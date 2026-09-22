@@ -12,6 +12,7 @@
         'MODEL_BINDBONE'
     ]);
     const MAX_PLAN_STEPS = 32;
+    const RESOURCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 
     function isSafeScalar(value) {
         return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
@@ -30,6 +31,14 @@
         }
         if (command.name !== undefined && !isSafeScalar(command.name)) {
             return { valid: false, error: '动作名称格式无效' };
+        }
+        if (command.type === 'MOTION_ADD') {
+            if (!RESOURCE_ID_PATTERN.test(command.resourceId || '')) {
+                return { valid: false, error: 'MOTION_ADD 必须引用白名单 resourceId' };
+            }
+            if (Object.keys(command).some((key) => /(?:url|path|file)/iu.test(key))) {
+                return { valid: false, error: 'MOTION_ADD 不允许直接传入 URL 或文件路径' };
+            }
         }
         return { valid: true };
     }

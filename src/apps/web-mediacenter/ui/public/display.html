@@ -71,6 +71,60 @@
         </div>
         <section id="displayChatLayer" class="display-chat-layer" aria-hidden="true"></section>
         <div id="displayInteractionLayer" class="display-interaction-layer">
+            <div class="display-stage-lighting-control">
+                <button id="displayMmdLightingToggle" class="display-stage-button" type="button"
+                        aria-controls="displayMmdLightingPanel" aria-expanded="false">灯光</button>
+                <section id="displayMmdLightingPanel" class="display-mmd-lighting-panel" hidden
+                         aria-label="角色灯光设置">
+                    <div class="display-mmd-lighting-header">
+                        <strong>灯光设置</strong>
+                        <button id="displayMmdLightingReset" class="display-mmd-lighting-reset" type="button">
+                            恢复默认
+                        </button>
+                    </div>
+                    <label class="display-mmd-lighting-field">
+                        <span>亮度预设</span>
+                        <select id="displayMmdLightingPreset">
+                            <option value="default">默认</option>
+                            <option value="soft">柔和</option>
+                            <option value="bright">明亮</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                    </label>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdShadowEnabled" type="checkbox" checked>
+                        <span>角色阴影（默认开启）</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>环境光颜色</span>
+                        <input id="displayMmdAmbientColor" type="color" value="#ffffff">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>环境光强度 <output id="displayMmdAmbientIntensityValue">1.80</output></span>
+                        <input id="displayMmdAmbientIntensity" type="range" min="0" max="4" step="0.05" value="1.8">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>主光颜色</span>
+                        <input id="displayMmdKeyColor" type="color" value="#ffffff">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>主光强度 <output id="displayMmdKeyIntensityValue">2.30</output></span>
+                        <input id="displayMmdKeyIntensity" type="range" min="0" max="5" step="0.05" value="2.3">
+                    </label>
+                    <fieldset class="display-mmd-lighting-direction">
+                        <legend>主光方向</legend>
+                        <label><span>X <output id="displayMmdKeyPositionXValue">1.5</output></span>
+                            <input id="displayMmdKeyPositionX" type="range" min="-10" max="10" step="0.1" value="1.5">
+                        </label>
+                        <label><span>Y <output id="displayMmdKeyPositionYValue">3.0</output></span>
+                            <input id="displayMmdKeyPositionY" type="range" min="-10" max="10" step="0.1" value="3">
+                        </label>
+                        <label><span>Z <output id="displayMmdKeyPositionZValue">2.5</output></span>
+                            <input id="displayMmdKeyPositionZ" type="range" min="-10" max="10" step="0.1" value="2.5">
+                        </label>
+                    </fieldset>
+                </section>
+            </div>
             <button id="displayChatToggle" class="display-stage-button" type="button"
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
@@ -96,6 +150,7 @@
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
+    <script src="js/display-mmd-lighting.js" defer></script>
     <script src="js/display-mmd-command-adapter.js" defer></script>
     <script>
         // 临时 render 刷新诊断默认关闭，避免现场控制台持续输出高频日志。

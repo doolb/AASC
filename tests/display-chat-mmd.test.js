@@ -26,6 +26,32 @@ test('display.html 使用同页舞台模块，不为聊天或 MMD 创建 iframe'
     assert.doesNotMatch(html, /display(?:Chat|Mmd)[^<]*<iframe/iu);
 });
 
+test('显示端提供右上角灯光按钮和详细设置面板', () => {
+    const html = readPublic('display.html');
+    const css = readPublic('css/display-mmd.css');
+    const lighting = readPublic('js/display-mmd-lighting.js');
+    assert.match(html, /id="displayMmdLightingToggle"/u);
+    assert.match(html, /id="displayMmdLightingPanel"/u);
+    assert.match(html, /id="displayMmdAmbientIntensity"/u);
+    assert.match(html, /id="displayMmdKeyPositionX"/u);
+    assert.match(html, /js\/display-mmd-lighting\.js/u);
+    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*top:/u);
+    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*right:/u);
+    assert.match(css, /\.display-mmd-lighting-panel\s*\{/u);
+    assert.match(lighting, /localStorage/u);
+    assert.match(html, /id="displayMmdLightingReset"[\s\S]*恢复默认/u);
+});
+
+test('灯光按钮位于时间区域下方并提供默认开启的阴影开关', () => {
+    const html = readPublic('display.html');
+    const css = readPublic('css/display-mmd.css');
+    const lighting = readPublic('js/display-mmd-lighting.js');
+    assert.match(html, /id="displayMmdShadowEnabled"[^>]*checked/u);
+    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*top:\s*calc\(/u);
+    assert.match(css, /clamp\(64px, 12vh, 104px\)/u);
+    assert.match(lighting, /shadowEnabled/u);
+});
+
 test('显示端模块通过现有 WebSocket 注入，不创建第二条连接', () => {
     const stage = readPublic('js/display-stage.js');
     const chat = readPublic('js/display-chat.js');
@@ -41,6 +67,51 @@ test('显示端模块通过现有 WebSocket 注入，不创建第二条连接', 
     assert.match(vrm, /KTX2Loader/u);
     assert.match(vrm, /VRMLoaderPlugin/u);
     assert.match(chat, /source:\s*'displayChat'/u);
+});
+
+test('MMD 显示模块保存规范化灯光并在 runtime 创建后应用', () => {
+    const mmd = readPublic('js/display-mmd.js');
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(mmd, /DEFAULT_MMD_LIGHTING/u);
+    assert.match(mmd, /setLighting/u);
+    assert.match(mmd, /state\.runtime\.setLighting/u);
+    assert.match(pmx, /new THREE\.AmbientLight\(0xffffff, 1\.8\)/u);
+    assert.match(pmx, /new THREE\.DirectionalLight\(0xffffff, 2\.3\)/u);
+    assert.match(pmx, /setLighting/u);
+    assert.match(vrm, /setLighting/u);
+});
+
+test('PMX 和 VRM runtime 提供默认开启的实时阴影', () => {
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(pmx, /renderer\.shadowMap\.enabled/u);
+    assert.match(pmx, /THREE\.PCFSoftShadowMap/u);
+    assert.match(pmx, /new THREE\.ShadowMaterial/u);
+    assert.match(pmx, /castShadow\s*=\s*shadowEnabled/u);
+    assert.match(pmx, /receiveShadow\s*=\s*shadowEnabled/u);
+    assert.match(pmx, /shadowEnabled/u);
+    assert.match(vrm, /renderer\.shadowMap\.enabled/u);
+    assert.match(vrm, /THREE\.PCFSoftShadowMap/u);
+    assert.match(vrm, /new THREE\.ShadowMaterial/u);
+    assert.match(vrm, /castShadow\s*=\s*shadowEnabled/u);
+    assert.match(vrm, /receiveShadow\s*=\s*shadowEnabled/u);
+    assert.match(vrm, /shadowEnabled/u);
+});
+
+test('PMX 和 VRM runtime 按模型范围定位高质量阴影相机', () => {
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(pmx, /SHADOW_MAP_SIZE\s*=\s*1024/u);
+    assert.match(pmx, /shadow\.mapSize\.set\(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE\)/u);
+    assert.match(pmx, /fitShadowCamera/u);
+    assert.match(pmx, /keyLight\.target\.position\.copy/u);
+    assert.match(pmx, /shadowCamera\.updateProjectionMatrix/u);
+    assert.match(vrm, /SHADOW_MAP_SIZE\s*=\s*1024/u);
+    assert.match(vrm, /shadow\.mapSize\.set\(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE\)/u);
+    assert.match(vrm, /fitShadowCamera/u);
+    assert.match(vrm, /keyLight\.target\.position\.copy/u);
+    assert.match(vrm, /shadowCamera\.updateProjectionMatrix/u);
 });
 
 test('舞台等待 DOMContentLoaded 后初始化，避免 defer 模块尚未注册', () => {
@@ -289,4 +360,13 @@ test('服务端提供 VRoid profile 和同源 VRM 代理', () => {
     assert.match(service, /http:\/\/c\.aasc\.us\/mnt\/mmd\//u);
     assert.match(service, /resolveStaticMmdAssetUrl/u);
     assert.match(service, /MAX_MODEL_BYTES/u);
+});
+
+test('显示端默认请求本地 PMX/VMD 清单且不把资源加入 Offline APK', () => {
+    const mmd = readPublic('js/display-mmd.js');
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    assert.match(mmd, /\/api\/mmd\/resources/u);
+    assert.match(mmd, /\/models\/mmd\//u);
+    assert.match(server, /modelRoot:\s*path\.join\(PROJECT_ROOT, 'res', 'models'\)/u);
+    assert.doesNotMatch(mmd, /release\/apkbuild|build:apk/u);
 });

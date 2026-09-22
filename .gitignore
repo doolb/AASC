@@ -23,3 +23,8 @@ src/apps/android-display/.kotlin/
 # 参考：https://github.com/FunAudioLLM/SenseVoice
 /3rd/ttslive/models/sensevoice/model.int8.onnx
 /res/models/sensevoice/model.int8.onnx
+
+# 本地 MMD 模型、纹理、动作和生成清单由 prepare:mmd-model 重新生成
+/res/models/mmd/miya/
+/res/models/mmd/motions/
+/res/models/mmd/manifest.json

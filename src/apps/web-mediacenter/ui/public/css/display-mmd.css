@@ -100,6 +100,142 @@
     pointer-events: none;
 }
 
+.display-stage-lighting-control {
+    position: absolute;
+    top: calc(max(12px, env(safe-area-inset-top)) + clamp(64px, 12vh, 104px));
+    right: max(12px, env(safe-area-inset-right));
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.display-mmd-lighting-panel {
+    width: min(320px, 86vw);
+    max-height: min(72vh, 620px);
+    overflow-y: auto;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    color: var(--text-primary);
+    pointer-events: auto;
+    overscroll-behavior: contain;
+}
+
+.display-mmd-lighting-shadow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 12px;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.display-mmd-lighting-shadow input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent-color);
+}
+
+.display-mmd-lighting-panel[hidden] {
+    display: none;
+}
+
+.display-mmd-lighting-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+
+.display-mmd-lighting-reset {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.display-mmd-lighting-reset:hover,
+.display-mmd-lighting-reset:focus-visible {
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+}
+
+.display-mmd-lighting-field,
+.display-mmd-lighting-direction label {
+    display: grid;
+    gap: 6px;
+    margin: 10px 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.display-mmd-lighting-field > span,
+.display-mmd-lighting-direction label > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.display-mmd-lighting-field output,
+.display-mmd-lighting-direction output {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.display-mmd-lighting-field select {
+    width: 100%;
+    min-height: 32px;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.display-mmd-lighting-field input[type="color"] {
+    width: 100%;
+    height: 32px;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+}
+
+.display-mmd-lighting-field input[type="range"],
+.display-mmd-lighting-direction input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent-color);
+}
+
+.display-mmd-lighting-direction {
+    margin: 12px 0 0;
+    padding: 0 10px 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.display-mmd-lighting-direction legend {
+    padding: 0 4px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+@media (max-width: 560px) {
+    .display-mmd-lighting-panel {
+        max-height: 68vh;
+    }
+}
+
 .display-stage-button {
     min-height: 36px;
     padding: 7px 12px;

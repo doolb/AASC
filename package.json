@@ -17,6 +17,7 @@
     "prepare:android-node": "node scripts/ops/prepare-android-node-runtime.js",
     "prepare:mnnllm-android": "node scripts/ops/prepare-mnnllm-android.js",
     "build:mnnllm-android": "node scripts/ops/prepare-mnnllm-android.js",
+    "prepare:mmd-model": "node scripts/models/install-local-mmd-assets.js",
     "download:llm-model": "node scripts/ops/download-llm-model.js",
     "test": "node --test tests/*.test.js",
     "check:chat2api": "node --test src/apps/server/modules/chat2api/*.test.js src/apps/server/modules/task-engine/builtin-tasks/chat2api-proxy.test.js src/apps/web-mediacenter/ui/public/js/chat2api.test.js",
@@ -48,6 +49,7 @@
     "sherpa-onnx-node": "^1.12.35",
     "systeminformation": "^5.31.12",
     "three": "0.160.0",
-    "ws": "^8.14.2"
+    "ws": "^8.14.2",
+    "yauzl": "2.10.0"
   }
 }

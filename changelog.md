@@ -1,5 +1,24 @@
 # Web MediaCenter - 变更日志
 
+### 优化 MMD 阴影质量
+
+- ✅ [2026-09-22] 将 PMX/VRM 阴影贴图从 `512×512` 提升到 `1024×1024`，并依据模型包围盒动态收紧阴影相机范围。
+  - 主光 target 定位到模型中心，按模型尺寸计算阴影相机左右/上下范围及 near/far，并在灯光方向变化时重新拟合。
+  - 定向测试 4/4、MMD 资源与 runtime 测试 17/17、JavaScript 语法和 diff 检查通过。
+
+### 修复 MMD 人物自阴影
+
+- ✅ [2026-09-22] 修复 PMX/VRM 角色只投射阴影但不接收自身阴影的问题。
+  - `display-pmx-runtime.js` 和 `display-vrm-runtime.js` 在阴影开启时同时设置人物网格 `castShadow` 与 `receiveShadow`；关闭开关时两者同步关闭。
+  - 新增自阴影契约断言；复现测试先在旧实现失败，修复后灯光/阴影定向测试 3/3、MMD 资源与 runtime 定向测试 17/17 通过。
+
+### 显示端灯光按钮位置与角色阴影
+
+- ✅ [2026-09-22] 将灯光按钮移到时间区域下方，并在灯光面板增加默认开启的角色阴影开关。
+  - PMX/VRM 使用 Three.js 软阴影和透明接收平面，模型加载完成后投射阴影；关闭开关时停用阴影贴图、投影和接收平面。
+  - 阴影状态与灯光参数一起保存到显示端浏览器 `localStorage`，不会重新加载模型、纹理或 VMD。
+  - 合并远端聊天历史修复时保留本地 MMD/VMD、灯光功能和相关文档；未提交代码、未构建 Offline APK、未上传外网。
+
 ### 显示端聊天对象与历史范围
 
 - ✅ [2026-09-22] 修复显示端多个助手、群聊和会话切换时的对象名称与聊天历史串线问题。
@@ -9,7 +28,7 @@
   - 定向契约测试 `35/35`、JavaScript 语法检查和 `git diff --check` 通过。
   - 已发布 code v30：`15,197,504` bytes，SHA-256 `4d826b408a3043a6e2d3e8fbcb99ed3ac1890c6408045aa65fef2ab029345b63`；沿用 dependencies v5 和 min APK v33，未重新打包 APK 或依赖包。
   - LAN/WAN 清单签名、版本、HTTP Content-Length、本地/远端落盘 SHA-256 均通过；旧 code 版本已按精确规则清理。
-  - 相关文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260922_显示端聊天对象和历史切换修复.md`。
+- 相关文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260922_显示端聊天对象和历史切换修复.md`。
 
 ### MNN 构建路径自动传递
 
@@ -20,7 +39,31 @@
   - 使用 `npm run build:apk:offline:min` 成功重打包 min APK versionCode 32（`0.2.30-offline-min`），产物 `89293934` bytes，SHA-256 `832a9a493f5749d792f936520ecf37edb43346292250998b8ab28ff13ca8af49`；ZIP、v2 签名和相关定向测试 `28/28` 通过。本次未安装或发布。
   - 随后将 min versionCode 升至 33（`0.2.31-offline-min`）重新构建并发布；code v29 同步发布，dependencies v5 复用。LAN/WAN manifest 均切换为 code 29 / dependencies 5 / min 33，版本化旧 code/min 已精确清理。
   - code v29：`15196338` bytes，SHA-256 `7af473a539a4573e6b14cce4af404424e920796fa0d2ad02c0a88ccd24546810`；min v33：`89293934` bytes，SHA-256 `2e8339f434ebab462013543f564dbbaa6c5e430862797794182b3366c7eb934a`。HTTP manifest/Content-Length、两端落盘 SHA-256、APK ZIP 和 v2 签名通过。
-  - 相关任务：`docs/task/20260922_MNN构建路径自动传递.md`。
+- 相关任务：`docs/task/20260922_MNN构建路径自动传递.md`。
+
+### 显示端 MMD/VRM 灯光设置
+
+- ✅ [2026-09-22] 增加显示端右上角“灯光”按钮和详细灯光面板。
+  - 支持环境光/主方向光颜色、强度和主光 X/Y/Z 方向调整，提供默认、柔和、明亮预设及“恢复默认”。
+  - PMX/VRM runtime 暴露 `setLighting()`，只更新现有 Three.js 灯光对象，不重新加载模型、纹理或 VMD，避免触发新的半成品画面。
+  - 设置保存到当前显示端浏览器 `localStorage`，不发送远端配置、不修改 Offline APK、不上传外网资源。
+  - 定向显示端/MMD 测试 40/40 通过，相关 JS 语法检查和 `git diff --check` 通过；内置浏览器因本地开发 HTTPS 证书未完成点击验证。
+
+### 显示端 PMX 模型加载防穿帮
+
+- ✅ [2026-09-22] 修复 PMX 模型加载期间纹理逐个出现、VMD 尚未准备完成就显示模型的问题。
+  - `display-pmx-runtime.js` 为每次模型和动作加载创建独立 `LoadingManager`，使用 staged 模型/动作资源，全部准备完成后一次性替换场景。
+  - 加载失败时释放 staged 资源；已有模型继续保留，首次加载才使用占位角色，避免闪回 T-pose 或显示半成品。
+  - 新增显示端契约测试；定向 MMD 测试 8/8 通过，Chromium 本地显示端状态为“PMX 模型已加载”且无页面异常。
+  - 未修改灯光、Offline APK、外网资源和发布配置。
+
+### 显示端本地 PMX/VMD 模型接入
+
+- ✅ [2026-09-22] 在本地 Node 服务和浏览器显示端将默认角色切换为 Aplaybox 米娅 PMX 模型，并接入对应 VMD 动作。
+  - 新增 ZIP 校验/解压脚本、MMD manifest、`GET /api/mmd/resources`、本地 vendored Three.js MMDLoader 依赖、PMX runtime 和 VMD `LoopOnce` 播放；动作计划只接受白名单 `resourceId`。
+  - 保留 VRM runtime、VRM 代理和 Canvas 占位降级；模型类型切换会释放旧 runtime、场景和动画循环。模型与生成清单不提交 Git。
+  - 验证：资源安装测试 4/4、MMD 服务/显示端契约测试合计 36/36；本地 HTTPS API、PMX、12 个 PNG 纹理和 VMD 均 HTTP 200；Chromium 状态为“PMX 模型已加载”，WebGL 可用且无页面异常。
+- 本地下载包的 `toon/` 目录为空，运行时使用 MMDLoader 内置 toon 数据纹理；本阶段未构建 Offline APK、未上传 LAN/WAN 外网。
 
 ### 后端依赖打包方案记录
 

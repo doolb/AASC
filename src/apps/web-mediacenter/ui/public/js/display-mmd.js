@@ -1,20 +1,61 @@
 /*
- * 显示端 VRM/MMD 舞台模块。
+ * 显示端 VRM/PMX 舞台模块。
  *
- * three-vrm 运行时通过动态 import 按需加载，模型由同源服务端在线代理；网络、
- * WebGL 或 VRM 解析失败时回退到轻量 Canvas 占位，确保聊天和媒体仍然可用。
+ * VRM 和 PMX 运行时通过动态 import 按需加载，模型与动作由同源服务端白名单清单
+ * 提供；网络、WebGL 或模型解析失败时回退到轻量 Canvas 占位，确保聊天和媒体仍然可用。
  * 任何动作计划都必须经过 display-mmd-command-adapter.js。
  */
 (function exposeDisplayMmd(root) {
     const DEFAULT_STATIC_MODEL_FILE = 'default-vroid.vrm.zst';
     const STATIC_MODEL_FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:vrm|glb)(?:\.zst)?$/u;
+    const DEFAULT_MMD_RESOURCE_ID = 'miya-default';
     const DEFAULT_MODEL_PROFILE = Object.freeze({
-        roleId: 'default-vroid',
-        name: '凍香(天使)',
-        fileName: DEFAULT_STATIC_MODEL_FILE,
-        modelUrl: `/api/vrm/model/static?file=${encodeURIComponent(DEFAULT_STATIC_MODEL_FILE)}`,
-        sourceUrl: 'http://c.aasc.us/mnt/mmd/'
+        roleId: 'default-miya',
+        name: '米娅',
+        resourceId: DEFAULT_MMD_RESOURCE_ID,
+        modelType: 'pmx'
     });
+    const DEFAULT_MMD_LIGHTING = Object.freeze({
+        ambientColor: '#ffffff',
+        ambientIntensity: 1.8,
+        keyColor: '#ffffff',
+        keyIntensity: 2.3,
+        keyPosition: Object.freeze({ x: 1.5, y: 3, z: 2.5 }),
+        shadowEnabled: true
+    });
+
+    function clamp(value, minimum, maximum, fallback) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return fallback;
+        return Math.min(maximum, Math.max(minimum, number));
+    }
+
+    function normalizeColor(value, fallback = '#ffffff') {
+        const color = String(value || '').trim().toLowerCase();
+        return /^#[0-9a-f]{6}$/u.test(color) ? color : fallback;
+    }
+
+    function normalizeMmdLighting(input = {}) {
+        const source = input && typeof input === 'object' ? input : {};
+        const position = source.keyPosition && typeof source.keyPosition === 'object'
+            ? source.keyPosition
+            : {};
+        return {
+            ambientColor: normalizeColor(source.ambientColor, DEFAULT_MMD_LIGHTING.ambientColor),
+            ambientIntensity: clamp(source.ambientIntensity, 0, 4, DEFAULT_MMD_LIGHTING.ambientIntensity),
+            keyColor: normalizeColor(source.keyColor, DEFAULT_MMD_LIGHTING.keyColor),
+            keyIntensity: clamp(source.keyIntensity, 0, 5, DEFAULT_MMD_LIGHTING.keyIntensity),
+            keyPosition: {
+                x: clamp(position.x, -10, 10, DEFAULT_MMD_LIGHTING.keyPosition.x),
+                y: clamp(position.y, -10, 10, DEFAULT_MMD_LIGHTING.keyPosition.y),
+                z: clamp(position.z, -10, 10, DEFAULT_MMD_LIGHTING.keyPosition.z)
+            },
+            shadowEnabled: typeof source.shadowEnabled === 'boolean'
+                ? source.shadowEnabled
+                : DEFAULT_MMD_LIGHTING.shadowEnabled
+        };
+    }
+
     const state = {
         initialized: false,
         visible: false,
@@ -35,9 +76,11 @@
         lastInteractionAt: 0,
         animationFrame: null,
         runtime: null,
+        runtimeType: null,
         runtimePromise: null,
         runtimeUnavailable: false,
-        loadSequence: 0
+        loadSequence: 0,
+        lighting: normalizeMmdLighting(DEFAULT_MMD_LIGHTING)
     };
 
     function setStatus(message, isError = false) {
@@ -178,20 +221,61 @@
         state.visible = visible === true;
         if (state.runtime) state.runtime.setVisible(state.visible);
         if (state.visible && !state.modelReady && !state.runtime) {
-            setStatus('正在准备在线 VRM 模型…');
+            setStatus('正在准备角色模型…');
         }
         if (!state.runtime && state.runtimeUnavailable) drawFallback();
     }
 
-    async function ensureRuntime() {
-        if (state.runtime) return state.runtime;
+    function setLighting(lighting) {
+        const current = state.lighting || DEFAULT_MMD_LIGHTING;
+        state.lighting = normalizeMmdLighting({
+            ...current,
+            ...(lighting && typeof lighting === 'object' ? lighting : {}),
+            keyPosition: {
+                ...current.keyPosition,
+                ...(lighting?.keyPosition && typeof lighting.keyPosition === 'object'
+                    ? lighting.keyPosition
+                    : {})
+            }
+        });
+        if (state.runtime && typeof state.runtime.setLighting === 'function') {
+            state.runtime.setLighting(state.lighting);
+        }
+        return getLighting();
+    }
+
+    function getLighting() {
+        return {
+            ...state.lighting,
+            keyPosition: { ...state.lighting.keyPosition }
+        };
+    }
+
+    async function ensureRuntime(modelType = 'vrm') {
+        if (state.runtime && state.runtimeType === modelType) return state.runtime;
+        if (state.runtime && state.runtimeType !== modelType) {
+            try {
+                state.runtime.dispose?.();
+            } catch (error) {
+                console.warn('[显示端 MMD] 切换运行时释放失败:', error);
+            }
+            state.runtime = null;
+            state.runtimeType = null;
+            state.runtimePromise = null;
+        }
         if (state.runtimePromise) return state.runtimePromise;
-        state.runtimePromise = import('./display-vrm-runtime.js')
-            .then(({ createDisplayVrmRuntime }) => {
-                state.runtime = createDisplayVrmRuntime({
+        const runtimeModule = modelType === 'pmx' ? './display-pmx-runtime.js' : './display-vrm-runtime.js';
+        state.runtimePromise = import(runtimeModule)
+            .then((runtimeExports) => {
+                const createRuntime = modelType === 'pmx'
+                    ? runtimeExports.createDisplayPmxRuntime
+                    : runtimeExports.createDisplayVrmRuntime;
+                state.runtime = createRuntime({
                     canvas: state.canvas,
                     onStatus: (message) => setStatus(message)
                 });
+                state.runtimeType = modelType;
+                state.runtime.setLighting?.(state.lighting);
                 state.runtime.setVisible(state.visible);
                 resizeCanvas(state.width, state.height);
                 return state.runtime;
@@ -199,14 +283,49 @@
             .catch((error) => {
                 state.runtimePromise = null;
                 state.runtimeUnavailable = true;
-                setStatus(`VRM 运行时不可用：${error.message}`, true);
+                setStatus(`${modelType === 'pmx' ? 'PMX' : 'VRM'} 运行时不可用：${error.message}`, true);
                 drawFallback();
                 return null;
             });
         return state.runtimePromise;
     }
 
+    function isSafeLocalMmdUrl(url, extension) {
+        return typeof url === 'string'
+            && url.startsWith('/models/mmd/')
+            && !url.includes('://')
+            && !url.includes('..')
+            && !/[?#]/u.test(url)
+            && url.toLowerCase().endsWith(extension);
+    }
+
+    async function resolvePmxProfile(profile) {
+        if (profile.modelType === 'pmx'
+            && isSafeLocalMmdUrl(profile.modelUrl, '.pmx')
+            && (!profile.motionUrl || isSafeLocalMmdUrl(profile.motionUrl, '.vmd'))
+            && typeof profile.motionResourceId === 'string') {
+            return { ...profile };
+        }
+        const response = await fetch('/api/mmd/resources', {
+            cache: 'no-store',
+            credentials: 'same-origin'
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.status !== 'success' || !Array.isArray(payload.resources)) {
+            throw new Error(payload.message || `MMD profile 返回 HTTP ${response.status}`);
+        }
+        const resource = payload.resources.find((entry) => entry.resourceId === profile.resourceId)
+            || payload.resources[0];
+        if (!resource || resource.modelType !== 'pmx'
+            || !isSafeLocalMmdUrl(resource.modelUrl, '.pmx')
+            || !isSafeLocalMmdUrl(resource.motionUrl, '.vmd')) {
+            throw new Error('服务端没有返回有效的 PMX 资源清单');
+        }
+        return { ...profile, ...resource };
+    }
+
     async function resolveProfile(profile) {
+        if (profile?.modelType === 'pmx') return resolvePmxProfile(profile);
         if (typeof profile.modelUrl === 'string'
             && (profile.modelUrl.startsWith('/api/vrm/model/file?')
                 || profile.modelUrl.startsWith('/api/vrm/model/static?'))) {
@@ -240,21 +359,24 @@
         const sequence = ++state.loadSequence;
         state.modelProfile = { ...profile };
         state.modelReady = false;
-        setStatus('正在解析在线 VRM 模型…');
-        const runtime = await ensureRuntime();
-        if (!runtime || sequence !== state.loadSequence) return false;
+        setStatus('正在准备角色模型…');
         try {
             const resolvedProfile = await resolveProfile(state.modelProfile);
             if (sequence !== state.loadSequence) return false;
-            await runtime.load(resolvedProfile.modelUrl);
+            const modelType = resolvedProfile.modelType === 'pmx' ? 'pmx' : 'vrm';
+            const runtime = await ensureRuntime(modelType);
+            if (!runtime || sequence !== state.loadSequence) return false;
+            await runtime.load(modelType === 'pmx' ? resolvedProfile : resolvedProfile.modelUrl);
             if (sequence !== state.loadSequence) return false;
             state.modelProfile = resolvedProfile;
             state.modelReady = true;
-            setStatus('VRM 模型已加载');
+            setStatus(`${modelType === 'pmx' ? 'PMX' : 'VRM'} 模型已加载`);
             return true;
         } catch (error) {
             state.modelReady = false;
-            setStatus(`VRM 模型加载失败：${error.message}`, true);
+            state.runtime?.showFallback?.();
+            setStatus(`角色模型加载失败：${error.message}`, true);
+            if (!state.runtime) drawFallback();
             return false;
         }
     }
@@ -292,7 +414,7 @@
         }, { passive: true });
         state.initialized = true;
         resizeCanvas();
-        setStatus('正在准备在线 VRM 模型…');
+        setStatus('正在准备角色模型…');
         loadModel(DEFAULT_MODEL_PROFILE);
     }
 
@@ -307,10 +429,13 @@
     }
 
     root.DisplayMmd = Object.freeze({
+        DEFAULT_MMD_LIGHTING,
+        getLighting,
         handleActionPlan,
         init,
         loadModel,
         resize: resizeCanvas,
+        setLighting,
         setPointerEnabled,
         setVisible
     });
