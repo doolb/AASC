@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### 显示端摄像头开关
+
+- ✅ [2026-09-23] 控制端显示面板的设备能力增加逐显示端“摄像头采集”开关。
+  - 设备能力树和能力编辑弹窗均可修改；服务端规范化并持久化配置，显示端重连后恢复。关闭时立即释放普通摄像头轨道和 AR 跟踪，阻止摄像头列表刷新、视频采集、拍照、预览及 AR 启动；麦克风录音保持独立。
+  - 更新 `docs/design/display-camera-chat.md`、`docs/design/display-capability.md`、`docs/design/mmd-image-ar.md` 及对应伪代码、使用说明、自测清单和任务文档。`node --check` 检查服务端、控制端 JS、AR JS 和 `display.html` 内联脚本通过，`git diff --check` 通过；浏览器/Android WebView 摄像头现场验证待进行。
+  - Offline 待打包状态：`servicePackage=true`、`minApk=true`、`dependenciesPackage=false`；本次未构建或发布 APK/服务包。
+
 ### MMD/VRM 角色灯光
 
 - ✅ [2026-09-23] PMX 新增两组独立、仅作用于轮廓的边缘光，并将 Toon 明暗默认改为关闭。
