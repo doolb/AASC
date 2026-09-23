@@ -93,7 +93,12 @@ class MMDPhysics {
 
 		mesh.matrixWorld.decompose( position, quaternion, scale );
 
-		if ( scale.x !== 1 || scale.y !== 1 || scale.z !== 1 ) {
+		// 本地补丁：旋转矩阵分解会产生微小尺度误差，不能因此脱离中心枢轴。
+		// 单位缩放允许 0.001 误差；超过容差才执行原有的尺度转换。
+		const scaleTolerance = 0.001;
+		if ( Math.abs( scale.x - 1 ) > scaleTolerance ||
+			Math.abs( scale.y - 1 ) > scaleTolerance ||
+			Math.abs( scale.z - 1 ) > scaleTolerance ) {
 
 			isNonDefaultScale = true;
 

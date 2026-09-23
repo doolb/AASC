@@ -9,15 +9,16 @@ const PHYSICS_PATH = path.join(ROOT, 'src/apps/web-mediacenter/ui/public/js/vend
 const PMX_HELPER_URL = path.join(ROOT, 'src/apps/web-mediacenter/ui/public/js/mmd-pmx-helper.mjs');
 
 const loadPhysicsRuntime = async () => {
-    // 测试执行 npm 的同版本模块；先核对它与显示端内置文件逐字节一致。
-    assert.deepEqual(fs.readFileSync(PHYSICS_PATH), fs.readFileSync(require.resolve('three/addons/animation/MMDPhysics.js')));
     const AmmoFactory = require(path.join(AMMO_DIR, 'ammo.wasm.js'));
     globalThis.Ammo = await AmmoFactory({
         wasmBinary: fs.readFileSync(path.join(AMMO_DIR, 'ammo.wasm.wasm'))
     });
     const THREE = await import('three');
     const { pathToFileURL } = require('node:url');
-    const { MMDPhysics } = await import('three/addons/animation/MMDPhysics.js');
+    // 执行浏览器实际使用的内置源码（含本地补丁），只将裸模块地址解析到同版本 Three。
+    const threeUrl = pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href;
+    const source = fs.readFileSync(PHYSICS_PATH, 'utf8').replace("from 'three'", `from '${threeUrl}'`);
+    const { MMDPhysics } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const { advancePmxMotionFrame } = await import(pathToFileURL(PMX_HELPER_URL).href);
     return { THREE, MMDPhysics, advancePmxMotionFrame };
 };
@@ -57,6 +58,65 @@ const origin = (entry) => {
     const value = entry.body.getCenterOfMassTransform().getOrigin();
     return [value.x(), value.y(), value.z()];
 };
+
+for (const axes of ['x', 'y', 'xy']) {
+    test(`PMX ${axes} 连续中心缓动保持世界锚点且不误触缩放分支`, async () => {
+        const { THREE, MMDPhysics, advancePmxMotionFrame } = await loadPhysicsRuntime();
+        const pivot = new THREE.Group();
+        pivot.position.y = 10;
+        const mesh = new THREE.Object3D();
+        mesh.position.y = -10;
+        const bone = new THREE.Bone();
+        bone.position.set(2, 12, 1);
+        mesh.add(bone);
+        mesh.skeleton = { bones: [bone] };
+        pivot.add(mesh);
+        pivot.updateWorldMatrix(true, true);
+        const physics = new MMDPhysics(mesh, [rigidBodyParams(0, 0)], []);
+        let detached = 0;
+        const updateRigidBodies = physics._updateRigidBodies;
+        physics._updateRigidBodies = function () {
+            if (mesh.parent === null) detached += 1;
+            return updateRigidBodies.call(this);
+        };
+        for (let frame = 1; frame <= 180; frame += 1) {
+            let expected;
+            advancePmxMotionFrame({
+                delta: 1 / 60, pivot, helper: physics,
+                advanceRotation() {
+                    for (const axis of axes) pivot.rotation[axis] = 1 - Math.exp(-frame / 60 / 0.14);
+                    pivot.updateWorldMatrix(true, true);
+                    expected = bone.getWorldPosition(new THREE.Vector3());
+                }
+            });
+            const actual = new THREE.Vector3(...origin(physics.bodies[0]));
+            assert.ok(actual.distanceTo(expected) < 0.001, `第 ${frame} 帧锚点偏离世界位置`);
+        }
+        assert.equal(detached, 0);
+    });
+}
+
+test('PMX 各轴单位缩放采用 0.001 容差，超过容差仍处理真实缩放', async () => {
+    const { THREE, MMDPhysics } = await loadPhysicsRuntime();
+    for (const axis of ['x', 'y', 'z']) {
+        for (const [scale, expectedDetached] of [[0.9991, false], [1.0009, false], [0.9989, true], [1.0011, true]]) {
+            const pivot = new THREE.Group();
+            const mesh = new THREE.Object3D();
+            mesh.skeleton = { bones: [] };
+            pivot.add(mesh);
+            pivot.updateWorldMatrix(true, true);
+            const physics = new MMDPhysics(mesh, [], []);
+            mesh.scale[axis] = scale;
+            pivot.updateWorldMatrix(true, true);
+            let detached;
+            physics._updateRigidBodies = () => { detached = mesh.parent === null; };
+            physics.update(1 / 60);
+            assert.equal(detached, expectedDetached, `${axis}=${scale}`);
+            assert.equal(mesh.parent, pivot);
+            assert.equal(mesh.scale[axis], scale);
+        }
+    }
+});
 
 for (const [label, axis, rotationAxis, direction] of [
     ['水平 yaw', 'x', 'y', -1],

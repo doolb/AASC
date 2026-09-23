@@ -1,5 +1,18 @@
 # 本地 PMX 模型与 VMD 动作实现规范
 
+## PMX 物理单位缩放容差
+
+```text
+MMDPhysics.update(delta):
+  世界矩阵分解为 position、quaternion、scale
+  非单位缩放 = 任一分量 abs(scale分量 - 1) > 0.001
+  仅非单位缩放进入既有临时脱离父节点的尺度处理
+  容差内保持父节点与中心枢轴世界变换，继续正常刚体更新、模拟和骨骼回写
+  不重置刚体，不清零或改写线速度与角速度
+```
+
+内置 Three.js r160 `MMDPhysics.js` 保留此本地补丁；升级 vendor 时需要重验。回归直接加载内置源码，覆盖 180 帧 yaw/pitch/组合缓动及容差内外的缩放分支。
+
 ## 1. 资源声明
 
 ```text
