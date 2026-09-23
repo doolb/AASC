@@ -23,6 +23,7 @@
         selectingRegion: '调整选区',
         compilingTarget: '保存定位图',
         ready: '已准备',
+        searching: '寻找中',
         tracking: '定位中',
         lost: '目标丢失',
         stopped: '已停止'
@@ -54,11 +55,9 @@
         motionLastSample: null,
         motionSensitivity: readMotionSensitivity()
     };
-
     function byId(id) {
         return document.getElementById(id);
     }
-
     function getElements() {
         return {
             toggle: byId('displayArTargetToggle'),
@@ -87,7 +86,6 @@
             cancelButton: byId('displayArCancelButton')
         };
     }
-
     function createEmptyCalibration() {
         return {
             sourceCanvas: null,
@@ -95,7 +93,6 @@
             selectedQuad: createDefaultQuad()
         };
     }
-
     function createDefaultQuad() {
         return [
             { x: 0.15, y: 0.15 },
@@ -104,19 +101,16 @@
             { x: 0.15, y: 0.85 }
         ];
     }
-
     function cloneQuad(points) {
         return (Array.isArray(points) ? points : createDefaultQuad()).map((point) => ({
             x: clamp(Number(point?.x), 0, 1),
             y: clamp(Number(point?.y), 0, 1)
         }));
     }
-
     function clamp(value, min, max) {
         if (!Number.isFinite(value)) return min;
         return Math.min(max, Math.max(min, value));
     }
-
     function readActiveTargetId() {
         try {
             return root.localStorage?.getItem(ACTIVE_TARGET_KEY) || '';
@@ -125,7 +119,6 @@
             return '';
         }
     }
-
     function readMotionSensitivity() {
         try {
             const value = Number(root.localStorage?.getItem(MOTION_SENSITIVITY_KEY));
@@ -135,7 +128,6 @@
             return 1;
         }
     }
-
     function saveMotionSensitivity(value) {
         try {
             root.localStorage?.setItem(MOTION_SENSITIVITY_KEY, String(value));
@@ -143,7 +135,6 @@
             console.warn('[显示端 AR] 保存体感灵敏度失败:', error);
         }
     }
-
     function saveActiveTargetId(targetId) {
         try {
             if (targetId) {
@@ -173,7 +164,7 @@
         if (!state.elements.calibration.hidden && /失败|拒绝|未找到|占用|尚未准备/u.test(state.message)) {
             state.elements.calibrationHint.textContent = state.message;
         }
-        toggle.textContent = state.status === 'tracking'
+        toggle.textContent = state.status === 'tracking' || state.status === 'searching'
             ? '定位中'
             : state.status === 'lost'
                 ? '重新定位'
@@ -795,21 +786,27 @@
             result = await session.processFrame(state.elements.trackingVideo, timestamp);
         } catch (error) {
             console.error('[显示端 AR] 识别当前帧失败:', error);
-            setStatus('lost', `定位暂时中断：${error.message || '识别失败'}`);
+            setStatus(session.hasLocated ? 'lost' : 'searching', `识别暂时中断：${error.message || '请保持镜头稳定'}`);
             return;
         }
         if (!state.tracking || session !== state.trackerSession) return;
         if (result?.visible) {
+            session.hasLocated = true;
             setStatus('tracking', `定位中 · 置信度 ${Math.round(clamp(Number(result.confidence) || 0, 0, 1) * 100)}%`);
             if (result.pose && typeof root.DisplayMmd?.setArPose === 'function') {
                 const video = state.elements.trackingVideo;
                 const pose = root.DisplayMmdImageTargetTracker.mapPoseToCover(
-                    result.pose, video, video.parentElement
+                    result.pose, video, byId('displayStageLayers')
                 );
                 root.DisplayMmd.setArPose(pose, getSelectedTarget()?.modelCalibration);
             }
         } else {
-            setStatus('lost', '暂未识别到定位图');
+            const message = result?.reason === 'cameraNotReady'
+                ? '正在等待摄像头画面'
+                : result?.reason === 'lowTexture'
+                    ? '画面细节不足，请保持镜头稳定并增加光线'
+                    : '正在寻找定位图，请将基准图置于画面中央';
+            setStatus(session.hasLocated ? 'lost' : 'searching', message);
         }
     }
 
@@ -852,7 +849,7 @@
             state.trackerSession = session;
             state.tracking = true;
             setPanelOpen(false);
-            setStatus('tracking', '定位中');
+            setStatus('searching', '正在寻找定位图，请将基准图置于画面中央');
             scheduleTrackingFrame();
             return true;
         } catch (error) {

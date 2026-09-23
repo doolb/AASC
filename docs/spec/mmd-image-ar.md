@@ -4,6 +4,41 @@
 
 ## 2026-09-23 定位界面与脚底锚点增量伪代码
 
+### 图片目标识别稳定性
+
+```text
+启动定位:
+  读取基准图和四角选区，提取跨区域角点
+  若选区纹理不足则提示重新拍摄或扩大选区
+  状态设为 searching，记录 hasLocated = false
+
+处理摄像头帧:
+  将摄像头帧缩放到识别尺寸
+  为每个角点估计亮度重心方向
+  按方向旋转采样局部灰度描述子，并为实时帧取多个尺度
+  对基准图与实时帧描述子做最近邻比值匹配
+  通过内点比例与空间分布筛选单应矩阵
+  若有可信目标位置:
+    记录 hasLocated = true，状态设为 tracking，更新脚底锚点
+  否则:
+    首次成功前保持 searching；成功后设为 lost
+    摄像头未就绪或画面细节不足时显示相应提示
+```
+
+### 定位视频层级修正
+
+```text
+声明 DisplayLayers { mediaContainer, arTrackingVideo, displayStageLayers, statusOverlays }
+
+过程 arrangeTrackingVideo()
+  将 arTrackingVideo 放在 mediaContainer 之后、displayStageLayers 之前
+  设置 mediaContainer 层级为 1，arTrackingVideo 层级为 2
+  保留语音状态、任务状态和 MMD/聊天/控件原有更高层级
+  当舞台视口尺寸变化时，同步 arTrackingVideo 的宽高
+  将识别器视频坐标按视频 cover 裁切映射到 displayStageLayers 的宽高
+  停止定位或关闭摄像头时隐藏 arTrackingVideo
+```
+
 ```text
 声明 CalibrationView { mode: "closed" | "capture" | "edit", cameraStream, sourceImage, selectedQuad }
 声明 TrackingView { active, targetCorners, anchorScreen, confidence, lastVisibleAt }

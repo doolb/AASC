@@ -5,7 +5,7 @@
     const MAX_WIDTH = 320;
     const MAX_FEATURES = 240;
     const SAMPLE_OFFSETS = [-4, -2, 0, 2, 4];
-    const MIN_MATCHES = 10;
+    const MIN_MATCHES = 8;
 
     function createFrame(source) {
         const width = Math.max(1, Math.round(source.width || source.videoWidth || 1));
@@ -39,14 +39,40 @@
         return true;
     }
 
-    function describe(frame, x, y) {
-        // 固定取角点周围 5×5 个采样点，减去均值并按能量归一化。
-        // 这样同一印刷图在较亮或较暗的摄像头画面中仍可比较局部结构。
+    function sampleGray(frame, x, y) {
+        const left = Math.max(0, Math.min(frame.width - 2, Math.floor(x)));
+        const top = Math.max(0, Math.min(frame.height - 2, Math.floor(y)));
+        const fx = Math.max(0, Math.min(1, x - left));
+        const fy = Math.max(0, Math.min(1, y - top));
+        const offset = top * frame.width + left;
+        const upper = frame.gray[offset] * (1 - fx) + frame.gray[offset + 1] * fx;
+        const lower = frame.gray[offset + frame.width] * (1 - fx)
+            + frame.gray[offset + frame.width + 1] * fx;
+        return upper * (1 - fy) + lower * fy;
+    }
+
+    function describe(frame, x, y, scale = 1) {
+        // 先求局部亮度重心方向，再沿该方向采样；与固定方向图像块相比，
+        // 拍照后手机轻微转动仍能得到相近描述子。双线性采样减轻像素偏移。
+        let momentX = 0;
+        let momentY = 0;
+        for (const dy of SAMPLE_OFFSETS) {
+            for (const dx of SAMPLE_OFFSETS) {
+                const value = sampleGray(frame, x + dx * scale, y + dy * scale);
+                momentX += dx * value;
+                momentY += dy * value;
+            }
+        }
+        const angle = Math.hypot(momentX, momentY) < 20 ? 0 : Math.atan2(momentY, momentX);
+        const cosine = Math.cos(angle);
+        const sine = Math.sin(angle);
         const samples = [];
         let total = 0;
         for (const dy of SAMPLE_OFFSETS) {
             for (const dx of SAMPLE_OFFSETS) {
-                const value = frame.gray[(y + dy) * frame.width + x + dx];
+                const sampleX = x + (dx * cosine - dy * sine) * scale;
+                const sampleY = y + (dx * sine + dy * cosine) * scale;
+                const value = sampleGray(frame, sampleX, sampleY);
                 samples.push(value);
                 total += value;
             }
@@ -62,13 +88,13 @@
         return samples.map((value) => value * inverse);
     }
 
-    function extractFeatures(frame, region = null) {
+    function extractFeatures(frame, region = null, scales = [1]) {
         // 将画面分格后保留各格最强角点，再做空间去重；避免大段文字只占满
         // 一小片区域，导致估计出的透视矩阵缺乏跨区域约束。
         const { gray, width, height } = frame;
         const cells = new Map();
-        for (let y = 7; y < height - 7; y += 3) {
-            for (let x = 7; x < width - 7; x += 3) {
+        for (let y = 12; y < height - 12; y += 3) {
+            for (let x = 12; x < width - 12; x += 3) {
                 if (region && !insideQuad(x, y, region)) continue;
                 const offset = y * width + x;
                 const gx = gray[offset + 1] - gray[offset - 1];
@@ -92,8 +118,11 @@
             if (separated.length >= MAX_FEATURES) break;
         }
         return separated
-            .map((point) => ({ ...point, descriptor: describe(frame, point.x, point.y) }))
-            .filter((point) => point.descriptor);
+            .map((point) => ({
+                ...point,
+                descriptors: scales.map((scale) => describe(frame, point.x, point.y, scale)).filter(Boolean)
+            }))
+            .filter((point) => point.descriptors.length);
     }
 
     function descriptorDistance(left, right) {
@@ -109,7 +138,10 @@
             let bestDistance = Infinity;
             let secondDistance = Infinity;
             for (const destination of current) {
-                const distance = descriptorDistance(source.descriptor, destination.descriptor);
+                let distance = Infinity;
+                for (const descriptor of destination.descriptors) {
+                    distance = Math.min(distance, descriptorDistance(source.descriptors[0], descriptor));
+                }
                 if (distance < bestDistance) {
                     secondDistance = bestDistance;
                     bestDistance = distance;
@@ -118,7 +150,7 @@
                     secondDistance = distance;
                 }
             }
-            if (best && bestDistance < 0.36 && bestDistance < secondDistance * 0.78) {
+            if (best && bestDistance < 0.42 && bestDistance < secondDistance * 0.84) {
                 candidates.push({ source, destination: best, distance: bestDistance });
             }
         }
@@ -207,7 +239,10 @@
             });
             if (inliers.length > best.length) best = inliers;
         }
-        if (best.length < MIN_MATCHES || best.length / matches.length < 0.35) return null;
+        if (best.length < MIN_MATCHES || best.length / matches.length < 0.4) return null;
+        const xs = best.map((match) => match.source.x);
+        const ys = best.map((match) => match.source.y);
+        if (Math.max(...xs) - Math.min(...xs) < 20 || Math.max(...ys) - Math.min(...ys) < 20) return null;
         return { matrix: fitHomography(best), confidence: best.length / matches.length };
     }
 
@@ -240,9 +275,12 @@
         let active = true;
         return {
             async processFrame(video) {
-                if (!active || !video.videoWidth || !video.videoHeight) return { visible: false };
+                if (!active || !video.videoWidth || !video.videoHeight) {
+                    return { visible: false, reason: 'cameraNotReady' };
+                }
                 const frame = createFrame(video);
-                const current = extractFeatures(frame);
+                const current = extractFeatures(frame, null, [0.75, 1, 1.35]);
+                if (current.length < MIN_MATCHES) return { visible: false, reason: 'lowTexture' };
                 const matches = matchFeatures(features, current);
                 const estimate = estimateHomography(matches);
                 if (!estimate?.matrix) return { visible: false };

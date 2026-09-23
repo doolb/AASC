@@ -57,12 +57,12 @@
         <div id="mediaSleepOverlay" class="sleep-overlay sleep-overlay-media"></div>
     </div>
 
+    <video id="displayArTrackingVideo" class="display-mmd-ar-background" autoplay muted playsinline hidden></video>
     <!--
         显示端交互舞台与媒体层保持同一页面，聊天/MMD 只拆分代码和样式模块。
         这些容器不使用 iframe，避免 WebView 中出现第二套 viewport、焦点和 WebSocket 生命周期。
     -->
     <div id="displayStageLayers" class="display-stage-layers" aria-label="显示端交互层">
-        <video id="displayArTrackingVideo" class="display-mmd-ar-background" autoplay muted playsinline hidden></video>
         <div id="displayMmdLayer" class="display-mmd-layer" aria-hidden="true">
             <canvas id="displayMmdCanvas" aria-label="MMD 角色画布"></canvas>
             <div id="displayMmdStatus" class="display-mmd-status" role="status" aria-live="polite"></div>

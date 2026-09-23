@@ -88,6 +88,11 @@
 
 ### MMD 图片基准图 AR 设计记录
 
+- ✅ [2026-09-23] 调整定位摄像头画面层级。
+  - `display.html`、`display-mmd.css` 将视频移到媒体容器与交互舞台之间；`display-stage.js` 同步可视视口尺寸，`display-mmd-ar.js` 继续按舞台映射脚底锚点。更新 design/spec/task/todo/usage；语法解析和 `git diff --check` 通过，Android 现场观感待验证，服务代码待重新出包。
+- ✅ [2026-09-23] 改进图片基准图识别和首次搜索状态。
+  - `display-mmd-image-tracker.js` 使用方向对齐与多尺度描述子，并强化单应矩阵内点分布检查；`display-mmd-ar.js` 首次识别前显示“寻找中”，摄像头未就绪与低纹理画面给出提示。同步 design/spec/task/todo；JavaScript 语法检查与 diff 检查通过，实际识别率和帧率待 Android 设备验证，服务代码待重新出包。
+
 - ✅ [2026-09-23] 增加独立拍照校准弹窗、摄像头背景和基准图脚底锚点。
   - `display.html`、`display-mmd.css` 和 `display-mmd-ar.js` 将拍摄与四角编辑放在同一弹窗预览区；定位时在透明 MMD 画布下显示摄像头，并在停止时释放轨道。
   - 新增 `display-mmd-image-tracker.js` 本地角点匹配与单应矩阵估计、`display-mmd-ar-pose.js` PMX/VRM 共用脚底屏幕锚点；`display-mmd.js` 和两个 runtime 接入姿态与复位。同步 design/spec/task/todo/usage；JavaScript 语法解析和 `git diff --check` 通过，目标 Android 设备的跟踪精度和帧率待现场验证。本次未构建或发布，`servicePackage` 保持待出包。

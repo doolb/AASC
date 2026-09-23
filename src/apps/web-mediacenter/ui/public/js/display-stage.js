@@ -212,6 +212,10 @@
             refs.stage.style.setProperty('--display-stage-height', `${Math.round(height)}px`);
             refs.stage.style.setProperty('--display-keyboard-inset', `${Math.round(keyboardInset)}px`);
         }
+        if (refs.arTrackingVideo) {
+            refs.arTrackingVideo.style.width = `${Math.round(width)}px`;
+            refs.arTrackingVideo.style.height = `${Math.round(height)}px`;
+        }
         if (root.DisplayChat && typeof root.DisplayChat.resize === 'function') root.DisplayChat.resize();
         if (root.DisplayMmd && typeof root.DisplayMmd.resize === 'function') root.DisplayMmd.resize(width, height);
         publish('stage.resize', { width, height, keyboardInset });
@@ -232,6 +236,7 @@
     function initialize() {
         if (state.initialized) return;
         refs.stage = document.getElementById('displayStageLayers');
+        refs.arTrackingVideo = document.getElementById('displayArTrackingVideo');
         refs.mmdLayer = document.getElementById('displayMmdLayer');
         refs.chatLayer = document.getElementById('displayChatLayer');
         refs.mmdCanvas = document.getElementById('displayMmdCanvas');
