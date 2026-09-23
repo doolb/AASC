@@ -214,9 +214,9 @@
   否则使用受限的 Canvas 占位命中区，不读取外部资源
   如果没有命中模型
     返回
-  根据网格/骨骼映射得到 hitPart
-  执行 hitPart 对应的本地预置动作或表情
-  发布 mmd.interaction，包含 roleId、hitPart、gesture 和时间戳
+  根据网格/骨骼映射得到 hitPart，作为按下时的触摸候选
+  仅在 pointerup 且未达到拖动阈值时执行 hitPart 对应的本地预置动作或表情
+  此时发布 mmd.interaction，包含 roleId、hitPart、gesture 和时间戳
 ```
 
 ```text
@@ -226,20 +226,20 @@
   startPoint = 计算 Canvas 坐标
   hitPart = Raycaster(startPoint)
   如果 hitPart 存在
-    保存 hitPart 和 startPoint，保留既有点击判定
-    返回
-  保存空白拖动的 pointerId、startPoint、lastPoint
+    保存 hitPart 和 startPoint 作为触摸候选，暂不触发角色互动
+  否则清空触摸候选
+  无论是否命中角色，都保存旋转拖动的 pointerId、startPoint、lastPoint、didRotate=false
   捕获当前 pointerId，保证移出 Canvas 后仍可结束拖动
 
 过程 handleMmdPointerMove(event)
-  如果 event.pointerId 不属于空白拖动
+  如果 event.pointerId 不属于当前旋转拖动
     返回
   currentPoint = 计算 Canvas 坐标
   deltaX = currentPoint.x - lastPoint.x
   deltaY = currentPoint.y - lastPoint.y
-  总位移未超过拖动阈值
-    只更新 lastPoint
+  总位移未达到 8 像素拖动阈值
     返回
+  首次达到拖动阈值时清空角色触摸候选，并将 didRotate 设为 true
   将 deltaX 转为 Y 轴转身弧度
   将 deltaY 转为 X 轴俯仰弧度
   调用 runtime.rotateModelBy(yawRadians, pitchRadians)
@@ -247,13 +247,16 @@
   更新 lastPoint
 
 过程 handleMmdPointerUpOrCancel(event)
-  如果 event.pointerId 属于空白拖动
+  如果 event.pointerId 属于当前旋转拖动
     释放 pointer capture
-    调用 runtime.finishModelRotation() 标记角度收敛后的阴影范围刷新
-    清空拖动状态，不发布 mmd.interaction
-    返回
-  如果角色命中且总位移不超过点击阈值
+    如果 didRotate 为 true
+      调用 runtime.finishModelRotation() 标记角度收敛后的阴影范围刷新
+      清空拖动和触摸候选，不发布 mmd.interaction
+      返回
+    清空拖动状态
+  如果事件是 pointerup，且按下时命中角色、总位移未达到拖动阈值
     执行既有角色触摸互动
+  如果事件是 pointercancel，不触发角色触摸互动
   清空按下状态
 ```
 

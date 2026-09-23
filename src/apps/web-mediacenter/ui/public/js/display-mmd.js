@@ -35,7 +35,6 @@
         pmxAoResolution: 'half'
     });
     const POINTER_DRAG_THRESHOLD = 8;
-    const POINTER_TAP_THRESHOLD = 18;
     const ROTATION_RADIANS_PER_PIXEL = Math.PI / 360;
 
     function clamp(value, minimum, maximum, fallback) {
@@ -118,7 +117,7 @@
         modelReady: false,
         modelProfile: null,
         pressedPoint: null,
-        blankDrag: null,
+        rotationDrag: null,
         pulseUntil: 0,
         lastInteractionAt: 0,
         animationFrame: null,
@@ -245,23 +244,23 @@
         if (state.bus) state.bus.publish('mmd.interaction', event);
     }
 
-    function finishBlankDrag(pointerId) {
-        const drag = state.blankDrag;
+    function finishRotationDrag(pointerId) {
+        const drag = state.rotationDrag;
         if (!drag || drag.pointerId !== pointerId) return false;
         if (state.canvas?.hasPointerCapture?.(pointerId)) {
             state.canvas.releasePointerCapture(pointerId);
         }
-        state.blankDrag = null;
+        state.rotationDrag = null;
         state.canvas?.classList.remove('is-dragging');
         if (drag.didRotate && typeof state.runtime?.finishModelRotation === 'function') {
             state.runtime.finishModelRotation();
         }
-        return true;
+        return drag.didRotate;
     }
 
     function cancelPointerInteraction() {
-        const pointerId = state.blankDrag?.pointerId;
-        if (typeof pointerId === 'number') finishBlankDrag(pointerId);
+        const pointerId = state.rotationDrag?.pointerId;
+        if (typeof pointerId === 'number') finishRotationDrag(pointerId);
         state.pressedPoint = null;
     }
 
@@ -269,12 +268,9 @@
         if (!state.pointerEnabled || !state.visible) return;
         const point = getCanvasPoint(event);
         const hitPart = raycast(point);
-        if (hitPart) {
-            state.pressedPoint = { point, hitPart, pointerId: event.pointerId };
-            return;
-        }
-        state.pressedPoint = null;
-        state.blankDrag = {
+        // 命中角色仅保留点击候选；任何起点都允许拖动旋转。
+        state.pressedPoint = hitPart ? { point, hitPart, pointerId: event.pointerId } : null;
+        state.rotationDrag = {
             pointerId: event.pointerId,
             startPoint: point,
             lastPoint: point,
@@ -284,7 +280,7 @@
     }
 
     function handlePointerMove(event) {
-        const drag = state.blankDrag;
+        const drag = state.rotationDrag;
         if (!state.pointerEnabled || !state.visible || !drag || drag.pointerId !== event.pointerId) return;
         const point = getCanvasPoint(event);
         const travelled = Math.hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y);
@@ -292,6 +288,8 @@
         const deltaX = point.x - drag.lastPoint.x;
         const deltaY = point.y - drag.lastPoint.y;
         drag.lastPoint = point;
+        // 一旦确认为拖动，松手也不能再触发角色触摸。
+        state.pressedPoint = null;
         drag.didRotate = true;
         state.canvas.classList.add('is-dragging');
         if (Math.abs(deltaX) < Number.EPSILON && Math.abs(deltaY) < Number.EPSILON) return;
@@ -300,13 +298,16 @@
 
     function handlePointerUp(event) {
         if (!state.pointerEnabled || !state.visible) return;
-        if (finishBlankDrag(event.pointerId)) return;
+        if (finishRotationDrag(event.pointerId)) {
+            state.pressedPoint = null;
+            return;
+        }
         const pressedPoint = state.pressedPoint;
         if (!pressedPoint || pressedPoint.pointerId !== event.pointerId) return;
         const point = getCanvasPoint(event);
         const distance = Math.hypot(point.x - pressedPoint.point.x, point.y - pressedPoint.point.y);
         state.pressedPoint = null;
-        if (distance > POINTER_TAP_THRESHOLD) return;
+        if (distance >= POINTER_DRAG_THRESHOLD) return;
         triggerInteraction(pressedPoint.hitPart, point);
     }
 
@@ -537,7 +538,7 @@
         state.canvas.addEventListener('pointermove', handlePointerMove, { passive: true });
         state.canvas.addEventListener('pointerup', handlePointerUp, { passive: true });
         state.canvas.addEventListener('pointercancel', (event) => {
-            finishBlankDrag(event.pointerId);
+            finishRotationDrag(event.pointerId);
             state.pressedPoint = null;
         }, { passive: true });
         state.initialized = true;

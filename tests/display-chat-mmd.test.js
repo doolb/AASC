@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'src/apps/web-mediacenter/ui/public');
@@ -220,19 +221,90 @@ test('聊天隐藏后才允许 MMD Canvas 接收点击，并展示 think 内容'
     assert.match(chat, /<think>/u);
 });
 
-test('MMD 空白区域拖动只旋转本地角色并保留命中角色的点击互动', () => {
+test('MMD 指针拖动旋转本地角色并保留点击互动', () => {
     const mmd = readPublic('js/display-mmd.js');
     const pmx = readPublic('js/display-pmx-runtime.js');
     const vrm = readPublic('js/display-vrm-runtime.js');
     assert.match(mmd, /POINTER_DRAG_THRESHOLD/u);
-    assert.match(mmd, /function handlePointerDown\(event\)[\s\S]*const hitPart = raycast\(point\)[\s\S]*if \(hitPart\)/u);
-    assert.match(mmd, /function handlePointerMove\(event\)[\s\S]*state\.blankDrag[\s\S]*rotateModelBy/u);
-    assert.match(mmd, /function finishBlankDrag\(pointerId\)[\s\S]*releasePointerCapture[\s\S]*finishModelRotation/u);
-    assert.match(mmd, /function handlePointerUp\(event\)[\s\S]*finishBlankDrag\(event\.pointerId\)[\s\S]*triggerInteraction/u);
+    assert.match(mmd, /function handlePointerMove\(event\)[\s\S]*rotateModelBy/u);
     assert.match(pmx, /const rotateModelBy = \(yawRadians, pitchRadians = 0\)[\s\S]*rotationState\.targetYaw \+= yawDelta/u);
     assert.match(pmx, /const finishModelRotation = \(\)[\s\S]*fitShadowWhenSettled/u);
     assert.match(vrm, /function rotateModelBy\(yawRadians, pitchRadians = 0\)[\s\S]*rotationState\.targetYaw \+= yawDelta/u);
     assert.match(vrm, /function finishModelRotation\(\)[\s\S]*fitShadowWhenSettled/u);
+});
+
+function createMmdPointerHarness(hitPart) {
+    const source = readPublic('js/display-mmd.js');
+    const marker = '    root.DisplayMmd = Object.freeze({';
+    assert.ok(source.includes(marker));
+    const instrumented = source.replace(marker,
+        '    root.__pointerTest = { state, handlePointerDown, handlePointerMove, handlePointerUp, cancelPointerInteraction };\n' + marker);
+    const window = {};
+    vm.runInNewContext(instrumented, { window, console });
+    const { state, handlePointerDown, handlePointerMove, handlePointerUp, cancelPointerInteraction } = window.__pointerTest;
+    const events = [];
+    const captures = new Set();
+    state.canvas = {
+        getBoundingClientRect() { return { left: 0, top: 0, width: 300, height: 300 }; },
+        setPointerCapture(pointerId) { captures.add(pointerId); },
+        hasPointerCapture(pointerId) { return captures.has(pointerId); },
+        releasePointerCapture(pointerId) { captures.delete(pointerId); },
+        classList: { add(name) { events.push(`class:${name}`); }, remove() {} }
+    };
+    state.status = { textContent: '', classList: { toggle() {} } };
+    state.bus = { publish(type, payload) { events.push({ type, payload }); } };
+    state.runtime = {
+        raycast() { return hitPart; },
+        rotateModelBy(yaw, pitch) { events.push({ yaw, pitch }); },
+        finishModelRotation() { events.push('finish'); }
+    };
+    state.pointerEnabled = true;
+    state.visible = true;
+    return { state, events, captures, handlePointerDown, handlePointerMove, handlePointerUp, cancelPointerInteraction };
+}
+
+test('MMD 从角色身上拖动会旋转，抬起不触发触摸', () => {
+    const harness = createMmdPointerHarness('body');
+    const point = (x, y) => ({ pointerId: 1, clientX: x, clientY: y });
+    harness.handlePointerDown(point(100, 100));
+    assert.equal(harness.captures.has(1), true);
+    harness.handlePointerMove(point(120, 110));
+    harness.handlePointerUp(point(120, 110));
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && 'yaw' in event).length, 1);
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 0);
+    assert.equal(harness.events.includes('finish'), true);
+    assert.equal(harness.captures.has(1), false);
+});
+
+test('MMD 角色轻点触发触摸，取消和空白拖动不触发', () => {
+    const tap = createMmdPointerHarness('head');
+    const point = (x, y) => ({ pointerId: 2, clientX: x, clientY: y });
+    tap.handlePointerDown(point(100, 100));
+    tap.handlePointerMove(point(103, 102));
+    tap.handlePointerUp(point(103, 102));
+    assert.equal(tap.events.filter((event) => typeof event === 'object' && 'yaw' in event).length, 0);
+    assert.equal(tap.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 1);
+    assert.equal(tap.captures.has(2), false);
+
+    const movedWithoutMove = createMmdPointerHarness('body');
+    movedWithoutMove.handlePointerDown(point(100, 100));
+    movedWithoutMove.handlePointerUp(point(112, 100));
+    assert.equal(movedWithoutMove.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 0);
+
+    const cancelled = createMmdPointerHarness('body');
+    cancelled.handlePointerDown(point(100, 100));
+    cancelled.handlePointerMove(point(130, 100));
+    cancelled.cancelPointerInteraction();
+    assert.equal(cancelled.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 0);
+    assert.equal(cancelled.events.includes('finish'), true);
+    assert.equal(cancelled.captures.has(2), false);
+
+    const blank = createMmdPointerHarness(null);
+    blank.handlePointerDown(point(100, 100));
+    blank.handlePointerMove(point(130, 100));
+    blank.handlePointerUp(point(130, 100));
+    assert.equal(blank.events.filter((event) => typeof event === 'object' && 'yaw' in event).length, 1);
+    assert.equal(blank.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 0);
 });
 
 test('MMD 空白区域上下拖动以受限俯仰角旋转 PMX 和 VRM 角色', () => {
