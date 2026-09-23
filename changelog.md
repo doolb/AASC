@@ -28,6 +28,9 @@
   - `npm run sync:offline-update -- --skip-signature-verification` 不加载公钥或验证 RSA 签名，并明确警告清单来源未经认证；默认验签行为不变。
   - 无论是否跳过验签，仍校验清单结构、组件白名单、路径、文件大小和 SHA-256，并保留原子清单切换与精确清理；Android 客户端仍强制验签。
   - 更新同步 design/spec、使用说明和任务记录；Node 语法检查与 `git diff --check` 通过，未运行自动化测试或构建 Offline APK/发布包。
+- ✅ [2026-09-23] 外网 Offline 同步显示文件名和下载进度
+  - 同步输出当前资源相对路径、单文件已传/总大小与百分比，并按资源总字节数计算整体进度；TTY 当前行刷新和普通日志均节流。
+  - 更新同步 design/spec、使用说明和任务记录；Node 语法检查与 `git diff --check` 通过，未运行自动化测试或构建 Offline APK/发布包。
 - ✅ [2026-09-23] 重新构建并发布 Offline min APK v34（`0.2.32-offline-min`）
   - 发布文件：`apk/aasc-display-offline-min-v34.apk`，大小 `89302814` bytes，SHA-256 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`。
   - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的清单、资源校验和旧 min 版本精确清理通过；完整 APK 未构建。

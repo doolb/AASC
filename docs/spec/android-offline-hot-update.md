@@ -91,10 +91,20 @@ syncOfflineUpdate:
         code, dependencies, apkMin, dataRepair when present
         exclude apkFull and any component not in the allowlist
     validate manifest structure, component versions and safe relative paths
+    totalDownloadBytes = sum(component.size for component in selected components)
+    completedDownloadBytes = 0
 
-    for component in selected components:
+    for component, index in selected components:
+        show component.relativeUrl and 0% file/overall download progress
         download to localRoot/.sync-<id>/<relativeUrl>.part
         require ordinary file path and safe relativeUrl
+        for each received data chunk:
+            update file received bytes and overall received bytes
+            show filename, received/total bytes, file percent and overall percent
+            if terminal is interactive:
+                refresh current progress line at a throttled interval
+            else:
+                print progress at throttled percentage milestones
         require exact size and SHA-256 declared by manifest
         if localRoot/relativeUrl exists with same hash:
             keep existing file
@@ -102,6 +112,7 @@ syncOfflineUpdate:
             stop without replacing manifest
         else:
             atomically install the size/hash-checked versioned file
+        completedDownloadBytes += component.size
 
     write manifest to localRoot/manifest.json.tmp-<id>
     fsync and atomically rename manifest.json last
@@ -129,7 +140,7 @@ publishOfflineUpdate:
     LAN source list does not create additional upload targets
 ```
 
-实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。默认源为公网 IP，默认目标为 `/mnt/aasc-offline`，可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过（此前同步功能记录）。
+实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。默认源为公网 IP，默认目标为 `/mnt/aasc-offline`，可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。同步显示当前文件名、单文件字节/百分比和总字节/百分比。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过（此前同步功能记录）。
 
 > 2026-09-23 已重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），APK 大小 `89302814` bytes，SHA-256 为 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`；内网和外网清单、资源大小/SHA-256 及旧 min 版本精确清理校验通过，完整 APK 未构建。
 

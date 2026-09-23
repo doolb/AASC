@@ -44,6 +44,63 @@ function sha256Buffer(value) {
     return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+function formatProgressBytes(value) {
+    if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
+    if (value >= 1024) return `${(value / 1024).toFixed(1)} KiB`;
+    return `${value} B`;
+}
+
+function createProgressDisplay(totalBytes, output = process.stderr) {
+    const isInteractive = Boolean(output.isTTY);
+    let previousLineLength = 0;
+    let lastRenderAt = 0;
+    let lastLoggedMilestone = -1;
+    let currentFile = null;
+
+    function render(receivedBytes, completedBytes, force = false) {
+        if (!currentFile) return;
+        const filePercent = Math.min(100, Math.floor((receivedBytes / currentFile.size) * 100));
+        const overallBytes = Math.min(totalBytes, completedBytes + receivedBytes);
+        const overallPercent = Math.min(100, Math.floor((overallBytes / totalBytes) * 100));
+        const message = `[${currentFile.index}/${currentFile.count}] ${currentFile.name} ` +
+            `${formatProgressBytes(receivedBytes)}/${formatProgressBytes(currentFile.size)} (${filePercent}%)` +
+            ` | 总进度 ${formatProgressBytes(overallBytes)}/${formatProgressBytes(totalBytes)} (${overallPercent}%)`;
+
+        if (isInteractive) {
+            const now = Date.now();
+            if (!force && receivedBytes < currentFile.size && now - lastRenderAt < 200) return;
+            const lineWidth = Math.max(previousLineLength, message.length);
+            output.write(`\r${message.padEnd(lineWidth, ' ')}`);
+            previousLineLength = lineWidth;
+            lastRenderAt = now;
+            return;
+        }
+
+        const milestone = Math.floor(filePercent / 10);
+        if (force || filePercent === 100 || milestone > lastLoggedMilestone) {
+            output.write(`${message}\n`);
+            lastLoggedMilestone = milestone;
+        }
+    }
+
+    return {
+        begin(name, index, count, size, completedBytes) {
+            currentFile = { name, index, count, size };
+            lastLoggedMilestone = -1;
+            render(0, completedBytes, true);
+        },
+        update(receivedBytes, completedBytes) {
+            render(receivedBytes, completedBytes);
+        },
+        end() {
+            if (isInteractive && previousLineLength > 0) output.write('\n');
+            previousLineLength = 0;
+            lastRenderAt = 0;
+            currentFile = null;
+        }
+    };
+}
+
 async function sha256File(filePath) {
     const hash = crypto.createHash('sha256');
     for await (const chunk of fs.createReadStream(filePath)) hash.update(chunk);
@@ -119,7 +176,7 @@ function selectSyncComponents(manifest) {
         .filter(({ component }) => component && typeof component.relativeUrl === 'string');
 }
 
-async function downloadArtifact(sourceUrl, component, stagingPath, options = {}) {
+async function downloadArtifact(sourceUrl, component, stagingPath, options = {}, onProgress) {
     const response = await fetchWithTimeout(new URL(component.relativeUrl, sourceUrl), options);
     if (!response.ok) {
         throw new Error(`下载 ${component.relativeUrl} 失败，HTTP ${response.status}`);
@@ -138,6 +195,7 @@ async function downloadArtifact(sourceUrl, component, stagingPath, options = {})
             }
             hash.update(buffer);
             await handle.write(buffer);
+            onProgress?.(totalBytes);
         }
         await handle.sync();
     } finally {
@@ -228,11 +286,28 @@ async function syncOfflineUpdate(options = {}) {
     const stagingRoot = await fs.promises.mkdtemp(path.join(localRoot, `.offline-sync-${syncId}-`));
     const installed = [];
     const skipped = [];
+    const totalDownloadBytes = components.reduce((total, { component }) => total + component.size, 0);
+    const progressDisplay = createProgressDisplay(totalDownloadBytes);
+    let completedDownloadBytes = 0;
     try {
-        for (const { name, component } of components) {
+        for (const [index, { name, component }] of components.entries()) {
             const targetPath = await resolveSafePath(localRoot, component.relativeUrl);
             const stagingPath = path.join(stagingRoot, ...component.relativeUrl.split('/'));
-            await downloadArtifact(sourceUrl, component, stagingPath, options);
+            progressDisplay.begin(
+                component.relativeUrl,
+                index + 1,
+                components.length,
+                component.size,
+                completedDownloadBytes
+            );
+            try {
+                await downloadArtifact(sourceUrl, component, stagingPath, options, (receivedBytes) => {
+                    progressDisplay.update(receivedBytes, completedDownloadBytes);
+                });
+            } finally {
+                progressDisplay.end();
+            }
+            completedDownloadBytes += component.size;
             const didInstall = await installArtifact(stagingPath, targetPath, component);
             (didInstall ? installed : skipped).push(name);
         }
