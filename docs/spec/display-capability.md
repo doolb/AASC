@@ -15,6 +15,7 @@ DisplayCapabilities:
     voiceRecording: boolean     // 语音录音，默认 true
     voiceRecognition: boolean   // 语音识别，默认 false（需要检测）
     displayText: boolean        // 文本显示，默认 true
+    cameraCapture: boolean      // 摄像头读取，显示端声明支持；控制端可持久化启用/禁用
 ```
 
 ### 默认能力
@@ -112,27 +113,57 @@ handleDisplayMessage(displayId, data, ws):
 handleControlMessage(ws, data):
     if data.type === 'updateCapabilities':
         displayId = data.displayId
-        capabilities = data.capabilities
+        requestedCapabilities = 只接收普通对象，否则使用空对象
         displayData = displayClients.get(displayId)
         if displayData:
-            displayData.state.capabilities = {
-                ...DEFAULT_CAPABILITIES,
-                ...capabilities
-            }
-            // 保存用户覆盖值，重连后恢复（与硬件能力分开跟踪）
-            displayData.state.userCapabilities = { ...capabilities }
-            // 通知显示端能力已更新
+            userCapabilities = normalizeDisplayUserCapabilities(requestedCapabilities)
+            displayData.state.capabilities = mergeDisplayCapabilities(
+                { ...displayData.state.capabilities, ...requestedCapabilities },
+                userCapabilities
+            )
+            displayData.state.userCapabilities = userCapabilities
+            如果 displayData.state.capabilities.cameraCapture !== true:
+                停止该显示端摄像头会话并通知发起请求的控制端
             sendToDisplay(displayId, {
                 type: 'capabilitiesUpdated',
                 capabilities: displayData.state.capabilities
             })
-            // 持久化到 config.json，保存用户覆盖值
-            config.updateDisplayState(displayData.ip, {
+            ws.send({
+                type: 'capabilitiesUpdated',
+                displayId,
+                capabilities: displayData.state.capabilities
+            })
+            persistDisplayState(displayData, {
                 capabilities: displayData.state.capabilities,
-                userCapabilities: { ...capabilities }
+                userCapabilities
             })
             broadcastToControls({ type: 'displayList', list: getDisplayList() })
         return
+```
+
+### 摄像头能力开关
+
+```
+控制端设备能力树或能力编辑弹窗:
+    将 cameraCapture 作为可编辑布尔项
+    通过 updateCapabilities 发送目标 displayId 和 capabilities
+
+服务端处理 cameraCapture:
+    仅将严格布尔值写入 userCapabilities
+    合并自动声明能力和用户覆盖值
+    关闭时停止该显示端已有的摄像头会话
+    通过 config.set 持久化 capabilities 和 userCapabilities
+    向控制端和显示端回传规范化后的权威 capabilities
+
+显示端收到 capabilitiesUpdated(cameraCapture=false):
+    停止普通摄像头轨道和 AR 跟踪
+    禁止摄像头路径的 video getUserMedia、摄像头列表 enumerateDevices、拍照、预览和定位
+    音频输入设备枚举和麦克风录音仍按 voiceRecording 能力独立运行
+
+显示端连接但尚未收到远端配置:
+    使用本地默认 cameraCapture=true
+显示端重连:
+    服务端先恢复 userCapabilities，再发送权威 cameraCapture 值
 ```
 
 ### getDisplayList 修改

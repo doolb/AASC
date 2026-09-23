@@ -362,13 +362,17 @@ const DeviceList = {
     handleCapabilitiesUpdated(data) {
         const display = this.list.find((item) => item.id === data?.displayId);
         if (!display || !data.capabilities) return;
+        const previousVoiceRecording = display.capabilities?.voiceRecording;
         display.capabilities = { ...this.getVoiceCapabilities(display), ...data.capabilities };
+        if (data.capabilities.cameraCapture === false) {
+            this.clearDisplayCameraState(display.id, false);
+        }
         const pending = this.voiceListeningPending.get(display.id);
         if (!pending || display.capabilities.voiceRecording === pending.enabled) {
             this.voiceListeningPending.delete(display.id);
         }
         this.render();
-        if (window.showToast) {
+        if (window.showToast && previousVoiceRecording !== display.capabilities.voiceRecording) {
             window.showToast(`显示端监听已${display.capabilities.voiceRecording ? '开启' : '关闭'}`, 'success');
         }
     },
@@ -628,6 +632,20 @@ const DeviceList = {
         return this.displayCameraDevicesByDisplay.get(displayId) || [];
     },
 
+    clearDisplayCameraState(displayId, stopSession = true) {
+        // 关闭摄像头时清除设备列表、预览帧和照片缓存，并按需通知服务端停止在途会话。
+        const state = this.getDisplayCameraState(displayId);
+        if (stopSession && state?.requestId) {
+            this.sendDisplayCameraMessage({
+                type: 'stopDisplayCamera',
+                displayId,
+                requestId: state.requestId
+            });
+        }
+        this.displayCameraByDisplay.delete(displayId);
+        this.displayCameraDevicesByDisplay.delete(displayId);
+    },
+
     requestDisplayCameraDevicesIfNeeded(display) {
         if (!display || display.capabilities?.cameraCapture !== true || !this.isControlSocketOpen()) return;
         const displayId = display.id;
@@ -647,6 +665,8 @@ const DeviceList = {
     },
 
     requestDisplayCameraDevices(displayId) {
+        const display = this.list.find((item) => item.id === displayId);
+        if (display?.capabilities?.cameraCapture !== true) return false;
         const requestId = `display-camera-list-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const state = this.getDisplayCameraState(displayId) || {};
         state.listRequestId = requestId;
@@ -721,6 +741,8 @@ const DeviceList = {
     handleDisplayCameraDevices(data) {
         const displayId = String(data?.displayId || '');
         if (!displayId) return;
+        const display = this.list.find((item) => item.id === displayId);
+        if (display?.capabilities?.cameraCapture !== true) return;
         const devices = Array.isArray(data.devices) ? data.devices : [];
         this.displayCameraDevicesByDisplay.set(displayId, devices);
         const state = this.getDisplayCameraState(displayId) || {};
@@ -759,6 +781,8 @@ const DeviceList = {
 
     handleDisplayCameraFrame(data) {
         const displayId = String(data?.displayId || '');
+        const display = this.list.find((item) => item.id === displayId);
+        if (display?.capabilities?.cameraCapture !== true) return;
         const state = this.getDisplayCameraState(displayId);
         if (!displayId || !state || state.requestId !== data.requestId) return;
         const dataUrl = this.getCameraDataUrl(data);
@@ -771,6 +795,8 @@ const DeviceList = {
 
     handleDisplayCameraResult(data) {
         const displayId = String(data?.displayId || '');
+        const display = this.list.find((item) => item.id === displayId);
+        if (display?.capabilities?.cameraCapture !== true) return;
         const state = this.getDisplayCameraState(displayId);
         if (!displayId || !state || (state.requestId && state.requestId !== data.requestId)) return;
         const dataUrl = this.getCameraDataUrl(data);
@@ -1149,7 +1175,9 @@ const DeviceList = {
         const photoButton = state.photoDataUrl
             ? `<button type="button" class="display-camera-attach" data-camera-attach data-display-id="${displayId}">发送给 AI</button>`
             : '';
-        const status = state.cameraError
+        const status = !supported
+            ? '摄像头已关闭'
+            : state.cameraError
             ? '摄像头列表读取失败'
             : state.listRequestId
                 ? '正在刷新摄像头'
@@ -1165,7 +1193,7 @@ const DeviceList = {
                     <button type="button" data-camera-photo data-display-id="${displayId}" ${supported && !isBusy ? '' : 'disabled'}>📷 拍照</button>
                     <button type="button" data-camera-live data-display-id="${displayId}" ${supported ? '' : 'disabled'}>${isRealtime ? '停止实时预览' : '▶ 实时预览'}</button>
                 </div>
-                <div class="display-camera-status">${supported ? status : '当前显示端不支持摄像头'}</div>
+                <div class="display-camera-status">${status}</div>
                 <img class="display-camera-preview" data-camera-preview data-display-id="${displayId}" src="${activePreview}" alt="摄像头预览" ${activePreview ? '' : 'hidden'}>
                 <div class="display-camera-photo-actions">${photoButton}</div>
             </div>
@@ -1705,7 +1733,7 @@ const DeviceList = {
                     <span class="cap-icon ${caps.mediaRendering ? 'active' : 'inactive'}" title="媒体渲染${caps.mediaRendering ? '' : '（不可用）'}">🖥️</span>
                     <span class="cap-icon ${caps.voicePlayback ? 'active' : 'inactive'}" title="语音播放${caps.voicePlayback ? '' : '（不可用）'}">🔊</span>
                     <span class="cap-icon ${caps.voiceRecording ? 'active' : 'inactive'}" title="语音录音${caps.voiceRecording ? '' : '（不可用）'}">🎙️</span>
-                    <span class="cap-icon ${caps.cameraCapture ? 'active' : 'inactive'}" title="摄像头${caps.cameraCapture ? '' : '（不可用）'}">📷</span>
+                    <span class="cap-icon ${caps.cameraCapture ? 'active' : 'inactive'}" title="摄像头${caps.cameraCapture ? '（已启用）' : '（已关闭）'}">📷</span>
                     <span class="cap-icon ${caps.voiceRecognition ? 'active' : 'inactive'}" title="语音识别${caps.voiceRecognition ? '' : '（不可用）'}">🧠</span>
                     <span class="cap-icon ${caps.ttsGeneration ? 'active' : 'inactive'}" title="语音生成${caps.ttsGeneration ? '' : '（不可用）'}">🗣️</span>
                     <span class="cap-icon ${caps.displayText ? 'active' : 'inactive'}" title="文本显示${caps.displayText ? '' : '（不可用）'}">📝</span>
@@ -1938,7 +1966,7 @@ const DeviceList = {
             { key: 'mediaRendering', label: '媒体渲染', icon: '🖥️' },
             { key: 'voicePlayback', label: '语音播放', icon: '🔊' },
             { key: 'voiceRecording', label: '语音录音', icon: '🎙️' },
-            { key: 'cameraCapture', label: '摄像头采集', icon: '📷', readOnly: true },
+            { key: 'cameraCapture', label: '摄像头采集', icon: '📷' },
             { key: 'voiceRecognition', label: '语音识别', icon: '🧠' },
             { key: 'ttsGeneration', label: '语音生成', icon: '🗣️' },
             { key: 'displayText', label: '文本显示', icon: '📝' },
@@ -2299,16 +2327,22 @@ const DeviceList = {
         const displayId = nodeId.replace(`-cap-${key}`, '');
         const display = this.list.find(d => d.id === displayId);
         if (!display) return;
+        if (!this.isControlSocketOpen()) {
+            if (window.showToast) window.showToast('能力设置失败：控制端未连接', 'error');
+            return false;
+        }
 
-        const capabilities = display.capabilities || {
+        const capabilities = {
             mediaRendering: true,
             voicePlayback: true,
             voiceRecording: true,
-                voiceRecognition: false,
-                ttsGeneration: false,
-                displayText: true,
-                ocrAvailable: false,
-                yolo11nAvailable: false
+            cameraCapture: false,
+            voiceRecognition: false,
+            ttsGeneration: false,
+            displayText: true,
+            ocrAvailable: false,
+            yolo11nAvailable: false,
+            ...(display.capabilities || {})
         };
 
         if (key === 'llm') {
@@ -2320,21 +2354,30 @@ const DeviceList = {
             capabilities[key] = value;
         }
 
-        if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+        if (key === 'cameraCapture' && value !== true) {
+            this.clearDisplayCameraState(displayId);
+        }
+
+        try {
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'updateCapabilities',
-                displayId: displayId,
-                capabilities: capabilities
+                displayId,
+                capabilities
             }));
+        } catch (error) {
+            if (window.showToast) window.showToast(`能力设置失败：${error.message}`, 'error');
+            return false;
         }
 
         display.capabilities = capabilities;
+        this.render();
 
         if (window.showToast) {
             const labelMap = {
                 mediaRendering: '媒体渲染',
                 voicePlayback: '语音播放',
                 voiceRecording: '语音录音',
+                cameraCapture: '摄像头采集',
                 voiceRecognition: '语音识别',
                 ttsGeneration: '语音生成',
                 displayText: '文本显示',
@@ -2342,6 +2385,7 @@ const DeviceList = {
             };
             window.showToast(`${labelMap[key] || key} 已${value ? '启用' : '禁用'}`, 'success');
         }
+        return true;
     },
 
     showFeatureModal(displayId) {
@@ -2429,6 +2473,7 @@ const DeviceList = {
             mediaRendering: true,
             voicePlayback: true,
             voiceRecording: true,
+            cameraCapture: false,
             voiceRecognition: false,
             ttsGeneration: false,
             displayText: true
@@ -2458,6 +2503,11 @@ const DeviceList = {
                         <input type="checkbox" ${caps.voiceRecording ? 'checked' : ''} data-cap="voiceRecording">
                         <span>🎙️ 语音录音</span>
                         <span class="capability-desc">能录制音频</span>
+                    </label>
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.cameraCapture ? 'checked' : ''} data-cap="cameraCapture">
+                        <span>📷 摄像头采集</span>
+                        <span class="capability-desc">关闭后停止拍照、预览和 AR 定位</span>
                     </label>
                     <label class="capability-item">
                         <input type="checkbox" ${caps.voiceRecognition ? 'checked' : ''} data-cap="voiceRecognition">
@@ -2507,6 +2557,10 @@ const DeviceList = {
     },
 
     saveCapabilities(displayId) {
+        if (!this.isControlSocketOpen()) {
+            if (window.showToast) window.showToast('能力设置失败：控制端未连接', 'error');
+            return false;
+        }
         const checkboxes = document.querySelectorAll('#capabilityModal input[type="checkbox"]');
         const capabilities = {};
         checkboxes.forEach(cb => {
@@ -2517,15 +2571,23 @@ const DeviceList = {
             capabilities[cb.dataset.cap] = cb.checked;
         });
 
-        if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+        if (capabilities.cameraCapture === false) {
+            this.clearDisplayCameraState(displayId);
+        }
+
+        try {
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'updateCapabilities',
                 displayId: displayId,
                 capabilities: capabilities
             }));
+        } catch (error) {
+            if (window.showToast) window.showToast(`能力设置失败：${error.message}`, 'error');
+            return false;
         }
 
         this.closeCapabilityEditor();
+        return true;
     },
 
     closeCapabilityEditor() {

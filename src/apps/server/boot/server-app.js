@@ -1602,6 +1602,20 @@ function rejectDisplayCameraSessionsForDisplay(displayId, message) {
     }
 }
 
+// 摄像头能力关闭时终止该显示端所有在途请求，避免服务端继续转发旧帧。
+function stopDisplayCameraSessionsForDisplay(displayId) {
+    for (const [requestId, session] of displayCameraSessions) {
+        if (session.displayId !== displayId) continue;
+        sendToDisplay(displayId, { type: 'stopDisplayCamera', requestId });
+        sendDisplayCameraToControl(session, {
+            type: 'displayCameraStatus',
+            requestId,
+            state: 'stopped'
+        });
+        closeDisplayCameraSession(requestId);
+    }
+}
+
 function rejectDisplayCameraSessionsForControl(controlSocket) {
     for (const [requestId, session] of displayCameraSessions) {
         if (session.controlSocket === controlSocket) closeDisplayCameraSession(requestId);
@@ -1741,6 +1755,10 @@ function normalizeDisplayUserCapabilities(capabilities) {
         ? capabilities
         : {};
     const normalized = { ...source };
+    if (Object.prototype.hasOwnProperty.call(source, 'cameraCapture')) {
+        // 摄像头开关只接受严格布尔值；异常输入按关闭处理，避免意外打开采集。
+        normalized.cameraCapture = source.cameraCapture === true;
+    }
     // Android 控制端是显示端原生能力声明，不能由控制端伪造或关闭。
     delete normalized.androidControlPage;
     if (Object.prototype.hasOwnProperty.call(source, 'llm')) {
@@ -8250,6 +8268,9 @@ wss.on('connection', (ws, req) => {
                         });
                         // 保存用户覆盖值，重连后恢复
                         targetDisplayData.state.userCapabilities = userCapabilities;
+                        if (targetDisplayData.state.capabilities.cameraCapture !== true) {
+                            stopDisplayCameraSessionsForDisplay(targetDisplayId);
+                        }
                         syncDisplayConversationListeningState(targetDisplayId, 'control');
                         sendToDisplay(targetDisplayId, {
                             type: 'capabilitiesUpdated',
@@ -8803,6 +8824,16 @@ function handleDisplayCameraMessage(displayId, data) {
     const requestId = typeof data.requestId === 'string' ? data.requestId : '';
     const session = displayCameraSessions.get(requestId);
     if (!session || session.displayId !== displayId) return;
+    const display = displayClients.get(displayId);
+    if (display?.state.capabilities?.cameraCapture !== true) {
+        sendDisplayCameraToControl(session, {
+            type: 'displayCameraStatus',
+            requestId,
+            state: 'stopped'
+        });
+        closeDisplayCameraSession(requestId);
+        return;
+    }
     if (['displayCameraFrame', 'displayCameraResult'].includes(data.type)
         && !isCameraPayloadWithinLimit(data.imageBase64)) {
         sendDisplayCameraToControl(session, {
@@ -9133,7 +9164,7 @@ async function handleControlMessageFallback(data, ws) {
                 displayId,
                 requestId: data.requestId || null,
                 state: 'error',
-                error: '显示端不支持摄像头'
+                error: '显示端摄像头能力已关闭'
             }));
             return;
         }

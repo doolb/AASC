@@ -162,7 +162,7 @@ idle → requestingCamera → calibrationCapture → selectingRegion
 
 ## 9. 控制边界
 
-首期 AR 校准和启停由显示端本地按钮完成，不新增服务器配置和 WebSocket 消息。控制端现有 MMD 显示/隐藏仍然有效：隐藏 MMD 时同时隐藏 AR 角色，但是否继续占用摄像头由本地 AR 状态决定；默认关闭 AR 时不占用摄像头。
+首期 AR 校准和启停由显示端本地按钮完成，不新增 AR 专属服务器配置或 WebSocket 消息。摄像头读取受显示端 `cameraCapture` 能力统一控制；控制端在设备能力中关闭摄像头后，显示端立即停止 AR 跟踪并释放视频轨道，校准与定位入口不可启动。重新开启只恢复入口，不自动启动摄像头。控制端现有 MMD 显示/隐藏仍然有效：隐藏 MMD 时同时隐藏 AR 角色，但是否继续占用摄像头由本地 AR 状态决定；默认关闭 AR 时不占用摄像头。
 
 后续如果需要控制端远程启停，可以增加 `ar.start`、`ar.stop`、`ar.target.clear` 等消息，但不能把图像目标本体通过控制 WebSocket 传输。
 

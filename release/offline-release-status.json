@@ -1,5 +1,5 @@
 {
-  "minApk": false,
-  "servicePackage": false,
+  "minApk": true,
+  "servicePackage": true,
   "dependenciesPackage": false
 }

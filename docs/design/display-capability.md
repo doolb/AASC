@@ -32,6 +32,7 @@
 | `voice-recording` | 语音录音 | 能录制音频 | 浏览器检测 getUserMedia / 子显示端默认 true |
 | `voice-recognition` | 语音识别提供端 | 可被服务器选作 ASR 提供端 | Android 原生模型状态或控制端能力配置 |
 | `display-text` | 文本显示 | 能显示文字覆盖层 | 默认 true，子显示端为 false |
+| `cameraCapture` | 摄像头采集 | 允许读取视频设备、拍照、预览和 AR 定位 | 浏览器 API 能力检测并接受控制端远端覆盖 |
 
 ### 2.1.1 ASR 能力归属
 
@@ -46,15 +47,16 @@ interface DisplayCapabilities {
   voiceRecording: boolean;    // 语音录音
   voiceRecognition: boolean;  // 语音识别
   displayText: boolean;       // 文本显示
+  cameraCapture: boolean;     // 摄像头采集，默认沿用设备检测结果，可由控制端关闭
 }
 ```
 
 ### 2.3 默认能力
 
-| 显示端类型 | mediaRendering | voicePlayback | voiceRecording | voiceRecognition | displayText |
-|------------|:-:|:-:|:-:|:-:|:-:|
-| 普通显示端 | ✅ | ✅ | ✅ | 视ASR可用性 | ✅ |
-| 子显示端（voice-display） | ❌ | ✅ | ✅ | ✅ | ❌ |
+| 显示端类型 | mediaRendering | voicePlayback | voiceRecording | voiceRecognition | displayText | cameraCapture |
+|------------|:-:|:-:|:-:|:-:|:-:|:-:|
+| 普通显示端 | ✅ | ✅ | ✅ | 视ASR可用性 | ✅ | 视浏览器能力，默认启用 |
+| 子显示端（voice-display） | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
 
 ## 3. 能力声明流程
 
@@ -78,19 +80,21 @@ interface DisplayCapabilities {
 
 ### 3.2 控制端手动标记
 
-控制端可以手动修改显示端的能力标记：
+控制端可以手动修改显示端的能力标记，包括摄像头采集开关：
 
 ```
 控制端显示端列表
     ↓
-点击显示端能力编辑
+在设备能力树或能力编辑弹窗修改能力标记
     ↓
 修改能力标记
     ↓
 发送 updateCapabilities 消息到服务端
     ↓
-服务端更新 capabilities 并广播到控制端
+服务端规范化 cameraCapture 布尔值，持久化 userCapabilities，并向控制端和显示端回传权威 capabilities
 ```
+
+关闭 `cameraCapture` 后，显示端立即停止普通摄像头流和 MMD 图片定位 AR；服务端拒绝新的摄像头请求并停止该显示端现有的摄像头转发会话。该设置仅影响视频采集，不影响麦克风录音。显示端默认启用摄像头以兼容现有行为；重连后由服务端下发已保存的开关值。
 
 ### 3.3 子显示端自动声明
 

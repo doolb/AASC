@@ -5868,6 +5868,8 @@
         watchDisplayVersion();
 
         let currentCapabilities = null;
+        // 服务端手动覆盖值优先于异步硬件探测，避免重连后重新声明为开启。
+        let cameraCaptureUserOverride = null;
         let cameraStream = null;
         let cameraVideo = null;
         let cameraCanvas = null;
@@ -5878,6 +5880,10 @@
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return false;
             displayWs.send(JSON.stringify(message));
             return true;
+        }
+
+        function isDisplayCameraEnabled() {
+            return currentCapabilities?.cameraCapture !== false;
         }
 
         function updateCameraStatus(state, text, title = text) {
@@ -6025,6 +6031,11 @@
         }
 
         async function listDisplayCameras(requestId) {
+            if (!isDisplayCameraEnabled()) {
+                updateCameraStatus('stopped', '摄像头已关闭');
+                sendCameraStatus(requestId, 'error', '显示端摄像头能力已关闭');
+                return;
+            }
             updateCameraStatus('loading', '正在刷新摄像头');
             try {
                 if (!navigator.mediaDevices?.getUserMedia || !navigator.mediaDevices?.enumerateDevices) {
@@ -6036,7 +6047,10 @@
                     audio: false
                 });
                 probeStream.getTracks().forEach((track) => track.stop());
-                const devices = (await navigator.mediaDevices.enumerateDevices())
+                if (!isDisplayCameraEnabled()) throw new Error('显示端摄像头能力已关闭');
+                const enumeratedDevices = await navigator.mediaDevices.enumerateDevices();
+                if (!isDisplayCameraEnabled()) throw new Error('显示端摄像头能力已关闭');
+                const devices = enumeratedDevices
                     .filter((device) => device.kind === 'videoinput')
                     .map((device, index) => ({
                         deviceId: device.deviceId,
@@ -6046,17 +6060,28 @@
                 sendCameraMessage({ type: 'displayCameraDevices', requestId, devices });
                 updateCameraStatus('ready', `摄像头已就绪：${devices.length} 个`);
             } catch (error) {
+                if (!isDisplayCameraEnabled()) {
+                    updateCameraStatus('stopped', '摄像头已关闭');
+                    sendCameraStatus(requestId, 'stopped');
+                    return;
+                }
                 updateCameraStatus('error', '摄像头读取失败', error.message || '无法读取摄像头');
                 sendCameraStatus(requestId, 'error', error.message || '无法读取摄像头');
             }
         }
 
         async function openCamera(cameraId) {
+            if (!isDisplayCameraEnabled()) throw new Error('显示端摄像头能力已关闭');
             stopCameraStream();
             const videoConstraints = cameraId
                 ? { deviceId: { exact: cameraId }, width: { ideal: 640 }, height: { ideal: 480 } }
                 : { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } };
-            cameraStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+            if (!isDisplayCameraEnabled()) {
+                stream.getTracks().forEach((track) => track.stop());
+                throw new Error('显示端摄像头能力已关闭');
+            }
+            cameraStream = stream;
             cameraVideo = document.createElement('video');
             cameraVideo.muted = true;
             cameraVideo.playsInline = true;
@@ -6069,13 +6094,18 @@
             const mode = data.mode === 'realtime' ? 'realtime' : 'single';
             updateCameraStatus('loading', mode === 'single' ? '正在打开摄像头' : '正在启动实时预览');
             try {
-                if (!currentCapabilities?.cameraCapture) throw new Error('当前显示端不支持摄像头');
+                if (!isDisplayCameraEnabled()) throw new Error('显示端摄像头能力已关闭');
                 await openCamera(data.cameraId || '');
+                if (!isDisplayCameraEnabled()) {
+                    stopCameraStream();
+                    return;
+                }
                 cameraSession = { requestId, mode };
                 sendCameraStatus(requestId, 'started');
                 if (mode === 'single') {
                     updateCameraStatus('capturing', '正在拍照');
                     const photo = await captureSingleCameraImage(cameraVideo);
+                    if (!isDisplayCameraEnabled() || cameraSession?.requestId !== requestId) return;
                     if (!photo?.imageBase64) throw new Error('摄像头尚未输出画面');
                     sendCameraMessage({
                         type: 'displayCameraResult',
@@ -6089,6 +6119,11 @@
                 }
                 updateCameraStatus('previewing', '实时预览中');
                 cameraPreviewTimer = setInterval(() => {
+                    if (!isDisplayCameraEnabled()) {
+                        stopCameraStream();
+                        updateCameraStatus('stopped', '摄像头已关闭');
+                        return;
+                    }
                     const imageBase64 = cameraImageBase64(cameraVideo, 0.55);
                     if (!imageBase64 || !cameraSession || cameraSession.requestId !== requestId) return;
                     sendCameraMessage({
@@ -6100,6 +6135,11 @@
                 }, 400);
             } catch (error) {
                 stopCameraStream();
+                if (!isDisplayCameraEnabled()) {
+                    updateCameraStatus('stopped', '摄像头已关闭');
+                    sendCameraStatus(requestId, 'stopped');
+                    return;
+                }
                 updateCameraStatus('error', '摄像头操作失败', error.message || '打开摄像头失败');
                 sendCameraStatus(requestId, 'error', error.message || '打开摄像头失败');
             }
@@ -6490,7 +6530,7 @@
                 androidControlPage: !!(nativeBridge && typeof nativeBridge.setControlPageAccess === 'function'),
                 ocrAvailable: nativeOcrAvailable,
                 yolo11nAvailable: nativeYoloAvailable,
-                cameraCapture: !!navigator.mediaDevices?.getUserMedia,
+                cameraCapture: cameraCaptureUserOverride ?? !!navigator.mediaDevices?.getUserMedia,
                 webViewAudioCapture: !!navigator.mediaDevices?.getUserMedia,
                 nativeAudioCapture: !!(nativeBridge && typeof nativeBridge.startNativeAudioCapture === 'function'),
                 audioInputDevices,
@@ -6572,7 +6612,7 @@
                     capabilities.voiceRecording = false;
             }
 
-            capabilities.cameraCapture = !!navigator.mediaDevices?.getUserMedia;
+            capabilities.cameraCapture = cameraCaptureUserOverride ?? !!navigator.mediaDevices?.getUserMedia;
             const inputDevices = await refreshAudioInputDevices();
             capabilities.audioInputDevices = inputDevices;
             const outputDevices = await refreshAudioOutputDevices();
@@ -6654,6 +6694,7 @@
                 }
             }
             
+            capabilities.cameraCapture = cameraCaptureUserOverride ?? capabilities.cameraCapture;
             return capabilities;
         }
         
@@ -6676,7 +6717,7 @@
                     crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch),
                     ocrAvailable: nativeOcrAvailable,
                     yolo11nAvailable: nativeYoloAvailable,
-                    cameraCapture: !!navigator.mediaDevices?.getUserMedia,
+                    cameraCapture: cameraCaptureUserOverride ?? !!navigator.mediaDevices?.getUserMedia,
                     webViewAudioCapture: !!navigator.mediaDevices?.getUserMedia,
                     nativeAudioCapture: !!(nativeBridge && typeof nativeBridge.startNativeAudioCapture === 'function'),
                     audioInputDevices,
@@ -6720,6 +6761,15 @@
             if (data.capabilities) {
                 const prevCaps = currentCapabilities;
                 currentCapabilities = data.capabilities;
+                const cameraEnabled = data.capabilities.cameraCapture === true;
+                cameraCaptureUserOverride = cameraEnabled;
+                if (!cameraEnabled) {
+                    stopCameraStream();
+                    updateCameraStatus('stopped', '摄像头已关闭');
+                }
+                if (window.DisplayMmdAr?.setCameraEnabled) {
+                    void window.DisplayMmdAr.setCameraEnabled(cameraEnabled);
+                }
                 if (data.capabilities.audioInputDevices) {
                     audioInputDevices = {
                         webview: Array.isArray(data.capabilities.audioInputDevices.webview)

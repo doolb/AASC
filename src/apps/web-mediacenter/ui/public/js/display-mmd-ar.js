@@ -37,8 +37,10 @@
         selectedTargetId: readActiveTargetId(),
         status: 'idle',
         message: '尚未选择定位图',
+        cameraEnabled: true,
         cameraStream: null,
         cameraRequestId: 0,
+        cameraReadyCancel: null,
         trackingRequestId: 0,
         trackerSession: null,
         tracking: false,
@@ -176,7 +178,8 @@
         if (!state.elements) return;
         const selected = getSelectedTarget();
         const hasTarget = !!selected;
-        state.elements.startButton.disabled = !hasTarget || state.tracking;
+        state.elements.calibrationButton.disabled = !state.cameraEnabled;
+        state.elements.startButton.disabled = !state.cameraEnabled || !hasTarget || state.tracking;
         state.elements.stopButton.disabled = !state.tracking && !state.cameraStream;
         state.elements.deleteButton.disabled = !hasTarget || state.tracking;
         state.elements.saveButton.disabled = !state.calibration.sourceCanvas
@@ -562,6 +565,7 @@
     }
 
     async function startCamera() {
+        if (!state.cameraEnabled) throw new Error('显示端摄像头能力已关闭');
         const requestId = ++state.cameraRequestId;
         const video = state.elements.calibration.hidden
             ? state.elements.trackingVideo
@@ -580,7 +584,7 @@
             video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
             audio: false
         });
-        if (requestId !== state.cameraRequestId) {
+        if (requestId !== state.cameraRequestId || !state.cameraEnabled) {
             for (const track of stream.getTracks()) track.stop();
             return;
         }
@@ -589,13 +593,22 @@
         state.elements.trackingVideo.srcObject = stream;
         try {
             await new Promise((resolve) => {
-                if (video.readyState >= 1) {
+                const finish = () => {
+                    video.removeEventListener('loadedmetadata', finish);
+                    if (state.cameraReadyCancel === finish) state.cameraReadyCancel = null;
                     resolve();
+                };
+                if (video.readyState >= 1) {
+                    finish();
                     return;
                 }
-                video.addEventListener('loadedmetadata', resolve, { once: true });
+                state.cameraReadyCancel = finish;
+                video.addEventListener('loadedmetadata', finish, { once: true });
             });
-            if (requestId !== state.cameraRequestId) return;
+            if (requestId !== state.cameraRequestId || !state.cameraEnabled) {
+                stopCamera();
+                return;
+            }
             await video.play();
         } catch (error) {
             stopCamera();
@@ -605,6 +618,7 @@
 
     function stopCamera() {
         state.cameraRequestId += 1;
+        if (state.cameraReadyCancel) state.cameraReadyCancel();
         if (state.cameraStream) {
             for (const track of state.cameraStream.getTracks()) track.stop();
         }
@@ -618,6 +632,10 @@
     }
 
     async function beginCalibration() {
+        if (!state.cameraEnabled) {
+            setStatus('stopped', '摄像头已关闭');
+            return;
+        }
         await stopTrackerSession();
         root.DisplayMmd?.resetArPose?.();
         state.elements.trackingVideo.hidden = true;
@@ -813,6 +831,10 @@
     }
 
     async function startTracking(target = getSelectedTarget(), keepCamera = false) {
+        if (!state.cameraEnabled) {
+            setStatus('stopped', '摄像头已关闭');
+            return false;
+        }
         if (!target) {
             setStatus('idle', '请先拍照保存定位图');
             return false;
@@ -835,6 +857,9 @@
             if (!state.cameraStream) throw new Error('摄像头已关闭');
             state.elements.trackingVideo.hidden = false;
             await state.elements.trackingVideo.play();
+            if (requestId !== state.trackingRequestId || !state.cameraEnabled || !state.cameraStream) {
+                return false;
+            }
             const session = await tracker.start(
                 {
                     targetId: target.targetId,
@@ -866,13 +891,36 @@
     }
 
     async function stopAr() {
+        stopCamera();
         await stopTrackerSession();
         root.DisplayMmd?.resetArPose?.();
-        stopCamera();
         disableMotionView();
         if (state.elements?.calibration) state.elements.calibration.hidden = true;
         state.calibration = createEmptyCalibration();
         if (state.status !== 'idle') setStatus('stopped', '定位已停止');
+    }
+
+    async function setCameraEnabled(enabled) {
+        // 远端关闭时先释放视频轨道并作废异步请求，再等待识别器退出，防止迟到的流继续被使用。
+        const nextEnabled = enabled === true;
+        if (state.cameraEnabled === nextEnabled) {
+            updateControls();
+            return nextEnabled;
+        }
+        state.cameraEnabled = nextEnabled;
+        if (!state.cameraEnabled) {
+            stopCamera();
+            await stopTrackerSession();
+            root.DisplayMmd?.resetArPose?.();
+            if (state.elements?.calibration) state.elements.calibration.hidden = true;
+            if (state.elements?.trackingVideo) state.elements.trackingVideo.hidden = true;
+            state.calibration = createEmptyCalibration();
+            setStatus('stopped', '摄像头已关闭');
+            return false;
+        }
+        setStatus(getSelectedTarget() ? 'ready' : 'idle', '摄像头已启用');
+        updateControls();
+        return true;
     }
 
     async function deleteSelectedTarget() {
@@ -979,11 +1027,13 @@
 
     root.DisplayMmdAr = Object.freeze({
         closePanel: () => setPanelOpen(false),
+        setCameraEnabled,
         getState: () => ({
             status: state.status,
             selectedTargetId: state.selectedTargetId,
             targetCount: state.targets.length,
-            tracking: state.tracking
+            tracking: state.tracking,
+            cameraEnabled: state.cameraEnabled
         }),
         initialize,
         stop: stopAr

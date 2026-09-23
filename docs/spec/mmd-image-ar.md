@@ -388,6 +388,8 @@ DisplayMmd.setArPose(pose):
 
 ```text
 过程 startAr(targetId)
+  如果 DisplayCapabilities.cameraCapture !== true:
+    显示“摄像头已关闭”并结束
   读取 ArTargetStore 中的 targetId
   如果目标不存在，显示“请先拍照校准”
   启动摄像头
@@ -396,9 +398,9 @@ DisplayMmd.setArPose(pose):
   将状态设为 ready
 
 过程 stopAr()
+  立即释放所有摄像头视频轨道
   停止 trackerSession
   清除 DisplayMmd 的 AR 外部姿态
-  停止摄像头
   隐藏 arCameraLayer
   恢复普通 MMD Canvas 显示策略
   将状态设为 stopped
@@ -407,6 +409,23 @@ DisplayMmd.setArPose(pose):
   调用 stopAr()
   不删除 IndexedDB 目标
 ```
+
+控制端能力配置更新:
+  收到 capabilitiesUpdated 且 cameraCapture !== true:
+    设 cameraEnabled = false
+    取消尚未完成的摄像头请求
+    立即释放视频轨道并停止 trackerSession
+    隐藏校准/跟踪画面并禁用拍照校准和开始定位
+  收到 cameraCapture === true:
+    设 cameraEnabled = true
+    恢复校准/定位入口，但不自动启动摄像头
+
+过程 startCamera()
+  如果 cameraEnabled !== true:
+    返回“摄像头已关闭”
+  请求 getUserMedia
+  如果请求返回时 cameraEnabled !== true:
+    立即停止返回流的所有轨道并结束
 
 ## 9. 与 MMD 显示开关的关系
 
