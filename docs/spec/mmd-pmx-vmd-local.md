@@ -99,7 +99,8 @@
   ambientIntensity = 1.8
   keyColor = "#ffffff"
   keyIntensity = 2.3
-  keyPosition = { x: 1.5, y: 3, z: 2.5 }
+  keyDirection = { longitude: 31, latitude: 46 }
+  keyDistance = 4.183
   shadowEnabled = true
 ```
 
@@ -108,7 +109,9 @@
   对颜色只接受 #RRGGBB，不合法时使用白色
   将环境光强度限制在 0..4
   将主光强度限制在 0..5
-  将主光 x/y/z 限制在 -10..10
+  将主光 longitude 限制在 -180..180 度
+  将主光 latitude 限制在 -90..90 度
+  将 keyDistance 固定为运行时光源距离，不接受界面输入
   shadowEnabled 只接受布尔值，缺省为 true
   返回完整的 MmdLightingSettings
 ```
@@ -119,6 +122,7 @@
   如果 PMX 或 VRM runtime 已创建
     更新当前 runtime 的 AmbientLight 和 DirectionalLight
     根据 shadowEnabled 开关 renderer 阴影贴图、主光投影、人物网格投射/接收自阴影和透明接收阴影平面
+    将 keyDirection 的经度/纬度转换为固定距离的 Three.js 光源坐标
     主光目标定位到当前模型中心，并按模型包围盒动态收紧阴影相机范围
     不重新加载模型、纹理或 VMD
 ```
@@ -139,7 +143,7 @@
   将表单值同步到 DisplayMmd.setLighting()
   右上角时间区域下方的“灯光”按钮切换详细设置面板
   阴影开关默认打开并随灯光设置保存
-  滑块、颜色和方向改变时立即应用并保存
+  滑块、颜色和经纬度改变时立即应用并保存
   选择亮度预设时应用预设并保存
   点击“恢复默认”时恢复 DEFAULT_MMD_LIGHTING
 ```

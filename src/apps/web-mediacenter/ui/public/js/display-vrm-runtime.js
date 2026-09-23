@@ -20,6 +20,7 @@ const MAX_MODEL_PITCH_RADIANS = Math.PI / 4;
 const MAX_CAMERA_PITCH_RADIANS = Math.PI / 4;
 const ROTATION_EASING_PER_SECOND = 1 / 0.14;
 const ROTATION_SETTLE_EPSILON = 0.0005;
+const KEY_LIGHT_DISTANCE = Math.hypot(1.5, 3, 2.5);
 
 async function readCachedModel(url) {
     if (typeof caches === 'undefined') return null;
@@ -238,10 +239,26 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         return /^#[0-9a-f]{6}$/iu.test(color) ? color : '#ffffff';
     };
 
+    const normalizeLightDirection = (value) => ({
+        longitude: normalizeLightNumber(value?.longitude, -180, 180, 31),
+        latitude: normalizeLightNumber(value?.latitude, -90, 90, 46)
+    });
+
+    const lightDirectionToPosition = (value) => {
+        const direction = normalizeLightDirection(value);
+        const longitude = direction.longitude * Math.PI / 180;
+        const latitude = direction.latitude * Math.PI / 180;
+        const horizontalDistance = Math.cos(latitude) * KEY_LIGHT_DISTANCE;
+        return {
+            x: Math.sin(longitude) * horizontalDistance,
+            y: Math.sin(latitude) * KEY_LIGHT_DISTANCE,
+            z: Math.cos(longitude) * horizontalDistance
+        };
+    };
+
     const setLighting = (lighting = {}) => {
-        const position = lighting.keyPosition && typeof lighting.keyPosition === 'object'
-            ? lighting.keyPosition
-            : {};
+        const keyDirection = normalizeLightDirection(lighting.keyDirection);
+        const position = lightDirectionToPosition(keyDirection);
         ambientLight.color.set(normalizeLightColor(lighting.ambientColor));
         ambientLight.intensity = normalizeLightNumber(lighting.ambientIntensity, 0, 4, 1.8);
         keyLight.color.set(normalizeLightColor(lighting.keyColor));
@@ -258,11 +275,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
             ambientIntensity: ambientLight.intensity,
             keyColor: normalizeLightColor(lighting.keyColor),
             keyIntensity: keyLight.intensity,
-            keyPosition: {
-                x: keyLight.position.x,
-                y: keyLight.position.y,
-                z: keyLight.position.z
-            },
+            keyDirection,
             shadowEnabled
         };
     };

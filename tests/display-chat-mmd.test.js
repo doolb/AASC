@@ -33,7 +33,9 @@ test('显示端提供右上角灯光按钮和详细设置面板', () => {
     assert.match(html, /id="displayMmdLightingToggle"/u);
     assert.match(html, /id="displayMmdLightingPanel"/u);
     assert.match(html, /id="displayMmdAmbientIntensity"/u);
-    assert.match(html, /id="displayMmdKeyPositionX"/u);
+    assert.match(html, /id="displayMmdKeyDirectionLongitude"/u);
+    assert.match(html, /id="displayMmdKeyDirectionLatitude"/u);
+    assert.doesNotMatch(html, /displayMmdKeyPosition[XYZ]/u);
     assert.match(html, /js\/display-mmd-lighting\.js/u);
     assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*top:/u);
     assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*right:/u);
@@ -128,6 +130,26 @@ test('MMD 显示模块保存规范化灯光并在 runtime 创建后应用', () =
     assert.match(pmx, /new THREE\.DirectionalLight\(0xffffff, 2\.3\)/u);
     assert.match(pmx, /setLighting/u);
     assert.match(vrm, /setLighting/u);
+});
+
+test('角色灯光主方向使用经纬度并保持固定光源距离', () => {
+    const html = readPublic('display.html');
+    const lighting = readPublic('js/display-mmd-lighting.js');
+    const mmd = readPublic('js/display-mmd.js');
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(html, /主光方向[\s\S]*经度[\s\S]*纬度/u);
+    assert.match(lighting, /keyDirection/u);
+    assert.match(lighting, /keyPosition/u);
+    assert.match(mmd, /keyDirection/u);
+    assert.match(mmd, /directionFromLegacyPosition/u);
+    assert.match(pmx, /KEY_LIGHT_DISTANCE/u);
+    assert.match(pmx, /lightDirectionToPosition/u);
+    assert.match(vrm, /KEY_LIGHT_DISTANCE/u);
+    assert.match(vrm, /lightDirectionToPosition/u);
+    assert.doesNotMatch(mmd, /keyPosition:\s*\{/u);
+    assert.doesNotMatch(pmx, /lighting\.keyPosition/u);
+    assert.doesNotMatch(vrm, /lighting\.keyPosition/u);
 });
 
 test('PMX 和 VRM runtime 提供默认开启的实时阴影', () => {

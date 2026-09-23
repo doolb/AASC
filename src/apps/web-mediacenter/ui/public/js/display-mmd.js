@@ -24,7 +24,7 @@
         ambientIntensity: 1.8,
         keyColor: '#ffffff',
         keyIntensity: 2.3,
-        keyPosition: Object.freeze({ x: 1.5, y: 3, z: 2.5 }),
+        keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
         shadowEnabled: true
     });
     const POINTER_DRAG_THRESHOLD = 8;
@@ -42,20 +42,31 @@
         return /^#[0-9a-f]{6}$/u.test(color) ? color : fallback;
     }
 
+    function directionFromLegacyPosition(position) {
+        const x = Number(position?.x);
+        const y = Number(position?.y);
+        const z = Number(position?.z);
+        const distance = Math.hypot(x, y, z);
+        if (!Number.isFinite(distance) || distance <= 0) return DEFAULT_MMD_LIGHTING.keyDirection;
+        return {
+            longitude: Math.atan2(x, z) * 180 / Math.PI,
+            latitude: Math.asin(y / distance) * 180 / Math.PI
+        };
+    }
+
     function normalizeMmdLighting(input = {}) {
         const source = input && typeof input === 'object' ? input : {};
-        const position = source.keyPosition && typeof source.keyPosition === 'object'
-            ? source.keyPosition
-            : {};
+        const direction = source.keyDirection && typeof source.keyDirection === 'object'
+            ? source.keyDirection
+            : directionFromLegacyPosition(source.keyPosition);
         return {
             ambientColor: normalizeColor(source.ambientColor, DEFAULT_MMD_LIGHTING.ambientColor),
             ambientIntensity: clamp(source.ambientIntensity, 0, 4, DEFAULT_MMD_LIGHTING.ambientIntensity),
             keyColor: normalizeColor(source.keyColor, DEFAULT_MMD_LIGHTING.keyColor),
             keyIntensity: clamp(source.keyIntensity, 0, 5, DEFAULT_MMD_LIGHTING.keyIntensity),
-            keyPosition: {
-                x: clamp(position.x, -10, 10, DEFAULT_MMD_LIGHTING.keyPosition.x),
-                y: clamp(position.y, -10, 10, DEFAULT_MMD_LIGHTING.keyPosition.y),
-                z: clamp(position.z, -10, 10, DEFAULT_MMD_LIGHTING.keyPosition.z)
+            keyDirection: {
+                longitude: clamp(direction.longitude, -180, 180, DEFAULT_MMD_LIGHTING.keyDirection.longitude),
+                latitude: clamp(direction.latitude, -90, 90, DEFAULT_MMD_LIGHTING.keyDirection.latitude)
             },
             shadowEnabled: typeof source.shadowEnabled === 'boolean'
                 ? source.shadowEnabled
@@ -292,12 +303,11 @@
         state.lighting = normalizeMmdLighting({
             ...current,
             ...(lighting && typeof lighting === 'object' ? lighting : {}),
-            keyPosition: {
-                ...current.keyPosition,
-                ...(lighting?.keyPosition && typeof lighting.keyPosition === 'object'
-                    ? lighting.keyPosition
-                    : {})
-            }
+            keyDirection: lighting?.keyDirection && typeof lighting.keyDirection === 'object'
+                ? lighting.keyDirection
+                : lighting?.keyPosition && typeof lighting.keyPosition === 'object'
+                    ? directionFromLegacyPosition(lighting.keyPosition)
+                    : current.keyDirection
         });
         if (state.runtime && typeof state.runtime.setLighting === 'function') {
             state.runtime.setLighting(state.lighting);
@@ -308,7 +318,7 @@
     function getLighting() {
         return {
             ...state.lighting,
-            keyPosition: { ...state.lighting.keyPosition }
+            keyDirection: { ...state.lighting.keyDirection }
         };
     }
 
