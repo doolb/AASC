@@ -223,14 +223,17 @@ MMDPhysics.update(delta):
   失败时不创建默认资源切换，不覆盖既有版本目录
 ```
 
-当前镜像版本为 `miya-v1`，公网根为 `http://120.79.245.103/mnt/mmd/miya-v1/`。本阶段不实现 APK 资源清单、Android Runtime 内置资源或显示端远端配置；桌面运行时继续优先解析本地同源 `/models/mmd/...`，而 Offline 缺失本地清单时按下一节使用固定公网同源代理。
+当前镜像版本为 `miya-v1`，公网根为 `http://120.79.245.103/mnt/mmd/miya-v1/`。本阶段不实现 APK 资源清单、Android Runtime 内置资源或显示端远端配置；桌面运行时继续优先解析本地同源 `/models/mmd/...`，而 Offline 缺失本地清单时按下一节使用家庭内网、公司内网、外网的固定同源代理回退序列。
 
 ## 8. Offline 静态 MMD profile 与代理
 
 ```text
 常量 StaticMmdRelease
-  host = "c.aasc.us"
-  publicRoot = "/mnt/mmd/miya-v1/"
+  sources = [
+    "http://192.168.1.39/mnt/mmd/miya-v1/",
+    "http://10.221.70.87/mnt/mmd/miya-v1/",
+    "http://c.aasc.us/mnt/mmd/miya-v1/"
+  ]
   resourceId = "miya-default"
   motionResourceId = "miya-default-motion"
   version = 本次 miya manifest 的固定版本
@@ -256,11 +259,13 @@ MMDPhysics.update(delta):
   拒绝空路径、查询指定路径、反斜杠、绝对路径、.、..、重复编码和未声明路径
   在 StaticMmdRelease.files 中查找完全匹配的文件
   不存在时返回 404
-  将 c.aasc.us 解析为 IPv4，并仅请求 /mnt/mmd/miya-v1/<relativePath>
-  上游必须返回 200，Content-Length 必须等于声明 size，且下载不得超过声明 size
+  对 StaticMmdRelease.sources 按顺序逐一尝试
+  对域名源解析 IPv4 并按解析顺序生成候选 IP URL；IP 源原样使用
+  每个上游请求禁止重定向，必须返回 200，Content-Length 等于声明 size
   对完整受限缓冲区计算 SHA-256，必须等于声明 sha256
-  成功时按声明扩展名返回 PMX/VMD 二进制或 image/png
-  任一 DNS、网络、超时、状态、长度或 hash 失败时返回结构化 502
+  仅当当前源所有校验都通过时按扩展名返回 PMX/VMD 二进制或 image/png
+  当前源 DNS、网络、超时、状态、长度或 hash 失败时继续下一个源
+  所有源失败时返回包含各源失败摘要的结构化 502
   不写入磁盘、不建立持久缓存、不允许重定向
 ```
 
@@ -550,3 +555,45 @@ MMDPhysics.update(delta):
 ```
 
 约束：AO 只作用于 PMX 角色显示，现有 VRM、物理步进、动作、阴影开关和透明画布层级不变。无 WebGL2 时保留原渲染路径；不因 AO 不可用阻断角色加载。AO 开关沿用本地灯光设置，不新建远端配置接口。
+
+## 15. Offline MMD 上游内网优先与外网回退伪代码（2026-09-23）
+
+```text
+STATIC_MMD_SOURCES = [
+    http://192.168.1.39/mnt/mmd/miya-v1/,
+    http://10.221.70.87/mnt/mmd/miya-v1/,
+    http://c.aasc.us/mnt/mmd/miya-v1/
+]
+
+过程 resolveStaticMmdSource(sourceBase, lookup):
+    如果 sourceBase 主机是 IPv4
+        返回 sourceBase
+    addresses = DNS 查询 sourceBase 主机的 IPv4 地址
+    对每个 address 按 DNS 返回顺序
+        返回替换主机为 address 的 sourceBase
+
+过程 requestStaticMmdAsset(relativePath):
+    asset = 只从固定的 14 个 MMD 文件白名单中查找 relativePath
+    sourceErrors = []
+    对 sourceBase 按家庭内网、公司内网、外网顺序:
+        尝试解析当前 sourceBase
+        DNS 失败时记录来源错误并继续下一个 sourceBase
+        对每个已解析 source:
+            url = source + 固定 miya-v1 路径 + asset.path
+            response = GET(url, redirect=manual, timeout=300秒)
+            如果请求异常、HTTP 状态不是 200、Content-Length 不等于 asset.size 或没有 body
+                释放/关闭当前响应，记录来源错误，继续下一个 source
+            流式读取完整 body
+            如果字节数不等于 asset.size 或 SHA-256 不等于 asset.sha256
+                丢弃当前响应，记录校验错误，继续下一个 source
+            返回完整内容、固定 contentType、实际成功的 sourceUrl
+    所有来源都失败时返回 HTTP 502，并附各来源的失败摘要
+
+过程 loadPreferredMmdResources(modelRoot):
+    本地 manifest 存在且完整校验通过时继续返回本地 /models/mmd/ profile
+    本地 manifest 仅因不存在而无法读取时返回固定 MMD profile
+    本地 manifest 格式、文件大小或 hash 校验失败时返回错误，不回退网络
+    显示端请求 /api/mmd/static/<relativePath> 时调用 requestStaticMmdAsset
+```
+
+固定资源白名单、同源显示端代理路径、文件大小/SHA-256 校验和本地有效模型优先规则不变；Offline 静态代理按家庭内网→公司内网→外网顺序回退。该行为复用 Offline 热更新的来源顺序，不读取热更新清单，也不放宽客户端资源路径白名单。

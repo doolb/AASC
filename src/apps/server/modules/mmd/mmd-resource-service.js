@@ -10,6 +10,11 @@ const RESOURCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const STATIC_MMD_TIMEOUT_MS = 300000;
 const STATIC_MMD_PROXY_PREFIX = '/api/mmd/static/';
+const STATIC_MMD_SOURCE_BASE_URLS = Object.freeze([
+  'http://192.168.1.39/mnt/mmd/miya-v1/',
+  'http://10.221.70.87/mnt/mmd/miya-v1/',
+  'http://c.aasc.us/mnt/mmd/miya-v1/',
+]);
 
 const STATIC_MMD_RELEASE = Object.freeze({
   host: 'c.aasc.us',
@@ -87,22 +92,35 @@ const createStaticMmdResourceProfile = () => ({
   version: STATIC_MMD_RELEASE.version,
 });
 
-const resolveStaticMmdAssetUrl = async (relativePath, { lookup = dns.lookup } = {}) => {
-  const asset = resolveStaticMmdAsset(relativePath);
-  const source = new URL(`http://${STATIC_MMD_RELEASE.host}${STATIC_MMD_RELEASE.publicPath}`);
-  if (source.protocol !== 'http:'
-    || source.hostname.toLowerCase() !== STATIC_MMD_RELEASE.host
-    || source.pathname !== STATIC_MMD_RELEASE.publicPath) {
+const resolveStaticMmdSourceAssetUrls = async (sourceBaseUrl, relativePath, { lookup = dns.lookup } = {}) => {
+  const source = new URL(sourceBaseUrl);
+  if (source.protocol !== 'http:' || source.username || source.password || source.search || source.hash
+    || !source.pathname.endsWith('/')) {
     throw createMmdError('MMD static release source is invalid', 502);
   }
-  const resolvedAddresses = await lookup(source.hostname, { all: true, family: 4, verbatim: false });
-  const address = Array.isArray(resolvedAddresses) ? resolvedAddresses[0]?.address : resolvedAddresses?.address;
-  if (!address || net.isIP(address) !== 4) {
-    throw createMmdError('MMD static release has no IPv4 address', 502);
+  source.pathname = `${source.pathname}${relativePath}`;
+  const hostname = source.hostname.toLowerCase();
+  if (net.isIP(hostname) === 4) return [source.toString()];
+
+  const resolvedAddresses = await lookup(hostname, { all: true, family: 4, verbatim: false });
+  const addresses = (Array.isArray(resolvedAddresses) ? resolvedAddresses : [resolvedAddresses])
+    .map((entry) => entry?.address)
+    .filter((address) => address && net.isIP(address) === 4);
+  const uniqueAddresses = [...new Set(addresses)];
+  if (uniqueAddresses.length === 0) {
+    throw createMmdError(`MMD static release has no IPv4 address: ${hostname}`, 502);
   }
-  source.hostname = address;
-  source.pathname = `${STATIC_MMD_RELEASE.publicPath}${asset.path}`;
-  return source.toString();
+  return uniqueAddresses.map((address) => {
+    const resolvedSource = new URL(source);
+    resolvedSource.hostname = address;
+    return resolvedSource.toString();
+  });
+};
+
+const resolveStaticMmdAssetUrl = async (relativePath, { lookup = dns.lookup } = {}) => {
+  const asset = resolveStaticMmdAsset(relativePath);
+  const sourceBaseUrl = `http://${STATIC_MMD_RELEASE.host}${STATIC_MMD_RELEASE.publicPath}`;
+  return (await resolveStaticMmdSourceAssetUrls(sourceBaseUrl, asset.path, { lookup }))[0];
 };
 
 const requestFetch = async (target, { timeoutMs = STATIC_MMD_TIMEOUT_MS, headers = {}, redirect = 'manual' } = {}) => {
@@ -134,48 +152,89 @@ const asNodeReadable = (stream) => {
   return null;
 };
 
+const discardStaticMmdResponse = async (response) => {
+  const body = response?.body || response;
+  if (body && typeof body.destroy === 'function') {
+    body.destroy();
+    return;
+  }
+  if (body && typeof body.cancel === 'function') {
+    try {
+      await body.cancel();
+    } catch (error) {
+      // 已失败的上游响应无需阻断下一个固定来源。
+    }
+  }
+};
+
+const fetchAndValidateStaticMmdAsset = async ({ asset, sourceUrl, request }) => {
+  let response;
+  try {
+    response = await request(sourceUrl, {
+      timeoutMs: STATIC_MMD_TIMEOUT_MS,
+      redirect: 'manual',
+      headers: {
+        Accept: `${asset.contentType}, application/octet-stream;q=0.9, */*;q=0.8`,
+        'User-Agent': 'AASC-MMD-Static-Proxy/1.0',
+      },
+    });
+    const statusCode = Number(response?.statusCode ?? response?.status);
+    if (statusCode !== 200) {
+      throw createMmdError(`MMD static asset upstream returned HTTP ${statusCode || 'unknown'}`, 502);
+    }
+    const contentLength = getResponseHeader(response.headers, 'content-length');
+    if (!/^\d+$/u.test(String(contentLength || '')) || Number(contentLength) !== asset.size) {
+      throw createMmdError(`MMD static asset Content-Length is invalid: ${asset.path}`, 502);
+    }
+    const stream = asNodeReadable(response.body || response);
+    if (!stream) throw createMmdError(`MMD static asset response has no body: ${asset.path}`, 502);
+
+    const chunks = [];
+    let total = 0;
+    for await (const chunk of stream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buffer.length;
+      if (total > asset.size) {
+        stream.destroy?.();
+        throw createMmdError(`MMD static asset exceeds declared size: ${asset.path}`, 502);
+      }
+      chunks.push(buffer);
+    }
+    if (total !== asset.size) {
+      throw createMmdError(`MMD static asset size is incomplete: ${asset.path}`, 502);
+    }
+    const content = Buffer.concat(chunks, total);
+    const digest = crypto.createHash('sha256').update(content).digest('hex');
+    if (digest !== asset.sha256) {
+      throw createMmdError(`MMD static asset checksum mismatch: ${asset.path}`, 502);
+    }
+    return { content, contentType: asset.contentType, sourceUrl };
+  } catch (error) {
+    await discardStaticMmdResponse(response);
+    throw error;
+  }
+};
+
 const requestStaticMmdAsset = async ({ relativePath, lookup = dns.lookup, request = requestFetch } = {}) => {
   const asset = resolveStaticMmdAsset(relativePath);
-  const sourceUrl = await resolveStaticMmdAssetUrl(asset.path, { lookup });
-  const response = await request(sourceUrl, {
-    timeoutMs: STATIC_MMD_TIMEOUT_MS,
-    redirect: 'manual',
-    headers: {
-      Accept: `${asset.contentType}, application/octet-stream;q=0.9, */*;q=0.8`,
-      'User-Agent': 'AASC-MMD-Static-Proxy/1.0',
-    },
-  });
-  const statusCode = Number(response?.statusCode ?? response?.status);
-  if (statusCode !== 200) {
-    throw createMmdError(`MMD static asset upstream returned HTTP ${statusCode || 'unknown'}`, 502);
-  }
-  const contentLength = getResponseHeader(response.headers, 'content-length');
-  if (!/^\d+$/u.test(String(contentLength || '')) || Number(contentLength) !== asset.size) {
-    throw createMmdError(`MMD static asset Content-Length is invalid: ${asset.path}`, 502);
-  }
-  const stream = asNodeReadable(response.body || response);
-  if (!stream) throw createMmdError(`MMD static asset response has no body: ${asset.path}`, 502);
-
-  const chunks = [];
-  let total = 0;
-  for await (const chunk of stream) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    total += buffer.length;
-    if (total > asset.size) {
-      stream.destroy?.();
-      throw createMmdError(`MMD static asset exceeds declared size: ${asset.path}`, 502);
+  const sourceErrors = [];
+  for (const sourceBaseUrl of STATIC_MMD_SOURCE_BASE_URLS) {
+    let sourceUrls;
+    try {
+      sourceUrls = await resolveStaticMmdSourceAssetUrls(sourceBaseUrl, asset.path, { lookup });
+    } catch (error) {
+      sourceErrors.push(`${sourceBaseUrl}: ${error.message}`);
+      continue;
     }
-    chunks.push(buffer);
+    for (const sourceUrl of sourceUrls) {
+      try {
+        return await fetchAndValidateStaticMmdAsset({ asset, sourceUrl, request });
+      } catch (error) {
+        sourceErrors.push(`${new URL(sourceUrl).origin}: ${error.message}`);
+      }
+    }
   }
-  if (total !== asset.size) {
-    throw createMmdError(`MMD static asset size is incomplete: ${asset.path}`, 502);
-  }
-  const content = Buffer.concat(chunks, total);
-  const digest = crypto.createHash('sha256').update(content).digest('hex');
-  if (digest !== asset.sha256) {
-    throw createMmdError(`MMD static asset checksum mismatch: ${asset.path}`, 502);
-  }
-  return { content, contentType: asset.contentType, sourceUrl };
+  throw createMmdError(`MMD static asset failed from all sources: ${sourceErrors.join('; ')}`, 502);
 };
 
 const normalizeManifestPath = (value, label) => {

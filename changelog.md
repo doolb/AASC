@@ -9409,3 +9409,8 @@
 - ✅ [2026-09-23] `sync:offline-update` 支持以远端和本地 `/mnt` 父目录同步服务更新及完整 `mmd/` 目录树。
   - 服务更新进入 `aasc-offline/`；MMD 按同源目录索引递归同步到同级 `mmd/`，记录 ETag/Last-Modified、大小和 SHA-256 以复用未变化文件，并保留本地额外文件。
   - 保留直接 `/aasc-offline/` 源 URL 的旧行为；更新 design/spec/usage/task 文档。`node --check` 和 `git diff --check` 通过；未运行自动化测试、同步公网资源或构建 APK/服务包/依赖包。
+### Offline MMD 内网源回退
+
+- ✅ [2026-09-23] MMD 静态资源按热更新顺序优先请求内网，并在失败时回退外网。
+  - `mmd-resource-service.js` 对家庭内网 `192.168.1.39`、公司内网 `10.221.70.87`、外网 `c.aasc.us` 逐源请求；每个候选响应均需通过 HTTP 状态、Content-Length、完整字节数和 SHA-256 校验，失败后继续下一源。保留本地有效 manifest 优先、固定 14 项白名单和同源代理。
+  - 更新 MMD design/spec/task。`node --check` 与 `git diff --check` 通过；未运行测试，未构建或发布 APK、服务包或依赖包。

@@ -70,19 +70,19 @@ PMX 材质的“环境色”与场景环境光并非同一设置。Three.js `MMD
 
 ## 8. Offline APK 外网 MMD 代理
 
-Offline APK 不内置 PMX、纹理或 VMD，也不由 WebView 直接请求外网。它复用静态 VRM 的规则：内嵌 Node 服务只接受固定的公网静态根 `http://c.aasc.us/mnt/mmd/miya-v1/`，先将域名解析为 IPv4，再从解析后的地址下载并以同源路径响应给显示端。这样可避免 WebView 混合内容、CORS 和任意 URL 注入问题。
+Offline APK 不内置 PMX、纹理或 VMD，也不由 WebView 直接请求网络。内嵌 Node 服务按热更新相同顺序尝试固定 MMD 根：家庭内网 `http://192.168.1.39/mnt/mmd/miya-v1/`、公司内网 `http://10.221.70.87/mnt/mmd/miya-v1/`、外网 `http://c.aasc.us/mnt/mmd/miya-v1/`。内网地址直接请求；外网域名先解析 IPv4 并替换 URL 主机。代理再以同源路径响应给显示端，避免 WebView 混合内容、CORS 和任意 URL 注入。
 
 PMX 的纹理是相对模型 URL 解析的，因此不能使用 VRM 的单文件 query 代理。服务端应返回路径型同源地址，例如 `/api/mmd/static/mmd/miya/miya.pmx`；MMDLoader 后续请求的 `tex/*.png` 会自然落到同一前缀。服务端只允许随版本固定的 14 个文件（PMX、12 张 PNG、VMD），在代码中固定其路径、大小和 SHA-256，不接受查询参数、任意文件名或路径穿越。
 
-`/api/mmd/resources` 优先返回本地 `res/models/mmd/manifest.json` 的 profile，便于桌面内网验证；仅当本地清单确实不存在时回退为固定的公网 `miya-v1` profile。清单存在但格式、文件或 hash 无效时必须返回错误，不能静默切到公网。公网下载没有持久缓存：每次显示端请求由本地 Node 代理受限的上游文件；断网、上游非 200、大小或 SHA-256 不一致时，显示端保持占位降级，聊天、媒体和灯光功能不受影响。
+`/api/mmd/resources` 优先返回本地 `res/models/mmd/manifest.json` 的 profile，便于桌面内网验证；仅当本地清单确实不存在时回退为固定的 `miya-v1` profile。清单存在但格式、文件或 hash 无效时必须返回错误，不能静默切到网络源。静态代理对每个文件按家庭内网、公司内网、外网顺序请求；某源 DNS、网络、状态、长度或 SHA-256 校验失败时继续下一源，全部失败后显示端保持占位，聊天、媒体和灯光功能不受影响。每个请求仍使用固定路径与文件白名单，不做持久缓存。
 
 本功能只修改服务端/显示端代码，因此通过服务代码更新交付给既有 Offline APK；不改 `allserver`/`allserver-min` profile，不构建或发布完整 APK、min APK，也不将模型二进制写入 Git 或 APK assets。
 
 ## 9. Offline 静态代理实施结果
 
-已在服务代码中固定 `miya-v1` 的 14 个运行时文件记录、版本 `ca07d84b494577f5dab90d71465bc08e01ec036fe66278a2393313b6febf56c6`，并为 PMX/VMD 返回 `/api/mmd/static/mmd/...` 同源 profile。服务端仅在本地 `mmd/manifest.json` 缺失时回退；清单存在但 JSON、文件大小或 hash 校验失败时继续返回错误。
+已在服务代码中固定 `miya-v1` 的 14 个运行时文件记录、版本 `ca07d84b494577f5dab90d71465bc08e01ec036fe66278a2393313b6febf56c6`，并为 PMX/VMD 返回 `/api/mmd/static/mmd/...` 同源 profile。服务端仅在本地 `mmd/manifest.json` 缺失时回退；清单存在但 JSON、文件大小或 hash 校验失败时继续返回错误。静态代理上游按家庭内网、公司内网、外网顺序逐源尝试，并在每个源返回内容后独立验证状态、长度及 SHA-256。
 
-`GET /api/mmd/static/...` 不接受查询参数，路径必须完整命中固定白名单。上游请求使用 `c.aasc.us` 的 IPv4 解析结果、禁止重定向，且只在 HTTP 200、`Content-Length`、完整读取字节数和 SHA-256 都与固定记录一致后返回内容。浏览器只新增 `/api/mmd/static/mmd/` 这一同源前缀；外部 URL、协议相对 URL、路径穿越、反斜杠和 query/hash 仍拒绝。
+`GET /api/mmd/static/...` 不接受查询参数，路径必须完整命中固定白名单。上游请求顺序与 Offline 热更新一致：`192.168.1.39`、`10.221.70.87`、`c.aasc.us`；仅外网域名解析为 IPv4 地址后请求。禁止重定向；只有 HTTP 200、`Content-Length`、完整读取字节数和 SHA-256 都与固定记录一致的源才返回内容，其余源失败后继续尝试。浏览器只新增 `/api/mmd/static/mmd/` 这一同源前缀；外部 URL、协议相对 URL、路径穿越、反斜杠和 query/hash 仍拒绝。
 
 Android Runtime 打包逻辑现在无条件排除 `res/models/mmd`，避免后续服务包或 APK Runtime 意外携带 PMX、VMD 与纹理；该排除不影响服务器源码中的 MMD 模块。实施过程未执行 APK、服务更新包构建或发布，也没有复制或提交任何模型二进制。
 
