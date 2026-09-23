@@ -73,13 +73,21 @@ Android.downloadArtifact:
 ```text
 syncOfflineUpdate:
     sourceBase = --source-url or AASC_OFFLINE_SYNC_SOURCE
-        or http://120.79.245.103/mnt/aasc-offline/
-    localRoot = --local-root or AASC_OFFLINE_LOCAL_ROOT
-        or /mnt/aasc-offline
+        or http://120.79.245.103/mnt/
+    localParent = --local-root or AASC_OFFLINE_LOCAL_ROOT or /mnt
+    if sourceBase path ends with /aasc-offline/:
+        preserve legacy direct mode: offlineSource = sourceBase
+        offlineLocalRoot = --local-root or /mnt/aasc-offline
+        do not mirror sibling MMD directory
+    else:
+        offlineSource = sourceBase/aasc-offline/
+        offlineLocalRoot = localParent/aasc-offline
+        mmdSource = sourceBase/mmd/
+        mmdLocalRoot = localParent/mmd
     skipSignatureVerification = --skip-signature-verification is present
     full APK is excluded unconditionally
 
-    manifest = GET(sourceBase/manifest.json)
+    manifest = GET(offlineSource/manifest.json)
     if skipSignatureVerification is false:
         load configured public key
         verify manifest RSA signature
@@ -93,7 +101,7 @@ syncOfflineUpdate:
     validate manifest structure, component versions and safe relative paths
     componentPlan = []
     for component, index in selected components:
-        targetPath = resolveSafePath(localRoot, component.relativeUrl)
+        targetPath = resolveSafePath(offlineLocalRoot, component.relativeUrl)
         existingState = inspectExistingArtifact(targetPath, component)
         if existingState == conflict:
             stop before downloading any component
@@ -108,7 +116,7 @@ syncOfflineUpdate:
             show [reused], filename and overall progress
             continue
         show component.relativeUrl and 0% file/overall download progress
-        download to localRoot/.sync-<id>/<relativeUrl>.part
+        download to offlineLocalRoot/.sync-<id>/<relativeUrl>.part
         require ordinary file path and safe relativeUrl
         for each received data chunk:
             update file received bytes and overall completed bytes
@@ -121,15 +129,34 @@ syncOfflineUpdate:
         atomically install the size/hash-checked versioned file
         completedSyncBytes += component.size
 
-    write manifest to localRoot/manifest.json.tmp-<id>
+    write manifest to offlineLocalRoot/manifest.json.tmp-<id>
     fsync and atomically rename manifest.json last
     remove only obsolete numeric code/dependencies/data-repair/min files
     never remove full APK, logs, models, config, task, results or non-version files
+
+    if sibling MMD mirroring is enabled:
+        recursively GET directory indexes under mmdSource
+        accept only same-origin links within mmdSource; reject unsafe relative paths
+        HEAD each regular file and require a valid Content-Length
+        load local .offline-mmd-sync-state.json, rejecting symlinks/non-files
+        for each remote file:
+            target = resolveSafePath(mmdLocalRoot, relativePath)
+            if ETag/Last-Modified and size match saved metadata
+                and target is a regular file with matching size and saved SHA-256:
+                    report [已复用], issue no file GET
+                    continue
+            stream GET into a unique temporary tree under mmdLocalRoot
+            verify response metadata and exact Content-Length; calculate SHA-256
+            atomically replace only this target file
+            atomically persist its remote metadata and SHA-256 in sync state
+        preserve local files absent from the remote directory index
+        never follow symlinks or delete extra local files
 
 parseCliArguments:
     accept bare --skip-signature-verification once
     reject a value supplied to --skip-signature-verification
     accept --source-url, --local-root and --public-key as value parameters
+    in parent mode, --source-url and --local-root both name the shared /mnt parent
 
 securityBoundary:
     without --skip-signature-verification, local RSA signature verification is required
@@ -147,7 +174,7 @@ publishOfflineUpdate:
     LAN source list does not create additional upload targets
 ```
 
-实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。默认源为公网 IP，默认目标为 `/mnt/aasc-offline`，可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。同步显示当前文件名、单文件字节/百分比和总字节/百分比。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过（此前同步功能记录）。
+实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。父目录模式默认源为公网 `/mnt/`、本地根为 `/mnt`；服务更新分别位于 `aasc-offline/`，MMD 资源递归同步至同级 `mmd/`。可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。同步显示当前文件名、单文件字节/百分比和总字节/百分比；MMD 递归目录以 HEAD 元数据和本地 SHA-256 状态跳过重复下载，并逐文件原子替换，不清理本地额外文件。旧的直接 `/aasc-offline/` 源地址继续只同步服务更新。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过（此前同步功能记录）。
 
 > 2026-09-23 已重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），APK 大小 `89302814` bytes，SHA-256 为 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`；内网和外网清单、资源大小/SHA-256 及旧 min 版本精确清理校验通过，完整 APK 未构建。
 
