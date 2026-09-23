@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-23，code v33/min v34 已发布）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-23，code v34/min v34 已发布）
 
 ## 控制端
 
@@ -108,6 +108,7 @@
   - 🔄待现场验收 [2026-09-20] code v12 与 min v21 已联合发布，包含聊天播报文字隐藏和服务器启动后 30 秒隐藏分辨率诊断；待 SM-N9500 通过外网更新卡片确认 code/min 更新及真机行为。
   - [2026-09-21] 更新卡片下载/校验/安装期间已支持 10 秒无触摸收起，收起入口按进度填充并显示状态色；分辨率/DPI/缩放诊断提示改为 10 秒隐藏；修复 code-only 在已有热更依赖时错误使用 `legacy-root`，并在 Offline Node 启动时迁移旧 active release，按清单动态选择依赖版本；控制端收起按钮贴合屏幕边缘。Android JVM 单测 25/25 通过；min APK v31（`0.2.29-offline-min`）已构建并发布，仍待真机现场安装验收。
   - [2026-09-23] 多内网热更源和外网资源同步已完成；`allserver-min` v34（`0.2.32-offline-min`）已重新构建并发布到内网/外网，完整 APK 未构建。
+  - [2026-09-23] 服务代码 `code-v34` 已发布到内网/外网，继续复用 `dependencies-v6`；代码包已完成 ZIP、SHA-256、清单签名和旧版本精确清理校验。
   - 待处理：完整 Offline APK 首次安装不创建 `updates/active-release.json`；首次 code-only 更新找不到版本化依赖目录时会将根目录内置依赖标记为 `legacy-root`。暂不修复，后续需确定是否在首次启动初始化版本化基线 release。
   - 服务更新支持 `code-only`（lock 指纹一致时不发布/下载依赖）与 `all`（代码+生产依赖）；`code-only` 检测到 lock 指纹变化时自动升级为 `all` 并递增依赖版本；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
 

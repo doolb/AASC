@@ -12,7 +12,7 @@ Offline APK 的热更读取源扩展为家庭内网、公司内网和外网三�
 
 新增外网资源同步命令，用于在家庭或公司机器上把当前外网签名清单中的服务资源同步到指定本地 HTTP 根目录。同步目标支持 `--local-root` 和 `AASC_OFFLINE_LOCAL_ROOT` 覆盖，默认保持 `/mnt/aasc-offline`。同步代码包、生产依赖包、min APK 和数据修复包；完整 APK 不进入同步范围。同步先验签并逐项校验大小/SHA-256，版本文件采用临时文件和原子清单替换，最后再清理严格匹配的过时版本文件。
 
-实现验证：Node 更新/同步定向测试通过，Android Offline JVM 单测 25/25 通过；现有 Android 静态回归中的更新面板左边距和固定 displayId 两项断言仍为既有失败，与本次热更源改动无关。基于本次改动重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），完整 APK 未构建。
+实现验证：Node 更新/同步定向测试通过，Android Offline JVM 单测 25/25 通过；现有 Android 静态回归中的更新面板左边距和固定 displayId 两项断言仍为既有失败，与本次热更源改动无关。基于本次改动重新构建并发布服务 `code-v34`（复用 `dependencies-v6`）和 `allserver-min` v34（`0.2.32-offline-min`），完整 APK 未构建。
 
 ## 状态
 

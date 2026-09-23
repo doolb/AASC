@@ -10,6 +10,9 @@
 - ✅ [2026-09-23] 重新构建并发布 Offline min APK v34（`0.2.32-offline-min`）
   - 发布文件：`apk/aasc-display-offline-min-v34.apk`，大小 `89302814` bytes，SHA-256 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`。
   - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的清单、资源校验和旧 min 版本精确清理通过；完整 APK 未构建。
+- ✅ [2026-09-23] 发布服务代码 v34
+  - 发布文件：`code/code-v34.zip`，大小 `15322127` bytes，SHA-256 `8e926ed1805dbf58a8947338f35c98d993aeff6dea27d2deecd1e06455bfff9b`；继续复用 `dependencies/dependencies-v6.zip`。
+  - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的 manifest、代码包 ZIP、依赖 lock 指纹和旧 code 版本精确清理校验通过。
 
 ### Android 显示端音频
 

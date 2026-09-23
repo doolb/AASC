@@ -81,6 +81,8 @@ publishOfflineUpdate:
 
 > 2026-09-23 已重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），APK 大小 `89302814` bytes，SHA-256 为 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`；内网和外网清单、资源大小/SHA-256 及旧 min 版本精确清理校验通过，完整 APK 未构建。
 
+> 2026-09-23 已发布服务代码 `code-v34`，大小 `15322127` bytes，SHA-256 为 `8e926ed1805dbf58a8947338f35c98d993aeff6dea27d2deecd1e06455bfff9b`；继续复用 `dependencies-v6`，内网和外网清单、代码包 ZIP、依赖指纹及旧 code 版本精确清理校验通过。
+
 > 2026-09-21 修复 code-only 依赖来源选择：清单中的任意 `dependencyVersion` 都先匹配对应热更目录和 marker；旧流程缺 marker 时再校验依赖包自身 version、lockSha256 和 express 元数据，匹配成功写入 `legacyDependencies=false`，否则回退 `legacy-root`。启动已有旧 active release 时执行本地迁移。当前已发布 min APK v31（`0.2.29-offline-min`），未发布完整 APK。
 
 > 真机验收补充：min APK v31 覆盖安装不会自动替换已有 active service code；旧设备仍可能显示 code v15，需在更新卡片中确认 code-only 更新。code v19 应用后，`/api/status.versions.dependencySource` 必须为 `active-release`，`codePath` 指向 `updates/code/code-v19`，`dependenciesPath` 和 `AASC_NODE_MODULES_DIR` 指向 `updates/dependencies/dependencies-v4/node_modules`。
