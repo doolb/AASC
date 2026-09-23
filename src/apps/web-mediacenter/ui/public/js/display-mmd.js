@@ -27,6 +27,7 @@
         keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
         shadowEnabled: true,
         physicsFps: 65,
+        rotationPhysicsLimit: 180,
         pmxAoEnabled: true,
         pmxAoColor: '#931231',
         pmxAoIntensity: 0.6,
@@ -65,6 +66,11 @@
         return Math.round(clamped / 5) * 5;
     }
 
+    function normalizeRotationPhysicsLimit(value) {
+        const clamped = clamp(value, 30, 720, DEFAULT_MMD_LIGHTING.rotationPhysicsLimit);
+        return Math.round(clamped / 10) * 10;
+    }
+
     function normalizeMmdLighting(input = {}) {
         const source = input && typeof input === 'object' ? input : {};
         const direction = source.keyDirection && typeof source.keyDirection === 'object'
@@ -83,6 +89,7 @@
                 ? source.shadowEnabled
                 : DEFAULT_MMD_LIGHTING.shadowEnabled,
             physicsFps: normalizePhysicsFps(source.physicsFps),
+            rotationPhysicsLimit: normalizeRotationPhysicsLimit(source.rotationPhysicsLimit),
             pmxAoEnabled: typeof source.pmxAoEnabled === 'boolean'
                 ? source.pmxAoEnabled
                 : DEFAULT_MMD_LIGHTING.pmxAoEnabled,

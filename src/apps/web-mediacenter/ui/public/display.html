@@ -186,6 +186,11 @@
                         <small>目标值；实际步进受渲染帧率和每帧最多 3 个子步限制。</small>
                     </label>
                     <label class="display-mmd-lighting-field">
+                        <span>旋转暂停物理阈值 <output id="displayMmdRotationPhysicsLimitValue">180°/秒</output></span>
+                        <input id="displayMmdRotationPhysicsLimit" type="range" min="30" max="720" step="10" value="180">
+                        <small>PMX 实际旋转速度超过此值时暂停布料物理，减速后恢复。</small>
+                    </label>
+                    <label class="display-mmd-lighting-field">
                         <span>环境光颜色</span>
                         <input id="displayMmdAmbientColor" type="color" value="#ffffff">
                     </label>

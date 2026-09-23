@@ -226,6 +226,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         keyIntensity: 2.3,
         keyDirection: { longitude: 31, latitude: 46 },
         physicsFps: 65,
+        rotationPhysicsLimit: 180,
         pmxAoColor: '#931231',
         pmxAoIntensity: 0.6,
         pmxAoRadiusPercent: 6,
@@ -327,6 +328,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         return Math.round(clamped / 5) * 5;
     };
 
+    const normalizeRotationPhysicsLimit = (value) => {
+        const clamped = normalizeLightNumber(value, 30, 720, lightingState.rotationPhysicsLimit);
+        return Math.round(clamped / 10) * 10;
+    };
+
     const normalizeLightColor = (value, fallback = '#ffffff') => {
         const color = String(value || '').trim();
         return /^#[0-9a-f]{6}$/iu.test(color) ? color : fallback;
@@ -357,6 +363,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         lightingState.keyIntensity = normalizeLightNumber(lighting.keyIntensity, 0, 5, 2.3);
         lightingState.keyDirection = keyDirection;
         lightingState.physicsFps = normalizePhysicsFps(lighting.physicsFps);
+        lightingState.rotationPhysicsLimit = normalizeRotationPhysicsLimit(lighting.rotationPhysicsLimit);
         lightingState.pmxAoColor = normalizeLightColor(lighting.pmxAoColor, '#931231');
         lightingState.pmxAoIntensity = normalizeLightNumber(lighting.pmxAoIntensity, 0, 2, 0.6);
         lightingState.pmxAoRadiusPercent = Math.round(normalizeLightNumber(lighting.pmxAoRadiusPercent, 1, 20, 6));
@@ -383,6 +390,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
             keyDirection,
             shadowEnabled,
             physicsFps: lightingState.physicsFps,
+            rotationPhysicsLimit: lightingState.rotationPhysicsLimit,
             pmxAoEnabled,
             pmxAoColor: lightingState.pmxAoColor,
             pmxAoIntensity: lightingState.pmxAoIntensity,
@@ -392,6 +400,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     };
 
     const helper = { current: null };
+    const physicsGate = { paused: false };
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let currentMesh = null;
@@ -415,6 +424,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         rotationState.targetYaw = currentRotationPivot?.rotation.y || 0;
         rotationState.targetPitch = currentRotationPivot?.rotation.x || 0;
         rotationState.fitShadowWhenSettled = false;
+        physicsGate.paused = false;
     }
 
     function updateModelRotation(delta) {
@@ -433,13 +443,13 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
                 currentRotationPivot.updateWorldMatrix(true, true);
                 fitShadowCamera(currentRotationPivot);
             }
-            return pivotMoved;
+            return pivotMoved ? Math.hypot(yawDistance, pitchDistance) : 0;
         }
         const easing = 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
         currentRotationPivot.rotation.y += yawDistance * easing;
         currentRotationPivot.rotation.x += pitchDistance * easing;
         keyLight.shadow.needsUpdate = true;
-        return true;
+        return Math.hypot(yawDistance * easing, pitchDistance * easing);
     }
 
     const clearFallback = () => {
@@ -506,7 +516,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
             delta,
             advanceRotation: updateModelRotation,
             helper: helper.current,
-            pivot: currentRotationPivot
+            pivot: currentRotationPivot,
+            physics: helper.current?.objects?.get(currentMesh)?.physics,
+            physicsGate,
+            rotationPhysicsLimit: lightingState.rotationPhysicsLimit
         });
         updateCameraView(delta);
         if (currentMesh) ambientOcclusion.render();

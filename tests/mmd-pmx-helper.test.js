@@ -376,3 +376,74 @@ test('没有 PMX 物理 helper 时仍推进旋转', async () => {
     });
     assert.deepEqual(events, ['rotation:0.02', 'matrix']);
 });
+
+test('PMX 快转暂停物理但保持动作，减速后对齐刚体并在下一帧恢复', async () => {
+    const { advancePmxMotionFrame } = await loadFreshPmxHelperModule();
+    const events = [];
+    const velocities = { linear: 5, angular: 2 };
+    const body = {
+        setLinearVelocity(value) { velocities.linear = value.x(); },
+        setAngularVelocity(value) { velocities.angular = value.x(); },
+        clearForces() { events.push('clear-forces'); },
+        activate() { events.push('activate'); }
+    };
+    const physics = {
+        bodies: [{ params: { type: 1 }, body }],
+        manager: {
+            allocVector3() { return { x: () => 0, setValue() {} }; },
+            freeVector3() {}
+        },
+        reset() { events.push('reset'); }
+    };
+    const helper = {
+        enabled: { physics: true },
+        update() {
+            events.push('animation');
+            if (this.enabled.physics) events.push('physics');
+        }
+    };
+    const pivot = { updateWorldMatrix() { events.push('matrix'); } };
+    const physicsGate = { paused: false };
+    const frame = (rotationRadians) => advancePmxMotionFrame({
+        delta: 1 / 60, pivot, helper, physics, physicsGate,
+        rotationPhysicsLimit: 180,
+        advanceRotation() { return rotationRadians; }
+    });
+
+    frame(0.2);
+    assert.deepEqual(events, ['matrix', 'animation']);
+    assert.equal(physicsGate.paused, true);
+    events.length = 0;
+
+    frame(0.01);
+    assert.deepEqual(events, ['matrix', 'animation', 'matrix', 'reset', 'clear-forces', 'activate']);
+    assert.deepEqual(velocities, { linear: 0, angular: 0 });
+    assert.equal(physicsGate.paused, false);
+    events.length = 0;
+
+    frame(0.01);
+    assert.deepEqual(events, ['matrix', 'animation', 'physics']);
+});
+
+test('PMX 旋转速度等于阈值及零时长帧不暂停物理', async () => {
+    const { advancePmxMotionFrame } = await loadFreshPmxHelperModule();
+    const helper = {
+        enabled: { physics: true },
+        updates: 0,
+        update() { if (this.enabled.physics) this.updates += 1; }
+    };
+    const options = {
+        delta: 1 / 60,
+        helper,
+        physics: { reset() {} },
+        physicsGate: { paused: false },
+        rotationPhysicsLimit: 180,
+        advanceRotation() { return Math.PI / 60; }
+    };
+    advancePmxMotionFrame(options);
+    assert.equal(helper.updates, 1);
+    assert.equal(options.physicsGate.paused, false);
+    advancePmxMotionFrame({ ...options, delta: 0, advanceRotation() { return 1; } });
+    assert.equal(helper.updates, 2);
+    assert.equal(options.physicsGate.paused, false);
+});

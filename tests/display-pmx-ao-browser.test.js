@@ -331,7 +331,8 @@ test('PMX runtime applies AO switch without reloading the model', { skip: !CHROM
       disabled: false,
       adjusted: { ambientColor: '#ffffff', ambientIntensity: 1.8, keyColor: '#ffffff',
         keyIntensity: 2.3, keyDirection: { longitude: 31, latitude: 46 }, shadowEnabled: true,
-        physicsFps: 65, pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
+        physicsFps: 65, rotationPhysicsLimit: 180,
+        pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
         pmxAoRadiusPercent: 12, pmxAoResolution: 'full' }
     });
   } finally {

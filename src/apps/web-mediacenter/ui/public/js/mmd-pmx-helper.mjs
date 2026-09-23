@@ -70,9 +70,54 @@ export async function stagePmxMesh({ scene, mesh, createPivot, prepareHelper }) 
  * MMDPhysics 只从骨骼移动 type=0 运动学锚点；动态刚体留在 Bullet 世界里，
  * 由约束产生跟随、滞后与惯性，不在这里整批传送位置或速度。
  */
-export function advancePmxMotionFrame({ delta, pivot, helper, advanceRotation } = {}) {
-    advanceRotation?.(delta);
+function resetPmxPhysicsAfterRotation(physics, pivot) {
+    // 动作已经推进到当前帧；先刷新骨骼矩阵，再让刚体贴合当前姿态。
     pivot?.updateWorldMatrix?.(true, true);
+    physics.reset();
+    const zero = physics.manager.allocVector3();
+    zero.setValue(0, 0, 0);
+    try {
+        for (const entry of physics.bodies) {
+            if (entry.params.type === 0) continue;
+            entry.body.setLinearVelocity(zero);
+            entry.body.setAngularVelocity(zero);
+            entry.body.clearForces();
+            entry.body.activate();
+        }
+    } finally {
+        physics.manager.freeVector3(zero);
+    }
+}
+
+export function advancePmxMotionFrame({
+    delta, pivot, helper, advanceRotation, physics, physicsGate, rotationPhysicsLimit
+} = {}) {
+    const rotationRadians = advanceRotation?.(delta);
+    pivot?.updateWorldMatrix?.(true, true);
+    if (physics && physicsGate && helper?.enabled) {
+        const speed = delta > 0 && Number.isFinite(rotationRadians)
+            ? Math.abs(rotationRadians) * 180 / Math.PI / delta
+            : 0;
+        const tooFast = Number.isFinite(rotationPhysicsLimit)
+            && rotationPhysicsLimit > 0 && speed > rotationPhysicsLimit;
+        if (tooFast) {
+            // 只关闭 Ammo 步进；MMDAnimationHelper 仍推进 VMD、IK 和 grant。
+            helper.enabled.physics = false;
+            physicsGate.paused = true;
+            helper.update(delta);
+            return;
+        }
+        if (physicsGate.paused) {
+            // 减速后的首帧先推进动画，再复位刚体；下一帧才重新步进物理。
+            helper.enabled.physics = false;
+            helper.update(delta);
+            resetPmxPhysicsAfterRotation(physics, pivot);
+            helper.enabled.physics = true;
+            physicsGate.paused = false;
+            return;
+        }
+        helper.enabled.physics = true;
+    }
     helper?.update(delta);
 }
 

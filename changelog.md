@@ -2,6 +2,10 @@
 
 ### PMX 旋转物理
 
+- ✅ [2026-09-23] 快速旋转时按可调速度阈值暂停 PMX 布料物理。
+  - `display.html`、`display-mmd-lighting.js`、`display-mmd.js` 增加灯光面板阈值设置：30–720°/秒，默认 180°/秒，浏览器本地保存；灯光预设保留阈值，恢复默认重置。
+  - `display-pmx-runtime.js`、`mmd-pmx-helper.mjs` 按实际枢轴角速度暂停 Ammo，继续播放 VMD/IK/grant；减速后重置刚体并清除旧速度，下一帧恢复物理。VRM 与无物理 PMX 不受影响。
+  - 更新 PMX design/spec、task、todo、usage 和自测文档及相关测试；PMX/MMD 定向测试 39/39 通过，语法和 `git diff --check` 通过。完整 `npm test` 为 926/983 通过，57 项其他模块或本机环境用例失败；真实模型与 Android WebView 视觉效果待现场验证。服务代码需重新出包，未构建或发布 APK/更新包。
 - ✅ [2026-09-23] 修复单位缩放浮点误差导致旋转缓动期间物理锚点跳位。
   - 内置 `vendor/three/animation/MMDPhysics.js` 将单位缩放判断改为 0.001 容差，保留父级中心枢轴变换及布料原有线/角速度；真实超限缩放仍走原处理。
   - 回归直接执行内置源码，新增连续 yaw/pitch/组合旋转及三轴容差用例；修复前 4 项失败，修复后相关测试 72/72 通过。同步 design/spec/todo/自测文档；真实模型视觉效果待现场验证，未构建或发布。

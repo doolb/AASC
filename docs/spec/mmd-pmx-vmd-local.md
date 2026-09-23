@@ -118,6 +118,7 @@ MMDPhysics.update(delta):
   keyDistance = 4.183
   shadowEnabled = true
   physicsFps = 65
+  rotationPhysicsLimit = 180
   pmxAoEnabled = true
   pmxAoColor = "#931231"
   pmxAoIntensity = 0.6
@@ -135,6 +136,7 @@ MMDPhysics.update(delta):
   将 keyDistance 固定为运行时光源距离，不接受界面输入
   shadowEnabled 只接受布尔值，缺省为 true
   physicsFps 限制在 30..90 并按 5 Hz 对齐，缺省为 65
+  rotationPhysicsLimit 限制在 30..720 度/秒并按 10 度/秒对齐，缺省为 180
   pmxAoEnabled 只接受布尔值，旧设置缺失时为 true
   pmxAoColor 只接受 #RRGGBB，缺省为 #931231
   pmxAoIntensity 限制在 0..2，缺省为 0.6
@@ -153,6 +155,7 @@ MMDPhysics.update(delta):
     将 keyDirection 的经度/纬度转换为固定距离的 Three.js 光源坐标
     主光目标定位到当前模型中心，并按模型包围盒动态收紧阴影相机范围
     如果当前为 PMX，将现有 physics.unitStep 更新为 1 / physicsFps
+    如果当前为 PMX，更新旋转暂停物理的速度阈值
     如果当前为 PMX，按 pmxAoEnabled 切换环境遮蔽渲染路径
     如果当前为 PMX，将 AO 颜色、强度和相对模型身高的半径即时传给渲染器
     如果当前为 PMX，将 AO 分辨率模式即时传给渲染器，模式变化时重建 AO 与模糊目标尺寸
@@ -166,11 +169,13 @@ MMDPhysics.update(delta):
   面板在开关下提供颜色、强度和半径输入；改变时即时保存和渲染
   面板在 AO 参数中提供半分辨率/全分辨率选择；默认半分辨率，沿用灯光 localStorage 保存
   面板新增“PMX 物理计算频率”滑块，范围 30..90 Hz、步长 5 Hz、默认 65 Hz
+  面板新增“旋转暂停物理阈值”滑块，范围 30..720 度/秒、步长 10 度/秒、默认 180 度/秒
   将滑块值加入既有 MmdLightingSettings 保存和恢复流程
   调整设置后立即调用 DisplayMmd.setLighting()，更新当前 PMX 物理 fixed step
-  选择灯光预设时保留当前 physicsFps；点击恢复默认时恢复 65 Hz
+  选择灯光预设时保留当前 physicsFps 和 rotationPhysicsLimit；点击恢复默认时恢复 65 Hz 和 180 度/秒
   提示该值是物理目标步进频率，实际步数受渲染帧率及 maxStepNum=3 限制
   VRM runtime 忽略 physicsFps
+  VRM runtime 忽略 rotationPhysicsLimit
   VRM runtime 忽略 pmxAoEnabled
 ```
 
@@ -434,9 +439,17 @@ MMDPhysics.update(delta):
   否则显示模型加载成功
 
 过程 renderMmdFrame(delta)
-  更新中心枢轴的目标 yaw/pitch 缓动
+  记录中心枢轴的旧 yaw/pitch，更新目标 yaw/pitch 缓动
+  使用本帧 yaw/pitch 实际角位移与 delta 计算角速度，单位为度/秒
   刷新 pivot、mesh 和骨骼的世界矩阵
-  helper 存在时调用 helper.update(delta)
+  如果 PMX 物理可用，且角速度超过 rotationPhysicsLimit
+    暂停 helper 中的物理更新，但继续调用 helper.update(delta) 推进 VMD、IK、grant
+    记录物理暂停状态
+  否则如果上一帧物理暂停
+    在物理仍暂停时调用 helper.update(delta) 推进动作到当前姿态
+    刷新骨骼世界矩阵，将刚体重置到当前骨骼并清除动态刚体的旧速度与外力
+    结束物理暂停；下一帧恢复物理步进
+  否则 helper 存在时正常调用 helper.update(delta)
   MMDAnimationHelper 依次维持 VMD、IK/grant 与已启用的 MMDPhysics
   MMDPhysics 从旋转后的骨骼更新 type=0 运动学刚体锚点
   type=1/2 动态刚体保留 Bullet 世界坐标、姿态及线/角速度
@@ -444,7 +457,7 @@ MMDPhysics.update(delta):
   MMDPhysics 将动态刚体结果回写到当前 pivot 下的骨骼
   渲染当前场景
 
-约束：PmxPhysicsWarmupSteps 固定为 0，因此 helper.add 只初始化/重置刚体；首个 helper.update(delta) 由模型显示后的下一次 requestAnimationFrame 触发。旋转时只由 MMDPhysics 更新运动学锚点，不再对动态刚体做整体位置传送或速度补偿，也不调用 physics.reset()、清零速度/角速度。物理目标频率和 maxStepNum=3 不变；低渲染帧率下的多子步仍须现场验证。无 physics 的 PMX 和 VRM 不受影响。
+约束：PmxPhysicsWarmupSteps 固定为 0，因此 helper.add 只初始化/重置刚体；首个 helper.update(delta) 由模型显示后的下一次 requestAnimationFrame 触发。低于速度阈值的普通旋转沿用运动学锚点牵引，不传送动态刚体。仅从快速旋转的暂停状态恢复时重置刚体并清除旧速度，防止跳变；阈值按实际枢轴位移计算，不按鼠标事件频率计算。物理目标频率和 maxStepNum=3 不变；低渲染帧率下的多子步仍须现场验证。无 physics 的 PMX 和 VRM 不受影响。
 ```
 
 ### 固定物理子步中的枢轴同步（备选设计，待现场试验结果，尚未实现）

@@ -7,6 +7,7 @@
 (function exposeDisplayMmdLighting(root) {
     const STORAGE_KEY = 'aasc.display.mmdLighting.v1';
     const DEFAULT_PHYSICS_FPS = 65;
+    const DEFAULT_ROTATION_PHYSICS_LIMIT = 180;
     const PRESETS = Object.freeze({
         default: Object.freeze({
             ambientColor: '#ffffff',
@@ -63,6 +64,8 @@
             pmxAoResolution: byId('displayMmdPmxAoResolution'),
             physicsFps: byId('displayMmdPhysicsFps'),
             physicsFpsValue: byId('displayMmdPhysicsFpsValue'),
+            rotationPhysicsLimit: byId('displayMmdRotationPhysicsLimit'),
+            rotationPhysicsLimitValue: byId('displayMmdRotationPhysicsLimitValue'),
             ambientColor: byId('displayMmdAmbientColor'),
             ambientIntensity: byId('displayMmdAmbientIntensity'),
             ambientIntensityValue: byId('displayMmdAmbientIntensityValue'),
@@ -94,6 +97,7 @@
         elements.keyDirectionLongitudeValue.textContent = `${formatNumber(elements.keyDirectionLongitude.value, 0)}°`;
         elements.keyDirectionLatitudeValue.textContent = `${formatNumber(elements.keyDirectionLatitude.value, 0)}°`;
         elements.physicsFpsValue.textContent = `${elements.physicsFps.value} Hz`;
+        elements.rotationPhysicsLimitValue.textContent = `${elements.rotationPhysicsLimit.value}°/秒`;
         elements.pmxAoIntensityValue.textContent = formatNumber(elements.pmxAoIntensity.value);
         elements.pmxAoRadiusPercentValue.textContent = `${elements.pmxAoRadiusPercent.value}%`;
     }
@@ -113,6 +117,7 @@
         elements.pmxAoRadiusPercent.value = String(lighting.pmxAoRadiusPercent);
         elements.pmxAoResolution.value = lighting.pmxAoResolution;
         elements.physicsFps.value = String(lighting.physicsFps);
+        elements.rotationPhysicsLimit.value = String(lighting.rotationPhysicsLimit);
         updateOutputs();
     }
 
@@ -133,7 +138,8 @@
             pmxAoIntensity: elements.pmxAoIntensity.value,
             pmxAoRadiusPercent: elements.pmxAoRadiusPercent.value,
             pmxAoResolution: elements.pmxAoResolution.value,
-            physicsFps: elements.physicsFps.value
+            physicsFps: elements.physicsFps.value,
+            rotationPhysicsLimit: elements.rotationPhysicsLimit.value
         };
     }
 
@@ -203,7 +209,11 @@
         elements.panel.addEventListener('click', (event) => event.stopPropagation());
         elements.reset.addEventListener('click', () => {
             elements.preset.value = 'default';
-            applyLighting({ ...PRESETS.default, physicsFps: DEFAULT_PHYSICS_FPS });
+            applyLighting({
+                ...PRESETS.default,
+                physicsFps: DEFAULT_PHYSICS_FPS,
+                rotationPhysicsLimit: DEFAULT_ROTATION_PHYSICS_LIMIT
+            });
         });
         elements.preset.addEventListener('change', handlePresetChange);
         [
@@ -221,6 +231,7 @@
         ].forEach((element) => element.addEventListener('input', handleFormInput));
         elements.pmxAoResolution.addEventListener('change', handleFormInput);
         elements.physicsFps.addEventListener('input', () => applyLighting(readForm()));
+        elements.rotationPhysicsLimit.addEventListener('input', () => applyLighting(readForm()));
         document.addEventListener('click', () => setPanelOpen(false));
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') setPanelOpen(false);
