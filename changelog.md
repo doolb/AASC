@@ -92,6 +92,9 @@
 
 ### MMD 图片基准图 AR 设计记录
 
+- ✅ [2026-09-23] 修复实时视频识别帧尺寸并细化查找提示。
+  - `display-mmd-image-tracker.js` 优先使用 `videoWidth/videoHeight` 保持摄像头原始宽高比，并区分纹理、匹配和几何阶段失败；`display-mmd-ar.js` 显示对应操作提示。同步 design/spec/task/todo/usage；语法与差异检查通过，目标 Android 设备的实际识别效果待验证。
+
 - ✅ [2026-09-23] 调整定位摄像头画面层级。
   - `display.html`、`display-mmd.css` 将视频移到媒体容器与交互舞台之间；`display-stage.js` 同步可视视口尺寸，`display-mmd-ar.js` 继续按舞台映射脚底锚点。更新 design/spec/task/todo/usage；语法解析和 `git diff --check` 通过，Android 现场观感待验证，服务代码待重新出包。
 - ✅ [2026-09-23] 改进图片基准图识别和首次搜索状态。

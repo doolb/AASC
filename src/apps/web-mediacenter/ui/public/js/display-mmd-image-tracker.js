@@ -8,8 +8,10 @@
     const MIN_MATCHES = 8;
 
     function createFrame(source) {
-        const width = Math.max(1, Math.round(source.width || source.videoWidth || 1));
-        const height = Math.max(1, Math.round(source.height || source.videoHeight || 1));
+        // video.width/height 可能是元素布局尺寸；识别必须使用实际摄像头帧宽高，
+        // 否则会把画面拉伸，造成角点描述子和基准图的几何关系不一致。
+        const width = Math.max(1, Math.round(source.videoWidth || source.width || 1));
+        const height = Math.max(1, Math.round(source.videoHeight || source.height || 1));
         const scale = Math.min(1, MAX_WIDTH / width);
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(width * scale));
@@ -282,23 +284,26 @@
                 const current = extractFeatures(frame, null, [0.75, 1, 1.35]);
                 if (current.length < MIN_MATCHES) return { visible: false, reason: 'lowTexture' };
                 const matches = matchFeatures(features, current);
+                if (matches.length < MIN_MATCHES) return { visible: false, reason: 'insufficientMatches' };
                 const estimate = estimateHomography(matches);
-                if (!estimate?.matrix) return { visible: false };
+                if (!estimate?.matrix) return { visible: false, reason: 'unstableGeometry' };
                 const corners = quad.map((point) => project(estimate.matrix, point));
                 if (corners.some((point) => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
-                    return { visible: false };
+                    return { visible: false, reason: 'unstableGeometry' };
                 }
                 const area = Math.abs(corners.reduce((sum, point, index) => {
                     const next = corners[(index + 1) % 4];
                     return sum + point.x * next.y - next.x * point.y;
                 }, 0)) / 2;
-                if (area < 250 || area > frame.width * frame.height * 1.4) return { visible: false };
+                if (area < 250 || area > frame.width * frame.height * 1.4) {
+                    return { visible: false, reason: 'unstableGeometry' };
+                }
                 const center = project(estimate.matrix, {
                     x: quad.reduce((sum, point) => sum + point.x, 0) / 4,
                     y: quad.reduce((sum, point) => sum + point.y, 0) / 4
                 });
                 if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.y)) {
-                    return { visible: false };
+                    return { visible: false, reason: 'unstableGeometry' };
                 }
                 const sourceWidth = Math.hypot(quad[1].x - quad[0].x, quad[1].y - quad[0].y);
                 const imageWidth = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y);

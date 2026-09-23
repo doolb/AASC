@@ -25,6 +25,27 @@
     摄像头未就绪或画面细节不足时显示相应提示
 ```
 
+### 实时视频尺寸与识别诊断修正
+
+```text
+过程 createFrame(source)
+  如果 source 是实时视频且 videoWidth/videoHeight 已就绪:
+    使用 videoWidth/videoHeight 作为原始帧尺寸和宽高比
+  否则使用图像自身 width/height
+  按原始宽高比缩放到识别宽度，再绘制到识别画布
+
+过程 processFrame(video)
+  视频帧未就绪时返回 cameraNotReady
+  角点不足时返回 lowTexture
+  有角点但匹配对不足时返回 insufficientMatches
+  匹配对足够但单应矩阵或投影区域无效时返回 unstableGeometry
+  成功时返回位置、旋转、尺度和置信度
+
+过程 showTrackingMessage(reason)
+  根据 reason 提示等待视频、增加画面细节、靠近并摆正基准图，或保持画面稳定
+  首次成功前状态保持 searching；成功后再次失败才设为 lost
+```
+
 ### 定位视频层级修正
 
 ```text

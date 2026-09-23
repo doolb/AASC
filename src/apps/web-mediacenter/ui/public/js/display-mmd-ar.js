@@ -801,11 +801,13 @@
                 root.DisplayMmd.setArPose(pose, getSelectedTarget()?.modelCalibration);
             }
         } else {
-            const message = result?.reason === 'cameraNotReady'
-                ? '正在等待摄像头画面'
-                : result?.reason === 'lowTexture'
-                    ? '画面细节不足，请保持镜头稳定并增加光线'
-                    : '正在寻找定位图，请将基准图置于画面中央';
+            const hints = {
+                cameraNotReady: '正在等待摄像头画面',
+                lowTexture: '画面细节不足，请增加光线或选择细节丰富的定位图',
+                insufficientMatches: '未匹配到定位图，请靠近并将图片摆正',
+                unstableGeometry: '定位图位置不稳定，请保持镜头平稳'
+            };
+            const message = hints[result?.reason] || '正在寻找定位图，请将基准图置于画面中央';
             setStatus(session.hasLocated ? 'lost' : 'searching', message);
         }
     }
