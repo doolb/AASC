@@ -13,6 +13,7 @@
     const TARGET_STORE = 'targets';
     const ACTIVE_TARGET_KEY = 'aasc.display.mmdAr.activeTarget.v1';
     const MOTION_SENSITIVITY_KEY = 'aasc.display.mmdAr.motionSensitivity.v1';
+    const MOTION_ORBIT_MODE = 'sensor-orbit-only';
     const MIN_QUAD_AREA = 0.03;
     const MAX_PHYSICAL_WIDTH_MM = 100000;
     const DEG_TO_RAD = Math.PI / 180;
@@ -45,6 +46,7 @@
         dragIndex: -1,
         dragPointerId: null,
         motionEnabled: false,
+        motionMode: 'off',
         motionPermission: 'unknown',
         motionListening: false,
         motionCenter: null,
@@ -216,7 +218,8 @@
             -Math.PI / 4,
             Math.PI / 4
         );
-        // 体感观察只更新虚拟相机，不调用 rotateModelBy，否则会改变角色自身朝向。
+        // 独立体感模式只提交 yaw/pitch 环绕角度；runtime 内部保持固定 cameraDistance，
+        // 不接收距离、位移、变焦或滚转参数，不调用 rotateModelBy 改变角色自身朝向。
         root.DisplayMmd?.setCameraViewRotation?.(yaw, pitch);
     }
 
@@ -253,6 +256,7 @@
         }
         state.motionListening = false;
         state.motionEnabled = false;
+        state.motionMode = 'off';
         state.motionCenter = null;
         state.motionLastSample = null;
         root.DisplayMmd?.resetCameraViewRotation?.();
@@ -270,6 +274,8 @@
             if (permission !== 'granted') throw new Error('手机姿态传感器权限被拒绝');
         }
         state.motionPermission = 'granted';
+        // 体感观察是独立于图片定位的相机环绕模式，不要求目标、摄像头或识别会话。
+        state.motionMode = MOTION_ORBIT_MODE;
         state.motionCenter = null;
         state.motionLastSample = null;
         root.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });

@@ -69,8 +69,10 @@ display-mmd-ar.js:
 
 ```text
 声明 ArMotionView {
+  mode: "off" | "sensor-orbit-only",
   enabled,
   sensitivity,
+  distancePolicy: "fixed",
   center: { alpha, beta, gamma },
   viewRotation: { yaw, pitch },
   permission: "unknown" | "granted" | "denied" | "unsupported"
@@ -78,12 +80,16 @@ display-mmd-ar.js:
 
 过程 enableArMotionView()
   在用户点击事件中申请 DeviceOrientationEvent 权限（如果平台要求）
+  不检查定位图、不启动摄像头、不创建 ImageTargetTracker
+  mode = "sensor-orbit-only"
+  distancePolicy = "fixed"
   记录当前 alpha/beta/gamma 作为体感中心
   将 enabled 设为 true
 
 过程 onDeviceOrientation(sample)
   计算当前姿态相对 center 的 yaw/pitch
   乘以 sensitivity 并限制最大俯仰角
+  忽略 gamma 对应的滚转、线性加速度、位移和变焦
   调用 DisplayMmd.setCameraViewRotation(yaw, pitch)
   不调用 DisplayMmd 的 rotateModelBy
 
@@ -93,11 +99,14 @@ display-mmd-ar.js:
 
 过程 disableArMotionView()
   移除传感器监听
+  mode = "off"
   调用 DisplayMmd.resetCameraViewRotation()
   角色继续保留屏幕拖动旋转结果
 ```
 
 六轴数据只改变虚拟相机观察角度，不改变角色自身旋转、定位图锚点、位置或尺度。屏幕拖动继续调用现有 `rotateModelBy`，因此 AR 体感和手动角色旋转互不覆盖。
+
+`setCameraViewRotation` 只更新 runtime 的 yaw/pitch 目标值；PMX/VRM runtime 使用固定 `cameraDistance` 重新计算相机位置，不提供体感变焦或位移通道。
 ```
 
 页面实现不得把摄像头帧写入日志、WebSocket 或 HTTP 请求；停止定位、页面隐藏和权限失败必须释放视频轨道。
@@ -371,6 +380,13 @@ IndexedDB 失败:
 测试 privacyBoundary
   启动和运行跟踪
   断言没有发送 camera frame、referenceImageBlob 或 compiledTargetData 的 HTTP/WS 消息
+
+测试 sensorOrbitOnlyWithoutTarget
+  不创建定位图、不启动摄像头
+  开启体感环绕并输入 alpha/beta 姿态样本
+  断言只调用 setCameraViewRotation
+  断言未调用 rotateModelBy、setCameraDistance 或位移接口
+  断言关闭后相机距离和角色旋转结果保持不变
 ```
 
 ## 12. Offline 发布伪代码

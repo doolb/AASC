@@ -87,7 +87,7 @@ test('AR 体感观察只控制虚拟相机，不覆盖屏幕拖动的角色旋�
     const mmd = readPublic('js/display-mmd.js');
     const pmx = readPublic('js/display-pmx-runtime.js');
     const vrm = readPublic('js/display-vrm-runtime.js');
-    assert.match(html, /id="displayArMotionEnabled"[\s\S]*体感观察（只移动视角）/u);
+    assert.match(html, /id="displayArMotionEnabled"[\s\S]*独立体感环绕（固定距离）/u);
     assert.match(html, /id="displayArMotionSensitivity"/u);
     assert.match(html, /id="displayArMotionRecenter"/u);
     assert.match(ar, /deviceorientation/u);
@@ -100,6 +100,21 @@ test('AR 体感观察只控制虚拟相机，不覆盖屏幕拖动的角色旋�
     assert.match(pmx, /updateCameraView/u);
     assert.match(vrm, /setCameraViewRotation/u);
     assert.match(vrm, /updateCameraView/u);
+});
+
+test('AR 独立体感环绕不依赖定位图和摄像头，并保持固定距离', () => {
+    const ar = readPublic('js/display-mmd-ar.js');
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(ar, /MOTION_ORBIT_MODE\s*=\s*['"]sensor-orbit-only['"]/u);
+    assert.match(ar, /motionMode:\s*['"]off['"]/u);
+    assert.match(ar, /state\.motionMode\s*=\s*MOTION_ORBIT_MODE/u);
+    assert.match(ar, /不要求目标、摄像头或识别会话/u);
+    assert.match(pmx, /const cameraDistance\s*=\s*TARGET_MODEL_HEIGHT\s*\*\s*2\.8/u);
+    assert.match(vrm, /const cameraDistance\s*=\s*TARGET_MODEL_HEIGHT\s*\*\s*2\.8/u);
+    assert.match(pmx, /camera\.position\.set\([\s\S]*cameraDistance/u);
+    assert.match(vrm, /camera\.position\.set\([\s\S]*cameraDistance/u);
+    assert.doesNotMatch(ar, /setCameraDistance/u);
 });
 
 test('显示端模块通过现有 WebSocket 注入，不创建第二条连接', () => {

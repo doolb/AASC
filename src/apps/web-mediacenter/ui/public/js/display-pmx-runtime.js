@@ -144,6 +144,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
     const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
+    // 体感环绕只允许改变 yaw/pitch；距离固定，避免手机姿态输入变成缩放或推拉镜头。
     const cameraDistance = TARGET_MODEL_HEIGHT * 2.8;
     const cameraViewState = {
         targetYaw: 0,

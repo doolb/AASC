@@ -20,9 +20,15 @@
 - ✅ [2026-09-22] 增加 AR 放大角色的六轴体感观察。
   - 定位面板增加体感开关、灵敏度和重新居中；`deviceorientation` 只更新 PMX/VRM 虚拟相机观察角度，不调用角色 `rotateModelBy`。
   - 屏幕拖动仍负责角色自身旋转；传感器权限拒绝或设备不支持时回退为普通拖动观察。验证：显示端测试 37/37、AR/PMX/VRM 脚本语法检查和 `git diff --check` 通过。
+- ✅ [2026-09-22] 将六轴体感改为独立固定距离环绕模式。
+  - 不依赖定位图、摄像头或图像识别会话，只使用相对 alpha/beta 更新相机 yaw/pitch；忽略滚转、位移和变焦。
+  - PMX/VRM runtime 保持固定 `cameraDistance`，角色自身旋转仍由屏幕拖动控制。验证：显示端测试 38/38、AR 脚本语法检查和 `git diff --check` 通过。
 - ✅ [2026-09-22] 发布 MMD 图片基准图 AR 第一阶段服务代码。
   - 生成并同步 `code/code-v32.zip` 到局域网 `/mnt/aasc-offline` 和外网 `~/a/aasc-offline`；大小 `15321083` bytes，SHA-256 为 `28fbb04089acc08fcc74b734346c1b85a02991926ac5052220f11ded322e1788`。
   - 采用 `code-only`，继续使用 `dependencies-v6.zip` 和 min APK v33；完整 APK v23 未替换。局域网/外网 manifest 签名、代码包 SHA-256 和精确版本清理验证通过。
+- ✅ [2026-09-23] 发布独立固定距离体感环绕服务代码。
+  - 生成并同步 `code/code-v33.zip` 到局域网 `/mnt/aasc-offline` 和外网 `~/a/aasc-offline`；大小 `15321507` bytes，SHA-256 为 `3293fd4e063cbe4f30486b7a2e3d579f39359e951c0bbfdcfd67019b2e21d771`。
+  - 采用 `code-only`，继续使用 `dependencies-v6.zip` 和 min APK v33；完整 APK v23 未替换。内外网 manifest 签名、代码包 SHA-256 和精确版本清理验证通过。
 
 ### 显示端 MMD 空白区域拖动旋转
 
