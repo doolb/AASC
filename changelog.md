@@ -1,5 +1,9 @@
 # Web MediaCenter - 变更日志
 
+### 项目规则
+
+- ✅ [2026-09-23] 明确纯构建、发布和资源同步任务只记录 `changelog.md`，不强制新增或更新 design/spec/task，也不修改 todo.md；规则已同步到 `AGENTS.md` 和 `CLAUDE.md`。
+
 ### Offline 热更发布
 
 - ✅ [2026-09-23] 增加多内网热更源与外网资源同步
