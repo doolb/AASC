@@ -91,28 +91,35 @@ syncOfflineUpdate:
         code, dependencies, apkMin, dataRepair when present
         exclude apkFull and any component not in the allowlist
     validate manifest structure, component versions and safe relative paths
-    totalDownloadBytes = sum(component.size for component in selected components)
-    completedDownloadBytes = 0
-
+    componentPlan = []
     for component, index in selected components:
+        targetPath = resolveSafePath(localRoot, component.relativeUrl)
+        existingState = inspectExistingArtifact(targetPath, component)
+        if existingState == conflict:
+            stop before downloading any component
+        add component, index, targetPath and existingState to componentPlan
+    totalSyncBytes = sum(component.size for component in componentPlan)
+    completedSyncBytes = 0
+
+    for component, index, targetPath, existingState in componentPlan:
+        if existingState == same:
+            mark component as reused without an HTTP request
+            completedSyncBytes += component.size
+            show [reused], filename and overall progress
+            continue
         show component.relativeUrl and 0% file/overall download progress
         download to localRoot/.sync-<id>/<relativeUrl>.part
         require ordinary file path and safe relativeUrl
         for each received data chunk:
-            update file received bytes and overall received bytes
+            update file received bytes and overall completed bytes
             show filename, received/total bytes, file percent and overall percent
             if terminal is interactive:
                 refresh current progress line at a throttled interval
             else:
                 print progress at throttled percentage milestones
         require exact size and SHA-256 declared by manifest
-        if localRoot/relativeUrl exists with same hash:
-            keep existing file
-        else if same version has different hash:
-            stop without replacing manifest
-        else:
-            atomically install the size/hash-checked versioned file
-        completedDownloadBytes += component.size
+        atomically install the size/hash-checked versioned file
+        completedSyncBytes += component.size
 
     write manifest to localRoot/manifest.json.tmp-<id>
     fsync and atomically rename manifest.json last

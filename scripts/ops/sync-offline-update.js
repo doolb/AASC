@@ -62,7 +62,7 @@ function createProgressDisplay(totalBytes, output = process.stderr) {
         const filePercent = Math.min(100, Math.floor((receivedBytes / currentFile.size) * 100));
         const overallBytes = Math.min(totalBytes, completedBytes + receivedBytes);
         const overallPercent = Math.min(100, Math.floor((overallBytes / totalBytes) * 100));
-        const message = `[${currentFile.index}/${currentFile.count}] ${currentFile.name} ` +
+        const message = `[下载进度] [${currentFile.index}/${currentFile.count}] ${currentFile.name} ` +
             `${formatProgressBytes(receivedBytes)}/${formatProgressBytes(currentFile.size)} (${filePercent}%)` +
             ` | 总进度 ${formatProgressBytes(overallBytes)}/${formatProgressBytes(totalBytes)} (${overallPercent}%)`;
 
@@ -84,6 +84,14 @@ function createProgressDisplay(totalBytes, output = process.stderr) {
     }
 
     return {
+        reused(name, index, count, size, completedBytes) {
+            const overallBytes = Math.min(totalBytes, completedBytes);
+            const overallPercent = Math.min(100, Math.floor((overallBytes / totalBytes) * 100));
+            output.write(
+                `[已复用] [${index}/${count}] ${name} ${formatProgressBytes(size)}/${formatProgressBytes(size)} (100%)` +
+                ` | 总进度 ${formatProgressBytes(overallBytes)}/${formatProgressBytes(totalBytes)} (${overallPercent}%)\n`
+            );
+        },
         begin(name, index, count, size, completedBytes) {
             currentFile = { name, index, count, size };
             lastLoggedMilestone = -1;
@@ -282,34 +290,56 @@ async function syncOfflineUpdate(options = {}) {
     const components = selectSyncComponents(manifest);
     if (components.length === 0) throw new Error('清单没有可同步的服务资源');
 
+    const componentPlan = [];
+    for (const [index, { name, component }] of components.entries()) {
+        const targetPath = await resolveSafePath(localRoot, component.relativeUrl);
+        const existingState = await inspectExistingArtifact(targetPath, component);
+        if (existingState === 'conflict') {
+            throw new Error(`同版本资源已有不同内容，拒绝覆盖: ${component.relativeUrl}`);
+        }
+        componentPlan.push({ name, component, targetPath, existingState, index: index + 1 });
+    }
+
     const syncId = `${Date.now()}-${process.pid}-${crypto.randomUUID()}`;
     const stagingRoot = await fs.promises.mkdtemp(path.join(localRoot, `.offline-sync-${syncId}-`));
     const installed = [];
     const skipped = [];
-    const totalDownloadBytes = components.reduce((total, { component }) => total + component.size, 0);
-    const progressDisplay = createProgressDisplay(totalDownloadBytes);
-    let completedDownloadBytes = 0;
+    const totalSyncBytes = componentPlan.reduce((total, { component }) => total + component.size, 0);
+    const progressDisplay = createProgressDisplay(totalSyncBytes);
+    let completedSyncBytes = 0;
     try {
-        for (const [index, { name, component }] of components.entries()) {
-            const targetPath = await resolveSafePath(localRoot, component.relativeUrl);
+        for (const { name, component, targetPath, existingState, index } of componentPlan) {
+            if (existingState === 'same') {
+                completedSyncBytes += component.size;
+                skipped.push(name);
+                progressDisplay.reused(
+                    component.relativeUrl,
+                    index,
+                    componentPlan.length,
+                    component.size,
+                    completedSyncBytes
+                );
+                continue;
+            }
+
             const stagingPath = path.join(stagingRoot, ...component.relativeUrl.split('/'));
             progressDisplay.begin(
                 component.relativeUrl,
-                index + 1,
-                components.length,
+                index,
+                componentPlan.length,
                 component.size,
-                completedDownloadBytes
+                completedSyncBytes
             );
             try {
                 await downloadArtifact(sourceUrl, component, stagingPath, options, (receivedBytes) => {
-                    progressDisplay.update(receivedBytes, completedDownloadBytes);
+                    progressDisplay.update(receivedBytes, completedSyncBytes);
                 });
             } finally {
                 progressDisplay.end();
             }
-            completedDownloadBytes += component.size;
             const didInstall = await installArtifact(stagingPath, targetPath, component);
             (didInstall ? installed : skipped).push(name);
+            completedSyncBytes += component.size;
         }
         await writeManifestLast(localRoot, manifest, syncId);
     } finally {

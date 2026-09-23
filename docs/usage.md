@@ -194,6 +194,7 @@ npm run sync:offline-update -- \
 `--local-root` 也可通过 `AASC_OFFLINE_LOCAL_ROOT` 指定。同步会验签并校验 code、dependencies、min APK
 和 data-repair 资源，完整 Offline APK 不参与同步；同版本 hash 冲突会中止且不替换清单。
 同步时会显示当前资源文件名、单文件传输字节和百分比，以及全部资源的整体下载进度；日志模式会节流输出。
+同步前会检查目标目录中的同版本文件；文件大小和 SHA-256 都匹配时直接复用并跳过下载。发现同版本文件内容冲突会在发起下载前报错。
 
 如果本机没有清单公钥，可显式添加 `--skip-signature-verification` 跳过本地 RSA 验签。此时命令会提示清单来源未经认证；大小和 SHA-256 只校验下载文件是否符合该清单，不能证明清单可信。清单结构、资源路径、资源白名单和哈希校验仍会执行，Android 客户端仍强制验签。
 
