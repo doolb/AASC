@@ -274,9 +274,10 @@ TTS 批次完成和中断:
     其他控制端语音命令 -> 使用 generateTtsWithFallback(text, ..., targetDisplayId)
     播放目标优先为控制端指定的 targetDisplayId；目标没有 voicePlayback 能力时按在线语音显示端列表第一个目标兜底
 
-停止播报:
+用户说“停止播报”“中止播报”或“停一下”:
     显示端来源 -> 只向当前语音会话实际选中的 targetDisplayId 发送 tts.stop
     控制端来源 -> 只向当前解析出的 targetDisplayId 发送 tts.stop
+    三种说法复用同一个停止处理和确认提示
 
 显示端 TTS 播放开始:
     服务端暂停当前显示端 active 会话的到期 timer

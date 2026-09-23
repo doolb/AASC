@@ -769,9 +769,10 @@ timeAnnounce.generateTimeText():
     只发送给本句解析出的一个 targetDisplayId
     sourceDisplayId 或 preferredDisplayId 失效时，后续句子切换到备用显示端
 
-停止播报:
+停止播报命令（“停止播报”“中止播报”或“停一下”）:
     使用当前语音会话记录的实际 targetDisplayId
     只向实际目标发送 tts/stop
+    复用同一个 stopTts 命令处理器
 
 TTS 生成:
     仍调用 generateTtsWithFallback(text, voice, speed, preferredDisplayId)

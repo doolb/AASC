@@ -105,9 +105,9 @@ const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
     },
     {
         id: 'stopTts',
-        examples: ['停止播报', '中止播报'],
+        examples: ['停止播报', '中止播报', '停一下'],
         description: '停止当前语音播报',
-        matcher: text => text.includes('停止播报') || text.includes('中止播报')
+        matcher: text => text.includes('停止播报') || text.includes('中止播报') || text.includes('停一下')
     },
     {
         id: 'confirmation',
@@ -1886,7 +1886,7 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
     }
 
     // 停止播报
-    if (trimmedText.includes('停止播报') || trimmedText.includes('中止播报')) {
+    if (trimmedText.includes('停止播报') || trimmedText.includes('中止播报') || trimmedText.includes('停一下')) {
         if (callbacks && callbacks.onStop) {
             await callbacks.onStop();
         } else if (sendToDisplay && displayId) {
