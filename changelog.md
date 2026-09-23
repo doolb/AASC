@@ -9403,3 +9403,9 @@
 - ✅ [2026-09-22] 修复显示端重连时恢复已保存的声音输出设备。
   - 服务端按 `displayId` 保存的 `audioOutputDeviceKey` 下发后，网页端即使发现 key 未变化也会重新调用原生输出路由；设备不可用时保留请求值并回报回退状态。
   - 未修改 Android 原生层、服务端和控制端；输出设备及相关回归测试 13/13 通过，未重打 APK。
+
+### Offline 外网资源同步
+
+- ✅ [2026-09-23] `sync:offline-update` 支持以远端和本地 `/mnt` 父目录同步服务更新及完整 `mmd/` 目录树。
+  - 服务更新进入 `aasc-offline/`；MMD 按同源目录索引递归同步到同级 `mmd/`，记录 ETag/Last-Modified、大小和 SHA-256 以复用未变化文件，并保留本地额外文件。
+  - 保留直接 `/aasc-offline/` 源 URL 的旧行为；更新 design/spec/usage/task 文档。`node --check` 和 `git diff --check` 通过；未运行自动化测试、同步公网资源或构建 APK/服务包/依赖包。
