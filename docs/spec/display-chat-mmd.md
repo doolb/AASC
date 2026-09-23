@@ -1154,3 +1154,63 @@
 控制端只保留一个切换按钮；控制端、显示端和多个控制端最终都以服务端保存并广播的
 `mmdVisible` 为准。状态按 `displayId` 隔离，不新增 HTTP 配置接口，不改变模型加载、动作
 上下文和聊天会话生命周期。
+
+## 23. 显示端交互舞台旋转适配（2026-09-23）
+
+```text
+过程 getRotationStageGeometry(viewportWidth, viewportHeight, rotation, keyboardInset)
+  angle = rotation 规范化到 0、90、180 或 270
+  如果 angle 是 90 或 270
+    logicalWidth = viewportHeight
+    logicalHeight = viewportWidth
+  否则
+    logicalWidth = viewportWidth
+    logicalHeight = viewportHeight
+  按 angle 将物理 safe-area 四边映射到逻辑 top/right/bottom/left
+  将物理键盘遮挡量映射到旋转后对应的逻辑边
+  返回 { rotation: angle, logicalWidth, logicalHeight, safeAreaSources, keyboardInsets }
+```
+
+```text
+过程 applyStageRotation(rotation)
+  geometry = getRotationStageGeometry(visualViewport.width, visualViewport.height,
+    rotation, physicalKeyboardInset)
+  保持 displayStageLayers 和播报辅助层为物理视口大小
+  对 displayMmdLayer、displayChatLayer、displayInteractionLayer、displayArCalibration 分别设置
+    逻辑宽高、居中锚点和同一旋转角度
+  设置 displayStageLayers 的 data-rotation，供各层映射安全区 CSS 变量
+  设置逻辑安全区、面板最大宽高和键盘边距 CSS 变量
+  将 displayArTrackingVideo 设为同一逻辑宽高并绕物理视口中心旋转 angle
+  调用 DisplayChat.resize()
+  调用 DisplayMmd.resize(logicalWidth, logicalHeight)
+```
+
+```text
+过程 applyRotation()
+  更新 window.currentRotation
+  更新媒体、既有语音文字和弹窗旋转
+  调用 DisplayStage.setRotation(currentRotation)
+```
+
+```text
+过程 getCanvasPoint(pointerEvent)
+  physicalPoint = pointerEvent.clientX/clientY 相对 Canvas 变换后包围盒的位置
+  angle = window.currentRotation
+  按 angle 的逆变换将 physicalPoint 映射为 Canvas 逻辑 x/y
+  normalizedX = x / canvasLogicalWidth * 2 - 1
+  normalizedY = -(y / canvasLogicalHeight * 2 - 1)
+  返回 { x, y, normalizedX, normalizedY }
+```
+
+```text
+过程 getCalibrationPoint(pointerEvent)
+  rect = calibrationCanvas.getBoundingClientRect()
+  按旋转角度从 rect.width/height 还原 Canvas 逻辑宽高
+  logicalPoint = mapViewportPointToStage(pointerEvent.clientX/clientY, rect, angle, logicalWidth, logicalHeight)
+  返回将 logicalPoint 除以逻辑宽高并限制在 0..1 的选区坐标
+```
+
+- `getRotationStageGeometry` 返回逻辑宽高、安全区来源和软键盘边缘映射；`applyStageRotation` 为 MMD、聊天、交互控件、AR 校准及 AR 视频分别设置旋转几何，不创建新的包裹层，保留原 z-index 顺序。
+- 各自应用相同旋转变换的层包括 MMD Canvas、聊天层、右上角灯光/定位入口与设置面板、底部聊天/角色/停止播报按钮。
+- 播报辅助层继续留在物理视口坐标，因为 TTS/天气元素已由 `applyRotation()` 独立旋转。
+- 仅改变渲染尺寸、位置和指针坐标；不改变聊天状态、MMD runtime 生命周期、语音队列、AR 权限或服务端状态协议。

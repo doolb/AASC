@@ -1722,6 +1722,8 @@
             const voiceStatusOffset = `${rotationLayout.margin * 4}px`;
             const voiceTextOffset = `${rotationLayout.margin * 7}px`;
             window.currentRotation = currentRotation;
+            // MMD、聊天和交互按钮使用同一显示端旋转角；播报文字仍由下方既有逻辑独立排版。
+            window.DisplayStage?.setRotation?.(currentRotation);
             const rotTransform = 'rotate(' + currentRotation + 'deg)';
             mediaImage.style.transform = rotTransform;
             mediaVideo.style.transform = rotTransform;

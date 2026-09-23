@@ -224,6 +224,10 @@
 
     function getCanvasPoint(event) {
         const rect = state.canvas.getBoundingClientRect();
+        const geometry = root.DisplayStage?.getRotationGeometry?.();
+        if (geometry && typeof root.DisplayStage?.mapViewportPointToStage === 'function') {
+            return root.DisplayStage.mapViewportPointToStage(event.clientX, event.clientY, rect, geometry);
+        }
         return {
             x: event.clientX - rect.left,
             y: event.clientY - rect.top,

@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### 显示端交互层旋转适配
+
+- ✅ [2026-09-23] MMD、聊天、灯光/定位控件和底部三个按钮跟随显示端旋转角度。
+  - `display-stage.js` 以 `currentRotation` 计算逻辑视口和安全边，统一旋转 MMD、聊天、交互控件、AR 校准层及定位视频；`display-mmd.js` 与 `display-mmd-ar.js` 反算旋转后的触摸坐标。独立播报层沿用原有旋转与层级。
+  - 更新 MMD/聊天设计文档、伪代码、自测、todo 和任务记录。显示端旋转与聊天/MMD/播报回归 59/59 通过，三个 JS 语法检查及 `git diff --check` 通过；浏览器/Android WebView 视觉及触摸验收待进行。
+  - Offline 待打包状态：`servicePackage=true`、`minApk=true`、`dependenciesPackage=false`；未构建或发布 APK/服务包。
+
 ### 显示端摄像头开关
 
 - ✅ [2026-09-23] 控制端显示面板的设备能力增加逐显示端“摄像头采集”开关。

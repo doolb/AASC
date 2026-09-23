@@ -457,6 +457,23 @@
         const canvas = state.elements.calibrationCanvas;
         const rect = canvas.getBoundingClientRect();
         if (!rect.width || !rect.height) return null;
+        const geometry = root.DisplayStage?.getRotationGeometry?.();
+        if (geometry && typeof root.DisplayStage?.mapViewportPointToStage === 'function') {
+            const isQuarterTurn = geometry.rotation === 90 || geometry.rotation === 270;
+            const logicalWidth = isQuarterTurn ? rect.height : rect.width;
+            const logicalHeight = isQuarterTurn ? rect.width : rect.height;
+            const point = root.DisplayStage.mapViewportPointToStage(
+                event.clientX,
+                event.clientY,
+                rect,
+                { rotation: geometry.rotation, logicalWidth, logicalHeight }
+            );
+            if (!point) return null;
+            return {
+                x: clamp(point.x / logicalWidth, 0, 1),
+                y: clamp(point.y / logicalHeight, 0, 1)
+            };
+        }
         return {
             x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
             y: clamp((event.clientY - rect.top) / rect.height, 0, 1)

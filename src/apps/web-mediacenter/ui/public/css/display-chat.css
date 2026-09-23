@@ -40,10 +40,10 @@
 
 .display-chat-header {
     flex: 0 0 auto;
-    padding: max(10px, calc(env(safe-area-inset-top) + 8px))
-        max(14px, env(safe-area-inset-right))
+    padding: max(10px, calc(var(--display-safe-inset-top) + 8px))
+        max(14px, var(--display-safe-inset-right))
         10px
-        max(14px, env(safe-area-inset-left));
+        max(14px, var(--display-safe-inset-left));
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
     background: var(--bg-secondary);
 }
@@ -258,7 +258,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
-    padding: 14px max(14px, env(safe-area-inset-right)) 14px max(14px, env(safe-area-inset-left));
+    padding: 14px max(14px, var(--display-safe-inset-right)) 14px max(14px, var(--display-safe-inset-left));
     overscroll-behavior: contain;
     background: transparent;
 }
@@ -309,7 +309,7 @@
 
 .display-chat-status {
     min-height: 18px;
-    padding: 0 max(14px, env(safe-area-inset-right)) 5px max(14px, env(safe-area-inset-left));
+    padding: 0 max(14px, var(--display-safe-inset-right)) 5px max(14px, var(--display-safe-inset-left));
     background: var(--bg-secondary);
     color: var(--text-muted);
     font-size: 12px;
@@ -325,9 +325,9 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: stretch;
     gap: 8px;
-    padding: 10px max(14px, env(safe-area-inset-right))
-        calc(12px + var(--display-chat-keyboard-inset, 0px) + env(safe-area-inset-bottom))
-        max(14px, env(safe-area-inset-left));
+    padding: 10px max(14px, var(--display-safe-inset-right))
+        calc(12px + var(--display-chat-keyboard-inset, 0px) + var(--display-safe-inset-bottom))
+        max(14px, var(--display-safe-inset-left));
     border-top: 1px solid var(--border-color);
     background: var(--bg-secondary);
 }

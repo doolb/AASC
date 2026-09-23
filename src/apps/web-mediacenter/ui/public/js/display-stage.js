@@ -27,12 +27,89 @@
         // MMD 默认显示；服务端连接后会用按 displayId 保存的权威值覆盖它。
         mmdVisible: true,
         mmdOrder: 'under-chat',
+        rotation: 0,
+        rotationGeometry: null,
         displayId: null,
         transport: null,
         snapshotRequested: false
     };
     const subscribers = new Map();
     const refs = {};
+    const ROTATION_SAFE_AREA_MAP = Object.freeze({
+        0: Object.freeze({ top: 'top', right: 'right', bottom: 'bottom', left: 'left' }),
+        90: Object.freeze({ top: 'right', right: 'bottom', bottom: 'left', left: 'top' }),
+        180: Object.freeze({ top: 'bottom', right: 'left', bottom: 'top', left: 'right' }),
+        270: Object.freeze({ top: 'left', right: 'top', bottom: 'right', left: 'bottom' })
+    });
+    const ROTATION_KEYBOARD_EDGE = Object.freeze({ 0: 'bottom', 90: 'right', 180: 'top', 270: 'left' });
+
+    function normalizeRotation(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return 0;
+        const normalized = ((numeric % 360) + 360) % 360;
+        return Object.prototype.hasOwnProperty.call(ROTATION_SAFE_AREA_MAP, normalized) ? normalized : 0;
+    }
+
+    function getRotationGeometry(viewportWidth, viewportHeight, rotation, keyboardInset = 0) {
+        const width = Math.max(1, Math.round(Number(viewportWidth) || 1));
+        const height = Math.max(1, Math.round(Number(viewportHeight) || 1));
+        const angle = normalizeRotation(rotation);
+        const isQuarterTurn = angle === 90 || angle === 270;
+        const logicalWidth = isQuarterTurn ? height : width;
+        const logicalHeight = isQuarterTurn ? width : height;
+        const physicalKeyboardInset = Math.max(0, Number(keyboardInset) || 0);
+        const keyboardEdge = ROTATION_KEYBOARD_EDGE[angle];
+        const keyboardInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+        keyboardInsets[keyboardEdge] = physicalKeyboardInset;
+        return {
+            rotation: angle,
+            viewportWidth: width,
+            viewportHeight: height,
+            logicalWidth,
+            logicalHeight,
+            keyboardInset: physicalKeyboardInset,
+            keyboardInsets,
+            safeAreaSources: ROTATION_SAFE_AREA_MAP[angle]
+        };
+    }
+
+    function mapViewportPointToStage(clientX, clientY, rect, geometry) {
+        if (!rect || !geometry || rect.width <= 0 || rect.height <= 0) return null;
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const deltaX = Number(clientX) - centerX;
+        const deltaY = Number(clientY) - centerY;
+        const logicalWidth = Math.max(1, Number(geometry.logicalWidth) || rect.width);
+        const logicalHeight = Math.max(1, Number(geometry.logicalHeight) || rect.height);
+        let x;
+        let y;
+        switch (normalizeRotation(geometry.rotation)) {
+            case 90:
+                x = logicalWidth / 2 + deltaY;
+                y = logicalHeight / 2 - deltaX;
+                break;
+            case 180:
+                x = logicalWidth / 2 - deltaX;
+                y = logicalHeight / 2 - deltaY;
+                break;
+            case 270:
+                x = logicalWidth / 2 - deltaY;
+                y = logicalHeight / 2 + deltaX;
+                break;
+            default:
+                x = logicalWidth / 2 + deltaX;
+                y = logicalHeight / 2 + deltaY;
+                break;
+        }
+        const normalizedX = (x / logicalWidth) * 2 - 1;
+        const normalizedY = -((y / logicalHeight) * 2 - 1);
+        return {
+            x,
+            y,
+            normalizedX: normalizedX === 0 ? 0 : normalizedX,
+            normalizedY: normalizedY === 0 ? 0 : normalizedY
+        };
+    }
 
     function subscribe(type, handler) {
         if (typeof handler !== 'function') return () => {};
@@ -207,18 +284,63 @@
         const width = viewport?.width || document.documentElement.clientWidth || window.innerWidth;
         const height = viewport?.height || document.documentElement.clientHeight || window.innerHeight;
         const keyboardInset = Math.max(0, window.innerHeight - height);
+        const geometry = getRotationGeometry(width, height, root.currentRotation, keyboardInset);
+        state.rotation = geometry.rotation;
+        state.rotationGeometry = geometry;
+        const logicalWidth = geometry.logicalWidth;
+        const logicalHeight = geometry.logicalHeight;
         if (refs.stage) {
-            refs.stage.style.setProperty('--display-stage-width', `${Math.round(width)}px`);
-            refs.stage.style.setProperty('--display-stage-height', `${Math.round(height)}px`);
-            refs.stage.style.setProperty('--display-keyboard-inset', `${Math.round(keyboardInset)}px`);
+            refs.stage.dataset.rotation = String(geometry.rotation);
+            refs.stage.style.setProperty('--display-viewport-width', `${width}px`);
+            refs.stage.style.setProperty('--display-viewport-height', `${height}px`);
+            refs.stage.style.setProperty('--display-stage-width', `${logicalWidth}px`);
+            refs.stage.style.setProperty('--display-stage-height', `${logicalHeight}px`);
+            refs.stage.style.setProperty('--display-stage-panel-width', `${Math.min(320, Math.max(1, Math.round(logicalWidth * 0.86)))}px`);
+            refs.stage.style.setProperty('--display-stage-panel-max-height', `${Math.min(620, Math.max(1, Math.round(logicalHeight * 0.72)))}px`);
+            refs.stage.style.setProperty('--display-stage-dialog-width', `${Math.min(920, Math.max(1, logicalWidth - 24))}px`);
+            refs.stage.style.setProperty('--display-stage-dialog-max-height', `${Math.max(1, Math.round(logicalHeight * 0.92))}px`);
+            refs.stage.style.setProperty('--display-stage-preview-max-height', `${Math.max(1, Math.round(logicalHeight * 0.68))}px`);
+            refs.stage.style.setProperty('--display-stage-panel-top-gap', `${Math.min(104, Math.max(64, Math.round(logicalHeight * 0.12)))}px`);
+            refs.stage.style.setProperty('--display-keyboard-inset', `${geometry.rotation === 0 ? keyboardInset : 0}px`);
+            for (const edge of ['top', 'right', 'bottom', 'left']) {
+                refs.stage.style.setProperty(`--display-keyboard-inset-${edge}`, `${Math.round(geometry.keyboardInsets[edge])}px`);
+            }
+        }
+        for (const layer of [refs.mmdLayer, refs.chatLayer, refs.interactionLayer, refs.arCalibration]) {
+            if (!layer) continue;
+            layer.style.inset = 'auto';
+            layer.style.left = '50%';
+            layer.style.top = '50%';
+            layer.style.right = 'auto';
+            layer.style.bottom = 'auto';
+            layer.style.width = `${logicalWidth}px`;
+            layer.style.height = `${logicalHeight}px`;
+            layer.style.transformOrigin = 'center center';
+            layer.style.transform = `translate(-50%, -50%) rotate(${geometry.rotation}deg)`;
         }
         if (refs.arTrackingVideo) {
-            refs.arTrackingVideo.style.width = `${Math.round(width)}px`;
-            refs.arTrackingVideo.style.height = `${Math.round(height)}px`;
+            refs.arTrackingVideo.style.inset = 'auto';
+            refs.arTrackingVideo.style.left = '50%';
+            refs.arTrackingVideo.style.top = '50%';
+            refs.arTrackingVideo.style.right = 'auto';
+            refs.arTrackingVideo.style.bottom = 'auto';
+            refs.arTrackingVideo.style.width = `${logicalWidth}px`;
+            refs.arTrackingVideo.style.height = `${logicalHeight}px`;
+            refs.arTrackingVideo.style.transformOrigin = 'center center';
+            refs.arTrackingVideo.style.transform = `translate(-50%, -50%) rotate(${geometry.rotation}deg)`;
         }
         if (root.DisplayChat && typeof root.DisplayChat.resize === 'function') root.DisplayChat.resize();
-        if (root.DisplayMmd && typeof root.DisplayMmd.resize === 'function') root.DisplayMmd.resize(width, height);
-        publish('stage.resize', { width, height, keyboardInset });
+        if (root.DisplayMmd && typeof root.DisplayMmd.resize === 'function') root.DisplayMmd.resize(logicalWidth, logicalHeight);
+        publish('stage.resize', { width: logicalWidth, height: logicalHeight, viewportWidth: width, viewportHeight: height, keyboardInset, rotation: geometry.rotation });
+    }
+
+    function setRotation(rotation) {
+        const angle = normalizeRotation(rotation);
+        if (state.rotation === angle && state.rotationGeometry) return true;
+        state.rotation = angle;
+        if (refs.stage) resize();
+        publish('stage.rotation', { rotation: angle });
+        return true;
     }
 
     function handleServerMessage(message) {
@@ -239,6 +361,8 @@
         refs.arTrackingVideo = document.getElementById('displayArTrackingVideo');
         refs.mmdLayer = document.getElementById('displayMmdLayer');
         refs.chatLayer = document.getElementById('displayChatLayer');
+        refs.interactionLayer = document.getElementById('displayInteractionLayer');
+        refs.arCalibration = document.getElementById('displayArCalibration');
         refs.mmdCanvas = document.getElementById('displayMmdCanvas');
         refs.voiceTextDisplay = document.getElementById('voiceTextDisplay');
         refs.chatToggle = document.getElementById('displayChatToggle');
@@ -298,7 +422,17 @@
         publish,
         requestMmdVisibility,
         refreshVoiceTextVisibility: applyVoiceTextVisibility,
+        getRotationGeometry: (...args) => args.length
+            ? getRotationGeometry(...args)
+            : state.rotationGeometry || getRotationGeometry(
+                root.visualViewport?.width || document.documentElement.clientWidth || window.innerWidth,
+                root.visualViewport?.height || document.documentElement.clientHeight || window.innerHeight,
+                root.currentRotation,
+                0
+            ),
+        mapViewportPointToStage,
         send,
+        setRotation,
         setChatVisible,
         setMmdOrder,
         setMmdVisible,
