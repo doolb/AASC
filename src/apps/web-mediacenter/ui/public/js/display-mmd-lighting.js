@@ -1,11 +1,12 @@
 /*
  * 显示端 MMD/VRM 灯光面板。
  *
- * 面板只修改当前浏览器显示端的 AmbientLight、DirectionalLight 和阴影状态，
- * 设置保存到 localStorage，避免把灯光调试参数混入 WebSocket 或 Offline APK 配置。
+ * 面板修改当前浏览器显示端的 AmbientLight、DirectionalLight、阴影、PMX AO 和物理目标频率，
+ * 设置保存到 localStorage，避免把显示调试参数混入 WebSocket 或 Offline APK 配置。
  */
 (function exposeDisplayMmdLighting(root) {
     const STORAGE_KEY = 'aasc.display.mmdLighting.v1';
+    const DEFAULT_PHYSICS_FPS = 65;
     const PRESETS = Object.freeze({
         default: Object.freeze({
             ambientColor: '#ffffff',
@@ -13,7 +14,12 @@
             keyColor: '#ffffff',
             keyIntensity: 2.3,
             keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
-            shadowEnabled: true
+            shadowEnabled: true,
+            pmxAoEnabled: true,
+            pmxAoColor: '#931231',
+            pmxAoIntensity: 0.6,
+            pmxAoRadiusPercent: 6,
+            pmxAoResolution: 'half'
         }),
         soft: Object.freeze({
             ambientColor: '#ffffff',
@@ -48,6 +54,15 @@
             reset: byId('displayMmdLightingReset'),
             preset: byId('displayMmdLightingPreset'),
             shadowEnabled: byId('displayMmdShadowEnabled'),
+            pmxAoEnabled: byId('displayMmdPmxAoEnabled'),
+            pmxAoColor: byId('displayMmdPmxAoColor'),
+            pmxAoIntensity: byId('displayMmdPmxAoIntensity'),
+            pmxAoIntensityValue: byId('displayMmdPmxAoIntensityValue'),
+            pmxAoRadiusPercent: byId('displayMmdPmxAoRadiusPercent'),
+            pmxAoRadiusPercentValue: byId('displayMmdPmxAoRadiusPercentValue'),
+            pmxAoResolution: byId('displayMmdPmxAoResolution'),
+            physicsFps: byId('displayMmdPhysicsFps'),
+            physicsFpsValue: byId('displayMmdPhysicsFpsValue'),
             ambientColor: byId('displayMmdAmbientColor'),
             ambientIntensity: byId('displayMmdAmbientIntensity'),
             ambientIntensityValue: byId('displayMmdAmbientIntensityValue'),
@@ -78,6 +93,9 @@
         elements.keyIntensityValue.textContent = formatNumber(elements.keyIntensity.value);
         elements.keyDirectionLongitudeValue.textContent = `${formatNumber(elements.keyDirectionLongitude.value, 0)}°`;
         elements.keyDirectionLatitudeValue.textContent = `${formatNumber(elements.keyDirectionLatitude.value, 0)}°`;
+        elements.physicsFpsValue.textContent = `${elements.physicsFps.value} Hz`;
+        elements.pmxAoIntensityValue.textContent = formatNumber(elements.pmxAoIntensity.value);
+        elements.pmxAoRadiusPercentValue.textContent = `${elements.pmxAoRadiusPercent.value}%`;
     }
 
     function updateForm(lighting) {
@@ -89,6 +107,12 @@
         elements.keyDirectionLongitude.value = String(lighting.keyDirection.longitude);
         elements.keyDirectionLatitude.value = String(lighting.keyDirection.latitude);
         elements.shadowEnabled.checked = lighting.shadowEnabled !== false;
+        elements.pmxAoEnabled.checked = lighting.pmxAoEnabled !== false;
+        elements.pmxAoColor.value = lighting.pmxAoColor;
+        elements.pmxAoIntensity.value = String(lighting.pmxAoIntensity);
+        elements.pmxAoRadiusPercent.value = String(lighting.pmxAoRadiusPercent);
+        elements.pmxAoResolution.value = lighting.pmxAoResolution;
+        elements.physicsFps.value = String(lighting.physicsFps);
         updateOutputs();
     }
 
@@ -103,7 +127,13 @@
                 longitude: elements.keyDirectionLongitude.value,
                 latitude: elements.keyDirectionLatitude.value
             },
-            shadowEnabled: elements.shadowEnabled.checked
+            shadowEnabled: elements.shadowEnabled.checked,
+            pmxAoEnabled: elements.pmxAoEnabled.checked,
+            pmxAoColor: elements.pmxAoColor.value,
+            pmxAoIntensity: elements.pmxAoIntensity.value,
+            pmxAoRadiusPercent: elements.pmxAoRadiusPercent.value,
+            pmxAoResolution: elements.pmxAoResolution.value,
+            physicsFps: elements.physicsFps.value
         };
     }
 
@@ -173,7 +203,7 @@
         elements.panel.addEventListener('click', (event) => event.stopPropagation());
         elements.reset.addEventListener('click', () => {
             elements.preset.value = 'default';
-            applyLighting(PRESETS.default);
+            applyLighting({ ...PRESETS.default, physicsFps: DEFAULT_PHYSICS_FPS });
         });
         elements.preset.addEventListener('change', handlePresetChange);
         [
@@ -183,8 +213,14 @@
             elements.keyIntensity,
             elements.keyDirectionLongitude,
             elements.keyDirectionLatitude,
-            elements.shadowEnabled
+            elements.shadowEnabled,
+            elements.pmxAoEnabled,
+            elements.pmxAoColor,
+            elements.pmxAoIntensity,
+            elements.pmxAoRadiusPercent
         ].forEach((element) => element.addEventListener('input', handleFormInput));
+        elements.pmxAoResolution.addEventListener('change', handleFormInput);
+        elements.physicsFps.addEventListener('input', () => applyLighting(readForm()));
         document.addEventListener('click', () => setPanelOpen(false));
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') setPanelOpen(false);

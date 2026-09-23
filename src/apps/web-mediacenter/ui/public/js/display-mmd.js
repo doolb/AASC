@@ -25,7 +25,13 @@
         keyColor: '#ffffff',
         keyIntensity: 2.3,
         keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
-        shadowEnabled: true
+        shadowEnabled: true,
+        physicsFps: 65,
+        pmxAoEnabled: true,
+        pmxAoColor: '#931231',
+        pmxAoIntensity: 0.6,
+        pmxAoRadiusPercent: 6,
+        pmxAoResolution: 'half'
     });
     const POINTER_DRAG_THRESHOLD = 8;
     const POINTER_TAP_THRESHOLD = 18;
@@ -54,6 +60,11 @@
         };
     }
 
+    function normalizePhysicsFps(value) {
+        const clamped = clamp(value, 30, 90, DEFAULT_MMD_LIGHTING.physicsFps);
+        return Math.round(clamped / 5) * 5;
+    }
+
     function normalizeMmdLighting(input = {}) {
         const source = input && typeof input === 'object' ? input : {};
         const direction = source.keyDirection && typeof source.keyDirection === 'object'
@@ -70,7 +81,17 @@
             },
             shadowEnabled: typeof source.shadowEnabled === 'boolean'
                 ? source.shadowEnabled
-                : DEFAULT_MMD_LIGHTING.shadowEnabled
+                : DEFAULT_MMD_LIGHTING.shadowEnabled,
+            physicsFps: normalizePhysicsFps(source.physicsFps),
+            pmxAoEnabled: typeof source.pmxAoEnabled === 'boolean'
+                ? source.pmxAoEnabled
+                : DEFAULT_MMD_LIGHTING.pmxAoEnabled,
+            pmxAoColor: normalizeColor(source.pmxAoColor, DEFAULT_MMD_LIGHTING.pmxAoColor),
+            pmxAoIntensity: clamp(source.pmxAoIntensity, 0, 2, DEFAULT_MMD_LIGHTING.pmxAoIntensity),
+            pmxAoRadiusPercent: Math.round(clamp(
+                source.pmxAoRadiusPercent, 1, 20, DEFAULT_MMD_LIGHTING.pmxAoRadiusPercent
+            )),
+            pmxAoResolution: source.pmxAoResolution === 'full' ? 'full' : 'half'
         };
     }
 

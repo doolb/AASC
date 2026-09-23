@@ -8,6 +8,14 @@
 import * as THREE from 'three';
 import { MMDAnimationHelper } from 'three/addons/animation/MMDAnimationHelper.js';
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
+import { ensureAmmoPhysics } from './mmd-ammo-physics.mjs';
+import {
+    createPmxMotionHelper,
+    stagePmxMesh,
+    advancePmxMotionFrame
+} from './mmd-pmx-helper.mjs';
+import { calculatePmxCameraFrame, normalizePmxPhysicsMesh } from './pmx-display-layout.mjs';
+import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
 
 const TARGET_MODEL_HEIGHT = 1.75;
 const MMD_MODEL_PREFIXES = Object.freeze([
@@ -99,15 +107,7 @@ const waitForManagedLoad = (startLoad, label) => new Promise((resolve, reject) =
 });
 
 const normalizeModel = (mesh) => {
-    const box = new THREE.Box3().setFromObject(mesh);
-    const size = box.getSize(new THREE.Vector3());
-    const height = Math.max(0.01, size.y);
-    mesh.scale.setScalar(TARGET_MODEL_HEIGHT / height);
-    const scaledBox = new THREE.Box3().setFromObject(mesh);
-    const center = scaledBox.getCenter(new THREE.Vector3());
-    mesh.position.x -= center.x;
-    mesh.position.y -= scaledBox.min.y;
-    mesh.position.z -= center.z;
+    return normalizePmxPhysicsMesh(mesh, THREE);
 };
 
 function createModelRotationPivot(model) {
@@ -145,7 +145,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
     const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
     // 体感环绕只允许改变 yaw/pitch；距离固定，避免手机姿态输入变成缩放或推拉镜头。
-    const cameraDistance = TARGET_MODEL_HEIGHT * 2.8;
+    let cameraDistance = TARGET_MODEL_HEIGHT * 2.8;
     const cameraViewState = {
         targetYaw: 0,
         targetPitch: 0,
@@ -156,9 +156,9 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     const applyCameraView = () => {
         const cosPitch = Math.cos(cameraViewState.currentPitch);
         camera.position.set(
-            Math.sin(cameraViewState.currentYaw) * cosPitch * cameraDistance,
+            cameraTarget.x + Math.sin(cameraViewState.currentYaw) * cosPitch * cameraDistance,
             cameraTarget.y + Math.sin(cameraViewState.currentPitch) * cameraDistance,
-            Math.cos(cameraViewState.currentYaw) * cosPitch * cameraDistance
+            cameraTarget.z + Math.cos(cameraViewState.currentYaw) * cosPitch * cameraDistance
         );
         camera.lookAt(cameraTarget);
     };
@@ -192,6 +192,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         startRendering();
         return true;
     };
+    const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
     keyLight.position.set(1.5, 3, 2.5);
@@ -217,6 +218,64 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     scene.add(ambientLight, keyLight, keyLight.target, shadowPlane);
 
     let shadowEnabled = true;
+    let pmxAoEnabled = true;
+    const lightingState = {
+        ambientColor: '#ffffff',
+        ambientIntensity: 1.8,
+        keyColor: '#ffffff',
+        keyIntensity: 2.3,
+        keyDirection: { longitude: 31, latitude: 46 },
+        physicsFps: 65,
+        pmxAoColor: '#931231',
+        pmxAoIntensity: 0.6,
+        pmxAoRadiusPercent: 6,
+        pmxAoResolution: 'half'
+    };
+
+    const getModelBounds = (root) => {
+        if (root?.isObject3D) {
+            const bounds = new THREE.Box3().setFromObject(root);
+            if (!bounds.isEmpty()) return bounds;
+        }
+        return new THREE.Box3(
+            new THREE.Vector3(-TARGET_MODEL_HEIGHT * 0.25, 0, -TARGET_MODEL_HEIGHT * 0.25),
+            new THREE.Vector3(TARGET_MODEL_HEIGHT * 0.25, TARGET_MODEL_HEIGHT, TARGET_MODEL_HEIGHT * 0.25)
+        );
+    };
+
+    const applyKeyLightPosition = (bounds) => {
+        const center = bounds.getCenter(new THREE.Vector3());
+        const size = bounds.getSize(new THREE.Vector3());
+        const unitScale = Math.max(0.01, size.y / TARGET_MODEL_HEIGHT);
+        const position = lightDirectionToPosition(lightingState.keyDirection);
+        keyLight.position.set(
+            center.x + position.x * unitScale,
+            center.y + position.y * unitScale,
+            center.z + position.z * unitScale
+        );
+    };
+
+    const applyAoRadius = (bounds) => {
+        // AO 半径随当前角色包围盒缩放；调整滑块或换模型时都沿用同一比例。
+        const modelHeight = bounds.getSize(new THREE.Vector3()).y;
+        ambientOcclusion.setRadius(Math.max(0.005, modelHeight * lightingState.pmxAoRadiusPercent / 100));
+    };
+
+    const fitCameraToModel = (root) => {
+        const bounds = getModelBounds(root);
+        const frame = calculatePmxCameraFrame(bounds, {
+            fovDegrees: camera.fov,
+            aspect: camera.aspect
+        });
+        camera.near = frame.near;
+        camera.far = frame.far;
+        cameraTarget.copy(frame.center);
+        cameraDistance = frame.distance;
+        applyCameraView();
+        camera.updateProjectionMatrix();
+        applyAoRadius(bounds);
+        return frame;
+    };
 
     const applyShadowFlags = (root) => {
         root?.traverse?.((object) => {
@@ -228,18 +287,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
 
     const fitShadowCamera = (root) => {
         const shadowCamera = keyLight.shadow.camera;
-        const fallbackCenter = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
-        const bounds = root?.isObject3D
-            ? new THREE.Box3().setFromObject(root)
-            : new THREE.Box3();
-        const center = bounds.isEmpty()
-            ? fallbackCenter
-            : bounds.getCenter(new THREE.Vector3());
-        const size = bounds.isEmpty()
-            ? new THREE.Vector3(TARGET_MODEL_HEIGHT, TARGET_MODEL_HEIGHT, TARGET_MODEL_HEIGHT)
-            : bounds.getSize(new THREE.Vector3());
+        const bounds = getModelBounds(root);
+        const center = bounds.getCenter(new THREE.Vector3());
+        const size = bounds.getSize(new THREE.Vector3());
         const radius = Math.max(TARGET_MODEL_HEIGHT * 0.65, size.length() * 0.5);
         const extent = radius * SHADOW_FRUSTUM_MARGIN;
+        applyKeyLightPosition(bounds);
+        shadowPlane.scale.setScalar(Math.max(1, Math.max(size.x, size.z) * 2 / 8));
+        shadowPlane.position.y = bounds.min.y - Math.max(0.001, size.y * 0.0001);
         const lightDistance = keyLight.position.distanceTo(center);
 
         keyLight.target.position.copy(center);
@@ -267,9 +322,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         return Math.min(maximum, Math.max(minimum, number));
     };
 
-    const normalizeLightColor = (value) => {
+    const normalizePhysicsFps = (value) => {
+        const clamped = normalizeLightNumber(value, 30, 90, lightingState.physicsFps);
+        return Math.round(clamped / 5) * 5;
+    };
+
+    const normalizeLightColor = (value, fallback = '#ffffff') => {
         const color = String(value || '').trim();
-        return /^#[0-9a-f]{6}$/iu.test(color) ? color : '#ffffff';
+        return /^#[0-9a-f]{6}$/iu.test(color) ? color : fallback;
     };
 
     const normalizeLightDirection = (value) => ({
@@ -291,25 +351,43 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
 
     const setLighting = (lighting = {}) => {
         const keyDirection = normalizeLightDirection(lighting.keyDirection);
-        const position = lightDirectionToPosition(keyDirection);
-        ambientLight.color.set(normalizeLightColor(lighting.ambientColor));
-        ambientLight.intensity = normalizeLightNumber(lighting.ambientIntensity, 0, 4, 1.8);
-        keyLight.color.set(normalizeLightColor(lighting.keyColor));
-        keyLight.intensity = normalizeLightNumber(lighting.keyIntensity, 0, 5, 2.3);
-        keyLight.position.set(
-            normalizeLightNumber(position.x, -10, 10, 1.5),
-            normalizeLightNumber(position.y, -10, 10, 3),
-            normalizeLightNumber(position.z, -10, 10, 2.5)
-        );
+        lightingState.ambientColor = normalizeLightColor(lighting.ambientColor);
+        lightingState.ambientIntensity = normalizeLightNumber(lighting.ambientIntensity, 0, 4, 1.8);
+        lightingState.keyColor = normalizeLightColor(lighting.keyColor);
+        lightingState.keyIntensity = normalizeLightNumber(lighting.keyIntensity, 0, 5, 2.3);
+        lightingState.keyDirection = keyDirection;
+        lightingState.physicsFps = normalizePhysicsFps(lighting.physicsFps);
+        lightingState.pmxAoColor = normalizeLightColor(lighting.pmxAoColor, '#931231');
+        lightingState.pmxAoIntensity = normalizeLightNumber(lighting.pmxAoIntensity, 0, 2, 0.6);
+        lightingState.pmxAoRadiusPercent = Math.round(normalizeLightNumber(lighting.pmxAoRadiusPercent, 1, 20, 6));
+        lightingState.pmxAoResolution = lighting.pmxAoResolution === 'full' ? 'full' : 'half';
+        const currentPhysics = helper.current?.objects?.get(currentMesh)?.physics;
+        if (currentPhysics) currentPhysics.unitStep = 1 / lightingState.physicsFps;
+        ambientLight.color.set(lightingState.ambientColor);
+        ambientLight.intensity = lightingState.ambientIntensity;
+        keyLight.color.set(lightingState.keyColor);
+        keyLight.intensity = lightingState.keyIntensity;
         shadowEnabled = lighting.shadowEnabled !== false;
+        pmxAoEnabled = lighting.pmxAoEnabled !== false;
+        ambientOcclusion.setEnabled(pmxAoEnabled);
+        ambientOcclusion.setResolution(lightingState.pmxAoResolution);
+        ambientOcclusion.setColor(lightingState.pmxAoColor);
+        ambientOcclusion.setIntensity(lightingState.pmxAoIntensity);
+        applyAoRadius(getModelBounds(currentRotationPivot || currentMesh));
         applyShadowMode();
         return {
-            ambientColor: normalizeLightColor(lighting.ambientColor),
+            ambientColor: lightingState.ambientColor,
             ambientIntensity: ambientLight.intensity,
-            keyColor: normalizeLightColor(lighting.keyColor),
+            keyColor: lightingState.keyColor,
             keyIntensity: keyLight.intensity,
             keyDirection,
-            shadowEnabled
+            shadowEnabled,
+            physicsFps: lightingState.physicsFps,
+            pmxAoEnabled,
+            pmxAoColor: lightingState.pmxAoColor,
+            pmxAoIntensity: lightingState.pmxAoIntensity,
+            pmxAoRadiusPercent: lightingState.pmxAoRadiusPercent,
+            pmxAoResolution: lightingState.pmxAoResolution
         };
     };
 
@@ -346,6 +424,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         const settled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
             && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON;
         if (settled) {
+            const pivotMoved = Math.abs(yawDistance) >= Number.EPSILON
+                || Math.abs(pitchDistance) >= Number.EPSILON;
             currentRotationPivot.rotation.y = rotationState.targetYaw;
             currentRotationPivot.rotation.x = rotationState.targetPitch;
             if (rotationState.fitShadowWhenSettled) {
@@ -353,7 +433,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
                 currentRotationPivot.updateWorldMatrix(true, true);
                 fitShadowCamera(currentRotationPivot);
             }
-            return false;
+            return pivotMoved;
         }
         const easing = 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
         currentRotationPivot.rotation.y += yawDistance * easing;
@@ -420,10 +500,17 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         if (!visible || disposed) return;
         const delta = Math.min(0.1, Math.max(0, (now - lastFrameAt) / 1000));
         lastFrameAt = now;
-        if (helper.current) helper.current.update(delta);
-        updateModelRotation(delta);
+        // 先推进角色中心缓动，让物理从新骨骼姿态移动运动学锚点；
+        // 动态布料刚体留在 Bullet 世界，由约束牵引并保留已有速度。
+        advancePmxMotionFrame({
+            delta,
+            advanceRotation: updateModelRotation,
+            helper: helper.current,
+            pivot: currentRotationPivot
+        });
         updateCameraView(delta);
-        renderer.render(scene, camera);
+        if (currentMesh) ambientOcclusion.render();
+        else renderer.render(scene, camera);
         frameHandle = requestAnimationFrame(renderFrame);
     };
 
@@ -439,9 +526,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         const pixelRatio = Math.min(2, Math.max(1, Number(devicePixelRatio) || 1));
         renderer.setPixelRatio(pixelRatio);
         renderer.setSize(safeWidth, safeHeight, false);
+        const drawingSize = renderer.getDrawingBufferSize(new THREE.Vector2());
+        ambientOcclusion.resize(drawingSize.x, drawingSize.y);
         camera.aspect = safeWidth / safeHeight;
-        camera.updateProjectionMatrix();
-        applyCameraView();
+        fitCameraToModel(currentRotationPivot || currentMesh);
         startRendering();
     };
 
@@ -455,19 +543,21 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         'VMD 动作'
     );
 
-    const createMotionHelper = (mesh, clip, playMode = 'loop') => {
-        const shouldLoop = playMode !== 'once';
-        const nextHelper = new MMDAnimationHelper({ sync: false, pmxAnimation: true });
-        // physics=false 避免浏览器端额外加载 Ammo；IK 和 grant 仍由 helper 更新。
-        nextHelper.add(mesh, { animation: clip, physics: false });
-        const animationState = nextHelper.objects.get(mesh);
-        const action = animationState?.mixer?._actions?.[0];
-        if (action) {
-            action.setLoop(shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce, shouldLoop ? Infinity : 1);
-            action.clampWhenFinished = !shouldLoop;
-            action.reset().play();
-        }
-        return nextHelper;
+    const createMotionHelper = async (mesh, clip, playMode = 'loop') => {
+        const prepared = await createPmxMotionHelper({
+            mesh,
+            clip,
+            playMode,
+            MMDAnimationHelper,
+            loopRepeat: THREE.LoopRepeat,
+            loopOnce: THREE.LoopOnce,
+            physicsFps: lightingState.physicsFps,
+            // 仅刚体 PMX 才会在这里惰性初始化 Ammo；失败时 helper 自动回退为无物理解算。
+            ensurePhysics: ensureAmmoPhysics
+        });
+        const physics = prepared.helper?.objects?.get(mesh)?.physics;
+        if (physics) physics.unitStep = 1 / lightingState.physicsFps;
+        return prepared;
     };
 
     const validateMotionResource = (profile, resourceId) => {
@@ -479,13 +569,17 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         }
     };
 
-    const prepareMotion = async (mesh, profile, resourceId) => {
-        validateMotionResource(profile, resourceId);
-        const clip = await loadAnimationClip(profile.motionUrl, mesh);
+    const preparePmxHelper = async (mesh, profile, resourceId = profile.motionResourceId) => {
+        let clip = null;
+        if (resourceId && profile.motionUrl) {
+            validateMotionResource(profile, resourceId);
+            clip = await loadAnimationClip(profile.motionUrl, mesh);
+        }
         return createMotionHelper(mesh, clip, profile.playMode);
     };
 
-    const disposeStagedResources = (mesh, stagedHelper) => {
+    const disposeStagedResources = (mesh, stagedHelper, stagedPivot = null) => {
+        if (stagedPivot) scene.remove(stagedPivot);
         if (stagedHelper && mesh) {
             try {
                 stagedHelper.remove(mesh);
@@ -502,7 +596,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         const sequence = ++motionSequence;
         const mesh = currentMesh;
         const profile = currentProfile;
-        const nextHelper = await prepareMotion(mesh, profile, resourceId);
+        const preparedHelper = await preparePmxHelper(mesh, profile, resourceId);
+        const nextHelper = preparedHelper.helper;
         if (disposed || sequence !== motionSequence || mesh !== currentMesh || profile !== currentProfile) {
             disposeStagedResources(mesh, nextHelper);
             return false;
@@ -510,14 +605,17 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         stopMotion();
         helper.current = nextHelper;
         currentMotionResourceId = resourceId;
-        return true;
+        return preparedHelper;
     };
 
     const loadMotion = async (resourceId) => {
         try {
-            const loaded = await loadMotionInternal(resourceId);
-            if (loaded) onStatus('VMD 动作已加载');
-            return loaded;
+            const preparedHelper = await loadMotionInternal(resourceId);
+            if (!preparedHelper) return false;
+            onStatus(preparedHelper.physicsError
+                ? `PMX 物理不可用，已回退骨骼动画：${preparedHelper.physicsError.message}`
+                : 'VMD 动作已加载');
+            return true;
         } catch (error) {
             onStatus(`VMD 动作加载失败：${error.message}`);
             return false;
@@ -532,39 +630,60 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         const sequence = ++modelSequence;
         let stagedMesh = null;
         let stagedHelper = null;
+        let stagedPivot = null;
+        let stagedPhysicsError = null;
         onStatus('正在加载 PMX 模型…');
         try {
             stagedMesh = await loadModelMesh(profile.modelUrl);
+            // MMDLoader 把 PMX 材质的环境色映射成 emissive；按显示端规则始终忽略这部分亮度。
+            stagedMesh.traverse((object) => {
+                if (!object.isMesh) return;
+                const materials = Array.isArray(object.material) ? object.material : [object.material];
+                for (const material of materials) {
+                    if (material?.isMMDToonMaterial) material.emissive.setRGB(0, 0, 0);
+                }
+            });
             normalizeModel(stagedMesh);
-            if (profile.motionUrl && profile.motionResourceId) {
-                stagedHelper = await prepareMotion(stagedMesh, profile, profile.motionResourceId);
-            }
+            const staged = await stagePmxMesh({
+                scene,
+                mesh: stagedMesh,
+                createPivot: createModelRotationPivot,
+                prepareHelper: () => preparePmxHelper(stagedMesh, profile)
+            });
+            stagedPivot = staged.pivot;
+            stagedHelper = staged.preparedHelper.helper;
+            stagedPhysicsError = staged.preparedHelper.physicsError;
             if (disposed || sequence !== modelSequence) {
-                disposeStagedResources(stagedMesh, stagedHelper);
+                disposeStagedResources(stagedMesh, stagedHelper, stagedPivot);
                 return false;
             }
 
-            // PMX、纹理和 VMD 准备完成后一次性替换当前模型，避免半成品穿帮。
+            // 暂存枢轴已在最终场景中完成初始状态准备，提交后下一帧才推进物理。
             clearFallback();
             disposeCurrentModel();
             currentMesh = stagedMesh;
-            currentRotationPivot = createModelRotationPivot(currentMesh);
+            currentRotationPivot = stagedPivot;
             resetModelRotation();
+            currentRotationPivot.updateWorldMatrix(true, true);
             currentProfile = profile;
             helper.current = stagedHelper;
             currentMotionResourceId = profile.motionResourceId || null;
             applyShadowFlags(currentMesh);
-            scene.add(currentRotationPivot);
+            stagedPivot.visible = true;
+            fitCameraToModel(currentRotationPivot);
             fitShadowCamera(currentRotationPivot);
             stagedMesh = null;
             stagedHelper = null;
-            onStatus('PMX 模型已加载');
+            stagedPivot = null;
+            onStatus(stagedPhysicsError
+                ? `PMX 物理不可用，已回退骨骼动画：${stagedPhysicsError.message}`
+                : 'PMX 模型已加载');
             startRendering();
             return true;
         } catch (error) {
             const partialMesh = error?.partialResult;
             if (!stagedMesh && partialMesh?.isObject3D) stagedMesh = partialMesh;
-            disposeStagedResources(stagedMesh, stagedHelper);
+            disposeStagedResources(stagedMesh, stagedHelper, stagedPivot);
             throw error instanceof Error ? error : new Error('PMX 模型加载失败');
         }
     };
@@ -630,6 +749,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         clearFallback();
         scene.remove(shadowPlane);
         disposeObject(shadowPlane);
+        ambientOcclusion.dispose();
         renderer.dispose();
     };
 

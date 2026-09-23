@@ -332,6 +332,12 @@
     font-variant-numeric: tabular-nums;
 }
 
+.display-mmd-lighting-field small {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
 .display-mmd-lighting-field select {
     width: 100%;
     min-height: 32px;

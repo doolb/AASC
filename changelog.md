@@ -48,6 +48,57 @@
   - 生成并同步 `code/code-v33.zip` 到局域网 `/mnt/aasc-offline` 和外网 `~/a/aasc-offline`；大小 `15321507` bytes，SHA-256 为 `3293fd4e063cbe4f30486b7a2e3d579f39359e951c0bbfdcfd67019b2e21d771`。
   - 采用 `code-only`，继续使用 `dependencies-v6.zip` 和 min APK v33；完整 APK v23 未替换。内外网 manifest 签名、代码包 SHA-256 和精确版本清理验证通过。
 
+### PMX 角色环境遮蔽
+
+- ✅ [2026-09-23] 按用户截图调整 PMX AO 默认参数为 `#931231`、强度 `0.60`、半径 `6%`、半分辨率。
+  - `display-mmd.js`、`display-mmd-lighting.js`、`display-pmx-runtime.js` 和 `display.html` 同步初始值、非法输入回退与“恢复默认”预设；已保存的合法自定义设置保持不变。更新 `docs/spec/mmd-pmx-vmd-local.md`、设计、使用说明、自测和任务文档；MMD/PMX 定向测试 76/76 通过。完整 `npm test` 为 919/976 通过、57 项非 AO 失败。
+- ✅ [2026-09-23] 在灯光面板加入 AO 半分辨率 / 全分辨率切换。
+  - `display-pmx-ao-size.mjs` 保留默认半分辨率和 `1280×720` 上限，全分辨率使用实际绘制缓冲区尺寸；`display-pmx-ao.mjs` 即时调整 AO 与模糊目标。`display-pmx-runtime.js`、`display-mmd.js`、`display-mmd-lighting.js`、`display.html` 将模式接入现有本地灯光设置，旧设置默认半分辨率。浏览器目标尺寸、状态和面板定向测试 7/7、PMX/MMD 相关测试 22/22 通过；完整 `npm test` 为 901/956 通过、55 项既有非 PMX 失败。Android 高 DPI 画质与帧率待现场验证。
+- ✅ [2026-09-23] PMX 角色始终忽略模型材质的环境色。
+  - `display-pmx-runtime.js` 在加载完成但尚未显示的 PMX 材质上清零由 `MMDLoader` 映射出的 `emissive`；不修改 Three.js vendor、VRM 材质或场景灯光。`tests/display-pmx-ao-browser.test.js` 用真实米娅 PMX 验证两盏灯为 0 时角色不再因环境色显灰；PMX/MMD 定向测试 22/22 通过。完整 `npm test` 为 901/956 通过、55 项失败，失败项不在本次 PMX 用例中；设计、伪代码、使用及自测文档同步。
+- ✅ [2026-09-23] 减轻 PMX AO 颗粒噪点，并在“灯光”面板加入颜色、强度、半径设置。
+  - `display-pmx-ao.mjs` 对半分辨率遮蔽图增加水平/垂直深度保边模糊；合成时按颜色与强度混合 RGB，保留原 alpha。`display-pmx-runtime.js` 将半径按当前角色高度换算，换模型和实时调整均生效。
+  - `display-mmd.js`、`display-mmd-lighting.js`、`display.html` 将默认黑色、强度 1、半径 6% 纳入现有灯光设置和本地保存；更新设计、伪代码、使用及自测文档。AO 定向测试 6/6、PMX/MMD 相关测试 21/21 通过，真实本地米娅 PMX 的可见 alpha 不变；Android WebView 的实际画质与帧率待现场验证。
+- ✅ [2026-09-23] 在显示端 PMX 角色加入默认开启的 AO 与“灯光”面板开关。
+  - 新增 `display-pmx-ao.mjs`、`display-pmx-ao-size.mjs`：基于深度纹理计算低分辨率屏幕空间遮蔽，按模型高度调整半径，合成时保留透明画布 alpha；关闭开关、没有模型或 WebGL2 不可用时沿用直接渲染。
+  - 更新 `display-pmx-runtime.js`、`display-mmd.js`、`display-mmd-lighting.js`、`display.html`，设置在现有浏览器 localStorage 中保存，亮度预设保留 AO 状态，“恢复默认”重新开启；VRM 不读取 AO 设置。
+  - 新增本地 Chrome WebGL 像素测试，覆盖透明背景、AO 颜色变化、真实米娅 PMX alpha 和即时开关；六份 AO/MMD/显示端定向测试 64/64 通过。运行中的本地 `https://127.0.0.1:8081/display` 已加载 PMX，面板 AO 开关双向操作与显示端状态同步且没有页面异常；JavaScript 语法与差异检查通过。最终完整 `npm test` 为 900/955 通过，55 项失败不在 AO 定向用例中；目标 Android WebView 的画质与帧率待现场验证。
+
+### PMX 内置 Ammo 物理解算
+
+- ✅ [2026-09-23] 试验 PMX 旋转时仅移动角色和运动学锚点，由约束牵引动态布料。
+  - `display-pmx-runtime.js` 先推进中心枢轴缓动再更新 helper；`mmd-pmx-helper.mjs` 移除每帧对所有 Bullet 刚体的位置、姿态和速度传送。保留布料已有线/角速度、角色真实旋转和原有物理频率。
+  - 同步 `docs/design/mmd-pmx-vmd-local.md`、`docs/spec/mmd-pmx-vmd-local.md`、试验 task、`docs/self-test.md` 和 `docs/todo.md`；新增 yaw/pitch 内置 Ammo 约束回归，相关测试 63/63、语法及差异检查通过。完整 `npm test` 在本机 Windows 环境为 900/955 通过、55 个非 PMX 用例失败，涉及证书、符号链接、Linux 路径及 Chromium 等；真实 PMX 布料效果待现场验证，暂不宣称问题彻底解决。
+
+- ✅ [2026-09-23] 实施 PMX 使用上一渲染帧枢轴姿态的物理时序试验。
+  - `display-pmx-runtime.js` 先执行 `helper.update(delta)`，再推进中心枢轴缓动并调用 `synchronizePmxPhysicsWithPivot()`；同步后的刚体位置、姿态和速度作为下一帧物理起点。`mmd-pmx-helper.mjs` 更新时序注释，刚体变换算法保持原样。
+  - 更新 `docs/design/mmd-pmx-vmd-local.md`、`docs/spec/mmd-pmx-vmd-local.md`、试验 task、`docs/self-test.md` 和 `docs/todo.md`；备选固定子步设计暂缓。同步帧序断言，并修正 PMX helper 现有频率选项的过期断言。定向测试 23/23、相关 JavaScript 语法检查与差异检查通过；真实 PMX 布料效果待现场验证。
+
+- ✅ [2026-09-23] 记录 PMX 缓动旋转物理同步的设计提案，等待审阅。
+  - 现场反馈当前逐渲染帧枢轴同步仍会在缓动期间扰动布料；提案改为在 Bullet 固定子步中插值枢轴轨迹，并传递枢轴运动产生的线速度与角速度。
+  - 本记录仅描述待审阅设计；尚未修改运行时代码、未运行测试，也未发布资源。
+
+- ✅ [2026-09-23] 在显示端灯光面板开放 PMX 物理目标频率设置。
+  - 新增 30–90 Hz、每格 5 Hz、默认 65 Hz 的频率滑块；规范化值沿用灯光设置 localStorage，旧记录自动采用 65 Hz。
+  - 当前 PMX 的 `MMDPhysics.unitStep` 即时更新，新建 PMX helper 使用相同步长；每帧最多 3 个子步不变，VRM 不读取该设置。柔和/明亮预设保留频率，“恢复默认”将其重置为 65 Hz。
+  - 更新 `docs/design/mmd-pmx-vmd-local.md`、spec/task、`docs/usage.md` 和 `docs/self-test.md`；JavaScript 语法检查与 `git diff --check` 通过，本次未运行行为测试。
+
+- ✅ [2026-09-22] 为带刚体数据的 PMX 启用 Three.js MMD 的 Ammo/Bullet 物理解算。
+  - 将固定 Three.js r160 的 `ammo.wasm.js` 与 `ammo.wasm.wasm` 下载到显示端同源 vendor 目录；运行时按需初始化 WASM、复用成功实例且失败后允许重试，不使用 CDN。
+  - 仅 `geometry.userData.MMD.rigidBodies` 非空的 PMX 以 `physics: true` 创建 `MMDAnimationHelper`；无刚体模型不加载 Ammo。物理初始化失败时保留 VMD、IK、grant 和循环/单次动作，自动回退至无物理 helper 并显示降级状态。
+  - 新增 Ammo 加载器与 PMX helper 行为测试；`node --test tests/display-mmd-runtime.test.js tests/mmd-pmx-helper.test.js tests/display-chat-mmd.test.js` 54/54、相关 JavaScript 语法检查和 `git diff --check` 通过。完整 `npm test` 仍受当前 Windows 主机既有工具、权限和浏览器依赖阻断；未构建或发布 APK、更新包，PMX/VMD/纹理也未内置。
+
+- ✅ [2026-09-22] 修复刚体 PMX 首次显示时物理尚未收敛造成的明显抖动和短暂穿模。
+  - 物理 helper 为所有带刚体 PMX（无论是否带 VMD）传入 `warmup: 180`；新模型中心枢轴先以不可见状态进入最终场景、更新世界矩阵并完成物理预热，成功后才显示。
+  - 预热/初始化失败会移除不可见暂存枢轴并沿用既有降级或加载失败释放逻辑；不改 PMX 原始刚体、关节、阻尼、重力，也不改 VRM SpringBone 初始化路径。
+
+- ✅ [2026-09-23] 修复 PMX 布料因显示缩放与 MMDPhysics 原始单位回写不一致而持续向上飘。
+  - PMX 物理网格固定为单位缩放，仅贴地居中；相机距离和裁剪面、方向光相对位置及阴影平面随原始模型边界适配，保留中心旋转枢轴与远端灯光配置语义。
+  - 带刚体 PMX 改用 `warmup: 0`，加载阶段不推进物理，显示后下一次渲染帧才开始模拟；新增布局回归测试，定向测试 55/55 通过。
+
+- ✅ [2026-09-23] 修复 PMX 角色中心旋转后布料约束失稳。
+  - 每个 `MMDAnimationHelper.update(delta)` 前统一刷新中心枢轴世界矩阵，并按本帧相对上一物理帧的增量同时变换 Bullet 刚体位置、姿态、线速度和角速度；刚体与 MotionState 同步更新并唤醒，保持关节相对关系与布料惯性。
+  - 不再在缓动帧调用 `MMDPhysics.reset()` 或清零速度/外力；无 physics 的 PMX 与 VRM SpringBone 不改变。新增刚体/速度增量同步、无物理跳过和渲染顺序回归测试。PMX/MMD 定向测试 58/58、相关脚本语法检查和差异检查通过；未构建或发布 APK、更新包。
 ### 显示端 MMD 空白区域拖动旋转
 
 - ✅ [2026-09-22] 在 `displayMmdCanvas` 的空白区域拖动时旋转本地 PMX/VRM 角色。

@@ -38,7 +38,7 @@
 | 聊天 TTS 打断与 Offline 定时更新 | [chat-tts-interruption-and-offline-update.md](design/chat-tts-interruption-and-offline-update.md) | 聊天会话 TTS 代次/think 阶段打断、显示端停止按钮和 Offline 前台更新轮询 |
 | 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](design/display-chat-mmd.md) | 浏览器显示端聊天、角色会话、VRM/MMD 同位舞台和动作控制 |
 | MMD 图片基准图 AR | [mmd-image-ar.md](design/mmd-image-ar.md) | 普通图片拍照、手动四角选区、本地图像目标跟踪和 MMD 姿态叠加 |
-| PMX 模型、VMD 动作与 Offline 静态代理 | [mmd-pmx-vmd-local.md](design/mmd-pmx-vmd-local.md) | 本地 PMX/VMD、灯光设置，以及 Offline Node 按 VRM 规则代理固定公网 MMD 资源 |
+| PMX 模型、VMD 动作与 Offline 静态代理 | [mmd-pmx-vmd-local.md](design/mmd-pmx-vmd-local.md) | 本地 PMX/VMD、灯光设置、旋转缓动期间的物理子步同步设计，以及 Offline Node 公网 MMD 资源代理 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 控制端折叠 think、显示端展示 think、TTS 播报去标签内容和私聊清空错误反馈 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](design/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出 |
 | 搜索频道与独立 Pi 搜索进程 | [search-channel.md](design/search-channel.md) | 搜索状态/历史独立展示、LLM 搜索上下文隔离与临时进程回收 |

@@ -110,7 +110,8 @@ test('AR 独立体感环绕不依赖定位图和摄像头，并保持固定距�
     assert.match(ar, /motionMode:\s*['"]off['"]/u);
     assert.match(ar, /state\.motionMode\s*=\s*MOTION_ORBIT_MODE/u);
     assert.match(ar, /不要求目标、摄像头或识别会话/u);
-    assert.match(pmx, /const cameraDistance\s*=\s*TARGET_MODEL_HEIGHT\s*\*\s*2\.8/u);
+    assert.match(pmx, /let cameraDistance\s*=\s*TARGET_MODEL_HEIGHT\s*\*\s*2\.8/u);
+    assert.match(pmx, /cameraDistance\s*=\s*frame\.distance/u);
     assert.match(vrm, /const cameraDistance\s*=\s*TARGET_MODEL_HEIGHT\s*\*\s*2\.8/u);
     assert.match(pmx, /camera\.position\.set\([\s\S]*cameraDistance/u);
     assert.match(vrm, /camera\.position\.set\([\s\S]*cameraDistance/u);

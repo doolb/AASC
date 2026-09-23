@@ -155,6 +155,36 @@
                         <input id="displayMmdShadowEnabled" type="checkbox" checked>
                         <span>角色阴影（默认开启）</span>
                     </label>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdPmxAoEnabled" type="checkbox" checked>
+                        <span>PMX 环境遮蔽 AO（默认开启）</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>AO 颜色</span>
+                        <input id="displayMmdPmxAoColor" type="color" value="#931231">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>AO 强度 <output id="displayMmdPmxAoIntensityValue">0.60</output></span>
+                        <input id="displayMmdPmxAoIntensity" type="range" min="0" max="2" step="0.05" value="0.6">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>AO 半径 <output id="displayMmdPmxAoRadiusPercentValue">6%</output></span>
+                        <input id="displayMmdPmxAoRadiusPercent" type="range" min="1" max="20" step="1" value="6">
+                        <small>半径按当前 PMX 模型身高的比例计算。</small>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>AO 分辨率</span>
+                        <select id="displayMmdPmxAoResolution">
+                            <option value="half">半分辨率（默认）</option>
+                            <option value="full">全分辨率</option>
+                        </select>
+                        <small>全分辨率按实际绘制像素计算，画质更细但 GPU 开销更高。</small>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>PMX 物理频率 <output id="displayMmdPhysicsFpsValue">65 Hz</output></span>
+                        <input id="displayMmdPhysicsFps" type="range" min="30" max="90" step="5" value="65">
+                        <small>目标值；实际步进受渲染帧率和每帧最多 3 个子步限制。</small>
+                    </label>
                     <label class="display-mmd-lighting-field">
                         <span>环境光颜色</span>
                         <input id="displayMmdAmbientColor" type="color" value="#ffffff">
