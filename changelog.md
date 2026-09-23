@@ -1,5 +1,16 @@
 # Web MediaCenter - 变更日志
 
+### Offline 热更发布
+
+- ✅ [2026-09-23] 增加多内网热更源与外网资源同步
+  - Android 热更源增加家庭 `192.168.1.39` 和公司 `10.221.70.87`，保留外网域名解析回退；Node 构建清单读取增加两个内网源和公网 IP 回退。
+  - 新增 `npm run sync:offline-update`，支持 `--source-url`、`--local-root` 和 `AASC_OFFLINE_LOCAL_ROOT`，验签并校验 code/dependencies/min APK/data-repair 后原子更新本地清单。
+  - 完整 APK 不参与同步；现有发布器仍写入本机 `--local-root` 和外网 SCP 目录，不会因增加热更读取地址而增加上传目标。
+  - Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过。
+- ✅ [2026-09-23] 重新构建并发布 Offline min APK v34（`0.2.32-offline-min`）
+  - 发布文件：`apk/aasc-display-offline-min-v34.apk`，大小 `89302814` bytes，SHA-256 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`。
+  - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的清单、资源校验和旧 min 版本精确清理通过；完整 APK 未构建。
+
 ### Android 显示端音频
 
 - ✅ [2026-09-23] 修复正式 Android 显示端 ASR 首次冷启动和输出设备切换无声。

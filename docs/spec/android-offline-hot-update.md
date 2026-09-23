@@ -1,5 +1,86 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+## 多内网热更源与外网资源同步伪代码（2026-09-23）
+
+```text
+OFFLINE_UPDATE_SOURCES:
+    homeLan = http://192.168.1.39/mnt/aasc-offline/
+    companyLan = http://10.221.70.87/mnt/aasc-offline/
+    wan = http://c.aasc.us/mnt/aasc-offline/
+
+Android.resolveUpdateSources:
+    for source in [homeLan, companyLan, wan]:
+        if source.host is domain:
+            addresses = DNS(source.host)
+            yield source with host replaced by each address
+        else:
+            yield source
+    remove duplicate URLs while preserving order
+
+Android.fetchManifest:
+    for source in resolveUpdateSources():
+        response = GET(source/manifest.json)
+        if response is successful:
+            verify RSA signature
+            return manifest and source
+    return no candidate
+
+Android.downloadArtifact:
+    candidates = [manifest source] + resolveUpdateSources()
+    for source in distinct candidates:
+        response = GET(source/component.relativeUrl)
+        write response to temporary file
+        verify byte count and SHA-256
+        if valid:
+            atomically materialize artifact
+            return artifact
+    return failure
+```
+
+```text
+syncOfflineUpdate:
+    sourceBase = --source-url or AASC_OFFLINE_SYNC_SOURCE
+        or http://120.79.245.103/mnt/aasc-offline/
+    localRoot = --local-root or AASC_OFFLINE_LOCAL_ROOT
+        or /mnt/aasc-offline
+    full APK is excluded unconditionally
+
+    manifest = GET(sourceBase/manifest.json)
+    verify manifest RSA signature using configured public key
+    select components from manifest:
+        code, dependencies, apkMin, dataRepair when present
+        exclude apkFull and any component not in the allowlist
+
+    for component in selected components:
+        download to localRoot/.sync-<id>/<relativeUrl>.part
+        require ordinary file path and safe relativeUrl
+        require exact size and SHA-256 from manifest
+        if localRoot/relativeUrl exists with same hash:
+            keep existing file
+        else if same version has different hash:
+            stop without replacing manifest
+        else:
+            atomically install the verified versioned file
+
+    write verified manifest to localRoot/manifest.json.tmp-<id>
+    fsync and atomically rename manifest.json last
+    remove only obsolete numeric code/dependencies/data-repair/min files
+    never remove full APK, logs, models, config, task, results or non-version files
+```
+
+```text
+publishOfflineUpdate:
+    artifactRoot = release/offline-update/output
+    localRoot = --local-root or /mnt/aasc-offline
+    remoteRoot = as@120.79.245.103:~/a/aasc-offline
+    publish localRoot and remoteRoot as before
+    LAN source list does not create additional upload targets
+```
+
+实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。默认源为公网 IP，默认目标为 `/mnt/aasc-offline`，可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过。
+
+> 2026-09-23 已重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），APK 大小 `89302814` bytes，SHA-256 为 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`；内网和外网清单、资源大小/SHA-256 及旧 min 版本精确清理校验通过，完整 APK 未构建。
+
 > 2026-09-21 修复 code-only 依赖来源选择：清单中的任意 `dependencyVersion` 都先匹配对应热更目录和 marker；旧流程缺 marker 时再校验依赖包自身 version、lockSha256 和 express 元数据，匹配成功写入 `legacyDependencies=false`，否则回退 `legacy-root`。启动已有旧 active release 时执行本地迁移。当前已发布 min APK v31（`0.2.29-offline-min`），未发布完整 APK。
 
 > 真机验收补充：min APK v31 覆盖安装不会自动替换已有 active service code；旧设备仍可能显示 code v15，需在更新卡片中确认 code-only 更新。code v19 应用后，`/api/status.versions.dependencySource` 必须为 `active-release`，`codePath` 指向 `updates/code/code-v19`，`dependenciesPath` 和 `AASC_NODE_MODULES_DIR` 指向 `updates/dependencies/dependencies-v4/node_modules`。

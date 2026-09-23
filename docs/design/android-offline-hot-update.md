@@ -1,8 +1,22 @@
 # Android Offline APK 热更新与原生增量 APK
 
+## 2026-09-23 多内网热更源与外网资源同步
+
+Offline APK 的热更读取源扩展为家庭内网、公司内网和外网三个候选源：
+
+- 家庭内网：`http://192.168.1.39/mnt/aasc-offline/`
+- 公司内网：`http://10.221.70.87/mnt/aasc-offline/`
+- 外网：`http://c.aasc.us/mnt/aasc-offline/`；Android 访问前继续解析域名并替换为 IP，Node 发布/构建脚本使用公网 IP 作为可靠回退源。
+
+候选源只改变客户端读取和回退顺序，不改变发布器的写入目标。现有发布器仍将本机发布资源写到 `--local-root`（默认 `/mnt/aasc-offline`），并通过 SCP 写到 `as@120.79.245.103:~/a/aasc-offline`；不会因为新增公司内网地址而向另一个 IP 自动上传。
+
+新增外网资源同步命令，用于在家庭或公司机器上把当前外网签名清单中的服务资源同步到指定本地 HTTP 根目录。同步目标支持 `--local-root` 和 `AASC_OFFLINE_LOCAL_ROOT` 覆盖，默认保持 `/mnt/aasc-offline`。同步代码包、生产依赖包、min APK 和数据修复包；完整 APK 不进入同步范围。同步先验签并逐项校验大小/SHA-256，版本文件采用临时文件和原子清单替换，最后再清理严格匹配的过时版本文件。
+
+实现验证：Node 更新/同步定向测试通过，Android Offline JVM 单测 25/25 通过；现有 Android 静态回归中的更新面板左边距和固定 displayId 两项断言仍为既有失败，与本次热更源改动无关。基于本次改动重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），完整 APK 未构建。
+
 ## 状态
 
-2026-09-21 已修复 code-only 更新错误沿用 `legacy-root` 的问题：应用 code-only release 时优先校验清单指定的 `updates/dependencies/dependencies-v<dependencyVersion>` 目录及 `.offline-update-verified.json`，有效时写入 `legacyDependencies=false`；仅在热更依赖目录不可用时保留旧根目录回退。针对旧流程没有 marker 的设备，Offline Node 启动迁移还会校验依赖包自身的 version、lockSha256 和 express 元数据。控制端收起入口贴合左上角屏幕边缘，展开态保留安全边距。当前 min APK v31（`0.2.29-offline-min`）已发布，完整 Offline APK 未构建。
+2026-09-21 已修复 code-only 更新错误沿用 `legacy-root` 的问题：应用 code-only release 时优先校验清单指定的 `updates/dependencies/dependencies-v<dependencyVersion>` 目录及 `.offline-update-verified.json`，有效时写入 `legacyDependencies=false`；仅在热更依赖目录不可用时保留旧根目录回退。针对旧流程没有 marker 的设备，Offline Node 启动迁移还会校验依赖包自身的 version、lockSha256 和 express 元数据。控制端收起入口贴合左上角屏幕边缘，展开态保留安全边距。当前 min APK v34（`0.2.32-offline-min`）已发布，完整 Offline APK 未构建。
 
 ADB 真机验收确认：min APK 版本和 active 服务版本独立，覆盖安装 v31 后旧设备仍可能继续运行 active code v15；服务更新检查会发现 code v19，但需要用户确认 code-only 下载。将已发布 code v19 应用到真机后，`/api/status` 和 Node 环境均确认依赖来源为 `active-release`，实际路径为 `updates/code/code-v19` 与 `updates/dependencies/dependencies-v4/node_modules`，不再使用 `legacy-root`。
 内屏 display 0 的控制端“服务器”页面也已复核显示相同的 v19/v4、versioned 路径和 `active-release` 来源。

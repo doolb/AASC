@@ -105,7 +105,10 @@ class OfflineUpdateManager(
         const val PUBLIC_KEY_ASSET = "offline-update-public-key.pem"
         const val CLIENT_METADATA_FILE = "offline-update-client.json"
         const val ACTIVE_RELEASE_FILE = "updates/active-release.json"
-        const val LAN_BASE_URL = "http://192.168.1.39/mnt/aasc-offline/"
+        const val HOME_LAN_BASE_URL = "http://192.168.1.39/mnt/aasc-offline/"
+        const val COMPANY_LAN_BASE_URL = "http://10.221.70.87/mnt/aasc-offline/"
+        // 保留旧常量名，兼容已有测试和调用方；新的源列表同时包含家庭和公司内网。
+        const val LAN_BASE_URL = HOME_LAN_BASE_URL
         const val WAN_BASE_URL = "http://c.aasc.us/mnt/aasc-offline/"
         private const val TAG = "AASC-Offline-Update"
         private const val CONNECT_TIMEOUT_MS = 4_000
@@ -117,7 +120,11 @@ class OfflineUpdateManager(
         private const val MIN_APK_PACKAGE_NAME = "com.aasc.display.offline"
         private const val MIN_APK_INSTALL_RESERVE_BYTES = 256L * 1024L * 1024L
         const val MIN_APK_INSTALL_ACTION = "com.aasc.display.action.INSTALL_OFFLINE_MIN_APK"
-        private val UPDATE_BASE_URLS = listOf(LAN_BASE_URL, WAN_BASE_URL)
+        private val UPDATE_BASE_URLS = listOf(
+            HOME_LAN_BASE_URL,
+            COMPANY_LAN_BASE_URL,
+            WAN_BASE_URL
+        )
 
         /**
          * 将更新源的域名替换为解析得到的 IP，同时保留协议、端口和完整路径。

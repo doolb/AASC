@@ -8,6 +8,7 @@
     "restart:server": "node scripts/ops/restart-server.js",
     "build:server-package": "node scripts/ops/build-server-package.js",
     "build:offline-update": "node scripts/ops/offline-update-package.js",
+    "sync:offline-update": "node scripts/ops/sync-offline-update.js",
     "build:offline-data-repair": "node scripts/ops/offline-update-package.js --mode=data-repair",
     "publish:offline-update": "node scripts/ops/publish-offline-update.js",
     "publish:offline-data-repair": "node scripts/ops/publish-offline-update.js --mode=data-repair",

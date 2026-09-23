@@ -20,9 +20,14 @@ const DATA_REPAIR_CAPABILITIES = Object.freeze([
     'chat2api.model-mappings'
 ]);
 const SIGNATURE_ALGORITHM = 'SHA256withRSA';
+const HOME_LAN_UPDATE_BASE_URL = 'http://192.168.1.39/mnt/aasc-offline/';
+const COMPANY_LAN_UPDATE_BASE_URL = 'http://10.221.70.87/mnt/aasc-offline/';
+// 公网域名当前可能被代理返回 403；构建阶段使用已解析的公网 IP，Android 端仍负责域名解析。
+const WAN_UPDATE_BASE_URL = 'http://120.79.245.103/mnt/aasc-offline/';
 const UPDATE_BASE_URLS = Object.freeze([
-    'http://192.168.1.39/mnt/aasc-offline/',
-    'http://c.aasc.us/mnt/aasc-offline/'
+    HOME_LAN_UPDATE_BASE_URL,
+    COMPANY_LAN_UPDATE_BASE_URL,
+    WAN_UPDATE_BASE_URL
 ]);
 
 function canonicalValue(value) {
@@ -777,5 +782,8 @@ module.exports = {
     resolveUpdatePlan,
     validateDataRepairComponent,
     parseCliArguments,
-    runCli
+    runCli,
+    HOME_LAN_UPDATE_BASE_URL,
+    COMPANY_LAN_UPDATE_BASE_URL,
+    WAN_UPDATE_BASE_URL
 };

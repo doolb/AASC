@@ -170,6 +170,30 @@ Android 9/API 28 设备首次启动 APK 时，会弹出“照片、媒体内容�
 
 媒体库的 `path` 仍通过控制端的本地媒体库配置设置；上传、创建目录和删除操作受媒体库 `readonly` 设置保护。拒绝授权不会阻塞显示端连接，但共享存储媒体库会返回权限错误。当前实现只保证 Android 9/API 28，Android 10+ 的整个共享存储访问不在本功能范围内。
 
+### Offline 热更源与资源同步
+
+Offline APK 会按顺序尝试家庭内网、公司内网和外网热更源：
+
+```text
+http://192.168.1.39/mnt/aasc-offline/
+http://10.221.70.87/mnt/aasc-offline/
+http://c.aasc.us/mnt/aasc-offline/
+```
+
+发布器的上传目标不随热更读取源增加而改变：本机默认写入 `/mnt/aasc-offline`，外网通过 SCP 写入
+`as@120.79.245.103:~/a/aasc-offline`。如果本机热更目录不同，发布时使用 `--local-root` 指定。
+
+从外网资源包同步到本机时执行：
+
+```bash
+npm run sync:offline-update -- \
+  --source-url http://120.79.245.103/mnt/aasc-offline/ \
+  --local-root /mnt/aasc-offline
+```
+
+`--local-root` 也可通过 `AASC_OFFLINE_LOCAL_ROOT` 指定。同步会验签并校验 code、dependencies、min APK
+和 data-repair 资源，完整 Offline APK 不参与同步；同版本 hash 冲突会中止且不替换清单。
+
 普通聊天 Agent 后端的配置和会话规则见：[普通聊天 Agent 后端](usage/llm-agent.md)。
 
 ### 工作 AI 角色

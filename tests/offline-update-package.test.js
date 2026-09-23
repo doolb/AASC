@@ -312,6 +312,7 @@ test('canonical JSON fixture matches the Android manifest verifier ordering and 
 test('package.json exposes the Offline update package builder', () => {
     const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
     assert.equal(packageJson.scripts['build:offline-update'], 'node scripts/ops/offline-update-package.js');
+    assert.equal(packageJson.scripts['sync:offline-update'], 'node scripts/ops/sync-offline-update.js');
 });
 
 test('CLI parser accepts explicit versions and rejects duplicates or unknown options', () => {

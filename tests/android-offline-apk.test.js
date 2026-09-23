@@ -242,6 +242,9 @@ test('Offline 热更外网源使用域名解析后的 IP 且不覆盖 Host', () 
     );
 
     assert.match(manager, /WAN_BASE_URL\s*=\s*"http:\/\/c\.aasc\.us\/mnt\/aasc-offline\/"/u);
+    assert.match(manager, /HOME_LAN_BASE_URL\s*=\s*"http:\/\/192\.168\.1\.39\/mnt\/aasc-offline\/"/u);
+    assert.match(manager, /COMPANY_LAN_BASE_URL\s*=\s*"http:\/\/10\.221\.70\.87\/mnt\/aasc-offline\/"/u);
+    assert.match(manager, /UPDATE_BASE_URLS\s*=\s*listOf\(\s*HOME_LAN_BASE_URL,\s*COMPANY_LAN_BASE_URL,\s*WAN_BASE_URL/su);
     assert.match(manager, /InetAddress\.getAllByName/u);
     assert.match(manager, /replaceUpdateUrlHost/u);
     assert.doesNotMatch(manager, /setRequestProperty\(\s*["']Host["']/u);
