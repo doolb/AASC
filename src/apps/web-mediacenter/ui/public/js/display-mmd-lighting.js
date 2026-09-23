@@ -7,7 +7,7 @@
 (function exposeDisplayMmdLighting(root) {
     const STORAGE_KEY = 'aasc.display.mmdLighting.v1';
     const DEFAULT_PHYSICS_FPS = 65;
-    const DEFAULT_ROTATION_PHYSICS_LIMIT = 180;
+    const DEFAULT_ROTATION_PHYSICS_LIMIT = 720;
     const PRESETS = Object.freeze({
         default: Object.freeze({
             ambientColor: '#ffffff',

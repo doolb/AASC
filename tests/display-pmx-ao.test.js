@@ -42,11 +42,12 @@ test('PMX AO defaults on and a partial lighting update keeps its saved switch', 
   assert.equal(displayMmd.setLighting({ pmxAoResolution: 'full' }).pmxAoResolution, 'full');
   assert.equal(displayMmd.setLighting({ keyIntensity: 2 }).pmxAoResolution, 'full');
   assert.equal(displayMmd.setLighting({ pmxAoResolution: 'invalid' }).pmxAoResolution, 'half');
-  assert.equal(displayMmd.getLighting().rotationPhysicsLimit, 180);
+  assert.equal(displayMmd.getLighting().rotationPhysicsLimit, 720);
   assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 5 }).rotationPhysicsLimit, 30);
-  assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 725 }).rotationPhysicsLimit, 720);
+  assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 1440 }).rotationPhysicsLimit, 1440);
+  assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 2000 }).rotationPhysicsLimit, 1440);
   assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 184 }).rotationPhysicsLimit, 180);
-  assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 'invalid' }).rotationPhysicsLimit, 180);
+  assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 'invalid' }).rotationPhysicsLimit, 720);
   const clamped = displayMmd.setLighting({
     pmxAoColor: 'not-a-color', pmxAoIntensity: 100, pmxAoRadiusPercent: -4
   });
@@ -94,7 +95,7 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   assert.equal(elements.displayMmdPmxAoIntensity.value, '0.6');
   assert.equal(elements.displayMmdPmxAoRadiusPercent.value, '6');
   assert.equal(elements.displayMmdPmxAoResolution.value, 'half');
-  assert.equal(elements.displayMmdRotationPhysicsLimit.value, '180');
+  assert.equal(elements.displayMmdRotationPhysicsLimit.value, '720');
   elements.displayMmdPmxAoColor.value = '#2b4769';
   elements.displayMmdPmxAoColor.handlers.input();
   elements.displayMmdPmxAoIntensity.value = '1.5';
@@ -114,9 +115,14 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   assert.equal(context.window.DisplayMmd.getLighting().rotationPhysicsLimit, 240);
   assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).rotationPhysicsLimit, 240);
   assert.equal(elements.displayMmdRotationPhysicsLimitValue.textContent, '240°/秒');
+  elements.displayMmdRotationPhysicsLimit.value = '180';
+  elements.displayMmdRotationPhysicsLimit.handlers.input();
   elements.displayMmdLightingPreset.value = 'soft';
   elements.displayMmdLightingPreset.handlers.change();
-  assert.equal(context.window.DisplayMmd.getLighting().rotationPhysicsLimit, 240);
+  assert.equal(context.window.DisplayMmd.getLighting().rotationPhysicsLimit, 180);
+  assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).rotationPhysicsLimit, 180);
+  vm.runInNewContext(fs.readFileSync(path.join(PUBLIC_DIR, 'js/display-mmd-lighting.js'), 'utf8'), context);
+  assert.equal(elements.displayMmdRotationPhysicsLimit.value, '180');
   elements.displayMmdPmxAoEnabled.checked = false;
   elements.displayMmdPmxAoEnabled.handlers.input();
   assert.equal(context.window.DisplayMmd.getLighting().pmxAoEnabled, false);
@@ -128,10 +134,10 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   assert.equal(elements.displayMmdPmxAoIntensity.value, '0.6');
   assert.equal(elements.displayMmdPmxAoRadiusPercent.value, '6');
   assert.equal(elements.displayMmdPmxAoResolution.value, 'half');
-  assert.equal(elements.displayMmdRotationPhysicsLimit.value, '180');
+  assert.equal(elements.displayMmdRotationPhysicsLimit.value, '720');
 });
 
 test('灯光面板包含快速旋转物理阈值滑块', () => {
   const html = fs.readFileSync(path.join(PUBLIC_DIR, 'display.html'), 'utf8');
-  assert.match(html, /id="displayMmdRotationPhysicsLimit"[^>]*type="range"[^>]*min="30"[^>]*max="720"/u);
+  assert.match(html, /id="displayMmdRotationPhysicsLimit"[^>]*type="range"[^>]*min="30"[^>]*max="1440"[^>]*value="720"/u);
 });

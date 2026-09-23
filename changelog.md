@@ -2,6 +2,9 @@
 
 ### PMX 旋转物理
 
+- ✅ [2026-09-23] 提高快速旋转暂停物理阈值的默认值和可调上限。
+  - `display.html`、`display-mmd-lighting.js`、`display-mmd.js`、`display-pmx-runtime.js` 将默认和复位值由 180 调整为 720°/秒、滑块与输入上限由 720 调整为 1440°/秒；旧浏览器已保存的自定义值继续生效，物理暂停逻辑不变。
+  - 更新 PMX design/spec、task、todo、usage、自测和测试预期；PMX/MMD 定向测试 39/39 通过，语法与 `git diff --check` 通过。完整 `npm test` 为 926/983 通过、57 项其他模块或本机环境用例失败，当前无 PMX 用例失败；未构建或发布更新包。
 - ✅ [2026-09-23] 快速旋转时按可调速度阈值暂停 PMX 布料物理。
   - `display.html`、`display-mmd-lighting.js`、`display-mmd.js` 增加灯光面板阈值设置：30–720°/秒，默认 180°/秒，浏览器本地保存；灯光预设保留阈值，恢复默认重置。
   - `display-pmx-runtime.js`、`mmd-pmx-helper.mjs` 按实际枢轴角速度暂停 Ammo，继续播放 VMD/IK/grant；减速后重置刚体并清除旧速度，下一帧恢复物理。VRM 与无物理 PMX 不受影响。

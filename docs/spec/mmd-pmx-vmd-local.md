@@ -118,7 +118,7 @@ MMDPhysics.update(delta):
   keyDistance = 4.183
   shadowEnabled = true
   physicsFps = 65
-  rotationPhysicsLimit = 180
+  rotationPhysicsLimit = 720
   pmxAoEnabled = true
   pmxAoColor = "#931231"
   pmxAoIntensity = 0.6
@@ -136,7 +136,7 @@ MMDPhysics.update(delta):
   将 keyDistance 固定为运行时光源距离，不接受界面输入
   shadowEnabled 只接受布尔值，缺省为 true
   physicsFps 限制在 30..90 并按 5 Hz 对齐，缺省为 65
-  rotationPhysicsLimit 限制在 30..720 度/秒并按 10 度/秒对齐，缺省为 180
+  rotationPhysicsLimit 限制在 30..1440 度/秒并按 10 度/秒对齐，缺省为 720
   pmxAoEnabled 只接受布尔值，旧设置缺失时为 true
   pmxAoColor 只接受 #RRGGBB，缺省为 #931231
   pmxAoIntensity 限制在 0..2，缺省为 0.6
@@ -169,10 +169,10 @@ MMDPhysics.update(delta):
   面板在开关下提供颜色、强度和半径输入；改变时即时保存和渲染
   面板在 AO 参数中提供半分辨率/全分辨率选择；默认半分辨率，沿用灯光 localStorage 保存
   面板新增“PMX 物理计算频率”滑块，范围 30..90 Hz、步长 5 Hz、默认 65 Hz
-  面板新增“旋转暂停物理阈值”滑块，范围 30..720 度/秒、步长 10 度/秒、默认 180 度/秒
+  面板提供“旋转暂停物理阈值”滑块，范围 30..1440 度/秒、步长 10 度/秒、默认 720 度/秒
   将滑块值加入既有 MmdLightingSettings 保存和恢复流程
   调整设置后立即调用 DisplayMmd.setLighting()，更新当前 PMX 物理 fixed step
-  选择灯光预设时保留当前 physicsFps 和 rotationPhysicsLimit；点击恢复默认时恢复 65 Hz 和 180 度/秒
+  选择灯光预设时保留当前 physicsFps 和 rotationPhysicsLimit；点击恢复默认时恢复 65 Hz 和 720 度/秒
   提示该值是物理目标步进频率，实际步数受渲染帧率及 maxStepNum=3 限制
   VRM runtime 忽略 physicsFps
   VRM runtime 忽略 rotationPhysicsLimit

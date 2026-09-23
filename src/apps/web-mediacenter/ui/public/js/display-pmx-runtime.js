@@ -226,7 +226,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         keyIntensity: 2.3,
         keyDirection: { longitude: 31, latitude: 46 },
         physicsFps: 65,
-        rotationPhysicsLimit: 180,
+        rotationPhysicsLimit: 720,
         pmxAoColor: '#931231',
         pmxAoIntensity: 0.6,
         pmxAoRadiusPercent: 6,
@@ -329,7 +329,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     };
 
     const normalizeRotationPhysicsLimit = (value) => {
-        const clamped = normalizeLightNumber(value, 30, 720, lightingState.rotationPhysicsLimit);
+        const clamped = normalizeLightNumber(value, 30, 1440, lightingState.rotationPhysicsLimit);
         return Math.round(clamped / 10) * 10;
     };
 

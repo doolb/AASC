@@ -27,7 +27,7 @@
         keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
         shadowEnabled: true,
         physicsFps: 65,
-        rotationPhysicsLimit: 180,
+        rotationPhysicsLimit: 720,
         pmxAoEnabled: true,
         pmxAoColor: '#931231',
         pmxAoIntensity: 0.6,
@@ -67,7 +67,7 @@
     }
 
     function normalizeRotationPhysicsLimit(value) {
-        const clamped = clamp(value, 30, 720, DEFAULT_MMD_LIGHTING.rotationPhysicsLimit);
+        const clamped = clamp(value, 30, 1440, DEFAULT_MMD_LIGHTING.rotationPhysicsLimit);
         return Math.round(clamped / 10) * 10;
     }
 

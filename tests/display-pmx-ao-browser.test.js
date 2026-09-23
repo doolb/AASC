@@ -314,6 +314,7 @@ test('PMX runtime applies AO switch without reloading the model', { skip: !CHROM
       document.body.append(canvas);
       const runtime = createDisplayPmxRuntime({ canvas });
       const defaults = runtime.setLighting({});
+      const maxLimit = runtime.setLighting({ rotationPhysicsLimit: 2000 }).rotationPhysicsLimit;
       const disabled = runtime.setLighting({ pmxAoEnabled: false }).pmxAoEnabled;
       const adjusted = runtime.setLighting({
         pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
@@ -323,15 +324,16 @@ test('PMX runtime applies AO switch without reloading the model', { skip: !CHROM
       return { defaultValue: defaults.pmxAoEnabled, defaultColor: defaults.pmxAoColor,
         defaultIntensity: defaults.pmxAoIntensity, defaultRadius: defaults.pmxAoRadiusPercent,
         defaultResolution: defaults.pmxAoResolution,
-        disabled, adjusted };
+        defaultLimit: defaults.rotationPhysicsLimit, maxLimit, disabled, adjusted };
     });
     assert.deepEqual(result, {
       defaultValue: true, defaultColor: '#931231', defaultIntensity: 0.6, defaultRadius: 6,
       defaultResolution: 'half',
+      defaultLimit: 720, maxLimit: 1440,
       disabled: false,
       adjusted: { ambientColor: '#ffffff', ambientIntensity: 1.8, keyColor: '#ffffff',
         keyIntensity: 2.3, keyDirection: { longitude: 31, latitude: 46 }, shadowEnabled: true,
-        physicsFps: 65, rotationPhysicsLimit: 180,
+        physicsFps: 65, rotationPhysicsLimit: 1440,
         pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
         pmxAoRadiusPercent: 12, pmxAoResolution: 'full' }
     });
