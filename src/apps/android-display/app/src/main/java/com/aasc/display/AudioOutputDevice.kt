@@ -24,6 +24,9 @@ data class AudioOutputDevice(
         .put("typeName", typeName(type))
         .put("name", name.ifBlank { "未命名输出设备" })
         .put("address", address)
+        .apply {
+            platformDevice?.let { put("legacyKey", legacyKey(it)) }
+        }
 
     companion object {
         const val DEFAULT_KEY = "default"
@@ -59,11 +62,26 @@ data class AudioOutputDevice(
         fun stableKey(device: AudioDeviceInfo): String {
             val address = device.address?.trim().orEmpty()
             val name = device.productName?.toString()?.trim().orEmpty()
-            // 没有地址的同名输出设备需要保留系统 id，避免控制端选中错误设备。
+            // 优先使用系统地址，其次使用产品名；只有两者都没有时才使用临时 id。
+            val identity = address.ifBlank { name.ifBlank { "id-${device.id}" } }
+            return "native-output:${device.type}:$identity"
+        }
+
+        fun legacyKey(device: AudioDeviceInfo): String {
+            val address = device.address?.trim().orEmpty()
+            val name = device.productName?.toString()?.trim().orEmpty()
             val identity = address.ifBlank {
                 "${name.ifBlank { "unnamed" }}:id-${device.id}"
             }
             return "native-output:${device.type}:$identity"
+        }
+
+        fun matchesKey(device: AudioDeviceInfo, requestedKey: String): Boolean {
+            val normalized = requestedKey.trim()
+            val stable = stableKey(device)
+            return normalized == stable ||
+                normalized == legacyKey(device) ||
+                normalized.startsWith("$stable:id-")
         }
 
         fun typeName(type: Int): String {

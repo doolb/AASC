@@ -1684,7 +1684,8 @@ function normalizeAudioInputDevice(device) {
             ? device.name.slice(0, 160)
             : (typeof device.label === 'string' ? device.label.slice(0, 160) : ''),
         label: typeof device.label === 'string' ? device.label.slice(0, 160) : '',
-        address: typeof device.address === 'string' ? device.address.slice(0, 256) : ''
+        address: typeof device.address === 'string' ? device.address.slice(0, 256) : '',
+        legacyKey: typeof device.legacyKey === 'string' ? device.legacyKey.slice(0, 512) : ''
     };
 }
 
@@ -1710,7 +1711,8 @@ function normalizeAudioOutputDevice(device) {
         type: Number.isInteger(device.type) ? device.type : 0,
         typeName: typeof device.typeName === 'string' ? device.typeName.slice(0, 120) : '',
         name: typeof device.name === 'string' ? device.name.slice(0, 160) : '',
-        address: typeof device.address === 'string' ? device.address.slice(0, 256) : ''
+        address: typeof device.address === 'string' ? device.address.slice(0, 256) : '',
+        legacyKey: typeof device.legacyKey === 'string' ? device.legacyKey.slice(0, 512) : ''
     };
 }
 

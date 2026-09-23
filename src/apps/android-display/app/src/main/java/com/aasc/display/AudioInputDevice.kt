@@ -24,6 +24,9 @@ data class AudioInputDevice(
         .put("typeName", typeName(type, address))
         .put("name", name.ifBlank { "未命名输入设备" })
         .put("address", address)
+        .apply {
+            platformDevice?.let { put("legacyKey", legacyKey(it)) }
+        }
 
     companion object {
         const val DEFAULT_KEY = "default"
@@ -59,11 +62,27 @@ data class AudioInputDevice(
         fun stableKey(device: AudioDeviceInfo): String {
             val address = device.address?.trim().orEmpty()
             val name = device.productName?.toString()?.trim().orEmpty()
-            // 同名且没有系统地址的内置麦克风需要保留 id，否则控制端无法区分多个输入。
+            // 优先使用系统地址，其次使用产品名；只有两者都没有时才使用临时 id。
+            // 多个内置麦克风通常由 Android 通过 front/back 地址区分，避免 id 变化破坏历史配置。
+            val identity = address.ifBlank { name.ifBlank { "id-${device.id}" } }
+            return "native:${device.type}:$identity"
+        }
+
+        fun legacyKey(device: AudioDeviceInfo): String {
+            val address = device.address?.trim().orEmpty()
+            val name = device.productName?.toString()?.trim().orEmpty()
             val identity = address.ifBlank {
                 "${name.ifBlank { "unnamed" }}:id-${device.id}"
             }
             return "native:${device.type}:$identity"
+        }
+
+        fun matchesKey(device: AudioDeviceInfo, requestedKey: String): Boolean {
+            val normalized = requestedKey.trim()
+            val stable = stableKey(device)
+            return normalized == stable ||
+                normalized == legacyKey(device) ||
+                normalized.startsWith("$stable:id-")
         }
 
         fun typeName(type: Int, address: String): String {

@@ -79,8 +79,12 @@ class AsrModelManager(
                 } else {
                     false
                 }
+                // load 只完成 recognizer 构造；首次 decode 仍可能初始化 native session。
+                // 预热在当前后台 downloadPool 中执行，不阻塞 WebView、录音和界面线程。
+                val warmupOk = loadOk && AsrEngine.warmup()
                 val loadMemoryError = !loadOk && okModel && hashSaved && AsrEngine.lastLoadWasMemoryError
-                if (loadOk) {
+                val warmupMemoryError = loadOk && !warmupOk && AsrEngine.lastLoadWasMemoryError
+                if (loadOk && warmupOk) {
                     state = "ready"
                     postModelEvent(JSONObject().put("state", "ready"), onModelEvent)
                 } else {
@@ -89,19 +93,24 @@ class AsrModelManager(
                         !validOnDisk && serverHashes == null -> "无法获取模型校验 hash"
                         !okModel -> "模型下载失败"
                         !hashSaved -> "模型 hash 保存失败"
-                        loadMemoryError -> "设备内存不足，无法加载语音模型"
-                        else -> "模型加载自检失败"
+                        loadMemoryError || warmupMemoryError -> "设备内存不足，无法加载语音模型"
+                        !loadOk -> "模型加载自检失败"
+                        else -> "ASR 首次推理预热失败"
                     }
                     when {
                         // 下载或 hash 校验失败：模型/tokens/hash 全部清掉（含 .tmp 残件）
                         !okModel || !hashSaved -> purgeModelFiles()
                         // 内存不足：保留已下载文件（内存释放后可重试加载），仅清理 .tmp 残件
-                        loadMemoryError -> {
+                        loadMemoryError || warmupMemoryError -> {
                             File(modelFile.parentFile, modelFile.name + ".tmp").delete()
                             File(tokensFile.parentFile, tokensFile.name + ".tmp").delete()
                         }
-                        // 加载自检失败：清掉损坏文件（含 .tmp 残件）
-                        else -> purgeModelFiles()
+                        // 构造失败通常代表模型损坏，清掉模型文件；普通预热失败保留已校验文件，便于重试。
+                        !loadOk -> purgeModelFiles()
+                        else -> {
+                            File(modelFile.parentFile, modelFile.name + ".tmp").delete()
+                            File(tokensFile.parentFile, tokensFile.name + ".tmp").delete()
+                        }
                     }
                     postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
                 }
@@ -129,14 +138,20 @@ class AsrModelManager(
     private fun ensureBundledModel(onModelEvent: (JSONObject) -> Unit) {
         val validOnDisk = hasVerifiedLocalFiles(null)
         val loadOk = validOnDisk && AsrEngine.load(context, modelFile, tokensFile)
-        if (loadOk) {
+        val warmupOk = loadOk && AsrEngine.warmup()
+        if (loadOk && warmupOk) {
             state = "ready"
             progress = 100
             postModelEvent(JSONObject().put("state", "ready"), onModelEvent)
             return
         }
         state = "error"
-        lastError = "APK 内置 ASR 模型校验或加载失败"
+        lastError = when {
+            !validOnDisk -> "APK 内置 ASR 模型校验失败"
+            !loadOk && AsrEngine.lastLoadWasMemoryError -> "设备内存不足，无法加载语音模型"
+            !loadOk -> "APK 内置 ASR 模型加载失败"
+            else -> "APK 内置 ASR 模型首次推理预热失败"
+        }
         android.util.Log.e("AsrModelManager", lastError + ": " + modelDir.absolutePath)
         postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
     }

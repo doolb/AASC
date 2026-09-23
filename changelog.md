@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### Android 显示端音频
+
+- ✅ [2026-09-23] 修复正式 Android 显示端 ASR 首次冷启动和输出设备切换无声。
+  - `AsrEnginePool` 为每个 recognizer slot 执行真实静音推理预热；`AsrModelManager` 只有在模型加载和预热全部完成后才向显示端发布 `ready`，预热在后台 worker 执行，不阻塞 WebView、录音和界面。
+  - Android 26–30 不再使用输出通信 SCO 或 `setSpeakerphoneOn` 改写 WebView `STREAM_MUSIC`；输出设备无法被旧版 Android 精确路由时保持系统媒体路由，并回报 `routingMode=system_default`、`fallback=true` 及限制原因。
+  - 输入录音的 Bluetooth SCO owner 保持不变。验证：Android JVM 单元测试通过，音频/ASR 契约测试 10/10 通过；正式 `withserver` APK 已构建，大小 `267309962` bytes，SHA-256 为 `8c40280f3609e87d89d14228258ed7719001bd56800e4eb87dfa643676cbfc01`，APK v2 签名校验通过。
+
 ### MMD 图片基准图 AR 设计记录
 
 - 📝 [2026-09-22] 完成普通图片拍照、手动四角选区、本地图像目标跟踪和 MMD 姿态叠加的 design/spec 设计，识别引擎仍待接入。
@@ -9258,6 +9265,10 @@
 
 ### Android 显示端音频
 
+- ✅ [2026-09-22] 修复正式 APK 输入/输出设备切换时过快回退。
+  - 原生输入和输出统一按 300/700/1200ms 重新枚举重试，目标设备在 Android 音频服务或蓝牙 SCO 延迟出现时不会立即切到系统默认；重试耗尽后保留请求 key 并回报最终回退原因。
+  - 输入/输出设备改用地址或产品名生成稳定 key，增加 `legacyKey` 和旧稳定前缀 id key 兼容；服务端透传，控制端命中历史 key 后使用当前 key。
+  - `:app:testDebugUnitTest`、音频契约测试 7/7、Node 语法检查和 APK ZIP 完整性检查通过；重新构建 `withserver` APK，SHA-256 为 `a9907b8d405db1e109c753d05937938124e100a259b8b279edc70e13b4021b71`。
 - ✅ [2026-09-22] 增加控制端选择正式 APK 声音输出设备。
   - Android 新增输出设备枚举、NativeBridge 路由接口和 API 26–30 系统默认回退；蓝牙 SCO 使用独立 owner，录音停止不会误释放输出链路。
   - 服务端通过 WebSocket 持久化 `audioOutputDeviceKey`，显示端重连/重启后恢复；控制端新增输出设备选择、刷新和实际路由/回退状态显示。

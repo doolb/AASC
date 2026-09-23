@@ -24,6 +24,15 @@ const OUTPUT_DEVICE = read(
 const NATIVE_OUTPUT = read(
     'src/apps/android-display/app/src/main/java/com/aasc/display/NativeAudioOutputController.kt'
 );
+const ASR_ENGINE = read(
+    'src/apps/android-display/app/src/main/java/com/aasc/display/AsrEngine.kt'
+);
+const ASR_POOL = read(
+    'src/apps/android-display/app/src/main/java/com/aasc/display/AsrEnginePool.kt'
+);
+const ASR_MANAGER = read(
+    'src/apps/android-display/app/src/main/java/com/aasc/display/AsrModelManager.kt'
+);
 
 test('服务端注册双录音方式的 WebSocket 配置和设备状态消息', () => {
     assert.match(SERVER, /setVoiceCaptureConfig/);
@@ -42,6 +51,7 @@ test('服务端注册双录音方式的 WebSocket 配置和设备状态消息', 
     assert.match(SERVER, /audioOutputStatus/);
     assert.match(SERVER, /normalizeAudioOutputDeviceKey/);
     assert.match(SERVER, /persistDisplayState\(displayData, \{ audioOutputDeviceKey/);
+    assert.match(SERVER, /legacyKey/);
 });
 
 test('控制端提供采集方式、设备选择和设备刷新入口', () => {
@@ -60,6 +70,7 @@ test('控制端提供采集方式、设备选择和设备刷新入口', () => {
     assert.match(WEBSOCKET, /displayAudioOutputConfigChanged/);
     assert.match(WEBSOCKET, /audioOutputDevices/);
     assert.match(WEBSOCKET, /audioOutputStatus/);
+    assert.match(DEVICE_LIST, /device\.legacyKey === currentKey/);
 });
 
 test('显示端按配置选择 WebView 或 Native 录音并回报实际状态', () => {
@@ -98,14 +109,34 @@ test('Native PCM 采集复用 JS VAD/WAV 链路，原生桥枚举并选择输入
     assert.match(NATIVE_CAPTURE, /window\.onNativeAudioChunk/);
     assert.match(INPUT_DEVICE, /GET_DEVICES_INPUTS/);
     assert.match(INPUT_DEVICE, /native:\$\{device\.type\}/);
+    assert.match(INPUT_DEVICE, /fun legacyKey\(device: AudioDeviceInfo\)/);
+    assert.match(INPUT_DEVICE, /fun matchesKey\(device: AudioDeviceInfo/);
+    assert.match(NATIVE_CAPTURE, /tryStartRequestedDevice/);
+    assert.match(NATIVE_CAPTURE, /longArrayOf\(300L, 700L, 1200L\)/);
     assert.match(BRIDGE, /fun listAudioOutputDevices\(\): String/);
     assert.match(BRIDGE, /fun setAudioOutputDevice\(configJson: String\): String/);
     assert.match(BRIDGE, /fun audioOutputStatus\(\): String/);
     assert.match(OUTPUT_DEVICE, /GET_DEVICES_OUTPUTS/);
     assert.match(OUTPUT_DEVICE, /native-output:\$\{device\.type\}/);
+    assert.match(OUTPUT_DEVICE, /fun legacyKey\(device: AudioDeviceInfo\)/);
+    assert.match(OUTPUT_DEVICE, /fun matchesKey\(device: AudioDeviceInfo/);
     assert.match(NATIVE_OUTPUT, /setCommunicationDevice/);
     assert.match(NATIVE_OUTPUT, /routingMode/);
     assert.match(NATIVE_OUTPUT, /system_default/);
+    assert.match(NATIVE_OUTPUT, /applyRequestedRouteWithRetry/);
+    assert.match(NATIVE_OUTPUT, /longArrayOf\(300L, 700L, 1200L\)/);
+    assert.match(NATIVE_OUTPUT, /WebView 媒体流不能精确路由/);
+    assert.match(NATIVE_OUTPUT, /fallback = true/);
+    assert.doesNotMatch(NATIVE_OUTPUT, /acquireForOutput/);
+});
+
+test('ASR 模型 ready 前在后台对每个 recognizer slot 做实际推理预热', () => {
+    assert.match(ASR_ENGINE, /fun warmup\(\): Boolean/);
+    assert.match(ASR_ENGINE, /FloatArray\(WARMUP_SAMPLE_COUNT\)/);
+    assert.match(ASR_POOL, /repeat\(slots\.size\)/);
+    assert.match(ASR_POOL, /slot\.recognize\(samples, affinityApplier\)/);
+    assert.match(ASR_MANAGER, /val warmupOk = loadOk && AsrEngine\.warmup\(\)/);
+    assert.match(ASR_MANAGER, /if \(loadOk && warmupOk\)/);
 });
 
 console.log('display-audio-capture-config.test.js: contract checks passed');

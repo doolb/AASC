@@ -22,8 +22,6 @@ class NativeAudioOutputController(
     private var actualDevice: AudioOutputDevice? = AudioOutputDevice.systemDefault()
     private var routingMode = "default"
     private var lastError: String? = null
-    private var legacyRouteChanged = false
-    private var previousSpeakerphoneOn = false
     private var lastStatus = createStatus(state = "applied").toString()
 
     fun listDevices(): String {
@@ -53,25 +51,13 @@ class NativeAudioOutputController(
         }
         requestedDeviceKey = normalizeKey(config.optString("deviceKey", AudioOutputDevice.DEFAULT_KEY))
         lastError = null
-        val requested = resolveDevice(requestedDeviceKey)
         if (requestedDeviceKey == AudioOutputDevice.DEFAULT_KEY) {
             restoreDefaultRoute()
             actualDevice = AudioOutputDevice.systemDefault()
             routingMode = "default"
             return@synchronized saveStatus(state = "applied", fallback = false)
         }
-        if (requested == null || requested.platformDevice == null) {
-            restoreDefaultRoute()
-            actualDevice = AudioOutputDevice.systemDefault()
-            routingMode = "default"
-            return@synchronized saveStatus(
-                state = "applied",
-                fallback = true,
-                fallbackReason = "所选原生输出设备已不可用"
-            )
-        }
-
-        val result = applyRoute(requested)
+        val result = applyRequestedRouteWithRetry(requestedDeviceKey)
         if (!result.ok) {
             restoreDefaultRoute()
             actualDevice = AudioOutputDevice.systemDefault()
@@ -104,10 +90,42 @@ class NativeAudioOutputController(
 
     private fun resolveDevice(key: String): AudioOutputDevice? {
         return try {
-            AudioOutputDevice.enumerate(audioManager).firstOrNull { it.key == key }
+            AudioOutputDevice.enumerate(audioManager).firstOrNull { device ->
+                device.platformDevice?.let { AudioOutputDevice.matchesKey(it, key) } == true
+            }
         } catch (error: Exception) {
             lastError = error.message ?: "读取原生输出设备失败"
             null
+        }
+    }
+
+    /**
+     * 切换设备时先给 Android 音频服务和蓝牙路由留出刷新时间，失败后才回退默认。
+     * 每轮重新枚举，避免继续使用设备断开前的 AudioDeviceInfo 对象。
+     */
+    private fun applyRequestedRouteWithRetry(key: String): RouteResult {
+        var failure: String? = lastError
+        val lastAttempt = ROUTE_RETRY_DELAYS_MS.size
+        for (attempt in 0..lastAttempt) {
+            val requested = resolveDevice(key)
+            val result = requested?.platformDevice?.let { applyRoute(requested) }
+                ?: RouteResult(ok = false, error = lastError ?: "所选原生输出设备暂未枚举")
+            if (result.ok) return result
+
+            failure = result.error ?: failure ?: "所选原生输出设备启动失败"
+            restoreDefaultRoute()
+            if (attempt == lastAttempt || !waitBeforeRetry(ROUTE_RETRY_DELAYS_MS[attempt])) break
+        }
+        return RouteResult(ok = false, error = failure ?: "所选原生输出设备重试后仍不可用")
+    }
+
+    private fun waitBeforeRetry(delayMs: Long): Boolean {
+        return try {
+            Thread.sleep(delayMs)
+            true
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
         }
     }
 
@@ -139,29 +157,18 @@ class NativeAudioOutputController(
 
     private fun applyLegacyRoute(device: AudioOutputDevice): RouteResult {
         return try {
-            if (!legacyRouteChanged) {
-                previousSpeakerphoneOn = audioManager.isSpeakerphoneOn
-                legacyRouteChanged = true
-            }
-            if (device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
-                if (!bluetoothScoController.acquireForOutput(device.platformDevice!!)) {
-                    return RouteResult(ok = false, error = "蓝牙 SCO 输出链路未建立")
-                }
-                RouteResult(ok = true, actualDevice = device, routingMode = "bluetooth_sco")
-            } else {
-                bluetoothScoController.releaseOutput()
-                @Suppress("DEPRECATION")
-                audioManager.isSpeakerphoneOn = device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-                val exact = device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ||
-                    device.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-                if (exact) {
-                    RouteResult(ok = true, actualDevice = device, routingMode = "legacy_speaker")
-                } else {
-                    // API 26–30 没有面向 WebView 媒体流的通用 preferred output API。
-                    // 关闭强制扬声器后由系统根据有线/蓝牙连接状态选择媒体输出。
-                    RouteResult(ok = true, actualDevice = null, routingMode = "system_default")
-                }
-            }
+            // Android 8–11 没有面向 WebView STREAM_MUSIC 的通用 preferred output API。
+            // 这里不能用通信 SCO 或 setSpeakerphoneOn 冒充媒体路由：它们可能只改变
+            // 通话流，反而把 WebView 音频切到不可用的路径。保留系统媒体路由，
+            // 并向控制端明确回报“请求已接受但实际设备由系统决定”。
+            bluetoothScoController.releaseOutput()
+            RouteResult(
+                ok = true,
+                actualDevice = null,
+                routingMode = "system_default",
+                fallback = true,
+                error = "Android ${Build.VERSION.SDK_INT} 的 WebView 媒体流不能精确路由到指定输出设备，已保持系统媒体路由"
+            )
         } catch (error: Exception) {
             RouteResult(ok = false, error = error.message ?: "设置旧版 Android 输出路由失败")
         }
@@ -176,15 +183,6 @@ class NativeAudioOutputController(
             // 某些 ROM 不支持清理通信路由，继续执行旧版回退和 SCO 释放。
         }
         bluetoothScoController.releaseOutput()
-        if (legacyRouteChanged) {
-            try {
-                @Suppress("DEPRECATION")
-                audioManager.isSpeakerphoneOn = previousSpeakerphoneOn
-            } catch (_: Exception) {
-                // 释放阶段保持幂等，系统拒绝恢复时不阻塞页面和 WebView 退出。
-            }
-        }
-        legacyRouteChanged = false
     }
 
     private fun findDevice(device: AudioDeviceInfo): AudioOutputDevice {
@@ -266,4 +264,8 @@ class NativeAudioOutputController(
         val fallback: Boolean = false,
         val error: String? = null
     )
+
+    companion object {
+        private val ROUTE_RETRY_DELAYS_MS = longArrayOf(300L, 700L, 1200L)
+    }
 }

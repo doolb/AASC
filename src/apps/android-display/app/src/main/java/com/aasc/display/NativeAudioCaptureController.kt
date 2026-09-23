@@ -71,15 +71,16 @@ class NativeAudioCaptureController(
                 .trim()
                 .ifBlank { AudioInputDevice.DEFAULT_KEY }
             lastError = null
-            val requestedDevice = resolveDevice(requestedDeviceKey)
-            val selectedDevice = requestedDevice?.platformDevice
-            var fallback = requestedDeviceKey != AudioInputDevice.DEFAULT_KEY && requestedDevice == null
-            var fallbackReason: String? = if (fallback) "所选原生输入设备已不可用" else null
-
-            var started = tryStart(selectedDevice)
-            if (started == null && selectedDevice != null) {
+            var fallback = false
+            var fallbackReason: String? = null
+            var started = if (requestedDeviceKey == AudioInputDevice.DEFAULT_KEY) {
+                tryStart(null)
+            } else {
+                tryStartRequestedDevice(requestedDeviceKey)
+            }
+            if (started == null && requestedDeviceKey != AudioInputDevice.DEFAULT_KEY) {
                 fallback = true
-                fallbackReason = lastError ?: "所选原生输入设备启动失败"
+                fallbackReason = lastError ?: "所选原生输入设备重试后仍不可用"
                 bluetoothScoController.stopForInput()
                 started = tryStart(null)
             }
@@ -132,10 +133,45 @@ class NativeAudioCaptureController(
     private fun resolveDevice(key: String): AudioInputDevice? {
         if (key == AudioInputDevice.DEFAULT_KEY) return AudioInputDevice.systemDefault()
         return try {
-            AudioInputDevice.enumerate(audioManager).firstOrNull { it.key == key }
+            AudioInputDevice.enumerate(audioManager).firstOrNull { device ->
+                device.platformDevice?.let { AudioInputDevice.matchesKey(it, key) } == true
+            }
         } catch (error: Exception) {
             lastError = error.message ?: "读取原生输入设备失败"
             null
+        }
+    }
+
+    /**
+     * 设备切换期间 Android 的设备列表和 SCO 状态可能晚于配置消息到达。
+     * 每次重试都重新枚举并拿最新设备句柄，耗尽后才允许上层回退系统默认。
+     */
+    private fun tryStartRequestedDevice(key: String): Pair<AudioRecord, AudioInputDevice?>? {
+        var failure = lastError
+        val lastAttempt = ROUTE_RETRY_DELAYS_MS.size
+        for (attempt in 0..lastAttempt) {
+            val requested = resolveDevice(key)
+            val started = requested?.platformDevice?.let { tryStart(it) }
+            if (started != null) return started
+
+            failure = lastError ?: if (requested == null) {
+                "所选原生输入设备暂未枚举"
+            } else {
+                "所选原生输入设备启动失败"
+            }
+            if (attempt == lastAttempt || !waitBeforeRetry(ROUTE_RETRY_DELAYS_MS[attempt])) break
+        }
+        lastError = failure
+        return null
+    }
+
+    private fun waitBeforeRetry(delayMs: Long): Boolean {
+        return try {
+            Thread.sleep(delayMs)
+            true
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
         }
     }
 
@@ -326,5 +362,6 @@ class NativeAudioCaptureController(
 
     companion object {
         private const val SAMPLE_RATE = 16000
+        private val ROUTE_RETRY_DELAYS_MS = longArrayOf(300L, 700L, 1200L)
     }
 }

@@ -80,6 +80,40 @@ class AsrEnginePoolTest {
     }
 
     @Test
+    fun 预热会让每个recognizer_slot至少执行一次真实识别() {
+        val recognizerCalls = AtomicInteger(0)
+        val factory = object : AsrEnginePool.RecognizerFactory {
+            override fun create(modelFile: File, tokensFile: File, language: String): AsrEnginePool.Recognizer {
+                return object : AsrEnginePool.Recognizer {
+                    override fun recognize(samples: FloatArray): String {
+                        recognizerCalls.incrementAndGet()
+                        return ""
+                    }
+
+                    override fun release() = Unit
+                }
+            }
+        }
+        val policy = CpuTopology(
+            listOf(0 to 1200000L, 1 to 2400000L)
+        ).policy(bigCoreCount = 1, littleCoreCount = 1)
+        val pool = AsrEnginePool.configure(
+            policy = policy,
+            modelFile = File("model.int8.onnx"),
+            tokensFile = File("tokens.txt"),
+            recognizerFactory = factory,
+            affinityApplier = { true }
+        )
+
+        try {
+            pool.warmup(FloatArray(1600))
+            assertEquals(2, recognizerCalls.get())
+        } finally {
+            pool.retire()
+        }
+    }
+
+    @Test
     fun retire后旧池已排队请求仍会被旧slot服务() {
         val firstStarted = CountDownLatch(1)
         val releaseFirst = CountDownLatch(1)

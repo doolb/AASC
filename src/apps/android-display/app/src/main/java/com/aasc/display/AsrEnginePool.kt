@@ -107,6 +107,23 @@ class AsrEnginePool private constructor(
         }
     }
 
+    /**
+     * 让每个 recognizer slot 执行一次真实推理，提前触发 sherpa native session 初始化。
+     *
+     * 该方法只能由后台模型管理线程调用。这里仍然走和正式请求相同的 slot 队列，
+     * 因此预热完成后首个用户请求不会再承担 native recognizer 的首次初始化耗时。
+     */
+    internal fun warmup(samples: FloatArray) {
+        repeat(slots.size) {
+            val slot = idleSlots.take()
+            try {
+                slot.recognize(samples, affinityApplier)
+            } finally {
+                returnOrRelease(slot)
+            }
+        }
+    }
+
     fun retire() {
         if (!retired.compareAndSet(false, true)) return
         synchronized(lifecycleLock) {

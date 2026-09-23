@@ -520,17 +520,15 @@ const DeviceList = {
     getAudioOutputDeviceKeyForDisplay(display) {
         const currentKey = this.getAudioOutputDeviceKey(display);
         const devices = this.getAudioOutputDevices(display);
-        return currentKey === 'default' || devices.some((device) => device.key === currentKey)
-            ? currentKey
-            : 'default';
+        if (currentKey === 'default') return currentKey;
+        return devices.find((device) => device.key === currentKey || device.legacyKey === currentKey)?.key || 'default';
     },
 
     getVoiceCaptureDeviceKeyForMode(display, captureMode) {
         const currentKey = this.getVoiceInputDeviceKey(display);
         const devices = this.getVoiceInputDevices(display, captureMode);
-        return currentKey === 'default' || devices.some((device) => device.key === currentKey)
-            ? currentKey
-            : 'default';
+        if (currentKey === 'default') return currentKey;
+        return devices.find((device) => device.key === currentKey || device.legacyKey === currentKey)?.key || 'default';
     },
 
     setVoiceCaptureConfig(displayId, captureMode, deviceKey) {

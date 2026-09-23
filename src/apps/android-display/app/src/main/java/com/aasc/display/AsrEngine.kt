@@ -101,6 +101,27 @@ object AsrEngine {
         return recognizeRaw(samples)
     }
 
+    /**
+     * 在后台对当前 pool 的每个 recognizer slot 做一次静音推理。
+     *
+     * 真实推理会初始化 sherpa native session；模型文件加载成功并不代表首次 decode 已经完成，
+     * 所以必须等这里完成后，模型管理器才能向 WebView 报告 ready。
+     */
+    fun warmup(): Boolean {
+        val pool = synchronized(lock) { currentPool } ?: return false
+        return try {
+            pool.warmup(FloatArray(WARMUP_SAMPLE_COUNT))
+            true
+        } catch (error: OutOfMemoryError) {
+            lastLoadWasMemoryError = true
+            android.util.Log.e("AsrEngine", "ASR 预热内存不足", error)
+            false
+        } catch (error: Exception) {
+            android.util.Log.e("AsrEngine", "ASR 预热失败: ${error.message}", error)
+            false
+        }
+    }
+
     @Synchronized
     fun configureLanguage(languageMode: AsrLanguageMode): Boolean {
         val modelSnapshot: File
@@ -213,4 +234,6 @@ object AsrEngine {
         currentTokensFile = tokensFile
         oldPool?.retire()
     }
+
+    private const val WARMUP_SAMPLE_COUNT = 1600
 }

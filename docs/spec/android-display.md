@@ -641,6 +641,104 @@ NativeAudioOutputController.apply(config):
 
 实现状态（2026-09-22）：输出设备枚举、原生桥、远程配置、控制端 UI、按 displayId 持久化、重连强制恢复和状态回报已实现；Android 旧版本任意媒体设备的系统路由限制按上述 `system_default/fallback` 状态暴露，未伪造精确实际设备。正式 `withserver` APK 已重新构建，输出文件为 `release/apkbuild/withserver/output/aasc-display.apk`，并通过 ZIP 完整性校验。
 
+## 输入/输出设备切换延迟回退与稳定 key 伪代码（2026-09-22）
+
+```text
+生成原生设备 key:
+    address = trim(AudioDeviceInfo.address)
+    name = trim(AudioDeviceInfo.productName)
+    如果 address 非空:
+        stableKey = native/native-output + type + address
+    否则如果 name 非空:
+        stableKey = native/native-output + type + name
+    否则:
+        stableKey = native/native-output + type + id
+    legacyKey = 旧版 type + (address 或 name + id) 格式
+    列表项返回 key、legacyKey、设备描述和当前原生句柄
+
+解析设备 key:
+    重新枚举当前 AudioManager 设备
+    匹配当前 stableKey
+    或匹配 legacyKey
+    或匹配同一稳定前缀下的旧 id-* key
+    返回最新枚举出的 AudioDeviceInfo
+
+应用指定输入设备:
+    如果 key == default:
+        直接按系统默认创建 AudioRecord
+    否则:
+        第一次枚举并启动 AudioRecord
+        如果设备未出现或启动/路由失败:
+            等待 300ms，重新枚举并重试
+            等待 700ms，重新枚举并重试
+            等待 1200ms，重新枚举并重试
+        重试全部失败:
+            停止目标 SCO/录音资源
+            按系统默认创建 AudioRecord
+            保留请求 key，回报 fallback=true 和最终失败原因
+
+应用指定输出设备:
+    如果 key == default:
+        直接清除通信路由、释放输出 SCO、恢复旧版系统状态
+    否则:
+        每次尝试都重新枚举设备并使用最新句柄
+        调用 API 31+ setCommunicationDevice 或 API 26–30 旧版路由
+        失败后清理本次临时路由
+        按 300ms、700ms、1200ms 逐次等待并重试
+        重试全部失败:
+            恢复系统默认输出
+            保留请求 key，回报 fallback=true 和最终失败原因
+
+控制端恢复历史 key:
+    当前设备 key 未命中时，尝试匹配 legacyKey
+    命中旧 key 后使用设备当前 stableKey 发送新的选择配置
+    完全未命中时才显示系统默认
+```
+
+实现状态（2026-09-22）：已完成原生输入/输出重试、延迟回退和稳定 key 迁移；`:app:testDebugUnitTest`、音频契约测试 7/7、APK ZIP 完整性校验通过。正式 `withserver` APK 为 `release/apkbuild/withserver/output/aasc-display.apk`，SHA-256 为 `a9907b8d405db1e109c753d05937938124e100a259b8b279edc70e13b4021b71`。
+
+## ASR 后台实际预热与输出路由保护伪代码（2026-09-23）
+
+```text
+后台准备 ASR:
+    在 AsrModelManager 的后台 worker 中校验模型和 tokens
+    创建 AsrEngine recognizer pool
+    对 pool 中每个 recognizer slot:
+        取一段短静音 Float32 PCM
+        执行一次真实 recognize
+        忽略识别文本，只等待 native session/计算图初始化完成
+    全部成功:
+        state = ready
+        回调 window.onNativeAsrModel({ state: ready })
+    任一失败:
+        state = error
+        保留已验证模型文件
+        回调错误，不阻塞 WebView 主线程
+
+    页面收到 ready 前:
+        不向服务端声明本地 voiceRecognition 可用
+    页面收到 ready 后:
+        才允许服务端转发 asrAudio
+
+应用 Android 26–30 输出配置:
+    如果 deviceKey == default:
+        清除通信路由
+        释放输出 owner 的 SCO
+        恢复系统媒体默认路由
+    否则:
+        重新枚举目标设备并保留请求 key
+        不调用输出 owner 的 Bluetooth SCO
+        不调用 setSpeakerphoneOn 改写 WebView STREAM_MUSIC
+        保持系统媒体路由
+        回传 routingMode=system_default、fallback=true 和限制原因
+
+输入输出 owner 隔离:
+    输入录音仍可 startForInput/stopForInput
+    输出配置不得释放 native/webview 输入 owner
+```
+
+实现状态（2026-09-23）：已完成 `AsrEnginePool.warmup`、`AsrEngine.warmup`、模型管理器 ready 门控，以及 Android 26–30 输出路由安全回退；Android JVM 单元测试、音频/ASR 契约测试和正式 `withserver` APK 构建均已通过。APK 为 `release/apkbuild/withserver/output/aasc-display.apk`，大小 `267309962` bytes，SHA-256 为 `8c40280f3609e87d89d14228258ed7719001bd56800e4eb87dfa643676cbfc01`，v2 签名校验通过。
+
 ## 2026-09-22 网页显示端语音模型启动预热伪代码
 
 ```text

@@ -468,6 +468,61 @@ ADB 未观察到 ANR/崩溃，但显示端在 TTS 请求期间反复接收 `cpuC
 - 已为显示端能力声明、显示端重连恢复、输出设备列表和回退状态增加 WebSocket 消息与契约测试；正式 `withserver` APK 已重新构建并通过 ZIP 完整性校验。
 - Android API 26–30 的蓝牙/有线精确媒体路由和 API 31+ 真机路由仍需现场设备验收；不影响系统默认输出回退。
 
+## 2026-09-22 输入/输出设备切换延迟回退与稳定标识
+
+### 需求目标
+
+- 控制端切换输入或输出设备时，设备枚举尚未完成、蓝牙 SCO 尚未建立或 Android 路由接口暂时失败，不立即回退到系统默认设备。
+- 输入、输出统一采用“重新枚举 + 递增等待重试 + 最终回退”的策略，给系统音频路由完成连接和刷新设备列表的时间。
+- 设备 key 不再把 Android 临时 device id 作为无地址设备的首选身份；同时保留旧 key 兼容匹配，避免历史配置因 APK 升级失效。
+
+### 路由策略
+
+- 目标设备请求执行初次尝试后，按 `300ms、700ms、1200ms` 等待并重新枚举，最多执行 3 次重试；每次重试都使用最新 `AudioDeviceInfo` 句柄。
+- 只有全部尝试失败后才释放目标路由并启动系统默认输入/输出；状态继续保留用户请求的 key，并回报 `fallback=true` 和最终原因。
+- 蓝牙 SCO 的单次连接超时仍由 `BluetoothScoController` 管理；SCO 失败会进入统一重试，不改变输入/输出 owner 的隔离关系。
+- 旧版 Android 对 A2DP/有线媒体输出的精确路由限制不变；能进入系统默认媒体路由时仍返回 `routingMode=system_default`，真正不可用才回退。
+
+### 稳定 key 与兼容
+
+- 有地址的设备使用 `native:{type}:{address}` 或 `native-output:{type}:{address}`。
+- 无地址但有产品名的设备使用类型与产品名；只有没有可识别名称时才使用临时 id 作为最后兜底。
+- 原生设备列表额外返回 `legacyKey`；服务端透传并限制长度，控制端和原生解析都同时接受当前 key、旧 key 以及同一稳定前缀下的旧 `id-*` key。
+- 多内置麦克风优先使用 Android 提供的地址（例如 front/back）区分；无法区分的同名、无地址设备仍按系统枚举能力显示，不能伪造稳定身份。
+
+### 实现状态
+
+- 已完成：原生输入/输出控制器在目标设备未枚举、SCO 未建立或路由失败时按 300/700/1200ms 重新枚举重试，耗尽后才回退系统默认。
+- 已完成：输入/输出设备改用地址或产品名生成稳定 key，保留 `legacyKey` 及稳定前缀旧 id 匹配；服务端透传、控制端命中旧 key 后改用当前 key。
+- 已完成：Android JVM 测试、音频契约测试和正式 `withserver` APK 构建通过；API 26–30 的普通媒体输出精确路由限制仍按既有 `system_default` 状态暴露。
+
+## 2026-09-23 ASR 后台实际预热与输出路由保护
+
+### 需求目标
+
+- ASR 模型加载和首次推理初始化在后台完成，不阻塞 WebView、录音线程或页面交互；首个真实语音请求不再承担 sherpa-onnx 的冷启动耗时。
+- 修复 Android 9/API 28 选择输出设备后 WebView 无声的问题：普通 WebView 媒体属于 `STREAM_MUSIC`，不能使用通信路由/SCO 选择接口强行改变输出。
+- 输出设备不可被当前 Android 版本精确控制时，保持系统媒体路由并把 `system_default/fallback` 如实回报，不能为了显示“已应用”而切换到不承载 WebView 媒体的通信链路。
+
+### ASR 预热策略
+
+- `AsrModelManager.ensureModel` 继续在独立后台线程执行模型校验、加载和状态回调。
+- `AsrEngine.load` 完成并发布 recognizer pool 后，使用短静音 PCM 依次触发每个 recognizer slot 的真实 `recognize`，把 native session/计算图初始化提前完成。
+- 只有模型加载和全部 slot 预热成功才回调 `ready`；预热期间保持 `downloading`，显示端不向服务端声明本地 ASR 可用。
+- 预热失败不阻塞主线程，按现有错误状态回报；下一次显式 `ensureModel` 仍可重试，已验证模型文件不因单次预热失败被误删。
+
+### 输出路由保护
+
+- Android API 26–30 的 WebView `STREAM_MUSIC` 不调用输出 owner 的 SCO，也不通过 `setSpeakerphoneOn` 冒充普通媒体精确路由。
+- API 26–30 的普通 A2DP、有线、USB、SCO 和内置设备选择统一保持系统媒体路由，回报 `routingMode=system_default`、`fallback=true` 和能力限制原因；默认选择仍清理原生通信路由。
+- 输入录音的 SCO owner 不变，输入设备仍可使用标准 Bluetooth SCO；输出修复不能释放或抢占输入 owner。
+- API 31+ 的通信设备接口继续保留，但状态仍必须以实际路由能力为准；后续如需精确控制普通媒体流，必须新增系统级媒体路由能力而不能复用通信接口。
+
+### 实现状态
+
+- 已完成：`AsrModelManager` 在后台模型 worker 中等待每个 recognizer slot 完成真实静音推理后才发布 `ready`；Android 26–30 不再用输出 SCO 或 `setSpeakerphoneOn` 改写 WebView 媒体路由，统一回报 `system_default/fallback`；输入 SCO owner 保持独立。
+- 已验证：Android JVM 单元测试通过，音频/ASR 契约测试通过；正式 `withserver` APK 已构建，文件大小 `267309962` bytes，SHA-256 为 `8c40280f3609e87d89d14228258ed7719001bd56800e4eb87dfa643676cbfc01`，APK v2 签名校验通过。
+
 ## 2026-09-22 控制端入口收起边缘位置
 
 - 控制端入口仍使用左上角 `START | TOP` 布局和既有点击状态机。
