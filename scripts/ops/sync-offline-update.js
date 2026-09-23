@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
+    validateSignedManifestEnvelope,
     verifySignedManifest,
     validateManifestComponents
 } = require('./offline-update-package');
@@ -209,15 +210,19 @@ async function syncOfflineUpdate(options = {}) {
         options.localRoot || process.env[LOCAL_ROOT_ENV] || DEFAULT_LOCAL_ROOT,
         '同步目标目录'
     );
-    const key = await loadOfflineUpdatePublicKey({
-        publicKeyPem: options.publicKeyPem,
-        publicKeyPath: options.publicKeyPath
-    });
+    const skipSignatureVerification = options.skipSignatureVerification === true;
+    const key = skipSignatureVerification
+        ? null
+        : await loadOfflineUpdatePublicKey({
+            publicKeyPem: options.publicKeyPem,
+            publicKeyPath: options.publicKeyPath
+        });
     const manifest = await readRemoteManifest(sourceUrl, options);
-    verifySignedManifest(manifest, key.publicKeyPem);
+    validateSignedManifestEnvelope(manifest);
+    if (!skipSignatureVerification) verifySignedManifest(manifest, key.publicKeyPem);
     validateManifestComponents(manifest);
     const components = selectSyncComponents(manifest);
-    if (components.length === 0) throw new Error('签名清单没有可同步的服务资源');
+    if (components.length === 0) throw new Error('清单没有可同步的服务资源');
 
     const syncId = `${Date.now()}-${process.pid}-${crypto.randomUUID()}`;
     const stagingRoot = await fs.promises.mkdtemp(path.join(localRoot, `.offline-sync-${syncId}-`));
@@ -241,6 +246,7 @@ async function syncOfflineUpdate(options = {}) {
         sourceUrl,
         localRoot,
         manifest,
+        signatureVerificationSkipped: skipSignatureVerification,
         installed,
         skipped,
         cleanup
@@ -254,6 +260,14 @@ function parseCliArguments(argv) {
         if (!token.startsWith('--')) throw new Error(`不支持的位置参数: ${token}`);
         const equalIndex = token.indexOf('=');
         const key = equalIndex >= 0 ? token.slice(2, equalIndex) : token.slice(2);
+        if (key === 'skip-signature-verification') {
+            if (equalIndex >= 0) throw new Error(`参数 --${key} 不接受值`);
+            if (Object.hasOwn(parsed, 'skipSignatureVerification')) {
+                throw new Error(`参数 --${key} 不能重复`);
+            }
+            parsed.skipSignatureVerification = true;
+            continue;
+        }
         const value = equalIndex >= 0 ? token.slice(equalIndex + 1) : argv[++index];
         if (!['source-url', 'local-root', 'public-key'].includes(key)) {
             throw new Error(`未知同步参数: --${key}`);
@@ -271,6 +285,9 @@ function parseCliArguments(argv) {
 async function runCli(argv = process.argv.slice(2)) {
     try {
         const options = parseCliArguments(argv);
+        if (options.skipSignatureVerification) {
+            console.warn('警告：已跳过清单 RSA 验签；清单来源未经认证，大小和 SHA-256 仅校验下载内容是否与该清单一致。Android 客户端仍会验签。');
+        }
         const result = await syncOfflineUpdate({
             ...options,
             publicKeyPath: options.publicKey

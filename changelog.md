@@ -24,6 +24,10 @@
   - 新增 `npm run sync:offline-update`，支持 `--source-url`、`--local-root` 和 `AASC_OFFLINE_LOCAL_ROOT`，验签并校验 code/dependencies/min APK/data-repair 后原子更新本地清单。
   - 完整 APK 不参与同步；现有发布器仍写入本机 `--local-root` 和外网 SCP 目录，不会因增加热更读取地址而增加上传目标。
   - Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过。
+- ✅ [2026-09-23] 同步脚本支持显式跳过本地清单验签
+  - `npm run sync:offline-update -- --skip-signature-verification` 不加载公钥或验证 RSA 签名，并明确警告清单来源未经认证；默认验签行为不变。
+  - 无论是否跳过验签，仍校验清单结构、组件白名单、路径、文件大小和 SHA-256，并保留原子清单切换与精确清理；Android 客户端仍强制验签。
+  - 更新同步 design/spec、使用说明和任务记录；Node 语法检查与 `git diff --check` 通过，未运行自动化测试或构建 Offline APK/发布包。
 - ✅ [2026-09-23] 重新构建并发布 Offline min APK v34（`0.2.32-offline-min`）
   - 发布文件：`apk/aasc-display-offline-min-v34.apk`，大小 `89302814` bytes，SHA-256 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`。
   - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的清单、资源校验和旧 min 版本精确清理通过；完整 APK 未构建。

@@ -53,16 +53,21 @@ function signManifestPayload(payload, privateKeyPem) {
     };
 }
 
-function verifySignedManifest(manifest, publicKeyPem) {
+function validateSignedManifestEnvelope(manifest) {
     if (!manifest || typeof manifest !== 'object' || !manifest.payload || !manifest.signature) {
         throw new Error('Offline 更新清单格式无效');
     }
-    if (!publicKeyPem) throw new Error('Offline 更新清单验证公钥未提供');
     if (manifest.signature.algorithm !== SIGNATURE_ALGORITHM ||
         typeof manifest.signature.value !== 'string' ||
         !/^[A-Za-z0-9+/]+={0,2}$/.test(manifest.signature.value)) {
         throw new Error('Offline 更新清单签名字段无效');
     }
+    return true;
+}
+
+function verifySignedManifest(manifest, publicKeyPem) {
+    validateSignedManifestEnvelope(manifest);
+    if (!publicKeyPem) throw new Error('Offline 更新清单验证公钥未提供');
     const verifier = crypto.createVerify('RSA-SHA256');
     verifier.update(canonicalJson(manifest.payload), 'utf8');
     verifier.end();
@@ -773,6 +778,7 @@ module.exports = {
     createDataRepairArtifacts,
     canonicalJson,
     signManifestPayload,
+    validateSignedManifestEnvelope,
     verifySignedManifest,
     validateManifestComponents,
     publicKeyFromPrivateKey,

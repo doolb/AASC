@@ -76,29 +76,48 @@ syncOfflineUpdate:
         or http://120.79.245.103/mnt/aasc-offline/
     localRoot = --local-root or AASC_OFFLINE_LOCAL_ROOT
         or /mnt/aasc-offline
+    skipSignatureVerification = --skip-signature-verification is present
     full APK is excluded unconditionally
 
     manifest = GET(sourceBase/manifest.json)
-    verify manifest RSA signature using configured public key
+    if skipSignatureVerification is false:
+        load configured public key
+        verify manifest RSA signature
+    else:
+        do not load public key
+        warn that manifest source authenticity is not verified
+    validate manifest payload and signature envelope fields in both modes
     select components from manifest:
         code, dependencies, apkMin, dataRepair when present
         exclude apkFull and any component not in the allowlist
+    validate manifest structure, component versions and safe relative paths
 
     for component in selected components:
         download to localRoot/.sync-<id>/<relativeUrl>.part
         require ordinary file path and safe relativeUrl
-        require exact size and SHA-256 from manifest
+        require exact size and SHA-256 declared by manifest
         if localRoot/relativeUrl exists with same hash:
             keep existing file
         else if same version has different hash:
             stop without replacing manifest
         else:
-            atomically install the verified versioned file
+            atomically install the size/hash-checked versioned file
 
-    write verified manifest to localRoot/manifest.json.tmp-<id>
+    write manifest to localRoot/manifest.json.tmp-<id>
     fsync and atomically rename manifest.json last
     remove only obsolete numeric code/dependencies/data-repair/min files
     never remove full APK, logs, models, config, task, results or non-version files
+
+parseCliArguments:
+    accept bare --skip-signature-verification once
+    reject a value supplied to --skip-signature-verification
+    accept --source-url, --local-root and --public-key as value parameters
+
+securityBoundary:
+    without --skip-signature-verification, local RSA signature verification is required
+    with --skip-signature-verification, component hashes only compare downloaded bytes
+        with the untrusted manifest; they do not authenticate the source
+    Android clients continue to verify the manifest signature before applying updates
 ```
 
 ```text
@@ -110,7 +129,7 @@ publishOfflineUpdate:
     LAN source list does not create additional upload targets
 ```
 
-实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。默认源为公网 IP，默认目标为 `/mnt/aasc-offline`，可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过。
+实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。默认源为公网 IP，默认目标为 `/mnt/aasc-offline`，可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过（此前同步功能记录）。
 
 > 2026-09-23 已重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），APK 大小 `89302814` bytes，SHA-256 为 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`；内网和外网清单、资源大小/SHA-256 及旧 min 版本精确清理校验通过，完整 APK 未构建。
 

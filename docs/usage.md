@@ -194,6 +194,8 @@ npm run sync:offline-update -- \
 `--local-root` 也可通过 `AASC_OFFLINE_LOCAL_ROOT` 指定。同步会验签并校验 code、dependencies、min APK
 和 data-repair 资源，完整 Offline APK 不参与同步；同版本 hash 冲突会中止且不替换清单。
 
+如果本机没有清单公钥，可显式添加 `--skip-signature-verification` 跳过本地 RSA 验签。此时命令会提示清单来源未经认证；大小和 SHA-256 只校验下载文件是否符合该清单，不能证明清单可信。清单结构、资源路径、资源白名单和哈希校验仍会执行，Android 客户端仍强制验签。
+
 普通聊天 Agent 后端的配置和会话规则见：[普通聊天 Agent 后端](usage/llm-agent.md)。
 
 ### 工作 AI 角色
