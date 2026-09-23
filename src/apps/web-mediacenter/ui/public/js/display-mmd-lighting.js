@@ -15,7 +15,16 @@
             keyColor: '#ffffff',
             keyIntensity: 2.3,
             keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
+            fillEnabled: false,
+            fillColor: '#ffffff',
+            fillIntensity: 1,
+            fillDirection: Object.freeze({ longitude: -45, latitude: 25 }),
+            rimLights: Object.freeze([
+                Object.freeze({ enabled: false, color: '#8acbff', intensity: 1, direction: Object.freeze({ longitude: -130, latitude: 25 }) }),
+                Object.freeze({ enabled: false, color: '#ffb6d9', intensity: 1, direction: Object.freeze({ longitude: 130, latitude: 25 }) })
+            ]),
             shadowEnabled: true,
+            pmxToonEnabled: false,
             pmxAoEnabled: true,
             pmxAoColor: '#931231',
             pmxAoIntensity: 0.6,
@@ -48,6 +57,20 @@
         return document.getElementById(id);
     }
 
+    function getRimElements(index) {
+        const prefix = `displayMmdRim${index}`;
+        return {
+            enabled: byId(`${prefix}Enabled`),
+            color: byId(`${prefix}Color`),
+            intensity: byId(`${prefix}Intensity`),
+            intensityValue: byId(`${prefix}IntensityValue`),
+            directionLongitude: byId(`${prefix}DirectionLongitude`),
+            directionLongitudeValue: byId(`${prefix}DirectionLongitudeValue`),
+            directionLatitude: byId(`${prefix}DirectionLatitude`),
+            directionLatitudeValue: byId(`${prefix}DirectionLatitudeValue`)
+        };
+    }
+
     function getElements() {
         return {
             toggle: byId('displayMmdLightingToggle'),
@@ -55,6 +78,7 @@
             reset: byId('displayMmdLightingReset'),
             preset: byId('displayMmdLightingPreset'),
             shadowEnabled: byId('displayMmdShadowEnabled'),
+            pmxToonEnabled: byId('displayMmdPmxToonEnabled'),
             pmxAoEnabled: byId('displayMmdPmxAoEnabled'),
             pmxAoColor: byId('displayMmdPmxAoColor'),
             pmxAoIntensity: byId('displayMmdPmxAoIntensity'),
@@ -75,7 +99,16 @@
             keyDirectionLongitude: byId('displayMmdKeyDirectionLongitude'),
             keyDirectionLongitudeValue: byId('displayMmdKeyDirectionLongitudeValue'),
             keyDirectionLatitude: byId('displayMmdKeyDirectionLatitude'),
-            keyDirectionLatitudeValue: byId('displayMmdKeyDirectionLatitudeValue')
+            keyDirectionLatitudeValue: byId('displayMmdKeyDirectionLatitudeValue'),
+            fillEnabled: byId('displayMmdFillEnabled'),
+            fillColor: byId('displayMmdFillColor'),
+            fillIntensity: byId('displayMmdFillIntensity'),
+            fillIntensityValue: byId('displayMmdFillIntensityValue'),
+            fillDirectionLongitude: byId('displayMmdFillDirectionLongitude'),
+            fillDirectionLongitudeValue: byId('displayMmdFillDirectionLongitudeValue'),
+            fillDirectionLatitude: byId('displayMmdFillDirectionLatitude'),
+            fillDirectionLatitudeValue: byId('displayMmdFillDirectionLatitudeValue'),
+            rimLights: [getRimElements(1), getRimElements(2)]
         };
     }
 
@@ -94,6 +127,14 @@
         const { elements } = state;
         elements.ambientIntensityValue.textContent = formatNumber(elements.ambientIntensity.value);
         elements.keyIntensityValue.textContent = formatNumber(elements.keyIntensity.value);
+        elements.fillIntensityValue.textContent = formatNumber(elements.fillIntensity.value);
+        elements.rimLights.forEach((rim) => {
+            rim.intensityValue.textContent = formatNumber(rim.intensity.value);
+            rim.directionLongitudeValue.textContent = `${formatNumber(rim.directionLongitude.value, 0)}°`;
+            rim.directionLatitudeValue.textContent = `${formatNumber(rim.directionLatitude.value, 0)}°`;
+        });
+        elements.fillDirectionLongitudeValue.textContent = `${formatNumber(elements.fillDirectionLongitude.value, 0)}°`;
+        elements.fillDirectionLatitudeValue.textContent = `${formatNumber(elements.fillDirectionLatitude.value, 0)}°`;
         elements.keyDirectionLongitudeValue.textContent = `${formatNumber(elements.keyDirectionLongitude.value, 0)}°`;
         elements.keyDirectionLatitudeValue.textContent = `${formatNumber(elements.keyDirectionLatitude.value, 0)}°`;
         elements.physicsFpsValue.textContent = `${elements.physicsFps.value} Hz`;
@@ -110,7 +151,21 @@
         elements.keyIntensity.value = String(lighting.keyIntensity);
         elements.keyDirectionLongitude.value = String(lighting.keyDirection.longitude);
         elements.keyDirectionLatitude.value = String(lighting.keyDirection.latitude);
+        elements.fillEnabled.checked = lighting.fillEnabled === true;
+        elements.fillColor.value = lighting.fillColor;
+        elements.fillIntensity.value = String(lighting.fillIntensity);
+        elements.fillDirectionLongitude.value = String(lighting.fillDirection.longitude);
+        elements.fillDirectionLatitude.value = String(lighting.fillDirection.latitude);
+        elements.rimLights.forEach((rim, index) => {
+            const settings = lighting.rimLights[index];
+            rim.enabled.checked = settings.enabled;
+            rim.color.value = settings.color;
+            rim.intensity.value = String(settings.intensity);
+            rim.directionLongitude.value = String(settings.direction.longitude);
+            rim.directionLatitude.value = String(settings.direction.latitude);
+        });
         elements.shadowEnabled.checked = lighting.shadowEnabled !== false;
+        elements.pmxToonEnabled.checked = lighting.pmxToonEnabled === true;
         elements.pmxAoEnabled.checked = lighting.pmxAoEnabled !== false;
         elements.pmxAoColor.value = lighting.pmxAoColor;
         elements.pmxAoIntensity.value = String(lighting.pmxAoIntensity);
@@ -132,7 +187,21 @@
                 longitude: elements.keyDirectionLongitude.value,
                 latitude: elements.keyDirectionLatitude.value
             },
+            fillEnabled: elements.fillEnabled.checked,
+            fillColor: elements.fillColor.value,
+            fillIntensity: elements.fillIntensity.value,
+            fillDirection: {
+                longitude: elements.fillDirectionLongitude.value,
+                latitude: elements.fillDirectionLatitude.value
+            },
+            rimLights: elements.rimLights.map((rim) => ({
+                enabled: rim.enabled.checked,
+                color: rim.color.value,
+                intensity: rim.intensity.value,
+                direction: { longitude: rim.directionLongitude.value, latitude: rim.directionLatitude.value }
+            })),
             shadowEnabled: elements.shadowEnabled.checked,
+            pmxToonEnabled: elements.pmxToonEnabled.checked,
             pmxAoEnabled: elements.pmxAoEnabled.checked,
             pmxAoColor: elements.pmxAoColor.value,
             pmxAoIntensity: elements.pmxAoIntensity.value,
@@ -223,7 +292,16 @@
             elements.keyIntensity,
             elements.keyDirectionLongitude,
             elements.keyDirectionLatitude,
+            elements.fillEnabled,
+            elements.fillColor,
+            elements.fillIntensity,
+            elements.fillDirectionLongitude,
+            elements.fillDirectionLatitude,
+            ...elements.rimLights.flatMap((rim) => [
+                rim.enabled, rim.color, rim.intensity, rim.directionLongitude, rim.directionLatitude
+            ]),
             elements.shadowEnabled,
+            elements.pmxToonEnabled,
             elements.pmxAoEnabled,
             elements.pmxAoColor,
             elements.pmxAoIntensity,
@@ -241,7 +319,9 @@
     function initialize() {
         if (state.initialized || !root.DisplayMmd?.setLighting) return;
         state.elements = getElements();
-        if (Object.values(state.elements).some((element) => !element)) return;
+        if (Object.values(state.elements).flatMap((value) => (
+            Array.isArray(value) ? value.flatMap((group) => Object.values(group)) : [value]
+        )).some((element) => !element)) return;
         state.initialized = true;
         const saved = readSavedLighting();
         state.lighting = root.DisplayMmd.setLighting(saved || PRESETS.default);

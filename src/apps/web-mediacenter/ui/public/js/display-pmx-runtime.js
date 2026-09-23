@@ -17,6 +17,7 @@ import {
 } from './mmd-pmx-helper.mjs';
 import { calculatePmxCameraFrame, normalizePmxPhysicsMesh } from './pmx-display-layout.mjs';
 import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
+import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights } from './display-pmx-lighting-mode.mjs';
 
 const TARGET_MODEL_HEIGHT = 1.75;
 const MMD_MODEL_PREFIXES = Object.freeze([
@@ -196,6 +197,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0);
+    fillLight.castShadow = false;
     keyLight.position.set(1.5, 3, 2.5);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
@@ -216,7 +219,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), shadowMaterial);
     shadowPlane.rotation.x = -Math.PI / 2;
     shadowPlane.receiveShadow = true;
-    scene.add(ambientLight, keyLight, keyLight.target, shadowPlane);
+    scene.add(ambientLight, keyLight, keyLight.target, fillLight, fillLight.target, shadowPlane);
 
     let shadowEnabled = true;
     let pmxAoEnabled = true;
@@ -226,6 +229,15 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         keyColor: '#ffffff',
         keyIntensity: 2.3,
         keyDirection: { longitude: 31, latitude: 46 },
+        fillEnabled: false,
+        fillColor: '#ffffff',
+        fillIntensity: 1,
+        fillDirection: { longitude: -45, latitude: 25 },
+        rimLights: [
+            { enabled: false, color: '#8acbff', intensity: 1, direction: { longitude: -130, latitude: 25 } },
+            { enabled: false, color: '#ffb6d9', intensity: 1, direction: { longitude: 130, latitude: 25 } }
+        ],
+        pmxToonEnabled: false,
         physicsFps: 65,
         rotationPhysicsLimit: 720,
         pmxAoColor: '#931231',
@@ -255,6 +267,13 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
             center.y + position.y * unitScale,
             center.z + position.z * unitScale
         );
+        const fillPosition = lightDirectionToPosition(lightingState.fillDirection);
+        fillLight.position.set(
+            center.x + fillPosition.x * unitScale,
+            center.y + fillPosition.y * unitScale,
+            center.z + fillPosition.z * unitScale
+        );
+        fillLight.target.position.copy(center);
     };
 
     const applyAoRadius = (bounds) => {
@@ -363,6 +382,26 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         lightingState.keyColor = normalizeLightColor(lighting.keyColor);
         lightingState.keyIntensity = normalizeLightNumber(lighting.keyIntensity, 0, 5, 2.3);
         lightingState.keyDirection = keyDirection;
+        lightingState.fillEnabled = lighting.fillEnabled === true;
+        lightingState.fillColor = normalizeLightColor(lighting.fillColor);
+        lightingState.fillIntensity = normalizeLightNumber(lighting.fillIntensity, 0, 5, 1);
+        lightingState.fillDirection = {
+            longitude: normalizeLightNumber(lighting.fillDirection?.longitude, -180, 180, -45),
+            latitude: normalizeLightNumber(lighting.fillDirection?.latitude, -90, 90, 25)
+        };
+        lightingState.rimLights = lightingState.rimLights.map((defaults, index) => {
+            const value = Array.isArray(lighting.rimLights) ? lighting.rimLights[index] : null;
+            return {
+                enabled: typeof value?.enabled === 'boolean' ? value.enabled : defaults.enabled,
+                color: normalizeLightColor(value?.color, defaults.color),
+                intensity: normalizeLightNumber(value?.intensity, 0, 5, defaults.intensity),
+                direction: {
+                    longitude: normalizeLightNumber(value?.direction?.longitude, -180, 180, defaults.direction.longitude),
+                    latitude: normalizeLightNumber(value?.direction?.latitude, -90, 90, defaults.direction.latitude)
+                }
+            };
+        });
+        lightingState.pmxToonEnabled = lighting.pmxToonEnabled === true;
         lightingState.physicsFps = normalizePhysicsFps(lighting.physicsFps);
         lightingState.rotationPhysicsLimit = normalizeRotationPhysicsLimit(lighting.rotationPhysicsLimit);
         lightingState.pmxAoColor = normalizeLightColor(lighting.pmxAoColor, '#931231');
@@ -375,6 +414,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         ambientLight.intensity = lightingState.ambientIntensity;
         keyLight.color.set(lightingState.keyColor);
         keyLight.intensity = lightingState.keyIntensity;
+        fillLight.color.set(lightingState.fillColor);
+        fillLight.intensity = lightingState.fillEnabled ? lightingState.fillIntensity : 0;
+        setPmxLightingMode(currentMesh, lightingState.pmxToonEnabled);
+        setPmxRimLights(currentMesh, lightingState.rimLights);
         shadowEnabled = lighting.shadowEnabled !== false;
         pmxAoEnabled = lighting.pmxAoEnabled !== false;
         ambientOcclusion.setEnabled(pmxAoEnabled);
@@ -389,6 +432,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
             keyColor: lightingState.keyColor,
             keyIntensity: keyLight.intensity,
             keyDirection,
+            fillEnabled: lightingState.fillEnabled,
+            fillColor: lightingState.fillColor,
+            fillIntensity: lightingState.fillIntensity,
+            fillDirection: { ...lightingState.fillDirection },
+            rimLights: lightingState.rimLights.map((rim) => ({ ...rim, direction: { ...rim.direction } })),
+            pmxToonEnabled: lightingState.pmxToonEnabled,
             shadowEnabled,
             physicsFps: lightingState.physicsFps,
             rotationPhysicsLimit: lightingState.rotationPhysicsLimit,
@@ -661,9 +710,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
                 if (!object.isMesh) return;
                 const materials = Array.isArray(object.material) ? object.material : [object.material];
                 for (const material of materials) {
-                    if (material?.isMMDToonMaterial) material.emissive.setRGB(0, 0, 0);
+                    if (!material?.isMMDToonMaterial) continue;
+                    material.emissive.setRGB(0, 0, 0);
+                    preparePmxLightingMaterial(material, lightingState.pmxToonEnabled);
                 }
             });
+            setPmxRimLights(stagedMesh, lightingState.rimLights);
             normalizeModel(stagedMesh);
             const staged = await stagePmxMesh({
                 scene,

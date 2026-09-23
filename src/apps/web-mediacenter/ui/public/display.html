@@ -145,6 +145,10 @@
                         <span>角色阴影（默认开启）</span>
                     </label>
                     <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdPmxToonEnabled" type="checkbox">
+                        <span>PMX Toon 明暗（关闭后使用普通光照）</span>
+                    </label>
+                    <label class="display-mmd-lighting-shadow">
                         <input id="displayMmdPmxAoEnabled" type="checkbox" checked>
                         <span>PMX 环境遮蔽 AO（默认开启）</span>
                     </label>
@@ -202,6 +206,69 @@
                         </label>
                         <label><span>纬度 <output id="displayMmdKeyDirectionLatitudeValue">46°</output></span>
                             <input id="displayMmdKeyDirectionLatitude" type="range" min="-90" max="90" step="1" value="46">
+                        </label>
+                    </fieldset>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdFillEnabled" type="checkbox">
+                        <span>补光（不投射阴影，默认关闭）</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>补光颜色</span>
+                        <input id="displayMmdFillColor" type="color" value="#ffffff">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>补光强度 <output id="displayMmdFillIntensityValue">1.00</output></span>
+                        <input id="displayMmdFillIntensity" type="range" min="0" max="5" step="0.05" value="1">
+                    </label>
+                    <fieldset class="display-mmd-lighting-direction">
+                        <legend>补光方向</legend>
+                        <label><span>经度 <output id="displayMmdFillDirectionLongitudeValue">-45°</output></span>
+                            <input id="displayMmdFillDirectionLongitude" type="range" min="-180" max="180" step="1" value="-45">
+                        </label>
+                        <label><span>纬度 <output id="displayMmdFillDirectionLatitudeValue">25°</output></span>
+                            <input id="displayMmdFillDirectionLatitude" type="range" min="-90" max="90" step="1" value="25">
+                        </label>
+                    </fieldset>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdRim1Enabled" type="checkbox">
+                        <span>PMX 边缘光 1（默认关闭，不照亮正面）</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>边缘光 1 颜色</span>
+                        <input id="displayMmdRim1Color" type="color" value="#8acbff">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>边缘光 1 强度 <output id="displayMmdRim1IntensityValue">1.00</output></span>
+                        <input id="displayMmdRim1Intensity" type="range" min="0" max="5" step="0.05" value="1">
+                    </label>
+                    <fieldset class="display-mmd-lighting-direction">
+                        <legend>边缘光 1 方向</legend>
+                        <label><span>经度 <output id="displayMmdRim1DirectionLongitudeValue">-130°</output></span>
+                            <input id="displayMmdRim1DirectionLongitude" type="range" min="-180" max="180" step="1" value="-130">
+                        </label>
+                        <label><span>纬度 <output id="displayMmdRim1DirectionLatitudeValue">25°</output></span>
+                            <input id="displayMmdRim1DirectionLatitude" type="range" min="-90" max="90" step="1" value="25">
+                        </label>
+                    </fieldset>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdRim2Enabled" type="checkbox">
+                        <span>PMX 边缘光 2（默认关闭，不照亮正面）</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>边缘光 2 颜色</span>
+                        <input id="displayMmdRim2Color" type="color" value="#ffb6d9">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>边缘光 2 强度 <output id="displayMmdRim2IntensityValue">1.00</output></span>
+                        <input id="displayMmdRim2Intensity" type="range" min="0" max="5" step="0.05" value="1">
+                    </label>
+                    <fieldset class="display-mmd-lighting-direction">
+                        <legend>边缘光 2 方向</legend>
+                        <label><span>经度 <output id="displayMmdRim2DirectionLongitudeValue">130°</output></span>
+                            <input id="displayMmdRim2DirectionLongitude" type="range" min="-180" max="180" step="1" value="130">
+                        </label>
+                        <label><span>纬度 <output id="displayMmdRim2DirectionLatitudeValue">25°</output></span>
+                            <input id="displayMmdRim2DirectionLatitude" type="range" min="-90" max="90" step="1" value="25">
                         </label>
                     </fieldset>
                 </section>

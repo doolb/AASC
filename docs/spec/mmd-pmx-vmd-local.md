@@ -115,6 +115,15 @@ MMDPhysics.update(delta):
   keyColor = "#ffffff"
   keyIntensity = 2.3
   keyDirection = { longitude: 31, latitude: 46 }
+  fillEnabled = false
+  fillColor = "#ffffff"
+  fillIntensity = 1
+  fillDirection = { longitude: -45, latitude: 25 }
+  rimLights = [
+    { enabled: false, color: "#8acbff", intensity: 1, direction: { longitude: -130, latitude: 25 } },
+    { enabled: false, color: "#ffb6d9", intensity: 1, direction: { longitude: 130, latitude: 25 } }
+  ]
+  pmxToonEnabled = false
   keyDistance = 4.183
   shadowEnabled = true
   physicsFps = 65
@@ -133,6 +142,10 @@ MMDPhysics.update(delta):
   将主光强度限制在 0..5
   将主光 longitude 限制在 -180..180 度
   将主光 latitude 限制在 -90..90 度
+  补光开关只接受布尔值，旧设置缺失时为 false
+  补光颜色只接受 #RRGGBB，强度限制在 0..5，经纬度分别限制在 -180..180 和 -90..90 度
+  对两组 rimLights 分别规范化开关、颜色、强度 0..5 和经纬度；旧设置缺失时均关闭
+  pmxToonEnabled 只接受布尔值，旧设置缺失时为 false；明确保存的 true 保留
   将 keyDistance 固定为运行时光源距离，不接受界面输入
   shadowEnabled 只接受布尔值，缺省为 true
   physicsFps 限制在 30..90 并按 5 Hz 对齐，缺省为 65
@@ -151,6 +164,9 @@ MMDPhysics.update(delta):
   规范化 settings 并保存到显示端内存状态
   如果 PMX 或 VRM runtime 已创建
     更新当前 runtime 的 AmbientLight 和 DirectionalLight
+    更新补光 DirectionalLight 的颜色、强度和方向；关闭时强度为 0，始终不投射阴影
+    如果当前为 PMX，同步两组边缘光到 PMX 材质参数；不创建 DirectionalLight，不参与正面漫反射、阴影或 VRM
+    如果当前为 PMX，同步 pmxToonEnabled 到已加载材质的运行时 shader 参数，主光和补光共用该参数
     根据 shadowEnabled 开关 renderer 阴影贴图、主光投影、人物网格投射/接收自阴影和透明接收阴影平面
     将 keyDirection 的经度/纬度转换为固定距离的 Three.js 光源坐标
     主光目标定位到当前模型中心，并按模型包围盒动态收紧阴影相机范围
@@ -164,7 +180,34 @@ MMDPhysics.update(delta):
 ```
 
 ```text
+过程 preparePmxLightingMaterial(material, pmxToonEnabled)
+  如果不是 MMDToonMaterial，保持原状
+  在此材质的直射光 shader 中插入运行时模式参数，不修改共享的 Three.js vendor 源码
+  Toon 模式沿用原有渐变贴图采样
+  普通模式将法线与光方向点积限制在 0..1，背向该光的表面不接收它的直射漫反射或高光
+  同一条直射光计算对主光和补光生效；环境光、阴影采样和 AO 不变
+  为两组 PMX 边缘光准备颜色、强度、世界方向参数；只在面向视点的表面、法线接近视线垂直且朝向对应光的轮廓处加色
+  强度为 0 或开关关闭时不增加像素亮度；两组分别生效，中心正面不因边缘光增亮
+  将模式参数设置为当前 pmxToonEnabled；切换时只更新参数，不重建模型与动作
+```
+
+```text
+过程 setPmxRimLights(modelRoot, rimLights)
+  遍历已加载模型的 MMDToonMaterial，不修改 vendored shader 或 VRM
+  对每组边缘光，将经纬度换算为世界方向，将颜色写入材质 uniform
+  若开关关闭则写入实际强度 0，否则写入规范化后的强度
+  fragment shader 把世界方向变换到观察空间，用法线与视线夹角筛出轮廓
+  再以法线与该边缘光方向的非负点积限制受光侧，将颜色叠加到输出光色
+  不创建额外方向光，不修改漫反射、材质透明度、主光阴影或 AO
+  切换参数不重载模型或动作；模型首次载入时应用当前两组设置
+```
+
+```text
 过程 initializeMmdLightingPanel()
+  面板提供“PMX Toon 明暗”开关，默认关闭；开启时主光和补光沿用 Toon 渐变
+  旧 localStorage 缺少 pmxToonEnabled 时使用普通直射光；明确保存的 true 保留；预设保留当前模式，恢复默认关闭 Toon
+  面板提供补光开关、颜色、强度、经纬度；默认关闭，沿用现有 localStorage 保存
+  面板另提供两组 PMX 边缘光开关、颜色、强度、经纬度，均默认关闭；预设保留当前值，恢复默认关闭
   面板新增“PMX 环境遮蔽”开关，默认开启，并保存到现有灯光设置
   面板在开关下提供颜色、强度和半径输入；改变时即时保存和渲染
   面板在 AO 参数中提供半分辨率/全分辨率选择；默认半分辨率，沿用灯光 localStorage 保存

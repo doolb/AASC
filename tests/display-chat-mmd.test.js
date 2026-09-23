@@ -186,6 +186,47 @@ test('PMX 和 VRM runtime 提供默认开启的实时阴影', () => {
     assert.match(vrm, /shadowEnabled/u);
 });
 
+test('PMX 明暗模式开关在灯光面板中可见', () => {
+    const html = readPublic('display.html');
+    assert.match(html, /id="displayMmdPmxToonEnabled"/u);
+});
+
+test('补光默认关闭，输入规范化后保留独立方向且不影响主光阴影', () => {
+    const window = {};
+    vm.runInNewContext(readPublic('js/display-mmd.js'), { window, console });
+    const initial = window.DisplayMmd.getLighting();
+    assert.equal(initial.fillEnabled, false);
+    assert.equal(initial.fillIntensity, 1);
+    assert.equal(initial.fillDirection.longitude, -45);
+    const result = window.DisplayMmd.setLighting({
+        fillEnabled: true,
+        fillColor: '#123abc',
+        fillIntensity: 99,
+        fillDirection: { longitude: -240, latitude: 120 }
+    });
+    assert.equal(result.fillEnabled, true);
+    assert.equal(result.fillColor, '#123abc');
+    assert.equal(result.fillIntensity, 5);
+    assert.deepEqual({ ...result.fillDirection }, { longitude: -180, latitude: 90 });
+    assert.equal(result.shadowEnabled, true);
+});
+
+test('补光面板及两个 runtime 使用不投影的独立方向光', () => {
+    const html = readPublic('display.html');
+    const lighting = readPublic('js/display-mmd-lighting.js');
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    for (const id of ['FillEnabled', 'FillColor', 'FillIntensity', 'FillDirectionLongitude', 'FillDirectionLatitude']) {
+        assert.match(html, new RegExp(`id="displayMmd${id}"`, 'u'));
+    }
+    assert.match(lighting, /fillDirection/u);
+    for (const source of [pmx, vrm]) {
+        assert.match(source, /const fillLight = new THREE\.DirectionalLight/u);
+        assert.match(source, /fillLight\.castShadow = false/u);
+        assert.match(source, /fillLight\.intensity = .*fillEnabled/u);
+    }
+});
+
 test('PMX 和 VRM runtime 按模型范围定位高质量阴影相机', () => {
     const pmx = readPublic('js/display-pmx-runtime.js');
     const vrm = readPublic('js/display-vrm-runtime.js');

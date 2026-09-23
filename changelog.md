@@ -1,5 +1,20 @@
 # Web MediaCenter - 变更日志
 
+### MMD/VRM 角色灯光
+
+- ✅ [2026-09-23] PMX 新增两组独立、仅作用于轮廓的边缘光，并将 Toon 明暗默认改为关闭。
+  - `display.html`、`display-mmd-lighting.js`、`display-mmd.js` 新增两组默认关闭的颜色/强度/方向控制，沿用本地保存；旧配置缺少 Toon 字段时默认普通光照，明确保存的开启值保留。现有补光、VRM 与阴影不变。
+  - `display-pmx-lighting-mode.mjs`、`display-pmx-runtime.js` 通过 PMX 材质 uniform 实现视角轮廓与受光方向筛选，不新增方向光或阴影贴图；模型加载与即时设置均应用。更新 MMD design/spec/task/todo/usage 和回归。
+  - PMX/MMD 定向测试 57/57，通过浏览器像素验证正面中心不增亮、两侧独立显色、关闭后归零；完整 `npm test` 为 936/993，余下 57 项与此前相同，涉及本机路径、浏览器、证书和其他模块。真实模型及 Android WebView 观感/帧率待现场验证；未构建或发布。
+
+- ✅ [2026-09-23] PMX 增加 Toon / 普通光照切换，主光和补光共用同一计算模式。
+  - `display.html`、`display-mmd-lighting.js`、`display-mmd.js` 增加默认开启的本地 Toon 开关；`display-pmx-lighting-mode.mjs` 为 PMX 材质实例加入即时切换参数，普通模式以非负法线点积计算主光和补光直射，`display-pmx-runtime.js` 在模型加载与灯光更新时应用；VRM、ACES、环境光、阴影与 AO 不变，未修改 vendored shader 或远端 PMX。
+  - 更新 MMD design/spec/task、todo、usage 与回归。浏览器像素测试证明背向主光在普通模式变暗、补光从正面仍有效，并通过反向变异验证；相关测试 55/55、语法与 `git diff --check` 通过。完整 `npm test` 为 934/991，余下 57 项其他模块或本机环境失败，与改动前数量一致；真实米娅与 Android WebView 观感待现场验证，未构建或发布。
+
+- ✅ [2026-09-23] 显示端加入默认关闭、始终不投影的独立补光源。
+  - `display.html`、`display-mmd-lighting.js` 增加补光开关、颜色、强度、经纬度设置；`display-mmd.js` 规范化并保留旧 localStorage 设置兼容性；PMX/VRM runtime 各使用一盏不投射阴影的方向光，主光阴影逻辑不变。
+  - 更新 MMD design/spec/task、todo、usage 与测试；定向测试 43/43、PMX AO 测试 4/4、浏览器 AO 测试 1/1，通过语法及 `git diff --check`。完整 `npm test` 为 930/987，通过数较修改前增加 2，剩余 57 项为其他模块或本机环境失败；真实 PMX/VRM 观感及移动 WebView 帧率待现场验证，未构建或发布。
+
 ### MMD 角色交互
 
 - ✅ [2026-09-23] 支持从角色身上拖动旋转，只有轻点才触发角色触摸。

@@ -318,21 +318,35 @@ test('PMX runtime applies AO switch without reloading the model', { skip: !CHROM
       const disabled = runtime.setLighting({ pmxAoEnabled: false }).pmxAoEnabled;
       const adjusted = runtime.setLighting({
         pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
-        pmxAoRadiusPercent: 12, pmxAoResolution: 'full'
+        pmxAoRadiusPercent: 12, pmxAoResolution: 'full', pmxToonEnabled: false,
+        rimLights: [
+          { enabled: true, color: '#123456', intensity: 1.5, direction: { longitude: -120, latitude: 20 } },
+          { enabled: false, color: '#654321', intensity: 2, direction: { longitude: 120, latitude: 30 } }
+        ]
       });
+      const retainedRims = runtime.setLighting({ keyIntensity: 1.2 }).rimLights.map((rim) => rim.enabled);
       runtime.dispose();
       return { defaultValue: defaults.pmxAoEnabled, defaultColor: defaults.pmxAoColor,
         defaultIntensity: defaults.pmxAoIntensity, defaultRadius: defaults.pmxAoRadiusPercent,
         defaultResolution: defaults.pmxAoResolution,
-        defaultLimit: defaults.rotationPhysicsLimit, maxLimit, disabled, adjusted };
+        defaultLimit: defaults.rotationPhysicsLimit, defaultToon: defaults.pmxToonEnabled,
+        maxLimit, disabled, adjusted, retainedRims };
     });
     assert.deepEqual(result, {
       defaultValue: true, defaultColor: '#931231', defaultIntensity: 0.6, defaultRadius: 6,
       defaultResolution: 'half',
-      defaultLimit: 720, maxLimit: 1440,
+      defaultLimit: 720, defaultToon: false, maxLimit: 1440,
       disabled: false,
+      retainedRims: [true, false],
       adjusted: { ambientColor: '#ffffff', ambientIntensity: 1.8, keyColor: '#ffffff',
         keyIntensity: 2.3, keyDirection: { longitude: 31, latitude: 46 }, shadowEnabled: true,
+        pmxToonEnabled: false,
+        fillEnabled: false, fillColor: '#ffffff', fillIntensity: 1,
+        fillDirection: { longitude: -45, latitude: 25 },
+        rimLights: [
+          { enabled: true, color: '#123456', intensity: 1.5, direction: { longitude: -120, latitude: 20 } },
+          { enabled: false, color: '#654321', intensity: 2, direction: { longitude: 120, latitude: 30 } }
+        ],
         physicsFps: 65, rotationPhysicsLimit: 1440,
         pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
         pmxAoRadiusPercent: 12, pmxAoResolution: 'full' }

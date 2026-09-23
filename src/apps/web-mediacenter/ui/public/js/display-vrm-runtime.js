@@ -163,6 +163,8 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0);
+    fillLight.castShadow = false;
     keyLight.position.set(1.5, 3, 2.5);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
@@ -183,9 +185,10 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), shadowMaterial);
     shadowPlane.rotation.x = -Math.PI / 2;
     shadowPlane.receiveShadow = true;
-    scene.add(ambientLight, keyLight, keyLight.target, shadowPlane);
+    scene.add(ambientLight, keyLight, keyLight.target, fillLight, fillLight.target, shadowPlane);
 
     let shadowEnabled = true;
+    let fillDirection = { longitude: -45, latitude: 25 };
 
     const applyShadowFlags = (root) => {
         root?.traverse?.((object) => {
@@ -212,6 +215,13 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         const lightDistance = keyLight.position.distanceTo(center);
 
         keyLight.target.position.copy(center);
+        const fillPosition = lightDirectionToPosition(fillDirection);
+        fillLight.position.set(
+            center.x + fillPosition.x,
+            center.y + fillPosition.y,
+            center.z + fillPosition.z
+        );
+        fillLight.target.position.copy(center);
         shadowCamera.left = -extent;
         shadowCamera.right = extent;
         shadowCamera.top = extent;
@@ -260,11 +270,20 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
 
     const setLighting = (lighting = {}) => {
         const keyDirection = normalizeLightDirection(lighting.keyDirection);
+        fillDirection = {
+            longitude: normalizeLightNumber(lighting.fillDirection?.longitude, -180, 180, -45),
+            latitude: normalizeLightNumber(lighting.fillDirection?.latitude, -90, 90, 25)
+        };
+        const fillEnabled = lighting.fillEnabled === true;
+        const fillColor = normalizeLightColor(lighting.fillColor);
+        const fillIntensity = normalizeLightNumber(lighting.fillIntensity, 0, 5, 1);
         const position = lightDirectionToPosition(keyDirection);
         ambientLight.color.set(normalizeLightColor(lighting.ambientColor));
         ambientLight.intensity = normalizeLightNumber(lighting.ambientIntensity, 0, 4, 1.8);
         keyLight.color.set(normalizeLightColor(lighting.keyColor));
         keyLight.intensity = normalizeLightNumber(lighting.keyIntensity, 0, 5, 2.3);
+        fillLight.color.set(fillColor);
+        fillLight.intensity = fillEnabled ? fillIntensity : 0;
         keyLight.position.set(
             normalizeLightNumber(position.x, -10, 10, 1.5),
             normalizeLightNumber(position.y, -10, 10, 3),
@@ -278,6 +297,10 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
             keyColor: normalizeLightColor(lighting.keyColor),
             keyIntensity: keyLight.intensity,
             keyDirection,
+            fillEnabled,
+            fillColor,
+            fillIntensity,
+            fillDirection: { ...fillDirection },
             shadowEnabled
         };
     };

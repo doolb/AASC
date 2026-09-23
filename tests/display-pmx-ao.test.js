@@ -56,6 +56,38 @@ test('PMX AO defaults on and a partial lighting update keeps its saved switch', 
   assert.equal(clamped.pmxAoRadiusPercent, 1);
 });
 
+test('PMX Toon 默认关闭，明确开启后局部灯光更新保持模式', () => {
+  const context = { window: {}, console };
+  vm.runInNewContext(fs.readFileSync(path.join(PUBLIC_DIR, 'js/display-mmd.js'), 'utf8'), context);
+  const displayMmd = context.window.DisplayMmd;
+  assert.equal(displayMmd.getLighting().pmxToonEnabled, false);
+  assert.equal(displayMmd.setLighting({ pmxToonEnabled: true }).pmxToonEnabled, true);
+  assert.equal(displayMmd.setLighting({ fillIntensity: 2 }).pmxToonEnabled, true);
+  assert.equal(displayMmd.setLighting({ pmxToonEnabled: 'invalid' }).pmxToonEnabled, false);
+});
+
+test('两组边缘光默认关闭、独立规范化，局部更新保留另一组', () => {
+  const context = { window: {}, console };
+  vm.runInNewContext(fs.readFileSync(path.join(PUBLIC_DIR, 'js/display-mmd.js'), 'utf8'), context);
+  const displayMmd = context.window.DisplayMmd;
+  assert.equal(displayMmd.getLighting().rimLights.length, 2);
+  assert.equal(displayMmd.getLighting().rimLights[0].enabled, false);
+  assert.equal(displayMmd.getLighting().rimLights[1].enabled, false);
+  const lighting = displayMmd.setLighting({ rimLights: [
+    { enabled: true, color: '#123456', intensity: 7, direction: { longitude: -160, latitude: 30 } },
+    { enabled: true, color: 'bad', intensity: -1, direction: { longitude: 210, latitude: -100 } }
+  ] });
+  assert.equal(lighting.rimLights[0].enabled, true);
+  assert.equal(lighting.rimLights[0].color, '#123456');
+  assert.equal(lighting.rimLights[0].intensity, 5);
+  assert.equal(lighting.rimLights[1].enabled, true);
+  assert.equal(lighting.rimLights[1].color, '#ffb6d9');
+  assert.equal(lighting.rimLights[1].intensity, 0);
+  assert.equal(lighting.rimLights[1].direction.longitude, 180);
+  assert.equal(lighting.rimLights[1].direction.latitude, -90);
+  assert.equal(displayMmd.setLighting({ keyIntensity: 2 }).rimLights[0].color, '#123456');
+});
+
 test('PMX AO checkbox applies and saves its value; reset restores the default', () => {
   const ids = [
     'displayMmdLightingToggle', 'displayMmdLightingPanel', 'displayMmdLightingReset',
@@ -68,7 +100,16 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
     'displayMmdAmbientIntensity', 'displayMmdAmbientIntensityValue', 'displayMmdKeyColor',
     'displayMmdKeyIntensity', 'displayMmdKeyIntensityValue', 'displayMmdKeyDirectionLongitude',
     'displayMmdKeyDirectionLongitudeValue', 'displayMmdKeyDirectionLatitude',
-    'displayMmdKeyDirectionLatitudeValue'
+    'displayMmdKeyDirectionLatitudeValue', 'displayMmdFillEnabled', 'displayMmdFillColor',
+    'displayMmdFillIntensity', 'displayMmdFillIntensityValue', 'displayMmdFillDirectionLongitude',
+    'displayMmdFillDirectionLongitudeValue', 'displayMmdFillDirectionLatitude',
+    'displayMmdFillDirectionLatitudeValue', 'displayMmdPmxToonEnabled',
+    ...[1, 2].flatMap((index) => [
+      `displayMmdRim${index}Enabled`, `displayMmdRim${index}Color`,
+      `displayMmdRim${index}Intensity`, `displayMmdRim${index}IntensityValue`,
+      `displayMmdRim${index}DirectionLongitude`, `displayMmdRim${index}DirectionLongitudeValue`,
+      `displayMmdRim${index}DirectionLatitude`, `displayMmdRim${index}DirectionLatitudeValue`
+    ])
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, {
     value: '', checked: false, hidden: true, textContent: '', handlers: {},
@@ -96,6 +137,22 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   assert.equal(elements.displayMmdPmxAoRadiusPercent.value, '6');
   assert.equal(elements.displayMmdPmxAoResolution.value, 'half');
   assert.equal(elements.displayMmdRotationPhysicsLimit.value, '720');
+  assert.equal(elements.displayMmdFillEnabled.checked, false);
+  assert.equal(elements.displayMmdPmxToonEnabled.checked, false);
+  assert.equal(elements.displayMmdRim1Enabled.checked, false);
+  elements.displayMmdRim1Enabled.checked = true;
+  elements.displayMmdRim1Enabled.handlers.input();
+  assert.equal(context.window.DisplayMmd.getLighting().rimLights[0].enabled, true);
+  assert.equal(context.window.DisplayMmd.getLighting().rimLights[1].enabled, false);
+  assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).rimLights[0].enabled, true);
+  elements.displayMmdPmxToonEnabled.checked = true;
+  elements.displayMmdPmxToonEnabled.handlers.input();
+  assert.equal(context.window.DisplayMmd.getLighting().pmxToonEnabled, true);
+  assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).pmxToonEnabled, true);
+  elements.displayMmdFillEnabled.checked = true;
+  elements.displayMmdFillEnabled.handlers.input();
+  assert.equal(context.window.DisplayMmd.getLighting().fillEnabled, true);
+  assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).fillEnabled, true);
   elements.displayMmdPmxAoColor.value = '#2b4769';
   elements.displayMmdPmxAoColor.handlers.input();
   elements.displayMmdPmxAoIntensity.value = '1.5';
@@ -128,6 +185,9 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   assert.equal(context.window.DisplayMmd.getLighting().pmxAoEnabled, false);
   assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).pmxAoEnabled, false);
   elements.displayMmdLightingReset.handlers.click();
+  assert.equal(context.window.DisplayMmd.getLighting().pmxToonEnabled, false);
+  assert.equal(context.window.DisplayMmd.getLighting().rimLights[0].enabled, false);
+  assert.equal(context.window.DisplayMmd.getLighting().fillEnabled, false);
   assert.equal(context.window.DisplayMmd.getLighting().pmxAoEnabled, true);
   assert.equal(elements.displayMmdPmxAoEnabled.checked, true);
   assert.equal(elements.displayMmdPmxAoColor.value, '#931231');

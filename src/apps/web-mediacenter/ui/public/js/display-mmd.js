@@ -25,7 +25,16 @@
         keyColor: '#ffffff',
         keyIntensity: 2.3,
         keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
+        fillEnabled: false,
+        fillColor: '#ffffff',
+        fillIntensity: 1,
+        fillDirection: Object.freeze({ longitude: -45, latitude: 25 }),
         shadowEnabled: true,
+        rimLights: Object.freeze([
+            Object.freeze({ enabled: false, color: '#8acbff', intensity: 1, direction: Object.freeze({ longitude: -130, latitude: 25 }) }),
+            Object.freeze({ enabled: false, color: '#ffb6d9', intensity: 1, direction: Object.freeze({ longitude: 130, latitude: 25 }) })
+        ]),
+        pmxToonEnabled: false,
         physicsFps: 65,
         rotationPhysicsLimit: 720,
         pmxAoEnabled: true,
@@ -84,9 +93,31 @@
                 longitude: clamp(direction.longitude, -180, 180, DEFAULT_MMD_LIGHTING.keyDirection.longitude),
                 latitude: clamp(direction.latitude, -90, 90, DEFAULT_MMD_LIGHTING.keyDirection.latitude)
             },
+            fillEnabled: typeof source.fillEnabled === 'boolean' ? source.fillEnabled : DEFAULT_MMD_LIGHTING.fillEnabled,
+            fillColor: normalizeColor(source.fillColor, DEFAULT_MMD_LIGHTING.fillColor),
+            fillIntensity: clamp(source.fillIntensity, 0, 5, DEFAULT_MMD_LIGHTING.fillIntensity),
+            fillDirection: {
+                longitude: clamp(source.fillDirection?.longitude, -180, 180, DEFAULT_MMD_LIGHTING.fillDirection.longitude),
+                latitude: clamp(source.fillDirection?.latitude, -90, 90, DEFAULT_MMD_LIGHTING.fillDirection.latitude)
+            },
+            rimLights: DEFAULT_MMD_LIGHTING.rimLights.map((defaults, index) => {
+                const value = Array.isArray(source.rimLights) ? source.rimLights[index] : null;
+                return {
+                    enabled: typeof value?.enabled === 'boolean' ? value.enabled : defaults.enabled,
+                    color: normalizeColor(value?.color, defaults.color),
+                    intensity: clamp(value?.intensity, 0, 5, defaults.intensity),
+                    direction: {
+                        longitude: clamp(value?.direction?.longitude, -180, 180, defaults.direction.longitude),
+                        latitude: clamp(value?.direction?.latitude, -90, 90, defaults.direction.latitude)
+                    }
+                };
+            }),
             shadowEnabled: typeof source.shadowEnabled === 'boolean'
                 ? source.shadowEnabled
                 : DEFAULT_MMD_LIGHTING.shadowEnabled,
+            pmxToonEnabled: typeof source.pmxToonEnabled === 'boolean'
+                ? source.pmxToonEnabled
+                : DEFAULT_MMD_LIGHTING.pmxToonEnabled,
             physicsFps: normalizePhysicsFps(source.physicsFps),
             rotationPhysicsLimit: normalizeRotationPhysicsLimit(source.rotationPhysicsLimit),
             pmxAoEnabled: typeof source.pmxAoEnabled === 'boolean'
@@ -347,7 +378,9 @@
     function getLighting() {
         return {
             ...state.lighting,
-            keyDirection: { ...state.lighting.keyDirection }
+            keyDirection: { ...state.lighting.keyDirection },
+            fillDirection: { ...state.lighting.fillDirection },
+            rimLights: state.lighting.rimLights.map((rim) => ({ ...rim, direction: { ...rim.direction } }))
         };
     }
 
