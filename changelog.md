@@ -50,6 +50,10 @@
 
 ### Offline 热更发布
 
+- ✅ [2026-09-23] 发布服务代码 v39，修复图片定位实时视频取帧尺寸。
+  - `code/code-v39.zip` 为 `15647731` bytes，SHA-256 `077dbc6be2c4c91e621d8b41eaddab4de47a5c28f7eede06b308b1ffb0f0310f`；签名清单沿用 dependencies v6、min APK v34 和数据修复包 v1。
+  - `npm run build:offline-update -- --mode=code-only --code-version=39 --manifest-file=/mnt/aasc-offline/manifest.json` 与 `npm run publish:offline-update -- --mode=code-only --manifest-file=release/offline-update/output/manifests/manifest-code-v39.json --remote-dir=/home/as/a/aasc-offline` 成功。内外网清单和组件 HTTP 大小/SHA-256 校验通过，旧版本精确清理无错误；`servicePackage` 复位为 `false`，无需重打 min APK。
+
 - ✅ [2026-09-23] 发布服务代码 v38，包含定位视频层级和图片识别改进。
   - `code/code-v38.zip` 为 `15647465` bytes，SHA-256 `c531be6a8d00b75a580d1d3f9eff11c04ddff3b3cd6d6cd5adf519e0cca9e310`；签名清单继续引用 dependencies v6、min APK v34 和数据修复包 v1。
   - `npm run build:offline-update -- --mode=code-only --code-version=38 --manifest-file=/mnt/aasc-offline/manifest.json` 与 `npm run publish:offline-update -- --mode=code-only --manifest-file=release/offline-update/output/manifests/manifest-code-v38.json --remote-dir=/home/as/a/aasc-offline` 成功。内外网清单和组件 HTTP 大小/SHA-256 校验通过，旧版本精确清理无错误；`servicePackage` 复位为 `false`，无需重打 min APK。
