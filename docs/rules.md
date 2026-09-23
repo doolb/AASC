@@ -82,6 +82,13 @@ PORT=3000 npm start
 - 涉及代码、配置、协议或用户可见行为实现变化时，才按项目规则同步对应 design、spec、task、todo、changelog，并同步更新相关使用文档。
 - 使用文档只描述当前可用行为；后续设计必须明确标注为“尚未实现”。
 
+## Offline 发布待打包状态
+
+- 所有 Offline 产物的待打包状态只维护在 `release/offline-release-status.json`，三个字段分别表示是否需要 min APK、服务代码包和生产依赖包。
+- 修改服务端或网页热更新代码时将 `servicePackage` 设为 `true`；修改 Android 原生/min APK 内资源时将 `minApk` 设为 `true`；改变生产依赖集合时将 `dependenciesPackage` 设为 `true`。未受影响的项保持原值。
+- 代码修改和状态变化一起上传 Git。只有出包机具备离线签名密钥；对应产物成功生成后，出包机将相应字段设为 `false` 并上传 Git。失败或打包内容未覆盖最新代码时保持 `true`。
+- 该文件记录技术上的待打包状态，不代表已经构建或发布；本地无密钥时不运行 APK 打包命令。
+
 ## 1. 项目结构
 
 ```

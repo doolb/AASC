@@ -4,8 +4,18 @@
 
 - ✅ [2026-09-23] 明确纯构建、发布和资源同步任务只记录 `changelog.md`，不强制新增或更新 design/spec/task，也不修改 todo.md；规则已同步到 `AGENTS.md` 和 `CLAUDE.md`。
 
+### 显示端语音输入
+
+- ✅ [2026-09-23] 增加声纹关闭时可选处理 TTS 播放期间语音的开关。
+  - 控制端声纹设置新增 `voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint`，默认关闭；开启后服务端不因 TTS 播放而丢弃无声纹 ASR 输入，现有唤醒/会话门控继续生效。
+  - 需同时关闭“播放时暂停录音”；声纹开启时未匹配说话人的处理保持不变。更新 ASR design/spec、全局播放录音 spec、语音会话使用说明和任务文档。
+  - `git diff --check` 和两个 JavaScript 文件的语法解析通过；未新增或运行自动化测试。按用户要求未构建或发布 Offline 更新包。
+
 ### Offline 热更发布
 
+- ✅ [2026-09-23] 增加 Offline 待打包状态文件。
+  - 新增 `release/offline-release-status.json`，集中记录 min APK、服务代码包和生产依赖包是否待打包；代码修改后将受影响字段置为 `true` 并上传 Git，出包机成功生成后改回 `false` 并上传。
+  - 各任务不重复维护实时状态值；本次状态以该 JSON 文件为准。本地未运行出包，需由持有签名密钥的出包机完成。
 - ✅ [2026-09-23] 增加多内网热更源与外网资源同步
   - Android 热更源增加家庭 `192.168.1.39` 和公司 `10.221.70.87`，保留外网域名解析回退；Node 构建清单读取增加两个内网源和公网 IP 回退。
   - 新增 `npm run sync:offline-update`，支持 `--source-url`、`--local-root` 和 `AASC_OFFLINE_LOCAL_ROOT`，验签并校验 code/dependencies/min APK/data-repair 后原子更新本地清单。

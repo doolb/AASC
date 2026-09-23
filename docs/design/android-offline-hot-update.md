@@ -1,5 +1,13 @@
 # Android Offline APK 热更新与原生增量 APK
 
+## Offline 待打包状态记录（2026-09-23）
+
+Offline 产物是否待打包集中记录在 `release/offline-release-status.json`，字段为 `minApk`、`servicePackage` 和 `dependenciesPackage`，初始值均为 `false`。代码变更后根据实际影响将对应字段置为 `true`，并和代码一起上传 Git；未受影响的产物不变。
+
+该状态表示是否仍需在出包机生成对应产物，与本地是否有签名密钥、是否已执行构建/发布分开。Offline APK 和相关发布包只在持有签名密钥的出包机上构建；对应产物成功生成且包含最新代码后，出包机将该字段改回 `false` 并上传 Git。失败时保留 `true`。
+
+影响判断：服务端或网页热更新代码要求服务代码包；Android 原生或 min APK 内资源变化要求 min APK；生产依赖集合变化要求依赖包。一次改动可同时标记多个字段。
+
 ## 2026-09-23 多内网热更源与外网资源同步
 
 Offline APK 的热更读取源扩展为家庭内网、公司内网和外网三个候选源：

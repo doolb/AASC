@@ -1260,7 +1260,7 @@ async function startServer() {
                             return;
                         }
                         if (text) {
-                            if (!config.get('voiceprint.enabled', true) && voiceTtsPlaybackTimers.size > 0) {
+                            if (shouldIgnoreVoiceInputDuringTts()) {
                                 return;
                             }
                             const passwordInput = isRepairModePasswordInput(ctx.displayId);
@@ -4375,6 +4375,7 @@ app.get('/api/voiceprint/config', (req, res) => {
         multiMode: config.get('voiceprint.multiMode', 'fast'),
         speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
         pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
+        acceptVoiceInputDuringTtsWithoutVoiceprint: config.get('voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint', false) === true,
         ...getGlobalVoiceVadConfig(),
         asrResultDetailLog: config.get('voiceprint.asrResultDetailLog', true),
         denoise: config.get('asr.denoise', false)
@@ -4391,6 +4392,7 @@ app.post('/api/voiceprint/config', (req, res) => {
         speakerCount,
         denoise,
         pauseRecordingDuringPlayback,
+        acceptVoiceInputDuringTtsWithoutVoiceprint,
         asrResultDetailLog,
         vadSilenceDurationMs,
         vadMinSpeechDurationMs
@@ -4406,6 +4408,10 @@ app.post('/api/voiceprint/config', (req, res) => {
     }
     if (pauseRecordingDuringPlayback !== undefined && typeof pauseRecordingDuringPlayback !== 'boolean') {
         return res.status(400).json({ status: 'error', message: 'pauseRecordingDuringPlayback 必须是布尔值' });
+    }
+    if (acceptVoiceInputDuringTtsWithoutVoiceprint !== undefined
+        && typeof acceptVoiceInputDuringTtsWithoutVoiceprint !== 'boolean') {
+        return res.status(400).json({ status: 'error', message: 'acceptVoiceInputDuringTtsWithoutVoiceprint 必须是布尔值' });
     }
     if (asrResultDetailLog !== undefined && typeof asrResultDetailLog !== 'boolean') {
         return res.status(400).json({ status: 'error', message: 'asrResultDetailLog 必须是布尔值' });
@@ -4429,6 +4435,12 @@ app.post('/api/voiceprint/config', (req, res) => {
     if (denoise !== undefined) config.set('asr.denoise', denoise);
     if (pauseRecordingDuringPlayback !== undefined) {
         config.set('voiceprint.pauseRecordingDuringPlayback', pauseRecordingDuringPlayback);
+    }
+    if (acceptVoiceInputDuringTtsWithoutVoiceprint !== undefined) {
+        config.set(
+            'voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint',
+            acceptVoiceInputDuringTtsWithoutVoiceprint
+        );
     }
     if (asrResultDetailLog !== undefined) {
         config.set('voiceprint.asrResultDetailLog', asrResultDetailLog);
@@ -8326,6 +8338,13 @@ wss.on('connection', (ws, req) => {
  * 新版显示端由 /api/asr/recognize 直接调用这里，旧版显示端发送的
  * voiceInput WebSocket 消息也复用这里，确保去重、声纹门控和唤醒逻辑只有一份。
  */
+function shouldIgnoreVoiceInputDuringTts() {
+    // 未启用声纹时默认过滤 TTS 回声；用户确认设备具备硬件回声抑制后可显式放行。
+    return !config.get('voiceprint.enabled', true)
+        && config.get('voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint', false) !== true
+        && voiceTtsPlaybackTimers.size > 0;
+}
+
 function processDisplayVoiceInput(displayId, data, ws = null) {
     const displayData = displayClients.get(displayId);
     const text = normalizeAsrText(data?.text);
@@ -8378,7 +8397,7 @@ function processDisplayVoiceInput(displayId, data, ws = null) {
     }
 
     // TTS 可能在另一台显示端播放；即使录音端刚好有一段 ASR 已在途中，也不能让播报回声继续进入命令处理。
-    if (!voiceprintEnabledNow && voiceTtsPlaybackTimers.size > 0) {
+    if (shouldIgnoreVoiceInputDuringTts()) {
         if (!isRepairModePasswordInput(displayId)) {
             log('语音', `TTS 播报期间忽略显示端 ${displayId} 的在途语音: "${text}"`);
         }

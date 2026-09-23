@@ -34,6 +34,26 @@
   服务端只通过 req.body.displayId 绑定在线显示端，不按 IP 猜测浏览器来源
 ```
 
+TTS 期间无声纹语音配置：
+
+```text
+voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint = false（默认）
+
+GET /api/voiceprint/config：
+  返回 acceptVoiceInputDuringTtsWithoutVoiceprint
+  缺失或非法值按 false 返回
+
+POST /api/voiceprint/config：
+  如果 acceptVoiceInputDuringTtsWithoutVoiceprint 存在且不是布尔值：
+    返回 400，不修改配置
+  如果字段存在：
+    保存 voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint
+
+控制端声纹面板：
+  初始化复选框为 response.acceptVoiceInputDuringTtsWithoutVoiceprint === true
+  修改时随现有声纹配置请求提交该字段
+```
+
 ## 服务端处理伪代码
 
 ```text
@@ -124,9 +144,19 @@ processDisplayVoiceInput(displayId, data):
   广播 voiceInput 到控制端，包含 speaker、similarityScore、threshold
   如果声纹启用且 speaker=null：
     记录“未识别声纹，仅回传”并结束
+  如果声纹未启用 且 TTS 播放计时器非空
+      且 acceptVoiceInputDuringTtsWithoutVoiceprint != true：
+    记录 TTS 播放期间忽略无声纹输入并结束
+  如果声纹未启用 且 TTS 播放计时器非空
+      且 acceptVoiceInputDuringTtsWithoutVoiceprint == true：
+    继续进入修复模式或显示端会话门控
   如果命中修复模式：转入修复模式输入
   否则执行显示端会话门控
   通过唤醒门控后，转入现有 voiceCommand 处理链路
+
+服务器 ASR 音频流入口：
+  使用相同的声纹开关、TTS 播放计时器和配置值判断是否忽略识别结果
+  新配置打开时不在 ASR 音频流入口提前丢弃结果
 ```
 
 ## 显示端伪代码
@@ -151,4 +181,5 @@ sendAudioForRecognition(audioBlob, timing):
 - 显示端上传和回显：`src/apps/web-mediacenter/ui/public/display.html`
 - 控制端最近识别面板的声纹诊断字段：`src/apps/web-mediacenter/ui/public/js/device-list.js`
 - 控制端详细日志开关：`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/js/voiceprint-panel.js`
+- TTS 播放期间无声纹输入开关：`upload.html`、`voiceprint-panel.js`、`server-app.js`、`config-app-service.js`
 - 浏览器显示端来源绑定回归：`tests/display-asr-audio-pipeline.test.js`

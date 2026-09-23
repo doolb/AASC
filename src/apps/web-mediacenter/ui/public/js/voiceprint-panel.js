@@ -30,6 +30,7 @@
             document.getElementById('vpMultiCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpDenoiseCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpPauseRecordingDuringPlaybackCheck').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpAcceptVoiceInputDuringTtsWithoutVoiceprintCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpAsrResultDetailLogCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpVadSilenceDurationInput').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpVadMinSpeechDurationInput').addEventListener('change', () => this.saveConfig());
@@ -260,6 +261,7 @@
                 document.getElementById('vpMultiCheck').checked = !!c.multiSpeaker;
                 document.getElementById('vpDenoiseCheck').checked = !!c.denoise;
                 document.getElementById('vpPauseRecordingDuringPlaybackCheck').checked = c.pauseRecordingDuringPlayback !== false;
+                document.getElementById('vpAcceptVoiceInputDuringTtsWithoutVoiceprintCheck').checked = c.acceptVoiceInputDuringTtsWithoutVoiceprint === true;
                 document.getElementById('vpAsrResultDetailLogCheck').checked = c.asrResultDetailLog !== false;
                 document.getElementById('vpVadSilenceDurationInput').value = this.normalizeVadDuration(c.vadSilenceDurationMs, 500);
                 document.getElementById('vpVadMinSpeechDurationInput').value = this.normalizeVadDuration(c.vadMinSpeechDurationMs, 300);
@@ -383,6 +385,7 @@
                 multiSpeaker: document.getElementById('vpMultiCheck').checked,
                 denoise: document.getElementById('vpDenoiseCheck').checked,
                 pauseRecordingDuringPlayback: document.getElementById('vpPauseRecordingDuringPlaybackCheck').checked,
+                acceptVoiceInputDuringTtsWithoutVoiceprint: document.getElementById('vpAcceptVoiceInputDuringTtsWithoutVoiceprintCheck').checked,
                 asrResultDetailLog: document.getElementById('vpAsrResultDetailLogCheck').checked,
                 vadSilenceDurationMs,
                 vadMinSpeechDurationMs,

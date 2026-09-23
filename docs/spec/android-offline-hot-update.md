@@ -1,5 +1,38 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+## Offline 待打包状态伪代码（2026-09-23）
+
+```text
+文件 release/offline-release-status.json:
+    minApk = false
+    servicePackage = false
+    dependenciesPackage = false
+
+代码变更后:
+    changedFiles = 当前改动文件
+    impactedArtifacts = 空集合
+
+    if changedFiles 包含服务端或网页热更新代码:
+        impactedArtifacts 加入 servicePackage
+    if changedFiles 包含 Android 原生代码或 min APK 内资源:
+        impactedArtifacts 加入 minApk
+    if 生产依赖集合或依赖锁指纹变化:
+        impactedArtifacts 加入 dependenciesPackage
+
+    对每个 artifact in impactedArtifacts:
+        status[artifact] = true
+    将代码与 status 文件一并上传 Git
+
+出包机生成产物(artifact):
+    确认当前代码版本包含需要打包的最新改动
+    确认出包机具备对应签名密钥
+    若构建成功:
+        status[artifact] = false
+        将状态文件上传 Git
+    否则:
+        status[artifact] 保持 true
+```
+
 ## 多内网热更源与外网资源同步伪代码（2026-09-23）
 
 ```text
