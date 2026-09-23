@@ -25,6 +25,20 @@
     transition: opacity 160ms ease;
 }
 
+.display-mmd-ar-background {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.display-mmd-ar-background[hidden] {
+    display: none;
+}
+
 .display-mmd-layer.is-visible {
     display: block;
 }
@@ -268,21 +282,62 @@
     display: none;
 }
 
+.display-mmd-ar-calibration {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.72);
+    pointer-events: auto;
+}
+
+.display-mmd-ar-dialog {
+    width: min(92vw, 920px);
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 16px;
+    box-sizing: border-box;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.display-mmd-ar-preview {
+    display: grid;
+    place-items: center;
+    min-height: 180px;
+    max-height: 68vh;
+    background: #111;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
 .display-mmd-ar-camera,
 .display-mmd-ar-canvas {
     display: block;
     width: 100%;
-    max-height: 36vh;
-    margin-top: 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+    height: auto;
+    max-height: 68vh;
     background: #111;
     object-fit: contain;
     touch-action: none;
 }
 
+.display-mmd-ar-camera[hidden],
+.display-mmd-ar-canvas[hidden] {
+    display: none;
+}
+
 .display-mmd-ar-canvas {
     cursor: crosshair;
+    width: auto;
+    max-width: 100%;
 }
 
 .display-mmd-lighting-header {

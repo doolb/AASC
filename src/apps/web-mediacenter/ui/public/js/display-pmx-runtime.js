@@ -6,6 +6,7 @@
  * 校验过的 profile/resourceId，不接受动作计划传入的任意 URL。
  */
 import * as THREE from 'three';
+import { createArFootAnchor } from './display-mmd-ar-pose.js';
 import { MMDAnimationHelper } from 'three/addons/animation/MMDAnimationHelper.js';
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
 import { ensureAmmoPhysics } from './mmd-ammo-physics.mjs';
@@ -497,6 +498,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         motionSequence += 1;
         stopMotion();
         if (!currentMesh) return;
+        arFootAnchor.reset();
         scene.remove(currentRotationPivot || currentMesh);
         currentRotationPivot?.remove(currentMesh);
         disposeObject(currentMesh);
@@ -532,6 +534,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         lastFrameAt = performance.now();
         frameHandle = requestAnimationFrame(renderFrame);
     };
+    const arFootAnchor = createArFootAnchor({
+        camera,
+        getModelRoot: () => currentRotationPivot,
+        getViewport: () => ({ width: canvas.clientWidth, height: canvas.clientHeight }),
+        startRendering
+    });
 
     const resize = (width, height, devicePixelRatio = window.devicePixelRatio || 1) => {
         const safeWidth = Math.max(1, Number(width) || window.innerWidth || 1);
@@ -773,9 +781,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         loadMotion,
         playMotion,
         raycast,
+        resetArPose: arFootAnchor.reset,
         rotateModelBy,
         finishModelRotation,
         setCameraViewRotation,
+        setArPose: arFootAnchor.setPose,
         resize,
         setLighting,
         setVisible,

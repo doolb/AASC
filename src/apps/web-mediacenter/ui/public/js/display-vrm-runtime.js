@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { createArFootAnchor } from './display-mmd-ar-pose.js';
 
 // v2 表示服务端已经把 VRoid optimized_preview 的顶点恢复为正常 GLB；不能继续复用
 // 旧版本缓存中的压缩顶点，否则模型会出现拉伸、破面或看似空白。
@@ -299,6 +300,12 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     let frameHandle = 0;
     let lastFrameAt = performance.now();
     let visible = true;
+    const arFootAnchor = createArFootAnchor({
+        camera,
+        getModelRoot: () => currentRotationPivot,
+        getViewport: () => ({ width: canvas.clientWidth, height: canvas.clientHeight }),
+        startRendering
+    });
 
     function resetModelRotation() {
         rotationState.targetYaw = currentRotationPivot?.rotation.y || 0;
@@ -349,6 +356,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
 
     function disposeCurrentModel() {
         if (!currentVrm) return;
+        arFootAnchor.reset();
         scene.remove(currentRotationPivot || currentVrm.scene);
         currentRotationPivot?.remove(currentVrm.scene);
         VRMUtils.deepDispose(currentVrm.scene);
@@ -470,8 +478,10 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         handleActionPlan,
         load,
         raycast,
+        resetArPose: arFootAnchor.reset,
         resize,
         rotateModelBy,
+        setArPose: arFootAnchor.setPose,
         setCameraViewRotation,
         setLighting,
         setVisible

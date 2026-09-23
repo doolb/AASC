@@ -1,9 +1,8 @@
 /*
- * 显示端图片基准图 AR 第一阶段控制器。
+ * 显示端图片基准图 AR 控制器。
  *
- * 本模块只负责右上角“定位”入口、摄像头校准、四角选区和 IndexedDB 目标管理。
- * 具体图像目标识别通过 DisplayMmdImageTargetTracker 适配器接入；适配器不存在时
- * 仍然允许用户保存和管理定位图，但必须明确提示识别引擎尚未就绪，不能伪装成正在跟踪。
+ * 本模块负责校准弹窗、摄像头生命周期、目标管理和跟踪状态。
+ * 图像特征匹配由同源 DisplayMmdImageTargetTracker 完成，原始帧只在显示端处理。
  */
 (function exposeDisplayMmdAr(root) {
     'use strict';
@@ -38,6 +37,8 @@
         status: 'idle',
         message: '尚未选择定位图',
         cameraStream: null,
+        cameraRequestId: 0,
+        trackingRequestId: 0,
         trackerSession: null,
         tracking: false,
         trackingFrameHandle: null,
@@ -77,6 +78,7 @@
             deleteButton: byId('displayArDeleteButton'),
             message: byId('displayArTargetMessage'),
             calibration: byId('displayArCalibration'),
+            trackingVideo: byId('displayArTrackingVideo'),
             cameraVideo: byId('displayArCameraVideo'),
             calibrationCanvas: byId('displayArCalibrationCanvas'),
             calibrationHint: byId('displayArCalibrationHint'),
@@ -168,6 +170,9 @@
         const { statusLabel, message: messageElement, toggle } = state.elements;
         statusLabel.textContent = STATUS_LABELS[state.status];
         messageElement.textContent = state.message;
+        if (!state.elements.calibration.hidden && /失败|拒绝|未找到|占用|尚未准备/u.test(state.message)) {
+            state.elements.calibrationHint.textContent = state.message;
+        }
         toggle.textContent = state.status === 'tracking'
             ? '定位中'
             : state.status === 'lost'
@@ -183,7 +188,8 @@
         state.elements.startButton.disabled = !hasTarget || state.tracking;
         state.elements.stopButton.disabled = !state.tracking && !state.cameraStream;
         state.elements.deleteButton.disabled = !hasTarget || state.tracking;
-        state.elements.saveButton.disabled = !state.calibration.sourceCanvas;
+        state.elements.saveButton.disabled = !state.calibration.sourceCanvas
+            || !isValidQuad(state.calibration.selectedQuad);
         state.elements.motionEnabled.checked = state.motionEnabled;
         state.elements.motionSensitivity.value = String(state.motionSensitivity);
         state.elements.motionSensitivityValue.textContent = state.motionSensitivity.toFixed(2);
@@ -373,7 +379,7 @@
         setStatus(
             selected ? 'ready' : 'idle',
             selected
-                ? '定位图已保存；当前识别引擎尚未接入'
+                ? '定位图已保存，可以开始定位'
                 : '尚未选择定位图'
         );
     }
@@ -565,9 +571,13 @@
     }
 
     async function startCamera() {
-        const video = state.elements.cameraVideo;
+        const requestId = ++state.cameraRequestId;
+        const video = state.elements.calibration.hidden
+            ? state.elements.trackingVideo
+            : state.elements.cameraVideo;
         if (state.cameraStream?.active) {
-            video.srcObject = state.cameraStream;
+            state.elements.cameraVideo.srcObject = state.cameraStream;
+            state.elements.trackingVideo.srcObject = state.cameraStream;
             await video.play();
             return;
         }
@@ -579,38 +589,61 @@
             video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
             audio: false
         });
+        if (requestId !== state.cameraRequestId) {
+            for (const track of stream.getTracks()) track.stop();
+            return;
+        }
         state.cameraStream = stream;
-        video.srcObject = stream;
-        await new Promise((resolve) => {
-            if (video.readyState >= 1) {
-                resolve();
-                return;
-            }
-            video.addEventListener('loadedmetadata', resolve, { once: true });
-        });
-        await video.play();
+        state.elements.cameraVideo.srcObject = stream;
+        state.elements.trackingVideo.srcObject = stream;
+        try {
+            await new Promise((resolve) => {
+                if (video.readyState >= 1) {
+                    resolve();
+                    return;
+                }
+                video.addEventListener('loadedmetadata', resolve, { once: true });
+            });
+            if (requestId !== state.cameraRequestId) return;
+            await video.play();
+        } catch (error) {
+            stopCamera();
+            throw error;
+        }
     }
 
     function stopCamera() {
+        state.cameraRequestId += 1;
         if (state.cameraStream) {
             for (const track of state.cameraStream.getTracks()) track.stop();
         }
         state.cameraStream = null;
         if (state.elements?.cameraVideo) state.elements.cameraVideo.srcObject = null;
+        if (state.elements?.trackingVideo) {
+            state.elements.trackingVideo.srcObject = null;
+            state.elements.trackingVideo.hidden = true;
+        }
         updateControls();
     }
 
     async function beginCalibration() {
-        setPanelOpen(true);
+        await stopTrackerSession();
+        root.DisplayMmd?.resetArPose?.();
+        state.elements.trackingVideo.hidden = true;
+        setPanelOpen(false);
+        state.calibration = createEmptyCalibration();
         state.elements.calibration.hidden = false;
         state.elements.cameraVideo.hidden = false;
         state.elements.calibrationCanvas.hidden = true;
+        state.elements.captureButton.hidden = false;
         state.elements.saveButton.disabled = true;
         state.elements.calibrationHint.textContent = '先拍摄当前画面，再拖动四个角点框选定位区域。';
         try {
             await startCamera();
+            if (state.elements.calibration.hidden) return;
             setStatus('calibrationCapture', '摄像头已准备，可以拍照');
         } catch (error) {
+            if (state.elements.calibration.hidden) return;
             state.elements.calibration.hidden = false;
             setStatus('stopped', cameraErrorMessage(error));
         }
@@ -632,6 +665,7 @@
         state.calibration.selectedQuad = createDefaultQuad();
         state.elements.cameraVideo.hidden = true;
         state.elements.calibrationCanvas.hidden = false;
+        state.elements.captureButton.hidden = true;
         drawCalibrationCanvas();
         state.elements.calibrationHint.textContent = '拖动四个白色角点选择定位区域。';
         setStatus('selectingRegion', '请调整四个角点后保存');
@@ -677,7 +711,7 @@
             state.calibration = createEmptyCalibration();
             state.elements.calibration.hidden = true;
             stopCamera();
-            setStatus('ready', '定位图已保存；当前识别引擎尚未接入');
+            setStatus('ready', '定位图已保存，可以开始定位');
         } catch (error) {
             console.error('[显示端 AR] 保存定位图失败:', error);
             setStatus('selectingRegion', `保存失败：${error.message || 'IndexedDB 不可用'}`);
@@ -687,6 +721,7 @@
     async function switchTarget(targetId) {
         const nextTarget = state.targets.find((target) => target.targetId === targetId);
         if (!nextTarget) {
+            if (state.tracking) await stopAr();
             setSelectedTarget('');
             setStatus('idle', '尚未选择定位图');
             return;
@@ -696,7 +731,7 @@
         if (wasTracking) await stopTrackerSession();
         setSelectedTarget(targetId);
         if (!wasTracking) {
-            setStatus('ready', '已切换定位图；当前识别引擎尚未接入');
+            setStatus('ready', '已切换定位图，可以开始定位');
             return;
         }
         const started = await startTracking(nextTarget, true);
@@ -710,8 +745,8 @@
 
     function cancelTrackingFrame() {
         if (state.trackingFrameHandle === null) return;
-        if (state.trackingFrameMode === 'video' && typeof state.elements.cameraVideo.cancelVideoFrameCallback === 'function') {
-            state.elements.cameraVideo.cancelVideoFrameCallback(state.trackingFrameHandle);
+        if (state.trackingFrameMode === 'video' && typeof state.elements.trackingVideo.cancelVideoFrameCallback === 'function') {
+            state.elements.trackingVideo.cancelVideoFrameCallback(state.trackingFrameHandle);
         } else {
             clearTimeout(state.trackingFrameHandle);
         }
@@ -720,6 +755,7 @@
     }
 
     async function stopTrackerSession() {
+        state.trackingRequestId += 1;
         cancelTrackingFrame();
         const session = state.trackerSession;
         state.trackerSession = null;
@@ -735,7 +771,7 @@
 
     function scheduleTrackingFrame() {
         if (!state.tracking || !state.trackerSession) return;
-        const video = state.elements.cameraVideo;
+        const video = state.elements.trackingVideo;
         if (typeof video.requestVideoFrameCallback === 'function') {
             state.trackingFrameMode = 'video';
             state.trackingFrameHandle = video.requestVideoFrameCallback((timestamp) => {
@@ -754,12 +790,23 @@
     async function processTrackingFrame(timestamp) {
         const session = state.trackerSession;
         if (!state.tracking || !session || typeof session.processFrame !== 'function') return;
-        const result = await session.processFrame(state.elements.cameraVideo, timestamp);
-        if (!state.tracking) return;
+        let result;
+        try {
+            result = await session.processFrame(state.elements.trackingVideo, timestamp);
+        } catch (error) {
+            console.error('[显示端 AR] 识别当前帧失败:', error);
+            setStatus('lost', `定位暂时中断：${error.message || '识别失败'}`);
+            return;
+        }
+        if (!state.tracking || session !== state.trackerSession) return;
         if (result?.visible) {
             setStatus('tracking', `定位中 · 置信度 ${Math.round(clamp(Number(result.confidence) || 0, 0, 1) * 100)}%`);
             if (result.pose && typeof root.DisplayMmd?.setArPose === 'function') {
-                root.DisplayMmd.setArPose(result.pose, getSelectedTarget()?.modelCalibration);
+                const video = state.elements.trackingVideo;
+                const pose = root.DisplayMmdImageTargetTracker.mapPoseToCover(
+                    result.pose, video, video.parentElement
+                );
+                root.DisplayMmd.setArPose(pose, getSelectedTarget()?.modelCalibration);
             }
         } else {
             setStatus('lost', '暂未识别到定位图');
@@ -771,28 +818,47 @@
             setStatus('idle', '请先拍照保存定位图');
             return false;
         }
+        const mmdState = root.DisplayMmd?.getState?.();
+        if (!mmdState?.visible || !mmdState.modelReady) {
+            setStatus('ready', '请先显示并等待角色模型加载完成');
+            return false;
+        }
         const tracker = root.DisplayMmdImageTargetTracker;
         if (!tracker || typeof tracker.start !== 'function') {
             setStatus('ready', '定位图已保存；当前识别引擎尚未接入');
             return false;
         }
+        const requestId = ++state.trackingRequestId;
         try {
+            state.elements.calibration.hidden = true;
             if (!state.cameraStream) await startCamera();
-            state.trackerSession = await tracker.start(
+            if (requestId !== state.trackingRequestId) return false;
+            if (!state.cameraStream) throw new Error('摄像头已关闭');
+            state.elements.trackingVideo.hidden = false;
+            await state.elements.trackingVideo.play();
+            const session = await tracker.start(
                 {
                     targetId: target.targetId,
                     referenceImageBlob: target.referenceImageBlob,
                     selectedQuad: target.selectedQuad,
                     compiledTargetData: target.compiledTargetData
                 },
-                { video: state.elements.cameraVideo, facingMode: 'environment' }
+                { video: state.elements.trackingVideo, facingMode: 'environment' }
             );
+            if (requestId !== state.trackingRequestId) {
+                await session.stop?.();
+                return false;
+            }
+            state.trackerSession = session;
             state.tracking = true;
+            setPanelOpen(false);
             setStatus('tracking', '定位中');
             scheduleTrackingFrame();
             return true;
         } catch (error) {
+            if (requestId !== state.trackingRequestId) return false;
             await stopTrackerSession();
+            state.elements.trackingVideo.hidden = true;
             if (!keepCamera) stopCamera();
             console.error('[显示端 AR] 启动识别失败:', error);
             setStatus('ready', `识别引擎启动失败：${error.message || '未知错误'}`);
@@ -802,6 +868,7 @@
 
     async function stopAr() {
         await stopTrackerSession();
+        root.DisplayMmd?.resetArPose?.();
         stopCamera();
         disableMotionView();
         if (state.elements?.calibration) state.elements.calibration.hidden = true;
@@ -862,7 +929,7 @@
         elements.cancelButton.addEventListener('click', () => {
             state.calibration = createEmptyCalibration();
             elements.calibration.hidden = true;
-            if (!state.tracking) stopCamera();
+            stopCamera();
             setStatus(getSelectedTarget() ? 'ready' : 'idle', getSelectedTarget()
                 ? '已取消校准'
                 : '尚未选择定位图');
@@ -882,7 +949,11 @@
         elements.calibrationCanvas.addEventListener('pointercancel', finishCalibrationPointer);
         document.addEventListener('click', () => setPanelOpen(false));
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') setPanelOpen(false);
+            if (event.key === 'Escape' && !elements.calibration.hidden) {
+                elements.cancelButton.click();
+            } else if (event.key === 'Escape') {
+                setPanelOpen(false);
+            }
         });
         root.addEventListener('pagehide', () => {
             void stopAr();

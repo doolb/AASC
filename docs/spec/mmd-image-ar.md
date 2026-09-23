@@ -2,6 +2,47 @@
 
 ## 1. 模块边界
 
+## 2026-09-23 定位界面与脚底锚点增量伪代码
+
+```text
+声明 CalibrationView { mode: "closed" | "capture" | "edit", cameraStream, sourceImage, selectedQuad }
+声明 TrackingView { active, targetCorners, anchorScreen, confidence, lastVisibleAt }
+
+过程 openCalibrationDialog()
+  如果定位正在运行，先停止识别并释放摄像头
+  关闭定位设置面板，显示位于交互层上方的独立校准弹窗
+  mode = "capture"；在共同的画面容器中显示实时视频
+  请求摄像头权限；失败时在弹窗中显示错误并允许关闭
+
+过程 captureCalibrationPhoto()
+  从实时视频截取照片到源画布
+  mode = "edit"；在同一画面容器中以画布替换视频
+  生成四个角点；拖动时保持画布坐标与显示坐标一致
+
+过程 closeCalibrationDialog()
+  隐藏弹窗、清空临时照片和拖动状态
+  如果没有运行中的定位，停止摄像头所有轨道
+
+过程 startImageTracking(target)
+  检查目标已保存、MMD 模型已加载且显示
+  启动摄像头并在 MMD 透明画布下方显示实时视频层
+  从保存的照片和四角选区提取局部特征
+  对实时视频帧提取特征、匹配、估计单应矩阵并剔除离群点
+  从单应矩阵得到基准图四角、中心、尺度和屏幕内旋转
+  将视频坐标按 object-fit: cover 映射为舞台坐标
+  将基准图平面中心作为脚底锚点，向 MMD runtime 提交姿态
+  识别丢失时保留最后姿态并更新状态；停止时清空姿态和视频层
+
+过程 setMmdArPose(anchorScreen, imageScale, imageRotation, calibration)
+  校验可见模型和有限数值
+  计算模型当前脚底的屏幕投影
+  根据目标中心与脚底投影之差移动模型外层锚点
+  按目标相对尺度调整模型外层锚点，并平滑位置、尺度与转角
+  不改变模型内部动画、动作和体感观察角度
+```
+
+本增量采用显示端本地 JavaScript 图像特征匹配，不增加生产依赖；自然图片需要足够纹理。单目图片只能估计屏幕平面的位置、尺度和旋转，不能恢复真实深度或精确平面法向量。
+
 ```text
 MmdImageArController
   ├── CameraSession          摄像头流和视频层
@@ -51,17 +92,19 @@ display-mmd-ar.js:
   实现 CameraSession 的后置摄像头启动、拍照和释放
   实现 CalibrationOverlay 的默认四角、拖动校准、透视裁剪前的质量校验
   实现定位图列表、拍照校准、重新选择和运行中切换入口
-  通过 ImageTargetTracker 契约预留识别实现
+  调用同源 ImageTargetTracker 特征匹配实现
 
-当前第一阶段实现:
+当前页面实现:
   可以完成目标图片和四角选区的本地保存与管理
-  未接入具体图像目标识别库时，状态显示为“识别引擎未就绪”
+  目标保存后可启用本地图片特征识别与脚底锚点
   不上传摄像头帧，不新增服务端接口和 WebSocket 消息
 
 实际文件:
   `display.html` 提供右上角入口和面板 DOM
   `css/display-mmd.css` 提供入口纵向布局和面板样式
   `js/display-mmd-ar.js` 提供本地目标、摄像头和四角选区控制器
+  `js/display-mmd-image-tracker.js` 提供局部特征匹配和单应矩阵估计
+  `js/display-mmd-ar-pose.js` 提供 PMX/VRM 共用的脚底屏幕锚点
   `js/display-mmd.js` 转发虚拟相机视角
   `js/display-pmx-runtime.js` 和 `js/display-vrm-runtime.js` 实现相机环绕与缓动
 
@@ -190,18 +233,18 @@ display-mmd-ar.js:
 
 ```text
 过程 startCamera(facingMode)
-  如果 cameraStream 已存在，先停止旧轨道
+  如果 cameraStream 已存在，在校准视频与背景视频之间复用同一流
   请求 navigator.mediaDevices.getUserMedia({
     video: { facingMode, width: 1280, height: 720 },
     audio: false
   })
-  将 stream 绑定到 arCameraVideo
+  将 stream 绑定到校准视频和背景视频
   等待 video.loadedmetadata 和 video.play()
   将状态设为 calibrationCapture 或 ready
 
 过程 stopCamera()
   停止 cameraStream 的所有 video tracks
-  清空 arCameraVideo.srcObject
+  清空两个 video 的 srcObject 并隐藏背景视频
   取消帧检测定时器或 requestVideoFrameCallback
   将状态设为 stopped
 ```

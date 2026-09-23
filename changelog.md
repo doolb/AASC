@@ -69,6 +69,10 @@
 
 ### MMD 图片基准图 AR 设计记录
 
+- ✅ [2026-09-23] 增加独立拍照校准弹窗、摄像头背景和基准图脚底锚点。
+  - `display.html`、`display-mmd.css` 和 `display-mmd-ar.js` 将拍摄与四角编辑放在同一弹窗预览区；定位时在透明 MMD 画布下显示摄像头，并在停止时释放轨道。
+  - 新增 `display-mmd-image-tracker.js` 本地角点匹配与单应矩阵估计、`display-mmd-ar-pose.js` PMX/VRM 共用脚底屏幕锚点；`display-mmd.js` 和两个 runtime 接入姿态与复位。同步 design/spec/task/todo/usage；JavaScript 语法解析和 `git diff --check` 通过，目标 Android 设备的跟踪精度和帧率待现场验证。本次未构建或发布，`servicePackage` 保持待出包。
+
 - 📝 [2026-09-22] 完成普通图片拍照、手动四角选区、本地图像目标跟踪和 MMD 姿态叠加的 design/spec 设计，识别引擎仍待接入。
   - 首期目标保存在显示端 IndexedDB，摄像头帧不上传服务器；不包含 ARCore/WebXR、深度遮挡和真实地面识别。
   - 新增 `docs/design/mmd-image-ar.md`、`docs/spec/mmd-image-ar.md` 和 `docs/task/20260922_MMD图片基准图AR设计.md`；未安装识别依赖、未生成 APK 或服务发布包。

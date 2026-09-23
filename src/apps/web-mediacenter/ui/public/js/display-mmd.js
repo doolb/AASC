@@ -375,6 +375,15 @@
         return setCameraViewRotation(0, 0);
     }
 
+    function setArPose(pose, calibration) {
+        if (!state.visible || !state.modelReady) return false;
+        return state.runtime?.setArPose?.(pose, calibration) === true;
+    }
+
+    function resetArPose() {
+        state.runtime?.resetArPose?.();
+    }
+
     async function ensureRuntime(modelType = 'vrm') {
         if (state.runtime && state.runtimeType === modelType) return state.runtime;
         if (state.runtime && state.runtimeType !== modelType) {
@@ -559,12 +568,15 @@
 
     root.DisplayMmd = Object.freeze({
         DEFAULT_MMD_LIGHTING,
+        getState: () => ({ visible: state.visible, modelReady: state.modelReady }),
         getLighting,
         handleActionPlan,
         init,
         loadModel,
         resize: resizeCanvas,
+        resetArPose,
         resetCameraViewRotation,
+        setArPose,
         setCameraViewRotation,
         setLighting,
         setPointerEnabled,
