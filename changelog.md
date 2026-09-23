@@ -50,6 +50,10 @@
 
 ### Offline 热更发布
 
+- ✅ [2026-09-23] 发布服务代码 v37，包含图片定位、MMD 显示与 Offline 同步更新。
+  - `code/code-v37.zip` 为 `15646732` bytes，SHA-256 `346e65176cbeffc0b001710cee79612cc627a552d6d39b495242f5d2b32f3f0c`；签名清单继续引用 dependencies v6、min APK v34 和数据修复包 v1。
+  - `npm run build:offline-update -- --mode=code-only --code-version=37 --manifest-file=/mnt/aasc-offline/manifest.json` 和 `npm run publish:offline-update -- --mode=code-only --manifest-file=release/offline-update/output/manifests/manifest-code-v37.json --remote-dir=/home/as/a/aasc-offline` 成功。内网与外网清单及各组件 HTTP 大小/SHA-256 验证通过，旧版本精确清理无错误；本次无需重打 min APK，`servicePackage` 已复位为 `false`。
+
 - ✅ [2026-09-23] 增加 Offline 待打包状态文件。
   - 新增 `release/offline-release-status.json`，集中记录 min APK、服务代码包和生产依赖包是否待打包；代码修改后将受影响字段置为 `true` 并上传 Git，出包机成功生成后改回 `false` 并上传。
   - 各任务不重复维护实时状态值；本次状态以该 JSON 文件为准。本地未运行出包，需由持有签名密钥的出包机完成。
