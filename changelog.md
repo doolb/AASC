@@ -1,5 +1,10 @@
 # Web MediaCenter - 变更日志
 
+### 批量播放模式
+
+- ✅ [2026-09-24] 修复批量图片切换时 TTS 可能中断并反复恢复播放。
+  - `display.html` 的 `showMedia()` 在图片切图时不再重置无来源的音视频元素；TTS 恢复仅在语音确实暂停时重试。同步 batch-playlist design/spec/task/todo；JavaScript 语法与差异检查通过，Android WebView 实际听感待现场验证。Offline `servicePackage=true`，本次未构建或发布。
+
 ### 显示端交互层旋转适配
 
 - ✅ [2026-09-23] MMD、聊天、灯光/定位控件和底部三个按钮跟随显示端旋转角度。

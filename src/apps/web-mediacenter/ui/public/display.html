@@ -2561,16 +2561,19 @@
 
         function scheduleTtsRecovery(reason) {
             if (!currentTtsItem || !isPlayingTts || ttsAudio.ended
-                || ttsRecoveryTimer || ttsRecoveryAttempts >= TTS_RECOVERY_MAX_ATTEMPTS) return;
+                || !ttsAudio.paused || ttsRecoveryTimer
+                || ttsRecoveryAttempts >= TTS_RECOVERY_MAX_ATTEMPTS) return;
             ttsRecoveryTimer = setTimeout(() => {
                 ttsRecoveryTimer = null;
-                if (!currentTtsItem || !isPlayingTts || ttsAudio.ended) return;
+                if (!currentTtsItem || !isPlayingTts || ttsAudio.ended || !ttsAudio.paused) return;
                 recoverTtsPlayback(reason + ':retry');
             }, TTS_RECOVERY_DELAY_MS);
         }
 
         function recoverTtsPlayback(reason) {
             if (!currentTtsItem || !currentTtsItem.audioUrl || !isPlayingTts) return;
+            // 图片切换和音频焦点回调期间，已在播放的语音不能重复调用 play。
+            if (reason !== 'start' && !ttsAudio.paused) return;
             if (reason !== 'start') ttsRecoveryAttempts++;
             ttsAudio.volume = 1;
             try {
@@ -4584,12 +4587,18 @@
             }
             const previousMediaType = currentMediaType;
             currentMediaType = data.mediaType || 'image';
-            mediaVideo.pause();
-            mediaVideo.src = '';
-            mediaVideo.load();
-            mediaAudio.pause();
-            mediaAudio.src = '';
-            mediaAudio.load();
+            // 图片间切换不碰隐藏的音视频元素；空来源调用 load 也可能让 WebView
+            // 重新分配媒体焦点，打断同页正在播报的 TTS。
+            if (previousMediaType === 'video' || mediaVideo.getAttribute('src')) {
+                mediaVideo.pause();
+                mediaVideo.removeAttribute('src');
+                mediaVideo.load();
+            }
+            if (previousMediaType === 'audio' || mediaAudio.getAttribute('src')) {
+                mediaAudio.pause();
+                mediaAudio.removeAttribute('src');
+                mediaAudio.load();
+            }
             mediaAudio.ontimeupdate = null;
             mediaVideo.onloadedmetadata = null;
             mediaAudio.onloadedmetadata = null;

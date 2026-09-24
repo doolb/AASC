@@ -180,6 +180,18 @@ playCurrentItem():
     构建 mediaData (url 或 base64 类型)
     showMedia(mediaData)
 
+showMedia 图片切项与 TTS 协调修正:
+    记录 previousMediaType 和 nextMediaType
+    只有上一项为 video 或视频元素仍有有效来源时才 pause、清空来源、load 视频元素
+    只有上一项为 audio 或音频元素仍有有效来源时才 pause、清空来源、load 音频元素
+    图片切图片时只替换图片来源，不重置隐藏的音视频元素
+    继续更新文件名、播放列表进度和按需播报文件名
+
+TTS 恢复:
+    收到 pause、waiting、stalled 或音频焦点回调时，先确认当前 TTS 元素确实 paused
+    若已在播放，则不安排重试，也不再次调用 play
+    新 TTS 音源首次启动仍调用 play；暂停且音源未结束时有限次数重试
+
 showMedia 的 html 媒体分支（display.html）:
     隐藏 img/video，显示 iframe#mediaHtml（铺满、pointer-events:none）
     旋转适配: transform 跟随 rotate(); 90/270° 时宽高互换（100vh × 100vw）并

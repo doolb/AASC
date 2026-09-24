@@ -81,6 +81,12 @@
 - 控制端手动发送 `playlistControl(next)` 时，显示端先 `activateTemporarily()` 进入 60 秒 active，再执行 `playlistNext()`。
 - 显示端实时回传当前 `fileName`；控制端刷新后从 `displayState.currentPlaylist` 恢复当前项，临时批量只保留轻量元数据并显示文件名占位。
 
+## 2026-09-24 图片切换与 TTS 协调
+
+批量图片自动或手动进入下一张时，显示端只替换图片来源。`showMedia()` 只在离开视频、音频或对应元素仍持有来源时清理该媒体元素，不再对空音视频元素重复执行 `pause()` 和 `load()`，避免 WebView 在纯图片切换时触发音频焦点波动。
+
+TTS 恢复仅在当前语音元素确实暂停、尚未结束时有限重试；焦点回调不应对正在播放的语音重复调用 `play()`。视频和音频项仍按原规则释放旧资源，批量文件名播报开关及播放列表间隔保持原语义。
+
 ## 视频循环边界
 
 - 批量播放 video 项时 `playCurrentItem()` 设置 `mediaVideo.loop=false`，由 `ended` 等间隔切换下一项。

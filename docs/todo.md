@@ -184,6 +184,11 @@
 
 ## 批量播放模式
 
+- ⏳待现场验证 [2026-09-24] 批量图片切换不再打断并回退 TTS
+  - 图片切图已跳过空音视频元素的 `pause/load`；TTS 只在当前语音确实暂停时执行恢复。
+  - 需在目标 Android WebView 验证自动/手动切图、循环播放、开启文件名播报及聊天 TTS 同时播放的组合。
+  - 关联文档：`docs/design/batch-playlist.md`、`docs/spec/batch-playlist.md`、`docs/task/2026-09-24_批量图片切换打断TTS修复.md`。
+
 # 当前任务
 
 ## 显示端 VRM/MMD
