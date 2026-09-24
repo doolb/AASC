@@ -1,0 +1,7 @@
+/app/build/
+/app/.gradle/
+/.gradle/
+/gradle/
+/model-cache/
+/output/
+/web-dist/

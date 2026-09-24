@@ -102,6 +102,8 @@
   聊天输入区只使用 keyboardInset 调整底部内边距
   MMD Canvas 的 CSS 尺寸跟随舞台
   MMD Canvas 的实际像素尺寸乘以受限的 devicePixelRatio
+  灯光面板读取 MMD Canvas 绘制缓冲宽高，展示当前实际渲染分辨率
+  Canvas 宽高属性变化时同步更新文字，模型加载前后与窗口/方向变化都保持一致
   不因为键盘或 devicePixelRatio 改变模型的逻辑缩放
 ```
 

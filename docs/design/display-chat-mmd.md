@@ -33,6 +33,7 @@
 - `display-stage.js` 负责舞台尺寸、层级、显示开关和模块事件总线。
 - `display-chat.js` 负责聊天对象、会话、消息、输入和聊天可见性。
 - `display-mmd.js` 负责 VRM/MMD Canvas、模型加载、点击检测和动作运行时。
+- 灯光面板在标题后只读显示当前 MMD Canvas 绘制缓冲宽×高像素；窗口、方向或舞台尺寸变化后，由现有 resize 流程更新 Canvas，共用灯光脚本观察绘制缓冲属性并刷新文字。
 - `display-mmd-command-adapter.js` 负责高级动作计划和低级兼容命令。
 - 聊天和 MMD 使用独立 CSS 文件，并以各自根容器为作用域，避免污染现有媒体样式。
 - 舞台模块在 `DOMContentLoaded` 后再初始化，确保同页 `defer` 加载的聊天和 MMD 模块已经注册，避免入口按钮连接到空容器。

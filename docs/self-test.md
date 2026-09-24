@@ -1,8 +1,52 @@
 # 自测功能文档
 
+## MindAR 编译回调修正版外网发布（2026-09-24）
+
+独立 MMD AR 测试 APK 已覆盖上传到 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-mmd-ar-test.apk`。本地、SSH 远端文件和公网 GET 响应的 SHA-256 均为 `54e4e2be3acfbf56dff1b59259c05410ab0dc657d3deab8f02114b971a39a985`，文件大小均为 `13,620,450` bytes，HTTP 返回 200。未修改服务更新清单。MindAR 实际相机编译与图片首锁仍待设备验证。
+
 ## 显示端交互层旋转适配（2026-09-23）
 
 运行 `node --test tests/display-stage-rotation.test.js tests/display-chat-mmd.test.js tests/display-broadcast-text-rotation.test.js`，59/59 项通过：覆盖 0°/90°/180°/270°逻辑视口、安全区和软键盘边映射、MMD Canvas 逆旋转坐标、聊天/MMD 分层和独立播报层旋转。`node --check` 检查 `display-stage.js`、`display-mmd.js`、`display-mmd-ar.js` 通过。四方向视觉布局、真实触摸命中、软键盘与 Android WebView 表现仍需现场验收。
+
+## MMD AR HTTPS 测试页（2026-09-24）
+
+运行 `npm run build:web:mmd-ar-test`，确认 `3rd/mmd-ar-test/web-dist/` 包含首页、静态 profile、默认 PMX/VMD、MindAR 和 Ammo WASM。核对所有生成路径以 `/mnt/mmd-ar/` 为前缀；打开 `https://c.aasc.us/mnt/mmd-ar/`，检查首页/清单/PMX/VMD/MindAR/模块/WASM 请求均为 200。远端与本地首页、PMX 和 MindAR 入口 SHA-256 一致。Puppeteer 浏览器检查到 `PMX 模型已加载`、`modelReady=true`，没有页面脚本或资源错误；390×844、3 倍设备像素比下灯光和定位按钮均能打开对应面板。真实摄像头授权、拍照选区和目标首锁仍需手机现场复测。
+
+模型加载进度回归：重新构建网页后，记录 `#mmdArLoadingProgress` 的 `aria-valuenow`，确认 PMX、纹理、VMD、初始化分段单调不倒退，模型 `modelReady=true` 后才到 100%，约 1.5 秒后自动隐藏；无可用 Content-Length 时允许维持阶段起点再跳到下一阶段。窄屏需确认进度条不遮挡灯光/定位按钮。独立 APK 和正式显示端不传 `onLoadProgress`，保持原状态文案。
+
+验证结果：真实 HTTPS Chromium 请求的 PMX 进度从 1% 连续推进到 70%，随后纹理 73–84%、VMD 85–94%、初始化 95/99%、模型 ready 后 100%；`aria-valuenow` 单调，完成后进度层隐藏，页面/资源错误为空。`node --test tests/display-chat-mmd.test.js tests/mmd-ar-benchmark-metrics.test.js tests/mmd-ar-benchmark-compiler.test.js` 为 50/50 通过；手机现场窄屏观感待确认。
+
+Canvas 分辨率回归：`npm run build:web:mmd-ar-test` 后在 Chromium 模拟 390×844/DPR 3，实际绘制缓冲与灯光标题均为 780×1688；切换 844×390/DPR 1.5 后二者均为 1266×585。模型加载完成后灯光面板可打开，无页面错误；HTTPS 线上页面重复验证竖横屏数值一致。正式 `display.html` 含相同标题和共享 Canvas 属性监听，定向测试新增断言后 51/51 通过；正式显示端发布及真机观感待验收，原独立测试 APK 停止维护。
+
+## MMD AR 独立测试 APK 构建检查（2026-09-23）
+
+运行 `npm run build:apk:mmd-ar-test`，Gradle `assembleDebug` 成功。构建器核对 applicationId=`com.aasc.mmdartest`，APK ZIP 目录和压缩数据完整，APK v2 签名有效；内置默认 PMX、12 张纹理及 VMD 共 14 个资源逐文件与 `STATIC_MMD_RELEASE` 清单的大小和 SHA-256 一致，未带其他 PMX/VRM/VMD、Node 依赖或 AASC server assets。最新 APK 为 `13,128,697` bytes，SHA-256=`129379eca1856d6d5ab1852f41bf5f5dd9c369116894b6cf3df2c6f4c562cf6c`。已用 ADB 覆盖安装到 SM-N9500（Android 9/API 28）并在内屏 display 0 启动；截图可见测试页和米娅 PMX，首页、默认 profile、PMX 和 VMD 请求均返回 HTTP 200。
+
+灯光/定位触摸回归：display 0 的系统 Insets 为 top=24/right=48 CSS px；ADB 触摸日志确认灯光与定位按钮都成为 DOM target，两个面板分别成功打开和关闭。触摸根因是测试 harness 抽取按钮时漏了 `display-interaction-layer` 的 z-index 50 父层，导致 MMD canvas 截获 hit-test；补回包装层后通过。模型 swipe 后继续响应旋转，VMD 动作保持运行。相机授权、AR 跟踪和布料物理仍未确认；另观察到旧 Activity 未退出时另建实例会有固定端口绑定冲突，单实例启动通过。
+
+## MMD AR 校准四角触控拖动（2026-09-23）
+
+运行 `node --test tests/display-mmd-ar-calibration.test.js tests/display-chat-mmd.test.js`，51/51 通过。模拟舞台 0°/90°/180°/270° 逆旋转映射，逐一拖动四个角点，断言只更新对应点；覆盖 pointercancel、lostpointercapture 后再次拖动，并检查拖动重绘不重复设置 canvas intrinsic 尺寸。`node --check src/apps/web-mediacenter/ui/public/js/display-mmd-ar.js` 与 `git diff --check` 通过。
+
+`npm run build:apk:mmd-ar-test` 构建成功；APK `13,620,354` bytes，SHA-256=`e099999c4c9adb4b002f03efefdd88698c084a109ab3679671b0d570543bc917`，14 个模型资源和 6 个 A/B 资源校验通过，已覆盖安装到 SM-N9500 / Android 9 / API 28 并启动，PMX 正常加载。真机手指拖点仍待现场确认；Android 13 闪退因当前没有 Android 13 设备和 logcat 未能复现或定因。
+
+## MMD AR 测试 APK 启动失败诊断（2026-09-24）
+
+启动 Activity 的同步异常显示阶段/异常摘要诊断页，完整堆栈写入 `MmdArTest` 日志；WebView 恢复失败或 renderer 退出也显示诊断页。iQOO Z5x 反馈 `window.insetsController` 为空，修正版将全屏初始化移到窗口获得焦点后；空值时恢复普通系统栏和默认内容布局并继续运行。
+
+修正版 `npm run build:apk:mmd-ar-test` 构建成功，大小 `13,620,354` bytes、SHA-256=`71a0cb63844b6516624b8150e1f061a35bdd1f16f701f721e88875e669993d94`；覆盖安装 SM-N9500 / Android 9 / API 28 后 `MainActivity` 处于前台且进程存活。外网文件已替换，HTTP HEAD 返回 200/Content-Length `13620354`，远端 SHA-256 与本机一致。Android 13/iQOO Z5x 尚待用户现场重新安装验证。
+
+## MMD AR MindAR 状态与竖屏提示避让（2026-09-24）
+
+MindAR 适配器仅在共享摄像头视频就绪后启动；这一阶段将定位面板状态更新为“MindAR 准备中”，A/B 状态提示显示引擎加载/目标编译，控制器启动后提示寻找定位图。竖屏生成页将顶部提示右边界收至灯光按钮左侧，横屏规则不变。`node --check` 两个改动脚本通过；`npm run build:apk:mmd-ar-test` 成功，APK `13,620,354` bytes、SHA-256=`3409e3e6a182339118b5cc09a32ce3e5ca0aea46a6e9e5bbe45f980dc548174e`。已覆盖安装 SM-N9500 / Android 9/API 28 并前台启动；临时竖屏截图确认文字不遮挡灯光按钮，随后恢复设备自动旋转设置。实际相机授权、MindAR 编译及图片首锁未实测，需要已保存定位图和现场相机。
+
+## MMD AR 跟踪器 A/B 指标
+
+运行 `node --test tests/mmd-ar-benchmark-metrics.test.js`，4/4 通过，检查首次识别、识别帧率、时间加权可见率、丢失次数和锚点偏差。`npm run build:apk:mmd-ar-test` 产物 `13,607,730` bytes，SHA-256=`7ece4967af75858667c1b300d8d9c5d2d893ee5cd08c4ed04094408cf508131c`；APK 内 MindAR 1.2.5 runtime/Controller/UI 与 LICENSE 按大小/SHA-256 检查，APK ZIP 和 v2 签名通过。已覆盖安装 SM-N9500 / Android 9 / API 28，display 0 截图显示米娅 PMX、定位面板和可切换算法选择器；回环读取的三个 JS 资源 SHA-256 与清单一致。尚未请求相机权限或开始实际识别，因此首锁、FPS、可见率和锚点 RMS 仍待可控目标现场采集。
+
+## MindAR 编译进度回调修复（2026-09-24）
+
+运行 `node --test tests/mmd-ar-benchmark-compiler.test.js tests/mmd-ar-benchmark-metrics.test.js`，6/6 通过，覆盖编译器收到进度回调、缺少回调时拒绝启动，以及既有 A/B 指标。`node --check` 检查编译适配器、MindAR benchmark、APK 构建脚本和回归测试通过。`npm run build:apk:mmd-ar-test` 成功，APK `13,620,450` bytes，SHA-256=`54e4e2be3acfbf56dff1b59259c05410ab0dc657d3deab8f02114b971a39a985`；构建器确认 14 个模型文件和 7 个 A/B 资源齐全。实际相机编译进度与图片首锁仍需使用保存的定位图在设备上验收。
 
 ## PMX 旋转缩放容差回归（2026-09-23）
 

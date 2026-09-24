@@ -19,6 +19,57 @@
   - 更新 `docs/design/display-camera-chat.md`、`docs/design/display-capability.md`、`docs/design/mmd-image-ar.md` 及对应伪代码、使用说明、自测清单和任务文档。`node --check` 检查服务端、控制端 JS、AR JS 和 `display.html` 内联脚本通过，`git diff --check` 通过；浏览器/Android WebView 摄像头现场验证待进行。
   - Offline 待打包状态：`servicePackage=true`、`minApk=true`、`dependenciesPackage=false`；本次未构建或发布 APK/服务包。
 
+### MMD AR 独立测试 APK
+
+- ✅ [2026-09-24] MMD Canvas 随独立 HTTPS 测试页视口变化重设绘制缓冲，并在正式显示端/网页灯光面板展示当前渲染分辨率。
+  - `3rd/mmd-ar-test/build.js` 的网页模式监听舞台、窗口和 visualViewport 变化并调用现有 `DisplayMmd.resize()`；`display.html`、`display-mmd-lighting.js`、`display-mmd.css` 在灯光标题后展示 `canvas.width×canvas.height`，并随绘制缓冲属性变化更新。独立测试 APK 后续停止维护，不再构建。
+  - `npm run build:web:mmd-ar-test` 成功；本地及线上 Chromium 验证 390×844/DPR 3 → 780×1688、844×390/DPR 1.5 → 1266×585，模型加载后面板仍可打开，页面无错误。定向测试 51/51 通过；HTTPS 网页已更新，正式显示端服务代码包待下次发布，真机视觉效果待验收。
+
+- ✅ [2026-09-24] HTTPS MMD AR 测试页增加 PMX 模型加载百分比。
+  - `display-pmx-runtime.js` 利用 Three.js 下载事件和 LoadingManager 分段汇报 PMX、纹理、VMD 与初始化进度；`display-mmd.js` 仅在模型 ready 后报告 100%。`3rd/mmd-ar-test/build.js` 只在网页模式生成独立进度条，APK 与正式显示端不传回调、UI 保持原状。
+  - `npm run build:web:mmd-ar-test` 成功；外网网页已更新。真实 HTTPS 浏览器验证 PMX 字节进度连续推进到 70%，纹理/VMD/初始化接续至 100%，全程单调、完成后自动收起，未见页面或资源错误；相关定向测试 50/50 通过。手机浏览器视觉效果仍待现场验收。
+
+- ✅ [2026-09-24] 将独立 MMD AR 测试页另行构建并发布为 HTTPS 静态网页。
+  - `3rd/mmd-ar-test/build.js` 新增 `--web` 模式，`package.json` 新增 `build:web:mmd-ar-test`；复用 APK 测试页、默认 PMX/VMD、灯光/布料/旋转和 MindAR 对比资源，只对生成副本改写 `/mnt/mmd-ar/` 路径。产物约 19 MB / 54 文件，忽略 Git；旧 APK 构建保留。
+  - 网页已上传 `https://c.aasc.us/mnt/mmd-ar/`；首页、清单、PMX、VMD、Three.js、MindAR 和 Ammo 均为 HTTPS 200，抽样文件远端 SHA-256 与本地一致。浏览器自动化确认 `PMX 模型已加载` / `modelReady=true` 且没有页面/资源错误，手机尺寸模拟下灯光和定位面板均可打开；AR 对比单测 6/6 通过。更新设计/伪代码/任务/使用/自测文档；真实摄像头和识别首锁待手机现场验收。
+
+- ✅ [2026-09-24] 修复 MindAR 编译缺少必需进度回调导致定位无法启动。
+  - 新增独立编译适配器，保证 `compileImageTargets` 收到进度回调并实时更新百分比；编译或初始化失败时 A/B 提示展示错误原因。生产显示端 tracker 与服务代码不变。
+  - 新增编译契约回归测试；MindAR 编译器与指标定向测试 6/6 通过，相关 JS 语法和 `git diff --check` 通过。`npm run build:apk:mmd-ar-test` 成功，APK `13,620,450` bytes，SHA-256 `54e4e2be3acfbf56dff1b59259c05410ab0dc657d3deab8f02114b971a39a985`，包含 14 个模型文件和 7 个 A/B 资源。修正版已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-mmd-ar-test.apk`；SSH 远端及公网 GET 的大小和 SHA-256 均一致，HTTP 200，未修改服务 `manifest.json`。MindAR 实际相机编译与目标首锁仍待设备验证。
+
+- ✅ [2026-09-24] 修正独立 MMD AR 测试 APK 的 MindAR 状态卡在相机权限及竖屏提示遮挡灯光按钮。
+  - MindAR 适配器在共享摄像头已就绪后立即显示引擎准备/目标编译状态，控制器启动后显示寻找定位图；异常仍交由共享 AR 状态流程展示。竖屏说明为右上灯光控件与安全 Insets 预留宽度，可在窄屏换行；生产显示端共享文件不变。
+  - 两个改动脚本语法检查通过；`npm run build:apk:mmd-ar-test` 构建成功，APK `13,620,354` bytes，SHA-256 `3409e3e6a182339118b5cc09a32ce3e5ca0aea46a6e9e5bbe45f980dc548174e`。已安装到 SM-N9500 Android 9/API 28 并在内屏前台运行；临时竖屏截图确认提示未覆盖灯光按钮，自动旋转设置已恢复。实际 MindAR 相机授权/编译/首锁未测；本轮未上传或发布 APK。
+
+- ✅ [2026-09-24] 修正 iQOO Android 13 沉浸式初始化时 Insets controller 为空导致的启动中断。
+  - 根据设备反馈，`window.insetsController` 在 Activity 窗口尚未获得焦点时为空。`MainActivity.kt` 现在在视图挂载并获焦后申请沉浸式显示；controller 为空或厂商窗口 API 失败时恢复普通系统栏与默认布局，继续打开页面。
+  - APK 构建通过并在 SM-N9500 Android 9/API 28 前台启动；新文件已覆盖外网 `apk/aasc-mmd-ar-test.apk`，HTTP 200、大小 `13620354` bytes，远端 SHA-256 与本地 `71a0cb63844b6516624b8150e1f061a35bdd1f16f701f721e88875e669993d94` 一致。iQOO Z5x/Android 13 尚待现场复测。
+
+- ✅ [2026-09-24] 为独立 MMD AR 测试 APK 增加启动闪退诊断与降级保护。
+  - `MainActivity.kt` 将启动步骤分阶段记录；同步异常显示阶段/异常摘要错误页并记录堆栈，WebView 恢复异常和 renderer 退出时显示诊断页，沉浸式模式恢复失败降级继续运行。相机权限策略不变。
+  - 更新 MMD AR 测试 APK 的 design/spec/README、自测、todo 和任务文档。APK `13,620,354` bytes，SHA-256 `7f752e0a1f2a0b0543a35c6f492202b42894c662e70054f5e1fca37c51a1d96f`；已在 SM-N9500 Android 9/API 28 覆盖安装并以前台 Activity 启动。独立测试 APK 已上传至 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-mmd-ar-test.apk`，HTTP 200、长度及远端 SHA-256 校验通过；未改服务 `manifest.json`。Android 13/iQOO Z5x 无法通过 ADB 连接，原始闪退根因仍待现场复测；未发布 Offline APK、服务包或依赖包。
+
+- ✅ [2026-09-23] 修复拍照校准四角在触屏上拖动不稳定。
+  - 校准触点继续执行 DisplayStage 逆旋转映射；move/up/cancel 改由文档级事件处理，兼容指针离开画布和捕获异常；重绘时不再重复重设 canvas 尺寸，并禁止画布默认触控拖图/文本选择。
+  - 新增 `tests/display-mmd-ar-calibration.test.js`，四角和 0°/90°/180°/270° 坐标、捕获取消/丢失后再拖均通过；与显示端回归合计 51/51。`npm run build:apk:mmd-ar-test` 成功，APK `13,620,354` bytes，SHA-256 `e099999c4c9adb4b002f03efefdd88698c084a109ab3679671b0d570543bc917`，已安装 SM-N9500 Android 9/API 28 并确认应用和 PMX 启动正常。真实手指拖动待设备现场确认；Android 13 闪退待取得设备日志。未发布 Offline APK、服务包或依赖包。
+
+- ✅ [2026-09-23] 为独立 MMD AR 测试 APK 加入当前 JS tracker 与 MindAR 1.2.5 的 A/B 对比。
+  - 测试页复用同一保存定位图/四角选区和单摄像头流，显示目标准备/编译、首锁、实际识别帧率、时间加权可见率、丢失和锚点 RMS；MindAR 未暴露的置信度不作伪造。生产显示端 tracker 未修改。
+  - 固定 MindAR runtime/Controller/UI/许可证资源并在构建时校验 SHA-256；只打入 `com.aasc.mmdartest` 独立 APK，不进入 Offline/生产包。
+  - `npm run build:apk:mmd-ar-test` 成功，APK 为 `13,607,730` bytes，SHA-256 `7ece4967af75858667c1b300d8d9c5d2d893ee5cd08c4ed04094408cf508131c`；14 个模型文件和 6 个 A/B 资源校验通过，APK v2 签名、ZIP 完整性通过。已安装并运行于 SM-N9500 Android 9/API 28 display 0，定位面板与算法选择器可用；APK 内三个 MindAR JS 文件经回环 HTTP 读取后与清单哈希一致。
+  - `node --test tests/mmd-ar-benchmark-metrics.test.js` 4/4 通过；语法和 diff 检查通过。没有请求摄像头权限或采集环境图，实际图片跟踪和 A/B 性能数字仍待现场测试；未发布、未构建 Offline 包。
+
+- ✅ [2026-09-23] 修复独立 MMD AR 测试 APK 的灯光/定位按钮触摸被模型画布截获。
+  - `3rd/mmd-ar-test/build.js` 为提取的控件恢复 `.display-interaction-layer`（z-index 50）包装，避免 z-index 10 的 MMD canvas 成为按钮 hit-test 目标；Android WindowInsets 动态换算 CSS px 并应用安全边距，同时隐藏默认蓝色 tap highlight。
+  - `MainActivity.kt` 同步系统 Insets，并记录右上区域原生 raw/local 触摸坐标；测试页日志记录 DOM target 与面板状态。SM-N9500 Android 9 内屏 display 0 验证灯光/定位面板均可打开、关闭，模型 swipe 旋转正常。
+  - `npm run build:apk:mmd-ar-test` 构建通过，14 个模型资源 hash 校验通过；APK `13,128,697` bytes，SHA-256 `129379eca1856d6d5ab1852f41bf5f5dd9c369116894b6cf3df2c6f4c562cf6c`，已覆盖安装真机，未发布或改动 Offline APK。
+
+- ✅ [2026-09-23] 新增仅含默认米娅 PMX 的独立 AR 测试 APK。
+  - 新增 `3rd/mmd-ar-test/` Android 工程、APK 内回环静态 HTTP 服务、复用显示端 MMD/AR/灯光页面的 harness、资源下载校验/构建脚本和 README；`package.json` 增加 `build:apk:mmd-ar-test`。本机服务固定监听 `127.0.0.1:17836`，只服务 APK 白名单静态资源；无 AASC/Node server、控制端、聊天或其他模型。
+  - APK 内置当前默认 PMX、12 张纹理及默认 VMD 共 14 项，保留摄像头图片定位、灯光、VMD/布料物理和拖动旋转。资源逐文件固定 SHA-256 校验，构建 APK 的 ZIP、v2 签名、包名及内容校验通过。
+  - 输出 `3rd/mmd-ar-test/output/aasc-mmd-ar-test.apk`，大小 `13,112,748` bytes，SHA-256 `6f04454df446b20d3d8e577caac1345ed2c42e00bfe92dd8e62b735dc7f455c8`；未发布。ADB 安装至 SM-N9500（Android 9/API 28），停止旧实例后切至内屏 display 0；唤醒内屏后截图可见测试页面与米娅 PMX 模型。首页、默认 profile、PMX 和 VMD 经本机 HTTP 服务返回 200。
+  - 摄像头/AR、灯光、布料和旋转仍待验收。多 display 测试发现同时创建第二个 Activity 会因固定端口占用失败；单实例启动通过，后续是否支持多实例待确认。
+
 ### MMD/VRM 角色灯光
 
 - ✅ [2026-09-23] PMX 新增两组独立、仅作用于轮廓的边缘光，并将 Toon 明暗默认改为关闭。

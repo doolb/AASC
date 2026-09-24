@@ -45,6 +45,16 @@ test('显示端提供右上角灯光按钮和详细设置面板', () => {
     assert.match(html, /id="displayMmdLightingReset"[\s\S]*恢复默认/u);
 });
 
+test('正式显示端灯光面板展示 Canvas 实际渲染分辨率', () => {
+    const html = readPublic('display.html');
+    const lighting = readPublic('js/display-mmd-lighting.js');
+    const mmd = readPublic('js/display-mmd.js');
+    assert.match(html, /灯光设置\s*<small id="displayMmdRenderResolution"/u);
+    assert.match(lighting, /canvas\.width.*canvas\.height/u);
+    assert.match(lighting, /attributeFilter:\s*\['width', 'height'\]/u);
+    assert.match(mmd, /state\.runtime\.resize\(state\.width, state\.height, state\.devicePixelRatio\)/u);
+});
+
 test('灯光按钮位于时间区域下方并提供默认开启的阴影开关', () => {
     const html = readPublic('display.html');
     const css = readPublic('css/display-mmd.css');

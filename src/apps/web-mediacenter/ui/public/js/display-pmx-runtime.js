@@ -66,7 +66,7 @@ const isSameOriginMmdAsset = (url, extension) => {
         && url.toLowerCase().endsWith(extension);
 };
 
-const waitForManagedLoad = (startLoad, label) => new Promise((resolve, reject) => {
+const waitForManagedLoad = (startLoad, label, onFileProgress = () => {}, onItemsProgress = () => {}) => new Promise((resolve, reject) => {
     const loadingManager = new THREE.LoadingManager();
     let result;
     let resultReady = false;
@@ -94,6 +94,7 @@ const waitForManagedLoad = (startLoad, label) => new Promise((resolve, reject) =
         managerReady = true;
         tryResolve();
     };
+    loadingManager.onProgress = (url, loaded, total) => onItemsProgress(url, loaded, total);
     loadingManager.onError = (url) => fail(new Error(`${label}资源加载失败：${url}`));
 
     try {
@@ -102,7 +103,7 @@ const waitForManagedLoad = (startLoad, label) => new Promise((resolve, reject) =
             result = value;
             resultReady = true;
             tryResolve();
-        }, fail);
+        }, fail, onFileProgress);
     } catch (error) {
         fail(error);
     }
@@ -126,7 +127,7 @@ function createModelRotationPivot(model) {
     return pivot;
 }
 
-export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
+export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgress = () => {} } = {}) {
     if (!canvas) throw new Error('PMX Canvas 不存在');
 
     const renderer = new THREE.WebGLRenderer({
@@ -603,14 +604,31 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         startRendering();
     };
 
-    const loadModelMesh = (url) => waitForManagedLoad(
-        (loader, resolve, reject) => loader.load(url, resolve, undefined, reject),
-        'PMX 模型'
-    );
+    const loadModelMesh = (url, report) => {
+        let modelDownloadComplete = false;
+        return waitForManagedLoad(
+            (loader, resolve, reject, progress) => loader.load(url, resolve, progress, reject),
+            'PMX 模型',
+            (event) => {
+                // Three.js FileLoader 产生的 ProgressEvent 没有 target URL；首个完整下载事件后忽略纹理事件。
+                if (modelDownloadComplete || !event?.lengthComputable || event.total <= 0) return;
+                report('下载 PMX', 1 + Math.floor(69 * event.loaded / event.total));
+                if (event.loaded >= event.total) modelDownloadComplete = true;
+            },
+            (resourceUrl, loaded, total) => {
+                if (!/\.(?:png|jpe?g|bmp|tga)$/iu.test(resourceUrl) || total <= 0) return;
+                report('加载纹理', 70 + Math.floor(14 * loaded / total));
+            }
+        );
+    };
 
-    const loadAnimationClip = (url, mesh) => waitForManagedLoad(
-        (loader, resolve, reject) => loader.loadAnimation(url, mesh, resolve, undefined, reject),
-        'VMD 动作'
+    const loadAnimationClip = (url, mesh, report = () => {}) => waitForManagedLoad(
+        (loader, resolve, reject, progress) => loader.loadAnimation(url, mesh, resolve, progress, reject),
+        'VMD 动作',
+        (event) => {
+            if (!event?.lengthComputable || event.total <= 0) return;
+            report('下载 VMD', 85 + Math.floor(9 * event.loaded / event.total));
+        }
     );
 
     const createMotionHelper = async (mesh, clip, playMode = 'loop') => {
@@ -639,12 +657,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         }
     };
 
-    const preparePmxHelper = async (mesh, profile, resourceId = profile.motionResourceId) => {
+    const preparePmxHelper = async (mesh, profile, resourceId = profile.motionResourceId, report = () => {}) => {
         let clip = null;
         if (resourceId && profile.motionUrl) {
             validateMotionResource(profile, resourceId);
-            clip = await loadAnimationClip(profile.motionUrl, mesh);
+            report('下载 VMD', 85);
+            clip = await loadAnimationClip(profile.motionUrl, mesh, report);
         }
+        report('初始化模型与物理', 95);
         return createMotionHelper(mesh, clip, profile.playMode);
     };
 
@@ -702,9 +722,17 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         let stagedHelper = null;
         let stagedPivot = null;
         let stagedPhysicsError = null;
+        let progressPercent = 0;
+        const report = (phase, percent) => {
+            if (disposed || sequence !== modelSequence) return;
+            progressPercent = Math.max(progressPercent, Math.min(99, Math.round(percent)));
+            onProgress({ phase, percent: progressPercent });
+        };
         onStatus('正在加载 PMX 模型…');
+        report('下载 PMX', 1);
         try {
-            stagedMesh = await loadModelMesh(profile.modelUrl);
+            stagedMesh = await loadModelMesh(profile.modelUrl, report);
+            report('加载纹理', 84);
             // MMDLoader 把 PMX 材质的环境色映射成 emissive；按显示端规则始终忽略这部分亮度。
             stagedMesh.traverse((object) => {
                 if (!object.isMesh) return;
@@ -721,7 +749,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
                 scene,
                 mesh: stagedMesh,
                 createPivot: createModelRotationPivot,
-                prepareHelper: () => preparePmxHelper(stagedMesh, profile)
+                prepareHelper: () => preparePmxHelper(stagedMesh, profile, profile.motionResourceId, report)
             });
             stagedPivot = staged.pivot;
             stagedHelper = staged.preparedHelper.helper;
@@ -748,6 +776,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
             stagedMesh = null;
             stagedHelper = null;
             stagedPivot = null;
+            report('模型就绪', 99);
             onStatus(stagedPhysicsError
                 ? `PMX 物理不可用，已回退骨骼动画：${stagedPhysicsError.message}`
                 : 'PMX 模型已加载');

@@ -50,11 +50,28 @@
     const state = {
         initialized: false,
         elements: null,
-        lighting: null
+        lighting: null,
+        resolutionObserver: null
     };
 
     function byId(id) {
         return document.getElementById(id);
+    }
+
+    function observeRenderResolution() {
+        const canvas = byId('displayMmdCanvas');
+        const label = byId('displayMmdRenderResolution');
+        if (!canvas || !label) return;
+        const update = () => {
+            label.textContent = `${canvas.width}×${canvas.height} px`;
+        };
+        // 绘制缓冲属性由 DisplayMmd/PMX runtime 在 resize 后设置；直接读取可避免把 CSS 尺寸误报为渲染像素。
+        state.resolutionObserver = new MutationObserver(update);
+        state.resolutionObserver.observe(canvas, {
+            attributes: true,
+            attributeFilter: ['width', 'height']
+        });
+        update();
     }
 
     function getRimElements(index) {
@@ -326,6 +343,7 @@
         const saved = readSavedLighting();
         state.lighting = root.DisplayMmd.setLighting(saved || PRESETS.default);
         updateForm(state.lighting);
+        observeRenderResolution();
         state.elements.preset.value = saved ? 'custom' : 'default';
         bindEvents();
     }

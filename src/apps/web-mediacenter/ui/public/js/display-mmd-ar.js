@@ -484,8 +484,8 @@
         const source = state.calibration.sourceCanvas;
         const canvas = state.elements.calibrationCanvas;
         if (!source || !canvas) return;
-        canvas.width = source.width;
-        canvas.height = source.height;
+        if (canvas.width !== source.width) canvas.width = source.width;
+        if (canvas.height !== source.height) canvas.height = source.height;
         const context = canvas.getContext('2d');
         context.clearRect(0, 0, canvas.width, canvas.height);
         context.drawImage(source, 0, 0);
@@ -529,6 +529,7 @@
     }
 
     function handleCalibrationPointerDown(event) {
+        if (state.dragPointerId !== null || event.isPrimary === false || event.button > 0) return;
         const point = getCanvasPoint(event);
         if (!point) return;
         const handleIndex = findQuadHandle(point);
@@ -536,14 +537,18 @@
         event.preventDefault();
         state.dragIndex = handleIndex;
         state.dragPointerId = event.pointerId;
-        state.elements.calibrationCanvas.setPointerCapture?.(event.pointerId);
+        try {
+            state.elements.calibrationCanvas.setPointerCapture?.(event.pointerId);
+        } catch (_error) {
+            // 文档级 move/up 监听仍能在浏览器拒绝捕获时完成这次拖动。
+        }
     }
 
     function handleCalibrationPointerMove(event) {
         if (state.dragIndex < 0 || state.dragPointerId !== event.pointerId) return;
         const point = getCanvasPoint(event);
         if (!point) return;
-        event.preventDefault();
+        if (event.cancelable) event.preventDefault();
         state.calibration.selectedQuad[state.dragIndex] = point;
         drawCalibrationCanvas();
         const valid = isValidQuad(state.calibration.selectedQuad);
@@ -555,9 +560,16 @@
 
     function finishCalibrationPointer(event) {
         if (state.dragPointerId !== event.pointerId) return;
-        state.elements.calibrationCanvas.releasePointerCapture?.(event.pointerId);
+        const canvas = state.elements.calibrationCanvas;
+        const pointerId = state.dragPointerId;
         state.dragIndex = -1;
         state.dragPointerId = null;
+        if (event.type === 'lostpointercapture') return;
+        try {
+            if (canvas.hasPointerCapture?.(pointerId)) canvas.releasePointerCapture(pointerId);
+        } catch (_error) {
+            // 指针已由系统释放时保持本地拖动状态复位即可。
+        }
     }
 
     function canvasToBlob(canvas) {
@@ -1008,9 +1020,10 @@
             void deleteSelectedTarget();
         });
         elements.calibrationCanvas.addEventListener('pointerdown', handleCalibrationPointerDown);
-        elements.calibrationCanvas.addEventListener('pointermove', handleCalibrationPointerMove);
-        elements.calibrationCanvas.addEventListener('pointerup', finishCalibrationPointer);
-        elements.calibrationCanvas.addEventListener('pointercancel', finishCalibrationPointer);
+        elements.calibrationCanvas.addEventListener('lostpointercapture', finishCalibrationPointer);
+        document.addEventListener('pointermove', handleCalibrationPointerMove);
+        document.addEventListener('pointerup', finishCalibrationPointer);
+        document.addEventListener('pointercancel', finishCalibrationPointer);
         document.addEventListener('click', () => setPanelOpen(false));
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && !elements.calibration.hidden) {

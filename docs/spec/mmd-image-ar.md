@@ -73,7 +73,13 @@
 过程 captureCalibrationPhoto()
   从实时视频截取照片到源画布
   mode = "edit"；在同一画面容器中以画布替换视频
-  生成四个角点；拖动时保持画布坐标与显示坐标一致
+  生成四个角点；读取校准画布 client rect 和当前舞台旋转值
+  对视口触点执行舞台逆旋转，再按画布逻辑宽高换算为归一化坐标
+  pointerdown 命中最近角点后，在校准画布捕获当前 pointerId
+  只处理与当前 pointerId 匹配的文档级 pointermove，并更新该角点后重绘
+  仅当源图尺寸变化时设置校准 canvas 的 intrinsic width/height，避免重置上下文
+  pointerup、pointercancel 或 lostpointercapture 时释放指针并清空拖动状态
+  保持校准画布 touch-action 为 none，避免浏览器滚动/缩放手势抢占拖动
 
 过程 closeCalibrationDialog()
   隐藏弹窗、清空临时照片和拖动状态
@@ -471,6 +477,30 @@ IndexedDB 失败:
 ## 11. 测试伪代码
 
 ```text
+测试 calibrationHandleDragCoordinates
+  将 DisplayStage 设置为 0°、90°、180°、270°
+  在校准画布四个可见白点中心分别触发 pointerdown
+  将 pointermove 坐标转换为对应舞台旋转下的视口坐标
+  断言逆旋转后只更新被触碰的角点，且选区按逻辑画布坐标跟随指针
+
+测试 calibrationPointerLifecycle
+  按下角点并移动到画布边界之外
+  断言捕获中的同一 pointerId 继续更新选区
+  分别触发 pointerup、pointercancel 和 lostpointercapture
+  断言拖动状态清空、弹窗保持打开，下一次拖动仍可开始
+
+测试 calibrationQuadValidationAfterDrag
+  拖动后保持原四边形面积与凸性校验
+  有效选区允许保存，无效选区禁止保存并显示现有提示
+
+测试 captureCalibrationImage
+  模拟摄像头 video 帧
+  触发拍照
+  断言生成四个默认角点
+
+```
+
+```text
 测试 captureCalibrationImage
   模拟摄像头 video 帧
   触发拍照
@@ -530,3 +560,20 @@ IndexedDB 失败:
 ```
 
 本次发布使用 `code-only`，依赖锁文件指纹未变化，因此不生成新的 dependencies 包；完整 APK 不参与发布和清理。
+
+## 13. 测试 APK 算法对比隔离
+
+```text
+生产 display.html:
+  继续加载并使用现有 DisplayMmdImageTargetTracker
+  不注入 MindAR 脚本、算法选择器或 A/B 指标
+
+3rd/mmd-ar-test 构建页面:
+  在独立 harness 中保存原 tracker 引用
+  将测试页 tracker 接口转发给 current 或 MindAR adapter
+  复用 DisplayMmdAr 的目标存储、摄像头生命周期、姿态 cover 映射和 MMD pose API
+  一轮结束并 dispose 后，才允许切换算法和开始下一轮
+  MindAR 从测试 APK 本地 vendor 路径动态加载，不使用 CDN
+```
+
+MindAR A/B 指标及目标透视校正仅属于独立测试 APK 的伪代码，不能据此改变生产 tracker 的默认行为。A/B 结果需同设备、同一保存目标和静止测试条件下采集；可见率按时间加权，锚点 RMS 需要保持目标静止才近似代表定位抖动。

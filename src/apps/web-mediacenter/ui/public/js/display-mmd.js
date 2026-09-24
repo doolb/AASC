@@ -139,6 +139,7 @@
         canvas: null,
         context: null,
         status: null,
+        onLoadProgress: null,
         bus: null,
         send: null,
         getState: null,
@@ -442,7 +443,8 @@
                     : runtimeExports.createDisplayVrmRuntime;
                 state.runtime = createRuntime({
                     canvas: state.canvas,
-                    onStatus: (message) => setStatus(message)
+                    onStatus: (message) => setStatus(message),
+                    onProgress: state.onLoadProgress
                 });
                 state.runtimeType = modelType;
                 state.runtime.setLighting?.(state.lighting);
@@ -544,11 +546,13 @@
             state.modelProfile = resolvedProfile;
             state.modelReady = true;
             setStatus(`${modelType === 'pmx' ? 'PMX' : 'VRM'} 模型已加载`);
+            state.onLoadProgress?.({ phase: '模型已加载', percent: 100 });
             return true;
         } catch (error) {
             state.modelReady = false;
             state.runtime?.showFallback?.();
             setStatus(`角色模型加载失败：${error.message}`, true);
+            state.onLoadProgress?.({ phase: '加载失败', error: error.message });
             if (!state.runtime) drawFallback();
             return false;
         }
@@ -571,6 +575,7 @@
         if (state.initialized || !options.canvas) return;
         state.canvas = options.canvas;
         state.status = options.status || null;
+        state.onLoadProgress = typeof options.onLoadProgress === 'function' ? options.onLoadProgress : null;
         state.bus = options.bus || null;
         state.send = typeof options.send === 'function' ? options.send : () => false;
         state.getState = typeof options.getState === 'function' ? options.getState : () => ({});
