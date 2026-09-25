@@ -1061,11 +1061,12 @@ const Chat = {
             html += `<button class="session-btn session-add" onclick="Chat.startTemporaryConversation()" title="重新开始当前角色临时对话"${canRestart ? '' : ' disabled'}>↻</button>`;
             html += this.renderTemporaryHistorySelector();
             container.innerHTML = html;
-            container.querySelectorAll('[data-temporary-history-session]').forEach((button) => {
-                button.addEventListener('click', () => this.viewTemporaryHistory(button.dataset.temporaryHistorySession));
-            });
-            const currentButton = container.querySelector('[data-temporary-history-current]');
-            if (currentButton) currentButton.addEventListener('click', () => this.showCurrentTemporaryConversation());
+            const historySelect = container.querySelector('[data-temporary-history-select]');
+            if (historySelect) {
+                historySelect.addEventListener('change', () => {
+                    this.onTemporaryHistoryChange(historySelect.value);
+                });
+            }
             return;
         }
 
@@ -1110,24 +1111,33 @@ const Chat = {
         const groups = Array.isArray(this.temporaryHistoryGroups)
             ? this.temporaryHistoryGroups
             : [];
-        let html = '<div class="temporary-history-viewer" style="flex-basis:100%;margin-top:6px;">';
-        html += '<span class="session-label">历史临时会话:</span>';
-        if (this.temporaryHistoryViewSessionId) {
-            html += '<button type="button" class="session-btn" data-temporary-history-current>当前对话</button>';
-        }
+        const selectedSessionId = this.temporaryHistoryViewSessionId || '';
+        let html = '<div class="temporary-history-viewer">';
+        html += '<label class="session-label" for="temporaryHistorySelect">历史临时会话:</label>';
+        html += '<select class="session-select temporary-history-select" id="temporaryHistorySelect" data-temporary-history-select aria-label="切换历史临时会话">';
+        html += `<option value=""${selectedSessionId ? '' : ' selected'}>当前对话</option>`;
         if (groups.length === 0) {
-            html += '<span class="chat-empty" style="padding:0 4px;">暂无历史会话</span>';
+            html += '<option disabled>暂无历史会话</option>';
         } else {
             groups.forEach((group) => {
                 const sessionId = this.escapeHtml(String(group.sessionId || ''));
-                const roleName = this.escapeHtml(group.roleName || '临时对话');
-                const time = this.escapeHtml(this.formatTemporaryHistoryTime(group.startedAt));
+                const roleName = String(group.roleName || '临时对话');
+                const time = this.formatTemporaryHistoryTime(group.startedAt);
                 const count = Number(group.messageCount) || 0;
-                const selected = group.sessionId === this.temporaryHistoryViewSessionId ? ' active' : '';
-                html += `<button type="button" class="session-btn${selected}" data-temporary-history-session="${sessionId}" title="${roleName}">${time} · ${roleName} · ${count}条</button>`;
+                const selected = group.sessionId === this.temporaryHistoryViewSessionId ? ' selected' : '';
+                const label = this.escapeHtml(`${time} · ${roleName} · ${count}条`);
+                html += `<option value="${sessionId}"${selected}>${label}</option>`;
             });
         }
-        return `${html}</div>`;
+        return `${html}</select></div>`;
+    },
+
+    onTemporaryHistoryChange(sessionId) {
+        if (!sessionId) {
+            this.showCurrentTemporaryConversation();
+            return;
+        }
+        this.viewTemporaryHistory(sessionId);
     },
 
     viewTemporaryHistory(sessionId) {

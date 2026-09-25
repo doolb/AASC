@@ -1918,6 +1918,9 @@ handleChatMessage(options):
 控制端临时页签:
     收到 temporaryConversation 快照后保存 roleName/templateId/messages
     角色选择变化时发送 { type: startTemporaryConversation, roleName }
+    历史临时会话用 select 下拉呈现每组摘要：开始时间、角色、消息数
+    下拉默认项“当前对话”使用空值；选择历史 sessionId 后只读显示该组消息
+    重新选择“当前对话”后清除历史查看状态并恢复输入发送
     普通发送只发送 { mode: temporary, temporaryConversationId: id }
     id 或 roleName 缺失时禁用发送按钮并提示先选择角色
 ```
