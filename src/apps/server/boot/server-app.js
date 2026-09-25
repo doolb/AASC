@@ -7698,13 +7698,13 @@ wss.on('connection', (ws, req) => {
             supported: false,
             ready: false
         });
-        // 非子显示端：从持久化恢复用户覆盖值，等显示端声明能力后自动合并
-        if (!isSubDisplay && savedState?.userCapabilities) {
+        // 显示端重连时先恢复用户能力覆盖；子显示端以自身能力为基础，避免默认录音声明覆盖关闭状态。
+        if (savedState?.userCapabilities) {
             const entry = displayClients.get(displayId);
             if (entry) {
                 entry.state.userCapabilities = normalizeDisplayUserCapabilities(savedState.userCapabilities);
                 entry.state.capabilities = mergeDisplayCapabilities(
-                    DEFAULT_CAPABILITIES,
+                    isSubDisplay ? SUB_DISPLAY_CAPABILITIES : DEFAULT_CAPABILITIES,
                     entry.state.userCapabilities
                 );
             }

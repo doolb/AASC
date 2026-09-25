@@ -66,6 +66,7 @@ class AudioRecorderPv {
             throw new Error('录音已在进行中');
         }
 
+        this.paused = false;
         this.recording = true;
 
         console.log('[录音] 开始录音 (PvRecorder)...');
@@ -167,12 +168,17 @@ class AudioRecorderPv {
         this.recording = false;
 
         if (this.recorder) {
+            const recorder = this.recorder;
+            this.recorder = null;
             try {
-                this.recorder.stop();
-                this.recorder.release();
-                this.recorder = null;
+                recorder.stop();
             } catch (error) {
-                console.error('[录音] 停止录音时出错:', error.message);
+                console.error('[录音] 停止 PvRecorder 时出错:', error.message);
+            }
+            try {
+                recorder.release();
+            } catch (error) {
+                console.error('[录音] 释放 PvRecorder 时出错:', error.message);
             }
         }
 

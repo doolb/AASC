@@ -77,9 +77,14 @@ wss.on('connection', (ws, req)):
                 ? { ...SUB_DISPLAY_CAPABILITIES }
                 : null  // 非子显示端初始为 null，等硬件声明
         }
-        // 非子显示端：从持久化恢复用户覆盖值
-        if !isSubDisplay && savedState?.userCapabilities:
-            displayData.state.userCapabilities = { ...savedState.userCapabilities }
+        // 所有显示端都恢复用户覆盖值；子显示端以自身固定能力为合并基础
+        if savedState?.userCapabilities:
+            displayData.state.userCapabilities = normalizeDisplayUserCapabilities(savedState.userCapabilities)
+            baseCapabilities = isSubDisplay ? SUB_DISPLAY_CAPABILITIES : DEFAULT_CAPABILITIES
+            displayData.state.capabilities = mergeDisplayCapabilities(
+                baseCapabilities,
+                displayData.state.userCapabilities
+            )
         ...
 ```
 
@@ -90,11 +95,14 @@ handleDisplayMessage(displayId, data, ws):
     if data.type === 'capabilities':
         displayData = displayClients.get(displayId)
         if displayData:
-            // 以硬件声明为基础
-            displayData.state.capabilities = {
-                ...DEFAULT_CAPABILITIES,
-                ...data.capabilities
-            }
+            // 以显示端类型和本次硬件声明为基础
+            baseCapabilities = displayData.state.isSubDisplay
+                ? SUB_DISPLAY_CAPABILITIES
+                : DEFAULT_CAPABILITIES
+            displayData.state.capabilities = mergeDisplayCapabilities(
+                { ...baseCapabilities, ...data.capabilities },
+                displayData.state.userCapabilities
+            )
             // 重连后恢复用户手动覆盖的能力值
             if displayData.state.userCapabilities:
                 Object.assign(displayData.state.capabilities, displayData.state.userCapabilities)
@@ -431,8 +439,7 @@ handleCapabilitiesUpdated(data):
     if pendingAutoStart && 能力允许:
         startVoiceRecording()  // 启动录音
 
-// 旧服务器不发送 capabilitiesUpdated，pendingAutoStart 不会触发
-// 但服务器有强制启动录音的场景（voice-display-node/TTS 播完恢复）
+// 旧服务器不发送 capabilitiesUpdated 时网页端不启动录音；Node 子显示端也采用关闭优先策略
 ```
 
 ## 子显示端实现 (voice-display-node/main.js)
@@ -457,6 +464,46 @@ class VoiceDisplay:
                     displayText: false
                 }
             }))
+
+    // 服务端下发权威能力前保持麦克风关闭
+    recordingEnabled = false
+    voiceRecordingCapabilityKnown = false
+
+handleCapabilitiesUpdated(data):
+    _capabilities = data.capabilities
+    voiceRecordingCapabilityKnown = true
+    if data.capabilities.voiceRecording !== true:
+        recordingEnabled = false
+        voiceRecognitionRestartPending = false
+        recorder.stop()  // 停止 VAD 循环并释放 PvRecorder / AudioIO
+    else:
+        recordingEnabled = true
+        if ASR 就绪且没有录音实例:
+            startVoiceRecognition()
+
+startVoiceRecognition():
+    if !recordingEnabled or !voiceRecordingCapabilityKnown:
+        return
+    if _capabilities.voiceRecording !== true or globalRecordingPaused:
+        return
+    if voiceRecognitionStarted or recorder.isRecording():
+        return
+    voiceRecognitionStarted = true
+    recordingPromise = recorder.start(onAudioData)
+    recordingPromise.finally:
+        voiceRecognitionStarted = false
+        if 关闭期间又收到开启请求且当前能力仍允许:
+            startVoiceRecognition()
+
+onAudioData(wavData):
+    如果能力关闭或全局录音暂停:
+        丢弃音频段
+    等待 ASR 返回后再次检查能力状态；已关闭则丢弃识别结果
+
+WebSocket 断开:
+    voiceRecordingCapabilityKnown = false
+    recordingEnabled = false
+    recorder.stop()  // 重连权威状态到达前不占用麦克风
 ```
 
 ## 子显示端实现 (voice-display/main.go)

@@ -55,6 +55,7 @@ class AudioRecorder {
             throw new Error('录音已在进行中');
         }
 
+        this.paused = false;
         this.recording = true;
 
         console.log('[录音] 开始录音...');
@@ -191,9 +192,10 @@ class AudioRecorder {
         this.recording = false;
 
         if (this.audioInput) {
+            const audioInput = this.audioInput;
+            this.audioInput = null;
             try {
-                this.audioInput.quit();
-                this.audioInput = null;
+                audioInput.quit();
             } catch (error) {
                 console.error('[录音] 停止录音时出错:', error.message);
             }

@@ -161,11 +161,13 @@ class VoiceDisplay {
         this.heartbeatInterval = null;
         this.heartbeatIntervalMs = 60 * 1000;
         this.asrPollTimer = null;
-        this.recordingEnabled = true;
+        // 麦克风能力要等服务端权威配置到达后才确认；启动时先保持关闭，避免重连竞态提前打开设备。
+        this.recordingEnabled = false;
+        this.voiceRecordingCapabilityKnown = false;
         this.voiceRecognitionStarted = false;
+        this.voiceRecognitionRestartPending = false;
         // 服务端全局暂停状态仅保存在运行时，重连后由服务端重新下发权威值。
         this.globalRecordingPaused = false;
-        this.globalPauseWasRecording = false;
         this.lastRecognition = '';
         // Windows 系统级语音输入状态独立于 TUI 输入栏；记录每段文本以支持“返回”单次撤销。
         this.textInputMode = 'inactive';
@@ -226,7 +228,7 @@ class VoiceDisplay {
         tui.updateRecordingState({
             recordingEnabled: this.recordingEnabled,
             asrReady: this.asr ? this.asr.isReady() : false,
-            vadStatus: this.recorder ? '运行中' : '未启动',
+            vadStatus: this.recorder?.isRecording() ? '运行中' : '未启动',
             playQueueSize: this.audio ? this.audio.queueLength || 0 : 0,
             lastRecognition: this.lastRecognition || '-',
             recordingMode: this.recordingMode
@@ -279,6 +281,10 @@ class VoiceDisplay {
             ws.on('close', () => {
                 if (this.ws !== ws) return;
                 this.connected = false;
+                // 断线期间服务端可能已修改能力；释放设备并等待重连后的权威配置。
+                this.voiceRecordingCapabilityKnown = false;
+                this.recordingEnabled = false;
+                this.stopVoiceRecognition();
                 this.rejectDisplayIdWaiter(new Error('WebSocket 已关闭，服务器未确认显示端 ID'));
                 log('断开', '连接已关闭');
                 this.updateTUIConnectionState();
@@ -483,6 +489,7 @@ class VoiceDisplay {
     handleCapabilitiesUpdated(data) {
         if (!data.capabilities) return;
         this._capabilities = data.capabilities;
+        this.voiceRecordingCapabilityKnown = true;
         log('能力', '能力已更新: ' + JSON.stringify(data.capabilities));
 
         if (!data.capabilities.voicePlayback) {
@@ -494,12 +501,19 @@ class VoiceDisplay {
         }
         if (!data.capabilities.voiceRecording) {
             this.disableRecording();
+        } else {
+            this.enableRecording();
         }
     }
 
     handleAsrConfig(data) {
         this._asrConfig = data;
         log('ASR', 'ASR 配置: device=' + data.device + ' localEnabled=' + data.localAsrEnabled);
+    }
+
+    isVoiceRecordingEnabled() {
+        return this.recordingEnabled && this.voiceRecordingCapabilityKnown
+            && this._capabilities?.voiceRecording === true;
     }
 
     handleVoiceRecordingConfig(data) {
@@ -512,17 +526,10 @@ class VoiceDisplay {
         const nextPaused = data?.paused === true;
         this.globalRecordingPaused = nextPaused;
         if (nextPaused) {
-            this.globalPauseWasRecording = Boolean(this.recorder && !this.recorder.isPaused());
-            if (this.globalPauseWasRecording) this.recorder.pause();
+            if (this.recorder && !this.recorder.isPaused()) this.recorder.pause();
         } else {
-            const shouldResume = this.globalPauseWasRecording;
-            this.globalPauseWasRecording = false;
-            if (shouldResume && this.recordingEnabled && !this.localTtsPlaybackActive
-                && this.remoteTtsPlaybackIds.size === 0 && this.recorder?.isPaused()) {
-                this.recorder.resume();
-            } else if (!shouldResume && this.recordingEnabled && !this.voiceRecognitionStarted
-                && !this.localTtsPlaybackActive && this.remoteTtsPlaybackIds.size === 0) {
-                void this.startVoiceRecognition();
+            if (this.recordingEnabled) {
+                this.resumeRecorderIfTtsIdle();
             }
         }
         this.updateTUIRecordingState();
@@ -755,11 +762,7 @@ class VoiceDisplay {
     }
 
     resumeRecorderAfterTextInputAnnouncement() {
-        if (!this.recordingEnabled || this.globalRecordingPaused || !this.recorder) return;
-        if (this.recorder.isPaused() && !this.localTtsPlaybackActive && this.remoteTtsPlaybackIds.size === 0) {
-            this.recorder.resume();
-            log('录音', '状态提示播报结束，恢复录音');
-        }
+        this.resumeRecorderIfTtsIdle();
     }
 
     requestTextInputAnnouncement(mode, textOverride = null) {
@@ -1278,12 +1281,6 @@ class VoiceDisplay {
         this.pendingVoiceTtsPlaybackIds.clear();
     }
 
-    resumeRecorderIfTtsIdle() {
-        if (!this.recordingEnabled || this.globalRecordingPaused
-            || this.localTtsPlaybackActive || this.remoteTtsPlaybackIds.size > 0) return;
-        if (this.recorder && this.recorder.isPaused()) this.recorder.resume();
-    }
-
     getRecognitionTexts(result = {}) {
         const segments = Array.isArray(result.segments)
             ? result.segments
@@ -1550,7 +1547,10 @@ class VoiceDisplay {
      * @returns {Promise<void>}
      */
     async startVoiceRecognition() {
-        if (this.globalRecordingPaused) return;
+        if (!this.recordingEnabled || !this.voiceRecordingCapabilityKnown
+            || this._capabilities?.voiceRecording !== true || this.globalRecordingPaused) return;
+        if (this.isRecordingPausedForPlayback()) return;
+        if (this.voiceRecognitionStarted || this.recorder?.isRecording()) return;
         if (!AudioRecorder) {
             logError('语音', '录音器不可用，语音识别功能将不可用');
             return;
@@ -1565,7 +1565,7 @@ class VoiceDisplay {
 
         const onAudioData = async (wavData, timing = {}) => {
             try {
-                if (this.globalRecordingPaused) return;
+                if (!this.isVoiceRecordingEnabled() || this.globalRecordingPaused) return;
                 let dataToSend = wavData;
 
                 // SpeexDSP 模式：将 WAV 音频经过 AEC 后再送 ASR
@@ -1594,7 +1594,7 @@ class VoiceDisplay {
                     localTextInputMode: requestTextInputMode,
                     localTextInputRequireVoiceprint
                 });
-                if (this.globalRecordingPaused) return;
+                if (!this.isVoiceRecordingEnabled() || this.globalRecordingPaused) return;
                 const displayText = formatAsrDisplayText(result);
                 if (result.status === 'success' && displayText) {
                     log('语音', `识别结果: ${displayText}`);
@@ -1616,12 +1616,29 @@ class VoiceDisplay {
             }
         };
 
-        this.recorder.start(onAudioData, {
-            stopSignal: this.stopController.signal
-        }).catch(error => {
-            logError('语音', `录音错误: ${error.message}`);
-        });
         this.voiceRecognitionStarted = true;
+        const recordingPromise = this.recorder.start(onAudioData, {
+            stopSignal: this.stopController.signal
+        });
+        this.voiceRecognitionPromise = recordingPromise;
+        recordingPromise
+            .catch(error => {
+                logError('语音', `录音错误: ${error.message}`);
+            })
+            .finally(() => {
+                if (this.voiceRecognitionPromise !== recordingPromise) return;
+                this.voiceRecognitionPromise = null;
+                this.voiceRecognitionStarted = false;
+
+                const shouldRestart = this.voiceRecognitionRestartPending;
+                this.voiceRecognitionRestartPending = false;
+                if (shouldRestart && this.recordingEnabled
+                    && this.voiceRecordingCapabilityKnown
+                    && this._capabilities?.voiceRecording === true
+                    && !this.globalRecordingPaused) {
+                    void this.startVoiceRecognition();
+                }
+            });
     }
 
     /**
@@ -1678,23 +1695,58 @@ class VoiceDisplay {
     }
 
     enableRecording() {
+        if (!this.voiceRecordingCapabilityKnown || this._capabilities?.voiceRecording !== true) {
+            log('录音', '服务端未确认录音能力，保持麦克风关闭');
+            return;
+        }
         this.recordingEnabled = true;
         if (this.recorder && !this.globalRecordingPaused) {
-            this.recorder.resume();
+            this.resumeRecorderIfTtsIdle();
         }
         log('录音', '已通过远程指令开启录音');
-        this.recordingEnabled = true;
         this.updateTUIRecordingState();
     }
 
     disableRecording() {
         this.recordingEnabled = false;
-        if (this.recorder) {
-            this.recorder.pause();
-        }
+        this.stopVoiceRecognition();
         log('录音', '已通过远程指令关闭录音');
-        this.recordingEnabled = false;
         this.updateTUIRecordingState();
+    }
+
+    stopVoiceRecognition() {
+        this.voiceRecognitionRestartPending = false;
+        if (this.recorder?.isRecording()) {
+            // 能力关闭是硬关闭：停止采集并释放底层音频设备，而不是只丢弃音频帧。
+            this.recorder.stop();
+        }
+    }
+
+    isRecordingPausedForPlayback() {
+        return this.pauseRecordingDuringPlayback
+            && (this.localTtsPlaybackActive || this.remoteTtsPlaybackIds.size > 0);
+    }
+
+    resumeRecorderIfTtsIdle() {
+        if (!this.isVoiceRecordingEnabled() || this.globalRecordingPaused
+            || this.isRecordingPausedForPlayback()) return;
+
+        if (this.voiceRecognitionStarted) {
+            if (this.recorder?.isRecording() && this.recorder.isPaused()) {
+                this.recorder.resume();
+                log('录音', 'TTS 播放结束，恢复录音');
+            } else if (!this.recorder?.isRecording()) {
+                // 录音器正在释放上一次采集；等其 Promise 完成后再重新打开设备。
+                this.voiceRecognitionRestartPending = true;
+            }
+            return;
+        }
+
+        if (this.asr?.isReady()) {
+            void this.startVoiceRecognition();
+        } else if (this.asr) {
+            this.waitForASRReady();
+        }
     }
 
     /**
@@ -2051,6 +2103,8 @@ class VoiceDisplay {
      * 停止语音显示端
      */
     stop() {
+        this.recordingEnabled = false;
+        this.voiceRecognitionRestartPending = false;
         this.stopController.abort();
         this.stopHeartbeat();
         this.clearTextInputIdleTimer();

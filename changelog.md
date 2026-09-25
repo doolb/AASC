@@ -1,5 +1,11 @@
 # Web MediaCenter - 变更日志
 
+### Node 子显示端语音录音
+
+- ✅ [2026-09-25] 修复关闭 Node 子显示端录音能力后仍占用麦克风的问题。
+  - Node 子显示端等服务端权威能力后才启动采集；能力关闭或 WebSocket 断开时停止并释放 PvRecorder/AudioIO，关闭后返回的 ASR 结果会丢弃。重新开启时等待旧采集 Promise 结束后重建单一采集流；TTS 临时暂停仍复用当前设备。
+  - 服务端重连时恢复子显示端持久化 `userCapabilities`，避免客户端默认 `voiceRecording=true` 覆盖用户关闭值。同步更新能力 design/spec、任务和自测文档；自动化测试未运行，Windows 节点麦克风占用和重连待现场验收。
+
 ### 批量播放模式
 
 - ✅ [2026-09-24] 修复批量图片切换时 TTS 可能中断并反复恢复播放。

@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-23，code v34/min v34 已发布）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-25，code v34/min v34 已发布）
 
 ## 控制端
 
@@ -272,6 +272,11 @@
   - 设计：`docs/design/android-display.md`；实现伪代码：`docs/spec/android-display.md`；任务：`docs/task/20260920_正式APK蓝牙SCO录音接入.md`。
 
 ## 外部应用焦点
+
+- ⏳待现场验收 [2026-09-25] Node 子显示端录音能力关闭时释放麦克风
+  - 控制端关闭 `voiceRecording` 后，节点应停止并释放底层采集器；重连权威能力到达前也保持关闭。重新开启后只启动一个采集流，断线后麦克风占用应结束。
+  - 需在 `voice-display-node-DESKTOP-1I50TLH`（192.168.1.33）验证系统麦克风占用指示、关闭/开启、断线重连和 ASR 就绪前后的行为；本轮未远程部署或重启该节点。
+  - 关联文档：`docs/design/display-capability.md`、`docs/spec/display-capability.md`、`docs/task/20260925_Node子显示端关闭录音释放麦克风.md`。
 
 - ⏳待现场验收 [2026-09-12] Windows 子显示端语音输入端到端回归
   - 需在 Windows 10/11 同步最新 Node 子显示端代码并重启，验证“开始输入”/“结束输入”提示完成后持续产生 `asrAudio`，普通文本注入、 “返回”、 “发送”保持输入模式、30 秒超时退出及窗口切换保护。
