@@ -619,7 +619,7 @@ const Chat = {
         window.WebSocketManager.ws.send(JSON.stringify({ type: 'getTemporaryConversation' }));
     },
 
-    handleTemporaryConversation(data) {
+    handleTemporaryConversation(data, { renderMessages = true } = {}) {
         if (!data || !data.conversation) return;
         const conversation = data.conversation;
         const nextHistoryGroups = Array.isArray(conversation.historyGroups)
@@ -645,7 +645,7 @@ const Chat = {
         this.renderModeIndicator();
         this.renderSessionSelector();
         this.updateSendButton();
-        if (this.session.mode === 'temporary') this.renderHistory();
+        if (renderMessages && this.session.mode === 'temporary') this.renderHistory();
     },
 
     handleTemporaryConversationError(data) {
@@ -1803,7 +1803,7 @@ const Chat = {
         this.currentStreamingReasoning = data.reasoning || this.currentStreamingReasoning;
         this.updateStreamingThinkButton(this.currentStreamingReasoning);
         
-        if (data.success && !data.temporaryConversation) {
+        if (data.success && !data.temporaryConversation && Array.isArray(data.history)) {
             // 角色模式：历史写入该角色独立历史，避免污染群聊/私聊
             if (this.session.mode === 'role' && this.session.roleTarget) {
                 this.roleHistories[this.session.roleTarget] = data.history;
@@ -1813,9 +1813,26 @@ const Chat = {
         } else if (!data.success) {
             window.showToast('聊天失败: ' + data.error, 'error');
         }
+
+        if (data.success) {
+            if (data.temporaryConversation && data.conversation) {
+                this.handleTemporaryConversation(
+                    { conversation: data.conversation },
+                    { renderMessages: false }
+                );
+            }
+            const hasFinalHistory = data.temporaryConversation
+                ? Array.isArray(this.temporaryConversation.messages)
+                : Array.isArray(data.history);
+            if (hasFinalHistory) {
+                // 完成态以服务端最终历史/临时会话快照为准，避免流式节点与历史刷新出现顺序差异。
+                this.renderHistory();
+                return;
+            }
+        }
         
         if (streamingContent) {
-            streamingContent.innerHTML = ChatMarkdown.render(data.message);
+            streamingContent.innerHTML = ChatMarkdown.render(data.message || '');
             streamingContent.removeAttribute('id');
         }
         
@@ -1827,26 +1844,17 @@ const Chat = {
             streamingAssistant.removeAttribute('id');
             const streamingThinkButton = document.getElementById('streamingThinkBtn');
             if (streamingThinkButton) streamingThinkButton.removeAttribute('id');
-            
             if (data.success) {
                 const playBtn = document.createElement('button');
                 playBtn.className = 'chat-play-btn';
                 playBtn.textContent = '🔊';
                 playBtn.title = '播放语音';
-                // 角色模式：播放按钮取该角色独立历史最后一条（历史已写入 roleHistories），
-                // 仍读 this.history 会播放群聊最后一条，造成播错消息
-                if (data.temporaryConversation) {
-                    playBtn.onclick = () => this.playMessage({
-                        content: data.message,
-                        speech: data.speech,
-                        displayId: window.currentDisplayId,
-                        playOnControl: this.session.playOnControl
-                    });
-                } else if (this.session.mode === 'role' && this.session.roleTarget && this.roleHistories[this.session.roleTarget]) {
-                    playBtn.onclick = () => this.playMessage(this.roleHistories[this.session.roleTarget].length - 1);
-                } else {
-                    playBtn.onclick = () => this.playMessage(this.history.length - 1);
-                }
+                playBtn.onclick = () => this.playMessage({
+                    content: data.message,
+                    speech: data.speech,
+                    displayId: window.currentDisplayId,
+                    playOnControl: this.session.playOnControl
+                });
                 streamingAssistant.appendChild(playBtn);
             }
         } else if (data.success) {
