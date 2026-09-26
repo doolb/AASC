@@ -1741,6 +1741,15 @@ getGroupSystemPrompt():
     复用 showStreamingMessage(data.content, 助手名)
     不发送 chatMessage，避免同一语音请求重复进入服务端
 
+服务端流式完成:
+    若为临时会话:
+        assistantMessageRecord 写入 messages 快照时保留 reasoning 和 speech
+        chatResponse 同时携带完整 temporaryConversation 快照
+    控制端收到成功 chatResponse:
+        若携带临时会话快照，先用快照更新当前临时会话
+        用服务端 history 或临时会话 messages 重绘消息列表
+        不保留独立的流式 DOM 顺序作为最终显示顺序
+
 服务端流式完成且 voiceOriginDisplayId 存在:
     向来源显示端发送:
         { type: 'voiceCommand', action: 'response', text: fullMessage, detailText: fullMessage }

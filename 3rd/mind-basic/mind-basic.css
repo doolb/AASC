@@ -1,0 +1,396 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #111318;
+  color: #f5f7fa;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #111318;
+}
+
+a-scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mind-basic-controls {
+  position: fixed;
+  z-index: 20;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  width: min(390px, calc(100vw - 24px));
+  max-height: min(60dvh, 520px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 16px;
+  background: rgb(17 19 24 / 92%);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 32%);
+  backdrop-filter: blur(12px);
+}
+
+.mind-basic-controls h1,
+.mind-basic-calibration h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.mind-basic-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mind-basic-controls-toggle {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 1px solid #596273;
+  border-radius: 9px;
+  padding: 5px 10px;
+  color: #f7f8fa;
+  background: #262a33;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mind-basic-controls.is-collapsed {
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 7px;
+  border-radius: 12px;
+}
+
+.mind-basic-controls.is-collapsed h1,
+.mind-basic-controls.is-collapsed .mind-basic-controls-body {
+  display: none;
+}
+
+.mind-basic-controls.is-collapsed .mind-basic-controls-toggle {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.mind-basic-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: #c7ccd5;
+  font-size: 13px;
+}
+
+.mind-basic-field select,
+.mind-basic-field input,
+.mind-basic-actions button,
+.mind-basic-calibration-actions button,
+.mind-basic-secondary {
+  min-height: 42px;
+  border: 1px solid #4a5060;
+  border-radius: 10px;
+  padding: 8px 11px;
+  color: #f7f8fa;
+  background: #262a33;
+  font: inherit;
+}
+
+.mind-basic-field select,
+.mind-basic-field input {
+  width: 100%;
+}
+
+.mind-basic-field select option {
+  color: #f7f8fa;
+  background: #242832;
+}
+
+.mind-basic-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mind-basic-actions button,
+.mind-basic-calibration-actions button,
+.mind-basic-secondary {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mind-basic-actions button:first-child,
+.mind-basic-calibration-actions button:last-child {
+  border-color: #3285dc;
+  background: #1769bb;
+}
+
+.mind-basic-actions button:disabled,
+.mind-basic-calibration-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.mind-basic-status,
+.mind-basic-note {
+  margin: 10px 0 0;
+  color: #dce1e9;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.mind-basic-note {
+  color: #aab1bf;
+  font-size: 12px;
+}
+
+.mind-basic-progress {
+  margin-top: 10px;
+}
+
+.mind-basic-progress[hidden] {
+  display: none;
+}
+
+.mind-basic-progress-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+  color: #dce1e9;
+  font-size: 12px;
+}
+
+.mind-basic-progress progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  accent-color: #3f9cff;
+}
+
+.mind-basic-calibration {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  background: rgb(0 0 0 / 78%);
+}
+
+.mind-basic-calibration[hidden] {
+  display: none;
+}
+
+.mind-basic-calibration-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: clamp(12px, 3vw, 20px);
+  border: 1px solid #555d6b;
+  border-radius: 16px;
+  background: #171a20;
+  box-shadow: 0 20px 70px rgb(0 0 0 / 55%);
+}
+
+.mind-basic-calibration-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mind-basic-calibration-header p {
+  margin: 5px 0 0;
+  color: #b8bfcb;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mind-basic-secondary {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 5px 10px;
+}
+
+.mind-basic-capture-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid #444a55;
+  border-radius: 12px;
+  background: #08090b;
+}
+
+.mind-basic-capture-stage video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.mind-basic-capture-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mind-basic-capture-stage video[hidden],
+.mind-basic-capture-stage canvas[hidden],
+.mind-basic-crop-frame[hidden],
+.mind-basic-calibration-actions button[hidden] {
+  display: none;
+}
+
+.mind-basic-crop-frame {
+  position: absolute;
+  z-index: 1;
+  left: 10%;
+  top: 10%;
+  width: 80%;
+  height: 80%;
+  touch-action: none;
+  cursor: move;
+  border: 2px solid #229cff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 34%),
+    inset 0 0 0 1px rgb(255 255 255 / 80%);
+}
+
+.mind-basic-crop-frame::after {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: #fff;
+  background: rgb(0 0 0 / 62%);
+  content: "裁剪区域 · 拖动可移动";
+  font-size: 11px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.mind-basic-crop-handle {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  padding: 0;
+  background: #1682db;
+  box-shadow: 0 1px 8px rgb(0 0 0 / 72%);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.mind-basic-crop-handle-nw { top: 0; left: 0; transform: translate(-50%, -50%); }
+.mind-basic-crop-handle-n { top: 0; left: 50%; width: 36px; height: 14px; transform: translate(-50%, -50%); }
+.mind-basic-crop-handle-ne { top: 0; right: 0; transform: translate(50%, -50%); }
+.mind-basic-crop-handle-e { top: 50%; right: 0; width: 14px; height: 36px; transform: translate(50%, -50%); }
+.mind-basic-crop-handle-se { right: 0; bottom: 0; transform: translate(50%, 50%); }
+.mind-basic-crop-handle-s { bottom: 0; left: 50%; width: 36px; height: 14px; transform: translate(-50%, 50%); }
+.mind-basic-crop-handle-sw { bottom: 0; left: 0; transform: translate(-50%, 50%); }
+.mind-basic-crop-handle-w { top: 50%; left: 0; width: 14px; height: 36px; transform: translate(-50%, -50%); }
+
+.mind-basic-name-field {
+  margin-top: 10px;
+}
+
+.mind-basic-calibration-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mindar-basic-attribution {
+  position: fixed;
+  z-index: 10;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  max-width: min(58vw, 500px);
+  padding: 6px 9px;
+  border-radius: 8px;
+  color: #f2f4f7;
+  background: rgb(0 0 0 / 58%);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.mindar-basic-attribution a {
+  color: #9ccaff;
+}
+
+@media (max-width: 600px) {
+  .mind-basic-controls {
+    width: min(350px, calc(100vw - 20px));
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    padding: 11px;
+  }
+
+  .mind-basic-controls h1 {
+    font-size: 16px;
+  }
+
+  .mind-basic-controls.is-collapsed {
+    padding: 5px;
+  }
+
+  .mind-basic-crop-handle {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+
+  .mind-basic-crop-handle-n,
+  .mind-basic-crop-handle-s {
+    width: 40px;
+    height: 16px;
+  }
+
+  .mind-basic-crop-handle-e,
+  .mind-basic-crop-handle-w {
+    width: 16px;
+    height: 40px;
+  }
+
+  .mind-basic-actions button {
+    min-height: 40px;
+    padding: 7px;
+    font-size: 13px;
+  }
+
+  .mindar-basic-attribution {
+    max-width: 48vw;
+    font-size: 10px;
+  }
+}

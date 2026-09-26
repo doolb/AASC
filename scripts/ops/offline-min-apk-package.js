@@ -126,6 +126,7 @@ async function createOfflineMinApkArtifact(options = {}) {
         relativeUrl,
         size,
         sha256,
+        ...(buildManifest.source ? { source: buildManifest.source } : {}),
         ...(releaseNotes ? { releaseNotes } : {})
     };
     const payload = {

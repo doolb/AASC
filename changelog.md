@@ -6,11 +6,170 @@
   - `3rd/mmd-ar-test/build.js`、`web-panel-groups.js` 加入可本地记忆的双模式按钮；`display-mmd-ar-aframe.js` 传递目标图高宽比，`display-pmx-runtime.js` 按所选平面计算相机，立面下边缘中点对齐角色脚底，切换时立即重新定位。模型根节点和物理不变；同步更新 design/spec/task/todo/自测。仅本地构建，未发布网页或 APK。
   - 网页构建成功；相机投影 1/1、面板与锚点 8/8 通过，`git diff --check` 通过。真实手机立面观感待现场验收。
 
+### MMD AR HTTPS 测试网页
+
+- ✅ [2026-09-26] 将蓝框/角色相机重锁同步修复发布到外网测试页。
+  - 重新构建后仅替换 `js/display-pmx-runtime.js`、`js/display-mmd.js`、`js/display-mmd-ar-aframe.js` 和 `index.html`，脚本先于首页切换；四文件公网 SHA-256 与本地一致，首页为 `7d5c6c2e76d362f0efb611f539ead9cec757970e55fc6c90f47db9ee7e594888`。线上 MindAR 首锁、失锁、无更新事件重锁及自定义图重启回归 1/1 通过。未改模型、APK 或其他远端文件；真机对齐仍待现场验收。
+
+- ✅ [2026-09-26] 修复蓝色定位框已恢复但角色相机可能停在旧视角的同步缺口。
+  - `display-mmd-ar-aframe.js` 保留 `targetUpdate` 即时提交，并在锚点可见期间逐帧核对成功采纳的位姿和 PMX 活跃状态，漏帧或 PMX 暂未就绪时重试；`display-mmd.js` 与 `display-pmx-runtime.js` 提供轻量 active/trackingLost 状态，避免每帧重算模型包围盒。找到目标与角色相机同步分开提示，停止时取消补偿循环。`mmd-ar-web-tracking.test.js` 新增无后续更新事件的重锁回归，`mmd-ar-camera-runtime.test.js` 新增失锁恢复和脚底中心投影对齐回归。同步更新 design/spec/task/todo/自测；仅本地构建，未发布。
+  - 网页构建成功；MindAR 重锁、PMX 相机及后台恢复定向测试 3/3 通过，语法与差异检查通过。真机实际偏离是否完全消除仍待现场验证。
+
+### MMD AR HTTPS 测试网页
+
+- ✅ [2026-09-26] 将定位图位姿死区修正发布到外网测试页。
+  - `npm run build:web:mmd-ar-test` 成功；仅替换 `js/display-pmx-runtime.js`、`js/display-mmd.js` 与 `index.html`，先脚本后首页。公网 HTTPS 三文件 SHA-256 均与本地一致，依次为 `45c5080b0db9c7c64d4b88d9fa07a61e0336665a547143d469304dcb1f4ad3c2`、`0dabd24ce0ee797433f7c0c48efd3608917bafe1611521e427a5011f8d9952fb`、`42106e1f62a493aec686ce71f2cb95df538a77d25743e47430bc3c906c9fd6cc`。未改模型、APK 或其他远端文件；真机防抖观感待验收。
+
+### MMD AR 测试网页
+
+- ✅ [2026-09-26] 相机死区改按 MindAR 定位图位姿判断。
+  - `display-pmx-runtime.js` 先过滤锚点平移/旋转，再换算相机；距离缩放不再影响死区判定。`mmd-ar-camera-runtime.test.js` 加入距离 50% 时定位图刚越过 1% 平移死区的回归。同步更新 design/spec/task/todo/自测；仅本地构建，未发布。
+
+### MMD AR HTTPS 测试网页
+
+- ✅ [2026-09-26] 将定位相机防抖与相机—图中心距离设置发布到外网测试页。
+  - 重新构建 `web-dist` 后只替换有差异的 `index.html`、`js/display-mmd.js`、`js/display-pmx-runtime.js`；先 PMX runtime、再显示模块、最后首页，未上传无差异模型或打 APK。
+  - 三个文件公网 SHA-256 均与本地一致，首页为 `c8a24f2a4c1da1bc0484b74bb3313c081d93ca107397cd3044b0aea259a68d52`；除远端既有隐藏文件外，整站静态资源与本地构建一致。线上 MindAR 锚点及自定义图重启回归 1/1 通过，真机防抖观感待验收。
+
+- ✅ [2026-09-26] 增加定位相机死区、逐帧缓动和相机—定位图中心距离设置。
+  - `build.js` 与 `web-panel-groups.js` 在测试页定位面板加入四个滑条和当前浏览器存储；`display-mmd.js` 在模型运行时创建前暂存设置；`display-pmx-runtime.js` 在测试模式按目标宽度/角度过滤小抖动、按帧时间平滑位置与旋转，并沿相机—定位图中心连线按 50%–100% 调整距离。首次锁定立即对齐，失锁冻结当前视角；模型根节点不动。同步更新 design/spec/task/usage/README/todo/自测。
+  - 网页构建、面板 7/7、相机合成姿态 1/1、后台恢复/锚点/校准 10/10 通过；语法及差异检查通过。仅本地测试页，未自动发布外网或 APK，真机视觉待验收。
+
+- ✅ [2026-09-26] 将失锁保留与模拟图平面旋转等最新测试网页改动发布到外网。
+  - 对比 `web-dist` 与 `/home/as/a/mmd-ar/`，仅暂存并替换九个不同的静态文件；先切换脚本/清单，最后切换 `index.html`，未重复上传无差异的 PMX、纹理或 VMD，也未打 APK。
+  - `https://c.aasc.us/mnt/mmd-ar/` 九个文件公网 SHA-256 均与本地一致，首页为 `aa26b8b9823b2e379baf65f0337bb82621487b3b9b6e960fc1aebf946c9c15ea`；线上 MindAR 锚点、目标丢失和自定义图重启回归 1/1 通过。真机视觉待验收。
+
+- ✅ [2026-09-26] 失锁保留模型和最后视角，模拟图旋转改为先转原图平面再做透视。
+  - `display-pmx-runtime.js` 的失锁路径不再隐藏模型，`display-mmd-ar-aframe.js` 同步提示；`display-mmd-ar-sim-camera.js` 按取景宽高比统一平面坐标，绕法线旋转后再施加经纬度及投影。更新相机/模拟图回归和 design/spec/task/usage/README/todo、自测记录。
+  - 本地测试网页构建成功，模拟图与相机回归各 1/1 通过，后台恢复/A-Frame 锚点/校准回归 10/10 通过；三个 JS 语法检查和 `git diff --check` 通过。未发布外网或 APK，真实手机失锁/重锁视觉效果待验收。
+
+- ✅ [2026-09-26] 模拟图新增左侧经度滑条，下方改为 0–360° 水平旋转。
+  - `3rd/mmd-ar-test/build.js` 改为上缩放、左经度、右纬度、下水平旋转；`display-mmd-ar-sim-camera.js` 在原经纬度透视后绕画面中心旋转四角，并让两个竖条按原图比例适配高度。`tests/mmd-ar-sim-camera.test.js` 覆盖控件位置、90°/360° 几何关系和重置；同步 design/spec/task/usage/README/todo、自测。
+  - 网页构建与模拟图片端到端 1/1 通过，包含 90°/360° 几何断言；后台恢复回归 1/1、原定位与校准回归 9/9 通过。未发布外网或 APK，真机触控待验收。
+
+- ✅ [2026-09-26] 修复模拟定位切后台返回后背景黑屏，并将 AR 视觉比例换算移到相机。
+  - `display-mmd-ar.js` 在测试页监听 `document.visibilitychange`，只为此前运行中的模拟定位保存待恢复目标，后台释放旧轨道，回前台串行重建；手动停止和切换输入取消恢复。`display-pmx-runtime.js` 不再缩放或移动 PMX 根节点，而是以原有脚底和模型高度计算相机世界变换，失锁仅暂改可见性。同步更新 design/spec/task/usage/README/todo/自测。
+  - 网页构建、模拟后台恢复浏览器回归 1/1、实际 PMX 相机与根节点不变测试 1/1、原定位及校准回归 9/9 通过。外网与 APK 未发布，真机后台策略及布料观感待验收。
+
+- ✅ [2026-09-26] 模拟取景高度改按所选原图比例计算。
+  - `display-mmd-ar-sim-camera.js` 以 960 像素画面宽度和解码原图比例计算画布高度，同时更新预览、WebGL 视口、帧尺寸与纬度滑条；GPU 视口无法承载时提示错误。`build.js` 的页面说明、模拟端到端测试与 design/spec/task/usage/README/todo/自测记录同步更新。真实相机和正式显示端 AR 入口不变。
+  - 网页构建及模拟竖图转横图、拍照保存、MindAR 首锁回归 1/1 通过，原定位与校准回归 9/9 通过；未发布外网或 APK，真机性能与视觉比例待验收。
+
+- ✅ [2026-09-26] 平放定位图的 A-Frame 姿态驱动 PMX 相机，并按取景比例缩短纬度滑条。
+  - `display-mmd-ar-aframe.js` 读取目标锚点及投影；`display-mmd.js` 和 `display-pmx-runtime.js` 仅在测试模式启用逆矩阵相机、脚底对齐、失锁隐藏与停止恢复。`display-mmd-ar-sim-camera.js` 按横向滑条宽度和 960×540 比例计算纬度滑条长度。同步更新 design/spec、task、usage、README、自测和 todo；正式显示端 AR 与旧测试 APK 不变。
+  - 网页构建、模拟首锁与滑条测试 1/1、真实 PMX 合成姿态测试 1/1、原定位及校准回归 9/9 通过。真实手机视觉对齐待验收；未发布外网或 APK。
+
+- ✅ [2026-09-26] 模拟摄像头改用电脑视角控制，四角由同一平面投影生成。
+  - `3rd/mmd-ar-test/build.js` 在预览上方、右侧、下方分别放置缩放、纬度、经度滑条，保留重置按钮；`display-mmd-ar-sim-camera.js` 以固定焦距投影图片平面，鼠标拖动画面只修改平移，不再允许独立拖动四角。模拟流、拍照校准和 MindAR 输入接口保持不变，正式显示端及旧测试 APK 未改。
+  - 同步更新测试、design/spec、usage、task 与自测记录；网页构建、模拟摄像头端到端 1/1、正式校准及面板等定向回归 15/15、A-Frame 锚点独立复跑 1/1 通过。A-Frame 测试与另一浏览器测试并跑时曾首锁失败一次；外网未发布，未构建 APK。
+
+- ✅ [2026-09-26] MMD AR 测试网页拍照校准改为矩形选区操作。
+  - `display-mmd-ar.js` 仅在测试网页模式启用蓝色轴对齐矩形，内部可整体拖动，八个边角缩放块可调整大小；保存仍写入原 `selectedQuad`，正式显示端和旧测试 APK 保留四角操作。同步更新 design/spec、usage、task、todo 和自测记录。
+  - 网页构建成功；校准单元测试 8/8、模拟摄像头浏览器端到端 1/1 通过，验证 IndexedDB 四角坐标及后续 MindAR 首锁。本轮未发布外网或重打 APK，真机触控待现场确认。
+
+- ✅ [2026-09-26] 修复内网深层目录打不开页面，并让模拟摄像头参与拍照校准。
+  - `3rd/mmd-ar-test/build.js` 生成相对当前页面目录的 JS/CSS、官方图、MMD 清单与模型 URL；`display-mmd-ar-benchmark.js` 的 MindAR Compiler 动态导入改按当前脚本 URL 寻找同级 vendor，避免 `js/js`。`display-mmd-ar.js` 仅在测试页模拟模式把校准取流切到透视画布，拍照后继续原选区/IndexedDB 保存，并在取消、保存或切换跟踪时释放模拟流。正式显示端及旧测试 APK 的实际行为保持不变。
+  - `npm run build:web:mmd-ar-test` 成功；深层路径模拟校准/保存及 A-Frame 首锁测试 1/1、外网式路径 A-Frame 回归 1/1、面板回归 7/7、正式校准/编译/阴影定向回归 11/11 通过。实际内网 HTTP 页面在非安全上下文中已用 Chromium 验证 960×540 模拟校准预览与取消释放，无页面异常；所需 JS/CSS、官方图、清单和 PMX 在内网返回 200。外网仍保持上一版，本轮未上传或发布 APK/服务包。
+
+- ✅ [2026-09-26] 为无摄像头电脑增加本地图片模拟视频输入与透视控制点开关。
+  - `3rd/mmd-ar-test/build.js` 仅在 HTTPS 网页增加真实/模拟输入切换、选图、预览、四角拖动、控制点显示开关及重置；`display-mmd-ar-sim-camera.js` 将本地图经 WebGL 单应变换生成 960×540/20fps 画布流；`display-mmd-ar-aframe.js` 选择视频源并在停止时释放轨道。定位图仍独立选择，图片不上传/持久化；正式显示端与旧测试 APK 不变。
+  - 网页构建与语法检查通过；Chromium 无实体相机上传 `mindar.JPG` 后真实 MindAR 官方目标首锁，拖角/隐藏/恢复/重置通过，实体相机调用 0 次；定位与面板定向回归 9/9 通过。适配层保留旧首页缺少模拟脚本时的真实相机回退，避免逐文件发布窗口中断旧页面。
+  - 已仅发布首页、模拟输入脚本和 A-Frame 适配脚本至 `https://c.aasc.us/mnt/mmd-ar/`，先上脚本再原子切换首页；外网 HTTP 200，三文件 SHA-256 与本地一致，依次为 `bbdc18aea0d0f46248f7e8d5521c10c781bdd50d0bb72e5276935b1b9e73b2c9`、`24f0c9093876c21447596b895c365789522dd65496ec35deb760325456ccbf0b`、`965363108592c8ec1e851b1511d03c97849fd97e491938e2db39ebf37af5ab4d`。远端旧隐藏文件保留；未打 APK，真机实摄仍待验收。
+
+- ✅ [2026-09-25] 将 MindAR Basic A-Frame 锚点定位接入并发布到 MMD AR HTTPS 测试页。
+  - `3rd/mmd-ar-test/build.js` 仅在网页模式引入 A-Frame 场景；新增 `display-mmd-ar-aframe.js`，官方 `.mind` 复用 Basic 资源、自定义图复用原编译器。共享 AR 管理器网页分支在定位前释放校准相机，目标找到后显示随锚点运动的半透明蓝色矩形与中心十字，丢失时隐藏；APK/正式端不切换引擎。
+  - 网页构建通过；Chromium 模拟相机实际识别/丢失、停止清理及自定义目标编译重启，本地和线上浏览器测试各 1/1 通过；校准、面板、阴影回归 16/16、编译/指标 6/6。只上传变更的首页和 3 个脚本，外网 55 个当前资源 SHA-256 与本地一致。真机触摸、透视对齐和高分辨率帧率待现场验证。
+
+### MindAR Basic 独立测试页
+
+- ✅ [2026-09-25] 裁剪编辑恢复为照片上的蓝色框叠加。
+  - 移除单独的裁剪结果缩略图和每次拖动时的预览重绘；保留完整照片、可移动/缩放的蓝色矩形框及保存/编译时的矩形裁切。更新页面、样式、脚本、测试及使用文档，仅发布 MindAR Basic 静态页面。
+  - 定向测试 8/8 通过，真实 MindAR Compiler 本地编译测试通过；真机触摸与识别仍待现场验证。
+
+- ✅ [2026-09-25] 自定义目标改为拍后矩形裁剪编辑，并增加控制面板收起。
+  - 先保存完整拍摄帧，再显示四边内缩 10% 的默认选区；可拖动选区移动、拖动边/角调整任意尺寸，裁剪始终为轴对齐矩形并即时预览。控制面板默认展开，可收起至紧凑入口再展开。
+  - 定向测试 8/8 通过；真实 MindAR 1.2.5 Compiler 在本地和 HTTPS 线上均完成实际编译与启动。`https://c.aasc.us/mnt/mind-basic/` 首页/CSS/JS/几何脚本 SHA-256 与本地一致；`/mnt/mmd-ar/` 未改动。真机触摸与识别待现场验证。
+
+- ✅ [2026-09-25] 自定义定位图校准改为预置固定矩形裁剪。
+  - 摄像头预览预置居中且四边内缩 10% 的矩形框；用户移动设备对准后拍照，直接裁剪框内区域，可重拍但不能拖角、移动选框或透视校正。新目标以 `{imageBlob,cropRect}` 保存；旧版 `{imageBlob,selectedQuad}` 通过四角外接矩形继续兼容。官方卡片、Softmind 模型、MindAR 编译流程和本地存储保持不变。
+  - 定向测试 6/6 通过；Chromium 模拟摄像头本地和线上端到端验证通过，并在已发布页面使用真实 MindAR 1.2.5 Compiler 编译测试图、启动目标成功。HTTPS 页面四个资源均 HTTP 200 且 SHA-256 与本地一致；`/mnt/mmd-ar/` 首页未变化。真机实摄识别待现场验收。
+
+- ✅ [2026-09-25] MindAR Basic 增加本地拍照校准与自定义图片目标编译。
+  - 新增 `mind-basic.js`、`mind-basic.css`、`mind-basic-geometry.js` 和自定义定位测试。浏览器内拍摄图片并保存到 IndexedDB；开始定位时运行 MindAR 1.2.5 Compiler 显示进度，将临时 `.mind` Blob URL 切换给 A-Frame system，并在停止时清理摄像头、Controller、Blob URL 和 MindAR resize listener。初版选区操作后续已由固定矩形交互替换。保留官方卡片、Softmind 动画模型及 CC BY 4.0 署名；不上传照片，与 MMD AR 和正式显示端代码隔离。
+  - 固定矩形实现后定向测试 6/6 通过；本地与已发布 HTTPS 页面均通过 Chromium 模拟摄像头端到端测试。首页、CSS、JS、几何脚本公网 HTTP 200 且 SHA-256 与本地一致；`/mnt/mmd-ar/` 首页未变。真机首锁与模型对齐待现场验收。
+
+- ✅ [2026-09-25] 克隆 MindAR 官方 Basic 示例并发布到外网独立目录。
+  - 新增 `3rd/mind-basic/index.html`，保留 A-Frame 1.5.0、MindAR 1.2.5、官方卡片目标及 Softmind 动画模型；页面显示模型署名和 CC BY 4.0。发布地址为 `https://c.aasc.us/mnt/mind-basic/`，与 `/mnt/mmd-ar/` 隔离。
+  - 首页 HTTP 200，2,631 bytes，公网 SHA-256 与本地一致（`ff688f1a6715d07912b41ac57321e6efdf3512425e42533d3cd32f4a00cb9d4a`）；A-Frame、MindAR、目标及 glTF 依赖均可访问。`/mnt/mmd-ar/` 首页 hash 保持不变；手机摄像头首锁和动画跟随待现场验证。
+
+### Offline 构建追溯
+
+- ✅ [2026-09-25] APK 与 Offline 热更清单记录 Git 提交来源。
+  - `build-manifest.json` 记录完整 `source.gitCommit` 和 `source.gitDirty`；签名热更清单分别在 `components.code`、新生成的 `components.dependencies` 和 `components.apkMin` 保存对应来源信息。
+  - 来源字段包含在 RSA 签名 payload 中；旧清单和无 Git 元数据的测试/导出目录保持兼容。未构建或发布 APK/热更包，待下次出包验收。
+
+### MMD AR HTTPS 测试页
+
+- ✅ [2026-09-25] 恢复完整 MMD AR 测试页，并将定位标记改为不驱动模型的网页测试分支。
+  - `3rd/mmd-ar-test/build.js` 重新打包完整 MMD/Three.js/Ammo、默认模型、动作、灯光/AO 和 MindAR 资源；HTTPS 页只额外设置 `MmdArLocationMarkerTest`。`display-mmd-ar.js` 在识别到有效姿态时显示投影中心标记并立即 `return`，跳过该帧模型姿态更新；普通 APK/正式显示端路径不启用测试开关。
+  - 先前发布的纯定位网页是短暂中间版本，已被用户澄清取代。本次完整产物 54 个文件、19,350,632 bytes；公网逐文件 HTTP 200 且 SHA-256 与本地一致。首页大小 41,337 bytes，SHA-256=`1bd94c8e6eacc9df5fd67359792639505ad8cf60f983c864b619a287ea1a3abd`；资源上传后原子替换首页，未删除远端旧文件。
+  - 静态结构和 `node --check`、`git diff --check` 通过；未运行自动化测试套件，手机摄像头首锁和标记视觉对齐待现场验收。MindAR Basic 外网目录哈希保持不变；未构建 APK、服务包或依赖包。
+
+- ✅ [2026-09-25] MMD AR 测试网页精简为定位与中心标记。
+  - `3rd/mmd-ar-test/build.js` 网页分支改用独立定位页面，仅打包 AR/校准、MindAR 和官方定位图；不再准备 PMX、Three.js、Ammo、灯光、动作及 MMD runtime。识别输出在网页模式只投影定位图中心，目标找到时显示绿色中心标记，丢失/识别错误/停止时隐藏；模型状态门槛仅在该测试页旁路。
+  - `npm run build:web:mmd-ar-test` 成功；定向回归 `node --test tests/mmd-ar-web-tracking.test.js tests/mmd-ar-benchmark-compiler.test.js tests/mmd-ar-benchmark-metrics.test.js` 为 7/7 通过，合成官方定位图成功首锁并检验中心坐标和标记生命周期。纯定位网页已发布至 `https://c.aasc.us/mnt/mmd-ar/`；首页和 9 个资源均返回 HTTP 200，10 个文件公网 SHA-256 与本地一致。未删除远端目录其他旧文件；手机实拍首锁/标记行为待现场验收。APK 与正式显示端未构建或发布。
+
+- ⏳ [2026-09-25] 使用 `testimg/mindar.JPG` 做定位找到后的只读回放。
+  - 35% 识别输入的 MindAR session 约 4.1 秒首锁，找到后有姿态更新和点击回调，切空白帧后丢失；完整页面自动化受本机软件 GPU 及模拟视频帧限制，未验证模型跟随、面板和结束定位。ADB 无设备，真机复测列入 todo；本轮没有修改代码或发布资源。
+
+- ✅ [2026-09-25] 定位面板增加 MindAR 识别分辨率比例设置。
+  - HTTPS 测试页提供 25%／35%／50%／75%／100% 档位；默认 100% 严格等于摄像头原始宽高，低档位按两轴等比缩小。选择存于当前浏览器，定位中修改下次启动才生效；显示本次原始/识别尺寸并提示全分辨率卡顿风险。摄像头预览、正式显示端和旧测试 APK 不变。
+  - `npm run build:web:mmd-ar-test` 与 AR/面板定向回归 15/15 通过；1920×1080 合成输入在 35% 档得到 672×378，识别、保存恢复及点击响应通过。100% 高分辨率真机性能待现场验收。
+  - 已更新 `https://c.aasc.us/mnt/mmd-ar/` 的首页和 MindAR 适配脚本；本地、远端上传文件及公网 SHA-256 一致。未打或发布 APK、Offline 服务包和模型。
+
+- ✅ [2026-09-25] 修复识别到定位图后页面按钮可能无法响应的问题。
+  - 测试页 MindAR 改用限 640×480 像素预算的独立识别画布，不再按手机相机原始高分辨率持续处理；原摄像头预览保持原画质。重复识别样本不再重复更新页面，模型姿态写入按 100 ms 间隔限速。
+  - 1920×1080 合成相机中官方图可锁定、识别后页面点击回调执行、切空白帧后退出定位；AR/面板定向回归 15/15 通过。真机 GPU、PMX/AO 负载和触控响应待现场验收。用户确认的“模型世界固定、移动手机改变相机视角”记录为后续独立改造，未并入本修复。
+  - 已发布 `index.html`、`display-mmd-ar-benchmark.js`、`display-mmd-ar.js` 到 `https://c.aasc.us/mnt/mmd-ar/`；公网 SHA-256 与本地构建一致。未发布 APK、Offline 服务包或模型。
+
+- ✅ [2026-09-25] 增加网页专用主光阴影开关，并修复 MindAR 取帧尺寸不一致。
+  - 主光阴影默认开启并随现有灯光配置保存；补光无阴影、沿用主光阴影、自身阴影三种模式仍可独立选择。仅 HTTPS 测试页显示新开关，正式显示端与旧测试 APK 保持原行为。
+  - MindAR 在目标编译后将视频元素宽高同步至摄像头原始帧尺寸，再创建 Controller；修复预览正常但识别器按错误尺寸取帧的风险。
+  - `npm run build:web:mmd-ar-test` 成功；浏览器合成视频对官方目标可锁定、空白帧会丢失目标；定向回归 62/62 通过，覆盖真实 PMX 阴影组合。真机首锁与帧率待现场验收。
+  - 已将 `index.html` 和四个变更脚本发布到 `https://c.aasc.us/mnt/mmd-ar/`；五个文件的公网 SHA-256 均与本地构建一致。未打或发布 APK、服务包及模型。
+
+### Node 子显示端语音会话
+
+- ✅ [2026-09-25] Node 子显示端共用网页显示端的服务端语音唤醒状态机；Go/C# 客户端代码和协议未改。
+  - Node 握手加入 `clientType=node`，服务端兼容识别现有 `voice-display-node-` ID；等待唤醒时拦截普通语音，纯唤醒词只切换状态，活跃群聊/私聊按显示端状态处理。Node 收到状态更新后记录会话状态。
+  - 已更新语音会话 design/spec、任务和自测文档。自动化测试未运行；目标 `voice-display-node-arch0` 的语音唤醒与路由待现场验收，未部署或重启节点。
+
+- ✅ [2026-09-25] 修复显示端语音聊天实时列表与刷新后历史顺序不一致。
+  - 成功回包时控制端按服务端最终历史/临时会话快照重绘；临时会话回包包含最终消息快照，助手 `reasoning` 与 `speech` 保留在快照中。
+  - 更新聊天设计/spec、任务文档及手动验收清单。未运行自动化测试；Node 子显示端的实时聊天显示待现场验收。Offline `servicePackage=true`，未构建或发布服务包。
+
 ### Node 子显示端语音录音
 
 - ✅ [2026-09-25] 修复关闭 Node 子显示端录音能力后仍占用麦克风的问题。
   - Node 子显示端等服务端权威能力后才启动采集；能力关闭或 WebSocket 断开时停止并释放 PvRecorder/AudioIO，关闭后返回的 ASR 结果会丢弃。重新开启时等待旧采集 Promise 结束后重建单一采集流；TTS 临时暂停仍复用当前设备。
   - 服务端重连时恢复子显示端持久化 `userCapabilities`，避免客户端默认 `voiceRecording=true` 覆盖用户关闭值。同步更新能力 design/spec、任务和自测文档；自动化测试未运行，Windows 节点麦克风占用和重连待现场验收。
+
+### PMX 环境遮蔽
+
+- ✅ [2026-09-24] 将 AO 多轮模糊更新发布至外网 MMD AR 测试网页。
+  - 上传 `index.html`、`css/display-mmd.css` 及四个共用显示端 JS 文件到 `https://c.aasc.us/mnt/mmd-ar/`；上传前后六个文件 SHA-256 与本地构建一致，网页入口返回 HTTP 200。未改 Offline 清单、模型文件，也未发布 APK、服务包或依赖包；目标手机功能与帧率待现场验证。
+
+- ✅ [2026-09-24] 灯光面板增加 AO 多轮模糊及每轮独立半径设置。
+  - `display.html`、`display-mmd.css`、`display-mmd-lighting.js`、`display-mmd.js` 增加 0–3 轮选择及每轮 1–5 AO 像素半径，默认 1 轮/3 px；与原有灯光设置一起保存，旧设置自动补默认值。`display-pmx-runtime.js`、`display-pmx-ao.mjs` 使用现有 AO/临时目标逐轮水平与垂直保边模糊，0 轮直接合成原始 AO；不改变 VRM、透明 alpha 或模型资源。
+  - 同步 AO design/spec、任务文档、使用说明和自测；AO/聊天显示端定向测试 53 通过、2 项因本地素材不可用跳过、0 失败，`npm run build:web:mmd-ar-test`、JS 语法及 `git diff --check` 通过。目标 Android 的画质与帧率待现场验收；本轮未发布 APK、服务包、网页，也未修改 Apache 配置。
+
+- ✅ [2026-09-24] 清理外网 MMD AR 测试页的两份过时备份。
+  - 精确删除 `as@120.79.245.103:/home/as/a/.mmd-ar-backup-progress-20260924/` 与 `.mmd-ar-backup-resize-20260924/`，各约 19 MB；删除前确认是普通目录且无符号链接，删除后确认正在使用的 `mmd-ar/index.html` 仍在。未改当前测试页、Offline 清单或模型源文件；备份目录已永久移除。
+
+- ✅ [2026-09-24] 灯光面板开放 12/24/32 次 AO 采样并增强空间降噪。
+  - `display.html`、`display-mmd-lighting.js`、`display-mmd.js`、`display-pmx-runtime.js`、`display-pmx-ao.mjs` 增加默认 24 次的即时采样选择；旧本地设置缺字段自动补默认值，采样结果按次数归一化，保边模糊扩展到每轴左右各 3 点并按深度差平方衰减。同步 AO design/spec、使用说明、自测与任务文档。
+  - `node --test tests/display-pmx-ao.test.js tests/display-pmx-ao-browser.test.js tests/display-chat-mmd.test.js`：53 通过、2 跳过、0 失败；`npm run build:web:mmd-ar-test` 和 `git diff --check` 通过。扩大回归中 `display-mmd-runtime.test.js` 有 1 项既有 `preparePmxHelper` 签名断言失败，HEAD 源码同样含额外 `report` 参数，与本次 AO 变更无关。真机噪点/帧率待现场验收；未发布服务包或 APK。
+  - 已仅更新外网 HTTPS MMD AR 测试页的 HTML 和 4 个共享脚本，远端 SHA-256 与本地一致；按要求跳过外网页面功能测试。内网、Offline 清单、服务包、依赖包和 APK 均未发布或变更；本地预生成的 `code-v40` 未上传。
 
 ### 批量播放模式
 
@@ -32,6 +191,42 @@
   - Offline 待打包状态：`servicePackage=true`、`minApk=true`、`dependenciesPackage=false`；本次未构建或发布 APK/服务包。
 
 ### MMD AR 独立测试 APK
+
+- ✅ [2026-09-25] HTTPS MMD AR 测试页修正拍照校准竖屏越界、合并定位按钮并让主光和补光独立投影。
+  - `3rd/mmd-ar-test/build.js`、`web-panel-groups.js` 将校准弹窗限制在可视区内、预览缩小并保留内部滚动；第一分类显示单个开始/结束定位按钮，仍复用原摄像头和跟踪控制。`display-mmd.js`、`display-pmx-runtime.js`、`display-pmx-lighting-mode.mjs` 通过网页专用标记让主光常驻阴影，补光可选无阴影、沿用主光遮挡或自身第二张阴影图；正式显示端和旧 APK 沿用原逻辑。
+  - `npm run build:web:mmd-ar-test` 成功；窄屏分类、弹窗和定位按钮、校准角点及正式显示端定向回归 62/62 通过。真实 PMX 浏览器加载与三模式切换无 WebGL shader 编译错误；补光自身阴影模式需在手机上复测画质与帧率。外网仅替换 HTTPS 测试页首页和三个 JS/ESM 文件，四个公网 SHA-256 与本地一致；未打 APK、服务包或依赖包，未改 Offline 更新清单。
+
+- ✅ [2026-09-25] HTTPS 测试页改为仅 MindAR，修复手机面板无法触摸滚动并增加阴影来源选择。
+  - `3rd/mmd-ar-test/build.js`、`display-mmd-ar-benchmark.js`、`web-panel-groups.js` 移除网页的自写跟踪器及算法选择，仅保留 MindAR 单算法指标；根据动态视口限制面板高度，允许纵向触摸滚动，网页脚本/PMX runtime 使用内容指纹 URL。正式显示端旧跟踪器与旧测试 APK 的 A/B 路径不变。
+  - `display.html`、`display-mmd-lighting.js`、`display-mmd.js`、`display-pmx-runtime.js` 将旧阴影复选框改为无阴影/主光/补光三选一，保留旧设置迁移及最多一盏灯投射阴影；VRM 暂未实现补光投影，但不会误用主光阴影。`testimg` 静态回放 MindAR 3/3 锁定、自写 JS 0/3。
+  - 网页构建和定向测试 59/59 通过；PMX AO/阴影浏览器测试 12 通过、2 项因本地测试素材条件跳过；单算法本地页静态回放 6 帧中 3 帧锁定。外网原子替换 `index.html` 与 4 个改动脚本，5 个文件公网 SHA-256 与本地一致，真实浏览器无脚本异常。精准移除外网旧 `js/display-mmd-image-tracker.js`；正式显示端源码保留，可恢复。真机连续视频、阴影画质和面板手势待现场验收。另有 `display-mmd-runtime.test.js` 的 1 项既有 helper 签名断言失败，与本次改动无关。
+
+- ✅ [2026-09-25] 将内置 MindAR 官方示例图的 HTTPS 测试页发布到外网。
+  - 仅替换 `https://c.aasc.us/mnt/mmd-ar/` 的 `index.html`、`js/display-mmd-ar.js` 和新增 `assets/mindar-official-card.png`；按图片、脚本、首页顺序上线。公网 HTTP 200，三个文件 SHA-256 分别为 `44d377efbb9e66600e52134a1b673cd26fe5e32ce0a4d3bb4231f979e3271950`、`8cbfb57735e04cccdab1bf0347efc3e5b5533efabb3069d19ec7fb6f94f57e73`、`f4253baa29270f36cf04aeff8be58d036cefffa3032e76bfbca0c08bcc046bdd`，均与本地一致。官方图片 MIME 为 `image/png`；真机首锁待现场验收。未发布 APK、服务包或模型。
+
+- ✅ [2026-09-25] HTTPS 测试网页内置 MindAR 官方示例定位图。
+  - `3rd/mmd-ar-test/assets/mindar-official-card.png` 按固定 SHA-256 校验后进入网页资源；`build.js` 在定位面板加入查看/打印入口和网页专用只读目标，首次无用户图时默认选中。共享 `display-mmd-ar.js` 仅在收到测试页提供者时合并内置目标，保留用户选择并阻止删除内置图；正式显示端与测试 APK 不启用。
+  - `npm run build:web:mmd-ar-test` 和定向浏览器/校准测试 12/12 通过；真机对官方图的首锁仍待现场验收。本轮未发布外网，也未重打 APK。
+
+- ✅ [2026-09-25] 修复完整测试网页中灯光与定位分类点击后无法展开。
+  - 原面板对内部点击调用 `stopPropagation`，网页专用分类监听却绑定在 `document`；旧线上页复现 AO 点击前后均收起。`3rd/mmd-ar-test/web-panel-groups.js` 改为直接绑定各分类按钮，`tests/mmd-ar-web-panel-groups.test.js` 新增加载完整生成页/业务脚本的回归，旧页失败、新页 4/4 通过。
+  - 仅原子替换外网 `index.html`；HTTPS 200，34,949 bytes，本地/SSH/公网 SHA-256 均为 `7e03c8da6c8e795f7562df7e14e2dfe9ff91d5061e4faf8abb7e467c29d528ee`。线上完整页面及浏览器真实点按复测 AO、定位跟踪组均可展开，AO 开关未误切换；正式显示端和 APK 不变。
+
+- ✅ [2026-09-25] 修复 HTTPS 测试页点击分类标题文字时误切换开关。
+  - `3rd/mmd-ar-test/web-panel-groups.js` 将原开关说明文字移到占满标题剩余宽度的展开按钮，左侧复选框标签只保留开关，原控件 ID 和设置事件不变；`tests/mmd-ar-web-panel-groups.test.js` 用 Chromium 真实点击文字/复选框验证开合与开关互不干扰。网页构建与定向测试 3/3 通过。
+  - 仅原子替换外网测试页首页；HTTPS 200，34,993 bytes，本地/SSH/公网 SHA-256 均为 `f2daf5204103db0b71d583fc645031fa68a6e9e5c597e8d216c31ec14c8fc20c`。正式显示端和 APK 未改；真机触摸待现场确认。
+
+- ✅ [2026-09-25] HTTPS 测试页的分类开关前置，并调亮标题背景。
+  - `3rd/mmd-ar-test/web-panel-groups.js` 将 AO、补光、边缘光 1/2、体感环绕的原开关移到分类标题行，边缘光拆为独立两组；展开按钮与开关分离，标题背景改为 `#39455c`，保留所有原控件 ID 与设置逻辑。`build.js` 仅在网页模式注入开合事件；正式显示端及独立 APK 不变。
+  - 网页构建与定向测试 3/3 通过，含手机尺寸 Chromium 的开关/展开隔离回归；仅原子替换外网测试页 `index.html`。HTTPS 200，34,939 bytes，本地/SSH/公网 SHA-256 均为 `9664cd6a1bc6e0a10c87611fe7848502134333063d8132e0cc6a76bc5db90205`。真机触摸和相机操作仍待现场确认。
+
+- ✅ [2026-09-25] 仅在 HTTPS MMD AR 测试网页的灯光与定位面板加入可独立展开的设置分类。
+  - `3rd/mmd-ar-test/web-panel-groups.js` 和 `build.js` 仅在网页模式移动原控件节点：灯光六类、定位三类，首组默认展开；保留控件 ID、事件入口与设置值，正式显示端和测试 APK 不变。新增 `tests/mmd-ar-web-panel-groups.test.js`，3/3 通过，包含手机视口 Chromium 开合回归；`npm run build:web:mmd-ar-test` 成功。
+  - 仅替换外网 `https://c.aasc.us/mnt/mmd-ar/` 的 `index.html`；公网 HTTP 200，本地、SSH 远端与公网 SHA-256 均为 `0d39655885b6c22a7d85a87037c01476048f95c13e2cd16a8a8cc3e813dcb0c3`。真机相机与触摸体验待现场验收，未重打/发布 APK。
+
+- ✅ [2026-09-24] 应要求将当前测试网页共用的 AO/灯光/MMD 脚本重新打入独立测试 APK。
+  - `npm run build:apk:mmd-ar-test` 成功；输出 `3rd/mmd-ar-test/output/aasc-mmd-ar-test.apk`，13,620,450 bytes，SHA-256 `616701547be944319114dcdad13b8c656d4468e84fdfb0f00878e5d6d43b07e6`。包内 AO、灯光和 MMD 脚本 SHA-256 与当前源码一致；模型资源由构建脚本校验。目标真机 AO 对照待验收。
+  - 随后通过 ADB 覆盖安装到 SM-N9500（Android 9），在内屏 display 0 启动 `com.aasc.mmdartest/.MainActivity`；包进程存在且 Activity 为前台。尚未验证 AO 画质或相机跟踪，未上传外网。
 
 - ✅ [2026-09-24] MMD Canvas 随独立 HTTPS 测试页视口变化重设绘制缓冲，并在正式显示端/网页灯光面板展示当前渲染分辨率。
   - `3rd/mmd-ar-test/build.js` 的网页模式监听舞台、窗口和 visualViewport 变化并调用现有 `DisplayMmd.resize()`；`display.html`、`display-mmd-lighting.js`、`display-mmd.css` 在灯光标题后展示 `canvas.width×canvas.height`，并随绘制缓冲属性变化更新。独立测试 APK 后续停止维护，不再构建。
@@ -144,6 +339,9 @@
   - `code/code-v37.zip` 为 `15646732` bytes，SHA-256 `346e65176cbeffc0b001710cee79612cc627a552d6d39b495242f5d2b32f3f0c`；签名清单继续引用 dependencies v6、min APK v34 和数据修复包 v1。
   - `npm run build:offline-update -- --mode=code-only --code-version=37 --manifest-file=/mnt/aasc-offline/manifest.json` 和 `npm run publish:offline-update -- --mode=code-only --manifest-file=release/offline-update/output/manifests/manifest-code-v37.json --remote-dir=/home/as/a/aasc-offline` 成功。内网与外网清单及各组件 HTTP 大小/SHA-256 验证通过，旧版本精确清理无错误；本次无需重打 min APK，`servicePackage` 已复位为 `false`。
 
+- ✅ [2026-09-23] 发布 Offline 数据修复包 v1，开启声纹关闭时处理 TTS 期间语音输入。
+  - 修复仅通过 `config.set` 将 `voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint` 设为 `true` 并回读确认；不改服务代码、依赖或 APK。适用 code v36，数据版本从 0 升至 1，能力范围为 `config`。
+  - 发布 `data/data-repair-v1.zip`，大小 `440` bytes，SHA-256 `c63785b2e7aae7ef1594cc032640e6b191e8772498222c158161e71ab1bec8c5`。内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的签名清单和资源校验通过；code v36、dependencies v6、min APK v34 保持不变。
 - ✅ [2026-09-23] 增加 Offline 待打包状态文件。
   - 新增 `release/offline-release-status.json`，集中记录 min APK、服务代码包和生产依赖包是否待打包；代码修改后将受影响字段置为 `true` 并上传 Git，出包机成功生成后改回 `false` 并上传。
   - 各任务不重复维护实时状态值；本次状态以该 JSON 文件为准。本地未运行出包，需由持有签名密钥的出包机完成。
@@ -168,6 +366,12 @@
 - ✅ [2026-09-23] 发布服务代码 v34
   - 发布文件：`code/code-v34.zip`，大小 `15322127` bytes，SHA-256 `8e926ed1805dbf58a8947338f35c98d993aeff6dea27d2deecd1e06455bfff9b`；继续复用 `dependencies/dependencies-v6.zip`。
   - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的 manifest、代码包 ZIP、依赖 lock 指纹和旧 code 版本精确清理校验通过。
+- ✅ [2026-09-23] 重新构建并发布服务代码 v35
+  - 发布文件：`code/code-v35.zip`，大小 `15634073` bytes，SHA-256 `06c8af904218476064b66d1a7e891b40ec5736a161e89517499281f6a547fbe0`；继续复用 `dependencies/dependencies-v6.zip`，清单保持 min v34。
+  - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的 manifest、代码包 ZIP、资源大小/SHA-256、依赖 lock 指纹和旧 code 版本精确清理校验通过。
+- ✅ [2026-09-23] 构建并发布服务代码 v36
+  - 发布文件：`code/code-v36.zip`，大小 `15634368` bytes，SHA-256 `75ba8a4b9f7fbaf312bd2c4856305dfb310fcc558c451e29f6e3ac4b3b9f9073`；继续复用 `dependencies/dependencies-v6.zip`，清单保持 min v34。
+  - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 的 manifest、代码包 ZIP、依赖 lock 指纹及 code/dependencies/min 资源校验通过；旧 code 版本精确清理完成。
 
 ### Android 显示端音频
 
@@ -9535,3 +9739,10 @@
 - ✅ [2026-09-23] MMD 静态资源按热更新顺序优先请求内网，并在失败时回退外网。
   - `mmd-resource-service.js` 对家庭内网 `192.168.1.39`、公司内网 `10.221.70.87`、外网 `c.aasc.us` 逐源请求；每个候选响应均需通过 HTTP 状态、Content-Length、完整字节数和 SHA-256 校验，失败后继续下一源。保留本地有效 manifest 优先、固定 14 项白名单和同源代理。
   - 更新 MMD design/spec/task。`node --check` 与 `git diff --check` 通过；未运行测试，未构建或发布 APK、服务包或依赖包。
+
+### Node 子显示端连接
+
+- ✅ [2026-09-25] Node 子显示端重连行为对齐网页显示端，并固定重连身份。
+  - 连接断开或发生 WebSocket 错误后统一释放心跳、录音能力确认和麦克风；使用单一 3 秒定时器持续重试，初次连接失败不退出进程，正常停止时取消重连。
+  - 每次重连复用进程启动时生成的本地 `displayId`，服务器确认 ID 单独保存；重连后仍等待服务端权威录音能力，能力关闭时不启动麦克风。
+  - 更新 `main.js`、`tui.js` 及显示端重连/Node 路由文档。现场 Node 重连 ID、录音恢复和语音路由仍待验收；未远程部署或重启。

@@ -8,7 +8,7 @@
       "target": "display",
       "env": "cpu",
       "mode": "service",
-      "displayId": "display-umwo5k6l",
+      "displayId": "offline-display",
       "params": {},
       "routing": null,
       "requiredCapabilities": [],

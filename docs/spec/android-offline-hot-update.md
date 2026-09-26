@@ -250,15 +250,17 @@ SignedManifest:
     payload.generatedAt = ISO-8601
     payload.components.code = {
         version, requiredDependencyVersion, requiredLockSha256,
-        relativeUrl, size, sha256
+        relativeUrl, size, sha256,
+        source: { gitCommit, gitDirty }
     }
     payload.components.dependencies = {
-        version, lockSha256, relativeUrl, size, sha256
+        version, lockSha256, relativeUrl, size, sha256,
+        source: { gitCommit, gitDirty }  # all 模式新生成时写入
     }
     payload.components.apkMin = optional {
         versionCode, versionName, packageName, signerSha256,
         modelCompatibilitySha256, relativeUrl, size, sha256,
-        releaseNotes?
+        releaseNotes?, source: { gitCommit, gitDirty }
     }
     signature.algorithm = "SHA256withRSA"
     signature.value = Base64(sign(privateKey, canonicalJson(payload)))
@@ -269,13 +271,24 @@ canonicalJson(value):
     encode UTF-8 without BOM or trailing newline
 
 createOfflineMinApkArtifact(options):
+    source = buildManifest.source
     releaseNotes = read options.releaseNotesFile as UTF-8 text when provided
     releaseNotes = trim(releaseNotes)
     require Unicode character count <= 4096
     如果 releaseNotes 非空：写入 payload.components.apkMin.releaseNotes
+    如果 source 存在：写入 payload.components.apkMin.source
+
+createOfflineUpdateArtifacts(options):
+    source = readGitSourceMetadata(projectRoot)
+    payload.components.code.source = source
+    如果 mode == all:
+        payload.components.dependencies.source = source
+    对 source 元数据纳入完整 payload 执行签名
     对包含 releaseNotes 的 payload 重新签名并验证
 
 OfflineUpdateManifest.parse:
+    验证签名时保留并覆盖完整 payload，包括可选的 components.*.source
+    解析已知更新字段；source 只作追溯，不参与更新决策
     apkMin.releaseNotes 为可选字符串
     如果存在：trim 后长度必须 <= 4096；缺少时返回 null
 

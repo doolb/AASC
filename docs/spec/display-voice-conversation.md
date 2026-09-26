@@ -112,13 +112,25 @@ Offline APK 控制端手动切换聊天模式:
     普通部署不因 setChatSession 自动打开显示端语音会话
     按显示端分别保存聊天模式与私聊目标属于后续任务
 
+Node 子显示端 WebSocket 握手:
+    Node 客户端携带 clientType=node
+    旧 Node 客户端若 displayId 以 voice-display-node- 开头，也识别为 Node 子显示端
+    其他子显示端不带该标记，服务端按原连接类型处理
+
+Node 收到 voiceConversationState:
+    保存服务端权威的当前状态并记录状态变化
+    状态迁移和语音放行仍由服务端按 displayId 决定
+
 显示端 voiceInput(text):
     如果目标不存在或 capabilities.voiceRecording !== true:
         丢弃输入
     text 非空 -> 先广播 voiceInput 到控制端，用于显示最新 ASR 结果
     启用声纹且 speaker == null -> 只停止命令处理，不撤销已广播的文字
-    如果目标是旧 Go/C#/Node 子显示端:
+    如果目标是子显示端且不是 Node:
         沿用原有语音命令流程，不启用唤醒状态机
+    如果目标是网页显示端、Android 显示端或 Node 子显示端:
+        使用服务端 display-voice-conversation 状态机
+        按 displayId 独立执行 waitingWake、activeGroup、activePrivate 和会话超时
     如果当前为 disabled:
         丢弃输入
     如果当前为 waitingWake:
@@ -636,6 +648,40 @@ WebSocket error:
     取消 WebSocket 重连定时器和 ASR 重试定时器
     关闭当前 socket
     不再执行旧 ASR 请求的恢复回调
+```
+
+Node 子显示端 WebSocket 重连:
+
+```text
+start():
+    初始化本地语音资源和输入功能
+    在后台开始连接；首次连接失败不退出进程
+
+connectWithRetry():
+    如果进程已停止、已有连接或连接尝试正在运行:
+        返回
+    使用进程启动时生成的固定 clientDisplayId 连接 /display?subDisplay=true&clientType=node&displayId=...
+    等待服务端确认本次连接的 displayId
+    尝试失败且进程仍运行:
+        保留一个 3 秒重连定时器
+
+当前 WebSocket error 或 close:
+    只允许当前 socket 执行清理
+    清除当前连接引用、displayId 和心跳
+    停止并释放麦克风，清除本次连接的能力确认
+    拒绝未完成的 displayId 等待
+    安排唯一的 3 秒重连定时器
+    error 时关闭异常 socket
+
+服务器确认 displayId 并返回 capabilitiesUpdated:
+    保存本次连接的 displayId
+    不覆盖用于后续重连的 clientDisplayId
+    重置连续连接尝试计数
+    仅当权威 voiceRecording=true 时恢复录音
+
+stop():
+    取消重连定时器
+    关闭当前 WebSocket；不得再次安排重连
 ```
 
 ## 显示端语音状态、旋转布局与音频监视图

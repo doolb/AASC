@@ -16,6 +16,8 @@
 
 每个 profile 的构建输入和中间产物只允许写入对应的 `release/apkbuild/<profile>/`，包括配置、服务器运行包、Runtime assets、Gradle 目录和最终输出，不能与其他 profile 共用可变目录。
 
+APK 构建生成的 `output/build-manifest.json` 记录 `source.gitCommit` 完整 Git 提交 hash 和 `source.gitDirty` 工作区状态。无 Git 仓库或无有效提交时两项为 `null`；正常仓库打包时应记录提交 hash，并用 dirty 标志说明该构建是否还包含未提交文件。
+
 ## 服务器 release 模式
 
 - 不带 `--release` 时保持当前读取路径：`config/`、`~/.config/aasc-user/` 和 `res/tasks/`。

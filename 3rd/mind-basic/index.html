@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#111318" />
+    <title>MindAR Basic 图片定位</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <link rel="stylesheet" href="./mind-basic.css" />
+  </head>
+  <body>
+    <aside id="mindBasicControls" class="mind-basic-controls" aria-label="MindAR 定位控制">
+      <header class="mind-basic-controls-header">
+        <h1>MindAR 图片定位</h1>
+        <button id="mindBasicControlsToggle" class="mind-basic-controls-toggle" type="button"
+          aria-controls="mindBasicControlsBody" aria-expanded="true">收起</button>
+      </header>
+      <div id="mindBasicControlsBody" class="mind-basic-controls-body">
+        <label class="mind-basic-field" for="mindBasicTargetSelect">
+          <span>定位图</span>
+          <select id="mindBasicTargetSelect">
+            <option value="official">MindAR 官方示例卡片</option>
+          </select>
+        </label>
+        <div class="mind-basic-actions">
+          <button id="mindBasicCaptureButton" type="button">拍摄自定义定位图</button>
+          <button id="mindBasicStartButton" type="button">开始定位</button>
+          <button id="mindBasicStopButton" type="button" disabled>停止定位</button>
+          <button id="mindBasicDeleteButton" type="button" disabled>删除自定义图</button>
+        </div>
+        <p id="mindBasicStatus" class="mind-basic-status" role="status" aria-live="polite">正在准备官方示例…</p>
+        <div id="mindBasicProgress" class="mind-basic-progress" hidden>
+          <div class="mind-basic-progress-heading">
+            <span id="mindBasicProgressText">正在编译定位图…</span>
+            <span id="mindBasicProgressValue">0%</span>
+          </div>
+          <progress id="mindBasicProgressBar" max="100" value="0">0%</progress>
+        </div>
+        <p class="mind-basic-note">拍摄的图片和选区仅保存在此浏览器，不会上传。</p>
+      </div>
+    </aside>
+
+    <section id="mindBasicCalibration" class="mind-basic-calibration" role="dialog" aria-modal="true"
+      aria-labelledby="mindBasicCalibrationTitle" hidden>
+      <div class="mind-basic-calibration-dialog">
+        <header class="mind-basic-calibration-header">
+          <div>
+            <h2 id="mindBasicCalibrationTitle">拍摄自定义定位图</h2>
+          <p id="mindBasicCalibrationHint">拍摄完整图片后，可移动裁剪框并拖动边角调整大小；默认四边内缩 10%。</p>
+          </div>
+          <button id="mindBasicCancelButton" class="mind-basic-secondary" type="button">取消</button>
+        </header>
+        <div id="mindBasicCaptureStage" class="mind-basic-capture-stage">
+          <video id="mindBasicCameraVideo" autoplay muted playsinline></video>
+          <canvas id="mindBasicCalibrationCanvas" hidden></canvas>
+          <div id="mindBasicCropFrame" class="mind-basic-crop-frame" role="group"
+            aria-label="矩形裁剪框" hidden>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-nw" data-crop-handle="nw" type="button" aria-label="调整左上角"></button>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-n" data-crop-handle="n" type="button" aria-label="调整上边"></button>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-ne" data-crop-handle="ne" type="button" aria-label="调整右上角"></button>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-e" data-crop-handle="e" type="button" aria-label="调整右边"></button>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-se" data-crop-handle="se" type="button" aria-label="调整右下角"></button>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-s" data-crop-handle="s" type="button" aria-label="调整下边"></button>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-sw" data-crop-handle="sw" type="button" aria-label="调整左下角"></button>
+            <button class="mind-basic-crop-handle mind-basic-crop-handle-w" data-crop-handle="w" type="button" aria-label="调整左边"></button>
+          </div>
+        </div>
+        <label class="mind-basic-field mind-basic-name-field" for="mindBasicTargetName">
+          <span>定位图名称</span>
+          <input id="mindBasicTargetName" type="text" maxlength="64" placeholder="例如：桌上的卡片" />
+        </label>
+        <div class="mind-basic-calibration-actions">
+          <button id="mindBasicTakePhotoButton" type="button">拍照</button>
+          <button id="mindBasicRetakeButton" type="button" hidden>重拍</button>
+          <button id="mindBasicSaveButton" type="button" disabled>保存定位图</button>
+        </div>
+      </div>
+    </section>
+
+    <a-scene
+      id="mindBasicScene"
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/card-example/card.mind; autoStart: false;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+    >
+      <a-assets>
+        <img
+          id="mindBasicTargetImage"
+          src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/card-example/card.png"
+          crossorigin="anonymous"
+        />
+        <a-asset-item
+          id="avatarModel"
+          src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/card-example/softmind/scene.gltf"
+        ></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <a-entity id="mindBasicTargetAnchor" mindar-image-target="targetIndex: 0">
+        <a-plane
+          id="mindBasicTargetPlane"
+          src="#mindBasicTargetImage"
+          position="0 0 0"
+          height="0.552"
+          width="1"
+          rotation="0 0 0"
+        ></a-plane>
+        <a-gltf-model
+          id="mindBasicAvatar"
+          rotation="0 0 0"
+          position="0 0 0.1"
+          scale="0.005 0.005 0.005"
+          src="#avatarModel"
+          animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate"
+        ></a-gltf-model>
+      </a-entity>
+    </a-scene>
+
+    <div class="mindar-basic-attribution">
+      MindAR 官方 Basic 示例 · Softmind 模型作者
+      <a href="https://sketchfab.com/hiukim" target="_blank" rel="noopener noreferrer">hiukim</a>
+      · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
+    </div>
+    <script src="./mind-basic-geometry.js"></script>
+    <script src="./mind-basic.js"></script>
+  </body>
+</html>

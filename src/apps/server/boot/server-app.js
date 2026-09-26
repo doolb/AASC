@@ -1990,6 +1990,8 @@ function appendTemporaryConversationMessage(message, conversationId) {
         name: message.name || (message.role === 'assistant' ? '助手' : '用户'),
         roleName: message.roleName || temporaryConversation.roleName || null,
         content: message.content,
+        ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+        ...(message.speech ? { speech: message.speech } : {}),
         mode: 'temporary',
         sessionId: conversationId
     });
@@ -2669,8 +2671,8 @@ function handleDisplayConversationInput(displayId, text) {
         return { accepted: false, state: createConversationState(false), event: null };
     }
 
-    // Go/C#/Node 子显示端尚未接入唤醒状态机，继续沿用原有语音命令流程，避免升级服务端后旧客户端失去语音能力。
-    if (displayData.isSubDisplay) {
+    // 未标记为 Node 的其他子显示端暂时沿用旧语音命令路径。
+    if (displayData.isSubDisplay && !displayData.isNodeSubDisplay) {
         return {
             accepted: true,
             state: displayData.state.voiceConversation || createConversationState(true),
@@ -7650,8 +7652,14 @@ wss.on('connection', (ws, req) => {
     if (url === '/display' || url.startsWith('/display')) {
         const urlParams = new URL(url, 'http://localhost');
         const isSubDisplay = urlParams.searchParams.get('subDisplay') === 'true';
+        const clientType = urlParams.searchParams.get('clientType');
         const customDisplayId = urlParams.searchParams.get('displayId');
         const displayId = customDisplayId || generateId();
+        const isNodeSubDisplay = isSubDisplay && (
+            clientType === 'node'
+            // 兼容尚未更新、但沿用 Node 默认 ID 前缀的已部署客户端。
+            || displayId.startsWith('voice-display-node-')
+        );
         const clientIP = getClientIP(req);
         const savedState = config.getDisplayStateById(displayId, clientIP);
 
@@ -7668,6 +7676,7 @@ wss.on('connection', (ws, req) => {
             displayId: displayId,
             ip: clientIP,
             isSubDisplay: isSubDisplay,
+            isNodeSubDisplay,
             lastSeen: Date.now(),
             state: {
                 ...createDisplayState(),
@@ -10892,7 +10901,8 @@ async function handleChatMessage(options) {
                 speech,
                 history: isTemporaryConversation ? [] : chat.getHistory(),
                 temporaryConversation: isTemporaryConversation,
-                temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
+                temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null,
+                conversation: isTemporaryConversation ? getTemporaryConversationSnapshot() : null
             });
             // 有语音播放能力的来源端已经通过 tts/playAudio 收到回复；只有无语音能力时
             // 才发送 response 文字兜底，避免同一条普通聊天同时出现 TTS 文字和响应弹窗。

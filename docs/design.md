@@ -39,6 +39,7 @@
 | 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](design/display-chat-mmd.md) | 浏览器显示端聊天、角色会话、VRM/MMD 同位舞台和动作控制 |
 | MMD 图片基准图 AR | [mmd-image-ar.md](design/mmd-image-ar.md) | 普通图片拍照、手动四角选区、本地图像目标跟踪和 MMD 姿态叠加 |
 | MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](design/mmd-ar-test-apk.md) | 3rd 下独立运行的 APK 与 HTTPS 静态页、默认米娅 PMX、当前 JS/MindAR A/B 跟踪器 |
+| MindAR Basic 独立 HTTPS 测试页 | [mindar-basic-web.md](design/mindar-basic-web.md) | 保留官方示例与 Softmind，支持浏览器本地拍照校准、保存并编译自定义图片目标 |
 | PMX 模型、VMD 动作与 Offline 静态代理 | [mmd-pmx-vmd-local.md](design/mmd-pmx-vmd-local.md) | 本地 PMX/VMD、灯光设置、旋转缓动期间的物理子步同步设计，以及 Offline Node 公网 MMD 资源代理 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 控制端折叠 think、显示端展示 think、TTS 播报去标签内容和私聊清空错误反馈 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](design/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出 |

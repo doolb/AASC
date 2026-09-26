@@ -74,6 +74,14 @@ build:apk:noserver:
     embeddedNode = false
     release = true
 
+buildApk(profile):
+    source = readGitSourceMetadata(projectRoot)
+    执行 profile 原有 APK 构建流程
+    build-manifest.source = {
+        gitCommit: source.gitCommit,
+        gitDirty: source.gitDirty
+    }
+
 upload:apk:
     先执行 build:apk
     从 release/apkbuild/withserver/output/aasc-display.apk 上传和安装

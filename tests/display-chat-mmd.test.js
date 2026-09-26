@@ -55,14 +55,14 @@ test('正式显示端灯光面板展示 Canvas 实际渲染分辨率', () => {
     assert.match(mmd, /state\.runtime\.resize\(state\.width, state\.height, state\.devicePixelRatio\)/u);
 });
 
-test('灯光按钮位于时间区域下方并提供默认开启的阴影开关', () => {
+test('灯光按钮位于时间区域下方并提供默认主光源的阴影来源选择', () => {
     const html = readPublic('display.html');
     const css = readPublic('css/display-mmd.css');
     const lighting = readPublic('js/display-mmd-lighting.js');
-    assert.match(html, /id="displayMmdShadowEnabled"[^>]*checked/u);
+    assert.match(html, /id="displayMmdShadowSource"[\s\S]*value="none"[\s\S]*value="key" selected[\s\S]*value="fill"/u);
     assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*top:\s*calc\(/u);
     assert.match(css, /clamp\(64px, 12vh, 104px\)/u);
-    assert.match(lighting, /shadowEnabled/u);
+    assert.match(lighting, /shadowSource/u);
 });
 
 test('显示端定位入口位于右上角灯光按钮正下方，不新增 AI 模式按钮', () => {
@@ -185,7 +185,8 @@ test('PMX 和 VRM runtime 提供默认开启的实时阴影', () => {
     assert.match(pmx, /renderer\.shadowMap\.enabled/u);
     assert.match(pmx, /THREE\.PCFSoftShadowMap/u);
     assert.match(pmx, /new THREE\.ShadowMaterial/u);
-    assert.match(pmx, /castShadow\s*=\s*shadowEnabled/u);
+    assert.match(pmx, /keyLight\.castShadow\s*=\s*shadowEnabled && shadowSource === 'key'/u);
+    assert.match(pmx, /fillLight\.castShadow\s*=\s*shadowEnabled && shadowSource === 'fill'/u);
     assert.match(pmx, /receiveShadow\s*=\s*shadowEnabled/u);
     assert.match(pmx, /shadowEnabled/u);
     assert.match(vrm, /renderer\.shadowMap\.enabled/u);
@@ -221,7 +222,23 @@ test('补光默认关闭，输入规范化后保留独立方向且不影响主�
     assert.equal(result.shadowEnabled, true);
 });
 
-test('补光面板及两个 runtime 使用不投影的独立方向光', () => {
+test('阴影来源三选一迁移旧布尔设置并保留补光关闭时的选择', () => {
+    const window = {};
+    vm.runInNewContext(readPublic('js/display-mmd.js'), { window, console });
+    const display = window.DisplayMmd;
+    assert.equal(display.getLighting().shadowSource, 'key');
+    assert.equal(display.setLighting({ shadowEnabled: false }).shadowSource, 'none');
+    assert.equal(display.setLighting({ shadowEnabled: true }).shadowSource, 'key');
+    const fillOff = display.setLighting({ shadowSource: 'fill', fillEnabled: false });
+    assert.equal(fillOff.shadowSource, 'fill');
+    assert.equal(fillOff.shadowEnabled, false);
+    const fillOn = display.setLighting({ fillEnabled: true });
+    assert.equal(fillOn.shadowSource, 'fill');
+    assert.equal(fillOn.shadowEnabled, true);
+    assert.equal(display.setLighting({ shadowSource: 'none' }).shadowEnabled, false);
+});
+
+test('补光面板与 PMX 阴影来源及 VRM 独立方向光', () => {
     const html = readPublic('display.html');
     const lighting = readPublic('js/display-mmd-lighting.js');
     const pmx = readPublic('js/display-pmx-runtime.js');
@@ -243,7 +260,7 @@ test('PMX 和 VRM runtime 按模型范围定位高质量阴影相机', () => {
     assert.match(pmx, /SHADOW_MAP_SIZE\s*=\s*1024/u);
     assert.match(pmx, /shadow\.mapSize\.set\(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE\)/u);
     assert.match(pmx, /fitShadowCamera/u);
-    assert.match(pmx, /keyLight\.target\.position\.copy/u);
+    assert.match(pmx, /light\.target\.position\.copy/u);
     assert.match(pmx, /shadowCamera\.updateProjectionMatrix/u);
     assert.match(vrm, /SHADOW_MAP_SIZE\s*=\s*1024/u);
     assert.match(vrm, /shadow\.mapSize\.set\(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE\)/u);

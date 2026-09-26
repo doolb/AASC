@@ -220,7 +220,7 @@ class SubDisplayTUI {
             ` 地址: ${state.serverUrl || '-'}`,
             ` 显示端ID: ${state.displayId || '-'}`,
             ` 心跳: ${state.heartbeatStatus || '-'}`,
-            ` 重连: ${state.reconnectAttempts || 0}/${state.maxReconnectAttempts || 5}`
+            ` 连接尝试: ${state.reconnectAttempts || 0} 次 · 每 ${Math.round((state.reconnectDelayMs || 3000) / 1000)} 秒重试`
         ];
         this.connectionBox.setContent(lines.join('\n'));
         this._scheduleRender();

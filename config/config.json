@@ -78,6 +78,7 @@
     "multiMode": "fast",
     "speakerCount": "AUTO",
     "pauseRecordingDuringPlayback": false,
+    "acceptVoiceInputDuringTtsWithoutVoiceprint": false,
     "vadSilenceDurationMs": 500,
     "vadMinSpeechDurationMs": 300,
     "asrResultDetailLog": true
@@ -141,6 +142,7 @@
   "logBlocklist": [],
   "chat": {
     "agentBackend": "codex",
+    "codexProxy": "http://127.0.0.1:7899",
     "apiUrl": "http://127.0.0.1:8083/v1/chat/completions",
     "model": "Qwen3.6-Flash",
     "maxTokens": 65536,
@@ -148,7 +150,9 @@
     "apiKey": "",
     "contextCount": 10,
     "systemPrompt": "你是一个可爱萝莉猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
-    "activeProfile": "qwen3.5",
+    "promptFormat": "raw",
+    "mode": "llm",
+    "backend": null,
     "llmProfiles": [
       {
         "name": "default",
@@ -171,14 +175,10 @@
         "contextCount": 10,
         "apiKey": "",
         "promptFormat": "raw",
-        "mode": "agent",
-        "backend": "pi"
+        "mode": "llm"
       }
     ],
-    "codexProxy": "http://127.0.0.1:7899",
-    "promptFormat": "raw",
-    "mode": "agent",
-    "backend": "pi"
+    "activeProfile": "qwen3.5"
   },
   "logCategoryFilter": null,
   "timeAnnounce": {

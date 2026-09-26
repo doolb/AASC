@@ -207,6 +207,13 @@ MMDPhysics.update(delta):
   面板提供“PMX Toon 明暗”开关，默认关闭；开启时主光和补光沿用 Toon 渐变
   旧 localStorage 缺少 pmxToonEnabled 时使用普通直射光；明确保存的 true 保留；预设保留当前模式，恢复默认关闭 Toon
   面板提供补光开关、颜色、强度、经纬度；默认关闭，沿用现有 localStorage 保存
+  阴影来源选择 无阴影 / 主光源阴影 / 补光自身阴影，替换原角色阴影复选框；默认主光源
+  旧 shadowEnabled=false 映射为无阴影，旧 true 或未设置映射为主光源阴影
+  DisplayMmd 规范化中保留 shadowSource；旧设置仅传布尔值时先完成迁移，不能被当前默认来源覆盖
+  仅所选且启用的方向光投射阴影；补光未启用时选补光阴影不产生阴影
+  主光与补光各有独立阴影相机参数，切换时只启用一个阴影贴图
+  VRM 暂不实现补光阴影；选择补光来源时不得错误地显示主光阴影
+  AO 开关和 PMX Toon 不因阴影来源改变
   面板另提供两组 PMX 边缘光开关、颜色、强度、经纬度，均默认关闭；预设保留当前值，恢复默认关闭
   面板新增“PMX 环境遮蔽”开关，默认开启，并保存到现有灯光设置
   面板在开关下提供颜色、强度和半径输入；改变时即时保存和渲染
@@ -580,8 +587,11 @@ MMDPhysics.update(delta):
     返回
   将原场景渲染到带深度纹理的透明色彩目标
   从深度纹理重建人物可见像素的视空间位置和局部表面法线
-  在半分辨率 AO 目标中采样邻近深度，估计局部遮蔽
-  用水平、垂直两次半分辨率深度感知模糊抑制逐像素随机采样噪点
+  依据 pmxAoSampleCount 在 AO 目标中采样邻近深度；按实际采样数归一化遮蔽
+  按 pmxAoBlurPassCount 遍历 0–3 轮；每轮读取对应的 pmxAoBlurRadii 半径
+  每轮先从 AO 目标到临时目标做水平模糊，再从临时目标回到 AO 目标做垂直模糊
+  每次按本轮 1–5 个 AO 像素邻点采样，并按视空间深度抑制跨表面串色
+  0 轮时跳过两个模糊通道，直接把原始 AO 图用于合成
   模糊与最终合成均按线性视空间深度过滤，避免跨前后景和透明轮廓串色
   以 pmxAoIntensity 调整遮蔽量，以 pmxAoColor 混合遮蔽色
   仅修改人物已绘制的 RGB，保留原色彩目标的 alpha
@@ -591,13 +601,36 @@ MMDPhysics.update(delta):
   根据 pmxAoEnabled 切换 AO，开关关闭时不执行额外渲染通道
   pmxAoRadiusPercent 乘以当前模型包围盒高度得到世界空间采样半径
   颜色、强度、半径修改立即更新当前 runtime，不重新加载 PMX/VMD
+  pmxAoSampleCount 规范化为 12、24 或 32，旧本地设置缺失时使用默认 24
+  采样数修改立即更新 AO 着色器 uniform，不重新分配目标或加载模型
+  pmxAoBlurPassCount 规范化为 0–3，旧本地设置缺失时默认 1
+  pmxAoBlurRadii 规范化为三个 1–5 的整数，缺失值默认 3；只执行前 pmxAoBlurPassCount 项
+  运行时逐轮更新模糊材质的半径 uniform，复用现有 AO/临时目标，不新建目标
   resize 时按绘制缓冲区大小调整色彩、深度和 AO 目标
   pmxAoResolution 从 half 切到 full 或反向切换时，只调整 AO 与模糊目标尺寸及相应采样 uniform
   模型切换时重用 AO 渲染资源
   runtime dispose 时释放 AO 目标、临时模糊目标、材质和全屏网格
+
+过程 displayPmxAoSampleSetting(savedLighting, selectedCount)
+  从灯光面板读取采样次数并规范化为受支持的档位
+  将采样次数与其他灯光设置保存在同一 localStorage 对象
+  更新 PMX runtime 的 AO 采样次数；VRM 不处理该参数
+  恢复默认时重新采用 24 次；旧保存对象缺少字段时补默认值
+
+过程 displayPmxAoBlurSetting(savedLighting, passCount, radii)
+  从灯光面板读取模糊轮数，逐轮显示对应的独立半径控件
+  将轮数和三个半径与其他灯光设置保存在同一 localStorage 对象
+  规范化非法轮数和半径，旧设置缺少字段时采用 1 轮、首轮半径 3
+  更新 PMX runtime，VRM 不处理该参数；恢复默认时重新采用 1 轮、半径 3
+
+过程 publishPmxAoTestPage(webBuild, wanPage)
+  从现有网页构建产物选择 HTML、灯光 CSS 与四个共用显示端脚本
+  先上传临时目录并比较各文件 SHA-256，再替换外网测试页对应文件
+  替换后再次核对远端六个文件的 SHA-256 与网页入口 HTTP 状态
+  不修改 Offline 服务更新清单、内网、依赖包或 APK
 ```
 
-约束：AO 只作用于 PMX 角色显示，现有 VRM、物理步进、动作、阴影开关和透明画布层级不变。无 WebGL2 时保留原渲染路径；不因 AO 不可用阻断角色加载。AO 开关沿用本地灯光设置，不新建远端配置接口。
+约束：AO 只作用于 PMX 角色显示，现有 VRM、物理步进、动作、阴影开关和透明画布层级不变。无 WebGL2 时保留原渲染路径；不因 AO 不可用阻断角色加载。AO 开关沿用本地灯光设置，不新建远端配置接口。此阶段仅增强空间降噪；若移动闪烁仍明显，另行评估有历史失效检测的时域方案，不能直接混合旧帧造成拖影。
 
 ## 15. Offline MMD 上游内网优先与外网回退伪代码（2026-09-23）
 

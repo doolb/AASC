@@ -16,6 +16,7 @@ const {
     prepareAndroidServerPackage
 } = require('./prepare-android-server-package');
 const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
+const { readGitSourceMetadata } = require('./git-source-metadata');
 const {
     resolveReleaseRuntimeContext,
     validateReleaseRuntimeContext
@@ -146,6 +147,7 @@ async function prepareRuntimeForProfile(options = {}) {
 
 async function buildApk(options = {}) {
     const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
+    const source = readGitSourceMetadata(projectRoot);
     const profileName = String(options.profileName || '').trim();
     const plan = createApkBuildPlan({ projectRoot, profileName });
     const profile = await loadApkProfile({ projectRoot, profile: profileName });
@@ -232,6 +234,7 @@ async function buildApk(options = {}) {
         versionName: profile.versionName,
         apk: path.basename(apkPath),
         sha256: crypto.createHash('sha256').update(apkContent).digest('hex'),
+        source,
         runtime: prepared?.manifest || null
     };
     await fs.promises.writeFile(

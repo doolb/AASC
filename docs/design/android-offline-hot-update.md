@@ -183,6 +183,8 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 - `code-only`：优先生成并发布完整代码包；当当前 `package-lock.json` 与已发布依赖的 lockfile 指纹一致时沿用当前依赖包，不生成、不上传、不下载依赖包。检测到指纹变化时，自动升级为 `all`，递增依赖版本并同时生成代码包和依赖包，避免代码包声明的新依赖无法在设备上运行。
 - `all`：重新生成代码包和依赖包，设备在一个版本切换事务中同时应用两者。
 
+整包的 `build-manifest.json` 记录构建源的完整 Git 提交 hash 与工作区 dirty 状态。服务热更签名清单将对应来源信息放在 `components.code.source`；`all` 模式同时记录新生成依赖包的来源，min APK 构建则从 APK `build-manifest.json` 复制到 `components.apkMin.source`。来源字段位于签名 payload 内，使用完整 40 位提交 hash；无 Git 提交时 hash 和 dirty 状态均为 `null`。该元数据用于追溯产物，不改变 APK/服务更新运行逻辑，旧清单仍兼容。
+
 code-only 应用时，设备必须按以下顺序选择依赖目录：先检查当前清单要求的
 `updates/dependencies/dependencies-v<dependencyVersion>` 是否包含有效的
 `.offline-update-verified.json`、匹配的版本/hash 标记和 `node_modules`；有效时无论旧指针是否为

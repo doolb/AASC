@@ -4,7 +4,7 @@
       "instanceId": "ce2c4a03",
       "taskName": "win-monitor",
       "status": "running",
-      "timestamp": 1789391853658,
+      "timestamp": 1790325831715,
       "env": "auto",
       "mode": "service",
       "displayId": null,
@@ -24,8 +24,8 @@
     {
       "instanceId": "3ed3e09e",
       "taskName": "win-monitor",
-      "status": "pending_forward",
-      "timestamp": 1789216611026,
+      "status": "display_offline",
+      "timestamp": 1790325831885,
       "target": "subdisplay",
       "env": "auto",
       "mode": "service",
@@ -39,7 +39,9 @@
       "routeReason": "explicit-display",
       "routeNodeId": null,
       "routing": null,
-      "requiredCapabilities": []
+      "requiredCapabilities": [],
+      "stage": "display_offline",
+      "progress": 100
     },
     {
       "instanceId": "28d32243",
@@ -54,7 +56,10 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "error": "显示端不在线或连接关闭: voice-display-node-winblueg2"
+      "error": "显示端不在线或连接关闭: voice-display-node-winblueg2",
+      "routeTarget": "subdisplay",
+      "routeReason": "explicit-display",
+      "routeNodeId": null
     }
   ]
 }

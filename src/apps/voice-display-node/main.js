@@ -152,15 +152,20 @@ class VoiceDisplay {
         this.audio = null;
         this.recorder = null;
         this.connected = false;
+        // 本地候选 ID 在进程内固定；服务器确认 ID 单独保存，不能反写覆盖重连身份。
+        this.clientDisplayId = config.displayId;
         // 服务器通过 WebSocket 确认的身份才是 ASR 请求的权威来源，不能只依赖本地候选 ID。
         this.serverDisplayId = null;
         this.displayIdWaiter = null;
         this.stopController = new AbortController();
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = config.maxReconnectAttempts || 5;
+        this.reconnectDelayMs = 3000;
+        this.reconnectTimer = null;
+        this.connectionAttemptPromise = null;
         this.heartbeatInterval = null;
         this.heartbeatIntervalMs = 60 * 1000;
         this.asrPollTimer = null;
+        this.voiceConversationState = null;
         // 麦克风能力要等服务端权威配置到达后才确认；启动时先保持关闭，避免重连竞态提前打开设备。
         this.recordingEnabled = false;
         this.voiceRecordingCapabilityKnown = false;
@@ -216,10 +221,10 @@ class VoiceDisplay {
         tui.updateConnectionState({
             connected: this.connected,
             serverUrl: this.config.serverUrl,
-            displayId: this.config.displayId,
+            displayId: this.serverDisplayId || this.clientDisplayId,
             heartbeatStatus: this.heartbeatInterval ? '运行中' : '未启动',
             reconnectAttempts: this.reconnectAttempts,
-            maxReconnectAttempts: this.maxReconnectAttempts
+            reconnectDelayMs: this.reconnectDelayMs
         });
     }
 
@@ -244,7 +249,7 @@ class VoiceDisplay {
         this.serverDisplayId = null;
         const parsedUrl = URL.parse(this.config.serverUrl);
         const wsProtocol = parsedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${parsedUrl.host}/display?subDisplay=true&displayId=${encodeURIComponent(this.config.displayId)}`;
+        const wsUrl = `${wsProtocol}//${parsedUrl.host}/display?subDisplay=true&clientType=node&displayId=${encodeURIComponent(this.clientDisplayId)}`;
 
         log('连接', `正在连接到 ${wsUrl}`);
 
@@ -252,16 +257,18 @@ class VoiceDisplay {
             const wsOptions = wsProtocol === 'wss:' ? {
                 rejectUnauthorized: false
             } : undefined;
+            let opened = false;
             
             const ws = new WebSocket(wsUrl, wsOptions);
             this.ws = ws;
 
             ws.on('open', () => {
                 if (this.ws !== ws) return;
+                opened = true;
                 this.connected = true;
-                this.reconnectAttempts = 0;
+                this.clearReconnectTimer();
 
-                log('连接', `已连接，等待服务器确认显示端ID（本地候选: ${this.config.displayId}）`);
+                log('连接', `已连接，等待服务器确认显示端ID（本地候选: ${this.clientDisplayId}）`);
                 this.startHeartbeat();
                 this.declareCapabilities();
                 this.updateTUIConnectionState();
@@ -278,30 +285,68 @@ class VoiceDisplay {
                 }
             });
 
-            ws.on('close', () => {
+            ws.on('close', (code, reason) => {
                 if (this.ws !== ws) return;
-                this.connected = false;
-                // 断线期间服务端可能已修改能力；释放设备并等待重连后的权威配置。
-                this.voiceRecordingCapabilityKnown = false;
-                this.recordingEnabled = false;
-                this.stopVoiceRecognition();
-                this.rejectDisplayIdWaiter(new Error('WebSocket 已关闭，服务器未确认显示端 ID'));
-                log('断开', '连接已关闭');
-                this.updateTUIConnectionState();
-                this.reconnect();
+                const closeReason = reason?.toString() || `连接已关闭 (code=${code})`;
+                this.handleSocketDisconnect(ws, closeReason);
+                if (!opened) {
+                    // 握手未完成便关闭时，确保当前连接尝试可以结束并进入重试。
+                    reject(new Error(closeReason));
+                }
             });
 
             ws.on('error', (error) => {
                 if (this.ws !== ws) return;
                 logError('连接', `WebSocket错误: ${error.message}`);
-                if (!this.connected) {
+                this.handleSocketDisconnect(ws, error.message);
+                if (!opened) {
                     reject(error);
+                }
+                try {
+                    if (ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
+                        ws.close();
+                    }
+                } catch (closeError) {
+                    logError('连接', `关闭异常 WebSocket 失败: ${closeError.message}`);
                 }
             });
         });
 
         // open 只代表传输层建立；必须等 displayId 消息，才能让 start() 启动 ASR。
         await this.waitForServerDisplayId();
+    }
+
+    handleSocketDisconnect(ws, reason) {
+        if (this.ws !== ws) return;
+        this.ws = null;
+        this.connected = false;
+        this.serverDisplayId = null;
+        // 断线期间服务端可能已修改能力；释放设备并等待重连后的权威配置。
+        this.voiceRecordingCapabilityKnown = false;
+        this.recordingEnabled = false;
+        this.stopVoiceRecognition();
+        this.stopHeartbeat();
+        this.rejectDisplayIdWaiter(new Error('WebSocket 已断开，服务器未确认显示端 ID'));
+        log('断开', reason || '连接已关闭');
+        this.updateTUIConnectionState();
+        this.scheduleReconnect();
+    }
+
+    scheduleReconnect() {
+        if (this.stopController.signal.aborted || this.reconnectTimer !== null) return;
+        if (this.connected) return;
+
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            void this.connectWithRetry();
+        }, this.reconnectDelayMs);
+        log('重连', `将在 ${this.reconnectDelayMs / 1000} 秒后重试`);
+    }
+
+    clearReconnectTimer() {
+        if (this.reconnectTimer === null) return;
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
     }
 
     /**
@@ -312,6 +357,10 @@ class VoiceDisplay {
     async waitForServerDisplayId(timeoutMs = 5000) {
         if (this.serverDisplayId) {
             return this.serverDisplayId;
+        }
+
+        if (!this.connected || !this.ws) {
+            throw new Error('WebSocket 未连接，无法等待服务器确认显示端 ID');
         }
 
         return new Promise((resolve, reject) => {
@@ -375,7 +424,10 @@ class VoiceDisplay {
             case 'displayId':
                 if (typeof data.id === 'string' && data.id.trim()) {
                     this.serverDisplayId = data.id.trim();
-                    this.config.displayId = this.serverDisplayId;
+                    this.reconnectAttempts = 0;
+                    if (this.serverDisplayId !== this.clientDisplayId) {
+                        logError('连接', `服务器确认 ID ${this.serverDisplayId} 与稳定本地 ID ${this.clientDisplayId} 不一致`);
+                    }
                     if (this.displayIdWaiter) {
                         const waiter = this.displayIdWaiter;
                         this.displayIdWaiter = null;
@@ -428,6 +480,9 @@ class VoiceDisplay {
                 break;
             case 'voiceInput':
                 log('语音', '收到语音输入确认');
+                break;
+            case 'voiceConversationState':
+                this.handleVoiceConversationState(data);
                 break;
             case 'control':
                 this.handleControl(data);
@@ -509,6 +564,24 @@ class VoiceDisplay {
     handleAsrConfig(data) {
         this._asrConfig = data;
         log('ASR', 'ASR 配置: device=' + data.device + ' localEnabled=' + data.localAsrEnabled);
+    }
+
+    handleVoiceConversationState(data) {
+        const state = data?.state;
+        if (!['disabled', 'waitingWake', 'activeGroup', 'activePrivate'].includes(state)) return;
+        const target = typeof data?.target === 'string' ? data.target : null;
+        const previous = this.voiceConversationState;
+        this.voiceConversationState = { ...data, state, target };
+        if (previous?.state !== state || previous?.target !== target) {
+            const labels = {
+                disabled: '已关闭',
+                waitingWake: '等待唤醒',
+                activeGroup: '群聊',
+                activePrivate: `私聊：${target || '未知助手'}`
+            };
+            const label = labels[state];
+            log('语音', `语音会话状态更新: ${label}`);
+        }
     }
 
     isVoiceRecordingEnabled() {
@@ -1749,31 +1822,32 @@ class VoiceDisplay {
         }
     }
 
-    /**
-     * 重连机制
-     */
-    async reconnect() {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            log('重连', '达到最大重连次数，退出');
-            this.stop();
-            return;
-        }
+    async connectWithRetry() {
+        if (this.stopController.signal.aborted || this.connected) return;
+        if (this.connectionAttemptPromise) return this.connectionAttemptPromise;
+        if (this.ws && (this.ws.readyState === WebSocket.CONNECTING
+            || this.ws.readyState === WebSocket.OPEN)) return;
 
         this.reconnectAttempts++;
-        const delay = this.reconnectAttempts * 5000;
+        this.updateTUIConnectionState();
+        log('连接', `开始第 ${this.reconnectAttempts} 次连接尝试`);
 
-        log('重连', `第${this.reconnectAttempts}次尝试重连，${delay/1000}秒后...`);
-
-        await new Promise(resolve => setTimeout(resolve, delay));
-
-        try {
-            await this.connect();
-            log('重连', '重连成功');
-            this.updateTUIConnectionState();
-        } catch (error) {
-            logError('重连', `重连失败: ${error.message}`);
-            this.reconnect();
-        }
+        const connectionAttempt = (async () => {
+            try {
+                await this.connect();
+                log('连接', '服务器已确认显示端 ID，连接可用');
+                this.updateTUIConnectionState();
+            } catch (error) {
+                logError('连接', `连接尝试失败: ${error.message}`);
+            } finally {
+                if (this.connectionAttemptPromise === connectionAttempt) {
+                    this.connectionAttemptPromise = null;
+                }
+                if (!this.connected) this.scheduleReconnect();
+            }
+        })();
+        this.connectionAttemptPromise = connectionAttempt;
+        return connectionAttempt;
     }
 
     /**
@@ -1824,7 +1898,8 @@ class VoiceDisplay {
                 this.setupPlaybackPause();
         }
 
-        await this.connect();
+        // 连接过程在后台持续重试；服务器暂时不可达时不应让 Node 进程退出。
+        void this.connectWithRetry();
         await this.startWindowsTextInput();
 
         if (this.recorder && this.asr && this.asr.isReady()) {
@@ -2106,6 +2181,7 @@ class VoiceDisplay {
         this.recordingEnabled = false;
         this.voiceRecognitionRestartPending = false;
         this.stopController.abort();
+        this.clearReconnectTimer();
         this.stopHeartbeat();
         this.clearTextInputIdleTimer();
         this.rejectDisplayIdWaiter(new Error('语音显示端已停止'));
@@ -2168,7 +2244,6 @@ function loadConfig(configPath) {
         serverUrl: 'http://localhost:3000',
         displayId: 'voice-display-node-' + os.hostname(),
         vadThreshold: 0.01,
-        maxReconnectAttempts: 5,
         recordingMode: 'mute',
         textInput: {
             requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_DISABLED
@@ -2208,7 +2283,7 @@ async function main() {
             displayId: config.displayId,
             heartbeatStatus: '未启动',
             reconnectAttempts: 0,
-            maxReconnectAttempts: config.maxReconnectAttempts || 5
+            reconnectDelayMs: voiceDisplay.reconnectDelayMs
         });
 
         systemMonitor = new SystemMonitor({ intervalMs: 5000 });

@@ -3,8 +3,8 @@
     {
       "instanceId": "75b07843",
       "taskName": "render-display",
-      "status": "display_offline",
-      "timestamp": 1789391853597,
+      "status": "running",
+      "timestamp": 1790325831705,
       "target": "display",
       "env": "cpu",
       "mode": "service",
@@ -19,7 +19,7 @@
       "routeReason": "explicit-display",
       "routeNodeId": null,
       "error": "显示端已断开连接",
-      "stage": "display_offline",
+      "stage": "running",
       "progress": 100
     }
   ]

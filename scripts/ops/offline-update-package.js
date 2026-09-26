@@ -7,6 +7,10 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
+const {
+    readGitSourceMetadata,
+    validateGitSourceMetadata
+} = require('./git-source-metadata');
 
 const execFileAsync = promisify(execFile);
 const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
@@ -105,6 +109,8 @@ function validateManifestComponents(manifest) {
     const { code, dependencies, apkMin } = manifest.payload.components;
     validateArtifactEntry(code, 'code');
     validateArtifactEntry(dependencies, 'dependencies');
+    validateGitSourceMetadata(code.source, 'components.code.source');
+    validateGitSourceMetadata(dependencies.source, 'components.dependencies.source');
     assertVersion(code.requiredDependencyVersion, 'code.requiredDependencyVersion');
     if (code.requiredDependencyVersion !== dependencies.version ||
         !isSha256(code.requiredLockSha256) || code.requiredLockSha256 !== dependencies.lockSha256 ||
@@ -113,6 +119,7 @@ function validateManifestComponents(manifest) {
     }
     if (apkMin !== undefined) {
         validateArtifactEntry({ ...apkMin, version: apkMin.versionCode }, 'apkMin');
+        validateGitSourceMetadata(apkMin.source, 'components.apkMin.source');
         if (typeof apkMin.versionName !== 'string' || apkMin.versionName.trim() === '') {
             throw new Error('Offline 清单 apkMin.versionName 无效');
         }
@@ -575,6 +582,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
     if (requestedMode === 'data-repair') return createDataRepairArtifacts(options);
     if (!['code-only', 'all'].includes(requestedMode)) throw new Error('更新模式必须是 code-only 或 all');
     const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
+    const source = readGitSourceMetadata(projectRoot);
     const outputDir = path.resolve(options.outputDir || path.join(projectRoot, 'release/offline-update/output'));
     const codeVersion = Number(options.codeVersion);
     assertVersion(codeVersion, 'codeVersion');
@@ -652,6 +660,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
                     version: codeVersion,
                     requiredDependencyVersion: dependencyVersion,
                     requiredLockSha256: lockSha256,
+                    source,
                     ...(await describeArtifact(stagedCodeArchive, `code/${path.basename(codeDestination)}`))
                 }
             }
@@ -660,6 +669,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
             payload.components.dependencies = {
                 version: dependencyVersion,
                 lockSha256,
+                source,
                 ...(await describeArtifact(dependenciesArchivePath, `dependencies/${path.basename(dependenciesArchivePath)}`))
             };
         }

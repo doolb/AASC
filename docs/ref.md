@@ -9,6 +9,11 @@
 
 ### 前端
 - 原生 HTML/CSS/JavaScript (无框架)
+- [MindAR Basic Image Tracking 示例](https://hiukim.github.io/mind-ar-js-doc/samples/basic.html) - 官方 A-Frame 图片识别示例
+- [MindAR 项目与示例资源](https://github.com/hiukim/mind-ar-js) - Basic 示例使用的固定版本 `.mind`、卡片图片和 Softmind glTF
+- [MindAR Core API](https://github.com/hiukim/mind-ar-js-doc/blob/master/docs/core-api.md) - 浏览器端 Compiler/Controller 接口与编译结果导出
+- [MindAR 图片目标编译器](https://github.com/hiukim/mind-ar-js-doc/blob/master/docs/tools/compile.mdx) - 官方目标图片编译流程
+- [Softmind 模型许可](https://creativecommons.org/licenses/by/4.0/) - hiukim 模型采用 CC BY 4.0，页面保留署名
 
 ## 外部资源
 
