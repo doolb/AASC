@@ -141,10 +141,6 @@
                         </select>
                     </label>
                     <label class="display-mmd-lighting-shadow">
-                        <input id="displayMmdShadowEnabled" type="checkbox" checked>
-                        <span>角色阴影（默认开启）</span>
-                    </label>
-                    <label class="display-mmd-lighting-shadow">
                         <input id="displayMmdPmxToonEnabled" type="checkbox">
                         <span>PMX Toon 明暗（关闭后使用普通光照）</span>
                     </label>
@@ -172,6 +168,37 @@
                             <option value="full">全分辨率</option>
                         </select>
                         <small>全分辨率按实际绘制像素计算，画质更细但 GPU 开销更高。</small>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>AO 采样次数</span>
+                        <select id="displayMmdPmxAoSampleCount">
+                            <option value="12">12 次（省电）</option>
+                            <option value="24" selected>24 次（默认）</option>
+                            <option value="32">32 次（高画质）</option>
+                        </select>
+                        <small>采样越多，颗粒和移动闪烁越少，但 GPU 开销越高。</small>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>AO 模糊次数</span>
+                        <select id="displayMmdPmxAoBlurPassCount">
+                            <option value="0">关闭模糊</option>
+                            <option value="1" selected>1 次（默认）</option>
+                            <option value="2">2 次</option>
+                            <option value="3">3 次</option>
+                        </select>
+                        <small>每次包含水平和垂直模糊；次数越多，GPU 开销越高。</small>
+                    </label>
+                    <label id="displayMmdPmxAoBlurRadius1Field" class="display-mmd-lighting-field">
+                        <span>第 1 次模糊半径 <output id="displayMmdPmxAoBlurRadius1Value">3 px</output></span>
+                        <input id="displayMmdPmxAoBlurRadius1" type="range" min="1" max="5" step="1" value="3">
+                    </label>
+                    <label id="displayMmdPmxAoBlurRadius2Field" class="display-mmd-lighting-field" hidden>
+                        <span>第 2 次模糊半径 <output id="displayMmdPmxAoBlurRadius2Value">3 px</output></span>
+                        <input id="displayMmdPmxAoBlurRadius2" type="range" min="1" max="5" step="1" value="3">
+                    </label>
+                    <label id="displayMmdPmxAoBlurRadius3Field" class="display-mmd-lighting-field" hidden>
+                        <span>第 3 次模糊半径 <output id="displayMmdPmxAoBlurRadius3Value">3 px</output></span>
+                        <input id="displayMmdPmxAoBlurRadius3" type="range" min="1" max="5" step="1" value="3">
                     </label>
                     <label class="display-mmd-lighting-field">
                         <span>PMX 物理频率 <output id="displayMmdPhysicsFpsValue">65 Hz</output></span>
@@ -210,7 +237,15 @@
                     </fieldset>
                     <label class="display-mmd-lighting-shadow">
                         <input id="displayMmdFillEnabled" type="checkbox">
-                        <span>补光（不投射阴影，默认关闭）</span>
+                        <span>补光（默认关闭）</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>阴影来源</span>
+                        <select id="displayMmdShadowSource">
+                            <option value="none">无阴影</option>
+                            <option value="key" selected>主光源阴影</option>
+                            <option value="fill">补光自己的阴影</option>
+                        </select>
                     </label>
                     <label class="display-mmd-lighting-field">
                         <span>补光颜色</span>

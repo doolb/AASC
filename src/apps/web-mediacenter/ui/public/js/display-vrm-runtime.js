@@ -289,7 +289,8 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
             normalizeLightNumber(position.y, -10, 10, 3),
             normalizeLightNumber(position.z, -10, 10, 2.5)
         );
-        shadowEnabled = lighting.shadowEnabled !== false;
+        // VRM 暂不支持补光自身阴影；不能把“补光阴影”错误显示为主光阴影。
+        shadowEnabled = lighting.shadowSource !== 'fill' && lighting.shadowEnabled !== false;
         applyShadowMode();
         return {
             ambientColor: normalizeLightColor(lighting.ambientColor),

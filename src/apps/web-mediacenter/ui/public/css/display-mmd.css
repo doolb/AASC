@@ -422,6 +422,10 @@
     font-size: 12px;
 }
 
+.display-mmd-lighting-field[hidden] {
+    display: none;
+}
+
 .display-mmd-lighting-field > span,
 .display-mmd-lighting-direction label > span {
     display: flex;

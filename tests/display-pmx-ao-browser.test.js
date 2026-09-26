@@ -83,6 +83,20 @@ test('PMX AO darkens nearby geometry while keeping the stage transparent', { ski
       ao.setEnabled(true);
       ao.render();
       const withAo = read();
+      ao.setBlurPasses(0, [3, 3, 3]);
+      ao.render();
+      const withoutBlur = read();
+      ao.setBlurPasses(2, [1, 5, 3]);
+      ao.render();
+      const multiBlur = read();
+      ao.setBlurPasses(1, [3, 3, 3]);
+      ao.setSampleCount(12);
+      ao.render();
+      const twelveSamples = read();
+      ao.setSampleCount(32);
+      ao.render();
+      const thirtyTwoSamples = read();
+      ao.setSampleCount(24);
       ao.setIntensity(0);
       ao.render();
       const zeroIntensity = read();
@@ -107,13 +121,23 @@ test('PMX AO darkens nearby geometry while keeping the stage transparent', { ski
       let tintedGreenLoss = 0;
       let smallRadiusLoss = 0;
       let largeRadiusLoss = 0;
+      let twelveSampleLoss = 0;
+      let thirtyTwoSampleLoss = 0;
+      let sampleModeDifference = 0;
+      let blurOffDifference = 0;
+      let multiBlurDifference = 0;
       for (let index = 0; index < withAo.length; index += 4) {
         if (withoutAo[index + 3] !== withAo[index + 3]) changedAlpha += 1;
         if (withoutAo[index + 3] === 255) {
           occupied += 1;
           minWithout = Math.min(minWithout, withoutAo[index]);
           minWith = Math.min(minWith, withAo[index]);
-          if (withAo[index] < withoutAo[index] - 5) darkened += 1;
+          if (withAo[index] < withoutAo[index] - 1) darkened += 1;
+          twelveSampleLoss += Math.max(0, withoutAo[index] - twelveSamples[index]);
+          thirtyTwoSampleLoss += Math.max(0, withoutAo[index] - thirtyTwoSamples[index]);
+          sampleModeDifference += Math.abs(twelveSamples[index] - thirtyTwoSamples[index]);
+          blurOffDifference += Math.abs(withAo[index] - withoutBlur[index]);
+          multiBlurDifference += Math.abs(withAo[index] - multiBlur[index]);
           zeroIntensityDifference = Math.max(zeroIntensityDifference,
             Math.abs(zeroIntensity[index] - withoutAo[index]));
           tintedRedLoss += Math.max(0, withoutAo[index] - tinted[index]);
@@ -158,12 +182,17 @@ test('PMX AO darkens nearby geometry while keeping the stage transparent', { ski
       return { supported: ao.supported, darkened, changedAlpha, cornerAlpha: withAo[3],
         occupied, minWithout, minWith, glError, farColorBefore, farColorAfter,
         jitter: jitter / jitterSamples, zeroIntensityDifference, tintedRedLoss,
-        tintedGreenLoss, smallRadiusLoss, largeRadiusLoss, fullSizes, halfSizes, resizeGlError };
+        tintedGreenLoss, smallRadiusLoss, largeRadiusLoss, twelveSampleLoss,
+        thirtyTwoSampleLoss, sampleModeDifference, blurOffDifference, multiBlurDifference,
+        fullSizes, halfSizes, resizeGlError };
     });
     assert.equal(result.supported, true);
     assert.equal(result.cornerAlpha, 0);
     assert.equal(result.changedAlpha, 0);
     assert.ok(result.darkened > 10, JSON.stringify(result));
+    assert.ok(result.twelveSampleLoss > 0 && result.thirtyTwoSampleLoss > 0, JSON.stringify(result));
+    assert.ok(result.sampleModeDifference > 0, JSON.stringify(result));
+    assert.ok(result.blurOffDifference > 0 && result.multiBlurDifference > 0, JSON.stringify(result));
     assert.ok(Math.abs(result.farColorBefore - result.farColorAfter) <= 3, JSON.stringify(result));
     assert.ok(result.jitter < 2, JSON.stringify(result));
     assert.ok(result.zeroIntensityDifference <= 3, JSON.stringify(result));
@@ -318,28 +347,43 @@ test('PMX runtime applies AO switch without reloading the model', { skip: !CHROM
       const disabled = runtime.setLighting({ pmxAoEnabled: false }).pmxAoEnabled;
       const adjusted = runtime.setLighting({
         pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
-        pmxAoRadiusPercent: 12, pmxAoResolution: 'full', pmxToonEnabled: false,
+        pmxAoRadiusPercent: 12, pmxAoResolution: 'full', pmxAoSampleCount: 32,
+        pmxAoBlurPassCount: 2, pmxAoBlurRadii: [1, 5, 3], pmxToonEnabled: false,
         rimLights: [
           { enabled: true, color: '#123456', intensity: 1.5, direction: { longitude: -120, latitude: 20 } },
           { enabled: false, color: '#654321', intensity: 2, direction: { longitude: 120, latitude: 30 } }
         ]
       });
+      const shadowModes = [
+        runtime.setLighting({ shadowSource: 'none', fillEnabled: true }),
+        runtime.setLighting({ shadowSource: 'fill', fillEnabled: false }),
+        runtime.setLighting({ shadowSource: 'fill', fillEnabled: true }),
+        runtime.setLighting({ shadowSource: 'key', fillEnabled: true })
+      ].map(({ shadowSource, shadowEnabled }) => ({ shadowSource, shadowEnabled }));
       const retainedRims = runtime.setLighting({ keyIntensity: 1.2 }).rimLights.map((rim) => rim.enabled);
       runtime.dispose();
       return { defaultValue: defaults.pmxAoEnabled, defaultColor: defaults.pmxAoColor,
         defaultIntensity: defaults.pmxAoIntensity, defaultRadius: defaults.pmxAoRadiusPercent,
-        defaultResolution: defaults.pmxAoResolution,
+        defaultResolution: defaults.pmxAoResolution, defaultSampleCount: defaults.pmxAoSampleCount,
+        defaultBlurPassCount: defaults.pmxAoBlurPassCount, defaultBlurRadii: defaults.pmxAoBlurRadii,
         defaultLimit: defaults.rotationPhysicsLimit, defaultToon: defaults.pmxToonEnabled,
-        maxLimit, disabled, adjusted, retainedRims };
+        maxLimit, disabled, adjusted, retainedRims, shadowModes };
     });
     assert.deepEqual(result, {
       defaultValue: true, defaultColor: '#931231', defaultIntensity: 0.6, defaultRadius: 6,
-      defaultResolution: 'half',
+      defaultResolution: 'half', defaultSampleCount: 24,
+      defaultBlurPassCount: 1, defaultBlurRadii: [3, 3, 3],
       defaultLimit: 720, defaultToon: false, maxLimit: 1440,
       disabled: false,
       retainedRims: [true, false],
+      shadowModes: [
+        { shadowSource: 'none', shadowEnabled: false },
+        { shadowSource: 'fill', shadowEnabled: false },
+        { shadowSource: 'fill', shadowEnabled: true },
+        { shadowSource: 'key', shadowEnabled: true }
+      ],
       adjusted: { ambientColor: '#ffffff', ambientIntensity: 1.8, keyColor: '#ffffff',
-        keyIntensity: 2.3, keyDirection: { longitude: 31, latitude: 46 }, shadowEnabled: true,
+        keyIntensity: 2.3, keyDirection: { longitude: 31, latitude: 46 }, shadowEnabled: true, shadowSource: 'key',
         pmxToonEnabled: false,
         fillEnabled: false, fillColor: '#ffffff', fillIntensity: 1,
         fillDirection: { longitude: -45, latitude: 25 },
@@ -349,7 +393,8 @@ test('PMX runtime applies AO switch without reloading the model', { skip: !CHROM
         ],
         physicsFps: 65, rotationPhysicsLimit: 1440,
         pmxAoEnabled: true, pmxAoColor: '#336699', pmxAoIntensity: 1.4,
-        pmxAoRadiusPercent: 12, pmxAoResolution: 'full' }
+        pmxAoRadiusPercent: 12, pmxAoResolution: 'full', pmxAoSampleCount: 32,
+        pmxAoBlurPassCount: 2, pmxAoBlurRadii: [1, 5, 3] }
     });
   } finally {
     await browser?.close();

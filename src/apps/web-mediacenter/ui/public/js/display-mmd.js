@@ -25,10 +25,12 @@
         keyColor: '#ffffff',
         keyIntensity: 2.3,
         keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
+        keyShadowEnabled: true,
         fillEnabled: false,
         fillColor: '#ffffff',
         fillIntensity: 1,
         fillDirection: Object.freeze({ longitude: -45, latitude: 25 }),
+        shadowSource: 'key',
         shadowEnabled: true,
         rimLights: Object.freeze([
             Object.freeze({ enabled: false, color: '#8acbff', intensity: 1, direction: Object.freeze({ longitude: -130, latitude: 25 }) }),
@@ -41,7 +43,10 @@
         pmxAoColor: '#931231',
         pmxAoIntensity: 0.6,
         pmxAoRadiusPercent: 6,
-        pmxAoResolution: 'half'
+        pmxAoResolution: 'half',
+        pmxAoSampleCount: 24,
+        pmxAoBlurPassCount: 1,
+        pmxAoBlurRadii: [3, 3, 3]
     });
     const POINTER_DRAG_THRESHOLD = 8;
     const ROTATION_RADIANS_PER_PIXEL = Math.PI / 360;
@@ -81,6 +86,8 @@
 
     function normalizeMmdLighting(input = {}) {
         const source = input && typeof input === 'object' ? input : {};
+        const shadowSource = ['none', 'key', 'fill'].includes(source.shadowSource)
+            ? source.shadowSource : source.shadowEnabled === false ? 'none' : 'key';
         const direction = source.keyDirection && typeof source.keyDirection === 'object'
             ? source.keyDirection
             : directionFromLegacyPosition(source.keyPosition);
@@ -112,9 +119,12 @@
                     }
                 };
             }),
-            shadowEnabled: typeof source.shadowEnabled === 'boolean'
-                ? source.shadowEnabled
-                : DEFAULT_MMD_LIGHTING.shadowEnabled,
+            shadowSource,
+            keyShadowEnabled: root.MmdArTestWebFillShadow === true ? source.keyShadowEnabled !== false : true,
+            shadowEnabled: root.MmdArTestWebFillShadow === true
+                ? source.keyShadowEnabled !== false || (source.fillEnabled === true && shadowSource === 'fill')
+                : (shadowSource !== 'none' && (shadowSource !== 'fill' || source.fillEnabled === true)),
+            webFillShadowMode: root.MmdArTestWebFillShadow === true,
             pmxToonEnabled: typeof source.pmxToonEnabled === 'boolean'
                 ? source.pmxToonEnabled
                 : DEFAULT_MMD_LIGHTING.pmxToonEnabled,
@@ -128,7 +138,15 @@
             pmxAoRadiusPercent: Math.round(clamp(
                 source.pmxAoRadiusPercent, 1, 20, DEFAULT_MMD_LIGHTING.pmxAoRadiusPercent
             )),
-            pmxAoResolution: source.pmxAoResolution === 'full' ? 'full' : 'half'
+            pmxAoResolution: source.pmxAoResolution === 'full' ? 'full' : 'half',
+            pmxAoSampleCount: [12, 24, 32].includes(Number(source.pmxAoSampleCount))
+                ? Number(source.pmxAoSampleCount)
+                : DEFAULT_MMD_LIGHTING.pmxAoSampleCount,
+            pmxAoBlurPassCount: Math.round(clamp(source.pmxAoBlurPassCount, 0, 3,
+                DEFAULT_MMD_LIGHTING.pmxAoBlurPassCount)),
+            pmxAoBlurRadii: DEFAULT_MMD_LIGHTING.pmxAoBlurRadii.map((defaultRadius, index) => (
+                Math.round(clamp(source.pmxAoBlurRadii?.[index], 1, 5, defaultRadius))
+            ))
         };
     }
 
@@ -159,7 +177,8 @@
         runtimeUnavailable: false,
         loadSequence: 0,
         lighting: normalizeMmdLighting(DEFAULT_MMD_LIGHTING),
-        cameraViewRotation: { yaw: 0, pitch: 0 }
+        cameraViewRotation: { yaw: 0, pitch: 0 },
+        arCameraSettings: null
     };
 
     function setStatus(message, isError = false) {
@@ -365,9 +384,16 @@
 
     function setLighting(lighting) {
         const current = state.lighting || DEFAULT_MMD_LIGHTING;
+        // 旧配置只有 shadowEnabled 时先转成来源，避免展开当前设置后被默认来源覆盖。
+        const shadowSource = ['none', 'key', 'fill'].includes(lighting?.shadowSource)
+            ? lighting.shadowSource
+            : typeof lighting?.shadowEnabled === 'boolean'
+                ? lighting.shadowEnabled ? 'key' : 'none'
+                : current.shadowSource;
         state.lighting = normalizeMmdLighting({
             ...current,
             ...(lighting && typeof lighting === 'object' ? lighting : {}),
+            shadowSource,
             keyDirection: lighting?.keyDirection && typeof lighting.keyDirection === 'object'
                 ? lighting.keyDirection
                 : lighting?.keyPosition && typeof lighting.keyPosition === 'object'
@@ -385,7 +411,8 @@
             ...state.lighting,
             keyDirection: { ...state.lighting.keyDirection },
             fillDirection: { ...state.lighting.fillDirection },
-            rimLights: state.lighting.rimLights.map((rim) => ({ ...rim, direction: { ...rim.direction } }))
+            rimLights: state.lighting.rimLights.map((rim) => ({ ...rim, direction: { ...rim.direction } })),
+            pmxAoBlurRadii: [...state.lighting.pmxAoBlurRadii]
         };
     }
 
@@ -422,6 +449,26 @@
         state.runtime?.resetArPose?.();
     }
 
+    function setArCameraPose(pose) {
+        if (root.MmdArTestAframeMode !== true || !state.visible || !state.modelReady) return false;
+        return state.runtime?.setArCameraPose?.(pose) === true;
+    }
+
+    function setArCameraSettings(settings) {
+        if (root.MmdArTestAframeMode !== true || !settings || typeof settings !== 'object') return false;
+        state.arCameraSettings = { ...settings };
+        state.runtime?.setArCameraSettings?.(state.arCameraSettings);
+        return true;
+    }
+
+    function suspendArCameraPose() {
+        if (root.MmdArTestAframeMode === true) state.runtime?.suspendArCameraPose?.();
+    }
+
+    function resetArCameraPose() {
+        if (root.MmdArTestAframeMode === true) state.runtime?.resetArCameraPose?.();
+    }
+
     async function ensureRuntime(modelType = 'vrm') {
         if (state.runtime && state.runtimeType === modelType) return state.runtime;
         if (state.runtime && state.runtimeType !== modelType) {
@@ -448,6 +495,7 @@
                 });
                 state.runtimeType = modelType;
                 state.runtime.setLighting?.(state.lighting);
+                if (state.arCameraSettings) state.runtime.setArCameraSettings?.(state.arCameraSettings);
                 state.runtime.setVisible(state.visible);
                 state.runtime.setCameraViewRotation?.(
                     state.cameraViewRotation.yaw,
@@ -610,18 +658,24 @@
 
     root.DisplayMmd = Object.freeze({
         DEFAULT_MMD_LIGHTING,
+        getArCameraState: () => root.MmdArTestAframeMode === true ? state.runtime?.getArCameraState?.() : null,
+        getArCameraSyncState: () => root.MmdArTestAframeMode === true ? state.runtime?.getArCameraSyncState?.() : null,
         getState: () => ({ visible: state.visible, modelReady: state.modelReady }),
         getLighting,
         handleActionPlan,
         init,
         loadModel,
         resize: resizeCanvas,
+        resetArCameraPose,
         resetArPose,
         resetCameraViewRotation,
         setArPose,
+        setArCameraPose,
+        setArCameraSettings,
         setCameraViewRotation,
         setLighting,
         setPointerEnabled,
-        setVisible
+        setVisible,
+        suspendArCameraPose
     });
 }(window));

@@ -17,7 +17,7 @@ import {
 } from './mmd-pmx-helper.mjs';
 import { calculatePmxCameraFrame, normalizePmxPhysicsMesh } from './pmx-display-layout.mjs';
 import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
-import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights } from './display-pmx-lighting-mode.mjs';
+import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights, setPmxFillShadowMode } from './display-pmx-lighting-mode.mjs';
 
 const TARGET_MODEL_HEIGHT = 1.75;
 const MMD_MODEL_PREFIXES = Object.freeze([
@@ -31,6 +31,27 @@ const MAX_CAMERA_PITCH_RADIANS = Math.PI / 4;
 const ROTATION_EASING_PER_SECOND = 1 / 0.14;
 const ROTATION_SETTLE_EPSILON = 0.0005;
 const KEY_LIGHT_DISTANCE = Math.hypot(1.5, 3, 2.5);
+const DEFAULT_AR_CAMERA_SETTINGS = Object.freeze({
+    translationDeadZonePercent: 0.5,
+    rotationDeadZoneDegrees: 0.5,
+    smoothingMs: 120,
+    distancePercent: 100,
+    targetPlane: 'floor'
+});
+
+const normalizeArCameraSettings = (input, previous = DEFAULT_AR_CAMERA_SETTINGS) => {
+    const clampSetting = (name, minimum, maximum) => {
+        const value = Number(input?.[name]);
+        return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : previous[name];
+    };
+    return {
+        translationDeadZonePercent: clampSetting('translationDeadZonePercent', 0, 3),
+        rotationDeadZoneDegrees: clampSetting('rotationDeadZoneDegrees', 0, 3),
+        smoothingMs: clampSetting('smoothingMs', 0, 500),
+        distancePercent: clampSetting('distancePercent', 50, 100),
+        targetPlane: ['floor', 'vertical'].includes(input?.targetPlane) ? input.targetPlane : previous.targetPlane
+    };
+};
 
 const classifyHit = (object) => {
     const name = String(object?.name || '').toLowerCase();
@@ -202,15 +223,18 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     fillLight.castShadow = false;
     keyLight.position.set(1.5, 3, 2.5);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
-    keyLight.shadow.camera.near = 0.1;
-    keyLight.shadow.camera.far = 20;
-    keyLight.shadow.camera.left = -5;
-    keyLight.shadow.camera.right = 5;
-    keyLight.shadow.camera.top = 5;
-    keyLight.shadow.camera.bottom = -5;
-    keyLight.shadow.bias = -0.0005;
-    keyLight.shadow.normalBias = 0.02;
+    // 两盏方向光沿用相同阴影质量参数，但运行时只允许所选光源生成一张阴影贴图。
+    for (const light of [keyLight, fillLight]) {
+        light.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+        light.shadow.camera.near = 0.1;
+        light.shadow.camera.far = 20;
+        light.shadow.camera.left = -5;
+        light.shadow.camera.right = 5;
+        light.shadow.camera.top = 5;
+        light.shadow.camera.bottom = -5;
+        light.shadow.bias = -0.0005;
+        light.shadow.normalBias = 0.02;
+    }
     const shadowMaterial = new THREE.ShadowMaterial({
         color: 0x000000,
         opacity: 0.28,
@@ -223,6 +247,9 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     scene.add(ambientLight, keyLight, keyLight.target, fillLight, fillLight.target, shadowPlane);
 
     let shadowEnabled = true;
+    let shadowSource = 'key';
+    let webFillShadowMode = false;
+    let keyShadowEnabled = true;
     let pmxAoEnabled = true;
     const lightingState = {
         ambientColor: '#ffffff',
@@ -244,7 +271,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         pmxAoColor: '#931231',
         pmxAoIntensity: 0.6,
         pmxAoRadiusPercent: 6,
-        pmxAoResolution: 'half'
+        pmxAoResolution: 'half',
+        pmxAoSampleCount: 24,
+        pmxAoBlurPassCount: 1,
+        pmxAoBlurRadii: [3, 3, 3]
     };
 
     const getModelBounds = (root) => {
@@ -308,7 +338,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     };
 
     const fitShadowCamera = (root) => {
-        const shadowCamera = keyLight.shadow.camera;
         const bounds = getModelBounds(root);
         const center = bounds.getCenter(new THREE.Vector3());
         const size = bounds.getSize(new THREE.Vector3());
@@ -317,22 +346,31 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         applyKeyLightPosition(bounds);
         shadowPlane.scale.setScalar(Math.max(1, Math.max(size.x, size.z) * 2 / 8));
         shadowPlane.position.y = bounds.min.y - Math.max(0.001, size.y * 0.0001);
-        const lightDistance = keyLight.position.distanceTo(center);
-
-        keyLight.target.position.copy(center);
-        shadowCamera.left = -extent;
-        shadowCamera.right = extent;
-        shadowCamera.top = extent;
-        shadowCamera.bottom = -extent;
-        shadowCamera.near = Math.max(0.1, lightDistance - radius * 2.2);
-        shadowCamera.far = Math.max(shadowCamera.near + 1, lightDistance + radius * 2.2);
-        shadowCamera.updateProjectionMatrix();
-        keyLight.shadow.needsUpdate = true;
+        for (const light of [keyLight, fillLight]) {
+            const shadowCamera = light.shadow.camera;
+            const lightDistance = light.position.distanceTo(center);
+            light.target.position.copy(center);
+            shadowCamera.left = -extent;
+            shadowCamera.right = extent;
+            shadowCamera.top = extent;
+            shadowCamera.bottom = -extent;
+            shadowCamera.near = Math.max(0.1, lightDistance - radius * 2.2);
+            shadowCamera.far = Math.max(shadowCamera.near + 1, lightDistance + radius * 2.2);
+            shadowCamera.updateProjectionMatrix();
+            light.shadow.needsUpdate = true;
+        }
     };
 
     const applyShadowMode = () => {
         renderer.shadowMap.enabled = shadowEnabled;
-        keyLight.castShadow = shadowEnabled;
+        if (webFillShadowMode) {
+            // 网页实验模式下两盏灯的投影独立；补光复用主光模式要求主光投影可用。
+            keyLight.castShadow = keyShadowEnabled;
+            fillLight.castShadow = lightingState.fillEnabled && shadowSource === 'fill';
+        } else {
+            keyLight.castShadow = shadowEnabled && shadowSource === 'key';
+            fillLight.castShadow = shadowEnabled && shadowSource === 'fill';
+        }
         shadowPlane.visible = shadowEnabled;
         applyShadowFlags(currentMesh);
         fitShadowCamera(currentRotationPivot || currentMesh);
@@ -409,6 +447,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         lightingState.pmxAoIntensity = normalizeLightNumber(lighting.pmxAoIntensity, 0, 2, 0.6);
         lightingState.pmxAoRadiusPercent = Math.round(normalizeLightNumber(lighting.pmxAoRadiusPercent, 1, 20, 6));
         lightingState.pmxAoResolution = lighting.pmxAoResolution === 'full' ? 'full' : 'half';
+        lightingState.pmxAoSampleCount = [12, 24, 32].includes(Number(lighting.pmxAoSampleCount))
+            ? Number(lighting.pmxAoSampleCount) : 24;
+        lightingState.pmxAoBlurPassCount = Math.round(normalizeLightNumber(lighting.pmxAoBlurPassCount, 0, 3, 1));
+        lightingState.pmxAoBlurRadii = [0, 1, 2].map((index) => Math.round(normalizeLightNumber(
+            lighting.pmxAoBlurRadii?.[index], 1, 5, 3
+        )));
         const currentPhysics = helper.current?.objects?.get(currentMesh)?.physics;
         if (currentPhysics) currentPhysics.unitStep = 1 / lightingState.physicsFps;
         ambientLight.color.set(lightingState.ambientColor);
@@ -419,10 +463,21 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         fillLight.intensity = lightingState.fillEnabled ? lightingState.fillIntensity : 0;
         setPmxLightingMode(currentMesh, lightingState.pmxToonEnabled);
         setPmxRimLights(currentMesh, lightingState.rimLights);
-        shadowEnabled = lighting.shadowEnabled !== false;
+        // 兼容旧版持久化的布尔开关；新字段优先，避免切换阴影来源后又被旧值覆盖。
+        shadowSource = ['none', 'key', 'fill'].includes(lighting.shadowSource)
+            ? lighting.shadowSource : lighting.shadowEnabled === false ? 'none' : 'key';
+        webFillShadowMode = lighting.webFillShadowMode === true;
+        keyShadowEnabled = lighting.keyShadowEnabled !== false;
+        shadowEnabled = webFillShadowMode
+            ? keyShadowEnabled || (lightingState.fillEnabled && shadowSource === 'fill')
+            : (shadowSource !== 'none' && (shadowSource !== 'fill' || lightingState.fillEnabled));
+        setPmxFillShadowMode(currentMesh, webFillShadowMode && keyShadowEnabled
+            && lightingState.fillEnabled && shadowSource === 'key');
         pmxAoEnabled = lighting.pmxAoEnabled !== false;
         ambientOcclusion.setEnabled(pmxAoEnabled);
         ambientOcclusion.setResolution(lightingState.pmxAoResolution);
+        ambientOcclusion.setSampleCount(lightingState.pmxAoSampleCount);
+        ambientOcclusion.setBlurPasses(lightingState.pmxAoBlurPassCount, lightingState.pmxAoBlurRadii);
         ambientOcclusion.setColor(lightingState.pmxAoColor);
         ambientOcclusion.setIntensity(lightingState.pmxAoIntensity);
         applyAoRadius(getModelBounds(currentRotationPivot || currentMesh));
@@ -440,13 +495,18 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             rimLights: lightingState.rimLights.map((rim) => ({ ...rim, direction: { ...rim.direction } })),
             pmxToonEnabled: lightingState.pmxToonEnabled,
             shadowEnabled,
+            shadowSource,
+            keyShadowEnabled,
             physicsFps: lightingState.physicsFps,
             rotationPhysicsLimit: lightingState.rotationPhysicsLimit,
             pmxAoEnabled,
             pmxAoColor: lightingState.pmxAoColor,
             pmxAoIntensity: lightingState.pmxAoIntensity,
             pmxAoRadiusPercent: lightingState.pmxAoRadiusPercent,
-            pmxAoResolution: lightingState.pmxAoResolution
+            pmxAoResolution: lightingState.pmxAoResolution,
+            pmxAoSampleCount: lightingState.pmxAoSampleCount,
+            pmxAoBlurPassCount: lightingState.pmxAoBlurPassCount,
+            pmxAoBlurRadii: [...lightingState.pmxAoBlurRadii]
         };
     };
 
@@ -456,6 +516,19 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const pointer = new THREE.Vector2();
     let currentMesh = null;
     let currentRotationPivot = null;
+    const arCameraState = {
+        active: false,
+        trackingLost: false,
+        savedVisible: null,
+        targetPosition: null,
+        targetWidth: 1,
+        settings: { ...DEFAULT_AR_CAMERA_SETTINGS },
+        acceptedAnchorPosition: new THREE.Vector3(),
+        acceptedAnchorQuaternion: new THREE.Quaternion(),
+        acceptedPosition: new THREE.Vector3(),
+        acceptedQuaternion: new THREE.Quaternion(),
+        lastPose: null
+    };
     const rotationState = {
         targetYaw: 0,
         targetPitch: 0,
@@ -500,6 +573,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentRotationPivot.rotation.y += yawDistance * easing;
         currentRotationPivot.rotation.x += pitchDistance * easing;
         keyLight.shadow.needsUpdate = true;
+        fillLight.shadow.needsUpdate = true;
         return Math.hypot(yawDistance * easing, pitchDistance * easing);
     }
 
@@ -548,6 +622,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         motionSequence += 1;
         stopMotion();
         if (!currentMesh) return;
+        resetArCameraPose();
         arFootAnchor.reset();
         scene.remove(currentRotationPivot || currentMesh);
         currentRotationPivot?.remove(currentMesh);
@@ -573,7 +648,17 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             physicsGate,
             rotationPhysicsLimit: lightingState.rotationPhysicsLimit
         });
-        updateCameraView(delta);
+        if (arCameraState.active && !arCameraState.trackingLost) {
+            // 以实际帧间隔做指数缓动；只有目标姿态越过死区才会移动。
+            const easingSeconds = arCameraState.settings.smoothingMs / 1000;
+            const alpha = easingSeconds <= 0 ? 1 : 1 - Math.exp(-delta / easingSeconds);
+            camera.position.lerp(arCameraState.acceptedPosition, alpha);
+            camera.quaternion.slerp(arCameraState.acceptedQuaternion, alpha);
+            camera.updateMatrix();
+            camera.updateMatrixWorld(true);
+        } else if (!arCameraState.active) {
+            updateCameraView(delta);
+        }
         if (currentMesh) ambientOcclusion.render();
         else renderer.render(scene, camera);
         frameHandle = requestAnimationFrame(renderFrame);
@@ -591,6 +676,136 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         startRendering
     });
 
+    const resetArCameraPose = () => {
+        if (!arCameraState.active) return;
+        if (currentRotationPivot) currentRotationPivot.visible = arCameraState.savedVisible;
+        arCameraState.active = false;
+        arCameraState.savedVisible = null;
+        arCameraState.targetPosition = null;
+        arCameraState.targetWidth = 1;
+        arCameraState.trackingLost = false;
+        arCameraState.lastPose = null;
+        camera.matrixAutoUpdate = true;
+        camera.fov = 28;
+        camera.aspect = Math.max(1, canvas.clientWidth) / Math.max(1, canvas.clientHeight);
+        fitCameraToModel(currentRotationPivot || currentMesh);
+        startRendering();
+    };
+
+    const suspendArCameraPose = () => {
+        if (!arCameraState.active) return;
+        // 失锁时连未完成的缓动也暂停，保持用户当时看到的画面。
+        arCameraState.trackingLost = true;
+        arCameraState.acceptedPosition.copy(camera.position);
+        arCameraState.acceptedQuaternion.copy(camera.quaternion);
+        startRendering();
+    };
+
+    const setArCameraSettings = (input) => {
+        if (!window.MmdArTestAframeMode || !input || typeof input !== 'object') return false;
+        const oldDistance = arCameraState.settings.distancePercent;
+        const oldPlane = arCameraState.settings.targetPlane;
+        arCameraState.settings = normalizeArCameraSettings(input, arCameraState.settings);
+        // 距离和定位面变化时重算相机；切换底面/立面立即对齐，避免跨平面的缓动偏离。
+        if (arCameraState.active && !arCameraState.trackingLost
+            && (oldDistance !== arCameraState.settings.distancePercent
+                || oldPlane !== arCameraState.settings.targetPlane) && arCameraState.lastPose) {
+            if (setArCameraPose(arCameraState.lastPose) && oldPlane !== arCameraState.settings.targetPlane) {
+                camera.position.copy(arCameraState.acceptedPosition);
+                camera.quaternion.copy(arCameraState.acceptedQuaternion);
+                camera.updateMatrix();
+                camera.updateMatrixWorld(true);
+            }
+        }
+        return { ...arCameraState.settings };
+    };
+
+    const setArCameraPose = ({ anchorMatrix, projectionMatrix, targetAspect } = {}) => {
+        if (!window.MmdArTestAframeMode || !currentRotationPivot
+            || !Array.isArray(anchorMatrix) || anchorMatrix.length !== 16
+            || !Array.isArray(projectionMatrix) || projectionMatrix.length !== 16
+            || [...anchorMatrix, ...projectionMatrix].some((value) => !Number.isFinite(value))) return false;
+        const targetToCamera = new THREE.Matrix4().fromArray(anchorMatrix);
+        if (Math.abs(targetToCamera.determinant()) < 1e-8) return false;
+        const firstLock = !arCameraState.active;
+        const anchorPosition = new THREE.Vector3();
+        const anchorQuaternion = new THREE.Quaternion();
+        const anchorScale = new THREE.Vector3();
+        targetToCamera.decompose(anchorPosition, anchorQuaternion, anchorScale);
+        if (firstLock) {
+            arCameraState.acceptedAnchorPosition.copy(anchorPosition);
+            arCameraState.acceptedAnchorQuaternion.copy(anchorQuaternion);
+        } else {
+            // 死区判断直接使用 MindAR 的定位图位姿，避免距离设置放大相机位移后误判抖动。
+            const translationThreshold = arCameraState.settings.translationDeadZonePercent / 100;
+            const translation = arCameraState.acceptedAnchorPosition.distanceTo(anchorPosition);
+            if (translation > translationThreshold) {
+                arCameraState.acceptedAnchorPosition.lerp(anchorPosition,
+                    (translation - translationThreshold) / translation);
+            }
+            const rotationThreshold = THREE.MathUtils.degToRad(arCameraState.settings.rotationDeadZoneDegrees);
+            const rotation = arCameraState.acceptedAnchorQuaternion.angleTo(anchorQuaternion);
+            if (rotation > rotationThreshold) {
+                arCameraState.acceptedAnchorQuaternion.slerp(anchorQuaternion,
+                    (rotation - rotationThreshold) / rotation);
+            }
+        }
+        targetToCamera.compose(arCameraState.acceptedAnchorPosition,
+            arCameraState.acceptedAnchorQuaternion, anchorScale);
+        if (firstLock) {
+            // 图面映射到现有角色脚底；只改变相机，避免改写 PMX 根节点和 Bullet 刚体的世界变换。
+            const bounds = getModelBounds(currentRotationPivot);
+            const modelHeight = Math.max(0.001, bounds.max.y - bounds.min.y);
+            const center = bounds.getCenter(new THREE.Vector3());
+            arCameraState.savedVisible = currentRotationPivot.visible;
+            arCameraState.targetPosition = new THREE.Vector3(center.x, bounds.min.y, center.z);
+            arCameraState.targetWidth = modelHeight / 1.5;
+            arCameraState.active = true;
+        }
+        currentRotationPivot.visible = true;
+        const aspect = Number.isFinite(targetAspect) && targetAspect > 0 ? targetAspect : 1;
+        const isVertical = arCameraState.settings.targetPlane === 'vertical';
+        // 立面时图的下边缘中点落在脚底；底面仍将图中心落在脚底。
+        const targetCenter = arCameraState.targetPosition.clone();
+        if (isVertical) targetCenter.y += arCameraState.targetWidth * aspect / 2;
+        const targetWorld = new THREE.Matrix4().makeTranslation(...targetCenter.toArray())
+            .multiply(new THREE.Matrix4().makeRotationX(isVertical ? 0 : -Math.PI / 2))
+            .multiply(new THREE.Matrix4().makeScale(arCameraState.targetWidth, arCameraState.targetWidth, arCameraState.targetWidth));
+        const cameraWorld = targetWorld.multiply(targetToCamera.invert());
+        camera.matrixAutoUpdate = false;
+        const cameraScale = new THREE.Vector3();
+        const nextPosition = new THREE.Vector3();
+        const nextQuaternion = new THREE.Quaternion();
+        cameraWorld.decompose(nextPosition, nextQuaternion, cameraScale);
+        // 沿相机与定位图中心的连线拉近；模型根节点与目标跟踪旋转保持不变。
+        nextPosition.sub(targetCenter)
+            .multiplyScalar(arCameraState.settings.distancePercent / 100)
+            .add(targetCenter);
+        if (firstLock) {
+            camera.position.copy(nextPosition);
+            camera.quaternion.copy(nextQuaternion);
+            arCameraState.acceptedPosition.copy(nextPosition);
+            arCameraState.acceptedQuaternion.copy(nextQuaternion);
+        } else {
+            // 相机姿态只由已接受的定位图位姿换算；距离滑条不参与死区判断。
+            arCameraState.acceptedPosition.copy(nextPosition);
+            arCameraState.acceptedQuaternion.copy(nextQuaternion);
+        }
+        arCameraState.trackingLost = false;
+        arCameraState.lastPose = { anchorMatrix: [...anchorMatrix], projectionMatrix: [...projectionMatrix], targetAspect: aspect };
+        camera.scale.set(1, 1, 1);
+        if (firstLock || arCameraState.settings.smoothingMs <= 0) {
+            camera.position.copy(arCameraState.acceptedPosition);
+            camera.quaternion.copy(arCameraState.acceptedQuaternion);
+            camera.updateMatrix();
+            camera.updateMatrixWorld(true);
+        }
+        camera.projectionMatrix.fromArray(projectionMatrix);
+        camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+        startRendering();
+        return true;
+    };
+
     const resize = (width, height, devicePixelRatio = window.devicePixelRatio || 1) => {
         const safeWidth = Math.max(1, Number(width) || window.innerWidth || 1);
         const safeHeight = Math.max(1, Number(height) || window.innerHeight || 1);
@@ -600,7 +815,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         const drawingSize = renderer.getDrawingBufferSize(new THREE.Vector2());
         ambientOcclusion.resize(drawingSize.x, drawingSize.y);
         camera.aspect = safeWidth / safeHeight;
-        fitCameraToModel(currentRotationPivot || currentMesh);
+        if (!arCameraState.active) fitCameraToModel(currentRotationPivot || currentMesh);
         startRendering();
     };
 
@@ -740,7 +955,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
                 for (const material of materials) {
                     if (!material?.isMMDToonMaterial) continue;
                     material.emissive.setRGB(0, 0, 0);
-                    preparePmxLightingMaterial(material, lightingState.pmxToonEnabled);
+                    preparePmxLightingMaterial(material, lightingState.pmxToonEnabled, webFillShadowMode);
                 }
             });
             setPmxRimLights(stagedMesh, lightingState.rimLights);
@@ -763,6 +978,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             clearFallback();
             disposeCurrentModel();
             currentMesh = stagedMesh;
+            setPmxFillShadowMode(currentMesh, webFillShadowMode && keyShadowEnabled
+                && lightingState.fillEnabled && shadowSource === 'key');
             currentRotationPivot = stagedPivot;
             resetModelRotation();
             currentRotationPivot.updateWorldMatrix(true, true);
@@ -857,19 +1074,41 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
 
     return Object.freeze({
         dispose,
+        getArCameraSyncState: () => window.MmdArTestAframeMode === true ? {
+            active: arCameraState.active,
+            trackingLost: arCameraState.trackingLost
+        } : null,
+        getArCameraState: () => window.MmdArTestAframeMode === true ? {
+            active: arCameraState.active,
+            cameraPosition: camera.position.toArray(),
+            cameraQuaternion: camera.quaternion.toArray(),
+            acceptedPosition: arCameraState.acceptedPosition.toArray(),
+            trackingLost: arCameraState.trackingLost,
+            settings: { ...arCameraState.settings },
+            modelVisible: currentRotationPivot?.visible ?? false,
+            modelFootY: currentRotationPivot ? getModelBounds(currentRotationPivot).min.y : null,
+            modelPosition: currentRotationPivot?.position.toArray() ?? null,
+            modelScale: currentRotationPivot?.scale.toArray() ?? null,
+            targetWidth: arCameraState.targetWidth,
+            targetPosition: arCameraState.targetPosition?.toArray() ?? null
+        } : null,
         handleActionPlan,
         load,
         loadMotion,
         playMotion,
         raycast,
         resetArPose: arFootAnchor.reset,
+        resetArCameraPose,
         rotateModelBy,
         finishModelRotation,
         setCameraViewRotation,
+        setArCameraPose,
+        setArCameraSettings,
         setArPose: arFootAnchor.setPose,
         resize,
         setLighting,
         setVisible,
+        suspendArCameraPose,
         showFallback
     });
 }

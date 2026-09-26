@@ -39,6 +39,7 @@
         message: '尚未选择定位图',
         cameraEnabled: true,
         cameraStream: null,
+        cameraSource: null,
         cameraRequestId: 0,
         cameraReadyCancel: null,
         trackingRequestId: 0,
@@ -48,6 +49,7 @@
         trackingFrameMode: null,
         calibration: createEmptyCalibration(),
         dragIndex: -1,
+        dragRect: null,
         dragPointerId: null,
         motionEnabled: false,
         motionMode: 'off',
@@ -57,6 +59,9 @@
         motionLastSample: null,
         motionSensitivity: readMotionSensitivity()
     };
+    let backgroundResumeTargetId = null;
+    let backgroundStopPromise = Promise.resolve();
+    let visibilityGeneration = 0;
     function byId(id) {
         return document.getElementById(id);
     }
@@ -112,6 +117,76 @@
     function clamp(value, min, max) {
         if (!Number.isFinite(value)) return min;
         return Math.min(max, Math.max(min, value));
+    }
+    function usesTestRectangleCalibration() {
+        return root.MmdArTestAframeMode === true;
+    }
+    function rectangleFromQuad(points) {
+        return {
+            x: points[0].x,
+            y: points[0].y,
+            width: points[1].x - points[0].x,
+            height: points[3].y - points[0].y
+        };
+    }
+    function quadFromRectangle(rect) {
+        return [
+            { x: rect.x, y: rect.y },
+            { x: rect.x + rect.width, y: rect.y },
+            { x: rect.x + rect.width, y: rect.y + rect.height },
+            { x: rect.x, y: rect.y + rect.height }
+        ];
+    }
+    function rectangleHandles(rect) {
+        const middleX = rect.x + rect.width / 2;
+        const middleY = rect.y + rect.height / 2;
+        const right = rect.x + rect.width;
+        const bottom = rect.y + rect.height;
+        return [
+            { name: 'nw', x: rect.x, y: rect.y },
+            { name: 'n', x: middleX, y: rect.y },
+            { name: 'ne', x: right, y: rect.y },
+            { name: 'e', x: right, y: middleY },
+            { name: 'se', x: right, y: bottom },
+            { name: 's', x: middleX, y: bottom },
+            { name: 'sw', x: rect.x, y: bottom },
+            { name: 'w', x: rect.x, y: middleY }
+        ];
+    }
+    function findRectangleAction(point, rect) {
+        const canvasBounds = state.elements.calibrationCanvas.getBoundingClientRect();
+        const nearby = rectangleHandles(rect).find((handle) => Math.hypot(
+            (handle.x - point.x) * canvasBounds.width,
+            (handle.y - point.y) * canvasBounds.height
+        ) <= 20);
+        if (nearby) return nearby.name;
+        const inside = point.x >= rect.x && point.x <= rect.x + rect.width
+            && point.y >= rect.y && point.y <= rect.y + rect.height;
+        return inside ? 'move' : null;
+    }
+    function moveOrResizeRectangle(drag, point) {
+        const deltaX = point.x - drag.startPoint.x;
+        const deltaY = point.y - drag.startPoint.y;
+        const rect = drag.startRect;
+        if (drag.action === 'move') {
+            return {
+                x: clamp(rect.x + deltaX, 0, 1 - rect.width),
+                y: clamp(rect.y + deltaY, 0, 1 - rect.height),
+                width: rect.width,
+                height: rect.height
+            };
+        }
+        const minimumSide = 0.02;
+        let left = rect.x;
+        let top = rect.y;
+        let right = rect.x + rect.width;
+        let bottom = rect.y + rect.height;
+        if (drag.action.includes('w')) left = clamp(left + deltaX, 0, right - minimumSide);
+        if (drag.action.includes('e')) right = clamp(right + deltaX, left + minimumSide, 1);
+        if (drag.action.includes('n')) top = clamp(top + deltaY, 0, bottom - minimumSide);
+        if (drag.action.includes('s')) bottom = clamp(bottom + deltaY, top + minimumSide, 1);
+        const resized = { x: left, y: top, width: right - left, height: bottom - top };
+        return resized.width * resized.height >= MIN_QUAD_AREA ? resized : rect;
     }
     function readActiveTargetId() {
         try {
@@ -181,7 +256,7 @@
         state.elements.calibrationButton.disabled = !state.cameraEnabled;
         state.elements.startButton.disabled = !state.cameraEnabled || !hasTarget || state.tracking;
         state.elements.stopButton.disabled = !state.tracking && !state.cameraStream;
-        state.elements.deleteButton.disabled = !hasTarget || state.tracking;
+        state.elements.deleteButton.disabled = !hasTarget || selected.readOnly === true || state.tracking;
         state.elements.saveButton.disabled = !state.calibration.sourceCanvas
             || !isValidQuad(state.calibration.selectedQuad);
         state.elements.motionEnabled.checked = state.motionEnabled;
@@ -360,10 +435,25 @@
         state.database = state.database || await openDatabase();
         const transaction = state.database.transaction(TARGET_STORE, 'readonly');
         const records = await requestToPromise(transaction.objectStore(TARGET_STORE).getAll());
-        state.targets = records
+        const savedTargets = records
             .map(normalizeTarget)
             .filter(Boolean)
             .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+        let builtInTargets = [];
+        if (typeof root.DisplayMmdArBuiltInTargets === 'function') {
+            try {
+                // 测试网页可提供只读内置图；资源失败不能阻断用户已保存的定位图。
+                const provided = await root.DisplayMmdArBuiltInTargets();
+                builtInTargets = (Array.isArray(provided) ? provided : [])
+                    .map(normalizeTarget)
+                    .filter((target) => target && target.readOnly === true
+                        && target.referenceImageBlob instanceof Blob
+                        && !savedTargets.some((saved) => saved.targetId === target.targetId));
+            } catch (error) {
+                console.warn('[显示端 AR] 内置定位图不可用:', error);
+            }
+        }
+        state.targets = [...savedTargets, ...builtInTargets];
         if (!getSelectedTarget()) {
             state.selectedTargetId = state.targets[0]?.targetId || '';
             saveActiveTargetId(state.selectedTargetId);
@@ -505,11 +595,22 @@
         context.stroke();
         context.fillStyle = '#ffffff';
         context.strokeStyle = '#0867a8';
-        for (const point of points) {
-            context.beginPath();
-            context.arc(point.x, point.y, Math.max(10, canvas.width / 45), 0, Math.PI * 2);
-            context.fill();
-            context.stroke();
+        if (usesTestRectangleCalibration()) {
+            // 测试网页画出矩形的四边和八个缩放块；正式显示端保留原四角点。
+            const handleSize = Math.max(8, canvas.width / 110);
+            for (const handle of rectangleHandles(rectangleFromQuad(state.calibration.selectedQuad))) {
+                const x = handle.x * canvas.width - handleSize / 2;
+                const y = handle.y * canvas.height - handleSize / 2;
+                context.fillRect(x, y, handleSize, handleSize);
+                context.strokeRect(x, y, handleSize, handleSize);
+            }
+        } else {
+            for (const point of points) {
+                context.beginPath();
+                context.arc(point.x, point.y, Math.max(10, canvas.width / 45), 0, Math.PI * 2);
+                context.fill();
+                context.stroke();
+            }
         }
         context.restore();
     }
@@ -532,6 +633,20 @@
         if (state.dragPointerId !== null || event.isPrimary === false || event.button > 0) return;
         const point = getCanvasPoint(event);
         if (!point) return;
+        if (usesTestRectangleCalibration()) {
+            const rect = rectangleFromQuad(state.calibration.selectedQuad);
+            const action = findRectangleAction(point, rect);
+            if (!action) return;
+            state.dragRect = { action, startPoint: point, startRect: rect };
+            state.dragPointerId = event.pointerId;
+            event.preventDefault();
+            try {
+                state.elements.calibrationCanvas.setPointerCapture?.(event.pointerId);
+            } catch (_error) {
+                // 文档级监听处理无法捕获指针的浏览器。
+            }
+            return;
+        }
         const handleIndex = findQuadHandle(point);
         if (handleIndex < 0) return;
         event.preventDefault();
@@ -545,16 +660,23 @@
     }
 
     function handleCalibrationPointerMove(event) {
-        if (state.dragIndex < 0 || state.dragPointerId !== event.pointerId) return;
+        if (state.dragPointerId !== event.pointerId) return;
         const point = getCanvasPoint(event);
         if (!point) return;
         if (event.cancelable) event.preventDefault();
-        state.calibration.selectedQuad[state.dragIndex] = point;
+        if (state.dragRect) {
+            const rect = moveOrResizeRectangle(state.dragRect, point);
+            state.calibration.selectedQuad = quadFromRectangle(rect);
+        } else if (state.dragIndex >= 0) {
+            state.calibration.selectedQuad[state.dragIndex] = point;
+        } else {
+            return;
+        }
         drawCalibrationCanvas();
         const valid = isValidQuad(state.calibration.selectedQuad);
         state.elements.calibrationHint.textContent = valid
             ? '选区有效，可以保存定位图。'
-            : '选区面积过小或四边形无效，请调整四个角点。';
+            : usesTestRectangleCalibration() ? '矩形选区无效，请调整位置或尺寸。' : '选区面积过小或四边形无效，请调整四个角点。';
         state.elements.saveButton.disabled = !valid;
     }
 
@@ -563,6 +685,7 @@
         const canvas = state.elements.calibrationCanvas;
         const pointerId = state.dragPointerId;
         state.dragIndex = -1;
+        state.dragRect = null;
         state.dragPointerId = null;
         if (event.type === 'lostpointercapture') return;
         try {
@@ -605,19 +728,25 @@
             await video.play();
             return;
         }
-        if (!root.navigator?.mediaDevices?.getUserMedia) {
+        const simulated = root.MmdArTestAframeMode === true
+            && root.MmdArTestSimCamera?.isSimulated?.() === true;
+        if (!simulated && !root.navigator?.mediaDevices?.getUserMedia) {
             throw new Error('当前浏览器不支持摄像头访问');
         }
-        setStatus('requestingCamera', '正在请求后置摄像头权限…');
-        const stream = await root.navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: false
-        });
+        setStatus('requestingCamera', simulated ? '正在准备模拟摄像头画面…' : '正在请求后置摄像头权限…');
+        const stream = simulated
+            ? await root.MmdArTestSimCamera.getStream()
+            : await root.navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
+            });
         if (requestId !== state.cameraRequestId || !state.cameraEnabled) {
             for (const track of stream.getTracks()) track.stop();
+            if (simulated) root.MmdArTestSimCamera.releaseStream();
             return;
         }
         state.cameraStream = stream;
+        state.cameraSource = simulated ? 'simulated' : 'camera';
         state.elements.cameraVideo.srcObject = stream;
         state.elements.trackingVideo.srcObject = stream;
         try {
@@ -651,7 +780,9 @@
         if (state.cameraStream) {
             for (const track of state.cameraStream.getTracks()) track.stop();
         }
+        if (state.cameraSource === 'simulated') root.MmdArTestSimCamera?.releaseStream?.();
         state.cameraStream = null;
+        state.cameraSource = null;
         if (state.elements?.cameraVideo) state.elements.cameraVideo.srcObject = null;
         if (state.elements?.trackingVideo) {
             state.elements.trackingVideo.srcObject = null;
@@ -660,13 +791,21 @@
         updateControls();
     }
 
+    function resetTrackedDisplay() {
+        if (root.MmdArLocationMarkerTest === true) {
+            root.DisplayMmdArLocationMarker?.hide?.();
+            return;
+        }
+        root.DisplayMmd?.resetArPose?.();
+    }
+
     async function beginCalibration() {
         if (!state.cameraEnabled) {
             setStatus('stopped', '摄像头已关闭');
             return;
         }
         await stopTrackerSession();
-        root.DisplayMmd?.resetArPose?.();
+        resetTrackedDisplay();
         state.elements.trackingVideo.hidden = true;
         setPanelOpen(false);
         state.calibration = createEmptyCalibration();
@@ -675,15 +814,19 @@
         state.elements.calibrationCanvas.hidden = true;
         state.elements.captureButton.hidden = false;
         state.elements.saveButton.disabled = true;
-        state.elements.calibrationHint.textContent = '先拍摄当前画面，再拖动四个角点框选定位区域。';
+        state.elements.calibrationHint.textContent = usesTestRectangleCalibration()
+            ? '先拍摄当前画面，再拖动矩形框选定位区域。'
+            : '先拍摄当前画面，再拖动四个角点框选定位区域。';
+        const simulated = root.MmdArTestAframeMode === true
+            && root.MmdArTestSimCamera?.isSimulated?.() === true;
         try {
             await startCamera();
             if (state.elements.calibration.hidden) return;
-            setStatus('calibrationCapture', '摄像头已准备，可以拍照');
+            setStatus('calibrationCapture', simulated ? '模拟画面已准备，可以拍照' : '摄像头已准备，可以拍照');
         } catch (error) {
             if (state.elements.calibration.hidden) return;
             state.elements.calibration.hidden = false;
-            setStatus('stopped', cameraErrorMessage(error));
+            setStatus('stopped', simulated ? `模拟画面启动失败：${error.message || '未知错误'}` : cameraErrorMessage(error));
         }
     }
 
@@ -705,8 +848,10 @@
         state.elements.calibrationCanvas.hidden = false;
         state.elements.captureButton.hidden = true;
         drawCalibrationCanvas();
-        state.elements.calibrationHint.textContent = '拖动四个白色角点选择定位区域。';
-        setStatus('selectingRegion', '请调整四个角点后保存');
+        state.elements.calibrationHint.textContent = usesTestRectangleCalibration()
+            ? '拖动蓝色矩形移动选区，拖动边或角调整尺寸。'
+            : '拖动四个白色角点选择定位区域。';
+        setStatus('selectingRegion', usesTestRectangleCalibration() ? '请调整矩形选区后保存' : '请调整四个角点后保存');
     }
 
     async function saveCalibrationTarget() {
@@ -716,7 +861,9 @@
             return;
         }
         if (!isValidQuad(selectedQuad)) {
-            setStatus('selectingRegion', '当前选区无效，请扩大区域或调整四个角点');
+            setStatus('selectingRegion', usesTestRectangleCalibration()
+                ? '当前矩形选区无效，请扩大区域'
+                : '当前选区无效，请扩大区域或调整四个角点');
             return;
         }
         const width = Number(state.elements.physicalWidth.value);
@@ -795,6 +942,7 @@
     async function stopTrackerSession() {
         state.trackingRequestId += 1;
         cancelTrackingFrame();
+        if (root.MmdArTestAframeMode === true) root.MmdArTestAframeTracking?.cancelPending?.();
         const session = state.trackerSession;
         state.trackerSession = null;
         state.tracking = false;
@@ -810,7 +958,7 @@
     function scheduleTrackingFrame() {
         if (!state.tracking || !state.trackerSession) return;
         const video = state.elements.trackingVideo;
-        if (typeof video.requestVideoFrameCallback === 'function') {
+        if (root.MmdArTestAframeMode !== true && typeof video.requestVideoFrameCallback === 'function') {
             state.trackingFrameMode = 'video';
             state.trackingFrameHandle = video.requestVideoFrameCallback((timestamp) => {
                 state.trackingFrameHandle = null;
@@ -833,14 +981,34 @@
             result = await session.processFrame(state.elements.trackingVideo, timestamp);
         } catch (error) {
             console.error('[显示端 AR] 识别当前帧失败:', error);
+            if (root.MmdArLocationMarkerTest === true) root.DisplayMmdArLocationMarker?.hide?.();
             setStatus(session.hasLocated ? 'lost' : 'searching', `识别暂时中断：${error.message || '请保持镜头稳定'}`);
             return;
         }
         if (!state.tracking || session !== state.trackerSession) return;
+        // MindAR 适配器可能在两个识别样本之间被相机帧回调多次；旧样本无需重复更新显示。
+        if (result?.newSample === false) return;
         if (result?.visible) {
             session.hasLocated = true;
-            setStatus('tracking', `定位中 · 置信度 ${Math.round(clamp(Number(result.confidence) || 0, 0, 1) * 100)}%`);
-            if (result.pose && typeof root.DisplayMmd?.setArPose === 'function') {
+            if (root.MmdArTestAframeMode === true) {
+                setStatus('tracking', '定位测试：角色站在图中心，视角随相机移动');
+                return;
+            }
+            setStatus('tracking', root.MmdArLocationMarkerTest === true
+                ? '定位测试：已找到定位图，绿色标记显示图像中心'
+                : `定位中 · 置信度 ${Math.round(clamp(Number(result.confidence) || 0, 0, 1) * 100)}%`);
+            if (root.MmdArLocationMarkerTest === true) {
+                if (result.pose) {
+                    const pose = root.DisplayMmdImageTargetTracker.mapPoseToCover(
+                        result.pose, state.elements.trackingVideo, byId('displayStageLayers')
+                    );
+                    root.DisplayMmdArLocationMarker?.setPose?.(pose);
+                } else {
+                    root.DisplayMmdArLocationMarker?.hide?.();
+                }
+                return;
+            }
+            if (result.pose && result.poseUpdate !== false && typeof root.DisplayMmd?.setArPose === 'function') {
                 const video = state.elements.trackingVideo;
                 const pose = root.DisplayMmdImageTargetTracker.mapPoseToCover(
                     result.pose, video, byId('displayStageLayers')
@@ -848,6 +1016,7 @@
                 root.DisplayMmd.setArPose(pose, getSelectedTarget()?.modelCalibration);
             }
         } else {
+            if (root.MmdArLocationMarkerTest === true) root.DisplayMmdArLocationMarker?.hide?.();
             const hints = {
                 cameraNotReady: '正在等待摄像头画面',
                 lowTexture: '画面细节不足，请增加光线或选择细节丰富的定位图',
@@ -879,14 +1048,21 @@
             return false;
         }
         const requestId = ++state.trackingRequestId;
+        resetTrackedDisplay();
         try {
             state.elements.calibration.hidden = true;
-            if (!state.cameraStream) await startCamera();
+            if (root.MmdArTestAframeMode === true) {
+                // 校准流与 A-Frame 追踪流不能同时持有；先释放旧流，再由 A-Frame 申请相机。
+                stopCamera();
+            } else if (!state.cameraStream) await startCamera();
             if (requestId !== state.trackingRequestId) return false;
-            if (!state.cameraStream) throw new Error('摄像头已关闭');
-            state.elements.trackingVideo.hidden = false;
-            await state.elements.trackingVideo.play();
-            if (requestId !== state.trackingRequestId || !state.cameraEnabled || !state.cameraStream) {
+            if (root.MmdArTestAframeMode !== true && !state.cameraStream) throw new Error('摄像头已关闭');
+            if (root.MmdArTestAframeMode !== true) {
+                state.elements.trackingVideo.hidden = false;
+                await state.elements.trackingVideo.play();
+            }
+            if (requestId !== state.trackingRequestId || !state.cameraEnabled
+                || (root.MmdArTestAframeMode !== true && !state.cameraStream)) {
                 return false;
             }
             const session = await tracker.start(
@@ -911,6 +1087,7 @@
         } catch (error) {
             if (requestId !== state.trackingRequestId) return false;
             await stopTrackerSession();
+            resetTrackedDisplay();
             state.elements.trackingVideo.hidden = true;
             if (!keepCamera) stopCamera();
             console.error('[显示端 AR] 启动识别失败:', error);
@@ -919,10 +1096,14 @@
         }
     }
 
-    async function stopAr() {
+    async function stopAr({ preserveBackgroundResume = false } = {}) {
+        if (!preserveBackgroundResume) {
+            backgroundResumeTargetId = null;
+            visibilityGeneration += 1;
+        }
         stopCamera();
         await stopTrackerSession();
-        root.DisplayMmd?.resetArPose?.();
+        resetTrackedDisplay();
         disableMotionView();
         if (state.elements?.calibration) state.elements.calibration.hidden = true;
         state.calibration = createEmptyCalibration();
@@ -940,7 +1121,7 @@
         if (!state.cameraEnabled) {
             stopCamera();
             await stopTrackerSession();
-            root.DisplayMmd?.resetArPose?.();
+            resetTrackedDisplay();
             if (state.elements?.calibration) state.elements.calibration.hidden = true;
             if (state.elements?.trackingVideo) state.elements.trackingVideo.hidden = true;
             state.calibration = createEmptyCalibration();
@@ -954,7 +1135,7 @@
 
     async function deleteSelectedTarget() {
         const target = getSelectedTarget();
-        if (!target || state.tracking) return;
+        if (!target || target.readOnly === true || state.tracking) return;
         if (typeof root.confirm === 'function' && !root.confirm(`确认删除定位图“${target.name}”？`)) return;
         try {
             await deleteTarget(target.targetId);
@@ -1035,8 +1216,31 @@
         root.addEventListener('pagehide', () => {
             void stopAr();
         }, { once: true });
-        root.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') void stopAr();
+        const visibilityTarget = root.MmdArTestAframeMode === true ? document : root;
+        visibilityTarget.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                visibilityGeneration += 1;
+                // 真实摄像头回到前台仍需用户手动启动；仅恢复已运行的网页模拟定位。
+                backgroundResumeTargetId = root.MmdArTestAframeMode === true
+                    && root.MmdArTestSimCamera?.isSimulated?.() === true && state.tracking
+                    ? state.selectedTargetId : null;
+                backgroundStopPromise = stopAr({ preserveBackgroundResume: true });
+                return;
+            }
+            if (document.visibilityState !== 'visible' || !backgroundResumeTargetId) return;
+            const targetId = backgroundResumeTargetId;
+            const token = ++visibilityGeneration;
+            backgroundResumeTargetId = null;
+            void (async () => {
+                await backgroundStopPromise;
+                if (token !== visibilityGeneration || document.visibilityState !== 'visible'
+                    || root.MmdArTestSimCamera?.isSimulated?.() !== true || !state.cameraEnabled
+                    || state.selectedTargetId !== targetId || state.tracking) return;
+                await startTracking(getSelectedTarget());
+            })().catch((error) => {
+                console.error('[显示端 AR] 模拟定位前台恢复失败:', error);
+                setStatus('ready', `模拟定位恢复失败：${error.message || '未知错误'}`);
+            });
         });
     }
 

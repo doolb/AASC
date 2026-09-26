@@ -17,6 +17,7 @@ uniform vec2 fullResolution;
 uniform mat4 inverseProjection;
 uniform mat4 projection;
 uniform float radius;
+uniform int sampleCount;
 varying vec2 vUv;
 
 vec3 viewPosition(vec2 uv, float depth) {
@@ -51,10 +52,11 @@ void main() {
         / max(-center.z * 2.0, 0.01), 2.0, 48.0);
     float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
     float occlusion = 0.0;
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < 32; i++) {
+        if (i >= sampleCount) break;
         float sampleIndex = float(i);
         float angle = noise * 6.2831853 + sampleIndex * 2.3999632;
-        float sampleRadius = sqrt((sampleIndex + 0.5) / 12.0);
+        float sampleRadius = sqrt((sampleIndex + 0.5) / float(sampleCount));
         vec2 offset = vec2(cos(angle), sin(angle)) * sampleRadius * radiusPixels / fullResolution;
         vec2 sampleUv = clamp(vUv + offset, vec2(0.001), vec2(0.999));
         float sampleDepth = texture2D(tDepth, sampleUv).r;
@@ -65,11 +67,11 @@ void main() {
         float rangeWeight = 1.0 - smoothstep(0.0, radius, distanceToSample);
         occlusion += smoothstep(0.08, 0.3, facing) * rangeWeight;
     }
-    float visibility = 1.0 - min(0.6, occlusion * (8.0 / 12.0));
+    float visibility = 1.0 - min(0.6, occlusion * (8.0 / float(sampleCount)));
     gl_FragColor = vec4(vec3(visibility), 1.0);
 }`;
 
-// 在半分辨率 AO 图上做水平/垂直两次保边模糊。深度差越大权重越低，
+// 每轮在 AO 图上做水平/垂直保边模糊；每轮半径独立，深度差越大权重越低，
 // 避免衣袖、发丝轮廓和背后的身体被同一团 AO 污染。
 const BLUR_FRAGMENT = `
 uniform sampler2D tAo;
@@ -78,6 +80,7 @@ uniform vec2 aoResolution;
 uniform vec2 direction;
 uniform mat4 inverseProjection;
 uniform float radius;
+uniform int blurRadiusPixels;
 varying vec2 vUv;
 
 float viewDistance(vec2 uv, float depth) {
@@ -93,17 +96,19 @@ void main() {
         return;
     }
     float centerDistance = viewDistance(vUv, centerDepth);
-    float sum = texture2D(tAo, vUv).r * 0.2270270;
-    float weight = 0.2270270;
+    float sum = texture2D(tAo, vUv).r * 0.2;
+    float weight = 0.2;
     vec2 texel = direction / aoResolution;
-    for (int i = 1; i <= 2; i++) {
-        float spatialWeight = i == 1 ? 0.3162162 : 0.0702703;
+    for (int i = 1; i <= 5; i++) {
+        if (i > blurRadiusPixels) break;
+        float spatialWeight = i == 1 ? 0.16 : (i == 2 ? 0.11 : (i == 3 ? 0.06 : (i == 4 ? 0.03 : 0.015)));
         for (int side = -1; side <= 1; side += 2) {
             vec2 sampleUv = clamp(vUv + texel * float(i * side), vec2(0.001), vec2(0.999));
             float sampleDepth = texture2D(tDepth, sampleUv).r;
             if (sampleDepth >= 0.99999) continue;
             float distanceGap = abs(viewDistance(sampleUv, sampleDepth) - centerDistance);
-            float edgeWeight = exp(-distanceGap / max(radius * 0.12, 0.005));
+            float edgeScale = max(radius * 0.2, 0.005);
+            float edgeWeight = exp(-pow(distanceGap / edgeScale, 2.0));
             float sampleWeight = spatialWeight * edgeWeight;
             sum += texture2D(tAo, sampleUv).r * sampleWeight;
             weight += sampleWeight;
@@ -166,6 +171,9 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
     let enabled = true;
     let resolutionMode = 'half';
     let radius = 0.1;
+    let sampleCount = 24;
+    let blurPassCount = 1;
+    let blurRadii = [3, 3, 3];
     let intensity = 1;
     const aoColor = new THREE.Color(0x000000);
     let fullWidth = 1;
@@ -194,7 +202,8 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
                 fullResolution: { value: new THREE.Vector2() },
                 inverseProjection: { value: camera.projectionMatrixInverse },
                 projection: { value: camera.projectionMatrix },
-                radius: { value: radius }
+                radius: { value: radius },
+                sampleCount: { value: sampleCount }
             },
             vertexShader: FULLSCREEN_VERTEX,
             fragmentShader: AO_FRAGMENT,
@@ -210,7 +219,8 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
                 aoResolution: { value: new THREE.Vector2() },
                 direction: { value: new THREE.Vector2(1, 0) },
                 inverseProjection: { value: camera.projectionMatrixInverse },
-                radius: { value: radius }
+                radius: { value: radius },
+                blurRadiusPixels: { value: 3 }
             },
             vertexShader: FULLSCREEN_VERTEX,
             fragmentShader: BLUR_FRAGMENT,
@@ -269,6 +279,7 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         const previousTarget = renderer.getRenderTarget();
         try {
             resources.aoMaterial.uniforms.radius.value = radius;
+            resources.aoMaterial.uniforms.sampleCount.value = sampleCount;
             resources.blurMaterial.uniforms.radius.value = radius;
             resources.compositeMaterial.uniforms.radius.value = radius;
             resources.compositeMaterial.uniforms.intensity.value = intensity;
@@ -279,17 +290,22 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
             renderer.setRenderTarget(resources.aoTarget);
             renderer.clear();
             renderer.render(resources.passScene, resources.passCamera);
-            resources.quad.material = resources.blurMaterial;
-            resources.blurMaterial.uniforms.tAo.value = resources.aoTarget.texture;
-            resources.blurMaterial.uniforms.direction.value.set(1, 0);
-            renderer.setRenderTarget(resources.blurTarget);
-            renderer.clear();
-            renderer.render(resources.passScene, resources.passCamera);
-            resources.blurMaterial.uniforms.tAo.value = resources.blurTarget.texture;
-            resources.blurMaterial.uniforms.direction.value.set(0, 1);
-            renderer.setRenderTarget(resources.aoTarget);
-            renderer.clear();
-            renderer.render(resources.passScene, resources.passCamera);
+            if (blurPassCount > 0) {
+                resources.quad.material = resources.blurMaterial;
+                for (let passIndex = 0; passIndex < blurPassCount; passIndex++) {
+                    resources.blurMaterial.uniforms.blurRadiusPixels.value = blurRadii[passIndex];
+                    resources.blurMaterial.uniforms.tAo.value = resources.aoTarget.texture;
+                    resources.blurMaterial.uniforms.direction.value.set(1, 0);
+                    renderer.setRenderTarget(resources.blurTarget);
+                    renderer.clear();
+                    renderer.render(resources.passScene, resources.passCamera);
+                    resources.blurMaterial.uniforms.tAo.value = resources.blurTarget.texture;
+                    resources.blurMaterial.uniforms.direction.value.set(0, 1);
+                    renderer.setRenderTarget(resources.aoTarget);
+                    renderer.clear();
+                    renderer.render(resources.passScene, resources.passCamera);
+                }
+            }
             resources.quad.material = resources.compositeMaterial;
             renderer.setRenderTarget(previousTarget);
             renderer.clear();
@@ -314,6 +330,17 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
     const setRadius = (value) => {
         if (Number.isFinite(value) && value > 0) radius = value;
     };
+    const setSampleCount = (value) => {
+        if ([12, 24, 32].includes(value)) sampleCount = value;
+    };
+    const setBlurPasses = (count, radii) => {
+        if (!Number.isInteger(count) || count < 0 || count > 3 || !Array.isArray(radii)) return;
+        blurPassCount = count;
+        blurRadii = [0, 1, 2].map((index) => {
+            const value = radii[index];
+            return Number.isInteger(value) ? Math.min(5, Math.max(1, value)) : 3;
+        });
+    };
     const dispose = () => {
         if (!resources) return;
         resources.colorTarget.dispose();
@@ -328,5 +355,5 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
     };
 
     return Object.freeze({ supported, resize, render, setEnabled, setResolution,
-        setColor, setIntensity, setRadius, dispose });
+        setColor, setIntensity, setRadius, setSampleCount, setBlurPasses, dispose });
 }

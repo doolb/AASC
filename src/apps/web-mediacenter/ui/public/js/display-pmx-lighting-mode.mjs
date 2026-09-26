@@ -2,7 +2,7 @@
  * PMX 材质的 Toon / 普通直射光切换。
  * 只修改本次加载出的 MMDToonMaterial 实例，不修改 Three.js 内置 shader 或模型文件。
  */
-import { Color, Vector3 } from 'three';
+import { Color, Vector3, ShaderChunk } from 'three';
 
 const TOON_IRRADIANCE =
     'vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;';
@@ -23,6 +23,35 @@ const RIM_FRAGMENT = `
         pmxRimColor2 * pmxRimIntensity2 * max( dot( normal, pmxRimViewDir2 ), 0.0 )
     );
     ${OUTPUT_ANCHOR}`;
+const DIRECTIONAL_SHADOW_SAMPLE = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
+const DIRECTIONAL_LIGHT_START = '#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )';
+const DIRECTIONAL_LIGHT_END = '#if ( NUM_RECT_AREA_LIGHTS > 0 ) && defined( RE_Direct_RectArea )';
+const DIRECT_LIGHT_APPLY = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );';
+
+function createWebFillShadowChunk() {
+    const chunk = ShaderChunk.lights_fragment_begin;
+    const start = chunk.indexOf(DIRECTIONAL_LIGHT_START);
+    const end = chunk.indexOf(DIRECTIONAL_LIGHT_END, start);
+    if (start < 0 || end < 0) throw new Error('Three.js 方向光 shader 布局已改变');
+    const section = chunk.slice(start, end);
+    if (!section.includes(DIRECTIONAL_SHADOW_SAMPLE) || !section.includes(DIRECT_LIGHT_APPLY)) {
+        throw new Error('Three.js 方向光阴影 shader 布局已改变');
+    }
+    // 第一盏方向光为主光。缓存其阴影系数，第二盏补光仅在“沿用主光”模式复用；
+    // 补光自己的阴影模式由 Three.js 原生第二张阴影贴图负责，两张图彼此独立。
+    const patched = section
+        .replace('DirectionalLight directionalLight;', 'DirectionalLight directionalLight;\nfloat pmxKeyShadowMask = 1.0;\nfloat pmxThisShadowMask = 1.0;')
+        .replace(DIRECTIONAL_SHADOW_SAMPLE, `pmxThisShadowMask = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
+        directLight.color *= pmxThisShadowMask;
+        #if UNROLLED_LOOP_INDEX == 0
+        pmxKeyShadowMask = pmxThisShadowMask;
+        #endif`)
+        .replace(DIRECT_LIGHT_APPLY, `#if UNROLLED_LOOP_INDEX == 1
+        directLight.color *= mix( 1.0, pmxKeyShadowMask, pmxFillUsesKeyShadow );
+        #endif
+        ${DIRECT_LIGHT_APPLY}`);
+    return chunk.slice(0, start) + patched + chunk.slice(end);
+}
 
 function applyRimsToMaterial(material, rimLights = []) {
     for (const index of [0, 1]) {
@@ -40,7 +69,7 @@ function applyRimsToMaterial(material, rimLights = []) {
     }
 }
 
-export function preparePmxLightingMaterial(material, pmxToonEnabled) {
+export function preparePmxLightingMaterial(material, pmxToonEnabled, webFillShadowMode = false) {
     if (!material?.isMMDToonMaterial) return false;
     if (!material.uniforms?.pmxStandardLighting) {
         // 对模型实例的直射光表达式加模式参数；主光和补光会经过同一个 shader 路径。
@@ -68,8 +97,30 @@ ${UNIFORM_ANCHOR}`)
         }
         material.needsUpdate = true;
     }
+    if (webFillShadowMode && !material.uniforms.pmxFillUsesKeyShadow) {
+        if (!material.fragmentShader.includes('#include <lights_fragment_begin>')) {
+            throw new Error('PMX Toon shader 不包含光照循环入口');
+        }
+        material.fragmentShader = material.fragmentShader
+            .replace(UNIFORM_ANCHOR, `uniform float pmxFillUsesKeyShadow;\n${UNIFORM_ANCHOR}`)
+            .replace('#include <lights_fragment_begin>', createWebFillShadowChunk());
+        material.uniforms.pmxFillUsesKeyShadow = { value: 0 };
+        material.needsUpdate = true;
+    }
     material.uniforms.pmxStandardLighting.value = pmxToonEnabled === false ? 1 : 0;
     return true;
+}
+
+export function setPmxFillShadowMode(root, useKeyShadow) {
+    root?.traverse?.((object) => {
+        if (!object.isMesh) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+            if (material?.uniforms?.pmxFillUsesKeyShadow) {
+                material.uniforms.pmxFillUsesKeyShadow.value = useKeyShadow ? 1 : 0;
+            }
+        }
+    });
 }
 
 export function setPmxRimLights(root, rimLights) {

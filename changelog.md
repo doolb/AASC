@@ -1,5 +1,11 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR HTTPS 测试网页
+
+- ✅ [2026-09-26] 增加定位图底面/立面模式切换。
+  - `3rd/mmd-ar-test/build.js`、`web-panel-groups.js` 加入可本地记忆的双模式按钮；`display-mmd-ar-aframe.js` 传递目标图高宽比，`display-pmx-runtime.js` 按所选平面计算相机，立面下边缘中点对齐角色脚底，切换时立即重新定位。模型根节点和物理不变；同步更新 design/spec/task/todo/自测。仅本地构建，未发布网页或 APK。
+  - 网页构建成功；相机投影 1/1、面板与锚点 8/8 通过，`git diff --check` 通过。真实手机立面观感待现场验收。
+
 ### Node 子显示端语音录音
 
 - ✅ [2026-09-25] 修复关闭 Node 子显示端录音能力后仍占用麦克风的问题。

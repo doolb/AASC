@@ -21,7 +21,9 @@ const ANDROID_PROJECT = __dirname;
 const APP_PROJECT = path.join(ANDROID_PROJECT, 'app');
 const SOURCE_PUBLIC = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public');
 const WEB_MODE = process.argv.includes('--web');
-const WEB_BASE_PATH = '/mnt/mmd-ar';
+const WEB_PANEL_GROUPS = WEB_MODE ? require('./web-panel-groups') : null;
+// 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
+const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
   ? path.join(ANDROID_PROJECT, 'web-dist')
   : path.join(APP_PROJECT, 'build/generated/assets/www');
@@ -30,6 +32,10 @@ const OUTPUT_APK = path.join(ANDROID_PROJECT, 'output/aasc-mmd-ar-test.apk');
 const MINDAR_VERSION = '1.2.5';
 const MINDAR_CACHE = path.join(ANDROID_PROJECT, 'model-cache', `mind-ar-${MINDAR_VERSION}`);
 const MINDAR_PUBLIC_BASE_URL = `https://cdn.jsdelivr.net/npm/mind-ar@${MINDAR_VERSION}`;
+const OFFICIAL_TARGET_FILE = 'mindar-official-card.png';
+const OFFICIAL_TARGET_SIZE = 61689;
+const OFFICIAL_TARGET_SHA256 = 'f4253baa29270f36cf04aeff8be58d036cefffa3032e76bfbca0c08bcc046bdd';
+const OFFICIAL_TARGET_PATH = `${WEB_BASE_PATH}/assets/${OFFICIAL_TARGET_FILE}`;
 const MINDAR_FILES = Object.freeze([
   ['mindar-image.prod.js', 266, 'a21eef9a98ed73aee589a219b35e580c50b501c6f50f88d6eed16dcef9b8dec2'],
   ['controller-mGt1s8dJ.js', 2199370, '98a90806c01077a46fc5a3daddc6441ac9d61c5b85b3cc09d3f0b2087d228713'],
@@ -198,20 +204,85 @@ async function stageTextAssets() {
   }
   arHeader.after(`
     <div class="mmd-ar-benchmark">
+      ${WEB_MODE ? '' : `
       <label class="display-mmd-ar-field" for="mmdArTrackerEngine">
         <span>图像匹配算法</span>
         <select id="mmdArTrackerEngine">
           <option value="current">当前 JS</option>
           <option value="mindar">MindAR ${MINDAR_VERSION}</option>
         </select>
-      </label>
+      </label>`}
+      ${WEB_MODE ? '<p class="mmd-ar-benchmark-live">定位采用 MindAR Basic 的 A-Frame 目标锚点；真实相机使用原始分辨率，模拟画面宽 960 像素、高度按所选原图比例计算。</p>' : ''}
       <p id="mmdArBenchmarkLive" class="mmd-ar-benchmark-live" role="status" aria-live="polite">
-        两种算法复用同一张定位图、选区和摄像头；耗时从识别引擎启动计时，不含相机授权。MindAR 每轮重新编译，首次首锁也计入本地模块加载。请保持目标静止后比较锚点抖动。
+        ${WEB_MODE ? 'A-Frame 定位尚未启动。' : '两种算法复用同一张定位图、选区和摄像头；耗时从识别引擎启动计时，不含相机授权。MindAR 每轮重新编译，首次首锁也计入本地模块加载。请保持目标静止后比较锚点抖动。'}
       </p>
-      <div id="mmdArBenchmarkResults" class="mmd-ar-benchmark-results" aria-live="polite"></div>
-      <button id="mmdArBenchmarkReset" class="display-mmd-ar-action" type="button">重置对比结果</button>
+      ${WEB_MODE ? '' : '<div id="mmdArBenchmarkResults" class="mmd-ar-benchmark-results" aria-live="polite"></div><button id="mmdArBenchmarkReset" class="display-mmd-ar-action" type="button">重置对比结果</button>'}
     </div>
   `);
+  if (WEB_MODE) {
+    $('#displayMmdKeyColor').closest('label').before(`
+      <label class="display-mmd-lighting-shadow">
+        <input id="displayMmdKeyShadowEnabled" type="checkbox" checked>
+        <span>主光阴影（默认开启）</span>
+      </label>
+    `);
+    arPanel.append(`
+      <div id="mmdArTargetPlaneMode" class="display-mmd-ar-field mmd-ar-plane-setting" role="group" aria-label="定位图模式">
+        <span>定位图模式</span>
+        <div class="mmd-ar-plane-options">
+          <button type="button" data-target-plane="floor" aria-pressed="true">底面</button>
+          <button type="button" data-target-plane="vertical" aria-pressed="false">立面</button>
+        </div>
+      </div>
+      <label class="display-mmd-ar-field mmd-ar-camera-setting" for="mmdArTranslationDeadZone">
+        <span>平移死区 <output id="mmdArTranslationDeadZoneValue">0.5%</output></span>
+        <input id="mmdArTranslationDeadZone" type="range" min="0" max="3" step="0.1" value="0.5">
+      </label>
+      <label class="display-mmd-ar-field mmd-ar-camera-setting" for="mmdArRotationDeadZone">
+        <span>旋转死区 <output id="mmdArRotationDeadZoneValue">0.5°</output></span>
+        <input id="mmdArRotationDeadZone" type="range" min="0" max="3" step="0.1" value="0.5">
+      </label>
+      <label class="display-mmd-ar-field mmd-ar-camera-setting" for="mmdArSmoothingMs">
+        <span>相机缓动 <output id="mmdArSmoothingMsValue">120 ms</output></span>
+        <input id="mmdArSmoothingMs" type="range" min="0" max="500" step="10" value="120">
+      </label>
+      <label class="display-mmd-ar-field mmd-ar-camera-setting" for="mmdArCameraDistance">
+        <span>相机距定位图中心 <output id="mmdArCameraDistanceValue">100%</output></span>
+        <input id="mmdArCameraDistance" type="range" min="50" max="100" step="5" value="100">
+        <small>100% 为定位原始距离；减小数值沿相机到图中心的连线拉近。</small>
+      </label>
+    `);
+    WEB_PANEL_GROUPS.groupWebPanels($);
+    $('#displayArTargetPanelGroup1').append(`
+      <label class="display-mmd-ar-field" for="mmdArInputMode">
+        <span>视频输入</span>
+        <select id="mmdArInputMode"><option value="camera">真实摄像头</option><option value="simulated">模拟摄像头</option></select>
+      </label>
+      <div id="mmdArSimControls" class="mmd-ar-sim-controls" hidden>
+        <label class="display-mmd-ar-field" for="mmdArSimFile"><span>模拟摄像头拍到的图片</span><input id="mmdArSimFile" type="file" accept="image/*"></label>
+        <div class="mmd-ar-sim-view-controls">
+          <label class="mmd-ar-sim-slider mmd-ar-sim-zoom" for="mmdArSimZoom"><span>缩放 <output id="mmdArSimZoomValue">100%</output></span><input id="mmdArSimZoom" type="range" min="60" max="220" value="100"></label>
+          <div class="mmd-ar-sim-middle">
+            <label class="mmd-ar-sim-slider mmd-ar-sim-longitude" for="mmdArSimLongitude"><span>经度 <output id="mmdArSimLongitudeValue">0°</output></span><input id="mmdArSimLongitude" type="range" min="-60" max="60" value="0"></label>
+            <div id="mmdArSimPreview" class="mmd-ar-sim-preview">
+              <canvas id="mmdArSimCanvas" width="960" height="540" aria-label="拖动平移模拟摄像头画面"></canvas>
+            </div>
+            <label class="mmd-ar-sim-slider mmd-ar-sim-latitude" for="mmdArSimLatitude"><span>纬度 <output id="mmdArSimLatitudeValue">0°</output></span><input id="mmdArSimLatitude" type="range" min="-60" max="60" value="0"></label>
+          </div>
+          <label class="mmd-ar-sim-slider mmd-ar-sim-horizontal-rotation" for="mmdArSimHorizontalRotation"><span>水平旋转 <output id="mmdArSimHorizontalRotationValue">0°</output></span><input id="mmdArSimHorizontalRotation" type="range" min="0" max="360" value="0"></label>
+        </div>
+        <button id="mmdArSimReset" class="display-mmd-ar-action" type="button">重置透视</button>
+        <p id="mmdArSimStatus" class="mmd-ar-benchmark-live" role="status">请选择一张本地图片。图片不会上传。</p>
+      </div>
+    `);
+    $('#displayMmdShadowSource').closest('label').find('span').first().text('补光阴影');
+    $('#displayMmdShadowSource option[value="none"]').text('补光无阴影');
+    $('#displayMmdShadowSource option[value="key"]').text('补光沿用主光阴影');
+    $('#displayMmdShadowSource option[value="fill"]').text('补光自己的阴影');
+    $('#displayArTargetSelect').closest('label').after(`
+      <a class="mmd-ar-official-target-link" href="${OFFICIAL_TARGET_PATH}" target="_blank" rel="noopener noreferrer">查看 MindAR 官方测试图（请在另一屏幕显示或打印）</a>
+    `);
+  }
   const webResizeSupport = WEB_MODE ? `
       const stage = document.getElementById('displayStageLayers');
       let previousWidth = 0;
@@ -241,7 +312,7 @@ async function stageTextAssets() {
   ` : '';
 
   const assets = [
-    ...SOURCE_ASSET_FILES.map((fileName) => [
+    ...SOURCE_ASSET_FILES.filter((fileName) => !WEB_MODE || fileName !== 'display-mmd-image-tracker.js').map((fileName) => [
       path.join(SOURCE_PUBLIC, 'js', fileName),
       path.join(GENERATED_ASSETS, 'js', fileName),
     ]),
@@ -250,6 +321,9 @@ async function stageTextAssets() {
       path.join(ANDROID_PROJECT, fileName),
       path.join(GENERATED_ASSETS, 'js', fileName),
     ]),
+    ...(WEB_MODE ? ['display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js'].map((fileName) => [
+      path.join(ANDROID_PROJECT, fileName), path.join(GENERATED_ASSETS, 'js', fileName),
+    ]) : []),
   ];
   for (const [sourcePath, destinationPath] of assets) {
     await fs.mkdir(path.dirname(destinationPath), { recursive: true });
@@ -259,7 +333,32 @@ async function stageTextAssets() {
       await fs.copyFile(sourcePath, destinationPath);
     }
   }
+  if (WEB_MODE) {
+    // 静态站点可能长时间缓存同路径 ESM；先给阴影模块加内容指纹，再计算 runtime 指纹。
+    const pmxRuntimePath = path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js');
+    const lightingModeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-lighting-mode.mjs'))).sha256.slice(0, 12);
+    const runtimeSource = await fs.readFile(pmxRuntimePath, 'utf8');
+    const lightingModeImport = "'./display-pmx-lighting-mode.mjs'";
+    if (!runtimeSource.includes(lightingModeImport)) throw new Error('测试网页未找到 PMX 灯光模块入口');
+    await fs.writeFile(pmxRuntimePath, runtimeSource.replace(lightingModeImport,
+      `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`));
+    // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
+    const mmdScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd.js');
+    const runtimeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js'))).sha256.slice(0, 12);
+    const current = await fs.readFile(mmdScriptPath, 'utf8');
+    const runtimeImport = "'./display-pmx-runtime.js'";
+    if (!current.includes(runtimeImport)) throw new Error('测试网页未找到 PMX runtime 动态导入入口');
+    await fs.writeFile(mmdScriptPath, current.replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`));
+  }
   await fs.cp(VENDOR_THREE_SOURCE, path.join(GENERATED_ASSETS, 'js/vendor/three'), { recursive: true });
+
+  const scriptVersion = new Map();
+  if (WEB_MODE) {
+    for (const fileName of ['display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar.js']) {
+      scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
+    }
+  }
+  const scriptUrl = (fileName) => `/js/${fileName}${WEB_MODE && scriptVersion.has(fileName) ? `?v=${scriptVersion.get(fileName)}` : ''}`;
 
   const page = `<!doctype html>
 <html lang="zh-CN">
@@ -269,6 +368,7 @@ async function stageTextAssets() {
   <meta name="theme-color" content="#111318">
   <title>MMD AR 独立测试</title>
   <link rel="stylesheet" href="/css/display-mmd.css">
+  ${WEB_MODE ? '<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script><script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>' : ''}
   <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"}}</script>
   <style>
     :root {
@@ -288,7 +388,14 @@ async function stageTextAssets() {
     * { box-sizing: border-box; }
     button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
-    body { background: radial-gradient(ellipse at 50% 42%, #303442 0%, #171920 58%, #101116 100%); color: var(--text-primary); font: 14px/1.45 system-ui, sans-serif; touch-action: none; }
+    body { background: radial-gradient(ellipse at 50% 42%, #303442 0%, #171920 58%, #101116 100%); color: var(--text-primary); font: 14px/1.45 system-ui, sans-serif; touch-action: manipulation; }
+    .display-stage-layers { --display-stage-panel-max-height: min(620px, calc(100dvh - var(--display-stage-panel-top-gap) - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 28px)); }
+    /* 校准弹窗只占真实可视区；短屏时收缩预览并允许弹窗内部滚动。 */
+    #displayArCalibration { position: fixed; inset: 0; width: 100vw; height: 100dvh; min-height: 0; overflow: hidden; }
+    #displayArCalibration .display-mmd-ar-dialog { width: min(920px, 100%); max-height: calc(100dvh - max(12px, var(--display-safe-inset-top)) - max(12px, var(--display-safe-inset-bottom))); min-height: 0; overscroll-behavior: contain; }
+    #displayArCalibration .display-mmd-ar-preview { min-height: 0; max-height: min(50dvh, 480px); }
+    #displayArCalibration .display-mmd-ar-camera, #displayArCalibration .display-mmd-ar-canvas { max-height: min(50dvh, 480px); }
+    .display-mmd-lighting-panel, .display-mmd-ar-panel { touch-action: pan-y; }
     .display-stage-layers { z-index: 10; }
     .display-mmd-layer { background: transparent; }
     .display-mmd-status { --bg-secondary: #20242e; --border-color: #475066; --text-secondary: #c2c8d4; }
@@ -307,6 +414,29 @@ async function stageTextAssets() {
     .mmd-ar-loading-progress[hidden] { display: none; }
     .mmd-ar-loading-track { height: 6px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: #ffffff35; }
     .mmd-ar-loading-fill { width: 0; height: 100%; border-radius: inherit; background: #758bff; transition: width 160ms ease-out; }
+    .mmd-ar-official-target-link { display: block; width: fit-content; max-width: 100%; padding: 6px 0; color: #bfcaff; text-decoration: underline; overflow-wrap: anywhere; }
+    ${WEB_MODE ? `
+    .mmd-ar-sim-controls { display: grid; gap: 10px; margin-top: 10px; }
+    .mmd-ar-sim-controls[hidden] { display: none; }
+    .mmd-ar-sim-view-controls { display: grid; gap: 7px; min-width: 0; }
+    .mmd-ar-sim-middle { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+    .mmd-ar-sim-slider { display: flex; gap: 6px; color: #e8ebf4; font-size: 12px; }
+    .mmd-ar-sim-slider output { color: #bfcaff; font-variant-numeric: tabular-nums; }
+    .mmd-ar-sim-slider input { accent-color: #758bff; }
+    .mmd-ar-sim-zoom, .mmd-ar-sim-horizontal-rotation { align-items: center; }
+    .mmd-ar-sim-zoom input, .mmd-ar-sim-horizontal-rotation input { flex: 1; min-width: 0; }
+    .mmd-ar-sim-longitude, .mmd-ar-sim-latitude { flex-direction: column; align-items: center; justify-content: center; min-width: 42px; }
+    .mmd-ar-sim-longitude input, .mmd-ar-sim-latitude input { flex: none; height: 100px; min-height: 0; max-height: 100%; width: 20px; writing-mode: vertical-lr; direction: rtl; }
+    .mmd-ar-sim-preview { position: relative; flex: 1; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #758bff; border-radius: 8px; background: #555; }
+    #mmdArSimCanvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+    #mmdArSimCanvas:active { cursor: grabbing; }
+    #mmdArAframeHost { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    #mmdArAframeHost[hidden] { display: none; }
+    #mmdArAframeHost video { z-index: 2 !important; pointer-events: none; }
+    #mmdArAframeScene { position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%; background: transparent !important; pointer-events: none; }
+    #mmdArAframeScene canvas { background: transparent !important; pointer-events: none; }
+    ` : ''}
+    ${WEB_MODE ? WEB_PANEL_GROUPS.WEB_PANEL_GROUP_CSS : ''}
   </style>
 </head>
 <body>
@@ -322,15 +452,57 @@ async function stageTextAssets() {
       ${controls.toString()}
     </div>
     ${calibration.toString()}
+    ${WEB_MODE ? `<div id="mmdArAframeHost" hidden aria-label="MindAR 定位图蓝色标记">
+      <a-scene id="mmdArAframeScene" embedded mindar-image="imageTargetSrc: ; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
+        renderer="colorManagement: true; alpha: true" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+        <a-entity id="mmdArAframeAnchor" mindar-image-target="targetIndex: 0">
+          <a-plane id="mmdArAframeTargetRect" width="1" height="1" material="color: #229cff; opacity: 0.35; transparent: true; side: double" position="0 0 0"></a-plane>
+          <a-plane id="mmdArAframeCrossH" width="0.22" height="0.009" material="color: #d8f2ff; side: double" position="0 0 0.01"></a-plane>
+          <a-plane id="mmdArAframeCrossV" width="0.009" height="0.22" material="color: #d8f2ff; side: double" position="0 0 0.01"></a-plane>
+        </a-entity>
+      </a-scene>
+    </div>` : ''}
   </div>
-  <script src="/js/display-mmd.js"></script>
-  <script src="/js/display-mmd-lighting.js"></script>
-  <script src="/js/display-mmd-image-tracker.js"></script>
+  ${WEB_MODE ? '<script>window.MmdArTestWebFillShadow = true;</script>' : ''}
+  <script src="${scriptUrl('display-mmd.js')}"></script>
+  <script src="${scriptUrl('display-mmd-lighting.js')}"></script>
+  ${WEB_MODE ? `<script>
+    window.MmdArTestMindArOnly = true;
+    window.MmdArLocationMarkerTest = true;
+    window.MmdArTestAframeMode = true;
+  </script>` : '<script src="/js/display-mmd-image-tracker.js"></script>'}
   <script src="/js/display-mmd-ar-benchmark-compiler.js"></script>
   <script src="/js/display-mmd-ar-benchmark-metrics.js"></script>
-  <script src="/js/display-mmd-ar-benchmark.js"></script>
-  <script src="/js/display-mmd-ar.js"></script>
+  <script src="${scriptUrl('display-mmd-ar-benchmark.js')}"></script>
+  ${WEB_MODE ? `<script src="${scriptUrl('display-mmd-ar-sim-camera.js')}"></script>` : ''}
+  ${WEB_MODE ? `<script src="${scriptUrl('display-mmd-ar-aframe.js')}"></script>` : ''}
+  ${WEB_MODE ? `<script>
+    // 只为 HTTPS 测试页提供内置目标；共享 AR 模块在正式显示端和 APK 中不接收此配置。
+    window.DisplayMmdArBuiltInTargets = async () => {
+      const response = await fetch('${OFFICIAL_TARGET_PATH}');
+      if (!response.ok) throw new Error('官方测试图 HTTP ' + response.status);
+      const referenceImageBlob = await response.blob();
+      if (referenceImageBlob.type !== 'image/png' || referenceImageBlob.size !== ${OFFICIAL_TARGET_SIZE}) {
+        throw new Error('官方测试图格式或大小不符');
+      }
+      return [{
+        targetId: 'builtin:mindar-official-card',
+        name: 'MindAR 官方示例',
+        readOnly: true,
+        referenceImageBlob,
+        selectedQuad: [
+          { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }
+        ],
+        physicalWidthMm: null,
+        compiledTargetData: null,
+        updatedAt: 0
+      }];
+    };
+  </script>` : ''}
+  <script src="${scriptUrl('display-mmd-ar.js')}"></script>
   <script>
+    ${WEB_MODE ? WEB_PANEL_GROUPS.WEB_PANEL_GROUP_JS : ''}
     (() => {
       const controls = new Map([
         ['displayMmdLightingToggle', 'displayMmdLightingPanel'],
@@ -420,6 +592,17 @@ async function stageModelAssets() {
     await fs.mkdir(path.dirname(stagedPath), { recursive: true });
     await fs.copyFile(cachePath, stagedPath);
   }
+}
+
+async function stageOfficialTargetAsset() {
+  if (!WEB_MODE) return;
+  const source = path.join(ANDROID_PROJECT, 'assets', OFFICIAL_TARGET_FILE);
+  if (!await isVerifiedFile(source, OFFICIAL_TARGET_SIZE, OFFICIAL_TARGET_SHA256)) {
+    throw new Error(`MindAR 官方示例图校验失败：${source}`);
+  }
+  const destination = path.join(GENERATED_ASSETS, 'assets', OFFICIAL_TARGET_FILE);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.copyFile(source, destination);
 }
 
 async function stageMindArAssets() {
@@ -585,9 +768,10 @@ async function publishLocalArtifact(sourceApk) {
 }
 
 async function main() {
-  if (STATIC_MMD_RELEASE.files.length === 0) throw new Error('默认 PMX 清单为空');
   await fs.rm(GENERATED_ASSETS, { recursive: true, force: true });
+  if (STATIC_MMD_RELEASE.files.length === 0) throw new Error('默认 PMX 清单为空');
   await stageTextAssets();
+  await stageOfficialTargetAsset();
   await stageModelAssets();
   await stageMindArAssets();
 

@@ -3,29 +3,81 @@
     'use strict';
 
     const MINDAR_VERSION = '1.2.5';
-    const MINDAR_BASE = `/js/vendor/mind-ar-${MINDAR_VERSION}`;
+    // 动态 import 相对当前脚本解析；从脚本 URL 求同目录 vendor，兼容任意网页挂载前缀。
+    const MINDAR_BASE = typeof document === 'object' && document.currentScript?.src
+        ? new URL(`./vendor/mind-ar-${MINDAR_VERSION}`, document.currentScript.src).href
+        : `/js/vendor/mind-ar-${MINDAR_VERSION}`;
     const ENGINE_LABELS = Object.freeze({ current: '当前 JS', mindar: 'MindAR' });
     const MINDAR_IMAGE_MAX_WIDTH = 512;
     const SOURCE_MAX_WIDTH = 640;
+    const MINDAR_INPUT_MAX_PIXELS = 640 * 480;
+    const MINDAR_INPUT_SCALE_KEY = 'aasc.mmdArTest.inputScalePercent.v1';
+    const MINDAR_INPUT_SCALE_OPTIONS = Object.freeze([25, 35, 50, 75, 100]);
+    const MINDAR_INPUT_REFRESH_MS = 100;
+    const MINDAR_POSE_REFRESH_MS = 100;
     const benchmark = {
-        currentEngine: 'current',
+        currentEngine: root.MmdArTestMindArOnly === true ? 'mindar' : 'current',
         currentRun: null,
         reports: new Map(),
         lastRenderAt: 0,
-        resources: new Map()
+        resources: new Map(),
+        inputScalePercent: 100,
+        activeInput: null
     };
 
     const originalTracker = root.DisplayMmdImageTargetTracker;
+    const mindArOnly = root.MmdArTestMindArOnly === true;
     const metricsApi = root.MmdArBenchmarkMetrics;
     const compilerApi = root.MmdArBenchmarkCompiler;
-    if (!originalTracker || !metricsApi || !compilerApi) {
+    if ((!originalTracker && !mindArOnly) || !metricsApi || !compilerApi) {
         console.error('[MMD AR A/B] 测试跟踪器、指标模块或 MindAR 编译适配器未加载');
         return;
+    }
+
+    function mapPoseToCover(pose, video, layer) {
+        if (originalTracker) return originalTracker.mapPoseToCover(pose, video, layer);
+        // 仅 MindAR 网页不加载旧跟踪器；仍需把相机原始帧坐标映射到 cover 裁切后的舞台。
+        const width = Math.max(1, layer.clientWidth);
+        const height = Math.max(1, layer.clientHeight);
+        const coverScale = Math.max(width / Math.max(1, video.videoWidth), height / Math.max(1, video.videoHeight));
+        const renderedWidth = video.videoWidth * coverScale;
+        const renderedHeight = video.videoHeight * coverScale;
+        return {
+            ...pose,
+            x: (pose.x * renderedWidth - (renderedWidth - width) / 2) / width,
+            y: (pose.y * renderedHeight - (renderedHeight - height) / 2) / height
+        };
     }
 
     function getElement(id) {
         return document.getElementById(id);
     }
+
+    function readInputScalePercent() {
+        try {
+            const saved = Number(root.localStorage?.getItem(MINDAR_INPUT_SCALE_KEY));
+            return MINDAR_INPUT_SCALE_OPTIONS.includes(saved) ? saved : 100;
+        } catch (error) {
+            console.warn('[MMD AR] 读取识别分辨率失败，使用 100%:', error);
+            return 100;
+        }
+    }
+
+    function updateInputResolutionLabel() {
+        const label = getElement('mmdArInputResolution');
+        if (!label) return;
+        const active = benchmark.activeInput;
+        if (!active) {
+            label.textContent = `已选 ${benchmark.inputScalePercent}%；开始定位后显示实际识别尺寸。`;
+            return;
+        }
+        const pending = benchmark.inputScalePercent !== active.percent
+            ? `；已选 ${benchmark.inputScalePercent}% 将在下次开始定位时生效` : '';
+        label.textContent = `摄像头 ${active.sourceWidth}×${active.sourceHeight} → `
+            + `本次识别 ${active.inputWidth}×${active.inputHeight}（${active.percent}%）${pending}`;
+    }
+
+    if (mindArOnly) benchmark.inputScalePercent = readInputScalePercent();
 
     function showMindArPreparationStatus(message) {
         const statusLabel = getElement('displayArTargetStatus');
@@ -259,23 +311,24 @@
         if (!Array.isArray(worldMatrix) || worldMatrix.length !== 16
             || !video.videoWidth || !video.videoHeight) return null;
         const [targetWidth, targetHeight] = targetDimensions;
-        // 复刻 MindARThree 的 postMatrix，将目标局部平面四角还原为编译图像像素坐标，
-        // 但只使用 Controller 的识别输出，不创建第二个 Three.js/WebGL 渲染器。
+        const projectionMatrix = controller.getProjectionMatrix();
+        if (!projectionMatrix) return null;
+        const center = projectMindArPoint(worldMatrix, projectionMatrix, {
+            x: targetWidth / 2,
+            y: targetHeight / 2,
+            z: 0
+        });
+        if (!center) return null;
+
+        // 复刻 MindARThree 的 postMatrix，将目标局部平面四角还原为图像像素坐标，仅供模型跟踪模式。
         const targetPoints = [
             { x: 0, y: targetHeight, z: 0 },
             { x: targetWidth, y: targetHeight, z: 0 },
             { x: targetWidth, y: 0, z: 0 },
             { x: 0, y: 0, z: 0 }
         ];
-        const projectionMatrix = controller.getProjectionMatrix();
-        if (!projectionMatrix) return null;
         const corners = targetPoints.map((point) => projectMindArPoint(worldMatrix, projectionMatrix, point));
-        const center = projectMindArPoint(worldMatrix, projectionMatrix, {
-            x: targetWidth / 2,
-            y: targetHeight / 2,
-            z: 0
-        });
-        if (!center || corners.some((point) => !point)) return null;
+        if (corners.some((point) => !point)) return null;
 
         const rawCorners = corners.map((point) => ({
             x: point.x * video.videoWidth,
@@ -309,6 +362,24 @@
         const setupStartedAt = performance.now();
         const compiled = await compileTarget(target);
         const modules = await loadMindArModules();
+        // 手机相机可达数百万像素；识别只需要等比例的有限画布，预览仍使用原始视频。
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        if (!Number.isInteger(sourceWidth) || !Number.isInteger(sourceHeight)
+            || sourceWidth <= 0 || sourceHeight <= 0) {
+            throw new Error('摄像头原始画面尺寸无效，请重新开始定位');
+        }
+        const inputPercent = mindArOnly ? benchmark.inputScalePercent : null;
+        const inputScale = mindArOnly ? inputPercent / 100
+            : Math.min(1, Math.sqrt(MINDAR_INPUT_MAX_PIXELS / (sourceWidth * sourceHeight)));
+        const inputWidth = Math.max(1, Math.floor(sourceWidth * inputScale));
+        const inputHeight = Math.max(1, Math.floor(sourceHeight * inputScale));
+        const inputCanvas = document.createElement('canvas');
+        inputCanvas.width = inputWidth;
+        inputCanvas.height = inputHeight;
+        const inputContext = inputCanvas.getContext('2d', { alpha: false });
+        if (!inputContext) throw new Error('无法创建 MindAR 识别画布');
+        inputContext.drawImage(video, 0, 0, inputWidth, inputHeight);
         let latest = { visible: false, reason: 'searching', confidence: null };
         let pendingResult = latest;
         let hasLocated = false;
@@ -316,9 +387,18 @@
         let controller;
         let targetDimensions;
         let lastSampleTimestamp = null;
+        let lastPoseDeliveryAt = -Infinity;
+        let inputRefreshHandle = null;
+        const refreshInput = () => {
+            if (!active) return;
+            if (video.readyState >= 2) {
+                inputContext.drawImage(video, 0, 0, inputWidth, inputHeight);
+            }
+            inputRefreshHandle = setTimeout(refreshInput, MINDAR_INPUT_REFRESH_MS);
+        };
         controller = new modules.Controller({
-            inputWidth: video.videoWidth,
-            inputHeight: video.videoHeight,
+            inputWidth,
+            inputHeight,
             maxTrack: 1,
             onUpdate(data) {
                 if (data.type === 'processDone') {
@@ -343,11 +423,17 @@
             const loadedTargets = controller.addImageTargetsFromBuffer(compiled.data);
             targetDimensions = loadedTargets.dimensions?.[0];
             if (!targetDimensions) throw new Error('MindAR 未能读取编译后的定位图');
-            await controller.dummyRun(video);
-            controller.processVideo(video);
+            await controller.dummyRun(inputCanvas);
+            controller.processVideo(inputCanvas);
+            inputRefreshHandle = setTimeout(refreshInput, MINDAR_INPUT_REFRESH_MS);
+            if (mindArOnly) {
+                benchmark.activeInput = { sourceWidth, sourceHeight, inputWidth, inputHeight, percent: inputPercent };
+                updateInputResolutionLabel();
+            }
             showMindArSearchingStatus();
             return {
                 get hasLocated() { return hasLocated; },
+                inputSize: { width: inputWidth, height: inputHeight },
                 compilationMs: compiled.compilationMs,
                 setupMs: performance.now() - setupStartedAt,
                 async processFrame() {
@@ -355,17 +441,31 @@
                     const isNewSample = Number.isFinite(latest.sampleTimestamp)
                         && latest.sampleTimestamp !== lastSampleTimestamp;
                     if (isNewSample) lastSampleTimestamp = latest.sampleTimestamp;
-                    return { ...latest, newSample: isNewSample };
+                    const poseUpdate = isNewSample && latest.visible
+                        && latest.sampleTimestamp - lastPoseDeliveryAt >= MINDAR_POSE_REFRESH_MS;
+                    if (poseUpdate) lastPoseDeliveryAt = latest.sampleTimestamp;
+                    if (isNewSample && !latest.visible) lastPoseDeliveryAt = -Infinity;
+                    return { ...latest, newSample: isNewSample, poseUpdate };
                 },
                 async stop() {
                     if (!active) return;
                     active = false;
+                    clearTimeout(inputRefreshHandle);
                     controller.dispose();
+                    if (mindArOnly) {
+                        benchmark.activeInput = null;
+                        updateInputResolutionLabel();
+                    }
                 }
             };
         } catch (error) {
             active = false;
+            clearTimeout(inputRefreshHandle);
             controller.dispose();
+            if (mindArOnly) {
+                benchmark.activeInput = null;
+                updateInputResolutionLabel();
+            }
             throw error;
         }
     }
@@ -382,7 +482,7 @@
         const container = getElement('mmdArBenchmarkResults');
         if (!container) return;
         container.replaceChildren();
-        for (const engine of ['current', 'mindar']) {
+        for (const engine of mindArOnly ? ['mindar'] : ['current', 'mindar']) {
             const report = benchmark.reports.get(engine);
             const section = document.createElement('section');
             section.className = 'mmd-ar-benchmark-result';
@@ -424,7 +524,7 @@
         let screenPose = null;
         if (result?.visible && result.pose) {
             const stage = getElement('displayStageLayers');
-            screenPose = originalTracker.mapPoseToCover(result.pose, video, stage);
+            screenPose = mapPoseToCover(result.pose, video, stage);
         }
         metricsApi.recordSample(run, {
             timestamp: Number.isFinite(result?.sampleTimestamp) ? result.sampleTimestamp : timestamp,
@@ -438,9 +538,9 @@
 
     function installTrackerAdapter() {
         root.DisplayMmdImageTargetTracker = Object.freeze({
-            mapPoseToCover: originalTracker.mapPoseToCover,
+            mapPoseToCover,
             async start(target, options) {
-                const engine = getElement('mmdArTrackerEngine')?.value === 'mindar' ? 'mindar' : 'current';
+                const engine = mindArOnly || getElement('mmdArTrackerEngine')?.value === 'mindar' ? 'mindar' : 'current';
                 benchmark.currentEngine = engine;
                 const run = metricsApi.createRun(engine, performance.now());
                 benchmark.currentRun = run;
@@ -456,6 +556,7 @@
                     return {
                         get hasLocated() { return delegate.hasLocated === true || this._hasLocated === true; },
                         set hasLocated(value) { this._hasLocated = value === true; },
+                        inputSize: delegate.inputSize,
                         async processFrame(video, timestamp) {
                             const startedAt = performance.now();
                             const result = await delegate.processFrame(video, timestamp);
@@ -470,7 +571,7 @@
                             } finally {
                                 benchmark.reports.set(engine, metricsApi.finishRun(run, performance.now()));
                                 if (benchmark.currentRun === run) benchmark.currentRun = null;
-                                getElement('mmdArTrackerEngine').disabled = false;
+                                if (!mindArOnly) getElement('mmdArTrackerEngine').disabled = false;
                                 renderReports();
                             }
                         }
@@ -481,7 +582,7 @@
                     if (benchmark.currentRun === run) benchmark.currentRun = null;
                     const live = getElement('mmdArBenchmarkLive');
                     if (live) live.textContent = `${ENGINE_LABELS[engine]}：启动失败，${error?.message || String(error)}`;
-                    getElement('mmdArTrackerEngine').disabled = false;
+                    if (!mindArOnly) getElement('mmdArTrackerEngine').disabled = false;
                     renderReports();
                     throw error;
                 }
@@ -494,15 +595,31 @@
         const startButton = getElement('displayArStartButton');
         const stopButton = getElement('displayArStopButton');
         const resetButton = getElement('mmdArBenchmarkReset');
-        if (!engineSelect || !startButton || !stopButton || !resetButton) return;
-        engineSelect.addEventListener('change', () => {
+        if ((!engineSelect && !mindArOnly) || !startButton || !stopButton || !resetButton) return;
+        const inputScale = getElement('mmdArInputScale');
+        if (mindArOnly && inputScale) {
+            inputScale.value = String(benchmark.inputScalePercent);
+            updateInputResolutionLabel();
+            inputScale.addEventListener('change', () => {
+                const selected = Number(inputScale.value);
+                benchmark.inputScalePercent = MINDAR_INPUT_SCALE_OPTIONS.includes(selected) ? selected : 100;
+                inputScale.value = String(benchmark.inputScalePercent);
+                try {
+                    root.localStorage?.setItem(MINDAR_INPUT_SCALE_KEY, String(benchmark.inputScalePercent));
+                } catch (error) {
+                    console.warn('[MMD AR] 保存识别分辨率失败:', error);
+                }
+                updateInputResolutionLabel();
+            });
+        }
+        engineSelect?.addEventListener('change', () => {
             benchmark.currentEngine = engineSelect.value === 'mindar' ? 'mindar' : 'current';
         });
         startButton.addEventListener('click', () => {
-            const engine = engineSelect.value === 'mindar' ? 'mindar' : 'current';
+            const engine = mindArOnly || engineSelect?.value === 'mindar' ? 'mindar' : 'current';
             benchmark.currentEngine = engine;
             benchmark.currentRun = null;
-            engineSelect.disabled = true;
+            if (engineSelect) engineSelect.disabled = true;
             const live = getElement('mmdArBenchmarkLive');
             if (live) live.textContent = `${ENGINE_LABELS[engine]}：正在准备测试…`;
         }, true);
@@ -510,15 +627,15 @@
             // 指标由 tracker session.stop 收口；这里仅允许停止后切换算法。
             window.setTimeout(() => {
                 if (!getElement('displayArStopButton')?.disabled) return;
-                engineSelect.disabled = false;
+                if (engineSelect) engineSelect.disabled = false;
             }, 0);
         }, true);
         resetButton.addEventListener('click', () => {
-            if (!engineSelect.disabled) {
+            if (!engineSelect?.disabled) {
                 benchmark.reports.clear();
                 renderReports();
                 const live = getElement('mmdArBenchmarkLive');
-                if (live) live.textContent = '分别运行两种算法后会显示对比结果。';
+                if (live) live.textContent = mindArOnly ? '运行 MindAR 后显示定位指标。' : '分别运行两种算法后会显示对比结果。';
             }
         });
         const statusMessage = getElement('displayArTargetMessage');
@@ -533,11 +650,16 @@
         renderReports();
     }
 
-    installTrackerAdapter();
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', installUi, { once: true });
+    if (root.MmdArTestAframeMode === true) {
+        // 网页定位由 A-Frame 接管；这里只复用已验证的选区裁剪与 MindAR 编译。
+        root.MmdArTestCompileTarget = compileTarget;
     } else {
-        installUi();
+        installTrackerAdapter();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', installUi, { once: true });
+        } else {
+            installUi();
+        }
     }
     root.addEventListener('pagehide', () => {
         for (const resource of benchmark.resources.values()) {

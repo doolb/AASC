@@ -29,6 +29,9 @@ test('PMX AO defaults on and a partial lighting update keeps its saved switch', 
   assert.equal(displayMmd.getLighting().pmxAoIntensity, 0.6);
   assert.equal(displayMmd.getLighting().pmxAoRadiusPercent, 6);
   assert.equal(displayMmd.getLighting().pmxAoResolution, 'half');
+  assert.equal(displayMmd.getLighting().pmxAoSampleCount, 24);
+  assert.equal(displayMmd.getLighting().pmxAoBlurPassCount, 1);
+  assert.deepEqual(Array.from(displayMmd.getLighting().pmxAoBlurRadii), [3, 3, 3]);
   assert.equal(displayMmd.setLighting({ pmxAoEnabled: false }).pmxAoEnabled, false);
   assert.equal(displayMmd.setLighting({ ambientIntensity: 1.4 }).pmxAoEnabled, false);
   assert.equal(displayMmd.setLighting({ pmxAoEnabled: true }).pmxAoEnabled, true);
@@ -42,6 +45,20 @@ test('PMX AO defaults on and a partial lighting update keeps its saved switch', 
   assert.equal(displayMmd.setLighting({ pmxAoResolution: 'full' }).pmxAoResolution, 'full');
   assert.equal(displayMmd.setLighting({ keyIntensity: 2 }).pmxAoResolution, 'full');
   assert.equal(displayMmd.setLighting({ pmxAoResolution: 'invalid' }).pmxAoResolution, 'half');
+  assert.equal(displayMmd.setLighting({ pmxAoSampleCount: 32 }).pmxAoSampleCount, 32);
+  assert.equal(displayMmd.setLighting({ keyIntensity: 2 }).pmxAoSampleCount, 32);
+  assert.equal(displayMmd.setLighting({ pmxAoSampleCount: 19 }).pmxAoSampleCount, 24);
+  assert.equal(displayMmd.setLighting({ pmxAoSampleCount: 12 }).pmxAoSampleCount, 12);
+  const blurLighting = displayMmd.setLighting({ pmxAoBlurPassCount: 2, pmxAoBlurRadii: [1, 5, 3] });
+  assert.equal(blurLighting.pmxAoBlurPassCount, 2);
+  assert.deepEqual(Array.from(blurLighting.pmxAoBlurRadii), [1, 5, 3]);
+  assert.equal(displayMmd.setLighting({ keyIntensity: 2 }).pmxAoBlurPassCount, 2);
+  assert.equal(displayMmd.setLighting({ pmxAoBlurPassCount: 8 }).pmxAoBlurPassCount, 3);
+  assert.equal(displayMmd.setLighting({ pmxAoBlurPassCount: 0 }).pmxAoBlurPassCount, 0);
+  const normalizedBlur = displayMmd.setLighting({ pmxAoBlurRadii: [0, 9, 'bad'] });
+  assert.deepEqual(Array.from(normalizedBlur.pmxAoBlurRadii), [1, 5, 3]);
+  normalizedBlur.pmxAoBlurRadii[0] = 5;
+  assert.equal(displayMmd.getLighting().pmxAoBlurRadii[0], 1);
   assert.equal(displayMmd.getLighting().rotationPhysicsLimit, 720);
   assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 5 }).rotationPhysicsLimit, 30);
   assert.equal(displayMmd.setLighting({ rotationPhysicsLimit: 1440 }).rotationPhysicsLimit, 1440);
@@ -91,10 +108,14 @@ test('两组边缘光默认关闭、独立规范化，局部更新保留另一�
 test('PMX AO checkbox applies and saves its value; reset restores the default', () => {
   const ids = [
     'displayMmdLightingToggle', 'displayMmdLightingPanel', 'displayMmdLightingReset',
-    'displayMmdLightingPreset', 'displayMmdShadowEnabled', 'displayMmdPmxAoEnabled',
+    'displayMmdLightingPreset', 'displayMmdShadowSource', 'displayMmdPmxAoEnabled',
     'displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoIntensityValue',
     'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoRadiusPercentValue',
-    'displayMmdPmxAoResolution',
+    'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount',
+    ...[1, 2, 3].flatMap((index) => [
+      `displayMmdPmxAoBlurRadius${index}Field`, `displayMmdPmxAoBlurRadius${index}`,
+      `displayMmdPmxAoBlurRadius${index}Value`
+    ]),
     'displayMmdPhysicsFps', 'displayMmdPhysicsFpsValue',
     'displayMmdRotationPhysicsLimit', 'displayMmdRotationPhysicsLimitValue', 'displayMmdAmbientColor',
     'displayMmdAmbientIntensity', 'displayMmdAmbientIntensityValue', 'displayMmdKeyColor',
@@ -136,6 +157,11 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   assert.equal(elements.displayMmdPmxAoIntensity.value, '0.6');
   assert.equal(elements.displayMmdPmxAoRadiusPercent.value, '6');
   assert.equal(elements.displayMmdPmxAoResolution.value, 'half');
+  assert.equal(elements.displayMmdPmxAoSampleCount.value, '24');
+  assert.equal(elements.displayMmdPmxAoBlurPassCount.value, '1');
+  assert.equal(elements.displayMmdPmxAoBlurRadius1.value, '3');
+  assert.equal(elements.displayMmdPmxAoBlurRadius1Field.hidden, false);
+  assert.equal(elements.displayMmdPmxAoBlurRadius2Field.hidden, true);
   assert.equal(elements.displayMmdRotationPhysicsLimit.value, '720');
   assert.equal(elements.displayMmdFillEnabled.checked, false);
   assert.equal(elements.displayMmdPmxToonEnabled.checked, false);
@@ -161,11 +187,25 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   elements.displayMmdPmxAoRadiusPercent.handlers.input();
   elements.displayMmdPmxAoResolution.value = 'full';
   elements.displayMmdPmxAoResolution.handlers.change();
+  elements.displayMmdPmxAoSampleCount.value = '32';
+  elements.displayMmdPmxAoSampleCount.handlers.change();
+  elements.displayMmdPmxAoBlurPassCount.value = '2';
+  elements.displayMmdPmxAoBlurPassCount.handlers.change();
+  elements.displayMmdPmxAoBlurRadius1.value = '1';
+  elements.displayMmdPmxAoBlurRadius1.handlers.input();
+  elements.displayMmdPmxAoBlurRadius2.value = '5';
+  elements.displayMmdPmxAoBlurRadius2.handlers.input();
   assert.equal(context.window.DisplayMmd.getLighting().pmxAoColor, '#2b4769');
   assert.equal(context.window.DisplayMmd.getLighting().pmxAoIntensity, 1.5);
   assert.equal(context.window.DisplayMmd.getLighting().pmxAoRadiusPercent, 11);
   assert.equal(context.window.DisplayMmd.getLighting().pmxAoResolution, 'full');
+  assert.equal(context.window.DisplayMmd.getLighting().pmxAoSampleCount, 32);
+  assert.equal(context.window.DisplayMmd.getLighting().pmxAoBlurPassCount, 2);
+  assert.deepEqual(Array.from(context.window.DisplayMmd.getLighting().pmxAoBlurRadii), [1, 5, 3]);
+  assert.equal(elements.displayMmdPmxAoBlurRadius2Field.hidden, false);
   assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).pmxAoResolution, 'full');
+  assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).pmxAoSampleCount, 32);
+  assert.deepEqual(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).pmxAoBlurRadii, [1, 5, 3]);
   assert.equal(JSON.parse(storage.get('aasc.display.mmdLighting.v1')).pmxAoRadiusPercent, 11);
   elements.displayMmdRotationPhysicsLimit.value = '240';
   elements.displayMmdRotationPhysicsLimit.handlers.input();
@@ -194,6 +234,10 @@ test('PMX AO checkbox applies and saves its value; reset restores the default', 
   assert.equal(elements.displayMmdPmxAoIntensity.value, '0.6');
   assert.equal(elements.displayMmdPmxAoRadiusPercent.value, '6');
   assert.equal(elements.displayMmdPmxAoResolution.value, 'half');
+  assert.equal(elements.displayMmdPmxAoSampleCount.value, '24');
+  assert.equal(elements.displayMmdPmxAoBlurPassCount.value, '1');
+  assert.equal(elements.displayMmdPmxAoBlurRadius1.value, '3');
+  assert.equal(elements.displayMmdPmxAoBlurRadius2Field.hidden, true);
   assert.equal(elements.displayMmdRotationPhysicsLimit.value, '720');
 });
 

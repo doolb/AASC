@@ -15,6 +15,7 @@
             keyColor: '#ffffff',
             keyIntensity: 2.3,
             keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
+            keyShadowEnabled: true,
             fillEnabled: false,
             fillColor: '#ffffff',
             fillIntensity: 1,
@@ -23,13 +24,16 @@
                 Object.freeze({ enabled: false, color: '#8acbff', intensity: 1, direction: Object.freeze({ longitude: -130, latitude: 25 }) }),
                 Object.freeze({ enabled: false, color: '#ffb6d9', intensity: 1, direction: Object.freeze({ longitude: 130, latitude: 25 }) })
             ]),
-            shadowEnabled: true,
+            shadowSource: 'key',
             pmxToonEnabled: false,
             pmxAoEnabled: true,
             pmxAoColor: '#931231',
             pmxAoIntensity: 0.6,
             pmxAoRadiusPercent: 6,
-            pmxAoResolution: 'half'
+            pmxAoResolution: 'half',
+            pmxAoSampleCount: 24,
+            pmxAoBlurPassCount: 1,
+            pmxAoBlurRadii: Object.freeze([3, 3, 3])
         }),
         soft: Object.freeze({
             ambientColor: '#ffffff',
@@ -88,13 +92,21 @@
         };
     }
 
+    function getBlurRadiusElements(index) {
+        return {
+            field: byId(`displayMmdPmxAoBlurRadius${index}Field`),
+            input: byId(`displayMmdPmxAoBlurRadius${index}`),
+            output: byId(`displayMmdPmxAoBlurRadius${index}Value`)
+        };
+    }
+
     function getElements() {
         return {
             toggle: byId('displayMmdLightingToggle'),
             panel: byId('displayMmdLightingPanel'),
             reset: byId('displayMmdLightingReset'),
             preset: byId('displayMmdLightingPreset'),
-            shadowEnabled: byId('displayMmdShadowEnabled'),
+            shadowSource: byId('displayMmdShadowSource'),
             pmxToonEnabled: byId('displayMmdPmxToonEnabled'),
             pmxAoEnabled: byId('displayMmdPmxAoEnabled'),
             pmxAoColor: byId('displayMmdPmxAoColor'),
@@ -103,6 +115,9 @@
             pmxAoRadiusPercent: byId('displayMmdPmxAoRadiusPercent'),
             pmxAoRadiusPercentValue: byId('displayMmdPmxAoRadiusPercentValue'),
             pmxAoResolution: byId('displayMmdPmxAoResolution'),
+            pmxAoSampleCount: byId('displayMmdPmxAoSampleCount'),
+            pmxAoBlurPassCount: byId('displayMmdPmxAoBlurPassCount'),
+            pmxAoBlurRadii: [1, 2, 3].map(getBlurRadiusElements),
             physicsFps: byId('displayMmdPhysicsFps'),
             physicsFpsValue: byId('displayMmdPhysicsFpsValue'),
             rotationPhysicsLimit: byId('displayMmdRotationPhysicsLimit'),
@@ -111,6 +126,7 @@
             ambientIntensity: byId('displayMmdAmbientIntensity'),
             ambientIntensityValue: byId('displayMmdAmbientIntensityValue'),
             keyColor: byId('displayMmdKeyColor'),
+            ...(root.MmdArTestWebFillShadow === true ? { keyShadowEnabled: byId('displayMmdKeyShadowEnabled') } : {}),
             keyIntensity: byId('displayMmdKeyIntensity'),
             keyIntensityValue: byId('displayMmdKeyIntensityValue'),
             keyDirectionLongitude: byId('displayMmdKeyDirectionLongitude'),
@@ -158,6 +174,9 @@
         elements.rotationPhysicsLimitValue.textContent = `${elements.rotationPhysicsLimit.value}°/秒`;
         elements.pmxAoIntensityValue.textContent = formatNumber(elements.pmxAoIntensity.value);
         elements.pmxAoRadiusPercentValue.textContent = `${elements.pmxAoRadiusPercent.value}%`;
+        elements.pmxAoBlurRadii.forEach(({ input, output }) => {
+            output.textContent = `${input.value} px`;
+        });
     }
 
     function updateForm(lighting) {
@@ -165,6 +184,7 @@
         elements.ambientColor.value = lighting.ambientColor;
         elements.ambientIntensity.value = String(lighting.ambientIntensity);
         elements.keyColor.value = lighting.keyColor;
+        if (elements.keyShadowEnabled) elements.keyShadowEnabled.checked = lighting.keyShadowEnabled !== false;
         elements.keyIntensity.value = String(lighting.keyIntensity);
         elements.keyDirectionLongitude.value = String(lighting.keyDirection.longitude);
         elements.keyDirectionLatitude.value = String(lighting.keyDirection.latitude);
@@ -181,13 +201,19 @@
             rim.directionLongitude.value = String(settings.direction.longitude);
             rim.directionLatitude.value = String(settings.direction.latitude);
         });
-        elements.shadowEnabled.checked = lighting.shadowEnabled !== false;
+        elements.shadowSource.value = lighting.shadowSource;
         elements.pmxToonEnabled.checked = lighting.pmxToonEnabled === true;
         elements.pmxAoEnabled.checked = lighting.pmxAoEnabled !== false;
         elements.pmxAoColor.value = lighting.pmxAoColor;
         elements.pmxAoIntensity.value = String(lighting.pmxAoIntensity);
         elements.pmxAoRadiusPercent.value = String(lighting.pmxAoRadiusPercent);
         elements.pmxAoResolution.value = lighting.pmxAoResolution;
+        elements.pmxAoSampleCount.value = String(lighting.pmxAoSampleCount);
+        elements.pmxAoBlurPassCount.value = String(lighting.pmxAoBlurPassCount);
+        elements.pmxAoBlurRadii.forEach(({ field, input }, index) => {
+            input.value = String(lighting.pmxAoBlurRadii[index]);
+            field.hidden = index >= lighting.pmxAoBlurPassCount;
+        });
         elements.physicsFps.value = String(lighting.physicsFps);
         elements.rotationPhysicsLimit.value = String(lighting.rotationPhysicsLimit);
         updateOutputs();
@@ -199,6 +225,7 @@
             ambientColor: elements.ambientColor.value,
             ambientIntensity: elements.ambientIntensity.value,
             keyColor: elements.keyColor.value,
+            keyShadowEnabled: elements.keyShadowEnabled?.checked ?? true,
             keyIntensity: elements.keyIntensity.value,
             keyDirection: {
                 longitude: elements.keyDirectionLongitude.value,
@@ -217,13 +244,16 @@
                 intensity: rim.intensity.value,
                 direction: { longitude: rim.directionLongitude.value, latitude: rim.directionLatitude.value }
             })),
-            shadowEnabled: elements.shadowEnabled.checked,
+            shadowSource: elements.shadowSource.value,
             pmxToonEnabled: elements.pmxToonEnabled.checked,
             pmxAoEnabled: elements.pmxAoEnabled.checked,
             pmxAoColor: elements.pmxAoColor.value,
             pmxAoIntensity: elements.pmxAoIntensity.value,
             pmxAoRadiusPercent: elements.pmxAoRadiusPercent.value,
             pmxAoResolution: elements.pmxAoResolution.value,
+            pmxAoSampleCount: elements.pmxAoSampleCount.value,
+            pmxAoBlurPassCount: elements.pmxAoBlurPassCount.value,
+            pmxAoBlurRadii: elements.pmxAoBlurRadii.map(({ input }) => input.value),
             physicsFps: elements.physicsFps.value,
             rotationPhysicsLimit: elements.rotationPhysicsLimit.value
         };
@@ -306,6 +336,7 @@
             elements.ambientColor,
             elements.ambientIntensity,
             elements.keyColor,
+            elements.keyShadowEnabled,
             elements.keyIntensity,
             elements.keyDirectionLongitude,
             elements.keyDirectionLatitude,
@@ -317,14 +348,17 @@
             ...elements.rimLights.flatMap((rim) => [
                 rim.enabled, rim.color, rim.intensity, rim.directionLongitude, rim.directionLatitude
             ]),
-            elements.shadowEnabled,
             elements.pmxToonEnabled,
             elements.pmxAoEnabled,
             elements.pmxAoColor,
             elements.pmxAoIntensity,
             elements.pmxAoRadiusPercent
-        ].forEach((element) => element.addEventListener('input', handleFormInput));
+        ].filter(Boolean).forEach((element) => element.addEventListener('input', handleFormInput));
         elements.pmxAoResolution.addEventListener('change', handleFormInput);
+        elements.shadowSource.addEventListener('change', handleFormInput);
+        elements.pmxAoSampleCount.addEventListener('change', handleFormInput);
+        elements.pmxAoBlurPassCount.addEventListener('change', handleFormInput);
+        elements.pmxAoBlurRadii.forEach(({ input }) => input.addEventListener('input', handleFormInput));
         elements.physicsFps.addEventListener('input', () => applyLighting(readForm()));
         elements.rotationPhysicsLimit.addEventListener('input', () => applyLighting(readForm()));
         document.addEventListener('click', () => setPanelOpen(false));

@@ -1,5 +1,9 @@
 # 自测功能文档
 
+## MMD AR 定位图底面/立面切换（2026-09-26）
+
+`npm run build:web:mmd-ar-test` 成功。`node --test tests/mmd-ar-camera-runtime.test.js` 1/1 通过：底面原有中心映射保持，立面时角色脚底投影对齐目标图下边缘中点；模式切换立即更新相机，模型位置、缩放与物理根节点不变。面板和 MindAR 锚点回归 8/8 通过，覆盖按钮本地保存/刷新恢复、分类开合与自定义图重启。`git diff --check` 通过；本次未发布网页或 APK，真实手机立面观感待现场验收。
+
 ## MindAR 编译回调修正版外网发布（2026-09-24）
 
 独立 MMD AR 测试 APK 已覆盖上传到 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-mmd-ar-test.apk`。本地、SSH 远端文件和公网 GET 响应的 SHA-256 均为 `54e4e2be3acfbf56dff1b59259c05410ab0dc657d3deab8f02114b971a39a985`，文件大小均为 `13,620,450` bytes，HTTP 返回 200。未修改服务更新清单。MindAR 实际相机编译与图片首锁仍待设备验证。

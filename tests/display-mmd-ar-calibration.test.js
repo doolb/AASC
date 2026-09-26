@@ -26,6 +26,7 @@ class FakeElement {
         this.rect = { left: 100, top: 50, width: 500, height: 300 };
         this.context = {
             arcCalls: [],
+            rectangleHandleCalls: [],
             clearRect() {},
             drawImage() {},
             save() {},
@@ -38,6 +39,11 @@ class FakeElement {
             stroke() {},
             arc(x, y, radius) {
                 this.arcCalls.push({ x, y, radius });
+            },
+            fillRect(x, y, width, height) {
+                this.rectangleHandleCalls.push({ x, y, width, height });
+            },
+            strokeRect() {
             }
         };
     }
@@ -127,7 +133,7 @@ class FakeElement {
     }
 }
 
-function createCalibrationHarness(rotation) {
+function createCalibrationHarness(rotation, testRectangleMode = false) {
     const getElementsBlock = AR_SOURCE.match(/function getElements\(\) \{([\s\S]*?)\n    \}/u)?.[1];
     assert.ok(getElementsBlock, '应能找到 AR 控制器 DOM 元素清单');
     const ids = [...getElementsBlock.matchAll(/byId\('([^']+)'\)/gu)].map((match) => match[1]);
@@ -179,6 +185,7 @@ function createCalibrationHarness(rotation) {
     const windowListeners = new Map();
     const window = {
         document,
+        MmdArTestAframeMode: testRectangleMode,
         localStorage: {
             getItem(key) {
                 return localStorageValues.get(key) || null;
@@ -374,6 +381,42 @@ test('AR 校准指针取消或丢失捕获后可再次拖动', async () => {
     assert.equal(canvas.context.arcCalls.length, 4);
     assert.ok(Math.abs(canvas.context.arcCalls[0].x - canvas.width * 0.2) < 0.01);
     assert.ok(Math.abs(canvas.context.arcCalls[0].y - canvas.height * 0.2) < 0.01);
+});
+
+test('测试网页拍照后可整体移动矩形并沿边角缩放，正式四角模式不变', async () => {
+    const harness = createCalibrationHarness(0, true);
+    const canvas = await prepareCalibration(harness);
+    assert.equal(canvas.context.rectangleHandleCalls.length, 8, '测试网页应显示八个矩形缩放块');
+    assert.equal(canvas.context.arcCalls.length, 0, '测试网页不应显示旧四角圆点');
+
+    function drag(start, end, pointerId) {
+        const from = viewportPointForCanvasPoint(start, 0, canvas.rect);
+        const to = viewportPointForCanvasPoint(end, 0, canvas.rect);
+        const down = canvas.dispatch('pointerdown', { pointerId, clientX: from.x, clientY: from.y });
+        assert.equal(down.defaultPrevented, true);
+        harness.document.dispatch('pointermove', { pointerId, clientX: to.x, clientY: to.y });
+        harness.document.dispatch('pointerup', { pointerId });
+        assert.equal(canvas.hasPointerCapture(pointerId), false);
+    }
+
+    canvas.context.rectangleHandleCalls.length = 0;
+    drag({ x: 0.5, y: 0.5 }, { x: 0.6, y: 0.55 }, 21);
+    let handles = canvas.context.rectangleHandleCalls.slice(-8);
+    assert.ok(Math.abs(handles[0].x + handles[0].width / 2 - canvas.width * 0.25) < 0.01);
+    assert.ok(Math.abs(handles[0].y + handles[0].height / 2 - canvas.height * 0.2) < 0.01);
+    assert.equal(harness.elements.get('displayArSaveButton').disabled, false);
+
+    drag({ x: 0.95, y: 0.55 }, { x: 0.8, y: 0.55 }, 22);
+    handles = canvas.context.rectangleHandleCalls.slice(-8);
+    assert.ok(Math.abs(handles[3].x + handles[3].width / 2 - canvas.width * 0.8) < 0.01, '右边应可单独缩放');
+    assert.ok(Math.abs(handles[0].x + handles[0].width / 2 - canvas.width * 0.25) < 0.01, '左边保持不动');
+
+    drag({ x: 0.25, y: 0.2 }, { x: 0.1, y: 0.1 }, 23);
+    handles = canvas.context.rectangleHandleCalls.slice(-8);
+    assert.ok(Math.abs(handles[0].x + handles[0].width / 2 - canvas.width * 0.1) < 0.01);
+    assert.ok(Math.abs(handles[0].y + handles[0].height / 2 - canvas.height * 0.1) < 0.01);
+    assert.ok(Math.abs(handles[2].y + handles[2].height / 2 - canvas.height * 0.1) < 0.01, '上边应始终水平');
+    assert.match(harness.elements.get('displayArCalibrationHint').textContent, /选区有效/u);
 });
 
 test('AR 校准触控画布禁止浏览器手势抢占', () => {
