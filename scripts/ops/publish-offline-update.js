@@ -20,6 +20,7 @@ const DEFAULT_LOCAL_VERIFY_URL = 'http://192.168.1.39/mnt/aasc-offline/';
 const DEFAULT_WAN_VERIFY_URL = 'http://120.79.245.103/mnt/aasc-offline/';
 const CLEANUP_RULES = Object.freeze([
     { componentName: 'code', directory: 'code', prefix: 'code-v', suffix: '.zip' },
+    { componentName: 'nodeMinSeeds', directory: 'node-min-seeds', prefix: 'node-min-seeds-v', suffix: '.zip' },
     { componentName: 'dependencies', directory: 'dependencies', prefix: 'dependencies-v', suffix: '.zip' },
     { componentName: 'dataRepair', directory: 'data', prefix: 'data-repair-v', suffix: '.zip' },
     { componentName: 'apkMin', directory: 'apk', prefix: 'aasc-display-offline-min-v', suffix: '.apk' },
@@ -57,6 +58,7 @@ function getPublishComponents(manifest, mode) {
         return [components.apkMin];
     }
     const selected = [components.code];
+    if (components.nodeMinSeeds) selected.push(components.nodeMinSeeds);
     if (mode === 'all') selected.push(components.dependencies);
     return selected;
 }
@@ -80,8 +82,8 @@ function createCleanupSpecifications(manifest, options = {}) {
     const components = manifest?.payload?.components || {};
     const specifications = [];
     const componentNames = options.includeApkMin === false
-        ? ['code', 'dependencies', 'dataRepair']
-        : ['code', 'dependencies', 'apkMin'];
+        ? ['code', 'nodeMinSeeds', 'dependencies', 'dataRepair']
+        : ['code', 'nodeMinSeeds', 'dependencies', 'apkMin'];
     for (const componentName of componentNames) {
         const component = components[componentName];
         if (!component || typeof component.relativeUrl !== 'string') continue;
@@ -650,7 +652,7 @@ async function publishOfflineUpdate(options = {}) {
                 .filter(([name, component]) => name !== 'dataRepair' && component && component.relativeUrl)
                 .map(([, component]) => component)
         : mode === 'apk-min'
-            ? [manifest.payload.components.code, manifest.payload.components.dependencies]
+            ? [manifest.payload.components.code, manifest.payload.components.nodeMinSeeds, manifest.payload.components.dependencies].filter(Boolean)
             : [];
     const publishId = `${Date.now()}-${process.pid}`;
     const localRoot = options.localRoot ? path.resolve(options.localRoot) : null;

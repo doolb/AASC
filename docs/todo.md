@@ -100,6 +100,11 @@
 
 ## 开发工具
 
+- ⏳待现场验收 [2026-09-26] Node Offline min 跨平台服务更新入口
+  - `release/allserver-min.js` 已调整为单文件引导：目标机只需该文件和 Node/npm；启动器从签名 Offline manifest 下载独立 `nodeMinSeeds` ZIP，补齐 release 配置、用户配置和任务，再下载 code ZIP 并安装 ZIP 内生产依赖；部署推荐 Node.js 24 LTS，开发机版本记录为 `v26.8.1`。
+  - `npm run build:offline-update` 生成并签名 `nodeMinSeeds` ZIP；现有发布器和同步器会传输该组件。`nodeMinSeeds v39` 已发布到内网及公网更新源，服务代码保持 v39；公司更新源本次连接超时，目标机可从其他可用更新源回退下载。
+  - 尚未在 Windows/Linux 目标机实装验证首次下载、依赖安装、代码更新、自动重启与回滚；未运行自动化测试。关联文档：`docs/design/offline-node-min-runtime.md`、`docs/spec/offline-node-min-runtime.md`、`docs/task/2026-09-26_Node-Offline-min跨平台热更新入口.md`。
+
 - ⏳待处理 [2026-09-22] 使用 esbuild 处理后端纯 JavaScript 依赖
   - 仅记录方案，暂不安装 esbuild、暂不创建 bundle、暂不改变服务器启动入口和 Offline APK 发布链路。
   - 预期采用纯 JS 依赖内联、ASR/TTS/声纹原生模块和 Puppeteer 外置、动态任务与数据修复能力保持兼容的混合方式。

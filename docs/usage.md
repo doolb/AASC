@@ -28,7 +28,64 @@ npm start
 ==================================================
 ```
 
-### 1.3 访问界面
+### 1.3 Node Offline min 跨平台服务器入口
+
+`release/allserver-min.js` 可在 Windows 或 Linux 上用 Node.js 直接启动，不需要构建 Android APK。生产部署建议使用 Node.js 24 LTS；截至 2026-09-26，记录的推荐补丁版本为 `v24.21.0`。本开发机当前是 `v26.8.1`；入口会在 `--help` 中同时显示这两个版本。当前最低兼容版本为 `20.18.1`，但生产环境优先选择受支持的 LTS 版本。
+
+目标机只需安装 Node.js（内含 npm），并能访问 Offline 更新源和 npm registry。将 `allserver-min.js` 单独复制到可写的数据根目录即可；若放在名为 `release/` 的子目录，则使用该子目录的上级作为数据根目录。启动器先从现有签名 `manifest.json` 下载独立的 `nodeMinSeeds` ZIP，补齐 `release/config`、`release/userconfig` 和 `release/task`，再下载 code ZIP 并使用其中的 `package.json` / `package-lock.json` 安装生产依赖；不需要预先拷贝源码或运行 `npm ci`：
+
+```bash
+node release/allserver-min.js
+```
+
+Linux 放置示例：
+
+```bash
+mkdir -p /opt/aasc/release
+cp allserver-min.js /opt/aasc/release/
+cd /opt/aasc
+node release/allserver-min.js
+```
+
+也可以直接放在数据根目录运行：
+
+```bash
+mkdir -p /opt/aasc
+cp allserver-min.js /opt/aasc/
+cd /opt/aasc
+node allserver-min.js
+```
+
+Windows PowerShell 放置示例：
+
+```powershell
+New-Item -ItemType Directory -Force C:\aasc\release
+Copy-Item .\allserver-min.js C:\aasc\release\
+Set-Location C:\aasc
+node .\release\allserver-min.js
+```
+
+直接放在数据根目录时：
+
+```powershell
+New-Item -ItemType Directory -Force C:\aasc
+Copy-Item .\allserver-min.js C:\aasc\
+Set-Location C:\aasc
+node .\allserver-min.js
+```
+
+首次安装与后续热更新都以各自 code ZIP 中的 package manifest 为准，在目标机为当前操作系统安装依赖；不下载 Android dependencies ZIP。种子 ZIP 由 Offline 签名 manifest 校验，解压后只补缺失文件，不覆盖已有配置和任务结果。服务以 release 模式读取上述三个目录；任务索引中标记为 `running` 的服务会按服务既有规则尝试恢复。更新器启动时检查一次，默认每 5 分钟轮询；可用 `--interval-ms 0` 关闭定时检查。若 npm registry 不可用，首次部署无法完成依赖安装；已有版本则继续运行。若服务端还是旧清单且目标目录没有初始数据，需要先发布包含 `nodeMinSeeds` 的更新清单。
+
+更新 `release/config`、`release/userconfig` 或 `release/task` 的默认种子后，与代码包一起生成并发布独立 ZIP：
+
+```bash
+npm run build:offline-update -- --mode code-only --code-version <新版本>
+npm run publish:offline-update -- --mode code-only --manifest-file <生成的manifest文件>
+```
+
+服务器保存 `node-min-seeds/node-min-seeds-v<版本>.zip`，清单发布时最后更新，启动器按签名清单下载。更新后的代码和种子缓存保存在 `updates/allserver-min/`；配置、用户配置和任务数据保存在项目根目录的 `release/`，模型、日志和上传数据继续使用项目根目录。`--root <目录>` 可指定项目根；`AASC_OFFLINE_UPDATE_BASE_URLS` 可用逗号分隔覆盖更新源，`AASC_NODE_MIN_UPDATE_INTERVAL_MS` 可配置默认轮询间隔。运行 `node release/allserver-min.js --help` 查看参数。
+
+### 1.4 访问界面
 
 - **控制端**: 在浏览器中打开 `http://<服务器IP>:8081/control`
 - **显示端**: 在显示设备上打开 `http://<服务器IP>:8081/display`

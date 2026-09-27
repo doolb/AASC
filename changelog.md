@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### Node Offline min 跨平台热更新入口
+
+- ✅ [2026-09-26] 新增 `release/allserver-min.js`，支持 Windows/Linux 通过 Node 直接启动并消费现有 Offline 签名 code 包。
+  - 调整为真正单文件引导：首次启动也从签名 code ZIP 解压代码并按 ZIP 内 manifest 安装生产依赖；更新入口使用 Node 内置 ZIP32/Deflate 读取器，不需要目标机已有项目源码或 `node_modules`。直接监督 server-app IPC 的 ready/restart 消息，兼容现有发布代码，并支持失败回滚。记录开发机 Node `v26.8.1`；推荐 Node.js 24 LTS（记录版 `v24.21.0`，最低兼容 `20.18.1`）。
+  - 根据 `release/1.txt` 修正 Windows 直接部署：单文件放在数据根目录时以该目录为根，放在 `release/` 时以其上级为根；路径边界检查兼容盘符根目录。
+  - 增加独立 `nodeMinSeeds` ZIP 签名组件：Offline 构建、发布和同步流程包含 `release/config`、`release/userconfig`、`release/task`；Node min 启动器从服务器下载并校验 ZIP，仅补齐本地缺失文件，服务以 release 模式读取配置和任务。
+  - 更新 design/spec/task/usage/todo 文档。内网与公网已发布 `nodeMinSeeds v39`，未升级服务代码版本；清单签名、ZIP SHA-256/大小及全部组件 HTTP 大小校验通过。公司更新源本次连接超时，Windows/Linux 目标机现场验收待进行。
+
 ### MMD AR HTTPS 测试网页
 
 - ✅ [2026-09-26] 增加定位图底面/立面模式切换。

@@ -11,6 +11,7 @@ const {
     readGitSourceMetadata,
     validateGitSourceMetadata
 } = require('./git-source-metadata');
+const { stageNodeMinSeeds } = require('./node-min-seeds');
 
 const execFileAsync = promisify(execFile);
 const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
@@ -24,6 +25,7 @@ const DATA_REPAIR_CAPABILITIES = Object.freeze([
     'chat2api.model-mappings'
 ]);
 const SIGNATURE_ALGORITHM = 'SHA256withRSA';
+const MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const HOME_LAN_UPDATE_BASE_URL = 'http://192.168.1.39/mnt/aasc-offline/';
 const COMPANY_LAN_UPDATE_BASE_URL = 'http://10.221.70.87/mnt/aasc-offline/';
 // 公网域名当前可能被代理返回 403；构建阶段使用已解析的公网 IP，Android 端仍负责域名解析。
@@ -109,6 +111,10 @@ function validateManifestComponents(manifest) {
     const { code, dependencies, apkMin } = manifest.payload.components;
     validateArtifactEntry(code, 'code');
     validateArtifactEntry(dependencies, 'dependencies');
+    if (manifest.payload.components.nodeMinSeeds !== undefined) {
+        validateArtifactEntry(manifest.payload.components.nodeMinSeeds, 'nodeMinSeeds');
+        validateGitSourceMetadata(manifest.payload.components.nodeMinSeeds.source, 'components.nodeMinSeeds.source');
+    }
     validateGitSourceMetadata(code.source, 'components.code.source');
     validateGitSourceMetadata(dependencies.source, 'components.dependencies.source');
     assertVersion(code.requiredDependencyVersion, 'code.requiredDependencyVersion');
@@ -619,13 +625,27 @@ async function createOfflineUpdateArtifacts(options = {}) {
     const commandRunner = options.commandRunner || execFileAsync;
     const workDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-offline-update-'));
     const stagedCodeArchive = path.join(workDirectory, `code-v${codeVersion}.zip`);
+    const stagedNodeMinSeedsDirectory = path.join(workDirectory, 'node-min-seeds');
+    const stagedNodeMinSeedsArchive = path.join(workDirectory, `node-min-seeds-v${codeVersion}.zip`);
+    const nodeMinSeedsArchivePath = path.join(outputDir, 'node-min-seeds', path.basename(stagedNodeMinSeedsArchive));
     let codeArchivePath = null;
+    let finalNodeMinSeedsArchivePath = null;
     let dependenciesArchivePath = null;
     try {
         const codeDirectory = path.join(workDirectory, 'code');
         await fs.promises.mkdir(codeDirectory, { recursive: true });
         await copyCodeSnapshot(projectRoot, codeDirectory);
         await createZip(codeDirectory, stagedCodeArchive, zipRunner);
+
+        if (fs.existsSync(nodeMinSeedsArchivePath)) {
+            throw new Error(`Node min 种子包版本文件已存在，拒绝覆盖: ${nodeMinSeedsArchivePath}`);
+        }
+        await stageNodeMinSeeds(path.join(projectRoot, 'release'), stagedNodeMinSeedsDirectory);
+        await createZip(stagedNodeMinSeedsDirectory, stagedNodeMinSeedsArchive, zipRunner);
+        const stagedNodeMinSeedsStat = await fs.promises.stat(stagedNodeMinSeedsArchive);
+        if (stagedNodeMinSeedsStat.size > MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES) {
+            throw new Error(`Node min 初始数据 ZIP 超过 ${MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES} 字节上限`);
+        }
 
         const codeDestinationDirectory = path.join(outputDir, 'code');
         const codeDestination = path.join(codeDestinationDirectory, path.basename(stagedCodeArchive));
@@ -662,6 +682,11 @@ async function createOfflineUpdateArtifacts(options = {}) {
                     requiredLockSha256: lockSha256,
                     source,
                     ...(await describeArtifact(stagedCodeArchive, `code/${path.basename(codeDestination)}`))
+                },
+                nodeMinSeeds: {
+                    version: codeVersion,
+                    source,
+                    ...(await describeArtifact(stagedNodeMinSeedsArchive, `node-min-seeds/${path.basename(nodeMinSeedsArchivePath)}`))
                 }
             }
         };
@@ -685,6 +710,9 @@ async function createOfflineUpdateArtifacts(options = {}) {
 
         await atomicallyCopyToOutput(stagedCodeArchive, codeDestination);
         codeArchivePath = codeDestination;
+        await fs.promises.mkdir(path.dirname(nodeMinSeedsArchivePath), { recursive: true });
+        await atomicallyCopyToOutput(stagedNodeMinSeedsArchive, nodeMinSeedsArchivePath);
+        finalNodeMinSeedsArchivePath = nodeMinSeedsArchivePath;
         if (mode === 'all') {
             await fs.promises.mkdir(path.dirname(finalDependenciesArchivePath), { recursive: true });
             await atomicallyCopyToOutput(dependenciesArchivePath, finalDependenciesArchivePath);
@@ -699,6 +727,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
             manifest,
             manifestPath,
             codeArchivePath,
+            nodeMinSeedsArchivePath: finalNodeMinSeedsArchivePath,
             dependenciesArchivePath,
             publicKeyPem,
             publicKeyPath: keyPair.publicKeyPath
@@ -771,6 +800,7 @@ async function runCli(argv = process.argv.slice(2)) {
             console.log('检测到 package-lock.json 指纹变化，已自动生成新的 dependencies 包');
         }
         console.log(`代码包: ${result.codeArchivePath}`);
+        if (result.nodeMinSeedsArchivePath) console.log(`Node min 初始配置和任务包: ${result.nodeMinSeedsArchivePath}`);
         if (result.dependenciesArchivePath) console.log(`依赖包: ${result.dependenciesArchivePath}`);
         if (result.dataRepairArchivePath) console.log(`数据修复包: ${result.dataRepairArchivePath}`);
         console.log(`签名清单: ${result.manifestPath}`);

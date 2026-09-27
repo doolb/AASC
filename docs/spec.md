@@ -245,4 +245,5 @@
 | [rules.md](rules.md) | 代码规范、文件结构 |
 | [todo.md](todo.md) | 项目未完成任务列表 |
 | 服务器发布包 | [server-release.md](spec/server-release.md) | npm 显式生成发布包、清单读取和子服务器更新伪代码 |
+| Node Offline min 跨平台热更新入口 | [offline-node-min-runtime.md](spec/offline-node-min-runtime.md) | 从签名清单下载 release 种子和 code ZIP、npm 依赖安装及代码回滚伪代码 |
 | Release 配置与 APK 构建 profile | [release-build-profiles.md](spec/release-build-profiles.md) | release 路径解析、任务 results 恢复、三种 APK profile 和模型选择伪代码 |
