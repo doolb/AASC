@@ -89,6 +89,64 @@ MMDPhysics.update(delta):
     记录可观察错误
 ```
 
+### VMD 动作播放开关（测试网页调用的运行时接口，伪代码）
+
+```text
+DisplayMmd.setMotionPlaybackEnabled(enabled)
+  规范化 enabled 为布尔值
+  保存到显示模块运行时状态
+  若当前 PMX runtime 已创建
+    调用 PMX runtime.setMotionPlaybackEnabled(enabled)
+  返回规范化后的状态
+
+PMX runtime.setMotionPlaybackEnabled(enabled)
+  保存 motionPlaybackEnabled
+  若当前 MMDAnimationHelper 存在
+    只设置 helper.enabled.animation = enabled
+    不修改 helper.enabled.physics
+  确保渲染循环继续运行
+  返回规范化后的状态
+
+创建或切换 PMX 动作 helper
+  创建 helper 时保持 PMX 绑定姿态；不在初始化阶段自动套用 VMD 第 0 帧
+  将当前 motionPlaybackEnabled 应用到新 helper
+  保持物理初始化与布料模拟启用
+
+首次提交新 PMX 模型后的渲染帧
+  记录该模型 helper 待延迟一次动作
+  第一个实际渲染帧临时关闭该 helper 的 animation，物理照常更新
+  本帧绘制时临时隐藏 PMX 枢轴，不把绑定姿态或动作起始姿态显示出来
+  绘制后恢复枢轴原有可见状态与用户动作播放开关，并清除待延迟标记
+  第二个渲染帧才正常推进 VMD 并显示模型；切换 VMD 和暂停恢复不创建标记
+
+测试网页恢复动作播放设置
+  从本地存储读取专用开关
+  只有保存值明确为 false 时关闭，否则默认开启
+  在模型初始化前调用 DisplayMmd.setMotionPlaybackEnabled
+  开关变化时更新运行时并持久化
+  刷新后动作仍从 VMD 第 0 帧开始；关闭状态保留 PMX 绑定姿态，不预先推进或跳帧
+
+### 测试网页 PMX 物理开关（伪代码）
+
+DisplayMmd.setPhysicsEnabled(enabled)
+  规范化并保存物理开关状态
+  将状态写入当前 PMX runtime
+  若当前模型已加载，则以当前模型 profile 重新加载模型
+  重新加载时 VMD 从头播放；原模型在新模型准备完成前保留
+  返回重新加载结果
+
+PMX runtime.createMotionHelper(mesh, clip)
+  若物理开关关闭，创建 physics=false 的 helper，不初始化 Ammo，也不执行预热
+  若物理开关开启，只初始化 Ammo，不执行隐藏预热或自动套用 VMD 首帧
+  将动作播放开关应用到新 helper
+
+测试网页物理菜单
+  显示默认开启的物理复选框
+  首次加载前从测试页专用本地存储恢复物理开关
+  用户切换时调用 DisplayMmd.setPhysicsEnabled 并保存结果
+  重载失败时恢复原开关状态，显示错误，不将暂停物理当作无物理结果
+```
+
 ## 5. 帧更新与释放
 
 ```text
@@ -420,7 +478,6 @@ MMDPhysics.update(delta):
 ```text
 常量 AmmoScriptUrl = "/js/vendor/three/libs/ammo.wasm.js"
 常量 AmmoWasmUrl = "/js/vendor/three/libs/ammo.wasm.wasm"
-常量 PmxPhysicsWarmupSteps = 0
 状态 ammoLoadPromise = null
 
 过程 hasMmdPhysics(mesh)
@@ -450,7 +507,7 @@ MMDPhysics.update(delta):
     用 physics=false 创建 helper
     返回 { helper, physicsEnabled=false, physicsError=null }
   尝试 await ensureAmmoPhysics()
-    成功时用 physics=true 创建 helper，并传入 unitStep = 1 / physicsFps、warmup = 0
+    成功时用 physics=true 创建 helper，并传入 unitStep = 1 / physicsFps、warmup = 0、animationWarmup = false
     返回 { helper, physicsEnabled=true, physicsError=null }
   捕获 Ammo 初始化或 physics helper 创建错误
     用 physics=false 重新创建 helper，保留 clip、IK、grant 与动作循环设置
@@ -459,7 +516,7 @@ MMDPhysics.update(delta):
 过程 buildMotionHelper(mesh, clip, playMode, physics)
   创建 MMDAnimationHelper(sync=false, pmxAnimation=true)
   options.physics = physics
-  physics 为真时设置 options.warmup = PmxPhysicsWarmupSteps
+  physics 为真时设置 options.warmup = 0、options.animationWarmup = false
   clip 存在时才设置 options.animation
   helper.add(mesh, options)
   动作存在时
@@ -474,7 +531,7 @@ MMDPhysics.update(delta):
   resourceId 和 motionUrl 同时存在时
     校验白名单并加载 VMD 为 clip
   否则 clip = null
-  返回 createPmxMotionHelper(mesh, clip, profile.playMode)
+  返回 createPmxMotionHelper(mesh, clip, profile.playMode, physicsFps)
 
 过程 loadPmxResource(profile)
   加载 stagedMesh
@@ -484,9 +541,11 @@ MMDPhysics.update(delta):
   stagedPivot.visible = false
   将 stagedPivot 加入最终 MMD 场景并更新完整世界矩阵
   在不可见的最终场景层级内
-    prepared = await preparePmxHelper(stagedMesh, profile)
+    prepared = await preparePmxHelper(stagedMesh, profile, profile.motionResourceId)
+    含刚体模型只创建物理世界；不预热、不在 helper.add 内自动套用 VMD 第 0 帧
   任何加载失败或过期时，从场景移除 stagedPivot 并释放 stagedMesh/helper
   提交 prepared.helper、stagedMesh 与 stagedPivot
+  为当前 helper 记录一次性的首渲染帧动作延迟；仅成功提交模型时记录
   stagedPivot.visible = true
   根据原始 bounds 更新相机距离、near/far、方向光相对位置和阴影平面范围
   prepared.physicsError 存在时
@@ -494,6 +553,8 @@ MMDPhysics.update(delta):
   否则显示模型加载成功
 
 过程 renderMmdFrame(delta)
+  如果当前 helper 有待延迟的首渲染帧标记
+    清除标记，暂时关闭 animation；仅此帧仍更新物理
   记录中心枢轴的旧 yaw/pitch，更新目标 yaw/pitch 缓动
   使用本帧 yaw/pitch 实际角位移与 delta 计算角速度，单位为度/秒
   刷新 pivot、mesh 和骨骼的世界矩阵
@@ -510,9 +571,13 @@ MMDPhysics.update(delta):
   type=1/2 动态刚体保留 Bullet 世界坐标、姿态及线/角速度
   Bullet 约束牵引动态刚体跟随锚点，形成旋转惯性与自然摆动
   MMDPhysics 将动态刚体结果回写到当前 pivot 下的骨骼
-  渲染当前场景
+  如果本帧临时关闭了 animation，按用户动作开关恢复 helper 状态
+  如果本帧是新模型首个实际渲染帧
+    记录当前 PMX 枢轴可见状态，临时隐藏枢轴，渲染无模型画面
+    绘制完成后恢复枢轴原有可见状态，下一帧才可显示模型
+  否则渲染当前场景
 
-约束：PmxPhysicsWarmupSteps 固定为 0，因此 helper.add 只初始化/重置刚体；首个 helper.update(delta) 由模型显示后的下一次 requestAnimationFrame 触发。低于速度阈值的普通旋转沿用运动学锚点牵引，不传送动态刚体。仅从快速旋转的暂停状态恢复时重置刚体并清除旧速度，防止跳变；阈值按实际枢轴位移计算，不按鼠标事件频率计算。物理目标频率和 maxStepNum=3 不变；低渲染帧率下的多子步仍须现场验证。无 physics 的 PMX 和 VRM 不受影响。
+约束：首次载入带刚体的 PMX 时，Three.js `MMDAnimationHelper.add` 只创建物理世界，显式设置 `warmup=0` 与 `animationWarmup=false`；切换 VMD 时同样不预热。模型提交后的首个实际渲染帧只推进物理且不绘制 PMX，第二帧开始推进 VMD 并显示；绘制后必须恢复枢轴原有可见状态，不能破坏 AR 失锁状态。隐藏或暂停不消耗该首帧标记，显式切换 VMD、暂停恢复不再延迟。若动作播放开关关闭，初始化阶段不套用 VMD 第 0 帧。低于速度阈值的普通旋转沿用运动学锚点牵引，不传送动态刚体。仅从快速旋转的暂停状态恢复时重置刚体并清除旧速度，防止跳变；阈值按实际枢轴位移计算，不按鼠标事件频率计算。物理目标频率和 maxStepNum=3 不变。无 physics 的 PMX 和 VRM 不受影响。
 ```
 
 ### 固定物理子步中的枢轴同步（备选设计，待现场试验结果，尚未实现）
@@ -556,7 +621,7 @@ MMDPhysics.update(delta):
   渲染场景
 ```
 
-设计约束：不修改 Three.js vendor 文件；只为启用 Ammo 的 PMX helper 安装实例级步进包装。继续使用灯光面板的 `physicsFps`（`unitStep = 1 / physicsFps`）、`maxStepNum = 3` 和 `warmup = 0`；不清零或丢弃布料自身的相对线速度/角速度，不更改重力、风、刚体、关节及阻尼。无 physics 的 PMX 与 VRM SpringBone 不变。若实例私有 `_stepSimulation` 无法在当前 Ammo 绑定上安全进行单固定步调用，应停止实现并重新评审，不回退到逐渲染帧整体传送。
+设计约束：不修改 Three.js vendor 文件；只为启用 Ammo 的 PMX helper 安装实例级步进包装。继续使用灯光面板的 `physicsFps`（`unitStep = 1 / physicsFps`）和 `maxStepNum = 3`；首次加载和显式切换动作均不执行隐藏预热。不清零或丢弃布料自身的相对线速度/角速度，不更改重力、风、刚体、关节及阻尼。无 physics 的 PMX 与 VRM SpringBone 不变。若实例私有 `_stepSimulation` 无法在当前 Ammo 绑定上安全进行单固定步调用，应停止实现并重新评审，不回退到逐渲染帧整体传送。
 
 当前 Ammo WASM 绑定未向 JavaScript 暴露可用的函数指针注册 API，故不使用 Bullet 内部 tick callback。单步拆分时 Bullet 会在每次 stepSimulation 调用后清除累计力；当前显示端 PMX 路径没有显式 applyForce/applyTorque 调用，重力由 Bullet 每步统一施加。后续如引入外部力/风力，须另行增加跨子步保持规则。
 

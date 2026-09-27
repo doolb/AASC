@@ -220,6 +220,18 @@ async function stageTextAssets() {
     </div>
   `);
   if (WEB_MODE) {
+    $('#displayMmdLightingPanel').prepend(`
+      <label class="display-mmd-lighting-shadow">
+        <input id="mmdArMotionPlayback" type="checkbox" checked>
+        <span>播放动作</span>
+      </label>
+    `);
+    $('#displayMmdPhysicsFps').closest('label').before(`
+      <label class="display-mmd-lighting-shadow">
+        <input id="mmdArPhysicsEnabled" type="checkbox" checked>
+        <span>启用 PMX 物理（切换时重新加载模型）</span>
+      </label>
+    `);
     $('#displayMmdKeyColor').closest('label').before(`
       <label class="display-mmd-lighting-shadow">
         <input id="displayMmdKeyShadowEnabled" type="checkbox" checked>

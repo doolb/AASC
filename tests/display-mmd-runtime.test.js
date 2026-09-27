@@ -190,16 +190,115 @@ test('PMX runtime exposes looping model and motion lifecycle methods', () => {
   assert.match(source, /dispose/u);
 });
 
+test('动作播放开关只切换 PMX animation 状态并由 DisplayMmd 记住', () => {
+  const displayMmd = readPublic('js/display-mmd.js');
+  const pmxRuntime = readPublic('js/display-pmx-runtime.js');
+  const helper = readPublic('js/mmd-pmx-helper.mjs');
+  assert.match(displayMmd, /motionPlaybackEnabled:\s*true/u);
+  assert.match(displayMmd, /setMotionPlaybackEnabled\(enabled\)/u);
+  assert.match(displayMmd, /state\.runtime\.setMotionPlaybackEnabled\?\./u);
+  assert.match(pmxRuntime, /setPmxMotionPlaybackEnabled\(prepared\.helper, motionPlaybackEnabled\)/u);
+  assert.match(pmxRuntime, /setPmxMotionPlaybackEnabled\(helper\.current, motionPlaybackEnabled\)/u);
+  assert.match(helper, /helper\.enabled\.animation = enabled === true/u);
+  assert.doesNotMatch(helper, /setPmxMotionPlaybackEnabled[\s\S]{0,180}helper\.enabled\.physics\s*=/u);
+});
+
+test('测试页物理开关切换时重载 PMX，关闭后新 helper 不创建 Ammo', () => {
+  const displayMmd = readPublic('js/display-mmd.js');
+  const pmxRuntime = readPublic('js/display-pmx-runtime.js');
+  const helper = readPublic('js/mmd-pmx-helper.mjs');
+  assert.match(displayMmd, /physicsEnabled:\s*true/u);
+  assert.match(displayMmd, /async function setPhysicsEnabled\(enabled\)/u);
+  assert.match(displayMmd, /state\.runtime\?\.setPhysicsEnabled\?\.\(nextEnabled\)/u);
+  assert.match(displayMmd, /if \(await loadModel\(profile\)\) return true/u);
+  assert.match(pmxRuntime, /physicsEnabled,\s*physicsFps:/u);
+  assert.match(helper, /if \(!physicsEnabled \|\| !hasMmdPhysics\(mesh\)\)/u);
+});
+
 test('PMX runtime 在中心枢轴前创建可降级的 Ammo 物理 helper', () => {
   const source = readPublic('js/display-pmx-runtime.js');
   assert.match(source, /import \{ ensureAmmoPhysics \} from '\.\/mmd-ammo-physics\.mjs'/u);
   assert.match(source, /import\s*\{[\s\S]*createPmxMotionHelper[\s\S]*stagePmxMesh[\s\S]*\}\s*from '\.\/mmd-pmx-helper\.mjs'/u);
-  assert.match(source, /const preparePmxHelper = async \(mesh, profile, resourceId = profile\.motionResourceId\)/u);
+  assert.match(source, /const preparePmxHelper = async \([\s\S]*?resourceId = profile\.motionResourceId[\s\S]*?\) =>/u);
   assert.match(source, /const staged = await stagePmxMesh\(/u);
   assert.match(source, /stagedHelper = staged\.preparedHelper\.helper/u);
   assert.match(source, /stagedPivot\.visible = true/u);
   assert.match(source, /currentRotationPivot = stagedPivot/u);
   assert.match(source, /PMX 物理不可用，已回退骨骼动画/u);
+});
+
+test('PMX 首载与切换动作都不预热或在初始化时套用 VMD 首帧', () => {
+  const source = readPublic('js/display-pmx-runtime.js');
+  const helper = readPublic('js/mmd-pmx-helper.mjs');
+  assert.doesNotMatch(source, /PMX_INITIAL_PHYSICS_WARMUP_STEPS|PMX_MOTION_SWITCH_WARMUP_STEPS|physicsWarmupSteps/u);
+  assert.match(source, /createMotionHelper\(mesh, clip, profile\.playMode\)/u);
+  assert.match(helper, /options\.warmup = 0/u);
+  assert.match(helper, /options\.animationWarmup = false/u);
+  assert.match(source, /const loadMotionInternal = async \(resourceId\)/u);
+  assert.match(source, /preparePmxHelper\(mesh, profile, resourceId\)/u);
+});
+
+test('PMX 新模型只在首次实际渲染帧延迟 VMD，物理保持更新', () => {
+  const source = readPublic('js/display-pmx-runtime.js');
+  const renderFrame = source.slice(source.indexOf('const renderFrame = (now) => {'), source.indexOf('const startRendering = () => {'));
+  const loadMotion = source.slice(source.indexOf('const loadMotionInternal = async (resourceId) => {'), source.indexOf('const loadMotion = async (resourceId) => {'));
+  const loadModel = source.slice(source.indexOf('const load = async (profile) => {'), source.indexOf('const playMotion = async (resourceId) =>'));
+  assert.match(loadModel, /helper\.current = stagedHelper;\s*pendingInitialMotionHelper = stagedHelper/u);
+  assert.match(renderFrame, /if \(!visible \|\| disposed\) return;[\s\S]*pendingInitialMotionHelper === frameHelper/u);
+  assert.match(renderFrame, /setPmxMotionPlaybackEnabled\(frameHelper, false\);[\s\S]*advancePmxMotionFrame\(\{[\s\S]*physics: frameHelper\?\.objects\?\.get\(currentMesh\)\?\.physics/u);
+  assert.match(renderFrame, /finally \{\s*if \(delayInitialMotion\) setPmxMotionPlaybackEnabled\(frameHelper, motionPlaybackEnabled\)/u);
+  assert.match(source, /const stopMotion = \(\) => \{\s*pendingInitialMotionHelper = null/u);
+  assert.doesNotMatch(loadMotion, /pendingInitialMotionHelper = nextHelper/u);
+});
+
+test('PMX 首帧更新物理但不显示模型，第二帧才显示并推进 VMD', () => {
+  const source = readPublic('js/display-pmx-runtime.js');
+  const renderFrameSource = source.slice(source.indexOf('const renderFrame = (now) => {'), source.indexOf('const startRendering = () => {'));
+  const pivot = { visible: true };
+  const physics = {};
+  const motionHelper = { enabled: { animation: true }, objects: { get: () => ({ physics }) } };
+  const motionFrames = [];
+  const renderedVisibility = [];
+  const context = {
+    frameHandle: 0,
+    visible: false,
+    disposed: false,
+    lastFrameAt: 0,
+    helper: { current: motionHelper },
+    pendingInitialMotionHelper: motionHelper,
+    motionPlaybackEnabled: true,
+    currentMesh: {},
+    currentRotationPivot: pivot,
+    physicsGate: { paused: false },
+    lightingState: { rotationPhysicsLimit: 720 },
+    updateModelRotation() {},
+    advancePmxMotionFrame({ helper, physics: framePhysics }) {
+      motionFrames.push({ animation: helper.enabled.animation, physics: framePhysics === physics });
+    },
+    setPmxMotionPlaybackEnabled(helper, enabled) { helper.enabled.animation = enabled; },
+    arCameraState: { active: false },
+    updateCameraView() {},
+    ambientOcclusion: { render() { renderedVisibility.push(pivot.visible); } },
+    renderer: { render() {} },
+    scene: {},
+    camera: {},
+    requestAnimationFrame: () => 1
+  };
+  const renderFrame = vm.runInNewContext(`${renderFrameSource}\nrenderFrame`, context);
+  renderFrame(0);
+  assert.equal(context.pendingInitialMotionHelper, motionHelper, '隐藏的运行时不消耗首帧');
+  context.visible = true;
+  renderFrame(16);
+  assert.deepEqual(motionFrames, [{ animation: false, physics: true }]);
+  assert.deepEqual(renderedVisibility, [false]);
+  assert.equal(pivot.visible, true, '首帧绘制后恢复模型原有可见性');
+  assert.equal(motionHelper.enabled.animation, true, '首帧绘制后恢复用户播放开关');
+  renderFrame(32);
+  assert.deepEqual(motionFrames, [
+    { animation: false, physics: true },
+    { animation: true, physics: true }
+  ]);
+  assert.deepEqual(renderedVisibility, [false, true]);
 });
 
 test('PMX runtime 先推进中心旋转，再让物理约束牵引布料', () => {

@@ -1,5 +1,25 @@
 # 自测功能文档
 
+## PMX 首帧延迟显示（2026-09-27）
+
+`npm run build:web:mmd-ar-test` 成功；PMX、物理与 MMD AR 面板定向回归 41/41 通过。新增运行时行为测试模拟隐藏状态、首帧和第二帧：隐藏时不消耗标记；首帧物理更新而模型不绘制；绘制后恢复用户播放开关和枢轴原有可见状态；第二帧推进 VMD 并显示。`node --check` 与 `git diff --check` 通过。外网仅替换 PMX 运行时、显示模块及首页，HTTPS 200，三个公网 SHA-256 与本地一致；未构建 APK。真机首屏观感待现场验收。
+
+## PMX 首次动作延迟一帧（2026-09-27）
+
+`npm run build:web:mmd-ar-test` 成功；`node --test tests/display-mmd-runtime.test.js tests/mmd-pmx-helper.test.js tests/mmd-ar-web-panel-groups.test.js` 40/40 通过，MindAR 网页定位浏览器回归 1/1 通过。新增回归核对成功提交模型才标记延迟、首个实际渲染帧只关闭 animation 而仍调用物理帧更新、帧后恢复用户开关；显式换动作不创建标记。外网仅替换运行时、显示模块和首页，HTTPS 返回 200，三文件 SHA-256 与本地一致。真机首屏布料观感待现场验收；未构建 APK。
+
+## PMX 取消初始化首帧与物理预热（2026-09-27）
+
+`npm run build:web:mmd-ar-test` 成功。`node --test tests/mmd-pmx-helper.test.js tests/display-mmd-runtime.test.js` 32/32 通过，验证首载与换动作都传 `warmup=0`、`animationWarmup=false`，不再从 runtime 注入 180 步预热；无物理路径仍不请求 Ammo。网页面板、PMX 旋转和单位缩放相关回归 14/14 通过；`git diff --check` 通过。仅本地网页构建，未发布外网或 APK；实际首屏布料抖动和 Android WebView 观感待现场验收。
+
+## MMD AR 测试网页物理开关（2026-09-26）
+
+`npm run build:web:mmd-ar-test` 成功。`node --test tests/mmd-pmx-helper.test.js tests/display-mmd-runtime.test.js tests/mmd-ar-web-panel-groups.test.js` 39/39 通过：带刚体 PMX 关闭物理时不请求 Ammo、不预热，VMD 仍播放；网页“物理”分类出现默认开启的控件，并从专用 localStorage 恢复设置。切换使用模型重载而非暂停当前 Bullet 世界。`git diff --check` 通过。未发布外网或 APK；实际布料穿模观感待现场验收。
+
+## MMD AR 测试网页动作播放开关（2026-09-26）
+
+`npm run build:web:mmd-ar-test` 成功。`node --test tests/mmd-pmx-helper.test.js tests/display-mmd-runtime.test.js tests/mmd-ar-web-panel-groups.test.js`：37/37 通过。覆盖灯光面板首分类与默认开启、切换后写入独立 localStorage 键、刷新恢复关闭、无效值回退开启；运行时 setter 只改 `helper.enabled.animation`，physics 保持 true，关闭期间帧更新仍继续调用 helper。只更新本地测试网页，未发布外网或 APK；真实 PMX 的暂停/布料表现待现场验收。
+
 ## MMD AR 定位图底面/立面切换（2026-09-26）
 
 `npm run build:web:mmd-ar-test` 成功。`node --test tests/mmd-ar-camera-runtime.test.js` 1/1 通过：底面原有中心映射保持，立面时角色脚底投影对齐目标图下边缘中点；模式切换立即更新相机，模型位置、缩放与物理根节点不变。面板和 MindAR 锚点回归 8/8 通过，覆盖按钮本地保存/刷新恢复、分类开合与自定义图重启。`git diff --check` 通过；本次未发布网页或 APK，真实手机立面观感待现场验收。
@@ -296,6 +316,8 @@ MindAR 适配器仅在共享摄像头视频就绪后启动；这一阶段将定�
 
 | 测试项 | 说明 | 前置条件 |
 |--------|------|----------|
+| MMD AR 动作播放诊断开关 | 网页灯光面板首分类默认勾选；关闭后 VMD 停在当前帧但布料继续模拟，再开启后从暂停帧接续；刷新后动作从第 0 帧开始并恢复上次开关值 | HTTPS 测试页已加载带刚体 PMX/VMD；浏览器允许 localStorage |
+| PMX 首载布料稳定预热 | 刷新 MMD AR 页面；模型在物理初始化期间应保持隐藏，显示后布料不应再出现持续数秒的轻微上漂；记录从“初始化模型与物理”到“模型就绪”的耗时。重载页面重复 3 次，并确认 VMD 从正常初始姿态开始播放 | 首次加载带刚体的 PMX 和 Ammo；桌面 Chromium 与目标 Android WebView 分别记录 |
 | PMX 物理频率设置 | 打开显示端“灯光”面板，将频率从默认 65 Hz 改到其他档位，确认当前布料继续模拟且输出值同步 | 已加载启用 Ammo 的 PMX |
 | 角色上拖动与点击分离 | 分别从 PMX/VRM 角色身体、头部和空白处拖动，确认都能旋转且松开不触发触摸；在角色上轻点确认只触发一次触摸；拖动后取消或移出画布也不触发触摸 | 聊天面板关闭且角色画布可交互；重点检查触屏 8 像素附近的手感 |
 | PMX 快转暂停物理 | 将“旋转暂停物理阈值”设为默认 720°/秒，快速拖动 yaw/pitch 和反向拖动，确认动作与角色旋转继续、布料不再被快速锚点牵引穿模；减速后观察布料重新贴合及继续摆动 | 已加载带布料刚体的 PMX；对比 30、720、1440°/秒，留意恢复瞬间跳变 |

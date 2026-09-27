@@ -13,7 +13,8 @@ import { ensureAmmoPhysics } from './mmd-ammo-physics.mjs';
 import {
     createPmxMotionHelper,
     stagePmxMesh,
-    advancePmxMotionFrame
+    advancePmxMotionFrame,
+    setPmxMotionPlaybackEnabled
 } from './mmd-pmx-helper.mjs';
 import { calculatePmxCameraFrame, normalizePmxPhysicsMesh } from './pmx-display-layout.mjs';
 import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
@@ -512,6 +513,9 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
 
     const helper = { current: null };
     const physicsGate = { paused: false };
+    let motionPlaybackEnabled = true;
+    let pendingInitialMotionHelper = null;
+    let physicsEnabled = true;
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let currentMesh = null;
@@ -607,6 +611,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     };
 
     const stopMotion = () => {
+        pendingInitialMotionHelper = null;
         if (helper.current && currentMesh) {
             try {
                 helper.current.remove(currentMesh);
@@ -637,17 +642,28 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         if (!visible || disposed) return;
         const delta = Math.min(0.1, Math.max(0, (now - lastFrameAt) / 1000));
         lastFrameAt = now;
+        const frameHelper = helper.current;
+        const delayInitialMotion = frameHelper && pendingInitialMotionHelper === frameHelper;
+        if (delayInitialMotion) {
+            // 新模型第一个实际显示帧先让物理和画面更新，VMD 从下一帧才推进。
+            pendingInitialMotionHelper = null;
+            setPmxMotionPlaybackEnabled(frameHelper, false);
+        }
         // 先推进角色中心缓动，让物理从新骨骼姿态移动运动学锚点；
         // 动态布料刚体留在 Bullet 世界，由约束牵引并保留已有速度。
-        advancePmxMotionFrame({
-            delta,
-            advanceRotation: updateModelRotation,
-            helper: helper.current,
-            pivot: currentRotationPivot,
-            physics: helper.current?.objects?.get(currentMesh)?.physics,
-            physicsGate,
-            rotationPhysicsLimit: lightingState.rotationPhysicsLimit
-        });
+        try {
+            advancePmxMotionFrame({
+                delta,
+                advanceRotation: updateModelRotation,
+                helper: frameHelper,
+                pivot: currentRotationPivot,
+                physics: frameHelper?.objects?.get(currentMesh)?.physics,
+                physicsGate,
+                rotationPhysicsLimit: lightingState.rotationPhysicsLimit
+            });
+        } finally {
+            if (delayInitialMotion) setPmxMotionPlaybackEnabled(frameHelper, motionPlaybackEnabled);
+        }
         if (arCameraState.active && !arCameraState.trackingLost) {
             // 以实际帧间隔做指数缓动；只有目标姿态越过死区才会移动。
             const easingSeconds = arCameraState.settings.smoothingMs / 1000;
@@ -659,8 +675,17 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         } else if (!arCameraState.active) {
             updateCameraView(delta);
         }
-        if (currentMesh) ambientOcclusion.render();
-        else renderer.render(scene, camera);
+        const firstFramePivot = delayInitialMotion ? currentRotationPivot : null;
+        const firstFramePivotVisible = firstFramePivot?.visible;
+        if (firstFramePivot) firstFramePivot.visible = false;
+        try {
+            // 首帧物理照常运行，但不把动作起始姿态绘制出来；下一帧才显示模型。
+            if (currentMesh) ambientOcclusion.render();
+            else renderer.render(scene, camera);
+        } finally {
+            // 恢复原始可见性，避免覆盖 AR 失锁或其他显示状态。
+            if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;
+        }
         frameHandle = requestAnimationFrame(renderFrame);
     };
 
@@ -854,10 +879,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             MMDAnimationHelper,
             loopRepeat: THREE.LoopRepeat,
             loopOnce: THREE.LoopOnce,
+            physicsEnabled,
             physicsFps: lightingState.physicsFps,
             // 仅刚体 PMX 才会在这里惰性初始化 Ammo；失败时 helper 自动回退为无物理解算。
             ensurePhysics: ensureAmmoPhysics
         });
+        setPmxMotionPlaybackEnabled(prepared.helper, motionPlaybackEnabled);
         const physics = prepared.helper?.objects?.get(mesh)?.physics;
         if (physics) physics.unitStep = 1 / lightingState.physicsFps;
         return prepared;
@@ -872,7 +899,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         }
     };
 
-    const preparePmxHelper = async (mesh, profile, resourceId = profile.motionResourceId, report = () => {}) => {
+    const preparePmxHelper = async (
+        mesh,
+        profile,
+        resourceId = profile.motionResourceId,
+        report = () => {}
+    ) => {
         let clip = null;
         if (resourceId && profile.motionUrl) {
             validateMotionResource(profile, resourceId);
@@ -964,7 +996,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
                 scene,
                 mesh: stagedMesh,
                 createPivot: createModelRotationPivot,
-                prepareHelper: () => preparePmxHelper(stagedMesh, profile, profile.motionResourceId, report)
+                prepareHelper: () => preparePmxHelper(
+                    stagedMesh,
+                    profile,
+                    profile.motionResourceId,
+                    report
+                )
             });
             stagedPivot = staged.pivot;
             stagedHelper = staged.preparedHelper.helper;
@@ -985,6 +1022,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             currentRotationPivot.updateWorldMatrix(true, true);
             currentProfile = profile;
             helper.current = stagedHelper;
+            pendingInitialMotionHelper = stagedHelper;
             currentMotionResourceId = profile.motionResourceId || null;
             applyShadowFlags(currentMesh);
             stagedPivot.visible = true;
@@ -1008,6 +1046,19 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     };
 
     const playMotion = async (resourceId) => loadMotion(resourceId);
+
+    const setMotionPlaybackEnabled = (enabled) => {
+        motionPlaybackEnabled = enabled === true;
+        setPmxMotionPlaybackEnabled(helper.current, motionPlaybackEnabled);
+        startRendering();
+        return motionPlaybackEnabled;
+    };
+
+    const setPhysicsEnabled = (enabled) => {
+        // 仅影响下次创建的 helper；调用方重新加载模型，避免把冻结的布料误判为无物理结果。
+        physicsEnabled = enabled === true;
+        return physicsEnabled;
+    };
 
     const handleActionPlan = (plan) => {
         const steps = Array.isArray(plan?.steps) ? plan.steps : [];
@@ -1104,6 +1155,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         setCameraViewRotation,
         setArCameraPose,
         setArCameraSettings,
+        setMotionPlaybackEnabled,
+        getMotionPlaybackEnabled: () => motionPlaybackEnabled,
+        setPhysicsEnabled,
+        getPhysicsEnabled: () => physicsEnabled,
         setArPose: arFootAnchor.setPose,
         resize,
         setLighting,

@@ -6,8 +6,6 @@
  */
 import { hasMmdPhysics } from './mmd-ammo-physics.mjs';
 
-// 不在模型加载栈内推进物理；首个 helper.update 由显示后的下一渲染帧执行。
-const PMX_PHYSICS_WARMUP_STEPS = 0;
 const DEFAULT_PMX_PHYSICS_FPS = 65;
 
 const normalizePmxPhysicsFps = (value) => {
@@ -30,7 +28,9 @@ const buildMotionHelper = ({
     const helper = new MMDAnimationHelper({ sync: false, pmxAnimation: true });
     const options = { physics };
     if (physics) {
-        options.warmup = PMX_PHYSICS_WARMUP_STEPS;
+        // 不在隐藏加载阶段推进物理或自动套用 VMD 首帧；动作从可见后的渲染帧开始。
+        options.warmup = 0;
+        options.animationWarmup = false;
         options.unitStep = 1 / normalizePmxPhysicsFps(physicsFps);
         options.maxStepNum = 3;
     }
@@ -121,6 +121,13 @@ export function advancePmxMotionFrame({
     helper?.update(delta);
 }
 
+/* 只控制 VMD/骨骼动画，保留 Ammo 刚体和布料物理的原有运行状态。 */
+export function setPmxMotionPlaybackEnabled(helper, enabled) {
+    if (!helper?.enabled) return false;
+    helper.enabled.animation = enabled === true;
+    return helper.enabled.animation;
+}
+
 export async function createPmxMotionHelper({
     mesh,
     clip = null,
@@ -129,6 +136,7 @@ export async function createPmxMotionHelper({
     loopRepeat,
     loopOnce,
     ensurePhysics,
+    physicsEnabled = true,
     physicsFps = DEFAULT_PMX_PHYSICS_FPS
 }) {
     const commonOptions = {
@@ -140,7 +148,7 @@ export async function createPmxMotionHelper({
         loopOnce,
         physicsFps
     };
-    if (!hasMmdPhysics(mesh)) {
+    if (!physicsEnabled || !hasMmdPhysics(mesh)) {
         return {
             helper: buildMotionHelper({ ...commonOptions, physics: false }),
             physicsEnabled: false,

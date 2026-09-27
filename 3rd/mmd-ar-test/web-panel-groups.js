@@ -2,13 +2,14 @@
 
 // 仅用于 HTTPS 测试页生成阶段：移动现有控件节点，不重建输入框或改变原 ID。
 const LIGHTING_GROUPS = Object.freeze([
+  ['动作', ['mmdArMotionPlayback']],
   ['基础光照', ['displayMmdLightingPreset', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
   ['AO', ['displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3'], 'displayMmdPmxAoEnabled'],
   ['主光', ['displayMmdKeyColor', 'displayMmdKeyIntensity', 'displayMmdKeyDirectionLongitude'], 'displayMmdKeyShadowEnabled'],
   ['补光', ['displayMmdShadowSource', 'displayMmdFillColor', 'displayMmdFillIntensity', 'displayMmdFillDirectionLongitude'], 'displayMmdFillEnabled'],
   ['边缘光 1', ['displayMmdRim1Color', 'displayMmdRim1Intensity', 'displayMmdRim1DirectionLongitude'], 'displayMmdRim1Enabled'],
   ['边缘光 2', ['displayMmdRim2Color', 'displayMmdRim2Intensity', 'displayMmdRim2DirectionLongitude'], 'displayMmdRim2Enabled'],
-  ['物理', ['displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
+  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
 ]);
 
 const TRACKING_GROUPS = Object.freeze([
@@ -44,6 +45,46 @@ const WEB_PANEL_GROUP_CSS = `
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    (() => {
+      const toggle = document.getElementById('mmdArPhysicsEnabled');
+      if (!toggle) return;
+      const storageKey = 'aasc.mmdArTest.physicsEnabled.v1';
+      let enabled = true;
+      try { enabled = localStorage.getItem(storageKey) !== 'false'; } catch (error) { /* 隐私模式按默认值运行。 */ }
+      toggle.checked = enabled;
+      window.DisplayMmd?.setPhysicsEnabled?.(enabled);
+      toggle.addEventListener('change', async () => {
+        toggle.disabled = true;
+        try {
+          const applied = await window.DisplayMmd?.setPhysicsEnabled?.(toggle.checked);
+          if (applied !== true) {
+            toggle.checked = enabled;
+            return;
+          }
+          enabled = toggle.checked;
+          try { localStorage.setItem(storageKey, String(enabled)); } catch (error) { /* 隐私模式允许仅本次生效。 */ }
+        } catch (error) {
+          toggle.checked = enabled;
+          console.warn('[MmdArTest] 切换 PMX 物理失败:', error);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    })();
+    (() => {
+      const toggle = document.getElementById('mmdArMotionPlayback');
+      if (!toggle) return;
+      const storageKey = 'aasc.mmdArTest.motionPlayback.v1';
+      let enabled = true;
+      try { enabled = localStorage.getItem(storageKey) !== 'false'; } catch (error) { /* 隐私模式按默认值运行。 */ }
+      toggle.checked = enabled;
+      window.DisplayMmd?.setMotionPlaybackEnabled?.(enabled);
+      toggle.addEventListener('change', () => {
+        enabled = toggle.checked;
+        window.DisplayMmd?.setMotionPlaybackEnabled?.(enabled);
+        try { localStorage.setItem(storageKey, String(enabled)); } catch (error) { /* 隐私模式允许仅本次生效。 */ }
+      });
+    })();
     (() => {
       // 测试页参数只保存于当前浏览器；无效存储值回退默认，不影响正式显示端配置。
       const storageKey = 'aasc.mmdArTest.cameraSettings.v1';

@@ -248,11 +248,43 @@ test('含刚体的 PMX 在 Ammo 就绪后以 physics true 创建循环动作 hel
     assert.equal(physicsLoads, 1);
     assert.deepEqual(instances[0].addCalls, [{
         mesh,
-        options: { animation: clip, physics: true, warmup: 0, unitStep: 1 / 65, maxStepNum: 3 }
+        options: { animation: clip, physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 }
     }]);
     const action = instances[0].objects.get(mesh).mixer._actions[0];
     assert.deepEqual(action.loops, { loop: 'repeat', repetitions: Infinity });
     assert.equal(action.played, true);
+});
+
+test('动作播放开关只暂停动画并保留物理状态', async () => {
+    const { setPmxMotionPlaybackEnabled } = await loadFreshPmxHelperModule();
+    const helper = { enabled: { animation: true, physics: true } };
+
+    assert.equal(setPmxMotionPlaybackEnabled(helper, false), false);
+    assert.deepEqual(helper.enabled, { animation: false, physics: true });
+    assert.equal(setPmxMotionPlaybackEnabled(helper, true), true);
+    assert.deepEqual(helper.enabled, { animation: true, physics: true });
+});
+
+test('VMD 暂停时帧更新仍调用 helper 以继续推进布料物理', async () => {
+    const { advancePmxMotionFrame, setPmxMotionPlaybackEnabled } = await loadFreshPmxHelperModule();
+    const updates = [];
+    const helper = {
+        enabled: { animation: true, physics: true },
+        update(delta) {
+            updates.push({ delta, animation: this.enabled.animation, physics: this.enabled.physics });
+        }
+    };
+    setPmxMotionPlaybackEnabled(helper, false);
+
+    advancePmxMotionFrame({
+        delta: 1 / 60,
+        helper,
+        physics: {},
+        physicsGate: { paused: false },
+        rotationPhysicsLimit: 720
+    });
+
+    assert.deepEqual(updates, [{ delta: 1 / 60, animation: false, physics: true }]);
 });
 
 test('无刚体 PMX 不初始化 Ammo 且仍创建骨骼动作 helper', async () => {
@@ -276,6 +308,28 @@ test('无刚体 PMX 不初始化 Ammo 且仍创建骨骼动作 helper', async ()
     const action = instances[0].objects.get(mesh).mixer._actions[0];
     assert.deepEqual(action.loops, { loop: 'once', repetitions: 1 });
     assert.equal(action.clampWhenFinished, true);
+});
+
+test('关闭 PMX 物理时即使模型有刚体也不初始化 Ammo 或执行预热', async () => {
+    const { createPmxMotionHelper } = await loadFreshPmxHelperModule();
+    const { FakeMmdAnimationHelper, instances } = createHelperFixture();
+    const mesh = createMesh([{}]);
+    const clip = { name: 'motion' };
+
+    const result = await createPmxMotionHelper({
+        mesh,
+        clip,
+        physicsEnabled: false,
+        MMDAnimationHelper: FakeMmdAnimationHelper,
+        loopRepeat: 'repeat',
+        loopOnce: 'once',
+        ensurePhysics: async () => { throw new Error('关闭物理时不应加载 Ammo'); }
+    });
+
+    assert.equal(result.physicsEnabled, false);
+    assert.equal(result.physicsError, null);
+    assert.deepEqual(instances[0].addCalls, [{ mesh, options: { animation: clip, physics: false } }]);
+    assert.equal(instances[0].objects.get(mesh).mixer._actions[0].played, true);
 });
 
 test('Ammo 初始化失败时 PMX 回退为无物理 helper 并保留 VMD', async () => {
@@ -315,8 +369,29 @@ test('有刚体但没有 VMD 的 PMX 仍创建物理 helper', async () => {
     assert.equal(result.physicsEnabled, true);
     assert.deepEqual(instances[0].addCalls, [{
         mesh,
-        options: { physics: true, warmup: 0, unitStep: 1 / 65, maxStepNum: 3 }
+        options: { physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 }
     }]);
+});
+
+test('PMX 首载及动作切换均不执行隐藏预热或自动应用 VMD 第 0 帧', async () => {
+    const { createPmxMotionHelper } = await loadFreshPmxHelperModule();
+    const { FakeMmdAnimationHelper, instances } = createHelperFixture();
+    const mesh = createMesh([{}]);
+
+    for (const clip of [{ name: 'initial' }, { name: 'replacement' }]) {
+        await createPmxMotionHelper({
+            mesh,
+            clip,
+            MMDAnimationHelper: FakeMmdAnimationHelper,
+            loopRepeat: 'repeat',
+            loopOnce: 'once',
+            ensurePhysics: async () => undefined
+        });
+    }
+    assert.deepEqual(instances.map((instance) => instance.addCalls[0].options), [
+        { animation: { name: 'initial' }, physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 },
+        { animation: { name: 'replacement' }, physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 }
+    ]);
 });
 
 test('PMX 先旋转并刷新骨骼矩阵，再推进物理且不直接传送动态刚体', async () => {

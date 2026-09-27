@@ -289,6 +289,62 @@ MindAR 视频输入:
   旧 APK 生成页不含网页专用分组；正式 display.html 保持原结构
 ```
 
+### 测试网页 VMD 动作播放开关（伪代码）
+
+```text
+网页构建模式:
+  在灯光面板首个分类插入“播放动作”复选框，默认 checked
+  把复选框登记为网页专用“动作”分类控件
+  APK 构建模式不插入该控件
+
+网页专用初始化脚本，在 DisplayMmd 模型初始化前执行:
+  从 aasc.mmdArTest.motionPlayback.v1 读取字符串
+  enabled ← (保存值 == "false") ? false : true
+  设置复选框 checked = enabled
+  调用 DisplayMmd.setMotionPlaybackEnabled(enabled)
+  监听复选框 change
+    enabled ← 复选框 checked
+    调用 DisplayMmd.setMotionPlaybackEnabled(enabled)
+    尝试将 String(enabled) 写回专用 localStorage 键
+    存储不可用时仅本次页面生效
+
+DisplayMmd.setMotionPlaybackEnabled(enabled):
+  将 enabled 规范化为严格布尔值
+  保存显示模块状态
+  若 PMX runtime 已创建则立即转发；否则由后续 runtime 创建时应用
+
+PMX runtime 应用开关:
+  仅更新 MMDAnimationHelper.enabled.animation
+  保持 enabled.physics 原值，布料继续模拟
+  helper.update(delta) 继续执行并渲染
+  关闭时 mixer 不推进，当前动作帧保留；开启后从该帧继续
+  每个新 helper 继承当前开关状态
+  刷新重新加载动作时不在初始化阶段应用 VMD 第 0 帧；新模型首个实际渲染帧只更新物理且不绘制角色，第二帧起推进 VMD 并显示
+
+验证:
+  默认开启；切换关闭后帧停止、物理状态仍推进；重新开启接续帧
+  关闭后刷新仍关闭且保留 PMX 绑定姿态；清除/无效存储值默认为开启
+  APK 页面及正式显示端界面不新增该复选框
+```
+
+### 测试网页 PMX 物理对照开关（伪代码）
+
+```text
+网页构建模式：在“物理”分类加入默认开启的复选框；APK 和正式显示端不加入
+初始化时读取 aasc.mmdArTest.physicsEnabled.v1；仅明确保存 false 时关闭
+在 DisplayMmd.init 之前设置物理状态，避免初次加载后立即重复加载
+用户切换时禁用复选框，调用 DisplayMmd.setPhysicsEnabled(checked)
+  如果成功，保存专用 localStorage 键并恢复复选框可操作
+  如果失败，恢复原复选框值及运行状态，不保存失败值
+DisplayMmd.setPhysicsEnabled:
+  将开关状态传给 PMX runtime，并用当前 profile 重新加载模型
+  关闭时新 helper 以 physics=false 创建，不请求 Ammo，不执行物理预热
+  开启时初始化 Ammo，但不在不可见阶段预热或套用 VMD 首帧；后续正常物理步进
+  动作从 VMD 第 0 帧重新开始；原模型在新模型准备阶段继续显示
+  不使用 helper.enabled.physics=false 模拟“无物理”
+验证：带刚体 PMX 关闭物理时 helper 不初始化 Ammo，开关重载不会影响正式显示端
+```
+
 ```text
 buildMmdArTestWeb
   通过 npm run build:web:mmd-ar-test 调用现有资源准备脚本的 --web 模式

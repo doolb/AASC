@@ -165,6 +165,8 @@
         height: 0,
         devicePixelRatio: 1,
         modelReady: false,
+        motionPlaybackEnabled: true,
+        physicsEnabled: true,
         modelProfile: null,
         pressedPoint: null,
         rotationDrag: null,
@@ -461,6 +463,29 @@
         return true;
     }
 
+    function setMotionPlaybackEnabled(enabled) {
+        state.motionPlaybackEnabled = enabled === true;
+        state.runtime?.setMotionPlaybackEnabled?.(state.motionPlaybackEnabled);
+        return state.motionPlaybackEnabled;
+    }
+
+    async function setPhysicsEnabled(enabled) {
+        const nextEnabled = enabled === true;
+        if (nextEnabled === state.physicsEnabled) return true;
+        const previousEnabled = state.physicsEnabled;
+        state.physicsEnabled = nextEnabled;
+        state.runtime?.setPhysicsEnabled?.(nextEnabled);
+        if (state.runtimeType !== 'pmx' || !state.modelProfile) return true;
+
+        // 重新创建 PMX helper；仅暂停物理会保留旧布料形变，不能用于穿模对照。
+        const profile = state.modelProfile;
+        if (await loadModel(profile)) return true;
+        state.physicsEnabled = previousEnabled;
+        state.runtime?.setPhysicsEnabled?.(previousEnabled);
+        await loadModel(profile);
+        return false;
+    }
+
     function suspendArCameraPose() {
         if (root.MmdArTestAframeMode === true) state.runtime?.suspendArCameraPose?.();
     }
@@ -494,6 +519,8 @@
                     onProgress: state.onLoadProgress
                 });
                 state.runtimeType = modelType;
+                state.runtime.setMotionPlaybackEnabled?.(state.motionPlaybackEnabled);
+                state.runtime.setPhysicsEnabled?.(state.physicsEnabled);
                 state.runtime.setLighting?.(state.lighting);
                 if (state.arCameraSettings) state.runtime.setArCameraSettings?.(state.arCameraSettings);
                 state.runtime.setVisible(state.visible);
@@ -660,7 +687,12 @@
         DEFAULT_MMD_LIGHTING,
         getArCameraState: () => root.MmdArTestAframeMode === true ? state.runtime?.getArCameraState?.() : null,
         getArCameraSyncState: () => root.MmdArTestAframeMode === true ? state.runtime?.getArCameraSyncState?.() : null,
-        getState: () => ({ visible: state.visible, modelReady: state.modelReady }),
+        getState: () => ({
+            visible: state.visible,
+            modelReady: state.modelReady,
+            motionPlaybackEnabled: state.motionPlaybackEnabled,
+            physicsEnabled: state.physicsEnabled
+        }),
         getLighting,
         handleActionPlan,
         init,
@@ -674,6 +706,8 @@
         setArCameraSettings,
         setCameraViewRotation,
         setLighting,
+        setMotionPlaybackEnabled,
+        setPhysicsEnabled,
         setPointerEnabled,
         setVisible,
         suspendArCameraPose
