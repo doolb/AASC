@@ -334,6 +334,10 @@ test('CLI parser accepts explicit versions and rejects duplicates or unknown opt
         bootstrap: true
     });
     assert.throws(() => parseCliArguments(['--mode=all', '--bootstrap=true']), /不接收值/);
+    assert.deepEqual(parseCliArguments(['--mode=code-only', '--reuse-node-min-seeds=true']), {
+        mode: 'code-only',
+        reuseNodeMinSeeds: true
+    });
 });
 
 test('manifest fetch falls back from an unreachable LAN source to WAN', async () => {

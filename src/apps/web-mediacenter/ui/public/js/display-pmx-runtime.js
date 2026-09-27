@@ -727,7 +727,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     };
 
     const setArCameraSettings = (input) => {
-        if (!window.MmdArTestAframeMode || !input || typeof input !== 'object') return false;
+        if ((!window.MmdArAframeMode && !window.MmdArTestAframeMode) || !input || typeof input !== 'object') return false;
         const oldDistance = arCameraState.settings.distancePercent;
         const oldPlane = arCameraState.settings.targetPlane;
         arCameraState.settings = normalizeArCameraSettings(input, arCameraState.settings);
@@ -746,7 +746,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     };
 
     const setArCameraPose = ({ anchorMatrix, projectionMatrix, targetAspect } = {}) => {
-        if (!window.MmdArTestAframeMode || !currentRotationPivot
+        if ((!window.MmdArAframeMode && !window.MmdArTestAframeMode) || !currentRotationPivot
             || !Array.isArray(anchorMatrix) || anchorMatrix.length !== 16
             || !Array.isArray(projectionMatrix) || projectionMatrix.length !== 16
             || [...anchorMatrix, ...projectionMatrix].some((value) => !Number.isFinite(value))) return false;
@@ -1125,11 +1125,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
 
     return Object.freeze({
         dispose,
-        getArCameraSyncState: () => window.MmdArTestAframeMode === true ? {
+        getArCameraSyncState: () => window.MmdArAframeMode || window.MmdArTestAframeMode === true ? {
             active: arCameraState.active,
             trackingLost: arCameraState.trackingLost
         } : null,
-        getArCameraState: () => window.MmdArTestAframeMode === true ? {
+        getArCameraState: () => window.MmdArAframeMode || window.MmdArTestAframeMode === true ? {
             active: arCameraState.active,
             cameraPosition: camera.position.toArray(),
             cameraQuaternion: camera.quaternion.toArray(),

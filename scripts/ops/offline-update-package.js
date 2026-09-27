@@ -620,6 +620,10 @@ async function createOfflineUpdateArtifacts(options = {}) {
         dependencyVersion: options.dependencyVersion
     });
     const { mode, dependencyVersion, autoDependencyUpgrade } = updatePlan;
+    const reuseNodeMinSeeds = options.reuseNodeMinSeeds === true;
+    if (reuseNodeMinSeeds && (mode !== 'code-only' || !currentComponents.nodeMinSeeds)) {
+        throw new Error('复用 Node min 种子只允许已有种子清单的 code-only 更新');
+    }
 
     const zipRunner = options.zipRunner || execFileAsync;
     const commandRunner = options.commandRunner || execFileAsync;
@@ -637,14 +641,16 @@ async function createOfflineUpdateArtifacts(options = {}) {
         await copyCodeSnapshot(projectRoot, codeDirectory);
         await createZip(codeDirectory, stagedCodeArchive, zipRunner);
 
-        if (fs.existsSync(nodeMinSeedsArchivePath)) {
-            throw new Error(`Node min 种子包版本文件已存在，拒绝覆盖: ${nodeMinSeedsArchivePath}`);
-        }
-        await stageNodeMinSeeds(path.join(projectRoot, 'release'), stagedNodeMinSeedsDirectory);
-        await createZip(stagedNodeMinSeedsDirectory, stagedNodeMinSeedsArchive, zipRunner);
-        const stagedNodeMinSeedsStat = await fs.promises.stat(stagedNodeMinSeedsArchive);
-        if (stagedNodeMinSeedsStat.size > MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES) {
-            throw new Error(`Node min 初始数据 ZIP 超过 ${MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES} 字节上限`);
+        if (!reuseNodeMinSeeds) {
+            if (fs.existsSync(nodeMinSeedsArchivePath)) {
+                throw new Error(`Node min 种子包版本文件已存在，拒绝覆盖: ${nodeMinSeedsArchivePath}`);
+            }
+            await stageNodeMinSeeds(path.join(projectRoot, 'release'), stagedNodeMinSeedsDirectory);
+            await createZip(stagedNodeMinSeedsDirectory, stagedNodeMinSeedsArchive, zipRunner);
+            const stagedNodeMinSeedsStat = await fs.promises.stat(stagedNodeMinSeedsArchive);
+            if (stagedNodeMinSeedsStat.size > MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES) {
+                throw new Error(`Node min 初始数据 ZIP 超过 ${MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES} 字节上限`);
+            }
         }
 
         const codeDestinationDirectory = path.join(outputDir, 'code');
@@ -683,7 +689,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
                     source,
                     ...(await describeArtifact(stagedCodeArchive, `code/${path.basename(codeDestination)}`))
                 },
-                nodeMinSeeds: {
+                nodeMinSeeds: reuseNodeMinSeeds ? currentComponents.nodeMinSeeds : {
                     version: codeVersion,
                     source,
                     ...(await describeArtifact(stagedNodeMinSeedsArchive, `node-min-seeds/${path.basename(nodeMinSeedsArchivePath)}`))
@@ -710,9 +716,11 @@ async function createOfflineUpdateArtifacts(options = {}) {
 
         await atomicallyCopyToOutput(stagedCodeArchive, codeDestination);
         codeArchivePath = codeDestination;
-        await fs.promises.mkdir(path.dirname(nodeMinSeedsArchivePath), { recursive: true });
-        await atomicallyCopyToOutput(stagedNodeMinSeedsArchive, nodeMinSeedsArchivePath);
-        finalNodeMinSeedsArchivePath = nodeMinSeedsArchivePath;
+        if (!reuseNodeMinSeeds) {
+            await fs.promises.mkdir(path.dirname(nodeMinSeedsArchivePath), { recursive: true });
+            await atomicallyCopyToOutput(stagedNodeMinSeedsArchive, nodeMinSeedsArchivePath);
+            finalNodeMinSeedsArchivePath = nodeMinSeedsArchivePath;
+        }
         if (mode === 'all') {
             await fs.promises.mkdir(path.dirname(finalDependenciesArchivePath), { recursive: true });
             await atomicallyCopyToOutput(dependenciesArchivePath, finalDependenciesArchivePath);
@@ -756,7 +764,7 @@ function parseCliArguments(argv) {
         if (!['mode', 'code-version', 'dependency-version', 'output-dir', 'manifest-file',
             'data-repair-file', 'repair-version', 'repair-id', 'required-code-version',
             'required-apk-version-code', 'required-data-version', 'target-data-version',
-            'repair-capabilities', 'release-notes', 'sensitive'].includes(key)) {
+            'repair-capabilities', 'release-notes', 'sensitive', 'reuse-node-min-seeds'].includes(key)) {
             throw new Error(`未知构建参数: --${key}`);
         }
         if (typeof value !== 'string' || value.startsWith('--')) throw new Error(`参数 --${key} 缺少值`);
@@ -772,7 +780,7 @@ function parseCliArguments(argv) {
             'target-data-version'
         ]);
         parsed[fieldName] = numericKeys.has(key) ? Number(value) :
-            key === 'sensitive' ? value === 'true' : value;
+            key === 'sensitive' || key === 'reuse-node-min-seeds' ? value === 'true' : value;
     }
     return parsed;
 }

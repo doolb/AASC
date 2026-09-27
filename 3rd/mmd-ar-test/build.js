@@ -10,6 +10,7 @@ const { Transform, Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const cheerio = require('cheerio');
 const yauzl = require('yauzl');
+const { RESOURCES: LOCAL_AR_RESOURCES, verifyBuffer: verifyLocalArBuffer } = require('../../scripts/ops/prepare-mmd-ar-vendor');
 const {
   STATIC_MMD_RELEASE,
   createStaticMmdResourceProfile,
@@ -30,8 +31,6 @@ const GENERATED_ASSETS = WEB_MODE
 const MODEL_CACHE = path.join(ANDROID_PROJECT, 'model-cache', STATIC_MMD_RELEASE.version);
 const OUTPUT_APK = path.join(ANDROID_PROJECT, 'output/aasc-mmd-ar-test.apk');
 const MINDAR_VERSION = '1.2.5';
-const MINDAR_CACHE = path.join(ANDROID_PROJECT, 'model-cache', `mind-ar-${MINDAR_VERSION}`);
-const MINDAR_PUBLIC_BASE_URL = `https://cdn.jsdelivr.net/npm/mind-ar@${MINDAR_VERSION}`;
 const OFFICIAL_TARGET_FILE = 'mindar-official-card.png';
 const OFFICIAL_TARGET_SIZE = 61689;
 const OFFICIAL_TARGET_SHA256 = 'f4253baa29270f36cf04aeff8be58d036cefffa3032e76bfbca0c08bcc046bdd';
@@ -174,17 +173,13 @@ async function ensureModelFile([relativePath, expectedSize, expectedHash]) {
 }
 
 async function ensureMindArFile([fileName, expectedSize, expectedHash]) {
-  const cachePath = path.join(MINDAR_CACHE, fileName);
-  if (await isVerifiedFile(cachePath, expectedSize, expectedHash)) {
-    log(`复用已校验 MindAR ${MINDAR_VERSION} 资源：${fileName}`);
-    return cachePath;
+  // 测试 APK 和网页共用项目内固定版本；出包阶段无需再次访问公网依赖 CDN。
+  const sourceName = fileName === 'mind-ar-LICENSE' ? 'LICENSE' : fileName;
+  const sourcePath = path.join(SOURCE_PUBLIC, 'js/vendor', `mind-ar-${MINDAR_VERSION}`, sourceName);
+  if (!await isVerifiedFile(sourcePath, expectedSize, expectedHash)) {
+    throw new Error(`本地 MindAR ${MINDAR_VERSION} 资源校验失败：${sourcePath}`);
   }
-
-  const resourcePath = fileName === 'mind-ar-LICENSE' ? 'LICENSE' : `dist/${fileName}`;
-  const url = `${MINDAR_PUBLIC_BASE_URL}/${resourcePath}`;
-  await downloadToFile(url, cachePath, expectedSize, expectedHash);
-  log(`MindAR ${MINDAR_VERSION} 资源 SHA-256 校验通过：${fileName}`);
-  return cachePath;
+  return sourcePath;
 }
 
 async function stageTextAssets() {
@@ -202,6 +197,12 @@ async function stageTextAssets() {
   if ($('#mmdArTrackerEngine').length || $('#mmdArBenchmarkResults').length) {
     throw new Error('显示端页面已包含 A/B 测试控件，测试 harness 不得重复注入');
   }
+  // 测试页有自己的 MindAR 参数和物理开关，避免复制正式页控件后出现两套状态。
+  for (const id of [
+    'displayArTrackerEngine', 'displayArTargetPlane', 'displayArTranslationDeadZone',
+    'displayArRotationDeadZone', 'displayArSmoothing', 'displayArCameraDistance',
+    'displayMmdMotionPlayback', 'displayMmdPhysicsEnabled'
+  ]) $(`#${id}`).closest('label').remove();
   arHeader.after(`
     <div class="mmd-ar-benchmark">
       ${WEB_MODE ? '' : `
@@ -380,7 +381,7 @@ async function stageTextAssets() {
   <meta name="theme-color" content="#111318">
   <title>MMD AR 独立测试</title>
   <link rel="stylesheet" href="/css/display-mmd.css">
-  ${WEB_MODE ? '<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script><script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>' : ''}
+  ${WEB_MODE ? '<script src="/js/vendor/aframe-1.5.0/aframe.min.js"></script><script src="/js/vendor/mind-ar-1.2.5/mindar-image-aframe.prod.js"></script>' : ''}
   <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"}}</script>
   <style>
     :root {
@@ -633,6 +634,23 @@ async function stageMindArAssets() {
   return integrity;
 }
 
+async function stageLocalArVendor() {
+  if (!WEB_MODE) return;
+  // 网页测试版随站点带齐 A-Frame、MindAR 和官方目标文件，运行时不依赖公网 CDN。
+  for (const resource of LOCAL_AR_RESOURCES) {
+    const source = path.join(SOURCE_PUBLIC, resource.path);
+    if (!verifyLocalArBuffer(await fs.readFile(source), resource)) {
+      throw new Error(`本地 AR 资源校验失败：${source}`);
+    }
+  }
+  for (const directory of ['aframe-1.5.0', 'mind-ar-1.2.5']) {
+    const relativePath = path.join('js/vendor', directory);
+    await fs.cp(path.join(SOURCE_PUBLIC, relativePath), path.join(GENERATED_ASSETS, relativePath), { recursive: true });
+  }
+  await fs.copyFile(path.join(SOURCE_PUBLIC, 'assets/mindar-official-card.mind'),
+    path.join(GENERATED_ASSETS, 'assets/mindar-official-card.mind'));
+}
+
 function runGradle() {
   return new Promise((resolve, reject) => {
     const wrapper = path.join(PROJECT_ROOT, 'src/apps/android-display/gradlew');
@@ -785,7 +803,8 @@ async function main() {
   await stageTextAssets();
   await stageOfficialTargetAsset();
   await stageModelAssets();
-  await stageMindArAssets();
+  if (WEB_MODE) await stageLocalArVendor();
+  else await stageMindArAssets();
 
   if (WEB_MODE) {
     log(`HTTPS 静态网页资源已生成：${GENERATED_ASSETS}`);

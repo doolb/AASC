@@ -58,6 +58,7 @@
     </div>
 
     <video id="displayArTrackingVideo" class="display-mmd-ar-background" autoplay muted playsinline hidden></video>
+    <div id="displayArAframeHost" class="display-mmd-ar-aframe-host" hidden aria-hidden="true"></div>
     <!--
         显示端交互舞台与媒体层保持同一页面，聊天/MMD 只拆分代码和样式模块。
         这些容器不使用 iframe，避免 WebView 中出现第二套 viewport、焦点和 WebSocket 生命周期。
@@ -88,6 +89,36 @@
                         <select id="displayArTargetSelect">
                             <option value="">未选择</option>
                         </select>
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>定位算法</span>
+                        <select id="displayArTrackerEngine">
+                            <option value="mindar">MindAR（推荐）</option>
+                            <option value="legacy">旧 JS（回退）</option>
+                        </select>
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>定位图模式</span>
+                        <select id="displayArTargetPlane">
+                            <option value="floor">底面</option>
+                            <option value="vertical">立面</option>
+                        </select>
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>平移死区 <output id="displayArTranslationDeadZoneValue">0.5%</output></span>
+                        <input id="displayArTranslationDeadZone" type="range" min="0" max="3" step="0.1" value="0.5">
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>旋转死区 <output id="displayArRotationDeadZoneValue">0.5°</output></span>
+                        <input id="displayArRotationDeadZone" type="range" min="0" max="3" step="0.1" value="0.5">
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>相机缓动 <output id="displayArSmoothingValue">120 ms</output></span>
+                        <input id="displayArSmoothing" type="range" min="0" max="500" step="10" value="120">
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>相机距定位图中心 <output id="displayArCameraDistanceValue">100%</output></span>
+                        <input id="displayArCameraDistance" type="range" min="50" max="100" step="5" value="100">
                     </label>
                     <label class="display-mmd-ar-field">
                         <span>定位图名称</span>
@@ -131,6 +162,14 @@
                             恢复默认
                         </button>
                     </div>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdMotionPlayback" type="checkbox" checked>
+                        <span>播放动作</span>
+                    </label>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdPhysicsEnabled" type="checkbox" checked>
+                        <span>启用 PMX 物理（切换时重新加载模型）</span>
+                    </label>
                     <label class="display-mmd-lighting-field">
                         <span>亮度预设</span>
                         <select id="displayMmdLightingPreset">
@@ -354,6 +393,7 @@
     <script src="js/display-mmd.js" defer></script>
     <script src="js/display-mmd-lighting.js" defer></script>
     <script src="js/display-mmd-image-tracker.js" defer></script>
+    <script src="js/display-mmd-ar-mindar.js" defer></script>
     <script src="js/display-mmd-ar.js" defer></script>
     <script src="js/display-mmd-command-adapter.js" defer></script>
     <script>

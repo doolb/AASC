@@ -7,7 +7,7 @@
     const anchor = document.getElementById('mmdArAframeAnchor');
     const rectangle = document.getElementById('mmdArAframeTargetRect');
     const live = document.getElementById('mmdArBenchmarkLive');
-    const OFFICIAL_TARGET_SRC = 'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/card-example/card.mind';
+    const OFFICIAL_TARGET_SRC = new URL('../assets/mindar-official-card.mind', document.currentScript.src).href;
     if (!host || !scene || !anchor || !rectangle) return;
 
     let generation = 0;

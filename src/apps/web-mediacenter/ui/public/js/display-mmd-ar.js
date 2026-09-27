@@ -12,6 +12,8 @@
     const TARGET_STORE = 'targets';
     const ACTIVE_TARGET_KEY = 'aasc.display.mmdAr.activeTarget.v1';
     const MOTION_SENSITIVITY_KEY = 'aasc.display.mmdAr.motionSensitivity.v1';
+    const ENGINE_KEY = 'aasc.display.mmdAr.engine.v1';
+    const CAMERA_SETTINGS_KEY = 'aasc.display.mmdAr.cameraSettings.v1';
     const MOTION_ORBIT_MODE = 'sensor-orbit-only';
     const MIN_QUAD_AREA = 0.03;
     const MAX_PHYSICAL_WIDTH_MM = 100000;
@@ -59,6 +61,7 @@
         motionLastSample: null,
         motionSensitivity: readMotionSensitivity()
     };
+    state.engine = readEngine();
     let backgroundResumeTargetId = null;
     let backgroundStopPromise = Promise.resolve();
     let visibilityGeneration = 0;
@@ -119,7 +122,79 @@
         return Math.min(max, Math.max(min, value));
     }
     function usesTestRectangleCalibration() {
-        return root.MmdArTestAframeMode === true;
+        return usesAframeTracking();
+    }
+    function usesAframeTracking() {
+        return root.MmdArTestAframeMode === true
+            || (state.engine === 'mindar' && !!byId('displayArTrackerEngine'));
+    }
+    function readEngine() {
+        try { return root.localStorage?.getItem(ENGINE_KEY) === 'legacy' ? 'legacy' : 'mindar'; }
+        catch (error) { return 'mindar'; }
+    }
+    function syncEngineMode() {
+        // 测试页原有标志不变；正式页只在选择 MindAR 时开放 PMX 相机矩阵入口。
+        if (byId('displayArTrackerEngine')) root.MmdArAframeMode = state.engine === 'mindar';
+    }
+    function initializeCameraControls() {
+        const engine = byId('displayArTrackerEngine');
+        if (!engine) return;
+        engine.value = state.engine;
+        syncEngineMode();
+        engine.addEventListener('change', () => {
+            void (async () => {
+                await stopAr();
+                state.engine = engine.value === 'legacy' ? 'legacy' : 'mindar';
+                try { root.localStorage?.setItem(ENGINE_KEY, state.engine); }
+                catch (error) { console.warn('[显示端 AR] 保存算法选择失败:', error); }
+                syncEngineMode();
+                setStatus(getSelectedTarget() ? 'ready' : 'idle', `已切换至${state.engine === 'mindar' ? 'MindAR' : '旧 JS'}定位`);
+            })();
+        });
+        let saved = {};
+        try { saved = JSON.parse(root.localStorage?.getItem(CAMERA_SETTINGS_KEY) || '{}') || {}; }
+        catch (error) { console.warn('[显示端 AR] 读取相机设置失败:', error); }
+        const settings = { targetPlane: saved.targetPlane === 'vertical' ? 'vertical' : 'floor' };
+        const plane = byId('displayArTargetPlane');
+        plane.value = settings.targetPlane;
+        plane.addEventListener('change', () => {
+            settings.targetPlane = plane.value === 'vertical' ? 'vertical' : 'floor';
+            saveSettings();
+        });
+        const controls = [
+            ['displayArTranslationDeadZone', 'translationDeadZonePercent', 0.5, 0, 3, '%'],
+            ['displayArRotationDeadZone', 'rotationDeadZoneDegrees', 0.5, 0, 3, '°'],
+            ['displayArSmoothing', 'smoothingMs', 120, 0, 500, ' ms'],
+            ['displayArCameraDistance', 'distancePercent', 100, 50, 100, '%']
+        ];
+        function saveSettings() {
+            root.DisplayMmd?.setArCameraSettings?.(settings);
+            try { root.localStorage?.setItem(CAMERA_SETTINGS_KEY, JSON.stringify(settings)); }
+            catch (error) { console.warn('[显示端 AR] 保存相机设置失败:', error); }
+        }
+        for (const [id, key, fallback, minimum, maximum, unit] of controls) {
+            const input = byId(id);
+            const output = byId(`${id}Value`);
+            const value = Number(saved[key]);
+            settings[key] = saved[key] !== undefined && Number.isFinite(value)
+                ? clamp(value, minimum, maximum) : fallback;
+            input.value = String(settings[key]);
+            output.textContent = `${settings[key]}${unit}`;
+            input.addEventListener('input', () => {
+                settings[key] = clamp(Number(input.value), minimum, maximum);
+                output.textContent = `${settings[key]}${unit}`;
+                saveSettings();
+            });
+        }
+        root.DisplayMmd?.setArCameraSettings?.(settings);
+        const playback = byId('displayMmdMotionPlayback');
+        playback?.addEventListener('change', () => root.DisplayMmd?.setMotionPlaybackEnabled?.(playback.checked));
+        const physics = byId('displayMmdPhysicsEnabled');
+        physics?.addEventListener('change', () => {
+            void Promise.resolve(root.DisplayMmd?.setPhysicsEnabled?.(physics.checked)).then((success) => {
+                if (!success) physics.checked = !physics.checked;
+            });
+        });
     }
     function rectangleFromQuad(points) {
         return {
@@ -796,6 +871,10 @@
             root.DisplayMmdArLocationMarker?.hide?.();
             return;
         }
+        if (usesAframeTracking()) {
+            root.DisplayMmd?.resetArCameraPose?.();
+            return;
+        }
         root.DisplayMmd?.resetArPose?.();
     }
 
@@ -943,6 +1022,7 @@
         state.trackingRequestId += 1;
         cancelTrackingFrame();
         if (root.MmdArTestAframeMode === true) root.MmdArTestAframeTracking?.cancelPending?.();
+        if (byId('displayArTrackerEngine')) root.DisplayMmdMindArTracker?.cancelPending?.();
         const session = state.trackerSession;
         state.trackerSession = null;
         state.tracking = false;
@@ -958,7 +1038,7 @@
     function scheduleTrackingFrame() {
         if (!state.tracking || !state.trackerSession) return;
         const video = state.elements.trackingVideo;
-        if (root.MmdArTestAframeMode !== true && typeof video.requestVideoFrameCallback === 'function') {
+        if (!usesAframeTracking() && typeof video.requestVideoFrameCallback === 'function') {
             state.trackingFrameMode = 'video';
             state.trackingFrameHandle = video.requestVideoFrameCallback((timestamp) => {
                 state.trackingFrameHandle = null;
@@ -990,8 +1070,8 @@
         if (result?.newSample === false) return;
         if (result?.visible) {
             session.hasLocated = true;
-            if (root.MmdArTestAframeMode === true) {
-                setStatus('tracking', '定位测试：角色站在图中心，视角随相机移动');
+            if (usesAframeTracking()) {
+                setStatus('tracking', '角色站在定位图上，视角随相机移动');
                 return;
             }
             setStatus('tracking', root.MmdArLocationMarkerTest === true
@@ -1042,7 +1122,9 @@
             setStatus('ready', '请先显示并等待角色模型加载完成');
             return false;
         }
-        const tracker = root.DisplayMmdImageTargetTracker;
+        const aframe = usesAframeTracking();
+        const tracker = root.MmdArTestAframeMode === true ? root.DisplayMmdImageTargetTracker
+            : aframe ? root.DisplayMmdMindArTracker : root.DisplayMmdImageTargetTracker;
         if (!tracker || typeof tracker.start !== 'function') {
             setStatus('ready', '定位图已保存；当前识别引擎尚未接入');
             return false;
@@ -1050,19 +1132,21 @@
         const requestId = ++state.trackingRequestId;
         resetTrackedDisplay();
         try {
+            if (aframe) await tracker.load?.();
+            if (requestId !== state.trackingRequestId) return false;
             state.elements.calibration.hidden = true;
-            if (root.MmdArTestAframeMode === true) {
+            if (aframe) {
                 // 校准流与 A-Frame 追踪流不能同时持有；先释放旧流，再由 A-Frame 申请相机。
                 stopCamera();
             } else if (!state.cameraStream) await startCamera();
             if (requestId !== state.trackingRequestId) return false;
-            if (root.MmdArTestAframeMode !== true && !state.cameraStream) throw new Error('摄像头已关闭');
-            if (root.MmdArTestAframeMode !== true) {
+            if (!aframe && !state.cameraStream) throw new Error('摄像头已关闭');
+            if (!aframe) {
                 state.elements.trackingVideo.hidden = false;
                 await state.elements.trackingVideo.play();
             }
             if (requestId !== state.trackingRequestId || !state.cameraEnabled
-                || (root.MmdArTestAframeMode !== true && !state.cameraStream)) {
+                || (!aframe && !state.cameraStream)) {
                 return false;
             }
             const session = await tracker.start(
@@ -1249,6 +1333,7 @@
         state.elements = getElements();
         if (Object.values(state.elements).some((element) => !element)) return;
         state.initialized = true;
+        initializeCameraControls();
         bindEvents();
         setStatus('idle', '正在读取本地定位图…');
         try {

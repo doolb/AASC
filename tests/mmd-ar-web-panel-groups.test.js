@@ -16,6 +16,12 @@ const CHROME = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium']
 const CAMERA_CONTROL_IDS = ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone', 'mmdArSmoothingMs', 'mmdArCameraDistance'];
 
 function addCameraControls($) {
+  // 测试网页构建器先移除正式页新控件，再注入测试专用的一套参数。
+  for (const id of [
+    'displayArTrackerEngine', 'displayArTargetPlane', 'displayArTranslationDeadZone',
+    'displayArRotationDeadZone', 'displayArSmoothing', 'displayArCameraDistance',
+    'displayMmdMotionPlayback', 'displayMmdPhysicsEnabled'
+  ]) $(`#${id}`).closest('label').remove();
   $('#displayMmdLightingPanel').prepend('<label><input id="mmdArMotionPlayback" type="checkbox" checked><span>播放动作</span></label>');
   $('#displayMmdPhysicsFps').closest('label').before('<label><input id="mmdArPhysicsEnabled" type="checkbox" checked><span>启用 PMX 物理</span></label>');
   $('#displayArTargetPanel').append('<div id="mmdArTargetPlaneMode"></div>');

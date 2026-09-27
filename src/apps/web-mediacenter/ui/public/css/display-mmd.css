@@ -77,6 +77,37 @@
     display: none;
 }
 
+/* A-Frame 只负责定位矩阵；摄像头画面仍处于媒体上方、正式 PMX 和交互层下方。 */
+.display-mmd-ar-aframe-host {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.display-mmd-ar-aframe-host[hidden] {
+    display: none;
+}
+
+.display-mmd-ar-aframe-host a-scene {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.display-mmd-ar-mindar-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
 .display-mmd-layer.is-visible {
     display: block;
 }

@@ -452,12 +452,12 @@
     }
 
     function setArCameraPose(pose) {
-        if (root.MmdArTestAframeMode !== true || !state.visible || !state.modelReady) return false;
+        if ((!root.MmdArAframeMode && root.MmdArTestAframeMode !== true) || !state.visible || !state.modelReady) return false;
         return state.runtime?.setArCameraPose?.(pose) === true;
     }
 
     function setArCameraSettings(settings) {
-        if (root.MmdArTestAframeMode !== true || !settings || typeof settings !== 'object') return false;
+        if ((!root.MmdArAframeMode && root.MmdArTestAframeMode !== true) || !settings || typeof settings !== 'object') return false;
         state.arCameraSettings = { ...settings };
         state.runtime?.setArCameraSettings?.(state.arCameraSettings);
         return true;
@@ -487,11 +487,11 @@
     }
 
     function suspendArCameraPose() {
-        if (root.MmdArTestAframeMode === true) state.runtime?.suspendArCameraPose?.();
+        if (root.MmdArAframeMode || root.MmdArTestAframeMode === true) state.runtime?.suspendArCameraPose?.();
     }
 
     function resetArCameraPose() {
-        if (root.MmdArTestAframeMode === true) state.runtime?.resetArCameraPose?.();
+        if (root.MmdArAframeMode || root.MmdArTestAframeMode === true) state.runtime?.resetArCameraPose?.();
     }
 
     async function ensureRuntime(modelType = 'vrm') {
@@ -685,8 +685,8 @@
 
     root.DisplayMmd = Object.freeze({
         DEFAULT_MMD_LIGHTING,
-        getArCameraState: () => root.MmdArTestAframeMode === true ? state.runtime?.getArCameraState?.() : null,
-        getArCameraSyncState: () => root.MmdArTestAframeMode === true ? state.runtime?.getArCameraSyncState?.() : null,
+        getArCameraState: () => root.MmdArAframeMode || root.MmdArTestAframeMode === true ? state.runtime?.getArCameraState?.() : null,
+        getArCameraSyncState: () => root.MmdArAframeMode || root.MmdArTestAframeMode === true ? state.runtime?.getArCameraSyncState?.() : null,
         getState: () => ({
             visible: state.visible,
             modelReady: state.modelReady,
