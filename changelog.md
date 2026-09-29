@@ -1,5 +1,27 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR 高光独立分类外网发布
+
+- ✅ [2026-09-29] 将“高光”独立分类版发布到 `https://c.aasc.us/mnt/mmd-ar/`。此次仅 `index.html` 与线上不同；先上传暂存文件并校验 SHA-256，再替换首页。暂存文件默认权限为 600，导致公网短暂返回 403；修正为 644 后目录入口和首页直链均返回最新文件，SHA-256 为 `55dc7aed31072d68e6deddf917940ab0021808581f880d1e94b00dea08ee289e`。其余脚本及模型未变。
+
+### MMD AR 高光独立分类
+
+- ✅ [2026-09-29] 测试网页将高光从基础光照移至其后的独立“高光”分类，默认折叠、标题前放启用开关，正文保留颜色、强度、锐度。折叠与开关互不触发，原参数和本地存储保持不变。
+  - 修改 `3rd/mmd-ar-test/web-panel-groups.js`、`tests/mmd-ar-web-panel-groups.test.js` 及文档，不修改 shader、正式显示端或 APK。`npm run build:web:mmd-ar-test` 成功；9 项相关测试中 8 项首轮通过，修正旧 AO 序号断言后剩余 1 项复测通过；语法和差异检查通过。已验证刷新恢复设置与手机窄屏布局，独立分类尚未发布。
+
+### MMD AR 自定义高光外网发布
+
+- ✅ [2026-09-29] 发布至 `https://c.aasc.us/mnt/mmd-ar/`，入口为“灯光 → 基础光照 → 自定义 Blinn-Phong 高光”，默认关闭。
+  - 上传 `js/web-specular.mjs`、`js/display-pmx-lighting-mode.mjs`、`js/display-pmx-runtime.js`、`js/display-mmd.js`、`index.html` 五个文件；远端暂存 SHA-256 校验后依次切换脚本、最后原子替换首页，公网 HTTPS 五文件大小与 SHA-256 全部匹配。首页 SHA-256 为 `1d79cf734ce1b8ea82e2a0c622a20d8ad7ba5a7d06b3acaabd3a46f33e38516e`。
+  - AO、模型、纹理未变；未打 APK 或发布正式服务包。空暂存目录已移除，未删除旧业务资源；本轮仅验证资源发布，未进行外网浏览器交互测试。
+
+### MMD AR 测试网页高光设置
+
+- 验证：`npm run build:web:mmd-ar-test` 成功；高光、原面板、双光阴影共 11/11 测试通过，包括真实 PMX shader 编译；语法检查和差异空白检查通过。
+
+- ✅ [2026-09-29] 基础光照增加自定义 Blinn-Phong 高光开关、颜色、强度和锐度；默认关闭保留 PMX 原效果，独立本地存储，开启使用直射光方向与已有阴影，不依赖 PBR 贴图。
+  - `3rd/mmd-ar-test/web-specular.mjs`、`web-panel-groups.js`、`build.js`：仅 WEB_MODE 构建副本注入，模块内容指纹防缓存；正式显示端和 APK 不变，无需 Offline 包更新。新增 `web-specular.test.mjs` 验证规范化、存储失效、持久化及真实 WebGL 高光效果；关闭后与原像素一致，零强度为零，颜色和锐度生效。本地网页已构建，尚未发布。
+
 ### MMD AR 边界修正开关外网发布
 
 - ✅ [2026-09-29] 用户确认整数像素取样后横条消失、边界修正后效果改善；明确背景白色保护仅用于法线预览，正常 AO 与预览共用边界修正开关，真机帧率与细边缘继续验收。

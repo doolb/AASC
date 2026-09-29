@@ -361,6 +361,16 @@ async function stageTextAssets() {
     const aoVersion = (await hashFile(aoPath)).sha256.slice(0, 12);
     // 静态站点可能长时间缓存同路径 ESM；先给阴影模块加内容指纹，再计算 runtime 指纹。
     const pmxRuntimePath = path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js');
+    // 高光只注入测试网页副本，保持正式显示端与旧 APK 材质不变。
+    const specularPath = path.join(GENERATED_ASSETS, 'js/web-specular.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-specular.mjs'), specularPath);
+    const specularVersion = (await hashFile(specularPath)).sha256.slice(0, 12);
+    const lightingPath = path.join(GENERATED_ASSETS, 'js/display-pmx-lighting-mode.mjs');
+    const lightingSource = await fs.readFile(lightingPath, 'utf8');
+    const specularAnchor = 'if (!material?.isMMDToonMaterial) return false;';
+    if (lightingSource.split(specularAnchor).length !== 2) throw new Error('测试高光未找到唯一材质初始化入口');
+    await fs.writeFile(lightingPath, `import { prepareTestSpecular } from './web-specular.mjs?v=${specularVersion}';\n` +
+      lightingSource.replace(specularAnchor, `${specularAnchor}\n    prepareTestSpecular(material);`));
     const lightingModeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-lighting-mode.mjs'))).sha256.slice(0, 12);
     const runtimeSource = await fs.readFile(pmxRuntimePath, 'utf8');
     const lightingModeImport = "'./display-pmx-lighting-mode.mjs'";

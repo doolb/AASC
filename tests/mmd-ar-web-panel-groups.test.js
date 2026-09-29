@@ -80,7 +80,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   groupWebPanels($);
 
   const expectedTitles = [
-    ['动作', '基础光照', 'AO', '主光', '补光', '边缘光 1', '边缘光 2', '物理'],
+    ['动作', '基础光照', '高光', 'AO', '主光', '补光', '边缘光 1', '边缘光 2', '物理'],
     ['定位图与校准', '跟踪操作', '体感环绕', '相机跟随'],
   ];
   panels.forEach((selector, index) => {
@@ -115,6 +115,12 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#displayMmdShadowSource').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '补光');
   assert.equal($('#mmdArPhysicsEnabled').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
   assert.match(WEB_PANEL_GROUP_CSS, /background: #39455c/u);
+  const specular = $('.mmd-ar-specular');
+  assert.equal(specular.is('section.mmd-ar-panel-group'), true);
+  assert.equal(specular.find('.mmd-ar-panel-group-header [data-specular="enabled"]').length, 1);
+  assert.equal(specular.find('.mmd-ar-panel-group-body [data-specular]').length, 3);
+  assert.equal(specular.find('.mmd-ar-panel-group-body').is('[hidden]'), true);
+  assert.equal(specular.prev().find('button').attr('data-group-title'), '基础光照');
 });
 
 test('新增未分类控件时停止网页构建，避免面板设置丢失', () => {
@@ -144,15 +150,15 @@ test('手机宽度下分类可独立开合，控件值与面板滚动范围不�
       lighting: document.getElementById('displayMmdLightingPreset').value,
       shadowSource: document.getElementById('displayMmdShadowSource').value,
     }));
-    await page.click('#displayMmdLightingPanel .mmd-ar-panel-group:nth-of-type(3) .mmd-ar-panel-group-toggle > span:first-child');
+    await page.click('#displayMmdLightingPanel [data-group-title="AO"] > span:first-child');
     const aoOpenedFromTitle = await page.evaluate(() => ({
-      open: !document.querySelectorAll('#displayMmdLightingPanel .mmd-ar-panel-group-body')[2].hidden,
+      open: !document.getElementById('displayMmdPmxAoEnabled').closest('section').querySelector('.mmd-ar-panel-group-body').hidden,
       enabled: document.getElementById('displayMmdPmxAoEnabled').checked,
     }));
     await page.click('#displayMmdPmxAoEnabled');
-    const aoStayedOpenFromSwitch = await page.evaluate(() => !document.querySelectorAll('#displayMmdLightingPanel .mmd-ar-panel-group-body')[2].hidden);
-    await page.click('#displayMmdLightingPanel .mmd-ar-panel-group:nth-of-type(3) .mmd-ar-panel-group-toggle > span:first-child');
-    const aoClosedFromTitle = await page.evaluate(() => document.querySelectorAll('#displayMmdLightingPanel .mmd-ar-panel-group-body')[2].hidden);
+    const aoStayedOpenFromSwitch = await page.evaluate(() => !document.getElementById('displayMmdPmxAoEnabled').closest('section').querySelector('.mmd-ar-panel-group-body').hidden);
+    await page.click('#displayMmdLightingPanel [data-group-title="AO"] > span:first-child');
+    const aoClosedFromTitle = await page.evaluate(() => document.getElementById('displayMmdPmxAoEnabled').closest('section').querySelector('.mmd-ar-panel-group-body').hidden);
     await page.click('#displayMmdFillEnabled');
     await page.evaluate(() => {
       document.getElementById('displayMmdLightingPanel').hidden = true;
@@ -162,13 +168,13 @@ test('手机宽度下分类可独立开合，控件值与面板滚动范围不�
     const after = await page.evaluate(() => ({
       lighting: document.getElementById('displayMmdLightingPreset').value,
       shadowSource: document.getElementById('displayMmdShadowSource').value,
-      aoOpen: document.querySelectorAll('#displayMmdLightingPanel .mmd-ar-panel-group-body')[2].hidden === false,
+      aoOpen: !document.getElementById('displayMmdPmxAoEnabled').closest('section').querySelector('.mmd-ar-panel-group-body').hidden,
       trackingOpen: document.querySelectorAll('#displayArTargetPanel .mmd-ar-panel-group-body')[1].hidden === false,
       firstLightingOpen: document.querySelector('#displayMmdLightingPanel .mmd-ar-panel-group-body').hidden === false,
       fillEnabled: document.getElementById('displayMmdFillEnabled').checked,
-      fillGroupClosed: document.querySelectorAll('#displayMmdLightingPanel .mmd-ar-panel-group-body')[4].hidden,
+      fillGroupClosed: document.getElementById('displayMmdFillEnabled').closest('section').querySelector('.mmd-ar-panel-group-body').hidden,
       aoEnabled: document.getElementById('displayMmdPmxAoEnabled').checked,
-      aoButtonLabel: document.querySelectorAll('#displayMmdLightingPanel .mmd-ar-panel-group-toggle')[2].getAttribute('aria-label'),
+      aoButtonLabel: document.querySelector('#displayMmdLightingPanel [data-group-title="AO"]').getAttribute('aria-label'),
       titleBackground: getComputedStyle(document.querySelector('#displayMmdLightingPanel .mmd-ar-panel-group-header')).backgroundColor,
       panelWidth: document.getElementById('displayMmdLightingPanel').getBoundingClientRect().width,
       viewportWidth: window.innerWidth,
@@ -229,6 +235,23 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanelGroup3').hidden), false);
     await page.evaluate((selector) => document.querySelector(selector).click(), lightingTitle);
     assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanelGroup3').hidden), true);
+    // 高光开关位于折叠标题外，切换不展开；展开也不能反向切换启用状态。
+    await page.waitForSelector('.mmd-ar-specular[data-bound="true"]');
+    const specularState = await page.evaluate(() => {
+      const group = document.querySelector('.mmd-ar-specular');
+      const toggle = group.querySelector('[data-specular="enabled"]');
+      const body = group.querySelector('.mmd-ar-panel-group-body');
+      toggle.click();
+      const stayedClosed = body.hidden;
+      group.querySelector('.mmd-ar-panel-group-toggle').click();
+      const remainedEnabled = toggle.checked;
+      const intensity = group.querySelector('[data-specular="intensity"]');
+      intensity.value = '0.62'; intensity.dispatchEvent(new Event('input', { bubbles: true }));
+      group.querySelector('.mmd-ar-panel-group-toggle').click();
+      return { stayedClosed, remainedEnabled, closed: body.hidden, enabled: toggle.checked,
+        disabled: intensity.disabled, saved: JSON.parse(localStorage.getItem('aasc.mmdArTest.specular.v1')).intensity };
+    });
+    assert.deepEqual(specularState, { stayedClosed: true, remainedEnabled: true, closed: true, enabled: true, disabled: false, saved: 0.62 });
     const keyShadow = await page.evaluate(() => {
       const toggle = document.getElementById('displayMmdKeyShadowEnabled');
       const initial = { checked: toggle.checked, value: window.DisplayMmd.getLighting().keyShadowEnabled };
@@ -271,6 +294,9 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     assert.equal(await page.$eval('#mmdArTargetPlaneMode [data-target-plane="vertical"]', (button) => button.getAttribute('aria-pressed')), 'true');
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('aasc.mmdArTest.cameraSettings.v1')).targetPlane), 'vertical');
     await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.mmd-ar-specular[data-bound="true"]');
+    assert.equal(await page.$eval('[data-specular="enabled"]', node => node.checked), true);
+    assert.equal(await page.$eval('[data-specular="intensity"]', node => node.value), '0.62');
     assert.equal(await page.$eval('#mmdArMotionPlayback', (node) => node.checked), false);
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
     assert.equal(await page.$eval('#mmdArPhysicsEnabled', (node) => node.checked), true);

@@ -2,6 +2,22 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 测试网页 Blinn-Phong 高光（伪代码）
+
+```text
+已有声明：MMDToonMaterial 的直射高光、测试页基础光照分类、WEB_MODE 构建副本
+新增定义：TestSpecular { enabled=false, color=#ffffff, intensity=0.3, shininess=30 }
+读取独立本地存储，失败或字段非法回退默认；强度限制 0..2，锐度限制 1..256
+基础光照之后插入独立高光分类；默认折叠，标题前开关与折叠按钮互不触发
+分类 section 保留 mmd-ar-specular，容纳标题开关与正文颜色、强度、锐度
+输入更新内存权威值并尝试持久化；原存储键与 shader 不变，折叠不改变启用状态
+仅 WEB_MODE 复制模块并给 lighting import 添加内容指纹，正式源码和 APK 不变
+为模型材质增加独立 uniform；关闭时完整保留原 PMX 高光
+开启时用颜色、强度、锐度替代原高光，按 max(N·L,0) 和原 Blinn-Phong BRDF 计算
+沿用进入直射光函数之前的主光和补光阴影，不改变漫反射、Toon、AO、轮廓光和透明度
+每次绘制仅在设置版本变化时刷新 uniform；不改 PMX 原参数，避免材质 morph 覆盖
+```
+
 ### 独立 WebGL2 深度读数页（伪代码）
 
 ```text

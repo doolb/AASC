@@ -4,6 +4,7 @@
 const LIGHTING_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback']],
   ['基础光照', ['displayMmdLightingPreset', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
+  ['高光', []],
   ['AO', ['displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3'], 'displayMmdPmxAoEnabled'],
   ['主光', ['displayMmdKeyColor', 'displayMmdKeyIntensity', 'displayMmdKeyDirectionLongitude'], 'displayMmdKeyShadowEnabled'],
   ['补光', ['displayMmdShadowSource', 'displayMmdFillColor', 'displayMmdFillIntensity', 'displayMmdFillDirectionLongitude'], 'displayMmdFillEnabled'],
@@ -292,6 +293,17 @@ function groupPanel($, panel, headerClass, groups) {
     if (title === '基础光照' && panel.attr('id') === 'displayMmdLightingPanel') {
       // 测试专用读数不是原面板控件，不增加 ID，也不改变正式页控件清单。
       body.prepend(panel.children('.mmd-ar-camera-clip'));
+    }
+    if (title === '高光' && panel.attr('id') === 'displayMmdLightingPanel') {
+      // 保留同一个设置容器，标题开关和正文参数继续复用原高光模块的事件与存储。
+      group.addClass('mmd-ar-specular');
+      header.prepend('<label class="mmd-ar-panel-group-switch"><input type="checkbox" data-specular="enabled" aria-label="启用自定义 Blinn-Phong 高光"></label>');
+      body.append(`
+        <label class="display-mmd-lighting-field"><span>高光颜色</span><input type="color" data-specular="color" value="#ffffff" disabled></label>
+        <label class="display-mmd-lighting-field"><span>高光强度 <output>0.3</output></span><input type="range" data-specular="intensity" min="0" max="2" step="0.01" value="0.3" disabled></label>
+        <label class="display-mmd-lighting-field"><span>高光锐度 <output>30</output></span><input type="range" data-specular="shininess" min="1" max="256" step="1" value="30" disabled></label>
+        <small>关闭保留模型原高光；锐度越高光斑越集中。</small>
+      `);
     }
     group.append(header, body);
     panel.append(group);
