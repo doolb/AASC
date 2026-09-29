@@ -248,15 +248,40 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), true);
     assert.equal(await page.$eval('#mmdArPhysicsEnabled', (node) => node.checked), true);
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().physicsEnabled), true);
+    assert.equal(await page.$eval('#mmdArMotionTime', node => node.textContent), '--:-- / --:--');
+    assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 0);
+    await page.evaluate(() => {
+      window.__testMotionProgress = { durationSeconds: 12.4, timeSeconds: 3.7 };
+      const displayMmd = window.DisplayMmd;
+      window.DisplayMmd = new Proxy({}, {
+        get(_target, property) {
+          if (property === 'getMotionProgress') return () => window.__testMotionProgress;
+          return Reflect.get(displayMmd, property);
+        },
+      });
+    });
     await page.click('#mmdArMotionToggle');
     assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), false);
     assert.equal(await page.$eval('#mmdArMotionToggle', node => node.getAttribute('aria-expanded')), 'true');
-    assert.equal(await page.$eval('#mmdArMotionTime', node => node.textContent), '--:-- / --:--');
-    assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 0);
+    assert.deepEqual(await page.evaluate(() => ({
+      progress: document.getElementById('mmdArMotionProgress').value,
+      time: document.getElementById('mmdArMotionTime').textContent,
+      motion: window.DisplayMmd.getMotionProgress(),
+    })), {
+      progress: 3.7,
+      time: '00:03 / 00:12',
+      motion: { durationSeconds: 12.4, timeSeconds: 3.7 },
+    });
     await page.keyboard.press('Escape');
     assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), true);
     assert.equal(await page.$eval('#mmdArMotionToggle', node => node.getAttribute('aria-expanded')), 'false');
+    await page.evaluate(() => {
+      window.__testMotionProgress = { durationSeconds: 12.4, timeSeconds: 8.2 };
+    });
+    await new Promise(resolve => setTimeout(resolve, 350));
+    assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 3.7);
     await page.click('#mmdArMotionToggle');
+    assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 8.2);
     assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), false);
     await page.click('#mmdArMotionPlayback');
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
@@ -404,10 +429,18 @@ test('测试网页三个面板在横竖屏都停靠在按钮列左侧并从顶�
       }
     };
 
-    assertPanelsLeftOfButtons(await readLayouts());
+    const portraitLayouts = await readLayouts();
+    assertPanelsLeftOfButtons(portraitLayouts);
+    for (const layout of portraitLayouts) {
+      assert.equal(Math.round(layout.panelWidth), 320, `${layout.panelId} 竖屏保持标准面板宽度`);
+    }
     await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 3 });
     await page.waitForFunction(() => document.getElementById('displayStageLayers')?.dataset.panelOrientation === 'landscape');
-    assertPanelsLeftOfButtons(await readLayouts());
+    const landscapeLayouts = await readLayouts();
+    assertPanelsLeftOfButtons(landscapeLayouts);
+    for (const layout of landscapeLayouts) {
+      assert.equal(Math.round(layout.panelWidth), 320, `${layout.panelId} 横屏保持标准面板宽度`);
+    }
     await page.setViewport({ width: 320, height: 700, deviceScaleFactor: 3 });
     await page.waitForFunction(() => document.getElementById('displayStageLayers')?.dataset.panelOrientation === 'portrait');
     assertPanelsLeftOfButtons(await readLayouts());

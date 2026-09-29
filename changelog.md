@@ -18,6 +18,8 @@
 
 - ✅ [2026-09-29] 修复“动作”按钮无法打开面板，并让灯光、动作/物理、定位三个面板在竖屏和横屏都停靠在按钮列左侧、顶部对齐。
   - 测试页为重建的动作按钮绑定独立开合与互斥逻辑，补回动作/物理两组并同步 `aria-expanded`；面板位置、宽度和高度随可视区更新。更新 `3rd/mmd-ar-test/build.js`、`web-panel-groups.js`、`tests/mmd-ar-web-panel-groups.test.js` 和 design/spec/task/todo。`npm run build:web:mmd-ar-test` 成功，Chrome 面板回归 8/8 通过；外网未发布。附带模拟摄像头用例的素材高度断言仍有 1 px 差异（507 预期/506 实际）。
+- ✅ [2026-09-29] 补齐动作面板的只读 VMD 进度与时间刷新，并保持常规竖屏面板 320px 宽度。
+  - 打开面板后立即读取并每 250ms 更新实际播放时间；关闭面板或离开页面后停止刷新。宽度按实际按钮列、安全区和间距计算，仅在窄屏空间不足时收缩。同步更新 `3rd/mmd-ar-test/README.md`、`build.js`、`web-panel-groups.js`、浏览器测试及 design/spec/task；本地网页构建成功，Chrome 面板回归 8/8 通过。外网未发布；`docs/todo.md` 中没有遗留的本功能待办。
 
 ### MMD AR 动作面板外网发布
 

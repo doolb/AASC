@@ -45,6 +45,7 @@ const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-plane-options { display: flex; gap: 6px; margin-top: 6px; }
     .mmd-ar-plane-options button { flex: 1; min-height: 38px; border: 1px solid #758bff88; border-radius: 7px; background: #222b3d; color: #d6e0f5; cursor: pointer; }
     .mmd-ar-plane-options button[aria-pressed="true"] { background: #5169a3; border-color: #a8bbff; color: #fff; }
+    #mmdArMotionProgress { width: 100%; height: 12px; accent-color: var(--accent-color); }
 `;
 
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
@@ -82,12 +83,43 @@ const WEB_PANEL_GROUP_JS = `
     (() => {
       const button = document.getElementById('mmdArMotionToggle');
       const panel = document.getElementById('mmdArMotionPanel');
+      const progress = document.getElementById('mmdArMotionProgress');
+      const time = document.getElementById('mmdArMotionTime');
       if (!button || !panel) return;
 
+      let timer = null;
+      const formatTime = (seconds) => {
+        const rounded = Math.max(0, Math.floor(seconds));
+        return String(Math.floor(rounded / 60)).padStart(2, '0') + ':'
+          + String(rounded % 60).padStart(2, '0');
+      };
+      const updateProgress = () => {
+        if (!progress || !time) return;
+        const motion = window.DisplayMmd?.getMotionProgress?.();
+        const duration = Number(motion?.durationSeconds);
+        const current = Number(motion?.timeSeconds);
+        if (!motion || !Number.isFinite(duration) || duration <= 0 || !Number.isFinite(current)) {
+          progress.value = 0;
+          progress.max = 1;
+          time.textContent = '--:-- / --:--';
+          return;
+        }
+        progress.max = duration;
+        progress.value = Math.max(0, Math.min(duration, current));
+        time.textContent = formatTime(progress.value) + ' / ' + formatTime(duration);
+      };
       const setOpen = (open) => {
         const nextOpen = open === true;
         panel.hidden = !nextOpen;
         button.setAttribute('aria-expanded', String(nextOpen));
+        if (timer !== null) {
+          window.clearInterval(timer);
+          timer = null;
+        }
+        if (nextOpen && progress && time) {
+          updateProgress();
+          timer = window.setInterval(updateProgress, 250);
+        }
       };
       button.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -110,6 +142,10 @@ const WEB_PANEL_GROUP_JS = `
         if (event.key === 'Escape') setOpen(false);
       });
       setOpen(false);
+      window.addEventListener('pagehide', () => {
+        if (timer !== null) window.clearInterval(timer);
+        timer = null;
+      }, { once: true });
     })();
     (() => {
       const field = document.querySelector('.mmd-ar-edge-correction');

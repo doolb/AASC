@@ -22,7 +22,8 @@
 网页舞台尺寸变化:
   direction = visualViewport.width > visualViewport.height ? landscape : portrait
   portrait 和 landscape 时都把三个面板定位在竖向按钮列左边，顶部对齐第一颗按钮
-  面板宽度不超过 320px，并按当前宽度、按钮列、间距和左右安全区收缩
+  常规视口下三个面板都固定为 320px，不因横竖屏方向缩窄
+  只有可用宽度不足 320px 时，才按按钮列、间距和左右安全区收缩到可用宽度
   面板最大高度 = 可视高度 - 上下安全区 - 24px，上限 620px
   内容超出时只滚动面板内部
   方向或可视区变化时重新计算位置、宽度和最大高度
@@ -33,6 +34,8 @@
   点击动作按钮时切换 hidden 和 aria-expanded
   打开动作面板时关闭灯光和定位面板；打开其他面板时关闭动作面板
   面板内部点击停止向外传播；点击外部或 Escape 收起并同步 aria-expanded
+  动作面板打开时立即读取 getMotionProgress，并每 250ms 更新进度和当前/总时长
+  面板关闭或页面离开时清理定时器；暂停和循环播放按实际 action.time 显示
 ```
 
 正式显示端与 HTTPS 测试网页使用相同的存储键和范围；只有同一浏览器 origin 下的页面共享 localStorage 值。测试网页仍由 `npm run build:web:mmd-ar-test` 生成，不因本次修改上传发布。
