@@ -208,7 +208,7 @@
 ## 显示端 VRM/MMD
 
 - ⏳待现场验证 [2026-09-28] 对比 Android Vivaldi 与正常浏览器的 WebGL2 原始深度读数
-  - 2026-09-29 诊断页加入默认/highp sampler 同纹理对照；待 Vivaldi 比较两者纹理误差，确认 highp 是否消除 d/d1 截图中的约 1/2048 量化，再处理 AO、模糊、合成三阶段。
+  - 半分辨率边界修正开关及法线预览白边保护已发布外网；用户确认横条消失、边界效果改善。仍待 Vivaldi 对照细发丝、运动和边界密集时的帧率，再决定正式显示端同步。
   - 独立 `3rd/mmd-ar-test/depth-probe.html` 已在桌面 Chromium/SwiftShader 验证标准透视深度；待两款手机浏览器对照两组裁剪范围中的已知值、片元深度、纹理采样三路读数，并保存报告后判断 AO 错位原因。
   - 测试网页“基础光照”已加入当前投影 near/far 读数；现场比较时同步记录普通/AR 模式和该读数，避免只用初始化的 0.01、100 推断深度精度。
   - 关联文档：`docs/design/mmd-ar-test-apk.md`、`docs/spec/mmd-ar-test-apk.md`、`docs/task/20260928_独立WebGL深度纹理诊断页.md`、`docs/task/20260928_MMDAR测试网页相机裁剪范围读数.md`。

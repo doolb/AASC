@@ -347,11 +347,25 @@ async function stageTextAssets() {
     }
   }
   if (WEB_MODE) {
+    // 测试网页单独验证手机深度采样精度；三个阶段必须一致，避免模糊和合成再次丢失精度。
+    const aoPath = path.join(GENERATED_ASSETS, 'js/display-pmx-ao.mjs');
+    const aoSource = await fs.readFile(aoPath, 'utf8');
+    const depthSampler = 'uniform sampler2D tDepth;';
+    if (aoSource.split(depthSampler).length !== 4) throw new Error('测试网页 AO 深度采样器数量应为三处');
+    const { addAoNormalPreview } = require('./web-ao-preview');
+    const { alignAoDepthTexels } = require('./web-ao-texel');
+    const { fixAoNormalPreviewEdges } = require('./web-ao-preview-edges');
+    const { addAoBoundaryCorrection } = require('./web-ao-boundary');
+    const alignedAoSource = alignAoDepthTexels(aoSource.replaceAll(depthSampler, 'uniform highp sampler2D tDepth;'));
+    await fs.writeFile(aoPath, addAoBoundaryCorrection(fixAoNormalPreviewEdges(addAoNormalPreview(alignedAoSource))));
+    const aoVersion = (await hashFile(aoPath)).sha256.slice(0, 12);
     // 静态站点可能长时间缓存同路径 ESM；先给阴影模块加内容指纹，再计算 runtime 指纹。
     const pmxRuntimePath = path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js');
     const lightingModeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-lighting-mode.mjs'))).sha256.slice(0, 12);
     const runtimeSource = await fs.readFile(pmxRuntimePath, 'utf8');
     const lightingModeImport = "'./display-pmx-lighting-mode.mjs'";
+    const aoImport = "'./display-pmx-ao.mjs'";
+    if (runtimeSource.split(aoImport).length !== 2) throw new Error('测试网页未找到唯一的 AO 模块入口');
     if (!runtimeSource.includes(lightingModeImport)) throw new Error('测试网页未找到 PMX 灯光模块入口');
     const cameraProbeAnchor = 'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });';
     if (runtimeSource.split(cameraProbeAnchor).length !== 2) throw new Error('测试网页未找到唯一的 PMX 相机诊断锚点');
@@ -359,7 +373,8 @@ async function stageTextAssets() {
     const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
     await fs.writeFile(pmxRuntimePath, runtimeWithProbe.replace(lightingModeImport,
-      `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`));
+      `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
+      `'./display-pmx-ao.mjs?v=${aoVersion}'`));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
     const mmdScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd.js');
     const runtimeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js'))).sha256.slice(0, 12);

@@ -47,6 +47,37 @@ const WEB_PANEL_GROUP_CSS = `
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
     (() => {
+      const field = document.querySelector('.mmd-ar-edge-correction');
+      const toggle = field?.querySelector('input');
+      const note = field?.querySelector('small');
+      const resolution = document.getElementById('displayMmdPmxAoResolution');
+      if (!toggle || !note) return;
+      const storageKey = 'aasc.mmdArTest.aoEdgeCorrection.v1';
+      let enabled = true;
+      try { enabled = localStorage.getItem(storageKey) !== 'false'; } catch (error) { /* 存储不可用时默认开启。 */ }
+      toggle.checked = enabled;
+      window.MmdArTestEdgeCorrection = enabled;
+      const syncSize = (reduced) => {
+        toggle.disabled = !reduced;
+        note.textContent = reduced ? '同时修正 AO 与法线预览边界' : '全分辨率无需修正；切回半分辨率恢复选择';
+      };
+      toggle.addEventListener('change', () => {
+        window.MmdArTestEdgeCorrection = toggle.checked;
+        try { localStorage.setItem(storageKey, String(toggle.checked)); } catch (error) { /* 不影响本次切换。 */ }
+      });
+      window.addEventListener('mmd-ar-ao-size', event => syncSize(event.detail.reduced));
+      resolution?.addEventListener('change', () => syncSize(resolution.value !== 'full'));
+      syncSize(resolution?.value !== 'full');
+    })();
+    (() => {
+      const toggle = document.querySelector('.mmd-ar-normal-preview input');
+      if (!toggle) return;
+      // 诊断只在本次页面有效，不写入灯光配置；关闭时由原渲染分支恢复全部参数。
+      window.MmdArTestNormalPreview = false;
+      toggle.checked = false;
+      toggle.addEventListener('change', () => { window.MmdArTestNormalPreview = toggle.checked; });
+    })();
+    (() => {
       const panel = document.getElementById('displayMmdLightingPanel');
       const label = panel?.querySelector('.mmd-ar-camera-clip');
       if (!panel || !label) return;
@@ -294,6 +325,11 @@ function groupWebPanels($) {
   actions.remove();
 
   groupPanel($, lightingPanel, 'display-mmd-lighting-header', LIGHTING_GROUPS);
+  const aoGroup = lightingPanel.find('button[data-group-title="AO"]').closest('.mmd-ar-panel-group');
+  aoGroup.find('.mmd-ar-panel-group-body').prepend(
+    '<label class="display-mmd-lighting-field mmd-ar-edge-correction"><input type="checkbox" checked><span>半分辨率边界修正 <small></small></span></label>' +
+    '<label class="display-mmd-lighting-field mmd-ar-normal-preview"><input type="checkbox"><span>深度重建法线预览（颜色代表方向，跳过 AO 与模糊）</span></label>'
+  );
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);
 }
 
