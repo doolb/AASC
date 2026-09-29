@@ -294,11 +294,15 @@ test('MMD 指针拖动旋转本地角色并保留点击互动', () => {
     const pmx = readPublic('js/display-pmx-runtime.js');
     const vrm = readPublic('js/display-vrm-runtime.js');
     assert.match(mmd, /POINTER_DRAG_THRESHOLD/u);
+    assert.match(mmd, /addEventListener\('wheel', handleWheel, \{ passive: false \}\)/u);
+    assert.match(mmd, /addEventListener\('contextmenu', handleContextMenu\)/u);
     assert.match(mmd, /function handlePointerMove\(event\)[\s\S]*rotateModelBy/u);
     assert.match(pmx, /const rotateModelBy = \(yawRadians, pitchRadians = 0\)[\s\S]*rotationState\.targetYaw \+= yawDelta/u);
     assert.match(pmx, /const finishModelRotation = \(\)[\s\S]*fitShadowWhenSettled/u);
     assert.match(vrm, /function rotateModelBy\(yawRadians, pitchRadians = 0\)[\s\S]*rotationState\.targetYaw \+= yawDelta/u);
     assert.match(vrm, /function finishModelRotation\(\)[\s\S]*fitShadowWhenSettled/u);
+    assert.match(pmx, /translateModelByPixels: arFootAnchor\.translateByPixels[\s\S]*zoomCameraBy/u);
+    assert.match(vrm, /translateModelByPixels: arFootAnchor\.translateByPixels[\s\S]*zoomCameraBy/u);
 });
 
 function createMmdPointerHarness(hitPart) {
@@ -306,10 +310,10 @@ function createMmdPointerHarness(hitPart) {
     const marker = '    root.DisplayMmd = Object.freeze({';
     assert.ok(source.includes(marker));
     const instrumented = source.replace(marker,
-        '    root.__pointerTest = { state, handlePointerDown, handlePointerMove, handlePointerUp, cancelPointerInteraction };\n' + marker);
+        '    root.__pointerTest = { state, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel, cancelPointerInteraction, handleWheel: typeof handleWheel === "function" ? handleWheel : null, handleContextMenu: typeof handleContextMenu === "function" ? handleContextMenu : null };\n' + marker);
     const window = {};
     vm.runInNewContext(instrumented, { window, console });
-    const { state, handlePointerDown, handlePointerMove, handlePointerUp, cancelPointerInteraction } = window.__pointerTest;
+    const { state, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel, cancelPointerInteraction, handleWheel, handleContextMenu } = window.__pointerTest;
     const events = [];
     const captures = new Set();
     state.canvas = {
@@ -324,12 +328,71 @@ function createMmdPointerHarness(hitPart) {
     state.runtime = {
         raycast() { return hitPart; },
         rotateModelBy(yaw, pitch) { events.push({ yaw, pitch }); },
+        translateModelByPixels(dx, dy) { events.push({ type: 'translate', dx, dy }); },
+        zoomCameraBy(factor) { events.push({ type: 'zoom', factor }); },
         finishModelRotation() { events.push('finish'); }
     };
     state.pointerEnabled = true;
     state.visible = true;
-    return { state, events, captures, handlePointerDown, handlePointerMove, handlePointerUp, cancelPointerInteraction };
+    return { state, events, captures, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel, cancelPointerInteraction, handleWheel, handleContextMenu };
 }
+
+
+test('MMD 右键拖动平移角色，不旋转或触发角色互动', () => {
+    const harness = createMmdPointerHarness('body');
+    const point = (x, y) => ({ pointerId: 3, pointerType: 'mouse', button: 2, clientX: x, clientY: y });
+    harness.handlePointerDown(point(20, 20));
+    harness.handlePointerMove(point(40, 30));
+    harness.handlePointerUp(point(40, 30));
+    const contextMenu = { prevented: false, preventDefault() { this.prevented = true; } };
+    assert.equal(harness.handleContextMenu(contextMenu), true);
+    assert.equal(contextMenu.prevented, true, '拖动角色时应阻止浏览器右键菜单');
+    assert.deepEqual(harness.events.filter((event) => event.type === 'translate'), [{ type: 'translate', dx: 20, dy: 10 }]);
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && 'yaw' in event).length, 0);
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 0);
+});
+
+test('MMD 滚轮连续缩放相机并阻止浏览器滚动', () => {
+    const harness = createMmdPointerHarness(null);
+    assert.equal(typeof harness.handleWheel, 'function');
+    const event = { deltaY: 120, prevented: false, preventDefault() { this.prevented = true; } };
+    harness.handleWheel(event);
+    assert.equal(event.prevented, true);
+    assert.equal(harness.events.filter((item) => item.type === 'zoom').length, 1);
+    assert.ok(Math.abs(harness.events.find((item) => item.type === 'zoom').factor - 0.8869204367) < 1e-9);
+});
+
+test('MMD 两指移动同时平移角色和连续缩放相机，不旋转或触发点击', () => {
+    const harness = createMmdPointerHarness('body');
+    const touch = (pointerId, x, y) => ({ pointerId, pointerType: 'touch', button: 0, clientX: x, clientY: y });
+    harness.handlePointerDown(touch(10, 100, 100));
+    harness.handlePointerDown(touch(11, 200, 100));
+    harness.handlePointerMove(touch(10, 90, 100));
+    harness.handlePointerMove(touch(11, 210, 100));
+    harness.handlePointerUp(touch(11, 210, 100));
+    harness.handlePointerUp(touch(10, 90, 100));
+    const moves = harness.events.filter((event) => event.type === 'translate');
+    const zooms = harness.events.filter((event) => event.type === 'zoom');
+    assert.equal(moves.length, 2);
+    assert.deepEqual(moves.map(({ dx, dy }) => [dx, dy]), [[-5, 0], [5, 0]]);
+    assert.deepEqual(zooms.map(({ factor }) => factor), [1.1, 120 / 110]);
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && 'yaw' in event).length, 0);
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 0);
+});
+test('MMD 双指中断后剩余手指不会误旋转或触发点击', () => {
+    const harness = createMmdPointerHarness('body');
+    const touch = (pointerId, x, y) => ({ pointerId, pointerType: 'touch', button: 0, clientX: x, clientY: y });
+    harness.handlePointerDown(touch(20, 100, 100));
+    harness.handlePointerDown(touch(21, 200, 100));
+    harness.handlePointerMove(touch(20, 90, 100));
+    harness.handlePointerCancel(touch(21, 200, 100));
+    harness.handlePointerMove(touch(20, 130, 100));
+    harness.handlePointerUp(touch(20, 130, 100));
+    assert.equal(harness.state.touchGesture, null);
+    assert.equal(harness.captures.size, 0);
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && 'yaw' in event).length, 0);
+    assert.equal(harness.events.filter((event) => typeof event === 'object' && event.type === 'mmd.interaction').length, 0);
+});
 
 test('MMD 从角色身上拖动会旋转，抬起不触发触摸', () => {
     const harness = createMmdPointerHarness('body');

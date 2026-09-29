@@ -148,6 +148,10 @@
     cursor: grabbing;
 }
 
+#displayMmdCanvas.is-interactive.is-translating {
+    cursor: grabbing;
+}
+
 .display-mmd-status {
     position: absolute;
     right: max(12px, var(--display-safe-inset-right));

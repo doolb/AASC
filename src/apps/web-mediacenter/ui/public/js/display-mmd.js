@@ -168,6 +168,10 @@
         modelProfile: null,
         pressedPoint: null,
         rotationDrag: null,
+        translationDrag: null,
+        activeTouchPointers: new Map(),
+        suppressedTouchPointers: new Set(),
+        touchGesture: null,
         pulseUntil: 0,
         lastInteractionAt: 0,
         animationFrame: null,
@@ -299,12 +303,16 @@
         if (state.bus) state.bus.publish('mmd.interaction', event);
     }
 
-    function finishRotationDrag(pointerId) {
-        const drag = state.rotationDrag;
-        if (!drag || drag.pointerId !== pointerId) return false;
+    function releasePointerCapture(pointerId) {
         if (state.canvas?.hasPointerCapture?.(pointerId)) {
             state.canvas.releasePointerCapture(pointerId);
         }
+    }
+
+    function finishRotationDrag(pointerId) {
+        const drag = state.rotationDrag;
+        if (!drag || drag.pointerId !== pointerId) return false;
+        releasePointerCapture(pointerId);
         state.rotationDrag = null;
         state.canvas?.classList.remove('is-dragging');
         if (drag.didRotate && typeof state.runtime?.finishModelRotation === 'function') {
@@ -313,17 +321,30 @@
         return drag.didRotate;
     }
 
+    function finishTranslationDrag(pointerId) {
+        const drag = state.translationDrag;
+        if (!drag || drag.pointerId !== pointerId) return false;
+        releasePointerCapture(pointerId);
+        state.translationDrag = null;
+        state.canvas?.classList.remove('is-translating');
+        return drag.didTranslate;
+    }
+
     function cancelPointerInteraction() {
-        const pointerId = state.rotationDrag?.pointerId;
-        if (typeof pointerId === 'number') finishRotationDrag(pointerId);
+        const rotationPointerId = state.rotationDrag?.pointerId;
+        if (typeof rotationPointerId === 'number') finishRotationDrag(rotationPointerId);
+        const translationPointerId = state.translationDrag?.pointerId;
+        if (typeof translationPointerId === 'number') finishTranslationDrag(translationPointerId);
+        for (const pointerId of state.activeTouchPointers.keys()) releasePointerCapture(pointerId);
+        state.activeTouchPointers.clear();
+        state.suppressedTouchPointers.clear();
+        state.touchGesture = null;
         state.pressedPoint = null;
     }
 
-    function handlePointerDown(event) {
-        if (!state.pointerEnabled || !state.visible) return;
-        const point = getCanvasPoint(event);
+    function beginRotationDrag(event, point) {
         const hitPart = raycast(point);
-        // 命中角色仅保留点击候选；任何起点都允许拖动旋转。
+        // 命中角色仅保留点击候选；任何起点都允许左键或单指拖动旋转。
         state.pressedPoint = hitPart ? { point, hitPart, pointerId: event.pointerId } : null;
         state.rotationDrag = {
             pointerId: event.pointerId,
@@ -334,10 +355,107 @@
         state.canvas.setPointerCapture?.(event.pointerId);
     }
 
-    function handlePointerMove(event) {
-        const drag = state.rotationDrag;
-        if (!state.pointerEnabled || !state.visible || !drag || drag.pointerId !== event.pointerId) return;
+    function beginTouchGesture() {
+        const activePointers = [...state.activeTouchPointers.entries()];
+        state.pressedPoint = null;
+        if (state.rotationDrag) finishRotationDrag(state.rotationDrag.pointerId);
+        state.touchGesture = null;
+        for (const [pointerId] of activePointers) {
+            state.suppressedTouchPointers.add(pointerId);
+            state.canvas.setPointerCapture?.(pointerId);
+        }
+        if (activePointers.length !== 2) return;
+        const [first, second] = activePointers.map(([, point]) => point);
+        const center = {
+            x: (first.x + second.x) / 2,
+            y: (first.y + second.y) / 2
+        };
+        state.touchGesture = {
+            pointerIds: activePointers.map(([pointerId]) => pointerId),
+            lastCenter: center,
+            lastDistance: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y))
+        };
+    }
+
+    function handlePointerDown(event) {
+        if (!state.pointerEnabled || !state.visible) return;
         const point = getCanvasPoint(event);
+        if (event.pointerType === 'touch') {
+            state.activeTouchPointers.set(event.pointerId, point);
+            state.canvas.setPointerCapture?.(event.pointerId);
+            if (state.activeTouchPointers.size > 1) {
+                beginTouchGesture();
+                return;
+            }
+        }
+        if (event.pointerType !== 'touch' && event.button === 2) {
+            state.pressedPoint = null;
+            if (state.rotationDrag) finishRotationDrag(state.rotationDrag.pointerId);
+            state.translationDrag = {
+                pointerId: event.pointerId,
+                startPoint: point,
+                lastPoint: point,
+                didTranslate: false
+            };
+            state.canvas.setPointerCapture?.(event.pointerId);
+            return;
+        }
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        beginRotationDrag(event, point);
+    }
+
+    function updateTouchGesture() {
+        const gesture = state.touchGesture;
+        if (!gesture) return;
+        const first = state.activeTouchPointers.get(gesture.pointerIds[0]);
+        const second = state.activeTouchPointers.get(gesture.pointerIds[1]);
+        if (!first || !second) return;
+        const center = {
+            x: (first.x + second.x) / 2,
+            y: (first.y + second.y) / 2
+        };
+        const distance = Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+        const deltaX = center.x - gesture.lastCenter.x;
+        const deltaY = center.y - gesture.lastCenter.y;
+        if (Math.abs(deltaX) >= Number.EPSILON || Math.abs(deltaY) >= Number.EPSILON) {
+            state.runtime?.translateModelByPixels?.(deltaX, deltaY);
+        }
+        const scaleFactor = distance / gesture.lastDistance;
+        if (Number.isFinite(scaleFactor) && Math.abs(scaleFactor - 1) >= Number.EPSILON) {
+            state.runtime?.zoomCameraBy?.(scaleFactor);
+        }
+        gesture.lastCenter = center;
+        gesture.lastDistance = distance;
+    }
+
+    function handlePointerMove(event) {
+        if (!state.pointerEnabled || !state.visible) return;
+        const point = getCanvasPoint(event);
+        if (event.pointerType === 'touch' && state.activeTouchPointers.has(event.pointerId)) {
+            state.activeTouchPointers.set(event.pointerId, point);
+            if (state.touchGesture?.pointerIds.includes(event.pointerId)) {
+                updateTouchGesture();
+                return;
+            }
+            if (state.suppressedTouchPointers.has(event.pointerId)) return;
+        }
+        const translation = state.translationDrag;
+        if (translation && translation.pointerId === event.pointerId) {
+            const travelled = Math.hypot(point.x - translation.startPoint.x, point.y - translation.startPoint.y);
+            if (!translation.didTranslate && travelled < POINTER_DRAG_THRESHOLD) return;
+            const deltaX = point.x - translation.lastPoint.x;
+            const deltaY = point.y - translation.lastPoint.y;
+            translation.lastPoint = point;
+            state.pressedPoint = null;
+            translation.didTranslate = true;
+            state.canvas.classList.add('is-translating');
+            if (Math.abs(deltaX) >= Number.EPSILON || Math.abs(deltaY) >= Number.EPSILON) {
+                state.runtime?.translateModelByPixels?.(deltaX, deltaY);
+            }
+            return;
+        }
+        const drag = state.rotationDrag;
+        if (!drag || drag.pointerId !== event.pointerId) return;
         const travelled = Math.hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y);
         if (!drag.didRotate && travelled < POINTER_DRAG_THRESHOLD) return;
         const deltaX = point.x - drag.lastPoint.x;
@@ -353,6 +471,25 @@
 
     function handlePointerUp(event) {
         if (!state.pointerEnabled || !state.visible) return;
+        if (event.pointerType === 'touch' && state.activeTouchPointers.has(event.pointerId)) {
+            const wasGesturePointer = state.touchGesture?.pointerIds.includes(event.pointerId) === true;
+            state.activeTouchPointers.delete(event.pointerId);
+            releasePointerCapture(event.pointerId);
+            if (wasGesturePointer) {
+                state.touchGesture = null;
+                state.pressedPoint = null;
+                for (const pointerId of state.activeTouchPointers.keys()) {
+                    state.suppressedTouchPointers.add(pointerId);
+                }
+                if (state.rotationDrag) finishRotationDrag(state.rotationDrag.pointerId);
+                return;
+            }
+            if (state.suppressedTouchPointers.delete(event.pointerId)) return;
+        }
+        if (finishTranslationDrag(event.pointerId)) {
+            state.pressedPoint = null;
+            return;
+        }
         if (finishRotationDrag(event.pointerId)) {
             state.pressedPoint = null;
             return;
@@ -363,7 +500,40 @@
         const distance = Math.hypot(point.x - pressedPoint.point.x, point.y - pressedPoint.point.y);
         state.pressedPoint = null;
         if (distance >= POINTER_DRAG_THRESHOLD) return;
+        releasePointerCapture(event.pointerId);
         triggerInteraction(pressedPoint.hitPart, point);
+    }
+
+    function handlePointerCancel(event) {
+        if (event.pointerType === 'touch' && state.activeTouchPointers.has(event.pointerId)) {
+            state.activeTouchPointers.delete(event.pointerId);
+            state.suppressedTouchPointers.delete(event.pointerId);
+            releasePointerCapture(event.pointerId);
+            if (state.touchGesture?.pointerIds.includes(event.pointerId)) {
+                state.touchGesture = null;
+                for (const pointerId of state.activeTouchPointers.keys()) {
+                    state.suppressedTouchPointers.add(pointerId);
+                }
+            }
+        }
+        finishTranslationDrag(event.pointerId);
+        finishRotationDrag(event.pointerId);
+        state.pressedPoint = null;
+    }
+
+    function handleWheel(event) {
+        if (!state.pointerEnabled || !state.visible || typeof state.runtime?.zoomCameraBy !== 'function') return false;
+        const deltaY = Number(event.deltaY);
+        if (!Number.isFinite(deltaY) || deltaY === 0) return false;
+        event.preventDefault?.();
+        state.runtime.zoomCameraBy(Math.exp(-deltaY * 0.001));
+        return true;
+    }
+
+    function handleContextMenu(event) {
+        if (!state.pointerEnabled || !state.visible) return false;
+        event.preventDefault?.();
+        return true;
     }
 
     function setPointerEnabled(enabled) {
@@ -443,6 +613,14 @@
     function setArPose(pose, calibration) {
         if (!state.visible || !state.modelReady) return false;
         return state.runtime?.setArPose?.(pose, calibration) === true;
+    }
+
+    function translateModelByPixels(deltaX, deltaY) {
+        return state.runtime?.translateModelByPixels?.(deltaX, deltaY) === true;
+    }
+
+    function zoomCameraBy(factor) {
+        return state.runtime?.zoomCameraBy?.(factor) === true;
     }
 
     function resetArPose() {
@@ -661,10 +839,9 @@
         state.canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
         state.canvas.addEventListener('pointermove', handlePointerMove, { passive: true });
         state.canvas.addEventListener('pointerup', handlePointerUp, { passive: true });
-        state.canvas.addEventListener('pointercancel', (event) => {
-            finishRotationDrag(event.pointerId);
-            state.pressedPoint = null;
-        }, { passive: true });
+        state.canvas.addEventListener('pointercancel', handlePointerCancel, { passive: true });
+        state.canvas.addEventListener('wheel', handleWheel, { passive: false });
+        state.canvas.addEventListener('contextmenu', handleContextMenu);
         state.initialized = true;
         resizeCanvas();
         setStatus('正在准备角色模型…');
@@ -701,6 +878,8 @@
         resetArPose,
         resetCameraViewRotation,
         setArPose,
+        translateModelByPixels,
+        zoomCameraBy,
         setArCameraPose,
         setArCameraSettings,
         setCameraViewRotation,

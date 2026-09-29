@@ -15,6 +15,8 @@ import { createArFootAnchor } from './display-mmd-ar-pose.js';
 // 旧版本缓存中的压缩顶点，否则模型会出现拉伸、破面或看似空白。
 const MODEL_CACHE_NAME = 'aasc-vrm-models-v2';
 const TARGET_MODEL_HEIGHT = 1.75;
+const MINIMUM_CAMERA_ZOOM = 0.1;
+const MAXIMUM_CAMERA_ZOOM = 10;
 const SHADOW_MAP_SIZE = 1024;
 const SHADOW_FRUSTUM_MARGIN = 1.18;
 const MAX_MODEL_PITCH_RADIANS = Math.PI / 4;
@@ -112,8 +114,8 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
     const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
-    // 体感环绕只允许改变 yaw/pitch；距离固定，避免手机姿态输入变成缩放或推拉镜头。
-    const cameraDistance = TARGET_MODEL_HEIGHT * 2.8;
+    const initialCameraDistance = TARGET_MODEL_HEIGHT * 2.8;
+    let cameraZoomFactor = 1;
     const cameraViewState = {
         targetYaw: 0,
         targetPitch: 0,
@@ -123,12 +125,16 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
 
     const applyCameraView = () => {
         const cosPitch = Math.cos(cameraViewState.currentPitch);
+        const distance = initialCameraDistance / cameraZoomFactor;
+        const targetX = cameraTarget.x;
+        const targetY = cameraTarget.y;
+        const targetZ = cameraTarget.z;
         camera.position.set(
-            Math.sin(cameraViewState.currentYaw) * cosPitch * cameraDistance,
-            cameraTarget.y + Math.sin(cameraViewState.currentPitch) * cameraDistance,
-            Math.cos(cameraViewState.currentYaw) * cosPitch * cameraDistance
+            targetX + Math.sin(cameraViewState.currentYaw) * cosPitch * distance,
+            targetY + Math.sin(cameraViewState.currentPitch) * distance,
+            targetZ + Math.cos(cameraViewState.currentYaw) * cosPitch * distance
         );
-        camera.lookAt(cameraTarget);
+        camera.lookAt(targetX, targetY, targetZ);
     };
 
     const updateCameraView = (delta) => {
@@ -159,6 +165,29 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         );
         startRendering();
         return true;
+    };
+
+    const resetCameraAdjustments = () => {
+        cameraZoomFactor = 1;
+        applyCameraView();
+    };
+
+    const zoomCameraBy = (factor) => {
+        const numericFactor = Number(factor);
+        if (!Number.isFinite(numericFactor) || numericFactor <= 0) return false;
+        const nextZoom = Math.max(MINIMUM_CAMERA_ZOOM,
+            Math.min(MAXIMUM_CAMERA_ZOOM, cameraZoomFactor * numericFactor));
+        if (Math.abs(nextZoom - cameraZoomFactor) < Number.EPSILON) return false;
+        cameraZoomFactor = nextZoom;
+        applyCameraView();
+        startRendering();
+        return true;
+    };
+
+    const resetArPose = () => {
+        arFootAnchor.reset();
+        resetCameraAdjustments();
+        startRendering();
     };
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
@@ -424,6 +453,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         disposeCurrentModel();
         currentVrm = nextVrm;
         currentRotationPivot = createModelRotationPivot(currentVrm.scene);
+        resetCameraAdjustments();
         resetModelRotation();
         applyShadowFlags(currentVrm.scene);
         scene.add(currentRotationPivot);
@@ -502,11 +532,13 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         handleActionPlan,
         load,
         raycast,
-        resetArPose: arFootAnchor.reset,
+        resetArPose,
         resize,
         rotateModelBy,
         setArPose: arFootAnchor.setPose,
+        translateModelByPixels: arFootAnchor.translateByPixels,
         setCameraViewRotation,
+        zoomCameraBy,
         setLighting,
         setVisible
     });

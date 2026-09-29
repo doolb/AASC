@@ -216,6 +216,45 @@ test('平放定位图以锚点逆矩阵驱动 PMX 相机，丢失和停止恢复
     assert.deepEqual(planeMode.vertical.modelScale, planeMode.floor.modelScale);
     assert.deepEqual(planeMode.restoredFloor.cameraPosition, planeMode.floor.cameraPosition,
       '切回底面应还原原始相机位姿');
+    const modelTransform = await page.evaluate(() => {
+      const mmd = window.DisplayMmd;
+      const available = typeof mmd.translateModelByPixels === 'function'
+        && typeof mmd.zoomCameraBy === 'function';
+      if (available === false) return { available };
+      mmd.resetArPose();
+      const before = mmd.getArCameraState();
+      const initialPose = { x: 0.5, y: 0.5, scale: 1 };
+      mmd.setArPose(initialPose);
+      const cameraBefore = { position: before.cameraPosition, quaternion: before.cameraQuaternion };
+      mmd.translateModelByPixels(24, -12);
+      mmd.zoomCameraBy(1.5);
+      const adjusted = mmd.getArCameraState();
+      mmd.setArPose(initialPose);
+      const relocked = mmd.getArCameraState();
+      mmd.resetArPose();
+      const reset = mmd.getArCameraState();
+      return { available, before, adjusted, relocked, reset, cameraBefore };
+    });
+    assert.equal(modelTransform.available, true, 'AR 显示端应提供模型平移和相机缩放接口');
+    assert.notDeepEqual(modelTransform.adjusted.modelPosition, modelTransform.before.modelPosition,
+      '手动平移应移动模型根节点');
+    assert.deepEqual(modelTransform.adjusted.modelScale, modelTransform.before.modelScale,
+      '相机缩放不得改变模型根节点缩放');
+    assert.notDeepEqual(modelTransform.adjusted.cameraPosition, modelTransform.cameraBefore.position,
+      '相机缩放应改变 AR 相机距离');
+    assert.equal(modelTransform.adjusted.cameraZoomFactor, 1.5);
+    assert.deepEqual(modelTransform.adjusted.cameraQuaternion, modelTransform.cameraBefore.quaternion,
+      '缩放相机距离不应改变 AR 相机旋转');
+    assert.deepEqual(modelTransform.relocked.modelScale, modelTransform.adjusted.modelScale,
+      '定位更新后模型缩放保持不变');
+    assert.notDeepEqual(modelTransform.relocked.modelPosition, modelTransform.before.modelPosition,
+      '定位更新后应保留用户对模型的平移');
+    assert.deepEqual(modelTransform.reset.modelPosition, modelTransform.before.modelPosition,
+      '重置 AR 姿态应恢复模型原始位置');
+    assert.deepEqual(modelTransform.reset.modelScale, modelTransform.before.modelScale,
+      '重置 AR 姿态应恢复模型原始缩放');
+    assert.equal(modelTransform.reset.cameraZoomFactor, 1,
+      '重置 AR 姿态应恢复相机缩放');
     assert.deepEqual(errors, []);
   } finally {
     await browser?.close();

@@ -21,6 +21,8 @@ import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
 import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights, setPmxFillShadowMode } from './display-pmx-lighting-mode.mjs';
 
 const TARGET_MODEL_HEIGHT = 1.75;
+const MINIMUM_CAMERA_ZOOM = 0.1;
+const MAXIMUM_CAMERA_ZOOM = 10;
 const MMD_MODEL_PREFIXES = Object.freeze([
     '/models/mmd/',
     '/api/mmd/static/mmd/'
@@ -169,7 +171,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
     const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
-    // 体感环绕只允许改变 yaw/pitch；距离固定，避免手机姿态输入变成缩放或推拉镜头。
+    let cameraZoomFactor = 1;
     let cameraDistance = TARGET_MODEL_HEIGHT * 2.8;
     const cameraViewState = {
         targetYaw: 0,
@@ -180,12 +182,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
 
     const applyCameraView = () => {
         const cosPitch = Math.cos(cameraViewState.currentPitch);
+        const distance = cameraDistance / cameraZoomFactor;
+        const target = cameraTarget;
         camera.position.set(
-            cameraTarget.x + Math.sin(cameraViewState.currentYaw) * cosPitch * cameraDistance,
-            cameraTarget.y + Math.sin(cameraViewState.currentPitch) * cameraDistance,
-            cameraTarget.z + Math.cos(cameraViewState.currentYaw) * cosPitch * cameraDistance
+            target.x + Math.sin(cameraViewState.currentYaw) * cosPitch * distance,
+            target.y + Math.sin(cameraViewState.currentPitch) * distance,
+            target.z + Math.cos(cameraViewState.currentYaw) * cosPitch * distance
         );
-        camera.lookAt(cameraTarget);
+        camera.lookAt(target);
     };
 
     const updateCameraView = (delta) => {
@@ -324,6 +328,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         camera.far = frame.far;
         cameraTarget.copy(frame.center);
         cameraDistance = frame.distance;
+        cameraZoomFactor = 1;
         applyCameraView();
         camera.updateProjectionMatrix();
         applyAoRadius(bounds);
@@ -529,9 +534,45 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         settings: { ...DEFAULT_AR_CAMERA_SETTINGS },
         acceptedAnchorPosition: new THREE.Vector3(),
         acceptedAnchorQuaternion: new THREE.Quaternion(),
+        acceptedBasePosition: new THREE.Vector3(),
         acceptedPosition: new THREE.Vector3(),
         acceptedQuaternion: new THREE.Quaternion(),
         lastPose: null
+    };
+
+    const getArCameraTargetCenter = (aspect = 1) => {
+        const center = arCameraState.targetPosition?.clone();
+        if (!center) return null;
+        if (arCameraState.settings.targetPlane === 'vertical') {
+            center.y += arCameraState.targetWidth * aspect / 2;
+        }
+        return center;
+    };
+
+    const zoomCameraBy = (factor) => {
+        const numericFactor = Number(factor);
+        if (!Number.isFinite(numericFactor) || numericFactor <= 0) return false;
+        const nextZoom = Math.max(MINIMUM_CAMERA_ZOOM,
+            Math.min(MAXIMUM_CAMERA_ZOOM, cameraZoomFactor * numericFactor));
+        if (Math.abs(nextZoom - cameraZoomFactor) < Number.EPSILON) return false;
+        if (arCameraState.active) {
+            const targetCenter = getArCameraTargetCenter(arCameraState.lastPose?.targetAspect || 1);
+            if (!targetCenter) return false;
+            const currentBasePosition = camera.position.clone().sub(targetCenter)
+                .multiplyScalar(cameraZoomFactor).add(targetCenter);
+            cameraZoomFactor = nextZoom;
+            arCameraState.acceptedPosition.copy(arCameraState.acceptedBasePosition)
+                .sub(targetCenter).multiplyScalar(1 / cameraZoomFactor).add(targetCenter);
+            camera.position.copy(currentBasePosition.sub(targetCenter)
+                .multiplyScalar(1 / cameraZoomFactor).add(targetCenter));
+            camera.updateMatrix();
+            camera.updateMatrixWorld(true);
+        } else {
+            cameraZoomFactor = nextZoom;
+            applyCameraView();
+        }
+        startRendering();
+        return true;
     };
     const rotationState = {
         targetYaw: 0,
@@ -702,7 +743,13 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     });
 
     const resetArCameraPose = () => {
-        if (!arCameraState.active) return;
+        arFootAnchor.reset();
+        if (!arCameraState.active) {
+            cameraZoomFactor = 1;
+            applyCameraView();
+            startRendering();
+            return;
+        }
         if (currentRotationPivot) currentRotationPivot.visible = arCameraState.savedVisible;
         arCameraState.active = false;
         arCameraState.savedVisible = null;
@@ -717,11 +764,23 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         startRendering();
     };
 
+    const resetArPose = () => {
+        arFootAnchor.reset();
+        cameraZoomFactor = 1;
+        if (!arCameraState.active) applyCameraView();
+        startRendering();
+    };
+
     const suspendArCameraPose = () => {
         if (!arCameraState.active) return;
         // 失锁时连未完成的缓动也暂停，保持用户当时看到的画面。
         arCameraState.trackingLost = true;
         arCameraState.acceptedPosition.copy(camera.position);
+        const targetCenter = getArCameraTargetCenter(arCameraState.lastPose?.targetAspect || 1);
+        if (targetCenter) {
+            arCameraState.acceptedBasePosition.copy(camera.position).sub(targetCenter)
+                .multiplyScalar(cameraZoomFactor).add(targetCenter);
+        }
         arCameraState.acceptedQuaternion.copy(camera.quaternion);
         startRendering();
     };
@@ -806,6 +865,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         nextPosition.sub(targetCenter)
             .multiplyScalar(arCameraState.settings.distancePercent / 100)
             .add(targetCenter);
+        arCameraState.acceptedBasePosition.copy(nextPosition);
+        nextPosition.sub(targetCenter).multiplyScalar(1 / cameraZoomFactor).add(targetCenter);
         if (firstLock) {
             camera.position.copy(nextPosition);
             camera.quaternion.copy(nextQuaternion);
@@ -1134,6 +1195,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             cameraPosition: camera.position.toArray(),
             cameraQuaternion: camera.quaternion.toArray(),
             acceptedPosition: arCameraState.acceptedPosition.toArray(),
+            cameraZoomFactor,
             trackingLost: arCameraState.trackingLost,
             settings: { ...arCameraState.settings },
             modelVisible: currentRotationPivot?.visible ?? false,
@@ -1148,7 +1210,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         loadMotion,
         playMotion,
         raycast,
-        resetArPose: arFootAnchor.reset,
+        resetArPose,
         resetArCameraPose,
         rotateModelBy,
         finishModelRotation,
@@ -1168,6 +1230,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         setPhysicsEnabled,
         getPhysicsEnabled: () => physicsEnabled,
         setArPose: arFootAnchor.setPose,
+        translateModelByPixels: arFootAnchor.translateByPixels,
+        zoomCameraBy,
         resize,
         setLighting,
         setVisible,

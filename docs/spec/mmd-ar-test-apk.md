@@ -783,3 +783,18 @@ publishMmdArTestApk
   通过公网 URL 下载响应并校验 HTTP 成功、文件大小和 SHA-256
   不修改 Offline 服务 manifest.json
 ```
+
+### mmd-ar HTTPS 测试网页角色拖动与缩放（伪代码）
+
+```text
+构建 WEB_MODE 页面
+  继续从正式显示端复制 display-mmd.js、display-pmx-runtime.js、display-mmd-ar-pose.js 与 display-mmd.css
+  不注入额外手势脚本，保持测试网页和正式端使用同一 pointer 处理逻辑
+
+运行测试网页
+  左键/单指拖动沿用角色旋转；轻点角色沿用互动
+  鼠标滚轮与双指捏合连续缩放相机距离，保持 PMX 根缩放不变
+  鼠标右键拖动与双指中点移动角色相对定位锚点的位置
+  相机缩放作用在 A-Frame 跟随相机位置上，不改写 MindAR 锚点矩阵
+  通过既有 PMX 手势、AR pose 与测试网页构建回归确认行为
+```

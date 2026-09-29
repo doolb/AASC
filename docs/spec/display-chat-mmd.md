@@ -1259,3 +1259,68 @@
 - 灯光、动作/物理、定位三个面板共用一份透明度状态；关闭后切换另一个面板时读取同一数值，刷新后恢复本地保存值。
 - 面板定位使用逻辑舞台方向和旋转后的安全区，不依赖设备物理宽高顺序；测试网页构建副本使用相同的横屏锚点与不透明度语义。
 - 不改变面板开合互斥、控件事件、MMD/AR runtime、聊天或服务端状态协议。
+
+## 2026-09-29 MMD 角色平移与连续缩放（伪代码）
+
+```text
+状态 MmdPointerState 增加
+  activeTouchPointers: pointerId -> canvasPoint
+  touchGesture: null | { pointerIds, lastCentroid, lastDistance, didManipulate }
+  translationDrag: null | { pointerId, lastPoint, didMove }
+
+过程 handlePointerDown(event)
+  如果 MMD 不可见或 pointerEnabled 为 false，返回
+  point = 转换为舞台逻辑坐标
+  如果 event.pointerType 是 touch
+    记录 pointerId 与 point，并捕获 pointer
+    如果当前只有一个 touch，按既有流程开始单指旋转并记录角色点击候选
+    如果当前恰好有两个 touch
+      清除点击候选和单指旋转状态
+      用两点创建 centroid 与 distance 基线
+    如果当前超过两个 touch，清除点击候选并忽略该组手势直到全部结束
+    返回
+  如果 event.button 是右键，开始平移、清除点击候选并捕获 pointer
+  如果 event.button 是主键，沿用旋转和角色点击候选流程
+
+过程 handlePointerMove(event)
+  如果 pointerId 属于双指手势
+    更新对应 point，计算当前两点中点 centroid 与间距 distance
+    调用 runtime.translateModelByPixels(centroid - lastCentroid)
+    调用 runtime.zoomCameraBy(distance / lastDistance)
+    保存新的 centroid 与 distance，清除点击候选并标记手势已操作
+    返回
+  如果 pointerId 属于右键平移，调用 runtime.translateModelByPixels(point - lastPoint)，更新 lastPoint
+  否则沿用既有单指/左键旋转流程
+
+过程 handleWheel(event)
+  如果 MMD 不可见或 pointerEnabled 为 false，返回
+  阻止浏览器默认滚动
+  factor = exp(-event.deltaY * 0.001)
+  调用 runtime.zoomCameraBy(factor)
+
+过程 handlePointerUpOrCancel(event)
+  释放当前 pointer capture 并清理其状态
+  双指手势任一 pointer 结束时清理整组；剩余 pointer 不转成旋转或点击
+  右键拖动只结束平移，不触发角色互动
+  仅单指/左键未超过 8 像素阈值的 pointerup 可触发角色点击
+  pointercancel 不触发角色点击，并清除相关手势状态
+
+过程 runtime.translateModelByPixels(deltaX, deltaY)
+  依据当前相机朝向、模型深度、画布 CSS 高度计算屏幕平面世界位移
+  调用 arFootAnchor.translateBy(worldDelta)
+
+过程 runtime.zoomCameraBy(factor)
+  拒绝非有限或非正倍率
+  将相机距离倍率限制在 0.1 至 10
+  普通模式更新轨道相机距离；MindAR 模式在最新跟随相机位置与定位图中心之间应用倍率
+  不改变模型根缩放和定位锚点矩阵
+
+过程 arFootAnchor.setPose(pose, calibration)
+  从独立 posePosition 计算跟踪校正，不把 manualOffset 混入脚底对齐误差
+  自动尺度目标 = 基准尺度 * pose.scale * calibration.scale
+  保存 posePosition 后再应用 manualOffset 到模型根位置
+
+过程 arFootAnchor.reset()
+  将根位置/尺度还原到模型基准值
+  清空 manualOffset，供停止定位或更换模型使用
+```
