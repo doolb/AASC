@@ -33,6 +33,7 @@ const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-panel-group-body[hidden] { display: none; }
     .mmd-ar-panel-group-body > :first-child { margin-top: 9px; }
     .mmd-ar-panel-group-body > :last-child { margin-bottom: 0; }
+    .mmd-ar-camera-clip { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: #26344a; color: #dce8ff; font-size: 12px; font-variant-numeric: tabular-nums; }
     .mmd-ar-original-tracking-actions { display: none; }
     #mmdArTrackingToggle { width: 100%; min-height: 44px; }
     .mmd-ar-camera-setting input[type="range"] { width: 100%; }
@@ -45,6 +46,49 @@ const WEB_PANEL_GROUP_CSS = `
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    (() => {
+      const panel = document.getElementById('displayMmdLightingPanel');
+      const label = panel?.querySelector('.mmd-ar-camera-clip');
+      if (!panel || !label) return;
+      let timer = null;
+      const update = () => {
+        if (window.DisplayMmd?.getState?.()?.modelReady !== true) {
+          label.textContent = '当前 PMX 相机：模型未就绪';
+          return;
+        }
+        const matrix = window.MmdArTestCameraProjection?.();
+        if (!Array.isArray(matrix) || matrix.length !== 16) {
+          label.textContent = '当前 PMX 相机：投影未就绪';
+          return;
+        }
+        // WebGL 透视矩阵的 m22/m23 可直接反解裁剪面；AR 模式不能沿用 camera.near/far 字段。
+        const m22 = matrix[10];
+        const m23 = matrix[14];
+        const near = m23 / (m22 - 1);
+        const far = m23 / (m22 + 1);
+        if (!matrix.every(Number.isFinite) || Math.abs(matrix[11] + 1) > 0.001
+          || Math.abs(matrix[15]) > 0.001 || !Number.isFinite(near)
+          || !Number.isFinite(far) || near <= 0 || far <= near) {
+          label.textContent = '当前 PMX 相机：投影矩阵无法反解 near/far';
+          return;
+        }
+        const ar = window.DisplayMmd?.getArCameraSyncState?.();
+        const mode = ar?.active ? ar.trackingLost ? 'MindAR（失锁，沿用最后投影）' : 'MindAR 投影' : '普通相机';
+        label.textContent = mode + ' · near=' + near.toPrecision(5) + ' · far=' + far.toPrecision(5);
+      };
+      const sync = () => {
+        if (panel.hidden) {
+          if (timer !== null) clearInterval(timer);
+          timer = null;
+          return;
+        }
+        update();
+        if (timer === null) timer = setInterval(update, 500);
+      };
+      new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
+      window.addEventListener('pagehide', () => { if (timer !== null) clearInterval(timer); }, { once: true });
+      sync();
+    })();
     (() => {
       const toggle = document.getElementById('mmdArPhysicsEnabled');
       if (!toggle) return;
@@ -214,6 +258,10 @@ function groupPanel($, panel, headerClass, groups) {
       covered.add(node[0]);
       body.append(node);
     }
+    if (title === '基础光照' && panel.attr('id') === 'displayMmdLightingPanel') {
+      // 测试专用读数不是原面板控件，不增加 ID，也不改变正式页控件清单。
+      body.prepend(panel.children('.mmd-ar-camera-clip'));
+    }
     group.append(header, body);
     panel.append(group);
   }
@@ -228,6 +276,11 @@ function groupWebPanels($) {
   const lightingPanel = $('#displayMmdLightingPanel').first();
   const trackingPanel = $('#displayArTargetPanel').first();
   if (!lightingPanel.length || !trackingPanel.length) throw new Error('网页分类缺少灯光或定位面板');
+
+  // 只在网页测试副本增加只读读数；原灯光控件与正式显示端页面不变。
+  lightingPanel.find('.display-mmd-lighting-header').first().after(
+    '<div class="mmd-ar-camera-clip" aria-live="polite">当前 PMX 相机：模型未就绪</div>'
+  );
 
   // 将原按钮网格拆成校准与跟踪两组；保留按钮节点，原来的 ID 事件绑定继续有效。
   const actions = trackingPanel.find('.display-mmd-ar-actions').first();

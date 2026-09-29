@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WebGL2 深度纹理测试</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.55 system-ui, sans-serif; }
+    body { max-width: 900px; margin: 0 auto; padding: 18px; background: #111722; color: #e8edf7; }
+    h1 { font-size: 1.4rem; margin: 0 0 8px; }
+    p { margin: 8px 0 14px; color: #c4cedf; }
+    button { padding: 9px 16px; border: 1px solid #8298c9; border-radius: 7px; background: #263857; color: #fff; font: inherit; }
+    canvas { display: block; width: 100%; height: auto; margin: 14px 0 5px; border: 1px solid #62749a; background: #000; }
+    .labels { display: flex; justify-content: space-around; color: #c7d7ff; }
+    .result { margin: 18px 0; padding: 12px; border: 1px solid #536786; border-radius: 8px; background: #192334; }
+    .result h2 { font-size: 1.05rem; margin: 0 0 8px; }
+    .scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    th, td { padding: 6px 9px; border-bottom: 1px solid #43516b; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: #b7c9f4; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #0a101b; border-radius: 7px; }
+    .warn { color: #ffd49c; }
+  </style>
+</head>
+<body>
+  <h1>WebGL2 原始深度纹理测试</h1>
+  <p>采样精度对照版：同一张深度纹理分别用默认 sampler 和 highp sampler 读取。请比较两组“纹理误差”；普通 float 的 highp 声明不能代替 sampler 的 highp。</p>
+  <p>判读：默认 sampler 异常、highp 正常时，支持采样器精度不足的判断；两者都异常时仍需继续排查。两者都正常只说明此浏览器通过本项测试。测试裁剪范围为固定对照值，不读取 MMD 相机。</p>
+  <p>独立页面，无模型、摄像头或网络依赖。用已知值、片元深度、深度纹理三条路径对照标准透视 Z 和反向 Z，定位误差发生在哪一步。透视深度通常是 A+B/z，并非直接的线性 z。</p>
+  <button id="run" type="button">重新测试</button>
+  <canvas id="preview" width="600" height="240" aria-label="深度预览；三块矩形由左到右距离递增"></canvas>
+  <div class="labels"><span>距离 1</span><span>距离 2</span><span>距离 4</span></div>
+  <div id="results" aria-live="polite"></div>
+  <pre id="report">等待测试。</pre>
+  <p class="warn">这里测的是浏览器对合成场景的深度纹理写入/读取，不等于直接测试 PMX 材质或 AO 法线计算。请在正常浏览器和异常浏览器分别保存结果作对照。</p>
+  <script>
+    (() => {
+      'use strict';
+
+      const canvas = document.getElementById('preview');
+      const results = document.getElementById('results');
+      const report = document.getElementById('report');
+      const width = canvas.width;
+      const height = canvas.height;
+      const distances = [1, 2, 4];
+      const centers = [-0.68, 0, 0.68];
+      const cases = [
+        { name: '初始化裁剪范围（非当前模型实测值）', near: 0.01, far: 100 },
+        { name: '紧凑范围对照', near: 0.1, far: 10 }
+      ];
+
+      // 标准透视投影在 WebGL 深度缓冲中的值是 A+B/视距；反向 Z 则是 1-标准值。
+      const standardDepth = (distance, near, far) => far / (far - near)
+        - near * far / ((far - near) * distance);
+      const restoreDistance = (depth, near, far) => near * far
+        / (far - depth * (far - near));
+      const format = (value) => Number.isFinite(value) ? value.toFixed(7) : '无效';
+
+      const compile = (gl, type, source) => {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          const message = gl.getShaderInfoLog(shader) || '未知着色器错误';
+          gl.deleteShader(shader);
+          throw new Error(message);
+        }
+        return shader;
+      };
+
+      const program = (gl, vertex, fragment) => {
+        const vertexShader = compile(gl, gl.VERTEX_SHADER, vertex);
+        const fragmentShader = compile(gl, gl.FRAGMENT_SHADER, fragment);
+        const linked = gl.createProgram();
+        gl.attachShader(linked, vertexShader);
+        gl.attachShader(linked, fragmentShader);
+        gl.linkProgram(linked);
+        gl.deleteShader(vertexShader);
+        gl.deleteShader(fragmentShader);
+        if (!gl.getProgramParameter(linked, gl.LINK_STATUS)) {
+          const message = gl.getProgramInfoLog(linked) || '未知着色器链接错误';
+          gl.deleteProgram(linked);
+          throw new Error(message);
+        }
+        return linked;
+      };
+
+      const makeColorBuffer = (gl) => {
+        const buffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, buffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, width, height);
+        return buffer;
+      };
+
+      const makeFramebuffer = (gl, colorBuffer, depthTexture = null) => {
+        const framebuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorBuffer);
+        if (depthTexture) {
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT,
+            gl.TEXTURE_2D, depthTexture, 0);
+        }
+        const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        if (status !== gl.FRAMEBUFFER_COMPLETE) {
+          throw new Error(`帧缓冲不完整：0x${status.toString(16)}`);
+        }
+        return framebuffer;
+      };
+
+      const makeProjection = (near, far) => {
+        const cotangent = 1 / Math.tan(Math.PI / 6);
+        const aspect = width / height;
+        return new Float32Array([
+          cotangent / aspect, 0, 0, 0,
+          0, cotangent, 0, 0,
+          0, 0, -(far + near) / (far - near), -1,
+          0, 0, -2 * near * far / (far - near), 0
+        ]);
+      };
+
+      const vertexSource = `#version 300 es
+        layout(location = 0) in vec2 aPosition;
+        uniform mat4 uProjection;
+        uniform float uDistance;
+        void main() {
+          vec4 view = vec4(aPosition.x * uDistance / uProjection[0][0],
+            aPosition.y * uDistance / uProjection[1][1], -uDistance, 1.0);
+          gl_Position = uProjection * view;
+        }`;
+      const sceneFragment = `#version 300 es
+        precision highp float;
+        precision highp int;
+        uniform bool uEncodeDepth;
+        out vec4 outColor;
+        vec4 encodeFloat(float value) {
+          uint bits = floatBitsToUint(value);
+          return vec4(float((bits >> 24u) & 255u), float((bits >> 16u) & 255u),
+            float((bits >> 8u) & 255u), float(bits & 255u)) / 255.0;
+        }
+        void main() {
+          outColor = uEncodeDepth ? encodeFloat(gl_FragCoord.z) : vec4(1.0);
+        }`;
+      const passVertex = `#version 300 es
+        layout(location = 0) in vec2 aPosition;
+        out vec2 vUv;
+        void main() {
+          vUv = aPosition * 0.5 + 0.5;
+          gl_Position = vec4(aPosition, 0.0, 1.0);
+        }`;
+      const passFragment = (qualifier) => `#version 300 es
+        precision highp float;
+        precision highp int;
+        uniform ${qualifier}sampler2D uDepth;
+        uniform float uNear;
+        uniform float uFar;
+        uniform vec3 uKnownDepths;
+        uniform int uMode;
+        in vec2 vUv;
+        out vec4 outColor;
+        vec4 encodeFloat(float value) {
+          uint bits = floatBitsToUint(value);
+          return vec4(float((bits >> 24u) & 255u), float((bits >> 16u) & 255u),
+            float((bits >> 8u) & 255u), float(bits & 255u)) / 255.0;
+        }
+        void main() {
+          float depth = uMode == 2 ? (vUv.x < 0.3 ? uKnownDepths.x
+            : (vUv.x < 0.7 ? uKnownDepths.y : uKnownDepths.z)) : texture(uDepth, vUv).r;
+          if (uMode != 0) {
+            outColor = encodeFloat(depth);
+          } else {
+            float distance = uNear * uFar / max(uFar - depth * (uFar - uNear), 0.000001);
+            float shade = depth >= 0.999999 ? 0.0
+              : 1.0 - clamp(log(distance / uNear) / log(uFar / uNear), 0.0, 1.0);
+            outColor = vec4(vec3(shade), 1.0);
+          }
+        }`;
+
+      const readDepth = (gl, x, y) => {
+        const bytes = new Uint8Array(4);
+        gl.readPixels(Math.floor((x + 1) * width / 2), Math.floor((y + 1) * height / 2),
+          1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+        const error = gl.getError();
+        if (error !== gl.NO_ERROR) throw new Error(`读取深度编码失败：0x${error.toString(16)}`);
+        // RGBA8 按高字节到低字节承载 IEEE-754 位模式，不做浮点乘法打包。
+        const view = new DataView(new ArrayBuffer(4));
+        view.setUint8(0, bytes[0]);
+        view.setUint8(1, bytes[1]);
+        view.setUint8(2, bytes[2]);
+        view.setUint8(3, bytes[3]);
+        return view.getFloat32(0, false);
+      };
+
+      const addCell = (row, value, heading = false) => {
+        const cell = document.createElement(heading ? 'th' : 'td');
+        cell.textContent = value;
+        row.append(cell);
+      };
+
+      const showCase = (settings, readings) => {
+        const expected = distances.map((distance) => standardDepth(distance, settings.near, settings.far));
+        const errorOf = (values, target) => values.reduce((sum, value, index) =>
+          sum + Math.abs(value - target[index]), 0) / distances.length;
+        const errors = {
+          known: errorOf(readings.known, expected),
+          fragment: errorOf(readings.fragment, expected),
+          texture: errorOf(readings.texture, expected),
+          reversed: errorOf(readings.texture, expected.map((depth) => 1 - depth))
+        };
+        const threshold = 0.000001;
+        let verdict = '三条路径均符合标准透视深度 A+B/z';
+        if (errors.known >= threshold) verdict = '已知值编码/读回异常；暂不能判断深度纹理';
+        else if (errors.fragment >= threshold) verdict = '片元深度已异常；检查投影或光栅化';
+        else if (errors.texture >= threshold) verdict = errors.reversed < threshold && readings.background < threshold
+          ? '纹理采样符合反向 Z；检查深度方向' : '片元深度正常，但深度纹理采样异常';
+        else if (Math.abs(readings.background - 1) >= threshold) verdict = '平面深度正常，但背景深度异常';
+
+        const section = document.createElement('section');
+        section.className = 'result';
+        const title = document.createElement('h2');
+        title.textContent = `${settings.name} · ${readings.sampler}：near=${settings.near}，far=${settings.far}`;
+        const summary = document.createElement('p');
+        summary.textContent = `结论：${verdict}；背景 ${format(readings.background)}；已知值误差 ${format(errors.known)}，片元误差 ${format(errors.fragment)}，纹理误差 ${format(errors.texture)}`;
+        const scroller = document.createElement('div');
+        scroller.className = 'scroll';
+        const table = document.createElement('table');
+        const head = document.createElement('tr');
+        ['视距', '标准预期', '已知值编码', '片元深度', '纹理采样', '反向预期', '纹理还原视距'].forEach((label) => addCell(head, label, true));
+        table.append(head);
+        distances.forEach((distance, index) => {
+          const row = document.createElement('tr');
+          [String(distance), format(expected[index]), format(readings.known[index]),
+            format(readings.fragment[index]), format(readings.texture[index]),
+            format(1 - expected[index]),
+            format(restoreDistance(readings.texture[index], settings.near, settings.far))]
+            .forEach((value) => addCell(row, value));
+          table.append(row);
+        });
+        scroller.append(table);
+        section.append(title, summary, scroller);
+        results.append(section);
+        return `${settings.name} · ${readings.sampler}: ${verdict}; textureError=${errors.texture.toExponential(6)}; known=[${readings.known.map(format).join(', ')}]; fragment=[${readings.fragment.map(format).join(', ')}]; texture=[${readings.texture.map(format).join(', ')}]; background=${format(readings.background)}`;
+      };
+
+      const run = () => {
+        results.replaceChildren();
+        report.textContent = '正在测试…';
+        const gl = canvas.getContext('webgl2', { alpha: false, antialias: false,
+          preserveDrawingBuffer: true });
+        if (!gl) {
+          report.textContent = 'WebGL2 不可用，无法测试深度纹理。';
+          return;
+        }
+        const resources = [];
+        const keep = (resource, dispose) => { resources.push(() => dispose(resource)); return resource; };
+        try {
+          gl.disable(gl.DITHER);
+          gl.viewport(0, 0, width, height);
+          const sceneProgram = keep(program(gl, vertexSource, sceneFragment), gl.deleteProgram.bind(gl));
+          // 两个独立程序只改变采样器精度，复用同一纹理、坐标和编码器，便于手机上定位精度损失。
+          const passes = [
+            { name: '默认 sampler（lowp）', qualifier: '' },
+            { name: 'highp sampler', qualifier: 'highp ' }
+          ].map((pass) => ({ ...pass,
+            program: keep(program(gl, passVertex, passFragment(pass.qualifier)), gl.deleteProgram.bind(gl))
+          }));
+          const buffer = keep(gl.createBuffer(), gl.deleteBuffer.bind(gl));
+          const vao = keep(gl.createVertexArray(), gl.deleteVertexArray.bind(gl));
+          gl.bindVertexArray(vao);
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.enableVertexAttribArray(0);
+          gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+          const depthTexture = keep(gl.createTexture(), gl.deleteTexture.bind(gl));
+          gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, width, height, 0,
+            gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+          const sceneColor = keep(makeColorBuffer(gl), gl.deleteRenderbuffer.bind(gl));
+          const sceneFramebuffer = keep(makeFramebuffer(gl, sceneColor, depthTexture), gl.deleteFramebuffer.bind(gl));
+          const depthBits = gl.getParameter(gl.DEPTH_BITS);
+          const packColor = keep(makeColorBuffer(gl), gl.deleteRenderbuffer.bind(gl));
+          const packFramebuffer = keep(makeFramebuffer(gl, packColor), gl.deleteFramebuffer.bind(gl));
+          const extension = gl.getExtension('WEBGL_debug_renderer_info');
+          const renderer = extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+          const shaderPrecision = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+          const lines = [`浏览器: ${navigator.userAgent}`, `WebGL 渲染器: ${renderer}`,
+            `深度纹理: DEPTH_COMPONENT24 / UNSIGNED_INT；实际附件位数: ${depthBits}`,
+            `片元 highp 声明精度: ${shaderPrecision?.precision ?? '未知'} 位`];
+
+          cases.forEach((settings) => {
+            const expected = distances.map((distance) => standardDepth(distance, settings.near, settings.far));
+            const drawPlanes = () => {
+              distances.forEach((distance, index) => {
+                const x = centers[index];
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                  x - 0.16, -0.45, x + 0.16, -0.45,
+                  x - 0.16, 0.45, x + 0.16, 0.45
+                ]), gl.STREAM_DRAW);
+                gl.uniform1f(gl.getUniformLocation(sceneProgram, 'uDistance'), distance);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+              });
+            };
+            // 与显示端相同的普通透视投影，分别测试宽/窄近远裁面。
+            gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFramebuffer);
+            gl.viewport(0, 0, width, height);
+            gl.enable(gl.DEPTH_TEST);
+            gl.depthFunc(gl.LESS);
+            gl.clearDepth(1);
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.useProgram(sceneProgram);
+            gl.uniformMatrix4fv(gl.getUniformLocation(sceneProgram, 'uProjection'), false,
+              makeProjection(settings.near, settings.far));
+            gl.uniform1i(gl.getUniformLocation(sceneProgram, 'uEncodeDepth'), 0);
+            drawPlanes();
+
+            // 不经过深度纹理，直接把光栅化后的 gl_FragCoord.z 位模式写入 RGBA8。
+            gl.disable(gl.DEPTH_TEST);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, packFramebuffer);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.uniform1i(gl.getUniformLocation(sceneProgram, 'uEncodeDepth'), 1);
+            drawPlanes();
+            const fragment = centers.map((x) => readDepth(gl, x, 0));
+
+            for (const pass of passes) {
+            const passProgram = pass.program;
+            gl.bindFramebuffer(gl.FRAMEBUFFER, packFramebuffer);
+            gl.useProgram(passProgram);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+            gl.uniform1i(gl.getUniformLocation(passProgram, 'uDepth'), 0);
+            gl.uniform1f(gl.getUniformLocation(passProgram, 'uNear'), settings.near);
+            gl.uniform1f(gl.getUniformLocation(passProgram, 'uFar'), settings.far);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+              -1, -1, 1, -1, -1, 1, 1, 1
+            ]), gl.STREAM_DRAW);
+            gl.uniform1i(gl.getUniformLocation(passProgram, 'uMode'), 1);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            const texture = centers.map((x) => readDepth(gl, x, 0));
+            const background = readDepth(gl, -0.95, 0.9);
+
+            // 已知浮点 uniform 走同一编码/读回通道，用来识别编码器自身的精度问题。
+            gl.uniform3fv(gl.getUniformLocation(passProgram, 'uKnownDepths'), expected);
+            gl.uniform1i(gl.getUniformLocation(passProgram, 'uMode'), 2);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            const known = centers.map((x) => readDepth(gl, x, 0));
+            lines.push(showCase(settings, { known, fragment, texture, background, sampler: pass.name }));
+
+            // 只把最后一组深度绘成预览，读回值始终来自独立 RGBA8 帧缓冲。
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.uniform1i(gl.getUniformLocation(passProgram, 'uMode'), 0);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            }
+          });
+          const error = gl.getError();
+          if (error !== gl.NO_ERROR) throw new Error(`WebGL 错误：0x${error.toString(16)}`);
+          report.textContent = lines.join('\n');
+        } catch (error) {
+          report.textContent = `测试失败：${error?.message || error}`;
+        } finally {
+          resources.reverse().forEach((dispose) => dispose());
+        }
+      };
+
+      document.getElementById('run').addEventListener('click', run);
+      canvas.addEventListener('webglcontextlost', (event) => {
+        event.preventDefault();
+        report.textContent = 'WebGL 上下文丢失，请重新加载页面后测试。';
+      });
+      run();
+    })();
+  </script>
+</body>
+</html>

@@ -353,7 +353,12 @@ async function stageTextAssets() {
     const runtimeSource = await fs.readFile(pmxRuntimePath, 'utf8');
     const lightingModeImport = "'./display-pmx-lighting-mode.mjs'";
     if (!runtimeSource.includes(lightingModeImport)) throw new Error('测试网页未找到 PMX 灯光模块入口');
-    await fs.writeFile(pmxRuntimePath, runtimeSource.replace(lightingModeImport,
+    const cameraProbeAnchor = 'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });';
+    if (runtimeSource.split(cameraProbeAnchor).length !== 2) throw new Error('测试网页未找到唯一的 PMX 相机诊断锚点');
+    // 只改 web-dist 副本：面板只读当前投影，不把近远裁面写进正式显示端源码或灯光配置。
+    const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
+    window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
+    await fs.writeFile(pmxRuntimePath, runtimeWithProbe.replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
     const mmdScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd.js');

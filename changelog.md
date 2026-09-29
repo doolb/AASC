@@ -1,5 +1,21 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR 深度采样精度对照
+
+- ✅ [2026-09-29] `3rd/mmd-ar-test/depth-probe.html` 增加默认 sampler 与 highp sampler 的同纹理对照，分别显示三条读数路径和纹理误差；固定裁剪范围明确标为测试值。
+  - 桌面 Chromium/SwiftShader 四组读数及重复运行通过，纹理平均误差约 2×10⁻⁸。
+  - 仅更新独立 HTML 和诊断文档；AO 运行时代码未修改，未发布。手机 Vivaldi 的 highp 对照结果待现场验证。
+
+### MMD AR 测试网页相机裁剪范围诊断
+
+- ✅ [2026-09-28] 仅在 `3rd/mmd-ar-test` 测试网页“基础光照”显示当前 PMX 投影矩阵反解的 near/far 和相机模式。
+  - `build.js` 只向 `web-dist` 的 PMX runtime 副本注入只读投影读取器，`web-panel-groups.js` 显示动态读数；正式显示端及测试 APK 均不变。现场 near=24、far=75 与初始化 0.01、100 区分记录。网页构建通过，浏览器面板回归测试通过；Android Vivaldi 现场核对待完成，未发布。
+
+### MMD AR 深度纹理诊断
+
+- ✅ [2026-09-28] 新增独立 `3rd/mmd-ar-test/depth-probe.html`，对照标准透视 `A+B/z`、反向 Z 和原始深度纹理读数，用于 Android 浏览器 AO 异常定位。
+  - 页面不依赖模型、摄像头或网络；根据 Vivaldi 旧截图出现的 1/2048 量化，补充已知值、片元深度、深度纹理采样三路对照，改用浮点位模式 RGBA8 读回，避免旧乘法编码自身压缩精度。本机 Chromium/SwiftShader 两组 near/far 三路均吻合标准深度，背景为 1.0、附件为 24 位。未修改 AO、未构建或发布；Android Vivaldi 与正常浏览器的现场对照仍待完成。
+
 ### Node Offline min 跨平台热更新入口
 
 - ✅ [2026-09-26] 新增 `release/allserver-min.js`，支持 Windows/Linux 通过 Node 直接启动并消费现有 Offline 签名 code 包。
