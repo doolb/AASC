@@ -44,6 +44,7 @@
 - 首次运行必须能访问 Offline code 源和 npm registry；已运行后 registry 不可用且锁指纹变化时保留旧版本。
 - 进程被强制终止时可能留下 staging 目录；下次运行只允许安全地重用或报告该目录，不覆盖已发布版本。
 - 更新器入口自身不在 code ZIP 内，后续修复更新器时需单独替换该 JS 文件。
+- 启动器和 `noserver`、`withserver` APK 作为配套下载资源发布在外网 `/mnt/node-min/`，不放入 `/mnt/aasc-offline/`；修改启动器或重新构建 APK 后上传对应文件，并核对公网 HTTP 状态、大小和 SHA-256。
 
 ## 预计工时
 
@@ -55,3 +56,4 @@
 - 根据 `release/1.txt` 修正 Windows 根目录部署：可将脚本放在数据根目录或 `release/` 子目录运行；路径边界校验使用 `path.relative`。
 - 单文件部署的 release 初始数据改由服务器独立 ZIP 提供；新增 `nodeMinSeeds` 签名清单组件、构建/发布/同步流程和启动器下载校验逻辑。启动时只补缺失文件，并以 release profile 启动服务。
 - 已向内网和公网更新源发布 `nodeMinSeeds v39`，服务代码维持 v39；清单签名、种子 ZIP SHA-256/大小与全部组件 HTTP 大小校验通过。公司更新源连接超时；Windows/Linux 目标机下载、启动及任务恢复仍待现场验收，未运行自动化测试。
+- [2026-09-28] 启动器与 `noserver`、`withserver` APK 已发布到 `http://120.79.245.103/mnt/node-min/`，并从原 `aasc-offline` 目录移除启动器。两个 APK 均从当前源码重建，profile 为 `noserver`/`withserver`，versionCode `1`、versionName `0.1.0`；外网 HTTP 状态和大小正确，服务器 SHA-256 与本地一致。

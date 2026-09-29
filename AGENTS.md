@@ -60,6 +60,7 @@
 7. 清理失败不回滚已经校验并切换的发布，必须报告可重试错误；不得用 `git clean`、递归删除工作区或手工删除未经过精确规则确认的资源。
 8. 默认不把日志、模型、APK、ZIP、构建中间文件提交到 Git；只有用户明确要求提交发布资源时才提交，并先检查目标与大小。
 9. 修改代码后，更新受影响的状态项并将代码与状态文件上传 Git。Offline APK/发布包只能在持有对应签名密钥的出包机上构建；出包机成功生成某项产物后，将对应状态项设回 `false` 并上传 Git，构建失败或产物未覆盖最新代码时保持 `true`。完整 APK 仍只有用户明确要求时才构建和发布。
+10. Node Offline min 配套文件单独发布到外网 `/home/as/a/node-min/`（公网目录 `http://120.79.245.103/mnt/node-min/`），不得放入 `/mnt/aasc-offline/`。目录内使用 `allserver-min.js`、`aasc-display-noserver.apk`、`aasc-display-withserver.apk`；每次修改启动器或重新构建这两种 profile 的 APK 后，必须上传对应文件，并核对公网 HTTP 状态、大小和 SHA-256 与本地一致。这些文件不属于签名 `manifest.json` 的服务代码包。
 
 ## 变更日志记录格式
 

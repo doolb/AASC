@@ -28,7 +28,8 @@
 1. `npm run build:offline-update -- --mode code-only --code-version <版本>` 或 `--mode all` 同时生成代码包、`node-min-seeds/node-min-seeds-v<版本>.zip` 和包含两个组件的签名 manifest。ZIP 来自仓库的 `release/config/`、`release/userconfig/`、`release/task/`。
 2. 通过现有 `npm run publish:offline-update` 发布构建结果。发布器先上传 ZIP 与代码包，最后原子替换 `manifest.json`；同步器也会同步 `nodeMinSeeds`。
 3. 部署端准备 Node.js 24 LTS（开发机版本 `v26.8.1`，记录的推荐补丁版本 `v24.21.0`；最低兼容 `20.18.1`），将 `allserver-min.js` 放入可写数据目录并运行 `node release/allserver-min.js`。
-4. 启动器从配置的 Offline 更新源读取签名清单并下载初始 ZIP；随后下载并安装 code ZIP，启动服务。后续代码更新仍由同一清单驱动。
+4. 启动器从配置的 Offline 更新源读取签名清单并下载初始 ZIP；随后下载并安装 code ZIP，启动服务。后续服务代码更新仍由同一清单驱动。
+5. Node Offline min 配套下载资源单独放在外网 `/home/as/a/node-min/`（公网 `http://120.79.245.103/mnt/node-min/`），包括 `allserver-min.js`、`aasc-display-noserver.apk` 和 `aasc-display-withserver.apk`；不得放进 `/mnt/aasc-offline/`。每次修改启动器或重新构建这两种 APK 后，上传对应文件并核对公网 HTTP 状态、大小和 SHA-256。
 
 旧清单没有 `nodeMinSeeds` 时，已有完整本地 release 配置可继续运行；空白目标目录会明确提示服务器需要先发布含 `nodeMinSeeds` 的新清单。
 
@@ -38,7 +39,7 @@
 - `release-seeds.json` 记录已应用的种子版本和 SHA-256；ZIP 缓存在 `updates/allserver-min/downloads/`。
 - 种子逐文件合并，只创建缺失内容；已存在的普通文件和 `results/latest` 链接不替换。
 - 版本代码存放于 `updates/allserver-min/code/code-v<version>/`。`active-release.json` 原子记录当前代码与待健康确认的上一版本。
-- 启动器自身在热更新代码包之外，应由管理员单独更新。
+- 启动器和配套 APK 在热更新代码包之外，应单独发布；更新源的签名 manifest 不管理这些下载资源。
 
 ## 当前限制
 

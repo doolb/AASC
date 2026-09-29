@@ -62,9 +62,21 @@ npm run publish:offline-update -- --mode code-only --manifest-file <清单>
 
 npm run sync:offline-update
     同步 code、nodeMinSeeds、dependencies、apkMin 和 dataRepair
+
+Node Offline min 配套资源位于独立公网目录 /mnt/node-min/
+    allserver-min.js
+    aasc-display-noserver.apk
+    aasc-display-withserver.apk
+    不得放到 /mnt/aasc-offline/
+每次修改 allserver-min.js 或重新构建 noserver/withserver APK 后
+    计算本地对应文件大小和 SHA-256
+    上传到 as@120.79.245.103:~/a/node-min/<文件名>
+    从 http://120.79.245.103/mnt/node-min/<文件名> 验证
+    确认 HTTP 成功、大小与 SHA-256 均和本地一致
 ```
 
 `--mode all` 同时构建/发布 dependencies ZIP。Node min 不下载该依赖 ZIP，而在 Windows/Linux 目标机按 code ZIP 的 package lock 安装依赖。
+这些是独立部署资源，不在签名服务代码 ZIP 或 manifest 中；服务代码包发布不能替代它们的公网同步。
 
 ## 手动验收场景（本规范不代表已执行）
 

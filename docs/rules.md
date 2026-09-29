@@ -89,6 +89,12 @@ PORT=3000 npm start
 - 代码修改和状态变化一起上传 Git。只有出包机具备离线签名密钥；对应产物成功生成后，出包机将相应字段设为 `false` 并上传 Git。失败或打包内容未覆盖最新代码时保持 `true`。
 - 该文件记录技术上的待打包状态，不代表已经构建或发布；本地无密钥时不运行 APK 打包命令。
 
+## Node Offline min 配套文件发布
+
+- `allserver-min.js` 与配套 `noserver`、`withserver` APK 单独发布到外网 `/home/as/a/node-min/`，公网目录为 `http://120.79.245.103/mnt/node-min/`；禁止放入 `/mnt/aasc-offline/`。
+- 对应文件名为 `allserver-min.js`、`aasc-display-noserver.apk`、`aasc-display-withserver.apk`。每次修改启动器或重新构建这两种 APK profile 后，上传对应文件，并核对公网 HTTP 状态、大小和 SHA-256 与本地一致。
+- 这些是独立部署资源，不包含在签名 `manifest.json` 的服务代码 ZIP 中；发布服务代码包或更新 `nodeMinSeeds` 不会代替它们的独立上传。
+
 ## 1. 项目结构
 
 ```

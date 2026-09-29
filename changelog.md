@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### Node Offline min 配套文件外网发布
+
+- ✅ [2026-09-27] 记录 `release/allserver-min.js` 的独立发布要求：每次修改后单独上传到外网，并核对公网 HTTP 文件大小及 SHA-256 与本地一致。
+  - 更新 `AGENTS.md`、`docs/rules.md`、Node min design/spec、todo 和本日志；该启动器不属于签名服务代码 ZIP 或 `manifest.json`。
+- ✅ [2026-09-28] 将配套下载资源改放独立公网目录 `http://120.79.245.103/mnt/node-min/`，不再放在 `aasc-offline`。
+  - 上传 `allserver-min.js`、`aasc-display-noserver.apk`、`aasc-display-withserver.apk`；两个 APK 从当前源码重建，profile 均为 versionCode `1` / versionName `0.1.0`。noserver 为 `51,718,734` bytes、SHA-256 `de5a235591aad24884a72a355c9767583f0942124bf2d6dcc9af2fd360c0453e`；withserver 为 `267,188,075` bytes、SHA-256 `555d252d546472b50ba82da9ddf71a7d7f921c395b7ac3e63a374551fbdae397`。启动器为 `62,217` bytes、SHA-256 `91972b459dcfbbc7881bae2e0d109a60e70292b6f58cad31d032bf61f47c9748`。
+  - 公网 HTTP 200、Content-Length 与本地大小一致；启动器及 noserver APK 的公网 GET 完整 hash 一致，withserver 由外网机 Apache 回环完整 GET hash 与远端文件 hash 核对一致；旧 `aasc-offline/allserver-min.js` 已移除。
+
 ### MMD AR 深度采样精度对照
 
 - ✅ [2026-09-29] `3rd/mmd-ar-test/depth-probe.html` 增加默认 sampler 与 highp sampler 的同纹理对照，分别显示三条读数路径和纹理误差；固定裁剪范围明确标为测试值。

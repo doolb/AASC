@@ -32,6 +32,8 @@ npm start
 
 `release/allserver-min.js` 可在 Windows 或 Linux 上用 Node.js 直接启动，不需要构建 Android APK。生产部署建议使用 Node.js 24 LTS；截至 2026-09-26，记录的推荐补丁版本为 `v24.21.0`。本开发机当前是 `v26.8.1`；入口会在 `--help` 中同时显示这两个版本。当前最低兼容版本为 `20.18.1`，但生产环境优先选择受支持的 LTS 版本。
 
+Node Offline min 的配套下载资源统一放在 [外网 node-min 目录](http://120.79.245.103/mnt/node-min/)，包括 `allserver-min.js`、不内置 Node 的 `aasc-display-noserver.apk` 和内置 Node 的 `aasc-display-withserver.apk`；这些文件不在 `aasc-offline` 更新目录中。
+
 目标机只需安装 Node.js（内含 npm），并能访问 Offline 更新源和 npm registry。将 `allserver-min.js` 单独复制到可写的数据根目录即可；若放在名为 `release/` 的子目录，则使用该子目录的上级作为数据根目录。启动器先从现有签名 `manifest.json` 下载独立的 `nodeMinSeeds` ZIP，补齐 `release/config`、`release/userconfig` 和 `release/task`，再下载 code ZIP 并使用其中的 `package.json` / `package-lock.json` 安装生产依赖；不需要预先拷贝源码或运行 `npm ci`：
 
 ```bash
