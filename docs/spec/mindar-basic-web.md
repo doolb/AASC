@@ -36,6 +36,7 @@ MindAR Basic 页面启动:
   停止旧 MindAR system 并释放旧流/Controller
   system.imageTargetSrc ← 固定官方 card.mind URL
   target 图片平面 ← 官方 card.png，宽高比 ← 0.552
+  Softmind glTF 保持在 mindBasicImuStage 独立场景节点；由逐帧融合模块跟随目标锚点，不嵌套在 MindAR 锚点节点
   system.start()
 
 开始自定义目标定位:
@@ -48,7 +49,7 @@ MindAR Basic 页面启动:
   停止旧 MindAR system 并释放旧跟踪流/Controller
   system.imageTargetSrc ← 临时 Blob URL
   target 图片平面 ← 校正后的目标图，宽高比 ← 目标图高度/宽度
-  保持 Softmind glTF entity 挂在 targetIndex 0 的锚点
+  保持参考平面挂在 targetIndex 0 的锚点；Softmind glTF entity 位于 mindBasicImuStage 独立场景节点
   system.start() 并等待 arReady；错误显示可读状态并允许重试
   本次停止或切换前保持 Blob URL 有效
 
@@ -67,6 +68,26 @@ MindAR Basic 页面启动:
   用户点击收起按钮时隐藏面板内容，仅保留小型展开按钮
   用户点击展开按钮时恢复面板内容
   aria-expanded 与实际显示状态保持同步
+
+IMU 辅助实验:
+  页面加载时 imu.enabled ← false；不得自动申请传感器权限
+  用户点击“启用 IMU”时检查 HTTPS/安全上下文和设备运动事件支持
+  若浏览器提供 DeviceMotionEvent.requestPermission，则在该用户手势内请求授权
+  用户拒绝、接口不支持或事件字段为空时，保留纯 MindAR 模式并显示具体原因
+  授权成功后注册唯一 devicemotion、orientationchange、visibilitychange 监听器
+  用户保持设备静止完成短时陀螺仪偏置采样，记录 gyroBias 与当前 screen.orientation
+  接收样本时使用单调时间戳；dt 超过上限时丢弃该步，避免后台恢复产生位置跳变
+  用 rotationRate 减去 gyroBias 并积分相对四元数，按屏幕方向换算传感器坐标
+  用 MindAR targetUpdate 提供的目标姿态校正预测姿态，并按滤波增益配置抑制视觉姿态高频抖动
+  姿态防抖关闭时，模型姿态直接采用 MindAR 视觉姿态
+  位置补偿开启且 targetLost 时，仅接受 acceleration（已去重力）样本
+  将加速度按 IMU 相对朝向变换到初始场景坐标，更新速度/相对位移并施加静止死区与速度阻尼
+  模型位置沿相机位移的反方向更新；超过 maxLossDuration 或 maxTranslation 后停止推算并隐藏模型
+  targetFound 后以新视觉姿态校正场景位置/朝向，将旧速度清零并重新建立丢失计时基准
+  acceleration 不可用时仅禁用位移补偿，陀螺仪姿态实验仍可单独运行
+  页面进入后台时清空积分时间基准；离开页面、停止定位或关闭 IMU 时移除监听器并清零临时状态
+  状态面板显示权限、样本可用性、角速度、线性加速度、校正后姿态、积分位移和失锁时长
+  原始相机视频不经过 IMU 变换；IMU 仅用于虚拟模型/场景姿态测试
 
 发布 MindAR Basic:
   目标目录 ← 外网站点 /var/www/html/mnt/mind-basic/

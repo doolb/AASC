@@ -13,6 +13,8 @@
 - [MindAR 项目与示例资源](https://github.com/hiukim/mind-ar-js) - Basic 示例使用的固定版本 `.mind`、卡片图片和 Softmind glTF
 - [MindAR Core API](https://github.com/hiukim/mind-ar-js-doc/blob/master/docs/core-api.md) - 浏览器端 Compiler/Controller 接口与编译结果导出
 - [MindAR 图片目标编译器](https://github.com/hiukim/mind-ar-js-doc/blob/master/docs/tools/compile.mdx) - 官方目标图片编译流程
+- [ARCore 基础概念：运动跟踪](https://developers.google.com/ar/develop/fundamentals) - 视觉特征与 IMU 融合、相机位姿和锚点原理
+- [DeviceMotionEvent - MDN](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent) - 浏览器加速度、角速度字段及运动权限
 - [Softmind 模型许可](https://creativecommons.org/licenses/by/4.0/) - hiukim 模型采用 CC BY 4.0，页面保留署名
 
 ## 外部资源
