@@ -8,6 +8,16 @@
 - ✅ [2026-09-29] 构建并发布签名 Offline 服务代码包 code-v42 至内外网，复用依赖 v6、Node 种子 v39 和 min APK v34。
   - `code-v42.zip` 大小 `16,794,090` bytes、SHA-256 `e4735fb255923a4351d43a0294328132455ea56c67ee69d2aa059bbd7df23c13`，包含正式显示端新增文件。LAN/WAN 签名清单 SHA-256 均为 `51596879c3e97bc4270fd6735b831b0fc007be3fac458ac6c4ae4532d6e4ac8a`，公网代码包 GET 已通过全量哈希；发布脚本的旧依赖包公网全量下载校验未完成（首次 `fetch failed`，重试长时间停滞），已补用公网 HEAD 大小和远端文件 SHA-256 与清单核对。精确清理外网旧 code-v41，内外网均仅保留 code-v42；`servicePackage` 复位为 `false`。Android 真机未连接，热更后的视觉和相机效果待现场验收。
 
+### MMD AR 动作面板外网发布
+
+- ✅ [2026-09-29] 将动作/物理独立面板版发布至 `https://c.aasc.us/mnt/mmd-ar/`。
+  - `npm run build:web:mmd-ar-test` 成功；逐文件比较后仅上传 `index.html`、`js/display-mmd.js`、`js/display-pmx-runtime.js`，先校验暂存文件 SHA-256，再切换脚本、最后替换首页。三个文件的公网 HTTPS SHA-256 均与本地一致；模型、贴图、APK 和正式显示端未改。手机触摸与视觉效果待现场验收。
+
+### MMD AR 动作与物理独立面板
+
+- ✅ [2026-09-29] 测试网页新增独立“动作”按钮及面板，内分动作和物理分类；移动原控件并沿用原设置。动作分类显示当前 VMD 的只读进度和时间，暂停保持、循环归零、无有效动作时显示未知；面板互斥、点击外部或 Escape 关闭。
+  - 更新 `3rd/mmd-ar-test/build.js`、`web-panel-groups.js`、相关浏览器测试及 design/spec/task/usage。测试网页副本读取 runtime 中当前 VMD action 的真实时间与时长，面板隐藏时停止刷新；正式显示端和 APK 原资源保持不变。`npm run build:web:mmd-ar-test`、面板浏览器回归 7/7、真实 PMX 浏览器回归 2/2 均通过；外网已发布，手机视觉验收待进行。
+
 ### MMD AR 高光独立分类外网发布
 
 - ✅ [2026-09-29] 将“高光”独立分类版发布到 `https://c.aasc.us/mnt/mmd-ar/`。此次仅 `index.html` 与线上不同；先上传暂存文件并校验 SHA-256，再替换首页。暂存文件默认权限为 600，导致公网短暂返回 403；修正为 644 后目录入口和首页直链均返回最新文件，SHA-256 为 `55dc7aed31072d68e6deddf917940ab0021808581f880d1e94b00dea08ee289e`。其余脚本及模型未变。
@@ -76,14 +86,6 @@
   - `3rd/mmd-ar-test/build.js` 构建及浏览器 shader 回归 2/2 通过。发布 12 个差异文件至 `https://c.aasc.us/mnt/mmd-ar/`，补齐网页依赖的本地 A-Frame/MindAR 资源，模型纹理未重传；逐文件上传 SHA-256 校验后最后切换首页，空暂存目录已删除。
   - 公网 HTTPS 获取 AO、runtime、显示脚本、首页的 SHA-256 均与本地一致；AO 为 `2d64d61b890ed46811b210c5f2bebcc61e543f3524a4574bfa978b939f6bc116`，首页为 `adf5a78021e59cf63046f12f43b955c260d447d76d44dff2c5fb6b2bf57ee25b`。Vivaldi 真机条纹和错误遮蔽是否改善待用户复测。
 
-### Node Offline min 配套文件外网发布
-
-- ✅ [2026-09-27] 记录 `release/allserver-min.js` 的独立发布要求：每次修改后单独上传到外网，并核对公网 HTTP 文件大小及 SHA-256 与本地一致。
-  - 更新 `AGENTS.md`、`docs/rules.md`、Node min design/spec、todo 和本日志；该启动器不属于签名服务代码 ZIP 或 `manifest.json`。
-- ✅ [2026-09-28] 将配套下载资源改放独立公网目录 `http://120.79.245.103/mnt/node-min/`，不再放在 `aasc-offline`。
-  - 上传 `allserver-min.js`、`aasc-display-noserver.apk`、`aasc-display-withserver.apk`；两个 APK 从当前源码重建，profile 均为 versionCode `1` / versionName `0.1.0`。noserver 为 `51,718,734` bytes、SHA-256 `de5a235591aad24884a72a355c9767583f0942124bf2d6dcc9af2fd360c0453e`；withserver 为 `267,188,075` bytes、SHA-256 `555d252d546472b50ba82da9ddf71a7d7f921c395b7ac3e63a374551fbdae397`。启动器为 `62,217` bytes、SHA-256 `91972b459dcfbbc7881bae2e0d109a60e70292b6f58cad31d032bf61f47c9748`。
-  - 公网 HTTP 200、Content-Length 与本地大小一致；启动器及 noserver APK 的公网 GET 完整 hash 一致，withserver 由外网机 Apache 回环完整 GET hash 与远端文件 hash 核对一致；旧 `aasc-offline/allserver-min.js` 已移除。
-
 ### MMD AR 深度采样精度对照
 
 - ✅ [2026-09-29] `3rd/mmd-ar-test/depth-probe.html` 增加默认 sampler 与 highp sampler 的同纹理对照，分别显示三条读数路径和纹理误差；固定裁剪范围明确标为测试值。
@@ -100,6 +102,55 @@
 - ✅ [2026-09-28] 新增独立 `3rd/mmd-ar-test/depth-probe.html`，对照标准透视 `A+B/z`、反向 Z 和原始深度纹理读数，用于 Android 浏览器 AO 异常定位。
   - 页面不依赖模型、摄像头或网络；根据 Vivaldi 旧截图出现的 1/2048 量化，补充已知值、片元深度、深度纹理采样三路对照，改用浮点位模式 RGBA8 读回，避免旧乘法编码自身压缩精度。本机 Chromium/SwiftShader 两组 near/far 三路均吻合标准深度，背景为 1.0、附件为 24 位。未修改 AO、未构建或发布；Android Vivaldi 与正常浏览器的现场对照仍待完成。
 
+### 正式 Offline 显示端 MMD AR
+
+- ✅ [2026-09-27] 正式显示端默认使用本地懒加载的 A-Frame 1.5.0 / MindAR 1.2.5 定位，自写 JS 可手动回退；新增底面/立面、相机死区/缓动/距离和 PMX 动作/物理开关。
+  - 主要改动：`display.html`、`display-mmd-ar-mindar.js`、`display-mmd-ar.js`、`display-mmd.js`、`display-pmx-runtime.js`、`display-mmd.css`；测试网页构建继续使用本地资源并剔除重复控件。浏览器模拟摄像头首启/再次启动与轨道释放通过；定向 JS/AR 回归和 ZIP 完整性检查通过。`offline-update-package.js` 增加显式复用已发布 Node-min 种子的 code-only 选项，避免重新打包 task results 日志。
+  - 已向内外网发布签名 `code/code-v41.zip`，16,785,319 bytes，SHA-256 `3be022f2d9a4ed56730e3cb7a96133703b3c5af125983eb6411657d7fa15f32b`；沿用 dependencies v6、Node-min 种子 v39 和 min APK v34，发布脚本完整校验内外网清单与资源。未重打 APK/依赖；Android 真机首锁、视角、布料及触控待验收。
+
+### Node Offline min 配套文件外网发布
+
+- ✅ [2026-09-27] 记录 `release/allserver-min.js` 的独立发布要求：每次修改后单独上传到外网，并核对公网 HTTP 文件大小及 SHA-256 与本地一致。
+  - 更新 `AGENTS.md`、`docs/rules.md`、Node min design/spec、todo 和本日志；该启动器不属于签名服务代码 ZIP 或 `manifest.json`。
+- ✅ [2026-09-28] 将配套下载资源改放独立公网目录 `http://120.79.245.103/mnt/node-min/`，不再放在 `aasc-offline`。
+  - 上传 `allserver-min.js`、`aasc-display-noserver.apk`、`aasc-display-withserver.apk`；两个 APK 从当前源码重建，profile 均为 versionCode `1` / versionName `0.1.0`。noserver 为 `51,718,734` bytes、SHA-256 `de5a235591aad24884a72a355c9767583f0942124bf2d6dcc9af2fd360c0453e`；withserver 为 `267,188,075` bytes、SHA-256 `555d252d546472b50ba82da9ddf71a7d7f921c395b7ac3e63a374551fbdae397`。启动器为 `62,217` bytes、SHA-256 `91972b459dcfbbc7881bae2e0d109a60e70292b6f58cad31d032bf61f47c9748`。
+  - 公网 HTTP 200、Content-Length 与本地大小一致；启动器及 noserver APK 的公网 GET 完整 hash 一致，withserver 由外网机 Apache 回环完整 GET hash 与远端文件 hash 核对一致；旧 `aasc-offline/allserver-min.js` 已移除。
+
+### MMD AR 本地依赖资源
+
+- ✅ [2026-09-27] A-Frame 1.5.0、MindAR 1.2.5 与官方示例 `.mind` 提前收入显示端静态目录，附许可证和 SHA-256 校验；测试网页改为同源加载，测试 APK 构建复用同一 MindAR 文件。
+  - 新增 `prepare:mmd-ar-vendor` 和资源校验测试，`npm run build:web:mmd-ar-test`、本地资源 2/2 测试、MindAR 浏览器与编译回归 4/4 通过。正式显示端 MindAR 切换和 Offline code-only 发布仍待完成，未声称已发布。
+
+### MMD AR 首帧显示修正
+
+- ✅ [2026-09-27] 首次加载 PMX 时首个实际渲染帧不再露出动作起始姿态；物理照常更新，第二帧推进 VMD 并显示模型。
+  - `display-pmx-runtime.js` 首帧绘制期间临时隐藏枢轴，绘制后恢复原可见状态，不影响 AR 失锁；`tests/display-mmd-runtime.test.js` 增加首帧/第二帧行为回归。同步更新 PMX/MMD AR design、spec、task、todo、usage、自测。
+  - 网页构建成功，定向回归 41/41、语法与差异检查通过。仅发布 `js/display-pmx-runtime.js`、版本引用脚本 `js/display-mmd.js` 和首页至外网；HTTPS 200，公网 SHA-256 分别为 `a05a8e89222fdb6584803802dc5d10ff292122fabaef6da8415a5edaa92fb063`、`19a5ef5d6412b7e51a656f80140d55d994d608f5ace28d889a150277237a5094`、`c5e05e2c0c83173ef48b6e7fa073e433a3890726de1fd3ff9491a6bc714ba4b7`，与本地一致。未打 APK；真机观感待验收。
+
+### PMX 首次动作延迟一帧
+
+- ✅ [2026-09-27] 新模型首个实际渲染帧只更新物理与画面，第二帧才推进 VMD；切换动作、暂停恢复不延迟。
+  - `display-pmx-runtime.js` 增加一次性 helper 标记，首帧临时关闭 animation 并在帧后恢复用户设置；更新 PMX/MMD AR design、spec、task、todo、usage、自测及运行时回归测试。
+  - `npm run build:web:mmd-ar-test` 成功，定向测试 40/40、MindAR 网页定位浏览器回归 1/1 通过。仅将 `js/display-pmx-runtime.js`、随之变更的 `js/display-mmd.js` 和 `index.html` 发布至外网；HTTPS 返回 200，公网 SHA-256 分别为 `c63916dc2ec71e3ac3b43216817ab0f862bce9ad7b33cfe23086c03eb1560d24`、`d007dbdbe2692e047daa074b95f5ef7fbdc10981212ee4995dec5ff728f7b7eb`、`2962ce79e7a1b7e2fb87847330d720e65815ef218533d414f2b55c0b0b58a1f0`，与本地一致。未打 APK；真机布料观感待验收。
+
+### MMD AR HTTPS 测试网页发布
+
+- ✅ [2026-09-27] 将动作/物理对照开关及取消 PMX 首帧自动应用、隐藏预热的当前测试网页发布到 `https://c.aasc.us/mnt/mmd-ar/`。
+  - `npm run build:web:mmd-ar-test` 成功；本地定位与面板浏览器回归 8/8 通过。仅替换 `js/display-mmd.js`、`js/mmd-pmx-helper.mjs`、`js/display-mmd-ar-aframe.js`、`js/display-pmx-runtime.js` 和 `index.html`，先上传并校验脚本，再原子切换首页；PMX、VMD、纹理及远端旧隐藏文件未动，临时暂存目录已清理。
+  - 公网 HTTPS 首页返回 200；五个文件公网 SHA-256 与本地一致，首页为 `6c0a21c8beeab52e8f06efc6cef9e9825d5f7100146d76f609aeb8818ed99cfb`。未打 APK 或发布 Offline 服务包；真实手机首屏布料观感待验收。
+
+### PMX 首帧与物理预热
+
+- ✅ [2026-09-27] 按现场反馈取消 PMX 初始化时自动套用 VMD 第 0 帧及首次隐藏物理预热。
+  - `src/apps/web-mediacenter/ui/public/js/mmd-pmx-helper.mjs` 统一传入 `warmup=0`、`animationWarmup=false`；`display-pmx-runtime.js` 移除首载与动作切换的预热步数传递，保留正常渲染帧内的 VMD/物理更新。同步更新 PMX/MMD AR design、spec、task、todo、自测及使用文档；此前 180 步预热记录为历史方案，不再代表当前行为。
+  - `npm run build:web:mmd-ar-test` 成功；PMX helper/显示端 32/32、网页面板与 PMX 物理回归 14/14 通过，`git diff --check` 通过。仅本地重建测试网页，未发布外网或 APK；实际首屏布料表现待真机验收。
+
+### MMD AR 测试网页物理开关
+
+- ✅ [2026-09-26] 在 HTTPS MMD AR 测试网页的“物理”分类增加默认开启的 PMX 物理开关，用于对照无物理时的穿模情况。
+  - `3rd/mmd-ar-test/build.js`、`web-panel-groups.js` 仅为网页生成控件并保存选择；`display-mmd.js`、`display-pmx-runtime.js`、`mmd-pmx-helper.mjs` 在切换时重新加载当前模型，关闭时创建 `physics: false` helper，不加载 Ammo 或执行预热，VMD 从头播放。正式显示端和旧测试 APK 不显示开关。
+  - `npm run build:web:mmd-ar-test` 成功；`node --test tests/mmd-pmx-helper.test.js tests/display-mmd-runtime.test.js tests/mmd-ar-web-panel-groups.test.js` 39/39 通过，`git diff --check` 通过。仅本地构建，未发布网页或 APK；目标手机上的穿模观感待现场验收。
+
 ### Node Offline min 跨平台热更新入口
 
 - ✅ [2026-09-26] 新增 `release/allserver-min.js`，支持 Windows/Linux 通过 Node 直接启动并消费现有 Offline 签名 code 包。
@@ -107,6 +158,24 @@
   - 根据 `release/1.txt` 修正 Windows 直接部署：单文件放在数据根目录时以该目录为根，放在 `release/` 时以其上级为根；路径边界检查兼容盘符根目录。
   - 增加独立 `nodeMinSeeds` ZIP 签名组件：Offline 构建、发布和同步流程包含 `release/config`、`release/userconfig`、`release/task`；Node min 启动器从服务器下载并校验 ZIP，仅补齐本地缺失文件，服务以 release 模式读取配置和任务。
   - 更新 design/spec/task/usage/todo 文档。内网与公网已发布 `nodeMinSeeds v39`，未升级服务代码版本；清单签名、ZIP SHA-256/大小及全部组件 HTTP 大小校验通过。公司更新源本次连接超时，Windows/Linux 目标机现场验收待进行。
+
+### MMD AR 测试网页动作播放开关
+
+- ✅ [2026-09-26] 为 HTTPS MMD AR 测试页增加可保存的 VMD 播放开关。
+  - 灯光面板首分类新增默认开启的“播放动作”；关闭时停在当前 VMD 帧，PMX helper 仍运行物理与渲染，恢复后从暂停帧继续。网页刷新重新从 VMD 第 0 帧开始，并读取浏览器本地开关；仅影响 HTTPS 测试页 UI，不加入 APK 或正式显示端 UI。
+  - `npm run build:web:mmd-ar-test` 成功；`node --test tests/mmd-pmx-helper.test.js tests/display-mmd-runtime.test.js tests/mmd-ar-web-panel-groups.test.js` 37/37 通过，覆盖物理保持、默认值、保存/刷新恢复及无效存储回退。只重建本地 `web-dist`，未发布网页或 APK；布料上漂视觉验收仍待进行。
+
+### MMD AR PMX 布料首屏稳定预热
+
+- ✅ [2026-09-26] 修复刷新后带刚体 PMX 在首次显示期间布料轻微上漂的问题。
+  - 首次加载在隐藏的 staged 模型上以 VMD 第 0 帧预热 180 步物理；后续显式切换 VMD 保持 0 步，不增加换动作等待。仅作用于带 PMX 刚体的物理路径，VRM 与无物理回退不变。
+  - `node --test tests/mmd-pmx-helper.test.js tests/display-mmd-runtime.test.js tests/mmd-pmx-physics-rotation.test.js tests/pmx-display-layout.test.js` 34/34 通过；网页构建、相关 JS 语法和 `git diff --check` 通过。真实浏览器/Android WebView 的视觉及首屏耗时验收待进行；未发布网页或 APK。
+
+### MindAR Basic IMU 测试
+
+- ✅ [2026-09-26] 增加虚拟场景 IMU 姿态防抖与定位丢失短时补偿实验。
+  - `3rd/mind-basic/` 增加独立 IMU 积分模块、权限/校准/状态面板和独立模型舞台；MindAR 视觉姿态用于校正陀螺仪预测，定位丢失时对线性加速度积分限时限距，重新识别后重锚。视频画面不做变换；不改 MMD AR 正式页、APK 或服务器。
+  - 新增四元数、视觉校正、积分上限和重锚定测试，并扩展 Chromium 模拟传感器/场景锚点回归；MindAR Basic 定向自动化 14/14 通过，JS 语法和 `git diff --check` 通过。全量 `npm test` 遇到多项既有失败及 Node 原生断言崩溃后挂起，已中断；本次相关定向测试复跑通过。Android Chrome HTTPS 真实传感器方向与防抖观感仍待现场验收；本次未发布网页。
 
 ### MMD AR HTTPS 测试网页
 
