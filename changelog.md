@@ -9949,3 +9949,11 @@
 - ✅ [2026-09-29] mmd-ar HTTPS 测试网页和正式 Android 显示端共用角色平移/相机缩放手势，并发布网页更新。
   - 桌面右键拖动和手机双指中点移动角色；滚轮和双指捏合连续缩放相机。display-mmd-ar-pose.js 将角色手动偏移与 AR 自动定位分离，PMX/VRM runtime 将屏幕位移换算为角色深度平面位移；右键菜单仅在 MMD 画布内拦截，既有旋转与点击互动保留。
   - 已重建 `3rd/mmd-ar-test/web-dist` 并发布至 `https://c.aasc.us/mnt/mmd-ar/`；上传 5 个变化文件，62 个 HTTPS 静态资源的 SHA-256 与本地一致。未重跑自动测试，先前验证结果对应角色缩放语义，不代表当前相机缩放行为。Android 真机手势待验收；未构建 APK 或发布服务代码包。
+
+### MMD AR 相机 near 固定为 1 与 Offline 服务包 v45 发布
+
+- ✅ [2026-09-29] PMX 普通模式和 AR 投影、VRM 正式显示相机的 near 均固定为 1；AR 保留视角与 far，只重建深度裁剪矩阵参数。mmd-ar HTTPS 页更新 3 个 JS 和首页，公网 HTTPS 哈希一致，远端 62 个构建文件与本地校验无差异。
+- ✅ Offline code-only v44 随提交 `7be9b881` 发布；其后包含 near 修正的 v45 随提交 `d7eeda51` 发布到内网和外网。
+  - v44 ZIP 大小 `16,796,784` bytes、SHA-256 `ceba2a8037bd8ddabb739394672d09200b69ffd2a98286aea23518ff11339d47`，manifest SHA-256 `51916629eb29cc5ab5cfb246d6d5154ee82bbc313d500082ba21607a7d8e5265`。
+  - v45 ZIP 大小 `16,797,517` bytes、SHA-256 `6933d6cadeccff837aa02efcb25b8341b65f0b451c035d9f3a40820623966812`；两端 `manifest.json` 与签名清单 SHA-256 `612854087939f651c5bcf3667ad90c7f5e93d8baa6ca29e69177002c65f925e9` 一致，全部引用包 HTTP 大小/SHA-256 校验通过。复用 dependencies v6、Node seeds v39、min APK v34 和 dataRepair v1；`servicePackage` 已复位为 `false`。
+  - 未构建 APK、依赖包或 Node seeds，未运行自动测试；真机手势与 near 裁剪观感待验收。

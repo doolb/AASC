@@ -209,8 +209,8 @@
 
 ## 显示端 VRM/MMD
 
-- ⏳待现场验收 [2026-09-29] MMD 角色右键拖动与相机滚轮/双指缩放
-  - 已发布至 `https://c.aasc.us/mnt/mmd-ar/`，公网 62 个静态资源哈希一致；正式 Offline 服务代码包已标记待构建。本次语义修正后未重跑自动回归；待桌面检查相机距离变化，并在 Android 正式 APK 与 mmd-ar HTTPS 测试页确认双指手势、失锁重锁保留角色偏移及停止后复位。
+- ⏳待现场验收 [2026-09-29] MMD 角色右键拖动与相机滚轮/双指缩放，near 固定为 1
+  - mmd-ar HTTPS 测试页、PMX 普通/AR 相机和 VRM 正式相机均已将 near 固定为 1；页面更新已发布，62 个静态资源的远端校验无差异。Offline 正式服务包 code-v45 已发布到内网和外网，复用 dependencies v6、Node seeds v39、min APK v34；未重跑自动测试。待桌面检查相机距离变化，并在 Android 正式 APK 与 mmd-ar HTTPS 测试页确认双指手势、near 裁剪观感、失锁重锁保留角色偏移及停止后复位。
   - 关联文档：docs/design/display-chat-mmd.md、docs/spec/display-chat-mmd.md、docs/design/mmd-ar-test-apk.md、docs/spec/mmd-ar-test-apk.md、docs/task/20260929_MMD_AR角色拖动和连续缩放.md。
 
 - ⏳待现场验收 [2026-09-29] 正式 Offline 显示端合并 MMD AR 用户功能：检查 Android WebView 上的分类面板、模型加载百分比、AO 边界修正/高光、MindAR 首锁与失锁重锁；当前无 ADB 设备，尚未完成真机验收。
