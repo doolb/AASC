@@ -565,7 +565,40 @@ IndexedDB 失败:
 
 本次发布使用 `code-only`，依赖锁文件指纹未变化，因此不生成新的 dependencies 包；完整 APK 不参与发布和清理。
 
-## 13. 测试 APK 算法对比隔离
+## 14. 当前：正式显示端与独立测试 APK 仅使用 MindAR（伪代码）
+
+```text
+正式 display.html:
+  设置 DisplayMmdProductionMindArOnly = true
+  只显示只读定位算法说明 MindAR
+  加载 display-mmd-ar-mindar.js 与共享定位控制器
+  不加载 display-mmd-image-tracker.js
+
+DisplayMmdAr 初始化:
+  如果 DisplayMmdProductionMindArOnly
+    忽略 aasc.display.mmdAr.engine.v1 历史值
+    使用 DisplayMmdMindArTracker 作为唯一正式跟踪器
+    取消待加载时调用 MindAR cancelPending
+  否则
+    保持测试 harness 自己标记的适配器入口
+  校准、定位状态、相机跟随和摄像头释放契约保持不变
+
+构建独立测试 APK:
+  不复制 display-mmd-image-tracker.js
+  不插入 current/MindAR 算法选择器
+  设置 MmdArTestMindArOnly = true
+  保留 MindAR 本地 vendor 文件、定位控件和单算法指标面板
+  测量适配器只调用 startMindArTracker
+  停止后显示 MindAR 指标并允许重置单次测量
+
+HTTPS 测试网页:
+  保持 MmdArTestAframeMode = true，由独立 A-Frame 页面入口识别 MindAR
+  不向正式端注入测试页标记或内置定位图
+```
+
+正式页不根据旧 `legacy` localStorage 值回退到 JS 匹配。APK 算法无法通过面板切换；相机授权、目标存储、停止清理和 MindAR 本地资源约束保持不变。
+
+## 15. 历史：测试 APK 算法对比隔离
 
 ```text
 生产 display.html:

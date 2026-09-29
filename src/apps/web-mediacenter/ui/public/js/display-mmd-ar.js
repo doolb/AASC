@@ -2,7 +2,7 @@
  * 显示端图片基准图 AR 控制器。
  *
  * 本模块负责校准弹窗、摄像头生命周期、目标管理和跟踪状态。
- * 图像特征匹配由同源 DisplayMmdImageTargetTracker 完成，原始帧只在显示端处理。
+ * 正式显示端使用同源 MindAR；独立测试 harness 可通过自身适配器复用控制流程。
  */
 (function exposeDisplayMmdAr(root) {
     'use strict';
@@ -12,7 +12,6 @@
     const TARGET_STORE = 'targets';
     const ACTIVE_TARGET_KEY = 'aasc.display.mmdAr.activeTarget.v1';
     const MOTION_SENSITIVITY_KEY = 'aasc.display.mmdAr.motionSensitivity.v1';
-    const ENGINE_KEY = 'aasc.display.mmdAr.engine.v1';
     const CAMERA_SETTINGS_KEY = 'aasc.display.mmdAr.cameraSettings.v1';
     const MOTION_ORBIT_MODE = 'sensor-orbit-only';
     const MIN_QUAD_AREA = 0.03;
@@ -61,7 +60,6 @@
         motionLastSample: null,
         motionSensitivity: readMotionSensitivity()
     };
-    state.engine = readEngine();
     let backgroundResumeTargetId = null;
     let backgroundStopPromise = Promise.resolve();
     let visibilityGeneration = 0;
@@ -126,31 +124,10 @@
     }
     function usesAframeTracking() {
         return root.MmdArTestAframeMode === true
-            || (state.engine === 'mindar' && !!byId('displayArTrackerEngine'));
+            || root.DisplayMmdProductionMindArOnly === true;
     }
-    function readEngine() {
-        try { return root.localStorage?.getItem(ENGINE_KEY) === 'legacy' ? 'legacy' : 'mindar'; }
-        catch (error) { return 'mindar'; }
-    }
-    function syncEngineMode() {
-        // 测试页原有标志不变；正式页只在选择 MindAR 时开放 PMX 相机矩阵入口。
-        if (byId('displayArTrackerEngine')) root.MmdArAframeMode = state.engine === 'mindar';
-    }
-    function initializeCameraControls() {
-        const engine = byId('displayArTrackerEngine');
-        if (!engine) return;
-        engine.value = state.engine;
-        syncEngineMode();
-        engine.addEventListener('change', () => {
-            void (async () => {
-                await stopAr();
-                state.engine = engine.value === 'legacy' ? 'legacy' : 'mindar';
-                try { root.localStorage?.setItem(ENGINE_KEY, state.engine); }
-                catch (error) { console.warn('[显示端 AR] 保存算法选择失败:', error); }
-                syncEngineMode();
-                setStatus(getSelectedTarget() ? 'ready' : 'idle', `已切换至${state.engine === 'mindar' ? 'MindAR' : '旧 JS'}定位`);
-            })();
-        });
+    function initializeCameraSettings() {
+        if (!byId('displayArTargetPlane')) return;
         let saved = {};
         try { saved = JSON.parse(root.localStorage?.getItem(CAMERA_SETTINGS_KEY) || '{}') || {}; }
         catch (error) { console.warn('[显示端 AR] 读取相机设置失败:', error); }
@@ -1022,7 +999,7 @@
         state.trackingRequestId += 1;
         cancelTrackingFrame();
         if (root.MmdArTestAframeMode === true) root.MmdArTestAframeTracking?.cancelPending?.();
-        if (byId('displayArTrackerEngine')) root.DisplayMmdMindArTracker?.cancelPending?.();
+        if (root.DisplayMmdProductionMindArOnly === true) root.DisplayMmdMindArTracker?.cancelPending?.();
         const session = state.trackerSession;
         state.trackerSession = null;
         state.tracking = false;
@@ -1123,8 +1100,8 @@
             return false;
         }
         const aframe = usesAframeTracking();
-        const tracker = root.MmdArTestAframeMode === true ? root.DisplayMmdImageTargetTracker
-            : aframe ? root.DisplayMmdMindArTracker : root.DisplayMmdImageTargetTracker;
+        const tracker = root.DisplayMmdProductionMindArOnly === true
+            ? root.DisplayMmdMindArTracker : root.DisplayMmdImageTargetTracker;
         if (!tracker || typeof tracker.start !== 'function') {
             setStatus('ready', '定位图已保存；当前识别引擎尚未接入');
             return false;
@@ -1333,7 +1310,7 @@
         state.elements = getElements();
         if (Object.values(state.elements).some((element) => !element)) return;
         state.initialized = true;
-        initializeCameraControls();
+        initializeCameraSettings();
         bindEvents();
         setStatus('idle', '正在读取本地定位图…');
         try {

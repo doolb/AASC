@@ -99,10 +99,7 @@
                     </label>
                     <label class="display-mmd-ar-field">
                         <span>定位算法</span>
-                        <select id="displayArTrackerEngine">
-                            <option value="mindar">MindAR（推荐）</option>
-                            <option value="legacy">旧 JS（回退）</option>
-                        </select>
+                        <output id="displayArTrackerEngine">MindAR</output>
                     </label>
                     <label class="display-mmd-ar-field">
                         <span>定位图模式</span>
@@ -432,11 +429,13 @@
     <script src="js/display-mmd.js" defer></script>
     <script src="js/display-mmd-panel-groups.js" defer></script>
     <script src="js/display-mmd-lighting.js" defer></script>
-    <script src="js/display-mmd-image-tracker.js" defer></script>
     <script src="js/display-mmd-ar-mindar.js" defer></script>
     <script src="js/display-mmd-ar.js" defer></script>
     <script src="js/display-mmd-command-adapter.js" defer></script>
     <script>
+        // 正式显示端固定使用 MindAR；测试 harness 由各自标记选择独立适配器。
+        window.DisplayMmdProductionMindArOnly = true;
+        window.MmdArAframeMode = true;
         // 临时 render 刷新诊断默认关闭，避免现场控制台持续输出高频日志。
         window.ENABLE_RENDER_REFRESH_DIAGNOSTICS = false;
         const connectionStatus = document.getElementById('connectionStatus');

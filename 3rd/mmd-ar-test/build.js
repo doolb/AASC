@@ -49,7 +49,6 @@ const MINDAR_TEST_SOURCE_FILES = Object.freeze([
 const SOURCE_ASSET_FILES = Object.freeze([
   'display-mmd.js',
   'display-mmd-lighting.js',
-  'display-mmd-image-tracker.js',
   'display-mmd-ar.js',
   'display-pmx-runtime.js',
   'display-mmd-ar-pose.js',
@@ -217,19 +216,12 @@ async function stageTextAssets() {
   ]) $(`#${id}`).closest('label').remove();
   arHeader.after(`
     <div class="mmd-ar-benchmark">
-      ${WEB_MODE ? '' : `
-      <label class="display-mmd-ar-field" for="mmdArTrackerEngine">
-        <span>图像匹配算法</span>
-        <select id="mmdArTrackerEngine">
-          <option value="current">当前 JS</option>
-          <option value="mindar">MindAR ${MINDAR_VERSION}</option>
-        </select>
-      </label>`}
+      ${WEB_MODE ? '' : `<p class="mmd-ar-benchmark-live">本测试只使用 MindAR ${MINDAR_VERSION}，不会在测试过程中切换识别算法。</p>`}
       ${WEB_MODE ? '<p class="mmd-ar-benchmark-live">定位采用 MindAR Basic 的 A-Frame 目标锚点；真实相机使用原始分辨率，模拟画面宽 960 像素、高度按所选原图比例计算。</p>' : ''}
       <p id="mmdArBenchmarkLive" class="mmd-ar-benchmark-live" role="status" aria-live="polite">
-        ${WEB_MODE ? 'A-Frame 定位尚未启动。' : '两种算法复用同一张定位图、选区和摄像头；耗时从识别引擎启动计时，不含相机授权。MindAR 每轮重新编译，首次首锁也计入本地模块加载。请保持目标静止后比较锚点抖动。'}
+        ${WEB_MODE ? 'A-Frame 定位尚未启动。' : '定位启动后显示 MindAR 目标编译、首锁、帧率、可见率、丢失次数和锚点抖动。请保持目标静止后观察抖动。'}
       </p>
-      ${WEB_MODE ? '' : '<div id="mmdArBenchmarkResults" class="mmd-ar-benchmark-results" aria-live="polite"></div><button id="mmdArBenchmarkReset" class="display-mmd-ar-action" type="button">重置对比结果</button>'}
+      ${WEB_MODE ? '' : '<div id="mmdArBenchmarkResults" class="mmd-ar-benchmark-results" aria-live="polite"></div><button id="mmdArBenchmarkReset" class="display-mmd-ar-action" type="button">重置测量</button>'}
     </div>
   `);
   if (WEB_MODE) {
@@ -370,7 +362,7 @@ async function stageTextAssets() {
   ` : '';
 
   const assets = [
-    ...SOURCE_ASSET_FILES.filter((fileName) => !WEB_MODE || fileName !== 'display-mmd-image-tracker.js').map((fileName) => [
+    ...SOURCE_ASSET_FILES.map((fileName) => [
       path.join(SOURCE_PUBLIC, 'js', fileName),
       path.join(GENERATED_ASSETS, 'js', fileName),
     ]),
@@ -565,11 +557,12 @@ async function stageTextAssets() {
   ${WEB_MODE ? '<script>window.MmdArTestWebFillShadow = true;</script>' : ''}
   <script src="${scriptUrl('display-mmd.js')}"></script>
   <script src="${scriptUrl('display-mmd-lighting.js')}"></script>
-  ${WEB_MODE ? `<script>
+  <script>
     window.MmdArTestMindArOnly = true;
+    ${WEB_MODE ? `
     window.MmdArLocationMarkerTest = true;
-    window.MmdArTestAframeMode = true;
-  </script>` : '<script src="/js/display-mmd-image-tracker.js"></script>'}
+    window.MmdArTestAframeMode = true;` : ''}
+  </script>
   <script src="/js/display-mmd-ar-benchmark-compiler.js"></script>
   <script src="/js/display-mmd-ar-benchmark-metrics.js"></script>
   <script src="${scriptUrl('display-mmd-ar-benchmark.js')}"></script>
@@ -676,8 +669,14 @@ async function stageTextAssets() {
   </script>
 </body>
 </html>`;
+  const generatedPage = webAssetText(page);
+  if (!generatedPage.includes('window.MmdArTestMindArOnly = true;')
+    || generatedPage.includes('display-mmd-image-tracker.js')
+    || generatedPage.includes('<option value="current">')) {
+    throw new Error('MindAR-only 测试页仍包含旧跟踪器或算法切换控件');
+  }
   await fs.mkdir(GENERATED_ASSETS, { recursive: true });
-  await fs.writeFile(path.join(GENERATED_ASSETS, 'index.html'), webAssetText(page), 'utf8');
+  await fs.writeFile(path.join(GENERATED_ASSETS, 'index.html'), generatedPage, 'utf8');
 
   const profile = createStaticMmdResourceProfile();
   const payload = { status: 'success', resources: [profile] };
@@ -821,6 +820,10 @@ function inspectApk(apkPath) {
       zip.on('error', fail);
       zip.on('entry', (entry) => {
         const name = entry.fileName;
+        if (name === 'assets/www/js/display-mmd-image-tracker.js') {
+          fail(new Error('MindAR-only 测试 APK 不得包含旧 JS 图片跟踪器'));
+          return;
+        }
         if (name === 'assets/www/index.html') hasIndex = true;
         if (name === 'assets/www/mmd-resources.json') hasProfile = true;
         if (/^classes\d*\.dex$/u.test(name)) hasDex = true;
@@ -864,7 +867,7 @@ function inspectApk(apkPath) {
           return;
         }
         if (foundAssets.size !== expectedAssets.size) {
-          finish(reject, new Error(`APK 内 MindAR/对比工具不完整：${foundAssets.size}/${expectedAssets.size}`));
+          finish(reject, new Error(`APK 内 MindAR 资源不完整：${foundAssets.size}/${expectedAssets.size}`));
           return;
         }
         finish(resolve, { modelFiles: foundModels.size, mindArFiles: foundAssets.size });
@@ -907,7 +910,7 @@ async function main() {
   }
   const inspection = await inspectApk(builtApk);
   const artifact = await publishLocalArtifact(builtApk);
-  log(`APK 校验通过：applicationId=${buildMetadata.applicationId}，${inspection.modelFiles} 个模型文件，${inspection.mindArFiles} 个 A/B 资源，${artifact.size} bytes`);
+  log(`APK 校验通过：applicationId=${buildMetadata.applicationId}，${inspection.modelFiles} 个模型文件，${inspection.mindArFiles} 个 MindAR 资源，${artifact.size} bytes`);
   log(`SHA-256：${artifact.sha256}`);
   log(`输出：${artifact.path}`);
 }

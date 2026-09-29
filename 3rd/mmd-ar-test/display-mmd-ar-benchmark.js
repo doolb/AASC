@@ -1,4 +1,4 @@
-/* MindAR 与现有图片跟踪器的独立 APK A/B 适配层。 */
+/* 独立测试 APK 的 MindAR 单算法适配层。 */
 (function exposeMmdArBenchmark(root) {
     'use strict';
 
@@ -7,7 +7,7 @@
     const MINDAR_BASE = typeof document === 'object' && document.currentScript?.src
         ? new URL(`./vendor/mind-ar-${MINDAR_VERSION}`, document.currentScript.src).href
         : `/js/vendor/mind-ar-${MINDAR_VERSION}`;
-    const ENGINE_LABELS = Object.freeze({ current: '当前 JS', mindar: 'MindAR' });
+    const ENGINE_LABELS = Object.freeze({ mindar: 'MindAR' });
     const MINDAR_IMAGE_MAX_WIDTH = 512;
     const SOURCE_MAX_WIDTH = 640;
     const MINDAR_INPUT_MAX_PIXELS = 640 * 480;
@@ -16,7 +16,7 @@
     const MINDAR_INPUT_REFRESH_MS = 100;
     const MINDAR_POSE_REFRESH_MS = 100;
     const benchmark = {
-        currentEngine: root.MmdArTestMindArOnly === true ? 'mindar' : 'current',
+        currentEngine: 'mindar',
         currentRun: null,
         reports: new Map(),
         lastRenderAt: 0,
@@ -25,18 +25,16 @@
         activeInput: null
     };
 
-    const originalTracker = root.DisplayMmdImageTargetTracker;
     const mindArOnly = root.MmdArTestMindArOnly === true;
     const metricsApi = root.MmdArBenchmarkMetrics;
     const compilerApi = root.MmdArBenchmarkCompiler;
-    if ((!originalTracker && !mindArOnly) || !metricsApi || !compilerApi) {
-        console.error('[MMD AR A/B] 测试跟踪器、指标模块或 MindAR 编译适配器未加载');
+    if (!mindArOnly || !metricsApi || !compilerApi) {
+        console.error('[MMD AR] MindAR-only 标记、指标模块或编译适配器未加载');
         return;
     }
 
     function mapPoseToCover(pose, video, layer) {
-        if (originalTracker) return originalTracker.mapPoseToCover(pose, video, layer);
-        // 仅 MindAR 网页不加载旧跟踪器；仍需把相机原始帧坐标映射到 cover 裁切后的舞台。
+        // 将 MindAR 相机原始帧坐标映射到 cover 裁切后的舞台。
         const width = Math.max(1, layer.clientWidth);
         const height = Math.max(1, layer.clientHeight);
         const coverScale = Math.max(width / Math.max(1, video.videoWidth), height / Math.max(1, video.videoHeight));
@@ -482,7 +480,7 @@
         const container = getElement('mmdArBenchmarkResults');
         if (!container) return;
         container.replaceChildren();
-        for (const engine of mindArOnly ? ['mindar'] : ['current', 'mindar']) {
+        for (const engine of ['mindar']) {
             const report = benchmark.reports.get(engine);
             const section = document.createElement('section');
             section.className = 'mmd-ar-benchmark-result';
@@ -540,17 +538,13 @@
         root.DisplayMmdImageTargetTracker = Object.freeze({
             mapPoseToCover,
             async start(target, options) {
-                const engine = mindArOnly || getElement('mmdArTrackerEngine')?.value === 'mindar' ? 'mindar' : 'current';
-                benchmark.currentEngine = engine;
+                const engine = 'mindar';
+                benchmark.currentEngine = 'mindar';
                 const run = metricsApi.createRun(engine, performance.now());
                 benchmark.currentRun = run;
                 let session;
                 try {
-                    const preparationStartedAt = performance.now();
-                    session = engine === 'mindar'
-                        ? await startMindArTracker(target, options)
-                        : await originalTracker.start(target, options);
-                    if (engine === 'current') session.compilationMs = performance.now() - preparationStartedAt;
+                    session = await startMindArTracker(target, options);
                     if (Number.isFinite(session.compilationMs)) run.compilationMs = session.compilationMs;
                     const delegate = session;
                     return {
@@ -571,7 +565,6 @@
                             } finally {
                                 benchmark.reports.set(engine, metricsApi.finishRun(run, performance.now()));
                                 if (benchmark.currentRun === run) benchmark.currentRun = null;
-                                if (!mindArOnly) getElement('mmdArTrackerEngine').disabled = false;
                                 renderReports();
                             }
                         }
@@ -582,7 +575,6 @@
                     if (benchmark.currentRun === run) benchmark.currentRun = null;
                     const live = getElement('mmdArBenchmarkLive');
                     if (live) live.textContent = `${ENGINE_LABELS[engine]}：启动失败，${error?.message || String(error)}`;
-                    if (!mindArOnly) getElement('mmdArTrackerEngine').disabled = false;
                     renderReports();
                     throw error;
                 }
@@ -591,11 +583,10 @@
     }
 
     function installUi() {
-        const engineSelect = getElement('mmdArTrackerEngine');
         const startButton = getElement('displayArStartButton');
         const stopButton = getElement('displayArStopButton');
         const resetButton = getElement('mmdArBenchmarkReset');
-        if ((!engineSelect && !mindArOnly) || !startButton || !stopButton || !resetButton) return;
+        if (!startButton || !stopButton || !resetButton) return;
         const inputScale = getElement('mmdArInputScale');
         if (mindArOnly && inputScale) {
             inputScale.value = String(benchmark.inputScalePercent);
@@ -612,30 +603,19 @@
                 updateInputResolutionLabel();
             });
         }
-        engineSelect?.addEventListener('change', () => {
-            benchmark.currentEngine = engineSelect.value === 'mindar' ? 'mindar' : 'current';
-        });
         startButton.addEventListener('click', () => {
-            const engine = mindArOnly || engineSelect?.value === 'mindar' ? 'mindar' : 'current';
-            benchmark.currentEngine = engine;
+            const engine = 'mindar';
+            benchmark.currentEngine = 'mindar';
             benchmark.currentRun = null;
-            if (engineSelect) engineSelect.disabled = true;
             const live = getElement('mmdArBenchmarkLive');
             if (live) live.textContent = `${ENGINE_LABELS[engine]}：正在准备测试…`;
         }, true);
-        stopButton.addEventListener('click', () => {
-            // 指标由 tracker session.stop 收口；这里仅允许停止后切换算法。
-            window.setTimeout(() => {
-                if (!getElement('displayArStopButton')?.disabled) return;
-                if (engineSelect) engineSelect.disabled = false;
-            }, 0);
-        }, true);
         resetButton.addEventListener('click', () => {
-            if (!engineSelect?.disabled) {
+            if (stopButton.disabled) {
                 benchmark.reports.clear();
                 renderReports();
                 const live = getElement('mmdArBenchmarkLive');
-                if (live) live.textContent = mindArOnly ? '运行 MindAR 后显示定位指标。' : '分别运行两种算法后会显示对比结果。';
+                if (live) live.textContent = '运行 MindAR 后显示定位指标。';
             }
         });
         const statusMessage = getElement('displayArTargetMessage');

@@ -8,6 +8,12 @@
 - ✅ [2026-09-29] 构建并发布签名 Offline 服务代码包 code-v42 至内外网，复用依赖 v6、Node 种子 v39 和 min APK v34。
   - `code-v42.zip` 大小 `16,794,090` bytes、SHA-256 `e4735fb255923a4351d43a0294328132455ea56c67ee69d2aa059bbd7df23c13`，包含正式显示端新增文件。LAN/WAN 签名清单 SHA-256 均为 `51596879c3e97bc4270fd6735b831b0fc007be3fac458ac6c4ae4532d6e4ac8a`，公网代码包 GET 已通过全量哈希；发布脚本的旧依赖包公网全量下载校验未完成（首次 `fetch failed`，重试长时间停滞），已补用公网 HEAD 大小和远端文件 SHA-256 与清单核对。精确清理外网旧 code-v41，内外网均仅保留 code-v42；`servicePackage` 复位为 `false`。Android 真机未连接，热更后的视觉和相机效果待现场验收。
 
+### MMD AR 定位算法
+
+- ✅ [2026-09-29] 正式显示端与独立测试 APK 固定使用 MindAR。
+  - 正式页移除旧 JS 算法选择和跟踪脚本入口，忽略历史 `legacy` 选择；独立测试 APK 移除 current/MindAR A/B 选择和旧跟踪器资源，保留 MindAR 单次运行指标。HTTPS 测试网页继续使用 MindAR A-Frame 模式。
+  - 更新 `display.html`、`display-mmd-ar.js`、`3rd/mmd-ar-test/build.js`、`display-mmd-ar-benchmark.js`、相关 AR 测试和 README/design/spec/task/todo。测试网页构建成功，定向测试 4/4、语法与差异检查通过。测试 APK 构建脚本在 Windows 上因直接 spawn 无扩展名 `gradlew` 失败；手动调用 `gradlew.bat` 后 Gradle 无法建立 loopback 连接，未生成/签名/发布 APK，Android 定位待现场验收。`release/offline-release-status.json` 的 `servicePackage` 保持 `true`。
+
 ### MMD AR 动作面板外网发布
 
 - ✅ [2026-09-29] 将动作/物理独立面板版发布至 `https://c.aasc.us/mnt/mmd-ar/`。
