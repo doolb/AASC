@@ -14,6 +14,11 @@
   - 正式页移除旧 JS 算法选择和跟踪脚本入口，忽略历史 `legacy` 选择；独立测试 APK 移除 current/MindAR A/B 选择和旧跟踪器资源，保留 MindAR 单次运行指标。HTTPS 测试网页继续使用 MindAR A-Frame 模式。
   - 更新 `display.html`、`display-mmd-ar.js`、`3rd/mmd-ar-test/build.js`、`display-mmd-ar-benchmark.js`、相关 AR 测试和 README/design/spec/task/todo。测试网页构建成功，定向测试 4/4、语法与差异检查通过。测试 APK 构建脚本在 Windows 上因直接 spawn 无扩展名 `gradlew` 失败；手动调用 `gradlew.bat` 后 Gradle 无法建立 loopback 连接，未生成/签名/发布 APK，Android 定位待现场验收。`release/offline-release-status.json` 的 `servicePackage` 保持 `true`。
 
+### MMD AR 测试页动作面板与竖屏布局
+
+- ✅ [2026-09-29] 修复“动作”按钮无法打开面板，并让灯光、动作/物理、定位三个面板在竖屏和横屏都停靠在按钮列左侧、顶部对齐。
+  - 测试页为重建的动作按钮绑定独立开合与互斥逻辑，补回动作/物理两组并同步 `aria-expanded`；面板位置、宽度和高度随可视区更新。更新 `3rd/mmd-ar-test/build.js`、`web-panel-groups.js`、`tests/mmd-ar-web-panel-groups.test.js` 和 design/spec/task/todo。`npm run build:web:mmd-ar-test` 成功，Chrome 面板回归 8/8 通过；外网未发布。附带模拟摄像头用例的素材高度断言仍有 1 px 差异（507 预期/506 实际）。
+
 ### MMD AR 动作面板外网发布
 
 - ✅ [2026-09-29] 将动作/物理独立面板版发布至 `https://c.aasc.us/mnt/mmd-ar/`。

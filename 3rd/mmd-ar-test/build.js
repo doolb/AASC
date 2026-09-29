@@ -334,16 +334,11 @@ async function stageTextAssets() {
         const height = Math.max(1, Math.round(viewport?.height || bounds.height));
         const isLandscape = width > height;
         stage.dataset.panelOrientation = isLandscape ? 'landscape' : 'portrait';
-        if (isLandscape) {
-          const panelWidth = 'min(320px, max(220px, ' + Math.round(width * 0.38) +
-            'px), max(1px, calc(' + width + 'px - var(--mmd-ar-safe-inset-left) - var(--mmd-ar-safe-inset-right) - 96px)))';
-          stage.style.setProperty('--display-stage-panel-width', panelWidth);
-          stage.style.setProperty('--display-stage-panel-max-height',
-            'min(620px, calc(' + height + 'px - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 24px))');
-        } else {
-          stage.style.removeProperty('--display-stage-panel-width');
-          stage.style.removeProperty('--display-stage-panel-max-height');
-        }
+        const panelWidth = 'min(320px, max(220px, ' + Math.round(width * 0.38) +
+          'px), max(1px, calc(' + width + 'px - var(--mmd-ar-safe-inset-left) - var(--mmd-ar-safe-inset-right) - 96px)))';
+        stage.style.setProperty('--display-stage-panel-width', panelWidth);
+        stage.style.setProperty('--display-stage-panel-max-height',
+          'min(620px, calc(' + height + 'px - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 24px))');
         const pixelRatio = Math.min(2, Math.max(1, Number(window.devicePixelRatio) || 1));
         if (width !== previousWidth || height !== previousHeight || pixelRatio !== previousPixelRatio) {
           previousWidth = width;
@@ -483,9 +478,9 @@ async function stageTextAssets() {
     #displayArCalibration .display-mmd-ar-preview { min-height: 0; max-height: min(50dvh, 480px); }
     #displayArCalibration .display-mmd-ar-camera, #displayArCalibration .display-mmd-ar-canvas { max-height: min(50dvh, 480px); }
     .display-mmd-lighting-panel, .display-mmd-ar-panel { touch-action: pan-y; }
-    #displayStageLayers[data-panel-orientation="landscape"] .display-stage-lighting-control { top: calc(var(--mmd-ar-safe-inset-top) + 14px); }
-    .display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-lighting-panel,
-    .display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-ar-panel { right: calc(100% + 8px); }
+    .display-stage-layers .display-stage-lighting-control { top: calc(var(--mmd-ar-safe-inset-top) + 14px); }
+    .display-stage-layers .display-stage-lighting-control > .display-mmd-lighting-panel,
+    .display-stage-layers .display-stage-lighting-control > .display-mmd-ar-panel { position: absolute; top: 0; right: calc(100% + 8px); z-index: 2; }
     .display-stage-layers { z-index: 10; }
     .display-mmd-layer { background: transparent; }
     .display-mmd-status { --bg-secondary: #20242e; --border-color: #475066; --text-secondary: #c2c8d4; }

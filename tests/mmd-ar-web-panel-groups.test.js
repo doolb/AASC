@@ -94,6 +94,10 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   originalIds.get('#displayArTargetPanel').sort();
 
   groupWebPanels($);
+  for (const selector of panels) {
+    originalIds.get(selector).push(`${selector.slice(1)}Opacity`);
+    originalIds.get(selector).sort();
+  }
 
   const expectedTitles = [
     ['基础光照', '高光', 'AO', '主光', '补光', '边缘光 1', '边缘光 2'],
@@ -133,7 +137,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArPhysicsEnabled').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
   assert.equal($('#mmdArMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.equal($('#mmdArMotionPlayback').closest('#displayMmdLightingPanel').length, 0);
-  assert.match(WEB_PANEL_GROUP_CSS, /background: #39455c/u);
+  assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 96%\), transparent\)/u);
   const specular = $('.mmd-ar-specular');
   assert.equal(specular.is('section.mmd-ar-panel-group'), true);
   assert.equal(specular.find('.mmd-ar-panel-group-header [data-specular="enabled"]').length, 1);
@@ -194,7 +198,7 @@ test('手机宽度下分类可独立开合，控件值与面板滚动范围不�
       fillGroupClosed: document.getElementById('displayMmdFillEnabled').closest('section').querySelector('.mmd-ar-panel-group-body').hidden,
       aoEnabled: document.getElementById('displayMmdPmxAoEnabled').checked,
       aoButtonLabel: document.querySelector('#displayMmdLightingPanel [data-group-title="AO"]').getAttribute('aria-label'),
-      titleBackground: getComputedStyle(document.querySelector('#displayMmdLightingPanel .mmd-ar-panel-group-header')).backgroundColor,
+      panelOpacity: getComputedStyle(document.getElementById('displayStageLayers')).getPropertyValue('--display-mmd-panel-opacity').trim(),
       panelWidth: document.getElementById('displayMmdLightingPanel').getBoundingClientRect().width,
       viewportWidth: window.innerWidth,
     }));
@@ -208,7 +212,7 @@ test('手机宽度下分类可独立开合，控件值与面板滚动范围不�
     assert.equal(after.fillGroupClosed, true);
     assert.equal(after.aoEnabled, false);
     assert.equal(after.aoButtonLabel, '展开AO设置');
-    assert.equal(after.titleBackground, 'rgb(57, 69, 92)');
+    assert.equal(after.panelOpacity, '96%');
     assert.equal(after.lighting, before.lighting);
     assert.equal(after.shadowSource, before.shadowSource);
     assert.ok(after.panelWidth <= after.viewportWidth);
@@ -244,10 +248,16 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), true);
     assert.equal(await page.$eval('#mmdArPhysicsEnabled', (node) => node.checked), true);
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().physicsEnabled), true);
-    await page.evaluate(() => document.getElementById('mmdArMotionToggle').click());
+    await page.click('#mmdArMotionToggle');
     assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), false);
+    assert.equal(await page.$eval('#mmdArMotionToggle', node => node.getAttribute('aria-expanded')), 'true');
     assert.equal(await page.$eval('#mmdArMotionTime', node => node.textContent), '--:-- / --:--');
     assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 0);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), true);
+    assert.equal(await page.$eval('#mmdArMotionToggle', node => node.getAttribute('aria-expanded')), 'false');
+    await page.click('#mmdArMotionToggle');
+    assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), false);
     await page.click('#mmdArMotionPlayback');
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
     assert.equal(await page.evaluate(() => localStorage.getItem('aasc.mmdArTest.motionPlayback.v1')), 'false');
@@ -256,6 +266,7 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     await page.evaluate(() => document.getElementById('displayMmdLightingToggle').click());
     assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanel').hidden), false);
     assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), true);
+    assert.equal(await page.$eval('#mmdArMotionToggle', node => node.getAttribute('aria-expanded')), 'false');
     const lightingTitle = '#displayMmdLightingPanel [data-group-title="高光"] > span:first-child';
     await page.evaluate((selector) => document.querySelector(selector).click(), lightingTitle);
     assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanelGroup2').hidden), false);
@@ -343,6 +354,66 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
   } finally {
     await browser?.close();
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('测试网页三个面板在横竖屏都停靠在按钮列左侧并从顶部对齐', {
+  skip: !CHROME || !fs.existsSync(GENERATED_PAGE),
+}, async () => {
+  const server = await startGeneratedPageServer();
+  let browser;
+  try {
+    browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3 });
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/mnt/mmd-ar/mmd/')) void request.abort();
+      else void request.continue();
+    });
+    await page.goto(`http://127.0.0.1:${server.address().port}/mnt/mmd-ar/`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.getElementById('displayStageLayers')?.dataset.panelOrientation === 'portrait');
+
+    const readLayouts = () => page.evaluate(() => {
+      const entries = [
+        ['displayMmdLightingPanel', 'displayMmdLightingToggle'],
+        ['mmdArMotionPanel', 'displayMmdLightingToggle'],
+        ['displayArTargetPanel', 'displayMmdLightingToggle'],
+      ];
+      for (const [panelId] of entries) document.getElementById(panelId).hidden = false;
+      return entries.map(([panelId, buttonId]) => {
+        const panel = document.getElementById(panelId);
+        const button = document.getElementById(buttonId);
+        const panelRect = panel.getBoundingClientRect();
+        const buttonRect = button.getBoundingClientRect();
+        return {
+          panelId,
+          panelWidth: panelRect.width,
+          panelTop: panelRect.top,
+          panelRight: panelRect.right,
+          buttonTop: buttonRect.top,
+          buttonLeft: buttonRect.left,
+        };
+      });
+    });
+    const assertPanelsLeftOfButtons = (layouts) => {
+      for (const layout of layouts) {
+        assert.ok(layout.panelWidth > 0, `${layout.panelId} 应有可见宽度`);
+        assert.ok(Math.abs(layout.panelTop - layout.buttonTop) <= 2, `${layout.panelId} 应与按钮列顶部对齐`);
+        assert.ok(layout.panelRight <= layout.buttonLeft - 4, `${layout.panelId} 应位于按钮列左侧`);
+      }
+    };
+
+    assertPanelsLeftOfButtons(await readLayouts());
+    await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 3 });
+    await page.waitForFunction(() => document.getElementById('displayStageLayers')?.dataset.panelOrientation === 'landscape');
+    assertPanelsLeftOfButtons(await readLayouts());
+    await page.setViewport({ width: 320, height: 700, deviceScaleFactor: 3 });
+    await page.waitForFunction(() => document.getElementById('displayStageLayers')?.dataset.panelOrientation === 'portrait');
+    assertPanelsLeftOfButtons(await readLayouts());
+  } finally {
+    await browser?.close();
+    server.close();
   }
 });
 

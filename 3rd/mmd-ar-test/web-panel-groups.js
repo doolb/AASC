@@ -18,6 +18,11 @@ const TRACKING_GROUPS = Object.freeze([
   ['相机跟随', ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone', 'mmdArSmoothingMs', 'mmdArCameraDistance']],
 ]);
 
+const MOTION_GROUPS = Object.freeze([
+  ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
+  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
+]);
+
 const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-panel-group { margin: 9px 0; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, 96%), transparent); overflow: hidden; }
     .mmd-ar-panel-group-header { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 11px; background: color-mix(in srgb, #39455c var(--display-mmd-panel-opacity, 96%), transparent); }
@@ -73,6 +78,38 @@ const WEB_PANEL_GROUP_JS = `
         input.addEventListener('change', () => applyOpacity(input.value, true));
       }
       applyOpacity(opacity);
+    })();
+    (() => {
+      const button = document.getElementById('mmdArMotionToggle');
+      const panel = document.getElementById('mmdArMotionPanel');
+      if (!button || !panel) return;
+
+      const setOpen = (open) => {
+        const nextOpen = open === true;
+        panel.hidden = !nextOpen;
+        button.setAttribute('aria-expanded', String(nextOpen));
+      };
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const nextOpen = panel.hidden;
+        if (nextOpen) {
+          window.DisplayMmdLighting?.close?.();
+          window.DisplayMmdAr?.closePanel?.();
+        }
+        setOpen(nextOpen);
+      });
+      panel.addEventListener('click', (event) => event.stopPropagation());
+      for (const buttonId of ['displayMmdLightingToggle', 'displayArTargetToggle']) {
+        document.getElementById(buttonId)?.addEventListener('click', () => setOpen(false));
+      }
+      document.addEventListener('click', (event) => {
+        if (panel.hidden || panel.contains(event.target) || button.contains(event.target)) return;
+        setOpen(false);
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') setOpen(false);
+      });
+      setOpen(false);
     })();
     (() => {
       const field = document.querySelector('.mmd-ar-edge-correction');
@@ -369,6 +406,8 @@ function groupWebPanels($) {
     '<label class="display-mmd-lighting-field mmd-ar-edge-correction"><input type="checkbox" checked><span>半分辨率边界修正 <small></small></span></label>' +
     '<label class="display-mmd-lighting-field mmd-ar-normal-preview"><input type="checkbox"><span>深度重建法线预览（颜色代表方向，跳过 AO 与模糊）</span></label>'
   );
+  const motionPanel = $('#mmdArMotionPanel').first();
+  if (motionPanel.length) groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);
   const panels = [lightingPanel, $('#mmdArMotionPanel').first(), trackingPanel].filter((panel) => panel.length > 0);
   for (const panel of panels) {
