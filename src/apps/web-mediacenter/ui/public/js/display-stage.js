@@ -388,9 +388,30 @@
             if (state.chatVisible) syncDisplayChatVoiceContext(true);
         });
         if (root.DisplayMmd && typeof root.DisplayMmd.init === 'function') {
+            const loading = document.getElementById('displayMmdLoadingProgress');
+            const loadingText = document.getElementById('displayMmdLoadingText');
+            const loadingFill = document.getElementById('displayMmdLoadingFill');
+            let loadingHideTimer = null;
             root.DisplayMmd.init({
                 canvas: refs.mmdCanvas,
                 status: document.getElementById('displayMmdStatus'),
+                onLoadProgress: ({ phase, percent, error }) => {
+                    if (!loading || !loadingText || !loadingFill) return;
+                    if (loadingHideTimer !== null) root.clearTimeout(loadingHideTimer);
+                    loadingHideTimer = null;
+                    if (error) {
+                        loading.hidden = true;
+                        return;
+                    }
+                    const value = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+                    loading.hidden = false;
+                    loading.setAttribute('aria-valuenow', String(value));
+                    loadingText.textContent = `${phase} ${value}%`;
+                    loadingFill.style.width = `${value}%`;
+                    if (value === 100) {
+                        loadingHideTimer = root.setTimeout(() => { loading.hidden = true; }, 1500);
+                    }
+                },
                 bus,
                 send,
                 getState: () => ({ ...state })

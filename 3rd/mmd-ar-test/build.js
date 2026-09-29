@@ -56,6 +56,7 @@ const SOURCE_ASSET_FILES = Object.freeze([
   'display-pmx-ao.mjs',
   'display-pmx-ao-size.mjs',
   'display-pmx-lighting-mode.mjs',
+  'display-pmx-specular.mjs',
   'mmd-ammo-physics.mjs',
   'mmd-pmx-helper.mjs',
   'pmx-display-layout.mjs',
@@ -197,6 +198,17 @@ async function stageTextAssets() {
   if ($('#mmdArTrackerEngine').length || $('#mmdArBenchmarkResults').length) {
     throw new Error('显示端页面已包含 A/B 测试控件，测试 harness 不得重复注入');
   }
+  // 正式页已有独立动作面板；保留共用物理滑条，测试 harness 使用自己的开关与存储键。
+  for (const id of ['displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']) {
+    $('#displayMmdLightingPanel').append($(`#${id}`).closest('label'));
+  }
+  $('#displayMmdMotionToggle, #displayMmdMotionPanel').remove();
+  // 测试页保留独立高光/AO 开关及测试存储；不复制正式页新增字段。
+  for (const id of [
+    'displayMmdSpecularEnabled', 'displayMmdSpecularColor',
+    'displayMmdSpecularIntensity', 'displayMmdSpecularShininess',
+    'displayMmdPmxAoEdgeCorrection', 'displayMmdKeyShadowEnabled'
+  ]) $(`#${id}`).closest('label').remove();
   // 测试页有自己的 MindAR 参数和物理开关，避免复制正式页控件后出现两套状态。
   for (const id of [
     'displayArTrackerEngine', 'displayArTargetPlane', 'displayArTranslationDeadZone',
@@ -233,6 +245,26 @@ async function stageTextAssets() {
         <span>启用 PMX 物理（切换时重新加载模型）</span>
       </label>
     `);
+    // 测试网页将现有动作与物理控件移到独立面板；复用原节点及 ID，灯光事件仍可读取物理参数。
+    controls.find('#displayMmdLightingToggle').after(
+      '<button id="mmdArMotionToggle" class="display-stage-button" type="button" aria-controls="mmdArMotionPanel" aria-expanded="false">动作</button>'
+    );
+    controls.find('#displayMmdLightingPanel').after(`
+      <section id="mmdArMotionPanel" class="display-mmd-lighting-panel" hidden aria-label="角色动作与物理设置">
+        <div class="display-mmd-lighting-header"><strong>动作与物理</strong></div>
+      </section>
+    `);
+    const motionPanel = $('#mmdArMotionPanel');
+    motionPanel.append($('#mmdArMotionPlayback').closest('label'));
+    motionPanel.append(`
+      <label class="display-mmd-lighting-field">
+        <span>播放进度 <output id="mmdArMotionTime">--:-- / --:--</output></span>
+        <progress id="mmdArMotionProgress" max="1" value="0" aria-label="动作播放进度"></progress>
+      </label>
+    `);
+    for (const id of ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']) {
+      motionPanel.append($(`#${id}`).closest('label'));
+    }
     $('#displayMmdKeyColor').closest('label').before(`
       <label class="display-mmd-lighting-shadow">
         <input id="displayMmdKeyShadowEnabled" type="checkbox" checked>
@@ -350,14 +382,17 @@ async function stageTextAssets() {
     // 测试网页单独验证手机深度采样精度；三个阶段必须一致，避免模糊和合成再次丢失精度。
     const aoPath = path.join(GENERATED_ASSETS, 'js/display-pmx-ao.mjs');
     const aoSource = await fs.readFile(aoPath, 'utf8');
-    const depthSampler = 'uniform sampler2D tDepth;';
-    if (aoSource.split(depthSampler).length !== 4) throw new Error('测试网页 AO 深度采样器数量应为三处');
-    const { addAoNormalPreview } = require('./web-ao-preview');
-    const { alignAoDepthTexels } = require('./web-ao-texel');
-    const { fixAoNormalPreviewEdges } = require('./web-ao-preview-edges');
-    const { addAoBoundaryCorrection } = require('./web-ao-boundary');
-    const alignedAoSource = alignAoDepthTexels(aoSource.replaceAll(depthSampler, 'uniform highp sampler2D tDepth;'));
-    await fs.writeFile(aoPath, addAoBoundaryCorrection(fixAoNormalPreviewEdges(addAoNormalPreview(alignedAoSource))));
+    // AO 优化已进入正式显示端，测试页直接复制同一 shader；旧版源码仍允许构建期注入。
+    if (!aoSource.includes('edgeSourcePixel')) {
+      const depthSampler = 'uniform sampler2D tDepth;';
+      if (aoSource.split(depthSampler).length !== 4) throw new Error('测试网页 AO 深度采样器数量应为三处');
+      const { addAoNormalPreview } = require('./web-ao-preview');
+      const { alignAoDepthTexels } = require('./web-ao-texel');
+      const { fixAoNormalPreviewEdges } = require('./web-ao-preview-edges');
+      const { addAoBoundaryCorrection } = require('./web-ao-boundary');
+      const alignedAoSource = alignAoDepthTexels(aoSource.replaceAll(depthSampler, 'uniform highp sampler2D tDepth;'));
+      await fs.writeFile(aoPath, addAoBoundaryCorrection(fixAoNormalPreviewEdges(addAoNormalPreview(alignedAoSource))));
+    }
     const aoVersion = (await hashFile(aoPath)).sha256.slice(0, 12);
     // 静态站点可能长时间缓存同路径 ESM；先给阴影模块加内容指纹，再计算 runtime 指纹。
     const pmxRuntimePath = path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js');
@@ -382,6 +417,7 @@ async function stageTextAssets() {
     // 只改 web-dist 副本：面板只读当前投影，不把近远裁面写进正式显示端源码或灯光配置。
     const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
+    if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
     await fs.writeFile(pmxRuntimePath, runtimeWithProbe.replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`));
@@ -391,7 +427,9 @@ async function stageTextAssets() {
     const current = await fs.readFile(mmdScriptPath, 'utf8');
     const runtimeImport = "'./display-pmx-runtime.js'";
     if (!current.includes(runtimeImport)) throw new Error('测试网页未找到 PMX runtime 动态导入入口');
-    await fs.writeFile(mmdScriptPath, current.replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`));
+    if (!current.includes('getMotionProgress: () =>')) throw new Error('正式显示模块缺少 VMD 进度入口');
+    await fs.writeFile(mmdScriptPath, current
+      .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`));
   }
   await fs.cp(VENDOR_THREE_SOURCE, path.join(GENERATED_ASSETS, 'js/vendor/three'), { recursive: true });
 
@@ -432,7 +470,8 @@ async function stageTextAssets() {
     button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
     body { background: radial-gradient(ellipse at 50% 42%, #303442 0%, #171920 58%, #101116 100%); color: var(--text-primary); font: 14px/1.45 system-ui, sans-serif; touch-action: manipulation; }
-    .display-stage-layers { --display-stage-panel-max-height: min(620px, calc(100dvh - var(--display-stage-panel-top-gap) - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 28px)); }
+    /* 三个面板入口在短屏上占用三行，预留额外一行高度给面板内部滚动。 */
+    .display-stage-layers { --display-stage-panel-max-height: min(620px, calc(100dvh - var(--display-stage-panel-top-gap) - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 72px)); }
     /* 校准弹窗只占真实可视区；短屏时收缩预览并允许弹窗内部滚动。 */
     #displayArCalibration { position: fixed; inset: 0; width: 100vw; height: 100dvh; min-height: 0; overflow: hidden; }
     #displayArCalibration .display-mmd-ar-dialog { width: min(920px, 100%); max-height: calc(100dvh - max(12px, var(--display-safe-inset-top)) - max(12px, var(--display-safe-inset-bottom))); min-height: 0; overscroll-behavior: contain; }
@@ -549,11 +588,12 @@ async function stageTextAssets() {
     (() => {
       const controls = new Map([
         ['displayMmdLightingToggle', 'displayMmdLightingPanel'],
+        ['mmdArMotionToggle', 'mmdArMotionPanel'],
         ['displayArTargetToggle', 'displayArTargetPanel']
       ]);
       const findControl = (target) => {
         if (!(target instanceof Element)) return null;
-        const button = target.closest('#displayMmdLightingToggle, #displayArTargetToggle');
+        const button = target.closest('#displayMmdLightingToggle, #mmdArMotionToggle, #displayArTargetToggle');
         return button && controls.has(button.id) ? button : null;
       };
 

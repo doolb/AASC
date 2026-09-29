@@ -12,12 +12,14 @@ void main() {
 }`;
 
 const AO_FRAGMENT = `
-uniform sampler2D tDepth;
+uniform highp sampler2D tDepth;
 uniform vec2 fullResolution;
+uniform vec2 aoResolution;
 uniform mat4 inverseProjection;
 uniform mat4 projection;
 uniform float radius;
 uniform int sampleCount;
+uniform bool testNormalPreview;
 varying vec2 vUv;
 
 vec3 viewPosition(vec2 uv, float depth) {
@@ -26,27 +28,112 @@ vec3 viewPosition(vec2 uv, float depth) {
     return view.xyz / view.w;
 }
 
+
+ivec2 depthPixel(vec2 uv) {
+    ivec2 size = textureSize(tDepth, 0);
+    return clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - ivec2(1));
+}
+
+vec2 depthPixelUv(ivec2 pixel) {
+    return (vec2(pixel) + 0.5) / vec2(textureSize(tDepth, 0));
+}
+
+
+uniform bool testEdgeCorrection;
+ivec2 edgeSourcePixel(ivec2 pixel) {
+    ivec2 size = textureSize(tDepth, 0);
+    ivec2 grid = ivec2(aoResolution);
+    pixel = clamp(pixel, ivec2(0), grid - 1);
+    return ((pixel * 2 + 1) * size) / (grid * 2);
+}
+ivec2 edgePixel(vec2 uv) {
+    ivec2 size = textureSize(tDepth, 0);
+    return clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+}
+vec2 edgeUv(ivec2 pixel) {
+    return (vec2(pixel) + 0.5) / vec2(textureSize(tDepth, 0));
+}
+vec3 edgePosition(vec2 uv, float depth) {
+    vec4 view = inverseProjection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    return view.xyz / view.w;
+}
+float edgeDistance(ivec2 pixel, float depth) {
+    return -edgePosition(edgeUv(pixel), depth).z;
+}
+float edgeSlope(ivec2 pixel, ivec2 offset, float centerZ) {
+    ivec2 last = textureSize(tDepth, 0) - 1;
+    ivec2 plus = clamp(pixel + offset, ivec2(0), last);
+    ivec2 minus = clamp(pixel - offset, ivec2(0), last);
+    float dp = texelFetch(tDepth, plus, 0).r;
+    float dm = texelFetch(tDepth, minus, 0).r;
+    bool validPlus = any(notEqual(plus, pixel)) && dp < 0.99999;
+    bool validMinus = any(notEqual(minus, pixel)) && dm < 0.99999;
+    float forward = edgeDistance(plus, dp) - centerZ;
+    float backward = centerZ - edgeDistance(minus, dm);
+    if (!validPlus && !validMinus) return 0.0;
+    if (!validPlus) return backward;
+    if (!validMinus) return forward;
+    return abs(forward) < abs(backward) ? forward : backward;
+}
+vec3 edgeSurface(ivec2 pixel, float depth) {
+    vec2 uv = edgeUv(pixel);
+    vec3 position = edgePosition(uv, depth);
+    vec2 stepUv = 1.0 / vec2(textureSize(tDepth, 0));
+    float footprint = max(length(edgePosition(uv + vec2(stepUv.x, 0.0), depth) - position),
+        length(edgePosition(uv + vec2(0.0, stepUv.y), depth) - position));
+    // 同时考虑 D24 和 highp 浮点读数的一阶量化误差，避免近平面/远平面使用固定世界单位。
+    float quantization = max(
+        abs(edgeDistance(pixel, min(depth + 1.1920929e-7, 0.99999994)) + position.z),
+        abs(edgeDistance(pixel, max(depth - 1.1920929e-7, 0.0)) + position.z));
+    float tolerance = max(max(footprint * 0.25, quantization * 8.0), 1e-6 * max(1.0, abs(position.z)));
+    return vec3(edgeSlope(pixel, ivec2(1, 0), -position.z),
+        edgeSlope(pixel, ivec2(0, 1), -position.z), tolerance);
+}
+bool edgeMatches(ivec2 pixel, float centerZ, vec3 surface, ivec2 samplePixel) {
+    float depth = texelFetch(tDepth, samplePixel, 0).r;
+    if (depth >= 0.99999) return false;
+    float predicted = centerZ + dot(surface.xy, vec2(samplePixel - pixel));
+    return abs(edgeDistance(samplePixel, depth) - predicted) <= surface.z;
+}
+
 void main() {
-    float centerDepth = texture2D(tDepth, vUv).r;
+    ivec2 centerPixel = edgeSourcePixel(ivec2(gl_FragCoord.xy));
+    vec2 centerUv = depthPixelUv(centerPixel);
+    float centerDepth = texelFetch(tDepth, centerPixel, 0).r;
     if (centerDepth >= 0.99999) {
-        gl_FragColor = vec4(1.0);
+        gl_FragColor = testNormalPreview ? vec4(0.0) : vec4(1.0);
         return;
     }
 
-    vec3 center = viewPosition(vUv, centerDepth);
-    vec2 onePixel = 1.0 / fullResolution;
-    float rightDepth = texture2D(tDepth, vUv + vec2(onePixel.x, 0.0)).r;
-    float leftDepth = texture2D(tDepth, vUv - vec2(onePixel.x, 0.0)).r;
-    float topDepth = texture2D(tDepth, vUv + vec2(0.0, onePixel.y)).r;
-    float bottomDepth = texture2D(tDepth, vUv - vec2(0.0, onePixel.y)).r;
-    vec3 tangentX = abs(rightDepth - centerDepth) < abs(leftDepth - centerDepth)
-        ? viewPosition(vUv + vec2(onePixel.x, 0.0), rightDepth) - center
-        : center - viewPosition(vUv - vec2(onePixel.x, 0.0), leftDepth);
-    vec3 tangentY = abs(topDepth - centerDepth) < abs(bottomDepth - centerDepth)
-        ? viewPosition(vUv + vec2(0.0, onePixel.y), topDepth) - center
-        : center - viewPosition(vUv - vec2(0.0, onePixel.y), bottomDepth);
-    vec3 normal = normalize(cross(tangentX, tangentY));
+    vec3 center = viewPosition(centerUv, centerDepth);
+    ivec2 lastPixel = textureSize(tDepth, 0) - ivec2(1);
+    ivec2 rightPixel = min(centerPixel + ivec2(1, 0), lastPixel);
+    ivec2 leftPixel = max(centerPixel - ivec2(1, 0), ivec2(0));
+    ivec2 topPixel = min(centerPixel + ivec2(0, 1), lastPixel);
+    ivec2 bottomPixel = max(centerPixel - ivec2(0, 1), ivec2(0));
+    float rightDepth = texelFetch(tDepth, rightPixel, 0).r;
+    float leftDepth = texelFetch(tDepth, leftPixel, 0).r;
+    float topDepth = texelFetch(tDepth, topPixel, 0).r;
+    float bottomDepth = texelFetch(tDepth, bottomPixel, 0).r;
+    bool useRight = centerPixel.x == 0 || (centerPixel.x < lastPixel.x
+        && abs(rightDepth - centerDepth) < abs(leftDepth - centerDepth));
+    bool useTop = centerPixel.y == 0 || (centerPixel.y < lastPixel.y
+        && abs(topDepth - centerDepth) < abs(bottomDepth - centerDepth));
+    vec3 tangentX = useRight
+        ? viewPosition(depthPixelUv(rightPixel), rightDepth) - center
+        : center - viewPosition(depthPixelUv(leftPixel), leftDepth);
+    vec3 tangentY = useTop
+        ? viewPosition(depthPixelUv(topPixel), topDepth) - center
+        : center - viewPosition(depthPixelUv(bottomPixel), bottomDepth);
+    vec3 crossNormal = cross(tangentX, tangentY);
+    float normalLengthSquared = dot(crossNormal, crossNormal);
+    vec3 normal = normalLengthSquared > 1e-20
+        ? crossNormal * inversesqrt(normalLengthSquared) : vec3(0.0, 0.0, 1.0);
     if (normal.z < 0.0) normal = -normal;
+    if (testNormalPreview) {
+        gl_FragColor = vec4(normal * 0.5 + 0.5, 1.0);
+        return;
+    }
 
     float radiusPixels = clamp(radius * projection[1][1] * fullResolution.y
         / max(-center.z * 2.0, 0.01), 2.0, 48.0);
@@ -58,8 +145,9 @@ void main() {
         float angle = noise * 6.2831853 + sampleIndex * 2.3999632;
         float sampleRadius = sqrt((sampleIndex + 0.5) / float(sampleCount));
         vec2 offset = vec2(cos(angle), sin(angle)) * sampleRadius * radiusPixels / fullResolution;
-        vec2 sampleUv = clamp(vUv + offset, vec2(0.001), vec2(0.999));
-        float sampleDepth = texture2D(tDepth, sampleUv).r;
+        ivec2 samplePixel = depthPixel(centerUv + offset);
+        vec2 sampleUv = depthPixelUv(samplePixel);
+        float sampleDepth = texelFetch(tDepth, samplePixel, 0).r;
         if (sampleDepth >= 0.99999) continue;
         vec3 delta = viewPosition(sampleUv, sampleDepth) - center;
         float distanceToSample = length(delta);
@@ -75,7 +163,7 @@ void main() {
 // 避免衣袖、发丝轮廓和背后的身体被同一团 AO 污染。
 const BLUR_FRAGMENT = `
 uniform sampler2D tAo;
-uniform sampler2D tDepth;
+uniform highp sampler2D tDepth;
 uniform vec2 aoResolution;
 uniform vec2 direction;
 uniform mat4 inverseProjection;
@@ -89,7 +177,92 @@ float viewDistance(vec2 uv, float depth) {
     return -view.z / view.w;
 }
 
+
+uniform bool testEdgeCorrection;
+ivec2 edgeSourcePixel(ivec2 pixel) {
+    ivec2 size = textureSize(tDepth, 0);
+    ivec2 grid = ivec2(aoResolution);
+    pixel = clamp(pixel, ivec2(0), grid - 1);
+    return ((pixel * 2 + 1) * size) / (grid * 2);
+}
+ivec2 edgePixel(vec2 uv) {
+    ivec2 size = textureSize(tDepth, 0);
+    return clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+}
+vec2 edgeUv(ivec2 pixel) {
+    return (vec2(pixel) + 0.5) / vec2(textureSize(tDepth, 0));
+}
+vec3 edgePosition(vec2 uv, float depth) {
+    vec4 view = inverseProjection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    return view.xyz / view.w;
+}
+float edgeDistance(ivec2 pixel, float depth) {
+    return -edgePosition(edgeUv(pixel), depth).z;
+}
+float edgeSlope(ivec2 pixel, ivec2 offset, float centerZ) {
+    ivec2 last = textureSize(tDepth, 0) - 1;
+    ivec2 plus = clamp(pixel + offset, ivec2(0), last);
+    ivec2 minus = clamp(pixel - offset, ivec2(0), last);
+    float dp = texelFetch(tDepth, plus, 0).r;
+    float dm = texelFetch(tDepth, minus, 0).r;
+    bool validPlus = any(notEqual(plus, pixel)) && dp < 0.99999;
+    bool validMinus = any(notEqual(minus, pixel)) && dm < 0.99999;
+    float forward = edgeDistance(plus, dp) - centerZ;
+    float backward = centerZ - edgeDistance(minus, dm);
+    if (!validPlus && !validMinus) return 0.0;
+    if (!validPlus) return backward;
+    if (!validMinus) return forward;
+    return abs(forward) < abs(backward) ? forward : backward;
+}
+vec3 edgeSurface(ivec2 pixel, float depth) {
+    vec2 uv = edgeUv(pixel);
+    vec3 position = edgePosition(uv, depth);
+    vec2 stepUv = 1.0 / vec2(textureSize(tDepth, 0));
+    float footprint = max(length(edgePosition(uv + vec2(stepUv.x, 0.0), depth) - position),
+        length(edgePosition(uv + vec2(0.0, stepUv.y), depth) - position));
+    // 同时考虑 D24 和 highp 浮点读数的一阶量化误差，避免近平面/远平面使用固定世界单位。
+    float quantization = max(
+        abs(edgeDistance(pixel, min(depth + 1.1920929e-7, 0.99999994)) + position.z),
+        abs(edgeDistance(pixel, max(depth - 1.1920929e-7, 0.0)) + position.z));
+    float tolerance = max(max(footprint * 0.25, quantization * 8.0), 1e-6 * max(1.0, abs(position.z)));
+    return vec3(edgeSlope(pixel, ivec2(1, 0), -position.z),
+        edgeSlope(pixel, ivec2(0, 1), -position.z), tolerance);
+}
+bool edgeMatches(ivec2 pixel, float centerZ, vec3 surface, ivec2 samplePixel) {
+    float depth = texelFetch(tDepth, samplePixel, 0).r;
+    if (depth >= 0.99999) return false;
+    float predicted = centerZ + dot(surface.xy, vec2(samplePixel - pixel));
+    return abs(edgeDistance(samplePixel, depth) - predicted) <= surface.z;
+}
+
+void edgeBlur() {
+    ivec2 centerAo = ivec2(gl_FragCoord.xy);
+    ivec2 pixel = edgeSourcePixel(centerAo);
+    float depth = texelFetch(tDepth, pixel, 0).r;
+    if (depth >= 0.99999) { gl_FragColor = vec4(1.0); return; }
+    float centerZ = edgeDistance(pixel, depth);
+    vec3 surface = edgeSurface(pixel, depth);
+    float sum = texelFetch(tAo, centerAo, 0).r * 0.2;
+    float weight = 0.2;
+    for (int i = 1; i <= 5; i++) {
+        if (i > blurRadiusPixels) break;
+        float w = i == 1 ? 0.16 : (i == 2 ? 0.11 : (i == 3 ? 0.06 : (i == 4 ? 0.03 : 0.015)));
+        for (int side = -1; side <= 1; side += 2) {
+            ivec2 sampleAo = clamp(centerAo + ivec2(direction) * i * side, ivec2(0), ivec2(aoResolution) - 1);
+            ivec2 samplePixel = edgeSourcePixel(sampleAo);
+            if (!edgeMatches(pixel, centerZ, surface, samplePixel)) continue;
+            float sampleDepth = texelFetch(tDepth, samplePixel, 0).r;
+            float gap = abs(edgeDistance(samplePixel, sampleDepth) - centerZ);
+            float sampleWeight = w * exp(-pow(gap / max(radius * 0.2, 0.005), 2.0));
+            sum += texelFetch(tAo, sampleAo, 0).r * sampleWeight;
+            weight += sampleWeight;
+        }
+    }
+    gl_FragColor = vec4(vec3(sum / weight), 1.0);
+}
+
 void main() {
+    if (testEdgeCorrection) { edgeBlur(); return; }
     float centerDepth = texture2D(tDepth, vUv).r;
     if (centerDepth >= 0.99999) {
         gl_FragColor = vec4(1.0);
@@ -119,12 +292,16 @@ void main() {
 
 const COMPOSITE_FRAGMENT = `
 uniform sampler2D tColor;
-uniform sampler2D tDepth;
+uniform highp sampler2D tDepth;
 uniform sampler2D tAo;
 uniform vec2 aoResolution;
 uniform mat4 inverseProjection;
 uniform float radius;
 uniform vec3 aoColor;
+uniform vec2 fullResolution;
+uniform mat4 projection;
+uniform int sampleCount;
+uniform bool testNormalPreview;
 uniform float intensity;
 varying vec2 vUv;
 
@@ -134,12 +311,198 @@ float viewDistance(vec2 uv, float depth) {
     return -view.z / view.w;
 }
 
+vec3 viewPosition(vec2 uv, float depth) {
+    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 view = inverseProjection * clip;
+    return view.xyz / view.w;
+}
+
+
+ivec2 depthPixel(vec2 uv) {
+    ivec2 size = textureSize(tDepth, 0);
+    return clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - ivec2(1));
+}
+
+vec2 depthPixelUv(ivec2 pixel) {
+    return (vec2(pixel) + 0.5) / vec2(textureSize(tDepth, 0));
+}
+
+
+vec4 previewNormalAtDepth(vec2 uv) {
+    ivec2 centerPixel = depthPixel(uv);
+    vec2 centerUv = depthPixelUv(centerPixel);
+    float centerDepth = texelFetch(tDepth, centerPixel, 0).r;
+    if (centerDepth >= 0.99999) {
+        return vec4(0.0);
+    }
+
+    vec3 center = viewPosition(centerUv, centerDepth);
+    ivec2 lastPixel = textureSize(tDepth, 0) - ivec2(1);
+    ivec2 rightPixel = min(centerPixel + ivec2(1, 0), lastPixel);
+    ivec2 leftPixel = max(centerPixel - ivec2(1, 0), ivec2(0));
+    ivec2 topPixel = min(centerPixel + ivec2(0, 1), lastPixel);
+    ivec2 bottomPixel = max(centerPixel - ivec2(0, 1), ivec2(0));
+    float rightDepth = texelFetch(tDepth, rightPixel, 0).r;
+    float leftDepth = texelFetch(tDepth, leftPixel, 0).r;
+    float topDepth = texelFetch(tDepth, topPixel, 0).r;
+    float bottomDepth = texelFetch(tDepth, bottomPixel, 0).r;
+    bool useRight = centerPixel.x == 0 || (centerPixel.x < lastPixel.x
+        && abs(rightDepth - centerDepth) < abs(leftDepth - centerDepth));
+    bool useTop = centerPixel.y == 0 || (centerPixel.y < lastPixel.y
+        && abs(topDepth - centerDepth) < abs(bottomDepth - centerDepth));
+    vec3 tangentX = useRight
+        ? viewPosition(depthPixelUv(rightPixel), rightDepth) - center
+        : center - viewPosition(depthPixelUv(leftPixel), leftDepth);
+    vec3 tangentY = useTop
+        ? viewPosition(depthPixelUv(topPixel), topDepth) - center
+        : center - viewPosition(depthPixelUv(bottomPixel), bottomDepth);
+    vec3 crossNormal = cross(tangentX, tangentY);
+    float normalLengthSquared = dot(crossNormal, crossNormal);
+    vec3 normal = normalLengthSquared > 1e-20
+        ? crossNormal * inversesqrt(normalLengthSquared) : vec3(0.0, 0.0, 1.0);
+    if (normal.z < 0.0) normal = -normal;
+    return vec4(normal * 0.5 + 0.5, 1.0);
+}
+
+uniform bool testEdgeCorrection;
+ivec2 edgeSourcePixel(ivec2 pixel) {
+    ivec2 size = textureSize(tDepth, 0);
+    ivec2 grid = ivec2(aoResolution);
+    pixel = clamp(pixel, ivec2(0), grid - 1);
+    return ((pixel * 2 + 1) * size) / (grid * 2);
+}
+ivec2 edgePixel(vec2 uv) {
+    ivec2 size = textureSize(tDepth, 0);
+    return clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+}
+vec2 edgeUv(ivec2 pixel) {
+    return (vec2(pixel) + 0.5) / vec2(textureSize(tDepth, 0));
+}
+vec3 edgePosition(vec2 uv, float depth) {
+    vec4 view = inverseProjection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    return view.xyz / view.w;
+}
+float edgeDistance(ivec2 pixel, float depth) {
+    return -edgePosition(edgeUv(pixel), depth).z;
+}
+float edgeSlope(ivec2 pixel, ivec2 offset, float centerZ) {
+    ivec2 last = textureSize(tDepth, 0) - 1;
+    ivec2 plus = clamp(pixel + offset, ivec2(0), last);
+    ivec2 minus = clamp(pixel - offset, ivec2(0), last);
+    float dp = texelFetch(tDepth, plus, 0).r;
+    float dm = texelFetch(tDepth, minus, 0).r;
+    bool validPlus = any(notEqual(plus, pixel)) && dp < 0.99999;
+    bool validMinus = any(notEqual(minus, pixel)) && dm < 0.99999;
+    float forward = edgeDistance(plus, dp) - centerZ;
+    float backward = centerZ - edgeDistance(minus, dm);
+    if (!validPlus && !validMinus) return 0.0;
+    if (!validPlus) return backward;
+    if (!validMinus) return forward;
+    return abs(forward) < abs(backward) ? forward : backward;
+}
+vec3 edgeSurface(ivec2 pixel, float depth) {
+    vec2 uv = edgeUv(pixel);
+    vec3 position = edgePosition(uv, depth);
+    vec2 stepUv = 1.0 / vec2(textureSize(tDepth, 0));
+    float footprint = max(length(edgePosition(uv + vec2(stepUv.x, 0.0), depth) - position),
+        length(edgePosition(uv + vec2(0.0, stepUv.y), depth) - position));
+    // 同时考虑 D24 和 highp 浮点读数的一阶量化误差，避免近平面/远平面使用固定世界单位。
+    float quantization = max(
+        abs(edgeDistance(pixel, min(depth + 1.1920929e-7, 0.99999994)) + position.z),
+        abs(edgeDistance(pixel, max(depth - 1.1920929e-7, 0.0)) + position.z));
+    float tolerance = max(max(footprint * 0.25, quantization * 8.0), 1e-6 * max(1.0, abs(position.z)));
+    return vec3(edgeSlope(pixel, ivec2(1, 0), -position.z),
+        edgeSlope(pixel, ivec2(0, 1), -position.z), tolerance);
+}
+bool edgeMatches(ivec2 pixel, float centerZ, vec3 surface, ivec2 samplePixel) {
+    float depth = texelFetch(tDepth, samplePixel, 0).r;
+    if (depth >= 0.99999) return false;
+    float predicted = centerZ + dot(surface.xy, vec2(samplePixel - pixel));
+    return abs(edgeDistance(samplePixel, depth) - predicted) <= surface.z;
+}
+
+float edgeFallbackAo(ivec2 pixel, float depth) {
+    vec2 centerUv = edgeUv(pixel);
+    vec3 center = edgePosition(centerUv, depth);
+    vec3 normal = previewNormalAtDepth(centerUv).rgb * 2.0 - 1.0;
+    float radiusPixels = clamp(radius * projection[1][1] * fullResolution.y
+        / max(-center.z * 2.0, 0.01), 2.0, 48.0);
+    float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    float occlusion = 0.0;
+    for (int i = 0; i < 32; i++) {
+        if (i >= sampleCount) break;
+        float sampleIndex = float(i);
+        float angle = noise * 6.2831853 + sampleIndex * 2.3999632;
+        float sampleRadius = sqrt((sampleIndex + 0.5) / float(sampleCount));
+        vec2 offset = vec2(cos(angle), sin(angle)) * sampleRadius * radiusPixels / fullResolution;
+        ivec2 samplePixel = depthPixel(centerUv + offset);
+        vec2 sampleUv = depthPixelUv(samplePixel);
+        float sampleDepth = texelFetch(tDepth, samplePixel, 0).r;
+        if (sampleDepth >= 0.99999) continue;
+        vec3 delta = viewPosition(sampleUv, sampleDepth) - center;
+        float distanceToSample = length(delta);
+        float facing = dot(normal, delta) / max(distanceToSample, 0.0001);
+        float rangeWeight = 1.0 - smoothstep(0.0, radius, distanceToSample);
+        occlusion += smoothstep(0.08, 0.3, facing) * rangeWeight;
+    }
+    float visibility = 1.0 - min(0.6, occlusion * (8.0 / float(sampleCount)));
+
+    return visibility;
+}
+vec4 edgeResolve(vec2 uv, bool normalMode) {
+    ivec2 pixel = edgePixel(uv);
+    float depth = texelFetch(tDepth, pixel, 0).r;
+    float centerZ = edgeDistance(pixel, depth);
+    vec3 surface = edgeSurface(pixel, depth);
+    vec2 gridPosition = uv * aoResolution - 0.5;
+    ivec2 base = ivec2(floor(gridPosition));
+    vec2 blend = fract(gridPosition);
+    vec3 sum = vec3(0.0);
+    float weight = 0.0;
+    for (int y = 0; y < 2; y++) {
+        for (int x = 0; x < 2; x++) {
+            ivec2 candidate = clamp(base + ivec2(x, y), ivec2(0), ivec2(aoResolution) - 1);
+            ivec2 samplePixel = edgeSourcePixel(candidate);
+            if (!edgeMatches(pixel, centerZ, surface, samplePixel)) continue;
+            vec4 sampleValue = texelFetch(tAo, candidate, 0);
+            if (normalMode && sampleValue.a < 0.5) continue;
+            float w = (x == 0 ? 1.0 - blend.x : blend.x) * (y == 0 ? 1.0 - blend.y : blend.y);
+            sum += sampleValue.rgb * w;
+            weight += w;
+        }
+    }
+    if (weight > 1e-6) {
+        vec3 value = sum / weight;
+        if (normalMode) {
+            vec3 n = value * 2.0 - 1.0;
+            if (dot(n, n) > 1e-12) value = normalize(n) * 0.5 + 0.5;
+        }
+        return vec4(value, 1.0);
+    }
+    if (normalMode) return previewNormalAtDepth(edgeUv(pixel));
+    return vec4(vec3(edgeFallbackAo(pixel, depth)), 1.0);
+}
+
 void main() {
     vec4 color = texture2D(tColor, vUv);
+    if (testNormalPreview) {
+        float actualDepth = texelFetch(tDepth, depthPixel(vUv), 0).r;
+        if (color.a <= 0.001 || actualDepth >= 0.99999) {
+            gl_FragColor = color;
+            return;
+        }
+        vec4 preview = testEdgeCorrection ? edgeResolve(vUv, true) : texture2D(tAo, vUv);
+        if (preview.a < 0.5) preview = previewNormalAtDepth(vUv);
+        gl_FragColor = vec4(preview.rgb, color.a);
+        return;
+    }
     float depth = texture2D(tDepth, vUv).r;
     if (color.a <= 0.001 || depth >= 0.99999) {
         gl_FragColor = color;
     } else {
+        float visibility;
+        if (testEdgeCorrection) visibility = edgeResolve(vUv, false).r;
+        else {
         float centerDistance = viewDistance(vUv, depth);
         vec2 texel = 1.0 / aoResolution;
         float sum = 0.0;
@@ -158,7 +521,8 @@ void main() {
             sum += texture2D(tAo, sampleUv).r * sampleWeight;
             weight += sampleWeight;
         }
-        float visibility = weight > 0.0 ? sum / weight : 1.0;
+        visibility = weight > 0.0 ? sum / weight : 1.0;
+        }
         float amount = clamp((1.0 - visibility) * intensity, 0.0, 1.0);
         gl_FragColor = vec4(color.rgb * mix(vec3(1.0), aoColor, amount), color.a);
     }
@@ -203,7 +567,8 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
                 inverseProjection: { value: camera.projectionMatrixInverse },
                 projection: { value: camera.projectionMatrix },
                 radius: { value: radius },
-                sampleCount: { value: sampleCount }
+                sampleCount: { value: sampleCount },
+                testNormalPreview: { value: false }
             },
             vertexShader: FULLSCREEN_VERTEX,
             fragmentShader: AO_FRAGMENT,
@@ -238,6 +603,7 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
                 inverseProjection: { value: camera.projectionMatrixInverse },
                 radius: { value: radius },
                 aoColor: { value: aoColor },
+                testNormalPreview: { value: false },
                 intensity: { value: intensity }
             },
             vertexShader: FULLSCREEN_VERTEX,
@@ -252,6 +618,14 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         const passScene = new THREE.Scene();
         passScene.add(quad);
         const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        // 修正参数只供测试网页使用，不进入正式灯光配置。
+        for (const material of [aoMaterial, blurMaterial, compositeMaterial]) {
+            material.uniforms.testEdgeCorrection = { value: false };
+        }
+        aoMaterial.uniforms.aoResolution = { value: new THREE.Vector2() };
+        compositeMaterial.uniforms.fullResolution = { value: new THREE.Vector2() };
+        compositeMaterial.uniforms.projection = { value: camera.projectionMatrix };
+        compositeMaterial.uniforms.sampleCount = { value: sampleCount };
         resources = { depthTexture, colorTarget, aoTarget, blurTarget, aoMaterial, blurMaterial, compositeMaterial,
             geometry, quad, passScene, passCamera };
         resize(fullWidth, fullHeight);
@@ -264,6 +638,11 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         const aoSize = calculatePmxAoSize(fullWidth, fullHeight, resolutionMode);
         resources.colorTarget.setSize(fullWidth, fullHeight);
         resources.aoTarget.setSize(aoSize.width, aoSize.height);
+        resources.aoMaterial.uniforms.aoResolution.value.set(aoSize.width, aoSize.height);
+        resources.compositeMaterial.uniforms.fullResolution.value.set(fullWidth, fullHeight);
+        window.dispatchEvent(new CustomEvent('mmd-ar-ao-size', { detail: {
+            reduced: aoSize.width < fullWidth || aoSize.height < fullHeight
+        } }));
         resources.blurTarget.setSize(aoSize.width, aoSize.height);
         resources.aoMaterial.uniforms.fullResolution.value.set(fullWidth, fullHeight);
         resources.blurMaterial.uniforms.aoResolution.value.set(aoSize.width, aoSize.height);
@@ -271,13 +650,21 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
     };
 
     const render = () => {
-        if (!enabled || !supported) {
+        const normalPreview = window.MmdArTestNormalPreview === true;
+        if ((!enabled && !normalPreview) || !supported) {
             renderer.render(scene, camera);
             return;
         }
         createResources();
+        resources.aoMaterial.uniforms.testNormalPreview.value = normalPreview;
+        resources.compositeMaterial.uniforms.testNormalPreview.value = normalPreview;
         const previousTarget = renderer.getRenderTarget();
         try {
+            const edgeCorrection = (window.DisplayMmdAoEdgeCorrection ?? window.MmdArTestEdgeCorrection) !== false
+                && (resources.aoTarget.width < fullWidth || resources.aoTarget.height < fullHeight);
+            resources.blurMaterial.uniforms.testEdgeCorrection.value = edgeCorrection;
+            resources.compositeMaterial.uniforms.testEdgeCorrection.value = edgeCorrection;
+            resources.compositeMaterial.uniforms.sampleCount.value = sampleCount;
             resources.aoMaterial.uniforms.radius.value = radius;
             resources.aoMaterial.uniforms.sampleCount.value = sampleCount;
             resources.blurMaterial.uniforms.radius.value = radius;
@@ -290,7 +677,7 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
             renderer.setRenderTarget(resources.aoTarget);
             renderer.clear();
             renderer.render(resources.passScene, resources.passCamera);
-            if (blurPassCount > 0) {
+            if (!normalPreview && blurPassCount > 0) {
                 resources.quad.material = resources.blurMaterial;
                 for (let passIndex = 0; passIndex < blurPassCount; passIndex++) {
                     resources.blurMaterial.uniforms.blurRadiusPixels.value = blurRadii[passIndex];

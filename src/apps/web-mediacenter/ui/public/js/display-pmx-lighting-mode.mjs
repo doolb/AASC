@@ -3,6 +3,7 @@
  * 只修改本次加载出的 MMDToonMaterial 实例，不修改 Three.js 内置 shader 或模型文件。
  */
 import { Color, Vector3, ShaderChunk } from 'three';
+import { preparePmxSpecular } from './display-pmx-specular.mjs';
 
 const TOON_IRRADIANCE =
     'vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;';
@@ -71,6 +72,7 @@ function applyRimsToMaterial(material, rimLights = []) {
 
 export function preparePmxLightingMaterial(material, pmxToonEnabled, webFillShadowMode = false) {
     if (!material?.isMMDToonMaterial) return false;
+    if (typeof window === 'undefined' || window.MmdArTestWebFillShadow !== true) preparePmxSpecular(material);
     if (!material.uniforms?.pmxStandardLighting) {
         // 对模型实例的直射光表达式加模式参数；主光和补光会经过同一个 shader 路径。
         if (!material.fragmentShader.includes(TOON_IRRADIANCE)

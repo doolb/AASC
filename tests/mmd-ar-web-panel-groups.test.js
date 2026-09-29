@@ -17,6 +17,15 @@ const CAMERA_CONTROL_IDS = ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone',
 
 function addCameraControls($) {
   // 测试网页构建器先移除正式页新控件，再注入测试专用的一套参数。
+  for (const id of ['displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']) {
+    $('#displayMmdLightingPanel').append($(`#${id}`).closest('label'));
+  }
+  $('#displayMmdMotionToggle, #displayMmdMotionPanel').remove();
+  for (const id of [
+    'displayMmdSpecularEnabled', 'displayMmdSpecularColor',
+    'displayMmdSpecularIntensity', 'displayMmdSpecularShininess',
+    'displayMmdPmxAoEdgeCorrection', 'displayMmdKeyShadowEnabled'
+  ]) $(`#${id}`).closest('label').remove();
   for (const id of [
     'displayArTrackerEngine', 'displayArTargetPlane', 'displayArTranslationDeadZone',
     'displayArRotationDeadZone', 'displayArSmoothing', 'displayArCameraDistance',
@@ -24,6 +33,13 @@ function addCameraControls($) {
   ]) $(`#${id}`).closest('label').remove();
   $('#displayMmdLightingPanel').prepend('<label><input id="mmdArMotionPlayback" type="checkbox" checked><span>播放动作</span></label>');
   $('#displayMmdPhysicsFps').closest('label').before('<label><input id="mmdArPhysicsEnabled" type="checkbox" checked><span>启用 PMX 物理</span></label>');
+  $('#displayMmdLightingPanel').after('<section id="mmdArMotionPanel" class="display-mmd-lighting-panel" hidden><div class="display-mmd-lighting-header">动作与物理</div></section>');
+  const motionPanel = $('#mmdArMotionPanel');
+  motionPanel.append($('#mmdArMotionPlayback').closest('label'));
+  motionPanel.append('<label><progress id="mmdArMotionProgress" max="1" value="0"></progress><output id="mmdArMotionTime">--:-- / --:--</output></label>');
+  for (const id of ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']) {
+    motionPanel.append($(`#${id}`).closest('label'));
+  }
   $('#displayArTargetPanel').append('<div id="mmdArTargetPlaneMode"></div>');
   $('#displayArTargetPanel').append(CAMERA_CONTROL_IDS.map((id) => `<label><input id="${id}" type="range"></label>`).join(''));
 }
@@ -63,7 +79,7 @@ async function startGeneratedPageServer() {
 test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保留', () => {
   const $ = cheerio.load(fs.readFileSync(DISPLAY_SOURCE, 'utf8'));
   addCameraControls($);
-  const panels = ['#displayMmdLightingPanel', '#displayArTargetPanel'];
+  const panels = ['#displayMmdLightingPanel', '#mmdArMotionPanel', '#displayArTargetPanel'];
   const originalIds = new Map(panels.map((selector) => [
     selector,
     $(selector).find('[id]').map((_, node) => node.attribs.id).get().sort(),
@@ -80,7 +96,8 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   groupWebPanels($);
 
   const expectedTitles = [
-    ['动作', '基础光照', '高光', 'AO', '主光', '补光', '边缘光 1', '边缘光 2', '物理'],
+    ['基础光照', '高光', 'AO', '主光', '补光', '边缘光 1', '边缘光 2'],
+    ['动作', '物理'],
     ['定位图与校准', '跟踪操作', '体感环绕', '相机跟随'],
   ];
   panels.forEach((selector, index) => {
@@ -114,6 +131,8 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArTrackingToggle').closest('.mmd-ar-panel-group').find('button.mmd-ar-panel-group-toggle').attr('data-group-title'), '定位图与校准');
   assert.equal($('#displayMmdShadowSource').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '补光');
   assert.equal($('#mmdArPhysicsEnabled').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
+  assert.equal($('#mmdArMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
+  assert.equal($('#mmdArMotionPlayback').closest('#displayMmdLightingPanel').length, 0);
   assert.match(WEB_PANEL_GROUP_CSS, /background: #39455c/u);
   const specular = $('.mmd-ar-specular');
   assert.equal(specular.is('section.mmd-ar-panel-group'), true);
@@ -225,16 +244,23 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), true);
     assert.equal(await page.$eval('#mmdArPhysicsEnabled', (node) => node.checked), true);
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().physicsEnabled), true);
-    await page.evaluate(() => document.getElementById('displayMmdLightingToggle').click());
-    assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanel').hidden), false);
+    await page.evaluate(() => document.getElementById('mmdArMotionToggle').click());
+    assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), false);
+    assert.equal(await page.$eval('#mmdArMotionTime', node => node.textContent), '--:-- / --:--');
+    assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 0);
     await page.click('#mmdArMotionPlayback');
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
     assert.equal(await page.evaluate(() => localStorage.getItem('aasc.mmdArTest.motionPlayback.v1')), 'false');
-    const lightingTitle = '#displayMmdLightingPanel .mmd-ar-panel-group:nth-of-type(3) .mmd-ar-panel-group-toggle > span:first-child';
+    await page.evaluate(() => document.querySelector('#mmdArMotionPanel [data-group-title="物理"]').click());
+    assert.equal(await page.$eval('#displayMmdPhysicsFps', node => node.closest('#mmdArMotionPanel') !== null), true);
+    await page.evaluate(() => document.getElementById('displayMmdLightingToggle').click());
+    assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanel').hidden), false);
+    assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), true);
+    const lightingTitle = '#displayMmdLightingPanel [data-group-title="高光"] > span:first-child';
     await page.evaluate((selector) => document.querySelector(selector).click(), lightingTitle);
-    assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanelGroup3').hidden), false);
+    assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanelGroup2').hidden), false);
     await page.evaluate((selector) => document.querySelector(selector).click(), lightingTitle);
-    assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanelGroup3').hidden), true);
+    assert.equal(await page.evaluate(() => document.getElementById('displayMmdLightingPanelGroup2').hidden), true);
     // 高光开关位于折叠标题外，切换不展开；展开也不能反向切换启用状态。
     await page.waitForSelector('.mmd-ar-specular[data-bound="true"]');
     const specularState = await page.evaluate(() => {
@@ -262,7 +288,7 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     assert.deepEqual(keyShadow, {
       initial: { checked: true, value: true }, checked: false, value: false, saved: false,
     });
-    assert.doesNotMatch(fs.readFileSync(DISPLAY_SOURCE, 'utf8'), /displayMmdKeyShadowEnabled/u);
+    assert.match(fs.readFileSync(DISPLAY_SOURCE, 'utf8'), /displayMmdKeyShadowEnabled/u);
 
     await page.evaluate(() => document.getElementById('displayArTargetToggle').click());
     assert.equal(await page.evaluate(() => document.getElementById('displayArTargetPanel').hidden), false);

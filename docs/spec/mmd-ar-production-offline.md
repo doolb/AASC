@@ -1,5 +1,33 @@
 # 正式 Offline 显示端 MMD AR 同步实现规范（伪代码）
 
+## 测试页用户功能合并（2026-09-29）
+
+```text
+已有声明:
+  DisplayMmdLighting.open / close / update
+  DisplayMmdAr.startTracking / stopAr / closePanel
+  DisplayMmd.setLighting / setMotionPlaybackEnabled / setPhysicsEnabled
+  PmxRuntime.setArCameraPose / getArCameraSyncState
+
+新增定义:
+  MotionPanel { toggle, panel, playback, physics, progress, time }
+  LightingGroups { base, specular, ao, key, fill, rim1, rim2 }
+  TrackingGroups { target, operation, gyro, cameraFollow }
+  ProductionRenderOptions { keyShadow, specular, aoBoundaryCorrection }
+
+操作流程:
+  正式显示端保留现有控件 ID 和本地配置键，将动作与物理控件移入独立动作面板
+  正式显示页把 DisplayMmd 的 onLoadProgress 接到非阻塞进度卡，显示阶段和百分比，完成后延迟隐藏，错误时清除进度
+  灯光面板按基础光照、高光、AO、主光、补光、边缘光分类；定位面板按目标、操作、体感、相机跟随分类
+  各面板互斥，标题开合不误触标题前的开关；窄屏内容在面板内部滚动
+  动作面板显示真实 VMD 时长与播放时间，只读、不跳帧；无有效动作显示未知，面板隐藏时停止轮询
+  AO 使用高精度深度读取和像素对齐；半分辨率轮廓按原深度重建，默认启用边界修正
+  高光、主光与补光阴影的用户配置进入正式灯光状态；不暴露法线预览、near/far 诊断、模拟摄像头
+  MindAR 找到定位图后以锚点和投影矩阵同步 PMX 相机；事件漏帧或模型未就绪时继续逐帧重试
+  失锁保持最后相机姿态，重锁再次同步；停用时释放视频流、识别器并恢复普通相机
+  正式显示端静态代码随 Offline 服务代码包发布；不因本次改动重打原生 APK 或依赖包
+```
+
 ## 输入与发布边界
 
 ```text

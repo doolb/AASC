@@ -1157,6 +1157,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         setArCameraSettings,
         setMotionPlaybackEnabled,
         getMotionPlaybackEnabled: () => motionPlaybackEnabled,
+        // 动作面板只读当前 VMD action；不向外暴露 mixer，也不改变物理状态。
+        getMotionProgress: () => {
+            const action = helper.current?.objects?.get(currentMesh)?.mixer?._actions?.[0];
+            const durationSeconds = action?.getClip?.()?.duration;
+            const timeSeconds = action?.time;
+            return Number.isFinite(durationSeconds) && durationSeconds > 0 && Number.isFinite(timeSeconds)
+                ? { timeSeconds, durationSeconds } : null;
+        },
         setPhysicsEnabled,
         getPhysicsEnabled: () => physicsEnabled,
         setArPose: arFootAnchor.setPose,

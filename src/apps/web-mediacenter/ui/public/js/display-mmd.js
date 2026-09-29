@@ -120,11 +120,9 @@
                 };
             }),
             shadowSource,
-            keyShadowEnabled: root.MmdArTestWebFillShadow === true ? source.keyShadowEnabled !== false : true,
-            shadowEnabled: root.MmdArTestWebFillShadow === true
-                ? source.keyShadowEnabled !== false || (source.fillEnabled === true && shadowSource === 'fill')
-                : (shadowSource !== 'none' && (shadowSource !== 'fill' || source.fillEnabled === true)),
-            webFillShadowMode: root.MmdArTestWebFillShadow === true,
+            keyShadowEnabled: source.keyShadowEnabled !== false,
+            shadowEnabled: source.keyShadowEnabled !== false || (source.fillEnabled === true && shadowSource === 'fill'),
+            webFillShadowMode: true,
             pmxToonEnabled: typeof source.pmxToonEnabled === 'boolean'
                 ? source.pmxToonEnabled
                 : DEFAULT_MMD_LIGHTING.pmxToonEnabled,
@@ -694,6 +692,7 @@
             physicsEnabled: state.physicsEnabled
         }),
         getLighting,
+        getMotionProgress: () => state.runtime?.getMotionProgress?.() ?? null,
         handleActionPlan,
         init,
         loadModel,

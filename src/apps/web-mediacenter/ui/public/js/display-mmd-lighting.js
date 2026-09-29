@@ -126,7 +126,7 @@
             ambientIntensity: byId('displayMmdAmbientIntensity'),
             ambientIntensityValue: byId('displayMmdAmbientIntensityValue'),
             keyColor: byId('displayMmdKeyColor'),
-            ...(root.MmdArTestWebFillShadow === true ? { keyShadowEnabled: byId('displayMmdKeyShadowEnabled') } : {}),
+            keyShadowEnabled: byId('displayMmdKeyShadowEnabled'),
             keyIntensity: byId('displayMmdKeyIntensity'),
             keyIntensityValue: byId('displayMmdKeyIntensityValue'),
             keyDirectionLongitude: byId('displayMmdKeyDirectionLongitude'),

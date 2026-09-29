@@ -218,6 +218,7 @@
         let lastAnchor = null;
         let lastProjection = null;
         let synced = false;
+        let poseQueued = false;
         const onResize = originalResize.bind(system);
         const trackedResize = function trackedResize(...args) { return originalResize.apply(this, args); };
         Object.defineProperty(trackedResize, 'bind', { value: () => onResize });
@@ -276,14 +277,24 @@
             }
             poseFrame = root.requestAnimationFrame(checkPose);
         };
-        const onUpdate = () => queueMicrotask(syncPose);
+        const onUpdate = () => {
+            if (poseQueued || token !== generation) return;
+            poseQueued = true;
+            // MindAR 在 targetUpdate 回调结束后才提交本帧锚点矩阵；合并重复事件并读取新矩阵。
+            queueMicrotask(() => {
+                poseQueued = false;
+                syncPose();
+            });
+        };
         const onFound = () => {
+            if (token !== generation) return;
             visible = true;
             synced = false;
             lastAnchor = null;
             sample += 1;
         };
         const onLost = () => {
+            if (token !== generation) return;
             visible = false;
             synced = false;
             lastAnchor = null;

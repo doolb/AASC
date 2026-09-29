@@ -5,6 +5,11 @@ import http from 'node:http';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { normalizeSpecular } from './web-specular.mjs';
+import {
+  normalizeSpecular as normalizeProductionSpecular,
+  preparePmxSpecular,
+  setSpecular as setProductionSpecular
+} from '../../src/apps/web-mediacenter/ui/public/js/display-pmx-specular.mjs';
 
 test('高光参数默认与非法输入规范化', () => {
   assert.deepEqual(normalizeSpecular(null), { enabled: false, color: '#ffffff', intensity: 0.3, shininess: 30 });
@@ -12,6 +17,19 @@ test('高光参数默认与非法输入规范化', () => {
   assert.deepEqual(normalizeSpecular({ enabled: true, color: '#AA0022', intensity: 9, shininess: -1 }), {
     enabled: true, color: '#aa0022', intensity: 2, shininess: 1,
   });
+});
+
+test('正式 PMX 高光沿用已验证参数和材质接口', () => {
+  assert.deepEqual(normalizeProductionSpecular(null), normalizeSpecular(null));
+  const original = 'reflectedLight.directSpecular += irradiance * BRDF_BlinnPhong( directLight.direction, geometryViewDir, geometryNormal, material.specularColor, material.specularShininess ) * material.specularStrength;';
+  const material = { isMMDToonMaterial: true, uniforms: {}, fragmentShader: original };
+  preparePmxSpecular(material);
+  assert.match(material.fragmentShader, /testSpecularEnabled/u);
+  setProductionSpecular({ enabled: true, color: '#ff0000', intensity: 0.8, shininess: 90 });
+  material.onBeforeRender();
+  assert.equal(material.uniforms.testSpecularEnabled.value, 1);
+  assert.equal(material.uniforms.testSpecularIntensity.value, 0.8);
+  assert.equal(material.uniforms.testSpecularShininess.value, 90);
 });
 
 test('真实 WebGL 高光与面板持久化回归', async () => {

@@ -68,6 +68,11 @@
             <canvas id="displayMmdCanvas" aria-label="MMD 角色画布"></canvas>
             <div id="displayMmdStatus" class="display-mmd-status" role="status" aria-live="polite"></div>
         </div>
+        <div id="displayMmdLoadingProgress" class="display-mmd-loading-progress" role="progressbar"
+             aria-label="模型加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+            <span id="displayMmdLoadingText">准备模型 0%</span>
+            <div class="display-mmd-loading-track"><div id="displayMmdLoadingFill" class="display-mmd-loading-fill"></div></div>
+        </div>
         <div id="displayBroadcastLayer" class="display-stage-broadcast-layer" aria-hidden="true">
             <div id="voiceTextDisplay" class="voice-text-hidden"></div>
         </div>
@@ -76,6 +81,8 @@
             <div class="display-stage-lighting-control">
                 <button id="displayMmdLightingToggle" class="display-stage-button" type="button"
                         aria-controls="displayMmdLightingPanel" aria-expanded="false">灯光</button>
+                <button id="displayMmdMotionToggle" class="display-stage-button" type="button"
+                        aria-controls="displayMmdMotionPanel" aria-expanded="false">动作</button>
                 <button id="displayArTargetToggle" class="display-stage-button" type="button"
                         aria-controls="displayArTargetPanel" aria-expanded="false">定位</button>
                 <section id="displayArTargetPanel" class="display-mmd-ar-panel" hidden
@@ -154,6 +161,32 @@
                         尚未选择定位图
                     </p>
                 </section>
+                <section id="displayMmdMotionPanel" class="display-mmd-lighting-panel" hidden
+                         aria-label="角色动作与物理设置">
+                    <div class="display-mmd-lighting-header"><strong>动作与物理</strong></div>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdMotionPlayback" type="checkbox" checked>
+                        <span>播放动作</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>播放进度 <output id="displayMmdMotionTime">--:-- / --:--</output></span>
+                        <progress id="displayMmdMotionProgress" max="1" value="0" aria-label="动作播放进度"></progress>
+                    </label>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdPhysicsEnabled" type="checkbox" checked>
+                        <span>启用 PMX 物理（切换时重新加载模型）</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>PMX 物理频率 <output id="displayMmdPhysicsFpsValue">65 Hz</output></span>
+                        <input id="displayMmdPhysicsFps" type="range" min="30" max="90" step="5" value="65">
+                        <small>目标值；实际步进受渲染帧率和每帧最多 3 个子步限制。</small>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>旋转暂停物理阈值 <output id="displayMmdRotationPhysicsLimitValue">720°/秒</output></span>
+                        <input id="displayMmdRotationPhysicsLimit" type="range" min="30" max="1440" step="10" value="720">
+                        <small>PMX 实际旋转速度超过此值时暂停布料物理，减速后恢复。</small>
+                    </label>
+                </section>
                 <section id="displayMmdLightingPanel" class="display-mmd-lighting-panel" hidden
                          aria-label="角色灯光设置">
                     <div class="display-mmd-lighting-header">
@@ -162,14 +195,6 @@
                             恢复默认
                         </button>
                     </div>
-                    <label class="display-mmd-lighting-shadow">
-                        <input id="displayMmdMotionPlayback" type="checkbox" checked>
-                        <span>播放动作</span>
-                    </label>
-                    <label class="display-mmd-lighting-shadow">
-                        <input id="displayMmdPhysicsEnabled" type="checkbox" checked>
-                        <span>启用 PMX 物理（切换时重新加载模型）</span>
-                    </label>
                     <label class="display-mmd-lighting-field">
                         <span>亮度预设</span>
                         <select id="displayMmdLightingPreset">
@@ -180,12 +205,36 @@
                         </select>
                     </label>
                     <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdSpecularEnabled" data-specular="enabled" type="checkbox">
+                        <span>启用自定义 Blinn-Phong 高光</span>
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>高光颜色</span>
+                        <input id="displayMmdSpecularColor" data-specular="color" type="color" value="#ffffff">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>高光强度 <output id="displayMmdSpecularIntensityValue">0.30</output></span>
+                        <input id="displayMmdSpecularIntensity" data-specular="intensity" type="range" min="0" max="2" step="0.01" value="0.3">
+                    </label>
+                    <label class="display-mmd-lighting-field">
+                        <span>高光锐度 <output id="displayMmdSpecularShininessValue">30</output></span>
+                        <input id="displayMmdSpecularShininess" data-specular="shininess" type="range" min="1" max="256" step="1" value="30">
+                    </label>
+                    <label class="display-mmd-lighting-shadow">
                         <input id="displayMmdPmxToonEnabled" type="checkbox">
                         <span>PMX Toon 明暗（关闭后使用普通光照）</span>
                     </label>
                     <label class="display-mmd-lighting-shadow">
                         <input id="displayMmdPmxAoEnabled" type="checkbox" checked>
                         <span>PMX 环境遮蔽 AO（默认开启）</span>
+                    </label>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdPmxAoEdgeCorrection" type="checkbox" checked>
+                        <span>半分辨率 AO 边界修正</span>
+                    </label>
+                    <label class="display-mmd-lighting-shadow">
+                        <input id="displayMmdKeyShadowEnabled" type="checkbox" checked>
+                        <span>主光阴影</span>
                     </label>
                     <label class="display-mmd-lighting-field">
                         <span>AO 颜色</span>
@@ -238,16 +287,6 @@
                     <label id="displayMmdPmxAoBlurRadius3Field" class="display-mmd-lighting-field" hidden>
                         <span>第 3 次模糊半径 <output id="displayMmdPmxAoBlurRadius3Value">3 px</output></span>
                         <input id="displayMmdPmxAoBlurRadius3" type="range" min="1" max="5" step="1" value="3">
-                    </label>
-                    <label class="display-mmd-lighting-field">
-                        <span>PMX 物理频率 <output id="displayMmdPhysicsFpsValue">65 Hz</output></span>
-                        <input id="displayMmdPhysicsFps" type="range" min="30" max="90" step="5" value="65">
-                        <small>目标值；实际步进受渲染帧率和每帧最多 3 个子步限制。</small>
-                    </label>
-                    <label class="display-mmd-lighting-field">
-                        <span>旋转暂停物理阈值 <output id="displayMmdRotationPhysicsLimitValue">720°/秒</output></span>
-                        <input id="displayMmdRotationPhysicsLimit" type="range" min="30" max="1440" step="10" value="720">
-                        <small>PMX 实际旋转速度超过此值时暂停布料物理，减速后恢复。</small>
                     </label>
                     <label class="display-mmd-lighting-field">
                         <span>环境光颜色</span>
@@ -391,6 +430,7 @@
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
+    <script src="js/display-mmd-panel-groups.js" defer></script>
     <script src="js/display-mmd-lighting.js" defer></script>
     <script src="js/display-mmd-image-tracker.js" defer></script>
     <script src="js/display-mmd-ar-mindar.js" defer></script>
