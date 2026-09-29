@@ -2,7 +2,6 @@
 
 // 仅用于 HTTPS 测试页生成阶段：移动现有控件节点，不重建输入框或改变原 ID。
 const LIGHTING_GROUPS = Object.freeze([
-  ['动作', ['mmdArMotionPlayback']],
   ['基础光照', ['displayMmdLightingPreset', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
   ['高光', []],
   ['AO', ['displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3'], 'displayMmdPmxAoEnabled'],
@@ -10,7 +9,6 @@ const LIGHTING_GROUPS = Object.freeze([
   ['补光', ['displayMmdShadowSource', 'displayMmdFillColor', 'displayMmdFillIntensity', 'displayMmdFillDirectionLongitude'], 'displayMmdFillEnabled'],
   ['边缘光 1', ['displayMmdRim1Color', 'displayMmdRim1Intensity', 'displayMmdRim1DirectionLongitude'], 'displayMmdRim1Enabled'],
   ['边缘光 2', ['displayMmdRim2Color', 'displayMmdRim2Intensity', 'displayMmdRim2DirectionLongitude'], 'displayMmdRim2Enabled'],
-  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
 ]);
 
 const TRACKING_GROUPS = Object.freeze([
@@ -21,8 +19,8 @@ const TRACKING_GROUPS = Object.freeze([
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
-    .mmd-ar-panel-group { margin: 9px 0; border: 1px solid #758bff66; border-radius: 10px; background: #171a22aa; overflow: hidden; }
-    .mmd-ar-panel-group-header { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 11px; background: #39455c; }
+    .mmd-ar-panel-group { margin: 9px 0; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, 96%), transparent); overflow: hidden; }
+    .mmd-ar-panel-group-header { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 11px; background: color-mix(in srgb, #39455c var(--display-mmd-panel-opacity, 96%), transparent); }
     .mmd-ar-panel-group-switch { display: flex; flex: none; align-items: center; justify-content: center; width: 18px; min-height: 32px; margin: 0; cursor: pointer; }
     .mmd-ar-panel-group-switch input { flex: none; }
     .mmd-ar-panel-group-toggle { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 32px; padding: 0; border: 0; background: transparent; color: #f4f6fb; font: 600 13px/1.4 system-ui, sans-serif; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -34,7 +32,7 @@ const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-panel-group-body[hidden] { display: none; }
     .mmd-ar-panel-group-body > :first-child { margin-top: 9px; }
     .mmd-ar-panel-group-body > :last-child { margin-bottom: 0; }
-    .mmd-ar-camera-clip { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: #26344a; color: #dce8ff; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .mmd-ar-camera-clip { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: color-mix(in srgb, #26344a var(--display-mmd-panel-opacity, 96%), transparent); color: #dce8ff; font-size: 12px; font-variant-numeric: tabular-nums; }
     .mmd-ar-original-tracking-actions { display: none; }
     #mmdArTrackingToggle { width: 100%; min-height: 44px; }
     .mmd-ar-camera-setting input[type="range"] { width: 100%; }
@@ -47,6 +45,35 @@ const WEB_PANEL_GROUP_CSS = `
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    (() => {
+      const stage = document.getElementById('displayStageLayers');
+      const inputs = Array.from(document.querySelectorAll('.display-mmd-panel-opacity-range'));
+      if (!stage || inputs.length === 0) return;
+      const storageKey = 'aasc.display.mmdPanelOpacity.v1';
+      let opacity = 96;
+      try {
+        const stored = window.localStorage.getItem(storageKey);
+        const parsed = stored === null || stored.trim() === '' ? NaN : Number(stored);
+        if (Number.isFinite(parsed)) opacity = Math.max(0, Math.min(100, Math.round(parsed)));
+      } catch (error) { /* 存储不可用时使用默认值，并保留当前页面调节能力。 */ }
+      const applyOpacity = (value, persist = false) => {
+        opacity = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+        stage.style.setProperty('--display-mmd-panel-opacity', opacity + '%');
+        for (const input of inputs) {
+          input.value = String(opacity);
+          const output = input.closest('.display-mmd-panel-opacity-control')?.querySelector('output');
+          if (output) output.textContent = opacity + '%';
+        }
+        if (!persist) return;
+        try { window.localStorage.setItem(storageKey, String(opacity)); }
+        catch (error) { /* 写入失败只影响刷新后的恢复，不影响本页面。 */ }
+      };
+      for (const input of inputs) {
+        input.addEventListener('input', () => applyOpacity(input.value));
+        input.addEventListener('change', () => applyOpacity(input.value, true));
+      }
+      applyOpacity(opacity);
+    })();
     (() => {
       const field = document.querySelector('.mmd-ar-edge-correction');
       const toggle = field?.querySelector('input');
@@ -343,6 +370,17 @@ function groupWebPanels($) {
     '<label class="display-mmd-lighting-field mmd-ar-normal-preview"><input type="checkbox"><span>深度重建法线预览（颜色代表方向，跳过 AO 与模糊）</span></label>'
   );
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);
+  const panels = [lightingPanel, $('#mmdArMotionPanel').first(), trackingPanel].filter((panel) => panel.length > 0);
+  for (const panel of panels) {
+    const panelId = panel.attr('id');
+    const inputId = `${panelId}Opacity`;
+    panel.prepend(`
+      <label class="display-mmd-panel-opacity-control" for="${inputId}">
+        <span>面板不透明度 <output>96%</output></span>
+        <input id="${inputId}" class="display-mmd-panel-opacity-range" type="range" min="0" max="100" step="1" value="96" aria-label="面板不透明度">
+      </label>
+    `);
+  }
 }
 
 module.exports = { groupWebPanels, WEB_PANEL_GROUP_CSS, WEB_PANEL_GROUP_JS };

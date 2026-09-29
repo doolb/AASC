@@ -36,6 +36,8 @@
         '边缘光 2': 'displayMmdRim2Enabled',
         体感环绕: 'displayArMotionEnabled'
     });
+    const PANEL_OPACITY_STORAGE_KEY = 'aasc.display.mmdPanelOpacity.v1';
+    const DEFAULT_PANEL_OPACITY = 96;
     let progressTimer = null;
 
     function directChild(panel, element) {
@@ -124,11 +126,70 @@
         if (open) updateProgress();
     }
 
+    function initializeSharedPanelOpacity() {
+        const stage = document.getElementById('displayStageLayers');
+        const panels = PANELS.map(([, panelId]) => document.getElementById(panelId)).filter(Boolean);
+        if (!stage || panels.length === 0) return;
+
+        let opacity = DEFAULT_PANEL_OPACITY;
+        try {
+            const storedValue = root.localStorage.getItem(PANEL_OPACITY_STORAGE_KEY);
+            const parsedValue = storedValue === null || storedValue.trim() === '' ? NaN : Number(storedValue);
+            if (Number.isFinite(parsedValue)) opacity = Math.max(0, Math.min(100, Math.round(parsedValue)));
+        } catch (error) {
+            // 存储不可用时仍使用默认值，并允许本页面即时调节。
+        }
+
+        const inputs = [];
+        const outputs = [];
+        for (const panel of panels) {
+            const label = document.createElement('label');
+            label.className = 'display-mmd-panel-opacity-control';
+            const heading = document.createElement('span');
+            heading.append(document.createTextNode('面板不透明度'));
+            const output = document.createElement('output');
+            output.textContent = `${opacity}%`;
+            heading.appendChild(output);
+            const input = document.createElement('input');
+            input.type = 'range';
+            input.min = '0';
+            input.max = '100';
+            input.step = '1';
+            input.value = String(opacity);
+            input.setAttribute('aria-label', '面板不透明度');
+            input.dataset.displayMmdPanelOpacity = 'true';
+            label.append(heading, input);
+            panel.prepend(label);
+            inputs.push(input);
+            outputs.push(output);
+        }
+
+        const applyOpacity = (value, persist = false) => {
+            opacity = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+            stage.style.setProperty('--display-mmd-panel-opacity', `${opacity}%`);
+            for (const input of inputs) input.value = String(opacity);
+            for (const output of outputs) output.textContent = `${opacity}%`;
+            if (!persist) return;
+            try {
+                root.localStorage.setItem(PANEL_OPACITY_STORAGE_KEY, String(opacity));
+            } catch (error) {
+                // 写入失败只影响刷新后的恢复，不影响当前页面的共用滑条。
+            }
+        };
+
+        for (const input of inputs) {
+            input.addEventListener('input', () => applyOpacity(input.value));
+            input.addEventListener('change', () => applyOpacity(input.value, true));
+        }
+        applyOpacity(opacity);
+    }
+
     function initialize() {
         for (const [id, definitions] of Object.entries(GROUPS)) {
             const panel = document.getElementById(id);
             if (panel) groupPanel(panel, definitions);
         }
+        initializeSharedPanelOpacity();
         const edge = document.getElementById('displayMmdPmxAoEdgeCorrection');
         if (edge) {
             const key = 'aasc.display.mmdAoEdgeCorrection.v1';

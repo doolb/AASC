@@ -11,6 +11,7 @@
     --display-keyboard-inset-left: 0px;
     --display-stage-panel-width: min(320px, 86vw);
     --display-stage-panel-max-height: min(72vh, 620px);
+    --display-mmd-panel-opacity: 96%;
     --display-stage-dialog-width: min(920px, 92vw);
     --display-stage-dialog-max-height: 92vh;
     --display-stage-preview-max-height: 68vh;
@@ -208,7 +209,7 @@
     border: 1px solid var(--border-color);
     border-radius: 10px;
     overflow: hidden;
-    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    background: color-mix(in srgb, var(--bg-secondary) var(--display-mmd-panel-opacity), transparent);
 }
 
 .display-mmd-panel-group-header {
@@ -216,7 +217,9 @@
     align-items: center;
     gap: 9px;
     min-height: 44px;
-    background: color-mix(in srgb, var(--bg-secondary) 65%, var(--accent-color));
+    background: color-mix(in srgb,
+        color-mix(in srgb, var(--bg-secondary) 65%, var(--accent-color)) var(--display-mmd-panel-opacity),
+        transparent);
 }
 
 .display-mmd-panel-group-switch {
@@ -258,6 +261,34 @@
     display: none;
 }
 
+.display-mmd-panel-opacity-control {
+    display: grid;
+    gap: 5px;
+    margin: 0 0 12px;
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.display-mmd-panel-opacity-control > span {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.display-mmd-panel-opacity-control output {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.display-mmd-panel-opacity-control input[type="range"] {
+    width: 100%;
+    margin: 0;
+    accent-color: var(--accent-color);
+}
+
 #displayMmdMotionProgress {
     width: 100%;
     height: 12px;
@@ -292,7 +323,7 @@
     padding: 14px;
     border: 1px solid var(--border-color);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    background: color-mix(in srgb, var(--bg-secondary) var(--display-mmd-panel-opacity), transparent);
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
     color: var(--text-primary);
     pointer-events: auto;
@@ -327,7 +358,7 @@
     padding: 14px;
     border: 1px solid var(--border-color);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    background: color-mix(in srgb, var(--bg-secondary) var(--display-mmd-panel-opacity), transparent);
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
     color: var(--text-primary);
     pointer-events: auto;
@@ -336,6 +367,19 @@
 
 .display-mmd-ar-panel[hidden] {
     display: none;
+}
+
+/* 横屏时面板停靠在按钮列左侧，标题与按钮列顶部对齐，短屏仅滚动面板内容。 */
+.display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control {
+    top: max(12px, var(--display-safe-inset-top));
+}
+
+.display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-lighting-panel,
+.display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-ar-panel {
+    position: absolute;
+    top: 0;
+    right: calc(100% + 8px);
+    z-index: 2;
 }
 
 .display-mmd-ar-header {

@@ -337,8 +337,21 @@ async function stageTextAssets() {
       const applyStageSize = () => {
         resizeFrame = 0;
         const bounds = stage.getBoundingClientRect();
-        const width = Math.max(1, Math.round(bounds.width));
-        const height = Math.max(1, Math.round(bounds.height));
+        const viewport = window.visualViewport;
+        const width = Math.max(1, Math.round(viewport?.width || bounds.width));
+        const height = Math.max(1, Math.round(viewport?.height || bounds.height));
+        const isLandscape = width > height;
+        stage.dataset.panelOrientation = isLandscape ? 'landscape' : 'portrait';
+        if (isLandscape) {
+          const panelWidth = 'min(320px, max(220px, ' + Math.round(width * 0.38) +
+            'px), max(1px, calc(' + width + 'px - var(--mmd-ar-safe-inset-left) - var(--mmd-ar-safe-inset-right) - 96px)))';
+          stage.style.setProperty('--display-stage-panel-width', panelWidth);
+          stage.style.setProperty('--display-stage-panel-max-height',
+            'min(620px, calc(' + height + 'px - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 24px))');
+        } else {
+          stage.style.removeProperty('--display-stage-panel-width');
+          stage.style.removeProperty('--display-stage-panel-max-height');
+        }
         const pixelRatio = Math.min(2, Math.max(1, Number(window.devicePixelRatio) || 1));
         if (width !== previousWidth || height !== previousHeight || pixelRatio !== previousPixelRatio) {
           previousWidth = width;
@@ -478,6 +491,9 @@ async function stageTextAssets() {
     #displayArCalibration .display-mmd-ar-preview { min-height: 0; max-height: min(50dvh, 480px); }
     #displayArCalibration .display-mmd-ar-camera, #displayArCalibration .display-mmd-ar-canvas { max-height: min(50dvh, 480px); }
     .display-mmd-lighting-panel, .display-mmd-ar-panel { touch-action: pan-y; }
+    #displayStageLayers[data-panel-orientation="landscape"] .display-stage-lighting-control { top: calc(var(--mmd-ar-safe-inset-top) + 14px); }
+    .display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-lighting-panel,
+    .display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-ar-panel { right: calc(100% + 8px); }
     .display-stage-layers { z-index: 10; }
     .display-mmd-layer { background: transparent; }
     .display-mmd-status { --bg-secondary: #20242e; --border-color: #475066; --text-secondary: #c2c8d4; }
@@ -487,7 +503,7 @@ async function stageTextAssets() {
       .mmd-ar-test-label { right: calc(var(--mmd-ar-safe-inset-right) + 82px); }
     }
     .display-mmd-ar-background { z-index: 2; }
-    .mmd-ar-benchmark { display: grid; gap: 8px; margin: 4px 0 12px; padding: 10px; border: 1px solid #758bff66; border-radius: 10px; background: #171a22; }
+    .mmd-ar-benchmark { display: grid; gap: 8px; margin: 4px 0 12px; padding: 10px; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, 96%), transparent); }
     .mmd-ar-benchmark-live { margin: 0; color: #d3d9e8; font-size: 12px; line-height: 1.45; }
     .mmd-ar-benchmark-results { display: grid; gap: 6px; }
     .mmd-ar-benchmark-result { display: grid; gap: 3px; color: #d3d9e8; font-size: 11px; }

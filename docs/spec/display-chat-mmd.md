@@ -1216,3 +1216,46 @@
 - 各自应用相同旋转变换的层包括 MMD Canvas、聊天层、右上角灯光/定位入口与设置面板、底部聊天/角色/停止播报按钮。
 - 播报辅助层继续留在物理视口坐标，因为 TTS/天气元素已由 `applyRotation()` 独立旋转。
 - 仅改变渲染尺寸、位置和指针坐标；不改变聊天状态、MMD runtime 生命周期、语音队列、AR 权限或服务端状态协议。
+
+## 24. 显示端 MMD 面板横屏布局与共用透明度（2026-09-29）
+
+```text
+过程 resizeDisplayStage(viewportWidth, viewportHeight, rotation)
+  geometry = getRotationStageGeometry(viewportWidth, viewportHeight, rotation)
+  logicalLandscape = geometry.logicalWidth > geometry.logicalHeight
+  将 logicalLandscape 写入 displayStageLayers.dataset.panelOrientation
+  如果 logicalLandscape
+    按逻辑宽度与按钮列、安全边距计算面板宽度，上限 320px
+    面板最大高度 = min(620px, 逻辑高度 - 逻辑安全区上下边距 - 24px)
+  否则
+    沿用竖屏面板宽度与高度计算
+
+过程 layoutMmdPanel(panel, lightingControl, panelOrientation)
+  如果 panelOrientation == landscape
+    panel 设置为绝对定位
+    panel.top = 0
+    panel.right = lightingControl 按钮列宽 + 8px
+    所有面板使用同一锚点，位于按钮列左侧
+  否则
+    panel 恢复原有按钮列纵向布局
+  panel 使用 max-height 和 overflow-y:auto 限制短屏内容
+
+过程 initializeSharedMmdPanelOpacity(panels)
+  opacity = 从 localStorage 读取 aasc.display.mmdPanelOpacity.v1
+  opacity = 校验后限制在 0..100；存储不可用或值非法时默认为 96
+  对每个 panel
+    在顶部添加面板不透明度 range 输入和百分比 output
+    将 range.value 设置为 opacity
+  设置 displayStageLayers 的 --display-mmd-panel-opacity = opacity%
+  range input 变化时
+    opacity = 当前 range.value
+    同步三个 range 和 output
+    更新 displayStageLayers 的 --display-mmd-panel-opacity
+    尝试写回 localStorage；失败时保留本页内存状态
+  CSS 将不透明度应用于面板、分类卡片和分类标题背景
+  CSS 不改变文本、表单控件和图标的不透明度
+```
+
+- 灯光、动作/物理、定位三个面板共用一份透明度状态；关闭后切换另一个面板时读取同一数值，刷新后恢复本地保存值。
+- 面板定位使用逻辑舞台方向和旋转后的安全区，不依赖设备物理宽高顺序；测试网页构建副本使用相同的横屏锚点与不透明度语义。
+- 不改变面板开合互斥、控件事件、MMD/AR runtime、聊天或服务端状态协议。

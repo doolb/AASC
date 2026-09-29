@@ -291,12 +291,20 @@
         const logicalHeight = geometry.logicalHeight;
         if (refs.stage) {
             refs.stage.dataset.rotation = String(geometry.rotation);
+            const isLandscape = logicalWidth > logicalHeight;
+            refs.stage.dataset.panelOrientation = isLandscape ? 'landscape' : 'portrait';
             refs.stage.style.setProperty('--display-viewport-width', `${width}px`);
             refs.stage.style.setProperty('--display-viewport-height', `${height}px`);
             refs.stage.style.setProperty('--display-stage-width', `${logicalWidth}px`);
             refs.stage.style.setProperty('--display-stage-height', `${logicalHeight}px`);
-            refs.stage.style.setProperty('--display-stage-panel-width', `${Math.min(320, Math.max(1, Math.round(logicalWidth * 0.86)))}px`);
-            refs.stage.style.setProperty('--display-stage-panel-max-height', `${Math.min(620, Math.max(1, Math.round(logicalHeight * 0.72)))}px`);
+            const panelWidth = isLandscape
+                ? `min(320px, max(220px, ${Math.round(logicalWidth * 0.38)}px), max(1px, calc(${logicalWidth}px - var(--display-safe-inset-left) - var(--display-safe-inset-right) - 96px)))`
+                : `${Math.min(320, Math.max(1, Math.round(logicalWidth * 0.86)))}px`;
+            const panelMaxHeight = isLandscape
+                ? `min(620px, calc(${logicalHeight}px - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - 24px))`
+                : `${Math.min(620, Math.max(1, Math.round(logicalHeight * 0.72)))}px`;
+            refs.stage.style.setProperty('--display-stage-panel-width', panelWidth);
+            refs.stage.style.setProperty('--display-stage-panel-max-height', panelMaxHeight);
             refs.stage.style.setProperty('--display-stage-dialog-width', `${Math.min(920, Math.max(1, logicalWidth - 24))}px`);
             refs.stage.style.setProperty('--display-stage-dialog-max-height', `${Math.max(1, Math.round(logicalHeight * 0.92))}px`);
             refs.stage.style.setProperty('--display-stage-preview-max-height', `${Math.max(1, Math.round(logicalHeight * 0.68))}px`);
