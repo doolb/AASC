@@ -7,6 +7,7 @@
  */
 
 const CAMERA_FRAME_MARGIN = 1.12;
+export const PMX_CAMERA_NEAR = 1;
 
 export function normalizePmxPhysicsMesh(mesh, THREE) {
     mesh.scale.set(1, 1, 1);
@@ -40,7 +41,24 @@ export function calculatePmxCameraFrame(bounds, { fovDegrees = 28, aspect = 1 } 
         center,
         size,
         distance,
-        near: Math.max(0.01, distance - radius * 2),
+        near: PMX_CAMERA_NEAR,
         far: distance + radius * 2
     };
+}
+
+export function normalizePmxProjectionNear(projectionMatrix, near = PMX_CAMERA_NEAR) {
+    if (!Array.isArray(projectionMatrix) || projectionMatrix.length !== 16
+        || projectionMatrix.some((value) => !Number.isFinite(value))) return null;
+    const nextNear = Number.isFinite(near) && near > 0 ? near : PMX_CAMERA_NEAR;
+    const matrix = [...projectionMatrix];
+    const denominator = matrix[10] + 1;
+    const projectedFar = Math.abs(denominator) > Number.EPSILON
+        ? matrix[14] / denominator
+        : Number.POSITIVE_INFINITY;
+    const far = Number.isFinite(projectedFar) && projectedFar > nextNear
+        ? projectedFar
+        : Math.max(1000, nextNear + 1);
+    matrix[10] = (far + nextNear) / (nextNear - far);
+    matrix[14] = (2 * far * nextNear) / (nextNear - far);
+    return { matrix, near: nextNear, far };
 }

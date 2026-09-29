@@ -111,7 +111,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
+    const camera = new THREE.PerspectiveCamera(28, 1, 1, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
     const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
     const initialCameraDistance = TARGET_MODEL_HEIGHT * 2.8;

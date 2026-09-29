@@ -16,7 +16,12 @@ import {
     advancePmxMotionFrame,
     setPmxMotionPlaybackEnabled
 } from './mmd-pmx-helper.mjs';
-import { calculatePmxCameraFrame, normalizePmxPhysicsMesh } from './pmx-display-layout.mjs';
+import {
+    calculatePmxCameraFrame,
+    normalizePmxPhysicsMesh,
+    normalizePmxProjectionNear,
+    PMX_CAMERA_NEAR
+} from './pmx-display-layout.mjs';
 import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
 import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights, setPmxFillShadowMode } from './display-pmx-lighting-mode.mjs';
 
@@ -168,7 +173,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
+    const camera = new THREE.PerspectiveCamera(28, 1, PMX_CAMERA_NEAR, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
     const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
     let cameraZoomFactor = 1;
@@ -809,6 +814,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             || !Array.isArray(anchorMatrix) || anchorMatrix.length !== 16
             || !Array.isArray(projectionMatrix) || projectionMatrix.length !== 16
             || [...anchorMatrix, ...projectionMatrix].some((value) => !Number.isFinite(value))) return false;
+        const fixedProjection = normalizePmxProjectionNear(projectionMatrix);
+        if (!fixedProjection) return false;
         const targetToCamera = new THREE.Matrix4().fromArray(anchorMatrix);
         if (Math.abs(targetToCamera.determinant()) < 1e-8) return false;
         const firstLock = !arCameraState.active;
@@ -878,7 +885,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             arCameraState.acceptedQuaternion.copy(nextQuaternion);
         }
         arCameraState.trackingLost = false;
-        arCameraState.lastPose = { anchorMatrix: [...anchorMatrix], projectionMatrix: [...projectionMatrix], targetAspect: aspect };
+        arCameraState.lastPose = {
+            anchorMatrix: [...anchorMatrix],
+            projectionMatrix: fixedProjection.matrix,
+            targetAspect: aspect
+        };
         camera.scale.set(1, 1, 1);
         if (firstLock || arCameraState.settings.smoothingMs <= 0) {
             camera.position.copy(arCameraState.acceptedPosition);
@@ -886,7 +897,9 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             camera.updateMatrix();
             camera.updateMatrixWorld(true);
         }
-        camera.projectionMatrix.fromArray(projectionMatrix);
+        camera.near = fixedProjection.near;
+        camera.far = fixedProjection.far;
+        camera.projectionMatrix.fromArray(fixedProjection.matrix);
         camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
         startRendering();
         return true;
@@ -1196,6 +1209,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             cameraQuaternion: camera.quaternion.toArray(),
             acceptedPosition: arCameraState.acceptedPosition.toArray(),
             cameraZoomFactor,
+            cameraNear: camera.near,
+            cameraFar: camera.far,
             trackingLost: arCameraState.trackingLost,
             settings: { ...arCameraState.settings },
             modelVisible: currentRotationPivot?.visible ?? false,

@@ -1315,6 +1315,11 @@
   普通模式更新轨道相机距离；MindAR 模式在最新跟随相机位置与定位图中心之间应用倍率
   不改变模型根缩放和定位锚点矩阵
 
+过程 runtime.setArCameraPose({ anchorMatrix, projectionMatrix })
+  从透视投影矩阵反解并保留 far
+  固定 near = 1，重建深度裁剪矩阵项；保留视场角、长宽比和偏移项
+  将规范化投影写入正式 PMX 相机，并保存为最后一次有效 pose
+
 过程 arFootAnchor.setPose(pose, calibration)
   从独立 posePosition 计算跟踪校正，不把 manualOffset 混入脚底对齐误差
   自动尺度目标 = 基准尺度 * pose.scale * calibration.scale
