@@ -2,6 +2,41 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 骨骼物理状态小球（2026-09-30，已实现并验证）
+
+```text
+已有声明
+  WEB_MODE构建适配、动作面板、DisplayMmd接口
+  currentMesh.skeleton.bones、geometry.userData.MMD.rigidBodies
+  动作/物理帧更新、模型提交/释放、角色首帧可见性、renderer与camera
+新增定义
+  SkeletonPreference { enabled，默认关闭，本地保存 }
+  BoneMarker { boneIndex，physicalType，instanceIndex }
+  SkeletonOverlay { auxiliaryScene，markerGroups，geometry，materials，model }
+  类型颜色表 { type0红，type2黄，type1绿，无关联灰 }
+  多类型优先表 { type1优先，type2次之，type0最后 }
+操作流程
+  WEB_MODE构建 -> 拷贝独立模块并生成内容指纹 -> 注入runtime与DisplayMmd适配
+  动作面板 -> 添加显示骨骼复选框和颜色图例 -> 安全恢复本地偏好
+  用户切换 -> 更新偏好 -> DisplayMmd转发当前runtime；后续runtime继承
+  模型提交 -> 释放旧overlay资源 -> 保存新mesh -> 按实际刚体元数据分类骨骼
+    非法type/越界boneIndex/无骨骼刚体 -> 跳过
+    同一骨骼多个类型 -> 按优先表选唯一颜色；无关联 -> 灰
+  首次开启且有模型 -> 共享低面数球几何 -> 各颜色建立实例组
+  每画面帧 -> 完成原动作/物理更新 -> 判断开关、角色可见性、首帧门控
+    不满足 -> 不更新/不绘制小球
+    满足 -> 刷新模型世界矩阵 -> 骨骼世界位置与模型缩放 -> 批量更新实例矩阵
+  原角色/AO绘制后 -> 暂存renderer.autoClear -> 禁用清屏 -> 绘制独立overlay场景
+    材质不测试/不写入深度，不参与阴影；finally恢复renderer状态
+  关闭 -> 隐藏overlay并停止逐骨骼更新
+  换模型/销毁 -> 清空骨骼引用 -> 释放实例、材质、几何；重复释放幂等
+  小球逻辑 -> 只读骨骼结果；不修改Ammo速度、约束、子步或动作切换流程
+验证状态 -> 用户确认后实现；模块8/面板8/切换及生命周期14/真实网页1，共31项通过
+  实际321骨骼 -> 红18/黄16/绿148/灰139；4实例组；重载与两次PMX切换释放旧16组
+  VMD切换 -> 不重建骨骼球；AO开启仍叠加；刷新恢复开关
+  构建/28脚本/4内联/13导入指纹/LAN HTTP200通过；外网未发布，手机观感待验收
+```
+
 ### 跨Hz布料与小物件抖动（2026-09-30，已实现并验证）
 
 ```text

@@ -101,6 +101,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   originalIds.get('#displayArTargetPanel').sort();
 
   groupWebPanels($);
+  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonEnabled', 'mmdArSkeletonLegend');
   for (const selector of panels) {
     originalIds.get(selector).push(`${selector.slice(1)}Opacity`);
     originalIds.get(selector).sort();
@@ -108,7 +109,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
 
   const expectedTitles = [
     ['基础光照', '高光', 'AO', '主光', '补光', '边缘光 1', '边缘光 2'],
-    ['动作', '物理'],
+    ['动作', '物理', '骨骼'],
     ['定位图与校准', '跟踪操作', 'MindAR 抖动过滤', 'IMU 相机预测', 'MindAR 可信度（估算）', '重力旋转', '相机跟随'],
   ];
   panels.forEach((selector, index) => {
@@ -142,6 +143,9 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArTrackingToggle').closest('.mmd-ar-panel-group').find('button.mmd-ar-panel-group-toggle').attr('data-group-title'), '定位图与校准');
   assert.equal($('#displayMmdShadowSource').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '补光');
   assert.equal($('#mmdArPhysicsEnabled').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
+  assert.equal($('#mmdArSkeletonEnabled').closest('.mmd-ar-panel-group-header').length, 1);
+  assert.equal($('#mmdArSkeletonEnabled').is('[checked]'), false);
+  assert.match($('#mmdArSkeletonLegend').text(), /红 type0.*黄 type2.*绿 type1/u);
   assert.equal($('#mmdArMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.equal($('#mmdArMotionPlayback').closest('#displayMmdLightingPanel').length, 0);
   assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 50%\), transparent\)/u);

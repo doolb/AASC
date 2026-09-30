@@ -29,6 +29,7 @@ const WEB_PHYSICS_LIFECYCLE = WEB_MODE ? require('./web-physics-lifecycle') : nu
 const WEB_PHYSICS_RATE = WEB_MODE ? require('./web-physics-rate') : null;
 const WEB_PHYSICS_SUBSTEPS = WEB_MODE ? require('./web-physics-substeps') : null;
 const WEB_PHYSICS_STABILITY = WEB_MODE ? require('./web-physics-stability') : null;
+const WEB_SKELETON_DEBUG = WEB_MODE ? require('./web-skeleton-debug') : null;
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -451,6 +452,9 @@ async function stageTextAssets() {
     const physicsRatePath = path.join(GENERATED_ASSETS, 'js/web-physics-rate.mjs');
     await fs.copyFile(path.join(__dirname, 'web-physics-rate.mjs'), physicsRatePath);
     const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
+    const skeletonPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-debug.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-skeleton-debug.mjs'), skeletonPath);
+    const skeletonUrl = `./web-skeleton-debug.mjs?v=${(await hashFile(skeletonPath)).sha256.slice(0, 12)}`;
     const pmxHelperPath = path.join(GENERATED_ASSETS, 'js/mmd-pmx-helper.mjs');
     await fs.writeFile(pmxHelperPath, WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl));
     const pmxHelperUrl = `./mmd-pmx-helper.mjs?v=${(await hashFile(pmxHelperPath)).sha256.slice(0, 12)}`;
@@ -499,8 +503,8 @@ async function stageTextAssets() {
     const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
-    await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SUBSTEPS.addSubstepRuntime(WEB_PHYSICS_RATE.addPhysicsRateRuntime(
-      WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl), physicsRateUrl))
+    await fs.writeFile(pmxRuntimePath, WEB_SKELETON_DEBUG.addSkeletonRuntime(WEB_PHYSICS_SUBSTEPS.addSubstepRuntime(WEB_PHYSICS_RATE.addPhysicsRateRuntime(
+      WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl), physicsRateUrl)), skeletonUrl)
       .replace('./mmd-pmx-helper.mjs', pmxHelperUrl).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`));
@@ -511,7 +515,7 @@ async function stageTextAssets() {
     const runtimeImport = "'./display-pmx-runtime.js'";
     if (!current.includes(runtimeImport)) throw new Error('测试网页未找到 PMX runtime 动态导入入口');
     if (!current.includes('getMotionProgress: () =>')) throw new Error('正式显示模块缺少 VMD 进度入口');
-    await fs.writeFile(mmdScriptPath, WEB_PHYSICS_RATE.addPhysicsRateDisplay(WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current)))
+    await fs.writeFile(mmdScriptPath, WEB_SKELETON_DEBUG.addSkeletonDisplay(WEB_PHYSICS_RATE.addPhysicsRateDisplay(WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current))))
       .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`));
     const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));

@@ -24,6 +24,7 @@ const TRACKING_GROUPS = Object.freeze([
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
   ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
+  ['骨骼', ['mmdArSkeletonLegend'], 'mmdArSkeletonEnabled'],
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
@@ -56,11 +57,24 @@ const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-plane-options button { flex: 1; min-height: 38px; border: 1px solid #758bff88; border-radius: 7px; background: #222b3d; color: #d6e0f5; cursor: pointer; }
     .mmd-ar-plane-options button[aria-pressed="true"] { background: #5169a3; border-color: #a8bbff; color: #fff; }
     #mmdArMotionProgress { width: 100%; height: 12px; accent-color: var(--accent-color); }
+    #mmdArSkeletonLegend { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 12px; line-height: 1.6; }
+    #mmdArSkeletonLegend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 50%; background: var(--bone-color); }
 `;
 
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    (() => {
+      const toggle = document.getElementById('mmdArSkeletonEnabled');
+      if (!toggle) return;
+      const key = 'aasc.mmdArTest.skeletonVisible.v1';
+      try { toggle.checked = localStorage.getItem(key) === 'true'; } catch (error) { toggle.checked = false; }
+      window.DisplayMmd?.setSkeletonVisible?.(toggle.checked);
+      toggle.addEventListener('change', () => {
+        window.DisplayMmd?.setSkeletonVisible?.(toggle.checked);
+        try { localStorage.setItem(key, String(toggle.checked)); } catch (error) { /* 存储受限时仍允许本次切换。 */ }
+      });
+    })();
     (() => {
       const key = 'aasc.mmdArTest.gravityFilter.v1';
       const defaults = { deadZoneDegrees: 0.5, smoothingMs: 20 };
@@ -484,7 +498,15 @@ function groupWebPanels($) {
     '<label class="display-mmd-lighting-field mmd-ar-normal-preview"><input type="checkbox"><span>深度重建法线预览（颜色代表方向，跳过 AO 与模糊）</span></label>'
   );
   const motionPanel = $('#mmdArMotionPanel').first();
-  if (motionPanel.length) groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
+  if (motionPanel.length) {
+    motionPanel.append('<label class="display-mmd-lighting-field"><input id="mmdArSkeletonEnabled" type="checkbox"><span>显示骨骼（小球）</span></label>' +
+      '<div id="mmdArSkeletonLegend" aria-label="骨骼物理类型图例">' +
+      '<span><i style="--bone-color:#ff3333"></i>红 type0 · 跟随骨骼</span>' +
+      '<span><i style="--bone-color:#ffd633"></i>黄 type2 · 物理旋转</span>' +
+      '<span><i style="--bone-color:#33e066"></i>绿 type1 · 完全物理</span>' +
+      '<span><i style="--bone-color:#9ca3af"></i>灰 · 无关联刚体</span></div>');
+    groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
+  }
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);
   const panels = [lightingPanel, $('#mmdArMotionPanel').first(), trackingPanel].filter((panel) => panel.length > 0);
   for (const panel of panels) {
