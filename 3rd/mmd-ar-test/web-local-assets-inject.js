@@ -50,7 +50,7 @@ function addLocalRuntime(source, moduleUrl, motionModuleUrl = './web-motion-swit
             loader.loadAnimation(url, mesh, resolve, progress, reject);
         },`);
   output = once(output, '    const playMotion = async (resourceId) => loadMotion(resourceId);', `
-    // 先解析动作，再冻结旧 helper；应用新姿态后才建立物理，失败保留旧动作。
+    // 先解析动作，再冻结旧 helper；从绑定姿态创建物理，下一实际动画帧才播放。
     const loadSelectedMotion = async (motion, reportProgress = onProgress) => {
         if (!currentMesh || !currentProfile) throw new Error('请先加载 PMX 模型');
         if (motionSwitchMesh === currentMesh) throw new Error('动作正在切换，请稍后再试');
@@ -85,8 +85,8 @@ function addLocalRuntime(source, moduleUrl, motionModuleUrl = './web-motion-swit
             if (!isCurrent()) { prepared.rollback(); return false; }
             stopMotion();
             helper.current = prepared.helper;
-            // 起始姿态已在无物理状态完成；手动换动作无需首载的延迟动画帧。
-            pendingInitialMotionHelper = null;
+            // 复用刷新/换模型的渲染门控：首帧仅物理，下一帧才推进 VMD。
+            pendingInitialMotionHelper = prepared.helper;
             physicsGate.paused = false;
             setPmxMotionPlaybackEnabled(prepared.helper, motionPlaybackEnabled);
             currentMotionResourceId = profile.motionResourceId || null;

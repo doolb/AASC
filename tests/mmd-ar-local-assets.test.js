@@ -59,7 +59,7 @@ test('本地资源拒绝歧义、重复路径和目录越界，并在网格创�
 });
 
 test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重载和恢复默认可用', {
-    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 600000
+    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 900000
 }, async () => {
     // 使用构建缓存的真实资源，通过 file input 上传，验证对象 URL 和同一 ESM 注册表。
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'mmd-resources.json'), 'utf8'));
@@ -93,7 +93,11 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         const page = await browser.newPage();
         await page.setViewport({ width: 390, height: 844 });
         page.on('pageerror', (error) => errors.push(error.message));
-        await page.evaluateOnNewDocument(() => localStorage.setItem('aasc.mmdArTest.physicsEnabled.v1', 'false'));
+        await page.evaluateOnNewDocument(() => {
+            localStorage.setItem('aasc.mmdArTest.physicsEnabled.v1', 'false');
+            // 此用例验证重载保留用户设置，显式固定测试值，避免依赖另一个功能的默认值。
+            localStorage.setItem('aasc.mmdArTest.gravityFilter.v1', JSON.stringify({ deadZoneDegrees: 0.5, smoothingMs: 120 }));
+        });
         await page.goto(`http://127.0.0.1:${server.address().port}/deep/mmd-ar/`, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => window.DisplayMmd?.setLighting);
         await page.evaluate(() => window.DisplayMmd.setLighting({ pmxAoEnabled: false, keyShadowEnabled: false }));
@@ -195,12 +199,16 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
                 assert.equal(progress.percent, '100');
                 if (selector === '#mmdArLocalVmd') {
                     assert.ok(progress.trace.some((value) => value.includes('读取/解析 VMD')));
-                    assert.ok(progress.trace.some((value) => value.includes('应用动作起始姿态')));
+                    assert.ok(progress.trace.some((value) => value.includes('恢复 T Pose')));
                 }
             }
             return progress;
         };
+        const initialMotionUrl = await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl);
         const directoryProgress = await upload('#mmdArLocalDirectory', [path.dirname(pmxPath)]);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl), initialMotionUrl);
+        assert.equal(await page.$eval('#mmdArLocalMotionName', (element) => element.textContent), '内置默认动作');
+        await page.waitForFunction(() => window.DisplayMmd.getMotionProgress()?.timeSeconds > 0);
         assert.ok(directoryProgress.trace.some((value) => value.includes('校验 PMX')));
         assert.ok(directoryProgress.trace.some((value) => value.includes('加载纹理')));
         const alternatePmx = path.join(temporary, 'alternate.pmx');
@@ -213,11 +221,17 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.equal(await page.$eval('#mmdArLoadingProgress', (element) => element.dataset.state), 'complete');
         assert.equal(await page.$eval('#mmdArLocalMessage', (element) => element.dataset.error), 'false');
         assert.match(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), /__local__/u);
-        assert.equal(await page.evaluate(() => window.DisplayMmd.getMotionProgress()), null);
-        const currentUrl = await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl);
+        assert.ok(await page.evaluate(() => window.DisplayMmd.getMotionProgress().durationSeconds > 0));
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl), initialMotionUrl);
         await upload('#mmdArLocalVmd', [vmdPath]);
         assert.equal(await page.$eval('#mmdArLocalMessage', (element) => element.dataset.error), 'false');
         assert.ok(await page.evaluate(() => window.DisplayMmd.getMotionProgress().durationSeconds > 0));
+        const localMotionUrl = await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl);
+        await upload('#mmdArLocalFiles', [alternatePmx, ...textures]);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl), localMotionUrl);
+        assert.equal(await page.$eval('#mmdArLocalMotionName', (element) => element.textContent), path.basename(vmdPath));
+        await page.waitForFunction(() => window.DisplayMmd.getMotionProgress()?.timeSeconds > 0);
+        const currentUrl = await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl);
         await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(false));
         const paused = await page.evaluate(() => window.DisplayMmd.getMotionProgress().timeSeconds);
         await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 150)));
@@ -264,17 +278,23 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), currentUrl);
         assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.ok(await page.evaluate(() => window.DisplayMmd.getMotionProgress().durationSeconds > 0));
-        // 记录真实 vendor 的零帧与物理初始化，在暂停播放且物理开启时重新选同一 VMD。
+        // 记录真实物理创建与前两次渲染更新；加载阶段不得调用零帧更新。
         await page.evaluate(async () => {
             const { MMDAnimationHelper } = await import('three/addons/animation/MMDAnimationHelper.js');
             const update = MMDAnimationHelper.prototype.update;
             const setup = MMDAnimationHelper.prototype._setupMeshPhysics;
+            const frameCounts = new WeakMap();
             window.motionSwitchTrace = [];
             MMDAnimationHelper.prototype.update = function (delta) {
                 const data = this.objects.get(this.meshes[0]);
                 if (delta === 0 && data?.mixer && !data.physics) {
-                    window.motionSwitchTrace.push({ phase: 'pose', physics: this.enabled.physics,
-                        animation: this.enabled.animation });
+                    window.motionSwitchTrace.push({ phase: 'early-pose' });
+                }
+                const count = frameCounts.get(this);
+                if (data?.mixer && count !== undefined && count < 2) {
+                    window.motionSwitchTrace.push({ phase: 'frame', animation: this.enabled.animation,
+                        time: data.mixer._actions[0].time });
+                    frameCounts.set(this, count + 1);
                 }
                 return update.call(this, delta);
             };
@@ -282,14 +302,17 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
                 const data = this.objects.get(mesh);
                 window.motionSwitchTrace.push({ phase: 'physics', time: data?.mixer?._actions?.[0]?.time,
                     animationWarmup: options.animationWarmup, warmup: options.warmup });
+                if (data?.mixer) frameCounts.set(this, 0);
                 return setup.call(this, mesh, options);
             };
         });
         await upload('#mmdArLocalVmd', [vmdPath]);
+        await page.waitForFunction(() => window.motionSwitchTrace.filter((item) => item.phase === 'frame').length === 2);
         assert.equal(await page.$eval('#mmdArLocalMessage', (element) => element.dataset.error), 'false');
         assert.deepEqual(await page.evaluate(() => window.motionSwitchTrace), [
-            { phase: 'pose', physics: false, animation: true },
-            { phase: 'physics', time: 0, animationWarmup: false, warmup: 0 }
+            { phase: 'physics', time: 0, animationWarmup: false, warmup: 0 },
+            { phase: 'frame', animation: false, time: 0 },
+            { phase: 'frame', animation: false, time: 0 }
         ]);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getMotionProgress().timeSeconds), 0);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
@@ -300,16 +323,40 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl.includes('__local__')), false);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getMotionProgress().timeSeconds), 0);
-        assert.deepEqual(await page.evaluate(() => window.motionSwitchTrace.map((item) => item.phase)), ['pose', 'physics']);
+        await page.waitForFunction(() => window.motionSwitchTrace.filter((item) => item.phase === 'frame').length === 2);
+        assert.deepEqual(await page.evaluate(() => window.motionSwitchTrace.map((item) => item.phase)), ['physics', 'frame', 'frame']);
         await page.click('#mmdArLocalDefaultModel');
         await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl.includes('__local__')), false);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getState().modelReady), true);
+        await page.waitForFunction(() => window.motionSwitchTrace.filter((item) => item.phase === 'frame').length === 4);
         // 超过原64MiB堆可容纳的泄漏切换次数；每轮只剩当前实例，验证实际文件输入和native回收。
         const probes = [];
         for (let index = 0; index < 24; index += 1) {
+            const playing = index < 12;
+            await page.evaluate((enabled) => {
+                window.DisplayMmd.setMotionPlaybackEnabled(enabled);
+                window.motionSwitchTrace.length = 0;
+            }, playing);
             await upload('#mmdArLocalVmd', [vmdPath]);
-            if (index % 6 === 5) await upload('#mmdArLocalFiles', [pmxPath, ...textures]);
+            await page.waitForFunction(() => window.motionSwitchTrace.filter((item) => item.phase === 'frame').length === 2);
+            assert.deepEqual(await page.evaluate(() => window.motionSwitchTrace), [
+                { phase: 'physics', time: 0, animationWarmup: false, warmup: 0 },
+                { phase: 'frame', animation: false, time: 0 },
+                { phase: 'frame', animation: playing, time: 0 }
+            ]);
+            if (index % 6 === 5) {
+                const inheritedUrl = await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl);
+                await upload('#mmdArLocalFiles', [pmxPath, ...textures]);
+                assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl), playing ? inheritedUrl : '');
+                if (playing) {
+                    await page.waitForFunction(() => window.DisplayMmd.getMotionProgress()?.timeSeconds > 0);
+                    assert.equal(await page.$eval('#mmdArLocalMotionName', (element) => element.textContent), path.basename(vmdPath));
+                } else {
+                    assert.equal(await page.evaluate(() => window.DisplayMmd.getMotionProgress()), null);
+                    assert.equal(await page.$eval('#mmdArLocalMotionName', (element) => element.textContent), '无 VMD 动作（可单独选择）');
+                }
+            }
             const lifetime = await page.evaluate(() => {
                 const { active, created, disposed, errors } = window.physicsLifetime;
                 const pointer = Ammo._malloc(4 * 1024 * 1024);
@@ -325,7 +372,8 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
             assert.equal(lifetime.heap, 64 * 1024 * 1024);
             assert.ok(lifetime.probe > 0);
             probes.push(lifetime.probe);
-            assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
+            assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), playing);
+            if (index % 6 === 5) console.info(`连续切换已验证${index + 1}/24次动作、${(index + 1) / 6}/4次模型`);
         }
         // 新旧实例在提交前短暂并存，碰撞计算也会改变空闲块布局；地址不必逐字相同。
         // 限制预热后的地址范围，并逐轮确认64MiB堆、当前仅1实例和销毁后的native分配为0。

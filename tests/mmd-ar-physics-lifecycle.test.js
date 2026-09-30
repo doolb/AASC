@@ -191,7 +191,7 @@ test('helper物理创建后的预热/IK失败及刚体构造失败都释放分�
     } finally { Ammo.btRigidBody = Body; cleanupMesh(mesh); }
 });
 
-test('真实动作切换失败/过期只清理新物理，成功移除旧helper不覆盖新零帧', async () => {
+test('真实动作切换失败/过期只清理新物理，成功移除旧helper不覆盖绑定姿态', async () => {
     const { THREE, MMDAnimationHelper, makeMesh, cleanupMesh, makeHelper, living } = await fixture();
     const { prepareMotionSwitch } = await import('../3rd/mmd-ar-test/web-motion-switch.mjs');
     const { createPmxMotionHelper } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-pmx-helper.mjs');
@@ -219,7 +219,7 @@ test('真实动作切换失败/过期只清理新物理，成功移除旧helper�
     old.update(1 / 65);
     const next = await prepareMotionSwitch(options);
     old.remove(mesh);
-    assert.deepEqual(mesh.skeleton.bones[0].position.toArray(), [3, 4, 5]);
+    assert.deepEqual(mesh.skeleton.bones[0].position.toArray(), [0, 0, 0]);
     assert.equal(oldPhysics.disposed, true);
     next.helper.update(1 / 65);
     next.helper.remove(mesh);

@@ -36,7 +36,8 @@ test('重力缓动按帧时间收敛，60/120Hz结果一致，最终精确到达
         assert.deepEqual(filter.getState().current, filter.getState().target);
     }
     assert.ok(new THREE.Quaternion().fromArray(results[0]).angleTo(new THREE.Quaternion().fromArray(results[1])) < 1e-7);
-    const filter = createGravityFilter(THREE);
+    // 验证一个缓动时间常数的数学行为，明确120ms，不依赖网页默认值。
+    const filter = createGravityFilter(THREE, { smoothingMs: 120 });
     filter.setTarget(quaternion(THREE, 30));
     const first = filter.update(0.12).angleTo(new THREE.Quaternion()) * 180 / Math.PI;
     assert.ok(Math.abs(first - 30 * (1 - Math.exp(-1))) < 1e-7);
