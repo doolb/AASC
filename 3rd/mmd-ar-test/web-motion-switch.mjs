@@ -15,7 +15,7 @@ export function clearPmxPhysicsMotion(physics) {
     }
 }
 
-// 仅网页手动换动作使用：在同一 helper 上先应用起始骨骼姿态，再建立物理。
+// 网页手动换动作先恢复模型绑定姿态，再建立物理；动作由渲染首帧门控延后播放。
 export async function prepareMotionSwitch({ mesh, oldHelper, createHelper, ensurePhysics,
     physicsEnabled, physicsFps, playbackEnabled, isCurrent, canRestore = isCurrent,
     onStage = () => {} }) {
@@ -57,20 +57,18 @@ export async function prepareMotionSwitch({ mesh, oldHelper, createHelper, ensur
         if (!isCurrent()) return null;
         // 先恢复绑定姿态，再让新 mixer 捕获初始属性，避免缓存旧动作的骨骼和表情。
         poseChanged = true;
+        onStage('恢复 T Pose（模型绑定姿态）');
         mesh.pose();
         mesh.morphTargetInfluences?.fill(0);
         nextHelper = (await createHelper()).helper;
         if (!isCurrent()) { rollback(); return null; }
         nextHelper.enable('physics', false);
-        nextHelper.enabled.animation = true;
-        onStage('应用动作起始姿态');
-        // delta=0 应用 VMD 起始关键帧、IK 与 grant，不推进动作时间或刚体。
-        nextHelper.update(0);
+        // 创建 mixer 只注册动作，不执行 update(0)；物理必须读取绑定姿态而非 VMD 首帧。
+        nextHelper.enabled.animation = false;
         mesh.updateWorldMatrix(true, true);
         if (needsPhysics) {
             onStage('初始化物理');
-            // 固定的 r160 vendor 提供该初始化步骤；在同一 helper 上保留动画骨骼缓存，
-            // 禁止物理初始化再次套用首帧，避免 grant 叠加或从旧动作创建刚体。
+            // 禁止自动套用 VMD 首帧和物理预热，所有刚体都从模型绑定姿态开始。
             nextHelper._setupMeshPhysics(mesh, { warmup: 0, animationWarmup: false,
                 unitStep: 1 / physicsFps, maxStepNum: 3 });
             clearPmxPhysicsMotion(nextHelper.objects.get(mesh).physics);

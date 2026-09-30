@@ -130,6 +130,14 @@ function initLocalAssets() {
     };
     const applyModel = async (file, report) => {
         const next = createLocalModelSelection(selectedFiles, file);
+        const previous = window.DisplayMmd.getModelProfile();
+        const inheritMotion = window.DisplayMmd.getState().motionPlaybackEnabled === true
+            && Boolean(previous?.motionUrl && previous?.motionResourceId);
+        if (inheritMotion) {
+            // 用新模型重新解析当前 VMD，不能复用绑定在旧骨骼上的 clip。
+            Object.assign(next.profile, { motionUrl: previous.motionUrl,
+                motionResourceId: previous.motionResourceId, playMode: previous.playMode || 'loop' });
+        }
         try {
             const loaded = await window.DisplayMmd.loadModel(next.profile, report);
             if (!loaded) throw new Error(document.getElementById('displayMmdStatus')?.textContent || '模型加载失败');
@@ -138,10 +146,11 @@ function initLocalAssets() {
             throw error;
         }
         currentModel?.release();
-        releaseMotion();
+        // 本地动作仍被新 profile 使用时保留其独立上下文，供后续换模型及物理重载读取。
+        if (!inheritMotion) releaseMotion();
         currentModel = next;
         modelName.textContent = localFilePath(file);
-        motionName.textContent = '无 VMD 动作（可单独选择）';
+        if (!inheritMotion) motionName.textContent = '无 VMD 动作（可单独选择）';
     };
     const acceptFiles = (input) => {
         if (!input.files.length || busy) return;

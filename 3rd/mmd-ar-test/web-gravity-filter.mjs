@@ -1,5 +1,5 @@
 // 重力角度保持 1:1；死区只决定是否接受目标，缓动只决定到达目标的速度。
-export const DEFAULT_GRAVITY_SETTINGS = Object.freeze({ deadZoneDegrees: 0.5, smoothingMs: 120 });
+export const DEFAULT_GRAVITY_SETTINGS = Object.freeze({ deadZoneDegrees: 0.5, smoothingMs: 20 });
 
 export function normalizeGravitySettings(value = {}) {
     const read = (key, max) => {

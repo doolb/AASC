@@ -63,7 +63,7 @@ const WEB_PANEL_GROUP_CSS = `
 const WEB_PANEL_GROUP_JS = `
     (() => {
       const key = 'aasc.mmdArTest.gravityFilter.v1';
-      const defaults = { deadZoneDegrees: 0.5, smoothingMs: 120 };
+      const defaults = { deadZoneDegrees: 0.5, smoothingMs: 20 };
       let stored = {};
       try { stored = JSON.parse(localStorage.getItem(key) || '{}') || {}; }
       catch (error) { /* 存储损坏时只恢复本分类默认值。 */ }

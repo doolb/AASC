@@ -26,18 +26,10 @@ async function fixture() {
     } }] };
     const helper = { objects: new Map([[mesh, { physics }]]), enabled: { physics: true, animation: false },
         enable(key, value) { this.enabled[key] = value; link.enabled = true; },
-        update(delta) {
-            assert.equal(delta, 0);
-            assert.equal(oldHelper.enabled.physics, false);
-            assert.equal(this.enabled.physics, false);
-            assert.equal(this.enabled.animation, true);
-            assert.deepEqual(bone.position.toArray(), [0, 0, 0]);
-            bone.position.set(3, 4, 5);
-            events.push('pose');
-        },
+        update() { throw new Error('初始化阶段不能应用动作或推进物理'); },
         _setupMeshPhysics(value, options) {
             assert.equal(value, mesh);
-            assert.deepEqual(bone.position.toArray(), [3, 4, 5]);
+            assert.deepEqual(bone.position.toArray(), [0, 0, 0]);
             assert.deepEqual(options, { warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 });
             events.push('physics');
         },
@@ -56,7 +48,7 @@ async function fixture() {
     return { ...(await loadSwitch()), mesh, bone, link, helper, oldHelper, options, events };
 }
 
-test('切换先暂停旧物理、无物理应用第0帧、更新矩阵，最后初始化新物理', async () => {
+test('切换先暂停旧物理、恢复绑定姿态并更新矩阵，再初始化物理和清零速度', async () => {
     const { prepareMotionSwitch, options, helper, oldHelper, events } = await fixture();
     const result = await prepareMotionSwitch(options);
     assert.equal(result.helper, helper);
@@ -64,10 +56,10 @@ test('切换先暂停旧物理、无物理应用第0帧、更新矩阵，最后�
     assert.equal(helper.enabled.physics, true);
     assert.equal(helper.enabled.animation, true);
     assert.equal(oldHelper.enabled.physics, true);
-    assert.deepEqual(events, ['ammo', 'helper', 'pose', 'matrix', 'physics', 'zero']);
+    assert.deepEqual(events, ['ammo', 'helper', 'matrix', 'physics', 'zero']);
 });
 
-test('原物理关闭或没有刚体时不请求 Ammo，暂停播放仍应用初始姿态并保持暂停', async () => {
+test('原物理关闭或没有刚体时不请求 Ammo，暂停播放保留绑定姿态', async () => {
     for (const noBodies of [false, true]) {
         const { prepareMotionSwitch, options, mesh, helper, oldHelper, events } = await fixture();
         options.physicsEnabled = noBodies;
@@ -75,13 +67,13 @@ test('原物理关闭或没有刚体时不请求 Ammo，暂停播放仍应用初
         if (noBodies) mesh.geometry.userData.MMD.rigidBodies = [];
         oldHelper.enabled.physics = false;
         // 无物理旧状态也必须保持关闭。
-        helper.update = () => { assert.equal(helper.enabled.animation, true); events.push('pose'); };
+        helper.update = () => { throw new Error('暂停加载也不能应用第0帧'); };
         const result = await prepareMotionSwitch(options);
         assert.equal(result.physicsEnabled, false);
         assert.equal(helper.enabled.physics, false);
         assert.equal(helper.enabled.animation, false);
         assert.equal(oldHelper.enabled.physics, false);
-        assert.deepEqual(events, ['helper', 'pose', 'matrix']);
+        assert.deepEqual(events, ['helper', 'matrix']);
     }
 });
 
@@ -233,12 +225,12 @@ test('注入 runtime 在等待 Ammo 时阻止旧动作/物理帧，继续锚点�
     assert.equal(await loading, true);
     assert.equal(runtime.getFrameHelper(), data.helper);
     assert.equal(runtime.state().profile.motionUrl, 'new.vmd');
-    assert.equal(runtime.state().pendingInitialMotionHelper, null);
+    assert.equal(runtime.state().pendingInitialMotionHelper, data.helper);
     assert.equal(runtime.state().physicsGate.paused, false);
     assert.equal(data.helper.enabled.animation, false);
 });
 
-test('固定 vendor 的真实 VMD mixer/Ammo 从新动作姿态创建刚体，暂停时保持第0帧', async () => {
+test('真实 VMD/Ammo 从绑定姿态创建刚体，首渲染帧仅物理、下一帧才播放', async () => {
     const THREE = await import('three');
     const vendor = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/vendor/three');
     const threeUrl = pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href;
@@ -275,10 +267,10 @@ test('固定 vendor 的真实 VMD mixer/Ammo 从新动作姿态创建刚体，�
         physicsFps: 65, playbackEnabled: false, isCurrent: () => true, ensurePhysics: async () => {},
         createHelper: () => createPmxMotionHelper({ mesh, clip, MMDAnimationHelper,
             loopRepeat: THREE.LoopRepeat, loopOnce: THREE.LoopOnce, physicsEnabled: false }) });
-    assert.deepEqual(bone.position.toArray(), [3, 4, 5]);
+    assert.deepEqual(bone.position.toArray(), [0, 0, 0]);
     const data = prepared.helper.objects.get(mesh);
     const origin = data.physics.bodies[0].body.getCenterOfMassTransform().getOrigin();
-    assert.deepEqual([origin.x(), origin.y(), origin.z()], [3, 4, 5]);
+    assert.deepEqual([origin.x(), origin.y(), origin.z()], [0, 0, 0]);
     // 对三种刚体主动注入旧速度和力，确认清理完整且不会改变位姿。
     const { clearPmxPhysicsMotion } = await loadSwitch();
     const velocity = new Ammo.btVector3(4, 5, 6);
@@ -298,18 +290,52 @@ test('固定 vendor 的真实 VMD mixer/Ammo 从新动作姿态创建刚体，�
         assert.deepEqual(vector(body.getLinearVelocity()), [0, 0, 0]);
         assert.deepEqual(vector(body.getAngularVelocity()), [0, 0, 0]);
     }
-    assert.deepEqual(vector(data.physics.bodies[0].body.getCenterOfMassTransform().getOrigin()), [3, 4, 5]);
+    assert.deepEqual(vector(data.physics.bodies[0].body.getCenterOfMassTransform().getOrigin()), [0, 0, 0]);
     Ammo.destroy(velocity);
     Ammo.destroy(force);
-    prepared.helper.update(0.1);
+    // 执行网页实际渲染门控，而非另写一份模拟顺序；验证首帧物理和下一帧动作。
+    const { addLocalRuntime } = require('../3rd/mmd-ar-test/web-local-assets-inject');
+    const runtimeSource = addLocalRuntime(fs.readFileSync(path.resolve(__dirname,
+        '../src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js'), 'utf8'), './web-local-assets.mjs');
+    const begin = runtimeSource.indexOf('    const renderFrame =');
+    const end = runtimeSource.indexOf('    const startRendering =', begin);
+    const { advancePmxMotionFrame, setPmxMotionPlaybackEnabled } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-pmx-helper.mjs');
+    const renderTrace = [];
+    const render = new Function('bindings', `
+        const { mesh, prepared, advancePmxMotionFrame, setPmxMotionPlaybackEnabled, renderTrace } = bindings;
+        let pendingInitialMotionHelper = prepared.helper, motionSwitchMesh = null;
+        let frameHandle = 0, lastFrameAt = 0, motionPlaybackEnabled = true;
+        const visible = true, disposed = false, currentMesh = mesh;
+        const helper = { current: prepared.helper }, physicsGate = { paused: false };
+        const currentRotationPivot = mesh, lightingState = { rotationPhysicsLimit: 0 };
+        const arCameraState = { active: false }, updateModelRotation = () => 0, updateCameraView = () => {};
+        const ambientOcclusion = { render: () => renderTrace.push({ visible: mesh.visible,
+            time: helper.current.objects.get(mesh).mixer._actions[0].time,
+            bone: mesh.skeleton.bones[0].position.toArray() }) };
+        const requestAnimationFrame = () => 1;
+        ${runtimeSource.slice(begin, end)}
+        return { frame: renderFrame, setPlayback: (enabled) => {
+            motionPlaybackEnabled = enabled;
+            setPmxMotionPlaybackEnabled(helper.current, enabled);
+        } };
+    `)({ mesh, prepared, advancePmxMotionFrame, setPmxMotionPlaybackEnabled, renderTrace });
+    // 即使用户在首帧前启用播放，也不能越过首帧物理门控。
+    render.setPlayback(true);
+    render.frame(100);
     assert.notEqual(data.physics.bodies[1].body.getLinearVelocity().y(), 0, '初始化清理后重力仍产生运动');
     assert.equal(data.physics.bodies[1].body.getLinearVelocity().x(), 0, '施加的X方向残留力已清除');
-    assert.deepEqual(bone.position.toArray(), [3, 4, 5]);
+    assert.deepEqual(bone.position.toArray(), [0, 0, 0]);
     assert.equal(data.mixer._actions[0].time, 0);
-    prepared.helper.enabled.animation = true;
-    prepared.helper.update(0.1);
+    assert.deepEqual(renderTrace[0], { visible: false, time: 0, bone: [0, 0, 0] });
+    render.frame(200);
     assert.ok(Math.abs(bone.position.x - 3.3) < 1e-6);
     assert.ok(Math.abs(data.mixer._actions[0].time - 0.1) < 1e-8);
+    assert.equal(renderTrace[1].visible, true);
+    // 下一帧前关闭播放，立即保持当前动作时间；后台不调用frame，不会消耗门控。
+    render.setPlayback(false);
+    render.frame(300);
+    assert.ok(Math.abs(data.mixer._actions[0].time - 0.1) < 1e-8);
+    render.setPlayback(true);
     prepared.helper.update(1);
     assert.equal(zeroCalls, 3, '自动循环不调用新增清理');
     prepared.helper.remove(mesh);
