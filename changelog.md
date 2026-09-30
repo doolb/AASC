@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### 控制端与显示端状态栏
+
+- ✅ [2026-09-30] 控制端新增按显示端独立保存的状态栏开关，默认显示；关闭后隐藏连接、语音/摄像头状态、音频监视器和会话倒计时，时间与媒体文件名保持显示。
+  - 控制端树形/列表设备行使用 WebSocket 消息 `setDisplayStatusBarConfig`；服务端按 `displayId` 持久化并同步权威值，显示端重连时恢复。没有新增 HTTP 配置接口；竖屏左侧导航保持既有布局。
+  - 更新 `server-app.js`、`config-app-service.js`、`device-list.js`、`websocket.js`、`display.html` 及对应 CSS；新增状态栏 design/spec/task，更新索引、usage 和自测文档。Node 语法检查及 `git diff --check` 通过；多显示端及重连的现场手动验收待执行。
+  - Offline 服务代码包标记为待构建；未构建或发布 Offline 产物。
+
 ### MMD AR 手动切换 VMD 的物理顺序
 
 - ✅ [2026-09-30] 手动选择 VMD 与恢复默认动作先暂停物理、应用新动作第0帧，再从新姿态初始化物理。

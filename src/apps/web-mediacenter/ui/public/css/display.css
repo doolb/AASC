@@ -266,6 +266,12 @@ body {
     white-space: nowrap;
 }
 
+/* 状态栏开关只隐藏连接与语音状态提示；时间、媒体名和语音正文保持显示。 */
+.display-status-bar-hidden #connectionStatus,
+.display-status-bar-hidden #voiceStatusRow {
+    visibility: hidden !important;
+}
+
 .connected {
     background: var(--bg-secondary, rgba(56, 239, 125, 0.3));
     color: var(--success-color, #38ef7d);

@@ -1308,6 +1308,7 @@ async function startServer() {
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
+                'setDisplayStatusBarConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
                 'getTemporaryConversation', 'clearTemporaryConversation',
@@ -1818,6 +1819,7 @@ function normalizeDynamicFitConfig(value) {
 function createDisplayState() {
     return {
         currentMedia: null,
+        showStatusBar: true,
         mmdVisible: true,
         currentMediaProgress: null,
         currentHtmlScroll: null,
@@ -2783,6 +2785,10 @@ function persistDisplayState(displayData, partialState) {
 }
 
 function normalizeMmdVisibility(value, fallback = true) {
+    return typeof value === 'boolean' ? value : fallback;
+}
+
+function normalizeDisplayStatusBarVisibility(value, fallback = true) {
     return typeof value === 'boolean' ? value : fallback;
 }
 
@@ -6206,6 +6212,7 @@ function getDisplayList() {
             ip: data.ip,
             isSubDisplay: data.isSubDisplay || data.state.isSubDisplay || false,
             canvasSize: data.state.canvasSize,
+            showStatusBar: normalizeDisplayStatusBarVisibility(data.state.showStatusBar),
             mmdVisible: normalizeMmdVisibility(data.state.mmdVisible),
             rotation: data.state.rotation || 0,
             browserInfo: data.state.browserInfo,
@@ -7681,6 +7688,7 @@ wss.on('connection', (ws, req) => {
             state: {
                 ...createDisplayState(),
                 ...savedState,
+                showStatusBar: normalizeDisplayStatusBarVisibility(savedState?.showStatusBar),
                 mmdVisible: normalizeMmdVisibility(savedState?.mmdVisible),
                 dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
                 vadThreshold: normalizeVadThreshold(savedState?.vadThreshold),
@@ -7732,6 +7740,13 @@ wss.on('connection', (ws, req) => {
             type: 'control',
             action: 'mmdVisibility',
             value: normalizeMmdVisibility(displayClients.get(displayId)?.state.mmdVisible)
+        }));
+        ws.send(JSON.stringify({
+            type: 'displayStatusBarConfig',
+            displayId,
+            showStatusBar: normalizeDisplayStatusBarVisibility(
+                displayClients.get(displayId)?.state.showStatusBar
+            )
         }));
         ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
         ws.send(JSON.stringify({ type: 'controlThemeChanged', theme: getControlTheme() }));
@@ -9039,6 +9054,44 @@ async function handleControlMessageFallback(data, ws) {
         config.set('display.versionCheckIntervalMs', intervalMs);
         broadcastDisplayVersionConfig();
         log('配置', `显示端代码检测间隔已更新为 ${intervalMs}ms`);
+        return;
+    }
+
+    if (data.type === 'setDisplayStatusBarConfig') {
+        const displayId = typeof data.displayId === 'string' ? data.displayId : '';
+        const displayData = displayClients.get(displayId);
+        const currentVisible = normalizeDisplayStatusBarVisibility(
+            displayData?.state.showStatusBar
+                ?? config.getDisplayStateById(displayId || null)?.showStatusBar
+        );
+        if (!displayData || typeof data.showStatusBar !== 'boolean') {
+            ws.send(JSON.stringify({
+                type: 'displayStatusBarConfigError',
+                displayId,
+                showStatusBar: currentVisible,
+                message: !displayData ? '显示端不存在或已断开' : 'showStatusBar 必须是布尔值'
+            }));
+            return;
+        }
+
+        try {
+            const showStatusBar = normalizeDisplayStatusBarVisibility(data.showStatusBar);
+            persistDisplayState(displayData, { showStatusBar });
+            displayData.state.showStatusBar = showStatusBar;
+            const message = { type: 'displayStatusBarConfig', displayId, showStatusBar };
+            sendToDisplay(displayId, message);
+            broadcastToControls({ type: 'displayStatusBarConfigChanged', ...message });
+            broadcastDisplayList();
+            log('配置', `显示端 ${displayId} 状态栏显示已${showStatusBar ? '开启' : '关闭'}`);
+        } catch (error) {
+            logError('配置', `保存显示端 ${displayId} 状态栏配置失败: ${error.message}`);
+            ws.send(JSON.stringify({
+                type: 'displayStatusBarConfigError',
+                displayId,
+                showStatusBar: currentVisible,
+                message: '状态栏配置保存失败'
+            }));
+        }
         return;
     }
 

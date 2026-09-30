@@ -5518,6 +5518,13 @@
                         return;
                     }
 
+                    if (data.type === 'displayStatusBarConfig') {
+                        if (!data.displayId || data.displayId === displayId) {
+                            applyDisplayStatusBarVisibility(data.showStatusBar);
+                        }
+                        return;
+                    }
+
                     if (data.type === 'controlThemeChanged') {
                         if (window.UiTheme) {
                             window.UiTheme.applyRemoteTheme(data.theme);
@@ -5972,6 +5979,11 @@
         function applyDisplayVersionConfig(intervalMs) {
             displayVersionIntervalMs = normalizeDisplayVersionInterval(intervalMs);
             scheduleDisplayVersionWatch();
+        }
+
+        function applyDisplayStatusBarVisibility(showStatusBar) {
+            const isVisible = typeof showStatusBar === 'boolean' ? showStatusBar : true;
+            document.body.classList.toggle('display-status-bar-hidden', !isVisible);
         }
 
         function watchDisplayVersion() {

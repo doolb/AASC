@@ -29,6 +29,7 @@
 | 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](design/display-camera-chat.md) | 摄像头能力开关、单摄像头拍照、实时预览和聊天图片输入 |
 | 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪、选择模式 |
 | 显示端代码变化检测远端配置 | [display-version-remote-config.md](design/display-version-remote-config.md) | 控制端通过 AASC 远端配置显示端代码检测间隔 |
+| 显示端状态栏独立开关 | [display-status-bar.md](design/display-status-bar.md) | 控制端按 displayId 独立控制状态提示显示，保留时间和媒体名称 |
 | 控制端 | [control.md](design/control.md) | 媒体管理、显示控制、裁剪预览 |
 | 控制端运行版本显示 | [runtime-version-display.md](design/runtime-version-display.md) | APK、服务代码、依赖包和显示端版本来源及服务器面板展示 |
 | 控制端主题与 UI 控件分类 | [control-ui-theme.md](design/control-ui-theme.md) | 控制端主题切换、交互控件语义分类与统一样式 |
