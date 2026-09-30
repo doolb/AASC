@@ -390,6 +390,14 @@ const WebSocketManager = {
                 && typeof data.visible === 'boolean' && window.Controls) {
                 window.Controls.updateMmdVisibilityState(data.visible);
             }
+        } else if (data.type === 'displayStatusBarConfigChanged') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayStatusBarConfigChanged(data);
+            }
+        } else if (data.type === 'displayStatusBarConfigError') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayStatusBarConfigError(data);
+            }
         } else if (data.type === 'mmdVisibilityError') {
             if (data.displayId === window.currentDisplayId && window.showToast) {
                 window.showToast(data.message || 'MMD 状态更新失败', 'error');

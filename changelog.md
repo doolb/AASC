@@ -1,10 +1,22 @@
 # Web MediaCenter - 变更日志
 
+### Git 远端同步
+
+- ✅ [2026-09-30] 合并 `origion/master` 的显示端状态栏开关与验收文档，保留本地重力缓动默认20ms提交。
+  - `changelog.md` 顶部记录冲突保留双方内容；重叠的未提交文档先单独保存，进行中的MMD切换改动与运行配置/日志不纳入合并提交。未执行测试或发布外网。
+
 ### MMD AR 重力缓动默认值
 
 - ✅ [2026-09-30] 独立网页重力缓动默认值由120ms改为20ms，同步过滤模块、模型状态、控件初始化和滑条读数。
   - 更新 `web-gravity-filter.mjs`、`web-gravity-mode.js`、`web-panel-groups.js`、`build.js` 及设计/规范/使用/任务文档；保留已保存用户参数。
   - 本地web-dist重新生成，静态语法及定向差异空白检查通过；未执行测试；按用户要求提交本次修改，未发布外网。
+
+### 控制端与显示端状态栏
+
+- ✅ [2026-09-30] 控制端新增按显示端独立保存的状态栏开关，默认显示；关闭后隐藏连接、语音/摄像头状态、音频监视器和会话倒计时，时间与媒体文件名保持显示。
+  - 控制端树形/列表设备行使用 WebSocket 消息 `setDisplayStatusBarConfig`；服务端按 `displayId` 持久化并同步权威值，显示端重连时恢复。没有新增 HTTP 配置接口；竖屏左侧导航保持既有布局。
+  - 更新 `server-app.js`、`config-app-service.js`、`device-list.js`、`websocket.js`、`display.html` 及对应 CSS；新增状态栏 design/spec/task，更新索引、usage 和自测文档。Node 语法检查及 `git diff --check` 通过；多显示端及重连的现场手动验收待执行。
+  - Offline 服务代码包标记为待构建；未构建或发布 Offline 产物。
 
 ### MMD AR 重力摄像头背景与面板外观
 

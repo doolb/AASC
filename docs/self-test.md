@@ -1,5 +1,9 @@
 # 自测功能文档
 
+## 显示端状态栏独立开关（2026-09-30）
+
+待现场手动验收：在两台在线显示端的设备卡片中分别关闭和开启状态栏，确认设置互不覆盖；关闭端隐藏连接状态、语音/摄像头状态、音频监视器和会话倒计时，时间、媒体文件名、语音正文及模型任务进度继续显示；刷新控制端、刷新显示端并重连后确认各自状态恢复；旧配置缺少 `showStatusBar` 时确认默认显示；控制端竖屏时确认导航仍固定在左侧。
+
 ## MMD AR Ammo 频繁切换内存释放（2026-09-30）
 
 `node --test tests/mmd-ar-physics-lifecycle.test.js tests/mmd-ar-motion-switch.test.js tests/mmd-ar-load-progress.test.js tests/mmd-ar-gravity.test.js` 24/24通过，既有PMX/helper/物理40/40通过。新增生命周期6项验证固定真实Ammo连续128轮创建三种形状刚体与约束、步进、helper.remove，每轮全部自建native指针归零；每轮4MiB探针在预热后稳定复用同一地址，WASM堆保持64MiB。

@@ -428,6 +428,22 @@ const DeviceList = {
         this.render();
     },
 
+    handleDisplayStatusBarConfigChanged(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display || typeof data.showStatusBar !== 'boolean') return;
+        display.showStatusBar = data.showStatusBar;
+        this.render();
+    },
+
+    handleDisplayStatusBarConfigError(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (display && typeof data.showStatusBar === 'boolean') {
+            display.showStatusBar = data.showStatusBar;
+            this.render();
+        }
+        if (window.showToast) window.showToast(data?.message || '状态栏设置失败', 'error');
+    },
+
     handleAudioOutputDevices(data) {
         const display = this.list.find((item) => item.id === data?.displayId);
         if (!display || !Array.isArray(data.devices)) return;
@@ -569,6 +585,23 @@ const DeviceList = {
         return true;
     },
 
+    getDisplayStatusBarVisibility(display) {
+        return display?.showStatusBar !== false;
+    },
+
+    setDisplayStatusBarVisibility(displayId, showStatusBar) {
+        const display = this.list.find((item) => item.id === displayId);
+        if (!display || typeof showStatusBar !== 'boolean') return false;
+        if (!this.sendDisplayStatusBarMessage({
+            type: 'setDisplayStatusBarConfig',
+            displayId,
+            showStatusBar
+        })) return false;
+        display.showStatusBar = showStatusBar;
+        this.render();
+        return true;
+    },
+
     requestAudioOutputDevices(displayId) {
         return this.sendDisplayRecordingMessage({
             type: 'requestAudioOutputDevices',
@@ -606,6 +639,20 @@ const DeviceList = {
             return true;
         } catch (error) {
             if (window.showToast) window.showToast(`录音操作失败：${error.message}`, 'error');
+            return false;
+        }
+    },
+
+    sendDisplayStatusBarMessage(message) {
+        if (!this.isControlSocketOpen()) {
+            if (window.showToast) window.showToast('状态栏设置失败：控制端未连接', 'error');
+            return false;
+        }
+        try {
+            window.WebSocketManager.ws.send(JSON.stringify(message));
+            return true;
+        } catch (error) {
+            if (window.showToast) window.showToast(`状态栏设置失败：${error.message}`, 'error');
             return false;
         }
     },
@@ -1020,11 +1067,16 @@ const DeviceList = {
         const latestType = latest ? (latest.isFinal ? '最终' : '实时') : '';
         const latestMeta = this.escapeHtml(this.getVoiceInputMeta(latest));
         const displayId = this.escapeHtml(display.id);
+        const showStatusBar = this.getDisplayStatusBarVisibility(display);
         return `
             <div class="display-voice-control" data-display-id="${displayId}">
                 <label class="display-voice-toggle" title="直接控制该显示端是否采集语音">
                     <input type="checkbox" data-voice-listening-toggle data-display-id="${displayId}" ${capabilities.voiceRecording ? 'checked' : ''}>
                     <span>🎙️ 监听</span>
+                </label>
+                <label class="display-status-bar-toggle" title="独立控制该显示端的连接、语音与摄像头状态提示">
+                    <input type="checkbox" data-display-status-bar-toggle data-display-id="${displayId}" ${showStatusBar ? 'checked' : ''}>
+                    <span>显示状态栏</span>
                 </label>
                 <span class="display-voice-state ${status.className}">${status.label}</span>
                 <span class="display-voice-latest" title="最近一次语音识别结果">最近识别${latestType ? `（${latestType}）` : ''}${latestMeta}：${latestText}</span>
@@ -1039,6 +1091,17 @@ const DeviceList = {
             if (event.target.closest('.display-voice-control')) event.stopPropagation();
         });
         container.addEventListener('change', (event) => {
+            const statusBarInput = event.target.closest('[data-display-status-bar-toggle]');
+            if (statusBarInput) {
+                event.stopPropagation();
+                const display = this.list.find((item) => item.id === statusBarInput.dataset.displayId);
+                const previousValue = this.getDisplayStatusBarVisibility(display);
+                if (!this.setDisplayStatusBarVisibility(statusBarInput.dataset.displayId, statusBarInput.checked)) {
+                    statusBarInput.checked = previousValue;
+                }
+                return;
+            }
+
             const input = event.target.closest('[data-voice-listening-toggle]');
             if (input) {
                 event.stopPropagation();
@@ -2125,7 +2188,24 @@ const DeviceList = {
             ? `最近识别（${latest.isFinal ? '最终' : '实时'}）${this.getVoiceInputMeta(latest)}：${latest.text}`
             : '最近识别：暂无识别回传';
 
-        container.append(label, state, latestText);
+        const statusBarLabel = document.createElement('label');
+        statusBarLabel.className = 'display-status-bar-toggle';
+        statusBarLabel.title = '独立控制该显示端的连接、语音与摄像头状态提示';
+        const statusBarInput = document.createElement('input');
+        statusBarInput.type = 'checkbox';
+        statusBarInput.checked = this.getDisplayStatusBarVisibility(display);
+        statusBarInput.addEventListener('change', (event) => {
+            event.stopPropagation();
+            const previousValue = this.getDisplayStatusBarVisibility(display);
+            if (!this.setDisplayStatusBarVisibility(display.id, event.target.checked)) {
+                event.target.checked = previousValue;
+            }
+        });
+        const statusBarText = document.createElement('span');
+        statusBarText.textContent = '显示状态栏';
+        statusBarLabel.append(statusBarInput, statusBarText);
+
+        container.append(label, statusBarLabel, state, latestText);
         return container;
     },
 

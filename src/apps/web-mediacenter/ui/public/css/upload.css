@@ -603,6 +603,19 @@ input[type="file"] {
     accent-color: var(--accent-color, #00d2ff);
 }
 
+.display-status-bar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.display-status-bar-toggle input {
+    accent-color: var(--accent-color, #00d2ff);
+}
+
 .display-voice-state {
     padding: 2px 6px;
     border-radius: 4px;
