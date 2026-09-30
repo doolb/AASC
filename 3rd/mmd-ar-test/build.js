@@ -24,6 +24,7 @@ const SOURCE_PUBLIC = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/publi
 const WEB_MODE = process.argv.includes('--web');
 const WEB_PANEL_GROUPS = WEB_MODE ? require('./web-panel-groups') : null;
 const WEB_GRAVITY_MODE = WEB_MODE ? require('./web-gravity-mode') : null;
+const WEB_LOCAL_ASSETS = WEB_MODE ? require('./web-local-assets-inject') : null;
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -320,6 +321,7 @@ async function stageTextAssets() {
     $('#displayArMotionRecenter').text('重力居中');
     $('#displayArMotionMessage').text('重力旋转关闭，手动旋转保留');
     WEB_PANEL_GROUPS.groupWebPanels($);
+    WEB_PANEL_GROUPS.addLocalAssetPanel($);
     arPanel.find('[data-group-title="重力旋转"]').closest('.mmd-ar-panel-group')
       .find('.mmd-ar-panel-group-body').append(
         '<p class="mind-basic-note">按重力倾斜旋转角色锚点，与手动旋转叠加；首次姿态为中性姿态。居中或关闭只重置重力层。</p>'
@@ -418,6 +420,14 @@ async function stageTextAssets() {
     }
   }
   if (WEB_MODE) {
+    // UI 和 PMX runtime 必须导入同一个带内容指纹的 ESM，避免生成两个独立文件注册表。
+    for (const fileName of ['web-local-assets.mjs', 'web-local-assets-ui.mjs']) {
+      await fs.copyFile(path.join(__dirname, fileName), path.join(GENERATED_ASSETS, 'js', fileName));
+    }
+    const localAssetsVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/web-local-assets.mjs'))).sha256.slice(0, 12);
+    const localAssetsUrl = `./web-local-assets.mjs?v=${localAssetsVersion}`;
+    const localUiPath = path.join(GENERATED_ASSETS, 'js/web-local-assets-ui.mjs');
+    await fs.writeFile(localUiPath, (await fs.readFile(localUiPath, 'utf8')).replace('./web-local-assets.mjs', localAssetsUrl));
     // 测试网页单独验证手机深度采样精度；三个阶段必须一致，避免模糊和合成再次丢失精度。
     const aoPath = path.join(GENERATED_ASSETS, 'js/display-pmx-ao.mjs');
     const aoSource = await fs.readFile(aoPath, 'utf8');
@@ -457,7 +467,7 @@ async function stageTextAssets() {
     const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
-    await fs.writeFile(pmxRuntimePath, WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe).replace(lightingModeImport,
+    await fs.writeFile(pmxRuntimePath, WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe), localAssetsUrl).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
@@ -467,7 +477,7 @@ async function stageTextAssets() {
     const runtimeImport = "'./display-pmx-runtime.js'";
     if (!current.includes(runtimeImport)) throw new Error('测试网页未找到 PMX runtime 动态导入入口');
     if (!current.includes('getMotionProgress: () =>')) throw new Error('正式显示模块缺少 VMD 进度入口');
-    await fs.writeFile(mmdScriptPath, WEB_GRAVITY_MODE.addGravityDisplay(current)
+    await fs.writeFile(mmdScriptPath, WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current))
       .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`));
     const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
@@ -476,7 +486,7 @@ async function stageTextAssets() {
 
   const scriptVersion = new Map();
   if (WEB_MODE) {
-    for (const fileName of ['display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
+    for (const fileName of ['web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
     }
   }
@@ -635,6 +645,7 @@ async function stageTextAssets() {
     };
   </script>` : ''}
   <script src="${scriptUrl('display-mmd-ar.js')}"></script>
+  ${WEB_MODE ? `<script type="module" src="${scriptUrl('web-local-assets-ui.mjs')}"></script>` : ''}
   <script>
     ${WEB_MODE ? WEB_PANEL_GROUPS.WEB_PANEL_GROUP_JS : ''}
     (() => {

@@ -468,4 +468,34 @@ function groupWebPanels($) {
   }
 }
 
-module.exports = { groupWebPanels, WEB_PANEL_GROUP_CSS, WEB_PANEL_GROUP_JS };
+function addLocalAssetPanel($) {
+  $('#mmdArMotionPanel').append(`
+    <section id="mmdArLocalAssets" class="mmd-ar-panel-group">
+      <div class="mmd-ar-panel-group-header">
+        <button class="mmd-ar-panel-group-toggle" type="button" data-group-title="本地资源" aria-controls="mmdArLocalAssetsBody" aria-expanded="false" aria-label="展开本地资源设置">
+          <span>本地模型与动作</span><span class="mmd-ar-panel-group-arrow" aria-hidden="true">⌄</span>
+        </button>
+      </div>
+      <div id="mmdArLocalAssetsBody" class="mmd-ar-panel-group-body" hidden>
+        <div class="display-mmd-ar-actions">
+          <button id="mmdArLocalDirectoryButton" class="display-mmd-ar-action" type="button">选择模型目录</button>
+          <button id="mmdArLocalFilesButton" class="display-mmd-ar-action" type="button">多选 PMX＋贴图</button>
+        </div>
+        <input id="mmdArLocalDirectory" type="file" webkitdirectory multiple hidden>
+        <input id="mmdArLocalFiles" type="file" multiple hidden>
+        <label class="display-mmd-ar-field"><span>所选目录中的 PMX</span><select id="mmdArLocalPmx" disabled><option>请先选择文件</option></select></label>
+        <p class="mind-basic-note">当前模型：<span id="mmdArLocalModelName">内置默认模型</span></p>
+        <div class="display-mmd-ar-actions">
+          <button id="mmdArLocalVmdButton" class="display-mmd-ar-action" type="button">选择 VMD 动作</button>
+          <button id="mmdArLocalDefaultMotion" class="display-mmd-ar-action" type="button">恢复默认动作</button>
+        </div>
+        <input id="mmdArLocalVmd" type="file" accept=".vmd" hidden>
+        <p class="mind-basic-note">当前动作：<span id="mmdArLocalMotionName">内置默认动作</span></p>
+        <button id="mmdArLocalDefaultModel" class="display-mmd-ar-action" type="button">恢复默认模型与动作</button>
+        <p id="mmdArLocalMessage" class="mind-basic-note" role="status" style="overflow-wrap:anywhere">请选择完整模型目录，或一起多选 PMX 与贴图；文件不上传，刷新后需重新选择。</p>
+      </div>
+    </section>
+  `);
+}
+
+module.exports = { groupWebPanels, addLocalAssetPanel, WEB_PANEL_GROUP_CSS, WEB_PANEL_GROUP_JS };

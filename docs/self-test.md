@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## MMD AR 本地 PMX、贴图与 VMD 选择（2026-09-30）
+
+`npm run build:web:mmd-ar-test` 成功。`node --test tests/mmd-ar-local-assets.test.js` 3/3 通过：目录/Windows 分隔符/大小写/平铺唯一匹配，重复与歧义拒绝、缺失贴图预检、对象 URL 释放后不可读取及旧映射不可复用；真实 Chromium 深层目录网页的 PMX＋贴图 file input、VMD 加载和暂停、损坏 VMD/缺贴图 PMX 保留旧内容、物理重载、恢复默认动作与模型均通过，未产生虚拟本地路径 HTTP 请求或页面异常。
+
+`node --test tests/mmd-pmx-helper.test.js tests/mmd-pmx-physics-rotation.test.js tests/display-mmd-runtime.test.js` 40/40 通过。源/生成脚本静态语法和定向差异空白检查通过。手机需现场检查目录/多选与取消、同一文件重选、多 PMX 下拉、不同 PMX 的材质/VMD 兼容性、灯光/阴影、重力旋转、图片定位和帧率；本次自动检查不证明真机视觉/性能。独立网页已生成，未发布外网。
+
 ## MMD AR 独立重力旋转（2026-09-30，待验证）
 
 `npm run build:web:mmd-ar-test` 成功。构建为独立网页控制器/显示 API/PMX runtime 注入重力模式，原正式源文件保持；生成页面分类和控件为“重力旋转”。重力目标与手动角度独立保存，PMX 实际相机更新在组合角色旋转之前，原相机第二层缓动仍保留。

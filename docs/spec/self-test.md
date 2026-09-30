@@ -1,5 +1,27 @@
 # 自测功能实现文档
 
+## MMD AR 网页本地资源选择（2026-09-30）
+
+```text
+已有声明:
+  Node test runner、Chromium、生成 web-dist、构建校验过的 PMX/贴图/VMD
+新增定义:
+  LocalAssetFixture { pmxFile, textureFiles, vmdFile, invalidVmd }
+  LocalAssetResult { ready, modelUrl, motionUrl, motionProgress, error, requests }
+操作流程:
+  目录索引及平铺索引 -> 检查相对路径、大小写、唯一名称回退、重复/歧义/越界
+  注册文件 -> 创建对象 URL -> 读取文件 -> 释放 -> 原 URL 和旧映射均不可复用
+  生成网页 -> 本地 HTTP 按正确 CSS/ESM MIME 服务深层目录 -> Chromium 打开
+  原生 file input 选择真实 PMX 与贴图 -> 就绪且地址属于当前会话
+  选择真实 VMD -> 进度可读 -> 暂停后进度冻结
+  选择损坏 VMD 或缺贴图 PMX -> 错误提示 -> 原模型/动作仍就绪
+  物理重载 -> 本地模型/动作仍可读取
+  恢复默认动作 -> 当前本地模型保持；恢复默认模型 -> 内置 profile 生效
+  页面异常与本地虚拟路径的 HTTP 请求均为空
+  收集结果 -> 关闭浏览器和 HTTP 服务 -> 删除本用例创建的临时损坏 VMD
+```
+
+
 ## 概述
 
 自测功能用于验证系统各模块是否正常工作，包括基础功能测试、播放控制测试、画面控制测试等。

@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR 本地模型与动作选择
+
+- ✅ [2026-09-30] 独立 mmd-ar 网页新增“动作 → 本地模型与动作”，支持选择模型目录或多选 PMX＋贴图、明确选择多个 PMX、单独 VMD、恢复默认动作及模型。
+  - 新增 `web-local-assets.mjs`、`web-local-assets-ui.mjs`、`web-local-assets-inject.js`，更新 `build.js` 和 `web-panel-groups.js`；网页副本独立映射所选文件，匹配相对路径/唯一名称，缺失与歧义提示，失败保留旧角色/动作；物理重载保留文件引用，释放后旧映射不可复用。文件仅当前会话使用、不上传，刷新需重选。
+  - 新增 `tests/mmd-ar-local-assets.test.js` 3/3 通过，含真实 PMX/贴图/VMD 的浏览器文件输入、暂停、失败保留、物理重载和两种恢复默认；既有 PMX/helper/物理回归 40/40 通过。`npm run build:web:mmd-ar-test`、源/生成脚本语法与定向差异空白检查通过。
+  - 同步设计、伪代码、任务、使用说明与自测文档，移除已完成 todo。生成 web-dist；独立网页不影响 Offline 发布状态。未发布外网，手机文件选择及视觉/性能待现场验收。
+
 ### MMD AR 独立重力旋转与手动叠加
 
 - ✅ [2026-09-30] 将独立网页的体感环绕改为重力倾斜控制角色锚点旋转，手动角度独立保存并叠加。

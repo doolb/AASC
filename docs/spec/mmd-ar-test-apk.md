@@ -2,6 +2,42 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 本地 PMX / 贴图 / VMD 选择（2026-09-30，独立网页已实现）
+
+```text
+已有声明:
+  DisplayMmd.loadModel、PMX runtime.load、loadMotion、LoadingManager
+  动作面板、播放开关、进度、物理重载、重力旋转与 AR 相机
+新增定义:
+  LocalModelSelection { pmxFile, relativeFiles, textureMatches, retainedUrls }
+  LocalMotionSelection { vmdFile, resourceId }
+  LocalLoadContext { selection, sequence, stagedResources, missingPaths }
+操作流程（仅 WEB_MODE）:
+  用户选目录或多选文件 -> 保留相对路径 -> 枚举 PMX -> 确定当前 PMX
+  PMX 引用贴图 -> 规范化分隔符和相对路径 -> 查找完整路径
+  文件多选缺少目录信息 -> 仅唯一文件名允许回退 -> 缺失/歧义显示路径
+  受控虚拟 PMX/贴图路径 -> 当前加载器独立资源映射 -> 已选文件对象 URL
+  通用 toon 纹理继续使用运行时内置资源，不放宽任意网络资源地址校验
+  暂存模型与物理 -> 全部就绪且序号仍有效 -> 提交 -> 释放旧资源
+  无 VMD -> 保留静态模型及物理；用户选 VMD -> 准备新动作 -> 成功后替换
+  加载错误或旧序号 -> 清理暂存资源 -> 保留原模型/动作 -> 显示错误
+  切换物理重载 -> 复用当前本地选择 -> 不提前释放文件 URL
+  恢复默认 -> 成功加载内置 profile -> 释放本地选择；刷新需重新选择
+  web-local-assets.mjs 用模块内注册表保存已选文件；注册的虚拟路径仍带 PMX/VMD 扩展名
+  每个 LoadingManager 仅映射该次注册上下文，不修改 Three.js 全局管理器
+  预读 PMX 实际引用的纹理声明，缺失/歧义在创建网格前报错；内置 data URI toon 保留
+  独立 VMD 先解析 clip，序号和当前网格仍一致才替换 helper 与当前 profile
+  DisplayMmd 网页副本暴露当前 profile、独立动作加载和恢复默认模型入口
+  操作期间禁用本地资源与物理开关，错误不抹去前一次成功选择
+  物理重载正在进行时提示等待；多 PMX 时先展示空选项，不擅自加载第一个
+  释放上下文后旧映射拒绝生成新 URL；BFCache pagehide 保留会话引用
+  模块和注入副本使用同一内容指纹 URL，保证会话注册表唯一
+  验证相对路径、歧义、缺失、VMD、取消、失败、并发切换及物理重载
+```
+
+实现：`web-local-assets.mjs`（路径索引/会话 URL）、`web-local-assets-ui.mjs`（选择/串行操作）、`web-local-assets-inject.js`（网页副本运行时和显示 API）；`build.js` 和 `web-panel-groups.js` 负责构建与入口。新增定向测试 3/3、既有 PMX/helper/物理测试 40/40 通过，网页构建与语法检查通过。
+
+
 ### 独立重力体感与手动旋转叠加（2026-09-30）
 
 ```text

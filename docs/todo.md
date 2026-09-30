@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-29，code v42/min v34 已发布）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-30，code v42/min v34 已发布）
 
 ## 控制端
 
