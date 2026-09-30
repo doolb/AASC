@@ -60,7 +60,7 @@ function addPhysicsSubsteps(source) {
         // 复位和恢复只重建驱动历史，不修改动态刚体速度、力或姿态。
         if (this.anchorSamples.length === 0) {
             this.anchorSamples = this.bodies
-                .filter((entry) => entry.params.type === 0 && entry.params.boneIndex !== -1)
+                .filter((entry) => (entry.params.type === 0 && entry.params.boneIndex !== -1) || entry.positionDriven)
                 .map((entry) => ({ entry, previousPosition: new Vector3(), position: new Vector3(),
                     previousQuaternion: new Quaternion(), quaternion: new Quaternion(),
                     stepPosition: new Vector3(), stepQuaternion: new Quaternion() }));
@@ -89,14 +89,24 @@ function addPhysicsSubsteps(source) {
         }
     }
 
-    _applyAnchorTargets(alpha, form) {
+    _applyAnchorTargets(alpha, form, velocity) {
         for (const sample of this.anchorSamples) {
             sample.stepPosition.lerpVectors(sample.previousPosition, sample.position, alpha);
+            if (sample.entry.positionDriven) {
+                // 只指定本步终点所需线速度，不能先跳到终点再积分，否则会重复移动。
+                // 当前COM是借用值；角速度与姿态不被改写，仍由Ammo处理旋转及接触。
+                const origin = sample.entry.body.getCenterOfMassTransform().getOrigin();
+                velocity.setValue((sample.stepPosition.x - origin.x()) / this.unitStep,
+                    (sample.stepPosition.y - origin.y()) / this.unitStep,
+                    (sample.stepPosition.z - origin.z()) / this.unitStep);
+                sample.entry.body.setLinearVelocity(velocity);
+                continue;
+            }
             sample.stepQuaternion.slerpQuaternions(sample.previousQuaternion, sample.quaternion, alpha);
             this.manager.setOriginFromThreeVector3(form, sample.stepPosition);
             this.manager.setBasisFromThreeQuaternion(form, sample.stepQuaternion);
             // 只写运动学MotionState。每次单步调用前Bullet会读取目标并计算线/角速度。
-            // 动态type1/type2不被插值覆盖，也不在正常子步清空速度。
+            // type1不被覆盖；type2位置驱动不通用清零任何刚体速度。
             sample.entry.body.getMotionState().setWorldTransform(form);
         }
     }
@@ -114,19 +124,36 @@ function addPhysicsSubsteps(source) {
         this.physicsStepTime += skipped * h;
         this.physicsRemainder -= skipped * h;
         if (steps === 0) return;
-        const form = this.anchorSamples.length ? this.manager.allocTransform() : null;
+        let form = null;
+        let velocity = null;
         try {
+            form = this.anchorSamples.length ? this.manager.allocTransform() : null;
+            if (this.anchorSamples.some((sample) => sample.entry.positionDriven)) velocity = this.manager.allocVector3();
+            // 受控平移必须到达目标，暂时跳过其线性阻尼；旋转阻尼原值保留。
+            // 即使原始线性阻尼为1也能驱动，finally恢复参数，不影响其余动态刚体。
+            for (const sample of this.anchorSamples) {
+                if (sample.entry.positionDriven) sample.entry.body.setDamping(0, sample.entry.params.rotationDamping);
+            }
             for (let index = 0; index < steps; index += 1) {
                 const nextTime = this.physicsStepTime + h;
                 const alpha = Math.min(1, Math.max(0, (nextTime - previousTime) / delta));
-                if (form) this._applyAnchorTargets(alpha, form);
+                if (form) this._applyAnchorTargets(alpha, form, velocity);
                 // 外层负责固定时钟，maxSubSteps=0让Bullet恰好求解一次，避免重复内部拆步。
                 this.world.stepSimulation(h, 0, h);
                 this.physicsStepTime = nextTime;
                 this.physicsRemainder = Math.max(0, this.physicsRemainder - h);
             }
         } finally {
-            if (form) this.manager.freeTransform(form);
+            try {
+                for (const sample of this.anchorSamples) {
+                    if (sample.entry.positionDriven) sample.entry.body.setDamping(
+                        sample.entry.params.positionDamping, sample.entry.params.rotationDamping);
+                }
+            } finally {
+                // 参数恢复异常也必须归还临时值，避免下一次切换累积native分配。
+                if (velocity) this.manager.freeVector3(velocity);
+                if (form) this.manager.freeTransform(form);
+            }
         }
     }
 

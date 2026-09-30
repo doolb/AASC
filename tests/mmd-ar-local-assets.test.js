@@ -289,6 +289,15 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         }))), [{ unitStep: 1 / 180, maxStepNum: 19 }]);
         assert.equal(await page.evaluate(() => [...window.physicsLifetime.active].every((physics) =>
             physics.anchorSamples.length > 0 && typeof physics.resetAnchorInterpolation === 'function')), true);
+        assert.equal(await page.evaluate(() => [...window.physicsLifetime.active].every((physics) => {
+            const controlled = physics.bodies.filter((entry) => entry.positionDriven);
+            const expectedErp = 1 - 0.525 ** (65 / 180);
+            return controlled.length > 0 && controlled.every((entry) => {
+                const factor = entry.body.getLinearFactor();
+                return factor.x() === 0 && factor.y() === 0 && factor.z() === 0
+                    && Math.abs(entry.body.getLinearDamping() - entry.params.positionDamping) < 1e-6;
+            }) && physics.constraints.every((entry) => Math.abs(entry.constraint.getParam(2, 0) - expectedErp) < 1e-6);
+        })), true, '实际网页接入type2子步位置驱动和时间归一ERP，积分后阻尼恢复');
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), currentUrl);
         assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.ok(await page.evaluate(() => window.DisplayMmd.getMotionProgress().durationSeconds > 0));
@@ -411,7 +420,7 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
             return { same: window.physicsLifetime.active.has(physics), created: window.physicsLifetime.created - created,
                 unitStep: physics.unitStep, maxStepNum: physics.maxStepNum, fps: window.DisplayMmd.getLighting().physicsFps };
         });
-        assert.deepEqual(liveChange, { same: true, created: 0, unitStep: 1 / 65, maxStepNum: 3, fps: 65 });
+        assert.deepEqual(liveChange, { same: true, created: 0, unitStep: 1 / 65, maxStepNum: 8, fps: 65 });
         await page.$eval('#displayMmdPhysicsFps', (input) => {
             input.value = '180'; input.dispatchEvent(new Event('input', { bubbles: true }));
         });

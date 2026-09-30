@@ -28,6 +28,7 @@ const WEB_LOCAL_ASSETS = WEB_MODE ? require('./web-local-assets-inject') : null;
 const WEB_PHYSICS_LIFECYCLE = WEB_MODE ? require('./web-physics-lifecycle') : null;
 const WEB_PHYSICS_RATE = WEB_MODE ? require('./web-physics-rate') : null;
 const WEB_PHYSICS_SUBSTEPS = WEB_MODE ? require('./web-physics-substeps') : null;
+const WEB_PHYSICS_STABILITY = WEB_MODE ? require('./web-physics-stability') : null;
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -522,7 +523,8 @@ async function stageTextAssets() {
     const animationDirectory = path.join(GENERATED_ASSETS, 'js/vendor/three/animation');
     const physicsPath = path.join(animationDirectory, 'MMDPhysics.js');
     const helperPath = path.join(animationDirectory, 'MMDAnimationHelper.js');
-    await fs.writeFile(physicsPath, WEB_PHYSICS_SUBSTEPS.addPhysicsSubsteps(WEB_PHYSICS_LIFECYCLE.addPhysicsLifecycle(await fs.readFile(physicsPath, 'utf8'))));
+    await fs.writeFile(physicsPath, WEB_PHYSICS_STABILITY.addPhysicsStability(
+        WEB_PHYSICS_SUBSTEPS.addPhysicsSubsteps(WEB_PHYSICS_LIFECYCLE.addPhysicsLifecycle(await fs.readFile(physicsPath, 'utf8')))));
     const physicsVersion = (await hashFile(physicsPath)).sha256.slice(0, 12);
     await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
       await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));

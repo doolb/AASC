@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
+const { addPhysicsStability } = require('../3rd/mmd-ar-test/web-physics-stability');
 const { addPhysicsSubsteps } = require('../3rd/mmd-ar-test/web-physics-substeps');
 const { addPhysicsRateDisplay, addPhysicsRateHelper, addPhysicsRateRuntime } = require('../3rd/mmd-ar-test/web-physics-rate');
 const { addPhysicsLifecycle, addAnimationLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
@@ -15,8 +16,8 @@ const dataUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).t
 test('网页30到180Hz边界、默认、5Hz步长和高频子步预算', async () => {
     const { getWebPhysicsStepOptions } = await import(rateUrl);
     for (const [input, fps, maxStepNum] of [
-        [undefined, 65, 3], [NaN, 65, 3], [Infinity, 65, 3], [-1, 30, 3],
-        [30, 30, 3], [65, 65, 3], [90, 90, 3], [95, 95, 11], [120, 120, 13],
+        [undefined, 65, 8], [NaN, 65, 8], [Infinity, 65, 8], [-1, 30, 4],
+        [30, 30, 4], [65, 65, 8], [90, 90, 10], [95, 95, 11], [120, 120, 13],
         ['180', 180, 19], [999, 180, 19], [177, 175, 19], [178, 180, 19], [480, 180, 19]
     ]) assert.deepEqual(getWebPhysicsStepOptions(input), { unitStep: 1 / fps, maxStepNum });
 });
@@ -47,7 +48,7 @@ async function fixture() {
         const vendor = path.join(publicRoot, 'js/vendor/three');
         const source = (name) => fs.readFileSync(path.join(vendor, 'animation', name), 'utf8')
             .replace("from 'three'", `from '${threeUrl}'`);
-        const physicsUrl = dataUrl(addPhysicsSubsteps(addPhysicsLifecycle(source('MMDPhysics.js'))));
+        const physicsUrl = dataUrl(addPhysicsStability(addPhysicsSubsteps(addPhysicsLifecycle(source('MMDPhysics.js')))));
         const helperSource = addAnimationLifecycle(source('MMDAnimationHelper.js'), physicsUrl)
             .replace('../animation/CCDIKSolver.js', dataUrl(source('CCDIKSolver.js')));
         const { MMDAnimationHelper } = await import(dataUrl(helperSource));
@@ -98,7 +99,7 @@ test('真实Ammo在180Hz下以60/30/10FPS推进一秒均保持恒速位移，实
             assert.ok(Math.abs(travelled - 1) < 0.01, `${renderFps}FPS一秒位移=${travelled}`);
             Object.assign(physics, getWebPhysicsStepOptions(65));
             assert.equal(helper.objects.get(mesh).physics, physics);
-            assert.equal(physics.maxStepNum, 3);
+            assert.equal(physics.maxStepNum, 8);
             assert.equal(body.getLinearVelocity().x(), 1);
         } finally {
             Ammo.destroy(vector);

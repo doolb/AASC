@@ -6,6 +6,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
 const { addPhysicsLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
+const { addPhysicsStability } = require('../3rd/mmd-ar-test/web-physics-stability');
 const { addPhysicsSubsteps, addSubstepRuntime } = require('../3rd/mmd-ar-test/web-physics-substeps');
 const vendor = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/vendor/three');
 let fixturePromise;
@@ -15,7 +16,7 @@ async function fixture() {
     fixturePromise = (async () => {
         const threeUrl = pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href;
         const THREE = await import(threeUrl);
-        const source = addPhysicsSubsteps(addPhysicsLifecycle(fs.readFileSync(path.join(vendor, 'animation/MMDPhysics.js'), 'utf8')))
+        const source = addPhysicsStability(addPhysicsSubsteps(addPhysicsLifecycle(fs.readFileSync(path.join(vendor, 'animation/MMDPhysics.js'), 'utf8'))))
             .replace("from 'three'", `from '${threeUrl}'`);
         const { MMDPhysics } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
         globalThis.Ammo = await require(path.join(vendor, 'libs/ammo.wasm.js'))({
@@ -152,6 +153,7 @@ test('零时间和不足一步不驱动物理，历史复位和频率变化不�
 
 test('低频超预算丢弃整步不会无限积压，异常回收临时变换和非单位网格缩放', async () => {
     const { physics, mesh, target, cleanup } = await create(65);
+    physics.maxStepNum = 3; // 人为收紧预算，独立验证丢步保护，而非依赖旧默认预算。
     const step = physics.world.stepSimulation.bind(physics.world);
     let count = 0;
     physics.world.stepSimulation = (...args) => { count += 1; return step(...args); };
