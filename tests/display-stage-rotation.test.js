@@ -71,3 +71,60 @@ test('MMD 指针坐标按视口旋转的逆变换映射到逻辑 Canvas 四角',
         assert.equal(center.normalizedY, 0);
     }
 });
+
+test('横屏时间只在与交互按钮实际相交时水平避让，竖屏保持原位置', () => {
+    const stage = loadDisplayStageApi();
+    assert.equal(typeof stage.getLandscapeClockAvoidance, 'function',
+        '舞台应提供可单测的横屏时间避让几何');
+
+    const rightControls = { left: 900, right: 980, top: 12, bottom: 180 };
+    const overlappingTimeAtRight = { left: 850, right: 970, top: 24, bottom: 72 };
+    assert.equal(stage.getLandscapeClockAvoidance({
+        isLandscape: true,
+        controlRect: rightControls,
+        timeRect: overlappingTimeAtRight,
+        viewportWidth: 1000,
+        gap: 12
+    }), -82);
+
+    const leftControls = { left: 20, right: 100, top: 12, bottom: 180 };
+    const overlappingTimeAtLeft = { left: 30, right: 150, top: 24, bottom: 72 };
+    assert.equal(stage.getLandscapeClockAvoidance({
+        isLandscape: true,
+        controlRect: leftControls,
+        timeRect: overlappingTimeAtLeft,
+        viewportWidth: 1000,
+        gap: 12
+    }), 82);
+
+    assert.equal(stage.getLandscapeClockAvoidance({
+        isLandscape: false,
+        controlRect: rightControls,
+        timeRect: overlappingTimeAtRight,
+        viewportWidth: 1000,
+        gap: 12
+    }), 0);
+    assert.equal(stage.getLandscapeClockAvoidance({
+        isLandscape: true,
+        controlRect: rightControls,
+        timeRect: { ...overlappingTimeAtRight, top: 200, bottom: 248 },
+        viewportWidth: 1000,
+        gap: 12
+    }), 0);
+    assert.equal(stage.getLandscapeClockAvoidance({
+        isLandscape: true,
+        controlRect: rightControls,
+        timeRect: { left: 700, right: 820, top: 24, bottom: 72 },
+        viewportWidth: 1000,
+        gap: 12
+    }), 0);
+});
+
+test('display 页在每次旋转文本重排后应用横屏时间避让', () => {
+    const displayHtml = fs.readFileSync(
+        path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/display.html'),
+        'utf8'
+    );
+    assert.ok(/function repositionRotationTextElement\([\s\S]*?element === timeDisplay[\s\S]*?getLandscapeClockAvoidance[\s\S]*?timeRect:\s*\{[\s\S]*?left:\s*rect\.left\s*\+\s*deltaX/u.test(displayHtml),
+        '显示页应在时间包围盒重排时执行横屏避让');
+});

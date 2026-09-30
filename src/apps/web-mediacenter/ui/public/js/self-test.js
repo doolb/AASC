@@ -70,23 +70,25 @@ const SelfTest = {
         {
             id: 'display_background_glow_settings',
             name: '显示端背景光晕设置',
-            description: '检查全局光晕滑块、预览和当前参数范围',
+            description: '检查全局中心颜色、完整中心范围、扩散范围与实时预览',
             category: '界面布局',
             run: async () => {
-                const brightness = document.getElementById('displayBackgroundGlowBrightness');
+                const color = document.getElementById('displayBackgroundGlowColor');
+                const centerRange = document.getElementById('displayBackgroundGlowCenterRange');
                 const spread = document.getElementById('displayBackgroundGlowSpread');
                 const preview = document.getElementById('displayBackgroundGlowPreview');
                 const config = window.DisplayBackgroundGlow?.currentConfig;
-                if (!brightness || !spread || !preview || !config) {
+                if (!color || !centerRange || !spread || !preview || !config) {
                     return { success: false, message: '背景光晕设置控件不完整', details: '缺少滑块、预览或配置管理器' };
                 }
-                const valid = Number.isFinite(config.brightness)
-                    && config.brightness >= 0 && config.brightness <= 100
+                const valid = /^#[0-9A-F]{6}$/u.test(config.color)
+                    && Number.isFinite(config.centerRange)
+                    && config.centerRange >= 0 && config.centerRange <= 20
                     && Number.isFinite(config.spread) && config.spread >= 25 && config.spread <= 90;
                 return {
                     success: valid,
                     message: valid ? '背景光晕设置正常' : '背景光晕参数超出范围',
-                    details: `中心亮度 ${config.brightness}%，扩散范围 ${config.spread}%`
+                    details: `中心颜色 ${config.color}，中心亮度范围 ${config.centerRange}%，扩散范围 ${config.spread}%`
                 };
             }
         },

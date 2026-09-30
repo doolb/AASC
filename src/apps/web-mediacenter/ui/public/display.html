@@ -1725,6 +1725,25 @@
                     : 0;
             shiftFixedTextElement(element, 'x', deltaX);
             shiftFixedTextElement(element, 'y', deltaY);
+            if (element === timeDisplay) {
+                const stageLayers = document.getElementById('displayStageLayers');
+                if (stageLayers?.dataset.panelOrientation === 'landscape') {
+                    const controls = document.querySelector('.display-stage-lighting-control');
+                    const avoidance = window.DisplayStage?.getLandscapeClockAvoidance?.({
+                        isLandscape: true,
+                        controlRect: controls?.getBoundingClientRect(),
+                        timeRect: {
+                            left: rect.left + deltaX,
+                            right: rect.right + deltaX,
+                            top: rect.top + deltaY,
+                            bottom: rect.bottom + deltaY
+                        },
+                        viewportWidth: layout.viewportWidth,
+                        gap: 12
+                    }) || 0;
+                    shiftFixedTextElement(element, 'x', avoidance);
+                }
+            }
         }
 
         // 使用旋转后的逻辑画布重新限制并定位所有固定文本，防止长中文在旋转后越出屏幕。

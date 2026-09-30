@@ -36,7 +36,7 @@ const defaultDisplayState = {
 const CPU_AFFINITY_ENGINES = ['asr', 'tts', 'llm'];
 const CPU_AFFINITY_FIELDS = ['bigCoreCount', 'littleCoreCount'];
 const CPU_AFFINITY_BOOLEAN_FIELDS = ['preferBigCores'];
-const DEFAULT_DISPLAY_BACKGROUND_GLOW = Object.freeze({ brightness: 100, spread: 58 });
+const DEFAULT_DISPLAY_BACKGROUND_GLOW = Object.freeze({ color: '#8FA8D5', centerRange: 10, spread: 58 });
 const DEFAULT_CPU_AFFINITY = {
     asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
     tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
@@ -69,8 +69,20 @@ function normalizeDisplayBackgroundGlowConfig(rawConfig, fallbackConfig = DEFAUL
         return Math.min(maximum, Math.max(minimum, Math.round(number)));
     };
 
+    const isHexColor = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+    const fallbackColor = isHexColor(fallback.color)
+        ? fallback.color.toUpperCase()
+        : DEFAULT_DISPLAY_BACKGROUND_GLOW.color;
+
     return {
-        brightness: normalizeValue(source.brightness, fallback.brightness, 0, 100, DEFAULT_DISPLAY_BACKGROUND_GLOW.brightness),
+        color: isHexColor(source.color) ? source.color.toUpperCase() : fallbackColor,
+        centerRange: normalizeValue(
+            source.centerRange,
+            fallback.centerRange,
+            0,
+            20,
+            DEFAULT_DISPLAY_BACKGROUND_GLOW.centerRange
+        ),
         spread: normalizeValue(source.spread, fallback.spread, 25, 90, DEFAULT_DISPLAY_BACKGROUND_GLOW.spread)
     };
 }
@@ -79,7 +91,10 @@ function validateDisplayBackgroundGlowPayload(payload, fallbackConfig = DEFAULT_
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         return { ok: false, message: '背景光晕配置必须是对象' };
     }
-    for (const key of ['brightness', 'spread']) {
+    if (payload.color !== undefined && (typeof payload.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(payload.color))) {
+        return { ok: false, message: 'color 必须是 #RRGGBB 颜色值' };
+    }
+    for (const key of ['centerRange', 'spread']) {
         if (payload[key] !== undefined && !Number.isFinite(payload[key])) {
             return { ok: false, message: `${key} 必须是有限数值` };
         }

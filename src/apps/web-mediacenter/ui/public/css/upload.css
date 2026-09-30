@@ -4484,6 +4484,17 @@ input[type="range"]::-webkit-slider-thumb:active {
     accent-color: var(--accent-color, #00d2ff);
 }
 
+.display-background-glow-control input[type="color"] {
+    width: 48px;
+    height: 30px;
+    justify-self: end;
+    padding: 2px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.25));
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
 .display-background-glow-control output {
     min-width: 52px;
     color: var(--text-secondary, #aaa);
@@ -4500,8 +4511,9 @@ input[type="range"]::-webkit-slider-thumb:active {
     background-color: #101116;
     background-image: radial-gradient(
         ellipse at 50% 42%,
-        rgba(48, 52, 66, var(--display-background-glow-brightness, 1)) 0%,
-        rgba(23, 25, 32, var(--display-background-glow-brightness, 1)) var(--display-background-glow-spread, 58%),
+        var(--display-background-glow-center-color, #8FA8D5) 0%,
+        var(--display-background-glow-center-color, #8FA8D5) var(--display-background-glow-center-range, 10%),
+        var(--display-background-glow-middle-color, #5D6C8A) var(--display-background-glow-spread, 58%),
         #101116 100%
     );
 }

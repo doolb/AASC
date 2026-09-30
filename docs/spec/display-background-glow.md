@@ -4,38 +4,47 @@
 
 ```text
 DEFAULT_DISPLAY_BACKGROUND_GLOW = {
-    brightness: 100,
+    color: '#8FA8D5',
+    centerRange: 10,
     spread: 58
 }
 
 normalizeDisplayBackgroundGlow(input, fallback):
-    brightness = 将有限数值取整并限制在 0..100；缺失时使用 fallback.brightness
-    spread = 将有限数值取整并限制在 25..90；缺失时使用 fallback.spread
-    返回 { brightness, spread }
+    若 input 不是普通对象，则使用空对象
+    color = input.color 为 #RRGGBB 时转为大写；否则使用 fallback.color
+    centerRange = 有限数值取整并限制在 0..20；缺失时使用 fallback.centerRange
+    spread = 有限数值取整并限制在 25..90；缺失时使用 fallback.spread
+    返回仅含 { color, centerRange, spread } 的对象
+
+validateDisplayBackgroundGlow(payload, fallback):
+    若 payload 不是对象，返回错误
+    若 color 存在但不是 #RRGGBB，返回错误
+    若 centerRange 或 spread 存在但不是有限数值，返回错误
+    返回 { ok: true, config: normalizeDisplayBackgroundGlow(payload, fallback) }
 ```
 
 ## 控制端设置
 
 ```text
 初始化“系统设置 → 界面主题”:
-    显示亮度滑块与扩散范围滑块
+    读取中心颜色选择器、中心亮度范围滑块和扩散范围滑块
     未收到服务端配置时应用 DEFAULT_DISPLAY_BACKGROUND_GLOW
 
-滑块输入:
-    读取 brightness 与 spread
-    显示百分比
+颜色或滑块输入:
+    读取 { color, centerRange, spread }
+    更新颜色值和两个百分比
     将预览值应用到当前控制端页面
 
-滑块提交:
+颜色或滑块提交:
     send({
         type: 'setDisplayBackgroundGlowConfig',
-        config: { brightness, spread }
+        config: { color, centerRange, spread }
     })
 
 收到 displayBackgroundGlowConfig(config):
     normalized = normalizeDisplayBackgroundGlow(config, 默认值)
     保存 normalized 为最后确认值
-    更新滑块、百分比和页面预览
+    更新颜色选择器、滑块、数值和页面预览
 
 收到 displayBackgroundGlowConfigError(config):
     恢复服务端回传的权威 config
@@ -51,37 +60,45 @@ normalizeDisplayBackgroundGlow(input, fallback):
         DEFAULT_DISPLAY_BACKGROUND_GLOW
     )
 
-控制端连接:
-    发送 displayBackgroundGlowConfig(displayBackgroundGlow)
-
-显示端连接:
+控制端连接或显示端连接:
     发送 displayBackgroundGlowConfig(displayBackgroundGlow)
 
 收到 setDisplayBackgroundGlowConfig:
-    若 config 不是对象或 brightness/spread 不是有限数值:
+    validation = validateDisplayBackgroundGlow(message.config, 当前权威值)
+    若 validation.ok 为 false:
         回送 displayBackgroundGlowConfigError(当前权威值)
         结束
-    normalized = normalizeDisplayBackgroundGlow(config, 当前值)
-    config.set('ui.displayBackgroundGlow', normalized)
-    更新服务端当前值
-    向所有控制端和在线显示端广播 displayBackgroundGlowConfig(normalized)
-    若保存失败:
+    config.set('ui.displayBackgroundGlow', validation.config)
+    若持久化失败:
         回送 displayBackgroundGlowConfigError(保存前的权威值)
+        结束
+    更新服务端当前值
+    向所有控制端和在线显示端广播 displayBackgroundGlowConfig(validation.config)
 ```
 
-## 显示端背景
+## 显示端和控制端预览
 
 ```text
 默认媒体画布背景:
     中心位置 = 水平 50%、垂直 42%
-    中心色 = rgba(48, 52, 66, brightness / 100)
-    中间色 = rgba(23, 25, 32, brightness / 100)，位置 = spread%
+    中心色 = #8FA8D5
+    完整中心色终点 = 10%
+    混合色 = 中心色与 #20232E 按 45% 混合
+    混合色位置 = 58%
     外围色 = #101116，位置 = 100%
 
-收到 displayBackgroundGlowConfig(config):
+收到 displayBackgroundGlowConfig(config) 或滑块/颜色输入:
     normalized = normalizeDisplayBackgroundGlow(config, 默认值)
-    将 brightness / 100 写入 --display-background-glow-brightness
+    将 color 写入 --display-background-glow-center-color
+    将 centerRange% 写入 --display-background-glow-center-range
+    计算混合色并写入 --display-background-glow-middle-color
     将 spread% 写入 --display-background-glow-spread
+
+径向渐变色阶:
+    center-color 0%
+    center-color centerRange%
+    middle-color spread%
+    #101116 100%
 
 媒体元素继续覆盖背景；睡眠遮罩仍覆盖为黑色。
 ```
@@ -114,11 +131,10 @@ VAD 面板:
     sidebar-nav 纵向滚动
     content 保留左侧导航边距
 ```
-```
 
 ## 兼容性与性能
 
-- 背景配置缺失时采用亮度 100、扩散 58 的本地默认值；断线时不影响媒体播放。
-- 旧显示端忽略新增配置消息；新显示端连接后接收服务端当前全局配置。
+- 缺少配置时采用中心色 `#8FA8D5`、中心范围 10%、扩散 58%；旧配置中的 brightness 不作为透明度使用。
+- 断线时不影响媒体播放；新显示端连接后接收服务端当前全局配置。
 - 只在连接初始化和用户修改参数时发送消息，不引入轮询或渲染循环。
 - 使用 CSS 自定义属性更新背景，不修改媒体节点尺寸或播放状态；导航仅按视口方向切换位置与滚动轴。

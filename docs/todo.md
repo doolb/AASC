@@ -7,8 +7,8 @@
   - 关联文档：`docs/design/display-status-bar.md`、`docs/spec/display-status-bar.md`、`docs/task/20260930_显示端状态栏独立开关.md`。
 
 - ⏳待现场验收 [2026-09-30] 显示端背景光晕参数
-  - 检查系统设置中的亮度/扩散范围全局调节、多个显示端同步和重连恢复；确认媒体内容不变、睡眠遮罩仍为黑色；竖屏导航位于底部且内容不被遮挡，横屏导航位于左侧。
-  - 关联文档：`docs/design/display-background-glow.md`、`docs/spec/display-background-glow.md`、`docs/task/20260930_显示端背景光晕与状态栏位置.md`。
+  - 检查中心颜色、中心亮度范围（纯色中心区域，不是透明度）和扩散范围的全局调节、多个显示端同步及重连恢复；确认媒体内容不变、睡眠遮罩仍为黑色。横屏检查时间不与灯光/动作/定位按钮重叠，竖屏确认顶部留白；控制端竖屏导航在底部、横屏在左侧。
+  - 关联文档：`docs/design/display-background-glow.md`、`docs/spec/display-background-glow.md`、`docs/task/20260930_显示端背景光晕与状态栏位置.md`、`docs/task/20260930_背景光晕中心范围与横屏时间避让.md`。
 
 - ⏳待现场验收 [2026-09-29] mmd-ar-test Blinn-Phong 高光：手机浏览器检查颜色、锐度、阴影和帧率。
 

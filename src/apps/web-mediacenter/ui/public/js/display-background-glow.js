@@ -1,9 +1,15 @@
 'use strict';
 
-// 控制端和显示端共用背景光晕参数应用逻辑；只有控制端创建的滑块会提交配置。
+// 控制端和显示端共用背景光晕参数应用逻辑；只有控制端创建的控件会提交配置。
 (function createDisplayBackgroundGlow(windowObject, documentObject) {
-    const DEFAULT_CONFIG = Object.freeze({ brightness: 100, spread: 58 });
+    const DEFAULT_CONFIG = Object.freeze({ color: '#8FA8D5', centerRange: 10, spread: 58 });
+    const MIDDLE_BASE_COLOR = '#20232E';
+    const MIDDLE_BASE_RATIO = 0.45;
 
+    const isHexColor = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+    const normalizeColor = (value, fallback) => (
+        isHexColor(value) ? value.toUpperCase() : isHexColor(fallback) ? fallback.toUpperCase() : DEFAULT_CONFIG.color
+    );
     const normalizeValue = (value, fallback, minimum, maximum) => {
         const number = Number.isFinite(value) ? value : fallback;
         return Math.min(maximum, Math.max(minimum, Math.round(number)));
@@ -15,28 +21,42 @@
             ? fallback
             : DEFAULT_CONFIG;
         return {
-            brightness: normalizeValue(source.brightness, safeFallback.brightness, 0, 100),
+            color: normalizeColor(source.color, safeFallback.color),
+            centerRange: normalizeValue(source.centerRange, safeFallback.centerRange, 0, 20),
             spread: normalizeValue(source.spread, safeFallback.spread, 25, 90)
         };
+    };
+
+    const mixColors = (foreground, background, backgroundRatio) => {
+        const foregroundChannels = foreground.slice(1).match(/.{2}/gu).map(channel => Number.parseInt(channel, 16));
+        const backgroundChannels = background.slice(1).match(/.{2}/gu).map(channel => Number.parseInt(channel, 16));
+        const channels = foregroundChannels.map((value, index) => (
+            Math.round(value * (1 - backgroundRatio) + backgroundChannels[index] * backgroundRatio)
+        ));
+        return `#${channels.map(value => value.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
     };
 
     const DisplayBackgroundGlow = {
         currentConfig: { ...DEFAULT_CONFIG },
         authoritativeConfig: { ...DEFAULT_CONFIG },
-        brightnessInput: null,
-        brightnessOutput: null,
+        colorInput: null,
+        colorOutput: null,
+        centerRangeInput: null,
+        centerRangeOutput: null,
         spreadInput: null,
         spreadOutput: null,
 
         init() {
-            this.brightnessInput = documentObject.getElementById('displayBackgroundGlowBrightness');
-            this.brightnessOutput = documentObject.getElementById('displayBackgroundGlowBrightnessValue');
+            this.colorInput = documentObject.getElementById('displayBackgroundGlowColor');
+            this.colorOutput = documentObject.getElementById('displayBackgroundGlowColorValue');
+            this.centerRangeInput = documentObject.getElementById('displayBackgroundGlowCenterRange');
+            this.centerRangeOutput = documentObject.getElementById('displayBackgroundGlowCenterRangeValue');
             this.spreadInput = documentObject.getElementById('displayBackgroundGlowSpread');
             this.spreadOutput = documentObject.getElementById('displayBackgroundGlowSpreadValue');
             this.render(this.currentConfig);
 
-            if (this.brightnessInput && this.spreadInput) {
-                [this.brightnessInput, this.spreadInput].forEach((input) => {
+            if (this.colorInput && this.centerRangeInput && this.spreadInput) {
+                [this.colorInput, this.centerRangeInput, this.spreadInput].forEach((input) => {
                     input.addEventListener('input', () => this.previewFromInputs());
                     input.addEventListener('change', () => {
                         this.previewFromInputs();
@@ -51,25 +71,27 @@
             this.currentConfig = normalizeConfig(config, this.authoritativeConfig);
             const root = documentObject.documentElement;
             if (root?.style) {
+                root.style.setProperty('--display-background-glow-center-color', this.currentConfig.color);
+                root.style.setProperty('--display-background-glow-center-range', `${this.currentConfig.centerRange}%`);
                 root.style.setProperty(
-                    '--display-background-glow-brightness',
-                    String(this.currentConfig.brightness / 100)
+                    '--display-background-glow-middle-color',
+                    mixColors(this.currentConfig.color, MIDDLE_BASE_COLOR, MIDDLE_BASE_RATIO)
                 );
-                root.style.setProperty(
-                    '--display-background-glow-spread',
-                    `${this.currentConfig.spread}%`
-                );
+                root.style.setProperty('--display-background-glow-spread', `${this.currentConfig.spread}%`);
             }
-            if (this.brightnessInput) this.brightnessInput.value = String(this.currentConfig.brightness);
-            if (this.brightnessOutput) this.brightnessOutput.textContent = `${this.currentConfig.brightness}%`;
+            if (this.colorInput) this.colorInput.value = this.currentConfig.color;
+            if (this.colorOutput) this.colorOutput.textContent = this.currentConfig.color;
+            if (this.centerRangeInput) this.centerRangeInput.value = String(this.currentConfig.centerRange);
+            if (this.centerRangeOutput) this.centerRangeOutput.textContent = `${this.currentConfig.centerRange}%`;
             if (this.spreadInput) this.spreadInput.value = String(this.currentConfig.spread);
             if (this.spreadOutput) this.spreadOutput.textContent = `${this.currentConfig.spread}%`;
         },
 
         previewFromInputs() {
-            if (!this.brightnessInput || !this.spreadInput) return;
+            if (!this.colorInput || !this.centerRangeInput || !this.spreadInput) return;
             this.render({
-                brightness: Number(this.brightnessInput.value),
+                color: this.colorInput.value,
+                centerRange: Number(this.centerRangeInput.value),
                 spread: Number(this.spreadInput.value)
             });
         },

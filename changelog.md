@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### 显示端背景光晕中心范围与横屏时间避让
+
+- ✅ [2026-09-30] 新增全局中心颜色，将“中心亮度”改为中心颜色完整保留范围；提高默认中心色，并在横屏时检测按钮/时间的实际包围盒，仅相交时自动避让，竖屏位置保持原样。
+  - 更新 `config-app-service.js`、`display-background-glow.js`、`upload.html`、`upload.css`、`display.css`、`display-stage.js`、`display.html`、`self-test.js`；配置结构为 `{ color, centerRange, spread }`，继续沿用既有 WebSocket 权威配置流程和媒体下层渐变，不再将中心范围映射为 alpha。
+  - 新增/更新光晕与旋转回归测试；定向测试 10/10 通过，JavaScript 语法检查通过。全量 `npm test` 在当前 Windows 环境失败，含缺失 `/usr/bin/chromium`、符号链接 `EPERM`、POSIX 路径断言与当前 Windows 路径不一致等环境问题。
+  - 同步 design/spec/task/todo 与自测；`release/offline-release-status.json` 的 `servicePackage` 已为 `true`，无需改写；未构建 APK 或发布产物。显示设备上的亮度观感及四角现场验收待执行。
+
 ### Git 拉取保留本地文档
 
 - ✅ [2026-09-30] 解决未提交的 `changelog.md`、`docs/design.md`、`docs/spec.md` 阻塞拉取，合并 `origion/master` 的背景光晕、状态栏位置与竖屏导航提交，保留本地480Hz提交。

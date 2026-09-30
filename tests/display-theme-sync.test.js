@@ -8,6 +8,7 @@ const { test } = require('node:test');
 const root = path.join(__dirname, '../src/apps/web-mediacenter/ui/public');
 const display = fs.readFileSync(path.join(root, 'display.html'), 'utf8');
 const displayCss = fs.readFileSync(path.join(root, 'css/display.css'), 'utf8');
+const uploadCss = fs.readFileSync(path.join(root, 'css/upload.css'), 'utf8');
 const themeCss = fs.readFileSync(path.join(root, 'css/theme.css'), 'utf8');
 const server = fs.readFileSync(
     path.join(__dirname, '../src/apps/server/boot/server-app.js'),
@@ -33,12 +34,19 @@ test('显示端媒体底色应使用可调中心光晕，睡眠遮罩仍纯黑�
     assert.match(mediaContainerBackground, /background-color:\s*#101116\b/u);
     assert.match(mediaContainerBackground, /background-image:\s*radial-gradient/u);
     assert.match(mediaContainerBackground, /ellipse at 50% 42%/u);
-    assert.match(mediaContainerBackground, /--display-background-glow-brightness/u);
+    assert.match(mediaContainerBackground, /--display-background-glow-center-color/u);
+    assert.match(mediaContainerBackground, /--display-background-glow-center-range/u);
+    assert.doesNotMatch(mediaContainerBackground, /--display-background-glow-brightness/u);
+    assert.match(mediaContainerBackground, /--display-background-glow-middle-color/u);
     assert.match(mediaContainerBackground, /--display-background-glow-spread/u);
     assert.doesNotMatch(mediaContainerBackground, /var\(--bg-primary/u);
     assert.match(mediaSleepOverlayBackground, /background:\s*#000\b/u);
-    assert.match(displayCss, /--display-background-glow-brightness:\s*1/u);
+    assert.match(displayCss, /--display-background-glow-center-color:\s*#8FA8D5/u);
+    assert.match(displayCss, /--display-background-glow-center-range:\s*10%/u);
+    assert.match(displayCss, /--display-background-glow-middle-color:\s*#5D6C8A/u);
     assert.match(displayCss, /--display-background-glow-spread:\s*58%/u);
+    assert.match(uploadCss, /display-background-glow-preview[\s\S]*--display-background-glow-center-range/u);
+    assert.match(uploadCss, /display-background-glow-preview[\s\S]*--display-background-glow-center-color/u);
     assert.match(displayCss, /#mediaText[\s\S]*background:\s*var\(--bg-secondary(?:,\s*[^)]+)?\)/u);
     assert.match(displayCss, /#mediaText[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);
     const timeDisplay = displayCss.match(/#timeDisplay\s*\{([\s\S]*?)\}/u)?.[1] || '';

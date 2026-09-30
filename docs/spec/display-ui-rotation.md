@@ -26,6 +26,12 @@
 | 左下(文件名) | bottom+left | top+left | top+right | bottom+right |
 | 右下(音频/语音) | bottom+right | bottom+left | top+left | top+right |
 
+### 横屏时间与交互按钮避让
+
+横屏交互层右上角的灯光/动作/定位按钮可能覆盖同角时间。时间完成四角锚点和旋转包围盒校正后，再按物理视口中的实际包围盒判断是否与按钮列相交；相交时，若按钮列位于屏幕右侧则将时间向左移到按钮列左边并留 12px，若位于左侧则将时间向右移到按钮列右边并留 12px。非相交时不改位置。只在 `displayStageLayers.dataset.panelOrientation === 'landscape'` 时启用，竖屏保留时间四角和按钮列顶部留白。
+
+`DisplayStage.getLandscapeClockAvoidance({ isLandscape, controlRect, timeRect, viewportWidth, gap })` 返回物理 x 轴位移 `deltaX`；竖屏、无有效包围盒或未相交时返回 0。显示页在每次旋转文本包围盒校正后应用此位移，因此时间内容变化和旋转重排仍保持避让，不累计偏移。
+
 ## 重力方向与文字方向
 
 旋转后，重力方向改变，文字的垂直方向需要根据新重力方向调整：
@@ -153,6 +159,19 @@
         如果 element 使用 bottom:
             沿 y 轴移动 viewportHeight - margin - rect.bottom
 
+    如果 displayStageLayers.dataset.panelOrientation == landscape:
+        读取 timeDisplay 与 .display-stage-lighting-control 的物理包围盒
+        deltaX = DisplayStage.getLandscapeClockAvoidance({
+            isLandscape: true,
+            controlRect,
+            timeRect,
+            viewportWidth: layout.viewportWidth,
+            gap: 12
+        })
+        沿物理 x 轴移动 timeDisplay deltaX
+    否则:
+        保持 timeDisplay 现有四角位置
+
     // 5. 内容或视口变化后重新适配
     监听文本元素的 MutationObserver，在下一帧重新执行包围盒校正
     监听 window.resize，重新执行 applyRotation()
@@ -200,4 +219,5 @@ const DEVICE_EVENT_DEBOUNCE_MS = 30000  // 30秒内同一IP同一事件不重复
 |------|------|
 | public/display.html | 显示端页面，applyRotation 函数 |
 | public/css/display.css | 显示端样式，UI元素定位 |
+| public/js/display-stage.js | 交互舞台几何与时间避让计算 |
 | server.js | executeDeviceEvent 函数，设备事件防抖 |

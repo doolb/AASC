@@ -73,6 +73,30 @@
         };
     }
 
+    function getLandscapeClockAvoidance({
+        isLandscape = false,
+        controlRect,
+        timeRect,
+        viewportWidth,
+        gap = 12
+    } = {}) {
+        if (!isLandscape || !controlRect || !timeRect) return 0;
+        const controlValues = [controlRect.left, controlRect.right, controlRect.top, controlRect.bottom];
+        const timeValues = [timeRect.left, timeRect.right, timeRect.top, timeRect.bottom];
+        if (![...controlValues, ...timeValues].every(Number.isFinite)) return 0;
+
+        const overlapsVertically = timeRect.bottom > controlRect.top && timeRect.top < controlRect.bottom;
+        const overlapsHorizontally = timeRect.right > controlRect.left && timeRect.left < controlRect.right;
+        if (!overlapsVertically || !overlapsHorizontally) return 0;
+
+        const safeGap = Math.max(0, Number.isFinite(gap) ? gap : 12);
+        const screenWidth = Math.max(0, Number(viewportWidth) || 0);
+        const controlsAreOnRight = (controlRect.left + controlRect.right) / 2 >= screenWidth / 2;
+        return controlsAreOnRight
+            ? controlRect.left - safeGap - timeRect.right
+            : controlRect.right + safeGap - timeRect.left;
+    }
+
     function mapViewportPointToStage(clientX, clientY, rect, geometry) {
         if (!rect || !geometry || rect.width <= 0 || rect.height <= 0) return null;
         const centerX = rect.left + rect.width / 2;
@@ -459,6 +483,7 @@
                 root.currentRotation,
                 0
             ),
+        getLandscapeClockAvoidance,
         mapViewportPointToStage,
         send,
         setRotation,

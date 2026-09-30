@@ -5,7 +5,9 @@
 }
 
 :root {
-    --display-background-glow-brightness: 1;
+    --display-background-glow-center-color: #8FA8D5;
+    --display-background-glow-center-range: 10%;
+    --display-background-glow-middle-color: #5D6C8A;
     --display-background-glow-spread: 58%;
 }
 
@@ -37,8 +39,9 @@ body {
     background-color: #101116;
     background-image: radial-gradient(
         ellipse at 50% 42%,
-        rgba(48, 52, 66, var(--display-background-glow-brightness)) 0%,
-        rgba(23, 25, 32, var(--display-background-glow-brightness)) var(--display-background-glow-spread),
+        var(--display-background-glow-center-color) 0%,
+        var(--display-background-glow-center-color) var(--display-background-glow-center-range),
+        var(--display-background-glow-middle-color) var(--display-background-glow-spread),
         #101116 100%
     );
 }
