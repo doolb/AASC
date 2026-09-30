@@ -316,6 +316,13 @@ async function stageTextAssets() {
       arPanel.append(basic.html(panel).replaceAll('mindBasic', 'mmdAr'));
     }
     $('#displayArMotionEnabled').closest('label').find('span').text('独立重力旋转（角色锚点）');
+    $('#displayArMotionEnabled').closest('label').after(`
+      <label class="display-mmd-ar-field" for="mmdArGravityCameraEnabled">
+        <span>显示摄像头画面</span>
+        <input id="mmdArGravityCameraEnabled" type="checkbox" disabled>
+      </label>
+      <p id="mmdArGravityCameraMessage" class="mind-basic-note" role="status">启用重力旋转后，可选择显示摄像头画面。</p>
+    `);
     $('#displayArMotionSensitivity').closest('label').replaceWith(`
       <label class="display-mmd-ar-field" for="mmdArGravityDeadZone">
         <span>重力死区 <output id="mmdArGravityDeadZoneValue">0.5°</output></span>
@@ -412,7 +419,7 @@ async function stageTextAssets() {
       path.join(ANDROID_PROJECT, fileName),
       path.join(GENERATED_ASSETS, 'js', fileName),
     ]),
-    ...(WEB_MODE ? ['display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js'].map((fileName) => [
+    ...(WEB_MODE ? ['display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js'].map((fileName) => [
       path.join(ANDROID_PROJECT, fileName), path.join(GENERATED_ASSETS, 'js', fileName),
     ]) : []),
     ...(WEB_MODE ? ['mind-basic-imu.js', 'mind-basic-quality.js'].map((fileName) => [
@@ -512,7 +519,7 @@ async function stageTextAssets() {
 
   const scriptVersion = new Map();
   if (WEB_MODE) {
-    for (const fileName of ['web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
+    for (const fileName of ['web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
     }
   }
@@ -568,7 +575,7 @@ async function stageTextAssets() {
       .mmd-ar-test-label { right: calc(var(--mmd-ar-safe-inset-right) + 82px); }
     }
     .display-mmd-ar-background { z-index: 2; }
-    .mmd-ar-benchmark { display: grid; gap: 8px; margin: 4px 0 12px; padding: 10px; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, 96%), transparent); }
+    .mmd-ar-benchmark { display: grid; gap: 8px; margin: 4px 0 12px; padding: 10px; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, ${WEB_MODE ? 50 : 96}%), transparent); }
     .mmd-ar-benchmark-live { margin: 0; color: #d3d9e8; font-size: 12px; line-height: 1.45; }
     .mmd-ar-benchmark-results { display: grid; gap: 6px; }
     .mmd-ar-benchmark-result { display: grid; gap: 3px; color: #d3d9e8; font-size: 11px; }
@@ -586,6 +593,10 @@ async function stageTextAssets() {
 
     .mmd-ar-official-target-link { display: block; width: fit-content; max-width: 100%; padding: 6px 0; color: #bfcaff; text-decoration: underline; overflow-wrap: anywhere; }
     ${WEB_MODE ? `
+    .display-stage-layers { --display-mmd-panel-opacity: 50%; }
+    #mmdArGravityCameraVideo { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; pointer-events: none; }
+    #mmdArGravityCameraVideo[hidden] { display: none; }
+    .mmd-ar-gravity-hide-camera #mmdArAframeHost video { opacity: 0; }
     .mmd-ar-sim-controls { display: grid; gap: 10px; margin-top: 10px; }
     .mmd-ar-sim-controls[hidden] { display: none; }
     .mmd-ar-sim-view-controls { display: grid; gap: 7px; min-width: 0; }
@@ -610,7 +621,8 @@ async function stageTextAssets() {
   </style>
 </head>
 <body>
-  <div class="mmd-ar-test-label">MMD AR 测试 · 点“定位”拍照校准 · 拖动模型旋转</div>
+  ${WEB_MODE ? '' : '<div class="mmd-ar-test-label">MMD AR 测试 · 点“定位”拍照校准 · 拖动模型旋转</div>'}
+  ${WEB_MODE ? '<video id="mmdArGravityCameraVideo" autoplay muted playsinline hidden aria-label="重力模式摄像头背景"></video>' : ''}
   <div id="mmdArLoadingProgress" class="mmd-ar-loading-progress" role="progressbar" aria-label="${WEB_MODE ? '模型与动作加载进度' : '模型加载进度'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
     <span id="mmdArLoadingText">准备模型 0%</span>
     <div class="mmd-ar-loading-track"><div id="mmdArLoadingFill" class="mmd-ar-loading-fill"></div></div>
@@ -650,6 +662,7 @@ async function stageTextAssets() {
   <script src="/js/display-mmd-ar-benchmark-metrics.js"></script>
   <script src="${scriptUrl('display-mmd-ar-benchmark.js')}"></script>
   ${WEB_MODE ? `<script src="${scriptUrl('display-mmd-ar-sim-camera.js')}"></script>` : ''}
+  ${WEB_MODE ? `<script src="${scriptUrl('display-mmd-ar-gravity-camera.js')}"></script>` : ''}
   ${WEB_MODE ? `<script src="${scriptUrl('mind-basic-imu.js')}"></script>
   <script src="${scriptUrl('mind-basic-quality.js')}"></script>
   <script src="${scriptUrl('display-mmd-ar-imu.js')}"></script>` : ''}
