@@ -1,12 +1,24 @@
 # 自测功能文档
 
+## MMD AR 切换 VMD 先姿态后物理（2026-09-30）
+
+`node --test tests/mmd-ar-motion-switch.test.js` 6/6 通过：严格先零帧/矩阵后物理、物理关闭/无刚体/暂停播放、失败恢复骨骼/网格父级/表情/IK、Ammo失败/异步过期、等待期间停止旧 helper 帧但继续锚点更新，以及真实固定 Three.js vendor 与 Ammo 读取新动作第0帧姿态建立刚体，暂停后时间保持0并可恢复推进。
+
+扩展 `tests/mmd-ar-local-assets.test.js` 3/3 通过，在真实 PMX/VMD 与开启物理/暂停播放条件下，记录 vendor 的无物理 update(0) 后才执行物理初始化，检查 animationWarmup=false / warmup=0；重复选同一VMD与恢复默认动作均保持顺序和暂停，无页面异常。重力6项与原有PMX/helper/物理40项也通过，合计55项。网页已生成，未发布外网；真机布料视觉与帧率待现场验收。
+
+## MMD AR 完整重力方向、死区与缓动（2026-09-30）
+
+`node --test tests/mmd-ar-gravity.test.js` 6/6 通过：不缩放方向、死区抑噪与慢转累计、60/120Hz 一致收敛、归零绕过死区、零参数、降低阈值重新接受原始输入、首次姿态归零、旧灵敏度存储无效、缺 alpha/无效倾斜、坐标重建、迟到权限取消及归零后手动角度保持。
+
+`tests/mmd-ar-local-assets.test.js` 的真实生成网页用例加入控件默认值、参数保存、合成姿态事件、小抖动过滤、30°完整方向与居中归零，并验证本地模型/物理重载保留参数。调试期间启用尚未完成时合成倾斜未被处理；测试明确等待传感器启用完成后连续派发，最终完整回归 3/3 通过。构建与浏览器服务按顺序执行，避免读取正在生成的资源。既有 PMX/helper/物理回归 40/40 通过。网页构建和静态语法检查通过。手机传感器方向、噪声、布料和帧率待现场验收，当前重力修改未发布外网。
+
 ## MMD AR 本地 PMX、贴图与 VMD 选择（2026-09-30）
 
 `npm run build:web:mmd-ar-test` 成功。`node --test tests/mmd-ar-local-assets.test.js` 3/3 通过：目录/Windows 分隔符/大小写/平铺唯一匹配，重复与歧义拒绝、缺失贴图预检、对象 URL 释放后不可读取及旧映射不可复用；真实 Chromium 深层目录网页的 PMX＋贴图 file input、VMD 加载和暂停、损坏 VMD/缺贴图 PMX 保留旧内容、物理重载、恢复默认动作与模型均通过，未产生虚拟本地路径 HTTP 请求或页面异常。
 
 `node --test tests/mmd-pmx-helper.test.js tests/mmd-pmx-physics-rotation.test.js tests/display-mmd-runtime.test.js` 40/40 通过。源/生成脚本静态语法和定向差异空白检查通过。手机需现场检查目录/多选与取消、同一文件重选、多 PMX 下拉、不同 PMX 的材质/VMD 兼容性、灯光/阴影、重力旋转、图片定位和帧率；本次自动检查不证明真机视觉/性能。独立网页已生成，未发布外网。
 
-## MMD AR 独立重力旋转（2026-09-30，待验证）
+## MMD AR 独立重力旋转（2026-09-30，初版验证记录，最新结果见上文）
 
 `npm run build:web:mmd-ar-test` 成功。构建为独立网页控制器/显示 API/PMX runtime 注入重力模式，原正式源文件保持；生成页面分类和控件为“重力旋转”。重力目标与手动角度独立保存，PMX 实际相机更新在组合角色旋转之前，原相机第二层缓动仍保留。
 

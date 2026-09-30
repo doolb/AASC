@@ -315,16 +315,23 @@ async function stageTextAssets() {
       arPanel.append(basic.html(panel).replaceAll('mindBasic', 'mmdAr'));
     }
     $('#displayArMotionEnabled').closest('label').find('span').text('独立重力旋转（角色锚点）');
-    $('#displayArMotionSensitivity').closest('label').find('span').html(
-      '重力灵敏度 <output id="displayArMotionSensitivityValue">1.00</output>'
-    );
+    $('#displayArMotionSensitivity').closest('label').replaceWith(`
+      <label class="display-mmd-ar-field" for="mmdArGravityDeadZone">
+        <span>重力死区 <output id="mmdArGravityDeadZoneValue">0.5°</output></span>
+        <input id="mmdArGravityDeadZone" type="range" min="0" max="3" step="0.1" value="0.5">
+      </label>
+      <label class="display-mmd-ar-field" for="mmdArGravitySmoothing">
+        <span>重力缓动 <output id="mmdArGravitySmoothingValue">120 ms</output></span>
+        <input id="mmdArGravitySmoothing" type="range" min="0" max="500" step="10" value="120">
+      </label>
+    `);
     $('#displayArMotionRecenter').text('重力居中');
     $('#displayArMotionMessage').text('重力旋转关闭，手动旋转保留');
     WEB_PANEL_GROUPS.groupWebPanels($);
     WEB_PANEL_GROUPS.addLocalAssetPanel($);
     arPanel.find('[data-group-title="重力旋转"]').closest('.mmd-ar-panel-group')
       .find('.mmd-ar-panel-group-body').append(
-        '<p class="mind-basic-note">按重力倾斜旋转角色锚点，与手动旋转叠加；首次姿态为中性姿态。居中或关闭只重置重力层。</p>'
+        '<p class="mind-basic-note">首次姿态为零点，按完整重力方向旋转锚点，与手动角度叠加。死区忽略微小变化，缓动控制跟随速度；参数为 0 时关闭对应过滤。居中或关闭只重置重力层。</p>'
       );
     $('#displayArTargetPanelGroup1').append(`
       <label class="display-mmd-ar-field" for="mmdArInputMode">
@@ -426,6 +433,12 @@ async function stageTextAssets() {
     }
     const localAssetsVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/web-local-assets.mjs'))).sha256.slice(0, 12);
     const localAssetsUrl = `./web-local-assets.mjs?v=${localAssetsVersion}`;
+    const gravityPath = path.join(GENERATED_ASSETS, 'js/web-gravity-filter.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-gravity-filter.mjs'), gravityPath);
+    const gravityUrl = `./web-gravity-filter.mjs?v=${(await hashFile(gravityPath)).sha256.slice(0, 12)}`;
+    const motionSwitchPath = path.join(GENERATED_ASSETS, 'js/web-motion-switch.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-motion-switch.mjs'), motionSwitchPath);
+    const motionSwitchUrl = `./web-motion-switch.mjs?v=${(await hashFile(motionSwitchPath)).sha256.slice(0, 12)}`;
     const localUiPath = path.join(GENERATED_ASSETS, 'js/web-local-assets-ui.mjs');
     await fs.writeFile(localUiPath, (await fs.readFile(localUiPath, 'utf8')).replace('./web-local-assets.mjs', localAssetsUrl));
     // 测试网页单独验证手机深度采样精度；三个阶段必须一致，避免模糊和合成再次丢失精度。
@@ -467,7 +480,7 @@ async function stageTextAssets() {
     const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
-    await fs.writeFile(pmxRuntimePath, WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe), localAssetsUrl).replace(lightingModeImport,
+    await fs.writeFile(pmxRuntimePath, WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。

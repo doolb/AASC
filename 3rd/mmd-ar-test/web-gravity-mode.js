@@ -14,19 +14,21 @@ function replaceFunction(source, name, nextName, replacement) {
   return source.slice(0, start) + replacement + '\n\n' + source.slice(end);
 }
 
-function addGravityRuntime(source) {
+function addGravityRuntime(source, moduleUrl = './web-gravity-filter.mjs') {
   let output = replaceOnce(source, '    const rotationState = {', `    // 手动角度和相机坐标中的重力倾斜分别保存，最终只合成角色锚点四元数。
     const manualRotation = { yaw: 0, pitch: 0 };
-    const gravityRotation = {
-        target: new THREE.Quaternion(), current: new THREE.Quaternion()
-    };
-    const setModelGravityRotation = (value) => {
-        if (!Array.isArray(value) || value.length !== 4 || !value.every(Number.isFinite)
-            || Math.hypot(...value) < 1e-9) return false;
-        gravityRotation.target.fromArray(value).normalize();
+    const gravityFilter = createGravityFilter(THREE);
+    const setModelGravityRotation = (value, force = false) => {
+        if (!gravityFilter.setTarget(value, force)) return false;
         rotationState.fitShadowWhenSettled = true;
         startRendering();
         return true;
+    };
+    const setModelGravitySettings = (value) => {
+        const settings = gravityFilter.setSettings(value);
+        rotationState.fitShadowWhenSettled = true;
+        startRendering();
+        return settings;
     };
     const rotationState = {`);
   output = replaceOnce(output,
@@ -43,18 +45,17 @@ function addGravityRuntime(source) {
         const previous = currentRotationPivot.quaternion.clone();
         const yawDistance = rotationState.targetYaw - manualRotation.yaw;
         const pitchDistance = rotationState.targetPitch - manualRotation.pitch;
-        const gravityDistance = gravityRotation.current.angleTo(gravityRotation.target);
-        const settled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
-            && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON
-            && gravityDistance < ROTATION_SETTLE_EPSILON;
-        const easing = settled ? 1 : 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
+        const manualSettled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
+            && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON;
+        const easing = manualSettled ? 1 : 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
         manualRotation.yaw += yawDistance * easing;
         manualRotation.pitch += pitchDistance * easing;
-        gravityRotation.current.slerp(gravityRotation.target, easing);
+        const gravityQuaternion = gravityFilter.update(delta);
+        const settled = manualSettled && gravityFilter.isSettled();
         const manual = new THREE.Quaternion().setFromEuler(
             new THREE.Euler(manualRotation.pitch, manualRotation.yaw, 0, 'XYZ'));
         // 相机方向已经在本帧更新，倾斜先转到世界坐标，再左乘手动角度。
-        const worldGravity = camera.quaternion.clone().multiply(gravityRotation.current)
+        const worldGravity = camera.quaternion.clone().multiply(gravityQuaternion)
             .multiply(camera.quaternion.clone().invert());
         currentRotationPivot.quaternion.copy(worldGravity.multiply(manual)).normalize();
         const moved = previous.angleTo(currentRotationPivot.quaternion);
@@ -78,23 +79,40 @@ function addGravityRuntime(source) {
   const cameraUpdate = output.slice(cameraStart, cameraEnd);
   output = output.slice(0, cameraStart) + output.slice(cameraEnd);
   output = replaceOnce(output, '        const frameHelper = helper.current;', cameraUpdate + '        const frameHelper = helper.current;');
-  return replaceOnce(output, '        rotateModelBy,', '        rotateModelBy,\n        setModelGravityRotation,');
+  output = replaceOnce(output, '        rotateModelBy,', `        rotateModelBy,
+        setModelGravityRotation,
+        setModelGravitySettings,
+        getModelGravityState: () => gravityFilter.getState(),`);
+  return `import { createGravityFilter } from '${moduleUrl}';\n${output}`;
 }
 
 function addGravityDisplay(source) {
   let output = replaceOnce(source, '    function setCameraViewRotation(yaw, pitch) {', `    let modelGravityRotation = [0, 0, 0, 1];
-    function setModelGravityRotation(value) {
+    let modelGravityForce = false;
+    let modelGravitySettings = { deadZoneDegrees: 0.5, smoothingMs: 120 };
+    function setModelGravityRotation(value, force = false) {
         if (!Array.isArray(value) || value.length !== 4 || !value.every(Number.isFinite)
             || Math.hypot(...value) < 1e-9) return false;
         modelGravityRotation = value.slice();
-        state.runtime?.setModelGravityRotation?.(modelGravityRotation);
+        modelGravityForce = force === true;
+        state.runtime?.setModelGravityRotation?.(modelGravityRotation, modelGravityForce);
         return true;
+    }
+
+    function setModelGravitySettings(value) {
+        modelGravitySettings = { ...modelGravitySettings, ...value };
+        state.runtime?.setModelGravitySettings?.(modelGravitySettings);
     }
 
     function setCameraViewRotation(yaw, pitch) {`);
   output = replaceOnce(output, '                state.runtime.setVisible(state.visible);',
-    '                state.runtime.setVisible(state.visible);\n                state.runtime.setModelGravityRotation?.(modelGravityRotation);');
-  return replaceOnce(output, '        setCameraViewRotation,', '        setCameraViewRotation,\n        setModelGravityRotation,');
+    `                state.runtime.setVisible(state.visible);
+                state.runtime.setModelGravitySettings?.(modelGravitySettings);
+                state.runtime.setModelGravityRotation?.(modelGravityRotation, modelGravityForce);`);
+  return replaceOnce(output, '        setCameraViewRotation,', `        setCameraViewRotation,
+        setModelGravityRotation,
+        setModelGravitySettings,
+        getModelGravityState: () => state.runtime?.getModelGravityState?.() ?? null,`);
 }
 
 function addGravityControls(source) {
@@ -123,7 +141,7 @@ function addGravityControls(source) {
             axis.crossVectors(from, Math.abs(from.x) < 0.8
                 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1));
         }
-        const tilt = Math.min(Math.PI, Math.acos(dot) * state.motionSensitivity);
+        const tilt = Math.acos(dot);
         const rotation = new THREE.Quaternion().setFromAxisAngle(axis.normalize(), tilt);
         root.DisplayMmd?.setModelGravityRotation?.(rotation.toArray());
     }
@@ -131,16 +149,16 @@ function addGravityControls(source) {
     function handleGravityCoordinatesChanged() {
         state.motionCenter = null;
         state.motionLastSample = null;
-        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1]);
+        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1], true);
         setMotionMessage('等待新的重力方向建立中性姿态，手动旋转保留');
         updateControls();
     }`);
   output = replaceOnce(output, '        if (!state.motionEnabled) return;',
     "        if (!state.motionEnabled || document.visibilityState === 'hidden') return;");
   output = replaceOnce(output, '        root.DisplayMmd?.setCameraViewRotation?.(0, 0);',
-    '        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1]);');
+    '        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1], true);');
   output = replaceOnce(output, '        root.DisplayMmd?.resetCameraViewRotation?.();',
-    '        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1]);');
+    '        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1], true);');
   output = replaceOnce(output, '        state.motionListening = false;\n        state.motionEnabled = false;',
     `        state.motionRequest += 1;
         state.motionPending = false;
@@ -179,6 +197,18 @@ function addGravityControls(source) {
             if (request === state.motionRequest) { state.motionPending = false; updateControls(); }
         }
     }`);
+  // 网页已经移除灵敏度 DOM，必须同时移除原模块的读写与事件，避免空节点中断初始化。
+  output = replaceOnce(output, "    const MOTION_SENSITIVITY_KEY = 'aasc.display.mmdAr.motionSensitivity.v1';", '');
+  output = replaceOnce(output, '        motionSensitivity: readMotionSensitivity()', '');
+  output = replaceOnce(output, "            motionSensitivity: byId('displayArMotionSensitivity'),", '');
+  output = replaceOnce(output, "            motionSensitivityValue: byId('displayArMotionSensitivityValue'),", '');
+  output = replaceFunction(output, 'readMotionSensitivity', 'saveActiveTargetId', '');
+  output = replaceFunction(output, 'updateMotionSensitivity', 'getSelectedTarget', '');
+  output = replaceOnce(output, `        state.elements.motionSensitivity.value = String(state.motionSensitivity);
+        state.elements.motionSensitivityValue.textContent = state.motionSensitivity.toFixed(2);`, '');
+  output = replaceOnce(output, `        elements.motionSensitivity.addEventListener('input', () => {
+            updateMotionSensitivity(elements.motionSensitivity.value);
+        });`, '');
   return output.replaceAll('当前设备未提供完整六轴姿态数据', '当前设备未提供有效重力倾斜数据')
     .replaceAll('体感观察已启用，当前姿态为中心', '重力旋转已启用，当前姿态为中性姿态；可叠加手动旋转')
     .replaceAll('已重新居中', '重力方向已居中，手动旋转保留')

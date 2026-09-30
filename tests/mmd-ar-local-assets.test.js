@@ -95,8 +95,49 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         page.on('pageerror', (error) => errors.push(error.message));
         await page.evaluateOnNewDocument(() => localStorage.setItem('aasc.mmdArTest.physicsEnabled.v1', 'false'));
         await page.goto(`http://127.0.0.1:${server.address().port}/deep/mmd-ar/`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => window.DisplayMmd?.setLighting);
         await page.evaluate(() => window.DisplayMmd.setLighting({ pmxAoEnabled: false, keyShadowEnabled: false }));
         await page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 90000 });
+        // 在真实生成页面上验证新控件、原控制器事件及 runtime 使用同一组独立设置。
+        assert.equal(await page.$('#displayArMotionSensitivity'), null);
+        assert.equal(await page.$eval('#mmdArGravityDeadZone', (input) => input.value), '0.5');
+        assert.equal(await page.$eval('#mmdArGravitySmoothing', (input) => input.value), '120');
+        await page.evaluate(() => window.DisplayMmdAr.initialize());
+        await page.evaluate(() => {
+            const change = (id, value) => {
+                const input = document.getElementById(id);
+                input.value = value;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            };
+            change('mmdArGravityDeadZone', '0.8');
+            change('mmdArGravitySmoothing', '0');
+            const toggle = document.getElementById('displayArMotionEnabled');
+            toggle.checked = true;
+            toggle.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await page.waitForFunction(() => document.getElementById('displayArMotionMessage').textContent.includes('等待重力方向'), { timeout: 10000 });
+        const gravity = await page.evaluate(() => {
+            const toggle = document.getElementById('displayArMotionEnabled');
+            // 等待启用完成后连续派发，覆盖真实事件绑定且避免原生屏幕事件插入样本序列。
+            const orient = (beta) => window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta, gamma: 0 }));
+            orient(30);
+            const initial = window.DisplayMmd.getModelGravityState();
+            orient(30.4);
+            const small = window.DisplayMmd.getModelGravityState();
+            orient(60);
+            const tilted = window.DisplayMmd.getModelGravityState();
+            document.getElementById('displayArMotionRecenter').click();
+            const centered = window.DisplayMmd.getModelGravityState();
+            toggle.checked = false;
+            toggle.dispatchEvent(new Event('change', { bubbles: true }));
+            return { initial, small, tilted, centered,
+                saved: JSON.parse(localStorage.getItem('aasc.mmdArTest.gravityFilter.v1')) };
+        });
+        assert.deepEqual(gravity.initial.target, [0, 0, 0, 1]);
+        assert.deepEqual(gravity.small.target, [0, 0, 0, 1]);
+        assert.ok(Math.abs(2 * Math.acos(gravity.tilted.target[3]) * 180 / Math.PI - 30) < 1e-6, JSON.stringify(gravity));
+        assert.deepEqual(gravity.centered.target, [0, 0, 0, 1]);
+        assert.deepEqual(gravity.saved, { deadZoneDegrees: 0.8, smoothingMs: 0 });
         await page.click('#mmdArMotionToggle');
         assert.deepEqual(errors, []);
         assert.equal(await page.$eval('#mmdArMotionPanel', (element) => element.hidden), false);
@@ -137,17 +178,52 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.match(await page.$eval('#mmdArLocalMessage', (element) => element.textContent), /缺少贴图/u);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getState().modelReady), true);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), currentUrl);
+        assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl.includes('__local__')), true);
         await page.evaluate(async () => {
             if (!await window.DisplayMmd.setPhysicsEnabled(false)) throw new Error('物理重载失败');
             if (!await window.DisplayMmd.setPhysicsEnabled(true)) throw new Error('物理重载失败');
         });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), currentUrl);
+        assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.ok(await page.evaluate(() => window.DisplayMmd.getMotionProgress().durationSeconds > 0));
+        // 记录真实 vendor 的零帧与物理初始化，在暂停播放且物理开启时重新选同一 VMD。
+        await page.evaluate(async () => {
+            const { MMDAnimationHelper } = await import('./js/vendor/three/animation/MMDAnimationHelper.js');
+            const update = MMDAnimationHelper.prototype.update;
+            const setup = MMDAnimationHelper.prototype._setupMeshPhysics;
+            window.motionSwitchTrace = [];
+            MMDAnimationHelper.prototype.update = function (delta) {
+                const data = this.objects.get(this.meshes[0]);
+                if (delta === 0 && data?.mixer && !data.physics) {
+                    window.motionSwitchTrace.push({ phase: 'pose', physics: this.enabled.physics,
+                        animation: this.enabled.animation });
+                }
+                return update.call(this, delta);
+            };
+            MMDAnimationHelper.prototype._setupMeshPhysics = function (mesh, options) {
+                const data = this.objects.get(mesh);
+                window.motionSwitchTrace.push({ phase: 'physics', time: data?.mixer?._actions?.[0]?.time,
+                    animationWarmup: options.animationWarmup, warmup: options.warmup });
+                return setup.call(this, mesh, options);
+            };
+        });
+        await upload('#mmdArLocalVmd', [vmdPath]);
+        assert.equal(await page.$eval('#mmdArLocalMessage', (element) => element.dataset.error), 'false');
+        assert.deepEqual(await page.evaluate(() => window.motionSwitchTrace), [
+            { phase: 'pose', physics: false, animation: true },
+            { phase: 'physics', time: 0, animationWarmup: false, warmup: 0 }
+        ]);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getMotionProgress().timeSeconds), 0);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
+        await page.evaluate(() => { window.motionSwitchTrace.length = 0; });
         await page.click('#mmdArLocalDefaultMotion');
         await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), currentUrl);
+        assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl.includes('__local__')), false);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getMotionProgress().timeSeconds), 0);
+        assert.deepEqual(await page.evaluate(() => window.motionSwitchTrace.map((item) => item.phase)), ['pose', 'physics']);
         await page.click('#mmdArLocalDefaultModel');
         await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl.includes('__local__')), false);

@@ -2,6 +2,55 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 重力方向 1:1 与锚点死区/缓动（2026-09-30，已实现）
+
+```text
+已有声明:
+  gravityDirection、setModelGravityRotation、手动旋转层、重力开关、屏幕坐标转换
+新增定义:
+  GravityFilter { referenceSample, lastSample, rawQuaternion, acceptedTarget, currentQuaternion }
+  GravitySettings { deadZoneDegrees: 0.5, smoothingMs: 120 }
+操作流程（仅 WEB_MODE）:
+  移除灵敏度控件和对应 DOM/事件/存储；保留重力开关、重力居中及首次姿态归零
+  重力分类增加独立死区与缓动控件 -> 规范化参数 -> 当前浏览器保存 -> runtime 重力层
+  启用 -> 首个有效 beta/gamma 记录参考 -> 下一样本使用完整方向求相对参考的旋转
+  beta/gamma -> 屏幕坐标重力上方向 -> 参考到当前方向的最短弧四元数 rawQuaternion
+  对跖方向使用固定旋转轴；忽略 alpha；不乘角度系数
+  angleBetween(rawQuaternion, acceptedTarget) 小于死区 -> 保持 acceptedTarget
+  达到或超过死区 -> acceptedTarget 使用完整 rawQuaternion，不扣除死区角度
+  原始样本始终更新；相对接受目标比较，缓慢移动可累积越过阈值
+  渲染帧 -> 按 delta 与 smoothingMs 计算球面缓动 -> currentQuaternion 收敛至 acceptedTarget
+  smoothingMs 为 0 -> 立即采用目标；死区为 0 -> 每个有效样本均接受
+  实际相机先更新 -> 重力层转换到世界坐标 -> 叠加独立手动层 -> 物理角速度保护
+  横竖屏/后台 -> 重建中性参考；权限迟到不得重新开启；模型重载保留设置和最新目标
+  居中 -> 参考采用最新样本 -> 强制重力目标归零，绕过死区，手动状态保持
+  关闭 -> 强制重力目标归零，绕过死区，移除监听；手动状态保持
+  测试 -> 首样本归零、居中、1:1角度、死区抑噪/累计、缓动收敛与帧率一致、参数为0
+```
+
+### 手动 VMD 切换暂停物理后应用动作（2026-09-30，已实现）
+
+```text
+已有声明:
+  loadSelectedMotion、createMotionHelper、physicsEnabled、helper.current、PMX 骨骼和物理
+新增定义:
+  MotionSwitch { oldHelper, newClip, modelSequence, motionSequence, playbackEnabled, physicsEnabled }
+操作流程（仅独立网页）:
+  选择 VMD -> 解析 clip 成功 -> 核对当前模型/动作序号
+  切换中的当前网格不推进 helper 帧，角色锚点仍更新；旧 helper 物理暂停
+  保存骨骼/网格变换、表情与 IK 开关 -> 等待 Ammo 可用并检查序号
+  重置绑定姿态/表情 -> 新 helper 仅骨骼动画 -> 无物理应用第0帧 -> 刷新角色/骨骼世界矩阵
+  根据原 physicsEnabled 与 PMX 刚体声明，在同一新 helper 上初始化新物理
+  使用固定 vendor 的 _setupMeshPhysics；warmup 为0，禁止再次应用初始动作
+  由新姿态建立刚体 -> 保留原播放开关 -> 提交新 helper/profile，清除首载延迟标记
+  原来关闭物理 -> 新 helper 继续无物理；原来暂停播放 -> 应用初始姿态后保持暂停
+  失败或序号过期 -> 清理暂存动作 -> 网格仍有效且旧 helper 未被替换时恢复骨骼/网格/表情/IK -> 恢复旧 helper 状态 -> 不改变旧 profile
+  下一实际帧 -> 依现有物理角速度保护推进 -> 动作从起始姿态播放
+  实现模块 -> web-motion-switch.mjs；runtime 注入 -> web-local-assets-inject.js
+  验证 -> 定向6项通过、真实网页文件选择/恢复默认动作顺序通过
+```
+
+
 ### 本地 PMX / 贴图 / VMD 选择（2026-09-30，独立网页已实现）
 
 ```text
@@ -42,16 +91,16 @@
 
 ```text
 仅 WEB_MODE:
-  将独立体感环绕改为独立重力旋转，保留启用/灵敏度/重新居中控件
+  将独立体感环绕改为独立重力旋转，保留启用/重力死区/重力缓动/重新居中控件
   DeviceOrientation 只读取有限 beta/gamma，忽略 alpha/absolute/磁航向
   upDevice = [-sin(gamma)*cos(beta), sin(beta), cos(gamma)*cos(beta)]
   首个样本记录为中性重力；居中更新参考，不改手动角度
   按当前屏幕角度将参考/当前向量转到屏幕坐标，取两向量的最短弧旋转
-  灵敏度缩放该倾斜角，最大限制为 pi；固定对跖方向轴避免反转抖动
+  完整倾斜角不缩放；固定对跖方向轴避免反转抖动；接受目标按独立死区过滤
   新增网页专用 PMX 旋转入口，保存相机坐标的目标重力四元数
   每帧在实际相机更新后:
     manualYaw/manualPitch 仍使用原拖动目标角和缓动；不从最终组合 Euler 读回手动状态
-    gravityQuaternion 独立缓动；世界重力层 = cameraQ * gravityQuaternion * inverse(cameraQ)
+    gravityQuaternion 按独立 smoothingMs 球面缓动；世界重力层 = cameraQ * gravityQuaternion * inverse(cameraQ)
     finalAnchorQ = worldGravityQ * manualQuaternion
     先更新锚点/骨骼世界矩阵，再推进物理/动作；合成角速度仍进入原旋转物理保护
   关闭体感/重新居中将重力目标归单位四元数，手动目标保持

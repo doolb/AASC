@@ -17,7 +17,7 @@ const TRACKING_GROUPS = Object.freeze([
   ['MindAR 抖动过滤', ['mmdArFilterMinCF', 'mmdArFilterBeta', 'mmdArFilterApplyHint']],
   ['IMU 相机预测', ['mmdArImuPanel']],
   ['MindAR 可信度（估算）', ['mmdArQualityPanel']],
-  ['重力旋转', ['displayArMotionSensitivity', 'displayArMotionRecenter', 'displayArMotionMessage'], 'displayArMotionEnabled'],
+  ['重力旋转', ['mmdArGravityDeadZone', 'mmdArGravitySmoothing', 'displayArMotionRecenter', 'displayArMotionMessage'], 'displayArMotionEnabled'],
   ['相机跟随', ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone', 'mmdArSmoothingMs', 'mmdArCameraDistance']],
 ]);
 
@@ -61,6 +61,37 @@ const WEB_PANEL_GROUP_CSS = `
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    (() => {
+      const key = 'aasc.mmdArTest.gravityFilter.v1';
+      const defaults = { deadZoneDegrees: 0.5, smoothingMs: 120 };
+      let stored = {};
+      try { stored = JSON.parse(localStorage.getItem(key) || '{}') || {}; }
+      catch (error) { /* 存储损坏时只恢复本分类默认值。 */ }
+      const settings = { ...defaults };
+      const fields = [
+        ['mmdArGravityDeadZone', 'deadZoneDegrees', 3, '°'],
+        ['mmdArGravitySmoothing', 'smoothingMs', 500, ' ms']
+      ];
+      const apply = () => window.DisplayMmd?.setModelGravitySettings?.(settings);
+      for (const [id, field, max, unit] of fields) {
+        const input = document.getElementById(id);
+        const output = document.getElementById(id + 'Value');
+        if (!input || !output) continue;
+        const storedValue = stored[field];
+        settings[field] = typeof storedValue === 'number' && Number.isFinite(storedValue)
+          ? Math.max(0, Math.min(max, storedValue)) : defaults[field];
+        input.value = String(settings[field]);
+        output.textContent = settings[field] + unit;
+        input.addEventListener('input', () => {
+          settings[field] = Math.max(0, Math.min(max, Number(input.value) || 0));
+          output.textContent = settings[field] + unit;
+          apply();
+          try { localStorage.setItem(key, JSON.stringify(settings)); }
+          catch (error) { /* 保存失败不影响当前页面的重力过滤。 */ }
+        });
+      }
+      apply();
+    })();
     (() => {
       const stage = document.getElementById('displayStageLayers');
       const inputs = Array.from(document.querySelectorAll('.display-mmd-panel-opacity-range'));
