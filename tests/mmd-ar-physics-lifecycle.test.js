@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
+const { addPhysicsSubsteps } = require('../3rd/mmd-ar-test/web-physics-substeps');
 const { addPhysicsLifecycle, addAnimationLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
 const vendor = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/vendor/three');
 let fixturePromise;
@@ -18,7 +19,7 @@ async function fixture() {
         const encode = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
         const source = (name) => fs.readFileSync(path.join(vendor, 'animation', name), 'utf8')
             .replace("from 'three'", `from '${threeUrl}'`);
-        const physicsSource = addPhysicsLifecycle(source('MMDPhysics.js'));
+        const physicsSource = addPhysicsSubsteps(addPhysicsLifecycle(source('MMDPhysics.js')));
         const physicsUrl = encode(physicsSource);
         const helperSource = addAnimationLifecycle(source('MMDAnimationHelper.js'), physicsUrl)
             .replace('../animation/CCDIKSolver.js', encode(source('CCDIKSolver.js')));

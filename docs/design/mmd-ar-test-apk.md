@@ -1,6 +1,32 @@
 # MMD AR 独立测试 APK / HTTPS 网页设计
 
-## 2026-09-30 布料物理频率上限480Hz（已实现）
+## 2026-09-30 Ammo求解方式与XPBD可行性（技术评估）
+
+用户询问Ammo使用的物理方法及能否采用XPBD。实际固定MMDPhysics._createWorld创建btSequentialImpulseConstraintSolver与btDiscreteDynamicsWorld，约束为btGeneric6DofSpringConstraint。现有裙摆/头发效果由PMX刚体、6自由度弹簧关节与骨骼回写产生，未运行网格顶点布料求解。Bullet官方将该求解器描述为PGS（投影高斯-赛德尔）迭代方法；当前流程以速度/冲量处理碰撞和关节，再推进刚体姿态。
+
+XPBD先预测位置，再用带compliance的约束修正位置/旋转并更新速度，原论文通过步长缩放compliance和累计约束乘子处理PBD刚度依赖步长/迭代数的问题；有限求解精度、碰撞与外部锚点驱动仍影响表现。其广义坐标可包含刚体姿态，所以PMX可采用XPBD刚体/关节后端；不能直接把现有骨骼物理换成只有粒子距离约束的布料演示，须保持质量/惯量、旋转限制、弹簧/阻尼、球/盒/胶囊碰撞、碰撞组和骨骼偏移回写语义。
+
+工程建议是新增可对照的XPBD实验后端，沿用PMX刚体/关节数据及VMD渲染，保留Ammo作为已知行为基线；或自定义扩展/重编译物理引擎。当前Ammo调用流程没有XPBD后端切换实现。采用何种后端都需要每个固定子步更新插值的运动学锚点，不保证替换求解器即可消除目前抖动。若采用Ammo碰撞检测与XPBD求解混合，需另行设计反馈与接触同步，不能让两个后端同时推进同一动态刚体。
+
+用户已选择先继续Ammo；XPBD保持可行性评估，未实施后端替换。若决定实验，需要独立任务明确支持的PMX关节/形状、compliance映射和标定、接触/摩擦、暂停/速度归零/循环/销毁接口及手机性能验收。参考：Bullet官方求解器头文件 <https://github.com/bulletphysics/bullet3/blob/master/src/BulletDynamics/ConstraintSolver/btSequentialImpulseConstraintSolver.h>、XPBD原论文 <https://mmacklin.com/xpbd.pdf>、XPBD刚体论文 <https://matthias-research.github.io/pages/publications/PBDBodies.pdf>。
+
+## 2026-09-30 布料物理频率上限180Hz与Ammo子步锚点（已实现）
+
+用户将独立mmd-ar网页物理上限由480Hz调整为180Hz。沿用已确认的网页范围、下限30Hz、默认65Hz和5Hz步长；已同步滑条以及DisplayMmd/runtime/helper限幅与共享步进参数。已保存的超过180Hz选值在恢复时钳制到180Hz。仍使用现有高频子步预算：不超过90Hz为3，大于90Hz为ceil(FPS×0.1)+1，180Hz预算19；实时调节与模型/动作物理初始化一致。
+
+已修改 `3rd/mmd-ar-test/build.js`、`web-physics-rate.js`、`web-physics-rate.mjs`，更新 `tests/mmd-ar-physics-rate.test.js` 和 `tests/mmd-ar-local-assets.test.js`；共享参数入口已有，`web-motion-switch.mjs`与本地资源注入模块无需修改。同步当前使用说明、自测和伪代码，480Hz实现/验证保留历史记录。网页构建仍用现有npm脚本、导入指纹自动更新。验证180Hz实际Ammo在60/30/10FPS下的一秒模拟、旧480设置恢复为180、实时65Hz不重建及模型/动作切换19子步和内存释放。
+
+用户补充观察：提高Hz时布料反而抖动。只读核对发现当前每个渲染帧只更新一次运动学锚点，再在Bullet内部执行多个子步，子步间没有重新采样动作/锚点。固定PMX适配使用旧式btGeneric6DofSpringConstraint，其目标速度计算包含物理步频、弹簧参数及求解迭代数（Bullet官方源码：<https://github.com/bulletphysics/bullet3/blob/master/src/BulletDynamics/ConstraintSolver/btGeneric6DofSpringConstraint.cpp>）。锚点离散更新、弹簧/碰撞响应及高频CPU负担均是待验证原因，尚无受控复现，不能认定单一根因。此前自测验证时间推进、切换和资源释放，没有验收高频布料视觉稳定性。180Hz上限调整不等同已修复抖动，本次按用户后续确认加入锚点子步插值，弹簧参数保持。
+
+用户继续询问子步锚点插值，已由用户“先用ammo，处理子步锚点”确认实施：每帧保存前后两份运动学刚体目标世界姿态，在每个固定物理子步前按实际采样时间线做位置线性插值及四元数球面插值，只驱动type=0且有骨骼的锚点；type=1/2动态刚体继续由Bullet推进。60FPS与180Hz整除时，一帧约3步，从0到9度的锚点旋转依次3/6/9度；非整除时按时间戳计算比例，跨帧保留不足一步的时间，不能每帧强制至少走一步或用子步序号机械等分。
+
+实际固定Ammo虽有setInternalTickCallback绑定，但未导出addFunction/removeFunction和saveKinematicState，因此由JS管理固定步长与累计时间，每步设置运动学MotionState目标后调用world.stepSimulation(h,0)，使Bullet每次调用都计算运动学速度，再进行单步求解；避免JS循环外再让Bullet重复内部拆步。全部子步后回写动态骨骼并绘制，保持帧末VMD/IK/锚点采样和物理回写顺序，不能在每个子步重新运行整套helper造成动作时间叠加或骨骼反馈。首载/换模型/换动作/复位/后台恢复同步插值历史；正常子步不清零动态速度。复用现有Ammo资源池，销毁时释放历史引用。
+
+新增 `web-physics-substeps.js` 网页子步插值构建适配，修改build.js的WEB_MODE物理副本接入，新增真实刚体/约束插值自测并回归模型动作切换/帧门控/native回收；与180Hz频率修改一并实施。已验证锚点子步轨迹、运动学线/角速度、60/90/120/144FPS与180Hz模拟时钟、无子步帧、暂停/切换/复位和资源复用；手机CPU开销待验收，不承诺仅插值可消除所有弹簧/碰撞抖动。实际帧间隔超过0.1秒、显示恢复和频率变化时同步插值基线；异常时归还临时值。
+
+仅修改独立网页，保留此前绑定姿态初始化、速度清零与下一帧动作、重力/循环和native清理行为。完成后仅推送 `origion`，外网发布与手机验收另行处理。按AGENTS.md先更新伪代码，再实施与验证。定向74项与本地资源3项共77项通过；真实64轮锚点/弹簧及128轮生命周期native分配清空，大块内存复用。实际网页约563秒完成24次VMD/4次PMX切换，创建32/释放31/存活1，堆64MiB，探针跨度391064字节，无OOM/页面异常；旧480保存值恢复180、首两帧门控与实时降65不重建通过。网页构建、10个源/生成脚本和4个内联脚本语法及11个导入关系内容指纹通过。只有独立WEB_MODE受影响，Offline发布状态不需改变，本轮未发布网页或构建APK。
+
+## 2026-09-30 布料物理频率上限480Hz（历史实现，现由180Hz取代）
 
 用户要求开放独立mmd-ar网页的布料物理频率上限至480Hz。已将“动作 → 物理 → PMX物理频率”范围从30–90Hz扩展为30–480Hz，保留默认65Hz、5Hz步长和当前浏览器保存/恢复机制。该设置是PMX刚体与布料的目标物理步进频率，画面刷新仍由浏览器渲染帧率决定。
 

@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
+const { addPhysicsSubsteps } = require('../3rd/mmd-ar-test/web-physics-substeps');
 const loadSwitch = () => import('../3rd/mmd-ar-test/web-motion-switch.mjs');
 
 async function fixture() {
@@ -239,7 +240,7 @@ test('真实 VMD/Ammo 从绑定姿态创建刚体，首渲染帧仅物理、下�
         .replace("from 'three'", `from '${threeUrl}'`);
     const ikUrl = encode(source('CCDIKSolver.js'));
     const { addPhysicsLifecycle, addAnimationLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
-    const physicsUrl = encode(addPhysicsLifecycle(source('MMDPhysics.js')));
+    const physicsUrl = encode(addPhysicsSubsteps(addPhysicsLifecycle(source('MMDPhysics.js'))));
     const helperSource = addAnimationLifecycle(source('MMDAnimationHelper.js'), physicsUrl)
         .replace('../animation/CCDIKSolver.js', ikUrl);
     const { MMDAnimationHelper } = await import(encode(helperSource));

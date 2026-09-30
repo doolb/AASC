@@ -3,6 +3,6 @@
 export function getWebPhysicsStepOptions(value) {
     const number = Number(value);
     const fps = Number.isFinite(number)
-        ? Math.round(Math.min(480, Math.max(30, number)) / 5) * 5 : 65;
+        ? Math.round(Math.min(180, Math.max(30, number)) / 5) * 5 : 65;
     return { unitStep: 1 / fps, maxStepNum: fps <= 90 ? 3 : Math.ceil(fps * 0.1) + 1 };
 }

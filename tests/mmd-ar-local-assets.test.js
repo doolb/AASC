@@ -106,7 +106,7 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.equal(await page.$('#displayArMotionSensitivity'), null);
         assert.deepEqual(await page.$eval('#displayMmdPhysicsFps', (input) => ({
             min: input.min, max: input.max, step: input.step, value: input.value
-        })), { min: '30', max: '480', step: '5', value: '65' });
+        })), { min: '30', max: '180', step: '5', value: '65' });
         assert.equal(await page.$eval('#mmdArGravityDeadZone', (input) => input.value), '0.5');
         assert.equal(await page.$eval('#mmdArGravitySmoothing', (input) => input.value), '120');
         await page.evaluate(() => window.DisplayMmdAr.initialize());
@@ -276,17 +276,19 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         });
         await page.evaluate(async () => {
             const input = document.getElementById('displayMmdPhysicsFps');
-            input.value = '480';
+            input.value = '180';
             input.dispatchEvent(new Event('input', { bubbles: true }));
             if (!await window.DisplayMmd.setPhysicsEnabled(false)) throw new Error('物理重载失败');
             if (!await window.DisplayMmd.setPhysicsEnabled(true)) throw new Error('物理重载失败');
         });
-        assert.equal(await page.evaluate(() => window.DisplayMmd.getLighting().physicsFps), 480);
-        assert.equal(await page.$eval('#displayMmdPhysicsFpsValue', (output) => output.textContent), '480 Hz');
-        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('aasc.display.mmdLighting.v1')).physicsFps), 480);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getLighting().physicsFps), 180);
+        assert.equal(await page.$eval('#displayMmdPhysicsFpsValue', (output) => output.textContent), '180 Hz');
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('aasc.display.mmdLighting.v1')).physicsFps), 180);
         assert.deepEqual(await page.evaluate(() => [...window.physicsLifetime.active].map((physics) => ({
             unitStep: physics.unitStep, maxStepNum: physics.maxStepNum
-        }))), [{ unitStep: 1 / 480, maxStepNum: 49 }]);
+        }))), [{ unitStep: 1 / 180, maxStepNum: 19 }]);
+        assert.equal(await page.evaluate(() => [...window.physicsLifetime.active].every((physics) =>
+            physics.anchorSamples.length > 0 && typeof physics.resetAnchorInterpolation === 'function')), true);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), currentUrl);
         assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.ok(await page.evaluate(() => window.DisplayMmd.getMotionProgress().durationSeconds > 0));
@@ -311,7 +313,7 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
                 return update.call(this, delta);
             };
             MMDAnimationHelper.prototype._setupMeshPhysics = function (mesh, options) {
-                if (options.unitStep !== 1 / 480 || options.maxStepNum !== 49) throw new Error('切换丢失480Hz物理参数');
+                if (options.unitStep !== 1 / 180 || options.maxStepNum !== 19) throw new Error('切换丢失180Hz物理参数');
                 const data = this.objects.get(mesh);
                 window.motionSwitchTrace.push({ phase: 'physics', time: data?.mixer?._actions?.[0]?.time,
                     animationWarmup: options.animationWarmup, warmup: options.warmup });
@@ -383,7 +385,7 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
             assert.equal(lifetime.created - lifetime.disposed, 1);
             assert.deepEqual(lifetime.errors, []);
             assert.ok(lifetime.resources[0] > 0);
-            assert.deepEqual(lifetime.rates, [{ unitStep: 1 / 480, maxStepNum: 49 }]);
+            assert.deepEqual(lifetime.rates, [{ unitStep: 1 / 180, maxStepNum: 19 }]);
             assert.equal(lifetime.heap, 64 * 1024 * 1024);
             assert.ok(lifetime.probe > 0);
             probes.push(lifetime.probe);
@@ -399,7 +401,7 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
             disposed: window.physicsLifetime.disposed, active: window.physicsLifetime.active.size,
             heap: Ammo.HEAP8.byteLength }));
         console.info('真实网页24次VMD/4次PMX连续切换:', JSON.stringify({ ...result, probeRange }));
-        // 实时降回默认值不得重建物理；再恢复480并刷新验证持久化，reload不会沿用观测包装。
+        // 实时降回默认值不得重建物理；再恢复180并刷新验证持久化，reload不会沿用观测包装。
         const liveChange = await page.evaluate(() => {
             const physics = [...window.physicsLifetime.active][0];
             const created = window.physicsLifetime.created;
@@ -411,12 +413,19 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         });
         assert.deepEqual(liveChange, { same: true, created: 0, unitStep: 1 / 65, maxStepNum: 3, fps: 65 });
         await page.$eval('#displayMmdPhysicsFps', (input) => {
-            input.value = '480'; input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.value = '180'; input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        // 模拟升级前保存的480Hz；刷新必须在控件与运行参数中统一限制180。
+        await page.evaluate(() => {
+            const key = 'aasc.display.mmdLighting.v1';
+            const settings = JSON.parse(localStorage.getItem(key));
+            settings.physicsFps = 480;
+            localStorage.setItem(key, JSON.stringify(settings));
         });
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 90000 });
-        assert.equal(await page.$eval('#displayMmdPhysicsFps', (input) => input.value), '480');
-        assert.equal(await page.evaluate(() => window.DisplayMmd.getLighting().physicsFps), 480);
+        assert.equal(await page.$eval('#displayMmdPhysicsFps', (input) => input.value), '180');
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getLighting().physicsFps), 180);
         assert.deepEqual(errors, []);
         assert.equal(requests.some((url) => url.includes('__local__')), false, '本地资源不能回退到 HTTP 请求');
     } finally {

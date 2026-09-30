@@ -2,7 +2,101 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
-### 布料物理频率30–480Hz（2026-09-30，已实现）
+### Ammo方法与XPBD候选后端（2026-09-30，评估，未实现XPBD）
+
+```text
+当前实现:
+  PMX刚体/关节输入 -> Bullet顺序冲量PGS求解器与离散动力学世界
+  6自由度弹簧约束/碰撞 -> 刚体速度与姿态 -> 骨骼变换回写 -> 蒙皮显示
+候选已有声明:
+  PMX刚体/关节参数、骨骼偏移、VMD与IK、锚点姿态、固定步时钟
+候选定义:
+  XPBDState { position, orientation, velocity, angularVelocity, inverseMass, inverseInertia }
+  CompliantConstraint { localFrames, limits, compliance, damping, multiplier }
+候选操作流程（未实施）:
+  PMX数据 -> XPBD刚体/关节适配 -> 明确材料参数映射与标定
+  每固定子步 -> 运动学锚点位置/四元数插值 -> 预测动态姿态
+  约束/接触/摩擦迭代 -> 柔度按步长平方缩放，更新累计乘子及位置/旋转
+  姿态变化 -> 更新线/角速度 -> 全帧结束回写骨骼
+  后端独立拥有状态 -> 不与Ammo重复求解同一动态刚体
+  初始化/暂停/循环/速度归零/销毁 -> 与当前运行时约定适配
+边界:
+  XPBD与现有Ammo为不同实现路径，不能通过修改physicsFps获得XPBD
+  XPBD不自动处理外部锚点不连续，仍需子步采样/插值
+  XPBD仅评估；用户已确认180Hz与Ammo插值实施，未替换物理
+```
+
+### 布料物理频率上限180Hz（2026-09-30，已实现）
+
+```text
+已有声明:
+  网页滑条、DisplayMmd/runtime/helper副本、共享StepOptions、浏览器设置和导入指纹
+新增定义:
+  WebPhysicsRate { minimum:30, maximum:180, default:65, increment:5, maxFrameSeconds:0.1 }
+操作流程（已确认，仅独立网页）:
+  WEB_MODE -> 滑条max改180，保留下限30、默认65与步长5
+  DisplayMmd / runtime / helper / 共享参数 -> 输入统一限制30至180，5Hz规范化
+  保存的480或其他超过180的值 -> 恢复时实际应用180
+  目标频率 -> unitStep为频率倒数；不超过90时预算3
+  目标频率超过90 -> 预算为频率乘0.1向上取整加1，180时19
+  实时修改 / 模型初始化 / 动作切换 -> 同一共享StepOptions
+  频率调整 -> 保持当前物理实例与速度；模型/动作初始化 -> 绑定姿态、速度清零、两帧播放
+  构建 -> 频率模块与helper的导入内容指纹自动更新
+验证结果:
+  默认/边界/非法值、177到175及178到180、480到180
+  180Hz真实Ammo在60/30/10FPS下推进一秒 -> 模拟位移正常
+  页面范围180、旧480设置恢复180、实时65不重建、模型/动作切换预算19及资源回收
+  正式显示端/APK仍30至90；仅origion同步代码，不发布外网
+高频抖动原流程核对（历史问题分析）:
+  每个渲染帧 -> 动作/锚点更新一次 -> Bullet内部多个子步 -> 物理骨骼回写
+  原子步期间 -> 无动作/锚点重新采样；本次改为子步MotionState插值
+  弹簧目标速度 -> 与物理步频、弹簧参数及求解迭代数有关
+  原因判断 -> 离散驱动/约束响应/CPU帧间隔波动为候选，需受控复现
+  上限180 -> 限制最高目标步频，不保证解决视觉抖动
+```
+
+### 运动学锚点子步插值（2026-09-30，已实现）
+
+```text
+已有声明:
+  MMDPhysics.update、RigidBody运动学目标变换、world.stepSimulation、资源池、帧末VMD/IK、初始化复位
+新增定义:
+  AnchorSamples { entry, previousPosition, position, previousQuaternion, quaternion, stepPosition, stepQuaternion }
+  FixedClock { physicsRemainder, physicsSampleTime, physicsStepTime, interpolationUnitStep, unitStep, maxStepNum }
+  KinematicTarget { position, quaternion, bodyReference }
+操作流程（已确认，仅网页副本）:
+  每渲染帧 -> VMD/IK与角色锚点就绪 -> 采集type0且有骨骼的目标世界姿态
+  将本帧有效时间加入累计 -> 足够一固定步且预算未耗尽时执行子步
+  子步对应时间 -> 前后采样时间范围内的插值比例
+  位置线性插值 / 四元数球面插值 -> 本步运动学目标MotionState
+  world以固定h、关闭内部拆步单次求解 -> 每步由Bullet更新运动学速度
+  减少累计时间，保留未满一步余量 -> 不强制每渲染帧推进至少一步
+  预算超限 -> 丢弃超额整步并同步时钟基线，保留不足一步余量，避免后台积压补算
+  全部子步后 -> 动态刚体骨骼回写 -> 正常绘制；不重复推进VMD时钟
+  动态type1/type2 -> 保留Bullet运动，不用锚点插值覆盖速度或位置
+  首载 / 换模型动作 / 物理复位 / 后台恢复 -> 重建姿态历史与物理时钟基线
+  实时频率切换 -> 同步步长/预算及时间基线，保留动态速度
+  native临时值 -> 资源池复用，异常finally回收；dispose清除历史引用
+  web-physics-substeps.js -> 构建时在生命周期补丁之后注入MMDPhysics固定子步方法
+  resetAnchorInterpolation -> 以当前刚体世界姿态同步前后样本并将时间余量归零，不清速度
+  unitStep改变 -> 捕获本帧目标前同步历史；实际帧间隔超过0.1秒或显示恢复 -> 同步历史
+  renderFrame/setVisible -> WEB_MODE构建适配调用history reset，正式源/APK保持
+  零/负/非法delta -> 不采样、不求解，不强制推进
+  update异常 -> 恢复临时网格变换并归还资源池
+接口依据:
+  固定Ammo有tickCallback方法，但未导出addFunction/removeFunction/saveKinematicState
+  选择JS外层固定步循环；每次stepSimulation单步，避免重复累计/内部拆步
+  Bullet每次world调用在求解前更新运动学变换与速度
+已验证:
+  子步锚点轨迹、角速度方向、单位时间推进、60/90/120FPS与180Hz时钟一致
+  无子步帧、暂停/循环、初始化首帧、复位历史、预算超限/后台帧间隔、异常资源回收
+  64轮真实弹簧锚点及128轮生命周期 -> native分配归零、大块堆空间复用
+  实际浏览器24次VMD/4次PMX -> 创建32/释放31/存活1，64MiB堆，探针跨度391064字节
+  定向74项加本地资源3项 -> 77项通过；构建/语法/导入指纹通过
+  手机CPU/布料观感与外网发布 -> 仍待现场验收与单独发布
+```
+
+### 布料物理频率30–480Hz（2026-09-30，历史实现，现由180Hz取代）
 
 ```text
 已有声明:

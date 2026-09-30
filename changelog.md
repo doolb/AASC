@@ -1,5 +1,17 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR Ammo子步锚点与180Hz上限
+
+- ✅ [2026-09-30] 独立网页继续使用Ammo，每个固定子步前插值运动学锚点的位置与旋转；跨帧积累时间余量，避免画面快于物理时被强制加速，物理频率上限改为180Hz。
+  - 新增 `web-physics-substeps.js`，更新 `build.js`、`web-physics-rate.js/mjs`：只给WEB_MODE物理/runtime副本接入目标采样、MotionState插值与单步求解；type1/type2由Ammo推进，VMD/IK和骨骼回写仍按画面帧。初始化/复位/频率变化/后台恢复同步历史，正常子步保留动态速度；保留绑定姿态初始化清零与下一帧动作，循环不新增清零。
+  - 新增 `tests/mmd-ar-physics-substeps.test.js`，更新rate/lifecycle/motion-switch真实夹具及local-assets浏览器验证；定向74项与本地资源3项共77项通过。真实64轮锚点弹簧及128轮生命周期native分配清空、堆复用；浏览器约563秒完成24次VMD/4次PMX切换，创建32/释放31/存活1、64MiB堆、探针跨度391064字节，无OOM/页面异常。旧480保存值恢复180，实时65不重建，首两帧门控通过。
+  - `npm run build:web:mmd-ar-test`、10个源/生成脚本与4个内联脚本语法、11导入指纹关系及定向差异空白检查通过；同步design/spec/task/todo/usage/README/self-test。使用origion同步代码，本地web-dist已生成，未发布网页或构建APK；正式显示端/APK及Offline产物状态保持。手机抖动改善、CPU/帧率与模型兼容性仍待验收。
+
+### MMD AR Ammo与XPBD可行性核对
+
+- ✅ [2026-09-30] 核对当前Ammo使用Bullet顺序冲量PGS求解器、PMX使用6自由度弹簧刚体关节；查阅XPBD原论文并记录独立刚体/关节实验后端的可行性与兼容边界。
+  - 更新MMD设计/伪代码、180Hz任务及可选todo；用户已选择先继续Ammo并处理子步锚点。XPBD仅保留技术评估与未来可选事项，未替换后端。
+
 ### 显示端背景光晕中心范围与横屏时间避让
 
 - ✅ [2026-09-30] 新增全局中心颜色，将“中心亮度”改为中心颜色完整保留范围；提高默认中心色，并在横屏时检测按钮/时间的实际包围盒，仅相交时自动避让，竖屏位置保持原样。

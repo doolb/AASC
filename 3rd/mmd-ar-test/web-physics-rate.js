@@ -8,12 +8,12 @@ function once(source, anchor, replacement) {
 
 function addPhysicsRateDisplay(source) {
     return once(source, 'clamp(value, 30, 90, DEFAULT_MMD_LIGHTING.physicsFps)',
-        'clamp(value, 30, 480, DEFAULT_MMD_LIGHTING.physicsFps)');
+        'clamp(value, 30, 180, DEFAULT_MMD_LIGHTING.physicsFps)');
 }
 
 function addPhysicsRateHelper(source, moduleUrl) {
     let output = `import { getWebPhysicsStepOptions } from '${moduleUrl}';\n${source}`;
-    output = once(output, 'Math.min(90, Math.max(30, number))', 'Math.min(480, Math.max(30, number))');
+    output = once(output, 'Math.min(90, Math.max(30, number))', 'Math.min(180, Math.max(30, number))');
     return once(output, `        options.unitStep = 1 / normalizePmxPhysicsFps(physicsFps);
         options.maxStepNum = 3;`,
         '        Object.assign(options, getWebPhysicsStepOptions(normalizePmxPhysicsFps(physicsFps)));');
@@ -23,7 +23,7 @@ function addPhysicsRateHelper(source, moduleUrl) {
 function addPhysicsRateRuntime(source, moduleUrl) {
     let output = `import { getWebPhysicsStepOptions } from '${moduleUrl}';\n${source}`;
     output = once(output, 'normalizeLightNumber(value, 30, 90, lightingState.physicsFps)',
-        'normalizeLightNumber(value, 30, 480, lightingState.physicsFps)');
+        'normalizeLightNumber(value, 30, 180, lightingState.physicsFps)');
     output = once(output, 'if (currentPhysics) currentPhysics.unitStep = 1 / lightingState.physicsFps;',
         'if (currentPhysics) Object.assign(currentPhysics, getWebPhysicsStepOptions(lightingState.physicsFps));');
     return once(output, '            physics.unitStep = 1 / lightingState.physicsFps;',

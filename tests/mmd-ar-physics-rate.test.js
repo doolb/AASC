@@ -5,18 +5,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
+const { addPhysicsSubsteps } = require('../3rd/mmd-ar-test/web-physics-substeps');
 const { addPhysicsRateDisplay, addPhysicsRateHelper, addPhysicsRateRuntime } = require('../3rd/mmd-ar-test/web-physics-rate');
 const { addPhysicsLifecycle, addAnimationLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
 const publicRoot = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const rateUrl = pathToFileURL(path.resolve(__dirname, '../3rd/mmd-ar-test/web-physics-rate.mjs')).href;
 const dataUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 
-test('网页30到480Hz边界、默认、5Hz步长和高频子步预算', async () => {
+test('网页30到180Hz边界、默认、5Hz步长和高频子步预算', async () => {
     const { getWebPhysicsStepOptions } = await import(rateUrl);
     for (const [input, fps, maxStepNum] of [
         [undefined, 65, 3], [NaN, 65, 3], [Infinity, 65, 3], [-1, 30, 3],
         [30, 30, 3], [65, 65, 3], [90, 90, 3], [95, 95, 11], [120, 120, 13],
-        ['480', 480, 49], [999, 480, 49], [477, 475, 49], [478, 480, 49]
+        ['180', 180, 19], [999, 180, 19], [177, 175, 19], [178, 180, 19], [480, 180, 19]
     ]) assert.deepEqual(getWebPhysicsStepOptions(input), { unitStep: 1 / fps, maxStepNum });
 });
 
@@ -24,10 +25,10 @@ test('网页适配在固定源唯一锚点改限幅和预算，源码升级缺�
     const read = (file) => fs.readFileSync(path.join(publicRoot, 'js', file), 'utf8');
     const display = read('display-mmd.js');
     assert.ok(display.includes('clamp(value, 30, 90, DEFAULT_MMD_LIGHTING.physicsFps)'));
-    assert.ok(addPhysicsRateDisplay(display).includes('clamp(value, 30, 480, DEFAULT_MMD_LIGHTING.physicsFps)'));
+    assert.ok(addPhysicsRateDisplay(display).includes('clamp(value, 30, 180, DEFAULT_MMD_LIGHTING.physicsFps)'));
     const { addLocalRuntime } = require('../3rd/mmd-ar-test/web-local-assets-inject');
     const patched = addPhysicsRateRuntime(addLocalRuntime(read('display-pmx-runtime.js'), './local.mjs', './motion.mjs'), rateUrl);
-    assert.ok(patched.includes('normalizeLightNumber(value, 30, 480, lightingState.physicsFps)'));
+    assert.ok(patched.includes('normalizeLightNumber(value, 30, 180, lightingState.physicsFps)'));
     assert.ok(patched.includes('Object.assign(currentPhysics, getWebPhysicsStepOptions(lightingState.physicsFps))'));
     assert.ok(patched.includes('Object.assign(physics, getWebPhysicsStepOptions(lightingState.physicsFps))'));
     for (const transform of [addPhysicsRateDisplay, addPhysicsRateHelper, addPhysicsRateRuntime]) {
@@ -46,7 +47,7 @@ async function fixture() {
         const vendor = path.join(publicRoot, 'js/vendor/three');
         const source = (name) => fs.readFileSync(path.join(vendor, 'animation', name), 'utf8')
             .replace("from 'three'", `from '${threeUrl}'`);
-        const physicsUrl = dataUrl(addPhysicsLifecycle(source('MMDPhysics.js')));
+        const physicsUrl = dataUrl(addPhysicsSubsteps(addPhysicsLifecycle(source('MMDPhysics.js'))));
         const helperSource = addAnimationLifecycle(source('MMDAnimationHelper.js'), physicsUrl)
             .replace('../animation/CCDIKSolver.js', dataUrl(source('CCDIKSolver.js')));
         const { MMDAnimationHelper } = await import(dataUrl(helperSource));
@@ -75,20 +76,20 @@ async function fixture() {
     return fixturePromise;
 }
 
-test('真实Ammo在480Hz下以60/30/10FPS推进一秒均保持恒速位移，实时降频不清零', async () => {
+test('真实Ammo在180Hz下以60/30/10FPS推进一秒均保持恒速位移，实时降频不清零', async () => {
     const { makeMesh, create } = await fixture();
     const { getWebPhysicsStepOptions } = await import(rateUrl);
     const started = performance.now();
     for (const renderFps of [60, 30, 10]) {
         const mesh = makeMesh();
-        const { helper, physicsError } = await create(mesh, 480);
+        const { helper, physicsError } = await create(mesh, 180);
         assert.equal(physicsError, null);
         const physics = helper.objects.get(mesh).physics;
         const body = physics.bodies[0].body;
         const vector = new Ammo.btVector3(0, 0, 0);
         try {
-            assert.equal(physics.unitStep, 1 / 480);
-            assert.equal(physics.maxStepNum, 49);
+            assert.equal(physics.unitStep, 1 / 180);
+            assert.equal(physics.maxStepNum, 19);
             physics.world.setGravity(vector);
             vector.setValue(1, 0, 0);
             body.setLinearVelocity(vector);
@@ -106,24 +107,24 @@ test('真实Ammo在480Hz下以60/30/10FPS推进一秒均保持恒速位移，实
             mesh.geometry.dispose(); mesh.material.dispose();
         }
     }
-    console.info(`480Hz真实Ammo三组一秒模拟耗时${Math.round(performance.now() - started)}ms`);
+    console.info(`180Hz真实Ammo三组一秒模拟耗时${Math.round(performance.now() - started)}ms`);
 });
 
-test('480Hz手动动作从绑定姿态创建物理且速度清零，关闭物理不创建', async () => {
+test('180Hz手动动作从绑定姿态创建物理且速度清零，关闭物理不创建', async () => {
     const { THREE, makeMesh, create } = await fixture();
     const { prepareMotionSwitch } = await import('../3rd/mmd-ar-test/web-motion-switch.mjs');
     const mesh = makeMesh();
-    const { helper: oldHelper } = await create(mesh, 480);
+    const { helper: oldHelper } = await create(mesh, 180);
     const oldPhysics = oldHelper.objects.get(mesh).physics;
     const clip = new THREE.AnimationClip('motion', 1, [new THREE.VectorKeyframeTrack('.bones[0].position', [0, 1], [8, 0, 0, 9, 0, 0])]);
-    const options = { mesh, oldHelper, physicsEnabled: true, physicsFps: 480, playbackEnabled: true,
-        isCurrent: () => true, ensurePhysics: async () => {}, createHelper: () => create(mesh, 480, clip, false) };
+    const options = { mesh, oldHelper, physicsEnabled: true, physicsFps: 180, playbackEnabled: true,
+        isCurrent: () => true, ensurePhysics: async () => {}, createHelper: () => create(mesh, 180, clip, false) };
     let next;
     try {
         next = await prepareMotionSwitch(options);
         const physics = next.helper.objects.get(mesh).physics;
-        assert.equal(physics.unitStep, 1 / 480);
-        assert.equal(physics.maxStepNum, 49);
+        assert.equal(physics.unitStep, 1 / 180);
+        assert.equal(physics.maxStepNum, 19);
         assert.equal(mesh.skeleton.bones[0].position.x, 0);
         assert.equal(next.helper.objects.get(mesh).mixer._actions[0].time, 0);
         for (const { body } of physics.bodies) {
