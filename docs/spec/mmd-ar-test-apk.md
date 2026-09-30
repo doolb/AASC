@@ -2,6 +2,16 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 重力缓动默认20ms（2026-09-30）
+
+```text
+仅独立网页重力旋转:
+  默认 GravitySettings.smoothingMs = 20
+  过滤模块、模型状态、控件初始化、滑条及读数使用相同默认值
+  未保存用户设置 -> 使用20ms；已保存用户设置 -> 保持原值
+  0关闭缓动、最大500ms、步长10ms、独立存储键沿用
+```
+
 ### 重力摄像头背景与面板默认外观（2026-09-30）
 
 ```text
@@ -112,7 +122,7 @@
   gravityDirection、setModelGravityRotation、手动旋转层、重力开关、屏幕坐标转换
 新增定义:
   GravityFilter { referenceSample, lastSample, rawQuaternion, acceptedTarget, currentQuaternion }
-  GravitySettings { deadZoneDegrees: 0.5, smoothingMs: 120 }
+  GravitySettings { deadZoneDegrees: 0.5, smoothingMs: 20 }
 操作流程（仅 WEB_MODE）:
   移除灵敏度控件和对应 DOM/事件/存储；保留重力开关、重力居中及首次姿态归零
   重力分类增加独立死区与缓动控件 -> 规范化参数 -> 当前浏览器保存 -> runtime 重力层

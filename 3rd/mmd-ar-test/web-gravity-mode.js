@@ -89,7 +89,7 @@ function addGravityRuntime(source, moduleUrl = './web-gravity-filter.mjs') {
 function addGravityDisplay(source) {
   let output = replaceOnce(source, '    function setCameraViewRotation(yaw, pitch) {', `    let modelGravityRotation = [0, 0, 0, 1];
     let modelGravityForce = false;
-    let modelGravitySettings = { deadZoneDegrees: 0.5, smoothingMs: 120 };
+    let modelGravitySettings = { deadZoneDegrees: 0.5, smoothingMs: 20 };
     function setModelGravityRotation(value, force = false) {
         if (!Array.isArray(value) || value.length !== 4 || !value.every(Number.isFinite)
             || Math.hypot(...value) < 1e-9) return false;

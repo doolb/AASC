@@ -329,8 +329,8 @@ async function stageTextAssets() {
         <input id="mmdArGravityDeadZone" type="range" min="0" max="3" step="0.1" value="0.5">
       </label>
       <label class="display-mmd-ar-field" for="mmdArGravitySmoothing">
-        <span>重力缓动 <output id="mmdArGravitySmoothingValue">120 ms</output></span>
-        <input id="mmdArGravitySmoothing" type="range" min="0" max="500" step="10" value="120">
+        <span>重力缓动 <output id="mmdArGravitySmoothingValue">20 ms</output></span>
+        <input id="mmdArGravitySmoothing" type="range" min="0" max="500" step="10" value="20">
       </label>
     `);
     $('#displayArMotionRecenter').text('重力居中');
