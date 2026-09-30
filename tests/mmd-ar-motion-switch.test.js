@@ -19,7 +19,12 @@ async function fixture() {
     mesh.pose = () => bone.position.set(0, 0, 0);
     const events = [];
     const oldHelper = { enabled: { physics: true, animation: true } };
-    const helper = { enabled: { physics: true, animation: false },
+    const physics = { manager: {
+        allocVector3: () => ({ setValue() {} }), freeVector3() {}
+    }, bodies: [{ body: {
+        setLinearVelocity() { events.push('zero'); }, setAngularVelocity() {}, clearForces() {}, activate() {}
+    } }] };
+    const helper = { objects: new Map([[mesh, { physics }]]), enabled: { physics: true, animation: false },
         enable(key, value) { this.enabled[key] = value; link.enabled = true; },
         update(delta) {
             assert.equal(delta, 0);
@@ -59,7 +64,7 @@ test('切换先暂停旧物理、无物理应用第0帧、更新矩阵，最后�
     assert.equal(helper.enabled.physics, true);
     assert.equal(helper.enabled.animation, true);
     assert.equal(oldHelper.enabled.physics, true);
-    assert.deepEqual(events, ['ammo', 'helper', 'pose', 'matrix', 'physics']);
+    assert.deepEqual(events, ['ammo', 'helper', 'pose', 'matrix', 'physics', 'zero']);
 });
 
 test('原物理关闭或没有刚体时不请求 Ammo，暂停播放仍应用初始姿态并保持暂停', async () => {
@@ -125,6 +130,59 @@ test('Ammo失败和异步过期不应用动作；提交前过期可回滚且不�
     assert.equal(rollback.events.filter((name) => name === 'remove').length, 1);
 });
 
+test('速度清理无物理旁路，临时零向量在成功和失败时都释放', async () => {
+    const { clearPmxPhysicsMotion } = await loadSwitch();
+    assert.equal(clearPmxPhysicsMotion(null), undefined);
+    for (const fail of [false, true]) {
+        let freed = 0, linear, angular, forces = 1;
+        const zero = { values: null, setValue(...values) { this.values = values; } };
+        const physics = { manager: { allocVector3: () => zero,
+            freeVector3(value) { assert.equal(value, zero); freed += 1; } },
+        bodies: [{ body: {
+            setLinearVelocity(value) { linear = [...value.values]; },
+            setAngularVelocity(value) {
+                if (fail) throw new Error('清理失败');
+                angular = [...value.values];
+            }, clearForces() { forces = 0; }, activate() {}
+        } }] };
+        if (fail) assert.throws(() => clearPmxPhysicsMotion(physics), /清理失败/u);
+        else {
+            clearPmxPhysicsMotion(physics);
+            assert.deepEqual(linear, [0, 0, 0]);
+            assert.deepEqual(angular, [0, 0, 0]);
+            assert.equal(forces, 0);
+        }
+        assert.equal(freed, 1);
+    }
+});
+
+test('网页注入的模型helper返回前也清理速度并保留播放/物理参数', async () => {
+    const { addLocalRuntime } = require('../3rd/mmd-ar-test/web-local-assets-inject');
+    const source = addLocalRuntime(fs.readFileSync(path.resolve(__dirname,
+        '../src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js'), 'utf8'), './web-local-assets.mjs');
+    const begin = source.indexOf('    const createMotionHelper =');
+    const end = source.indexOf('    const validateMotionResource =', begin);
+    const data = await fixture();
+    const create = new Function('data', `
+        const { clearPmxPhysicsMotion } = data;
+        const MMDAnimationHelper = function () {}, THREE = {}, physicsEnabled = true;
+        const lightingState = { physicsFps: 65 }, motionPlaybackEnabled = false;
+        const ensureAmmoPhysics = () => {}, setPmxMotionPlaybackEnabled = (helper, enabled) => { helper.enabled.animation = enabled; };
+        const createPmxMotionHelper = async (options) => {
+            if (options.physicsEnabled !== true) throw new Error('模型物理开关丢失');
+            return { helper: data.helper };
+        };
+        ${source.slice(begin, end)}
+        return createMotionHelper;
+    `);
+    const prepare = create(data);
+    const result = await prepare(data.mesh, {}, 'loop');
+    assert.equal(result.helper, data.helper);
+    assert.deepEqual(data.events, ['zero']);
+    assert.equal(data.helper.enabled.animation, false);
+    assert.equal(data.helper.objects.get(data.mesh).physics.unitStep, 1 / 65);
+});
+
 test('注入 runtime 在等待 Ammo 时阻止旧动作/物理帧，继续锚点更新并拒绝重复提交', async () => {
     const { addLocalRuntime } = require('../3rd/mmd-ar-test/web-local-assets-inject');
     const original = fs.readFileSync(path.resolve(__dirname,
@@ -151,7 +209,7 @@ test('注入 runtime 在等待 Ammo 时阻止旧动作/物理帧，继续锚点�
         const ensureAmmoPhysics = () => ammo;
         const stopMotion = () => { helper.current = null; pendingInitialMotionHelper = null; };
         const setPmxMotionPlaybackEnabled = (target, value) => { target.enabled.animation = value; };
-        const onStatus = () => {};
+        const onStatus = () => {}, onProgress = () => {};
         ${source.slice(begin, finish)}
         return { loadSelectedMotion,
             getFrameHelper: () => { ${frameRead} return frameHelper; },
@@ -204,6 +262,9 @@ test('固定 vendor 的真实 VMD mixer/Ammo 从新动作姿态创建刚体，�
         rigidBodies: [{ type: 0, boneIndex: 0, shapeType: 0, width: 0.1, height: 0.1, depth: 0.1,
             weight: 0, position: [0, 0, 0], rotation: [0, 0, 0], friction: 0, restitution: 0,
             positionDamping: 0, rotationDamping: 0, groupIndex: 0, groupTarget: 65535 }] };
+    for (const type of [1, 2]) mesh.geometry.userData.MMD.rigidBodies.push({
+        ...mesh.geometry.userData.MMD.rigidBodies[0], type, boneIndex: -1, weight: 1, position: [type * 2, 0, 0]
+    });
     bone.position.set(8, 9, 10);
     const clip = new THREE.AnimationClip('new-motion', 1, [new THREE.VectorKeyframeTrack(
         '.bones[center].position', [0, 1], [3, 4, 5, 6, 7, 8])]);
@@ -217,12 +278,38 @@ test('固定 vendor 的真实 VMD mixer/Ammo 从新动作姿态创建刚体，�
     const data = prepared.helper.objects.get(mesh);
     const origin = data.physics.bodies[0].body.getCenterOfMassTransform().getOrigin();
     assert.deepEqual([origin.x(), origin.y(), origin.z()], [3, 4, 5]);
+    // 对三种刚体主动注入旧速度和力，确认清理完整且不会改变位姿。
+    const { clearPmxPhysicsMotion } = await loadSwitch();
+    const velocity = new Ammo.btVector3(4, 5, 6);
+    const force = new Ammo.btVector3(7, 8, 9);
+    const vector = (value) => [value.x(), value.y(), value.z()];
+    let zeroCalls = 0;
+    for (const { body } of data.physics.bodies) {
+        body.setLinearVelocity(velocity);
+        body.setAngularVelocity(velocity);
+        body.applyCentralForce(force);
+        const setLinear = body.setLinearVelocity;
+        body.setLinearVelocity = function (value) { zeroCalls += 1; return setLinear.call(this, value); };
+    }
+    clearPmxPhysicsMotion(data.physics);
+    assert.equal(zeroCalls, 3);
+    for (const { body } of data.physics.bodies) {
+        assert.deepEqual(vector(body.getLinearVelocity()), [0, 0, 0]);
+        assert.deepEqual(vector(body.getAngularVelocity()), [0, 0, 0]);
+    }
+    assert.deepEqual(vector(data.physics.bodies[0].body.getCenterOfMassTransform().getOrigin()), [3, 4, 5]);
+    Ammo.destroy(velocity);
+    Ammo.destroy(force);
     prepared.helper.update(0.1);
+    assert.notEqual(data.physics.bodies[1].body.getLinearVelocity().y(), 0, '初始化清理后重力仍产生运动');
+    assert.equal(data.physics.bodies[1].body.getLinearVelocity().x(), 0, '施加的X方向残留力已清除');
     assert.deepEqual(bone.position.toArray(), [3, 4, 5]);
     assert.equal(data.mixer._actions[0].time, 0);
     prepared.helper.enabled.animation = true;
     prepared.helper.update(0.1);
     assert.ok(Math.abs(bone.position.x - 3.3) < 1e-6);
     assert.ok(Math.abs(data.mixer._actions[0].time - 0.1) < 1e-8);
+    prepared.helper.update(1);
+    assert.equal(zeroCalls, 3, '自动循环不调用新增清理');
     prepared.helper.remove(mesh);
 });

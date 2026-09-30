@@ -108,10 +108,12 @@ export function configureLocalLoader(loader, url) {
     if (context) loader.manager.setURLModifier((resourceUrl) => context.resolve(resourceUrl));
 }
 
-export async function validateLocalModel(loader, url) {
+export async function validateLocalModel(loader, url, onValidate = () => {}) {
     const context = getContext(url);
     if (!context) return;
-    const data = loader._getParser().parsePmx(await context.selectedFile.arrayBuffer(), true);
+    const buffer = await context.selectedFile.arrayBuffer();
+    onValidate();
+    const data = loader._getParser().parsePmx(buffer, true);
     const directory = context.path.split('/').slice(0, -1).join('/');
     const used = new Set();
     for (const material of data.materials) {

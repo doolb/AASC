@@ -59,7 +59,7 @@ test('本地资源拒绝歧义、重复路径和目录越界，并在网格创�
 });
 
 test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重载和恢复默认可用', {
-    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 240000
+    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 300000
 }, async () => {
     // 使用构建缓存的真实资源，通过 file input 上传，验证对象 URL 和同一 ESM 注册表。
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'mmd-resources.json'), 'utf8'));
@@ -142,7 +142,25 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.deepEqual(errors, []);
         assert.equal(await page.$eval('#mmdArMotionPanel', (element) => element.hidden), false);
         await page.click('#mmdArLocalAssets .mmd-ar-panel-group-toggle');
-        const upload = async (selector, files) => {
+        // 用MutationObserver保留同步阶段的各个文本节点，避免只看到最终完成消息。
+        await page.evaluate(() => {
+            window.localLoadProgressTrace = [];
+            window.localLoadProgressStarts = [];
+            const progress = document.getElementById('mmdArLoadingProgress');
+            new MutationObserver((records) => {
+                for (const record of records) for (const node of record.addedNodes) {
+                    window.localLoadProgressTrace.push(node.textContent);
+                }
+            }).observe(document.getElementById('mmdArLoadingText'), { childList: true });
+            for (const id of ['mmdArLocalFiles', 'mmdArLocalDirectory', 'mmdArLocalVmd', 'mmdArLocalPmx']) {
+                document.getElementById(id).addEventListener('change', () => {
+                    window.localLoadProgressStarts.push({ hidden: progress.hidden,
+                        state: progress.dataset.state, text: document.getElementById('mmdArLoadingText').textContent });
+                });
+            }
+        });
+        const upload = async (selector, files, waiting = false) => {
+            await page.evaluate(() => { window.localLoadProgressTrace.length = 0; window.localLoadProgressStarts.length = 0; });
             const input = await page.$(selector);
             await input.uploadFile(...files);
             try {
@@ -156,8 +174,41 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
                 }));
                 throw new Error(`${selector}: ${JSON.stringify(snapshot)}; ${error.message}`);
             }
+            const progress = await page.evaluate(() => ({
+                state: document.getElementById('mmdArLoadingProgress').dataset.state,
+                percent: document.getElementById('mmdArLoadingProgress').getAttribute('aria-valuenow'),
+                start: window.localLoadProgressStarts.at(-1), trace: [...window.localLoadProgressTrace]
+            }));
+            assert.equal(progress.start.hidden, false, '文件确认后立即显示进度');
+            assert.equal(progress.start.state, 'loading');
+            assert.ok(progress.trace.length > 0);
+            if (progress.state === 'error') {
+                assert.equal(progress.percent, null);
+                assert.equal(progress.trace.some((value) => value.includes('100%')), false);
+            } else if (waiting) {
+                assert.equal(progress.state, 'waiting');
+                assert.equal(progress.percent, null);
+            } else {
+                assert.equal(progress.state, 'complete');
+                assert.equal(progress.percent, '100');
+                if (selector === '#mmdArLocalVmd') {
+                    assert.ok(progress.trace.some((value) => value.includes('读取/解析 VMD')));
+                    assert.ok(progress.trace.some((value) => value.includes('应用动作起始姿态')));
+                }
+            }
+            return progress;
         };
-        await upload('#mmdArLocalFiles', [pmxPath, ...textures]);
+        const directoryProgress = await upload('#mmdArLocalDirectory', [path.dirname(pmxPath)]);
+        assert.ok(directoryProgress.trace.some((value) => value.includes('校验 PMX')));
+        assert.ok(directoryProgress.trace.some((value) => value.includes('加载纹理')));
+        const alternatePmx = path.join(temporary, 'alternate.pmx');
+        fs.copyFileSync(pmxPath, alternatePmx);
+        const beforeSelection = await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl);
+        await upload('#mmdArLocalFiles', [pmxPath, alternatePmx, ...textures], true);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), beforeSelection);
+        await page.select('#mmdArLocalPmx', path.basename(pmxPath));
+        await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
+        assert.equal(await page.$eval('#mmdArLoadingProgress', (element) => element.dataset.state), 'complete');
         assert.equal(await page.$eval('#mmdArLocalMessage', (element) => element.dataset.error), 'false');
         assert.match(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl), /__local__/u);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getMotionProgress()), null);
@@ -233,7 +284,7 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
     } finally {
         await browser?.close();
         await new Promise((resolve) => server.close(resolve));
-        // 只清理本测试创建的损坏 VMD 临时文件。
+        // 只清理本测试创建的损坏 VMD 和备用 PMX 临时文件。
         fs.rmSync(temporary, { recursive: true, force: true });
     }
 });

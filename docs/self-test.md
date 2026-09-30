@@ -1,5 +1,15 @@
 # 自测功能文档
 
+## MMD AR 加载进度与初始化速度清理（2026-09-30）
+
+进度4/4、动作/初始化清理8/8、重力6/6、本地资源3/3、既有PMX/helper/物理40/40，共61项通过。定向命令：`node --test tests/mmd-ar-load-progress.test.js tests/mmd-ar-motion-switch.test.js tests/mmd-ar-gravity.test.js`；浏览器命令：`node --test tests/mmd-ar-local-assets.test.js`；回归命令：`node --test tests/mmd-pmx-helper.test.js tests/mmd-pmx-physics-rotation.test.js tests/display-mmd-runtime.test.js`。
+
+进度验证覆盖立即显示、不定阶段、真实比例单调且提交前不超过99%、成功100%和1500ms收起、旧回调/定时器隔离、失败保留和多个PMX等待。真实Chromium原生目录/多文件选择、明确选PMX和VMD验证开始即显示、模型校验/贴图及VMD起始姿态阶段、失败无100%且保留旧内容，物理重载和恢复默认继续通过。
+
+真实固定Three.js/Ammo验证全部刚体类型和无骨骼索引刚体的线/角速度归零、位姿保持，下一步进无残留X速度且重力仍能产生运动。当前Ammo未暴露总力读取接口，使用步进行为验证残留力已清理；模拟用例另验证清力、异常释放和模型初始化接入。VMD自动循环未增加初始化清理调用次数。
+
+`npm run build:web:mmd-ar-test`和源/生成脚本语法、定向差异空白检查通过；共享build保留APK原进度渲染器。最新网页未发布，手机文件选择器、阶段可见时长、布料及帧率待现场验收。
+
 ## MMD AR 切换 VMD 先姿态后物理（2026-09-30）
 
 `node --test tests/mmd-ar-motion-switch.test.js` 6/6 通过：严格先零帧/矩阵后物理、物理关闭/无刚体/暂停播放、失败恢复骨骼/网格父级/表情/IK、Ammo失败/异步过期、等待期间停止旧 helper 帧但继续锚点更新，以及真实固定 Three.js vendor 与 Ammo 读取新动作第0帧姿态建立刚体，暂停后时间保持0并可恢复推进。
