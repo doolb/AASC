@@ -14,6 +14,9 @@ const LIGHTING_GROUPS = Object.freeze([
 const TRACKING_GROUPS = Object.freeze([
   ['定位图与校准', ['displayArTargetSelect', 'displayArTargetName', 'displayArPhysicalWidth', 'displayArCalibrationButton', 'mmdArTrackingToggle', 'mmdArTargetPlaneMode']],
   ['跟踪操作', ['mmdArBenchmarkLive', 'displayArStartButton', 'displayArTargetMessage']],
+  ['MindAR 抖动过滤', ['mmdArFilterMinCF', 'mmdArFilterBeta', 'mmdArFilterApplyHint']],
+  ['IMU 相机预测', ['mmdArImuPanel']],
+  ['MindAR 可信度（估算）', ['mmdArQualityPanel']],
   ['体感环绕', ['displayArMotionSensitivity', 'displayArMotionRecenter', 'displayArMotionMessage'], 'displayArMotionEnabled'],
   ['相机跟随', ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone', 'mmdArSmoothingMs', 'mmdArCameraDistance']],
 ]);
@@ -42,6 +45,13 @@ const WEB_PANEL_GROUP_CSS = `
     #mmdArTrackingToggle { width: 100%; min-height: 44px; }
     .mmd-ar-camera-setting input[type="range"] { width: 100%; }
     .mmd-ar-camera-setting small { color: #ccd6ee; line-height: 1.4; }
+    .mind-basic-field { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; font-size: 12px; }
+    .mind-basic-field input[type="range"] { width: 100%; }
+    .mind-basic-imu-options label { display: flex; align-items: center; gap: 6px; margin: 8px 0; font-size: 12px; }
+    .mind-basic-imu-metrics { margin: 10px 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .mind-basic-imu-metrics > div { display: flex; justify-content: space-between; gap: 8px; margin: 6px 0; }
+    .mind-basic-imu-metrics dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+    .mind-basic-note, .mind-basic-imu-status { font-size: 12px; line-height: 1.5; color: #ccd6ee; }
     .mmd-ar-plane-options { display: flex; gap: 6px; margin-top: 6px; }
     .mmd-ar-plane-options button { flex: 1; min-height: 38px; border: 1px solid #758bff88; border-radius: 7px; background: #222b3d; color: #d6e0f5; cursor: pointer; }
     .mmd-ar-plane-options button[aria-pressed="true"] { background: #5169a3; border-color: #a8bbff; color: #fff; }

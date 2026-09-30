@@ -6,9 +6,62 @@
     const scene = document.getElementById('mmdArAframeScene');
     const anchor = document.getElementById('mmdArAframeAnchor');
     const rectangle = document.getElementById('mmdArAframeTargetRect');
+    const worldTarget = document.getElementById('mmdArAframeWorldTarget');
+    const cameraRig = document.getElementById('mmdArAframeCameraRig');
     const live = document.getElementById('mmdArBenchmarkLive');
+    const filterMinCFInput = document.getElementById('mmdArFilterMinCF');
+    const filterMinCFOutput = document.getElementById('mmdArFilterMinCFValue');
+    const filterBetaInput = document.getElementById('mmdArFilterBeta');
+    const filterBetaOutput = document.getElementById('mmdArFilterBetaValue');
+    const FILTER_SETTINGS_KEY = 'aasc.mmdArTest.mindArFilter.v1';
+    const DEFAULT_FILTER_SETTINGS = Object.freeze({ filterMinCF: 0.001, filterBeta: 1000 });
     const OFFICIAL_TARGET_SRC = new URL('../assets/mindar-official-card.mind', document.currentScript.src).href;
-    if (!host || !scene || !anchor || !rectangle) return;
+    if (!host || !scene || !anchor || !rectangle || !worldTarget || !cameraRig) return;
+
+    const readFilterSettings = () => {
+        let stored = {};
+        try { stored = JSON.parse(root.localStorage.getItem(FILTER_SETTINGS_KEY) || '{}') || {}; }
+        catch (error) { stored = {}; }
+        const normalize = (name, minimum, maximum) => {
+            const candidate = stored[name];
+            if (candidate === null || candidate === undefined
+                || (typeof candidate === 'string' && candidate.trim() === '')) return DEFAULT_FILTER_SETTINGS[name];
+            const value = Number(candidate);
+            return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : DEFAULT_FILTER_SETTINGS[name];
+        };
+        return {
+            filterMinCF: normalize('filterMinCF', 0.0001, 0.02),
+            filterBeta: normalize('filterBeta', 0, 2000)
+        };
+    };
+
+    let filterSettings = readFilterSettings();
+
+    function updateFilterControls() {
+        if (filterMinCFInput) filterMinCFInput.value = String(filterSettings.filterMinCF);
+        if (filterMinCFOutput) {
+            filterMinCFOutput.textContent = filterSettings.filterMinCF.toFixed(4).replace(/0+$/u, '').replace(/\.$/u, '');
+        }
+        if (filterBetaInput) filterBetaInput.value = String(filterSettings.filterBeta);
+        if (filterBetaOutput) filterBetaOutput.textContent = String(filterSettings.filterBeta);
+    }
+
+    function saveFilterSettings() {
+        try { root.localStorage.setItem(FILTER_SETTINGS_KEY, JSON.stringify(filterSettings)); }
+        catch (error) { /* 存储不可用时仍允许本页调节，重新加载后回到默认值。 */ }
+    }
+
+    filterMinCFInput?.addEventListener('input', () => {
+        filterSettings.filterMinCF = Math.min(0.02, Math.max(0.0001, Number(filterMinCFInput.value)));
+        updateFilterControls();
+        saveFilterSettings();
+    });
+    filterBetaInput?.addEventListener('input', () => {
+        filterSettings.filterBeta = Math.min(2000, Math.max(0, Number(filterBetaInput.value)));
+        updateFilterControls();
+        saveFilterSettings();
+    });
+    updateFilterControls();
 
     let generation = 0;
     let currentSession = null;
@@ -29,7 +82,16 @@
         if (poseSyncFrame) root.cancelAnimationFrame(poseSyncFrame);
         poseSyncFrame = 0;
         root.MmdArTestSimCamera?.releaseStream?.();
+        root.MmdArTestImu?.stopSession();
         root.DisplayMmd?.resetArCameraPose?.();
+        if (worldTarget.object3D) worldTarget.object3D.visible = false;
+        if (cameraRig.object3D) {
+            cameraRig.object3D.position.set(0, 0, 0);
+            cameraRig.object3D.quaternion.set(0, 0, 0, 1);
+            cameraRig.object3D.scale.set(1, 1, 1);
+            cameraRig.object3D.updateMatrix();
+            cameraRig.object3D.updateMatrixWorld(true);
+        }
         const system = scene.systems?.['mindar-image-system'];
         if (!system) return;
         if (resizeHandler) root.removeEventListener('resize', resizeHandler);
@@ -157,6 +219,11 @@
             if (!system || (!root.MmdArTestSimCamera?.isSimulated() && !root.navigator.mediaDevices?.getUserMedia)) {
                 throw new Error('A-Frame 定位或视频输入不可用');
             }
+            if (!root.MmdArTestImu || !root.MindBasicImu) throw new Error('IMU 融合模块未加载');
+            root.MmdArTestImu.startSession(target);
+            // MindAR 1.2.5 在 _startAR 创建 Controller 时读取 system 上的滤波参数。
+            system.filterMinCF = filterSettings.filterMinCF;
+            system.filterBeta = filterSettings.filterBeta;
             prepareSystem(system, token);
             targetUrl = compiled.data
                 ? URL.createObjectURL(new Blob([compiled.data], { type: 'application/octet-stream' }))
@@ -172,11 +239,68 @@
             let lastAppliedAnchor = null;
             let lastAppliedProjection = null;
             poseSyncState = { attempts: 0, successes: 0, failures: 0, synced: false };
+            const THREE = root.AFRAME.THREE;
+            let lastObservedAnchor = null;
+            let worldScale = null;
+            let cameraFrozen = false;
+            const rawTrackingValid = () => anchor.object3D?.visible
+                && system.controller?.trackingStates?.[0]?.isTracking !== false;
+            const markLost = () => {
+                visible = false;
+                root.MmdArTestImu.beginLoss(performance.now());
+            };
+            const observeCurrentPose = () => {
+                if (token !== generation || document.visibilityState === 'hidden') return;
+                if (!rawTrackingValid()) { markLost(); return; }
+                const position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3();
+                anchor.object3D.matrix.decompose(position, quaternion, scale);
+                const pose = { position: position.toArray(), quaternion: quaternion.toArray(), scale: scale.toArray() };
+                if (![...pose.position, ...pose.quaternion, ...pose.scale].every(Number.isFinite)
+                    || pose.scale.some((value) => value <= 0) || Math.hypot(...pose.quaternion) < 1e-9) return;
+                lastObservedAnchor = Array.from(anchor.object3D.matrix.elements);
+                root.MmdArTestImu.observeVisualPose(pose, performance.now());
+                visible = true;
+                sample += 1;
+            };
             const applyCurrentPose = () => {
-                if (token !== generation || !anchor.object3D?.visible || !scene.camera) return false;
-                const anchorMatrix = Array.from(anchor.object3D.matrix.elements);
+                if (token !== generation || !scene.camera || document.visibilityState === 'hidden') return false;
+                const frame = root.MmdArTestImu.getFramePose(performance.now());
+                const pmxState = root.DisplayMmd?.getArCameraSyncState?.();
+                if (!frame) {
+                    // 关闭失锁预测/传感器断流时也暂停尚未走完的第二层缓动。
+                    if (!cameraFrozen || (pmxState?.active && !pmxState.trackingLost)) root.DisplayMmd?.suspendArCameraPose?.();
+                    cameraFrozen = true;
+                    return false;
+                }
+                cameraFrozen = false;
+                const pose = frame.pose;
+                const referenceScale = worldScale ?? pose.scale[0];
+                const cameraPose = root.MindBasicImu.cameraPoseFromTarget(pose, referenceScale);
+                if (!cameraPose) return false;
+                if (worldScale === null) {
+                    worldScale = referenceScale;
+                    worldTarget.object3D.position.set(0, 0, 0);
+                    worldTarget.object3D.quaternion.set(0, 0, 0, 1);
+                    worldTarget.object3D.scale.set(worldScale, worldScale, worldScale);
+                    worldTarget.object3D.updateMatrix();
+                }
+                // 蓝框固定在世界锚点，A-Frame 相机取融合测量的逆；模型不随传感器变换。
+                worldTarget.object3D.visible = true;
+                cameraRig.object3D.position.set(...cameraPose.position);
+                cameraRig.object3D.quaternion.set(...cameraPose.quaternion);
+                cameraRig.object3D.scale.set(1, 1, 1);
+                cameraRig.object3D.updateMatrix();
+                cameraRig.object3D.updateMatrixWorld(true);
+                const anchorMatrix = new THREE.Matrix4().compose(
+                    new THREE.Vector3(...pose.position), new THREE.Quaternion(...pose.quaternion),
+                    new THREE.Vector3(...pose.scale)).toArray();
                 const projectionMatrix = Array.from(scene.camera.projectionMatrix.elements);
+                const changed = !lastAppliedAnchor || !lastAppliedProjection
+                    || anchorMatrix.some((value, index) => value !== lastAppliedAnchor[index])
+                    || projectionMatrix.some((value, index) => value !== lastAppliedProjection[index]);
+                if (!changed && poseSyncState.synced && (!pmxState || (pmxState.active && !pmxState.trackingLost))) return true;
                 poseSyncState.attempts += 1;
+                // PMX 仍使用原世界图面映射、死区与第二层相机缓动，不改角色根节点或物理。
                 const applied = root.DisplayMmd?.setArCameraPose?.({ anchorMatrix, projectionMatrix, targetAspect: compiled.aspect }) === true;
                 if (applied) {
                     const wasUnsynced = !poseSyncState.synced;
@@ -184,61 +308,51 @@
                     poseSyncState.synced = true;
                     lastAppliedAnchor = anchorMatrix;
                     lastAppliedProjection = projectionMatrix;
-                    sample += 1;
-                    if (wasUnsynced) updateLive('已收到定位图位姿，角色相机正在跟随。');
+                    if (wasUnsynced) updateLive('相机已同步，IMU/视觉融合后继续使用相机跟随设置。');
                 } else {
                     const wasSynced = poseSyncState.synced;
                     poseSyncState.failures += 1;
                     poseSyncState.synced = false;
-                    if (wasSynced || poseSyncState.failures === 1) {
-                        updateLive('已找到定位图，正在等待角色相机同步…');
-                    }
+                    if (wasSynced || poseSyncState.failures === 1) updateLive('已收到位姿，正在等待角色相机同步…');
                 }
                 return applied;
             };
             const checkPoseSync = () => {
                 poseSyncFrame = 0;
                 if (token !== generation) return;
-                if (anchor.object3D?.visible && scene.camera) {
-                    const anchorMatrix = anchor.object3D.matrix.elements;
-                    const projectionMatrix = scene.camera.projectionMatrix.elements;
-                    const changed = !lastAppliedAnchor || !lastAppliedProjection
-                        || anchorMatrix.some((value, index) => value !== lastAppliedAnchor[index])
-                        || projectionMatrix.some((value, index) => value !== lastAppliedProjection[index]);
-                    const pmxState = root.DisplayMmd?.getArCameraSyncState?.();
-                    // A-Frame 蓝框独立渲染；事件漏帧或 PMX 暂未就绪时，按当前锚点重试。
-                    if (!poseSyncState.synced || changed
-                        || (pmxState && (!pmxState.active || pmxState.trackingLost))) applyCurrentPose();
+                // 漏事件时仅接纳真正改变的原始矩阵，不将 RAF 重读的旧矩阵当作新观测。
+                if (document.visibilityState !== 'hidden') {
+                    if (rawTrackingValid()) {
+                        const matrix = anchor.object3D.matrix.elements;
+                        if (!lastObservedAnchor || matrix.some((value, index) => value !== lastObservedAnchor[index])) observeCurrentPose();
+                    } else if (visible) markLost();
                 }
+                applyCurrentPose();
                 poseSyncFrame = root.requestAnimationFrame(checkPoseSync);
             };
             const onPoseUpdate = () => {
                 if (poseQueued || token !== generation) return;
                 poseQueued = true;
-                // MindAR 在 targetUpdate 事件返回后才把矩阵写入锚点；微任务读取本帧新矩阵。
+                // MindAR 在事件返回后才提交矩阵，微任务只读取本次新观测。
                 queueMicrotask(() => {
                     poseQueued = false;
+                    if (token !== generation) return;
+                    observeCurrentPose();
                     applyCurrentPose();
                 });
             };
             const onFound = () => {
                 if (token !== generation) return;
-                visible = true;
                 sample += 1;
-                poseSyncState.synced = false;
-                lastAppliedAnchor = null;
-                lastAppliedProjection = null;
-                updateLive('A-Frame 已找到定位图，正在同步角色相机…');
+                updateLive('已找到定位图，等待稳定观测并同步相机…');
+                onPoseUpdate();
             };
             const onLost = () => {
                 if (token !== generation) return;
-                visible = false;
                 sample += 1;
-                poseSyncState.synced = false;
-                lastAppliedAnchor = null;
-                lastAppliedProjection = null;
-                root.DisplayMmd?.suspendArCameraPose?.();
-                updateLive('定位图暂时丢失，角色保持原位置，视角停在最后一次定位结果；正在寻找…');
+                markLost();
+                applyCurrentPose();
+                updateLive('定位图暂时丢失；相机按 IMU 场景开关预测或保持，正在寻找…');
             };
             anchor.addEventListener('targetUpdate', onPoseUpdate);
             anchor.addEventListener('targetFound', onFound);
@@ -257,7 +371,13 @@
                         scene.removeEventListener('arError', onError);
                         if (rejectStart === onCancel) rejectStart = null;
                     };
-                    const onReady = () => { cleanup(); resolve(); };
+                    const onReady = () => {
+                        if (scene.object3D) scene.object3D.background = null;
+                        scene.renderer?.setClearAlpha?.(0);
+                        root.MmdArTestImu.attachQuality(system.controller);
+                        cleanup();
+                        resolve();
+                    };
                     const onError = (event) => {
                         cleanup();
                         reject(new Error(`MindAR 启动失败：${event.detail?.error || '摄像头不可用'}`));
@@ -283,7 +403,8 @@
                 async processFrame() {
                     const newSample = sample !== lastSample;
                     lastSample = sample;
-                    return { visible, newSample, reason: visible ? null : 'searching' };
+                    const visualFresh = visible && root.MmdArTestImu.isVisualTrackingFresh(performance.now());
+                    return { visible: visualFresh, newSample, reason: visualFresh ? null : 'searching' };
                 },
                 async stop() {
                     anchor.removeEventListener('targetUpdate', onPoseUpdate);
@@ -305,7 +426,10 @@
         cancelPending,
         getPoseSyncState: () => ({ ...poseSyncState })
     });
-    root.DisplayMmdArLocationMarker = Object.freeze({ hide: () => { if (anchor.object3D) anchor.object3D.visible = false; } });
+    root.DisplayMmdArLocationMarker = Object.freeze({
+        // 正常失锁保留已锚定蓝框；停止/切换由 releaseSystem 显式隐藏，不能篡改 MindAR 测量节点。
+        hide: () => { if (!currentSession && worldTarget.object3D) worldTarget.object3D.visible = false; }
+    });
     root.DisplayMmdImageTargetTracker = Object.freeze({ start });
     root.addEventListener('pagehide', cancelPending);
 })(window);

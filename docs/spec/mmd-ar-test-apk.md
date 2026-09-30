@@ -2,6 +2,55 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 合并 MindAR Basic 相机融合（2026-09-30）
+
+```text
+仅 WEB_MODE 构建:
+  复制 mind-basic-imu.js、mind-basic-quality.js 原模块，使用内容指纹加载
+  从 mind-basic/index.html 复用 IMU/质量面板，改为 mmdAr ID；分类独立展开
+  默认关闭 IMU；用户启用后请求权限并连续静置至少 1.2 秒校准双零偏/噪声
+  两个开关分别控制图片可见/不可见时的旋转和平移预测
+  共用核心的死区×2、静止归零、低通、时间/速度/位移保护和三帧重获
+  每个新 targetUpdate 在微任务分解本帧矩阵，原始跟踪失败立即接管且不接纳旧矩阵
+  每个 RAF 根据有效视觉<=500ms、校准/传感器新鲜度选择视觉/融合/冻结
+  相机预测由固定世界图面位姿与融合目标相对相机位姿取逆得到
+  A-Frame 参考框移到固定世界锚点，相机 rig 更新位置/方向；PMX 根节点不写入定位变换
+  PMX 用已有底面/立面及尺度映射，只更新相机；融合输出继续经过原相机死区和第二层缓动
+  保留相机 near=1、底面/立面、距离/缩放、角色拖动、模型物理和动作
+  arReady 挂接只读质量观测；面板每100ms刷新，失锁/过期/停止不显示旧评分
+  停止/换目标/离开取消权限等待、传感器监听、质量包装、RAF并重置相机/世界尺度
+  横竖屏/后台切换清除预测时间基准，等待新视觉；重校准不移动固定锚点
+  保留 PMX runtime 现有相机跟随实现，不增加跳过缓动的分支
+  npm run build:web:mmd-ar-test 同步 web-dist；本次不发布外网
+```
+
+### MindAR One Euro Filter 调节（伪代码）
+
+```text
+网页构建:
+  WEB_MODE 在定位面板新增 MindAR 抖动过滤分类
+  提供 filterMinCF 与 filterBeta 两个滑条，默认分别为 0.001 与 1000
+  APK 构建不添加这两项控件
+
+页面初始化:
+  从 aasc.mmdArTest.mindArFilter.v1 读取合法有限数值
+  filterMinCF 限制到 0.0001..0.02；filterBeta 限制到 0..2000
+  缺失、损坏或不可读时使用 MindAR 默认值
+  更新滑条、数值显示和操作提示
+
+用户调节:
+  更新当前页设置与数值读数，并尽力保存到 localStorage
+  不在运行中的会话修改 Controller，不中断相机
+  提示停止并重新启动定位以应用
+
+每次开始定位:
+  等待定位页 A-Frame scene 完成初始化
+  将当前 filterMinCF/filterBeta 写入 MindAR image system
+  再启动 system，使新 Controller 使用本次滤波参数
+
+既有 PMX 相机跟随死区和 smoothingMs 保持独立，不合并到 MindAR 参数
+```
+
 ### HTTPS 测试网页面板横竖屏布局与共用透明度（伪代码）
 
 ```text

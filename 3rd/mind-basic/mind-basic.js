@@ -22,7 +22,15 @@
     'mindBasicCalibrationCanvas', 'mindBasicCropFrame', 'mindBasicCaptureStage',
     'mindBasicTargetName', 'mindBasicTakePhotoButton', 'mindBasicRetakeButton',
     'mindBasicSaveButton', 'mindBasicCancelButton', 'mindBasicCalibrationHint',
-    'mindBasicScene', 'mindBasicTargetPlane', 'mindBasicTargetAnchor'
+    'mindBasicScene', 'mindBasicTargetPlane', 'mindBasicTargetAnchor', 'mindBasicImuStage', 'mindBasicCameraRig',
+    'mindBasicImuToggle', 'mindBasicImuStabilize', 'mindBasicImuBridge', 'mindBasicImuReset',
+    'mindBasicImuStatus', 'mindBasicImuAngular', 'mindBasicImuAcceleration',
+    'mindBasicImuTranslation', 'mindBasicImuLostFor',
+    'mindBasicImuCorrection', 'mindBasicImuCorrectionValue', 'mindBasicImuHold', 'mindBasicImuHoldValue',
+    'mindBasicImuTargetWidth',
+    'mindBasicQualityScore', 'mindBasicQualityPoints', 'mindBasicQualityRatio',
+    'mindBasicQualityCoverage', 'mindBasicQualityError', 'mindBasicQualityAge',
+    'mindBasicImuRawAngular', 'mindBasicImuCorrectedAcceleration', 'mindBasicImuStationary'
   ].map((id) => [id, document.getElementById(id)]));
 
   const state = {
@@ -44,11 +52,452 @@
     planeUrl: null,
     resizeHandler: null,
     startPromise: null,
-    operationId: 0
+    operationId: 0,
+    imuEnabled: false,
+    imuState: null,
+    imuTracked: false,
+    targetVisible: false,
+    imuMotionHandler: null,
+    imuOrientationHandler: null,
+    imuVisibilityHandler: null,
+    imuSampleCount: 0,
+    imuBiasSamples: [],
+    imuCalibrating: false,
+    imuCalibrationTimeout: null,
+    imuMetricsUpdatedAt: 0,
+    imuExpiryReported: false,
+    imuScreenAngle: 0,
+    imuPoseUpdateQueued: false,
+    lastVisualPose: null,
+    lastRenderedCameraPose: null,
+    worldTargetScale: null,
+    lastVisualReceivedAt: null,
+    qualitySample: null,
+    qualityDetach: null,
+    qualityUpdatedAt: -Infinity,
+    qualityLost: false,
+    imuPredictionActive: null,
+    imuFallbackReported: false
   };
 
   function setStatus(message) {
     elements.mindBasicStatus.textContent = message;
+  }
+
+  function setImuStatus(message) {
+    elements.mindBasicImuStatus.textContent = message;
+  }
+
+  function updateMindQualityDisplay(now, force = false) {
+    if (!force && now - state.qualityUpdatedAt < 100) return;
+    state.qualityUpdatedAt = now;
+    const sample = state.qualitySample;
+    const metrics = sample?.metrics;
+    const age = sample ? Math.max(0, now - sample.timestamp) : null;
+    const stale = age !== null && age > 500;
+    const usable = state.isRunning && !state.qualityLost && !stale && metrics;
+    elements.mindBasicQualityScore.textContent = usable ? `${metrics.score} / 100` : '--';
+    elements.mindBasicQualityPoints.textContent = usable ? `${metrics.points} / ${metrics.totalPoints}` : '--';
+    elements.mindBasicQualityRatio.textContent = usable ? `${(metrics.ratio * 100).toFixed(0)}%` : '--';
+    elements.mindBasicQualityCoverage.textContent = usable && metrics.coverage !== null
+      ? `${(metrics.coverage * 100).toFixed(0)}%` : '--';
+    elements.mindBasicQualityError.textContent = usable && metrics.rmse !== null ? `${metrics.rmse.toFixed(2)} px` : '--';
+    let status = '等待识别';
+    if (sample) status = metrics ? `${Math.round(age)} ms 前${metrics.tracking ? '' : ' · 跟踪失败'}` : '指标不可用';
+    if (stale) status = '数据已过期';
+    if (state.qualityLost) status = '定位已丢失';
+    if (state.isRunning && !state.qualityDetach) status = '质量接口不可用';
+    if (!state.isRunning) status = '未运行';
+    elements.mindBasicQualityAge.textContent = status;
+  }
+
+  function observeMindQuality() {
+    state.qualityDetach?.();
+    state.qualitySample = null;
+    state.qualityLost = false;
+    state.qualityDetach = root.MindBasicQuality?.attach(state.system?.controller, (sample) => {
+      if (!state.isRunning || sample.targetIndex !== 0) return;
+      state.qualitySample = sample;
+      if (sample.metrics?.tracking) state.qualityLost = false;
+    }) || null;
+    updateMindQualityDisplay(performance.now(), true);
+  }
+
+  function setImuControlsEnabled(enabled) {
+    elements.mindBasicImuToggle.setAttribute('aria-pressed', String(enabled));
+    elements.mindBasicImuToggle.textContent = enabled ? '关闭 IMU 辅助' : '启用 IMU 辅助';
+    elements.mindBasicImuStabilize.disabled = !enabled;
+    elements.mindBasicImuBridge.disabled = !enabled;
+    elements.mindBasicImuReset.disabled = !enabled;
+  }
+
+  function getScreenAngle() {
+    const angle = Number(root.screen?.orientation?.angle ?? root.orientation ?? 0);
+    return Number.isFinite(angle) ? angle : 0;
+  }
+
+  function readTargetPose() {
+    const object3D = elements.mindBasicTargetAnchor.object3D;
+    if (!object3D?.position || !object3D?.quaternion || !object3D?.scale) return null;
+    const position = object3D.position.clone?.() || object3D.position;
+    const quaternion = object3D.quaternion.clone?.() || object3D.quaternion;
+    const scale = object3D.scale.clone?.() || object3D.scale;
+    // MindAR 关闭 matrixAutoUpdate 并直接提交 matrix，position/quaternion 属性可能仍是初值。
+    if (object3D.matrixAutoUpdate === false && object3D.matrix?.decompose) {
+      object3D.matrix.decompose(position, quaternion, scale);
+    }
+    const pose = { position: position.toArray(), quaternion: quaternion.toArray(), scale: scale.toArray() };
+    if (![...pose.position, ...pose.quaternion, ...pose.scale].every(Number.isFinite)
+      || pose.scale.some((value) => value <= 0) || Math.hypot(...pose.quaternion) < 1e-9) return null;
+    return pose;
+  }
+
+  function readImuOptions() {
+    const bounded = (element, fallback, min, max) => {
+      const value = Number(element.value);
+      return Number.isFinite(value) && element.value !== '' ? Math.max(min, Math.min(max, value)) : fallback;
+    };
+    return {
+      orientationCorrectionMs: bounded(elements.mindBasicImuCorrection, 800, 200, 2000),
+      maxLossDurationMs: bounded(elements.mindBasicImuHold, 1800, 200, 3000),
+      translationEnabled: true,
+      targetWidthMeters: bounded(elements.mindBasicImuTargetWidth, 20, 1, 300) / 100
+    };
+  }
+
+  function resetImuPrediction() {
+    const calibration = state.imuState;
+    state.imuState = root.MindBasicImu.createState(readImuOptions());
+    state.imuPredictionActive = null;
+    if (calibration) root.MindBasicImu.setCalibration(state.imuState, calibration);
+    state.lastVisualReceivedAt = null;
+    state.lastVisualPose = null;
+    state.lastRenderedCameraPose = null;
+    state.imuExpiryReported = false;
+    state.imuFallbackReported = false;
+    setStageVisible(false);
+  }
+
+  function setStageVisible(visible) {
+    const isVisible = Boolean(visible);
+    if (elements.mindBasicImuStage.object3D) {
+      elements.mindBasicImuStage.object3D.visible = isVisible;
+    }
+    elements.mindBasicImuStage.setAttribute('visible', String(isVisible));
+  }
+
+  function applyCameraPose(targetPose) {
+    const cameraRig = elements.mindBasicCameraRig.object3D;
+    const worldAnchor = elements.mindBasicImuStage.object3D;
+    if (!cameraRig || !worldAnchor || !targetPose) return false;
+    const referenceScale = state.worldTargetScale ?? targetPose.scale?.[0];
+    const cameraPose = root.MindBasicImu?.cameraPoseFromTarget(targetPose, referenceScale);
+    if (!cameraPose) return false;
+    if (state.worldTargetScale === null) {
+      // 一次定位会话内，图片和角色共享固定世界锚点；后续预测/纠偏只更新相机。
+      state.worldTargetScale = referenceScale;
+      worldAnchor.position.set(0, 0, 0);
+      worldAnchor.quaternion.set(0, 0, 0, 1);
+      worldAnchor.scale.set(referenceScale, referenceScale, referenceScale);
+      worldAnchor.updateMatrix?.();
+      worldAnchor.updateMatrixWorld?.(true);
+    }
+    cameraRig.position.set(...cameraPose.position);
+    cameraRig.quaternion.set(...cameraPose.quaternion);
+    cameraRig.scale.set(1, 1, 1);
+    cameraRig.updateMatrix?.();
+    cameraRig.updateMatrixWorld?.(true);
+    // 只保存已经应用到相机的姿态，失锁保持不能退回原始视觉候选。
+    state.lastRenderedCameraPose = {
+      position: cameraPose.position.slice(), quaternion: cameraPose.quaternion.slice(), scale: cameraPose.scale.slice()
+    };
+    return true;
+  }
+
+  function updateWorldAnchorVisibility() {
+    // 预测失效冻结相机；首次定位前和显式停止后不显示世界锚点下的模型。
+    setStageVisible(state.isRunning && Boolean(state.lastRenderedCameraPose));
+  }
+
+  function applyVisualPose(pose) {
+    if (!pose) return;
+    state.lastVisualPose = {
+      position: pose.position.slice(),
+      quaternion: pose.quaternion.slice(),
+      scale: pose.scale.slice()
+    };
+    if (!state.imuEnabled || !state.imuState) {
+      applyCameraPose(pose);
+      return;
+    }
+    const timestamp = performance.now();
+    root.MindBasicImu.observeVisualMotion(state.imuState, pose, timestamp);
+    const isStabilizing = elements.mindBasicImuStabilize.checked && !state.imuCalibrating;
+    const wasTracking = state.imuState.tracking;
+    const accepted = root.MindBasicImu.correctVisualPose(state.imuState, pose, { stabilize: isStabilizing, timestamp });
+    if (accepted && !wasTracking) {
+      state.imuExpiryReported = false;
+      if (state.imuState.initialized) setImuStatus('视觉定位已确认；IMU 预测运动，视觉持续平滑纠偏。');
+    }
+    applyCameraPose(isStabilizing ? root.MindBasicImu.getPose(state.imuState, timestamp) : pose);
+  }
+
+  function updateImuMetrics(timestamp) {
+    if (timestamp - state.imuMetricsUpdatedAt < 100) return;
+    state.imuMetricsUpdatedAt = timestamp;
+    const diagnostics = state.imuState
+      ? root.MindBasicImu.getDiagnostics(state.imuState, timestamp)
+      : null;
+    if (!diagnostics) return;
+    elements.mindBasicImuRawAngular.textContent = `${diagnostics.rawAngularSpeedDegrees.toFixed(3)} °/s`;
+    elements.mindBasicImuStationary.textContent = diagnostics.stationary ? '视觉＋IMU 确认静止' : '运动或静止未确认';
+    elements.mindBasicImuCorrectedAcceleration.textContent = diagnostics.correctedAcceleration
+      ? `${diagnostics.correctedAcceleration.map((value) => value.toFixed(3)).join(', ')} m/s²` : '无可用样本';
+    elements.mindBasicImuAngular.textContent = `${diagnostics.angularSpeedDegrees.toFixed(3)} °/s`;
+    elements.mindBasicImuAcceleration.textContent = diagnostics.acceleration
+      ? `${diagnostics.acceleration.map((value) => value.toFixed(3)).join(', ')} m/s²`
+      : '无可用样本';
+    elements.mindBasicImuTranslation.textContent = `${diagnostics.translation
+      .map((value) => value.toFixed(3)).join(', ')} m`;
+    elements.mindBasicImuLostFor.textContent = diagnostics.lostForMs > 0
+      ? `${diagnostics.lostForMs.toFixed(0)} ms`
+      : state.imuTracked ? '跟踪中' : '--';
+  }
+
+  function isVisualTrackingFresh(timestamp) {
+    return state.targetVisible && state.imuTracked && state.lastVisualReceivedAt !== null
+      && timestamp - state.lastVisualReceivedAt <= (state.imuState?.config.visualTimeoutMs ?? 500);
+  }
+
+  function syncImuPredictionMode(timestamp) {
+    const enabled = isVisualTrackingFresh(timestamp)
+      ? elements.mindBasicImuStabilize.checked : elements.mindBasicImuBridge.checked;
+    if (!enabled && state.imuPredictionActive !== false) {
+      root.MindBasicImu.pausePrediction(state.imuState);
+    }
+    state.imuPredictionActive = enabled;
+    return enabled;
+  }
+
+  function updateImuSceneFrame() {
+    if (document.visibilityState === 'hidden') return;
+    const now = performance.now();
+    updateMindQualityDisplay(now);
+    if (!state.isRunning) return;
+    if (!state.imuEnabled || !state.imuState) return;
+    const imu = root.MindBasicImu;
+    const fusion = state.imuState;
+    const fresh = !state.imuCalibrating && imu.isGyroscopeFresh(fusion, now);
+    // 有识别标志但没有新的可靠观测时，也要进入失锁状态，限制无视觉约束的平移积分。
+    if (fusion.tracking && now - fusion.lastVisualAt > fusion.config.visualTimeoutMs) {
+      imu.beginTrackingLoss(fusion, fusion.lastVisualAt);
+    }
+    const visualFresh = isVisualTrackingFresh(now);
+    const predicting = syncImuPredictionMode(now) && fresh;
+
+    if (!predicting) {
+      if (visualFresh && state.lastVisualPose) {
+        // 传感器过期时也保留视觉接纳门槛，不绕过滤波直接应用候选原始矩阵。
+        const fallback = elements.mindBasicImuStabilize.checked && fusion.initialized
+          ? imu.getPose(fusion, now) : state.lastVisualPose;
+        if (fallback) applyCameraPose(fallback);
+        updateWorldAnchorVisibility();
+      } else {
+        updateWorldAnchorVisibility();
+      }
+      if (!fresh && !state.imuCalibrating && !state.imuFallbackReported) {
+        setImuStatus('陀螺仪数据缺失或过期；使用可用视觉姿态，失锁时保留最后姿态。');
+        state.imuFallbackReported = true;
+      }
+      updateImuMetrics(now);
+      return;
+    }
+    if (state.imuFallbackReported) {
+      setImuStatus('IMU 已恢复；预测旋转与平移，视觉持续纠偏。');
+      state.imuFallbackReported = false;
+    }
+    const pose = imu.getPose(fusion, now);
+    if (pose) applyCameraPose(pose);
+    updateWorldAnchorVisibility();
+    if (fusion.lossStartedAt !== null && !state.imuExpiryReported
+      && (now - fusion.lastVisualAt > fusion.config.maxLossDurationMs || fusion.translationLimitReached)) {
+      setImuStatus('失锁平移预测已停止；陀螺仪有效时继续旋转，等待稳定视觉重新校准。');
+      state.imuExpiryReported = true;
+    }
+    updateImuMetrics(now);
+  }
+
+  function handleTargetPoseUpdate() {
+    if (state.imuPoseUpdateQueued) return;
+    state.imuPoseUpdateQueued = true;
+    queueMicrotask(() => {
+      state.imuPoseUpdateQueued = false;
+      if (!state.targetVisible || !state.isRunning || document.visibilityState === 'hidden') return;
+      // MindAR 在 missTolerance 窗口内仍会重复旧矩阵，不能把它视为新视觉观测。
+      if (state.system?.controller?.trackingStates?.[0]?.isTracking === false) {
+        state.imuTracked = false;
+        state.lastVisualReceivedAt = null;
+        if (state.imuEnabled && state.imuState) {
+          root.MindBasicImu.beginTrackingLoss(state.imuState, performance.now());
+        }
+        updateImuSceneFrame();
+        return;
+      }
+      const pose = readTargetPose();
+      if (!pose) return;
+      state.imuTracked = true;
+      state.lastVisualReceivedAt = performance.now();
+      applyVisualPose(pose);
+      updateWorldAnchorVisibility();
+      updateImuSceneFrame();
+    });
+  }
+
+  function updateCalibrationSamples(event, timestamp) {
+    if (!state.imuCalibrating) return false;
+    const fusion = state.imuState;
+    // 有视觉时，校准也必须避开已观测到的相机运动；无视觉时依赖用户静置和传感器窗口。
+    if (fusion.visualObservedAt !== null && timestamp - fusion.visualObservedAt <= 200
+      && timestamp - fusion.visualStillAt < 600) {
+      state.imuBiasSamples.length = 0;
+      return true;
+    }
+    const bias = root.MindBasicImu.collectCalibrationSample(
+      state.imuBiasSamples, event.rotationRate, event.acceleration, timestamp
+    );
+    if (!bias) return true;
+    root.MindBasicImu.setCalibration(state.imuState, bias);
+    state.imuCalibrating = false;
+    state.imuState.lastGyroscopeAt = null;
+    clearTimeout(state.imuCalibrationTimeout);
+    state.imuCalibrationTimeout = null;
+    setImuStatus('IMU 已校准。IMU 预测旋转与平移，视觉持续纠偏；请按实物填写定位图宽度。');
+    return true;
+  }
+
+  function handleDeviceMotion(event) {
+    if (!state.imuEnabled || !state.imuState || document.visibilityState === 'hidden') return;
+    state.imuSampleCount += 1;
+    const timestamp = performance.now();
+    root.MindBasicImu.recordLinearAcceleration(state.imuState, event.acceleration);
+    if (updateCalibrationSamples(event, timestamp)) {
+      updateImuMetrics(timestamp);
+      return;
+    }
+    root.MindBasicImu.integrateGyroscope(
+      state.imuState,
+      event.rotationRate,
+      timestamp,
+      state.imuScreenAngle,
+      syncImuPredictionMode(timestamp)
+    );
+    if (state.imuPredictionActive) {
+      root.MindBasicImu.integrateLinearAcceleration(
+        state.imuState,
+        event.acceleration,
+        timestamp,
+        state.imuScreenAngle
+      );
+    }
+    updateImuMetrics(timestamp);
+  }
+
+  function clearImuListeners() {
+    if (state.imuMotionHandler) root.removeEventListener('devicemotion', state.imuMotionHandler);
+    if (state.imuOrientationHandler) root.removeEventListener('orientationchange', state.imuOrientationHandler);
+    if (state.imuVisibilityHandler) document.removeEventListener('visibilitychange', state.imuVisibilityHandler);
+    state.imuMotionHandler = null;
+    state.imuOrientationHandler = null;
+    state.imuVisibilityHandler = null;
+    clearTimeout(state.imuCalibrationTimeout);
+    state.imuCalibrationTimeout = null;
+  }
+
+  function stopImuSensors(message = 'IMU 已关闭；MindAR 使用原始视觉定位。') {
+    clearImuListeners();
+    state.imuEnabled = false;
+    state.imuCalibrating = false;
+    state.imuTracked = state.targetVisible;
+    state.imuState = root.MindBasicImu?.createState?.(readImuOptions()) || null;
+    state.imuPredictionActive = null;
+    state.imuBiasSamples = [];
+    state.imuSampleCount = 0;
+    state.imuExpiryReported = false;
+    setImuControlsEnabled(false);
+    const pose = state.targetVisible ? readTargetPose() : null;
+    if (pose && state.isRunning) {
+      applyCameraPose(pose);
+      updateWorldAnchorVisibility();
+    } else {
+      updateWorldAnchorVisibility();
+    }
+    setImuStatus(message);
+  }
+
+  async function startImuSensors() {
+    if (state.imuEnabled) return;
+    try {
+      if (!root.isSecureContext) throw new Error('设备传感器只在 HTTPS 或可信本地页面开放');
+      if (!root.MindBasicImu) throw new Error('IMU 算法模块未加载，纯 MindAR 定位仍可继续使用');
+      if (!root.DeviceMotionEvent) throw new Error('浏览器不支持设备运动传感器');
+      if (typeof root.DeviceMotionEvent.requestPermission === 'function') {
+        const permission = await root.DeviceMotionEvent.requestPermission();
+        if (permission !== 'granted') throw new Error('设备运动权限未获准');
+      }
+      state.imuState = root.MindBasicImu.createState(readImuOptions());
+      state.imuPredictionActive = null;
+      state.imuEnabled = true;
+      state.imuTracked = state.isRunning && state.targetVisible;
+      state.imuScreenAngle = getScreenAngle();
+      state.imuBiasSamples = [];
+      state.imuSampleCount = 0;
+      state.imuCalibrating = true;
+      state.imuExpiryReported = false;
+      setImuControlsEnabled(true);
+      if (state.imuTracked) root.MindBasicImu.seedVisualPose(state.imuState, readTargetPose(), performance.now());
+      state.imuMotionHandler = handleDeviceMotion;
+      state.imuOrientationHandler = () => {
+        state.imuScreenAngle = getScreenAngle();
+        resetImuPrediction();
+        state.imuBiasSamples = [];
+      };
+      state.imuVisibilityHandler = () => {
+        resetImuPrediction();
+        state.imuBiasSamples = [];
+      };
+      root.addEventListener('devicemotion', state.imuMotionHandler, { passive: true });
+      root.addEventListener('orientationchange', state.imuOrientationHandler, { passive: true });
+      document.addEventListener('visibilitychange', state.imuVisibilityHandler);
+      setImuStatus('请保持手机静止，正在校准陀螺仪偏置与加速度零偏（至少 1.2 秒）…');
+      state.imuCalibrationTimeout = setTimeout(() => {
+        if (state.imuCalibrating) {
+          setImuStatus(state.imuSampleCount
+            ? '静止校准未完成，IMU 保持暂停；请静置后点击重新校准。'
+            : '等待设备运动数据；请确认 HTTPS、权限和浏览器传感器支持。');
+        }
+      }, 8000);
+    } catch (error) {
+      stopImuSensors(error.message || '无法启用 IMU');
+    }
+  }
+
+  function resetImuCalibration() {
+    if (!state.imuEnabled) return;
+    const pose = state.imuTracked ? readTargetPose() : state.lastVisualPose;
+    state.imuState = root.MindBasicImu.createState(readImuOptions());
+    state.imuPredictionActive = null;
+    state.imuBiasSamples = [];
+    state.imuSampleCount = 0;
+    state.imuCalibrating = true;
+    state.imuExpiryReported = false;
+    if (state.imuTracked && pose) root.MindBasicImu.seedVisualPose(state.imuState, pose, performance.now());
+    setImuStatus('请保持手机静止，正在重新校准陀螺仪偏置与加速度零偏（至少 1.2 秒）…');
+    clearTimeout(state.imuCalibrationTimeout);
+    state.imuCalibrationTimeout = setTimeout(() => {
+      if (state.imuCalibrating) {
+        setImuStatus('静止校准未完成，IMU 保持暂停；请静置后点击重新校准。');
+      }
+    }, 8000);
   }
 
   function setBusy(value) {
@@ -318,6 +767,28 @@
   }
 
   function stopMindArSystem() {
+    state.isRunning = false;
+    state.qualityDetach?.();
+    state.qualityDetach = null;
+    state.qualitySample = null;
+    state.qualityLost = false;
+    updateMindQualityDisplay(performance.now(), true);
+    state.targetVisible = false;
+    state.imuTracked = false;
+    state.lastVisualPose = null;
+    state.lastRenderedCameraPose = null;
+    state.worldTargetScale = null;
+    state.imuExpiryReported = false;
+    state.imuFallbackReported = false;
+    setStageVisible(false);
+    const cameraRig = elements.mindBasicCameraRig.object3D;
+    if (cameraRig) {
+      cameraRig.position.set(0, 0, 0);
+      cameraRig.quaternion.set(0, 0, 0, 1);
+      cameraRig.scale.set(1, 1, 1);
+      cameraRig.updateMatrix?.();
+      cameraRig.updateMatrixWorld?.(true);
+    }
     const system = state.system;
     if (!system) return;
     const video = system.video;
@@ -389,6 +860,29 @@
     };
   }
 
+  function prepareCameraBackground(operationId) {
+    const video = state.system?.video;
+    if (!video) return;
+    // 使用 MindAR 实际创建的视频，不依赖其父节点；保留其尺寸与投影裁剪。
+    video.classList.add('mind-basic-tracking-video');
+    video.muted = true;
+    video.playsInline = true;
+    state.scene.object3D.background = null;
+    state.scene.renderer?.setClearAlpha(0);
+    const playCamera = async () => {
+      if (operationId !== state.operationId || video !== state.system?.video) return;
+      try {
+        await video.play();
+      } catch (error) {
+        if (operationId !== state.operationId || video !== state.system?.video) return;
+        setStatus('摄像头播放失败，请停止定位后重新开始。');
+        console.warn('[Mind Basic] 播放跟踪摄像头失败:', error);
+      }
+    };
+    if (video.readyState >= 1) void playCamera();
+    else video.addEventListener('loadedmetadata', playCamera, { once: true });
+  }
+
   function waitForArStart(operationId) {
     return new Promise((resolve, reject) => {
       let timeoutId = null;
@@ -405,6 +899,7 @@
           return;
         }
         state.isRunning = true;
+        observeMindQuality();
         setStatus('定位已启动，请将图片放入摄像头画面。');
         hideProgress();
         setBusy(false);
@@ -428,6 +923,7 @@
       }, 120000);
       try {
         state.system.start();
+        prepareCameraBackground(operationId);
       } catch (error) {
         cleanup();
         reject(error);
@@ -438,6 +934,7 @@
   async function startSelectedTarget() {
     if (state.isBusy || !state.system) return;
     const operationId = ++state.operationId;
+    if (state.imuEnabled) stopImuSensors('定位正在重启；IMU 已关闭，请重新启用以继续实验。');
     setBusy(true);
     hideProgress();
     try {
@@ -477,6 +974,7 @@
     state.operationId += 1;
     state.startPromise?.cancel?.();
     stopMindArSystem();
+    stopImuSensors('定位已停止，IMU 监听已关闭。');
     hideProgress();
     setBusy(false);
     setStatus('定位已停止。');
@@ -502,6 +1000,7 @@
     const captureRequestId = ++state.captureRequestId;
     state.operationId += 1;
     state.startPromise?.cancel?.();
+    stopImuSensors('正在进行拍照校准；IMU 监听已关闭。');
     stopMindArSystem();
     hideProgress();
     elements.mindBasicCalibration.hidden = false;
@@ -682,10 +1181,34 @@
 
   function bindTargetEvents() {
     elements.mindBasicTargetAnchor.addEventListener('targetFound', () => {
+      state.targetVisible = true;
+      state.imuTracked = true;
+      state.imuExpiryReported = false;
+      updateWorldAnchorVisibility();
       setStatus(`已识别“${findSelectedTarget()?.name || 'MindAR 官方示例卡片'}”，Softmind 模型已锚定。`);
+      handleTargetPoseUpdate();
     });
+    elements.mindBasicTargetAnchor.addEventListener('targetUpdate', handleTargetPoseUpdate);
     elements.mindBasicTargetAnchor.addEventListener('targetLost', () => {
-      if (state.isRunning) setStatus('定位运行中，正在寻找图片…');
+      state.qualityLost = true;
+      updateMindQualityDisplay(performance.now(), true);
+      state.targetVisible = false;
+      state.imuTracked = false;
+      if (state.imuEnabled && state.imuState) {
+        root.MindBasicImu.beginTrackingLoss(state.imuState, performance.now());
+      }
+      if (state.imuEnabled && state.imuState && elements.mindBasicImuBridge.checked) {
+        const pose = root.MindBasicImu.getPose(state.imuState, performance.now());
+        if (pose) applyCameraPose(pose);
+        updateWorldAnchorVisibility();
+        setImuStatus(pose
+          ? '定位图丢失；IMU 继续预测旋转，平移在设定时间内继续估算。'
+          : '定位图丢失；保留最后姿态，等待下一次视觉锚定。');
+      } else {
+        updateWorldAnchorVisibility();
+        if (state.imuEnabled) setImuStatus('定位图丢失；失锁预测已关闭，模型保留最后姿态。');
+      }
+      if (state.isRunning) setStatus('定位图丢失，保留模型；正在重新寻找图片…');
     });
   }
 
@@ -709,6 +1232,26 @@
     elements.mindBasicControlsToggle.addEventListener('click', () => {
       setControlsExpanded(!state.controlsExpanded);
     });
+    elements.mindBasicImuToggle.addEventListener('click', () => {
+      if (state.imuEnabled) stopImuSensors();
+      else void startImuSensors();
+    });
+    elements.mindBasicImuReset.addEventListener('click', resetImuCalibration);
+    const updateFusionOptions = () => {
+      const options = readImuOptions();
+      elements.mindBasicImuCorrectionValue.textContent = `${options.orientationCorrectionMs} ms`;
+      elements.mindBasicImuHoldValue.textContent = `${options.maxLossDurationMs} ms`;
+      if (state.imuState) Object.assign(state.imuState.config, options);
+    };
+    elements.mindBasicImuCorrection.addEventListener('input', updateFusionOptions);
+    elements.mindBasicImuHold.addEventListener('input', updateFusionOptions);
+    elements.mindBasicImuTargetWidth.addEventListener('change', () => {
+      if (state.imuEnabled) resetImuPrediction();
+      updateFusionOptions();
+    });
+    for (const input of [elements.mindBasicImuStabilize, elements.mindBasicImuBridge]) {
+      input.addEventListener('change', updateImuSceneFrame);
+    }
     elements.mindBasicTakePhotoButton.addEventListener('click', () => void takePhoto());
     elements.mindBasicRetakeButton.addEventListener('click', retakePhoto);
     elements.mindBasicSaveButton.addEventListener('click', () => void saveCalibrationTarget());
@@ -727,6 +1270,13 @@
     try {
       bindControls();
       setControlsExpanded(true);
+      setImuControlsEnabled(false);
+      if (root.MindBasicImu) {
+        root.MindBasicImu.setFrameHandler(updateImuSceneFrame);
+      } else {
+        elements.mindBasicImuToggle.disabled = true;
+        setImuStatus('IMU 算法模块未加载；普通 MindAR 定位不受影响。');
+      }
       bindTargetEvents();
       await loadTargets();
       await waitForScene();
@@ -745,6 +1295,7 @@
     state.operationId += 1;
     state.captureRequestId += 1;
     state.startPromise?.cancel?.();
+    stopImuSensors('页面已离开，IMU 监听已清理。');
     root.removeEventListener('resize', updateCaptureStageSize);
     elements.mindBasicCalibration.hidden = true;
     releaseCamera();

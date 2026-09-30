@@ -19,11 +19,25 @@ body {
   background: #111318;
 }
 
+/* 识别实际跟踪视频并覆盖负层级，避免被页面底色挡住。
+   不改视频尺寸/裁剪，继续由 MindAR 与相机投影同步计算。 */
+body > video,
+.mind-basic-tracking-video {
+  z-index: 0 !important;
+  pointer-events: none;
+}
+
 a-scene {
   position: fixed;
+  z-index: 1;
+  background: transparent;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+a-scene canvas {
+  background: transparent;
 }
 
 .mind-basic-controls {
@@ -157,6 +171,109 @@ a-scene {
 .mind-basic-note {
   color: #aab1bf;
   font-size: 12px;
+}
+
+.mind-basic-imu {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgb(123 158 198 / 28%);
+  border-radius: 11px;
+  background: rgb(27 34 45 / 82%);
+}
+
+.mind-basic-imu h2 {
+  margin: 0 0 8px;
+  color: #e7edf7;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.mind-basic-imu-toggle,
+.mind-basic-imu-reset {
+  min-height: 38px;
+  border: 1px solid #596273;
+  border-radius: 9px;
+  padding: 6px 10px;
+  color: #f7f8fa;
+  background: #262a33;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mind-basic-imu-toggle[aria-pressed="true"] {
+  border-color: #3da987;
+  background: #176c57;
+}
+
+.mind-basic-imu-toggle:disabled,
+.mind-basic-imu-reset:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.mind-basic-imu-options {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+  color: #dce1e9;
+  font-size: 12px;
+}
+
+.mind-basic-imu-options label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+}
+
+.mind-basic-imu-options input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #3f9cff;
+}
+
+.mind-basic-imu-reset {
+  min-height: 32px;
+  margin-top: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.mind-basic-imu-status {
+  margin: 8px 0 0;
+  color: #bac7d7;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.mind-basic-imu-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.mind-basic-imu-metrics div {
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 7px;
+  background: rgb(0 0 0 / 22%);
+}
+
+.mind-basic-imu-metrics dt {
+  color: #9eabbc;
+  font-size: 10px;
+}
+
+.mind-basic-imu-metrics dd {
+  margin: 2px 0 0;
+  color: #e9f1fc;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .mind-basic-progress {

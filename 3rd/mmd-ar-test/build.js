@@ -288,7 +288,30 @@ async function stageTextAssets() {
         <input id="mmdArCameraDistance" type="range" min="50" max="100" step="5" value="100">
         <small>100% 为定位原始距离；减小数值沿相机到图中心的连线拉近。</small>
       </label>
+      <label class="display-mmd-ar-field mmd-ar-camera-setting" for="mmdArFilterMinCF">
+        <span>最低截止频率（filterMinCF） <output id="mmdArFilterMinCFValue">0.001</output></span>
+        <input id="mmdArFilterMinCF" type="range" min="0.0001" max="0.02" step="0.0001" value="0.001">
+        <small>调低通常能减少静止抖动；过低时快速移动会更拖后。</small>
+      </label>
+      <label class="display-mmd-ar-field mmd-ar-camera-setting" for="mmdArFilterBeta">
+        <span>速度响应（filterBeta） <output id="mmdArFilterBetaValue">1000</output></span>
+        <input id="mmdArFilterBeta" type="range" min="0" max="2000" step="10" value="1000">
+        <small>调高可减少快速移动时的滞后，也可能让运动中的抖动更明显。</small>
+      </label>
+      <p id="mmdArFilterApplyHint" class="mmd-ar-benchmark-live">修改后停止并重新开始定位，新参数才会应用。</p>
     `);
+    // 两个面板直接复用 Basic 的控件，算法/校准参数保持同一来源。
+    const basic = cheerio.load(await fs.readFile(path.join(PROJECT_ROOT, '3rd/mind-basic/index.html'), 'utf8'));
+    for (const [selector, id] of [
+      ['#mindBasicImuTitle', 'mmdArImuPanel'],
+      ['section[aria-label="MindAR 定位质量"]', 'mmdArQualityPanel']
+    ]) {
+      const panel = selector.startsWith('#') ? basic(selector).closest('section') : basic(selector);
+      if (panel.length !== 1) throw new Error(`Basic 定位面板缺失：${selector}`);
+      panel.attr('id', id).removeAttr('aria-labelledby');
+      panel.find('h2').remove();
+      arPanel.append(basic.html(panel).replaceAll('mindBasic', 'mmdAr'));
+    }
     WEB_PANEL_GROUPS.groupWebPanels($);
     $('#displayArTargetPanelGroup1').append(`
       <label class="display-mmd-ar-field" for="mmdArInputMode">
@@ -368,8 +391,11 @@ async function stageTextAssets() {
       path.join(ANDROID_PROJECT, fileName),
       path.join(GENERATED_ASSETS, 'js', fileName),
     ]),
-    ...(WEB_MODE ? ['display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js'].map((fileName) => [
+    ...(WEB_MODE ? ['display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js'].map((fileName) => [
       path.join(ANDROID_PROJECT, fileName), path.join(GENERATED_ASSETS, 'js', fileName),
+    ]) : []),
+    ...(WEB_MODE ? ['mind-basic-imu.js', 'mind-basic-quality.js'].map((fileName) => [
+      path.join(PROJECT_ROOT, '3rd/mind-basic', fileName), path.join(GENERATED_ASSETS, 'js', fileName),
     ]) : []),
   ];
   for (const [sourcePath, destinationPath] of assets) {
@@ -437,7 +463,7 @@ async function stageTextAssets() {
 
   const scriptVersion = new Map();
   if (WEB_MODE) {
-    for (const fileName of ['display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar.js']) {
+    for (const fileName of ['display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
     }
   }
@@ -543,8 +569,11 @@ async function stageTextAssets() {
     ${WEB_MODE ? `<div id="mmdArAframeHost" hidden aria-label="MindAR 定位图蓝色标记">
       <a-scene id="mmdArAframeScene" embedded mindar-image="imageTargetSrc: ; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
         renderer="colorManagement: true; alpha: true" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
-        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-        <a-entity id="mmdArAframeAnchor" mindar-image-target="targetIndex: 0">
+        <a-entity id="mmdArAframeCameraRig">
+          <a-camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-camera>
+        </a-entity>
+        <a-entity id="mmdArAframeAnchor" mindar-image-target="targetIndex: 0"></a-entity>
+        <a-entity id="mmdArAframeWorldTarget" visible="false">
           <a-plane id="mmdArAframeTargetRect" width="1" height="1" material="color: #229cff; opacity: 0.35; transparent: true; side: double" position="0 0 0"></a-plane>
           <a-plane id="mmdArAframeCrossH" width="0.22" height="0.009" material="color: #d8f2ff; side: double" position="0 0 0.01"></a-plane>
           <a-plane id="mmdArAframeCrossV" width="0.009" height="0.22" material="color: #d8f2ff; side: double" position="0 0 0.01"></a-plane>
@@ -565,6 +594,9 @@ async function stageTextAssets() {
   <script src="/js/display-mmd-ar-benchmark-metrics.js"></script>
   <script src="${scriptUrl('display-mmd-ar-benchmark.js')}"></script>
   ${WEB_MODE ? `<script src="${scriptUrl('display-mmd-ar-sim-camera.js')}"></script>` : ''}
+  ${WEB_MODE ? `<script src="${scriptUrl('mind-basic-imu.js')}"></script>
+  <script src="${scriptUrl('mind-basic-quality.js')}"></script>
+  <script src="${scriptUrl('display-mmd-ar-imu.js')}"></script>` : ''}
   ${WEB_MODE ? `<script src="${scriptUrl('display-mmd-ar-aframe.js')}"></script>` : ''}
   ${WEB_MODE ? `<script>
     // 只为 HTTPS 测试页提供内置目标；共享 AR 模块在正式显示端和 APK 中不接收此配置。

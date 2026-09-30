@@ -17,6 +17,7 @@ function injectBrowserFixture(html) {
     .replace(/\s*<script src="https:\/\/aframe\.io\/releases\/1\.5\.0\/aframe\.min\.js"><\/script>/u, '')
     .replace(/\s*<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/mind-ar@1\.2\.5\/dist\/mindar-image-aframe\.prod\.js"><\/script>/u, '');
   const fixture = `<script>
+    window.AFRAME = { components: {}, registerComponent(name, definition) { this.components[name] = definition; } };
     customElements.define('a-scene', class extends HTMLElement {
       connectedCallback() {
         const scene = this;
@@ -30,8 +31,8 @@ function injectBrowserFixture(html) {
       }
     });
   </script>`;
-  return withoutExternalEngines.replace('<script src="./mind-basic-geometry.js"></script>',
-    `${fixture}\n    <script src="./mind-basic-geometry.js"></script>`);
+  return withoutExternalEngines.replace(/<script src="\.\/mind-basic-imu\.js(?:\?[^" ]*)?"><\/script>/u,
+    (script) => `${fixture}\n    ${script}`);
 }
 
 async function startLocalServer() {
@@ -112,6 +113,14 @@ test('蓝框叠加拍摄、移动、缩放、重拍、保存和 MindAR 编译浏
           }
         }
       });
+      Object.defineProperty(window, 'DeviceMotionEvent', {
+        configurable: true,
+        value: class DeviceMotionFixture {
+          static async requestPermission() {
+            return 'granted';
+          }
+        }
+      });
     });
     await page.setRequestInterception(true);
     page.on('request', async (request) => {
@@ -160,7 +169,252 @@ test('蓝框叠加拍摄、移动、缩放、重拍、保存和 MindAR 编译浏
     await page.click('#mindBasicControlsToggle');
     assert.equal(await page.$eval('#mindBasicControlsToggle', (button) => button.getAttribute('aria-expanded')), 'true');
 
+    await page.click('#mindBasicImuToggle');
+    await page.waitForFunction(() => document.getElementById('mindBasicImuStatus')
+      ?.textContent.includes('正在校准陀螺仪偏置'));
+    await page.evaluate(() => {
+      const originalNow = performance.now.bind(performance);
+      let calibrationNow = originalNow();
+      Object.defineProperty(performance, 'now', { configurable: true, value: () => calibrationNow });
+      for (let index = 0; index < 24; index += 1) {
+        calibrationNow += 60;
+        const event = new Event('devicemotion');
+        Object.defineProperties(event, {
+          rotationRate: { value: { alpha: 0, beta: 0, gamma: 0 } },
+          acceleration: { value: { x: 0, y: 0, z: 0 } }
+        });
+        window.dispatchEvent(event);
+      }
+      Object.defineProperty(performance, 'now', { configurable: true, value: originalNow });
+    });
+    await page.waitForFunction(() => document.getElementById('mindBasicImuStatus')
+      ?.textContent.includes('IMU 已校准'));
+    assert.equal(await page.$eval('#mindBasicImuToggle', (button) => button.getAttribute('aria-pressed')), 'true');
+    assert.equal(await page.$eval('#mindBasicImuStabilize', (input) => input.disabled), false);
+    await page.click('#mindBasicImuToggle');
+    assert.equal(await page.$eval('#mindBasicImuToggle', (button) => button.getAttribute('aria-pressed')), 'false');
+    assert.match(await page.$eval('#mindBasicImuStatus', (element) => element.textContent), /IMU 已关闭/u);
+    await page.evaluate(() => {
+      const makeVector = (values) => ({
+        x: values[0], y: values[1], z: values[2], w: values[3],
+        toArray() { return values.slice(); },
+        clone() { return makeVector(values.slice()); },
+        set(...next) {
+          values.splice(0, next.length, ...next);
+          [this.x, this.y, this.z, this.w] = next;
+        }
+      });
+      const anchor = document.getElementById('mindBasicTargetAnchor');
+      const stage = document.getElementById('mindBasicImuStage');
+      anchor.object3D = {
+        position: makeVector([0.25, 0.5, -1]),
+        quaternion: makeVector([0, 0, 0, 1]),
+        scale: makeVector([1, 1, 1])
+      };
+      anchor.object3D.matrixAutoUpdate = false;
+      anchor.object3D.matrix = {
+        position: [0.25, 0.5, -1],
+        decompose(position, quaternion, scale) {
+          position.set(...this.position);
+          quaternion.set(0, 0, 0, 1);
+          scale.set(1, 1, 1);
+        }
+      };
+      // 模拟真实 MindAR：只更新矩阵，分量保持旧值；应用必须分解矩阵读取。
+      anchor.object3D.position.set(99, 99, 99);
+      stage.object3D = {
+        position: makeVector([0, 0, 0]),
+        quaternion: makeVector([0, 0, 0, 1]),
+        scale: makeVector([1, 1, 1]),
+        updateMatrix() {}
+      };
+      document.getElementById('mindBasicCameraRig').object3D = {
+        position: makeVector([0, 0, 0]),
+        quaternion: makeVector([0, 0, 0, 1]),
+        scale: makeVector([1, 1, 1]),
+        updateMatrix() {}
+      };
+      anchor.dispatchEvent(new Event('targetFound'));
+      anchor.dispatchEvent(new Event('targetUpdate'));
+    });
+    await page.waitForFunction(() => document.getElementById('mindBasicCameraRig')
+      ?.object3D?.position.x === -0.25);
+    assert.equal(await page.$eval('#mindBasicImuStage', (stage) => stage.object3D.visible), true);
+    await page.click('#mindBasicImuToggle');
+    await page.evaluate(() => {
+      const originalNow = performance.now.bind(performance);
+      window.imuClock = originalNow();
+      Object.defineProperty(performance, 'now', { configurable: true, value: () => window.imuClock });
+      window.restoreImuClock = () => Object.defineProperty(performance, 'now', { configurable: true, value: originalNow });
+      window.emitImu = (rate = { alpha: 0, beta: 0, gamma: 0 }, acceleration = { x: 0, y: 0, z: 0 }) => {
+        const event = new Event('devicemotion');
+        Object.defineProperties(event, {
+          rotationRate: { value: rate }, acceleration: { value: acceleration }
+        });
+        window.dispatchEvent(event);
+      };
+      window.tickImu = () => AFRAME.components['mind-basic-imu-frame'].tick(performance.now());
+      for (let i = 0; i < 24; i += 1) { window.imuClock += 60; window.emitImu(); }
+      document.getElementById('mindBasicTargetAnchor').dispatchEvent(new Event('targetUpdate'));
+    });
+    assert.equal(await page.$('#mindBasicImuTranslationEnabled'), null);
+    assert.equal(await page.$eval('#mindBasicImuBridge', (input) => input.checked), true);
+    const predictions = await page.evaluate(async () => {
+      window.emitImu();
+      const camera = document.getElementById('mindBasicCameraRig').object3D;
+      const before = camera.quaternion.toArray();
+      window.imuClock += 25;
+      window.emitImu({ alpha: 0, beta: 0, gamma: 90 });
+      window.tickImu();
+      const first = camera.quaternion.toArray();
+      window.imuClock += 25;
+      window.emitImu({ alpha: 0, beta: 0, gamma: 90 });
+      window.tickImu();
+      return { before, first, second: camera.quaternion.toArray() };
+    });
+    assert.ok(predictions.first[1] > predictions.before[1], '视觉没有新帧时仍须更新 IMU 预测的相机旋转');
+    assert.ok(predictions.second[1] > predictions.first[1]);
+    await page.evaluate(async () => {
+      window.imuClock += 280;
+      window.tickImu();
+    });
+    assert.equal(await page.$eval('#mindBasicCameraRig', (camera) => camera.object3D.quaternion.y), predictions.second[1],
+      '传感器过期时保留已融合的相机旋转，不跳回旧视觉矩阵');
+    await page.evaluate(async () => {
+      const anchor = document.getElementById('mindBasicTargetAnchor');
+      anchor.dispatchEvent(new Event('targetUpdate'));
+      await Promise.resolve();
+      window.emitImu();
+      window.imuClock += 25;
+      window.emitImu();
+      const hold = document.getElementById('mindBasicImuHold');
+      hold.value = '200';
+      hold.dispatchEvent(new Event('input'));
+      anchor.dispatchEvent(new Event('targetLost'));
+      window.tickImu();
+    });
+    assert.equal(await page.$eval('#mindBasicImuStage', (stage) => stage.object3D.visible), true);
+    await page.evaluate(async () => {
+      for (let i = 0; i < 6; i += 1) {
+        window.imuClock += 40;
+        window.emitImu();
+        window.tickImu();
+      }
+    });
+    assert.equal(await page.$eval('#mindBasicImuStage', (stage) => stage.object3D.visible), true,
+      '平移预测超时仍保留模型，陀螺仪继续驱动旋转');
+    await page.evaluate(() => {
+      document.getElementById('mindBasicTargetAnchor').dispatchEvent(new Event('targetFound'));
+    });
+    await page.waitForFunction(() => document.getElementById('mindBasicImuStage').object3D.visible);
+    await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
+    assert.equal(await page.$eval('#mindBasicImuStage', (stage) => stage.object3D.visible), false);
+    await page.evaluate(() => { window.imuClock += 1; document.getElementById('mindBasicTargetAnchor').dispatchEvent(new Event('targetUpdate')); });
+    await page.waitForFunction(() => document.getElementById('mindBasicImuStage').object3D.visible);
+    await page.evaluate(async () => {
+      window.emitImu();
+      for (let i = 0; i < 15; i += 1) {
+        window.imuClock += 40;
+        window.emitImu();
+        window.tickImu();
+      }
+    });
+    assert.equal(await page.$eval('#mindBasicImuStage', (stage) => stage.object3D.visible), true,
+      '没有视觉新观测时保留模型并继续旋转预测');
+    await page.evaluate(() => { window.imuClock += 1; document.getElementById('mindBasicTargetAnchor').dispatchEvent(new Event('targetUpdate')); });
+    await page.waitForFunction(() => document.getElementById('mindBasicImuStage').object3D.visible);
+    const translation = await page.evaluate(async () => {
+      const anchor = document.getElementById('mindBasicTargetAnchor');
+      const camera = document.getElementById('mindBasicCameraRig').object3D;
+      const system = document.getElementById('mindBasicScene').systems['mindar-image-system'];
+      system.controller = { trackingStates: [{ isTracking: true }] };
+      for (let i = 0; i < 4; i += 1) {
+        window.imuClock += 20;
+        window.emitImu();
+        anchor.dispatchEvent(new Event('targetUpdate'));
+        await Promise.resolve();
+      }
+      const before = camera.position.x;
+      for (let i = 0; i < 3; i += 1) {
+        window.imuClock += 20;
+        window.emitImu(undefined, { x: 1, y: 0, z: 0 });
+        window.tickImu();
+      }
+      const after = camera.position.x;
+      system.controller.trackingStates[0].isTracking = false;
+      anchor.object3D.matrix.position = [99, 99, -99];
+      anchor.dispatchEvent(new Event('targetUpdate'));
+      await Promise.resolve();
+      const afterStale = camera.position.x;
+      anchor.object3D.matrix.position = [0.25, 0.5, -1];
+      system.controller.trackingStates[0].isTracking = true;
+      // 未收到正式 targetLost 的短暂失败也必须走三帧重获确认。
+      const recovery = [];
+      for (let i = 0; i < 3; i += 1) {
+        window.imuClock += 20;
+        anchor.dispatchEvent(new Event('targetUpdate'));
+        await Promise.resolve();
+        recovery.push(camera.position.x);
+      }
+      return { before, after, afterStale, recovery };
+    });
+    assert.ok(translation.after > translation.before, '跟踪期间向右加速，更新世界中的相机位置');
+    assert.equal(translation.afterStale, translation.after, '跟踪失败时重复的旧矩阵不得覆盖融合结果');
+    assert.equal(translation.recovery[0], translation.afterStale);
+    assert.equal(translation.recovery[1], translation.afterStale);
+    assert.notEqual(translation.recovery[2], translation.afterStale, '第三帧稳定观测后恢复纠偏');
+    const phaseSwitches = await page.evaluate(async () => {
+      const anchor = document.getElementById('mindBasicTargetAnchor');
+      const stage = document.getElementById('mindBasicImuStage').object3D;
+      const camera = document.getElementById('mindBasicCameraRig').object3D;
+      const visible = document.getElementById('mindBasicImuStabilize');
+      const hidden = document.getElementById('mindBasicImuBridge');
+      const set = (input, checked) => { input.checked = checked; input.dispatchEvent(new Event('change')); };
+      const move = () => {
+        for (let i = 0; i < 3; i += 1) {
+          window.imuClock += 20;
+          window.emitImu({ alpha: 0, beta: 0, gamma: 90 }, { x: 1, y: 0, z: 0 });
+          window.tickImu();
+        }
+      };
+      const snapshot = () => ({ position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), visible: stage.visible });
+      set(visible, false);
+      const beforeVisibleOff = snapshot(); move(); const afterVisibleOff = snapshot();
+      anchor.dispatchEvent(new Event('targetLost'));
+      const beforeHiddenOn = snapshot(); move(); const afterHiddenOn = snapshot();
+      set(hidden, false);
+      const beforeHiddenOff = snapshot(); move(); const afterHiddenOff = snapshot();
+      set(visible, true); move(); const onlyVisibleOnWhileLost = snapshot();
+      set(hidden, true); move(); const resumed = snapshot();
+      anchor.dispatchEvent(new Event('targetFound'));
+      return { beforeVisibleOff, afterVisibleOff, beforeHiddenOn, afterHiddenOn,
+        beforeHiddenOff, afterHiddenOff, onlyVisibleOnWhileLost, resumed };
+    });
+    assert.deepEqual(phaseSwitches.afterVisibleOff, phaseSwitches.beforeVisibleOff,
+      '可见场景关闭时，旋转和平移都停止预测');
+    assert.notDeepEqual(phaseSwitches.afterHiddenOn.position, phaseSwitches.beforeHiddenOn.position);
+    assert.notDeepEqual(phaseSwitches.afterHiddenOn.quaternion, phaseSwitches.beforeHiddenOn.quaternion);
+    assert.deepEqual(phaseSwitches.afterHiddenOff, phaseSwitches.beforeHiddenOff,
+      '不可见场景关闭时模型保持显示，旋转和平移都冻结');
+    assert.deepEqual(phaseSwitches.onlyVisibleOnWhileLost, phaseSwitches.afterHiddenOff,
+      '失锁时仅开启可见场景不会偷偷预测');
+    assert.notDeepEqual(phaseSwitches.resumed.quaternion, phaseSwitches.afterHiddenOff.quaternion);
+    assert.equal(phaseSwitches.resumed.visible, true);
+    await page.click('#mindBasicImuToggle');
+    await page.evaluate(() => {
+      const anchor = document.getElementById('mindBasicTargetAnchor');
+      window.restoreImuClock();
+      anchor.object3D.matrix.position = [0.4, 0.5, -1];
+      anchor.dispatchEvent(new Event('targetUpdate'));
+    });
+    await page.waitForFunction(() => document.getElementById('mindBasicCameraRig').object3D.position.x === -0.4);
+    await page.evaluate(() => document.getElementById('mindBasicTargetAnchor')
+      .dispatchEvent(new Event('targetLost')));
+    assert.equal(await page.$eval('#mindBasicImuStage', (stage) => stage.object3D.visible), true);
+
     await page.click('#mindBasicCaptureButton');
+    assert.equal(await page.$eval('#mindBasicImuStage', (stage) => stage.object3D.visible), false,
+      '停止跟踪并进入拍照时必须清除旧模型');
     await page.waitForFunction(() => {
       const video = document.getElementById('mindBasicCameraVideo');
       return video.videoWidth === 800 && video.videoHeight === 600

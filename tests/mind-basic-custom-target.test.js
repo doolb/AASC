@@ -9,6 +9,7 @@ const geometry = require('../3rd/mind-basic/mind-basic-geometry.js');
 const root = path.join(__dirname, '..', '3rd', 'mind-basic');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const script = fs.readFileSync(path.join(root, 'mind-basic.js'), 'utf8');
+const imuScript = fs.readFileSync(path.join(root, 'mind-basic-imu.js'), 'utf8');
 
 test('Mind Basic 保留官方目标和 Softmind，并由页面控制 MindAR 启停', () => {
   assert.match(html, /autoStart:\s*false/u);
@@ -16,7 +17,23 @@ test('Mind Basic 保留官方目标和 Softmind，并由页面控制 MindAR 启�
   assert.match(html, /softmind\/scene\.gltf/u);
   assert.match(html, /mindar-image-target="targetIndex:\s*0"/u);
   assert.match(html, /mind-basic-geometry\.js/u);
+  assert.match(html, /mind-basic-imu\.js/u);
   assert.match(html, /mind-basic\.js/u);
+  assert.match(html, /mindBasicImuStage/u);
+  assert.match(html, /mindBasicImuStabilize/u);
+  assert.match(html, /mindBasicImuBridge/u);
+});
+
+test('IMU 防抖与失锁补偿隔离在 MindAR Basic，传感器权限由用户手势触发', () => {
+  assert.match(imuScript, /integrateGyroscope/u);
+  assert.match(imuScript, /integrateLinearAcceleration/u);
+  assert.match(imuScript, /maxLossDurationMs/u);
+  assert.match(script, /DeviceMotionEvent\.requestPermission/u);
+  assert.match(script, /addEventListener\('devicemotion'/u);
+  assert.match(script, /removeEventListener\('devicemotion'/u);
+  assert.match(script, /targetUpdate/u);
+  assert.match(script, /beginTrackingLoss/u);
+  assert.match(html, /摄像头画面不会被处理或防抖/u);
 });
 
 test('自定义目标拍照后提供可移动、可缩放的矩形裁剪编辑器', () => {

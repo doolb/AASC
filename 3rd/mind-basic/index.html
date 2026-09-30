@@ -6,8 +6,9 @@
     <meta name="theme-color" content="#111318" />
     <title>MindAR Basic 图片定位</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="./mind-basic-imu.js?v=20260930-camera-world-5"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    <link rel="stylesheet" href="./mind-basic.css" />
+    <link rel="stylesheet" href="./mind-basic.css?v=20260930-camera-world-5" />
   </head>
   <body>
     <aside id="mindBasicControls" class="mind-basic-controls" aria-label="MindAR 定位控制">
@@ -29,6 +30,51 @@
           <button id="mindBasicStopButton" type="button" disabled>停止定位</button>
           <button id="mindBasicDeleteButton" type="button" disabled>删除自定义图</button>
         </div>
+        <section class="mind-basic-imu" aria-labelledby="mindBasicImuTitle">
+          <h2 id="mindBasicImuTitle">IMU 姿态实验</h2>
+          <button id="mindBasicImuToggle" class="mind-basic-imu-toggle" type="button" aria-pressed="false">
+            启用 IMU 辅助
+          </button>
+          <div class="mind-basic-imu-options">
+            <label><input id="mindBasicImuStabilize" type="checkbox" checked disabled />图片可见时预测相机运动</label>
+            <label><input id="mindBasicImuBridge" type="checkbox" checked disabled />图片不可见时预测相机运动</label>
+          </div>
+          <label class="mind-basic-field">视觉纠正时间 <output id="mindBasicImuCorrectionValue">800 ms</output>
+            <input id="mindBasicImuCorrection" type="range" min="200" max="2000" step="100" value="800" />
+          </label>
+          <label class="mind-basic-field">失锁平移预测时间 <output id="mindBasicImuHoldValue">1800 ms</output>
+            <input id="mindBasicImuHold" type="range" min="200" max="3000" step="100" value="1800" />
+          </label>
+          <label class="mind-basic-field">定位图实际宽度（厘米）
+            <input id="mindBasicImuTargetWidth" type="number" min="1" max="300" step="1" value="20" />
+          </label>
+          <p class="mind-basic-note">两个开关均预测相机旋转和位移；图片可见时由视觉纠偏，不可见时短时预测平移。请填写定位图实物宽度，20 cm 仅为示例值。</p>
+          <button id="mindBasicImuReset" class="mind-basic-imu-reset" type="button" disabled>重新校准</button>
+          <p id="mindBasicImuStatus" class="mind-basic-imu-status" role="status" aria-live="polite">
+            IMU 未启用；摄像头画面不会被处理或防抖。
+          </p>
+          <dl class="mind-basic-imu-metrics" aria-label="IMU 实时数据">
+            <div><dt>原始角速度</dt><dd id="mindBasicImuRawAngular">--</dd></div>
+            <div><dt>校正后角速度</dt><dd id="mindBasicImuAngular">--</dd></div>
+            <div><dt>原始线性加速度</dt><dd id="mindBasicImuAcceleration">--</dd></div>
+            <div><dt>校正后加速度</dt><dd id="mindBasicImuCorrectedAcceleration">--</dd></div>
+            <div><dt>静止判定</dt><dd id="mindBasicImuStationary">--</dd></div>
+            <div><dt>估算位移</dt><dd id="mindBasicImuTranslation">--</dd></div>
+            <div><dt>丢失时长</dt><dd id="mindBasicImuLostFor">--</dd></div>
+          </dl>
+        </section>
+        <section class="mind-basic-imu" aria-label="MindAR 定位质量">
+          <h2>MindAR 可信度（估算）</h2>
+          <dl class="mind-basic-imu-metrics">
+            <div><dt>质量评分</dt><dd id="mindBasicQualityScore">--</dd></div>
+            <div><dt>有效匹配点</dt><dd id="mindBasicQualityPoints">--</dd></div>
+            <div><dt>有效点占比</dt><dd id="mindBasicQualityRatio">--</dd></div>
+            <div><dt>特征分布面积</dt><dd id="mindBasicQualityCoverage">--</dd></div>
+            <div><dt>重投影误差</dt><dd id="mindBasicQualityError">--</dd></div>
+            <div><dt>数据状态</dt><dd id="mindBasicQualityAge">等待识别</dd></div>
+          </dl>
+          <p class="mind-basic-note">0–100 分仅估算视觉质量，不是官方置信概率或 IMU 融合精度。误差越小通常越好；本版评分用于观察，不参与融合权重。</p>
+        </section>
         <p id="mindBasicStatus" class="mind-basic-status" role="status" aria-live="polite">正在准备官方示例…</p>
         <div id="mindBasicProgress" class="mind-basic-progress" hidden>
           <div class="mind-basic-progress-heading">
@@ -80,9 +126,10 @@
 
     <a-scene
       id="mindBasicScene"
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/card-example/card.mind; autoStart: false;"
+      mind-basic-imu-frame
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.2/examples/image-tracking/assets/card-example/card.mind; autoStart: false; uiScanning: no;"
       color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights"
+      renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true;"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
@@ -98,9 +145,12 @@
         ></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-entity id="mindBasicCameraRig">
+        <a-camera id="mindBasicCamera" position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-camera>
+      </a-entity>
 
-      <a-entity id="mindBasicTargetAnchor" mindar-image-target="targetIndex: 0">
+      <a-entity id="mindBasicTargetAnchor" mindar-image-target="targetIndex: 0"></a-entity>
+      <a-entity id="mindBasicImuStage" visible="false">
         <a-plane
           id="mindBasicTargetPlane"
           src="#mindBasicTargetImage"
@@ -125,7 +175,8 @@
       <a href="https://sketchfab.com/hiukim" target="_blank" rel="noopener noreferrer">hiukim</a>
       · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
     </div>
-    <script src="./mind-basic-geometry.js"></script>
-    <script src="./mind-basic.js"></script>
+    <script src="./mind-basic-geometry.js?v=20260930-camera-world-5"></script>
+    <script src="./mind-basic-quality.js?v=20260930-camera-world-5"></script>
+    <script src="./mind-basic.js?v=20260930-camera-world-5"></script>
   </body>
 </html>

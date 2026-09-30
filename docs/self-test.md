@@ -1,5 +1,57 @@
 # 自测功能文档
 
+## MMD AR 合并 Mind Basic 相机预测（2026-09-30，待验证）
+
+`npm run build:web:mmd-ar-test` 成功，web-dist 已生成 IMU/质量面板、相机 rig、固定蓝框世界锚点和三个新增 JS 资源，内容指纹加载。构建复用固定校验的模型与 MindAR 资源。IMU 适配、定位适配和构建脚本静态语法检查通过；生成 PMX runtime 仍使用原 `smoothingMs / 1000` 和相机死区处理。
+
+本次未新增或运行测试；构建成功不代表真实 IMU/MindAR/PMX 运行通过。待验证双场景开关、校准/漂移、权限等待取消、原始失败接管、三帧重获、质量分/过期、固定蓝框对齐、PMX 缓动/near=1、模型根节点/物理不受定位改写、停止/切换/后台恢复及真机性能。未发布外网。
+
+## MindAR Basic 相机预测与固定模型（2026-09-30，待验证）
+
+本次未运行测试；主脚本、IMU 模块及现有浏览器用例的静态语法检查通过，定向差异空白检查通过。现有浏览器回归已同步相机 rig 的模拟对象及运动断言：纯视觉相机位置为目标相对位置的逆，陀螺仪更新相机四元数，加速度更新世界相机位置，场景开关冻结/恢复相机而保持模型显示。
+
+此前 34/34 结果属于 `20260930-imu-phase-4`，不能作为本次相机实现的通过结论。后续需验证固定世界锚点的位置/朝向/尺度保持、相机纯旋转/平移、参考图重投影对齐、MindAR near/far、重新识别、IMU 降级、停止/换图及实际 Android 精度与性能。版本 `20260930-camera-world-5` 尚未发布外网。
+
+## MindAR Basic 两个场景开关（2026-09-30）
+
+`node --test tests/mind-basic-imu.test.js tests/mind-basic-quality.test.js tests/mind-basic-custom-target.test.js tests/mind-basic-custom-target-browser.test.js`：34/34 通过。新增算法用例验证暂停吸收累计位移、清零速度、保持失锁时间和重新开启不补积分；浏览器覆盖可见场景关闭冻结预测、不可见场景开启同时更新旋转/位置、关闭不可见场景保持模型、仅开启可见开关不会在失锁时预测、重新开启继续，以及原拍照裁剪工作流。场景测试结束显式恢复 targetFound 后再验证关闭 IMU 的视觉更新，避免测试状态遗漏。定向 diff 空白检查通过，未进行真机精度/性能验收，尚未发布。
+
+
+## MindAR Basic 死区翻倍与快速失锁（2026-09-30）
+
+`node --test tests/mind-basic-imu.test.js tests/mind-basic-quality.test.js tests/mind-basic-custom-target.test.js tests/mind-basic-custom-target-browser.test.js`：33/33 通过。新增检查死区翻倍后的高低迟滞门限、间歇失败重置重获计数且不延长失锁窗口。浏览器模拟原始 isTracking=false 但尚未触发 targetLost，恢复的前两帧保持原显示位姿，第三帧才平滑纠偏；旧融合/漂移/质量/拍照流程通过。未进行真机快速横移或低速灵敏度验收，未发布外网。
+
+
+## MindAR Basic 旋转与平移抗漂移（2026-09-30）
+
+`node --test tests/mind-basic-imu.test.js tests/mind-basic-quality.test.js tests/mind-basic-custom-target.test.js tests/mind-basic-custom-target-browser.test.js`：31/31 通过。新增覆盖至少 1.2 秒的双零偏校准、短突发/断流拒绝、10 秒静止噪声不累计位姿、慢转/快转响应、视觉＋IMU 静止归零、移动视觉/无视觉不归零、加速度扣偏与断流清除滤波记忆。
+
+浏览器校准用受控单调时钟，不把宿主机调度停顿当作真实设备运动断流；原有融合、可信度及拍照裁剪流程继续通过。真实手机旋转轴向、低速灵敏度、背景、漂移及性能尚未验收，当前未发布。
+
+
+## MindAR Basic 可信度观测（2026-09-30）
+
+`node --test tests/mind-basic-quality.test.js tests/mind-basic-imu.test.js tests/mind-basic-custom-target.test.js tests/mind-basic-custom-target-browser.test.js`：27/27 通过。质量模块覆盖有效点/比例/分布/误差、分辨率归一、不修改原始输入、原矩阵引用保持、拆除包装、在途回调取消和算法异常原样传播。旧融合及拍照裁剪流程继续通过。真实手机精度/分数阈值/帧率未标定，当前评分仅用于观察。
+
+
+真实库接入检查：Chromium 加载本地 A-Frame 1.5.0/MindAR 1.2.5，向模拟摄像头绘制官方卡片，使用真实 .mind 与跟踪算法（glTF 使用空模型）。一次采样为 21/32 有效点、特征分布 67%、RMSE 0.34 px、72/100 分；IMU 未启用时也正常显示。停止处理后面板分数清空并显示过期，触发丢失显示“定位已丢失”，点击停止显示“未运行”。最初使用 networkidle 等待导航超时，改用 DOMContentLoaded 后接入与状态检查完成。JS 语法与定向 diff 空白检查通过。此检查不等于手机实拍精度、完整模型加载或性能验收。
+
+## MindAR Basic 同时视觉惯性定位（2026-09-29）
+
+`node --test tests/mind-basic-imu.test.js tests/mind-basic-custom-target.test.js tests/mind-basic-custom-target-browser.test.js`：22/22 通过。新覆盖正常跟踪期间的加速度平移、纠偏保留速度及坐标换轴、进入失锁无跳回、稳定三帧重获、超时冻结平移但持续旋转、传感器断流不跨间隔积分。浏览器覆盖实际页面 IMU 事件驱动平移、拒绝 MindAR 失败容忍窗口旧矩阵、保留模型及停止清除，原有拍照/裁剪/保存流程继续通过。更新脚本版本后测试注入仍正常。
+
+此回归使用模拟传感器、MindAR/A-Frame 测试替身和模拟编译器，不代表真实手机定位精度、漂移及帧率通过；本版尚未发布。另用本地真实 A-Frame 1.5.0/MindAR 1.2.5 加载页面（模拟摄像头，空 glTF 替代模型），实际视频 640×480、paused=false、z-index=0，renderer clearAlpha=0，截图可见摄像头背景。JS 语法与定向 diff 空白检查通过。
+
+## MindAR Basic 镜头背景与关闭扫描提示（2026-09-29）
+
+`node --test tests/mind-basic-custom-target-browser.test.js tests/mind-basic-custom-target.test.js`：9/9 通过。另以 Chromium 加载真实 MindAR 1.2.5 UI 类，关闭 uiScanning 后反复调用 showScanning/hideScanning，扫描遮罩数量为 0；模拟 MindAR 的 body 直属视频及 -2 内联层级，计算样式得到视频 z-index 0、场景 1、面板 20，场景/画布背景透明。核对 renderer.alpha 与场景配置生效。此检查验证 UI 类和 DOM/CSS 层级，不代表真实摄像头/WebGL 合成画面已验收。未同步外网。
+
+## MindAR Basic IMU 主导旋转（2026-09-29）
+
+`node --test tests/mind-basic-imu.test.js tests/mind-basic-custom-target.test.js tests/mind-basic-custom-target-browser.test.js`：19/19 通过。算法覆盖逆旋转位置/方向一致、15Hz/60Hz 时间纠偏一致、快速转动降低延迟观测回拉、视觉异常确认、短失锁渐进恢复/超时重锚、实体宽度换算、位移限幅、静止校准筛选。浏览器覆盖只更新 matrix 的锚点、无新视觉帧时持续渲染、传感器中断退回视觉、失锁超时隐藏、视觉事件中断保护、恢复/方向切换及关闭 IMU 后持续视觉更新，并继续跑原有拍照/裁剪/保存/模拟编译流程。
+
+新增传感器行为使用受控 `performance.now` 与手动 A-Frame tick，避免宿主机调度延迟被误当成真实传感器断流。MindAR/A-Frame、摄像头、编译器和传感器均为测试替身；不能据此宣称真机定位精度或渲染帧率通过。两个 JS 的 `node --check` 与 `git diff --check` 通过。代码尚未同步外网，实际 Android 传感器轴向、视觉延迟和运动观感待验证。
+
 ## MMD AR 拖动角色与相机缩放外网发布（2026-09-29）
 
 按右键/双指中点移动角色、滚轮/双指捏合缩放相机的语义重新构建 `web-dist` 并发布到 `https://c.aasc.us/mnt/mmd-ar/`。仅上传 5 个变化文件；页面引用的 62 个静态文件均通过 HTTPS 返回且 SHA-256 与本地一致，首页 SHA-256 为 `89c13378b6cd034cefd352c00b3f10fdf3ec7931faed7ba46b7690d270554d42`。远端已有的隐藏文件与 LICENSE 保留。本次未运行自动测试；桌面和 Android WebView 真机手势待验收。
@@ -87,6 +139,10 @@
 ## MindAR Basic 自定义图片定位（2026-09-25）
 
 语法检查通过；`node --test tests/mind-basic-custom-target.test.js tests/mind-basic-custom-target-browser.test.js`：8/8 通过。390×844 Chromium 视口模拟摄像头端到端验证完整帧拍摄、默认四边内缩 10% 的蓝色叠加框、框体移动、角点缩放、没有单独裁剪缩略图、重拍重置、IndexedDB 保存及控制面板默认展开/折叠/恢复。真实 MindAR 1.2.5 Compiler 对调整后的目标实际编译并启动通过；HTTPS 发布页同一浏览器测试通过。首页/CSS/JS/几何脚本本地与 HTTPS SHA-256 一致：`c04e5dc27499af557112001b0a0e17951c57edf02fceaba9854abe90006b7446`、`388c228dbae5dffe176341e5206ee939a3d28c85647863a3cb28361f06073d36`、`297fcdd1f3bfcfbb5cf2fc091fd179f106722dc79652f0fdc3995b2d6fce72ca`、`ceb2f1f9f900c1eac34d34b31e20ed26ec69d5e1e83943a018f6f1df7750f6f9`。`/mnt/mmd-ar/` 首页 SHA-256 未变化。照片未上传；手机真触摸命中、真实摄像头目标首锁及模型对齐待现场验证。
+
+## MindAR Basic IMU 外网发布（2026-09-29）
+
+将 IMU 姿态防抖与失锁补偿页面发布到 `https://c.aasc.us/mnt/mind-basic/`。仅替换 `index.html`、`mind-basic.css`、`mind-basic.js` 并新增 `mind-basic-imu.js`；几何脚本未变。公网 HTTPS 五个文件的 SHA-256 与本地一致：首页 `5c1a78b850e611332491526898cf4167031289a6464e97b24ae6be585a208880`，CSS `58488855c80d51f292cd7d5ffacc797c3a1b2f5b1f8cdb6e24c4bdec52266429`，主 JS `5bfb1ba60889ce0eaf9db3e5186ee0a58232229d60e9202bac2df44aeabb0101`，IMU JS `f3fd3d2b25559a23371e37c48f2a43f05d51f1301fedb6e61ce1f80189a2feb2`，几何 JS `ceb2f1f9f900c1eac34d34b31e20ed26ec69d5e1e83943a018f6f1df7750f6f9`。未更改 `/mnt/mmd-ar/`。已完成的 MindAR Basic 定向回归 14/14；Android Chrome 真机传感器方向和效果待现场确认。
 
 ## MindAR Basic 官方示例外网发布（2026-09-25）
 
