@@ -119,7 +119,19 @@ function addGravityControls(source) {
   let output = replaceOnce(source, "    const MOTION_ORBIT_MODE = 'sensor-orbit-only';", "    const MOTION_ORBIT_MODE = 'gravity-anchor-rotation';");
   output = replaceOnce(output, '        motionListening: false,', '        motionListening: false,\n        motionPending: false,\n        motionRequest: 0,');
   output = replaceOnce(output, 'state.elements.motionEnabled.checked = state.motionEnabled;',
-    'state.elements.motionEnabled.checked = state.motionEnabled || state.motionPending;');
+    `state.elements.motionEnabled.checked = state.motionEnabled || state.motionPending;
+        root.MmdArGravityCamera?.setGravityEnabled(state.motionEnabled);`);
+  output = replaceOnce(output, `        await stopTrackerSession();
+        resetTrackedDisplay();
+        state.elements.trackingVideo.hidden = true;
+        setPanelOpen(false);
+        state.calibration = createEmptyCalibration();`,
+    `        root.MmdArGravityCamera?.setCalibrationActive(true);
+        await stopTrackerSession();
+        resetTrackedDisplay();
+        state.elements.trackingVideo.hidden = true;
+        setPanelOpen(false);
+        state.calibration = createEmptyCalibration();`);
   output = replaceOnce(output, 'const rawValues = [event?.alpha, event?.beta, event?.gamma];',
     '// 重力方向由倾斜给出，不需要磁航向 alpha；缺少航向的设备也可使用。\n        const rawValues = [0, event?.beta, event?.gamma];');
   output = replaceFunction(output, 'applyMotionView', 'handleDeviceOrientation', `    function gravityDirection(sample) {

@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR 重力摄像头背景与面板外观
+
+- ✅ [2026-09-30] 独立网页重力分类新增默认关闭的“显示摄像头画面”；灯光、定位和动作面板默认不透明度改为50%，移除顶部固定测试提示。
+  - 新增 `3rd/mmd-ar-test/display-mmd-ar-gravity-camera.js`，更新 `build.js`、`web-panel-groups.js`、`web-gravity-mode.js`、`display-mmd-ar-aframe.js`。重力单独运行时显示视频背景，图片定位时复用跟踪视频且隐藏背景不停止识别，校准前释放独立预览；关闭/后台/离开释放独立轨道并取消迟到请求。相机错误不影响重力/手动旋转，真实/模拟输入沿用现有选择。
+  - 默认值与滑条/CSS一致，保留已有手动保存的透明度；保留加载进度和面板内状态。仅网页生成副本生效，正式显示端和旧APK不变；保留工作区已有Ammo生命周期改动。
+  - `npm run build:web:mmd-ar-test` 成功；源/生成脚本静态语法、定向差异空白检查通过。未新增或执行自动测试，未真机验收；按用户要求提交本次改动，未发布外网。同步design/spec/task/todo/usage/README/自测记录。
+
 ### MMD AR 频繁切换 Ammo 内存泄漏修复
 
 - ✅ [2026-09-30] 修复切换模型/动作后旧物理未释放造成的Ammo OOM：网页helper移除时先释放native物理，初始化失败和过期暂存结果共用幂等清理。

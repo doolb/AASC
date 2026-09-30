@@ -81,7 +81,6 @@
     function releaseSystem() {
         if (poseSyncFrame) root.cancelAnimationFrame(poseSyncFrame);
         poseSyncFrame = 0;
-        root.MmdArTestSimCamera?.releaseStream?.();
         root.MmdArTestImu?.stopSession();
         root.DisplayMmd?.resetArCameraPose?.();
         if (worldTarget.object3D) worldTarget.object3D.visible = false;
@@ -93,7 +92,12 @@
             cameraRig.object3D.updateMatrixWorld(true);
         }
         const system = scene.systems?.['mindar-image-system'];
-        if (!system) return;
+        if (!system) {
+            root.MmdArGravityCamera?.trackingStopped();
+            return;
+        }
+        // 编译尚未开始使用摄像头时，不释放独立重力背景持有的模拟流。
+        if (system.video || originalStartVideo) root.MmdArTestSimCamera?.releaseStream?.();
         if (resizeHandler) root.removeEventListener('resize', resizeHandler);
         if (originalResize) system._resize = originalResize;
         if (originalStartVideo) system._startVideo = originalStartVideo;
@@ -115,6 +119,7 @@
         video?.remove();
         system.video = null;
         system.controller = null;
+        root.MmdArGravityCamera?.trackingStopped();
         if (system.mainStats?.domElement?.isConnected) system.mainStats.domElement.remove();
         system.mainStats = null;
         detachTargetEvents?.();
@@ -221,6 +226,7 @@
             }
             if (!root.MmdArTestImu || !root.MindBasicImu) throw new Error('IMU 融合模块未加载');
             root.MmdArTestImu.startSession(target);
+            root.MmdArGravityCamera?.prepareTracking();
             // MindAR 1.2.5 在 _startAR 创建 Controller 时读取 system 上的滤波参数。
             system.filterMinCF = filterSettings.filterMinCF;
             system.filterBeta = filterSettings.filterBeta;

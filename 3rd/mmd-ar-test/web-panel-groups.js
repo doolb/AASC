@@ -17,7 +17,7 @@ const TRACKING_GROUPS = Object.freeze([
   ['MindAR 抖动过滤', ['mmdArFilterMinCF', 'mmdArFilterBeta', 'mmdArFilterApplyHint']],
   ['IMU 相机预测', ['mmdArImuPanel']],
   ['MindAR 可信度（估算）', ['mmdArQualityPanel']],
-  ['重力旋转', ['mmdArGravityDeadZone', 'mmdArGravitySmoothing', 'displayArMotionRecenter', 'displayArMotionMessage'], 'displayArMotionEnabled'],
+  ['重力旋转', ['mmdArGravityCameraEnabled', 'mmdArGravityCameraMessage', 'mmdArGravityDeadZone', 'mmdArGravitySmoothing', 'displayArMotionRecenter', 'displayArMotionMessage'], 'displayArMotionEnabled'],
   ['相机跟随', ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone', 'mmdArSmoothingMs', 'mmdArCameraDistance']],
 ]);
 
@@ -27,8 +27,8 @@ const MOTION_GROUPS = Object.freeze([
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
-    .mmd-ar-panel-group { margin: 9px 0; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, 96%), transparent); overflow: hidden; }
-    .mmd-ar-panel-group-header { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 11px; background: color-mix(in srgb, #39455c var(--display-mmd-panel-opacity, 96%), transparent); }
+    .mmd-ar-panel-group { margin: 9px 0; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, 50%), transparent); overflow: hidden; }
+    .mmd-ar-panel-group-header { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 11px; background: color-mix(in srgb, #39455c var(--display-mmd-panel-opacity, 50%), transparent); }
     .mmd-ar-panel-group-switch { display: flex; flex: none; align-items: center; justify-content: center; width: 18px; min-height: 32px; margin: 0; cursor: pointer; }
     .mmd-ar-panel-group-switch input { flex: none; }
     .mmd-ar-panel-group-toggle { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 32px; padding: 0; border: 0; background: transparent; color: #f4f6fb; font: 600 13px/1.4 system-ui, sans-serif; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -40,7 +40,7 @@ const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-panel-group-body[hidden] { display: none; }
     .mmd-ar-panel-group-body > :first-child { margin-top: 9px; }
     .mmd-ar-panel-group-body > :last-child { margin-bottom: 0; }
-    .mmd-ar-camera-clip { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: color-mix(in srgb, #26344a var(--display-mmd-panel-opacity, 96%), transparent); color: #dce8ff; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .mmd-ar-camera-clip { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: color-mix(in srgb, #26344a var(--display-mmd-panel-opacity, 50%), transparent); color: #dce8ff; font-size: 12px; font-variant-numeric: tabular-nums; }
     .mmd-ar-original-tracking-actions { display: none; }
     #mmdArTrackingToggle { width: 100%; min-height: 44px; }
     .mmd-ar-camera-setting input[type="range"] { width: 100%; }
@@ -97,7 +97,7 @@ const WEB_PANEL_GROUP_JS = `
       const inputs = Array.from(document.querySelectorAll('.display-mmd-panel-opacity-range'));
       if (!stage || inputs.length === 0) return;
       const storageKey = 'aasc.display.mmdPanelOpacity.v1';
-      let opacity = 96;
+      let opacity = 50;
       try {
         const stored = window.localStorage.getItem(storageKey);
         const parsed = stored === null || stored.trim() === '' ? NaN : Number(stored);
@@ -492,8 +492,8 @@ function groupWebPanels($) {
     const inputId = `${panelId}Opacity`;
     panel.prepend(`
       <label class="display-mmd-panel-opacity-control" for="${inputId}">
-        <span>面板不透明度 <output>96%</output></span>
-        <input id="${inputId}" class="display-mmd-panel-opacity-range" type="range" min="0" max="100" step="1" value="96" aria-label="面板不透明度">
+        <span>面板不透明度 <output>50%</output></span>
+        <input id="${inputId}" class="display-mmd-panel-opacity-range" type="range" min="0" max="100" step="1" value="50" aria-label="面板不透明度">
       </label>
     `);
   }
