@@ -26,6 +26,7 @@ const WEB_PANEL_GROUPS = WEB_MODE ? require('./web-panel-groups') : null;
 const WEB_GRAVITY_MODE = WEB_MODE ? require('./web-gravity-mode') : null;
 const WEB_LOCAL_ASSETS = WEB_MODE ? require('./web-local-assets-inject') : null;
 const WEB_PHYSICS_LIFECYCLE = WEB_MODE ? require('./web-physics-lifecycle') : null;
+const WEB_PHYSICS_RATE = WEB_MODE ? require('./web-physics-rate') : null;
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -228,6 +229,7 @@ async function stageTextAssets() {
     </div>
   `);
   if (WEB_MODE) {
+    $('#displayMmdPhysicsFps').attr('max', '480');
     $('#displayMmdLightingPanel').prepend(`
       <label class="display-mmd-lighting-shadow">
         <input id="mmdArMotionPlayback" type="checkbox" checked>
@@ -444,8 +446,15 @@ async function stageTextAssets() {
     const gravityPath = path.join(GENERATED_ASSETS, 'js/web-gravity-filter.mjs');
     await fs.copyFile(path.join(__dirname, 'web-gravity-filter.mjs'), gravityPath);
     const gravityUrl = `./web-gravity-filter.mjs?v=${(await hashFile(gravityPath)).sha256.slice(0, 12)}`;
+    const physicsRatePath = path.join(GENERATED_ASSETS, 'js/web-physics-rate.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-physics-rate.mjs'), physicsRatePath);
+    const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
+    const pmxHelperPath = path.join(GENERATED_ASSETS, 'js/mmd-pmx-helper.mjs');
+    await fs.writeFile(pmxHelperPath, WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl));
+    const pmxHelperUrl = `./mmd-pmx-helper.mjs?v=${(await hashFile(pmxHelperPath)).sha256.slice(0, 12)}`;
     const motionSwitchPath = path.join(GENERATED_ASSETS, 'js/web-motion-switch.mjs');
-    await fs.copyFile(path.join(__dirname, 'web-motion-switch.mjs'), motionSwitchPath);
+    await fs.writeFile(motionSwitchPath, (await fs.readFile(path.join(__dirname, 'web-motion-switch.mjs'), 'utf8'))
+      .replace('./web-physics-rate.mjs', physicsRateUrl));
     const motionSwitchUrl = `./web-motion-switch.mjs?v=${(await hashFile(motionSwitchPath)).sha256.slice(0, 12)}`;
     const localUiPath = path.join(GENERATED_ASSETS, 'js/web-local-assets-ui.mjs');
     await fs.writeFile(localUiPath, (await fs.readFile(localUiPath, 'utf8')).replace('./web-local-assets.mjs', localAssetsUrl));
@@ -488,7 +497,9 @@ async function stageTextAssets() {
     const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
-    await fs.writeFile(pmxRuntimePath, WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl).replace(lightingModeImport,
+    await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_RATE.addPhysicsRateRuntime(
+      WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl), physicsRateUrl)
+      .replace('./mmd-pmx-helper.mjs', pmxHelperUrl).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
@@ -498,7 +509,7 @@ async function stageTextAssets() {
     const runtimeImport = "'./display-pmx-runtime.js'";
     if (!current.includes(runtimeImport)) throw new Error('测试网页未找到 PMX runtime 动态导入入口');
     if (!current.includes('getMotionProgress: () =>')) throw new Error('正式显示模块缺少 VMD 进度入口');
-    await fs.writeFile(mmdScriptPath, WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current))
+    await fs.writeFile(mmdScriptPath, WEB_PHYSICS_RATE.addPhysicsRateDisplay(WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current)))
       .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`));
     const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));

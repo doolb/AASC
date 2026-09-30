@@ -1,3 +1,5 @@
+import { getWebPhysicsStepOptions } from './web-physics-rate.mjs';
+
 // 模型和动作共享初始化清理；只在新物理第一次步进前调用，不参与自动循环重播。
 export function clearPmxPhysicsMotion(physics) {
     if (!physics) return;
@@ -70,7 +72,7 @@ export async function prepareMotionSwitch({ mesh, oldHelper, createHelper, ensur
             onStage('初始化物理');
             // 禁止自动套用 VMD 首帧和物理预热，所有刚体都从模型绑定姿态开始。
             nextHelper._setupMeshPhysics(mesh, { warmup: 0, animationWarmup: false,
-                unitStep: 1 / physicsFps, maxStepNum: 3 });
+                ...getWebPhysicsStepOptions(physicsFps) });
             clearPmxPhysicsMotion(nextHelper.objects.get(mesh).physics);
             nextHelper.enable('physics', true);
         }

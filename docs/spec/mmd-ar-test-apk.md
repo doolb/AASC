@@ -2,6 +2,38 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 布料物理频率30–480Hz（2026-09-30，已实现）
+
+```text
+已有声明:
+  displayMmdPhysicsFps滑条、DisplayMmd与runtime频率规范化、createPmxMotionHelper
+  当前物理unitStep/maxStepNum、prepareMotionSwitch、WEB_MODE副本、浏览器保存设置
+新增定义:
+  WebPhysicsRate { minimum:30, maximum:480, default:65, increment:5, maxFrameSeconds:0.1 }
+  StepOptions { unitStep, maxStepNum }
+操作流程（仅独立网页）:
+  WEB_MODE -> 滑条max设480，min30/step5/value65保持
+  DisplayMmd / PMX runtime / helper生成副本 -> 频率上限480，保留非法值回退与5Hz规范化
+  规范化频率 -> unitStep = 1除以目标频率
+  频率不超过90 -> maxStepNum=3，保持原低频预算
+  频率超过90 -> maxStepNum=目标频率乘0.1向上取整再加1，480Hz预算49
+  实时调节 -> 同时更新当前物理unitStep与maxStepNum，不重载模型或清零速度
+  创建模型helper / 手动动作物理 -> 使用同一StepOptions
+  首帧 -> 物理从绑定姿态推进；下一帧 -> 依播放开关播放，初始化速度归零和循环逻辑保持
+  实际帧更新 -> vendor按实际delta计算子步数量，且不超过上述预算；不强制执行最大预算
+  当前浏览器保存/恢复 -> 480Hz不再被任一层回落到90Hz
+  网页频率/物理helper模块 -> 带内容指纹导入，确保新校验和预算同时生效
+  非WEB_MODE -> 控件/显示模块/runtime/helper仍为原30–90Hz与子步预算
+验证（70项覆盖通过）:
+  默认65、30/90/95/480边界、超过480和非法值、5Hz步长
+  UI实时调节与存储恢复 -> display/runtime/helper物理参数一致
+  480Hz真实Ammo在60/30/10FPS模拟输入下 -> 无3子步截断导致的物理时间损失
+  模型/动作切换、暂停、物理关闭、速度清零、循环及资源释放继续通过
+  480Hz网页24次VMD与4次PMX -> 创建32、销毁31、当前1；WASM堆64MiB、探针跨度3516552字节
+  实时降至65 -> 原实例仍存活、预算3；再设480并刷新 -> 控件/API恢复480
+  源/生成脚本9个、内联脚本4个 -> 语法通过；导入指纹6个 -> 与文件内容匹配
+```
+
 ### 换模型沿用 VMD 与 T Pose 分帧初始化（2026-09-30，已实现）
 
 ```text

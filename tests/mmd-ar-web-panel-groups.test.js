@@ -42,6 +42,13 @@ function addCameraControls($) {
   }
   $('#displayArTargetPanel').append('<div id="mmdArTargetPlaneMode"></div>');
   $('#displayArTargetPanel').append(CAMERA_CONTROL_IDS.map((id) => `<label><input id="${id}" type="range"></label>`).join(''));
+  // 补齐网页现有专用控件；夹具仍使用真实分组函数验证保留节点和未分类检查。
+  $('#displayArMotionSensitivity').closest('label').remove();
+  $('#displayArTargetPanel').append([
+    'mmdArFilterMinCF', 'mmdArFilterBeta', 'mmdArFilterApplyHint',
+    'mmdArImuPanel', 'mmdArQualityPanel', 'mmdArGravityCameraEnabled',
+    'mmdArGravityCameraMessage', 'mmdArGravityDeadZone', 'mmdArGravitySmoothing'
+  ].map((id) => `<div id="${id}"></div>`).join(''));
 }
 
 // 使用真正的生成页与全部业务脚本，确保面板 stopPropagation 等事件链进入回归。
@@ -102,7 +109,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   const expectedTitles = [
     ['基础光照', '高光', 'AO', '主光', '补光', '边缘光 1', '边缘光 2'],
     ['动作', '物理'],
-    ['定位图与校准', '跟踪操作', '体感环绕', '相机跟随'],
+    ['定位图与校准', '跟踪操作', 'MindAR 抖动过滤', 'IMU 相机预测', 'MindAR 可信度（估算）', '重力旋转', '相机跟随'],
   ];
   panels.forEach((selector, index) => {
     const panel = $(selector);
@@ -119,7 +126,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
     ['displayMmdFillEnabled', '补光'],
     ['displayMmdRim1Enabled', '边缘光 1'],
     ['displayMmdRim2Enabled', '边缘光 2'],
-    ['displayArMotionEnabled', '体感环绕'],
+    ['displayArMotionEnabled', '重力旋转'],
   ]) {
     const group = $(`#${controlId}`).closest('.mmd-ar-panel-group');
     assert.equal(group.find('.mmd-ar-panel-group-header').find(`#${controlId}`).length, 1);
@@ -137,7 +144,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArPhysicsEnabled').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
   assert.equal($('#mmdArMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.equal($('#mmdArMotionPlayback').closest('#displayMmdLightingPanel').length, 0);
-  assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 96%\), transparent\)/u);
+  assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 50%\), transparent\)/u);
   const specular = $('.mmd-ar-specular');
   assert.equal(specular.is('section.mmd-ar-panel-group'), true);
   assert.equal(specular.find('.mmd-ar-panel-group-header [data-specular="enabled"]').length, 1);
@@ -212,7 +219,7 @@ test('手机宽度下分类可独立开合，控件值与面板滚动范围不�
     assert.equal(after.fillGroupClosed, true);
     assert.equal(after.aoEnabled, false);
     assert.equal(after.aoButtonLabel, '展开AO设置');
-    assert.equal(after.panelOpacity, '96%');
+    assert.equal(after.panelOpacity, '50%');
     assert.equal(after.lighting, before.lighting);
     assert.equal(after.shadowSource, before.shadowSource);
     assert.ok(after.panelWidth <= after.viewportWidth);
