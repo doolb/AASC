@@ -398,6 +398,14 @@ const WebSocketManager = {
             if (window.DeviceList) {
                 window.DeviceList.handleDisplayStatusBarConfigError(data);
             }
+        } else if (data.type === 'displayBackgroundGlowConfig') {
+            if (window.DisplayBackgroundGlow) {
+                window.DisplayBackgroundGlow.handleConfig(data);
+            }
+        } else if (data.type === 'displayBackgroundGlowConfigError') {
+            if (window.DisplayBackgroundGlow) {
+                window.DisplayBackgroundGlow.handleConfigError(data);
+            }
         } else if (data.type === 'mmdVisibilityError') {
             if (data.displayId === window.currentDisplayId && window.showToast) {
                 window.showToast(data.message || 'MMD 状态更新失败', 'error');

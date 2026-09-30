@@ -7,8 +7,13 @@
     showStatusBar = true
 
 控制端设备卡片:
-    对每台 displayId 渲染一个“显示状态栏”复选框
+    设备树和列表行不渲染状态栏复选框
+
+VAD 面板:
+    读取当前选中的 displayId
+    在当前显示端 VAD 卡片中渲染“显示状态栏”复选框
     缺少 showStatusBar 时将复选框视为选中
+    change 时沿用 setDisplayStatusBarConfig
 
 用户修改复选框:
     send({
@@ -80,4 +85,4 @@ showStatusBar = true
 - 新增 WebSocket 消息必须带 `type`；服务端只接受布尔值并向客户端回传持久化后的权威值。
 - 离线目标不接受实时控制；显示端下次连接时从按 `displayId` 保存的状态恢复。
 - 时间和媒体文件名不受状态栏开关影响。
-- 不增加配置 HTTP 读写接口，不改变控制端导航的现有响应式行为。
+- 不增加配置 HTTP 读写接口。控制端主导航按方向响应式布局：竖屏位于底部，横屏位于左侧。

@@ -78,6 +78,24 @@ test('左侧导航应支持 Pointer Events 拖动垂直滚动', () => {
     );
 });
 
+test('竖屏主导航固定在底部并支持横向滚动', () => {
+    const stylesheet = fs.readFileSync(stylesheetPath, 'utf8');
+    const portraitMediaIndex = stylesheet.indexOf('@media (orientation: portrait)');
+    assert.notEqual(portraitMediaIndex, -1, '应按竖屏方向切换导航布局');
+
+    const portraitStyles = stylesheet.slice(portraitMediaIndex);
+    assert.match(portraitStyles, /\.sidebar\s*\{[^}]*position\s*:\s*fixed[^}]*bottom\s*:\s*0[^}]*width\s*:\s*100%/s,
+        '竖屏导航应固定在底部并占满宽度');
+    assert.match(portraitStyles, /\.sidebar-nav\s*\{[^}]*flex-direction\s*:\s*row[^}]*overflow-x\s*:\s*auto[^}]*overflow-y\s*:\s*hidden/s,
+        '竖屏导航项应横向排列并仅启用横向滚动');
+    assert.match(portraitStyles, /\.content\s*\{[^}]*margin-left\s*:\s*0[^}]*padding-bottom\s*:[^}]*env\(safe-area-inset-bottom/s,
+        '竖屏主内容应清除左边距并为底部导航安全区留白');
+
+    const script = fs.readFileSync(sidebarScriptPath, 'utf8');
+    assert.match(script, /startX/, '导航拖动应记录水平起点');
+    assert.match(script, /scrollLeft/, '竖屏导航拖动应改变 scrollLeft');
+});
+
 test('右侧仅空白内容背景应支持拖动页面滚动', () => {
     const script = fs.readFileSync(sidebarScriptPath, 'utf8');
 

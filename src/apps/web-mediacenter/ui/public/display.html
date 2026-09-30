@@ -424,6 +424,7 @@
     <script src="js/chat-markdown.js"></script>
     <script src="js/text-media-player.js"></script>
     <script src="js/ui-theme.js"></script>
+    <script src="js/display-background-glow.js"></script>
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
@@ -5521,6 +5522,13 @@
                     if (data.type === 'displayStatusBarConfig') {
                         if (!data.displayId || data.displayId === displayId) {
                             applyDisplayStatusBarVisibility(data.showStatusBar);
+                        }
+                        return;
+                    }
+
+                    if (data.type === 'displayBackgroundGlowConfig') {
+                        if (window.DisplayBackgroundGlow) {
+                            window.DisplayBackgroundGlow.handleConfig(data);
                         }
                         return;
                     }

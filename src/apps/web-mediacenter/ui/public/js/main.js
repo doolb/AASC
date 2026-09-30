@@ -39,9 +39,14 @@ const Sidebar = {
             if (event.button !== undefined && event.button !== 0) return;
             if (event.isPrimary === false) return;
 
+            const isHorizontal = typeof window.matchMedia === 'function'
+                && window.matchMedia('(orientation: portrait)').matches;
             dragState = {
                 pointerId: event.pointerId,
+                axis: isHorizontal ? 'horizontal' : 'vertical',
+                startX: event.clientX,
                 startY: event.clientY,
+                startScrollLeft: sidebarNav.scrollLeft,
                 startScrollTop: sidebarNav.scrollTop,
                 moved: false,
                 captured: false
@@ -51,8 +56,10 @@ const Sidebar = {
         sidebarNav.addEventListener('pointermove', (event) => {
             if (!dragState || dragState.pointerId !== event.pointerId) return;
 
-            const deltaY = event.clientY - dragState.startY;
-            if (!dragState.moved && Math.abs(deltaY) < dragThreshold) return;
+            const delta = dragState.axis === 'horizontal'
+                ? event.clientX - dragState.startX
+                : event.clientY - dragState.startY;
+            if (!dragState.moved && Math.abs(delta) < dragThreshold) return;
 
             dragState.moved = true;
             if (!dragState.captured) {
@@ -60,7 +67,11 @@ const Sidebar = {
                 dragState.captured = true;
             }
             sidebarNav.classList.add('is-dragging');
-            sidebarNav.scrollTop = dragState.startScrollTop - deltaY;
+            if (dragState.axis === 'horizontal') {
+                sidebarNav.scrollLeft = dragState.startScrollLeft - delta;
+            } else {
+                sidebarNav.scrollTop = dragState.startScrollTop - delta;
+            }
             event.preventDefault();
         });
 

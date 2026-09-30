@@ -11,11 +11,19 @@ const WEBSOCKET = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public
 const UPLOAD = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/upload.html');
 
 const read = file => fs.readFileSync(file, 'utf8');
+const extractMethod = methodSignature => {
+    const start = deviceList.indexOf(`    ${methodSignature} {`);
+    assert.notEqual(start, -1, `应找到方法 ${methodSignature}`);
+    const end = deviceList.indexOf('\n    },', start);
+    assert.notEqual(end, -1, `方法 ${methodSignature} 应有结束位置`);
+    return deviceList.slice(start, end);
+};
 const server = read(SERVER);
 const display = read(DISPLAY);
 const deviceList = read(DEVICE_LIST);
 const websocket = read(WEBSOCKET);
 const upload = read(UPLOAD);
+const selfTest = read(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/self-test.js'));
 
 assert.match(server, /DEFAULT_VAD_THRESHOLD\s*=\s*0\.01/, '服务端应定义统一的默认 VAD 阈值');
 assert.match(server, /normalizeVadThreshold/, '服务端应校验并限制控制端设置的 VAD 阈值');
@@ -38,20 +46,37 @@ assert.match(deviceList, /data-vad-noise-test/, '控制端设备列表应提供�
 assert.match(deviceList, /setVoiceVad|detectVoiceNoise/, '控制端应发送 VAD 配置和底噪检测消息');
 assert.match(deviceList, /voiceVadNoiseResult|recommendedThreshold/, '控制端应展示底噪检测结果');
 
-const listVoiceHtmlStart = deviceList.indexOf('renderVoiceControlHtml(display)');
-const listVoiceHtmlEnd = deviceList.indexOf('bindVoiceListeningControls(container)', listVoiceHtmlStart);
 assert.doesNotMatch(
-    deviceList.slice(listVoiceHtmlStart, listVoiceHtmlEnd),
+    extractMethod('renderVoiceControlHtml(display)'),
     /data-vad-threshold|data-vad-noise-test/,
     '设备列表语音控制区域不应包含 VAD 配置和底噪检测控件'
 );
-const treeVoiceStart = deviceList.indexOf('renderVoiceControl(display)');
-const treeVoiceEnd = deviceList.indexOf('renderSettingControl(node)', treeVoiceStart);
 assert.doesNotMatch(
-    deviceList.slice(treeVoiceStart, treeVoiceEnd),
+    extractMethod('renderVoiceControlHtml(display)'),
+    /data-display-status-bar-toggle/,
+    '设备列表语音控制区域不应放置状态栏开关'
+);
+assert.doesNotMatch(
+    extractMethod('renderVoiceControl(display)'),
     /display-vad-noise-test|display-vad-threshold/,
     '树形设备列表语音控制区域不应包含 VAD 配置和底噪检测控件'
 );
+assert.doesNotMatch(
+    extractMethod('renderVoiceControl(display)'),
+    /display-status-bar-toggle|显示状态栏/,
+    '树形设备列表语音控制区域不应放置状态栏开关'
+);
+assert.match(
+    extractMethod('renderVoiceVadCardHtml(display)'),
+    /data-display-status-bar-toggle/,
+    '当前显示端 VAD 卡片应包含状态栏开关'
+);
+assert.match(
+    extractMethod('bindVoiceVadControls(container)'),
+    /data-display-status-bar-toggle[\s\S]*setDisplayStatusBarVisibility/,
+    'VAD 面板应继续按 displayId 保存状态栏设置'
+);
+assert.match(selfTest, /id:\s*'display_status_bar_vad_location'/, '自测模块应检查状态栏开关位置');
 assert.match(upload, /id="voiceVadPanel"/, '显示控制页应提供独立 VAD 卡片容器');
 assert.match(deviceList, /renderVoiceVadPanel/, '控制端应独立渲染 VAD 卡片');
 const vadPanelStart = deviceList.indexOf('renderVoiceVadPanel()');

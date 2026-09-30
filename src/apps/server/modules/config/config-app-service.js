@@ -36,6 +36,7 @@ const defaultDisplayState = {
 const CPU_AFFINITY_ENGINES = ['asr', 'tts', 'llm'];
 const CPU_AFFINITY_FIELDS = ['bigCoreCount', 'littleCoreCount'];
 const CPU_AFFINITY_BOOLEAN_FIELDS = ['preferBigCores'];
+const DEFAULT_DISPLAY_BACKGROUND_GLOW = Object.freeze({ brightness: 100, spread: 58 });
 const DEFAULT_CPU_AFFINITY = {
     asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
     tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
@@ -51,6 +52,43 @@ const DEFAULT_LLM_MODEL_MAPPINGS = [{
 
 function isNonNegativeInteger(value) {
     return Number.isInteger(value) && value >= 0;
+}
+
+function normalizeDisplayBackgroundGlowConfig(rawConfig, fallbackConfig = DEFAULT_DISPLAY_BACKGROUND_GLOW) {
+    const source = rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig)
+        ? rawConfig
+        : {};
+    const fallback = fallbackConfig && typeof fallbackConfig === 'object' && !Array.isArray(fallbackConfig)
+        ? fallbackConfig
+        : DEFAULT_DISPLAY_BACKGROUND_GLOW;
+    const normalizeValue = (value, fallbackValue, minimum, maximum, defaultValue) => {
+        const base = Number.isFinite(fallbackValue)
+            ? Math.min(maximum, Math.max(minimum, Math.round(fallbackValue)))
+            : defaultValue;
+        const number = Number.isFinite(value) ? value : base;
+        return Math.min(maximum, Math.max(minimum, Math.round(number)));
+    };
+
+    return {
+        brightness: normalizeValue(source.brightness, fallback.brightness, 0, 100, DEFAULT_DISPLAY_BACKGROUND_GLOW.brightness),
+        spread: normalizeValue(source.spread, fallback.spread, 25, 90, DEFAULT_DISPLAY_BACKGROUND_GLOW.spread)
+    };
+}
+
+function validateDisplayBackgroundGlowPayload(payload, fallbackConfig = DEFAULT_DISPLAY_BACKGROUND_GLOW) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return { ok: false, message: '背景光晕配置必须是对象' };
+    }
+    for (const key of ['brightness', 'spread']) {
+        if (payload[key] !== undefined && !Number.isFinite(payload[key])) {
+            return { ok: false, message: `${key} 必须是有限数值` };
+        }
+    }
+
+    return {
+        ok: true,
+        config: normalizeDisplayBackgroundGlowConfig(payload, fallbackConfig)
+    };
 }
 
 function cloneCpuAffinityConfig(cpuAffinity = DEFAULT_CPU_AFFINITY) {
@@ -681,6 +719,13 @@ module.exports.setTtsConfig = (ttsConfig) => config.setTtsConfig(ttsConfig);
 module.exports.getTtsConfig = () => config.getTtsConfig();
 module.exports.normalizeCpuAffinityConfig = (rawConfig, fallbackConfig) => normalizeCpuAffinityConfig(rawConfig, fallbackConfig);
 module.exports.validateCpuAffinityPayload = (payload, fallbackConfig) => validateCpuAffinityPayload(payload, fallbackConfig);
+module.exports.getDefaultDisplayBackgroundGlowConfig = () => ({ ...DEFAULT_DISPLAY_BACKGROUND_GLOW });
+module.exports.normalizeDisplayBackgroundGlowConfig = (rawConfig, fallbackConfig) => (
+    normalizeDisplayBackgroundGlowConfig(rawConfig, fallbackConfig)
+);
+module.exports.validateDisplayBackgroundGlowPayload = (payload, fallbackConfig) => (
+    validateDisplayBackgroundGlowPayload(payload, fallbackConfig)
+);
 module.exports.normalizeLlmDefaultModelMappings = (rawMappings, availableModelIds, reservedNames) => (
     normalizeLlmDefaultModelMappings(rawMappings, availableModelIds, reservedNames)
 );

@@ -1,11 +1,24 @@
 # Web MediaCenter - 变更日志
 
+### Git 拉取保留本地文档
+
+- ✅ [2026-09-30] 解决未提交的 `changelog.md`、`docs/design.md`、`docs/spec.md` 阻塞拉取，合并 `origion/master` 的背景光晕、状态栏位置与竖屏导航提交，保留本地480Hz提交。
+  - 三个文件定向stash并单独备份，顶部变更日志冲突保留双方条目；合并后恢复原未提交发布记录和索引，其他工作区改动不纳入合并提交。仅Git同步，不修改项目规则；未构建、测试或发布。
+
 ### MMD AR 布料物理频率480Hz
 
 - ✅ [2026-09-30] 独立网页“动作 → 物理 → PMX物理频率”开放30–480Hz，保留默认65Hz与5Hz步长，保存/刷新、换模型和换动作后保持选值。
   - 新增 `web-physics-rate.js` / `web-physics-rate.mjs`，更新 `build.js` / `web-motion-switch.mjs`；仅WEB_MODE扩展控件和DisplayMmd/runtime/helper限幅，实时调节与切换初始化统一unitStep与子步预算。90Hz以内保持3子步，高频预算ceil(FPS×0.1)+1，480Hz为49，实际按delta执行；调节不重载或清零速度。频率模块/helper导入增加内容指纹。
   - 新增 `tests/mmd-ar-physics-rate.test.js`，扩展本地资源浏览器验证，补齐旧AO/面板测试夹具；定向57项、面板/本地vendor10项（修正后定向复测）、本地资源3项共70项覆盖通过。真实Ammo在480Hz下按60/30/10FPS模拟一秒位移正常；480Hz网页24次VMD/4次PMX切换约589秒，创建32/销毁31/存活1，堆64MiB、探针跨度3516552字节，无异常/OOM；实时65Hz不重建，刷新恢复480Hz。
   - 网页构建、9个源/生成脚本及4个内联脚本语法、6个导入指纹、定向差异空白检查通过。更新设计/伪代码/任务/待办/使用及自测文档；本地web-dist已生成，本轮未发布外网或构建APK。仅独立网页受影响，Offline待打包状态不改；手机480Hz负荷、帧率与布料观感待现场验收。
+
+### 显示端背景光晕、状态栏位置与竖屏导航
+
+- ✅ [2026-09-30] 显示端媒体空白区域改为可调的 MMD-AR 风格中心光晕；系统设置增加全局亮度和扩散范围，默认分别为 100% 和 58%。
+  - 新增 `display-background-glow.js`，控制端通过 WebSocket 提交参数，服务端校验、规范化后经 `config.set` 持久化并向控制端/所有在线显示端广播；两类客户端连接初始化时接收权威配置。未新增 HTTP 配置接口。更新 `server-app.js`、`config-app-service.js`、`websocket.js`、`upload.html`、`display.html`、`display.css` 和 `upload.css`。
+  - 状态栏开关从设备树/列表移至对应显示端的 VAD 卡片，仍按显示端独立保存；关闭状态栏不隐藏时间。控制端竖屏导航固定在底部并横向滚动，横屏继续位于左侧。更新 `device-list.js`、`main.js`、`self-test.js` 及对应样式。
+  - 同步 design/spec/task、索引、usage、自测与 todo；定向自动测试 47/47 通过，Node 语法、配置 JSON 和 `git diff --check` 通过。完整 `npm test` 为 1031/1111 通过、65 失败；失败包含当前 Windows 环境缺少项目测试所需的 `/usr/bin/chromium`、`/mnt/AASC/node_modules/puppeteer`，以及符号链接测试触发 `EPERM`。现场多显示端、重连和手机竖屏验收待执行。
+  - Offline `servicePackage` 状态保持 `true`；未构建或发布 APK。
 
 ### MMD AR 换模型继承动作与 T Pose 分帧初始化
 
