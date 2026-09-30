@@ -59,7 +59,7 @@ test('本地资源拒绝歧义、重复路径和目录越界，并在网格创�
 });
 
 test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重载和恢复默认可用', {
-    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 300000
+    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 600000
 }, async () => {
     // 使用构建缓存的真实资源，通过 file input 上传，验证对象 URL 和同一 ESM 注册表。
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'mmd-resources.json'), 'utf8'));
@@ -162,6 +162,8 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         const upload = async (selector, files, waiting = false) => {
             await page.evaluate(() => { window.localLoadProgressTrace.length = 0; window.localLoadProgressStarts.length = 0; });
             const input = await page.$(selector);
+            // 模拟选择按钮先清空input的实际行为；浏览器相同FileList不会再次触发change。
+            await input.evaluate((element) => { element.value = ''; });
             await input.uploadFile(...files);
             try {
                 await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
@@ -232,6 +234,30 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getModelGravityState().settings), { deadZoneDegrees: 0.8, smoothingMs: 0 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl.includes('__local__')), true);
         await page.evaluate(async () => {
+            // 使用importmap同一个带指纹模块，覆盖实际runtime；只保留存活实例，避免观测本身累积模型引用。
+            const { MMDAnimationHelper } = await import('three/addons/animation/MMDAnimationHelper.js');
+            const create = MMDAnimationHelper.prototype._createMMDPhysics;
+            window.physicsLifetime = { active: new Set(), created: 0, disposed: 0, errors: [] };
+            MMDAnimationHelper.prototype._createMMDPhysics = function (...args) {
+                const physics = create.apply(this, args);
+                const stats = window.physicsLifetime;
+                stats.active.add(physics);
+                stats.created += 1;
+                const dispose = physics.dispose.bind(physics);
+                physics.dispose = () => {
+                    const alreadyDisposed = physics.disposed;
+                    const result = dispose();
+                    if (!alreadyDisposed) {
+                        stats.disposed += 1;
+                        stats.active.delete(physics);
+                        if (physics.manager.nativeObjects.size) stats.errors.push('物理销毁后仍有native资源');
+                    }
+                    return result;
+                };
+                return physics;
+            };
+        });
+        await page.evaluate(async () => {
             if (!await window.DisplayMmd.setPhysicsEnabled(false)) throw new Error('物理重载失败');
             if (!await window.DisplayMmd.setPhysicsEnabled(true)) throw new Error('物理重载失败');
         });
@@ -240,7 +266,7 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         assert.ok(await page.evaluate(() => window.DisplayMmd.getMotionProgress().durationSeconds > 0));
         // 记录真实 vendor 的零帧与物理初始化，在暂停播放且物理开启时重新选同一 VMD。
         await page.evaluate(async () => {
-            const { MMDAnimationHelper } = await import('./js/vendor/three/animation/MMDAnimationHelper.js');
+            const { MMDAnimationHelper } = await import('three/addons/animation/MMDAnimationHelper.js');
             const update = MMDAnimationHelper.prototype.update;
             const setup = MMDAnimationHelper.prototype._setupMeshPhysics;
             window.motionSwitchTrace = [];
@@ -279,6 +305,37 @@ test('真实网页文件选择加载 PMX/VMD，失败保留旧模型，物理重
         await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getModelProfile().modelUrl.includes('__local__')), false);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getState().modelReady), true);
+        // 超过原64MiB堆可容纳的泄漏切换次数；每轮只剩当前实例，验证实际文件输入和native回收。
+        const probes = [];
+        for (let index = 0; index < 24; index += 1) {
+            await upload('#mmdArLocalVmd', [vmdPath]);
+            if (index % 6 === 5) await upload('#mmdArLocalFiles', [pmxPath, ...textures]);
+            const lifetime = await page.evaluate(() => {
+                const { active, created, disposed, errors } = window.physicsLifetime;
+                const pointer = Ammo._malloc(4 * 1024 * 1024);
+                Ammo._free(pointer);
+                return { active: active.size, created, disposed, errors,
+                    resources: [...active].map((physics) => physics.manager.nativeObjects.size),
+                    probe: pointer, heap: Ammo.HEAP8.byteLength };
+            });
+            assert.equal(lifetime.active, 1, JSON.stringify(lifetime));
+            assert.equal(lifetime.created - lifetime.disposed, 1);
+            assert.deepEqual(lifetime.errors, []);
+            assert.ok(lifetime.resources[0] > 0);
+            assert.equal(lifetime.heap, 64 * 1024 * 1024);
+            assert.ok(lifetime.probe > 0);
+            probes.push(lifetime.probe);
+            assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
+        }
+        // 新旧实例在提交前短暂并存，碰撞计算也会改变空闲块布局；地址不必逐字相同。
+        // 限制预热后的地址范围，并逐轮确认64MiB堆、当前仅1实例和销毁后的native分配为0。
+        const stableProbes = probes.slice(8);
+        const probeRange = Math.max(...stableProbes) - Math.min(...stableProbes);
+        assert.ok(probeRange < 8 * 1024 * 1024, `切换后内存范围必须保持有界：${probes}`);
+        const result = await page.evaluate(() => ({ created: window.physicsLifetime.created,
+            disposed: window.physicsLifetime.disposed, active: window.physicsLifetime.active.size,
+            heap: Ammo.HEAP8.byteLength }));
+        console.info('真实网页24次VMD/4次PMX连续切换:', JSON.stringify({ ...result, probeRange }));
         assert.deepEqual(errors, []);
         assert.equal(requests.some((url) => url.includes('__local__')), false, '本地资源不能回退到 HTTP 请求');
     } finally {

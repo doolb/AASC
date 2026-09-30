@@ -25,6 +25,7 @@ const WEB_MODE = process.argv.includes('--web');
 const WEB_PANEL_GROUPS = WEB_MODE ? require('./web-panel-groups') : null;
 const WEB_GRAVITY_MODE = WEB_MODE ? require('./web-gravity-mode') : null;
 const WEB_LOCAL_ASSETS = WEB_MODE ? require('./web-local-assets-inject') : null;
+const WEB_PHYSICS_LIFECYCLE = WEB_MODE ? require('./web-physics-lifecycle') : null;
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -496,6 +497,18 @@ async function stageTextAssets() {
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }
   await fs.cp(VENDOR_THREE_SOURCE, path.join(GENERATED_ASSETS, 'js/vendor/three'), { recursive: true });
+  let webPhysicsHelperVersion = '';
+  if (WEB_MODE) {
+    // 只给网页副本补齐 native 物理所有权；依赖和 importmap 逐级带指纹，避免继续加载旧缓存。
+    const animationDirectory = path.join(GENERATED_ASSETS, 'js/vendor/three/animation');
+    const physicsPath = path.join(animationDirectory, 'MMDPhysics.js');
+    const helperPath = path.join(animationDirectory, 'MMDAnimationHelper.js');
+    await fs.writeFile(physicsPath, WEB_PHYSICS_LIFECYCLE.addPhysicsLifecycle(await fs.readFile(physicsPath, 'utf8')));
+    const physicsVersion = (await hashFile(physicsPath)).sha256.slice(0, 12);
+    await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
+      await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));
+    webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
+  }
 
   const scriptVersion = new Map();
   if (WEB_MODE) {
@@ -514,7 +527,7 @@ async function stageTextAssets() {
   <title>MMD AR 独立测试</title>
   <link rel="stylesheet" href="/css/display-mmd.css">
   ${WEB_MODE ? '<script src="/js/vendor/aframe-1.5.0/aframe.min.js"></script><script src="/js/vendor/mind-ar-1.2.5/mindar-image-aframe.prod.js"></script>' : ''}
-  <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"}}</script>
+  <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"${WEB_MODE ? `,"three/addons/animation/MMDAnimationHelper.js":"/js/vendor/three/animation/MMDAnimationHelper.js?v=${webPhysicsHelperVersion}"` : ''}}}</script>
   <style>
     :root {
       color-scheme: dark;

@@ -2,6 +2,36 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### Ammo 物理生命周期与频繁切换 OOM（2026-09-30，已实现）
+
+```text
+已有声明:
+  MMDPhysics、ResourceManager、MMDAnimationHelper.remove、网页构建副本
+  stopMotion、disposeStagedResources、prepareMotionSwitch.rollback
+  Ammo.destroy、world.removeConstraint / removeRigidBody、模型/动作提交序号
+新增定义:
+  NativeOwnership { ownedObjects, attachedBodies, attachedConstraints, disposed }
+  自建对象按创建顺序登记，临时向量通过同一资源池复用，构造信息在创建刚体后立即销毁
+操作流程（仅独立网页）:
+  构建 -> 为MMDPhysics/MMDAnimationHelper副本接入所有权与释放；正式vendor/APK保持
+  物理副本内容指纹 -> helper物理import带指纹 -> importmap精确helper地址带指纹，避免旧缓存
+  物理创建 -> 记录自建世界依赖、形状/状态/刚体、约束及资源池对象
+  临时重力/盒体尺寸向量 -> 最后使用后归还所有权资源池，dispose时销毁
+  刚体构造信息 -> 刚体创建结束后立即销毁，异常时同样释放
+  getter借用对象及外部传入世界 -> 不当作自建对象销毁
+  helper移除 -> 物理幂等释放 -> 原helper移除；不停止旧mixer以避免复原骨骼覆盖新动作
+  helper物理创建后的预热/IK异常 -> 同样释放已创建物理，再上抛原异常
+  释放 -> 从世界移除约束 -> 移除刚体 -> 按依赖顺序销毁自建native对象
+        -> 清空资源池/对象引用 -> 仅销毁自建世界与其依赖
+  初始化异常 -> 释放已分配和已挂接部分 -> 恢复网格姿态/父级 -> 原异常上抛
+  成功切换 -> 新资源准备成功 -> 提交边界释放旧helper/物理 -> 新资源接管
+  失败或过期 -> 只释放暂存helper/物理，旧内容及开关保持
+  动作切换 -> 第0帧/矩阵 -> 新物理/速度归零 -> 提交；原进度流程保持
+  自动循环 -> 原姿态复位，不新建/释放物理，不新增速度清理
+  真实Ammo压力验证 -> 重复创建/步进/销毁 -> 存活native分配回到基线
+  真实PMX/VMD重复切换 -> 内存稳定，无OOM，旧内容/进度/开关/循环仍正常
+```
+
 ### 模型/动作物理初始化速度归零（2026-09-30，已实现）
 
 ```text

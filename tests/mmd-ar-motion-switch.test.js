@@ -246,9 +246,10 @@ test('固定 vendor 的真实 VMD mixer/Ammo 从新动作姿态创建刚体，�
     const source = (name) => fs.readFileSync(path.join(vendor, 'animation', name), 'utf8')
         .replace("from 'three'", `from '${threeUrl}'`);
     const ikUrl = encode(source('CCDIKSolver.js'));
-    const physicsUrl = encode(source('MMDPhysics.js'));
-    const helperSource = source('MMDAnimationHelper.js')
-        .replace('../animation/CCDIKSolver.js', ikUrl).replace('../animation/MMDPhysics.js', physicsUrl);
+    const { addPhysicsLifecycle, addAnimationLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
+    const physicsUrl = encode(addPhysicsLifecycle(source('MMDPhysics.js')));
+    const helperSource = addAnimationLifecycle(source('MMDAnimationHelper.js'), physicsUrl)
+        .replace('../animation/CCDIKSolver.js', ikUrl);
     const { MMDAnimationHelper } = await import(encode(helperSource));
     globalThis.Ammo = await require(path.join(vendor, 'libs/ammo.wasm.js'))({
         wasmBinary: fs.readFileSync(path.join(vendor, 'libs/ammo.wasm.wasm')) });
@@ -312,4 +313,5 @@ test('固定 vendor 的真实 VMD mixer/Ammo 从新动作姿态创建刚体，�
     prepared.helper.update(1);
     assert.equal(zeroCalls, 3, '自动循环不调用新增清理');
     prepared.helper.remove(mesh);
+    assert.equal(data.physics.manager.nativeObjects.size, 0, '移除动作释放全部自建native物理对象');
 });

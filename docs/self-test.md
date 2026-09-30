@@ -1,5 +1,17 @@
 # 自测功能文档
 
+## MMD AR Ammo 频繁切换内存释放（2026-09-30）
+
+`node --test tests/mmd-ar-physics-lifecycle.test.js tests/mmd-ar-motion-switch.test.js tests/mmd-ar-load-progress.test.js tests/mmd-ar-gravity.test.js` 24/24通过，既有PMX/helper/物理40/40通过。新增生命周期6项验证固定真实Ammo连续128轮创建三种形状刚体与约束、步进、helper.remove，每轮全部自建native指针归零；每轮4MiB探针在预热后稳定复用同一地址，WASM堆保持64MiB。
+
+覆盖移除/销毁依赖顺序、重复dispose、借用world不销毁所有者、第二刚体/约束/构造失败与helper物理创建后IK失败清理及网格变换恢复、新动作回滚不释放旧物理、成功移除旧helper不复位新零帧。速度归零和自动循环用例改用网页生命周期补丁后的真实vendor，语义保持。
+
+`node --test tests/mmd-ar-local-assets.test.js` 3/3通过，包含24次真实VMD文件选择及4次PMX/贴图重选。最终物理创建32、销毁31、存活1；逐轮确认已销毁manager拥有分配为0，WASM堆为67108864字节，4MiB探针预热后地址跨度3197784字节（约3.05MiB，小于8MiB），无OOM/页面异常。连同定向24项、既有40项共67项通过。
+
+测试入口对齐真实按钮的清空file input行为，确保重选同一文件也派发change；真实模型的空闲块地址受新旧物理短暂并存/分配布局影响，不要求逐次完全相同，而检查有界范围，并保持逐轮存活对象/销毁资源/堆容量断言。修正后完整网页回归通过。
+
+`npm run build:web:mmd-ar-test`、源/生成/内联脚本语法、helper与物理内容指纹核对通过。补丁仅网页副本，源vendor/正式端与APK不变；本轮未发布，手机持续切换、布料/性能及大模型峰值待现场验收。
+
 ## MMD AR 加载进度与初始化速度清理（2026-09-30）
 
 进度4/4、动作/初始化清理8/8、重力6/6、本地资源3/3、既有PMX/helper/物理40/40，共61项通过。定向命令：`node --test tests/mmd-ar-load-progress.test.js tests/mmd-ar-motion-switch.test.js tests/mmd-ar-gravity.test.js`；浏览器命令：`node --test tests/mmd-ar-local-assets.test.js`；回归命令：`node --test tests/mmd-pmx-helper.test.js tests/mmd-pmx-physics-rotation.test.js tests/display-mmd-runtime.test.js`。
