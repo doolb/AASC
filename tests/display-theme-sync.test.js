@@ -23,16 +23,22 @@ test('显示端应加载共享主题并处理服务端主题通知', () => {
     assert.match(server, /displayClients\.forEach\([\s\S]*controlThemeChanged/u);
 });
 
-test('显示端媒体底色应固定为黑色，UI 控件仍使用共享主题变量', () => {
+test('显示端媒体底色应使用可调中心光晕，睡眠遮罩仍纯黑，UI 控件使用共享主题变量', () => {
     const pageBackground = displayCss.match(/html, body\s*\{([\s\S]*?)\}/u)?.[1] || '';
     const mediaContainerBackground = displayCss.match(/#mediaContainer\s*\{([\s\S]*?)\}/u)?.[1] || '';
     const mediaSleepOverlayBackground = displayCss.match(/\.sleep-overlay\s*\{([\s\S]*?)\}/u)?.[1] || '';
 
-    assert.match(pageBackground, /background:\s*#000\b/u);
+    assert.match(pageBackground, /background:\s*#101116\b/u);
     assert.doesNotMatch(pageBackground, /var\(--bg-primary/u);
-    assert.match(mediaContainerBackground, /background:\s*#000\b/u);
+    assert.match(mediaContainerBackground, /background-color:\s*#101116\b/u);
+    assert.match(mediaContainerBackground, /background-image:\s*radial-gradient/u);
+    assert.match(mediaContainerBackground, /ellipse at 50% 42%/u);
+    assert.match(mediaContainerBackground, /--display-background-glow-brightness/u);
+    assert.match(mediaContainerBackground, /--display-background-glow-spread/u);
     assert.doesNotMatch(mediaContainerBackground, /var\(--bg-primary/u);
     assert.match(mediaSleepOverlayBackground, /background:\s*#000\b/u);
+    assert.match(displayCss, /--display-background-glow-brightness:\s*1/u);
+    assert.match(displayCss, /--display-background-glow-spread:\s*58%/u);
     assert.match(displayCss, /#mediaText[\s\S]*background:\s*var\(--bg-secondary(?:,\s*[^)]+)?\)/u);
     assert.match(displayCss, /#mediaText[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);
     const timeDisplay = displayCss.match(/#timeDisplay\s*\{([\s\S]*?)\}/u)?.[1] || '';

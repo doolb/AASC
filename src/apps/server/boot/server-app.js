@@ -1309,6 +1309,7 @@ async function startServer() {
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
                 'setDisplayStatusBarConfig',
+                'setDisplayBackgroundGlowConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
                 'getTemporaryConversation', 'clearTemporaryConversation',
@@ -3708,6 +3709,19 @@ app.post('/api/config/localAsr', (req, res) => {
 
 function getControlTheme() {
     return normalizeControlTheme(config.get('ui.controlTheme', 'dark'));
+}
+
+function getDisplayBackgroundGlowConfig() {
+    return config.normalizeDisplayBackgroundGlowConfig(
+        config.get('ui.displayBackgroundGlow'),
+        config.getDefaultDisplayBackgroundGlowConfig()
+    );
+}
+
+function broadcastDisplayBackgroundGlowConfig(displayBackgroundGlow = getDisplayBackgroundGlowConfig()) {
+    const message = { type: 'displayBackgroundGlowConfig', config: displayBackgroundGlow };
+    broadcastToControls(message);
+    displayClients.forEach((_, displayId) => sendToDisplay(displayId, message));
 }
 
 function broadcastControlTheme(theme) {
@@ -7748,6 +7762,10 @@ wss.on('connection', (ws, req) => {
                 displayClients.get(displayId)?.state.showStatusBar
             )
         }));
+        ws.send(JSON.stringify({
+            type: 'displayBackgroundGlowConfig',
+            config: getDisplayBackgroundGlowConfig()
+        }));
         ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
         ws.send(JSON.stringify({ type: 'controlThemeChanged', theme: getControlTheme() }));
         ws.send(JSON.stringify({ type: 'displayVersionConfig', ...getDisplayVersionConfig() }));
@@ -8095,6 +8113,10 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
+        ws.send(JSON.stringify({
+            type: 'displayBackgroundGlowConfig',
+            config: getDisplayBackgroundGlowConfig()
+        }));
         ws.send(JSON.stringify({
             type: 'llm.modelManifest',
             ...llmModelManifestService.createManifest({ includeIncomplete: true })
@@ -9090,6 +9112,42 @@ async function handleControlMessageFallback(data, ws) {
                 displayId,
                 showStatusBar: currentVisible,
                 message: '状态栏配置保存失败'
+            }));
+        }
+        return;
+    }
+
+    if (data.type === 'setDisplayBackgroundGlowConfig') {
+        const currentConfig = getDisplayBackgroundGlowConfig();
+        const validation = config.validateDisplayBackgroundGlowPayload(data.config, currentConfig);
+        if (!validation.ok) {
+            ws.send(JSON.stringify({
+                type: 'displayBackgroundGlowConfigError',
+                config: currentConfig,
+                message: validation.message
+            }));
+            return;
+        }
+
+        try {
+            if (!config.set('ui.displayBackgroundGlow', validation.config)) {
+                const authoritativeConfig = getDisplayBackgroundGlowConfig();
+                logError('配置', '保存显示端背景光晕失败');
+                ws.send(JSON.stringify({
+                    type: 'displayBackgroundGlowConfigError',
+                    config: authoritativeConfig,
+                    message: '背景光晕配置保存失败'
+                }));
+                return;
+            }
+            broadcastDisplayBackgroundGlowConfig(validation.config);
+            log('配置', `显示端背景光晕已更新：亮度 ${validation.config.brightness}%，扩散 ${validation.config.spread}%`);
+        } catch (error) {
+            logError('配置', `保存显示端背景光晕失败: ${error.message}`);
+            ws.send(JSON.stringify({
+                type: 'displayBackgroundGlowConfigError',
+                config: getDisplayBackgroundGlowConfig(),
+                message: '背景光晕配置保存失败'
             }));
         }
         return;

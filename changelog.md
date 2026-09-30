@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### 显示端背景光晕、状态栏位置与竖屏导航
+
+- ✅ [2026-09-30] 显示端媒体空白区域改为可调的 MMD-AR 风格中心光晕；系统设置增加全局亮度和扩散范围，默认分别为 100% 和 58%。
+  - 新增 `display-background-glow.js`，控制端通过 WebSocket 提交参数，服务端校验、规范化后经 `config.set` 持久化并向控制端/所有在线显示端广播；两类客户端连接初始化时接收权威配置。未新增 HTTP 配置接口。更新 `server-app.js`、`config-app-service.js`、`websocket.js`、`upload.html`、`display.html`、`display.css` 和 `upload.css`。
+  - 状态栏开关从设备树/列表移至对应显示端的 VAD 卡片，仍按显示端独立保存；关闭状态栏不隐藏时间。控制端竖屏导航固定在底部并横向滚动，横屏继续位于左侧。更新 `device-list.js`、`main.js`、`self-test.js` 及对应样式。
+  - 同步 design/spec/task、索引、usage、自测与 todo；定向自动测试 47/47 通过，Node 语法、配置 JSON 和 `git diff --check` 通过。完整 `npm test` 为 1031/1111 通过、65 失败；失败包含当前 Windows 环境缺少项目测试所需的 `/usr/bin/chromium`、`/mnt/AASC/node_modules/puppeteer`，以及符号链接测试触发 `EPERM`。现场多显示端、重连和手机竖屏验收待执行。
+  - Offline `servicePackage` 状态保持 `true`；未构建或发布 APK。
+
 ### 控制端与显示端状态栏
 
 - ✅ [2026-09-30] 控制端新增按显示端独立保存的状态栏开关，默认显示；关闭后隐藏连接、语音/摄像头状态、音频监视器和会话倒计时，时间与媒体文件名保持显示。

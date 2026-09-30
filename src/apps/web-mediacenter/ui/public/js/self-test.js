@@ -68,6 +68,85 @@ const SelfTest = {
             }
         },
         {
+            id: 'display_background_glow_settings',
+            name: '显示端背景光晕设置',
+            description: '检查全局光晕滑块、预览和当前参数范围',
+            category: '界面布局',
+            run: async () => {
+                const brightness = document.getElementById('displayBackgroundGlowBrightness');
+                const spread = document.getElementById('displayBackgroundGlowSpread');
+                const preview = document.getElementById('displayBackgroundGlowPreview');
+                const config = window.DisplayBackgroundGlow?.currentConfig;
+                if (!brightness || !spread || !preview || !config) {
+                    return { success: false, message: '背景光晕设置控件不完整', details: '缺少滑块、预览或配置管理器' };
+                }
+                const valid = Number.isFinite(config.brightness)
+                    && config.brightness >= 0 && config.brightness <= 100
+                    && Number.isFinite(config.spread) && config.spread >= 25 && config.spread <= 90;
+                return {
+                    success: valid,
+                    message: valid ? '背景光晕设置正常' : '背景光晕参数超出范围',
+                    details: `中心亮度 ${config.brightness}%，扩散范围 ${config.spread}%`
+                };
+            }
+        },
+        {
+            id: 'display_status_bar_vad_location',
+            name: '显示状态栏开关位置',
+            description: '确认当前显示端的独立开关位于 VAD 卡片',
+            category: '界面布局',
+            run: async () => {
+                if (!window.currentDisplayId) {
+                    return { success: true, message: '未选择显示端，跳过位置检查', details: '选择显示端后可在 VAD 面板检查开关' };
+                }
+                const panel = document.getElementById('voiceVadPanel');
+                const toggle = panel?.querySelector('[data-display-status-bar-toggle]');
+                const misplacedToggle = document.querySelector('.display-voice-control [data-display-status-bar-toggle]');
+                const valid = Boolean(toggle)
+                    && toggle.dataset.displayId === window.currentDisplayId
+                    && !misplacedToggle;
+                return {
+                    success: valid,
+                    message: valid ? '状态栏开关位置正常' : '状态栏开关未显示在当前 VAD 卡片',
+                    details: valid ? `displayId: ${toggle.dataset.displayId}` : '开关应只在 VAD 当前显示端卡片中出现'
+                };
+            }
+        },
+        {
+            id: 'control_sidebar_orientation',
+            name: '控制端主导航方向布局',
+            description: '竖屏检查底部导航，横屏检查左侧导航',
+            category: '界面布局',
+            run: async () => {
+                const sidebar = document.querySelector('.sidebar');
+                const sidebarNav = document.querySelector('.sidebar-nav');
+                const content = document.querySelector('.content');
+                if (!sidebar || !sidebarNav || !content || typeof window.matchMedia !== 'function') {
+                    return { success: false, message: '无法读取主导航布局', details: '缺少导航元素或方向检测能力' };
+                }
+                const portrait = window.matchMedia('(orientation: portrait)').matches;
+                const sidebarStyle = window.getComputedStyle(sidebar);
+                const navStyle = window.getComputedStyle(sidebarNav);
+                const contentStyle = window.getComputedStyle(content);
+                const valid = portrait
+                    ? sidebarStyle.position === 'fixed'
+                        && sidebarStyle.flexDirection === 'row'
+                        && Number.parseFloat(sidebarStyle.bottom) === 0
+                        && navStyle.flexDirection === 'row'
+                        && Number.parseFloat(contentStyle.marginLeft) === 0
+                    : sidebarStyle.position === 'fixed'
+                        && sidebarStyle.flexDirection === 'column'
+                        && Number.parseFloat(sidebarStyle.left) === 0
+                        && navStyle.overflowY === 'auto'
+                        && Number.parseFloat(contentStyle.marginLeft) === 60;
+                return {
+                    success: valid,
+                    message: valid ? '主导航方向布局正常' : '主导航位置或滚动方向不符合屏幕方向',
+                    details: portrait ? '竖屏：底部横向导航' : '横屏：左侧纵向导航'
+                };
+            }
+        },
+        {
             id: 'play_command',
             name: '播放命令测试',
             description: '测试播放命令发送并等待显示端确认',

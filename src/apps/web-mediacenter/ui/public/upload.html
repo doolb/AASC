@@ -712,6 +712,21 @@
                         <button class="control-btn theme-preview-btn" id="themePreviewBtn" type="button" data-ui-type="button" onclick="UiTheme.showPreview()">预览</button>
                     </div>
                     <div class="routing-hint" data-ui-type="tip">主题保存到服务端，所有控制端浏览器共享；显示端不切换主题。</div>
+                    <div class="control-item" style="margin-top: 18px;">
+                        <strong data-ui-type="text">显示端背景光晕</strong>
+                        <label class="display-background-glow-control" for="displayBackgroundGlowBrightness">
+                            <span>中心亮度</span>
+                            <output id="displayBackgroundGlowBrightnessValue" for="displayBackgroundGlowBrightness">100%</output>
+                            <input id="displayBackgroundGlowBrightness" type="range" min="0" max="100" step="1" value="100" data-ui-type="slider">
+                        </label>
+                        <label class="display-background-glow-control" for="displayBackgroundGlowSpread">
+                            <span>扩散范围</span>
+                            <output id="displayBackgroundGlowSpreadValue" for="displayBackgroundGlowSpread">58%</output>
+                            <input id="displayBackgroundGlowSpread" type="range" min="25" max="90" step="1" value="58" data-ui-type="slider">
+                        </label>
+                        <div class="display-background-glow-preview" id="displayBackgroundGlowPreview" aria-label="显示端背景光晕预览"></div>
+                        <div class="routing-hint" data-ui-type="tip">全局共享，保存后同步到所有显示端；媒体画面和睡眠遮罩不受影响。</div>
+                    </div>
                 </div>
             </div>
 
@@ -1144,6 +1159,7 @@
     <script src="js/device-list.js"></script>
     <script src="js/server-list.js"></script>
     <script src="js/websocket.js"></script>
+    <script src="js/display-background-glow.js"></script>
     <script src="js/control-mode-utils.js"></script>
     <script src="js/crop.js"></script>
     <script src="js/tts.js"></script>

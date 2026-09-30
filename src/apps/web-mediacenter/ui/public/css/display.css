@@ -4,12 +4,17 @@
     box-sizing: border-box;
 }
 
+:root {
+    --display-background-glow-brightness: 1;
+    --display-background-glow-spread: 58%;
+}
+
 html, body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    /* 媒体画布底色与主题 UI 分离，媒体未覆盖的区域始终保持黑色。 */
-    background: #000;
+    /* 媒体画布底色与主题 UI 分离，未收到远端配置时使用默认深色底。 */
+    background: #101116;
 }
 
 body {
@@ -28,8 +33,14 @@ body {
     justify-content: center;
     overflow: hidden;
     z-index: 1;
-    /* 图片、视频或网页媒体之外的空白区域固定为黑色，不随控制端主题变化。 */
-    background: #000;
+    /* 光晕只铺在媒体画布后方；图片、视频和网页媒体本身继续覆盖底层。 */
+    background-color: #101116;
+    background-image: radial-gradient(
+        ellipse at 50% 42%,
+        rgba(48, 52, 66, var(--display-background-glow-brightness)) 0%,
+        rgba(23, 25, 32, var(--display-background-glow-brightness)) var(--display-background-glow-spread),
+        #101116 100%
+    );
 }
 
 /* 睡眠遮罩只改变可见性，不改变媒体节点的布局尺寸，避免填充模式重新计算时得到 0 尺寸。 */

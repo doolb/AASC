@@ -1067,16 +1067,11 @@ const DeviceList = {
         const latestType = latest ? (latest.isFinal ? '最终' : '实时') : '';
         const latestMeta = this.escapeHtml(this.getVoiceInputMeta(latest));
         const displayId = this.escapeHtml(display.id);
-        const showStatusBar = this.getDisplayStatusBarVisibility(display);
         return `
             <div class="display-voice-control" data-display-id="${displayId}">
                 <label class="display-voice-toggle" title="直接控制该显示端是否采集语音">
                     <input type="checkbox" data-voice-listening-toggle data-display-id="${displayId}" ${capabilities.voiceRecording ? 'checked' : ''}>
                     <span>🎙️ 监听</span>
-                </label>
-                <label class="display-status-bar-toggle" title="独立控制该显示端的连接、语音与摄像头状态提示">
-                    <input type="checkbox" data-display-status-bar-toggle data-display-id="${displayId}" ${showStatusBar ? 'checked' : ''}>
-                    <span>显示状态栏</span>
                 </label>
                 <span class="display-voice-state ${status.className}">${status.label}</span>
                 <span class="display-voice-latest" title="最近一次语音识别结果">最近识别${latestType ? `（${latestType}）` : ''}${latestMeta}：${latestText}</span>
@@ -1091,17 +1086,6 @@ const DeviceList = {
             if (event.target.closest('.display-voice-control')) event.stopPropagation();
         });
         container.addEventListener('change', (event) => {
-            const statusBarInput = event.target.closest('[data-display-status-bar-toggle]');
-            if (statusBarInput) {
-                event.stopPropagation();
-                const display = this.list.find((item) => item.id === statusBarInput.dataset.displayId);
-                const previousValue = this.getDisplayStatusBarVisibility(display);
-                if (!this.setDisplayStatusBarVisibility(statusBarInput.dataset.displayId, statusBarInput.checked)) {
-                    statusBarInput.checked = previousValue;
-                }
-                return;
-            }
-
             const input = event.target.closest('[data-voice-listening-toggle]');
             if (input) {
                 event.stopPropagation();
@@ -1113,6 +1097,7 @@ const DeviceList = {
 
     renderVoiceVadCardHtml(display) {
         const displayId = this.escapeHtml(display.id);
+        const showStatusBar = this.getDisplayStatusBarVisibility(display);
         const vadThreshold = this.getVoiceVadThreshold(display);
         const vadNoise = this.voiceVadNoiseByDisplay.get(display.id);
         const vadNoisePending = this.voiceVadNoisePending.has(display.id);
@@ -1167,7 +1152,13 @@ const DeviceList = {
             : '';
         return `
             <div class="display-vad-card" data-display-id="${displayId}">
-                <div class="display-vad-card-title">${this.getDisplayLabel(display)}</div>
+                <div class="display-vad-card-header">
+                    <div class="display-vad-card-title">${this.getDisplayLabel(display)}</div>
+                    <label class="display-status-bar-toggle" title="独立控制该显示端的连接、语音与摄像头状态提示">
+                        <input type="checkbox" data-display-status-bar-toggle data-display-id="${displayId}" ${showStatusBar ? 'checked' : ''}>
+                        <span>显示状态栏</span>
+                    </label>
+                </div>
                 <div class="display-vad-card-controls">
                     <label class="display-vad-threshold" title="数值越大越不容易被底噪触发">
                         VAD 阈值
@@ -1364,6 +1355,10 @@ const DeviceList = {
         if (!container || container.dataset.voiceVadControlsBound) return;
         container.dataset.voiceVadControlsBound = '1';
         container.addEventListener('click', (event) => {
+            if (event.target.closest('.display-status-bar-toggle')) {
+                event.stopPropagation();
+                return;
+            }
             const refreshAudio = event.target.closest('[data-audio-input-refresh]');
             if (refreshAudio && !refreshAudio.disabled) {
                 event.stopPropagation();
@@ -1406,6 +1401,16 @@ const DeviceList = {
             }
         });
         container.addEventListener('change', (event) => {
+            const statusBarInput = event.target.closest('[data-display-status-bar-toggle]');
+            if (statusBarInput) {
+                event.stopPropagation();
+                const display = this.list.find((item) => item.id === statusBarInput.dataset.displayId);
+                const previousValue = this.getDisplayStatusBarVisibility(display);
+                if (!this.setDisplayStatusBarVisibility(statusBarInput.dataset.displayId, statusBarInput.checked)) {
+                    statusBarInput.checked = previousValue;
+                }
+                return;
+            }
             const vadInput = event.target.closest('[data-vad-threshold]');
             if (vadInput) {
                 event.stopPropagation();
@@ -2188,24 +2193,7 @@ const DeviceList = {
             ? `最近识别（${latest.isFinal ? '最终' : '实时'}）${this.getVoiceInputMeta(latest)}：${latest.text}`
             : '最近识别：暂无识别回传';
 
-        const statusBarLabel = document.createElement('label');
-        statusBarLabel.className = 'display-status-bar-toggle';
-        statusBarLabel.title = '独立控制该显示端的连接、语音与摄像头状态提示';
-        const statusBarInput = document.createElement('input');
-        statusBarInput.type = 'checkbox';
-        statusBarInput.checked = this.getDisplayStatusBarVisibility(display);
-        statusBarInput.addEventListener('change', (event) => {
-            event.stopPropagation();
-            const previousValue = this.getDisplayStatusBarVisibility(display);
-            if (!this.setDisplayStatusBarVisibility(display.id, event.target.checked)) {
-                event.target.checked = previousValue;
-            }
-        });
-        const statusBarText = document.createElement('span');
-        statusBarText.textContent = '显示状态栏';
-        statusBarLabel.append(statusBarInput, statusBarText);
-
-        container.append(label, statusBarLabel, state, latestText);
+        container.append(label, state, latestText);
         return container;
     },
 

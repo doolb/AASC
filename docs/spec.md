@@ -15,7 +15,7 @@
 | 配置管理 | [config.md](spec/config.md) | 配置文件、API、显示端状态、播放列表 |
 | 提醒功能 | [reminder.md](spec/reminder.md) | 提醒数据结构、触发逻辑、定时检查 |
 | 时间监听 | [timeListener.md](spec/timeListener.md) | 时间变化事件监听、事件类型、API接口 |
-| 侧边栏导航 | [sidebar.md](spec/sidebar.md) | 侧边栏布局、面板切换、交互逻辑 |
+| 侧边栏导航 | [sidebar.md](spec/sidebar.md) | 横屏左侧/竖屏底部响应式布局、面板切换和方向滚动伪代码 |
 | 控制端运行版本显示 | [runtime-version-display.md](spec/runtime-version-display.md) | 运行版本读取、AASC 节点状态返回和服务器面板渲染伪代码 |
 | 控制端主题与 UI 控件分类 | [ui-theme.md](spec/ui-theme.md) | 主题持久化、主题应用和控件语义标记伪代码 |
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
@@ -38,6 +38,7 @@
 | ViewBind | [viewbind.md](spec/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 | 显示端选择 | [display-selection.md](spec/display-selection.md) | 单选、全选、自适应选择模式 |
 | 显示端代码变化检测远端配置 | [display-version-remote-config.md](spec/display-version-remote-config.md) | 显示端代码版本检测间隔的 WebSocket 远端配置伪代码 |
+| 显示端背景光晕 | [display-background-glow.md](spec/display-background-glow.md) | 全局光晕参数的 WebSocket 配置与显示端 CSS 应用伪代码 |
 | 显示端状态栏独立开关 | [display-status-bar.md](spec/display-status-bar.md) | 按 displayId 持久化状态栏显隐、初始化补发和控制端同步伪代码 |
 | 设备列表 | [device-list.md](spec/device-list.md) | 设备列表组件，合并 DisplayList 和 DeviceTree |
 | 设备树 | [device-tree.md](spec/device-tree.md) | 树状结构设备列表（已合并到 device-list） |
