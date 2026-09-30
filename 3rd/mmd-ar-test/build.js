@@ -23,6 +23,7 @@ const APP_PROJECT = path.join(ANDROID_PROJECT, 'app');
 const SOURCE_PUBLIC = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public');
 const WEB_MODE = process.argv.includes('--web');
 const WEB_PANEL_GROUPS = WEB_MODE ? require('./web-panel-groups') : null;
+const WEB_GRAVITY_MODE = WEB_MODE ? require('./web-gravity-mode') : null;
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -312,7 +313,17 @@ async function stageTextAssets() {
       panel.find('h2').remove();
       arPanel.append(basic.html(panel).replaceAll('mindBasic', 'mmdAr'));
     }
+    $('#displayArMotionEnabled').closest('label').find('span').text('独立重力旋转（角色锚点）');
+    $('#displayArMotionSensitivity').closest('label').find('span').html(
+      '重力灵敏度 <output id="displayArMotionSensitivityValue">1.00</output>'
+    );
+    $('#displayArMotionRecenter').text('重力居中');
+    $('#displayArMotionMessage').text('重力旋转关闭，手动旋转保留');
     WEB_PANEL_GROUPS.groupWebPanels($);
+    arPanel.find('[data-group-title="重力旋转"]').closest('.mmd-ar-panel-group')
+      .find('.mmd-ar-panel-group-body').append(
+        '<p class="mind-basic-note">按重力倾斜旋转角色锚点，与手动旋转叠加；首次姿态为中性姿态。居中或关闭只重置重力层。</p>'
+      );
     $('#displayArTargetPanelGroup1').append(`
       <label class="display-mmd-ar-field" for="mmdArInputMode">
         <span>视频输入</span>
@@ -446,7 +457,7 @@ async function stageTextAssets() {
     const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
-    await fs.writeFile(pmxRuntimePath, runtimeWithProbe.replace(lightingModeImport,
+    await fs.writeFile(pmxRuntimePath, WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
@@ -456,8 +467,10 @@ async function stageTextAssets() {
     const runtimeImport = "'./display-pmx-runtime.js'";
     if (!current.includes(runtimeImport)) throw new Error('测试网页未找到 PMX runtime 动态导入入口');
     if (!current.includes('getMotionProgress: () =>')) throw new Error('正式显示模块缺少 VMD 进度入口');
-    await fs.writeFile(mmdScriptPath, current
+    await fs.writeFile(mmdScriptPath, WEB_GRAVITY_MODE.addGravityDisplay(current)
       .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`));
+    const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
+    await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }
   await fs.cp(VENDOR_THREE_SOURCE, path.join(GENERATED_ASSETS, 'js/vendor/three'), { recursive: true });
 

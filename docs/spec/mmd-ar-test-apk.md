@@ -2,6 +2,29 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### 独立重力体感与手动旋转叠加（2026-09-30）
+
+```text
+仅 WEB_MODE:
+  将独立体感环绕改为独立重力旋转，保留启用/灵敏度/重新居中控件
+  DeviceOrientation 只读取有限 beta/gamma，忽略 alpha/absolute/磁航向
+  upDevice = [-sin(gamma)*cos(beta), sin(beta), cos(gamma)*cos(beta)]
+  首个样本记录为中性重力；居中更新参考，不改手动角度
+  按当前屏幕角度将参考/当前向量转到屏幕坐标，取两向量的最短弧旋转
+  灵敏度缩放该倾斜角，最大限制为 pi；固定对跖方向轴避免反转抖动
+  新增网页专用 PMX 旋转入口，保存相机坐标的目标重力四元数
+  每帧在实际相机更新后:
+    manualYaw/manualPitch 仍使用原拖动目标角和缓动；不从最终组合 Euler 读回手动状态
+    gravityQuaternion 独立缓动；世界重力层 = cameraQ * gravityQuaternion * inverse(cameraQ)
+    finalAnchorQ = worldGravityQ * manualQuaternion
+    先更新锚点/骨骼世界矩阵，再推进物理/动作；合成角速度仍进入原旋转物理保护
+  关闭体感/重新居中将重力目标归单位四元数，手动目标保持
+  屏幕方向/后台切换重新建立重力参考，取消权限等待；退出清理监听
+  模型尚未加载时保存重力目标，重载后恢复；无传感器时手动旋转仍可用
+  相机独立 IMU 定位、MindAR/PMX 第二层相机缓动、角色拖动/缩放继续保留
+  通过构建期注入网页副本，不改正式显示端或旧 APK
+```
+
 ### 合并 MindAR Basic 相机融合（2026-09-30）
 
 ```text

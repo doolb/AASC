@@ -17,7 +17,7 @@ const TRACKING_GROUPS = Object.freeze([
   ['MindAR 抖动过滤', ['mmdArFilterMinCF', 'mmdArFilterBeta', 'mmdArFilterApplyHint']],
   ['IMU 相机预测', ['mmdArImuPanel']],
   ['MindAR 可信度（估算）', ['mmdArQualityPanel']],
-  ['体感环绕', ['displayArMotionSensitivity', 'displayArMotionRecenter', 'displayArMotionMessage'], 'displayArMotionEnabled'],
+  ['重力旋转', ['displayArMotionSensitivity', 'displayArMotionRecenter', 'displayArMotionMessage'], 'displayArMotionEnabled'],
   ['相机跟随', ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone', 'mmdArSmoothingMs', 'mmdArCameraDistance']],
 ]);
 
