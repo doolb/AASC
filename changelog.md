@@ -1,5 +1,20 @@
 # Web MediaCenter - 变更日志
 
+### TTS 缓存默认128MiB及控制端容量设置
+
+- ✅ [2026-09-30] 缓存总量默认提高到128MiB，控制端“语音生成设备”新增16–1024整数MiB的容量输入与保存按钮。
+  - 新增tts-audio-cache-config.js统一规范化，更新cache/service/config-app-service/server-app及upload.html/tts.js/websocket.js。通过setTtsAudioCacheConfig、config.set持久化和ttsAudioCacheConfig权威广播，保存立即生效，连接/重连补发当前值；保存失败维持旧容量，无回包10秒解除等待。未新增HTTP设置接口。
+  - 调低上限保留有效音频，超出新上限拒绝新增直到过期；单段16MiB、1024条及TTL10分钟保持，Windows Node仍为内存流播放。静态语法/定向空白检查通过，未新增或运行测试，按用户要求提交；尚未重启或发布；servicePackage已有true保持，无依赖变化。
+
+### TTS 内存音频下发与 Node 无文件播放
+
+- ✅ [2026-09-30] 服务端外部TTS响应与显示端回传音频改为内存缓存，继续下发原 `/uploads/tts/` URL，不再生成临时tts_*.wav。
+  - 新增 `src/external/tts/tts-audio-cache.js`、`src/apps/server/modules/tts/tts-audio-http.js`，更新 `tts-service.js` 和 `server-app.js`。缓存10分钟、128MiB、1024条，单段16MiB；响应收集、base64解码有上限，失败不发布半成品；满额拒绝新增且显示端已成功合成时不重复触发fallback。GET/HEAD/单段Range继续支持，多端可在有效期内重复读取；服务器重启后旧内存URL失效。
+  - 旧WAV仅按原过期规则清理，严格匹配旧名称、跳过符号链接，清理数量汇总；迁移清理结束后定时任务只清内存，不再扫描磁盘。原生成字符串引用与basename下发保持，路由/句序/打断协议不变。
+- ✅ [2026-09-30] Node子显示端URL与Buffer播放取消audio_*.wav写盘，使用系统播放器标准输入。
+  - 更新 `src/apps/voice-display-node/audio-player.js`：Linux使用aplay，Windows通过PowerShell标准输入转MemoryStream/SoundPlayer；macOS Buffer使用ffplay，显式文件仍可afplay。直接spawn不经过shell，音频不嵌入命令行；下载30秒及16MiB上限，停止AbortController/当前进程，以代次隔离旧下载/队列/回调，停止时同步通知播放结束恢复录音。WAV按RIFF块解析16位PCM，立体声转单声道AEC参考，只回调一次。
+  - 5个源脚本 `node --check` 和定向差异空白检查通过。未新增/运行测试、未验证实际声音播放；同步design/spec/task/todo/usage/自测文档，Offline servicePackage已有true保持，无生产依赖变化；按用户要求提交；尚未重启或发布。
+
 ### MMD AR Ammo子步锚点与180Hz上限
 
 - ✅ [2026-09-30] 独立网页继续使用Ammo，每个固定子步前插值运动学锚点的位置与旋转；跨帧积累时间余量，避免画面快于物理时被强制加速，物理频率上限改为180Hz。

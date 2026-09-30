@@ -1,9 +1,31 @@
 # 服务端 TTS 稳定性设计文档
 
+## 2026-09-30 TTS 音频内存下发（已实现，待现场验收）
+
+用户希望消除服务端下发TTS时的临时WAV及逐文件清理日志。原实现有两个写盘入口：`src/external/tts/tts-service.js` 将外部HTTP音频通过pipeline写盘，`server-app.js` 的 `generateTtsWithFallback` 将显示端回传base64写盘。API、普通聊天、Agent、提醒、报时及文本媒体均主要通过basename构造 `/uploads/tts/<name>.wav` 下发；继续沿用URL可以兼容网页/控制端/Android/Node的队列、播放目标与打断消息。
+
+新增进程内音频缓存：完整合成成功后保存WAV Buffer并生成随机音频引用，原生成接口保留字符串引用与basename用法；在uploads静态路由之前提供内存音频GET/HEAD处理，支持Content-Type、长度和单段Range。多显示端重复读取同一条音频，不在第一次下载后立即删除；在有效期内可重复读取。服务端重启后临时引用失效，与永久媒体分离。
+
+采用10分钟TTL、缓存总量128MiB、最多1024条及单段16MiB限制，并在请求生成/存取时清理过期缓存。容量不足时拒绝新增，不驱逐仍有效但可能尚在队列中的音频；响应中保留Buffer引用直到传输结束。HTTP响应超限、异常断连或超时停止收集，不缓存半成品，错误体继续有上限。显示端回传音频进入同一缓存，不再二次写盘。既有WAV仅沿用历史过期清理和兼容读取，不删除整个目录，新音频不再产生逐文件清理日志。历史文件清理完成后不再定时扫描磁盘，兼容旧静态文件读取。128MiB限制仅指缓存，合成在途响应、解码及正在发送的Buffer另占内存。
+
+另发现 `src/apps/voice-display-node/audio-player.js` 在下载及Buffer播放时均写 `audio_*.wav`。用户已确认一起去掉；Linux通过aplay标准输入播放，Windows通过PowerShell标准输入转MemoryStream/SoundPlayer播放，保留队列、停止、完成回执及PCM/AEC回调。macOS Buffer播放改用ffplay标准输入，显式本地文件继续支持afplay。上游TTS引擎自身的输出方式不属于此次服务端中转优化。
+
+用户已确认服务端和Node子显示端一起改，已完成实现；停止须取消下载/子进程，播放与队列以代次隔离，旧任务不得覆盖新会话。WAV按RIFF块解析16位PCM，保留AEC回调；Windows音频经stdin，不放进命令行。无需新增npm生产依赖。新增 `tts-audio-cache.js` 与 `tts-audio-http.js`，源脚本静态语法与定向差异空白检查通过，未执行自动/实际声音播放测试。Offline服务包已处于待构建状态，保持servicePackage=true；按用户要求提交；尚未重启或发布。
+
+## 音频缓存容量远端设置（2026-09-30，已实现）
+
+缓存默认总上限提高到128MiB；控制端“语音生成设备”卡片可设置16–1024整数MiB，单段16MiB、1024条和10分钟有效期保持。服务端合成和显示端回传共享同一容量。
+
+控制端通过setTtsAudioCacheConfig发送容量，服务端共用规范化规则，config.set持久化tts.audioCacheMaxMiB后立即应用，并广播ttsAudioCacheConfig权威值。连接/重连补发当前容量；没有新增HTTP配置读取/保存入口。保存失败回传旧容量，运行值不变；控制端等待权威回包，断线或10秒无回应解除保存等待。
+
+首次加载无配置时使用128MiB；Android禁用外部TTS时也会独立恢复缓存容量；tts.init部分配置不包含容量时保留当前值。降低上限不清除有效音频，已占容量超过新上限时拒绝新增，等待过期释放；提高上限立即允许新音频。此上限不包含在途响应、解码和发送占用，不是进程RSS上限。Windows Node仍通过内存流播放，无新增临时WAV。
+
+涉及tts-audio-cache-config/cache/service、config-app-service、server-app、控制端upload.html/tts.js/websocket.js；仅静态检查，未新增或执行测试、重启或发布。
+
 ## 功能目标
 
 - 服务端调用外部 TTS 接口生成音频时，避免异常网络场景导致资源长期占用
-- 失败路径需要释放请求连接、写入流和半成品文件，降低 RSS 波动风险
+- 失败路径需要释放请求连接和收集中的Buffer，降低RSS波动风险
 - 保持现有 `/api/tts/generate` 接口协议不变，改动仅限内部可靠性
 
 ## 设计方案
@@ -53,15 +75,15 @@
 - 在 `tts` 配置增加 `requestTimeoutMs`，默认 20000ms
 - 超时后主动 `destroy` 请求，避免连接悬挂
 
-### 2. 流式写盘统一回收
+### 2. 内存音频统一回收
 
-- 成功响应使用 `pipeline(res, writeStream)` 写入音频文件
-- `pipeline` 错误路径统一回调，避免只监听单一事件造成漏回收
+- 成功响应有限收集到Buffer，校验RIFF/WAVE后才入缓存
+- 响应error/aborted、请求超时、大小超限统一销毁连接并释放收集引用
 
-### 3. 失败文件清理
+### 3. 过期音频和历史文件清理
 
-- 请求失败、写入失败、超时失败都尝试删除目标输出文件
-- 防止半写 `.wav` 累积占用磁盘并延长对象生命周期
+- 新音频仅内存缓存，定期/存取时释放过期Buffer；满额拒绝新增，不驱逐有效排队引用
+- 旧磁盘WAV保留原过期规则，严格文件名和普通文件检查；汇总清理数量，迁移结束后不再扫描
 
 ### 4. 错误体上限
 

@@ -1,8 +1,63 @@
 # 服务端 TTS 稳定性实现文档
 
+## 2026-09-30 内存音频下发（已实现）
+
+```text
+已有声明:
+  tts.generateTTS、generateTtsWithFallback、/api/tts/generate、uploads静态路由
+  下发消息中的audioUrl、basename音频引用、有序调度、播放目标/完成回执
+新增定义:
+  AudioEntry { name, buffer, expiresAt }
+  AudioCache { entries, totalBytes, ttlMs=10分钟, maxBytes=128MiB默认, maxAudioBytes=16MiB, maxEntries=1024 }
+  AudioCacheConfig { audioCacheMaxMiB=128默认, 范围16..1024, 整数MiB }
+  容量规范化 -> 有限数字或非空数字字符串取整并限制16..1024，其余回退128
+  启动 -> getTtsConfig读取并规范化持久化容量 -> configure缓存（含Android禁用外部TTS场景）
+  tts.init完整配置 -> 热应用容量；外部服务启用策略不影响缓存配置加载
+  部分tts.init不携带容量 -> 保留当前缓存上限
+  控制端连接/重连 -> 服务端补发ttsAudioCacheConfig当前容量
+  控制端语音生成设备卡片 -> 容量输入/保存 -> setTtsAudioCacheConfig {maxMiB, requestId}
+  服务端仅接受控制端 -> 规范化maxMiB -> config.set(tts.audioCacheMaxMiB)
+    保存失败 -> 回传旧权威容量和错误；不改变缓存运行值
+    保存成功 -> configure缓存 -> 广播ttsAudioCacheConfig {maxMiB, requestId}
+  控制端仅在回包后应用权威值；自己的请求回包显示成功/失败，其他端静默同步
+  断线取消等待；10秒无回包显示未收到结果并解除等待；重连初始化恢复持久化值
+  不新增HTTP配置入口
+  降低容量 -> 保留有效音频，超过新上限时拒绝新增，直到自然过期释放
+操作流程（用户确认服务端和Node一起改）:
+  外部TTS成功响应 -> 限长收集Buffer；错误/超时/截断 -> 清理请求与收集引用
+  显示端回传base64 -> 校验解码大小 -> 同一缓存入口
+  缓存入口 -> 删除过期项 -> 单段/总量超限则失败 -> 随机name -> 缓存完整音频
+  generateTTS/统一fallback -> 返回字符串音频引用，保持basename调用方式
+  原发送逻辑 -> /uploads/tts/name -> 保持目标、句序、队列及打断信息
+  uploads静态路由前:
+    GET/HEAD内存音频 -> 查询缓存，返回audio/wav、长度、no-store
+    单段Range有效 -> 206/Content-Range；范围不可满足 -> 416
+    HEAD -> 只返回头；GET -> 发送Buffer/切片，响应持有引用直到发送结束
+    不因首次读取删除 -> 多端/重试在有效期内继续读取
+    旧磁盘WAV -> 兼容静态路由；过期内存引用 -> 明确失败
+  清理 -> 释放过期Buffer与总量计数；旧文件清理仅处理已有历史WAV
+  历史目录不存在或所有旧WAV已过期清理 -> 后续周期仅清内存，不再扫描磁盘
+  Node播放无文件:
+    URL下载 -> Buffer -> 系统播放器标准输入；直接Buffer同一入口
+    Windows -> stdin -> MemoryStream/SoundPlayer；Linux -> aplay stdin
+    保留队列/打断/回执/PCM-AEC，macOS使用ffplay
+  Windows数据通过stdin传base64，不嵌入命令行；Linux stdin传WAV
+  下载设置AbortController/长度上限，停止取消下载并杀当前播放器
+  播放与队列携带代次，旧任务完成不得覆盖新播放/空闲状态
+  stop同步通知当前队列播放结束以恢复录音，旧回调不重复通知
+  缓存条数最多1024；满额只拒绝新增，不重新触发已经完成的显示端合成
+  WAV解析遍历RIFF块，确认16位PCM后才给AEC回调
+  macOS Buffer使用ffplay stdin；显式本地文件播放仍可用afplay
+  Offline servicePackage=true；不执行测试、重启或发布
+```
+
 ## 模块位置
 
 - `src/external/tts/tts-service.js`
+- `src/external/tts/tts-audio-cache.js`
+- `src/external/tts/tts-audio-cache-config.js`
+- `src/apps/server/modules/tts/tts-audio-http.js`
+- `src/apps/voice-display-node/audio-player.js`
 - `src/apps/server/modules/config/config-app-service.js`
 - `src/apps/server/boot/server-app.js`
 - `src/apps/server/modules/media/ordered-task-scheduler.js`
@@ -110,8 +165,8 @@ generateTtsWithFallback(text, voice, speed, preferredDisplayId):
             下发 ttsGenerate
             3 秒内未收到 ttsGenerating → 判定失败并回退
             收到 ttsGenerating 后等待 WAV
-            成功 → 保存 WAV 并返回路径
-            失败/超时 → 继续服务端生成
+            成功 → 校验并缓存 WAV Buffer，返回音频引用字符串
+            失败/超时 → 继续服务端生成；缓存满额则直接失败，不重复合成
     return generateTTS(text, voice, speed)
 
 服务端入口:
@@ -192,50 +247,23 @@ generateTTS(text, voice, speed):
     if text 为空:
         throw 错误
 
-    outputPath = generateUniquePath()
-    await callExternalTTS(text, voice, speed, outputPath)
+    audioBuffer = await callExternalTTS(text, voice, speed)
+    audioReference = cache.storeAudio(audioBuffer)
+    返回audioReference字符串（供basename/URL使用，不是磁盘路径）
 
-    if outputPath 不存在:
-        throw 错误
-
-    return outputPath
 ```
 
 ### callExternalTTS
 
 ```
-callExternalTTS(text, voice, speed, outputPath):
-    初始化 settled=false
-    构建 POST JSON 请求
-
-    定义 done(error, resultPath):
-        如果已 settled 直接返回
-        标记 settled=true
-        如果 error:
-            删除 outputPath 半成品文件
-            reject(error)
-        否则:
-            resolve(resultPath)
-
-    req = http.request(options, onResponse)
-    req.setTimeout(requestTimeoutMs)
-    req.on('error', done(error))
-    req.write(postData)
-    req.end()
-
-onResponse(res):
-    if statusCode != 200:
-        读取错误体(最多 maxErrorBytes)
-        end 时 done(错误)
-        return
-
-    writeStream = fs.createWriteStream(outputPath)
-    pipeline(res, writeStream, (error) => {
-        if error:
-            done(写入失败错误)
-        else:
-            done(null, outputPath)
-    })
+callExternalTTS(text, voice, speed):
+    初始化settled、chunks和received
+    创建POST请求，保留按排队数量增加的请求超时
+    非200响应 -> 最多收集maxErrorBytes，截断或结束时失败
+    200响应 -> Content-Length或累积大小超过16MiB则销毁连接并失败
+    data -> 保存有限chunk；aborted/error/超时 -> 清除chunks与连接，失败
+    end且响应完整 -> 合并为Buffer并清除chunks引用，成功
+    生成入口再校验RIFF/WAVE并存入缓存，返回字符串引用
 ```
 
 ## 配置 API 伪代码
@@ -263,8 +291,8 @@ onResponse(res):
 ## 内存与资源回收要点
 
 - 请求超时后立即销毁 socket，避免连接悬挂
-- 写入流统一由 `pipeline` 收敛成功和错误路径
-- 失败路径删除半成品音频文件
+- HTTP响应在内存收集，成功结束后才发布；连接/响应错误和超时统一收敛
+- 失败路径释放连接和收集Buffer，不发布半成品；历史磁盘文件仅按原有效期清理
 - 错误响应体读取做字节上限控制
 
 ## Wine TTS 队列实现索引

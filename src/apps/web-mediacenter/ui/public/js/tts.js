@@ -2,6 +2,7 @@ const Tts = {
     autoTtsEnabled: true,
     
     init() {
+        TtsAudioCacheSettings.init();
         if (window.CpuAffinitySettings) {
             window.CpuAffinitySettings.init();
         }
@@ -72,6 +73,93 @@ const Tts = {
         }
     }
 };
+
+// 缓存属于服务端，读取、保存与重连都使用同一条权威配置消息。
+const TtsAudioCacheSettings = {
+    maxMiB: 128,
+    pendingId: null,
+    pendingTimer: null,
+    status: '等待服务器配置（默认 128MiB）',
+
+    init() {
+        document.getElementById('ttsAudioCacheSaveBtn')?.addEventListener('click', () => this.save());
+        document.getElementById('ttsAudioCacheMaxMiB')?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            this.save();
+        });
+        this.updateUI();
+    },
+
+    updateUI() {
+        const input = document.getElementById('ttsAudioCacheMaxMiB');
+        const button = document.getElementById('ttsAudioCacheSaveBtn');
+        const status = document.getElementById('ttsAudioCacheStatus');
+        if (input) input.value = this.maxMiB;
+        if (button) button.disabled = Boolean(this.pendingId);
+        if (status) status.textContent = this.status;
+    },
+
+    clearPending() {
+        clearTimeout(this.pendingTimer);
+        this.pendingTimer = null;
+        this.pendingId = null;
+    },
+
+    save() {
+        if (this.pendingId) return;
+        const input = document.getElementById('ttsAudioCacheMaxMiB');
+        if (!input || !input.reportValidity()) return;
+        const ws = window.WebSocketManager?.ws;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            showToast('未连接到服务器', 'error');
+            return;
+        }
+        const requestId = `tts-cache-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        this.pendingId = requestId;
+        this.status = '保存中…';
+        // 等待权威回包，不提前把输入值当成服务器已保存的容量。
+        document.getElementById('ttsAudioCacheSaveBtn').disabled = true;
+        document.getElementById('ttsAudioCacheStatus').textContent = this.status;
+        this.pendingTimer = setTimeout(() => {
+            if (this.pendingId !== requestId) return;
+            this.clearPending();
+            this.status = '未收到保存结果，请重连确认';
+            this.updateUI();
+        }, 10000);
+        try {
+            ws.send(JSON.stringify({ type: 'setTtsAudioCacheConfig', maxMiB: Number(input.value), requestId }));
+        } catch (error) {
+            this.clearPending();
+            this.status = '发送失败';
+            this.updateUI();
+            showToast('音频缓存容量发送失败: ' + error.message, 'error');
+        }
+    },
+
+    handleConfig(data) {
+        if (!Number.isInteger(data.maxMiB) || data.maxMiB < 16 || data.maxMiB > 1024) return;
+        const ownReply = Boolean(this.pendingId && data.requestId === this.pendingId);
+        // 初始化消息不含请求ID，也用于重连后清除旧连接遗留的保存等待。
+        if (ownReply || !data.requestId) this.clearPending();
+        this.maxMiB = data.maxMiB;
+        this.status = this.pendingId ? '保存中…' : `已同步服务器容量：${data.maxMiB}MiB`;
+        if (ownReply && data.success === false) this.status = data.message || '保存失败';
+        this.updateUI();
+        if (ownReply) {
+            showToast(data.success === false ? this.status : `音频缓存容量已保存：${data.maxMiB}MiB`,
+                data.success === false ? 'error' : 'success');
+        }
+    },
+
+    handleDisconnected() {
+        this.clearPending();
+        this.status = '连接已断开，重连后同步';
+        this.updateUI();
+    }
+};
+
+window.TtsAudioCacheSettings = TtsAudioCacheSettings;
 
 const AsrDevice = {
     currentDevice: 'server',

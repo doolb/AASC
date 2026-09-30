@@ -8,6 +8,7 @@ const {
     validateReleaseRuntimeContext
 } = require('../../../../core/release-runtime-context');
 const { normalizeControlTheme } = require('./control-theme-config');
+const { DEFAULT_MAX_MIB, normalizeAudioCacheMaxMiB } = require('../../../../external/tts/tts-audio-cache-config');
 
 const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../../'));
 const RUNTIME_CONTEXT = resolveReleaseRuntimeContext({
@@ -327,6 +328,7 @@ class Config extends DataSnapshot {
            requestTimeoutMs: 20000,
            extraTimeoutPerPending: 10000,
             maxErrorBytes: 65536,
+            audioCacheMaxMiB: DEFAULT_MAX_MIB,
             device: 'server',
             serverEnabled: true
        },
@@ -494,7 +496,8 @@ class Config extends DataSnapshot {
             defaultSpeed: this.get('tts.defaultSpeed'),
             requestTimeoutMs: this.get('tts.requestTimeoutMs', 20000),
             extraTimeoutPerPending: this.get('tts.extraTimeoutPerPending', 10000),
-            maxErrorBytes: this.get('tts.maxErrorBytes', 65536)
+            maxErrorBytes: this.get('tts.maxErrorBytes', 65536),
+            audioCacheMaxMiB: normalizeAudioCacheMaxMiB(this.get('tts.audioCacheMaxMiB', DEFAULT_MAX_MIB))
         };
     }
 }

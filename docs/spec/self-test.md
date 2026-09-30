@@ -1,5 +1,25 @@
 # 自测功能实现文档
 
+## TTS 内存音频下发与 Node 标准输入播放（2026-09-30）
+
+```text
+本轮仅静态检查，不新增或运行测试:
+  tts-service/cache/cache-config/http、config-app-service、server-app、Node audio-player
+  控制端tts.js/websocket.js -> node --check通过
+  定向差异空白检查通过；两处服务端生成与Node URL/Buffer路径无写文件入口
+待现场验收:
+  默认128MiB、16..1024边界/非法值规范化、容量热应用与持久化失败保留旧值
+  Android禁用外部TTS时也恢复显示端回传音频缓存容量
+  多控制端广播/断线重连/服务器重启恢复，10秒无回包解除等待
+  降额不驱逐有效音频，超额拒绝新增，过期后恢复；升额立即放行
+  外部/显示端生成成功及fallback，API/普通/Agent/文本媒体/语音/提醒/报时
+  完整GET/HEAD、首尾/后缀/无效Range、重复/多端读取、过期/重启404
+  单段/总量/条数超限、异常base64、上游错误/超时/中断不发布半成品
+  Windows/Linux：没有新增临时WAV，有正常声音、队列/停止/新句不被旧结束覆盖
+  录音暂停后停止恢复，16位PCM额外RIFF块/立体声的AEC回调只执行一次
+  旧WAV汇总清理且清理完成后不再磁盘扫描，其他文件/符号链接保留
+```
+
 ## MMD AR Ammo固定子步锚点与180Hz（2026-09-30，已验证）
 
 ```text

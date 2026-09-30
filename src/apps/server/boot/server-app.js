@@ -38,6 +38,9 @@ function stripMarkdown(text) {
         .trim();
 }
 const tts = require('../../../external/tts/tts-service');
+const ttsAudioCache = require('../../../external/tts/tts-audio-cache');
+const { normalizeAudioCacheMaxMiB } = require('../../../external/tts/tts-audio-cache-config');
+const { serveTtsAudio } = require('../modules/tts/tts-audio-http');
 const asr = require('../../../external/asr/asr-service');
 const timeListener = require('../../web-mediacenter/modules/time/time-listener-app-service');
 const chat = require('../../../external/llm/llm-service');
@@ -638,6 +641,8 @@ const pendingDisplayVisionRequests = new Map();
 let pendingVisionRequestId = 0;
 const VISION_REQUEST_TIMEOUT_MS = 120000;
 
+// Android可禁用外部TTS服务，但显示端回传音频的共享缓存仍需恢复已保存容量。
+ttsAudioCache.configure(config.getTtsConfig().audioCacheMaxMiB);
 if (!ANDROID_NODE_POLICY.enabled) {
     tts.init(config.getTtsConfig());
 }
@@ -1308,7 +1313,7 @@ async function startServer() {
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
-                'setDisplayStatusBarConfig',
+                'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
                 'setDisplayBackgroundGlowConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
@@ -2871,6 +2876,7 @@ function staticWithMhtmlMime(dir) {
   });
 }
 
+app.use('/uploads/tts', serveTtsAudio);
 app.use('/uploads', staticWithMhtmlMime(UPLOADS_DIR));
 app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
@@ -6920,15 +6926,12 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
             const requestId = 'tts-' + Date.now() + '-' + (++pendingDisplayTtsRequestId);
             try {
                 const result = await sendTtsGenerateToDisplay(display, ttsText, requestId);
-                // 显示端返回 base64 WAV → 写入临时文件供播放
-                const buffer = Buffer.from(result.audioData, 'base64');
-                const ttsDir = path.join(RES_DIR, 'uploads', 'tts');
-                if (!fs.existsSync(ttsDir)) fs.mkdirSync(ttsDir, { recursive: true });
-                const outPath = path.join(ttsDir, 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8) + '.wav');
-                fs.writeFileSync(outPath, buffer);
-                log('TTS', '显示端生成成功 (displayId=' + display.id + ' bytes=' + buffer.length + ')');
-                return outPath;
+                // 显示端返回 base64 WAV 直接进入内存缓存，原 URL/队列协议保持。
+                const audioReference = ttsAudioCache.storeBase64Audio(result.audioData);
+                log('TTS', '显示端生成成功 (displayId=' + display.id + ' audio=' + audioReference + ')');
+                return audioReference;
             } catch (err) {
+                if (err.code === 'TTS_AUDIO_CACHE_FULL') throw err;
                 if (!isServerTtsEnabled()) {
                     throw new Error('服务器 TTS 已关闭，显示端生成失败: ' + err.message);
                 }
@@ -8112,6 +8115,7 @@ wss.on('connection', (ws, req) => {
         log('连接', `控制端已连接，当前连接数: ${controlClients.size}`);
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
+        ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         ws.send(JSON.stringify({
             type: 'displayBackgroundGlowConfig',
@@ -9048,6 +9052,26 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 async function handleControlMessageFallback(data, ws) {
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
+
+    if (data.type === 'setTtsAudioCacheConfig') {
+        // 此配置属于服务器进程，不能被显示端消息或指定目标端绕过控制端权限。
+        if (!controlClients.has(ws)) return;
+        try {
+            const maxMiB = normalizeAudioCacheMaxMiB(data.maxMiB);
+            if (!config.set('tts.audioCacheMaxMiB', maxMiB)) {
+                throw new Error('音频缓存容量保存失败，请重试');
+            }
+            ttsAudioCache.configure(maxMiB);
+            broadcastToControls({ type: 'ttsAudioCacheConfig', maxMiB, requestId: data.requestId, success: true });
+            log('配置', `TTS音频缓存上限已更新为 ${maxMiB}MiB`);
+        } catch (error) {
+            ws.send(JSON.stringify({
+                type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB,
+                requestId: data.requestId, success: false, message: error.message
+            }));
+        }
+        return;
+    }
 
     if (data.type === 'chatMessage') {
         await handleChatMessageRequest(data, { displayId, ws });

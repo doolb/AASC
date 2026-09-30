@@ -39,11 +39,16 @@ const WebSocketManager = {
         };
         
         this.ws.onclose = () => {
+            window.TtsAudioCacheSettings?.handleDisconnected();
             setTimeout(() => this.connect(), 3000);
         };
     },
     
     handleMessage(data) {
+        if (data.type === 'ttsAudioCacheConfig') {
+            window.TtsAudioCacheSettings?.handleConfig(data);
+            return;
+        }
         if (data.type === 'serverStartTime') {
             const storedTime = localStorage.getItem('serverStartTime');
             if (storedTime && storedTime !== String(data.time)) {
