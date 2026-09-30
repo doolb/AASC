@@ -25,6 +25,7 @@ const WEB_MODE = process.argv.includes('--web');
 const WEB_PANEL_GROUPS = WEB_MODE ? require('./web-panel-groups') : null;
 const WEB_GRAVITY_MODE = WEB_MODE ? require('./web-gravity-mode') : null;
 const WEB_LOCAL_ASSETS = WEB_MODE ? require('./web-local-assets-inject') : null;
+const WEB_PHYSICS_LIFECYCLE = WEB_MODE ? require('./web-physics-lifecycle') : null;
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -496,6 +497,18 @@ async function stageTextAssets() {
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }
   await fs.cp(VENDOR_THREE_SOURCE, path.join(GENERATED_ASSETS, 'js/vendor/three'), { recursive: true });
+  let webPhysicsHelperVersion = '';
+  if (WEB_MODE) {
+    // 只给网页副本补齐 native 物理所有权；依赖和 importmap 逐级带指纹，避免继续加载旧缓存。
+    const animationDirectory = path.join(GENERATED_ASSETS, 'js/vendor/three/animation');
+    const physicsPath = path.join(animationDirectory, 'MMDPhysics.js');
+    const helperPath = path.join(animationDirectory, 'MMDAnimationHelper.js');
+    await fs.writeFile(physicsPath, WEB_PHYSICS_LIFECYCLE.addPhysicsLifecycle(await fs.readFile(physicsPath, 'utf8')));
+    const physicsVersion = (await hashFile(physicsPath)).sha256.slice(0, 12);
+    await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
+      await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));
+    webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
+  }
 
   const scriptVersion = new Map();
   if (WEB_MODE) {
@@ -514,7 +527,7 @@ async function stageTextAssets() {
   <title>MMD AR 独立测试</title>
   <link rel="stylesheet" href="/css/display-mmd.css">
   ${WEB_MODE ? '<script src="/js/vendor/aframe-1.5.0/aframe.min.js"></script><script src="/js/vendor/mind-ar-1.2.5/mindar-image-aframe.prod.js"></script>' : ''}
-  <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"}}</script>
+  <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"${WEB_MODE ? `,"three/addons/animation/MMDAnimationHelper.js":"/js/vendor/three/animation/MMDAnimationHelper.js?v=${webPhysicsHelperVersion}"` : ''}}}</script>
   <style>
     :root {
       color-scheme: dark;
@@ -560,10 +573,17 @@ async function stageTextAssets() {
     .mmd-ar-benchmark-results { display: grid; gap: 6px; }
     .mmd-ar-benchmark-result { display: grid; gap: 3px; color: #d3d9e8; font-size: 11px; }
     .mmd-ar-benchmark-result strong { color: #ffffff; font-size: 12px; }
-    .mmd-ar-loading-progress { position: fixed; z-index: 25; left: max(10vw, 14px); right: max(10vw, 14px); bottom: calc(var(--mmd-ar-safe-inset-bottom) + 48px); max-width: 440px; margin: 0 auto; padding: 10px 14px; border: 1px solid #ffffff40; border-radius: 12px; background: #171a22eb; color: #f4f6fb; font-size: 13px; pointer-events: none; }
+    .mmd-ar-loading-progress { position: fixed; z-index: ${WEB_MODE ? 90 : 25}; left: max(10vw, 14px); right: max(10vw, 14px); bottom: calc(var(--mmd-ar-safe-inset-bottom) + 48px); max-width: 440px; margin: 0 auto; padding: 10px 14px; border: 1px solid #ffffff40; border-radius: 12px; background: #171a22eb; color: #f4f6fb; font-size: 13px; pointer-events: none; }
     .mmd-ar-loading-progress[hidden] { display: none; }
     .mmd-ar-loading-track { height: 6px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: #ffffff35; }
     .mmd-ar-loading-fill { width: 0; height: 100%; border-radius: inherit; background: #758bff; transition: width 160ms ease-out; }
+    ${WEB_MODE ? `
+    .mmd-ar-loading-progress[data-indeterminate="true"] .mmd-ar-loading-fill { animation: mmd-ar-loading-busy 1.1s linear infinite; }
+    .mmd-ar-loading-progress[data-state="error"] { border-color: #ef7777; }
+    @keyframes mmd-ar-loading-busy { from { transform: translateX(-100%); } to { transform: translateX(400%); } }
+    @media (prefers-reduced-motion: reduce) { .mmd-ar-loading-progress[data-indeterminate="true"] .mmd-ar-loading-fill { animation: none; } }
+    ` : ''}
+
     .mmd-ar-official-target-link { display: block; width: fit-content; max-width: 100%; padding: 6px 0; color: #bfcaff; text-decoration: underline; overflow-wrap: anywhere; }
     ${WEB_MODE ? `
     .mmd-ar-sim-controls { display: grid; gap: 10px; margin-top: 10px; }
@@ -591,7 +611,7 @@ async function stageTextAssets() {
 </head>
 <body>
   <div class="mmd-ar-test-label">MMD AR 测试 · 点“定位”拍照校准 · 拖动模型旋转</div>
-  <div id="mmdArLoadingProgress" class="mmd-ar-loading-progress" role="progressbar" aria-label="模型加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+  <div id="mmdArLoadingProgress" class="mmd-ar-loading-progress" role="progressbar" aria-label="${WEB_MODE ? '模型与动作加载进度' : '模型加载进度'}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
     <span id="mmdArLoadingText">准备模型 0%</span>
     <div class="mmd-ar-loading-track"><div id="mmdArLoadingFill" class="mmd-ar-loading-fill"></div></div>
   </div>
@@ -712,7 +732,10 @@ async function stageTextAssets() {
     document.addEventListener('DOMContentLoaded', () => {
       const canvas = document.getElementById('displayMmdCanvas');
       const status = document.getElementById('displayMmdStatus');
-      const progress = document.getElementById('mmdArLoadingProgress');
+      ${WEB_MODE ? `window.DisplayMmd.init({ canvas, status, onLoadProgress: (detail) => {
+        // 默认模型与物理重载复用本地选择模块的进度视图，避免两套收起定时器互相覆盖。
+        document.dispatchEvent(new CustomEvent('mmd-ar-load-progress', { detail }));
+      } });` : `const progress = document.getElementById('mmdArLoadingProgress');
       const progressText = document.getElementById('mmdArLoadingText');
       const progressFill = document.getElementById('mmdArLoadingFill');
       let hideTimer = null;
@@ -728,7 +751,7 @@ async function stageTextAssets() {
         progressText.textContent = phase + ' ' + value + '%';
         progressFill.style.width = value + '%';
         if (value === 100) hideTimer = window.setTimeout(() => { progress.hidden = true; }, 1500);
-      } });
+      } });`}
       window.DisplayMmd.setVisible(true);
       window.DisplayMmd.setPointerEnabled(true);
       ${webResizeSupport}

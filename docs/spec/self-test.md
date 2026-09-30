@@ -1,5 +1,52 @@
 # 自测功能实现文档
 
+## MMD AR Ammo 生命周期压力验证（2026-09-30）
+
+```text
+已有声明:
+  网页vendor生命周期补丁、固定Three.js/Ammo、Node test runner、Chromium本地资源用例
+新增定义:
+  NativeFixture { livingPointers, createEvents, destroyEvents, memoryProbes, ownedWorld, borrowedWorld }
+  BrowserPhysicsLifetime { activeInstances, createdCount, disposedCount, errors }
+操作流程:
+  固定物理/动画源码 -> 与构建相同补丁 -> 实际Ammo，观测new与destroy对应native指针
+  128轮创建三种形状刚体/约束 -> 物理步进 -> helper.remove -> 存活指针回到0
+  每轮4MiB申请/释放 -> 预热后地址稳定复用 -> 64MiB堆不增长
+  约束先移除 -> 刚体移除 -> 逆创建销毁，重复dispose不再destroy
+  借用world -> 只销毁借用实例的自建对象 -> 所有者world仍可步进
+  第二刚体/约束/构造失败、helper物理创建后IK失败 -> 暂存分配为0，网格父级/变换恢复
+  新动作已初始化后回滚/失败 -> 旧物理仍存活，新分配消失
+  成功移除旧helper -> 新第0帧骨骼不被旧mixer复位 -> 新物理可步进，最终释放为0
+  真实网页 -> importmap同一指纹helper -> 只观测存活物理，不保留历史模型引用
+  24次原生VMD文件选择 + 每6次一次PMX/贴图选择共4次模型切换
+  每轮 -> 当前仅1实例且创建数减销毁数等于1 -> 被销毁manager拥有对象为0
+  每轮4MiB探针 -> 预热后的地址跨度小于8MiB，不要求地址逐次相同
+  每轮当前仅1实例、已销毁native为0 -> 64MiB堆保持，无页面异常/OOM
+  原PMX/贴图/进度/暂停/恢复默认/物理重载/重力/循环用例继续通过
+```
+
+## MMD AR 加载进度与初始化速度清理（2026-09-30）
+
+```text
+已有声明:
+  ProgressView、模型/VMD专用进度回调、clearPmxPhysicsMotion、固定vendor与Ammo
+新增定义:
+  ProgressFixture { token, timers, aria, phase, state }
+  PhysicsFixture { bodies, velocities, forces, transforms, allocationCount }
+操作流程:
+  开始 -> 不定进度可见 -> 实际读取比例单调 -> 未提交不能到100% -> 成功收起
+  新操作 -> 旧消息/旧定时器忽略；失败 -> 停止且不100%；多PMX -> 等待选择
+  非零线/角速度与残留力 -> 清理 -> 全部为零，刚体位姿保持
+  临时向量 -> 成功和异常均释放；无物理 -> 旁路
+  注入模型helper初始化 -> 清理 -> 返回提交；动作初帧后初始化 -> 清理 -> 启用
+  真实Ammo不同刚体类型/无骨骼索引 -> 设速度/施力 -> 线/角速度读回零
+  下一步进 -> 无残留X速度证明清力 -> 仍受重力，位姿和动作时间保持
+  真实VMD自动循环 -> 新增清理调用次数不变
+  Chromium原生文件选择 -> 提交前可见进度 -> 模型/动作阶段 -> 成功100%
+  缺贴图/损坏VMD -> 错误提示无100% -> 原模型/动作可用
+  恢复默认与物理重载 -> 同一进度和清理；无过期进度或页面异常
+```
+
 ## MMD AR 手动 VMD 切换顺序（2026-09-30）
 
 ```text

@@ -2,6 +2,92 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### Ammo 物理生命周期与频繁切换 OOM（2026-09-30，已实现）
+
+```text
+已有声明:
+  MMDPhysics、ResourceManager、MMDAnimationHelper.remove、网页构建副本
+  stopMotion、disposeStagedResources、prepareMotionSwitch.rollback
+  Ammo.destroy、world.removeConstraint / removeRigidBody、模型/动作提交序号
+新增定义:
+  NativeOwnership { ownedObjects, attachedBodies, attachedConstraints, disposed }
+  自建对象按创建顺序登记，临时向量通过同一资源池复用，构造信息在创建刚体后立即销毁
+操作流程（仅独立网页）:
+  构建 -> 为MMDPhysics/MMDAnimationHelper副本接入所有权与释放；正式vendor/APK保持
+  物理副本内容指纹 -> helper物理import带指纹 -> importmap精确helper地址带指纹，避免旧缓存
+  物理创建 -> 记录自建世界依赖、形状/状态/刚体、约束及资源池对象
+  临时重力/盒体尺寸向量 -> 最后使用后归还所有权资源池，dispose时销毁
+  刚体构造信息 -> 刚体创建结束后立即销毁，异常时同样释放
+  getter借用对象及外部传入世界 -> 不当作自建对象销毁
+  helper移除 -> 物理幂等释放 -> 原helper移除；不停止旧mixer以避免复原骨骼覆盖新动作
+  helper物理创建后的预热/IK异常 -> 同样释放已创建物理，再上抛原异常
+  释放 -> 从世界移除约束 -> 移除刚体 -> 按依赖顺序销毁自建native对象
+        -> 清空资源池/对象引用 -> 仅销毁自建世界与其依赖
+  初始化异常 -> 释放已分配和已挂接部分 -> 恢复网格姿态/父级 -> 原异常上抛
+  成功切换 -> 新资源准备成功 -> 提交边界释放旧helper/物理 -> 新资源接管
+  失败或过期 -> 只释放暂存helper/物理，旧内容及开关保持
+  动作切换 -> 第0帧/矩阵 -> 新物理/速度归零 -> 提交；原进度流程保持
+  自动循环 -> 原姿态复位，不新建/释放物理，不新增速度清理
+  真实Ammo压力验证 -> 重复创建/步进/销毁 -> 存活native分配回到基线
+  真实PMX/VMD重复切换 -> 内存稳定，无OOM，旧内容/进度/开关/循环仍正常
+```
+
+### 模型/动作物理初始化速度归零（2026-09-30，已实现）
+
+```text
+已有声明:
+  网页 createMotionHelper、prepareMotionSwitch、新物理的 bodies 与 manager
+  刚体 setLinearVelocity / setAngularVelocity / clearForces、物理开关、模型/动作提交保护
+新增定义:
+  PhysicsMotionReset { newPhysics, zeroVector }
+操作流程（仅独立网页）:
+  模型切换 -> 新模型骨骼/物理初始化 -> 新刚体速度归零 -> 提交模型 -> 下一渲染回调物理步进
+  动作切换 -> 无物理应用第0帧 -> 更新骨骼矩阵 -> 新物理初始化
+            -> 新刚体速度归零 -> 启用物理并提交动作 -> 下一渲染回调物理步进
+  无物理或原物理关闭 -> 不创建物理、不执行归零
+  归零入口位于web-motion-switch.mjs，由网页模型helper与动作新物理复用
+  归零入口 -> 从新物理 manager 分配零向量
+            -> 遍历新物理全部刚体，线速度与角速度置零、清除残留力、激活
+            -> 无论成功/异常都释放临时向量
+  归零不改刚体位置/朝向、PMX参数、骨骼、锚点或动作时间
+  恢复默认模型/动作、物理重载 -> 复用相同初始化归零入口
+  清理只在初始化边界执行；正常渲染帧不调用归零，保留后续物理运动
+  VMD自动循环重播 -> 沿用现有helper循环处理 -> 不调用新增初始化速度清理
+  现有resetPhysicsOnLoop为true -> physics.reset只按骨骼复位刚体变换，不清速度
+  初始化或清理失败 -> 清理暂存资源 -> 恢复或保留原可用模型/动作/物理
+  过期结果 -> 不提交、不归零旧物理；进度只在当前资源成功提交后达到100%
+```
+
+### 本地 PMX / VMD 加载进度（2026-09-30，已实现）
+
+```text
+已有声明:
+  本地文件选择与串行 run、模型 runtime.onProgress、显示 onLoadProgress、网页底部进度条
+  loadSelectedMotion、prepareMotionSwitch、PMX校验、模型/动作序号、旧模型/动作保留
+新增定义:
+  LocalLoadProgress { phase, percent, indeterminate, error }
+  ProgressView { operationToken, latestPercent, hideTimer, settled, state }
+  loadModel / loadSelectedMotion 的网页可选进度回调、默认模型进度事件
+  APK构建不加载本地选择模块 -> 保留原模型进度渲染器；共享构建只在WEB_MODE替换渲染
+操作流程（仅独立网页）:
+  原生文件选择器返回文件 -> 取消旧收起定时器 -> 显示检查/准备阶段 -> 让浏览器绘制
+  每次操作建立新token -> 该操作专用回调传至DisplayMmd及runtime
+  UI接收回调 -> 检查token -> 更新底部条及本地消息；开始后的两个绘制回调再进行耗时读取
+  默认模型/物理重载进度 -> 页面事件 -> UI同一进度视图，本地操作忙时不覆盖
+  目录/多选 -> 枚举PMX -> 只有一个则加载；多个则提示数量和等待明确选择
+  等待选PMX -> 结束文件检查提示，不宣称模型就绪；选中目标 -> 开始新的模型加载进度
+  模型 -> PMX读取/校验 -> 纹理读取 -> 模型/物理初始化 -> 成功提交
+  VMD -> 读取/解析 -> 序号有效 -> 暂停物理/应用第0帧 -> 更新矩阵/初始化物理 -> 成功提交
+  文件读取有字节数、纹理有资源数 -> 实际读取进度映射到对应阶段
+  解析和物理初始化没有可测比例 -> 阶段提示或不定进度，不使用虚假定时器递增
+  模型与VMD进度通知统一更新底部条及当前本地资源提示，忽略过期操作的消息
+  成功提交 -> 显示100%和完成阶段 -> 保留1500ms -> 自动收起
+  加载失败 -> 停止进度、不显示100% -> 保留错误原因 -> 继续旧模型/动作
+  文件选择取消 -> 保留原状态，不显示虚假加载或完成
+  恢复默认入口 -> 同一进度生命周期；新操作开始 -> 取消旧完成收起定时器
+  保留串行与原物理/播放开关；进度更新不推进VMD时间或重新开启物理
+```
+
 ### 重力方向 1:1 与锚点死区/缓动（2026-09-30，已实现）
 
 ```text
@@ -42,6 +128,7 @@
   重置绑定姿态/表情 -> 新 helper 仅骨骼动画 -> 无物理应用第0帧 -> 刷新角色/骨骼世界矩阵
   根据原 physicsEnabled 与 PMX 刚体声明，在同一新 helper 上初始化新物理
   使用固定 vendor 的 _setupMeshPhysics；warmup 为0，禁止再次应用初始动作
+  第0帧应用 -> 世界矩阵 -> 新物理初始化之间没有渲染回调等待
   由新姿态建立刚体 -> 保留原播放开关 -> 提交新 helper/profile，清除首载延迟标记
   原来关闭物理 -> 新 helper 继续无物理；原来暂停播放 -> 应用初始姿态后保持暂停
   失败或序号过期 -> 清理暂存动作 -> 网格仍有效且旧 helper 未被替换时恢复骨骼/网格/表情/IK -> 恢复旧 helper 状态 -> 不改变旧 profile
