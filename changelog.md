@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR骨骼大小、名称与点选诊断
+
+- ✅ [2026-10-01] 独立网页“动作 → 骨骼”增加小球大小0.2～3倍（默认1）、名称开关（默认关闭），本地记忆；轻点选择显示白环/名称/局部XYZ轴及字母，空白取消，拖动/双指保留。
+  - 新增 `3rd/mmd-ar-test/web-skeleton-selection.mjs`，扩展 `web-skeleton-debug.mjs`/`.js`、`web-rigid-body-debug.mjs`/`.js`、`web-physics-substeps.js`、`web-panel-groups.js`、`build.js`。选中后仅显示自身关联刚体及从选中开始累计实际接触的直接对手，每固定子步只读manifold，集合按索引去重、不递归，不改速度/参数；未选中不扫描。换选/取消/PMX或physics替换清累计，VMD保留选择；无关联刚体有明确说明，清空按钮可重置。
+  - 唯一透明Canvas批量绘制中文描边与选择环，复用投影点，轴尺寸独立于小球倍率；模型替换清旧引用、销毁释放Canvas/轴资源。更新selection模块10项与已有骨骼8/刚体9/子步6/切换8/生命周期6/稳定性9、面板8及真实网页1，共65项通过；真实Ammo短暂子步接触、诊断异常、连续读取不改速度/native对象数与4MiB探针复用通过。
+  - 实际米娅321骨骼/4球组，物理重载及两次PMX释放16旧组、Canvas始终1，真实轻点/拖动/双指、AO与筛选、刷新偏好及VMD保留选择通过，无页面错误。`npm run build:web:mmd-ar-test`、31生成脚本/4内联语法/16导入指纹与原LAN HTTP200通过。软件WebGL并行面板回归8帧数据：关闭813.88ms/帧、骨骼及名称开启1027.91ms/帧，真机验收另计。
+  - 同步design/spec/task/self-test/usage/README/todo；移除开发任务，仅保留真机验收。仅WEB_MODE，无Offline产物受影响，未构建APK或发布外网；提交推送origion时排除其他工作区改动和生成资源。
+
 ### MMD AR PMX碰撞体线框显示
 
 - ✅ [2026-10-01] 独立网页“动作 → 骨骼”新增“显示碰撞体（线框）”独立开关，默认关闭/本地记忆；球、盒、胶囊按真实尺寸，红type0/黄type2/绿type1，透过模型显示。

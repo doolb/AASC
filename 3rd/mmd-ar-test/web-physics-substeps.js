@@ -13,7 +13,9 @@ function addPhysicsSubsteps(source) {
         this.physicsRemainder = 0;
         this.physicsSampleTime = 0;
         this.physicsStepTime = 0;
-        this.interpolationUnitStep = this.unitStep;`);
+        this.interpolationUnitStep = this.unitStep;
+        // 独立网页诊断的可选观察入口，未选中骨骼时保持null。
+        this.onDiagnosticSubstep = null;`);
     output = once(output, '\tupdate( delta ) {', `\tupdate( delta ) {
         // 高频画面帧允许没有物理子步，非法/零时间不采样也不推进。
         if (!Number.isFinite(delta) || delta <= 0) return this;`);
@@ -43,6 +45,7 @@ function addPhysicsSubsteps(source) {
             this.physicsRemainder = 0;
             this.physicsSampleTime = 0;
             this.physicsStepTime = 0;
+            this.onDiagnosticSubstep = null;
             this.bodies.length = 0;`);
     const start = output.indexOf('\t_stepSimulation( delta ) {');
     const end = output.indexOf('\t_updateBones() {', start);
@@ -140,6 +143,7 @@ function addPhysicsSubsteps(source) {
                 if (form) this._applyAnchorTargets(alpha, form, velocity);
                 // 外层负责固定时钟，maxSubSteps=0让Bullet恰好求解一次，避免重复内部拆步。
                 this.world.stepSimulation(h, 0, h);
+                this.onDiagnosticSubstep?.();
                 this.physicsStepTime = nextTime;
                 this.physicsRemainder = Math.max(0, this.physicsRemainder - h);
             }

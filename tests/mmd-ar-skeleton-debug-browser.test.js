@@ -11,7 +11,7 @@ const ROOT = path.resolve(__dirname, '../3rd/mmd-ar-test/web-dist');
 const CHROME = '/usr/bin/chromium';
 
 test('真实网页骨骼显示、动作/物理更新、偏好恢复与PMX/VMD切换释放', {
-    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 300000
+    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 420000
 }, async () => {
     const errors = [];
     const server = http.createServer((request, response) => {
@@ -67,6 +67,68 @@ test('真实网页骨骼显示、动作/物理更新、偏好恢复与PMX/VMD切
             const samples = window.DisplayMmd.getSkeletonState().samples;
             return samples.some((value, index) => value.position.some((axis, axisIndex) => Math.abs(axis - previous[index][axisIndex]) > 1e-4));
         }, { timeout: 10000 }, oldPositions);
+        await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(false));
+        const changeDisplay = (id, value, event) => page.evaluate(({ id, value, event }) => {
+            const input = document.getElementById(id);
+            if (typeof value === 'boolean') input.checked = value;
+            else input.value = String(value);
+            input.dispatchEvent(new Event(event, { bubbles: true }));
+        }, { id, value, event });
+        await changeDisplay('mmdArSkeletonSize', 0.2, 'input');
+        assert.equal((await state()).sizeMultiplier, 0.2);
+        await changeDisplay('mmdArSkeletonSize', 3, 'input');
+        assert.equal((await state()).sizeMultiplier, 3);
+        await changeDisplay('mmdArSkeletonSize', 1.5, 'input');
+        await changeDisplay('mmdArSkeletonNamesEnabled', true, 'change');
+        await page.waitForFunction(() => window.DisplayMmd.getSkeletonState().labelCount > 100, { timeout: 15000 });
+        assert.equal(await page.$$eval('.mmd-ar-bone-names', elements => elements.length), 1);
+        await changeDisplay('mmdArSkeletonNamesEnabled', false, 'change');
+        await changeDisplay('mmdArRigidBodyEnabled', true, 'change');
+        await page.waitForFunction(() => window.DisplayMmd.getRigidBodyState().visibleBodyCount > 100, { timeout: 15000 });
+        const clickSample = async () => {
+            const point = await page.evaluate(() => {
+                const snapshot = window.DisplayMmd.getSkeletonState();
+                const sample = snapshot.samples.find(item => item.type === 0 && item.screen) || snapshot.samples.find(item => item.screen);
+                const canvas = document.getElementById('displayMmdCanvas');
+                const rect = canvas.getBoundingClientRect();
+                return { x: rect.left + sample.screen.x * rect.width / canvas.clientWidth,
+                    y: rect.top + sample.screen.y * rect.height / canvas.clientHeight };
+            });
+            await page.mouse.click(point.x, point.y);
+            await page.waitForFunction(() => window.DisplayMmd.getSkeletonState().selectedBoneIndex >= 0, { timeout: 15000 });
+            return point;
+        };
+        const point = await clickSample();
+        await page.waitForFunction(() => window.DisplayMmd.getSkeletonState().axesVisible, { timeout: 15000 });
+        const selected = await state();
+        assert.ok(selected.selectedBoneName);
+        assert.ok(selected.labelCount >= 1);
+        await page.waitForFunction(() => window.DisplayMmd.getRigidBodyState().filtered, { timeout: 15000 });
+        assert.ok((await page.evaluate(() => window.DisplayMmd.getRigidBodyState())).visibleBodyCount < 183);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.down();
+        await page.mouse.move(point.x + 40, point.y + 20, { steps: 4 });
+        await page.mouse.up();
+        assert.equal((await state()).selectedBoneIndex, selected.selectedBoneIndex);
+        // 多指结束继续走原抑制逻辑，不将第二次抬指误当成骨骼轻点。
+        const touch = await page.createCDPSession();
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 30, y: 400, id: 11 }] });
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 30, y: 400, id: 11 }, { x: 80, y: 400, id: 12 }] });
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [{ x: 80, y: 400, id: 12 }] });
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await touch.detach();
+        assert.equal((await state()).selectedBoneIndex, selected.selectedBoneIndex);
+        await page.screenshot({ path: path.join(os.tmpdir(), 'mmd-ar-skeleton-selection.png') });
+        await page.evaluate(() => window.DisplayMmd.clearSkeletonContacts());
+        const rect = await page.$eval('#displayMmdCanvas', canvas => {
+            const value = canvas.getBoundingClientRect(); return { x: value.left + 2, y: value.top + value.height * 0.6 };
+        });
+        await page.mouse.click(rect.x, rect.y);
+        assert.equal((await state()).selectedBoneIndex, -1);
+        await page.waitForFunction(() => !window.DisplayMmd.getRigidBodyState().filtered, { timeout: 15000 });
+        await changeDisplay('mmdArRigidBodyEnabled', false, 'change');
+        await changeDisplay('mmdArSkeletonNamesEnabled', true, 'change');
+        await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(true));
         await page.screenshot({ path: path.join(os.tmpdir(), 'mmd-ar-skeleton-debug.png') });
         const measureFrames = () => page.evaluate(async () => {
             const start = performance.now();
@@ -89,6 +151,10 @@ test('真实网页骨骼显示、动作/物理更新、偏好恢复与PMX/VMD切
         await ready();
         await waitDraw();
         assert.equal(await page.$eval('#mmdArSkeletonEnabled', input => input.checked), true);
+        assert.equal((await state()).sizeMultiplier, 1.5);
+        assert.equal((await state()).namesVisible, true);
+        assert.equal((await state()).selectedBoneIndex, -1);
+        assert.equal(await page.$$eval('.mmd-ar-bone-names', elements => elements.length), 1);
         await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(false));
         await page.evaluate(() => window.DisplayMmd.setPhysicsEnabled(false));
         const paused = await state();
@@ -105,6 +171,8 @@ test('真实网页骨骼显示、动作/物理更新、偏好恢复与PMX/VMD切
         const directory = path.join(path.dirname(pmx), 'tex');
         const files = [pmx, ...fs.readdirSync(directory).map(name => path.join(directory, name))];
         for (let iteration = 0; iteration < 2; iteration += 1) {
+            await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(false));
+            await clickSample();
             const before = await state();
             const input = await page.$('#mmdArLocalFiles');
             await input.evaluate(element => { element.value = ''; });
@@ -114,10 +182,15 @@ test('真实网页骨骼显示、动作/物理更新、偏好恢复与PMX/VMD切
             await waitDraw();
             const after = await state();
             assert.equal(after.enabled, true);
+            assert.equal(after.sizeMultiplier, 1.5);
+            assert.equal(after.namesVisible, true);
+            assert.equal(after.selectedBoneIndex, -1);
+            assert.equal(await page.$$eval('.mmd-ar-bone-names', elements => elements.length), 1);
             assert.equal(after.resourceGroups, before.resourceGroups);
             assert.equal(after.releasedGroups - before.releasedGroups, before.resourceGroups);
             assert.deepEqual(after.counts, before.counts);
         }
+        await clickSample();
         const beforeMotion = await state();
         await (await page.$('#mmdArLocalVmd')).uploadFile(vmd);
         await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
@@ -125,6 +198,7 @@ test('真实网页骨骼显示、动作/物理更新、偏好恢复与PMX/VMD切
         assert.equal(afterMotion.generation, beforeMotion.generation);
         assert.equal(afterMotion.releasedGroups, beforeMotion.releasedGroups);
         assert.equal(afterMotion.enabled, true);
+        assert.equal(afterMotion.selectedBoneIndex, beforeMotion.selectedBoneIndex);
         assert.equal(afterMotion.resourceGroups, 4);
         assert.deepEqual(errors, []);
         console.log(`骨骼网页诊断 ${JSON.stringify({ boneCount: afterMotion.boneCount, counts: afterMotion.counts,

@@ -24,7 +24,7 @@ const TRACKING_GROUPS = Object.freeze([
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
   ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
-  ['骨骼', ['mmdArSkeletonLegend', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
+  ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
@@ -75,7 +75,7 @@ const WEB_PANEL_GROUP_JS = `
         const state = window.DisplayMmd?.getRigidBodyState?.();
         if (!state?.bodyCount) { status.textContent = '当前模型没有可显示的碰撞体'; return; }
         const modes = { physics: '实际物理姿态', preview: '未模拟，显示配置位置', mixed: '部分未模拟，包含配置位置预览', none: '等待模型显示' };
-        status.textContent = state.bodyCount + ' 个碰撞体 · ' + (modes[state.poseMode] || modes.none);
+        status.textContent = (state.filtered ? state.visibleBodyCount + ' / ' : '') + state.bodyCount + ' 个碰撞体 · ' + (modes[state.poseMode] || modes.none);
       };
       window.DisplayMmd?.setRigidBodyVisible?.(toggle.checked);
       toggle.addEventListener('change', () => {
@@ -106,6 +106,55 @@ const WEB_PANEL_GROUP_JS = `
         window.DisplayMmd?.setSkeletonVisible?.(toggle.checked);
         try { localStorage.setItem(key, String(toggle.checked)); } catch (error) { /* 存储受限时仍允许本次切换。 */ }
       });
+    })();
+    (() => {
+      const size = document.getElementById('mmdArSkeletonSize');
+      const names = document.getElementById('mmdArSkeletonNamesEnabled');
+      const status = document.getElementById('mmdArSkeletonSelectionStatus');
+      const clear = document.getElementById('mmdArSkeletonClearContacts');
+      const output = document.getElementById('mmdArSkeletonSizeValue');
+      if (!size || !names || !status || !clear || !output) return;
+      const key = 'aasc.mmdArTest.skeletonDisplay.v1';
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; }
+      catch (error) { /* 偏好损坏时使用明确默认值，允许本次操作。 */ }
+      const normalize = value => typeof value === 'number' && Number.isFinite(value)
+        ? Math.round(Math.max(0.2, Math.min(3, value)) * 10) / 10 : 1;
+      const settings = { sizeMultiplier: normalize(saved.sizeMultiplier), namesVisible: saved.namesVisible === true };
+      size.value = String(settings.sizeMultiplier);
+      names.checked = settings.namesVisible;
+      const apply = () => {
+        output.textContent = settings.sizeMultiplier.toFixed(1) + ' 倍';
+        window.DisplayMmd?.setSkeletonSize?.(settings.sizeMultiplier);
+        window.DisplayMmd?.setSkeletonNamesVisible?.(settings.namesVisible);
+      };
+      const save = () => { try { localStorage.setItem(key, JSON.stringify(settings)); } catch (error) { /* 存储受限仍即时生效。 */ } };
+      size.addEventListener('input', () => { settings.sizeMultiplier = normalize(Number(size.value)); apply(); save(); });
+      names.addEventListener('change', () => { settings.namesVisible = names.checked; apply(); save(); });
+      const update = () => {
+        const state = window.DisplayMmd?.getSkeletonState?.();
+        const selected = state?.selectedBoneIndex >= 0;
+        clear.disabled = !selected;
+        if (!selected) { status.textContent = '轻点小球选中骨骼，点空白取消'; return; }
+        const name = state.selectedBoneName || ('骨骼 #' + state.selectedBoneIndex);
+        const detail = !state.ownBodyIndices?.length ? '无关联刚体'
+          : state.contactError ? '接触记录暂不可用'
+          : !state.contactActive ? '未模拟，显示自身配置位置'
+          : '自身 ' + state.ownBodyIndices.length + ' · 累计碰撞 ' + state.contactBodyIndices.length;
+        status.textContent = name + ' · ' + detail;
+      };
+      clear.addEventListener('click', () => { window.DisplayMmd?.clearSkeletonContacts?.(); update(); });
+      const panel = document.getElementById('mmdArMotionPanel');
+      let timer = null;
+      const sync = () => {
+        if (timer !== null) clearInterval(timer);
+        timer = null;
+        update();
+        if (panel && !panel.hidden) timer = setInterval(update, 500);
+      };
+      if (panel) new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
+      window.addEventListener('pagehide', () => { if (timer !== null) clearInterval(timer); }, { once: true });
+      apply(); sync();
     })();
     (() => {
       const key = 'aasc.mmdArTest.gravityFilter.v1';
@@ -537,6 +586,11 @@ function groupWebPanels($) {
       '<span><i style="--bone-color:#ffd633"></i>黄 type2 · 物理旋转</span>' +
       '<span><i style="--bone-color:#33e066"></i>绿 type1 · 完全物理</span>' +
       '<span><i style="--bone-color:#9ca3af"></i>灰 · 无关联刚体</span></div>' +
+      '<label class="mind-basic-field"><span>小球大小 <output id="mmdArSkeletonSizeValue">1.0 倍</output></span><input id="mmdArSkeletonSize" type="range" min="0.2" max="3" step="0.1" value="1" aria-label="骨骼小球大小"></label>' +
+      '<label class="display-mmd-lighting-field"><input id="mmdArSkeletonNamesEnabled" type="checkbox"><span>显示骨骼名称</span></label>' +
+      '<p id="mmdArSkeletonSelectionStatus" class="mind-basic-note" role="status">轻点小球选中骨骼，点空白取消</p>' +
+      '<button id="mmdArSkeletonClearContacts" type="button" disabled>清空累计碰撞</button>' +
+      '<p id="mmdArSkeletonHint" class="mind-basic-note">选中显示局部轴：X红、Y绿、Z蓝。碰撞体开启时仅显示自身与累计碰撞对象；拖动旋转模型。</p>' +
       '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体（线框）</span></label>' +
       '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>');
     groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);

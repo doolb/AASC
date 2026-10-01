@@ -15,7 +15,7 @@ function addRigidBodyRuntime(source, moduleUrl) {
     output = once(output, '            currentRotationPivot = stagedPivot;',
         '            currentRotationPivot = stagedPivot;\n            rigidBodyOverlay.setModel(currentMesh);');
     output = once(output, '            skeletonOverlay.render(currentRotationPivot?.visible === true);',
-        '            rigidBodyOverlay.render(currentRotationPivot?.visible === true, physicsEnabled ? helper.current?.objects?.get(currentMesh)?.physics : null);\n            skeletonOverlay.render(currentRotationPivot?.visible === true);');
+        '            rigidBodyOverlay.setBodyFilter(skeletonOverlay.getBodyFilter());\n            rigidBodyOverlay.render(currentRotationPivot?.visible === true, physicsEnabled ? helper.current?.objects?.get(currentMesh)?.physics : null);\n            skeletonOverlay.render(currentRotationPivot?.visible === true);');
     output = once(output, '        renderer.dispose();', '        rigidBodyOverlay.dispose();\n        renderer.dispose();');
     return once(output, '        setMotionPlaybackEnabled,',
         '        setRigidBodyVisible: rigidBodyOverlay.setVisible,\n        getRigidBodyState: rigidBodyOverlay.getState,\n        setMotionPlaybackEnabled,');

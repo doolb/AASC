@@ -453,8 +453,12 @@ async function stageTextAssets() {
     const physicsRatePath = path.join(GENERATED_ASSETS, 'js/web-physics-rate.mjs');
     await fs.copyFile(path.join(__dirname, 'web-physics-rate.mjs'), physicsRatePath);
     const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
+    const selectionPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-selection.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-skeleton-selection.mjs'), selectionPath);
+    const selectionUrl = `./web-skeleton-selection.mjs?v=${(await hashFile(selectionPath)).sha256.slice(0, 12)}`;
     const skeletonPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-debug.mjs');
-    await fs.copyFile(path.join(__dirname, 'web-skeleton-debug.mjs'), skeletonPath);
+    await fs.writeFile(skeletonPath, (await fs.readFile(path.join(__dirname, 'web-skeleton-debug.mjs'), 'utf8'))
+      .replace('./web-skeleton-selection.mjs', selectionUrl));
     const skeletonUrl = `./web-skeleton-debug.mjs?v=${(await hashFile(skeletonPath)).sha256.slice(0, 12)}`;
     const rigidBodyPath = path.join(GENERATED_ASSETS, 'js/web-rigid-body-debug.mjs');
     await fs.writeFile(rigidBodyPath, (await fs.readFile(path.join(__dirname, 'web-rigid-body-debug.mjs'), 'utf8'))

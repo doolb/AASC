@@ -102,6 +102,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
 
   groupWebPanels($);
   originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonEnabled', 'mmdArSkeletonLegend', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus');
+  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonSize', 'mmdArSkeletonSizeValue', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint');
   for (const selector of panels) {
     originalIds.get(selector).push(`${selector.slice(1)}Opacity`);
     originalIds.get(selector).sort();
@@ -149,6 +150,10 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArRigidBodyEnabled').closest('.mmd-ar-panel-group-body').length, 1);
   assert.equal($('#mmdArRigidBodyEnabled').is('[checked]'), false);
   assert.equal($('#mmdArRigidBodyStatus').attr('role'), 'status');
+  assert.equal($('#mmdArSkeletonSize').attr('min'), '0.2');
+  assert.equal($('#mmdArSkeletonSize').attr('max'), '3');
+  assert.equal($('#mmdArSkeletonNamesEnabled').is('[checked]'), false);
+  assert.equal($('#mmdArSkeletonClearContacts').is('[disabled]'), true);
   assert.equal($('#mmdArMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.equal($('#mmdArMotionPlayback').closest('#displayMmdLightingPanel').length, 0);
   assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 50%\), transparent\)/u);

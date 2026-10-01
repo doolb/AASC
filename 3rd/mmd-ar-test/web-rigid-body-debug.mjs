@@ -45,6 +45,8 @@ export function createRigidBodyOverlay({ THREE, renderer, camera }) {
     let actualCount = 0;
     let poseMode = 'none';
     let samples = [];
+    let bodyFilter = null;
+    let visibleBodyCount = 0;
 
     const release = () => {
         for (const group of groups) {
@@ -65,6 +67,8 @@ export function createRigidBodyOverlay({ THREE, renderer, camera }) {
         model = disposed ? null : mesh;
         entries = [];
         actualCount = 0;
+        bodyFilter = null;
+        visibleBodyCount = 0;
         poseMode = 'none';
         if (!model) return;
         generation += 1;
@@ -146,25 +150,32 @@ export function createRigidBodyOverlay({ THREE, renderer, camera }) {
         createResources();
         updateSpace();
         actualCount = 0;
+        visibleBodyCount = 0;
         samples = [];
         const manager = physics?.manager;
         let nativeRotation = null;
         try {
             if (manager && physics.bodies?.length) nativeRotation = manager.allocQuaternion();
             for (const group of groups) {
+                let count = 0;
                 for (let index = 0; index < group.entries.length; index += 1) {
                     const entry = group.entries[index];
+                    if (bodyFilter && !bodyFilter.has(entry.bodyIndex)) continue;
                     updateEntry(entry, physics, nativeRotation);
-                    group.mesh.setMatrixAt(index, matrix);
-                    if (index === 0) samples.push({ bodyIndex: entry.bodyIndex, type: entry.type,
+                    group.mesh.setMatrixAt(count, matrix);
+                    if (count === 0) samples.push({ bodyIndex: entry.bodyIndex, type: entry.type,
                         shape: entry.shape.key, color: group.mesh.material.color.getHex(), matrix: matrix.toArray() });
+                    count += 1;
                 }
+                group.mesh.count = count;
+                group.mesh.visible = count > 0;
+                visibleBodyCount += count;
                 group.mesh.instanceMatrix.needsUpdate = true;
             }
         } finally {
             if (nativeRotation) manager.freeQuaternion(nativeRotation);
         }
-        poseMode = actualCount === entries.length ? 'physics' : actualCount ? 'mixed' : 'preview';
+        poseMode = !visibleBodyCount ? 'none' : actualCount === visibleBodyCount ? 'physics' : actualCount ? 'mixed' : 'preview';
         updateCount += 1;
         const autoClear = renderer.autoClear;
         try {
@@ -177,9 +188,11 @@ export function createRigidBodyOverlay({ THREE, renderer, camera }) {
 
     return Object.freeze({
         setModel, render,
+        setBodyFilter: value => { bodyFilter = value instanceof Set ? value : null; },
         setVisible: value => { enabled = value === true; },
         getState: () => ({ enabled, bodyCount: entries.length, generation, releasedGroups, updateCount, drawCount,
             resourceGroups: groups.length, geometries: geometryCache.size, actualCount, poseMode,
+            filtered: bodyFilter !== null, visibleBodyCount,
             counts: Object.fromEntries([0, 2, 1].map(type => [type, entries.filter(entry => entry.type === type).length])),
             samples: samples.map(sample => ({ ...sample, matrix: [...sample.matrix] })) }),
         dispose: () => { disposed = true; setModel(null); }
