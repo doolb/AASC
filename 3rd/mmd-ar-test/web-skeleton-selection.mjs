@@ -117,6 +117,14 @@ export function createSkeletonSelection({ THREE, renderer, camera, scene }) {
     const capture = () => {
         if (!enabled || selectedBoneIndex < 0 || !ownBodies.size || !attachedPhysics) return;
         try {
+            if (['xpbd', 'three-xpbd'].includes(attachedPhysics.engine)) {
+                for (const { a, b } of attachedPhysics.contacts) {
+                    if (ownBodies.has(a.index) && !ownBodies.has(b.index)) contacts.add(b.index);
+                    if (ownBodies.has(b.index) && !ownBodies.has(a.index)) contacts.add(a.index);
+                }
+                rebuildFilter(); contactScanCount += 1;
+                return;
+            }
             const dispatcher = attachedPhysics.world.getDispatcher();
             const ammo = globalThis.Ammo;
             for (let i = 0, count = dispatcher.getNumManifolds(); i < count; i += 1) {
@@ -142,7 +150,12 @@ export function createSkeletonSelection({ THREE, renderer, camera, scene }) {
 
     const attach = () => {
         detach();
-        if (!enabled || selectedBoneIndex < 0 || !ownBodies.size || !physics || !globalThis.Ammo?.getPointer) return;
+        if (!enabled || selectedBoneIndex < 0 || !ownBodies.size || !physics) return;
+        if (['xpbd', 'three-xpbd'].includes(physics.engine)) {
+            attachedPhysics = physics; physics.onDiagnosticSubstep = capture;
+            return;
+        }
+        if (!globalThis.Ammo?.getPointer) return;
         for (const [index, entry] of physics.bodies.entries()) {
             if (entry.body) pointerToIndex.set(globalThis.Ammo.getPointer(entry.body), index);
         }

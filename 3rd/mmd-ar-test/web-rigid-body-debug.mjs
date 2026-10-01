@@ -221,8 +221,12 @@ export function createRigidBodyOverlay({ THREE, renderer, camera }) {
     // 返回是否读取了实际物理姿态；计数由填充绘制负责，描边二次调用不重复累计。
     const updateEntry = (entry, physics, nativeRotation, expansion = 0) => {
         const body = physics?.bodies?.[entry.bodyIndex]?.body;
-        const usedPhysics = Boolean(body && nativeRotation);
-        if (usedPhysics) {
+        const xpbdPose = ['xpbd', 'three-xpbd'].includes(physics?.engine) && physics.getBodyPose(entry.bodyIndex, position, rotation);
+        const usedPhysics = Boolean(xpbdPose || (body && nativeRotation));
+        if (xpbdPose) {
+            bodyMatrix.compose(position, rotation, unitScale);
+            matrix.copy(spaceMatrix).multiply(bodyMatrix);
+        } else if (usedPhysics) {
             // COM、origin、basis均为借用引用，不能destroy；旋转输出借用manager池对象。
             const transform = body.getCenterOfMassTransform();
             const origin = transform.getOrigin();

@@ -34,6 +34,8 @@ const WEB_SKELETON_DEBUG = require('./web-skeleton-debug');
 const WEB_RIGID_BODY_DEBUG = require('./web-rigid-body-debug');
 const WEB_SHADOW_BIAS = require('./web-shadow-bias');
 const WEB_PHYSICS_WIND = require('./web-physics-wind');
+const WEB_PHYSICS_SOLVER = require('./web-physics-solver');
+const { stagePhysicsBackends } = require('./web-three-xpbd-build');
 const WEB_FILL_FACING_RANGE = require('./web-fill-facing-range');
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
@@ -458,6 +460,7 @@ async function stageTextAssets() {
       await fs.copyFile(sourcePath, destinationPath);
     }
   }
+  let xpbdPhysicsVersion = '', threeXpbdPhysicsVersion = '';
   {
     // UI 和 PMX runtime 必须导入同一个带内容指纹的 ESM，避免生成两个独立文件注册表。
     for (const fileName of ['web-local-assets.mjs', 'web-local-assets-ui.mjs']) {
@@ -474,6 +477,8 @@ async function stageTextAssets() {
     const physicsRatePath = path.join(GENERATED_ASSETS, 'js/web-physics-rate.mjs');
     await fs.copyFile(path.join(__dirname, 'web-physics-rate.mjs'), physicsRatePath);
     const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
+    ({ xpbdPhysicsVersion, threeXpbdPhysicsVersion } = await stagePhysicsBackends({
+      generatedAssets: GENERATED_ASSETS, physicsWindUrl, physicsRateUrl }));
     const selectionPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-selection.mjs');
     await fs.copyFile(path.join(__dirname, 'web-skeleton-selection.mjs'), selectionPath);
     const selectionUrl = `./web-skeleton-selection.mjs?v=${(await hashFile(selectionPath)).sha256.slice(0, 12)}`;
@@ -494,7 +499,8 @@ async function stageTextAssets() {
     await fs.writeFile(physicsLightingPath, WEB_PHYSICS_RATE.addPhysicsRateLighting(
       await fs.readFile(physicsLightingPath, 'utf8')));
     const pmxHelperPath = path.join(GENERATED_ASSETS, 'js/mmd-pmx-helper.mjs');
-    await fs.writeFile(pmxHelperPath, WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl));
+    await fs.writeFile(pmxHelperPath, WEB_PHYSICS_SOLVER.addSolverHelper(
+      WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl)));
     const pmxHelperUrl = `./mmd-pmx-helper.mjs?v=${(await hashFile(pmxHelperPath)).sha256.slice(0, 12)}`;
     const motionSwitchPath = path.join(GENERATED_ASSETS, 'js/web-motion-switch.mjs');
     await fs.writeFile(motionSwitchPath, (await fs.readFile(path.join(__dirname, 'web-motion-switch.mjs'), 'utf8'))
@@ -548,6 +554,7 @@ async function stageTextAssets() {
       `'./display-pmx-ao.mjs?v=${aoVersion}'`), rigidBodyUrl)));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_WIND.addWindRuntime(
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
+    await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8')));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
     const mmdScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd.js');
     const runtimeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js'))).sha256.slice(0, 12);
@@ -559,6 +566,7 @@ async function stageTextAssets() {
     await fs.writeFile(mmdScriptPath, WEB_PHYSICS_STABILITY.addStabilityDisplay(WEB_RIGID_BODY_DEBUG.addRigidBodyDisplay(WEB_CAMERA_MOTION.addCameraMotionDisplay(WEB_SKELETON_DEBUG.addSkeletonDisplay(WEB_PHYSICS_RATE.addPhysicsRateDisplay(WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current), localAssetsUrl)))))
       .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`)));
     await fs.writeFile(mmdScriptPath, WEB_PHYSICS_WIND.addWindDisplay(await fs.readFile(mmdScriptPath, 'utf8')));
+    await fs.writeFile(mmdScriptPath, WEB_PHYSICS_SOLVER.addSolverDisplay(await fs.readFile(mmdScriptPath, 'utf8')));
     const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }
@@ -577,6 +585,9 @@ async function stageTextAssets() {
     const physicsVersion = (await hashFile(physicsPath)).sha256.slice(0, 12);
     await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
       await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));
+    await fs.writeFile(helperPath, WEB_PHYSICS_SOLVER.addSolverAnimationHelper(
+      await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`,
+      `../../../web-three-xpbd-physics.mjs?v=${threeXpbdPhysicsVersion}`));
     webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
   }
 
@@ -840,6 +851,7 @@ async function stageTextAssets() {
   });
   const lightingSource = await fs.readFile(path.join(GENERATED_ASSETS, 'js/display-mmd-lighting.js'), 'utf8');
   const requiredIds = new Set([...lightingSource.matchAll(/byId\('([^']+)'\)/gu)].map((match) => match[1]));
+  for (const id of WEB_PHYSICS_SOLVER.SOLVER_CONTROL_IDS) requiredIds.add(id);
   for (const id of ['mmdArMotionToggle', 'mmdArMotionPanel', 'mmdArLocalAssets',
     'mmdArCameraMotionPlayback', 'mmdArGravityCameraEnabled', 'mmdArSkeletonEnabled', 'mmdArRigidBodyEnabled',
     'mmdArRigidBodyLegend', 'mmdArRigidBodyControls', 'mmdArPhysicsStabilityReference',

@@ -1,5 +1,54 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR三种物理后端提交归档
+
+- ✅ [2026-10-01] 按用户要求归档独立XPBD、真实THREE-XPBD固定核心/许可证、三项选择/诊断/动作适配、每帧子步及基准下限1和相关文档。
+  - 提交范围为3rd/mmd-ar-test源码、固定vendor及两份任务文档和对应design/spec/usage/self-test/todo；原始第三方源码保留来源哈希。网页构建及静态检查沿用本轮记录，不新增或执行测试；真实物理/设备效果仍待现场验收，Offline既有状态保持。
+
+### MMD AR基准下限开放到1
+
+- ✅ [2026-10-01] 按用户要求将共用纠错基准/XPBD子步下限由10开放到1，滑条步长5同步改1，保证1–4实际生效；默认45、上限180、存储键及物理Hz保持。
+  - 修改web-physics-rate.mjs、web-physics-stability.js和web-panel-groups.js，ESM、经典Display、滑条/保存恢复统一为1–180整数，非法/缺失回退45；两种XPBD直接按该整数执行每帧N子步，Ammo继续作为ERP参考Hz。web-physics-solver.js提示改为1步示例。
+  - npm run build:web:mmd-ar-test完成、本地web-dist已同步；6源/10生成模块/5内联或importmap语法、4控件唯一、24导入指纹与公式/滑条静态一致性检查通过。未执行或新增测试，低子步实际效果/持久化待现场验收；未APK、提交或发布，Offline既有状态保持。
+
+### MMD AR第三求解器THREE-XPBD实现
+
+- ✅ [2026-10-01] 按已确认方案新增“动作→物理→布料计算”第三项THREE-XPBD，保留默认Ammo与现有XPBD；三项本地记忆、换模型/VMD、切换重建/失败回滚、帧物理耗时及实际刚体/接触诊断已适配。
+  - 收录markeasting/THREE-XPBD固定提交df1c273107dff7ea8cbedfc1d7a929c1b0aeb0df的实际RigidBody/GJK-EPA/ContactSet/位置和速度摩擦、原始源码哈希及MIT；Three0.160.0凸体辅助和许可证一起离线保存。剥离演示GUI/场景/调试几何，修正prevPose四元数、原点逆质量、纠正力臂与EPA witness/非有限数据，并加入小接触容差及低速反弹门限。
+  - 新增web-three-xpbd-physics.mjs和web-three-xpbd-joint.mjs，适配PMX质量/惯量/阻尼/type0/1/2、六轴弹簧柔度1/k/限位、世界风力矩及碰撞掩码；真实上游纠正和接触求解独立于现有XPBD循环。共同web-xpbd-physics.mjs复用空间/骨骼/风/帧子步及错误释放。两种XPBD均为基准值=N子步、h=delta/N、每子步1轮，物理Hz不使用；不新增参数或生产依赖。
+  - 新增web-three-xpbd-build.js和vendor/three-xpbd/build-headless.js，核心运行闭包整体指纹目录及PMX模块逐层指纹进入网页/APK共同构建；球/胶囊凸体近似、没有CCD，实际精度/稳定性/性能待设备验收。正式显示端未接入第三选项。
+  - 本地web-dist构建完成；29源/核心模块、28生成模块、5内联/importmap语法、4控件唯一、3求解器选项、62处本地导入和24指纹检查通过，两个源物理类离线导入完成。未执行/新增测试，未打包APK、提交或发布；Offline原有minApk/servicePackage=true、dependenciesPackage=false保持。
+
+### MMD AR第三求解器THREE-XPBD接入方案
+
+- ✅ [2026-10-01] 用户要求再接入Three.js XPBD，核对markeasting/THREE-XPBD固定提交df1c273107dff7ea8cbedfc1d7a929c1b0aeb0df、刚体/关节/接触核心、Game.gui/World依赖及凸体GJK/EPA范围。
+  - 提出独立第三求解器、固定核心/许可证、PMX及骨骼/风/诊断适配，保留现有每帧子步参数；已记录design/spec/task/todo并发送具体方案确认。未修改运行源码、构建、执行测试、提交或发布；第三求解器当前尚不可用。
+
+### MMD AR XPBD硬限位速度与静止接触减抖修正
+
+- ✅ [2026-10-01] 按已确认方案，在XPBD回算速度后补齐关节硬限位速度投影；锁定轴消除相对速度，范围边界只限制继续越界，使用与位置约束一致的线/角梯度及惯量，运动学和type2驱动位置保持。
+  - 修改`web-xpbd-rigid.mjs`及`web-xpbd-collision.mjs`：接触容差按最薄尺寸缩放到1e-6–1e-3模型单位，SAP/窄阶段接触带连续，位置只推出超容差穿透；正间距允许闭合，低速反弹阈值取固定0.5模型单位/s、2|g|h和容差/h的大者。保留PMX刚度/阻尼、碰撞分组、每帧N子步/每子步1轮及现有面板参数。
+  - 本地web-dist重新生成，4源文件/12生成模块/5段内联或importmap语法、4控件唯一性及21导入指纹检查通过。未新增或执行测试，未做真实模型/手机物理验证；减抖效果待现场验收，未打包APK、提交或发布，已有Offline标记保持。
+
+### MMD AR XPBD明显抖动排查
+
+- ✅ [2026-10-01] 核对XPBD帧间隔、骨骼驱动、关节和碰撞流程，并对照Ten Minute Physics25源码：当前有刚体阻尼与接触速度求解，缺少关节限位速度投影/关节阻尼，子步随实际delta变化；尚未确认用户抖动主因。
+  - 记录待修复todo、设计及候选伪代码；提出关节硬限位速度约束、静止接触容差与低速反弹抑制，保持子步数参数含义。已发送方案确认及现象补充问题，未修改运行源码、构建、执行测试或复现，抖动未修复。
+
+### MMD AR XPBD每帧子步与基准下限10
+
+- ✅ [2026-10-01] 按用户最终指定，复用基准数值作为XPBD每帧子步数（10即10子步），不新增参数、不使用物理Hz比值；每子步1轮，移除固定6轮。
+  - 修改`web-xpbd-physics.mjs`和`web-xpbd-rigid.mjs`：h=有效帧间隔/N，每子步重新积分、骨骼目标插值、风、碰撞、单轮关节/接触求解及速度回算；帧末骨骼回写，记录帧子步数。
+  - 修改`web-physics-rate.mjs`、`web-physics-stability.js`、`web-panel-groups.js`，基准下限10，上限180/步长5/默认45及存储键保持；`web-physics-solver.js`按模式显示纠错Hz或每帧子步数/当前子步数，XPBD禁用物理Hz并保留值，切回Ammo恢复。`build.js`为新增共享基准导入写入内容指纹。
+  - 本地web-dist构建通过；7源文件/12生成模块/5段内联或importmap语法、4控件唯一性/min10及21导入指纹检查通过。未运行或新增测试，真实运动/手机性能待验收；未打包APK、提交或发布。Offline既有待打包标记保持。
+
+### MMD AR可选XPBD刚体求解
+
+- ✅ [2026-10-01] “动作→物理”新增“布料计算”Ammo / XPBD下拉，默认Ammo；本地记忆、首次加载前恢复、切换重建/失败回滚，模型和VMD切换沿用，物理配置切换互斥。
+  - 新增`web-xpbd-collision.mjs`、`web-xpbd-rigid.mjs`、`web-xpbd-physics.mjs`和`web-physics-solver.js`；参考Ten Minute Physics/XPBD论文独立实现刚体惯量、六轴弹簧柔度与累积lambda、范围限制、球/胶囊/盒碰撞、SAP与PMX碰撞过滤、摩擦/反弹、风、固定累计子步/type0插值/type2位置驱动和父世界旋转逆回写。复用原PMX刚体/骨骼，不模拟布料网格；不增加生产依赖或加载Ammo执行XPBD。
+  - 更新`build.js`逐级指纹与共同网页/APK生成副本、`web-panel-groups.js`控件、`web-motion-switch.mjs`换动作求解器参数/清理、`web-rigid-body-debug.mjs`真实XPBD姿态、`web-skeleton-selection.mjs`XPBD接触；两方式显示帧物理耗时，XPBD禁用Ammo纠错基准，风参数和原值保留。正式显示端未接入新选项。
+  - `npm run build:web:mmd-ar-test`完成；9个源文件、11个生成模块及5个内联脚本/importmap静态语法通过，2个求解器控件唯一，21个导入指纹一致。未执行或新增自动测试，未验证实际运动/碰撞/设备性能；网页本地同步，未打包APK、提交或发布，原Offline待发布状态minApk/servicePackage=true保持。
+
 ### 工作区非日志/非模型改动提交
 
 - ✅ [2026-10-01] 按用户要求归档当前代码、配置、文档、自测和参考截图；日志、模型、任务运行结果、APK/ZIP及构建缓存留在本地。

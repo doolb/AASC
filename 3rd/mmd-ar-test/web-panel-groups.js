@@ -4,6 +4,7 @@ const { CAMERA_SETTINGS_JS } = require('./camera-settings-template');
 const SHADOW_BIAS = require('./web-shadow-bias');
 const WIND = require('./web-physics-wind');
 const FILL_FACING_RANGE = require('./web-fill-facing-range');
+const PHYSICS_SOLVER = require('./web-physics-solver');
 
 // 仅用于 HTTPS 测试页生成阶段：移动现有控件节点，不重建输入框或改变原 ID。
 const LIGHTING_GROUPS = Object.freeze([
@@ -28,7 +29,7 @@ const TRACKING_GROUPS = Object.freeze([
 
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArCameraMotionPlayback', 'mmdArMotionProgress', 'mmdArCameraMotionProgress']],
-  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
+  ['物理', ['mmdArPhysicsEnabled', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
   ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus', 'mmdArRigidBodyControls', 'mmdArRigidBodyLegend'], 'mmdArSkeletonEnabled'],
 ]);
 
@@ -75,6 +76,7 @@ const WEB_PANEL_GROUP_CSS = `
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    ${PHYSICS_SOLVER.SOLVER_PANEL_JS}
     ${SHADOW_BIAS.PANEL_JS}
     ${FILL_FACING_RANGE.PANEL_JS}
     (() => {
@@ -556,25 +558,25 @@ const WEB_PANEL_GROUP_JS = `
       refresh();
     })();
     (() => {
-      // 关节纠错基准Hz：只改STOP_ERP的换算基准，默认45；本地记忆。
+      // 共用基准值：Ammo纠错Hz / 两种XPBD每帧子步数，下限1、默认45；本地记忆。
       const input = document.getElementById('mmdArPhysicsStabilityReference');
       const output = document.getElementById('mmdArPhysicsStabilityReferenceValue');
       if (!input || !output) return;
       const storageKey = 'aasc.mmdArTest.physicsStabilityReference.v1';
       const normalize = (value) => {
         const number = Number(value);
-        return Number.isFinite(number) ? Math.round(Math.min(180, Math.max(30, number)) / 5) * 5 : 45;
+        return Number.isFinite(number) ? Math.round(Math.min(180, Math.max(1, number))) : 45;
       };
       let value = 45;
       try {
         const stored = localStorage.getItem(storageKey);
-        // 缺失或空串用默认45；其余按30-180、5Hz取整，非法回退45。
+        // 缺失或空串用默认45；其余按1-180、步长1取整，非法回退45。
         value = stored === null || stored.trim() === '' ? 45 : normalize(stored);
       } catch (error) { value = 45; }
       const apply = (next, persist = false) => {
         value = normalize(next);
         input.value = String(value);
-        output.textContent = value + ' Hz';
+        output.textContent = value + (['xpbd', 'three-xpbd'].includes(window.DisplayMmd?.getPhysicsSolver?.()) ? ' 子步' : ' Hz');
         window.DisplayMmd?.setPhysicsStabilityReference?.(value);
         if (!persist) return;
         try { localStorage.setItem(storageKey, String(value)); } catch (error) { /* 存储受限时本次仍生效。 */ }
@@ -715,7 +717,7 @@ function groupWebPanels($) {
       '<button id="mmdArSkeletonClearContacts" type="button" disabled>清空累计碰撞</button>' +
       '<p id="mmdArSkeletonHint" class="mind-basic-note">选中显示局部轴：X红、Y绿、Z蓝。碰撞体开启时仅显示自身与累计碰撞对象；拖动旋转模型。</p>' +
       '<label class="mind-basic-field"><span>纠错基准 Hz <output id="mmdArPhysicsStabilityReferenceValue">45 Hz</output></span>' +
-      '<input id="mmdArPhysicsStabilityReference" type="range" min="30" max="180" step="5" value="45" aria-label="关节纠错基准频率"></label>' +
+      '<input id="mmdArPhysicsStabilityReference" type="range" min="1" max="180" step="1" value="45" aria-label="关节纠错基准频率"></label>' +
       '<p id="mmdArPhysicsStabilityReferenceHint" class="mind-basic-note">按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。</p>' +
       '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体</span></label>' +
       '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>' +
@@ -733,6 +735,7 @@ function groupWebPanels($) {
       '<span class="mmd-ar-mass-zero"><i></i>灰＝有效质量 0（跟随骨骼）</span>' +
       '</div>');
     motionPanel.append(WIND.WIND_PANEL_HTML);
+    motionPanel.append(PHYSICS_SOLVER.SOLVER_PANEL_HTML);
     groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
   }
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);

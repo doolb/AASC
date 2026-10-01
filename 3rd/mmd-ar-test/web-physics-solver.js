@@ -1,0 +1,180 @@
+'use strict';
+
+// 只适配独立网页/APK副本；源锚点改变时停止构建，不静默漏掉某个模型/VMD路径。
+function once(source, anchor, replacement) {
+    if (source.split(anchor).length !== 2) throw new Error(`物理解算器缺少唯一锚点：${anchor.slice(0, 100)}`);
+    return source.replace(anchor, replacement);
+}
+
+function addSolverHelper(source) {
+    let output = once(source, '    physics,\n    physicsFps\n}) => {', '    physics,\n    physicsFps,\n    physicsSolver\n}) => {');
+    output = once(output, '    const options = { physics };', '    const options = { physics, physicsSolver };');
+    output = once(output, '    physicsFps = DEFAULT_PMX_PHYSICS_FPS\n}) {', "    physicsFps = DEFAULT_PMX_PHYSICS_FPS,\n    physicsSolver = 'ammo'\n}) {");
+    output = once(output, '        physicsFps\n    };', '        physicsFps,\n        physicsSolver\n    };');
+    output = once(output, '        await ensurePhysics();', "        if (physicsSolver === 'ammo') await ensurePhysics();");
+    // XPBD失败必须让切换回滚，不能选项写着XPBD而实际停用物理。
+    output = once(output, '    } catch (error) {\n        return {', "    } catch (error) {\n        if (physicsSolver !== 'ammo') throw error;\n        return {");
+    return once(output, '    physics.reset();', "    physics.reset();\n    if (['xpbd', 'three-xpbd'].includes(physics.engine)) { physics.resetMotion(); return; }");
+}
+
+function addSolverAnimationHelper(source, moduleUrl, threeModuleUrl) {
+    return once(`import { XpbdPmxPhysics } from '${moduleUrl}';\nimport { ThreeXpbdPmxPhysics } from '${threeModuleUrl}';\n${source}`, '\t_createMMDPhysics( mesh, params ) {', `\t_createMMDPhysics( mesh, params ) {
+        if (params.physicsSolver === 'three-xpbd') return new ThreeXpbdPmxPhysics(mesh,
+            mesh.geometry.userData.MMD.rigidBodies, mesh.geometry.userData.MMD.constraints, params);
+        if (params.physicsSolver === 'xpbd') return new XpbdPmxPhysics(mesh,
+            mesh.geometry.userData.MMD.rigidBodies, mesh.geometry.userData.MMD.constraints, params);`);
+}
+
+function addSolverRuntime(source) {
+    let output = once(source, '    let physicsEnabled = true;', `    let physicsEnabled = true;
+    let physicsSolver = 'ammo';
+    const timedPhysics = new WeakSet();
+    const timePhysics = (physics) => {
+        if (!physics || timedPhysics.has(physics)) return;
+        const update = physics.update;
+        physics.update = function(delta) {
+            const begin = performance.now();
+            try { return update.call(this, delta); }
+            finally { this.frameMs = performance.now() - begin; }
+        };
+        timedPhysics.add(physics);
+    };
+    const setPhysicsSolver = (value) => { physicsSolver = ['xpbd', 'three-xpbd'].includes(value) ? value : 'ammo'; return physicsSolver; };
+    const getPhysicsSolverState = () => {
+        const physics = helper.current?.objects?.get(currentMesh)?.physics;
+        if (!physics) return { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 };
+        return { solver: physics.engine || 'ammo', active: physicsEnabled,
+            bodyCount: physics.bodies.length, jointCount: physics.constraints.length,
+            frameMs: physics.frameMs || 0, ...physics.getState?.() };
+    };`);
+    output = once(output, '            physicsEnabled: usePhysics,', '            physicsEnabled: usePhysics,\n            physicsSolver,');
+    output = once(output, '                ensurePhysics: ensureAmmoPhysics, physicsEnabled,',
+        "                ensurePhysics: physicsSolver !== 'ammo' ? async () => {} : ensureAmmoPhysics, physicsEnabled, physicsSolver,");
+    output = once(output, '        syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);',
+        '        syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);\n        timePhysics(frameHelper?.objects?.get(currentMesh)?.physics);');
+    return once(output, '        setMotionPlaybackEnabled,', '        setPhysicsSolver,\n        getPhysicsSolverState,\n        setMotionPlaybackEnabled,');
+}
+
+function addSolverDisplay(source) {
+    let output = once(source, '    async function setPhysicsEnabled(enabled) {', `    let physicsSolver = 'ammo';
+    // 初始偏好在首次加载前读取，面板恢复无需异步重载，避免和“启用物理”恢复互相抢锁。
+    try { const saved = localStorage.getItem('aasc.mmdArTest.physicsSolver.v1'); physicsSolver = ['xpbd', 'three-xpbd'].includes(saved) ? saved : 'ammo'; }
+    catch (error) { /* 存储受限默认Ammo。 */ }
+    let physicsConfigurationBusy = false;
+    async function setPhysicsSolver(value) {
+        const next = ['xpbd', 'three-xpbd'].includes(value) ? value : 'ammo';
+        if (physicsConfigurationBusy) return false;
+        if (next === physicsSolver) return true;
+        const previous = physicsSolver;
+        physicsSolver = next;
+        state.runtime?.setPhysicsSolver?.(next);
+        if (state.runtimeType !== 'pmx' || !state.modelProfile) return true;
+        physicsConfigurationBusy = true;
+        try {
+            if (await loadModel(state.modelProfile)) return true;
+            physicsSolver = previous; state.runtime?.setPhysicsSolver?.(previous);
+            return false;
+        } catch (error) {
+            physicsSolver = previous; state.runtime?.setPhysicsSolver?.(previous);
+            throw error;
+        } finally { physicsConfigurationBusy = false; }
+    }
+    async function setPhysicsEnabled(enabled) {
+        if (physicsConfigurationBusy) return false;
+        physicsConfigurationBusy = true;
+        try { return await setPhysicsEnabledBase(enabled); }
+        finally { physicsConfigurationBusy = false; }
+    }
+    async function setPhysicsEnabledBase(enabled) {`);
+    output = once(output, '                state.runtime.setPhysicsEnabled?.(state.physicsEnabled);',
+        '                state.runtime.setPhysicsSolver?.(physicsSolver);\n                state.runtime.setPhysicsEnabled?.(state.physicsEnabled);');
+    return once(output, '        setMotionPlaybackEnabled,', `        setPhysicsSolver,
+        getPhysicsSolver: () => physicsSolver,
+        getPhysicsSolverState: () => state.runtime?.getPhysicsSolverState?.() || { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 },
+        setMotionPlaybackEnabled,`);
+}
+
+const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus']);
+const SOLVER_PANEL_HTML = `<label class="mind-basic-field"><span>布料计算</span>
+    <select id="mmdArPhysicsSolver" aria-label="布料计算求解器"><option value="ammo" selected>Ammo（原方式）</option>
+    <option value="xpbd">XPBD（现有实现）</option>
+    <option value="three-xpbd">THREE-XPBD（上游实现）</option></select></label>
+    <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>`;
+const SOLVER_PANEL_JS = `
+    (() => {
+        const select = document.getElementById('mmdArPhysicsSolver');
+        const label = document.getElementById('mmdArPhysicsSolverStatus');
+        const toggle = document.getElementById('mmdArPhysicsEnabled');
+        const correction = document.getElementById('mmdArPhysicsStabilityReference');
+        const correctionValue = document.getElementById('mmdArPhysicsStabilityReferenceValue');
+        const correctionTitle = correctionValue?.parentElement?.firstChild;
+        const physicsFps = document.getElementById('displayMmdPhysicsFps');
+        const hint = document.getElementById('mmdArPhysicsStabilityReferenceHint');
+        const panel = document.getElementById('mmdArMotionPanel');
+        if (!select || !label) return;
+        const key = 'aasc.mmdArTest.physicsSolver.v1';
+        let timer = null;
+        let requested = 'ammo';
+        try { const saved = localStorage.getItem(key); requested = ['xpbd', 'three-xpbd'].includes(saved) ? saved : 'ammo'; }
+        catch (error) { /* 存储受限按原方式启动。 */ }
+        const update = () => {
+            const solver = window.DisplayMmd?.getPhysicsSolver?.() || 'ammo';
+            const xpbd = solver !== 'ammo';
+            select.value = solver;
+            if (correction) {
+                correction.disabled = false;
+                correction.setAttribute('aria-label', xpbd ? 'XPBD每帧子步数' : '关节纠错基准频率');
+            }
+            // 同一保存值在Ammo与两种XPBD中含义不同，显示实际单位，避免把子步数误读为Hz。
+            if (correctionTitle?.nodeType === 3) correctionTitle.nodeValue = xpbd ? '每帧子步数 ' : '纠错基准 Hz ';
+            if (correctionValue && correction) correctionValue.textContent = correction.value + (xpbd ? ' 子步' : ' Hz');
+            if (physicsFps) {
+                physicsFps.disabled = xpbd;
+                if (xpbd) physicsFps.title = 'XPBD按每帧子步数计算，此物理频率暂不使用。';
+                else physicsFps.removeAttribute('title');
+            }
+            if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：1表示1个子步；每子步1轮，步长为本帧时间÷子步数。物理Hz暂不使用。'
+                : '按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。';
+            const state = window.DisplayMmd?.getPhysicsSolverState?.();
+            const name = { ammo: 'Ammo', xpbd: 'XPBD', 'three-xpbd': 'THREE-XPBD' }[solver] || 'Ammo';
+            label.textContent = !state?.active ? name + ' · 物理未运行'
+                : name + ' · ' + state.bodyCount + ' 个刚体'
+                    + (xpbd ? ' · 当前子步数 ' + state.substeps + ' · 每子步1轮' : '')
+                    + ' · 帧物理耗时 ' + Number(state.frameMs || 0).toFixed(2) + ' ms';
+        };
+        const apply = async (value, persist) => {
+            select.disabled = true; if (toggle) toggle.disabled = true;
+            label.textContent = '正在重新建立物理…';
+            try {
+                if (await window.DisplayMmd?.setPhysicsSolver?.(value) !== true) {
+                    update(); label.textContent += ' · 切换失败，已保留原方式'; return;
+                }
+                if (persist) {
+                    try { localStorage.setItem(key, value); } catch (error) { /* 本次选择仍有效。 */ }
+                }
+                update();
+            } catch (error) {
+                update(); label.textContent += ' · ' + (error.message || '切换失败');
+                console.warn('[MmdArTest] 切换布料计算失败:', error);
+            } finally { select.disabled = false; if (toggle) toggle.disabled = false; }
+        };
+        select.addEventListener('change', () => apply(['xpbd', 'three-xpbd'].includes(select.value) ? select.value : 'ammo', true));
+        // 基准保存模块在本段之后绑定事件，微任务等待其更新当前实例及输出，再同步状态行。
+        correction?.addEventListener('input', () => queueMicrotask(update));
+        correction?.addEventListener('change', () => queueMicrotask(update));
+        const sync = () => {
+            if (timer !== null) clearInterval(timer);
+            timer = null;
+            if (panel && !panel.hidden) {
+                if (!select.disabled) update();
+                timer = setInterval(() => { if (!select.disabled) update(); }, 500);
+            }
+        };
+        if (panel) new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
+        window.addEventListener('pagehide', () => { if (timer !== null) clearInterval(timer); }, { once: true });
+        apply(requested, false).then(sync);
+    })();
+`;
+
+module.exports = { addSolverHelper, addSolverAnimationHelper, addSolverRuntime, addSolverDisplay,
+    SOLVER_CONTROL_IDS, SOLVER_PANEL_HTML, SOLVER_PANEL_JS };

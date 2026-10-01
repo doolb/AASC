@@ -1,0 +1,23 @@
+{
+  "commit": "df1c273107dff7ea8cbedfc1d7a929c1b0aeb0df",
+  "files": {
+    "esm/Collider.mjs": "89bf4ba54bde8e97411613ed8314157d4ec94e3fc705fc88dca337adaa3cf596",
+    "esm/CollisionPair.mjs": "350cf4a9f3786470dae1ad298f4cac27723fa479bd8f3e99cc46b9805a35f59b",
+    "esm/ContactSet.mjs": "42833093b59d2e31e5e68aa94475ff47339fcbd3c34baf97d18c2714f561c403",
+    "esm/Face.mjs": "d78e799a74b382637536d500d8c057a303281603a607591246de60106e67667f",
+    "esm/narrowphase/GjkEpa.mjs": "30b38d3314ebf90e26af1eabb0ee0228b79f38242393e2ddb7d2a64c1e8e5089",
+    "esm/narrowphase/GrahamScan.mjs": "ce7ee27e5d045292f17474e292b9dced0e7b71e33c6931e6c723d0f04a8aaa6f",
+    "esm/narrowphase/Simplex.mjs": "0d1319ee31d06df7ebf8b9f110cdd92049469877ae33f6feb7ba9bfd333b6641",
+    "esm/narrowphase/Support.mjs": "d0789921369c2dbe2ce50169c6a5568f5f70ae5f558c27f202198084b279b89e",
+    "esm/narrowphase/SutherlandHodgmanClipping.mjs": "57ab4b8b8656fa34b9148ad67ca43ca952a75832c3012765d5ec20b5ef617a0a",
+    "esm/Pose.mjs": "5322ce3b706366278357d3d1a355ab95fdd2e86581fae42be7cb8f92b1f68811",
+    "esm/Quaternion.mjs": "3096f5da71d3fc9a448306e0fa629dd6741216983c75d6ed17c93de191724aef",
+    "esm/RigidBody.mjs": "8fc484b89050f3309db94e6d25f0affec021e4adb02dac242a81680cd40c63f0",
+    "esm/solver/BaseSolver.mjs": "51b3fea3fe35e36c1c929051901dd2cd6c2606e0c8e57326549914d592f0da4e",
+    "esm/solver/XPBDSolver.mjs": "b56b1b084c545a3bffec6d65ec760ad402f7aa910bf74f1ec311e822eb5d2acc",
+    "esm/Vec2.mjs": "12d9def4fbc521554a71a47800a042653adb36da5357954ad73f51e3d0b76d1d",
+    "esm/Vec3.mjs": "3b7d1d4365e0cdcb2a0169db95561187cd44f60604045a5ed670aecf56227483",
+    "support/ConvexGeometry.mjs": "2c891bcfb91936f291cf54a8bf25e76cd62d479604dec7f54afda0fb914ae41a",
+    "support/ConvexHull.mjs": "3c9e34aad82901f50ac3d55ca4bdad49baa532eb3056dcd8273abad27c3ca833"
+  }
+}

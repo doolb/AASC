@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/markeasting/THREE-XPBD",
+  "commit": "df1c273107dff7ea8cbedfc1d7a929c1b0aeb0df",
+  "license": "MIT",
+  "files": {
+    "src/physics/Collider.ts": "148a5311dcc874595ab6bf8c3db3213cc8b8b1a5ec8c48c7c5680efc34de0a4a",
+    "src/physics/CollisionPair.ts": "84c83ade08f629e39649e70041714a258785fe922c4dc1192d1903e21fbf405b",
+    "src/physics/ContactSet.ts": "99e9d6c76d816dc134c5fec25ed63731a69b56f8b3341e138d8ba09dabcb860d",
+    "src/physics/Face.ts": "aca9ec2f9240d0d1fa7652542da15900aae41e41c273f091c5ac72af0a725bb6",
+    "src/physics/Pose.ts": "e893bace5aafabf54d1e9a051fbdc6e566018a0f9d2186fb76b7b91ab0eec672",
+    "src/physics/Quaternion.ts": "3403ddbf41dcd3ba7e9894c4772d408e48c0cf6dbb57b0441d640a890ae9c01e",
+    "src/physics/RigidBody.ts": "f1d053bd253edbb399d07e4123dd00dbfbb00572eb6340540d2027e5ecc695b3",
+    "src/physics/Vec2.ts": "a0faa9f89f8af8291f1e2db5ae8e37691d3c16ea1aa3fbbbbdc539053187b969",
+    "src/physics/Vec3.ts": "28cb9fac12afe08334ccf41af43cd764c5b15a83f061f8b941a520031fbd8373",
+    "src/physics/narrowphase/GjkEpa.ts": "69b97085dce3875b36772e7b0ada39bc925b036c8f08ff0790e9b2131685f33b",
+    "src/physics/narrowphase/GrahamScan.ts": "3ee135c9e64d43416bd7fb1b42610533271fa0b43c6f9dcb81cbd7d26cd77a2e",
+    "src/physics/narrowphase/Simplex.ts": "7c41117271a525294d9a2e486ec8895f4a02ae7956b9521a3ad385114a7d49d8",
+    "src/physics/narrowphase/Support.ts": "1bfa60b50af3b4d3adb3f117e29ab0831bf1c2ca535f9576d5d5da3d2c25a5c1",
+    "src/physics/narrowphase/SutherlandHodgmanClipping.ts": "b35dccc3106ce672b2a0bab786553761a40d14d9c84e616f26d902a743e9fe4b",
+    "src/physics/solver/BaseSolver.ts": "ffbf2d28b2a0dfd4448b6df1f59f3994094ed428e0f10201762c474a5cd064dc",
+    "src/physics/solver/XPBDSolver.ts": "3a622354509f355f6d8626392108897767f5f894aa83e3ed2960a175312ca804",
+    "LICENSE": "f4c7bf76b4ff3fab33572a62c8e5b08a509338afa8269cbb8f4816e95b0ec884"
+  },
+  "three": {
+    "version": "0.160.0",
+    "license": "MIT",
+    "files": {
+      "ConvexHull.js": "782e7e422c8d308cd686bacfd23356bda884f01727f9fc4a7a75bcff441bd1ad",
+      "ConvexGeometry.js": "9bcf80281a538592fbac81507628adf2c8450dd52f15530492725d76085ebf92",
+      "LICENSE": "852e0e8699169bf9f6fdc6bda3e682d078dcbc738b5d33e74df594721bff271d"
+    }
+  }
+}

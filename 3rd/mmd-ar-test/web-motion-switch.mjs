@@ -3,6 +3,7 @@ import { getWebPhysicsStepOptions } from './web-physics-rate.mjs';
 // 模型和动作共享初始化清理；只在新物理第一次步进前调用，不参与自动循环重播。
 export function clearPmxPhysicsMotion(physics) {
     if (!physics) return;
+    if (['xpbd', 'three-xpbd'].includes(physics.engine)) { physics.resetMotion(); return; }
     const zero = physics.manager.allocVector3();
     try {
         zero.setValue(0, 0, 0);
@@ -19,7 +20,7 @@ export function clearPmxPhysicsMotion(physics) {
 
 // 网页手动换动作先恢复模型绑定姿态，再建立物理；动作由渲染首帧门控延后播放。
 export async function prepareMotionSwitch({ mesh, oldHelper, createHelper, ensurePhysics,
-    physicsEnabled, physicsFps, playbackEnabled, isCurrent, canRestore = isCurrent,
+    physicsEnabled, physicsFps, physicsSolver = 'ammo', playbackEnabled, isCurrent, canRestore = isCurrent,
     onStage = () => {} }) {
     const transforms = [mesh, ...mesh.skeleton.bones].map((node) => ({ node,
         position: node.position.clone(), quaternion: node.quaternion.clone(), scale: node.scale.clone() }));
@@ -55,7 +56,7 @@ export async function prepareMotionSwitch({ mesh, oldHelper, createHelper, ensur
         const needsPhysics = physicsEnabled && (mesh.geometry.userData.MMD.rigidBodies?.length || 0) > 0;
         onStage('准备动作与物理');
         // 等待期间由 runtime 阻止旧 helper 步进；异步返回后先检查网格与请求是否仍有效。
-        if (needsPhysics) await ensurePhysics();
+        if (needsPhysics && physicsSolver === 'ammo') await ensurePhysics();
         if (!isCurrent()) return null;
         // 先恢复绑定姿态，再让新 mixer 捕获初始属性，避免缓存旧动作的骨骼和表情。
         poseChanged = true;
@@ -72,7 +73,7 @@ export async function prepareMotionSwitch({ mesh, oldHelper, createHelper, ensur
             onStage('初始化物理');
             // 禁止自动套用 VMD 首帧和物理预热，所有刚体都从模型绑定姿态开始。
             nextHelper._setupMeshPhysics(mesh, { warmup: 0, animationWarmup: false,
-                ...getWebPhysicsStepOptions(physicsFps) });
+                physicsSolver, ...getWebPhysicsStepOptions(physicsFps) });
             clearPmxPhysicsMotion(nextHelper.objects.get(mesh).physics);
             nextHelper.enable('physics', true);
         }

@@ -112,18 +112,18 @@ function addStabilityRuntime(source) {
 }
 
 // 显示层：参考Hz只属于测试网页物理分类；runtime重建后补发。
-// 经典脚本不能导入共享模块，这里按同一规则（30–180、5Hz步长、非法回退45）本地归一，
+// 经典脚本不能导入共享模块，这里按同一规则（1–180、步长1、非法回退45）本地归一，
 // 保证runtime尚未创建时也能保存待补发的值。
 function addStabilityDisplay(source) {
     let output = once(source, '    function setMotionPlaybackEnabled(enabled) {', `    let physicsStabilityReference = 45;
     function setPhysicsStabilityReference(value) {
-        // 缺失/空串/非有限值回退45；其余30-180截断并按5Hz取整（与共享归一化一致）。
+        // 缺失/空串/非有限值回退45；其余1-180截断并按整数取整（与共享归一化一致）。
         if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
             physicsStabilityReference = 45;
         } else {
             const number = Number(value);
             physicsStabilityReference = Number.isFinite(number)
-                ? Math.round(Math.min(180, Math.max(30, number)) / 5) * 5 : 45;
+                ? Math.round(Math.min(180, Math.max(1, number))) : 45;
         }
         state.runtime?.setPhysicsStabilityReference?.(physicsStabilityReference);
         return physicsStabilityReference;
