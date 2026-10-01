@@ -221,7 +221,7 @@ export function createRigidBodyOverlay({ THREE, renderer, camera }) {
     // 返回是否读取了实际物理姿态；计数由填充绘制负责，描边二次调用不重复累计。
     const updateEntry = (entry, physics, nativeRotation, expansion = 0) => {
         const body = physics?.bodies?.[entry.bodyIndex]?.body;
-        const xpbdPose = ['xpbd', 'three-xpbd'].includes(physics?.engine) && physics.getBodyPose(entry.bodyIndex, position, rotation);
+        const xpbdPose = physics?.engine === 'xpbd' && physics.getBodyPose(entry.bodyIndex, position, rotation);
         const usedPhysics = Boolean(xpbdPose || (body && nativeRotation));
         if (xpbdPose) {
             bodyMatrix.compose(position, rotation, unitScale);

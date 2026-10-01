@@ -35,7 +35,7 @@ const WEB_RIGID_BODY_DEBUG = require('./web-rigid-body-debug');
 const WEB_SHADOW_BIAS = require('./web-shadow-bias');
 const WEB_PHYSICS_WIND = require('./web-physics-wind');
 const WEB_PHYSICS_SOLVER = require('./web-physics-solver');
-const { stagePhysicsBackends } = require('./web-three-xpbd-build');
+const { stageXpbdPhysics } = require('./web-xpbd-build');
 const WEB_FILL_FACING_RANGE = require('./web-fill-facing-range');
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
@@ -460,7 +460,7 @@ async function stageTextAssets() {
       await fs.copyFile(sourcePath, destinationPath);
     }
   }
-  let xpbdPhysicsVersion = '', threeXpbdPhysicsVersion = '';
+  let xpbdPhysicsVersion = '';
   {
     // UI 和 PMX runtime 必须导入同一个带内容指纹的 ESM，避免生成两个独立文件注册表。
     for (const fileName of ['web-local-assets.mjs', 'web-local-assets-ui.mjs']) {
@@ -477,7 +477,7 @@ async function stageTextAssets() {
     const physicsRatePath = path.join(GENERATED_ASSETS, 'js/web-physics-rate.mjs');
     await fs.copyFile(path.join(__dirname, 'web-physics-rate.mjs'), physicsRatePath);
     const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
-    ({ xpbdPhysicsVersion, threeXpbdPhysicsVersion } = await stagePhysicsBackends({
+    ({ xpbdPhysicsVersion } = await stageXpbdPhysics({
       generatedAssets: GENERATED_ASSETS, physicsWindUrl, physicsRateUrl }));
     const selectionPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-selection.mjs');
     await fs.copyFile(path.join(__dirname, 'web-skeleton-selection.mjs'), selectionPath);
@@ -586,8 +586,7 @@ async function stageTextAssets() {
     await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
       await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));
     await fs.writeFile(helperPath, WEB_PHYSICS_SOLVER.addSolverAnimationHelper(
-      await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`,
-      `../../../web-three-xpbd-physics.mjs?v=${threeXpbdPhysicsVersion}`));
+      await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`));
     webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
   }
 

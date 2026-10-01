@@ -117,7 +117,7 @@ export function createSkeletonSelection({ THREE, renderer, camera, scene }) {
     const capture = () => {
         if (!enabled || selectedBoneIndex < 0 || !ownBodies.size || !attachedPhysics) return;
         try {
-            if (['xpbd', 'three-xpbd'].includes(attachedPhysics.engine)) {
+            if (attachedPhysics.engine === 'xpbd') {
                 for (const { a, b } of attachedPhysics.contacts) {
                     if (ownBodies.has(a.index) && !ownBodies.has(b.index)) contacts.add(b.index);
                     if (ownBodies.has(b.index) && !ownBodies.has(a.index)) contacts.add(a.index);
@@ -151,7 +151,7 @@ export function createSkeletonSelection({ THREE, renderer, camera, scene }) {
     const attach = () => {
         detach();
         if (!enabled || selectedBoneIndex < 0 || !ownBodies.size || !physics) return;
-        if (['xpbd', 'three-xpbd'].includes(physics.engine)) {
+        if (physics.engine === 'xpbd') {
             attachedPhysics = physics; physics.onDiagnosticSubstep = capture;
             return;
         }

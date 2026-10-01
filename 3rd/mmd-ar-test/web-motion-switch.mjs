@@ -3,7 +3,7 @@ import { getWebPhysicsStepOptions } from './web-physics-rate.mjs';
 // 模型和动作共享初始化清理；只在新物理第一次步进前调用，不参与自动循环重播。
 export function clearPmxPhysicsMotion(physics) {
     if (!physics) return;
-    if (['xpbd', 'three-xpbd'].includes(physics.engine)) { physics.resetMotion(); return; }
+    if (physics.engine === 'xpbd') { physics.resetMotion(); return; }
     const zero = physics.manager.allocVector3();
     try {
         zero.setValue(0, 0, 0);

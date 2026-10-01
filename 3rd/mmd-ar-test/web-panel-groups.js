@@ -558,7 +558,7 @@ const WEB_PANEL_GROUP_JS = `
       refresh();
     })();
     (() => {
-      // 共用基准值：Ammo纠错Hz / 两种XPBD每帧子步数，下限3、默认45；本地记忆。
+      // 共用基准值：Ammo纠错Hz / XPBD每帧子步数，下限3、默认45；本地记忆。
       const input = document.getElementById('mmdArPhysicsStabilityReference');
       const output = document.getElementById('mmdArPhysicsStabilityReferenceValue');
       if (!input || !output) return;
@@ -576,7 +576,7 @@ const WEB_PANEL_GROUP_JS = `
       const apply = (next, persist = false) => {
         value = normalize(next);
         input.value = String(value);
-        output.textContent = value + (['xpbd', 'three-xpbd'].includes(window.DisplayMmd?.getPhysicsSolver?.()) ? ' 子步' : ' Hz');
+        output.textContent = value + (window.DisplayMmd?.getPhysicsSolver?.() === 'xpbd' ? ' 子步' : ' Hz');
         window.DisplayMmd?.setPhysicsStabilityReference?.(value);
         if (!persist) return;
         try { localStorage.setItem(storageKey, String(value)); } catch (error) { /* 存储受限时本次仍生效。 */ }
