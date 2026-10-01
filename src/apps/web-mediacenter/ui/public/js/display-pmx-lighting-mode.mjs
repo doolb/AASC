@@ -2,7 +2,7 @@
  * PMX 材质的 Toon / 普通直射光切换。
  * 只修改本次加载出的 MMDToonMaterial 实例，不修改 Three.js 内置 shader 或模型文件。
  */
-import { Color, Vector3, ShaderChunk } from 'three';
+import { Color, Vector2, Vector3, ShaderChunk } from 'three';
 import { preparePmxSpecular } from './display-pmx-specular.mjs';
 
 const TOON_IRRADIANCE =
@@ -27,6 +27,7 @@ const RIM_FRAGMENT = `
 const DIRECTIONAL_SHADOW_SAMPLE = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
 const DIRECTIONAL_LIGHT_START = '#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )';
 const DIRECTIONAL_LIGHT_END = '#if ( NUM_RECT_AREA_LIGHTS > 0 ) && defined( RE_Direct_RectArea )';
+const DIRECTIONAL_LIGHT_INFO = 'getDirectionalLightInfo( directionalLight, directLight );';
 const DIRECT_LIGHT_APPLY = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );';
 
 function createWebFillShadowChunk() {
@@ -35,19 +36,27 @@ function createWebFillShadowChunk() {
     const end = chunk.indexOf(DIRECTIONAL_LIGHT_END, start);
     if (start < 0 || end < 0) throw new Error('Three.js 方向光 shader 布局已改变');
     const section = chunk.slice(start, end);
-    if (!section.includes(DIRECTIONAL_SHADOW_SAMPLE) || !section.includes(DIRECT_LIGHT_APPLY)) {
+    if (!section.includes(DIRECTIONAL_SHADOW_SAMPLE) || !section.includes(DIRECT_LIGHT_APPLY)
+        || !section.includes(DIRECTIONAL_LIGHT_INFO) || !section.includes('DirectionalLight directionalLight;')) {
         throw new Error('Three.js 方向光阴影 shader 布局已改变');
     }
-    // 第一盏方向光为主光。缓存其阴影系数，第二盏补光仅在“沿用主光”模式复用；
+    // 第一盏方向光为主光。继承区域同时包含几何遮挡和背光面；阴影贴图只判断遮挡，
+    // 没有被其他几何挡住的背光面仍可能返回1，必须另用着色法线与主光方向判断。
+    // 朝向过渡默认-0.3至0.3，测试面板可调整范围，补光延伸至略背光区域后再淡出；
+    // 默认点积0保留一半，避免高补光强度下出现窄硬折线；其余受光面不额外乘余弦强度。
+    // 第二盏补光仅在“沿用主光”模式复用该系数；
     // 补光自己的阴影模式由 Three.js 原生第二张阴影贴图负责，两张图彼此独立。
     const patched = section
         .replace('DirectionalLight directionalLight;', 'DirectionalLight directionalLight;\nfloat pmxKeyShadowMask = 1.0;\nfloat pmxThisShadowMask = 1.0;')
+        // 每盏光先恢复无遮挡；没有阴影贴图时不能继承前一盏光的采样值。
+        .replace(DIRECTIONAL_LIGHT_INFO, `${DIRECTIONAL_LIGHT_INFO}\n        pmxThisShadowMask = 1.0;`)
         .replace(DIRECTIONAL_SHADOW_SAMPLE, `pmxThisShadowMask = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
-        directLight.color *= pmxThisShadowMask;
-        #if UNROLLED_LOOP_INDEX == 0
-        pmxKeyShadowMask = pmxThisShadowMask;
-        #endif`)
-        .replace(DIRECT_LIGHT_APPLY, `#if UNROLLED_LOOP_INDEX == 1
+        directLight.color *= pmxThisShadowMask;`)
+        // 主光方向缓存位于阴影贴图条件之外，非接收阴影材质也能正确判断背光面。
+        .replace(DIRECT_LIGHT_APPLY, `#if UNROLLED_LOOP_INDEX == 0
+        pmxKeyShadowMask = pmxThisShadowMask * smoothstep( pmxFillKeyFacingRange.x, pmxFillKeyFacingRange.y, dot( geometryNormal, directLight.direction ) );
+        #endif
+        #if UNROLLED_LOOP_INDEX == 1
         directLight.color *= mix( 1.0, pmxKeyShadowMask, pmxFillUsesKeyShadow );
         #endif
         ${DIRECT_LIGHT_APPLY}`);
@@ -104,9 +113,10 @@ ${UNIFORM_ANCHOR}`)
             throw new Error('PMX Toon shader 不包含光照循环入口');
         }
         material.fragmentShader = material.fragmentShader
-            .replace(UNIFORM_ANCHOR, `uniform float pmxFillUsesKeyShadow;\n${UNIFORM_ANCHOR}`)
+            .replace(UNIFORM_ANCHOR, `uniform float pmxFillUsesKeyShadow;\nuniform vec2 pmxFillKeyFacingRange;\n${UNIFORM_ANCHOR}`)
             .replace('#include <lights_fragment_begin>', createWebFillShadowChunk());
         material.uniforms.pmxFillUsesKeyShadow = { value: 0 };
+        material.uniforms.pmxFillKeyFacingRange = { value: new Vector2(-0.3, 0.3) };
         material.needsUpdate = true;
     }
     material.uniforms.pmxStandardLighting.value = pmxToonEnabled === false ? 1 : 0;

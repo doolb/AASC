@@ -23,13 +23,27 @@ function addSkeletonRuntime(source, moduleUrl) {
     output = once(output, '        renderer.dispose();',
         '        skeletonOverlay.dispose();\n        renderer.dispose();');
     return once(output, '        setMotionPlaybackEnabled,',
-        '        setSkeletonVisible: skeletonOverlay.setVisible,\n        setSkeletonSize: skeletonOverlay.setSize,\n        setSkeletonNamesVisible: skeletonOverlay.setNamesVisible,\n        pickSkeleton: skeletonOverlay.pick,\n        clearSkeletonContacts: skeletonOverlay.clearContacts,\n        getSkeletonBodyFilter: skeletonOverlay.getBodyFilter,\n        getSkeletonState: skeletonOverlay.getState,\n        setMotionPlaybackEnabled,');
+        '        setSkeletonVisible: skeletonOverlay.setVisible,\n        setSkeletonSize: skeletonOverlay.setSize,\n        setSkeletonNamesVisible: skeletonOverlay.setNamesVisible,\n        setSkeletonOcclusion: skeletonOverlay.setOcclusion,\n        setSkeletonOccludedOpacity: skeletonOverlay.setOccludedOpacity,\n        pickSkeleton: skeletonOverlay.pick,\n        clearSkeletonContacts: skeletonOverlay.clearContacts,\n        getSkeletonBodyFilter: skeletonOverlay.getBodyFilter,\n        getSkeletonState: skeletonOverlay.getState,\n        setMotionPlaybackEnabled,');
 }
 
 function addSkeletonDisplay(source) {
     let output = once(source, '    function setMotionPlaybackEnabled(enabled) {', `    let skeletonVisible = false;
     let skeletonSize = 1;
     let skeletonNamesVisible = false;
+    let skeletonOcclusionEnabled = false;
+    let skeletonOccludedOpacity = 0.5;
+    function setSkeletonOccludedOpacity(value) {
+        skeletonOccludedOpacity = typeof value === 'number' && Number.isFinite(value)
+            ? Math.round(Math.max(0, Math.min(1, value)) * 100) / 100 : 0.5;
+        state.runtime?.setSkeletonOccludedOpacity?.(skeletonOccludedOpacity);
+        return skeletonOccludedOpacity;
+    }
+    // 显示层保存偏好，runtime重建后重新应用；关闭恢复现有穿透显示。
+    function setSkeletonOcclusion(value) {
+        skeletonOcclusionEnabled = value === true;
+        state.runtime?.setSkeletonOcclusion?.(skeletonOcclusionEnabled);
+        return skeletonOcclusionEnabled;
+    }
     function setSkeletonSize(value) {
         skeletonSize = typeof value === 'number' && Number.isFinite(value)
             ? Math.round(Math.max(0.2, Math.min(3, value)) * 10) / 10 : 1;
@@ -49,7 +63,7 @@ function addSkeletonDisplay(source) {
 
     function setMotionPlaybackEnabled(enabled) {`);
     output = once(output, '                state.runtime.setVisible(state.visible);',
-        '                state.runtime.setSkeletonVisible?.(skeletonVisible);\n                state.runtime.setSkeletonSize?.(skeletonSize);\n                state.runtime.setSkeletonNamesVisible?.(skeletonNamesVisible);\n                state.runtime.setVisible(state.visible);');
+        '                state.runtime.setSkeletonVisible?.(skeletonVisible);\n                state.runtime.setSkeletonSize?.(skeletonSize);\n                state.runtime.setSkeletonNamesVisible?.(skeletonNamesVisible);\n                state.runtime.setSkeletonOcclusion?.(skeletonOcclusionEnabled);\n                state.runtime.setSkeletonOccludedOpacity?.(skeletonOccludedOpacity);\n                state.runtime.setVisible(state.visible);');
     output = once(output, '        if (finishTranslationDrag(event.pointerId)) {',
         '        const skeletonTapCandidate = state.rotationDrag?.pointerId === event.pointerId;\n        if (finishTranslationDrag(event.pointerId)) {');
     output = once(output, '        const pressedPoint = state.pressedPoint;', `        // 复用原轻点/拖动/多指判定；只消费同一指针的主键轻点，右键平移或游离抬起不选中。
@@ -60,7 +74,7 @@ function addSkeletonDisplay(source) {
         }
         const pressedPoint = state.pressedPoint;`);
     return once(output, '        setMotionPlaybackEnabled,',
-        '        setSkeletonVisible,\n        setSkeletonSize,\n        setSkeletonNamesVisible,\n        clearSkeletonContacts: () => state.runtime?.clearSkeletonContacts?.(),\n        getSkeletonState: () => state.runtime?.getSkeletonState?.() || { enabled: skeletonVisible, sizeMultiplier: skeletonSize, namesVisible: skeletonNamesVisible, selectedBoneIndex: -1, boneCount: 0 },\n        setMotionPlaybackEnabled,');
+        '        setSkeletonVisible,\n        setSkeletonSize,\n        setSkeletonNamesVisible,\n        setSkeletonOcclusion,\n        setSkeletonOccludedOpacity,\n        clearSkeletonContacts: () => state.runtime?.clearSkeletonContacts?.(),\n        getSkeletonState: () => state.runtime?.getSkeletonState?.() || { enabled: skeletonVisible, occlusionEnabled: skeletonOcclusionEnabled, occludedOpacity: skeletonOccludedOpacity, sizeMultiplier: skeletonSize, namesVisible: skeletonNamesVisible, selectedBoneIndex: -1, boneCount: 0 },\n        setMotionPlaybackEnabled,');
 }
 
 module.exports = { addSkeletonRuntime, addSkeletonDisplay };

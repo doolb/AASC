@@ -1,4 +1,5 @@
 import { createSkeletonSelection, normalizeSkeletonSize } from './web-skeleton-selection.mjs';
+import { createSkeletonCharacterDepth, normalizeSkeletonOccludedOpacity } from './web-skeleton-character-depth.mjs';
 
 // 独立网页骨骼诊断：只读取动作/物理更新后的骨骼，不进入角色场景或 Ammo 世界。
 export const SKELETON_COLORS = Object.freeze({ 0: 0xff3333, 2: 0xffd633, 1: 0x33e066, none: 0x9ca3af });
@@ -26,12 +27,18 @@ export function classifySkeletonBones(mesh) {
 export function createSkeletonOverlay({ THREE, renderer, camera }) {
     const scene = new THREE.Scene();
     scene.name = 'mmd-ar-skeleton-overlay';
+    const depthScene = new THREE.Scene();
+    // 球面深度预绘不包含文字或选中轴，避免透明混合留下后方球的颜色。
+    const ballDepthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
+    const characterDepth = createSkeletonCharacterDepth({ THREE, renderer, camera });
     const selection = createSkeletonSelection({ THREE, renderer, camera, scene });
     const position = new THREE.Vector3();
     const scale = new THREE.Vector3();
     const matrix = new THREE.Matrix4();
     const bounds = new THREE.Box3();
     let enabled = false;
+    let occlusionEnabled = false;
+    let occludedOpacity = 0.5;
     let disposed = false;
     let model = null;
     let types = [];
@@ -50,6 +57,8 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
             // InstancedMesh.dispose 释放 renderer 管理的 instanceMatrix/instanceColor 缓冲。
             group.mesh.dispose();
             group.mesh.material.dispose();
+            depthScene.remove(group.depthMesh);
+            group.depthMesh.dispose();
             releasedGroups += 1;
         }
         groups = [];
@@ -60,6 +69,7 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
     const setModel = (mesh) => {
         releaseResources();
         model = disposed ? null : mesh;
+        characterDepth.setModel(model);
         selection.setModel(model);
         types = classifySkeletonBones(model);
         if (!model) return;
@@ -77,13 +87,19 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
             const indices = types.flatMap((value, index) => value === type ? [index] : []);
             if (!indices.length) continue;
             const material = new THREE.MeshBasicMaterial({ color: SKELETON_COLORS[type],
-                depthTest: false, depthWrite: false, toneMapped: false });
+                transparent: characterDepth.supported && occludedOpacity < 1,
+                depthTest: occlusionEnabled, depthWrite: false, toneMapped: false });
+            characterDepth.prepareMaterial(material);
             const mesh = new THREE.InstancedMesh(geometry, material, indices.length);
             mesh.name = `mmd-ar-skeleton-${type}`;
             mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
             mesh.frustumCulled = false;
             scene.add(mesh);
-            groups.push({ type, indices, mesh });
+            const depthMesh = new THREE.InstancedMesh(geometry, ballDepthMaterial, indices.length);
+            depthMesh.instanceMatrix = mesh.instanceMatrix;
+            depthMesh.frustumCulled = false;
+            depthScene.add(depthMesh);
+            groups.push({ type, indices, mesh, depthMesh });
         }
     };
 
@@ -106,10 +122,17 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
             group.mesh.instanceMatrix.needsUpdate = true;
         }
         selection.update(worldRadius, baseWorldRadius * 16);
+        characterDepth.capture();
         updateCount += 1;
         const autoClear = renderer.autoClear;
         try {
             renderer.autoClear = false;
+            // 先得到本层最近球面，再混合半透明颜色；预绘不清除已绘角色/碰撞体颜色。
+            // 这样球间遮挡与角色遮挡处透明度彼此独立，跨类型和组内实例都正确比较。
+            if (occlusionEnabled) {
+                renderer.clearDepth();
+                renderer.render(depthScene, camera);
+            }
             renderer.render(scene, camera);
             drawCount += 1;
         } finally {
@@ -120,7 +143,8 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
 
     // 诊断快照只在显式查询时生成，测试不需要向 window 暴露 Three 或模型对象。
     const getState = () => ({
-        enabled, sizeMultiplier, ...selection.getState(), boneCount: types.length, generation, releasedGroups, updateCount, drawCount,
+        enabled, occlusionEnabled, occludedOpacity, sizeMultiplier, ...characterDepth.getState(),
+        ...selection.getState(), boneCount: types.length, generation, releasedGroups, updateCount, drawCount,
         resourceGroups: groups.length,
         counts: Object.fromEntries(['none', 0, 2, 1].map(type => [type, types.filter(value => value === type).length])),
         samples: groups.map(group => {
@@ -135,11 +159,29 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
 
     return Object.freeze({
         setModel, render, getState,
+        setOcclusion: value => {
+            occlusionEnabled = value === true;
+            for (const group of groups) {
+                group.mesh.material.depthTest = occlusionEnabled;
+            }
+            return occlusionEnabled;
+        },
+        setOccludedOpacity: value => {
+            occludedOpacity = normalizeSkeletonOccludedOpacity(value);
+            characterDepth.setOpacity(occludedOpacity);
+            for (const group of groups) {
+                const transparent = characterDepth.supported && occludedOpacity < 1;
+                if (group.mesh.material.transparent === transparent) continue;
+                group.mesh.material.transparent = transparent;
+                group.mesh.material.needsUpdate = true;
+            }
+            return occludedOpacity;
+        },
         setSize: value => { sizeMultiplier = normalizeSkeletonSize(value); return sizeMultiplier; },
         setNamesVisible: selection.setNamesVisible,
         pick: selection.pick, observePhysics: selection.observePhysics,
         clearContacts: selection.clearContacts, getBodyFilter: selection.getBodyFilter, hide: selection.hide,
         setVisible: value => { enabled = value === true; selection.setVisible(enabled); if (!enabled) selection.hide(); },
-        dispose: () => { disposed = true; setModel(null); selection.dispose(); }
+        dispose: () => { disposed = true; setModel(null); selection.dispose(); characterDepth.dispose(); ballDepthMaterial.dispose(); }
     });
 }

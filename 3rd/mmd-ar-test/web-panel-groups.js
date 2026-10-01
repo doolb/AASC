@@ -1,6 +1,7 @@
 'use strict';
 
 const SHADOW_BIAS = require('./web-shadow-bias');
+const FILL_FACING_RANGE = require('./web-fill-facing-range');
 
 // 仅用于 HTTPS 测试页生成阶段：移动现有控件节点，不重建输入框或改变原 ID。
 const LIGHTING_GROUPS = Object.freeze([
@@ -26,7 +27,7 @@ const TRACKING_GROUPS = Object.freeze([
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
   ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit']],
-  ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
+  ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
@@ -67,6 +68,7 @@ const WEB_PANEL_GROUP_CSS = `
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
     ${SHADOW_BIAS.PANEL_JS}
+    ${FILL_FACING_RANGE.PANEL_JS}
     (() => {
       const toggle = document.getElementById('mmdArRigidBodyEnabled');
       const status = document.getElementById('mmdArRigidBodyStatus');
@@ -113,27 +115,43 @@ const WEB_PANEL_GROUP_JS = `
     (() => {
       const size = document.getElementById('mmdArSkeletonSize');
       const names = document.getElementById('mmdArSkeletonNamesEnabled');
+      const occlusion = document.getElementById('mmdArSkeletonOcclusionEnabled');
+      const opacity = document.getElementById('mmdArSkeletonOccludedOpacity');
+      const opacityOutput = document.getElementById('mmdArSkeletonOccludedOpacityValue');
       const status = document.getElementById('mmdArSkeletonSelectionStatus');
       const clear = document.getElementById('mmdArSkeletonClearContacts');
       const output = document.getElementById('mmdArSkeletonSizeValue');
-      if (!size || !names || !status || !clear || !output) return;
+      if (!size || !names || !occlusion || !opacity || !opacityOutput || !status || !clear || !output) return;
       const key = 'aasc.mmdArTest.skeletonDisplay.v1';
       let saved = {};
       try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; }
       catch (error) { /* 偏好损坏时使用明确默认值，允许本次操作。 */ }
       const normalize = value => typeof value === 'number' && Number.isFinite(value)
         ? Math.round(Math.max(0.2, Math.min(3, value)) * 10) / 10 : 1;
-      const settings = { sizeMultiplier: normalize(saved.sizeMultiplier), namesVisible: saved.namesVisible === true };
+      const normalizeOpacity = value => typeof value === 'number' && Number.isFinite(value)
+        ? Math.round(Math.max(0, Math.min(1, value)) * 100) / 100 : 0.5;
+      // 旧偏好没有遮挡字段时默认关闭，保留原穿透显示；仅接受布尔true。
+      const settings = { sizeMultiplier: normalize(saved.sizeMultiplier), namesVisible: saved.namesVisible === true,
+        occlusionEnabled: saved.occlusionEnabled === true, occludedOpacity: normalizeOpacity(saved.occludedOpacity) };
       size.value = String(settings.sizeMultiplier);
       names.checked = settings.namesVisible;
+      occlusion.checked = settings.occlusionEnabled;
+      opacity.value = String(Math.round(settings.occludedOpacity * 100));
       const apply = () => {
         output.textContent = settings.sizeMultiplier.toFixed(1) + ' 倍';
+        opacityOutput.textContent = Math.round(settings.occludedOpacity * 100) + '%';
         window.DisplayMmd?.setSkeletonSize?.(settings.sizeMultiplier);
         window.DisplayMmd?.setSkeletonNamesVisible?.(settings.namesVisible);
+        window.DisplayMmd?.setSkeletonOcclusion?.(settings.occlusionEnabled);
+        window.DisplayMmd?.setSkeletonOccludedOpacity?.(settings.occludedOpacity);
       };
       const save = () => { try { localStorage.setItem(key, JSON.stringify(settings)); } catch (error) { /* 存储受限仍即时生效。 */ } };
       size.addEventListener('input', () => { settings.sizeMultiplier = normalize(Number(size.value)); apply(); save(); });
       names.addEventListener('change', () => { settings.namesVisible = names.checked; apply(); save(); });
+      occlusion.addEventListener('change', () => { settings.occlusionEnabled = occlusion.checked; apply(); save(); });
+      const updateOpacity = () => { settings.occludedOpacity = normalizeOpacity(Number(opacity.value) / 100); apply(); save(); };
+      opacity.addEventListener('input', updateOpacity);
+      opacity.addEventListener('change', updateOpacity);
       const update = () => {
         const state = window.DisplayMmd?.getSkeletonState?.();
         const selected = state?.selectedBoneIndex >= 0;
@@ -605,6 +623,7 @@ function groupWebPanels($) {
 
   groupPanel($, lightingPanel, 'display-mmd-lighting-header', LIGHTING_GROUPS);
   SHADOW_BIAS.addShadowBiasControls($, lightingPanel);
+  FILL_FACING_RANGE.addFillFacingControls($, lightingPanel);
   const aoGroup = lightingPanel.find('button[data-group-title="AO"]').closest('.mmd-ar-panel-group');
   aoGroup.find('.mmd-ar-panel-group-body').prepend(
     '<label class="display-mmd-lighting-field mmd-ar-edge-correction"><input type="checkbox" checked><span>半分辨率边界修正 <small></small></span></label>' +
@@ -619,6 +638,9 @@ function groupWebPanels($) {
       '<span><i style="--bone-color:#33e066"></i>绿 type1 · 完全物理</span>' +
       '<span><i style="--bone-color:#9ca3af"></i>灰 · 无关联刚体</span></div>' +
       '<label class="mind-basic-field"><span>小球大小 <output id="mmdArSkeletonSizeValue">1.0 倍</output></span><input id="mmdArSkeletonSize" type="range" min="0.2" max="3" step="0.1" value="1" aria-label="骨骼小球大小"></label>' +
+      '<label class="display-mmd-lighting-field"><input id="mmdArSkeletonOcclusionEnabled" type="checkbox"><span>小球相互遮挡</span></label>' +
+      '<label class="mind-basic-field"><span>遮挡处不透明度 <output id="mmdArSkeletonOccludedOpacityValue">50%</output></span>' +
+      '<input id="mmdArSkeletonOccludedOpacity" type="range" min="0" max="100" step="1" value="50" aria-label="骨骼小球被角色遮挡处不透明度"><small>被角色挡住的部分变淡，外露部分保持不透明。</small></label>' +
       '<label class="display-mmd-lighting-field"><input id="mmdArSkeletonNamesEnabled" type="checkbox"><span>显示骨骼名称</span></label>' +
       '<p id="mmdArSkeletonSelectionStatus" class="mind-basic-note" role="status">轻点小球选中骨骼，点空白取消</p>' +
       '<button id="mmdArSkeletonClearContacts" type="button" disabled>清空累计碰撞</button>' +

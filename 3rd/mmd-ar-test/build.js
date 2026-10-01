@@ -32,6 +32,7 @@ const WEB_PHYSICS_STABILITY = WEB_MODE ? require('./web-physics-stability') : nu
 const WEB_SKELETON_DEBUG = WEB_MODE ? require('./web-skeleton-debug') : null;
 const WEB_RIGID_BODY_DEBUG = WEB_MODE ? require('./web-rigid-body-debug') : null;
 const WEB_SHADOW_BIAS = require('./web-shadow-bias');
+const WEB_FILL_FACING_RANGE = require('./web-fill-facing-range');
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -458,9 +459,13 @@ async function stageTextAssets() {
     const selectionPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-selection.mjs');
     await fs.copyFile(path.join(__dirname, 'web-skeleton-selection.mjs'), selectionPath);
     const selectionUrl = `./web-skeleton-selection.mjs?v=${(await hashFile(selectionPath)).sha256.slice(0, 12)}`;
+    const characterDepthPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-character-depth.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-skeleton-character-depth.mjs'), characterDepthPath);
+    const characterDepthUrl = `./web-skeleton-character-depth.mjs?v=${(await hashFile(characterDepthPath)).sha256.slice(0, 12)}`;
     const skeletonPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-debug.mjs');
     await fs.writeFile(skeletonPath, (await fs.readFile(path.join(__dirname, 'web-skeleton-debug.mjs'), 'utf8'))
-      .replace('./web-skeleton-selection.mjs', selectionUrl));
+      .replace('./web-skeleton-selection.mjs', selectionUrl)
+      .replace('./web-skeleton-character-depth.mjs', characterDepthUrl));
     const skeletonUrl = `./web-skeleton-debug.mjs?v=${(await hashFile(skeletonPath)).sha256.slice(0, 12)}`;
     const rigidBodyPath = path.join(GENERATED_ASSETS, 'js/web-rigid-body-debug.mjs');
     await fs.writeFile(rigidBodyPath, (await fs.readFile(path.join(__dirname, 'web-rigid-body-debug.mjs'), 'utf8'))
@@ -515,8 +520,8 @@ async function stageTextAssets() {
     const cameraProbeAnchor = 'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });';
     if (runtimeSource.split(cameraProbeAnchor).length !== 2) throw new Error('测试网页未找到唯一的 PMX 相机诊断锚点');
     // 只改 web-dist 副本：面板只读当前投影，不把近远裁面写进正式显示端源码或灯光配置。
-    const runtimeWithProbe = WEB_SHADOW_BIAS.addShadowBiasRuntime(runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
-    window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`));
+    const runtimeWithProbe = WEB_FILL_FACING_RANGE.addFillFacingRuntime(WEB_SHADOW_BIAS.addShadowBiasRuntime(runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
+    window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`)));
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_STABILITY.addStabilityRuntime(WEB_RIGID_BODY_DEBUG.addRigidBodyRuntime(WEB_SKELETON_DEBUG.addSkeletonRuntime(WEB_PHYSICS_SUBSTEPS.addSubstepRuntime(WEB_PHYSICS_RATE.addPhysicsRateRuntime(
       WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl), physicsRateUrl)), skeletonUrl)
@@ -810,6 +815,13 @@ async function stageTextAssets() {
     || generatedPage.includes('display-mmd-image-tracker.js')
     || generatedPage.includes('<option value="current">')) {
     throw new Error('MindAR-only 测试页仍包含旧跟踪器或算法切换控件');
+  }
+  // 独立网页新增控件必须各出现一次，避免模板同步漏项或重复。
+  if (WEB_MODE) {
+    const controls = cheerio.load(generatedPage);
+    for (const id of ['mmdArFillFacingStart', 'mmdArFillFacingEnd', 'mmdArSkeletonOccludedOpacity']) {
+      if (controls('#' + id).length !== 1) throw new Error(`测试页面缺少或重复控件：${id}`);
+    }
   }
   await fs.mkdir(GENERATED_ASSETS, { recursive: true });
   await fs.writeFile(path.join(GENERATED_ASSETS, 'index.html'), generatedPage, 'utf8');
