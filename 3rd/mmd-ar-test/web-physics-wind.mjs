@@ -10,7 +10,7 @@ export function normalizeWindSettings(value = {}) {
         return Number((Math.round(Math.min(max, Math.max(min, parsed)) / step) * step).toFixed(2));
     };
     return { enabled: input.enabled === true,
-        strength: number('strength', 0.3, 0, 3, 0.05),
+        strength: number('strength', 0.3, 0, 30, 0.05),
         longitude: number('longitude', 0, -180, 180, 1),
         latitude: number('latitude', 0, -90, 90, 1),
         gust: number('gust', 0, 0, 100, 5) };

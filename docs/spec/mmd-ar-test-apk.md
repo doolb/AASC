@@ -1,5 +1,21 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+### 风力强度上限30（2026-10-01，已实现）
+
+```text
+已有声明 -> normalizeWindSettings、共享归一化经典副本、风滑条、风控件本地键、固定子步施力
+变更定义 -> strength范围0–30，步长0.05，缺省0.3；enabled缺省false
+操作 -> 共享strength规范化max3改30；滑条max3改30
+已有合法保存值 -> 保持；超过30 -> 截断30；非法/缺失 -> 0.3
+Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实例
+自由体施力 -> 原质量×10×强度×阵风倍率 -> 连续子步积分
+受控type2 -> 原位置约束与局部角加速度12限幅保持
+验证 -> 3/30/31/999及非法、经典副本一致、强度30真实Ammo积分与极小惯量限幅、保存/恢复
+构建 -> npm run build:web:mmd-ar-test；控件max30及共享模块指纹验证
+结果 -> 用户确认后实施，14项风场自测、网页构建与35脚本/4内联/21指纹通过；LAN控件/物理值30、API31截断和刷新30恢复通过
+```
+
+
 ### Ammo物理风场（2026-10-01，已实现）
 
 ```text
@@ -7,7 +23,7 @@
   固定子步时钟、anchorSamples、positionDriven、bodies及params质量/type/骨骼偏移
   Ammo刚体施力/力矩、manager资源池、模型动作切换门控和Display/runtime补发
 新增定义
-  WindSettings { enabled=false，strength=0.3，longitude=0°，latitude=0°，gust=0% }
+  WindSettings { enabled=false，strength=0.3（0–30），longitude=0°，latitude=0°，gust=0% }
   WindState { 有界平滑强度、已模拟秒数、场景来向/气流向量、等效风力臂 }
   本地偏好键 -> aasc.mmdArTest.wind.v1；共享归一化声明同时嵌入经典Display与面板
   风力幅度 -> 强度步内均值×(1+阵风百分比×连续双频正弦)；角加速度限12，力臂限1

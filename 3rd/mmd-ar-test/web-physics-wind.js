@@ -146,7 +146,7 @@ const WIND_CONTROL_IDS = Object.freeze(['mmdArWindEnabled', 'mmdArWindStrength',
     'mmdArWindGust', 'mmdArWindGustValue', 'mmdArWindHint']);
 const WIND_PANEL_HTML = `
     <label class="display-mmd-lighting-field"><input id="mmdArWindEnabled" type="checkbox"><span>启用风</span></label>
-    <label class="mind-basic-field"><span>风力强度 <output id="mmdArWindStrengthValue">0.30</output></span><input id="mmdArWindStrength" type="range" min="0" max="3" step="0.05" value="0.3"></label>
+    <label class="mind-basic-field"><span>风力强度 <output id="mmdArWindStrengthValue">0.30</output></span><input id="mmdArWindStrength" type="range" min="0" max="30" step="0.05" value="0.3"></label>
     <label class="mind-basic-field"><span>风向经度 <output id="mmdArWindLongitudeValue">0°</output></span><input id="mmdArWindLongitude" type="range" min="-180" max="180" step="1" value="0"></label>
     <label class="mind-basic-field"><span>风向纬度 <output id="mmdArWindLatitudeValue">0°</output></span><input id="mmdArWindLatitude" type="range" min="-90" max="90" step="1" value="0"></label>
     <label class="mind-basic-field"><span>阵风幅度 <output id="mmdArWindGustValue">0%</output></span><input id="mmdArWindGust" type="range" min="0" max="100" step="5" value="0"></label>

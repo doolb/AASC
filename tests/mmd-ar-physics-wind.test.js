@@ -59,12 +59,17 @@ test('风参数默认关闭、经纬度与灯光一致，经典Display归一化�
     new vm.Script(addWindDisplay(fs.readFileSync(path.join(publicRoot, 'js/display-mmd.js'), 'utf8'))).runInContext(context);
     for (const value of [undefined, null, 'bad', {}, { enabled: 'false', strength: '', longitude: NaN, latitude: Infinity, gust: null },
         { enabled: true, strength: 0, longitude: -180, latitude: 90, gust: 100 },
+        { enabled: true, strength: 3 }, { enabled: true, strength: 30 }, { enabled: true, strength: 31 },
         { enabled: true, strength: 999, longitude: -999, latitude: 999, gust: -1 },
         { enabled: true, strength: 0.326, longitude: 45.7, latitude: -32.4, gust: 43 }]) {
         const expected = normalizeWindSettings(value);
         assert.deepEqual(JSON.parse(JSON.stringify(context.window.DisplayMmd.setWindSettings(value))), expected);
     }
     assert.deepEqual(normalizeWindSettings(), { enabled: false, strength: 0.3, longitude: 0, latitude: 0, gust: 0 });
+    for (const [input, expected] of [[3, 3], [30, 30], [31, 30], [999, 30], [-1, 0], [null, 0.3], ['', 0.3], ['bad', 0.3]]) {
+        assert.equal(normalizeWindSettings({ strength: input }).strength, expected);
+        assert.equal(context.window.DisplayMmd.setWindSettings({ strength: input }).strength, expected);
+    }
 });
 
 test('经纬度来源转成吹向：六个基轴、极点和±180等价', async () => {
@@ -111,29 +116,31 @@ test('默认风关闭和零强度真实Ammo与旧流程相同，不创建受風�
     } finally { baseline.cleanup(); wind.cleanup(); }
 });
 
-test('真实Ammo连续風力按模拟秒积分，不同物理Hz/画面FPS一致，关闭保留速度', async () => {
-    const results = [];
-    for (const [fps, renderFps] of [[30, 60], [90, 60], [180, 30], [180, 144]]) {
-        const f = await create(fps);
-        try {
-            f.physics.setWindSettings({ enabled: true, strength: 0.3, longitude: 90, latitude: 0 });
-            for (let i = 0; i < renderFps; i += 1) f.physics.update(1 / renderFps);
-            const body = f.physics.bodies[0].body;
-            near(body.getLinearVelocity().x(), -3 * (1 - 0.3 * (1 - Math.exp(-1 / 0.3))), 2e-5);
-            near(body.getLinearVelocity().z(), 0); near(body.getLinearVelocity().y(), 0);
-            const before = body.getLinearVelocity().x(); f.physics.setWindSettings({ enabled: false });
-            f.physics.update(1 / 60); near(body.getLinearVelocity().x(), before);
-            results.push({ fps, renderFps, velocity: before, x: body.getCenterOfMassTransform().getOrigin().x() });
-        } finally { f.cleanup(); }
+test('真实Ammo连续风力含上限30按模拟秒积分，不同物理Hz/画面FPS一致，关闭保留速度', async () => {
+    for (const strength of [0.3, 30]) {
+        const results = [];
+        for (const [fps, renderFps] of [[30, 60], [90, 60], [180, 30], [180, 144]]) {
+            const f = await create(fps);
+            try {
+                f.physics.setWindSettings({ enabled: true, strength, longitude: 90, latitude: 0 });
+                for (let i = 0; i < renderFps; i += 1) f.physics.update(1 / renderFps);
+                const body = f.physics.bodies[0].body;
+                near(body.getLinearVelocity().x(), -strength * 10 * (1 - 0.3 * (1 - Math.exp(-1 / 0.3))), 2e-5 * Math.max(1, strength));
+                near(body.getLinearVelocity().z(), 0); near(body.getLinearVelocity().y(), 0);
+                const before = body.getLinearVelocity().x(); f.physics.setWindSettings({ enabled: false });
+                f.physics.update(1 / 60); near(body.getLinearVelocity().x(), before);
+                results.push({ strength, fps, renderFps, velocity: before, x: body.getCenterOfMassTransform().getOrigin().x() });
+            } finally { f.cleanup(); }
+        }
+        assert.ok(Math.max(...results.map((r) => r.x)) - Math.min(...results.map((r) => r.x)) < 0.05 * strength / 0.3);
+        console.info('真实Ammo风力跨Hz/FPS', results);
     }
-    assert.ok(Math.max(...results.map((r) => r.x)) - Math.min(...results.map((r) => r.x)) < 0.05);
-    console.info('真实Ammo风力跨Hz/FPS', results);
 });
 
 test('type0/零质量不受风，自由type2被推动；受控type2只转动并保持骨骼局部位置', async () => {
     const f = await create(180);
     try {
-        f.physics.setWindSettings({ enabled: true, strength: 3, longitude: 90, latitude: 0, gust: 100 });
+        f.physics.setWindSettings({ enabled: true, strength: 30, longitude: 90, latitude: 0, gust: 100 });
         const localPosition = f.bone.position.toArray();
         for (let i = 0; i < 60; i += 1) { f.mesh.updateMatrixWorld(true); f.physics.update(1 / 60); }
         const controlled = f.physics.bodies[1].body;
@@ -153,7 +160,7 @@ test('极小惯量风矩限幅且没有骨骼偏移时不制造力矩', async ()
     for (const position of [[0, 0.3, 0], [0, 0, 0]]) {
         const f = await create(180, null, [{ ...params, type: 2, boneIndex: 1, weight: 1e-8, width: 0.01, position }]);
         try {
-            f.physics.setWindSettings({ enabled: true, strength: 3, longitude: 90, gust: 100 });
+            f.physics.setWindSettings({ enabled: true, strength: 30, longitude: 90, gust: 100 });
             for (let i = 0; i < 90; i += 1) f.physics.update(1 / 180);
             const velocity = f.physics.bodies[0].body.getAngularVelocity();
             assert.ok(Number.isFinite(velocity.z())); assert.ok(Math.abs(velocity.z()) <= 6.01);
@@ -221,7 +228,7 @@ test('runtime新物理首次帧前补发风设置，同实例无变更不重复�
 });
 
 test('风控件持久化、损坏存储、存储受限与非法值回退，恢复读数和Display调用一致', async () => {
-    for (const stored of [null, '{broken', JSON.stringify({ enabled: true, longitude: 45, latitude: 30, strength: 0.5, gust: 50 })]) {
+    for (const stored of [null, '{broken', JSON.stringify({ enabled: true, longitude: 45, latitude: 30, strength: 30, gust: 50 })]) {
         const nodes = new Map(WIND_CONTROL_IDS.map((id) => [id, { value: '', textContent: '', checked: false, handlers: {},
             addEventListener(name, fn) { this.handlers[name] = fn; } }]));
         const values = new Map(); if (stored !== null) values.set('aasc.mmdArTest.wind.v1', stored);
@@ -231,6 +238,8 @@ test('风控件持久化、损坏存储、存储受限与非法值回退，恢�
             window: { DisplayMmd: { setWindSettings: (value) => { result = JSON.parse(JSON.stringify(value)); } } } });
         new vm.Script(WIND_PANEL_JS).runInContext(context);
         assert.equal(result.enabled, stored?.startsWith('{"enabled":true') || false);
+        assert.equal(result.strength, stored?.startsWith('{"enabled":true') ? 30 : 0.3);
+        assert.equal(nodes.get('mmdArWindStrength').value, String(result.strength));
         nodes.get('mmdArWindEnabled').checked = true; nodes.get('mmdArWindLatitude').value = '-90';
         nodes.get('mmdArWindLatitude').handlers.change();
         assert.equal(result.latitude, -90); assert.equal(nodes.get('mmdArWindLatitudeValue').textContent, '-90°');
@@ -264,7 +273,7 @@ test('真实米娅90/180Hz恒风与阵风下姿态有限、风影响动态体且
             const physics = new f.MMDPhysics(mesh, metadata.rigidBodies, metadata.constraints, f.getWebPhysicsStepOptions(fps));
             try {
                 assert.equal(physics.bodies.length, 183); assert.equal(physics.constraints.length, 261);
-                physics.setWindSettings({ enabled, strength: 0.3, longitude: 45, latitude: 20, gust: 50 });
+                physics.setWindSettings({ enabled, strength: 30, longitude: 45, latitude: 20, gust: 50 });
                 const start = performance.now();
                 for (let frame = 0; frame < 120; frame += 1) physics.update(1 / 60);
                 measurements.push({ fps, enabled, simulationSeconds: 2, elapsedMs: Math.round(performance.now() - start) });
