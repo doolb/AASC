@@ -81,7 +81,7 @@ function addShadowMapControls($, lightingPanel) {
       + '>' + size + ' × ' + size + '</option>').join('') + '</select></label>'
     + '<label class="mind-basic-field"><span>阴影相机范围 <output id="mmdArShadowCameraScaleValue">1.00 ×</output></span>'
     + '<input id="mmdArShadowCameraScale" type="range" min="0.1" max="2" step="0.01" value="1" aria-label="阴影相机范围倍率"></label>'
-    + '<p class="mind-basic-note">1倍为角色自动范围，范围越小角色在贴图中越大；过小会裁掉部分阴影。</p>'
+    + '<p class="mind-basic-note">默认1倍，自动范围基准已缩至原来的0.5；范围越小角色在贴图中越大，过小会裁掉部分阴影。阴影相机跟随角色移动并对齐像素网格。</p>'
     + '<label class="display-mmd-lighting-field"><input id="mmdArShadowMapPreviewEnabled" type="checkbox"><span>显示 ShadowMap</span></label>'
     + '<div id="mmdArShadowMapPreviewRows" hidden>' + rows
     + '<p class="mind-basic-note">整张阴影贴图，不裁剪角色；深色为角色，白色为空白。覆盖比例按256×256采样估算，列表可见时每秒刷新4次。</p></div>'
@@ -97,6 +97,42 @@ function addShadowMapRuntime(source, moduleUrl) {
   replaceOnce(anchor, `
     ${normalizeShadowMapSize.toString()}
     ${normalizeShadowCameraScale.toString()}
+    const alignTestShadowCamera = createShadowCameraAlignment(THREE);
+    let shadowFollowRoot = null;
+    const shadowFollowPosition = new THREE.Vector3();
+    const shadowFollowScale = new THREE.Vector3();
+    const shadowRootPosition = new THREE.Vector3();
+    const shadowRootScale = new THREE.Vector3();
+    const shadowFollowDelta = new THREE.Vector3();
+    let shadowFitCount = 0;
+    let shadowTranslationCount = 0;
+    const captureTestShadowRoot = (root) => {
+        shadowFollowRoot = root?.isObject3D ? root : null;
+        if (!shadowFollowRoot) return;
+        root.getWorldPosition(shadowFollowPosition);
+        root.getWorldScale(shadowFollowScale);
+    };
+    // 纯平移只搬动已拟合的灯位/目标/承接面；换根或缩放才重新计算角色包围范围。
+    const followTestShadowRoot = () => {
+        const root = currentRotationPivot || currentMesh;
+        if (!root) { shadowFollowRoot = null; return; }
+        root.getWorldPosition(shadowRootPosition);
+        root.getWorldScale(shadowRootScale);
+        if (root !== shadowFollowRoot || shadowRootScale.distanceToSquared(shadowFollowScale) > 1e-16) {
+            fitShadowCamera(root);
+            return;
+        }
+        shadowFollowDelta.subVectors(shadowRootPosition, shadowFollowPosition);
+        if (shadowFollowDelta.lengthSq() <= 1e-20) return;
+        for (const light of [keyLight, fillLight]) {
+            light.position.add(shadowFollowDelta);
+            light.target.position.add(shadowFollowDelta);
+            light.shadow.needsUpdate = true;
+        }
+        shadowPlane.position.add(shadowFollowDelta);
+        shadowFollowPosition.copy(shadowRootPosition);
+        shadowTranslationCount += 1;
+    };
     const shadowMapLimit = renderer.capabilities.maxTextureSize;
     window.MmdArTestShadowMapLimit = shadowMapLimit;
     window.dispatchEvent(new CustomEvent('mmd-ar-shadow-map-limit'));
@@ -112,8 +148,18 @@ function addShadowMapRuntime(source, moduleUrl) {
     const shadowMapDiagnostic = () => ({
         size: keyLight.shadow.mapSize.x, limit: shadowMapLimit,
         cameraScale: normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale),
+        follow: { position: shadowFollowRoot ? shadowFollowPosition.toArray() : null,
+            scale: shadowFollowRoot ? shadowFollowScale.toArray() : null,
+            fitCount: shadowFitCount, translationCount: shadowTranslationCount,
+            planePosition: shadowPlane.position.toArray() },
         maps: [keyLight, fillLight].map(light => ({ width: light.shadow.map?.width || 0,
             height: light.shadow.map?.height || 0, castShadow: light.castShadow,
+            position: light.position.toArray(), target: light.target.position.toArray(),
+            originPixel: (() => {
+                const origin = new THREE.Vector3().project(light.shadow.camera);
+                return [(origin.x * 0.5 + 0.5) * light.shadow.mapSize.x,
+                    (origin.y * 0.5 + 0.5) * light.shadow.mapSize.y];
+            })(),
             camera: { left: light.shadow.camera.left, right: light.shadow.camera.right,
                 top: light.shadow.camera.top, bottom: light.shadow.camera.bottom,
                 near: light.shadow.camera.near, far: light.shadow.camera.far } })),
@@ -142,9 +188,18 @@ function addShadowMapRuntime(source, moduleUrl) {
     syncTestShadowMapSize();
 ${anchor}`);
   const extentAnchor = '        const extent = radius * SHADOW_FRUSTUM_MARGIN;';
-  replaceOnce(extentAnchor, '        const extent = radius * SHADOW_FRUSTUM_MARGIN * normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale);');
+  replaceOnce(extentAnchor, '        const extent = radius * SHADOW_FRUSTUM_MARGIN * 0.5 * normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale);');
+  const fitEnd = '            light.shadow.needsUpdate = true;\n        }\n    };\n\n    const applyShadowMode = () => {';
+  replaceOnce(fitEnd, '            light.shadow.needsUpdate = true;\n        }\n'
+    + '        shadowPlane.position.x = center.x; shadowPlane.position.z = center.z;\n'
+    + '        captureTestShadowRoot(root);\n        shadowFitCount += 1;\n    };\n\n    const applyShadowMode = () => {');
   const frameAnchor = '        const delta = Math.min(0.1, Math.max(0, (now - lastFrameAt) / 1000));';
   replaceOnce(frameAnchor, '        syncTestShadowMapSize();\n' + frameAnchor);
+  const renderAnchor = '            if (currentMesh) ambientOcclusion.render();';
+  replaceOnce(renderAnchor, '            followTestShadowRoot();\n'
+    + '            if (renderer.shadowMap.enabled) {\n'
+    + '                for (const light of [keyLight, fillLight]) if (light.castShadow) alignTestShadowCamera(light);\n'
+    + '            }\n' + renderAnchor);
   const afterFrame = '            if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;\n        }';
   replaceOnce(afterFrame, afterFrame + '\n        shadowMapPreview.update(now);');
   const disposeAnchor = '        ambientOcclusion.dispose();';
@@ -152,7 +207,7 @@ ${anchor}`);
         for (const light of [keyLight, fillLight]) releaseShadowTargets(light.shadow);
         if (window.MmdArTestShadowMapDiagnostic === shadowMapDiagnostic) delete window.MmdArTestShadowMapDiagnostic;
 ${disposeAnchor}`);
-  return `import { createShadowMapPreview, releaseShadowTargets } from ${JSON.stringify(moduleUrl)};\n` + source;
+  return `import { createShadowCameraAlignment, createShadowMapPreview, releaseShadowTargets } from ${JSON.stringify(moduleUrl)};\n` + source;
 }
 
 module.exports = { normalizeShadowMapSize, normalizeShadowCameraScale, PANEL_JS, addShadowMapControls, addShadowMapRuntime };

@@ -35,13 +35,15 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
     lights[0].position.set(1, 3, 2); lights[1].position.set(-1, 2, -3);
     const settings = { cameraScale: 1 };
     const bounds = new THREE.Box3(new THREE.Vector3(-0.5, 0, -0.2), new THREE.Vector3(0.5, 1.75, 0.2));
-    const fit = vm.runInNewContext(normalizeShadowCameraScale.toString() + '\n' + injected.slice(start, end) + '\nfitShadowCamera;', {
+    const fit = vm.runInNewContext(normalizeShadowCameraScale.toString() + '\nlet shadowFitCount = 0;\n' + injected.slice(start, end) + '\nfitShadowCamera;', {
         THREE, TARGET_MODEL_HEIGHT: 1.75, SHADOW_FRUSTUM_MARGIN: 1.18,
         getModelBounds: () => bounds, applyKeyLightPosition: () => {},
         keyLight: lights[0], fillLight: lights[1], shadowPlane: new THREE.Object3D(),
-        window: { MmdArTestShadowMapSettings: settings }
+        window: { MmdArTestShadowMapSettings: settings }, captureTestShadowRoot: () => {}
     });
     fit(null);
+    const expectedExtent = Math.max(1.75 * 0.65, bounds.getSize(new THREE.Vector3()).length() * 0.5) * 1.18 * 0.5;
+    assert.ok(Math.abs(lights[0].shadow.camera.right - expectedExtent) < 1e-12, '默认倍率仍1，基准半幅减半');
     const originals = lights.map(light => ({ extent: light.shadow.camera.right,
         near: light.shadow.camera.near, far: light.shadow.camera.far,
         matrixX: light.shadow.camera.projectionMatrix.elements[0] }));
@@ -55,6 +57,105 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
             assert.ok(Math.abs(camera.projectionMatrix.elements[0] - original.matrixX / scale) < 1e-12);
         }
     }
+});
+
+test('两灯按真实贴图对齐整像素，宽高/光向/NF保持且连续小位移不累积抵消跟随', async () => {
+    const THREE = await import('three');
+    const { createShadowCameraAlignment } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
+    const align = createShadowCameraAlignment(THREE);
+    const origin = new THREE.Vector3();
+    const cameraCenter = camera => new THREE.Vector3((camera.left + camera.right) / 2,
+        (camera.bottom + camera.top) / 2, 0).applyMatrix4(camera.matrixWorld);
+    for (const position of [[1, 3, 2], [-2, 2, -3]]) {
+        const light = new THREE.DirectionalLight();
+        light.position.set(...position); light.target.position.set(0.23, 0.9, -0.13);
+        const camera = light.shadow.camera;
+        camera.left = -3.7; camera.right = 3.7; camera.bottom = -2.1; camera.top = 2.1;
+        camera.near = 0.1; camera.far = 20;
+        const direction = light.target.position.clone().sub(light.position).normalize();
+        const check = () => {
+            origin.set(0, 0, 0).project(camera);
+            const pixel = [(origin.x * 0.5 + 0.5) * light.shadow.map.width,
+                (origin.y * 0.5 + 0.5) * light.shadow.map.height];
+            for (const value of pixel) assert.ok(Math.abs(value - Math.round(value)) < 1e-8, JSON.stringify(pixel));
+            assert.ok(Math.abs(camera.right - camera.left - 7.4) < 1e-10);
+            assert.ok(Math.abs(camera.top - camera.bottom - 4.2) < 1e-10);
+            assert.ok(Math.abs((camera.left + camera.right) / 2) <= 7.4 / light.shadow.map.width / 2 + 1e-10);
+            assert.ok(Math.abs((camera.top + camera.bottom) / 2) <= 4.2 / light.shadow.map.height / 2 + 1e-10);
+            assert.equal(camera.near, 0.1); assert.equal(camera.far, 20);
+            assert.ok(light.target.position.clone().sub(light.position).normalize().distanceTo(direction) < 1e-10);
+        };
+        for (const size of [512, 1024, 2048, 4096, 512]) {
+            // 实际目标尺寸优先于配置：设备限幅或目标重新创建后按本帧真实尺寸计算。
+            light.shadow.mapSize.set(8192, 8192);
+            light.shadow.map = { width: size, height: size / 2 };
+            assert.equal(align(light), true); check();
+            const edges = [camera.left, camera.right, camera.bottom, camera.top];
+            for (let repeat = 0; repeat < 10; repeat += 1) { align(light); check(); }
+            for (const [index, edge] of [camera.left, camera.right, camera.bottom, camera.top].entries()) {
+                assert.ok(Math.abs(edge - edges[index]) < 1e-10);
+            }
+        }
+        const start = cameraCenter(camera);
+        const axis = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+        const step = axis.clone().multiplyScalar(7.4 / 512 * 0.15);
+        for (let frame = 0; frame < 100; frame += 1) {
+            light.position.add(step); light.target.position.add(step); align(light); check();
+        }
+        const displacement = cameraCenter(camera).sub(start).dot(axis);
+        assert.ok(Math.abs(displacement - 7.4 / 512 * 15) <= 7.4 / 512, '连续小移动应推进阴影网格，不得冻结在原位');
+        // 渲染器再次更新阴影矩阵后仍对齐，不依赖即将被Three覆盖的相机position。
+        light.shadow.updateMatrices(light); check();
+    }
+});
+
+test('真实注入跟随拖动/定位/复位及缩放，纯平移和静止不重算模型包围范围', async () => {
+    const THREE = await import('three');
+    const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
+    const injected = addShadowMapRuntime(source, './preview');
+    const followStart = injected.indexOf('    let shadowFollowRoot = null;');
+    const followEnd = injected.indexOf('    const shadowMapLimit =', followStart);
+    const fitStart = injected.indexOf('    const fitShadowCamera = (root) => {');
+    const fitEnd = injected.indexOf('    const applyShadowMode = () => {', fitStart);
+    const root = new THREE.Group(); root.add(new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1)));
+    const lights = [new THREE.DirectionalLight(), new THREE.DirectionalLight()];
+    const plane = new THREE.Object3D();
+    let boundsReads = 0;
+    const context = vm.createContext({ THREE, TARGET_MODEL_HEIGHT: 1.75, SHADOW_FRUSTUM_MARGIN: 1.18,
+        currentRotationPivot: root, currentMesh: null, keyLight: lights[0], fillLight: lights[1], shadowPlane: plane,
+        window: { MmdArTestShadowMapSettings: { cameraScale: 1 } },
+        getModelBounds: node => { boundsReads += 1; node.updateWorldMatrix(true, true); return new THREE.Box3().setFromObject(node); },
+        applyKeyLightPosition: bounds => {
+            const center = bounds.getCenter(new THREE.Vector3());
+            lights[0].position.copy(center).add(new THREE.Vector3(1, 3, 2));
+            lights[1].position.copy(center).add(new THREE.Vector3(-1, 2, -3));
+        }
+    });
+    const runtime = vm.runInContext(normalizeShadowCameraScale.toString() + '\n' + injected.slice(followStart, followEnd)
+        + injected.slice(fitStart, fitEnd) + '\n({ fit: fitShadowCamera, follow: followTestShadowRoot, state: () => ({ fits: shadowFitCount, moves: shadowTranslationCount, root: shadowFollowRoot }) });', context);
+    runtime.fit(root);
+    const widths = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
+    const previous = lights.map(light => ({ position: light.position.clone(), target: light.target.position.clone() }));
+    const planePosition = plane.position.clone();
+    const delta = new THREE.Vector3(0.35, 0.2, -0.15);
+    root.position.add(delta); runtime.follow();
+    for (const [index, light] of lights.entries()) {
+        assert.ok(light.position.clone().sub(previous[index].position).distanceTo(delta) < 1e-12);
+        assert.ok(light.target.position.clone().sub(previous[index].target).distanceTo(delta) < 1e-12);
+        assert.equal(light.shadow.camera.right - light.shadow.camera.left, widths[index]);
+    }
+    assert.ok(plane.position.clone().sub(planePosition).distanceTo(delta) < 1e-12);
+    for (let frame = 0; frame < 10; frame += 1) runtime.follow();
+    assert.equal(boundsReads, 1); assert.equal(runtime.state().fits, 1); assert.equal(runtime.state().moves, 1);
+    root.position.set(0, 0, 0); runtime.follow();
+    assert.ok(lights[0].position.distanceTo(previous[0].position) < 1e-12);
+    assert.equal(boundsReads, 1);
+    root.scale.setScalar(2); runtime.follow();
+    assert.equal(boundsReads, 2);
+    assert.ok(Math.abs(lights[0].shadow.camera.right - lights[0].shadow.camera.left - widths[0] * 2) < 1e-12);
+    root.scale.setScalar(1); runtime.follow(); assert.equal(boundsReads, 3);
+    context.currentRotationPivot = root.clone(); runtime.follow(); assert.equal(boundsReads, 4);
+    context.currentRotationPivot = null; runtime.follow(); assert.equal(runtime.state().root, null);
 });
 
 test('释放阴影map/mapPass并清空引用，重复目标与重复调用只释放一次', async () => {
@@ -170,6 +271,8 @@ test('面板生成四档和两张完整预览，注入唯一锚点/清理；锚�
     assert.equal($('#mmdArShadowCameraScale').attr('min'), '0.1');
     assert.equal($('#mmdArShadowCameraScale').attr('max'), '2');
     assert.equal($('#mmdArShadowCameraScale').attr('step'), '0.01');
+    assert.equal($('#mmdArShadowCameraScale').attr('value'), '1');
+    assert.match($('#panel').text(), /自动范围基准已缩至原来的0.5/u);
     assert.doesNotThrow(() => new vm.Script(PANEL_JS));
     const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
     const output = addShadowMapRuntime(source, './web-shadow-map-preview.mjs?v=test');

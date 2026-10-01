@@ -9,8 +9,8 @@ const puppeteer = require('puppeteer-core');
 const ROOT = path.resolve(__dirname, '../3rd/mmd-ar-test/web-dist');
 const CHROME = '/usr/bin/chromium';
 
-test('真实PMX阴影尺寸/相机倍率、整图覆盖/双光模式、保存复位及GPU资源回收', {
-    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 360000
+test('真实PMX阴影尺寸/倍率/像素对齐、移动与缩放跟随、整图覆盖/保存复位及GPU资源回收', {
+    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 480000
 }, async () => {
     const failures = [];
     const server = http.createServer((request, response) => {
@@ -41,6 +41,16 @@ test('真实PMX阴影尺寸/相机倍率、整图覆盖/双光模式、保存复
         }), count);
         const initial = await page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
         assert.equal(initial.size, 1024); assert.equal(initial.preview.allocated, false); assert.equal(initial.preview.reads, 0);
+        assert.equal(initial.cameraScale, 1);
+        assert.equal(await page.$eval('#mmdArShadowCameraScale', node => node.value), '1');
+        const checkGrid = state => {
+            for (const map of state.maps) {
+                if (!map.castShadow || !map.width) continue;
+                for (const pixel of map.originPixel) assert.ok(Math.abs(pixel - Math.round(pixel)) < 1e-6,
+                    `世界参考点必须落整像素：${JSON.stringify(map)}`);
+            }
+        };
+        const cameraWidth = camera => camera.right - camera.left;
         // 通过真实控件改变设置，停下角色动作/物理便于稳定比较资源数。
         await page.evaluate(async () => {
             window.DisplayMmd.setMotionPlaybackEnabled(false);
@@ -62,7 +72,9 @@ test('真实PMX阴影尺寸/相机倍率、整图覆盖/双光模式、保存复
             } catch (error) {
                 assert.fail(JSON.stringify({ requested: size, state: await page.evaluate(() => window.MmdArTestShadowMapDiagnostic()), failures }));
             }
-            return page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
+            const state = await page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
+            checkGrid(state);
+            return state;
         };
         await chooseSize(512);
         // 新模型首帧隐藏用于物理初始化，角色材质贴图下一帧才上传；采样前等实际绘制稳定。
@@ -123,10 +135,13 @@ test('真实PMX阴影尺寸/相机倍率、整图覆盖/双光模式、保存复
             const state = await page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
             for (let index = 0; index < state.maps.length; index += 1) {
                 const map = state.maps[index]; const original = baseCameras[index];
-                assert.ok(Math.abs(map.camera.right - original.right * scale) < 1e-6);
+                // 网格对齐会平移正交边界，倍率应验证总宽高，不能要求左右严格对称。
+                assert.ok(Math.abs(cameraWidth(map.camera) - cameraWidth(original) * scale) < 1e-6);
+                assert.ok(Math.abs(map.camera.top - map.camera.bottom - (original.top - original.bottom) * scale) < 1e-6);
                 assert.equal(map.width, 512); assert.equal(map.height, 512);
                 assert.equal(map.camera.near, original.near); assert.equal(map.camera.far, original.far);
             }
+            checkGrid(state);
             assert.equal(state.memory.textures, result.state.memory.textures);
             return page.$eval('#mmdArShadowMapKeyStatus', node => Number(node.textContent.match(/约 ([\d.]+)%/u)[1]));
         };
@@ -140,7 +155,48 @@ test('真实PMX阴影尺寸/相机倍率、整图覆盖/双光模式、保存复
         await page.evaluate(() => window.DisplayMmd.setLighting({ keyIntensity: 2.2 }));
         await frames();
         const refitted = await page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
-        assert.ok(Math.abs(refitted.maps[0].camera.right - baseCameras[0].right * 0.5) < 1e-6);
+        assert.ok(Math.abs(cameraWidth(refitted.maps[0].camera) - cameraWidth(baseCameras[0]) * 0.5) < 1e-6);
+        checkGrid(refitted);
+        // 调用真实移动入口，移动中已跟随；纯平移及静止不重复获取角色包围范围。
+        const beforeMove = refitted;
+        assert.equal(await page.evaluate(() => window.DisplayMmd.translateModelByPixels(45, 20)), true);
+        await frames(2);
+        const moved = await page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
+        const delta = moved.follow.position.map((value, index) => value - beforeMove.follow.position[index]);
+        assert.ok(delta.some(value => Math.abs(value) > 0.001));
+        assert.equal(moved.follow.fitCount, beforeMove.follow.fitCount);
+        assert.ok(moved.follow.translationCount > beforeMove.follow.translationCount);
+        for (const [index, map] of moved.maps.entries()) {
+            for (const component of ['position', 'target']) {
+                for (let axis = 0; axis < 3; axis += 1) {
+                    assert.ok(Math.abs(map[component][axis] - beforeMove.maps[index][component][axis] - delta[axis]) < 1e-6);
+                }
+            }
+            assert.ok(Math.abs(cameraWidth(map.camera) - cameraWidth(beforeMove.maps[index].camera)) < 1e-6);
+        }
+        for (let axis = 0; axis < 3; axis += 1) {
+            assert.ok(Math.abs(moved.follow.planePosition[axis] - beforeMove.follow.planePosition[axis] - delta[axis]) < 1e-6);
+        }
+        checkGrid(moved); assert.equal(moved.memory.textures, beforeMove.memory.textures);
+        await frames(3);
+        assert.equal(await page.evaluate(() => window.MmdArTestShadowMapDiagnostic().follow.fitCount), moved.follow.fitCount);
+        // 定位入口同时改变位置与比例：范围只随这次缩放重新拟合，复位恢复原根姿态。
+        assert.equal(await page.evaluate(() => window.DisplayMmd.setArPose({ x: 0.6, y: 0.6, scale: 1.4 })), true);
+        await frames(2);
+        const scaled = await page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
+        assert.ok(scaled.follow.fitCount > moved.follow.fitCount);
+        assert.ok(scaled.follow.scale[0] > beforeMove.follow.scale[0]);
+        assert.ok(cameraWidth(scaled.maps[0].camera) > cameraWidth(moved.maps[0].camera));
+        checkGrid(scaled);
+        await page.evaluate(() => window.DisplayMmd.resetArPose());
+        await frames(2);
+        const resetPose = await page.evaluate(() => window.MmdArTestShadowMapDiagnostic());
+        for (let axis = 0; axis < 3; axis += 1) {
+            assert.ok(Math.abs(resetPose.follow.position[axis] - beforeMove.follow.position[axis]) < 1e-6);
+            assert.ok(Math.abs(resetPose.follow.scale[axis] - beforeMove.follow.scale[axis]) < 1e-6);
+        }
+        assert.ok(Math.abs(cameraWidth(resetPose.maps[0].camera) - cameraWidth(beforeMove.maps[0].camera)) < 1e-6);
+        checkGrid(resetPose);
         await page.evaluate(() => window.DisplayMmd.setLighting({ shadowSource: 'key' }));
         await page.waitForFunction(() => document.getElementById('mmdArShadowMapFillStatus').textContent.includes('复用上图'));
         await page.evaluate(() => window.DisplayMmd.setLighting({ keyShadowEnabled: false, shadowSource: 'none' }));
