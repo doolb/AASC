@@ -1,5 +1,53 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+### 关节纠错基准Hz可调（2026-10-01，已实现）
+
+```text
+已有声明
+  web-physics-rate.mjs的getWebPhysicsStepOptions、runtime两处Object.assign步进参数
+  web-physics-stability.js的_refreshConstraintStability（65写死）与resetAnchorInterpolation刷新入口
+  lightingState.physicsFps、动作面板物理分类、DisplayMmd转发
+新增定义
+  normalizeWebStabilityReference(value) { 非有限值/缺失回退45；其余30-180截断并按5Hz取整 }
+  PhysicsStepOptions { unitStep，maxStepNum，stabilityReferenceHz（默认45） }
+  MMDPhysics.setStabilityReferenceHz(value) { 有限正数写入（非法回退45）并立即重算六轴，返回生效值 }
+  面板：mmdArPhysicsStabilityReference + 数值输出 + 说明；本地键aasc.mmdArTest.physicsStabilityReference.v1
+操作流程
+  面板滑条(30-180步长5默认45) -> 本地记忆 -> DisplayMmd.setPhysicsStabilityReference
+  显示层 -> 同一归一规则本地保存待补发值，runtime存在时转发；runtime重建后补发
+  runtime -> physicsStabilityReferenceHz；对当前物理Object.assign步进参数并调用setStabilityReferenceHz立即重算
+  创建/变频路径 -> 步进参数携带参考值写入实例；补丁记忆核对unitStep与参考值任一变化重算
+  补丁换算 -> ERP = 1-(1-0.475)^(参考Hz×unitStep)；65Hz基准恢复原库0.475
+  非法值 -> 滑条/显示层/runtime/补丁四层一致回退45；不修改弹簧/质量/阻尼/预算/渲染
+  验证 -> 同Hz不同基准ERP数值、实时改基准立即生效、回退与非法值、45默认/90物理真实ERP与公式一致，显式65仍保持旧行为
+```
+
+实现：修改 `3rd/mmd-ar-test/web-physics-rate.mjs`、`web-physics-rate.js`、`web-physics-stability.js`、`web-panel-groups.js`、`build.js`；扩展 `tests/mmd-ar-physics-rate.test.js`、`tests/mmd-ar-physics-stability.test.js`、`tests/mmd-ar-web-panel-groups.test.js`。
+
+
+### 默认纠错45Hz与物理90Hz（2026-10-01，已实现）
+
+```text
+已有声明
+  getWebPhysicsStepOptions、normalizeWebStabilityReference、稳定性生成补丁
+  DisplayMmd/PMX runtime/helper生成副本、物理控件、纠错偏好恢复
+新增定义
+  DefaultTestPhysics { 纠错参考Hz=45、物理步进Hz=90 }
+操作流程
+  参考初值/缺失/非法 -> 45；合法保存值 -> 30–180范围、5Hz规范化后恢复
+  物理初值/缺失/非法 -> 90；合法保存值 -> 原范围及步长规范化后恢复
+  生成DisplayMmd/runtime/helper/vendor物理 -> 默认90；物理控件初值/读数 -> 90Hz
+  生成display-mmd-lighting -> 恢复默认90Hz；空白字符串按缺失处理
+  生成稳定性实例/runtime/display -> 参考默认45；纠错控件初值/读数 -> 45Hz
+  共享步进 -> unitStep=1/物理Hz，maxStepNum=ceil(物理Hz×0.1)+1，携带参考Hz
+  六轴关节纠错 -> ERP=1-0.525^(参考Hz/物理Hz)，默认45/90 -> 约0.275431
+  保存值继续优先，不以新默认覆盖手动配置
+  真实骨骼旋转回写、type2位置、切换清速度/分帧和循环 -> 原流程保持
+验证 -> 默认/回退/偏好、默认真实ERP、生成脚本/控件/指纹与网页加载
+状态 -> 先更新本伪代码，用户确认后完成代码；51项定向回归和真实LAN网页默认/偏好/回退/复位通过
+```
+
+
 ### 后蝴蝶结末端旋转回写修正（2026-10-01，已实现并验证）
 
 ```text

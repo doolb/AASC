@@ -25,7 +25,7 @@ const TRACKING_GROUPS = Object.freeze([
 
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
-  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
+  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit']],
   ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
 ]);
 
@@ -472,6 +472,34 @@ const WEB_PANEL_GROUP_JS = `
       if (status) observer.observe(status, { childList: true, subtree: true, characterData: true });
       refresh();
     })();
+    (() => {
+      // 关节纠错基准Hz：只改STOP_ERP的换算基准，默认45；本地记忆。
+      const input = document.getElementById('mmdArPhysicsStabilityReference');
+      const output = document.getElementById('mmdArPhysicsStabilityReferenceValue');
+      if (!input || !output) return;
+      const storageKey = 'aasc.mmdArTest.physicsStabilityReference.v1';
+      const normalize = (value) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? Math.round(Math.min(180, Math.max(30, number)) / 5) * 5 : 45;
+      };
+      let value = 45;
+      try {
+        const stored = localStorage.getItem(storageKey);
+        // 缺失或空串用默认45；其余按30-180、5Hz取整，非法回退45。
+        value = stored === null || stored.trim() === '' ? 45 : normalize(stored);
+      } catch (error) { value = 45; }
+      const apply = (next, persist = false) => {
+        value = normalize(next);
+        input.value = String(value);
+        output.textContent = value + ' Hz';
+        window.DisplayMmd?.setPhysicsStabilityReference?.(value);
+        if (!persist) return;
+        try { localStorage.setItem(storageKey, String(value)); } catch (error) { /* 存储受限时本次仍生效。 */ }
+      };
+      input.addEventListener('input', () => apply(input.value));
+      input.addEventListener('change', () => apply(input.value, true));
+      apply(value);
+    })();
     document.querySelectorAll('.mmd-ar-panel-group-toggle').forEach((button) => {
       button.addEventListener('click', () => {
         const body = document.getElementById(button.getAttribute('aria-controls'));
@@ -595,6 +623,9 @@ function groupWebPanels($) {
       '<p id="mmdArSkeletonSelectionStatus" class="mind-basic-note" role="status">轻点小球选中骨骼，点空白取消</p>' +
       '<button id="mmdArSkeletonClearContacts" type="button" disabled>清空累计碰撞</button>' +
       '<p id="mmdArSkeletonHint" class="mind-basic-note">选中显示局部轴：X红、Y绿、Z蓝。碰撞体开启时仅显示自身与累计碰撞对象；拖动旋转模型。</p>' +
+      '<label class="mind-basic-field"><span>纠错基准 Hz <output id="mmdArPhysicsStabilityReferenceValue">45 Hz</output></span>' +
+      '<input id="mmdArPhysicsStabilityReference" type="range" min="30" max="180" step="5" value="45" aria-label="关节纠错基准频率"></label>' +
+      '<p id="mmdArPhysicsStabilityReferenceHint" class="mind-basic-note">按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。</p>' +
       '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体（线框）</span></label>' +
       '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>');
     groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);

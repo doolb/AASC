@@ -5,9 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
-const { addPhysicsStability } = require('../3rd/mmd-ar-test/web-physics-stability');
+const { addPhysicsStability, addStabilityDisplay } = require('../3rd/mmd-ar-test/web-physics-stability');
 const { addPhysicsSubsteps } = require('../3rd/mmd-ar-test/web-physics-substeps');
-const { addPhysicsRateDisplay, addPhysicsRateHelper, addPhysicsRateRuntime } = require('../3rd/mmd-ar-test/web-physics-rate');
+const { addPhysicsRateDisplay, addPhysicsRateLighting, addPhysicsRateHelper, addPhysicsRateRuntime } = require('../3rd/mmd-ar-test/web-physics-rate');
 const { addPhysicsLifecycle, addAnimationLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
 const publicRoot = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const rateUrl = pathToFileURL(path.resolve(__dirname, '../3rd/mmd-ar-test/web-physics-rate.mjs')).href;
@@ -16,23 +16,40 @@ const dataUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).t
 test('网页30到180Hz边界、默认、5Hz步长和高频子步预算', async () => {
     const { getWebPhysicsStepOptions } = await import(rateUrl);
     for (const [input, fps, maxStepNum] of [
-        [undefined, 65, 8], [NaN, 65, 8], [Infinity, 65, 8], [-1, 30, 4],
+        [undefined, 90, 10], [null, 90, 10], ['', 90, 10], ['  ', 90, 10], [NaN, 90, 10], [Infinity, 90, 10], [-1, 30, 4],
         [30, 30, 4], [65, 65, 8], [90, 90, 10], [95, 95, 11], [120, 120, 13],
         ['180', 180, 19], [999, 180, 19], [177, 175, 19], [178, 180, 19], [480, 180, 19]
-    ]) assert.deepEqual(getWebPhysicsStepOptions(input), { unitStep: 1 / fps, maxStepNum });
+    ]) assert.deepEqual(getWebPhysicsStepOptions(input), { unitStep: 1 / fps, maxStepNum, stabilityReferenceHz: 45 });
+});
+
+test('关节纠错基准Hz独立于物理频率：默认45、30到180边界、5Hz步长、非法值回退', async () => {
+    const { getWebPhysicsStepOptions, normalizeWebStabilityReference } = await import(rateUrl);
+    for (const [input, expected] of [
+        [undefined, 45], [null, 45], ['', 45], ['  ', 45], [NaN, 45], [Infinity, 45], [0, 30], [-1, 30], ['65', 65],
+        [30, 30], [65, 65], [90, 90], [95, 95], [130, 130], [177, 175], [178, 180], [999, 180], ['invalid', 45]
+    ]) assert.equal(normalizeWebStabilityReference(input), expected);
+    assert.deepEqual(getWebPhysicsStepOptions(180, 130),
+        { unitStep: 1 / 180, maxStepNum: 19, stabilityReferenceHz: 130 });
+    assert.equal(getWebPhysicsStepOptions(65, 0).stabilityReferenceHz, 30);
 });
 
 test('网页适配在固定源唯一锚点改限幅和预算，源码升级缺失/重复锚点时失败', () => {
     const read = (file) => fs.readFileSync(path.join(publicRoot, 'js', file), 'utf8');
     const display = read('display-mmd.js');
     assert.ok(display.includes('clamp(value, 30, 90, DEFAULT_MMD_LIGHTING.physicsFps)'));
-    assert.ok(addPhysicsRateDisplay(display).includes('clamp(value, 30, 180, DEFAULT_MMD_LIGHTING.physicsFps)'));
+    const generatedDisplay = addPhysicsRateDisplay(display);
+    assert.ok(generatedDisplay.includes('clamp(value, 30, 180, DEFAULT_MMD_LIGHTING.physicsFps)'));
+    assert.ok(generatedDisplay.includes('physicsFps: 90,'));
+    assert.ok(addPhysicsRateLighting(read('display-mmd-lighting.js')).includes('const DEFAULT_PHYSICS_FPS = 90;'));
+    assert.ok(addPhysicsRateHelper(read('mmd-pmx-helper.mjs'), rateUrl).includes('const DEFAULT_PMX_PHYSICS_FPS = 90;'));
     const { addLocalRuntime } = require('../3rd/mmd-ar-test/web-local-assets-inject');
     const patched = addPhysicsRateRuntime(addLocalRuntime(read('display-pmx-runtime.js'), './local.mjs', './motion.mjs'), rateUrl);
     assert.ok(patched.includes('normalizeLightNumber(value, 30, 180, lightingState.physicsFps)'));
-    assert.ok(patched.includes('Object.assign(currentPhysics, getWebPhysicsStepOptions(lightingState.physicsFps))'));
-    assert.ok(patched.includes('Object.assign(physics, getWebPhysicsStepOptions(lightingState.physicsFps))'));
-    for (const transform of [addPhysicsRateDisplay, addPhysicsRateHelper, addPhysicsRateRuntime]) {
+    assert.ok(patched.includes('Object.assign(currentPhysics, getWebPhysicsStepOptions(lightingState.physicsFps, physicsStabilityReferenceHz))'));
+    assert.ok(patched.includes('Object.assign(physics, getWebPhysicsStepOptions(lightingState.physicsFps, physicsStabilityReferenceHz))'));
+    assert.ok(patched.includes('normalizeWebStabilityReference'));
+    assert.ok(patched.includes('physicsFps: 90,'));
+    for (const transform of [addPhysicsRateDisplay, addPhysicsRateLighting, addPhysicsRateHelper, addPhysicsRateRuntime]) {
         assert.throws(() => transform('', rateUrl), /唯一锚点/u);
     }
     assert.throws(() => addPhysicsRateDisplay(display + display), /唯一锚点/u);
@@ -76,6 +93,24 @@ async function fixture() {
     })();
     return fixturePromise;
 }
+
+test('缺失或非法物理频率从绑定姿态创建90Hz/45Hz物理，显式保存65Hz仍恢复', async () => {
+    const { makeMesh, create } = await fixture();
+    for (const [value, expected] of [[undefined, 90], [null, 90], ['', 90], ['invalid', 90], [65, 65]]) {
+        const mesh = makeMesh();
+        const { helper, physicsError } = await create(mesh, value);
+        assert.equal(physicsError, null);
+        const physics = helper.objects.get(mesh).physics;
+        try {
+            assert.equal(physics.unitStep, 1 / expected);
+            assert.equal(physics.maxStepNum, Math.ceil(expected * 0.1) + 1);
+            assert.equal(physics.stabilityReferenceHz, 45);
+        } finally {
+            helper.remove(mesh); assert.equal(physics.manager.nativeObjects.size, 0);
+            mesh.geometry.dispose(); mesh.material.dispose();
+        }
+    }
+});
 
 test('真实Ammo在180Hz下以60/30/10FPS推进一秒均保持恒速位移，实时降频不清零', async () => {
     const { makeMesh, create } = await fixture();
@@ -141,5 +176,17 @@ test('180Hz手动动作从绑定姿态创建物理且速度清零，关闭物理
         oldHelper.remove(mesh);
         assert.equal(oldPhysics.manager.nativeObjects.size, 0);
         mesh.geometry.dispose(); mesh.material.dispose();
+    }
+});
+
+// 直接运行生成显示层，验证运行时尚未创建时的默认与空白输入，而非仅匹配补丁字符串。
+test('生成显示层纠错接口与共享归一化保持一致，缺失和空白均回退45Hz', async () => {
+    const vm = require('node:vm');
+    const { normalizeWebStabilityReference } = await import(rateUrl);
+    const source = fs.readFileSync(path.join(publicRoot, 'js/display-mmd.js'), 'utf8');
+    const context = vm.createContext({ window: {} });
+    new vm.Script(addStabilityDisplay(source)).runInContext(context);
+    for (const value of [undefined, null, '', '  ', NaN, Infinity, 'invalid', 0, 65, 130, 999]) {
+        assert.equal(context.window.DisplayMmd.setPhysicsStabilityReference(value), normalizeWebStabilityReference(value));
     }
 });

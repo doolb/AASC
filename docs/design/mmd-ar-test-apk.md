@@ -1,5 +1,23 @@
 # MMD AR 独立测试 APK / HTTPS 网页设计
 
+## 2026-10-01 关节纠错基准Hz可调（已实现）
+
+用户询问“布料计算基准 Hz 可不可以调”，确认实施：测试网页“物理”分类新增“纠错基准 Hz”滑条（30–180、5Hz 步长、默认 45、本地记忆），实时改变关节 STOP_ERP 的换算基准；只改纠错强度，不修改弹簧、质量、阻尼、步进预算或渲染。
+
+参考 Hz 决定单位时间纠错率的换算：`ERP = 1-(1-0.475)^(参考Hz×unitStep)`；65 是原库 0.475 的标定基准、也是既有跨 Hz 对照的基线，显式选择65可恢复旧纠错强度，当前默认45由本轮要求调整，调高关节更硬、调低更松。参考值经共享步进参数（`getWebPhysicsStepOptions` 第二个参数）写入每个 MMDPhysics 实例；稳定性补丁的记忆同时核对 `unitStep` 与参考值，任一变化都在刷新时重算六轴；运行时实时改参考时由 `setStabilityReferenceHz` 立即重算，不依赖变频检测（只改参考不会触发 `resetAnchorInterpolation`）。非法/缺失回退 45，其余数值按 30–180 截断并 5Hz 取整。
+
+实现：`web-physics-rate.mjs`（`normalizeWebStabilityReference`＋参数对象增加 `stabilityReferenceHz`）、`web-physics-rate.js`（运行时创建/变频两处步进参数携带参考值）、`web-physics-stability.js`（补丁记忆双条件＋`setStabilityReferenceHz`＋`addStabilityRuntime`/`addStabilityDisplay` 注入）、`web-panel-groups.js`（物理分类滑条＋说明文字＋本地记忆）、`build.js`（注入链；控件由面板自测核对）。仅独立 WEB_MODE，正式显示端与旧 APK 不变。
+
+
+## 2026-10-01 默认纠错45Hz与物理90Hz（已实现）
+
+用户要求默认纠错Hz改为45、物理改为90。范围为mmd-ar独立测试构建，纠错基准默认由65改45，物理步进默认由65改90；保持30–180范围与5Hz步长。缺失/非法配置按新的默认回退，合法手动保存值继续优先恢复，不强行覆盖已有180Hz等偏好。纠错公式保留ERP=1-0.525^(参考Hz/物理Hz)，45/90时每子步ERP约0.275431，90Hz最大0.1秒预算为10步。
+
+已修改web-physics-stability.js的物理实例/运行时/显示层参考默认和非法回退；web-physics-rate.mjs的共享默认/回退；web-physics-rate.js的生成DisplayMmd、PMX runtime与helper物理默认；web-panel-groups.js纠错滑条初值、读数、存储缺省；build.js物理控件初值/读数及生成灯光模块“恢复默认”的90Hz。正式显示端和固定vendor源不改。当前网页与测试APK共用部分构建适配，实施时核对生成范围，用户未要求打包APK。
+
+扩展physics-rate/stability/web-panel-groups已有测试，验证无存储默认45/90、非法回退、合法偏好恢复、真实关节ERP与当前回写/动作切换不回归；采用npm run build:web:mmd-ar-test构建并核对生成指纹。用户确认后实施；51项定向测试通过（面板原夹具遗漏当前工作区补光/骨骼控件，同步后单项复验通过）。真实局域网页验证首次45/90、手动180/130刷新保留、非法回退45/90以及物理恢复默认90Hz；生成34脚本、4内联脚本、19相对指纹引用验证通过。任务见docs/task/20261001_MMDAR默认纠错45与物理90Hz.md。
+
+
 ## 2026-10-01 后蝴蝶结末端持续旋转抖动（已实现并验证）
 
 用户报告左后与右后蝴蝶结6_1不停旋转抖动，已确认具体修复方案。以内置米娅验证：右后蝴蝶結帶_6_1（骨骼247、刚体120）与左后蝴蝶結帶_6_1（骨骼255、刚体127）均为type1、质量约0.001、薄盒体，末端关节Y锁定、X/Z±60度、旋转弹簧0。现场模型来源仍未回复，不能将受控实验视为现场唯一根因。

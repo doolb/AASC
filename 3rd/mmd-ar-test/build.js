@@ -234,7 +234,8 @@ async function stageTextAssets() {
     </div>
   `);
   if (WEB_MODE) {
-    $('#displayMmdPhysicsFps').attr('max', '180');
+    $('#displayMmdPhysicsFps').attr({ max: '180', value: '90' });
+    $('#displayMmdPhysicsFpsValue').text('90 Hz');
     $('#displayMmdLightingPanel').prepend(`
       <label class="display-mmd-lighting-shadow">
         <input id="mmdArMotionPlayback" type="checkbox" checked>
@@ -465,6 +466,10 @@ async function stageTextAssets() {
     await fs.writeFile(rigidBodyPath, (await fs.readFile(path.join(__dirname, 'web-rigid-body-debug.mjs'), 'utf8'))
       .replace('./web-skeleton-debug.mjs', skeletonUrl));
     const rigidBodyUrl = `./web-rigid-body-debug.mjs?v=${(await hashFile(rigidBodyPath)).sha256.slice(0, 12)}`;
+    // 复用灯光重置按钮时也恢复90Hz，只修改生成的测试副本。
+    const physicsLightingPath = path.join(GENERATED_ASSETS, 'js/display-mmd-lighting.js');
+    await fs.writeFile(physicsLightingPath, WEB_PHYSICS_RATE.addPhysicsRateLighting(
+      await fs.readFile(physicsLightingPath, 'utf8')));
     const pmxHelperPath = path.join(GENERATED_ASSETS, 'js/mmd-pmx-helper.mjs');
     await fs.writeFile(pmxHelperPath, WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl));
     const pmxHelperUrl = `./mmd-pmx-helper.mjs?v=${(await hashFile(pmxHelperPath)).sha256.slice(0, 12)}`;
@@ -513,11 +518,11 @@ async function stageTextAssets() {
     const runtimeWithProbe = WEB_SHADOW_BIAS.addShadowBiasRuntime(runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
     window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`));
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
-    await fs.writeFile(pmxRuntimePath, WEB_RIGID_BODY_DEBUG.addRigidBodyRuntime(WEB_SKELETON_DEBUG.addSkeletonRuntime(WEB_PHYSICS_SUBSTEPS.addSubstepRuntime(WEB_PHYSICS_RATE.addPhysicsRateRuntime(
+    await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_STABILITY.addStabilityRuntime(WEB_RIGID_BODY_DEBUG.addRigidBodyRuntime(WEB_SKELETON_DEBUG.addSkeletonRuntime(WEB_PHYSICS_SUBSTEPS.addSubstepRuntime(WEB_PHYSICS_RATE.addPhysicsRateRuntime(
       WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl), physicsRateUrl)), skeletonUrl)
       .replace('./mmd-pmx-helper.mjs', pmxHelperUrl).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
-      `'./display-pmx-ao.mjs?v=${aoVersion}'`), rigidBodyUrl));
+      `'./display-pmx-ao.mjs?v=${aoVersion}'`), rigidBodyUrl)));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
     const mmdScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd.js');
     const runtimeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js'))).sha256.slice(0, 12);
@@ -525,8 +530,8 @@ async function stageTextAssets() {
     const runtimeImport = "'./display-pmx-runtime.js'";
     if (!current.includes(runtimeImport)) throw new Error('测试网页未找到 PMX runtime 动态导入入口');
     if (!current.includes('getMotionProgress: () =>')) throw new Error('正式显示模块缺少 VMD 进度入口');
-    await fs.writeFile(mmdScriptPath, WEB_RIGID_BODY_DEBUG.addRigidBodyDisplay(WEB_SKELETON_DEBUG.addSkeletonDisplay(WEB_PHYSICS_RATE.addPhysicsRateDisplay(WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current))))
-      .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`)));
+    await fs.writeFile(mmdScriptPath, WEB_PHYSICS_STABILITY.addStabilityDisplay(WEB_RIGID_BODY_DEBUG.addRigidBodyDisplay(WEB_SKELETON_DEBUG.addSkeletonDisplay(WEB_PHYSICS_RATE.addPhysicsRateDisplay(WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current))))
+      .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`))));
     const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }

@@ -407,7 +407,7 @@ test('动态父骨骼带动type2子骨骼，帧间目标延迟有界且不会改
     } finally { physics.manager.freeVector3(vector); cleanup(); }
 });
 
-test('真实关节65Hz ERP保持原值，六轴只在变频时刷新；跨Hz相同时间限位误差衰减相近', async () => {
+test('真实关节默认45Hz基准，六轴只在变频时刷新；跨Hz相同时间限位误差衰减相近', async () => {
     const { getWebPhysicsStepOptions } = await fixture();
     const residuals = [];
     for (const fps of [30, 65, 90, 120, 180]) {
@@ -419,14 +419,16 @@ test('真实关节65Hz ERP保持原值，六轴只在变频时刷新；跨Hz相�
         const form = manager.allocTransform();
         const vector = manager.allocVector3();
         try {
-            const expected = 1 - 0.525 ** (65 / fps);
+            const expected = 1 - 0.525 ** (45 / fps);
             for (let axis = 0; axis < 6; axis += 1) near(joint.getParam(2, axis), expected);
             vector.setValue(0, 0, 0); physics.world.setGravity(vector);
             const body = physics.bodies[1].body;
             manager.setIdentity(form); manager.setOriginFromArray3(form, [0.1, 0, 0]);
             body.setCenterOfMassTransform(form); body.getMotionState().setWorldTransform(form);
             physics.update(0.1);
-            residuals.push(body.getCenterOfMassTransform().getOrigin().x());
+            const residual = body.getCenterOfMassTransform().getOrigin().x();
+            residuals.push(residual);
+            near(residual, 0.1 * 0.525 ** (45 / fps * Math.floor(0.1 * fps)));
             let updates = 0;
             const setParam = joint.setParam.bind(joint);
             joint.setParam = (...args) => { updates += 1; return setParam(...args); };
@@ -439,8 +441,58 @@ test('真实关节65Hz ERP保持原值，六轴只在变频时刷新；跨Hz相�
     }
     // 65Hz的0.1秒包含6个完整子步，其余组包含整步数，允许不足一步带来的误差。
     assert.ok(Math.max(...residuals) / Math.min(...residuals) < 1.5, `限位残余=${residuals}`);
-    assert.ok(residuals.every((value) => value > 0 && value < 0.003));
+    assert.ok(residuals.every((value) => value > 0 && value < 0.01));
     console.info(`跨Hz锁定关节0.1秒位置残余：${residuals.map((value) => value.toFixed(6)).join(', ')}`);
+});
+
+test('关节纠错基准Hz可调：同物理频率下按基准换算，实时改基准立即重算六轴', async () => {
+    const { getWebPhysicsStepOptions } = await fixture();
+    const { physics, cleanup } = await create(180, { bodies: [
+        { ...base, type: 0, boneIndex: 0, position: [0, 0, 0] },
+        { ...base, type: 1, boneIndex: -1, position: [0, 0, 0] }], constraints: [lockedJoint] });
+    const joint = physics.constraints[0].constraint;
+    try {
+        // 默认参考45：180Hz约0.149，降低基准后单位时间纠错更柔和。
+        const defaultErp = 1 - 0.525 ** (45 / 180);
+        const raisedErp = 1 - 0.525 ** (130 / 180);
+        for (let axis = 0; axis < 6; axis += 1) near(joint.getParam(2, axis), defaultErp);
+        // 运行时实时改基准（频率不变）：立即重算六轴，纠错率变大。
+        assert.equal(physics.setStabilityReferenceHz(130), 130);
+        assert.ok(raisedErp > defaultErp);
+        for (let axis = 0; axis < 6; axis += 1) near(joint.getParam(2, axis), raisedErp);
+        // 回落到45立即恢复；非法值按45处理并回读45。
+        physics.setStabilityReferenceHz(45);
+        for (let axis = 0; axis < 6; axis += 1) near(joint.getParam(2, axis), defaultErp);
+        assert.equal(physics.setStabilityReferenceHz(Number.NaN), 45);
+        for (let axis = 0; axis < 6; axis += 1) near(joint.getParam(2, axis), defaultErp);
+        // 创建/变频路径：步进参数携带参考值，复位刷新后生效；65Hz基准恢复原库0.475。
+        Object.assign(physics, getWebPhysicsStepOptions(180, 130));
+        physics.resetAnchorInterpolation();
+        for (let axis = 0; axis < 6; axis += 1) near(joint.getParam(2, axis), raisedErp);
+        Object.assign(physics, getWebPhysicsStepOptions(65, 65));
+        physics.resetAnchorInterpolation();
+        for (let axis = 0; axis < 6; axis += 1) near(joint.getParam(2, axis), 0.475);
+    } finally { cleanup(); }
+});
+
+test('不传步进参数时真实Ammo默认90Hz、纠错45Hz且六轴ERP正确', async () => {
+    const { MMDPhysics } = await fixture();
+    const bodies = [
+        { ...base, type: 0, boneIndex: 0, position: [0, 0, 0] },
+        { ...base, type: 1, boneIndex: -1, position: [0, 0, 0] }];
+    const { physics: initial, mesh, cleanup } = await create(90, { bodies, constraints: [lockedJoint] });
+    initial.dispose();
+    let physics;
+    try {
+        physics = new MMDPhysics(mesh, bodies, [lockedJoint]);
+        near(physics.unitStep, 1 / 90);
+        assert.equal(physics.stabilityReferenceHz, 45);
+        for (let axis = 0; axis < 6; axis += 1) near(physics.constraints[0].constraint.getParam(2, axis), 1 - Math.sqrt(0.525));
+    } finally {
+        physics?.dispose();
+        if (physics) assert.equal(physics.manager.nativeObjects.size, 0);
+        cleanup();
+    }
 });
 
 test('30至180Hz在10/30/60/90/120/144FPS下完整推进时间，恒速刚体不因预算丢步', async () => {

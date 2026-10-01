@@ -7,17 +7,35 @@ function once(source, anchor, replacement) {
 }
 
 function addPhysicsStability(source) {
-    let output = once(source, '\t\tthis.constraints = [];', `\t\tthis.constraints = [];
-        this.stabilityUnitStep = null;`);
+    // 未显式传入步长时也采用测试默认90Hz，固定vendor文件保持原65Hz。
+    let output = once(source, 'this.unitStep = ( params.unitStep !== undefined ) ? params.unitStep : 1 / 65;',
+        'this.unitStep = ( params.unitStep !== undefined ) ? params.unitStep : 1 / 90;');
+    output = once(output, '\t\tthis.constraints = [];', `\t\tthis.constraints = [];
+        this.stabilityUnitStep = null;
+        this.stabilityReferenceHz = 45;
+        this.stabilityAppliedReferenceHz = null;`);
     output = once(output, '    resetAnchorInterpolation() {', `    // 原库STOP_ERP=0.475以65Hz为参考；归一单位时间的误差衰减，而不修改弹簧/质量。
+    // 参考Hz运行时可调（默认45）：unitStep或参考值任一变化都重算六轴纠错率。
     _refreshConstraintStability() {
-        if (this.stabilityUnitStep === this.unitStep) return;
-        const stopErp = 1 - Math.pow(1 - 0.475, 65 * this.unitStep);
+        if (this.stabilityUnitStep === this.unitStep
+            && this.stabilityAppliedReferenceHz === this.stabilityReferenceHz) return;
+        const reference = Number(this.stabilityReferenceHz);
+        const referenceHz = Number.isFinite(reference) && reference > 0 ? reference : 45;
+        const stopErp = 1 - Math.pow(1 - 0.475, referenceHz * this.unitStep);
         for (const entry of this.constraints) {
             if (typeof entry.constraint.setParam !== 'function') continue;
             for (let axis = 0; axis < 6; axis += 1) entry.constraint.setParam(2, stopErp, axis);
         }
         this.stabilityUnitStep = this.unitStep;
+        this.stabilityAppliedReferenceHz = this.stabilityReferenceHz;
+    }
+
+    // 运行时实时改基准：立即重算六轴，不等待变频/复位；非法值按45。
+    setStabilityReferenceHz(value) {
+        const reference = Number(value);
+        this.stabilityReferenceHz = Number.isFinite(reference) && reference > 0 ? reference : 45;
+        this._refreshConstraintStability();
+        return this.stabilityReferenceHz;
     }
 
     resetAnchorInterpolation() {`);
@@ -69,4 +87,53 @@ function addPhysicsStability(source) {
     return output;
 }
 
-module.exports = { addPhysicsStability };
+// 网页运行时接口：参考Hz进入共享步进参数；变更时立即改写当前物理实例，下一帧重算六轴纠错率。
+// getWebPhysicsStepOptions / normalizeWebStabilityReference 由频率模块的运行时导入提供。
+function addStabilityRuntime(source) {
+    let output = once(source, '    let visible = true;', `    let physicsStabilityReferenceHz = 45;
+    const setPhysicsStabilityReference = (value) => {
+        physicsStabilityReferenceHz = normalizeWebStabilityReference(value);
+        const physics = helper.current?.objects?.get(currentMesh)?.physics;
+        if (physics) {
+            Object.assign(physics, getWebPhysicsStepOptions(lightingState.physicsFps, physicsStabilityReferenceHz));
+            // 只改基准不触发变频检测，需显式立即重算六轴纠错率。
+            if (typeof physics.setStabilityReferenceHz === 'function') {
+                physics.setStabilityReferenceHz(physicsStabilityReferenceHz);
+            }
+        }
+        startRendering();
+        return physicsStabilityReferenceHz;
+    };
+
+    let visible = true;`);
+    return once(output, '        setMotionPlaybackEnabled,', `        setPhysicsStabilityReference,
+        getPhysicsStabilityReference: () => physicsStabilityReferenceHz,
+        setMotionPlaybackEnabled,`);
+}
+
+// 显示层：参考Hz只属于测试网页物理分类；runtime重建后补发。
+// 经典脚本不能导入共享模块，这里按同一规则（30–180、5Hz步长、非法回退45）本地归一，
+// 保证runtime尚未创建时也能保存待补发的值。
+function addStabilityDisplay(source) {
+    let output = once(source, '    function setMotionPlaybackEnabled(enabled) {', `    let physicsStabilityReference = 45;
+    function setPhysicsStabilityReference(value) {
+        // 缺失/空串/非有限值回退45；其余30-180截断并按5Hz取整（与共享归一化一致）。
+        if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+            physicsStabilityReference = 45;
+        } else {
+            const number = Number(value);
+            physicsStabilityReference = Number.isFinite(number)
+                ? Math.round(Math.min(180, Math.max(30, number)) / 5) * 5 : 45;
+        }
+        state.runtime?.setPhysicsStabilityReference?.(physicsStabilityReference);
+        return physicsStabilityReference;
+    }
+
+    function setMotionPlaybackEnabled(enabled) {`);
+    output = once(output, '                state.runtime.setVisible(state.visible);',
+        '                state.runtime.setPhysicsStabilityReference?.(physicsStabilityReference);\n                state.runtime.setVisible(state.visible);');
+    return once(output, '        setMotionPlaybackEnabled,',
+        '        setPhysicsStabilityReference,\n        setMotionPlaybackEnabled,');
+}
+
+module.exports = { addPhysicsStability, addStabilityRuntime, addStabilityDisplay };

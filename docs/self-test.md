@@ -1,5 +1,12 @@
 # 自测功能文档
 
+## MMD AR默认纠错45Hz与物理90Hz（2026-10-01）
+
+51项定向回归通过：rate7、stability16、substeps6、lifecycle6、motion8、panel8。全套原面板1项因夹具遗漏工作区已有控件失败，同步后单项通过；其余49项通过，新增显示层归一化1项通过。真实Ammo默认unitStep=1/90、参考45、六轴ERP约0.275431；显式65仍恢复，蝴蝶结旋转回写及20秒米娅180Hz静止等回归通过。
+
+网页构建及34脚本、4内联、19相对指纹通过。Puppeteer在用户LAN地址验证fresh90/45、manual180/130、saved180/130、invalid90/45、before-reset180/45、reset90/45，真实六轴ERP与公式一致且无页面异常。未打包APK，手机实际布料手感/性能待验收。
+
+
 ## MMD AR主光阴影偏移（2026-10-01）
 
 源`web-shadow-bias.js`/`web-panel-groups.js`/`build.js`，阴影与完整面板内联模板、生成runtime静态语法通过；生成网页4段内联脚本和importmap JSON语法通过，两个控件各1个且位于主光分组，范围/步长/默认值与集中字段一致。npm网页构建成功，runtime指纹`bb62ffb19c38`与动态导入一致；AO仍为`8eae1293cfd9`且与既有源码一致，差异空白检查通过。

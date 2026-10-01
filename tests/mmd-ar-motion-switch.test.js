@@ -32,7 +32,7 @@ async function fixture() {
         _setupMeshPhysics(value, options) {
             assert.equal(value, mesh);
             assert.deepEqual(bone.position.toArray(), [0, 0, 0]);
-            assert.deepEqual(options, { warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 8 });
+            assert.deepEqual(options, { warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 8, stabilityReferenceHz: 45 });
             events.push('physics');
         },
         remove() { events.push('remove'); }
