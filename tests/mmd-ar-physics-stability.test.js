@@ -49,7 +49,8 @@ async function create(fps = 180, options = {}) {
         { ...base, type: 2, boneIndex: 1, position: [0, 0, 0], ...options.controlled },
         { ...base, type: 1, boneIndex: -1, position: [3, 0, 0] },
         { ...base, type: 2, boneIndex: -1, position: [6, 0, 0] }];
-    const physics = new MMDPhysics(mesh, bodies, options.constraints || [], {
+    const Physics = options.Physics || MMDPhysics;
+    const physics = new Physics(mesh, bodies, options.constraints || [], {
         ...getWebPhysicsStepOptions(fps), gravity: new THREE.Vector3(0, -9.8, 0) });
     const cleanup = () => {
         physics.dispose();
@@ -59,6 +60,237 @@ async function create(fps = 180, options = {}) {
     };
     return { THREE, physics, mesh, parent, child, cleanup };
 }
+
+// 用明确的骨骼世界目标构造刚体姿态。回归只比较最终世界旋转，不重复局部换算实现。
+function setBoneWorldPose(physics, index, quaternion, position = [0, 0, 0]) {
+    const manager = physics.manager;
+    const form = manager.allocTransform();
+    let bodyForm = null;
+    try {
+        manager.setIdentity(form);
+        manager.setOriginFromArray3(form, position);
+        manager.setBasisFromThreeQuaternion(form, quaternion);
+        const entry = physics.bodies[index];
+        bodyForm = manager.multiplyTransforms(form, entry.boneOffsetForm);
+        entry.body.setCenterOfMassTransform(bodyForm);
+        entry.body.getMotionState().setWorldTransform(bodyForm);
+    } finally {
+        if (bodyForm) manager.freeTransform(bodyForm);
+        manager.freeTransform(form);
+    }
+}
+
+function readBoneWorldTarget(physics, index, quaternion) {
+    const manager = physics.manager;
+    const form = physics.bodies[index]._getWorldTransformForBone();
+    const rotation = manager.getBasis(form);
+    try { return quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w()).normalize(); }
+    finally { manager.freeQuaternion(rotation); manager.freeTransform(form); }
+}
+
+test('固定刚体多轴大角度时type1/type2骨骼不自旋，旧回写在相同条件下出现错误反馈', async () => {
+    const { THREE, MMDPhysics, BaselinePhysics } = await fixture();
+    const results = [];
+    for (const type of [1, 2]) {
+        for (const Physics of [BaselinePhysics, MMDPhysics]) {
+            const { physics, mesh, parent, child, cleanup } = await create(180, { Physics, bodies: [
+                { ...base, type: 1, boneIndex: 0, position: [0, 0, 0] },
+                { ...base, type, boneIndex: 1, position: [0.2, 0.1, 0.15], rotation: [0.3, -0.4, 0.5] }] });
+            const parentTarget = new THREE.Quaternion().setFromEuler(new THREE.Euler(2.3, 0.5, 0.7));
+            const childTarget = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.8, 1.2, -0.6));
+            const observed = new THREE.Quaternion();
+            const previous = new THREE.Quaternion();
+            let error = 0;
+            let turn = 0;
+            try {
+                setBoneWorldPose(physics, 0, parentTarget, [0, 2, 0]);
+                setBoneWorldPose(physics, 1, childTarget, [0.5, 3, 0]);
+                for (let frame = 0; frame < 256; frame += 1) {
+                    mesh.updateMatrixWorld(true); physics._updateBones();
+                    child.getWorldQuaternion(observed);
+                    if (frame >= 128) {
+                        error += observed.angleTo(childTarget);
+                        turn += observed.angleTo(previous);
+                    }
+                    previous.copy(observed);
+                }
+                results.push({ type, fixed: Physics === MMDPhysics, error: error / 128, turn: turn / 128 });
+                if (Physics === MMDPhysics) {
+                    near(parent.getWorldQuaternion(observed).angleTo(parentTarget), 0, 1e-5);
+                    near(error, 0, 0.002); near(turn, 0, 0.002);
+                    if (type === 2) assert.deepEqual(child.position.toArray(), [0, 1, 0]);
+                } else {
+                    assert.ok(error / 128 > 0.1, '旧实现必须复现世界旋转错误，防止无效夹具误报通过');
+                    assert.ok(turn / 128 > 0.1, '固定刚体时旧骨骼仍自旋');
+                }
+                for (const entry of physics.bodies) {
+                    const velocity = entry.body.getAngularVelocity();
+                    near(Math.hypot(velocity.x(), velocity.y(), velocity.z()), 0);
+                }
+            } finally { cleanup(); }
+        }
+    }
+    console.info(`固定刚体旋转回写平均误差/转角(rad)：${JSON.stringify(results)}`);
+});
+
+test('type1/type2回写读取当帧父级和模型组合旋转，动作恢复旧局部姿态不影响世界目标', async () => {
+    const { THREE } = await fixture();
+    for (const type of [1, 2]) {
+        const { physics, mesh, parent, child, cleanup } = await create(180, { bodies: [
+            { ...base, type, boneIndex: 1, position: [0.2, 0.1, -0.3], rotation: [0.6, -0.4, 0.2] }] });
+        const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.6, 0.8, 1.1));
+        const observed = new THREE.Quaternion();
+        try {
+            setBoneWorldPose(physics, 0, target, [2, 3, -1]);
+            for (let frame = 0; frame < 128; frame += 1) {
+                // 故意保留上一帧matrixWorld，再恢复动作局部姿态，验证不读取旧矩阵形成增量。
+                mesh.rotation.set(0.3, frame * 0.035, -0.7); mesh.position.set(1, 0, 2);
+                parent.rotation.set(2.2 * Math.sin(frame * 0.09), 0.4, frame * 0.025);
+                child.rotation.set(-0.5, 0.9, -0.1);
+                physics._updateBones();
+                near(child.getWorldQuaternion(observed).angleTo(target), 0, 1e-5);
+                if (type === 2) assert.deepEqual(child.position.toArray(), [0, 1, 0]);
+            }
+        } finally { cleanup(); }
+    }
+});
+
+test('旋转回写异常归还全部临时对象，连续回写native池稳定并保留刚体速度', async () => {
+    const { THREE, physics, parent, cleanup } = await create();
+    const entry = physics.bodies[0];
+    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(2.3, 0.5, 0.7));
+    const vector = physics.manager.allocVector3();
+    const getWorldQuaternion = parent.getWorldQuaternion;
+    try {
+        setBoneWorldPose(physics, 0, target);
+        vector.setValue(0.2, 0.4, 0.6); entry.body.setAngularVelocity(vector);
+        entry.updateBone();
+        const size = physics.manager.nativeObjects.size;
+        const pools = () => [physics.manager.transforms.length, physics.manager.quaternions.length,
+            physics.manager.threeQuaternions.length];
+        const before = pools();
+        parent.getWorldQuaternion = () => { throw new Error('模拟父级世界矩阵读取失败'); };
+        assert.throws(() => entry.updateBone(), /模拟父级世界矩阵读取失败/u);
+        assert.deepEqual(pools(), before, '异常也完整归还变换、Ammo和Three四元数');
+        parent.getWorldQuaternion = getWorldQuaternion;
+        for (let frame = 0; frame < 1300; frame += 1) entry.updateBone();
+        assert.equal(physics.manager.nativeObjects.size, size);
+        assert.deepEqual(pools(), before);
+        const angular = entry.body.getAngularVelocity();
+        [angular.x(), angular.y(), angular.z()].forEach((value, index) => near(value, [0.2, 0.4, 0.6][index]));
+    } finally {
+        parent.getWorldQuaternion = getWorldQuaternion;
+        physics.manager.freeVector3(vector); cleanup();
+    }
+});
+
+test('非单位模型缩放及父级世界旋转下真实物理帧回写正确，type2局部位置保持', async () => {
+    const { THREE } = await fixture();
+    for (const type of [1, 2]) {
+        const { physics, mesh, child, cleanup } = await create(180, { bodies: [
+            { ...base, type, boneIndex: 1, position: [0, 0, 0], rotation: [0.3, -0.4, 0.5] }] });
+        const group = new THREE.Group();
+        const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.6, 0.8, 1.1));
+        const observed = new THREE.Quaternion();
+        const expected = new THREE.Quaternion();
+        group.add(mesh); group.position.set(2, 3, -1); group.rotation.set(0.7, -0.3, 0.4);
+        mesh.scale.setScalar(0.25); mesh.position.set(1, 2, 3);
+        try {
+            setBoneWorldPose(physics, 0, target, [0.5, 3, -1]);
+            for (let frame = 0; frame < 64; frame += 1) {
+                mesh.rotation.set(-0.3, frame * 0.035, 0.8); group.updateMatrixWorld(true);
+                physics.update(1 / 60);
+                group.getWorldQuaternion(expected).multiply(target);
+                near(child.getWorldQuaternion(observed).angleTo(expected), 0, 1e-5);
+                assert.equal(mesh.parent, group); assert.equal(mesh.scale.x, 0.25);
+                if (type === 2) assert.deepEqual(child.position.toArray(), [0, 1, 0]);
+            }
+        } finally { group.remove(mesh); cleanup(); }
+    }
+});
+
+test('真实米娅两后蝴蝶结6_1固定刚体不自旋，180Hz骨骼转角跟随物理目标', {
+    skip: !fs.existsSync(modelPath) && '本地米娅PMX未安装'
+}, async () => {
+    const { THREE, MMDPhysics, BaselinePhysics, getWebPhysicsStepOptions } = await fixture();
+    const { MMDLoader } = await import('three/addons/loaders/MMDLoader.js');
+    const { MMDParser } = await import(pathToFileURL(path.join(vendor, 'libs/mmdparser.module.js')).href);
+    const bytes = fs.readFileSync(modelPath);
+    const metrics = [];
+    for (const Physics of [BaselinePhysics, MMDPhysics]) {
+        const data = new MMDParser.Parser().parsePmx(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), true);
+        const loader = new MMDLoader();
+        loader.meshBuilder.materialBuilder.build = () => data.materials.map(() => new THREE.MeshBasicMaterial());
+        const mesh = loader.meshBuilder.build(data, ''); mesh.updateMatrixWorld(true);
+        const metadata = mesh.geometry.userData.MMD;
+        const physics = new Physics(mesh, metadata.rigidBodies, metadata.constraints, getWebPhysicsStepOptions(180));
+        const targets = ['右后蝴蝶結帶_6_1', '左后蝴蝶結帶_6_1'].map((name) => {
+            const index = metadata.rigidBodies.findIndex((entry) => entry.name === name);
+            assert.ok(index >= 0, `目标刚体存在：${name}`);
+            assert.equal(metadata.rigidBodies[index].type, 1);
+            return { name, index, bone: mesh.skeleton.bones[metadata.rigidBodies[index].boneIndex],
+                previous: new THREE.Quaternion(), targetPrevious: new THREE.Quaternion(),
+                error: 0, turn: 0, squares: 0, maxError: 0 };
+        });
+        const observed = new THREE.Quaternion();
+        const target = new THREE.Quaternion();
+        const parentTarget = new THREE.Quaternion().setFromEuler(new THREE.Euler(2.3, 0.5, 0.7));
+        const childTarget = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.8, 1.2, -0.6));
+        try {
+            // 真实模型的两条父子链固定在不同轴大角度；不求解物理，隔离纯回写反馈。
+            for (const entry of targets) {
+                const parentBoneIndex = entry.bone.parent === mesh ? -1 : mesh.skeleton.bones.indexOf(entry.bone.parent);
+                const parentBodyIndex = metadata.rigidBodies.findIndex((body) => body.boneIndex === parentBoneIndex);
+                assert.ok(parentBodyIndex >= 0);
+                setBoneWorldPose(physics, parentBodyIndex, parentTarget);
+                setBoneWorldPose(physics, entry.index, childTarget);
+            }
+            for (let frame = 0; frame < 1200; frame += 1) {
+                mesh.updateMatrixWorld(true); physics._updateBones();
+                for (const entry of targets) {
+                    entry.bone.getWorldQuaternion(observed);
+                    if (frame >= 900) {
+                        entry.error += observed.angleTo(childTarget);
+                        entry.turn += observed.angleTo(entry.previous);
+                    }
+                    entry.previous.copy(observed);
+                }
+            }
+            metrics.push({ fixed: Physics === MMDPhysics, frozen: targets.map((entry) => ({ name: entry.name,
+                errorDeg: entry.error / 300 * 180 / Math.PI, turnDeg: entry.turn / 300 * 180 / Math.PI })) });
+            for (const entry of targets) {
+                if (Physics === MMDPhysics) {
+                    near(entry.error / 300, 0, 1e-5); near(entry.turn / 300, 0, 1e-5);
+                } else assert.ok(entry.turn / 300 > 0.1, '原回写在真实米娅骨骼上复现自旋');
+            }
+            if (Physics !== MMDPhysics) continue;
+            // 从绑定姿态重新开始真实180Hz步进；回写不消除物理本身的残余角速度。
+            mesh.pose(); mesh.updateMatrixWorld(true); physics.reset();
+            for (let frame = 0; frame < 1200; frame += 1) {
+                mesh.updateMatrixWorld(true); physics.update(1 / 60);
+                for (const entry of targets) {
+                    entry.bone.getWorldQuaternion(observed);
+                    readBoneWorldTarget(physics, entry.index, target);
+                    const error = observed.angleTo(target);
+                    entry.maxError = Math.max(entry.maxError, error);
+                    near(error, 0, 1e-5);
+                    if (frame >= 900) {
+                        near(observed.angleTo(entry.previous), target.angleTo(entry.targetPrevious), 1e-5);
+                        const angular = physics.bodies[entry.index].body.getAngularVelocity();
+                        entry.squares += angular.x() ** 2 + angular.y() ** 2 + angular.z() ** 2;
+                    }
+                    entry.previous.copy(observed); entry.targetPrevious.copy(target);
+                }
+            }
+            metrics.push({ hz: 180, seconds: 20, simulated: targets.map((entry) => ({ name: entry.name,
+                angularRms: Math.sqrt(entry.squares / 300), maxWritebackErrorDeg: entry.maxError * 180 / Math.PI })) });
+        } finally {
+            physics.dispose(); assert.equal(physics.manager.nativeObjects.size, 0);
+            mesh.geometry.dispose(); mesh.material.forEach((material) => material.dispose());
+        }
+    }
+    console.info(`真实米娅两末端回写对照：${JSON.stringify(metrics)}`);
+});
 
 test('type2位置按子步端点驱动且旋转保留，原线性阻尼为1也能跟随，无帧末COM跳变', async () => {
     const { THREE, physics, mesh, parent, child, cleanup } = await create(180, { controlled: { positionDamping: 1 } });
@@ -308,5 +540,12 @@ test('稳定性补丁要求唯一入口，固定vendor原始文件不被修改',
     const patched = addPhysicsSubsteps(addPhysicsLifecycle(source));
     assert.throws(() => addPhysicsStability(''), /唯一锚点/u);
     assert.throws(() => addPhysicsStability(patched + patched), /唯一锚点/u);
+    assert.throws(() => addPhysicsStability(patched.replace('\t_updateBoneRotation() {', '')), /唯一锚点/u);
+    assert.throws(() => addPhysicsStability(patched.replace('\t_updateBonePosition() {', '')), /唯一锚点/u);
+    const swapped = patched.replace('\t_updateBoneRotation() {', '__ROTATION_BOUNDARY__')
+        .replace('\t_updateBonePosition() {', '\t_updateBoneRotation() {')
+        .replace('__ROTATION_BOUNDARY__', '\t_updateBonePosition() {');
+    assert.throws(() => addPhysicsStability(swapped), /边界顺序/u);
     assert.equal(source.includes('positionDriven'), false);
+    assert.equal(source.includes('parentQuaternion.multiply(worldQuaternion)'), false);
 });

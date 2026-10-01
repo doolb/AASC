@@ -1,6 +1,6 @@
 'use strict';
 
-// 稳定性只接入独立网页副本；固定源升级时必须显式核对补丁入口。
+// 稳定性只接入独立测试构建副本；固定源升级时必须显式核对补丁入口。
 function once(source, anchor, replacement) {
     if (source.split(anchor).length !== 2) throw new Error(`网页物理稳定性缺少唯一锚点：${anchor.slice(0, 90)}`);
     return source.replace(anchor, replacement);
@@ -34,6 +34,38 @@ function addPhysicsStability(source) {
         }`);
     output = once(output, '\t\tif ( this.params.type === 2 ) {',
         '\t\tif ( this.params.type === 2 && !this.positionDriven ) {');
+    // 完整替换旋转回写入口，不依赖旧局部姿态和可能滞后一帧的骨骼世界矩阵。
+    // 两个边界各校验一次，固定库升级或重复注入时停止构建，避免静默保留错误反馈。
+    const rotationStart = '\t_updateBoneRotation() {';
+    const rotationEnd = '\t_updateBonePosition() {';
+    output = once(output, rotationStart, rotationStart);
+    output = once(output, rotationEnd, rotationEnd);
+    const start = output.indexOf(rotationStart);
+    const end = output.indexOf(rotationEnd);
+    if (end <= start) throw new Error('网页物理稳定性旋转回写边界顺序错误');
+    output = output.slice(0, start) + `    _updateBoneRotation() {
+        const manager = this.manager;
+        const form = this._getWorldTransformForBone();
+        const rotation = manager.getBasis(form);
+        const worldQuaternion = manager.allocThreeQuaternion();
+        const parentQuaternion = manager.allocThreeQuaternion();
+        try {
+            worldQuaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+            // 父骨骼可能刚被物理回写或动作恢复。getWorldQuaternion更新祖先及父级自身，
+            // 不遍历整个模型；世界目标必须由父世界旋转的逆换算为局部旋转。
+            if (this.bone.parent) this.bone.parent.getWorldQuaternion(parentQuaternion).invert();
+            else parentQuaternion.identity();
+            this.bone.quaternion.copy(parentQuaternion.multiply(worldQuaternion).normalize());
+        } finally {
+            // 只归还本次取得的池对象，不清理借用刚体、不改速度、质量或关节参数。
+            manager.freeThreeQuaternion(parentQuaternion);
+            manager.freeThreeQuaternion(worldQuaternion);
+            manager.freeQuaternion(rotation);
+            manager.freeTransform(form);
+        }
+    }
+
+` + output.slice(end);
     return output;
 }
 
