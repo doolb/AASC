@@ -32,6 +32,7 @@ const WEB_PHYSICS_STABILITY = WEB_MODE ? require('./web-physics-stability') : nu
 const WEB_SKELETON_DEBUG = WEB_MODE ? require('./web-skeleton-debug') : null;
 const WEB_RIGID_BODY_DEBUG = WEB_MODE ? require('./web-rigid-body-debug') : null;
 const WEB_SHADOW_BIAS = require('./web-shadow-bias');
+const WEB_PHYSICS_WIND = require('./web-physics-wind');
 const WEB_FILL_FACING_RANGE = require('./web-fill-facing-range');
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
@@ -453,6 +454,9 @@ async function stageTextAssets() {
     const gravityPath = path.join(GENERATED_ASSETS, 'js/web-gravity-filter.mjs');
     await fs.copyFile(path.join(__dirname, 'web-gravity-filter.mjs'), gravityPath);
     const gravityUrl = `./web-gravity-filter.mjs?v=${(await hashFile(gravityPath)).sha256.slice(0, 12)}`;
+    const physicsWindPath = path.join(GENERATED_ASSETS, 'js/web-physics-wind.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-physics-wind.mjs'), physicsWindPath);
+    const physicsWindUrl = `./web-physics-wind.mjs?v=${(await hashFile(physicsWindPath)).sha256.slice(0, 12)}`;
     const physicsRatePath = path.join(GENERATED_ASSETS, 'js/web-physics-rate.mjs');
     await fs.copyFile(path.join(__dirname, 'web-physics-rate.mjs'), physicsRatePath);
     const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
@@ -528,6 +532,8 @@ async function stageTextAssets() {
       .replace('./mmd-pmx-helper.mjs', pmxHelperUrl).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`), rigidBodyUrl)));
+    await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_WIND.addWindRuntime(
+      await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
     const mmdScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd.js');
     const runtimeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js'))).sha256.slice(0, 12);
@@ -537,6 +543,7 @@ async function stageTextAssets() {
     if (!current.includes('getMotionProgress: () =>')) throw new Error('正式显示模块缺少 VMD 进度入口');
     await fs.writeFile(mmdScriptPath, WEB_PHYSICS_STABILITY.addStabilityDisplay(WEB_RIGID_BODY_DEBUG.addRigidBodyDisplay(WEB_SKELETON_DEBUG.addSkeletonDisplay(WEB_PHYSICS_RATE.addPhysicsRateDisplay(WEB_LOCAL_ASSETS.addLocalDisplay(WEB_GRAVITY_MODE.addGravityDisplay(current))))
       .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`))));
+    await fs.writeFile(mmdScriptPath, WEB_PHYSICS_WIND.addWindDisplay(await fs.readFile(mmdScriptPath, 'utf8')));
     const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }
@@ -549,6 +556,9 @@ async function stageTextAssets() {
     const helperPath = path.join(animationDirectory, 'MMDAnimationHelper.js');
     await fs.writeFile(physicsPath, WEB_PHYSICS_STABILITY.addPhysicsStability(
         WEB_PHYSICS_SUBSTEPS.addPhysicsSubsteps(WEB_PHYSICS_LIFECYCLE.addPhysicsLifecycle(await fs.readFile(physicsPath, 'utf8')))));
+    const windVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/web-physics-wind.mjs'))).sha256.slice(0, 12);
+    await fs.writeFile(physicsPath, WEB_PHYSICS_WIND.addPhysicsWind(
+      await fs.readFile(physicsPath, 'utf8'), `../../../web-physics-wind.mjs?v=${windVersion}`));
     const physicsVersion = (await hashFile(physicsPath)).sha256.slice(0, 12);
     await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
       await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));

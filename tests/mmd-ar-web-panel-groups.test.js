@@ -101,6 +101,11 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   originalIds.get('#displayArTargetPanel').sort();
 
   groupWebPanels($);
+  // 已提交的补光与骨骼遮挡控件也应纳入完整ID夹具。
+  originalIds.get('#displayMmdLightingPanel').push('mmdArFillFacingStart', 'mmdArFillFacingStartValue',
+    'mmdArFillFacingEnd', 'mmdArFillFacingEndValue');
+  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonOccludedOpacityValue');
+  originalIds.get('#mmdArMotionPanel').push(...require('../3rd/mmd-ar-test/web-physics-wind').WIND_CONTROL_IDS);
   originalIds.get('#displayMmdLightingPanel').push('mmdArKeyShadowBias', 'mmdArKeyShadowBiasValue',
     'mmdArKeyShadowNormalBias', 'mmdArKeyShadowNormalBiasValue');
   originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonEnabled', 'mmdArSkeletonLegend', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus');

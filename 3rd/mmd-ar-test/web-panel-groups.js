@@ -1,6 +1,7 @@
 'use strict';
 
 const SHADOW_BIAS = require('./web-shadow-bias');
+const WIND = require('./web-physics-wind');
 const FILL_FACING_RANGE = require('./web-fill-facing-range');
 
 // 仅用于 HTTPS 测试页生成阶段：移动现有控件节点，不重建输入框或改变原 ID。
@@ -26,7 +27,7 @@ const TRACKING_GROUPS = Object.freeze([
 
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
-  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit']],
+  ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
   ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
 ]);
 
@@ -518,6 +519,7 @@ const WEB_PANEL_GROUP_JS = `
       input.addEventListener('change', () => apply(input.value, true));
       apply(value);
     })();
+    ${WIND.WIND_PANEL_JS}
     document.querySelectorAll('.mmd-ar-panel-group-toggle').forEach((button) => {
       button.addEventListener('click', () => {
         const body = document.getElementById(button.getAttribute('aria-controls'));
@@ -650,6 +652,7 @@ function groupWebPanels($) {
       '<p id="mmdArPhysicsStabilityReferenceHint" class="mind-basic-note">按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。</p>' +
       '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体（线框）</span></label>' +
       '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>');
+    motionPanel.append(WIND.WIND_PANEL_HTML);
     groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
   }
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);

@@ -8,6 +8,7 @@ const test = require('node:test');
 const { addPhysicsLifecycle } = require('../3rd/mmd-ar-test/web-physics-lifecycle');
 const { addPhysicsSubsteps } = require('../3rd/mmd-ar-test/web-physics-substeps');
 const { addPhysicsStability } = require('../3rd/mmd-ar-test/web-physics-stability');
+const { addPhysicsWind } = require('../3rd/mmd-ar-test/web-physics-wind');
 const vendor = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/vendor/three');
 const modelPath = path.resolve(__dirname, '../3rd/mmd-ar-test/web-dist/mmd/miya/miya.pmx');
 const encode = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
@@ -21,7 +22,8 @@ async function fixture() {
         const original = fs.readFileSync(path.join(vendor, 'animation/MMDPhysics.js'), 'utf8');
         const baseline = addPhysicsSubsteps(addPhysicsLifecycle(original)).replace("from 'three'", `from '${threeUrl}'`);
         const { MMDPhysics: BaselinePhysics } = await import(encode(baseline));
-        const { MMDPhysics } = await import(encode(addPhysicsStability(baseline)));
+        const { MMDPhysics } = await import(encode(addPhysicsWind(addPhysicsStability(baseline),
+            pathToFileURL(path.resolve(__dirname, '../3rd/mmd-ar-test/web-physics-wind.mjs')).href)));
         globalThis.Ammo = await require(path.join(vendor, 'libs/ammo.wasm.js'))({
             wasmBinary: fs.readFileSync(path.join(vendor, 'libs/ammo.wasm.wasm')) });
         const { getWebPhysicsStepOptions } = await import('../3rd/mmd-ar-test/web-physics-rate.mjs');

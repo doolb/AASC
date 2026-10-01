@@ -142,6 +142,8 @@ function addPhysicsSubsteps(source) {
                 const alpha = Math.min(1, Math.max(0, (nextTime - previousTime) / delta));
                 if (form) this._applyAnchorTargets(alpha, form, velocity);
                 // 外层负责固定时钟，maxSubSteps=0让Bullet恰好求解一次，避免重复内部拆步。
+                // 风按真实子步施力，由Bullet积分；未注入风模块的测试仍走原步进。
+                this._applyWind?.(h);
                 this.world.stepSimulation(h, 0, h);
                 this.onDiagnosticSubstep?.();
                 this.physicsStepTime = nextTime;
