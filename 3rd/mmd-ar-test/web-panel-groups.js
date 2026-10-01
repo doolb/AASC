@@ -558,19 +558,19 @@ const WEB_PANEL_GROUP_JS = `
       refresh();
     })();
     (() => {
-      // 共用基准值：Ammo纠错Hz / 两种XPBD每帧子步数，下限1、默认45；本地记忆。
+      // 共用基准值：Ammo纠错Hz / 两种XPBD每帧子步数，下限3、默认45；本地记忆。
       const input = document.getElementById('mmdArPhysicsStabilityReference');
       const output = document.getElementById('mmdArPhysicsStabilityReferenceValue');
       if (!input || !output) return;
       const storageKey = 'aasc.mmdArTest.physicsStabilityReference.v1';
       const normalize = (value) => {
         const number = Number(value);
-        return Number.isFinite(number) ? Math.round(Math.min(180, Math.max(1, number))) : 45;
+        return Number.isFinite(number) ? Math.round(Math.min(180, Math.max(3, number))) : 45;
       };
       let value = 45;
       try {
         const stored = localStorage.getItem(storageKey);
-        // 缺失或空串用默认45；其余按1-180、步长1取整，非法回退45。
+        // 缺失或空串用默认45；其余按3-180、步长1取整，非法回退45。
         value = stored === null || stored.trim() === '' ? 45 : normalize(stored);
       } catch (error) { value = 45; }
       const apply = (next, persist = false) => {
@@ -717,7 +717,7 @@ function groupWebPanels($) {
       '<button id="mmdArSkeletonClearContacts" type="button" disabled>清空累计碰撞</button>' +
       '<p id="mmdArSkeletonHint" class="mind-basic-note">选中显示局部轴：X红、Y绿、Z蓝。碰撞体开启时仅显示自身与累计碰撞对象；拖动旋转模型。</p>' +
       '<label class="mind-basic-field"><span>纠错基准 Hz <output id="mmdArPhysicsStabilityReferenceValue">45 Hz</output></span>' +
-      '<input id="mmdArPhysicsStabilityReference" type="range" min="1" max="180" step="1" value="45" aria-label="关节纠错基准频率"></label>' +
+      '<input id="mmdArPhysicsStabilityReference" type="range" min="3" max="180" step="1" value="45" aria-label="关节纠错基准频率"></label>' +
       '<p id="mmdArPhysicsStabilityReferenceHint" class="mind-basic-note">按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。</p>' +
       '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体</span></label>' +
       '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>' +

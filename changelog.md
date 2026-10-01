@@ -1,5 +1,27 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR XPBD优化与基准下限3提交归档
+
+- ✅ [2026-10-01] 按用户“提交”要求归档自写XPBD完整效果对齐、基准下限3和对应文档，提交目标为origion/master。
+  - 包含两个自写求解模块、四个基准配置/提示模块、README及design/spec/task/todo/usage/self-test/changelog；本地web-dist沿用已构建结果。仅提交源码与文档，构建资源/日志/模型/运行数据按既有规则保留在工作区。
+  - 沿用上一轮网页构建和静态检查结果，本轮检查提交差异与范围，未新增或执行测试；真实精度/稳定性/性能验收继续保留在todo，Offline待出包状态保持。
+
+### MMD AR自写XPBD完整效果对齐
+
+- ✅ [2026-10-01] 按用户确认的完整方案优化自写XPBD，保留解析碰撞/SAP/对象池和现有子步参数。
+  - web-xpbd-rigid.mjs补前姿态表面位移静摩擦、法向lambda预算及合成速度级摩擦/恢复响应；一阶四元数积分/角速度回算、逐体0.5rad限角不削弱平移、阻尼先于外力且骨骼目标在积分后。静摩擦复用预算预计算的惯量变换。
+  - web-xpbd-collision.mjs摩擦/恢复系数逐体规范化后平均；胶囊/胶囊和胶囊/盒面近似平行侧面至多两个解析点，实际间距筛选、去重和原单点回退，盒/盒多点保持。基准3–180/step1/default45、每子步一轮、PMX/风/诊断接口保持，无新增控件或依赖。
+  - 按仓库要求先更新spec，再实施并同步design/task/usage/README/self-test/todo；本地web-dist构建完成，9个源模块、29个生成模块语法、5段内联脚本/importmap、62处本地导入、24处内容指纹及4个控件唯一性检查通过；基准滑条3–180/step1/default45、两个自写模块与生成内容一致。差异空白检查通过，固定上游核心目录未变。
+  - 未运行或新增测试，真实精度/稳定性/耗时待同条件设备验收，不宣称与THREE-XPBD完全一致或已保持速度优势；未APK/提交/发布。Offline原有minApk/servicePackage=true、dependenciesPackage=false保持。
+
+### MMD AR基准下限3与自写XPBD效果对齐分析
+
+- ✅ [2026-10-01] 按用户最新指令将基准下限1改3，步长1/default45/max180保持，已有1/2偏好恢复为3。
+  - 修改web-physics-rate.mjs、web-physics-stability.js、web-panel-groups.js和web-physics-solver.js；共享ESM/Display/保存恢复/HTML及提示统一3–180，两种XPBD仍每帧N子步/每步一轮，Ammo仍为ERP参考Hz，物理Hz不变。
+  - 本地web-dist构建完成；6源/10生成/5内联或importmap语法、4控件唯一、24指纹与公式静态一致性通过。未新增/执行测试、未真机/APK/提交/发布，Offline原状态保持。
+- ✅ [2026-10-01] 根据用户“自写XPBD更快但效果较差”反馈，对比两后端源码，确认位置静摩擦、材质乘积/平均、四元数积分/回算、角限幅/阻尼与目标顺序及胶囊接触点差异。
+  - 记录设计/spec/task/todo候选方案，询问具体表现；拟保留解析碰撞/SAP/对象池及参数并向上游响应对齐。尚未确认主因或改求解算法，精度/速度改善未验证；按AGENTS等待具体方案确认。
+
 ### MMD AR三种物理后端提交归档
 
 - ✅ [2026-10-01] 按用户要求归档独立XPBD、真实THREE-XPBD固定核心/许可证、三项选择/诊断/动作适配、每帧子步及基准下限1和相关文档。

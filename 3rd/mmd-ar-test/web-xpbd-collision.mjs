@@ -3,6 +3,9 @@ import { Quaternion, Vector3 } from 'three';
 // PMX只需要球、盒和胶囊。每个物理实例独占临时值/接触池，避免子步制造短命Vector3。
 // 碰撞检测使用解析最近距离及OBB的SAT；不是THREE-XPBD的通用GJK/EPA流程。
 const EPS = 1e-9;
+// 约0.57度以内才扩展侧面支撑；倾斜明显的接触仍由解析最近点处理。
+const SIDE_SINE = 0.01;
+const SIDE_COSINE = Math.sqrt(1 - SIDE_SINE * SIDE_SINE);
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const component = (vector, axis) => vector.getComponent(axis);
 
@@ -54,15 +57,18 @@ export function createPrimitiveContacts() {
         let contact = pool[count];
         if (!contact) {
             contact = { a: null, b: null, normal: new Vector3(), localA: new Vector3(), localB: new Vector3(),
-                pointA: new Vector3(), pointB: new Vector3(), lambda: 0, incoming: 0, frictionBudget: 0, tolerance: 0 };
+                pointA: new Vector3(), pointB: new Vector3(), lambda: 0, incoming: 0, friction: 0, restitution: 0, tolerance: 0 };
             pool[count] = contact;
         }
         contact.a = a; contact.b = b;
         contact.tolerance = Math.min(a.contactTolerance, b.contactTolerance);
+        // PMX只给出一组摩擦：静/动摩擦共用；先逐体夹取，再平均，和THREE-XPBD包装一致。
+        contact.friction = (clamp(a.params.friction, 0, 10) + clamp(b.params.friction, 0, 10)) / 2;
+        contact.restitution = (clamp(a.params.restitution, 0, 1) + clamp(b.params.restitution, 0, 1)) / 2;
         contact.normal.copy(normal);
         contact.localA.copy(pointA).sub(a.position).applyQuaternion(inverse.copy(a.quaternion).invert());
         contact.localB.copy(pointB).sub(b.position).applyQuaternion(inverse.copy(b.quaternion).invert());
-        contact.lambda = 0; contact.frictionBudget = 0;
+        contact.lambda = 0;
         contacts[count++] = contact;
     };
 
@@ -84,6 +90,45 @@ export function createPrimitiveContacts() {
         outQ.copy(q0).addScaledVector(v, t);
     };
 
+    // 近似平行胶囊的中轴投影重叠区间两端形成稳定支撑，反向平行同样适用。
+    // 每点仍通过实际段距离筛选，避免把端帽间隙或不接触的另一端当成支撑。
+    const capsuleSidePair = (a, b, fallbackNormal) => {
+        if (a.params.shapeType !== 2 || b.params.shapeType !== 2
+            || a.params.height <= EPS || b.params.height <= EPS
+            || Math.abs(a.axes[1].dot(b.axes[1])) < SIDE_COSINE) return false;
+        const axis = a.axes[1], direction = scratch[10].subVectors(b.end, b.start);
+        const projection0 = scratch[9].subVectors(b.start, a.start).dot(axis);
+        const projection1 = scratch[9].subVectors(b.end, a.start).dot(axis);
+        const low = Math.max(0, Math.min(projection0, projection1));
+        const high = Math.min(a.params.height, Math.max(projection0, projection1));
+        const tolerance = Math.min(a.contactTolerance, b.contactTolerance);
+        if (high - low <= Math.max(EPS, tolerance)) return false;
+        const initialCount = count, lengthSq = direction.lengthSq();
+        const pa = scratch[11], pb = scratch[12], normal = scratch[13];
+        const previousA = scratch[14], previousB = scratch[15], duplicateSq = Math.max(EPS, tolerance) ** 2;
+        for (let i = 0; i < 2; i += 1) {
+            pa.copy(a.start).addScaledVector(axis, i === 0 ? low : high);
+            const t = clamp(scratch[9].subVectors(pa, b.start).dot(direction) / lengthSq, 0, 1);
+            pb.copy(b.start).addScaledVector(direction, t);
+            const distance = normal.subVectors(pb, pa).length();
+            if (distance > a.params.width + b.params.width + tolerance) continue;
+            if (distance > EPS) normal.multiplyScalar(1 / distance);
+            else {
+                normal.copy(fallbackNormal).addScaledVector(axis, -fallbackNormal.dot(axis));
+                if (normal.lengthSq() < EPS) normal.copy(a.axes[0]);
+                else normal.normalize();
+            }
+            // 法线沿中轴的情况属于端帽接触，应回退单点处理。
+            if (Math.abs(normal.dot(axis)) > SIDE_SINE) continue;
+            pa.addScaledVector(normal, a.params.width); pb.addScaledVector(normal, -b.params.width);
+            if (count > initialCount && pa.distanceToSquared(previousA) <= duplicateSq
+                && pb.distanceToSquared(previousB) <= duplicateSq) continue;
+            emit(a, b, normal, pa, pb);
+            previousA.copy(pa); previousB.copy(pb);
+        }
+        return count > initialCount;
+    };
+
     const roundedPair = (a, b) => {
         const pa = scratch[3], pb = scratch[4], normal = scratch[5];
         segmentSegment(a.start, a.end, b.start, b.end, pa, pb);
@@ -95,6 +140,7 @@ export function createPrimitiveContacts() {
             if (normal.lengthSq() < EPS) normal.set(1, 0, 0);
             else normal.normalize();
         }
+        if (capsuleSidePair(a, b, normal)) return;
         pa.addScaledVector(normal, a.params.width); pb.addScaledVector(normal, -b.params.width);
         emit(a, b, normal, pa, pb);
     };
@@ -145,6 +191,54 @@ export function createPrimitiveContacts() {
         return Math.sqrt(best);
     };
 
+    const emitRoundedBox = (a, b, reversed, normal, pa, pb) => {
+        if (reversed) emit(b, a, scratch[8].copy(normal).negate(), pb, pa);
+        else emit(a, b, normal, pa, pb);
+    };
+
+    // 中轴沿盒面铺开时，把段裁剪到面矩形后取两端；球、盒角和斜穿接触保持原单点。
+    const capsuleBoxFace = (a, b, reversed, normal) => {
+        if (a.params.shapeType !== 2 || a.params.height <= EPS
+            || Math.abs(a.axes[1].dot(normal)) > SIDE_SINE) return false;
+        let faceAxis = 0;
+        for (let i = 1; i < 3; i += 1) if (Math.abs(b.axes[i].dot(normal))
+            > Math.abs(b.axes[faceAxis].dot(normal))) faceAxis = i;
+        // 面法线必须足够一致；棱/角的径向法线不能冒充面支撑。
+        if (Math.abs(b.axes[faceAxis].dot(normal)) < 1 - 1e-8) return false;
+        const direction = scratch[10].subVectors(a.end, a.start);
+        const offset = scratch[9].subVectors(a.start, b.position);
+        const tolerance = Math.min(a.contactTolerance, b.contactTolerance);
+        let low = 0, high = 1;
+        for (let i = 0; i < 3; i += 1) {
+            if (i === faceAxis) continue;
+            const start = offset.dot(b.axes[i]), change = direction.dot(b.axes[i]), extent = component(b.halfSize, i);
+            if (Math.abs(change) <= EPS) {
+                if (Math.abs(start) > extent) return false;
+                continue;
+            }
+            const first = (-extent - start) / change, last = (extent - start) / change;
+            low = Math.max(low, Math.min(first, last)); high = Math.min(high, Math.max(first, last));
+            if (low > high) return false;
+        }
+        if ((high - low) * a.params.height <= Math.max(EPS, tolerance)) return false;
+        // normal指向盒子，接触面是盒中心沿normal反方向的那一面。
+        const plane = normal.dot(b.position) - component(b.halfSize, faceAxis);
+        const pa = scratch[11], pb = scratch[12];
+        const initialCount = count;
+        const previousA = scratch[14], previousB = scratch[15], duplicateSq = Math.max(EPS, tolerance) ** 2;
+        for (let i = 0; i < 2; i += 1) {
+            pa.copy(a.start).addScaledVector(direction, i === 0 ? low : high).addScaledVector(normal, a.params.width);
+            const separation = plane - pa.dot(normal);
+            if (separation > tolerance) continue;
+            pb.copy(pa).addScaledVector(normal, separation);
+            if (count > initialCount && pa.distanceToSquared(previousA) <= duplicateSq
+                && pb.distanceToSquared(previousB) <= duplicateSq) continue;
+            emitRoundedBox(a, b, reversed, normal, pa, pb);
+            previousA.copy(pa); previousB.copy(pb);
+        }
+        return count > initialCount;
+    };
+
     const roundedBox = (a, b, reversed = false) => {
         const pa = scratch[3], pb = scratch[4], normal = scratch[5];
         const distance = segmentBox(a, b, pa, pb), radius = a.params.width;
@@ -165,8 +259,8 @@ export function createPrimitiveContacts() {
             pa.copy(a.start.dot(normal) > a.end.dot(normal) ? a.start : a.end).addScaledVector(normal, radius);
             pb.copy(pa).addScaledVector(normal, -minimum);
         }
-        if (reversed) emit(b, a, scratch[8].copy(normal).negate(), pb, pa);
-        else emit(a, b, normal, pa, pb);
+        if (capsuleBoxFace(a, b, reversed, normal)) return;
+        emitRoundedBox(a, b, reversed, normal, pa, pb);
     };
 
     const projection = (body, axis) => body.halfSize.x * Math.abs(axis.dot(body.axes[0]))

@@ -133,7 +133,7 @@ const SOLVER_PANEL_JS = `
                 if (xpbd) physicsFps.title = 'XPBD按每帧子步数计算，此物理频率暂不使用。';
                 else physicsFps.removeAttribute('title');
             }
-            if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：1表示1个子步；每子步1轮，步长为本帧时间÷子步数。物理Hz暂不使用。'
+            if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：3表示3个子步；每子步1轮，步长为本帧时间÷子步数。物理Hz暂不使用。'
                 : '按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。';
             const state = window.DisplayMmd?.getPhysicsSolverState?.();
             const name = { ammo: 'Ammo', xpbd: 'XPBD', 'three-xpbd': 'THREE-XPBD' }[solver] || 'Ammo';

@@ -4,6 +4,7 @@ import { createPrimitiveContacts, getRigidBodyTolerance } from './web-xpbd-colli
 // 算法参考XPBD论文（Macklin/Müller/Chentanez 2016）与Ten Minute Physics第22/25节。
 // 独立实现PMX六轴约束：每个弹簧在子步内累积lambda，并使用alpha/h²，不以纠错倍率冒充XPBD。
 const EPS = 1e-10;
+const CORRECTION_EPS = 1e-6;
 const AXES = ['x', 'y', 'z'];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -62,11 +63,19 @@ export function createXpbdSolver(bodies, joints) {
     const rotate = (body, vector, factor) => {
         const length = vector.length() * Math.abs(factor);
         if (length < EPS) return;
-        const halfAngle = length / 2, gain = Math.sin(halfAngle) / length * factor;
-        q[4].set(vector.x * gain, vector.y * gain, vector.z * gain, Math.cos(halfAngle));
-        body.quaternion.premultiply(q[4]).normalize();
+        // 与THREE-XPBD一致的一阶四元数积分；每个刚体独立限角，不缩小另一侧或平移纠正。
+        const scale = factor * Math.min(1, 0.5 / length);
+        q[4].set(vector.x * scale, vector.y * scale, vector.z * scale, 0).multiply(body.quaternion);
+        const orientation = body.quaternion;
+        orientation.set(orientation.x + 0.5 * q[4].x, orientation.y + 0.5 * q[4].y,
+            orientation.z + 0.5 * q[4].z, orientation.w + 0.5 * q[4].w).normalize();
     };
 
+    const applyPositionCorrection = (a, b, n, dl) => {
+        a.position.addScaledVector(n, -a.inverseMass * dl);
+        b.position.addScaledVector(n, b.inverseMass * dl);
+        rotate(a, inverseA, dl); rotate(b, inverseB, dl);
+    };
     // n是B位置的梯度，angularA/B是两侧旋转的梯度；复用矩阵变换临时值。
     const correction = (a, b, n, angularA, angularB, error, compliance, lambda, h) => {
         inverseInertia(a, angularA, inverseA); inverseInertia(b, angularB, inverseB);
@@ -74,13 +83,8 @@ export function createXpbdSolver(bodies, joints) {
         const weight = n.lengthSq() * (a.inverseMass + b.inverseMass)
             + angularA.dot(inverseA) + angularB.dot(inverseB);
         if (weight < EPS) return 0;
-        let dl = (-error - alpha * lambda) / (weight + alpha);
-        // 错误初态或Euler奇异附近限制单次旋转修正，同时缩放lambda，避免修正与累积不一致。
-        const rotation = Math.max(inverseA.length(), inverseB.length()) * Math.abs(dl);
-        if (rotation > 0.35) dl *= 0.35 / rotation;
-        a.position.addScaledVector(n, -a.inverseMass * dl);
-        b.position.addScaledVector(n, b.inverseMass * dl);
-        rotate(a, inverseA, dl); rotate(b, inverseB, dl);
+        const dl = (-error - alpha * lambda) / (weight + alpha);
+        applyPositionCorrection(a, b, n, dl);
         return dl;
     };
 
@@ -152,14 +156,41 @@ export function createXpbdSolver(bodies, joints) {
     const velocityAt = (body, point, out) => out.crossVectors(body.omega, s[8].subVectors(point, body.position)).add(body.velocity);
     const contactPoints = (contact) => {
         anchor(contact.a, contact.localA, contact.pointA); anchor(contact.b, contact.localB, contact.pointB);
-        gradA.crossVectors(s[6].subVectors(contact.pointA, contact.a.position), contact.normal).negate();
-        gradB.crossVectors(s[7].subVectors(contact.pointB, contact.b.position), contact.normal);
+    };
+    const contactGradients = (contact, direction) => {
+        gradA.crossVectors(s[6].subVectors(contact.pointA, contact.a.position), direction).negate();
+        gradB.crossVectors(s[7].subVectors(contact.pointB, contact.b.position), direction);
+    };
+    const solveStaticFriction = (contact) => {
+        if (contact.lambda <= 0 || contact.friction <= 0) return;
+        const { a, b, normal: n } = contact;
+        contactPoints(contact);
+        const previousA = s[14].copy(contact.localA).applyQuaternion(a.previousQuaternion).add(a.previousPosition);
+        const previousB = s[15].copy(contact.localB).applyQuaternion(b.previousQuaternion).add(b.previousPosition);
+        const tangent = s[16].subVectors(contact.pointB, previousB).sub(s[17].subVectors(contact.pointA, previousA));
+        tangent.addScaledVector(n, -tangent.dot(n));
+        const distance = tangent.length();
+        if (distance < CORRECTION_EPS) return;
+        tangent.multiplyScalar(1 / distance);
+        contactGradients(contact, tangent);
+        inverseInertia(a, gradA, inverseA); inverseInertia(b, gradB, inverseB);
+        const weight = a.inverseMass + b.inverseMass + gradA.dot(inverseA) + gradB.dot(inverseB);
+        if (weight < EPS) return;
+        const lambda = distance / weight;
+        if (lambda >= contact.friction * contact.lambda) return;
+        // 本实现法向lambda为正，切向位移纠正lambda为负；超出静摩擦预算交给速度级动摩擦。
+        // 复用预算预计算的两侧逆惯量，不再重复四元数变换。
+        applyPositionCorrection(a, b, tangent, -lambda);
     };
     const solveContact = (contact, h) => {
         contactPoints(contact);
         // 容差内允许极小穿透，避免每个小子步都把浮点误差变为位置修正和反向速度。
         const error = s[0].subVectors(contact.pointB, contact.pointA).dot(contact.normal) + contact.tolerance;
-        if (error < 0) contact.lambda += correction(contact.a, contact.b, contact.normal, gradA, gradB, error, 0, 0, h);
+        if (error <= -CORRECTION_EPS) {
+            contactGradients(contact, contact.normal);
+            contact.lambda += correction(contact.a, contact.b, contact.normal, gradA, gradB, error, 0, 0, h);
+        }
+        solveStaticFriction(contact);
     };
 
     const velocityCorrection = (a, b, n, change, min = -Infinity, max = Infinity) => {
@@ -171,11 +202,6 @@ export function createXpbdSolver(bodies, joints) {
         a.velocity.addScaledVector(n, -value * a.inverseMass); b.velocity.addScaledVector(n, value * b.inverseMass);
         a.omega.addScaledVector(inverseA, value); b.omega.addScaledVector(inverseB, value);
         return value;
-    };
-    const impulse = (a, b, n, point0, point1, change, min, max) => {
-        gradA.crossVectors(s[6].subVectors(point0, a.position), n).negate();
-        gradB.crossVectors(s[7].subVectors(point1, b.position), n);
-        return velocityCorrection(a, b, n, change, min, max);
     };
 
     // 自由轴和范围内的弹簧运动保持原速度；锁定轴去掉相对速度，边界只限制继续越界的分量。
@@ -210,21 +236,24 @@ export function createXpbdSolver(bodies, joints) {
         const { a, b, normal: n } = contact;
         contactPoints(contact);
         const relative = s[11].subVectors(velocityAt(b, contact.pointB, s[10]), velocityAt(a, contact.pointA, s[9]));
-        const vn = relative.dot(n), restitution = clamp(a.params.restitution * b.params.restitution, 0, 1);
+        const vn = relative.dot(n);
         const separation = s[0].subVectors(contact.pointB, contact.pointA).dot(n);
         // 小步长不能无限降低反弹门限；接触误差带的速度噪声也不能触发恢复系数。
         const threshold = Math.max(restitutionThreshold, contact.tolerance / h);
-        const bounce = separation <= 0 && contact.incoming < -threshold ? -contact.incoming * restitution : 0;
-        const targetVelocity = bounce > 0 ? bounce : -Math.max(0, separation) / h;
-        const normalImpulse = impulse(a, b, n, contact.pointA, contact.pointB, targetVelocity - vn, -contact.lambda / h, Infinity);
-        const budget = Math.max(0, contact.lambda / h + normalImpulse);
-        velocityAt(b, contact.pointB, s[10]); velocityAt(a, contact.pointA, s[9]);
-        const tangent = s[12].subVectors(s[10], s[9]); tangent.addScaledVector(n, -tangent.dot(n));
+        const restitution = Math.abs(contact.incoming) > threshold ? contact.restitution : 0;
+        // 上游深度d=-separation，其分离支路目标为-d/h；统一法线方向后仍为正separation/h。
+        const targetVelocity = separation <= 0 ? Math.max(-contact.incoming * restitution, 0) : separation / h;
+        const tangent = s[12].copy(relative).addScaledVector(n, -vn);
         const speed = tangent.length();
-        if (speed < EPS) return;
-        tangent.multiplyScalar(1 / speed);
-        const friction = clamp(a.params.friction * b.params.friction, 0, 10) * budget;
-        impulse(a, b, tangent, contact.pointA, contact.pointB, -speed, -friction, friction);
+        const change = s[18].set(0, 0, 0);
+        if (speed > CORRECTION_EPS) change.copy(tangent).multiplyScalar(-Math.min(contact.friction * contact.lambda / h, speed) / speed);
+        change.addScaledVector(n, targetVelocity - vn);
+        const magnitude = change.length();
+        if (magnitude < CORRECTION_EPS) return;
+        // 按上游将法向和切向变化合成一次有效质量纠正，避免先后施加冲量改变摩擦方向/预算。
+        change.multiplyScalar(1 / magnitude);
+        contactGradients(contact, change);
+        velocityCorrection(a, b, change, magnitude);
     };
 
     const reconstructVelocity = (body, h) => {
@@ -232,8 +261,7 @@ export function createXpbdSolver(bodies, joints) {
         body.velocity.subVectors(body.position, body.previousPosition).multiplyScalar(1 / h);
         q[3].copy(body.previousQuaternion).invert(); q[3].premultiply(body.quaternion).normalize();
         if (q[3].w < 0) q[3].set(-q[3].x, -q[3].y, -q[3].z, -q[3].w);
-        const length = Math.hypot(q[3].x, q[3].y, q[3].z);
-        body.omega.set(q[3].x, q[3].y, q[3].z).multiplyScalar(length > EPS ? 2 * Math.atan2(length, q[3].w) / (length * h) : 0);
+        body.omega.set(q[3].x, q[3].y, q[3].z).multiplyScalar(2 / h);
     };
 
     const step = (h, gravity, applyTargets) => {
@@ -242,17 +270,17 @@ export function createXpbdSolver(bodies, joints) {
         for (const body of bodies) {
             body.previousPosition.copy(body.position); body.previousQuaternion.copy(body.quaternion);
         }
-        // 先记录起点，再插值type0姿态/type2位置，确保碰撞读取到驱动锚点的真实子步速度。
-        applyTargets?.(h);
         for (const body of bodies) {
             if (!body.dynamic) continue;
-            if (body.inverseMass > 0) body.velocity.addScaledVector(gravity, h).addScaledVector(body.force, body.inverseMass * h)
-                .multiplyScalar(Math.pow(1 - clamp(body.params.positionDamping, 0, 1), h));
-            inverseInertia(body, body.torque, s[13]); body.omega.addScaledVector(s[13], h)
-                .multiplyScalar(Math.pow(1 - clamp(body.params.rotationDamping, 0, 1), h));
+            body.velocity.multiplyScalar(Math.pow(1 - clamp(body.params.positionDamping, 0, 1), h));
+            body.omega.multiplyScalar(Math.pow(1 - clamp(body.params.rotationDamping, 0, 1), h));
+            if (body.inverseMass > 0) body.velocity.addScaledVector(gravity, h).addScaledVector(body.force, body.inverseMass * h);
+            inverseInertia(body, body.torque, s[13]); body.omega.addScaledVector(s[13], h);
             if (!body.positionDriven) body.position.addScaledVector(body.velocity, h);
             rotate(body, body.omega, h);
         }
+        // 先积分再覆盖type0姿态/type2位置，与THREE-XPBD包装顺序一致；目标速度仍由前姿态回算。
+        applyTargets?.(h);
         for (const joint of joints) joint.lambda.fill(0);
         // 每子步重新检测接触；先采集未修正的入射速度，供末尾反弹计算使用。
         currentContacts = collision.scan(bodies, excluded);

@@ -1,9 +1,9 @@
 // 共用基准值：Ammo作为STOP_ERP的标定Hz，XPBD作为每帧子步数。
-// 缺失/空串/非法值回退45，其余1–180按整数取整；不修改弹簧/质量/阻尼。
+// 缺失/空串/非法值回退45，其余3–180按整数取整；不修改弹簧/质量/阻尼。
 export function normalizeWebStabilityReference(value) {
     if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) return 45;
     const number = Number(value);
-    return Number.isFinite(number) ? Math.round(Math.min(180, Math.max(1, number))) : 45;
+    return Number.isFinite(number) ? Math.round(Math.min(180, Math.max(3, number))) : 45;
 }
 
 // 仅独立网页使用：全频率预算覆盖runtime最多0.1秒的帧间隔，并留一个累计余量。
