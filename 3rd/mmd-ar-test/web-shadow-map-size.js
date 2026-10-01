@@ -10,19 +10,31 @@ function normalizeShadowMapSize(value, maxSize = 4096) {
   return supported.at(-1) || Math.min(512, 2 ** Math.floor(Math.log2(limit)));
 }
 
+// 以角色自动拟合范围为基准；旧偏好缺字段回1，不能把空值隐式转为最小范围。
+function normalizeShadowCameraScale(value) {
+  if (!['number', 'string'].includes(typeof value) || String(value).trim() === '') return 1;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Number((Math.round(Math.max(0.1, Math.min(2, number)) * 100) / 100).toFixed(2));
+}
+
 const PANEL_JS = `
     (() => {
       ${normalizeShadowMapSize.toString()}
+      ${normalizeShadowCameraScale.toString()}
       const input = document.getElementById('mmdArShadowMapSize');
       const toggle = document.getElementById('mmdArShadowMapPreviewEnabled');
       const rows = document.getElementById('mmdArShadowMapPreviewRows');
       const sizeOutput = document.getElementById('mmdArShadowMapSizeValue');
-      if (!input || !toggle || !rows || !sizeOutput) return;
+      const cameraInput = document.getElementById('mmdArShadowCameraScale');
+      const cameraOutput = document.getElementById('mmdArShadowCameraScaleValue');
+      if (!input || !toggle || !rows || !sizeOutput || !cameraInput || !cameraOutput) return;
       const key = 'aasc.mmdArTest.shadowMap.v1';
       const apply = (settings, persist) => {
         const limit = window.MmdArTestShadowMapLimit || 4096;
         const size = normalizeShadowMapSize(settings?.size, limit);
         const previewEnabled = settings?.previewEnabled === true;
+        const cameraScale = normalizeShadowCameraScale(settings?.cameraScale);
         // 在极低设备上限下仍回显有效尺寸；常规档位保留但禁用不支持的选项。
         const automatic = input.querySelector('option[data-device-size]');
         automatic?.remove();
@@ -36,16 +48,20 @@ const PANEL_JS = `
         toggle.checked = previewEnabled;
         rows.hidden = !previewEnabled;
         sizeOutput.textContent = size + ' × ' + size;
-        window.MmdArTestShadowMapSettings = Object.freeze({ size, previewEnabled });
+        cameraInput.value = String(cameraScale);
+        cameraOutput.textContent = cameraScale.toFixed(2) + ' ×';
+        window.MmdArTestShadowMapSettings = Object.freeze({ size, previewEnabled, cameraScale });
         if (!persist) return;
-        try { localStorage.setItem(key, JSON.stringify({ size, previewEnabled })); } catch (error) { /* 存储受限仍可当场调整。 */ }
+        try { localStorage.setItem(key, JSON.stringify({ size, previewEnabled, cameraScale })); } catch (error) { /* 存储受限仍可当场调整。 */ }
       };
       let saved = {};
       try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch (error) { /* 坏存储回默认。 */ }
       apply(saved, false);
-      const applyInputs = () => apply({ size: input.value, previewEnabled: toggle.checked }, true);
+      const applyInputs = () => apply({ size: input.value, previewEnabled: toggle.checked, cameraScale: cameraInput.value }, true);
       input.addEventListener('change', applyInputs);
       toggle.addEventListener('change', applyInputs);
+      cameraInput.addEventListener('input', applyInputs);
+      cameraInput.addEventListener('change', applyInputs);
       window.addEventListener('mmd-ar-shadow-map-limit', () => apply(window.MmdArTestShadowMapSettings, true));
       document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => apply({}, true));
     })();
@@ -63,6 +79,9 @@ function addShadowMapControls($, lightingPanel) {
     + '<select id="mmdArShadowMapSize" aria-label="阴影贴图尺寸">'
     + [512, 1024, 2048, 4096].map(size => '<option value="' + size + '"' + (size === 1024 ? ' selected' : '')
       + '>' + size + ' × ' + size + '</option>').join('') + '</select></label>'
+    + '<label class="mind-basic-field"><span>阴影相机范围 <output id="mmdArShadowCameraScaleValue">1.00 ×</output></span>'
+    + '<input id="mmdArShadowCameraScale" type="range" min="0.1" max="2" step="0.01" value="1" aria-label="阴影相机范围倍率"></label>'
+    + '<p class="mind-basic-note">1倍为角色自动范围，范围越小角色在贴图中越大；过小会裁掉部分阴影。</p>'
     + '<label class="display-mmd-lighting-field"><input id="mmdArShadowMapPreviewEnabled" type="checkbox"><span>显示 ShadowMap</span></label>'
     + '<div id="mmdArShadowMapPreviewRows" hidden>' + rows
     + '<p class="mind-basic-note">整张阴影贴图，不裁剪角色；深色为角色，白色为空白。覆盖比例按256×256采样估算，列表可见时每秒刷新4次。</p></div>'
@@ -77,6 +96,7 @@ function addShadowMapRuntime(source, moduleUrl) {
   const anchor = '    const shadowMaterial = new THREE.ShadowMaterial({';
   replaceOnce(anchor, `
     ${normalizeShadowMapSize.toString()}
+    ${normalizeShadowCameraScale.toString()}
     const shadowMapLimit = renderer.capabilities.maxTextureSize;
     window.MmdArTestShadowMapLimit = shadowMapLimit;
     window.dispatchEvent(new CustomEvent('mmd-ar-shadow-map-limit'));
@@ -91,12 +111,18 @@ function addShadowMapRuntime(source, moduleUrl) {
         } });
     const shadowMapDiagnostic = () => ({
         size: keyLight.shadow.mapSize.x, limit: shadowMapLimit,
+        cameraScale: normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale),
         maps: [keyLight, fillLight].map(light => ({ width: light.shadow.map?.width || 0,
-            height: light.shadow.map?.height || 0, castShadow: light.castShadow })),
+            height: light.shadow.map?.height || 0, castShadow: light.castShadow,
+            camera: { left: light.shadow.camera.left, right: light.shadow.camera.right,
+                top: light.shadow.camera.top, bottom: light.shadow.camera.bottom,
+                near: light.shadow.camera.near, far: light.shadow.camera.far } })),
         memory: { ...renderer.info.memory },
         preview: shadowMapPreview.getState()
     });
     window.MmdArTestShadowMapDiagnostic = shadowMapDiagnostic;
+    // 初次同步发生在fitShadowCamera/角色变量声明前，初值不触发拟合；模型提交会正常拟合。
+    let appliedShadowCameraScale = normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale);
     const syncTestShadowMapSize = () => {
         const settings = window.MmdArTestShadowMapSettings;
         const size = normalizeShadowMapSize(settings?.size, shadowMapLimit);
@@ -106,10 +132,17 @@ function addShadowMapRuntime(source, moduleUrl) {
             light.shadow.mapSize.set(size, size);
             light.shadow.needsUpdate = true;
         }
+        const cameraScale = normalizeShadowCameraScale(settings?.cameraScale);
+        if (cameraScale !== appliedShadowCameraScale) {
+            appliedShadowCameraScale = cameraScale;
+            fitShadowCamera(currentRotationPivot || currentMesh);
+        }
         shadowMapPreview.setEnabled(settings?.previewEnabled === true);
     };
     syncTestShadowMapSize();
 ${anchor}`);
+  const extentAnchor = '        const extent = radius * SHADOW_FRUSTUM_MARGIN;';
+  replaceOnce(extentAnchor, '        const extent = radius * SHADOW_FRUSTUM_MARGIN * normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale);');
   const frameAnchor = '        const delta = Math.min(0.1, Math.max(0, (now - lastFrameAt) / 1000));';
   replaceOnce(frameAnchor, '        syncTestShadowMapSize();\n' + frameAnchor);
   const afterFrame = '            if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;\n        }';
@@ -122,4 +155,4 @@ ${disposeAnchor}`);
   return `import { createShadowMapPreview, releaseShadowTargets } from ${JSON.stringify(moduleUrl)};\n` + source;
 }
 
-module.exports = { normalizeShadowMapSize, PANEL_JS, addShadowMapControls, addShadowMapRuntime };
+module.exports = { normalizeShadowMapSize, normalizeShadowCameraScale, PANEL_JS, addShadowMapControls, addShadowMapRuntime };

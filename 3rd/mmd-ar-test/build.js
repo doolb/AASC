@@ -862,7 +862,8 @@ async function stageTextAssets() {
     'mmdArFillFacingStart', 'mmdArFillFacingEnd', 'mmdArSkeletonOccludedOpacity']) requiredIds.add(id);
   for (const id of ['mmdArShadowMapSize', 'mmdArShadowMapSizeValue', 'mmdArShadowMapPreviewEnabled',
     'mmdArShadowMapPreviewRows', 'mmdArShadowMapKeyStatus', 'mmdArShadowMapKeyCanvas',
-    'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas']) requiredIds.add(id);
+    'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas',
+    'mmdArShadowCameraScale', 'mmdArShadowCameraScaleValue']) requiredIds.add(id);
   for (const id of requiredIds) {
     if (!seenIds.has(id)) throw new Error(`测试页面缺少必需控件：${id}`);
   }

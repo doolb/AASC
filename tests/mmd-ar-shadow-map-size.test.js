@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const test = require('node:test');
 const cheerio = require('cheerio');
-const { normalizeShadowMapSize, addShadowMapControls, addShadowMapRuntime, PANEL_JS } = require('../3rd/mmd-ar-test/web-shadow-map-size');
+const { normalizeShadowMapSize, normalizeShadowCameraScale, addShadowMapControls, addShadowMapRuntime, PANEL_JS } = require('../3rd/mmd-ar-test/web-shadow-map-size');
 
 test('阴影尺寸限定四档，拒绝隐式空值，按真实设备上限降档', () => {
     for (const size of [512, 1024, 2048, 4096]) assert.equal(normalizeShadowMapSize(size), size);
@@ -14,6 +14,47 @@ test('阴影尺寸限定四档，拒绝隐式空值，按真实设备上限降�
     assert.equal(normalizeShadowMapSize(4096, 1024), 1024);
     assert.equal(normalizeShadowMapSize(4096, 256), 256);
     assert.equal(normalizeShadowMapSize(512, 8192), 512);
+});
+
+test('阴影相机倍率0.1–2按0.01归一，旧偏好和非法值回1', () => {
+    for (const value of [undefined, null, '', 'bad', true, [], {}, NaN, Infinity]) assert.equal(normalizeShadowCameraScale(value), 1);
+    for (const value of [0.1, 0.5, 1, 2]) assert.equal(normalizeShadowCameraScale(value), value);
+    assert.equal(normalizeShadowCameraScale('0.75'), 0.75);
+    assert.equal(normalizeShadowCameraScale(0), 0.1);
+    assert.equal(normalizeShadowCameraScale(3), 2);
+    assert.equal(normalizeShadowCameraScale(1.236), 1.24);
+});
+
+test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不累乘、不改变近远裁面', async () => {
+    const THREE = await import('three');
+    const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
+    const injected = addShadowMapRuntime(source, './preview');
+    const start = injected.indexOf('    const fitShadowCamera = (root) => {');
+    const end = injected.indexOf('    const applyShadowMode = () => {', start);
+    const lights = [new THREE.DirectionalLight(), new THREE.DirectionalLight()];
+    lights[0].position.set(1, 3, 2); lights[1].position.set(-1, 2, -3);
+    const settings = { cameraScale: 1 };
+    const bounds = new THREE.Box3(new THREE.Vector3(-0.5, 0, -0.2), new THREE.Vector3(0.5, 1.75, 0.2));
+    const fit = vm.runInNewContext(normalizeShadowCameraScale.toString() + '\n' + injected.slice(start, end) + '\nfitShadowCamera;', {
+        THREE, TARGET_MODEL_HEIGHT: 1.75, SHADOW_FRUSTUM_MARGIN: 1.18,
+        getModelBounds: () => bounds, applyKeyLightPosition: () => {},
+        keyLight: lights[0], fillLight: lights[1], shadowPlane: new THREE.Object3D(),
+        window: { MmdArTestShadowMapSettings: settings }
+    });
+    fit(null);
+    const originals = lights.map(light => ({ extent: light.shadow.camera.right,
+        near: light.shadow.camera.near, far: light.shadow.camera.far,
+        matrixX: light.shadow.camera.projectionMatrix.elements[0] }));
+    for (const scale of [0.1, 0.5, 2, 0.5, 1, 1]) {
+        settings.cameraScale = scale; fit(null);
+        for (let index = 0; index < lights.length; index += 1) {
+            const camera = lights[index].shadow.camera; const original = originals[index];
+            assert.ok(Math.abs(camera.right - original.extent * scale) < 1e-12);
+            assert.equal(camera.left, -camera.right); assert.equal(camera.top, camera.right); assert.equal(camera.bottom, -camera.right);
+            assert.equal(camera.near, original.near); assert.equal(camera.far, original.far);
+            assert.ok(Math.abs(camera.projectionMatrix.elements[0] - original.matrixX / scale) < 1e-12);
+        }
+    }
 });
 
 test('释放阴影map/mapPass并清空引用，重复目标与重复调用只释放一次', async () => {
@@ -126,6 +167,9 @@ test('面板生成四档和两张完整预览，注入唯一锚点/清理；锚�
     assert.deepEqual($('#mmdArShadowMapSize option').map((_, node) => node.attribs.value).get(), ['512', '1024', '2048', '4096']);
     assert.equal($('#mmdArShadowMapPreviewRows[hidden]').length, 1);
     assert.equal($('#panel canvas[width="256"][height="256"]').length, 2);
+    assert.equal($('#mmdArShadowCameraScale').attr('min'), '0.1');
+    assert.equal($('#mmdArShadowCameraScale').attr('max'), '2');
+    assert.equal($('#mmdArShadowCameraScale').attr('step'), '0.01');
     assert.doesNotThrow(() => new vm.Script(PANEL_JS));
     const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
     const output = addShadowMapRuntime(source, './web-shadow-map-preview.mjs?v=test');

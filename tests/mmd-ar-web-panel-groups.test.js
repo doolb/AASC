@@ -108,7 +108,8 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   originalIds.get('#displayMmdLightingPanel').push('mmdArAoConcavityAngle', 'mmdArAoConcavityAngleValue');
   originalIds.get('#displayMmdLightingPanel').push('mmdArShadowMapSize', 'mmdArShadowMapSizeValue',
     'mmdArShadowMapPreviewEnabled', 'mmdArShadowMapPreviewRows', 'mmdArShadowMapKeyStatus',
-    'mmdArShadowMapKeyCanvas', 'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas');
+    'mmdArShadowMapKeyCanvas', 'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas',
+    'mmdArShadowCameraScale', 'mmdArShadowCameraScaleValue');
   // 工作区已有补光角度控件和小球遮挡控件，完整ID校验夹具须包含这些现有节点。
   originalIds.get('#displayMmdLightingPanel').push('mmdArFillFacingStart', 'mmdArFillFacingStartValue',
     'mmdArFillFacingEnd', 'mmdArFillFacingEndValue');
