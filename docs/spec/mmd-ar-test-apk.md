@@ -1,5 +1,27 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+## 2026-10-01 阴影尺寸与ShadowMap预览（已完成）
+
+```text
+已有声明：keyLight.shadow.map；fillLight.shadow.map；renderer；当前主/补光阴影模式
+新增定义：ShadowMapDiagnostic { size, previewEnabled, maxSize, effectiveSize, previewRows }
+面板新增四档尺寸选择512/1024/2048/4096及显示ShadowMap开关；默认1024/关闭
+读取本地保存 -> 规范化 -> 发布冻结设置 -> 改变时保存；灯光复位同时重设
+渲染前按设备纹理上限计算有效尺寸 -> 回显/禁用不支持档位
+实际尺寸改变 -> 释放并置空两灯旧map/mapPass -> 写入尺寸 -> 标记更新
+渲染主场景后：
+    开关关闭/面板折叠或屏幕外 -> 不分配预览GPU资源、不读回
+    可见且距上次至少250ms -> 逐灯查看实际阴影状态
+    未投影 -> 清空预览并显示关闭/复用主光原因，不能展示旧帧
+    已投影 -> 用现有阴影贴图渲染到固定256方形预览目标
+    GPU解包RGBA深度 -> 灰度颜色/占用掩码 -> 读回固定小缓冲
+    Y翻转写到面板canvas，保留整张图；覆盖比例 := 掩码像素数/65536
+    回显实际map宽高及像素覆盖估算；不自动裁切/放大角色
+    finally恢复原renderTarget/viewport/scissor/autoClear/阴影更新状态
+首次分配后复用预览场景/材质/目标/缓冲；复位、关闭释放预览自有资源
+runtime结束 -> 释放预览与两灯阴影目标
+```
+
 ## 2026-10-01 第三后端移除与锁定传递修复归档
 
 ```text

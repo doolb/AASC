@@ -33,6 +33,7 @@ const WEB_PHYSICS_STABILITY = require('./web-physics-stability');
 const WEB_SKELETON_DEBUG = require('./web-skeleton-debug');
 const WEB_RIGID_BODY_DEBUG = require('./web-rigid-body-debug');
 const WEB_SHADOW_BIAS = require('./web-shadow-bias');
+const WEB_SHADOW_MAP = require('./web-shadow-map-size');
 const WEB_PHYSICS_WIND = require('./web-physics-wind');
 const WEB_PHYSICS_SOLVER = require('./web-physics-solver');
 const { stageXpbdPhysics } = require('./web-xpbd-build');
@@ -544,8 +545,12 @@ async function stageTextAssets() {
     const cameraProbeAnchor = 'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });';
     if (runtimeSource.split(cameraProbeAnchor).length !== 2) throw new Error('测试网页未找到唯一的 PMX 相机诊断锚点');
     // 只改测试网页/APK生成副本：面板只读当前投影，不把近远裁面写进正式显示端源码或灯光配置。
-    const runtimeWithProbe = WEB_FILL_FACING_RANGE.addFillFacingRuntime(WEB_SHADOW_BIAS.addShadowBiasRuntime(runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
-    window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`)));
+    const shadowPreviewPath = path.join(GENERATED_ASSETS, 'js/web-shadow-map-preview.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-shadow-map-preview.mjs'), shadowPreviewPath);
+    const shadowPreviewVersion = (await hashFile(shadowPreviewPath)).sha256.slice(0, 12);
+    const runtimeWithProbe = WEB_SHADOW_MAP.addShadowMapRuntime(WEB_FILL_FACING_RANGE.addFillFacingRuntime(WEB_SHADOW_BIAS.addShadowBiasRuntime(runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
+    window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`))),
+    `./web-shadow-map-preview.mjs?v=${shadowPreviewVersion}`);
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_STABILITY.addStabilityRuntime(WEB_RIGID_BODY_DEBUG.addRigidBodyRuntime(WEB_CAMERA_MOTION.addCameraMotionRuntime(WEB_SKELETON_DEBUG.addSkeletonRuntime(WEB_PHYSICS_SUBSTEPS.addSubstepRuntime(WEB_PHYSICS_RATE.addPhysicsRateRuntime(
       WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl), physicsRateUrl)), skeletonUrl), localAssetsUrl)
@@ -855,6 +860,9 @@ async function stageTextAssets() {
     'mmdArCameraMotionPlayback', 'mmdArGravityCameraEnabled', 'mmdArSkeletonEnabled', 'mmdArRigidBodyEnabled',
     'mmdArRigidBodyLegend', 'mmdArRigidBodyControls', 'mmdArPhysicsStabilityReference',
     'mmdArFillFacingStart', 'mmdArFillFacingEnd', 'mmdArSkeletonOccludedOpacity']) requiredIds.add(id);
+  for (const id of ['mmdArShadowMapSize', 'mmdArShadowMapSizeValue', 'mmdArShadowMapPreviewEnabled',
+    'mmdArShadowMapPreviewRows', 'mmdArShadowMapKeyStatus', 'mmdArShadowMapKeyCanvas',
+    'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas']) requiredIds.add(id);
   for (const id of requiredIds) {
     if (!seenIds.has(id)) throw new Error(`测试页面缺少必需控件：${id}`);
   }

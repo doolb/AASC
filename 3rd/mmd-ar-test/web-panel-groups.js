@@ -2,6 +2,7 @@
 
 const { CAMERA_SETTINGS_JS } = require('./camera-settings-template');
 const SHADOW_BIAS = require('./web-shadow-bias');
+const SHADOW_MAP = require('./web-shadow-map-size');
 const WIND = require('./web-physics-wind');
 const FILL_FACING_RANGE = require('./web-fill-facing-range');
 const PHYSICS_SOLVER = require('./web-physics-solver');
@@ -78,6 +79,7 @@ const WEB_PANEL_GROUP_CSS = `
 const WEB_PANEL_GROUP_JS = `
     ${PHYSICS_SOLVER.SOLVER_PANEL_JS}
     ${SHADOW_BIAS.PANEL_JS}
+    ${SHADOW_MAP.PANEL_JS}
     ${FILL_FACING_RANGE.PANEL_JS}
     (() => {
       const toggle = document.getElementById('mmdArRigidBodyEnabled');
@@ -691,6 +693,7 @@ function groupWebPanels($) {
 
   groupPanel($, lightingPanel, 'display-mmd-lighting-header', LIGHTING_GROUPS);
   SHADOW_BIAS.addShadowBiasControls($, lightingPanel);
+  SHADOW_MAP.addShadowMapControls($, lightingPanel);
   FILL_FACING_RANGE.addFillFacingControls($, lightingPanel);
   const aoGroup = lightingPanel.find('button[data-group-title="AO"]').closest('.mmd-ar-panel-group');
   aoGroup.find('.mmd-ar-panel-group-body').prepend(

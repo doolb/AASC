@@ -104,7 +104,11 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
 
   groupWebPanels($);
   originalIds.get('#mmdArMotionPanel').push(...require('../3rd/mmd-ar-test/web-physics-wind').WIND_CONTROL_IDS);
+  originalIds.get('#mmdArMotionPanel').push('mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus');
   originalIds.get('#displayMmdLightingPanel').push('mmdArAoConcavityAngle', 'mmdArAoConcavityAngleValue');
+  originalIds.get('#displayMmdLightingPanel').push('mmdArShadowMapSize', 'mmdArShadowMapSizeValue',
+    'mmdArShadowMapPreviewEnabled', 'mmdArShadowMapPreviewRows', 'mmdArShadowMapKeyStatus',
+    'mmdArShadowMapKeyCanvas', 'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas');
   // 工作区已有补光角度控件和小球遮挡控件，完整ID校验夹具须包含这些现有节点。
   originalIds.get('#displayMmdLightingPanel').push('mmdArFillFacingStart', 'mmdArFillFacingStartValue',
     'mmdArFillFacingEnd', 'mmdArFillFacingEndValue');
@@ -170,7 +174,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArRigidBodyStyle button[aria-pressed="false"]').attr('data-rigid-body-style'), 'wireframe');
   assert.equal($('#mmdArCharacterHiddenEnabled').is('[checked]'), false);
   assert.equal($('#mmdArPhysicsStabilityReference').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
-  assert.equal($('#mmdArPhysicsStabilityReference').attr('min'), '30');
+  assert.equal($('#mmdArPhysicsStabilityReference').attr('min'), '3');
   assert.equal($('#mmdArPhysicsStabilityReference').attr('max'), '180');
   assert.equal($('#mmdArPhysicsStabilityReference').attr('value'), '45');
   assert.equal($('#mmdArSkeletonSize').attr('min'), '0.2');
