@@ -19,6 +19,7 @@
     "requestTimeoutMs": 20000,
     "extraTimeoutPerPending": 10000,
     "maxErrorBytes": 65536,
+    "audioCacheMaxMiB": 128,
     "device": "display",
     "serverEnabled": false
   },
@@ -142,7 +143,6 @@
   "logBlocklist": [],
   "chat": {
     "agentBackend": "codex",
-    "codexProxy": "http://127.0.0.1:7899",
     "apiUrl": "http://127.0.0.1:8083/v1/chat/completions",
     "model": "Qwen3.6-Flash",
     "maxTokens": 65536,
@@ -150,9 +150,7 @@
     "apiKey": "",
     "contextCount": 10,
     "systemPrompt": "你是一个可爱萝莉猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
-    "promptFormat": "raw",
-    "mode": "llm",
-    "backend": null,
+    "activeProfile": "qwen3.5",
     "llmProfiles": [
       {
         "name": "default",
@@ -178,7 +176,10 @@
         "mode": "llm"
       }
     ],
-    "activeProfile": "qwen3.5"
+    "codexProxy": "http://127.0.0.1:7899",
+    "promptFormat": "raw",
+    "mode": "llm",
+    "backend": null
   },
   "logCategoryFilter": null,
   "timeAnnounce": {
@@ -189,6 +190,7 @@
   },
   "defaultDisplayState": {
     "currentMedia": null,
+    "showStatusBar": true,
     "mmdVisible": true,
     "currentMediaProgress": null,
     "rotation": 0,

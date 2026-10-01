@@ -39,7 +39,7 @@
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |
 | 聊天系统 | [chat-system.md](design/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | 聊天 TTS 打断与 Offline 定时更新 | [chat-tts-interruption-and-offline-update.md](design/chat-tts-interruption-and-offline-update.md) | 聊天会话 TTS 代次/think 阶段打断、显示端停止按钮和 Offline 前台更新轮询 |
-| 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](design/display-chat-mmd.md) | 浏览器显示端聊天、角色会话、VRM/MMD 同位舞台和动作控制 |
+| 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](design/display-chat-mmd.md) | 浏览器显示端聊天、角色会话、VRM/MMD 同位舞台、动作控制与角色鼠标/触屏变换 |
 | MMD 图片基准图 AR | [mmd-image-ar.md](design/mmd-image-ar.md) | 普通图片拍照、手动四角选区、本地图像目标跟踪和 MMD 姿态叠加 |
 | 正式 Offline MMD AR 同步 | [mmd-ar-production-offline.md](design/mmd-ar-production-offline.md) | 固定版本本地 AR 资源、正式显示端 MindAR/物理迁移及最小热更边界（进行中） |
 | MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](design/mmd-ar-test-apk.md) | 3rd 下独立运行的 APK 与 HTTPS 静态页、默认米娅 PMX、当前 JS/MindAR A/B 跟踪器及网页动作播放开关 |

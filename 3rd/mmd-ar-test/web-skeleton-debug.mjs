@@ -27,6 +27,12 @@ export function classifySkeletonBones(mesh) {
 export function createSkeletonOverlay({ THREE, renderer, camera }) {
     const scene = new THREE.Scene();
     scene.name = 'mmd-ar-skeleton-overlay';
+    // 诊断着色光只服务本叠加层（不联动真实场景灯光）：顶光略偏前区分球面朝向，
+    // 环境光保留下限；遮挡开关只控制小球之间的深度，不接收角色遮挡。
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    const topLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    topLight.position.set(0.35, 1, 0.5);
+    scene.add(ambientLight, topLight);
     const depthScene = new THREE.Scene();
     // 球面深度预绘不包含文字或选中轴，避免透明混合留下后方球的颜色。
     const ballDepthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
@@ -86,7 +92,7 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
         for (const type of ['none', 0, 2, 1]) {
             const indices = types.flatMap((value, index) => value === type ? [index] : []);
             if (!indices.length) continue;
-            const material = new THREE.MeshBasicMaterial({ color: SKELETON_COLORS[type],
+            const material = new THREE.MeshLambertMaterial({ color: SKELETON_COLORS[type],
                 transparent: characterDepth.supported && occludedOpacity < 1,
                 depthTest: occlusionEnabled, depthWrite: false, toneMapped: false });
             characterDepth.prepareMaterial(material);

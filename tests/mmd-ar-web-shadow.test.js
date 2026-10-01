@@ -62,7 +62,28 @@ test('生成的 HTTPS 网页真实加载 PMX 时双光阴影 shader 能编译', 
       if (message.type() === 'error') errors.push(message.text());
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/mnt/mmd-ar/`, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.DisplayMmd?.getState?.().modelReady === true, { timeout: 30000 });
+    await page.waitForFunction(() => window.DisplayMmd?.getState?.().modelReady === true, { timeout: 90000 });
+    await page.waitForFunction(() => window.DisplayMmd?.getMotionProgress?.()?.durationSeconds > 0, { timeout: 90000 });
+    // 软件光栅下渲染帧可达约1秒一帧，墙钟等待可能不含渲染帧；进度推进按渲染帧等待。
+    const waitFrames = (count) => page.evaluate((target) => new Promise((resolve) => {
+      let seen = 0;
+      const step = () => {
+        seen += 1;
+        if (seen >= target) resolve();
+        else requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }), count);
+    const firstMotion = await page.evaluate(() => window.DisplayMmd.getMotionProgress());
+    await waitFrames(2);
+    const laterMotion = await page.evaluate(() => window.DisplayMmd.getMotionProgress());
+    assert.ok(laterMotion.timeSeconds > firstMotion.timeSeconds, 'VMD 进度应随实际播放推进');
+    await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(false));
+    const pausedMotion = await page.evaluate(() => window.DisplayMmd.getMotionProgress());
+    await waitFrames(2);
+    const stillPausedMotion = await page.evaluate(() => window.DisplayMmd.getMotionProgress());
+    assert.ok(Math.abs(stillPausedMotion.timeSeconds - pausedMotion.timeSeconds) < 0.001,
+      '暂停后 VMD 进度应停留在当前时间');
     const modes = await page.evaluate(async () => {
       const values = [];
       for (const [keyShadowEnabled, shadowSource] of [

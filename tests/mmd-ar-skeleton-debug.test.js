@@ -67,9 +67,13 @@ test('默认关闭与角色隐藏时不创建/更新资源，开启后四类只�
     assert.equal(renderer.autoClear, true);
     assert.equal(mesh.children.filter(value => value.isInstancedMesh).length, 0);
     const scene = renderer.calls[0].scene;
-    assert.equal(scene.children.length, 4);
-    assert.equal(new Set(scene.children.map(value => value.geometry)).size, 1);
-    for (const marker of scene.children) {
+    const markerMeshes = scene.children.filter(value => value.isInstancedMesh);
+    assert.equal(markerMeshes.length, 4);
+    // 诊断着色灯光只服务叠加层；小球为受光材质并保持透过显示。
+    assert.equal(scene.children.filter(value => value.isLight).length, 2);
+    assert.equal(new Set(markerMeshes.map(value => value.geometry)).size, 1);
+    for (const marker of markerMeshes) {
+        assert.equal(marker.material.isMeshLambertMaterial, true);
         assert.equal(marker.material.depthTest, false);
         assert.equal(marker.material.depthWrite, false);
         assert.equal(marker.castShadow, false);
@@ -123,7 +127,7 @@ test('换模型释放实例/材质/几何，重复销毁幂等，空模型与后
     overlay.setVisible(true);
     overlay.render();
     const oldScene = renderer.calls[0].scene;
-    const oldGroups = [...oldScene.children];
+    const oldGroups = oldScene.children.filter(value => value.isInstancedMesh);
     const counts = { mesh: 0, material: 0, geometry: 0 };
     oldGroups[0].geometry.addEventListener('dispose', () => { counts.geometry += 1; });
     for (const group of oldGroups) {
@@ -132,7 +136,9 @@ test('换模型释放实例/材质/几何，重复销毁幂等，空模型与后
     }
     overlay.setModel(null);
     assert.deepEqual(counts, { mesh: 4, material: 4, geometry: 1 });
-    assert.equal(oldScene.children.length, 0);
+    // 场景只保留诊断灯光，实例网格全部释放。
+    assert.equal(oldScene.children.filter(value => value.isInstancedMesh).length, 0);
+    assert.equal(oldScene.children.filter(value => value.isLight).length, 2);
     assert.equal(overlay.getState().boneCount, 0);
     assert.equal(overlay.render(), false);
     overlay.setModel(mesh);

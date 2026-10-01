@@ -28,3 +28,7 @@ src/apps/android-display/.kotlin/
 /res/models/mmd/miya/
 /res/models/mmd/motions/
 /res/models/mmd/manifest.json
+
+# 独立 MMD AR 的原生定位依赖由固定版本脚本下载到本机构建缓存
+/build/third_party/orb-slam3/
+/build/third_party/mmd-ar-slam/

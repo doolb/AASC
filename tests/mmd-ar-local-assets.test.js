@@ -22,6 +22,9 @@ test('本地资源匹配目录、Windows 分隔符、大小写和唯一平铺文
     const pmx = file('人物.pmx', '包/人物.pmx');
     const png = file('A.png', '包/tex/A.png');
     const selection = assets.createLocalModelSelection([pmx, png], pmx);
+    assert.equal(assets.isRegisteredLocalAsset(selection.profile.modelUrl, '.pmx'), true);
+    assert.equal(assets.isRegisteredLocalAsset(selection.profile.modelUrl, '.vmd'), false);
+    assert.equal(assets.isRegisteredLocalAsset(`${selection.profile.modelUrl}/unselected.pmx`, '.pmx'), false);
     let resolver;
     assets.configureLocalLoader({ manager: { setURLModifier(value) { resolver = value; } } }, selection.profile.modelUrl);
     const base = selection.profile.modelUrl.slice(0, selection.profile.modelUrl.lastIndexOf('/') + 1);
@@ -32,6 +35,7 @@ test('本地资源匹配目录、Windows 分隔符、大小写和唯一平铺文
     assert.throws(() => resolver(`${base}tex/absent.png`), /缺少贴图/u);
     assert.throws(() => resolver('https://example.com/a.png'), /未选择/u);
     selection.release();
+    assert.throws(() => assets.isRegisteredLocalAsset(selection.profile.modelUrl, '.pmx'), /已经释放/u);
     await assert.rejects(fetch(textureUrl));
     assert.throws(() => resolver(`${base}tex/A.png`), /已经释放/u);
     assert.throws(() => assets.configureLocalLoader({ manager: {} }, selection.profile.modelUrl), /已经释放/u);

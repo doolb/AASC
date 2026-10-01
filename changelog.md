@@ -1,10 +1,15 @@
 # Web MediaCenter - 变更日志
 
+### 工作区非日志/非模型改动提交
+
+- ✅ [2026-10-01] 按用户要求归档当前代码、配置、文档、自测和参考截图；日志、模型、任务运行结果、APK/ZIP及构建缓存留在本地。
+  - 包含独立 MMD AR 原生定位/目录选择/摄像头几何、相机 VMD、碰撞体质量着色/实体遮挡、AO 浅凹门限及相关文档与测试，共74个文件约4.9MB；Offline待打包状态仍为minApk/servicePackage=true、dependenciesPackage=false。
+  - 23个源文件语法与代码/项目文档差异空白检查通过；原始笔记和第三方许可证的换行/尾随空白保留。提交前6组定向测试共38项，31通过、7失败：骨骼夹具缺少renderer.capabilities导致6项失败，本地资源用例仍断言旧物理默认65Hz（当前90Hz）导致1项失败；已记入todo，不把本轮提交检查记为全部通过。原生构建与真机验收沿用各任务已有记录，本轮未重新打包或部署。
+
 ### MMD AR风力上限30
 
 - ✅ [2026-10-01] 风力强度范围从0–3开放到0–30，步长0.05、默认0.3、风默认关闭与已有合法偏好保持；type2位置驱动及风矩防抖限幅沿用。
   - 修改`web-physics-wind.mjs`共享规范化上限与`web-physics-wind.js`滑条max，Display/面板复用声明随构建同步；扩展`tests/mmd-ar-physics-wind.test.js`及对应design/spec/task/usage/README/自测文档。14项风场自测通过：30/31/999边界、经典Display一致、30强度跨Hz/FPS真实一秒速度约−213.2106、微小惯量与阵风有限、30偏好恢复、米娅90/180Hz强风及native回收；`npm run build:web:mmd-ar-test`与35脚本/4内联/21指纹检查通过，LAN控件max30、手动30实际生效、API31截断30及刷新恢复30验证通过，无页面异常。仅测试副本，未打包APK或发布外网，手机观感待验收。
-
 
 ### MMD AR物理风场
 
@@ -21,6 +26,12 @@
 - ✅ [2026-10-01] “动作→骨骼”增加遮挡处不透明度（0至100%、默认50%），被角色挡住的球面变淡，外露部分保持不透明；保留独立的小球相互遮挡，设置保存及runtime重建补发。
   - 新增 `web-skeleton-character-depth.mjs`，角色浅克隆共享几何/骨骼/形变/贴图，独立深度材质捕获当前角色；球shader逐像素比较深度设置alpha。修改骨骼模块/注入、面板、build；小球相互遮挡开启时先球深度预绘再颜色混合，避免后球残影。诊断关闭或不透明度100%时不捕获角色深度，换模型/销毁仅释放辅助自有资源，AO算法不改。
   - `npm run build:web:mmd-ar-test`成功，12个源/生成模块及5段内联脚本/importmap静态语法通过，3控件HTML唯一；lighting64a2b657cf9f/character-depthddc72846653a/skeleton7adb2a6a6cfb/runtime0e8e21cc4809。未新增或执行测试，实际手机画面/交互与性能待现场验收；未打包APK、提交或发布，Offline标记沿用。
+
+### MMD AR默认纠错45Hz与物理90Hz
+
+- ✅ [2026-10-01] 独立测试构建的纠错默认/非法回退改45Hz，物理默认/非法回退改90Hz；控件、生成Display/runtime/helper/vendor与灯光“恢复默认”同步，合法本地偏好仍优先恢复，物理上限保留180Hz。
+  - 修改`web-physics-stability.js`、`web-physics-rate.mjs`/`.js`、`web-panel-groups.js`、`build.js`及rate/stability/motion-switch/panel测试；提交包含必需的纠错基准可调接口、滑条和本地记忆依赖。共享90Hz预算10步，默认六轴ERP约0.275431；正式显示端和固定vendor源保持。
+  - 51项定向测试通过（全套50项中面板夹具遗漏既有补光/骨骼控件，同步后单项通过；另补生成显示层空白输入实测1项）；真实Ammo旋转回写、20秒米娅、子步/生命周期/动作切换回归通过。`npm run build:web:mmd-ar-test`成功，34脚本/4内联/19相对指纹验证通过；真实LAN首次45/90、手动180/130刷新、非法回退45/90、物理复位90Hz通过且无页面异常。未打包APK，手机布料手感待现场验收；文档及任务同步。
 
 ### MMD AR 骨骼小球遮挡开关
 
@@ -44,13 +55,43 @@
   - 源 `node --check`和 `npm run build:web:mmd-ar-test`通过；本地web-dist已生成，现场画面待验收。未新增或运行测试、未打包APK/提交/发布，servicePackage已有true保持。
   - 后续骨骼小球遮挡开关已获用户确认并实现，见同日对应条目。
 
+### MMD AR 关节纠错基准Hz可调
 
-### MMD AR默认纠错45Hz与物理90Hz
+- ✅ [2026-10-01] 物理稳定性补丁写死的“关节纠错基准 65Hz”改为可调：测试网页“物理”分类新增“纠错基准 Hz”滑条（30–180、5Hz 步长、默认 65、本地记忆），实时重算六轴 STOP_ERP；只改纠错强度，不动弹簧/质量/阻尼/步进预算。
+  - 修改 `3rd/mmd-ar-test/web-physics-rate.mjs`（`normalizeWebStabilityReference`＋步进参数增加 `stabilityReferenceHz`，默认 65）、`web-physics-rate.js`（运行时创建/变频两处步进参数携带参考值）、`web-physics-stability.js`（补丁记忆同时核对 unitStep 与参考值、新增 `setStabilityReferenceHz` 立即重算、`addStabilityRuntime`/`addStabilityDisplay` 注入）、`web-panel-groups.js`（滑条＋说明＋本地键 `aasc.mmdArTest.physicsStabilityReference.v1`）、`build.js`（注入链与必需控件）。
+  - 只改参考不会触发变频检测，运行时显式调用 `setStabilityReferenceHz` 立即生效；非法/缺失四层一致回退 65，其余按 30–180 截断并 5Hz 取整；显示层在 runtime 未创建时先保存待补发，重建后补发。
+  - 测试：`tests/mmd-ar-physics-rate.test.js` 新增归一化与参数用例；`tests/mmd-ar-physics-stability.test.js` 新增“同 Hz 不同基准 ERP、实时改基准立即重算、回退/非法值、65Hz 恢复 0.475”；`tests/mmd-ar-web-panel-groups.test.js` 新增滑条分组/默认/保存断言。物理定向（rate＋stability）20/20、面板 8/8、本地资源 3/3 通过，`npm run build:web:mmd-ar-test` 生成 web-dist。
+  - 仅独立 WEB_MODE，正式显示端与旧 APK 不变；未发布外网，手机不同基准的关节手感对照待现场验收。
 
-- ✅ [2026-10-01] 独立测试构建的纠错默认/非法回退改45Hz，物理默认/非法回退改90Hz；控件、生成Display/runtime/helper/vendor与灯光“恢复默认”同步，合法本地偏好仍优先恢复，物理上限保留180Hz。
-  - 修改`web-physics-stability.js`、`web-physics-rate.mjs`/`.js`、`web-panel-groups.js`、`build.js`及rate/stability/motion-switch/panel测试；提交包含必需的纠错基准可调接口、滑条和本地记忆依赖。共享90Hz预算10步，默认六轴ERP约0.275431；正式显示端和固定vendor源保持。
-  - 51项定向测试通过（全套50项中面板夹具遗漏既有补光/骨骼控件，同步后单项通过；另补生成显示层空白输入实测1项）；真实Ammo旋转回写、20秒米娅、子步/生命周期/动作切换回归通过。`npm run build:web:mmd-ar-test`成功，34脚本/4内联/19相对指纹验证通过；真实LAN首次45/90、手动180/130刷新、非法回退45/90、物理复位90Hz通过且无页面异常。未打包APK，手机布料手感待现场验收；文档及任务同步。
+### MMD AR 碰撞体实体模式与真实遮挡
 
+- ✅ [2026-10-01] 碰撞体可视化从透过式线框改为可选「实体（默认）／线框」两种样式：实体为不透明质量色填充＋深色背面扩张描边，与角色逐像素互相遮挡、只显示未遮挡部分；线框保持原透过行为。新增「隐藏角色」（关角色网格、碰撞体叠加继续；骨骼小球仍随网格隐藏）与选中骨骼过滤时穿透显示。
+  - 修改 `3rd/mmd-ar-test/web-rigid-body-debug.mjs`（样式状态、填充/描边两组实例资源、过滤穿透、角色隐藏守卫放宽、`needsSceneDepth()`）、`web-rigid-body-debug.js`（AO 离屏合成后按条件补角色深度直写遍、`setCharacterHidden` 与显示层透传）、`web-panel-groups.js`（「碰撞体样式」线框/实体分段按钮默认实体、本地记忆；「隐藏角色」开关与提示文案）、`build.js`（必需控件）。
+  - 深度遍仅当「实体＋全量＋角色可见＋AO 离屏生效」时执行（clearDepth＋colorWrite:false 覆盖材质，期间关闭阴影贴图重渲复用本帧结果）；AO 关闭时直接用画布场景深度；线框、选中过滤、隐藏角色时零开销。隐藏角色只改 `mesh.visible`，AR/首帧 pivot 门控不受影响，换模型后重应用。
+  - 更新 `tests/mmd-ar-rigid-body-debug.test.js`（11 项：新增实体/描边/放大比、模式切换释放重建、过滤穿透、隐藏角色与 `needsSceneDepth`、样式/隐藏面板转发；修正 actualCount 被描边重复计数）、`tests/mmd-ar-rigid-body-debug-browser.test.js`（样式往返切换、隐藏角色后继续绘制、刷新恢复）、面板分组自测（新控件登记与断言，含并行「浅凹抑制」滑条登记）。
+  - 定向 11/11、真实网页 1/1、面板 8/8、骨骼 9/9、相机动作 2/2 通过；`npm run build:web:mmd-ar-test` 生成 web-dist（实例组 31）。仅独立 WEB_MODE，Offline 产物与旧 APK 不变；未发布外网，手机描边粗细、遮挡边缘观感与帧率待现场验收。
+- ✅ [2026-10-01] 视觉调整：描边外壳放大由 1.08 减半到 1.04；实体填充与骨骼小球加固定顶光着色以区分不同朝向的面（两个诊断叠加场景各自环境光 0.55＋顶光平行光 0.9，位于上方略偏前）。
+  - 修改 `3rd/mmd-ar-test/web-rigid-body-debug.mjs`（描边常量 1.04、Lambert 填充、诊断灯光）与 `web-skeleton-debug.mjs`（小球改 Lambert、同套诊断灯光，保留 type 三色与透过显示）；顶光只用于诊断叠加层的着色计算，不联动真实场景灯光，不改变 AO/阴影/正式显示端。
+  - 更新刚体单测（场景节点按实例网格过滤、两盏灯与 Lambert/BackSide 断言、描边比例随常量）与骨骼单测（灯光过滤、受光材质断言）；`npm run build:web:mmd-ar-test` 重新生成 web-dist。
+
+### MMD AR 碰撞体按质量着色
+
+- ✅ [2026-10-01] 碰撞体线框颜色由红/黄/绿 type 三色改为按物理有效质量（type0 恒为 0、type1/2 取 weight）对数连续色带（蓝→青→绿→黄→红），有效质量 0 统一浅灰；着色与显示跟随当前选择过滤，色阶范围固定为全模型、同一刚体颜色不随过滤漂移。
+  - 修改 `3rd/mmd-ar-test/web-rigid-body-debug.mjs`（有效质量/MassScale/逐实例 instanceColor，分组键去掉 type；`getRigidBodyState` 新增 `massScale`、`massRamp`、`massBodies`）、`web-panel-groups.js`（骨骼分组新增 `mmdArRigidBodyLegend`：渐变条＋范围文字＋“灰＝有效质量 0（跟随骨骼）”，随 500ms 状态轮询刷新）、`build.js`（必需控件校验加入图例）。
+  - 颜色随打包序号与矩阵同帧写入，过滤压缩序号后颜色仍对应所属刚体；骨骼小球保留 type 三色；有效质量按 type/weight 推导，与引擎构造质量一致，不逐帧读取 Ammo，物理关闭时也能正确着色。
+  - 更新 `tests/mmd-ar-rigid-body-debug.test.js`（新增有效质量色带 1 项：对数端点/中点、0 质量与非法 weight、退化单色、全零色阶、过滤后实例颜色；更新分组/释放与面板图例断言）与 `tests/mmd-ar-rigid-body-debug-browser.test.js`（真实米娅：type0 19 个全浅灰、最轻蓝/最重红、图例文字与渐变）；刚体 10/10、真实网页 1/1、骨骼 9/9、面板 8/8、相机动作 2/2 通过，`npm run build:web:mmd-ar-test` 生成 web-dist，真实实例组由 33 降至 31。
+  - 仅独立 WEB_MODE，Offline 产物与旧 APK 不变；未发布外网，手机深色背景下色带可读性、密集部位质量差异辨识与帧率待现场验收。
+
+### MMD AR SLAM失锁与图片重复定位排查
+
+- ✅ [2026-10-01] 确认单目SLAM加入IMU可行，现有测试APK已包含原始惯性采样及ORB-SLAM3 IMU_MONOCULAR分流，尚需本机联合标定、同步和初始化验收。
+  - 同步design/spec/todo，说明视觉惯性融合与应用层地图锚点恢复是独立问题；仅核对源码和官方支持范围，未修改默认门控、构建或安装。
+
+- ✅ [2026-10-01] 核对测试APK陀螺仪参与定位的实际门控：默认单目视觉，导入完整IMU标定并通过设备/时间同步检查后才注册加速度计与陀螺仪、启用视觉惯性融合。
+  - 同步design/spec/todo及使用说明，区分角色重力旋转与相机惯性定位。手机日志无可用模式记录，界面状态解析失败，未确认当前运行会话；未修改运行代码或构建。
+
+- ✅ [2026-10-01] 核对图片首定位、暂时失锁、环境重定位与地图重建的区别，确认普通同图失锁不清锚点，当前地图切换/参考关键帧失效会清空单份对齐结果。
+  - 核对`native-slam.cc`、`display-mmd-ar-native.js`、`NativeSlamController.kt`及上游`Tracking.cc`：单目视觉成熟地图短暂失锁尝试重定位，失败可重置或新建地图；切回旧地图也缺少对齐结果恢复。同步design/spec/todo及原生使用说明，后续改进标为待确认实施；未确定本次现场失锁诱因，未改运行代码、测试、构建、安装或发布。
 
 ### MMD AR主光阴影偏移
 
@@ -61,6 +102,36 @@
   - `npm run build:web:mmd-ar-test`成功；三个源文件、两段模板、生成runtime/4段内联脚本/importmap语法通过，两个控件唯一且参数匹配，runtime导入指纹`bb62ffb19c38`；AO内容及指纹`8eae1293cfd9`保持。差异空白检查通过。
   - 更新design/spec/task/usage/README/self-test/todo，只保留现场验收。未新增或执行测试，未构建APK、提交、安装或发布外网；近距离条纹实际改善和保存/复位交互待用户画面验证，AO覆盖层排查暂缓，Offline既有状态不变。
 
+### MMD AR低模面间 AO 排查
+
+- ✅ [2026-10-01] 依据用户“额头半透明面”线索，将眉心红线排查优先转向模型覆盖层及深度写入。
+  - 核对Three默认depthWrite=true/alphaTest=0、MMDLoader透明判断和AO共用彩色通道深度；透明混合不会自动排除深度。具体运行时材质/隐藏对比未确认，记录针对装饰覆盖层处理的方向，不自动排除头发/睫毛，不继续未经确认的法线改动。同步design/spec/todo，本轮无运行代码、构建、测试或发布变更；主光阴影bias候选保留。
+
+- ✅ [2026-10-01] 查看用户ao1.jpg确认圈内眉心细线位置，用户明确AO颜色红色、红线来自AO；另核对主光阴影bias=-0.0005、normalBias=0.02及1024² PCFSoft参数。
+  - 记录两像素共面法线选边/全分辨率直接AO合成，以及测试页可调主光深度/法线偏移的待确认方案。读取内置PMX与纹理发现脸前材质层，但抽查眉心alpha=255，没有透明片根因证据；不因材质名禁用模型内容。更新design/spec/todo，未修改运行代码、构建、测试、提交或发布，根因和改善仍待实际画面对比。
+
+- ✅ [2026-10-01] 针对45度门限下近距离眉心凸面仍有AO，完成原AO/法线/模糊/合成路径的源码核对。
+  - 发现法线按一像素深度差选方向，全分辨率合成仍进行中心及四邻点平均、模糊0轮也不关闭该平均；这些是待核查路径，不声明为眉心现象的确定根因。请求截图/模糊对比，更新design/spec/todo；旧截图不作为当前复现，未修改运行代码、构建、测试或发布。
+
+- ✅ [2026-10-01] 实现独立mmd-ar测试页“灯光 → AO → 浅凹抑制”滑块，0–45°/步长0.5°/默认10°，即时保存及灯光恢复默认；减轻低模浅内凹遮蔽，模型法线保持原样。
+  - `display-pmx-ao.mjs`原AO与合成补算共用角度权重和uniform；正式页未提供测试参数时保留原0.08–0.3门限。`web-panel-groups.js`增加控件/持久化/复位，既有build.js无需修改。
+  - `npm run build:web:mmd-ar-test`成功；源/生成AO及面板/内联模板、4段生成内联脚本/importmap语法通过，源/生成AO一致，导入指纹`8eae1293cfd9`；git差异空白检查通过。检查器将importmap改按JSON解析后通过，无运行功能测试。
+  - 同步本地web-dist及design/spec/task/usage/README/self-test/todo，保留手机视觉待验收；共享源码servicePackage已有true保持，不改变其他状态。未构建APK、提交、安装或发布外网；较大门限也会减弱真实浅凹槽，实际默认观感待手工验收。
+
+- ✅ [2026-10-01] 用户确认暗带发生在低模内凹交界；将候选方案收敛为测试页“浅凹抑制”可调夹角门限，原 AO/合成补算一致，正式端未指定时保留旧默认。同步 design/spec/todo，依据 AGENTS.md 等待实施确认；未改运行代码或构建，不标记视觉问题已修复。
+
+- ✅ [2026-10-01] 完成近距离相邻低模面 AO 暗带的初步源码排查，用户明确问题不在外轮廓。
+  - 共享 `display-pmx-ao.mjs` 使用深度差分法线及固定采样夹角门限，原半分辨率归属修正处理模糊/合成；记录可调自遮蔽偏移候选方案与真实浅凹槽遮蔽减弱的限制。同步 design/spec/todo，等待具体方案确认及复现信息，未修改运行代码、构建、测试、提交或发布；未声称问题已经修复。
+
+### MMD AR摄像头跟随旋转与竖屏预览
+
+- ✅ [2026-10-01] 修复测试APK开始定位后竖屏摄像头画面横向显示，预览与角色投影跟随手机旋转并保持等比例居中裁切。
+  - 新增`CameraPreviewGeometry.kt`，修正`NativeSlamController.kt`的TextureView默认传感器旋转补偿；原始SLAM像素到窗口的同一变换用于投影，原始YUV/标定不变。布局/DisplayListener覆盖横竖屏和180度同尺寸变化，当前会话缓存投影、丢弃过期几何姿态，停止注销监听；方向变化不重建相机和地图。
+  - 新增`app/src/test/java/com/aasc/mmdartest/CameraPreviewGeometryTest.kt`，`app/build.gradle.kts`仅增加JUnit测试依赖；6项自测、64几何组合、768条不同深度射线通过，控件一致性和原生/模拟分流2项Node回归通过。
+  - `npm run build:apk:mmd-ar-test`成功，76网页文件、14模型文件及原生库/词袋校验通过；`3rd/mmd-ar-test/output/aasc-mmd-ar-test.apk`为95,174,279字节，SHA-256 `b1eebc89a0226e0c68cd9a4d8b472c75cad00c4513c90da647cdfbbbed9e7d30`，已覆盖安装SM-N9500。
+  - 真机同进程640×480原生采集，竖屏720×1480/display0 → 横屏1480×720/display90 → 竖屏720×1480/display0持续显示，未因方向变化停止定位；180度仅数值自测。用户明确跟随手机旋转，APK方向保持unspecified，已恢复测试前自动旋转1/user_rotation0。
+  - 更新设计/伪代码/任务/使用/README及自测，从todo移除完成修复项；既有地图尺度/标定/定位精度验收仍待现场进行。本轮未发布外网或构建Offline产物。
+
 ### MMD AR后蝴蝶结末端旋转回写
 
 - ✅ [2026-10-01] 修正物理骨骼父子旋转换算的错误反馈，消除固定刚体下后蝴蝶结6_1骨骼持续自旋。
@@ -69,6 +140,19 @@
   - 稳定性14项及频率/子步/生命周期/切换/骨骼/点选/碰撞体51项，65项通过；入口互换测试夹具修正后复测通过。`npm run build:web:mmd-ar-test`成功，33脚本（含物理vendor2）/4内联语法/19导入指纹通过。实际用户LAN网页180Hz播放12/暂停12/恢复13帧，共37帧，两目标最大世界旋转误差4.214685e-8 rad，骨骼4组且无页面错误；物理模块内容指纹f3d9add20d67。
   - 同步design/spec/task/self-test/usage/todo，移除开发任务，保留手机180Hz现场验收。当前测试网页/APK复用补丁，本轮仅构建网页，未打包安装APK/发布外网；生产Offline产物不受影响。
 
+### MMD AR竖屏摄像头方向排查
+
+- ✅ [2026-10-01] 完成竖屏画面横向显示的初步只读排查与修正方案草案。
+  - 核对`NativeSlamController.kt`预览矩阵、投影及网页校准/重力摄像头入口；按Android官方TextureView说明发现再次旋转传感器方向的疑点，真实故障入口待用户回复。更新design/spec伪代码及todo，代码、APK未修改；依据AGENTS.md等待用户确认方案，不标记缺陷已修复。
+
+### MMD AR网页全部功能同步测试APK
+
+- ✅ [2026-10-01] 修复测试APK灯光面板无法展开，并同步当前网页全部功能，APK额外保留原生ORB-SLAM3定位/标定接口。
+  - `3rd/mmd-ar-test/build.js`统一控件/样式/脚本、物理/骨骼/碰撞体、两类VMD、本地文件、重力/模拟输入及内容指纹；两端保留主光阴影控件，构建检查灯光完整节点和重复ID。根因是旧APK缺少该控件，灯光初始化提前退出未绑定点击。
+  - 新增`apk-artifact.js`及`NativeDirectoryPicker.kt`；更新`MainActivity.kt`多文件选择、`LocalAssetHttpServer.kt`内置assets与用户授权令牌读取、`web-local-assets-ui.mjs`目录相对路径/取消/旧回调回收、`display-mmd-ar-native.js`模拟输入MindAR及预览相机生命周期。共享本地注册表与注入修复APK虚拟路径被默认模型覆盖，确保PMX/VMD真实应用。
+  - 新增APK页面/目录/后端/控件4项回归，并加强本地注册表单测；连同相机动作与进度/分类/物理频率/动作切换共32项定向测试通过。真实页面三面板、阴影/骨骼和目录PMX/本地VMD加载，无页面异常/业务资源404；两端各31脚本/4内联语法/18导入指纹正确。
+  - `npm run build:web:mmd-ar-test`及`npm run build:apk:mmd-ar-test`成功；APK全量校验76网页文件、14模型文件与原生库/词袋。产物`3rd/mmd-ar-test/output/aasc-mmd-ar-test.apk`，95,114,012字节，SHA-256 `c71b3c2200e2c71ebd9e397761964d2548bb4750b2caaab3d876f1a597cf22df`，已覆盖安装SM-N9500。设备日志确认三面板展开/收起，官方图回环HTTP200且61,689字节/摘要一致。
+  - 更新设计、伪代码、任务、使用及自测文档，从todo移除完成项；手机目录/标定/原生地图精度与持续性能仍待现场验收。本轮未发布外网或构建Offline产物。
 
 ### MMD AR骨骼大小、名称与点选诊断
 
@@ -78,17 +162,53 @@
   - 实际米娅321骨骼/4球组，物理重载及两次PMX释放16旧组、Canvas始终1，真实轻点/拖动/双指、AO与筛选、刷新偏好及VMD保留选择通过，无页面错误。`npm run build:web:mmd-ar-test`、31生成脚本/4内联语法/16导入指纹与原LAN HTTP200通过。软件WebGL并行面板回归8帧数据：关闭813.88ms/帧、骨骼及名称开启1027.91ms/帧，真机验收另计。
   - 同步design/spec/task/self-test/usage/README/todo；移除开发任务，仅保留真机验收。仅WEB_MODE，无Offline产物受影响，未构建APK或发布外网；提交推送origion时排除其他工作区改动和生成资源。
 
+### MMD AR 测试网页相机动作 VMD
+
+- ✅ [2026-10-01] mmd-ar HTTPS 测试网页动作面板新增“相机动作”：选择本地相机动画 VMD 后循环驱动预览虚拟相机，仅未定位的普通预览生效，开启 MindAR 定位自动暂停、退出后从暂停处继续；动作分类新增“相机动作”开关和只读进度。
+  - 新增 `3rd/mmd-ar-test/web-camera-motion-inject.js`（runtime/display 副本注入），更新 `build.js`（动作分类控件与注入链）、`web-panel-groups.js`（分组/轮询/开关/本地资源入口）、`web-local-assets-ui.mjs`（选择、释放与恢复默认清理）；只注入生成的 web-dist 副本，不改正式显示端源码与旧 APK。
+  - `loadVMD` 解析后按 `buildCameraAnimation` 生成循环 clip，固定专用 MMDAnimationHelper 绑定预览相机；无相机关键帧的 VMD（含内置角色动作）明确报错；near 固定 1、far 按机位最远距离＋模型半径放宽；关闭开关或清除时恢复 up、fov 28 与适配裁剪面；播放中拖动仍旋转模型，缩放/体感观察不改变相机。
+  - 新增 `tests/mmd-ar-camera-motion.test.js`（注入锚点 1 项 + 真实网页 E2E 1 项：加载与进度、循环位姿/投影变化、开关暂停与恢复、定位暂停与退出继续、角色 VMD 报错保留旧相机动作、恢复默认清除并复位），更新 `tests/mmd-ar-web-panel-groups.test.js`；相机动作 2/2、面板 8/8 通过，`npm run build:web:mmd-ar-test` 生成 web-dist。
+  - 本机软件光栅渲染约 1 秒一帧，墙钟 250ms 等待可能不含渲染帧；新增相机动作 E2E 按渲染帧推进，并把 `tests/mmd-ar-web-shadow.test.js` 的 VMD 进度推进/暂停断言从墙钟等待改为按渲染帧等待（此前在该环境下必然失败），修复后 motion-switch/shadow/load-progress 共 14/14、本地资源回归 3/3 通过。
+  - 仅独立 WEB_MODE，Offline 产物与旧 APK 不受影响；本轮未发布外网，手机文件选择、真实镜头 VMD 观感、定位往返与性能待现场验收。
+
 ### MMD AR PMX碰撞体线框显示
 
 - ✅ [2026-10-01] 独立网页“动作 → 骨骼”新增“显示碰撞体（线框）”独立开关，默认关闭/本地记忆；球、盒、胶囊按真实尺寸，红type0/黄type2/绿type1，透过模型显示。
   - 新增 `3rd/mmd-ar-test/web-rigid-body-debug.js/.mjs`，修改 `build.js` 与 `web-panel-groups.js`；开启物理只读实际COM位置/旋转，关闭立即预览配置位置并提示未模拟，处理非单位缩放和无骨骼刚体。共享球/盒几何及胶囊长径比几何，按颜色实例化；关闭不逐体更新，切换/销毁回收，保留首帧门控与骨骼独立开关，不改变物理参数。
   - 新增模块/真实网页自测，扩展骨骼/面板自测；同步design/spec、自测文档、task、usage/README和todo。40项通过，真实Ammo1000帧native数量稳定/4MiB探针复用/堆64MiB；真实网页183体、33实例组/31共享几何，重载及两次PMX切换释放132旧组，VMD复用/刷新恢复/AO/未模拟提示通过，无页面异常。网页构建、30脚本/4内联语法、16导入指纹及LAN HTTP200通过。仅独立WEB_MODE，本地web-dist已生成，外网未发布，Offline产物状态不受本功能影响，手机观感/性能待验收。
 
+### MMD AR 原生 ORB-SLAM3 接入
+
+- ✅ [2026-10-01] 按确认方案接入APK原生ORB-SLAM3，先识别原定位图并多帧对齐单目尺度，固定到地图首关键帧；纯网页/无可用原生协议继续MindAR，不移植WASM。
+  - 新增NDK/CMake/JNI、Camera2灰度采集与TextureView预览、SensorManager及会话代次桥；固定ORB提交、OpenCV/Boost/Eigen版本与摘要，词袋/许可证随arm64 APK。原生模式停用旧网页IMU预测，复用anchorMatrix相机接口与原第二层缓动，保留手动变换/动作/物理；新地图需重新识别图，失锁冻结已显示视角。
+  - 默认单目视觉/估算内参；导入真实相机、IMU外参/噪声/频率/时间偏移并满足REALTIME同步才开启惯性模式。补相机后台回收、旧回调隔离、建图/回环/GBA退出join与残余对象回收，跟踪器特征提取器/标定及临时重定位求解器释放；系统文档选择器支持标定JSON导入；相机控件模板供APK和网页共用。共享display-mmd-ar.js只补取消与状态文本，已有servicePackage=true保持，无npm生产依赖变化。
+  - APK/网页最终构建与资产检查通过，5个源脚本、4个生成脚本及APK3/网页4个内联脚本语法检查通过；APK 95,015,322 bytes（90.6MiB），SHA-256 29cbf0fc2242ebe2f03a3ca3c18a351daf79f5629da05760a3aad1b9abfba991。未新增/运行测试、未安装手机、未提交/发布；精度/惯性同步/回环连续性/性能待现场验收。同步design/spec/task/todo/usage/README与检查记录。
+
+
 ### MMD AR 骨骼物理状态球
 
 - ✅ [2026-09-30] 独立网页“动作 → 骨骼”新增显示开关与图例，红type0、黄type2、绿type1，灰色无关联；小球按关节点世界位置更新并透过角色显示，默认关闭、本地记忆。
   - 修改 `3rd/mmd-ar-test/build.js`、`web-panel-groups.js`，新增 `web-skeleton-debug.js/.mjs`；读取加载后实际刚体类型，多类型按type1/type2/type0优先，独立场景/共享球几何/按颜色实例化，不参与物理、包围盒、阴影或AO，关闭时停止逐骨骼更新，切换/销毁释放旧资源并保留首帧门控。
   - 新增模块/真实网页自测并更新面板自测；同步MMD design/spec、自测伪代码/结果、task、使用说明与README，删除开发todo，仅保留手机观感验收。定向31项通过，真实默认321骨骼、4实例组，模型重载/两次PMX切换释放16旧组，VMD切换复用，无页面异常；构建、28脚本/4内联语法、13导入指纹及用户局域网HTTP200通过。仅独立WEB_MODE，本地web-dist已生成，外网未发布，Offline产物状态不受影响。
+
+### MMD AR Blender物理修正方法核对
+
+- ✅ [2026-09-30] 查官方源码/手册，区分Blender刚体Bullet/Split Impulse、传统Cloth质量弹簧隐式积分，以及5.2手册中的实验几何节点XPBD。
+  - 同步MMD设计/伪代码与可选todo；实际固定Ammo新建world读取Split Impulse已开启、穿透阈值0、迭代10，现有MMD流程未覆盖。明确碰撞穿透纠正不等同弹簧关节XPBD位置求解；仅只读技术核对，未修改生产/自测代码、构建、提交或发布。
+
+### MMD AR 位置预测与XPBD式流程核对
+
+- ✅ [2026-09-30] 核对Ammo/Bullet已有候选姿态预测，区分原生速度/冲量求解与XPBD的位置约束迭代、柔度/累计乘子及速度重建。
+  - 更新 `docs/design/mmd-ar-test-apk.md`、`docs/spec/mmd-ar-test-apk.md` 与可选todo；明确JS先移动预测位置再调用Ammo可能重复积分，只读预测缓存本身不改变物理稳定性。仅源码/官方资料核对，未新增生产或自测代码、构建、提交或发布。
+
+### MMD AR ORB-SLAM3定位迁移评估
+
+- ✅ [2026-09-30] 按用户选择确定APK原生接口＋网页MindAR回退方案，取消网页WASM移植路线。
+  - 能力检测含协议版本、引擎和available；缺失/不可用使用原MindAR，原生会话独占相机与IMU且不再重复旧预测；保留第二层相机缓动、MMD动作/物理及手动变换。补充预览/投影一致、失锁/启动失败与会话清理契约。仅更新方案文档，尚未接入原生库、修改定位实现、构建、测试、提交或发布。
+
+- ✅ [2026-09-30] 核对现有MindAR/IMU到PMX相机链路及ORB-SLAM3官方C++接口、传感器配置和线程要求，记录网页WASM与独立APK NDK的改动范围。
+  - 现有图面/模型高度换算需新增通用世界相机入口；保留MMD、Ammo、手动变换及第二层缓动，SLAM模式停用旧IMU预测。补充标定/时间同步、单目尺度、世界锚点/地图变化和实际手机性能边界。
+  - 同步design/spec/task/todo与自测规划；只做评估，尚未替换后端、构建、执行测试、提交或发布，Offline产物状态保持。
 
 ### MMD AR 跨Hz布料与小物件稳定性
 
@@ -113,6 +233,18 @@
   - 更新 `src/apps/voice-display-node/audio-player.js`：Linux使用aplay，Windows通过PowerShell标准输入转MemoryStream/SoundPlayer；macOS Buffer使用ffplay，显式文件仍可afplay。直接spawn不经过shell，音频不嵌入命令行；下载30秒及16MiB上限，停止AbortController/当前进程，以代次隔离旧下载/队列/回调，停止时同步通知播放结束恢复录音。WAV按RIFF块解析16位PCM，立体声转单声道AEC参考，只回调一次。
   - 5个源脚本 `node --check` 和定向差异空白检查通过。未新增/运行测试、未验证实际声音播放；同步design/spec/task/todo/usage/自测文档，Offline servicePackage已有true保持，无生产依赖变化；按用户要求提交；尚未重启或发布。
 
+### Git 快进拉取保留本地修改
+
+- ✅ [2026-09-30] 定向保存 `changelog.md` 和 `docs/todo.md` 的未提交修改后，从 `origion/master` 快进到 `4cf300bd`。
+  - 恢复文档时变更日志顶部的两个新增章节均保留，本地180Hz方案和已有发布记录恢复至未提交状态；其他本地修改保持。仅Git同步，未修改项目规则、构建、执行测试或推送。
+
+### 显示端背景光晕中心范围与横屏时间避让
+
+- ✅ [2026-09-30] 新增全局中心颜色，将“中心亮度”改为中心颜色完整保留范围；提高默认中心色，并在横屏时检测按钮/时间的实际包围盒，仅相交时自动避让，竖屏位置保持原样。
+  - 更新 `config-app-service.js`、`display-background-glow.js`、`upload.html`、`upload.css`、`display.css`、`display-stage.js`、`display.html`、`self-test.js`；配置结构为 `{ color, centerRange, spread }`，继续沿用既有 WebSocket 权威配置流程和媒体下层渐变，不再将中心范围映射为 alpha。
+  - 新增/更新光晕与旋转回归测试；定向测试 10/10 通过，JavaScript 语法检查通过。全量 `npm test` 在当前 Windows 环境失败，含缺失 `/usr/bin/chromium`、符号链接 `EPERM`、POSIX 路径断言与当前 Windows 路径不一致等环境问题。
+  - 同步 design/spec/task/todo 与自测；`release/offline-release-status.json` 的 `servicePackage` 已为 `true`，无需改写；未构建 APK 或发布产物。显示设备上的亮度观感及四角现场验收待执行。
+
 ### MMD AR Ammo子步锚点与180Hz上限
 
 - ✅ [2026-09-30] 独立网页继续使用Ammo，每个固定子步前插值运动学锚点的位置与旋转；跨帧积累时间余量，避免画面快于物理时被强制加速，物理频率上限改为180Hz。
@@ -125,13 +257,6 @@
 - ✅ [2026-09-30] 核对当前Ammo使用Bullet顺序冲量PGS求解器、PMX使用6自由度弹簧刚体关节；查阅XPBD原论文并记录独立刚体/关节实验后端的可行性与兼容边界。
   - 更新MMD设计/伪代码、180Hz任务及可选todo；用户已选择先继续Ammo并处理子步锚点。XPBD仅保留技术评估与未来可选事项，未替换后端。
 
-### 显示端背景光晕中心范围与横屏时间避让
-
-- ✅ [2026-09-30] 新增全局中心颜色，将“中心亮度”改为中心颜色完整保留范围；提高默认中心色，并在横屏时检测按钮/时间的实际包围盒，仅相交时自动避让，竖屏位置保持原样。
-  - 更新 `config-app-service.js`、`display-background-glow.js`、`upload.html`、`upload.css`、`display.css`、`display-stage.js`、`display.html`、`self-test.js`；配置结构为 `{ color, centerRange, spread }`，继续沿用既有 WebSocket 权威配置流程和媒体下层渐变，不再将中心范围映射为 alpha。
-  - 新增/更新光晕与旋转回归测试；定向测试 10/10 通过，JavaScript 语法检查通过。全量 `npm test` 在当前 Windows 环境失败，含缺失 `/usr/bin/chromium`、符号链接 `EPERM`、POSIX 路径断言与当前 Windows 路径不一致等环境问题。
-  - 同步 design/spec/task/todo 与自测；`release/offline-release-status.json` 的 `servicePackage` 已为 `true`，无需改写；未构建 APK 或发布产物。显示设备上的亮度观感及四角现场验收待执行。
-
 ### Git 拉取保留本地文档
 
 - ✅ [2026-09-30] 解决未提交的 `changelog.md`、`docs/design.md`、`docs/spec.md` 阻塞拉取，合并 `origion/master` 的背景光晕、状态栏位置与竖屏导航提交，保留本地480Hz提交。
@@ -142,7 +267,9 @@
 - ✅ [2026-09-30] 独立网页“动作 → 物理 → PMX物理频率”开放30–480Hz，保留默认65Hz与5Hz步长，保存/刷新、换模型和换动作后保持选值。
   - 新增 `web-physics-rate.js` / `web-physics-rate.mjs`，更新 `build.js` / `web-motion-switch.mjs`；仅WEB_MODE扩展控件和DisplayMmd/runtime/helper限幅，实时调节与切换初始化统一unitStep与子步预算。90Hz以内保持3子步，高频预算ceil(FPS×0.1)+1，480Hz为49，实际按delta执行；调节不重载或清零速度。频率模块/helper导入增加内容指纹。
   - 新增 `tests/mmd-ar-physics-rate.test.js`，扩展本地资源浏览器验证，补齐旧AO/面板测试夹具；定向57项、面板/本地vendor10项（修正后定向复测）、本地资源3项共70项覆盖通过。真实Ammo在480Hz下按60/30/10FPS模拟一秒位移正常；480Hz网页24次VMD/4次PMX切换约589秒，创建32/销毁31/存活1，堆64MiB、探针跨度3516552字节，无异常/OOM；实时65Hz不重建，刷新恢复480Hz。
-  - 网页构建、9个源/生成脚本及4个内联脚本语法、6个导入指纹、定向差异空白检查通过。更新设计/伪代码/任务/待办/使用及自测文档；本地web-dist已生成，本轮未发布外网或构建APK。仅独立网页受影响，Offline待打包状态不改；手机480Hz负荷、帧率与布料观感待现场验收。
+  - 网页构建、9个源/生成脚本及4个内联脚本语法、6个导入指纹、定向差异空白检查通过。更新设计/伪代码/任务/待办/使用及自测文档；本地web-dist已生成，最新版已发布到 `https://c.aasc.us/mnt/mmd-ar/`，未构建或发布APK。仅独立网页受影响，Offline待打包状态不改；手机480Hz负荷、帧率与布料观感待现场验收。
+  - 本次 `web-dist` 共71个文件，rsync校验后仅同步8个变化文件：`index.html`、`js/display-mmd.js`、`js/display-pmx-runtime.js`、`js/mmd-pmx-helper.mjs`、`js/web-gravity-filter.mjs`、`js/web-local-assets-ui.mjs`、`js/web-motion-switch.mjs`、新增的 `js/web-physics-rate.mjs`。暂存文件均为644权限并通过SHA-256校验，脚本先切换、首页最后替换；发布后71个文件内容均与构建一致，未清理外网旧文件。
+  - 公网八项均返回HTTP 200，大小与SHA-256和本地一致：`index.html` 77299 bytes / `73234ef9edfc17a10633e09d454aaca65e43413adb9c8d2dab62eeee97630d82`；`display-mmd.js` 42287 / `d6f6889a865aaa26c2943523f4631904e848343dc4b88fc72bae65f7f7d244e4`；`display-pmx-runtime.js` 61871 / `4a65b02f7bfa0884972420d0927242e2adc8c451ae1789fb1db2b83fe8e3ff07`；`mmd-pmx-helper.mjs` 5856 / `4d204d72ad5662ad553cb289ebc0ab423ece55b2f845c63ae81cdc5b7569a918`；`web-gravity-filter.mjs` 2244 / `c3ccef6469295cbb0106a847a5b476ab03d7b0c1e091540f8cb029703e251838`；`web-local-assets-ui.mjs` 11659 / `167a81088342fc5112682a56305bcdc1b1f38f2cbc6aa6d31fe687e2bb75f858`；`web-motion-switch.mjs` 4146 / `90b2f6a4a0c43bff8d67297ac8522af05dfac2057065df9d9fdbee86ce4cd47b`；`web-physics-rate.mjs` 475 / `3ec56f1cef31bdab5863d915e3c37aecbae469674faa9f0af090fdf0110e0f22`。纯发布未重跑测试。
 
 ### 显示端背景光晕、状态栏位置与竖屏导航
 
@@ -183,7 +310,9 @@
 - ✅ [2026-09-30] 独立网页重力分类新增默认关闭的“显示摄像头画面”；灯光、定位和动作面板默认不透明度改为50%，移除顶部固定测试提示。
   - 新增 `3rd/mmd-ar-test/display-mmd-ar-gravity-camera.js`，更新 `build.js`、`web-panel-groups.js`、`web-gravity-mode.js`、`display-mmd-ar-aframe.js`。重力单独运行时显示视频背景，图片定位时复用跟踪视频且隐藏背景不停止识别，校准前释放独立预览；关闭/后台/离开释放独立轨道并取消迟到请求。相机错误不影响重力/手动旋转，真实/模拟输入沿用现有选择。
   - 默认值与滑条/CSS一致，保留已有手动保存的透明度；保留加载进度和面板内状态。仅网页生成副本生效，正式显示端和旧APK不变；保留工作区已有Ammo生命周期改动。
-  - `npm run build:web:mmd-ar-test` 成功；源/生成脚本静态语法、定向差异空白检查通过。未新增或执行自动测试，未真机验收；按用户要求提交本次改动，未发布外网。同步design/spec/task/todo/usage/README/自测记录。
+  - `npm run build:web:mmd-ar-test` 成功；源/生成脚本静态语法、定向差异空白检查通过。未新增或执行自动测试，未真机验收；按用户要求提交本次改动，最新版网页已发布到 `https://c.aasc.us/mnt/mmd-ar/`，未发布 APK。同步design/spec/task/todo/usage/README/自测记录。
+  - 本次 `web-dist` 共 70 个文件，rsync 仅发布 6 个变化文件：`index.html`、`js/display-mmd-ar-aframe.js`、`js/display-mmd-ar-gravity-camera.js`、`js/display-mmd-ar.js`、`js/vendor/three/animation/MMDAnimationHelper.js`、`js/vendor/three/animation/MMDPhysics.js`。远端暂存文件均为 644 权限并通过 SHA-256 校验，先切换脚本/资源、最后替换首页；发布后 70 个文件均与构建内容一致，未删除外网旧文件。
+  - 公网六项均返回 HTTP 200，大小与 SHA-256 和本地一致：`index.html` 77301 bytes / `5873430bdece507266c26597d761d6d56e2d6a4d9e7b687e2186d1da57c90078`；`display-mmd-ar-aframe.js` 22667 / `3791791fd624112de77bb6b4a14ffabb1d60308c96726c53a11ee56a90875f66`；`display-mmd-ar-gravity-camera.js` 5961 / `3a5ec0164c73cbfcf50e7afc92e736b2657245b0255c8172b3075d430432989e`；`display-mmd-ar.js` 60131 / `116f873b1d4571750bc7b5ec50fbfd66de02d90e5d4b030c7db36a155140d3c6`；`MMDAnimationHelper.js` 25682 / `f1b14b4fee9a6ba9b66bc96f55cb7da50b04d44c65f380240773a6264e0f3ebc`；`MMDPhysics.js` 31081 / `65f348ab4a4009f0d25e1fe30b8436199787ccae710ffd6bbee666b869fe1876`。纯发布未重跑测试。
 
 ### MMD AR 频繁切换 Ammo 内存泄漏修复
 
@@ -201,42 +330,50 @@
 - ✅ [2026-09-30] 切换模型或动作的新物理在首次步进前清零全部刚体线速度/角速度与残留力，覆盖恢复默认和物理重载。
   - `web-motion-switch.mjs`提供共享清理，模型helper与手动动作初始化后调用；复用临时零向量并在异常时释放。清理不改位姿和动作时间，原物理关闭/播放暂停保持，失败保留旧物理。第0帧、矩阵、新物理及清理连续执行，实际步进在提交后的渲染回调；自动循环不执行新增清理，保留既有循环姿态复位。
   - 进度4/4、动作/清理8/8（含真实固定Three.js/Ammo）、重力6/6、本地资源3/3（含真实Chromium目录与多PMX选择）、既有PMX/helper/物理40/40，共61项通过。真实Ammo验证零速度、残留力已清、后续重力运动及循环清理次数不变；网页构建、源/生成脚本语法和定向差异空白检查通过。
-  - 同步design/spec/task/todo/usage/README/自测，移除完成开发任务，仅保留现场/发布事项。最新web-dist已生成，本轮未发布网页或APK；独立网页不影响Offline产物状态，手机视觉/性能待验收。
+  - 同步design/spec/task/todo/usage/README/自测，移除完成开发任务，仅保留现场/发布事项。最新web-dist已发布到 `https://c.aasc.us/mnt/mmd-ar/`，未发布 APK；独立网页不影响 Offline 产物状态，手机视觉/性能待验收。
+  - `npm run build:web:mmd-ar-test` 成功，web-dist 共 69 个文件。rsync SHA-256 比对后只上传 `index.html`、`js/display-mmd.js`、`js/display-pmx-runtime.js`、`js/web-local-assets-ui.mjs`、`js/web-local-assets.mjs`、`js/web-motion-switch.mjs`；暂存文件按 644 权限校验后先切换脚本、最后替换首页。再次比对 69 个文件均无内容差异，未删除外网旧文件。
+  - 公网六个更新文件均返回 HTTP 200，大小与 SHA-256 和本地一致：`index.html` 76405 bytes / `1fe3852c6a479a209671433a519c2e2f306c8483e7f8fc428415e56cba60b491`；`display-mmd.js` 42287 / `61c034bcfca07c39227c60789bf8514af20cf804363917fd25164fe241d46e40`；`display-pmx-runtime.js` 61712 / `052034d188d9b9e8e1ead04e994ed25b84e0125b5970c8914e2c7a02224da829`；`web-local-assets-ui.mjs` 10960 / `ee56660308e83b1ce9f6cfc9ab2104230fbe6770f6f00f58cabefe477762a4ef`；`web-local-assets.mjs` 6026 / `1b71d7dfac54e2f5c1a37cf62bf73449e9a0b42e363fba2e15fd3fd6df28c5de`；`web-motion-switch.mjs` 4162 / `3625a30e77d0f0d3e2ab622d3be46a322b59cda5794dc8bff1846faed4983411`。本次纯发布未重跑测试，沿用实现阶段 61 项回归结果；未发布 APK 或 Offline 服务包。
 
 ### MMD AR 手动切换 VMD 的物理顺序
 
 - ✅ [2026-09-30] 手动选择 VMD 与恢复默认动作先暂停物理、应用新动作第0帧，再从新姿态初始化物理。
   - 新增 `web-motion-switch.mjs`，更新 `web-local-assets-inject.js` 与 `build.js`；解析成功后冻结旧 helper 帧，恢复绑定姿态/表情，无物理应用初始骨骼姿态并更新世界矩阵，在同一 helper 上建立刚体。原物理关闭和播放暂停时保持原设置，失败恢复旧骨骼/网格/表情/IK，过期结果不覆盖新模型。只进入独立网页副本。
   - `tests/mmd-ar-motion-switch.test.js` 6/6 通过，含等待期间帧门控与固定 Three.js/Ammo 真实刚体从新姿态初始化；扩展真实网页回归3/3通过，手动VMD及恢复默认动作的零帧→物理顺序、暂停保持验证。连同重力6项和既有PMX/helper/物理40项共55项通过；网页构建、源/生成脚本语法和定向差异空白检查通过。
-  - 同步 design/spec/task/usage/README/自测，移除开发完成的todo；网页已生成，尚未发布外网或APK，不影响Offline发布产物状态。真机视觉/布料与帧率待现场验收。
+  - 同步 design/spec/task/usage/README/自测，移除开发完成的todo；最新网页已发布外网，未发布 APK，不影响 Offline 发布产物状态。真机视觉/布料与帧率待现场验收。
+  - `npm run build:web:mmd-ar-test` 成功，web-dist 共 69 个文件。rsync SHA-256 比对后只上传 `index.html`、`js/display-mmd-ar.js`、`js/display-mmd.js`、`js/display-pmx-runtime.js`、新增的 `js/web-gravity-filter.mjs` 与 `js/web-motion-switch.mjs`；暂存文件按 644 权限校验后先切换脚本、最后替换首页。再次比对 69 个文件均无内容差异，未删除外网旧文件。
+  - 公网六个更新文件均返回 HTTP 200，大小与 SHA-256 和本地一致：`index.html` 76501 bytes / `33f5856dab728f666985bb996336c27de00aca5f39fe0fd8ea28110864368468`；`display-mmd-ar.js` 59997 / `6344ae48d0eff10193589dbd433bb08373cf6927154ec2d4c12dc11ef920c02b`；`display-mmd.js` 42103 / `1042a2f68e3a885cab05a7a524665b65af22a6643a723a70373b9aaf3b0d81d1`；`display-pmx-runtime.js` 60852 / `df178c2744c7930ef22e7edf3fbe48b4de4d969f1c3f9d710e905d3add97766d`；`web-gravity-filter.mjs` 2245 / `5827a834fc7ffcb66be0666bb5db42960c4b39331b73bd4261c1fbe3a3e28fe8`；`web-motion-switch.mjs` 3384 / `0b1bb0c79576ada6e4e32698c6e48a8b484b37727257ddd8c42738dd742b7791`。本次发布未重跑测试，沿用实现阶段回归结果；未发布 APK 或 Offline 服务包。
 
 ### MMD AR 完整重力方向与锚点过滤
 
 - ✅ [2026-09-30] 移除独立重力旋转的灵敏度倍率，保留首次姿态归零和“重力居中”，将完整方向经过独立死区和缓动应用到角色锚点。
   - 更新 `web-gravity-mode.js`、`build.js`、`web-panel-groups.js`，新增 `web-gravity-filter.mjs`；重力死区默认 0.5°（0–3°）、缓动默认 120ms（0–500ms），两个参数保存在当前浏览器，0 关闭对应步骤。死区与上次接受目标比较，慢转可累计；接受后使用完整角度。居中/关闭绕过死区归零，手动角度保持。
   - 重力定向测试 6/6、扩展本地资源真实网页回归 3/3、既有 PMX/helper/物理 40/40 通过；网页控件/参数保存、合成方向/居中及模型/物理重载参数保持均验证。网页构建、源/生成脚本语法和定向差异空白检查通过。浏览器模拟姿态明确等待传感器启用后再派发，修正测试时序并完整复跑通过。
-  - 同步 design/spec/task/usage/README/自测，移除已实现的 todo；VMD 切换同期完成，见以下记录。此次重力修改尚未发布网页或 APK，独立网页不影响 Offline 发布状态，手机方向/噪声/视觉/性能待现场验收。
+  - 同步 design/spec/task/usage/README/自测，移除已实现的 todo；VMD 切换同期完成，见以下记录。最新重力过滤修改已随当前网页发布，未发布 APK；独立网页不影响 Offline 发布状态，手机方向/噪声/视觉/性能待现场验收。
 
 ### MMD AR 本地模型与动作选择
 
 - ✅ [2026-09-30] 独立 mmd-ar 网页新增“动作 → 本地模型与动作”，支持选择模型目录或多选 PMX＋贴图、明确选择多个 PMX、单独 VMD、恢复默认动作及模型。
   - 新增 `web-local-assets.mjs`、`web-local-assets-ui.mjs`、`web-local-assets-inject.js`，更新 `build.js` 和 `web-panel-groups.js`；网页副本独立映射所选文件，匹配相对路径/唯一名称，缺失与歧义提示，失败保留旧角色/动作；物理重载保留文件引用，释放后旧映射不可复用。文件仅当前会话使用、不上传，刷新需重选。
   - 新增 `tests/mmd-ar-local-assets.test.js` 3/3 通过，含真实 PMX/贴图/VMD 的浏览器文件输入、暂停、失败保留、物理重载和两种恢复默认；既有 PMX/helper/物理回归 40/40 通过。`npm run build:web:mmd-ar-test`、源/生成脚本语法与定向差异空白检查通过。
-  - 同步设计、伪代码、任务、使用说明与自测文档，移除已完成 todo。生成 web-dist；独立网页不影响 Offline 发布状态。未发布外网，手机文件选择及视觉/性能待现场验收。
+  - 同步设计、伪代码、任务、使用说明与自测文档，移除已完成 todo。生成 web-dist；独立网页不影响 Offline 发布状态。最新网页已发布到 `https://c.aasc.us/mnt/mmd-ar/`；手机文件选择及视觉/性能待现场验收。
+  - `npm run build:web:mmd-ar-test` 成功并复用已校验模型资源。web-dist 共 67 个文件；rsync SHA-256 比对后只上传 `index.html`、`js/display-mmd-ar.js`、`js/display-mmd.js`、`js/display-pmx-runtime.js`、`js/web-local-assets-ui.mjs`、`js/web-local-assets.mjs`。暂存文件按 644 权限校验后先切换脚本、最后替换首页；再次比对 67 个文件均无内容差异，未删除外网旧文件。
+  - 公网六个更新文件均返回 HTTP 200，大小与 SHA-256 和本地一致：`index.html` 74666 bytes / `c287ce8f285d06d0b543239651fba857833ccdf4afe4bf2be3ccdf02efc53b06`；`display-mmd-ar.js` 61457 / `7a77ee57ed5bf6a78dc1f6991125cab64a195c547bc1c7fb0910a06ef1f8bb65`；`display-mmd.js` 41504 / `18b4f4841d1b381cf75e09a2b9577d6707582c8438d9b4f17347fa2990b59d3b`；`display-pmx-runtime.js` 59595 / `e5e67a50f6a40ec83ae42c2ecda81ac02b67dc1603f5ae61fa4ddd370a3d7f59`；`web-local-assets-ui.mjs` 6892 / `602e2b475f60e1ea14ab2f55f15c4bf73ed51eda363a94ad36af6022c6385db6`；`web-local-assets.mjs` 5958 / `4ce1403f69863b249f7bf710677b9f658ccad85f7c3e2fcc5784fad1197a8f0f`。本次未重跑测试，未发布 APK 或 Offline 服务包。
 
 ### MMD AR 独立重力旋转与手动叠加
 
 - ✅ [2026-09-30] 将独立网页的体感环绕改为重力倾斜控制角色锚点旋转，手动角度独立保存并叠加。
   - 忽略 alpha 航向，以 beta/gamma 推导重力上方向；首次样本为中性参考，灵敏度继续可调，居中/关闭只归零重力层。屏幕/后台切换重建参考，权限等待支持取消，模型延迟/重载保存重力目标。
   - 新增 `web-gravity-mode.js` 构建期注入网页副本；实际相机先更新，重力四元数转换到世界并左乘手动旋转，沿用现有旋转物理保护。保留 IMU 相机定位、第二层相机缓动、拖动/缩放和 near=1。
-  - `npm run build:web:mmd-ar-test` 成功，web-dist 已同步；源/生成脚本静态语法和定向差异空白检查通过，未新增或运行测试。按用户要求提交相关代码与文档，未发布外网；手机倾斜/叠加/物理与性能待验收。
+  - `npm run build:web:mmd-ar-test` 成功，web-dist 已同步；源/生成脚本静态语法和定向差异空白检查通过，未新增或运行测试。按用户要求提交相关代码与文档；功能已包含在当前外网网页，手机倾斜/叠加/物理与性能待验收。
 
 ### MMD AR 合并 Mind Basic 相机预测
 
 - ✅ [2026-09-30] 独立 mmd-ar 网页接入 Basic 共用 IMU 融合、双场景开关、双零偏校准/抗漂移及定位质量观测。
   - 构建直接复用 Basic 算法文件与面板，新增 `display-mmd-ar-imu.js` 桥接权限/传感器/质量及会话生命周期；原始失败立即接管、忽略旧矩阵、连续三帧稳定重获；蓝框固定世界锚点，相机更新，定位不改 PMX 根节点/物理。
   - 按用户补充保留原相机跟随死区与第二层缓动；原底面/立面、near=1、距离/缩放、拖动、动作与物理沿用。失锁/断流按开关预测或冻结相机，保留角色与蓝框。
-  - `npm run build:web:mmd-ar-test` 成功，同步 web-dist；静态语法检查通过，未新增或运行测试。未发布外网，实际定位/漂移、生命周期与性能待验收。
+  - `npm run build:web:mmd-ar-test` 成功，同步 web-dist；静态语法检查通过，未新增或运行测试。最新网页已发布外网，实际定位/漂移、生命周期与性能待验收。
+  - web-dist 共 65 个文件；rsync SHA-256 比对后仅上传 `index.html`、`js/display-mmd-ar-aframe.js`、新增的 `js/display-mmd-ar-imu.js`、`js/mind-basic-imu.js`、`js/mind-basic-quality.js`，先校验暂存文件和权限，再更新脚本并最后替换首页。再次比对 65 个文件无内容差异；其余旧资源保留。
+  - 公网五个更新文件均返回 HTTP 200，大小与 SHA-256 和本地一致：`index.html` 72376 bytes / `6b9415988c4ca153614966a7082fc9618785da4452b0c382390745a8d629c69f`；AR A-Frame 脚本 22340 / `fe0aa3083664b1fec4b7b1105da274e9c6e733bbe74685eba28a9b7b231821e9`；IMU 桥接 12427 / `91749cda314d4d3203009035091b72b8042f00e50735543383e7138d28755d24`；共用 IMU 26567 / `a46c07dd0a380141b5eae919652863655fe73057e0f994e348c1ba2d8ad01bf8`；可信度脚本 4984 / `1d339bdad9dcea41a7b987e0f5c8005b2cad0d8fed93a12c9e5cf49974ad8cf4`。Three.js、PMX、默认 VMD 与纹理 HTTPS 请求返回 200；未发布 APK 或 Offline 服务包。
   - 按用户要求提交 mind-basic/mmd-ar 相关源码、已有回归和设计/实现/任务文档；生成 web-dist、日志、模型及无关配置保持在提交之外。
 
 ### MindAR Basic 固定世界相机预测外网发布
@@ -348,6 +485,12 @@
 - ✅ [2026-09-29] 在 HTTPS mmd-ar 测试页定位面板增加 MindAR One Euro Filter 的 `filterMinCF` / `filterBeta` 滑条，默认 `0.001` / `1000`，并发布到外网测试站。
   - 值保存在当前浏览器，下一次开始定位时传给 MindAR Controller；当前识别运行中更改不打断相机，提示停止后重新启动。它与 PMX 相机跟随死区及 120ms 缓动分别生效。
   - `npm run build:web:mmd-ar-test` 成功。只更新 `js/display-mmd-ar-aframe.js` 与 `index.html`；公网首页返回 HTTP 200，首页及脚本 SHA-256 与本地一致：`b526ba7a64a258417932724f5aeb46905917c36035bd7b1330529e9325d9d3e6`、`941555d33d13e7ef032ed60428b22d8012d606be0e4f8eca021f7314da86c771`。未运行测试套件；Android 真机调参观感待现场验收。
+
+### Offline 服务代码包 v43 发布
+
+- ✅ [2026-09-29] 将最新服务代码包 `code-v43.zip` 发布到内网和外网 Offline 更新源；复用 dependencies v6、Node seeds v39、min APK v34。
+  - `code-v43.zip` 为 `16,796,784` bytes，SHA-256 `ceba2a8037bd8ddabb739394672d09200b69ffd2a98286aea23518ff11339d47`。两端 `manifest.json` SHA-256 均为 `f3eb4dae32aa61c4740a601a0413fc5e94cdbe786bd6f7aeca80502d7e646775`；签名与全部引用资源的 HTTP 大小/SHA-256 全量回读校验通过，旧 code 版本已精确清理。
+  - `servicePackage` 已复位为 `false`；`minApk` 保持待构建状态，本次没有重打 APK。
 
 ### MindAR Basic IMU 外网发布
 

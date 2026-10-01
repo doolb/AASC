@@ -1,0 +1,3 @@
+#pragma once
+#include <memory>
+namespace std { namespace tr1 { using std::shared_ptr; using std::weak_ptr; } }

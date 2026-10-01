@@ -21,7 +21,7 @@
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | 聊天 TTS 打断与 Offline 定时更新 | [chat-tts-interruption-and-offline-update.md](spec/chat-tts-interruption-and-offline-update.md) | 聊天 TTS 会话代次/阶段协议、前端队列清理和 Android 前台轮询伪代码 |
-| 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](spec/display-chat-mmd.md) | 显示端聊天会话、WebSocket 同步、VRM/MMD 分层和动作协议伪代码 |
+| 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](spec/display-chat-mmd.md) | 显示端聊天会话、WebSocket 同步、VRM/MMD 分层、动作与角色手势伪代码 |
 | MMD 图片基准图 AR | [mmd-image-ar.md](spec/mmd-image-ar.md) | 拍照校准、四角选区、本地目标跟踪、姿态平滑和 MMD 绑定伪代码 |
 | 正式 Offline MMD AR 同步 | [mmd-ar-production-offline.md](spec/mmd-ar-production-offline.md) | 本地 A-Frame/MindAR 校验、正式定位与物理迁移、code-only 发布伪代码（进行中） |
 | MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](spec/mmd-ar-test-apk.md) | APK 本地页面与 HTTPS 静态页、PMX/MindAR 资源校验、网页动作播放开关及 tracker A/B 对比伪代码 |

@@ -86,6 +86,13 @@ function getContext(url) {
     return context;
 }
 
+// 只接受注册表中的目标File，不能只按虚拟路径前缀放行任意资源。
+export function isRegisteredLocalAsset(url, extension) {
+    const context = getContext(url);
+    return Boolean(context && url === context.selectedUrl
+        && context.selectedFile.name.toLowerCase().endsWith(extension));
+}
+
 export function createLocalModelSelection(files, selectedFile = listLocalModels(files)[0]) {
     if (!selectedFile || !/\.pmx$/iu.test(selectedFile.name)) throw new Error('请选择 PMX 模型及配套贴图');
     const context = createContext(Array.from(files), selectedFile);

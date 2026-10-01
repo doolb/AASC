@@ -1,5 +1,6 @@
 'use strict';
 
+const { CAMERA_SETTINGS_JS } = require('./camera-settings-template');
 const SHADOW_BIAS = require('./web-shadow-bias');
 const WIND = require('./web-physics-wind');
 const FILL_FACING_RANGE = require('./web-fill-facing-range');
@@ -26,9 +27,9 @@ const TRACKING_GROUPS = Object.freeze([
 ]);
 
 const MOTION_GROUPS = Object.freeze([
-  ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
+  ['动作', ['mmdArMotionPlayback', 'mmdArCameraMotionPlayback', 'mmdArMotionProgress', 'mmdArCameraMotionProgress']],
   ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
-  ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
+  ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus', 'mmdArRigidBodyControls', 'mmdArRigidBodyLegend'], 'mmdArSkeletonEnabled'],
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
@@ -60,7 +61,13 @@ const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-plane-options { display: flex; gap: 6px; margin-top: 6px; }
     .mmd-ar-plane-options button { flex: 1; min-height: 38px; border: 1px solid #758bff88; border-radius: 7px; background: #222b3d; color: #d6e0f5; cursor: pointer; }
     .mmd-ar-plane-options button[aria-pressed="true"] { background: #5169a3; border-color: #a8bbff; color: #fff; }
-    #mmdArMotionProgress { width: 100%; height: 12px; accent-color: var(--accent-color); }
+    #mmdArMotionProgress, #mmdArCameraMotionProgress { width: 100%; height: 12px; accent-color: var(--accent-color); }
+    .mmd-ar-mass-legend { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; font-size: 12px; line-height: 1.5; color: #ccd6ee; }
+    .mmd-ar-mass-legend[hidden] { display: none; }
+    .mmd-ar-rigid-body-controls { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+    .mmd-ar-rigid-body-controls .mmd-ar-plane-options { margin-top: 0; }
+    .mmd-ar-mass-bar { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #3b82f6, #ff5a5a); }
+    .mmd-ar-mass-zero i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 50%; background: #d1d5db; }
     #mmdArSkeletonLegend { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 12px; line-height: 1.6; }
     #mmdArSkeletonLegend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 50%; background: var(--bone-color); }
 `;
@@ -73,12 +80,31 @@ const WEB_PANEL_GROUP_JS = `
     (() => {
       const toggle = document.getElementById('mmdArRigidBodyEnabled');
       const status = document.getElementById('mmdArRigidBodyStatus');
+      const legend = document.getElementById('mmdArRigidBodyLegend');
+      const massRange = document.getElementById('mmdArRigidBodyMassRange');
       if (!toggle || !status) return;
       const key = 'aasc.mmdArTest.rigidBodyVisible.v1';
       try { toggle.checked = localStorage.getItem(key) === 'true'; } catch (error) { toggle.checked = false; }
+      // 质量数字按3位有效数字裁剪；色带渐变直接取运行时色带，避免两处颜色漂移。
+      const formatMass = (value) => String(Number(Number(value).toPrecision(3)));
+      const updateLegend = (state) => {
+        if (!legend || !massRange) return;
+        legend.hidden = !toggle.checked;
+        if (!toggle.checked) return;
+        const bar = legend.querySelector('.mmd-ar-mass-bar');
+        if (bar && !bar.dataset.ready && Array.isArray(state?.massRamp) && state.massRamp.length > 1) {
+          bar.dataset.ready = '1';
+          bar.style.background = 'linear-gradient(90deg, '
+            + state.massRamp.map((color) => '#' + color.toString(16).padStart(6, '0')).join(', ') + ')';
+        }
+        massRange.textContent = !state?.bodyCount ? '质量色阶：等待模型'
+          : state.massScale ? '质量色阶（对数）：' + formatMass(state.massScale.min) + ' – ' + formatMass(state.massScale.max)
+          : '无非零质量刚体（全部浅灰）';
+      };
       const updateStatus = () => {
-        if (!toggle.checked) { status.textContent = '碰撞体显示已关闭'; return; }
+        if (!toggle.checked) { status.textContent = '碰撞体显示已关闭'; updateLegend(null); return; }
         const state = window.DisplayMmd?.getRigidBodyState?.();
+        updateLegend(state);
         if (!state?.bodyCount) { status.textContent = '当前模型没有可显示的碰撞体'; return; }
         const modes = { physics: '实际物理姿态', preview: '未模拟，显示配置位置', mixed: '部分未模拟，包含配置位置预览', none: '等待模型显示' };
         status.textContent = (state.filtered ? state.visibleBodyCount + ' / ' : '') + state.bodyCount + ' 个碰撞体 · ' + (modes[state.poseMode] || modes.none);
@@ -89,6 +115,35 @@ const WEB_PANEL_GROUP_JS = `
         try { localStorage.setItem(key, String(toggle.checked)); } catch (error) { /* 存储受限时本次切换仍有效。 */ }
         updateStatus();
       });
+      // 碰撞体样式：线框保持透过，实体与角色互相遮挡；均本地记忆并转发到当前runtime。
+      const styleGroup = document.getElementById('mmdArRigidBodyStyle');
+      const styleButtons = styleGroup ? Array.from(styleGroup.querySelectorAll('[data-rigid-body-style]')) : [];
+      const hiddenToggle = document.getElementById('mmdArCharacterHiddenEnabled');
+      const styleKey = 'aasc.mmdArTest.rigidBodyStyle.v1';
+      let style = 'solid';
+      try { style = localStorage.getItem(styleKey) === 'wireframe' ? 'wireframe' : 'solid'; } catch (error) { style = 'solid'; }
+      const refreshStyle = () => styleButtons.forEach((button) =>
+        button.setAttribute('aria-pressed', String(button.dataset.rigidBodyStyle === style)));
+      const applyStyle = (value, persist = false) => {
+        style = value === 'wireframe' ? 'wireframe' : 'solid';
+        refreshStyle();
+        window.DisplayMmd?.setRigidBodyStyle?.(style);
+        if (!persist) return;
+        try { localStorage.setItem(styleKey, style); } catch (error) { /* 存储受限时本次切换仍有效。 */ }
+      };
+      for (const button of styleButtons) {
+        button.addEventListener('click', () => applyStyle(button.dataset.rigidBodyStyle, true));
+      }
+      applyStyle(style);
+      if (hiddenToggle) {
+        const hiddenKey = 'aasc.mmdArTest.characterHidden.v1';
+        try { hiddenToggle.checked = localStorage.getItem(hiddenKey) === 'true'; } catch (error) { hiddenToggle.checked = false; }
+        window.DisplayMmd?.setCharacterHidden?.(hiddenToggle.checked);
+        hiddenToggle.addEventListener('change', () => {
+          window.DisplayMmd?.setCharacterHidden?.(hiddenToggle.checked);
+          try { localStorage.setItem(hiddenKey, String(hiddenToggle.checked)); } catch (error) { /* 存储受限时本次切换仍有效。 */ }
+        });
+      }
       // 只在动作面板打开时查询快照；不在每个渲染帧更新DOM。
       const panel = document.getElementById('mmdArMotionPanel');
       let timer = null;
@@ -243,6 +298,8 @@ const WEB_PANEL_GROUP_JS = `
       const panel = document.getElementById('mmdArMotionPanel');
       const progress = document.getElementById('mmdArMotionProgress');
       const time = document.getElementById('mmdArMotionTime');
+      const cameraProgress = document.getElementById('mmdArCameraMotionProgress');
+      const cameraTime = document.getElementById('mmdArCameraMotionTime');
       if (!button || !panel) return;
 
       let timer = null;
@@ -251,20 +308,24 @@ const WEB_PANEL_GROUP_JS = `
         return String(Math.floor(rounded / 60)).padStart(2, '0') + ':'
           + String(rounded % 60).padStart(2, '0');
       };
-      const updateProgress = () => {
-        if (!progress || !time) return;
-        const motion = window.DisplayMmd?.getMotionProgress?.();
+      // 角色动作与相机动作共用只读进度渲染；无数据时显示未知。
+      const writeProgress = (bar, label, motion) => {
+        if (!bar || !label) return;
         const duration = Number(motion?.durationSeconds);
         const current = Number(motion?.timeSeconds);
         if (!motion || !Number.isFinite(duration) || duration <= 0 || !Number.isFinite(current)) {
-          progress.value = 0;
-          progress.max = 1;
-          time.textContent = '--:-- / --:--';
+          bar.value = 0;
+          bar.max = 1;
+          label.textContent = '--:-- / --:--';
           return;
         }
-        progress.max = duration;
-        progress.value = Math.max(0, Math.min(duration, current));
-        time.textContent = formatTime(progress.value) + ' / ' + formatTime(duration);
+        bar.max = duration;
+        bar.value = Math.max(0, Math.min(duration, current));
+        label.textContent = formatTime(bar.value) + ' / ' + formatTime(duration);
+      };
+      const updateProgress = () => {
+        writeProgress(progress, time, window.DisplayMmd?.getMotionProgress?.());
+        writeProgress(cameraProgress, cameraTime, window.DisplayMmd?.getCameraMotionProgress?.());
       };
       const setOpen = (open) => {
         const nextOpen = open === true;
@@ -274,7 +335,7 @@ const WEB_PANEL_GROUP_JS = `
           window.clearInterval(timer);
           timer = null;
         }
-        if (nextOpen && progress && time) {
+        if (nextOpen && (progress || cameraProgress)) {
           updateProgress();
           timer = window.setInterval(updateProgress, 250);
         }
@@ -327,6 +388,35 @@ const WEB_PANEL_GROUP_JS = `
       window.addEventListener('mmd-ar-ao-size', event => syncSize(event.detail.reduced));
       resolution?.addEventListener('change', () => syncSize(resolution.value !== 'full'));
       syncSize(resolution?.value !== 'full');
+    })();
+    (() => {
+      const input = document.getElementById('mmdArAoConcavityAngle');
+      const output = document.getElementById('mmdArAoConcavityAngleValue');
+      if (!input || !output) return;
+      const storageKey = 'aasc.mmdArTest.aoConcavityAngle.v1';
+      const defaultAngle = 10;
+      // 缺失/空值不得经 Number(null) 误变成零；合法值按滑块步长和范围规范化。
+      const normalize = (value) => {
+        if (value == null || String(value).trim() === '') return defaultAngle;
+        const number = Number(value);
+        if (!Number.isFinite(number)) return defaultAngle;
+        return Math.round(Math.min(45, Math.max(0, number)) * 2) / 2;
+      };
+      const apply = (value, persist) => {
+        const angle = normalize(value);
+        input.value = String(angle);
+        output.textContent = angle.toFixed(1) + '°';
+        // 沿用测试页 AO 诊断设置入口；渲染按角度换算门限，不改模型/重建法线。
+        window.MmdArTestAoConcavityAngle = angle;
+        if (!persist) return;
+        try { localStorage.setItem(storageKey, String(angle)); } catch (error) { /* 存储受限时本次调整仍有效。 */ }
+      };
+      let saved = null;
+      try { saved = localStorage.getItem(storageKey); } catch (error) { /* 存储不可用时使用默认角度。 */ }
+      apply(saved, false);
+      input.addEventListener('input', () => apply(input.value, true));
+      input.addEventListener('change', () => apply(input.value, true));
+      document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => apply(defaultAngle, true));
     })();
     (() => {
       const toggle = document.querySelector('.mmd-ar-normal-preview input');
@@ -420,47 +510,21 @@ const WEB_PANEL_GROUP_JS = `
       });
     })();
     (() => {
-      // 测试页参数只保存于当前浏览器；无效存储值回退默认，不影响正式显示端配置。
-      const storageKey = 'aasc.mmdArTest.cameraSettings.v1';
-      const controls = [
-        ['mmdArTranslationDeadZone', 'translationDeadZonePercent', 0.5, 0, 3, '%'],
-        ['mmdArRotationDeadZone', 'rotationDeadZoneDegrees', 0.5, 0, 3, '°'],
-        ['mmdArSmoothingMs', 'smoothingMs', 120, 0, 500, ' ms'],
-        ['mmdArCameraDistance', 'distancePercent', 100, 50, 100, '%']
-      ];
-      let stored = {};
-      try { stored = JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch (error) { stored = {}; }
-      const settings = { targetPlane: stored.targetPlane === 'vertical' ? 'vertical' : 'floor' };
-      const planeButtons = document.querySelectorAll('#mmdArTargetPlaneMode [data-target-plane]');
-      const refreshPlaneButtons = () => planeButtons.forEach((button) => {
-        button.setAttribute('aria-pressed', String(button.dataset.targetPlane === settings.targetPlane));
+      // 相机动作开关默认开启并沿用当前浏览器的偏好；无相机 VMD 时保持无效果。
+      const toggle = document.getElementById('mmdArCameraMotionPlayback');
+      if (!toggle) return;
+      const storageKey = 'aasc.mmdArTest.cameraMotionPlayback.v1';
+      let enabled = true;
+      try { enabled = localStorage.getItem(storageKey) !== 'false'; } catch (error) { /* 隐私模式按默认值运行。 */ }
+      toggle.checked = enabled;
+      window.DisplayMmd?.setCameraMotionPlaybackEnabled?.(enabled);
+      toggle.addEventListener('change', () => {
+        enabled = toggle.checked;
+        window.DisplayMmd?.setCameraMotionPlaybackEnabled?.(enabled);
+        try { localStorage.setItem(storageKey, String(enabled)); } catch (error) { /* 隐私模式允许仅本次生效。 */ }
       });
-      refreshPlaneButtons();
-      planeButtons.forEach((button) => button.addEventListener('click', () => {
-        settings.targetPlane = button.dataset.targetPlane;
-        refreshPlaneButtons();
-        window.DisplayMmd?.setArCameraSettings?.(settings);
-        try { localStorage.setItem(storageKey, JSON.stringify(settings)); } catch (error) { /* 隐私模式允许仅本次生效。 */ }
-      }));
-      for (const [id, key, fallback, minimum, maximum, suffix] of controls) {
-        const input = document.getElementById(id);
-        const output = document.getElementById(id + 'Value');
-        if (!input || !output) return;
-        const candidate = Number(stored[key]);
-        const value = stored[key] !== undefined && Number.isFinite(candidate)
-          ? Math.min(maximum, Math.max(minimum, candidate)) : fallback;
-        settings[key] = value;
-        input.value = String(value);
-        output.textContent = String(value) + suffix;
-        input.addEventListener('input', () => {
-          settings[key] = Number(input.value);
-          output.textContent = input.value + suffix;
-          window.DisplayMmd?.setArCameraSettings?.(settings);
-          try { localStorage.setItem(storageKey, JSON.stringify(settings)); } catch (error) { /* 隐私模式允许仅本次生效。 */ }
-        });
-      }
-      window.DisplayMmd?.setArCameraSettings?.(settings);
     })();
+    ${CAMERA_SETTINGS_JS}
     (() => {
       const toggle = document.getElementById('mmdArTrackingToggle');
       const start = document.getElementById('displayArStartButton');
@@ -629,7 +693,10 @@ function groupWebPanels($) {
   const aoGroup = lightingPanel.find('button[data-group-title="AO"]').closest('.mmd-ar-panel-group');
   aoGroup.find('.mmd-ar-panel-group-body').prepend(
     '<label class="display-mmd-lighting-field mmd-ar-edge-correction"><input type="checkbox" checked><span>半分辨率边界修正 <small></small></span></label>' +
-    '<label class="display-mmd-lighting-field mmd-ar-normal-preview"><input type="checkbox"><span>深度重建法线预览（颜色代表方向，跳过 AO 与模糊）</span></label>'
+    '<label class="display-mmd-lighting-field mmd-ar-normal-preview"><input type="checkbox"><span>深度重建法线预览（颜色代表方向，跳过 AO 与模糊）</span></label>' +
+    '<label class="mind-basic-field"><span>浅凹抑制 <output id="mmdArAoConcavityAngleValue">10.0°</output></span>' +
+    '<input id="mmdArAoConcavityAngle" type="range" min="0" max="45" step="0.5" value="10" aria-label="AO 浅凹抑制角度">' +
+    '<small>值越大，浅内凹的 AO 越弱；也会减弱真实浅凹槽。角度不改变模型法线。</small></label>'
   );
   const motionPanel = $('#mmdArMotionPanel').first();
   if (motionPanel.length) {
@@ -650,8 +717,21 @@ function groupWebPanels($) {
       '<label class="mind-basic-field"><span>纠错基准 Hz <output id="mmdArPhysicsStabilityReferenceValue">45 Hz</output></span>' +
       '<input id="mmdArPhysicsStabilityReference" type="range" min="30" max="180" step="5" value="45" aria-label="关节纠错基准频率"></label>' +
       '<p id="mmdArPhysicsStabilityReferenceHint" class="mind-basic-note">按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。</p>' +
-      '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体（线框）</span></label>' +
-      '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>');
+      '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体</span></label>' +
+      '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>' +
+      '<div id="mmdArRigidBodyControls" class="mmd-ar-rigid-body-controls">' +
+      '<div id="mmdArRigidBodyStyle" class="mmd-ar-plane-options" role="group" aria-label="碰撞体样式">' +
+      '<button type="button" data-rigid-body-style="wireframe" aria-pressed="false">线框（透过）</button>' +
+      '<button type="button" data-rigid-body-style="solid" aria-pressed="true">实体（遮挡）</button>' +
+      '</div>' +
+      '<label class="display-mmd-lighting-field"><input id="mmdArCharacterHiddenEnabled" type="checkbox"><span>隐藏角色（可查看全部刚体）</span></label>' +
+      '<p class="mind-basic-note">实体模式与角色互相遮挡；选中骨骼时穿透显示。</p>' +
+      '</div>' +
+      '<div id="mmdArRigidBodyLegend" class="mmd-ar-mass-legend" hidden>' +
+      '<span class="mmd-ar-mass-bar" aria-hidden="true"></span>' +
+      '<span id="mmdArRigidBodyMassRange">质量色阶：等待模型</span>' +
+      '<span class="mmd-ar-mass-zero"><i></i>灰＝有效质量 0（跟随骨骼）</span>' +
+      '</div>');
     motionPanel.append(WIND.WIND_PANEL_HTML);
     groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
   }
@@ -692,6 +772,11 @@ function addLocalAssetPanel($) {
         </div>
         <input id="mmdArLocalVmd" type="file" accept=".vmd" hidden>
         <p class="mind-basic-note">当前动作：<span id="mmdArLocalMotionName">内置默认动作</span></p>
+        <div class="display-mmd-ar-actions">
+          <button id="mmdArLocalCameraVmdButton" class="display-mmd-ar-action" type="button">选择相机 VMD</button>
+        </div>
+        <input id="mmdArLocalCameraVmd" type="file" accept=".vmd" hidden>
+        <p class="mind-basic-note">当前相机动作：<span id="mmdArLocalCameraMotionName">无相机动作</span></p>
         <button id="mmdArLocalDefaultModel" class="display-mmd-ar-action" type="button">恢复默认模型与动作</button>
         <p id="mmdArLocalMessage" class="mind-basic-note" role="status" style="overflow-wrap:anywhere">请选择完整模型目录，或一起多选 PMX 与贴图；文件不上传，刷新后需重新选择。</p>
       </div>

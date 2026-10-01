@@ -36,7 +36,9 @@ function addCameraControls($) {
   $('#displayMmdLightingPanel').after('<section id="mmdArMotionPanel" class="display-mmd-lighting-panel" hidden><div class="display-mmd-lighting-header">动作与物理</div></section>');
   const motionPanel = $('#mmdArMotionPanel');
   motionPanel.append($('#mmdArMotionPlayback').closest('label'));
+  motionPanel.append('<label><input id="mmdArCameraMotionPlayback" type="checkbox" checked><span>相机动作</span></label>');
   motionPanel.append('<label><progress id="mmdArMotionProgress" max="1" value="0"></progress><output id="mmdArMotionTime">--:-- / --:--</output></label>');
+  motionPanel.append('<label><progress id="mmdArCameraMotionProgress" max="1" value="0"></progress><output id="mmdArCameraMotionTime">--:-- / --:--</output></label>');
   for (const id of ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']) {
     motionPanel.append($(`#${id}`).closest('label'));
   }
@@ -101,15 +103,18 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   originalIds.get('#displayArTargetPanel').sort();
 
   groupWebPanels($);
-  // 已提交的补光与骨骼遮挡控件也应纳入完整ID夹具。
+  originalIds.get('#mmdArMotionPanel').push(...require('../3rd/mmd-ar-test/web-physics-wind').WIND_CONTROL_IDS);
+  originalIds.get('#displayMmdLightingPanel').push('mmdArAoConcavityAngle', 'mmdArAoConcavityAngleValue');
+  // 工作区已有补光角度控件和小球遮挡控件，完整ID校验夹具须包含这些现有节点。
   originalIds.get('#displayMmdLightingPanel').push('mmdArFillFacingStart', 'mmdArFillFacingStartValue',
     'mmdArFillFacingEnd', 'mmdArFillFacingEndValue');
-  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonOccludedOpacityValue');
-  originalIds.get('#mmdArMotionPanel').push(...require('../3rd/mmd-ar-test/web-physics-wind').WIND_CONTROL_IDS);
   originalIds.get('#displayMmdLightingPanel').push('mmdArKeyShadowBias', 'mmdArKeyShadowBiasValue',
     'mmdArKeyShadowNormalBias', 'mmdArKeyShadowNormalBiasValue');
   originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonEnabled', 'mmdArSkeletonLegend', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus');
   originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonSize', 'mmdArSkeletonSizeValue', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint');
+  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonOccludedOpacityValue');
+  originalIds.get('#mmdArMotionPanel').push('mmdArRigidBodyLegend', 'mmdArRigidBodyMassRange');
+  originalIds.get('#mmdArMotionPanel').push('mmdArRigidBodyControls', 'mmdArRigidBodyStyle', 'mmdArCharacterHiddenEnabled');
   originalIds.get('#mmdArMotionPanel').push('mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceValue', 'mmdArPhysicsStabilityReferenceHint');
   for (const selector of panels) {
     originalIds.get(selector).push(`${selector.slice(1)}Opacity`);
@@ -158,6 +163,12 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArRigidBodyEnabled').closest('.mmd-ar-panel-group-body').length, 1);
   assert.equal($('#mmdArRigidBodyEnabled').is('[checked]'), false);
   assert.equal($('#mmdArRigidBodyStatus').attr('role'), 'status');
+  assert.equal($('#mmdArRigidBodyLegend').closest('.mmd-ar-panel-group-body').length, 1);
+  assert.match($('#mmdArRigidBodyLegend').text(), /灰＝有效质量 0（跟随骨骼）/u);
+  assert.equal($('#mmdArRigidBodyControls').closest('.mmd-ar-panel-group-body').length, 1);
+  assert.equal($('#mmdArRigidBodyStyle button[aria-pressed="true"]').attr('data-rigid-body-style'), 'solid');
+  assert.equal($('#mmdArRigidBodyStyle button[aria-pressed="false"]').attr('data-rigid-body-style'), 'wireframe');
+  assert.equal($('#mmdArCharacterHiddenEnabled').is('[checked]'), false);
   assert.equal($('#mmdArPhysicsStabilityReference').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
   assert.equal($('#mmdArPhysicsStabilityReference').attr('min'), '30');
   assert.equal($('#mmdArPhysicsStabilityReference').attr('max'), '180');
@@ -168,6 +179,9 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArSkeletonClearContacts').is('[disabled]'), true);
   assert.equal($('#mmdArMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.equal($('#mmdArMotionPlayback').closest('#displayMmdLightingPanel').length, 0);
+  assert.equal($('#mmdArCameraMotionPlayback').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
+  assert.equal($('#mmdArCameraMotionPlayback').is('[checked]'), true);
+  assert.equal($('#mmdArCameraMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 50%\), transparent\)/u);
   const specular = $('.mmd-ar-specular');
   assert.equal(specular.is('section.mmd-ar-panel-group'), true);
@@ -281,12 +295,17 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().physicsEnabled), true);
     assert.equal(await page.$eval('#mmdArMotionTime', node => node.textContent), '--:-- / --:--');
     assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 0);
+    assert.equal(await page.$eval('#mmdArCameraMotionPlayback', (node) => node.checked), true);
+    assert.equal(await page.$eval('#mmdArCameraMotionTime', node => node.textContent), '--:-- / --:--');
+    assert.equal(await page.$eval('#mmdArCameraMotionProgress', node => node.value), 0);
     await page.evaluate(() => {
       window.__testMotionProgress = { durationSeconds: 12.4, timeSeconds: 3.7 };
+      window.__testCameraProgress = { durationSeconds: 5.5, timeSeconds: 1.2 };
       const displayMmd = window.DisplayMmd;
       window.DisplayMmd = new Proxy({}, {
         get(_target, property) {
           if (property === 'getMotionProgress') return () => window.__testMotionProgress;
+          if (property === 'getCameraMotionProgress') return () => window.__testCameraProgress;
           return Reflect.get(displayMmd, property);
         },
       });
@@ -298,25 +317,37 @@ test('完整测试网页脚本存在时，灯光与定位分类仍能展开和�
       progress: document.getElementById('mmdArMotionProgress').value,
       time: document.getElementById('mmdArMotionTime').textContent,
       motion: window.DisplayMmd.getMotionProgress(),
+      cameraProgress: document.getElementById('mmdArCameraMotionProgress').value,
+      cameraTime: document.getElementById('mmdArCameraMotionTime').textContent,
+      cameraMotion: window.DisplayMmd.getCameraMotionProgress(),
     })), {
       progress: 3.7,
       time: '00:03 / 00:12',
       motion: { durationSeconds: 12.4, timeSeconds: 3.7 },
+      cameraProgress: 1.2,
+      cameraTime: '00:01 / 00:05',
+      cameraMotion: { durationSeconds: 5.5, timeSeconds: 1.2 },
     });
     await page.keyboard.press('Escape');
     assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), true);
     assert.equal(await page.$eval('#mmdArMotionToggle', node => node.getAttribute('aria-expanded')), 'false');
     await page.evaluate(() => {
       window.__testMotionProgress = { durationSeconds: 12.4, timeSeconds: 8.2 };
+      window.__testCameraProgress = { durationSeconds: 5.5, timeSeconds: 4.4 };
     });
     await new Promise(resolve => setTimeout(resolve, 350));
     assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 3.7);
     await page.click('#mmdArMotionToggle');
     assert.equal(await page.$eval('#mmdArMotionProgress', node => node.value), 8.2);
+    assert.equal(await page.$eval('#mmdArCameraMotionProgress', node => node.value), 4.4);
+    assert.equal(await page.$eval('#mmdArCameraMotionTime', node => node.textContent), '00:04 / 00:05');
     assert.equal(await page.$eval('#mmdArMotionPanel', node => node.hidden), false);
     await page.click('#mmdArMotionPlayback');
     assert.equal(await page.evaluate(() => window.DisplayMmd.getState().motionPlaybackEnabled), false);
     assert.equal(await page.evaluate(() => localStorage.getItem('aasc.mmdArTest.motionPlayback.v1')), 'false');
+    await page.click('#mmdArCameraMotionPlayback');
+    assert.equal(await page.$eval('#mmdArCameraMotionPlayback', (node) => node.checked), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem('aasc.mmdArTest.cameraMotionPlayback.v1')), 'false');
     await page.evaluate(() => document.querySelector('#mmdArMotionPanel [data-group-title="物理"]').click());
     assert.equal(await page.$eval('#displayMmdPhysicsFps', node => node.closest('#mmdArMotionPanel') !== null), true);
     // 纠错基准Hz滑条：默认45，改动即转发并本地保存。

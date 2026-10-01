@@ -1,0 +1,3 @@
+DBOW2-LICENSE.txt: https://github.com/dorian3d/DBoW2/blob/master/LICENSE.txt
+DUTILS-LICENSE.txt: https://github.com/dorian3d/DLib/blob/master/LICENSE.txt
+Retrieved 2026-10-01 for ORB-SLAM3 bundled DBoW2/DUtils README references.

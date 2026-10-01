@@ -1,13 +1,15 @@
 'use strict';
 
-// 本地选择只进入独立网页副本；源锚点变动时拒绝静默生成不完整适配。
+// 两端共用本地选择注入；源锚点变动时拒绝静默生成不完整适配。
 function once(source, anchor, replacement) {
   if (source.split(anchor).length !== 2) throw new Error(`本地资源适配缺少唯一锚点：${anchor.slice(0, 100)}`);
   return source.replace(anchor, replacement);
 }
 
 function addLocalRuntime(source, moduleUrl, motionModuleUrl = './web-motion-switch.mjs') {
-  let output = `import { prepareMotionSwitch, clearPmxPhysicsMotion } from '${motionModuleUrl}';\nimport { configureLocalLoader, validateLocalModel } from '${moduleUrl}';\n${source}`;
+  let output = `import { prepareMotionSwitch, clearPmxPhysicsMotion } from '${motionModuleUrl}';\nimport { configureLocalLoader, validateLocalModel, isRegisteredLocalAsset } from '${moduleUrl}';\n${source}`;
+  output = once(output, 'const isSameOriginMmdAsset = (url, extension) => {',
+    'const isSameOriginMmdAsset = (url, extension) => {\n    if (isRegisteredLocalAsset(url, extension)) return true;');
   output = once(output, '    let pendingInitialMotionHelper = null;',
     '    let pendingInitialMotionHelper = null;\n    let motionSwitchMesh = null;');
   output = once(output, '        const frameHelper = helper.current;',
@@ -103,9 +105,15 @@ function addLocalRuntime(source, moduleUrl, motionModuleUrl = './web-motion-swit
   return output;
 }
 
-function addLocalDisplay(source) {
+function addLocalDisplay(source, moduleUrl = './web-local-assets.mjs') {
   let output = once(source, '    async function loadModel(profile) {',
     '    async function loadModel(profile, reportProgress = state.onLoadProgress) {');
+  output = once(output, '    async function resolvePmxProfile(profile) {', `    async function resolvePmxProfile(profile) {
+        if (typeof profile.modelUrl === 'string' && profile.modelUrl.startsWith('./mmd/__local__/')) {
+            const { isRegisteredLocalAsset } = await import('${moduleUrl}');
+            if (!isRegisteredLocalAsset(profile.modelUrl, '.pmx')) throw new Error('本地模型未注册或已释放');
+            return { ...profile };
+        }`);
   output = once(output, "state.onLoadProgress?.({ phase: '模型已加载', percent: 100 });",
     "reportProgress?.({ phase: '模型已加载', percent: 100 });");
   output = once(output, "state.onLoadProgress?.({ phase: '加载失败', error: error.message });",

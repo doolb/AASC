@@ -2,15 +2,19 @@ package com.aasc.mmdartest
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.TextureView
+import android.widget.FrameLayout
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -25,13 +29,18 @@ class MainActivity : Activity() {
     companion object {
         private const val TAG = "MmdArTest"
         private const val CAMERA_PERMISSION_REQUEST = 501
+        private const val NATIVE_CAMERA_PERMISSION_REQUEST = 502
+        private const val FILE_CHOOSER_REQUEST = 503
         private const val LOCAL_HOST = "127.0.0.1"
     }
 
     private lateinit var webView: WebView
     private lateinit var assetServer: LocalAssetHttpServer
+    private lateinit var nativeSlam: NativeSlamController
+    private lateinit var directoryPicker: NativeDirectoryPicker
     private var localPort: Int = 0
     private var pendingCameraRequest: PermissionRequest? = null
+    private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
     private var cameraPermissionDialogPending = false
     private var webPageLoaded = false
     private var cssSafeInsets = CssSafeInsets(0f, 0f, 0f, 0f)
@@ -54,7 +63,7 @@ class MainActivity : Activity() {
 
             startupStage = "启动本地资源服务"
             Log.i(TAG, "启动阶段：$startupStage")
-            assetServer = LocalAssetHttpServer(assets)
+            assetServer = LocalAssetHttpServer(assets, contentResolver)
             localPort = assetServer.start()
 
             startupStage = "创建 WebView"
@@ -103,7 +112,8 @@ class MainActivity : Activity() {
             domStorageEnabled = true
             databaseEnabled = true
             allowFileAccess = false
-            allowContentAccess = false
+            // 系统文档选择器提供用户主动选择的content Uri；网页导航仍受本地白名单限制。
+            allowContentAccess = true
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
             mediaPlaybackRequiresUserGesture = true
@@ -156,6 +166,32 @@ class MainActivity : Activity() {
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
+
+            @Suppress("DEPRECATION")
+            override fun onShowFileChooser(
+                view: WebView,
+                callback: ValueCallback<Array<Uri>>,
+                parameters: FileChooserParams
+            ): Boolean {
+                pendingFileChooser?.onReceiveValue(null)
+                pendingFileChooser = callback
+                return try {
+                    val intent = parameters.createIntent().apply {
+                        action = Intent.ACTION_OPEN_DOCUMENT
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, parameters.mode == FileChooserParams.MODE_OPEN_MULTIPLE)
+                    }
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                    true
+                } catch (error: Exception) {
+                    Log.e(TAG, "无法打开文件选择器", error)
+                    pendingFileChooser = null
+                    callback.onReceiveValue(null)
+                    true
+                }
+            }
+
             override fun onPermissionRequest(request: PermissionRequest) {
                 runOnUiThread { handleWebPermissionRequest(request) }
             }
@@ -174,7 +210,31 @@ class MainActivity : Activity() {
                 return true
             }
         }
-        setContentView(webView)
+        val preview = TextureView(this).apply { visibility = View.GONE }
+        nativeSlam = NativeSlamController(this, preview, {
+            cameraPermissionDialogPending = true
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), NATIVE_CAMERA_PERMISSION_REQUEST)
+        }) { event ->
+            if (::webView.isInitialized && webPageLoaded) {
+                val encoded = org.json.JSONObject.quote(event.toString())
+                webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('mmdNativeSlam',{detail:JSON.parse($encoded)}))", null)
+            }
+        }
+        // 原生能力只注入现有本地白名单页面，所有外部导航仍由原规则拦截。
+        webView.addJavascriptInterface(nativeSlam, "MmdArNativeSlam")
+        directoryPicker = NativeDirectoryPicker(this, assetServer) { result ->
+            if (::webView.isInitialized && webPageLoaded) {
+                val encoded = org.json.JSONObject.quote(result.toString())
+                webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('mmd-ar-directory-picked',{detail:JSON.parse($encoded)}))", null)
+            }
+        }
+        webView.addJavascriptInterface(directoryPicker, "MmdArNativeFiles")
+        val layers = FrameLayout(this).apply {
+            addView(preview, FrameLayout.LayoutParams(-1, -1))
+            addView(webView, FrameLayout.LayoutParams(-1, -1))
+        }
+        setContentView(layers)
         webView.requestApplyInsets()
     }
 
@@ -248,6 +308,11 @@ class MainActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NATIVE_CAMERA_PERMISSION_REQUEST) {
+            cameraPermissionDialogPending = false
+            nativeSlam.onCameraPermissionResult(grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+            return
+        }
         if (requestCode != CAMERA_PERMISSION_REQUEST) return
         cameraPermissionDialogPending = false
         val request = pendingCameraRequest
@@ -262,8 +327,30 @@ class MainActivity : Activity() {
         }
     }
 
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == NativeDirectoryPicker.REQUEST_CODE) {
+            directoryPicker.onResult(resultCode, data)
+            return
+        }
+        if (requestCode != FILE_CHOOSER_REQUEST) return
+        val callback = pendingFileChooser ?: return
+        pendingFileChooser = null
+        // 明确保留系统多选返回的全部URI；取消时返回null，不影响网页已加载资源。
+        val selected = ArrayList<Uri>()
+        if (resultCode == RESULT_OK) {
+            val clip = data?.clipData
+            if (clip != null) for (index in 0 until clip.itemCount) selected.add(clip.getItemAt(index).uri)
+            else data?.data?.let(selected::add)
+        }
+        val result = selected.filter { it.scheme == "content" }.distinct().toTypedArray().takeIf { it.isNotEmpty() }
+        callback.onReceiveValue(result)
+    }
+
     override fun onPause() {
         if (::webView.isInitialized && !cameraPermissionDialogPending) {
+            if (::nativeSlam.isInitialized) nativeSlam.stopCurrent()
             webView.evaluateJavascript("window.DisplayMmdAr?.stop?.()", null)
             webView.onPause()
         }
@@ -285,11 +372,17 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        pendingFileChooser?.onReceiveValue(null)
+        pendingFileChooser = null
+        if (::nativeSlam.isInitialized) nativeSlam.close()
+        if (::directoryPicker.isInitialized) directoryPicker.close()
         pendingCameraRequest?.deny()
         pendingCameraRequest = null
         if (::webView.isInitialized) {
             webView.evaluateJavascript("window.DisplayMmdAr?.stop?.()", null)
             webView.stopLoading()
+            webView.removeJavascriptInterface("MmdArNativeSlam")
+            webView.removeJavascriptInterface("MmdArNativeFiles")
             webView.webChromeClient = null
             webView.webViewClient = WebViewClient()
             webView.removeAllViews()

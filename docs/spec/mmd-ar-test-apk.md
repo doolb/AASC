@@ -1,5 +1,17 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+## 非日志/非模型归档检查（2026-10-01）
+
+```text
+归档当前工作区：
+    收集现有代码、配置、文档、测试与参考截图
+    排除日志、模型、运行结果、APK/ZIP与构建缓存
+    检查源文件语法与差异空白
+    执行六组定向测试：38项 = 31通过 + 7失败
+    待同步：骨骼夹具的renderer.capabilities；本地资源用例的物理默认90Hz
+    将失败记录到todo；提交允许的74个文件并推送origion/master
+```
+
 ### 风力强度上限30（2026-10-01，已实现）
 
 ```text
@@ -57,31 +69,6 @@ Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实�
 ```
 
 
-### 关节纠错基准Hz可调（2026-10-01，已实现）
-
-```text
-已有声明
-  web-physics-rate.mjs的getWebPhysicsStepOptions、runtime两处Object.assign步进参数
-  web-physics-stability.js的_refreshConstraintStability（65写死）与resetAnchorInterpolation刷新入口
-  lightingState.physicsFps、动作面板物理分类、DisplayMmd转发
-新增定义
-  normalizeWebStabilityReference(value) { 非有限值/缺失回退45；其余30-180截断并按5Hz取整 }
-  PhysicsStepOptions { unitStep，maxStepNum，stabilityReferenceHz（默认45） }
-  MMDPhysics.setStabilityReferenceHz(value) { 有限正数写入（非法回退45）并立即重算六轴，返回生效值 }
-  面板：mmdArPhysicsStabilityReference + 数值输出 + 说明；本地键aasc.mmdArTest.physicsStabilityReference.v1
-操作流程
-  面板滑条(30-180步长5默认45) -> 本地记忆 -> DisplayMmd.setPhysicsStabilityReference
-  显示层 -> 同一归一规则本地保存待补发值，runtime存在时转发；runtime重建后补发
-  runtime -> physicsStabilityReferenceHz；对当前物理Object.assign步进参数并调用setStabilityReferenceHz立即重算
-  创建/变频路径 -> 步进参数携带参考值写入实例；补丁记忆核对unitStep与参考值任一变化重算
-  补丁换算 -> ERP = 1-(1-0.475)^(参考Hz×unitStep)；65Hz基准恢复原库0.475
-  非法值 -> 滑条/显示层/runtime/补丁四层一致回退45；不修改弹簧/质量/阻尼/预算/渲染
-  验证 -> 同Hz不同基准ERP数值、实时改基准立即生效、回退与非法值、45默认/90物理真实ERP与公式一致，显式65仍保持旧行为
-```
-
-实现：修改 `3rd/mmd-ar-test/web-physics-rate.mjs`、`web-physics-rate.js`、`web-physics-stability.js`、`web-panel-groups.js`、`build.js`；扩展 `tests/mmd-ar-physics-rate.test.js`、`tests/mmd-ar-physics-stability.test.js`、`tests/mmd-ar-web-panel-groups.test.js`。
-
-
 ### 默认纠错45Hz与物理90Hz（2026-10-01，已实现）
 
 ```text
@@ -104,6 +91,50 @@ Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实�
 状态 -> 先更新本伪代码，用户确认后完成代码；51项定向回归和真实LAN网页默认/偏好/回退/复位通过
 ```
 
+### SLAM失锁/地图切换行为核对（2026-10-01，仅分析当前实现）
+
+```text
+IMU启用条件补充核对
+  calibration.imu不存在 -> imuEnabled=false -> monocular -> 不注册SLAM惯性传感器
+  calibration.imu存在 -> 校验外参/噪声/频率/时间偏移、相机REALTIME时间戳
+  启动采集 -> 加速度计和陀螺仪均可用且注册成功 -> 传感器样本随帧传入JNI
+  网页pose.mode -> monocular-inertial显示“视觉＋IMU”，其他显示“单目视觉”
+  角色重力旋转 -> 独立显示功能，不能作为SLAM惯性模式已启用的证据
+  当前手机日志无可用模式记录，界面读取失败 -> 不确认现场会话模式
+单目加IMU可行性核对
+  已标定且条件通过 -> JNI创建System.IMU_MONOCULAR
+  原始加速度/角速度和校正时间戳 -> 有界imuSamples队列 -> 按相机帧时间取样
+  TrackMonocular(图像、相机时间、惯性测量) -> 跟踪/惯性初始化状态
+  惯性初始化完成且图片多帧对齐成功 -> 角色世界锚定
+  联合标定/初始化/恢复精度需本机实测，接入代码存在不等于已验证可用
+```
+
+```text
+已有声明
+  Session.anchored、observedMap、referenceKeyFrame、clearAnchor、findTarget、align
+  ORB-SLAM3.TrackMonocular/GetTrackingState、原生pose事件、网页状态提示
+当前操作
+  跟踪帧 -> 读取状态与有效匹配地图点所属地图
+  地图非空且不同于observedMap -> clearAnchor -> 保存新地图
+  OK且姿态有效且地图非空 -> 检查参考关键帧
+  参考关键帧失效或属于别图 -> clearAnchor
+  未锚定 -> 图片识别/PnP；图片姿态可有效，但多帧align完成前anchored仍为false
+  已锚定 -> 使用参考关键帧相对变换/尺度修正 -> 不调用图片识别
+  暂时失锁且没有地图切换 -> 保留锚点及最后渲染姿态
+  同图恢复 -> 使用原锚点；切回旧图 -> 当前单锚点实现仍会清空
+  状态0/1 -> 初始化提示；状态3/4 -> 同一暂时失锁提示
+  停止/后台 -> 销毁会话，当前没有地图和锚点跨会话持久化
+上游核对
+  单目视觉成熟地图RECENTLY_LOST -> 环境重定位
+  超过3秒且仍失败 -> LOST；地图较小也可能直接LOST
+  LOST后 -> 重置较小活动地图或在Atlas创建新地图
+限制及候选（尚未实施）
+  当前只保存单份地图对齐；需要独立设计有效地图锚点缓存及合并/替换迁移
+  新地图未恢复与旧图坐标关系 -> 不可直接复用旧姿态
+  区分首定位/同图恢复/重建/待对齐，并记录地图ID、状态转换、清空原因
+验证
+  本轮仅核对本地源码和官方Tracking.cc/论文；未复现具体失锁原因，未运行新增测试
+```
 
 ### 后蝴蝶结末端旋转回写修正（2026-10-01，已实现并验证）
 
@@ -136,6 +167,65 @@ Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实�
   固定vendor和生产Offline未变；当前测试网页/APK共用补丁，APK本轮未打包
 ```
 
+### 摄像头跟随手机旋转与竖屏方向修正（2026-10-01，已实现并验证）
+
+```text
+已有声明
+  NativeSlamController.initialize/updatePreviewGeometry、CameraPreviewGeometry.projection
+  TextureView系统传感器方向变换、原始YUV灰度帧、当前显示方向及窗口尺寸
+新增定义
+  PreviewGeometry { sensorOrientation、displayRotation、rawSize、viewSize、cropScale、offset }
+  DisplaySnapshot { 当前会话、显示旋转、已布局窗口宽高 }
+操作流程
+  已确认故障入口 -> 测试APK开始定位后的原生预览
+  手机旋转 -> APK沿用unspecified及系统自动旋转 -> 按当前窗口方向显示；不锁竖屏
+  已布局窗口 -> 记录DisplaySnapshot -> 同一几何计算产生两条变换
+    原始四角 -> 传感器方向旋转并按视图尺寸拉伸 -> TextureView已有显示位置
+    原始四角 -> 传感器方向减显示旋转 -> 等比例cover缩放并居中 -> 期望显示位置
+    TextureView已有位置到期望位置 -> 设置补偿矩阵；竖屏不再次施加传感器90度旋转
+    原始SLAM投影 -> 由相同原始像素到视图仿射变换生成NDC投影 -> 保持深度行
+  布局或当前显示器旋转变化 -> 当前会话更新不可变几何；监听包含180度同尺寸旋转
+  worker -> 按几何变化缓存投影；UI发送姿态前验证几何未过期；不重建相机和SLAM地图
+  退出/新会话 -> 注销显示/布局监听；旧会话更新不得覆盖新会话
+  保留原始采集尺寸/标定/灰度帧，不以旋转显示画面改变SLAM输入坐标
+  自测 -> 四个显示方向、两种传感器方向、竖横窗口比例及投影/画面对应
+  构建 -> npm run build:apk:mmd-ar-test -> 资源校验 -> SM-N9500覆盖安装及实际预览检查
+当前状态 -> 6项JUnit/64几何组合/768射线及2项Node回归通过；修正版APK构建及覆盖安装完成
+  SM-N9500同进程竖屏 -> 横屏 -> 竖屏持续预览，几何按display0/90/0更新
+  临时方向测试结束恢复accelerometer_rotation=1、user_rotation=0；180度由数值测试覆盖
+  本次验证预览方向与几何，不宣称原生地图尺度/标定/精度已验收
+```
+
+### 网页全功能同步测试 APK（2026-10-01，已实现并验证）
+
+```text
+已有声明
+  stageTextAssets、网页功能注入模块、APK回环资源服务、原生ORB-SLAM3适配
+新增定义
+  SharedTestFeatures { 三面板、灯光/AO/高光、本地PMX/贴图/两类VMD、重力/模拟视频、物理/诊断、加载进度 }
+  NativeDirectorySelection { operation、用户授权目录、相对路径、会话资源令牌 }
+操作流程
+  两种构建 -> 同一控件/脚本/样式/物理注入链 -> 校验必需控件与唯一ID
+  网页输出 -> 相对静态路径；APK输出 -> 原回环API路径；两端导入使用相同内容指纹
+  主光阴影控件 -> 两端均保留 -> 灯光初始化完成 -> 点击展开/关闭
+  APK目录入口 -> 系统目录选择 -> 只枚举用户授权树中的文件 -> 令牌化回环读取
+    返回相对路径清单 -> 获取文件Blob -> 构建带相对路径的File -> 共用模型加载流程
+    取消/异常 -> 返回明确结果；旧操作消息忽略；退出清理令牌与授权引用
+  APK多文件/VMD -> 系统文档选择；取消保持已加载内容
+  本地模型/动作解析 -> 先识别同一ESM注册表中的确切已选资源URL
+    注册存在且对应目标File/扩展名 -> 使用本地profile；已释放/伪造路径 -> 拒绝
+    不使用服务默认profile覆盖本地模型，不将虚拟路径直接交给HTTP服务
+  回环资源 -> 提供内置assets；路径先规范化并限制白名单
+  模拟视频 -> MindAR；真实视频且原生能力可用 -> ORB-SLAM3；无原生能力 -> MindAR
+  切换后端/输入 -> 先释放旧相机；重力背景与图片定位不得同时独占相机
+  构建APK -> 检查网页共用资源完整、SLAM库/词袋存在、内置模型摘要正确
+  自测 -> 两端功能清单一致、APK灯光/动作/定位点击、文件入口和资源加载、原生能力保留
+当前状态 -> npm网页/APK构建成功；76网页文件/14模型文件/原生SLAM库与词袋摘要校验通过
+  两端各31脚本/4内联语法与18导入指纹通过；32项定向测试通过
+  APK页面真实PMX/VMD加载、三面板/主光阴影/骨骼、目录取消/旧回调与模拟后端通过
+  SM-N9500覆盖安装；三面板真机日志及官方定位图HTTP200已确认
+  现场原生SLAM地图/标定/性能和手机本地目录贴图验收仍保留，不将构建等同精度验收
+```
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
@@ -220,6 +310,66 @@ Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实�
   构建/30脚本/4内联/16导入指纹/LAN HTTP200通过；外网未发布
 ```
 
+### 碰撞体按质量着色（2026-10-01，已实现）
+
+```text
+已有声明
+  RigidBodyOverlay、entries、共享几何与实例组、getRigidBodyState、骨骼选择过滤bodyFilter
+  MMD刚体参数type/weight、动作面板碰撞体开关与状态说明
+新增定义
+  EffectiveMass -> type0或weight非法/不大于0时为0，否则weight
+  MassScale { min，max } -> 模型全部刚体有效质量大于0部分；加载时固定，不随过滤重算
+  MassRamp -> 对数插值连续色带（蓝/青/绿/黄/红）；有效质量0 -> 浅灰
+  RigidBodyLegend { 渐变条，范围文字，灰说明 }
+操作流程
+  提交模型 -> 计算每个刚体有效质量 -> 汇总massScale -> 按形状建实例组（分组键去掉type）
+  首次开启 -> 白色基色材质；逐实例颜色与矩阵同帧写入（过滤压缩序号时颜色跟随所属刚体）
+  每帧 -> 更新实例矩阵与颜色；物理开关/VMD切换不改变颜色，颜色只取决于刚体质量
+  选择过滤 -> 只压缩显示实例count；同一刚体颜色不漂移
+  min等于max或只有一个正质量 -> 色带中点单色；无非零质量 -> 全部浅灰
+  换模型 -> massScale与实例色重建；销毁释放实例/几何/材质
+  getRigidBodyState -> 增加massScale/massRamp/massBodies；samples颜色改为实例色
+  动作面板骨骼分类 -> 碰撞体状态行下方图例；面板打开时500ms随状态刷新范围文字
+  骨骼小球 -> 保留红type0/黄type2/绿type1，不随本功能改变
+  验证 -> 0质量浅灰、色带端点、退化单色、非法weight按0、过滤颜色稳定、实例组数量不增加
+```
+
+实现：修改 `3rd/mmd-ar-test/web-rigid-body-debug.mjs`（有效质量/色阶/逐实例颜色/分组键）、`web-panel-groups.js`（图例元素、分组登记、轮询刷新、CSS）；扩展 `tests/mmd-ar-rigid-body-debug.test.js` 与 `tests/mmd-ar-rigid-body-debug-browser.test.js`。
+
+### 碰撞体实体模式与真实遮挡（2026-10-01，已实现）
+
+```text
+已有声明
+  RigidBodyOverlay实例组/材质/getState/setBodyFilter、质量色带与逐实例颜色
+  renderFrame的AO离屏合成→刚体叠加→骨骼叠加顺序、pmxAoEnabled、ambientOcclusion.supported
+  currentRotationPivot.visible（AR/首帧门控）、currentMesh、renderer/scene/camera
+新增定义
+  RigidBodyStyle { wireframe，solid（默认，本地记忆） }
+  SolidAppearance { 填充不透明质量色；描边BackSide深色，实例统一放大1.04 }
+  DiagnosticShading { 两叠加场景各自环境光0.55＋顶光平行光0.9（0.35,1,0.5）；不联动真实灯光 }
+  OcclusionRule { solid+全量+角色可见→深度遮挡；选中过滤→穿透；角色隐藏→无遮挡 }
+  CharacterHidden { 关闭mesh.visible；物理/动画/叠加继续；换模型后重应用 }
+  SceneDepthPrepass { clearDepth + colorWrite:false覆盖材质深度直写；仅AO离屏生效时 }
+操作流程
+  面板 -> 碰撞体样式分段按钮（线框/实体）+隐藏角色开关 -> 本地记忆与DisplayMmd转发
+  solid -> 重建资源：按形状分组各建填充与描边两组实例，共用几何缓存
+    填充受光材质（Lambert）不透明、depthTest/depthWrite开、逐实例质量色
+    描边BackSide深色、实例矩阵统一放大1.04；诊断顶光只作用于本叠加层
+    骨骼小球同用该诊断光：受光材质并保留type三色与透过显示
+    wireframe -> 保持原透过线框（depthTest关，无描边、无遮挡）
+  每帧 -> 未过滤且角色可见且solid -> 需要场景深度；过滤激活 -> 过滤刚体关闭深度测试穿透
+  深度遍（仅需要时）-> autoClear关 -> clearDepth -> scene.overrideMaterial=colorWrite:false
+    -> 渲染角色深度 -> finally恢复overrideMaterial/autoClear
+  隐藏角色 -> 仅mesh不绘制；碰撞体叠加守卫不再要求mesh.visible；骨骼小球保持随网格隐藏
+    -> AO场景无角色；跳过深度遍
+  换模型 -> 重建资源并重新应用隐藏状态；物理开关/VMD切换保持模式与隐藏
+  销毁 -> 释放填充/描边实例、材质、几何；重复释放幂等
+  getRigidBodyState -> 增加displayMode/characterHidden/needsSceneDepth
+  验证 -> 模式切换资源重建、描边材质与放大比、过滤穿透、深度遍条件、隐藏后仍绘制、释放幂等
+```
+
+实现：修改 `3rd/mmd-ar-test/web-rigid-body-debug.mjs`（样式/描边/穿透/守卫/needsSceneDepth/诊断顶光）、`web-skeleton-debug.mjs`（小球受光材质＋诊断顶光，保留透过）、`web-rigid-body-debug.js`（深度遍、隐藏角色与显示层透传）、`web-panel-groups.js`（样式按钮、隐藏开关、提示文案）、`build.js`（必需控件）；扩展刚体/骨骼单测与真实网页自测。视觉调整：描边外壳 1.08→1.04，两叠加层加固定顶光着色（不联动真实灯光）。
+
 ### 骨骼物理状态小球（2026-09-30，已实现并验证）
 
 ```text
@@ -253,6 +403,41 @@ Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实�
   实际321骨骼 -> 红18/黄16/绿148/灰139；4实例组；重载与两次PMX切换释放旧16组
   VMD切换 -> 不重建骨骼球；AO开启仍叠加；刷新恢复开关
   构建/28脚本/4内联/13导入指纹/LAN HTTP200通过；外网未发布，手机观感待验收
+```
+
+### Blender物理修正路径（2026-09-30，只读技术核对）
+
+```text
+已有声明: 当前PMX刚体/6DoF弹簧/骨骼回写，固定Ammo原生world
+Blender刚体 -> Bullet顺序冲量、子步与约束迭代
+  Split Impulse -> 碰撞穿透单独push/turn速度 -> 姿态纠错与真实动能分离
+  范围 -> 接触穿透，不代表PMX弹簧关节已经位置投影求解
+Blender传统Cloth -> 顶点质量/弹簧/阻尼 -> 隐式线性系统求速度增量 -> 更新位置
+Blender 5.2实验几何节点 -> XPBD Solver -> 预测位置/旋转、约束迭代、速度更新
+  实验状态 -> 不代表传统Cloth修改器或刚体后端整体替换为XPBD
+本地读取 -> 固定Ammo新建world默认splitImpulse为true，穿透阈值0、迭代10
+  当前MMD创建/补丁未覆盖 -> 沿用开启；仅参数读取，不作为模型对照测试
+候选借鉴 -> PMX刚体语义适配后再评估，避免重复求解与盲目更改默认参数
+本轮 -> 只读资料/参数和文档更新，无生产或自测代码、构建或发布
+```
+
+### 位置预测与XPBD式约束（2026-09-30，只读核对）
+
+```text
+已有声明: 当前WEB_MODE -> 每固定子步调用一次Ammo world.stepSimulation
+核对上游原生流程:
+  predictUnconstraintMotion -> 候选姿态缓存 -> 碰撞检测 -> 速度/冲量约束求解
+  约束后的速度 -> integrateTransforms -> 最终刚体姿态
+  候选姿态 -> 不等同XPBD约束修正后位置，也不是最终受约束结果
+候选XPBD式流程（未实施）:
+  当前位置/速度/外力 -> 预测位置与旋转
+  预测状态/关节/接触/柔度/累计乘子 -> 位置与旋转迭代修正
+  修正姿态与上一步姿态差 -> 更新线/角速度 -> 骨骼回写
+  独立求解职责 -> 避免与Ammo重复推进同一动态刚体，定义接触反馈
+边界:
+  JS预移刚体后再Ammo步进 -> 可能重复积分，不采用该快捷拼接
+  只读预测缓存 -> 诊断用途；骨骼目标外推 -> 处理延迟；均不能等同XPBD
+本轮: 仅核对/文档更新，未新增生产代码/自测代码、未构建或发布
 ```
 
 ### 跨Hz布料与小物件抖动（2026-09-30，已实现并验证）
@@ -309,6 +494,30 @@ Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实�
   网页约576秒24次VMD/4次PMX切换 -> 创建32/销毁31/存活1，64MiB堆，探针跨度3227080字节
   语法15脚本与4内联、11导入指纹、用户局域网HTTP200提供新实现 -> 通过，未发布外网
 ```
+
+### 关节纠错基准Hz可调（2026-10-01，已实现）
+
+```text
+已有声明
+  web-physics-rate.mjs的getWebPhysicsStepOptions、runtime两处Object.assign步进参数
+  web-physics-stability.js的_refreshConstraintStability（65写死）与resetAnchorInterpolation刷新入口
+  lightingState.physicsFps、动作面板物理分类、DisplayMmd转发
+新增定义
+  normalizeWebStabilityReference(value) { 非有限值/缺失回退45；其余30-180截断并按5Hz取整 }
+  PhysicsStepOptions { unitStep，maxStepNum，stabilityReferenceHz（默认45） }
+  MMDPhysics.setStabilityReferenceHz(value) { 有限正数写入（非法回退45）并立即重算六轴，返回生效值 }
+  面板：mmdArPhysicsStabilityReference + 数值输出 + 说明；本地键aasc.mmdArTest.physicsStabilityReference.v1
+操作流程
+  面板滑条(30-180步长5默认45) -> 本地记忆 -> DisplayMmd.setPhysicsStabilityReference
+  显示层 -> 同一归一规则本地保存待补发值，runtime存在时转发；runtime重建后补发
+  runtime -> physicsStabilityReferenceHz；对当前物理Object.assign步进参数并调用setStabilityReferenceHz立即重算
+  创建/变频路径 -> 步进参数携带参考值写入实例；补丁记忆核对unitStep与参考值任一变化重算
+  补丁换算 -> ERP = 1-(1-0.475)^(参考Hz×unitStep)；65Hz基准恢复原库0.475
+  非法值 -> 滑条/显示层/runtime/补丁四层一致回退45；不修改弹簧/质量/阻尼/预算/渲染
+  验证 -> 同Hz不同基准ERP数值、实时改基准立即生效、回退与非法值、45默认/90物理真实ERP与公式一致，显式65仍保持旧行为
+```
+
+实现：修改 `3rd/mmd-ar-test/web-physics-rate.mjs`、`web-physics-rate.js`、`web-physics-stability.js`、`web-panel-groups.js`、`build.js`；扩展 `tests/mmd-ar-physics-rate.test.js`、`tests/mmd-ar-physics-stability.test.js`、`tests/mmd-ar-web-panel-groups.test.js`。
 
 ### Ammo方法与XPBD候选后端（2026-09-30，评估，未实现XPBD）
 
@@ -667,6 +876,36 @@ Display/面板 -> 构建时复用同一规范化声明 -> runtime -> 物理实�
 ```
 
 实现：`web-local-assets.mjs`（路径索引/会话 URL）、`web-local-assets-ui.mjs`（选择/串行操作）、`web-local-assets-inject.js`（网页副本运行时和显示 API）；`build.js` 和 `web-panel-groups.js` 负责构建与入口。新增定向测试 3/3、既有 PMX/helper/物理测试 40/40 通过，网页构建与语法检查通过。
+
+
+### 测试网页相机动作 VMD（2026-10-01，已实现）
+
+```text
+已有声明:
+  PMX runtime camera（预览虚拟相机）、updateCameraView、fitCameraToModel、renderFrame、arCameraState
+  MMDLoader.loadVMD、animationBuilder.buildCameraAnimation、MMDAnimationHelper
+  动作面板、本地资源面板、loadSelectedMotion、getMotionProgress、恢复默认模型与动作
+新增定义:
+  CameraMotionSelection { motionUrl, motionResourceId }
+  CameraMotionState { hasClip, helper, enabled, farLimit }
+  UI: mmdArCameraMotionPlayback、mmdArCameraMotionProgress、mmdArCameraMotionTime、
+      mmdArLocalCameraVmdButton、mmdArLocalCameraVmd、mmdArLocalCameraMotionName
+操作流程（仅 WEB_MODE，构建期注入 web-dist 副本）:
+  用户选择相机 VMD -> 独立文件上下文与对象 URL -> 加载器经本地映射读取
+  loadVMD 解析 -> cameras 为空报错（内置角色动作 VMD 无相机帧）
+  buildCameraAnimation 生成循环 clip；按机位最远距离(|position|+distance)+模型半径计算 far 上限
+  复用固定 MMDAnimationHelper：先移除旧相机绑定，再绑定新 clip
+  每帧仅在未定位且开关开启时 -> helper.update(delta) 覆盖相机位置/朝向/FOV，near 固定 1
+  定位激活（含失锁冻结）-> 不推进混音器，相机保持 MindAR 姿态；退出定位 -> 从暂停处继续
+  关闭开关或清除 -> 停止推进并恢复预览视角（up、fov 28、near/far 与 fitCameraToModel）
+  进度只读：动作面板打开时每 250ms 读取当前/总时长；无相机 VMD 显示 --:-- / --:--
+  动作面板开关默认勾选并持久化于当前浏览器；本地资源分组显示当前相机动作名
+  恢复默认模型与动作 -> 清除相机动作并复位预览；释放本地文件上下文；pagehide 释放
+  播放期间拖动仍旋转模型；缩放/体感观察不改变相机；不改正式显示端源码
+  验证注入锚点唯一、合成相机 VMD 播放、进度推进、开关恢复、AR 暂停与无相机帧报错
+```
+
+实现：新增 `web-camera-motion-inject.js`（runtime/display 副本注入）；`build.js` 创建动作分类控件并接入注入链，`web-panel-groups.js` 负责分组与轮询/开关事件，`web-local-assets-ui.mjs` 负责选择与恢复默认清理。新增定向测试通过后构建 `web-dist`。
 
 
 ### 独立重力体感与手动旋转叠加（2026-09-30）
@@ -1538,6 +1777,160 @@ publishMmdArTestApk
   通过既有 PMX 手势、AR pose 与测试网页构建回归确认行为
 ```
 
+
+## ORB-SLAM3 定位迁移评估（2026-09-30，尚未实现）
+
+```text
+已有声明: MindAR锚点 -> MindBasicImu预测 -> setArCameraPose(图面/尺度换算) -> 第二层相机缓动
+拟新增定义: SlamPose {timestamp, cameraToWorld, trackingState, mapId, generation}
+拟新增定义: WorldAnchor {mapId, worldTransform, metricScale, placement}
+已确定: APK提供原生ORB-SLAM3桥；纯网页无原生接口时使用MindAR；不移植WASM
+待确定: 原生单目或单目IMU的设备标定；手动放置还是图片首定位
+拟原生接口: MmdArNativeSlam.getCapabilities/start/stop/reset
+拟能力: {protocolVersion:1, engine:orb-slam3, available, reason}
+拟回包: {sessionId, generation, timestamp, mapId, trackingState, cameraToWorld, projectionMatrix}
+后端选择:
+  无接口 -> 原MindAR
+  能力查询失败/版本不支持/available=false -> 原MindAR
+  能力可用 -> 原生ORB-SLAM3适配；不同时启动MindAR
+  原生跟踪失锁 -> 原生重定位流程，不触发自动后端切换
+  原生启动失败 -> 完整释放输入/线程/迟到回调后提示或回退MindAR
+拟迁移流程（本轮未改实现）:
+  相机标定 -> 内参/畸变；惯性模式另标定外参/噪声/时间偏移
+  输入 -> 相机帧及采集时间戳；原始加速度/角速度按相机帧区间对齐
+  Android -> 检查Camera2时间戳来源；不能直接拿UNKNOWN与SensorEvent比较
+  APK原生适配 -> 有界最新帧队列 -> TrackMonocular(frame, time, imuBatch)
+  有效跟踪 -> 转换SLAM位姿方向、坐标轴、矩阵存储顺序、世界锚点与模型单位
+  通用相机接口 -> 当前投影/背景裁切 -> 原第二层死区和缓动 -> 渲染相机
+  SLAM模式 -> 不再走旧MindBasicImu预测；渲染缓动不反馈SLAM测量
+  模型根节点 -> 保留手动偏移/旋转/缩放、动作和Ammo物理
+  初始世界锚点 -> 手动放置或已知图初始对齐；单目必须定义尺度
+  失锁 -> 保留角色且明确位姿无效；重定位/回环检查锚点变换
+  新地图/重置 -> 旧锚点不能直接复用；要求重定位旧图或重新放置
+  状态面板 -> 初始化/跟踪/失锁/重定位、匹配点数量；不伪造概率可信度
+  后台/停止 -> 释放采集/SLAM线程；代次阻止迟到位姿污染新会话
+  共用网页 -> 后端分发器/原生桥适配/MindAR资源，重新构建web-dist；无WASM依赖
+  MindAR模式 -> 保留原图像定位/IMU预测；原生模式只保留渲染缓动
+  能力检测不启动相机/申请权限；原生接口只向本地白名单页面注入
+  原生预览与位姿对应同一相机配置，禁止原生和网页争用相机
+  独立APK -> Camera2/SensorManager/NDK/JNI与预览桥接，重新编译APK
+  尚未实施 -> 不更改当前运行后端、不标记新增发布产物、不执行测试
+```
+
+## 原生ORB-SLAM3双后端实现计划（2026-09-30，用户已确认）
+
+```text
+已确定: APK NDK原生定位；网页无接口走MindAR；使用原图片首定位对齐SLAM
+构建:
+  固定ORB-SLAM3源码提交、OpenCV Android SDK和依赖 -> 本地构建缓存
+  自有CMake构建headless core/DBoW2/g2o/Boost序列化；不构建桌面Viewer/ROS/示例
+  APK资产加入词袋及许可证，原生lib经Gradle打包；网页不带原生资源
+  APK与网页都加载MindAR/A-Frame和原生分发器
+原生桥:
+  getCapabilities -> 检查实际lib/词袋存在，返回协议1/engine/available
+  start(targetImage, selectedQuad, viewport, calibration?) -> 会话ID；后台初始化
+  Camera2单一采集同时输出TextureView预览与ImageReader灰度帧
+  permission -> 允许后启动；退出/暂停/错误 -> 释放camera/sensors/native threads
+  原生frameQueue最多一个等待帧，丢旧帧不积压；时间戳使用采集时间
+  合法标定具备IMU外参/噪声/时间同步 -> IMU_MONOCULAR
+  未提供惯性标定 -> MONOCULAR；内参优先标定，其次Camera2数据估算并明确状态
+  原始IMU缓存按帧区间传入，禁止旧网页预测参与原生融合
+图片锚定:
+  参考图按已保存quad裁切 -> ORB参考描述子
+  每帧ORB匹配/RANSAC/PnP -> 目标到相机矩阵（图宽单位）
+  SLAM初始化期间保留图片测量；相机有足够平移且多个共同观测后拟合尺度/旋转/平移
+  对齐通过 -> 保存锚点相对地图关键帧的变换；后续只依赖SLAM
+  新地图/锚点关键帧失效 -> 重新寻找原图；失锁保留显示并暂停相机目标更新
+位姿/显示:
+  OpenCV坐标转Three坐标 -> anchorMatrix（目标到相机）
+  原生投影与TextureView使用相同屏幕旋转/cover裁切
+  网页收到sessionId/generation一致的位姿 -> 既有setArCameraPose -> 第二层缓动
+  原生异常/后台 -> 作废代次；不自动并发启用MindAR
+  纯网页/能力不可用 -> 原MindAR start/processFrame/stop及原IMU流程
+  相机设置、模型动作/物理/手动拖动和旋转保持
+本轮: 不新增/运行测试；允许构建和静态检查，未授权安装到设备或发布/提交
+```
+
+原生生命周期补充伪代码:
+```text
+Android单实例会话互斥 -> 初始化与停止不得交叉释放其他会话
+编译时镜像上游头文件并加入对象登记基类 -> KeyFrame/MapPoint/Map/Preintegrated/相机对象登记
+上游正常delete -> 注销；停止后的残余对象 -> 分类统一回收
+GBA线程取消时解锁GBA互斥量再join；完成旧任务后才启动新任务；停止时join当前GBA
+Shutdown -> join局部建图/回环 -> join GBA -> 删除跟踪组件 -> 回收残余地图与预积分
+```
+
+## 原生双后端已实现契约（2026-10-01）
+
+```text
+固定源码commit=4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4
+固定下载=OpenCV4.11.0/Boost1.85.0/Eigen3.4.0；解压前校验SHA-256
+capabilities: protocolVersion=1, engine=orb-slam3, available=真实lib和词袋可用
+start: referenceImageBase64/selectedQuad/calibration? -> sessionId,generation
+事件: status/ready/error/pose -> sessionId,generation及message/测量
+pose: timestamp,trackingState,mapId,anchored,trackedPoints,imageMatches,imuInitialized,poseValid
+      mode,calibrationQuality,anchorMatrix(列优先16),projectionMatrix(列优先16)
+首次: 图片ORB/RANSAC/PnP + SLAM共同观测 >=5、足够平移 -> 旋转SVD/正尺度/残差门控
+锚定: 使用不被常规剔除的地图首关键帧；保存目标->关键帧变换及地图点初始深度
+后续: 当前相机->首关键帧；地图点深度比中位数修正尺度 -> 目标->当前相机
+惯性: 提供Tbc/噪声/频率/timeOffsetSeconds并校验REALTIME -> IMU_MONOCULAR
+      传感器时间+标定偏移 -> 帧区间批次；惯性初始化前不固定锚点
+默认: MONOCULAR + 焦距/物理传感器尺寸估算K；明确estimated/calibrated
+渲染: OpenCV转Three -> 既有anchorMatrix图面/模型高度换算 -> 原相机缓动
+无接口: 同一APK/网页A-Frame MindAR资源与旧IMU控件；网页无原生依赖
+停止: 页面取消即作废代次/回调 -> Camera2/Sensor清理 -> worker串行销毁引擎
+本轮检查: 构建/静态语法/资产检查；不新增或执行测试/手机安装/发布/提交
+```
+
+```text
+构建资产检查: APK要求arm64 SLAM/C++库、词袋、版本/许可证、原生适配及MindAR回退脚本
+            词袋按打包源SHA-256/大小核对，默认模型和MindAR沿用固定清单检查
+相机控件: camera-settings-template.js共享模板 -> APK和网页相同默认/存储/事件逻辑
+```
+
+```text
+Android上游补丁: Tracking析构释放特征提取器/标定；不创建原本未保存的IMU重定位临时Frame
+              重定位MLPnP候选改unique_ptr自动回收；纯单目不读未初始化的IMU配置
+采集参数: ready报告后置cameraId和实际width/height；标定尺寸错误明确显示期望尺寸
+```
+
+```text
+APK标定导入: WebChromeClient文件输入 -> 系统文档选择器 -> 用户选中content Uri -> File读取JSON
+             保持本地origin白名单/禁止file导航；content读取允许，结果仅接content scheme
+             取消/新选择/Activity销毁 -> 旧ValueCallback收到null，防止悬挂
+```
+
+## 低模面间 AO 浅凹抑制（2026-10-01，已实现）
+
+```text
+用户问题 := 拉近相机后相邻低模面的 AO 暗带（非外轮廓）
+法线 := 沿用深度差分几何法线；不改模型法线或几何
+用户已确认 := 内凹交界处出现 AO
+控件 := 灯光 → AO → 浅凹抑制；0..45度 / 步长0.5度 / 默认10度
+存储 := aasc.mmdArTest.aoConcavityAngle.v1；受限时保持本次调整有效
+初始化:
+    缺失、空字符串、非法存储值 -> 默认10；合法数值 -> clamp(0,45)
+    输出数值与 window.MmdArTestAoConcavityAngle 同步
+input/change -> 校验范围 -> 即时设置 + 保存
+灯光恢复默认 -> 滑块及存储恢复10度
+每帧AO渲染:
+    角度 := window.MmdArTestAoConcavityAngle
+    lower := finite数值 ? sin(clamp(角度,0,45) * PI/180) : 0.08
+    upper := lower + 0.22（保持原有平滑过渡宽度；未指定时等价旧0.08..0.3）
+    原AO与合成补算 uniform aoFacingThreshold := (lower, upper)
+共同shader函数:
+    facing := dot(重建法线, 采样点-中心点) / 距离
+    遮蔽权重 := smoothstep(lower,upper,facing) * 原距离权重
+阈值含义 := 采样方向高出当前切平面的角度；不是两面的法线夹角
+兼容 := 半/全分辨率和补算一致；法线预览不受门限影响
+限制 := 较高门限同时减弱真实浅凹槽遮蔽，10度为起始值非已实测最优值
+构建 := 既有 build.js 复制共享shader/面板并生成指纹；同步web-dist
+状态 := 共享源码使servicePackage保持true；不改minApk/dependenciesPackage
+检查 := 静态语法/构建/差异；不新增或执行测试，不构建APK/提交/发布
+结果 := 网页构建成功；源/生成AO一致；4内联脚本/importmap语法通过
+生成AO指纹 := 8eae1293cfd9；真实近距离视觉与手机交互待验收
+```
+
 ## 主光阴影偏移控件（2026-10-01，已实现）
 
 ```text
@@ -1675,4 +2068,43 @@ DisplayMmd记忆设置 -> runtime初始化/重建时补发
 生成控件 := 起点、终点、不透明度各1个，位于各自分类
 生成指纹 := lighting64a2b657cf9f / character-depthddc72846653a / skeleton7adb2a6a6cfb / runtime0e8e21cc4809
 现场 := 实际画面/交互与性能未验收；未新增或执行测试、未打包APK/提交/发布
+```
+
+## 眉心凸面 AO 排查（2026-10-01，未改代码，用户要求暂缓）
+
+```text
+新线索 := 用户发现额头半透明覆盖面
+已核对默认 := Three.Material depthWrite=true / alphaTest=0
+加载路径 := MMDLoader按diffuse alpha设置transparent，不自动关闭depthWrite
+AO输入 := 彩色通道DepthTexture，混合透明度不等于忽略深度
+排查优先级 := 找到实际覆盖面材质/透明度/深度写入 -> 隐藏该面做同视角对比
+若确认来自覆盖面:
+    先确认具体材质及范围，再选择装饰层不写深度或独立AO深度排除策略
+    保留可见叠加；不能统一排除所有带alpha纹理的材质
+原法线/合成修改候选 := 未获确认，保留候选，优先检查覆盖面
+主光shadow bias候选 := 独立问题，仍待确认
+本轮 := 只读核对与文档，无运行代码变更或测试
+```
+
+```text
+反馈 := 抑制45度 + 拉近相机 -> 两眉中心凸面皮肤仍变暗
+角度门限局限 := 无法区分邻近眉毛几何 / 自表面 / 错误法线 / 滤波污染
+已核对:
+    法线 := 一像素深度差较小的一侧；跨面连续性尚无二像素判断
+    全分辨率合成 := 中心+四邻点深度加权平均；模糊0轮仍执行
+    半分辨率修正 := 表面归属匹配 + 原公式补算
+截图 := 用户runimg/ao1.jpg，眉心内部细红线；用户确认AO颜色红/红线来源AO
+模型资料 := 脸前有阴影材质层，眉心抽查alpha=255；不认定透明片根因
+AO候选（待确认）:
+    原AO及补算/预览共用两像素深度连续性选边法线
+    比较同侧深度线性外推至中心的误差；背景/边界邻点不作为共面证据
+    全分辨率AO直接同像素合成，半分辨率保留现有归属匹配/补算
+    保留浅凹抑制门限、模型法线与几何；实际红线改善待复现验收
+阴影现状 := PCFSoft / 1024平方 / 全角色范围 / bias=-0.0005 / normalBias=0.02
+阴影候选（待确认）:
+    web-panel-groups新增主光深度/法线偏移 -> 本地保存/灯光恢复默认
+    build.js仅测试生成runtime接入 -> 主光shadow参数即时生效
+    初始值保留现状；过大偏移可能让接触阴影脱离，需用户画面对比
+下一步 := 用户确认具体方案后更新实际伪代码再实施；不能以颜色区分替代验证
+状态 := 原因未定、问题未修复；本轮仅源码排查与文档
 ```

@@ -1,0 +1,4 @@
+#pragma once
+#include <unordered_map>
+// 上游旧g2o使用TR1名称，Android libc++提供对应的C++标准库实现。
+namespace std { namespace tr1 { using std::unordered_map; } }

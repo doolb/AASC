@@ -999,6 +999,7 @@
         state.trackingRequestId += 1;
         cancelTrackingFrame();
         if (root.MmdArTestAframeMode === true) root.MmdArTestAframeTracking?.cancelPending?.();
+        root.MmdArNativeTracking?.cancelPending?.();
         if (root.DisplayMmdProductionMindArOnly === true) root.DisplayMmdMindArTracker?.cancelPending?.();
         const session = state.trackerSession;
         state.trackerSession = null;
@@ -1048,7 +1049,7 @@
         if (result?.visible) {
             session.hasLocated = true;
             if (usesAframeTracking()) {
-                setStatus('tracking', '角色站在定位图上，视角随相机移动');
+                setStatus('tracking', result.message || '角色站在定位图上，视角随相机移动');
                 return;
             }
             setStatus('tracking', root.MmdArLocationMarkerTest === true
@@ -1080,7 +1081,7 @@
                 insufficientMatches: '未匹配到定位图，请靠近并将图片摆正',
                 unstableGeometry: '定位图位置不稳定，请保持镜头平稳'
             };
-            const message = hints[result?.reason] || '正在寻找定位图，请将基准图置于画面中央';
+            const message = result?.message || hints[result?.reason] || '正在寻找定位图，请将基准图置于画面中央';
             setStatus(session.hasLocated ? 'lost' : 'searching', message);
         }
     }

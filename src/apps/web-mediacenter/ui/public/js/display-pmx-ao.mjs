@@ -11,6 +11,15 @@ void main() {
     gl_Position = vec4(position.xy, 0.0, 1.0);
 }`;
 
+// 原 AO 和半分辨率缺失样本补算共用角度权重；只改变遮蔽判定，不修改重建法线。
+// facing 是采样方向在法线上的投影，即采样方向高出切平面角度的正弦。
+const AO_ANGLE_WEIGHT = `
+uniform vec2 aoFacingThreshold;
+float aoAngleWeight(float facing) {
+    return smoothstep(aoFacingThreshold.x, aoFacingThreshold.y, facing);
+}
+`;
+
 const AO_FRAGMENT = `
 uniform highp sampler2D tDepth;
 uniform vec2 fullResolution;
@@ -21,6 +30,8 @@ uniform float radius;
 uniform int sampleCount;
 uniform bool testNormalPreview;
 varying vec2 vUv;
+
+${AO_ANGLE_WEIGHT}
 
 vec3 viewPosition(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -153,7 +164,7 @@ void main() {
         float distanceToSample = length(delta);
         float facing = dot(normal, delta) / max(distanceToSample, 0.0001);
         float rangeWeight = 1.0 - smoothstep(0.0, radius, distanceToSample);
-        occlusion += smoothstep(0.08, 0.3, facing) * rangeWeight;
+        occlusion += aoAngleWeight(facing) * rangeWeight;
     }
     float visibility = 1.0 - min(0.6, occlusion * (8.0 / float(sampleCount)));
     gl_FragColor = vec4(vec3(visibility), 1.0);
@@ -305,6 +316,8 @@ uniform bool testNormalPreview;
 uniform float intensity;
 varying vec2 vUv;
 
+${AO_ANGLE_WEIGHT}
+
 float viewDistance(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 view = inverseProjection * clip;
@@ -443,7 +456,7 @@ float edgeFallbackAo(ivec2 pixel, float depth) {
         float distanceToSample = length(delta);
         float facing = dot(normal, delta) / max(distanceToSample, 0.0001);
         float rangeWeight = 1.0 - smoothstep(0.0, radius, distanceToSample);
-        occlusion += smoothstep(0.08, 0.3, facing) * rangeWeight;
+        occlusion += aoAngleWeight(facing) * rangeWeight;
     }
     float visibility = 1.0 - min(0.6, occlusion * (8.0 / float(sampleCount)));
 
@@ -622,6 +635,10 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         for (const material of [aoMaterial, blurMaterial, compositeMaterial]) {
             material.uniforms.testEdgeCorrection = { value: false };
         }
+        // 没有测试页角度设置时仍使用原门限；补算和原 AO 必须持有同样的值。
+        for (const material of [aoMaterial, compositeMaterial]) {
+            material.uniforms.aoFacingThreshold = { value: new THREE.Vector2(0.08, 0.3) };
+        }
         aoMaterial.uniforms.aoResolution = { value: new THREE.Vector2() };
         compositeMaterial.uniforms.fullResolution = { value: new THREE.Vector2() };
         compositeMaterial.uniforms.projection = { value: camera.projectionMatrix };
@@ -660,6 +677,13 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         resources.compositeMaterial.uniforms.testNormalPreview.value = normalPreview;
         const previousTarget = renderer.getRenderTarget();
         try {
+            // 角度在测试面板独立保存；正式页未提供数值时完整保留原 0.08..0.3 判定。
+            // 每帧只换算一次正弦，0..45 度确保平滑上界始终小于 1。
+            const concavityAngle = window.MmdArTestAoConcavityAngle;
+            const facingLower = Number.isFinite(concavityAngle)
+                ? Math.sin(Math.min(45, Math.max(0, concavityAngle)) * Math.PI / 180) : 0.08;
+            resources.aoMaterial.uniforms.aoFacingThreshold.value.set(facingLower, facingLower + 0.22);
+            resources.compositeMaterial.uniforms.aoFacingThreshold.value.set(facingLower, facingLower + 0.22);
             const edgeCorrection = (window.DisplayMmdAoEdgeCorrection ?? window.MmdArTestEdgeCorrection) !== false
                 && (resources.aoTarget.width < fullWidth || resources.aoTarget.height < fullHeight);
             resources.blurMaterial.uniforms.testEdgeCorrection.value = edgeCorrection;
