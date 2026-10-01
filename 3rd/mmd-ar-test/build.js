@@ -31,6 +31,7 @@ const WEB_PHYSICS_SUBSTEPS = WEB_MODE ? require('./web-physics-substeps') : null
 const WEB_PHYSICS_STABILITY = WEB_MODE ? require('./web-physics-stability') : null;
 const WEB_SKELETON_DEBUG = WEB_MODE ? require('./web-skeleton-debug') : null;
 const WEB_RIGID_BODY_DEBUG = WEB_MODE ? require('./web-rigid-body-debug') : null;
+const WEB_SHADOW_BIAS = require('./web-shadow-bias');
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
 const GENERATED_ASSETS = WEB_MODE
@@ -509,8 +510,8 @@ async function stageTextAssets() {
     const cameraProbeAnchor = 'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });';
     if (runtimeSource.split(cameraProbeAnchor).length !== 2) throw new Error('测试网页未找到唯一的 PMX 相机诊断锚点');
     // 只改 web-dist 副本：面板只读当前投影，不把近远裁面写进正式显示端源码或灯光配置。
-    const runtimeWithProbe = runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
-    window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`);
+    const runtimeWithProbe = WEB_SHADOW_BIAS.addShadowBiasRuntime(runtimeSource.replace(cameraProbeAnchor, `${cameraProbeAnchor}
+    window.MmdArTestCameraProjection = () => camera.projectionMatrix.toArray();`));
     if (!runtimeWithProbe.includes('getMotionProgress: () =>')) throw new Error('正式 PMX runtime 缺少 VMD 进度入口');
     await fs.writeFile(pmxRuntimePath, WEB_RIGID_BODY_DEBUG.addRigidBodyRuntime(WEB_SKELETON_DEBUG.addSkeletonRuntime(WEB_PHYSICS_SUBSTEPS.addSubstepRuntime(WEB_PHYSICS_RATE.addPhysicsRateRuntime(
       WEB_LOCAL_ASSETS.addLocalRuntime(WEB_GRAVITY_MODE.addGravityRuntime(runtimeWithProbe, gravityUrl), localAssetsUrl, motionSwitchUrl), physicsRateUrl)), skeletonUrl)

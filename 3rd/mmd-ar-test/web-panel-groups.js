@@ -1,5 +1,7 @@
 'use strict';
 
+const SHADOW_BIAS = require('./web-shadow-bias');
+
 // 仅用于 HTTPS 测试页生成阶段：移动现有控件节点，不重建输入框或改变原 ID。
 const LIGHTING_GROUPS = Object.freeze([
   ['基础光照', ['displayMmdLightingPreset', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
@@ -64,6 +66,7 @@ const WEB_PANEL_GROUP_CSS = `
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    ${SHADOW_BIAS.PANEL_JS}
     (() => {
       const toggle = document.getElementById('mmdArRigidBodyEnabled');
       const status = document.getElementById('mmdArRigidBodyStatus');
@@ -573,6 +576,7 @@ function groupWebPanels($) {
   actions.remove();
 
   groupPanel($, lightingPanel, 'display-mmd-lighting-header', LIGHTING_GROUPS);
+  SHADOW_BIAS.addShadowBiasControls($, lightingPanel);
   const aoGroup = lightingPanel.find('button[data-group-title="AO"]').closest('.mmd-ar-panel-group');
   aoGroup.find('.mmd-ar-panel-group-body').prepend(
     '<label class="display-mmd-lighting-field mmd-ar-edge-correction"><input type="checkbox" checked><span>半分辨率边界修正 <small></small></span></label>' +

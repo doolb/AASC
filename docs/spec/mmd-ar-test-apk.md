@@ -1432,3 +1432,41 @@ publishMmdArTestApk
   相机缩放作用在 A-Frame 跟随相机位置上，不改写 MindAR 锚点矩阵
   通过既有 PMX 手势、AR pose 与测试网页构建回归确认行为
 ```
+
+## 主光阴影偏移控件（2026-10-01，已实现）
+
+```text
+用户范围 := 暂不处理AO，先处理阴影；已确认主光bias/normalBias控件方案
+文件 := 新web-shadow-bias.js + web-panel-groups.js + build.js测试副本注入
+主光深度偏移bias := [-0.005,0.005] / step0.0001 / 默认-0.0005
+主光法线偏移normalBias := [0,0.1] / step0.001 / 默认0.02（场景单位）
+唯一字段定义 := 控件/默认值/校验/运行时由同一描述生成
+normalize(value, field):
+    缺失/空串/非数值类型/非finite -> field默认
+    clamp范围 -> 对齐step -> 按field小数位规范化
+控件初始化:
+    localStorage key aasc.mmdArTest.keyShadowBias.v1 -> JSON对象
+    非对象/解析错误/存储受限 -> 默认
+    规范化两值 -> 滑块/输出 -> 发布冻结的测试页设置对象
+input/change -> 读取两滑块 -> 即时发布 + 本地保存
+灯光恢复默认 -> 默认两值 -> 发布 + 保存
+独立测试runtime:
+    主/补光旧初始化后建立局部syncTestKeyShadowBias闭包
+    帧渲染在visible/disposed判断后、实际渲染前调用同步
+    设置对象未变化 -> 常数时间返回
+    新设置 -> 同一字段校验 -> 仅改keyLight.shadow.bias/normalBias
+    数值实际变化 -> keyLight.shadow.needsUpdate=true
+    不操作fillLight独立阴影参数；补光沿用主光的既有shader关系继续保留
+生命周期 := 无新增全局回调/定时器；不可见期间保存，下次渲染应用
+构建 := 本次提交为独立测试网页生成runtime注入，既有runtime指纹更新
+提交范围 := 阴影相关片段及文档；APK共享构建等其他未提交工作不带入
+本轮输出 := 本地web-dist；不重新打包APK或发布外网
+范围限制 := 不改AO、模型、正式runtime源码/灯光配置、贴图尺寸和阴影相机
+Offline状态 := 独立测试变更不改变现有发布状态
+检查 := 静态语法、生成资源与构建；不新增或执行测试
+风险 := 过大偏移可能使接触阴影脱离；保留旧默认，近距离条纹改善需现场调参
+结果 := 静态语法及网页构建通过；主光两控件唯一/参数匹配
+runtime指纹 := bb62ffb19c38；display-mmd动态导入携带同一指纹
+AO指纹 := 8eae1293cfd9；与已有源码一致，本轮不再修改
+待验收 := 实际条纹观感/偏移调节、保存/复位/主光及补光模式
+```
