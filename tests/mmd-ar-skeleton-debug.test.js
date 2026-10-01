@@ -165,7 +165,7 @@ test('无骨骼模型不分配球体，缺少刚体数据的骨骼显示灰球',
 });
 
 test('面板开关恢复偏好与转发，存储不可用或非法值仍默认关闭并可操作', () => {
-    const source = WEB_PANEL_GROUP_JS.match(/\(\(\) => \{[\s\S]*?\}\)\(\);/u)[0];
+    const source = WEB_PANEL_GROUP_JS.match(/\(\(\) => \{\s+const toggle = document.getElementById\('mmdArSkeletonEnabled'\);[\s\S]*?\}\)\(\);/u)[0];
     for (const stored of ['true', 'false', null, 'invalid', 'throws']) {
         const values = [];
         const events = new Map();

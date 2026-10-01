@@ -24,7 +24,7 @@ const TRACKING_GROUPS = Object.freeze([
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArMotionProgress']],
   ['物理', ['mmdArPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']],
-  ['骨骼', ['mmdArSkeletonLegend'], 'mmdArSkeletonEnabled'],
+  ['骨骼', ['mmdArSkeletonLegend', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus'], 'mmdArSkeletonEnabled'],
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
@@ -64,6 +64,38 @@ const WEB_PANEL_GROUP_CSS = `
 // 原灯光和定位面板会阻止点击向 document 冒泡，因此直接监听每个展开按钮。
 // 同一标题行内的原生复选框仍由原业务脚本处理，不触发分类开合。
 const WEB_PANEL_GROUP_JS = `
+    (() => {
+      const toggle = document.getElementById('mmdArRigidBodyEnabled');
+      const status = document.getElementById('mmdArRigidBodyStatus');
+      if (!toggle || !status) return;
+      const key = 'aasc.mmdArTest.rigidBodyVisible.v1';
+      try { toggle.checked = localStorage.getItem(key) === 'true'; } catch (error) { toggle.checked = false; }
+      const updateStatus = () => {
+        if (!toggle.checked) { status.textContent = '碰撞体显示已关闭'; return; }
+        const state = window.DisplayMmd?.getRigidBodyState?.();
+        if (!state?.bodyCount) { status.textContent = '当前模型没有可显示的碰撞体'; return; }
+        const modes = { physics: '实际物理姿态', preview: '未模拟，显示配置位置', mixed: '部分未模拟，包含配置位置预览', none: '等待模型显示' };
+        status.textContent = state.bodyCount + ' 个碰撞体 · ' + (modes[state.poseMode] || modes.none);
+      };
+      window.DisplayMmd?.setRigidBodyVisible?.(toggle.checked);
+      toggle.addEventListener('change', () => {
+        window.DisplayMmd?.setRigidBodyVisible?.(toggle.checked);
+        try { localStorage.setItem(key, String(toggle.checked)); } catch (error) { /* 存储受限时本次切换仍有效。 */ }
+        updateStatus();
+      });
+      // 只在动作面板打开时查询快照；不在每个渲染帧更新DOM。
+      const panel = document.getElementById('mmdArMotionPanel');
+      let timer = null;
+      const sync = () => {
+        if (timer !== null) clearInterval(timer);
+        timer = null;
+        updateStatus();
+        if (panel && !panel.hidden) timer = setInterval(updateStatus, 500);
+      };
+      if (panel) new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
+      window.addEventListener('pagehide', () => { if (timer !== null) clearInterval(timer); }, { once: true });
+      sync();
+    })();
     (() => {
       const toggle = document.getElementById('mmdArSkeletonEnabled');
       if (!toggle) return;
@@ -504,7 +536,9 @@ function groupWebPanels($) {
       '<span><i style="--bone-color:#ff3333"></i>红 type0 · 跟随骨骼</span>' +
       '<span><i style="--bone-color:#ffd633"></i>黄 type2 · 物理旋转</span>' +
       '<span><i style="--bone-color:#33e066"></i>绿 type1 · 完全物理</span>' +
-      '<span><i style="--bone-color:#9ca3af"></i>灰 · 无关联刚体</span></div>');
+      '<span><i style="--bone-color:#9ca3af"></i>灰 · 无关联刚体</span></div>' +
+      '<label class="display-mmd-lighting-field"><input id="mmdArRigidBodyEnabled" type="checkbox"><span>显示碰撞体（线框）</span></label>' +
+      '<p id="mmdArRigidBodyStatus" class="mind-basic-note" role="status">碰撞体显示已关闭</p>');
     groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
   }
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);

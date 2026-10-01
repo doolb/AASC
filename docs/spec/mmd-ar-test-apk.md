@@ -2,6 +2,45 @@
 
 本文描述 `3rd/mmd-ar-test/` 的本地测试 APK 实现。伪代码与独立 Android 工程、资源准备脚本和复用的显示端 MMD/AR 模块保持同步。
 
+### PMX碰撞体显示（2026-10-01，已实现并验证）
+
+```text
+已有声明
+  WEB_MODE资源注入、骨骼诊断叠加、动作面板、DisplayMmd转发
+  currentMesh几何MMD刚体参数、骨骼worldMatrix、helper当前physics.bodies
+新增定义
+  RigidBodyPreference { enabled，默认关闭，本地记忆 }
+  RigidBodyMarker { bodyIndex，boneIndex，type，shapeType，dimensions，offset }
+  RigidBodyOverlay { auxiliaryScene，instanceGroups，geometryCache，materials，model }
+  ShapeRules { 球半径width，盒边长2×各半边长，胶囊半径width/圆柱长height/Y轴 }
+  PoseMode { 实际物理姿态，骨骼绑定配置预览未模拟 }
+操作流程
+  WEB_MODE -> 拷贝独立模块 -> 导入骨骼颜色表及指纹 -> 接入runtime/DisplayMmd
+  动作面板骨骼分类 -> 添加独立碰撞体开关与状态说明 -> 安全恢复偏好
+  用户切换 -> 保存偏好 -> 当前runtime应用；后续runtime继承
+  提交模型 -> 清理旧overlay -> 提取加载后刚体参数；每个刚体保留独立标记
+    非法形状/尺寸/类型 -> 安全跳过；boneIndex=-1 -> 仍可显示配置或实际姿态
+  首次开启 -> 共享球/盒单位几何；胶囊按height/width比例缓存 -> 按颜色/形状分组实例化
+    胶囊统一半径缩放 -> 保留球形端帽，不用Y轴拉伸单位胶囊
+  每帧动作/物理完成 -> 判断角色可见性及首帧门控
+    关闭/不可见 -> 不读取逐刚体姿态、不更新/绘制
+    开启 -> 从当前helper读取physics，不保存已销毁的native刚体引用
+      physics有对应刚体 -> 借用COM变换与origin -> 池中旋转对象读取并归还
+        当前物理坐标系 -> 当前模型显示坐标系 -> 实际线框位置/朝向
+      没有物理 -> bone世界变换×PMX骨骼偏移；无bone则model世界变换×配置偏移
+        状态说明 -> 未模拟，显示配置位置
+    共享临时Three矩阵/向量 -> 批量更新实例矩阵
+  角色/AO之后、骨骼球之前 -> 线框独立场景叠加，忽略模型深度、不写深度
+    finally -> 恢复renderer清屏状态
+  换模型/销毁 -> 清空模型引用 -> 释放实例/材质/缓存几何；重复释放幂等
+  换VMD/物理重载 -> 读取本帧新physics；不修改速度/约束，不新增Ammo求解
+当前状态 -> 用户确认后完成；碰撞体9/骨骼8/面板8/切换及生命周期14/浏览器1，共40项通过
+  实际183体 -> 红19/黄16/绿148，134盒/49胶囊，33实例组/31几何
+  重载/两次PMX -> 释放132旧组；VMD复用；刷新恢复；无页面异常
+  真实Ammo1000帧 -> native数量稳定、4MiB探针复用、堆64MiB、速度不变
+  构建/30脚本/4内联/16导入指纹/LAN HTTP200通过；外网未发布
+```
+
 ### 骨骼物理状态小球（2026-09-30，已实现并验证）
 
 ```text

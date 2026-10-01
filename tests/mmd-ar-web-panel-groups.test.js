@@ -101,7 +101,7 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   originalIds.get('#displayArTargetPanel').sort();
 
   groupWebPanels($);
-  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonEnabled', 'mmdArSkeletonLegend');
+  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonEnabled', 'mmdArSkeletonLegend', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus');
   for (const selector of panels) {
     originalIds.get(selector).push(`${selector.slice(1)}Opacity`);
     originalIds.get(selector).sort();
@@ -146,6 +146,9 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArSkeletonEnabled').closest('.mmd-ar-panel-group-header').length, 1);
   assert.equal($('#mmdArSkeletonEnabled').is('[checked]'), false);
   assert.match($('#mmdArSkeletonLegend').text(), /红 type0.*黄 type2.*绿 type1/u);
+  assert.equal($('#mmdArRigidBodyEnabled').closest('.mmd-ar-panel-group-body').length, 1);
+  assert.equal($('#mmdArRigidBodyEnabled').is('[checked]'), false);
+  assert.equal($('#mmdArRigidBodyStatus').attr('role'), 'status');
   assert.equal($('#mmdArMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.equal($('#mmdArMotionPlayback').closest('#displayMmdLightingPanel').length, 0);
   assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 50%\), transparent\)/u);
