@@ -1,6 +1,7 @@
 import { Bone, Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import { createXpbdBody, createXpbdJoint, createXpbdSolver } from './web-xpbd-rigid.mjs';
-import { normalizeWindSettings, windFlowDirection, createWindState, advanceWindState } from './web-physics-wind.mjs';
+import { normalizeWindSettings, windFlowDirection, createWindState, advanceWindState,
+    calculateRigidWindForce, sampleRigidWindStrength } from './web-physics-wind.mjs';
 import { normalizeWebStabilityReference } from './web-physics-rate.mjs';
 
 // 对齐MMDAnimationHelper的update/reset/warmup/dispose契约；不创建或伪造Ammo对象。
@@ -36,6 +37,8 @@ export class XpbdPmxPhysics {
         this.position = new Vector3(); this.scale = new Vector3(); this.rotation = new Quaternion();
         this.windSceneRotation = new Quaternion();
         this.windVector = new Vector3(); this.lever = new Vector3(); this.torque = new Vector3();
+        this.windSceneMatrix = new Matrix4(); this.windSamplingMatrix = new Matrix4();
+        this.windSamplingPosition = new Vector3();
         this.frameRotation = new Quaternion(); this.deltaRotation = new Quaternion();
         this.matrix = new Matrix4();
         this.bonePosition = new Vector3(); this.boneRotation = new Quaternion(); this.unitScale = new Vector3(1, 1, 1);
@@ -171,15 +174,22 @@ export class XpbdPmxPhysics {
 
     _applyWind(h) {
         if (!this.windSettings.enabled) return;
-        const strength = advanceWindState(this.windState, h, this.windSettings);
+        const average = advanceWindState(this.windState, h, this.windSettings, false);
+        if (average <= 0) return;
         this.frameRotation.copy(this.windSceneRotation).invert();
         this.windVector.set(this.windDirection.x, this.windDirection.y, this.windDirection.z).applyQuaternion(this.frameRotation);
         this.mesh.getWorldQuaternion(this.frameRotation); this.windVector.applyQuaternion(this.frameRotation);
+        this.windSamplingMatrix.copy(this.mesh.matrixWorld).invert().premultiply(this.windSceneMatrix);
         for (const body of this.bodies) {
             if (!body.dynamic) continue;
-            body.force.copy(this.windVector).multiplyScalar(body.params.weight * 10 * strength);
+            this.windSamplingPosition.copy(body.position).applyMatrix4(this.windSamplingMatrix);
+            const strength = sampleRigidWindStrength(average, this.windState.time - h / 2,
+                this.windSettings.gust, this.windSamplingPosition);
+            this.lever.set(0, 0, 0);
+            if (body.positionDriven) this.lever.copy(body.windLever).applyQuaternion(body.quaternion);
+            calculateRigidWindForce(body.force, body.params, body.quaternion, body.velocity, body.omega,
+                this.lever, body.inertia, this.windVector, strength, h);
             if (!body.positionDriven) continue;
-            this.lever.copy(body.windLever).applyQuaternion(body.quaternion);
             this.torque.crossVectors(this.lever, body.force).applyQuaternion(this.frameRotation.copy(body.quaternion).invert());
             for (let i = 0; i < 3; i += 1) {
                 const limit = Math.max(0, body.inertia.getComponent(i)) * 12;
@@ -232,7 +242,10 @@ export class XpbdPmxPhysics {
         if (this.disposed || !Number.isFinite(delta) || delta <= 0) return this;
         const begin = performance.now();
         this.frameDelta = delta;
-        if (this.windSettings.enabled) this.mesh.getWorldQuaternion(this.windSceneRotation);
+        if (this.windSettings.enabled) {
+            this.mesh.getWorldQuaternion(this.windSceneRotation);
+            this.windSceneMatrix.copy(this.mesh.matrixWorld);
+        }
         this._withPhysicsSpace(this.frameAction);
         this.frameMs = performance.now() - begin;
         return this;

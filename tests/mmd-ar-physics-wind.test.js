@@ -21,7 +21,9 @@ async function fixture() {
         const threeUrl = pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href;
         const THREE = await import(threeUrl);
         const original = fs.readFileSync(path.join(vendor, 'animation/MMDPhysics.js'), 'utf8');
-        const baseSource = addPhysicsStability(addPhysicsSubsteps(addPhysicsLifecycle(original))).replace("from 'three'", `from '${threeUrl}'`);
+        const baseSource = addPhysicsStability(addPhysicsSubsteps(addPhysicsLifecycle(original)))
+            .replace("from 'three'", `from '${threeUrl}'`)
+            .replaceAll('../../../web-physics-wind.mjs', windUrl);
         const { MMDPhysics: BaselinePhysics } = await import(encode(baseSource));
         const { MMDPhysics } = await import(encode(addPhysicsWind(baseSource, windUrl)));
         globalThis.Ammo = await require(path.join(vendor, 'libs/ammo.wasm.js'))({ wasmBinary: fs.readFileSync(path.join(vendor, 'libs/ammo.wasm.wasm')) });
@@ -56,6 +58,9 @@ async function create(fps = 90, Physics, customBodies) {
 test('风参数默认关闭、经纬度与灯光一致，经典Display归一化与ESM相同', async () => {
     const { normalizeWindSettings } = await fixture();
     const context = vm.createContext({ window: {} });
+    // 正式显示端已把设置拆到独立模块；载入真实依赖，不用假实现替代参数契约。
+    const settingsPath = path.join(publicRoot, 'js/display-mmd-settings.js');
+    if (fs.existsSync(settingsPath)) new vm.Script(fs.readFileSync(settingsPath, 'utf8')).runInContext(context);
     new vm.Script(addWindDisplay(fs.readFileSync(path.join(publicRoot, 'js/display-mmd.js'), 'utf8'))).runInContext(context);
     for (const value of [undefined, null, 'bad', {}, { enabled: 'false', strength: '', longitude: NaN, latitude: Infinity, gust: null },
         { enabled: true, strength: 0, longitude: -180, latitude: 90, gust: 100 },
@@ -116,7 +121,7 @@ test('默认风关闭和零强度真实Ammo与旧流程相同，不创建受風�
     } finally { baseline.cleanup(); wind.cleanup(); }
 });
 
-test('真实Ammo连续风力含上限30按模拟秒积分，不同物理Hz/画面FPS一致，关闭保留速度', async () => {
+test('真实Ammo阻力含上限30趋近气流，不同物理Hz/画面FPS近似一致，关闭保留速度', async () => {
     for (const strength of [0.3, 30]) {
         const results = [];
         for (const [fps, renderFps] of [[30, 60], [90, 60], [180, 30], [180, 144]]) {
@@ -125,14 +130,16 @@ test('真实Ammo连续风力含上限30按模拟秒积分，不同物理Hz/画�
                 f.physics.setWindSettings({ enabled: true, strength, longitude: 90, latitude: 0 });
                 for (let i = 0; i < renderFps; i += 1) f.physics.update(1 / renderFps);
                 const body = f.physics.bodies[0].body;
-                near(body.getLinearVelocity().x(), -strength * 10 * (1 - 0.3 * (1 - Math.exp(-1 / 0.3))), 2e-5 * Math.max(1, strength));
+                const speed = Math.sqrt(20 * strength);
+                assert.ok(body.getLinearVelocity().x() < -0.5 * speed);
+                assert.ok(body.getLinearVelocity().x() >= -speed - 1e-5);
                 near(body.getLinearVelocity().z(), 0); near(body.getLinearVelocity().y(), 0);
                 const before = body.getLinearVelocity().x(); f.physics.setWindSettings({ enabled: false });
                 f.physics.update(1 / 60); near(body.getLinearVelocity().x(), before);
                 results.push({ strength, fps, renderFps, velocity: before, x: body.getCenterOfMassTransform().getOrigin().x() });
             } finally { f.cleanup(); }
         }
-        assert.ok(Math.max(...results.map((r) => r.x)) - Math.min(...results.map((r) => r.x)) < 0.05 * strength / 0.3);
+        assert.ok(Math.max(...results.map((r) => r.x)) - Math.min(...results.map((r) => r.x)) < 0.05 * Math.sqrt(20 * strength));
         console.info('真实Ammo风力跨Hz/FPS', results);
     }
 });
@@ -252,7 +259,8 @@ test('风控件持久化、损坏存储、存储受限与非法值回退，恢�
 test('注入锚点缺失或重复时显式失败', () => {
     for (const transform of [addPhysicsWind, addWindRuntime, addWindDisplay]) assert.throws(() => transform('', windUrl), /唯一锚点/);
     const display = fs.readFileSync(path.join(publicRoot, 'js/display-mmd.js'), 'utf8');
-    assert.throws(() => addWindDisplay(display + display), /唯一锚点/);
+    // 正式共享适配允许复用完整脚本；重复锚点用未打共享标记的输入验证。
+    assert.throws(() => addWindDisplay('    function setMotionPlaybackEnabled(enabled) {\n'.repeat(2)), /唯一锚点/);
 });
 
 // 使用真实PMX的完整骨骼/183刚体/261关节，仅替换材质加载；观察实际模型有限性及开启开销。
@@ -306,7 +314,8 @@ test('非单位缩放及旋转枢轴下，风保持场景来向，不随角色�
             for (let i = 0; i < 60; i += 1) f.physics.update(1 / 60);
             const v = f.physics.bodies[0].body.getLinearVelocity();
             const worldVelocity = new f.THREE.Vector3(v.x(), v.y(), v.z()).applyQuaternion(pivot.quaternion);
-            near(worldVelocity.x, 3 * (1 - 0.3 * (1 - Math.exp(-1 / 0.3))), 2e-5);
+            assert.ok(worldVelocity.x > 0.5 * Math.sqrt(6));
+            assert.ok(worldVelocity.x <= Math.sqrt(6) + 1e-5);
             near(worldVelocity.y, 0); near(worldVelocity.z, 0);
             assert.equal(f.mesh.parent, pivot);
         } finally { pivot.remove(f.mesh); f.cleanup(); }
