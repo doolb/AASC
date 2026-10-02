@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR正式刚体受风同步
+
+- ✅ [2026-10-02] 按已确认四文件方案，将相对气流、代理迎风面积、连续空间阵风和稳定阻力同步正式Ammo/刚体XPBD，保留风控件和type2位置驱动/风矩限幅。
+  - mmd-physics-wind.mjs、mmd-xpbd-physics.mjs、vendor/three/animation/MMDPhysics.js同步；web-physics-wind.js跳过已同步气动实现，重复适配不再注入声明/缓存。新增mmd-ar-production-wind.test.js。
+  - 正式与测试同源、真实两后端及生成Ammo、米娅、跨Hz/FPS、强风小质量、资源释放、光照及浏览器首次PMX共31项通过，无失败/跳过；npm网页构建和59脚本/4内联/40指纹检查通过。
+  - design/spec/task/self-test/usage/todo同步；实现任务完成移除，手机观感和全功能验收保留。servicePackage保持true，下一步签名code-only服务包并发布LAN/WAN，复用已有依赖/Node-min种子，其他APK状态保留。
+
+
 ### MMD正式用户功能与光照修复提交
 
 - ✅ [2026-10-02] 按用户要求将已完成正式用户功能迁移、共享模块依赖、lightDirectionToPosition返回/接收修复及风速说明一起提交。

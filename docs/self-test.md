@@ -1,5 +1,9 @@
 # 自测功能文档
 
+## MMD AR正式刚体受风同步回归（2026-10-02）
+
+新增tests/mmd-ar-production-wind.test.js，核对正式/测试数值模块与XPBD包装同源，以及正式Ammo经共享构建重复适配不重复声明。真实正式Ammo/XPBD覆盖强风、旋转缩放、type2位置驱动及重复释放。定向风/光照共20项通过；独立网页构建与59脚本/4内联/40指纹检查通过。生成Ammo/真实米娅XPBD及首次加载PMX/光照浏览器另外11项通过，合计31项无失败/跳过。正式手机观感与全功能现场验收待执行。
+
 ## MMD AR光照方向函数作用域回归（2026-10-02）
 
 5项通过：mmd-ar-light-direction.test.js四项执行真实模块、主运行时创建/解构及主补光定位语句，覆盖六个方向轴、默认31/46、数值异常/夹取、重新定位及尺度；mmd-ar-light-direction-browser.test.js在Chromium/SwiftShader首次加载真实米娅PMX并更新主补光，约31秒、pageerror为0。npm网页构建及59脚本/4内联/40指纹检查通过，本地web-dist已更新。用户要求后，修复及回归连同共享拆分纳入本次提交；未构建APK或发布外网。

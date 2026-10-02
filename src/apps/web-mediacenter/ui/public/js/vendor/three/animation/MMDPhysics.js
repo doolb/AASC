@@ -1,3 +1,4 @@
+import { calculateRigidWindForce, sampleRigidWindStrength } from '../../../mmd-physics-wind.mjs';
 import { normalizeWindSettings, windFlowDirection, createWindState, advanceWindState } from '../../../mmd-physics-wind.mjs';
 import {
 	Bone,
@@ -72,7 +73,9 @@ class MMDPhysics {
         this.windBodies = null;
         this.windSceneQuaternion = new Quaternion();
         this.windScratch = { force: new Vector3(), direction: new Vector3(), lever: new Vector3(), torque: new Vector3(),
-            frameQuaternion: new Quaternion(), quaternion: new Quaternion() };
+            frameQuaternion: new Quaternion(), quaternion: new Quaternion(),
+            velocity: new Vector3(), omega: new Vector3(), position: new Vector3(), matrix: new Matrix4() };
+        this.windSceneMatrix = new Matrix4();
         this.stabilityUnitStep = null;
         this.stabilityReferenceHz = 45;
         this.stabilityAppliedReferenceHz = null;
@@ -103,7 +106,10 @@ class MMDPhysics {
 	update( delta ) {
         // 高频画面帧允许没有物理子步，非法/零时间不采样也不推进。
         if (!Number.isFinite(delta) || delta <= 0) return this;
-        if (this.windSettings.enabled) this.mesh.getWorldQuaternion(this.windSceneQuaternion);
+        if (this.windSettings.enabled) {
+            this.mesh.getWorldQuaternion(this.windSceneQuaternion);
+            this.windSceneMatrix.copy(this.mesh.matrixWorld);
+        }
 
 		const manager = this.manager;
 		const mesh = this.mesh;
@@ -369,42 +375,48 @@ class MMDPhysics {
 
     _applyWind(seconds) {
         if (this.disposed || !this.windSettings.enabled) return;
-        const strength = advanceWindState(this.windState, seconds, this.windSettings);
-        if (strength <= 0) return;
-        // 第一次开启才筛选受风刚体；关闭时完全不遍历。模型切换由新物理实例重新建立缓存。
+        const average = advanceWindState(this.windState, seconds, this.windSettings, false);
+        if (average <= 0) return;
         if (!this.windBodies) this.windBodies = this.bodies.filter((entry) => entry.params.type !== 0
             && Number.isFinite(entry.params.weight) && entry.params.weight > 0);
         const scratch = this.windScratch;
         const direction = this.windDirection;
-        // 原MMDPhysics非单位缩放时会暂时脱离父级。将场景风向换到当前物理坐标，
-        // 保证经纬度和灯光同属场景方向，角色旋转/缩放不带动外部风。
         scratch.frameQuaternion.copy(this.windSceneQuaternion).invert();
         scratch.direction.set(direction.x, direction.y, direction.z).applyQuaternion(scratch.frameQuaternion);
         this.mesh.getWorldQuaternion(scratch.frameQuaternion);
         scratch.direction.applyQuaternion(scratch.frameQuaternion);
+        // 物理可能临时解除父级/尺度；此矩阵把物理COM映射回真实场景用于阵风采样。
+        scratch.matrix.copy(this.mesh.matrixWorld).invert().premultiply(this.windSceneMatrix);
         let force = null;
         let torque = null;
         try {
             force = this.manager.allocVector3();
             torque = this.manager.allocVector3();
             for (const entry of this.windBodies) {
-                scratch.force.copy(scratch.direction).multiplyScalar(entry.params.weight * 10 * strength);
+                // Bullet返回的transform/速度都是借用包装，只读，绝不destroy或放进池。
+                const transform = entry.body.getCenterOfMassTransform();
+                const origin = transform.getOrigin(), rotation = transform.getRotation();
+                const velocity = entry.body.getLinearVelocity(), omega = entry.body.getAngularVelocity();
+                scratch.position.set(origin.x(), origin.y(), origin.z()).applyMatrix4(scratch.matrix);
+                scratch.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w()).normalize();
+                scratch.velocity.set(velocity.x(), velocity.y(), velocity.z());
+                scratch.omega.set(omega.x(), omega.y(), omega.z());
+                scratch.lever.set(0, 0, 0);
+                if (entry.positionDriven) scratch.lever.copy(entry.windLever).applyQuaternion(scratch.quaternion);
+                const strength = sampleRigidWindStrength(average, this.windState.time - seconds / 2,
+                    this.windSettings.gust, scratch.position);
+                calculateRigidWindForce(scratch.force, entry.params, scratch.quaternion, scratch.velocity,
+                    scratch.omega, scratch.lever, entry.windInertia, scratch.direction, strength, seconds);
                 if (!entry.positionDriven) {
                     force.setValue(scratch.force.x, scratch.force.y, scratch.force.z);
                     entry.body.applyCentralForce(force);
                     continue;
                 }
-                // type2位置由骨骼锚点驱动：只添加近似风致力矩，不改线性因子/目标速度。
-                // 借用的Bullet姿态只读分量；等效力臂来自骨骼到刚体COM的偏移，不制造虚构偏移。
-                const rotation = entry.body.getCenterOfMassTransform().getRotation();
-                scratch.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w()).normalize();
-                scratch.lever.copy(entry.windLever).applyQuaternion(scratch.quaternion);
+                // type2位置仍由骨骼驱动，只使用真实偏移的等效风矩，保留惯量限幅。
                 scratch.torque.crossVectors(scratch.lever, scratch.force);
                 scratch.torque.applyQuaternion(scratch.quaternion.invert());
-                const inertia = entry.windInertia;
-                // 局部各轴角加速度上限12rad/s²，极小/零惯量时力矩同步趋零，避免小物件被风吹炸。
                 for (const axis of ['x', 'y', 'z']) {
-                    const limit = Number.isFinite(inertia[axis]) ? Math.max(0, inertia[axis]) * 12 : 0;
+                    const limit = Math.max(0, entry.windInertia[axis]) * 12;
                     scratch.torque[axis] = Math.min(limit, Math.max(-limit, scratch.torque[axis]));
                 }
                 scratch.torque.applyQuaternion(scratch.quaternion.invert());

@@ -191,9 +191,11 @@ module.exports = { addPhysicsWind, addWindRuntime, addWindDisplay, WIND_CONTROL_
 // 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
 module.exports = require('./web-production-shared').reuseAdapters(module.exports);
 
-// 先执行已有适配，再注入测试气动逻辑；兼容正式共享复用和原始vendor两种来源。
+// 先执行已有适配，再补齐气动逻辑；正式已同步时保留实现，避免重复声明与缓存注入。
 const basePhysicsWind = module.exports.addPhysicsWind;
 function addRigidAerodynamics(source, moduleUrl) {
+    if (source.includes('calculateRigidWindForce(scratch.force, entry.params')
+        && source.includes('this.windSceneMatrix = new Matrix4();')) return source;
     let output = `import { calculateRigidWindForce, sampleRigidWindStrength } from '${moduleUrl}';\n${source}`;
     output = once(output, 'frameQuaternion: new Quaternion(), quaternion: new Quaternion() };',
         `frameQuaternion: new Quaternion(), quaternion: new Quaternion(),
