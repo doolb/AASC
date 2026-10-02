@@ -1,3 +1,15 @@
+import { DEFAULT_AR_CAMERA_SETTINGS, normalizeArCameraSettings, classifyHit, disposeObject, waitForManagedLoad, normalizeModel, createModelRotationPivot } from './mmd-runtime-utils.mjs';
+import { createPmxLighting } from './mmd-lighting-runtime.mjs';
+import { createPmxArCamera } from './mmd-ar-camera-runtime.mjs';
+import { createPmxModelResources } from './mmd-model-runtime.mjs';
+import { createPmxCameraMotion } from './mmd-camera-motion.mjs';
+import { normalizeWindSettings } from './mmd-physics-wind.mjs';
+import { configureLocalLoader as configureCameraMotionLoader } from './mmd-local-assets.mjs';
+import { getWebPhysicsStepOptions, normalizeWebStabilityReference } from './mmd-physics-rate.mjs';
+import { prepareMotionSwitch, clearPmxPhysicsMotion } from './mmd-motion-switch.mjs';
+import { configureLocalLoader, validateLocalModel, isRegisteredLocalAsset } from './mmd-local-assets.mjs';
+import { createGravityFilter } from './mmd-gravity-filter.mjs';
+import { createShadowCameraAlignment, releaseShadowTargets } from "./mmd-shadow-camera.mjs";
 /*
  * 浏览器端 PMX/VMD 运行时。
  *
@@ -24,7 +36,6 @@ import {
 } from './pmx-display-layout.mjs';
 import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
 import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights, setPmxFillShadowMode } from './display-pmx-lighting-mode.mjs';
-
 const TARGET_MODEL_HEIGHT = 1.75;
 const MINIMUM_CAMERA_ZOOM = 0.1;
 const MAXIMUM_CAMERA_ZOOM = 10;
@@ -39,126 +50,15 @@ const MAX_CAMERA_PITCH_RADIANS = Math.PI / 4;
 const ROTATION_EASING_PER_SECOND = 1 / 0.14;
 const ROTATION_SETTLE_EPSILON = 0.0005;
 const KEY_LIGHT_DISTANCE = Math.hypot(1.5, 3, 2.5);
-const DEFAULT_AR_CAMERA_SETTINGS = Object.freeze({
-    translationDeadZonePercent: 0.5,
-    rotationDeadZoneDegrees: 0.5,
-    smoothingMs: 120,
-    distancePercent: 100,
-    targetPlane: 'floor'
-});
-
-const normalizeArCameraSettings = (input, previous = DEFAULT_AR_CAMERA_SETTINGS) => {
-    const clampSetting = (name, minimum, maximum) => {
-        const value = Number(input?.[name]);
-        return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : previous[name];
-    };
-    return {
-        translationDeadZonePercent: clampSetting('translationDeadZonePercent', 0, 3),
-        rotationDeadZoneDegrees: clampSetting('rotationDeadZoneDegrees', 0, 3),
-        smoothingMs: clampSetting('smoothingMs', 0, 500),
-        distancePercent: clampSetting('distancePercent', 50, 100),
-        targetPlane: ['floor', 'vertical'].includes(input?.targetPlane) ? input.targetPlane : previous.targetPlane
-    };
-};
-
-const classifyHit = (object) => {
-    const name = String(object?.name || '').toLowerCase();
-    if (/(head|face|eye|hair|髪|顔|頭)/u.test(name)) return 'head';
-    if (/(hand|arm|finger|手|腕)/u.test(name)) return 'hand';
-    if (/(body|chest|skirt|leg|foot|体|胸|脚)/u.test(name)) return 'body';
-    return 'body';
-};
-
-const disposeMaterial = (material) => {
-    if (!material) return;
-    for (const value of Object.values(material)) {
-        if (value && typeof value === 'object' && value.isTexture) value.dispose();
-    }
-    material.dispose?.();
-};
-
-const disposeObject = (root) => {
-    root?.traverse?.((object) => {
-        object.geometry?.dispose?.();
-        if (Array.isArray(object.material)) {
-            object.material.forEach(disposeMaterial);
-        } else {
-            disposeMaterial(object.material);
-        }
-    });
-};
-
 const isSameOriginMmdAsset = (url, extension) => {
+    if (isRegisteredLocalAsset(url, extension)) return true;
     if (typeof url !== 'string' || url.includes('://') || url.startsWith('//')
         || url.includes('..') || /[?#\\]/u.test(url)) return false;
     return MMD_MODEL_PREFIXES.some((prefix) => url.startsWith(prefix))
         && url.toLowerCase().endsWith(extension);
 };
-
-const waitForManagedLoad = (startLoad, label, onFileProgress = () => {}, onItemsProgress = () => {}) => new Promise((resolve, reject) => {
-    const loadingManager = new THREE.LoadingManager();
-    let result;
-    let resultReady = false;
-    let managerReady = false;
-    let settled = false;
-
-    const createError = (error) => {
-        const normalized = error instanceof Error ? error : new Error(`${label}资源加载失败`);
-        if (result !== undefined) normalized.partialResult = result;
-        return normalized;
-    };
-    const fail = (error) => {
-        if (settled) return;
-        settled = true;
-        reject(createError(error));
-    };
-    const tryResolve = () => {
-        if (!settled && managerReady && resultReady) {
-            settled = true;
-            resolve(result);
-        }
-    };
-
-    loadingManager.onLoad = () => {
-        managerReady = true;
-        tryResolve();
-    };
-    loadingManager.onProgress = (url, loaded, total) => onItemsProgress(url, loaded, total);
-    loadingManager.onError = (url) => fail(new Error(`${label}资源加载失败：${url}`));
-
-    try {
-        const loader = new MMDLoader(loadingManager);
-        startLoad(loader, (value) => {
-            result = value;
-            resultReady = true;
-            tryResolve();
-        }, fail, onFileProgress);
-    } catch (error) {
-        fail(error);
-    }
-});
-
-const normalizeModel = (mesh) => {
-    return normalizePmxPhysicsMesh(mesh, THREE);
-};
-
-function createModelRotationPivot(model) {
-    const pivot = new THREE.Group();
-    if (!model?.isObject3D) return pivot;
-    const bounds = new THREE.Box3().setFromObject(model);
-    if (!bounds.isEmpty()) {
-        pivot.position.copy(bounds.getCenter(new THREE.Vector3()));
-    }
-    // attach 保持模型当前世界变换，使贴地、骨骼动画和资源自身姿态不被枢轴改变。
-    pivot.updateWorldMatrix(true, false);
-    model.updateWorldMatrix(true, false);
-    pivot.attach(model);
-    return pivot;
-}
-
 export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgress = () => {} } = {}) {
     if (!canvas) throw new Error('PMX Canvas 不存在');
-
     const renderer = new THREE.WebGLRenderer({
         canvas,
         alpha: true,
@@ -171,7 +71,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(28, 1, PMX_CAMERA_NEAR, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
@@ -184,7 +83,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentYaw: 0,
         currentPitch: 0
     };
-
     const applyCameraView = () => {
         const cosPitch = Math.cos(cameraViewState.currentPitch);
         const distance = cameraDistance / cameraZoomFactor;
@@ -196,7 +94,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         );
         camera.lookAt(target);
     };
-
     const updateCameraView = (delta) => {
         const yawDistance = cameraViewState.targetYaw - cameraViewState.currentYaw;
         const pitchDistance = cameraViewState.targetPitch - cameraViewState.currentPitch;
@@ -213,7 +110,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         applyCameraView();
         return true;
     };
-
     const setCameraViewRotation = (yawRadians, pitchRadians = 0) => {
         const yaw = Number(yawRadians);
         const pitch = Number(pitchRadians);
@@ -245,6 +141,103 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         light.shadow.bias = -0.0005;
         light.shadow.normalBias = 0.02;
     }
+    // 仅独立测试生成副本：渲染前读取主光设置，不改正式配置或补光自己的阴影。
+    const syncTestKeyShadowBias = (() => {
+
+      const shadowBiasFields = [{"key":"bias","id":"mmdArKeyShadowBias","label":"阴影深度偏移 bias","min":-0.005,"max":0.005,"step":0.0001,"digits":4,"defaultValue":-0.0005},{"key":"normalBias","id":"mmdArKeyShadowNormalBias","label":"阴影法线偏移 normalBias","min":0,"max":0.1,"step":0.001,"digits":3,"defaultValue":0.02}];
+      function normalizeShadowBias(value, field) {
+  // 空值、布尔值和对象不参与 Number 隐式换算，避免误把坏存储值解释为零。
+  if (!['number', 'string'].includes(typeof value) || String(value).trim() === '') return field.defaultValue;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return field.defaultValue;
+  const bounded = Math.min(field.max, Math.max(field.min, number));
+  return Number((Math.round(bounded / field.step) * field.step).toFixed(field.digits));
+}
+      let appliedSettings = null;
+      return () => {
+        const settings = window.DisplayMmdKeyShadowSettings;
+        if (!settings || settings === appliedSettings) return;
+        const bias = normalizeShadowBias(settings.bias, shadowBiasFields[0]);
+        const normalBias = normalizeShadowBias(settings.normalBias, shadowBiasFields[1]);
+        appliedSettings = settings;
+        if (keyLight.shadow.bias === bias && keyLight.shadow.normalBias === normalBias) return;
+        keyLight.shadow.bias = bias;
+        keyLight.shadow.normalBias = normalBias;
+        keyLight.shadow.needsUpdate = true;
+      };
+    })();
+    syncTestKeyShadowBias();
+    function normalizeShadowMapSize(value, maxSize = 4096) {
+  const sizes = [512, 1024, 2048, 4096];
+  const requested = ['number', 'string'].includes(typeof value) && String(value).trim() !== ''
+    && sizes.includes(Number(value)) ? Number(value) : 1024;
+  const limit = Number.isFinite(Number(maxSize)) && Number(maxSize) >= 1 ? Number(maxSize) : 4096;
+  const supported = sizes.filter(size => size <= limit && size <= requested);
+  return supported.at(-1) || Math.min(512, 2 ** Math.floor(Math.log2(limit)));
+}
+    function normalizeShadowCameraScale(value) {
+  if (!['number', 'string'].includes(typeof value) || String(value).trim() === '') return 1;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Number((Math.round(Math.max(0.1, Math.min(2, number)) * 100) / 100).toFixed(2));
+}
+    const alignTestShadowCamera = createShadowCameraAlignment(THREE);
+    let shadowFollowRoot = null;
+    const shadowFollowPosition = new THREE.Vector3();
+    const shadowFollowScale = new THREE.Vector3();
+    const shadowRootPosition = new THREE.Vector3();
+    const shadowRootScale = new THREE.Vector3();
+    const shadowFollowDelta = new THREE.Vector3();
+    let shadowFitCount = 0;
+    let shadowTranslationCount = 0;
+    const captureTestShadowRoot = (root) => {
+        shadowFollowRoot = root?.isObject3D ? root : null;
+        if (!shadowFollowRoot) return;
+        root.getWorldPosition(shadowFollowPosition);
+        root.getWorldScale(shadowFollowScale);
+    };
+    // 纯平移只搬动已拟合的灯位/目标/承接面；换根或缩放才重新计算角色包围范围。
+    const followTestShadowRoot = () => {
+        const root = currentRotationPivot || currentMesh;
+        if (!root) { shadowFollowRoot = null; return; }
+        root.getWorldPosition(shadowRootPosition);
+        root.getWorldScale(shadowRootScale);
+        if (root !== shadowFollowRoot || shadowRootScale.distanceToSquared(shadowFollowScale) > 1e-16) {
+            fitShadowCamera(root);
+            return;
+        }
+        shadowFollowDelta.subVectors(shadowRootPosition, shadowFollowPosition);
+        if (shadowFollowDelta.lengthSq() <= 1e-20) return;
+        for (const light of [keyLight, fillLight]) {
+            light.position.add(shadowFollowDelta);
+            light.target.position.add(shadowFollowDelta);
+            light.shadow.needsUpdate = true;
+        }
+        shadowPlane.position.add(shadowFollowDelta);
+        shadowFollowPosition.copy(shadowRootPosition);
+        shadowTranslationCount += 1;
+    };
+    const shadowMapLimit = renderer.capabilities.maxTextureSize;
+    window.DisplayMmdShadowMapLimit = shadowMapLimit;
+    window.dispatchEvent(new CustomEvent('mmd-ar-shadow-map-limit'));
+    // 初次同步发生在fitShadowCamera/角色变量声明前，初值不触发拟合；模型提交会正常拟合。
+    let appliedShadowCameraScale = normalizeShadowCameraScale(window.DisplayMmdShadowMapSettings?.cameraScale);
+    const syncTestShadowMapSize = () => {
+        const settings = window.DisplayMmdShadowMapSettings;
+        const size = normalizeShadowMapSize(settings?.size, shadowMapLimit);
+        for (const light of [keyLight, fillLight]) {
+            if (light.shadow.mapSize.x === size && light.shadow.mapSize.y === size) continue;
+            releaseShadowTargets(light.shadow);
+            light.shadow.mapSize.set(size, size);
+            light.shadow.needsUpdate = true;
+        }
+        const cameraScale = normalizeShadowCameraScale(settings?.cameraScale);
+        if (cameraScale !== appliedShadowCameraScale) {
+            appliedShadowCameraScale = cameraScale;
+            fitShadowCamera(currentRotationPivot || currentMesh);
+        }
+    };
+    syncTestShadowMapSize();
     const shadowMaterial = new THREE.ShadowMaterial({
         color: 0x000000,
         opacity: 0.28,
@@ -255,7 +248,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     shadowPlane.rotation.x = -Math.PI / 2;
     shadowPlane.receiveShadow = true;
     scene.add(ambientLight, keyLight, keyLight.target, fillLight, fillLight.target, shadowPlane);
-
     let shadowEnabled = true;
     let shadowSource = 'key';
     let webFillShadowMode = false;
@@ -276,7 +268,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             { enabled: false, color: '#ffb6d9', intensity: 1, direction: { longitude: 130, latitude: 25 } }
         ],
         pmxToonEnabled: false,
-        physicsFps: 65,
+        physicsFps: 90,
         rotationPhysicsLimit: 720,
         pmxAoColor: '#931231',
         pmxAoIntensity: 0.6,
@@ -286,7 +278,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         pmxAoBlurPassCount: 1,
         pmxAoBlurRadii: [3, 3, 3]
     };
-
     const getModelBounds = (root) => {
         if (root?.isObject3D) {
             const bounds = new THREE.Box3().setFromObject(root);
@@ -297,7 +288,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             new THREE.Vector3(TARGET_MODEL_HEIGHT * 0.25, TARGET_MODEL_HEIGHT, TARGET_MODEL_HEIGHT * 0.25)
         );
     };
-
     const applyKeyLightPosition = (bounds) => {
         const center = bounds.getCenter(new THREE.Vector3());
         const size = bounds.getSize(new THREE.Vector3());
@@ -316,13 +306,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         );
         fillLight.target.position.copy(center);
     };
-
     const applyAoRadius = (bounds) => {
         // AO 半径随当前角色包围盒缩放；调整滑块或换模型时都沿用同一比例。
         const modelHeight = bounds.getSize(new THREE.Vector3()).y;
         ambientOcclusion.setRadius(Math.max(0.005, modelHeight * lightingState.pmxAoRadiusPercent / 100));
     };
-
     const fitCameraToModel = (root) => {
         const bounds = getModelBounds(root);
         const frame = calculatePmxCameraFrame(bounds, {
@@ -339,7 +327,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         applyAoRadius(bounds);
         return frame;
     };
-
     const applyShadowFlags = (root) => {
         root?.traverse?.((object) => {
             if (!object.isMesh) return;
@@ -347,13 +334,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             object.receiveShadow = shadowEnabled;
         });
     };
-
     const fitShadowCamera = (root) => {
         const bounds = getModelBounds(root);
         const center = bounds.getCenter(new THREE.Vector3());
         const size = bounds.getSize(new THREE.Vector3());
         const radius = Math.max(TARGET_MODEL_HEIGHT * 0.65, size.length() * 0.5);
-        const extent = radius * SHADOW_FRUSTUM_MARGIN;
+        const extent = radius * SHADOW_FRUSTUM_MARGIN * 0.5 * normalizeShadowCameraScale(window.DisplayMmdShadowMapSettings?.cameraScale);
         applyKeyLightPosition(bounds);
         shadowPlane.scale.setScalar(Math.max(1, Math.max(size.x, size.z) * 2 / 8));
         shadowPlane.position.y = bounds.min.y - Math.max(0.001, size.y * 0.0001);
@@ -370,8 +356,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             shadowCamera.updateProjectionMatrix();
             light.shadow.needsUpdate = true;
         }
+        shadowPlane.position.x = center.x; shadowPlane.position.z = center.z;
+        captureTestShadowRoot(root);
+        shadowFitCount += 1;
     };
-
     const applyShadowMode = () => {
         renderer.shadowMap.enabled = shadowEnabled;
         if (webFillShadowMode) {
@@ -386,149 +374,64 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         applyShadowFlags(currentMesh);
         fitShadowCamera(currentRotationPivot || currentMesh);
     };
-
-    const normalizeLightNumber = (value, minimum, maximum, fallback) => {
-        const number = Number(value);
-        if (!Number.isFinite(number)) return fallback;
-        return Math.min(maximum, Math.max(minimum, number));
-    };
-
-    const normalizePhysicsFps = (value) => {
-        const clamped = normalizeLightNumber(value, 30, 90, lightingState.physicsFps);
-        return Math.round(clamped / 5) * 5;
-    };
-
-    const normalizeRotationPhysicsLimit = (value) => {
-        const clamped = normalizeLightNumber(value, 30, 1440, lightingState.rotationPhysicsLimit);
-        return Math.round(clamped / 10) * 10;
-    };
-
-    const normalizeLightColor = (value, fallback = '#ffffff') => {
-        const color = String(value || '').trim();
-        return /^#[0-9a-f]{6}$/iu.test(color) ? color : fallback;
-    };
-
-    const normalizeLightDirection = (value) => ({
-        longitude: normalizeLightNumber(value?.longitude, -180, 180, 31),
-        latitude: normalizeLightNumber(value?.latitude, -90, 90, 46)
-    });
-
-    const lightDirectionToPosition = (value) => {
-        const direction = normalizeLightDirection(value);
-        const longitude = direction.longitude * Math.PI / 180;
-        const latitude = direction.latitude * Math.PI / 180;
-        const horizontalDistance = Math.cos(latitude) * KEY_LIGHT_DISTANCE;
-        return {
-            x: Math.sin(longitude) * horizontalDistance,
-            y: Math.sin(latitude) * KEY_LIGHT_DISTANCE,
-            z: Math.cos(longitude) * horizontalDistance
-        };
-    };
-
-    const setLighting = (lighting = {}) => {
-        const keyDirection = normalizeLightDirection(lighting.keyDirection);
-        lightingState.ambientColor = normalizeLightColor(lighting.ambientColor);
-        lightingState.ambientIntensity = normalizeLightNumber(lighting.ambientIntensity, 0, 4, 1.8);
-        lightingState.keyColor = normalizeLightColor(lighting.keyColor);
-        lightingState.keyIntensity = normalizeLightNumber(lighting.keyIntensity, 0, 5, 2.3);
-        lightingState.keyDirection = keyDirection;
-        lightingState.fillEnabled = lighting.fillEnabled === true;
-        lightingState.fillColor = normalizeLightColor(lighting.fillColor);
-        lightingState.fillIntensity = normalizeLightNumber(lighting.fillIntensity, 0, 5, 1);
-        lightingState.fillDirection = {
-            longitude: normalizeLightNumber(lighting.fillDirection?.longitude, -180, 180, -45),
-            latitude: normalizeLightNumber(lighting.fillDirection?.latitude, -90, 90, 25)
-        };
-        lightingState.rimLights = lightingState.rimLights.map((defaults, index) => {
-            const value = Array.isArray(lighting.rimLights) ? lighting.rimLights[index] : null;
-            return {
-                enabled: typeof value?.enabled === 'boolean' ? value.enabled : defaults.enabled,
-                color: normalizeLightColor(value?.color, defaults.color),
-                intensity: normalizeLightNumber(value?.intensity, 0, 5, defaults.intensity),
-                direction: {
-                    longitude: normalizeLightNumber(value?.direction?.longitude, -180, 180, defaults.direction.longitude),
-                    latitude: normalizeLightNumber(value?.direction?.latitude, -90, 90, defaults.direction.latitude)
-                }
-            };
-        });
-        lightingState.pmxToonEnabled = lighting.pmxToonEnabled === true;
-        lightingState.physicsFps = normalizePhysicsFps(lighting.physicsFps);
-        lightingState.rotationPhysicsLimit = normalizeRotationPhysicsLimit(lighting.rotationPhysicsLimit);
-        lightingState.pmxAoColor = normalizeLightColor(lighting.pmxAoColor, '#931231');
-        lightingState.pmxAoIntensity = normalizeLightNumber(lighting.pmxAoIntensity, 0, 2, 0.6);
-        lightingState.pmxAoRadiusPercent = Math.round(normalizeLightNumber(lighting.pmxAoRadiusPercent, 1, 20, 6));
-        lightingState.pmxAoResolution = lighting.pmxAoResolution === 'full' ? 'full' : 'half';
-        lightingState.pmxAoSampleCount = [12, 24, 32].includes(Number(lighting.pmxAoSampleCount))
-            ? Number(lighting.pmxAoSampleCount) : 24;
-        lightingState.pmxAoBlurPassCount = Math.round(normalizeLightNumber(lighting.pmxAoBlurPassCount, 0, 3, 1));
-        lightingState.pmxAoBlurRadii = [0, 1, 2].map((index) => Math.round(normalizeLightNumber(
-            lighting.pmxAoBlurRadii?.[index], 1, 5, 3
-        )));
-        const currentPhysics = helper.current?.objects?.get(currentMesh)?.physics;
-        if (currentPhysics) currentPhysics.unitStep = 1 / lightingState.physicsFps;
-        ambientLight.color.set(lightingState.ambientColor);
-        ambientLight.intensity = lightingState.ambientIntensity;
-        keyLight.color.set(lightingState.keyColor);
-        keyLight.intensity = lightingState.keyIntensity;
-        fillLight.color.set(lightingState.fillColor);
-        fillLight.intensity = lightingState.fillEnabled ? lightingState.fillIntensity : 0;
-        setPmxLightingMode(currentMesh, lightingState.pmxToonEnabled);
-        setPmxRimLights(currentMesh, lightingState.rimLights);
-        // 兼容旧版持久化的布尔开关；新字段优先，避免切换阴影来源后又被旧值覆盖。
-        shadowSource = ['none', 'key', 'fill'].includes(lighting.shadowSource)
-            ? lighting.shadowSource : lighting.shadowEnabled === false ? 'none' : 'key';
-        webFillShadowMode = lighting.webFillShadowMode === true;
-        keyShadowEnabled = lighting.keyShadowEnabled !== false;
-        shadowEnabled = webFillShadowMode
-            ? keyShadowEnabled || (lightingState.fillEnabled && shadowSource === 'fill')
-            : (shadowSource !== 'none' && (shadowSource !== 'fill' || lightingState.fillEnabled));
-        setPmxFillShadowMode(currentMesh, webFillShadowMode && keyShadowEnabled
-            && lightingState.fillEnabled && shadowSource === 'key');
-        pmxAoEnabled = lighting.pmxAoEnabled !== false;
-        ambientOcclusion.setEnabled(pmxAoEnabled);
-        ambientOcclusion.setResolution(lightingState.pmxAoResolution);
-        ambientOcclusion.setSampleCount(lightingState.pmxAoSampleCount);
-        ambientOcclusion.setBlurPasses(lightingState.pmxAoBlurPassCount, lightingState.pmxAoBlurRadii);
-        ambientOcclusion.setColor(lightingState.pmxAoColor);
-        ambientOcclusion.setIntensity(lightingState.pmxAoIntensity);
-        applyAoRadius(getModelBounds(currentRotationPivot || currentMesh));
-        applyShadowMode();
-        return {
-            ambientColor: lightingState.ambientColor,
-            ambientIntensity: ambientLight.intensity,
-            keyColor: lightingState.keyColor,
-            keyIntensity: keyLight.intensity,
-            keyDirection,
-            fillEnabled: lightingState.fillEnabled,
-            fillColor: lightingState.fillColor,
-            fillIntensity: lightingState.fillIntensity,
-            fillDirection: { ...lightingState.fillDirection },
-            rimLights: lightingState.rimLights.map((rim) => ({ ...rim, direction: { ...rim.direction } })),
-            pmxToonEnabled: lightingState.pmxToonEnabled,
-            shadowEnabled,
-            shadowSource,
-            keyShadowEnabled,
-            physicsFps: lightingState.physicsFps,
-            rotationPhysicsLimit: lightingState.rotationPhysicsLimit,
-            pmxAoEnabled,
-            pmxAoColor: lightingState.pmxAoColor,
-            pmxAoIntensity: lightingState.pmxAoIntensity,
-            pmxAoRadiusPercent: lightingState.pmxAoRadiusPercent,
-            pmxAoResolution: lightingState.pmxAoResolution,
-            pmxAoSampleCount: lightingState.pmxAoSampleCount,
-            pmxAoBlurPassCount: lightingState.pmxAoBlurPassCount,
-            pmxAoBlurRadii: [...lightingState.pmxAoBlurRadii]
-        };
-    };
-
     const helper = { current: null };
     const physicsGate = { paused: false };
     let motionPlaybackEnabled = true;
     let pendingInitialMotionHelper = null;
+    let motionSwitchMesh = null;
     let physicsEnabled = true;
+    let physicsSolver = 'ammo';
+    function normalizePhysicsSolver(value) {
+    return ['xpbd', 'three-xpbd'].includes(value) ? 'xpbd' : 'ammo';
+}
+    const setPhysicsSolver = (value) => { physicsSolver = normalizePhysicsSolver(value); return physicsSolver; };
+    const getPhysicsSolverState = () => {
+        const physics = helper.current?.objects?.get(currentMesh)?.physics;
+        if (!physics) return { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 };
+        return { solver: physics.engine || 'ammo', active: physicsEnabled,
+            bodyCount: physics.bodies.length, jointCount: physics.constraints.length,
+            frameMs: physics.frameMs || 0, ...physics.getState?.() };
+    };
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let currentMesh = null;
+    const syncTestFillFacingRange = (() => {
+      function normalizeFillFacingRange(value = {}, editedKey = '') {
+  const normalize = (input, fallback) => {
+    if (!['number', 'string'].includes(typeof input) || String(input).trim() === '') return fallback;
+    const number = Number(input);
+    return Number.isFinite(number) ? Math.round(Math.max(-1, Math.min(1, number)) * 100) / 100 : fallback;
+  };
+  let start = Math.min(0.99, normalize(value?.start, -0.3));
+  let end = Math.max(-0.99, normalize(value?.end, 0.3));
+  if (end - start < 0.0099) {
+    if (editedKey === 'end') start = Number((end - 0.01).toFixed(2));
+    else end = Number((start + 0.01).toFixed(2));
+  }
+  return { start, end };
+}
+      let appliedSettings = null;
+      let appliedMesh = null;
+      return () => {
+        const settings = window.DisplayMmdFillFacingRange;
+        if (!currentMesh || !settings || (settings === appliedSettings && currentMesh === appliedMesh)) return;
+        const range = normalizeFillFacingRange(settings);
+        let updated = false;
+        currentMesh.traverse(object => {
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          for (const material of materials) {
+            const uniform = material?.uniforms?.pmxFillKeyFacingRange;
+            if (!uniform) continue;
+            uniform.value.set(range.start, range.end);
+            updated = true;
+          }
+        });
+        // 材质尚未进入测试阴影路径时继续等待，不缓存未成功应用的模型。
+        if (!updated) return;
+        appliedSettings = settings;
+        appliedMesh = currentMesh;
+      };
+    })();
     let currentRotationPivot = null;
     const arCameraState = {
         active: false,
@@ -544,7 +447,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         acceptedQuaternion: new THREE.Quaternion(),
         lastPose: null
     };
-
     const getArCameraTargetCenter = (aspect = 1) => {
         const center = arCameraState.targetPosition?.clone();
         if (!center) return null;
@@ -553,7 +455,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         }
         return center;
     };
-
     const zoomCameraBy = (factor) => {
         const numericFactor = Number(factor);
         if (!Number.isFinite(numericFactor) || numericFactor <= 0) return false;
@@ -579,6 +480,21 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         startRendering();
         return true;
     };
+    // 手动角度和相机坐标中的重力倾斜分别保存，最终只合成角色锚点四元数。
+    const manualRotation = { yaw: 0, pitch: 0 };
+    const gravityFilter = createGravityFilter(THREE);
+    const setModelGravityRotation = (value, force = false) => {
+        if (!gravityFilter.setTarget(value, force)) return false;
+        rotationState.fitShadowWhenSettled = true;
+        startRendering();
+        return true;
+    };
+    const setModelGravitySettings = (value) => {
+        const settings = gravityFilter.setSettings(value);
+        rotationState.fitShadowWhenSettled = true;
+        startRendering();
+        return settings;
+    };
     const rotationState = {
         targetYaw: 0,
         targetPitch: 0,
@@ -590,50 +506,83 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     let modelSequence = 0;
     let frameHandle = 0;
     let lastFrameAt = performance.now();
+    let physicsStabilityReferenceHz = 45;
+    const setPhysicsStabilityReference = (value) => {
+        physicsStabilityReferenceHz = normalizeWebStabilityReference(value);
+        const physics = helper.current?.objects?.get(currentMesh)?.physics;
+        if (physics) {
+            Object.assign(physics, getWebPhysicsStepOptions(lightingState.physicsFps, physicsStabilityReferenceHz));
+            // 只改基准不触发变频检测，需显式立即重算六轴纠错率。
+            if (typeof physics.setStabilityReferenceHz === 'function') {
+                physics.setStabilityReferenceHz(physicsStabilityReferenceHz);
+            }
+        }
+        startRendering();
+        return physicsStabilityReferenceHz;
+    };
+    let windSettings = normalizeWindSettings();
+    let windVersion = 0;
+    const appliedWindVersions = new WeakMap();
+    const syncPhysicsWind = (physics) => {
+        if (!physics || appliedWindVersions.get(physics) === windVersion) return;
+        physics.setWindSettings(windSettings);
+        appliedWindVersions.set(physics, windVersion);
+    };
+    const setWindSettings = (value) => {
+        windSettings = normalizeWindSettings(value);
+        windVersion += 1;
+        syncPhysicsWind(helper.current?.objects?.get(currentMesh)?.physics);
+        startRendering();
+        return { ...windSettings };
+    };
     let visible = true;
     let disposed = false;
     let fallbackObject = null;
-
     function resetModelRotation() {
         rotationState.targetYaw = currentRotationPivot?.rotation.y || 0;
         rotationState.targetPitch = currentRotationPivot?.rotation.x || 0;
+        manualRotation.yaw = rotationState.targetYaw;
+        manualRotation.pitch = rotationState.targetPitch;
         rotationState.fitShadowWhenSettled = false;
         physicsGate.paused = false;
     }
-
     function updateModelRotation(delta) {
         if (!currentRotationPivot) return false;
-        const yawDistance = rotationState.targetYaw - currentRotationPivot.rotation.y;
-        const pitchDistance = rotationState.targetPitch - currentRotationPivot.rotation.x;
-        const settled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
+        const previous = currentRotationPivot.quaternion.clone();
+        const yawDistance = rotationState.targetYaw - manualRotation.yaw;
+        const pitchDistance = rotationState.targetPitch - manualRotation.pitch;
+        const manualSettled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
             && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON;
-        if (settled) {
-            const pivotMoved = Math.abs(yawDistance) >= Number.EPSILON
-                || Math.abs(pitchDistance) >= Number.EPSILON;
-            currentRotationPivot.rotation.y = rotationState.targetYaw;
-            currentRotationPivot.rotation.x = rotationState.targetPitch;
-            if (rotationState.fitShadowWhenSettled) {
-                rotationState.fitShadowWhenSettled = false;
-                currentRotationPivot.updateWorldMatrix(true, true);
-                fitShadowCamera(currentRotationPivot);
-            }
-            return pivotMoved ? Math.hypot(yawDistance, pitchDistance) : 0;
+        const easing = manualSettled ? 1 : 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
+        manualRotation.yaw += yawDistance * easing;
+        manualRotation.pitch += pitchDistance * easing;
+        const gravityQuaternion = gravityFilter.update(delta);
+        const settled = manualSettled && gravityFilter.isSettled();
+        const manual = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(manualRotation.pitch, manualRotation.yaw, 0, 'XYZ'));
+        // 相机方向已经在本帧更新，倾斜先转到世界坐标，再左乘手动角度。
+        const worldGravity = camera.quaternion.clone().multiply(gravityQuaternion)
+            .multiply(camera.quaternion.clone().invert());
+        currentRotationPivot.quaternion.copy(worldGravity.multiply(manual)).normalize();
+        const moved = previous.angleTo(currentRotationPivot.quaternion);
+        if (moved > Number.EPSILON) {
+            keyLight.shadow.needsUpdate = true;
+            fillLight.shadow.needsUpdate = true;
         }
-        const easing = 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
-        currentRotationPivot.rotation.y += yawDistance * easing;
-        currentRotationPivot.rotation.x += pitchDistance * easing;
-        keyLight.shadow.needsUpdate = true;
-        fillLight.shadow.needsUpdate = true;
-        return Math.hypot(yawDistance * easing, pitchDistance * easing);
+        if (settled && rotationState.fitShadowWhenSettled) {
+            rotationState.fitShadowWhenSettled = false;
+            currentRotationPivot.updateWorldMatrix(true, true);
+            fitShadowCamera(currentRotationPivot);
+        }
+        // 组合后的实际旋转角进入原物理保护，快速重力倾斜也不能绕过保护。
+        return moved;
     }
-
     const clearFallback = () => {
         if (!fallbackObject) return;
         scene.remove(fallbackObject);
         disposeObject(fallbackObject);
         fallbackObject = null;
     };
-
     const showFallback = () => {
         // 模型切换失败时保留当前完整模型，避免加载错误导致画面闪回占位或 T-pose。
         if (currentMesh) return;
@@ -655,7 +604,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         }
         startRendering();
     };
-
     const stopMotion = () => {
         pendingInitialMotionHelper = null;
         if (helper.current && currentMesh) {
@@ -668,7 +616,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         helper.current = null;
         currentMotionResourceId = null;
     };
-
     const disposeCurrentModel = () => {
         motionSequence += 1;
         stopMotion();
@@ -682,13 +629,30 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentRotationPivot = null;
         resetModelRotation();
     };
-
     const renderFrame = (now) => {
         frameHandle = 0;
         if (!visible || disposed) return;
-        const delta = Math.min(0.1, Math.max(0, (now - lastFrameAt) / 1000));
+        syncTestKeyShadowBias();
+        syncTestFillFacingRange();
+        syncTestShadowMapSize();
+        const frameSeconds = Math.max(0, (now - lastFrameAt) / 1000);
+        // 浏览器后台暂停后不沿用旧时间余量；只同步历史，保留动态布料已有运动。
+        if (frameSeconds > 0.1) helper.current?.objects?.get(currentMesh)?.physics?.resetAnchorInterpolation();
+        const delta = Math.min(0.1, frameSeconds);
         lastFrameAt = now;
-        const frameHelper = helper.current;
+        if (arCameraState.active && !arCameraState.trackingLost) {
+            // 以实际帧间隔做指数缓动；只有目标姿态越过死区才会移动。
+            const easingSeconds = arCameraState.settings.smoothingMs / 1000;
+            const alpha = easingSeconds <= 0 ? 1 : 1 - Math.exp(-delta / easingSeconds);
+            camera.position.lerp(arCameraState.acceptedPosition, alpha);
+            camera.quaternion.slerp(arCameraState.acceptedQuaternion, alpha);
+            camera.updateMatrix();
+            camera.updateMatrixWorld(true);
+        } else if (!arCameraState.active) {
+            if (!advanceCameraMotion(delta)) updateCameraView(delta);
+        }
+        const frameHelper = motionSwitchMesh === currentMesh ? null : helper.current;
+        syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);
         const delayInitialMotion = frameHelper && pendingInitialMotionHelper === frameHelper;
         if (delayInitialMotion) {
             // 新模型第一个实际显示帧先让物理和画面更新，VMD 从下一帧才推进。
@@ -710,22 +674,15 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         } finally {
             if (delayInitialMotion) setPmxMotionPlaybackEnabled(frameHelper, motionPlaybackEnabled);
         }
-        if (arCameraState.active && !arCameraState.trackingLost) {
-            // 以实际帧间隔做指数缓动；只有目标姿态越过死区才会移动。
-            const easingSeconds = arCameraState.settings.smoothingMs / 1000;
-            const alpha = easingSeconds <= 0 ? 1 : 1 - Math.exp(-delta / easingSeconds);
-            camera.position.lerp(arCameraState.acceptedPosition, alpha);
-            camera.quaternion.slerp(arCameraState.acceptedQuaternion, alpha);
-            camera.updateMatrix();
-            camera.updateMatrixWorld(true);
-        } else if (!arCameraState.active) {
-            updateCameraView(delta);
-        }
         const firstFramePivot = delayInitialMotion ? currentRotationPivot : null;
         const firstFramePivotVisible = firstFramePivot?.visible;
         if (firstFramePivot) firstFramePivot.visible = false;
         try {
             // 首帧物理照常运行，但不把动作起始姿态绘制出来；下一帧才显示模型。
+            followTestShadowRoot();
+            if (renderer.shadowMap.enabled) {
+                for (const light of [keyLight, fillLight]) if (light.castShadow) alignTestShadowCamera(light);
+            }
             if (currentMesh) ambientOcclusion.render();
             else renderer.render(scene, camera);
         } finally {
@@ -734,7 +691,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         }
         frameHandle = requestAnimationFrame(renderFrame);
     };
-
     const startRendering = () => {
         if (!visible || disposed || frameHandle) return;
         lastFrameAt = performance.now();
@@ -746,165 +702,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         getViewport: () => ({ width: canvas.clientWidth, height: canvas.clientHeight }),
         startRendering
     });
-
-    const resetArCameraPose = () => {
-        arFootAnchor.reset();
-        if (!arCameraState.active) {
-            cameraZoomFactor = 1;
-            applyCameraView();
-            startRendering();
-            return;
-        }
-        if (currentRotationPivot) currentRotationPivot.visible = arCameraState.savedVisible;
-        arCameraState.active = false;
-        arCameraState.savedVisible = null;
-        arCameraState.targetPosition = null;
-        arCameraState.targetWidth = 1;
-        arCameraState.trackingLost = false;
-        arCameraState.lastPose = null;
-        camera.matrixAutoUpdate = true;
-        camera.fov = 28;
-        camera.aspect = Math.max(1, canvas.clientWidth) / Math.max(1, canvas.clientHeight);
-        fitCameraToModel(currentRotationPivot || currentMesh);
-        startRendering();
-    };
-
-    const resetArPose = () => {
-        arFootAnchor.reset();
-        cameraZoomFactor = 1;
-        if (!arCameraState.active) applyCameraView();
-        startRendering();
-    };
-
-    const suspendArCameraPose = () => {
-        if (!arCameraState.active) return;
-        // 失锁时连未完成的缓动也暂停，保持用户当时看到的画面。
-        arCameraState.trackingLost = true;
-        arCameraState.acceptedPosition.copy(camera.position);
-        const targetCenter = getArCameraTargetCenter(arCameraState.lastPose?.targetAspect || 1);
-        if (targetCenter) {
-            arCameraState.acceptedBasePosition.copy(camera.position).sub(targetCenter)
-                .multiplyScalar(cameraZoomFactor).add(targetCenter);
-        }
-        arCameraState.acceptedQuaternion.copy(camera.quaternion);
-        startRendering();
-    };
-
-    const setArCameraSettings = (input) => {
-        if ((!window.MmdArAframeMode && !window.MmdArTestAframeMode) || !input || typeof input !== 'object') return false;
-        const oldDistance = arCameraState.settings.distancePercent;
-        const oldPlane = arCameraState.settings.targetPlane;
-        arCameraState.settings = normalizeArCameraSettings(input, arCameraState.settings);
-        // 距离和定位面变化时重算相机；切换底面/立面立即对齐，避免跨平面的缓动偏离。
-        if (arCameraState.active && !arCameraState.trackingLost
-            && (oldDistance !== arCameraState.settings.distancePercent
-                || oldPlane !== arCameraState.settings.targetPlane) && arCameraState.lastPose) {
-            if (setArCameraPose(arCameraState.lastPose) && oldPlane !== arCameraState.settings.targetPlane) {
-                camera.position.copy(arCameraState.acceptedPosition);
-                camera.quaternion.copy(arCameraState.acceptedQuaternion);
-                camera.updateMatrix();
-                camera.updateMatrixWorld(true);
-            }
-        }
-        return { ...arCameraState.settings };
-    };
-
-    const setArCameraPose = ({ anchorMatrix, projectionMatrix, targetAspect } = {}) => {
-        if ((!window.MmdArAframeMode && !window.MmdArTestAframeMode) || !currentRotationPivot
-            || !Array.isArray(anchorMatrix) || anchorMatrix.length !== 16
-            || !Array.isArray(projectionMatrix) || projectionMatrix.length !== 16
-            || [...anchorMatrix, ...projectionMatrix].some((value) => !Number.isFinite(value))) return false;
-        const fixedProjection = normalizePmxProjectionNear(projectionMatrix);
-        if (!fixedProjection) return false;
-        const targetToCamera = new THREE.Matrix4().fromArray(anchorMatrix);
-        if (Math.abs(targetToCamera.determinant()) < 1e-8) return false;
-        const firstLock = !arCameraState.active;
-        const anchorPosition = new THREE.Vector3();
-        const anchorQuaternion = new THREE.Quaternion();
-        const anchorScale = new THREE.Vector3();
-        targetToCamera.decompose(anchorPosition, anchorQuaternion, anchorScale);
-        if (firstLock) {
-            arCameraState.acceptedAnchorPosition.copy(anchorPosition);
-            arCameraState.acceptedAnchorQuaternion.copy(anchorQuaternion);
-        } else {
-            // 死区判断直接使用 MindAR 的定位图位姿，避免距离设置放大相机位移后误判抖动。
-            const translationThreshold = arCameraState.settings.translationDeadZonePercent / 100;
-            const translation = arCameraState.acceptedAnchorPosition.distanceTo(anchorPosition);
-            if (translation > translationThreshold) {
-                arCameraState.acceptedAnchorPosition.lerp(anchorPosition,
-                    (translation - translationThreshold) / translation);
-            }
-            const rotationThreshold = THREE.MathUtils.degToRad(arCameraState.settings.rotationDeadZoneDegrees);
-            const rotation = arCameraState.acceptedAnchorQuaternion.angleTo(anchorQuaternion);
-            if (rotation > rotationThreshold) {
-                arCameraState.acceptedAnchorQuaternion.slerp(anchorQuaternion,
-                    (rotation - rotationThreshold) / rotation);
-            }
-        }
-        targetToCamera.compose(arCameraState.acceptedAnchorPosition,
-            arCameraState.acceptedAnchorQuaternion, anchorScale);
-        if (firstLock) {
-            // 图面映射到现有角色脚底；只改变相机，避免改写 PMX 根节点和 Bullet 刚体的世界变换。
-            const bounds = getModelBounds(currentRotationPivot);
-            const modelHeight = Math.max(0.001, bounds.max.y - bounds.min.y);
-            const center = bounds.getCenter(new THREE.Vector3());
-            arCameraState.savedVisible = currentRotationPivot.visible;
-            arCameraState.targetPosition = new THREE.Vector3(center.x, bounds.min.y, center.z);
-            arCameraState.targetWidth = modelHeight / 1.5;
-            arCameraState.active = true;
-        }
-        currentRotationPivot.visible = true;
-        const aspect = Number.isFinite(targetAspect) && targetAspect > 0 ? targetAspect : 1;
-        const isVertical = arCameraState.settings.targetPlane === 'vertical';
-        // 立面时图的下边缘中点落在脚底；底面仍将图中心落在脚底。
-        const targetCenter = arCameraState.targetPosition.clone();
-        if (isVertical) targetCenter.y += arCameraState.targetWidth * aspect / 2;
-        const targetWorld = new THREE.Matrix4().makeTranslation(...targetCenter.toArray())
-            .multiply(new THREE.Matrix4().makeRotationX(isVertical ? 0 : -Math.PI / 2))
-            .multiply(new THREE.Matrix4().makeScale(arCameraState.targetWidth, arCameraState.targetWidth, arCameraState.targetWidth));
-        const cameraWorld = targetWorld.multiply(targetToCamera.invert());
-        camera.matrixAutoUpdate = false;
-        const cameraScale = new THREE.Vector3();
-        const nextPosition = new THREE.Vector3();
-        const nextQuaternion = new THREE.Quaternion();
-        cameraWorld.decompose(nextPosition, nextQuaternion, cameraScale);
-        // 沿相机与定位图中心的连线拉近；模型根节点与目标跟踪旋转保持不变。
-        nextPosition.sub(targetCenter)
-            .multiplyScalar(arCameraState.settings.distancePercent / 100)
-            .add(targetCenter);
-        arCameraState.acceptedBasePosition.copy(nextPosition);
-        nextPosition.sub(targetCenter).multiplyScalar(1 / cameraZoomFactor).add(targetCenter);
-        if (firstLock) {
-            camera.position.copy(nextPosition);
-            camera.quaternion.copy(nextQuaternion);
-            arCameraState.acceptedPosition.copy(nextPosition);
-            arCameraState.acceptedQuaternion.copy(nextQuaternion);
-        } else {
-            // 相机姿态只由已接受的定位图位姿换算；距离滑条不参与死区判断。
-            arCameraState.acceptedPosition.copy(nextPosition);
-            arCameraState.acceptedQuaternion.copy(nextQuaternion);
-        }
-        arCameraState.trackingLost = false;
-        arCameraState.lastPose = {
-            anchorMatrix: [...anchorMatrix],
-            projectionMatrix: fixedProjection.matrix,
-            targetAspect: aspect
-        };
-        camera.scale.set(1, 1, 1);
-        if (firstLock || arCameraState.settings.smoothingMs <= 0) {
-            camera.position.copy(arCameraState.acceptedPosition);
-            camera.quaternion.copy(arCameraState.acceptedQuaternion);
-            camera.updateMatrix();
-            camera.updateMatrixWorld(true);
-        }
-        camera.near = fixedProjection.near;
-        camera.far = fixedProjection.far;
-        camera.projectionMatrix.fromArray(fixedProjection.matrix);
-        camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-        startRendering();
-        return true;
-    };
-
     const resize = (width, height, devicePixelRatio = window.devicePixelRatio || 1) => {
         const safeWidth = Math.max(1, Number(width) || window.innerWidth || 1);
         const safeHeight = Math.max(1, Number(height) || window.innerHeight || 1);
@@ -917,223 +714,18 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         if (!arCameraState.active) fitCameraToModel(currentRotationPivot || currentMesh);
         startRendering();
     };
-
-    const loadModelMesh = (url, report) => {
-        let modelDownloadComplete = false;
-        return waitForManagedLoad(
-            (loader, resolve, reject, progress) => loader.load(url, resolve, progress, reject),
-            'PMX 模型',
-            (event) => {
-                // Three.js FileLoader 产生的 ProgressEvent 没有 target URL；首个完整下载事件后忽略纹理事件。
-                if (modelDownloadComplete || !event?.lengthComputable || event.total <= 0) return;
-                report('下载 PMX', 1 + Math.floor(69 * event.loaded / event.total));
-                if (event.loaded >= event.total) modelDownloadComplete = true;
-            },
-            (resourceUrl, loaded, total) => {
-                if (!/\.(?:png|jpe?g|bmp|tga)$/iu.test(resourceUrl) || total <= 0) return;
-                report('加载纹理', 70 + Math.floor(14 * loaded / total));
-            }
-        );
-    };
-
-    const loadAnimationClip = (url, mesh, report = () => {}) => waitForManagedLoad(
-        (loader, resolve, reject, progress) => loader.loadAnimation(url, mesh, resolve, progress, reject),
-        'VMD 动作',
-        (event) => {
-            if (!event?.lengthComputable || event.total <= 0) return;
-            report('下载 VMD', 85 + Math.floor(9 * event.loaded / event.total));
-        }
-    );
-
-    const createMotionHelper = async (mesh, clip, playMode = 'loop') => {
-        const prepared = await createPmxMotionHelper({
-            mesh,
-            clip,
-            playMode,
-            MMDAnimationHelper,
-            loopRepeat: THREE.LoopRepeat,
-            loopOnce: THREE.LoopOnce,
-            physicsEnabled,
-            physicsFps: lightingState.physicsFps,
-            // 仅刚体 PMX 才会在这里惰性初始化 Ammo；失败时 helper 自动回退为无物理解算。
-            ensurePhysics: ensureAmmoPhysics
-        });
-        setPmxMotionPlaybackEnabled(prepared.helper, motionPlaybackEnabled);
-        const physics = prepared.helper?.objects?.get(mesh)?.physics;
-        if (physics) physics.unitStep = 1 / lightingState.physicsFps;
-        return prepared;
-    };
-
-    const validateMotionResource = (profile, resourceId) => {
-        if (!profile || resourceId !== profile.motionResourceId) {
-            throw new Error('动作资源不在当前 PMX profile 白名单中');
-        }
-        if (!isSameOriginMmdAsset(profile.motionUrl, '.vmd')) {
-            throw new Error('VMD 地址必须是同源 MMD 资源');
-        }
-    };
-
-    const preparePmxHelper = async (
-        mesh,
-        profile,
-        resourceId = profile.motionResourceId,
-        report = () => {}
-    ) => {
-        let clip = null;
-        if (resourceId && profile.motionUrl) {
-            validateMotionResource(profile, resourceId);
-            report('下载 VMD', 85);
-            clip = await loadAnimationClip(profile.motionUrl, mesh, report);
-        }
-        report('初始化模型与物理', 95);
-        return createMotionHelper(mesh, clip, profile.playMode);
-    };
-
-    const disposeStagedResources = (mesh, stagedHelper, stagedPivot = null) => {
-        if (stagedPivot) scene.remove(stagedPivot);
-        if (stagedHelper && mesh) {
-            try {
-                stagedHelper.remove(mesh);
-            } catch (error) {
-                console.warn('[显示端 PMX] 释放待提交动作失败:', error);
-            }
-        }
-        if (mesh) disposeObject(mesh);
-    };
-
-    const loadMotionInternal = async (resourceId) => {
-        validateMotionResource(currentProfile, resourceId);
-        if (!currentMesh) throw new Error('当前 PMX 模型尚未加载');
-        const sequence = ++motionSequence;
-        const mesh = currentMesh;
-        const profile = currentProfile;
-        const preparedHelper = await preparePmxHelper(mesh, profile, resourceId);
-        const nextHelper = preparedHelper.helper;
-        if (disposed || sequence !== motionSequence || mesh !== currentMesh || profile !== currentProfile) {
-            disposeStagedResources(mesh, nextHelper);
-            return false;
-        }
-        stopMotion();
-        helper.current = nextHelper;
-        currentMotionResourceId = resourceId;
-        return preparedHelper;
-    };
-
-    const loadMotion = async (resourceId) => {
-        try {
-            const preparedHelper = await loadMotionInternal(resourceId);
-            if (!preparedHelper) return false;
-            onStatus(preparedHelper.physicsError
-                ? `PMX 物理不可用，已回退骨骼动画：${preparedHelper.physicsError.message}`
-                : 'VMD 动作已加载');
-            return true;
-        } catch (error) {
-            onStatus(`VMD 动作加载失败：${error.message}`);
-            return false;
-        }
-    };
-
-    const load = async (profile) => {
-        if (!profile || profile.modelType !== 'pmx' || !isSameOriginMmdAsset(profile.modelUrl, '.pmx')) {
-            throw new Error('PMX profile 或模型地址无效');
-        }
-        disposed = false;
-        const sequence = ++modelSequence;
-        let stagedMesh = null;
-        let stagedHelper = null;
-        let stagedPivot = null;
-        let stagedPhysicsError = null;
-        let progressPercent = 0;
-        const report = (phase, percent) => {
-            if (disposed || sequence !== modelSequence) return;
-            progressPercent = Math.max(progressPercent, Math.min(99, Math.round(percent)));
-            onProgress({ phase, percent: progressPercent });
-        };
-        onStatus('正在加载 PMX 模型…');
-        report('下载 PMX', 1);
-        try {
-            stagedMesh = await loadModelMesh(profile.modelUrl, report);
-            report('加载纹理', 84);
-            // MMDLoader 把 PMX 材质的环境色映射成 emissive；按显示端规则始终忽略这部分亮度。
-            stagedMesh.traverse((object) => {
-                if (!object.isMesh) return;
-                const materials = Array.isArray(object.material) ? object.material : [object.material];
-                for (const material of materials) {
-                    if (!material?.isMMDToonMaterial) continue;
-                    material.emissive.setRGB(0, 0, 0);
-                    preparePmxLightingMaterial(material, lightingState.pmxToonEnabled, webFillShadowMode);
-                }
-            });
-            setPmxRimLights(stagedMesh, lightingState.rimLights);
-            normalizeModel(stagedMesh);
-            const staged = await stagePmxMesh({
-                scene,
-                mesh: stagedMesh,
-                createPivot: createModelRotationPivot,
-                prepareHelper: () => preparePmxHelper(
-                    stagedMesh,
-                    profile,
-                    profile.motionResourceId,
-                    report
-                )
-            });
-            stagedPivot = staged.pivot;
-            stagedHelper = staged.preparedHelper.helper;
-            stagedPhysicsError = staged.preparedHelper.physicsError;
-            if (disposed || sequence !== modelSequence) {
-                disposeStagedResources(stagedMesh, stagedHelper, stagedPivot);
-                return false;
-            }
-
-            // 暂存枢轴已在最终场景中完成初始状态准备，提交后下一帧才推进物理。
-            clearFallback();
-            disposeCurrentModel();
-            currentMesh = stagedMesh;
-            setPmxFillShadowMode(currentMesh, webFillShadowMode && keyShadowEnabled
-                && lightingState.fillEnabled && shadowSource === 'key');
-            currentRotationPivot = stagedPivot;
-            resetModelRotation();
-            currentRotationPivot.updateWorldMatrix(true, true);
-            currentProfile = profile;
-            helper.current = stagedHelper;
-            pendingInitialMotionHelper = stagedHelper;
-            currentMotionResourceId = profile.motionResourceId || null;
-            applyShadowFlags(currentMesh);
-            stagedPivot.visible = true;
-            fitCameraToModel(currentRotationPivot);
-            fitShadowCamera(currentRotationPivot);
-            stagedMesh = null;
-            stagedHelper = null;
-            stagedPivot = null;
-            report('模型就绪', 99);
-            onStatus(stagedPhysicsError
-                ? `PMX 物理不可用，已回退骨骼动画：${stagedPhysicsError.message}`
-                : 'PMX 模型已加载');
-            startRendering();
-            return true;
-        } catch (error) {
-            const partialMesh = error?.partialResult;
-            if (!stagedMesh && partialMesh?.isObject3D) stagedMesh = partialMesh;
-            disposeStagedResources(stagedMesh, stagedHelper, stagedPivot);
-            throw error instanceof Error ? error : new Error('PMX 模型加载失败');
-        }
-    };
-
     const playMotion = async (resourceId) => loadMotion(resourceId);
-
     const setMotionPlaybackEnabled = (enabled) => {
         motionPlaybackEnabled = enabled === true;
         setPmxMotionPlaybackEnabled(helper.current, motionPlaybackEnabled);
         startRendering();
         return motionPlaybackEnabled;
     };
-
     const setPhysicsEnabled = (enabled) => {
         // 仅影响下次创建的 helper；调用方重新加载模型，避免把冻结的布料误判为无物理结果。
         physicsEnabled = enabled === true;
         return physicsEnabled;
     };
-
     const handleActionPlan = (plan) => {
         const steps = Array.isArray(plan?.steps) ? plan.steps : [];
         return Promise.all(steps
@@ -1141,8 +733,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             .map((step) => playMotion(step.resourceId)))
             .then((results) => results.every(Boolean));
     };
-
     const setVisible = (nextVisible) => {
+        if (nextVisible === true && !visible) {
+            helper.current?.objects?.get(currentMesh)?.physics?.resetAnchorInterpolation();
+        }
         visible = nextVisible === true;
         if (visible) {
             startRendering();
@@ -1151,7 +745,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         if (frameHandle) cancelAnimationFrame(frameHandle);
         frameHandle = 0;
     };
-
     const rotateModelBy = (yawRadians, pitchRadians = 0) => {
         if (!currentMesh || !currentRotationPivot) return false;
         const yawDelta = Number(yawRadians);
@@ -1166,7 +759,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         startRendering();
         return true;
     };
-
     const finishModelRotation = () => {
         if (!currentRotationPivot) return false;
         rotationState.fitShadowWhenSettled = true;
@@ -1174,7 +766,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         startRendering();
         return true;
     };
-
     const raycast = (point) => {
         if (!currentRotationPivot || !point) return null;
         pointer.set(Number(point.normalizedX) || 0, Number(point.normalizedY) || 0);
@@ -1182,9 +773,117 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         const intersections = raycaster.intersectObject(currentRotationPivot, true);
         return intersections.length ? classifyHit(intersections[0].object) : null;
     };
-
+/* aasc-module-start:mmd-lighting-runtime.mjs */
+    const { setLighting, lightDirectionToPosition } = createPmxLighting({
+        KEY_LIGHT_DISTANCE,
+        ambientLight,
+        ambientOcclusion,
+        applyAoRadius,
+        applyShadowMode,
+        fillLight,
+        getModelBounds,
+        getWebPhysicsStepOptions,
+        helper,
+        keyLight,
+        lightingState,
+        setPmxFillShadowMode,
+        setPmxLightingMode,
+        setPmxRimLights,
+        get currentMesh() { return currentMesh; }, set currentMesh(value) { currentMesh = value; },
+        get shadowSource() { return shadowSource; }, set shadowSource(value) { shadowSource = value; },
+        get shadowEnabled() { return shadowEnabled; }, set shadowEnabled(value) { shadowEnabled = value; },
+        get webFillShadowMode() { return webFillShadowMode; }, set webFillShadowMode(value) { webFillShadowMode = value; },
+        get keyShadowEnabled() { return keyShadowEnabled; }, set keyShadowEnabled(value) { keyShadowEnabled = value; },
+        get pmxAoEnabled() { return pmxAoEnabled; }, set pmxAoEnabled(value) { pmxAoEnabled = value; },
+        get physicsStabilityReferenceHz() { return physicsStabilityReferenceHz; }, set physicsStabilityReferenceHz(value) { physicsStabilityReferenceHz = value; },
+        get currentRotationPivot() { return currentRotationPivot; }, set currentRotationPivot(value) { currentRotationPivot = value; }
+    });
+/* aasc-module-end:mmd-lighting-runtime.mjs */
+/* aasc-module-start:mmd-ar-camera-runtime.mjs */
+    const { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose } = createPmxArCamera({
+        THREE,
+        applyCameraView,
+        arCameraState,
+        arFootAnchor,
+        camera,
+        canvas,
+        fitCameraToModel,
+        getArCameraTargetCenter,
+        getModelBounds,
+        normalizeArCameraSettings,
+        normalizePmxProjectionNear,
+        startRendering,
+        get currentMesh() { return currentMesh; }, set currentMesh(value) { currentMesh = value; },
+        get currentRotationPivot() { return currentRotationPivot; }, set currentRotationPivot(value) { currentRotationPivot = value; },
+        get cameraZoomFactor() { return cameraZoomFactor; }, set cameraZoomFactor(value) { cameraZoomFactor = value; },
+        get cameraDistance() { return cameraDistance; }, set cameraDistance(value) { cameraDistance = value; }
+    });
+/* aasc-module-end:mmd-ar-camera-runtime.mjs */
+/* aasc-module-start:mmd-model-runtime.mjs */
+    const { load, loadSelectedMotion, loadMotion, validateMotionResource } = createPmxModelResources({
+        MMDAnimationHelper,
+        THREE,
+        applyShadowFlags,
+        clearFallback,
+        clearPmxPhysicsMotion,
+        configureLocalLoader,
+        createModelRotationPivot,
+        createPmxMotionHelper,
+        disposeCurrentModel,
+        disposeObject,
+        ensureAmmoPhysics,
+        fitCameraToModel,
+        fitShadowCamera,
+        getWebPhysicsStepOptions,
+        helper,
+        isSameOriginMmdAsset,
+        lightingState,
+        normalizeModel,
+        onProgress,
+        onStatus,
+        physicsGate,
+        prepareMotionSwitch,
+        preparePmxLightingMaterial,
+        resetModelRotation,
+        scene,
+        setPmxFillShadowMode,
+        setPmxMotionPlaybackEnabled,
+        setPmxRimLights,
+        stagePmxMesh,
+        startRendering,
+        stopMotion,
+        syncPhysicsWind,
+        validateLocalModel,
+        waitForManagedLoad,
+        get currentMesh() { return currentMesh; }, set currentMesh(value) { currentMesh = value; },
+        get currentRotationPivot() { return currentRotationPivot; }, set currentRotationPivot(value) { currentRotationPivot = value; },
+        get currentProfile() { return currentProfile; }, set currentProfile(value) { currentProfile = value; },
+        get currentMotionResourceId() { return currentMotionResourceId; }, set currentMotionResourceId(value) { currentMotionResourceId = value; },
+        get motionSequence() { return motionSequence; }, set motionSequence(value) { motionSequence = value; },
+        get modelSequence() { return modelSequence; }, set modelSequence(value) { modelSequence = value; },
+        get disposed() { return disposed; }, set disposed(value) { disposed = value; },
+        get motionSwitchMesh() { return motionSwitchMesh; }, set motionSwitchMesh(value) { motionSwitchMesh = value; },
+        get pendingInitialMotionHelper() { return pendingInitialMotionHelper; }, set pendingInitialMotionHelper(value) { pendingInitialMotionHelper = value; },
+        get physicsSolver() { return physicsSolver; }, set physicsSolver(value) { physicsSolver = value; },
+        get physicsEnabled() { return physicsEnabled; }, set physicsEnabled(value) { physicsEnabled = value; },
+        get physicsStabilityReferenceHz() { return physicsStabilityReferenceHz; }, set physicsStabilityReferenceHz(value) { physicsStabilityReferenceHz = value; },
+        get motionPlaybackEnabled() { return motionPlaybackEnabled; }, set motionPlaybackEnabled(value) { motionPlaybackEnabled = value; },
+        get keyShadowEnabled() { return keyShadowEnabled; }, set keyShadowEnabled(value) { keyShadowEnabled = value; },
+        get shadowSource() { return shadowSource; }, set shadowSource(value) { shadowSource = value; },
+        get webFillShadowMode() { return webFillShadowMode; }, set webFillShadowMode(value) { webFillShadowMode = value; }
+    });
+/* aasc-module-end:mmd-model-runtime.mjs */
+    const cameraMotion = createPmxCameraMotion({ THREE, camera, arCameraState, PMX_CAMERA_NEAR,
+        MMDAnimationHelper, fitCameraToModel, getModelBounds, validateMotionResource,
+        configureCameraMotionLoader, waitForManagedLoad, onProgress, onStatus, startRendering,
+        get currentMesh() { return currentMesh; }, get currentProfile() { return currentProfile; },
+        get currentRotationPivot() { return currentRotationPivot; }, get disposed() { return disposed; }
+    });
+    const { advanceCameraMotion, loadCameraMotion, setCameraMotionPlaybackEnabled,
+        getCameraMotionProgress, clearCameraMotion } = cameraMotion;
     const dispose = () => {
         disposed = true;
+        cameraMotion.disposeCameraMotion();
         modelSequence += 1;
         motionSequence += 1;
         if (frameHandle) cancelAnimationFrame(frameHandle);
@@ -1193,10 +892,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         clearFallback();
         scene.remove(shadowPlane);
         disposeObject(shadowPlane);
+        for (const light of [keyLight, fillLight]) releaseShadowTargets(light.shadow);
         ambientOcclusion.dispose();
         renderer.dispose();
     };
-
     return Object.freeze({
         dispose,
         getArCameraSyncState: () => window.MmdArAframeMode || window.MmdArTestAframeMode === true ? {
@@ -1223,17 +922,31 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         handleActionPlan,
         load,
         loadMotion,
+        loadSelectedMotion,
         playMotion,
         raycast,
         resetArPose,
         resetArCameraPose,
         rotateModelBy,
+        setModelGravityRotation,
+        setModelGravitySettings,
+        getModelGravityState: () => gravityFilter.getState(),
         finishModelRotation,
         setCameraViewRotation,
         setArCameraPose,
         setArCameraSettings,
+        setPhysicsStabilityReference,
+        getPhysicsStabilityReference: () => physicsStabilityReferenceHz,
+        setWindSettings,
+        getWindSettings: () => ({ ...windSettings }),
+        setPhysicsSolver,
+        getPhysicsSolverState,
         setMotionPlaybackEnabled,
         getMotionPlaybackEnabled: () => motionPlaybackEnabled,
+        loadCameraMotion,
+        setCameraMotionPlaybackEnabled,
+        getCameraMotionProgress,
+        clearCameraMotion,
         // 动作面板只读当前 VMD action；不向外暴露 mixer，也不改变物理状态。
         getMotionProgress: () => {
             const action = helper.current?.objects?.get(currentMesh)?.mixer?._actions?.[0];
@@ -1254,3 +967,16 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         showFallback
     });
 }
+/* aasc-shared:addShadowBiasRuntime */
+/* aasc-shared:addFillFacingRuntime */
+/* aasc-shared:addShadowMapRuntime */
+/* aasc-shared:addGravityRuntime */
+/* aasc-shared:addLocalRuntime */
+/* aasc-shared:addPhysicsRateRuntime */
+/* aasc-shared:addSubstepRuntime */
+/* aasc-shared:addCameraMotionRuntime */
+/* aasc-shared:addStabilityRuntime */
+
+/* aasc-shared:addWindRuntime */
+
+/* aasc-shared:addSolverRuntime */

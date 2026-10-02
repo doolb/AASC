@@ -151,3 +151,6 @@ function addLocalDisplay(source, moduleUrl = './web-local-assets.mjs') {
 }
 
 module.exports = { addLocalRuntime, addLocalDisplay };
+
+// 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
+module.exports = require('./web-production-shared').reuseAdapters(module.exports);

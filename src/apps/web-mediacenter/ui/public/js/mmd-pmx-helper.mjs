@@ -1,3 +1,4 @@
+import { getWebPhysicsStepOptions } from './mmd-physics-rate.mjs';
 /*
  * PMX 的 MMDAnimationHelper 创建逻辑。
  *
@@ -6,12 +7,13 @@
  */
 import { hasMmdPhysics } from './mmd-ammo-physics.mjs';
 
-const DEFAULT_PMX_PHYSICS_FPS = 65;
+const DEFAULT_PMX_PHYSICS_FPS = 90;
 
 const normalizePmxPhysicsFps = (value) => {
+    if (value === null || (typeof value === 'string' && value.trim() === '')) return DEFAULT_PMX_PHYSICS_FPS;
     const number = Number(value);
     if (!Number.isFinite(number)) return DEFAULT_PMX_PHYSICS_FPS;
-    const clamped = Math.min(90, Math.max(30, number));
+    const clamped = Math.min(180, Math.max(30, number));
     return Math.round(clamped / 5) * 5;
 };
 
@@ -23,16 +25,16 @@ const buildMotionHelper = ({
     loopRepeat,
     loopOnce,
     physics,
-    physicsFps
+    physicsFps,
+    physicsSolver
 }) => {
     const helper = new MMDAnimationHelper({ sync: false, pmxAnimation: true });
-    const options = { physics };
+    const options = { physics, physicsSolver };
     if (physics) {
         // 不在隐藏加载阶段推进物理或自动套用 VMD 首帧；动作从可见后的渲染帧开始。
         options.warmup = 0;
         options.animationWarmup = false;
-        options.unitStep = 1 / normalizePmxPhysicsFps(physicsFps);
-        options.maxStepNum = 3;
+        Object.assign(options, getWebPhysicsStepOptions(normalizePmxPhysicsFps(physicsFps)));
     }
     if (clip) options.animation = clip;
     helper.add(mesh, options);
@@ -74,6 +76,7 @@ function resetPmxPhysicsAfterRotation(physics, pivot) {
     // 动作已经推进到当前帧；先刷新骨骼矩阵，再让刚体贴合当前姿态。
     pivot?.updateWorldMatrix?.(true, true);
     physics.reset();
+    if (physics.engine === 'xpbd') { physics.resetMotion(); return; }
     const zero = physics.manager.allocVector3();
     zero.setValue(0, 0, 0);
     try {
@@ -137,7 +140,8 @@ export async function createPmxMotionHelper({
     loopOnce,
     ensurePhysics,
     physicsEnabled = true,
-    physicsFps = DEFAULT_PMX_PHYSICS_FPS
+    physicsFps = DEFAULT_PMX_PHYSICS_FPS,
+    physicsSolver = 'ammo'
 }) {
     const commonOptions = {
         mesh,
@@ -146,7 +150,8 @@ export async function createPmxMotionHelper({
         MMDAnimationHelper,
         loopRepeat,
         loopOnce,
-        physicsFps
+        physicsFps,
+        physicsSolver
     };
     if (!physicsEnabled || !hasMmdPhysics(mesh)) {
         return {
@@ -157,13 +162,14 @@ export async function createPmxMotionHelper({
     }
 
     try {
-        await ensurePhysics();
+        if (physicsSolver !== 'xpbd') await ensurePhysics();
         return {
             helper: buildMotionHelper({ ...commonOptions, physics: true }),
             physicsEnabled: true,
             physicsError: null
         };
     } catch (error) {
+        if (physicsSolver !== 'ammo') throw error;
         return {
             helper: buildMotionHelper({ ...commonOptions, physics: false }),
             physicsEnabled: false,
@@ -171,3 +177,7 @@ export async function createPmxMotionHelper({
         };
     }
 }
+
+/* aasc-shared:addPhysicsRateHelper */
+
+/* aasc-shared:addSolverHelper */

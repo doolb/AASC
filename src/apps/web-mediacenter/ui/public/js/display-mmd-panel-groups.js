@@ -4,20 +4,23 @@
         displayMmdLightingPanel: [
             ['基础光照', ['displayMmdLightingPreset', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
             ['高光', ['displayMmdSpecularEnabled', 'displayMmdSpecularColor', 'displayMmdSpecularIntensity', 'displayMmdSpecularShininess']],
-            ['AO', ['displayMmdPmxAoEnabled', 'displayMmdPmxAoEdgeCorrection', 'displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3']],
-            ['主光', ['displayMmdKeyShadowEnabled', 'displayMmdKeyColor', 'displayMmdKeyIntensity', 'displayMmdKeyDirectionLongitude']],
-            ['补光', ['displayMmdFillEnabled', 'displayMmdShadowSource', 'displayMmdFillColor', 'displayMmdFillIntensity', 'displayMmdFillDirectionLongitude']],
+            ['AO', ['displayMmdPmxAoEnabled', 'displayMmdPmxAoEdgeCorrection', 'mmdArAoConcavityAngle', 'displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3']],
+            ['主光', ['displayMmdKeyShadowEnabled', 'displayMmdKeyColor', 'displayMmdKeyIntensity', 'displayMmdKeyDirectionLongitude', 'mmdArKeyShadowBias', 'mmdArKeyShadowNormalBias', 'mmdArShadowMapSize', 'mmdArShadowCameraScale']],
+            ['补光', ['displayMmdFillEnabled', 'displayMmdShadowSource', 'displayMmdFillColor', 'displayMmdFillIntensity', 'displayMmdFillDirectionLongitude', 'mmdArFillFacingStart', 'mmdArFillFacingEnd']],
             ['边缘光 1', ['displayMmdRim1Enabled', 'displayMmdRim1Color', 'displayMmdRim1Intensity', 'displayMmdRim1DirectionLongitude']],
             ['边缘光 2', ['displayMmdRim2Enabled', 'displayMmdRim2Color', 'displayMmdRim2Intensity', 'displayMmdRim2DirectionLongitude']]
         ],
         displayMmdMotionPanel: [
-            ['动作', ['displayMmdMotionPlayback', 'displayMmdMotionProgress']],
-            ['物理', ['displayMmdPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']]
+            ['动作', ['displayMmdMotionPlayback', 'displayMmdMotionProgress', 'mmdArCameraMotionPlayback', 'mmdArCameraMotionProgress']],
+            ['物理', ['displayMmdPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
+            ['本地资源', ['mmdArLocalAssets']]
         ],
         displayArTargetPanel: [
             ['定位图与校准', ['displayArTargetSelect', 'displayArTargetName', 'displayArPhysicalWidth', 'displayArCalibrationButton', 'displayArDeleteButton']],
             ['跟踪操作', ['displayArTrackerEngine', 'displayArStartButton', 'displayArStopButton', 'displayArTargetMessage']],
-            ['体感环绕', ['displayArMotionEnabled', 'displayArMotionSensitivity', 'displayArMotionRecenter', 'displayArMotionMessage']],
+            ['MindAR 滤波', ['mmdArFilterMinCF', 'mmdArFilterBeta', 'mmdArFilterApplyHint']],
+            ['IMU 相机预测', ['mmdArImuPanel']],
+            ['重力旋转', ['displayArMotionEnabled', 'mmdArGravityCameraEnabled', 'mmdArGravityCameraMessage', 'mmdArGravityDeadZone', 'mmdArGravitySmoothing', 'displayArMotionRecenter', 'displayArMotionMessage']],
             ['相机跟随', ['displayArTargetPlane', 'displayArTranslationDeadZone', 'displayArRotationDeadZone', 'displayArSmoothing', 'displayArCameraDistance']]
         ]
     });
@@ -34,10 +37,10 @@
         补光: 'displayMmdFillEnabled',
         '边缘光 1': 'displayMmdRim1Enabled',
         '边缘光 2': 'displayMmdRim2Enabled',
-        体感环绕: 'displayArMotionEnabled'
+        重力旋转: 'displayArMotionEnabled'
     });
     const PANEL_OPACITY_STORAGE_KEY = 'aasc.display.mmdPanelOpacity.v1';
-    const DEFAULT_PANEL_OPACITY = 96;
+    const DEFAULT_PANEL_OPACITY = 50;
     let progressTimer = null;
 
     function directChild(panel, element) {
@@ -113,6 +116,16 @@
         const valid = motion && Number.isFinite(duration) && duration > 0 && Number.isFinite(current);
         progress.max = valid ? duration : 1;
         progress.value = valid ? Math.max(0, Math.min(duration, current)) : 0;
+        const cameraProgress = document.getElementById('mmdArCameraMotionProgress');
+        const cameraTime = document.getElementById('mmdArCameraMotionTime');
+        const cameraMotion = root.DisplayMmd?.getCameraMotionProgress?.();
+        const cameraDuration = Number(cameraMotion?.durationSeconds), cameraCurrent = Number(cameraMotion?.timeSeconds);
+        const cameraValid = cameraMotion && Number.isFinite(cameraDuration) && cameraDuration > 0 && Number.isFinite(cameraCurrent);
+        if (cameraProgress && cameraTime) {
+            cameraProgress.max = cameraValid ? cameraDuration : 1;
+            cameraProgress.value = cameraValid ? Math.max(0, Math.min(cameraDuration, cameraCurrent)) : 0;
+            cameraTime.textContent = cameraValid ? formatTime(cameraProgress.value) + ' / ' + formatTime(cameraDuration) : '--:-- / --:--';
+        }
         time.textContent = valid ? `${formatTime(progress.value)} / ${formatTime(duration)}` : '--:-- / --:--';
     }
 

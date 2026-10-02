@@ -211,3 +211,6 @@ ${disposeAnchor}`);
 }
 
 module.exports = { normalizeShadowMapSize, normalizeShadowCameraScale, PANEL_JS, addShadowMapControls, addShadowMapRuntime };
+
+// 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
+module.exports = require('./web-production-shared').reuseAdapters(module.exports);

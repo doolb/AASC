@@ -1,3 +1,4 @@
+import { XpbdPmxPhysics } from '../../../mmd-xpbd-physics.mjs';
 import {
 	AnimationMixer,
 	Object3D,
@@ -370,6 +371,8 @@ class MMDAnimationHelper {
 
 			if ( this.meshes[ i ] === mesh ) {
 
+                // remove 原本只删 JS 记录；必须在记录丢失前释放其独占物理。
+                this.objects.get(mesh)?.physics?.dispose();
 				this.objects.delete( mesh );
 				found = true;
 
@@ -498,6 +501,7 @@ class MMDAnimationHelper {
 
 		}
 
+        try {
 		objects.physics = this._createMMDPhysics( mesh, params );
 
 		if ( objects.mixer && params.animationWarmup !== false ) {
@@ -510,6 +514,14 @@ class MMDAnimationHelper {
 		objects.physics.warmup( params.warmup !== undefined ? params.warmup : 60 );
 
 		this._optimizeIK( mesh, true );
+
+        } catch (error) {
+            // 构造成功后预热或 IK 失败同样需要清理；构造器失败则由物理自身清理。
+            try { objects.physics?.dispose(); }
+            catch (cleanupError) { console.warn('清理 helper 物理失败:', cleanupError.message); }
+            delete objects.physics;
+            throw error;
+        }
 
 	}
 
@@ -691,6 +703,9 @@ class MMDAnimationHelper {
 	}
 
 	_createMMDPhysics( mesh, params ) {
+        if (params.physicsSolver === 'xpbd') return new XpbdPmxPhysics(mesh,
+            mesh.geometry.userData.MMD.rigidBodies, mesh.geometry.userData.MMD.constraints, params);
+
 
 		if ( MMDPhysics === undefined ) {
 
@@ -1205,3 +1220,7 @@ class GrantSolver {
 }
 
 export { MMDAnimationHelper };
+
+/* aasc-shared:addAnimationLifecycle */
+
+/* aasc-shared:addSolverAnimationHelper */

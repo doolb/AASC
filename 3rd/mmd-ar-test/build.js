@@ -61,6 +61,7 @@ const MINDAR_TEST_SOURCE_FILES = Object.freeze([
   'display-mmd-ar-benchmark.js',
 ]);
 const SOURCE_ASSET_FILES = Object.freeze([
+  'display-mmd-settings.js',
   'display-mmd.js',
   'display-mmd-lighting.js',
   'display-mmd-ar.js',
@@ -80,7 +81,6 @@ const MODEL_PUBLIC_BASE_URL = 'http://120.79.245.103/mnt/mmd/miya-v1/';
 function log(message) {
   process.stdout.write(`[mmd-ar-${WEB_MODE ? 'web' : 'apk'}] ${message}\n`);
 }
-
 // 只重写网页输出副本；APK 的本地 HTTP 路由和正式显示端源码保持原样。
 function webAssetText(source) {
   if (!WEB_MODE) return source;
@@ -91,7 +91,6 @@ function webAssetText(source) {
     .replaceAll('/js/', `${WEB_BASE_PATH}/js/`)
     .replaceAll('/css/', `${WEB_BASE_PATH}/css/`);
 }
-
 async function isVerifiedFile(filePath, expectedSize, expectedHash) {
   try {
     const info = await fs.stat(filePath);
@@ -102,7 +101,6 @@ async function isVerifiedFile(filePath, expectedSize, expectedHash) {
     return false;
   }
 }
-
 async function downloadToFile(url, filePath, expectedSize, expectedHash) {
   const response = await fetch(url, {
     redirect: 'manual',
@@ -112,7 +110,6 @@ async function downloadToFile(url, filePath, expectedSize, expectedHash) {
   if (!response.ok || !response.body) {
     throw new Error(`资源请求失败 HTTP ${response.status}: ${url}`);
   }
-
   const temporaryPath = `${filePath}.download-${process.pid}-${Date.now()}`;
   const hash = crypto.createHash('sha256');
   let received = 0;
@@ -127,7 +124,6 @@ async function downloadToFile(url, filePath, expectedSize, expectedHash) {
       callback(null, chunk);
     },
   });
-
   try {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await pipeline(Readable.fromWeb(response.body), verifier, createWriteStream(temporaryPath, { flags: 'wx' }));
@@ -141,7 +137,6 @@ async function downloadToFile(url, filePath, expectedSize, expectedHash) {
     throw error;
   }
 }
-
 async function getDownloadUrls(relativePath) {
   const urls = [];
   try {
@@ -152,7 +147,6 @@ async function getDownloadUrls(relativePath) {
   urls.push(`${MODEL_PUBLIC_BASE_URL}${relativePath}`);
   return [...new Set(urls)];
 }
-
 async function ensureModelFile([relativePath, expectedSize, expectedHash]) {
   const cachePath = path.join(MODEL_CACHE, relativePath);
   if (await isVerifiedFile(cachePath, expectedSize, expectedHash)) {
@@ -190,6 +184,7 @@ async function stageTextAssets() {
   const arTrackingVideo = $('#displayArTrackingVideo').first();
   const mmdLayer = $('#displayMmdLayer').first().addClass('is-visible').attr('aria-hidden', 'false');
   const controls = $('.display-stage-lighting-control').first();
+  $('[data-mmd-production-only]').remove();
   const calibration = $('#displayArCalibration').first();
   const arPanel = $('#displayArTargetPanel').first();
   const arHeader = arPanel.find('.display-mmd-ar-header').first();
@@ -432,6 +427,7 @@ async function stageTextAssets() {
   `);
 
   const assets = [
+    ...(await fs.readdir(path.join(SOURCE_PUBLIC, 'js'))).filter(name => /^mmd-.*\.mjs$/u.test(name)).map(name => [path.join(SOURCE_PUBLIC, 'js', name), path.join(GENERATED_ASSETS, 'js', name)]),
     ...SOURCE_ASSET_FILES.map((fileName) => [
       path.join(SOURCE_PUBLIC, 'js', fileName),
       path.join(GENERATED_ASSETS, 'js', fileName),
@@ -562,6 +558,8 @@ async function stageTextAssets() {
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_WIND.addWindRuntime(
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8')));
+    await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
+      await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
     const mmdScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd.js');
     const runtimeVersion = (await hashFile(path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js'))).sha256.slice(0, 12);
@@ -599,7 +597,7 @@ async function stageTextAssets() {
 
   const scriptVersion = new Map();
   {
-    for (const fileName of ['web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'display-mmd-ar-native.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
+    for (const fileName of ['display-mmd-settings.js', 'web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'display-mmd-ar-native.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
     }
   }
@@ -740,6 +738,7 @@ async function stageTextAssets() {
     </div>
   </div>
   ${'<script>window.MmdArTestWebFillShadow = true;</script>'}
+  <script src="${scriptUrl('display-mmd-settings.js')}"></script>
   <script src="${scriptUrl('display-mmd.js')}"></script>
   <script src="${scriptUrl('display-mmd-lighting.js')}"></script>
   <script>

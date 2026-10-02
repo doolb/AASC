@@ -1,3 +1,4 @@
+import { normalizeWindSettings, windFlowDirection, createWindState, advanceWindState } from '../../../mmd-physics-wind.mjs';
 import {
 	Bone,
 	BoxGeometry,
@@ -55,7 +56,7 @@ class MMDPhysics {
 		 * Don't set too small unitStep because
 		 * the smaller unitStep can make the performance worse.
 		 */
-		this.unitStep = ( params.unitStep !== undefined ) ? params.unitStep : 1 / 65;
+		this.unitStep = ( params.unitStep !== undefined ) ? params.unitStep : 1 / 90;
 		this.maxStepNum = ( params.maxStepNum !== undefined ) ? params.maxStepNum : 3;
 		this.gravity = new Vector3( 0, - 9.8 * 10, 0 );
 
@@ -65,8 +66,31 @@ class MMDPhysics {
 
 		this.bodies = [];
 		this.constraints = [];
+        this.windSettings = normalizeWindSettings();
+        this.windState = createWindState();
+        this.windDirection = windFlowDirection(this.windSettings);
+        this.windBodies = null;
+        this.windSceneQuaternion = new Quaternion();
+        this.windScratch = { force: new Vector3(), direction: new Vector3(), lever: new Vector3(), torque: new Vector3(),
+            frameQuaternion: new Quaternion(), quaternion: new Quaternion() };
+        this.stabilityUnitStep = null;
+        this.stabilityReferenceHz = 45;
+        this.stabilityAppliedReferenceHz = null;
+        // 每个物理实例独占历史；初始化失败时也有可释放的完整状态。
+        this.anchorSamples = [];
+        this.physicsRemainder = 0;
+        this.physicsSampleTime = 0;
+        this.physicsStepTime = 0;
+        this.interpolationUnitStep = this.unitStep;
+        // 独立网页诊断的可选观察入口，未选中骨骼时保持null。
+        this.onDiagnosticSubstep = null;
 
-		this._init( mesh, rigidBodyParams, constraintParams );
+        this.disposed = false;
+        try { this._init(mesh, rigidBodyParams, constraintParams); }
+        catch (error) {
+            try { this.dispose(); } catch (cleanupError) { console.warn('清理初始化失败的物理:', cleanupError.message); }
+            throw error;
+        }
 
 	}
 
@@ -77,6 +101,9 @@ class MMDPhysics {
 	 * @return {MMDPhysics}
 	 */
 	update( delta ) {
+        // 高频画面帧允许没有物理子步，非法/零时间不采样也不推进。
+        if (!Number.isFinite(delta) || delta <= 0) return this;
+        if (this.windSettings.enabled) this.mesh.getWorldQuaternion(this.windSceneQuaternion);
 
 		const manager = this.manager;
 		const mesh = this.mesh;
@@ -121,9 +148,12 @@ class MMDPhysics {
 
 		// calculate physics and update bones
 
-		this._updateRigidBodies();
-		this._stepSimulation( delta );
-		this._updateBones();
+        try {
+            this._updateRigidBodies();
+            this._stepSimulation(delta);
+            // 骨骼只在所有子步完成后回写一次，VMD/IK仍按画面帧推进。
+            this._updateBones();
+        } finally {
 
 		// restore mesh if converted above
 
@@ -138,6 +168,7 @@ class MMDPhysics {
 		manager.freeThreeVector3( scale );
 		manager.freeThreeQuaternion( quaternion );
 		manager.freeThreeVector3( position );
+        }
 
 		return this;
 
@@ -156,6 +187,7 @@ class MMDPhysics {
 
 		}
 
+        this.resetAnchorInterpolation();
 		return this;
 
 	}
@@ -186,7 +218,11 @@ class MMDPhysics {
 	 */
 	setGravity( gravity ) {
 
-		this.world.setGravity( new Ammo.btVector3( gravity.x, gravity.y, gravity.z ) );
+        const vector = this.manager.allocVector3();
+        try {
+            vector.setValue(gravity.x, gravity.y, gravity.z);
+            this.world.setGravity(vector);
+        } finally { this.manager.freeVector3(vector); }
 		this.gravity.copy( gravity );
 
 		return this;
@@ -206,65 +242,63 @@ class MMDPhysics {
 
 	// private methods
 
-	_init( mesh, rigidBodyParams, constraintParams ) {
+    // 构造失败也恢复网格变换；部分创建的对象由构造器 catch 统一释放。
+    _init(mesh, rigidBodyParams, constraintParams) {
+        const parent = mesh.parent;
+        const position = mesh.position.clone();
+        const quaternion = mesh.quaternion.clone();
+        const scale = mesh.scale.clone();
+        try {
+            mesh.parent = null;
+            mesh.position.set(0, 0, 0);
+            mesh.quaternion.set(0, 0, 0, 1);
+            mesh.scale.set(1, 1, 1);
+            mesh.updateMatrixWorld(true);
+            if (this.world === null) {
+                this.world = this._createWorld();
+                this.setGravity(this.gravity);
+            }
+            this._initRigidBodies(rigidBodyParams);
+            this._initConstraints(constraintParams);
+        } finally {
+            mesh.parent = parent;
+            mesh.position.copy(position);
+            mesh.quaternion.copy(quaternion);
+            mesh.scale.copy(scale);
+            mesh.updateMatrixWorld(true);
+        }
+        this.reset();
+    }
 
-		const manager = this.manager;
-
-		// rigid body/constraint parameters are for
-		// mesh's default world transform as position(0, 0, 0),
-		// quaternion(0, 0, 0, 1) and scale(0, 0, 0)
-
-		const parent = mesh.parent;
-
-		if ( parent !== null ) mesh.parent = null;
-
-		const currentPosition = manager.allocThreeVector3();
-		const currentQuaternion = manager.allocThreeQuaternion();
-		const currentScale = manager.allocThreeVector3();
-
-		currentPosition.copy( mesh.position );
-		currentQuaternion.copy( mesh.quaternion );
-		currentScale.copy( mesh.scale );
-
-		mesh.position.set( 0, 0, 0 );
-		mesh.quaternion.set( 0, 0, 0, 1 );
-		mesh.scale.set( 1, 1, 1 );
-
-		mesh.updateMatrixWorld( true );
-
-		if ( this.world === null ) {
-
-			this.world = this._createWorld();
-			this.setGravity( this.gravity );
-
-		}
-
-		this._initRigidBodies( rigidBodyParams );
-		this._initConstraints( constraintParams );
-
-		if ( parent !== null ) mesh.parent = parent;
-
-		mesh.position.copy( currentPosition );
-		mesh.quaternion.copy( currentQuaternion );
-		mesh.scale.copy( currentScale );
-
-		mesh.updateMatrixWorld( true );
-
-		this.reset();
-
-		manager.freeThreeVector3( currentPosition );
-		manager.freeThreeQuaternion( currentQuaternion );
-		manager.freeThreeVector3( currentScale );
-
-	}
+    dispose() {
+        if (this.disposed) return this;
+        this.disposed = true;
+        try { this.manager.dispose(this.world); }
+        finally {
+            this.anchorSamples.length = 0;
+            this.physicsRemainder = 0;
+            this.physicsSampleTime = 0;
+            this.physicsStepTime = 0;
+            this.onDiagnosticSubstep = null;
+            this.windBodies = null;
+            this.windScratch = null;
+            this.bodies.length = 0;
+            this.constraints.length = 0;
+            this.world = null;
+            this.mesh = null;
+        }
+        return this;
+    }
 
 	_createWorld() {
 
-		const config = new Ammo.btDefaultCollisionConfiguration();
-		const dispatcher = new Ammo.btCollisionDispatcher( config );
-		const cache = new Ammo.btDbvtBroadphase();
-		const solver = new Ammo.btSequentialImpulseConstraintSolver();
-		const world = new Ammo.btDiscreteDynamicsWorld( dispatcher, cache, solver, config );
+        const manager = this.manager;
+
+		const config = manager.own(new Ammo.btDefaultCollisionConfiguration());
+		const dispatcher = manager.own(new Ammo.btCollisionDispatcher( config ));
+		const cache = manager.own(new Ammo.btDbvtBroadphase());
+		const solver = manager.own(new Ammo.btSequentialImpulseConstraintSolver());
+		const world = manager.own(new Ammo.btDiscreteDynamicsWorld( dispatcher, cache, solver, config ));
 		return world;
 
 	}
@@ -293,38 +327,201 @@ class MMDPhysics {
 
 	}
 
-	_stepSimulation( delta ) {
+    // getter返回的origin/rotation是借用值，只复制分量，绝不销毁借用包装。
+    _readAnchorTransform(form, position, quaternion) {
+        const origin = form.getOrigin();
+        const rotation = form.getRotation();
+        position.set(origin.x(), origin.y(), origin.z());
+        quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w()).normalize();
+    }
 
-		const unitStep = this.unitStep;
-		let stepTime = delta;
-		let maxStepNum = ( ( delta / unitStep ) | 0 ) + 1;
+    // 原库STOP_ERP=0.475以65Hz为参考；归一单位时间的误差衰减，而不修改弹簧/质量。
+    // 参考Hz运行时可调（默认45）：unitStep或参考值任一变化都重算六轴纠错率。
+    _refreshConstraintStability() {
+        if (this.stabilityUnitStep === this.unitStep
+            && this.stabilityAppliedReferenceHz === this.stabilityReferenceHz) return;
+        const reference = Number(this.stabilityReferenceHz);
+        const referenceHz = Number.isFinite(reference) && reference > 0 ? reference : 45;
+        const stopErp = 1 - Math.pow(1 - 0.475, referenceHz * this.unitStep);
+        for (const entry of this.constraints) {
+            if (typeof entry.constraint.setParam !== 'function') continue;
+            for (let axis = 0; axis < 6; axis += 1) entry.constraint.setParam(2, stopErp, axis);
+        }
+        this.stabilityUnitStep = this.unitStep;
+        this.stabilityAppliedReferenceHz = this.stabilityReferenceHz;
+    }
 
-		if ( stepTime < unitStep ) {
+    // 运行时实时改基准：立即重算六轴，不等待变频/复位；非法值按45。
+    setStabilityReferenceHz(value) {
+        const reference = Number(value);
+        this.stabilityReferenceHz = Number.isFinite(reference) && reference > 0 ? reference : 45;
+        this._refreshConstraintStability();
+        return this.stabilityReferenceHz;
+    }
 
-			stepTime = unitStep;
-			maxStepNum = 1;
+    setWindSettings(value) {
+        this.windSettings = normalizeWindSettings(value);
+        this.windDirection = windFlowDirection(this.windSettings);
+        // 关闭立刻停止新施力，保留刚体已有速度；下次开启从0缓动。
+        if (!this.windSettings.enabled) this.windState.strength = 0;
+        return { ...this.windSettings };
+    }
 
-		}
+    _applyWind(seconds) {
+        if (this.disposed || !this.windSettings.enabled) return;
+        const strength = advanceWindState(this.windState, seconds, this.windSettings);
+        if (strength <= 0) return;
+        // 第一次开启才筛选受风刚体；关闭时完全不遍历。模型切换由新物理实例重新建立缓存。
+        if (!this.windBodies) this.windBodies = this.bodies.filter((entry) => entry.params.type !== 0
+            && Number.isFinite(entry.params.weight) && entry.params.weight > 0);
+        const scratch = this.windScratch;
+        const direction = this.windDirection;
+        // 原MMDPhysics非单位缩放时会暂时脱离父级。将场景风向换到当前物理坐标，
+        // 保证经纬度和灯光同属场景方向，角色旋转/缩放不带动外部风。
+        scratch.frameQuaternion.copy(this.windSceneQuaternion).invert();
+        scratch.direction.set(direction.x, direction.y, direction.z).applyQuaternion(scratch.frameQuaternion);
+        this.mesh.getWorldQuaternion(scratch.frameQuaternion);
+        scratch.direction.applyQuaternion(scratch.frameQuaternion);
+        let force = null;
+        let torque = null;
+        try {
+            force = this.manager.allocVector3();
+            torque = this.manager.allocVector3();
+            for (const entry of this.windBodies) {
+                scratch.force.copy(scratch.direction).multiplyScalar(entry.params.weight * 10 * strength);
+                if (!entry.positionDriven) {
+                    force.setValue(scratch.force.x, scratch.force.y, scratch.force.z);
+                    entry.body.applyCentralForce(force);
+                    continue;
+                }
+                // type2位置由骨骼锚点驱动：只添加近似风致力矩，不改线性因子/目标速度。
+                // 借用的Bullet姿态只读分量；等效力臂来自骨骼到刚体COM的偏移，不制造虚构偏移。
+                const rotation = entry.body.getCenterOfMassTransform().getRotation();
+                scratch.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w()).normalize();
+                scratch.lever.copy(entry.windLever).applyQuaternion(scratch.quaternion);
+                scratch.torque.crossVectors(scratch.lever, scratch.force);
+                scratch.torque.applyQuaternion(scratch.quaternion.invert());
+                const inertia = entry.windInertia;
+                // 局部各轴角加速度上限12rad/s²，极小/零惯量时力矩同步趋零，避免小物件被风吹炸。
+                for (const axis of ['x', 'y', 'z']) {
+                    const limit = Number.isFinite(inertia[axis]) ? Math.max(0, inertia[axis]) * 12 : 0;
+                    scratch.torque[axis] = Math.min(limit, Math.max(-limit, scratch.torque[axis]));
+                }
+                scratch.torque.applyQuaternion(scratch.quaternion.invert());
+                torque.setValue(scratch.torque.x, scratch.torque.y, scratch.torque.z);
+                entry.body.applyTorque(torque);
+            }
+        } finally {
+            if (torque) this.manager.freeVector3(torque);
+            if (force) this.manager.freeVector3(force);
+        }
+    }
 
-		if ( maxStepNum > this.maxStepNum ) {
+    resetAnchorInterpolation() {
+        if (this.disposed) return this;
+        this._refreshConstraintStability();
+        // 复位和恢复只重建驱动历史，不修改动态刚体速度、力或姿态。
+        if (this.anchorSamples.length === 0) {
+            this.anchorSamples = this.bodies
+                .filter((entry) => (entry.params.type === 0 && entry.params.boneIndex !== -1) || entry.positionDriven)
+                .map((entry) => ({ entry, previousPosition: new Vector3(), position: new Vector3(),
+                    previousQuaternion: new Quaternion(), quaternion: new Quaternion(),
+                    stepPosition: new Vector3(), stepQuaternion: new Quaternion() }));
+        }
+        for (const sample of this.anchorSamples) {
+            this._readAnchorTransform(sample.entry.body.getCenterOfMassTransform(), sample.position, sample.quaternion);
+            sample.previousPosition.copy(sample.position);
+            sample.previousQuaternion.copy(sample.quaternion);
+        }
+        this.physicsRemainder = 0;
+        this.physicsSampleTime = 0;
+        this.physicsStepTime = 0;
+        this.interpolationUnitStep = this.unitStep;
+        return this;
+    }
 
-			maxStepNum = this.maxStepNum;
+    _updateRigidBodies() {
+        // 调节频率时从实际锚点姿态重新计时，随后再采集本帧骨骼目标。
+        if (this.interpolationUnitStep !== this.unitStep) this.resetAnchorInterpolation();
+        for (const sample of this.anchorSamples) {
+            sample.previousPosition.copy(sample.position);
+            sample.previousQuaternion.copy(sample.quaternion);
+            const form = sample.entry._getBoneTransform();
+            try { this._readAnchorTransform(form, sample.position, sample.quaternion); }
+            finally { this.manager.freeTransform(form); }
+        }
+    }
 
-		}
+    _applyAnchorTargets(alpha, form, velocity) {
+        for (const sample of this.anchorSamples) {
+            sample.stepPosition.lerpVectors(sample.previousPosition, sample.position, alpha);
+            if (sample.entry.positionDriven) {
+                // 只指定本步终点所需线速度，不能先跳到终点再积分，否则会重复移动。
+                // 当前COM是借用值；角速度与姿态不被改写，仍由Ammo处理旋转及接触。
+                const origin = sample.entry.body.getCenterOfMassTransform().getOrigin();
+                velocity.setValue((sample.stepPosition.x - origin.x()) / this.unitStep,
+                    (sample.stepPosition.y - origin.y()) / this.unitStep,
+                    (sample.stepPosition.z - origin.z()) / this.unitStep);
+                sample.entry.body.setLinearVelocity(velocity);
+                continue;
+            }
+            sample.stepQuaternion.slerpQuaternions(sample.previousQuaternion, sample.quaternion, alpha);
+            this.manager.setOriginFromThreeVector3(form, sample.stepPosition);
+            this.manager.setBasisFromThreeQuaternion(form, sample.stepQuaternion);
+            // 只写运动学MotionState。每次单步调用前Bullet会读取目标并计算线/角速度。
+            // type1不被覆盖；type2位置驱动不通用清零任何刚体速度。
+            sample.entry.body.getMotionState().setWorldTransform(form);
+        }
+    }
 
-		this.world.stepSimulation( stepTime, maxStepNum, unitStep );
-
-	}
-
-	_updateRigidBodies() {
-
-		for ( let i = 0, il = this.bodies.length; i < il; i ++ ) {
-
-			this.bodies[ i ].updateFromBone();
-
-		}
-
-	}
+    _stepSimulation(delta) {
+        const h = this.unitStep;
+        const previousTime = this.physicsSampleTime;
+        this.physicsSampleTime += delta;
+        this.physicsRemainder += delta;
+        // 只补偿浮点边界误差；不足一步的画面帧不强制模拟，余量跨帧保存。
+        const due = Math.floor(this.physicsRemainder / h + 1e-9);
+        const steps = Math.min(due, this.maxStepNum);
+        const skipped = due - steps;
+        // 超预算丢弃整步而非形成无限积压，同时推进采样时钟，使插值比例仍对应真实时间。
+        this.physicsStepTime += skipped * h;
+        this.physicsRemainder -= skipped * h;
+        if (steps === 0) return;
+        let form = null;
+        let velocity = null;
+        try {
+            form = this.anchorSamples.length ? this.manager.allocTransform() : null;
+            if (this.anchorSamples.some((sample) => sample.entry.positionDriven)) velocity = this.manager.allocVector3();
+            // 受控平移必须到达目标，暂时跳过其线性阻尼；旋转阻尼原值保留。
+            // 即使原始线性阻尼为1也能驱动，finally恢复参数，不影响其余动态刚体。
+            for (const sample of this.anchorSamples) {
+                if (sample.entry.positionDriven) sample.entry.body.setDamping(0, sample.entry.params.rotationDamping);
+            }
+            for (let index = 0; index < steps; index += 1) {
+                const nextTime = this.physicsStepTime + h;
+                const alpha = Math.min(1, Math.max(0, (nextTime - previousTime) / delta));
+                if (form) this._applyAnchorTargets(alpha, form, velocity);
+                // 外层负责固定时钟，maxSubSteps=0让Bullet恰好求解一次，避免重复内部拆步。
+                // 风按真实子步施力，由Bullet积分；未注入风模块的测试仍走原步进。
+                this._applyWind?.(h);
+                this.world.stepSimulation(h, 0, h);
+                this.onDiagnosticSubstep?.();
+                this.physicsStepTime = nextTime;
+                this.physicsRemainder = Math.max(0, this.physicsRemainder - h);
+            }
+        } finally {
+            try {
+                for (const sample of this.anchorSamples) {
+                    if (sample.entry.positionDriven) sample.entry.body.setDamping(
+                        sample.entry.params.positionDamping, sample.entry.params.rotationDamping);
+                }
+            } finally {
+                // 参数恢复异常也必须归还临时值，避免下一次切换累积native分配。
+                if (velocity) this.manager.freeVector3(velocity);
+                if (form) this.manager.freeTransform(form);
+            }
+        }
+    }
 
 	_updateBones() {
 
@@ -361,8 +558,42 @@ class ResourceManager {
 		this.transforms = [];
 		this.quaternions = [];
 		this.vector3s = [];
+        // 所有权仅登记 new 出来的对象；getter 返回值和外部传入 world 不属于此实例。
+        this.nativeObjects = new Map();
+        this.attachedBodies = new Set();
+        this.attachedConstraints = new Set();
+        this.disposed = false;
 
 	}
+
+    own(object) {
+        if (this.disposed) throw new Error('物理资源池已释放');
+        this.nativeObjects.set(object, object);
+        return object;
+    }
+
+    release(object) {
+        if (!this.nativeObjects.delete(object)) return;
+        Ammo.destroy(object);
+    }
+
+    dispose(world) {
+        if (this.disposed) return;
+        this.disposed = true;
+        const errors = [];
+        const attempt = (action) => {
+            try { action(); } catch (error) { errors.push(error); }
+        };
+        // 先断开 native 引用，约束早于刚体；逆创建顺序保证刚体早于状态/形状、world早于依赖。
+        for (const constraint of this.attachedConstraints) attempt(() => world.removeConstraint(constraint));
+        for (const body of this.attachedBodies) attempt(() => world.removeRigidBody(body));
+        for (const object of [...this.nativeObjects.keys()].reverse()) attempt(() => this.release(object));
+        this.attachedConstraints.clear();
+        this.attachedBodies.clear();
+        for (const pool of [this.transforms, this.quaternions, this.vector3s,
+            this.threeVector3s, this.threeMatrix4s, this.threeQuaternions, this.threeEulers]) pool.length = 0;
+        if (errors.length) throw new AggregateError(errors, '释放 Ammo 物理资源失败');
+    }
 
 	allocThreeVector3() {
 
@@ -424,7 +655,7 @@ class ResourceManager {
 
 		return ( this.transforms.length > 0 )
 			? this.transforms.pop()
-			: new Ammo.btTransform();
+			: this.own(new Ammo.btTransform());
 
 	}
 
@@ -438,7 +669,7 @@ class ResourceManager {
 
 		return ( this.quaternions.length > 0 )
 			? this.quaternions.pop()
-			: new Ammo.btQuaternion();
+			: this.own(new Ammo.btQuaternion());
 
 	}
 
@@ -452,7 +683,7 @@ class ResourceManager {
 
 		return ( this.vector3s.length > 0 )
 			? this.vector3s.pop()
-			: new Ammo.btVector3();
+			: this.own(new Ammo.btVector3());
 
 	}
 
@@ -871,7 +1102,7 @@ class RigidBody {
 
 		this.bone.updateMatrixWorld( true );
 
-		if ( this.params.type === 2 ) {
+		if ( this.params.type === 2 && !this.positionDriven ) {
 
 			this._setPositionFromBone();
 
@@ -890,13 +1121,19 @@ class RigidBody {
 			switch ( p.shapeType ) {
 
 				case 0:
-					return new Ammo.btSphereShape( p.width );
+					return manager.own(new Ammo.btSphereShape( p.width ));
 
 				case 1:
-					return new Ammo.btBoxShape( new Ammo.btVector3( p.width, p.height, p.depth ) );
+					{
+                    const size = manager.allocVector3();
+                    try {
+                        size.setValue(p.width, p.height, p.depth);
+                        return manager.own(new Ammo.btBoxShape(size));
+                    } finally { manager.freeVector3(size); }
+                }
 
 				case 2:
-					return new Ammo.btCapsuleShape( p.width, p.height );
+					return manager.own(new Ammo.btCapsuleShape( p.width, p.height ));
 
 				default:
 					throw new Error( 'unknown shape type ' + p.shapeType );
@@ -934,13 +1171,15 @@ class RigidBody {
 		manager.setOriginFromThreeVector3( boneForm, bone.getWorldPosition( vector ) );
 
 		const form = manager.multiplyTransforms( boneForm, boneOffsetForm );
-		const state = new Ammo.btDefaultMotionState( form );
+		const state = manager.own(new Ammo.btDefaultMotionState( form ));
 
-		const info = new Ammo.btRigidBodyConstructionInfo( weight, state, shape, localInertia );
+		const info = manager.own(new Ammo.btRigidBodyConstructionInfo( weight, state, shape, localInertia ));
 		info.set_m_friction( params.friction );
 		info.set_m_restitution( params.restitution );
 
-		const body = new Ammo.btRigidBody( info );
+        let body;
+        try { body = manager.own(new Ammo.btRigidBody(info)); }
+        finally { manager.release(info); }
 
 		if ( params.type === 0 ) {
 
@@ -957,10 +1196,24 @@ class RigidBody {
 
 		body.setDamping( params.positionDamping, params.rotationDamping );
 		body.setSleepingThresholds( 0, 0 );
+        // type2有骨骼时位置随骨骼、旋转随物理：屏蔽自由平移力，保留原质量及角惯量。
+        // 无骨骼的type2没有位置目标，必须继续作为自由动态刚体。
+        this.positionDriven = params.type === 2 && params.boneIndex !== -1;
+        if (this.positionDriven) {
+            const factor = manager.allocVector3();
+            try { factor.setValue(0, 0, 0); body.setLinearFactor(factor); }
+            finally { manager.freeVector3(factor); }
+        }
 
 		this.world.addRigidBody( body, 1 << params.groupIndex, params.groupTarget );
+        manager.attachedBodies.add(body);
 
 		this.body = body;
+        if (this.positionDriven) {
+            this.windInertia = new Vector3(localInertia.x(), localInertia.y(), localInertia.z());
+            const offsetRotation = new Quaternion().setFromEuler(new Euler(...params.rotation));
+            this.windLever = new Vector3(...params.position).applyQuaternion(offsetRotation.invert()).clampLength(0, 1);
+        }
 		this.bone = bone;
 		this.boneOffsetForm = boneOffsetForm;
 		this.boneOffsetFormInverse = manager.inverseTransform( boneOffsetForm );
@@ -1037,39 +1290,27 @@ class RigidBody {
 
 	}
 
-	_updateBoneRotation() {
-
-		const manager = this.manager;
-
-		const tr = this._getWorldTransformForBone();
-		const q = manager.getBasis( tr );
-
-		const thQ = manager.allocThreeQuaternion();
-		const thQ2 = manager.allocThreeQuaternion();
-		const thQ3 = manager.allocThreeQuaternion();
-
-		thQ.set( q.x(), q.y(), q.z(), q.w() );
-		thQ2.setFromRotationMatrix( this.bone.matrixWorld );
-		thQ2.conjugate();
-		thQ2.multiply( thQ );
-
-		//this.bone.quaternion.multiply( thQ2 );
-
-		thQ3.setFromRotationMatrix( this.bone.matrix );
-
-		// Renormalizing quaternion here because repeatedly transforming
-		// quaternion continuously accumulates floating point error and
-		// can end up being overflow. See #15335
-		this.bone.quaternion.copy( thQ2.multiply( thQ3 ).normalize() );
-
-		manager.freeThreeQuaternion( thQ );
-		manager.freeThreeQuaternion( thQ2 );
-		manager.freeThreeQuaternion( thQ3 );
-
-		manager.freeQuaternion( q );
-		manager.freeTransform( tr );
-
-	}
+    _updateBoneRotation() {
+        const manager = this.manager;
+        const form = this._getWorldTransformForBone();
+        const rotation = manager.getBasis(form);
+        const worldQuaternion = manager.allocThreeQuaternion();
+        const parentQuaternion = manager.allocThreeQuaternion();
+        try {
+            worldQuaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+            // 父骨骼可能刚被物理回写或动作恢复。getWorldQuaternion更新祖先及父级自身，
+            // 不遍历整个模型；世界目标必须由父世界旋转的逆换算为局部旋转。
+            if (this.bone.parent) this.bone.parent.getWorldQuaternion(parentQuaternion).invert();
+            else parentQuaternion.identity();
+            this.bone.quaternion.copy(parentQuaternion.multiply(worldQuaternion).normalize());
+        } finally {
+            // 只归还本次取得的池对象，不清理借用刚体、不改速度、质量或关节参数。
+            manager.freeThreeQuaternion(parentQuaternion);
+            manager.freeThreeQuaternion(worldQuaternion);
+            manager.freeQuaternion(rotation);
+            manager.freeTransform(form);
+        }
+    }
 
 	_updateBonePosition() {
 
@@ -1151,7 +1392,7 @@ class Constraint {
 		const formA2 = manager.multiplyTransforms( formInverseA, form );
 		const formB2 = manager.multiplyTransforms( formInverseB, form );
 
-		const constraint = new Ammo.btGeneric6DofSpringConstraint( bodyA.body, bodyB.body, formA2, formB2, true );
+		const constraint = manager.own(new Ammo.btGeneric6DofSpringConstraint( bodyA.body, bodyB.body, formA2, formB2, true ));
 
 		const lll = manager.allocVector3();
 		const lul = manager.allocVector3();
@@ -1215,6 +1456,7 @@ class Constraint {
 		}
 
 		this.world.addConstraint( constraint, true );
+        manager.attachedConstraints.add(constraint);
 		this.constraint = constraint;
 
 		manager.freeTransform( form );
@@ -1409,3 +1651,11 @@ class MMDPhysicsHelper extends Object3D {
 }
 
 export { MMDPhysics };
+
+/* aasc-shared:addPhysicsLifecycle */
+
+/* aasc-shared:addPhysicsSubsteps */
+
+/* aasc-shared:addPhysicsStability */
+
+/* aasc-shared:addPhysicsWind */

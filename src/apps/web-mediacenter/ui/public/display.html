@@ -58,6 +58,7 @@
     </div>
 
     <video id="displayArTrackingVideo" class="display-mmd-ar-background" autoplay muted playsinline hidden></video>
+    <video id="mmdArGravityCameraVideo" data-mmd-production-only autoplay muted playsinline hidden aria-label="重力摄像头背景"></video>
     <div id="displayArAframeHost" class="display-mmd-ar-aframe-host" hidden aria-hidden="true"></div>
     <!--
         显示端交互舞台与媒体层保持同一页面，聊天/MMD 只拆分代码和样式模块。
@@ -135,17 +136,18 @@
                     </label>
                     <label class="display-mmd-ar-motion-toggle">
                         <input id="displayArMotionEnabled" type="checkbox">
-                        <span>独立体感环绕（固定距离）</span>
+                        <span>独立重力旋转（角色锚点）</span>
                     </label>
-                    <label class="display-mmd-ar-field">
-                        <span>体感灵敏度 <output id="displayArMotionSensitivityValue">1.00</output></span>
+                    <!-- 保留旧控件供独立测试构建替换，正式模式不读取。 -->
+<label class="display-mmd-ar-field" hidden>
+                        <span hidden>体感灵敏度 <output id="displayArMotionSensitivityValue">1.00</output></span>
                         <input id="displayArMotionSensitivity" type="range" min="0.25" max="2" step="0.05" value="1">
                     </label>
                     <button id="displayArMotionRecenter" class="display-mmd-ar-action" type="button" disabled>
-                        重新居中
+                        重力居中
                     </button>
                     <p id="displayArMotionMessage" class="display-mmd-ar-message" role="status" aria-live="polite">
-                        体感观察关闭
+                        重力旋转关闭，手动旋转保留
                     </p>
                     <div class="display-mmd-ar-actions">
                         <button id="displayArCalibrationButton" class="display-mmd-ar-action" type="button">拍照校准</button>
@@ -157,7 +159,40 @@
                     <p id="displayArTargetMessage" class="display-mmd-ar-message" role="status" aria-live="polite">
                         尚未选择定位图
                     </p>
-                </section>
+
+<section class="mind-basic-imu" id="mmdArImuPanel" data-mmd-production-only="">
+
+          <button id="mmdArImuToggle" class="mind-basic-imu-toggle" type="button" aria-pressed="false">
+            启用 IMU 辅助
+          </button>
+          <div class="mind-basic-imu-options">
+            <label><input id="mmdArImuStabilize" type="checkbox" checked="" disabled="">图片可见时预测相机运动</label>
+            <label><input id="mmdArImuBridge" type="checkbox" checked="" disabled="">图片不可见时预测相机运动</label>
+          </div>
+          <label class="mind-basic-field">视觉纠正时间 <output id="mmdArImuCorrectionValue">800 ms</output>
+            <input id="mmdArImuCorrection" type="range" min="200" max="2000" step="100" value="800">
+          </label>
+          <label class="mind-basic-field">失锁平移预测时间 <output id="mmdArImuHoldValue">1800 ms</output>
+            <input id="mmdArImuHold" type="range" min="200" max="3000" step="100" value="1800">
+          </label>
+          <label class="mind-basic-field">定位图实际宽度（厘米）
+            <input id="mmdArImuTargetWidth" type="number" min="1" max="300" step="1" value="20">
+          </label>
+          <p class="mind-basic-note">两个开关均预测相机旋转和位移；图片可见时由视觉纠偏，不可见时短时预测平移。请填写定位图实物宽度，20 cm 仅为示例值。</p>
+          <button id="mmdArImuReset" class="mind-basic-imu-reset" type="button" disabled="">重新校准</button>
+          <p id="mmdArImuStatus" class="mind-basic-imu-status" role="status" aria-live="polite">
+            IMU 未启用；摄像头画面不会被处理或防抖。
+          </p>
+
+        </section>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>最低截止频率 <output id="mmdArFilterMinCFValue">0.0010</output></span><input id="mmdArFilterMinCF" type="range" min="0.0001" max="0.02" step="0.0001" value="0.001"></label>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>速度响应 <output id="mmdArFilterBetaValue">1000</output></span><input id="mmdArFilterBeta" type="range" min="0" max="2000" step="10" value="1000"></label>
+    <p id="mmdArFilterApplyHint" class="mind-basic-note" data-mmd-production-only="">停止并重新开始定位后应用滤波参数。</p>
+    <label class="display-mmd-lighting-shadow" data-mmd-production-only=""><input id="mmdArGravityCameraEnabled" type="checkbox" disabled=""><span>显示摄像头画面</span></label>
+    <p id="mmdArGravityCameraMessage" class="mind-basic-note" role="status" data-mmd-production-only="">启用重力旋转后可显示摄像头画面。</p>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>重力死区 <output id="mmdArGravityDeadZoneValue">0.5°</output></span><input id="mmdArGravityDeadZone" type="range" min="0" max="3" step="0.1" value="0.5"></label>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>重力缓动 <output id="mmdArGravitySmoothingValue">20 ms</output></span><input id="mmdArGravitySmoothing" type="range" min="0" max="500" step="10" value="20"></label>
+</section>
                 <section id="displayMmdMotionPanel" class="display-mmd-lighting-panel" hidden
                          aria-label="角色动作与物理设置">
                     <div class="display-mmd-lighting-header"><strong>动作与物理</strong></div>
@@ -174,16 +209,64 @@
                         <span>启用 PMX 物理（切换时重新加载模型）</span>
                     </label>
                     <label class="display-mmd-lighting-field">
-                        <span>PMX 物理频率 <output id="displayMmdPhysicsFpsValue">65 Hz</output></span>
-                        <input id="displayMmdPhysicsFps" type="range" min="30" max="90" step="5" value="65">
-                        <small>目标值；实际步进受渲染帧率和每帧最多 3 个子步限制。</small>
+                        <span>PMX 物理频率 <output id="displayMmdPhysicsFpsValue">90 Hz</output></span>
+                        <input id="displayMmdPhysicsFps" type="range" min="30" max="180" step="5" value="90">
+                        <small>Ammo 按累计时间子步推进；XPBD 使用下方基准数值作为每帧子步数。</small>
                     </label>
                     <label class="display-mmd-lighting-field">
                         <span>旋转暂停物理阈值 <output id="displayMmdRotationPhysicsLimitValue">720°/秒</output></span>
                         <input id="displayMmdRotationPhysicsLimit" type="range" min="30" max="1440" step="10" value="720">
                         <small>PMX 实际旋转速度超过此值时暂停布料物理，减速后恢复。</small>
                     </label>
-                </section>
+
+
+    <label class="display-mmd-lighting-shadow" data-mmd-production-only=""><input id="mmdArCameraMotionPlayback" type="checkbox" checked=""><span>相机动作</span></label>
+    <label class="display-mmd-lighting-field" data-mmd-production-only=""><span>相机动作进度 <output id="mmdArCameraMotionTime">--:-- / --:--</output></span><progress id="mmdArCameraMotionProgress" max="1" value="0"></progress></label>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>刚体求解器</span><select id="mmdArPhysicsSolver"><option value="ammo">Ammo（默认）</option><option value="xpbd">XPBD</option></select></label>
+    <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status" data-mmd-production-only="">Ammo</p>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>纠错基准 Hz <output id="mmdArPhysicsStabilityReferenceValue">45 Hz</output></span><input id="mmdArPhysicsStabilityReference" type="range" min="3" max="180" step="1" value="45"></label>
+    <p id="mmdArPhysicsStabilityReferenceHint" class="mind-basic-note" data-mmd-production-only="">Ammo 使用纠错频率，XPBD 使用每帧子步数。</p>
+
+    <label class="display-mmd-lighting-field" data-mmd-production-only=""><input id="mmdArWindEnabled" type="checkbox"><span>启用风</span></label>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>风力强度 <output id="mmdArWindStrengthValue">0.30</output></span><input id="mmdArWindStrength" type="range" min="0" max="30" step="0.05" value="0.3"></label>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>风向经度 <output id="mmdArWindLongitudeValue">0°</output></span><input id="mmdArWindLongitude" type="range" min="-180" max="180" step="1" value="0"></label>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>风向纬度 <output id="mmdArWindLatitudeValue">0°</output></span><input id="mmdArWindLatitude" type="range" min="-90" max="90" step="1" value="0"></label>
+    <label class="mind-basic-field" data-mmd-production-only=""><span>阵风幅度 <output id="mmdArWindGustValue">0%</output></span><input id="mmdArWindGust" type="range" min="0" max="100" step="5" value="0"></label>
+    <p id="mmdArWindHint" class="mind-basic-note" data-mmd-production-only="">经纬度与灯光一致，表示风从哪里吹来；正纬度从上方吹来。强度为效果等级，阵风0为恒定风。</p>
+
+
+    <section id="mmdArLocalAssets" class="mmd-ar-panel-group" data-mmd-production-only="">
+      <div class="mmd-ar-panel-group-header">
+        <button class="mmd-ar-panel-group-toggle" type="button" data-group-title="本地资源" aria-controls="mmdArLocalAssetsBody" aria-expanded="false" aria-label="展开本地资源设置">
+          <span>本地模型与动作</span><span class="mmd-ar-panel-group-arrow" aria-hidden="true">⌄</span>
+        </button>
+      </div>
+      <div id="mmdArLocalAssetsBody" class="mmd-ar-panel-group-body" hidden="">
+        <div class="display-mmd-ar-actions">
+          <button id="mmdArLocalDirectoryButton" class="display-mmd-ar-action" type="button">选择模型目录</button>
+          <button id="mmdArLocalFilesButton" class="display-mmd-ar-action" type="button">多选 PMX＋贴图</button>
+        </div>
+        <input id="mmdArLocalDirectory" type="file" webkitdirectory="" multiple="" hidden="">
+        <input id="mmdArLocalFiles" type="file" multiple="" hidden="">
+        <label class="display-mmd-ar-field"><span>所选目录中的 PMX</span><select id="mmdArLocalPmx" disabled=""><option>请先选择文件</option></select></label>
+        <p class="mind-basic-note">当前模型：<span id="mmdArLocalModelName">内置默认模型</span></p>
+        <div class="display-mmd-ar-actions">
+          <button id="mmdArLocalVmdButton" class="display-mmd-ar-action" type="button">选择 VMD 动作</button>
+          <button id="mmdArLocalDefaultMotion" class="display-mmd-ar-action" type="button">恢复默认动作</button>
+        </div>
+        <input id="mmdArLocalVmd" type="file" accept=".vmd" hidden="">
+        <p class="mind-basic-note">当前动作：<span id="mmdArLocalMotionName">内置默认动作</span></p>
+        <div class="display-mmd-ar-actions">
+          <button id="mmdArLocalCameraVmdButton" class="display-mmd-ar-action" type="button">选择相机 VMD</button>
+        </div>
+        <input id="mmdArLocalCameraVmd" type="file" accept=".vmd" hidden="">
+        <p class="mind-basic-note">当前相机动作：<span id="mmdArLocalCameraMotionName">无相机动作</span></p>
+        <button id="mmdArLocalDefaultModel" class="display-mmd-ar-action" type="button">恢复默认模型与动作</button>
+        <p id="mmdArLocalMessage" class="mind-basic-note" role="status" style="overflow-wrap:anywhere">请选择完整模型目录，或一起多选 PMX 与贴图；文件不上传，刷新后需重新选择。</p>
+      </div>
+    </section>
+
+</section>
                 <section id="displayMmdLightingPanel" class="display-mmd-lighting-panel" hidden
                          aria-label="角色灯光设置">
                     <div class="display-mmd-lighting-header">
@@ -381,7 +464,9 @@
                             <input id="displayMmdRim2DirectionLatitude" type="range" min="-90" max="90" step="1" value="25">
                         </label>
                     </fieldset>
-                </section>
+
+<label class="mind-basic-field" data-mmd-production-only=""><span>阴影深度偏移 bias <output id="mmdArKeyShadowBiasValue">-0.0005</output></span><input id="mmdArKeyShadowBias" type="range" min="-0.005" max="0.005" step="0.0001" value="-0.0005" aria-label="阴影深度偏移 bias"></label><label class="mind-basic-field" data-mmd-production-only=""><span>阴影法线偏移 normalBias <output id="mmdArKeyShadowNormalBiasValue">0.020</output></span><input id="mmdArKeyShadowNormalBias" type="range" min="0" max="0.1" step="0.001" value="0.02" aria-label="阴影法线偏移 normalBias"></label><p class="mind-basic-note" data-mmd-production-only="">条纹明显时，逐步把 bias 向负方向调，或增大 normalBias（场景单位）；一次调一项。偏移过大会让接触阴影脱离。</p><label class="mind-basic-field" data-mmd-production-only=""><span>阴影贴图尺寸 <output id="mmdArShadowMapSizeValue">1024 × 1024</output></span><select id="mmdArShadowMapSize" aria-label="阴影贴图尺寸"><option value="512">512 × 512</option><option value="1024" selected="">1024 × 1024</option><option value="2048">2048 × 2048</option><option value="4096">4096 × 4096</option></select></label><label class="mind-basic-field" data-mmd-production-only=""><span>阴影相机范围 <output id="mmdArShadowCameraScaleValue">1.00 ×</output></span><input id="mmdArShadowCameraScale" type="range" min="0.1" max="2" step="0.01" value="1" aria-label="阴影相机范围倍率"></label><p class="mind-basic-note" data-mmd-production-only="">默认1倍，自动范围基准已缩至原来的0.5；范围越小角色在贴图中越大，过小会裁掉部分阴影。阴影相机跟随角色移动并对齐像素网格。</p><p class="mind-basic-note" data-mmd-production-only="">主光和补光共用此尺寸。尺寸越大细节越高，也会增加显存与渲染开销。</p><label class="mind-basic-field" data-mmd-production-only=""><span>过渡起点 <output id="mmdArFillFacingStartValue">-0.30</output></span><input id="mmdArFillFacingStart" type="range" min="-1" max="1" step="0.01" value="-0.3" aria-label="补光过渡起点"></label><label class="mind-basic-field" data-mmd-production-only=""><span>过渡终点 <output id="mmdArFillFacingEndValue">0.30</output></span><input id="mmdArFillFacingEnd" type="range" min="-1" max="1" step="0.01" value="0.3" aria-label="补光过渡终点"></label><p class="mind-basic-note" data-mmd-production-only="">沿用主光阴影时生效；起点处补光淡出，终点处完整保留。负值让过渡延伸到背光面。</p><label class="mind-basic-field" data-mmd-production-only=""><span>浅凹抑制 <output id="mmdArAoConcavityAngleValue">10.0°</output></span><input id="mmdArAoConcavityAngle" type="range" min="0" max="45" step="0.5" value="10"><small>减弱浅内凹 AO，不修改模型法线。</small></label>
+</section>
             </div>
             <button id="displayChatToggle" class="display-stage-button" type="button"
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
@@ -410,7 +495,7 @@
             </div>
         </div>
     </div>
-    
+
     <audio id="ttsAudio" style="display:none;"></audio>
     <div id="uiSleepOverlay" class="sleep-overlay sleep-overlay-ui"></div>
     <script src="js/html-to-image.min.js"></script>
@@ -427,9 +512,17 @@
     <script src="js/display-background-glow.js"></script>
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
+    <script src="js/display-mmd-settings.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
     <script src="js/display-mmd-panel-groups.js" defer></script>
     <script src="js/display-mmd-lighting.js" defer></script>
+    <script src="js/mmd-imu-core.js" defer data-mmd-production-only></script>
+    <script src="js/display-mmd-ar-imu.js" defer data-mmd-production-only></script>
+    <script src="js/display-mmd-gravity-camera.js" defer data-mmd-production-only></script>
+    <script src="js/display-mmd-production-controls.js" defer data-mmd-production-only></script>
+    <script src="js/display-mmd-physics-controls.js" defer data-mmd-production-only></script>
+    <script src="js/display-mmd-mindar-controls.js" defer data-mmd-production-only></script>
+    <script type="module" src="js/mmd-local-assets-ui.mjs" data-mmd-production-only></script>
     <script src="js/display-mmd-ar-mindar.js" defer></script>
     <script src="js/display-mmd-ar.js" defer></script>
     <script src="js/display-mmd-command-adapter.js" defer></script>
@@ -468,7 +561,7 @@
         if (window.UiTheme) {
             window.UiTheme.init();
         }
-        
+
         let currentRotation = 0;
         window.currentRotation = 0;
         let currentFit = 'contain';
@@ -1289,19 +1382,19 @@
 
         let logReportConfig = null;
         let _originalConsole = null;
-        
+
         let monitorTime = 0;
         let monitorDataArray = null;
         let monitorLastFrameAt = 0;
         const VOICE_MONITOR_WIDTH = 140;
-        
+
         const monitorCanvas = document.getElementById('mini-monitor');
         const monitorCtx = monitorCanvas.getContext('2d');
-        
+
         function drawMonitor(data, timeSeconds) {
             monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
             monitorCtx.fillStyle = '#00f2ff';
-            
+
             const barWidth = 3;
             const gap = 1;
             const step = Math.floor(data.length / (monitorCanvas.width / (barWidth + gap)));
@@ -1319,7 +1412,7 @@
             }
             monitorCtx.globalAlpha = 1;
         }
-        
+
         function drawIdleMonitor(t) {
             monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
             monitorCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
@@ -1329,7 +1422,7 @@
             }
             monitorCtx.globalAlpha = 1;
         }
-        
+
         function animateMonitor(timestamp = 0) {
             const elapsed = monitorLastFrameAt === 0
                 ? 1 / 60
@@ -1348,9 +1441,9 @@
             }
             requestAnimationFrame(animateMonitor);
         }
-        
+
         requestAnimationFrame(animateMonitor);
-        
+
         function sendCanvasSize() {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 displayWs.send(JSON.stringify({
@@ -1360,7 +1453,7 @@
                 }));
             }
         }
-        
+
         // 存储最近收到的消息中的 correlationId，用于 commandAck 回传
         let _lastCorrelationId = null;
         function setCorrelationId(cid) { if (cid) _lastCorrelationId = cid; }
@@ -1384,14 +1477,14 @@
                 displayWs.send(JSON.stringify(ack));
             }
         }
-        
+
         function getBrowserInfo() {
             const ua = navigator.userAgent;
             const uaLower = ua.toLowerCase();
-            
+
             let browserName = '未知浏览器';
             let browserVersion = '未知';
-            
+
             if (uaLower.includes('edg/')) {
                 browserName = 'Microsoft Edge';
                 browserVersion = ua.split('Edg/')[1]?.split(' ')[0]?.split('.')[0] || '未知';
@@ -1419,7 +1512,7 @@
                 browserName = 'Google Chrome';
                 browserVersion = ua.split('Chrome/')[1]?.split(' ')[0]?.split('.')[0] || '未知';
             }
-            
+
             let os = '未知系统';
             if (ua.includes('Windows NT 10')) os = 'Windows 10/11';
             else if (ua.includes('Windows NT 6.3')) os = 'Windows 8.1';
@@ -1436,7 +1529,7 @@
                 os = match ? `iOS ${match[1].replace('_', '.')}` : 'iOS';
             } else if (ua.includes('Linux')) os = 'Linux';
             else if (ua.includes('CrOS')) os = 'Chrome OS';
-            
+
             let deviceType = '桌面设备';
             if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
                 if (/iPad|Android/i.test(ua) || ua.includes('Tablet')) {
@@ -1445,7 +1538,7 @@
                     deviceType = '移动设备';
                 }
             }
-            
+
             return {
                 userAgent: ua,
                 browserName: browserName,
@@ -1457,7 +1550,7 @@
                 devicePixelRatio: window.devicePixelRatio
             };
         }
-        
+
         function getFeatureSupport() {
             return [
                 {
@@ -1532,7 +1625,7 @@
                 }
             ];
         }
-        
+
         function sendBrowserInfo() {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 displayWs.send(JSON.stringify({
@@ -1542,7 +1635,7 @@
                 }));
             }
         }
-        
+
         // 计算旋转后的逻辑画布尺寸：90°/270°时，原视口的宽高互换。
         // 文本节点虽然不属于媒体容器，但其最大可用区域和四角边距必须使用同一套尺寸。
         function getRotationLayout() {
@@ -1891,7 +1984,7 @@
             // render 任务覆盖层的旋转定位由 render.js 的 applyRotationStyle 管理
 
             const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatusRow, voiceStatusMainRow, voiceStatus, voiceConversationCountdown, voiceConversationConfirmationCountdown, voiceTextDisplay, monitorWrapper];
-            
+
             uiElements.forEach(el => {
                 if (!el) return;
                 el.style.transform = '';
@@ -1911,7 +2004,7 @@
                 el.style.marginTop = '';
                 delete el.dataset.voiceCentered;
             });
-            
+
             if (currentRotation === 0) {
                 connectionStatus.style.top = edgeOffset;
                 connectionStatus.style.left = edgeOffset;
@@ -1932,21 +2025,21 @@
                 connectionStatus.style.top = edgeOffset;
                 connectionStatus.style.right = edgeOffset;
                 connectionStatus.style.transform = 'rotate(90deg)';
-                
+
                 timeDisplay.style.bottom = edgeOffset;
                 timeDisplay.style.right = edgeOffset;
                 timeDisplay.style.transform = 'rotate(90deg)';
-                
+
                 fileNameDisplay.style.top = edgeOffset;
                 fileNameDisplay.style.left = edgeOffset;
                 fileNameDisplay.style.transform = 'rotate(90deg)';
-                
+
                 monitorWrapper.style.bottom = edgeOffset;
                 monitorWrapper.style.left = edgeOffset;
                 monitorWrapper.style.flexDirection = 'column-reverse';
                 monitorWrapper.style.transformOrigin = 'bottom left';
                 monitorWrapper.style.transform = 'rotate(90deg)';
-                
+
                 voiceStatus.style.bottom = voiceStatusOffset;
                 voiceStatus.style.left = edgeOffset;
                 voiceStatus.style.transform = 'rotate(90deg)';
@@ -1959,20 +2052,20 @@
                 connectionStatus.style.bottom = edgeOffset;
                 connectionStatus.style.right = edgeOffset;
                 connectionStatus.style.transform = 'rotate(180deg)';
-                
+
                 timeDisplay.style.bottom = edgeOffset;
                 timeDisplay.style.left = edgeOffset;
                 timeDisplay.style.transform = 'rotate(180deg)';
-                
+
                 fileNameDisplay.style.top = edgeOffset;
                 fileNameDisplay.style.right = edgeOffset;
                 fileNameDisplay.style.transform = 'rotate(180deg)';
-                
+
                 monitorWrapper.style.top = edgeOffset;
                 monitorWrapper.style.left = edgeOffset;
                 monitorWrapper.style.transformOrigin = 'top left';
                 monitorWrapper.style.transform = 'rotate(180deg)';
-                
+
                 voiceStatus.style.top = voiceStatusOffset;
                 voiceStatus.style.left = edgeOffset;
                 voiceStatus.style.transform = 'rotate(180deg)';
@@ -1985,21 +2078,21 @@
                 connectionStatus.style.bottom = edgeOffset;
                 connectionStatus.style.left = edgeOffset;
                 connectionStatus.style.transform = 'rotate(270deg)';
-                
+
                 timeDisplay.style.top = edgeOffset;
                 timeDisplay.style.left = edgeOffset;
                 timeDisplay.style.transform = 'rotate(270deg)';
-                
+
                 fileNameDisplay.style.bottom = edgeOffset;
                 fileNameDisplay.style.right = edgeOffset;
                 fileNameDisplay.style.transform = 'rotate(270deg)';
-                
+
                 monitorWrapper.style.top = edgeOffset;
                 monitorWrapper.style.right = edgeOffset;
                 monitorWrapper.style.flexDirection = 'column-reverse';
                 monitorWrapper.style.transformOrigin = 'top right';
                 monitorWrapper.style.transform = 'rotate(270deg)';
-                
+
                 voiceStatus.style.top = voiceStatusOffset;
                 voiceStatus.style.right = edgeOffset;
                 voiceStatus.style.transform = 'rotate(270deg)';
@@ -2039,7 +2132,7 @@
                 });
             });
         }
-        
+
         function normalizeDynamicFitConfig(config = {}) {
             const readSeconds = (value, fallback) => {
                 const number = Number(value);
@@ -2117,7 +2210,7 @@
             currentFit = fit;
             mediaImage.classList.remove('height', 'width', 'crop');
             mediaVideo.classList.remove('height', 'width', 'crop');
-            
+
             if (fit === 'height') {
                 mediaImage.classList.add('height');
                 mediaVideo.classList.add('height');
@@ -2139,7 +2232,7 @@
             }
             applyCrop();
         }
-        
+
         let _cropRafId = null;
         let _cropDebug = false;
         function _cropLog(...args) {
@@ -2207,14 +2300,14 @@
             media.style.top = '';
             media.style.maxWidth = '';
             media.style.maxHeight = '';
-            
+
             const container = document.getElementById('mediaContainer');
             const containerWidth = container.clientWidth;
             const containerHeight = container.clientHeight;
-            
+
             const naturalWidth = media.naturalWidth || media.videoWidth || containerWidth;
             const naturalHeight = media.naturalHeight || media.videoHeight || containerHeight;
-            
+
             const isRotated = currentRotation === 90 || currentRotation === 270;
 
             _cropLog('[Crop] applyCrop 开始');
@@ -2313,7 +2406,7 @@
                 }
                 return { ...baseInfo, 状态: '高度适配模式' };
             }
-            
+
             if (geometryMode === 'width') {
                 if (isRotated) {
                     const displayWidth = containerHeight;
@@ -2325,14 +2418,14 @@
                 }
                 return { ...baseInfo, 状态: '宽度适配模式' };
             }
-            
+
             if (geometryMode !== 'crop') {
                 return { ...baseInfo, 状态: '非裁剪模式' };
             }
-            
+
             const containerRatio = containerWidth / containerHeight;
             let displayWidth, displayHeight;
-            
+
             if (isRotated) {
                 const rotatedRatio = 1 / mediaRatio;
                 if (rotatedRatio > containerRatio) {
@@ -2351,10 +2444,10 @@
                     displayHeight = containerWidth / mediaRatio;
                 }
             }
-            
+
             let cropWidth, cropHeight, cropX, cropY;
             let targetWidth, targetHeight;
-            
+
             if (isRotated) {
                 cropWidth = displayWidth * (currentCrop.height / 100);
                 cropHeight = displayHeight * (currentCrop.width / 100);
@@ -2370,19 +2463,19 @@
                 targetWidth = containerWidth;
                 targetHeight = containerHeight;
             }
-            
+
             const scaleX = targetWidth / cropWidth;
             const scaleY = targetHeight / cropHeight;
             const scale = Math.max(scaleX, scaleY);
-            
+
             let finalWidth, finalHeight, finalLeft, finalTop;
-            
+
             if (isRotated) {
                 finalWidth = displayWidth * scale;
                 finalHeight = displayHeight * scale;
                 finalLeft = -cropY * scale;
                 finalTop = -cropX * scale;
-                
+
                 // 旋转补偿：CSS transform rotate 是围绕元素中心旋转的
                 // 旋转90度后，元素视觉宽度变为原高度，视觉高度变为原宽度
                 // 需要补偿 (finalWidth - finalHeight) / 2 的偏移
@@ -2395,13 +2488,13 @@
                 finalLeft = -cropX * scale;
                 finalTop = -cropY * scale;
             }
-            
+
             media.classList.add('crop');
             media.style.width = finalWidth + 'px';
             media.style.height = finalHeight + 'px';
             media.style.left = finalLeft + 'px';
             media.style.top = finalTop + 'px';
-            
+
             _cropLog('[Crop] 裁剪计算完成');
             _cropLog('[Crop] 显示尺寸:', displayWidth, 'x', displayHeight);
             _cropLog('[Crop] 裁剪像素值:', { cropX, cropY, cropWidth, cropHeight });
@@ -2411,7 +2504,7 @@
                 left: Math.round(finalLeft) + 'px',
                 top: Math.round(finalTop) + 'px'
             });
-            
+
             return {
                 ...baseInfo,
                 状态: '裁剪模式',
@@ -2425,28 +2518,28 @@
                 }
             };
         }
-        
+
         function applyCustomCrop(customData) {
             const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
-            
+
             media.classList.remove('crop');
             media.classList.add('height');
             media.style.position = 'absolute';
             media.style.maxWidth = 'none';
             media.style.maxHeight = 'none';
-            
+
             const width = customData.width || 1920;
             const height = customData.height || 1080;
             const left = customData.left || 0;
             const top = customData.top || 0;
-            
+
             media.style.width = width + 'px';
             media.style.height = height + 'px';
             media.style.left = left + 'px';
             media.style.top = top + 'px';
-            
+
             currentFit = 'custom';
-            
+
             return {
                 自定义模式: true,
                 宽度: width + 'px',
@@ -2455,12 +2548,12 @@
                 上边距: top + 'px'
             };
         }
-        
+
         window.addEventListener('resize', applyCrop);
         window.addEventListener('resize', () => {
             if (currentMediaType === 'text') TextMediaPlayer.applyStyle({});
         });
-        
+
         function updateTime() {
             const now = new Date();
             const hours = String(now.getHours()).padStart(2, '0');
@@ -2468,15 +2561,15 @@
             const seconds = String(now.getSeconds()).padStart(2, '0');
             timeDisplay.textContent = `${hours}:${minutes}:${seconds}`;
         }
-        
+
         setInterval(updateTime, 1000);
         updateTime();
-        
+
         function setConnectionStatus(status, text) {
             connectionStatus.className = status;
             connectionStatus.textContent = text;
         }
-        
+
         // 媒体文件名必须交给服务器统一 TTS，才能让其他显示端收到跨设备播放状态并暂停非声纹监听。
         function requestMediaNameTts(text) {
             if (!text || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
@@ -2827,7 +2920,7 @@
                 return false;
             }
         }
-        
+
         function playNextTts() {
             console.log('[显示端] playNextTts: isPlayingTts=', isPlayingTts, 'queue=', ttsQueue.length);
             if (isPlayingTts) {
@@ -2842,20 +2935,20 @@
                 sendVoiceConversationTtsFinished();
                 return;
             }
-            
+
             pauseVoiceRecordingForTts();
             isPlayingTts = true;
             const item = ttsQueue.shift();
             currentTtsItem = item;
             item.playbackToken = ++ttsPlaybackToken;
             beginTtsVideoCoordination();
-            
+
             console.log('[显示端] 播放TTS:', item.audioUrl || item.text);
-            
+
             if (item.text) {
                 showTtsText(item.text);
             }
-            
+
             if (item.audioUrl) {
                 startTtsAudio(item, item.audioUrl);
             } else if (item.text) {
@@ -2877,18 +2970,18 @@
                 finishCurrentTts('empty');
             }
         }
-        
+
         function queueTts(item) {
             registerTtsBatchItem(item);
             ttsQueue.push(item);
             playNextTts();
         }
-        
+
         ttsAudio.addEventListener('ended', () => {
             if (!isCurrentTtsAudioSource()) return;
             finishCurrentTts('ended');
         });
-        
+
         ttsAudio.addEventListener('error', () => {
             if (!isCurrentTtsAudioSource()) return;
             finishCurrentTts('error');
@@ -2912,14 +3005,14 @@
                 window.DisplayStage?.refreshVoiceTextVisibility?.();
             }
         }
-        
+
         function hideTtsText() {
             if (voiceTextDisplay) {
                 voiceTextDisplay.className = 'voice-text-hidden';
                 window.DisplayStage?.refreshVoiceTextVisibility?.();
             }
         }
-        
+
         function handleTTS(data) {
             console.log('[显示端] 收到TTS消息:', data.action, data.audioUrl || data.text);
             if (data.textPlaybackRemote) {
@@ -3149,7 +3242,7 @@
             }
             playRemoteTextPlayback(data);
         }
-        
+
         function handleReminder(data) {
             if (data.action === 'popup') {
                 showReminderPopup(data.time, data.content);
@@ -3157,7 +3250,7 @@
                 queueTts({ audioUrl: data.audioUrl, text: data.text });
             }
         }
-        
+
         function handleVoiceCommand(data) {
             if (data.action === 'confirm') {
                 showVoiceConfirmPopup(data.confirmationId, data.text, data.audioUrl);
@@ -3204,17 +3297,17 @@
                 showPlayChoicesPopup(data.confirmationId, data.matches, data.text);
             }
         }
-        
+
         function showVoiceConfirmPopup(confirmationId, text, audioUrl) {
             const existing = document.querySelector('.voice-confirm-popup');
             if (existing) {
                 existing.remove();
             }
-            
+
             if (audioUrl) {
                 queueTts({ audioUrl: audioUrl, text: text });
             }
-            
+
             const popup = document.createElement('div');
             popup.className = 'voice-confirm-popup';
             popup.innerHTML = `
@@ -3222,7 +3315,7 @@
                 <div class="voice-confirm-hint">请说确认或取消</div>
             `;
             appendRotationPopup(popup);
-            
+
             setTimeout(() => {
                 if (popup.parentElement) {
                     popup.remove();
@@ -3237,7 +3330,7 @@
                 { conversationConfirmationId: confirmationId }
             );
         }
-        
+
         // 天气详情需要覆盖足够长的阅读时间；空白不计入字数，每 3 个可见字符保留 1 秒，最长 90 秒。
         function calculateWeatherPopupDuration(text) {
             const visibleTextLength = Array.from(String(text || '').replace(/\s/gu, '')).length;
@@ -3249,7 +3342,7 @@
             if (existing) {
                 existing.remove();
             }
-            
+
             const popup = document.createElement('div');
             popup.className = 'voice-response-popup';
             if (options.conversationConfirmationId) {
@@ -3261,7 +3354,7 @@
             // 详情文本可能来自 LLM，必须复用安全 Markdown 渲染器，禁止把原始 HTML 直接插入页面。
             popup.innerHTML = `<div class="voice-response-content">${ChatMarkdown.render(text)}</div>`;
             appendRotationPopup(popup, options);
-            
+
             setTimeout(() => {
                 if (popup.parentElement) {
                     popup.remove();
@@ -3269,13 +3362,13 @@
             }, durationMs);
             return popup;
         }
-        
+
         function showSearchResultPopup(query, results) {
             const existing = document.querySelector('.search-result-popup');
             if (existing) {
                 existing.remove();
             }
-            
+
             const resultList = Array.isArray(results) ? results : (results ? [results] : []);
             const escapeSearchText = (text) => String(text || '').replace(/[&<>"']/gu, (char) => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -3294,7 +3387,7 @@
             } else {
                 contentHtml = '<div class="search-no-result">没有找到结果</div>';
             }
-            
+
             const popup = document.createElement('div');
             popup.className = 'search-result-popup';
             popup.innerHTML = `
@@ -3302,27 +3395,27 @@
                 <div class="search-result-body">${contentHtml}</div>
             `;
             appendRotationPopup(popup);
-            
+
             setTimeout(() => {
                 if (popup.parentElement) {
                     popup.remove();
                 }
             }, 10000);
         }
-        
+
         function showPlayChoicesPopup(confirmationId, matches, text) {
             const existing = document.querySelector('.play-choices-popup');
             if (existing) {
                 existing.remove();
             }
-            
+
             let listHtml = '';
             if (matches && matches.length > 0) {
                 listHtml = matches.map((item, index) => 
                     `<div class="play-choice-item">${index + 1}. ${item.name}</div>`
                 ).join('');
             }
-            
+
             const popup = document.createElement('div');
             popup.className = 'play-choices-popup';
             popup.innerHTML = `
@@ -3330,20 +3423,20 @@
                 <div class="play-choices-list">${listHtml}</div>
             `;
             appendRotationPopup(popup);
-            
+
             setTimeout(() => {
                 if (popup.parentElement) {
                     popup.remove();
                 }
             }, 30000);
         }
-        
+
         function showReminderPopup(time, content) {
             const existing = document.querySelector('.reminder-popup');
             if (existing) {
                 existing.remove();
             }
-            
+
             const popup = document.createElement('div');
             popup.className = 'reminder-popup';
             popup.innerHTML = `
@@ -3352,7 +3445,7 @@
                 <div class="content">${content}</div>
             `;
             appendRotationPopup(popup);
-            
+
             setTimeout(() => {
                 if (popup.parentElement) {
                     popup.style.animation = 'popupPulse 0.3s ease reverse';
@@ -3360,7 +3453,7 @@
                 }
             }, 10000);
         }
-        
+
         function handleRestoreState(state) {
             if (!state) return;
 
@@ -3373,25 +3466,25 @@
             if (state.dynamicFitConfig !== undefined) {
                 dynamicFitConfig = normalizeDynamicFitConfig(state.dynamicFitConfig);
             }
-            
+
             if (state.rotation !== undefined) {
                 currentRotation = state.rotation;
                 applyRotation();
             }
-            
+
             if (state.fit !== undefined) {
                 applyFit(state.fit);
             }
-            
+
             if (state.crop !== undefined) {
                 currentCrop = state.crop;
                 applyCrop();
             }
-            
+
             if (state.volume !== undefined) {
                 mediaVideo.volume = state.volume / 100;
             }
-            
+
             if (state.textStyle) {
                 TextMediaPlayer.applyStyle(state.textStyle);
             }
@@ -3433,7 +3526,7 @@
                 autoTtsEnabled = !!state.autoTts;
             }
         }
-        
+
         function extractFileName(url) {
             try {
                 const urlParts = url.split('/');
@@ -3448,7 +3541,7 @@
                 return '';
             }
         }
-        
+
         <!-- 批量播放模式：本地自循环播放列表 -->
         let playlistState = null;
         let savedAutoTts = null;
@@ -4900,7 +4993,7 @@
             } else if (data.type === 'base64') {
                 const mimeType = data.mimeType || 'application/octet-stream';
                 const src = 'data:' + mimeType + ';base64,' + data.data;
-                
+
                 if (data.mediaType === 'audio') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'none';
@@ -4990,7 +5083,7 @@
                         requestAnimationFrame(() => TextMediaPlayer.applyStyle({}));
                     }
                     break;
-                    
+
                 case 'fit':
                     applyFit(data.value);
                     break;
@@ -5074,7 +5167,7 @@
                     // 上报真实播放状态：暂停后重连/刷新时服务端据此恢复，避免自动播放
                     reportPlayState(data.value === true);
                     break;
-                    
+
                 case 'seek':
                     {
                         const media = getCurrentPlayableMedia();
@@ -5083,14 +5176,14 @@
                         }
                     }
                     break;
-                    
+
                 case 'volume':
                     {
                         const media = getCurrentPlayableMedia();
                         if (media) media.volume = data.value / 100;
                     }
                     break;
-                    
+
                 case 'cropDebug':
                     _cropDebug = !!data.value;
                     break;
@@ -5100,7 +5193,7 @@
                     currentFit = 'crop';
                     scheduleCropApply();
                     break;
-                    
+
                 case 'customCrop':
                     applyCustomCrop(data.value);
                     sendCommandAck('customCrop', true, '自定义裁剪已应用');
@@ -5506,7 +5599,7 @@
                 // 显示端连接建立后提前触发现有 ASR/声纹模型加载，避免第一条语音请求承担初始化耗时。
                 void prewarmDisplaySpeechModels();
             };
-            
+
             socket.onmessage = function(event) {
                 if (!isCurrentDisplaySocket(socket)) return;
                 try {
@@ -5527,7 +5620,7 @@
                         }
                         return;
                     }
-                    
+
                     if (data.type === 'displayId') {
                         displayId = data.id;
                         return;
@@ -5569,7 +5662,7 @@
                         }
                         return;
                     }
-                    
+
                     if (data.type === 'capabilitiesUpdated') {
                         handleCapabilitiesUpdated(data);
                         return;
@@ -5919,7 +6012,7 @@
                     console.error('解析消息失败:', e);
                 }
             };
-            
+
             socket.onclose = function() {
                 if (!isCurrentDisplaySocket(socket)) return;
                 if (displayRecordingSession) {
@@ -5968,13 +6061,13 @@
                 console.warn('页面离开时关闭 WebSocket 失败:', error);
             }
         });
-        
+
         window.addEventListener('resize', function() {
             applyRotation();
             applyCrop();
             sendCanvasSize();
         });
-        
+
         applyRotation();
         connectWebSocket();
         checkSleepMode();
@@ -6330,7 +6423,7 @@
 
         initVoiceRecognition();
         updateVoiceStatusDisplay();
-        
+
         function updateVoiceStatusDisplay() {
             if (!voiceStatus) return;
 
@@ -6374,10 +6467,10 @@
                 ? '语音监听已关闭'
                 : '语音监听尚未启动');
         }
-        
+
         function updateVoiceTextDisplay(text, isFinal) {
             if (!voiceTextDisplay) return;
-            
+
             if (text) {
                 voiceTextDisplay.textContent = text + (isFinal ? '' : '…');
                 voiceTextDisplay.className = 'voice-text-visible';
@@ -6386,7 +6479,7 @@
             }
             window.DisplayStage?.refreshVoiceTextVisibility?.();
         }
-        
+
         function sendVoiceStatus() {
             updateVoiceStatusDisplay();
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -6654,7 +6747,7 @@
             };
             requestAnimationFrame(collect);
         }
-        
+
         function reportVoiceAvailability(available) {
             voiceSupported = available === true;
             sendVoiceStatus();
@@ -6761,7 +6854,7 @@
             if (webgpuDiag) {
                 capabilities._webgpuDiag = webgpuDiag;
             }
-            
+
             try {
                 // getUserMedia 授权弹窗无人值守时会永久挂起：3 秒超时视为不可用
                 const stream = await Promise.race([
@@ -6783,7 +6876,7 @@
             capabilities.audioOutputDevices = outputDevices;
             capabilities.webViewAudioCapture = !!navigator.mediaDevices?.getUserMedia;
             capabilities.nativeAudioCapture = !!(nativeBridge && typeof nativeBridge.startNativeAudioCapture === 'function');
-            
+
             if (nativeAsrAvailable) {
                 try {
                     const state = JSON.parse(nativeBridge.asrStatus());
@@ -6857,11 +6950,11 @@
                     console.warn('[视觉] visionStatus 解析失败:', e);
                 }
             }
-            
+
             capabilities.cameraCapture = cameraCaptureUserOverride ?? capabilities.cameraCapture;
             return capabilities;
         }
-        
+
         async function declareCapabilities() {
             console.log('[能力] 入口: 开始声明');
             try {
@@ -6920,7 +7013,7 @@
                 console.error('[能力] 声明失败:', e);
             }
         }
-        
+
         function handleCapabilitiesUpdated(data) {
             if (data.capabilities) {
                 const prevCaps = currentCapabilities;
@@ -7315,11 +7408,11 @@
             // 服务端下发的是权威恢复指令；即使 key 没变化，也要重新建立原生路由，覆盖 WebSocket/系统音频状态丢失。
             applyAudioOutputDevice(audioOutputDeviceKey);
         }
-        
+
         function initVoiceRecognition() {
             checkAsrStatus();
         }
-        
+
         async function checkAsrStatus() {
             const requestToken = ++asrStatusRequestToken;
             clearAsrStatusRetryTimer();
@@ -7330,7 +7423,7 @@
                 if (requestToken !== asrStatusRequestToken || !displayPageActive) return;
                 const ready = data.ready === true;
                 reportVoiceAvailability(ready);
-                
+
                 if (ready) {
                     console.log('显示端服务器 ASR 服务可用');
                     // 不直接启动录音，由 handleCapabilitiesUpdated 中的 pendingAutoStart 处理
@@ -7345,7 +7438,7 @@
                 scheduleAsrStatusRetry();
             }
         }
-        
+
         // 所有网页端 ASR/声纹录音统一使用共享 PCM 采集器，避免不同端的编码器差异。
         function startRawPcmCapture(stream, options = {}) {
             try {
@@ -7732,7 +7825,7 @@
                 console.log('[能力] 显示端语音监听已关闭，跳过录音启动');
                 return;
             }
-            
+
             if (currentCapabilities && !currentCapabilities.voiceRecording) {
                 console.log('[能力] 无语音录音能力，跳过录音启动');
                 return;
@@ -7751,7 +7844,7 @@
                 }
                 return;
             }
-            
+
             try {
                 activeRecordingPurpose = 'asr';
                 if ((micStream && pcmCapture && pcmCapture.active)
@@ -7796,7 +7889,7 @@
                 console.log('显示端语音录制已启动');
                 sendVoiceStatus();
                 startSilenceDetection();
-                
+
             } catch (e) {
                 console.error('显示端麦克风访问失败:', e);
                 releaseVoiceRecordingResources();
@@ -7805,7 +7898,7 @@
                 sendVoiceStatus();
             }
         }
-        
+
         function handleVoiceVadRms(rms) {
             if (!silenceDetectionRunning || !isListening || !Number.isFinite(rms)) return;
             if (vadNoiseTestActive) return;
@@ -7837,7 +7930,7 @@
                 return;
             }
             if (!micStream || !pcmCapture?.context) return;
-            
+
             try {
                 if (!audioContext) {
                     // VAD 与 PCM 采集复用同一个 AudioContext，整段监听期间只保留一条音频图。
@@ -7849,38 +7942,38 @@
                     analyser.fftSize = 2048;
                     vadSource.connect(analyser);
                 }
-                
+
                 silenceDetectionRunning = true;
-                
+
                 const checkSilence = () => {
                     if (!silenceDetectionRunning || !isListening || !analyser) {
                         silenceDetectionFrameId = null;
                         return;
                     }
-                    
+
                     const timeDomainData = new Uint8Array(analyser.fftSize);
                     analyser.getByteTimeDomainData(timeDomainData);
-                    
+
                     let sumSquares = 0;
                     for (let i = 0; i < timeDomainData.length; i++) {
                         const normalized = (timeDomainData[i] - 128) / 128;
                         sumSquares += normalized * normalized;
                     }
                     const rms = Math.sqrt(sumSquares / timeDomainData.length);
-                    
+
                     handleVoiceVadRms(rms);
                     if (!silenceDetectionRunning) return;
-                    
+
                     silenceDetectionFrameId = requestAnimationFrame(checkSilence);
                 };
-                
+
                 silenceDetectionFrameId = requestAnimationFrame(checkSilence);
             } catch (e) {
                 silenceDetectionRunning = false;
                 console.log('静音检测初始化失败:', e);
             }
         }
-        
+
         function stopSilenceDetection() {
             silenceDetectionRunning = false;
             if (silenceDetectionFrameId !== null) {
@@ -7893,7 +7986,7 @@
             // audioContext 由 PcmAudioCapture 统一关闭，这里只断开 VAD 节点，避免分段时销毁采集上下文。
             audioContext = null;
         }
-        
+
         function getVoiceInputTiming(timing, segment = null) {
             const speechStartAt = Number(timing?.speechStartAt);
             const speechEndAt = Number(timing?.speechEndAt);
@@ -7945,14 +8038,14 @@
                 const speechEndAt = Number(timing?.speechEndAt);
                 if (Number.isFinite(speechStartAt)) formData.append('speechStartAt', String(speechStartAt));
                 if (Number.isFinite(speechEndAt)) formData.append('speechEndAt', String(speechEndAt));
-                
+
                 const response = await fetch('/api/asr/recognize', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'success') {
                     // 分段已经由服务器按说话人合并并进入命令链路，显示端只负责回显。
                     if (data.segments && data.segments.length) {
@@ -7993,7 +8086,7 @@
                     } else {
                         updateVoiceTextDisplay('', true);
                     }
-                    
+
                     if (consecutiveIgnoreCount >= MAX_CONSECUTIVE_IGNORES) {
                         const cooldownMs = VOICE_COOLDOWN_MS * Math.pow(2, Math.min(consecutiveIgnoreCount - MAX_CONSECUTIVE_IGNORES, 3));
                         voiceCooldownUntil = Date.now() + cooldownMs;
@@ -8002,7 +8095,7 @@
                         // 连续无效识别进入冷却时才释放采集资源；普通 ignored 继续复用当前链路。
                         releaseVoiceRecordingResources();
                         sendVoiceStatus();
-                        
+
                         if (isAlwaysListening) {
                             setTimeout(() => {
                                 if (Date.now() >= voiceCooldownUntil) {
@@ -8145,7 +8238,7 @@
             for (let i = 0; i < pcm.length; i++) encoded += String.fromCharCode(pcm[i]);
             return btoa(encoded);
         }
-        
+
         document.addEventListener('click', function() {
             // 睡眠/深度睡眠中点击页面不恢复视频（睡眠期间媒体容器已隐藏，点击遮罩/系统 UI 不应触发播放）
             if (isSleepPaused()) return;

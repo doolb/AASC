@@ -137,3 +137,6 @@ function addStabilityDisplay(source) {
 }
 
 module.exports = { addPhysicsStability, addStabilityRuntime, addStabilityDisplay };
+
+// 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
+module.exports = require('./web-production-shared').reuseAdapters(module.exports);

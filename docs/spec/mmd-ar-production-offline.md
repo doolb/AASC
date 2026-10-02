@@ -1,5 +1,69 @@
 # 正式 Offline 显示端 MMD AR 同步实现规范（伪代码）
 
+## 用户功能补齐（2026-10-02，已实现，待现场验收与正式发布）
+
+```text
+已有声明:
+  DisplayMmd / DisplayMmdAr / DisplayMmdMindArTracker
+  PmxRuntime / PmxHelper / MMDAnimationHelper / MMDPhysics
+  正式面板状态与本地偏好、摄像头能力控制、Offline 服务包收录规则
+
+新增定义:
+  ProductionPhysicsOptions { solver: ammo|xpbd, physicsFps, baseline, wind }
+  ProductionTrackingOptions { filterMinCF, filterBeta, imuVisible, imuLost, calibration }
+  ProductionGravityOptions { enabled, cameraBackground, deadZone, smoothingMs: 20 }
+  ProductionShadowOptions { bias, normalBias, mapSize, rangeScale, fillFacingRange }
+  LocalModelResources / CharacterMotion / CameraMotion
+  拆分的 IMU、重力、资源、风场、物理频率、刚体 XPBD、阴影适配模块
+  createDisplayMmdSettings: 恢复/补发重力、风场、基准参数
+  createPmxModelResources(context): load/loadSelectedMotion/loadMotion/validateMotionResource
+  createPmxArCamera(context): set/reset/suspend AR 相机与参数
+  createPmxCameraMotion(context): 相机 VMD 加载、播放、进度、释放
+  createPmxLighting(context): setLighting
+  以上模块通过状态访问器读取同一个运行时实例，不复制可变模型/物理/相机状态
+
+操作流程:
+  读取正式状态；保留已有模型、动作、定位目标和配置键
+  规范化 Ammo/XPBD 选择，默认 Ammo；旧 THREE-XPBD 偏好迁移为 XPBD
+  Ammo 根据物理 Hz 子步积分并按基准缩放纠错，应用现有 PMX 六轴 K 与限制
+  XPBD 使用基准整数 N(3..180) 每帧子步，每子步 1 轮；不使用物理 Hz
+  XPBD 复用当前质量、弹簧、碰撞、速度投影与直接锁轴实现；锁定不沿动态链传播
+  每次 helper 重建保留动作与本地资源，安全释放自己拥有的 Ammo 对象
+  风场使用当前源方向、强度、阵风与两后端已有质量处理，不引入新的风倍率规则
+  本地加载 PMX/纹理或 VMD 前保留旧状态；成功切换后释放旧资源，失败回滚
+  普通视图可使用相机 VMD；AR 激活时只由定位相机流程控制视图
+  MindAR 首次识别后建立视觉坐标与 IMU 预测状态，静止校准后才预测
+  图片可见与不可见分别按对应开关应用相机旋转/平移预测；零偏/死区与丢失时限复用现实现
+  将相机预测结果送入正式相机跟随层，保留第二层缓动；不修改角色和物理世界姿态
+  独立重力模式把重力旋转与手动旋转叠加到角色锚点，非 SLAM
+  摄像头背景只有用户启用且能力允许时申请；停用、后台、权限关闭统一释放
+  阴影设置由正式状态提交，按硬件上限选贴图尺寸，拟合范围并对齐像素网格
+  角色移动/缩放时更新阴影范围；背光过渡使用现有补光 shader 与可配置范围
+  AO 浅凹抑制参数由正式状态输入，不依赖测试全局变量
+  用户面板默认透明度 50%；诊断/预览/顶点布料/SLAM 控件与模块不载入正式页
+  测试构建复用已合并功能核心，仅追加测试专有适配，避免重复注入
+  正式控制脚本恢复求解器/基准/风/重力/阴影/滤波偏好，保留原灯光/相机键
+  模型选择、求解器切换与物理重建时互相禁用相关控件，成功后才持久化，失败回显原值
+  相机 VMD 先建立新的动画 helper，成功后替换旧绑定；运行时退出作废异步请求并释放 helper
+  正式重力模式按需导入 Three 数学模块，不因重力启用加载 A-Frame/MindAR
+  独立构建识别 aasc-shared 标记；复用源码时转换测试参数入口并更新导入指纹
+  独立构建展开 mmd-model-runtime 的共享函数体，仅在副本模型提交点加入诊断
+  独立构建单独追加顶点后端/阴影预览/物理帧计时，正式包不载入这些模块
+  标记 servicePackage=true；实现完成不等同已构建发布
+
+已完成的构建/静态检查:
+  build:web:mmd-ar-test 成功；源码语法、控件唯一性、新资源引用与模块依赖核对完成
+  正式求解器选项严格为 ammo/xpbd；没有顶点/骨骼/刚体/质量/阴影预览/SLAM 控件
+  发布状态 servicePackage=true；未构建或发布正式包，未执行测试/模拟
+
+待现场验收(未执行):
+  普通显示/聊天启动、模型和动作切换、失败回滚、配置恢复及换后端
+  相机 VMD 与 AR 互斥、可见/不可见 IMU、重力加手动旋转、权限关闭/后台释放
+  Ammo/XPBD、锁轴与自由末端、风场、帧率变化及手机耗时
+  阴影贴图尺寸/范围/网格/随模型变化、补光背光过渡、AO 浅凹
+  正式页无诊断/顶点布料/SLAM 加载，独立测试页构建保留原有专属功能
+```
+
 ## 测试页用户功能合并（2026-09-29）
 
 ```text

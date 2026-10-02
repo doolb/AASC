@@ -11,9 +11,9 @@
     const DB_VERSION = 1;
     const TARGET_STORE = 'targets';
     const ACTIVE_TARGET_KEY = 'aasc.display.mmdAr.activeTarget.v1';
-    const MOTION_SENSITIVITY_KEY = 'aasc.display.mmdAr.motionSensitivity.v1';
+
     const CAMERA_SETTINGS_KEY = 'aasc.display.mmdAr.cameraSettings.v1';
-    const MOTION_ORBIT_MODE = 'sensor-orbit-only';
+    const MOTION_ORBIT_MODE = 'gravity-anchor-rotation';
     const MIN_QUAD_AREA = 0.03;
     const MAX_PHYSICAL_WIDTH_MM = 100000;
     const DEG_TO_RAD = Math.PI / 180;
@@ -56,9 +56,11 @@
         motionMode: 'off',
         motionPermission: 'unknown',
         motionListening: false,
+        motionPending: false,
+        motionRequest: 0,
         motionCenter: null,
         motionLastSample: null,
-        motionSensitivity: readMotionSensitivity()
+
     };
     let backgroundResumeTargetId = null;
     let backgroundStopPromise = Promise.resolve();
@@ -75,8 +77,8 @@
             name: byId('displayArTargetName'),
             physicalWidth: byId('displayArPhysicalWidth'),
             motionEnabled: byId('displayArMotionEnabled'),
-            motionSensitivity: byId('displayArMotionSensitivity'),
-            motionSensitivityValue: byId('displayArMotionSensitivityValue'),
+
+
             motionRecenter: byId('displayArMotionRecenter'),
             motionMessage: byId('displayArMotionMessage'),
             calibrationButton: byId('displayArCalibrationButton'),
@@ -164,14 +166,7 @@
             });
         }
         root.DisplayMmd?.setArCameraSettings?.(settings);
-        const playback = byId('displayMmdMotionPlayback');
-        playback?.addEventListener('change', () => root.DisplayMmd?.setMotionPlaybackEnabled?.(playback.checked));
-        const physics = byId('displayMmdPhysicsEnabled');
-        physics?.addEventListener('change', () => {
-            void Promise.resolve(root.DisplayMmd?.setPhysicsEnabled?.(physics.checked)).then((success) => {
-                if (!success) physics.checked = !physics.checked;
-            });
-        });
+        // 动作与物理开关由正式动作面板处理，避免异步重建被重复触发。
     }
     function rectangleFromQuad(points) {
         return {
@@ -248,22 +243,8 @@
             return '';
         }
     }
-    function readMotionSensitivity() {
-        try {
-            const value = Number(root.localStorage?.getItem(MOTION_SENSITIVITY_KEY));
-            return Number.isFinite(value) ? clamp(value, 0.25, 2) : 1;
-        } catch (error) {
-            console.warn('[显示端 AR] 读取体感灵敏度失败:', error);
-            return 1;
-        }
-    }
-    function saveMotionSensitivity(value) {
-        try {
-            root.localStorage?.setItem(MOTION_SENSITIVITY_KEY, String(value));
-        } catch (error) {
-            console.warn('[显示端 AR] 保存体感灵敏度失败:', error);
-        }
-    }
+
+
     function saveActiveTargetId(targetId) {
         try {
             if (targetId) {
@@ -311,9 +292,9 @@
         state.elements.deleteButton.disabled = !hasTarget || selected.readOnly === true || state.tracking;
         state.elements.saveButton.disabled = !state.calibration.sourceCanvas
             || !isValidQuad(state.calibration.selectedQuad);
-        state.elements.motionEnabled.checked = state.motionEnabled;
-        state.elements.motionSensitivity.value = String(state.motionSensitivity);
-        state.elements.motionSensitivityValue.textContent = state.motionSensitivity.toFixed(2);
+        state.elements.motionEnabled.checked = state.motionEnabled || state.motionPending;
+        root.DisplayMmdGravityCamera?.setGravityEnabled(state.motionEnabled);
+
         state.elements.motionRecenter.disabled = !state.motionLastSample;
     }
 
@@ -326,7 +307,8 @@
     }
 
     function readMotionSample(event) {
-        const rawValues = [event?.alpha, event?.beta, event?.gamma];
+        // 重力方向由倾斜给出，不需要磁航向 alpha；缺少航向的设备也可使用。
+        const rawValues = [0, event?.beta, event?.gamma];
         if (!rawValues.every((value) => typeof value === 'number' && Number.isFinite(value))) return null;
         const [alpha, beta, gamma] = rawValues;
         return {
@@ -336,31 +318,49 @@
         };
     }
 
+    function gravityDirection(sample) {
+        const vector = [-Math.sin(sample.gamma) * Math.cos(sample.beta),
+            Math.sin(sample.beta), Math.cos(sample.gamma) * Math.cos(sample.beta)];
+        const angle = Number(root.screen?.orientation?.angle ?? root.orientation ?? 0) || 0;
+        return new state.motionMath.Vector3(...root.DisplayMmdImuCore.rotateForScreen(vector, angle)).normalize();
+    }
+
     function applyMotionView() {
         if (!state.motionEnabled || !state.motionCenter || !state.motionLastSample) return;
-        const yaw = normalizeAngle(state.motionLastSample.alpha - state.motionCenter.alpha)
-            * state.motionSensitivity;
-        const pitch = clamp(
-            (state.motionLastSample.beta - state.motionCenter.beta) * state.motionSensitivity,
-            -Math.PI / 4,
-            Math.PI / 4
-        );
-        // 独立体感模式只提交 yaw/pitch 环绕角度；runtime 内部保持固定 cameraDistance，
-        // 不接收距离、位移、变焦或滚转参数，不调用 rotateModelBy 改变角色自身朝向。
-        root.DisplayMmd?.setCameraViewRotation?.(yaw, pitch);
+        const THREE = state.motionMath;
+        const from = gravityDirection(state.motionCenter), to = gravityDirection(state.motionLastSample);
+        const dot = clamp(from.dot(to), -1, 1);
+        let axis = new THREE.Vector3().crossVectors(from, to);
+        if (axis.lengthSq() < 1e-8) {
+            // 正向平行保持单位旋转；对跖方向选固定参考轴，不用本帧微小噪声决定翻转轴。
+            if (dot >= 0) { root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1]); return; }
+            axis.crossVectors(from, Math.abs(from.x) < 0.8
+                ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1));
+        }
+        const tilt = Math.acos(dot);
+        const rotation = new THREE.Quaternion().setFromAxisAngle(axis.normalize(), tilt);
+        root.DisplayMmd?.setModelGravityRotation?.(rotation.toArray());
+    }
+
+    function handleGravityCoordinatesChanged() {
+        state.motionCenter = null;
+        state.motionLastSample = null;
+        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1], true);
+        setMotionMessage('等待新的重力方向建立中性姿态，手动旋转保留');
+        updateControls();
     }
 
     function handleDeviceOrientation(event) {
-        if (!state.motionEnabled) return;
+        if (!state.motionEnabled || document.visibilityState === 'hidden') return;
         const sample = readMotionSample(event);
         if (!sample) {
-            setMotionMessage('当前设备未提供完整六轴姿态数据');
+            setMotionMessage('当前设备未提供有效重力倾斜数据');
             return;
         }
         state.motionLastSample = sample;
         if (!state.motionCenter) {
             state.motionCenter = { ...sample };
-            setMotionMessage('体感观察已启用，当前姿态为中心');
+            setMotionMessage('重力旋转已启用，当前姿态为中性姿态；可叠加手动旋转');
         }
         applyMotionView();
         updateControls();
@@ -372,8 +372,8 @@
             return;
         }
         state.motionCenter = { ...state.motionLastSample };
-        root.DisplayMmd?.setCameraViewRotation?.(0, 0);
-        setMotionMessage('已重新居中');
+        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1], true);
+        setMotionMessage('重力方向已居中，手动旋转保留');
         updateControls();
     }
 
@@ -381,35 +381,52 @@
         if (state.motionListening) {
             root.removeEventListener('deviceorientation', handleDeviceOrientation);
         }
+        state.motionRequest += 1;
+        state.motionPending = false;
+        root.removeEventListener('orientationchange', handleGravityCoordinatesChanged);
+        document.removeEventListener('visibilitychange', handleGravityCoordinatesChanged);
         state.motionListening = false;
         state.motionEnabled = false;
         state.motionMode = 'off';
         state.motionCenter = null;
         state.motionLastSample = null;
-        root.DisplayMmd?.resetCameraViewRotation?.();
-        setMotionMessage('体感观察关闭');
+        root.DisplayMmd?.setModelGravityRotation?.([0, 0, 0, 1], true);
+        setMotionMessage('重力旋转关闭，手动旋转保留');
         updateControls();
     }
 
     async function enableMotionView() {
-        const OrientationEvent = root.DeviceOrientationEvent;
-        if (typeof OrientationEvent === 'undefined') {
-            throw new Error('当前浏览器不支持手机姿态传感器');
-        }
-        if (typeof OrientationEvent.requestPermission === 'function') {
-            const permission = await OrientationEvent.requestPermission();
-            if (permission !== 'granted') throw new Error('手机姿态传感器权限被拒绝');
-        }
-        state.motionPermission = 'granted';
-        // 体感观察是独立于图片定位的相机环绕模式，不要求目标、摄像头或识别会话。
-        state.motionMode = MOTION_ORBIT_MODE;
-        state.motionCenter = null;
-        state.motionLastSample = null;
-        root.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
-        state.motionListening = true;
-        state.motionEnabled = true;
-        setMotionMessage('请保持当前姿态，等待传感器数据…');
+        if (state.motionEnabled || state.motionPending) return;
+        const request = ++state.motionRequest;
+        state.motionPending = true;
         updateControls();
+        try {
+            if (!root.isSecureContext) throw new Error('重力旋转需要 HTTPS 或可信本地页面');
+            const OrientationEvent = root.DeviceOrientationEvent;
+            if (typeof OrientationEvent === 'undefined') throw new Error('当前浏览器不支持重力倾斜传感器');
+            if (typeof OrientationEvent.requestPermission === 'function') {
+                const permission = await OrientationEvent.requestPermission();
+                if (request !== state.motionRequest) return;
+                if (permission !== 'granted') throw new Error('手机姿态传感器权限被拒绝');
+            }
+            if (request !== state.motionRequest || document.visibilityState === 'hidden') return;
+            state.motionMath = await import('three');
+            if (request !== state.motionRequest || document.visibilityState === 'hidden') return;
+            state.motionPermission = 'granted';
+            state.motionMode = MOTION_ORBIT_MODE;
+            state.motionCenter = null;
+            state.motionLastSample = null;
+            root.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
+            root.addEventListener('orientationchange', handleGravityCoordinatesChanged, { passive: true });
+            document.addEventListener('visibilitychange', handleGravityCoordinatesChanged);
+            state.motionListening = true;
+            state.motionEnabled = true;
+            setMotionMessage('等待重力方向，当前姿态将作为中性姿态…');
+        } catch (error) {
+            if (request === state.motionRequest) throw error;
+        } finally {
+            if (request === state.motionRequest) { state.motionPending = false; updateControls(); }
+        }
     }
 
     async function setMotionEnabled(enabled) {
@@ -423,16 +440,11 @@
             state.motionPermission = error.message.includes('权限') ? 'denied' : 'unsupported';
             state.elements.motionEnabled.checked = false;
             disableMotionView();
-            setMotionMessage(error.message || '体感观察不可用');
+            setMotionMessage(error.message || '重力旋转不可用');
         }
     }
 
-    function updateMotionSensitivity(value) {
-        state.motionSensitivity = clamp(Number(value), 0.25, 2);
-        saveMotionSensitivity(state.motionSensitivity);
-        applyMotionView();
-        updateControls();
-    }
+
 
     function getSelectedTarget() {
         return state.targets.find((target) => target.targetId === state.selectedTargetId) || null;
@@ -860,6 +872,7 @@
             setStatus('stopped', '摄像头已关闭');
             return;
         }
+        root.DisplayMmdGravityCamera?.setCalibrationActive(true);
         await stopTrackerSession();
         resetTrackedDisplay();
         state.elements.trackingVideo.hidden = true;
@@ -1175,6 +1188,7 @@
     async function setCameraEnabled(enabled) {
         // 远端关闭时先释放视频轨道并作废异步请求，再等待识别器退出，防止迟到的流继续被使用。
         const nextEnabled = enabled === true;
+        root.DisplayMmdGravityCamera?.setCameraEnabled(nextEnabled);
         if (state.cameraEnabled === nextEnabled) {
             updateControls();
             return nextEnabled;
@@ -1229,9 +1243,7 @@
         elements.motionEnabled.addEventListener('change', () => {
             void setMotionEnabled(elements.motionEnabled.checked);
         });
-        elements.motionSensitivity.addEventListener('input', () => {
-            updateMotionSensitivity(elements.motionSensitivity.value);
-        });
+
         elements.motionRecenter.addEventListener('click', recenterMotionView);
         elements.calibrationButton.addEventListener('click', () => {
             void beginCalibration();
@@ -1344,3 +1356,5 @@
         void initialize();
     }
 }(window));
+
+/* aasc-shared:addGravityControls */

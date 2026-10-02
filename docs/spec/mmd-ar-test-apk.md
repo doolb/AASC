@@ -1,5 +1,22 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+## 2026-10-02 光照方向函数显式绑定（已实现）
+
+```text
+已有声明 := createPmxLighting内部lightDirectionToPosition/normalizeLightDirection
+    PMX.applyKeyLightPosition调用主光及补光方向换算；KEY_LIGHT_DISTANCE属于模块上下文
+新增契约 := PmxLighting返回 { setLighting, lightDirectionToPosition }
+操作流程 := 创建光照模块 -> PMX主闭包接收两个函数
+    模型/灯光/阴影拟合 -> applyKeyLightPosition -> 已绑定方向函数 -> 原位置换算
+行为保持 := 默认31/46，经度正弦/纬度正弦/水平余弦，原距离及单位尺度
+验证 := 函数可调用、默认/六个方向轴/异常数值、主补光真实定位调用
+    生成网页的运行时与模块契约一致，浏览器首次模型加载无该ReferenceError
+状态 := 用户确认后已补齐返回/接收
+    4项真实模块/源及生成调用回归 + 1项真实浏览器米娅首启/主补光更新通过
+    npm网页构建通过，59脚本/4内联/40指纹通过；产物同步本地web-dist
+    用户要求提交并合并正式包，修复与共享拆分依赖同次纳入Git；旧内联实现无此作用域缺口
+```
+
 ## 2026-10-02 刚体衣服相对气流（已实现）
 
 ```text

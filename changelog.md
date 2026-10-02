@@ -1,5 +1,26 @@
 # Web MediaCenter - 变更日志
 
+### MMD正式用户功能与光照修复提交
+
+- ✅ [2026-10-02] 按用户要求将已完成正式用户功能迁移、共享模块依赖、lightDirectionToPosition返回/接收修复及风速说明一起提交。
+  - 收录正式入口、面板、模型/动作/相机/IMU/重力、物理/阴影共享模块及独立构建适配；检查49个源脚本和31条相对导入的目标均已收录或已跟踪。光照4项数值/实际调用＋1项真实米娅浏览器回归已通过，网页构建及59脚本/4内联/40指纹通过。
+  - servicePackage保持true，minApk=true/dependenciesPackage=false既有状态不变；未构建APK或发布服务包。日志/模型/构建产物/无关任务和未实施AO/IMU方案不纳入提交。新相对气流同步正式端四文件方案另待确认；本次先提交已完成迁移及光照修复。
+
+### MMD AR光照方向函数作用域修复
+
+- ✅ [2026-10-02] 修复共享光照模块拆分遗漏lightDirectionToPosition返回/接收，消除主补光定位ReferenceError。
+  - mmd-lighting-runtime.mjs返回同一方向函数，display-pmx-runtime.js显式接收；原经纬度/距离/尺度/阴影逻辑保持。新增mmd-ar-light-direction.test.js四项真实模块/源及生成调用回归、mmd-ar-light-direction-browser.test.js真实米娅浏览器首启及主补光更新回归，5项通过，无pageerror。
+  - npm网页构建及59脚本/4内联/40指纹检查通过，本地web-dist已更新。design/spec/task/self-test同步，功能完成项从todo删除，单独保留依赖共享迁移的提交事项。servicePackage已经为true，其他产物不变；未打包或外网发布。
+  - 用户随后要求提交并合并正式包，修复与所需共享拆分/用户功能迁移一起纳入Git；排除日志、模型、构建产物及未实施候选方案。
+
+### MMD AR用户功能合并正式显示端
+
+- ✅ [2026-10-02] 用户确认后将现有独立测试页的用户功能合并正式网页/Offline显示端：Ammo/刚体XPBD与风场/基准、物理生命周期及锚点修复、本地PMX/纹理/角色与相机VMD、MindAR滤波和IMU相机预测、重力锚点旋转/摄像头背景、阴影尺寸/范围/像素对齐/偏移、补光过渡及AO浅凹参数。面板默认50%，保留原相机第二层缓动、配置键与能力关闭/后台释放。
+  - 正式求解器仅Ammo/XPBD；不合并顶点布料、SLAM、骨骼/刚体/K值/质量诊断、AO法线/ShadowMap预览或物理帧计时。相机VMD先建立新绑定再替换旧动作并在退出时释放；资源/物理切换控件串行与失败回显已补齐。
+  - display.html、CSS、display-mmd/AR/MindAR/面板/灯光、PMX helper及vendor物理/动画接入；新增独立参数、IMU/重力、资源/动作、阴影与XPBD模块。主PMX运行时拆为模型、AR相机、相机VMD、灯光和通用模块，主模块982行、显示模块993行，新增功能模块均不超1000行。
+  - 独立构建识别共享标记更新指纹，仅在生成副本展开模型提交/追加顶点后端与诊断，构建脚本999行。源码36文件语法、正式225个控件ID唯一性/新控件及模块依赖检查通过，正式两个求解选项与诊断控件排除确认；独立网页构建成功，57个生成脚本静态语法检查通过。
+  - design/spec/task/todo/usage/readme同步。servicePackage原已为true，保持待出包，现有minApk=true/dependenciesPackage=false不变。未执行自动测试、物理/浏览器模拟或真机验收，未提交或构建发布正式包；待现场验收和正式发布。
+
 ### MMD AR衣服自然受风
 
 - ✅ [2026-10-02] 按确认方案改进独立测试页Ammo/刚体XPBD受风，顶点布料模块不修改。

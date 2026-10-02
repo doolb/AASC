@@ -203,3 +203,6 @@ const SOLVER_PANEL_JS = `
 
 module.exports = { addSolverHelper, addSolverAnimationHelper, addSolverRuntime, addSolverDisplay,
     SOLVER_CONTROL_IDS, SOLVER_PANEL_HTML, SOLVER_PANEL_JS };
+
+// 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
+module.exports = require('./web-production-shared').reuseAdapters(module.exports);

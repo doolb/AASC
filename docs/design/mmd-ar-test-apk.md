@@ -1,5 +1,13 @@
 # MMD AR 独立测试 APK / HTTPS 网页设计
 
+## 2026-10-02 光照方向函数作用域修复（已修复并验证）
+
+用户反馈lightdirectiontopostion报错并确认方案。实际lightDirectionToPosition在共享拆分的mmd-lighting-runtime.mjs内部声明，却没有由createPmxLighting返回；display-pmx-runtime.js的主光/补光定位保留调用但只接收setLighting，导致ReferenceError。
+
+已将同一方向闭包加入模块返回值，主运行时显式解构接收。原经纬度默认值、方向换算、KEY_LIGHT_DISTANCE、阴影跟随和单位缩放保持；不增加复制算法或全局变量。4项回归执行真实模块与源/生成主光补光定位调用，覆盖六个方向轴、默认/异常/夹取、模型尺度及重新定位。真实Chromium浏览器米娅首次加载及主补光更新通过（约31秒），无pageerror。
+
+npm run build:web:mmd-ar-test通过，59生成脚本/4内联/40指纹检查通过，本地web-dist已更新；正式源码修复也保留在工作区。servicePackage已为true、minApk/dependenciesPackage未变；未打包APK或发布外网。用户随后要求提交并合并正式包，本次将共享用户功能迁移和光照修复所需模块一并纳入提交；日志、模型、构建产物及未实施的AO/IMU候选方案保持工作区，不纳入。
+
 ## 2026-10-02 衣服受风自然摆动（Ammo/刚体XPBD已实现）
 
 用户确认具体方案，并明确先不处理顶点布料。独立测试网页Ammo与刚体XPBD共用刚体气动计算，复用风开关、0–30强度、经纬度和阵风控件。顶点布料求解器、分组及回写模块没有修改。

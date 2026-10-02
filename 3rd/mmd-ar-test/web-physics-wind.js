@@ -188,6 +188,9 @@ const WIND_PANEL_JS = `
 
 module.exports = { addPhysicsWind, addWindRuntime, addWindDisplay, WIND_CONTROL_IDS, WIND_PANEL_HTML, WIND_PANEL_JS };
 
+// 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
+module.exports = require('./web-production-shared').reuseAdapters(module.exports);
+
 // 先执行已有适配，再注入测试气动逻辑；兼容正式共享复用和原始vendor两种来源。
 const basePhysicsWind = module.exports.addPhysicsWind;
 function addRigidAerodynamics(source, moduleUrl) {

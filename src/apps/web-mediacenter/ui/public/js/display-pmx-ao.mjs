@@ -679,7 +679,7 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         try {
             // 角度在测试面板独立保存；正式页未提供数值时完整保留原 0.08..0.3 判定。
             // 每帧只换算一次正弦，0..45 度确保平滑上界始终小于 1。
-            const concavityAngle = window.MmdArTestAoConcavityAngle;
+            const concavityAngle = window.DisplayMmdAoConcavityAngle ?? window.MmdArTestAoConcavityAngle;
             const facingLower = Number.isFinite(concavityAngle)
                 ? Math.sin(Math.min(45, Math.max(0, concavityAngle)) * Math.PI / 180) : 0.08;
             resources.aoMaterial.uniforms.aoFacingThreshold.value.set(facingLower, facingLower + 0.22);

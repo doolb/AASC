@@ -37,7 +37,7 @@
             Object.freeze({ enabled: false, color: '#ffb6d9', intensity: 1, direction: Object.freeze({ longitude: 130, latitude: 25 }) })
         ]),
         pmxToonEnabled: false,
-        physicsFps: 65,
+        physicsFps: 90,
         rotationPhysicsLimit: 720,
         pmxAoEnabled: true,
         pmxAoColor: '#931231',
@@ -50,18 +50,15 @@
     });
     const POINTER_DRAG_THRESHOLD = 8;
     const ROTATION_RADIANS_PER_PIXEL = Math.PI / 360;
-
     function clamp(value, minimum, maximum, fallback) {
         const number = Number(value);
         if (!Number.isFinite(number)) return fallback;
         return Math.min(maximum, Math.max(minimum, number));
     }
-
     function normalizeColor(value, fallback = '#ffffff') {
         const color = String(value || '').trim().toLowerCase();
         return /^#[0-9a-f]{6}$/u.test(color) ? color : fallback;
     }
-
     function directionFromLegacyPosition(position) {
         const x = Number(position?.x);
         const y = Number(position?.y);
@@ -73,17 +70,18 @@
             latitude: Math.asin(y / distance) * 180 / Math.PI
         };
     }
-
     function normalizePhysicsFps(value) {
-        const clamped = clamp(value, 30, 90, DEFAULT_MMD_LIGHTING.physicsFps);
+        // 缺失或空白频率恢复测试默认，避免Number(null/空串)被当作0后落到30Hz。
+        if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+            return DEFAULT_MMD_LIGHTING.physicsFps;
+        }
+        const clamped = clamp(value, 30, 180, DEFAULT_MMD_LIGHTING.physicsFps);
         return Math.round(clamped / 5) * 5;
     }
-
     function normalizeRotationPhysicsLimit(value) {
         const clamped = clamp(value, 30, 1440, DEFAULT_MMD_LIGHTING.rotationPhysicsLimit);
         return Math.round(clamped / 10) * 10;
     }
-
     function normalizeMmdLighting(input = {}) {
         const source = input && typeof input === 'object' ? input : {};
         const shadowSource = ['none', 'key', 'fill'].includes(source.shadowSource)
@@ -147,7 +145,6 @@
             ))
         };
     }
-
     const state = {
         initialized: false,
         visible: false,
@@ -184,13 +181,11 @@
         cameraViewRotation: { yaw: 0, pitch: 0 },
         arCameraSettings: null
     };
-
     function setStatus(message, isError = false) {
         if (!state.status) return;
         state.status.textContent = message || '';
         state.status.classList.toggle('is-error', isError);
     }
-
     function ensureFallbackContext() {
         if (state.context || !state.canvas) return state.context;
         try {
@@ -200,7 +195,6 @@
         }
         return state.context;
     }
-
     function resizeCanvas(width = window.innerWidth, height = window.innerHeight) {
         if (!state.canvas) return;
         state.width = Math.max(1, Math.round(width));
@@ -216,14 +210,12 @@
         state.canvas.height = Math.round(state.height * state.devicePixelRatio);
         if (state.runtimeUnavailable) drawFallback();
     }
-
     function drawFallback() {
         const context = ensureFallbackContext();
         if (!context) return;
         context.setTransform(state.devicePixelRatio, 0, 0, state.devicePixelRatio, 0, 0);
         context.clearRect(0, 0, state.width, state.height);
         if (!state.visible || state.runtime) return;
-
         // three-vrm 不可用时保留轻量可点击占位区，避免模型失败导致舞台空白。
         const centerX = state.width / 2;
         const centerY = state.height * 0.48;
@@ -245,7 +237,6 @@
         context.restore();
         if (pulsing) state.animationFrame = requestAnimationFrame(drawFallback);
     }
-
     function getCanvasPoint(event) {
         const rect = state.canvas.getBoundingClientRect();
         const geometry = root.DisplayStage?.getRotationGeometry?.();
@@ -259,7 +250,6 @@
             normalizedY: -(((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1)
         };
     }
-
     function fallbackHitTest(point) {
         const centerX = state.width / 2;
         const centerY = state.height * 0.48;
@@ -273,14 +263,12 @@
             && point.y >= bodyTop && point.y <= bodyBottom) return 'body';
         return null;
     }
-
     function raycast(point) {
         if (state.runtime && typeof state.runtime.raycast === 'function') {
             return state.runtime.raycast(point);
         }
         return fallbackHitTest(point);
     }
-
     function triggerInteraction(hitPart, point) {
         const now = Date.now();
         if (now - state.lastInteractionAt < 250) return;
@@ -302,13 +290,11 @@
         if (!state.runtime && state.runtimeUnavailable) drawFallback();
         if (state.bus) state.bus.publish('mmd.interaction', event);
     }
-
     function releasePointerCapture(pointerId) {
         if (state.canvas?.hasPointerCapture?.(pointerId)) {
             state.canvas.releasePointerCapture(pointerId);
         }
     }
-
     function finishRotationDrag(pointerId) {
         const drag = state.rotationDrag;
         if (!drag || drag.pointerId !== pointerId) return false;
@@ -320,7 +306,6 @@
         }
         return drag.didRotate;
     }
-
     function finishTranslationDrag(pointerId) {
         const drag = state.translationDrag;
         if (!drag || drag.pointerId !== pointerId) return false;
@@ -329,7 +314,6 @@
         state.canvas?.classList.remove('is-translating');
         return drag.didTranslate;
     }
-
     function cancelPointerInteraction() {
         const rotationPointerId = state.rotationDrag?.pointerId;
         if (typeof rotationPointerId === 'number') finishRotationDrag(rotationPointerId);
@@ -597,6 +581,9 @@
         };
     }
 
+    const mmdSettings = root.createDisplayMmdSettings({ state });
+    const { setModelGravityRotation, setModelGravitySettings, setPhysicsStabilityReference, setWindSettings } = mmdSettings;
+
     function setCameraViewRotation(yaw, pitch) {
         state.cameraViewRotation = normalizeCameraViewRotation(yaw, pitch);
         state.runtime?.setCameraViewRotation?.(
@@ -645,7 +632,42 @@
         return state.motionPlaybackEnabled;
     }
 
+    let physicsSolver = 'ammo';
+    function normalizePhysicsSolver(value) {
+    return ['xpbd', 'three-xpbd'].includes(value) ? 'xpbd' : 'ammo';
+}
+    // 初始偏好在首次加载前读取，面板恢复无需异步重载，避免和“启用物理”恢复互相抢锁。
+    try {
+        const key = 'aasc.display.mmd.physicsSolver.v1', saved = localStorage.getItem(key);
+        physicsSolver = normalizePhysicsSolver(saved);
+        if (saved === 'three-xpbd') localStorage.setItem(key, physicsSolver);
+    } catch (error) { /* 保留已读取的选择；无法读取时默认Ammo。 */ }
+    let physicsConfigurationBusy = false;
+    async function setPhysicsSolver(value) {
+        const next = normalizePhysicsSolver(value);
+        if (physicsConfigurationBusy) return false;
+        if (next === physicsSolver) return true;
+        const previous = physicsSolver;
+        physicsSolver = next;
+        state.runtime?.setPhysicsSolver?.(next);
+        if (state.runtimeType !== 'pmx' || !state.modelProfile) return true;
+        physicsConfigurationBusy = true;
+        try {
+            if (await loadModel(state.modelProfile)) return true;
+            physicsSolver = previous; state.runtime?.setPhysicsSolver?.(previous);
+            return false;
+        } catch (error) {
+            physicsSolver = previous; state.runtime?.setPhysicsSolver?.(previous);
+            throw error;
+        } finally { physicsConfigurationBusy = false; }
+    }
     async function setPhysicsEnabled(enabled) {
+        if (physicsConfigurationBusy) return false;
+        physicsConfigurationBusy = true;
+        try { return await setPhysicsEnabledBase(enabled); }
+        finally { physicsConfigurationBusy = false; }
+    }
+    async function setPhysicsEnabledBase(enabled) {
         const nextEnabled = enabled === true;
         if (nextEnabled === state.physicsEnabled) return true;
         const previousEnabled = state.physicsEnabled;
@@ -696,10 +718,16 @@
                 });
                 state.runtimeType = modelType;
                 state.runtime.setMotionPlaybackEnabled?.(state.motionPlaybackEnabled);
+                state.runtime.setCameraMotionPlaybackEnabled?.(state.cameraMotionPlaybackEnabled === true);
+                state.runtime.setPhysicsSolver?.(physicsSolver);
                 state.runtime.setPhysicsEnabled?.(state.physicsEnabled);
                 state.runtime.setLighting?.(state.lighting);
                 if (state.arCameraSettings) state.runtime.setArCameraSettings?.(state.arCameraSettings);
+                state.runtime.setPhysicsStabilityReference?.(mmdSettings.physicsStabilityReference);
+                state.runtime.setWindSettings?.(mmdSettings.windSettings);
                 state.runtime.setVisible(state.visible);
+                state.runtime.setModelGravitySettings?.(mmdSettings.modelGravitySettings);
+                state.runtime.setModelGravityRotation?.(mmdSettings.modelGravityRotation, mmdSettings.modelGravityForce);
                 state.runtime.setCameraViewRotation?.(
                     state.cameraViewRotation.yaw,
                     state.cameraViewRotation.pitch
@@ -725,6 +753,11 @@
     }
 
     async function resolvePmxProfile(profile) {
+        if (typeof profile.modelUrl === 'string' && profile.modelUrl.startsWith('./mmd/__local__/')) {
+            const { isRegisteredLocalAsset } = await import('./mmd-local-assets.mjs');
+            if (!isRegisteredLocalAsset(profile.modelUrl, '.pmx')) throw new Error('本地模型未注册或已释放');
+            return { ...profile };
+        }
         if (profile.modelType === 'pmx'
             && isSameOriginMmdAsset(profile.modelUrl, '.pmx')
             && (!profile.motionUrl || isSameOriginMmdAsset(profile.motionUrl, '.vmd'))
@@ -774,13 +807,15 @@
         return { ...profile, ...payload.model };
     }
 
-    async function loadModel(profile) {
+    async function loadModel(profile, reportProgress = state.onLoadProgress) {
         if (!profile || typeof profile !== 'object') {
             state.modelProfile = null;
             state.modelReady = false;
             setStatus('未配置角色模型');
             return false;
         }
+        const previousProfile = state.modelProfile;
+        const previousReady = state.modelReady;
         const sequence = ++state.loadSequence;
         state.modelProfile = { ...profile };
         state.modelReady = false;
@@ -792,18 +827,21 @@
             const modelType = resolvedProfile.modelType === 'pmx' ? 'pmx' : 'vrm';
             const runtime = await ensureRuntime(modelType);
             if (!runtime || sequence !== state.loadSequence) return false;
-            await runtime.load(modelType === 'pmx' ? resolvedProfile : resolvedProfile.modelUrl);
+            const loaded = await runtime.load(modelType === 'pmx' ? resolvedProfile : resolvedProfile.modelUrl, reportProgress || undefined);
+            if (loaded === false) return false;
             if (sequence !== state.loadSequence) return false;
             state.modelProfile = resolvedProfile;
             state.modelReady = true;
             setStatus(`${modelType === 'pmx' ? 'PMX' : 'VRM'} 模型已加载`);
-            state.onLoadProgress?.({ phase: '模型已加载', percent: 100 });
+            reportProgress?.({ phase: '模型已加载', percent: 100 });
             return true;
         } catch (error) {
-            state.modelReady = false;
-            state.runtime?.showFallback?.();
+            if (sequence !== state.loadSequence) return false;
+            state.modelProfile = previousProfile;
+            state.modelReady = previousReady;
+            if (!previousReady) state.runtime?.showFallback?.();
             setStatus(`角色模型加载失败：${error.message}`, true);
-            state.onLoadProgress?.({ phase: '加载失败', error: error.message });
+            reportProgress?.({ phase: '加载失败', error: error.message });
             if (!state.runtime) drawFallback();
             return false;
         }
@@ -848,6 +886,34 @@
         loadModel(DEFAULT_MODEL_PROFILE);
     }
 
+    async function loadSelectedMotion(motion, reportProgress = state.onLoadProgress) {
+        if (!state.modelReady || state.runtimeType !== 'pmx') throw new Error('请先加载 PMX 模型');
+        const loaded = await state.runtime.loadSelectedMotion(motion, reportProgress || undefined);
+        if (loaded) state.modelProfile = { ...state.modelProfile,
+            motionUrl: motion.motionUrl, motionResourceId: motion.motionResourceId };
+        return loaded;
+    }
+
+    async function loadSelectedCameraMotion(motion, reportProgress = state.onLoadProgress) {
+        if (!state.modelReady || state.runtimeType !== 'pmx') throw new Error('请先加载 PMX 模型');
+        const loaded = await state.runtime.loadCameraMotion(motion, reportProgress || undefined);
+        return loaded;
+    }
+
+    function setCameraMotionPlaybackEnabled(enabled) {
+        state.cameraMotionPlaybackEnabled = enabled === true;
+        state.runtime?.setCameraMotionPlaybackEnabled?.(state.cameraMotionPlaybackEnabled);
+        return state.cameraMotionPlaybackEnabled;
+    }
+
+    function getCameraMotionProgress() {
+        return state.runtime?.getCameraMotionProgress?.() ?? null;
+    }
+
+    function clearCameraMotion() {
+        return state.runtime?.clearCameraMotion?.() === true;
+    }
+
     function handleActionPlan(plan) {
         if (!plan || typeof plan !== 'object') return false;
         const action = plan.fallbackAction || plan.action || 'idle';
@@ -873,6 +939,17 @@
         handleActionPlan,
         init,
         loadModel,
+        loadSelectedMotion,
+        getModelProfile: () => state.modelProfile ? { ...state.modelProfile } : null,
+        loadSelectedCameraMotion,
+        setCameraMotionPlaybackEnabled,
+        getCameraMotionProgress,
+        clearCameraMotion,
+        restoreDefaultModel: (reportProgress) => loadModel(DEFAULT_MODEL_PROFILE, reportProgress),
+        restoreDefaultMotion: async (reportProgress) => {
+            const profile = await resolvePmxProfile(DEFAULT_MODEL_PROFILE);
+            return loadSelectedMotion(profile, reportProgress);
+        },
         resize: resizeCanvas,
         resetArCameraPose,
         resetArPose,
@@ -883,7 +960,16 @@
         setArCameraPose,
         setArCameraSettings,
         setCameraViewRotation,
+        setModelGravityRotation,
+        setModelGravitySettings,
+        getModelGravityState: () => state.runtime?.getModelGravityState?.() ?? null,
         setLighting,
+        setPhysicsStabilityReference,
+        setWindSettings,
+        getWindSettings: () => ({ ...mmdSettings.windSettings }),
+        setPhysicsSolver,
+        getPhysicsSolver: () => physicsSolver,
+        getPhysicsSolverState: () => state.runtime?.getPhysicsSolverState?.() || { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 },
         setMotionPlaybackEnabled,
         setPhysicsEnabled,
         setPointerEnabled,
@@ -891,3 +977,17 @@
         suspendArCameraPose
     });
 }(window));
+
+/* aasc-shared:addGravityDisplay */
+
+/* aasc-shared:addLocalDisplay */
+
+/* aasc-shared:addPhysicsRateDisplay */
+
+/* aasc-shared:addCameraMotionDisplay */
+
+/* aasc-shared:addStabilityDisplay */
+
+/* aasc-shared:addWindDisplay */
+
+/* aasc-shared:addSolverDisplay */

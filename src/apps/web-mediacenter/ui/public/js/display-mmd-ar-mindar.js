@@ -193,10 +193,13 @@
         cleanupSession?.();
         cleanupSession = null;
         if (host) host.hidden = true;
+        root.DisplayMmdImu?.stopSession();
+        root.DisplayMmdGravityCamera?.trackingStopped();
     }
 
     async function start(target) {
         cancelPending();
+        root.DisplayMmdGravityCamera?.prepareTracking();
         const token = generation;
         await load();
         const compiled = await compileTarget(target);
@@ -207,6 +210,13 @@
         if (token !== generation) throw new Error('定位任务已取消');
         const system = scene.systems?.['mindar-image-system'];
         if (!system || !root.navigator.mediaDevices?.getUserMedia) throw new Error('MindAR 或摄像头不可用');
+        // 每次开始读取已规范化的参数；One Euro 参数修改后在下次开始生效。
+        const filter = root.DisplayMmdMindArOptions?.get?.() || { filterMinCF: 0.001, filterBeta: 1000 };
+        system.filterMinCF = filter.filterMinCF;
+        system.filterBeta = filter.filterBeta;
+        scene.setAttribute('mindar-image', 'filterMinCF', filter.filterMinCF);
+        scene.setAttribute('mindar-image', 'filterBeta', filter.filterBeta);
+        root.DisplayMmdImu?.startSession(target);
         const originalStartVideo = system._startVideo;
         const originalResize = system._resize;
         let resizeHandler = null;
@@ -253,16 +263,16 @@
         system.imageTargetSrc = targetUrl;
         const syncPose = () => {
             if (token !== generation || !anchor.object3D?.visible || !scene.camera) return;
-            const anchorMatrix = Array.from(anchor.object3D.matrix.elements);
-            const projectionMatrix = Array.from(scene.camera.projectionMatrix.elements);
-            synced = root.DisplayMmd?.setArCameraPose?.({
-                anchorMatrix, projectionMatrix, targetAspect: compiled.aspect
-            }) === true;
-            if (synced) {
-                lastAnchor = anchorMatrix;
-                lastProjection = projectionMatrix;
-                sample += 1;
-            }
+            const THREE = root.AFRAME.THREE;
+            const position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3();
+            anchor.object3D.matrix.decompose(position, quaternion, scale);
+            const pose = { position: position.toArray(), quaternion: quaternion.toArray(), scale: scale.toArray() };
+            if (![...pose.position, ...pose.quaternion, ...pose.scale].every(Number.isFinite)
+                || pose.scale.some(value => value <= 0) || Math.hypot(...pose.quaternion) < 1e-9) return;
+            root.DisplayMmdImu?.observeVisualPose(pose, performance.now());
+            lastAnchor = Array.from(anchor.object3D.matrix.elements);
+            lastProjection = Array.from(scene.camera.projectionMatrix.elements);
+            sample += 1;
         };
         const checkPose = () => {
             if (token !== generation) return;
@@ -272,8 +282,20 @@
                 const changed = !lastAnchor || !lastProjection
                     || matrix.some((value, index) => value !== lastAnchor[index])
                     || projection.some((value, index) => value !== lastProjection[index]);
-                const pmx = root.DisplayMmd?.getArCameraSyncState?.();
-                if (!synced || changed || (pmx && (!pmx.active || pmx.trackingLost))) syncPose();
+                if (changed || !lastAnchor) syncPose();
+            }
+            // 融合结果仍通过正式相机入口进入第二层缓动，传感器不修改角色/刚体世界。
+            const frame = root.DisplayMmdImu?.getFramePose(performance.now());
+            if (frame && scene.camera) {
+                const THREE = root.AFRAME.THREE, pose = frame.pose;
+                const anchorMatrix = new THREE.Matrix4().compose(new THREE.Vector3(...pose.position),
+                    new THREE.Quaternion(...pose.quaternion), new THREE.Vector3(...pose.scale)).toArray();
+                const projectionMatrix = Array.from(scene.camera.projectionMatrix.elements);
+                synced = root.DisplayMmd?.setArCameraPose?.({ anchorMatrix, projectionMatrix, targetAspect: compiled.aspect }) === true;
+            } else {
+                const current = root.DisplayMmd?.getArCameraSyncState?.();
+                if (current?.active && !current.trackingLost) root.DisplayMmd?.suspendArCameraPose?.();
+                synced = false;
             }
             poseFrame = root.requestAnimationFrame(checkPose);
         };
@@ -299,13 +321,14 @@
             synced = false;
             lastAnchor = null;
             sample += 1;
-            root.DisplayMmd?.suspendArCameraPose?.();
+            root.DisplayMmdImu?.beginLoss(performance.now());
         };
         anchor.addEventListener('targetUpdate', onUpdate);
         anchor.addEventListener('targetFound', onFound);
         anchor.addEventListener('targetLost', onLost);
         poseFrame = root.requestAnimationFrame(checkPose);
         cleanupSession = () => {
+            root.DisplayMmdImu?.stopSession();
             if (poseFrame) root.cancelAnimationFrame(poseFrame);
             anchor.removeEventListener('targetUpdate', onUpdate);
             anchor.removeEventListener('targetFound', onFound);
