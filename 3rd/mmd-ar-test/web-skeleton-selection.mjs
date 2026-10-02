@@ -202,6 +202,10 @@ export function createSkeletonSelection({ THREE, renderer, camera, scene }) {
                 axes.material.depthTest = false;
                 axes.material.depthWrite = false;
                 axes.material.toneMapped = false;
+                // 与透明骨骼球同队列，在球后画；外观仍保持完全不透明。
+                axes.material.transparent = true;
+                axes.material.opacity = 1;
+                axes.renderOrder = 99;
                 axes.setColors(0xff3333, 0x33e066, 0x3388ff);
                 axes.frustumCulled = false;
                 scene.add(axes);
@@ -209,7 +213,7 @@ export function createSkeletonSelection({ THREE, renderer, camera, scene }) {
             axes.visible = true;
             axes.position.setFromMatrixPosition(bone.matrixWorld);
             bone.getWorldQuaternion(axes.quaternion);
-            // 轴长度由模型基准尺寸决定，缩小小球时仍能辨认三轴。
+            // 选中轴与小球同尺度，随小球倍率变化，避免旧长轴盖过关节图形。
             axes.scale.setScalar(axisLength);
         } else if (axes) axes.visible = false;
         if (!namesVisible && !bone) { clearLabels(); return; }
@@ -277,6 +281,7 @@ export function createSkeletonSelection({ THREE, renderer, camera, scene }) {
         setNamesVisible: value => { namesVisible = value === true; clearLabels(); },
         setVisible: value => { enabled = value === true; if (!enabled) select(-1); },
         hide: () => { modelVisible = false; clearLabels(); if (axes) axes.visible = false; },
+        getSelectedBoneIndex: () => selectedBoneIndex,
         getBodyFilter: () => selectedBoneIndex < 0 ? null : visibleBodies,
         getScreenPoint: index => {
             viewport();

@@ -23,13 +23,19 @@ function addSkeletonRuntime(source, moduleUrl) {
     output = once(output, '        renderer.dispose();',
         '        skeletonOverlay.dispose();\n        renderer.dispose();');
     return once(output, '        setMotionPlaybackEnabled,',
-        '        setSkeletonVisible: skeletonOverlay.setVisible,\n        setSkeletonSize: skeletonOverlay.setSize,\n        setSkeletonNamesVisible: skeletonOverlay.setNamesVisible,\n        setSkeletonOcclusion: skeletonOverlay.setOcclusion,\n        setSkeletonOccludedOpacity: skeletonOverlay.setOccludedOpacity,\n        pickSkeleton: skeletonOverlay.pick,\n        clearSkeletonContacts: skeletonOverlay.clearContacts,\n        getSkeletonBodyFilter: skeletonOverlay.getBodyFilter,\n        getSkeletonState: skeletonOverlay.getState,\n        setMotionPlaybackEnabled,');
+        '        setSkeletonVisible: skeletonOverlay.setVisible,\n        setSkeletonSize: skeletonOverlay.setSize,\n        setSkeletonNamesVisible: skeletonOverlay.setNamesVisible,\n        setSkeletonJointParametersVisible: skeletonOverlay.setJointParametersVisible,\n        getSkeletonJointState: skeletonOverlay.getJointState,\n        setSkeletonOcclusion: skeletonOverlay.setOcclusion,\n        setSkeletonOccludedOpacity: skeletonOverlay.setOccludedOpacity,\n        pickSkeleton: skeletonOverlay.pick,\n        clearSkeletonContacts: skeletonOverlay.clearContacts,\n        getSkeletonBodyFilter: skeletonOverlay.getBodyFilter,\n        getSkeletonState: skeletonOverlay.getState,\n        setMotionPlaybackEnabled,');
 }
 
 function addSkeletonDisplay(source) {
     let output = once(source, '    function setMotionPlaybackEnabled(enabled) {', `    let skeletonVisible = false;
     let skeletonSize = 1;
     let skeletonNamesVisible = false;
+    let skeletonJointParametersVisible = false;
+    function setSkeletonJointParametersVisible(value) {
+        skeletonJointParametersVisible = value === true;
+        state.runtime?.setSkeletonJointParametersVisible?.(skeletonJointParametersVisible);
+        return skeletonJointParametersVisible;
+    }
     let skeletonOcclusionEnabled = false;
     let skeletonOccludedOpacity = 0.5;
     function setSkeletonOccludedOpacity(value) {
@@ -63,7 +69,7 @@ function addSkeletonDisplay(source) {
 
     function setMotionPlaybackEnabled(enabled) {`);
     output = once(output, '                state.runtime.setVisible(state.visible);',
-        '                state.runtime.setSkeletonVisible?.(skeletonVisible);\n                state.runtime.setSkeletonSize?.(skeletonSize);\n                state.runtime.setSkeletonNamesVisible?.(skeletonNamesVisible);\n                state.runtime.setSkeletonOcclusion?.(skeletonOcclusionEnabled);\n                state.runtime.setSkeletonOccludedOpacity?.(skeletonOccludedOpacity);\n                state.runtime.setVisible(state.visible);');
+        '                state.runtime.setSkeletonVisible?.(skeletonVisible);\n                state.runtime.setSkeletonSize?.(skeletonSize);\n                state.runtime.setSkeletonNamesVisible?.(skeletonNamesVisible);\n                state.runtime.setSkeletonJointParametersVisible?.(skeletonJointParametersVisible);\n                state.runtime.setSkeletonOcclusion?.(skeletonOcclusionEnabled);\n                state.runtime.setSkeletonOccludedOpacity?.(skeletonOccludedOpacity);\n                state.runtime.setVisible(state.visible);');
     output = once(output, '        if (finishTranslationDrag(event.pointerId)) {',
         '        const skeletonTapCandidate = state.rotationDrag?.pointerId === event.pointerId;\n        if (finishTranslationDrag(event.pointerId)) {');
     output = once(output, '        const pressedPoint = state.pressedPoint;', `        // 复用原轻点/拖动/多指判定；只消费同一指针的主键轻点，右键平移或游离抬起不选中。
@@ -74,7 +80,7 @@ function addSkeletonDisplay(source) {
         }
         const pressedPoint = state.pressedPoint;`);
     return once(output, '        setMotionPlaybackEnabled,',
-        '        setSkeletonVisible,\n        setSkeletonSize,\n        setSkeletonNamesVisible,\n        setSkeletonOcclusion,\n        setSkeletonOccludedOpacity,\n        clearSkeletonContacts: () => state.runtime?.clearSkeletonContacts?.(),\n        getSkeletonState: () => state.runtime?.getSkeletonState?.() || { enabled: skeletonVisible, occlusionEnabled: skeletonOcclusionEnabled, occludedOpacity: skeletonOccludedOpacity, sizeMultiplier: skeletonSize, namesVisible: skeletonNamesVisible, selectedBoneIndex: -1, boneCount: 0 },\n        setMotionPlaybackEnabled,');
+        '        setSkeletonVisible,\n        setSkeletonSize,\n        setSkeletonNamesVisible,\n        setSkeletonJointParametersVisible,\n        getSkeletonJointState: () => state.runtime?.getSkeletonJointState?.() || { enabled: skeletonJointParametersVisible, active: false, entries: [], actual: [] },\n        setSkeletonOcclusion,\n        setSkeletonOccludedOpacity,\n        clearSkeletonContacts: () => state.runtime?.clearSkeletonContacts?.(),\n        getSkeletonState: () => state.runtime?.getSkeletonState?.() || { enabled: skeletonVisible, occlusionEnabled: skeletonOcclusionEnabled, occludedOpacity: skeletonOccludedOpacity, sizeMultiplier: skeletonSize, namesVisible: skeletonNamesVisible, selectedBoneIndex: -1, boneCount: 0 },\n        setMotionPlaybackEnabled,');
 }
 
 module.exports = { addSkeletonRuntime, addSkeletonDisplay };

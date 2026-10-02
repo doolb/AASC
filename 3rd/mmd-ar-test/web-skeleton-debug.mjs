@@ -1,3 +1,4 @@
+import { createJointStiffnessDebug } from './web-joint-stiffness-debug.mjs';
 import { createSkeletonSelection, normalizeSkeletonSize } from './web-skeleton-selection.mjs';
 import { createSkeletonCharacterDepth, normalizeSkeletonOccludedOpacity } from './web-skeleton-character-depth.mjs';
 
@@ -38,6 +39,7 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
     const ballDepthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
     const characterDepth = createSkeletonCharacterDepth({ THREE, renderer, camera });
     const selection = createSkeletonSelection({ THREE, renderer, camera, scene });
+    const joints = createJointStiffnessDebug({ THREE, scene, getSelectedBoneIndex: selection.getSelectedBoneIndex });
     const position = new THREE.Vector3();
     const scale = new THREE.Vector3();
     const matrix = new THREE.Matrix4();
@@ -77,6 +79,7 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
         model = disposed ? null : mesh;
         characterDepth.setModel(model);
         selection.setModel(model);
+        joints.setModel(model);
         types = classifySkeletonBones(model);
         if (!model) return;
         generation += 1;
@@ -111,7 +114,7 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
 
     const render = (modelVisible = true) => {
         if (disposed || !enabled || !model || !modelVisible || !model.visible || !types.length) {
-            selection.hide();
+            selection.hide(); joints.hide();
             return false;
         }
         createResources();
@@ -127,7 +130,8 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
             }
             group.mesh.instanceMatrix.needsUpdate = true;
         }
-        selection.update(worldRadius, baseWorldRadius * 16);
+        selection.update(worldRadius, worldRadius);
+        joints.render(true, radius * 0.8 * sizeMultiplier);
         characterDepth.capture();
         updateCount += 1;
         const autoClear = renderer.autoClear;
@@ -185,9 +189,10 @@ export function createSkeletonOverlay({ THREE, renderer, camera }) {
         },
         setSize: value => { sizeMultiplier = normalizeSkeletonSize(value); return sizeMultiplier; },
         setNamesVisible: selection.setNamesVisible,
-        pick: selection.pick, observePhysics: selection.observePhysics,
-        clearContacts: selection.clearContacts, getBodyFilter: selection.getBodyFilter, hide: selection.hide,
-        setVisible: value => { enabled = value === true; selection.setVisible(enabled); if (!enabled) selection.hide(); },
-        dispose: () => { disposed = true; setModel(null); selection.dispose(); characterDepth.dispose(); ballDepthMaterial.dispose(); }
+        setJointParametersVisible: joints.setVisible, getJointState: joints.getState,
+        pick: selection.pick, observePhysics: next => { selection.observePhysics(next); joints.observePhysics(next); },
+        clearContacts: selection.clearContacts, getBodyFilter: selection.getBodyFilter, hide: () => { selection.hide(); joints.hide(); },
+        setVisible: value => { enabled = value === true; selection.setVisible(enabled); if (!enabled) { selection.hide(); joints.hide(); } },
+        dispose: () => { disposed = true; setModel(null); selection.dispose(); joints.dispose(); characterDepth.dispose(); ballDepthMaterial.dispose(); }
     });
 }

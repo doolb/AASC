@@ -30,8 +30,8 @@ const TRACKING_GROUPS = Object.freeze([
 
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArCameraMotionPlayback', 'mmdArMotionProgress', 'mmdArCameraMotionProgress']],
-  ['物理', ['mmdArPhysicsEnabled', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
-  ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus', 'mmdArRigidBodyControls', 'mmdArRigidBodyLegend'], 'mmdArSkeletonEnabled'],
+  ['物理', ['mmdArPhysicsEnabled', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'mmdArVertexClothPanel', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
+  ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonJointParametersEnabled', 'mmdArSkeletonJointLegend', 'mmdArSkeletonJointDetails', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus', 'mmdArRigidBodyControls', 'mmdArRigidBodyLegend'], 'mmdArSkeletonEnabled'],
 ]);
 
 const WEB_PANEL_GROUP_CSS = `
@@ -49,6 +49,13 @@ const WEB_PANEL_GROUP_CSS = `
     .mmd-ar-panel-group-body > :first-child { margin-top: 9px; }
     .mmd-ar-panel-group-body > :last-child { margin-bottom: 0; }
     .mmd-ar-camera-clip { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: color-mix(in srgb, #26344a var(--display-mmd-panel-opacity, 50%), transparent); color: #dce8ff; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .mmd-ar-joint-scale { display: flex; align-items: center; gap: 6px; margin: 5px 0; }
+    .mmd-ar-joint-ramp { width: 70px; height: 8px; background: linear-gradient(90deg,#3b82f6,#22d3ee,#facc15,#ff5a5a); border-radius: 4px; }
+    .mmd-ar-joint-card { margin: 8px 0; padding: 6px; border: 1px solid #758bff55; border-radius: 6px; overflow-wrap: anywhere; }
+    .mmd-ar-joint-values { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mmd-ar-joint-value { font-variant-numeric: tabular-nums; }
+    .mmd-ar-joint-value::before { content: '■'; margin-right: 3px; }
+    .mmd-ar-joint-actual { white-space: pre-line; font-variant-numeric: tabular-nums; }
     .mmd-ar-original-tracking-actions { display: none; }
     #mmdArTrackingToggle { width: 100%; min-height: 44px; }
     .mmd-ar-camera-setting input[type="range"] { width: 100%; }
@@ -175,13 +182,16 @@ const WEB_PANEL_GROUP_JS = `
     (() => {
       const size = document.getElementById('mmdArSkeletonSize');
       const names = document.getElementById('mmdArSkeletonNamesEnabled');
+      const joints = document.getElementById('mmdArSkeletonJointParametersEnabled');
+      const jointLegend = document.getElementById('mmdArSkeletonJointLegend');
+      const jointDetails = document.getElementById('mmdArSkeletonJointDetails');
       const occlusion = document.getElementById('mmdArSkeletonOcclusionEnabled');
       const opacity = document.getElementById('mmdArSkeletonOccludedOpacity');
       const opacityOutput = document.getElementById('mmdArSkeletonOccludedOpacityValue');
       const status = document.getElementById('mmdArSkeletonSelectionStatus');
       const clear = document.getElementById('mmdArSkeletonClearContacts');
       const output = document.getElementById('mmdArSkeletonSizeValue');
-      if (!size || !names || !occlusion || !opacity || !opacityOutput || !status || !clear || !output) return;
+      if (!size || !names || !joints || !jointLegend || !jointDetails || !occlusion || !opacity || !opacityOutput || !status || !clear || !output) return;
       const key = 'aasc.mmdArTest.skeletonDisplay.v1';
       let saved = {};
       try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; }
@@ -192,9 +202,11 @@ const WEB_PANEL_GROUP_JS = `
         ? Math.round(Math.max(0, Math.min(1, value)) * 100) / 100 : 0.5;
       // 旧偏好没有遮挡字段时默认关闭，保留原穿透显示；仅接受布尔true。
       const settings = { sizeMultiplier: normalize(saved.sizeMultiplier), namesVisible: saved.namesVisible === true,
+        jointParametersVisible: saved.jointParametersVisible === true,
         occlusionEnabled: saved.occlusionEnabled === true, occludedOpacity: normalizeOpacity(saved.occludedOpacity) };
       size.value = String(settings.sizeMultiplier);
       names.checked = settings.namesVisible;
+      joints.checked = settings.jointParametersVisible;
       occlusion.checked = settings.occlusionEnabled;
       opacity.value = String(Math.round(settings.occludedOpacity * 100));
       const apply = () => {
@@ -202,12 +214,14 @@ const WEB_PANEL_GROUP_JS = `
         opacityOutput.textContent = Math.round(settings.occludedOpacity * 100) + '%';
         window.DisplayMmd?.setSkeletonSize?.(settings.sizeMultiplier);
         window.DisplayMmd?.setSkeletonNamesVisible?.(settings.namesVisible);
+        window.DisplayMmd?.setSkeletonJointParametersVisible?.(settings.jointParametersVisible);
         window.DisplayMmd?.setSkeletonOcclusion?.(settings.occlusionEnabled);
         window.DisplayMmd?.setSkeletonOccludedOpacity?.(settings.occludedOpacity);
       };
       const save = () => { try { localStorage.setItem(key, JSON.stringify(settings)); } catch (error) { /* 存储受限仍即时生效。 */ } };
       size.addEventListener('input', () => { settings.sizeMultiplier = normalize(Number(size.value)); apply(); save(); });
       names.addEventListener('change', () => { settings.namesVisible = names.checked; apply(); save(); });
+      joints.addEventListener('change', () => { settings.jointParametersVisible = joints.checked; apply(); save(); updateJoints(); });
       occlusion.addEventListener('change', () => { settings.occlusionEnabled = occlusion.checked; apply(); save(); });
       const updateOpacity = () => { settings.occludedOpacity = normalizeOpacity(Number(opacity.value) / 100); apply(); save(); };
       opacity.addEventListener('input', updateOpacity);
@@ -225,16 +239,88 @@ const WEB_PANEL_GROUP_JS = `
         status.textContent = name + ' · ' + detail;
       };
       clear.addEventListener('click', () => { window.DisplayMmd?.clearSkeletonContacts?.(); update(); });
+      // 静态DOM仅在模型/选择变化时建立；实时姿态单独刷新，模型名称只写textContent。
+      const numeric = value => Number.isFinite(value) ? Number(value.toPrecision(4)).toString() : '—';
+      const axes = ['X', 'Y', 'Z'];
+      let jointKey = '';
+      const readings = new Map();
+      const node = (tag, text, className) => {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        if (className) element.className = className;
+        return element;
+      };
+      const updateJoints = () => {
+        const canRead = settings.jointParametersVisible
+          && !jointDetails.closest('.mmd-ar-panel-group-body')?.hidden
+          && !document.getElementById('mmdArMotionPanel')?.hidden;
+        const state = canRead ? window.DisplayMmd?.getSkeletonJointState?.() : null;
+        const visible = state?.active === true;
+        jointLegend.hidden = !visible; jointDetails.hidden = !visible;
+        if (!visible) {
+          if (jointKey) { jointKey = ''; readings.clear(); jointDetails.replaceChildren(); }
+          return;
+        }
+        const key = state.generation + ':' + state.selectedBoneIndex;
+        if (jointKey !== key) {
+          jointKey = key; readings.clear();
+          const legend = document.createDocumentFragment();
+          for (const [title, scale] of [['平移 K', state.translationScale], ['旋转 K', state.rotationScale]]) {
+            const row = node('div', '', 'mmd-ar-joint-scale');
+            row.append(node('span', title), node('i', '', 'mmd-ar-joint-ramp'),
+              node('span', scale ? numeric(scale.min) + '～' + numeric(scale.max) : '全 0'));
+            legend.append(row);
+          }
+          legend.append(node('div', '蓝低 → 红高 · 灰 K=0（弹簧关闭）；两组分别按全模型对数色阶。'));
+          legend.append(node('div', '直箭头＝平移；圆弧＝旋转。短刻度1/2/3、圆弧小/中/大对应XYZ。'));
+          legend.append(node('div', '区间/弧段＝限位，菱形＝锁定，虚线＝自由。白标＝实际变化，红标＝越界或超过平移显示范围。'));
+          legend.append(node('div', '平移各轴按固定范围缩放；圆周按实际角度，精确值见选中读数。'));
+          jointLegend.replaceChildren(legend);
+          const fragment = document.createDocumentFragment();
+          if (state.selectedBoneIndex < 0) fragment.append(node('p', '当前显示全部 ' + state.entries.length + ' 个关节；轻点骨骼查看实际变化。'));
+          else if (!state.entries.length) fragment.append(node('p', '无关联关节'));
+          else for (const entry of state.entries) {
+            const card = node('div', '', 'mmd-ar-joint-card');
+            card.append(node('strong', entry.name), node('div', entry.relation));
+            for (const [r, title] of ['平移 K', '旋转 K'].entries()) {
+              const row = node('div', title + ' ', 'mmd-ar-joint-values');
+              for (const cell of entry.rows[r]) {
+                const value = node('span', cell.text, 'mmd-ar-joint-value');
+                value.style.color = cell.color;
+                value.title = cell.value === 0 ? '弹簧关闭；硬限位仍有效' : 'PMX弹簧刚度';
+                row.append(value);
+              }
+              card.append(row);
+            }
+            card.append(node('div', '平移限位（模型单位）：' + entry.limitRows[0]),
+              node('div', '旋转限位：' + entry.limitRows[1]));
+            const actual = node('div', '', 'mmd-ar-joint-actual');
+            readings.set(entry.index, actual); card.append(actual); fragment.append(card);
+          }
+          fragment.append(node('p', 'XYZ 为关节局部轴；实际变化相对绑定姿态，平移为模型单位，旋转为度数。'));
+          jointDetails.replaceChildren(fragment);
+        }
+        for (const [index, element] of readings) {
+          const actual = state.actual.find(value => value.index === index);
+          const text = actual?.translation && actual?.rotation
+            ? '实际位移 ' + axes.map((axis, i) => axis + ' ' + numeric(actual.translation[i])).join(' · ')
+              + '\\n实际角度 ' + axes.map((axis, i) => axis + ' ' + numeric(actual.rotation[i]) + '°').join(' · ')
+            : state.poseError || actual?.status || '未模拟';
+          if (element.textContent !== text) element.textContent = text;
+        }
+      };
       const panel = document.getElementById('mmdArMotionPanel');
+      let jointTimer = null;
       let timer = null;
       const sync = () => {
         if (timer !== null) clearInterval(timer);
-        timer = null;
-        update();
-        if (panel && !panel.hidden) timer = setInterval(update, 500);
+        if (jointTimer !== null) clearInterval(jointTimer);
+        timer = null; jointTimer = null;
+        update(); updateJoints();
+        if (panel && !panel.hidden) { timer = setInterval(update, 500); jointTimer = setInterval(updateJoints, 100); }
       };
       if (panel) new MutationObserver(sync).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
-      window.addEventListener('pagehide', () => { if (timer !== null) clearInterval(timer); }, { once: true });
+      window.addEventListener('pagehide', () => { if (timer !== null) clearInterval(timer); if (jointTimer !== null) clearInterval(jointTimer); }, { once: true });
       apply(); sync();
     })();
     (() => {
@@ -578,7 +664,7 @@ const WEB_PANEL_GROUP_JS = `
       const apply = (next, persist = false) => {
         value = normalize(next);
         input.value = String(value);
-        output.textContent = value + (window.DisplayMmd?.getPhysicsSolver?.() === 'xpbd' ? ' 子步' : ' Hz');
+        output.textContent = value + (window.DisplayMmd?.getPhysicsSolver?.() !== 'ammo' ? ' 子步' : ' Hz');
         window.DisplayMmd?.setPhysicsStabilityReference?.(value);
         if (!persist) return;
         try { localStorage.setItem(storageKey, String(value)); } catch (error) { /* 存储受限时本次仍生效。 */ }
@@ -716,6 +802,9 @@ function groupWebPanels($) {
       '<label class="mind-basic-field"><span>遮挡处不透明度 <output id="mmdArSkeletonOccludedOpacityValue">50%</output></span>' +
       '<input id="mmdArSkeletonOccludedOpacity" type="range" min="0" max="100" step="1" value="50" aria-label="骨骼小球被角色遮挡处不透明度"><small>被角色挡住的部分变淡，外露部分保持不透明。</small></label>' +
       '<label class="display-mmd-lighting-field"><input id="mmdArSkeletonNamesEnabled" type="checkbox"><span>显示骨骼名称</span></label>' +
+      '<label class="display-mmd-lighting-field"><input id="mmdArSkeletonJointParametersEnabled" type="checkbox"><span>显示关节 K 值与限位</span></label>' +
+      '<div id="mmdArSkeletonJointLegend" class="mind-basic-note" hidden></div>' +
+      '<div id="mmdArSkeletonJointDetails" class="mind-basic-note" hidden></div>' +
       '<p id="mmdArSkeletonSelectionStatus" class="mind-basic-note" role="status">轻点小球选中骨骼，点空白取消</p>' +
       '<button id="mmdArSkeletonClearContacts" type="button" disabled>清空累计碰撞</button>' +
       '<p id="mmdArSkeletonHint" class="mind-basic-note">选中显示局部轴：X红、Y绿、Z蓝。碰撞体开启时仅显示自身与累计碰撞对象；拖动旋转模型。</p>' +

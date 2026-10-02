@@ -1,5 +1,9 @@
 # Web MediaCenter - 项目参考文档
 
+## TMP14顶点布料（2026-10-02核对）
+
+- [作者演示](https://matthias-research.github.io/pages/tenMinutePhysics/14-cloth.html)、[作者源码](https://raw.githubusercontent.com/matthias-research/pages/master/tenMinutePhysics/14-cloth.html)：MIT许可；顶点粒子、边距离拉伸、相邻三角对边顶点距离的近似弯曲；示例15子步、每步各一遍；简单地面碰撞。当前只作候选接入参考，尚未加入项目顶点布料后端。
+
 ## 技术栈
 
 ### 后端

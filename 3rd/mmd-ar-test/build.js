@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 'use strict';
-
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const { createWriteStream } = require('node:fs');
@@ -16,7 +15,6 @@ const {
   createStaticMmdResourceProfile,
   resolveStaticMmdAssetUrl,
 } = require('../../src/apps/server/modules/mmd/mmd-resource-service');
-
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const ANDROID_PROJECT = __dirname;
 const APP_PROJECT = path.join(ANDROID_PROJECT, 'app');
@@ -37,6 +35,7 @@ const WEB_SHADOW_MAP = require('./web-shadow-map-size');
 const WEB_PHYSICS_WIND = require('./web-physics-wind');
 const WEB_PHYSICS_SOLVER = require('./web-physics-solver');
 const { stageXpbdPhysics } = require('./web-xpbd-build');
+const { stageVertexCloth, addClothMotionSwitch } = require('./web-vertex-cloth-inject');
 const WEB_FILL_FACING_RANGE = require('./web-fill-facing-range');
 // 网页构建产物可挂载在任意目录；资源统一相对页面目录，APK 仍使用原本地路由。
 const WEB_BASE_PATH = '.';
@@ -78,7 +77,6 @@ const SOURCE_ASSET_FILES = Object.freeze([
 const VENDOR_THREE_SOURCE = path.join(SOURCE_PUBLIC, 'js/vendor/three');
 const DISPLAY_HTML_SOURCE = path.join(SOURCE_PUBLIC, 'display.html');
 const MODEL_PUBLIC_BASE_URL = 'http://120.79.245.103/mnt/mmd/miya-v1/';
-
 function log(message) {
   process.stdout.write(`[mmd-ar-${WEB_MODE ? 'web' : 'apk'}] ${message}\n`);
 }
@@ -461,7 +459,7 @@ async function stageTextAssets() {
       await fs.copyFile(sourcePath, destinationPath);
     }
   }
-  let xpbdPhysicsVersion = '';
+  let xpbdPhysicsVersion = '', vertexClothUrl = '';
   {
     // UI 和 PMX runtime 必须导入同一个带内容指纹的 ESM，避免生成两个独立文件注册表。
     for (const fileName of ['web-local-assets.mjs', 'web-local-assets-ui.mjs']) {
@@ -480,15 +478,19 @@ async function stageTextAssets() {
     const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
     ({ xpbdPhysicsVersion } = await stageXpbdPhysics({
       generatedAssets: GENERATED_ASSETS, physicsWindUrl, physicsRateUrl }));
+    vertexClothUrl = await stageVertexCloth({ generatedAssets: GENERATED_ASSETS, physicsWindUrl, physicsRateUrl });
     const selectionPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-selection.mjs');
     await fs.copyFile(path.join(__dirname, 'web-skeleton-selection.mjs'), selectionPath);
     const selectionUrl = `./web-skeleton-selection.mjs?v=${(await hashFile(selectionPath)).sha256.slice(0, 12)}`;
     const characterDepthPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-character-depth.mjs');
     await fs.copyFile(path.join(__dirname, 'web-skeleton-character-depth.mjs'), characterDepthPath);
     const characterDepthUrl = `./web-skeleton-character-depth.mjs?v=${(await hashFile(characterDepthPath)).sha256.slice(0, 12)}`;
+    const jointPath = path.join(GENERATED_ASSETS, 'js/web-joint-stiffness-debug.mjs');
+    await fs.copyFile(path.join(__dirname, 'web-joint-stiffness-debug.mjs'), jointPath);
+    const jointUrl = `./web-joint-stiffness-debug.mjs?v=${(await hashFile(jointPath)).sha256.slice(0, 12)}`;
     const skeletonPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-debug.mjs');
     await fs.writeFile(skeletonPath, (await fs.readFile(path.join(__dirname, 'web-skeleton-debug.mjs'), 'utf8'))
-      .replace('./web-skeleton-selection.mjs', selectionUrl)
+      .replace('./web-joint-stiffness-debug.mjs', jointUrl).replace('./web-skeleton-selection.mjs', selectionUrl)
       .replace('./web-skeleton-character-depth.mjs', characterDepthUrl));
     const skeletonUrl = `./web-skeleton-debug.mjs?v=${(await hashFile(skeletonPath)).sha256.slice(0, 12)}`;
     const rigidBodyPath = path.join(GENERATED_ASSETS, 'js/web-rigid-body-debug.mjs');
@@ -504,8 +506,8 @@ async function stageTextAssets() {
       WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl)));
     const pmxHelperUrl = `./mmd-pmx-helper.mjs?v=${(await hashFile(pmxHelperPath)).sha256.slice(0, 12)}`;
     const motionSwitchPath = path.join(GENERATED_ASSETS, 'js/web-motion-switch.mjs');
-    await fs.writeFile(motionSwitchPath, (await fs.readFile(path.join(__dirname, 'web-motion-switch.mjs'), 'utf8'))
-      .replace('./web-physics-rate.mjs', physicsRateUrl));
+    await fs.writeFile(motionSwitchPath, addClothMotionSwitch((await fs.readFile(path.join(__dirname, 'web-motion-switch.mjs'), 'utf8'))
+      .replace('./web-physics-rate.mjs', physicsRateUrl)));
     const motionSwitchUrl = `./web-motion-switch.mjs?v=${(await hashFile(motionSwitchPath)).sha256.slice(0, 12)}`;
     const localUiPath = path.join(GENERATED_ASSETS, 'js/web-local-assets-ui.mjs');
     await fs.writeFile(localUiPath, (await fs.readFile(localUiPath, 'utf8')).replace('./web-local-assets.mjs', localAssetsUrl));
@@ -591,7 +593,7 @@ async function stageTextAssets() {
     await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
       await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));
     await fs.writeFile(helperPath, WEB_PHYSICS_SOLVER.addSolverAnimationHelper(
-      await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`));
+      await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`, vertexClothUrl));
     webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
   }
 
@@ -859,7 +861,7 @@ async function stageTextAssets() {
   for (const id of ['mmdArMotionToggle', 'mmdArMotionPanel', 'mmdArLocalAssets',
     'mmdArCameraMotionPlayback', 'mmdArGravityCameraEnabled', 'mmdArSkeletonEnabled', 'mmdArRigidBodyEnabled',
     'mmdArRigidBodyLegend', 'mmdArRigidBodyControls', 'mmdArPhysicsStabilityReference',
-    'mmdArFillFacingStart', 'mmdArFillFacingEnd', 'mmdArSkeletonOccludedOpacity']) requiredIds.add(id);
+    'mmdArFillFacingStart', 'mmdArFillFacingEnd', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonJointParametersEnabled', 'mmdArSkeletonJointLegend', 'mmdArSkeletonJointDetails']) requiredIds.add(id);
   for (const id of ['mmdArShadowMapSize', 'mmdArShadowMapSizeValue', 'mmdArShadowMapPreviewEnabled',
     'mmdArShadowMapPreviewRows', 'mmdArShadowMapKeyStatus', 'mmdArShadowMapKeyCanvas',
     'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas',

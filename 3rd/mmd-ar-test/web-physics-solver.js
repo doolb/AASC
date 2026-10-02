@@ -1,4 +1,5 @@
 'use strict';
+const CLOTH = require('./web-vertex-cloth-inject');
 
 // 只适配独立网页/APK副本；源锚点改变时停止构建，不静默漏掉某个模型/VMD路径。
 function once(source, anchor, replacement) {
@@ -6,8 +7,9 @@ function once(source, anchor, replacement) {
     return source.replace(anchor, replacement);
 }
 
-// 第三后端已移除；旧偏好与旧调用统一迁移到自写XPBD，避免恢复不存在的选项。
+// THREE刚体后端已移除；旧偏好迁移自写XPBD，TMP14顶点模式使用独立选项。
 function normalizePhysicsSolver(value) {
+    if (value === 'vertex-cloth') return value;
     return ['xpbd', 'three-xpbd'].includes(value) ? 'xpbd' : 'ammo';
 }
 
@@ -16,16 +18,18 @@ function addSolverHelper(source) {
     output = once(output, '    const options = { physics };', '    const options = { physics, physicsSolver };');
     output = once(output, '    physicsFps = DEFAULT_PMX_PHYSICS_FPS\n}) {', "    physicsFps = DEFAULT_PMX_PHYSICS_FPS,\n    physicsSolver = 'ammo'\n}) {");
     output = once(output, '        physicsFps\n    };', '        physicsFps,\n        physicsSolver\n    };');
-    output = once(output, '        await ensurePhysics();', "        if (physicsSolver === 'ammo') await ensurePhysics();");
+    output = once(output, '        await ensurePhysics();', "        if (physicsSolver !== 'xpbd') await ensurePhysics();");
     // XPBD失败必须让切换回滚，不能选项写着XPBD而实际停用物理。
     output = once(output, '    } catch (error) {\n        return {', "    } catch (error) {\n        if (physicsSolver !== 'ammo') throw error;\n        return {");
-    return once(output, '    physics.reset();', "    physics.reset();\n    if (physics.engine === 'xpbd') { physics.resetMotion(); return; }");
+    return once(output, '    physics.reset();', "    physics.reset();\n    if (physics.engine === 'xpbd' || physics.engine === 'vertex-cloth') { physics.resetMotion(); return; }");
 }
 
-function addSolverAnimationHelper(source, moduleUrl) {
-    return once(`import { XpbdPmxPhysics } from '${moduleUrl}';\n${source}`, '\t_createMMDPhysics( mesh, params ) {', `\t_createMMDPhysics( mesh, params ) {
+function addSolverAnimationHelper(source, moduleUrl, clothUrl) {
+    return once(`import { XpbdPmxPhysics } from '${moduleUrl}';\nimport { VertexClothPmxPhysics } from '${clothUrl}';\n${source}`, '\t_createMMDPhysics( mesh, params ) {', `\t_createMMDPhysics( mesh, params ) {
         if (params.physicsSolver === 'xpbd') return new XpbdPmxPhysics(mesh,
-            mesh.geometry.userData.MMD.rigidBodies, mesh.geometry.userData.MMD.constraints, params);`);
+            mesh.geometry.userData.MMD.rigidBodies, mesh.geometry.userData.MMD.constraints, params);
+        if (params.physicsSolver === 'vertex-cloth') return new VertexClothPmxPhysics(mesh, params,
+            (target, bodies, joints, options) => new MMDPhysics(target, bodies, joints, options));`);
 }
 
 function addSolverRuntime(source) {
@@ -53,10 +57,17 @@ function addSolverRuntime(source) {
     };`);
     output = once(output, '            physicsEnabled: usePhysics,', '            physicsEnabled: usePhysics,\n            physicsSolver,');
     output = once(output, '                ensurePhysics: ensureAmmoPhysics, physicsEnabled,',
-        "                ensurePhysics: physicsSolver !== 'ammo' ? async () => {} : ensureAmmoPhysics, physicsEnabled, physicsSolver,");
+        "                ensurePhysics: physicsSolver === 'xpbd' ? async () => {} : ensureAmmoPhysics, physicsEnabled, physicsSolver,");
     output = once(output, '        syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);',
         '        syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);\n        timePhysics(frameHelper?.objects?.get(currentMesh)?.physics);');
-    return once(output, '        setMotionPlaybackEnabled,', '        setPhysicsSolver,\n        getPhysicsSolverState,\n        setMotionPlaybackEnabled,');
+    return once(output, '        setMotionPlaybackEnabled,', `        setVertexClothGroup: (id, enabled) => {
+            const result = helper.current?.objects?.get(currentMesh)?.physics?.setGroupEnabled?.(id, enabled) === true;
+            startRendering(); return result;
+        },
+        setVertexClothPreview: (value) => helper.current?.objects?.get(currentMesh)?.physics?.setPreview?.(value) || false,
+        setPhysicsSolver,
+        getPhysicsSolverState,
+        setMotionPlaybackEnabled,`);
 }
 
 function addSolverDisplay(source) {
@@ -97,17 +108,20 @@ function addSolverDisplay(source) {
     output = once(output, '                state.runtime.setPhysicsEnabled?.(state.physicsEnabled);',
         '                state.runtime.setPhysicsSolver?.(physicsSolver);\n                state.runtime.setPhysicsEnabled?.(state.physicsEnabled);');
     return once(output, '        setMotionPlaybackEnabled,', `        setPhysicsSolver,
+        setVertexClothGroup: (id, enabled) => !physicsConfigurationBusy && (state.runtime?.setVertexClothGroup?.(id, enabled) || false),
+        setVertexClothPreview: (value) => state.runtime?.setVertexClothPreview?.(value) || false,
         getPhysicsSolver: () => physicsSolver,
         getPhysicsSolverState: () => state.runtime?.getPhysicsSolverState?.() || { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 },
         setMotionPlaybackEnabled,`);
 }
 
-const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus']);
+const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', ...CLOTH.CLOTH_CONTROL_IDS]);
 const SOLVER_PANEL_HTML = `<label class="mind-basic-field"><span>布料计算</span>
     <select id="mmdArPhysicsSolver" aria-label="布料计算求解器"><option value="ammo" selected>Ammo（原方式）</option>
-    <option value="xpbd">XPBD（现有实现）</option></select></label>
-    <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>`;
+    <option value="xpbd">XPBD（现有实现）</option><option value="vertex-cloth">顶点布料（TMP14）</option></select></label>
+    <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>${CLOTH.CLOTH_PANEL_HTML}`;
 const SOLVER_PANEL_JS = `
+    ${CLOTH.CLOTH_PANEL_JS}
     (() => {
         ${normalizePhysicsSolver.toString()}
         const select = document.getElementById('mmdArPhysicsSolver');
@@ -127,30 +141,31 @@ const SOLVER_PANEL_JS = `
         catch (error) { /* 存储受限按原方式启动。 */ }
         const update = () => {
             const solver = window.DisplayMmd?.getPhysicsSolver?.() || 'ammo';
-            const xpbd = solver === 'xpbd';
+            const xpbd = solver !== 'ammo';
             select.value = solver;
             if (correction) {
                 correction.disabled = false;
-                correction.setAttribute('aria-label', xpbd ? 'XPBD每帧子步数' : '关节纠错基准频率');
+                correction.setAttribute('aria-label', xpbd ? '每帧子步数' : '关节纠错基准频率');
             }
             // 同一保存值在Ammo与XPBD中含义不同，显示实际单位，避免把子步数误读为Hz。
             if (correctionTitle?.nodeType === 3) correctionTitle.nodeValue = xpbd ? '每帧子步数 ' : '纠错基准 Hz ';
             if (correctionValue && correction) correctionValue.textContent = correction.value + (xpbd ? ' 子步' : ' Hz');
             if (physicsFps) {
                 physicsFps.disabled = xpbd;
-                if (xpbd) physicsFps.title = 'XPBD按每帧子步数计算，此物理频率暂不使用。';
+                if (xpbd) physicsFps.title = '顶点/XPBD按每帧子步数计算；顶点模式其余Ammo保留已有频率。';
                 else physicsFps.removeAttribute('title');
             }
             const roundsHint = solver === 'xpbd' ? '每子步1轮并补旋转锁轴纠正' : '每子步1轮';
-            if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：3表示3个子步；' + roundsHint + '，步长为本帧时间÷子步数。物理Hz暂不使用。'
+            if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：3表示3个子步；' + roundsHint + '，步长为本帧时间÷子步数。' + (solver === 'vertex-cloth' ? '非布料Ammo保留已有物理Hz，顶点求解不用它。' : '物理Hz暂不使用。')
                 : '按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。';
             const state = window.DisplayMmd?.getPhysicsSolverState?.();
-            const name = { ammo: 'Ammo', xpbd: 'XPBD' }[solver] || 'Ammo';
+            const name = { ammo: 'Ammo', xpbd: 'XPBD', 'vertex-cloth': 'TMP14顶点布料' }[solver] || 'Ammo';
+            const particleInfo = solver === 'vertex-cloth' ? ' · ' + state?.particleCount + ' 粒子 / ' + state?.constraintCount + ' 约束' : '';
             label.textContent = !state?.active ? name + ' · 物理未运行'
                 : name + ' · ' + state.bodyCount + ' 个刚体'
                     + (xpbd ? ' · 当前子步数 ' + state.substeps + ' · 每子步1轮' : '')
                     + (state.rotationLockProjections > 0 ? ' + 旋转锁轴纠正' : '')
-                    + ' · 帧物理耗时 ' + Number(state.frameMs || 0).toFixed(2) + ' ms';
+                    + particleInfo + ' · 帧物理耗时 ' + Number(state.frameMs || 0).toFixed(2) + ' ms';
         };
         const apply = async (value, persist) => {
             select.disabled = true; if (toggle) toggle.disabled = true;
