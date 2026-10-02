@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### MMD AR正式服务包code46发布
+
+- ✅ [2026-10-02] 正式显示端用户功能迁移、光照修复和新相对气流计算已合并并发布code46，源码920030f0；复用dependencies6、Node-min种子39、min APK34与已有数据修复组件。
+  - npm run build:offline-update / publish:offline-update均采用code-only，显式复用Node-min种子；code/code-v46.zip大小16,891,625 bytes、SHA-256 893a2baee14885724a5e7c10b9eb063cd1a67800eb4b151f0bbe66e1c38d3f58。ZIP完整性、包内922文件与源码逐字节比对及正式模块收录通过。
+  - LAN /mnt/aasc-offline和WAN /home/as/a/aasc-offline发布成功，签名清单最后原子替换；两端所有组件HTTP整包大小/SHA-256、RSA签名通过，旧数字版本普通文件精确清理无错误。两端清单字节一致、SHA-256 1cd26c8da4661d8fabeb55fac187b74bea7021f1a22a372e7f73b0e7c0a9d68a，code HEAD均200/16,891,625 bytes。
+  - 31项风/光照定向测试与网页构建/指纹检查通过，发布状态servicePackage复位false，既有minApk=true/dependenciesPackage=false不变。未构建APK/依赖包或将生成物提交Git；design/spec/task/todo/usage/self-test同步，手机观感及全功能现场验收继续保留。
+
+
 ### MMD AR正式刚体受风同步
 
 - ✅ [2026-10-02] 按已确认四文件方案，将相对气流、代理迎风面积、连续空间阵风和稳定阻力同步正式Ammo/刚体XPBD，保留风控件和type2位置驱动/风矩限幅。
