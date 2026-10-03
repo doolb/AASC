@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### MMD刚体XPBD WebGL2
+
+- ✅ [2026-10-03] 测试版新增“XPBD（WebGL2）”刚体后端：RGBA32F ping-pong预测/风/锚点/六轴约束/球盒胶囊碰撞，关节图着色及接触邻接汇总，帧末一次读回并沿用骨骼回写。
+  - 新增`web-xpbd-webgl-{state,shaders,joints,collision,solver,physics}.mjs`及注入模块，更新`web-xpbd-build.js`、`web-physics-solver.js`、`build.js`；支持64MiB预算、明确CPU回退、reset清零和上下文丢失/恢复，状态显示读回/pass/GPU计时。
+  - 数值/六种形状/锚点关节/type2/全锁/50次释放及恢复自测通过；原风回归24/24通过；生成网页实际米娅确认GPU运行。独立网页构建、70脚本/4内联/58指纹校验通过，文档和自测同步。
+  - 软件GPU米娅3子步317 passes、约8.17MiB、单帧约4.65秒，当前不宣称加速；硬件手机性能及长期动作/模型切换观感保留待验收。未改正式端或Offline发布状态，未发布正式包。
+
+
 ### MMD AR正式服务包code46发布
 
 - ✅ [2026-10-02] 正式显示端用户功能迁移、光照修复和新相对气流计算已合并并发布code46，源码920030f0；复用dependencies6、Node-min种子39、min APK34与已有数据修复组件。

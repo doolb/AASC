@@ -932,3 +932,7 @@ MindAR 适配器仅在共享摄像头视频就绪后启动；这一阶段将定�
 ## MMD 角色鼠标和双指平移/缩放（2026-09-29）
 
 自动验证：运行 MMD 指针交互与 AR 相机 runtime 定向测试、mmd-ar 测试网页构建。覆盖滚轮相机缩放、右键角色拖动、两指同步平移角色与捏合相机、取消事件清理、单指旋转/点击不回归，以及 AR pose 更新不覆盖手动角色偏移。手动验证：桌面右键拖动和滚轮；Android 正式 APK 与 HTTPS mmd-ar 页面分别检查单指旋转/点击、双指移动角色并缩放相机、锁定/失锁/重锁后的相对位置。
+
+## 刚体XPBD WebGL2
+
+`node --test tests/mmd-ar-xpbd-webgl.test.js tests/mmd-ar-xpbd-webgl-browser.test.js`：真实Chromium/SwiftShader验证六种形状、关节、type2、全锁、CPU风/重力对照、一次读回、reset、渲染状态恢复、50次资源释放、上下文恢复与默认米娅生成网页切换。软件驱动不替代手机观感/性能验收。结果见[任务记录](task/20261003_MMD刚体XPBD_WebGL2.md)。

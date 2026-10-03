@@ -455,7 +455,7 @@ async function stageTextAssets() {
       await fs.copyFile(sourcePath, destinationPath);
     }
   }
-  let xpbdPhysicsVersion = '', vertexClothUrl = '';
+  let xpbdPhysicsVersion = '', vertexClothUrl = '', webglUrl = '';
   {
     // UI 和 PMX runtime 必须导入同一个带内容指纹的 ESM，避免生成两个独立文件注册表。
     for (const fileName of ['web-local-assets.mjs', 'web-local-assets-ui.mjs']) {
@@ -472,7 +472,7 @@ async function stageTextAssets() {
     const physicsRatePath = path.join(GENERATED_ASSETS, 'js/web-physics-rate.mjs');
     await fs.copyFile(path.join(__dirname, 'web-physics-rate.mjs'), physicsRatePath);
     const physicsRateUrl = `./web-physics-rate.mjs?v=${(await hashFile(physicsRatePath)).sha256.slice(0, 12)}`;
-    ({ xpbdPhysicsVersion } = await stageXpbdPhysics({
+    ({ xpbdPhysicsVersion, webglUrl } = await stageXpbdPhysics({
       generatedAssets: GENERATED_ASSETS, physicsWindUrl, physicsRateUrl }));
     vertexClothUrl = await stageVertexCloth({ generatedAssets: GENERATED_ASSETS, physicsWindUrl, physicsRateUrl });
     const selectionPath = path.join(GENERATED_ASSETS, 'js/web-skeleton-selection.mjs');
@@ -557,7 +557,7 @@ async function stageTextAssets() {
       `'./display-pmx-ao.mjs?v=${aoVersion}'`), rigidBodyUrl)));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_WIND.addWindRuntime(
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
-    await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8')));
+    await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
@@ -591,7 +591,7 @@ async function stageTextAssets() {
     await fs.writeFile(helperPath, WEB_PHYSICS_LIFECYCLE.addAnimationLifecycle(
       await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));
     await fs.writeFile(helperPath, WEB_PHYSICS_SOLVER.addSolverAnimationHelper(
-      await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`, vertexClothUrl));
+      await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`, vertexClothUrl, webglUrl.replace('./', '../../../')));
     webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
   }
 

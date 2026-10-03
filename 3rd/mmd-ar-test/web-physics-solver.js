@@ -9,7 +9,7 @@ function once(source, anchor, replacement) {
 
 // THREE刚体后端已移除；旧偏好迁移自写XPBD，TMP14顶点模式使用独立选项。
 function normalizePhysicsSolver(value) {
-    if (value === 'vertex-cloth') return value;
+    if (['vertex-cloth', 'xpbd-webgl'].includes(value)) return value;
     return ['xpbd', 'three-xpbd'].includes(value) ? 'xpbd' : 'ammo';
 }
 
@@ -118,7 +118,7 @@ function addSolverDisplay(source) {
 const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', ...CLOTH.CLOTH_CONTROL_IDS]);
 const SOLVER_PANEL_HTML = `<label class="mind-basic-field"><span>布料计算</span>
     <select id="mmdArPhysicsSolver" aria-label="布料计算求解器"><option value="ammo" selected>Ammo（原方式）</option>
-    <option value="xpbd">XPBD（现有实现）</option><option value="vertex-cloth">顶点布料（TMP14）</option></select></label>
+    <option value="xpbd">XPBD（CPU）</option><option value="xpbd-webgl">XPBD（WebGL2）</option><option value="vertex-cloth">顶点布料（TMP14）</option></select></label>
     <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>${CLOTH.CLOTH_PANEL_HTML}`;
 const SOLVER_PANEL_JS = `
     ${CLOTH.CLOTH_PANEL_JS}
@@ -155,17 +155,19 @@ const SOLVER_PANEL_JS = `
                 if (xpbd) physicsFps.title = '顶点/XPBD按每帧子步数计算；顶点模式其余Ammo保留已有频率。';
                 else physicsFps.removeAttribute('title');
             }
-            const roundsHint = solver === 'xpbd' ? '每子步1轮并补旋转锁轴纠正' : '每子步1轮';
+            const roundsHint = ['xpbd', 'xpbd-webgl'].includes(solver) ? '每子步1轮并补旋转锁轴纠正' : '每子步1轮';
             if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：3表示3个子步；' + roundsHint + '，步长为本帧时间÷子步数。' + (solver === 'vertex-cloth' ? '非布料Ammo保留已有物理Hz，顶点求解不用它。' : '物理Hz暂不使用。')
                 : '按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。';
             const state = window.DisplayMmd?.getPhysicsSolverState?.();
-            const name = { ammo: 'Ammo', xpbd: 'XPBD', 'vertex-cloth': 'TMP14顶点布料' }[solver] || 'Ammo';
+            const name = { ammo: 'Ammo', xpbd: 'XPBD（CPU）', 'xpbd-webgl': 'XPBD（WebGL2）', 'vertex-cloth': 'TMP14顶点布料' }[solver] || 'Ammo';
             const particleInfo = solver === 'vertex-cloth' ? ' · ' + state?.particleCount + ' 粒子 / ' + state?.constraintCount + ' 约束' : '';
             label.textContent = !state?.active ? name + ' · 物理未运行'
                 : name + ' · ' + state.bodyCount + ' 个刚体'
                     + (xpbd ? ' · 当前子步数 ' + state.substeps + ' · 每子步1轮' : '')
                     + (state.rotationLockProjections > 0 ? ' + 旋转锁轴纠正' : '')
-                    + particleInfo + ' · 帧物理耗时 ' + Number(state.frameMs || 0).toFixed(2) + ' ms';
+                    + particleInfo + ' · 帧物理耗时 ' + Number(state.frameMs || 0).toFixed(2) + ' ms'
+                    + (state.computeBackend === 'webgl2' ? ' · 读回 ' + Number(state.readbackMs || 0).toFixed(2) + ' ms · ' + state.passCount + ' passes · GPU ' + (state.gpuMs == null ? '计时不可用' : Number(state.gpuMs).toFixed(2) + ' ms') : '')
+                    + (state.fallbackReason ? ' · CPU回退：' + state.fallbackReason : '');
         };
         const apply = async (value, persist) => {
             select.disabled = true; if (toggle) toggle.disabled = true;
@@ -206,3 +208,11 @@ module.exports = { addSolverHelper, addSolverAnimationHelper, addSolverRuntime, 
 
 // 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
 module.exports = require('./web-production-shared').reuseAdapters(module.exports);
+
+// WebGL后端适配放在共享复用之后，保证正式源码与旧注入来源都能正确接入。
+const { applyWebglSolver } = require('./web-xpbd-webgl-inject');
+for (const operation of ['addSolverHelper', 'addSolverAnimationHelper', 'addSolverRuntime', 'addSolverDisplay']) {
+    const original = module.exports[operation];
+    module.exports[operation] = (source, ...args) => applyWebglSolver(original(source, ...args), operation,
+        operation === 'addSolverAnimationHelper' ? args[2] : args[0]);
+}

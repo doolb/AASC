@@ -665,3 +665,7 @@ PORT=3000 npm start
 | Edge | 80+ |
 
 **推荐使用 Chrome 或 Edge 获得最佳体验。**
+
+## 刚体XPBD WebGL2测试版
+
+动作面板选择、子步含义、能力回退及性能限制见[使用说明](usage/mmd-xpbd-webgl.md)。

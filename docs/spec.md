@@ -8,6 +8,7 @@
 
 | 模块 | 文档 | 说明 |
 |------|------|------|
+| MMD刚体XPBD WebGL2 | [mmd-xpbd-webgl.md](spec/mmd-xpbd-webgl.md) | 测试版WebGL2 ping-pong刚体后端、碰撞/约束并行、骨骼读回与CPU回退 |
 | HTTP API | [api.md](spec/api.md) | 文件上传、媒体管理、TTS、提醒、聊天、整点报时等 API |
 | 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](spec/display-camera-chat.md) | 摄像头能力远端配置、请求转发、单次拍照、实时预览和多模态聊天伪代码 |
 | API 使用与命令行工具 | [api-usage.md](spec/api-usage.md) | 服务器 HTTP API 目录、Bash 调用器和安全测试伪代码 |

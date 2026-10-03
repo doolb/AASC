@@ -26,6 +26,7 @@
 
 | 模块 | 文档 | 说明 |
 |------|------|------|
+| MMD刚体XPBD WebGL2 | [mmd-xpbd-webgl.md](design/mmd-xpbd-webgl.md) | 测试版WebGL2 ping-pong刚体后端、碰撞/约束并行、骨骼读回与CPU回退 |
 | 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](design/display-camera-chat.md) | 摄像头能力开关、单摄像头拍照、实时预览和聊天图片输入 |
 | 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪、选择模式 |
 | 显示端代码变化检测远端配置 | [display-version-remote-config.md](design/display-version-remote-config.md) | 控制端通过 AASC 远端配置显示端代码检测间隔 |

@@ -21,7 +21,17 @@ async function stageXpbdPhysics({ generatedAssets, physicsWindUrl, physicsRateUr
     const rigidUrl = await write('web-xpbd-rigid.mjs', [['./web-xpbd-collision.mjs', collisionUrl]]);
     await write('web-xpbd-physics.mjs', [['./web-xpbd-rigid.mjs', rigidUrl],
         ['./web-physics-wind.mjs', physicsWindUrl], ['./web-physics-rate.mjs', physicsRateUrl]]);
-    return { xpbdPhysicsVersion: await version('web-xpbd-physics.mjs') };
+    const shadersUrl = await write('web-xpbd-webgl-shaders.mjs');
+    const stateUrl = await write('web-xpbd-webgl-state.mjs');
+    const jointsUrl = await write('web-xpbd-webgl-joints.mjs', [['./web-xpbd-webgl-shaders.mjs', shadersUrl]]);
+    const contactUrl = await write('web-xpbd-webgl-collision.mjs', [['./web-xpbd-webgl-shaders.mjs', shadersUrl]]);
+    const solverUrl = await write('web-xpbd-webgl-solver.mjs', [['./web-xpbd-webgl-state.mjs', stateUrl],
+        ['./web-xpbd-webgl-shaders.mjs', shadersUrl], ['./web-xpbd-webgl-joints.mjs', jointsUrl],
+        ['./web-xpbd-webgl-collision.mjs', contactUrl], ['./web-physics-wind.mjs', physicsWindUrl]]);
+    const xpbdPhysicsVersion = await version('web-xpbd-physics.mjs');
+    const webglUrl = await write('web-xpbd-webgl-physics.mjs', [['./web-xpbd-physics.mjs', './web-xpbd-physics.mjs?v=' + xpbdPhysicsVersion],
+        ['./web-xpbd-rigid.mjs', rigidUrl], ['./web-physics-rate.mjs', physicsRateUrl], ['./web-xpbd-webgl-solver.mjs', solverUrl]]);
+    return { xpbdPhysicsVersion, webglUrl };
 }
 
 module.exports = { stageXpbdPhysics };
