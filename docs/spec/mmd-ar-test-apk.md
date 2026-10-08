@@ -278,42 +278,49 @@ Three渲染队列 -> opaque先绘，transparent后绘；跨队列renderOrder不�
 手机动作/换模型后覆盖与裁切观感 := 待现场验收
 ```
 
-## 2026-10-08 主相机视野与光源阴影相机联合拟合
+## 2026-10-08 主相机视锥切片与光源阴影相机拟合（CSM式修正）
 
 ```text
 状态 := cachedCasterBounds, cachedReceiverBounds, lastCamera/light/model signature
+shadowDistance := min(camera.far, targetModelHeight * 4) // 默认角色高度×4，角色高度1.75时约7单位
 触发 := 主相机投影/位姿变化、模型根替换/变换、接收面变换、光线方向或cameraScale变化
 更新 := signature变化后于当前渲染帧拟合；同帧内最多一次
 
-fitVisibleShadow(light):
-  update 主相机、模型根、接收面与光源矩阵
-  visibleCasters := 主相机视锥 ∩ cachedCasterBounds
-  visibleReceivers := 主相机视锥 ∩ cachedReceiverBounds
-  casterShadowFootprint := 将角色包围盒沿light到target方向投到接收平面
-       -> 与主相机视锥及可见接收面边界裁剪
-  fitPoints := visibleCasters ∪ visibleReceivers ∪ casterShadowFootprint
-  if fitPoints 为空、非有限或退化:
-    回退原角色包围盒半幅(radius*1.18*0.5*cameraScale)
+createCameraSlice(camera, near, shadowDistance):
+  对主相机NDC四角分别从near clip与far clip反投影成视空间射线
+  在视空间深度-near与-min(camera.far, shadowDistance)上求交
+  sliceCorners := 近/远切片共8角变换至世界空间
+  sliceCenter := 8角平均；sliceRadius := max(各角到sliceCenter距离)
+  无效/退化 -> CSM拟合失败
+
+fitShadow(light):
+  更新主相机、模型根、接收面与光源矩阵
+  slice := createCameraSlice(camera, camera.near, shadowDistance)
+  if slice无效:
+    回退旧角色包围盒半幅(radius*1.18*0.5*cameraScale)，标记fallback
   else:
-    lightPoints := fitPoints变换到当前shadowCamera.matrixWorldInverse
-    x/y投影范围 := lightPoints包围矩形；结合ShadowMap实际宽高比
-    viewHeight := max(projectedHeight, projectedWidth/aspect, 0.02) / 0.78 * 0.5 * cameraScale
-    viewWidth := viewHeight * aspect；以投影范围中心设置可非对称正交边界
+    不以角色/接收面/影子足迹重设XY中心或宽高；模型仅参与光空间near/far深度范围
+    centerLight := sliceCenter变换到当前shadowCamera空间；direction不变，不移动light/target
+    mapAspect := 实际ShadowMap.width/height
+    viewHeight := max(2*sliceRadius, 2*sliceRadius/mapAspect) / 0.78 * cameraScale
+    viewWidth := viewHeight * mapAspect
+    以centerLight.xy为中心设置正交边界；联动模式不再额外乘0.5
     near/far := 角色与接收面光空间深度范围 + max(0.1, radius*0.25)余量
     updateProjectionMatrix；标记shadow.needsUpdate
 
 renderFrame:
   跟随角色移动 -> jointFitter.update()检查签名并按需更新
-  依次执行现有light-space texel对齐与ShadowMap渲染
-  对齐时还原自身上次像素偏移；保留拟合中心/宽高后重算本帧偏移，防止累计漂移
+  联动区域随主相机视锥切片移动；相机旋转/投影不变时sliceRadius与阴影区域大小稳定
+  角色偏移/姿势变化不重新居中XY范围，只更新签名及必要的光空间深度
+  依次执行现有light-space texel对齐与ShadowMap渲染，保持切片投影中心
 
-规则 := 主/补光分别按自身光线方向拟合；联合拟合全视野高度另乘既有自动基准0.5，再乘cameraScale；cameraScale默认仍1且不被自动覆盖
-规则 := ShadowMap分辨率仍由现有尺寸设置独立管理；拟合失败不得留下空/NaN裁面
-性能 := 角色AABB只在根对象替换时读取；视锥交集使用有限凸体边/角计算，静止签名不变则不重拟合
-实现 := web-shadow-map-preview.mjs提供交集/拟合；web-production-test-extras.js只向独立测试副本注入
+规则 := near到shadowDistance构成CSM式相机前方固定距离视锥切片；目标占比0.78控制余量
+规则 := cameraScale为唯一联动范围倍率，默认1；不额外乘旧角色中心拟合的0.5系数
+规则 := 联动关闭时旧角色包围盒拟合及其0.5基准保持不变；贴图尺寸独立管理
+性能 := 角色AABB仅用于深度范围且只在根替换时读取；静止签名不变则不重算
 范围 := PMX/静态GLB；正式display VRM/PMX源码不改
-验证 := tests/mmd-ar-shadow-map-size.test.js 12/12通过；包含联合拟合额外0.5基准断言，用户确认实际范围效果正常
-构建 := npm run build:web:mmd-ar-test 在本地GLB缺失时通过受校验公网回退成功生成web-dist；浏览器测试因当前Windows环境缺少配置的/usr/bin/chromium跳过
+验证 := tests/mmd-ar-shadow-map-size.test.js 15/15通过；与公网模型回退组合22/22通过；角色平移/随行灯光、完全离开切片、相机移动、固定投影尺寸及0.5/1/2倍率均覆盖
+构建 := npm run build:web:mmd-ar-test成功，生成模块含CSM切片；当前缺少配置Chromium，实际GPU阴影画面待设备/浏览器验收
 ```
 
 ## 2026-10-08 可选主相机联动阴影拟合开关
@@ -332,18 +339,19 @@ syncJointShadowFitMode():
   enabled := window.MmdArTestShadowMapSettings?.jointFit === true
   if enabled:
     if 上次状态为关闭: jointFitter.forceUpdate()
-    else: jointFitter.update() // 内部签名缓存；相机静止不重算模型范围
+    else: jointFitter.update() // 内部签名缓存；相机与切片静止时不重算
   else:
     if 上次状态为开启: fitShadowCamera(currentRotationPivot || currentMesh) // 立即切回旧角色包围盒拟合
     不调用jointFitter.update() // 不跟随主相机重新拟合
   保存本次enabled状态
 
 renderFrame := followTestShadowRoot() 后调用syncJointShadowFitMode()
-联动开启时使用当前联合拟合及0.5视野系数；关闭时仍响应模型替换/缩放/角色平移，cameraScale照常作用
+联动开启 := CSM式主相机near→targetModelHeight*4视锥切片拟合，不以角色为XY中心且不额外乘0.5；cameraScale控制尺寸
+联动关闭 := 旧角色包围盒拟合与0.5基准不变；两态的角色跟随、模型替换/缩放及手动cameraScale继续生效
 兼容 := 默认关闭；缺失字段的旧本地偏好安全归一为关闭；size/预览/倍率字段保持不变
 范围 := 仅独立MMD-AR测试网页；不修改正式display运行时或APK行为
-测试 := UI默认/持久化/复位、开关即时切换两种拟合器、关闭时主相机变化不触发联合拟合、开关两态的角色跟随与cameraScale生效
-验证 := tests/mmd-ar-shadow-map-size.test.js 15/15通过；与公网GLB回退组合22/22通过；npm run build:web:mmd-ar-test成功，生成HTML/运行时均含开关；自动浏览器测试因缺少Chromium未执行
+测试 := UI默认/持久化/复位、CSM切片中心追随主相机、角色移动不重置XY中心/尺寸、主相机转向与cameraScale更新、联动关闭旧fit不变
+验证 := 更新联合拟合测试并运行Web构建；GPU视觉验收待可用浏览器/设备
 ```
 
 ## 2026-10-08 web-dist西施GLB公网回退

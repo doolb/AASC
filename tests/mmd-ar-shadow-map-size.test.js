@@ -68,9 +68,9 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
     }
 });
 
-test('主相机视锥与阴影接收面共同拟合，拉近收紧、拉远放宽且静止不重算', async () => {
+test('CSM相机切片跟随主相机且不因角色偏移重居中，投影尺寸稳定', async () => {
     const THREE = await import('three');
-    const { createJointShadowCameraFitter } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
+    const { createJointShadowCameraFitter, createCameraFrustumSlice } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     const cameraTarget = new THREE.Vector3(0, 1, 0);
     const setCamera = distance => {
@@ -92,32 +92,65 @@ test('主相机视锥与阴影接收面共同拟合，拉近收紧、拉远放�
     const fitter = createJointShadowCameraFitter({ THREE, camera, lights, getRoot: () => root,
         getModelBounds: model => { model.updateWorldMatrix(true, true); return new THREE.Box3().setFromObject(model); },
         receiver, getCameraScale: () => cameraScale, targetModelHeight: 1.75 });
+    const slice = createCameraFrustumSlice(THREE, camera, 1.75 * 4);
+    assert.ok(slice && slice.corners.length === 8);
+    assert.ok(Math.abs(slice.farDistance - 7) < 1e-10, 'CSM切片默认延伸至目标角色高度×4');
     assert.equal(fitter.update(), true);
-    const wide = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
-    const wideState = fitter.getState();
-    assert.ok(wideState.maps.every(map => map.points > 0 && !map.fallback));
-    assert.ok(wideState.maps.every(map => Math.abs(Math.max(map.occupancyX, map.occupancyY) - 1.56) < 1e-6),
-        '正常拟合在targetOccupancy 0.78后再乘0.5，默认1x产生1.56的投影占比');
+    const initial = fitter.getState().maps;
+    const initialSizes = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
+    assert.ok(initial.every(map => map.points === 8 && !map.fallback));
+    assert.ok(initial.every(map => Math.abs(map.shadowDistance - 7) < 1e-10));
+    assert.ok(initial.every(map => Math.abs(map.viewHeight - 2 * map.sliceRadius / 0.78) < 1e-8),
+        '联动模式按完整切片球和目标占比拟合，不再额外乘0.5');
+    const initialCenters = initial.map(map => [map.centerX, map.centerY]);
+
+    const actorShift = new THREE.Vector3(2, 0, 0);
+    root.position.x += actorShift.x; root.updateWorldMatrix(true, true);
+    for (const light of lights) {
+        light.position.add(actorShift); light.target.position.add(actorShift);
+        light.updateWorldMatrix(true, false); light.target.updateWorldMatrix(true, false);
+    }
+    assert.equal(fitter.update(), true, '角色及随行方向光平移仍触发更新');
+    const shifted = fitter.getState().maps;
+    for (const [index, light] of lights.entries()) {
+        const expectedCenter = slice.center.clone().applyMatrix4(light.shadow.camera.matrixWorldInverse);
+        assert.ok(Math.abs(shifted[index].centerX - expectedCenter.x) < 1e-9
+            && Math.abs(shifted[index].centerY - expectedCenter.y) < 1e-9,
+        '方向光移动后，光空间偏移补偿仍把窗口锚定在主相机切片');
+        assert.ok(Math.abs(light.shadow.camera.right - light.shadow.camera.left - initialSizes[index]) < 1e-9,
+            '角色偏移不改变相机切片阴影尺寸');
+    }
+
     cameraScale = 0.5;
     assert.equal(fitter.update(), true);
-    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - wide[index] * 0.5) < 1e-10));
+    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - initialSizes[index] * 0.5) < 1e-9));
+    cameraScale = 2;
+    assert.equal(fitter.update(), true);
+    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - initialSizes[index] * 2) < 1e-9));
     cameraScale = 1;
     assert.equal(fitter.update(), true);
-    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - wide[index]) < 1e-10));
     assert.equal(fitter.update(), false, '相机/模型静止时不重复拟合');
 
     setCamera(4);
     assert.equal(fitter.update(), true);
-    const close = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
-    assert.ok(close.every((width, index) => width < wide[index]), `拉近应收紧阴影范围：${close} < ${wide}`);
+    const closeState = fitter.getState().maps;
+    const closeSizes = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
+    assert.ok(lights.every((light, index) => Math.abs(closeSizes[index] - initialSizes[index]) < 1e-8),
+        '相机距离变化只移动切片，不改变固定投影下的稳定尺寸');
+    assert.ok(closeState.some((map, index) => Math.hypot(map.centerX - initialCenters[index][0], map.centerY - initialCenters[index][1]) > 1e-3),
+        '相机前向切片中心随主相机位置变化');
     setCamera(10);
     assert.equal(fitter.update(), true);
-    const far = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
-    assert.ok(far.every((width, index) => width > close[index]), `拉远应放宽阴影范围：${far} > ${close}`);
-
-    camera.position.set(20, 4, 0); camera.lookAt(20, 4, -1); camera.updateMatrixWorld(true);
+    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - initialSizes[index]) < 1e-8));
+    const offscreenShift = new THREE.Vector3(18, 0, 0);
+    root.position.x += offscreenShift.x; root.updateWorldMatrix(true, true);
+    for (const light of lights) {
+        light.position.add(offscreenShift); light.target.position.add(offscreenShift);
+        light.updateWorldMatrix(true, false); light.target.updateWorldMatrix(true, false);
+    }
     assert.equal(fitter.update(), true);
-    assert.ok(fitter.getState().maps.every(map => map.fallback), '主视锥与模型/接收面无交集时回退原范围');
+    assert.ok(fitter.getState().maps.every(map => !map.fallback), '角色在相机切片外时仍按相机区域拟合，不回退角色居中');
+    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - initialSizes[index]) < 1e-8));
 });
 
 test('主相机联动开关即时切换联合/旧式拟合且关闭时跳过联动检查', async () => {

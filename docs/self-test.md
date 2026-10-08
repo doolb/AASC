@@ -1044,6 +1044,12 @@ Blender4.5.4后台导出完成：7网格/7材质/22内嵌图像，无骨架/动�
 - 与阴影拟合及公网模型回退测试组合27/27通过；`npm run build:web:mmd-ar-test`成功，构建产物包含轮数/半径控件、设置模块及可变半径滤波Shader。
 - 当前Windows环境缺少配置的`/usr/bin/chromium`，未执行GPU Shader实时编译、同角色画面颗粒变化/帧耗时比较；不宣称视觉降噪幅度，待可用浏览器/设备验收。
 
+## 2026-10-08 MMD-AR主相机联动CSM切片回归
+
+- `tests/mmd-ar-shadow-map-size.test.js` 15/15通过；与公网GLB回退回归组合22/22通过。
+- 覆盖near至目标角色高度×4的8角切片、角色及随行方向光平移时仍锚定相机切片、角色完全离开切片不回退居中、主相机移动时中心跟随且尺寸稳定、cameraScale 0.5/1/2、关闭联动旧模式及像素对齐。
+- `npm run build:web:mmd-ar-test`成功；构建产物包含切片 fitter。当前Windows环境缺少配置的`/usr/bin/chromium`，未进行GPU阴影实时画面/角色覆盖效果对照，需设备或可用浏览器验收。
+
 ## 2026-10-04 MMD-AR编辑器首版
 
 Chromium/SwiftShader 640×600，西施2，物理参考3子步，AO和阴影关闭用于交互验证。脚本、日志、截图在`3rd/mmd-ar-test/output/editor-check/`。

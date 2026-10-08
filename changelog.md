@@ -34,6 +34,12 @@
   - `web-shadow-map-size.js` 将jointFit与阴影尺寸/预览/倍率一起存入既有本地键，旧数据缺字段和灯光复位均为关闭；`web-production-test-extras.js` 通过 `createJointShadowFitMode` 即时切换并暴露运行态诊断，`web-shadow-map-preview.mjs` 提供模式控制器。
   - 阴影回归15/15通过，与公网GLB回退组合22/22通过；`npm run build:web:mmd-ar-test`成功，生成HTML和运行时代码均含开关。自动浏览器测试因当前环境缺少配置的 `/usr/bin/chromium` 未执行；未改正式显示端、APK或Offline发布状态。
 
+### MMD-AR联动阴影改用CSM式主相机切片（已实现，画面待验收）
+
+- ✅ [2026-10-08] 根据用户反馈，修正“联动主相机计算”把角色重新居中的行为：按主相机near至角色目标高度×4（默认约7单位）的视锥切片确定阴影区域中心和稳定尺寸；角色只参与光空间深度裁剪，不再决定XY拟合。联动模式不乘额外0.5，cameraScale仍生效；关闭联动的legacy角色包围盒与0.5行为不变。
+  - `web-shadow-map-preview.mjs`新增CSM式视锥切片与稳定包围球拟合，移除角色地面影子足迹对XY范围的驱动；更新`tests/mmd-ar-shadow-map-size.test.js`验证相机锚定、角色及随行方向光平移、角色离开切片、固定尺寸和倍率。
+  - 阴影定向回归15/15通过，与公网GLB回退组合22/22；`npm run build:web:mmd-ar-test`成功并静态确认构建采用切片实现。当前无配置Chromium，尚未GPU画面验收角色阴影覆盖/清晰度；未改正式显示端、APK或Offline发布状态。
+
 ### MMD-AR web-dist 西施GLB公网回退（已完成）
 
 - ✅ [2026-10-08] 独立网页构建优先使用本地有效GLB；缺失或结构无效时，从公网资源清单下载西施版本化GLB并校验完整SHA-256，生成资源仍按内容哈希命名。只对Web构建启用；APK构建仍仅用本地资源，不覆盖模型源文件。

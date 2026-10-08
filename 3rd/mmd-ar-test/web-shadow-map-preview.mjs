@@ -135,6 +135,44 @@ function createCameraFrustum(THREE, camera) {
     return { frustum, corners };
 }
 
+/**
+ * 生成主相机near到固定阴影距离的CSM式视锥切片。
+ * 在每个NDC角的near/far反投影射线上求视空间Z平面交点，
+ * 返回世界空间八角、切片中心与包围球半径；相机旋转不改变切片尺寸。
+ */
+export function createCameraFrustumSlice(THREE, camera, shadowDistance) {
+    camera.updateMatrixWorld(true);
+    const nearDistance = Number(camera.near);
+    const farDistance = Math.min(Number(camera.far), Number(shadowDistance));
+    if (![nearDistance, farDistance].every(Number.isFinite) || nearDistance <= 0
+        || farDistance <= nearDistance + SHADOW_FIT_EPSILON) return null;
+
+    const corners = [];
+    for (const y of [-1, 1]) {
+        for (const x of [-1, 1]) {
+            const nearWorld = new THREE.Vector3(x, y, -1).unproject(camera);
+            const farWorld = new THREE.Vector3(x, y, 1).unproject(camera);
+            const nearView = nearWorld.applyMatrix4(camera.matrixWorldInverse);
+            const farView = farWorld.applyMatrix4(camera.matrixWorldInverse);
+            const depthDelta = farView.z - nearView.z;
+            if (!Number.isFinite(depthDelta) || Math.abs(depthDelta) <= SHADOW_FIT_EPSILON) return null;
+            for (const distance of [nearDistance, farDistance]) {
+                const amount = (-distance - nearView.z) / depthDelta;
+                if (!Number.isFinite(amount) || amount < -SHADOW_FIT_EPSILON || amount > 1 + SHADOW_FIT_EPSILON) return null;
+                const point = nearView.clone().lerp(farView, Math.max(0, Math.min(1, amount)));
+                point.applyMatrix4(camera.matrixWorld);
+                if (![point.x, point.y, point.z].every(Number.isFinite)) return null;
+                corners.push(point);
+            }
+        }
+    }
+    const center = corners.reduce((sum, point) => sum.add(point), new THREE.Vector3())
+        .multiplyScalar(1 / corners.length);
+    const radius = Math.max(...corners.map(point => point.distanceTo(center)));
+    if (!Number.isFinite(radius) || radius <= SHADOW_FIT_EPSILON) return null;
+    return { corners, center, radius, nearDistance, farDistance };
+}
+
 /** 返回主相机视锥与一个世界空间AABB的交集顶点，供各方向光分别投影。 */
 export function getCameraBoxIntersectionPoints(THREE, camera, bounds, preparedFrustum = null) {
     if (!bounds || bounds.isEmpty()) return [];
@@ -161,76 +199,13 @@ export function getCameraBoxIntersectionPoints(THREE, camera, bounds, preparedFr
     return points;
 }
 
-function convexGroundHull(points) {
-    const sorted = points.slice().sort((a, b) => a.x - b.x || a.z - b.z);
-    const unique = [];
-    for (const point of sorted) {
-        if (!unique.some(value => Math.hypot(value.x - point.x, value.z - point.z) <= 1e-8)) unique.push(point);
-    }
-    if (unique.length <= 2) return unique;
-    const cross = (origin, a, b) => (a.x - origin.x) * (b.z - origin.z) - (a.z - origin.z) * (b.x - origin.x);
-    const lower = [], upper = [];
-    for (const point of unique) {
-        while (lower.length >= 2 && cross(lower.at(-2), lower.at(-1), point) <= 1e-12) lower.pop();
-        lower.push(point);
-    }
-    for (const point of unique.slice().reverse()) {
-        while (upper.length >= 2 && cross(upper.at(-2), upper.at(-1), point) <= 1e-12) upper.pop();
-        upper.push(point);
-    }
-    return lower.slice(0, -1).concat(upper.slice(0, -1));
-}
-
-function clipPolygonByDistance(points, distanceToPoint) {
-    if (points.length < 2) return points;
-    const clipped = [];
-    for (let index = 0; index < points.length; index += 1) {
-        const start = points[index], end = points[(index + 1) % points.length];
-        const startDistance = distanceToPoint(start), endDistance = distanceToPoint(end);
-        const startInside = startDistance >= -SHADOW_FIT_EPSILON;
-        const endInside = endDistance >= -SHADOW_FIT_EPSILON;
-        if (startInside) clipped.push(start);
-        if (startInside !== endInside) {
-            const amount = startDistance / (startDistance - endDistance);
-            clipped.push(start.clone().lerp(end, amount));
-        }
-    }
-    return clipped;
-}
-
-function getVisibleGroundShadowFootprint(THREE, casterBounds, receiverBounds, frustum, lightDirection) {
-    if (Math.abs(lightDirection.y) <= 1e-5) return [];
-    const planeY = (receiverBounds.min.y + receiverBounds.max.y) * 0.5;
-    const projected = [];
-    for (const corner of getBoxCorners(THREE, casterBounds)) {
-        const amount = (planeY - corner.y) / lightDirection.y;
-        if (!Number.isFinite(amount) || amount < 0) continue;
-        projected.push(corner.clone().addScaledVector(lightDirection, amount));
-    }
-    let polygon = convexGroundHull(projected);
-    for (const plane of frustum.planes) {
-        polygon = clipPolygonByDistance(polygon, point => plane.distanceToPoint(point));
-        if (!polygon.length) return [];
-    }
-    for (const distance of [
-        point => point.x - receiverBounds.min.x,
-        point => receiverBounds.max.x - point.x,
-        point => point.z - receiverBounds.min.z,
-        point => receiverBounds.max.z - point.z
-    ]) {
-        polygon = clipPolygonByDistance(polygon, distance);
-        if (!polygon.length) return [];
-    }
-    return polygon;
-}
-
 /**
- * 仅用于独立MMD-AR测试副本：把主相机可见区域和方向光投影统一拟合到光空间。
- * 模型包围盒只在换根时读取；相机连续运动只重算少量视锥交点，不遍历网格。
+ * 仅用于独立MMD-AR测试副本：以主相机前方的CSM式视锥切片确定阴影XY中心/尺寸。
+ * 角色包围盒只缓存用于光空间near/far深度；角色移动不会让阴影区域重新居中到角色。
  */
 export function createJointShadowCameraFitter({
     THREE, camera, lights, getRoot, getModelBounds, receiver, getCameraScale,
-    targetModelHeight = 1.75, targetOccupancy = 0.78
+    targetModelHeight = 1.75, targetOccupancy = 0.78, shadowDistance = null
 }) {
     const cached = { root: null, bounds: null, baseMatrix: null, inverseBaseMatrix: null };
     let lastSignature = null;
@@ -294,42 +269,38 @@ export function createJointShadowCameraFitter({
         const radius = Math.max(targetModelHeight * 0.65, size.length() * 0.5);
         const receiverBounds = new THREE.Box3().setFromObject(receiver);
         receiverBounds.expandByScalar(Math.max(1e-5, size.y * 1e-5));
-        const preparedFrustum = createCameraFrustum(THREE, camera);
-        const visibleCasters = getCameraBoxIntersectionPoints(THREE, camera, modelBounds, preparedFrustum);
-        const visibleReceivers = getCameraBoxIntersectionPoints(THREE, camera, receiverBounds, preparedFrustum);
+        const requestedDistance = shadowDistance == null || shadowDistance === ''
+            ? targetModelHeight * 4 : Number(shadowDistance);
+        const fitDistance = Number.isFinite(requestedDistance) ? requestedDistance : targetModelHeight * 4;
+        const cameraSlice = createCameraFrustumSlice(THREE, camera, fitDistance);
+        const occupancy = Number.isFinite(targetOccupancy) && targetOccupancy > 0
+            ? Math.min(1, Math.max(0.1, targetOccupancy)) : 0.78;
         lastMaps = [];
         lastFallback = false;
 
         for (const light of lights) {
             light.shadow.updateMatrices(light);
             const shadowCamera = light.shadow.camera;
-            const lightDirection = light.target.position.clone().sub(light.position).normalize();
-            const shadowFootprint = getVisibleGroundShadowFootprint(
-                THREE, modelBounds, receiverBounds, preparedFrustum.frustum, lightDirection);
-            const worldPoints = [];
-            for (const point of visibleCasters) addUniquePoint(worldPoints, point);
-            for (const point of visibleReceivers) addUniquePoint(worldPoints, point);
-            for (const point of shadowFootprint) addUniquePoint(worldPoints, point);
-
-            if (!worldPoints.length) {
+            if (!cameraSlice) {
                 setFallbackRange(light, center, radius, cameraScale);
                 lastFallback = true;
-                lastMaps.push({ points: 0, occupancyX: 0, occupancyY: 0, fallback: true });
+                lastMaps.push({ points: 0, occupancyX: 0, occupancyY: 0, fallback: true, shadowDistance: fitDistance });
                 continue;
             }
 
-            const lightPoints = worldPoints.map(point => point.clone().applyMatrix4(shadowCamera.matrixWorldInverse));
+            // XY拟合完全跟随相机切片中心；角色及接收面不会改变这块固定相机前向区域。
+            const lightPoints = cameraSlice.corners.map(point => point.clone().applyMatrix4(shadowCamera.matrixWorldInverse));
             const lightBounds = new THREE.Box3().setFromPoints(lightPoints);
             const spanX = Math.max(0.01, lightBounds.max.x - lightBounds.min.x);
             const spanY = Math.max(0.01, lightBounds.max.y - lightBounds.min.y);
             const mapWidth = light.shadow.map?.width || light.shadow.mapSize.x;
             const mapHeight = light.shadow.map?.height || light.shadow.mapSize.y;
             const aspect = Math.max(0.1, mapWidth / Math.max(1, mapHeight));
-            // 保留旧自动范围0.5基准；cameraScale仍是相对该基准的倍率，默认值继续为1。
-            const viewHeight = Math.max(spanY, spanX / aspect, 0.02) / targetOccupancy * 0.5 * cameraScale;
+            const sliceDiameter = Math.max(0.02, cameraSlice.radius * 2);
+            const viewHeight = Math.max(sliceDiameter, sliceDiameter / aspect) / occupancy * cameraScale;
             const viewWidth = viewHeight * aspect;
-            const centerX = (lightBounds.min.x + lightBounds.max.x) * 0.5;
-            const centerY = (lightBounds.min.y + lightBounds.max.y) * 0.5;
+            const centerLight = cameraSlice.center.clone().applyMatrix4(shadowCamera.matrixWorldInverse);
+            const centerX = centerLight.x, centerY = centerLight.y;
             const shadowCameraCorners = [...getBoxCorners(THREE, modelBounds), ...getBoxCorners(THREE, receiverBounds)]
                 .map(point => point.applyMatrix4(shadowCamera.matrixWorldInverse));
             const depthBounds = new THREE.Box3().setFromPoints(shadowCameraCorners);
@@ -344,8 +315,10 @@ export function createJointShadowCameraFitter({
             shadowCamera.far = Math.max(shadowCamera.near + 1, farthest + depthPadding);
             shadowCamera.updateProjectionMatrix();
             light.shadow.needsUpdate = true;
-            lastMaps.push({ points: worldPoints.length,
-                occupancyX: spanX / viewWidth, occupancyY: spanY / viewHeight, fallback: false });
+            lastMaps.push({ points: cameraSlice.corners.length,
+                occupancyX: spanX / viewWidth, occupancyY: spanY / viewHeight,
+                centerX, centerY, viewWidth, viewHeight, sliceRadius: cameraSlice.radius,
+                shadowDistance: cameraSlice.farDistance, fallback: false });
         }
         fitCount += 1;
         lastSignature = readSignature(root, cameraScale);
