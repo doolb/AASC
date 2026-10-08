@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const puppeteer = require('puppeteer-core');
-const { addCameraMotionRuntime, addCameraMotionDisplay } = require('../3rd/mmd-ar-test/web-camera-motion-inject');
+const { addCameraMotionRuntime, preserveCameraOnResize, addCameraMotionDisplay } = require('../3rd/mmd-ar-test/web-camera-motion-inject');
 const { addLocalDisplay } = require('../3rd/mmd-ar-test/web-local-assets-inject');
 
 const ROOT = path.resolve(__dirname, '../3rd/mmd-ar-test/web-dist');
@@ -54,23 +54,44 @@ const closePose = (actual, expected) => actual.every((value, index) =>
 test('相机动作注入命中正式源码唯一锚点并生成完整 API', () => {
     const runtimeSource = fs.readFileSync(path.join(SOURCE_JS, 'display-pmx-runtime.js'), 'utf8');
     const displaySource = fs.readFileSync(path.join(SOURCE_JS, 'display-mmd.js'), 'utf8');
-    const injectedRuntime = addCameraMotionRuntime(runtimeSource, './web-local-assets.mjs?v=test');
+    const injectedRuntime = preserveCameraOnResize(addCameraMotionRuntime(runtimeSource, './web-local-assets.mjs?v=test'));
     for (const api of ['loadCameraMotion', 'setCameraMotionPlaybackEnabled', 'getCameraMotionProgress', 'clearCameraMotion']) {
         assert.ok(injectedRuntime.includes(api), api);
     }
     assert.ok(injectedRuntime.includes('if (!advanceCameraMotion(delta)) updateCameraView(delta);'));
+    const resizeStart = injectedRuntime.indexOf('    const resize = (width, height, devicePixelRatio = window.devicePixelRatio || 1) => {');
+    const resizeEnd = injectedRuntime.indexOf('    const playMotion = async (resourceId) =>', resizeStart);
+    assert.ok(resizeStart >= 0 && resizeEnd > resizeStart, 'PMX runtime resize block is located');
+    const resizeSource = injectedRuntime.slice(resizeStart, resizeEnd);
+    assert.match(resizeSource, /camera\.aspect = safeWidth \/ safeHeight;/u);
+    assert.match(resizeSource, /camera\.updateProjectionMatrix\(\)/u, '普通预览按新aspect更新投影');
+    assert.doesNotMatch(resizeSource, /fitCameraToModel/u, 'resize不得重新按角色中心取景');
+    assert.doesNotMatch(resizeSource, /currentRotationPivot\?\.\s*(?:position|quaternion|scale)/u,
+        'resize不得写角色根位置、旋转或缩放');
+    const modelRuntime = fs.readFileSync(path.join(SOURCE_JS, 'mmd-model-runtime.mjs'), 'utf8');
+    assert.match(modelRuntime, /fitCameraToModel\(context\.currentRotationPivot\)/u,
+        '模型初次加载/替换仍保留显式自动取景');
     // 源锚点缺失时必须抛出，避免静默生成不完整适配。
     assert.throws(() => addCameraMotionRuntime(
-        runtimeSource.replace('    const dispose = () => {', '    const removedDispose = () => {'), './x'),
+        runtimeSource.replace('/* aasc-shared:addCameraMotionRuntime */', '')
+            .replace('    const dispose = () => {', '    const removedDispose = () => {'), './x'),
     /缺少唯一锚点/u);
-    // 显示注入依赖本地资源注入产出的入口文本，单独应用必须失败。
-    assert.throws(() => addCameraMotionDisplay(displaySource), /缺少唯一锚点/u);
+    // 显示适配器的唯一入口锚点缺失时必须明确失败。
+    assert.throws(() => addCameraMotionDisplay(displaySource
+        .replace('/* aasc-shared:addCameraMotionDisplay */', '')
+        .replace('    function handleActionPlan(plan) {', '    function removedHandleActionPlan(plan) {')),
+    /缺少唯一锚点/u);
     const injectedDisplay = addCameraMotionDisplay(addLocalDisplay(displaySource));
     for (const api of ['loadSelectedCameraMotion', 'setCameraMotionPlaybackEnabled', 'getCameraMotionProgress', 'clearCameraMotion']) {
         assert.ok(injectedDisplay.includes(api), api);
     }
     if (fs.existsSync(GENERATED_PAGE)) {
         const generatedRuntime = fs.readFileSync(path.join(ROOT, 'js/display-pmx-runtime.js'), 'utf8');
+        const generatedResizeStart = generatedRuntime.indexOf('    const resize = (width, height, devicePixelRatio = window.devicePixelRatio || 1) => {');
+        const generatedResizeEnd = generatedRuntime.indexOf('    const playMotion = async (resourceId) =>', generatedResizeStart);
+        const generatedResize = generatedRuntime.slice(generatedResizeStart, generatedResizeEnd);
+        assert.match(generatedResize, /camera\.updateProjectionMatrix\(\)/u);
+        assert.doesNotMatch(generatedResize, /fitCameraToModel/u);
         const generatedDisplay = fs.readFileSync(path.join(ROOT, 'js/display-mmd.js'), 'utf8');
         const generatedPage = fs.readFileSync(GENERATED_PAGE, 'utf8');
         assert.ok(generatedRuntime.includes('loadCameraMotion,'));

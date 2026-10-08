@@ -136,9 +136,9 @@ function createCameraFrustum(THREE, camera) {
 }
 
 /**
- * 生成主相机near到固定阴影距离的CSM式视锥切片。
- * 在每个NDC角的near/far反投影射线上求视空间Z平面交点，
- * 返回世界空间八角、切片中心与包围球半径；相机旋转不改变切片尺寸。
+ * 生成Stable CSM式单切片视锥：主相机near到固定阴影距离的前向区域。
+ * 用八角平均点作中心，并以角点最大距离构造旋转不变的包围球；固定投影下主相机旋转只移动中心，不改变正交范围。
+ * createShadowCameraAlignment再将光空间投影平移吸附到整ShadowMap texel，避免亚像素移动造成阴影抖动。
  */
 export function createCameraFrustumSlice(THREE, camera, shadowDistance) {
     camera.updateMatrixWorld(true);

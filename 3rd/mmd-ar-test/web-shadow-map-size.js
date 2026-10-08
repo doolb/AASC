@@ -93,7 +93,7 @@ function addShadowMapControls($, lightingPanel) {
     + '<label class="mind-basic-field"><span>阴影相机范围 <output id="mmdArShadowCameraScaleValue">1.00 ×</output></span>'
     + '<input id="mmdArShadowCameraScale" type="range" min="0.1" max="2" step="0.01" value="1" aria-label="阴影相机范围倍率"></label>'
     + '<label class="display-mmd-lighting-field"><input id="mmdArShadowJointFit" type="checkbox"><span>联动主相机计算</span></label>'
-    + '<p class="mind-basic-note">联动主相机计算默认关闭；开启后按主相机可见区域拟合并应用0.5系数，关闭时按角色包围盒拟合。范围过小会裁切部分阴影，均可用上方倍率调整。</p>'
+    + '<p class="mind-basic-note">联动主相机计算默认关闭；开启后按主相机near到目标角色高度×4的CSM视锥切片拟合，不额外乘0.5；关闭时按角色包围盒拟合并保留原0.5。范围过小会裁切部分阴影，可用上方倍率调整。</p>'
     + '<label class="display-mmd-lighting-field"><input id="mmdArShadowMapPreviewEnabled" type="checkbox"><span>显示 ShadowMap</span></label>'
     + '<div id="mmdArShadowMapPreviewRows" hidden>' + rows
     + '<p class="mind-basic-note">整张阴影贴图，不裁剪角色；深色为角色，白色为空白。覆盖比例按256×256采样估算，列表可见时每秒刷新4次。</p></div>'

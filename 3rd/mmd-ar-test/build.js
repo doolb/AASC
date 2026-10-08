@@ -553,6 +553,7 @@ async function stageTextAssets() {
       .replace('./mmd-pmx-helper.mjs', pmxHelperUrl).replace(lightingModeImport,
       `'./display-pmx-lighting-mode.mjs?v=${lightingModeVersion}'`).replace(aoImport,
       `'./display-pmx-ao.mjs?v=${aoVersion}'`), rigidBodyUrl)));
+    await fs.writeFile(pmxRuntimePath, WEB_CAMERA_MOTION.preserveCameraOnResize(await fs.readFile(pmxRuntimePath, 'utf8')));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_WIND.addWindRuntime(
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));

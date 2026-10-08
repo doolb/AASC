@@ -128,6 +128,14 @@ function addCameraMotionRuntime(source, moduleUrl) {
   return output;
 }
 
+// 独立MMD-AR生成运行时专用：resize只更新显示投影，不按角色包围盒重置相机。
+// AR跟踪器提供自定义projectionMatrix时保留它；普通预览更新垂直FOV对应的aspect投影。
+function preserveCameraOnResize(source) {
+  return once(source,
+    '        camera.aspect = safeWidth / safeHeight;\n        if (!arCameraState.active) fitCameraToModel(currentRotationPivot || currentMesh);',
+    '        camera.aspect = safeWidth / safeHeight;\n        if (!arCameraState.active) camera.updateProjectionMatrix();');
+}
+
 // 注入显示模块副本：网页端相机动作入口与状态透传（经典脚本，不能新增 import）。
 function addCameraMotionDisplay(source) {
   let output = once(source, '    function handleActionPlan(plan) {', `    async function loadSelectedCameraMotion(motion, reportProgress = state.onLoadProgress) {
@@ -163,7 +171,7 @@ function addCameraMotionDisplay(source) {
                 state.runtime.setCameraMotionPlaybackEnabled?.(state.cameraMotionPlaybackEnabled === true);`);
 }
 
-module.exports = { addCameraMotionRuntime, addCameraMotionDisplay };
+module.exports = { addCameraMotionRuntime, preserveCameraOnResize, addCameraMotionDisplay };
 
 // 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
 module.exports = require('./web-production-shared').reuseAdapters(module.exports);

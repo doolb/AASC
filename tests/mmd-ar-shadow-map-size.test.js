@@ -68,14 +68,14 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
     }
 });
 
-test('CSM相机切片跟随主相机且不因角色偏移重居中，投影尺寸稳定', async () => {
+test('Stable CSM单切片跟随主相机且不因角色偏移重居中，旋转时投影尺寸稳定', async () => {
     const THREE = await import('three');
     const { createJointShadowCameraFitter, createCameraFrustumSlice } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     const cameraTarget = new THREE.Vector3(0, 1, 0);
-    const setCamera = distance => {
+    const setCamera = (distance, target = cameraTarget) => {
         camera.position.set(0, 3, distance);
-        camera.lookAt(cameraTarget);
+        camera.lookAt(target);
         camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
     };
     setCamera(8);
@@ -130,6 +130,16 @@ test('CSM相机切片跟随主相机且不因角色偏移重居中，投影尺�
     cameraScale = 1;
     assert.equal(fitter.update(), true);
     assert.equal(fitter.update(), false, '相机/模型静止时不重复拟合');
+
+    setCamera(8, new THREE.Vector3(3, 1, 0));
+    const rotatedSlice = createCameraFrustumSlice(THREE, camera, 1.75 * 4);
+    assert.ok(Math.abs(rotatedSlice.radius - slice.radius) < 1e-9,
+        'Stable CSM使用切片球，不因主相机转向改变包围半径');
+    assert.equal(fitter.update(), true);
+    const rotatedState = fitter.getState().maps;
+    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - initialSizes[index]) < 1e-8),
+        '主相机只旋转时正交投影尺寸保持稳定');
+    assert.ok(rotatedState.every(map => Math.abs(map.sliceRadius - slice.radius) < 1e-9));
 
     setCamera(4);
     assert.equal(fitter.update(), true);
@@ -451,7 +461,8 @@ test('面板生成四档和两张完整预览，注入唯一锚点/清理；锚�
     assert.equal($('#mmdArShadowCameraScale').attr('value'), '1');
     assert.equal($('#mmdArShadowJointFit').attr('type'), 'checkbox');
     assert.equal($('#mmdArShadowJointFit').attr('checked'), undefined, '联动复选框默认不勾选');
-    assert.match($('#panel').text(), /联动主相机计算默认关闭.*按角色包围盒拟合/u);
+    assert.match($('#panel').text(), /联动主相机计算默认关闭.*主相机near到目标角色高度×4.*CSM视锥切片.*不额外乘0\.5.*关闭时按角色包围盒拟合并保留原0\.5/u);
+    assert.doesNotMatch($('#panel').text(), /按主相机可见区域拟合并应用0\.5/u);
     assert.doesNotThrow(() => new vm.Script(PANEL_JS));
     const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
     const output = addShadowMapRuntime(source, './web-shadow-map-preview.mjs?v=test');

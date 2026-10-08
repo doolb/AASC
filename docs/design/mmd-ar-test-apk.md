@@ -121,8 +121,18 @@ npm run build:web:mmd-ar-test通过，59生成脚本/4内联/40指纹检查通�
 - 用户指出上一版联动仍按角色/接收面投影范围求光空间中心，导致角色被重新居中。改为以主相机为锚点，不再用角色包围盒或影子足迹决定阴影XY中心和尺寸。
 - 取主相机near到固定shadowDistance的视锥切片；shadowDistance默认targetModelHeight×4（模型目标高度1.75时约7单位），切片中心为八角点平均，稳定半径取切片角点最大距离。对各方向光仅变换切片中心到光空间，方向光target/光线方向不变。
 - 按稳定切片球半径和ShadowMap宽高比设置正交投影尺寸，targetOccupancy=0.78留边，cameraScale仍控制大小；CSM联动模式不再乘角色拟合时确认的额外0.5（完整切片乘0.5会裁掉可见区域）。关闭联动/旧角色包围盒路径保持0.5基准。
-- 角色与接收面只用于光空间near/far深度范围；角色移动/姿势变化不改XY中心或尺寸。主相机移动/转向时切片区域随相机前方更新，投影像素对齐保留。
+- 角色与接收面只用于光空间near/far深度范围；角色移动/姿势变化不改XY中心或尺寸。切片球半径决定固定投影宽高，主相机转向只改变中心、不改变尺寸；方向光空间保持AABB正交轴，并把固定世界参考点吸附到ShadowMap整texel以稳定平移。当前每盏灯仍为单切片/单ShadowMap（Stable CSM单层），不包含多级级联与级间混合。
 - 仅独立MMD-AR测试页；阴影定向回归15/15通过，与公网模型回退组合22/22通过；Web构建成功并静态确认生成模块采用CSM切片。当前环境无配置Chromium，尚未GPU画面验收，需可用浏览器/设备确认角色阴影覆盖与实际分辨率。
+
+## 2026-10-08 MMD-AR后台恢复保持预览视角（已实现，设备待复验）
+
+用户在本地最新web-dist、联动已开启、普通预览且AR未启动时复现：切到后台再返回，角色画面位置/角度发生变化并被重新居中。舞台在`resize`、`visualViewport.resize`和`ResizeObserver`时调用`DisplayMmd.resize`；PMX runtime的`resize()`在非AR模式下再次执行`fitCameraToModel`，将cameraTarget/距离/zoom重置为模型包围盒取景。该函数只改相机，不写角色根节点；屏幕中角色位置变化可由相机重置解释，根坐标需用测试诊断单独核实。
+
+修正规则：独立测试网页构建的resize只更新renderer尺寸、camera.aspect与projection，不调用`fitCameraToModel`，保持当前相机位置/角度/目标/距离/zoom及角色根位置/旋转/缩放。首次加载或替换模型仍由模型提交路径显式自动取景；正式显示端不修改。同步改正联动阴影说明中的旧“主相机可见区域+0.5”文案，准确写明CSM near到目标高度×4、无额外0.5。
+
+- `build.js`在共享运行时展开后应用`preserveCameraOnResize`，仅作用于独立测试产物；AR激活时不覆盖追踪器的自定义投影。
+- Stable CSM单切片以固定切片球半径保持主相机转向时的正交尺寸，并沿用实际ShadowMap整texel吸附；不扩成多级cascade。
+- 组合定向测试23项通过、真实浏览器测试2项因环境未配置Chromium跳过；`npm run build:web:mmd-ar-test`成功。手机/真实GPU后台恢复及阴影画面仍待设备复验。
 
 ## 2026-10-08 web-dist缺少西施GLB时从公网回退（代码与Web构建验证完成）
 

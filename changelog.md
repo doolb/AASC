@@ -40,6 +40,12 @@
   - `web-shadow-map-preview.mjs`新增CSM式视锥切片与稳定包围球拟合，移除角色地面影子足迹对XY范围的驱动；更新`tests/mmd-ar-shadow-map-size.test.js`验证相机锚定、角色及随行方向光平移、角色离开切片、固定尺寸和倍率。
   - 阴影定向回归15/15通过，与公网GLB回退组合22/22；`npm run build:web:mmd-ar-test`成功并静态确认构建采用切片实现。当前无配置Chromium，尚未GPU画面验收角色阴影覆盖/清晰度；未改正式显示端、APK或Offline发布状态。
 
+### MMD-AR后台恢复保留预览视角与Stable CSM稳定性（代码/构建完成，设备待验）
+
+- ✅ [2026-10-08] 修复独立MMD-AR页面恢复前台时resize按模型包围盒重新取景的问题：生成运行时只更新普通预览的camera aspect/projection，不重置视角、目标、距离/zoom或角色根变换；模型首次加载/替换仍自动取景，AR激活时保留跟踪器自定义projection。
+  - `build.js`在共享模块展开后调用`web-camera-motion-inject.js`的`preserveCameraOnResize`，不改正式显示端源码；`web-shadow-map-size.js`更新过时“可见区域+0.5”提示。
+  - 确认Stable CSM单切片使用固定切片球和整ShadowMap texel吸附；新增相机旋转时半径/投影尺寸不变回归。组合测试23项通过、2项真实浏览器测试因缺少`/usr/bin/chromium`跳过；`npm run build:web:mmd-ar-test`成功。本地web-dist已更新，未向外网部署，真实设备前后台恢复/阴影画面待验。
+
 ### MMD-AR web-dist 西施GLB公网回退（已完成）
 
 - ✅ [2026-10-08] 独立网页构建优先使用本地有效GLB；缺失或结构无效时，从公网资源清单下载西施版本化GLB并校验完整SHA-256，生成资源仍按内容哈希命名。只对Web构建启用；APK构建仍仅用本地资源，不覆盖模型源文件。

@@ -336,9 +336,22 @@ fitShadow(light):
     mapAspect := 实际ShadowMap.width/height
     viewHeight := max(2*sliceRadius, 2*sliceRadius/mapAspect) / 0.78 * cameraScale
     viewWidth := viewHeight * mapAspect
+     stability := 按切片球半径而非旋转后的OBB定XY范围；主相机仅旋转时viewWidth/viewHeight不变
+     texelSnap := alignTestShadowCamera将固定世界参考点吸附到实际ShadowMap整像素，且每次从拟合边界恢复上帧偏移，避免累计抵消跟随
+     cascadeCount := 当前每盏灯仍为单切片/单ShadowMap，不实现多级级联与级间混合
     以centerLight.xy为中心设置正交边界；联动模式不再额外乘0.5
     near/far := 角色与接收面光空间深度范围 + max(0.1, radius*0.25)余量
     updateProjectionMatrix；标记shadow.needsUpdate
+
+resizeViewport(width,height):
+  renderer.setSize(width,height)
+  camera.aspect := width/height
+  if not arCameraState.active: camera.updateProjectionMatrix()
+  else: 保留定位跟踪器提供的projectionMatrix
+  不调用fitCameraToModel；保持cameraTarget/cameraDistance/cameraZoomFactor与camera.position/quaternion
+  不写currentRotationPivot.position/quaternion/scale
+  首次加载/替换模型 -> 既有模型提交路径显式fitCameraToModel
+  浏览器恢复可见触发resize -> 仍按上述规则，仅更新投影，不自动居中
 
 renderFrame:
   跟随角色移动 -> jointFitter.update()检查签名并按需更新

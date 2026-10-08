@@ -2,7 +2,7 @@
 
 - ⏳待现场验收 [2026-10-08] MMD-AR接触阴影跨越修正：三档18种受控GLSL输入与定向回归通过，仍需用户模型同视角验证发际/下巴暗带与手机帧耗时；工作区完整Shader还需已有SSGI/HZB改动解决`packed`保留字编译错误。记录：`docs/task/20261008_MMDAR接触阴影跨越漏判.md`。
 
-- ⏳待现场验收 [2026-10-08] MMD-AR联动CSM阴影：确认阴影区域跟随主相机前方而非角色中心、镜头移动/转动覆盖及cameraScale边缘裁切；自动测试和本地Web构建已完成，GPU画面验收待可用浏览器/设备。实现记录：`docs/task/20261008_MMDAR主相机CSM切片拟合.md`。
+- ⏳待现场验收 [2026-10-08] MMD-AR联动Stable CSM阴影与后台恢复：稳定切片球、相机旋转尺寸不变和整texel吸附回归通过；后台恢复resize已改为保留相机/角色变换并重新构建本地web-dist。仍需手机/可用GPU浏览器确认阴影覆盖、镜头移动/转向、cameraScale边缘裁切及后台返回画面。实现记录：`docs/task/20261008_MMDAR主相机CSM切片拟合.md`、`docs/task/20261008_MMDAR后台恢复保留预览相机视角.md`。
 
 - 🔄进行中 [2026-10-08] MMD-AR Blender 工程按需加载：外网已部署至 `https://c.aasc.us/mnt/mmd-ar/`；Apache 已启用 `mod_headers` 并按路径提供 COOP `same-origin`、COEP `credentialless`。修复用户反馈的动态导入入口缺少 `mountBlenderWorkbench` 导出，构建有导出断言，6 个修复文件 SHA-256 匹配且线上 HTTP 200。待用真实桌面 Chromium 验收目录授权、相对贴图、Cycles PNG、保存往返及普通首屏不请求 Blender；APK 不包含引擎。Brotli 资源直接请求 `.br` 文件，无需 mod_rewrite。任务：`docs/task/20261008_MMDARBlender工程按需加载.md`。
 

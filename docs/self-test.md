@@ -1050,6 +1050,13 @@ Blender4.5.4后台导出完成：7网格/7材质/22内嵌图像，无骨架/动�
 - 覆盖near至目标角色高度×4的8角切片、角色及随行方向光平移时仍锚定相机切片、角色完全离开切片不回退居中、主相机移动时中心跟随且尺寸稳定、cameraScale 0.5/1/2、关闭联动旧模式及像素对齐。
 - `npm run build:web:mmd-ar-test`成功；构建产物包含切片 fitter。当前Windows环境缺少配置的`/usr/bin/chromium`，未进行GPU阴影实时画面/角色覆盖效果对照，需设备或可用浏览器验收。
 
+## 2026-10-08 MMD-AR后台恢复视角保持与Stable CSM
+
+- `node --test tests/mmd-ar-camera-motion.test.js tests/mmd-ar-camera-runtime.test.js tests/mmd-ar-shadow-map-size.test.js tests/mmd-ar-web-characters-build.test.js`：23/23通过，2项真实Chromium浏览器测试因环境没有配置`/usr/bin/chromium`跳过。
+- 回归验证独立测试页生成runtime的resize仅更新aspect/projection、不调用`fitCameraToModel`且不写角色根变换；模型首次提交仍保留自动取景。Stable CSM单切片使用切片包围球，主相机转向后半径/正交尺寸不变；既有整ShadowMap texel吸附与连续小位移不累计测试通过。
+- 阴影帮助说明已更新为主相机near至目标角色高度×4的CSM切片、联动不额外乘0.5、关闭时保留legacy 0.5。
+- `npm run build:web:mmd-ar-test`成功；本轮网页产物含resize保持视角注入。当前环境无法运行真实浏览器/GPU阴影画面，需在用户设备复验后台返回后相机/角色画面及阴影覆盖。
+
 ## 2026-10-04 MMD-AR编辑器首版
 
 Chromium/SwiftShader 640×600，西施2，物理参考3子步，AO和阴影关闭用于交互验证。脚本、日志、截图在`3rd/mmd-ar-test/output/editor-check/`。
