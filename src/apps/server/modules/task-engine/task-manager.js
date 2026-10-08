@@ -120,7 +120,7 @@ class TaskManager extends EventEmitter {
               taskType: isBuiltin ? 'builtin' : (entry.taskType || 'user'),
               builtinId: isBuiltin ? entry.taskName : null,
               entryFile: isBuiltin ? null : (entry.entryFile || 'service.js')
-            });
+            }, { preserveTimestamp: true });
             await this.runInstance(entry.taskName, entry.instanceId);
           } catch (err) {
             console.error('[TaskManager] 服务恢复失败:', entry.taskName, err.message);
@@ -621,7 +621,7 @@ class TaskManager extends EventEmitter {
     return this._taskRouteRegistry.unregisterInstance(instanceId);
   }
 
-  async submit(task) {
+  async submit(task, options = {}) {
     if (this.instances.size >= this.maxInstances) {
       throw new Error('超出最大实例数 (' + this.maxInstances + ')');
     }
@@ -638,7 +638,9 @@ class TaskManager extends EventEmitter {
     }
 
     const instanceId = task.instanceId || this._generateId();
-    const timestamp = Date.now();
+    const timestamp = options.preserveTimestamp && Number.isFinite(task.timestamp) && task.timestamp >= 0
+      ? task.timestamp
+      : Date.now();
 
     const instance = {
       taskName: task.taskName,

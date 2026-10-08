@@ -128,6 +128,25 @@ createTaskContext(task, instance):
    与 `handleDisplayDisconnect()` 的孤儿结构一致（同 instanceId 去重，缺 displayId 跳过），
    待显示端重连时由 `retryOrphanedTasks(displayId)` 自然接管（rereinstance → runInstance → 转发）。
 
+```text
+restoreAutoStartServices():
+  for each indexEntry in taskIndexes:
+    if indexEntry.mode == 'service' and indexEntry.status == 'running':
+      submit(restoredEntry, { preserveTimestamp: true })
+      runInstance(indexEntry.taskName, indexEntry.instanceId)
+    else if indexEntry.mode == 'service' and indexEntry.status == 'display_offline':
+      collectOfflineOrphan(indexEntry)
+
+submit(task, options):
+  if options.preserveTimestamp and task.timestamp is a nonnegative finite number:
+    timestamp = task.timestamp              // 服务器重启恢复时保留首次创建时间
+  else:
+    timestamp = Date.now()                  // 新建实例生成创建时间
+  persist instance with timestamp
+```
+
+`timestamp` 表示实例首次创建/提交时间（Unix 毫秒），不是每次服务恢复时间。恢复时保留该值，确保任务排序、时长显示和旧实例清理使用稳定时间，同时避免服务器每次重启都改写受 Git 跟踪的 `results/index.json`。外部普通 `submit()` 不启用 `preserveTimestamp`，仍由服务端生成当前时间。
+
 #### 显示端断连孤儿
 
 显示端的 WebSocket 断开时（浏览器刷新、网络断开），`server-app.js` 的 `onDisplayDisconnect` 回调调用

@@ -1,7 +1,7 @@
 'use strict';
 // 任务引擎：服务器重启后 display_offline 服务实例自动恢复（方案 A）
 // 覆盖：restoreAutoStartServices 回填孤儿表 / 去重 / 缺 displayId 跳过 /
-//      显示端重连 retryOrphanedTasks 接管恢复 / 幂等 / running 旧路径不回归
+//      显示端重连接管 / running 服务时间戳保留 / 幂等 / running 旧路径不回归
 // 运行：node --test tests/task-engine-restore.test.js
 const { test } = require('node:test');
 const assert = require('node:assert');
@@ -163,6 +163,32 @@ test('restore 对 running 显示端服务仍走旧路径（pending 队列），�
   assert.ok(!orphanIds.includes('running-inst'), 'running 实例不应进孤儿表');
 
   const run = tm.instances.get('running-inst');
+  assert.ok(run, 'running 实例应恢复到内存');
+  assert.strictEqual(run.timestamp, running.timestamp, '内存实例应保留首次创建时间戳');
+  const restoredIndex = await tm.taskIO.getIndex('render-display');
+  const restoredEntry = restoredIndex.find(entry => entry.instanceId === 'running-inst');
+  assert.strictEqual(restoredEntry.timestamp, running.timestamp, '内存索引应保留首次创建时间戳');
+  const persistedIndex = JSON.parse(fs.readFileSync(path.join(base, 'render-display', 'results', 'index.json'), 'utf8'));
+  const persistedEntry = persistedIndex.instances.find(entry => entry.instanceId === 'running-inst');
+  assert.strictEqual(persistedEntry.timestamp, running.timestamp, '磁盘 index.json 不应因服务恢复重写时间戳');
   if (run && run._forwardTimeout) clearTimeout(run._forwardTimeout);
+  await tm.destroy();
+});
+
+test('普通 submit 忽略调用方传入的 timestamp 并使用当前时间', async (t) => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'task-engine-restore-'));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  makeTask(base, 'timestamp-task');
+
+  const tm = new TaskManager({ tasksDir: base });
+  const before = Date.now();
+  const result = await tm.submit({
+    taskName: 'timestamp-task', instanceId: 'new-inst', timestamp: 1,
+    mode: 'one-shot', target: 'server', files: []
+  });
+  const after = Date.now();
+  const instance = tm.instances.get(result.instanceId);
+  assert.ok(instance.timestamp >= before && instance.timestamp <= after, '普通 submit 应由服务器生成当前时间戳');
+  assert.notStrictEqual(instance.timestamp, 1, '普通 submit 不应信任调用方时间戳');
   await tm.destroy();
 });

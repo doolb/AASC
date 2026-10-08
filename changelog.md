@@ -1,5 +1,10 @@
 # Web MediaCenter - 变更日志
 
+### 任务系统
+
+- ✅ [2026-10-08] 修复服务器重启恢复运行中服务时重置实例创建时间戳的问题，避免无意义地改写 `results/index.json`。
+  - `task-manager.js` 只在 `restoreAutoStartServices()` 内部显式启用保留时间戳；普通新建仍使用当前时间。`tests/task-engine-restore.test.js` 验证内存和磁盘索引均保留原值，并确认普通提交仍使用服务器时间，定向回归 6/6 通过；同步 design/spec/task，`release/offline-release-status.json` 的 `servicePackage` 标记为 `true`。完整仓库测试未完成：npm 参数未过滤到单测，过程中出现若干现有环境/契约失败后取消。
+
 ### MMD刚体XPBD WebGL2
 
 - ✅ [2026-10-03] 测试版新增“XPBD（WebGL2）”刚体后端：RGBA32F ping-pong预测/风/锚点/六轴约束/球盒胶囊碰撞，关节图着色及接触邻接汇总，帧末一次读回并沿用骨骼回写。

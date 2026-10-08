@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-10-02，code v46/min v34 已发布）
+# Web MediaCenter - 未完成任务列表（更新于 2026-10-08，code v46/min v34 已发布）
 
 - ⏳待现场验收 [2026-10-03] MMD刚体XPBD WebGL2：实验后端、构建与浏览器验证已完成；手机硬件GPU的3/10/45/180子步同条件中位数/P95、小物件稳定性、复杂接触及本地模型/VMD连续切换待测。软件GPU明显较慢，保留CPU/Ammo选择。任务：`docs/task/20261003_MMD刚体XPBD_WebGL2.md`。
 
