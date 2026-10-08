@@ -10999,3 +10999,16 @@
 - ✅ [2026-10-06] 发布当前工作区网页包至 `https://c.aasc.us/mnt/mmd-ar/`，包含移除西施2和编辑/预览/渲染首版；内置角色为米娅及静态西施。
   - 更新16个文件，先资源后首页；全部133个文件（35,131,277字节）远端及公网HTTPS大小/SHA-256核对通过，首页HTTP 200。旧文件已备份，未清理未引用的历史模型。
   - 发布快照 `/tmp/mmd-ar-remove-xishi2-publish-fp21l9zq`；核对报告 `/tmp/aasc-mmd-ar-publish-result-remove-xishi2-20261006.json`。首页SHA-256：`41635a6b26c60d011922ca5e0f65f12bb1e813035165890d1083b43a88e22a26`。本次未提交Git。
+
+### MMD-AR接触阴影诊断
+
+- ✅ [2026-10-08] 分析接触阴影集中于边缘的可能原因，未修改渲染代码
+  - 检查 `3rd/mmd-ar-test/web-screen-lighting-shader.mjs` 与运行/合成流程，源码跨越条件的最小数值检查确认较大深度跳变可能持续漏判；默认低质量示例厚度0.0375，大跨越序列不命中、小跨越0.02命中。
+  - 更新 `docs/design/mmd-ar-test-apk.md`、`docs/spec/mmd-ar-test-apk.md`、`docs/todo.md`；已有屏幕光照测试5/5通过，用户视角GPU复现及具体修正仍待确认。未构建、发布或标记修复完成。
+
+### MMD-AR接触阴影跨越修正
+
+- ✅ [2026-10-08] 修正粗步深度跨越超过厚度后无法细化的接触阴影漏判
+  - `3rd/mmd-ar-test/web-screen-lighting-shader.mjs` 将厚度与自遮挡检查移至4轮细化之后；不增加配置、纹理或循环上限。新增 `tests/mmd-ar-contact-shadow-browser.test.js` 执行真实GLSL，三档质量18种输入检查通过，已验证旧实现先失败、修正后通过。
+  - 接触阴影/屏幕光照10/10通过，Web构建成功；扩展阴影组合25通过/1失败/1跳过，全量1078通过/161失败/21跳过，详见 `docs/task/20261008_MMDAR接触阴影自测结果.md`。APK一致性测试子进程因异常后未关闭服务而挂起，定点结束后取得全量结果；未声称全量通过。
+  - 同步design/spec/task/todo及独立测试页README；`servicePackage`原已为true并保持，其他发布状态不变。保留已有SSGI/HZB、配置与相机改动，不混入提交；完整工作区Shader另有HZB的`packed`保留字编译错误，用户模型同视角与手机性能待验收。未打包APK或发布站点。

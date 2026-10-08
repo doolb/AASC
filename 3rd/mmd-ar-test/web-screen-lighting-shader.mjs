@@ -37,7 +37,8 @@ bool trace(vec3 start,vec3 direction,float distanceLimit,float bias,out vec2 hit
   float depth=texture2D(tDepth,uv).r;if(depth>=.99999){previousGap=-bias;continue;}
   vec3 surface=positionAt(uv,depth);float gap=surface.z-q.z;
   float thickness=max(bias*3.,distanceLimit/float(stepCount)*1.5);
-  if(gap>bias&&gap<thickness&&previousGap<=bias&&length(surface-start)>bias*3.){
+  // 粗步可直接跨到厚度范围外，必须先细化跨越区间，再检查真实命中点。
+  if(gap>bias&&previousGap<=bias){
    // 细化跨越区间，减少射线步长造成的阶梯与不稳定命中位置。
    float low=distanceLimit*float(i-1)/float(stepCount),high=t;
    for(int k=0;k<4;k++){
@@ -52,7 +53,8 @@ bool trace(vec3 start,vec3 direction,float distanceLimit,float bias,out vec2 hit
    float refinedDepth=texture2D(tDepth,hitUv).r;
    hit=positionAt(hitUv,refinedDepth);
    float refinedGap=hit.z-refined.z;
-   if(refinedDepth>=.99999||refinedGap<0.||refinedGap>thickness){previousGap=gap;continue;}
+   // 厚度与自遮挡保护基于细化点，拒绝深度轮廓跳变及射线起点附近的伪命中。
+   if(refinedDepth>=.99999||refinedGap<=bias||refinedGap>thickness||length(hit-start)<=bias*3.){previousGap=gap;continue;}
    confidence=1.-smoothstep(thickness*.4,thickness,refinedGap);
    return true;
   }
