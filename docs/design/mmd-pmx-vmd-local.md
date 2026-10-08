@@ -95,9 +95,9 @@ PMX 的纹理是相对模型 URL 解析的，因此不能使用 VRM 的单文件
 
 `GET /api/mmd/static/<version>/...` 不接受查询参数，版本必须等于当前固定 release，资源路径必须完整命中固定白名单。上游请求顺序与 Offline 热更新一致：`192.168.1.39`、`10.221.70.87`、`c.aasc.us`；仅外网域名解析为 IPv4 地址后请求。禁止重定向；只有 HTTP 200、`Content-Length`、完整读取字节数和 SHA-256 都与固定记录一致的源才会写入本地缓存并返回，其余源失败后继续尝试。旧 `/api/mmd/static/mmd/...` 路径保留兼容，但继续使用 `no-store`；版本化路径设置 ETag 与 `private, max-age=31536000, immutable`。浏览器只接受固定版本路径或旧同源前缀；外部 URL、协议相对 URL、路径穿越、反斜杠和 query/hash 仍拒绝。
 
-Android Runtime 打包逻辑现在无条件排除 `res/models/mmd`，避免后续服务包或 APK Runtime 意外携带 PMX、VMD 与纹理；该排除不影响服务器源码中的 MMD 模块。实施过程未执行 APK、服务更新包构建或发布，也没有复制或提交任何模型二进制。
+Android Runtime 打包逻辑现在无条件排除 `res/models/mmd`，避免后续服务包或 APK Runtime 意外携带 PMX、VMD 与纹理；该排除不影响服务器源码中的 MMD 模块。缓存更新仅发布服务代码包，不改 APK profile，也没有复制或提交任何模型二进制。Offline 服务代码 v47 已发布到 LAN/WAN；`servicePackage=false`，min APK 与生产依赖状态保持不变。
 
-缓存自测结果：MMD 代理服务测试 17/17、显示端版本路径白名单定向测试 1/1 通过，服务/路由/显示端脚本语法检查及 `git diff --check` 通过。自动化覆盖热缓存、并发、坏缓存重取、旧目录清理、符号链接隔离和写入失败回退；尚未在 Android Offline APK 上验证首次下载、Runtime 更新/重启后的命中及真实角色初始化耗时。
+缓存自测结果：MMD 代理服务测试 17/17、显示端版本路径白名单定向测试 1/1 通过，服务/路由/显示端脚本语法检查及 `git diff --check` 通过。自动化覆盖热缓存、并发、坏缓存重取、旧目录清理、符号链接隔离和写入失败回退。code v47 已通过签名、包完整性、LAN/WAN 清单与完整组件大小/SHA-256 验证并发布；尚未在 Android Offline APK 上验证首次下载、Runtime 更新/重启后的命中及真实角色初始化耗时。
 
 ## 10. PMX 内置 Ammo 物理解算
 

@@ -1084,7 +1084,7 @@ Blender4.5.4后台导出完成：7网格/7材质/22内嵌图像，无骨架/动�
 
 - `node --test src/apps/server/modules/mmd/mmd-resource-service.test.js`：17/17通过。覆盖固定版本profile、冷缓存原子写入、热缓存不访问上游、并发请求合并、损坏内容重取、旧版本普通目录清理、符号链接隔离、存储失败回退与旧版本路径兼容。
 - `node --test --test-name-pattern='PMX profile validation accepts only local and fixed static same-origin MMD paths' tests/display-mmd-runtime.test.js`：1/1通过；显示端接受严格64位版本路径并保留旧同源路径。
-- `node --check` 对 MMD 服务、server-app 与两处显示端脚本通过；`git diff --check`通过。HTTP ETag/immutable/304 与旧路由 no-store 已做路由契约检查；尚未在 Android Offline APK 上实测首次下载、重启/Runtime 更新后命中及角色初始化耗时，不声称手机性能已验证。
+- `node --check` 对 MMD 服务、server-app 与两处显示端脚本通过；`git diff --check`通过。HTTP ETag/immutable/304 与旧路由 no-store 已做路由契约检查。code v47 已发布并完成 LAN/WAN 全组件大小/SHA-256 验证；尚未在 Android Offline APK 上实测首次下载、重启/Runtime 更新后命中及角色初始化耗时，不声称手机性能已验证。
 
 ## 2026-10-04 MMD-AR编辑器首版
 

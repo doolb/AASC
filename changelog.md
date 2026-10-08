@@ -11051,4 +11051,4 @@
 
 - ✅ [2026-10-08] 固定白名单 PMX、贴图与 VMD 首次校验后写入 Offline 可保留的 `res/temp/mmd-static-cache/<version>/`；后续从磁盘读取，版本化同源 URL 提供一年 immutable HTTP 缓存。
   - 修改 MMD 资源服务、server-app 与显示端路径校验；缓存使用 SHA/长度复核、并发合并、临时文件原子替换、坏缓存重取及旧版本目录清理，并隔离符号链接。旧路径保持兼容且 `no-store`，缓存写入失败不影响已校验响应。
-  - 服务测试17/17、显示端路径测试1/1通过；语法检查和`git diff --check`通过。更新design/spec/task/todo及自测文档；未构建或发布 APK/服务包，`servicePackage=true`保持待发布。Android冷启动与实际耗时待验收。
+  - 服务测试17/17、显示端路径测试1/1通过。code v47：16,895,693 bytes，SHA-256 `cdccd101c1dbb4c67140496a520316cb0dc67f8357529364900c4d58fed7d865`；LAN `/mnt/aasc-offline` 与 WAN `/home/as/a/aasc-offline` 发布成功，两端清单签名/一致性及全部组件大小/SHA-256验证通过，旧 code 版本按数字文件规则清理。dependencies v6、min APK v34、Node-min seeds v39 和 data-repair v2 保持；未构建 APK。`servicePackage=false`、`minApk=true`、`dependenciesPackage=false`。Android 冷启动与实际耗时待验收。

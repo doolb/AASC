@@ -70,5 +70,7 @@ Offline APK 首次使用固定 PMX 角色时仍从固定上游下载模型、贴
 - 已完成服务端版本化 profile、专用磁盘缓存、大小与 SHA-256 命中校验、并发请求合并、唯一临时文件原子写入、旧缓存目录清理与符号链接隔离；存储不可用时仍返回经过校验的当次资源。
 - 版本化路由设置固定资源 ETag、`private, max-age=31536000, immutable` 并支持 `If-None-Match`；旧路径维持兼容和 `no-store`。显示端 MMD 路径校验接受严格格式的版本路径。
 - `node --test src/apps/server/modules/mmd/mmd-resource-service.test.js`：17/17通过；显示端版本路径定向测试：1/1通过；4个相关脚本语法检查及 `git diff --check` 通过。
-- 更新 design/spec、自测伪代码与结果、索引和 changelog；已从 `docs/todo.md` 删除已完成条目。
-- 未构建或发布 APK/服务包。`release/offline-release-status.json` 的 `servicePackage=true` 保持原值，表示服务代码包待发布；未改其他状态项。尚未在 Android Offline APK 做冷缓存、Runtime 更新/进程重启及真实角色初始化耗时验收。
+- 更新 design/spec、自测伪代码与结果、索引和 changelog；`docs/todo.md` 不保留已完成任务。
+- 使用 `npm run build:offline-update -- --mode=code-only --code-version=47 --manifest-file=/mnt/aasc-offline/manifest.json --reuse-node-min-seeds=true` 生成 `code/code-v47.zip`：16,895,693 bytes，SHA-256 `cdccd101c1dbb4c67140496a520316cb0dc67f8357529364900c4d58fed7d865`；ZIP 完整性、签名清单与组件兼容性检查通过。包内 1,122 个条目含持久缓存实现，不含 APK、模型、日志或其他 ZIP。来源提交为 `c968a361e41f380fbe11fea9db9cf2eaa2a961ef`；`gitDirty=true` 由保留的工作区改动标记，参与归档的服务源码与提交一致。
+- `npm run publish:offline-update -- --mode=code-only --manifest-file=release/offline-update/output/manifests/manifest-code-v47.json --remote-dir='~/a/aasc-offline'` 成功发布至 LAN `/mnt/aasc-offline` 和 WAN `/home/as/a/aasc-offline`。两端清单签名有效且字节内容一致；发布器下载复核所有清单组件大小/SHA-256成功，code v47 HTTP HEAD 均为 200 / 16,895,693 bytes。LAN/WAN 的旧数字 code 文件已按规则精确清理，仅保留 v47；dependencies v6、min APK v34、Node-min seeds v39 与 data-repair v2 保留。未构建或发布 APK。
+- 服务包发布成功后，`release/offline-release-status.json` 的 `servicePackage` 设为 `false`；`minApk=true` 与 `dependenciesPackage=false` 不变并随发布记录上传 Git。Android Offline APK 冷启动、Runtime 更新/重启后缓存命中及角色初始化实测仍待现场验收。
