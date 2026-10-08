@@ -23,6 +23,8 @@
 
 ### MMD-AR Blender 工程按需加载
 
+- ✅ [2026-10-08] 修复 Blender 工程入口点击后错误提示被折叠面板隐藏的问题：入口点击时立即展开面板并显示状态，常驻状态区移到折叠区外；浏览器不支持目录选择、动态模块/工作区报错时可见，取消目录选择会清除状态并恢复入口。相关设计/spec/task/todo 已同步；`npm run build:web:mmd-ar-test` 及静态检查结果记录在任务文档。本地重建 `web-dist`，未发布外网。
+
 - 🔄 [2026-10-08] 新增原生 `.blend` 工作区的设计、伪代码、任务文档与入口代码；用户点击后才加载 Blender 5.2 WASM，文件通过 HTTPS 目录句柄读写，不上传服务器、不经过 PMX/MMD Tools。
   - 锁定 `@volter/blender-engine@0.1.136` 与独立 Three.js 0.180 构建；新增 Vite 工作区入口、Web 专用 Service Worker 适配器、用户授权目录索引/读取、分块哈希校验与 `.blend` 回写、Brotli WASM 静态资源及 COOP/COEP 配置。APK 构建移除 Blender 按钮且不带引擎资产。
   - 完整 `web-dist` 构建成功；用户取消目录选择时不下载工作区模块，启动或预览失败会回收 worker 与 WebGL 资源并允许重试。静态资源改为直接请求 `.br`，移除了 `Options` 和 rewrite 依赖。

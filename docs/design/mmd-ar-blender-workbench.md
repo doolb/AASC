@@ -4,7 +4,7 @@
 
 让独立 MMD-AR 网页可以直接使用 Blender `.blend` 工程。网页初次加载和普通 PMX 编辑不下载 Blender；用户点击“Blender 工程”后立即打开目录选择器，再按需加载工作区模块和 Blender WebAssembly。打开工程后，Blender 角色接管 MMD-AR 当前视口中的角色位置，进入同一页面的编辑、预览和渲染流程。工程以原生 `.blend` 文件读写，不经过网页 PMX 导入器或 MMD Tools 转换脚本。
 
-目录选择使用浏览器 File System Access API，读取同一目录中的 `.blend`、贴图和引用资源，并将保存后的 `.blend` 写回该目录。目录句柄只保存在当前浏览器 origin 的 IndexedDB；浏览器撤销权限后提示重新授权。首期面向 HTTPS 桌面 Chromium；不支持目录读写的浏览器显示明确兼容性提示。
+目录选择使用浏览器 File System Access API，读取同一目录中的 `.blend`、贴图和引用资源，并将保存后的 `.blend` 写回该目录。目录句柄只保存在当前浏览器 origin 的 IndexedDB；浏览器撤销权限后提示重新授权。首期面向 HTTPS 桌面 Chromium；不支持目录读写的浏览器显示明确兼容性提示。兼容性提示和加载进度位于工作区折叠面板外，确保入口失败时用户仍能看到原因。
 
 ## 运行方式
 
@@ -15,7 +15,7 @@
 - 页面部署需要 HTTPS/localhost、`Cross-Origin-Opener-Policy: same-origin` 与 `Cross-Origin-Embedder-Policy: credentialless`；页面和模块按同源相对路径工作。
 - 独立网页部署在 `/mnt/mmd-ar/` 这类子目录时，Vite 生成的 worker/分块 URL 与引擎 API URL 都必须留在当前应用路径内；Service Worker 的 API 路由由其注册 scope 计算，避免访问域名根路径。
 - 启动 Blender 前先请求 Service Worker 更新，并等待本次注册的 active worker 接管页面，避免已有旧版本控制器继续处理新 API 路由。
-- 目录选择发生在用户点击的同步调用栈里；确认选中目录后才加载工作区模块。用户取消选择时不下载工作区模块。Blender 实例只在用户选择 `.blend` 并按“打开”后创建。
+- 目录选择发生在用户点击的同步调用栈里；入口点击后立即展开工作区并显示目录选择状态，确认选中目录后才加载工作区模块。用户取消选择时清除状态、恢复入口并且不下载工作区模块。浏览器能力不足或模块加载失败时，在始终可见的状态区显示错误。Blender 实例只在用户选择 `.blend` 并按“打开”后创建。
 - 工程读取复用目录树相对路径；引擎保存的 `.blend` 写回已授权目录。关闭工作区前排空并保存；写回失败保留会话并提示原因。
 - Blender 预览复用 `DisplayMmd` 的场景、相机和 renderer；工作区加载时暂时隐藏当前角色模型，关闭时恢复其原可见状态与相机。Blender 工程角色通过受控编辑桥接接入，不另建全屏 Three.js viewport。
 - Blender 工程的编辑面板显示对象层级、对象位置/旋转/缩放，以及 Armature 的骨骼层级、姿态变换和骨架结构（头、尾、Roll、父级）。属性修改通过 `BlenderRuntime.execute` 写入当前 `.blend`，随后请求新帧更新主视口。
@@ -32,7 +32,7 @@
 ## 完成标准
 
 - 普通首屏 Network 不请求工作区模块、Blender glue、WASM、data 或 Essentials。
-- 点击入口立即显示目录选择器；仅选择工程后才下载并启动 Blender。
+- 点击入口立即显示目录选择器并给出可见状态；不支持的浏览器、目录选择取消及模块加载失败均有可见且可恢复的反馈；仅选择工程后才下载并启动 Blender。
 - 带相对贴图的 `.blend` 角色进入 MMD-AR 主视口并暂时替换当前角色；关闭后当前角色与相机状态恢复。
 - 对象变换、骨骼姿态以及骨架头尾、Roll、父级修改能更新视口并保存回原 `.blend`；刷新后可再次打开。
 - Blender 预览和 Cycles PNG 使用同一工程状态；PMX 刚体/关节编辑不会误用于 Blender 工程。

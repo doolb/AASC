@@ -5,7 +5,7 @@
 - ⏳待现场验收 [2026-10-08] MMD-AR联动Stable CSM阴影与后台恢复：稳定切片球、相机旋转尺寸不变和整texel吸附回归通过；后台恢复resize已改为保留相机/角色变换并重新构建本地web-dist。仍需手机/可用GPU浏览器确认阴影覆盖、镜头移动/转向、cameraScale边缘裁切及后台返回画面。实现记录：`docs/task/20261008_MMDAR主相机CSM切片拟合.md`、`docs/task/20261008_MMDAR后台恢复保留预览相机视角.md`。
 
 - 🔄进行中 [2026-10-08] MMD-AR Blender 工程按需加载：外网已部署至 `https://c.aasc.us/mnt/mmd-ar/`；Apache 已启用 `mod_headers` 并按路径提供 COOP `same-origin`、COEP `credentialless`。修复用户反馈的动态导入入口缺少 `mountBlenderWorkbench` 导出，构建有导出断言，6 个修复文件 SHA-256 匹配且线上 HTTP 200。待用真实桌面 Chromium 验收目录授权、相对贴图、Cycles PNG、保存往返及普通首屏不请求 Blender；APK 不包含引擎。Brotli 资源直接请求 `.br` 文件，无需 mod_rewrite。任务：`docs/task/20261008_MMDARBlender工程按需加载.md`。
-- ⏳待桌面浏览器验收 [2026-10-08] MMD-AR Blender 工程：已集成主视口角色替换、对象变换、骨骼姿态/结构编辑和模式路由；本地网页构建通过。桌面 Chromium 实测 `.blend` 显示、骨骼编辑、Cycles 与保存回读待验收；自动化 Chromium 导航前报 `ERR_INSUFFICIENT_RESOURCES`。本轮未发布。任务：`docs/task/20261008_MMDARBlender角色与骨骼编辑集成.md`。
+- ⏳待桌面浏览器验收 [2026-10-08] MMD-AR Blender 工程：已集成主视口角色替换、对象变换、骨骼姿态/结构编辑和模式路由；入口状态/错误提示移出折叠面板，目录选择取消会恢复入口。本地网页构建通过。桌面 Chromium 实测 `.blend` 显示、骨骼编辑、Cycles 与保存回读待验收；自动化 Chromium 导航前报 `ERR_INSUFFICIENT_RESOURCES`。本地最新 `web-dist` 尚未发布，线上仍在服务旧版入口。任务：`docs/task/20261008_MMDARBlender角色与骨骼编辑集成.md`、`docs/task/20261008_MMDARBlender工程入口反馈修复.md`。
 
 
 

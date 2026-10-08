@@ -8,13 +8,17 @@
     不请求 WASM、.data、Essentials 或工作区构建块
 
 点击“Blender 工程”：
+    展开工作区面板
+    在折叠面板外的常驻状态区显示“请选择包含 Blender 工程的目录”
     若 File System Access API 可用：
         在当前 click 调用栈立即执行 showDirectoryPicker(mode=readwrite)
     不支持目录读写、HTTPS/localhost 或 Service Worker：
-        显示兼容性提示并结束
-    用户取消目录选择 -> 不启动引擎，不下载工作区模块或 WASM
-    选择目录 -> 用目录句柄枚举相对路径，筛选 .blend
+        在常驻状态区显示兼容性提示并结束，保持入口可再次点击
+    用户取消目录选择 -> 清除状态并恢复入口，不启动引擎，不下载工作区模块或 WASM
+    选择目录 -> 常驻状态区显示工作区加载进度，用目录句柄枚举相对路径，筛选 .blend
     选择目录后 dynamic import 已指纹化工作区模块；更新同源 Service Worker 并等待最新 active worker 控制当前页面
+    工作区创建成功 -> 清除入口加载状态，由 Blender 面板显示自身状态
+    模块/工作区失败 -> 在常驻状态区显示错误，清理未完成面板并恢复入口
     无 .blend -> 显示空工程选择/创建状态，不自动转换 PMX
 
 用户选择 .blend 并按“打开”：
