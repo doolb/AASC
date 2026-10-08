@@ -41,4 +41,5 @@
 
 - 已把状态/错误区域放在折叠面板之外；点击入口后先显示可见提示，选择目录后显示加载状态，取消时清除提示并恢复按钮。
 - `node --check 3rd/mmd-ar-test/web-editor-ui.mjs`、`git diff --check` 通过；`npm run build:web:mmd-ar-test` 成功，生成 `3rd/mmd-ar-test/web-dist`。产物含入口状态区和新点击流程；Vite 仅提示 Blender 静态资源分块超过 500 kB，不影响构建。
-- 未运行测试套件或真实桌面 Chromium；目录选择、取消及真实 `.blend` 打开仍待桌面浏览器验收。本轮未发布外网。
+- 已发布至 `https://c.aasc.us/mnt/mmd-ar/`：14 个文件（13 个 HTTPS 资源及引擎版本目录 `.htaccess`）先进入暂存目录并通过 SHA-256 校验，再按模块、显示入口、首页顺序切换。13 个公开资源均 HTTP 200 且 SHA-256 与本地一致；暂存目录已清理。站点 COOP `same-origin`、COEP `credentialless` 响应头正常。根 `.htaccess` 未覆盖，沿用 Apache 站点配置。
+- 首页 SHA-256：`8ee856b230b94451f8c611f30fb568a7930ed4ebec9505d67054bf53643ead0a`。未运行测试套件或真实桌面 Chromium；目录选择、取消及真实 `.blend` 打开仍待桌面浏览器验收。

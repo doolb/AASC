@@ -58,6 +58,13 @@ WASM 初始化资源约 38 MB 压缩体积，Blender 本身的解码后内存约
 - 修复后的文件已同步至 `https://c.aasc.us/mnt/mmd-ar/`；`rsync -aciR --dry-run` 无差异。线上首页、工作台模块、worker 和 Blender 状态端点均 HTTP 200，状态端点返回 `available: true`，COOP/COEP 保持启用。
 - 尚未在真实浏览器中完成目录授权及 `.blend` 打开、预览、渲染、保存往返验收。
 
+## 入口反馈修复发布
+
+- Blender 入口把状态/错误提示移到折叠面板外；点击后立即显示目录选择提示，选择目录后显示加载状态，取消时恢复入口。
+- 将构建的 14 个变化文件（不覆盖由 Apache 管理的站点根 `.htaccess`）先同步到远端暂存目录，逐文件 SHA-256 核验后按依赖、显示入口、首页顺序切换；暂存目录已清理。
+- 13 个 HTTPS 资源均 HTTP 200，响应体 SHA-256 与本地一致；引擎版本目录 `.htaccess` 的远端文件哈希与本地一致。站点首页仍返回 COOP `same-origin` 和 COEP `credentialless`。首页 SHA-256：`8ee856b230b94451f8c611f30fb568a7930ed4ebec9505d67054bf53643ead0a`。
+- 未运行自动测试或真实 Edge/Chromium 工程流程；需在桌面 Edge 验证目录选择和 `.blend` 打开、编辑、渲染及保存。
+
 ## `/mnt/mmd/blender/西施原皮.blend` 浏览器验收
 
 - 文件为 103,355,592 bytes；所有测试均保持 `/mnt/mmd/blender/西施原皮.blend` 源文件不变。
