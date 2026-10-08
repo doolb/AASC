@@ -717,7 +717,7 @@ GPU需要WebGL2、浮点渲染目标及足够纹理容量；不可用会回退CP
 
 点击右上角“角色”，可选择米娅或西施；模型按需下载，成功后记住选择，刷新恢复上次服务器角色。原“本地模型与动作”入口移入角色面板。西施为静态GLB，支持相机/定位及基础灯光，动作与骨骼物理面板禁用；PMX专用卡通/高光/边缘光参数不保证作用于GLB标准PBR材质。
 
-西施源文件位于 `3rd/mmd-ar-test/output/xishi/西施 游龙清影.blend`。修改源模型后运行 `BLENDER_BIN=/path/to/blender npm run export:mmd-ar:xishi`，再运行 `npm run build:web:mmd-ar-test`。导出仅选角色七个网格，不改写源blend；输出 `output/xishi/xishi.glb`，构建按SHA-256命名 `mmd/xishi/xishi-<hash>.glb` 并纳入资源清单。Blender自定义头发高光使用标准PBR近似。模型文件不提交Git，部署时和web-dist一起上传。
+西施源文件位于 `3rd/mmd-ar-test/output/xishi/西施 游龙清影.blend`。修改源模型后运行 `BLENDER_BIN=/path/to/blender npm run export:mmd-ar:xishi`，再运行 `npm run build:web:mmd-ar-test`。导出仅选角色七个网格，不改写源blend；输出 `output/xishi/xishi.glb`，构建按SHA-256命名 `mmd/xishi/xishi-<hash>.glb` 并纳入资源清单。Blender自定义头发高光使用标准PBR近似。模型文件不提交Git，部署时和web-dist一起上传。网页构建优先使用本地有效GLB；本地GLB缺失或GLB头/声明长度无效时，从 `https://c.aasc.us/mnt/mmd-ar/mmd-resources.json` 读取 `xishi-default` 版本化资源并校验完整SHA-256后回退下载。该回退只用于 `build:web:mmd-ar-test`；`export:mmd-ar:xishi` 仍需本地Blend源，APK构建仍需本地GLB且不联网。
 
 西施提示“PMX profile 或模型地址无效”时，需使用2026-10-03加载入口修复后的web-dist；本次补齐了展开主运行时的GLB分支，部署时需同步首页、display-mmd和运行时等完整依赖，不能只替换模型文件。
 

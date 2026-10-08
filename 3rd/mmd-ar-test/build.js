@@ -556,7 +556,7 @@ async function stageTextAssets() {
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_WIND.addWindRuntime(
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));
-    extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS); await require('./web-editor-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
+    extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE }); await require('./web-editor-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。

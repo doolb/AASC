@@ -1,7 +1,7 @@
 # Web MediaCenter - 未完成任务列表（更新于 2026-10-08，code v46/min v34 已发布）
 
 - 🔄进行中 [2026-10-08] MMD-AR Blender 工程按需加载：外网已部署至 `https://c.aasc.us/mnt/mmd-ar/`；Apache 已启用 `mod_headers` 并按路径提供 COOP `same-origin`、COEP `credentialless`。修复用户反馈的动态导入入口缺少 `mountBlenderWorkbench` 导出，构建有导出断言，6 个修复文件 SHA-256 匹配且线上 HTTP 200。待用真实桌面 Chromium 验收目录授权、相对贴图、Cycles PNG、保存往返及普通首屏不请求 Blender；APK 不包含引擎。Brotli 资源直接请求 `.br` 文件，无需 mod_rewrite。任务：`docs/task/20261008_MMDARBlender工程按需加载.md`。
-- 🔄进行中 [2026-10-08] MMD-AR 主相机/阴影相机联合拟合：联合主相机视锥、角色/接收面与方向光光空间，定向单测12/12通过；`npm run build:web:mmd-ar-test` 因缺少未提交资源 `3rd/mmd-ar-test/output/xishi/xishi.glb` 失败，浏览器测试因此跳过。恢复该资源后待重建并验收。任务：`docs/task/20261008_MMDAR主相机与阴影相机联合拟合.md`。
+- 🔄进行中 [2026-10-08] MMD-AR 主相机/阴影相机联合拟合：联合主相机视锥、角色/接收面与方向光光空间，定向单测12/12通过；新增Web专用公网GLB回退后 `npm run build:web:mmd-ar-test` 已成功。阴影浏览器测试因当前Windows环境缺少 `/usr/bin/chromium` 跳过，待真实浏览器/设备观感验收。任务：`docs/task/20261008_MMDAR主相机与阴影相机联合拟合.md`。
 
 
 

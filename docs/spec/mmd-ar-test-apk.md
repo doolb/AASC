@@ -313,10 +313,45 @@ renderFrame:
 实现 := web-shadow-map-preview.mjs提供交集/拟合；web-production-test-extras.js只向独立测试副本注入
 范围 := PMX/静态GLB；正式display VRM/PMX源码不改
 验证 := tests/mmd-ar-shadow-map-size.test.js 12/12通过
-构建限制 := npm run build:web:mmd-ar-test需要未提交的output/xishi/xishi.glb；当前缺失，浏览器测试因web-dist/index.html缺失跳过
+构建 := npm run build:web:mmd-ar-test 在本地GLB缺失时通过受校验公网回退成功生成web-dist；浏览器测试因当前Windows环境缺少配置的/usr/bin/chromium跳过
 ```
 
-## 2026-10-01 图形匹配球大小且不显示下一节（已完成）
+## 2026-10-08 web-dist西施GLB公网回退
+
+```text
+stageRuntime(root, { webMode }):
+  local := 尝试读取 output/xishi/xishi.glb
+  if local可读 且GLB magic/version/声明长度有效:
+    modelBytes := local
+    modelHash := SHA256(local)
+  else if webMode:
+    manifest := HTTPS GET https://c.aasc.us/mnt/mmd-ar/mmd-resources.json
+        设置请求超时；manifest响应大小 <= 1MiB；HTTP成功且JSON有效
+    profile := manifest.resources中resourceId == xishi-default
+    require profile.modelType == glb 且 profile.staticModel == true
+    require profile.version为64位小写SHA-256
+    modelUrl := resolve(profile.modelUrl, manifest URL目录)
+    require modelUrl.protocol == https
+    require modelUrl.origin == https://c.aasc.us
+    require pathname匹配 /mnt/mmd-ar/mmd/xishi/xishi-<version前12位>.glb
+    bytes := HTTPS GET modelUrl，设置请求超时/大小上限64MiB
+    require HTTP成功、GLB magic/version/声明长度有效
+    require SHA256(bytes) == profile.version
+    modelBytes := bytes；modelHash := profile.version
+  else:
+    报错本地GLB缺失或无效；不得在APK构建中访问公网
+
+  relative := mmd/xishi/xishi-<modelHash前12位>.glb
+  将modelBytes仅写入GENERATED_ASSETS/relative
+  返回xishi-default静态角色profile，version=modelHash
+
+规则 := 本地有效模型优先；远端回退仅WEB_MODE启用，不覆盖output/xishi或Blend源文件
+规则 := 非HTTPS/非指定来源/非角色静态模型/路径不符/超时/过大/哈希错误 -> 构建失败，不弱化校验
+测试 := 本地优先且零网络、Web缺失时有效回退、APK缺失时不联网、非法清单/域名/哈希/GLB/超时/超大响应拒绝；tests/mmd-ar-web-characters-build.test.js 7/7通过
+验证 := npm run build:web:mmd-ar-test在本地GLB缺失时成功生成web-dist及西施资源清单；合并阴影回归19/19通过
+浏览器 := 阴影浏览器验证2项因Windows环境缺少测试配置的/usr/bin/chromium跳过
+```
+
 
 ```text
 用户要求 -> 轴图形与骨骼球一样大；选中只显示本骨骼，不显示下一节

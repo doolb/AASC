@@ -6,12 +6,108 @@ const once = (source, anchor, replacement) => {
     if (source.split(anchor).length !== 2) throw new Error(`角色接入缺少唯一锚点：${anchor.slice(0, 90)}`);
     return source.replace(anchor, replacement);
 };
-async function stageRuntime(root) {
+const crypto = require('node:crypto');
+const PUBLIC_MMD_AR_ROOT = 'https://c.aasc.us/mnt/mmd-ar/';
+const PUBLIC_MMD_AR_ORIGIN = new URL(PUBLIC_MMD_AR_ROOT).origin;
+const PUBLIC_MODEL_MANIFEST = new URL('mmd-resources.json', PUBLIC_MMD_AR_ROOT).href;
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_MANIFEST_BYTES = 1024 * 1024;
+const DEFAULT_MAX_MODEL_BYTES = 64 * 1024 * 1024;
+const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+function validateGlbBytes(bytes, label) {
+    if (!Buffer.isBuffer(bytes) || bytes.length < 12 || bytes.toString('ascii', 0, 4) !== 'glTF'
+        || bytes.readUInt32LE(4) !== 2 || bytes.readUInt32LE(8) !== bytes.length) {
+        const error = new Error(`${label}不是有效的GLB 2.0文件`);
+        error.code = 'ERR_INVALID_GLTF';
+        throw error;
+    }
+}
+async function readResponseBytes(response, maxBytes, label) {
+    if (!response?.ok) throw new Error(`${label}HTTP状态异常：${response?.status ?? '无响应'}`);
+    const declaredLength = Number(response.headers?.get?.('content-length'));
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new Error(`${label}超过大小上限${maxBytes}字节`);
+    if (!response.body || typeof response.body[Symbol.asyncIterator] !== 'function') throw new Error(`${label}响应没有可读取的正文`);
+    const chunks = [];
+    let totalBytes = 0;
+    try {
+        for await (const chunk of response.body) {
+            const buffer = Buffer.from(chunk);
+            totalBytes += buffer.length;
+            if (totalBytes > maxBytes) throw new Error(`${label}超过大小上限${maxBytes}字节`);
+            chunks.push(buffer);
+        }
+    } catch (error) {
+        if (error.message.includes('超过大小上限')) throw error;
+        throw new Error(`${label}响应读取失败：${error.message}`, { cause: error });
+    }
+    if (!totalBytes) throw new Error(`${label}响应内容为空`);
+    return Buffer.concat(chunks, totalBytes);
+}
+async function fetchBytes(url, maxBytes, label, fetchImpl, timeoutMs) {
+    let response;
+    try {
+        response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
+    } catch (error) {
+        throw new Error(`${label}请求失败：${error.message}`, { cause: error });
+    }
+    return readResponseBytes(response, maxBytes, label);
+}
+async function fetchPublicXishiModel({ fetchImpl, timeoutMs, maxManifestBytes, maxModelBytes }) {
+    const manifestBytes = await fetchBytes(PUBLIC_MODEL_MANIFEST, maxManifestBytes, '西施资源清单', fetchImpl, timeoutMs);
+    let manifest;
+    try { manifest = JSON.parse(manifestBytes.toString('utf8')); }
+    catch (error) { throw new Error(`西施资源清单JSON无效：${error.message}`, { cause: error }); }
+    if (manifest?.status !== 'success' || !Array.isArray(manifest.resources)) throw new Error('公网西施资源清单结构无效');
+    const profile = manifest.resources.find(resource => resource?.resourceId === 'xishi-default');
+    if (!profile || profile.modelType !== 'glb' || profile.staticModel !== true) {
+        throw new Error('公网资源清单缺少xishi-default静态GLB角色');
+    }
+    if (typeof profile.version !== 'string' || !/^[a-f0-9]{64}$/u.test(profile.version)) {
+        throw new Error('公网西施模型清单缺少有效SHA-256版本');
+    }
+    if (typeof profile.modelUrl !== 'string') throw new Error('公网西施模型清单缺少有效URL');
+    let modelUrl;
+    try { modelUrl = new URL(profile.modelUrl, PUBLIC_MMD_AR_ROOT); }
+    catch (error) { throw new Error(`公网西施模型URL无效：${error.message}`, { cause: error }); }
+    const expectedPath = `/mnt/mmd-ar/mmd/xishi/xishi-${profile.version.slice(0, 12)}.glb`;
+    if (modelUrl.protocol !== 'https:' || modelUrl.origin !== PUBLIC_MMD_AR_ORIGIN
+        || modelUrl.pathname !== expectedPath || modelUrl.search || modelUrl.hash
+        || modelUrl.username || modelUrl.password) {
+        throw new Error('公网西施模型URL不属于允许的HTTPS版本化资源路径');
+    }
+    const bytes = await fetchBytes(modelUrl.href, maxModelBytes, '西施GLB', fetchImpl, timeoutMs);
+    validateGlbBytes(bytes, '公网西施模型');
+    const digest = sha256(bytes);
+    if (digest !== profile.version) throw new Error(`公网西施GLB SHA-256不匹配：清单=${profile.version}，实际=${digest}`);
+    return { bytes, sha256: digest, source: 'remote', url: modelUrl.href };
+}
+async function resolveXishiModelBytes({ sourceModel, webMode = false, fetchImpl = globalThis.fetch,
+    timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, maxManifestBytes = DEFAULT_MAX_MANIFEST_BYTES,
+    maxModelBytes = DEFAULT_MAX_MODEL_BYTES }) {
+    let localError;
+    try {
+        const bytes = await fs.readFile(sourceModel);
+        validateGlbBytes(bytes, '本地西施模型');
+        return { bytes, sha256: sha256(bytes), source: 'local', url: null };
+    } catch (error) {
+        if (!['ENOENT', 'EISDIR', 'ERR_INVALID_GLTF'].includes(error.code)) throw error;
+        localError = error;
+    }
+    if (!webMode) throw new Error(`本地西施GLB缺失或无效，APK构建不启用公网回退：${localError.message}`, { cause: localError });
+    if (typeof fetchImpl !== 'function') throw new Error(`本地西施GLB缺失或无效，当前Node环境没有fetch：${localError.message}`, { cause: localError });
+    try { return await fetchPublicXishiModel({ fetchImpl, timeoutMs, maxManifestBytes, maxModelBytes }); }
+    catch (error) {
+        throw new Error(`本地西施GLB不可用且公网回退失败：${error.message}`, { cause: error });
+    }
+}
+async function stageRuntime(root, { webMode = false, fetchImpl = globalThis.fetch } = {}) {
     const sourceModel = path.join(__dirname, 'output/xishi/xishi.glb');
-    const hash = (await hashFile(sourceModel)).sha256;
+    const model = await resolveXishiModelBytes({ sourceModel, webMode, fetchImpl });
+    const hash = model.sha256;
     const relative = `mmd/xishi/xishi-${hash.slice(0, 12)}.glb`;
+    if (model.source === 'remote') process.stdout.write(`[mmd-ar] 本地西施GLB不可用，已校验并使用公网模型 ${relative}\n`);
     await fs.mkdir(path.join(root, 'mmd/xishi'), { recursive: true });
-    await fs.copyFile(sourceModel, path.join(root, relative));
+    await fs.writeFile(path.join(root, relative), model.bytes);
     const js = path.join(root, 'js');
     for (const name of ['web-character-glb.mjs', 'web-character-panel.mjs', 'web-pmx-project-materials.mjs']) await fs.copyFile(path.join(__dirname, name), path.join(js, name));
     const materialFile = path.join(js, 'web-pmx-project-materials.mjs');
@@ -98,4 +194,4 @@ function addPanel($) {
         </section>`);
     $('#mmdArCharacterPanel').append($('#mmdArLocalAssets'));
 }
-module.exports = { stageRuntime, patchDisplay, addPanel };
+module.exports = { stageRuntime, patchDisplay, addPanel, resolveXishiModelBytes };

@@ -17,10 +17,16 @@
   - ✅ [2026-10-08] 修复线上点击 Blender 工程报 `mountBlenderWorkbench is not a function`：Vite 未保留动态导入入口的导出签名。构建设置 `preserveEntrySignatures: exports-only`，并增加产物导出检查；本地 Node 动态导入确认导出为函数。重新部署首页、两个入口脚本、工作区入口及两个分块共 6 个文件，SHA-256 全部匹配；当前首页 SHA-256 `123c31429dd0e3e748a3a04729c9414a75f424619b218d97dafac8f8a32e6ef4`，新模块和分块均 HTTP 200。真实浏览器的目录授权、`.blend` 打开、Cycles 渲染和保存往返仍待验收。
 
 
-### MMD-AR 主相机视野与光源阴影相机联合拟合（等待网页构建验收）
+### MMD-AR 主相机视野与光源阴影相机联合拟合（Web构建已完成，待浏览器/设备验收）
 
 - 🔄 [2026-10-08] 独立测试页把主相机可见角色/接收面区域和各方向光的ShadowCamera联合拟合；相机缩放/转动时按视锥与模型/接收面交集更新光空间正交范围，加入角色投影到地面的可见影子足迹；保留手动cameraScale、贴图分辨率独立和像素网格对齐。正式 `/display` VRM/PMX源码未改。
-  - 修改 `web-production-test-extras.js`、`web-shadow-map-preview.mjs` 与阴影测试；定向单测12/12通过。网页构建因缺少本地未提交 `3rd/mmd-ar-test/output/xishi/xishi.glb` 失败，浏览器测试因无 `web-dist/index.html` 跳过；恢复资源后待重建/验收。未改Offline发布状态。
+  - 修改 `web-production-test-extras.js`、`web-shadow-map-preview.mjs` 与阴影测试；定向单测12/12通过。后续新增的Web专用公网GLB回退后，`npm run build:web:mmd-ar-test` 在本地GLB缺失时成功生成网页；现有阴影浏览器测试因Windows环境缺少 `/usr/bin/chromium` 跳过，真实浏览器/设备验收待后续进行。未改Offline发布状态。
+
+### MMD-AR web-dist 西施GLB公网回退（已完成）
+
+- ✅ [2026-10-08] 独立网页构建优先使用本地有效GLB；缺失或结构无效时，从公网资源清单下载西施版本化GLB并校验完整SHA-256，生成资源仍按内容哈希命名。只对Web构建启用；APK构建仍仅用本地资源，不覆盖模型源文件。
+  - `3rd/mmd-ar-test/build.js` 向角色资源构建传递Web模式；`web-characters-build.js` 限定HTTPS主机/静态角色路径、30秒请求超时、manifest 1MiB与模型64MiB上限，并验证GLB 2.0头/长度和清单SHA-256。当前公网资源为 `xishi-ee3602cbb49e.glb`，SHA-256 `ee3602cbb49efdbae84c92970b68a9e96c6c25a14591f33be78b6f06a1d565c0`。
+  - 新增 `tests/mmd-ar-web-characters-build.test.js`，7/7通过；与阴影回归组合19/19通过。安装锁定的Blender工作区依赖后，`npm run build:web:mmd-ar-test` 在本地GLB缺失时成功生成网页。阴影浏览器测试2项因当前Windows环境缺少 `/usr/bin/chromium` 跳过；未做真实浏览器/设备观感验收。未修改正式显示端、Offline发布状态或原有配置。
 
 ### 任务系统
 
