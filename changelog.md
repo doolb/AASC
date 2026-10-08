@@ -1,6 +1,13 @@
 # Web MediaCenter - 变更日志
 
 
+### MMD-AR Blender 工程按需加载（进行中）
+
+- 🔄 [2026-10-08] 新增原生 `.blend` 工作区的设计、伪代码、任务文档与入口代码；用户点击后才加载 Blender 5.2 WASM，文件通过 HTTPS 目录句柄读写，不上传服务器、不经过 PMX/MMD Tools。
+  - 锁定 `@volter/blender-engine@0.1.136` 与独立 Three.js 0.180 构建；新增 Vite 工作区入口、Web 专用 Service Worker 适配器、用户授权目录索引/读取、分块哈希校验与 `.blend` 回写、Brotli WASM 静态资源及 COOP/COEP 配置。APK 构建移除 Blender 按钮且不带引擎资产。
+  - 完整 `web-dist` 构建成功；用户取消目录选择时不下载工作区模块，启动或预览失败会回收 worker 与 WebGL 资源并允许重试。外网发布尝试因 Apache 未加载 `mod_headers`、未允许 `.htaccess` 中的 `Header` 指令而回滚；静态资源改为直接请求 `.br`，移除了 `Options` 和 rewrite 依赖。线上旧页面已恢复；待管理员配置 COOP/COEP 后重新发布并验证真实 `.blend` 往返。
+
+
 ### 任务系统
 
 - ✅ [2026-10-08] 修复服务器重启恢复运行中服务时重置实例创建时间戳的问题，避免无意义地改写 `results/index.json`。

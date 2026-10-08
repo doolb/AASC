@@ -11,7 +11,7 @@ const style=document.createElement('style');style.textContent=`
 @media(min-width:1000px){#edProperties:not(:empty){position:fixed;right:80px;top:50px;width:270px;max-height:80vh;overflow:auto;background:#121720f2;padding:10px;border:1px solid #536078;border-radius:8px}}
 `;document.head.append(style);
 const host=document.createElement('section');host.id='mmdEditor';host.setAttribute('aria-label','模型工作区');host.innerHTML=`
-<nav><button data-mode="edit">编辑</button><button data-mode="preview">预览</button><button data-mode="render">渲染</button><button id="edCollapse" aria-expanded="false">展开</button></nav>
+<nav><button data-mode="edit">编辑</button><button data-mode="preview">预览</button><button data-mode="render">渲染</button><button id="edBlender" type="button" data-blender-only>Blender工程</button><button id="edCollapse" aria-expanded="false">展开</button></nav>
 <div class="ed-panel" id="edPanel" hidden>
 <div><button id="edSave">保存工程</button><button id="edOpen">打开工程</button><input id="edFile" type="file" accept=".zip" hidden></div>
 <div><button data-face="0,0,1">正面</button><button data-face="1,0,0">侧面</button><button data-face="0,0,-1">背面</button><button id="edViewReset">自由视角</button></div>
@@ -55,6 +55,17 @@ async function workspace(next){if(!api()?.getState().modelReady)throw new Error(
     mode=next;sync();$('edPanel').hidden=false;$('edCollapse').textContent='收起';$('edCollapse').setAttribute('aria-expanded','true');$('edEditing').hidden=mode!=='edit';$('edPreview').hidden=mode==='edit';$('edRender').hidden=mode!=='render';$('edPhysics').checked=api().getState().physicsEnabled;for(const b of host.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));status(mode==='edit'?'绑定姿态编辑；修改切到预览后生效。':'');
 }
 for(const button of host.querySelectorAll('[data-mode]'))button.onclick=()=>run(()=>workspace(button.dataset.mode));
+if($('edBlender'))$('edBlender').onclick=()=>run(async()=>{
+    const button=$('edBlender');
+    if(button.disabled)return;
+    button.disabled=true;
+    try{
+        if(!window.showDirectoryPicker)throw new Error('Blender工程需要支持目录读写的桌面Chromium浏览器。');
+        const directory=await window.showDirectoryPicker({mode:'readwrite'});
+        const module=await import('__BLENDER_WORKBENCH_URL__');
+        await module.mountBlenderWorkbench(directory,()=>{button.disabled=false;});
+    }catch(error){button.disabled=false;throw error;}
+});
 for(const button of host.querySelectorAll('[data-tool]'))button.onclick=()=>{view?.setMode(button.dataset.tool);};
 $('edCollapse').onclick=()=>{$('edPanel').hidden=!$('edPanel').hidden;$('edCollapse').textContent=$('edPanel').hidden?'展开':'收起';$('edCollapse').setAttribute('aria-expanded',String(!$('edPanel').hidden));if(!$('edPanel').hidden&&!history)run(async()=>sync());};
 $('edObjects').onchange=()=>{selection=[...$('edObjects').selectedOptions].map(o=>Number(o.value));refresh();};$('edKind').onchange=()=>{kind=$('edKind').value;selection=[];refresh();};$('edSearch').oninput=refresh;

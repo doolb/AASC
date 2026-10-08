@@ -45,6 +45,7 @@
 | MMD 图片基准图 AR | [mmd-image-ar.md](design/mmd-image-ar.md) | 普通图片拍照、手动四角选区、本地图像目标跟踪和 MMD 姿态叠加 |
 | 正式 Offline MMD AR 同步 | [mmd-ar-production-offline.md](design/mmd-ar-production-offline.md) | 固定版本本地 AR 资源、正式显示端 MindAR/物理迁移及最小热更边界（进行中） |
 | MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](design/mmd-ar-test-apk.md) | 3rd 下独立运行的 APK 与 HTTPS 静态页、默认米娅 PMX、当前 JS/MindAR A/B 跟踪器及网页动作播放开关 |
+| MMD-AR Blender 工程工作区 | [mmd-ar-blender-workbench.md](design/mmd-ar-blender-workbench.md) | `.blend` 原生工程目录选择、Blender WASM 按需加载、静态站点文件接口适配 |
 | MindAR Basic 独立 HTTPS 测试页 | [mindar-basic-web.md](design/mindar-basic-web.md) | 官方/自定义目标、IMU/视觉融合与定位质量估算 |
 | PMX 模型、VMD 动作与 Offline 静态代理 | [mmd-pmx-vmd-local.md](design/mmd-pmx-vmd-local.md) | 本地 PMX/VMD、布料首载稳定预热、动作播放开关接口、灯光与旋转物理，以及 Offline Node 公网 MMD 资源代理 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 控制端折叠 think、显示端展示 think、TTS 播报去标签内容和私聊清空错误反馈 |

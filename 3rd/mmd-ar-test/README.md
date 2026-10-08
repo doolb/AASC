@@ -199,6 +199,8 @@ HTTPS 网页会随窗口、屏幕方向和舞台尺寸变化调整 MMD Canvas。
 
 在仓库根目录运行 `npm run build:web:mmd-ar-test`，输出 `3rd/mmd-ar-test/web-dist/`。可以直接通过内网的 `/mnt/AASC/3rd/mmd-ar-test/web-dist/` 打开，也可把该目录的**内容**放到 HTTPS 站点的 `/mnt/mmd-ar/` 路径；资源地址相对于当前页面目录，不依赖固定挂载前缀。模型与 MindAR 文件复用现有固定 SHA-256 清单，不需要 Gradle。网页构建产物已忽略，不提交 Git。
 
+Blender工程工作区仅在独立HTTPS网页启用。首次构建前在仓库根目录运行 `npm run prepare:mmd-ar-blender-engine`，再运行 `npm run build:web:mmd-ar-test`；Web构建会生成单独延迟加载的引擎模块、`assets/blender-engine/0.1.136/` Brotli运行资源、目录Service Worker和跨域隔离 `.htaccess`。点击网页“Blender工程”后选择工程目录，再选 `.blend` 打开；关闭时保存回所选目录。浏览器缓存后可复用引擎资源；APK不包含Blender引擎。需要支持 File System Access API 和 Service Worker 的HTTPS桌面Chromium。更多边界见根目录 `docs/design/mmd-ar-blender-workbench.md`。
+
 ## 构建
 
 在仓库根目录执行：

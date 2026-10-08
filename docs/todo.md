@@ -1,5 +1,7 @@
 # Web MediaCenter - 未完成任务列表（更新于 2026-10-08，code v46/min v34 已发布）
 
+- 🔄进行中 [2026-10-08] MMD-AR Blender 工程按需加载：独立 Vite 工作区、Service Worker 本地目录适配和完整 `web-dist` 构建已完成；外网更新已回滚。当前 Apache 尚未启用 mod_headers，且目录未允许 `.htaccess` 的 `Header` 指令。待管理员配置 COOP/COEP 后重新发布，并验证真实目录权限/相对贴图、Cycles PNG、保存往返和普通首屏无 Blender 请求。Brotli 资源已改为直接请求 `.br` 文件，无需 mod_rewrite。任务：`docs/task/20261008_MMDARBlender工程按需加载.md`。
+
 
 - ⏳待现场验收 [2026-10-03] MMD刚体XPBD WebGL2：实验后端、构建与浏览器验证已完成；手机硬件GPU的3/10/45/180子步同条件中位数/P95、小物件稳定性、复杂接触及本地模型/VMD连续切换待测。软件GPU明显较慢，保留CPU/Ammo选择。任务：`docs/task/20261003_MMD刚体XPBD_WebGL2.md`。
 

@@ -753,6 +753,12 @@ AO浅凹抑制默认与重置值改为45°；若之前保存了其他值，仍�
 
 切“预览”重建物理使修改生效；进度条定位时自动关闭物理，可再勾选。正面/侧面/背面固定观察视角，“自由视角”恢复原视角控制。保存工程生成自包含ZIP，包括原始PMX/贴图/动作、物理修改及场景设置，使用PBR材质源的工程还带源GLB；通过“打开工程”重新加载。工程保存不是导出已修改PMX，不会覆盖源模型。渲染区可设图片宽高和透明背景，导出当前姿态PNG；图片尺寸64～4096并受设备上限约束。首版不包含视频输出。
 
+### Blender 工程（按需加载）
+
+网页构建前运行 `npm run prepare:mmd-ar-blender-engine` 安装固定版本构建依赖，再运行 `npm run build:web:mmd-ar-test`。HTTPS 桌面 Chromium 打开网页后，点击左上角“Blender工程”，浏览器会立即询问本地目录读写权限；选择含 `.blend` 的工程目录，再点“打开工程”。选中目录后才下载 Blender 工作区代码与预览资源；选择并打开 `.blend` 时再下载约38 MB压缩核心WASM/数据并启动引擎。用户取消目录选择、普通首屏与测试 APK 都不下载这些资源。
+
+工作区显示 Blender 工程预览，可旋转观察、请求 Cycles PNG 渲染、保存并关闭。改动写回用户选择目录中的原生 `.blend`，同目录图片/贴图按相对路径供 Blender 使用；工程文件不会上传服务端。目录句柄保存在当前 HTTPS origin 的 IndexedDB，权限失效时点“重新授权目录”。部署服务器必须返回 `COOP: same-origin` 与 `COEP: credentialless`，并按 `Content-Encoding: br` 提供 `.br` WASM 资源。Apache 部署还需启用 `mod_headers` 并允许 `.htaccess` 中的 `Header` 指令。首期不支持 Firefox、Safari、APK；未编入引擎的 Blender 插件和自定义扩展不会自动安装。实现边界见 `docs/design/mmd-ar-blender-workbench.md`。
+
 ### 移除西施2（2026-10-06）
 
 内置角色保留米娅和静态西施；西施2入口、专用导出命令及构建资源已移除。旧 `character=xishi2` 链接和角色记忆自动回到静态西施。原始 `output/xishi2/` 工程保留，不再打入网页。通用编辑器与工程PBR材质恢复能力继续保留。当前仅更新本地，未发布。

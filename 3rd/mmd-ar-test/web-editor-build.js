@@ -1,16 +1,84 @@
 'use strict';
 const fs=require('node:fs/promises'),path=require('node:path');
+const {spawn}=require('node:child_process');
 const {hashFile}=require('./apk-artifact');
 const once=(s,a,b)=>{if(s.split(a).length!==2)throw new Error('编辑器缺少唯一锚点：'+a.slice(0,70));return s.replace(a,b);};
-async function stage(root){
+const BLENDER_VERSION='0.1.136';
+async function buildBlenderBundle(root){
+    const engineRoot=path.join(__dirname,'blender-engine');
+    const vite=path.join(engineRoot,'node_modules','vite','bin','vite.js');
+    const packageRoot=path.join(engineRoot,'node_modules','@volter','blender-engine');
+    await Promise.all([fs.access(vite),fs.access(path.join(packageRoot,'wasm','BUNDLE.json'))]).catch(()=>{
+        throw new Error('Blender 工作区构建依赖未安装；先运行 npm install --prefix 3rd/mmd-ar-test/blender-engine');
+    });
+    await new Promise((resolve,reject)=>{
+        const child=spawn(process.execPath,[vite,'build','--config',path.join(engineRoot,'vite.config.mjs')],{cwd:engineRoot,stdio:'inherit'});
+        child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error(`Blender 工作区模块构建失败：${code}`)));
+    });
+    const versionRoot=path.join(root,'assets','blender-engine',BLENDER_VERSION);
+    await fs.mkdir(versionRoot,{recursive:true});
+    const workerSource=await fs.readFile(path.join(__dirname,'web-blender-service-worker.js'),'utf8');
+    await fs.writeFile(path.join(root,'web-blender-service-worker.js'),once(workerSource,
+        "const ENGINE_VERSION = '__BLENDER_VERSION__';",`const ENGINE_VERSION = '${BLENDER_VERSION}';`));
+    const wasmRoot=path.join(packageRoot,'wasm');
+    for(const name of ['blender_browser.js','blender_browser.wasm.br','blender_browser.data.br','essentials.bin.br','essentials.json','BUNDLE.json','DEPENDENCY-LICENSES.txt'])
+        await fs.copyFile(path.join(wasmRoot,name),path.join(versionRoot,name));
+    await fs.copyFile(path.join(packageRoot,'LICENSE'),path.join(versionRoot,'LICENSE'));
+    const bundle=JSON.parse(await fs.readFile(path.join(wasmRoot,'BUNDLE.json'),'utf8'));
+    const essentials=JSON.parse(await fs.readFile(path.join(wasmRoot,'essentials.json'),'utf8'));
+    const status={
+        available:true,skew:'emscripten',dir:`assets/blender-engine/${BLENDER_VERSION}`,
+        sizes:{
+            'blender_browser.js':bundle.rawFiles['blender_browser.js'].bytes,
+            'blender_browser.wasm':bundle.rawFiles['blender_browser.wasm'].bytes,
+            'blender_browser.data':bundle.rawFiles['blender_browser.data'].bytes,
+            'essentials.bin':essentials.bytes,
+        },
+        encoded:{'blender_browser.wasm':'br','blender_browser.data':'br','essentials.bin':'br'},
+        digests:{
+            'blender_browser.wasm':bundle.rawFiles['blender_browser.wasm'].sha256,
+            'blender_browser.data':bundle.rawFiles['blender_browser.data'].sha256,
+            'essentials.bin':essentials.sha256,
+        },
+        inTab:false,missing:[],
+    };
+    await fs.writeFile(path.join(versionRoot,'status'),JSON.stringify(status)+'\n');
+    await fs.writeFile(path.join(versionRoot,'.htaccess'),[
+        '<IfModule mod_mime.c>',
+        'AddEncoding br .br',
+        'AddType application/wasm .wasm.br',
+        'AddType application/octet-stream .data.br .bin.br',
+        '</IfModule>',
+        '<IfModule mod_headers.c>',
+        '<FilesMatch "\\.(js|wasm|data|bin)(\\.br)?$">',
+        'Header set Cache-Control "public, max-age=31536000, immutable"',
+        '</FilesMatch>',
+        '</IfModule>',
+        '',
+    ].join('\n'));
+    await fs.writeFile(path.join(root,'.htaccess'),[
+        '<IfModule mod_headers.c>',
+        'Header always set Cross-Origin-Opener-Policy "same-origin"',
+        'Header always set Cross-Origin-Embedder-Policy "credentialless"',
+        '</IfModule>',
+        '',
+    ].join('\n'));
+    return (await hashFile(path.join(root,'js','blender-engine','workbench.mjs'))).sha256.slice(0,12);
+}
+async function stage(root,{webMode=false}={}){
     const folder=path.join(root,'js');
     const names=['web-editor-document.mjs','web-editor-bridge.mjs','web-editor-view.mjs','web-editor-project.mjs','web-editor-ui.mjs'];
+    const blenderVersion=webMode?await buildBlenderBundle(root):null;
     await fs.copyFile(path.join(path.dirname(require.resolve('three')),'../examples/jsm/libs/fflate.module.js'),path.join(folder,'web-editor-zip.mjs'));
     await fs.copyFile(path.join(__dirname,'web-editor-zip.LICENSE.txt'),path.join(folder,'web-editor-zip.LICENSE.txt'));
     const versions=new Map([['web-local-assets.mjs',(await hashFile(path.join(folder,'web-local-assets.mjs'))).sha256.slice(0,12)],['web-editor-zip.mjs',(await hashFile(path.join(folder,'web-editor-zip.mjs'))).sha256.slice(0,12)]]);
     for(const name of names){
         let text=await fs.readFile(path.join(__dirname,name),'utf8');
         for(const [dependency,hash] of versions)text=text.replaceAll('./'+dependency,'./'+dependency+'?v='+hash);
+        if(name==='web-editor-ui.mjs'){
+            text=text.replace('__BLENDER_WORKBENCH_URL__',`./blender-engine/workbench.mjs?v=${blenderVersion||'web-only-disabled'}`);
+            if(!webMode)text=text.replace('<button id="edBlender" type="button" data-blender-only>Blender工程</button>','');
+        }
         await fs.writeFile(path.join(folder,name),text);versions.set(name,(await hashFile(path.join(folder,name))).sha256.slice(0,12));
     }
     const doc='./web-editor-document.mjs?v='+versions.get('web-editor-document.mjs');

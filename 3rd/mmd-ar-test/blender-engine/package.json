@@ -1,0 +1,13 @@
+{
+  "name": "mmd-ar-blender-engine-build",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build --config vite.config.mjs"
+  },
+  "devDependencies": {
+    "@volter/blender-engine": "0.1.136",
+    "three": "0.180.0",
+    "vite": "6.4.3"
+  }
+}
