@@ -1,3 +1,22 @@
+/**
+ * 按用户开关在主相机联合拟合与旧角色包围盒拟合间切换。
+ * 只在联动状态变化时强制切换/拟合；关闭时不调用联合拟合器的逐帧签名检查。
+ */
+export function createJointShadowFitMode({ getEnabled, fitter, fitLegacy }) {
+    let appliedEnabled = getEnabled() === true;
+    return () => {
+        const enabled = getEnabled() === true;
+        if (enabled) {
+            if (appliedEnabled) fitter.update();
+            else fitter.forceUpdate();
+        } else if (appliedEnabled) {
+            fitLegacy();
+        }
+        appliedEnabled = enabled;
+        return enabled;
+    };
+}
+
 /** 释放并置空两类阴影目标；Three r160仅在map为null时按新尺寸重新创建。 */
 export function releaseShadowTargets(shadow) {
     const targets = new Set([shadow.map, shadow.mapPass]);

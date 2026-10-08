@@ -18,23 +18,31 @@ function normalizeShadowCameraScale(value) {
   return Number((Math.round(Math.max(0.1, Math.min(2, number)) * 100) / 100).toFixed(2));
 }
 
+// 联动主相机计算属于可选模式；旧设置缺失字段和非法值均默认关闭。
+function normalizeJointFitEnabled(value) {
+  return value === true;
+}
+
 const PANEL_JS = `
     (() => {
       ${normalizeShadowMapSize.toString()}
       ${normalizeShadowCameraScale.toString()}
+      ${normalizeJointFitEnabled.toString()}
       const input = document.getElementById('mmdArShadowMapSize');
       const toggle = document.getElementById('mmdArShadowMapPreviewEnabled');
       const rows = document.getElementById('mmdArShadowMapPreviewRows');
       const sizeOutput = document.getElementById('mmdArShadowMapSizeValue');
       const cameraInput = document.getElementById('mmdArShadowCameraScale');
       const cameraOutput = document.getElementById('mmdArShadowCameraScaleValue');
-      if (!input || !toggle || !rows || !sizeOutput || !cameraInput || !cameraOutput) return;
+      const jointFitInput = document.getElementById('mmdArShadowJointFit');
+      if (!input || !toggle || !rows || !sizeOutput || !cameraInput || !cameraOutput || !jointFitInput) return;
       const key = 'aasc.mmdArTest.shadowMap.v1';
       const apply = (settings, persist) => {
         const limit = window.MmdArTestShadowMapLimit || 4096;
         const size = normalizeShadowMapSize(settings?.size, limit);
         const previewEnabled = settings?.previewEnabled === true;
         const cameraScale = normalizeShadowCameraScale(settings?.cameraScale);
+        const jointFit = normalizeJointFitEnabled(settings?.jointFit);
         // 在极低设备上限下仍回显有效尺寸；常规档位保留但禁用不支持的选项。
         const automatic = input.querySelector('option[data-device-size]');
         automatic?.remove();
@@ -50,18 +58,21 @@ const PANEL_JS = `
         sizeOutput.textContent = size + ' × ' + size;
         cameraInput.value = String(cameraScale);
         cameraOutput.textContent = cameraScale.toFixed(2) + ' ×';
-        window.MmdArTestShadowMapSettings = Object.freeze({ size, previewEnabled, cameraScale });
+        jointFitInput.checked = jointFit;
+        window.MmdArTestShadowMapSettings = Object.freeze({ size, previewEnabled, cameraScale, jointFit });
         if (!persist) return;
-        try { localStorage.setItem(key, JSON.stringify({ size, previewEnabled, cameraScale })); } catch (error) { /* 存储受限仍可当场调整。 */ }
+        try { localStorage.setItem(key, JSON.stringify({ size, previewEnabled, cameraScale, jointFit })); } catch (error) { /* 存储受限仍可当场调整。 */ }
       };
       let saved = {};
       try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch (error) { /* 坏存储回默认。 */ }
       apply(saved, false);
-      const applyInputs = () => apply({ size: input.value, previewEnabled: toggle.checked, cameraScale: cameraInput.value }, true);
+      const applyInputs = () => apply({ size: input.value, previewEnabled: toggle.checked,
+        cameraScale: cameraInput.value, jointFit: jointFitInput.checked }, true);
       input.addEventListener('change', applyInputs);
       toggle.addEventListener('change', applyInputs);
       cameraInput.addEventListener('input', applyInputs);
       cameraInput.addEventListener('change', applyInputs);
+      jointFitInput.addEventListener('change', applyInputs);
       window.addEventListener('mmd-ar-shadow-map-limit', () => apply(window.MmdArTestShadowMapSettings, true));
       document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => apply({}, true));
     })();
@@ -81,7 +92,8 @@ function addShadowMapControls($, lightingPanel) {
       + '>' + size + ' × ' + size + '</option>').join('') + '</select></label>'
     + '<label class="mind-basic-field"><span>阴影相机范围 <output id="mmdArShadowCameraScaleValue">1.00 ×</output></span>'
     + '<input id="mmdArShadowCameraScale" type="range" min="0.1" max="2" step="0.01" value="1" aria-label="阴影相机范围倍率"></label>'
-    + '<p class="mind-basic-note">默认1倍，自动范围基准已缩至原来的0.5；范围越小角色在贴图中越大，过小会裁掉部分阴影。阴影相机跟随角色移动并对齐像素网格。</p>'
+    + '<label class="display-mmd-lighting-field"><input id="mmdArShadowJointFit" type="checkbox"><span>联动主相机计算</span></label>'
+    + '<p class="mind-basic-note">联动主相机计算默认关闭；开启后按主相机可见区域拟合并应用0.5系数，关闭时按角色包围盒拟合。范围过小会裁切部分阴影，均可用上方倍率调整。</p>'
     + '<label class="display-mmd-lighting-field"><input id="mmdArShadowMapPreviewEnabled" type="checkbox"><span>显示 ShadowMap</span></label>'
     + '<div id="mmdArShadowMapPreviewRows" hidden>' + rows
     + '<p class="mind-basic-note">整张阴影贴图，不裁剪角色；深色为角色，白色为空白。覆盖比例按256×256采样估算，列表可见时每秒刷新4次。</p></div>'
@@ -210,7 +222,7 @@ ${disposeAnchor}`);
   return `import { createShadowCameraAlignment, createShadowMapPreview, releaseShadowTargets } from ${JSON.stringify(moduleUrl)};\n` + source;
 }
 
-module.exports = { normalizeShadowMapSize, normalizeShadowCameraScale, PANEL_JS, addShadowMapControls, addShadowMapRuntime };
+module.exports = { normalizeShadowMapSize, normalizeShadowCameraScale, normalizeJointFitEnabled, PANEL_JS, addShadowMapControls, addShadowMapRuntime };
 
 // 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
 module.exports = require('./web-production-shared').reuseAdapters(module.exports);

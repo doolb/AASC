@@ -316,6 +316,36 @@ renderFrame:
 构建 := npm run build:web:mmd-ar-test 在本地GLB缺失时通过受校验公网回退成功生成web-dist；浏览器测试因当前Windows环境缺少配置的/usr/bin/chromium跳过
 ```
 
+## 2026-10-08 可选主相机联动阴影拟合开关
+
+```text
+ShadowMapSettings := { size, previewEnabled, cameraScale, jointFit }
+jointFit默认 := false；旧存储缺少jointFit时按false；灯光复位也回false
+
+面板 := 增加“联动主相机计算”复选框
+apply(settings, persist):
+  jointFit := settings.jointFit === true
+  window.MmdArTestShadowMapSettings := { size, previewEnabled, cameraScale, jointFit }
+  if persist: 将四字段写入既有aasc.mmdArTest.shadowMap.v1
+
+syncJointShadowFitMode():
+  enabled := window.MmdArTestShadowMapSettings?.jointFit === true
+  if enabled:
+    if 上次状态为关闭: jointFitter.forceUpdate()
+    else: jointFitter.update() // 内部签名缓存；相机静止不重算模型范围
+  else:
+    if 上次状态为开启: fitShadowCamera(currentRotationPivot || currentMesh) // 立即切回旧角色包围盒拟合
+    不调用jointFitter.update() // 不跟随主相机重新拟合
+  保存本次enabled状态
+
+renderFrame := followTestShadowRoot() 后调用syncJointShadowFitMode()
+联动开启时使用当前联合拟合及0.5视野系数；关闭时仍响应模型替换/缩放/角色平移，cameraScale照常作用
+兼容 := 默认关闭；缺失字段的旧本地偏好安全归一为关闭；size/预览/倍率字段保持不变
+范围 := 仅独立MMD-AR测试网页；不修改正式display运行时或APK行为
+测试 := UI默认/持久化/复位、开关即时切换两种拟合器、关闭时主相机变化不触发联合拟合、开关两态的角色跟随与cameraScale生效
+验证 := tests/mmd-ar-shadow-map-size.test.js 15/15通过；与公网GLB回退组合22/22通过；npm run build:web:mmd-ar-test成功，生成HTML/运行时均含开关；自动浏览器测试因缺少Chromium未执行
+```
+
 ## 2026-10-08 web-dist西施GLB公网回退
 
 ```text

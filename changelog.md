@@ -22,6 +22,12 @@
 - ✅ [2026-10-08] 独立测试页把主相机可见角色/接收面区域和各方向光的ShadowCamera联合拟合；相机缩放/转动时按视锥与模型/接收面交集更新光空间正交范围，并纳入角色投影到地面的可见影子足迹。按用户确认，正常联合拟合的视野高度在目标占比换算后再乘0.5，默认cameraScale仍为1；保留手动倍率、贴图分辨率独立和像素网格对齐。正式 `/display` VRM/PMX源码未改。
   - 修改 `web-production-test-extras.js`、`web-shadow-map-preview.mjs` 与阴影测试；定向单测12/12通过，包含0.5基准占比断言；`npm run build:web:mmd-ar-test` 在本地GLB缺失时经公网回退成功生成网页。用户检查追加0.5后的效果并确认正常；当前Windows环境自动浏览器测试因缺少 `/usr/bin/chromium` 跳过。未改Offline发布状态。
 
+### MMD-AR 可选主相机联动阴影拟合开关（已完成）
+
+- ✅ [2026-10-08] 主光设置增加“联动主相机计算”复选框，默认关闭；开启使用主相机联合拟合（含已确认的0.5系数），关闭恢复旧角色包围盒拟合。
+  - `web-shadow-map-size.js` 将jointFit与阴影尺寸/预览/倍率一起存入既有本地键，旧数据缺字段和灯光复位均为关闭；`web-production-test-extras.js` 通过 `createJointShadowFitMode` 即时切换并暴露运行态诊断，`web-shadow-map-preview.mjs` 提供模式控制器。
+  - 阴影回归15/15通过，与公网GLB回退组合22/22通过；`npm run build:web:mmd-ar-test`成功，生成HTML和运行时代码均含开关。自动浏览器测试因当前环境缺少配置的 `/usr/bin/chromium` 未执行；未改正式显示端、APK或Offline发布状态。
+
 ### MMD-AR web-dist 西施GLB公网回退（已完成）
 
 - ✅ [2026-10-08] 独立网页构建优先使用本地有效GLB；缺失或结构无效时，从公网资源清单下载西施版本化GLB并校验完整SHA-256，生成资源仍按内容哈希命名。只对Web构建启用；APK构建仍仅用本地资源，不覆盖模型源文件。

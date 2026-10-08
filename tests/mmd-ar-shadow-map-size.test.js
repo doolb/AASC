@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const test = require('node:test');
 const cheerio = require('cheerio');
-const { normalizeShadowMapSize, normalizeShadowCameraScale, addShadowMapControls, addShadowMapRuntime, PANEL_JS } = require('../3rd/mmd-ar-test/web-shadow-map-size');
+const { normalizeShadowMapSize, normalizeShadowCameraScale, normalizeJointFitEnabled, addShadowMapControls, addShadowMapRuntime, PANEL_JS } = require('../3rd/mmd-ar-test/web-shadow-map-size');
 
 test('阴影尺寸限定四档，拒绝隐式空值，按真实设备上限降档', () => {
     for (const size of [512, 1024, 2048, 4096]) assert.equal(normalizeShadowMapSize(size), size);
@@ -25,12 +25,17 @@ test('阴影相机倍率0.1–2按0.01归一，旧偏好和非法值回1', () =>
     assert.equal(normalizeShadowCameraScale(1.236), 1.24);
 });
 
+test('主相机联动开关缺省及非法存储值均关闭', () => {
+    for (const value of [undefined, null, '', 'true', 1, false, {}, []]) assert.equal(normalizeJointFitEnabled(value), false);
+    assert.equal(normalizeJointFitEnabled(true), true);
+});
+
 test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不累乘、不改变近远裁面', async () => {
     const THREE = await import('three');
     const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
     const injected = addShadowMapRuntime(source, './preview');
     assert.match(injected, /createJointShadowCameraFitter/u);
-    assert.match(injected, /jointShadowCameraFitter\.update\(\)/u);
+    assert.match(injected, /syncJointShadowFitMode\(\)/u);
     const start = injected.indexOf('    const fitShadowCamera = (root) => {');
     const end = injected.indexOf('    const applyShadowMode = () => {', start);
     const lights = [new THREE.DirectionalLight(), new THREE.DirectionalLight()];
@@ -42,6 +47,7 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
         getModelBounds: () => bounds, applyKeyLightPosition: () => {},
         createJointShadowCameraFitter: () => ({ update: () => false, forceUpdate: () => false, getState: () => ({}) }),
         keyLight: lights[0], fillLight: lights[1], shadowPlane: new THREE.Object3D(),
+        createJointShadowFitMode: () => () => false,
         window: { MmdArTestShadowMapSettings: settings }, captureTestShadowRoot: () => {}
     });
     fit(null);
@@ -113,6 +119,31 @@ test('主相机视锥与阴影接收面共同拟合，拉近收紧、拉远放�
     assert.equal(fitter.update(), true);
     assert.ok(fitter.getState().maps.every(map => map.fallback), '主视锥与模型/接收面无交集时回退原范围');
 });
+
+test('主相机联动开关即时切换联合/旧式拟合且关闭时跳过联动检查', async () => {
+    const { createJointShadowFitMode } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
+    const calls = { update: 0, forceUpdate: 0, legacy: 0 };
+    let enabled = false;
+    const sync = createJointShadowFitMode({ getEnabled: () => enabled,
+        fitter: { update: () => { calls.update += 1; }, forceUpdate: () => { calls.forceUpdate += 1; } },
+        fitLegacy: () => { calls.legacy += 1; } });
+    assert.equal(sync(), false);
+    assert.deepEqual(calls, { update: 0, forceUpdate: 0, legacy: 0 }, '默认关闭不调用联合拟合器');
+    enabled = true;
+    assert.equal(sync(), true);
+    assert.deepEqual(calls, { update: 0, forceUpdate: 1, legacy: 0 }, '开启时立即联合拟合');
+    sync();
+    assert.deepEqual(calls, { update: 1, forceUpdate: 1, legacy: 0 }, '开启后使用签名缓存更新');
+    enabled = false;
+    sync();
+    assert.deepEqual(calls, { update: 1, forceUpdate: 1, legacy: 1 }, '关闭时立即切回旧式包围盒范围');
+    sync();
+    assert.deepEqual(calls, { update: 1, forceUpdate: 1, legacy: 1 }, '关闭时跳过联合拟合更新');
+    enabled = true;
+    sync();
+    assert.deepEqual(calls, { update: 1, forceUpdate: 2, legacy: 1 }, '再次开启时强制重拟合');
+});
+
 test('两灯按真实贴图对齐整像素，宽高/光向/NF保持且连续小位移不累积抵消跟随', async () => {
     const THREE = await import('three');
     const { createShadowCameraAlignment } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
@@ -198,6 +229,7 @@ test('真实注入跟随拖动/定位/复位及缩放，纯平移和静止不重
         currentRotationPivot: root, currentMesh: null, keyLight: lights[0], fillLight: lights[1], shadowPlane: plane,
         window: { MmdArTestShadowMapSettings: { cameraScale: 1 } },
         createJointShadowCameraFitter: () => ({ update: () => false, forceUpdate: () => false, getState: () => ({}) }),
+        createJointShadowFitMode: () => () => false,
         getModelBounds: node => { boundsReads += 1; node.updateWorldMatrix(true, true); return new THREE.Box3().setFromObject(node); },
         applyKeyLightPosition: bounds => {
             const center = bounds.getCenter(new THREE.Vector3());
@@ -336,6 +368,44 @@ test('GPU预览异常仍恢复原目标/视口/阴影/清屏状态，关闭后�
     preview.dispose(); assert.equal(preview.getState().allocated, false);
 });
 
+test('主相机联动设置旧存储兼容、默认关闭、持久化和复位', () => {
+    const makeElement = () => ({ value: '', checked: false, hidden: false, textContent: '',
+        options: [512, 1024, 2048, 4096].map(value => ({ value: String(value), disabled: false })),
+        listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; },
+        querySelector: () => null, append(option) { this.options.push(option); } });
+    const ids = ['mmdArShadowMapSize', 'mmdArShadowMapPreviewEnabled', 'mmdArShadowMapPreviewRows',
+        'mmdArShadowMapSizeValue', 'mmdArShadowCameraScale', 'mmdArShadowCameraScaleValue',
+        'mmdArShadowJointFit', 'displayMmdLightingReset'];
+    const elements = new Map(ids.map(id => [id, makeElement()]));
+    const savedValues = { 'aasc.mmdArTest.shadowMap.v1': JSON.stringify({ size: 2048, previewEnabled: true, cameraScale: 0.5 }) };
+    const window = { MmdArTestShadowMapLimit: 4096, listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; } };
+    const document = { getElementById: id => elements.get(id) };
+    const localStorage = { getItem: key => savedValues[key] || null, setItem: (key, value) => { savedValues[key] = value; } };
+    vm.runInNewContext(PANEL_JS, { window, document, localStorage });
+    const checkbox = elements.get('mmdArShadowJointFit');
+    assert.equal(checkbox.checked, false, '旧存储缺少jointFit时默认关闭');
+    assert.equal(window.MmdArTestShadowMapSettings.jointFit, false);
+    assert.equal(window.MmdArTestShadowMapSettings.size, 2048);
+    assert.equal(window.MmdArTestShadowMapSettings.previewEnabled, true);
+    assert.equal(window.MmdArTestShadowMapSettings.cameraScale, 0.5);
+    checkbox.checked = true; checkbox.listeners.change();
+    assert.equal(JSON.parse(savedValues['aasc.mmdArTest.shadowMap.v1']).jointFit, true);
+    const reloadedElements = new Map(ids.map(id => [id, makeElement()]));
+    const reloadedWindow = { MmdArShadowMapLimit: 4096, addEventListener() {} };
+    vm.runInNewContext(PANEL_JS, { window: reloadedWindow,
+        document: { getElementById: id => reloadedElements.get(id) }, localStorage });
+    assert.equal(reloadedElements.get('mmdArShadowJointFit').checked, true, '刷新后恢复已保存的开启状态');
+    savedValues['aasc.mmdArTest.shadowMap.v1'] = '{bad json';
+    const malformedElements = new Map(ids.map(id => [id, makeElement()]));
+    const malformedWindow = { MmdArShadowMapLimit: 4096, addEventListener() {} };
+    vm.runInNewContext(PANEL_JS, { window: malformedWindow,
+        document: { getElementById: id => malformedElements.get(id) }, localStorage });
+    assert.equal(malformedElements.get('mmdArShadowJointFit').checked, false, '坏存储回默认关闭');
+    elements.get('displayMmdLightingReset').listeners.click();
+    assert.equal(checkbox.checked, false, '灯光复位恢复关闭默认');
+    assert.equal(JSON.parse(savedValues['aasc.mmdArTest.shadowMap.v1']).jointFit, false);
+});
+
 test('面板生成四档和两张完整预览，注入唯一锚点/清理；锚点变化立即失败', () => {
     const $ = cheerio.load('<div id="panel"><div class="mmd-ar-panel-group"><button data-group-title="主光"></button><div class="mmd-ar-panel-group-body"></div></div></div>');
     addShadowMapControls($, $('#panel'));
@@ -346,7 +416,9 @@ test('面板生成四档和两张完整预览，注入唯一锚点/清理；锚�
     assert.equal($('#mmdArShadowCameraScale').attr('max'), '2');
     assert.equal($('#mmdArShadowCameraScale').attr('step'), '0.01');
     assert.equal($('#mmdArShadowCameraScale').attr('value'), '1');
-    assert.match($('#panel').text(), /自动范围基准已缩至原来的0.5/u);
+    assert.equal($('#mmdArShadowJointFit').attr('type'), 'checkbox');
+    assert.equal($('#mmdArShadowJointFit').attr('checked'), undefined, '联动复选框默认不勾选');
+    assert.match($('#panel').text(), /联动主相机计算默认关闭.*按角色包围盒拟合/u);
     assert.doesNotThrow(() => new vm.Script(PANEL_JS));
     const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
     const output = addShadowMapRuntime(source, './web-shadow-map-preview.mjs?v=test');
