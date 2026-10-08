@@ -29,6 +29,8 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
     const THREE = await import('three');
     const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
     const injected = addShadowMapRuntime(source, './preview');
+    assert.match(injected, /createJointShadowCameraFitter/u);
+    assert.match(injected, /jointShadowCameraFitter\.update\(\)/u);
     const start = injected.indexOf('    const fitShadowCamera = (root) => {');
     const end = injected.indexOf('    const applyShadowMode = () => {', start);
     const lights = [new THREE.DirectionalLight(), new THREE.DirectionalLight()];
@@ -36,8 +38,9 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
     const settings = { cameraScale: 1 };
     const bounds = new THREE.Box3(new THREE.Vector3(-0.5, 0, -0.2), new THREE.Vector3(0.5, 1.75, 0.2));
     const fit = vm.runInNewContext(normalizeShadowCameraScale.toString() + '\nlet shadowFitCount = 0;\n' + injected.slice(start, end) + '\nfitShadowCamera;', {
-        THREE, TARGET_MODEL_HEIGHT: 1.75, SHADOW_FRUSTUM_MARGIN: 1.18,
+        THREE, camera: new THREE.PerspectiveCamera(), TARGET_MODEL_HEIGHT: 1.75, SHADOW_FRUSTUM_MARGIN: 1.18,
         getModelBounds: () => bounds, applyKeyLightPosition: () => {},
+        createJointShadowCameraFitter: () => ({ update: () => false, forceUpdate: () => false, getState: () => ({}) }),
         keyLight: lights[0], fillLight: lights[1], shadowPlane: new THREE.Object3D(),
         window: { MmdArTestShadowMapSettings: settings }, captureTestShadowRoot: () => {}
     });
@@ -59,6 +62,55 @@ test('真实注入拟合等比更新两灯投影，往返/灯光重新拟合不�
     }
 });
 
+test('主相机视锥与阴影接收面共同拟合，拉近收紧、拉远放宽且静止不重算', async () => {
+    const THREE = await import('three');
+    const { createJointShadowCameraFitter } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    const cameraTarget = new THREE.Vector3(0, 1, 0);
+    const setCamera = distance => {
+        camera.position.set(0, 3, distance);
+        camera.lookAt(cameraTarget);
+        camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+    };
+    setCamera(8);
+    const root = new THREE.Group();
+    root.position.y = 1;
+    root.add(new THREE.Mesh(new THREE.BoxGeometry(4, 2, 1)));
+    const receiver = new THREE.Mesh(new THREE.PlaneGeometry(8, 8));
+    receiver.rotation.x = -Math.PI / 2; receiver.position.y = -0.001;
+    const lights = [new THREE.DirectionalLight(), new THREE.DirectionalLight()];
+    lights[0].position.set(3, 6, 4); lights[0].target.position.copy(cameraTarget);
+    lights[1].position.set(-4, 5, -2); lights[1].target.position.copy(cameraTarget);
+    for (const light of lights) { light.updateWorldMatrix(true, false); light.target.updateWorldMatrix(true, false); }
+    let cameraScale = 1;
+    const fitter = createJointShadowCameraFitter({ THREE, camera, lights, getRoot: () => root,
+        getModelBounds: model => { model.updateWorldMatrix(true, true); return new THREE.Box3().setFromObject(model); },
+        receiver, getCameraScale: () => cameraScale, targetModelHeight: 1.75 });
+    assert.equal(fitter.update(), true);
+    const wide = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
+    const wideState = fitter.getState();
+    assert.ok(wideState.maps.every(map => map.points > 0 && !map.fallback));
+    cameraScale = 0.5;
+    assert.equal(fitter.update(), true);
+    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - wide[index] * 0.5) < 1e-10));
+    cameraScale = 1;
+    assert.equal(fitter.update(), true);
+    assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - wide[index]) < 1e-10));
+    assert.equal(fitter.update(), false, '相机/模型静止时不重复拟合');
+
+    setCamera(4);
+    assert.equal(fitter.update(), true);
+    const close = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
+    assert.ok(close.every((width, index) => width < wide[index]), `拉近应收紧阴影范围：${close} < ${wide}`);
+    setCamera(10);
+    assert.equal(fitter.update(), true);
+    const far = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
+    assert.ok(far.every((width, index) => width > close[index]), `拉远应放宽阴影范围：${far} > ${close}`);
+
+    camera.position.set(20, 4, 0); camera.lookAt(20, 4, -1); camera.updateMatrixWorld(true);
+    assert.equal(fitter.update(), true);
+    assert.ok(fitter.getState().maps.every(map => map.fallback), '主视锥与模型/接收面无交集时回退原范围');
+});
 test('两灯按真实贴图对齐整像素，宽高/光向/NF保持且连续小位移不累积抵消跟随', async () => {
     const THREE = await import('three');
     const { createShadowCameraAlignment } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
@@ -109,6 +161,25 @@ test('两灯按真实贴图对齐整像素，宽高/光向/NF保持且连续小�
     }
 });
 
+test('阴影像素对齐保留主相机拟合出的非对称中心', async () => {
+    const THREE = await import('three');
+    const { createShadowCameraAlignment } = await import('../3rd/mmd-ar-test/web-shadow-map-preview.mjs');
+    const light = new THREE.DirectionalLight();
+    light.position.set(3, 5, 2); light.target.position.set(0.2, 0.8, -0.1);
+    const camera = light.shadow.camera;
+    camera.left = -1.1; camera.right = 2.9; camera.bottom = -0.6; camera.top = 1.4;
+    camera.near = 0.1; camera.far = 20;
+    light.shadow.mapSize.set(1024, 1024); light.shadow.map = { width: 1024, height: 1024 };
+    const align = createShadowCameraAlignment(THREE);
+    const initial = { centerX: (camera.left + camera.right) * 0.5,
+        centerY: (camera.bottom + camera.top) * 0.5, width: camera.right - camera.left, height: camera.top - camera.bottom };
+    assert.equal(align(light), true);
+    assert.ok(Math.abs(camera.right - camera.left - initial.width) < 1e-10);
+    assert.ok(Math.abs(camera.top - camera.bottom - initial.height) < 1e-10);
+    assert.ok(Math.abs((camera.left + camera.right) * 0.5 - initial.centerX) <= initial.width / 1024 / 2 + 1e-10);
+    assert.ok(Math.abs((camera.bottom + camera.top) * 0.5 - initial.centerY) <= initial.height / 1024 / 2 + 1e-10);
+});
+
 test('真实注入跟随拖动/定位/复位及缩放，纯平移和静止不重算模型包围范围', async () => {
     const THREE = await import('three');
     const source = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-pmx-runtime.js', 'utf8');
@@ -121,9 +192,10 @@ test('真实注入跟随拖动/定位/复位及缩放，纯平移和静止不重
     const lights = [new THREE.DirectionalLight(), new THREE.DirectionalLight()];
     const plane = new THREE.Object3D();
     let boundsReads = 0;
-    const context = vm.createContext({ THREE, TARGET_MODEL_HEIGHT: 1.75, SHADOW_FRUSTUM_MARGIN: 1.18,
+    const context = vm.createContext({ THREE, camera: new THREE.PerspectiveCamera(), TARGET_MODEL_HEIGHT: 1.75, SHADOW_FRUSTUM_MARGIN: 1.18,
         currentRotationPivot: root, currentMesh: null, keyLight: lights[0], fillLight: lights[1], shadowPlane: plane,
         window: { MmdArTestShadowMapSettings: { cameraScale: 1 } },
+        createJointShadowCameraFitter: () => ({ update: () => false, forceUpdate: () => false, getState: () => ({}) }),
         getModelBounds: node => { boundsReads += 1; node.updateWorldMatrix(true, true); return new THREE.Box3().setFromObject(node); },
         applyKeyLightPosition: bounds => {
             const center = bounds.getCenter(new THREE.Vector3());

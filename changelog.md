@@ -17,6 +17,11 @@
   - ✅ [2026-10-08] 修复线上点击 Blender 工程报 `mountBlenderWorkbench is not a function`：Vite 未保留动态导入入口的导出签名。构建设置 `preserveEntrySignatures: exports-only`，并增加产物导出检查；本地 Node 动态导入确认导出为函数。重新部署首页、两个入口脚本、工作区入口及两个分块共 6 个文件，SHA-256 全部匹配；当前首页 SHA-256 `123c31429dd0e3e748a3a04729c9414a75f424619b218d97dafac8f8a32e6ef4`，新模块和分块均 HTTP 200。真实浏览器的目录授权、`.blend` 打开、Cycles 渲染和保存往返仍待验收。
 
 
+### MMD-AR 主相机视野与光源阴影相机联合拟合（等待网页构建验收）
+
+- 🔄 [2026-10-08] 独立测试页把主相机可见角色/接收面区域和各方向光的ShadowCamera联合拟合；相机缩放/转动时按视锥与模型/接收面交集更新光空间正交范围，加入角色投影到地面的可见影子足迹；保留手动cameraScale、贴图分辨率独立和像素网格对齐。正式 `/display` VRM/PMX源码未改。
+  - 修改 `web-production-test-extras.js`、`web-shadow-map-preview.mjs` 与阴影测试；定向单测12/12通过。网页构建因缺少本地未提交 `3rd/mmd-ar-test/output/xishi/xishi.glb` 失败，浏览器测试因无 `web-dist/index.html` 跳过；恢复资源后待重建/验收。未改Offline发布状态。
+
 ### 任务系统
 
 - ✅ [2026-10-08] 修复服务器重启恢复运行中服务时重置实例创建时间戳的问题，避免无意义地改写 `results/index.json`。

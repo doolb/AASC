@@ -278,6 +278,44 @@ Three渲染队列 -> opaque先绘，transparent后绘；跨队列renderOrder不�
 手机动作/换模型后覆盖与裁切观感 := 待现场验收
 ```
 
+## 2026-10-08 主相机视野与光源阴影相机联合拟合
+
+```text
+状态 := cachedCasterBounds, cachedReceiverBounds, lastCamera/light/model signature
+触发 := 主相机投影/位姿变化、模型根替换/变换、接收面变换、光线方向或cameraScale变化
+更新 := signature变化后于当前渲染帧拟合；同帧内最多一次
+
+fitVisibleShadow(light):
+  update 主相机、模型根、接收面与光源矩阵
+  visibleCasters := 主相机视锥 ∩ cachedCasterBounds
+  visibleReceivers := 主相机视锥 ∩ cachedReceiverBounds
+  casterShadowFootprint := 将角色包围盒沿light到target方向投到接收平面
+       -> 与主相机视锥及可见接收面边界裁剪
+  fitPoints := visibleCasters ∪ visibleReceivers ∪ casterShadowFootprint
+  if fitPoints 为空、非有限或退化:
+    回退原角色包围盒半幅(radius*1.18*0.5*cameraScale)
+  else:
+    lightPoints := fitPoints变换到当前shadowCamera.matrixWorldInverse
+    x/y投影范围 := lightPoints包围矩形；结合ShadowMap实际宽高比
+    viewHeight := max(projectedHeight, projectedWidth/aspect, 0.02) / 0.78 * cameraScale
+    viewWidth := viewHeight * aspect；以投影范围中心设置可非对称正交边界
+    near/far := 角色与接收面光空间深度范围 + max(0.1, radius*0.25)余量
+    updateProjectionMatrix；标记shadow.needsUpdate
+
+renderFrame:
+  跟随角色移动 -> jointFitter.update()检查签名并按需更新
+  依次执行现有light-space texel对齐与ShadowMap渲染
+  对齐时还原自身上次像素偏移；保留拟合中心/宽高后重算本帧偏移，防止累计漂移
+
+规则 := 主/补光分别按自身光线方向拟合；cameraScale仍由用户设置，不被自动倍率覆盖
+规则 := ShadowMap分辨率仍由现有尺寸设置独立管理；拟合失败不得留下空/NaN裁面
+性能 := 角色AABB只在根对象替换时读取；视锥交集使用有限凸体边/角计算，静止签名不变则不重拟合
+实现 := web-shadow-map-preview.mjs提供交集/拟合；web-production-test-extras.js只向独立测试副本注入
+范围 := PMX/静态GLB；正式display VRM/PMX源码不改
+验证 := tests/mmd-ar-shadow-map-size.test.js 12/12通过
+构建限制 := npm run build:web:mmd-ar-test需要未提交的output/xishi/xishi.glb；当前缺失，浏览器测试因web-dist/index.html缺失跳过
+```
+
 ## 2026-10-01 图形匹配球大小且不显示下一节（已完成）
 
 ```text

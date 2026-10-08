@@ -2,7 +2,7 @@
 
 // 正式核心复用后，只为独立测试包追加顶点后端及阴影诊断。
 const once = (source, anchor, replacement) => {
-    if (source.split(anchor).length !== 2) throw new Error(`测试扩展缺少唯一锚点：${anchor.slice(0, 90)}`);
+    if (source.split(anchor).length !== 2) throw new Error(`测试扩展锚点缺失或重复：${anchor.slice(0, 90)}`);
     return source.replace(anchor, replacement);
 };
 
@@ -57,6 +57,7 @@ function addShadowDiagnostics(source, moduleUrl) {
     const shadowMapDiagnostic = () => ({
         size: keyLight.shadow.mapSize.x, limit: shadowMapLimit,
         cameraScale: normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale),
+        jointFit: jointShadowCameraFitter.getState(),
         follow: { position: shadowFollowRoot ? shadowFollowPosition.toArray() : null,
             scale: shadowFollowRoot ? shadowFollowScale.toArray() : null,
             fitCount: shadowFitCount, translationCount: shadowTranslationCount, planePosition: shadowPlane.position.toArray() },
@@ -73,6 +74,16 @@ function addShadowDiagnostics(source, moduleUrl) {
     window.MmdArTestShadowMapDiagnostic = shadowMapDiagnostic;
 `;
     let output = once(source, '    // 初次同步发生', diagnostic + '    // 初次同步发生');
+    output = once(output, '    const applyShadowMode = () => {', `    const jointShadowCameraFitter = createJointShadowCameraFitter({
+        THREE, camera, lights: [keyLight, fillLight],
+        getRoot: () => currentRotationPivot || currentMesh,
+        getModelBounds, receiver: shadowPlane,
+        getCameraScale: () => normalizeShadowCameraScale(window.MmdArTestShadowMapSettings?.cameraScale),
+        targetModelHeight: TARGET_MODEL_HEIGHT
+    });
+    const applyShadowMode = () => {`);
+    output = once(output, '            followTestShadowRoot();',
+        '            followTestShadowRoot();\n            jointShadowCameraFitter.update();');
     output = once(output, '        syncTestShadowMapSize();',
         '        syncTestShadowMapSize();\n        shadowMapPreview.setEnabled(window.MmdArTestShadowMapSettings?.previewEnabled === true);');
     output = once(output, '        ambientOcclusion.dispose();', `        shadowMapPreview.dispose();
@@ -80,7 +91,7 @@ function addShadowDiagnostics(source, moduleUrl) {
         ambientOcclusion.dispose();`);
     output = once(output, '            if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;\n        }',
         '            if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;\n        }\n        shadowMapPreview.update(now);');
-    return `import { createShadowMapPreview } from '${moduleUrl}';\n${output}`;
+    return `import { createShadowMapPreview, createJointShadowCameraFitter } from '${moduleUrl}';\n${output}`;
 }
 
 module.exports = { addClothSupport, addShadowDiagnostics };
