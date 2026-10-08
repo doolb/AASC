@@ -8,6 +8,40 @@ export function createEditorBridge(context) {
             context.editorCameraControl.view={position:[...view.position],quaternion:[...view.quaternion]};
         },
         resetCameraView(){context.editorCameraControl.view=null;},
+        attachExternalCharacter(root){
+            if(!root?.isObject3D)throw new Error('Blender角色场景无效');
+            const savedCamera=this.cameraView();
+            const savedCameraControl=context.editorCameraControl.view?{
+                position:[...context.editorCameraControl.view.position],quaternion:[...context.editorCameraControl.view.quaternion]
+            }:null;
+            const hidden=new Map();let restored=false;
+            const hideCurrent=()=>{
+                const current=context.currentPivot;
+                if(!current||current===root)return;
+                if(!hidden.has(current))hidden.set(current,current.visible);
+                current.visible=false;
+            };
+            const fit=()=>{
+                context.editorCameraControl.view=null;
+                context.fitCameraToModel?.(root);
+                context.fitShadowCamera?.(root);
+                context.editorCameraControl.view=this.cameraView();
+            };
+            hideCurrent();scene.add(root);context.applyShadowFlags?.(root);fit();
+            return {
+                refresh:()=>{if(restored)return false;hideCurrent();if(root.parent!==scene)scene.add(root);return true;},
+                restore:()=>{
+                    if(restored)return;restored=true;root.removeFromParent();
+                    for(const [model,visible]of hidden)if(model.parent)model.visible=visible;
+                    const current=context.currentPivot||context.mesh;
+                    context.editorCameraControl.view=null;
+                    context.fitCameraToModel?.(current);
+                    context.fitShadowCamera?.(current);
+                    camera.position.fromArray(savedCamera.position);camera.quaternion.fromArray(savedCamera.quaternion);camera.updateMatrixWorld(true);
+                    context.editorCameraControl.view=savedCameraControl;
+                }
+            };
+        },
         face(direction){const box=new THREE.Box3().setFromObject(context.mesh),center=box.getCenter(new THREE.Vector3());const distance=Math.max(box.getSize(new THREE.Vector3()).length(),1)*1.5;
             camera.position.copy(center).add(new THREE.Vector3(...direction).multiplyScalar(distance));camera.lookAt(center);this.setCameraView(this.cameraView());},
         rest(){const mesh=context.mesh;if(!mesh?.isSkinnedMesh)throw new Error('请选择PMX角色');mesh.pose();mesh.updateMatrixWorld(true);},

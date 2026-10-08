@@ -13,6 +13,7 @@ const style=document.createElement('style');style.textContent=`
 const host=document.createElement('section');host.id='mmdEditor';host.setAttribute('aria-label','模型工作区');host.innerHTML=`
 <nav><button data-mode="edit">编辑</button><button data-mode="preview">预览</button><button data-mode="render">渲染</button><button id="edBlender" type="button" data-blender-only>Blender工程</button><button id="edCollapse" aria-expanded="false">展开</button></nav>
 <div class="ed-panel" id="edPanel" hidden>
+<div id="edPmxWorkspace">
 <div><button id="edSave">保存工程</button><button id="edOpen">打开工程</button><input id="edFile" type="file" accept=".zip" hidden></div>
 <div><button data-face="0,0,1">正面</button><button data-face="1,0,0">侧面</button><button data-face="0,0,-1">背面</button><button id="edViewReset">自由视角</button></div>
 <section id="edEditing" hidden><div><button id="edUndo">撤销</button><button id="edRedo">重做</button></div>
@@ -22,9 +23,11 @@ const host=document.createElement('section');host.id='mmdEditor';host.setAttribu
 <div><button data-tool="move">移动</button><button data-tool="rotate">旋转</button><button data-tool="scale">尺寸</button></div><small>拖动彩色轴；位置单位为模型单位，角度为度。</small><label><input id="edOnly" type="checkbox" checked>只显示选中的碰撞体／关节</label><div id="edProperties"></div></section>
 <section id="edPreview"><button id="edPlay">播放／暂停</button><button id="edReset">重置物理</button><label><input id="edPhysics" type="checkbox">启用物理</label><input id="edTime" type="range" min="0" max="1" step="0.033333" value="0" aria-label="动作进度"><output id="edTimeText">无动作</output><small>拖动进度会关闭物理；可重新开启检查。</small></section>
 <section id="edRender" hidden><label>宽 <input id="edWidth" type="number" min="64" max="4096" value="1920"></label><label>高 <input id="edHeight" type="number" min="64" max="4096" value="1080"></label><label><input id="edTransparent" type="checkbox" checked>透明背景</label><button id="edPng">导出 PNG</button><small>输出当前姿态和场景光照，不含操作面板。</small></section>
-</div><div id="edStatus" role="status" hidden></div>`;document.body.append(host);
+</div>
+<div id="edBlenderSession" hidden></div>
+<div id="edStatus" role="status" hidden></div>`;document.body.append(host);
 const $=id=>host.querySelector('#'+id),api=()=>window.DisplayMmd;
-let mode='preview',kind='rigidBodies',selection=[],history=null,key='',bridge=null,view=null,busy=false,previousPhysics=true,previousPlay=true,dragStart=null,dragValue=null,project=null,dirty=false;
+let mode='preview',kind='rigidBodies',selection=[],history=null,key='',bridge=null,view=null,busy=false,previousPhysics=true,previousPlay=true,dragStart=null,dragValue=null,project=null,dirty=false,blenderSession=null,blenderPrevious=null;
 const status=message=>{$('edStatus').hidden=!message;$('edStatus').textContent=message;};
 async function run(task){if(busy)return;busy=true;host.setAttribute('aria-busy','true');try{await task();}catch(error){status(error.message||String(error));}finally{busy=false;host.removeAttribute('aria-busy');}}
 function snapshot(){const {mesh,profile}=bridge.read();return {mesh,profile,data:{rigidBodies:clone(mesh.geometry.userData.MMD.rigidBodies),constraints:clone(mesh.geometry.userData.MMD.constraints)}};}
@@ -49,7 +52,7 @@ for(const index of selection){const item=doc[kind][index];if(path==='boneIndex')
 if(path==='shapeType'){item.height=Math.max(.1,item.height);item.depth=Math.max(.1,item.depth);}}
 commit(doc);status('修改已记录；切到预览检查物理。');}));
 function transform(axis,amount,tool,finish){try{if(finish){if(dragValue)commit(dragValue);dragStart=dragValue=null;return;}dragStart ||= history.get();const next=clone(dragStart);for(const i of selection){const item=next[kind][i];if(tool==='scale'&&kind==='rigidBodies'){const name=item.shapeType===1?['width','height','depth'][axis]:item.shapeType===2&&axis===1?'height':'width';item[name]=Math.max(.001,item[name]*Math.max(.05,1+amount*.2));}else item[tool==='rotate'?'rotation':'position'][axis]+=amount;}dragValue=next;view.update(bridge.read().mesh,next,kind,selection);}catch(error){status(error.message);}}
-async function workspace(next){if(!api()?.getState().modelReady)throw new Error('模型尚未加载');if(next==='edit')api().getEditorBridge().read();if(next===mode&&bridge){$('edPanel').hidden=false;$('edCollapse').textContent='收起';return;}const was=mode;view?.setVisible(false);
+async function workspace(next){if(blenderSession){mode=next;blenderSession.setMode(next);$('edPanel').hidden=false;$('edCollapse').textContent='收起';$('edCollapse').setAttribute('aria-expanded','true');for(const b of host.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));return;}if(!api()?.getState().modelReady)throw new Error('模型尚未加载');if(next==='edit')api().getEditorBridge().read();if(next===mode&&bridge){$('edPanel').hidden=false;$('edCollapse').textContent='收起';return;}const was=mode;view?.setVisible(false);
     if(next==='edit'){previousPhysics=api().getState().physicsEnabled;previousPlay=api().getState().motionPlaybackEnabled;api().setMotionPlaybackEnabled(false);if(!await api().setPhysicsEnabled(false))throw new Error('暂停物理失败');bridge=api().getEditorBridge();bridge.rest();api().setPointerEnabled(false);}
     else if(was==='edit'){if(previousPhysics){if(!await api().setPhysicsEnabled(true))throw new Error('重建物理失败');}else if(!await api().loadModel(api().getModelProfile()))throw new Error('应用修改失败');api().setPointerEnabled(true);api().setMotionPlaybackEnabled(previousPlay);}
     mode=next;sync();$('edPanel').hidden=false;$('edCollapse').textContent='收起';$('edCollapse').setAttribute('aria-expanded','true');$('edEditing').hidden=mode!=='edit';$('edPreview').hidden=mode==='edit';$('edRender').hidden=mode!=='render';$('edPhysics').checked=api().getState().physicsEnabled;for(const b of host.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));status(mode==='edit'?'绑定姿态编辑；修改切到预览后生效。':'');
@@ -63,8 +66,39 @@ if($('edBlender'))$('edBlender').onclick=()=>run(async()=>{
         if(!window.showDirectoryPicker)throw new Error('Blender工程需要支持目录读写的桌面Chromium浏览器。');
         const directory=await window.showDirectoryPicker({mode:'readwrite'});
         const module=await import('__BLENDER_WORKBENCH_URL__');
-        await module.mountBlenderWorkbench(directory,()=>{button.disabled=false;});
-    }catch(error){button.disabled=false;throw error;}
+        $('edPanel').hidden=false;$('edCollapse').textContent='收起';$('edCollapse').setAttribute('aria-expanded','true');
+        $('edPmxWorkspace').hidden=true;$('edBlenderSession').hidden=false;
+        const restoreMmd=async()=>{
+            if(!blenderPrevious)return;
+            const previous=blenderPrevious;blenderPrevious=null;
+            api()?.setPointerEnabled(previous.pointer);
+            if(previous.physics!==api()?.getState().physicsEnabled&&api()?.getState().modelReady)await api().setPhysicsEnabled(previous.physics);
+            api()?.setMotionPlaybackEnabled(previous.play===true);
+            mode=previous.uiMode;
+            $('edEditing').hidden=mode!=='edit';$('edPreview').hidden=mode==='edit';$('edRender').hidden=mode!=='render';
+            $('edPhysics').checked=api()?.getState().physicsEnabled===true;
+            view?.setVisible(mode==='edit');
+        };
+        const onClosed=async()=>{
+            blenderSession=null;$('edBlenderSession').replaceChildren();$('edBlenderSession').hidden=true;$('edPmxWorkspace').hidden=false;button.disabled=false;
+            await restoreMmd();
+            for(const b of host.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));
+        };
+        blenderSession=await module.mountBlenderWorkbench(directory,{
+            displayBridge:api()?.getEditorBridge?.(),container:$('edBlenderSession'),
+            onStart:async()=>{
+                const state=api()?.getState();if(!state?.modelReady)throw new Error('当前角色尚未加载');
+                blenderPrevious={physics:state.physicsEnabled,play:state.motionPlaybackEnabled,pointer:mode!=='edit',uiMode:mode};
+                view?.setVisible(false);api().setMotionPlaybackEnabled(false);
+                if(state.physicsEnabled&&!await api().setPhysicsEnabled(false))throw new Error('暂停当前角色物理失败');
+            },
+            onClosed,
+            onModeChange:next=>{mode=next;for(const b of host.querySelectorAll('[data-mode]'))b.setAttribute('aria-pressed',String(b.dataset.mode===mode));}
+        });
+    }catch(error){
+        if(!blenderSession){$('edBlenderSession').replaceChildren();$('edBlenderSession').hidden=true;$('edPmxWorkspace').hidden=false;}
+        button.disabled=false;throw error;
+    }
 });
 for(const button of host.querySelectorAll('[data-tool]'))button.onclick=()=>{view?.setMode(button.dataset.tool);};
 $('edCollapse').onclick=()=>{$('edPanel').hidden=!$('edPanel').hidden;$('edCollapse').textContent=$('edPanel').hidden?'展开':'收起';$('edCollapse').setAttribute('aria-expanded',String(!$('edPanel').hidden));if(!$('edPanel').hidden&&!history)run(async()=>sync());};
@@ -82,7 +116,7 @@ const settings=()=>({referenceHz:api().getEditorBridge().context.referenceHz,cam
 $('edSave').onclick=()=>run(async()=>{if(!history)sync();status('正在打包原始模型与贴图…');const blob=await saveProject(bridge.read().profile,history.get(),settings());download(blob,'mmd-ar-project.zip');dirty=false;status('工程包已生成，可通过“打开工程”恢复。');});
 $('edOpen').onclick=()=>$('edFile').click();$('edFile').onchange=()=>run(async()=>{const file=$('edFile').files[0];if(!file)return;status('正在打开工程…');const next=await openProject(file);try{api().setMotionPlaybackEnabled(false);if(!await api().loadModel(next.profile))throw new Error('工程模型加载失败');const old=project;project=next;old?.release();key='';history=null;mode='preview';sync();if(Number.isFinite(next.settings.referenceHz))api().setPhysicsStabilityReference(next.settings.referenceHz);if(next.settings.camera)api().getEditorBridge().setCameraView(next.settings.camera);if(next.settings.lighting)api().setLighting(next.settings.lighting);if(next.settings.wind)api().setWindSettings(next.settings.wind);if(next.settings.screenLighting)window.MmdArScreenLighting=Object.freeze({...next.settings.screenLighting});if(next.settings.solver)await api().setPhysicsSolver(next.settings.solver);await api().setPhysicsEnabled(next.settings.physics!==false);api().setMotionPlaybackEnabled(next.settings.play===true);await workspace('edit');dirty=false;status('工程已恢复，当前为绑定姿态编辑。');}catch(error){if(project!==next)next.release();throw error;}finally{$('edFile').value='';}});
 $('edPng').onclick=()=>run(async()=>{const playing=api().getState().motionPlaybackEnabled;api().setMotionPlaybackEnabled(false);view?.setVisible(false);try{const blob=await api().getEditorBridge().capture($('edWidth').value,$('edHeight').value,$('edTransparent').checked);download(blob,'mmd-ar-render.png');status('PNG已生成。');}finally{api().setMotionPlaybackEnabled(playing);view?.setVisible(mode==='edit');}});
-document.addEventListener('mmd-ar-character-loaded',()=>{if(history)setTimeout(()=>{try{sync();if(mode==='edit')bridge.rest();}catch(error){view?.dispose();view=null;bridge=null;history=null;key='';api()?.setPointerEnabled(true);status(error.message);}},0);});
+document.addEventListener('mmd-ar-character-loaded',()=>{blenderSession?.refreshCharacter();if(history&&!blenderSession)setTimeout(()=>{try{sync();if(mode==='edit')bridge.rest();}catch(error){view?.dispose();view=null;bridge=null;history=null;key='';api()?.setPointerEnabled(true);status(error.message);}},0);});
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 setInterval(()=>{if($('edPanel').hidden||mode==='edit'||!api())return;const p=api().getMotionProgress();if(p){$('edTime').max=p.durationSeconds;if(document.activeElement!==$('edTime'))$('edTime').value=p.timeSeconds;$('edTimeText').textContent=`${p.timeSeconds.toFixed(2)} / ${p.durationSeconds.toFixed(2)}秒`;}},250);
 
