@@ -29,10 +29,12 @@
 
 ## 风险
 
-WASM 初始化资源约 38 MB 压缩体积，Blender 本身的解码后内存约 150 MB，打开工程还会复制工程资源并占用模型内存。工程外部链接、未编入 Blender WASM 的插件、特殊渲染节点可能不可用。Apache 必须允许 `.htaccess` 的 Header/Rewrite 规则；无跨域隔离时多线程 Blender 不可启动。
+WASM 初始化资源约 38 MB 压缩体积，Blender 本身的解码后内存约 150 MB，打开工程还会复制工程资源并占用模型内存。工程外部链接、未编入 Blender WASM 的插件、特殊渲染节点可能不可用。Apache 需要在该站点路径返回 COOP `same-origin` 和 COEP `credentialless`，并正确提供 Brotli 编码；没有跨域隔离时多线程 Blender 不可启动。COEP 可能限制未提供 CORS/CORP 的跨域资源。
 
 ## 预计工作
 
-独立构建入口、静态文件适配、工作区 UI、权限/保存生命周期和完整 `web-dist` 构建已完成。`npm run build:web:mmd-ar-test` 成功；未运行自动化测试或真实浏览器工程往返。
+独立构建入口、静态文件适配、工作区 UI、权限/保存生命周期、完整 `web-dist` 构建及外网部署已完成。`npm run build:web:mmd-ar-test` 成功；未运行自动化测试或真实浏览器工程往返。
 
-首次尝试发布至 `https://c.aasc.us/mnt/mmd-ar/` 时，24 个待更新文件先传入远端临时目录并全部通过 SHA-256 校验。检查发现 Apache 未加载 `mod_headers`，`/var/www/` 的 `AllowOverrideList` 也不允许 `Header`，且原始静态资源规则使用的 `Options -MultiViews` 在该目录被拒绝；Blender 路由返回 HTTP 500，首页也缺少跨域隔离响应头。已从临时备份恢复原首页及两个入口脚本，并移除本次新增公开文件，原线上首页恢复 HTTP 200。随后资源适配改为直接请求 `.br` 文件并移除了 `Options`/rewrite 依赖。当前账号没有 sudo 权限；待管理员启用 `mod_headers` 并允许 `Header` 指令后，再重新发布并验证真实网页。当前未成功发布外网。
+首次尝试发布时，Apache 未加载 `mod_headers`，`/var/www/` 的 `AllowOverrideList` 不允许 `Header`，原始静态资源规则中的 `Options -MultiViews` 也被拒绝；当时已回滚该次公开文件。随后改为直接请求 `.br`，移除 `Options` 和 rewrite 依赖。
+
+管理员配置 `/etc/apache2/conf-available/mmd-ar-cross-origin-isolation.conf`：为 `/mnt/mmd-ar/` 设置 COOP `same-origin`、COEP `credentialless`，启用 `mod_headers`，并仅对 `/var/www/html/mnt/mmd-ar/assets/blender-engine/0.1.136` 允许 `.htaccess` 使用 `Header`。`apache2ctl configtest` 返回 `Syntax OK`，Apache 已重载。之后将 23 个文件（47,296,610 bytes）发布到 `https://c.aasc.us/mnt/mmd-ar/`；暂存文件 SHA-256 与本地全部匹配。线上首页 SHA-256 为 `433687352b362e29eb836a905d244c9471cd840fd15c3c740f1881fa6dbb31b3`，首页、工作区模块、Service Worker、引擎状态和压缩 WASM 均 HTTP 200，WASM 返回 `application/wasm` 与 `Content-Encoding: br`。发布前的页面和资源备份保留在 `/home/as/a/.mmd-ar-blender-publish-backup-20261008`。真实浏览器的目录授权、工程预览、Cycles 渲染和保存往返仍待验收。

@@ -757,7 +757,7 @@ AO浅凹抑制默认与重置值改为45°；若之前保存了其他值，仍�
 
 网页构建前运行 `npm run prepare:mmd-ar-blender-engine` 安装固定版本构建依赖，再运行 `npm run build:web:mmd-ar-test`。HTTPS 桌面 Chromium 打开网页后，点击左上角“Blender工程”，浏览器会立即询问本地目录读写权限；选择含 `.blend` 的工程目录，再点“打开工程”。选中目录后才下载 Blender 工作区代码与预览资源；选择并打开 `.blend` 时再下载约38 MB压缩核心WASM/数据并启动引擎。用户取消目录选择、普通首屏与测试 APK 都不下载这些资源。
 
-工作区显示 Blender 工程预览，可旋转观察、请求 Cycles PNG 渲染、保存并关闭。改动写回用户选择目录中的原生 `.blend`，同目录图片/贴图按相对路径供 Blender 使用；工程文件不会上传服务端。目录句柄保存在当前 HTTPS origin 的 IndexedDB，权限失效时点“重新授权目录”。部署服务器必须返回 `COOP: same-origin` 与 `COEP: credentialless`，并按 `Content-Encoding: br` 提供 `.br` WASM 资源。Apache 部署还需启用 `mod_headers` 并允许 `.htaccess` 中的 `Header` 指令。首期不支持 Firefox、Safari、APK；未编入引擎的 Blender 插件和自定义扩展不会自动安装。实现边界见 `docs/design/mmd-ar-blender-workbench.md`。
+工作区显示 Blender 工程预览，可旋转观察、请求 Cycles PNG 渲染、保存并关闭。改动写回用户选择目录中的原生 `.blend`，同目录图片/贴图按相对路径供 Blender 使用；工程文件不会上传服务端。目录句柄保存在当前 HTTPS origin 的 IndexedDB，权限失效时点“重新授权目录”。部署服务器必须返回 `COOP: same-origin` 与 `COEP: credentialless`，并按 `Content-Encoding: br` 提供 `.br` WASM 资源。Apache 部署还需启用 `mod_headers`，并在引擎资源目录允许 `.htaccess` 使用 `Header` 指令。首期不支持 Firefox、Safari、APK；未编入引擎的 Blender 插件和自定义扩展不会自动安装。实现边界见 `docs/design/mmd-ar-blender-workbench.md`。
 
 ### 移除西施2（2026-10-06）
 
