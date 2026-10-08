@@ -39,9 +39,9 @@ test('static Miya release exposes only the fixed same-origin PMX and VMD profile
   assert.deepEqual(profile, {
     resourceId: 'miya-default',
     modelType: 'pmx',
-    modelUrl: '/api/mmd/static/mmd/miya/miya.pmx',
+    modelUrl: `/api/mmd/static/${STATIC_MMD_RELEASE.version}/mmd/miya/miya.pmx`,
     motionResourceId: 'miya-default-motion',
-    motionUrl: '/api/mmd/static/mmd/motions/miya-default.vmd',
+    motionUrl: `/api/mmd/static/${STATIC_MMD_RELEASE.version}/mmd/motions/miya-default.vmd`,
     playMode: 'loop',
     version: 'ca07d84b494577f5dab90d71465bc08e01ec036fe66278a2393313b6febf56c6',
   });
@@ -113,6 +113,211 @@ test('static Miya request rejects untrusted upstream responses without returning
     }),
     /checksum|sha|digest/i,
   );
+});
+
+const createCacheFixtureOptions = ({ cacheDir, content, request, assetPath = 'mmd/test/asset.bin' }) => ({
+  relativePath: assetPath,
+  releaseVersion: STATIC_MMD_RELEASE.version,
+  cacheDir,
+  lookup: lookupStaticMmdHost,
+  request,
+  resolveAsset: () => ({
+    path: assetPath,
+    size: content.length,
+    sha256: crypto.createHash('sha256').update(content).digest('hex'),
+    contentType: 'application/octet-stream',
+  }),
+});
+
+test('static MMD proxy persists verified assets and serves subsequent requests from disk', async () => {
+  const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-mmd-static-cache-'));
+  const content = Buffer.from('verified MMD fixture');
+  let upstreamRequests = 0;
+  const options = createCacheFixtureOptions({
+    cacheDir,
+    content,
+    request: async () => {
+      upstreamRequests += 1;
+      return createUpstreamResponse({ content, contentLength: content.length });
+    },
+  });
+  try {
+    const first = await requestStaticMmdAsset(options);
+    assert.deepEqual(first.content, content);
+    assert.equal(first.cacheHit, false);
+    assert.equal(first.cacheStored, true);
+    assert.equal(upstreamRequests, 1);
+
+    const cacheFile = path.join(cacheDir, STATIC_MMD_RELEASE.version, 'mmd/test/asset.bin');
+    assert.deepEqual(await fs.readFile(cacheFile), content);
+
+    const second = await requestStaticMmdAsset({ ...options, request: async () => {
+      upstreamRequests += 1;
+      throw new Error('cache hit must not reach upstream');
+    } });
+    assert.deepEqual(second.content, content);
+    assert.equal(second.cacheHit, true);
+    assert.equal(second.cacheStored, true);
+    assert.equal(upstreamRequests, 1);
+  } finally {
+    await fs.rm(cacheDir, { recursive: true, force: true });
+  }
+});
+
+test('static MMD proxy coalesces concurrent downloads for the same cached asset', async () => {
+  const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-mmd-static-flight-'));
+  const content = Buffer.from('single-flight fixture');
+  let upstreamRequests = 0;
+  const options = createCacheFixtureOptions({
+    cacheDir,
+    content,
+    request: async () => {
+      upstreamRequests += 1;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return createUpstreamResponse({ content, contentLength: content.length });
+    },
+  });
+  try {
+    const [first, second] = await Promise.all([
+      requestStaticMmdAsset(options),
+      requestStaticMmdAsset(options),
+    ]);
+    assert.deepEqual(first.content, content);
+    assert.deepEqual(second.content, content);
+    assert.equal(upstreamRequests, 1);
+  } finally {
+    await fs.rm(cacheDir, { recursive: true, force: true });
+  }
+});
+
+test('static MMD proxy replaces corrupt cache entries and prunes only old version folders', async () => {
+  const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-mmd-static-repair-'));
+  const content = Buffer.from('correct fixture');
+  const oldVersion = 'a'.repeat(64);
+  const oldVersionDir = path.join(cacheDir, oldVersion);
+  const unrelatedDir = path.join(cacheDir, 'keep-this-directory');
+  await fs.mkdir(path.join(oldVersionDir, 'mmd'), { recursive: true });
+  await fs.writeFile(path.join(oldVersionDir, 'mmd', 'old.bin'), 'old cache');
+  await fs.mkdir(unrelatedDir);
+  await fs.writeFile(path.join(unrelatedDir, 'keep.bin'), 'unrelated');
+  let upstreamRequests = 0;
+  const options = createCacheFixtureOptions({
+    cacheDir,
+    content,
+    request: async () => {
+      upstreamRequests += 1;
+      return createUpstreamResponse({ content, contentLength: content.length });
+    },
+  });
+  try {
+    await requestStaticMmdAsset(options);
+    const cacheFile = path.join(cacheDir, STATIC_MMD_RELEASE.version, 'mmd/test/asset.bin');
+    await fs.writeFile(cacheFile, Buffer.from('wrong fixture'));
+
+    const result = await requestStaticMmdAsset(options);
+    assert.deepEqual(result.content, content);
+    assert.equal(result.cacheHit, false);
+    assert.equal(upstreamRequests, 2);
+    await assert.rejects(fs.stat(oldVersionDir), { code: 'ENOENT' });
+    assert.equal(await fs.readFile(path.join(unrelatedDir, 'keep.bin'), 'utf8'), 'unrelated');
+  } finally {
+    await fs.rm(cacheDir, { recursive: true, force: true });
+  }
+});
+
+test('static MMD cache never reads or prunes through symbolic links', async (t) => {
+  const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-mmd-static-symlink-'));
+  const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-mmd-static-outside-'));
+  const outsideFile = path.join(outsideDir, 'outside.bin');
+  const versionRoot = path.join(cacheDir, STATIC_MMD_RELEASE.version);
+  const cacheFile = path.join(versionRoot, 'mmd/test/asset.bin');
+  const oldVersionLink = path.join(cacheDir, 'b'.repeat(64));
+  const content = Buffer.from('verified replacement');
+  await fs.writeFile(outsideFile, 'must not be served or removed');
+  try {
+    await fs.mkdir(path.dirname(cacheFile), { recursive: true });
+    await fs.symlink(outsideDir, oldVersionLink, 'dir');
+    await fs.symlink(outsideFile, cacheFile, 'file');
+  } catch (error) {
+    await Promise.all([
+      fs.rm(cacheDir, { recursive: true, force: true }),
+      fs.rm(outsideDir, { recursive: true, force: true }),
+    ]);
+    if (['EACCES', 'EPERM', 'ENOTSUP'].includes(error.code)) {
+      t.skip(`symbolic links are unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
+
+  let upstreamRequests = 0;
+  const options = createCacheFixtureOptions({
+    cacheDir,
+    content,
+    request: async () => {
+      upstreamRequests += 1;
+      return createUpstreamResponse({ content, contentLength: content.length });
+    },
+  });
+  try {
+    const result = await requestStaticMmdAsset(options);
+    assert.deepEqual(result.content, content);
+    assert.equal(result.cacheHit, false);
+    assert.equal(result.cacheStored, true);
+    assert.equal(upstreamRequests, 1);
+    assert.equal(await fs.readFile(outsideFile, 'utf8'), 'must not be served or removed');
+    assert.equal((await fs.lstat(cacheFile)).isFile(), true);
+    assert.equal((await fs.lstat(oldVersionLink)).isSymbolicLink(), true);
+
+    await fs.rm(versionRoot, { recursive: true, force: true });
+    await fs.symlink(outsideDir, versionRoot, 'dir');
+    const afterDirectoryReplacement = await requestStaticMmdAsset(options);
+    assert.deepEqual(afterDirectoryReplacement.content, content);
+    assert.equal(afterDirectoryReplacement.cacheHit, false);
+    assert.equal(afterDirectoryReplacement.cacheStored, false);
+    assert.equal(upstreamRequests, 2);
+    assert.equal((await fs.lstat(versionRoot)).isSymbolicLink(), true);
+    assert.equal(await fs.readFile(outsideFile, 'utf8'), 'must not be served or removed');
+  } finally {
+    await Promise.all([
+      fs.rm(cacheDir, { recursive: true, force: true }),
+      fs.rm(outsideDir, { recursive: true, force: true }),
+    ]);
+  }
+});
+
+test('static MMD proxy serves verified bytes when persistent cache storage is unavailable', async () => {
+  const parentDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-mmd-static-cache-error-'));
+  const cacheDir = path.join(parentDir, 'not-a-directory');
+  await fs.writeFile(cacheDir, 'block cache directory creation');
+  const content = Buffer.from('still serve verified fixture');
+  const options = createCacheFixtureOptions({
+    cacheDir,
+    content,
+    request: async () => createUpstreamResponse({ content, contentLength: content.length }),
+  });
+  try {
+    const result = await requestStaticMmdAsset(options);
+    assert.deepEqual(result.content, content);
+    assert.equal(result.cacheHit, false);
+    assert.equal(result.cacheStored, false);
+  } finally {
+    await fs.rm(parentDir, { recursive: true, force: true });
+  }
+});
+
+test('static MMD proxy rejects unsupported release versions before requesting assets', async () => {
+  let upstreamRequests = 0;
+  await assert.rejects(requestStaticMmdAsset({
+    relativePath: 'mmd/miya/miya.pmx',
+    releaseVersion: 'a'.repeat(64),
+    cacheDir: path.join(os.tmpdir(), 'unused-mmd-cache'),
+    request: async () => {
+      upstreamRequests += 1;
+      throw new Error('unsupported version must be rejected first');
+    },
+  }), (error) => error.statusCode === 404);
+  assert.equal(upstreamRequests, 0);
 });
 
 const createFixture = async (resourceOverrides = {}) => {
@@ -258,4 +463,10 @@ test('server registers the fixed MMD static proxy without replacing the existing
   assert.match(serverSource, /requestStaticMmdAsset/u);
   assert.ok(serverSource.includes('app.get(/^\\/api\\/mmd\\/static\\/'));
   assert.match(serverSource, /MMD 静态资源不接受查询参数/u);
+  assert.match(serverSource, /max-age=31536000, immutable/u);
+  assert.match(serverSource, /Cache-Control', 'no-store'/u);
+  assert.match(serverSource, /res\.status\(304\)\.end\(\)/u);
+  assert.match(serverSource, /If-None-Match/u);
+  assert.match(serverSource, /res\.setHeader\('ETag', etag\)/u);
+  assert.match(serverSource, /X-AASC-MMD-Cache/u);
 });

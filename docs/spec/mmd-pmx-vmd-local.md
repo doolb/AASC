@@ -355,14 +355,15 @@ PMX runtime.createMotionHelper(mesh, clip)
     返回本地 /models/mmd/... profile
   本地清单不存在时
     返回 StaticMmdRelease 的同源 profile
-    modelUrl = "/api/mmd/static/mmd/miya/miya.pmx"
-    motionUrl = "/api/mmd/static/mmd/motions/miya-default.vmd"
+    modelUrl = "/api/mmd/static/<version>/mmd/miya/miya.pmx"
+    motionUrl = "/api/mmd/static/<version>/mmd/motions/miya-default.vmd"
   本地清单存在但无效时
     返回 503，不回退到公网
 ```
 
 ```text
-过程 GET /api/mmd/static/<relativePath>
+过程 GET /api/mmd/static/<version>/<relativePath>
+  检查 version 与当前固定 StaticMmdRelease.version 一致
   将 URL 路径解码为 POSIX 相对路径
   拒绝空路径、查询指定路径、反斜杠、绝对路径、.、..、重复编码和未声明路径
   在 StaticMmdRelease.files 中查找完全匹配的文件
@@ -374,13 +375,16 @@ PMX runtime.createMotionHelper(mesh, clip)
   仅当当前源所有校验都通过时按扩展名返回 PMX/VMD 二进制或 image/png
   当前源 DNS、网络、超时、状态、长度或 hash 失败时继续下一个源
   所有源失败时返回包含各源失败摘要的结构化 502
-  不写入磁盘、不建立持久缓存、不允许重定向
+  首次成功后将已验证资源原子写入本地持久缓存
+  version 不同则使用独立缓存目录，不复用旧版本内容
+  不允许重定向
 ```
 
 ```text
 过程 validateBrowserMmdProfile(profile)
   接受 /models/mmd/... 本地路径
-  或接受 /api/mmd/static/mmd/... 固定同源路径
+  或接受 /api/mmd/static/<64位版本>/mmd/... 固定同源路径
+  兼容接受旧版 /api/mmd/static/mmd/... 同源路径
   PMX 和 VMD 仍分别要求 .pmx 与 .vmd 后缀
   拒绝 http(s)、//、查询 URL、其他 API 前缀和路径穿越
 ```
@@ -451,17 +455,22 @@ PMX runtime.createMotionHelper(mesh, clip)
 ```text
 过程 requestStaticMmdAsset(relativePath)
   先按固定 14 文件表校验 relativePath
+  先检查 res/temp/mmd-static-cache/<当前版本>/<relativePath>
+  只接受普通文件，校验缓存文件字节数和 SHA-256
+  缓存校验通过时从本地返回内容，不解析 DNS、不访问上游
+  并发请求相同版本和路径时等待同一个 in-flight 下载
   使用 c.aasc.us 的 IPv4 DNS 结果组装唯一上游 URL
   以 redirect = manual 和超时信号发起请求
   要求 status == 200 且 Content-Length == 声明 size
   受声明 size 限制读取整个响应并计算 SHA-256
-  仅 hash == 声明 sha256 时返回 Buffer 和声明 MIME
+  仅 hash == 声明 sha256 时，先写入同目录临时文件并原子改名
+  写入成功后返回 Buffer 和声明 MIME
   否则丢弃全部内容并返回结构化错误
 ```
 
 ```text
 过程 validateBrowserMmdUrl(url, extension)
-  允许前缀集合 = ["/models/mmd/", "/api/mmd/static/mmd/"]
+  允许前缀集合 = ["/models/mmd/", "/api/mmd/static/mmd/", "/api/mmd/static/<64位版本>/mmd/"]
   拒绝 ://、//、..、反斜杠、?、#
   仅当路径在允许前缀集合内且后缀匹配 extension 时接受
 ```
@@ -738,3 +747,57 @@ STATIC_MMD_SOURCES = [
 ```
 
 固定资源白名单、同源显示端代理路径、文件大小/SHA-256 校验和本地有效模型优先规则不变；Offline 静态代理按家庭内网→公司内网→外网顺序回退。该行为复用 Offline 热更新的来源顺序，不读取热更新清单，也不放宽客户端资源路径白名单。
+
+## 16. Offline MMD 静态资源持久缓存伪代码（2026-10-08）
+
+```text
+常量 MmdStaticCacheRoot = PROJECT_ROOT/res/temp/mmd-static-cache
+常量 MmdStaticCacheMaxAgeSeconds = 31536000
+状态 StaticMmdInFlight = 按 version + relativePath 索引的下载任务
+
+过程 createStaticMmdResourceProfile()
+  将当前 release version 放进 modelUrl 与 motionUrl 路径
+  保持相对贴图从 PMX 所在版本目录解析
+  返回既有 resourceId、playMode 和固定同源地址
+
+过程 requestStaticMmdAsset(version, relativePath)
+  先验证 version 是当前固定 release
+  再按 14 文件白名单解析 relativePath
+  lstat 验证缓存根与版本目录为普通目录，不跟随符号链接
+  首次准备时只清理专用缓存根下名称为64位小写SHA且确认为普通目录的旧版本
+  cacheFile = MmdStaticCacheRoot/version/relativePath
+  逐级 lstat 验证缓存父目录为普通目录；仅当 cacheFile 本身为普通文件时
+    读取内容并校验声明字节数与 SHA-256
+    如果校验通过
+      返回内容、MIME 与 cacheHit=true
+    否则删除损坏的普通文件并按未命中处理
+  缓存目标是符号链接时不读取链接目标，下载校验后移除链接并原子写入普通文件
+  如果 StaticMmdInFlight 已存在相同键
+    等待该任务结果并返回
+  创建唯一下载任务并记录到 StaticMmdInFlight
+  按固定内网/外网来源顺序请求上游，不跟随重定向
+  校验 HTTP 状态、Content-Length、完整字节数和 SHA-256
+  校验成功后写到缓存目录内唯一临时文件
+  原子改名为 cacheFile，不向响应输出部分或未经校验的内容
+  下载失败时删除本次临时文件，继续尝试下一个固定来源
+  所有来源失败时返回结构化 502
+  完成后清除 StaticMmdInFlight 对应任务
+
+过程 GET /api/mmd/static/<version>/<relativePath>
+  拒绝查询参数
+  根据白名单 SHA-256 设置 ETag
+  设置 Cache-Control = "private, max-age=31536000, immutable"
+  If-None-Match 与 ETag 匹配时返回 304
+  否则调用 requestStaticMmdAsset(version, relativePath)，返回完整资源、Content-Length 与 X-AASC-MMD-Cache 状态
+
+过程 GET /api/mmd/static/<relativePath>
+  保留旧客户端兼容路径
+  仍使用当前版本磁盘缓存与完整 hash 校验
+  设置 Cache-Control = "no-store"，避免旧 URL 缓存过期版本
+
+过程 installOfflineRuntime()
+  Runtime 更新保留 res/temp 可变目录
+  MMD 缓存继续可用，不进入 APK assets，也不覆盖 res/models
+```
+
+自测覆盖：冷缓存只请求上游一次并原子落盘；热缓存不调用上游；同资源并发请求只启动一个下载；缓存大小/hash 错误时安全重取；缓存文件/版本目录符号链接不被跟随或清理其目标；版本不匹配不命中；版本路由具有 ETag/immutable 与条件请求契约、旧路径仍为 no-store。首次未成功下载、校验失败或磁盘写入失败时不留下可命中的部分缓存。2026-10-08 定向结果：服务测试17/17、显示端版本路径白名单测试1/1通过；Android Offline Runtime 实机性能仍待验收。

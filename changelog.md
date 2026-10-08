@@ -11046,3 +11046,9 @@
   - `3rd/mmd-ar-test/web-screen-lighting-shader.mjs` 将厚度与自遮挡检查移至4轮细化之后；不增加配置、纹理或循环上限。新增 `tests/mmd-ar-contact-shadow-browser.test.js` 执行真实GLSL，三档质量18种输入检查通过，已验证旧实现先失败、修正后通过。
   - 接触阴影/屏幕光照10/10通过，Web构建成功；扩展阴影组合25通过/1失败/1跳过，全量1078通过/161失败/21跳过，详见 `docs/task/20261008_MMDAR接触阴影自测结果.md`。APK一致性测试子进程因异常后未关闭服务而挂起，定点结束后取得全量结果；未声称全量通过。
   - 同步design/spec/task/todo及独立测试页README；`servicePackage`原已为true并保持，其他发布状态不变。保留已有SSGI/HZB、配置与相机改动，不混入提交；完整工作区Shader另有HZB的`packed`保留字编译错误，用户模型同视角与手机性能待验收。未打包APK或发布站点。
+
+### Offline MMD 首次下载后加速
+
+- ✅ [2026-10-08] 固定白名单 PMX、贴图与 VMD 首次校验后写入 Offline 可保留的 `res/temp/mmd-static-cache/<version>/`；后续从磁盘读取，版本化同源 URL 提供一年 immutable HTTP 缓存。
+  - 修改 MMD 资源服务、server-app 与显示端路径校验；缓存使用 SHA/长度复核、并发合并、临时文件原子替换、坏缓存重取及旧版本目录清理，并隔离符号链接。旧路径保持兼容且 `no-store`，缓存写入失败不影响已校验响应。
+  - 服务测试17/17、显示端路径测试1/1通过；语法检查和`git diff --check`通过。更新design/spec/task/todo及自测文档；未构建或发布 APK/服务包，`servicePackage=true`保持待发布。Android冷启动与实际耗时待验收。

@@ -1080,6 +1080,12 @@ Blender4.5.4后台导出完成：7网格/7材质/22内嵌图像，无骨架/动�
 - 阴影帮助说明已更新为主相机near至目标角色高度×4的CSM切片、联动不额外乘0.5、关闭时保留legacy 0.5。
 - `npm run build:web:mmd-ar-test`成功；本轮网页产物含resize保持视角注入。当前环境无法运行真实浏览器/GPU阴影画面，需在用户设备复验后台返回后相机/角色画面及阴影覆盖。
 
+## 2026-10-08 Offline MMD 静态资源持久缓存
+
+- `node --test src/apps/server/modules/mmd/mmd-resource-service.test.js`：17/17通过。覆盖固定版本profile、冷缓存原子写入、热缓存不访问上游、并发请求合并、损坏内容重取、旧版本普通目录清理、符号链接隔离、存储失败回退与旧版本路径兼容。
+- `node --test --test-name-pattern='PMX profile validation accepts only local and fixed static same-origin MMD paths' tests/display-mmd-runtime.test.js`：1/1通过；显示端接受严格64位版本路径并保留旧同源路径。
+- `node --check` 对 MMD 服务、server-app 与两处显示端脚本通过；`git diff --check`通过。HTTP ETag/immutable/304 与旧路由 no-store 已做路由契约检查；尚未在 Android Offline APK 上实测首次下载、重启/Runtime 更新后命中及角色初始化耗时，不声称手机性能已验证。
+
 ## 2026-10-04 MMD-AR编辑器首版
 
 Chromium/SwiftShader 640×600，西施2，物理参考3子步，AO和阴影关闭用于交互验证。脚本、日志、截图在`3rd/mmd-ar-test/output/editor-check/`。
