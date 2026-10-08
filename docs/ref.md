@@ -106,3 +106,7 @@ web-mediacenter/
 - 确认 TTS 服务地址配置正确
 - 检查 TTS 服务是否运行
 - 查看服务器日志错误信息
+
+## 西施2PMX导出
+
+- [MMD Tools官方仓库](https://github.com/MMD-Blender/blender_mmd_tools)，使用 `mmd_tools/core/pmx` 序列化模块；导出时通过 `MMD_TOOLS_DIR` 指向外部仓库，本项目未复制该库源码。本次资源生成版本 `29d1478cf4385945b1c011d4c1e6adda7ad7cf70`。

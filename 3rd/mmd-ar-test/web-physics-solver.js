@@ -9,7 +9,7 @@ function once(source, anchor, replacement) {
 
 // THREE刚体后端已移除；旧偏好迁移自写XPBD，TMP14顶点模式使用独立选项。
 function normalizePhysicsSolver(value) {
-    if (['vertex-cloth', 'xpbd-webgl'].includes(value)) return value;
+    if (['vertex-cloth', 'vertex-cloth-gpu', 'xpbd-webgl'].includes(value)) return value;
     return ['xpbd', 'three-xpbd'].includes(value) ? 'xpbd' : 'ammo';
 }
 
@@ -21,14 +21,14 @@ function addSolverHelper(source) {
     output = once(output, '        await ensurePhysics();', "        if (physicsSolver !== 'xpbd') await ensurePhysics();");
     // XPBD失败必须让切换回滚，不能选项写着XPBD而实际停用物理。
     output = once(output, '    } catch (error) {\n        return {', "    } catch (error) {\n        if (physicsSolver !== 'ammo') throw error;\n        return {");
-    return once(output, '    physics.reset();', "    physics.reset();\n    if (physics.engine === 'xpbd' || physics.engine === 'vertex-cloth') { physics.resetMotion(); return; }");
+    return once(output, '    physics.reset();', "    physics.reset();\n    if (physics.engine === 'xpbd' || ['vertex-cloth', 'vertex-cloth-gpu'].includes(physics.engine)) { physics.resetMotion(); return; }");
 }
 
 function addSolverAnimationHelper(source, moduleUrl, clothUrl) {
     return once(`import { XpbdPmxPhysics } from '${moduleUrl}';\nimport { VertexClothPmxPhysics } from '${clothUrl}';\n${source}`, '\t_createMMDPhysics( mesh, params ) {', `\t_createMMDPhysics( mesh, params ) {
         if (params.physicsSolver === 'xpbd') return new XpbdPmxPhysics(mesh,
             mesh.geometry.userData.MMD.rigidBodies, mesh.geometry.userData.MMD.constraints, params);
-        if (params.physicsSolver === 'vertex-cloth') return new VertexClothPmxPhysics(mesh, params,
+        if (['vertex-cloth', 'vertex-cloth-gpu'].includes(params.physicsSolver)) return new VertexClothPmxPhysics(mesh, params,
             (target, bodies, joints, options) => new MMDPhysics(target, bodies, joints, options));`);
 }
 
@@ -43,7 +43,7 @@ function addSolverRuntime(source) {
         physics.update = function(delta) {
             const begin = performance.now();
             try { return update.call(this, delta); }
-            finally { this.frameMs = performance.now() - begin; }
+            finally { this.frameMs = performance.now() - begin; if (this.vertexStopped) physicsSolver = 'ammo'; }
         };
         timedPhysics.add(physics);
     };
@@ -55,6 +55,8 @@ function addSolverRuntime(source) {
             bodyCount: physics.bodies.length, jointCount: physics.constraints.length,
             frameMs: physics.frameMs || 0, ...physics.getState?.() };
     };`);
+    output = once(output, '        const prepared = await createPmxMotionHelper({',
+        '        mesh._aascVertexClothRenderer = renderer;\n        const prepared = await createPmxMotionHelper({');
     output = once(output, '            physicsEnabled: usePhysics,', '            physicsEnabled: usePhysics,\n            physicsSolver,');
     output = once(output, '                ensurePhysics: ensureAmmoPhysics, physicsEnabled,',
         "                ensurePhysics: physicsSolver === 'xpbd' ? async () => {} : ensureAmmoPhysics, physicsEnabled, physicsSolver,");
@@ -76,11 +78,13 @@ function addSolverDisplay(source) {
     // 初始偏好在首次加载前读取，面板恢复无需异步重载，避免和“启用物理”恢复互相抢锁。
     try {
         const key = 'aasc.mmdArTest.physicsSolver.v1', saved = localStorage.getItem(key);
-        physicsSolver = normalizePhysicsSolver(saved);
-        if (saved === 'three-xpbd') localStorage.setItem(key, physicsSolver);
+        const safe = new URLSearchParams(location.search).get('safePhysics') === '1';
+        physicsSolver = safe || saved === 'vertex-cloth-gpu' ? 'ammo' : normalizePhysicsSolver(saved);
+        if (safe || saved === 'vertex-cloth-gpu' || saved === 'three-xpbd') localStorage.setItem(key, physicsSolver);
     } catch (error) { /* 保留已读取的选择；无法读取时默认Ammo。 */ }
     let physicsConfigurationBusy = false;
     async function setPhysicsSolver(value) {
+        if (state.runtime?.getPhysicsSolverState?.().vertexStopped) physicsSolver = 'ammo';
         const next = normalizePhysicsSolver(value);
         if (physicsConfigurationBusy) return false;
         if (next === physicsSolver) return true;
@@ -110,7 +114,12 @@ function addSolverDisplay(source) {
     return once(output, '        setMotionPlaybackEnabled,', `        setPhysicsSolver,
         setVertexClothGroup: (id, enabled) => !physicsConfigurationBusy && (state.runtime?.setVertexClothGroup?.(id, enabled) || false),
         setVertexClothPreview: (value) => state.runtime?.setVertexClothPreview?.(value) || false,
-        getPhysicsSolver: () => physicsSolver,
+        getPhysicsSolver: () => {
+            if (state.runtime?.getPhysicsSolverState?.().vertexStopped) {
+                physicsSolver = 'ammo'; state.runtime?.setPhysicsSolver?.('ammo');
+            }
+            return physicsSolver;
+        },
         getPhysicsSolverState: () => state.runtime?.getPhysicsSolverState?.() || { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 },
         setMotionPlaybackEnabled,`);
 }
@@ -118,7 +127,7 @@ function addSolverDisplay(source) {
 const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', ...CLOTH.CLOTH_CONTROL_IDS]);
 const SOLVER_PANEL_HTML = `<label class="mind-basic-field"><span>布料计算</span>
     <select id="mmdArPhysicsSolver" aria-label="布料计算求解器"><option value="ammo" selected>Ammo（原方式）</option>
-    <option value="xpbd">XPBD（CPU）</option><option value="xpbd-webgl">XPBD（WebGL2）</option><option value="vertex-cloth">顶点布料（TMP14）</option></select></label>
+    <option value="xpbd">XPBD（CPU）</option><option value="xpbd-webgl">XPBD（WebGL2）</option><option value="vertex-cloth">顶点布料（CPU）</option><option value="vertex-cloth-gpu">顶点布料 GPU（WebGL2）</option></select></label>
     <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>${CLOTH.CLOTH_PANEL_HTML}`;
 const SOLVER_PANEL_JS = `
     ${CLOTH.CLOTH_PANEL_JS}
@@ -137,7 +146,7 @@ const SOLVER_PANEL_JS = `
         const key = 'aasc.mmdArTest.physicsSolver.v1';
         let timer = null;
         let requested = 'ammo';
-        try { requested = normalizePhysicsSolver(localStorage.getItem(key)); }
+        try { const saved = localStorage.getItem(key); requested = saved === 'vertex-cloth-gpu' || new URLSearchParams(location.search).get('safePhysics') === '1' ? 'ammo' : normalizePhysicsSolver(saved); }
         catch (error) { /* 存储受限按原方式启动。 */ }
         const update = () => {
             const solver = window.DisplayMmd?.getPhysicsSolver?.() || 'ammo';
@@ -156,16 +165,16 @@ const SOLVER_PANEL_JS = `
                 else physicsFps.removeAttribute('title');
             }
             const roundsHint = ['xpbd', 'xpbd-webgl'].includes(solver) ? '每子步1轮并补旋转锁轴纠正' : '每子步1轮';
-            if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：3表示3个子步；' + roundsHint + '，步长为本帧时间÷子步数。' + (solver === 'vertex-cloth' ? '非布料Ammo保留已有物理Hz，顶点求解不用它。' : '物理Hz暂不使用。')
+            if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：3表示3个子步；' + roundsHint + '，步长为本帧时间÷子步数。' + (['vertex-cloth', 'vertex-cloth-gpu'].includes(solver) ? '骨骼Ammo仍使用已有物理Hz，顶点修正按子步计算。' : '物理Hz暂不使用。')
                 : '按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。';
             const state = window.DisplayMmd?.getPhysicsSolverState?.();
-            const name = { ammo: 'Ammo', xpbd: 'XPBD（CPU）', 'xpbd-webgl': 'XPBD（WebGL2）', 'vertex-cloth': 'TMP14顶点布料' }[solver] || 'Ammo';
-            const particleInfo = solver === 'vertex-cloth' ? ' · ' + state?.particleCount + ' 粒子 / ' + state?.constraintCount + ' 约束' : '';
+            const name = { ammo: 'Ammo', xpbd: 'XPBD（CPU）', 'xpbd-webgl': 'XPBD（WebGL2）', 'vertex-cloth': '顶点布料CPU', 'vertex-cloth-gpu': '顶点布料GPU' }[solver] || 'Ammo';
+            const particleInfo = ['vertex-cloth', 'vertex-cloth-gpu'].includes(solver) ? ' · ' + state?.particleCount + ' 粒子 / ' + state?.constraintCount + ' 约束' : '';
             label.textContent = !state?.active ? name + ' · 物理未运行'
                 : name + ' · ' + state.bodyCount + ' 个刚体'
                     + (xpbd ? ' · 当前子步数 ' + state.substeps + ' · 每子步1轮' : '')
                     + (state.rotationLockProjections > 0 ? ' + 旋转锁轴纠正' : '')
-                    + particleInfo + ' · 帧物理耗时 ' + Number(state.frameMs || 0).toFixed(2) + ' ms'
+                    + particleInfo + (state.backend === 'webgl2' ? ' · WebGL2 · CPU提交耗时 ' : ' · 帧物理耗时 ') + Number(state.frameMs || 0).toFixed(2) + ' ms' + (state.gpuFallback ? ' · 已回退Ammo：' + state.gpuFallback : '') + (state.computePending ? ' · GPU分批计算中' : '')
                     + (state.computeBackend === 'webgl2' ? ' · 读回 ' + Number(state.readbackMs || 0).toFixed(2) + ' ms · ' + state.passCount + ' passes · GPU ' + (state.gpuMs == null ? '计时不可用' : Number(state.gpuMs).toFixed(2) + ' ms') : '')
                     + (state.fallbackReason ? ' · CPU回退：' + state.fallbackReason : '');
         };
@@ -177,7 +186,7 @@ const SOLVER_PANEL_JS = `
                     update(); label.textContent += ' · 切换失败，已保留原方式'; return;
                 }
                 if (persist) {
-                    try { localStorage.setItem(key, value); } catch (error) { /* 本次选择仍有效。 */ }
+                    try { localStorage.setItem(key, window.DisplayMmd?.getPhysicsSolver?.() || value); } catch (error) { /* 本次选择仍有效。 */ }
                 }
                 update();
             } catch (error) {

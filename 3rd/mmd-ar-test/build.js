@@ -23,7 +23,7 @@ const WEB_MODE = process.argv.includes('--web');
 const WEB_PANEL_GROUPS = require('./web-panel-groups');
 const WEB_CAMERA_MOTION = require('./web-camera-motion-inject');
 const WEB_GRAVITY_MODE = require('./web-gravity-mode');
-const WEB_LOCAL_ASSETS = require('./web-local-assets-inject');
+const WEB_LOCAL_ASSETS = require('./web-local-assets-inject'), WEB_CHARACTERS = require('./web-characters-build');
 const WEB_PHYSICS_LIFECYCLE = require('./web-physics-lifecycle');
 const WEB_PHYSICS_RATE = require('./web-physics-rate');
 const WEB_PHYSICS_SUBSTEPS = require('./web-physics-substeps');
@@ -153,7 +153,6 @@ async function ensureModelFile([relativePath, expectedSize, expectedHash]) {
     log(`复用已校验模型资源：${relativePath}`);
     return cachePath;
   }
-
   const failures = [];
   for (const url of await getDownloadUrls(relativePath)) {
     try {
@@ -168,7 +167,6 @@ async function ensureModelFile([relativePath, expectedSize, expectedHash]) {
   }
   throw new Error(`模型资源不可用 ${relativePath}\n${failures.join('\n')}`);
 }
-
 async function ensureMindArFile([fileName, expectedSize, expectedHash]) {
   // 测试 APK 和网页共用项目内固定版本；出包阶段无需再次访问公网依赖 CDN。
   const sourceName = fileName === 'mind-ar-LICENSE' ? 'LICENSE' : fileName;
@@ -178,7 +176,6 @@ async function ensureMindArFile([fileName, expectedSize, expectedHash]) {
   }
   return sourcePath;
 }
-
 async function stageTextAssets() {
   const $ = cheerio.load(await fs.readFile(DISPLAY_HTML_SOURCE, 'utf8'));
   const arTrackingVideo = $('#displayArTrackingVideo').first();
@@ -191,7 +188,6 @@ async function stageTextAssets() {
   if (!arTrackingVideo.length || !mmdLayer.length || !controls.length || !calibration.length || !arPanel.length || !arHeader.length) {
     throw new Error('显示端 AR/MMD 页面缺少测试 harness 所需的控件节点');
   }
-
   if ($('#mmdArTrackerEngine').length || $('#mmdArBenchmarkResults').length) {
     throw new Error('显示端页面已包含 A/B 测试控件，测试 harness 不得重复注入');
   }
@@ -426,6 +422,8 @@ async function stageTextAssets() {
     </div>
   `);
 
+  WEB_CHARACTERS.addPanel($); require('./web-screen-lighting-build').panel($);
+  let extraCharacterProfiles;
   const assets = [
     ...(await fs.readdir(path.join(SOURCE_PUBLIC, 'js'))).filter(name => /^mmd-.*\.mjs$/u.test(name)).map(name => [path.join(SOURCE_PUBLIC, 'js', name), path.join(GENERATED_ASSETS, 'js', name)]),
     ...SOURCE_ASSET_FILES.map((fileName) => [
@@ -521,7 +519,7 @@ async function stageTextAssets() {
       const alignedAoSource = alignAoDepthTexels(aoSource.replaceAll(depthSampler, 'uniform highp sampler2D tDepth;'));
       await fs.writeFile(aoPath, addAoBoundaryCorrection(fixAoNormalPreviewEdges(addAoNormalPreview(alignedAoSource))));
     }
-    const aoVersion = (await hashFile(aoPath)).sha256.slice(0, 12);
+    await require('./web-screen-lighting-build').stage(GENERATED_ASSETS); const aoVersion = (await hashFile(aoPath)).sha256.slice(0, 12);
     // 静态站点可能长时间缓存同路径 ESM；先给阴影模块加内容指纹，再计算 runtime 指纹。
     const pmxRuntimePath = path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js');
     // 两端测试副本共用高光注入，正式显示端源码保持原样。
@@ -540,7 +538,7 @@ async function stageTextAssets() {
     const aoImport = "'./display-pmx-ao.mjs'";
     if (runtimeSource.split(aoImport).length !== 2) throw new Error('测试网页未找到唯一的 AO 模块入口');
     if (!runtimeSource.includes(lightingModeImport)) throw new Error('测试网页未找到 PMX 灯光模块入口');
-    const cameraProbeAnchor = 'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });';
+    const cameraProbeAnchor = 'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera, keyLight });';
     if (runtimeSource.split(cameraProbeAnchor).length !== 2) throw new Error('测试网页未找到唯一的 PMX 相机诊断锚点');
     // 只改测试网页/APK生成副本：面板只读当前投影，不把近远裁面写进正式显示端源码或灯光配置。
     const shadowPreviewPath = path.join(GENERATED_ASSETS, 'js/web-shadow-map-preview.mjs');
@@ -558,6 +556,7 @@ async function stageTextAssets() {
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_WIND.addWindRuntime(
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));
+    extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS); await require('./web-editor-build').stage(GENERATED_ASSETS);
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
@@ -572,6 +571,7 @@ async function stageTextAssets() {
       .replace(runtimeImport, `'./display-pmx-runtime.js?v=${runtimeVersion}'`)));
     await fs.writeFile(mmdScriptPath, WEB_PHYSICS_WIND.addWindDisplay(await fs.readFile(mmdScriptPath, 'utf8')));
     await fs.writeFile(mmdScriptPath, WEB_PHYSICS_SOLVER.addSolverDisplay(await fs.readFile(mmdScriptPath, 'utf8')));
+    await fs.writeFile(mmdScriptPath, WEB_CHARACTERS.patchDisplay(await fs.readFile(mmdScriptPath, 'utf8')));
     const arScriptPath = path.join(GENERATED_ASSETS, 'js/display-mmd-ar.js');
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }
@@ -597,7 +597,7 @@ async function stageTextAssets() {
 
   const scriptVersion = new Map();
   {
-    for (const fileName of ['display-mmd-settings.js', 'web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'display-mmd-ar-native.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
+    for (const fileName of ['web-screen-lighting-panel.mjs', 'web-character-panel.mjs', 'display-mmd-settings.js', 'web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'display-mmd-ar-native.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
     }
   }
@@ -780,7 +780,7 @@ async function stageTextAssets() {
     };
   </script>
   <script src="${scriptUrl('display-mmd-ar.js')}"></script>
-  ${`<script type="module" src="${scriptUrl('web-local-assets-ui.mjs')}"></script>`}
+  ${`<script type="module" src="${scriptUrl('web-local-assets-ui.mjs')}"></script><script type="module" src="${scriptUrl('web-character-panel.mjs')}"></script><script type="module" src="${scriptUrl('web-screen-lighting-panel.mjs')}"></script>`}
   <script>
     ${WEB_PANEL_GROUPS.WEB_PANEL_GROUP_JS}
     (() => {
@@ -877,7 +877,7 @@ async function stageTextAssets() {
   await fs.writeFile(path.join(GENERATED_ASSETS, 'index.html'), generatedPage, 'utf8');
 
   const profile = createStaticMmdResourceProfile();
-  const payload = { status: 'success', resources: [profile] };
+  const payload = { status: 'success', resources: [{ ...profile, name: '米娅' }, ...extraCharacterProfiles] };
   await fs.writeFile(path.join(GENERATED_ASSETS, 'mmd-resources.json'), `${webAssetText(JSON.stringify(payload))}\n`, 'utf8');
 }
 

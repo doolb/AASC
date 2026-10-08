@@ -32,6 +32,9 @@
     "build:apk:offline:min": "node scripts/ops/build-apk.js allserver-min",
     "build:apk:mmd-ar-test": "node 3rd/mmd-ar-test/build.js",
     "build:web:mmd-ar-test": "node 3rd/mmd-ar-test/build.js --web",
+    "export:mmd-ar:xishi": "node scripts/models/export-mmd-ar-xishi.js",
+    "start:imu:six-axis-test": "node 3rd/imu-six-axis-test/server.mjs",
+    "test:imu:six-axis-test": "node --test tests/imu-six-axis-*.test.js",
     "build:apk:noserver": "node scripts/ops/build-apk.js noserver",
     "upload:apk": "npm run build:apk && node scripts/ops/apk-deploy.js",
     "start:apk:display": "node scripts/ops/apk-start.js"

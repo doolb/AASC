@@ -8,12 +8,12 @@ const once = (source, anchor, replacement) => {
 
 function addClothSupport(source, operation, args) {
     source = source.replace('function normalizePhysicsSolver(value) {',
-        "function normalizePhysicsSolver(value) {\n    if (value === 'vertex-cloth') return value;");
+        "function normalizePhysicsSolver(value) {\n    if (['vertex-cloth', 'vertex-cloth-gpu'].includes(value)) return value;");
     const handlers = {
-        addSolverHelper: text => text.replace("physics.engine === 'xpbd'", "physics.engine === 'xpbd' || physics.engine === 'vertex-cloth'"),
+        addSolverHelper: text => text.replace("physics.engine === 'xpbd'", "physics.engine === 'xpbd' || ['vertex-cloth', 'vertex-cloth-gpu'].includes(physics.engine)"),
         addSolverAnimationHelper: text => `import { VertexClothPmxPhysics } from '${args[1]}';\n` +
             once(text, '\t_createMMDPhysics( mesh, params ) {', `\t_createMMDPhysics( mesh, params ) {
-        if (params.physicsSolver === 'vertex-cloth') return new VertexClothPmxPhysics(mesh, params,
+        if (['vertex-cloth', 'vertex-cloth-gpu'].includes(params.physicsSolver)) return new VertexClothPmxPhysics(mesh, params,
             (target, bodies, joints, options) => new MMDPhysics(target, bodies, joints, options));`),
         addSolverRuntime: text => once(once(text, '    const setPhysicsSolver =', `    const timedPhysics = new WeakSet();
     const timePhysics = physics => {
@@ -37,7 +37,11 @@ function addClothSupport(source, operation, args) {
         setVertexClothPreview: value => state.runtime?.setVertexClothPreview?.(value) || false,
         setPhysicsSolver,`)
     };
-    return handlers[operation]?.(source) || source;
+    let output = handlers[operation]?.(source) || source;
+    if (operation === 'addSolverRuntime') output = once(output,
+        '        const prepared = await createPmxMotionHelper({',
+        '        mesh._aascVertexClothRenderer = renderer;\n        const prepared = await createPmxMotionHelper({');
+    return output;
 }
 
 function addShadowDiagnostics(source, moduleUrl) {

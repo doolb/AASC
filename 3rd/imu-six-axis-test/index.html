@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>六轴 IMU · 运动实验室</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three.mjs","three/addons/controls/":"/vendor/"}}</script>
+</head>
+<body>
+  <header><div><span class="eyebrow">MOTION LAB / 06</span><h1>六轴运动实验室</h1></div>
+    <div class="connection"><span id="roomStatus">正在连接房间</span><button id="reconnect">连接房间</button></div></header>
+  <div class="join-bar"><label>房间 <input id="roomCode" maxlength="8" placeholder="自动创建"></label>
+    <label class="link-label">手机接入链接 <input id="phoneLink" readonly></label><button id="copyLink">复制链接</button>
+    <label>本机输入 <select id="source"><option value="simulator">图形模拟器</option><option value="phone">手机六轴</option></select></label>
+    <button id="phoneStart">开始手机采集</button><button id="phoneStop">停止采集</button>
+  </div>
+  <main class="layout">
+    <section class="panel receiver"><div class="panel-heading"><div><span class="eyebrow">01 / ESTIMATED MOTION</span><h2>接收场景</h2></div><span class="badge mint">传感器估计</span></div>
+      <div class="viewport" id="leftViewport"><span class="view-label">X / Y / Z · 米制空间</span></div>
+      <div class="toolbar"><label>观察设备 <select id="deviceSelect"><option value="local">本机</option></select></label>
+        <label><input id="followLeft" type="checkbox" checked>跟随选中设备</label>
+        <label><input id="showTruth" type="checkbox">显示模拟真值</label><button id="clearTrails">清空轨迹</button></div>
+      <div id="devices" class="devices"></div>
+      <div class="readouts"><div><span>估计位置 / m</span><output id="position">—</output></div><div><span>估计速度 / m/s</span><output id="velocity">—</output></div>
+        <div><span>位置误差 / m</span><output id="positionError">—</output></div><div><span>姿态误差 / °</span><output id="rotationError">—</output></div></div>
+      <p class="status" id="engineStatus">等待数据</p>
+      <details><summary>六轴数据与零偏</summary><div class="readouts">
+        <div><span>原始角速度 / °/s</span><output id="rawRate">—</output></div><div><span>处理后角速度 / °/s</span><output id="cleanRate">—</output></div>
+        <div><span id="accelKind">原始加速度 / m/s²</span><output id="rawForce">—</output></div><div><span>世界线性加速度 / m/s²</span><output id="cleanForce">—</output></div>
+        <div><span>陀螺仪零偏 / °/s</span><output id="calibratedBias">—</output></div></div></details>
+      <div class="toolbar"><button id="calibrate">静置校准零偏</button><button id="stopVelocity">已停稳：清零速度</button>
+        <button id="resetOrigin">重置位置原点</button><button id="resetHeading">重置航向</button></div>
+      <details><summary>加速度六面校准 <span id="faceCount">0/6</span></summary><p>依次让设备的 ±X、±Y、±Z 朝上，点击对应面并静置 2 秒。单次静置不能完整分离加速度零偏。</p>
+        <div class="toolbar" id="faceButtons"><button data-face="x+">+X</button><button data-face="x-">−X</button><button data-face="y+">+Y</button><button data-face="y-">−Y</button><button data-face="z+">+Z</button><button data-face="z-">−Z</button></div>
+        <button id="autoFaces">模拟器自动依次静置六面</button></details>
+      <details open><summary>估计器处理</summary><div class="parameter-grid">
+        <label>角速度死区 / °/s<input id="gyroZone" type="range" min="0" max="1" step="0.01" value="0.2"><output></output></label>
+        <label>加速度死区 / m/s²<input id="accelZone" type="range" min="0" max="0.5" step="0.01" value="0.08"><output></output></label>
+        <label>世界加速度滤波 / Hz（0＝关闭）<input id="filterHz" type="range" min="0" max="50" step="1" value="12"><output></output></label>
+        <label>停稳假设下倾斜纠偏强度<input id="tiltGain" type="range" min="0" max="2" step="0.05" value="0.25"><output></output></label>
+      </div><label><input id="assumedRest" type="checkbox">手持停稳假设：安静时清零速度（可能误判匀速移动）</label></details>
+      <p class="footnote">旋转由角速度估计，平移由加速度积分。纯六轴会累积位置与航向漂移；右侧真值只用于对照。</p>
+    </section>
+    <section class="panel simulator"><div class="panel-heading"><div><span class="eyebrow">02 / VIRTUAL SENSOR</span><h2>陀螺仪模拟器</h2></div><span class="badge amber">图形操作</span></div>
+      <div class="viewport" id="rightViewport"><span class="view-label">拖动彩色手柄 · 相机跟随设备</span></div>
+      <div class="toolbar"><button id="translate" class="active">移动</button><button id="rotate">旋转</button>
+        <button id="resetExperiment">重置实验</button><label><input id="stream" type="checkbox" checked>输出六轴数据</label></div>
+      <p class="hint">移动模式拖动 XYZ 箭头，旋转模式拖动圆环；拖动背景调整视角，滚轮缩放。相机随设备位移保持观察距离。</p>
+      <div class="readouts"><div><span>角速度 / °/s · XYZ</span><output id="gyro">—</output></div><div><span>含重力加速度 / m/s²</span><output id="acceleration">—</output></div></div>
+      <div class="toolbar"><span>重复运动</span><button data-trajectory="translate">平移</button><button data-trajectory="rotate">旋转</button><button data-trajectory="combined">复合</button><button id="holdTarget">保持当前位姿</button></div>
+      <details open><summary>噪声与零偏</summary><div class="parameter-grid">
+        <label>陀螺仪噪声 / °/s<input id="gyroNoise" type="range" min="0" max="1" step="0.005" value="0.03"><output></output></label>
+        <label>陀螺仪固定零偏 / °/s<input id="gyroBias" type="range" min="0" max="2" step="0.01" value="0.23"><output></output></label>
+        <label>加速度噪声 / m/s²<input id="accelNoise" type="range" min="0" max="0.5" step="0.005" value="0.025"><output></output></label>
+        <label>加速度固定零偏 / m/s²<input id="accelBias" type="range" min="0" max="0.5" step="0.005" value="0.02"><output></output></label>
+        <label>随机游走 / 每√秒<input id="walk" type="range" min="0" max="0.03" step="0.001" value="0"><output></output></label>
+        <label>丢样比例<input id="drop" type="range" min="0" max="0.3" step="0.01" value="0"><output></output></label>
+        <label>采样时间抖动<input id="jitter" type="range" min="0" max="0.8" step="0.05" value="0"><output></output></label>
+      </div><button id="cleanInput">无噪声，保留当前处理</button><button id="ideal">理想基准（关闭全部处理）</button><p>默认开启模拟噪声和零偏，先静置校准；无噪声按钮可单独检查算法偏移。调整零偏后请重新校准。噪声使用固定种子，角速度和加速度由设备运动自动生成。</p></details>
+    </section>
+  </main>
+  <footer><span id="sampleStatus">100 Hz 模拟采样 · 网络限频 25 Hz</span><span id="phoneStatus">手机通过浏览器运动接口接入</span></footer>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>

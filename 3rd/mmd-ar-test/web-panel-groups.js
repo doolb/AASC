@@ -484,7 +484,7 @@ const WEB_PANEL_GROUP_JS = `
       const output = document.getElementById('mmdArAoConcavityAngleValue');
       if (!input || !output) return;
       const storageKey = 'aasc.mmdArTest.aoConcavityAngle.v1';
-      const defaultAngle = 10;
+      const defaultAngle = 45;
       // 缺失/空值不得经 Number(null) 误变成零；合法值按滑块步长和范围规范化。
       const normalize = (value) => {
         if (value == null || String(value).trim() === '') return defaultAngle;
@@ -785,8 +785,8 @@ function groupWebPanels($) {
   aoGroup.find('.mmd-ar-panel-group-body').prepend(
     '<label class="display-mmd-lighting-field mmd-ar-edge-correction"><input type="checkbox" checked><span>半分辨率边界修正 <small></small></span></label>' +
     '<label class="display-mmd-lighting-field mmd-ar-normal-preview"><input type="checkbox"><span>深度重建法线预览（颜色代表方向，跳过 AO 与模糊）</span></label>' +
-    '<label class="mind-basic-field"><span>浅凹抑制 <output id="mmdArAoConcavityAngleValue">10.0°</output></span>' +
-    '<input id="mmdArAoConcavityAngle" type="range" min="0" max="45" step="0.5" value="10" aria-label="AO 浅凹抑制角度">' +
+    '<label class="mind-basic-field"><span>浅凹抑制 <output id="mmdArAoConcavityAngleValue">45.0°</output></span>' +
+    '<input id="mmdArAoConcavityAngle" type="range" min="0" max="45" step="0.5" value="45" aria-label="AO 浅凹抑制角度">' +
     '<small>值越大，浅内凹的 AO 越弱；也会减弱真实浅凹槽。角度不改变模型法线。</small></label>'
   );
   const motionPanel = $('#mmdArMotionPanel').first();

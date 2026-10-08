@@ -55,7 +55,7 @@ function createContext(files, selectedFile) {
         return urls.get(file);
     };
     const context = {
-        base, selectedUrl, selectedFile, path, find,
+        base, selectedUrl, selectedFile, path, find, files: Array.from(files),
         resolve(url) {
             if (released) throw new Error('本地文件选择已经释放，请重新选择');
             // 默认 toon 来自 MMDLoader 内置 data URI；其他地址必须属于本次已选文件。
@@ -136,3 +136,8 @@ export async function validateLocalModel(loader, url, onValidate = () => {}) {
         context.find(`${directory ? `${directory}/` : ''}${texture}`);
     }
 }
+
+// 编辑工程保留本次授权的原始文件，原注册表仍负责生命周期。
+export const getLocalAssetFiles = url => getContext(url)?.files || null;
+export const readLocalAsset = async url => { const context=getContext(url); if(!context)return null; return (await fetch(context.resolve(url))).arrayBuffer(); };
+export const resolveLocalAssetUrl = url => getContext(url)?.resolve(url) || null;

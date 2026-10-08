@@ -1,8 +1,10 @@
 import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Euler, Matrix4, Points, PointsMaterial, Quaternion, Vector3 } from 'three';
-import { buildVertexClothTopology } from './web-vertex-cloth-topology.mjs';
+import { buildVertexClothTopology, resolveVertexClothEnabled } from './web-vertex-cloth-topology.mjs';
 import { VertexCloth } from './web-vertex-cloth.mjs';
+import { createClothSurface } from './web-vertex-cloth-surface.mjs';
+import { VertexClothWebGL } from './web-vertex-cloth-webgl.mjs';
 import { normalizeWebStabilityReference } from './web-physics-rate.mjs';
-import { advanceWindState, createWindState, normalizeWindSettings, windFlowDirection } from './web-physics-wind.mjs';
+import { normalizeWindSettings } from './web-physics-wind.mjs';
 
 // 同一网格切VMD时允许新旧helper暂时并存；各自几何只由自己的dispose释放。
 const geometryOwners = new WeakMap();
@@ -28,9 +30,12 @@ const copySettings = (settings) => ({ groups: { ...(settings.groups || {}) }, pr
 export class VertexClothPmxPhysics {
     constructor(mesh, options, createBase) {
         this.mesh = mesh; this.options = options; this.createBase = createBase;
-        this.engine = 'vertex-cloth'; this.disposed = false; this.frameMs = 0; this.substeps = 0;
+        const initializationStarted = performance.now();
+        this.vertexStopped = false;
+        this.engine = options.physicsSolver === 'vertex-cloth-gpu' ? 'vertex-cloth-gpu' : 'vertex-cloth';
+        this.gpu = null; this.gpuFallback = ''; this.gpuContextLost = false; this.disposed = false; this.frameMs = 0; this.substeps = 0;
         this.stabilityReferenceHz = normalizeWebStabilityReference(options.stabilityReferenceHz);
-        this.windSettings = normalizeWindSettings(); this.windState = createWindState();
+        this.windSettings = normalizeWindSettings();
         this.matrix = new Matrix4(); this.skinMatrix = new Matrix4(); this.inverse = new Matrix4();
         this.boneMatrix = new Matrix4(); this.inverseWorld = new Matrix4();
         this.vector = new Vector3(); this.normal = new Vector3(); this.edgeA = new Vector3(); this.edgeB = new Vector3();
@@ -46,7 +51,8 @@ export class VertexClothPmxPhysics {
             const saved = JSON.parse(localStorage.getItem(this.storageKey) || 'null');
             if (saved && typeof saved === 'object') this.settings = copySettings(saved);
         } catch (error) { /* 模型开关存储受限或损坏时使用自动固定组。 */ }
-        this.enabled = new Set(this.topology.groups.filter((group) => this.settings.groups[group.id] ?? group.defaultEnabled).map((group) => group.id));
+        this.requested = new Set(this.topology.groups.filter((group) => this.settings.groups[group.id] ?? group.defaultEnabled).map((group) => group.id));
+        this.enabled = resolveVertexClothEnabled(this.topology, this.requested);
         this.geometry = relativeGeometry(this.source);
         this.desired = new Float32Array(this.source.attributes.position.count * 3);
         this.normals = new Float32Array(this.desired.length);
@@ -55,7 +61,8 @@ export class VertexClothPmxPhysics {
         this.morphPositions = new Float32Array(this.desired.length); this.previousMorphPositions = new Float32Array(this.desired.length); this.morphNormals = new Float32Array(this.desired.length);
         this.morphKey = ''; this.morphChanged = false;
         this.cloths = this.topology.groups.map((group) => ({ group, solver: new VertexCloth(group, this.topology.height * 0.0008),
-            sample: new Float32Array(group.rest.length),
+            sample: new Float32Array(group.rest.length), rotations: new Float32Array(group.pins.length * 4),
+            previousRotations: new Float32Array(group.pins.length * 4), rotationReady: false,
             colliders: [], restFaceNormals: this.faceNormals(group) }));
         try {
             this.base = this.makeBase(this.enabled);
@@ -65,6 +72,9 @@ export class VertexClothPmxPhysics {
             mesh.geometry = this.geometry; mesh.frustumCulled = false;
             owner.active.push(this); geometryOwners.set(mesh, owner);
             this.createPreview(); this.reset(); this.setPreview(this.settings.preview);
+            if (this.engine === 'vertex-cloth-gpu' && performance.now() - initializationStarted > 500) {
+                this.fallbackGpu(new Error('顶点GPU初始化超过500ms'));
+            }
         } catch (error) {
             try { this.dispose(); } catch (cleanupError) { console.warn('清理顶点布料初始化失败:', cleanupError); }
             throw error;
@@ -80,20 +90,34 @@ export class VertexClothPmxPhysics {
         }
         return normals;
     }
-    replacedBodies(enabled) {
-        return new Set(this.topology.bodies.flatMap((body, index) => {
-            const groups = this.topology.boneGroups.get(body.boneIndex);
-            const replace = body.type !== 0 && groups?.size && [...groups].every((id) => enabled.has(id));
-            return replace ? [index] : [];
-        }));
+    replacedBodies() { return new Set(); }
+    makeBase() {
+        // 原PMX物理完整保留：整体摆动、质量、K、风与关节限位仍由骨骼层承担。
+        return this.createBase(this.mesh, this.topology.bodies, this.topology.joints, {
+            ...this.options, unitStep: this.base?.unitStep || this.options.unitStep,
+            maxStepNum: this.base?.maxStepNum || this.options.maxStepNum, stabilityReferenceHz: this.stabilityReferenceHz
+        });
     }
-    makeBase(enabled) {
-        const replaced = this.replacedBodies(enabled);
-        const bodies = this.topology.bodies.map((body, index) => replaced.has(index)
-            ? { ...body, type: 0, weight: 0, groupTarget: 0 } : body);
-        const joints = this.topology.joints.filter((joint) => !replaced.has(joint.rigidBodyIndex1) && !replaced.has(joint.rigidBodyIndex2));
-        return this.createBase(this.mesh, bodies, joints, { ...this.options, unitStep: this.base?.unitStep || this.options.unitStep,
-            maxStepNum: this.base?.maxStepNum || this.options.maxStepNum, stabilityReferenceHz: this.stabilityReferenceHz });
+    collectSurfaceTargets() {
+        if (!this.surface) return;
+        for (const { cloth, offset } of this.surface.layouts) {
+            this.surface.sample.set(cloth.sample, offset * 3); this.surface.rotations.set(cloth.rotations, offset * 4);
+        }
+    }
+    prepareSurface() {
+        const key = [...this.enabled].sort().join('|');
+        if (this.surface && this.surface.key === key) {
+            this.surface.colliders = this.colliders;
+            this.surface.group.colliderAllowed = this.cloths.map(cloth => new Set(cloth.colliders));
+            this.collectSurfaceTargets(); this.surface.solver.reset(this.surface.sample); return;
+        }
+        this.gpu?.dispose(); this.gpu = null;
+        const { group, layouts } = createClothSurface(this.cloths, this.enabled, this.topology.height, this.colliders);
+        this.surface = { group, layouts, key, sample: new Float32Array(group.rest.length), rotations: new Float32Array(group.pins.length * 4),
+            solver: new VertexCloth(group, this.topology.height * 0.0008), colliders: this.colliders,
+            restFaceNormals: this.faceNormals(group) };
+        this.collectSurfaceTargets(); this.surface.solver.reset(this.surface.sample);
+        for (const { cloth, offset } of layouts) cloth.solver.positions = this.surface.solver.positions.subarray(offset * 3, offset * 3 + cloth.sample.length);
     }
     createPreview() {
         const count = this.cloths.reduce((sum, { solver }) => sum + solver.group.pins.length, 0);
@@ -110,7 +134,7 @@ export class VertexClothPmxPhysics {
     }
     setPreview(value) {
         this.settings.preview = value === true;
-        if (this.preview) this.preview.visible = this.settings.preview;
+        if (this.preview) this.preview.visible = this.settings.preview && !this.vertexStopped;
         this.updatePreview(); this.save(); return this.settings.preview;
     }
     save() {
@@ -118,16 +142,28 @@ export class VertexClothPmxPhysics {
         catch (error) { /* 即时操作仍有效，不因本地存储受限撤销。 */ }
     }
     setGroupEnabled(id, enabled) {
-        if (this.disposed || !this.topology.groups.some((group) => group.id === id)) return false;
-        const next = new Set(this.enabled); if (enabled === true) next.add(id); else next.delete(id);
-        if (next.size === this.enabled.size && [...next].every((id) => this.enabled.has(id))) return true;
-        // 新基础物理构造成功后才替换旧实例，初始化异常不会留下半组配置。
-        const base = this.makeBase(next), previous = this.base;
-        try { base.setWindSettings(this.windSettings); base.onDiagnosticSubstep = previous.onDiagnosticSubstep; }
-        catch (error) { base.dispose(); throw error; }
-        this.base = base; this.enabled = next; this.settings.groups[id] = enabled === true;
-        try { previous.dispose(); } catch (error) { console.warn('释放旧布料基础物理:', error); }
-        this.reset(); this.save(); return true;
+        const group = this.topology.groups.find(group => group.id === id);
+        if (this.disposed || this.vertexStopped || !group || group.blockedReason) return false;
+        const requested = new Set(this.requested);
+        for (const member of group.relatedGroups) {
+            if (enabled === true) requested.add(member); else requested.delete(member);
+        }
+        const next = resolveVertexClothEnabled(this.topology, requested);
+        const saveSelection = () => {
+            this.requested = requested;
+            for (const member of group.relatedGroups) this.settings.groups[member] = enabled === true;
+            this.save();
+        };
+        if (next.size === this.enabled.size && [...next].every(id => this.enabled.has(id))) { saveSelection(); return true; }
+        // 仅切换局部修正，不重建Ammo或清除原骨骼刚体速度。
+        const previous = this.enabled;
+        try {
+            this.enabled = next; this.sampleTargets(); this.prepareSurface(); this.rebuildGpu();
+            this.writeGeometry(); this.updatePreview(); saveSelection(); return true;
+        } catch (error) {
+            this.enabled = previous; this.prepareSurface(); this.rebuildGpu(); this.writeGeometry();
+            throw error;
+        }
     }
     sampleMorphs() {
         const influences = this.mesh.morphTargetInfluences || [];
@@ -164,34 +200,21 @@ export class VertexClothPmxPhysics {
         this.sampleMorphs();
         const original = this.source.attributes.position;
         for (const cloth of this.cloths) {
-            const { group, sample, solver } = cloth; let groupMorphChanged = false;
+            const { group, sample } = cloth;
             for (let particle = 0; particle < group.representatives.length; particle++) {
                 const vertex = group.representatives[particle], i = particle * 3, v = vertex * 3, matrix = this.skin(vertex);
                 this.vector.fromBufferAttribute(original, vertex);
                 this.vector.x += this.morphPositions[v]; this.vector.y += this.morphPositions[v + 1]; this.vector.z += this.morphPositions[v + 2];
                 this.vector.applyMatrix4(matrix).toArray(sample, i);
-                // 自由点只跟随表情增量，不跟随骨骼动画整体回摆；随后更新当前中性约束长度。
-                if (this.morphChanged) {
-                    const e = matrix.elements, dx = this.morphPositions[v] - this.previousMorphPositions[v],
-                        dy = this.morphPositions[v + 1] - this.previousMorphPositions[v + 1], dz = this.morphPositions[v + 2] - this.previousMorphPositions[v + 2];
-                    if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > EPS) groupMorphChanged = true;
-                    if (!group.pins[particle]) {
-                        solver.positions[i] += e[0] * dx + e[4] * dy + e[8] * dz;
-                        solver.positions[i + 1] += e[1] * dx + e[5] * dy + e[9] * dz;
-                        solver.positions[i + 2] += e[2] * dx + e[6] * dy + e[10] * dz;
-                    }
-                }
+                this.matrix.extractRotation(matrix); this.rotation.setFromRotationMatrix(this.matrix).normalize();
+                if (!Number.isFinite(this.rotation.x + this.rotation.y + this.rotation.z + this.rotation.w)) this.rotation.identity();
+                if (cloth.rotationReady) this.frameRotation.fromArray(cloth.previousRotations, particle * 4).invert().premultiply(this.rotation).normalize();
+                else this.frameRotation.identity();
+                this.frameRotation.toArray(cloth.rotations, particle * 4); this.rotation.toArray(cloth.previousRotations, particle * 4);
             }
-            if (groupMorphChanged) this.updateRestLengths(cloth);
         }
-    }
-    updateRestLengths({ group }) {
-        for (const constraints of [group.stretch, group.bend]) for (let edge = 0; edge < constraints.lengths.length; edge++) {
-            const a = constraints.pairs[edge * 2], b = constraints.pairs[edge * 2 + 1];
-            const va = group.representatives[a] * 3, vb = group.representatives[b] * 3;
-            constraints.lengths[edge] = Math.hypot(...[0, 1, 2].map((axis) => group.rest[a * 3 + axis] + this.morphPositions[va + axis]
-                - group.rest[b * 3 + axis] - this.morphPositions[vb + axis]));
-        }
+        for (const cloth of this.cloths) cloth.rotationReady = true;
+        this.collectSurfaceTargets();
     }
     createColliders() {
         const replaced = this.replacedBodies(this.enabled), bodies = this.topology.bodies;
@@ -238,10 +261,12 @@ export class VertexClothPmxPhysics {
     }
     reset() {
         if (this.disposed) return this;
-        this.base.reset(); this.sampleTargets();
+        this.base.reset();
+        if (this.vertexStopped) return this;
+        this.sampleTargets();
         for (const cloth of this.cloths) cloth.solver.reset(cloth.sample);
-        this.createColliders(); this.sampleColliders(true); this.windState = createWindState(); this.substeps = 0;
-        this.writeGeometry(); this.updatePreview(); return this;
+        this.createColliders(); this.sampleColliders(true); this.substeps = 0;
+        this.prepareSurface(); this.rebuildGpu(); this.writeGeometry(); this.updatePreview(); return this;
     }
     resetMotion() {
         if (this.disposed) return this;
@@ -251,8 +276,12 @@ export class VertexClothPmxPhysics {
         return this.resetClothMotion();
     }
     resetClothMotion() {
+        if (this.vertexStopped) return this;
         this.sampleTargets(); for (const cloth of this.cloths) cloth.solver.reset(cloth.sample);
-        this.sampleColliders(true); this.writeGeometry(); this.updatePreview(); return this;
+        this.sampleColliders(true);
+        this.collectSurfaceTargets(); this.surface?.solver.reset(this.surface.sample);
+        if (this.gpu) { try { this.gpu.reset(); } catch (error) { this.fallbackGpu(error); } }
+        this.writeGeometry(); this.updatePreview(); return this;
     }
     resetAnchorInterpolation() { this.base.resetAnchorInterpolation?.(); this.resetClothMotion(); return this; }
     warmup(cycles) { for (let i = 0; i < cycles; i++) this.update(1 / 60); return this; }
@@ -261,31 +290,62 @@ export class VertexClothPmxPhysics {
     }
     setWindSettings(value) {
         this.windSettings = normalizeWindSettings(value); this.base.setWindSettings(this.windSettings);
-        if (!this.windSettings.enabled) this.windState.strength = 0;
         return { ...this.windSettings };
     }
     update(delta) {
         if (this.disposed || !Number.isFinite(delta) || delta <= 0) return this;
-        this.base.update(delta); this.sampleTargets(); this.sampleColliders(false, delta);
+        this.base.update(delta);
+        if (this.vertexStopped || this.gpu?.pending) return this;
+        const started = performance.now();
+        this.sampleTargets(); this.sampleColliders(false, delta);
         const steps = normalizeWebStabilityReference(this.stabilityReferenceHz), h = Math.min(0.1, delta) / steps;
-        this.mesh.getWorldQuaternion(this.frameRotation).invert();
-        this.localGravity.copy(this.gravity).applyQuaternion(this.frameRotation);
-        const direction = windFlowDirection(this.windSettings);
-        this.localWind.set(direction.x, direction.y, direction.z).applyQuaternion(this.frameRotation);
-        const wind = { x: this.localWind.x, y: this.localWind.y, z: this.localWind.z, strength: 0 };
-        for (const cloth of this.cloths) {
-            cloth.solver.beginFrame(cloth.sample);
-            if (!this.enabled.has(cloth.group.id)) cloth.solver.reset(cloth.sample);
-        }
-        for (let step = 0; step < steps; step++) {
-            const alpha = (step + 1) / steps; this.interpolateColliders(alpha);
-            wind.strength = advanceWindState(this.windState, h, this.windSettings);
-            for (const cloth of this.cloths) if (this.enabled.has(cloth.group.id)) cloth.solver.step(h, alpha, this.localGravity, wind, cloth.colliders);
+        this.surface.solver.beginFrame(this.surface.sample, this.surface.rotations);
+        if (this.gpu) {
+            if (performance.now() - started > 500) this.fallbackGpu(new Error('顶点GPU目标准备超过500ms'));
+            else this.gpu.submit(h, steps, started);
+        } else {
+            for (let step = 0; step < steps; step++) {
+                const alpha = (step + 1) / steps; this.interpolateColliders(alpha);
+                this.surface.solver.step(h, alpha, 1 / steps, this.colliders);
+            }
         }
         this.substeps = steps; this.writeGeometry(); this.updatePreview(); return this;
     }
+
+    rebuildGpu() {
+        if (this.vertexStopped) return;
+        const groups = [...this.enabled].sort().join('|');
+        if (this.gpu && groups === this.gpuGroups) {
+            try { this.gpu.reset(); return; }
+            catch (error) { this.fallbackGpu(error); return; }
+        }
+        this.gpuGroups = groups;
+        this.gpu?.dispose(); this.gpu = null; this.gpuFallback = ''; this.gpuContextLost = false;
+        if (this.engine !== 'vertex-cloth-gpu') return;
+        try { this.gpu = new VertexClothWebGL(this, this.mesh._aascVertexClothRenderer); }
+        catch (error) { this.fallbackGpu(error); }
+    }
+    fallbackGpu(error) {
+        this.vertexStopped = true; this.engine = 'ammo'; this.substeps = 0;
+        this.gpuFallback = error?.message || 'GPU不可用';
+        this.gpu?.dispose(); this.gpu = null; this.gpuContextLost = false;
+        // 回退不重建原Ammo实例、不清除其速度，也不启动CPU整模自碰撞。
+        for (const name of ['position', 'normal']) {
+            this.geometry.attributes[name].array.set(this.source.attributes[name].array);
+            this.geometry.attributes[name].needsUpdate = true;
+        }
+        if (this.preview) this.preview.visible = false;
+        try { localStorage.setItem('aasc.mmdArTest.physicsSolver.v1', 'ammo'); }
+        catch (storageError) { /* 存储不可用仍保持本次Ammo回退。 */ }
+        console.warn('顶点布料GPU已回退Ammo：', this.gpuFallback);
+    }
     writeGeometry() {
+        if (this.vertexStopped) return;
         this.mesh.geometry = this.geometry;
+        if (this.gpu) {
+            try { this.gpu.draw(); return; }
+            catch (error) { this.fallbackGpu(error); return; }
+        }
         const originalNormal = this.source.attributes.normal, positions = this.geometry.attributes.position, normals = this.geometry.attributes.normal;
         positions.array.set(this.source.attributes.position.array); normals.array.set(originalNormal.array); this.normals.fill(0);
         for (const cloth of this.cloths) {
@@ -322,22 +382,25 @@ export class VertexClothPmxPhysics {
         positions.needsUpdate = true; normals.needsUpdate = true;
     }
     updatePreview() {
+        if (this.vertexStopped) return;
         if (!this.preview?.visible) return;
         const positions = this.preview.geometry.attributes.position; let offset = 0;
         for (const cloth of this.cloths) {
-            positions.array.set(this.enabled.has(cloth.group.id) ? cloth.solver.positions : cloth.sample, offset);
+            positions.array.set(this.enabled.has(cloth.group.id) && !this.gpu ? cloth.solver.positions : cloth.sample, offset);
             offset += cloth.sample.length;
         }
         positions.needsUpdate = true;
     }
     getState() {
         const active = this.cloths.filter(({ group }) => this.enabled.has(group.id));
-        return { solver: this.engine, modelKey: this.topology.modelKey, substeps: this.substeps, preview: this.settings.preview,
+        return { solver: this.engine, backend: this.vertexStopped ? 'ammo' : this.gpu ? 'webgl2' : 'cpu', vertexStopped: this.vertexStopped, computePending: Boolean(this.gpu?.pending), gpuComputeMs: this.gpu?.lastComputeMs || 0, gpuFallback: this.gpuFallback, seamCount: this.topology.seamCount,
+            constraintBatches: this.gpu?.entries.reduce((sum, entry) => sum + entry.batches.length, 0) || 0, modelKey: this.topology.modelKey, substeps: this.substeps, preview: this.settings.preview,
             particleCount: active.reduce((sum, { group }) => sum + group.pins.length, 0),
             fixedCount: active.reduce((sum, { group }) => sum + group.fixedCount, 0),
             constraintCount: active.reduce((sum, { group }) => sum + group.stretch.lengths.length + group.bend.lengths.length, 0),
-            replacedBodyCount: this.replacedBodies(this.enabled).size,
-            groups: this.cloths.map(({ group }) => ({ id: group.id, name: group.name, enabled: this.enabled.has(group.id),
+            replacedBodyCount: 0, boneDriven: true, selfCollision: !this.vertexStopped, attachmentCount: this.surface?.group.attachments.length || 0,
+            retainedGroupCount: this.cloths.filter(({ group }) => Boolean(group.blockedReason) && group.fixedCount < group.pins.length).length,
+            groups: this.cloths.map(({ group }) => ({ blockedReason: group.blockedReason, relatedGroupCount: group.relatedGroups.length, id: group.id, name: group.name, enabled: this.enabled.has(group.id),
                 particles: group.pins.length, fixed: group.fixedCount, constraints: group.stretch.lengths.length + group.bend.lengths.length })) };
     }
     dispose() {
@@ -345,12 +408,13 @@ export class VertexClothPmxPhysics {
         this.disposed = true;
         try { this.base?.dispose(); }
         finally {
+            this.gpu?.dispose(); this.gpu = null;
             this.preview?.removeFromParent(); this.preview?.geometry.dispose(); this.preview?.material.dispose();
             this.owner.active = this.owner.active.filter((owner) => owner !== this);
             if (this.mesh.geometry === this.geometry) this.mesh.geometry = this.owner.active.at(-1)?.geometry || this.source;
             this.geometry.dispose();
             if (!this.owner.active.length) { this.mesh.frustumCulled = this.owner.frustumCulled; geometryOwners.delete(this.mesh); }
-            this.cloths.length = 0; this.colliders = []; this.base = null;
+            this.cloths.length = 0; this.colliders = []; this.surface = null; this.base = null;
         }
     }
 }

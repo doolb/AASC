@@ -1,3 +1,4 @@
+import { weldClothSeams } from './web-vertex-cloth-seams.mjs';
 // PMX物理骨骼与网格拓扑只读分析；不按名称猜布料，也不沿动态后代传播固定状态。
 const EPS = 1e-8;
 const THRESHOLD = 0.5;
@@ -15,6 +16,36 @@ const locked = (joint) => ['translation', 'rotation'].every((kind) => {
     const low = joint[kind + 'Limitation1'], high = joint[kind + 'Limitation2'];
     return low?.length === 3 && high?.length === 3 && low.every((value, i) => Math.abs(value - high[i]) < EPS);
 });
+
+// 同一动态链统一启用局部修正；原骨骼驱动始终保留，自由附件另建立表面附着。
+function assignDriveFamilies(groups, components) {
+    const sets = unionFind(groups.length), byComponent = new Map();
+    groups.forEach((group, index) => {
+        for (const bone of group.driveBones) {
+            const component = components.root(bone);
+            if (byComponent.has(component)) sets.join(index, byComponent.get(component));
+            else byComponent.set(component, index);
+        }
+    });
+    const families = new Map();
+    groups.forEach((group, index) => {
+        const key = sets.root(index);
+        if (!families.has(key)) families.set(key, []);
+        families.get(key).push(group);
+    });
+    for (const family of families.values()) {
+        const relatedGroups = family.map(group => group.id);
+        for (const group of family) {
+            group.relatedGroups = relatedGroups;
+            group.blockedReason = group.fixedCount === group.pins.length ? '全固定区域，沿用原骨骼' : '';
+        }
+    }
+}
+
+export function resolveVertexClothEnabled(topology, requested) {
+    return new Set(topology.groups.filter(group => !group.blockedReason
+        && group.relatedGroups.every(id => requested.has(id))).map(group => group.id));
+}
 
 export function buildVertexClothTopology(geometry, skeleton, materials) {
     const data = geometry.userData.MMD, bodies = data.rigidBodies, joints = data.constraints || [];
@@ -68,6 +99,7 @@ export function buildVertexClothTopology(geometry, skeleton, materials) {
         if (!weldKeys.has(key)) weldKeys.set(key, weldKeys.size);
         weld[vertex] = weldKeys.get(key); geometryHash = signature(geometryHash + '|' + key);
     }
+    const seamCount = weldClothSeams(geometry, weld, component);
     const indices = geometry.index.array, candidates = [], materialForTriangle = new Int32Array(indices.length / 3);
     for (const group of geometry.groups) materialForTriangle.fill(group.materialIndex, group.start / 3, (group.start + group.count) / 3);
     for (let offset = 0; offset < indices.length; offset += 3) {
@@ -102,9 +134,9 @@ export function buildVertexClothTopology(geometry, skeleton, materials) {
         + '|' + joints.map((joint) => [joint.rigidBodyIndex1, joint.rigidBodyIndex2, locked(joint)].join(':')).join('|'));
     for (let vertex = 0; vertex < position.count; vertex++) hash = signature(hash + ':' + weld[vertex] + ':' + component[vertex]);
     for (let i = 0; i < indices.length; i++) hash = signature(hash + ':' + indices[i]);
-    const modelKey = position.count + '-' + hash, groups = [], boneGroups = new Map(), covered = new Set();
+    const modelKey = position.count + '-' + hash, groups = [], boneGroups = new Map(), driveBoneGroups = new Map(), covered = new Set();
     for (const triangles of partitions.values()) {
-        const particles = new Map(), render = new Map(), rawTriangles = [], uniqueTriangles = [], triKeys = new Set(), materialSet = new Set(), groupBones = new Set();
+        const particles = new Map(), render = new Map(), rawTriangles = [], uniqueTriangles = [], triKeys = new Set(), materialSet = new Set(), groupBones = new Set(), driveBones = new Set();
         const rest = [], pins = [], representatives = [];
         const particle = (vertex) => {
             const key = weld[vertex];
@@ -112,9 +144,14 @@ export function buildVertexClothTopology(geometry, skeleton, materials) {
                 particles.set(key, particles.size); representatives.push(vertex); pins.push(pinned[vertex]);
                 rest.push(position.getX(vertex), position.getY(vertex), position.getZ(vertex));
             }
-            const index = particles.get(key); pins[index] = Math.max(pins[index], pinned[vertex]);
+            const index = particles.get(key);
+            if (pinned[vertex] && !pins[index]) representatives[index] = vertex;
+            pins[index] = Math.max(pins[index], pinned[vertex]);
             render.set(vertex, index); covered.add(vertex);
-            for (const bone of boneWeights[vertex]) groupBones.add(bone);
+            for (const bone of boneWeights[vertex]) {
+                groupBones.add(bone);
+                if (!pinned[vertex] && !fixed.has(bone)) driveBones.add(bone);
+            }
             return index;
         };
         for (const triangle of triangles) {
@@ -145,28 +182,38 @@ export function buildVertexClothTopology(geometry, skeleton, materials) {
         const names = [...materialSet].map((index) => materials[index]?.name || '材质' + index);
         const rootName = bones[triangles[0].component]?.name || '物理区域';
         const group = { id, name: rootName + ' · ' + names.slice(0, 3).join('/'), materials: names,
-            bones: groupBones, rest: Float32Array.from(rest), pins: Uint8Array.from(pins),
+            bones: groupBones, driveBones, rest: Float32Array.from(rest), pins: Uint8Array.from(pins),
             representatives: Uint32Array.from(representatives), vertexIds: Uint32Array.from(render.keys()), particleIds: Uint32Array.from(render.values()),
             triangles: Uint32Array.from(uniqueTriangles), rawTriangles: Uint32Array.from(rawTriangles),
             stretch: pack([...edges.values()]), bend: pack([...bends.values()]),
             inverseMass: Float32Array.from(mass, (value, i) => pins[i] ? 0 : 1 / Math.max(EPS, value)),
             fixedCount: pins.reduce((a, b) => a + b, 0) };
-        group.defaultEnabled = group.fixedCount > 0 && group.fixedCount < particles.size;
+        group.defaultEnabled = group.fixedCount < particles.size;
         groups.push(group);
+        for (const bone of driveBones) {
+            if (!driveBoneGroups.has(bone)) driveBoneGroups.set(bone, new Set());
+            driveBoneGroups.get(bone).add(id);
+        }
         for (const bone of groupBones) {
             if (!boneGroups.has(bone)) boneGroups.set(bone, new Set());
             boneGroups.get(bone).add(id);
         }
     }
-    // 部分覆盖/共享骨骼继续原物理，避免禁用没有进入顶点选区的附件。
+    // 固定边界不阻塞自由网格；真正遗漏的自由表面才阻止该链被部分替换。
+    const uncoveredComponents = new Set();
     for (let vertex = 0; vertex < position.count; vertex++) {
         if (covered.has(vertex)) continue;
         for (const bone of boneWeights[vertex]) {
             if (!boneGroups.has(bone)) boneGroups.set(bone, new Set());
             boneGroups.get(bone).add('__uncovered__');
+            if (pinned[vertex] || fixed.has(bone)) continue;
+            uncoveredComponents.add(components.root(bone));
+            if (!driveBoneGroups.has(bone)) driveBoneGroups.set(bone, new Set());
+            driveBoneGroups.get(bone).add('__uncovered__');
         }
     }
+    assignDriveFamilies(groups, components);
     geometry.computeBoundingBox();
     const height = Math.max(0.001, geometry.boundingBox.max.y - geometry.boundingBox.min.y);
-    return { groups, modelKey, bodies, joints, boneGroups, height, threshold: THRESHOLD };
+    return { groups, modelKey, bodies, joints, boneGroups, driveBoneGroups, height, seamCount, threshold: THRESHOLD };
 }
