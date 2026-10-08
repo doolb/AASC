@@ -1,5 +1,13 @@
 # 自测功能文档
 
+## MMD-AR独立接触采样、正式分类与刷新回归（2026-10-08）
+
+`tests/mmd-ar-screen-lighting.test.js`覆盖旧质量迁移、非法/越界/小数归一化、整数显示与持久化/复位，以及独立接触64步与SSGI32步同时传入。`tests/mmd-ar-contact-shadow-browser.test.js`真实生产追踪函数7种深度×4/12/20/32/64步共35组，包含64步后段交点、自遮挡/背景/厚度拒绝；完整SSGI及Reduction/HZB/滤波Shader编译链接通过。
+
+`tests/mmd-ar-screen-lighting-refresh-browser.test.js`真实加载米娅，开启两效果后刷新，直接读取角色像素和完整480×640 viewport；真实鼠标展开下方正式接触阴影、间接光/SSGI分类，修改64步并验证刷新恢复，DPR2仍保留逻辑viewport且物理画布宽960。HTTP夹具提供正确CSS MIME，退出时关闭浏览器和HTTP连接。
+
+网页构建通过。全量1263项中本次13项通过；全量1083通过、159失败、21跳过，不能视为仓库全量绿色。既有环境/路径失败及挂起处理见`docs/task/20261008_MMDAR接触阴影独立采样步数.md`。手机阴影观感与真实GPU帧耗时待验收。
+
 ## 六轴IMU共享3D网页（2026-10-03）
 
 `npm run test:imu:six-axis-test`：11项全部通过（9算法/轴向/相机、1真实WS、1Chromium界面）。算法测试真实生成测量并积分，覆盖组合旋转/位置、默认匀速不清速度、静置/六面校准、固定种子噪声对照、时间缺口/缺轴、手机自然轴映射、右相机位移跟随、航向重置保留倾斜及暂停共享时间。WS测试实际双源/观察端、晚加入、所有权/顺序拒绝与断线。浏览器测试真实鼠标拖动XYZ箭头/旋转圆环、相机偏移不变、数据关闭后左侧冻结、390px手机布局和事件适配/共享，不通过写估计位姿绕过算法。
@@ -1043,6 +1051,13 @@ Blender4.5.4后台导出完成：7网格/7材质/22内嵌图像，无骨架/动�
 - `tests/mmd-ar-screen-lighting.test.js` 5/5通过：旧设置默认、参数夹取、0–3轮/逐轮半径、ping-pong目标不自读写、接触阴影alpha旁路、面板持久化与复位。
 - 与阴影拟合及公网模型回退测试组合27/27通过；`npm run build:web:mmd-ar-test`成功，构建产物包含轮数/半径控件、设置模块及可变半径滤波Shader。
 - 当前Windows环境缺少配置的`/usr/bin/chromium`，未执行GPU Shader实时编译、同角色画面颗粒变化/帧耗时比较；不宣称视觉降噪幅度，待可用浏览器/设备验收。
+
+## 2026-10-08 UE 风格 SSGI 历史输入与分类回归
+
+- `node --test tests/mmd-ar-screen-lighting.test.js tests/mmd-ar-contact-shadow-browser.test.js`：12/12通过；覆盖旧设置与轮数、Reduction/HZB奇数尺寸、相机/质量切换失效、前帧SceneColor采集、双缓冲无纹理反馈、alpha中心保留及UI分类层级。
+- Chromium+SwiftShader/WebGL2 实际编译并链接 SSGI 重投影/HZB查询、颜色深度Reduction、双边降噪四类 Shader；同时既有接触阴影真实追踪大跨越测试通过。此次验证为Shader编译/链接和受控追踪，不代表角色画面画质或硬件GPU性能。
+- `npm run build:web:mmd-ar-test`成功；构建将实现注入独立测试页生成副本，正式显示端未修改。
+- 未进行用户模型实际画面、动态角色拖影、透明发丝边界和手机GPU帧时验收，继续保留在设备待办中。
 
 ## 2026-10-08 MMD-AR主相机联动CSM切片回归
 

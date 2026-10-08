@@ -1,5 +1,26 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+## 2026-10-08 接触阴影独立步数与刷新显示修复（已实现）
+
+```text
+新增设置 := 接触阴影采样步数；首次默认12；整数范围4–64
+旧设置缺字段 -> 按有效旧质量低/中/高初始化12/20/32
+存在设置 -> 数值校验、取整、限制范围；非法值回到对应旧质量步数
+面板 := 灯光面板下方正式分类；复用现有分类标题/开关/展开按钮；接触阴影滑块 + 间接光内SSGI子分类
+输入变化 -> 归一化设置 -> 更新现有本地设置对象 -> 保存现有存储键
+当前帧渲染 -> 更新独立接触阴影步数uniform
+当前帧追踪参数 := 射线起点、方向、距离、偏置、实际步数
+接触阴影调用 -> 传独立步数；SSGI回退调用 -> 传原质量步数
+静态循环上限 := 64；达到实际步数停止；厚度/步长/细化区间均使用实际步数
+历史HZB追踪 := 保留SSGI原质量步数与上限32
+灯光恢复默认 -> 接触阴影步数12；刷新保留设置
+自测 := 迁移、边界、整数、持久化、复位、GI参数独立、4/12/20/32/64步GLSL行为
+离屏pass := 切换目标自动使用该目标viewport；不调用全局setViewport
+完成离屏pass -> 恢复原渲染目标；主画布全局viewport保持原尺寸
+刷新回归 := 保存接触阴影/SSGI设置 -> 重载 -> 等待模型 -> 实际像素及viewport检查
+状态 := 独立步数、正式分类与viewport修复已实现；手机画质与帧耗时待验收
+```
+
 ## 2026-10-08 接触阴影跨越后厚度校验（已实现，GPU回归通过）
 
 ```text
@@ -30,7 +51,6 @@
 验证状态 := 现有屏幕光照测试5/5通过；未复现用户视角GPU结果
 候选修正（尚未实现） := 分离跨越识别、区间细化、最终厚度校验；保留自遮挡保护
 ```
-
 
 ## 2026-10-03 GPU 顶点布料 500ms 回退（已实现）
 
@@ -3451,32 +3471,54 @@ GLB原始材质按名称匹配PMX材质槽，保留颜色/法线/金属粗糙度
     校验浏览器面几何法线与顶点法线的点积，恢复双面材质正确受光
 ```
 
-## 接触阴影与SSGI降噪（2026-10-04，2026-10-08更新）
+## 接触阴影与 UE 风格 SSGI 历史输入/降噪（2026-10-08，已实现）
 
 ```text
-保持接触阴影/SSGI实验默认关闭和已有质量/强度参数
-ScreenLightingSettings := { contactEnabled, giEnabled, ..., giBlurPassCount, giBlurRadii[3] }
-giBlurPassCount规范 := 整数0–3，默认1；giBlurRadii每项整数1–5效果像素，默认[3,3,3]
-旧存储缺模糊字段 -> 1轮/[3,3,3]；设置沿用aasc.mmdArTest.screenLighting.v1本地键
+ScreenLightingSettings := { contactEnabled, contactStepCount, giEnabled, giStrength, giRadius, quality,
+                            giBlurPassCount, giBlurRadii[3] }
+UI := 接触阴影独立分类；间接光分类 -> SSGI子类；默认关闭；旧设置键不变
 
-短射线首次跨越深度 -> 4轮区间细化 -> 厚度与距离置信度，避免硬跳变
-GI命中颜色 -> 深度引导邻域取样 -> 亮度软限幅 -> 按命中置信度累加
-原始半分辨率光照 -> target[0]
-if giEnabled 且 giBlurPassCount > 0:
-  for each轮:
-    水平再垂直执行最多±5抽头的双边滤波，抽头范围/高斯宽度由该轮giBlurRadii配置
-    以深度重建法线/切平面距离约束邻域，轮廓外不混色
-    只滤波SSGI RGB；接触阴影alpha始终取该像素中心值
-    target[1]/target[2] ping-pong；输入与输出不得为同一纹理
-else:
-  原始target[0]直接供上采样；接触阴影不做额外模糊
-最终上采样同样用法线与切平面距离约束，不再先硬件线性混合
-有半浮点颜色附件支持则用HalfFloat，否则UnsignedByte；全部Nearest采样
-实验关闭/销毁 -> 释放原始与两个滤波目标、两个材质与共享几何
-验证 := 0–3轮/半径边界和复位、SSGI降噪、接触阴影alpha不变、轮廓无串色、资源释放与Web构建
+每帧场景颜色/深度渲染完成，AO/SSGI合成前：
+  key := (全分辨率尺寸, 效果尺寸, quality)
+  if SSGI关闭:
+    历史有效标记 := false；释放SSGI历史/层级目标；不构建Reduction/HZB
+  else if key改变或历史不存在:
+    按当前尺寸创建双缓冲历史SceneColor与深度层级；历史有效标记 := false
+  if 首帧/相机大幅切断/投影变化/上下文丢失或恢复:
+    本帧GI回退到currentSceneColor/currentDepth；不得采样无效历史
+  else if 历史有效:
+    当前帧射线起点和方向 -> 当前相机World -> previousView
+    每步投影到previousUV；按屏幕步长选择HZB mip粗筛
+    使用上帧HZB的近/远深度范围检测候选，可能命中则回到mip0做4轮区间细化
+    将候选命中反投影到当前深度验证；越界、遮挡不匹配或动态物体深度冲突 -> 拒绝历史
+    验证通过 -> 在previousUV采样前帧Reduction SceneColor作为入射颜色
+    拒绝或未命中 -> 当前帧深度/颜色射线回退
+  短射线 -> 每帧新算漫反射辐照度与接触阴影；不累积上一帧SSGI输出
+  命中颜色软限幅 -> SS Denoiser执行深度/法线引导双边降噪
+  只滤波SSGI RGB；接触阴影alpha始终保留原中心样本；最终引导上采样合成
+
+帧末从尚未合成SSGI的原始深度采集待写历史槽：
+  depthInput := currentDepth
+  while depthInput宽或高大于效果尺寸:
+    nextSize := 每维最多缩小1/2，最终落在效果尺寸
+    depthInput -> near/far 16-bit范围归约（空层哨兵near=1/far=0）；最终写入HZB mip[0]
+  for mip := 1 to 1x1:
+    HZB[mip] := 对前一级2x2归约；普通Z下near=min、far=max，背景哨兵不参与
+  colorInput := 未合成SSGI的currentSceneColor
+  for 与depth相同的逐级尺寸:
+    colorInput -> 四点深度引导颜色归约，使用对应的currentDepth归约级
+  深度范围RGBA用两个16-bit归一化分量编码，兼容UnsignedByte附件；near=min对应UE reversed-Z的max-near语义
+  写入颜色/深度双缓冲待写槽和当前相机矩阵、尺寸/质量key；完成后交换读写槽，任何pass输入/输出纹理不得相同
+
+尺寸/质量改变重建历史；相机切断或WebGL上下文丢失/恢复只清除有效标记
+动态形变无运动矢量时，前后深度/当前可见性不匹配 -> 拒绝历史并回退当前SceneColor
+GI关闭、runtime销毁 -> 释放历史颜色、HZB、Reduction、滤波目标与材质；模型切换由runtime销毁并重建
+
+验证 := 首帧回退/后续帧重投影、质量/尺寸/投影/相机切断失效、历史命中当前深度拒绝、
+        SceneColor历史不含GI反馈、Reduction/HZB奇数尺寸及层级、读写不别名、双边降噪/alpha不变、释放、WebGL Shader编译、Web构建
 ```
 
-实现验证：`tests/mmd-ar-screen-lighting.test.js` 5/5通过；与阴影及模型回退回归共27/27通过；`npm run build:web:mmd-ar-test`成功。当前环境无配置的`/usr/bin/chromium`，尚未进行GPU Shader编译及实际画面噪点/性能验收。
+实现边界：历史输入为前帧原始SceneColor Reduction，不是前帧SSGI结果或TAA累积；Three/WebGL2使用普通Z，HZB同时保存近/远范围以适配其深度约定。当前没有通用运动矢量，动态模型历史可能被保守拒绝。`node --test tests/mmd-ar-screen-lighting.test.js tests/mmd-ar-contact-shadow-browser.test.js` 12/12通过（包含SwiftShader/WebGL2真实Shader编译/链接）；`npm run build:web:mmd-ar-test`成功。移动设备画质和GPU帧时仍需实机验收。
 
 ## 编辑／预览／渲染首版（2026-10-04，已实现）
 

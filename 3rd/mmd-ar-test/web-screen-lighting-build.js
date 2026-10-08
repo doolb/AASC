@@ -51,15 +51,25 @@ async function stage(root) {
 }
 function panel($) {
     const range = (name, label, min, max, step, value) => `<label class="mind-basic-field"><span>${label} <output data-screen-value="${name}">${value}</output></span><input type="range" data-screen-lighting="${name}" min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
-    const blurRadius = index => `<label class="mind-basic-field" data-screen-blur-round="${index}"${index > 1 ? ' hidden' : ''}><span>SSGI第${index}轮模糊半径 <output data-screen-value="giBlurRadius${index}">3 px</output></span><input type="range" data-screen-lighting="giBlurRadius${index}" min="1" max="5" step="1" value="3"></label>`;
-    $('#displayMmdLightingReset').before(`<details id="mmdArScreenLighting"><summary>接触阴影 / 间接光（实验）</summary>
-    <label><input type="checkbox" data-screen-lighting="contactEnabled">接触阴影</label>
-    ${range('contactStrength', '阴影强度', 0, 1, .05, .5)}${range('contactDistance', '阴影距离', .02, 3, .02, .3)}
-    <label><input type="checkbox" data-screen-lighting="giEnabled">间接光（SSGI）</label>
-    ${range('giStrength', '反弹光强度', 0, 4, .05, 1)}${range('giRadius', '反弹光半径', .1, 10, .1, 2)}
-    <label>SSGI模糊轮数 <select data-screen-lighting="giBlurPassCount"><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select></label>
-     ${[1, 2, 3].map(blurRadius).join('')}
-     <label>质量 <select data-screen-lighting="quality"><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
-    <p data-screen-status style="font-size:12px">实验效果，默认关闭。</p><p style="font-size:12px">模糊只作用于SSGI反弹光颜色；接触阴影alpha不参与模糊。半径按SSGI低分辨率效果像素计，增加轮数会增加GPU开销。</p></details>`);
+    const blurRadius = index => `<label class="mind-basic-field" data-screen-blur-round="${index}"${index > 1 ? ' hidden' : ''}><span>SSGI第${index}轮双边滤波半径 <output data-screen-value="giBlurRadius${index}">3 px</output></span><input type="range" data-screen-lighting="giBlurRadius${index}" min="1" max="5" step="1" value="3"></label>`;
+    // 复用正式分类的结构及现有展开监听，不在顶部重建第二套details控件。
+    const group = (id, title, body, setting) => `<section id="${id}" class="mmd-ar-panel-group">
+      <div class="mmd-ar-panel-group-header">${setting ? `<label class="mmd-ar-panel-group-switch"><input type="checkbox" data-screen-lighting="${setting}" aria-label="启用${title}"></label>` : ''}
+        <button class="mmd-ar-panel-group-toggle" type="button" aria-controls="${id}Body" aria-expanded="false" data-group-title="${title}" aria-label="展开${title}设置"><span>${title}</span><span class="mmd-ar-panel-group-arrow" aria-hidden="true">⌄</span></button>
+      </div><div class="mmd-ar-panel-group-body" id="${id}Body" hidden>${body}</div></section>`;
+    const contact = group('mmdArContactLighting', '接触阴影',
+        range('contactStrength', '阴影强度', 0, 1, .05, .5) + range('contactDistance', '阴影距离', .02, 3, .02, .3)
+        + range('contactStepCount', '接触阴影采样步数', 4, 64, 1, 12)
+        + '<p class="mind-basic-note">采样步数越高，GPU开销越大；SSGI质量独立控制。</p>', 'contactEnabled');
+    const ssgi = group('mmdArSsgi', 'SSGI', `
+          ${range('giStrength', '反弹光强度', 0, 4, .05, 1)}${range('giRadius', '反弹光半径', .1, 10, .1, 2)}
+          <label>模糊轮数 <select data-screen-lighting="giBlurPassCount"><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select></label>
+          ${[1, 2, 3].map(blurRadius).join('')}
+          <label>SSGI质量 <select data-screen-lighting="quality"><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
+          <p data-screen-status class="mind-basic-note">默认关闭。</p>
+          <p class="mind-basic-note">近似可见表面的彩色漫反射；滤波仅平滑反弹光颜色。</p>`, 'giEnabled');
+    const lightingPanel = $('#displayMmdLightingPanel');
+    if (!lightingPanel.length) throw new Error('屏幕光照缺少正式灯光面板');
+    lightingPanel.append(`<div id="mmdArScreenLighting">${contact}${group('mmdArIndirectLighting', '间接光', ssgi)}</div>`);
 }
 module.exports = { stage, panel };

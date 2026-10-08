@@ -1,5 +1,5 @@
 export const defaults = Object.freeze({
-    contactEnabled: false, giEnabled: false, contactStrength: .5, contactDistance: .3,
+    contactEnabled: false, giEnabled: false, contactStrength: .5, contactDistance: .3, contactStepCount: 12,
     giStrength: 1, giRadius: 2, quality: 'low', giBlurPassCount: 1,
     giBlurRadii: Object.freeze([3, 3, 3])
 });
@@ -20,6 +20,12 @@ export function normalizeScreenLightingSettings(input) {
             ? Math.round(Math.max(1, Math.min(5, number))) : 3;
     });
     if (['low', 'medium', 'high'].includes(input?.quality)) value.quality = input.quality;
+    // 旧设置沿用原质量步数初始化；显式设置独立保存，不随SSGI质量再次变化。
+    const rawSteps = input?.contactStepCount;
+    const validSteps = (typeof rawSteps === 'number' || typeof rawSteps === 'string')
+        && String(rawSteps).trim() !== '' && Number.isFinite(Number(rawSteps));
+    value.contactStepCount = validSteps ? Math.round(Math.max(4, Math.min(64, Number(rawSteps))))
+        : { low: 12, medium: 20, high: 32 }[value.quality];
     return value;
 }
 
@@ -36,7 +42,7 @@ export function initScreenLightingPanel() {
             const input = panel.querySelector(`[data-screen-lighting="${name}"]`);
             if (input.type === 'checkbox') input.checked = setting; else input.value = String(setting);
             const output = panel.querySelector(`[data-screen-value="${name}"]`);
-            if (output) output.textContent = name === 'giBlurPassCount' ? String(setting) : Number(setting).toFixed(2);
+            if (output) output.textContent = ['giBlurPassCount', 'contactStepCount'].includes(name) ? String(setting) : Number(setting).toFixed(2);
         }
         value.giBlurRadii.forEach((setting, index) => {
             const name = `giBlurRadius${index + 1}`;
@@ -63,7 +69,9 @@ export function initScreenLightingPanel() {
     document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => { value = { ...defaults }; apply(true); });
     const status = () => {
         const supported = window.MmdArScreenLightingSupported;
-        panel.querySelector('[data-screen-status]').textContent = supported === false ? '当前渲染器不支持 WebGL2，实验效果不可用。' : '实验效果：仅当前可见表面参与；间接光为彩色漫反射近似。质量越高开销越大。';
+        panel.querySelector('[data-screen-status]').textContent = supported === false
+            ? '当前渲染器不支持 WebGL2，接触阴影和SSGI不可用。'
+            : '前帧场景颜色重投影失效时回退当前帧；动态物体可能拒绝历史样本。SSGI为屏幕空间漫反射近似。';
         for (const input of panel.querySelectorAll('input,select')) input.disabled = supported === false;
     };
     window.addEventListener('mmd-ar-screen-lighting-capability', status); apply(); status();

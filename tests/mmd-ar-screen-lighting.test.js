@@ -11,8 +11,67 @@ function makeControl(name, type = 'range', value = '') {
         addEventListener(eventName, callback) { this.listeners[eventName] = callback; } };
 }
 
+class FakeVector2 {
+    constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+    set(x, y) { this.x = x; this.y = y; return this; }
+}
+class FakeVector3 {
+    constructor(x = 0, y = 0, z = 0) { this.set(x, y, z); }
+    set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+    sub(value) { this.x -= value.x; this.y -= value.y; this.z -= value.z; return this; }
+    normalize() { const length = Math.hypot(this.x, this.y, this.z) || 1; this.x /= length; this.y /= length; this.z /= length; return this; }
+    transformDirection() { return this; }
+}
+class FakeMatrix4 {
+    constructor() { this.elements = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; }
+    copy(other) { this.elements = [...other.elements]; return this; }
+}
+class FakeRenderTarget {
+    static created = [];
+    constructor(width, height) { this.width = width; this.height = height; this.texture = { id: `render-target-${FakeRenderTarget.created.length}` }; this.disposed = false; FakeRenderTarget.created.push(this); }
+    setSize(width, height) { this.width = width; this.height = height; }
+    dispose() { this.disposed = true; }
+}
+class FakeShaderMaterial {
+    constructor(options) { Object.assign(this, options); this.disposed = false; }
+    dispose() { this.disposed = true; }
+}
+class FakeScene { constructor() { this.children = []; } add(child) { this.children.push(child); } }
+class FakeMesh { constructor(geometry, material) { this.geometry = geometry; this.material = material; } }
+class FakeCamera {
+    constructor() { this.matrixWorld = new FakeMatrix4(); this.matrixWorldInverse = new FakeMatrix4(); this.projectionMatrix = new FakeMatrix4(); this.projectionMatrixInverse = new FakeMatrix4(); }
+    updateMatrixWorld() {}
+}
+class FakeGeometry { dispose() { this.disposed = true; } }
+function createRuntimeFixture() {
+    FakeRenderTarget.created = [];
+    const draws = [];
+    let currentTarget = null;
+    const renderer = {
+        extensions: { has: () => true }, getRenderTarget: () => currentTarget,
+        setRenderTarget(target) { currentTarget = target; }, setViewport() {}, clear() {},
+        render(scene) {
+            const material = scene.children[0].material, output = currentTarget?.texture;
+            const inputs = Object.entries(material.uniforms || {}).filter(([name]) =>
+                name === 'tInput' || name === 'tDepthInput' || name === 'tDepth' || name === 'tColor' || name === 'tHistoryColor' || /^tHistoryDepth\\d+$/u.test(name))
+                .map(([name, uniform]) => [name, uniform.value]);
+            const alias = inputs.find(([, texture]) => texture === output);
+            assert.ok(!alias, `pass ${alias?.[0]} 不得对同一纹理读写：${output?.id}`);
+            draws.push({ material, output, inputs, historyValid: material.uniforms?.historyValid?.value,
+                contactStepCount: material.uniforms?.contactStepCount?.value, stepCount: material.uniforms?.stepCount?.value });
+        }
+    };
+    const THREE = {
+        WebGLRenderTarget: FakeRenderTarget, ShaderMaterial: FakeShaderMaterial, Vector2: FakeVector2,
+        Vector3: FakeVector3, Matrix4: FakeMatrix4, Scene: FakeScene, Mesh: FakeMesh,
+        PlaneGeometry: FakeGeometry, OrthographicCamera: FakeCamera,
+        NearestFilter: 1, LinearFilter: 2, RGBAFormat: 3, HalfFloatType: 4, UnsignedByteType: 5, NoBlending: 0
+    };
+    return { THREE, renderer, draws };
+}
+
 function createPanelFixture() {
-    const names = ['contactEnabled', 'contactStrength', 'contactDistance', 'giEnabled', 'giStrength', 'giRadius',
+    const names = ['contactEnabled', 'contactStrength', 'contactDistance', 'contactStepCount', 'giEnabled', 'giStrength', 'giRadius',
         'giBlurPassCount', 'giBlurRadius1', 'giBlurRadius2', 'giBlurRadius3', 'quality'];
     const inputs = names.map(name => makeControl(name,
         ['contactEnabled', 'giEnabled'].includes(name) ? 'checkbox' : ['giBlurPassCount', 'quality'].includes(name) ? 'select-one' : 'range',
@@ -54,6 +113,19 @@ test('SSGI模糊设置兼容旧值并限制轮数和逐轮半径', async () => {
     assert.equal(normalizeScreenLightingSettings({ giBlurPassCount: -1 }).giBlurPassCount, 0);
 });
 
+test('接触阴影步数沿用旧质量迁移，整数化并限定4–64，显式设置独立于质量', async () => {
+    const { defaults, normalizeScreenLightingSettings: normalize } = await import('../3rd/mmd-ar-test/web-screen-lighting-panel.mjs');
+    assert.equal(defaults.contactStepCount, 12);
+    for (const [quality, count] of [['low', 12], ['medium', 20], ['high', 32]]) {
+        assert.equal(normalize({ quality }).contactStepCount, count);
+        for (const raw of [null, '', ' ', 'bad', true, [], {}]) assert.equal(normalize({ quality, contactStepCount: raw }).contactStepCount, count);
+        assert.equal(normalize({ quality, contactStepCount: 17 }).contactStepCount, 17);
+    }
+    for (const [raw, expected] of [[-1, 4], [1, 4], [4, 4], [7.6, 8], ['64', 64], [99, 64]]) {
+        assert.equal(normalize({ contactStepCount: raw }).contactStepCount, expected);
+    }
+});
+
 test('SSGI滤波计划按轮数横纵ping-pong，零轮或GI关闭时旁路', async () => {
     const { createGiBlurPassPlan } = await import('../3rd/mmd-ar-test/web-screen-lighting.mjs');
     const disabled = createGiBlurPassPlan({ contactEnabled: true, giEnabled: false, giBlurPassCount: 3 });
@@ -72,18 +144,125 @@ test('SSGI滤波计划按轮数横纵ping-pong，零轮或GI关闭时旁路', as
     assert.equal(three.targetIndex, 2);
 });
 
+test('Reduction与HZB尺寸覆盖奇数输入并逐级降至目标', async () => {
+    const { createReductionSteps, createHzbLevelSizes } = await import('../3rd/mmd-ar-test/web-screen-lighting.mjs');
+    assert.deepEqual(createReductionSteps(1921, 1081, 384, 216), [
+        { width: 961, height: 541 }, { width: 481, height: 271 }, { width: 384, height: 216 }
+    ]);
+    assert.deepEqual(createReductionSteps(3, 5, 3, 5), [{ width: 3, height: 5 }]);
+    assert.deepEqual(createHzbLevelSizes(5, 3), [
+        { width: 5, height: 3 }, { width: 3, height: 2 }, { width: 2, height: 1 }, { width: 1, height: 1 }
+    ]);
+});
+
+test('相机切断或投影突变使历史失效', async () => {
+    const { isCameraCut } = await import('../3rd/mmd-ar-test/web-screen-lighting.mjs');
+    const world = { elements: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] };
+    const projection = { elements: [...world.elements] };
+    assert.equal(isCameraCut(world, world, projection, projection), false);
+    const translated = { elements: [...world.elements] }; translated.elements[12] = 9;
+    assert.equal(isCameraCut(world, translated, projection, projection), true);
+    const rotated = { elements: [...world.elements] }; rotated.elements[8] = 1; rotated.elements[10] = 0;
+    assert.equal(isCameraCut(world, rotated, projection, projection), true);
+    const changedProjection = { elements: [...projection.elements] }; changedProjection.elements[0] = 2;
+    assert.equal(isCameraCut(world, world, projection, changedProjection), true);
+});
+
+test('SSGI Shader使用前帧SceneColor与HZB，不累积上一帧GI输出', async () => {
+    const { fragmentShader, depthReductionShader, colorReductionShader } = await import('../3rd/mmd-ar-test/web-screen-lighting-shader.mjs');
+    assert.match(fragmentShader, /uniform sampler2D tColor,tHistoryColor/u);
+    assert.match(fragmentShader, /previousView\*cameraWorld/u);
+    assert.match(fragmentShader, /historyDepthRange\(uv,level\)/u);
+    assert.match(fragmentShader, /historyHitVisible\(hit,hitUv,thickness\)/u);
+    assert.match(fragmentShader, /traceCurrent\(start,dir,giRadius/u);
+    assert.doesNotMatch(fragmentShader, /tHistoryGi|previousGiAccumulation/u);
+    assert.match(depthReductionShader, /nearestDepth=min\(nearestDepth,sampleValue\.r\)/u);
+    assert.match(depthReductionShader, /farthestDepth=max\(farthestDepth,sampleValue\.g\)/u);
+    assert.match(depthReductionShader, /packDepth16/u);
+    assert.match(colorReductionShader, /uniform highp sampler2D tDepthInput/u);
+    assert.match(colorReductionShader, /exp\(-abs\(z0-referenceZ\)\/tolerance\)/u);
+});
+
 test('滤波shader限制在深度/法线边界内并原样保留接触阴影中心alpha', async () => {
     const { filterShader } = await import('../3rd/mmd-ar-test/web-screen-lighting-shader.mjs');
     assert.match(filterShader, /uniform int blurRadius/u);
     assert.match(filterShader, /if\(abs\(i\)>blurRadius\)continue;/u);
     assert.match(filterShader, /plane\/tolerance\).*dot\(n,otherNormal\)/u);
-    assert.match(filterShader, /gl_FragColor=vec4\(total>1e-5\?sum\.rgb\/total:center\.rgb,center\.a\)/u);
+    assert.match(filterShader, /gl_FragColor=vec4\(total>1e-5\?sum\/total:center\.rgb,center\.a\)/u);
 });
 
-test('SSGI面板生成0–3轮及三组逐轮半径控件', () => {
-    const $ = cheerio.load('<button id="displayMmdLightingReset"></button>');
+test('历史SceneColor/HZB双缓冲首帧回退且所有pass无读写别名', async () => {
+    const { createScreenLighting } = await import('../3rd/mmd-ar-test/web-screen-lighting.mjs');
+    const { colorReductionShader } = await import('../3rd/mmd-ar-test/web-screen-lighting-shader.mjs');
+    const fixture = createRuntimeFixture();
+    const camera = new FakeCamera();
+    const colorTarget = new FakeRenderTarget(640, 360);
+    const depthTexture = { id: 'current-depth' };
+    const compositeMaterial = { uniforms: {
+        screenAoEnabled: { value: 1 }, screenLightingEnabled: { value: false }, screenLightingTexture: { value: null },
+        screenLightingSize: { value: new FakeVector2() }, screenLightingFullSize: { value: new FakeVector2() }
+    } };
+    const ao = { colorTarget, depthTexture, compositeMaterial };
+    const previousWindow = globalThis.window;
+    globalThis.window = { MmdArScreenLighting: { giEnabled: true, contactEnabled: false, quality: 'low', giBlurPassCount: 0 } };
+    const lighting = createScreenLighting({ ...fixture, camera, keyLight: null });
+    try {
+        lighting.prepare(ao, 640, 360, false, false);
+        let giPasses = fixture.draws.filter(draw => draw.historyValid !== undefined);
+        assert.equal(giPasses.length, 1);
+        assert.equal(giPasses[0].historyValid, false, '首帧必须回退当前场景颜色');
+        assert.equal(giPasses[0].contactStepCount, 12);
+        assert.equal(giPasses[0].stepCount, 12);
+        assert.ok(fixture.draws.some(draw => draw.material.fragmentShader === colorReductionShader &&
+            draw.inputs.some(([name, texture]) => name === 'tInput' && texture === colorTarget.texture)),
+        '待写入历史从未合成GI的SceneColor采集');
+        lighting.prepare(ao, 640, 360, false, false);
+        giPasses = fixture.draws.filter(draw => draw.historyValid !== undefined);
+        assert.deepEqual(giPasses.map(draw => draw.historyValid), [false, true]);
+        globalThis.window.MmdArScreenLighting = { giEnabled: true, contactEnabled: true, quality: 'high', contactStepCount: 64, giBlurPassCount: 0 };
+        lighting.prepare(ao, 640, 360, false, false);
+        const independent = fixture.draws.filter(draw => draw.historyValid !== undefined).at(-1);
+        assert.equal(independent.contactStepCount, 64, '接触阴影手动步数下发GPU');
+        assert.equal(independent.stepCount, 32, 'SSGI仍由质量控制步数');
+        globalThis.window.MmdArScreenLighting.quality = 'medium';
+        lighting.prepare(ao, 640, 360, false, false);
+        camera.matrixWorld.elements[12] = 9;
+        lighting.prepare(ao, 640, 360, false, false);
+        giPasses = fixture.draws.filter(draw => draw.historyValid !== undefined);
+        assert.deepEqual(giPasses.map(draw => draw.historyValid), [false, true, false, false, false],
+            '质量变化和相机切断后必须重新用当前帧初始化历史');
+        globalThis.window.MmdArScreenLighting.giEnabled = false;
+        globalThis.window.MmdArScreenLighting.contactEnabled = false;
+        const targetCount = FakeRenderTarget.created.length;
+        lighting.prepare(ao, 640, 360, false, true);
+        assert.equal(FakeRenderTarget.created.length, targetCount, 'AO独立运行时不创建屏幕光照目标');
+        assert.ok(FakeRenderTarget.created.filter(target => target !== colorTarget).every(target => target.disposed),
+            '屏幕光照关闭后释放全部效果/历史目标');
+        assert.ok(fixture.draws.every(draw => draw.inputs.every(([, texture]) => texture !== draw.output)),
+            '颜色归约、深度归约、HZB、GI和滤波均不得输入输出同纹理');
+    } finally {
+        lighting.dispose();
+        if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow;
+    }
+    assert.ok(FakeRenderTarget.created.filter(target => target !== colorTarget).every(target => target.disposed),
+        '销毁时释放历史色彩、HZB和屏幕光照目标');
+});
+
+test('接触阴影和SSGI位于下方正式分类，保留模糊控件并新增采样滑块', () => {
+    const $ = cheerio.load('<div id="displayMmdLightingPanel"><header class="display-mmd-lighting-header"><button id="displayMmdLightingReset"></button></header><section class="mmd-ar-panel-group" id="existingLight"></section></div>');
     addScreenLightingPanel($);
     const panel = $('#mmdArScreenLighting');
+    assert.equal(panel.parent().attr('id'), 'displayMmdLightingPanel');
+    assert.equal(panel.prev().attr('id'), 'existingLight', '分类追加到现有正式灯光组下方');
+    assert.equal($('.display-mmd-lighting-header #mmdArScreenLighting').length, 0);
+    assert.equal(panel.find('details').length, 0);
+    assert.equal(panel.find('#mmdArContactLighting > .mmd-ar-panel-group-header [data-group-title="接触阴影"]').length, 1);
+    assert.equal(panel.find('#mmdArIndirectLighting > .mmd-ar-panel-group-header [data-group-title="间接光"]').length, 1);
+    assert.equal(panel.find('#mmdArSsgi > .mmd-ar-panel-group-header [data-group-title="SSGI"]').length, 1);
+    assert.equal(panel.find('#mmdArSsgi').parents('#mmdArIndirectLighting').length, 1);
+    assert.equal(panel.text().includes('实验'), false);
+    const samples = panel.find('[data-screen-lighting="contactStepCount"]');
+    assert.equal(samples.attr('min'), '4'); assert.equal(samples.attr('max'), '64'); assert.equal(samples.attr('step'), '1');
     assert.deepEqual(panel.find('[data-screen-lighting="giBlurPassCount"] option').map((_, node) => node.attribs.value).get(), ['0', '1', '2', '3']);
     assert.equal(panel.find('[data-screen-lighting="giBlurPassCount"] option[selected]').attr('value'), '1');
     for (let index = 1; index <= 3; index += 1) {
@@ -107,6 +286,11 @@ test('SSGI面板旧设置加载默认轮数，调节持久化并恢复默认', a
     try {
         initScreenLightingPanel();
         assert.equal(globalThis.window.MmdArScreenLighting.giBlurPassCount, 1);
+        assert.equal(globalThis.window.MmdArScreenLighting.contactStepCount, 20, '旧中质量迁移为20步');
+        const samples = fixture.inputs.find(input => input.dataset.screenLighting === 'contactStepCount');
+        samples.value = '51'; samples.listeners.input();
+        assert.equal(JSON.parse(store[storageKey]).contactStepCount, 51);
+        assert.equal(fixture.outputs.get('contactStepCount').textContent, '51');
         assert.deepEqual([...globalThis.window.MmdArScreenLighting.giBlurRadii], [3, 3, 3]);
         assert.equal(fixture.rounds[1][1].hidden, true);
         const radius = fixture.inputs.find(input => input.dataset.screenLighting === 'giBlurRadius2');
@@ -118,6 +302,7 @@ test('SSGI面板旧设置加载默认轮数，调节持久化并恢复默认', a
         fixture.reset.listeners.click();
         const saved = JSON.parse(store[storageKey]);
         assert.equal(saved.giBlurPassCount, 1);
+        assert.equal(saved.contactStepCount, 12);
         assert.deepEqual(saved.giBlurRadii, [3, 3, 3]);
     } finally {
         for (const name of ['document', 'window', 'localStorage']) {
