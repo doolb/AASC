@@ -1,3 +1,10 @@
+### Offline 数据修复包 v2
+
+- ✅ [2026-10-08] 发布 `data-repair-v2`，将固定显示端 `offline-display` 的 `showStatusBar` 设置为 `false`，其余显示端状态保持原值。
+  - 修复包仅含 `repair.js`，使用 `user-config` 能力，通过现有 `getDisplayStateById` / `updateDisplayStateById` 持久化。签名清单要求服务代码 v46、dataVersion 1，应用后推进到 dataVersion 2；敏感标记为 false。
+  - `data/data-repair-v2.zip` 大小 486 bytes，SHA-256 `924b7f9ab8a70d3017391236cb3af7a53a47540d286736dce50ceb0a8a7147d6`。LAN/WAN 的 manifest 与修复包发布成功；HTTP 200、Content-Length 486、两站点 ETag 不同但内容 SHA-256 与构建包一致，签名清单引用资源完整校验通过。
+  - 已发布待 Offline APK 用户确认应用；本轮没有设备端应用回执。未构建或发布 APK/服务代码/依赖包，release 状态标记保持原值。
+
 # Web MediaCenter - 变更日志
 
 
