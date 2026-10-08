@@ -6,7 +6,8 @@
 - 🔄 [2026-10-08] 新增原生 `.blend` 工作区的设计、伪代码、任务文档与入口代码；用户点击后才加载 Blender 5.2 WASM，文件通过 HTTPS 目录句柄读写，不上传服务器、不经过 PMX/MMD Tools。
   - 锁定 `@volter/blender-engine@0.1.136` 与独立 Three.js 0.180 构建；新增 Vite 工作区入口、Web 专用 Service Worker 适配器、用户授权目录索引/读取、分块哈希校验与 `.blend` 回写、Brotli WASM 静态资源及 COOP/COEP 配置。APK 构建移除 Blender 按钮且不带引擎资产。
   - 完整 `web-dist` 构建成功；用户取消目录选择时不下载工作区模块，启动或预览失败会回收 worker 与 WebGL 资源并允许重试。静态资源改为直接请求 `.br`，移除了 `Options` 和 rewrite 依赖。
-  - ✅ [2026-10-08] 完成外网发布 `https://c.aasc.us/mnt/mmd-ar/`。Apache 启用 `mod_headers`，按站点路径返回 COOP `same-origin`、COEP `credentialless`，仅对版本化 Blender 资源目录开放 `.htaccess` 的 `Header` 指令。23 个发布文件共 47,296,610 bytes，暂存 SHA-256 全部匹配；首页 SHA-256 `433687352b362e29eb836a905d244c9471cd840fd15c3c740f1881fa6dbb31b3`。首页、工作区脚本、Service Worker、引擎状态和 WASM 均返回 HTTP 200；WASM MIME 与 Brotli 编码正确。旧页面备份保留在服务器 `.mmd-ar-blender-publish-backup-20261008`。尚未在真实浏览器中完成目录授权、`.blend` 打开、Cycles 渲染和保存往返验收。
+  - ✅ [2026-10-08] 完成外网发布 `https://c.aasc.us/mnt/mmd-ar/`。Apache 启用 `mod_headers`，按站点路径返回 COOP `same-origin`、COEP `credentialless`，仅对版本化 Blender 资源目录开放 `.htaccess` 的 `Header` 指令。23 个发布文件共 47,296,610 bytes，暂存 SHA-256 全部匹配；首次首页 SHA-256 `433687352b362e29eb836a905d244c9471cd840fd15c3c740f1881fa6dbb31b3`。WASM MIME 与 Brotli 编码正确。旧页面备份保留在服务器 `.mmd-ar-blender-publish-backup-20261008`。
+  - ✅ [2026-10-08] 修复线上点击 Blender 工程报 `mountBlenderWorkbench is not a function`：Vite 未保留动态导入入口的导出签名。构建设置 `preserveEntrySignatures: exports-only`，并增加产物导出检查；本地 Node 动态导入确认导出为函数。重新部署首页、两个入口脚本、工作区入口及两个分块共 6 个文件，SHA-256 全部匹配；当前首页 SHA-256 `123c31429dd0e3e748a3a04729c9414a75f424619b218d97dafac8f8a32e6ef4`，新模块和分块均 HTTP 200。真实浏览器的目录授权、`.blend` 打开、Cycles 渲染和保存往返仍待验收。
 
 
 ### 任务系统

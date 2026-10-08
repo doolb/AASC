@@ -15,6 +15,9 @@ async function buildBlenderBundle(root){
         const child=spawn(process.execPath,[vite,'build','--config',path.join(engineRoot,'vite.config.mjs')],{cwd:engineRoot,stdio:'inherit'});
         child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error(`Blender 工作区模块构建失败：${code}`)));
     });
+    const workbenchPath=path.join(root,'js','blender-engine','workbench.mjs');
+    const workbenchSource=await fs.readFile(workbenchPath,'utf8');
+    if(!/\bmountBlenderWorkbench\b/.test(workbenchSource))throw new Error('Blender 工作区构建产物缺少 mountBlenderWorkbench 导出');
     const versionRoot=path.join(root,'assets','blender-engine',BLENDER_VERSION);
     await fs.mkdir(versionRoot,{recursive:true});
     const workerSource=await fs.readFile(path.join(__dirname,'web-blender-service-worker.js'),'utf8');

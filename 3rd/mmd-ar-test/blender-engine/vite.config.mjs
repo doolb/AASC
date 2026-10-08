@@ -16,6 +16,7 @@ export default defineConfig({
     minify: true,
     rollupOptions: {
       input: path.join(root, 'workbench.mjs'),
+      preserveEntrySignatures: 'exports-only',
       output: {
         entryFileNames: 'workbench.mjs',
         chunkFileNames: 'chunk-[hash].mjs',

@@ -41,6 +41,7 @@
 构建：
     仅 WEB_MODE 将 Blender 工作区入口及 Service Worker 写入 web-dist
     将工作区代码拆成独立 ESM chunk，入口通过 dynamic import 加载
+    保留 mountBlenderWorkbench 公开入口签名；构建后检查导出缺失即报错
     WASM/data/Essentials 放在单独 assets/blender-engine/目录
     Brotli文件以服务器 Content-Encoding: br 提供，避免解压体积进入普通页面
     同源状态清单返回固定版本、大小、digest、编码和必需文件

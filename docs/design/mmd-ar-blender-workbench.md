@@ -10,6 +10,7 @@
 
 - 工作区 JS、Blender WASM、Blender data 与 Essentials 独立于首屏，只有启动 Blender 工程时请求；浏览器缓存可供后续复用。
 - 固定 `@volter/blender-engine@0.1.136` 版本并保留 GPL-3.0-or-later 与第三方依赖声明。
+- Vite 入口由 UI 动态导入，构建必须保留 `mountBlenderWorkbench` 的公开导出签名；构建后检查生成模块包含该导出，缺失时终止网页构建。
 - 该库依赖跨域隔离、WASM 资源、工程目录索引/读取及工程保存接口。静态页用最小 Service Worker 适配这些同源接口，不向服务端上传工程。
 - 页面部署需要 HTTPS/localhost、`Cross-Origin-Opener-Policy: same-origin` 与 `Cross-Origin-Embedder-Policy: credentialless`；页面和模块按同源相对路径工作。
 - 目录选择发生在用户点击的同步调用栈里；确认选中目录后才加载工作区模块。用户取消选择时不下载工作区模块。Blender 实例只在用户选择 `.blend` 并按“打开”后创建。
