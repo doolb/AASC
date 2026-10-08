@@ -90,6 +90,8 @@ test('主相机视锥与阴影接收面共同拟合，拉近收紧、拉远放�
     const wide = lights.map(light => light.shadow.camera.right - light.shadow.camera.left);
     const wideState = fitter.getState();
     assert.ok(wideState.maps.every(map => map.points > 0 && !map.fallback));
+    assert.ok(wideState.maps.every(map => Math.abs(Math.max(map.occupancyX, map.occupancyY) - 1.56) < 1e-6),
+        '正常拟合在targetOccupancy 0.78后再乘0.5，默认1x产生1.56的投影占比');
     cameraScale = 0.5;
     assert.equal(fitter.update(), true);
     assert.ok(lights.every((light, index) => Math.abs(light.shadow.camera.right - light.shadow.camera.left - wide[index] * 0.5) < 1e-10));

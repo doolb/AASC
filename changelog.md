@@ -17,10 +17,10 @@
   - ✅ [2026-10-08] 修复线上点击 Blender 工程报 `mountBlenderWorkbench is not a function`：Vite 未保留动态导入入口的导出签名。构建设置 `preserveEntrySignatures: exports-only`，并增加产物导出检查；本地 Node 动态导入确认导出为函数。重新部署首页、两个入口脚本、工作区入口及两个分块共 6 个文件，SHA-256 全部匹配；当前首页 SHA-256 `123c31429dd0e3e748a3a04729c9414a75f424619b218d97dafac8f8a32e6ef4`，新模块和分块均 HTTP 200。真实浏览器的目录授权、`.blend` 打开、Cycles 渲染和保存往返仍待验收。
 
 
-### MMD-AR 主相机视野与光源阴影相机联合拟合（Web构建已完成，待浏览器/设备验收）
+### MMD-AR 主相机视野与光源阴影相机联合拟合（完成，用户确认范围效果）
 
-- 🔄 [2026-10-08] 独立测试页把主相机可见角色/接收面区域和各方向光的ShadowCamera联合拟合；相机缩放/转动时按视锥与模型/接收面交集更新光空间正交范围，加入角色投影到地面的可见影子足迹；保留手动cameraScale、贴图分辨率独立和像素网格对齐。正式 `/display` VRM/PMX源码未改。
-  - 修改 `web-production-test-extras.js`、`web-shadow-map-preview.mjs` 与阴影测试；定向单测12/12通过。后续新增的Web专用公网GLB回退后，`npm run build:web:mmd-ar-test` 在本地GLB缺失时成功生成网页；现有阴影浏览器测试因Windows环境缺少 `/usr/bin/chromium` 跳过，真实浏览器/设备验收待后续进行。未改Offline发布状态。
+- ✅ [2026-10-08] 独立测试页把主相机可见角色/接收面区域和各方向光的ShadowCamera联合拟合；相机缩放/转动时按视锥与模型/接收面交集更新光空间正交范围，并纳入角色投影到地面的可见影子足迹。按用户确认，正常联合拟合的视野高度在目标占比换算后再乘0.5，默认cameraScale仍为1；保留手动倍率、贴图分辨率独立和像素网格对齐。正式 `/display` VRM/PMX源码未改。
+  - 修改 `web-production-test-extras.js`、`web-shadow-map-preview.mjs` 与阴影测试；定向单测12/12通过，包含0.5基准占比断言；`npm run build:web:mmd-ar-test` 在本地GLB缺失时经公网回退成功生成网页。用户检查追加0.5后的效果并确认正常；当前Windows环境自动浏览器测试因缺少 `/usr/bin/chromium` 跳过。未改Offline发布状态。
 
 ### MMD-AR web-dist 西施GLB公网回退（已完成）
 

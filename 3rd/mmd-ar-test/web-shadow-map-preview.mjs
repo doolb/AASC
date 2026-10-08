@@ -306,7 +306,8 @@ export function createJointShadowCameraFitter({
             const mapWidth = light.shadow.map?.width || light.shadow.mapSize.x;
             const mapHeight = light.shadow.map?.height || light.shadow.mapSize.y;
             const aspect = Math.max(0.1, mapWidth / Math.max(1, mapHeight));
-            const viewHeight = Math.max(spanY, spanX / aspect, 0.02) / targetOccupancy * cameraScale;
+            // 保留旧自动范围0.5基准；cameraScale仍是相对该基准的倍率，默认值继续为1。
+            const viewHeight = Math.max(spanY, spanX / aspect, 0.02) / targetOccupancy * 0.5 * cameraScale;
             const viewWidth = viewHeight * aspect;
             const centerX = (lightBounds.min.x + lightBounds.max.x) * 0.5;
             const centerY = (lightBounds.min.y + lightBounds.max.y) * 0.5;

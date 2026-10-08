@@ -297,7 +297,7 @@ fitVisibleShadow(light):
   else:
     lightPoints := fitPoints变换到当前shadowCamera.matrixWorldInverse
     x/y投影范围 := lightPoints包围矩形；结合ShadowMap实际宽高比
-    viewHeight := max(projectedHeight, projectedWidth/aspect, 0.02) / 0.78 * cameraScale
+    viewHeight := max(projectedHeight, projectedWidth/aspect, 0.02) / 0.78 * 0.5 * cameraScale
     viewWidth := viewHeight * aspect；以投影范围中心设置可非对称正交边界
     near/far := 角色与接收面光空间深度范围 + max(0.1, radius*0.25)余量
     updateProjectionMatrix；标记shadow.needsUpdate
@@ -307,12 +307,12 @@ renderFrame:
   依次执行现有light-space texel对齐与ShadowMap渲染
   对齐时还原自身上次像素偏移；保留拟合中心/宽高后重算本帧偏移，防止累计漂移
 
-规则 := 主/补光分别按自身光线方向拟合；cameraScale仍由用户设置，不被自动倍率覆盖
+规则 := 主/补光分别按自身光线方向拟合；联合拟合全视野高度另乘既有自动基准0.5，再乘cameraScale；cameraScale默认仍1且不被自动覆盖
 规则 := ShadowMap分辨率仍由现有尺寸设置独立管理；拟合失败不得留下空/NaN裁面
 性能 := 角色AABB只在根对象替换时读取；视锥交集使用有限凸体边/角计算，静止签名不变则不重拟合
 实现 := web-shadow-map-preview.mjs提供交集/拟合；web-production-test-extras.js只向独立测试副本注入
 范围 := PMX/静态GLB；正式display VRM/PMX源码不改
-验证 := tests/mmd-ar-shadow-map-size.test.js 12/12通过
+验证 := tests/mmd-ar-shadow-map-size.test.js 12/12通过；包含联合拟合额外0.5基准断言，用户确认实际范围效果正常
 构建 := npm run build:web:mmd-ar-test 在本地GLB缺失时通过受校验公网回退成功生成web-dist；浏览器测试因当前Windows环境缺少配置的/usr/bin/chromium跳过
 ```
 
