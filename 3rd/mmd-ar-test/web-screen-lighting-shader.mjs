@@ -71,7 +71,7 @@ bool historyHitVisible(vec3 previousHit,vec2 previousUv,float tolerance){
  return abs(visible.z-current.z)<=max(tolerance,abs(current.z)*.002);
 }
 // 仅当前帧深度的回退路径，首帧/历史拒绝时保障画面可用。
-bool traceCurrent(vec3 start,vec3 direction,float distanceLimit,float bias,int sampleCount,out vec2 hitUv,out vec3 hit,out float confidence,out float hitDistance){
+bool traceCurrent(vec3 start,vec3 direction,float distanceLimit,float bias,int sampleCount,bool allowExit,out vec2 hitUv,out vec3 hit,out float confidence,out float hitDistance){
  float previousGap=-bias;
  // 接触阴影可独立使用4–64步，SSGI当前帧回退仍传入质量档位步数。
  for(int i=1;i<=64;i++){
@@ -83,22 +83,27 @@ bool traceCurrent(vec3 start,vec3 direction,float distanceLimit,float bias,int s
   float depth=texture2D(tDepth,uv).r;if(depth>=.99999){previousGap=-bias;continue;}
   vec3 surface=positionAt(uv,depth);float gap=surface.z-q.z;
   float thickness=max(bias*3.,distanceLimit/float(sampleCount)*1.5);
-  // 粗步可直接跨到厚度范围外，必须先细化跨越区间，再检查真实命中点。
-  if(gap>bias&&previousGap<=bias){
+  // 接触射线可能从轮廓进入遮挡背后，再从连续表面穿出；只接受进入会漏掉阴影内部。
+  // 双向跨越仍先细化，再执行厚度检查，不把任意轮廓跳变直接接受为遮挡。
+  if((gap>bias&&previousGap<=bias)||(allowExit&&gap<=bias&&previousGap>bias)){
+   bool exiting=gap<=bias;
    float low=distanceLimit*float(i-1)/float(sampleCount),high=t;
    for(int k=0;k<4;k++){
     float middle=(low+high)*.5;vec3 probe=start+direction*middle;
     vec4 projected=projection*vec4(probe,1.);vec2 probeUv=projected.xy/projected.w*.5+.5;
     float probeDepth=texture2D(tDepth,probeUv).r;
     float probeGap=positionAt(probeUv,probeDepth).z-probe.z;
-    if(probeDepth<.99999&&probeGap>bias)high=middle;else low=middle;
+    bool blocked=probeDepth<.99999&&probeGap>bias;
+    if(blocked!=exiting)high=middle;else low=middle;
    }
-   vec3 refined=start+direction*high;vec4 projected=projection*vec4(refined,1.);
+   // 进入时高端在表面背后，穿出时低端在表面背后；统一选取正深度差一侧。
+   float refinedDistance=exiting?low:high;
+   vec3 refined=start+direction*refinedDistance;vec4 projected=projection*vec4(refined,1.);
    hitUv=projected.xy/projected.w*.5+.5;float refinedDepth=texture2D(tDepth,hitUv).r;
    hit=positionAt(hitUv,refinedDepth);float refinedGap=hit.z-refined.z;
    // 厚度与自遮挡保护基于细化点，拒绝深度轮廓跳变及射线起点附近的伪命中。
    if(refinedDepth>=.99999||refinedGap<=bias||refinedGap>thickness||length(hit-start)<=bias*3.){previousGap=gap;continue;}
-   confidence=1.-smoothstep(thickness*.4,thickness,refinedGap);hitDistance=high;return true;
+   confidence=1.-smoothstep(thickness*.4,thickness,refinedGap);hitDistance=refinedDistance;return true;
   }
   previousGap=gap;
  }
@@ -152,7 +157,7 @@ void main(){
  vec3 start=p+n*bias*2.;vec2 hitUv;vec3 hit;float confidence,hitDistance;float shadow=0.;vec3 bounce=vec3(0.);
  float facing=max(dot(n,lightDirection),0.);
  if(contactEnabled&&facing>0.&&lightWeight>0.){
-  if(traceCurrent(start,lightDirection,contactDistance,bias,contactStepCount,hitUv,hit,confidence,hitDistance)){
+  if(traceCurrent(start,lightDirection,contactDistance,bias,contactStepCount,true,hitUv,hit,confidence,hitDistance)){
    shadow=confidence*contactStrength*lightWeight*smoothstep(0.,.25,facing)*edgeFade(hitUv);
    shadow*=1.-smoothstep(contactDistance*.75,contactDistance,length(hit-p));
   }
@@ -166,7 +171,7 @@ void main(){
    vec3 dir=tangent*(sqrt(u)*cos(a))+bitangent*(sqrt(u)*sin(a))+n*sqrt(1.-u);
    bool usedHistory=false;vec3 historyDir=dir;
    if(historyValid)usedHistory=traceHistory(start,dir,giRadius,bias,hitUv,hit,confidence,hitDistance,historyDir);
-   if(!usedHistory&&!traceCurrent(start,dir,giRadius,bias,stepCount,hitUv,hit,confidence,hitDistance))continue;
+   if(!usedHistory&&!traceCurrent(start,dir,giRadius,bias,stepCount,false,hitUv,hit,confidence,hitDistance))continue;
    vec3 otherNormal=usedHistory?historyNormalAt(hitUv,hit):normalAt(hitUv,hit);
    vec3 incomingDirection=usedHistory?historyDir:dir;
    float weight=confidence*max(dot(otherNormal,-incomingDirection),0.)*edgeFade(hitUv);

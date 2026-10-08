@@ -11,9 +11,9 @@ const root = path.resolve(__dirname, '../3rd/mmd-ar-test/web-dist');
 const chrome = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath(), '/usr/bin/chromium']
     .find(file => file && fs.existsSync(file));
 
-test('保存屏幕光照后刷新保留完整viewport与角色像素，正式分类展开并保存独立采样步数', {
+test('刷新保留角色和独立采样设置，正式分类可展开，真实模型接触阴影覆盖内部', {
     skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')), timeout: 120000
-}, async () => {
+}, async context => {
     const server = http.createServer((request, response) => {
         const relative = decodeURIComponent(new URL(request.url, 'http://localhost').pathname).slice(1) || 'index.html';
         const file = path.resolve(root, relative === 'api/mmd/resources' ? 'mmd-resources.json' : relative);
@@ -76,6 +76,40 @@ test('保存屏幕光照后刷新保留完整viewport与角色像素，正式分
         await page.setViewport({ width: 480, height: 640, deviceScaleFactor: 2 });
         await page.reload({ waitUntil: 'domcontentloaded' }); await ready(); await checkPicture();
         assert.equal(await page.evaluate(() => window.DisplayMmd.getEditorBridge().context.renderer.getContext().drawingBufferWidth), 960);
+        // 按用户反馈的强度1/距离3/30步和固定近景验证内部遮挡；旧追踪只会加深脖子的边缘。
+        await page.setViewport({ width: 768, height: 752, deviceScaleFactor: 1 });
+        // resize有节流，必须等待物理画布同步；否则固定坐标会误读上一尺寸的像素。
+        await page.waitForFunction(() => {
+            const gl = window.DisplayMmd.getEditorBridge().context.renderer.getContext();
+            return gl.drawingBufferWidth === 768 && gl.drawingBufferHeight === 752;
+        });
+        const interior = await page.evaluate(async () => {
+            const bridge = window.DisplayMmd.getEditorBridge(), c = bridge.context;
+            c.helper.enable('physics', false); c.helper.enable('animation', false);
+            bridge.rest();
+            bridge.setCameraView({ position: [0, 16.5, 18.5], quaternion: [0, 0, 0, 1] });
+            for (let i = 0; i < 3; i += 1) await new Promise(resolve => requestAnimationFrame(resolve));
+            const capture = enabled => {
+                window.MmdArScreenLighting = { ...window.MmdArScreenLighting, contactEnabled: enabled, giEnabled: false,
+                    contactStrength: 1, contactDistance: 3, contactStepCount: 30 };
+                c.ambientOcclusion.render();
+                const gl = c.renderer.getContext(), pixels = new Uint8Array(768 * 752 * 4);
+                gl.readPixels(0, 0, 768, 752, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                const average = (x, y) => {
+                    let sum = 0;
+                    for (let dy = -4; dy <= 4; dy += 1) for (let dx = -4; dx <= 4; dx += 1) {
+                        const index = ((751 - y - dy) * 768 + x + dx) * 4;
+                        sum += pixels[index] * .2126 + pixels[index + 1] * .7152 + pixels[index + 2] * .0722;
+                    }
+                    return sum / 81;
+                };
+                return { neck: average(380, 425), clearChest: average(385, 508) };
+            };
+            return { off: capture(false), on: capture(true) };
+        });
+        assert.ok(interior.on.neck < interior.off.neck * .85, `下巴遮挡内部应被阴影覆盖：${JSON.stringify(interior)}`);
+        assert.ok(Math.abs(interior.on.clearChest - interior.off.clearChest) < 3, '无遮挡胸部不能被整体压暗');
+        context.diagnostic(`内部/无遮挡亮度对比：${JSON.stringify(interior)}`);
         assert.deepEqual(failures, [], '首次加载与刷新不得出现GPU或页面错误');
     } finally {
         if (browser) await browser.close();

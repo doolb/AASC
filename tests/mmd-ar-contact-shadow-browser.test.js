@@ -16,8 +16,9 @@ test('接触阴影真实GLSL细化大跨越，并保留厚度及自遮挡保护'
     const traceName = fragmentShader.includes('bool traceCurrent(') ? 'traceCurrent' : 'trace';
     const withDistance = traceName === 'traceCurrent';
     const withStepArgument = /bool traceCurrent\([^\n]*int sampleCount/u.test(fragmentShader);
+    const withExitArgument = /bool traceCurrent\([^\n]*bool allowExit/u.test(fragmentShader);
     const entry = `void main(){vec2 uv;vec3 hit;float confidence;float hitDistance;
-        bool found=${traceName}(vec3(-.8,0.,0.),vec3(1.,0.,0.),testDistance,.001,${withStepArgument ? 'stepCount,' : ''}uv,hit,confidence${withDistance ? ',hitDistance' : ''});
+        bool found=${traceName}(vec3(-.8,0.,0.),vec3(1.,0.,0.),testDistance,.001,${withStepArgument ? 'stepCount,' : ''}${withExitArgument ? 'testAllowExit,' : ''}uv,hit,confidence${withDistance ? ',hitDistance' : ''});
         gl_FragColor=vec4(found?1.:0.,found?confidence:0.,0.,1.);}`;
     const extract = name => {
         const begin = fragmentShader.indexOf(name + '(');
@@ -31,7 +32,7 @@ test('接触阴影真实GLSL细化大跨越，并保留厚度及自遮挡保护'
         return fragmentShader.slice(start, end + 1);
     };
     // 隔离无关历史追踪，执行原始函数体，不将GLSL算法复制成JS参考实现。
-    const instrumented = 'uniform sampler2D tDepth;uniform mat4 projection,inverseProjection;uniform int stepCount;uniform float testDistance;\n'
+    const instrumented = 'uniform sampler2D tDepth;uniform mat4 projection,inverseProjection;uniform int stepCount;uniform float testDistance;uniform bool testAllowExit;\n'
         + [extract('positionAt'), extract('inside'), extract(traceName), entry].join('\n');
     let browser;
     try {
@@ -77,29 +78,36 @@ test('接触阴影真实GLSL细化大跨越，并保留厚度及自遮挡保护'
                 { name: 'small-crossing', surface: x => Math.max(-.4, Math.min(.02, x + .78)), distance: 1.2 },
                 // 相交点在射程75%处，64步时必须执行第32步之后的采样才能命中。
                 { name: 'late-crossing', surface: x => Math.max(-.4, Math.min(.32, 4 * (x - .1))), distance: 1.2 },
+                // 射线先从轮廓进入厚度范围外，之后连续穿出表面；接触阴影不能仅接受正向穿越。
+                { name: 'reverse-crossing', surface: x => x < -.65 ? -.2 : Math.max(-.4, .6 - (x + .65) * 1.5), distance: 1.2 },
                 // 深度轮廓跳变不与射线真正相交，细化后的厚度仍必须将它拒绝。
                 { name: 'thick-discontinuity', surface: x => x < -.75 ? -.2 : .5, distance: 1.2 },
+                { name: 'double-discontinuity', surface: x => x < -.65 || x > .1 ? -.2 : .6, distance: 1.2 },
                 { name: 'clear', surface: () => -.2, distance: 1.2 },
                 { name: 'self', surface: () => .0015, distance: .024 },
                 { name: 'background', surface: () => 1, distance: 1.2 }
             ];
-            for (const steps of [4, 12, 20, 32, 64]) {
+            for (const steps of [4, 12, 20, 30, 32, 64]) {
                 gl.uniform1i(gl.getUniformLocation(program, 'stepCount'), steps);
                 for (const fixture of fixtures) {
                     const data = new Float32Array(4096);
                     for (let i = 0; i < data.length; i += 1) data[i] = fixture.surface((i + .5) / data.length * 2 - 1) * .5 + .5;
                     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, data.length, 1, 0, gl.RED, gl.FLOAT, data);
                     gl.uniform1f(gl.getUniformLocation(program, 'testDistance'), fixture.distance);
-                    gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-                    samples.push({ name: fixture.name, steps, found: pixels[0] > 127, confidence: pixels[1] });
+                    for (const allowExit of fixture.name === 'reverse-crossing' ? [true, false] : [true]) {
+                        gl.uniform1i(gl.getUniformLocation(program, 'testAllowExit'), allowExit ? 1 : 0);
+                        gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                        samples.push({ name: fixture.name, steps, allowExit, found: pixels[0] > 127, confidence: pixels[1] });
+                    }
                 }
             }
             return { samples, error: gl.getError() };
         }, instrumented);
         assert.equal(result.error, 0, 'GPU操作不能包含GL错误');
         for (const sample of result.samples) {
-            const expected = ['large-crossing', 'small-crossing', 'late-crossing'].includes(sample.name);
-            assert.equal(sample.found, expected, `${sample.name}，${sample.steps}步`);
+            const expected = ['large-crossing', 'small-crossing', 'late-crossing'].includes(sample.name)
+                || sample.name === 'reverse-crossing' && sample.allowExit;
+            assert.equal(sample.found, expected, `${sample.name}，${sample.steps}步，反向=${sample.allowExit}`);
             if (expected) assert.ok(sample.confidence > 127, `${sample.name}细化后应有稳定遮挡置信度`);
         }
     } finally {
