@@ -142,12 +142,13 @@ vec4 resolveScreenLighting(vec2 uv,float depth){
 }
 `;
 
-// 两遍可分离双边滤波，背景与法线突变处不跨边扩散。
+// 可调多轮可分离双边滤波，背景与法线突变处不跨边扩散。
 export const filterShader = `
 uniform sampler2D tInput;
 uniform highp sampler2D tDepth;
 uniform mat4 inverseProjection;
 uniform vec2 fullSize,effectSize,filterAxis;
+uniform int blurRadius;
 varying vec2 vUv;
 vec3 positionAt(vec2 uv,float depth){vec4 p=inverseProjection*vec4(uv*2.-1.,depth*2.-1.,1.);return p.xyz/p.w;}
 bool inside(vec2 uv){return all(greaterThan(uv,vec2(.001)))&&all(lessThan(uv,vec2(.999)));}
@@ -169,14 +170,18 @@ void main(){
  vec3 p=positionAt(vUv,depth),n=normalAt(vUv,p);
  float footprint=length(positionAt(vUv+1./effectSize,depth)-p);
  float tolerance=max(.001,footprint*.65);
+  vec4 center=texture2D(tInput,vUv);
+  float sigma=max(float(blurRadius)*.5,.5);
  vec4 sum=vec4(0.);float total=0.;
- for(int i=-2;i<=2;i++){
+ for(int i=-5;i<=5;i++){
+   if(abs(i)>blurRadius)continue;
   vec2 q=vUv+filterAxis*float(i)/effectSize;if(!inside(q))continue;
   float d=texture2D(tDepth,q).r;if(d>=.99999)continue;
   vec3 other=positionAt(q,d),otherNormal=normalAt(q,other),delta=other-p;
   float plane=max(abs(dot(delta,n)),abs(dot(delta,otherNormal)));
-  float w=exp(-float(i*i)/2.-plane/tolerance)*pow(max(dot(n,otherNormal),0.),16.);
-  sum+=texture2D(tInput,q)*w;total+=w;
+  float w=exp(-float(i*i)/(2.*sigma*sigma)-plane/tolerance)*pow(max(dot(n,otherNormal),0.),16.);
+  sum.rgb+=texture2D(tInput,q).rgb*w;total+=w;
  }
- gl_FragColor=total>1e-5?sum/total:texture2D(tInput,vUv);
+ // 只柔化SSGI颜色；alpha承载接触阴影，保留中心像素避免模糊其边缘。
+  gl_FragColor=vec4(total>1e-5?sum.rgb/total:center.rgb,center.a);
 }`;

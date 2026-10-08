@@ -1,4 +1,27 @@
 import { vertexShader, fragmentShader, filterShader } from './web-screen-lighting-shader.mjs';
+
+export function createGiBlurPassPlan(settings = {}) {
+    if (settings.giEnabled !== true) return { steps: [], targetIndex: 0 };
+    const rawCount = settings.giBlurPassCount;
+    const passCount = rawCount == null || rawCount === '' || !Number.isFinite(Number(rawCount))
+        ? 1 : Math.round(Math.max(0, Math.min(3, Number(rawCount))));
+    const radii = [0, 1, 2].map(index => {
+        const raw = settings.giBlurRadii?.[index];
+        return raw == null || raw === '' || !Number.isFinite(Number(raw))
+            ? 3 : Math.round(Math.max(1, Math.min(5, Number(raw))));
+    });
+    const steps = [];
+    let inputIndex = 0;
+    for (let round = 0; round < passCount; round += 1) {
+        for (const axis of ['horizontal', 'vertical']) {
+            const outputIndex = inputIndex === 1 ? 2 : 1;
+            steps.push({ inputIndex, outputIndex, radius: radii[round], axis });
+            inputIndex = outputIndex;
+        }
+    }
+    return { steps, targetIndex: inputIndex };
+}
+
 export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
     let resources = null;
     const direction = new THREE.Vector3(), target = new THREE.Vector3();
@@ -27,7 +50,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
         const quad = new THREE.Mesh(geometry, material); scene.add(quad);
         const filterMaterial = new THREE.ShaderMaterial({ vertexShader, fragmentShader: filterShader,
             uniforms: { tInput: { value: null }, tDepth: uniforms.tDepth, inverseProjection: uniforms.inverseProjection,
-                fullSize: uniforms.fullSize, effectSize: { value: new THREE.Vector2() }, filterAxis: { value: new THREE.Vector2() } },
+                fullSize: uniforms.fullSize, effectSize: { value: new THREE.Vector2() }, filterAxis: { value: new THREE.Vector2() }, blurRadius: { value: 3 } },
             depthTest: false, depthWrite: false, blending: THREE.NoBlending, toneMapped: false });
         resources = { targets, material, filterMaterial, quad, geometry, scene, camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
     };
@@ -56,20 +79,24 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             keyLight.getWorldPosition(direction); keyLight.target.getWorldPosition(target);
             direction.sub(target).normalize().transformDirection(camera.matrixWorldInverse);
         }
+        const blurPlan = createGiBlurPassPlan(config);
         const previous = renderer.getRenderTarget();
         try {
             resources.quad.material = resources.material;
             renderer.setRenderTarget(resources.targets[0]); renderer.clear(); renderer.render(resources.scene, resources.camera);
-            const filter = resources.filterMaterial.uniforms; filter.effectSize.value.set(w, h);
-            resources.quad.material = resources.filterMaterial;
-            for (let pass = 0; pass < 2; pass++) {
-                filter.tInput.value = resources.targets[pass].texture;
-                filter.filterAxis.value.set(pass === 0 ? 1 : 0, pass === 0 ? 0 : 1);
-                renderer.setRenderTarget(resources.targets[pass + 1]); renderer.clear(); renderer.render(resources.scene, resources.camera);
+            if (blurPlan.steps.length > 0) {
+                const filter = resources.filterMaterial.uniforms; filter.effectSize.value.set(w, h);
+                resources.quad.material = resources.filterMaterial;
+                for (const step of blurPlan.steps) {
+                    filter.tInput.value = resources.targets[step.inputIndex].texture;
+                    filter.blurRadius.value = step.radius;
+                    filter.filterAxis.value.set(step.axis === 'horizontal' ? 1 : 0, step.axis === 'vertical' ? 1 : 0);
+                    renderer.setRenderTarget(resources.targets[step.outputIndex]); renderer.clear(); renderer.render(resources.scene, resources.camera);
+                }
             }
         }
         finally { renderer.setRenderTarget(previous); }
-        composite.screenLightingTexture.value = resources.targets[2].texture;
+        composite.screenLightingTexture.value = resources.targets[blurPlan.targetIndex].texture;
         composite.screenLightingSize.value.set(w, h);
         composite.screenLightingFullSize.value.set(width, height);
     };

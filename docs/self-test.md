@@ -1038,6 +1038,12 @@ Blender4.5.4后台导出完成：7网格/7材质/22内嵌图像，无骨架/动�
 
 - 全新会话、两项始终关闭复测：纹理23/几何1，依然出现GL_INVALID_VALUE(1281)，说明该错误不依赖新增光照资源；独立新增模块GL错误0。完整页既有GL错误和连续会话稳定性继续列入待查。
 
+## 2026-10-08 SSGI可调保边模糊回归
+
+- `tests/mmd-ar-screen-lighting.test.js` 5/5通过：旧设置默认、参数夹取、0–3轮/逐轮半径、ping-pong目标不自读写、接触阴影alpha旁路、面板持久化与复位。
+- 与阴影拟合及公网模型回退测试组合27/27通过；`npm run build:web:mmd-ar-test`成功，构建产物包含轮数/半径控件、设置模块及可变半径滤波Shader。
+- 当前Windows环境缺少配置的`/usr/bin/chromium`，未执行GPU Shader实时编译、同角色画面颗粒变化/帧耗时比较；不宣称视觉降噪幅度，待可用浏览器/设备验收。
+
 ## 2026-10-04 MMD-AR编辑器首版
 
 Chromium/SwiftShader 640×600，西施2，物理参考3子步，AO和阴影关闭用于交互验证。脚本、日志、截图在`3rd/mmd-ar-test/output/editor-check/`。

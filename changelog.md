@@ -22,6 +22,12 @@
 - ✅ [2026-10-08] 独立测试页把主相机可见角色/接收面区域和各方向光的ShadowCamera联合拟合；相机缩放/转动时按视锥与模型/接收面交集更新光空间正交范围，并纳入角色投影到地面的可见影子足迹。按用户确认，正常联合拟合的视野高度在目标占比换算后再乘0.5，默认cameraScale仍为1；保留手动倍率、贴图分辨率独立和像素网格对齐。正式 `/display` VRM/PMX源码未改。
   - 修改 `web-production-test-extras.js`、`web-shadow-map-preview.mjs` 与阴影测试；定向单测12/12通过，包含0.5基准占比断言；`npm run build:web:mmd-ar-test` 在本地GLB缺失时经公网回退成功生成网页。用户检查追加0.5后的效果并确认正常；当前Windows环境自动浏览器测试因缺少 `/usr/bin/chromium` 跳过。未改Offline发布状态。
 
+### MMD-AR SSGI可调保边模糊（已实现，画面待验收）
+
+- ✅ [2026-10-08] 根据SSGI颗粒反馈，在独立测试页增加0–3轮、每轮1–5低分辨率效果像素半径的保边模糊，默认1轮/3px；仅滤波SSGI颜色，接触阴影alpha保留中心值，实验总开关仍默认关闭。
+  - `web-screen-lighting-panel.mjs` 兼容旧存储并复用现有本地键，`web-screen-lighting-build.js`生成控件，`web-screen-lighting.mjs`在既有目标间ping-pong，`web-screen-lighting-shader.mjs`按深度/法线执行可变半径双边滤波；新增`tests/mmd-ar-screen-lighting.test.js`。
+  - 定向测试5/5通过，与阴影拟合及公网GLB回退回归共27/27；`npm run build:web:mmd-ar-test`成功，产物静态确认含控件和滤波shader。当前Windows环境无配置的`/usr/bin/chromium`，尚未验证GPU shader实时编译、实际颗粒改善与帧耗时，需浏览器/设备画面验收；未改正式显示端、APK或Offline发布状态。
+
 ### MMD-AR 可选主相机联动阴影拟合开关（已完成）
 
 - ✅ [2026-10-08] 主光设置增加“联动主相机计算”复选框，默认关闭；开启使用主相机联合拟合（含已确认的0.5系数），关闭恢复旧角色包围盒拟合。
