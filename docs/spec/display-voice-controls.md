@@ -1,5 +1,24 @@
 # 显示端语音交互实现伪代码
 
+## 圆钮VAD和ASR自适应布局（2026-10-10，已授权）
+
+```text
+运行快照新增 vadThreshold，使用现有规范化配置
+收到 voiceVadConfig 后立即 publishVoiceRuntime，更新阈值红线
+PCM RMS 变化时沿用 voice.vad 事件，不再只用两位小数变化门控
+renderVad:
+    活跃RMS有限且非负 -> clamp(RMS,0,1) * 100，否则填充0
+    阈值有限且非负 -> clamp(threshold,0,1) * 100，否则默认0.01对应1%
+    对48px内部圆的CSS变量更新填充百分比与红线高度，圆形裁切
+    数字仍仅在两位小数字符串变化时更新，暂停/停止隐藏数字
+renderAsrResult:
+    仍使用textContent，不解析HTML
+    共享顶部getVoiceTextAdaptiveMetrics，传入ASR文本长度与逻辑视口
+    字号16–36px、逻辑宽度扣除自适应边距
+    最大高度扣除下方圆钮/状态/安全区和键盘，超长可滚动
+    ASR内容、stage.resize变化后刷新尺寸，无额外录音/计时循环
+```
+
 ```text
 已有声明 = PCM/VAD/ASR、handleTTS、DisplayStage.bus、DisplayChat、persistDisplayState
 新增定义 = VoiceInteraction { continuous=true, configReady=false, manual=false, epoch, recognizingCount, chatRequests }

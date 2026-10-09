@@ -507,7 +507,7 @@
                 <div id="displayVoiceAsrResult" class="display-voice-asr-result" role="status" aria-live="polite" hidden></div>
                 <span id="displayVoiceActionStatus" class="display-voice-action-status"><span id="displayVoiceActionStatusText" role="status" aria-live="polite">已停止</span><span id="displayVoiceVadValue" aria-live="off" hidden></span></span>
                 <button id="displayVoiceAction" class="display-voice-action" type="button" data-state="stopped"
-                        aria-label="已停止，开始一次语音输入"><span aria-hidden="true">●</span></button>
+                        aria-label="已停止，开始一次语音输入"><span id="displayVoiceVadMeter" class="display-voice-vad-meter" aria-hidden="true"><span class="display-voice-vad-fill"></span><span class="display-voice-vad-threshold"></span></span></button>
             </div>
         </div>
         <div id="displayArCalibration" class="display-mmd-ar-calibration" role="dialog"
@@ -1753,7 +1753,8 @@
         // 所有计算都基于旋转后的逻辑画布，避免物理 DPI 放大后文字越界或竖屏两侧留白过大。
         function getVoiceTextAdaptiveMetrics(layout) {
             const shortSide = Math.max(Math.min(layout.layoutWidth, layout.layoutHeight), 1);
-            const textLength = Array.from(voiceTextDisplay?.textContent || '').length;
+            // 同一套字号/边距规则用于顶部播报文字和下方ASR，避免移动位置后缩成固定小字。
+            const textLength = Array.from(layout.text ?? voiceTextDisplay?.textContent ?? '').length;
             const edgeMargin = Math.round(clampVoiceTextMetric(shortSide * 0.04, 8, 32));
             const availableWidth = Math.max(layout.layoutWidth - edgeMargin * 2, 1);
             const viewportScale = clampVoiceTextMetric(shortSide / 720, 0.6, 1);
@@ -5853,6 +5854,7 @@
                             data.minSpeechDurationMs,
                             DEFAULT_VAD_MIN_SPEECH_DURATION_MS
                         );
+                        publishVoiceRuntime();
                         console.log('[语音] VAD 配置已更新:', {
                             threshold: vadThreshold,
                             silenceDurationMs: vadSilenceDurationMs,
@@ -6587,6 +6589,7 @@
                 connected: displayWs?.readyState === WebSocket.OPEN,
                 listening: isListening, hasSpeech,
                 vadRms: currentVoiceVadRms,
+                vadThreshold,
                 vadActive: isListening && !globalRecordingPaused && !ttsRecordingPaused && pcmCapture?.paused !== true,
                 asrText: lastVoiceAsrText,
                 recognizing: [...voiceRecognitionRequests.values()].filter((epoch) => epoch === voiceInteractionEpoch).length,
@@ -6681,10 +6684,22 @@
             publishVoiceRuntime();
         }
 
+        function getVoiceAsrAdaptiveMetrics(text) {
+            const geometry = window.DisplayStage?.getState?.().rotationGeometry;
+            const layout = geometry ? {
+                layoutWidth: geometry.logicalWidth, layoutHeight: geometry.logicalHeight, margin: 20
+            } : getRotationLayout();
+            const metrics = getVoiceTextAdaptiveMetrics({ ...layout, text: String(text || '') });
+            // 预留下方状态、圆钮和安全距离；长结果滚动，不将操作按钮推到画面外。
+            metrics.maxHeight = Math.max(1, layout.layoutHeight - 210 - (geometry?.keyboardInset || 0));
+            return metrics;
+        }
+
         window.DisplayVoiceRuntime = Object.freeze({
             snapshot: getVoiceInteractionSnapshot,
             configure: configureVoiceListening,
-            activate: activateVoiceInteraction
+            activate: activateVoiceInteraction,
+            measureAsrText: getVoiceAsrAdaptiveMetrics
         });
         for (const event of ['playing', 'pause', 'ended', 'error']) {
             ttsAudio.addEventListener(event, publishVoiceRuntime);
@@ -8139,9 +8154,9 @@
 
         function handleVoiceVadRms(rms) {
             if (!silenceDetectionRunning || !isListening || !Number.isFinite(rms) || rms < 0) return;
-            const valueChanged = rms.toFixed(2) !== currentVoiceVadRms.toFixed(2);
+            const valueChanged = rms !== currentVoiceVadRms;
             currentVoiceVadRms = rms;
-            // 复用原生和WebView的RMS回调，只有显示的两位小数变化才刷新VAD节点。
+            // 圆形音量使用真实RMS变化；文字仍由控件仅在两位小数变化时更新。
             if (valueChanged) window.DisplayStage?.publish('voice.vad', { rms });
             if (vadNoiseTestActive) return;
 

@@ -6,6 +6,59 @@ const { createDisplayVoiceListeningConfig } = require('../src/apps/server/module
 const html = fs.readFileSync('src/apps/web-mediacenter/ui/public/display.html', 'utf8');
 const controls = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/display-voice-controls.js', 'utf8');
 
+test('圆钮VAD使用真实百分比与相同阈值刻度，暂停/非法值清零', () => {
+    const subscriptions = new Map();
+    const properties = new Map();
+    const refs = {
+        displayVoiceVadValue: { textContent: '', hidden: true },
+        displayVoiceVadMeter: { style: { getPropertyValue: name => properties.get(name), setProperty: (name, value) => properties.set(name, value) } }
+    };
+    const snapshot = { vadActive: true, vadRms: 0.5, vadThreshold: 0.1 };
+    const window = { document: { getElementById: id => refs[id] } };
+    vm.runInNewContext(controls, { window });
+    window.DisplayVoiceControls.init({ runtime: { snapshot: () => snapshot }, send() {}, getState: () => ({}),
+        bus: { subscribe: (name, callback) => subscriptions.set(name, callback) } });
+    assert.equal(properties.get('--voice-vad-level'), '50.00');
+    assert.equal(properties.get('--voice-vad-threshold'), '10.00');
+    snapshot.vadRms = 0.0261;
+    subscriptions.get('voice.vad')();
+    assert.equal(properties.get('--voice-vad-level'), '2.61');
+    assert.equal(refs.displayVoiceVadValue.textContent, ' 0.03');
+    snapshot.vadRms = 2; snapshot.vadThreshold = 0.2;
+    subscriptions.get('voice.vad')();
+    assert.equal(properties.get('--voice-vad-level'), '100.00');
+    assert.equal(properties.get('--voice-vad-threshold'), '20.00');
+    snapshot.vadActive = false;
+    subscriptions.get('voice.runtime')();
+    assert.equal(properties.get('--voice-vad-level'), '0.00');
+    assert.equal(refs.displayVoiceVadValue.hidden, true);
+    snapshot.vadActive = true; snapshot.vadRms = NaN; snapshot.vadThreshold = -1;
+    subscriptions.get('voice.vad')();
+    assert.equal(properties.get('--voice-vad-level'), '0.00');
+    assert.equal(properties.get('--voice-vad-threshold'), '1.00');
+});
+
+test('ASR复用顶部文字自适应规则，旋转和键盘后高度仍有界', () => {
+    const geometry = { logicalWidth: 360, logicalHeight: 800, keyboardInset: 0 };
+    const context = vm.createContext({ window: { DisplayStage: { getState: () => ({ rotationGeometry: geometry }) } }, voiceTextDisplay: { textContent: '旧顶部文字' } });
+    for (const name of ['clampVoiceTextMetric', 'getVoiceTextAdaptiveMetrics', 'getVoiceAsrAdaptiveMetrics']) {
+        // 最后一个辅助函数紧邻运行时导出，夹具只执行函数本身。
+        vm.runInContext(inlineFunction(name).split('        window.DisplayVoiceRuntime')[0], context);
+    }
+    const short = vm.runInContext('getVoiceAsrAdaptiveMetrics("短识别")', context);
+    assert.equal(short.fontSize, 22);
+    assert.ok(short.availableWidth > 360 * 0.76);
+    assert.equal(short.maxHeight, 590);
+    const long = vm.runInContext('getVoiceAsrAdaptiveMetrics("长识别文字".repeat(500))', context);
+    assert.equal(long.fontSize, 16);
+    geometry.logicalWidth = 800; geometry.logicalHeight = 360;
+    const rotated = vm.runInContext('getVoiceAsrAdaptiveMetrics("短识别")', context);
+    assert.equal(rotated.maxHeight, 150);
+    assert.ok(rotated.availableWidth > 700);
+    geometry.keyboardInset = 500;
+    assert.equal(vm.runInContext('getVoiceAsrAdaptiveMetrics("短识别").maxHeight', context), 1);
+});
+
 function inlineFunction(name) {
     const pattern = new RegExp(`        (?:async )?function ${name}\\(`);
     const start = html.search(pattern);
@@ -344,17 +397,17 @@ test('开关等待权威配置，失败恢复旧值，聊天完成和断线清�
     assert.equal(refs.displayVoiceAsrResult.hidden, true);
 });
 
-test('真实RMS回调只有两位小数变化才发布反馈，不改变VAD判定', () => {
+test('真实RMS变化发布圆钮反馈，重复值和非法值不发布，不改变VAD判定', () => {
     const r = runtime(`
         let silenceDetectionRunning = true;
         ${inlineFunction('handleVoiceVadRms')}
     `);
-    r.run('isListening = true; pcmCapture = { beginSegment() {} }; handleVoiceVadRms(0.012); handleVoiceVadRms(0.014); handleVoiceVadRms(0.017)');
-    assert.equal(r.calls.filter((call) => call[0] === 'voice.vad').length, 2);
+    r.run('isListening = true; pcmCapture = { beginSegment() {} }; handleVoiceVadRms(0.012); handleVoiceVadRms(0.014); handleVoiceVadRms(0.017); handleVoiceVadRms(0.017)');
+    assert.equal(r.calls.filter((call) => call[0] === 'voice.vad').length, 3);
     assert.equal(r.run('currentVoiceVadRms'), 0.017);
     assert.equal(r.run('hasSpeech'), false, '反馈数值不改变阈值含义');
     r.run('handleVoiceVadRms(NaN); handleVoiceVadRms(-1); isListening = false; handleVoiceVadRms(0.5)');
-    assert.equal(r.calls.filter((call) => call[0] === 'voice.vad').length, 2);
+    assert.equal(r.calls.filter((call) => call[0] === 'voice.vad').length, 3);
     r.run('isListening = true; handleVoiceVadRms(0.2)');
     assert.equal(r.run('hasSpeech'), true);
     r.run('ttsRecordingPaused = true');

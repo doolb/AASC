@@ -177,7 +177,7 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
         /data\.action === 'weatherResult'[\s\S]*const detailText = data\.detailText \|\| data\.text[\s\S]*showVoiceResponsePopup\([\s\S]*?detailText,[\s\S]*?calculateWeatherPopupDuration\(detailText\),[\s\S]*?layer:\s*'broadcast'[\s\S]*?suppressWhenChatVisible:\s*true/u
     );
     const weatherPopupFunction = DISPLAY_HTML.match(
-        /function showVoiceResponsePopup\(text, durationMs = 5000, options = \{\}\)[\s\S]*?\n        \}\n        \n        function showSearchResultPopup/u
+        /function showVoiceResponsePopup\(text, durationMs = 5000, options = \{\}\)[\s\S]*?\n        \}\n\s*\n        function showSearchResultPopup/u
     )?.[0] || '';
     assert.match(
         weatherPopupFunction,

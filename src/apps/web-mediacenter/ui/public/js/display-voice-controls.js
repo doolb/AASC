@@ -41,12 +41,22 @@
 
     function renderVad(snapshot = runtime?.snapshot()) {
         if (!refs.vad || !snapshot) return;
+        const rms = Number.isFinite(snapshot.vadRms) && snapshot.vadRms >= 0 ? snapshot.vadRms : 0;
+        if (refs.meter) {
+            const level = snapshot.vadActive === true ? Math.min(rms, 1) * 100 : 0;
+            const threshold = Number.isFinite(snapshot.vadThreshold) && snapshot.vadThreshold >= 0
+                ? Math.min(snapshot.vadThreshold, 1) * 100 : 1;
+            // 真实RMS与阈值使用同一0–100%刻度，停止或暂停时清空填充，保留配置红线。
+            for (const [name, value] of [['--voice-vad-level', level], ['--voice-vad-threshold', threshold]]) {
+                const formatted = value.toFixed(2);
+                if (refs.meter.style.getPropertyValue(name) !== formatted) refs.meter.style.setProperty(name, formatted);
+            }
+        }
         refs.vad.hidden = snapshot.vadActive !== true;
         if (refs.vad.hidden) {
             if (refs.vad.textContent) refs.vad.textContent = '';
             return;
         }
-        const rms = Number.isFinite(snapshot.vadRms) && snapshot.vadRms >= 0 ? snapshot.vadRms : 0;
         const value = ` ${rms.toFixed(2)}`;
         if (refs.vad.textContent !== value) refs.vad.textContent = value;
     }
@@ -56,6 +66,12 @@
         const value = String(text || '');
         if (refs.asr.textContent !== value) refs.asr.textContent = value;
         refs.asr.hidden = !value;
+        const metrics = runtime?.measureAsrText?.(value);
+        if (metrics) {
+            refs.asr.style.fontSize = `${metrics.fontSize}px`;
+            refs.asr.style.maxWidth = `${metrics.availableWidth}px`;
+            refs.asr.style.maxHeight = `${metrics.maxHeight}px`;
+        }
     }
 
     function clearPending() {
@@ -121,6 +137,7 @@
             status: root.document.getElementById('displayVoiceActionStatus'),
             statusText: root.document.getElementById('displayVoiceActionStatusText'),
             vad: root.document.getElementById('displayVoiceVadValue'),
+            meter: root.document.getElementById('displayVoiceVadMeter'),
             asr: root.document.getElementById('displayVoiceAsrResult')
         };
         // 按钮请求切换权威模式，保存回包到达前保留原选中态并禁止重复点击。
@@ -130,6 +147,7 @@
         options.bus.subscribe('voice.runtime', render);
         options.bus.subscribe('voice.vad', () => renderVad());
         options.bus.subscribe('voice.asr-result', ({ text }) => renderAsrResult(text));
+        options.bus.subscribe('stage.resize', () => renderAsrResult(runtime.snapshot().asrText || ''));
         options.bus.subscribe('chat.status-name', render);
         options.bus.subscribe('chat.activity', ({ requestId, active }) => {
             if (!requestId) return;

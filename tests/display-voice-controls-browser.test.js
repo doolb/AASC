@@ -88,6 +88,11 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
                 function takeRawPcmWav() { return 'wav'; }
                 async function sendAudioForRecognition() { window.fixtureCalls.push('recognize'); }
                 ${inlineFunction(html, 'handleTTS')}
+                const voiceTextDisplay = null;
+                let currentRotation = 0;
+                ${inlineFunction(html, 'getRotationLayout')}
+                ${inlineFunction(html, 'clampVoiceTextMetric')}
+                ${inlineFunction(html, 'getVoiceTextAdaptiveMetrics')}
                 ${runtimeSource}
                 ${inlineFunction(html, 'handleVoiceVadRms')}
                 window.fixtureVad = (rms) => handleVoiceVadRms(rms);
@@ -155,7 +160,25 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         assert.equal(await page.$eval('#displayVoiceActionStatus', (element) => element.textContent), '群聊 · 空闲 0.03');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.parentElement.id), 'displayVoiceActionStatus');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
-        const resultText = '识别结果 <img src=x onerror="window.resultInjected=true">\n' + '长文本换行验证'.repeat(25);
+        const meterGeometry = await page.evaluate(() => {
+            const meter = document.getElementById('displayVoiceVadMeter');
+            return { level: meter.style.getPropertyValue('--voice-vad-level'), threshold: meter.style.getPropertyValue('--voice-vad-threshold'),
+                circle: meter.getBoundingClientRect().width, button: document.getElementById('displayVoiceAction').getBoundingClientRect().width,
+                clip: getComputedStyle(meter).overflow, lineColor: getComputedStyle(meter.querySelector('.display-voice-vad-threshold')).backgroundColor };
+        });
+        assert.equal(meterGeometry.level, '2.60');
+        assert.equal(meterGeometry.threshold, '10.00');
+        assert.ok(meterGeometry.circle < meterGeometry.button);
+        assert.equal(meterGeometry.clip, 'hidden');
+        assert.equal(meterGeometry.lineColor, 'rgb(239, 68, 68)');
+        await page.evaluate(() => { updateAsrResultDisplay('短识别文字'); window.fixtureVad(0.5); });
+        const shortLayout = await page.$eval('#displayVoiceAsrResult', element => ({
+            font: parseFloat(getComputedStyle(element).fontSize), width: parseFloat(element.style.maxWidth)
+        }));
+        assert.ok(shortLayout.font > 14, '恢复顶部文字字号而非固定14px');
+        assert.ok(shortLayout.width > 480 * 0.76, '恢复逻辑视口自适应宽度');
+        await page.screenshot({ path: path.join(cache, 'vad-circle-half-filled.png') });
+        const resultText = '识别结果 <img src=x onerror="window.resultInjected=true">\n' + '长文本换行验证'.repeat(200);
         await page.evaluate((text) => updateAsrResultDisplay(text), resultText);
         assert.equal(await page.$eval('#displayVoiceAsrResult', (element) => element.textContent), resultText);
         assert.equal(await page.$eval('#displayVoiceAsrResult', (element) => element.children.length), 0);
@@ -163,13 +186,14 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         const resultGeometry = await page.evaluate(() => {
             const result = document.getElementById('displayVoiceAsrResult');
             const bounds = result.getBoundingClientRect();
-            return { bottom: bounds.bottom, height: bounds.height, scrollHeight: result.scrollHeight,
+            return { top: bounds.top, bottom: bounds.bottom, height: bounds.height, scrollHeight: result.scrollHeight,
                 statusTop: document.getElementById('displayVoiceActionStatus').getBoundingClientRect().top };
         });
         assert.ok(resultGeometry.bottom <= resultGeometry.statusTop);
+        assert.ok(resultGeometry.top >= 0, '长结果不能把识别区推出可见画布');
         assert.ok(resultGeometry.scrollHeight > resultGeometry.height, '长结果换行并受最大高度限制');
         await page.screenshot({ path: path.join(cache, 'asr-vad-portrait.png') });
-        await page.evaluate(() => updateAsrResultDisplay(''));
+        await page.evaluate(() => { hasSpeech = false; updateAsrResultDisplay(''); });
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 说话中');
         await page.click('#displayVoiceAction');
@@ -188,6 +212,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         await page.click('#displayVoiceContinuous');
         await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 已停止');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.hidden), true);
+        assert.equal(await page.$eval('#displayVoiceVadMeter', element => element.style.getPropertyValue('--voice-vad-level')), '0.00');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.getAttribute('aria-pressed')), 'false');
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
         await page.click('#displayVoiceAction');
