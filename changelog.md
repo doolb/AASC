@@ -35,12 +35,18 @@
 
 ### MMD-AR Blender 工程按需加载
 
+- ✅ [2026-10-08] 修复 Blender 工程入口点击后错误提示被折叠面板隐藏的问题：入口点击时立即展开面板并显示状态，常驻状态区移到折叠区外；浏览器不支持目录选择、动态模块/工作区报错时可见，取消目录选择会清除状态并恢复入口。`npm run build:web:mmd-ar-test`、`node --check`、`git diff --check` 通过。14 个变化文件按模块、入口、首页顺序发布至 `https://c.aasc.us/mnt/mmd-ar/`；13 个 HTTPS 资源全部 HTTP 200 且 SHA-256 匹配，Blender 版本目录 `.htaccess` 远端 SHA-256 匹配，根 COOP/COEP 响应头正常。首页 SHA-256 `8ee856b230b94451f8c611f30fb568a7930ed4ebec9505d67054bf53643ead0a`。实际 Edge 目录授权、`.blend` 打开和保存仍待现场验收。
+
 - 🔄 [2026-10-08] 新增原生 `.blend` 工作区的设计、伪代码、任务文档与入口代码；用户点击后才加载 Blender 5.2 WASM，文件通过 HTTPS 目录句柄读写，不上传服务器、不经过 PMX/MMD Tools。
   - 锁定 `@volter/blender-engine@0.1.136` 与独立 Three.js 0.180 构建；新增 Vite 工作区入口、Web 专用 Service Worker 适配器、用户授权目录索引/读取、分块哈希校验与 `.blend` 回写、Brotli WASM 静态资源及 COOP/COEP 配置。APK 构建移除 Blender 按钮且不带引擎资产。
   - 完整 `web-dist` 构建成功；用户取消目录选择时不下载工作区模块，启动或预览失败会回收 worker 与 WebGL 资源并允许重试。静态资源改为直接请求 `.br`，移除了 `Options` 和 rewrite 依赖。
   - ✅ [2026-10-08] 完成外网发布 `https://c.aasc.us/mnt/mmd-ar/`。Apache 启用 `mod_headers`，按站点路径返回 COOP `same-origin`、COEP `credentialless`，仅对版本化 Blender 资源目录开放 `.htaccess` 的 `Header` 指令。23 个发布文件共 47,296,610 bytes，暂存 SHA-256 全部匹配；首次首页 SHA-256 `433687352b362e29eb836a905d244c9471cd840fd15c3c740f1881fa6dbb31b3`。WASM MIME 与 Brotli 编码正确。旧页面备份保留在服务器 `.mmd-ar-blender-publish-backup-20261008`。
   - ✅ [2026-10-08] 修复线上点击 Blender 工程报 `mountBlenderWorkbench is not a function`：Vite 未保留动态导入入口的导出签名。构建设置 `preserveEntrySignatures: exports-only`，并增加产物导出检查；本地 Node 动态导入确认导出为函数。重新部署首页、两个入口脚本、工作区入口及两个分块共 6 个文件，SHA-256 全部匹配；当前首页 SHA-256 `123c31429dd0e3e748a3a04729c9414a75f424619b218d97dafac8f8a32e6ef4`，新模块和分块均 HTTP 200。真实浏览器的目录授权、`.blend` 打开、Cycles 渲染和保存往返仍待验收。
-
+  - ✅ [2026-10-08] 修复 `Blender worker failed: the worker script did not load`：Vite 产物原引用域名根 `/assets/worker-*.js`，但 MMD-AR 部署于 `/mnt/mmd-ar/`。改用相对资源基路径，将固定版本引擎的 worker API 路由改为应用目录相对 URL，并让 Service Worker 按注册 scope 构造 `/__editor/*` 路由；启动前等待最新 worker 接管页面，构建断言防止绝对根路径回归。`npm run build:web:mmd-ar-test` 成功，分阶段发布后 rsync checksum dry-run 无差异；线上首页、分块、worker HTTP 200，worker 的子目录资源可用，域名根 worker 仍为 404，COOP/COEP 正常。真实浏览器 `.blend` 加载与保存流程仍待验收。
+  - ✅ [2026-10-08] 修复随后出现的 `.../js/blender-engine/assets/undefined`：Vite 把动态 `new URL(template, import.meta.url)` 转换为空资源映射。worker 改为从 `import.meta.url` 计算路由路径，并增加构建断言拦截 `undefined` 回归。重新构建发布后 rsync checksum dry-run 无差异；线上首页、工作台模块、worker 与 Blender 状态端点 HTTP 200，状态返回 `available: true`。真实浏览器 `.blend` 流程仍待验收。
+  - 🔄 [2026-10-08] 使用 `/mnt/mmd/blender/西施原皮.blend`（103,355,592 bytes）进行 headless Chromium 实测，源文件保持不变。Blender WASM 能启动，但当前工作区因 `BlenderRuntime` 没有转接必需的 staged-frame `stage` 回调而拒绝首帧；临时在浏览器响应中转接到 `presenter.view.stageFrame` 后到达“已打开”，SwiftShader 下预览画布仍为空。Cycles 与正常保存流程未验收；保存试验受响应拦截影响，不作为产品结论。修复待确认。
+  - ✅ [2026-10-08] 将 `BlenderRuntime.stage` 转接到 `presenter.view.stageFrame`，重新构建并发布；线上入口/分块可访问，Blender 静态资源状态为 `available: true`。本机 Blender 4.5.4 LTS 成功读取 `/mnt/mmd/blender/西施原皮.blend`（1 场景、15 对象、8 网格）。修复后网页回归未能启动：自动化 Chromium 导航本机临时页面也报 `ERR_INSUFFICIENT_RESOURCES`；模型预览、保存和 Cycles 仍待桌面 Chromium 验收。
+  - ✅ [2026-10-08] 按用户要求将 Blender 工程从独立全屏工作区整合到 MMD-AR 主视口，替换当前角色；页面编辑/预览/渲染模式路由到 Blender 面板，支持对象变换、骨骼姿态和骨架头/尾/Roll/父级编辑，沿用主相机、灯光与 renderer。关闭后恢复 MMD 角色、相机、动作/物理状态。`npm run build:web:mmd-ar-test`、相关 `node --check` 与 `git diff --check` 通过；未运行测试套件。Chromium 仍在导航前报 `ERR_INSUFFICIENT_RESOURCES`，因此 `.blend` 实际显示、编辑、Cycles 与保存回读待桌面浏览器验收。本轮未发布外网。任务：`docs/task/20261008_MMDARBlender角色与骨骼编辑集成.md`。
 
 ### MMD-AR 主相机视野与光源阴影相机联合拟合（完成，用户确认范围效果）
 
@@ -11052,3 +11058,9 @@
   - `3rd/mmd-ar-test/web-screen-lighting-shader.mjs` 将厚度与自遮挡检查移至4轮细化之后；不增加配置、纹理或循环上限。新增 `tests/mmd-ar-contact-shadow-browser.test.js` 执行真实GLSL，三档质量18种输入检查通过，已验证旧实现先失败、修正后通过。
   - 接触阴影/屏幕光照10/10通过，Web构建成功；扩展阴影组合25通过/1失败/1跳过，全量1078通过/161失败/21跳过，详见 `docs/task/20261008_MMDAR接触阴影自测结果.md`。APK一致性测试子进程因异常后未关闭服务而挂起，定点结束后取得全量结果；未声称全量通过。
   - 同步design/spec/task/todo及独立测试页README；`servicePackage`原已为true并保持，其他发布状态不变。保留已有SSGI/HZB、配置与相机改动，不混入提交；完整工作区Shader另有HZB的`packed`保留字编译错误，用户模型同视角与手机性能待验收。未打包APK或发布站点。
+
+### Offline MMD 首次下载后加速
+
+- ✅ [2026-10-08] 固定白名单 PMX、贴图与 VMD 首次校验后写入 Offline 可保留的 `res/temp/mmd-static-cache/<version>/`；后续从磁盘读取，版本化同源 URL 提供一年 immutable HTTP 缓存。
+  - 修改 MMD 资源服务、server-app 与显示端路径校验；缓存使用 SHA/长度复核、并发合并、临时文件原子替换、坏缓存重取及旧版本目录清理，并隔离符号链接。旧路径保持兼容且 `no-store`，缓存写入失败不影响已校验响应。
+  - 服务测试17/17、显示端路径测试1/1通过。code v47：16,895,693 bytes，SHA-256 `cdccd101c1dbb4c67140496a520316cb0dc67f8357529364900c4d58fed7d865`；LAN `/mnt/aasc-offline` 与 WAN `/home/as/a/aasc-offline` 发布成功，两端清单签名/一致性及全部组件大小/SHA-256验证通过，旧 code 版本按数字文件规则清理。dependencies v6、min APK v34、Node-min seeds v39 和 data-repair v2 保持；未构建 APK。`servicePackage=false`、`minApk=true`、`dependenciesPackage=false`。Android 冷启动与实际耗时待验收。

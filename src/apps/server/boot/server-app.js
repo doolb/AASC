@@ -144,8 +144,10 @@ const {
     unwrapVroidModelPayload
 } = require('../modules/vrm/vroid-model-service');
 const {
+    STATIC_MMD_RELEASE,
     loadPreferredMmdResources,
-    requestStaticMmdAsset
+    requestStaticMmdAsset,
+    resolveStaticMmdAsset
 } = require('../modules/mmd/mmd-resource-service');
 const { createAndroidControlPageAccess } = require('../modules/display/android-control-page-access');
 const {
@@ -334,6 +336,7 @@ const serverReleaseService = new ServerReleaseService({
     version: process.env.AASC_SERVER_VERSION || null
 });
 const RES_DIR = path.join(PROJECT_ROOT, 'res');
+const MMD_STATIC_CACHE_DIR = path.join(RES_DIR, 'temp', 'mmd-static-cache');
 const modelManifestService = new ModelManifestService({
     modelRoot: path.join(RES_DIR, 'models')
 });
@@ -2905,22 +2908,67 @@ app.get('/api/vrm/model', (req, res) => {
     }
 });
 
-app.get(/^\/api\/mmd\/static\/(.+)$/u, async (req, res) => {
+const matchesMmdIfNoneMatch = (header, etag) => String(header || '')
+    .split(',')
+    .map((value) => value.trim())
+    .some((value) => value === '*' || value === etag || value === `W/${etag}`);
+
+const serveStaticMmdAsset = async (req, res, options = {}) => {
     if (Object.keys(req.query || {}).length > 0) {
         res.status(400).json({ status: 'error', message: 'MMD 静态资源不接受查询参数' });
-        return;
+        return false;
     }
     try {
-        const asset = await requestStaticMmdAsset({ relativePath: req.params[0] });
+        const version = options.version || STATIC_MMD_RELEASE.version;
+        if (version !== STATIC_MMD_RELEASE.version) {
+            res.status(404).json({ status: 'error', message: 'MMD 静态资源版本不存在' });
+            return false;
+        }
+        const assetInfo = resolveStaticMmdAsset(options.relativePath);
+        const etag = `"${assetInfo.sha256}"`;
+        if (options.versioned) {
+            res.setHeader('ETag', etag);
+            res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+            if (matchesMmdIfNoneMatch(req.get('If-None-Match'), etag)) {
+                res.status(304).end();
+                return true;
+            }
+        } else {
+            // 老版本 URL 不带资源版本，保持不缓存以免代码更新后复用过期内容。
+            res.setHeader('Cache-Control', 'no-store');
+        }
+        const asset = await requestStaticMmdAsset({
+            relativePath: assetInfo.path,
+            releaseVersion: version,
+            cacheDir: MMD_STATIC_CACHE_DIR
+        });
         res.status(200);
         res.setHeader('Content-Type', asset.contentType);
         res.setHeader('Content-Length', String(asset.content.length));
-        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('ETag', etag);
+        res.setHeader('X-AASC-MMD-Cache', asset.cacheHit ? 'HIT' : asset.cacheStored ? 'MISS' : 'BYPASS');
         res.setHeader('X-AASC-MMD-Source', 'static-miya-v1-ip-resolved');
         res.end(asset.content);
+        return true;
     } catch (error) {
         res.status(error.statusCode || 502).json({ status: 'error', message: error.message });
+        return false;
     }
+};
+
+app.get(/^\/api\/mmd\/static\/([a-f0-9]{64})\/(.+)$/u, async (req, res) => {
+    await serveStaticMmdAsset(req, res, {
+        version: req.params[0],
+        relativePath: req.params[1],
+        versioned: true
+    });
+});
+
+app.get(/^\/api\/mmd\/static\/(.+)$/u, async (req, res) => {
+    await serveStaticMmdAsset(req, res, {
+        relativePath: req.params[0],
+        versioned: false
+    });
 });
 
 app.get('/api/mmd/resources', async (req, res) => {

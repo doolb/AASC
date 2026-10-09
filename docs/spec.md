@@ -29,7 +29,7 @@
 | MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](spec/mmd-ar-test-apk.md) | APK 本地页面与 HTTPS 静态页、PMX/MindAR 资源校验、网页动作播放开关及 tracker A/B 对比伪代码 |
 | MMD-AR Blender 工程工作区 | [mmd-ar-blender-workbench.md](spec/mmd-ar-blender-workbench.md) | 用户点击后加载 Blender WASM、选择本地工程目录、打开/预览/保存 `.blend` 的适配伪代码 |
 | MindAR Basic 独立 HTTPS 测试页 | [mindar-basic-web.md](spec/mindar-basic-web.md) | 目标生命周期、IMU/视觉融合、质量观测及传感器降级伪代码 |
-| PMX/VMD 与 Offline 静态代理 | [mmd-pmx-vmd-local.md](spec/mmd-pmx-vmd-local.md) | PMX/VMD 本地资源注册、布料首载预热、动作暂停/恢复、灯光及物理伪代码 |
+| PMX/VMD 与 Offline 静态代理 | [mmd-pmx-vmd-local.md](spec/mmd-pmx-vmd-local.md) | PMX/VMD 加载、Offline MMD 静态资源本地持久缓存与版本化 HTTP 缓存伪代码 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](spec/chat-output-filter.md) | think/正文/播报文本分流、控制端弹窗、显示端展示和私聊清空错误伪代码 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](spec/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出伪代码 |
 | 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |

@@ -8,8 +8,12 @@ const { Readable } = require('node:stream');
 const MMD_MANIFEST_RELATIVE_PATH = path.join('mmd', 'manifest.json');
 const RESOURCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
+const STATIC_MMD_VERSION_PATTERN = /^[a-f0-9]{64}$/u;
 const STATIC_MMD_TIMEOUT_MS = 300000;
 const STATIC_MMD_PROXY_PREFIX = '/api/mmd/static/';
+const staticMmdInFlight = new Map();
+const staticMmdCachePreparation = new Map();
+const preparedStaticMmdCacheVersions = new Set();
 const STATIC_MMD_SOURCE_BASE_URLS = Object.freeze([
   'http://192.168.1.39/mnt/mmd/miya-v1/',
   'http://10.221.70.87/mnt/mmd/miya-v1/',
@@ -85,12 +89,21 @@ const resolveStaticMmdAsset = (relativePath) => {
 const createStaticMmdResourceProfile = () => ({
   resourceId: STATIC_MMD_RELEASE.resourceId,
   modelType: 'pmx',
-  modelUrl: `${STATIC_MMD_PROXY_PREFIX}${STATIC_MMD_RELEASE.modelPath}`,
+  modelUrl: `${STATIC_MMD_PROXY_PREFIX}${STATIC_MMD_RELEASE.version}/${STATIC_MMD_RELEASE.modelPath}`,
   motionResourceId: STATIC_MMD_RELEASE.motionResourceId,
-  motionUrl: `${STATIC_MMD_PROXY_PREFIX}${STATIC_MMD_RELEASE.motionPath}`,
+  motionUrl: `${STATIC_MMD_PROXY_PREFIX}${STATIC_MMD_RELEASE.version}/${STATIC_MMD_RELEASE.motionPath}`,
   playMode: STATIC_MMD_RELEASE.playMode,
   version: STATIC_MMD_RELEASE.version,
 });
+
+const validateStaticMmdReleaseVersion = (version) => {
+  if (typeof version !== 'string'
+    || !STATIC_MMD_VERSION_PATTERN.test(version)
+    || version !== STATIC_MMD_RELEASE.version) {
+    throw createMmdError('Unsupported MMD static release version', 404);
+  }
+  return version;
+};
 
 const resolveStaticMmdSourceAssetUrls = async (sourceBaseUrl, relativePath, { lookup = dns.lookup } = {}) => {
   const source = new URL(sourceBaseUrl);
@@ -167,6 +180,159 @@ const discardStaticMmdResponse = async (response) => {
   }
 };
 
+const removeCacheEntryIfRegular = async (filePath) => {
+  try {
+    const stats = await fs.lstat(filePath);
+    if (stats.isFile() || stats.isSymbolicLink()) await fs.unlink(filePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+};
+
+const assertRegularDirectory = async (directoryPath, message) => {
+  const stats = await fs.lstat(directoryPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(message);
+};
+
+const ensureStaticMmdCacheVersionDirectory = async (cacheDir, version) => {
+  const cacheRoot = path.resolve(cacheDir);
+  const versionRoot = path.join(cacheRoot, version);
+  const preparationKey = `${cacheRoot}\0${version}`;
+  if (preparedStaticMmdCacheVersions.has(preparationKey)) {
+    await assertRegularDirectory(cacheRoot, 'MMD static cache root must be a regular directory');
+    await assertRegularDirectory(versionRoot, 'MMD static cache version path must be a regular directory');
+    return versionRoot;
+  }
+  if (staticMmdCachePreparation.has(preparationKey)) return staticMmdCachePreparation.get(preparationKey);
+
+  const preparation = (async () => {
+    await fs.mkdir(cacheRoot, { recursive: true });
+    const rootStats = await fs.lstat(cacheRoot);
+    if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
+      throw new Error('MMD static cache root must be a regular directory');
+    }
+
+    // 缓存根只供本模块使用；仅删除名称为 64 位小写 SHA 版本且确认为普通目录的旧版本。
+    const entries = await fs.readdir(cacheRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === version || !STATIC_MMD_VERSION_PATTERN.test(entry.name)) continue;
+      const oldVersionPath = path.join(cacheRoot, entry.name);
+      const oldStats = await fs.lstat(oldVersionPath);
+      if (oldStats.isDirectory() && !oldStats.isSymbolicLink()) {
+        await fs.rm(oldVersionPath, { recursive: true, force: true });
+      }
+    }
+
+    await fs.mkdir(versionRoot, { recursive: true });
+    const versionStats = await fs.lstat(versionRoot);
+    if (!versionStats.isDirectory() || versionStats.isSymbolicLink()) {
+      throw new Error('MMD static cache version path must be a regular directory');
+    }
+    preparedStaticMmdCacheVersions.add(preparationKey);
+    return versionRoot;
+  })();
+  staticMmdCachePreparation.set(preparationKey, preparation);
+  try {
+    return await preparation;
+  } finally {
+    if (staticMmdCachePreparation.get(preparationKey) === preparation) {
+      staticMmdCachePreparation.delete(preparationKey);
+    }
+  }
+};
+
+const ensureStaticMmdCacheParentDirectory = async (versionRoot, relativeDirectory) => {
+  let currentPath = versionRoot;
+  for (const segment of relativeDirectory.split('/').filter(Boolean)) {
+    currentPath = path.join(currentPath, segment);
+    try {
+      await fs.mkdir(currentPath);
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+    const stats = await fs.lstat(currentPath);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error('MMD static cache parent path must contain only regular directories');
+    }
+  }
+  return currentPath;
+};
+
+const resolveStaticMmdCacheFile = (versionRoot, assetPath) => {
+  const cacheFile = path.resolve(versionRoot, ...assetPath.split('/'));
+  const relativePath = path.relative(versionRoot, cacheFile);
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error('MMD static cache path escapes its version directory');
+  }
+  return cacheFile;
+};
+
+const hasRegularStaticMmdCacheParents = async (versionRoot, assetPath) => {
+  const directorySegments = assetPath.split('/').slice(0, -1);
+  let currentPath = versionRoot;
+  for (const segment of directorySegments) {
+    currentPath = path.join(currentPath, segment);
+    try {
+      const stats = await fs.lstat(currentPath);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) return false;
+    } catch (error) {
+      if (error.code === 'ENOENT') return false;
+      throw error;
+    }
+  }
+  return true;
+};
+
+const readStaticMmdCacheFile = async ({ cacheFile, versionRoot, asset }) => {
+  if (!await hasRegularStaticMmdCacheParents(versionRoot, asset.path)) return null;
+  let stats;
+  try {
+    stats = await fs.lstat(cacheFile);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  if (!stats.isFile() || stats.isSymbolicLink()) return null;
+  if (stats.size !== asset.size) {
+    await removeCacheEntryIfRegular(cacheFile);
+    return null;
+  }
+  const content = await fs.readFile(cacheFile);
+  const digest = crypto.createHash('sha256').update(content).digest('hex');
+  if (content.length !== asset.size || digest !== asset.sha256) {
+    await removeCacheEntryIfRegular(cacheFile);
+    return null;
+  }
+  return { content, contentType: asset.contentType, sourceUrl: null, cacheHit: true, cacheStored: true };
+};
+
+const writeStaticMmdCacheFile = async ({ cacheFile, versionRoot, asset, content }) => {
+  await ensureStaticMmdCacheParentDirectory(versionRoot, path.dirname(asset.path));
+  let existing;
+  try {
+    existing = await fs.lstat(cacheFile);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  if (existing) {
+    if (existing.isDirectory() && !existing.isSymbolicLink()) return false;
+    await fs.unlink(cacheFile);
+  }
+
+  const temporaryPath = `${cacheFile}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`;
+  try {
+    await fs.writeFile(temporaryPath, content, { flag: 'wx', mode: 0o600 });
+    await fs.rename(temporaryPath, cacheFile);
+    return true;
+  } finally {
+    try {
+      await fs.unlink(temporaryPath);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+};
+
 const fetchAndValidateStaticMmdAsset = async ({ asset, sourceUrl, request }) => {
   let response;
   try {
@@ -215,8 +381,7 @@ const fetchAndValidateStaticMmdAsset = async ({ asset, sourceUrl, request }) => 
   }
 };
 
-const requestStaticMmdAsset = async ({ relativePath, lookup = dns.lookup, request = requestFetch } = {}) => {
-  const asset = resolveStaticMmdAsset(relativePath);
+const fetchStaticMmdAsset = async ({ asset, lookup, request }) => {
   const sourceErrors = [];
   for (const sourceBaseUrl of STATIC_MMD_SOURCE_BASE_URLS) {
     let sourceUrls;
@@ -228,13 +393,60 @@ const requestStaticMmdAsset = async ({ relativePath, lookup = dns.lookup, reques
     }
     for (const sourceUrl of sourceUrls) {
       try {
-        return await fetchAndValidateStaticMmdAsset({ asset, sourceUrl, request });
+        const result = await fetchAndValidateStaticMmdAsset({ asset, sourceUrl, request });
+        return { ...result, cacheHit: false, cacheStored: false };
       } catch (error) {
         sourceErrors.push(`${new URL(sourceUrl).origin}: ${error.message}`);
       }
     }
   }
   throw createMmdError(`MMD static asset failed from all sources: ${sourceErrors.join('; ')}`, 502);
+};
+
+const requestStaticMmdAsset = async ({
+  relativePath,
+  releaseVersion = STATIC_MMD_RELEASE.version,
+  cacheDir = null,
+  lookup = dns.lookup,
+  request = requestFetch,
+  resolveAsset = resolveStaticMmdAsset,
+} = {}) => {
+  const version = validateStaticMmdReleaseVersion(releaseVersion);
+  const asset = resolveAsset(relativePath);
+  let cacheFile = null;
+  let versionRoot = null;
+  if (typeof cacheDir === 'string' && cacheDir.trim()) {
+    try {
+      versionRoot = await ensureStaticMmdCacheVersionDirectory(cacheDir, version);
+      cacheFile = resolveStaticMmdCacheFile(versionRoot, asset.path);
+      const cached = await readStaticMmdCacheFile({ cacheFile, versionRoot, asset });
+      if (cached) return cached;
+    } catch (error) {
+      // 私有缓存不可用时保留原有代理能力，不因设备空间或目录异常阻断已经校验的响应。
+      cacheFile = null;
+      versionRoot = null;
+    }
+  }
+
+  const flightKey = cacheFile ? `${path.resolve(cacheDir)}\0${version}\0${asset.path}` : null;
+  if (flightKey && staticMmdInFlight.has(flightKey)) return staticMmdInFlight.get(flightKey);
+
+  const task = (async () => {
+    const downloaded = await fetchStaticMmdAsset({ asset, lookup, request });
+    if (!cacheFile || !versionRoot) return downloaded;
+    try {
+      const cacheStored = await writeStaticMmdCacheFile({ cacheFile, versionRoot, asset, content: downloaded.content });
+      return { ...downloaded, cacheStored };
+    } catch (error) {
+      return downloaded;
+    }
+  })();
+  if (flightKey) staticMmdInFlight.set(flightKey, task);
+  try {
+    return await task;
+  } finally {
+    if (flightKey && staticMmdInFlight.get(flightKey) === task) staticMmdInFlight.delete(flightKey);
+  }
 };
 
 const normalizeManifestPath = (value, label) => {

@@ -83,19 +83,21 @@ PMX 材质的“环境色”与场景环境光并非同一设置。Three.js `MMD
 
 Offline APK 不内置 PMX、纹理或 VMD，也不由 WebView 直接请求网络。内嵌 Node 服务按热更新相同顺序尝试固定 MMD 根：家庭内网 `http://192.168.1.39/mnt/mmd/miya-v1/`、公司内网 `http://10.221.70.87/mnt/mmd/miya-v1/`、外网 `http://c.aasc.us/mnt/mmd/miya-v1/`。内网地址直接请求；外网域名先解析 IPv4 并替换 URL 主机。代理再以同源路径响应给显示端，避免 WebView 混合内容、CORS 和任意 URL 注入。
 
-PMX 的纹理是相对模型 URL 解析的，因此不能使用 VRM 的单文件 query 代理。服务端应返回路径型同源地址，例如 `/api/mmd/static/mmd/miya/miya.pmx`；MMDLoader 后续请求的 `tex/*.png` 会自然落到同一前缀。服务端只允许随版本固定的 14 个文件（PMX、12 张 PNG、VMD），在代码中固定其路径、大小和 SHA-256，不接受查询参数、任意文件名或路径穿越。
+PMX 的纹理是相对模型 URL 解析的，因此不能使用 VRM 的单文件 query 代理。服务端返回包含资源版本的路径型同源地址，例如 `/api/mmd/static/<version>/mmd/miya/miya.pmx`；MMDLoader 后续请求的 `tex/*.png` 会自然带上相同版本路径。服务端只允许随版本固定的 14 个文件（PMX、12 张 PNG、VMD），在代码中固定其路径、大小和 SHA-256，不接受查询参数、任意文件名或路径穿越。
 
-`/api/mmd/resources` 优先返回本地 `res/models/mmd/manifest.json` 的 profile，便于桌面内网验证；仅当本地清单确实不存在时回退为固定的 `miya-v1` profile。清单存在但格式、文件或 hash 无效时必须返回错误，不能静默切到网络源。静态代理对每个文件按家庭内网、公司内网、外网顺序请求；某源 DNS、网络、状态、长度或 SHA-256 校验失败时继续下一源，全部失败后显示端保持占位，聊天、媒体和灯光功能不受影响。每个请求仍使用固定路径与文件白名单，不做持久缓存。
+`/api/mmd/resources` 优先返回本地 `res/models/mmd/manifest.json` 的 profile，便于桌面内网验证；仅当本地清单确实不存在时回退为固定的 `miya-v1` profile。清单存在但格式、文件或 hash 无效时必须返回错误，不能静默切到网络源。静态代理对每个文件按家庭内网、公司内网、外网顺序请求；某源 DNS、网络、状态、长度或 SHA-256 校验失败时继续下一源，全部失败后显示端保持占位，聊天、媒体和灯光功能不受影响。首次成功下载且校验通过的文件原子写入 `res/temp/mmd-static-cache/<version>/`；该路径在 Android Runtime 更新时作为可变目录保留。缓存命中时再次校验文件长度和 SHA-256，损坏或缺失则重新下载；并发请求同一资源合并为一次上游读取。版本进入 URL，使 WebView 可按版本安全缓存一年；版本更新不会误用旧资源。缓存只保留当前固定 release 版本，不触碰模型源目录或其他临时文件；缓存根、版本目录和文件均检查符号链接，旧版本只清理专用根下符合版本名的普通目录。
 
 本功能只修改服务端/显示端代码，因此通过服务代码更新交付给既有 Offline APK；不改 `allserver`/`allserver-min` profile，不构建或发布完整 APK、min APK，也不将模型二进制写入 Git 或 APK assets。
 
 ## 9. Offline 静态代理实施结果
 
-已在服务代码中固定 `miya-v1` 的 14 个运行时文件记录、版本 `ca07d84b494577f5dab90d71465bc08e01ec036fe66278a2393313b6febf56c6`，并为 PMX/VMD 返回 `/api/mmd/static/mmd/...` 同源 profile。服务端仅在本地 `mmd/manifest.json` 缺失时回退；清单存在但 JSON、文件大小或 hash 校验失败时继续返回错误。静态代理上游按家庭内网、公司内网、外网顺序逐源尝试，并在每个源返回内容后独立验证状态、长度及 SHA-256。
+已在服务代码中固定 `miya-v1` 的 14 个运行时文件记录、版本 `ca07d84b494577f5dab90d71465bc08e01ec036fe66278a2393313b6febf56c6`，并为 PMX/VMD 返回包含版本的 `/api/mmd/static/<version>/...` 同源 profile。服务端仅在本地 `mmd/manifest.json` 缺失时回退；清单存在但 JSON、文件大小或 hash 校验失败时继续返回错误。静态代理上游按家庭内网、公司内网、外网顺序逐源尝试，并在每个源返回内容后独立验证状态、长度及 SHA-256。
 
-`GET /api/mmd/static/...` 不接受查询参数，路径必须完整命中固定白名单。上游请求顺序与 Offline 热更新一致：`192.168.1.39`、`10.221.70.87`、`c.aasc.us`；仅外网域名解析为 IPv4 地址后请求。禁止重定向；只有 HTTP 200、`Content-Length`、完整读取字节数和 SHA-256 都与固定记录一致的源才返回内容，其余源失败后继续尝试。浏览器只新增 `/api/mmd/static/mmd/` 这一同源前缀；外部 URL、协议相对 URL、路径穿越、反斜杠和 query/hash 仍拒绝。
+`GET /api/mmd/static/<version>/...` 不接受查询参数，版本必须等于当前固定 release，资源路径必须完整命中固定白名单。上游请求顺序与 Offline 热更新一致：`192.168.1.39`、`10.221.70.87`、`c.aasc.us`；仅外网域名解析为 IPv4 地址后请求。禁止重定向；只有 HTTP 200、`Content-Length`、完整读取字节数和 SHA-256 都与固定记录一致的源才会写入本地缓存并返回，其余源失败后继续尝试。旧 `/api/mmd/static/mmd/...` 路径保留兼容，但继续使用 `no-store`；版本化路径设置 ETag 与 `private, max-age=31536000, immutable`。浏览器只接受固定版本路径或旧同源前缀；外部 URL、协议相对 URL、路径穿越、反斜杠和 query/hash 仍拒绝。
 
-Android Runtime 打包逻辑现在无条件排除 `res/models/mmd`，避免后续服务包或 APK Runtime 意外携带 PMX、VMD 与纹理；该排除不影响服务器源码中的 MMD 模块。实施过程未执行 APK、服务更新包构建或发布，也没有复制或提交任何模型二进制。
+Android Runtime 打包逻辑现在无条件排除 `res/models/mmd`，避免后续服务包或 APK Runtime 意外携带 PMX、VMD 与纹理；该排除不影响服务器源码中的 MMD 模块。缓存更新仅发布服务代码包，不改 APK profile，也没有复制或提交任何模型二进制。Offline 服务代码 v47 已发布到 LAN/WAN；`servicePackage=false`，min APK 与生产依赖状态保持不变。
+
+缓存自测结果：MMD 代理服务测试 17/17、显示端版本路径白名单定向测试 1/1 通过，服务/路由/显示端脚本语法检查及 `git diff --check` 通过。自动化覆盖热缓存、并发、坏缓存重取、旧目录清理、符号链接隔离和写入失败回退。code v47 已通过签名、包完整性、LAN/WAN 清单与完整组件大小/SHA-256 验证并发布；尚未在 Android Offline APK 上验证首次下载、Runtime 更新/重启后的命中及真实角色初始化耗时。
 
 ## 10. PMX 内置 Ammo 物理解算
 

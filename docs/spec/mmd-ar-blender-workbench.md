@@ -8,40 +8,71 @@
     不请求 WASM、.data、Essentials 或工作区构建块
 
 点击“Blender 工程”：
+    展开工作区面板
+    在折叠面板外的常驻状态区显示“请选择包含 Blender 工程的目录”
     若 File System Access API 可用：
         在当前 click 调用栈立即执行 showDirectoryPicker(mode=readwrite)
     不支持目录读写、HTTPS/localhost 或 Service Worker：
-        显示兼容性提示并结束
-    用户取消目录选择 -> 不启动引擎，不下载工作区模块或 WASM
-    选择目录 -> 用目录句柄枚举相对路径，筛选 .blend
-    选择目录后 dynamic import 已指纹化工作区模块；注册/确认同源 Service Worker 控制当前页面
+        在常驻状态区显示兼容性提示并结束，保持入口可再次点击
+    用户取消目录选择 -> 清除状态并恢复入口，不启动引擎，不下载工作区模块或 WASM
+    选择目录 -> 常驻状态区显示工作区加载进度，用目录句柄枚举相对路径，筛选 .blend
+    选择目录后 dynamic import 已指纹化工作区模块；更新同源 Service Worker 并等待最新 active worker 控制当前页面
+    工作区创建成功 -> 清除入口加载状态，由 Blender 面板显示自身状态
+    模块/工作区失败 -> 在常驻状态区显示错误，清理未完成面板并恢复入口
     无 .blend -> 显示空工程选择/创建状态，不自动转换 PMX
 
 用户选择 .blend 并按“打开”：
     IndexedDB 保存目录句柄与权限状态
     选择相对工程路径和 .blend 相对路径
-    new BlenderRuntime({present: presenter.present, ...})
+    new BlenderRuntime({
+        stage: 分片 => presenter.view.stageFrame(分片)
+        present: async (帧, 描述, 截图) => {
+            答案 = await presenter.present(帧, 描述, 截图)
+            externalCharacter.refresh()
+            return 答案
+        }
+    })
     runtime.start(固定绝对虚拟根目录, .blend相对路径)
     Worker 的 /__editor/blender-wasm/* -> Service Worker -> 同源静态 WASM 资源
     Worker 的工程索引/文件读取 -> Service Worker -> 目录句柄
     引擎分阶段复制项目资源到 WASM FS，更新启动进度
     status.available=false、缺失资源、非 crossOriginIsolated -> 显示明确错误并回收 worker
-    收到 Blender 首帧 -> 建立视角 -> 显示预览
+    收到 Blender 首帧 -> presenter.view.root 交给 DisplayMmd 编辑桥接
+    保存当前 MMD 角色 pivot 的可见性和相机
+    隐藏当前 MMD 角色 -> 将 Blender root 挂入当前 DisplayMmd scene
+    沿用当前 DisplayMmd renderer、camera、灯光和渲染循环
+    用 Blender root 的包围盒重新取景；记录原相机以便关闭后恢复
+    刷新对象层级与 Armature/骨骼层级
+    页面“编辑/预览/渲染”模式路由到 Blender 工作区
 
-工作区：
-    每次 present -> presenter 更新 BlenderRuntimeView -> Three renderer 渲染
-    用户可切换材质预览/线框/渲染预览
+Blender 编辑：
+    对象选择 -> 显示 location / rotation_euler / scale
+    属性提交 -> runtime.execute(安全转义的对象名与数值)
+    Armature 选择 -> 枚举 pose bones 与 data bones 的父子层级
+    骨骼姿态 -> 编辑 pose.bones 的 location / rotation / scale
+    骨架结构 -> 在 Edit Mode 修改 edit_bones.head / tail / roll / parent
+    每次修改 -> 恢复原对象模式 -> runtime.present() -> 主视口更新
+
+预览与渲染：
+    预览模式隐藏编辑控件，继续在 DisplayMmd 主视口显示 Blender root
     请求 Cycles 渲染 -> nativePreview(width,height,samples)
         -> runtime.readFile(result.path) -> PNG 下载/显示
     用户点保存/退出 -> runtime.stop() 排空操作并 flush-document
         -> Worker 的分块保存接口 -> Service Worker 校验 SHA-256 并写回目录句柄
     写权限丢失或保存失败 -> 保留运行实例，提示重新授权/重试
-    保存成功退出 -> terminate worker，dispose presenter/renderer/controls
+    保存成功退出 -> 从 DisplayMmd scene 移除 Blender root，恢复当前 MMD 角色和相机
+        -> terminate worker，dispose presenter 与编辑器资源
+    PMX 刚体/关节编辑仅在 Blender 工作区未激活时显示
 
 构建：
     仅 WEB_MODE 将 Blender 工作区入口及 Service Worker 写入 web-dist
     将工作区代码拆成独立 ESM chunk，入口通过 dynamic import 加载
     保留 mountBlenderWorkbench 公开入口签名；构建后检查导出缺失即报错
+    Vite 资源基路径设为相对路径，worker 与其依赖从当前部署子目录加载
+    将固定版本引擎的 /__editor/* 请求按 worker URL 的目录段计算为应用内路径
+    不将动态 URL 模板直接交给 Vite new URL 静态资源转换
+    Service Worker API 路由以 registration.scope 为根，不能落到域名根路径
+    构建后检查生成模块不含站点根 /assets/worker URL
     WASM/data/Essentials 放在单独 assets/blender-engine/目录
     Brotli文件以服务器 Content-Encoding: br 提供，避免解压体积进入普通页面
     同源状态清单返回固定版本、大小、digest、编码和必需文件

@@ -9,13 +9,14 @@ const HANDLE_KEY = 'active-project';
 const PROJECT_ROOT = '/mmd-ar-project';
 const ENGINE_VERSION = '__BLENDER_VERSION__';
 const BROTLI_ARTIFACTS = new Set(['blender_browser.wasm', 'blender_browser.data', 'essentials.bin']);
+const editorRoute = path => new URL(`__editor/${path}`, self.registration.scope).pathname;
 const ROUTES = Object.freeze({
-  status: '/__editor/blender-wasm/status',
-  wasm: '/__editor/blender-wasm/',
-  index: '/__editor/blender-project-index',
-  file: '/__editor/blender-project-file',
-  document: '/__editor/blender-document',
-  chunk: '/__editor/blender-document-chunk',
+  status: editorRoute('blender-wasm/status'),
+  wasm: editorRoute('blender-wasm/'),
+  index: editorRoute('blender-project-index'),
+  file: editorRoute('blender-project-file'),
+  document: editorRoute('blender-document'),
+  chunk: editorRoute('blender-document-chunk'),
 });
 
 self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));

@@ -748,7 +748,8 @@
     function isSameOriginMmdAsset(url, extension) {
         if (typeof url !== 'string' || url.includes('://') || url.startsWith('//')
             || url.includes('..') || /[?#\\]/u.test(url)) return false;
-        return MMD_MODEL_PREFIXES.some((prefix) => url.startsWith(prefix))
+        const isVersionedStaticAsset = /^\/api\/mmd\/static\/[a-f0-9]{64}\/mmd\//iu.test(url);
+        return (MMD_MODEL_PREFIXES.some((prefix) => url.startsWith(prefix)) || isVersionedStaticAsset)
             && url.toLowerCase().endsWith(extension);
     }
 

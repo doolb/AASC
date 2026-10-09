@@ -40,3 +40,35 @@ WASM 初始化资源约 38 MB 压缩体积，Blender 本身的解码后内存约
 管理员配置 `/etc/apache2/conf-available/mmd-ar-cross-origin-isolation.conf`：为 `/mnt/mmd-ar/` 设置 COOP `same-origin`、COEP `credentialless`，启用 `mod_headers`，并仅对 `/var/www/html/mnt/mmd-ar/assets/blender-engine/0.1.136` 允许 `.htaccess` 使用 `Header`。`apache2ctl configtest` 返回 `Syntax OK`，Apache 已重载。之后将 23 个文件（47,296,610 bytes）发布到 `https://c.aasc.us/mnt/mmd-ar/`；暂存文件 SHA-256 与本地全部匹配。首次线上首页 SHA-256 为 `433687352b362e29eb836a905d244c9471cd840fd15c3c740f1881fa6dbb31b3`，WASM 返回 `application/wasm` 与 `Content-Encoding: br`。
 
 用户首次点击 Blender 工程时遇到 `module.mountBlenderWorkbench is not a function`。确认 Vite 默认未保留动态导入入口的公开签名，生成模块只有被压缩的依赖导出。设置 `preserveEntrySignatures: 'exports-only'` 并在网页构建后断言 `mountBlenderWorkbench` 存在；Node 动态导入确认其类型为 `function`。重新部署首页、`display-mmd.js`、`web-editor-ui.mjs`、工作区入口和两个分块共 6 个文件，SHA-256 全部匹配；当前首页 SHA-256 为 `123c31429dd0e3e748a3a04729c9414a75f424619b218d97dafac8f8a32e6ef4`，线上工作区入口和分块均 HTTP 200。发布前的页面和资源备份保留在 `/home/as/a/.mmd-ar-blender-publish-backup-20261008`。请刷新页面后重试；真实目录授权、工程预览、Cycles 渲染和保存往返仍待验收。
+
+## 子目录 worker 加载修复
+
+- 复现：线上工作台分块将 worker 写成 `/assets/worker-Dlfs8e8L.js`；该 URL 在域名根目录返回 404，实际资源 `/mnt/mmd-ar/js/blender-engine/assets/worker-Dlfs8e8L.js` 返回 200。
+- 修复范围：Vite 使用相对资源基路径；构建时将固定版本引擎内的 `/__editor/*` 请求改为应用子目录内的 URL；Service Worker 路由从 `registration.scope` 派生；构建后断言生成的 worker/API URL 保持子目录相对。
+- `npm run build:web:mmd-ar-test` 构建通过；构建断言拒绝域名根 `/assets/worker-*` 和 `/__editor/*` 请求。生成 worker 从其 `js/blender-engine/assets/` 目录回到应用根，再请求 `__editor` 路由；Service Worker 依据 `/mnt/mmd-ar/` scope 生成同一路径。
+- 启动前显式请求 Service Worker 更新，并等待注册实例的 active worker 控制当前页面，避免旧版 worker 因已存在 controller 而被误认为就绪。
+- 按资源、UI 模块、显示入口、首页顺序同步外网；校验 rsync checksum dry-run 无差异。线上首页、工作台 chunk、worker 均 HTTP 200 且保留 COOP/COEP；线上 worker 子目录 URL 可用，域名根 `/assets/worker-*` 为 404；入口仍导出 `mountBlenderWorkbench`。Blender WASM 文件未变化。
+- 未进行真实浏览器目录授权与 `.blend` 打开/保存/渲染验收；普通页面刷新后由 Blender 入口重新注册并更新 Service Worker。
+
+## 引擎状态 URL 生成修复
+
+- 用户继续报告 `.../js/blender-engine/assets/undefined: HTTP 404`。生成的 `worker.ts` 路由辅助器使用动态模板传给 `new URL`，Vite 将其改写成空资源映射 `Object.assign({})[route]`。
+- 将路由构造改为复制 `import.meta.url` 并按 worker 目录层级设置 `pathname`、`search`；构建断言检测空资源映射，防止退化为 `undefined`。
+- `npm run build:web:mmd-ar-test` 成功；生成 worker 不含空资源映射。修复后的 worker 使用 `/mnt/mmd-ar/__editor/*`，Service Worker 根据注册 scope 处理同一应用子目录。
+- 修复后的文件已同步至 `https://c.aasc.us/mnt/mmd-ar/`；`rsync -aciR --dry-run` 无差异。线上首页、工作台模块、worker 和 Blender 状态端点均 HTTP 200，状态端点返回 `available: true`，COOP/COEP 保持启用。
+- 尚未在真实浏览器中完成目录授权及 `.blend` 打开、预览、渲染、保存往返验收。
+
+## 入口反馈修复发布
+
+- Blender 入口把状态/错误提示移到折叠面板外；点击后立即显示目录选择提示，选择目录后显示加载状态，取消时恢复入口。
+- 将构建的 14 个变化文件（不覆盖由 Apache 管理的站点根 `.htaccess`）先同步到远端暂存目录，逐文件 SHA-256 核验后按依赖、显示入口、首页顺序切换；暂存目录已清理。
+- 13 个 HTTPS 资源均 HTTP 200，响应体 SHA-256 与本地一致；引擎版本目录 `.htaccess` 的远端文件哈希与本地一致。站点首页仍返回 COOP `same-origin` 和 COEP `credentialless`。首页 SHA-256：`8ee856b230b94451f8c611f30fb568a7930ed4ebec9505d67054bf53643ead0a`。
+- 未运行自动测试或真实 Edge/Chromium 工程流程；需在桌面 Edge 验证目录选择和 `.blend` 打开、编辑、渲染及保存。
+
+## `/mnt/mmd/blender/西施原皮.blend` 浏览器验收
+
+- 文件为 103,355,592 bytes；所有测试均保持 `/mnt/mmd/blender/西施原皮.blend` 源文件不变。
+- 首次打开时确认缺少 `BlenderRuntime.stage` 转接会报 `The presenter does not support staged Blender frames`。已在工作区接入 `stage: part => presenter.view.stageFrame(part)`，重新执行 `npm run build:web:mmd-ar-test` 并发布；线上工作区入口及新分块 HTTP 200，Blender 静态资源状态端点返回 `available: true`，COOP/COEP 仍启用。
+- 用本机 Blender 4.5.4 LTS 后台打开原文件成功：1 个场景、15 个对象、8 个网格。这只确认 `.blend` 文件可读，不代表网页预览已通过。
+- 修复后尝试用 Chromium 加载工作台进行回归，但当前自动化 Chromium 在导航前即失败；它连本机临时 HTTP 页面也报 `net::ERR_INSUFFICIENT_RESOURCES`。因此没有进入修复后的工作台打开流程。
+- 网页端模型是否可见、保存写回和 Cycles 渲染尚未验证；此前临时拦截模块响应的“已打开”状态及 403 保存结果不作为修复后验收结论。需要在可用的桌面 Chromium 上继续验证真实目录授权、预览、保存与渲染。

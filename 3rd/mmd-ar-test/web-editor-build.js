@@ -4,6 +4,27 @@ const {spawn}=require('node:child_process');
 const {hashFile}=require('./apk-artifact');
 const once=(s,a,b)=>{if(s.split(a).length!==2)throw new Error('编辑器缺少唯一锚点：'+a.slice(0,70));return s.replace(a,b);};
 const BLENDER_VERSION='0.1.136';
+async function assertSubdirectoryBlenderUrls(root){
+    const directory=path.join(root,'js','blender-engine'),files=[];
+    const visit=async current=>{for(const entry of await fs.readdir(current,{withFileTypes:true})){const file=path.join(current,entry.name);if(entry.isDirectory())await visit(file);else if(/\.(?:m?js)$/u.test(entry.name))files.push(file);}};
+    await visit(directory);
+    const rows=await Promise.all(files.map(async file=>({file,source:await fs.readFile(file,'utf8')})));
+    for(const {file,source} of rows){
+        if(/new URL\(["']\/assets\/(?:worker|sky-precompute-worker|blender-motion-worker)-/u.test(source))
+            throw new Error(`Blender 子目录构建产物仍从域名根目录加载 worker：${path.relative(directory,file)}`);
+        if(/(?:fetch|new URL)\([\s]*["'`]\/__editor\//u.test(source))
+            throw new Error(`Blender 子目录构建产物仍从域名根目录请求 Service Worker API：${path.relative(directory,file)}`);
+        if(source.includes('Object.assign({})[')&&source.includes('__editor/'))
+            throw new Error(`Blender 子目录 API URL 被改写成空的静态资源映射：${path.relative(directory,file)}`);
+        if(/ARTIFACT_BASE\s*=\s*["']\/__editor\/blender-wasm/u.test(source))
+            throw new Error(`Blender 子目录构建产物仍将 WASM API 固定到域名根目录：${path.relative(directory,file)}`);
+    }
+    if(!rows.some(({source})=>source.includes('worker-')&&source.includes('assets/')))
+        throw new Error('Blender 子目录构建产物中找不到相对 worker 资源引用');
+    const worker=rows.find(({file})=>file.includes(`${path.sep}assets${path.sep}worker-`));
+    if(!worker?.source.includes('__editor/')||!worker.source.includes('repeat(3)'))
+        throw new Error('Blender worker 的应用内 API 路径未使用当前子目录基准');
+}
 async function buildBlenderBundle(root){
     const engineRoot=path.join(__dirname,'blender-engine');
     const vite=path.join(engineRoot,'node_modules','vite','bin','vite.js');
@@ -18,6 +39,7 @@ async function buildBlenderBundle(root){
     const workbenchPath=path.join(root,'js','blender-engine','workbench.mjs');
     const workbenchSource=await fs.readFile(workbenchPath,'utf8');
     if(!/\bmountBlenderWorkbench\b/.test(workbenchSource))throw new Error('Blender 工作区构建产物缺少 mountBlenderWorkbench 导出');
+    await assertSubdirectoryBlenderUrls(root);
     const versionRoot=path.join(root,'assets','blender-engine',BLENDER_VERSION);
     await fs.mkdir(versionRoot,{recursive:true});
     const workerSource=await fs.readFile(path.join(__dirname,'web-blender-service-worker.js'),'utf8');
@@ -96,7 +118,8 @@ async function stage(root,{webMode=false}={}){
         }
         const frameHelper = motionSwitchMesh`);
     runtime=once(runtime,'        getMotionProgress: () => {',`        getEditorBridge: () => createEditorBridge({ THREE,renderer,camera,scene,ambientOcclusion,editorCameraControl,
-            get referenceHz(){return physicsStabilityReferenceHz;},get mesh(){return currentMesh;},get profile(){return currentProfile;},get helper(){return helper.current;} }),
+            get referenceHz(){return physicsStabilityReferenceHz;},get mesh(){return currentMesh;},get currentPivot(){return currentRotationPivot;},get profile(){return currentProfile;},get helper(){return helper.current;},
+            fitCameraToModel,fitShadowCamera,applyShadowFlags }),
         getMotionProgress: () => {`);
     await fs.writeFile(file,runtime);
     const display=path.join(folder,'display-mmd.js');let source=await fs.readFile(display,'utf8');
