@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="css/display.css">
     <link rel="stylesheet" href="css/display-chat.css">
     <link rel="stylesheet" href="css/display-mmd.css">
+    <link rel="stylesheet" href="css/display-voice-controls.css">
     <script type="importmap">
         {
             "imports": {
@@ -472,8 +473,15 @@
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
                     aria-controls="displayMmdLayer" aria-expanded="false">角色</button>
-            <button id="displayChatTtsStop" class="display-stage-button display-stage-button-danger" type="button"
-                    aria-label="停止当前聊天播报">停止播报</button>
+            <label class="display-stage-button display-voice-switch">
+                <input id="displayVoiceContinuous" type="checkbox" checked disabled role="switch">
+                <span>实时监听</span>
+            </label>
+            <div class="display-voice-action-group">
+                <span id="displayVoiceActionStatus" class="display-voice-action-status" role="status" aria-live="polite">已停止</span>
+                <button id="displayVoiceAction" class="display-voice-action" type="button" data-state="stopped"
+                        aria-label="已停止，开始一次语音输入"><span aria-hidden="true">●</span></button>
+            </div>
         </div>
         <div id="displayArCalibration" class="display-mmd-ar-calibration" role="dialog"
              aria-modal="true" aria-label="拍照校准" hidden>
@@ -512,6 +520,7 @@
     <script src="js/display-background-glow.js"></script>
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
+    <script src="js/display-voice-controls.js" defer></script>
     <script src="js/display-mmd-settings.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
     <script src="js/display-mmd-panel-groups.js" defer></script>
@@ -577,6 +586,10 @@
         // 舞台模块只通过这个适配器使用现有显示端 WebSocket，不创建第二条连接。
         function bindDisplayStageTransport() {
             if (!window.DisplayStage) return;
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) {
+                window.DisplayStage.setTransport(null);
+                return;
+            }
             window.DisplayStage.setTransport((message) => {
                 if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return false;
                 displayWs.send(JSON.stringify(message));
@@ -636,11 +649,13 @@
             // 文本媒体 TTS 与普通 TTS 共用网页视频音轨协调，避免逐句播放时改写视频声音。
             onAudioPlaybackStart() {
                 textTtsPlaybackActive = true;
+                publishVoiceRuntime();
                 pauseVoiceRecordingForTts();
                 beginTtsVideoCoordination();
             },
             onAudioPlaybackEnd(playbackId) {
                 textTtsPlaybackActive = false;
+                publishVoiceRuntime();
                 sendVoiceTtsPlaybackFinished(playbackId);
                 endTtsVideoCoordinationIfIdle();
                 scheduleTtsRecordingResume();
@@ -707,6 +722,15 @@
         let vadNoiseTestActive = false;
         let vadNoiseTestRequestId = null;
         let isAlwaysListening = false;
+        // 持续监听模式与采集能力、远端录音回放用途独立；收到权威配置后才自动启动。
+        let voiceContinuousEnabled = true;
+        let voiceListeningConfigReady = false;
+        let manualVoiceRecording = false;
+        let manualVoiceRecordingTimer = null;
+        let voiceInteractionEpoch = 0;
+        let voiceCaptureStartToken = 0;
+        let voiceCaptureStarting = false;
+        const voiceRecognitionRequests = new Map();
         let pendingAutoStart = false;
         let wasListeningBeforePlayback = false;
         let noInterruptMode = true;
@@ -2670,6 +2694,8 @@
             globalRecordingPaused = nextPaused;
             if (nextPaused) {
                 pendingAutoStart = false;
+                voiceInteractionEpoch++;
+                if (manualVoiceRecording) stopVoiceRecording(false);
                 globalPauseWasListening = activeRecordingPurpose === 'asr'
                     && isListening
                     && pcmCapture?.active;
@@ -2708,6 +2734,7 @@
                 }
             }
             updateVoiceStatusDisplay();
+            publishVoiceRuntime();
         }
 
         function pauseVoiceRecordingForTts() {
@@ -2731,7 +2758,7 @@
         function resumeVoiceRecordingAfterTts() {
             clearTtsRecordingResumeTimer();
             if (!ttsRecordingPaused) return;
-            const shouldResume = wasListeningBeforePlayback && displayPageActive
+            const shouldResume = wasListeningBeforePlayback && (isAlwaysListening || manualVoiceRecording) && displayPageActive
                 && voiceListeningEnabled && currentCapabilities?.voiceRecording === true
                 && !globalRecordingPaused && pcmCapture?.active
                 && (micStream || pcmCapture.isNative);
@@ -2750,11 +2777,13 @@
 
         // 文本媒体逐句播报之间可能有短暂请求间隔，延迟恢复避免把下一句 TTS 的开头再次采入。
         function scheduleTtsRecordingResume() {
-            if (!ttsRecordingPaused) return;
+            if (!ttsRecordingPaused && !(isAlwaysListening && !isListening)) return;
             clearTtsRecordingResumeTimer();
             ttsRecordingResumeTimer = setTimeout(() => {
                 ttsRecordingResumeTimer = null;
-                if (!hasActiveTtsPlayback()) resumeVoiceRecordingAfterTts();
+                if (hasActiveTtsPlayback()) return;
+                if (ttsRecordingPaused) resumeVoiceRecordingAfterTts();
+                else if (isAlwaysListening && !isListening) void startVoiceRecording();
             }, 300);
         }
 
@@ -5588,11 +5617,8 @@
                 reportNativeLlmStatus();
                 bindDisplayStageTransport();
 
-                if (!isAlwaysListening) {
-                    pendingAutoStart = true;
-                    isAlwaysListening = true;
-                    console.log('标记自动启动监听模式，等待服务器能力确认');
-                }
+                pendingAutoStart = voiceContinuousEnabled;
+                publishVoiceRuntime();
                 // 每次连接都重新查询服务端 ASR，避免服务器重启期间的一次未就绪状态永久残留。
                 clearAsrStatusRetryTimer();
                 void checkAsrStatus();
@@ -5670,6 +5696,11 @@
 
                     if (data.type === 'globalRecordingPauseState') {
                         void handleGlobalRecordingPauseState(data);
+                        return;
+                    }
+
+                    if (data.type === 'displayVoiceListeningConfig') {
+                        configureVoiceListening(data.enabled !== false);
                         return;
                     }
 
@@ -6018,8 +6049,11 @@
                 if (displayRecordingSession) {
                     void finalizeDisplayRecording(false, '显示端连接已断开');
                 }
+                cancelVoiceInteraction();
                 stopCameraStream();
                 displayWs = null;
+                bindDisplayStageTransport();
+                publishVoiceRuntime();
                 stopControlScreenshot();
                 controlModeEnabled = false;
                 setConnectionStatus('disconnected', '已断开');
@@ -6031,7 +6065,10 @@
                 console.error('WebSocket错误:', error);
                 // 部分 Android WebView 在服务端重启时可能只触发 error，不保证随后触发 close。
                 // 先释放当前连接引用，确保 scheduleDisplayReconnect 不被 OPEN/CLOSING 状态拦截。
+                cancelVoiceInteraction();
                 displayWs = null;
+                bindDisplayStageTransport();
+                publishVoiceRuntime();
                 stopCameraStream();
                 stopControlScreenshot();
                 controlModeEnabled = false;
@@ -6047,6 +6084,7 @@
 
         window.addEventListener('pagehide', function() {
             displayPageActive = false;
+            cancelVoiceInteraction();
             clearDisplayReconnectTimer();
             clearAsrStatusRetryTimer();
             asrStatusRequestToken += 1;
@@ -6417,7 +6455,7 @@
 
         function scheduleAsrStatusRetry() {
             if (!displayPageActive || asrStatusRetryTimer !== null) return;
-            if (!isAlwaysListening || !voiceListeningEnabled) return;
+            if (!voiceListeningEnabled) return;
             asrStatusRetryTimer = setTimeout(() => checkAsrStatus(), ASR_STATUS_RETRY_MS);
         }
 
@@ -6480,7 +6518,99 @@
             window.DisplayStage?.refreshVoiceTextVisibility?.();
         }
 
+        // 按真实采集、识别及播放事件刷新圆形按钮，不增加音频轮询。
+        function getVoiceInteractionSnapshot() {
+            return {
+                continuous: voiceContinuousEnabled, manual: manualVoiceRecording, configReady: voiceListeningConfigReady,
+                connected: displayWs?.readyState === WebSocket.OPEN,
+                listening: isListening, hasSpeech,
+                recognizing: [...voiceRecognitionRequests.values()].filter((epoch) => epoch === voiceInteractionEpoch).length,
+                speaking: (!ttsAudio.paused && !ttsAudio.ended) || textTtsPlaybackActive
+            };
+        }
+
+        function publishVoiceRuntime() {
+            window.DisplayStage?.publish('voice.runtime', getVoiceInteractionSnapshot());
+        }
+
+        function clearManualVoiceTimer() {
+            if (manualVoiceRecordingTimer) clearTimeout(manualVoiceRecordingTimer);
+            manualVoiceRecordingTimer = null;
+        }
+
+        function cancelVoiceInteraction() {
+            voiceInteractionEpoch++;
+            voiceListeningConfigReady = false;
+            isAlwaysListening = false;
+            stopVoiceRecording(false);
+            remoteTtsPlaybackIds.clear();
+        }
+
+        function configureVoiceListening(enabled) {
+            const changed = !voiceListeningConfigReady || voiceContinuousEnabled !== enabled;
+            voiceListeningConfigReady = true;
+            voiceContinuousEnabled = enabled;
+            isAlwaysListening = enabled;
+            if (changed) {
+                voiceInteractionEpoch++;
+                stopVoiceRecording(false);
+            }
+            if (isAlwaysListening && voiceSupported && voiceListeningEnabled && !globalRecordingPaused) {
+                void startVoiceRecording();
+            }
+            publishVoiceRuntime();
+        }
+
+        async function finishManualVoiceRecording() {
+            if (!manualVoiceRecording) return;
+            const timing = {
+                speechStartAt: speechStartTime, speechEndAt: Date.now(),
+                manualVoiceInput: true, epoch: voiceInteractionEpoch
+            };
+            const blob = pcmCapture && hasSpeech ? takeRawPcmWav() : null;
+            stopVoiceRecording(false);
+            if (blob) await sendAudioForRecognition(blob, timing);
+        }
+
+        async function activateVoiceInteraction() {
+            // 与控制端显示面板普通 stop 相同；本端立即清队列，服务端再回传停止命令。
+            handleTts({ type: 'tts', action: 'stop' });
+            const sent = window.DisplayStage?.send({ type: 'tts', action: 'stop', displayId });
+            if (!sent) throw new Error('未连接服务器，已停止本地播报');
+            if (voiceContinuousEnabled) {
+                resumeVoiceRecordingAfterTts();
+                if (!isListening) await startVoiceRecording();
+                return;
+            }
+            if (manualVoiceRecording) {
+                await finishManualVoiceRecording();
+                return;
+            }
+            if (globalRecordingPaused) throw new Error('所有录音已暂停');
+            if (!voiceListeningEnabled || currentCapabilities?.voiceRecording !== true) throw new Error('该显示端语音录音能力已关闭');
+            if (!voiceSupported) throw new Error('语音识别尚未就绪');
+            if (voiceRecordingMode !== 'asr' || displayRecordingSession) throw new Error('请先结束远端录音回放并切回普通 ASR');
+            stopVoiceRecording(false);
+            voiceInteractionEpoch++;
+            manualVoiceRecording = true;
+            voiceCooldownUntil = 0;
+            await startVoiceRecording();
+            if (!manualVoiceRecording || !isListening) return;
+            manualVoiceRecordingTimer = setTimeout(() => void finishManualVoiceRecording(), 60000);
+            publishVoiceRuntime();
+        }
+
+        window.DisplayVoiceRuntime = Object.freeze({
+            snapshot: getVoiceInteractionSnapshot,
+            configure: configureVoiceListening,
+            activate: activateVoiceInteraction
+        });
+        for (const event of ['playing', 'pause', 'ended', 'error']) {
+            ttsAudio.addEventListener(event, publishVoiceRuntime);
+        }
+
         function sendVoiceStatus() {
+            publishVoiceRuntime();
             updateVoiceStatusDisplay();
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 displayWs.send(JSON.stringify({
@@ -7056,6 +7186,7 @@
                 if (!voiceListeningEnabled) {
                     pendingAutoStart = false;
                     clearAsrStatusRetryTimer();
+                    voiceInteractionEpoch++;
                     voiceConversationState = 'disabled';
                     clearVoiceConversationTimer();
                     stopVoiceRecording();
@@ -7352,6 +7483,7 @@
         function handleVoiceRecordingConfig(data) {
             const nextMode = normalizeVoiceRecordingMode(data.mode);
             const previousMode = voiceRecordingMode;
+            if (nextMode !== voiceRecordingMode) voiceInteractionEpoch++;
             voiceRecordingMode = nextMode;
             console.log('[录音] 录音模式已更新:', nextMode);
             if (displayRecordingSession && displayRecordingSession.mode !== nextMode) {
@@ -7762,6 +7894,10 @@
         }
 
         function stopVoiceRecording(submitPendingAudio = true) {
+            voiceCaptureStartToken++;
+            voiceCaptureStarting = false;
+            manualVoiceRecording = false;
+            clearManualVoiceTimer();
             if (displayRecordingSession && activeRecordingPurpose !== 'asr') {
                 void finalizeDisplayRecording(false, '录音已停止');
                 return;
@@ -7772,7 +7908,6 @@
             clearTtsRecordingResumeTimer();
             ttsRecordingPaused = false;
             wasListeningBeforePlayback = false;
-            remoteTtsPlaybackIds.clear();
             if (vadNoiseTestActive) {
                 vadNoiseTestActive = false;
                 sendVoiceVadNoiseResult({
@@ -7794,6 +7929,10 @@
         async function finishVoiceSegment() {
             if (!isListening || !pcmCapture) return;
             if (globalRecordingPaused) return;
+            if (manualVoiceRecording) {
+                await finishManualVoiceRecording();
+                return;
+            }
             if (activeRecordingPurpose === 'single') {
                 await finalizeDisplayRecording(true);
                 return;
@@ -7807,14 +7946,18 @@
             hasSpeech = false;
             speechStartTime = null;
             silenceStartTime = null;
+            publishVoiceRuntime();
             if (audioBlob) void sendAudioForRecognition(audioBlob, { speechStartAt, speechEndAt });
             if (!isListening) return;
             startSilenceDetection();
         }
 
         async function startVoiceRecording() {
-            if (!displayPageActive || isListening || voiceRecordingMode !== 'asr') return;
+            if (!displayPageActive || isListening || voiceCaptureStarting || voiceRecordingMode !== 'asr') return;
+            if ((!voiceListeningConfigReady || !isAlwaysListening) && !manualVoiceRecording) return;
             if (globalRecordingPaused) return;
+            // 模式刚从手动切为持续时可能已有播报；沿用播放暂停策略，结束后再自动启动。
+            if (!manualVoiceRecording && pauseRecordingDuringPlayback && hasActiveTtsPlayback()) return;
 
             if (ttsRecordingPaused) {
                 console.log('[语音] TTS 播放中，暂不恢复录音');
@@ -7845,6 +7988,8 @@
                 return;
             }
 
+            const startToken = ++voiceCaptureStartToken;
+            voiceCaptureStarting = true;
             try {
                 activeRecordingPurpose = 'asr';
                 if ((micStream && pcmCapture && pcmCapture.active)
@@ -7867,6 +8012,11 @@
                     ensureBluetoothScoForVoice();
                     // WebView 录音必须在 navigator.mediaDevices.getUserMedia 前建立 SCO。
                     const webViewCapture = await openWebViewAudioStream();
+                    if (startToken !== voiceCaptureStartToken || !displayPageActive
+                        || globalRecordingPaused || (!isAlwaysListening && !manualVoiceRecording)) {
+                        webViewCapture.stream.getTracks().forEach((track) => track.stop());
+                        return;
+                    }
                     micStream = webViewCapture.stream;
                     if (!startRawPcmCapture(micStream)) {
                         throw new Error('当前浏览器不支持原始 PCM 录音');
@@ -7891,11 +8041,17 @@
                 startSilenceDetection();
 
             } catch (e) {
+                if (startToken !== voiceCaptureStartToken) return;
                 console.error('显示端麦克风访问失败:', e);
                 releaseVoiceRecordingResources();
+                manualVoiceRecording = false;
+                clearManualVoiceTimer();
                 isListening = false;
                 voiceSupported = false;
                 sendVoiceStatus();
+                if (!isAlwaysListening) throw e;
+            } finally {
+                if (startToken === voiceCaptureStartToken) voiceCaptureStarting = false;
             }
         }
 
@@ -7908,8 +8064,10 @@
                     pcmCapture.beginSegment();
                     speechStartTime = Date.now();
                 }
+                const speechChanged = !hasSpeech;
                 hasSpeech = true;
                 silenceStartTime = null;
+                if (speechChanged) publishVoiceRuntime();
                 return;
             }
             if (!hasSpeech) return;
@@ -8024,9 +8182,14 @@
 
         async function sendAudioForRecognition(audioBlob, timing = {}) {
             if (globalRecordingPaused) return;
+            const requestKey = {};
+            const epoch = timing.epoch ?? voiceInteractionEpoch;
+            voiceRecognitionRequests.set(requestKey, epoch);
+            publishVoiceRuntime();
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.wav');
+                if (timing.manualVoiceInput) formData.append('manualVoiceInput', 'true');
                 const requestDisplayId = typeof displayId === 'string' && displayId.trim()
                     ? displayId.trim()
                     : getPersistentDisplayId();
@@ -8045,6 +8208,20 @@
                 });
 
                 const data = await response.json();
+                if (epoch !== voiceInteractionEpoch || !displayPageActive || globalRecordingPaused
+                    || !voiceListeningEnabled || displayWs?.readyState !== WebSocket.OPEN) return;
+                if (timing.manualVoiceInput) {
+                    if (data.status === 'error' || !response.ok) throw new Error(data.message || '语音识别失败');
+                    if (data.status !== 'success') return;
+                    const text = Array.isArray(data.segments) && data.segments.length
+                        ? data.segments.filter((segment) => segment.speaker !== null).map((segment) => String(segment.text || '').trim()).filter(Boolean).join('，')
+                        : data.speaker !== null ? String(data.text || '').trim() : '';
+                    if (text) {
+                        updateVoiceTextDisplay(text, true);
+                        if (window.DisplayChat?.sendVoiceMessage(text) === false) throw new Error('聊天未发送，服务器连接已断开');
+                    }
+                    return;
+                }
 
                 if (data.status === 'success') {
                     // 分段已经由服务器按说话人合并并进入命令链路，显示端只负责回显。
@@ -8111,6 +8288,12 @@
                 }
             } catch (e) {
                 console.error('显示端语音识别请求失败:', e);
+                if (timing.manualVoiceInput && epoch === voiceInteractionEpoch) {
+                    window.showToast?.(e.message || '语音识别失败', 'error');
+                }
+            } finally {
+                voiceRecognitionRequests.delete(requestKey);
+                publishVoiceRuntime();
             }
         }
 

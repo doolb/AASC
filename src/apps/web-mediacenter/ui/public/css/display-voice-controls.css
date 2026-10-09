@@ -1,0 +1,66 @@
+/* 控件位于旋转后的逻辑舞台，随安全区与键盘避让，不依赖顶部状态栏。 */
+.display-voice-action-group {
+    position: absolute;
+    left: 50%;
+    bottom: calc(max(12px, var(--display-safe-inset-bottom)) + var(--display-keyboard-inset-bottom, 0px) + 58px);
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+}
+.display-voice-action-status {
+    padding: 3px 10px;
+    border-radius: 999px;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    font-size: 14px;
+    white-space: nowrap;
+}
+.display-voice-action {
+    --voice-state-color: #64748b;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 2px solid var(--voice-state-color);
+    color: white;
+    background: color-mix(in srgb, var(--voice-state-color) 78%, var(--bg-primary));
+    box-shadow: 0 0 18px color-mix(in srgb, var(--voice-state-color) 28%, transparent);
+    pointer-events: auto;
+    touch-action: manipulation;
+    cursor: pointer;
+    font-size: 25px;
+    transition: background 160ms, border-color 160ms;
+}
+.display-voice-action[data-state="idle"] { --voice-state-color: #3b82f6; }
+.display-voice-action[data-state="listening"] { --voice-state-color: #16a34a; }
+.display-voice-action[data-state="recognizing"] { --voice-state-color: #f59e0b; }
+.display-voice-action[data-state="thinking"] { --voice-state-color: #8b5cf6; }
+.display-voice-action[data-state="speaking"] { --voice-state-color: #06b6d4; }
+.display-voice-action:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 4px; }
+.display-voice-switch { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.display-voice-switch input {
+    appearance: none;
+    width: 32px;
+    height: 20px;
+    margin: 0;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-primary);
+    cursor: pointer;
+}
+.display-voice-switch input::before {
+    content: '';
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+.display-voice-switch input:checked { background: var(--accent-color); }
+.display-voice-switch input:checked::before { background: white; transform: translateX(12px); }
+.display-voice-switch input:disabled { opacity: 0.5; cursor: wait; }
+.display-voice-switch input:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .display-voice-action { transition: none; } }

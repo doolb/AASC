@@ -149,6 +149,7 @@ const {
     requestStaticMmdAsset,
     resolveStaticMmdAsset
 } = require('../modules/mmd/mmd-resource-service');
+const { createDisplayVoiceListeningConfig } = require('../modules/voice/display-voice-listening-config');
 const { createAndroidControlPageAccess } = require('../modules/display/android-control-page-access');
 const {
     ModelManifestService,
@@ -418,6 +419,10 @@ const DISPLAY_RECORDING_CHUNK_MAX_LENGTH = 128 * 1024;
 // 录音回传属于临时会话，键为 requestId，值中保留发起请求的控制端 socket，禁止广播音频数据。
 const displayRecordingSessions = new Map();
 let controlClients = new Set();
+const displayVoiceListeningConfig = createDisplayVoiceListeningConfig({
+    displays: displayClients, isControl: (ws) => controlClients.has(ws),
+    persist: persistDisplayState, sendToDisplay, broadcast: broadcastToControls
+});
 const llmModelManifestService = new LlmModelManifestService({
     modelRoot: path.join(RES_DIR, 'models', 'llm'),
     offlineModelMetadataPath: OFFLINE_NODE_MODE
@@ -1227,7 +1232,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setDisplayVoiceListeningConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1316,7 +1321,7 @@ async function startServer() {
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
-                'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
+                'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
                 'setDisplayBackgroundGlowConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
@@ -1849,6 +1854,7 @@ function createDisplayState() {
         vadThreshold: DEFAULT_VAD_THRESHOLD,
         vadSilenceDurationMs: DEFAULT_VAD_SILENCE_DURATION_MS,
         vadMinSpeechDurationMs: DEFAULT_VAD_MIN_SPEECH_DURATION_MS,
+        voiceContinuousEnabled: true,
         voiceRecordingMode: 'asr',
         voiceCaptureMode: DEFAULT_VOICE_CAPTURE_MODE,
         voiceInputDeviceKey: DEFAULT_VOICE_INPUT_DEVICE_KEY,
@@ -4711,6 +4717,7 @@ function getAsrRequestContext(req) {
     return {
         displayId,
         displayKind,
+        manualVoiceInput: req.body?.manualVoiceInput === 'true',
         speechStartAt: Number.isFinite(speechStartAt) ? speechStartAt : null,
         speechEndAt: Number.isFinite(speechEndAt) ? speechEndAt : null,
         textInputClient,
@@ -4871,7 +4878,9 @@ function serializeAsrSegment(segment, defaultThreshold) {
 }
 
 function processRecognizedAsrResultForDisplay(displayId, result, requestContext) {
-    if (globalRecordingPaused || !displayId || !displayClients.has(displayId)) return [];
+    if (globalRecordingPaused || requestContext?.manualVoiceInput || !displayId || !displayClients.has(displayId)) return [];
+    // 关闭持续模式后，在途普通识别不得再次进入命令；手动识别由页面发送当前聊天。
+    if (displayClients.get(displayId).state.voiceContinuousEnabled === false) return [];
 
     const groupedSegments = normalizeAsrSegments(result);
     if (groupedSegments.length > 0) {
@@ -4917,7 +4926,7 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
         const asrDevice = config.get('asr.device', 'server');
         const requestContext = getAsrRequestContext(req);
         const sourceDisplayId = resolveAsrSourceDisplayId(req, requestContext);
-        const processedByServer = Boolean(sourceDisplayId);
+        const processedByServer = Boolean(sourceDisplayId) && !requestContext.manualVoiceInput;
         if (!sourceDisplayId) {
             log('语音', `ASR请求来源未绑定，仅保留回显: requested=${requestContext.displayId || '-'} kind=${requestContext.displayKind || '-'} ip=${getClientIP(req)}`);
         }
@@ -6291,6 +6300,7 @@ function getDisplayList() {
             vadThreshold: normalizeVadThreshold(data.state.vadThreshold),
             vadSilenceDurationMs: globalVoiceVadConfig.vadSilenceDurationMs,
             vadMinSpeechDurationMs: globalVoiceVadConfig.vadMinSpeechDurationMs,
+            voiceContinuousEnabled: data.state.voiceContinuousEnabled !== false,
             voiceRecordingMode: normalizeVoiceRecordingMode(data.state.voiceRecordingMode),
             voiceCaptureMode: normalizeVoiceCaptureMode(data.state.voiceCaptureMode),
             voiceInputDeviceKey: normalizeVoiceInputDeviceKey(data.state.voiceInputDeviceKey),
@@ -7765,6 +7775,7 @@ wss.on('connection', (ws, req) => {
                     savedState?.vadMinSpeechDurationMs,
                     DEFAULT_VAD_MIN_SPEECH_DURATION_MS
                 ),
+                voiceContinuousEnabled: savedState?.voiceContinuousEnabled !== false,
                 voiceRecordingMode: normalizeVoiceRecordingMode(savedState?.voiceRecordingMode),
                 voiceCaptureMode: normalizeVoiceCaptureMode(savedState?.voiceCaptureMode),
                 voiceInputDeviceKey: normalizeVoiceInputDeviceKey(savedState?.voiceInputDeviceKey),
@@ -7850,6 +7861,8 @@ wss.on('connection', (ws, req) => {
             silenceDurationMs: globalVoiceVadConfig.vadSilenceDurationMs,
             minSpeechDurationMs: globalVoiceVadConfig.vadMinSpeechDurationMs
         }));
+
+        ws.send(JSON.stringify(displayVoiceListeningConfig.snapshot(displayId)));
 
         ws.send(JSON.stringify({
             type: 'voiceRecordingConfig',
@@ -8561,6 +8574,7 @@ function formatVoiceprintScore(value) {
 }
 
 function handleDisplayMessageFallback(displayId, data, ws) {
+    if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;
     const displayData = displayClients.get(displayId);
 
     if (data.type === 'mmdVisibilityRequest') {
@@ -9098,6 +9112,7 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
+    if (displayVoiceListeningConfig.handle(data, ws)) return;
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
 
