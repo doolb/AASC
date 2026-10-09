@@ -36,9 +36,9 @@ test('编辑器姿态/动作跳转清TAA历史，图片捕获绕过并恢复绘�
 
 test('渲染设置规范化，倍率以自动DPR为基准并按设备上限等比限制', async () => {
     const { normalizeRenderSettings: normalize, calculateCanvasSize: size } = await import('../3rd/mmd-ar-test/web-render-settings.mjs');
-    assert.deepEqual(normalize({}), { taaEnabled: false, taaHistoryWeight: .9, canvasScale: 1 });
+    assert.deepEqual(normalize({}), { taaEnabled: false, taaHistoryWeight: .9, canvasScale: 1, taaJitterScale: 1, taaJitterSamples: 8 });
     assert.deepEqual(normalize({ taaEnabled: true, taaHistoryWeight: 9, canvasScale: .61 }),
-        { taaEnabled: true, taaHistoryWeight: .95, canvasScale: .5 });
+        { taaEnabled: true, taaHistoryWeight: .95, canvasScale: .5, taaJitterScale: 1, taaJitterSamples: 8 });
     assert.equal(normalize({ canvasScale: -1 }).canvasScale, .25);
     assert.equal(normalize({ canvasScale: '', taaHistoryWeight: 'bad' }).canvasScale, 1);
     for (const dpr of [1, 2]) for (const scale of [.25, .5, 1, 1.5, 2]) {
@@ -49,6 +49,66 @@ test('渲染设置规范化，倍率以自动DPR为基准并按设备上限等�
     const limited = size(1000, 500, 2, 2, 1024);
     assert.deepEqual([limited.width, limited.height], [1024, 512]);
     assert.equal(limited.limited, true);
+});
+
+test('抖动参数兼容旧存储，强度夹取且周期只接受4/8/16/32', async () => {
+    const { normalizeRenderSettings: normalize } = await import('../3rd/mmd-ar-test/web-render-settings.mjs');
+    for (const count of [4, 8, 16, 32]) assert.equal(normalize({ taaJitterSamples: String(count) }).taaJitterSamples, count);
+    for (const count of [0, 2, 6, 8.1, 64, true, '', null, 'bad']) assert.equal(normalize({ taaJitterSamples: count }).taaJitterSamples, 8);
+    assert.equal(normalize({ taaJitterScale: 0 }).taaJitterScale, 0);
+    assert.equal(normalize({ taaJitterScale: '0.35' }).taaJitterScale, .35);
+    assert.equal(normalize({ taaJitterScale: 20 }).taaJitterScale, 2);
+    assert.equal(normalize({ taaJitterScale: -1 }).taaJitterScale, 0);
+    for (const scale of [NaN, Infinity, true, '', null, 'bad']) assert.equal(normalize({ taaJitterScale: scale }).taaJitterScale, 1);
+});
+
+test('TAA周期实际循环、强度0/1/2作用于像素偏移且仅绘制一次场景', async () => {
+    const { createTemporalAA } = await import('../3rd/mmd-ar-test/web-temporal-aa.mjs');
+    // 手工保留变更前的默认八相位，不能使用生产生成器计算期望值。
+    const jitterSamples = [[0,-1/6],[-1/4,1/6],[1/4,-7/18],[-3/8,-1/18],
+        [1/8,5/18],[-1/8,-5/18],[3/8,1/18],[-7/16,7/18]];
+    for (const orthographic of [false, true]) {
+        const camera = orthographic ? new THREE.OrthographicCamera(-2, 2, 2, -2, .1, 100) : new THREE.PerspectiveCamera(45, 1, .1, 100);
+        camera.setViewOffset(128, 128, 8, 12, 100, 104); camera.position.z = 8; camera.updateMatrixWorld();
+        const base = camera.projectionMatrix.clone(), inverse = camera.projectionMatrixInverse.clone();
+        let target = null, passes = 0;
+        const renderer = { capabilities: { isWebGL2: true }, extensions: { has: () => false }, domElement: new EventTarget(),
+            getRenderTarget: () => target, setRenderTarget(value) { target = value; },
+            getDrawingBufferSize(out) { return out.set(65, 97); }, clear() {}, render() { passes += 1; } };
+        const config = { taaEnabled: true, taaHistoryWeight: .9, taaJitterSamples: 8, taaJitterScale: 1 };
+        const taa = createTemporalAA({ THREE, renderer, camera, getSettings: () => config });
+        const depth = new THREE.DepthTexture(65, 97); let drawings = 0, observed;
+        const draw = () => { drawings += 1; observed = { projection: camera.projectionMatrix.toArray(), phase: camera.userData.mmdArTaaPhase }; };
+        const frame = () => { taa.render(draw, () => depth); assert.deepEqual(camera.projectionMatrix.elements, base.elements);
+            assert.deepEqual(camera.projectionMatrixInverse.elements, inverse.elements); return observed; };
+        for (const count of [4, 8, 16, 32]) {
+            config.taaJitterSamples = count; taa.invalidate();
+            const frames = Array.from({ length: count + 1 }, frame);
+            assert.deepEqual(frames[count], frames[0], '真实投影与接触相位按所选周期循环');
+            assert.equal(new Set(frames.slice(0, count).map(value => JSON.stringify(value.projection))).size, count);
+            for (let index = 0; index < count; index += 1) assert.equal(frames[index].phase, index);
+            if (count === 8) for (let index = 0; index < count; index += 1) {
+                const expected = base.clone();
+                for (let column = 0; column < 4; column += 1) {
+                    expected.elements[column * 4] += 2 * jitterSamples[index][0] / 65 * base.elements[column * 4 + 3];
+                    expected.elements[column * 4 + 1] += 2 * jitterSamples[index][1] / 97 * base.elements[column * 4 + 3];
+                }
+                assert.deepEqual(frames[index].projection, expected.elements, '默认八相位必须逐值兼容');
+            }
+        }
+        config.taaJitterSamples = 8;
+        const first = [];
+        for (const scale of [0, 1, 2]) { config.taaJitterScale = scale; taa.invalidate(); first.push(frame().projection); }
+        assert.deepEqual(first[0], base.elements);
+        for (let index = 0; index < 16; index += 1) assert.ok(Math.abs((first[2][index] - base.elements[index]) - 2 * (first[1][index] - base.elements[index])) < 1e-14);
+        frame(); assert.equal(taa.getState().lastHistoryUsed, true);
+        config.taaJitterSamples = 16; frame(); assert.equal(taa.getState().lastHistoryUsed, false, '直接改周期也清历史');
+        frame(); config.taaJitterScale = .5; frame(); assert.equal(taa.getState().lastHistoryUsed, false, '直接改强度也清历史');
+        assert.equal(passes, drawings * 3, '每次提交只有resolve/depth/present三次全屏pass');
+        const before = drawings; config.taaEnabled = false; taa.render(() => { drawings += 1; }, () => depth);
+        assert.equal(drawings, before + 1); assert.equal(taa.getState().targetCount, 0);
+        taa.dispose(); depth.dispose();
+    }
 });
 
 test('TAA真实矩阵抖动与恢复、历史失效、资源关闭和异常恢复', async () => {

@@ -1,3 +1,10 @@
+### MMD-AR TAA抖动参数
+
+- ✅ [2026-10-09] “灯光→抗锯齿”开放抖动强度0–2/默认1及Halton周期4/8/16/32帧/默认8，旧存储补默认、本地保存/刷新/复位，改值清TAA/SSGI历史，默认八相位逐值兼容。运动向量按用户要求暂缓，每帧场景绘制次数与目标数保持。
+  - 修改`web-render-settings.mjs`、`web-render-settings-build.js`、`web-temporal-aa.mjs`，更新单位/真实GPU与模型测试；修正旧相机VMD回归等待跨循环阈值。同步design/spec/task/ref/todo、README/usage/self-test，完成项从待办移除。
+  - 先红后绿，最终四文件24/24、另后台/刷新4项通过，无跳过；独立只读复核无功能缺陷。真实页面保存0.35/32刷新、复位1/8与能力禁用通过，透明alpha/米娅/GLB保持。320×400软件GPU周期8/32中位数128.6/128.8ms，五目标/场景提交数相同，仅本机小样本；手机仍待验收。
+  - `npm run build:web:mmd-ar-test`、语法/diff检查通过；未运行全仓测试、发布外网或构建APK，Offline状态保持既有true/true/false。本地已有配置改动保留。
+
 ### Offline 同步脚本 watch 定时轮询
 
 - ✅ [2026-10-09] `sync:offline-update` 增加可选 `--watch`：默认每 10 分钟检查，可用 `--interval-minutes <正整数>` 覆盖；启动立即同步，每轮结束后等待再串行检查；失败后继续，Ctrl+C 安全停止；不带 `--watch` 保持单次同步。

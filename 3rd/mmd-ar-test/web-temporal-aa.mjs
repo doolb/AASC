@@ -1,5 +1,6 @@
 import { vertexShader, resolveShader, depthShader, presentShader } from './web-temporal-aa-shader.mjs';
 import { isCameraCut } from './web-screen-lighting.mjs';
+import { normalizeRenderSettings, jitterSampleCounts } from './web-render-settings.mjs';
 
 // 异步等待期间旧动作仍可绘制，提交后的再次失效防止重播同一ID复用旧姿态历史。
 export async function runTemporalAction(invalidate, action) {
@@ -11,6 +12,15 @@ export async function runTemporalAction(invalidate, action) {
 // Halton(2,3)八相位。仅修改clip空间平移，兼容已有AR裁切与正交相机。
 export const jitterSamples = Object.freeze([[0,-1/6],[-1/4,1/6],[1/4,-7/18],[-3/8,-1/18],
     [1/8,5/18],[-1/8,-5/18],[3/8,1/18],[-7/16,7/18]]);
+// 扩展Halton序列只在模块初始化时生成；保留原八相位，避免默认浮点舍入改变画面。
+const radicalInverse = (index, base) => {
+    let result = 0, fraction = 1;
+    while (index > 0) { fraction /= base; result += (index % base) * fraction; index = Math.floor(index / base); }
+    return result;
+};
+const extendedSamples = Array.from({ length: 32 }, (_, index) => jitterSamples[index]
+    || Object.freeze([radicalInverse(index + 1, 2) - .5, radicalInverse(index + 1, 3) - .5]));
+const jitterSequences = new Map(jitterSampleCounts.map(count => [count, Object.freeze(extendedSamples.slice(0, count))]));
 export function createTemporalAA({ THREE, renderer, camera, getSettings = () => window.MmdArRenderSettings || {} }) {
     let resources = null, phase = 0, valid = false, lastSignature = '', lastHistoryUsed = false;
     const base = new THREE.Matrix4(), inverse = new THREE.Matrix4(), size = new THREE.Vector2();
@@ -48,10 +58,10 @@ export function createTemporalAA({ THREE, renderer, camera, getSettings = () => 
             resolve, depth, present, geometry, quad, passScene, passCamera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), readIndex: 0 };
     };
     const render = (draw, getDepth, { bypass = false, signature = '' } = {}) => {
-        const config = getSettings();
+        const config = normalizeRenderSettings(getSettings());
         if (!supported || !config.taaEnabled || bypass) { release(); draw(); return; }
         renderer.getDrawingBufferSize(size); create(size.x, size.y);
-        const nextSignature = `${config.taaHistoryWeight}:${signature}`;
+        const nextSignature = `${config.taaHistoryWeight}:${config.taaJitterScale}:${config.taaJitterSamples}:${signature}`;
         if (lastSignature !== nextSignature) invalidate(); lastSignature = nextSignature;
         camera.updateMatrixWorld(true); base.copy(camera.projectionMatrix); inverse.copy(camera.projectionMatrixInverse);
         if (valid && isCameraCut(previousWorld, camera.matrixWorld, previousBase, base)) invalidate();
@@ -59,15 +69,16 @@ export function createTemporalAA({ THREE, renderer, camera, getSettings = () => 
         const oldBase = camera.userData.mmdArTaaBaseProjection, oldPhase = camera.userData.mmdArTaaPhase;
         const read = resources.readIndex, write = 1 - read, uniforms = resources.resolve.uniforms;
         try {
-            const [x, y] = jitterSamples[phase % jitterSamples.length];
+            const sequence = jitterSequences.get(config.taaJitterSamples), sampleIndex = phase % sequence.length;
+            const [x, y] = sequence[sampleIndex];
             // row0/row1加row3的偏移，保留原投影所有裁切与透视参数。
             const elements = camera.projectionMatrix.elements;
             for (let column = 0; column < 4; column += 1) {
-                elements[column * 4] += 2 * x / size.x * base.elements[column * 4 + 3];
-                elements[column * 4 + 1] += 2 * y / size.y * base.elements[column * 4 + 3];
+                elements[column * 4] += 2 * x * config.taaJitterScale / size.x * base.elements[column * 4 + 3];
+                elements[column * 4 + 1] += 2 * y * config.taaJitterScale / size.y * base.elements[column * 4 + 3];
             }
             camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-            camera.userData.mmdArTaaBaseProjection = base; camera.userData.mmdArTaaPhase = phase % 8;
+            camera.userData.mmdArTaaBaseProjection = base; camera.userData.mmdArTaaPhase = sampleIndex;
             renderer.setRenderTarget(resources.current); draw();
             const depth = getDepth();
             if (!depth) throw new Error('TAA缺少当前场景深度');

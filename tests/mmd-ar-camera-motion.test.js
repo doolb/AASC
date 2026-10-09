@@ -190,11 +190,16 @@ test('真实网页选择相机 VMD 后预览相机循环播放，开关/定位�
             };
             requestAnimationFrame(step);
         }), count);
+        // 时间会在循环尾部回到0，不能等待超过duration的单调阈值，否则永远无法命中。
+        const waitCameraAdvance = (from, delta) => page.waitForFunction((start, distance) => {
+            const progress = window.DisplayMmd.getCameraMotionProgress();
+            if (!progress || progress.durationSeconds <= 0) return false;
+            return (progress.timeSeconds - start + progress.durationSeconds) % progress.durationSeconds > distance;
+        }, { timeout: 60000 }, from, delta);
         await page.waitForFunction(() => window.DisplayMmd.getCameraMotionProgress()?.timeSeconds > 0.1, { timeout: 60000 });
         const poseA = await readCamera();
         const timeA = await page.evaluate(() => window.DisplayMmd.getCameraMotionProgress().timeSeconds);
-        await page.waitForFunction((from) => window.DisplayMmd.getCameraMotionProgress().timeSeconds > from + 0.15,
-            { timeout: 60000 }, timeA);
+        await waitCameraAdvance(timeA, .15);
         const poseB = await readCamera();
         assert.notDeepEqual(poseA, poseB);
         assert.notDeepEqual(await readProjection(), previewProjection);
@@ -211,8 +216,7 @@ test('真实网页选择相机 VMD 后预览相机循环播放，开关/定位�
 
         // 再开启：从暂停时刻继续推进。
         await page.click('#mmdArCameraMotionPlayback');
-        await page.waitForFunction((from) => window.DisplayMmd.getCameraMotionProgress().timeSeconds > from + 0.05,
-            { timeout: 60000 }, pausedAt);
+        await waitCameraAdvance(pausedAt, .05);
 
         // 不含相机关键帧的角色动作 VMD：明确报错且保留已加载的相机动作。
         await upload([motionVmdPath]);
@@ -238,8 +242,7 @@ test('真实网页选择相机 VMD 后预览相机循环播放，开关/定位�
             window.DisplayMmd.resetArCameraPose();
             return window.DisplayMmd.getArCameraState()?.active === true;
         }), false);
-        await page.waitForFunction((from) => window.DisplayMmd.getCameraMotionProgress().timeSeconds > from + 0.05,
-            { timeout: 60000 }, arBefore);
+        await waitCameraAdvance(arBefore, .05);
 
         // 恢复默认模型与动作：同时清除相机动作并复位预览。
         await page.click('#mmdArCharacterToggle');

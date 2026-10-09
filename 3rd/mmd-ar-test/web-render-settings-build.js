@@ -13,6 +13,7 @@ async function stage(root) {
     const settingsUrl = await url('web-render-settings.mjs'), shaderUrl = await url('web-temporal-aa-shader.mjs');
     let temporal = await fs.readFile(path.join(__dirname, 'web-temporal-aa.mjs'), 'utf8');
     temporal = temporal.replace('./web-temporal-aa-shader.mjs', shaderUrl).replace('./web-screen-lighting.mjs', await url('web-screen-lighting.mjs'));
+    temporal = once(temporal, './web-render-settings.mjs', settingsUrl);
     await fs.writeFile(path.join(folder, 'web-temporal-aa.mjs'), temporal);
     const aoPath = path.join(folder, 'display-pmx-ao.mjs');
     let ao = await fs.readFile(aoPath, 'utf8');
@@ -62,6 +63,9 @@ function panel($) {
         <button class="mmd-ar-panel-group-toggle" type="button" aria-controls="mmdArTemporalAABody" aria-expanded="false" data-group-title="抗锯齿" aria-label="展开抗锯齿设置"><span>抗锯齿</span><span class="mmd-ar-panel-group-arrow" aria-hidden="true">⌄</span></button></div>
       <div id="mmdArTemporalAABody" class="mmd-ar-panel-group-body" hidden>
         <label class="mind-basic-field"><span>TAA累积强度 <output data-render-value="taaHistoryWeight">0.90</output></span><input type="range" data-render-setting="taaHistoryWeight" min="0" max="0.95" step="0.05" value="0.9"></label>
+        <label class="mind-basic-field"><span>抖动强度 <output data-render-value="taaJitterScale">1.00</output></span><input type="range" data-render-setting="taaJitterScale" min="0" max="2" step="0.05" value="1"></label>
+        <label class="mind-basic-field"><span>抖动周期</span><select data-render-setting="taaJitterSamples"><option value="4">4帧</option><option value="8" selected>8帧</option><option value="16">16帧</option><option value="32">32帧</option></select></label>
+        <p class="mind-basic-note">每帧绘制一次；强度0取消偏移但保留历史混合，较大强度可能使画面变软。</p>
         <p class="mind-basic-note" data-taa-status></p></div></section>`);
 }
 module.exports = { stage, panel };

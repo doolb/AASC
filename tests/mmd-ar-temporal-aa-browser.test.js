@@ -143,6 +143,57 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         assert.deepEqual(picture.after, picture.before, '后台与绘制只清历史，角色和相机不复位');
         assert.equal(picture.reset.historyValid, false);
         for (const sample of picture.coverage) { assert.ok(sample.pixels > 1000); assert.equal(sample.error, 0); assert.equal(sample.temporal.lastHistoryUsed, true); }
+        const jitter = await page.evaluate(() => {
+            const c = window.DisplayMmd.getEditorBridge().context, renderer = c.renderer;
+            const projection = c.camera.projectionMatrix.toArray(), render = renderer.render;
+            const samples = []; let current;
+            renderer.render = function(scene, camera) {
+                if (scene === c.scene) { current.draws += 1; current.matrix = camera.projectionMatrix.toArray(); current.phase = camera.userData.mmdArTaaPhase; }
+                return render.call(this, scene, camera);
+            };
+            const update = (name, value) => {
+                const node = document.querySelector(`[data-render-setting="${name}"]`); node.value = String(value);
+                node.dispatchEvent(new Event('input', { bubbles: true }));
+            };
+            try {
+                for (const count of [4, 8, 16, 32]) {
+                    update('taaJitterSamples', count);
+                    const cleared = c.ambientOcclusion.getTemporalState().historyValid, frames = [];
+                    for (let i = 0; i <= count; i += 1) {
+                        current = { draws: 0 }; c.ambientOcclusion.render(); frames.push(current);
+                    }
+                    // 同姿态/参数，两次预热后三次计时；等待GPU完成，周期比较不混合分辨率。
+                    const gl = renderer.getContext(), pixel = new Uint8Array(4), times = [];
+                    for (let i = 0; i < 5; i += 1) {
+                        current = { draws: 0 }; gl.finish(); const begin = performance.now(); c.ambientOcclusion.render();
+                        gl.readPixels(160, 200, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel); gl.finish();
+                        if (i >= 2) times.push(performance.now() - begin);
+                    }
+                    times.sort((a, b) => a - b);
+                    samples.push({ count, cleared, frames, medianMs: Number(times[1].toFixed(2)), targets: c.ambientOcclusion.getTemporalState().targetCount });
+                }
+                update('taaJitterScale', 0); current = { draws: 0 }; c.ambientOcclusion.render();
+                const zero = current.matrix;
+                update('taaJitterScale', 2); const scaleCleared = c.ambientOcclusion.getTemporalState().historyValid;
+                current = { draws: 0 }; c.ambientOcclusion.render();
+                const doubled = current.matrix;
+                update('taaJitterSamples', 8); update('taaJitterScale', 1);
+                return { samples, projection, zero, doubled, scaleCleared, settings: window.MmdArRenderSettings,
+                    restored: c.camera.projectionMatrix.toArray(), error: renderer.getContext().getError() };
+            } finally { renderer.render = render; }
+        });
+        for (const sample of jitter.samples) {
+            assert.equal(sample.cleared, false);
+            assert.deepEqual(sample.frames[sample.count], sample.frames[0]);
+            for (let i = 0; i < sample.count; i += 1) assert.equal(sample.frames[i].phase, i);
+            assert.equal(new Set(sample.frames.map(frame => frame.draws)).size, 1);
+            assert.equal(sample.frames[0].draws, jitter.samples[0].frames[0].draws, '周期不增加每帧场景绘制次数');
+            assert.equal(sample.targets, 5, '周期不增加历史目标数');
+        }
+        assert.deepEqual(jitter.zero, jitter.projection, '强度0实际GPU场景无投影偏移');
+        assert.notDeepEqual(jitter.doubled, jitter.projection); assert.equal(jitter.scaleCleared, false);
+        assert.deepEqual(jitter.restored, jitter.projection); assert.equal(jitter.error, 0);
+        context.diagnostic(`同条件周期GPU完成耗时：${JSON.stringify(jitter.samples.map(({ count, medianMs, targets }) => ({ count, medianMs, targets })))}`);
         const motion = await page.evaluate(async () => {
             const bridge = window.DisplayMmd.getEditorBridge(), c = bridge.context;
             const positions = c.mesh.skeleton.bones.map(bone => bone.quaternion.toArray());
@@ -184,10 +235,14 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         }
         context.diagnostic(`完整GPU完成耗时（软件GPU）：${JSON.stringify(timings)}`);
         await update('canvasScale', .5); await update('taaEnabled', true); await size(320, 400);
+        await update('taaJitterScale', .35); await update('taaJitterSamples', 32);
         await page.reload({ waitUntil: 'domcontentloaded' }); await ready(); await size(320, 400);
-        assert.deepEqual(await page.evaluate(() => window.MmdArRenderSettings), { taaEnabled: true, taaHistoryWeight: .9, canvasScale: .5 });
+        assert.deepEqual(await page.evaluate(() => window.MmdArRenderSettings),
+            { taaEnabled: true, taaHistoryWeight: .9, canvasScale: .5, taaJitterScale: .35, taaJitterSamples: 32 });
         await page.$eval('#displayMmdLightingReset', node => node.click()); await size(640, 800);
         assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaEnabled), false);
+        assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaJitterScale), 1);
+        assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaJitterSamples), 8);
         await page.click('#displayMmdLightingToggle');
         const layout = await page.$eval('[data-render-setting="canvasScale"]', node => {
             const bounds = node.getBoundingClientRect(), panel = document.getElementById('displayMmdLightingPanel').getBoundingClientRect();
@@ -197,6 +252,16 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         if (process.env.MMD_AR_TAA_SCREENSHOT) await page.screenshot({ path: process.env.MMD_AR_TAA_SCREENSHOT.replace('.png', '-top.png') });
         await page.click('#mmdArTemporalAA [data-group-title="抗锯齿"]');
         assert.equal(await page.$eval('#mmdArTemporalAABody', node => node.hidden), false);
+        const capability = await page.evaluate(() => {
+            const prior = window.MmdArRenderInfo;
+            window.MmdArRenderInfo = { ...prior, taaSupported: false }; window.dispatchEvent(new Event('mmd-ar-render-capability'));
+            const disabled = [...document.querySelectorAll('#mmdArTemporalAA input, #mmdArTemporalAA select')].every(node => node.disabled);
+            const scaleEnabled = !document.querySelector('[data-render-setting="canvasScale"]').disabled;
+            window.MmdArRenderInfo = prior; window.dispatchEvent(new Event('mmd-ar-render-capability'));
+            return { disabled, scaleEnabled, enabled: !document.querySelector('[data-render-setting="taaJitterSamples"]').disabled };
+        });
+        assert.deepEqual(capability, { disabled: true, scaleEnabled: true, enabled: true });
+        await page.$eval('[data-render-setting="taaJitterSamples"]', node => node.scrollIntoView({ block: 'end' }));
         if (process.env.MMD_AR_TAA_SCREENSHOT) await page.screenshot({ path: process.env.MMD_AR_TAA_SCREENSHOT });
         context.diagnostic(`四种屏幕光照组合有效像素：${picture.coverage.map(row => row.pixels).join(',')}`);
         await update('taaEnabled', true); await update('canvasScale', .5);
