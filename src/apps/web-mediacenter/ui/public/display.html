@@ -1442,6 +1442,7 @@
         let monitorTime = 0;
         let monitorDataArray = null;
         let monitorLastFrameAt = 0;
+        let monitorNativeLevel = 0;
         const VOICE_MONITOR_WIDTH = 140;
 
         const monitorCanvas = document.getElementById('mini-monitor');
@@ -1479,6 +1480,26 @@
             monitorCtx.globalAlpha = 1;
         }
 
+        function drawNativeMonitor(elapsed) {
+            // 原生 AudioRecord 没有浏览器频谱节点；已有 PCM RMS 表示真实音量。
+            // 500ms 无分块时衰减到零，平方根映射让轻声也能看见，不改变 VAD 原值。
+            const fresh = pcmCapture.latestLevelAt > 0 && Date.now() - pcmCapture.latestLevelAt <= 500;
+            const rms = fresh && Number.isFinite(pcmCapture.latestRms)
+                ? Math.max(pcmCapture.latestRms, 0) : 0;
+            const target = Math.min(Math.sqrt(rms) * 2, 1);
+            const timeConstant = target > monitorNativeLevel ? 0.04 : 0.18;
+            monitorNativeLevel += (target - monitorNativeLevel) * (1 - Math.exp(-elapsed / timeConstant));
+            monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
+            monitorCtx.fillStyle = '#00f2ff';
+            monitorCtx.globalAlpha = 0.5 + monitorNativeLevel * 0.5;
+            // 每根柱均表达同一个实时音量，避免把单值 RMS 伪装成不同频段。
+            const barHeight = Math.max(1, monitorNativeLevel * monitorCanvas.height);
+            for (let i = 0; i < monitorCanvas.width; i += 4) {
+                monitorCtx.fillRect(i, monitorCanvas.height - barHeight, 3, barHeight);
+            }
+            monitorCtx.globalAlpha = 1;
+        }
+
         function animateMonitor(timestamp = 0) {
             const elapsed = monitorLastFrameAt === 0
                 ? 1 / 60
@@ -1486,7 +1507,16 @@
             monitorLastFrameAt = timestamp;
             monitorTime += elapsed;
 
-            if (isListening && analyser) {
+            const listening = isListening && !globalRecordingPaused && !ttsRecordingPaused
+                && pcmCapture?.paused !== true;
+            const nativeListening = listening && pcmCapture?.isNative && pcmCapture.active;
+            if (nativeListening) {
+                drawNativeMonitor(elapsed);
+                requestAnimationFrame(animateMonitor);
+                return;
+            }
+            monitorNativeLevel = 0;
+            if (listening && analyser && !pcmCapture?.isNative) {
                 if (!monitorDataArray || monitorDataArray.length !== analyser.frequencyBinCount) {
                     monitorDataArray = new Uint8Array(analyser.frequencyBinCount);
                 }

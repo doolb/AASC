@@ -713,7 +713,12 @@ applyRotation:
 
 animateMonitor(timestamp):
     使用 timestamp 的秒级增量推进 monitorTime
-    如果 isListening 且 analyser 有效:
+    当前监听有效 = isListening 且非全局暂停、非TTS暂停、非采集暂停
+    如果当前监听有效且原生采集器 active:
+        使用最新 RMS 绘制平滑音量柱，500ms 无新数据则衰减
+        请求下一帧并结束本帧，避免频谱路径重复请求
+    清除原生平滑残值
+    如果当前监听有效且非原生采集、analyser 有效:
         复用 monitorDataArray 读取 AnalyserNode 频谱
         绘制频谱柱；低于可见幅度时叠加微弱动态基线
     否则:
@@ -723,7 +728,7 @@ animateMonitor(timestamp):
 
 ## 显示端语音 UI 顶部居中
 
-### 原生音量柱待确认伪代码（2026-10-10，尚未实施）
+### 原生音量柱伪代码（2026-10-10，已实施）
 
 ```text
 收到有效原生 PCM 分块:
@@ -733,7 +738,9 @@ animateMonitor(timestamp):
     清除旧 RMS 和更新时间，等待新分块
 已有 animateMonitor 每帧:
     当前原生采集有效且正在监听时，读取最新 RMS
-    信号过期时目标音量归零；对目标音量做时间相关平滑
+    超过 500ms 未更新时目标音量归零；对目标音量做时间相关平滑
+    RMS 有限且非负时，用平方根映射放大小音量并限制在 0 到 1
+    上升时间常数 40ms，下降时间常数 180ms，随帧时间计算插值
     用真实音量绘制柱状图，不表示各频段幅度
     浏览器采集继续读取并复用 AnalyserNode 频谱数组
     非监听或暂停时清除原生显示残值，绘制待机柱

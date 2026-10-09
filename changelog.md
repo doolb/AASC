@@ -1,5 +1,8 @@
 ### Offline界面修复构建与原生音量柱排查
 
+- ✅ [2026-10-10] 已确认并修复 Native AudioRecord 监听柱状图只显示待机动画：display.html 接入原生 RMS，pcm-audio-capture.js 添加时间戳及暂停/恢复/停止清零，超时500ms衰减。
+  - 新增 display-native-audio-monitor.test.js 真实PCM/绘图三项，四文件16通过；扩大64项63通过1既有声纹配置夹具失败，HEAD同样使用applyVoiceprintConfig，未修改该旧夹具。浏览器频谱数组及唯一动画循环保持，设计/伪代码/任务/使用/自测同步。servicePackage=true，等待控制端模式按钮确认及合并发布；设备验收待完成。
+
 - ✅ [2026-10-10] 前五项界面/声纹路径修复已构建 code-v53.zip，43 项定向通过；931 文件源字节、CRC、签名及组件校验通过，服务包状态设回 false。
   - 包大小16,933,418字节，SHA-256 8df0f63d0df1c6fa3bfa4d665bbaafc1156e0b38b6c64f977be1f4609975f042；尚未发布，线上仍为v52。用户新增原生音量柱缺陷，拟确认修复后合并发布。
 - ✅ [2026-10-10] 定位 Native AudioRecord 音量柱未接入原生 PCM RMS，原绘图只读取浏览器 AnalyserNode，导致显示待机柱；已记录待确认设计/伪代码/任务，尚未修改采集或绘图代码。

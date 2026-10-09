@@ -1,5 +1,26 @@
 # 设备列表组件实现文档
 
+## 实时/单次监听按钮伪代码（2026-10-10，待确认）
+
+```text
+每个显示端 voiceContinuousEnabled 缺失 -> true
+列表与树形视图在录音能力开关旁渲染模式按钮
+    enabled 为 true -> 实时监听；false -> 单次监听
+    未连接或该端等待配置回执 -> disabled
+点击按钮:
+    确认设备存在、WebSocket 已连接、没有未结束请求
+    建立按 displayId 的 requestId 和超时，保持当前权威值
+    发送 type=setDisplayVoiceListeningConfig、displayId、enabled、requestId
+收到 displayVoiceListeningConfig:
+    更新该端规范化权威 enabled
+    匹配请求时清除 pending 与超时，失败显示原因
+    刷新按钮；来自显示端或其他控制端的广播同样更新
+断线:
+    清除 pending 和超时并禁用按钮
+重新连接:
+    沿用 displayList 下发 voiceContinuousEnabled，恢复按钮
+```
+
 ## 概述
 
 设备列表组件（DeviceList）是合并了原 DisplayList 和 DeviceTree 的统一组件，支持列表视图和树形视图两种显示模式，提供设备管理、选择模式、设备设置等功能。

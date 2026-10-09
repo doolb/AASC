@@ -219,6 +219,8 @@
             this.active = false;
             this.paused = false;
             this.isNative = true;
+            // 音量柱只使用最近的原生分块，避免桥接停止回传后一直显示旧音量。
+            this.latestLevelAt = 0;
         }
 
         start(sampleRate = 16000) {
@@ -232,6 +234,7 @@
             this.latestRms = 0;
             this.paused = false;
             this.active = true;
+            this.latestLevelAt = 0;
             return this;
         }
 
@@ -254,6 +257,7 @@
             }
             this.sourceSampleRate = sourceRate;
             this.latestRms = Math.sqrt(sumSquares / sampleCount);
+            this.latestLevelAt = Date.now();
             if (this.segmentMode && !this.segmentActive) {
                 this.appendPreRoll(samples);
             } else {
@@ -293,6 +297,9 @@
         setPaused(paused) {
             if (!this.active) return;
             this.paused = paused === true;
+            // 暂停及恢复都清除旧信号，恢复后必须收到新分块才显示音量。
+            this.latestRms = 0;
+            this.latestLevelAt = 0;
             this.chunks = [];
             this.preRollChunks = [];
             this.preRollSampleCount = 0;
@@ -316,6 +323,8 @@
         stop() {
             this.active = false;
             this.paused = false;
+            this.latestRms = 0;
+            this.latestLevelAt = 0;
             this.chunks = [];
             this.preRollChunks = [];
             this.preRollSampleCount = 0;
