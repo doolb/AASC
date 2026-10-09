@@ -1081,3 +1081,5 @@ TAA累积 -> 有效历史；主动失效 -> historyValid=false；关闭 -> 5个�
 服务默认值 -> 缺失开启，已保存false保留
 结合声纹/浮动布局/群聊/Offline恢复 -> 9文件43项全部通过，无跳过
 ```
+
+2026-10-10 最终发布：code-v56.zip已发布LAN/WAN，16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42；源提交34671c31。931文件快照及运行资源完整、ZIP CRC/RSA/组件约束、内外网全部组件HTTP大小/SHA-256通过，签名清单完全一致，精确清理无错误，两端code目录仅保留code-v56.zip。21文件93/93通过，无跳过；servicePackage=false，minApk=true/dependenciesPackage=false保持，未构建原生APK或恢复旧声纹。手机现场验收保留。

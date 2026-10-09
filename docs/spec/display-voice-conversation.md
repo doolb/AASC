@@ -1217,3 +1217,5 @@ buildManualChatVoiceConversationUpdates(options):
 ```
 
 2026-10-09 本轮修复已提交origion/master并发布code50至LAN/WAN，50项定向自测通过；签名、所有组件HTTP大小/SHA-256及精确清理通过。Android实际录音与重开验收待设备验证。
+
+2026-10-10 发布验证：本轮对应功能已纳入code56，最终21文件93项定向通过、无跳过；LAN/WAN签名清单及全部组件HTTP大小/哈希、精确旧版本清理通过。手机实际交互另验收。

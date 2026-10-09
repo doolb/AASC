@@ -170,3 +170,5 @@ saved voiceContinuousEnabled缺失 -> true；显式false保留
     “监听 VAD / 底噪检测”卡片新增实时/单次模式按钮
     点击发送既有setDisplayVoiceListeningConfig，权威回包后更新按钮与显示端
 ```
+
+2026-10-10 发布验证：本轮对应功能已纳入code56，最终21文件93项定向通过、无跳过；LAN/WAN签名清单及全部组件HTTP大小/哈希、精确旧版本清理通过。手机实际交互另验收。

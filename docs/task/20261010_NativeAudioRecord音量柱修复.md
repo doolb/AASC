@@ -1,6 +1,6 @@
 # Native AudioRecord 音量柱修复
 
-日期：2026-10-10；状态：用户已确认，原生绘图与信号清理已实施，最终20文件78项组合回归通过，待合并发布。
+日期：2026-10-10；状态：实现、93项最终定向回归及code56内外网发布完成，手机现场待验收。
 
 需求：原生 AudioRecord 采集时，音量柱应跟随真实声音。用户随后确认控制端模式按钮放到“监听 VAD / 底噪检测”卡片，已单独实现，与原生绘图合并发布。
 
@@ -19,3 +19,5 @@
 需求分析：主 L4，单一采集到绘图的数据衔接；证据为 native 有 latestRms、原图仅检测 analyser、原生没有该节点。可开发，置信度 0.90，评分 94/100，风险低，无需能力下放，按上述输入、清理与绘制步骤落地。既有发布授权保留，新增代码须先确认。
 
 实施及验证：新增 tests/display-native-audio-monitor.test.js 三项真实 PCM/绘图用例，静音、轻声、较大音量柱高、500ms 超时衰减、暂停及恢复清零、停止、全局/TTS 暂停、浏览器频谱数组复用和每帧唯一请求通过；联合 display-voice-ui、display-asr-audio-pipeline、display-audio-capture-config 四文件共16/16通过，无跳过。未修改原生代码；真实设备待验收。
+
+2026-10-10 最终发布：code-v56.zip已发布LAN/WAN，16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42；源提交34671c31。931文件快照及运行资源完整、ZIP CRC/RSA/组件约束、内外网全部组件HTTP大小/SHA-256通过，签名清单完全一致，精确清理无错误，两端code目录仅保留code-v56.zip。21文件93/93通过，无跳过；servicePackage=false，minApk=true/dependenciesPackage=false保持，未构建原生APK或恢复旧声纹。手机现场验收保留。

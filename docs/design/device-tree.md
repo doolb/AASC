@@ -189,3 +189,5 @@
 | src/apps/server/modules/config/config-app-service.js | 配置管理（添加 deviceEvents 支持） |
 | server.js | API 端点和连线/掉线指令执行 |
 | config/config.json | 设备事件配置存储 |
+
+2026-10-10 发布验证：本轮对应功能已纳入code56，最终21文件93项定向通过、无跳过；LAN/WAN签名清单及全部组件HTTP大小/哈希、精确旧版本清理通过。手机实际交互另验收。

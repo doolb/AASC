@@ -1,5 +1,9 @@
 ### Offline界面修复构建与原生音量柱排查
 
+- ✅ [2026-10-10] 最终code56正式发布完成，已合并固定声纹数据根、竖屏浮动按钮、真实群聊/助手名、未选中主题预览、监听按钮、Native音量柱、VAD卡片模式入口、圆钮VAD/阈值与ASR字号/全宽修复。
+  - 21文件93/93、零跳过；LAN/WAN全部组件HTTP大小/SHA-256及RSA通过，签名清单完全一致，精确清理无错误，两端code目录仅code-v56.zip。servicePackage=false，minApk=true/dependenciesPackage=false保持，dependencies6/min34/种子39/dataRepair2复用，无APK构建及旧声纹恢复。
+  - 同步design/spec/task/usage/self-test，已完成开发/发布任务从todo移除，仅保留设备验收。用户日志、模型、原生中间文件、另行本机配置及MMD发布记录保持；代码包不提交Git，记录推送origion/master。
+
 - ✅ [2026-10-10] 全宽修正后21文件93/93再次通过，最终构建code-v56.zip（16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42），源提交34671c31。
   - 931文件快照字节一致、运行资源完整、CRC/RSA/组件约束通过，仅排除工作区另行修改的voice-display-node/config.json；servicePackage=false，既有minApk=true/dependenciesPackage=false保持，LAN/WAN最终发布校验进行中。
 
