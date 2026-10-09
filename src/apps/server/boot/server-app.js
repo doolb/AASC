@@ -2442,6 +2442,24 @@ function clearDisplayConversationTtsPlaybackKey(displayId, playbackKey) {
     }
 }
 
+function restoreOfflineChatSelection(displayId) {
+    if (!OFFLINE_NODE_MODE) return;
+    const displayData = displayClients.get(displayId);
+    if (!displayData || !isDisplayVoiceListeningEnabled(displayData)) return;
+    // 只补齐新连接的私聊上下文，保留已激活或临时会话；不改变聊天面板与麦克风开关。
+    if (displayData.state.voiceConversation?.state !== 'waitingWake') return;
+    const updates = buildManualChatVoiceConversationUpdates({
+        offlineMode: true,
+        source: 'offlineRestore',
+        chatSession: chat.getSession(),
+        displays: [{ displayId, voiceRecordingEnabled: true }]
+    });
+    for (const update of updates) {
+        displayData.state.voiceConversation = update.conversation;
+        armDisplayConversationTimer(displayId, { reason: 'offlineChatRestored' });
+    }
+}
+
 function syncDisplayConversationListeningState(displayId, reason) {
     const displayData = displayClients.get(displayId);
     if (!displayData) return;
@@ -7803,6 +7821,7 @@ wss.on('connection', (ws, req) => {
             }
         }
         syncDisplayConversationListeningState(displayId, 'connect');
+        restoreOfflineChatSelection(displayId);
         log('连接', `显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
         
         if (wsServer) {

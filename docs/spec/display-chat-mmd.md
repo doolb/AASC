@@ -1341,3 +1341,26 @@ DisplayChat 收到 chatResponse 或丢弃流 -> 发布 chat.activity(active=fals
 ```
 
 完整模式保存与资源生命周期伪代码见 [display-voice-controls.md](display-voice-controls.md)。
+
+## 2026-10-09 重开后的聊天对象权威恢复（已完成代码及定向验证）
+
+```text
+chatSession默认字段增加roleTarget=null
+setChatSession(session):
+    按现有流程更新模式、私聊目标、会话ID
+    如果输入含roleTarget:
+        roleTarget = 输入为字符串且去空白后非空 ? 去空白字符串 : null
+    使用已有saveSession写入chat-session.json
+    返回完整权威会话
+显示端接收chatSession:
+    previousScope = 当前聊天范围
+    session = normalizeSession(服务端会话)
+    服务端含roleTarget时采用权威值（包含null）
+    服务端缺roleTarget且mode==role时兼容保留当前角色
+    范围改变时清理旧消息；面板可见才查询历史及通知可见会话
+    不改变面板visible、不自动展开聊天
+新页面初始化:
+    默认关闭 -> 原有getChatSession -> 恢复privateTarget/privateSessionId/roleTarget
+单次语音:
+    按当前恢复后的session发送chat或roleChat，不依赖面板打开
+```

@@ -17,7 +17,7 @@ function createConversationState(listeningEnabled = true) {
 }
 
 /**
- * 将 offline APK 控制端的手动全局聊天模式转换为各在线显示端的语音会话初始状态。
+ * 将 offline APK 手动全局聊天选择或连接恢复转换为目标显示端的语音会话初始状态。
  * 这里只生成已启用监听设备的状态，不负责开启录音、广播状态或管理会话计时器。
  *
  * @param {{offlineMode?: boolean, source?: string, chatSession?: object, displays?: Array, now?: number}} options 同步策略输入
@@ -30,9 +30,11 @@ function buildManualChatVoiceConversationUpdates({
     displays = [],
     now = Date.now()
 } = {}) {
-    if (offlineMode !== true || source !== 'controlManual') return [];
+    if (offlineMode !== true || !['controlManual', 'offlineRestore'].includes(source)) return [];
 
     const mode = chatSession?.mode;
+    // 首次安装的默认群聊不能在连接时自动进入持续对话，只恢复已保存的有效私聊对象。
+    if (source === 'offlineRestore' && mode !== 'private') return [];
     if (mode !== 'group' && mode !== 'private') return [];
 
     const target = mode === 'private'

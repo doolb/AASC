@@ -54,9 +54,10 @@
             privateSessionId: typeof session.privateSessionId === 'string'
                 ? session.privateSessionId
                 : 'default',
-            roleTarget: typeof session.roleTarget === 'string'
-                ? session.roleTarget
-                : (mode === 'role' ? state.session.roleTarget : null),
+            // 旧服务端缺字段时兼容当前选择；明确传null时必须接受权威清空。
+            roleTarget: session.roleTarget === undefined && mode === 'role'
+                ? state.session.roleTarget
+                : (typeof session.roleTarget === 'string' ? session.roleTarget.trim() || null : null),
             playOnControl: session.playOnControl === true
         };
     }
@@ -79,6 +80,12 @@
             return { mode: 'private', target: state.session.roleTarget };
         }
         return { mode: 'group', target: null };
+    }
+
+    function getVoiceStatusName() {
+        if (state.session.mode === 'private' && state.session.privateTarget) return state.session.privateTarget;
+        if (state.session.mode === 'role' && state.session.roleTarget) return state.session.roleTarget;
+        return state.assistantName || '助手';
     }
 
     function notifyVoiceConversationContext() {
@@ -342,6 +349,8 @@
             const selected = state.targets.find((target) => target.value === getSelectedTargetValue());
             state.refs.title.textContent = selected ? selected.title : '聊天';
         }
+        // 状态标签独立于聊天可见性，关闭面板时也需跟随权威选择和助手配置刷新。
+        state.bus?.publish('chat.status-name', { name: getVoiceStatusName() });
     }
 
     function renderThinkAndAnswer(content, reasoning = '') {
@@ -626,9 +635,7 @@
         }
         if (message.type === 'chatSession') {
             const previousScopeKey = getHistoryScopeKey();
-            const previousRole = state.session.roleTarget;
             state.session = normalizeSession(message.session || {});
-            if (state.session.mode === 'role') state.session.roleTarget = previousRole;
             if (state.session.mode !== 'private') state.privateSessions = [];
             const nextScopeKey = getHistoryScopeKey();
             if (previousScopeKey !== nextScopeKey) {
@@ -778,6 +785,7 @@
 
     root.DisplayChat = Object.freeze({
         getVoiceConversationContext,
+        getVoiceStatusName,
         handleServerMessage,
         init,
         resize,

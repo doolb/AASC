@@ -47,7 +47,10 @@ function runtime(extra = '') {
         let vadNoiseTestRequestId = null, textTtsPlaybackActive = false;
         let ttsAudio = { paused: true, ended: false, addEventListener() {} };
         let remoteTtsPlaybackIds = new Set();
-        function handleTts(message) { calls.push(['stop', message]); }
+        // 执行正式播报处理函数，不能模拟错误拼写而掩盖点击链路的ReferenceError。
+        function stopTtsPlayback() { calls.push(['stop']); }
+        function clearRemoteTextPlayback() {}
+        ${inlineFunction('handleTTS')}
         function resumeVoiceRecordingAfterTts() { calls.push(['resume']); }
         function clearTtsRecordingResumeTimer() {}
         function sendVoiceStatus() { publishVoiceRuntime(); }
@@ -212,7 +215,8 @@ test('开关等待权威配置，失败恢复旧值，聊天完成和断线清�
     const handlers = new Map(), subscriptions = new Map(), sent = [], timers = new Map();
     const refs = {};
     for (const id of ['displayVoiceContinuous', 'displayVoiceAction', 'displayVoiceActionStatus']) {
-        refs[id] = { dataset: {}, addEventListener: (event, fn) => handlers.set(`${id}:${event}`, fn), setAttribute() {} };
+        refs[id] = { dataset: {}, attributes: {}, addEventListener: (event, fn) => handlers.set(`${id}:${event}`, fn),
+            setAttribute(name, value) { this.attributes[name] = value; } };
     }
     const snapshot = { continuous: false, connected: true, configReady: true, listening: false };
     const window = {
@@ -235,12 +239,21 @@ test('开关等待权威配置，失败恢复旧值，聊天完成和断线清�
     assert.equal(toggle.disabled, false);
     assert.equal(timers.size, 0);
     subscriptions.get('chat.activity')({ requestId: 'chat', active: true });
-    assert.equal(refs.displayVoiceActionStatus.textContent, '思考');
+    assert.equal(refs.displayVoiceActionStatus.textContent, '助手 · 思考');
     subscriptions.get('chat.activity')({ requestId: 'chat', active: false });
-    assert.equal(refs.displayVoiceActionStatus.textContent, '已停止');
+    assert.equal(refs.displayVoiceActionStatus.textContent, '助手 · 已停止');
     subscriptions.get('chat.activity')({ requestId: 'chat2', active: true });
     subscriptions.get('transport.changed')({ available: false });
-    assert.equal(refs.displayVoiceActionStatus.textContent, '已停止');
+    assert.equal(refs.displayVoiceActionStatus.textContent, '助手 · 已停止');
+    let name = '小爱';
+    window.DisplayChat = { getVoiceStatusName: () => name };
+    subscriptions.get('chat.status-name')();
+    assert.equal(refs.displayVoiceActionStatus.textContent, '小爱 · 已停止');
+    assert.equal(refs.displayVoiceAction.attributes['aria-label'], '小爱 · 已停止，开始一次语音输入');
+    name = '工作助手';
+    snapshot.manual = true;
+    subscriptions.get('chat.status-name')();
+    assert.equal(refs.displayVoiceActionStatus.textContent, '工作助手 · 监听中');
 });
 
 test('关闭持续监听后，TTS 结束不会自行重开麦克风', () => {

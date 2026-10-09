@@ -23,10 +23,12 @@
         if (!runtime) return;
         const snapshot = runtime.snapshot();
         const status = deriveStatus(snapshot, chats.size > 0);
-        if (refs.status) refs.status.textContent = LABELS[status];
+        const assistantName = root.DisplayChat?.getVoiceStatusName?.() || '助手';
+        const label = `${assistantName} · ${LABELS[status]}`;
+        if (refs.status) refs.status.textContent = label;
         if (refs.button) {
             refs.button.dataset.state = status;
-            refs.button.setAttribute('aria-label', `${LABELS[status]}，${snapshot.continuous ? '打断播报' : snapshot.manual ? '结束录音并识别' : '开始一次语音输入'}`);
+            refs.button.setAttribute('aria-label', `${label}，${snapshot.continuous ? '打断播报' : snapshot.manual ? '结束录音并识别' : '开始一次语音输入'}`);
         }
         if (refs.toggle) {
             refs.toggle.checked = snapshot.continuous;
@@ -100,6 +102,7 @@
         refs.button?.addEventListener('click', click);
         options.bus.subscribe('server.message', handleServerMessage);
         options.bus.subscribe('voice.runtime', render);
+        options.bus.subscribe('chat.status-name', render);
         options.bus.subscribe('chat.activity', ({ requestId, active }) => {
             if (!requestId) return;
             if (active) chats.add(requestId);

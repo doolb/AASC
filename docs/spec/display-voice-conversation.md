@@ -1170,3 +1170,24 @@ DisplayChat 收到 chatResponse 或丢弃流 -> 发布 chat.activity(active=fals
 ```
 
 完整模式保存与资源生命周期伪代码见 [display-voice-controls.md](display-voice-controls.md)。
+
+## 2026-10-09 Offline连接恢复私聊对象（已完成代码及定向验证）
+
+```text
+buildManualChatVoiceConversationUpdates(options):
+    offlineMode必须为true
+    source为controlManual时保持既有group/private同步
+    source为offlineRestore时只允许有效privateTarget的private模式
+    其他source返回空
+    仅对voiceRecordingEnabled为true的目标生成activePrivate及既有conversation窗口
+显示端连接:
+    建立显示端状态 -> 恢复用户能力 -> syncDisplayConversationListeningState
+    如果非Offline或语音能力关闭或会话状态不是waitingWake:
+        跳过选择恢复
+    updates = 同步辅助函数(source=offlineRestore, session=chat.getSession(), displays=[当前端])
+    对每个更新:
+        写入voiceConversation
+        用既有armDisplayConversationTimer下发状态并启动持续对话窗口
+    通过已有getChatSession请求/回包恢复当前聊天快照，正常发送其他连接配置
+    不发送显示聊天面板命令、不保存可见性、不新建配置接口
+```

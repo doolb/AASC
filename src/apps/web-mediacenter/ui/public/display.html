@@ -6604,7 +6604,7 @@
 
         async function activateVoiceInteraction() {
             // 与控制端显示面板普通 stop 相同；本端立即清队列，服务端再回传停止命令。
-            handleTts({ type: 'tts', action: 'stop' });
+            handleTTS({ type: 'tts', action: 'stop' });
             const sent = window.DisplayStage?.send({ type: 'tts', action: 'stop', displayId });
             if (!sent) throw new Error('未连接服务器，已停止本地播报');
             if (voiceContinuousEnabled) {

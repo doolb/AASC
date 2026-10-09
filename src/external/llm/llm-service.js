@@ -96,6 +96,7 @@ let chatTemplates = [];
 let chatSession = {
     mode: 'group',
     privateTarget: null,
+    roleTarget: null,
     privateSessionId: 'default',
     playOnControl: false,
     commandMode: true,
@@ -1096,6 +1097,12 @@ function setSession(session, metadata = {}) {
     const previousSession = getSession();
     if (session.mode !== undefined) chatSession.mode = session.mode;
     if (session.privateTarget !== undefined) chatSession.privateTarget = session.privateTarget;
+    // 工作角色与私聊助手共用既有会话存储，重开后由权威快照恢复当前角色。
+    if (session.roleTarget !== undefined) {
+        chatSession.roleTarget = typeof session.roleTarget === 'string'
+            ? session.roleTarget.trim() || null
+            : null;
+    }
     if (session.privateSessionId !== undefined) chatSession.privateSessionId = session.privateSessionId;
     if (session.playOnControl !== undefined) chatSession.playOnControl = session.playOnControl;
     if (session.commandMode !== undefined) chatSession.commandMode = session.commandMode;
