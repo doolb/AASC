@@ -11,7 +11,8 @@
 
 - ✅ [2026-10-09] 修复普通预览后台自动清理触发AR复位的问题：共享控制器在释放前捕获AR状态，将保留预览标记传入独立A-Frame取消流程；空闲自动清理保留根变换、相机方向和缩放，显式开始/手动停止默认仍复位。独立页持续监听pagehide，兼容BFCache重复恢复。
   - 修改`src/apps/web-mediacenter/ui/public/js/display-mmd-ar.js`、`3rd/mmd-ar-test/display-mmd-ar-aframe.js`及`tests/mmd-ar-background-resume.test.js`；同步design/spec/task/todo、自测、README和usage。真实模型旧根X 1.739→0用例先失败；最终两项实际浏览器回归通过（无跳过），覆盖位置/旋转/zoom、两轮后台/resize/pagehide、迟到摄像头、实际AR退出、手动复位及模拟旧轨道释放/新轨道恢复。
-  - `npm run build:web:mmd-ar-test`成功，独立只读复核无新增问题，diff检查通过。扩展相机/重力8项5通过/2既有VM动态import回调缺失失败/1旧浏览器路径跳过，旧源码基线复现同样失败，未宣称全仓自测通过。现有Offline状态true/true/false保持；没有升级依赖、出APK或发布外网。手机系统后台行为待验收。
+  - `npm run build:web:mmd-ar-test`成功，独立只读复核无新增问题，diff检查通过。扩展相机/重力8项5通过/2既有VM动态import回调缺失失败/1旧浏览器路径跳过，旧源码基线复现同样失败，未宣称全仓自测通过。推送时合并远端Blender/静态资源缓存及code47发布更新，保留两份无关配置；code47不含本次修复，servicePackage重新标true，minApk保持true、dependenciesPackage=false。合并后重新构建并复验；没有升级依赖、出APK或发布外网。手机系统后台行为待验收。
+  - 合并后发现正式清单的新64位版本路由未被独立网页构建转换，实际模型加载超时；`3rd/mmd-ar-test/build.js`补WEB_MODE相对路径转换，正式接口/APK不变。新增清单相对路径/打包文件断言先失败；最终重建后清单及两个真实浏览器用例3/3通过、无跳过，追加只读复核通过。
 
 ### MMD-AR后台空闲清理重置视角诊断
 

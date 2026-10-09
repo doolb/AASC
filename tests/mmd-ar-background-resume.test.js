@@ -26,6 +26,20 @@ function createWebServer() {
   });
 }
 
+test('独立静态页资源清单引用已打包的模型和动作', {
+  skip: !fs.existsSync(path.join(WEB_ROOT, 'mmd-resources.json'))
+}, () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(WEB_ROOT, 'mmd-resources.json'), 'utf8'));
+  assert.ok(manifest.resources.length > 0);
+  for (const profile of manifest.resources) {
+    for (const key of ['modelUrl', 'motionUrl']) {
+      if (!profile[key]) continue;
+      assert.match(profile[key], /^\.\/mmd\//u, `${key}不能依赖静态站点不存在的服务API`);
+      assert.ok(fs.existsSync(path.resolve(WEB_ROOT, profile[key])), `${key}必须指向已打包文件`);
+    }
+  }
+});
+
 test('真实模型普通预览前后台及pagehide保留平移、旋转、缩放和相机', {
   skip: !CHROME || !fs.existsSync(path.join(WEB_ROOT, 'mmd/miya/miya.pmx')),
   timeout: 120000,
