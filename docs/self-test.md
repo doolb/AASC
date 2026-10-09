@@ -1,5 +1,13 @@
 # 自测功能文档
 
+## MMD-AR后台自动清理与显式复位（2026-10-09）
+
+`node --test tests/mmd-ar-background-resume.test.js`在Windows使用Puppeteer已安装Chromium，HTTP夹具提供CSS/JSON正确MIME，退出时关闭所有连接。两个浏览器用例实际执行、2/2通过，无跳过。
+
+真实米娅冻结动画/物理后实际平移80/40像素、缩放1.8及调整相机方向，比较两轮visibilitychange、pagehide/pageshow和resize前后的模型根position/quaternion/scale与相机position/quaternion/zoom（容差1e-5），覆盖蓝框标记与共享直接复位分支；恢复画布可见像素>1000。校准摄像头权限延迟返回的真实canvas轨道在隐藏及重复pagehide后ended，位置/倍率保留；真实AR相机仍退出，显式手动停止仍复位zoom=1/根X=0。模拟定位运行时旧视频轨道ended、前台新轨道ID不同，手动停止后不自动重启。
+
+原实现真实模型根X由1.739变0而失败；扩展测试又发现一概跳过idle适配器复位破坏手动停止，改为自动清理显式传标记、普通取消默认复位后通过。Web构建及独立代码复核通过。扩展相机/重力8项为5通过/2失败/1跳过；两项动态import回调缺失在HEAD旧源码基线也失败，VMD旧浏览器发现路径导致跳过。未运行本轮全仓测试；手机系统后台及原生SLAM资源释放需设备验收。
+
 ## MMD-AR接触阴影反向穿越与内部像素回归（2026-10-08）
 
 `tests/mmd-ar-contact-shadow-browser.test.js`执行真实生产GLSL：4/12/20/30/32/64步共60组检查，覆盖正向/反向连续交点、单向及双向厚度外轮廓跳变、自遮挡/背景。反向仅在接触策略true时命中，GI策略false保持旧行为；完整SSGI、Reduction/HZB及滤波Shader编译链接保持通过。旧实现在反向交点4步用例失败后才改源码。

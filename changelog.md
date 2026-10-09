@@ -7,6 +7,18 @@
 
 # Web MediaCenter - 变更日志
 
+### MMD-AR后台恢复保留角色位置与相机距离
+
+- ✅ [2026-10-09] 修复普通预览后台自动清理触发AR复位的问题：共享控制器在释放前捕获AR状态，将保留预览标记传入独立A-Frame取消流程；空闲自动清理保留根变换、相机方向和缩放，显式开始/手动停止默认仍复位。独立页持续监听pagehide，兼容BFCache重复恢复。
+  - 修改`src/apps/web-mediacenter/ui/public/js/display-mmd-ar.js`、`3rd/mmd-ar-test/display-mmd-ar-aframe.js`及`tests/mmd-ar-background-resume.test.js`；同步design/spec/task/todo、自测、README和usage。真实模型旧根X 1.739→0用例先失败；最终两项实际浏览器回归通过（无跳过），覆盖位置/旋转/zoom、两轮后台/resize/pagehide、迟到摄像头、实际AR退出、手动复位及模拟旧轨道释放/新轨道恢复。
+  - `npm run build:web:mmd-ar-test`成功，独立只读复核无新增问题，diff检查通过。扩展相机/重力8项5通过/2既有VM动态import回调缺失失败/1旧浏览器路径跳过，旧源码基线复现同样失败，未宣称全仓自测通过。现有Offline状态true/true/false保持；没有升级依赖、出APK或发布外网。手机系统后台行为待验收。
+
+### MMD-AR后台空闲清理重置视角诊断
+
+- ✅ [2026-10-08] 使用真实米娅模型复现并定位后台重置：空闲AR仍经visibilitychange调用A-Frame releaseSystem/resetArCameraPose，角色根平移和缩放倍率同时归零；共享stopAr还有第二处显示复位，pagehide也触发适配器取消。
+  - 实测倍率1.8→1、相机Z 27.9015→50.2227、角色根[1.7392, 9.2303, 0]→[0, 10.0999, 0]，AR idle/tracking=false/active=false。已有resize修正不能覆盖本次生命周期路径。
+  - 更新design/spec/todo及任务文档，新增自动清理保留空闲预览的方案；按AGENTS.md修改代码前确认规则等待用户确认。尚未修改实现、执行修复回归、重新构建或发布；临时诊断脚本和输出留在.git，不提交资源或无关配置。
+
 ### MMD-AR接触阴影内部漏判
 
 - ✅ [2026-10-08] 根据强度1/距离3/30步下“仍只有边缘阴影”的反馈，在真实米娅近景定位单向深度跨越遗漏穿出表面的交点；补齐接触阴影双向细化，正/反向都选正深度差端点并统一命中距离。

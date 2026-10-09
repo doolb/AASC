@@ -78,11 +78,14 @@
         if (live) live.textContent = message;
     }
 
-    function releaseSystem() {
+    function releaseSystem({ preservePreview = false } = {}) {
+        // 自动清理的idle取消和pagehide也会到达这里；显式开始/停止仍保留原复位语义。
+        // 缺少诊断接口的旧运行时仍走原清理策略，确保实际定位不会遗留相机状态。
+        const resetCamera = !preservePreview || root.DisplayMmd?.getArCameraState?.()?.active !== false;
         if (poseSyncFrame) root.cancelAnimationFrame(poseSyncFrame);
         poseSyncFrame = 0;
         root.MmdArTestImu?.stopSession();
-        root.DisplayMmd?.resetArCameraPose?.();
+        if (resetCamera) root.DisplayMmd?.resetArCameraPose?.();
         if (worldTarget.object3D) worldTarget.object3D.visible = false;
         if (cameraRig.object3D) {
             cameraRig.object3D.position.set(0, 0, 0);
@@ -130,11 +133,11 @@
         targetUrl = null;
     }
 
-    function cancelPending() {
+    function cancelPending({ preservePreview = false } = {}) {
         generation += 1;
         rejectStart?.(new Error('定位任务已取消'));
         rejectStart = null;
-        releaseSystem();
+        releaseSystem({ preservePreview });
         currentSession = null;
     }
 
@@ -437,5 +440,5 @@
         hide: () => { if (!currentSession && worldTarget.object3D) worldTarget.object3D.visible = false; }
     });
     root.DisplayMmdImageTargetTracker = Object.freeze({ start });
-    root.addEventListener('pagehide', cancelPending);
+    root.addEventListener('pagehide', () => cancelPending({ preservePreview: true }));
 })(window);
