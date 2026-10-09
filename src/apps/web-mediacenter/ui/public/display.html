@@ -507,10 +507,7 @@
             </label>
             <div class="display-voice-action-group">
                 <div id="displayVoiceAsrResult" class="display-voice-asr-result" role="status" aria-live="polite" hidden></div>
-                <div class="display-voice-status-row">
-                    <span id="displayVoiceActionStatus" class="display-voice-action-status" role="status" aria-live="polite">已停止</span>
-                    <span id="displayVoiceVadValue" class="display-voice-action-status" aria-live="off" hidden></span>
-                </div>
+                <span id="displayVoiceActionStatus" class="display-voice-action-status"><span id="displayVoiceActionStatusText" role="status" aria-live="polite">已停止</span><span id="displayVoiceVadValue" aria-live="off" hidden></span></span>
                 <button id="displayVoiceAction" class="display-voice-action" type="button" data-state="stopped"
                         aria-label="已停止，开始一次语音输入"><span aria-hidden="true">●</span></button>
             </div>

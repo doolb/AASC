@@ -1,5 +1,8 @@
 ### 显示端ASR反馈与手动录音
 
+- ✅ [2026-10-09] VAD取消独立显示，数字并入状态文字末尾，例如“小爱 · 监听中 0.03”。
+  - 修改display.html、display-voice-controls.js/CSS及单元/浏览器夹具；状态文本和实时数字分别更新但共用同一背景，数字不加VAD前缀，暂停/停止清空。21项相关测试通过、无跳过，截图核对及diff检查通过；文档同步，servicePackage=true，服务包待更新。
+
 - ✅ [2026-10-09] 状态文字上方显示本端ASR结果，监听时显示两位小数VAD；手动再次点击立即停止，满足有效语音及静音等待才识别，否则丢弃。
   - display.html新增共用就绪判断、RMS/ASR反馈；display-voice-controls.js/CSS独立结果与数值节点。自动静音、按钮、60秒超时复用判断，保持分段PCM、声纹和过期门控。
   - 更新语音单元/浏览器/监听测试及design/spec/task/usage/自测文档；8文件41/41通过，无跳过，git diff检查通过。已生成code-v51.zip（16,932,719字节；SHA-256 e1798813b230b8eb62eed9270c07c702b6fb4c3deb9a527bc0e36360f327279a），源提交8c698865，931文件与工作区逐字节一致，CRC/签名/组件约束通过；servicePackage=false，minApk=true/dependenciesPackage=false保持；LAN/WAN签名清单一致，所有组件HTTP大小/SHA-256通过，精确清理无错误，两端code目录仅保留code-v51.zip；已推送origion/master，实机录音待验收。

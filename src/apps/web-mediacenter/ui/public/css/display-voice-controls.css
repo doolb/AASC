@@ -11,12 +11,6 @@
     pointer-events: none;
     max-width: calc(100% - 24px);
 }
-.display-voice-status-row {
-    display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 4px;
-}
 .display-voice-asr-result {
     max-width: min(76vw, 640px);
     max-height: 5.4em;

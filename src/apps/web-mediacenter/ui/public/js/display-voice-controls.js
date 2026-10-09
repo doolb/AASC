@@ -25,7 +25,8 @@
         const status = deriveStatus(snapshot, chats.size > 0);
         const assistantName = root.DisplayChat?.getVoiceStatusName?.() || '助手';
         const label = `${assistantName} · ${LABELS[status]}`;
-        if (refs.status && refs.status.textContent !== label) refs.status.textContent = label;
+        // 状态和实时数字在同一背景内分别更新，避免覆盖数字节点或重复播报RMS。
+        if (refs.statusText && refs.statusText.textContent !== label) refs.statusText.textContent = label;
         renderVad(snapshot);
         renderAsrResult(snapshot.asrText || '');
         if (refs.button) {
@@ -41,9 +42,12 @@
     function renderVad(snapshot = runtime?.snapshot()) {
         if (!refs.vad || !snapshot) return;
         refs.vad.hidden = snapshot.vadActive !== true;
-        if (refs.vad.hidden) return;
+        if (refs.vad.hidden) {
+            if (refs.vad.textContent) refs.vad.textContent = '';
+            return;
+        }
         const rms = Number.isFinite(snapshot.vadRms) && snapshot.vadRms >= 0 ? snapshot.vadRms : 0;
-        const value = `VAD ${rms.toFixed(2)}`;
+        const value = ` ${rms.toFixed(2)}`;
         if (refs.vad.textContent !== value) refs.vad.textContent = value;
     }
 
@@ -115,6 +119,7 @@
             toggle: root.document.getElementById('displayVoiceContinuous'),
             button: root.document.getElementById('displayVoiceAction'),
             status: root.document.getElementById('displayVoiceActionStatus'),
+            statusText: root.document.getElementById('displayVoiceActionStatusText'),
             vad: root.document.getElementById('displayVoiceVadValue'),
             asr: root.document.getElementById('displayVoiceAsrResult')
         };

@@ -272,10 +272,13 @@ test('异步麦克风启动去重，取消后迟到轨道立即释放', async ()
 test('开关等待权威配置，失败恢复旧值，聊天完成和断线清理思考状态', () => {
     const handlers = new Map(), subscriptions = new Map(), sent = [], timers = new Map();
     const refs = {};
-    for (const id of ['displayVoiceContinuous', 'displayVoiceAction', 'displayVoiceActionStatus', 'displayVoiceVadValue', 'displayVoiceAsrResult']) {
+    for (const id of ['displayVoiceContinuous', 'displayVoiceAction', 'displayVoiceActionStatus', 'displayVoiceActionStatusText', 'displayVoiceVadValue', 'displayVoiceAsrResult']) {
         refs[id] = { dataset: {}, attributes: {}, addEventListener: (event, fn) => handlers.set(`${id}:${event}`, fn),
             setAttribute(name, value) { this.attributes[name] = value; } };
     }
+    Object.defineProperty(refs.displayVoiceActionStatus, 'textContent', {
+        get: () => (refs.displayVoiceActionStatusText.textContent || '') + (refs.displayVoiceVadValue.textContent || '')
+    });
     const snapshot = { continuous: false, connected: true, configReady: true, listening: false };
     const window = {
         document: { getElementById: (id) => refs[id] },
@@ -315,12 +318,13 @@ test('开关等待权威配置，失败恢复旧值，聊天完成和断线清�
     snapshot.vadActive = true;
     snapshot.vadRms = 0.026;
     subscriptions.get('voice.vad')();
-    assert.equal(refs.displayVoiceVadValue.textContent, 'VAD 0.03');
+    assert.equal(refs.displayVoiceVadValue.textContent, ' 0.03');
     assert.equal(refs.displayVoiceVadValue.hidden, false);
-    assert.equal(refs.displayVoiceActionStatus.textContent, '工作助手 · 监听中');
+    assert.equal(refs.displayVoiceActionStatus.textContent, '工作助手 · 监听中 0.03');
     snapshot.vadActive = false;
     subscriptions.get('voice.runtime')();
     assert.equal(refs.displayVoiceVadValue.hidden, true);
+    assert.equal(refs.displayVoiceActionStatus.textContent, '工作助手 · 监听中', '暂停后去掉数字');
     snapshot.asrText = '<img>识别结果';
     subscriptions.get('voice.asr-result')({ text: snapshot.asrText });
     assert.equal(refs.displayVoiceAsrResult.textContent, snapshot.asrText);

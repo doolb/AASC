@@ -97,3 +97,18 @@ RMS回调:
 ```
 
 实施与发布：code51包含本节最终规则，41项定向通过；LAN/WAN签名、组件HTTP大小/SHA-256及精确清理通过。
+
+## 状态文字末尾合并VAD数字（2026-10-09，已确认）
+
+```text
+displayVoiceActionStatus = 共用背景的状态容器
+    displayVoiceActionStatusText = 助手名 + " · " + 六状态文本，保留polite状态通知
+    displayVoiceVadValue = 同一容器内的纯数字，不另加背景或VAD字样，aria-live=off
+render -> 仅更新状态文本子节点，避免覆盖数字子节点
+RMS通知 -> 实际采集中，将数字子节点textContent设为 " " + rms.toFixed(2)
+    未采集或暂停 -> 清空数字并隐藏，状态容器只剩助手名/状态
+    两位小数未变化 -> 不重复写DOM
+删除独立状态行容器和布局样式；保留一个状态背景
+按钮aria-label继续使用助手名/状态及操作，不加入实时数字
+ASR结果、PCM/VAD/ASR判定、配置、单次结束规则保持
+```
