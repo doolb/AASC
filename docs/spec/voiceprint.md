@@ -189,7 +189,7 @@ canonicalDb = projectRoot/res/voiceprint/db.json
     读取并验证canonicalDb
     有有效非空库 -> 保留当前库
     损坏库 -> 报错，禁止用空库或旧库静默覆盖
-    缺失/空库且尚未恢复:
+    缺失/空库且尚未恢复，且AASC_OFFLINE_MODE=1、codeRoot != projectRoot:
         候选 = root/updates/code/code-v<数字>/res/voiceprint/db.json
         仅普通文件，不跟随符号链接；验证结构和有效embedding
         选最近的有效非空候选；有多个不自动跨库合并
