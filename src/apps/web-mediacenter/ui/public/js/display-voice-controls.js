@@ -34,7 +34,7 @@
             refs.button.setAttribute('aria-label', `${label}，${snapshot.continuous ? '打断播报' : snapshot.manual ? '结束录音并识别' : '开始一次语音输入'}`);
         }
         if (refs.toggle) {
-            refs.toggle.checked = snapshot.continuous;
+            refs.toggle.setAttribute('aria-pressed', String(snapshot.continuous === true));
             refs.toggle.disabled = Boolean(pendingId) || !snapshot.connected || !snapshot.configReady;
         }
     }
@@ -123,7 +123,8 @@
             vad: root.document.getElementById('displayVoiceVadValue'),
             asr: root.document.getElementById('displayVoiceAsrResult')
         };
-        refs.toggle?.addEventListener('change', () => requestContinuous(refs.toggle.checked));
+        // 按钮请求切换权威模式，保存回包到达前保留原选中态并禁止重复点击。
+        refs.toggle?.addEventListener('click', () => requestContinuous(!runtime.snapshot().continuous));
         refs.button?.addEventListener('click', click);
         options.bus.subscribe('server.message', handleServerMessage);
         options.bus.subscribe('voice.runtime', render);

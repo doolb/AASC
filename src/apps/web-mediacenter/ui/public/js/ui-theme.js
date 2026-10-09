@@ -167,6 +167,7 @@
                             <h3 data-ui-type="title">按钮状态</h3>
                             <div class="theme-preview-button-row">
                                 <button class="control-btn theme-preview-button" type="button" data-ui-type="button">普通</button>
+                                <button class="control-btn theme-preview-button is-unselected" type="button" data-ui-type="button" aria-pressed="false">未选中</button>
                                 <button class="control-btn active theme-preview-button" type="button" data-ui-type="button">选中</button>
                                 <button class="control-btn playing theme-preview-button" type="button" data-ui-type="button">播放</button>
                                 <button class="control-btn danger theme-preview-button" type="button" data-ui-type="button">危险</button>

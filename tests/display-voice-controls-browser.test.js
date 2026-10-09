@@ -24,7 +24,8 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
     fs.mkdirSync(cache, { recursive: true });
     const profile = fs.mkdtempSync(path.join(cache, 'browser-'));
     const html = read('display.html');
-    const start = html.indexOf('            <label class="display-stage-button display-voice-switch">');
+    const start = html.indexOf('            <button id="displayVoiceContinuous"');
+    assert.ok(start >= 0);
     const end = html.indexOf('        </div>\n        <div id="displayArCalibration"', start);
     const markup = html.slice(start, end);
     const runtimeSource = html.slice(html.indexOf('        function getVoiceInteractionSnapshot()'),
@@ -113,6 +114,25 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
             });
         });
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 空闲');
+        assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.tagName), 'BUTTON');
+        assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.getAttribute('aria-pressed')), 'true', '默认实时监听开启');
+        assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.disabled), false);
+        for (const theme of ['dark', 'light']) {
+            await page.evaluate((name) => {
+                document.documentElement.dataset.theme = name;
+                document.documentElement.dataset.themeMode = name;
+            }, theme);
+            assert.match(await page.$eval('#displayVoiceContinuous', (element) => getComputedStyle(element).backgroundImage), /linear-gradient/u);
+            await page.click('#displayVoiceContinuous');
+            await page.waitForFunction(() => document.getElementById('displayVoiceContinuous').getAttribute('aria-pressed') === 'false');
+            assert.equal(await page.$eval('#displayVoiceContinuous', (element) => getComputedStyle(element).backgroundImage), 'none');
+            await page.click('#displayVoiceContinuous');
+            await page.waitForFunction(() => document.getElementById('displayVoiceContinuous').getAttribute('aria-pressed') === 'true');
+        }
+        await page.evaluate(() => {
+            document.documentElement.dataset.theme = 'dark';
+            document.documentElement.dataset.themeMode = 'dark';
+        });
         assert.deepEqual(await page.$$eval('[data-role="target-menu"] button', (items) => items.map((item) => item.textContent)), ['群聊']);
         await page.evaluate(() => window.DisplayStage.handleServerMessage({ type: 'assistantConfig', config: {} }));
         assert.deepEqual(await page.$$eval('[data-role="target-menu"] button', (items) => items.map((item) => item.textContent)), ['群聊']);
@@ -168,7 +188,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         await page.click('#displayVoiceContinuous');
         await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 已停止');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.hidden), true);
-        assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.checked), false);
+        assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.getAttribute('aria-pressed')), 'false');
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
         await page.click('#displayVoiceAction');
         await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 监听中');

@@ -501,10 +501,8 @@
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
                     aria-controls="displayMmdLayer" aria-expanded="false">角色</button>
-            <label class="display-stage-button display-voice-switch">
-                <input id="displayVoiceContinuous" type="checkbox" checked disabled role="switch">
-                <span>实时监听</span>
-            </label>
+            <button id="displayVoiceContinuous" class="display-stage-button display-voice-switch" type="button"
+                    aria-pressed="true" disabled>实时监听</button>
             <div class="display-voice-action-group">
                 <div id="displayVoiceAsrResult" class="display-voice-asr-result" role="status" aria-live="polite" hidden></div>
                 <span id="displayVoiceActionStatus" class="display-voice-action-status"><span id="displayVoiceActionStatusText" role="status" aria-live="polite">已停止</span><span id="displayVoiceVadValue" aria-live="off" hidden></span></span>

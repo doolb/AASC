@@ -891,6 +891,15 @@
     box-shadow: 0 0 0 2px var(--accent-color);
 }
 
+/* 未选中样例使用实际状态按钮的中性色，覆盖浅色主题的普通按钮渐变。 */
+.theme-preview-dialog .theme-preview-button.is-unselected,
+:root[data-theme-mode="light"] .theme-preview-dialog .theme-preview-button.is-unselected {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+
 .theme-preview-dialog .theme-preview-button.playing {
     background: linear-gradient(135deg, var(--success-color), var(--accent-color));
 }

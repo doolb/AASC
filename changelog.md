@@ -11206,4 +11206,4 @@
 ### Offline声纹目录与界面修复
 
 - ✅ [2026-10-10] 按确认方案固定声纹AASC_PROJECT_ROOT目录、竖屏三个浮动入口避开底部导航、群聊状态显示群聊且移除虚构助手默认项。
-  - 修改voiceprint-store.js、upload.css、display-chat.js/语音控件及既有测试，新增voiceprint-store-persistence与control-floating-layout-browser。5文件30/30通过、无跳过，截图已核对，diff检查通过；设计/伪代码/任务/使用/自测文档同步，代码与servicePackage=true已推送origion/master。用户取消声纹恢复，本轮不扫描/迁移旧库，不宣称已恢复旧记录。新增主题未选中样例与监听按钮方案待确认，尚未构建本轮服务包。
+  - 修改voiceprint-store.js、upload.css、display-chat.js/语音控件及既有测试，新增voiceprint-store-persistence与control-floating-layout-browser。5文件30/30通过、无跳过，截图已核对，diff检查通过；设计/伪代码/任务/使用/自测文档同步，代码与servicePackage=true已推送origion/master。用户取消声纹恢复，本轮不扫描/迁移旧库，不宣称已恢复旧记录。主题未选中样例与实时监听按钮已确认并实现；9文件43/43通过、无跳过，深浅主题/默认开启/权威等待与失败/实际按钮/Offline恢复通过，源码语法与diff检查通过，截图已核对。服务包待构建发布，控制端现有监听只控制能力，本轮未新增实时模式控制入口。

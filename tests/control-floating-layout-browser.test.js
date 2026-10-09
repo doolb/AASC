@@ -48,6 +48,27 @@ test('真实控制端样式下三个浮动按钮避开竖屏导航，横屏位�
         await page.setViewport({ width: 360, height: 800 });
         await page.setContent(html);
         await page.screenshot({ path: path.join(cache, 'control-floating-portrait.png') });
+        await page.addScriptTag({ content: fs.readFileSync(path.join(publicRoot, 'js/ui-theme.js'), 'utf8') });
+        await page.evaluate(() => window.UiTheme.setRootTheme('dark'));
+        for (const theme of ['dark', 'light']) {
+            await page.evaluate((name) => window.UiTheme.showPreview(name), theme);
+            const states = await page.evaluate(() => {
+                const unselected = document.querySelector('.theme-preview-button.is-unselected');
+                const selected = document.querySelector('.theme-preview-button.active');
+                return { text: unselected.textContent, pressed: unselected.getAttribute('aria-pressed'),
+                    neutralImage: getComputedStyle(unselected).backgroundImage,
+                    selectedImage: getComputedStyle(selected).backgroundImage,
+                    neutralShadow: getComputedStyle(unselected).boxShadow };
+            });
+            assert.equal(states.text, '未选中');
+            assert.equal(states.pressed, 'false');
+            assert.equal(states.neutralImage, 'none');
+            assert.match(states.selectedImage, /linear-gradient/u);
+            assert.equal(states.neutralShadow, 'none');
+            await page.screenshot({ path: path.join(cache, `theme-preview-${theme}.png`) });
+            await page.evaluate(() => window.UiTheme.closePreview());
+            assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark', '关闭恢复原主题');
+        }
     } finally {
         await browser.close();
     }

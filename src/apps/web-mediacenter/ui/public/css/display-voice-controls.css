@@ -56,28 +56,22 @@
 .display-voice-action[data-state="thinking"] { --voice-state-color: #8b5cf6; }
 .display-voice-action[data-state="speaking"] { --voice-state-color: #06b6d4; }
 .display-voice-action:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 4px; }
-.display-voice-switch { display: flex; align-items: center; gap: 7px; cursor: pointer; }
-.display-voice-switch input {
-    appearance: none;
-    width: 32px;
-    height: 20px;
-    margin: 0;
-    padding: 2px;
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    background: var(--bg-primary);
-    cursor: pointer;
+.display-voice-switch { cursor: pointer; }
+/* 实时监听用按钮选中态表达模式，关闭态保持中性；覆盖浅色通用按钮样式。 */
+.display-voice-switch[aria-pressed="true"],
+:root[data-theme-mode="light"] .display-voice-switch[aria-pressed="true"] {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 1px var(--accent-color);
 }
-.display-voice-switch input::before {
-    content: '';
-    display: block;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--text-secondary);
+.display-voice-switch[aria-pressed="false"],
+:root[data-theme-mode="light"] .display-voice-switch[aria-pressed="false"] {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color) !important;
+    box-shadow: none;
 }
-.display-voice-switch input:checked { background: var(--accent-color); }
-.display-voice-switch input:checked::before { background: white; transform: translateX(12px); }
-.display-voice-switch input:disabled { opacity: 0.5; cursor: wait; }
-.display-voice-switch input:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }
+.display-voice-switch:disabled { opacity: 0.5; cursor: wait; }
+.display-voice-switch:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .display-voice-action { transition: none; } }

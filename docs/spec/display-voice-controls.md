@@ -127,7 +127,7 @@ getVoiceStatusName -> private/role有效目标返回真实名字，否则群聊
 ```
 
 
-## 实时监听切换按钮样式（2026-10-10，具体方案待确认）
+## 实时监听切换按钮样式（2026-10-10，已确认）
 
 ```text
 displayVoiceContinuous = button type=button aria-pressed，文字“实时监听”
@@ -139,4 +139,13 @@ click -> requestContinuous(!runtime.snapshot().continuous)
     仍使用原配置消息和按displayId持久化
 移除checkbox滑轨样式，不改变监听启动/暂停/取消与圆钮功能
 验证 -> 实际点击两种方向、权威等待/失败恢复、断线禁用、深浅主题和旋转
+```
+
+默认值核对（2026-10-10）：
+```text
+saved voiceContinuousEnabled缺失 -> true；显式false保留
+显示初始continuous=true、aria-pressed=true，配置未就绪时禁用
+服务端连接补发当前权威值 -> 配置完成后允许切换
+控制端已有“监听”=voiceRecording能力；实时/单次模式目前无专门UI按钮
+    既有setDisplayVoiceListeningConfig协议可供后续控制端入口复用
 ```
