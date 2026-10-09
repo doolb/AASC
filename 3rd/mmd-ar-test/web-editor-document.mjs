@@ -24,7 +24,15 @@ export function validateDocument(value, boneCount) {
     return value;
 }
 export function putDocument(key, document) { documents.set(key, clone(document)); }
+// 来源与加载器处理后的基线随工程保存；复制对象必须取消来源，防止共用同一文件记录。
+export function markPmxEditorSources(data) {
+    for (const key of ['rigidBodies','constraints']) data[key]?.forEach((item,index)=>{
+        const baseline=clone(item);delete baseline._pmxSource;delete baseline._pmxSourceIndex;
+        item._pmxSourceIndex=index;item._pmxSource=baseline;
+    });
+}
 export function stageEditorDocument(mesh, profile) {
+    if(mesh.geometry?.userData?.MMD)markPmxEditorSources(mesh.geometry.userData.MMD);
     const saved = documents.get(profile.modelUrl);
     if (!saved) return;
     validateDocument(saved,mesh.skeleton.bones.length);

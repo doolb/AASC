@@ -1,5 +1,7 @@
 # MMD-AR Blender 工程工作区
 
+2026-10-09用户暂缓Blender相关改动，当前保留已有实现。此前讨论的jsblender只读替换未实施；当前开发转向PMX直接导出。
+
 ## 目标
 
 让独立 MMD-AR 网页可以直接使用 Blender `.blend` 工程。网页初次加载和普通 PMX 编辑不下载 Blender；用户点击“Blender 工程”后立即打开目录选择器，再按需加载工作区模块和 Blender WebAssembly。打开工程后，Blender 角色接管 MMD-AR 当前视口中的角色位置，进入同一页面的编辑、预览和渲染流程。工程以原生 `.blend` 文件读写，不经过网页 PMX 导入器或 MMD Tools 转换脚本。

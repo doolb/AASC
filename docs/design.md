@@ -26,6 +26,7 @@
 
 | 模块 | 文档 | 说明 |
 |------|------|------|
+| MMD-AR PMX文件导出 | [mmd-ar-pmx-export.md](design/mmd-ar-pmx-export.md) | 网页刚体/关节修改导出新PMX、原始段保留与跨段索引同步 |
 | MMD刚体XPBD WebGL2 | [mmd-xpbd-webgl.md](design/mmd-xpbd-webgl.md) | 测试版WebGL2 ping-pong刚体后端、碰撞/约束并行、骨骼读回与CPU回退 |
 | 六轴IMU共享3D测试网页 | [imu-six-axis-test.md](design/imu-six-axis-test.md) | 手机/电脑模拟六轴输入、校准/滤波、真值对照及多设备房间（已实现，Android真实采集验证） |
 | 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](design/display-camera-chat.md) | 摄像头能力开关、单摄像头拍照、实时预览和聊天图片输入 |

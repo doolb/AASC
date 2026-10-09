@@ -1,3 +1,9 @@
+### MMD-AR 网页导出 PMX
+
+- ✅ [2026-10-09] 编辑器新增“导出 PMX”，将刚体/关节参数及新增、复制、镜像、删除结果下载为`原名称-edited.pmx`。保留原模型其他段、英文名、编码和贴图相对路径；源身份/加载器基线避免坐标及运行时type修正误写；重排同步冲量表情、软体锚点和索引宽度，删除对应源引用。
+  - 新增`web-editor-pmx.mjs`；更新`web-editor-{document,project,ui,build}`及design/spec/task/todo、README/usage/self-test。7项定向回归通过，5个真实模型未编辑字节一致，质量/Z位置编辑后重读正确；网页构建、语法及diff检查通过。
+  - 浏览器下载回归在Chrome/Chromium启动阶段失败（`Target.setDiscoverTargets: Target closed`），未进入页面，下载/ZIP交互和手机/PMX Editor往返待验收。仅独立编辑器变更，Offline产物状态保持；本次提交PMX导出及相关文档，未发布或出APK。用户暂缓Blender后续改动，jsblender替换未实施。
+
 ### Offline 数据修复包 v2
 
 - ✅ [2026-10-08] 发布 `data-repair-v2`，将固定显示端 `offline-display` 的 `showStatusBar` 设置为 `false`，其余显示端状态保持原值。

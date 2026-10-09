@@ -92,7 +92,7 @@ async function buildBlenderBundle(root){
 }
 async function stage(root,{webMode=false}={}){
     const folder=path.join(root,'js');
-    const names=['web-editor-document.mjs','web-editor-bridge.mjs','web-editor-view.mjs','web-editor-project.mjs','web-editor-ui.mjs'];
+    const names=['web-editor-document.mjs','web-editor-bridge.mjs','web-editor-view.mjs','web-editor-pmx.mjs','web-editor-project.mjs','web-editor-ui.mjs'];
     const blenderVersion=webMode?await buildBlenderBundle(root):null;
     await fs.copyFile(path.join(path.dirname(require.resolve('three')),'../examples/jsm/libs/fflate.module.js'),path.join(folder,'web-editor-zip.mjs'));
     await fs.copyFile(path.join(__dirname,'web-editor-zip.LICENSE.txt'),path.join(folder,'web-editor-zip.LICENSE.txt'));
