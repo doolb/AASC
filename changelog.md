@@ -1,5 +1,8 @@
 ### Offline界面修复构建与原生音量柱排查
 
+- ✅ [2026-10-10] 最终构建code-v55.zip，16,936,231字节，SHA-256 640fbd7178a4ca34ab2d765d97c400538350e1bb6c2d236d99e775513426a902；源提交ad3d849d。
+  - 931文件与构建快照逐字节一致，包含全部v53运行资源，ZIP CRC/RSA签名/组件约束通过；保留且排除另行修改的voice-display-node/config.json，其余发布源码与当前工作区一致。v54的Git导出缺少已准备的运行资源，检查未通过且未发布，改用包含运行资源的v55；servicePackage=false，minApk=true/dependenciesPackage=false保持，内外网发布待完成。
+
 - ✅ [2026-10-10] 用户直接实施授权后加入状态圆钮48px内部VAD填色和阈值红线，并修复下方ASR固定小字号。
   - display.html、display-voice-controls.js/CSS读取真实RMS及权威阈值，暂停/停止清零；ASR共享顶部16–36px自适应字号、逻辑宽度和长文本滚动，旋转/键盘重算。最终21文件93/93通过、无跳过，含四向旋转/300%缩放/天气TTS；修正既有弹窗夹具空行缩进提取，截图和语法/diff核对完成；服务包构建发布进行中。
 
