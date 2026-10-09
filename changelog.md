@@ -1,5 +1,7 @@
 ### MMD-AR FSR2轮廓覆盖率修正
 
+- ✅ [2026-10-09] 按用户要求核对关键代码与提交/推送状态：修正提交`ce57b05a`、共享渲染合并提交`3e070d78`均已在远端master；核对时远端引用与本地HEAD完整哈希一致。关键逻辑位于`web-temporal-aa-shader.mjs`：排除零权重深度样本、保留背景贡献、前景内部颜色归一后乘回原覆盖率。本轮仅更新核对记录，用户配置保持未提交。
+
 - ✅ [2026-10-09] 修复FSR2重建筛除背景后扩大前景、比例1用零权重邻接前景替代背景中心的问题。保留前景/背景空间覆盖比例，仅规范化前景内部颜色，深度选择排除零权重样本；普通TAA与比例设置保持。
   - 修改`3rd/mmd-ar-test/web-temporal-aa-shader.mjs`、`tests/mmd-ar-temporal-aa-browser.test.js`；合并远端共享渲染后调整`web-render-settings-build.js`，仅在独立构建副本保留FSR2内部尺寸和PNG旁路。同步design/spec/task/todo/self-test/usage/README。
   - 96组真实GPU空间参考先失败再通过：比例1中心RGBA误差255→0；最大轮廓面积偏差128.859375→30.140625；平均重建覆盖误差约降67%、最终输出误差约降62%。横/竖/45°跨jitter指标保持改善。
