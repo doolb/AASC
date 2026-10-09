@@ -15,6 +15,10 @@ async function stage(root) {
     const runtimeUrl = `./web-screen-lighting.mjs?v=${(await hashFile(path.join(folder, 'web-screen-lighting.mjs'))).sha256.slice(0, 12)}`;
     const aoPath = path.join(folder, 'display-pmx-ao.mjs');
     let source = await fs.readFile(aoPath, 'utf8');
+    if (source.includes('/* aasc-shared:screen-lighting */')) {
+        await require('./web-production-shared').reuseRenderStage(root, ['web-screen-lighting.mjs', 'web-screen-lighting-shader.mjs']);
+        return;
+    }
     source = `import { createScreenLighting } from '${runtimeUrl}';\nimport { compositeChunk } from '${shaderUrl}';\n` + source;
     source = once(source, 'createPmxAmbientOcclusion({ THREE, renderer, scene, camera })', 'createPmxAmbientOcclusion({ THREE, renderer, scene, camera, keyLight })');
     source = once(source, '    let resources = null;', `    let resources = null;
@@ -50,6 +54,7 @@ async function stage(root) {
         'const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera, keyLight });'));
 }
 function panel($) {
+    if ($('#mmdArScreenLighting').length) return;
     const range = (name, label, min, max, step, value) => `<label class="mind-basic-field"><span>${label} <output data-screen-value="${name}">${value}</output></span><input type="range" data-screen-lighting="${name}" min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
     const blurRadius = index => `<label class="mind-basic-field" data-screen-blur-round="${index}"${index > 1 ? ' hidden' : ''}><span>SSGI第${index}轮双边滤波半径 <output data-screen-value="giBlurRadius${index}">3 px</output></span><input type="range" data-screen-lighting="giBlurRadius${index}" min="1" max="5" step="1" value="3"></label>`;
     const contactBlurRadius = index => `<label class="mind-basic-field" data-contact-blur-round="${index}"${index > 1 ? ' hidden' : ''}><span>接触阴影第${index}轮保边模糊半径 <output data-screen-value="contactBlurRadius${index}">3 px</output></span><input type="range" data-screen-lighting="contactBlurRadius${index}" min="1" max="5" step="1" value="3"></label>`;

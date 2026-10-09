@@ -17,6 +17,10 @@ async function stage(root) {
     await fs.writeFile(path.join(folder, 'web-temporal-aa.mjs'), temporal);
     const aoPath = path.join(folder, 'display-pmx-ao.mjs');
     let ao = await fs.readFile(aoPath, 'utf8');
+    if (ao.includes('/* aasc-shared:render-settings */')) {
+        await require('./web-production-shared').reuseRenderStage(root, ['web-temporal-aa.mjs', 'web-render-settings.mjs']);
+        return;
+    }
     ao = `import { createTemporalAA } from '${await url('web-temporal-aa.mjs')}';\n` + ao;
     ao = once(ao, '    let resources = null;', '    let resources = null;\n    let temporalContentKey = "";\n    const temporalAA = createTemporalAA({ THREE, renderer, camera });');
     ao = once(ao, '    const render = () => {', '    const renderSpatial = () => {');
@@ -56,6 +60,7 @@ async function stage(root) {
     await fs.writeFile(runtimePath, runtime);
 }
 function panel($) {
+    if ($('#mmdArTemporalAA').length) return;
     // 倍率独占标题下一行，避免窄屏挤压实际分辨率与恢复默认按钮。
     $('#displayMmdRenderResolution').closest('.display-mmd-lighting-header').after(`<label class="mind-basic-field"><span>Canvas渲染倍率 <output data-render-value="canvasScale">1.00×</output></span><input type="range" data-render-setting="canvasScale" min="0.25" max="2" step="0.25" value="1"><small data-render-limit></small></label>`);
     $('#displayMmdLightingPanel').append(`<section id="mmdArTemporalAA" class="mmd-ar-panel-group">

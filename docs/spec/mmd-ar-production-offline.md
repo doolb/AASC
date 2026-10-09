@@ -197,3 +197,24 @@ DisplayMmdAr.initializeCameraControls:
   规范化范围并通过 DisplayMmd.setArCameraSettings 提交给 PMX runtime
   动作开关仅切换 VMD 播放，物理开关通过重新加载 PMX helper 生效
 ```
+
+## 正式渲染同步（2026-10-09）
+```text
+已有声明: PMX runtime、AO合成、灯光面板、独立构建注入、签名Offline code-only发布
+新增定义: 正式RenderSettings、ScreenLightingSettings、TAA历史、屏幕光照/HZB/滤波资源
+操作流程:
+  正式显示页加载本地mmd-render-settings和mmd-screen-lighting-panel模块
+  用aasc.display.mmd专用键规范化并保存设置，旧正式灯光参数继续使用
+  Canvas倍率0.25至2，乘以原DPR并按GPU纹理/渲染缓冲上限限制；设置变更触发舞台resize
+  resize保留当前预览相机位置和目标，只调整投影及实际Canvas大小
+  TAA默认关闭，历史权重0.9，抖动强度1，周期8，可选4/8/16/32
+  启用TAA时每帧一次空间渲染，pingpong历史按深度重投影拒绝无效样本
+  模型/动作切换、动作开关、尺寸/配置/相机突变时清历史；离屏输出绕过TAA
+  AO合成同时接入接触阴影和SSGI，分别默认关闭；保留已有接触bias/normalBias对齐修正
+  接触阴影4至64步独立于SSGI质量，两个效果各0至3轮保边滤波/逐轮1至5像素半径
+  透明颜色先还原直色再色调映射，最后预乘，TAA呈现与空间合成语义一致
+  WebGL2不可用时关闭对应入口并直接渲染；销毁实例释放所有历史及滤波目标
+  独立构建识别共享渲染标记，仅映射测试命名空间与内容指纹，跳过重复注入/控件
+  验证正式面板保存/恢复/复位、真实GPU合成、独立构建及语音控件不丢失
+  提交推送origion，构建code48，复用已发布依赖/种子/min，签名校验后发布LAN/WAN
+```

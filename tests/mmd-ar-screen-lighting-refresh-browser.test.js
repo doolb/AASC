@@ -12,7 +12,8 @@ const chrome = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath(
     .find(file => file && fs.existsSync(file));
 
 test('刷新保留角色和独立采样设置，正式分类可展开，真实模型接触阴影覆盖内部', {
-    skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')), timeout: process.env.MMD_AR_COMPARE_BASELINE === '1' ? 240000 : 120000
+    skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')),
+    timeout: process.env.MMD_AR_SLOW_GPU === '1' ? 480000 : process.env.MMD_AR_COMPARE_BASELINE === '1' ? 240000 : 120000
 }, async context => {
     let baseline = false;
     const baselineFiles = new Map();
@@ -44,6 +45,8 @@ test('刷新保留角色和独立采样设置，正式分类可展开，真实�
         page.on('pageerror', error => failures.push(error.message));
         page.on('console', message => { if (message.type() === 'error' && /shader|webgl|compile|linkprogram/iu.test(message.text())) failures.push(message.text()); });
         await page.evaluateOnNewDocument(() => {
+            // 本用例验证渲染与存储，避免Ammo初始化占用软件GPU测试的启动预算。
+            localStorage.setItem('aasc.mmdArTest.physicsEnabled.v1', 'false');
             const key = 'aasc.mmdArTest.screenLighting.v1';
             if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ contactEnabled: true, giEnabled: true, quality: 'low', giBlurPassCount: 0 }));
         });

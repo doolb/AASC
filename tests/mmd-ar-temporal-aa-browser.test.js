@@ -101,10 +101,13 @@ test('真实GPU TAA边缘收敛、颜色/透明alpha和揭露历史拒绝', { sk
 });
 
 test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
-    skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')), timeout: 180000
+    // 软件GPU要逐帧完成周期和大倍率测量，允许显式增加总时限，不改变任何断言。
+    skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')), timeout: process.env.MMD_AR_SLOW_GPU === '1' ? 480000 : 180000
 }, async context => {
     await withBrowser(async (page, origin) => {
         await page.setViewport({ width: 320, height: 400 });
+        // 保留真实骨骼动画，渲染回归不依赖Ammo刚体初始化及步进。
+        await page.evaluateOnNewDocument(() => localStorage.setItem('aasc.mmdArTest.physicsEnabled.v1', 'false'));
         await page.goto(`${origin}/?safePhysics=1`, { waitUntil: 'domcontentloaded' });
         const ready = () => page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 45000 });
         await ready();
@@ -112,9 +115,20 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
             if (node.type === 'checkbox') node.checked = setting; else node.value = String(setting);
             node.dispatchEvent(new Event('input', { bubbles: true }));
         }, value);
-        const size = async (width, height) => page.waitForFunction((w, h) => {
-            const c = window.DisplayMmd.getEditorBridge().context.renderer.domElement; return c.width === w && c.height === h;
-        }, {}, width, height);
+        const size = async (width, height) => {
+            try {
+                await page.waitForFunction((w, h) => {
+                    const c = window.DisplayMmd.getEditorBridge().context.renderer.domElement; return c.width === w && c.height === h;
+                }, {}, width, height);
+            } catch (error) {
+                context.diagnostic(JSON.stringify({ expected: [width, height], actual: await page.evaluate(() => {
+                    const c = window.DisplayMmd.getEditorBridge().context.renderer;
+                    return { size: [c.domElement.width, c.domElement.height], dpr: devicePixelRatio,
+                        info: window.MmdArRenderInfo, settings: window.MmdArRenderSettings };
+                }) }));
+                throw error;
+            }
+        };
         for (const dpr of [1, 2]) {
             await page.setViewport({ width: 320, height: 400, deviceScaleFactor: dpr });
             for (const scale of [.25, .5, 1, 1.5, 2]) { await update('canvasScale', scale); await size(320 * dpr * scale, 400 * dpr * scale); }

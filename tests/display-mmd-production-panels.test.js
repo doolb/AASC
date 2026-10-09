@@ -31,7 +31,7 @@ test('正式显示端面板分类、动作进度及开关与标题互不干扰',
                 document.querySelectorAll(`[id="${node.id}"]`).length > 1),
             loadingProgress: !!document.getElementById('displayMmdLoadingProgress')
         }));
-        assert.deepEqual(initial, { lighting: 7, motion: 2, tracking: 4, duplicateIds: false, loadingProgress: true });
+        assert.deepEqual(initial, { lighting: 11, motion: 3, tracking: 6, duplicateIds: false, loadingProgress: true });
         await page.click('#displayMmdMotionToggle');
         const progress = await page.evaluate(() => ({
             visible: !document.getElementById('displayMmdMotionPanel').hidden,
@@ -42,7 +42,7 @@ test('正式显示端面板分类、动作进度及开关与标题互不干扰',
         await page.click('#displayMmdLightingToggle');
         assert.equal(await page.evaluate(() => document.getElementById('displayMmdMotionPanel').hidden), true);
         const ao = await page.evaluate(() => {
-            const group = [...document.querySelectorAll('#displayMmdLightingPanel .display-mmd-panel-group')][2];
+            const group = document.getElementById('displayMmdPmxAoEnabled').closest('.display-mmd-panel-group');
             const button = group.querySelector('.display-mmd-panel-group-toggle');
             const checkbox = group.querySelector('#displayMmdPmxAoEnabled');
             checkbox.click();
