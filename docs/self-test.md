@@ -1212,3 +1212,9 @@ code48发布验证：931包内文件和工作区一致，RSA清单、LAN/WAN所�
 合并远端共享渲染并重建网页后，设置本机PUPPETEER_EXECUTABLE_PATH和MMD_AR_SLOW_GPU=1，九个定向文件串行执行38/38通过、零跳过（temporal-aa、screen-lighting、temporal-aa-browser、contact-shadow-browser、contact-filter-browser、screen-lighting-refresh-browser、background-resume、camera-motion、display-mmd-render-production）。真实米娅模式/320×400输出与160×200内部场景、PNG/透明/尺寸恢复、配置刷新复位、GLB、AO/接触/SSGI、后台/相机全部通过。新空间夹具追加覆盖重心断言后独立复跑1/1通过。构建/语法/差异检查通过。
 
 全仓首轮npm test：1299项，1111通过/159失败/29跳过；Linux固定依赖路径、模型/构建资源、配置和旧VM/文本fixture等问题未在本任务扩修。mmd-ar-apk-parity挂起子进程被精确结束并记为失败；失败全名单见docs/task/20261009_MMDAR_FSR2轮廓覆盖率排查.md。全仓结果并非通过，手机画质/性能也未验收。
+
+## 正式FSR2渲染同步（2026-10-09）
+- `tests/display-mmd-render-production.test.js`验证正式FSR2存储、刷新/复位、PMX加载、空间场景实际降采样尺寸、模式切换和旁路释放。
+- `MMD_RENDER_SOURCE=production node --test --test-name-pattern='真实GPU' tests/mmd-ar-temporal-aa-browser.test.js`用正式模块运行同一解析参考，覆盖96组轮廓面积/重心/像素中心和TAA/FSR2真实Shader。
+- `npm run build:web:mmd-ar-test`验证共享内部尺寸和内容指纹；独立真实模型测试覆盖组合效果及PNG旁路。
+- Chromium软件GPU仅证明正确性，手机WebView视觉/耗时仍需设备验收。

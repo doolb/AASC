@@ -25,6 +25,11 @@ async function withBrowser(action) {
         browser = await puppeteer.launch({ executablePath: chrome, headless: true,
             args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
         const page = await browser.newPage(), errors = [];
+        // 相同解析参考和像素断言也用于正式模块，防止迁移后只验证测试页副本。
+        await page.evaluateOnNewDocument(prefix => { window.__testMmdRenderModulePrefix = prefix; },
+            process.env.MMD_RENDER_SOURCE === 'production'
+                ? '/__source/src/apps/web-mediacenter/ui/public/js/mmd-'
+                : '/__source/3rd/mmd-ar-test/web-');
         page.on('pageerror', error => errors.push(error.message));
         page.on('console', message => { if (message.type() === 'error' && /shader|webgl|compile|linkprogram/iu.test(message.text())) errors.push(message.text()); });
         const origin = `http://127.0.0.1:${server.address().port}`;
@@ -38,7 +43,7 @@ test('真实GPU TAA边缘收敛、颜色/透明alpha和揭露历史拒绝', { sk
         await page.goto(`${origin}/__source/package.json`);
         const result = await page.evaluate(async () => {
             const THREE = await import('/__source/node_modules/three/build/three.module.js');
-            const { createTemporalAA } = await import('/__source/3rd/mmd-ar-test/web-temporal-aa.mjs');
+            const { createTemporalAA } = await import(`${window.__testMmdRenderModulePrefix}temporal-aa.mjs`);
             const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false }); renderer.setSize(64, 64);
             renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
             const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 20);
@@ -105,7 +110,7 @@ test('真实GPU FSR2模式编译并将低分辨率TAA输入升采样到输出画
         await page.goto(`${origin}/__source/package.json`);
         const result = await page.evaluate(async () => {
             const THREE = await import('/__source/node_modules/three/build/three.module.js');
-            const { createTemporalAA } = await import('/__source/3rd/mmd-ar-test/web-temporal-aa.mjs');
+            const { createTemporalAA } = await import(`${window.__testMmdRenderModulePrefix}temporal-aa.mjs`);
             const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false }); renderer.setSize(64, 64);
             const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 20);
             camera.position.z = 4; camera.updateMatrixWorld();
@@ -186,7 +191,7 @@ test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { s
         await page.goto(`${origin}/__source/package.json`);
         const result = await page.evaluate(async () => {
             const THREE = await import('/__source/node_modules/three/build/three.module.js');
-            const { vertexShader, resolveShader, presentShader } = await import('/__source/3rd/mmd-ar-test/web-temporal-aa-shader.mjs');
+            const { vertexShader, resolveShader, presentShader } = await import(`${window.__testMmdRenderModulePrefix}temporal-aa-shader.mjs`);
             const size = 64, renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
             renderer.setSize(size, size); renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
             const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 20);

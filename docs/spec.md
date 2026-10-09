@@ -27,7 +27,7 @@
 | 聊天 TTS 打断与 Offline 定时更新 | [chat-tts-interruption-and-offline-update.md](spec/chat-tts-interruption-and-offline-update.md) | 聊天 TTS 会话代次/阶段协议、前端队列清理和 Android 前台轮询伪代码 |
 | 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](spec/display-chat-mmd.md) | 显示端聊天会话、WebSocket 同步、VRM/MMD 分层、动作与角色手势伪代码 |
 | MMD 图片基准图 AR | [mmd-image-ar.md](spec/mmd-image-ar.md) | 拍照校准、四角选区、本地目标跟踪、姿态平滑和 MMD 绑定伪代码 |
-| 正式 Offline MMD AR 同步 | [mmd-ar-production-offline.md](spec/mmd-ar-production-offline.md) | 正式定位/物理/渲染合成、配置隔离及code-only发布伪代码 |
+| 正式 Offline MMD AR 同步 | [mmd-ar-production-offline.md](spec/mmd-ar-production-offline.md) | 正式定位/物理/渲染合成、TAA/FSR2输入输出尺寸、配置隔离及code-only发布伪代码 |
 | MMD AR 独立测试 APK / HTTPS 网页 | [mmd-ar-test-apk.md](spec/mmd-ar-test-apk.md) | APK 本地页面与 HTTPS 静态页、PMX/MindAR 资源校验、网页动作播放开关及 tracker A/B 对比伪代码 |
 | MMD-AR Blender 工程工作区 | [mmd-ar-blender-workbench.md](spec/mmd-ar-blender-workbench.md) | 用户点击后加载 Blender WASM、选择本地工程目录、打开/预览/保存 `.blend` 的适配伪代码 |
 | MindAR Basic 独立 HTTPS 测试页 | [mindar-basic-web.md](spec/mindar-basic-web.md) | 目标生命周期、IMU/视觉融合、质量观测及传感器降级伪代码 |

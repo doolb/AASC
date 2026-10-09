@@ -484,13 +484,16 @@
           <label>SSGI质量 <select data-screen-lighting="quality"><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
           <p data-screen-status="" class="mind-basic-note">默认关闭。</p>
           <p class="mind-basic-note">近似可见表面的彩色漫反射；滤波仅平滑反弹光颜色。</p></div></section></div></section></div><section id="mmdArTemporalAA" class="display-mmd-panel-group">
-      <div class="display-mmd-panel-group-header"><label class="display-mmd-panel-group-switch"><input type="checkbox" data-render-setting="taaEnabled" aria-label="启用TAA"></label>
+      <div class="display-mmd-panel-group-header"><label class="display-mmd-panel-group-switch"><input type="checkbox" data-render-setting="taaEnabled" aria-label="启用抗锯齿"></label>
         <button class="display-mmd-panel-group-toggle" type="button" aria-controls="mmdArTemporalAABody" aria-expanded="false" data-render-group="" data-group-title="抗锯齿" aria-label="展开抗锯齿设置"><span>抗锯齿</span></button></div>
       <div id="mmdArTemporalAABody" class="display-mmd-panel-group-body" hidden="">
+        <label class="mind-basic-field"><span>抗锯齿方式</span><select data-render-setting="aaMode"><option value="taa" selected>TAA</option><option value="fsr2">FSR2（无运动矢量）</option></select></label>
+        <label class="mind-basic-field"><span>FSR2内部渲染比例 <output data-render-value="fsr2Scale">0.67×</output></span><input type="range" data-render-setting="fsr2Scale" min="0.5" max="1" step="0.01" value="0.67"></label>
         <label class="mind-basic-field"><span>TAA累积强度 <output data-render-value="taaHistoryWeight">0.90</output></span><input type="range" data-render-setting="taaHistoryWeight" min="0" max="0.95" step="0.05" value="0.9"></label>
         <label class="mind-basic-field"><span>抖动强度 <output data-render-value="taaJitterScale">1.00</output></span><input type="range" data-render-setting="taaJitterScale" min="0" max="2" step="0.05" value="1"></label>
         <label class="mind-basic-field"><span>抖动周期</span><select data-render-setting="taaJitterSamples"><option value="4">4帧</option><option value="8" selected="">8帧</option><option value="16">16帧</option><option value="32">32帧</option></select></label>
-        <p class="mind-basic-note">每帧绘制一次；强度0取消偏移但保留历史混合，较大强度可能使画面变软。</p>
+        <p class="mind-basic-note">FSR2为WebGL2时域升采样近似，不使用物体运动矢量；动态角色可能残影。每帧仅绘制一次场景。</p>
+        <p class="mind-basic-note">TAA强度0取消偏移但保留历史混合；较大抖动可能使画面变软。</p>
         <p class="mind-basic-note" data-taa-status=""></p></div></section>
 </section>
             </div>

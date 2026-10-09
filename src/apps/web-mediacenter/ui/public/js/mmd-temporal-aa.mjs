@@ -23,7 +23,7 @@ const extendedSamples = Array.from({ length: 32 }, (_, index) => jitterSamples[i
 const jitterSequences = new Map(jitterSampleCounts.map(count => [count, Object.freeze(extendedSamples.slice(0, count))]));
 export function createTemporalAA({ THREE, renderer, camera, getSettings = () => window.DisplayMmdRenderSettings || {} }) {
     let resources = null, phase = 0, valid = false, lastSignature = '', lastHistoryUsed = false;
-    const base = new THREE.Matrix4(), inverse = new THREE.Matrix4(), size = new THREE.Vector2();
+    const base = new THREE.Matrix4(), inverse = new THREE.Matrix4(), inputSize = new THREE.Vector2(), outputSize = new THREE.Vector2();
     const previousBase = new THREE.Matrix4(), previousWorld = new THREE.Matrix4();
     const supported = renderer.capabilities.isWebGL2 === true;
     const invalidate = () => { valid = false; phase = 0; };
@@ -35,60 +35,82 @@ export function createTemporalAA({ THREE, renderer, camera, getSettings = () => 
         }
         invalidate();
     };
-    const create = (width, height) => {
-        if (resources?.current.width === width && resources.current.height === height) return;
+    const create = (inputWidth, inputHeight, outputWidth, outputHeight) => {
+        if (resources?.current.width === inputWidth && resources.current.height === inputHeight
+            && resources.colors[0].width === outputWidth && resources.colors[0].height === outputHeight) return;
         release();
         const type = renderer.extensions.has('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
-        const target = (targetType, filter) => new THREE.WebGLRenderTarget(width, height, {
+        const target = (targetType, filter, width, height) => new THREE.WebGLRenderTarget(width, height, {
             depthBuffer: false, type: targetType, format: THREE.RGBAFormat, minFilter: filter, magFilter: filter });
         const material = (fragmentShader, uniforms, toneMapped = false) => new THREE.ShaderMaterial({
             vertexShader, fragmentShader, uniforms, toneMapped, depthTest: false, depthWrite: false, blending: THREE.NoBlending });
         const uniforms = { tCurrent: { value: null }, tHistory: { value: null }, tHistoryDepth: { value: null }, tDepth: { value: null },
             inverseProjection: { value: camera.projectionMatrixInverse }, cameraWorld: { value: camera.matrixWorld },
             previousView: { value: new THREE.Matrix4() }, previousProjection: { value: new THREE.Matrix4() },
-            previousInverseProjection: { value: new THREE.Matrix4() }, size: { value: size },
-            historyWeight: { value: .9 }, historyValid: { value: false } };
+            previousInverseProjection: { value: new THREE.Matrix4() }, inputSize: { value: inputSize }, outputSize: { value: outputSize },
+            historyWeight: { value: .9 }, historyValid: { value: false }, upscaleEnabled: { value: false } };
         const resolve = material(resolveShader, uniforms);
         const depth = material(depthShader, { tDepth: uniforms.tDepth });
-        const present = material(presentShader, { tColor: { value: null } }, true);
+        const present = material(presentShader, { tColor: { value: null }, outputSize: { value: new THREE.Vector2(outputWidth, outputHeight) }, edgeAaEnabled: { value: false } }, true);
         const geometry = new THREE.PlaneGeometry(2, 2), quad = new THREE.Mesh(geometry, resolve);
         const passScene = new THREE.Scene(); passScene.add(quad);
-        resources = { current: target(type, THREE.NearestFilter), colors: [target(type, THREE.LinearFilter), target(type, THREE.LinearFilter)],
-            depths: [target(THREE.UnsignedByteType, THREE.NearestFilter), target(THREE.UnsignedByteType, THREE.NearestFilter)],
+        resources = { current: target(type, THREE.NearestFilter, inputWidth, inputHeight),
+            colors: [target(type, THREE.LinearFilter, outputWidth, outputHeight), target(type, THREE.LinearFilter, outputWidth, outputHeight)],
+            depths: [target(THREE.UnsignedByteType, THREE.NearestFilter, outputWidth, outputHeight),
+                target(THREE.UnsignedByteType, THREE.NearestFilter, outputWidth, outputHeight)],
             resolve, depth, present, geometry, quad, passScene, passCamera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), readIndex: 0 };
     };
     const render = (draw, getDepth, { bypass = false, signature = '' } = {}) => {
         const config = normalizeRenderSettings(getSettings());
-        if (!supported || !config.taaEnabled || bypass) { release(); draw(); return; }
-        renderer.getDrawingBufferSize(size); create(size.x, size.y);
-        const nextSignature = `${config.taaHistoryWeight}:${config.taaJitterScale}:${config.taaJitterSamples}:${signature}`;
+        if (!supported || !config.taaEnabled || bypass) {
+            release();
+            const oldUpscale = camera.userData.mmdArTaaUpscaleActive;
+            camera.userData.mmdArTaaUpscaleActive = false;
+            try { draw(); }
+            finally {
+                if (oldUpscale === undefined) delete camera.userData.mmdArTaaUpscaleActive;
+                else camera.userData.mmdArTaaUpscaleActive = oldUpscale;
+            }
+            return;
+        }
+        renderer.getDrawingBufferSize(outputSize);
+        const upscaleEnabled = config.aaMode === 'fsr2';
+        const inputScale = upscaleEnabled ? config.fsr2Scale : 1;
+        inputSize.set(Math.max(1, Math.floor(outputSize.x * inputScale)), Math.max(1, Math.floor(outputSize.y * inputScale)));
+        create(inputSize.x, inputSize.y, outputSize.x, outputSize.y);
+        const nextSignature = `${config.aaMode}:${config.fsr2Scale}:${config.taaHistoryWeight}:${config.taaJitterScale}:${config.taaJitterSamples}:${signature}`;
         if (lastSignature !== nextSignature) invalidate(); lastSignature = nextSignature;
         camera.updateMatrixWorld(true); base.copy(camera.projectionMatrix); inverse.copy(camera.projectionMatrixInverse);
         if (valid && isCameraCut(previousWorld, camera.matrixWorld, previousBase, base)) invalidate();
         const previousTarget = renderer.getRenderTarget();
         const oldBase = camera.userData.mmdArTaaBaseProjection, oldPhase = camera.userData.mmdArTaaPhase;
+        const oldUpscale = camera.userData.mmdArTaaUpscaleActive;
         const read = resources.readIndex, write = 1 - read, uniforms = resources.resolve.uniforms;
         try {
             const sequence = jitterSequences.get(config.taaJitterSamples), sampleIndex = phase % sequence.length;
             const [x, y] = sequence[sampleIndex];
-            // row0/row1加row3的偏移，保留原投影所有裁切与透视参数。
+            // 抖动以当前场景输入像素为单位；FSR2模式下按内部目标尺寸计算。
             const elements = camera.projectionMatrix.elements;
             for (let column = 0; column < 4; column += 1) {
-                elements[column * 4] += 2 * x * config.taaJitterScale / size.x * base.elements[column * 4 + 3];
-                elements[column * 4 + 1] += 2 * y * config.taaJitterScale / size.y * base.elements[column * 4 + 3];
+                elements[column * 4] += 2 * x * config.taaJitterScale / inputSize.x * base.elements[column * 4 + 3];
+                elements[column * 4 + 1] += 2 * y * config.taaJitterScale / inputSize.y * base.elements[column * 4 + 3];
             }
             camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
             camera.userData.mmdArTaaBaseProjection = base; camera.userData.mmdArTaaPhase = sampleIndex;
+            camera.userData.mmdArTaaUpscaleActive = upscaleEnabled;
             renderer.setRenderTarget(resources.current); draw();
             const depth = getDepth();
             if (!depth) throw new Error('TAA缺少当前场景深度');
             uniforms.tCurrent.value = resources.current.texture; uniforms.tDepth.value = depth;
             uniforms.tHistory.value = resources.colors[read].texture; uniforms.tHistoryDepth.value = resources.depths[read].texture;
+            uniforms.inputSize.value.copy(inputSize); uniforms.outputSize.value.copy(outputSize); uniforms.upscaleEnabled.value = upscaleEnabled;
             uniforms.historyValid.value = valid; uniforms.historyWeight.value = Math.min(.95, Math.max(0, Number(config.taaHistoryWeight) || 0));
             lastHistoryUsed = valid;
             const pass = (material, target) => { resources.quad.material = material; renderer.setRenderTarget(target); renderer.clear(); renderer.render(resources.passScene, resources.passCamera); };
             pass(resources.resolve, resources.colors[write]); pass(resources.depth, resources.depths[write]);
             resources.present.uniforms.tColor.value = resources.colors[write].texture;
+            resources.present.uniforms.outputSize.value.copy(outputSize);
+            resources.present.uniforms.edgeAaEnabled.value = upscaleEnabled;
             pass(resources.present, previousTarget);
             uniforms.previousView.value.copy(camera.matrixWorldInverse); uniforms.previousProjection.value.copy(camera.projectionMatrix);
             uniforms.previousInverseProjection.value.copy(camera.projectionMatrixInverse);
@@ -99,6 +121,7 @@ export function createTemporalAA({ THREE, renderer, camera, getSettings = () => 
             camera.projectionMatrix.copy(base); camera.projectionMatrixInverse.copy(inverse);
             if (oldBase === undefined) delete camera.userData.mmdArTaaBaseProjection; else camera.userData.mmdArTaaBaseProjection = oldBase;
             if (oldPhase === undefined) delete camera.userData.mmdArTaaPhase; else camera.userData.mmdArTaaPhase = oldPhase;
+            if (oldUpscale === undefined) delete camera.userData.mmdArTaaUpscaleActive; else camera.userData.mmdArTaaUpscaleActive = oldUpscale;
             renderer.setRenderTarget(previousTarget);
         }
     };
@@ -110,5 +133,7 @@ export function createTemporalAA({ THREE, renderer, camera, getSettings = () => 
     const dispose = () => { release(); for (const [target, name] of handlers) target.removeEventListener(name, invalidate); handlers.length = 0; };
     return { render, invalidate, dispose, active: () => supported && getSettings().taaEnabled === true,
         getState: () => ({ supported, historyValid: valid, lastHistoryUsed, phase, targetCount: resources ? 5 : 0,
-            width: resources?.current.width || 0, height: resources?.current.height || 0 }) };
+            mode: getSettings().aaMode === 'fsr2' ? 'fsr2' : 'taa',
+            width: resources?.colors[0].width || 0, height: resources?.colors[0].height || 0,
+            inputWidth: resources?.current.width || 0, inputHeight: resources?.current.height || 0 }) };
 }

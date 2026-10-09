@@ -17,7 +17,7 @@ async function stage(root) {
     await fs.writeFile(path.join(folder, 'web-temporal-aa.mjs'), temporal);
     const aoPath = path.join(folder, 'display-pmx-ao.mjs');
     let ao = await fs.readFile(aoPath, 'utf8');
-    // 正式渲染共用后，独立FSR2仍需内部尺寸与PNG旁路；仅修改构建副本，避免重复插入TAA。
+    // 未合并的旧源码仍需注入FSR2；共享正式实现只转换命名空间和指纹。
     const withInternalSize = source => once(source, '    const renderSpatial = () => {\n        const normalPreview = window.MmdArTestNormalPreview === true;', `    const renderSpatial = () => {
         const normalPreview = window.MmdArTestNormalPreview === true;
         const settings = normalizeRenderSettings(window.MmdArRenderSettings);
@@ -29,9 +29,12 @@ async function stage(root) {
         if (fullWidth !== internalWidth || fullHeight !== internalHeight) resize(internalWidth, internalHeight);`);
     if (ao.includes('/* aasc-shared:render-settings */')) {
         await require('./web-production-shared').reuseRenderStage(root, ['web-temporal-aa.mjs', 'web-render-settings.mjs']);
-        ao = `import { normalizeRenderSettings } from '${settingsUrl}';\n` + withInternalSize(await fs.readFile(aoPath, 'utf8'));
-        ao = once(ao, 'bypass: options.bypassTemporal === true ||', 'bypass: camera.userData.mmdArTaaBypass === true || options.bypassTemporal === true ||');
-        await fs.writeFile(aoPath, ao);
+        ao = await fs.readFile(aoPath, 'utf8');
+        if (!ao.includes('/* aasc-shared:fsr2-internal-size */')) {
+            ao = `import { normalizeRenderSettings } from '${settingsUrl}';\n` + withInternalSize(ao);
+            ao = once(ao, 'bypass: options.bypassTemporal === true ||', 'bypass: camera.userData.mmdArTaaBypass === true || options.bypassTemporal === true ||');
+            await fs.writeFile(aoPath, ao);
+        }
         return;
     }
     ao = `import { createTemporalAA } from '${await url('web-temporal-aa.mjs')}';\nimport { normalizeRenderSettings } from '${settingsUrl}';\n` + ao;
