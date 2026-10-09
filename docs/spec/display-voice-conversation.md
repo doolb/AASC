@@ -723,6 +723,23 @@ animateMonitor(timestamp):
 
 ## 显示端语音 UI 顶部居中
 
+### 原生音量柱待确认伪代码（2026-10-10，尚未实施）
+
+```text
+收到有效原生 PCM 分块:
+    沿用现有解码和 RMS 计算
+    记录 latestRms 及最新音量更新时间
+原生采集暂停、恢复或停止:
+    清除旧 RMS 和更新时间，等待新分块
+已有 animateMonitor 每帧:
+    当前原生采集有效且正在监听时，读取最新 RMS
+    信号过期时目标音量归零；对目标音量做时间相关平滑
+    用真实音量绘制柱状图，不表示各频段幅度
+    浏览器采集继续读取并复用 AnalyserNode 频谱数组
+    非监听或暂停时清除原生显示残值，绘制待机柱
+    复用唯一 requestAnimationFrame 循环，不另开麦克风
+```
+
 ```text
 applyVoiceTopCenterLayout(rotationLayout):
     voiceStatusRow 包含 voiceStatus 和 monitorWrapper，使用 flex 横向排列并整体居中
