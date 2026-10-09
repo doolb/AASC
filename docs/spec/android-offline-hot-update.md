@@ -156,13 +156,50 @@ parseCliArguments:
     accept bare --skip-signature-verification once
     reject a value supplied to --skip-signature-verification
     accept --source-url, --local-root and --public-key as value parameters
+    accept bare --watch once
+    accept --interval-minutes <positive safe integer> once when supplied
+    if --watch is present and --interval-minutes is absent:
+        set intervalMinutes = 10
+    reject --interval-minutes without --watch
     in parent mode, --source-url and --local-root both name the shared /mnt parent
+
+runCli:
+    options = parseCliArguments(argv)
+    if options.watch is false:
+        execute one syncOfflineUpdate(options)
+        return
+
+    install SIGINT handler that marks watch as stopped
+    while watch is not stopped:
+        try:
+            execute one syncOfflineUpdate(options) immediately
+            print this round's success summary
+        catch error:
+            print this round's failure
+            do not set process exitCode; continue watching
+        if watch is stopped:
+            break
+        wait intervalMinutes after this round has fully completed
+        if SIGINT occurs while waiting:
+            cancel the wait and exit without starting another round
+    if SIGINT occurs during a sync:
+        allow that round to finish safely, then exit without another round
+    remove SIGINT handler in finally
 
 securityBoundary:
     without --skip-signature-verification, local RSA signature verification is required
     with --skip-signature-verification, component hashes only compare downloaded bytes
         with the untrusted manifest; they do not authenticate the source
     Android clients continue to verify the manifest signature before applying updates
+```
+
+```text
+watch timing invariants:
+    first sync begins immediately after CLI validation
+    start no next sync until the current sync has resolved and intervalMinutes have elapsed
+    a failed sync is a completed round; wait the same interval and continue
+    no overlapping sync rounds are allowed
+    without --watch, preserve existing one-shot behavior and exit-code semantics
 ```
 
 ```text
@@ -175,6 +212,8 @@ publishOfflineUpdate:
 ```
 
 实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。父目录模式默认源为公网 `/mnt/`、本地根为 `/mnt`；服务更新分别位于 `aasc-offline/`，MMD 资源递归同步至同级 `mmd/`。可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。同步显示当前文件名、单文件字节/百分比和总字节/百分比；MMD 递归目录以 HEAD 元数据和本地 SHA-256 状态跳过重复下载，并逐文件原子替换，不清理本地额外文件。旧的直接 `/aasc-offline/` 源地址继续只同步服务更新。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过（此前同步功能记录）。
+
+watch 实现结果：`--watch` 未指定 `--interval-minutes` 时默认 10 分钟；显式间隔仅接受可安全转换的正整数分钟。首轮立即执行，每轮结束后开始间隔等待，失败不终止循环，SIGINT 取消等待或在活动轮结束后安全退出。无 `--watch` 保持单次模式；watch 专项回归 8/8 通过。
 
 > 2026-09-23 已重新构建并发布 `allserver-min` v34（`0.2.32-offline-min`），APK 大小 `89302814` bytes，SHA-256 为 `b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea`；内网和外网清单、资源大小/SHA-256 及旧 min 版本精确清理校验通过，完整 APK 未构建。
 

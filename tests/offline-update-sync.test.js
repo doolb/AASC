@@ -11,7 +11,9 @@ const test = require('node:test');
 const {
     parseCliArguments,
     selectSyncComponents,
-    syncOfflineUpdate
+    syncOfflineUpdate,
+    runWatchMode,
+    waitForInterval
 } = require('../scripts/ops/sync-offline-update');
 const { signManifestPayload } = require('../scripts/ops/offline-update-package');
 
@@ -158,4 +160,131 @@ test('sync refuses same-version hash conflicts before replacing the manifest', a
         publicKeyPem: fixture.publicKeyPem
     }), /同版本资源已有不同内容/);
     assert.equal(await fs.promises.readFile(path.join(fixture.localRoot, 'manifest.json'), 'utf8'), '{"old":true}\n');
+});
+
+test('sync CLI validates watch interval and defaults to ten minutes', () => {
+    assert.deepEqual(parseCliArguments([]), {});
+    assert.deepEqual(parseCliArguments(['--watch']), {
+        watch: true,
+        intervalMinutes: 10
+    });
+    assert.deepEqual(parseCliArguments(['--watch', '--interval-minutes', '5']), {
+        watch: true,
+        intervalMinutes: 5
+    });
+    assert.deepEqual(parseCliArguments(['--interval-minutes=12', '--watch']), {
+        intervalMinutes: 12,
+        watch: true
+    });
+
+    for (const args of [
+        ['--interval-minutes', '1'],
+        ['--watch', '--interval-minutes', '0'],
+        ['--watch', '--interval-minutes', '-1'],
+        ['--watch', '--interval-minutes', '1.5'],
+        ['--watch', '--interval-minutes', '1e2'],
+        ['--watch', '--interval-minutes', '9007199254740991'],
+        ['--watch', '--watch', '--interval-minutes', '1'],
+        ['--watch', '--interval-minutes', '1', '--interval-minutes', '2'],
+        ['--watch=true', '--interval-minutes', '1']
+    ]) {
+        assert.throws(() => parseCliArguments(args));
+    }
+});
+
+test('watch mode uses the default ten-minute interval', async () => {
+    const options = parseCliArguments(['--watch']);
+    const controller = new AbortController();
+    const intervals = [];
+    const result = await runWatchMode(options, {
+        signal: controller.signal,
+        logger: { log() {}, error() {} },
+        async syncOnce() { return {}; },
+        async wait(intervalMs) {
+            intervals.push(intervalMs);
+            controller.abort();
+            return false;
+        }
+    });
+
+    assert.deepEqual(result, { rounds: 1 });
+    assert.deepEqual(intervals, [10 * 60_000]);
+});
+
+test('watch mode runs immediately, serializes rounds, waits after failures, and continues', async () => {
+    const controller = new AbortController();
+    const sequence = [];
+    const errors = [];
+    const successfulRounds = [];
+    let active = false;
+    let syncCalls = 0;
+    let waitCalls = 0;
+
+    const result = await runWatchMode({ intervalMinutes: 5 }, {
+        signal: controller.signal,
+        logger: {
+            log() {},
+            error(message) { errors.push(message); }
+        },
+        syncOnce: async () => {
+            assert.equal(active, false, '不会有同步轮次重叠');
+            active = true;
+            syncCalls += 1;
+            sequence.push(`sync-${syncCalls}-start`);
+            await Promise.resolve();
+            active = false;
+            sequence.push(`sync-${syncCalls}-end`);
+            if (syncCalls === 1) throw new Error('模拟网络失败');
+            return { round: syncCalls };
+        },
+        onSuccess(_value, round) {
+            successfulRounds.push(round);
+        },
+        async wait(intervalMs, signal) {
+            assert.equal(active, false, '必须等当前同步结束后才等待');
+            assert.equal(intervalMs, 5 * 60_000);
+            waitCalls += 1;
+            sequence.push(`wait-${waitCalls}`);
+            if (waitCalls === 2) controller.abort();
+            return !signal.aborted;
+        }
+    });
+
+    assert.deepEqual(result, { rounds: 2 });
+    assert.deepEqual(sequence, [
+        'sync-1-start', 'sync-1-end', 'wait-1',
+        'sync-2-start', 'sync-2-end', 'wait-2'
+    ]);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /第 1 轮同步失败/);
+    assert.deepEqual(successfulRounds, [2]);
+});
+
+test('watch mode finishes an active round after Ctrl+C and starts no next round', async () => {
+    const controller = new AbortController();
+    let releaseSync;
+    let waitCalls = 0;
+    const syncPromise = new Promise((resolve) => { releaseSync = resolve; });
+    const runPromise = runWatchMode({ intervalMinutes: 1 }, {
+        signal: controller.signal,
+        logger: { log() {}, error() {} },
+        syncOnce: () => syncPromise,
+        async wait() {
+            waitCalls += 1;
+            return true;
+        }
+    });
+
+    await Promise.resolve();
+    controller.abort();
+    releaseSync({});
+    assert.deepEqual(await runPromise, { rounds: 1 });
+    assert.equal(waitCalls, 0);
+});
+
+test('watch interval wait resolves immediately when aborted', async () => {
+    const controller = new AbortController();
+    const waiting = waitForInterval(60_000, controller.signal);
+    controller.abort();
+    assert.equal(await waiting, false);
 });

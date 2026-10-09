@@ -22,6 +22,10 @@ Offline APK 的热更读取源扩展为家庭内网、公司内网和外网三�
 
 2026-09-23 同步入口统一使用父目录：`--source-url` 指向远端 `/mnt/`，`--local-root` 指向本地 `mnt`，脚本将服务更新同步到 `aasc-offline/`，并将远端 `mmd/` 递归同步到同级本地 `mmd/`。MMD 只跟随同源目录索引，拒绝跨源、越界和不安全相对路径；文件经 HEAD 元数据检查并流式写入临时文件后原子替换。隐藏的 `.offline-mmd-sync-state.json` 保存远端 ETag/Last-Modified、大小和本地 SHA-256，元数据不变且本地 hash 仍匹配时跳过重复下载。不会删除本地多余文件；传统直接指向 `/aasc-offline/` 的 `--source-url` 继续按旧模式只同步服务更新。
 
+## Offline 同步 watch 模式
+
+`sync:offline-update` 默认维持单次同步。显式使用 `--watch` 后立即执行首轮；未指定 `--interval-minutes` 时默认间隔为 10 分钟，显式间隔必须为正整数。每轮完整结束后再等待指定时长，之后串行发起下一轮，因此同步耗时会额外叠加在轮次间隔之前，不会并发覆盖资源。某轮失败只记录该轮错误，不终止 watcher，也不改变单次模式的失败退出码语义。Ctrl+C 取消等待并阻止下一轮；若同步正在执行，允许当前轮收尾后退出，避免打断临时文件校验或清单原子替换。任务只影响 Node CLI，无 Android 更新端行为变化。
+
 实现验证：Node 更新/同步定向测试通过，Android Offline JVM 单测 25/25 通过；现有 Android 静态回归中的更新面板左边距和固定 displayId 两项断言仍为既有失败，与本次热更源改动无关。基于本次改动重新构建并发布服务 `code-v34`（复用 `dependencies-v6`）和 `allserver-min` v34（`0.2.32-offline-min`），完整 APK 未构建。
 
 ## 状态

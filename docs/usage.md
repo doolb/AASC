@@ -464,11 +464,19 @@ http://c.aasc.us/mnt/aasc-offline/
 发布器的上传目标不随热更读取源增加而改变：本机默认写入 `/mnt/aasc-offline`，外网通过 SCP 写入
 `as@120.79.245.103:~/a/aasc-offline`。如果本机热更目录不同，发布时使用 `--local-root` 指定。
 
-从外网资源包同步到本机时执行：
+从外网资源包同步到本机时执行一次同步：
 
 ```powershell
 npm run sync:offline-update -- --skip-signature-verification --source-url "http://120.79.245.103/mnt/" --local-root "D:\Program Files\nginx-1.29.5\html\mnt"
 ```
+
+需要持续检查时，可显式指定正整数分钟间隔；省略 `--interval-minutes` 时默认为 10 分钟：
+
+```powershell
+npm run sync:offline-update -- --watch --interval-minutes 5 --skip-signature-verification --source-url "http://120.79.245.103/mnt/" --local-root "D:\Program Files\nginx-1.29.5\html\mnt"
+```
+
+watch 启动后立即执行首轮；每轮完整结束后等待指定分钟再开始下一轮，轮次串行执行。单轮失败会记录错误并在等待后继续；按 Ctrl+C 会取消等待并停止后续轮次，若当时正在同步则等当前轮安全结束后退出。不带 `--watch` 仍只同步一次；`--interval-minutes` 只能与 `--watch` 搭配。
 
 父目录模式下，`--local-root` 也可通过 `AASC_OFFLINE_LOCAL_ROOT` 指定，`--source-url` 指向远端父目录。服务更新清单从远端 `aasc-offline/` 读取，写入本地 `aasc-offline/`；远端 `mmd/` 目录树同步到本地同级 `mmd/`。上例的目标路径为
 `D:\Program Files\nginx-1.29.5\html\mnt\aasc-offline` 和

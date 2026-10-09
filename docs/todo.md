@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-10-09，code v47/min v34 已发布）
+# Web MediaCenter - 未完成任务列表（更新于 2026-10-09，code v47/min v34 已发布；Offline 同步 watch 默认 10 分钟）
 
 - ⏳待设备验收 [2026-10-09] 独立MMD AR TAA与Canvas倍率：代码和本地网页构建已实现，桌面GPU/真实模型验证后需手机WebView检查快速发片/衣服残影、实际AR投影、操作系统后台、0.5/1/2倍率帧时与显存；TAA默认关闭/倍率1，不承诺实机提速。任务：`docs/task/20261009_MMDAR_TAA与Canvas倍率.md`。
 

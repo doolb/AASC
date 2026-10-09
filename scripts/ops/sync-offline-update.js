@@ -21,6 +21,7 @@ const DEFAULT_SOURCE_URL = 'http://120.79.245.103/mnt/aasc-offline/';
 const DEFAULT_LOCAL_ROOT = '/mnt/aasc-offline';
 const DEFAULT_SYNC_SOURCE_ROOT = 'http://120.79.245.103/mnt/';
 const DEFAULT_SYNC_LOCAL_ROOT = '/mnt';
+const DEFAULT_WATCH_INTERVAL_MINUTES = 10;
 const SOURCE_ENV = 'AASC_OFFLINE_SYNC_SOURCE';
 const LOCAL_ROOT_ENV = 'AASC_OFFLINE_LOCAL_ROOT';
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
@@ -740,16 +741,15 @@ function parseCliArguments(argv) {
         if (!token.startsWith('--')) throw new Error(`不支持的位置参数: ${token}`);
         const equalIndex = token.indexOf('=');
         const key = equalIndex >= 0 ? token.slice(2, equalIndex) : token.slice(2);
-        if (key === 'skip-signature-verification') {
+        if (key === 'skip-signature-verification' || key === 'watch') {
             if (equalIndex >= 0) throw new Error(`参数 --${key} 不接受值`);
-            if (Object.hasOwn(parsed, 'skipSignatureVerification')) {
-                throw new Error(`参数 --${key} 不能重复`);
-            }
-            parsed.skipSignatureVerification = true;
+            const fieldName = key === 'watch' ? 'watch' : 'skipSignatureVerification';
+            if (Object.hasOwn(parsed, fieldName)) throw new Error(`参数 --${key} 不能重复`);
+            parsed[fieldName] = true;
             continue;
         }
         const value = equalIndex >= 0 ? token.slice(equalIndex + 1) : argv[++index];
-        if (!['source-url', 'local-root', 'public-key'].includes(key)) {
+        if (!['source-url', 'local-root', 'public-key', 'interval-minutes'].includes(key)) {
             throw new Error(`未知同步参数: --${key}`);
         }
         if (typeof value !== 'string' || value.startsWith('--')) {
@@ -757,9 +757,104 @@ function parseCliArguments(argv) {
         }
         const fieldName = key.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
         if (Object.hasOwn(parsed, fieldName)) throw new Error(`参数 --${key} 不能重复`);
+        if (key === 'interval-minutes') {
+            if (!/^\d+$/.test(value)) throw new Error('参数 --interval-minutes 必须是正整数分钟');
+            const intervalMinutes = Number(value);
+            const maxMinutes = Math.floor(Number.MAX_SAFE_INTEGER / 60_000);
+            if (!Number.isSafeInteger(intervalMinutes) || intervalMinutes < 1 || intervalMinutes > maxMinutes) {
+                throw new Error('参数 --interval-minutes 必须是可表示的正整数分钟');
+            }
+            parsed[fieldName] = intervalMinutes;
+            continue;
+        }
         parsed[fieldName] = value;
     }
+    if (parsed.watch && !Object.hasOwn(parsed, 'intervalMinutes')) {
+        parsed.intervalMinutes = DEFAULT_WATCH_INTERVAL_MINUTES;
+    }
+    if (!parsed.watch && Object.hasOwn(parsed, 'intervalMinutes')) {
+        throw new Error('参数 --interval-minutes 只能与 --watch 一起使用');
+    }
     return parsed;
+}
+
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+function waitForInterval(intervalMs, signal) {
+    return new Promise((resolve) => {
+        let remainingMs = intervalMs;
+        let timer = null;
+        const finish = (completed) => {
+            if (timer !== null) clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            resolve(completed);
+        };
+        const onAbort = () => finish(false);
+        const scheduleChunk = () => {
+            if (signal?.aborted) {
+                finish(false);
+                return;
+            }
+            const delayMs = Math.min(remainingMs, MAX_TIMER_DELAY_MS);
+            timer = setTimeout(() => {
+                remainingMs -= delayMs;
+                if (remainingMs <= 0) {
+                    finish(true);
+                    return;
+                }
+                scheduleChunk();
+            }, delayMs);
+        };
+
+        if (signal?.aborted) {
+            finish(false);
+            return;
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
+        scheduleChunk();
+    });
+}
+
+async function runWatchMode(options, dependencies = {}) {
+    const intervalMs = options.intervalMinutes * 60_000;
+    const signal = dependencies.signal;
+    const syncOnce = dependencies.syncOnce || (() => syncOfflineUpdate(options));
+    const wait = dependencies.wait || waitForInterval;
+    const logger = dependencies.logger || console;
+    let round = 0;
+
+    while (!signal?.aborted) {
+        round += 1;
+        logger.log(`[watch] 第 ${round} 轮开始同步`);
+        try {
+            const result = await syncOnce();
+            if (dependencies.onSuccess) dependencies.onSuccess(result, round);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error(`[watch] 第 ${round} 轮同步失败，稍后继续：${errorMessage}`);
+        }
+        if (signal?.aborted) break;
+        logger.log(`[watch] 第 ${round} 轮结束，${options.intervalMinutes} 分钟后开始下一轮`);
+        const completed = await wait(intervalMs, signal);
+        if (!completed) break;
+    }
+    return { rounds: round };
+}
+
+function logSyncResult(result) {
+    console.log(`外网资源同步完成: ${result.sourceRoot} -> ${result.localParentRoot}`);
+    console.log(`Offline 更新目录: ${result.sourceUrl} -> ${result.localRoot}`);
+    console.log(`已安装: ${result.installed.join(', ') || '无'}；已复用: ${result.skipped.join(', ') || '无'}`);
+    if (result.mmd) {
+        console.log(`MMD 目录同步完成: ${result.mmd.sourceUrl} -> ${result.mmd.localRoot}`);
+        console.log(
+            `MMD 已安装 ${result.mmd.installed.length} 个文件；已复用 ${result.mmd.skipped.length} 个文件；` +
+            `总大小 ${formatProgressBytes(result.mmd.totalBytes)}`
+        );
+    }
+    if (result.cleanup.errors.length > 0) {
+        console.warn(`过时资源清理待重试: ${JSON.stringify(result.cleanup.errors)}`);
+    }
 }
 
 async function runCli(argv = process.argv.slice(2)) {
@@ -769,23 +864,31 @@ async function runCli(argv = process.argv.slice(2)) {
         if (options.skipSignatureVerification) {
             console.warn('警告：已跳过清单 RSA 验签；清单来源未经认证，大小和 SHA-256 仅校验下载内容是否与该清单一致。Android 客户端仍会验签。');
         }
-        const result = await syncOfflineUpdate({
+        const syncOnce = async () => syncOfflineUpdate({
             ...options,
             ...syncRoots,
             publicKeyPath: options.publicKey
         });
-        console.log(`外网资源同步完成: ${result.sourceRoot} -> ${result.localParentRoot}`);
-        console.log(`Offline 更新目录: ${result.sourceUrl} -> ${result.localRoot}`);
-        console.log(`已安装: ${result.installed.join(', ') || '无'}；已复用: ${result.skipped.join(', ') || '无'}`);
-        if (result.mmd) {
-            console.log(`MMD 目录同步完成: ${result.mmd.sourceUrl} -> ${result.mmd.localRoot}`);
-            console.log(
-                `MMD 已安装 ${result.mmd.installed.length} 个文件；已复用 ${result.mmd.skipped.length} 个文件；` +
-                `总大小 ${formatProgressBytes(result.mmd.totalBytes)}`
-            );
+        if (!options.watch) {
+            logSyncResult(await syncOnce());
+            return;
         }
-        if (result.cleanup.errors.length > 0) {
-            console.warn(`过时资源清理待重试: ${JSON.stringify(result.cleanup.errors)}`);
+
+        const controller = new AbortController();
+        const onSigint = () => {
+            if (controller.signal.aborted) return;
+            console.log('\n收到 Ctrl+C；当前同步轮次完成后停止，不再启动新一轮。');
+            controller.abort();
+        };
+        process.on('SIGINT', onSigint);
+        try {
+            await runWatchMode(options, {
+                signal: controller.signal,
+                syncOnce,
+                onSuccess: logSyncResult
+            });
+        } finally {
+            process.removeListener('SIGINT', onSigint);
         }
     } catch (error) {
         console.error(`Offline 外网资源同步失败: ${error.message}`);
@@ -809,6 +912,8 @@ module.exports = {
     discoverMmdTree,
     syncMmdDirectory,
     syncOfflineUpdate,
+    waitForInterval,
+    runWatchMode,
     runCli,
     sha256Buffer
 };

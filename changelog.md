@@ -1,3 +1,9 @@
+### Offline 同步脚本 watch 定时轮询
+
+- ✅ [2026-10-09] `sync:offline-update` 增加可选 `--watch`：默认每 10 分钟检查，可用 `--interval-minutes <正整数>` 覆盖；启动立即同步，每轮结束后等待再串行检查；失败后继续，Ctrl+C 安全停止；不带 `--watch` 保持单次同步。
+  - 修改 `scripts/ops/sync-offline-update.js` 与 `tests/offline-update-sync.test.js`，同步 Offline 热更 design/spec、使用说明、任务文档与 todo 状态。
+  - 参数/默认值/轮次/失败续跑/Ctrl+C 定向回归 8/8 通过，两个 Node 文件语法检查和 `git diff --check` 通过。未运行全量 `npm test`，未构建 APK 或发布 Offline 资源。
+
 ### 显示端监听开关与语音状态按钮
 
 - ✅ [2026-10-09] 底部停止播报入口改为按显示端保存的实时监听开关，上方中央圆形按钮及六状态文字。持续模式点击打断本端全部普通播报并继续监听；手动模式点击打断后单次录音，静音/再次点击提交，直接进入当前聊天对象并过滤未匹配声纹。
