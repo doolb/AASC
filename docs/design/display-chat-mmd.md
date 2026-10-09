@@ -400,8 +400,10 @@ MMD 交互画布支持桌面和触屏的角色摆放操作，正式显示端与�
 
 底部停止播报按钮替换为实时监听开关，中央状态圆钮负责普通 TTS 打断和手动单次输入。voiceContinuousEnabled 与 voiceRecording 能力及录音回放用途独立；模式按 displayId 保存。手动输入直接进入当前显示端聊天对象，不经过唤醒/命令链路，保留声纹过滤和全局暂停。详见 [监听开关与状态按钮设计](display-voice-controls.md)。
 
-## 2026-10-09 Offline重开恢复聊天对象（已完成代码及定向验证）
+## 2026-10-09 Offline重开恢复聊天对象（已实现并发布code50）
 
 用户明确：重新打开Offline APK时恢复上次选择的聊天对象或角色，不自动展开聊天面板。继续使用服务进程全局chat-session.json和现有getChatSession/setChatSession，显示端初始化仍请求权威快照。
 
 诊断：setSession没有保存roleTarget；显示端chatSession处理又用旧roleTarget覆盖权威值。已补齐保存和规范化回读；兼容旧快照缺少roleTarget时当前页面的已有角色选择。私聊目标和privateSessionId沿用现有存储；面板关闭时单次语音仍发送到恢复后的当前对象。服务端Offline连接恢复有效私聊的语音上下文见display-voice-conversation设计，不新增显示可见性恢复。
+
+2026-10-09 本轮修复已提交origion/master并发布code50至LAN/WAN，50项定向自测通过；签名、所有组件HTTP大小/SHA-256及精确清理通过。Android实际录音与重开验收待设备验证。

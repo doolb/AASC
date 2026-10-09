@@ -1342,7 +1342,7 @@ DisplayChat 收到 chatResponse 或丢弃流 -> 发布 chat.activity(active=fals
 
 完整模式保存与资源生命周期伪代码见 [display-voice-controls.md](display-voice-controls.md)。
 
-## 2026-10-09 重开后的聊天对象权威恢复（已完成代码及定向验证）
+## 2026-10-09 重开后的聊天对象权威恢复（已实现并发布code50）
 
 ```text
 chatSession默认字段增加roleTarget=null
@@ -1364,3 +1364,5 @@ setChatSession(session):
 单次语音:
     按当前恢复后的session发送chat或roleChat，不依赖面板打开
 ```
+
+2026-10-09 本轮修复已提交origion/master并发布code50至LAN/WAN，50项定向自测通过；签名、所有组件HTTP大小/SHA-256及精确清理通过。Android实际录音与重开验收待设备验证。

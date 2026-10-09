@@ -3,12 +3,12 @@
 - ✅ [2026-10-09] Offline APK重开恢复上次聊天对象，聊天面板保持关闭；状态文本显示“当前助手名 · 状态”。
   - llm-service补齐roleTarget持久化；display-chat接受权威角色并兼容旧快照缺字段；server-app连接时复用display-voice-conversation同步有效私聊和既有计时；display-voice-controls通过现有总线更新名字与aria-label。
   - 新增offline-chat-selection-recovery测试并更新语音浏览器/单元、自测及design/spec/task/usage；50项定向通过、无跳过。扩大检查的12项既有MMD夹具失败另行记录，不宣称全仓通过。已确认与按钮修复一起发布服务包；无原生/生产依赖变化。
-  - 已生成code-v50.zip（16,931,644字节；SHA-256 142f32ae194baa6a66b0c12379e208154107ab785814189c45e0dfcb563024ac），源提交e64e59fe，931个文件与工作区逐字节一致、CRC/签名/组件约束通过；servicePackage=false，minApk=true及dependenciesPackage=false保持，当前待发布验证。
+  - 已生成code-v50.zip（16,931,644字节；SHA-256 142f32ae194baa6a66b0c12379e208154107ab785814189c45e0dfcb563024ac），源提交e64e59fe，931个文件与工作区逐字节一致、CRC/签名/组件约束通过；servicePackage=false，minApk=true及dependenciesPackage=false保持，LAN/WAN清单完全一致、所有组件HTTP大小/SHA-256通过，精确清理无错误，两端code目录只保留code-v50.zip。
 
 ### 显示端语音状态按钮修复
 
 - ✅ [2026-10-09] 修复实时/手动状态按钮点击均因handleTts未定义而中断，改为调用正式handleTTS处理函数。
-  - 修改display.html、display-voice-controls单元与浏览器自测；真实处理函数及运行时16项通过，无跳过，持续模式可停止、手动模式可停止后开始单次录音。设计/伪代码/任务/自测/使用文档同步；已纳入code50构建，servicePackage=false，待发布验证。
+  - 修改display.html、display-voice-controls单元与浏览器自测；真实处理函数及运行时16项通过，无跳过，持续模式可停止、手动模式可停止后开始单次录音。设计/伪代码/任务/自测/使用文档同步；已纳入code50构建，servicePackage=false，LAN/WAN发布及全组件校验成功。
 
 ### MMD-AR FSR2正式同步
 
