@@ -97,7 +97,7 @@
         // 现有定位提示与恢复按钮等没有单独 ID；保持其原事件并归到对应操作组。
         const fallback = panel.querySelector('.display-mmd-panel-group-body');
         for (const node of Array.from(panel.children)) {
-            if (node.classList.contains('display-mmd-panel-group') || /-header$/u.test(node.className)) continue;
+            if (node.classList.contains('display-mmd-panel-group') || node.hasAttribute('data-mmd-render-groups') || /-header$/u.test(node.className)) continue;
             fallback?.appendChild(node);
         }
     }
@@ -198,6 +198,16 @@
     }
 
     function initialize() {
+        // 渲染组在HTML中预建，沿用同一展开语义；开关不触发展开按钮。
+        for (const button of document.querySelectorAll('[data-render-group]')) {
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const body = document.getElementById(button.getAttribute('aria-controls'));
+                if (!body) return;
+                body.hidden = !body.hidden;
+                button.setAttribute('aria-expanded', String(!body.hidden));
+            });
+        }
         for (const [id, definitions] of Object.entries(GROUPS)) {
             const panel = document.getElementById(id);
             if (panel) groupPanel(panel, definitions);

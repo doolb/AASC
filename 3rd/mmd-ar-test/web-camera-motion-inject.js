@@ -131,6 +131,7 @@ function addCameraMotionRuntime(source, moduleUrl) {
 // 独立MMD-AR生成运行时专用：resize只更新显示投影，不按角色包围盒重置相机。
 // AR跟踪器提供自定义projectionMatrix时保留它；普通预览更新垂直FOV对应的aspect投影。
 function preserveCameraOnResize(source) {
+  if (source.includes('/* aasc-shared:preserve-camera-resize */')) return source;
   return once(source,
     '        camera.aspect = safeWidth / safeHeight;\n        if (!arCameraState.active) fitCameraToModel(currentRotationPivot || currentMesh);',
     '        camera.aspect = safeWidth / safeHeight;\n        if (!arCameraState.active) camera.updateProjectionMatrix();');

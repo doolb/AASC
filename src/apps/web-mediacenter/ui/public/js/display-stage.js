@@ -452,6 +452,8 @@
         setMmdVisible(state.mmdVisible);
         setMmdOrder('under-chat');
         window.addEventListener('resize', resize, { passive: true });
+        // 渲染倍率改变后重算实际Canvas尺寸；舞台逻辑尺寸及旋转坐标保持原流程。
+        window.addEventListener('mmd-ar-render-settings', resize);
         window.addEventListener('orientationchange', resize, { passive: true });
         if (root.visualViewport) root.visualViewport.addEventListener('resize', resize, { passive: true });
         if (typeof ResizeObserver === 'function') {

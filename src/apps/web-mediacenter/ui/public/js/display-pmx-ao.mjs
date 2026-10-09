@@ -1,3 +1,6 @@
+import { createTemporalAA } from './mmd-temporal-aa.mjs';
+import { createScreenLighting } from './mmd-screen-lighting.mjs';
+import { compositeChunk } from './mmd-screen-lighting-shader.mjs';
 /*
  * PMX 的屏幕空间环境遮蔽。保留原场景的 RGBA 色彩，在低分辨率深度采样后
  * 只调暗已绘制像素的 RGB；透明舞台的 alpha 由原场景直接传到最终画布。
@@ -496,6 +499,7 @@ vec4 edgeResolve(vec2 uv, bool normalMode) {
     return vec4(vec3(edgeFallbackAo(pixel, depth)), 1.0);
 }
 
+${compositeChunk}
 void main() {
     vec4 color = texture2D(tColor, vUv);
     if (testNormalPreview) {
@@ -513,6 +517,10 @@ void main() {
     if (color.a <= 0.001 || depth >= 0.99999) {
         gl_FragColor = color;
     } else {
+        if (screenLightingEnabled) {
+            vec4 effect = resolveScreenLighting(vUv, depth);
+            color.rgb = color.rgb * (1.0 - effect.a) + effect.rgb;
+        }
         float visibility;
         if (testEdgeCorrection) visibility = edgeResolve(vUv, false).r;
         else {
@@ -536,14 +544,16 @@ void main() {
         }
         visibility = weight > 0.0 ? sum / weight : 1.0;
         }
-        float amount = clamp((1.0 - visibility) * intensity, 0.0, 1.0);
+        float amount = clamp((1.0 - visibility) * intensity * screenAoEnabled, 0.0, 1.0);
         gl_FragColor = vec4(color.rgb * mix(vec3(1.0), aoColor, amount), color.a);
     }
+    gl_FragColor.rgb = gl_FragColor.a > 1e-6 ? gl_FragColor.rgb / gl_FragColor.a : vec3(0.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
+    gl_FragColor.rgb *= gl_FragColor.a;
 }`;
 
-export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
+export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera, keyLight }) {
     const supported = renderer.capabilities.isWebGL2 === true;
     let enabled = true;
     let resolutionMode = 'half';
@@ -556,6 +566,11 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
     let fullWidth = 1;
     let fullHeight = 1;
     let resources = null;
+    let temporalContentKey = "";
+    const temporalAA = createTemporalAA({ THREE, renderer, camera });
+    const screenLighting = createScreenLighting({ THREE, renderer, camera, keyLight });
+    window.DisplayMmdScreenLightingSupported = supported;
+    window.dispatchEvent(new Event('mmd-ar-screen-lighting-capability'));
 
     const createResources = () => {
         if (resources || !supported) return;
@@ -626,6 +641,10 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
             blending: THREE.NoBlending,
             toneMapped: true
         });
+        Object.assign(compositeMaterial.uniforms, {
+            screenLightingTexture: { value: colorTarget.texture }, screenLightingEnabled: { value: false },
+            screenLightingSize: { value: new THREE.Vector2(1, 1) }, screenLightingFullSize: { value: new THREE.Vector2(1, 1) }, screenAoEnabled: { value: 1 }
+        });
         const geometry = new THREE.PlaneGeometry(2, 2);
         const quad = new THREE.Mesh(geometry, aoMaterial);
         const passScene = new THREE.Scene();
@@ -666,9 +685,10 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         resources.compositeMaterial.uniforms.aoResolution.value.set(aoSize.width, aoSize.height);
     };
 
-    const render = () => {
+    const renderSpatial = () => {
         const normalPreview = window.MmdArTestNormalPreview === true;
-        if ((!enabled && !normalPreview) || !supported) {
+        if ((!enabled && !normalPreview && !screenLighting.active() && !temporalAA.active()) || !supported) {
+            screenLighting.dispose();
             renderer.render(scene, camera);
             return;
         }
@@ -697,6 +717,7 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
             renderer.setRenderTarget(resources.colorTarget);
             renderer.clear();
             renderer.render(scene, camera);
+            if (enabled || normalPreview) {
             resources.quad.material = resources.aoMaterial;
             renderer.setRenderTarget(resources.aoTarget);
             renderer.clear();
@@ -717,6 +738,8 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
                     renderer.render(resources.passScene, resources.passCamera);
                 }
             }
+            }
+            screenLighting.prepare(resources, fullWidth, fullHeight, normalPreview, enabled);
             resources.quad.material = resources.compositeMaterial;
             renderer.setRenderTarget(previousTarget);
             renderer.clear();
@@ -726,6 +749,11 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         }
     };
 
+    const render = (options = {}) => temporalAA.render(renderSpatial, () => resources?.depthTexture, {
+        bypass: options.bypassTemporal === true || window.MmdArTestNormalPreview === true || renderer.getRenderTarget() !== null,
+        signature: JSON.stringify([enabled, resolutionMode, radius, intensity, sampleCount, blurPassCount, blurRadii,
+            temporalContentKey, window.DisplayMmdScreenLighting, scene.children.map(object => object.id)])
+    });
     const setEnabled = (value) => { enabled = value === true; };
     const setResolution = (value) => {
         const nextMode = value === 'full' ? 'full' : 'half';
@@ -753,6 +781,8 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
         });
     };
     const dispose = () => {
+        temporalAA.dispose();
+        screenLighting.dispose();
         if (!resources) return;
         resources.colorTarget.dispose();
         resources.aoTarget.dispose();
@@ -766,5 +796,10 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera }) {
     };
 
     return Object.freeze({ supported, resize, render, setEnabled, setResolution,
+        invalidateTemporal: temporalAA.invalidate, getTemporalState: temporalAA.getState,
+        setTemporalContent: (mesh, motion, settings) => { temporalContentKey = JSON.stringify([mesh?.uuid, motion, settings]); },
         setColor, setIntensity, setRadius, setSampleCount, setBlurPasses, dispose });
 }
+
+/* aasc-shared:screen-lighting */
+/* aasc-shared:render-settings */

@@ -228,6 +228,7 @@ test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { s
                     resolve.uniforms.tCurrent.value = colorTexture; resolve.uniforms.tDepth.value = depthTexture;
                     const reconstruction = render(resolve, resolved), filtered = render(present, presented);
                     let centerError = 0, area = 0, filteredArea = 0, referenceArea = 0, error = 0, filteredError = 0;
+                    const centroid = [0, 0], filteredCentroid = [0, 0], referenceCentroid = [0, 0];
                     for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
                         const index = (y * size + x) * 4;
                         if (scale === 1) for (let channel = 0; channel < 4; channel += 1) {
@@ -240,9 +241,14 @@ test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { s
                         const value = opaque ? (reconstruction[index] - 16) / 208 : reconstruction[index + 3] / 255;
                         const filteredValue = opaque ? (filtered[index] - 16) / 208 : filtered[index + 3] / 255;
                         area += value; filteredArea += filteredValue; referenceArea += coverage;
+                        centroid[0] += value * (x + .5); centroid[1] += value * (y + .5);
+                        filteredCentroid[0] += filteredValue * (x + .5); filteredCentroid[1] += filteredValue * (y + .5);
+                        referenceCentroid[0] += coverage * (x + .5); referenceCentroid[1] += coverage * (y + .5);
                         error += Math.abs(value - coverage); filteredError += Math.abs(filteredValue - coverage);
                     }
-                    cases.push({ scale, degrees, offset, opaque, centerError,
+                    const shift = (position, weight) => Math.hypot(position[0] / weight - referenceCentroid[0] / referenceArea,
+                        position[1] / weight - referenceCentroid[1] / referenceArea);
+                    cases.push({ scale, degrees, offset, opaque, centerError, centroidShift: shift(centroid, area), filteredCentroidShift: shift(filteredCentroid, filteredArea),
                         areaBias: area - referenceArea, filteredAreaBias: filteredArea - referenceArea,
                         error: error / (size * size), filteredError: filteredError / (size * size) });
                     colorTexture.dispose(); depthTexture.dispose();
@@ -255,6 +261,8 @@ test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { s
         context.diagnostic(JSON.stringify({ worstCenterError: Math.max(...result.cases.map(item => item.centerError)),
             worstAreaBias: Math.max(...result.cases.map(item => Math.abs(item.areaBias))),
             worstFilteredAreaBias: Math.max(...result.cases.map(item => Math.abs(item.filteredAreaBias))),
+            worstCentroidShift: Math.max(...result.cases.map(item => item.centroidShift)),
+            worstFilteredCentroidShift: Math.max(...result.cases.map(item => item.filteredCentroidShift)),
             meanError: result.cases.reduce((sum, item) => sum + item.error, 0) / result.cases.length,
             meanFilteredError: result.cases.reduce((sum, item) => sum + item.filteredError, 0) / result.cases.length }));
         for (const item of result.cases) {
@@ -263,6 +271,9 @@ test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { s
             // 边缘采样相位允许有限面积量化差，但禁止整条边一像素的系统扩张。
             assert.ok(Math.abs(item.areaBias) <= 32, `${label}：重建轮廓面积偏差${item.areaBias}`);
             assert.ok(Math.abs(item.filteredAreaBias) <= 32, `${label}：最终轮廓面积偏差${item.filteredAreaBias}`);
+            // 单帧低分辨率输入存在像素中心量化：半个输入像素在输出中对应0.5/scale像素。
+            assert.ok(item.centroidShift <= .5 / item.scale && item.filteredCentroidShift <= .5 / item.scale,
+                `${label}：轮廓覆盖重心不得偏移超过半个输入像素`);
             assert.ok(item.filteredError <= item.error + .003, `${label}：最终滤波不能明显增加空间覆盖误差`);
         }
         assert.equal(result.glError, 0);
@@ -270,10 +281,13 @@ test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { s
 });
 
 test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
-    skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')), timeout: 180000
+    // 软件GPU要逐帧完成周期和大倍率测量，允许显式增加总时限，不改变任何断言。
+    skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')), timeout: process.env.MMD_AR_SLOW_GPU === '1' ? 480000 : 180000
 }, async context => {
     await withBrowser(async (page, origin) => {
         await page.setViewport({ width: 320, height: 400 });
+        // 保留真实骨骼动画，渲染回归不依赖Ammo刚体初始化及步进。
+        await page.evaluateOnNewDocument(() => localStorage.setItem('aasc.mmdArTest.physicsEnabled.v1', 'false'));
         await page.goto(`${origin}/?safePhysics=1`, { waitUntil: 'domcontentloaded' });
         const ready = () => page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 45000 });
         await ready();
@@ -281,9 +295,20 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
             if (node.type === 'checkbox') node.checked = setting; else node.value = String(setting);
             node.dispatchEvent(new Event('input', { bubbles: true }));
         }, value);
-        const size = async (width, height) => page.waitForFunction((w, h) => {
-            const c = window.DisplayMmd.getEditorBridge().context.renderer.domElement; return c.width === w && c.height === h;
-        }, {}, width, height);
+        const size = async (width, height) => {
+            try {
+                await page.waitForFunction((w, h) => {
+                    const c = window.DisplayMmd.getEditorBridge().context.renderer.domElement; return c.width === w && c.height === h;
+                }, {}, width, height);
+            } catch (error) {
+                context.diagnostic(JSON.stringify({ expected: [width, height], actual: await page.evaluate(() => {
+                    const c = window.DisplayMmd.getEditorBridge().context.renderer;
+                    return { size: [c.domElement.width, c.domElement.height], dpr: devicePixelRatio,
+                        info: window.MmdArRenderInfo, settings: window.MmdArRenderSettings };
+                }) }));
+                throw error;
+            }
+        };
         for (const dpr of [1, 2]) {
             await page.setViewport({ width: 320, height: 400, deviceScaleFactor: dpr });
             for (const scale of [.25, .5, 1, 1.5, 2]) { await update('canvasScale', scale); await size(320 * dpr * scale, 400 * dpr * scale); }

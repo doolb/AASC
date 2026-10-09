@@ -56,24 +56,13 @@ const MINDAR_FILES = Object.freeze([
   ['mind-ar-LICENSE', 1063, '4f3aa5215ac0346a823170c9f9677da25c3e8bdb8243693118a3711e157d7fff'],
 ]);
 const MINDAR_TEST_SOURCE_FILES = Object.freeze([
-  'display-mmd-ar-benchmark-compiler.js',
-  'display-mmd-ar-benchmark-metrics.js',
-  'display-mmd-ar-benchmark.js',
+  'display-mmd-ar-benchmark-compiler.js', 'display-mmd-ar-benchmark-metrics.js', 'display-mmd-ar-benchmark.js',
 ]);
 const SOURCE_ASSET_FILES = Object.freeze([
-  'display-mmd-settings.js',
-  'display-mmd.js',
-  'display-mmd-lighting.js',
-  'display-mmd-ar.js',
-  'display-pmx-runtime.js',
-  'display-mmd-ar-pose.js',
-  'display-pmx-ao.mjs',
-  'display-pmx-ao-size.mjs',
-  'display-pmx-lighting-mode.mjs',
-  'display-pmx-specular.mjs',
-  'mmd-ammo-physics.mjs',
-  'mmd-pmx-helper.mjs',
-  'pmx-display-layout.mjs',
+  'display-mmd-settings.js', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar.js',
+  'display-pmx-runtime.js', 'display-mmd-ar-pose.js', 'display-pmx-ao.mjs', 'display-pmx-ao-size.mjs',
+  'display-pmx-lighting-mode.mjs', 'display-pmx-specular.mjs',
+  'mmd-ammo-physics.mjs', 'mmd-pmx-helper.mjs', 'pmx-display-layout.mjs',
 ]);
 const VENDOR_THREE_SOURCE = path.join(SOURCE_PUBLIC, 'js/vendor/three');
 const DISPLAY_HTML_SOURCE = path.join(SOURCE_PUBLIC, 'display.html');
@@ -184,6 +173,9 @@ async function stageTextAssets() {
   const mmdLayer = $('#displayMmdLayer').first().addClass('is-visible').attr('aria-hidden', 'false');
   const controls = $('.display-stage-lighting-control').first();
   $('[data-mmd-production-only]').remove();
+  // 分类前取下正式预建渲染组，随后用同一参数清单生成独立页控件。
+  $('#mmdArTemporalAA, #mmdArScreenLighting').remove();
+  $('[data-render-setting="canvasScale"]').closest('label').remove();
   const calibration = $('#displayArCalibration').first();
   const arPanel = $('#displayArTargetPanel').first();
   const arHeader = arPanel.find('.display-mmd-ar-header').first();

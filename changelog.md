@@ -1,3 +1,11 @@
+### MMD-AR FSR2轮廓覆盖率修正
+
+- ✅ [2026-10-09] 修复FSR2重建筛除背景后扩大前景、比例1用零权重邻接前景替代背景中心的问题。保留前景/背景空间覆盖比例，仅规范化前景内部颜色，深度选择排除零权重样本；普通TAA与比例设置保持。
+  - 修改`3rd/mmd-ar-test/web-temporal-aa-shader.mjs`、`tests/mmd-ar-temporal-aa-browser.test.js`；合并远端共享渲染后调整`web-render-settings-build.js`，仅在独立构建副本保留FSR2内部尺寸和PNG旁路。同步design/spec/task/todo/self-test/usage/README。
+  - 96组真实GPU空间参考先失败再通过：比例1中心RGBA误差255→0；最大轮廓面积偏差128.859375→30.140625；平均重建覆盖误差约降67%、最终输出误差约降62%。横/竖/45°跨jitter指标保持改善。
+  - 最终九文件38/38通过、无跳过，涵盖真实模型/PNG/透明/TAA/FSR2/屏幕光照/后台/相机及正式渲染兼容；网页构建成功，Vite既有大chunk警告。全仓首轮1299项1111通过/159失败/29跳过，全部失败位置与名称记录到任务；不宣称全仓通过。
+  - 只更新本地独立网页，未发布或构建APK；未修改正式FSR2运行功能，不产生新的Offline服务/依赖产物需求，合并后的既有状态servicePackage=false、minApk=true、dependenciesPackage=false保持。手机斜边与动态画面仍待设备验收，用户配置不提交。
+
 ### MMD-AR FSR2斜边滤波方向修正
 
 - ✅ [2026-10-09] 用户反馈初版滤波横向/纵向改善、斜向加重。FSR2最终pass的edge normal由四角差分改为N/S/E/W luma梯度，旋转为切线采样；TAA与FSR2比例设置不变。
@@ -18,6 +26,15 @@
   - 更新`web-render-settings.mjs`、`web-render-settings-build.js`、`web-temporal-aa.mjs`、`web-temporal-aa-shader.mjs`、`web-editor-bridge.mjs`与独立网页构建产物；更新设计/spec/task/usage/README/self-test/todo。
   - TAA设置单测8/8；真实GPU TAA/FSR2 Shader 2/2、真实米娅模式/导出集成1/1；`npm run build:web:mmd-ar-test`成功。320×400输出、FSR2 160×200内部输入时SwiftShader中位数94.1ms（普通TAA118.0ms），估算历史目标3,328,000 vs4,096,000 bytes；不代表手机性能。
   - 同组附带`mmd-ar-web-panel-groups.test.js`有1项既有lighting fixture缺失正式HTML额外控件失败（15项通过/7项跳过）；未修改正式页/该分组模块。Android WebView/手机画面与帧时待实机验收；未构建APK或发布外网。
+
+### MMD-AR 正式渲染同步
+
+- ✅ [2026-10-09] 将Canvas倍率、TAA抖动/周期、SSGI、接触阴影及保边滤波并入正式显示端
+  - 正式新增6个mmd渲染模块，修改display.html、display-stage.js、display-pmx-runtime.js、display-pmx-ao.mjs、display-mmd-panel-groups.js；保留等价正式高光和显示端语音入口。
+  - 3rd/mmd-ar-test/build.js及共享/渲染/相机构建适配识别共享标记，保持测试独立配置和模块指纹，避免重复注入；正式runtime999行，build1000行。
+  - 正式真实PMX/组合GPU/配置/视角2项、语音与面板17项、参数与历史20项、接触追踪/滤波GPU5项通过；65个正式/生成脚本语法及本地模块引用检查通过。大场景刷新/接触内部、TAA透明颜色与真实模型倍率/DPR/PNG/后台/GLB3项也已通过，共47项定向回归全部通过。
+  - 旧PMX/AO文本与VM夹具12项失败和修改前HEAD完全一致；相关真机验收保持待办。code48已构建发布内外网，完整HTTP大小/SHA-256、清单签名和精确旧版本清理均通过，无清理错误；servicePackage=false，既有minApk=true/dependenciesPackage=false保持。
+  - 发布code/code-v48.zip（16,928,480字节，SHA-256：9600126f0b967ba4fa609bb249568cb296aa9d117243474bda47e6dc7db5dfeb），931文件与源码一致；dependencies6/min34/Node-min种子39/dataRepair2继续复用，资源包不提交Git。
 
 ### MMD-AR TAA抖动参数
 

@@ -1,3 +1,5 @@
+import { calculateCanvasSize } from './mmd-render-settings.mjs';
+import { runTemporalAction } from './mmd-temporal-aa.mjs';
 import { DEFAULT_AR_CAMERA_SETTINGS, normalizeArCameraSettings, classifyHit, disposeObject, waitForManagedLoad, normalizeModel, createModelRotationPivot } from './mmd-runtime-utils.mjs';
 import { createPmxLighting } from './mmd-lighting-runtime.mjs';
 import { createPmxArCamera } from './mmd-ar-camera-runtime.mjs';
@@ -123,9 +125,9 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         startRendering();
         return true;
     };
-    const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera });
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
+    const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera, keyLight });
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     const fillLight = new THREE.DirectionalLight(0xffffff, 0);
     fillLight.castShadow = false;
     keyLight.position.set(1.5, 3, 2.5);
@@ -618,6 +620,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentMotionResourceId = null;
     };
     const disposeCurrentModel = () => {
+        ambientOcclusion.invalidateTemporal();
         motionSequence += 1;
         stopMotion();
         if (!currentMesh) return;
@@ -684,7 +687,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             if (renderer.shadowMap.enabled) {
                 for (const light of [keyLight, fillLight]) if (light.castShadow) alignTestShadowCamera(light);
             }
-            if (currentMesh) ambientOcclusion.render();
+            if (currentMesh) {
+                ambientOcclusion.setTemporalContent(currentMesh, currentMotionResourceId, lightingState);
+                ambientOcclusion.render();
+            }
             else renderer.render(scene, camera);
         } finally {
             // 恢复原始可见性，避免覆盖 AR 失锁或其他显示状态。
@@ -706,17 +712,23 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const resize = (width, height, devicePixelRatio = window.devicePixelRatio || 1) => {
         const safeWidth = Math.max(1, Number(width) || window.innerWidth || 1);
         const safeHeight = Math.max(1, Number(height) || window.innerHeight || 1);
-        const pixelRatio = Math.min(2, Math.max(1, Number(devicePixelRatio) || 1));
+        const gl = renderer.getContext();
+        const limit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+        const renderSize = calculateCanvasSize(safeWidth, safeHeight, devicePixelRatio, window.DisplayMmdRenderSettings?.canvasScale, limit);
+        const pixelRatio = renderSize.pixelRatio;
+        window.DisplayMmdRenderInfo = { taaSupported: renderer.capabilities.isWebGL2 === true, ...renderSize };
+        window.dispatchEvent(new Event('mmd-ar-render-capability'));
         renderer.setPixelRatio(pixelRatio);
         renderer.setSize(safeWidth, safeHeight, false);
         const drawingSize = renderer.getDrawingBufferSize(new THREE.Vector2());
         ambientOcclusion.resize(drawingSize.x, drawingSize.y);
         camera.aspect = safeWidth / safeHeight;
-        if (!arCameraState.active) fitCameraToModel(currentRotationPivot || currentMesh);
+        if (!arCameraState.active) camera.updateProjectionMatrix();
         startRendering();
     };
-    const playMotion = async (resourceId) => loadMotion(resourceId);
+    const playMotion = async (resourceId) => await runTemporalAction(ambientOcclusion.invalidateTemporal, () => loadMotion(resourceId));
     const setMotionPlaybackEnabled = (enabled) => {
+        ambientOcclusion.invalidateTemporal();
         motionPlaybackEnabled = enabled === true;
         setPmxMotionPlaybackEnabled(helper.current, motionPlaybackEnabled);
         startRendering();
@@ -922,8 +934,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         } : null,
         handleActionPlan,
         load,
-        loadMotion,
-        loadSelectedMotion,
+        loadMotion: playMotion,
+        loadSelectedMotion: async (...args) => await runTemporalAction(ambientOcclusion.invalidateTemporal, () => loadSelectedMotion(...args)),
         playMotion,
         raycast,
         resetArPose,
@@ -981,3 +993,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
 /* aasc-shared:addWindRuntime */
 
 /* aasc-shared:addSolverRuntime */
+
+/* aasc-shared:screen-lighting */
+/* aasc-shared:render-settings */
+/* aasc-shared:preserve-camera-resize */

@@ -17,10 +17,8 @@ async function stage(root) {
     await fs.writeFile(path.join(folder, 'web-temporal-aa.mjs'), temporal);
     const aoPath = path.join(folder, 'display-pmx-ao.mjs');
     let ao = await fs.readFile(aoPath, 'utf8');
-    ao = `import { createTemporalAA } from '${await url('web-temporal-aa.mjs')}';\nimport { normalizeRenderSettings } from '${settingsUrl}';\n` + ao;
-    ao = once(ao, '    let resources = null;', '    let resources = null;\n    let temporalContentKey = "";\n    const temporalAA = createTemporalAA({ THREE, renderer, camera });');
-    ao = once(ao, '    const render = () => {', '    const renderSpatial = () => {');
-    ao = once(ao, '    const renderSpatial = () => {\n        const normalPreview = window.MmdArTestNormalPreview === true;', `    const renderSpatial = () => {
+    // 正式渲染共用后，独立FSR2仍需内部尺寸与PNG旁路；仅修改构建副本，避免重复插入TAA。
+    const withInternalSize = source => once(source, '    const renderSpatial = () => {\n        const normalPreview = window.MmdArTestNormalPreview === true;', `    const renderSpatial = () => {
         const normalPreview = window.MmdArTestNormalPreview === true;
         const settings = normalizeRenderSettings(window.MmdArRenderSettings);
         const upscale = camera.userData.mmdArTaaUpscaleActive === true && camera.userData.mmdArTaaBypass !== true && !normalPreview && renderer.capabilities.isWebGL2 === true;
@@ -29,6 +27,17 @@ async function stage(root) {
         const internalWidth = Math.max(1, Math.floor(outputSize.x * internalScale));
         const internalHeight = Math.max(1, Math.floor(outputSize.y * internalScale));
         if (fullWidth !== internalWidth || fullHeight !== internalHeight) resize(internalWidth, internalHeight);`);
+    if (ao.includes('/* aasc-shared:render-settings */')) {
+        await require('./web-production-shared').reuseRenderStage(root, ['web-temporal-aa.mjs', 'web-render-settings.mjs']);
+        ao = `import { normalizeRenderSettings } from '${settingsUrl}';\n` + withInternalSize(await fs.readFile(aoPath, 'utf8'));
+        ao = once(ao, 'bypass: options.bypassTemporal === true ||', 'bypass: camera.userData.mmdArTaaBypass === true || options.bypassTemporal === true ||');
+        await fs.writeFile(aoPath, ao);
+        return;
+    }
+    ao = `import { createTemporalAA } from '${await url('web-temporal-aa.mjs')}';\nimport { normalizeRenderSettings } from '${settingsUrl}';\n` + ao;
+    ao = once(ao, '    let resources = null;', '    let resources = null;\n    let temporalContentKey = "";\n    const temporalAA = createTemporalAA({ THREE, renderer, camera });');
+    ao = once(ao, '    const render = () => {', '    const renderSpatial = () => {');
+    ao = withInternalSize(ao);
     // 场景目标已由正常透明混合预乘。变换前还原直色，变换后再预乘，
     // 让普通合成、TAA呈现和PNG导出保持同一语义；离屏变换为恒等映射。
     ao = once(ao, '    #include <tonemapping_fragment>\n    #include <colorspace_fragment>',
@@ -65,6 +74,7 @@ async function stage(root) {
     await fs.writeFile(runtimePath, runtime);
 }
 function panel($) {
+    if ($('#mmdArTemporalAA').length) return;
     // 倍率独占标题下一行，避免窄屏挤压实际分辨率与恢复默认按钮。
     $('#displayMmdRenderResolution').closest('.display-mmd-lighting-header').after(`<label class="mind-basic-field"><span>Canvas渲染倍率 <output data-render-value="canvasScale">1.00×</output></span><input type="range" data-render-setting="canvasScale" min="0.25" max="2" step="0.25" value="1"><small data-render-limit></small></label>`);
     $('#displayMmdLightingPanel').append(`<section id="mmdArTemporalAA" class="mmd-ar-panel-group">
