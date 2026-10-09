@@ -1218,3 +1218,7 @@ code48发布验证：931包内文件和工作区一致，RSA清单、LAN/WAN所�
 - `MMD_RENDER_SOURCE=production node --test --test-name-pattern='真实GPU' tests/mmd-ar-temporal-aa-browser.test.js`用正式模块运行同一解析参考，覆盖96组轮廓面积/重心/像素中心和TAA/FSR2真实Shader。
 - `npm run build:web:mmd-ar-test`验证共享内部尺寸和内容指纹；独立真实模型测试覆盖组合效果及PNG旁路。
 - Chromium软件GPU仅证明正确性，手机WebView视觉/耗时仍需设备验收。
+
+执行结果：2026-10-09参数/面板/语音37、正式集成2、正式Shader3（96组轮廓参考）、独立真实模型1，共43项通过，无跳过或取消；共享独立构建、源码语法和模块引用通过。手机视觉/性能待验收。
+
+发布验证：code49的931文件源码一致、ZIP CRC、RSA签名及组件约束通过；LAN/WAN全组件HTTP大小与SHA-256一致，精确清理无错误。首次WAN回读中断，完整流程重试成功。

@@ -247,4 +247,15 @@ DisplayMmdAr.initializeCameraControls:
   提交origion；构建更高版本code-only包，复用已发布其他组件并校验发布LAN/WAN
 ```
 
-同步验证：参数/历史/面板/语音37项、正式集成2项、正式真实Shader3项（96组轮廓参考）通过，无跳过；独立构建及共享注入唯一性/静态模块引用通过。正式模式与旁路尺寸、存储复位和释放已验证。独立真实模型/导出回归与签名服务包发布继续执行。
+同步验证：参数/历史/面板/语音37项、正式集成2项、正式真实Shader3项（96组轮廓参考）通过，无跳过；独立构建及共享注入唯一性/静态模块引用通过。正式模式与旁路尺寸、存储复位和释放已验证。独立真实模型/导出回归1项通过，总计43项无跳过；code49内外网签名服务包发布及全组件校验完成，清理无错误。
+
+## code49发布结果（2026-10-09）
+```text
+发布输入: bf6b1f72源码快照931文件，签名code49清单
+发布结果: LAN/WAN code49，沿用dependencies6、apkMin34、nodeMinSeeds39、dataRepair2
+校验结果: ZIP源码一致、大小/SHA-256/RSA签名、两端全组件HTTP完整哈希一致
+异常恢复: 首次WAN min APK回读连接中断；重试完整发布流程通过，不回滚清单
+清理结果: 仅旧数字版本普通文件，清单引用及非版本资源保留，无清理错误
+待出包状态: servicePackage=false，minApk=true沿用，dependenciesPackage=false
+后续验收: 手机WebView视觉、动态残影与硬件GPU性能
+```

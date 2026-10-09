@@ -1,8 +1,6 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-10-09，code v48/min v34 已发布；Offline 同步 watch 默认 10 分钟）
+# Web MediaCenter - 未完成任务列表（更新于 2026-10-09，code v49/min v34 已发布；Offline 同步 watch 默认 10 分钟）
 
-- ⏳进行中 [2026-10-09] 将已提交FSR2模式及轮廓修复同步正式端，完成定向回归、提交origion并发布code-only服务包。任务：`docs/task/20261009_MMDAR_FSR2同步正式包.md`。
-
-- ⏳待设备验收 [2026-10-09] 独立MMD-AR FSR2无物体运动矢量模式：覆盖率修正、96组真实GPU空间轮廓对照、九文件38/38回归及本地构建已完成；待Android WebView/手机斜边锯齿、实际AR动态画面、帧时及显存验收。任务记录：`docs/task/20261009_MMDAR时域升采样无运动矢量.md`、`docs/task/20261009_MMDAR_FSR2边缘滤波优化.md`、`docs/task/20261009_MMDAR_FSR2斜边滤波方向修正.md`、`docs/task/20261009_MMDAR_FSR2轮廓覆盖率排查.md`。
+- ⏳待设备验收 [2026-10-09] 独立/正式MMD-AR FSR2无物体运动矢量模式：正式code49已发布内外网，43项迁移定向回归通过；覆盖率修正、96组真实GPU空间轮廓对照、九文件38/38回归及本地构建已完成；待Android WebView/手机斜边锯齿、实际AR动态画面、帧时及显存验收。任务记录：`docs/task/20261009_MMDAR时域升采样无运动矢量.md`、`docs/task/20261009_MMDAR_FSR2边缘滤波优化.md`、`docs/task/20261009_MMDAR_FSR2斜边滤波方向修正.md`、`docs/task/20261009_MMDAR_FSR2轮廓覆盖率排查.md`、`docs/task/20261009_MMDAR_FSR2同步正式包.md`。
 
 - ⏳待设备验收 [2026-10-09] 独立MMD AR TAA与Canvas倍率：代码和本地网页构建已实现，抖动强度0–2/周期4/8/16/32及保存复位、真实GPU/模型/相机回归通过；仍需手机WebView检查快速发片/衣服残影、实际AR投影、操作系统后台、倍率及周期帧时与显存。TAA默认关闭/倍率1/抖动1和8帧，运动向量暂缓，不承诺实机提速。任务：`docs/task/20261009_MMDAR_TAA与Canvas倍率.md`、`docs/task/20261009_MMDAR_TAA抖动参数.md`。
 
