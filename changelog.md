@@ -1,13 +1,13 @@
-### MMD-AR TAA抖动参数
-
 ### MMD-AR 正式渲染同步
 
 - ✅ [2026-10-09] 将Canvas倍率、TAA抖动/周期、SSGI、接触阴影及保边滤波并入正式显示端
   - 正式新增6个mmd渲染模块，修改display.html、display-stage.js、display-pmx-runtime.js、display-pmx-ao.mjs、display-mmd-panel-groups.js；保留等价正式高光和显示端语音入口。
   - 3rd/mmd-ar-test/build.js及共享/渲染/相机构建适配识别共享标记，保持测试独立配置和模块指纹，避免重复注入；正式runtime999行，build1000行。
-  - 正式真实PMX/组合GPU/配置/视角2项、语音与面板17项、参数与历史20项、接触追踪/滤波GPU5项通过；65个正式/生成脚本语法及本地模块引用检查通过。大场景GPU回归在软件GPU增加时限后复验中。
-  - 旧PMX/AO文本与VM夹具12项失败和修改前HEAD完全一致；相关真机验收保持待办。servicePackage=true，按用户确认继续构建并发布code48。
+  - 正式真实PMX/组合GPU/配置/视角2项、语音与面板17项、参数与历史20项、接触追踪/滤波GPU5项通过；65个正式/生成脚本语法及本地模块引用检查通过。大场景刷新/接触内部、TAA透明颜色与真实模型倍率/DPR/PNG/后台/GLB3项也已通过，共47项定向回归全部通过。
+  - 旧PMX/AO文本与VM夹具12项失败和修改前HEAD完全一致；相关真机验收保持待办。code48已构建发布内外网，完整HTTP大小/SHA-256、清单签名和精确旧版本清理均通过，无清理错误；servicePackage=false，既有minApk=true/dependenciesPackage=false保持。
+  - 发布code/code-v48.zip（16,928,480字节，SHA-256：9600126f0b967ba4fa609bb249568cb296aa9d117243474bda47e6dc7db5dfeb），931文件与源码一致；dependencies6/min34/Node-min种子39/dataRepair2继续复用，资源包不提交Git。
 
+### MMD-AR TAA抖动参数
 
 - ✅ [2026-10-09] 上传前合并远端接触阴影对齐修复920fca8d，重新网页构建并完成TAA/屏幕光照/真实GPU与模型/追踪/滤波/刷新六文件28/28，无跳过。最新周期8/32同条件软件GPU128.4/128.6ms、目标均5；保留原24项及性能历史记录，用户配置未提交或覆盖。
 

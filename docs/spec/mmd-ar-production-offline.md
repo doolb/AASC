@@ -218,3 +218,12 @@ DisplayMmdAr.initializeCameraControls:
   验证正式面板保存/恢复/复位、真实GPU合成、独立构建及语音控件不丢失
   提交推送origion，构建code48，复用已发布依赖/种子/min，签名校验后发布LAN/WAN
 ```
+
+## code48发布状态（2026-10-09）
+```text
+发布输入: ed5469f3源码快照931文件，签名code48清单
+发布结果: LAN/WAN code48 + dependencies6 + apkMin34 + nodeMinSeeds39 + dataRepair2
+校验结果: ZIP逐文件一致、RSA签名、两端全组件HTTP大小和SHA-256一致、精确清理无错误
+待出包状态: servicePackage=false，minApk沿用true，dependenciesPackage=false
+后续验收: 手机视觉/硬件GPU耗时及真实物理组合；不以软件GPU结果代替
+```
