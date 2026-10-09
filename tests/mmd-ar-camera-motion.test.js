@@ -146,6 +146,10 @@ test('真实网页选择相机 VMD 后预览相机循环播放，开关/定位�
         await page.waitForFunction(() => window.DisplayMmd?.setLighting);
         await page.evaluate(() => window.DisplayMmd.setLighting({ pmxAoEnabled: false, keyShadowEnabled: false }));
         await page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 90000 });
+        // 同时覆盖TAA打开后的相机VMD与AR接管，投影读数必须是恢复后的基础投影。
+        await page.$eval('[data-render-setting="taaEnabled"]', node => { node.checked = true; node.dispatchEvent(new Event('input')); });
+        await page.$eval('[data-render-setting="canvasScale"]', node => { node.value = '.5'; node.dispatchEvent(new Event('input')); });
+        await page.waitForFunction(() => window.DisplayMmd.getEditorBridge().context.ambientOcclusion.getTemporalState().targetCount === 5);
         // 测试页固定 MmdArTestAframeMode=true，可直接读取预览相机状态。
         assert.equal(await page.$eval('#mmdArCameraMotionPlayback', (node) => node.checked), true);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getCameraMotionProgress()), null);
@@ -166,11 +170,14 @@ test('真实网页选择相机 VMD 后预览相机循环播放，开关/定位�
         // 角色动作随默认模型播放；相机动作在没有选择文件前显示未知。
         assert.equal(await page.$eval('#mmdArCameraMotionTime', (node) => node.textContent), '--:-- / --:--');
         assert.equal(await page.$eval('#mmdArCameraMotionProgress', (node) => node.value), 0);
+        // 本地资源已迁移到“角色”面板；先打开当前入口，再选择相机VMD。
+        await page.click('#mmdArCharacterToggle');
         await page.click('#mmdArLocalAssets .mmd-ar-panel-group-toggle');
         await upload([cameraVmdPath]);
         assert.equal(await page.$eval('#mmdArLocalMessage', (element) => element.dataset.error), 'false');
         assert.equal(await page.$eval('#mmdArLocalCameraMotionName', (element) => element.textContent), 'camera.vmd');
         assert.equal(await page.evaluate(() => window.DisplayMmd.getCameraMotionProgress().durationSeconds), 2);
+        await page.click('#mmdArMotionToggle');
 
         // 循环播放：预览相机与投影由相机 VMD 驱动并随时间变化。
         // 软件光栅下渲染帧很稀疏且每帧最多推进 0.1s，等待必须按渲染帧而不是墙钟时间。
@@ -235,6 +242,7 @@ test('真实网页选择相机 VMD 后预览相机循环播放，开关/定位�
             { timeout: 60000 }, arBefore);
 
         // 恢复默认模型与动作：同时清除相机动作并复位预览。
+        await page.click('#mmdArCharacterToggle');
         await page.click('#mmdArLocalDefaultModel');
         await page.waitForFunction(() => !document.getElementById('mmdArLocalFilesButton').disabled, { timeout: 90000 });
         assert.equal(await page.$eval('#mmdArLocalCameraMotionName', (element) => element.textContent), '无相机动作');

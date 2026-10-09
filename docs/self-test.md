@@ -1,5 +1,27 @@
 # 自测功能文档
 
+## MMD-AR TAA与Canvas倍率（2026-10-09）
+
+最终代码经`npm run build:web:mmd-ar-test`构建后，八个定向文件以`node --test --test-concurrency=1`执行31/31通过，无失败/跳过。测试文件为`mmd-ar-temporal-aa.test.js`、`mmd-ar-screen-lighting.test.js`、`mmd-ar-temporal-aa-browser.test.js`、`mmd-ar-contact-shadow-browser.test.js`、`mmd-ar-contact-filter-browser.test.js`、`mmd-ar-screen-lighting-refresh-browser.test.js`、`mmd-ar-background-resume.test.js`、`mmd-ar-camera-motion.test.js`；设置PUPPETEER_EXECUTABLE_PATH指向本机Chromium以执行旧相机用例，没有将跳过当验证。
+
+实际GPU检查：64²旋转平面静态轮廓的中间alpha从0增至150，内部RGB由[76,150,204]变为[77,151,204]，差≤1。颜色变蓝不残留旧色，揭露背景输出[0,0,0,0]。透明蓝色与实际AO合成TAA开/关、RGBA8强制回退均[0,0,114,128]。复核发现旧AO关闭TAA输出[0,0,193,128]，真实对照先失败，独立生成composite统一直色变换/预乘后通过。
+
+单位18项覆盖DPR与.25/.5/1/1.5/2尺寸、限制上限、8相位与AR裁切/逆投影恢复、历史首帧/失效/异常、读写隔离/关闭释放/WebGL2旁路、PNG/rest/seek，以及SSGI基础投影切断。异步同ID重播在开始/等待后提交双重清历史，回归先失败再通过；原相机用例隐藏入口已按现有角色面板修正，并在TAA开启/0.5倍率验证VMD循环/暂停/恢复和AR接管。
+
+真实米娅在四种接触/SSGI组合有效像素均18542，静态西施GLB21953。实际动画骨骼变化、seek失效、160×200 PNG和预览尺寸恢复、DPR1/2倍率、刷新/复位、正式分类展开及后台根position/quaternion/scale和相机position/quaternion/zoom/投影保持通过；原接触内部亮度49.5605、无遮挡211.2952保持。并发软件GPU运行曾超时，已改串行完整执行通过，不提高断言宽容度。
+
+固定米娅姿态/相机、DPR2、AO与低质量接触启用/GI关闭，两次预热后三次测量，readPixels+finish强制GPU完成。以下为最终同轮SwiftShader中位数，包含全部绘制成本，仅说明这台桌面软件GPU结果；样本少且环境负载影响明显，不能推定手机收益。
+
+| Canvas倍率 | 实际像素 | TAA关闭 | TAA开启 | TAA五目标额外存储 |
+|---|---|---|---|---|
+| 0.5 | 320×400 | 58.8ms | 69.0ms | 3.91MiB |
+| 1 | 640×800 | 121.3ms | 163.8ms | 15.63MiB |
+| 2 | 1280×1600 | 297.0ms | 757.9ms | 62.50MiB |
+
+存储按三张HalfFloat RGBA和两张RGBA8深度计算，不含AO/GI/场景目标、驱动和其它缓冲。默认TAA关闭/倍率1；没有完整骨骼/morph速度矢量，快速发片/衣服残影、WebView帧时、实际AR及操作系统后台仍需实机验收。独立复核两项P2已红测修复；语法与diff检查通过，未运行全仓测试、构建APK或外网发布。
+
+提交前将倍率移至分辨率标题下一行，避免窄屏flex挤压；再构建后单位/屏幕光照/TAA浏览器20/20通过，实际320px页面滑块左右边界在面板内，顶部与分类截图已查看。布局调整不改变渲染代码；上表保留同轮31项验收时的性能读数，不混合不同时段样本。
+
 ## MMD-AR接触投影优化与独立alpha保边模糊（2026-10-09）
 
 `tests/mmd-ar-contact-shadow-browser.test.js`四项通过：执行旧GI60组、新正交54组、新透视84组，合计198组真实生产GLSL输入。除正/反连续交点、薄表面、晚段、厚度外轮廓、自遮挡/背景外，覆盖朝相机、屏幕边缘裁剪及真正到达近平面。完整SSGI/滤波/颜色、历史深度与接触范围归约五类shader链接通过，16个采样器符合WebGL2最低数量。

@@ -219,6 +219,29 @@ test('滤波shader限制在深度/法线边界内，按模式保留另一通道'
     assert.match(filterShader, /filterContact\?filtered\.a:center\.a/u);
 });
 
+test('TAA抖动不会切断SSGI历史，真实投影变化仍清历史', async () => {
+    const { createScreenLighting } = await import('../3rd/mmd-ar-test/web-screen-lighting.mjs');
+    const fixture = createRuntimeFixture(), camera = new FakeCamera();
+    camera.userData = { mmdArTaaBaseProjection: new FakeMatrix4(), mmdArTaaPhase: 0 };
+    const ao = { colorTarget: new FakeRenderTarget(64, 64), depthTexture: {}, compositeMaterial: { uniforms: {
+        screenAoEnabled: { value: 1 }, screenLightingEnabled: { value: false }, screenLightingTexture: { value: null },
+        screenLightingSize: { value: new FakeVector2() }, screenLightingFullSize: { value: new FakeVector2() }
+    } } };
+    const previousWindow = globalThis.window;
+    globalThis.window = { MmdArScreenLighting: { giEnabled: true, contactEnabled: true, giBlurPassCount: 0 } };
+    const lighting = createScreenLighting({ ...fixture, camera });
+    try {
+        lighting.prepare(ao, 64, 64, false, false);
+        camera.projectionMatrix.elements[8] = .01; camera.userData.mmdArTaaPhase = 1;
+        lighting.prepare(ao, 64, 64, false, false);
+        camera.userData.mmdArTaaBaseProjection.elements[0] = 2;
+        lighting.prepare(ao, 64, 64, false, false);
+        const draws = fixture.draws.filter(draw => draw.historyValid !== undefined);
+        assert.deepEqual(draws.map(draw => draw.historyValid), [false, true, false]);
+        assert.equal(draws[1].material.uniforms.contactFramePhase.value, 1);
+    } finally { lighting.dispose(); globalThis.window = previousWindow; }
+});
+
 test('历史SceneColor/HZB双缓冲首帧回退且所有pass无读写别名', async () => {
     const { createScreenLighting } = await import('../3rd/mmd-ar-test/web-screen-lighting.mjs');
     const { colorReductionShader } = await import('../3rd/mmd-ar-test/web-screen-lighting-shader.mjs');

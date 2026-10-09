@@ -125,6 +125,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
         if (!resources) return;
         resources.contextTarget?.removeEventListener('webglcontextlost', invalidateHistoryOnContextChange);
         resources.contextTarget?.removeEventListener('webglcontextrestored', invalidateHistoryOnContextChange);
+        for (const [target, name] of resources.lifecycleListeners || []) target.removeEventListener(name, invalidateHistoryOnContextChange);
         disposeHistory(resources.history);
         resources.contactDepthTarget?.dispose();
         for (const target of resources.targets) target.dispose();
@@ -149,7 +150,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             previousInverseProjection: { value: new THREE.Matrix4() }, previousCameraWorld: { value: new THREE.Matrix4() },
             fullSize: { value: new THREE.Vector2(1, 1) }, effectSize: { value: new THREE.Vector2(1, 1) },
             lightDirection: { value: direction }, contactEnabled: { value: false }, giEnabled: { value: false },
-            historyValid: { value: false }, contactStrength: { value: .5 }, contactDistance: { value: .3 },
+            historyValid: { value: false }, contactStrength: { value: .5 }, contactDistance: { value: .3 }, contactFramePhase: { value: 0 },
             giStrength: { value: 1 }, giRadius: { value: 2 }, lightWeight: { value: 1 },
             rayCount: { value: 4 }, stepCount: { value: 12 }, contactStepCount: { value: 12 }, hzbLevelCount: { value: 1 }
         };
@@ -198,6 +199,15 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
         };
         resources.contextTarget?.addEventListener('webglcontextlost', invalidateHistoryOnContextChange);
         resources.contextTarget?.addEventListener('webglcontextrestored', invalidateHistoryOnContextChange);
+        // 后台/设置切换也清GI历史；按资源生命周期注册与注销，避免反复开关泄漏。
+        resources.lifecycleListeners = [];
+        const listen = (target, name) => {
+            if (!target?.addEventListener) return;
+            target.addEventListener(name, invalidateHistoryOnContextChange);
+            resources.lifecycleListeners.push([target, name]);
+        };
+        if (typeof window !== 'undefined') for (const name of ['pagehide', 'pageshow', 'mmd-ar-render-settings']) listen(window, name);
+        if (typeof document !== 'undefined') listen(document, 'visibilitychange');
     };
 
     const ensureHistory = (fullWidth, fullHeight, effectWidth, effectHeight, quality, type) => {
@@ -217,7 +227,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             colorScratch: colorSteps.slice(0, -1).map(size => createRenderTarget(THREE, size.width, size.height, type)),
             depthScratch: depthSteps.slice(0, -1).map(size => createRenderTarget(THREE, size.width, size.height, type)),
             previousWorld: new THREE.Matrix4(), previousView: new THREE.Matrix4(),
-            previousProjection: new THREE.Matrix4(), previousInverseProjection: new THREE.Matrix4()
+            previousProjection: new THREE.Matrix4(), previousInverseProjection: new THREE.Matrix4(), previousStableProjection: new THREE.Matrix4()
         };
     };
 
@@ -297,8 +307,10 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
         const history = resources.history;
         camera.updateMatrixWorld(true);
         const currentWorld = camera.matrixWorld;
+        // TAA绘制期间提供基础投影，切断判断忽略亚像素抖动；历史采样仍保存真实投影。
+        const stableProjection = camera.userData?.mmdArTaaBaseProjection || camera.projectionMatrix;
         const useHistory = config.giEnabled === true && history?.valid === true && !isCameraCut(
-            history.previousWorld, currentWorld, history.previousProjection, camera.projectionMatrix
+            history.previousWorld, currentWorld, history.previousStableProjection, stableProjection
         );
         if (history && !useHistory) history.valid = false;
         const uniforms = resources.material.uniforms;
@@ -308,6 +320,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
         uniforms.effectSize.value.set(effectWidth, effectHeight);
         uniforms.inverseProjection.value = camera.projectionMatrixInverse;
         uniforms.projection.value = camera.projectionMatrix;
+        uniforms.contactFramePhase.value = camera.userData?.mmdArTaaPhase || 0;
         uniforms.cameraWorld.value = camera.matrixWorld;
         uniforms.currentView.value = camera.matrixWorldInverse;
         uniforms.contactEnabled.value = config.contactEnabled === true;
@@ -390,6 +403,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
                 history.previousWorld.copy(camera.matrixWorld);
                 history.previousView.copy(camera.matrixWorldInverse);
                 history.previousProjection.copy(camera.projectionMatrix);
+                history.previousStableProjection.copy(stableProjection);
                 history.previousInverseProjection.copy(camera.projectionMatrixInverse);
             }
         } finally {

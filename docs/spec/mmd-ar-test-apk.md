@@ -1,5 +1,57 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+## 2026-10-09 TAA与Canvas倍率契约（已实现并验证）
+
+```text
+已有声明 := renderer/camera、runtime.resize、ambientOcclusion.render、屏幕光照当前/历史目标
+新增设置 := taaEnabled=false、taaHistoryWeight=.9（0..0.95）、canvasScale=1（.25..2、步长.25）
+新增资源 := 最终颜色/当前深度、双缓冲历史颜色/深度、resolve/copy材料、相位/矩阵
+新增接口 := 绘制包装、历史失效、关闭释放、实际分辨率及能力诊断
+独立编辑器rest/seek -> invalidateTemporal；capture -> render({bypassTemporal:true})
+异步动作重播 -> 开始清历史 -> await加载/提交 -> finally再次清历史（相同动作ID也生效）
+capture临时resize AO为导出像素，finally恢复原绘制尺寸/相机/clear设置
+独立AO composite输出 -> 直色toneMapping/colorspace -> 重新预乘alpha
+    离屏颜色变换为恒等映射，仍保存线性预乘；TAA开关及capture半透明内区一致
+
+设置加载 -> 规范化本地值；TAA关闭/倍率1保留当前行为
+修改倍率 -> CSS舞台尺寸与自动DPR -> 请求绘制尺寸
+设备上限 := min(MAX_TEXTURE_SIZE, MAX_RENDERBUFFER_SIZE)
+实际pixelRatio := 自动DPR × 倍率 × 等比例设备限制
+renderer更新缓冲 -> AO/深度/接触/SSGI/TAA跟随实际尺寸
+CSS/角色根/相机位置与倍率保持；更新aspect/投影但不重新fit
+实际尺寸/降档状态 -> 原分辨率显示；保存/复位倍率1及TAA关闭
+
+普通绘制:
+    TAA关闭或诊断/导出 -> 原链；关闭释放历史
+    TAA开启 -> 保存未抖动投影/逆投影及原状态
+    8相位小于1像素偏移叠加clip坐标，保留原AR投影裁切
+    深度/场景颜色/AO/接触/SSGI -> 当前最终颜色目标
+    无历史 -> 当前帧初始化；否则当前深度重建、投向前帧
+    历史UV越界/深度不匹配/覆盖变化 -> 当前帧
+    动态颜色变化 -> 降低历史权重；历史裁剪至当前邻域颜色范围
+    RGBA预乘alpha累积，背景不引入不可见RGB，保持原色彩变换
+    读写分离历史目标 -> 主画布呈现 -> 更新前帧矩阵/深度
+    finally -> 恢复投影/逆投影、目标/viewport；拾取用正常相机
+SSGI联动:
+    切断比较未抖动投影；历史采样使用实际抖动投影
+    不把抖动当相机切断，不直接累积上一帧GI
+接触联动:
+    TAA有效时用时间相位；关闭沿用固定相位及独立保边模糊
+历史失效:
+    首帧/开关/倍率/DPR/尺寸/模型/动作跳转/相机切断/后台返回/上下文恢复
+    仅清时间历史，不复位角色根或相机距离
+资源与兼容:
+    按需分配；WebGL2不支持则TAA不可用，倍率仍可调
+    浮点目标仅能力允许时启用；颜色/alpha语义显式保持
+验收:
+    实际GPU边缘累积、历史深度/覆盖/颜色拒绝、透明边缘和无反馈
+    真实米娅动画/相机、PMX/GLB、AO/接触/SSGI组合
+    DPR1/2的.25/.5/1/1.5/2倍率、设备降档、刷新/复位/后台变换
+    关闭/resize/异常恢复、拾取/AR与诊断预览
+```
+
+实际接口：normalizeRenderSettings/calculateCanvasSize；createTemporalAA返回render/invalidate/dispose/active/getState，runTemporalAction处理异步重播失效；独立AO暴露invalidateTemporal/getTemporalState/setTemporalContent，render支持bypassTemporal。五个按需目标为当前颜色、两个历史颜色和两个RGBA8历史深度；支持浮点时颜色为HalfFloat，否则RGBA8。8相位不改变camera.view或世界变换，保留原AR投影并恢复逆矩阵；SSGI单独存previousStableProjection用于切断。
+
 ## 2026-10-09 接触屏幕步进、粗细深度确认与独立保边模糊（已实现）
 
 参考 := 用户指定知乎文章的两级深度/屏幕步进；普通Three深度与朝光源约定按项目实现

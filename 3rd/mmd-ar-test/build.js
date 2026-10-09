@@ -382,6 +382,7 @@ async function stageTextAssets() {
       let previousWidth = 0;
       let previousHeight = 0;
       let previousPixelRatio = 0;
+      let previousCanvasScale = 0;
       let resizeFrame = 0;
       const applyStageSize = () => {
         resizeFrame = 0;
@@ -399,10 +400,12 @@ async function stageTextAssets() {
         stage.style.setProperty('--display-stage-panel-max-height',
           'min(620px, calc(' + height + 'px - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 24px))');
         const pixelRatio = Math.min(2, Math.max(1, Number(window.devicePixelRatio) || 1));
-        if (width !== previousWidth || height !== previousHeight || pixelRatio !== previousPixelRatio) {
+        const canvasScale = window.MmdArRenderSettings?.canvasScale || 1;
+        if (width !== previousWidth || height !== previousHeight || pixelRatio !== previousPixelRatio || canvasScale !== previousCanvasScale) {
           previousWidth = width;
           previousHeight = height;
           previousPixelRatio = pixelRatio;
+          previousCanvasScale = canvasScale;
           window.DisplayMmd.resize(width, height);
         }
       };
@@ -410,6 +413,7 @@ async function stageTextAssets() {
         if (!resizeFrame) resizeFrame = window.requestAnimationFrame(applyStageSize);
       };
       window.addEventListener('resize', scheduleStageSize, { passive: true });
+      window.addEventListener('mmd-ar-render-settings', scheduleStageSize);
       window.visualViewport?.addEventListener('resize', scheduleStageSize, { passive: true });
       if (window.ResizeObserver) new ResizeObserver(scheduleStageSize).observe(stage);
       scheduleStageSize();
@@ -424,7 +428,7 @@ async function stageTextAssets() {
     </div>
   `);
 
-  WEB_CHARACTERS.addPanel($); require('./web-screen-lighting-build').panel($);
+  WEB_CHARACTERS.addPanel($); require('./web-screen-lighting-build').panel($); require('./web-render-settings-build').panel($);
   let extraCharacterProfiles;
   const assets = [
     ...(await fs.readdir(path.join(SOURCE_PUBLIC, 'js'))).filter(name => /^mmd-.*\.mjs$/u.test(name)).map(name => [path.join(SOURCE_PUBLIC, 'js', name), path.join(GENERATED_ASSETS, 'js', name)]),
@@ -521,7 +525,9 @@ async function stageTextAssets() {
       const alignedAoSource = alignAoDepthTexels(aoSource.replaceAll(depthSampler, 'uniform highp sampler2D tDepth;'));
       await fs.writeFile(aoPath, addAoBoundaryCorrection(fixAoNormalPreviewEdges(addAoNormalPreview(alignedAoSource))));
     }
-    await require('./web-screen-lighting-build').stage(GENERATED_ASSETS); const aoVersion = (await hashFile(aoPath)).sha256.slice(0, 12);
+    await require('./web-screen-lighting-build').stage(GENERATED_ASSETS);
+    await require('./web-render-settings-build').stage(GENERATED_ASSETS);
+    const aoVersion = (await hashFile(aoPath)).sha256.slice(0, 12);
     // 静态站点可能长时间缓存同路径 ESM；先给阴影模块加内容指纹，再计算 runtime 指纹。
     const pmxRuntimePath = path.join(GENERATED_ASSETS, 'js/display-pmx-runtime.js');
     // 两端测试副本共用高光注入，正式显示端源码保持原样。
@@ -600,7 +606,7 @@ async function stageTextAssets() {
 
   const scriptVersion = new Map();
   {
-    for (const fileName of ['web-screen-lighting-panel.mjs', 'web-character-panel.mjs', 'display-mmd-settings.js', 'web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'display-mmd-ar-native.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
+    for (const fileName of ['web-render-settings.mjs', 'web-screen-lighting-panel.mjs', 'web-character-panel.mjs', 'display-mmd-settings.js', 'web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'display-mmd-ar-native.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
     }
   }
@@ -783,7 +789,7 @@ async function stageTextAssets() {
     };
   </script>
   <script src="${scriptUrl('display-mmd-ar.js')}"></script>
-  ${`<script type="module" src="${scriptUrl('web-local-assets-ui.mjs')}"></script><script type="module" src="${scriptUrl('web-character-panel.mjs')}"></script><script type="module" src="${scriptUrl('web-screen-lighting-panel.mjs')}"></script>`}
+  ${`<script type="module" src="${scriptUrl('web-local-assets-ui.mjs')}"></script><script type="module" src="${scriptUrl('web-character-panel.mjs')}"></script><script type="module" src="${scriptUrl('web-screen-lighting-panel.mjs')}"></script><script type="module" src="${scriptUrl('web-render-settings.mjs')}"></script>`}
   <script>
     ${WEB_PANEL_GROUPS.WEB_PANEL_GROUP_JS}
     (() => {

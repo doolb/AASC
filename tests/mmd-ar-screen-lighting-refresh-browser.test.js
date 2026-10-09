@@ -48,7 +48,11 @@ test('刷新保留角色和独立采样设置，正式分类可展开，真实�
             if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ contactEnabled: true, giEnabled: true, quality: 'low', giBlurPassCount: 0 }));
         });
         const ready = async () => {
-            await page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 45000 });
+            try { await page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 45000 }); }
+            catch (error) {
+                context.diagnostic(`模型加载失败诊断：${JSON.stringify({ errors: failures, page: await page.evaluate(() => ({ state: window.DisplayMmd?.getState(), text: document.body.innerText.slice(-1600) })) })}`);
+                throw error;
+            }
             await page.evaluate(async () => { for (let i = 0; i < 6; i += 1) await new Promise(resolve => requestAnimationFrame(resolve)); });
         };
         const checkPicture = async () => {

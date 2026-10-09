@@ -14,6 +14,7 @@ uniform vec2 fullSize,effectSize;
 uniform vec3 lightDirection;
 uniform bool contactEnabled,giEnabled,historyValid;
 uniform float contactStrength,contactDistance,giStrength,giRadius,lightWeight;
+uniform float contactFramePhase;
 uniform int rayCount,stepCount,contactStepCount,hzbLevelCount;
 varying vec2 vUv;
 const float PI=3.14159265359;
@@ -144,8 +145,8 @@ bool traceContact(vec3 start,vec3 direction,float distanceLimit,float bias,int s
  vec4 orthogonal=projection*vec4(start-vec3(0.,0.,distanceLimit),1.);
  float startDepth=(projection*vec4(start,1.)).z/(projection*vec4(start,1.)).w*.5+.5;
  float projectedDistance=abs(orthogonal.z/orthogonal.w*.5+.5-startDepth);
- // 无时间累积，使用固定空间相位；不随帧号变化，静态画面不会闪烁。
- float jitter=fract(52.9829189*fract(dot(floor(screenStart.xy*fullSize),vec2(.06711056,.00583715))))-.5;
+ // TAA有效时叠加八相位时间采样；关闭时phase为0，保留原固定空间噪声。
+ float jitter=fract(52.9829189*fract(dot(floor(screenStart.xy*fullSize),vec2(.06711056,.00583715)))+contactFramePhase*.61803398875)-.5;
  // 极低步数不额外扩大采样空洞，12步及以上使用完整固定空间相位。
  jitter*=clamp((float(sampleCount)-4.)/8.,0.,1.);
  bool previousBlocked=false;float previousProgress=0.;

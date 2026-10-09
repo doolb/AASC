@@ -33,7 +33,7 @@ for (const optimized of [false, 'orthographic', 'perspective']) test(`${optimize
         return fragmentShader.slice(start, end + 1);
     };
     // 隔离无关历史追踪，执行原始函数体，不将GLSL算法复制成JS参考实现。
-    const instrumented = 'uniform highp sampler2D tDepth,tContactDepth;uniform mat4 projection,inverseProjection;uniform vec2 fullSize;uniform vec3 testStart,testDirection;uniform int stepCount;uniform float testDistance;uniform bool testAllowExit;\n'
+    const instrumented = 'uniform highp sampler2D tDepth,tContactDepth;uniform mat4 projection,inverseProjection;uniform vec2 fullSize;uniform vec3 testStart,testDirection;uniform int stepCount;uniform float testDistance,contactFramePhase;uniform bool testAllowExit;\n'
         + [extract('positionAt'), extract('inside'), ...(optimized ? [extract('clipContactPlane'), extract('contactRaySegment'), extract('contactBiasAt')] : []), extract(traceName), entry].join('\n');
     let browser;
     try {
