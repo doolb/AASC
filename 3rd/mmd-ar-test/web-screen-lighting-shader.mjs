@@ -3,6 +3,7 @@ export const vertexShader = `varying vec2 vUv; void main(){vUv=uv;gl_Position=ve
 
 export const fragmentShader = `
 uniform highp sampler2D tDepth;
+uniform highp sampler2D tContactDepth;
 uniform sampler2D tColor,tHistoryColor;
 uniform highp sampler2D tHistoryDepth0,tHistoryDepth1,tHistoryDepth2,tHistoryDepth3;
 uniform highp sampler2D tHistoryDepth4,tHistoryDepth5,tHistoryDepth6,tHistoryDepth7;
@@ -109,6 +110,89 @@ bool traceCurrent(vec3 start,vec3 direction,float distanceLimit,float bias,int s
  }
  return false;
 }
+// 在齐次空间裁剪短射线，避免端点越过近平面时UV翻转或除以零。
+bool clipContactPlane(float a,float b,inout vec2 interval){
+ if(a<0.&&b<0.)return false;
+ float delta=b-a;
+ if(delta>0.)interval.x=max(interval.x,-a/delta);
+ if(delta<0.)interval.y=min(interval.y,-a/delta);
+ return interval.x<=interval.y;
+}
+bool contactRaySegment(vec3 start,vec3 direction,float distanceLimit,out vec3 screenStart,out vec3 screenDelta,out float endToStartW){
+ vec4 a=projection*vec4(start,1.),b=projection*vec4(start+direction*distanceLimit,1.);
+ vec2 interval=vec2(0.,1.);
+ if(!clipContactPlane(a.w-1e-6,b.w-1e-6,interval))return false;
+ if(!clipContactPlane(a.w+a.z,b.w+b.z,interval)||!clipContactPlane(a.w-a.z,b.w-b.z,interval))return false;
+ if(!clipContactPlane(a.w*.998+a.x,b.w*.998+b.x,interval)||!clipContactPlane(a.w*.998-a.x,b.w*.998-b.x,interval))return false;
+ if(!clipContactPlane(a.w*.998+a.y,b.w*.998+b.y,interval)||!clipContactPlane(a.w*.998-a.y,b.w*.998-b.y,interval))return false;
+ vec4 ca=mix(a,b,interval.x),cb=mix(a,b,interval.y);
+ screenStart=ca.xyz/ca.w*.5+.5;screenDelta=cb.xyz/cb.w*.5+.5-screenStart;
+ endToStartW=cb.w/ca.w;
+ return interval.y-interval.x>1e-6;
+}
+// 接触专用屏幕步进：粗步只做UV/deviceDepth运算；交点用全深度双向细化。
+// 粗范围向外量化，取样使用原像素对应的2×2格，奇数尺寸不会错位。
+float contactBiasAt(float depth,float bias){
+ // 普通透视/正交投影的深度导数；偏置随射线处的w变化，朝相机走时不能沿用起点偏置。
+ float inverseW=inverseProjection[2][3]*(depth*2.-1.)+inverseProjection[3][3];
+ float determinant=projection[2][2]*projection[3][3]-projection[3][2]*projection[2][3];
+ return max(abs(determinant)*bias*.5*inverseW*inverseW/max(abs(1.+bias*projection[2][3]*inverseW),1e-6),1e-8);
+}
+bool traceContact(vec3 start,vec3 direction,float distanceLimit,float bias,int sampleCount,out vec2 hitUv,out vec3 hit,out float confidence,out float hitDistance){
+ vec3 screenStart,screenDelta;float endToStartW;
+ if(!contactRaySegment(start,direction,distanceLimit,screenStart,screenDelta,endToStartW))return false;
+ vec4 orthogonal=projection*vec4(start-vec3(0.,0.,distanceLimit),1.);
+ float startDepth=(projection*vec4(start,1.)).z/(projection*vec4(start,1.)).w*.5+.5;
+ float projectedDistance=abs(orthogonal.z/orthogonal.w*.5+.5-startDepth);
+ // 无时间累积，使用固定空间相位；不随帧号变化，静态画面不会闪烁。
+ float jitter=fract(52.9829189*fract(dot(floor(screenStart.xy*fullSize),vec2(.06711056,.00583715))))-.5;
+ // 极低步数不额外扩大采样空洞，12步及以上使用完整固定空间相位。
+ jitter*=clamp((float(sampleCount)-4.)/8.,0.,1.);
+ bool previousBlocked=false;float previousProgress=0.;
+ for(int i=1;i<=64;i++){
+  if(i>sampleCount)break;
+  float linearProgress=i==sampleCount?1.:(float(i)+jitter)/float(sampleCount);
+  // 透视端点w变化大时，均匀UV会把短程采样集中在近平面；用一次标量换算保留物理步距。
+  float progress=linearProgress*endToStartW/(1.-linearProgress+linearProgress*endToStartW);
+  vec3 q=screenStart+screenDelta*progress;
+  float depthBias=contactBiasAt(q.z,bias);
+  float thickness=max(depthBias*6.,projectedDistance*.04*max(.07,progress));
+  vec2 coarseUv=(floor(q.xy*fullSize/2.)+.5)/ceil(fullSize/2.);
+  vec4 encoded=texture2D(tContactDepth,coarseUv);
+  float nearDepth=dot(encoded.rg*255.,vec2(256.,1.))/65535.;
+  float farDepth=dot(encoded.ba*255.,vec2(256.,1.))/65535.;
+  float nearGap=q.z-nearDepth,farGap=q.z-farDepth;
+  // 只有范围整体确定在同一侧才能略过全深度；跨越仍必须确认。
+  if(nearDepth>=.99999||(nearGap<=depthBias&&!previousBlocked)){
+   previousBlocked=false;previousProgress=progress;continue;
+  }
+  if(farGap>thickness&&previousBlocked){previousProgress=progress;continue;}
+  float depth=texture2D(tDepth,q.xy).r,gap=depth<.99999?q.z-depth:-depthBias;
+  bool currentBlocked=gap>depthBias;
+  if(currentBlocked!=previousBlocked){
+   bool exiting=!currentBlocked;float low=previousProgress,high=progress;
+   // 固定细化精度，不把厚度随粗步长度增大；低采样档也能拒绝轮廓跳变。
+   for(int k=0;k<8;k++){
+    float middle=(low+high)*.5;vec3 probe=screenStart+screenDelta*middle;
+    float d=texture2D(tDepth,probe.xy).r;bool blocked=d<.99999&&probe.z-d>contactBiasAt(probe.z,bias);
+    if(blocked!=exiting)high=middle;else low=middle;
+   }
+   float refinedProgress=exiting?low:high;vec3 refined=screenStart+screenDelta*refinedProgress;
+   hitUv=refined.xy;float d=texture2D(tDepth,hitUv).r;
+   vec3 rayPoint=positionAt(hitUv,refined.z);hit=positionAt(hitUv,d);
+   float refinedGap=refined.z-d;
+   float refinedBias=contactBiasAt(refined.z,bias);
+   float refinedThickness=max(refinedBias*6.,projectedDistance*.04*max(.07,refinedProgress));
+   hitDistance=length(rayPoint-start);
+   if(d<.99999&&refinedGap>refinedBias&&refinedGap<refinedThickness&&hit.z-rayPoint.z>bias
+      &&length(hit-start)>bias*3.&&hitDistance<=distanceLimit+bias){
+    confidence=1.-smoothstep(refinedThickness*.4,refinedThickness,refinedGap);return true;
+   }
+  }
+  previousBlocked=currentBlocked;previousProgress=progress;
+ }
+ return false;
+}
 // 当前帧射线经相机变换投向上一帧；HZB粗筛后在最细层做区间细化和深度校验。
 bool traceHistory(vec3 start,vec3 direction,float distanceLimit,float bias,out vec2 hitUv,out vec3 hit,out float confidence,out float hitDistance,out vec3 historyDirection){
  mat4 currentToPreviousView=previousView*cameraWorld;
@@ -157,7 +241,7 @@ void main(){
  vec3 start=p+n*bias*2.;vec2 hitUv;vec3 hit;float confidence,hitDistance;float shadow=0.;vec3 bounce=vec3(0.);
  float facing=max(dot(n,lightDirection),0.);
  if(contactEnabled&&facing>0.&&lightWeight>0.){
-  if(traceCurrent(start,lightDirection,contactDistance,bias,contactStepCount,true,hitUv,hit,confidence,hitDistance)){
+  if(traceContact(start,lightDirection,contactDistance,bias,contactStepCount,hitUv,hit,confidence,hitDistance)){
    shadow=confidence*contactStrength*lightWeight*smoothstep(0.,.25,facing)*edgeFade(hitUv);
    shadow*=1.-smoothstep(contactDistance*.75,contactDistance,length(hit-p));
   }
@@ -235,13 +319,14 @@ vec4 resolveScreenLighting(vec2 uv,float depth){
 }
 `;
 
-// 双边降噪：深度/法线引导空间权重，只滤波 SSGI RGB，alpha 保持中心接触阴影值。
+// 深度/法线保边滤波，按模式只处理SSGI RGB或接触alpha，另一通道保持中心值。
 export const filterShader = `
 uniform sampler2D tInput;
 uniform highp sampler2D tDepth;
 uniform mat4 inverseProjection;
 uniform vec2 fullSize,effectSize,filterAxis;
 uniform int blurRadius;
+uniform bool filterContact;
 varying vec2 vUv;
 vec3 positionAt(vec2 uv,float depth){vec4 p=inverseProjection*vec4(uv*2.-1.,depth*2.-1.,1.);return p.xyz/p.w;}
 bool inside(vec2 uv){return all(greaterThan(uv,vec2(.001)))&&all(lessThan(uv,vec2(.999)));}
@@ -261,7 +346,7 @@ void main(){
  vec3 p=positionAt(vUv,depth),n=normalAt(vUv,p);
  float footprint=length(positionAt(vUv+1./effectSize,depth)-p),tolerance=max(.001,footprint*.65);
  vec4 center=texture2D(tInput,vUv);float sigma=max(float(blurRadius)*.5,.5);
- vec3 sum=vec3(0.);float total=0.;
+ vec4 sum=vec4(0.);float total=0.;
  for(int i=-5;i<=5;i++){
   if(abs(i)>blurRadius)continue;
   vec2 q=vUv+filterAxis*float(i)/effectSize;if(!inside(q))continue;
@@ -269,9 +354,10 @@ void main(){
   vec3 other=positionAt(q,d),otherNormal=normalAt(q,other),delta=other-p;
   float plane=max(abs(dot(delta,n)),abs(dot(delta,otherNormal)));
   float w=exp(-float(i*i)/(2.*sigma*sigma)-plane/tolerance)*pow(max(dot(n,otherNormal),0.),16.);
-  sum+=texture2D(tInput,q).rgb*w;total+=w;
+  sum+=texture2D(tInput,q)*w;total+=w;
  }
- gl_FragColor=vec4(total>1e-5?sum/total:center.rgb,center.a);
+ vec4 filtered=total>1e-5?sum/total:center;
+ gl_FragColor=vec4(filterContact?center.rgb:filtered.rgb,filterContact?filtered.a:center.a);
 }`;
 
 // SceneColor Reduction 通过对应深度层过滤跨物体颜色混合。
@@ -331,4 +417,24 @@ void main(){
  }
  vec2 nearestPacked=packDepth16(valid>.5?nearestDepth:1.),farthestPacked=packDepth16(valid>.5?farthestDepth:0.);
  gl_FragColor=vec4(nearestPacked,farthestPacked);
+}`;
+
+// 当前帧接触粗深度：精确覆盖2×2原像素，奇数边缘夹紧，near向下/far向上量化。
+// 背景参与far范围，混合格不会被错误视作完整前景而裁掉薄发片。
+export const contactDepthReductionShader = `
+uniform highp sampler2D tInput;
+uniform vec2 inputSize;
+varying vec2 vUv;
+vec2 packCode(float code){return vec2(floor(code/256.),mod(code,256.))/255.;}
+void main(){
+ vec2 base=floor(gl_FragCoord.xy)*2.;float nearDepth=1.,farDepth=0.;
+ for(int i=0;i<4;i++){
+  vec2 offset=vec2(float(i-i/2*2),float(i/2));
+  vec2 uv=(min(base+offset,inputSize-1.)+.5)/inputSize;
+  float d=texture2D(tInput,uv).r;nearDepth=min(nearDepth,d);farDepth=max(farDepth,d);
+ }
+ // 乘法也会舍入：在整数码边界留一码余量，保证解码范围仍包住真实float32深度。
+ float nearCode=nearDepth>=.99999?65535.:max(0.,floor(nearDepth*65535.)-1.);
+ float farCode=min(65535.,ceil(farDepth*65535.)+1.);
+ gl_FragColor=vec4(packCode(nearCode),packCode(farCode));
 }`;
