@@ -11098,6 +11098,15 @@
   - 接触阴影/屏幕光照10/10通过，Web构建成功；扩展阴影组合25通过/1失败/1跳过，全量1078通过/161失败/21跳过，详见 `docs/task/20261008_MMDAR接触阴影自测结果.md`。APK一致性测试子进程因异常后未关闭服务而挂起，定点结束后取得全量结果；未声称全量通过。
   - 同步design/spec/task/todo及独立测试页README；`servicePackage`原已为true并保持，其他发布状态不变。保留已有SSGI/HZB、配置与相机改动，不混入提交；完整工作区Shader另有HZB的`packed`保留字编译错误，用户模型同视角与手机性能待验收。未打包APK或发布站点。
 
+### MMD-AR接触阴影与主光阴影对齐
+
+- ✅ [2026-10-09] 按用户要求提交剩余非日志、非模型改动：接触阴影对齐代码/文档、两份功能笔记及参考图片新增/删除（新增参考图约29MB）；运行日志、任务结果、模型、APK/ZIP和构建缓存留在本地。保留远端TAA采样参数；本次仅diff检查，未运行测试或发布。
+
+- ✅ [2026-10-08] 修正接触阴影与主光阴影的位置偏差
+  - `web-screen-lighting.mjs`：主光shadow map有效时读取`normalBias`，并按正交阴影相机深度范围换算`bias`，同步到接触射线起点；关闭主光阴影或非正交阴影相机时不应用该偏移。
+  - `web-screen-lighting-shader.mjs`：接触阴影alpha上采样选择几何权重最高的同表面样本，SSGI RGB保持原双边加权；无新增分辨率、循环或设置。
+  - 对应design/spec/task/todo已更新；`npm run build:web:mmd-ar-test`成功，本地`web-dist`已生成。未运行自动测试；同视角浏览器/设备观感待现场验收；2026-10-09合并远端TAA后提交，本次未重建、测试或发布外网。
+
 ### Offline MMD 首次下载后加速
 
 - ✅ [2026-10-08] 固定白名单 PMX、贴图与 VMD 首次校验后写入 Offline 可保留的 `res/temp/mmd-static-cache/<version>/`；后续从磁盘读取，版本化同源 URL 提供一年 immutable HTTP 缓存。

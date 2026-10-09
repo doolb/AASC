@@ -1,0 +1,15 @@
+陀螺仪定位
+
+xpbd webgl版本
+
+顶点布料优化和webgl版本
+https://matthias-research.github.io/pages/tenMinutePhysics/index.html
+16
+或者
+https://github.com/jspdown/cloth
+
+小说文生图和视频
+
+pmx view，edit，和render
+
+优化聊天界面交互

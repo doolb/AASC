@@ -139,6 +139,34 @@ GI追踪:
 合并后最终结果 := 资源清单及两个真实浏览器用例3/3通过，无跳过；正式接口与APK路径不变
 ```
 
+## 2026-10-08 接触阴影对齐主光阴影偏置与边界
+
+```text
+每帧场景深度/颜色完成后，接触阴影pass准备：
+  lightDirection := normalize(keyLight.worldPosition - keyLight.target.worldPosition)
+  mainShadowActive := renderer.shadowMap.enabled 且 keyLight.castShadow
+  if mainShadowActive 且 keyLight阴影相机为正交相机:
+    receiverNormalOffset := keyLight.shadow.normalBias
+    receiverLightOffset := -keyLight.shadow.bias * (shadowCamera.far - shadowCamera.near)
+  else:
+    receiverNormalOffset := 0
+    receiverLightOffset := 0
+  接触射线的深度重建法线 n、表面位置 p 与像素保护偏置 pixelBias := 原算法
+  rayStart := p + n * (receiverNormalOffset + 2 * pixelBias)
+             + lightDirection * receiverLightOffset
+  按原主光方向、接触距离、厚度/自遮挡保护和采样步数追踪当前帧可见深度
+
+全分辨率几何引导上采样：
+  四个低分辨率效果样本 -> 计算原双边几何权重 w（双线性 * 深度 * 法线）
+  SSGI RGB := 按w加权平均（原行为）
+  接触阴影alpha := w最大样本的alpha（不平均alpha，避免边界混合拖移）
+  无有效样本 -> RGB/alpha为0
+```
+
+适用范围 := 独立MMD-AR接触阴影；不修改Three.js主光阴影结果、SSGI RGB、正式显示端或用户设置
+TAA兼容 := 同时保留contactFramePhase时间采样、基础投影历史和生命周期清理；两项接触bias独立传入
+限制 := 深度重建几何法线近似材质法线；单层屏幕深度/低分辨率仍可能造成剩余边界差异
+
 ## 2026-10-08 接触阴影补齐反向深度穿越（已实现）
 
 ```text
