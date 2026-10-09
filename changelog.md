@@ -1,7 +1,7 @@
 ### 显示端ASR反馈与手动录音
 
 - ✅ [2026-10-09] VAD取消独立显示，数字并入状态文字末尾，例如“小爱 · 监听中 0.03”。
-  - 修改display.html、display-voice-controls.js/CSS及单元/浏览器夹具；状态文本和实时数字分别更新但共用同一背景，数字不加VAD前缀，暂停/停止清空。21项相关测试通过、无跳过，截图核对及diff检查通过；文档同步；已生成code-v52.zip（16,932,808字节；SHA-256 c4e605f1957ce09c1a182d75bdb780ad3173581f251d46975b713754e4624886），源提交bce21a9b、931文件源字节一致及CRC/签名/组件约束通过。servicePackage=false，保留minApk=true/dependenciesPackage=false，LAN/WAN发布待验证。
+  - 修改display.html、display-voice-controls.js/CSS及单元/浏览器夹具；状态文本和实时数字分别更新但共用同一背景，数字不加VAD前缀，暂停/停止清空。21项相关测试通过、无跳过，截图核对及diff检查通过；文档同步；已生成code-v52.zip（16,932,808字节；SHA-256 c4e605f1957ce09c1a182d75bdb780ad3173581f251d46975b713754e4624886），源提交bce21a9b、931文件源字节一致及CRC/签名/组件约束通过。servicePackage=false，保留minApk=true/dependenciesPackage=false，LAN/WAN签名清单一致、全部组件HTTP大小/哈希验证及精确清理通过，无错误；两端code目录仅保留code-v52.zip，已同步origion/master。
 
 - ✅ [2026-10-09] 状态文字上方显示本端ASR结果，监听时显示两位小数VAD；手动再次点击立即停止，满足有效语音及静音等待才识别，否则丢弃。
   - display.html新增共用就绪判断、RMS/ASR反馈；display-voice-controls.js/CSS独立结果与数值节点。自动静音、按钮、60秒超时复用判断，保持分段PCM、声纹和过期门控。
@@ -11195,3 +11195,8 @@
 - ✅ [2026-10-09] 完成用户反馈澄清及只读排查，确认反馈为斜向锯齿更明显；修复仍待方案确认。
   - 更新`docs/todo.md`、`docs/design/mmd-ar-test-apk.md`、`docs/spec/mmd-ar-test-apk.md`与`docs/task/20261009_MMDAR_FSR2轮廓覆盖率排查.md`；未修改运行代码或新测试、未构建/发布。
   - 现有真实GPU FSR2测试复跑1/1通过、GL错误0；其部分覆盖/RMS断言不能证明空间锯齿改善。数值探针按当前四点深度筛选与零权重回退分支，复现比例1背景中心alpha从0变1；实际GPU与现场影响尚待验证。
+
+### Offline声纹持久化与界面调查
+
+- 📋 [2026-10-09] 查明声纹库路径使用代码根，热更新版本切换后读成新目录空库；更新包未包含数据库，尚未核实用户设备旧文件。
+  - 同时查明竖屏浮动入口未避让68px底部导航，群聊名称使用默认助手且初始选项硬编码助手。已记录design/spec/task/todo和具体修复方案，按AGENTS等待确认；尚未改这三项运行代码或设备数据。连接ADB设备未安装Offline包。

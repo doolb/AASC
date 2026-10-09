@@ -112,3 +112,16 @@ RMS通知 -> 实际采集中，将数字子节点textContent设为 " " + rms.toF
 按钮aria-label继续使用助手名/状态及操作，不加入实时数字
 ASR结果、PCM/VAD/ASR判定、配置、单次结束规则保持
 ```
+
+code52已实现数字合并并发布LAN/WAN；21项相关测试、签名/完整组件HTTP大小和SHA-256/精确清理通过。
+
+## 群聊状态与助手选项纠正（2026-10-09，待确认）
+
+```text
+初始assistantNames = []，不生成虚构助手项
+updateAssistantConfig -> 仅规范化明确配置的有效名字，空配置不插入助手
+getVoiceStatusName -> private/role有效目标返回真实名字，否则群聊
+语音控件配置未到达fallback -> 群聊
+测试 -> 初始/配置空时只群聊；配置小爱后群聊+小爱
+    群聊状态名称始终群聊，切到小爱状态名称小爱，面板关闭亦同步
+```

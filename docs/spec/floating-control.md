@@ -295,3 +295,14 @@ document.addEventListener('DOMContentLoaded'):
 | public/js/display-list.js | 显示端列表模块 |
 | public/js/websocket.js | WebSocket 消息处理 |
 | public/js/main.js | 初始化入口 |
+
+## 竖屏底部导航避让（2026-10-09，待确认）
+
+```text
+portrait:
+    floating-control.bottom = 20px + 68px + safe-area-inset-bottom
+    self-test-trigger.bottom = 80px + 68px + safe-area-inset-bottom
+    floating-recording-pause保持相对控制容器bottom120px
+landscape -> 保持原位置和三按钮间距
+浏览器 -> 三按钮rect.bottom < sidebar.rect.top，切换方向仍满足布局
+```

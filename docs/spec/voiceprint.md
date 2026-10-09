@@ -179,3 +179,25 @@ chat.js: sendAudioForRecognition → data.segments 逐段 / data.speaker 归属
 注册（display）: 控制端录音→register→中转 APK voiceprintExtract→回 embedding→store.add→广播
 库同步: APK connect/变更→fetch /api/voiceprint/db→voiceprintSyncDb→本地重建
 ```
+
+## 服务包切换后的持久化与一次恢复（2026-10-09，待确认、未实施）
+
+```text
+projectRoot = resolve(AASC_PROJECT_ROOT or existing code root)
+canonicalDb = projectRoot/res/voiceprint/db.json
+启动:
+    读取并验证canonicalDb
+    有有效非空库 -> 保留当前库
+    损坏库 -> 报错，禁止用空库或旧库静默覆盖
+    缺失/空库且尚未恢复:
+        候选 = root/updates/code/code-v<数字>/res/voiceprint/db.json
+        仅普通文件，不跟随符号链接；验证结构和有效embedding
+        选最近的有效非空候选；有多个不自动跨库合并
+        保存源路径与版本备份信息，保留原文件；已有canonicalDb先备份
+        同目录临时写 -> 原子改名 -> 恢复标记
+    注册/删除落盘 -> 始终canonicalDb，不跟随当前代码版本变化
+测试:
+    code-vA注册 -> code-vB重启仍可见
+    旧目录恢复 -> 下次启动不重复恢复；删除不会复活
+    当前有效库优先、损坏库保护、空/缺失/无旧库、路径与原文件不变
+```
