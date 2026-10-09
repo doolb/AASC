@@ -1,12 +1,13 @@
 // 独立测试页的渲染设置，与正式显示端配置隔离。
-export const defaults = Object.freeze({ taaEnabled: false, taaHistoryWeight: .9, canvasScale: 1, taaJitterScale: 1, taaJitterSamples: 8 });
+export const defaults = Object.freeze({ taaEnabled: false, aaMode: 'taa', fsr2Scale: .67, taaHistoryWeight: .9, canvasScale: 1, taaJitterScale: 1, taaJitterSamples: 8 });
 export const jitterSampleCounts = Object.freeze([4, 8, 16, 32]);
 export const storageKey = 'aasc.mmdArTest.render.v1';
 const number = (raw, fallback, min, max) => raw == null || raw === '' || typeof raw === 'boolean' || !Number.isFinite(Number(raw))
     ? fallback : Math.min(max, Math.max(min, Number(raw)));
 export function normalizeRenderSettings(input) {
     const samples = number(input?.taaJitterSamples, 8, -Infinity, Infinity);
-    return { taaEnabled: input?.taaEnabled === true,
+    return { taaEnabled: input?.taaEnabled === true, aaMode: input?.aaMode === 'fsr2' ? 'fsr2' : 'taa',
+        fsr2Scale: Math.round(number(input?.fsr2Scale, .67, .5, 1) * 100) / 100,
         taaHistoryWeight: number(input?.taaHistoryWeight, .9, 0, .95),
         canvasScale: Math.round(number(input?.canvasScale, 1, .25, 2) * 4) / 4,
         taaJitterScale: number(input?.taaJitterScale, 1, 0, 2),
@@ -36,6 +37,7 @@ export function initRenderSettings() {
         }
         document.querySelector('[data-render-value="taaHistoryWeight"]').textContent = value.taaHistoryWeight.toFixed(2);
         document.querySelector('[data-render-value="taaJitterScale"]').textContent = value.taaJitterScale.toFixed(2);
+        document.querySelector('[data-render-value="fsr2Scale"]').textContent = `${value.fsr2Scale.toFixed(2)}×`;
         document.querySelector('[data-render-value="canvasScale"]').textContent = `${value.canvasScale.toFixed(2)}×`;
         if (persist) try { localStorage.setItem(storageKey, JSON.stringify(value)); } catch (error) { /* 当前会话仍可调整。 */ }
         window.dispatchEvent(new Event('mmd-ar-render-settings'));
@@ -49,7 +51,10 @@ export function initRenderSettings() {
         const info = window.MmdArRenderInfo || {};
         for (const input of panel.querySelectorAll('input, select')) input.disabled = info.taaSupported === false;
         panel.querySelector('[data-taa-status]').textContent = info.taaSupported === false
-            ? '当前设备不支持WebGL2，TAA不可用。' : '多帧减少锯齿和采样闪烁；快速运动可能产生残影。';
+            ? '当前设备不支持WebGL2，TAA/FSR2不可用。'
+            : value.taaEnabled && value.aaMode === 'fsr2'
+                ? 'FSR2模式为时域升采样近似，不读取物体运动矢量；动态角色可能残影。'
+                : value.taaEnabled ? 'TAA多帧减少锯齿和采样闪烁；快速运动可能产生残影。' : '选择TAA或FSR2；快速运动可能产生残影。';
         document.querySelector('[data-render-limit]').textContent = info.limited ? '已按设备尺寸上限限制' : '';
     };
     window.addEventListener('mmd-ar-render-capability', status);

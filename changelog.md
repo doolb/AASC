@@ -1,3 +1,24 @@
+### MMD-AR FSR2斜边滤波方向修正
+
+- ✅ [2026-10-09] 用户反馈初版滤波横向/纵向改善、斜向加重。FSR2最终pass的edge normal由四角差分改为N/S/E/W luma梯度，旋转为切线采样；TAA与FSR2比例设置不变。
+  - 更新`web-temporal-aa-shader.mjs`、`tests/mmd-ar-temporal-aa-browser.test.js`及design/spec/task/self-test。
+  - 真实WebGL 0°/45°/90°静态边缘、比例0.5/1.0六组alpha RMS全部下降；45°比例0.5为44.7639→30.8670、1.0为30.7673→21.2193；水平/垂直也未回归。中心颜色不变，GL无错误。TAA GPU/单元与真实米娅PNG/光照集成通过，网页重建成功。
+  - SwiftShader多轮全帧耗时波动明显，不据此推断性能收益；无运动矢量对动态场景的限制及Android WebView验收仍在。
+
+### MMD-AR FSR2轮廓锯齿/爬行优化
+
+- ✅ [2026-10-09] 用户反馈比例1.0仍不如TAA后，保留现有TAA与FSR2比例设置；仅在FSR2最终present pass加入轻量FXAA风格边缘滤波，不写回历史、不增加render target或运动矢量。
+  - 更新`web-temporal-aa-shader.mjs`、`web-temporal-aa.mjs`、`tests/mmd-ar-temporal-aa-browser.test.js`及FSR2 design/spec/task/usage/README/self-test/todo。
+  - 真实WebGL静态斜边：比例0.5部分覆盖0→262、alpha跨jitter RMS 47.3677→36.0012；比例1.0覆盖0→294、RMS33.621→18.1807；内部RGBA保持、TAA GPU fixture不变，21项TAA/屏幕光照单元通过。真实米娅集成通过并完成网页构建；320×400 SwiftShader中位数FSR2 98.3ms、TAA119.0ms，未验证手机/Android WebView。
+  - 滤波可能轻微软化细线并增加输出采样；动态动画仍受无物体运动矢量限制。未构建APK或发布外网。
+
+### MMD-AR TAA / FSR2 抗锯齿模式
+
+- ✅ [2026-10-09] 独立MMD-AR抗锯齿面板保留普通TAA，并新增互斥FSR2选择与内部比例控制。FSR2为无物体运动矢量的普通WebGL2时域升采样近似，复用相机/深度历史，不宣称官方AMD SDK；旧TAA存储兼容，PNG捕获保持请求尺寸。
+  - 更新`web-render-settings.mjs`、`web-render-settings-build.js`、`web-temporal-aa.mjs`、`web-temporal-aa-shader.mjs`、`web-editor-bridge.mjs`与独立网页构建产物；更新设计/spec/task/usage/README/self-test/todo。
+  - TAA设置单测8/8；真实GPU TAA/FSR2 Shader 2/2、真实米娅模式/导出集成1/1；`npm run build:web:mmd-ar-test`成功。320×400输出、FSR2 160×200内部输入时SwiftShader中位数94.1ms（普通TAA118.0ms），估算历史目标3,328,000 vs4,096,000 bytes；不代表手机性能。
+  - 同组附带`mmd-ar-web-panel-groups.test.js`有1项既有lighting fixture缺失正式HTML额外控件失败（15项通过/7项跳过）；未修改正式页/该分组模块。Android WebView/手机画面与帧时待实机验收；未构建APK或发布外网。
+
 ### MMD-AR TAA抖动参数
 
 - ✅ [2026-10-09] 上传前合并远端接触阴影对齐修复920fca8d，重新网页构建并完成TAA/屏幕光照/真实GPU与模型/追踪/滤波/刷新六文件28/28，无跳过。最新周期8/32同条件软件GPU128.4/128.6ms、目标均5；保留原24项及性能历史记录，用户配置未提交或覆盖。
@@ -11121,3 +11142,9 @@
 - ✅ [2026-10-08] 固定白名单 PMX、贴图与 VMD 首次校验后写入 Offline 可保留的 `res/temp/mmd-static-cache/<version>/`；后续从磁盘读取，版本化同源 URL 提供一年 immutable HTTP 缓存。
   - 修改 MMD 资源服务、server-app 与显示端路径校验；缓存使用 SHA/长度复核、并发合并、临时文件原子替换、坏缓存重取及旧版本目录清理，并隔离符号链接。旧路径保持兼容且 `no-store`，缓存写入失败不影响已校验响应。
   - 服务测试17/17、显示端路径测试1/1通过。code v47：16,895,693 bytes，SHA-256 `cdccd101c1dbb4c67140496a520316cb0dc67f8357529364900c4d58fed7d865`；LAN `/mnt/aasc-offline` 与 WAN `/home/as/a/aasc-offline` 发布成功，两端清单签名/一致性及全部组件大小/SHA-256验证通过，旧 code 版本按数字文件规则清理。dependencies v6、min APK v34、Node-min seeds v39 和 data-repair v2 保持；未构建 APK。`servicePackage=false`、`minApk=true`、`dependenciesPackage=false`。Android 冷启动与实际耗时待验收。
+
+### MMD-AR FSR2斜向阶梯锯齿排查
+
+- ✅ [2026-10-09] 完成用户反馈澄清及只读排查，确认反馈为斜向锯齿更明显；修复仍待方案确认。
+  - 更新`docs/todo.md`、`docs/design/mmd-ar-test-apk.md`、`docs/spec/mmd-ar-test-apk.md`与`docs/task/20261009_MMDAR_FSR2轮廓覆盖率排查.md`；未修改运行代码或新测试、未构建/发布。
+  - 现有真实GPU FSR2测试复跑1/1通过、GL错误0；其部分覆盖/RMS断言不能证明空间锯齿改善。数值探针按当前四点深度筛选与零权重回退分支，复现比例1背景中心alpha从0变1；实际GPU与现场影响尚待验证。

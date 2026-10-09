@@ -1,5 +1,32 @@
 # 自测功能实现文档
 
+## FSR2轮廓滤波回归（2026-10-09）
+
+```text
+真实静态斜边 + 32/64与64/64输入输出 -> FSR2 present开/关滤波对照
+    部分覆盖alpha像素增加；跨jitter静态轮廓alpha RMS变化下降
+    中心RGBA逐值一致、gl.getError()==0；检查透明边界无重复预乘
+普通TAA -> edgeAaEnabled=false，真实颜色/alpha/背景揭露fixture仍同值
+真实米娅 -> FSR2输入160×200/输出320×400；AO/接触/SSGI/PNG旁路与恢复
+性能 -> 同一SwiftShader场景分别记录TAA/FSR2全帧GPU完成时间和历史目标估算
+```
+
+## TAA / FSR2模式回归（2026-10-09）
+
+```text
+旧localStorage(taaEnabled) + 缺aaMode -> 加载为TAA；新选择与fsr2Scale保存/刷新/复位
+总开关关闭 -> 两种方式旁路；aaMode='taa'|'fsr2'互斥，不双重resolve
+TAA路径 -> 原投影抖动、1:1目标、历史拒绝、预乘alpha与PNG尺寸不变
+FSR2路径 -> 输出尺寸×比例的AO/场景颜色/深度；当前TAA颜色输入按内部尺寸
+    jitter按内部像素；全分辨率历史颜色/深度；depth-guided当前颜色重建并present到输出
+    验证相机/深度重投影、覆盖/颜色拒绝、模式/比例改变失效、异常释放与无纹理反馈
+实际WebGL2 -> 32×32输入升采样到64×64；真实模型160×200输入到320×400输出
+    WebGL2能力旁路/诊断/PNG不降内部分辨率；不生成/读取物体或骨骼运动矢量
+性能 -> 固定模型和Canvas倍率比较TAA/FSR2；拆分内部输入与输出历史显存估算
+    SwiftShader只做正确性和软件GPU计时，不代表移动设备帧时
+```
+
+
 ## TAA抖动参数回归（2026-10-09）
 
 ```text

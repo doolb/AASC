@@ -1,5 +1,21 @@
 # 自测功能文档
 
+## MMD-AR FSR2轮廓滤波（2026-10-09）
+
+真实WebGL静态长条测试对比FSR2最终present滤波开/关，分别跑0°/45°/90°、比例0.5/1.0和多轮jitter。alpha跨帧RMS变化（滤波前→后）：0.5比例水平/斜向/垂直为35.1389/44.7639/35.1389→34.3737/30.8670/34.3737；1.0比例为34.7781/30.7673/33.5204→33.5596/21.2193/32.3604。六种组合部分覆盖像素增加；中心RGBA固定[85,170,221,255]、`gl.getError()===0`。TAA真实GPU颜色/透明/背景揭露fixture通过，新方向滤波只用于FSR2。
+
+最终方向修正后真实米娅模式/PNG/AO/接触/SSGI浏览器回归1/1通过，320×400输出与160×200 FSR2输入保持。该轮SwiftShader样本TAA61.6ms、FSR2 52.1ms；前轮结果明显不同，软件GPU计时受环境影响，不作收益比较或手机推断。网页构建成功，Vite报告chunk大于500kB警告。静态边缘fixture改善不保证所有动态角色/AR设备一致，实机验收待进行。
+
+## MMD-AR TAA / FSR2模式（2026-10-09）
+
+`node --test tests/mmd-ar-temporal-aa.test.js`：8/8通过，覆盖旧存储迁移、TAA/FSR2模式选择、内部/输出尺寸、FSR2 jitter、模式切换清历史、WebGL2旁路与PNG旁路标记恢复。真实WebGL2（SwiftShader）TAA/FSR2 shader夹具分别通过：FSR2实际32×32输入升采样到64×64输出，12帧后历史有效，中心场景颜色正确且`gl.getError()===0`。
+
+真实米娅页面回归1/1通过：DPR2、Canvas倍率0.5时输出320×400，FSR2比例0.5内部160×200；普通TAA/FSR2切换、AO/接触/SSGI组合、历史目标数5、PNG 160×200导出及预览尺寸恢复均通过。对导出期间Canvas和真实scene render target同步观测，确保异步Blob读取时目标没有再次降为80×100。
+
+同一SwiftShader模型及输出下，两次预热后三次readPixels+finish测量中位数：普通TAA 118.0ms；FSR2比例0.5（输入160×200，输出320×400）94.1ms。五个历史目标估算：普通TAA 4,096,000 bytes，FSR2 3,328,000 bytes，不含AO/GI/场景目标。该软件GPU单机小样本只记录事实，不推断手机性能。
+
+`npm run build:web:mmd-ar-test`成功，Vite报告chunk大于500kB的既有警告。附带的`tests/mmd-ar-web-panel-groups.test.js`仍有1项失败（该 fixture 在组装lighting group前未纳入正式HTML已有的shadow-bias、shadow-map、fill-facing、AO-concavity节点；相关源和分组模块未修改），该组合其它15项通过、7项跳过。Android WebView/手机实际AR画面与性能仍待验收。
+
 ## MMD-AR TAA抖动参数（2026-10-09）
 
 上传时合并远端920fca8d接触阴影偏置/alpha对齐，重新构建后六文件28/28通过、无跳过：TAA7/屏幕光照13/TAA浏览器2/接触追踪与Shader4/滤波1/刷新1。米娅四组合18542/18542/18543/18543、GLB21953；周期4/8/16/32同条件中位数129.4/128.4/129.5/128.6ms，均五目标。以下24项及性能为合并前同轮记录，不跨轮混合；合并没有改相机运行代码，之前相机2项通过。最终构建与日志见`logs/taa-jitter-merge-*`。

@@ -73,6 +73,77 @@ SSGI联动:
 
 实际接口：normalizeRenderSettings/calculateCanvasSize；createTemporalAA返回render/invalidate/dispose/active/getState，runTemporalAction处理异步重播失效；独立AO暴露invalidateTemporal/getTemporalState/setTemporalContent，render支持bypassTemporal。五个按需目标为当前颜色、两个历史颜色和两个RGBA8历史深度；支持浮点时颜色为HalfFloat，否则RGBA8。8相位不改变camera.view或世界变换，保留原AR投影并恢复逆矩阵；SSGI单独存previousStableProjection用于切断。
 
+## 2026-10-09 抗锯齿模式TAA/FSR2契约（已实现并验证）
+
+```text
+已有声明 := renderer/camera、runtime.resize、ambientOcclusion.render、createTemporalAA历史管线
+新增设置 := aaMode='taa'（旧taaEnabled映射）、fsr2Scale=.67（.50..1、步长.01）；复用既有render storageKey
+设置规范 := taaEnabled=false为总开关；aaMode只取'taa'/'fsr2'；旧存储缺aaMode -> 'taa'；aaMode字段只在总开关有效时生效
+canvasScale := 最终Canvas输出像素倍率（原契约不变）
+输出尺寸 := renderer实际drawingBufferSize；设备限制按输出尺寸等比执行
+输入尺寸 := taaEnabled && aaMode=='fsr2' && WebGL2有效 ? max(1,floor(输出尺寸*fsr2Scale)) : 输出尺寸
+AO/接触/SSGI当前场景目标 := FSR2模式为输入尺寸；TAA/关闭/旁路时为输出尺寸；camera.aspect始终按舞台尺寸
+TAA目标 := 普通TAA保持原有五目标/输出尺寸；FSR2当前颜色输入尺寸 + 双缓冲历史颜色/深度输出尺寸
+jitter := 普通TAA保持原序列；FSR2偏移按内部输入像素计算；finally恢复基础projection/inverseProjection
+普通TAA模式 := 现有1:1最终RGBA场景绘制 -> 相机/深度重投影 -> 历史混合 -> 输出（行为不变）
+FSR2模式场景绘制 := renderSpatial绑定输入尺寸current target；读取同尺寸current depth；每帧一次
+FSR2 resolve(输出像素uv):
+    lowUv := 将输出uv映射到输入纹理
+    currentDepth := 在lowUv采样输入深度；position := 使用对应输入像素中心和逆投影重建
+    currentColor := 对低分辨率邻域执行深度引导空间重建并限制透明/边缘混色
+    previousPosition := previousView * cameraWorld * position
+    previousUv := previousProjection投影 previousPosition
+    若越界/深度/覆盖不匹配 -> 当前重建颜色
+    否则 historyColor := 读取输出尺寸历史并按当前邻域裁剪/颜色变化降低权重
+    outputColor := 当前重建颜色与historyColor混合（预乘RGBA）
+更新 := 将输入深度重采样/编码到输出尺寸历史深度，交换历史读写
+present := 输出尺寸全屏pass写回原render target；恢复viewport及当前target
+模式互斥 := aaMode只选择普通TAA或FSR2；不串行累计两套历史resolve
+总开关关闭/设备不支持WebGL2/诊断/导出旁路 := 输入尺寸=输出尺寸；维持既有行为和尺寸
+PNG捕获(宽,高):
+    camera.userData.mmdArTaaBypass=true -> 临时resize输出画布/目标 -> render({bypassTemporal:true}) -> 发起blob读取
+    等待blob期间其它帧同样旁路FSR2缩放；finally恢复标记/Canvas倍率/舞台尺寸/相机aspect/clear状态
+无运动信息 := 不生成、不读取object/骨骼速度纹理；动态像素仅靠深度/覆盖/颜色拒绝
+失效 := 开关/模式/FSR2比例、输出尺寸、模型/动作、相机切断、后台、WebGL上下文恢复
+释放 := 关闭/异常/销毁 -> 释放当前/历史目标，finally恢复camera和renderer状态
+验收 := 旧设置映射、模式切换、输入输出尺寸、jitter像素、历史别名/拒绝/释放、真实GLSL/alpha、PNG全尺寸、目标设备帧时
+```
+
+## FSR2轮廓边缘滤波（已实现并验证）
+
+```text
+present(tColor, mode, outputSize):
+    if mode != 'fsr2': 原样执行既有present与色彩空间/预乘alpha转换
+    else:
+        读取center、N/S/E/W和NW/NE/SW/SE八邻颜色，边界UV夹到半texel
+        luma := dot(预乘rgb, .299/.587/.114) + alpha*.05；范围覆盖九点
+        若lumaRange < max(1/32, lumaMax*.125) -> 输出center
+        edgeNormal := vec2(lumaE-lumaW,lumaS-lumaN)；edgeDirection := (-edgeNormal.y,edgeNormal.x)
+        reduce := max(四角luma均值*.125,1/128)；方向长度限幅[-8,8]个输出像素
+        sample alongA := 沿edgeDirection的1/3与2/3位置均值
+        sample alongB := .5*alongA + .25*(方向两端样本和)
+        luma(alongB)越过局部lumaRange -> 选alongA，否则选alongB
+        输出 := 选中预乘RGBA -> 既有色域/tone mapping -> 维持预乘输出
+    FSR2只在现有全分辨率present pass执行；TAA edgeAaEnabled=false
+    不写回时间历史，不新增target/运动矢量/设置字段
+验收 := scale .5与1.0斜边coverage增加、alpha跨jitter RMS降低；内部色/透明alpha与TAA回归正常
+```
+
+## FSR2斜边方向估算修正（已实现并验证）
+
+```text
+现状 := 初版FXAA edgeDirection仅由四角亮度差计算；对角覆盖可能抵消
+方向 := gx=luma(E)-luma(W), gy=luma(S)-luma(N); edgeTangent=(-gy,gx)
+验收 := angle∈{0°,45°,90°}, scale∈{.5,1.0}
+    比较滤波开关后的部分覆盖和静态alpha跨jitter RMS；三方向都改善
+    平坦颜色、透明alpha、普通TAA真实GPUfixture不变且无GL错误
+```
+
+实测RMS（开滤波前→后）：比例0.5下0°/45°/90°为35.1389/44.7639/35.1389→34.3737/30.8670/34.3737；比例1.0为34.7781/30.7673/33.5204→33.5596/21.2193/32.3604。
+
+
+目标尺寸契约：普通TAA历史颜色/深度仍与Canvas输出同尺寸；FSR2模式仅当前场景颜色和深度按内部比例缩小，TAA当前输入颜色目标为内部尺寸，两个历史颜色与两个历史深度目标始终为输出尺寸。`canvasScale`仍仅改变最终Canvas backing buffer，`fsr2Scale`只改变FSR2内部输入比例。
+
 ## 2026-10-09 接触屏幕步进、粗细深度确认与独立保边模糊（已实现）
 
 参考 := 用户指定知乎文章的两级深度/屏幕步进；普通Three深度与朝光源约定按项目实现
@@ -3778,3 +3849,21 @@ PNG导出后恢复像素比/画布/相机；编辑轴、操作面板不写进图
 输出结构校验 -> 下载新PMX，灯光/动作等另存工程ZIP
 详细伪代码 -> docs/spec/mmd-ar-pmx-export.md
 ```
+
+## 2026-10-09 FSR2覆盖率与斜边空间误差修正（方案已确认，实施中）
+
+```text
+已有声明 := reconstructCurrent、presentShader、FSR2浏览器夹具
+参考输入 := 同场景高分辨率覆盖率；多角度/正负斜率/亚像素相位
+四点双线性空间权重 → 保留前景总覆盖权重与背景颜色贡献
+空间权重大于最小有效值的四点深度 → 独立选择重投影参考深度
+前景深度相似度 → 只规范化前景内部颜色，不重新规范化前景/背景覆盖比例
+规范化前景颜色 × 原始前景覆盖权重 + 原始背景颜色贡献 → 当前线性预乘RGBA
+零空间权重的前景 → 不得替代背景中心覆盖率
+比例1且位于输入像素中心 → 空间重建保持中心颜色/alpha
+滤波关闭/开启、重建输出/最终输出 → 分别比较参考覆盖、轮廓位移与空间误差
+帧间alpha变化下降 → 仅代表时间指标改善，不作为空间质量充分条件
+失败断言定位到重建或最终滤波 → 单独修正该分支 → 普通TAA/透明/PNG/深度历史回归
+```
+
+用户已确认该局部方案。先以真实GPU验证原分支的背景替代与空间误差，再修改Shader并回归；手机实际观感仍待设备验证。详见`docs/task/20261009_MMDAR_FSR2轮廓覆盖率排查.md`。

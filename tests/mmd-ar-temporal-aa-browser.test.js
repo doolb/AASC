@@ -100,6 +100,175 @@ test('真实GPU TAA边缘收敛、颜色/透明alpha和揭露历史拒绝', { sk
     });
 });
 
+test('真实GPU FSR2模式编译并将低分辨率TAA输入升采样到输出画布', { skip: !chrome, timeout: 60000 }, async context => {
+    await withBrowser(async (page, origin) => {
+        await page.goto(`${origin}/__source/package.json`);
+        const result = await page.evaluate(async () => {
+            const THREE = await import('/__source/node_modules/three/build/three.module.js');
+            const { createTemporalAA } = await import('/__source/3rd/mmd-ar-test/web-temporal-aa.mjs');
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false }); renderer.setSize(64, 64);
+            const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 20);
+            camera.position.z = 4; camera.updateMatrixWorld();
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, .35), new THREE.MeshBasicMaterial({ color: 0x54aadd }));
+            scene.add(mesh);
+            const input = new THREE.WebGLRenderTarget(32, 32, { depthTexture: new THREE.DepthTexture(32, 32, THREE.UnsignedIntType) });
+            const inputFull = new THREE.WebGLRenderTarget(64, 64, { depthTexture: new THREE.DepthTexture(64, 64, THREE.UnsignedIntType) });
+            const copyMaterial = new THREE.ShaderMaterial({ toneMapped: false, depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+                uniforms: { tColor: { value: input.texture } }, vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+                fragmentShader: 'uniform sampler2D tColor;varying vec2 vUv;void main(){gl_FragColor=texture2D(tColor,vUv);}' });
+            const copyScene = new THREE.Scene(); copyScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), copyMaterial));
+            const copyCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const config = { taaEnabled: true, aaMode: 'fsr2', fsr2Scale: .5, taaHistoryWeight: .9, taaJitterScale: 1, taaJitterSamples: 8 };
+            const taa = createTemporalAA({ THREE, renderer, camera, getSettings: () => config }); let activeInput = input;
+            const draw = () => {
+                const target = renderer.getRenderTarget(); renderer.setRenderTarget(activeInput); renderer.clear(); renderer.render(scene, camera);
+                renderer.setRenderTarget(target); renderer.clear(); copyMaterial.uniforms.tColor.value = activeInput.texture; renderer.render(copyScene, copyCamera);
+            };
+            const gl = renderer.getContext();
+            const pixels = () => { const values = new Uint8Array(64 * 64 * 4); gl.readPixels(0, 0, 64, 64, gl.RGBA, gl.UNSIGNED_BYTE, values); return values; };
+            let forceEdgeAaOff = false; const originalRender = renderer.render;
+            renderer.render = function(passScene, passCamera, ...args) {
+                const material = passScene.children?.[0]?.material;
+                if (forceEdgeAaOff && material?.uniforms?.edgeAaEnabled) material.uniforms.edgeAaEnabled.value = false;
+                return originalRender.call(this, passScene, passCamera, ...args);
+            };
+            const sampleSequence = (edgeAa, angle) => {
+                mesh.rotation.z = angle; mesh.updateMatrixWorld(true);
+                forceEdgeAaOff = !edgeAa; taa.invalidate(); let previous = null, changed = 0, pairs = 0, finalPixels = null;
+                for (let frame = 0; frame < 17; frame += 1) {
+                    taa.render(draw, () => activeInput.depthTexture); finalPixels = pixels();
+                    if (frame >= 8 && previous) {
+                        for (let index = 3; index < finalPixels.length; index += 4) {
+                            const difference = finalPixels[index] - previous[index]; changed += difference * difference;
+                        }
+                        pairs += finalPixels.length / 4;
+                    }
+                    previous = finalPixels;
+                }
+                let partial = 0;
+                for (let index = 3; index < finalPixels.length; index += 4) if (finalPixels[index] > 8 && finalPixels[index] < 247) partial += 1;
+                const center = [...finalPixels.slice((32 * 64 + 32) * 4, (32 * 64 + 32) * 4 + 4)];
+                return { partial, temporalChange: Number(Math.sqrt(changed / pairs).toFixed(4)), center };
+            };
+            let state, fullState; const lowResults = [], fullResults = [], angles = [0, Math.PI / 4, Math.PI / 2];
+            try {
+                for (const angle of angles) lowResults.push({ angle, baseline: sampleSequence(false, angle), filtered: sampleSequence(true, angle) });
+                state = taa.getState(); config.fsr2Scale = 1; activeInput = inputFull;
+                for (const angle of angles) fullResults.push({ angle, baseline: sampleSequence(false, angle), filtered: sampleSequence(true, angle) });
+                fullState = taa.getState();
+            } finally { renderer.render = originalRender; }
+            const error = gl.getError(); taa.dispose(); input.dispose(); inputFull.dispose(); copyMaterial.dispose(); copyScene.children[0].geometry.dispose(); renderer.dispose();
+            return { state, fullState, lowResults, fullResults, error };
+        });
+        context.diagnostic(JSON.stringify(result));
+        assert.equal(result.state.mode, 'fsr2');
+        assert.deepEqual([result.state.inputWidth, result.state.inputHeight, result.state.width, result.state.height], [32, 32, 64, 64]);
+        assert.equal(result.state.historyValid, true); assert.equal(result.state.lastHistoryUsed, true);
+        assert.deepEqual([result.fullState.inputWidth, result.fullState.inputHeight, result.fullState.width, result.fullState.height], [64, 64, 64, 64]);
+        for (const [scale, cases] of [[.5, result.lowResults], [1, result.fullResults]]) {
+            for (const { angle, baseline, filtered } of cases) {
+                const degrees = Math.round(angle * 180 / Math.PI);
+                // 重建本身现在保留覆盖率；部分覆盖数量只验证路径生效，轮廓质量由独立空间参考测试判断。
+                if (scale < 1) assert.ok(baseline.partial > 10, `FSR2 ${degrees}度低分辨率重建必须保留中间覆盖率`);
+                assert.ok(filtered.partial > 10, `FSR2 ${degrees}度最终输出必须存在中间覆盖率`);
+                assert.ok(filtered.temporalChange < baseline.temporalChange, `FSR2 ${degrees}度边缘跨jitter变化应降低`);
+                assert.ok(filtered.center[3] > 240, `FSR2 ${degrees}度输出中心应保持不透明`);
+                for (let index = 0; index < 4; index += 1) assert.ok(Math.abs(baseline.center[index] - filtered.center[index]) <= 2,
+                    `FSR2 ${degrees}度平坦内部颜色不应变化`);
+            }
+        }
+        assert.equal(result.error, 0);
+    });
+});
+
+test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { skip: !chrome, timeout: 60000 }, async context => {
+    await withBrowser(async (page, origin) => {
+        await page.goto(`${origin}/__source/package.json`);
+        const result = await page.evaluate(async () => {
+            const THREE = await import('/__source/node_modules/three/build/three.module.js');
+            const { vertexShader, resolveShader, presentShader } = await import('/__source/3rd/mmd-ar-test/web-temporal-aa-shader.mjs');
+            const size = 64, renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
+            renderer.setSize(size, size); renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+            const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 20);
+            const scene = new THREE.Scene(), geometry = new THREE.PlaneGeometry(2, 2);
+            const resolved = new THREE.WebGLRenderTarget(size, size, { depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+            const presented = new THREE.WebGLRenderTarget(size, size, { depthBuffer: false });
+            const uniform = value => ({ value });
+            const resolve = new THREE.ShaderMaterial({ vertexShader, fragmentShader: resolveShader,
+                depthTest: false, depthWrite: false, blending: THREE.NoBlending, uniforms: {
+                    tCurrent: uniform(null), tDepth: uniform(null), tHistory: uniform(null), tHistoryDepth: uniform(null),
+                    inputSize: uniform(new THREE.Vector2()), outputSize: uniform(new THREE.Vector2(size, size)),
+                    inverseProjection: uniform(camera.projectionMatrixInverse), cameraWorld: uniform(new THREE.Matrix4()),
+                    previousView: uniform(new THREE.Matrix4()), previousProjection: uniform(camera.projectionMatrix),
+                    previousInverseProjection: uniform(camera.projectionMatrixInverse), historyWeight: uniform(0),
+                    historyValid: uniform(false), upscaleEnabled: uniform(true)
+                } });
+            const present = new THREE.ShaderMaterial({ vertexShader, fragmentShader: presentShader,
+                depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+                uniforms: { tColor: uniform(resolved.texture), outputSize: uniform(new THREE.Vector2(size, size)), edgeAaEnabled: uniform(true) } });
+            const quad = new THREE.Mesh(geometry, resolve); scene.add(quad);
+            const read = target => { const values = new Uint8Array(size * size * 4); renderer.readRenderTargetPixels(target, 0, 0, size, size, values); return values; };
+            const render = (material, target) => { quad.material = material; renderer.setRenderTarget(target); renderer.render(scene, camera); return read(target); };
+            const cases = [];
+            // 参考轮廓来自解析半平面内的16×16子像素覆盖，独立于被测GLSL的采样/权重算法。
+            for (const scale of [1, .5]) for (const degrees of [0, 15, 30, 45, 60, 75, 90, -15, -30, -45, -60, -75]) {
+                for (const offset of [0, .37]) for (const opaque of [false, true]) {
+                    const inputSize = size * scale, normalX = Math.cos(degrees * Math.PI / 180), normalY = Math.sin(degrees * Math.PI / 180);
+                    const inside = (x, y) => (x - size / 2) * normalX + (y - size / 2) * normalY > offset;
+                    const foreground = [224, 112, 64, 255], background = opaque ? [16, 32, 48, 255] : [0, 0, 0, 0];
+                    const colors = new Uint8Array(inputSize * inputSize * 4), depths = new Float32Array(inputSize * inputSize);
+                    for (let y = 0; y < inputSize; y += 1) for (let x = 0; x < inputSize; x += 1) {
+                        const filled = inside((x + .5) / scale, (y + .5) / scale), index = y * inputSize + x;
+                        colors.set(filled ? foreground : background, index * 4); depths[index] = filled ? .5 : 1;
+                    }
+                    const colorTexture = new THREE.DataTexture(colors, inputSize, inputSize, THREE.RGBAFormat);
+                    const depthTexture = new THREE.DataTexture(depths, inputSize, inputSize, THREE.RedFormat, THREE.FloatType);
+                    colorTexture.needsUpdate = true; depthTexture.needsUpdate = true;
+                    resolve.uniforms.inputSize.value.set(inputSize, inputSize);
+                    resolve.uniforms.tCurrent.value = colorTexture; resolve.uniforms.tDepth.value = depthTexture;
+                    const reconstruction = render(resolve, resolved), filtered = render(present, presented);
+                    let centerError = 0, area = 0, filteredArea = 0, referenceArea = 0, error = 0, filteredError = 0;
+                    for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+                        const index = (y * size + x) * 4;
+                        if (scale === 1) for (let channel = 0; channel < 4; channel += 1) {
+                            centerError = Math.max(centerError, Math.abs(reconstruction[index + channel] - colors[index + channel]));
+                        }
+                        let coverage = 0;
+                        for (let sy = 0; sy < 16; sy += 1) for (let sx = 0; sx < 16; sx += 1) {
+                            if (inside(x + (sx + .5) / 16, y + (sy + .5) / 16)) coverage += 1 / 256;
+                        }
+                        const value = opaque ? (reconstruction[index] - 16) / 208 : reconstruction[index + 3] / 255;
+                        const filteredValue = opaque ? (filtered[index] - 16) / 208 : filtered[index + 3] / 255;
+                        area += value; filteredArea += filteredValue; referenceArea += coverage;
+                        error += Math.abs(value - coverage); filteredError += Math.abs(filteredValue - coverage);
+                    }
+                    cases.push({ scale, degrees, offset, opaque, centerError,
+                        areaBias: area - referenceArea, filteredAreaBias: filteredArea - referenceArea,
+                        error: error / (size * size), filteredError: filteredError / (size * size) });
+                    colorTexture.dispose(); depthTexture.dispose();
+                }
+            }
+            const glError = renderer.getContext().getError();
+            geometry.dispose(); resolve.dispose(); present.dispose(); resolved.dispose(); presented.dispose(); renderer.dispose();
+            return { cases, glError };
+        });
+        context.diagnostic(JSON.stringify({ worstCenterError: Math.max(...result.cases.map(item => item.centerError)),
+            worstAreaBias: Math.max(...result.cases.map(item => Math.abs(item.areaBias))),
+            worstFilteredAreaBias: Math.max(...result.cases.map(item => Math.abs(item.filteredAreaBias))),
+            meanError: result.cases.reduce((sum, item) => sum + item.error, 0) / result.cases.length,
+            meanFilteredError: result.cases.reduce((sum, item) => sum + item.filteredError, 0) / result.cases.length }));
+        for (const item of result.cases) {
+            const label = `比例${item.scale} ${item.degrees}度 偏移${item.offset} ${item.opaque ? '双色' : '透明'}`;
+            assert.ok(item.centerError <= 1, `${label}：比例1重建不得用邻接前景替代背景或其他颜色中心，误差${item.centerError}`);
+            // 边缘采样相位允许有限面积量化差，但禁止整条边一像素的系统扩张。
+            assert.ok(Math.abs(item.areaBias) <= 32, `${label}：重建轮廓面积偏差${item.areaBias}`);
+            assert.ok(Math.abs(item.filteredAreaBias) <= 32, `${label}：最终轮廓面积偏差${item.filteredAreaBias}`);
+            assert.ok(item.filteredError <= item.error + .003, `${label}：最终滤波不能明显增加空间覆盖误差`);
+        }
+        assert.equal(result.glError, 0);
+    });
+});
+
 test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
     skip: !chrome || !fs.existsSync(path.join(root, 'mmd/miya/miya.pmx')), timeout: 180000
 }, async context => {
@@ -210,6 +379,51 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         assert.equal(motion.seekReset, false); assert.equal(motion.changed, true, '真实动画骨骼应实际运动');
         assert.equal(motion.frame.lastHistoryUsed, true); assert.deepEqual(motion.imageSize, [160, 200]);
         assert.ok(motion.bytes > 1000); assert.deepEqual([motion.width, motion.height], [320, 400]);
+        await update('aaMode', 'fsr2'); await update('fsr2Scale', .5);
+        const fsr2 = await page.evaluate(() => {
+            const c = window.DisplayMmd.getEditorBridge().context, gl = c.renderer.getContext();
+            const samples = [], pixel = new Uint8Array(4);
+            for (let i = 0; i < 7; i += 1) {
+                gl.finish(); const begin = performance.now(); c.ambientOcclusion.render();
+                gl.readPixels(160, 200, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel); gl.finish();
+                if (i >= 2) samples.push(performance.now() - begin);
+            }
+            samples.sort((a, b) => a - b);
+            const state = c.ambientOcclusion.getTemporalState();
+            return { state, pixel: [...pixel], medianMs: Number(samples[2].toFixed(2)), error: gl.getError(),
+                colorBytes: c.renderer.extensions.has('EXT_color_buffer_float') ? 8 : 4 };
+        });
+        assert.equal(fsr2.state.mode, 'fsr2'); assert.deepEqual([fsr2.state.width, fsr2.state.height], [320, 400]);
+        assert.deepEqual([fsr2.state.inputWidth, fsr2.state.inputHeight], [160, 200]);
+        assert.equal(fsr2.state.lastHistoryUsed, true); assert.equal(fsr2.error, 0);
+        assert.ok(fsr2.pixel[3] > 100, 'FSR2输出分辨率画布必须存在模型画面');
+        const fsr2Capture = await page.evaluate(async () => {
+            const bridge = window.DisplayMmd.getEditorBridge(), c = bridge.context;
+            const before = [c.renderer.domElement.width, c.renderer.domElement.height], originalRender = c.renderer.render, sceneTargets = [];
+            c.renderer.render = function(scene, camera, ...args) {
+                if (scene === c.scene && camera === c.camera) {
+                    const target = this.getRenderTarget();
+                    sceneTargets.push([this.domElement.width, this.domElement.height, target?.width || 0, target?.height || 0]);
+                }
+                return originalRender.call(this, scene, camera, ...args);
+            };
+            let blob, size;
+            try {
+                blob = await bridge.capture(160, 200, true); const bitmap = await createImageBitmap(blob);
+                size = [bitmap.width, bitmap.height]; bitmap.close();
+            } finally { c.renderer.render = originalRender; }
+            return { size, before, after: [c.renderer.domElement.width, c.renderer.domElement.height], sceneTargets };
+        });
+        assert.deepEqual(fsr2Capture.size, [160, 200]); assert.deepEqual(fsr2Capture.after, fsr2Capture.before);
+        assert.ok(fsr2Capture.sceneTargets.some(([width, height, targetWidth, targetHeight]) =>
+            width === 160 && height === 200 && targetWidth === 160 && targetHeight === 200), '导出场景必须用请求尺寸绘制');
+        assert.ok(!fsr2Capture.sceneTargets.some(([width, height, targetWidth, targetHeight]) =>
+            width === 160 && height === 200 && targetWidth === 80 && targetHeight === 100), '导出不能再应用FSR2内部比例');
+        const fsr2Timing = { scale: .5, mode: 'fsr2', input: `${fsr2.state.inputWidth}x${fsr2.state.inputHeight}`,
+            output: `${fsr2.state.width}x${fsr2.state.height}`, medianMs: fsr2.medianMs, targets: fsr2.state.targetCount,
+            extraBytes: fsr2.state.inputWidth * fsr2.state.inputHeight * fsr2.colorBytes
+                + fsr2.state.width * fsr2.state.height * (2 * fsr2.colorBytes + 8) };
+        await update('aaMode', 'taa'); await update('fsr2Scale', .67);
         const timings = [];
         for (const scale of [.5, 1, 2]) {
             await update('canvasScale', scale); await size(640 * scale, 800 * scale);
@@ -233,12 +447,12 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
                 }));
             }
         }
-        context.diagnostic(`完整GPU完成耗时（软件GPU）：${JSON.stringify(timings)}`);
+        context.diagnostic(`完整GPU完成耗时（软件GPU）：${JSON.stringify({ timings, fsr2Timing })}`);
         await update('canvasScale', .5); await update('taaEnabled', true); await size(320, 400);
         await update('taaJitterScale', .35); await update('taaJitterSamples', 32);
         await page.reload({ waitUntil: 'domcontentloaded' }); await ready(); await size(320, 400);
         assert.deepEqual(await page.evaluate(() => window.MmdArRenderSettings),
-            { taaEnabled: true, taaHistoryWeight: .9, canvasScale: .5, taaJitterScale: .35, taaJitterSamples: 32 });
+            { taaEnabled: true, aaMode: 'taa', fsr2Scale: .67, taaHistoryWeight: .9, canvasScale: .5, taaJitterScale: .35, taaJitterSamples: 32 });
         await page.$eval('#displayMmdLightingReset', node => node.click()); await size(640, 800);
         assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaEnabled), false);
         assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaJitterScale), 1);

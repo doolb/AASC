@@ -52,15 +52,17 @@ export function createEditorBridge(context) {
             if(!Number.isFinite(width+height)||width<64||height<64||width>limit||height>limit)throw new Error(`图片尺寸范围64～${limit}`);
             const size=renderer.getSize(new THREE.Vector2()),ratio=renderer.getPixelRatio(),aspect=camera.aspect;
             const clear=renderer.getClearColor(new THREE.Color()),alpha=renderer.getClearAlpha();
+            const oldTemporalBypass=camera.userData.mmdArTaaBypass;
+            camera.userData.mmdArTaaBypass=true;
             try {
                 renderer.setPixelRatio(1);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();
                 renderer.setClearColor(transparent?0x000000:0x20232b,transparent?0:1);
-                // 导出使用当前完整帧，不累积预览历史；目标尺寸与导出像素同步。
+                // 导出期间所有异步预览帧都保持请求尺寸，不应用FSR2内部分辨率。
                 ambientOcclusion.resize(width,height);
                 ambientOcclusion.render({bypassTemporal:true});
                 // 绘制后立即发起读取，兼容preserveDrawingBuffer=false。
                 return await new Promise((resolve,reject)=>renderer.domElement.toBlob(blob=>blob?resolve(blob):reject(new Error('PNG生成失败')),'image/png'));
-            } finally {renderer.setPixelRatio(ratio);renderer.setSize(size.x,size.y,false);ambientOcclusion.resize(Math.floor(size.x*ratio),Math.floor(size.y*ratio));camera.aspect=aspect;camera.updateProjectionMatrix();renderer.setClearColor(clear,alpha);}
+            } finally {if(oldTemporalBypass===undefined)delete camera.userData.mmdArTaaBypass;else camera.userData.mmdArTaaBypass=oldTemporalBypass;renderer.setPixelRatio(ratio);renderer.setSize(size.x,size.y,false);ambientOcclusion.resize(Math.floor(size.x*ratio),Math.floor(size.y*ratio));camera.aspect=aspect;camera.updateProjectionMatrix();renderer.setClearColor(clear,alpha);}
         },
         seek(seconds){const object=context.helper?.objects?.get(context.mesh);const mixer=object?.mixer;if(!mixer)return false;
             ambientOcclusion.invalidateTemporal?.();
