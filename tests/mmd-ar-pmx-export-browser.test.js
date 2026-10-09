@@ -35,11 +35,14 @@ test('真实HTTP网页编辑、下载PMX、复制、关节修改、工程保存�
         await page.click('[data-mode="edit"]');
         await page.waitForFunction(()=>!document.getElementById('mmdEditor').hasAttribute('aria-busy')&&!document.getElementById('edEditing').hidden);
         const download=async(button,extension)=>{
-            const before=new Set(await fsp.readdir(downloads));await page.click(button);
+            // 同名PMX连续导出时，CDP允许覆盖旧文件；每轮使用独立目录以保留比较样本。
+            const round=await fsp.mkdtemp(path.join(downloads,'round-'));
+            await cdp.send('Page.setDownloadBehavior',{behavior:'allow',downloadPath:round});
+            await page.click(button);
             const deadline=Date.now()+20000;
             while(Date.now()<deadline){
-                const files=await fsp.readdir(downloads),file=files.find(n=>!before.has(n)&&n.endsWith(extension));
-                if(file){await page.waitForFunction(()=>!document.getElementById('mmdEditor').hasAttribute('aria-busy'));return path.join(downloads,file);}
+                const files=await fsp.readdir(round),file=files.find(n=>n.endsWith(extension));
+                if(file){await page.waitForFunction(()=>!document.getElementById('mmdEditor').hasAttribute('aria-busy'));return path.join(round,file);}
                 await new Promise(resolve=>setTimeout(resolve,100));
             }
             throw new Error('未收到下载：'+await page.$eval('#edStatus',n=>n.textContent));

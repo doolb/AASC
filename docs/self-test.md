@@ -2,6 +2,8 @@
 
 ## MMD-AR TAA与Canvas倍率（2026-10-09）
 
+上传前合并远端PMX导出功能并重新构建。TAA/屏幕光照/GPU/真实模型20项与PMX单位7项通过；附加PMX浏览器用例先因CDP同名覆盖、等待新文件名超时失败。每轮独立下载目录保留各比较样本后，该浏览器用例1/1通过（26.37秒），实际完成参数/复制/关节修改、ZIP恢复、导出模型配贴图重载，共28项通过、无跳过。网页导出逻辑未修改；下表性能仍是原完整31项同轮记录。
+
 最终代码经`npm run build:web:mmd-ar-test`构建后，八个定向文件以`node --test --test-concurrency=1`执行31/31通过，无失败/跳过。测试文件为`mmd-ar-temporal-aa.test.js`、`mmd-ar-screen-lighting.test.js`、`mmd-ar-temporal-aa-browser.test.js`、`mmd-ar-contact-shadow-browser.test.js`、`mmd-ar-contact-filter-browser.test.js`、`mmd-ar-screen-lighting-refresh-browser.test.js`、`mmd-ar-background-resume.test.js`、`mmd-ar-camera-motion.test.js`；设置PUPPETEER_EXECUTABLE_PATH指向本机Chromium以执行旧相机用例，没有将跳过当验证。
 
 实际GPU检查：64²旋转平面静态轮廓的中间alpha从0增至150，内部RGB由[76,150,204]变为[77,151,204]，差≤1。颜色变蓝不残留旧色，揭露背景输出[0,0,0,0]。透明蓝色与实际AO合成TAA开/关、RGBA8强制回退均[0,0,114,128]。复核发现旧AO关闭TAA输出[0,0,193,128]，真实对照先失败，独立生成composite统一直色变换/预乘后通过。

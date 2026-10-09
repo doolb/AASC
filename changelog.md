@@ -15,6 +15,8 @@
 
 ### MMD-AR TAA与Canvas渲染倍率
 
+- ✅ [2026-10-09] 合并远端PMX导出后重新构建，TAA20项、PMX单位7项通过；修正`mmd-ar-pmx-export-browser.test.js`同名重复下载覆盖的检测问题，独立下载目录完整往返1项通过，共28项无跳过。原完整31项回归记录保留，工作区既有Offline/config修改保留。
+
 - ✅ [2026-10-09] 独立MMD AR增加TAA与Canvas倍率：正式抗锯齿分类提供开关/0–0.95累积强度（默认关/0.9），8相位线性预乘RGBA重投影，深度/覆盖拒绝及邻域颜色限制；倍率相对自动DPR为0.25–2、默认1，保存/复位/设备上限与实际尺寸显示，修改倍率及后台保留角色/相机。
   - 新增`web-render-settings.mjs`、`web-render-settings-build.js`、`web-temporal-aa.mjs`、`web-temporal-aa-shader.mjs`，修改独立build/编辑器/屏幕光照及自测；SSGI基础投影切断与真实抖动历史分离，接触仅在TAA有效时使用时间相位，导出/法线诊断旁路。
   - 独立复核两项P2已修复：旧AO半透明输出与TAA不一致（真实GPU蓝色193→114，alpha128保持），统一直色变换后预乘；同ID异步动作重播在开始/提交结束双重清历史。对应回归先失败再通过；旧相机VMD用例适配已迁移的角色资源入口，并在TAA开启时验证VMD/AR。
