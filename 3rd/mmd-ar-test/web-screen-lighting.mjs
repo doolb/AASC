@@ -151,6 +151,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             fullSize: { value: new THREE.Vector2(1, 1) }, effectSize: { value: new THREE.Vector2(1, 1) },
             lightDirection: { value: direction }, contactEnabled: { value: false }, giEnabled: { value: false },
             historyValid: { value: false }, contactStrength: { value: .5 }, contactDistance: { value: .3 }, contactFramePhase: { value: 0 },
+            contactNormalBias: { value: 0 }, contactDepthBias: { value: 0 },
             giStrength: { value: 1 }, giRadius: { value: 2 }, lightWeight: { value: 1 },
             rayCount: { value: 4 }, stepCount: { value: 12 }, contactStepCount: { value: 12 }, hzbLevelCount: { value: 1 }
         };
@@ -343,6 +344,17 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             keyLight.target.getWorldPosition(lightTarget);
             direction.sub(lightTarget).normalize().transformDirection(camera.matrixWorldInverse);
         }
+        const shadow = keyLight?.shadow;
+        const shadowCamera = shadow?.camera;
+        const mainShadowActive = renderer.shadowMap?.enabled === true && keyLight?.castShadow === true
+            && shadowCamera?.isOrthographicCamera === true;
+        const normalBias = Number(shadow?.normalBias);
+        const depthRange = Number(shadowCamera?.far) - Number(shadowCamera?.near);
+        const depthBias = Number(shadow?.bias);
+        uniforms.contactNormalBias.value = mainShadowActive && Number.isFinite(normalBias) ? normalBias : 0;
+        // Three.js shadow.bias作用于正交阴影相机的归一化深度；换算成世界单位后沿光源方向偏移接收点。
+        uniforms.contactDepthBias.value = mainShadowActive && Number.isFinite(depthBias)
+            && Number.isFinite(depthRange) && depthRange > 0 ? -depthBias * depthRange : 0;
         if (history) {
             const readSet = history.sets[history.readIndex];
             uniforms.tHistoryColor.value = useHistory ? readSet.colorTarget.texture : ao.colorTarget.texture;

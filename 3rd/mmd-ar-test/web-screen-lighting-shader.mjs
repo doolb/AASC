@@ -13,7 +13,7 @@ uniform mat4 previousView,previousProjection,previousInverseProjection,previousC
 uniform vec2 fullSize,effectSize;
 uniform vec3 lightDirection;
 uniform bool contactEnabled,giEnabled,historyValid;
-uniform float contactStrength,contactDistance,giStrength,giRadius,lightWeight;
+uniform float contactStrength,contactDistance,contactNormalBias,contactDepthBias,giStrength,giRadius,lightWeight;
 uniform float contactFramePhase;
 uniform int rayCount,stepCount,contactStepCount,hzbLevelCount;
 varying vec2 vUv;
@@ -239,7 +239,8 @@ void main(){
  vec3 p=positionAt(vUv,depth),n=normalAt(vUv,p);
  float pixelSize=length(positionAt(vUv+vec2(1./fullSize.x,0.),depth)-p);
  float bias=max(pixelSize*.7,max(1e-4,abs(p.z)*1e-5));
- vec3 start=p+n*bias*2.;vec2 hitUv;vec3 hit;float confidence,hitDistance;float shadow=0.;vec3 bounce=vec3(0.);
+ vec3 start=p+n*(contactNormalBias+bias*2.)+lightDirection*contactDepthBias;
+ vec2 hitUv;vec3 hit;float confidence,hitDistance;float shadow=0.;vec3 bounce=vec3(0.);
  float facing=max(dot(n,lightDirection),0.);
  if(contactEnabled&&facing>0.&&lightWeight>0.){
   if(traceContact(start,lightDirection,contactDistance,bias,contactStepCount,hitUv,hit,confidence,hitDistance)){
@@ -305,7 +306,8 @@ vec3 screenNormalAt(vec2 uv,vec3 p){
 }
 vec4 resolveScreenLighting(vec2 uv,float depth){
  vec2 pixel=uv*screenLightingSize-.5,base=floor(pixel),f=fract(pixel);
- vec3 p=edgePosition(uv,depth),n=screenNormalAt(uv,p);vec4 sum=vec4(0.);float total=0.;
+ vec3 p=edgePosition(uv,depth),n=screenNormalAt(uv,p),sum=vec3(0.);
+ float total=0.,contact=0.,bestWeight=0.;
  for(int y=0;y<2;y++)for(int x=0;x<2;x++){
   vec2 q=(base+vec2(float(x),float(y))+.5)/screenLightingSize;
   float d=texture2D(tDepth,q).r;if(d>=.99999)continue;
@@ -314,9 +316,12 @@ vec4 resolveScreenLighting(vec2 uv,float depth){
   float w=(x==0?1.-f.x:f.x)*(y==0?1.-f.y:f.y);
   float footprint=length(edgePosition(uv+1./screenLightingSize,depth)-p);
   w*=exp(-gap/max(.002,footprint*.65))*pow(max(dot(n,otherNormal),0.),16.);
-  sum+=texture2D(screenLightingTexture,q)*w;total+=w;
+  vec4 sampleLighting=texture2D(screenLightingTexture,q);
+  sum+=sampleLighting.rgb*w;total+=w;
+  // 接触遮蔽边界不做四点平均，避免低分辨率alpha在全分辨率合成时被拖移。
+  if(w>bestWeight){bestWeight=w;contact=sampleLighting.a;}
  }
- return total>1e-5?sum/total:vec4(0.);
+ return vec4(total>1e-5?sum/total:vec3(0.),contact);
 }
 `;
 
