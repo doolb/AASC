@@ -3,6 +3,7 @@
 - ✅ [2026-10-09] 正式端同步已提交的FSR2近似升采样、斜边滤波和轮廓覆盖率修复。
   - 更新正式mmd-render-settings/temporal-aa/temporal-aa-shader、display-pmx-ao和display.html；独立web-render-settings-build识别共享内部尺寸，避免重复注入。
   - 默认关闭、模式TAA、内部比例0.67（0.5至1），使用正式独立存储。42项定向自测与96组正式GPU轮廓参考通过，独立构建成功；独立模型回归及签名服务包发布进行中；无原生或生产依赖变更。
+  - 已生成code-v49.zip（16,930,847字节；SHA-256 180b7ad8d5d36cd3febe58afd0111bbd6526e1d61e4ec9e49a74ae634bc10d95），931文件逐字节一致，签名与组件约束通过；servicePackage=false，发布待回归完成。
 
 ### MMD-AR FSR2轮廓覆盖率修正
 
