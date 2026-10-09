@@ -2,9 +2,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// 从 src/apps/server/modules/voiceprint 上溯 5 级到达项目根目录 /mnt/AASC，
-// 再进入 res/voiceprint/db.json（真实 res 在根目录，不在 src 下）。
-const DB_PATH = path.join(__dirname, '../../../../../res/voiceprint/db.json');
+// 热更新时代码位于code-vXX，但注册声纹必须使用固定的数据根，不能随代码版本变化。
+// 普通服务端未设置环境变量时仍上溯5级使用原目录；用户明确不自动恢复旧版本库。
+const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../../'));
+const DB_PATH = path.join(PROJECT_ROOT, 'res', 'voiceprint', 'db.json');
 // 声纹维度：必须与 embedding 模型实际输出维度一致。
 // 3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx 真实输出为 512 维
 //（onnxruntime 检查 output Gemmembedding_dim_0=512；sherpa-onnx SpeakerEmbeddingExtractor.dim 亦返回 512）。

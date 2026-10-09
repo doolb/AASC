@@ -300,12 +300,12 @@ test('开关等待权威配置，失败恢复旧值，聊天完成和断线清�
     assert.equal(toggle.disabled, false);
     assert.equal(timers.size, 0);
     subscriptions.get('chat.activity')({ requestId: 'chat', active: true });
-    assert.equal(refs.displayVoiceActionStatus.textContent, '助手 · 思考');
+    assert.equal(refs.displayVoiceActionStatus.textContent, '群聊 · 思考');
     subscriptions.get('chat.activity')({ requestId: 'chat', active: false });
-    assert.equal(refs.displayVoiceActionStatus.textContent, '助手 · 已停止');
+    assert.equal(refs.displayVoiceActionStatus.textContent, '群聊 · 已停止');
     subscriptions.get('chat.activity')({ requestId: 'chat2', active: true });
     subscriptions.get('transport.changed')({ available: false });
-    assert.equal(refs.displayVoiceActionStatus.textContent, '助手 · 已停止');
+    assert.equal(refs.displayVoiceActionStatus.textContent, '群聊 · 已停止');
     let name = '小爱';
     window.DisplayChat = { getVoiceStatusName: () => name };
     subscriptions.get('chat.status-name')();

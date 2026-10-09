@@ -23,7 +23,7 @@
         if (!runtime) return;
         const snapshot = runtime.snapshot();
         const status = deriveStatus(snapshot, chats.size > 0);
-        const assistantName = root.DisplayChat?.getVoiceStatusName?.() || '助手';
+        const assistantName = root.DisplayChat?.getVoiceStatusName?.() || '群聊';
         const label = `${assistantName} · ${LABELS[status]}`;
         // 状态和实时数字在同一背景内分别更新，避免覆盖数字节点或重复播报RMS。
         if (refs.statusText && refs.statusText.textContent !== label) refs.statusText.textContent = label;

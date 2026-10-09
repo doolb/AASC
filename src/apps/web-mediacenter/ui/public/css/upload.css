@@ -4519,6 +4519,15 @@ input[type="range"]::-webkit-slider-thumb:active {
 }
 
 @media (orientation: portrait) {
+    /* 三个浮动入口整体上移，避开底部导航及设备安全区，保持各按钮原来的间距。 */
+    .floating-control {
+        bottom: calc(20px + 68px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .self-test-trigger {
+        bottom: calc(80px + 68px + env(safe-area-inset-bottom, 0px));
+    }
+
     .sidebar {
         position: fixed;
         top: auto;

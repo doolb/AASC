@@ -112,18 +112,27 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
                 return true;
             });
         });
-        assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '助手 · 空闲');
+        assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 空闲');
+        assert.deepEqual(await page.$$eval('[data-role="target-menu"] button', (items) => items.map((item) => item.textContent)), ['群聊']);
+        await page.evaluate(() => window.DisplayStage.handleServerMessage({ type: 'assistantConfig', config: {} }));
+        assert.deepEqual(await page.$$eval('[data-role="target-menu"] button', (items) => items.map((item) => item.textContent)), ['群聊']);
+
         await page.evaluate(() => {
             window.DisplayStage.handleServerMessage({ type: 'assistantConfig',
                 config: { defaultName: '小爱', assistants: [{ name: '小爱' }, { name: '妲己' }] } });
         });
+        assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 空闲');
+        assert.deepEqual(await page.$$eval('[data-role="target-menu"] button', (items) => items.map((item) => item.textContent)), ['群聊', '小爱', '妲己']);
+        await page.evaluate(() => window.DisplayStage.handleServerMessage({ type: 'chatSession', session: { mode: 'private', privateTarget: '小爱' } }));
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '小爱 · 空闲');
+        await page.evaluate(() => window.DisplayStage.handleServerMessage({ type: 'chatSession', session: { mode: 'group' } }));
+        assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 空闲');
         assert.equal(await page.evaluate(() => window.DisplayStage.getState().chatVisible), false);
         assert.equal(await page.$eval('#displayChatLayer', (element) => getComputedStyle(element).display), 'none');
         await page.evaluate(() => window.fixtureVad(0.026));
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.textContent), ' 0.03');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.hidden), false);
-        assert.equal(await page.$eval('#displayVoiceActionStatus', (element) => element.textContent), '小爱 · 空闲 0.03');
+        assert.equal(await page.$eval('#displayVoiceActionStatus', (element) => element.textContent), '群聊 · 空闲 0.03');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.parentElement.id), 'displayVoiceActionStatus');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
         const resultText = '识别结果 <img src=x onerror="window.resultInjected=true">\n' + '长文本换行验证'.repeat(25);
@@ -142,9 +151,9 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         await page.screenshot({ path: path.join(cache, 'asr-vad-portrait.png') });
         await page.evaluate(() => updateAsrResultDisplay(''));
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
-        assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '小爱 · 说话中');
+        assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 说话中');
         await page.click('#displayVoiceAction');
-        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '小爱 · 空闲');
+        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 空闲');
         assert.deepEqual(await page.evaluate(() => window.fixtureCalls), ['stop', 'send-stop']);
         const measure = () => page.evaluate(() => {
             const button = document.getElementById('displayVoiceAction').getBoundingClientRect();
@@ -157,23 +166,23 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         assert.equal(portrait.width, portrait.height);
         assert.ok(portrait.labelBottom < portrait.buttonTop);
         await page.click('#displayVoiceContinuous');
-        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '小爱 · 已停止');
+        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 已停止');
         assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.hidden), true);
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.checked), false);
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
         await page.click('#displayVoiceAction');
-        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '小爱 · 监听中');
+        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 监听中');
         assert.equal(await page.evaluate(() => window.DisplayVoiceRuntime.snapshot().manual), true);
         assert.deepEqual(await page.evaluate(() => window.fixtureCalls), ['stop', 'send-stop', 'start']);
         await page.evaluate(() => window.fixtureVad(0.2));
         await page.click('#displayVoiceAction');
-        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '小爱 · 已停止');
+        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 已停止');
         assert.equal(await page.evaluate(() => window.DisplayVoiceRuntime.snapshot().manual), false);
         assert.equal(await page.evaluate(() => window.fixtureCalls.includes('recognize')), false, '未等待静音的录音立即丢弃');
         await page.click('#displayVoiceAction');
         await page.evaluate(() => window.fixtureReadySpeech());
         await page.click('#displayVoiceAction');
-        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '小爱 · 已停止');
+        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 已停止');
         assert.equal(await page.evaluate(() => window.fixtureCalls.filter((call) => call === 'recognize').length), 1);
         await page.setViewport({ width: 800, height: 480 });
         for (const angle of [0, 90, 180, 270]) {
@@ -228,10 +237,11 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         await page.evaluate(() => {
             window.DisplayStage.handleServerMessage({ type: 'chatSession', session: { mode: 'role', roleTarget: null } });
         });
-        assert.equal(await page.evaluate(() => window.DisplayChat.getVoiceStatusName()), '小爱');
+        assert.equal(await page.evaluate(() => window.DisplayChat.getVoiceStatusName()), '群聊');
         const escapedName = '<img src=x onerror="window.nameInjected=true">';
         await page.evaluate((name) => {
             window.DisplayStage.handleServerMessage({ type: 'assistantConfig', config: { defaultName: name } });
+            window.DisplayStage.handleServerMessage({ type: 'chatSession', session: { mode: 'private', privateTarget: name } });
         }, escapedName);
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), escapedName + ' · 空闲');
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.children.length), 0);

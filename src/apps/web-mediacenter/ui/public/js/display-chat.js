@@ -9,8 +9,8 @@
         initialized: false,
         visible: false,
         displayId: null,
-        assistantName: '助手',
-        assistantNames: ['助手'],
+        assistantName: '',
+        assistantNames: [],
         roles: [],
         targets: [],
         session: {
@@ -85,7 +85,7 @@
     function getVoiceStatusName() {
         if (state.session.mode === 'private' && state.session.privateTarget) return state.session.privateTarget;
         if (state.session.mode === 'role' && state.session.roleTarget) return state.session.roleTarget;
-        return state.assistantName || '助手';
+        return '群聊';
     }
 
     function notifyVoiceConversationContext() {
@@ -169,8 +169,9 @@
             const name = String(candidate || '').trim();
             if (name && !names.includes(name)) names.push(name);
         }
-        state.assistantNames = names.length > 0 ? names : ['助手'];
-        state.assistantName = state.assistantNames[0];
+        // 配置未到达或为空时只展示群聊，不插入并不存在的“助手”聊天对象。
+        state.assistantNames = names;
+        state.assistantName = names[0] || '';
     }
 
     function restoreHiddenSelection() {

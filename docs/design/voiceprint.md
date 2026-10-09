@@ -48,10 +48,6 @@ APK 下载的声纹模型保存在应用私有目录，并通过绝对路径传�
 - `similarityScore` 表示本次 embedding 与注册声纹的余弦相似度诊断值；`threshold` 只决定 `speaker` 是否命中。未命中时仍返回最高诊断分数，空库或分数不可计算时返回 `null`。
 - 正式 APK 的单段、多段桥接结果均返回 `similarityScore` 与 `threshold`，多段每个最终分段返回对应分数；服务器只继续按 `speaker` 做声纹门控，不改变既有命令过滤语义。
 
-## 2026-10-09 服务热更新后声纹记录不可见（方案待确认）
+## 2026-10-10 服务热更新后声纹记录不可见
 
-调查发现voiceprint-store.js以__dirname上溯得到声纹数据路径；Android NodeServerService却从updates/code/code-vXX启动并设置AASC_PROJECT_ROOT为固定运行根。因此切换服务包后读写到不同版本的res/voiceprint/db.json，新代码包不包含数据库，初始化为空；不能据此断言旧文件已删除。连接的ADB设备没有com.aasc.display.offline包，尚未检查用户Offline设备上的数据库。
-
-拟改声纹库为固定AASC_PROJECT_ROOT/res/voiceprint/db.json。增加一次性旧库恢复：保护当前有效库，扫描旧数字版本下合法库；仅在固定库缺失/空且存在有效旧库时恢复，保留旧文件、备份当前文件并原子写入、记录恢复标记，防止下次启动重复恢复已删除的成员。损坏库不自动覆盖，输出明确错误。版本重启/注册/删除需回归；实际旧库是否仍在及能恢复多少记录需用户设备验收。
-
-兼容性补充：用户询问非Android服务端影响。未设置AASC_PROJECT_ROOT时沿用原项目根res/voiceprint/db.json；设置该环境变量时遵循其固定数据根，与现有服务端其他资源一致。旧版本恢复仅限AASC_OFFLINE_MODE=1且代码根不同于数据根的热更新环境，普通桌面/服务器不扫描旧版本目录。新代码仍待用户确认。
+voiceprint-store按代码位置上溯得到存储路径，Android切换code-vXX后因此读到新空库。用户确认修复固定目录，随后明确“不需要处理恢复声纹”，本轮仅遵循AASC_PROJECT_ROOT读写res/voiceprint/db.json。未设置环境变量时保持普通非Android原目录。不扫描/备份/恢复旧库；已经位于旧版本目录的记录不会自动迁移。跨版本注册/加载/删除与默认桌面目录需测试。

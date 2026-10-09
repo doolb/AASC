@@ -50,12 +50,12 @@
 DisplayChat.getVoiceStatusName:
     当前mode为private且目标非空 -> 返回privateTarget
     当前mode为role且角色非空 -> 返回roleTarget
-    否则返回assistantName，默认“助手”
+    否则返回“群聊”
 DisplayChat.renderHeader:
     按现有流程渲染选择器
     bus发布chat.status-name，不依赖visible
 DisplayVoiceControls.render:
-    assistantName = DisplayChat只读名字接口返回值，未就绪时“助手”
+    assistantName = DisplayChat只读名字接口返回值，未就绪时“群聊”
     statusLabel = assistantName + “ · ” + 六状态文本
     status.textContent = statusLabel
     圆钮aria-label包含同样的名字与状态，再拼接当前操作
@@ -115,7 +115,7 @@ ASR结果、PCM/VAD/ASR判定、配置、单次结束规则保持
 
 code52已实现数字合并并发布LAN/WAN；21项相关测试、签名/完整组件HTTP大小和SHA-256/精确清理通过。
 
-## 群聊状态与助手选项纠正（2026-10-09，待确认）
+## 群聊状态与助手选项纠正（2026-10-10，已确认）
 
 ```text
 初始assistantNames = []，不生成虚构助手项
@@ -124,4 +124,19 @@ getVoiceStatusName -> private/role有效目标返回真实名字，否则群聊
 语音控件配置未到达fallback -> 群聊
 测试 -> 初始/配置空时只群聊；配置小爱后群聊+小爱
     群聊状态名称始终群聊，切到小爱状态名称小爱，面板关闭亦同步
+```
+
+
+## 实时监听切换按钮样式（2026-10-10，具体方案待确认）
+
+```text
+displayVoiceContinuous = button type=button aria-pressed，文字“实时监听”
+    开启 -> 主题选中背景；关闭 -> 中性背景
+render -> aria-pressed = continuous权威值
+    等待确认/断线/配置未就绪 -> disabled
+click -> requestContinuous(!runtime.snapshot().continuous)
+    保存成功回包后改变选中状态，失败/超时保留旧值
+    仍使用原配置消息和按displayId持久化
+移除checkbox滑轨样式，不改变监听启动/暂停/取消与圆钮功能
+验证 -> 实际点击两种方向、权威等待/失败恢复、断线禁用、深浅主题和旋转
 ```

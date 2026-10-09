@@ -251,3 +251,14 @@ MutationObserver:
     已选中项使用 accent-color/accent gradient；未选中项使用 bg-secondary/text-secondary/border-color
     不为纯导航 active、弹窗 active、媒体条目 active 强行套用按钮状态，保留各自布局和语义样式
 ```
+
+## 按钮未选中预览（2026-10-10，具体方案待确认）
+
+```text
+主题预览按钮状态行 -> 添加“未选中”样例
+    control-btn + theme-preview-button + is-unselected，aria-pressed=false
+    bg-secondary背景、text-secondary文字、border-color边框、无选中光晕
+    普通/选中/播放/危险样例保持
+    仅预览，不触发业务操作或主题保存
+验证 -> 深色和浅色下未选中/选中背景及边框可区分
+```

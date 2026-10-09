@@ -180,24 +180,19 @@ chat.js: sendAudioForRecognition → data.segments 逐段 / data.speaker 归属
 库同步: APK connect/变更→fetch /api/voiceprint/db→voiceprintSyncDb→本地重建
 ```
 
-## 服务包切换后的持久化与一次恢复（2026-10-09，待确认、未实施）
+## 服务包切换后的固定持久化（2026-10-10，已确认）
+
+用户最终要求不处理声纹恢复，仅修正存储目录。
 
 ```text
-projectRoot = resolve(AASC_PROJECT_ROOT or existing code root)
-canonicalDb = projectRoot/res/voiceprint/db.json
-启动:
-    读取并验证canonicalDb
-    有有效非空库 -> 保留当前库
-    损坏库 -> 报错，禁止用空库或旧库静默覆盖
-    缺失/空库且尚未恢复，且AASC_OFFLINE_MODE=1、codeRoot != projectRoot:
-        候选 = root/updates/code/code-v<数字>/res/voiceprint/db.json
-        仅普通文件，不跟随符号链接；验证结构和有效embedding
-        选最近的有效非空候选；有多个不自动跨库合并
-        保存源路径与版本备份信息，保留原文件；已有canonicalDb先备份
-        同目录临时写 -> 原子改名 -> 恢复标记
-    注册/删除落盘 -> 始终canonicalDb，不跟随当前代码版本变化
+PROJECT_ROOT = resolve(AASC_PROJECT_ROOT or code directory上溯5级)
+DB_PATH = PROJECT_ROOT/res/voiceprint/db.json
+load / 注册防抖保存 / 删除防抖保存 -> 同一个DB_PATH
+未设置AASC_PROJECT_ROOT -> 完全保留现有非Android默认目录
+显式数据根 -> 与服务端已有配置及其他资源的根一致
+不扫描旧版本、不复制旧库、不创建恢复标记或备份
 测试:
-    code-vA注册 -> code-vB重启仍可见
-    旧目录恢复 -> 下次启动不重复恢复；删除不会复活
-    当前有效库优先、损坏库保护、空/缺失/无旧库、路径与原文件不变
+    从code-vA注册 -> 从code-vB启动仍读取固定数据根
+    删除并从下一版本启动 -> 保持删除
+    默认桌面根、显式根、旧目录不自动恢复/不变
 ```

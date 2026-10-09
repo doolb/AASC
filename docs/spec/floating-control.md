@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded'):
 | public/js/websocket.js | WebSocket 消息处理 |
 | public/js/main.js | 初始化入口 |
 
-## 竖屏底部导航避让（2026-10-09，待确认）
+## 竖屏底部导航避让（2026-10-10，已确认）
 
 ```text
 portrait:
