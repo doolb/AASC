@@ -1,5 +1,8 @@
 ### Offline界面修复构建与原生音量柱排查
 
+- ✅ [2026-10-10] 按用户指定在控制端“监听 VAD / 底噪检测”卡片加入“实时监听／单次监听”模式按钮，设备列表不添加入口。
+  - device-list.js、websocket.js、upload.css复用setDisplayVoiceListeningConfig权威流程，等待/失败/断线、多设备和迟到回执隔离，VAD输入聚焦时只更新按钮。新增控制端运行/浏览器自测并同步设计、伪代码、使用和任务；最终20文件78/78通过、无跳过，浏览器截图核对和语法/diff检查通过，服务包待构建发布。
+
 - ✅ [2026-10-10] 已确认并修复 Native AudioRecord 监听柱状图只显示待机动画：display.html 接入原生 RMS，pcm-audio-capture.js 添加时间戳及暂停/恢复/停止清零，超时500ms衰减。
   - 新增 display-native-audio-monitor.test.js 真实PCM/绘图三项，四文件16通过；扩大64项63通过1既有声纹配置夹具失败，HEAD同样使用applyVoiceprintConfig，未修改该旧夹具。浏览器频谱数组及唯一动画循环保持，设计/伪代码/任务/使用/自测同步。servicePackage=true，等待控制端模式按钮确认及合并发布；设备验收待完成。
 

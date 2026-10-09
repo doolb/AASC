@@ -603,6 +603,32 @@ input[type="file"] {
     accent-color: var(--accent-color, #00d2ff);
 }
 
+/* 模式入口仅位于 VAD 卡片，实时模式选中，单次模式使用中性背景。 */
+.display-vad-card .display-voice-mode-button,
+:root[data-theme-mode="light"] .display-vad-card .display-voice-mode-button {
+    min-height: 32px;
+    padding: 4px 12px;
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 6px;
+    box-shadow: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.display-vad-card .display-voice-mode-button[aria-pressed="true"],
+:root[data-theme-mode="light"] .display-vad-card .display-voice-mode-button[aria-pressed="true"] {
+    background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+}
+
+.display-vad-card .display-voice-mode-button:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
 .display-status-bar-toggle {
     display: inline-flex;
     align-items: center;

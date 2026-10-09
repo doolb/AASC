@@ -40,6 +40,7 @@ const WebSocketManager = {
         
         this.ws.onclose = () => {
             window.TtsAudioCacheSettings?.handleDisconnected();
+            window.DeviceList?.handleVoiceContinuousDisconnected?.();
             setTimeout(() => this.connect(), 3000);
         };
     },
@@ -131,8 +132,7 @@ const WebSocketManager = {
                 window.DisplayList.handleAndroidControlPageError(data);
             }
         } else if (data.type === 'displayVoiceListeningConfig') {
-            const display = window.DeviceList?.list?.find((item) => item.id === data.displayId);
-            if (display) display.voiceContinuousEnabled = data.enabled !== false;
+            window.DeviceList?.handleVoiceContinuousConfig(data);
         } else if (data.type === 'displayRecordingModeChanged') {
             if (window.DeviceList) {
                 window.DeviceList.handleDisplayRecordingModeChanged(data);

@@ -13,6 +13,9 @@ const DeviceList = {
     voiceInputByDisplay: new Map(),
     // 监听开关发出后等待服务端回执，避免用户误以为点击没有生效。
     voiceListeningPending: new Map(),
+    // 持续监听模式与录音能力分开保存等待状态，每台设备最多一个请求。
+    voiceContinuousPending: new Map(),
+    voiceContinuousRequestSequence: 0,
     // 每台显示端独立保存最近一次底噪统计，避免设备列表刷新后结果丢失。
     voiceVadNoiseByDisplay: new Map(),
     voiceVadNoisePending: new Map(),
@@ -357,6 +360,72 @@ const DeviceList = {
             window.showToast('监听开关发送中', 'info');
         }
         return sent;
+    },
+
+    clearVoiceContinuousPending(displayId) {
+        const pending = this.voiceContinuousPending.get(displayId);
+        if (pending) clearTimeout(pending.timer);
+        this.voiceContinuousPending.delete(displayId);
+    },
+
+    refreshVoiceContinuousControls() {
+        const panel = document.getElementById('voiceVadPanel');
+        if (!panel?.querySelectorAll) return;
+        // 只更新按钮，VAD 参数正在编辑时也不替换输入框，避免 Android 键盘丢焦点。
+        for (const button of panel.querySelectorAll('[data-voice-continuous-toggle]')) {
+            const display = this.list.find(item => item.id === button.dataset.displayId);
+            const enabled = display?.voiceContinuousEnabled !== false;
+            button.textContent = enabled ? '实时监听' : '单次监听';
+            button.setAttribute('aria-pressed', String(enabled));
+            button.setAttribute('aria-label', `当前${button.textContent}，点击切换为${enabled ? '单次监听' : '实时监听'}`);
+            button.disabled = !display || !this.isControlSocketOpen()
+                || this.voiceContinuousPending.has(button.dataset.displayId);
+        }
+    },
+
+    toggleVoiceContinuous(displayId) {
+        const display = this.list.find(item => item.id === displayId);
+        if (!display || this.voiceContinuousPending.has(displayId)) return false;
+        if (!this.isControlSocketOpen()) {
+            this.refreshVoiceContinuousControls();
+            window.showToast?.('监听模式发送失败：控制端未连接', 'error');
+            return false;
+        }
+        const requestId = `control-listening-${Date.now()}-${++this.voiceContinuousRequestSequence}`;
+        const timer = setTimeout(() => {
+            this.clearVoiceContinuousPending(displayId);
+            this.refreshVoiceContinuousControls();
+            window.showToast?.('未收到监听模式保存结果，请重连确认', 'error');
+        }, 10000);
+        this.voiceContinuousPending.set(displayId, { requestId, timer });
+        this.refreshVoiceContinuousControls();
+        try {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setDisplayVoiceListeningConfig', displayId,
+                enabled: display.voiceContinuousEnabled === false, requestId
+            }));
+        } catch (error) {
+            this.clearVoiceContinuousPending(displayId);
+            this.refreshVoiceContinuousControls();
+            window.showToast?.(`监听模式发送失败：${error.message}`, 'error');
+            return false;
+        }
+        return true;
+    },
+
+    handleVoiceContinuousConfig(data) {
+        const display = this.list.find(item => item.id === data?.displayId);
+        if (!display || typeof data.enabled !== 'boolean') return;
+        display.voiceContinuousEnabled = data.enabled;
+        const pending = this.voiceContinuousPending.get(display.id);
+        if (pending && data.requestId === pending.requestId) this.clearVoiceContinuousPending(display.id);
+        if (data.success === false) window.showToast?.(data.message || '监听模式保存失败', 'error');
+        this.refreshVoiceContinuousControls();
+    },
+
+    handleVoiceContinuousDisconnected() {
+        for (const displayId of this.voiceContinuousPending.keys()) this.clearVoiceContinuousPending(displayId);
+        this.refreshVoiceContinuousControls();
     },
 
     handleCapabilitiesUpdated(data) {
@@ -1160,6 +1229,11 @@ const DeviceList = {
                     </label>
                 </div>
                 <div class="display-vad-card-controls">
+                    <span class="display-voice-mode-label">监听模式</span>
+                    <button type="button" class="display-voice-mode-button" data-voice-continuous-toggle data-display-id="${displayId}"
+                        aria-pressed="${display.voiceContinuousEnabled !== false}"
+                        aria-label="当前${display.voiceContinuousEnabled !== false ? '实时监听，点击切换为单次监听' : '单次监听，点击切换为实时监听'}"
+                        ${!this.isControlSocketOpen() || this.voiceContinuousPending.has(display.id) ? 'disabled' : ''}>${display.voiceContinuousEnabled !== false ? '实时监听' : '单次监听'}</button>
                     <label class="display-vad-threshold" title="数值越大越不容易被底噪触发">
                         VAD 阈值
                         <input type="number" min="0.001" max="0.2" step="0.001" value="${vadThreshold}" data-vad-threshold data-display-id="${displayId}">
@@ -1298,6 +1372,7 @@ const DeviceList = {
         }
 
         this.bindVoiceVadRefreshOnFocusout(panel);
+        this.refreshVoiceContinuousControls();
         if (this.isFocusedVoiceVadInput(panel, selectedDisplayId)) {
             // 设备/语音状态刷新不能替换正在编辑的 input，否则 Android 键盘会随焦点丢失而自动关闭。
             panel.dataset.voiceVadRefreshPending = '1';
@@ -1355,6 +1430,12 @@ const DeviceList = {
         if (!container || container.dataset.voiceVadControlsBound) return;
         container.dataset.voiceVadControlsBound = '1';
         container.addEventListener('click', (event) => {
+            const modeButton = event.target.closest('[data-voice-continuous-toggle]');
+            if (modeButton) {
+                event.stopPropagation();
+                if (!modeButton.disabled) this.toggleVoiceContinuous(modeButton.dataset.displayId);
+                return;
+            }
             if (event.target.closest('.display-status-bar-toggle')) {
                 event.stopPropagation();
                 return;
@@ -2667,6 +2748,9 @@ const DeviceList = {
         const nextList = list || [];
         this._recordRenderDebug('displayList', nextList.map((display) => display.id));
         const onlineIds = new Set(nextList.map((display) => display.id));
+        for (const displayId of this.voiceContinuousPending.keys()) {
+            if (!onlineIds.has(displayId)) this.clearVoiceContinuousPending(displayId);
+        }
         for (const displayId of this.voiceInputByDisplay.keys()) {
             if (!onlineIds.has(displayId)) this.voiceInputByDisplay.delete(displayId);
         }

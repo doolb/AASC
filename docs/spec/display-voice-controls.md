@@ -146,6 +146,7 @@ click -> requestContinuous(!runtime.snapshot().continuous)
 saved voiceContinuousEnabled缺失 -> true；显式false保留
 显示初始continuous=true、aria-pressed=true，配置未就绪时禁用
 服务端连接补发当前权威值 -> 配置完成后允许切换
-控制端已有“监听”=voiceRecording能力；实时/单次模式目前无专门UI按钮
-    既有setDisplayVoiceListeningConfig协议可供后续控制端入口复用
+控制端已有“监听”=voiceRecording能力
+    “监听 VAD / 底噪检测”卡片新增实时/单次模式按钮
+    点击发送既有setDisplayVoiceListeningConfig，权威回包后更新按钮与显示端
 ```
