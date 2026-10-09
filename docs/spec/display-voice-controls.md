@@ -64,3 +64,38 @@ DisplayVoiceControls.render:
 ```
 
 2026-10-09 本轮修复已提交origion/master并发布code50至LAN/WAN，50项定向自测通过；签名、所有组件HTTP大小/SHA-256及精确清理通过。Android实际录音与重开验收待设备验证。
+
+## ASR结果、实时VAD与手动强制识别（2026-10-09，已确认，点击结束规则待澄清）
+
+ASR/VAD数据流已实现；以下完整手动PCM/forceSubmit部分为初始确认方案，因最新静音等待表述待澄清，尚未实施。当前点击仍调用已有finishManualVoiceRecording并受hasSpeech限制。
+
+```text
+已有声明:
+    PcmAudioCapture / NativePcmAudioCapture的segmentMode、takeWav
+    handleVoiceVadRms、finishManualVoiceRecording、sendAudioForRecognition
+    DisplayStage消息总线、DisplayVoiceControls六状态和助手名
+新增定义:
+    voice.vad只更新数值节点，不反复改写aria-live状态文字
+    VoiceFeedback { asrText, vadRms, manualStartedAt }
+    displayVoiceAsrResult位于displayVoiceActionStatus上方
+    finishManualVoiceRecording输入forceSubmit，默认false
+操作流程:
+    手动开始 -> segmentMode=false完整缓存；记录实际采集开始时间
+    持续开始 -> 保持segmentMode=true和300ms前置缓冲
+    手动再次点击 -> forceSubmit=true
+        有采集器且(forceSubmit或hasSpeech) -> 提取本轮WAV
+        timing起点优先speechStartTime，否则manualStartedAt
+        停止录音并清除单次定时器 -> 有音频则提交公共ASR
+        无音频不创建识别请求
+    静音自动完成/60秒超时 -> 默认forceSubmit=false，保留有效语音条件
+    RMS回调 -> 验证有限非负值、记录当前RMS、按两位小数变化发布voice.vad通知控件
+        实际采集中显示VAD，两位小数；停止或暂停采集时隐藏
+        不改变VAD阈值、最短语音或静音判定
+    本端公共ASR返回 -> 先验证epoch、权限、连接、页面有效性
+        将本端ASR结果发布voice.asr-result -> 底部结果区textContent更新
+        保留已有声纹分段显示格式；未匹配内容只回显，不进入聊天
+        声纹过滤及聊天发送沿用现有规则
+        其他端的原生ASR提供任务只回传结果，不更新本端反馈区
+    结果区 -> 新结果替换旧结果，长文本换行，不与播报字幕共享清理定时器
+    断线/模式切换等取消 -> 作废迟到结果并清理录音/VAD显示
+```

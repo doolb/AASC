@@ -34,6 +34,7 @@ function runtime(extra = '') {
     vm.runInContext(`
         let voiceContinuousEnabled = false, voiceListeningConfigReady = true, isAlwaysListening = false;
         let manualVoiceRecording = false, manualVoiceRecordingTimer = null;
+        let currentVoiceVadRms = 0, lastVoiceAsrText = '';
         let voiceInteractionEpoch = 0, voiceCaptureStartToken = 0, voiceCaptureStarting = false;
         const voiceRecognitionRequests = new Map();
         let displayWs = { readyState: 1 }, displayId = 'one', displayPageActive = true;
@@ -61,6 +62,8 @@ function runtime(extra = '') {
         async function startVoiceRecording() { isListening = true; pcmCapture = {}; calls.push(['start']); }
         ${html.slice(html.indexOf('        function getVoiceInteractionSnapshot()'), html.indexOf('        window.DisplayVoiceRuntime'))}
         ${inlineFunction('stopVoiceRecording')}
+        ${inlineFunction('formatVoiceprintDisplaySegment')}
+        ${inlineFunction('getVoiceAsrDisplayText')}
         ${inlineFunction('sendAudioForRecognition')}
         ${extra}
     `, context);
@@ -172,6 +175,7 @@ test('迟到 ASR 在模式切换、断线或全局暂停后不能再发送聊天
         resolve({ ok: true, json: async () => ({ status: 'success', text: '迟到' }) });
         await promise;
         assert.equal(r.calls.filter((call) => call[0] === 'chat').length, 0);
+        assert.equal(r.calls.filter((call) => call[0] === 'voice.asr-result').length, 0);
         assert.equal(r.run('getVoiceInteractionSnapshot().recognizing'), 0);
     }
 });
@@ -214,7 +218,7 @@ test('异步麦克风启动去重，取消后迟到轨道立即释放', async ()
 test('开关等待权威配置，失败恢复旧值，聊天完成和断线清理思考状态', () => {
     const handlers = new Map(), subscriptions = new Map(), sent = [], timers = new Map();
     const refs = {};
-    for (const id of ['displayVoiceContinuous', 'displayVoiceAction', 'displayVoiceActionStatus']) {
+    for (const id of ['displayVoiceContinuous', 'displayVoiceAction', 'displayVoiceActionStatus', 'displayVoiceVadValue', 'displayVoiceAsrResult']) {
         refs[id] = { dataset: {}, attributes: {}, addEventListener: (event, fn) => handlers.set(`${id}:${event}`, fn),
             setAttribute(name, value) { this.attributes[name] = value; } };
     }
@@ -254,6 +258,62 @@ test('开关等待权威配置，失败恢复旧值，聊天完成和断线清�
     snapshot.manual = true;
     subscriptions.get('chat.status-name')();
     assert.equal(refs.displayVoiceActionStatus.textContent, '工作助手 · 监听中');
+    snapshot.vadActive = true;
+    snapshot.vadRms = 0.026;
+    subscriptions.get('voice.vad')();
+    assert.equal(refs.displayVoiceVadValue.textContent, 'VAD 0.03');
+    assert.equal(refs.displayVoiceVadValue.hidden, false);
+    assert.equal(refs.displayVoiceActionStatus.textContent, '工作助手 · 监听中');
+    snapshot.vadActive = false;
+    subscriptions.get('voice.runtime')();
+    assert.equal(refs.displayVoiceVadValue.hidden, true);
+    snapshot.asrText = '<img>识别结果';
+    subscriptions.get('voice.asr-result')({ text: snapshot.asrText });
+    assert.equal(refs.displayVoiceAsrResult.textContent, snapshot.asrText);
+    assert.equal(refs.displayVoiceAsrResult.hidden, false);
+    snapshot.asrText = '';
+    subscriptions.get('voice.asr-result')({ text: '' });
+    assert.equal(refs.displayVoiceAsrResult.hidden, true);
+});
+
+test('真实RMS回调只有两位小数变化才发布反馈，不改变VAD判定', () => {
+    const r = runtime(`
+        let silenceDetectionRunning = true, vadThreshold = 0.1, vadSilenceDurationMs = 500, vadMinSpeechDurationMs = 300;
+        ${inlineFunction('handleVoiceVadRms')}
+    `);
+    r.run('isListening = true; pcmCapture = { beginSegment() {} }; handleVoiceVadRms(0.012); handleVoiceVadRms(0.014); handleVoiceVadRms(0.017)');
+    assert.equal(r.calls.filter((call) => call[0] === 'voice.vad').length, 2);
+    assert.equal(r.run('currentVoiceVadRms'), 0.017);
+    assert.equal(r.run('hasSpeech'), false, '反馈数值不改变阈值含义');
+    r.run('handleVoiceVadRms(NaN); handleVoiceVadRms(-1); isListening = false; handleVoiceVadRms(0.5)');
+    assert.equal(r.calls.filter((call) => call[0] === 'voice.vad').length, 2);
+    r.run('isListening = true; handleVoiceVadRms(0.2)');
+    assert.equal(r.run('hasSpeech'), true);
+    r.run('ttsRecordingPaused = true');
+    assert.equal(r.run('getVoiceInteractionSnapshot().vadActive'), false);
+});
+
+test('本端有效ASR在底部回显，包括未匹配声纹；聊天仍只发送有效文本', async () => {
+    const r = runtime();
+    r.context.fetch = async () => ({ ok: true, json: async () => ({ status: 'success', segments: [
+        { text: '未匹配', speaker: null }, { text: '有效内容', speaker: '甲' }
+    ] }) });
+    await r.run("sendAudioForRecognition('wav', { manualVoiceInput: true, epoch: 0 })");
+    const result = r.calls.find((call) => call[0] === 'voice.asr-result')[1].text;
+    assert.match(result, /未匹配/u);
+    assert.match(result, /\[甲\] 有效内容/u);
+    assert.deepEqual(r.calls.filter((call) => call[0] === 'chat'), [['chat', '有效内容']]);
+    assert.equal(r.calls.filter((call) => call[0] === 'text').length, 0, '不再共享旧字幕节点');
+    r.context.fetch = async () => ({ ok: true, json: async () => ({ status: 'ignored', text: '无效文本' }) });
+    await r.run("sendAudioForRecognition('wav', { manualVoiceInput: true, epoch: 0 })");
+    assert.equal(r.run('lastVoiceAsrText'), '无效文本');
+    assert.equal(r.calls.filter((call) => call[0] === 'chat').length, 1);
+    r.context.fetch = async () => ({ ok: true, json: async () => ({ status: 'success', text: '' }) });
+    await r.run("sendAudioForRecognition('wav', { manualVoiceInput: true, epoch: 0 })");
+    assert.equal(r.run('lastVoiceAsrText'), '');
+    r.context.fetch = async () => ({ ok: true, json: async () => ({ status: 'success', text: '连续识别' }) });
+    await r.run("sendAudioForRecognition('wav', { epoch: 0 })");
+    assert.equal(r.run('lastVoiceAsrText'), '连续识别');
 });
 
 test('关闭持续监听后，TTS 结束不会自行重开麦克风', () => {

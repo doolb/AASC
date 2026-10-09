@@ -1,5 +1,6 @@
 const assert = require('assert');
 const fs = require('fs');
+const vm = require('node:vm');
 
 const displayHtml = fs.readFileSync(
     'src/apps/web-mediacenter/ui/public/display.html',
@@ -66,21 +67,14 @@ assert.match(recognitionBody, /fetch\('\/api\/asr\/recognize'/);
 assert.match(recognitionBody, /FormData/);
 assert.doesNotMatch(recognitionBody, /asrRecognizeAsync|asrRecognize\(/);
 assert.doesNotMatch(recognitionBody, /SherpaASR\.(?:startStreaming|recognizeBuffer)/);
-assert.match(
-    recognitionBody,
-    /data\.status === 'ignored'[\s\S]*?const ignoredText = String\(data\.text \|\| ''\)\.trim\(\)/,
-    '显示端应保留有文字的 ignored 识别结果'
-);
-assert.match(
-    recognitionBody,
-    /const ignoredText = String\(data\.text \|\| ''\)\.trim\(\)[\s\S]*?updateVoiceTextDisplay\(ignoredText, true\)/,
-    '显示端应显示有文字的无效识别结果'
-);
-assert.match(
-    recognitionBody,
-    /data\.ignoredText[\s\S]*?updateVoiceTextDisplay\(ignoredText, true\)/,
-    '混合声纹分段中的无效文字也应显示'
-);
+// 回显已移动到独立底部区域，执行真实格式化函数验证内容，避免绑定旧字幕节点。
+const formatStart = displayHtml.indexOf('function formatVoiceprintDisplaySegment(');
+const formatFeedback = vm.runInNewContext(displayHtml.slice(formatStart, recognitionStart) + '\ngetVoiceAsrDisplayText');
+assert.equal(formatFeedback({ status: 'ignored', text: '  无效识别结果  ' }), '无效识别结果');
+assert.equal(formatFeedback({ status: 'success', segments: [{ text: '有效部分', speaker: '甲' }], ignoredText: '忽略部分' }),
+    '[甲] 有效部分\n[未识别有效内容] 忽略部分');
+assert.match(recognitionBody, /updateAsrResultDisplay\(getVoiceAsrDisplayText\(data\)\)/,
+    '识别结果应进入底部反馈区');
 const asrEndpointStart = serverJs.indexOf("app.post('/api/asr/recognize'");
 const asrEndpointEnd = serverJs.indexOf("app.get('/api/asr/status'", asrEndpointStart);
 const asrEndpointBody = serverJs.slice(asrEndpointStart, asrEndpointEnd);

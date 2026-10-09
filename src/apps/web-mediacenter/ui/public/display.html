@@ -506,7 +506,11 @@
                 <span>实时监听</span>
             </label>
             <div class="display-voice-action-group">
-                <span id="displayVoiceActionStatus" class="display-voice-action-status" role="status" aria-live="polite">已停止</span>
+                <div id="displayVoiceAsrResult" class="display-voice-asr-result" role="status" aria-live="polite" hidden></div>
+                <div class="display-voice-status-row">
+                    <span id="displayVoiceActionStatus" class="display-voice-action-status" role="status" aria-live="polite">已停止</span>
+                    <span id="displayVoiceVadValue" class="display-voice-action-status" aria-live="off" hidden></span>
+                </div>
                 <button id="displayVoiceAction" class="display-voice-action" type="button" data-state="stopped"
                         aria-label="已停止，开始一次语音输入"><span aria-hidden="true">●</span></button>
             </div>
@@ -761,6 +765,9 @@
         let voiceCaptureStartToken = 0;
         let voiceCaptureStarting = false;
         const voiceRecognitionRequests = new Map();
+        // 反馈只来自本端采集和公共ASR回包，不混入原生提供端替其他设备执行的任务。
+        let currentVoiceVadRms = 0;
+        let lastVoiceAsrText = '';
         let pendingAutoStart = false;
         let wasListeningBeforePlayback = false;
         let noInterruptMode = true;
@@ -6554,6 +6561,9 @@
                 continuous: voiceContinuousEnabled, manual: manualVoiceRecording, configReady: voiceListeningConfigReady,
                 connected: displayWs?.readyState === WebSocket.OPEN,
                 listening: isListening, hasSpeech,
+                vadRms: currentVoiceVadRms,
+                vadActive: isListening && !globalRecordingPaused && !ttsRecordingPaused && pcmCapture?.paused !== true,
+                asrText: lastVoiceAsrText,
                 recognizing: [...voiceRecognitionRequests.values()].filter((epoch) => epoch === voiceInteractionEpoch).length,
                 speaking: (!ttsAudio.paused && !ttsAudio.ended) || textTtsPlaybackActive
             };
@@ -6561,6 +6571,11 @@
 
         function publishVoiceRuntime() {
             window.DisplayStage?.publish('voice.runtime', getVoiceInteractionSnapshot());
+        }
+
+        function updateAsrResultDisplay(text) {
+            lastVoiceAsrText = String(text || '').trim();
+            window.DisplayStage?.publish('voice.asr-result', { text: lastVoiceAsrText });
         }
 
         function clearManualVoiceTimer() {
@@ -7934,6 +7949,7 @@
             }
             const shouldSubmitPendingAudio = submitPendingAudio && isListening === true;
             isListening = false;
+            currentVoiceVadRms = 0;
             activeRecordingPurpose = 'asr';
             clearTtsRecordingResumeTimer();
             ttsRecordingPaused = false;
@@ -8086,7 +8102,11 @@
         }
 
         function handleVoiceVadRms(rms) {
-            if (!silenceDetectionRunning || !isListening || !Number.isFinite(rms)) return;
+            if (!silenceDetectionRunning || !isListening || !Number.isFinite(rms) || rms < 0) return;
+            const valueChanged = rms.toFixed(2) !== currentVoiceVadRms.toFixed(2);
+            currentVoiceVadRms = rms;
+            // 复用原生和WebView的RMS回调，只有显示的两位小数变化才刷新VAD节点。
+            if (valueChanged) window.DisplayStage?.publish('voice.vad', { rms });
             if (vadNoiseTestActive) return;
 
             if (rms >= vadThreshold) {
@@ -8210,6 +8230,17 @@
             return `[未识别声纹｜相似度 ${scoreText || '未知'}｜阈值 ${thresholdText}] ${text}`;
         }
 
+        function getVoiceAsrDisplayText(data) {
+            if (data.status === 'ignored') return String(data.text || '').trim();
+            if (Array.isArray(data.segments) && data.segments.length) {
+                const texts = data.segments.map(formatVoiceprintDisplaySegment).filter(Boolean);
+                const ignoredText = String(data.ignoredText || '').trim();
+                if (ignoredText) texts.push(`[未识别有效内容] ${ignoredText}`);
+                return texts.join('\n');
+            }
+            return data.speaker === null ? formatVoiceprintDisplaySegment(data) : String(data.text || '').trim();
+        }
+
         async function sendAudioForRecognition(audioBlob, timing = {}) {
             if (globalRecordingPaused) return;
             const requestKey = {};
@@ -8240,6 +8271,10 @@
                 const data = await response.json();
                 if (epoch !== voiceInteractionEpoch || !displayPageActive || globalRecordingPaused
                     || !voiceListeningEnabled || displayWs?.readyState !== WebSocket.OPEN) return;
+                // 本端有效请求的结果统一进入底部反馈区；声纹过滤仍独立决定是否发送聊天。
+                if (response.ok && ['success', 'ignored'].includes(data.status)) {
+                    updateAsrResultDisplay(getVoiceAsrDisplayText(data));
+                }
                 if (timing.manualVoiceInput) {
                     if (data.status === 'error' || !response.ok) throw new Error(data.message || '语音识别失败');
                     if (data.status !== 'success') return;
@@ -8247,7 +8282,6 @@
                         ? data.segments.filter((segment) => segment.speaker !== null).map((segment) => String(segment.text || '').trim()).filter(Boolean).join('，')
                         : data.speaker !== null ? String(data.text || '').trim() : '';
                     if (text) {
-                        updateVoiceTextDisplay(text, true);
                         if (window.DisplayChat?.sendVoiceMessage(text) === false) throw new Error('聊天未发送，服务器连接已断开');
                     }
                     return;
@@ -8255,45 +8289,13 @@
 
                 if (data.status === 'success') {
                     // 分段已经由服务器按说话人合并并进入命令链路，显示端只负责回显。
-                    if (data.segments && data.segments.length) {
-                        const displayTexts = data.segments
-                            .map(formatVoiceprintDisplaySegment)
-                            .filter(Boolean);
-                        const ignoredText = String(data.ignoredText || '').trim();
-                        if (ignoredText) displayTexts.push(`[未识别有效内容] ${ignoredText}`);
-                        if (!displayTexts.length) return;
-                        consecutiveIgnoreCount = 0;
-                        updateVoiceTextDisplay(displayTexts.join('\n'), true);
-                        setTimeout(() => updateVoiceTextDisplay('', true), 3000);
-                        return;
-                    }
-                    if (!data.text) return;
-                    const recognizedText = data.text.trim();
+                    const recognizedText = getVoiceAsrDisplayText(data);
+                    if (!recognizedText) return;
                     console.log('显示端识别结果:', recognizedText);
-
                     consecutiveIgnoreCount = 0;
-
-                    const displayText = data.speaker === null
-                        ? formatVoiceprintDisplaySegment(data)
-                        : recognizedText;
-                    updateVoiceTextDisplay(displayText, true);
-
-                    setTimeout(() => {
-                        updateVoiceTextDisplay('', true);
-                    }, 3000);
                 } else if (data.status === 'ignored') {
                     consecutiveIgnoreCount++;
                     console.log('显示端无效语音输入，已忽略 (' + consecutiveIgnoreCount + '/' + MAX_CONSECUTIVE_IGNORES + '):', data.text);
-                    const ignoredText = String(data.text || '').trim();
-                    if (ignoredText) {
-                        updateVoiceTextDisplay(ignoredText, true);
-                        setTimeout(() => {
-                            updateVoiceTextDisplay('', true);
-                        }, 3000);
-                    } else {
-                        updateVoiceTextDisplay('', true);
-                    }
-
                     if (consecutiveIgnoreCount >= MAX_CONSECUTIVE_IGNORES) {
                         const cooldownMs = VOICE_COOLDOWN_MS * Math.pow(2, Math.min(consecutiveIgnoreCount - MAX_CONSECUTIVE_IGNORES, 3));
                         voiceCooldownUntil = Date.now() + cooldownMs;

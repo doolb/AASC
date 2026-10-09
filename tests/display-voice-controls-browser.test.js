@@ -46,7 +46,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         const fixtureHtml = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
             <style>${read('css/theme.css')} ${read('css/display.css')} ${read('css/display-mmd.css')} ${read('css/display-voice-controls.css')} ${read('css/display-chat.css')}</style></head>
             <body><div id="displayStageLayers" class="display-stage-layers">
-              <div id="displayMmdLayer"></div><div id="displayChatLayer"></div>
+              <div id="displayMmdLayer" class="display-mmd-layer"></div><div id="displayChatLayer" class="display-chat-layer"></div>
               <div id="displayInteractionLayer" class="display-interaction-layer">${markup}</div>
             </div>
             <script>
@@ -55,6 +55,9 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
                 window.fixtureCalls = [];
                 let voiceContinuousEnabled = true, voiceListeningConfigReady = true, isAlwaysListening = true;
                 let manualVoiceRecording = false, manualVoiceRecordingTimer = null, voiceInteractionEpoch = 0;
+                let currentVoiceVadRms = 0, lastVoiceAsrText = '', ttsRecordingPaused = false;
+                let silenceDetectionRunning = true, silenceStartTime = null, vadNoiseTestActive = false;
+                const vadThreshold = 0.1, vadSilenceDurationMs = 500, vadMinSpeechDurationMs = 300;
                 const voiceRecognitionRequests = new Map(), remoteTtsPlaybackIds = new Set();
                 let displayWs = { readyState: WebSocket.OPEN }, displayId = 'fixture';
                 let isListening = true, hasSpeech = false, speechStartTime = null;
@@ -81,6 +84,8 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
                 function takeRawPcmWav() { return null; }
                 ${inlineFunction(html, 'handleTTS')}
                 ${runtimeSource}
+                ${inlineFunction(html, 'handleVoiceVadRms')}
+                window.fixtureVad = (rms) => handleVoiceVadRms(rms);
             </script>
             <script>${read('js/display-chat.js')}</script>
             <script>${read('js/display-voice-controls.js')}</script>
@@ -106,6 +111,25 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         });
         assert.equal(await page.$eval('#displayVoiceActionStatus', (element) => element.textContent), '小爱 · 空闲');
         assert.equal(await page.evaluate(() => window.DisplayStage.getState().chatVisible), false);
+        assert.equal(await page.$eval('#displayChatLayer', (element) => getComputedStyle(element).display), 'none');
+        await page.evaluate(() => window.fixtureVad(0.026));
+        assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.textContent), 'VAD 0.03');
+        assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.hidden), false);
+        const resultText = '识别结果 <img src=x onerror="window.resultInjected=true">\n' + '长文本换行验证'.repeat(25);
+        await page.evaluate((text) => updateAsrResultDisplay(text), resultText);
+        assert.equal(await page.$eval('#displayVoiceAsrResult', (element) => element.textContent), resultText);
+        assert.equal(await page.$eval('#displayVoiceAsrResult', (element) => element.children.length), 0);
+        assert.equal(await page.evaluate(() => window.resultInjected), undefined);
+        const resultGeometry = await page.evaluate(() => {
+            const result = document.getElementById('displayVoiceAsrResult');
+            const bounds = result.getBoundingClientRect();
+            return { bottom: bounds.bottom, height: bounds.height, scrollHeight: result.scrollHeight,
+                statusTop: document.getElementById('displayVoiceActionStatus').getBoundingClientRect().top };
+        });
+        assert.ok(resultGeometry.bottom <= resultGeometry.statusTop);
+        assert.ok(resultGeometry.scrollHeight > resultGeometry.height, '长结果换行并受最大高度限制');
+        await page.screenshot({ path: path.join(cache, 'asr-vad-portrait.png') });
+        await page.evaluate(() => updateAsrResultDisplay(''));
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
         assert.equal(await page.$eval('#displayVoiceActionStatus', (element) => element.textContent), '小爱 · 说话中');
         await page.click('#displayVoiceAction');
@@ -123,6 +147,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         assert.ok(portrait.labelBottom < portrait.buttonTop);
         await page.click('#displayVoiceContinuous');
         await page.waitForFunction(() => document.getElementById('displayVoiceActionStatus').textContent === '小爱 · 已停止');
+        assert.equal(await page.$eval('#displayVoiceVadValue', (element) => element.hidden), true);
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.checked), false);
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
         await page.click('#displayVoiceAction');

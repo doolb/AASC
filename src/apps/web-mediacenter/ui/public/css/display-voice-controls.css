@@ -9,7 +9,30 @@
     align-items: center;
     gap: 8px;
     pointer-events: none;
+    max-width: calc(100% - 24px);
 }
+.display-voice-status-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.display-voice-asr-result {
+    max-width: min(76vw, 640px);
+    max-height: 5.4em;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    line-height: 1.45;
+    padding: 6px 10px;
+    border-radius: 10px;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    font-size: 14px;
+    text-align: center;
+    pointer-events: auto;
+}
+.display-voice-asr-result[hidden], #displayVoiceVadValue[hidden] { display: none; }
 .display-voice-action-status {
     padding: 3px 10px;
     border-radius: 999px;

@@ -25,7 +25,9 @@
         const status = deriveStatus(snapshot, chats.size > 0);
         const assistantName = root.DisplayChat?.getVoiceStatusName?.() || '助手';
         const label = `${assistantName} · ${LABELS[status]}`;
-        if (refs.status) refs.status.textContent = label;
+        if (refs.status && refs.status.textContent !== label) refs.status.textContent = label;
+        renderVad(snapshot);
+        renderAsrResult(snapshot.asrText || '');
         if (refs.button) {
             refs.button.dataset.state = status;
             refs.button.setAttribute('aria-label', `${label}，${snapshot.continuous ? '打断播报' : snapshot.manual ? '结束录音并识别' : '开始一次语音输入'}`);
@@ -34,6 +36,22 @@
             refs.toggle.checked = snapshot.continuous;
             refs.toggle.disabled = Boolean(pendingId) || !snapshot.connected || !snapshot.configReady;
         }
+    }
+
+    function renderVad(snapshot = runtime?.snapshot()) {
+        if (!refs.vad || !snapshot) return;
+        refs.vad.hidden = snapshot.vadActive !== true;
+        if (refs.vad.hidden) return;
+        const rms = Number.isFinite(snapshot.vadRms) && snapshot.vadRms >= 0 ? snapshot.vadRms : 0;
+        const value = `VAD ${rms.toFixed(2)}`;
+        if (refs.vad.textContent !== value) refs.vad.textContent = value;
+    }
+
+    function renderAsrResult(text) {
+        if (!refs.asr) return;
+        const value = String(text || '');
+        if (refs.asr.textContent !== value) refs.asr.textContent = value;
+        refs.asr.hidden = !value;
     }
 
     function clearPending() {
@@ -96,12 +114,16 @@
         refs = {
             toggle: root.document.getElementById('displayVoiceContinuous'),
             button: root.document.getElementById('displayVoiceAction'),
-            status: root.document.getElementById('displayVoiceActionStatus')
+            status: root.document.getElementById('displayVoiceActionStatus'),
+            vad: root.document.getElementById('displayVoiceVadValue'),
+            asr: root.document.getElementById('displayVoiceAsrResult')
         };
         refs.toggle?.addEventListener('change', () => requestContinuous(refs.toggle.checked));
         refs.button?.addEventListener('click', click);
         options.bus.subscribe('server.message', handleServerMessage);
         options.bus.subscribe('voice.runtime', render);
+        options.bus.subscribe('voice.vad', () => renderVad());
+        options.bus.subscribe('voice.asr-result', ({ text }) => renderAsrResult(text));
         options.bus.subscribe('chat.status-name', render);
         options.bus.subscribe('chat.activity', ({ requestId, active }) => {
             if (!requestId) return;
