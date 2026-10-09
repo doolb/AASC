@@ -9,6 +9,8 @@
     align-items: center;
     gap: 8px;
     pointer-events: none;
+    /* 明确整行宽度，避免绝对定位 left:50% 的自动宽度只剩半个逻辑画布。 */
+    width: calc(100% - 24px);
     max-width: calc(100% - 24px);
 }
 .display-voice-asr-result {

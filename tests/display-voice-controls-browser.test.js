@@ -186,11 +186,12 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         const resultGeometry = await page.evaluate(() => {
             const result = document.getElementById('displayVoiceAsrResult');
             const bounds = result.getBoundingClientRect();
-            return { top: bounds.top, bottom: bounds.bottom, height: bounds.height, scrollHeight: result.scrollHeight,
+            return { top: bounds.top, bottom: bounds.bottom, width: bounds.width, height: bounds.height, scrollHeight: result.scrollHeight,
                 statusTop: document.getElementById('displayVoiceActionStatus').getBoundingClientRect().top };
         });
         assert.ok(resultGeometry.bottom <= resultGeometry.statusTop);
         assert.ok(resultGeometry.top >= 0, '长结果不能把识别区推出可见画布');
+        assert.ok(resultGeometry.width >= 480 * 0.85, '长结果使用完整逻辑画布宽度，不能缩成半屏');
         assert.ok(resultGeometry.scrollHeight > resultGeometry.height, '长结果换行并受最大高度限制');
         await page.screenshot({ path: path.join(cache, 'asr-vad-portrait.png') });
         await page.evaluate(() => { hasSpeech = false; updateAsrResultDisplay(''); });

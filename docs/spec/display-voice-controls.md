@@ -15,6 +15,7 @@ renderAsrResult:
     仍使用textContent，不解析HTML
     共享顶部getVoiceTextAdaptiveMetrics，传入ASR文本长度与逻辑视口
     字号16–36px、逻辑宽度扣除自适应边距
+    居中交互组显式使用逻辑画布宽度减24px，避免left=50%时自动收缩为半宽
     最大高度扣除下方圆钮/状态/安全区和键盘，超长可滚动
     ASR内容、stage.resize变化后刷新尺寸，无额外录音/计时循环
 ```
