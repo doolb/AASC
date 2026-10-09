@@ -1,5 +1,8 @@
 ### Offline界面修复构建与原生音量柱排查
 
+- ✅ [2026-10-10] 全宽修正后21文件93/93再次通过，最终构建code-v56.zip（16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42），源提交34671c31。
+  - 931文件快照字节一致、运行资源完整、CRC/RSA/组件约束通过，仅排除工作区另行修改的voice-display-node/config.json；servicePackage=false，既有minApk=true/dependenciesPackage=false保持，LAN/WAN最终发布校验进行中。
+
 - ✅ [2026-10-10] 长ASR截图复核修复交互组left=50%时自动宽度收缩为半屏：display-voice-controls.css显式整行宽度，浏览器新增至少85%逻辑视口宽度断言并通过。
   - v55清单已切换但外网全组件回读未完成，主动停止校验并转入包含此修正的v56；servicePackage=true，最终发布以v56验证为准，工作区另行配置及MMD发布记录保持未提交。
 
