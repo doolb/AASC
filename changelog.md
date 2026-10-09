@@ -1,3 +1,9 @@
+### 显示端监听开关与语音状态按钮
+
+- ✅ [2026-10-09] 底部停止播报入口改为按显示端保存的实时监听开关，上方中央圆形按钮及六状态文字。持续模式点击打断本端全部普通播报并继续监听；手动模式点击打断后单次录音，静音/再次点击提交，直接进入当前聊天对象并过滤未匹配声纹。
+  - 新增 display-voice-controls.js/CSS、display-voice-listening-config.js 与两项自测文件；更新 display.html、display-stage.js、display-chat.js、websocket.js、server-app.js 及设计/伪代码/任务/使用/自测文档。复用 PCM/VAD、Native AudioRecord/WebView 和公共 ASR；WebSocket 持久化并补发权威模式，60 秒单次上限，取消迟到识别与采集，播报结束不误恢复已关闭监听。
+  - 新增单元 15/15、浏览器 1/1，相关模块合计 32/32，语法与 diff 检查通过。旧聊天/MMD 集成 38/50，HEAD 对照失败集合相同，本次无新增失败；手机实际采集/ASR/TTS 待设备验证。servicePackage 保持 true，仅待后续服务包发布；未构建或发布 APK/ZIP。
+
 ### MMD-AR 网页导出 PMX
 
 - ✅ [2026-10-09] 编辑器新增“导出 PMX”，将刚体/关节参数及新增、复制、镜像、删除结果下载为`原名称-edited.pmx`。保留原模型其他段、英文名、编码和贴图相对路径；源身份/加载器基线避免坐标及运行时type修正误写；重排同步冲量表情、软体锚点和索引宽度，删除对应源引用。

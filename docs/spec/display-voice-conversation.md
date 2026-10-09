@@ -1158,3 +1158,15 @@ onAllVoiceTtsPlaybackFinished(displayId):
 否则:
     只选择并播报文本指定日期
 ```
+
+## 监听开关与单次输入入口（2026-10-09）
+
+```text
+DisplayStage 初始化独立 DisplayVoiceControls，注入 DisplayVoiceRuntime 和现有总线/传输
+DisplayChat 发送及收到 chatInput -> 发布 chat.activity(active=true)
+DisplayChat 收到 chatResponse 或丢弃流 -> 发布 chat.activity(active=false)
+单次有效文本 -> DisplayChat.sendVoiceMessage -> 当前对象的统一 chatMessage
+持续采集保持原语音会话门控；手动 ASR 只回传，避免服务端和页面重复执行
+```
+
+完整模式保存与资源生命周期伪代码见 [display-voice-controls.md](display-voice-controls.md)。

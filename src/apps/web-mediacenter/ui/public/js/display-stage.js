@@ -399,7 +399,7 @@
         refs.voiceTextDisplay = document.getElementById('voiceTextDisplay');
         refs.chatToggle = document.getElementById('displayChatToggle');
         refs.mmdToggle = document.getElementById('displayMmdToggle');
-        refs.chatTtsStop = document.getElementById('displayChatTtsStop');
+
         if (!refs.stage || !refs.chatLayer || !refs.mmdLayer) return;
 
         if (refs.chatToggle) {
@@ -408,14 +408,12 @@
         if (refs.mmdToggle) {
             refs.mmdToggle.addEventListener('click', requestMmdVisibility);
         }
-        if (refs.chatTtsStop) {
-            refs.chatTtsStop.addEventListener('click', () => {
-                root.DisplayChat?.stopConversationTts({ notify: true });
-            });
-        }
         if (root.DisplayChat && typeof root.DisplayChat.init === 'function') {
             root.DisplayChat.init({ root: refs.chatLayer, bus, send, getState: () => ({ ...state }) });
         }
+        root.DisplayVoiceControls?.init({
+            runtime: root.DisplayVoiceRuntime, bus, send, getState: () => ({ ...state })
+        });
         bus.subscribe('chat.selection', () => {
             if (state.chatVisible) syncDisplayChatVoiceContext(true);
         });

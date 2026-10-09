@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [显示端监听开关与语音状态按钮](design/display-voice-controls.md)
+
 ## 项目概述
 
 基于 WebSocket 的实时媒体展示控制系统，支持多显示端连接和统一控制。

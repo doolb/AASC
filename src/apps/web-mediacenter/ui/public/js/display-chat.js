@@ -140,6 +140,7 @@
     function abandonStreamingMessages() {
         for (const requestId of state.streaming.keys()) {
             state.ignoredRequestIds.add(requestId);
+            state.bus?.publish('chat.activity', { requestId, active: false });
         }
         state.streaming.clear();
     }
@@ -408,11 +409,11 @@
         state.refs.status.classList.toggle('is-error', isError);
     }
 
-    function sendMessage() {
+    function sendMessage(voiceText = null) {
         const input = state.refs.input;
-        if (!input) return;
-        const content = input.value.trim();
-        if (!content) return;
+        if (!input) return false;
+        const content = typeof voiceText === 'string' ? voiceText.trim() : input.value.trim();
+        if (!content) return false;
         // 新消息先清理本地播放队列并通知服务端，使上一轮迟到的音频失效。
         stopConversationTts();
         const requestId = `display-chat-${Date.now()}-${++state.requestSequence}`;
@@ -434,7 +435,7 @@
         };
         if (!state.send(message)) {
             setStatus('当前未连接服务器，消息未发送', true);
-            return;
+            return false;
         }
         input.value = '';
         appendMessage('user', content);
@@ -443,7 +444,9 @@
             author: state.session.roleTarget || state.session.privateTarget || state.assistantName
         });
         state.streaming.set(requestId, streaming);
+        state.bus?.publish('chat.activity', { requestId, active: true });
         setStatus('');
+        return true;
     }
 
     function selectTarget(value) {
@@ -674,6 +677,7 @@
             const requestId = String(message.requestId || '');
             const content = String(message.content || '').trim();
             if (!requestId || !content || state.streaming.has(requestId)) return true;
+            state.bus?.publish('chat.activity', { requestId, active: true });
             appendMessage('user', content);
             const streaming = appendMessage('assistant', '正在思考…', {
                 requestId,
@@ -701,6 +705,7 @@
         }
         if (message.type === 'chatResponse') {
             const requestId = String(message.requestId || '');
+            state.bus?.publish('chat.activity', { requestId, active: false });
             if (state.ignoredRequestIds.has(requestId)) {
                 state.ignoredRequestIds.delete(requestId);
                 return true;
@@ -777,6 +782,7 @@
         init,
         resize,
         setVisible,
+        sendVoiceMessage: (text) => sendMessage(text),
         stopConversationTts
     });
 }(window));
