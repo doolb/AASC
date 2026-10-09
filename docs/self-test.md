@@ -1,5 +1,13 @@
 # 自测功能文档
 
+## MMD-AR PMX文件导出（2026-10-09）
+
+`node --test tests/mmd-ar-pmx-export.test.js`：7/7通过。独立手工二进制夹具覆盖PMX2.0/2.1、UTF-8/UTF-16、SDEF/QDEF、软体、物理坐标与上下限、索引1→2字节扩展、冲量/软体删除和重排、新建无骨骼刚体与关节、源身份跨工程重建和损坏输入；兼容输出再由Three.js原MMDParser独立回读。
+
+真实模型：实际MMDLoader GeometryBuilder生成编辑参数后，米娅及`/mnt/mmd/pmx`四个雪初音的未编辑导出全部逐字节一致；质量/Z位置改变后的原字节扫描值正确，原物理段外字节一致。源码语法、diff检查及网页构建通过。
+
+`tests/mmd-ar-pmx-export-browser.test.js`提供完整按钮下载、属性编辑/复制、关节K、ZIP保存/打开及导出PMX配贴图重新加载回归。当前Chrome/Chromium在启动阶段退出，打包Chrome错误为`Target.setDiscoverTargets: Target closed`；没有进入页面，不能声明浏览器交互通过。桌面及手机/APK下载、PMX Editor打开待人工验收，任务见`docs/task/20261009_MMDAR网页导出PMX.md`。
+
 ## MMD-AR接触阴影反向穿越与内部像素回归（2026-10-08）
 
 `tests/mmd-ar-contact-shadow-browser.test.js`执行真实生产GLSL：4/12/20/30/32/64步共60组检查，覆盖正向/反向连续交点、单向及双向厚度外轮廓跳变、自遮挡/背景。反向仅在接触策略true时命中，GI策略false保持旧行为；完整SSGI、Reduction/HZB及滤波Shader编译链接保持通过。旧实现在反向交点4步用例失败后才改源码。

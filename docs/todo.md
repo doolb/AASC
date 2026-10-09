@@ -1,11 +1,13 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-10-08，code v46/min v34 已发布）
+# Web MediaCenter - 未完成任务列表（更新于 2026-10-09，code v46/min v34 已发布）
+
+- ⏳待浏览器/实机验收 [2026-10-09] MMD-AR导出PMX：7项定向检查和5个真实模型往返通过，web-dist已构建；Chrome/Chromium在启动阶段退出，按钮下载、ZIP交互、手机/独立APK及PMX Editor打开待验收。任务：`docs/task/20261009_MMDAR网页导出PMX.md`。
 
 - ⏳待现场验收 [2026-10-08] MMD-AR接触阴影跨越修正及独立4–64步：60组正/反向GPU输入与完整SSGI Shader编译通过，真实米娅内部阴影像素、无遮挡区域、刷新/DPR/分类/步数保存13项通过；仍需用户同视角验证发际/下巴与手机帧耗时。记录：`docs/task/20261008_MMDAR接触阴影跨越漏判.md`、`docs/task/20261008_MMDAR接触阴影独立采样步数.md`、`docs/task/20261008_MMDAR接触阴影反向穿越漏判.md`。
 
 - ⏳待现场验收 [2026-10-08] MMD-AR联动Stable CSM阴影与后台恢复：稳定切片球、相机旋转尺寸不变和整texel吸附回归通过；后台恢复resize已改为保留相机/角色变换并重新构建本地web-dist。仍需手机/可用GPU浏览器确认阴影覆盖、镜头移动/转向、cameraScale边缘裁切及后台返回画面。实现记录：`docs/task/20261008_MMDAR主相机CSM切片拟合.md`、`docs/task/20261008_MMDAR后台恢复保留预览相机视角.md`。
 
-- 🔄进行中 [2026-10-08] MMD-AR Blender 工程按需加载：外网已部署至 `https://c.aasc.us/mnt/mmd-ar/`；Apache 已启用 `mod_headers` 并按路径提供 COOP `same-origin`、COEP `credentialless`。修复用户反馈的动态导入入口缺少 `mountBlenderWorkbench` 导出，构建有导出断言，6 个修复文件 SHA-256 匹配且线上 HTTP 200。待用真实桌面 Chromium 验收目录授权、相对贴图、Cycles PNG、保存往返及普通首屏不请求 Blender；APK 不包含引擎。Brotli 资源直接请求 `.br` 文件，无需 mod_rewrite。任务：`docs/task/20261008_MMDARBlender工程按需加载.md`。
-- ⏳待桌面浏览器验收 [2026-10-08] MMD-AR Blender 工程：已集成主视口角色替换、对象变换、骨骼姿态/结构编辑和模式路由；入口状态/错误提示移出折叠面板，目录选择取消会恢复入口。最新 `web-dist` 已发布到外网，13 个公开资源 HTTP 200 且 SHA-256 匹配，站点 COOP/COEP 响应头正常。桌面 Edge 实测目录选择、`.blend` 显示、骨骼编辑、Cycles 与保存回读待验收；自动化 Chromium 导航前报 `ERR_INSUFFICIENT_RESOURCES`。任务：`docs/task/20261008_MMDARBlender角色与骨骼编辑集成.md`、`docs/task/20261008_MMDARBlender工程入口反馈修复.md`。
+- ⏸用户暂缓 [2026-10-09] MMD-AR Blender 工程按需加载：外网已部署至 `https://c.aasc.us/mnt/mmd-ar/`；Apache 已启用 `mod_headers` 并按路径提供 COOP `same-origin`、COEP `credentialless`。修复用户反馈的动态导入入口缺少 `mountBlenderWorkbench` 导出，构建有导出断言，6 个修复文件 SHA-256 匹配且线上 HTTP 200。待用真实桌面 Chromium 验收目录授权、相对贴图、Cycles PNG、保存往返及普通首屏不请求 Blender；APK 不包含引擎。Brotli 资源直接请求 `.br` 文件，无需 mod_rewrite。任务：`docs/task/20261008_MMDARBlender工程按需加载.md`。
+- ⏸用户暂缓 [2026-10-09] MMD-AR Blender 工程：已集成主视口角色替换、对象变换、骨骼姿态/结构编辑和模式路由；入口状态/错误提示移出折叠面板，目录选择取消会恢复入口。最新 `web-dist` 已发布到外网，13 个公开资源 HTTP 200 且 SHA-256 匹配，站点 COOP/COEP 响应头正常。桌面 Edge 实测目录选择、`.blend` 显示、骨骼编辑、Cycles 与保存回读待验收；自动化 Chromium 导航前报 `ERR_INSUFFICIENT_RESOURCES`。任务：`docs/task/20261008_MMDARBlender角色与骨骼编辑集成.md`、`docs/task/20261008_MMDARBlender工程入口反馈修复.md`。
 
 
 

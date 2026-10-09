@@ -2,9 +2,16 @@ import { zip, unzipSync, strToU8, strFromU8 } from './web-editor-zip.mjs';
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
 import { getLocalAssetFiles, readLocalAsset, createLocalModelSelection, createLocalMotionSelection, localFilePath, normalizeLocalPath } from './web-local-assets.mjs';
 import { putDocument, validateDocument } from './web-editor-document.mjs';
+import { writePmxPhysics } from './web-editor-pmx.mjs';
 const LIMIT=256*1024*1024;
 export function download(blob,name){const a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
 async function read(url){const local=await readLocalAsset(url);if(local)return new Uint8Array(local);const u=new URL(url,location.href);if(u.origin!==location.origin)throw new Error('工程仅打包同源或已选择资源');const response=await fetch(u);if(!response.ok)throw new Error('资源读取失败：'+url);const buffer=await response.arrayBuffer();if(buffer.byteLength>LIMIT)throw new Error('资源过大');return new Uint8Array(buffer);}
+export async function exportPmx(profile,doc){
+    const source=await read(profile.modelUrl);
+    const bytes=writePmxPhysics(source,doc);
+    const sourceName=decodeURIComponent(new URL(profile.modelUrl,location.href).pathname.split('/').at(-1));
+    return {blob:new Blob([bytes],{type:'application/octet-stream'}),name:sourceName.replace(/\.pmx$/iu,'')+'-edited.pmx'};
+}
 export async function saveProject(profile,doc,settings){
     const entries={},local=getLocalAssetFiles(profile.modelUrl);let model;
     if(local){if(local.reduce((n,file)=>n+file.size,0)>LIMIT)throw new Error('本地工程资源超过256MB');for(const file of local)entries['assets/'+localFilePath(file)]=new Uint8Array(await file.arrayBuffer());model=decodeURIComponent(profile.modelUrl.replace(/^\.\/mmd\/__local__\/[^/]+\//,''));}
