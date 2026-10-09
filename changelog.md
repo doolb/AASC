@@ -13,6 +13,28 @@
 
 # Web MediaCenter - 变更日志
 
+### MMD-AR接触阴影参考优化与保边模糊
+
+- ✅ [2026-10-09] 用户确认参考知乎《接触阴影contact shadow》优化，并增加接触阴影独立保边模糊：投影短射线、透视屏幕步进、当前帧精确2×2保守半深度范围与全深度双向确认，固定空间相位；SSGI沿用原追踪路径。
+  - 修改`web-screen-lighting-shader.mjs`、`web-screen-lighting.mjs`、`web-screen-lighting-panel.mjs`、`web-screen-lighting-build.js`，正式接触分组新增0–3轮/每轮1–5效果像素（默认1轮/3像素），独立保存与复位；深度/法线保边alpha滤波保持GI RGB，先GI后接触串行目标，关闭释放专用深度。
+  - 修复复核发现的近景P1：沿射线按局部投影w换算物理bias，粗筛/二分/最终确认一致，避免朝相机交点被起点偏置误拒绝；透视步进及低步数相位兼顾裁剪与内部覆盖。
+  - 包含归约/滤波的SwiftShader读回完成耗时比较：12/30/64步旧中位数557.0/583.5/608.9ms，新0轮565.5/571.2/597.6ms，新1轮607.8/621.2/650.4ms；采样优化总耗时收益有限，默认模糊增加约8–9%成本，手机性能仍需实测。随后严格float32码边界回归失败后补near/far一码外扩，17项质量复验通过；该最终精度补丁未复测性能。
+  - 198组生产GLSL输入、五类shader编译、实际alpha/深度法线边界/另一通道和奇数范围归约、单位生命周期共17项通过，无跳过；真实米娅0/1/3轮、静态重复、正式分类存储/刷新/DPR通过，脖子118.43→49.56、无遮挡胸部211.30保持。`npm run build:web:mmd-ar-test`成功，独立复审无未解决缺陷；文档、todo、自测同步，本地web-dist已生成。Offline标记minApk/servicePackage保持true、dependenciesPackage=false；未构建APK或发布外网，手机观感与性能待验收。
+  - 最终精度补丁重建后真实模型1项复验亮度保持，相关后台资源/预览与模拟轨道3项通过；累计21项定向检查无失败/跳过，diff检查通过，未运行本轮全仓测试。
+
+### MMD-AR后台恢复保留角色位置与相机距离
+
+- ✅ [2026-10-09] 修复普通预览后台自动清理触发AR复位的问题：共享控制器在释放前捕获AR状态，将保留预览标记传入独立A-Frame取消流程；空闲自动清理保留根变换、相机方向和缩放，显式开始/手动停止默认仍复位。独立页持续监听pagehide，兼容BFCache重复恢复。
+  - 修改`src/apps/web-mediacenter/ui/public/js/display-mmd-ar.js`、`3rd/mmd-ar-test/display-mmd-ar-aframe.js`及`tests/mmd-ar-background-resume.test.js`；同步design/spec/task/todo、自测、README和usage。真实模型旧根X 1.739→0用例先失败；最终两项实际浏览器回归通过（无跳过），覆盖位置/旋转/zoom、两轮后台/resize/pagehide、迟到摄像头、实际AR退出、手动复位及模拟旧轨道释放/新轨道恢复。
+  - `npm run build:web:mmd-ar-test`成功，独立只读复核无新增问题，diff检查通过。扩展相机/重力8项5通过/2既有VM动态import回调缺失失败/1旧浏览器路径跳过，旧源码基线复现同样失败，未宣称全仓自测通过。推送时合并远端Blender/静态资源缓存及code47发布更新，保留两份无关配置；code47不含本次修复，servicePackage重新标true，minApk保持true、dependenciesPackage=false。合并后重新构建并复验；没有升级依赖、出APK或发布外网。手机系统后台行为待验收。
+  - 合并后发现正式清单的新64位版本路由未被独立网页构建转换，实际模型加载超时；`3rd/mmd-ar-test/build.js`补WEB_MODE相对路径转换，正式接口/APK不变。新增清单相对路径/打包文件断言先失败；最终重建后清单及两个真实浏览器用例3/3通过、无跳过，追加只读复核通过。
+
+### MMD-AR后台空闲清理重置视角诊断
+
+- ✅ [2026-10-08] 使用真实米娅模型复现并定位后台重置：空闲AR仍经visibilitychange调用A-Frame releaseSystem/resetArCameraPose，角色根平移和缩放倍率同时归零；共享stopAr还有第二处显示复位，pagehide也触发适配器取消。
+  - 实测倍率1.8→1、相机Z 27.9015→50.2227、角色根[1.7392, 9.2303, 0]→[0, 10.0999, 0]，AR idle/tracking=false/active=false。已有resize修正不能覆盖本次生命周期路径。
+  - 更新design/spec/todo及任务文档，新增自动清理保留空闲预览的方案；按AGENTS.md修改代码前确认规则等待用户确认。尚未修改实现、执行修复回归、重新构建或发布；临时诊断脚本和输出留在.git，不提交资源或无关配置。
+
 ### MMD-AR接触阴影内部漏判
 
 - ✅ [2026-10-08] 根据强度1/距离3/30步下“仍只有边缘阴影”的反馈，在真实米娅近景定位单向深度跨越遗漏穿出表面的交点；补齐接触阴影双向细化，正/反向都选正深度差端点并统一命中距离。

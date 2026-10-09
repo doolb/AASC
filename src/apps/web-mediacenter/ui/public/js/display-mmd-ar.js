@@ -1008,10 +1008,10 @@
         state.trackingFrameMode = null;
     }
 
-    async function stopTrackerSession() {
+    async function stopTrackerSession({ preservePreview = false } = {}) {
         state.trackingRequestId += 1;
         cancelTrackingFrame();
-        if (root.MmdArTestAframeMode === true) root.MmdArTestAframeTracking?.cancelPending?.();
+        if (root.MmdArTestAframeMode === true) root.MmdArTestAframeTracking?.cancelPending?.({ preservePreview });
         root.MmdArNativeTracking?.cancelPending?.();
         if (root.DisplayMmdProductionMindArOnly === true) root.DisplayMmdMindArTracker?.cancelPending?.();
         const session = state.trackerSession;
@@ -1171,14 +1171,18 @@
         }
     }
 
-    async function stopAr({ preserveBackgroundResume = false } = {}) {
+    async function stopAr({ preserveBackgroundResume = false, preservePreview = false } = {}) {
+        // 后台清理仍需取消尚未完成的相机/识别请求，但不能重置未进入AR的手动预览。
+        // 必须在适配器释放前读取状态；适配器退出AR后active已经变为false。
+        const keepPreview = preservePreview && root.MmdArTestAframeMode === true
+            && root.DisplayMmd?.getArCameraState?.()?.active === false;
         if (!preserveBackgroundResume) {
             backgroundResumeTargetId = null;
             visibilityGeneration += 1;
         }
         stopCamera();
-        await stopTrackerSession();
-        resetTrackedDisplay();
+        await stopTrackerSession({ preservePreview: keepPreview });
+        if (!keepPreview) resetTrackedDisplay();
         disableMotionView();
         if (state.elements?.calibration) state.elements.calibration.hidden = true;
         state.calibration = createEmptyCalibration();
@@ -1288,8 +1292,8 @@
             }
         });
         root.addEventListener('pagehide', () => {
-            void stopAr();
-        }, { once: true });
+            void stopAr({ preservePreview: true });
+        }, { once: root.MmdArTestAframeMode !== true });
         const visibilityTarget = root.MmdArTestAframeMode === true ? document : root;
         visibilityTarget.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') {
@@ -1298,7 +1302,7 @@
                 backgroundResumeTargetId = root.MmdArTestAframeMode === true
                     && root.MmdArTestSimCamera?.isSimulated?.() === true && state.tracking
                     ? state.selectedTargetId : null;
-                backgroundStopPromise = stopAr({ preserveBackgroundResume: true });
+                backgroundStopPromise = stopAr({ preserveBackgroundResume: true, preservePreview: true });
                 return;
             }
             if (document.visibilityState !== 'visible' || !backgroundResumeTargetId) return;

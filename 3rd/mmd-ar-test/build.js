@@ -85,6 +85,8 @@ function log(message) {
 function webAssetText(source) {
   if (!WEB_MODE) return source;
   return source
+    // 正式静态资源新增版本目录；独立网页文件仍放在本地mmd目录，不依赖服务API。
+    .replace(/\/api\/mmd\/static\/[a-f0-9]{64}\/mmd\//giu, `${WEB_BASE_PATH}/mmd/`)
     .replaceAll('/api/mmd/static/mmd/', `${WEB_BASE_PATH}/mmd/`)
     .replaceAll('/models/mmd/', `${WEB_BASE_PATH}/mmd/`)
     .replaceAll('/api/mmd/resources', `${WEB_BASE_PATH}/mmd-resources.json`)

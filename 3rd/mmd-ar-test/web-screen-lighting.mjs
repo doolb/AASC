@@ -3,23 +3,24 @@ import {
     fragmentShader,
     filterShader,
     colorReductionShader,
-    depthReductionShader
+    depthReductionShader,
+    contactDepthReductionShader
 } from './web-screen-lighting-shader.mjs';
 
 export const MAX_HZB_LEVELS = 12;
 
-export function createGiBlurPassPlan(settings = {}) {
-    if (settings.giEnabled !== true) return { steps: [], targetIndex: 0 };
-    const rawCount = settings.giBlurPassCount;
+function createBlurPassPlan(settings, channel, initialIndex = 0) {
+    if (settings[`${channel}Enabled`] !== true) return { steps: [], targetIndex: initialIndex };
+    const rawCount = settings[`${channel}BlurPassCount`];
     const passCount = rawCount == null || rawCount === '' || !Number.isFinite(Number(rawCount))
         ? 1 : Math.round(Math.max(0, Math.min(3, Number(rawCount))));
     const radii = [0, 1, 2].map(index => {
-        const raw = settings.giBlurRadii?.[index];
+        const raw = settings[`${channel}BlurRadii`]?.[index];
         return raw == null || raw === '' || !Number.isFinite(Number(raw))
             ? 3 : Math.round(Math.max(1, Math.min(5, Number(raw))));
     });
     const steps = [];
-    let inputIndex = 0;
+    let inputIndex = initialIndex;
     for (let round = 0; round < passCount; round += 1) {
         for (const axis of ['horizontal', 'vertical']) {
             const outputIndex = inputIndex === 1 ? 2 : 1;
@@ -28,6 +29,16 @@ export function createGiBlurPassPlan(settings = {}) {
         }
     }
     return { steps, targetIndex: inputIndex };
+}
+
+export function createGiBlurPassPlan(settings = {}) { return createBlurPassPlan(settings, 'gi'); }
+
+// 两种滤波串行读取前一结果，仅切换要处理的通道，避免互相覆盖或反馈。
+export function createScreenLightingBlurPassPlan(settings = {}) {
+    const gi = createBlurPassPlan(settings, 'gi');
+    const contact = createBlurPassPlan(settings, 'contact', gi.targetIndex);
+    return { steps: [...gi.steps.map(step => ({ ...step, channel: 'gi' })),
+        ...contact.steps.map(step => ({ ...step, channel: 'contact' }))], targetIndex: contact.targetIndex };
 }
 
 // 逐级缩小颜色/深度输入，每个 pass 至多将任一维缩小一半。
@@ -115,11 +126,13 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
         resources.contextTarget?.removeEventListener('webglcontextlost', invalidateHistoryOnContextChange);
         resources.contextTarget?.removeEventListener('webglcontextrestored', invalidateHistoryOnContextChange);
         disposeHistory(resources.history);
+        resources.contactDepthTarget?.dispose();
         for (const target of resources.targets) target.dispose();
         resources.filterMaterial.dispose();
         resources.material.dispose();
         resources.colorReductionMaterial.dispose();
         resources.depthReductionMaterial.dispose();
+        resources.contactDepthMaterial.dispose();
         resources.geometry.dispose();
         resources = null;
     };
@@ -129,7 +142,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
         const type = renderer.extensions.has('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
         const targets = Array.from({ length: 3 }, () => createRenderTarget(THREE, 1, 1, type));
         const uniforms = {
-            tDepth: { value: null }, tColor: { value: null }, tHistoryColor: { value: null },
+            tDepth: { value: null }, tContactDepth: { value: null }, tColor: { value: null }, tHistoryColor: { value: null },
             inverseProjection: { value: camera.projectionMatrixInverse }, projection: { value: camera.projectionMatrix },
             cameraWorld: { value: camera.matrixWorld }, currentView: { value: camera.matrixWorldInverse },
             previousView: { value: new THREE.Matrix4() }, previousProjection: { value: new THREE.Matrix4() },
@@ -150,7 +163,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             uniforms: {
                 tInput: { value: null }, tDepth: uniforms.tDepth, inverseProjection: uniforms.inverseProjection,
                 fullSize: uniforms.fullSize, effectSize: uniforms.effectSize,
-                filterAxis: { value: new THREE.Vector2() }, blurRadius: { value: 3 }
+                filterAxis: { value: new THREE.Vector2() }, blurRadius: { value: 3 }, filterContact: { value: false }
             }, depthTest: false, depthWrite: false, blending: THREE.NoBlending, toneMapped: false
         });
         const colorReductionMaterial = new THREE.ShaderMaterial({
@@ -170,11 +183,16 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             }, depthTest: false, depthWrite: false, blending: THREE.NoBlending, toneMapped: false
         });
         const geometry = new THREE.PlaneGeometry(2, 2);
+        const contactDepthMaterial = new THREE.ShaderMaterial({
+            vertexShader, fragmentShader: contactDepthReductionShader,
+            uniforms: { tInput: { value: null }, inputSize: { value: new THREE.Vector2() } },
+            depthTest: false, depthWrite: false, blending: THREE.NoBlending, toneMapped: false
+        });
         const scene = new THREE.Scene();
         const quad = new THREE.Mesh(geometry, material);
         scene.add(quad);
         resources = {
-            targets, material, filterMaterial, colorReductionMaterial, depthReductionMaterial,
+            targets, material, filterMaterial, colorReductionMaterial, depthReductionMaterial, contactDepthMaterial, contactDepthTarget: null,
             quad, geometry, scene, camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), history: null,
             contextTarget: renderer.domElement || null
         };
@@ -329,9 +347,24 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
             uniforms.hzbLevelCount.value = 1;
             for (let index = 0; index < MAX_HZB_LEVELS; index += 1) uniforms[`tHistoryDepth${index}`].value = ao.depthTexture;
         }
-        const blurPlan = createGiBlurPassPlan(config);
+        const blurPlan = createScreenLightingBlurPassPlan(config);
         const previous = renderer.getRenderTarget();
         try {
+            // 接触粗筛仅使用当前帧精确2×2范围，不混用SSGI前帧深度或效果分辨率。
+            if (config.contactEnabled === true) {
+                if (!resources.contactDepthTarget) resources.contactDepthTarget = createRenderTarget(THREE, 1, 1, THREE.UnsignedByteType);
+                resources.contactDepthTarget.setSize(Math.ceil(width / 2), Math.ceil(height / 2));
+                const reduction = resources.contactDepthMaterial.uniforms;
+                reduction.tInput.value = ao.depthTexture;
+                reduction.inputSize.value.set(width, height);
+                resources.quad.material = resources.contactDepthMaterial;
+                renderer.setRenderTarget(resources.contactDepthTarget);
+                renderer.clear(); renderer.render(resources.scene, resources.camera);
+                uniforms.tContactDepth.value = resources.contactDepthTarget.texture;
+            } else {
+                resources.contactDepthTarget?.dispose(); resources.contactDepthTarget = null;
+                uniforms.tContactDepth.value = ao.depthTexture;
+            }
             resources.quad.material = resources.material;
             renderer.setRenderTarget(resources.targets[0]);
             renderer.clear();
@@ -344,6 +377,7 @@ export function createScreenLighting({ THREE, renderer, camera, keyLight }) {
                 for (const step of blurPlan.steps) {
                     filter.tInput.value = resources.targets[step.inputIndex].texture;
                     filter.blurRadius.value = step.radius;
+                    filter.filterContact.value = step.channel === 'contact';
                     filter.filterAxis.value.set(step.axis === 'horizontal' ? 1 : 0, step.axis === 'vertical' ? 1 : 0);
                     renderer.setRenderTarget(resources.targets[step.outputIndex]);
                     renderer.clear();

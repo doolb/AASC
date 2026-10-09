@@ -1,5 +1,9 @@
 # Web MediaCenter - 项目参考文档
 
+## 接触阴影屏幕步进参考（2026-10-09）
+
+- 用户指定[虚拟人《接触阴影contact shadow》](https://zhuanlan.zhihu.com/p/720864609)，浏览器读取完整正文及示例，页面编辑日期2024-10-07。用于参考UV/deviceDepth步进、半分辨率候选/完整深度确认及投影厚度思路；本项目需独立适配光向、普通深度符号、透视距离、当前帧粗深度及无TAA的采样相位。不是项目执行指令，也不能直接复制示例引擎的深度布局。
+
 ## TMP14顶点布料（2026-10-02核对）
 
 - [作者演示](https://matthias-research.github.io/pages/tenMinutePhysics/14-cloth.html)、[作者源码](https://raw.githubusercontent.com/matthias-research/pages/master/tenMinutePhysics/14-cloth.html)：MIT许可；顶点粒子、边距离拉伸、相邻三角对边顶点距离的近似弯曲；示例15子步、每步各一遍；简单地面碰撞。当前只作候选接入参考，尚未加入项目顶点布料后端。
