@@ -65,37 +65,33 @@ DisplayVoiceControls.render:
 
 2026-10-09 本轮修复已提交origion/master并发布code50至LAN/WAN，50项定向自测通过；签名、所有组件HTTP大小/SHA-256及精确清理通过。Android实际录音与重开验收待设备验证。
 
-## ASR结果、实时VAD与手动强制识别（2026-10-09，已确认，点击结束规则待澄清）
+## ASR结果、实时VAD与手动结束（2026-10-09，最终规则已确认）
 
-ASR/VAD数据流已实现；以下完整手动PCM/forceSubmit部分为初始确认方案，因最新静音等待表述待澄清，尚未实施。当前点击仍调用已有finishManualVoiceRecording并受hasSpeech限制。
+用户最终明确：只有满足前面的有效语音和静音等待才识别，条件未满足时再次点击直接中断。本轮不采用完整PCM/forceSubmit方案，继续复用既有分段采集。
 
 ```text
-已有声明:
-    PcmAudioCapture / NativePcmAudioCapture的segmentMode、takeWav
-    handleVoiceVadRms、finishManualVoiceRecording、sendAudioForRecognition
-    DisplayStage消息总线、DisplayVoiceControls六状态和助手名
-新增定义:
-    voice.vad只更新数值节点，不反复改写aria-live状态文字
-    VoiceFeedback { asrText, vadRms, manualStartedAt }
-    displayVoiceAsrResult位于displayVoiceActionStatus上方
-    finishManualVoiceRecording输入forceSubmit，默认false
-操作流程:
-    手动开始 -> segmentMode=false完整缓存；记录实际采集开始时间
-    持续开始 -> 保持segmentMode=true和300ms前置缓冲
-    手动再次点击 -> forceSubmit=true
-        有采集器且(forceSubmit或hasSpeech) -> 提取本轮WAV
-        timing起点优先speechStartTime，否则manualStartedAt
-        停止录音并清除单次定时器 -> 有音频则提交公共ASR
-        无音频不创建识别请求
-    静音自动完成/60秒超时 -> 默认forceSubmit=false，保留有效语音条件
-    RMS回调 -> 验证有限非负值、记录当前RMS、按两位小数变化发布voice.vad通知控件
-        实际采集中显示VAD，两位小数；停止或暂停采集时隐藏
-        不改变VAD阈值、最短语音或静音判定
-    本端公共ASR返回 -> 先验证epoch、权限、连接、页面有效性
-        将本端ASR结果发布voice.asr-result -> 底部结果区textContent更新
-        保留已有声纹分段显示格式；未匹配内容只回显，不进入聊天
-        声纹过滤及聊天发送沿用现有规则
-        其他端的原生ASR提供任务只回传结果，不更新本端反馈区
-    结果区 -> 新结果替换旧结果，长文本换行，不与播报字幕共享清理定时器
-    断线/模式切换等取消 -> 作废迟到结果并清理录音/VAD显示
+新增定义 VoiceFeedback { currentVoiceVadRms, lastVoiceAsrText }
+新增判断 isVoiceSegmentReadyForRecognition(now):
+    hasSpeech 且 speechStartTime/silenceStartTime 非空
+    且 currentVoiceVadRms < vadThreshold
+    且 now - silenceStartTime > vadSilenceDurationMs
+    且 now - speechStartTime >= vadMinSpeechDurationMs
+结束手动录音 finishManualVoiceRecording:
+    非手动状态 -> 返回
+    保存当前时间、epoch、manualVoiceInput
+    满足共用判断且存在PCM -> 提取本轮WAV；否则不提取
+    无论条件是否满足 -> 立即停止采集并清除单次定时器
+    有WAV -> 提交公共ASR；否则丢弃本次录音
+再次点击 / 静音自动完成 / 60秒超时 -> 同一结束路径
+RMS回调:
+    验证有限非负值，记录当前值，两位小数变化时发布voice.vad
+    >=阈值 -> 保留beginSegment和hasSpeech更新，清空静音起点
+    <阈值且有语音 -> 记录静音起点，共用判断满足后自动完成
+控件:
+    实际采集中显示两位小数VAD，停止或暂停时隐藏
+    本端ASR结果经epoch/权限/连接/页面门控 -> voice.asr-result
+    独立底部节点textContent显示，长文本换行限制高度，保留至新结果替换
+    声纹未匹配可回显，不进入聊天；其他端原生ASR任务不混入
+取消:
+    停止采集、隐藏VAD、作废迟到结果
 ```

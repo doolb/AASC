@@ -1,7 +1,8 @@
 ### 显示端ASR反馈与手动录音
 
-- 📋 [2026-10-09] 记录底部ASR结果、两位小数VAD和手动再次点击绕过VAD的方案。
-  - 已检查display.html、PCM采集器、语音控件及既有自测：当前hasSpeech阻止强制提交，VAD前只保留300ms缓冲；拟将手动采集改为完整缓存并区分强制提交。更新design/spec/task/todo，等待用户确认；尚未修改代码或发布。
+- ✅ [2026-10-09] 状态文字上方显示本端ASR结果，监听时显示两位小数VAD；手动再次点击立即停止，满足有效语音及静音等待才识别，否则丢弃。
+  - display.html新增共用就绪判断、RMS/ASR反馈；display-voice-controls.js/CSS独立结果与数值节点。自动静音、按钮、60秒超时复用判断，保持分段PCM、声纹和过期门控。
+  - 更新语音单元/浏览器/监听测试及design/spec/task/usage/自测文档；8文件41/41通过，无跳过，git diff检查通过。servicePackage=true，minApk=true/dependenciesPackage=false保持；代码包待构建发布，实机录音待验收。
 
 ### Offline聊天选择恢复与语音助手名
 

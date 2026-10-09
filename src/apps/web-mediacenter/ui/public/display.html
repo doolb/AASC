@@ -6606,13 +6606,24 @@
             publishVoiceRuntime();
         }
 
+        function isVoiceSegmentReadyForRecognition(now = Date.now()) {
+            // 按钮、超时和自动静音共用既有VAD条件；未满足时手动结束只丢弃音频。
+            // 静音起点必须由真实低于阈值的回调建立，不能把初始RMS为0视为已静音。
+            return hasSpeech && speechStartTime !== null && silenceStartTime !== null
+                && currentVoiceVadRms < vadThreshold
+                && now - silenceStartTime > vadSilenceDurationMs
+                && now - speechStartTime >= vadMinSpeechDurationMs;
+        }
+
         async function finishManualVoiceRecording() {
             if (!manualVoiceRecording) return;
+            const now = Date.now();
             const timing = {
-                speechStartAt: speechStartTime, speechEndAt: Date.now(),
+                speechStartAt: speechStartTime, speechEndAt: now,
                 manualVoiceInput: true, epoch: voiceInteractionEpoch
             };
-            const blob = pcmCapture && hasSpeech ? takeRawPcmWav() : null;
+            const blob = pcmCapture && isVoiceSegmentReadyForRecognition(now) ? takeRawPcmWav() : null;
+            // 再次点击立即释放录音资源；不合格的片段不等待静音，也不创建ASR请求。
             stopVoiceRecording(false);
             if (blob) await sendAudioForRecognition(blob, timing);
         }
@@ -8122,12 +8133,9 @@
             }
             if (!hasSpeech) return;
             if (!silenceStartTime) silenceStartTime = Date.now();
-            if (Date.now() - silenceStartTime > vadSilenceDurationMs) {
-                const speechDuration = speechStartTime ? Date.now() - speechStartTime : 0;
-                if (speechDuration >= vadMinSpeechDurationMs) {
-                    console.log('显示端检测到静音，发送识别');
-                    void finishVoiceSegment();
-                }
+            if (isVoiceSegmentReadyForRecognition()) {
+                console.log('显示端检测到静音，发送识别');
+                void finishVoiceSegment();
             }
         }
 

@@ -76,16 +76,23 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
                 function resumeVoiceRecordingAfterTts() {}
                 function stopVoiceRecording() {
                     isListening = false; manualVoiceRecording = false;
+                    pcmCapture = null; hasSpeech = false; speechStartTime = null; silenceStartTime = null;
                     clearManualVoiceTimer(); publishVoiceRuntime();
                 }
                 async function startVoiceRecording() {
-                    window.fixtureCalls.push('start'); isListening = true; publishVoiceRuntime();
+                    window.fixtureCalls.push('start'); isListening = true;
+                    pcmCapture = { beginSegment() {} }; publishVoiceRuntime();
                 }
-                function takeRawPcmWav() { return null; }
+                function takeRawPcmWav() { return 'wav'; }
+                async function sendAudioForRecognition() { window.fixtureCalls.push('recognize'); }
                 ${inlineFunction(html, 'handleTTS')}
                 ${runtimeSource}
                 ${inlineFunction(html, 'handleVoiceVadRms')}
                 window.fixtureVad = (rms) => handleVoiceVadRms(rms);
+                window.fixtureReadySpeech = () => {
+                    hasSpeech = true; speechStartTime = Date.now() - 1000;
+                    silenceStartTime = Date.now() - 600; currentVoiceVadRms = 0.01;
+                };
             </script>
             <script>${read('js/display-chat.js')}</script>
             <script>${read('js/display-voice-controls.js')}</script>
@@ -154,9 +161,16 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         await page.waitForFunction(() => document.getElementById('displayVoiceActionStatus').textContent === '小爱 · 监听中');
         assert.equal(await page.evaluate(() => window.DisplayVoiceRuntime.snapshot().manual), true);
         assert.deepEqual(await page.evaluate(() => window.fixtureCalls), ['stop', 'send-stop', 'start']);
+        await page.evaluate(() => window.fixtureVad(0.2));
         await page.click('#displayVoiceAction');
         await page.waitForFunction(() => document.getElementById('displayVoiceActionStatus').textContent === '小爱 · 已停止');
         assert.equal(await page.evaluate(() => window.DisplayVoiceRuntime.snapshot().manual), false);
+        assert.equal(await page.evaluate(() => window.fixtureCalls.includes('recognize')), false, '未等待静音的录音立即丢弃');
+        await page.click('#displayVoiceAction');
+        await page.evaluate(() => window.fixtureReadySpeech());
+        await page.click('#displayVoiceAction');
+        await page.waitForFunction(() => document.getElementById('displayVoiceActionStatus').textContent === '小爱 · 已停止');
+        assert.equal(await page.evaluate(() => window.fixtureCalls.filter((call) => call === 'recognize').length), 1);
         await page.setViewport({ width: 800, height: 480 });
         for (const angle of [0, 90, 180, 270]) {
             await page.evaluate((rotation) => {
@@ -170,7 +184,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
             assert.ok(Math.abs(actual - (angle === 90 || angle === 270 ? 240 : 400)) < 1, `${angle}° ${JSON.stringify(geometry)}`);
             await page.click('#displayVoiceAction');
         }
-        assert.equal(await page.evaluate(() => window.fixtureActivations), 7);
+        assert.equal(await page.evaluate(() => window.fixtureActivations), 9);
         // 新文档不保留旧页面内存；重新注入服务端持久化快照模拟APK重开。
         for (const selection of [
             { mode: 'private', privateTarget: '妲己', privateSessionId: 'session-2', roleTarget: null },

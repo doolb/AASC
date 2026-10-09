@@ -35,6 +35,7 @@ function runtime(extra = '') {
         let voiceContinuousEnabled = false, voiceListeningConfigReady = true, isAlwaysListening = false;
         let manualVoiceRecording = false, manualVoiceRecordingTimer = null;
         let currentVoiceVadRms = 0, lastVoiceAsrText = '';
+        let vadThreshold = 0.1, vadSilenceDurationMs = 500, vadMinSpeechDurationMs = 300;
         let voiceInteractionEpoch = 0, voiceCaptureStartToken = 0, voiceCaptureStarting = false;
         const voiceRecognitionRequests = new Map();
         let displayWs = { readyState: 1 }, displayId = 'one', displayPageActive = true;
@@ -127,16 +128,64 @@ test('持续模式点击只打断并继续采集，手动模式先打断再单�
     assert.equal(r.calls.filter((call) => call[0] === 'start').length, starts);
 });
 
-test('单次再次点击释放麦克风后识别，并只发送一次聊天', async () => {
+test('单次再次点击满足语音和静音等待才识别，并只发送一次聊天', async () => {
     const r = runtime();
     await r.run('activateVoiceInteraction()');
-    r.run('hasSpeech = true; speechStartTime = Date.now() - 1000');
+    r.run('hasSpeech = true; speechStartTime = Date.now() - 1000; silenceStartTime = Date.now() - 600');
     await r.run('activateVoiceInteraction()');
     assert.equal(r.run('manualVoiceRecording || isListening'), false);
     assert.equal(r.timers.size, 0);
     assert.equal(r.calls.filter((call) => call[0] === 'start').length, 1);
     assert.deepEqual(r.calls.filter((call) => call[0] === 'chat'), [['chat', '你好']]);
     assert.ok(r.calls.find((call) => call[0] === 'fetch')[1].some((field) => field[0] === 'manualVoiceInput' && field[1] === 'true'));
+});
+
+test('再次点击条件未满足立即中断，不提取音频或等待静音', async () => {
+    for (const state of [
+        'hasSpeech = false',
+        'hasSpeech = true; speechStartTime = Date.now() - 1000; silenceStartTime = null',
+        'hasSpeech = true; speechStartTime = Date.now() - 1000; silenceStartTime = Date.now() - 100',
+        'hasSpeech = true; speechStartTime = Date.now() - 100; silenceStartTime = Date.now() - 600',
+        'hasSpeech = true; speechStartTime = Date.now() - 1000; silenceStartTime = Date.now() - 600; currentVoiceVadRms = 0.2'
+    ]) {
+        const r = runtime("function takeRawPcmWav() { throw new Error('不应提取未合格音频'); }");
+        await r.run('activateVoiceInteraction()');
+        r.run(state);
+        await r.run('activateVoiceInteraction()');
+        assert.equal(r.run('manualVoiceRecording || isListening'), false, state);
+        assert.equal(r.timers.size, 0);
+        assert.equal(r.calls.filter((call) => call[0] === 'fetch').length, 0);
+        assert.equal(r.calls.filter((call) => call[0] === 'release').length, 2);
+    }
+});
+
+test('共用判断保留静音严格大于和最短语音大于等于边界', () => {
+    const r = runtime();
+    r.run('hasSpeech = true; speechStartTime = 1000; silenceStartTime = 1500');
+    assert.equal(r.run('isVoiceSegmentReadyForRecognition(2000)'), false);
+    assert.equal(r.run('isVoiceSegmentReadyForRecognition(2001)'), true);
+    r.run('vadSilenceDurationMs = 100; speechStartTime = 1700');
+    assert.equal(r.run('isVoiceSegmentReadyForRecognition(1999)'), false);
+    assert.equal(r.run('isVoiceSegmentReadyForRecognition(2000)'), true);
+});
+
+test('真实RMS回调在静音等待完成后自动结束单次录音且不重复提交', async () => {
+    const r = runtime(`
+        let silenceDetectionRunning = true;
+        function startSilenceDetection() {}
+        ${inlineFunction('finishVoiceSegment')}
+        ${inlineFunction('handleVoiceVadRms')}
+    `);
+    await r.run('activateVoiceInteraction()');
+    r.run('pcmCapture.beginSegment = () => {}; handleVoiceVadRms(0.2); speechStartTime = Date.now() - 1000; handleVoiceVadRms(0.01)');
+    assert.equal(r.run('manualVoiceRecording && isListening'), true);
+    assert.equal(r.calls.filter((call) => call[0] === 'fetch').length, 0);
+    r.run('silenceStartTime = Date.now() - 600; handleVoiceVadRms(0.01)');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(r.run('manualVoiceRecording || isListening'), false);
+    await r.run('finishManualVoiceRecording()');
+    assert.equal(r.calls.filter((call) => call[0] === 'fetch').length, 1);
+    assert.deepEqual(r.calls.filter((call) => call[0] === 'chat'), [['chat', '你好']]);
 });
 
 test('静音完成复用单次提交，无语音超时不发送空音频', async () => {
@@ -147,9 +196,14 @@ test('静音完成复用单次提交，无语音超时不发送空音频', async
     assert.equal(r.run('isListening || manualVoiceRecording'), false);
     assert.equal(r.calls.filter((call) => call[0] === 'fetch').length, 0);
     await r.run('activateVoiceInteraction()');
-    r.run('hasSpeech = true');
+    r.run('hasSpeech = true; speechStartTime = Date.now() - 1000; silenceStartTime = Date.now() - 600');
     await r.run('finishVoiceSegment()');
     assert.equal(r.calls.filter((call) => call[0] === 'chat').length, 1);
+    await r.run('activateVoiceInteraction()');
+    r.run('hasSpeech = true; speechStartTime = Date.now() - 1000; silenceStartTime = null');
+    await [...r.timers.values()][0]();
+    assert.equal(r.run('isListening || manualVoiceRecording'), false);
+    assert.equal(r.calls.filter((call) => call[0] === 'chat').length, 1, '超时也不能绕过静音');
 });
 
 test('不匹配声纹分段不会聊天，多个有效分段合并一次', async () => {
@@ -278,7 +332,7 @@ test('开关等待权威配置，失败恢复旧值，聊天完成和断线清�
 
 test('真实RMS回调只有两位小数变化才发布反馈，不改变VAD判定', () => {
     const r = runtime(`
-        let silenceDetectionRunning = true, vadThreshold = 0.1, vadSilenceDurationMs = 500, vadMinSpeechDurationMs = 300;
+        let silenceDetectionRunning = true;
         ${inlineFunction('handleVoiceVadRms')}
     `);
     r.run('isListening = true; pcmCapture = { beginSegment() {} }; handleVoiceVadRms(0.012); handleVoiceVadRms(0.014); handleVoiceVadRms(0.017)');
