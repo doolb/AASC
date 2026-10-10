@@ -828,7 +828,11 @@ function groupWebPanels($) {
       '</div>');
     motionPanel.append(WIND.WIND_PANEL_HTML);
     motionPanel.append(PHYSICS_SOLVER.SOLVER_PANEL_HTML);
-    groupPanel($, motionPanel, 'display-mmd-lighting-header', MOTION_GROUPS);
+    const motionGroups = [MOTION_GROUPS[0]];
+    if ($('#mmdArExpressionPanel').length) motionGroups.push(['表情', ['mmdArExpressionPanel']]);
+    if ($('#mmdArMplPanel').length) motionGroups.push(['MPL 动作', ['mmdArMplPanel']]);
+    motionGroups.push(...MOTION_GROUPS.slice(1));
+    groupPanel($, motionPanel, 'display-mmd-lighting-header', motionGroups);
   }
   groupPanel($, trackingPanel, 'display-mmd-ar-header', TRACKING_GROUPS);
   const panels = [lightingPanel, $('#mmdArMotionPanel').first(), trackingPanel].filter((panel) => panel.length > 0);

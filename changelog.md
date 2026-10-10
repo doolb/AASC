@@ -1,3 +1,48 @@
+### MMD-AR MPL与手动表情代码整理提交
+
+- ✅ [2026-10-10] 将已发布的MPL编译播放、通用PMX手动表情及对应构建/使用/设计/实现/任务/发布记录纳入本次Git提交。
+  - 仅提交本次相关源码与文档；共享changelog/todo中「清空媒体」任务保留在工作区，日志、模型、构建产物、Android中间文件与Node本机配置保持。此前构建/语法及两次公网资源校验均通过，本次未运行测试或重新构建，未推送。
+
+### MMD-AR 手动表情网页外网发布
+
+- ✅ [2026-10-10] 将通用PMX手动表情面板发布至 `https://c.aasc.us/mnt/mmd-ar/`，入口「动作 → 表情」；包含自动表情分类/名称读取、点选组合、独立强度、清除恢复和VMD覆盖逻辑。
+  - 6 个变化文件共 330,602 bytes，先上传暂存目录校验大小/SHA-256、备份旧文件，再按模块→runtime→显示入口→首页顺序原子替换。模型、MPL编译器与Blender资源复用，站点配置保持。
+  - 6 个公网HTTPS资源全部HTTP 200，大小/SHA-256与本地一致；目录首页一致，COOP `same-origin`、COEP `credentialless`正常，rsync checksum dry-run无差异。首页SHA-256：`ccb0b373949134fcbfe2a45626430e43bb65e62aa34c91dc4f600437b255fbbc`。
+  - 远端备份：`/home/as/a/.mmd-ar-publish-20261010-073437-expressions/backup`；本地发布记录：`.git/mmd-ar-publish-20261010-073437-expressions`。本次纯发布只追加changelog，未运行自动/浏览器表情测试，未构建正式服务包或APK，未提交/推送Git。
+
+### 独立 MMD-AR 通用手动表情面板
+
+- ✅ [2026-10-10] 「动作 → 表情」自动从当前PMX获取Morph名称、英文名、类型和分类，按眉毛/眼睛/嘴型/其他分组；不硬编码米娅清单，模型切换自动刷新。
+  - 新增 `web-expressions.mjs`、`web-expressions-ui.mjs`、`web-expressions-build.js`；每项按钮启用/取消、0–100%独立强度、多项叠加、清除恢复VMD。保存动画基线，在物理前/帧末覆盖手动项，避免被动作覆盖；同模型物理重载/换动作保留，换模型清空，过期按钮索引拒绝。
+  - 仅修改生成Loader保存简表并添加内容指纹；顶点和直接顶点组合Morph可用，不支持/空Morph禁用。显示原名保留空格和重复名，不改PMX、工程或VMD。
+  - 同步design/spec/task/todo/usage/readme；`npm run build:web:mmd-ar-test`成功，源模块/生成入口及Loader语法检查、差异空白检查通过。未新增或运行测试，浏览器/设备验收待完成，未发布外网、提交/推送，未改正式包/生产依赖/Offline状态。
+
+### 米娅模型表情能力核对
+
+- ✅ [2026-10-10] 只读解析当前网页的「椛暗式-米娅 ver2.0」PMX，确认29个顶点Morph：嘴型12、眼部11、眉部6；包括口角上げ、まばたき、笑い、にこり、怒り等。
+  - 记录到MPL design/spec及已有验收todo。当前发布的MPL仍只生成骨骼动作，表情语法未接入；本轮未修改功能代码、未运行测试、未构建或发布。
+
+### MMD-AR MPL 网页外网发布
+
+- ✅ [2026-10-10] 将已构建的 MPL 动作测试功能发布至 `https://c.aasc.us/mnt/mmd-ar/`，入口「动作 → MPL 动作」。
+  - 9 个变化文件共 865,645 bytes，含输入面板、编译Worker、固定MMD-MPL JS/WASM/许可证/来源清单；暂存上传后校验大小/SHA-256，备份旧文件，按依赖模块→显示入口→首页顺序原子替换。
+  - 9 个HTTPS文件均HTTP 200、大小/SHA-256与本地一致；目录首页一致，COOP `same-origin`、COEP `credentialless`正常，rsync checksum dry-run无差异。首页SHA-256：`c64ef60b163c10df131bcaa8757b32eda9bf475d0488711271123dbd8f227f41`。
+  - 远端备份：`/home/as/a/.mmd-ar-publish-20261010-063158-mpl/backup`；本地发布记录：`.git/mmd-ar-publish-20261010-063158-mpl`。本次纯发布只追加changelog；未运行自动/浏览器播放测试，未提交/推送，未构建APK或正式服务包。
+
+### 独立 MMD-AR MPL 动作播放
+
+- ✅ [2026-10-10] 「动作 → MPL 动作」支持粘贴已有 MPL、点头示例、编译播放、取消编译、停止恢复原动作及下载 VMD；不调用 LLM，输入仅在本地浏览器处理。
+  - 新增 `web-mpl-build.js`、`web-mpl-worker.mjs`、`web-mpl-ui.mjs`；固定 MMD-MPL 0.3.6 提交 `2d3b1c7e3429b508443500801e94c41fd47c9f31`，构建缓存下载后校验大小/SHA-256并附带GPL-3.0与来源清单。编译器只在点击时加载，WASM为577,320字节。
+  - 生成VMD复用同一个本地资源注册表及动作/物理切换入口；校验骨骼匹配、有限变换值、64KiB输入/8MiB输出/30秒超时/一小时动画。纯姿势补1秒保持，避免零时长循环除零；模型/动作改变时拒绝迟到结果，保留恢复所需的生成资源并及时回收URL。
+  - 更新独立构建器、动作分类、package准备脚本及design/spec/task/todo/usage/ref/readme；`npm run prepare:mmd-ar-mpl`、`npm run build:web:mmd-ar-test` 成功，语法与差异空白检查通过。未运行自动/浏览器测试，待设备验收；仅独立网页，未发布外网、未提交/推送、未改正式包与Offline状态。
+
+### MMD-AR 最新网页外网发布
+
+- ✅ [2026-10-10] 重新构建源码 `9eb4511e` 并发布至 `https://c.aasc.us/mnt/mmd-ar/`，包含 PMX 导出、TAA/Canvas倍率、接触阴影对齐及当前独立网页更新。
+  - `npm run build:web:mmd-ar-test` 成功；24 个变化文件共 608,068 bytes，先上传暂存目录校验 SHA-256，再按模块、显示入口、首页顺序替换。模型、Blender资源无需重新上传，站点根配置保持。
+  - 24 个 HTTPS 资源全部 HTTP 200，大小及 SHA-256 与本地一致；目录入口与首页一致，COOP `same-origin`、COEP `credentialless` 正常，rsync checksum dry-run 无差异。首页 SHA-256：`5c1859463efd30c45c7ade7d68f7c0031e532f2a146401c3811f28c6f325a83c`。
+  - 远端旧文件备份保留于 `/home/as/a/.mmd-ar-publish-20261010-klw4q551/backup`。本次纯构建/发布仅更新 changelog，未运行自动测试或手机验收，未构建 APK/Offline 服务包，也未提交或推送 Git。
+
 ### 正式显示端面板与聊天
 
 - ✅ [2026-10-10] 用户最新布局调整与聊天首次显示修复完成最终发布code58。

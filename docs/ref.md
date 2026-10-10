@@ -1,5 +1,10 @@
 # Web MediaCenter - 项目参考文档
 
+## MPL动作编译器（2026-10-10）
+
+- [AmyangXYZ/MMD-MPL](https://github.com/AmyangXYZ/MMD-MPL)：规则驱动的 MMD Pose Language，上游 WASM `WasmMPLCompiler.compile` 返回 VMD。独立网页固定 `pkg/package.json` 0.3.6、提交 [2d3b1c7e3429b508443500801e94c41fd47c9f31](https://github.com/AmyangXYZ/MMD-MPL/tree/2d3b1c7e3429b508443500801e94c41fd47c9f31)，JS/WASM/LICENSE大小与SHA-256见 `3rd/mmd-ar-test/web-mpl-build.js`，GPL-3.0。仅消费已有MPL，不连接LLM。
+- [AmyangXYZ/PoPo](https://github.com/AmyangXYZ/PoPo)：文本到MPL再到MMD动作的参考项目；本次不采用其LLM服务/渲染器。MPL与Lobe Vidol选择已有预设动作的expression/motion JSON不同。
+
 ## TAA参考（2026-10-09）
 
 - 用户指定[tkstar《深入浅出Temporal Antialising》](https://zhuanlan.zhihu.com/p/142922246)，通过浏览器读取完整正文，页面编辑日期2022-07-30。参考Halton(2,3)序列、相机与模型运动重投影、历史邻域Clamp/Clip/方差盒、YCgCo颜色空间及移动端带宽权衡。当前代码已具备八相位、相机重投影、深度拒绝和RGB邻域限制；与文章相比尚无骨骼运动向量，不能把相机重投影描述为完整动态模型重投影。

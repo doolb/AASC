@@ -284,6 +284,30 @@ async function stageTextAssets() {
       </section>
     `);
     const motionPanel = $('#mmdArMotionPanel');
+    if (WEB_MODE) motionPanel.append(`
+      <div id="mmdArExpressionPanel">
+        <button type="button" class="display-mmd-ar-action" data-expression-clear disabled>清除手动表情</button>
+        <p class="mind-basic-note">自动读取当前 PMX。点击表情可叠加，再点取消；拖动强度会启用该项。手动选择覆盖同名动作表情，取消或清除后恢复动作自带的表情。</p>
+        <div class="mmd-ar-expression-list" data-expression-list></div>
+        <p class="mind-basic-note" role="status" aria-live="polite">模型加载后自动读取表情。</p>
+      </div>
+    `);
+    if (WEB_MODE) motionPanel.append(`
+      <div id="mmdArMplPanel">
+        <label class="display-mmd-lighting-field" for="mmdArMplSource"><span>MPL 动作代码</span></label>
+        <textarea id="mmdArMplSource" rows="12" maxlength="65536" spellcheck="false" autocapitalize="off"
+          style="width:100%;box-sizing:border-box;resize:vertical;background:#171a22;color:#eef2ff;border:1px solid #758bff88;border-radius:6px;padding:8px;font:12px/1.5 monospace"
+          aria-describedby="mmdArMplHint"></textarea>
+        <div class="display-mmd-ar-actions">
+          <button type="button" class="display-mmd-ar-action" data-mpl="play">编译并播放</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="stop" disabled>停止并恢复原动作</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="sample">填入点头示例</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="save" disabled>下载 VMD</button>
+        </div>
+        <p id="mmdArMplHint" class="mind-basic-note">粘贴已生成的 MPL；时间为秒，角度为度。播放会替换当前动作，沿用当前模型的播放方式。需要标准 MMD 骨骼的 PMX。</p>
+        <p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere">点击编译时才加载编译器；代码不上传服务器。</p>
+      </div>
+    `);
     motionPanel.append($('#mmdArMotionPlayback').closest('label'));
     // 相机动作与角色动作并列：独立开关、独立只读进度，仅普通预览生效。
     motionPanel.append(`
@@ -558,6 +582,8 @@ async function stageTextAssets() {
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));
     extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE }); await require('./web-editor-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
+    await require('./web-mpl-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
+    await require('./web-expressions-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。
@@ -577,6 +603,7 @@ async function stageTextAssets() {
     await fs.writeFile(arScriptPath, WEB_GRAVITY_MODE.addGravityControls(await fs.readFile(arScriptPath, 'utf8')));
   }
   await fs.cp(VENDOR_THREE_SOURCE, path.join(GENERATED_ASSETS, 'js/vendor/three'), { recursive: true });
+  const webExpressionLoaderVersion = await require('./web-expressions-build').stageVendor(GENERATED_ASSETS, { webMode: WEB_MODE });
   let webPhysicsHelperVersion = '';
   {
     // 给两端测试副本补齐 native 物理所有权；依赖和 importmap 逐级带指纹，避免继续加载旧缓存。
@@ -613,7 +640,7 @@ async function stageTextAssets() {
   <title>MMD AR 独立测试</title>
   <link rel="stylesheet" href="/css/display-mmd.css">
   <script src="/js/vendor/aframe-1.5.0/aframe.min.js"></script><script src="/js/vendor/mind-ar-1.2.5/mindar-image-aframe.prod.js"></script>
-  <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"${`,"three/addons/animation/MMDAnimationHelper.js":"/js/vendor/three/animation/MMDAnimationHelper.js?v=${webPhysicsHelperVersion}"`}}}</script>
+  <script type="importmap">{"imports":{"three":"/js/vendor/three/three.module.js","three/addons/":"/js/vendor/three/"${`,"three/addons/animation/MMDAnimationHelper.js":"/js/vendor/three/animation/MMDAnimationHelper.js?v=${webPhysicsHelperVersion}"`}${webExpressionLoaderVersion ? `,"three/addons/loaders/MMDLoader.js":"/js/vendor/three/loaders/MMDLoader.js?v=${webExpressionLoaderVersion}"` : ''}}}</script>
   <style>
     :root {
       color-scheme: dark;

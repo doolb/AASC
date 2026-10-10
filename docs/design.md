@@ -1,5 +1,9 @@
 # Web MediaCenter - 项目设计文档
 
+- [独立MMD-AR手动表情面板](design/mmd-ar-expressions.md)
+
+- [独立 MMD-AR MPL 动作输入](design/mmd-ar-mpl.md)
+
 - [显示端监听开关与语音状态按钮](design/display-voice-controls.md)
 
 ## 项目概述
