@@ -829,9 +829,11 @@ function groupWebPanels($) {
     motionPanel.append(WIND.WIND_PANEL_HTML);
     motionPanel.append(PHYSICS_SOLVER.SOLVER_PANEL_HTML);
     const motionGroups = [MOTION_GROUPS[0]];
+    if ($('#mmdArReplyPanel').length) motionGroups.push(['AI 回复', ['mmdArReplyPanel']]);
+    if ($('#mmdArAdvancedMotionPanel').length) motionGroups.push(['高级动作', ['mmdArAdvancedMotionPanel']]);
     if ($('#mmdArExpressionPanel').length) motionGroups.push(['表情', ['mmdArExpressionPanel']]);
     if ($('#mmdArLipSyncPanel').length) motionGroups.push(['口型', ['mmdArLipSyncPanel']]);
-    if ($('#mmdArMplPanel').length) motionGroups.push(['MPL 动作', ['mmdArMplPanel']]);
+    if ($('#mmdArMplPanel').length) motionGroups.push(['MPL 低级动作', ['mmdArMplPanel']]);
     motionGroups.push(...MOTION_GROUPS.slice(1));
     groupPanel($, motionPanel, 'display-mmd-lighting-header', motionGroups);
   }

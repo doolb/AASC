@@ -34,6 +34,8 @@ function initMpl() {
         || document.getElementById('mmdArPhysicsEnabled'))?.disabled === true;
     let phase = '', cancelCompile = null, session = null, lastResult = null;
     let closed = false, defaultSamplePending = true, sampleGeneration = 0;
+    // 手动MPL、语义动作和回复预览共用一个身体写入者，新请求先取消旧编译再串行切换。
+    let desired = 0, activeOwner = '', activeTask = Promise.resolve();
     const resources = new Set();
     input.value = '';
     input.placeholder = 'PMX 模型加载后自动填入动作＋表情示例，也可直接粘贴 MPL。';
@@ -174,20 +176,22 @@ function initMpl() {
         });
     }
 
-    async function compileAndPlay() {
+    async function compileAndPlay(options = {}) {
         if (phase || closed) return;
         let next;
         try {
-            const source = normalizeSource(input.value);
+            const source = normalizeSource(options.source ?? input.value);
             const before = readCurrent();
             const original = ownsCurrentMotion() ? session.original : {
                 motionUrl: before.profile.motionUrl || '',
                 motionResourceId: before.profile.motionResourceId || '', playing: before.playing,
+                playMode: before.profile.playMode || 'loop',
             };
             phase = 'compile';
             status('正在加载 MPL 编译器并编译…');
             sync();
             const result = await compile(source, morphMetadata(before.model));
+            if (options.request !== desired) throw new Error('动作请求已被取消或替换');
             if (closed) return;
             const current = readCurrent();
             if (current.model.token !== before.model.token || modelKey(current.profile) !== modelKey(before.profile)
@@ -206,6 +210,7 @@ function initMpl() {
             sync();
             const file = new File([result.buffer], 'mpl-motion.vmd', { type: 'application/octet-stream' });
             next = createLocalMotionSelection(file);
+            next.playMode = options.once ? 'once' : before.profile.playMode || 'loop';
             resources.add(next);
             if (!await api().loadSelectedMotion(next, detail => status(detail.phase || '正在加载 MPL 动作…'))) {
                 throw new Error('MPL 动作加载已取消；保留当前选择');
@@ -215,7 +220,9 @@ function initMpl() {
             if (modelKey(currentProfile()) !== modelKey(before.profile) || currentProfile()?.motionUrl !== next.motionUrl) {
                 throw new Error('当前选择已改变，MPL 未应用');
             }
-            session = { modelKey: modelKey(before.profile), original, motion: next };
+            session = { modelKey: modelKey(before.profile), original, motion: next,
+                owner: options.owner, request: options.request, duration: result.duration };
+            if (options.request !== desired) return;
             api().setMotionPlaybackEnabled(true);
             const selectedMorphs = new Set((api().getManualExpressions?.()?.items || [])
                 .filter(item => item.selected).map(item => item.name));
@@ -224,8 +231,11 @@ function initMpl() {
                 + (result.poseHold ? ' 纯姿势已生成1秒静态保持。' : '')
                 + (missing.length ? ` 未匹配骨骼：${missing.join('、')}。` : '')
                 + (overridden.length ? ` 手动选择正覆盖表情：${overridden.join('、')}；取消手动选择可查看 MPL 表情。` : ''));
+            return { request: session.request, duration: result.duration, motionUrl: next.motionUrl,
+                warnings: missing.length ? ['未匹配骨骼：' + missing.join('、')] : [] };
         } catch (error) {
             if (!closed) status(error?.message || String(error), true);
+            throw error;
         } finally {
             phase = '';
             // 失败时只清理未被 runtime 使用的资源；成功时释放上一份生成的动作。
@@ -256,18 +266,54 @@ function initMpl() {
             status('MPL 已停止，已恢复原动作和播放开关。');
         } catch (error) {
             if (!closed) status(error?.message || String(error), true);
+            throw error;
         } finally {
             phase = '';
             sync();
         }
     }
 
-    play.addEventListener('click', () => { void compileAndPlay(); });
+    async function launch(source, owner = 'manual', once = false) {
+        const request = ++desired;
+        cancelCompile?.();
+        activeOwner = owner;
+        const previous = activeTask;
+        activeTask = (async () => {
+            await previous.catch(() => {});
+            if (closed || request !== desired) throw new Error('身体动作请求已取消');
+            return compileAndPlay({ source, owner, once, request });
+        })();
+        const result = await activeTask;
+        if (!result || request !== desired) throw new Error('身体动作未播放，或请求已被替换；详见MPL状态');
+        return result;
+    }
+
+    async function stopOwned(owner, request) {
+        if (owner && activeOwner !== owner) return;
+        if (request !== undefined && session?.request !== request) return;
+        const stopping = ++desired;
+        cancelCompile?.();
+        const previous = activeTask;
+        activeTask = (async () => {
+            await previous.catch(() => {});
+            if (closed || stopping !== desired) return;
+            if (!owner || session?.owner === owner) await restore();
+            if (stopping === desired) activeOwner = '';
+        })();
+        await activeTask;
+    }
+    window.MmdArMplPlayback = Object.freeze({
+        play: (source, owner, once = true) => launch(source, owner, once),
+        stop: stopOwned,
+        getState: () => ({ phase, owner: activeOwner, request: session?.request, pendingRequest: desired,
+            ownsMotion: Boolean(ownsCurrentMotion()), duration: session?.duration || 0, closed })
+    });
+    window.dispatchEvent(new Event('mmd-ar-mpl-ready'));
+    play.addEventListener('click', () => { void launch(input.value).catch(error => status(error.message, true)); });
     sample.addEventListener('click', () => { void fillExpressionSample(true); });
     expressionSample.addEventListener('click', () => { void fillExpressionSample(); });
     stop.addEventListener('click', () => {
-        if (phase === 'compile') cancelCompile?.();
-        else void restore();
+        void stopOwned().catch(error => status(error.message, true));
     });
     save.addEventListener('click', () => {
         if (!lastResult) return;

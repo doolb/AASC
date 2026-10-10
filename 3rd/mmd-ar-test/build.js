@@ -284,6 +284,7 @@ async function stageTextAssets() {
       </section>
     `);
     const motionPanel = $('#mmdArMotionPanel');
+    if (WEB_MODE) require('./web-reply-panel').appendPanels(motionPanel);
     if (WEB_MODE) motionPanel.append(`
       <div id="mmdArExpressionPanel">
         <button type="button" class="display-mmd-ar-action" data-expression-clear disabled>清除手动表情</button>
@@ -602,6 +603,7 @@ async function stageTextAssets() {
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));
     extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE }); await require('./web-editor-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
     await require('./web-expressions-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
+    await require('./web-reply-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await require('./web-lipsync-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
@@ -625,6 +627,7 @@ async function stageTextAssets() {
   const webExpressionLoaderVersion = await require('./web-expressions-build').stageVendor(GENERATED_ASSETS, { webMode: WEB_MODE });
   // MPL表情编码依赖已复制的MMDParser，再生成Worker/UI与入口指纹。
   await require('./web-mpl-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
+  await require('./web-reply-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
   let webPhysicsHelperVersion = '';
   {
     // 给两端测试副本补齐 native 物理所有权；依赖和 importmap 逐级带指纹，避免继续加载旧缓存。

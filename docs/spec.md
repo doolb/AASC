@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [独立MMD-AR回复识别与动作调度](spec/mmd-ar-ai-reply.md)
+
 - [正式显示端 TTS 口型实现](spec/mmd-display-lipsync.md)
 
 - [MMD-AR文字口型实现](spec/mmd-ar-lipsync.md)
