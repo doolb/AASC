@@ -1,3 +1,10 @@
+### 正式服务包 v61：表情、MPL 与 TTS 口型
+
+- ✅ [2026-10-10] 已提交TTS口型同步源码43b7025f，并发布正式代码包v61至LAN/WAN；同时包含此前通用表情/MPL迁移。
+  - code-v61.zip：17,436,364 bytes，SHA-256 `e57261d044c33ae15d4edcd6eccc98f08064d8888abbbe65c70056abe3af4aa9`；清单记录源提交43b7025f8e3f38c75ee7402f6d74dacac306afff。975文件CRC通过：462项与提交字节一致，513项既有资源与签名v60一致；包含完整拼音资源与MPL JS/WASM。本机Node配置临时打包输入使用HEAD，工作区配置保留。
+  - 复用dependencies v6、min APK v34、Node min种子v39及dataRepair v2；签名/组件约束、LAN/WAN全部组件HTTP大小/SHA-256及最终清单字节一致检查通过。两端code目录仅保留code-v61.zip，精确清理无错误。记录 `.git/offline-publish-tts-lipsync`。
+  - servicePackage=false，原minApk=true/dependenciesPackage=false保持。源码与发布记录同步origion/master；未构建APK或重新发布独立mmd-ar网页，未新增或运行浏览器/自动/实际音频播放测试，实际TTS口型效果待设备使用。纯发布阶段仅更新changelog及发布状态，不提交模型/ZIP/日志/本机配置。
+
 ### 正式显示端 TTS 口型同步
 
 - ✅ [2026-10-10] 将独立口型预览迁入正式源码，并接入聊天、本地文本朗读和远程文本实际TTS消费路径。
