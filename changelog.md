@@ -1,3 +1,9 @@
+### 清空媒体服务包发布
+
+- ✅ [2026-10-10] 服务包code-v59.zip构建完成，包含快捷面板「清空媒体」，源提交a41c04d5。
+  - 16,940,176字节，SHA-256 c67887016aea7f5017dd643b463efb0ec39562fb86af3d065d1ccfaab9b6b72d；931文件CRC/快照字节、RSA签名及组件契约验证通过，保留已有完整运行资源，仅排除另行修改的Node本机配置。dependencies6/min34/种子39/dataRepair2复用，servicePackage=false，已有minApk=true/dependenciesPackage=false保持。
+  - 内外网发布验证进行中；本轮为纯构建发布，只更新changelog及产物状态，不重新运行功能测试或修改design/spec/task/todo，不提交ZIP/APK、日志、模型或原生中间文件。
+
 ### MMD-AR MPL与手动表情代码整理提交
 
 - ✅ [2026-10-10] 将已发布的MPL编译播放、通用PMX手动表情及对应构建/使用/设计/实现/任务/发布记录纳入本次Git提交。
