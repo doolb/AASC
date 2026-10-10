@@ -1,5 +1,9 @@
 ### 清空媒体服务包发布
 
+- ✅ [2026-10-10] 服务包v59已发布LAN/WAN，快捷面板「清空媒体」随本次服务更新提供。
+  - 代码包16,940,176字节，SHA-256 c67887016aea7f5017dd643b463efb0ec39562fb86af3d065d1ccfaab9b6b72d；签名及全部线上组件HTTP大小/哈希验证通过，两端清单与本地签名清单字节一致，代码目录均仅保留code-v59.zip，精确旧版本清理无错误。
+  - servicePackage=false，已有minApk=true/dependenciesPackage=false保持；未构建APK，未修改功能代码/配置规则，纯发布仅更新changelog及已构建状态，完成记录同步origion/master；用户其他工作区改动保持。
+
 - ✅ [2026-10-10] 服务包code-v59.zip构建完成，包含快捷面板「清空媒体」，源提交a41c04d5。
   - 16,940,176字节，SHA-256 c67887016aea7f5017dd643b463efb0ec39562fb86af3d065d1ccfaab9b6b72d；931文件CRC/快照字节、RSA签名及组件契约验证通过，保留已有完整运行资源，仅排除另行修改的Node本机配置。dependencies6/min34/种子39/dataRepair2复用，servicePackage=false，已有minApk=true/dependenciesPackage=false保持。
   - 内外网发布验证进行中；本轮为纯构建发布，只更新changelog及产物状态，不重新运行功能测试或修改design/spec/task/todo，不提交ZIP/APK、日志、模型或原生中间文件。
