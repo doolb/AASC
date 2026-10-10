@@ -285,6 +285,7 @@ async function stageTextAssets() {
     `);
     const motionPanel = $('#mmdArMotionPanel');
     if (WEB_MODE) require('./web-reply-panel').appendPanels(motionPanel);
+    if (WEB_MODE) require('./web-human-panel').appendPanels(motionPanel);
     if (WEB_MODE) motionPanel.append(`
       <div id="mmdArExpressionPanel">
         <button type="button" class="display-mmd-ar-action" data-expression-clear disabled>清除手动表情</button>
@@ -317,12 +318,12 @@ async function stageTextAssets() {
           aria-describedby="mmdArMplHint"></textarea>
         <div class="display-mmd-ar-actions">
           <button type="button" class="display-mmd-ar-action" data-mpl="play">编译并播放</button>
-          <button type="button" class="display-mmd-ar-action" data-mpl="stop" disabled>停止并恢复原动作</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="stop" disabled>停止MPL层</button>
           <button type="button" class="display-mmd-ar-action" data-mpl="sample">填入动作＋表情示例</button>
           <button type="button" class="display-mmd-ar-action" data-mpl="expression-sample">填入表情示例</button>
           <button type="button" class="display-mmd-ar-action" data-mpl="save" disabled>下载 VMD</button>
         </div>
-        <p id="mmdArMplHint" class="mind-basic-note">粘贴已生成的 MPL；时间为秒，角度为度。pose 内可写 morph "PMX原始表情名" 0.8;，权重0–1，也支持纯表情。名称见「表情」分类；手动选择优先。播放会替换当前动作，沿用当前模型的播放方式；骨骼动作需要标准 MMD 骨骼的 PMX。</p>
+        <p id="mmdArMplHint" class="mind-basic-note">粘贴已生成的 MPL；时间为秒，角度为度。pose 内可写 morph "PMX原始表情名" 0.8;，权重0–1，也支持纯表情。名称见「表情」分类；手动选择优先。MPL只覆盖代码涉及的部位，沿用当前播放方式，基础VMD与物理继续运行。可在Human分类保存修正版本。</p>
         <p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere">点击编译时才加载编译器；代码不上传服务器。</p>
       </div>
     `);
@@ -604,6 +605,7 @@ async function stageTextAssets() {
     extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE }); await require('./web-editor-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
     await require('./web-expressions-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await require('./web-reply-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
+    await require('./web-human-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await require('./web-lipsync-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
@@ -644,6 +646,7 @@ async function stageTextAssets() {
       await fs.readFile(helperPath, 'utf8'), `../animation/MMDPhysics.js?v=${physicsVersion}`));
     await fs.writeFile(helperPath, WEB_PHYSICS_SOLVER.addSolverAnimationHelper(
       await fs.readFile(helperPath, 'utf8'), `../../../web-xpbd-physics.mjs?v=${xpbdPhysicsVersion}`, vertexClothUrl, webglUrl.replace('./', '../../../')));
+    await require('./web-human-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
     webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
   }
 

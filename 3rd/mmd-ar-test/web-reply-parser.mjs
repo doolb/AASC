@@ -60,7 +60,7 @@ const protectedPattern = /```([^\n]*)\r?\n([\s\S]*?)```|`[^`\n]+`|^>[^\n]*(?:\n|
 const pattern = new RegExp(protectedPattern.source + '|(?:' + symbolPattern
     + String.raw`)[\uFE0E\uFE0F\p{Emoji_Modifier}]*|[（(]([^（）()\n]{1,80})[）)]`, 'gimu');
 
-export function parseReply(value) {
+export function parseReply(value, { actions = [] } = {}) {
     const text = String(value || '');
     if (!text.trim() || new TextEncoder().encode(text).length > 65536) throw new Error('回复不能为空，最多64KiB');
     let speech = '', cursor = 0;
@@ -84,7 +84,8 @@ export function parseReply(value) {
             try {
                 const opts = parameters(detail);
                 const kind = explicit === '表情' ? 'emotion' : 'action';
-                const canonical = aliases(kind === 'emotion' ? EMOTIONS : ACTIONS, opts.name);
+                const canonical = (kind === 'action' && actions.includes(opts.name) ? opts.name : '')
+                    || aliases(kind === 'emotion' ? EMOTIONS : ACTIONS, opts.name);
                 if (kind === 'action' && !canonical) warnings.push(`未支持高级动作：${opts.name}`);
                 else add(kind, { ...opts, name: canonical || opts.name }, raw);
                 handled = true;

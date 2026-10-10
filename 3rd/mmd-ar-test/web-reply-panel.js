@@ -32,7 +32,7 @@ function appendPanels(panel) {
           <button type="button" class="display-mmd-ar-action" data-advanced="歪头">歪头</button>
           <button type="button" class="display-mmd-ar-action" data-advanced-stop>停止并恢复</button>
         </div>
-        <p class="mind-basic-note">高级动作以名称和参数生成 MPL，单次播放后恢复原动作。与 MPL 低级动作共用身体调度；手动表情和口型可同时播放。</p>
+        <p class="mind-basic-note">高级动作优先使用Human中同名登记行为，缺失时使用MPL模板。只覆盖涉及的部位，基础VMD与物理继续运行；手动表情和口型可同时播放。</p>
         <p class="mind-basic-note" role="status" aria-live="polite">需要标准 MMD 骨骼的 PMX 模型。</p>
       </div>
     `);

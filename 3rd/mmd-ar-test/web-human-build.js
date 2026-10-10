@@ -1,0 +1,79 @@
+'use strict';
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { hashFile } = require('./apk-artifact');
+const once = (source, anchor, value) => {
+    if (source.split(anchor).length !== 2) throw new Error('Human构建缺少唯一锚点：' + anchor);
+    return source.replace(anchor, value);
+};
+async function stageRuntime(root, { webMode = false } = {}) {
+    if (!webMode) return;
+    const folder = path.join(root, 'js'), controllerFile = path.join(folder, 'mmd-expressions.mjs');
+    let controller = await fs.readFile(controllerFile, 'utf8');
+    controller = once(controller, '    let automatic = new Map();', '    let automatic = new Map();\n    let human = new Map();');
+    controller = once(controller, '        automatic.clear();', '        automatic.clear();\n        human.clear();');
+    controller = once(controller, '...automatic, ...selected, ...transient', '...automatic, ...human, ...selected, ...transient');
+    const start = controller.indexOf('    function setTransient('), end = controller.indexOf('    function setAutomatic(', start);
+    if (start < 0 || end < 0) throw new Error('Human构建缺少共享Morph通道');
+    const human = controller.slice(start, end).replace('function setTransient(', 'function setHuman(')
+        .replace('transient = next;', 'human = next;').replaceAll('口型', 'Human');
+    controller = controller.slice(0, end) + human + controller.slice(end);
+    controller = once(controller, '        setAutomatic,', '        setAutomatic,\n        setHuman,');
+    controller = once(controller, 'automatic.clear(); selected.clear();', 'automatic.clear(); human.clear(); selected.clear();');
+    await fs.writeFile(controllerFile, controller);
+    const runtimeFile = path.join(folder, 'display-pmx-runtime.js');
+    let runtime = await fs.readFile(runtimeFile, 'utf8');
+    runtime = "import { createHumanInterfaceElement } from './web-human-interface.mjs';\n" + runtime;
+    runtime = once(runtime, '    const physicsGate =', '    const human = createHumanInterfaceElement({ getMesh: () => currentMesh,\n'
+        + '        getHelper: () => helper.current, getProfile: () => currentProfile, manualExpressions, startRendering });\n    const physicsGate =');
+    runtime = once(runtime, '        manualExpressions.before(frameHelper);', '        human.before(delta, frameHelper);\n        manualExpressions.before(frameHelper);');
+    runtime = once(runtime, '        manualExpressions.dispose();', '        human.dispose();\n        manualExpressions.dispose();');
+    runtime = once(runtime, 'manualExpressions.setAutomatic(token, weights)', "human.setExpressionWeights('reply', token, weights)");
+    runtime = once(runtime, 'manualExpressions.setTransient(token, weights)', 'human.mouth.setWeights(token, weights)');
+    runtime = once(runtime, 'manualExpressions.set(index, weight)', 'human.face.set(index, weight)');
+    runtime = once(runtime, 'manualExpressions.clear()', 'human.face.clear()');
+    runtime = once(runtime, '    const setVisible = (nextVisible) => {', '    const setVisible = (nextVisible) => {\n        human.setVisible(nextVisible);');
+    runtime = once(runtime, '        getManualExpressions:', '        getHumanInterface: () => human,\n        getManualExpressions:');
+    await fs.writeFile(runtimeFile, runtime);
+    const displayFile = path.join(folder, 'display-mmd.js');
+    let display = await fs.readFile(displayFile, 'utf8');
+    display = once(display, '        setReplyExpressions:', "        getHumanInterface: () => state.runtimeType === 'pmx' ? state.runtime?.getHumanInterface?.() : null,\n        setReplyExpressions:");
+    await fs.writeFile(displayFile, display);
+}
+async function stage(root, { webMode = false } = {}) {
+    if (!webMode) return;
+    const folder = path.join(root, 'js'), version = async file => (await hashFile(path.join(folder, file))).sha256.slice(0, 12);
+    const versions = new Map();
+    for (const file of ['web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
+        'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js']) versions.set(file, await version(file));
+    const names = ['model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'interface', 'ui'];
+    for (const suffix of names) {
+        const file = 'web-human-' + suffix + '.mjs';
+        let source = await fs.readFile(path.join(__dirname, file), 'utf8');
+        for (const [dependency, hash] of versions) source = source.replaceAll('./' + dependency, './' + dependency + '?v=' + hash);
+        await fs.writeFile(path.join(folder, file), source); versions.set(file, await version(file));
+    }
+    const runtimeFile = path.join(folder, 'display-pmx-runtime.js');
+    let runtime = await fs.readFile(runtimeFile, 'utf8');
+    const oldHash = await version('display-pmx-runtime.js');
+    runtime = once(runtime, './web-human-interface.mjs', './web-human-interface.mjs?v=' + versions.get('web-human-interface.mjs'));
+    await fs.writeFile(runtimeFile, runtime);
+    const displayFile = path.join(folder, 'display-mmd.js');
+    let display = await fs.readFile(displayFile, 'utf8');
+    display = once(display, './display-pmx-runtime.js?v=' + oldHash, './display-pmx-runtime.js?v=' + await version('display-pmx-runtime.js'));
+    display += "\nimport('./web-human-ui.mjs?v=" + versions.get('web-human-ui.mjs') + "').catch(error => console.warn('[MMD] Human面板加载失败:', error));\n";
+    await fs.writeFile(displayFile, display);
+    const helperFile = path.join(folder, 'vendor/three/animation/MMDAnimationHelper.js');
+    let helper = await fs.readFile(helperFile, 'utf8');
+    // 基础姿态备份不含Human增量；每帧只从当前基础姿态合成一次，再进行IK/grant和物理。
+    helper = once(helper, '\t\t\t// PMX animation system special path',
+        '\t\t}\n\n\t\tif ( this.onHumanPose ) {\n'
+        + '\t\t\tif ( ! mixer || ! this.enabled.animation ) {\n'
+        + '\t\t\t\tif ( ! objects.backupBones ) this._saveBones( mesh );\n'
+        + '\t\t\t\telse this._restoreBones( mesh );\n\t\t\t}\n'
+        + '\t\t\tthis.onHumanPose( mesh, delta );\n\t\t}\n\n'
+        + '\t\tif ( ( mixer && this.enabled.animation ) || this.onHumanPose ) {\n'
+        + '\t\t\t// PMX animation system special path');
+    await fs.writeFile(helperFile, helper);
+}
+module.exports = { stageRuntime, stage };

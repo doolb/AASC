@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [独立MMD通用HumanInterfaceElement（已实现，本地构建）](design/mmd-human-interface.md)
+
 - [独立MMD-AR AI回复表情与分层动作](design/mmd-ar-ai-reply.md)
 
 - [正式显示端 TTS 口型同步](design/mmd-display-lipsync.md)

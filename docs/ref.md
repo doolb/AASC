@@ -2,7 +2,9 @@
 
 ## MPL动作编译器（2026-10-10）
 
-- [AmyangXYZ/MMD-MPL](https://github.com/AmyangXYZ/MMD-MPL)：规则驱动的 MMD Pose Language，上游 WASM `WasmMPLCompiler.compile` 返回 VMD。独立网页固定 `pkg/package.json` 0.3.6、提交 [2d3b1c7e3429b508443500801e94c41fd47c9f31](https://github.com/AmyangXYZ/MMD-MPL/tree/2d3b1c7e3429b508443500801e94c41fd47c9f31)，JS/WASM/LICENSE大小与SHA-256见 `3rd/mmd-ar-test/web-mpl-build.js`，GPL-3.0。仅消费已有MPL，不连接LLM。
+- Human MPL轨道筛选按固定提交 [bone.rs](https://github.com/AmyangXYZ/MMD-MPL/blob/2d3b1c7e3429b508443500801e94c41fd47c9f31/src/bone.rs) 的名称转换表处理；上半身/腰/足先EX/单独手指节分别映射，避免把编译器未控制的零轨道当成修正。
+
+- [AmyangXYZ/MMD-MPL](https://github.com/AmyangXYZ/MMD-MPL)：规则驱动的 MMD Pose Language，上游 WASM `WasmMPLCompiler.compile` 返回 VMD。独立网页固定 `pkg/package.json` 0.3.6、提交 [2d3b1c7e3429b508443500801e94c41fd47c9f31](https://github.com/AmyangXYZ/MMD-MPL/tree/2d3b1c7e3429b508443500801e94c41fd47c9f31)，JS/WASM/LICENSE大小与SHA-256见 `scripts/ops/mmd-mpl-assets.js`，GPL-3.0。仅消费已有MPL，不连接LLM。
 - [AmyangXYZ/PoPo](https://github.com/AmyangXYZ/PoPo)：文本到MPL再到MMD动作的参考项目；本次不采用其LLM服务/渲染器。MPL与Lobe Vidol选择已有预设动作的expression/motion JSON不同。
 
 ## TAA参考（2026-10-09）

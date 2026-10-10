@@ -829,6 +829,7 @@ function groupWebPanels($) {
     motionPanel.append(WIND.WIND_PANEL_HTML);
     motionPanel.append(PHYSICS_SOLVER.SOLVER_PANEL_HTML);
     const motionGroups = [MOTION_GROUPS[0]];
+    if ($('#mmdArHumanPanel').length) motionGroups.push(['Human 生理与后天行为', ['mmdArHumanPanel']]);
     if ($('#mmdArReplyPanel').length) motionGroups.push(['AI 回复', ['mmdArReplyPanel']]);
     if ($('#mmdArAdvancedMotionPanel').length) motionGroups.push(['高级动作', ['mmdArAdvancedMotionPanel']]);
     if ($('#mmdArExpressionPanel').length) motionGroups.push(['表情', ['mmdArExpressionPanel']]);

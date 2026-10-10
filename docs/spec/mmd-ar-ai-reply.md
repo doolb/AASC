@@ -59,3 +59,23 @@ build:
 ## 构建与静态检查
 
 现有 `npm run build:web:mmd-ar-test` 已成功生成本地web-dist。24个源码/生成模块语法、46处内容指纹引用、33项固定拼音/MPL资源大小和SHA-256，以及3个新面板ID唯一性检查通过。正式ui/public源码及Offline状态无差异。未新增或运行自动/浏览器功能测试；这些检查不代表实际播放验收。
+
+## 2026-10-10 Human统一入口更新
+
+当前身体整段加载/恢复已被Human按轨道混合替代，以上motionDirector为历史实现。伪代码：
+
+~~~text
+parseReply(text,actions):
+  明确[动作:名称]允许当前Human库已登记名称，其他自由标记仍用白名单
+resolveExpression(name):
+  优先Human组合；退回PMX真实Morph/语义候选
+body.play/perform:
+  调用Human.mpl.play或perform，返回request/时长/警告
+  getState读取Human请求进度/自然完成，不读取基础VMD进度
+  基础VMD选择变化终止旧回复，身体层结束后继续标记队列
+reply.face/lip:
+  回复情绪送Human priority50，口型送Human.mouth的同一现有player
+  手动Morph/嘴型继续有自己的所有权
+~~~
+
+具体限制与混合/物理顺序见[mmd-human-interface.md](mmd-human-interface.md)。正式范围保持，本轮仍仅本地构建与静态检查。

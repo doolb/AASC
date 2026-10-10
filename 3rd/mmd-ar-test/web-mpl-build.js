@@ -27,9 +27,6 @@ async function stage(root, { webMode = false } = {}) {
   await fs.writeFile(workerFile, once(await fs.readFile(workerFile, 'utf8'), './web-mpl-morphs.mjs', morphsUrl));
   const uiFile = path.join(folder, 'mmd-mpl-ui.mjs');
   let ui = once(await fs.readFile(uiFile, 'utf8'), './web-mpl-morphs.mjs', morphsUrl);
-  ui = once(ui, './web-mpl-worker.mjs', `./mmd-mpl-worker.mjs?v=${await version('mmd-mpl-worker.mjs')}`);
-  // MPL在此转换为独立本地资源模块，必须与runtime复用同一个注册表实例。
-  ui = once(ui, './web-local-assets.mjs', `./web-local-assets.mjs?v=${await version('web-local-assets.mjs')}`);
   await fs.writeFile(uiFile, ui);
   const displayFile = path.join(folder, 'display-mmd.js');
   const display = await fs.readFile(displayFile, 'utf8');

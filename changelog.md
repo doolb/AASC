@@ -1,3 +1,12 @@
+### 独立 MMD-AR：HumanInterfaceElement 与 MPL 后天修正
+
+- ✅ [2026-10-10] 按用户确认实现通用PMX控制层：生理呼吸/眨眼、条件反射、后天VMD/MPL行为与组合表情、低级MPL、原动作覆盖/增量与行为版本保存/切换。
+  - 新增11个web-human模块与构建/面板文件，动作面板「Human 生理与后天行为」提供名称映射、库登记、修正预览、新版本、反射规则、IndexedDB及含VMD的JSON备份/恢复；AI回复明确标记和高级按钮优先调用同名登记行为。
+  - web-mpl-ui、web-reply-player/parser/ui与build/panel-groups接统一入口；基础VMD和物理持续运行。生成Helper在基础动画/骨骼备份之后、IK/grant之前混合，暂停时从备份恢复，不累加上一帧贡献；默认根轨道保护，动态刚体骨骼由物理驱动。固定MPL实际骨骼转换分别处理上半身/腰/足先EX/手指节，避免零轨道覆盖无关部位。
+  - Morph生理/动作/回复/反射/MPL按轨道优先级混合后，再应用手动表情和同一口型player；请求所有权、模型/基础动作/helper令牌、Worker取消/超时、编辑/后台/隐藏显示、保存串行与准备期间库变化保护均接入。
+  - npm run build:web:mmd-ar-test成功生成本地web-dist；19源码、17生成模块语法，57处内容指纹引用，5面板ID唯一、Helper顺序、3项固定MPL大小/SHA-256及差异空白静态检查通过；新模块最大392行。未新增或运行自动/浏览器功能测试，设备播放/多模型/手机性能待验收。
+  - 更新Human设计/spec/task、相关回复设计/spec/usage、索引/todo/ref；正式src和Offline状态保持，无生产依赖变化。仅提交源码/文档并推送origion/master，不提交模型/日志/本机配置/生成资源；本轮未发布外网。任务：docs/task/20261010_MMD通用HumanInterfaceElement设计.md。
+
 ### 独立 MMD-AR：AI 回复表情与高级动作
 
 - ✅ [2026-10-10] 按用户确认仅在独立WEB_MODE加入「AI 回复」「高级动作」，原MPL分类改为「MPL 低级动作」，正式功能范围保持。

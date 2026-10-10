@@ -8,6 +8,8 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
     let sequence = 0, session = null, frame = 0, closed = false;
     let state = { phase: '', time: 0, duration: 0, warnings: [], events: [] };
     const model = () => api()?.getManualExpressions?.() || { ready: false, token: '', items: [] };
+    const parse = value => parseReply(value, { actions: api()?.getHumanInterface?.()?.learn.list().map(a => a.actionId) || [] });
+    const resolve = (items, name) => api()?.getHumanInterface?.()?.face.resolve(name) || resolveReplyExpression(items, name);
     const live = current => !closed && session === current && current.sequence === sequence;
     const update = patch => { state = { ...state, ...patch }; changed(state); };
     const cancelFrame = () => { if (frame) cancelAnimationFrame(frame); frame = 0; };
@@ -51,7 +53,9 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
     async function runBody(current, event) {
         current.compiling = true;
         try {
-            const result = await body().play(event.kind === 'mpl' ? event.source : createHighLevelMpl(event), current.owner, true);
+            const result = event.kind === 'action' && body().perform
+                ? await body().perform(event, current.owner)
+                : await body().play(event.kind === 'mpl' ? event.source : createHighLevelMpl(event), current.owner, true);
             if (!live(current)) return;
             current.motion = result;
             current.lastMotionUrl = result.motionUrl;
@@ -87,6 +91,10 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
             api().setReplyExpressions(current.token, replyExpressionWeights(current.emotions, time));
             const motionState = body()?.getState();
             const profile = api().getModelProfile?.();
+            if (profile?.motionUrl !== current.initialMotionUrl || profile?.motionResourceId !== current.initialMotionId) {
+                void stop('基础动作已手动切换，回复预览已停止。');
+                return;
+            }
             if (!current.bodyOwned && (profile?.motionUrl !== current.initialMotionUrl
                 || profile?.motionResourceId !== current.initialMotionId
                 || motionState?.pendingRequest !== current.initialBodyRequest)) {
@@ -103,11 +111,12 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
                 return;
             }
             if (current.motion) {
-                if (!motionState?.ownsMotion) {
+                if (motionState?.completed) current.motion = null;
+                else if (!motionState?.ownsMotion) {
                     void stop('当前动作或模型已切换，回复预览已停止。');
                     return;
                 }
-                const progress = api().getMotionProgress?.();
+                const progress = motionState?.progress || api().getMotionProgress?.();
                 if (progress && progress.timeSeconds >= progress.durationSeconds - 1 / 60) current.motion = null;
                 // 没有进度时拒绝永久占用；暂停动作也最多等待两分钟。
                 if (now - current.motionStarted > 120000) throw new Error('身体动作等待超过两分钟，请检查动作播放开关。');
@@ -168,7 +177,7 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
             current.startAt ??= performance.now();
             const length = Array.from(parsed.speech).length;
             const events = parsed.events.map(event => ({ ...event, at: eventTime(event.offset, units, duration, length),
-                ...(event.kind === 'emotion' ? resolveReplyExpression(currentModel.items, event.name) : {}) }));
+                ...(event.kind === 'emotion' ? resolve(currentModel.items, event.name) : {}) }));
             for (const event of events.filter(event => event.missing)) current.warnings.push(event.name + '：' + event.reason);
             current.emotions = events.filter(event => event.kind === 'emotion');
             current.actions = events.filter(event => event.kind !== 'emotion');
@@ -186,17 +195,17 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('pagehide', pagehide);
     return Object.freeze({
-        play: async value => playParsed(parseReply(value)),
+        play: async value => playParsed(parse(value)),
         playAdvanced: async options => {
             const event = { name: options.name, duration: options.duration ?? 2,
                 strength: options.strength ?? 0.7, count: options.count ?? 1 };
-            createHighLevelMpl(event);
+            if (!api()?.getHumanInterface?.()?.learn.list().some(a => a.actionId === event.name)) createHighLevelMpl(event);
             return playParsed({ speech: '', warnings: [], events: [{ kind: 'action', offset: 0, ...event }] });
         },
         parse: value => {
-            const parsed = parseReply(value);
+            const parsed = parse(value);
             return { ...parsed, events: parsed.events.map(event => ({ ...event,
-                ...(event.kind === 'emotion' ? resolveReplyExpression(model().items, event.name) : {}) })) };
+                ...(event.kind === 'emotion' ? resolve(model().items, event.name) : {}) })) };
         },
         stop,
         getState: () => ({ ...state, warnings: [...state.warnings], events: [...state.events] }),

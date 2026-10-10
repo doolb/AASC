@@ -47,7 +47,7 @@ function initReply() {
         stop.disabled = !state.phase;
         panel.setAttribute('aria-busy', String(state.phase === 'prepare'));
     }
-    const player = createReplyPlayer({ api, busy, lip: () => window.MmdArLipSyncPreview,
+    const player = createReplyPlayer({ api, busy, lip: () => api()?.getHumanInterface?.()?.mouth,
         body: () => window.MmdArMplPlayback, changed });
     function report(error) {
         message.textContent = error?.message || String(error);
