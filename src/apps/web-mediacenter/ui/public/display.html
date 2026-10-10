@@ -608,6 +608,9 @@
         let dynamicGeometryMode = 'contain';
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let currentMediaType = 'image';
+        // 每次换媒体或清空都会失效旧加载，避免迟到的 MHTML 内容和临时信息回填。
+        let mediaLoadSequence = 0;
+        let htmlMediaAbortController = null;
         let displayWs = null;
         // ASR 来源必须与当前 WebSocket 使用同一个持久化显示端 ID；连接确认前也允许使用本地 ID 上传。
         let displayId = '';
@@ -3581,6 +3584,10 @@
                 TextMediaPlayer.applyStyle(state.textStyle);
             }
 
+            if (state.currentMedia === null && !state.currentPlaylist) {
+                // 断线期间被控制端清空，重连后必须同步删除本页仍保留的旧画面。
+                clearCurrentMedia();
+            }
             if (state.currentMedia) {
                 // 恢复 html 滚动模式（服务器持久化，刷新/重启后沿用）
                 if (state.currentHtmlScroll) {
@@ -4779,6 +4786,7 @@
 
         // TTS 播报 + 临时媒体信息上报（各媒体类型共用）
         function announceAndReport(mediaName, data) {
+            const loadSequence = mediaLoadSequence;
             if (autoTtsEnabled && mediaName) {
                 const displayName = extractFileName(mediaName);
                 if (displayName) {
@@ -4788,6 +4796,7 @@
 
             if (!data.temp) return;
             const sendTempInfo = () => {
+                if (loadSequence !== mediaLoadSequence) return;
                 if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
                 let w, h;
                 if (data.mediaType === 'video') {
@@ -4872,6 +4881,7 @@
         // 只有资源元素真正触发 error 才回退，避免播放前额外发起一次探测请求。
         function setMediaSourceWithFallback(element, directUrl, fallbackUrl, reload = false) {
             let fallbackUsed = false;
+            const loadSequence = mediaLoadSequence;
             const normalizeUrl = value => {
                 if (typeof value !== 'string') return '';
                 const url = value.trim();
@@ -4881,6 +4891,7 @@
             const safeFallbackUrl = normalizeUrl(fallbackUrl);
             const source = safeDirectUrl || safeFallbackUrl;
             element.onerror = () => {
+                if (loadSequence !== mediaLoadSequence) return;
                 if (!fallbackUsed && safeFallbackUrl && safeFallbackUrl !== safeDirectUrl) {
                     fallbackUsed = true;
                     element.src = safeFallbackUrl;
@@ -4895,7 +4906,39 @@
             }
         }
 
+        // MHTML 的网络请求可取消；所有 await 后检查序号，失败回退也不得复活旧媒体。
+        async function loadMhtmlMedia(data, loadSequence) {
+            const controller = new AbortController();
+            htmlMediaAbortController = controller;
+            const urls = [...new Set([data.url, data.fallbackUrl].filter(Boolean))];
+            try {
+                for (const url of urls) {
+                    try {
+                        const response = await fetch(url, { credentials: 'same-origin', signal: controller.signal });
+                        if (loadSequence !== mediaLoadSequence) return;
+                        if (!response.ok) throw new Error(`MHTML HTTP ${response.status}`);
+                        const text = await response.text();
+                        if (loadSequence !== mediaLoadSequence) return;
+                        mediaHtml.srcdoc = mhtmlToHtml(text) || '<p style="color:#fff;padding:20px">无法解析该 .mhtml 文件</p>';
+                        return;
+                    } catch (error) {
+                        if (controller.signal.aborted || loadSequence !== mediaLoadSequence) return;
+                    }
+                }
+                if (loadSequence === mediaLoadSequence) {
+                    mediaHtml.srcdoc = '<p style="color:#fff;padding:20px">加载 .mhtml 失败</p>';
+                }
+            } finally {
+                if (htmlMediaAbortController === controller) htmlMediaAbortController = null;
+            }
+        }
+
         function showMedia(data, noActivate, paused, resumeTime = 0) {
+            const loadSequence = ++mediaLoadSequence;
+            htmlMediaAbortController?.abort();
+            htmlMediaAbortController = null;
+            mediaImage.onload = null;
+            mediaHtml.onload = null;
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
             pauseExpected = true;
@@ -4958,6 +5001,7 @@
                 // 发送未指定模式时沿用显示端当前模式；指定则更新记忆
                 if (data.htmlScroll) currentHtmlScroll = data.htmlScroll;
                 mediaHtml.onload = () => {
+                    if (loadSequence !== mediaLoadSequence) return;
                     // 重连恢复且为暂停状态时不自动滚动（控制端暂停的页面重连后保持冻结）
                     if (paused) {
                         stopHtmlScroll();
@@ -4975,27 +5019,7 @@
                     mediaHtml.removeAttribute('srcdoc');
                     if (/\.mhtml?$/i.test(data.url)) {
                         // .mhtml 浏览器无法直接渲染：fetch 后转纯 HTML 用 srcdoc 显示
-                        fetch(data.url, { credentials: 'same-origin' })
-                            .then(r => r.text())
-                            .then(text => {
-                                const html = mhtmlToHtml(text);
-                                mediaHtml.srcdoc = html || '<p style="color:#fff;padding:20px">无法解析该 .mhtml 文件</p>';
-                            })
-                            .catch(() => {
-                                if (data.fallbackUrl && data.fallbackUrl !== data.url) {
-                                    fetch(data.fallbackUrl, { credentials: 'same-origin' })
-                                        .then(r => r.text())
-                                        .then(text => {
-                                            const html = mhtmlToHtml(text);
-                                            mediaHtml.srcdoc = html || '<p style="color:#fff;padding:20px">无法解析该 .mhtml 文件</p>';
-                                        })
-                                        .catch(() => {
-                                            mediaHtml.srcdoc = '<p style="color:#fff;padding:20px">加载 .mhtml 失败</p>';
-                                        });
-                                    return;
-                                }
-                                mediaHtml.srcdoc = '<p style="color:#fff;padding:20px">加载 .mhtml 失败</p>';
-                            });
+                        void loadMhtmlMedia(data, loadSequence);
                     } else {
                         setMediaSourceWithFallback(mediaHtml, data.url, data.fallbackUrl);
                     }
@@ -5157,9 +5181,50 @@
             }
         }
 
+        // 清空停止全部媒体生命周期，但保留角色、聊天、监听和画面参数。
+        function clearCurrentMedia() {
+            mediaLoadSequence += 1;
+            htmlMediaAbortController?.abort();
+            htmlMediaAbortController = null;
+            mediaIsPlaying = false;
+            pauseExpected = true;
+            if (mediaRecoveryTimer) clearTimeout(mediaRecoveryTimer);
+            mediaRecoveryTimer = null;
+            mediaRecoveryAttempts = 0;
+            stopPlaylist();
+            stopDynamicFit();
+            stopHtmlScroll();
+            // 关闭网页控制截图，不能在清空后继续发送旧网页画面。
+            stopControlScreenshot();
+            controlModeEnabled = false;
+            TextMediaPlayer.clear();
+            for (const element of [mediaImage, mediaVideo, mediaAudio, mediaHtml]) {
+                element.onload = null;
+                element.onerror = null;
+                element.onloadedmetadata = null;
+                element.ontimeupdate = null;
+                element.style.display = 'none';
+                if (typeof element.pause === 'function') element.pause();
+                element.removeAttribute('src');
+                if (typeof element.load === 'function') element.load();
+            }
+            mediaHtml.removeAttribute('srcdoc');
+            mediaHtml.src = 'about:blank';
+            mediaText.style.display = 'none';
+            fileNameDisplay.textContent = '';
+            currentMediaType = null;
+            waitingMessage.style.display = 'block';
+            reportPlayState(false);
+        }
+
         function handleControl(data) {
             switch (data.action) {
+                case 'clearMedia':
+                    clearCurrentMedia();
+                    break;
+
                 case 'textPlayback':
+                    if (currentMediaType !== 'text') break;
                     TextMediaPlayer.handleControl(data.value);
                     break;
 
@@ -5232,6 +5297,7 @@
                     break;
 
                 case 'play':
+                    if (!currentMediaType) break;
                     // 睡眠/深度睡眠中拒绝播放命令（暂停命令仍生效并上报）
                     if (data.value === true && isSleepPaused()) break;
                     mediaIsPlaying = data.value === true;  // 同步本地播放状态（退出睡眠恢复时检查）

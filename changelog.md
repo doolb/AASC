@@ -17,6 +17,13 @@
   - 仅修改生成Loader保存简表并添加内容指纹；顶点和直接顶点组合Morph可用，不支持/空Morph禁用。显示原名保留空格和重复名，不改PMX、工程或VMD。
   - 同步design/spec/task/todo/usage/readme；`npm run build:web:mmd-ar-test`成功，源模块/生成入口及Loader语法检查、差异空白检查通过。未新增或运行测试，浏览器/设备验收待完成，未发布外网、提交/推送，未改正式包/生产依赖/Offline状态。
 
+### 控制端快捷面板清空媒体
+
+- ✅ [2026-10-10] 快捷控制面板播放按钮后新增「清空媒体」，停止所选显示端当前媒体及批量播放，刷新/重连保持空状态。
+  - upload.html、floating-control.js、websocket.js、display.html、text-media-player.js、server-app.js、config-app-service.js：复用control/clearMedia消息及权威结果，严格保存空媒体/列表/进度并失败回滚，取消迟到加载/进度和列表推进，清理分页/预览/标记；保留媒体文件、角色与聊天，文本只释放自己持有的音频。
+  - 新增floating-media-clear.test.js 7项，12文件103/103、零跳过；包含真实Chromium点击和五类媒体DOM、写盘失败/磁盘恢复、多目标隔离、旧MHTML回填与文本聊天音频隔离。语法及差异空白检查通过，design/spec/task/usage/self-test/todo同步。
+  - servicePackage=true；已有minApk=true/dependenciesPackage=false保持。未构建或发布服务包/APK，todo仅保留发布与Android验收；源码及状态上传origion/master，不提交日志、模型或构建资源。
+
 ### 米娅模型表情能力核对
 
 - ✅ [2026-10-10] 只读解析当前网页的「椛暗式-米娅 ver2.0」PMX，确认29个顶点Morph：嘴型12、眼部11、眉部6；包括口角上げ、まばたき、笑い、にこり、怒り等。

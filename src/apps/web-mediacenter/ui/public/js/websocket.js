@@ -316,11 +316,18 @@ const WebSocketManager = {
                     window.FloatingControl.setPlayingState(data.state.isPlaying);
                 }
 
+                // 显式空媒体状态同样用于切换显示端或刷新控制端，避免残留旧预览。
+                if (data.state.currentMedia === null && !data.state.currentPlaylist) {
+                    this.resetMediaControls();
+                    return;
+                }
+
                 if (data.state.currentTextProgress) {
                     if (window.Controls) window.Controls.updateTextPlaybackStatus(data.state.currentTextProgress);
                     if (window.FloatingControl) window.FloatingControl.updateTextPlaybackStatus(data.state.currentTextProgress);
                 }
                 
+                const mediaResetSequence = this.mediaResetSequence;
                 if (data.state.currentMediaUrl && window.Crop) {
                     const savedCrop = { ...data.state.crop };
                     const savedRotation = data.state.rotation;
@@ -330,7 +337,7 @@ const WebSocketManager = {
                             window.Crop.setData(savedCrop);
                             window.Crop.setRotation(savedRotation);
                             setTimeout(() => {
-                                window.Crop.updateBox();
+                                if (this.mediaResetSequence === mediaResetSequence) window.Crop.updateBox();
                             }, 350);
                         });
                     } else {
@@ -339,7 +346,7 @@ const WebSocketManager = {
                             window.Crop.setRotation(savedRotation);
                             window.Crop.updateContainerSize();
                             setTimeout(() => {
-                                window.Crop.updateBox();
+                                if (this.mediaResetSequence === mediaResetSequence) window.Crop.updateBox();
                             }, 350);
                         }
                     }
@@ -349,7 +356,9 @@ const WebSocketManager = {
                     if (window.Crop && data.state.crop) {
                         window.Crop.setData({ ...data.state.crop });
                         window.Crop.box.style.display = 'block';
-                        setTimeout(() => window.Crop.updateBox(), 100);
+                        setTimeout(() => {
+                            if (this.mediaResetSequence === mediaResetSequence) window.Crop.updateBox();
+                        }, 100);
                     }
                 }
 
@@ -392,6 +401,19 @@ const WebSocketManager = {
             } else {
                 console.log('[WS] displayState displayId 不匹配，跳过处理');
             }
+        } else if (data.type === 'mediaClearResult') {
+            if (data.displayId !== window.currentDisplayId
+                && data.displayId !== window.FloatingControl?.selectedDisplayId) return;
+            if (data.success !== true) {
+                window.showToast?.(data.message || '清空媒体失败', 'error');
+                return;
+            }
+            if (data.displayId === window.currentDisplayId) this.resetMediaControls();
+            if (data.displayId === window.FloatingControl?.selectedDisplayId) {
+                window.FloatingControl.setPlayingState(false);
+                window.FloatingControl.updateTextPlaybackStatus({ state: 'stopped', pageTotal: 0 });
+            }
+            window.showToast?.('当前媒体已清空', 'success');
         } else if (data.type === 'mmdVisibilityChanged') {
             // 服务端广播的是按 displayId 保存后的权威值，只更新当前选中的显示端。
             if (data.displayId === window.currentDisplayId
@@ -731,6 +753,53 @@ const WebSocketManager = {
         }
     },
     
+    // 清空结果和重连空快照共用恢复入口，不发送配置或播放命令。
+    resetMediaControls() {
+        this.mediaResetSequence += 1;
+        window.currentHtmlPlaying = false;
+        window.Controls?.setPlayingState(false);
+        window.Controls?.updateTextPlaybackStatus({ state: 'stopped', pageTotal: 0 });
+        window.FloatingControl?.setPlayingState(false);
+        window.FloatingControl?.updateTextPlaybackStatus({ state: 'stopped', pageTotal: 0 });
+        const slider = document.getElementById('progressSlider');
+        const label = document.getElementById('progressValue');
+        if (slider) slider.value = 0;
+        if (label) label.textContent = '0%';
+        if (window.MediaLibrary) {
+            window.MediaLibrary.setCurrentMedia(null);
+            window.MediaLibrary.clearPlaylistPanel();
+            window.MediaLibrary.tempPlaylistFiles = null;
+            window.MediaLibrary.lastTempFileSent = null;
+        }
+        const crop = window.Crop;
+        if (!crop) return;
+        crop.currentMedia = null;
+        // 阻止旧预览的重试和恢复回调，不能再次显示已经清空的裁剪框。
+        crop._callbackExecuted = true;
+        crop._onReadyCallback = null;
+        crop._loadComplete = false;
+        crop.controlModeOn = false;
+        const controlModeToggle = document.getElementById('controlModeToggle');
+        const controlTextRow = document.getElementById('controlTextRow');
+        if (controlModeToggle) controlModeToggle.checked = false;
+        if (controlTextRow) controlTextRow.style.display = 'none';
+        for (const element of [crop.previewImg, crop.previewVideo]) {
+            if (!element) continue;
+            element.onload = null;
+            element.onloadedmetadata = null;
+            element.onerror = null;
+            element.style.display = 'none';
+            if (typeof element.pause === 'function') element.pause();
+            element.removeAttribute('src');
+            if (typeof element.load === 'function') element.load();
+        }
+        if (crop.box) crop.box.style.display = 'none';
+        if (crop.placeholder) {
+            crop.placeholder.style.display = 'none';
+            crop.placeholder.textContent = '';
+        }
+    },
+
     sendControl(action, value) {
         if (!window.currentDisplayId) {
             showToast('请先选择显示端', 'error');

@@ -432,7 +432,8 @@
         }
 
         function clearAudio() {
-            const audio = getAudio();
+            // 同页聊天也使用 ttsAudio；只释放文本播放器当前持有的音频。
+            const audio = activeAudio;
             clearAudioRecovery();
             if (activeAudio) notifyAudioPlaybackEnd(activeAudioPlaybackId);
             activeAudio = null;
@@ -870,7 +871,27 @@
             getProgress,
             getPageText(index) { return pages[index] ? pages[index].plainText : ''; },
             finishCurrentSentence,
-            stop() { handleControl('stop'); }
+            stop() { handleControl('stop'); },
+            // 与暂停/停止区分：清空必须释放正文和恢复来源，旧加载及旧播报回包均失效。
+            clear() {
+                invalidateLoad();
+                invalidatePlayback();
+                source = null;
+                rawText = '';
+                pages = [];
+                currentSentences = [];
+                pageIndex = 0;
+                sentenceIndex = 0;
+                playlistContext = null;
+                voiceRoute = null;
+                state = 'stopped';
+                getContent()?.replaceChildren();
+                const status = getStatus();
+                if (status) status.textContent = '';
+                const container = getContainer();
+                if (container) container.style.display = 'none';
+                emitProgress();
+            }
         };
     }
 

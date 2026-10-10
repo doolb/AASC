@@ -1102,3 +1102,20 @@ TAA累积 -> 有效历史；主动失效 -> historyValid=false；关闭 -> 5个�
 2026-10-10 最终发布：code-v56.zip已发布LAN/WAN，16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42；源提交34671c31。931文件快照及运行资源完整、ZIP CRC/RSA/组件约束、内外网全部组件HTTP大小/SHA-256通过，签名清单完全一致，精确清理无错误，两端code目录仅保留code-v56.zip。21文件93/93通过，无跳过；servicePackage=false，minApk=true/dependenciesPackage=false保持，未构建原生APK或恢复旧声纹。手机现场验收保留。
 
 code58布局追加：5文件20/20、零跳过，涵盖三字定位入口、贴底/左侧向上面板与常驻状态隐藏；MMD扩展仍38通过/12既有失败，基线一致。服务包code58已发布LAN/WAN，完整校验和精确清理通过，设备验收待现场。
+
+
+## 快捷面板清空媒体自测（2026-10-10）
+
+```text
+正式快捷按钮真实点击 → 选中displayId的control/clearMedia → 回包前状态保持
+权威成功结果 → 播放/分页/列表/媒体库标记/预览清零；失败/其他目标不清理
+未选择/断线/发送异常 → 提示且不发送
+真实server控制处理 → 保存空状态先于取消文本路由和下发，重复清空幂等
+真实UserConfig+DataSnapshot → 严格写盘失败恢复旧表，成功从磁盘读取空媒体
+清空后旧播放/文本/列表进度 → 提前丢弃，空状态不被覆盖
+真实文本模块 → 取消旧加载/回包，释放页句缓存，保留共享聊天音频
+Chromium媒体DOM+正式函数 → 图片/视频/音频/HTML/文本都隐藏，列表timer/ended不再推进
+旧MHTML请求迟到 → 新图片不被覆盖；restoreState空快照 → 清除断线期间保留的画面
+```
+
+新增 tests/floating-media-clear.test.js 7项；12文件103/103通过、零跳过。使用现有npm test对应的node:test机制，因没有定向script，直接node --test --test-concurrency=1运行相关文件；服务包待发布、Android实际验收待完成。

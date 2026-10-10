@@ -135,6 +135,28 @@ const FloatingControl = {
         }
     },
     
+    // 清空只作用于快捷面板选择的目标，不能沿用可能指向另一端的全局显示端 ID。
+    clearMedia() {
+        if (!this.selectedDisplayId) {
+            window.showToast?.('请先选择显示端', 'warning');
+            return;
+        }
+        const socket = window.WebSocketManager?.ws;
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            window.showToast?.('控制端尚未连接服务端', 'warning');
+            return;
+        }
+        try {
+            socket.send(JSON.stringify({
+                type: 'control', displayId: this.selectedDisplayId, action: 'clearMedia'
+            }));
+            // 等待服务端权威结果后再清理面板，发送成功不代表媒体已经清空。
+        } catch (error) {
+            console.error('[FloatingControl] 清空媒体发送失败:', error);
+            window.showToast?.('清空媒体指令发送失败', 'error');
+        }
+    },
+
     setPlayingState(playing) {
         this.isPlaying = playing;
         const btn = document.getElementById('floatingPlayPauseBtn');

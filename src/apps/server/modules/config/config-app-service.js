@@ -531,7 +531,7 @@ class UserConfig extends DataSnapshot {
             obj = obj[keys[i]];
         }
         obj[keys[keys.length - 1]] = value;
-        this._save();
+        return this._save();
     }
 
     getDisplayState(ip) {
@@ -584,16 +584,21 @@ class UserConfig extends DataSnapshot {
     }
 
     // 按 displayId 更新显示端状态，保证同一 IP 上的多个显示端互不覆盖。
-    updateDisplayStateById(displayId, legacyIp, partialState) {
+    updateDisplayStateById(displayId, legacyIp, partialState, options = {}) {
         const currentState = this.getDisplayStateById(displayId, legacyIp);
         const newState = {
             ...currentState,
             ...partialState,
             ...(displayId ? { displayId } : {})
         };
-        const states = this.get('displayStates', {});
-        states[displayId || legacyIp || 'default'] = newState;
-        this.set('displayStates', states);
+        const previousStates = this.get('displayStates', {});
+        // 先构造副本，严格保存失败时可恢复旧表，不能污染旧显示端快照。
+        const states = { ...previousStates, [displayId || legacyIp || 'default']: newState };
+        const saved = this.set('displayStates', states);
+        if (options.requireSave === true && !saved) {
+            this._data.displayStates = previousStates;
+            throw new Error('显示端状态保存失败');
+        }
         return newState;
     }
 
@@ -756,7 +761,7 @@ module.exports.getDisplayState = (ip) => userConfig.getDisplayState(ip);
 module.exports.getDisplayStateById = (displayId, legacyIp) => userConfig.getDisplayStateById(displayId, legacyIp);
 module.exports.setDisplayState = (ip, state) => userConfig.setDisplayState(ip, state);
 module.exports.updateDisplayState = (ip, partialState) => userConfig.updateDisplayState(ip, partialState);
-module.exports.updateDisplayStateById = (displayId, legacyIp, partialState) => userConfig.updateDisplayStateById(displayId, legacyIp, partialState);
+module.exports.updateDisplayStateById = (displayId, legacyIp, partialState, options) => userConfig.updateDisplayStateById(displayId, legacyIp, partialState, options);
 module.exports.addToPlaylist = (ip, media) => userConfig.addToPlaylist(ip, media);
 module.exports.removeFromPlaylist = (ip, index) => userConfig.removeFromPlaylist(ip, index);
 module.exports.clearPlaylist = (ip) => userConfig.clearPlaylist(ip);

@@ -2812,9 +2812,9 @@ function updateDisplayPlaybackProgress(displayData, partialState, forcePersist =
 }
 
 // 显示端状态以 displayId 持久化，IP 只作为旧数据迁移和日志展示字段。
-function persistDisplayState(displayData, partialState) {
+function persistDisplayState(displayData, partialState, options) {
     if (!displayData) return null;
-    return config.updateDisplayStateById(displayData.displayId, displayData.ip, partialState);
+    return config.updateDisplayStateById(displayData.displayId, displayData.ip, partialState, options);
 }
 
 function normalizeMmdVisibility(value, fallback = true) {
@@ -8596,6 +8596,12 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;
     const displayData = displayClients.get(displayId);
 
+    // 清空后在途的旧进度不能重新写入空状态，也不能令控制端恢复已停止的列表。
+    const mediaReportTypes = ['videoProgress', 'audioProgress', 'htmlProgress', 'playlistProgress',
+        'tempMediaInfo', 'textProgress', 'playStateReport'];
+    if (displayData?.state.currentMedia === null && !displayData.state.currentPlaylist
+        && mediaReportTypes.includes(data.type)) return;
+
     if (data.type === 'mmdVisibilityRequest') {
         const result = updateDisplayMmdVisibility(displayData, data.visible);
         if (!result.ok) sendMmdVisibilityError(ws, displayId, result.message);
@@ -9134,6 +9140,32 @@ async function handleControlMessageFallback(data, ws) {
     if (displayVoiceListeningConfig.handle(data, ws)) return;
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
+
+    // 清空是一次媒体操作，沿用控制消息；提前返回，避免扩展下方的配置分支链。
+    if (data.type === 'control' && data.action === 'clearMedia') {
+        if (!displayData) {
+            ws.send(JSON.stringify({ type: 'mediaClearResult', displayId, success: false,
+                message: '显示端不在线，无法清空媒体' }));
+            return;
+        }
+        try {
+            const emptyState = {
+                currentMedia: null, currentPlaylist: null, currentMediaProgress: null,
+                currentTextProgress: null, lastTempMedia: null, isPlaying: false
+            };
+            // 先保存；失败时保持旧媒体与面板，避免刷新后又恢复刚刚清空的内容。
+            persistDisplayState(displayData, emptyState, { requireSave: true });
+            Object.assign(displayData.state, emptyState);
+            textMediaTtsService.clearDisplayRoute(displayId);
+            sendToDisplay(displayId, { type: 'control', action: 'clearMedia' });
+            broadcastToControls({ type: 'mediaClearResult', displayId, success: true });
+        } catch (error) {
+            logError('媒体', `清空显示端 ${displayId} 媒体失败: ${error.message}`);
+            ws.send(JSON.stringify({ type: 'mediaClearResult', displayId, success: false,
+                message: '清空媒体失败，请重试' }));
+        }
+        return;
+    }
 
     if (data.type === 'setTtsAudioCacheConfig') {
         // 此配置属于服务器进程，不能被显示端消息或指定目标端绕过控制端权限。

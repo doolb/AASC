@@ -321,3 +321,18 @@ MMD 可见性持久化:
 ```
 
 新的显示端状态不得以 IP 作为主键；`legacyIp` 只允许用于一次性兼容迁移。
+
+
+## 清空媒体的严格状态保存（2026-10-10）
+
+```text
+UserConfig.set(key,value) → 设置字段 → 返回DataSnapshot写盘结果
+updateDisplayStateById(displayId,legacyIp,partialState,options)：
+    按稳定ID读取当前状态 → 合并partialState → 新显示端状态
+    旧displayStates → 复制新表并写入目标状态 → set返回写盘结果
+    options.requireSave=true且写盘失败 → 恢复旧表并抛出错误
+    保存成功或非严格调用 → 返回新状态
+persistDisplayState将options透传，媒体清空选择requireSave=true
+其他调用不传options，保持原有接口与行为
+定向验证实际UserConfig+DataSnapshot：失败保留旧媒体与原文件，成功重新加载得到空媒体；其他目标保留
+```
