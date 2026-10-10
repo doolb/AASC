@@ -1,3 +1,10 @@
+### 正式服务包 v62：口型分类与调试功能隔离
+
+- ✅ [2026-10-10] 已将提交27de91d9的正式表情/MPL调试移除及口型分类样式修正发布至LAN/WAN；TTS口型继续保留。
+  - code-v62.zip：17,141,311 bytes，SHA-256 `1c9f2238df0b7b50b10b26073347ab7939ec453017ae78d15203c8a1ee006a44`；源提交27de91d951f0cc5937515bb9a891a4f322b90e2f。967文件CRC通过：454项与提交字节一致，513项既有资源与签名v61一致；表情/MPL调试模块及编译资源未入包，拼音31项完整，口型同级分类已入包。本机Node配置仅在临时输入使用HEAD，工作区改动保留。
+  - 复用dependencies v6、min APK v34、Node min种子v39和dataRepair v2；签名/profile、LAN/WAN所有组件完整HTTP文件大小/SHA-256与最终清单字节一致检查通过。两端code目录仅保留code-v62.zip，精确清理无错误。记录 `.git/offline-publish-mouth-isolation`。
+  - servicePackage=false，原minApk=true/dependenciesPackage=false保持；发布记录和状态同步origion/master。本轮未构建APK或发布独立外网页面，未新增或运行功能测试；后续AI回复表情/分层动作仅在独立mmd-ar开发，不属于本包。
+
 ### 正式口型分类与表情/MPL调试隔离
 
 - ✅ [2026-10-10] 按用户确认移除正式显示端的表情/MPL调试面板、专用接口、UI/worker/morphs模块及固定MPL编译器JS/WASM/LICENSE/SOURCE，独立mmd-ar保留对应功能。
