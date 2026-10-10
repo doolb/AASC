@@ -1,5 +1,8 @@
 ### Offline双页热更新刷新隔离
 
+- ✅ [2026-10-10] 修复服务包code-v60.zip已构建并校验，源提交3d76b19a。
+  - 16,940,629字节，SHA-256 3d8fdc980bf055b5aa361bcc925106570a192af80624f86f693e04b0cea9d949；931文件CRC/快照逐字节、RSA签名和组件契约通过，v59全部运行文件保留。dependencies6/min34/种子39/dataRepair2复用，servicePackage=false；未构建原生APK，内外网发布进行中。
+
 - ✅ [2026-10-10] 修复同源显示页与控制页共享重启时间导致仅一页刷新、控制页保留旧快捷面板的问题。
   - websocket.js/display.html各自维护内存重启基准与单次刷新标记，首连只记录；旧共享记录保留但不读取，多个控制页及存储异常不影响判断。仅网页服务代码，servicePackage=true，已有minApk/dependenciesPackage保持。
   - 新增offline-page-reload.test.js 10项，Chromium实际双页导航后获得清空按钮；15文件119/119、无跳过，JS语法通过。旧聊天按钮契约1项在HEAD也失败，未改无关功能；Android现场未验收。同步design/spec/task/todo/self-test/usage，待构建发布。
