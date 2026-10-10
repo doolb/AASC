@@ -120,3 +120,5 @@ MainActivity.kt:
 页面加载后第一条消息作为基准，因为此时页面已从服务端重新取得；不使用持久化旧时间触发首连刷新，避免存储写入失败后无限reload。页面仍在旧服务上但从未成功连接过的极端情况无法通过重启时间判断，需要实际重载页面；不扩展原生更新协议。已确认修复已连接两页的竞态，设备实际安装版本/IP仍待确认。
 
 代码映射：websocket.js的WebSocketManager保存observedServerStartTime/serverReloadRequested，handleMessage委托handleServerStartTime；display.html具有同名页面变量与函数，正式socket.onmessage委托处理。tests/offline-page-reload.test.js执行正式函数与实际浏览器刷新，15文件119/119通过。旧聊天按钮契约检查HEAD同样失败，不影响本轮重启流程。
+
+发布验证：code-v60.zip完整931文件，含内存基准及清空按钮；LAN/WAN所有清单组件大小/哈希、RSA与契约通过，最终清单与本地逐字节一致，旧版本精确清理成功。servicePackage=false；Android当前版本未知，首次安装此网页修复需要实际重载两页。

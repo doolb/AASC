@@ -1135,3 +1135,5 @@ Chromium同源正式页面DOM + 正式模块 → 两页实际重新导航，控�
 ```
 
 新增tests/offline-page-reload.test.js 10项，与清空媒体、文本/列表恢复、聊天对象恢复和显示语音生命周期合计15文件119/119、零跳过；正式JS语法通过。旧tests/chat-tts-interruption.test.js 3项中1项仍依赖已移除的displayChatTtsStop，未修改HEAD也同样失败，保留该基线问题。设备当前安装版本尚未取得，未冒充Android实际更新验收。
+
+本轮交付：v60已发布LAN/WAN，全部组件HTTP大小/SHA-256、签名/组件契约、最终清单一致性及精确旧版本清理通过。已有普通APK设备未操作，Offline实际升级后按钮与双页重启仍保留现场验收。

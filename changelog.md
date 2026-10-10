@@ -1,5 +1,9 @@
 ### Offline双页热更新刷新隔离
 
+- ✅ [2026-10-10] 服务包v60已发布至LAN/WAN，包含双页独立刷新修复与「清空媒体」按钮。
+  - 两端全部组件HTTP大小/SHA-256、RSA签名及组件契约验证通过；最终清单HTTP200且与本地签名清单逐字节一致。两端code目录仅保留code-v60.zip，精确旧版本清理无错误。
+  - servicePackage=false，原有minApk=true/dependenciesPackage=false保持；源码与发布状态已推送origion/master。未构建APK，未操作现有普通APK设备，日志/模型/ZIP/原生中间文件及用户本机配置未提交；用户首次应用v60后需完全退出重开APK加载新版双页，Android实际应用/验收仍待设备信息。
+
 - ✅ [2026-10-10] 修复服务包code-v60.zip已构建并校验，源提交3d76b19a。
   - 16,940,629字节，SHA-256 3d8fdc980bf055b5aa361bcc925106570a192af80624f86f693e04b0cea9d949；931文件CRC/快照逐字节、RSA签名和组件契约通过，v59全部运行文件保留。dependencies6/min34/种子39/dataRepair2复用，servicePackage=false；未构建原生APK，内外网发布进行中。
 
