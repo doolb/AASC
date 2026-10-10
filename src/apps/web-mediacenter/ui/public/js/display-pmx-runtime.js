@@ -383,6 +383,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const manualExpressions = createManualExpressions({
         getMesh: () => currentMesh, getHelper: () => helper.current,
         getProfile: () => currentProfile,
+        onTransientChanged: () => startRendering(),
         onChanged: () => { ambientOcclusion.invalidateTemporal(); startRendering(); }
     });
     const physicsGate = { paused: false };
@@ -980,6 +981,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
                     supported: item.supported && Object.hasOwn(dictionary, item.name)
                         && dictionary[item.name] === item.index })) };
         },
+        setLipSyncExpressions: (token, weights) => manualExpressions.setTransient(token, weights),
         getManualExpressions: () => manualExpressions.getState(),
         setManualExpression: (index, weight) => manualExpressions.set(index, weight),
         clearManualExpressions: () => manualExpressions.clear(),

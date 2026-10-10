@@ -1,0 +1,160 @@
+{
+  "name": "pinyin-pro",
+  "version": "3.29.5",
+  "license": "MIT",
+  "source": "https://github.com/zh-lx/pinyin-pro",
+  "archive": "https://registry.npmjs.org/pinyin-pro/-/pinyin-pro-3.29.5.tgz",
+  "integrity": "sha512-Fk5YoRmtdHqJWqAuzYVG/NzvzeCbaG+ZEwbY6Nbps3QAIrvQQEtcm49frcyCM8i2b5najnzPDtYqrHRYTTiuwQ==",
+  "files": [
+    {
+      "name": "dist/esm/core/pinyin/all.mjs",
+      "bytes": 727,
+      "sha256": "4783d4e0d7fac1b613aaa78280766dacbe1fad3adc5f031668fbc9c11febcb50"
+    },
+    {
+      "name": "dist/esm/common/constant.mjs",
+      "bytes": 715,
+      "sha256": "0063709ae4684eb39fcc7a4a485672d5b8d043775743d81d4a9d28785f183fb7"
+    },
+    {
+      "name": "dist/esm/data/dict1.mjs",
+      "bytes": 353483,
+      "sha256": "4ab2e452449ddd75be6b123d74bf0c31ea1ffa205c275849a7589d957c112426"
+    },
+    {
+      "name": "dist/esm/data/dict2.mjs",
+      "bytes": 57174,
+      "sha256": "6b5c8cb96db398f82a903c7bda2e91c54acb433a252a36fd656b525a4ca9861b"
+    },
+    {
+      "name": "dist/esm/data/dict3.mjs",
+      "bytes": 11312,
+      "sha256": "c4d390ad1cc7bf10b900624e206b8681328546c823850ae0ad1669324637bd22"
+    },
+    {
+      "name": "dist/esm/data/dict4.mjs",
+      "bytes": 67690,
+      "sha256": "ba7cf04114e8165856f7c054f2cf579a047423d1f2ba208776041593f4a3899d"
+    },
+    {
+      "name": "dist/esm/data/dict5.mjs",
+      "bytes": 1072,
+      "sha256": "44b3e849fe98ea974aea3e6ece593b09bd66c34e82181c80d3c26d17b162006e"
+    },
+    {
+      "name": "dist/esm/core/pinyin/handle.mjs",
+      "bytes": 10034,
+      "sha256": "6b066daa21f94f7baace52bbbe24907281f6991b8e97bcbe87a3bf447d66dd74"
+    },
+    {
+      "name": "dist/esm/common/segmentit/index.mjs",
+      "bytes": 7870,
+      "sha256": "05333c260a6d7188ac114c2e907c9e673262a2a842bc3151d1b8fc4c06305ab6"
+    },
+    {
+      "name": "dist/esm/core/convert/index.mjs",
+      "bytes": 3272,
+      "sha256": "0798e27cd4d5b2035d463b6cdbfcfa7919b0dab5b2bbbdc80324ebba74ca8d5b"
+    },
+    {
+      "name": "dist/esm/core/custom/index.mjs",
+      "bytes": 3559,
+      "sha256": "b9cf84b5547e71a82da352b9144121a43531d5e4cb5e9a98855fd38e22355662"
+    },
+    {
+      "name": "dist/esm/core/dict/index.mjs",
+      "bytes": 2854,
+      "sha256": "4af779484d3f32050eac082fc21ea6232d3ff1f4289f7a9b53bc859500c411f7"
+    },
+    {
+      "name": "dist/esm/core/html/index.mjs",
+      "bytes": 2298,
+      "sha256": "f2e8903548421d8fdfce6e059f1d39b9065d9808b2c7a78f5ab941bee50a4ffc"
+    },
+    {
+      "name": "dist/esm/core/match/index.mjs",
+      "bytes": 11500,
+      "sha256": "a9ab6501b2ce8a6b4ec60dacaba878e6ade41d44451b32e6dacb83affc2d0aad"
+    },
+    {
+      "name": "dist/esm/core/pinyin/index.mjs",
+      "bytes": 2555,
+      "sha256": "660c5afc3d5290f2c80be7465e6ea06e959459ef7e5b49d3bdd2a0f8df339047"
+    },
+    {
+      "name": "dist/esm/core/polyphonic/index.mjs",
+      "bytes": 4129,
+      "sha256": "698e20e0502e5abe4ee6f8fef3b3a3cf3fa0a12854f0b294ee82b14b78093ea4"
+    },
+    {
+      "name": "dist/esm/core/segment/index.mjs",
+      "bytes": 1756,
+      "sha256": "0e1466c135012e167b5079e326d27eaac729cc882ebc6faf94fa7ce44b237411"
+    },
+    {
+      "name": "dist/esm/core/traditional/index.mjs",
+      "bytes": 336,
+      "sha256": "a71645e75568a4a3b4258afbb4f60591598f7abe727789189a09376b2f0025f4"
+    },
+    {
+      "name": "dist/esm/index.mjs",
+      "bytes": 682,
+      "sha256": "255b22f9e28cb2e882b0f7fef0424ac7f115c85ce6f0c348457c86a5b24fbd8e"
+    },
+    {
+      "name": "dist/esm/common/segmentit/max-probability.mjs",
+      "bytes": 2490,
+      "sha256": "c10d385f99209b6871a4bd1aded1b25175cedf97f7fce9b5937d71ae7fc84bd6"
+    },
+    {
+      "name": "dist/esm/core/pinyin/middlewares.mjs",
+      "bytes": 8459,
+      "sha256": "f042bba7c353229cfebb7524fa87f44a557ce1d0d4bcc8e03c4e980485a61407"
+    },
+    {
+      "name": "dist/esm/core/segment/middlewares.mjs",
+      "bytes": 4185,
+      "sha256": "42efbc989863ceadb55bd20c44ec62c0e8d40fdec960e63d637bc92ca08f7dad"
+    },
+    {
+      "name": "dist/esm/common/segmentit/min-tokenization.mjs",
+      "bytes": 1749,
+      "sha256": "b202fd896761ed386922075136505da5c33244f2a887a6e6f99469d93d12cc16"
+    },
+    {
+      "name": "dist/esm/data/patterns.mjs",
+      "bytes": 440,
+      "sha256": "8dc9449fa4c63e5a59be82de41c7414018ae9657ff70779221c6064277ec0d1c"
+    },
+    {
+      "name": "dist/esm/common/segmentit/reverse-max-match.mjs",
+      "bytes": 942,
+      "sha256": "756f82b9f5ae4b60e12e87f665df1f56ece5ce6f137ce2711f069fc43432d4d8"
+    },
+    {
+      "name": "dist/esm/data/special.mjs",
+      "bytes": 3603,
+      "sha256": "196c5b068417cec910d8fcf09f93b238be61b8c0fdf2b0a9374003991c409291"
+    },
+    {
+      "name": "dist/esm/core/custom/state.mjs",
+      "bytes": 216,
+      "sha256": "9c03e5b61f72c9a25167912036f434a5fb6115be1cd28305ab71b6984c2ca5a8"
+    },
+    {
+      "name": "dist/esm/data/surname.mjs",
+      "bytes": 9871,
+      "sha256": "4e63558da556734e17c6b79b8fbb4553c011a88339a026ee986612b81a23bd4e"
+    },
+    {
+      "name": "dist/esm/common/utils.mjs",
+      "bytes": 1580,
+      "sha256": "d7a924431594ecbc59e48c321e57fbf4ab3479457a0fd47c93a9928258469e69"
+    },
+    {
+      "name": "LICENSE",
+      "bytes": 1070,
+      "sha256": "824f6069c5a59b0c1650d0fb9f8d091866c6019eb761c8e658dfc03f001eabd2"
+    }
+  ]
+}

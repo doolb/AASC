@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [正式显示端 TTS 口型实现](spec/mmd-display-lipsync.md)
+
 - [MMD-AR文字口型实现](spec/mmd-ar-lipsync.md)
 
 - [正式显示端 MPL 实现](spec/mmd-display-mpl.md)

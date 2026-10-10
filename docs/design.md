@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [正式显示端 TTS 口型同步](design/mmd-display-lipsync.md)
+
 - [MMD-AR文字口型预览](design/mmd-ar-lipsync.md)
 
 - [正式显示端 MPL 动作与表情](design/mmd-display-mpl.md)

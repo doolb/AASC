@@ -55,6 +55,7 @@
         let playlistContext = null;
         let activeAudio = null;
         let activeAudioPlaybackId = null;
+        let activeLipSyncEntry = null;
         let currentSentences = [];
         let requestPending = false;
         let voiceRoute = null;
@@ -435,7 +436,11 @@
             // 同页聊天也使用 ttsAudio；只释放文本播放器当前持有的音频。
             const audio = activeAudio;
             clearAudioRecovery();
-            if (activeAudio) notifyAudioPlaybackEnd(activeAudioPlaybackId);
+            if (activeAudio) {
+                root.DisplayLipSyncAudio?.clear(activeAudio, activeLipSyncEntry);
+                notifyAudioPlaybackEnd(activeAudioPlaybackId);
+            }
+            activeLipSyncEntry = null;
             activeAudio = null;
             activeAudioPlaybackId = null;
             if (!audio) return;
@@ -554,6 +559,7 @@
             activeAudio = audio;
             activeAudioPlaybackId = data.voiceTtsPlaybackId || null;
             notifyAudioPlaybackStart(activeAudioPlaybackId);
+            activeLipSyncEntry = root.DisplayLipSyncAudio?.prepare(audio, data.text || currentSentences[sentenceIndex], data.audioUrl);
             audio.src = data.audioUrl;
             audio.onended = finishCurrentSentence;
             audio.onerror = finishCurrentSentence;
@@ -635,7 +641,11 @@
         function finishCurrentSentence() {
             if (state !== 'playing') return;
             requestPending = false;
-            if (activeAudio) notifyAudioPlaybackEnd(activeAudioPlaybackId);
+            if (activeAudio) {
+                root.DisplayLipSyncAudio?.clear(activeAudio, activeLipSyncEntry);
+                notifyAudioPlaybackEnd(activeAudioPlaybackId);
+            }
+            activeLipSyncEntry = null;
             activeAudio = null;
             activeAudioPlaybackId = null;
             remoteActiveSentence = null;

@@ -23,6 +23,7 @@
     "prepare:mmd-ar-blender-engine": "npm install --prefix 3rd/mmd-ar-test/blender-engine",
     "prepare:mmd-ar-mpl": "node 3rd/mmd-ar-test/web-mpl-build.js",
     "prepare:mmd-ar-lipsync": "node 3rd/mmd-ar-test/web-lipsync-build.js",
+    "prepare:mmd-lipsync": "node scripts/ops/prepare-mmd-lipsync.js",
     "prepare:mmd-mpl": "node scripts/ops/prepare-mmd-mpl.js",
     "download:llm-model": "node scripts/ops/download-llm-model.js",
     "test": "node --test tests/*.test.js",

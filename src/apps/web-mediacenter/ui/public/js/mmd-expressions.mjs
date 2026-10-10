@@ -1,8 +1,9 @@
 // 每个PMX运行时有独立覆盖状态；名称、类型和分组全部来自当前加载的模型。
-export function createManualExpressions({ getMesh, getProfile, getHelper, onChanged }) {
+export function createManualExpressions({ getMesh, getProfile, getHelper, onChanged, onTransientChanged }) {
     let mesh = null, key = '', items = [], helper = null, originalHook = null, hook = null;
     let applied = false;
     const selected = new Map();
+    let transient = new Map();
     const underlying = new Map();
 
     function restore() {
@@ -31,6 +32,7 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
             nextItems.map(item => [item.name, item.type, item.panel])]);
         // 同模型物理重载保留选择；换模型或Morph索引变化则清空，不能仅按名称复用。
         if (nextKey !== key) selected.clear();
+        transient.clear();
         mesh = next;
         items = nextItems;
         key = nextKey;
@@ -39,7 +41,7 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
 
     function apply() {
         if (!mesh?.morphTargetInfluences || applied) return;
-        for (const [index, weight] of selected) {
+        for (const [index, weight] of new Map([...selected, ...transient])) {
             underlying.set(index, mesh.morphTargetInfluences[index]);
             mesh.morphTargetInfluences[index] = weight;
         }
@@ -98,7 +100,28 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
         return true;
     }
 
+    // 口型仅替换自己的权重表；不改用户手动选择，也不触发每帧TAA历史清空。
+    function setTransient(token, weights) {
+        bind();
+        if (!mesh || token !== mesh.uuid) return false;
+        bindHelper(getHelper());
+        if (!Array.isArray(weights) || weights.length > items.length) throw new Error('口型权重列表无效');
+        const next = new Map();
+        for (const pair of weights) {
+            if (!Array.isArray(pair) || pair.length !== 2 || !Number.isInteger(pair[0])
+                || !items[pair[0]]?.supported || !Number.isFinite(pair[1])) throw new Error('口型表情或强度无效');
+            next.set(pair[0], Math.max(0, Math.min(1, pair[1])));
+        }
+        restore();
+        transient = next;
+        applied = false;
+        apply();
+        onTransientChanged?.();
+        return true;
+    }
+
     return {
+        setTransient,
         before,
         after: apply,
         set,
@@ -109,6 +132,6 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
                 items: items.map(item => ({ ...item, selected: selected.has(item.index),
                     weight: selected.get(item.index) ?? 0 })) };
         },
-        dispose() { restore(); unhook(); selected.clear(); mesh = null; items = []; },
+        dispose() { restore(); unhook(); transient.clear(); selected.clear(); mesh = null; items = []; },
     };
 }

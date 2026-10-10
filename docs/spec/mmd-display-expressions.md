@@ -33,7 +33,7 @@ UI:
   保留独立面板以及MPL读取API的兼容性
 ```
 
-共享控制器的覆盖/恢复详细伪代码见 `mmd-ar-expressions.md`。表情迁移初始范围不包含MPL；随后用户要求一并接入，MPL迁移见 `mmd-display-mpl.md`。本轮仍不迁移编辑器、不接入 TTS 播放处理。
+共享控制器的覆盖/恢复详细伪代码见 `mmd-ar-expressions.md`。表情迁移初始范围不包含MPL；随后用户要求一并接入，MPL迁移见 `mmd-display-mpl.md`。本轮仍不迁移编辑器；后续TTS已接入，临时层及音频生命周期伪代码见 `mmd-display-lipsync.md`。
 
 ## 待验收
 
@@ -44,3 +44,5 @@ UI:
 上述伪代码已实现：正式Loader简表、runtime覆盖/恢复、DisplayMmd API、动作下可折叠表情面板；UI通过实际所属动作面板监听隐藏状态，兼容正式与独立ID。独立构建保留模块内容指纹，只验证共享入口与Loader元数据，不重复注入。
 
 `npm run build:web:mmd-ar-test`成功；8源文件/5生成模块语法及共享模块逐字节一致检查通过，git差异空白检查通过。未新增或运行测试；servicePackage=true，未构建发布正式服务包。
+
+TTS/预览临时权重合并顺序为手动→临时，先恢复上一帧的VMD基线再由动画与物理前回调覆盖；setTransient仅启动渲染，不逐帧清TAA，换mesh/dispose清临时层。

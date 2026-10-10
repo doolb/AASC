@@ -1,3 +1,11 @@
+### 正式显示端 TTS 口型同步
+
+- ✅ [2026-10-10] 将独立口型预览迁入正式源码，并接入聊天、本地文本朗读和远程文本实际TTS消费路径。
+  - 正式「动作 → 口型」默认同步TTS，保留无声文字预览与五元音映射；按currentTime/duration推进，暂停/等待/seek闭嘴，结束/中断释放，VMD/MPL继续且不重置物理。停止当前句口型不停止音频，下一句自动接续；关闭同步后切句不打断手动预览。
+  - 新增display-lipsync-audio快照桥接和mmd-lipsync-player/ui/timeline，mmd-expressions共用临时层；来源/请求/模型token防串句，来源微任务独立序号防重复定时器。普通TTS生成回包校验当前item，避免取消后的旧错误结束新句。后台/BFcache清理与前台按音频位置接续，字典失败和超限不阻断音频，预取不触发口型。
+  - 固定pinyin-pro 3.29.5完整ESM树与MIT/SOURCE已放正式public，新增prepare:mmd-lipsync，共用资源准备与独立构建；独立不重复注入控制器，timeline/player/UI/display内容指纹保持。无新增npm生产依赖；固定版本目录Git禁用换行转换，检出后保持SOURCE哈希。
+  - 资源准备与独立web-dist构建成功；13源码、1段HTML经典脚本及6生成模块语法通过，正式/独立各30固定资源大小/SHA-256一致，口型依赖指纹及差异空白检查通过。未新增或运行自动/浏览器/实际音频播放测试；无逐字时间戳，字音节奏仍按文本估算后缩放。servicePackage保持true，minApk/dependenciesPackage原状态保持；未构建发布正式包/APK，未发布新独立网页，未提交/推送。
+
 ### 独立MMD-AR文字口型外网发布
 
 - ✅ [2026-10-10] 当前web-dist已发布至 https://c.aasc.us/mnt/mmd-ar/，包含「动作 → 口型」文本输入/播放/停止、嘴型映射、与VMD/MPL同时播放及停止恢复表情，并同步本轮共享表情/MPL模块。

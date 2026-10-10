@@ -11,14 +11,14 @@ preparePinyin:
   安全读取归档普通文件，复制ESM树至独立vendor版本目录，附MIT许可证与逐文件大小/SHA256来源清单
 stageRuntime(webMode):
   非网页不改
-  只扩展生成mmd-expressions副本：增加临时权重Map
+  正式mmd-expressions共用临时权重Map，独立构建不再次注入
   apply按manual -> transient优先级合并，保存每项真实VMD基线
   before还原上一帧并让动画更新；物理前/帧末应用合并覆盖
   setTransient(token,pairs):校验当前token、支持索引、有限权重后批量更新
   临时更新仅启动渲染，不逐帧清空TAA历史；clear恢复VMD/手动值
   bind新mesh或dispose清除临时层
-  在生成runtime/display增加临时口型API，正式src不增加此API
-  timeline与UI、runtime静态引用、display入口按实际内容添加指纹
+  runtime/display共用setLipSyncExpressions临时口型API
+  timeline/player/UI、runtime静态引用、display入口按实际内容添加指纹
 buildTimeline(text):
   UTF8 <=4KiB，最多400字符，空文本/无发音字符报错
   首次播放动态导入本地pinyin-pro
@@ -47,10 +47,12 @@ UI.modelSync:
 
 ## 实现结果与细节
 
-- 新增web-lipsync-build/ui/timeline；独立WEB_MODE面板与分组接入。模型原名/索引控制，别名仅用于默认匹配；米娅「い 」尾随空格可以识别但实际索引保持不变。重名不猜选，五种映射均可手工选择。
+- 正式mmd-lipsync-ui/player/timeline由web-lipsync包装层复用；独立WEB_MODE面板与分组接入。模型原名/索引控制，别名仅用于默认匹配；米娅「い 」尾随空格可以识别但实际索引保持不变。重名不猜选，五种映射均可手工选择。
 - 字典使用固定npm归档SHA-512校验和安全普通文件读取，保留29文件ESM依赖树及LICENSE，SOURCE.json记录逐文件大小/SHA-256。运行时不访问CDN。新增prepare:mmd-ar-lipsync，只影响准备命令，不增加npm生产依赖。
-- 仅生成mmd-expressions副本增加transient Map，合并顺序manual→transient，覆盖mapped嘴型的0权重也参与；物理前/帧末仍走原共享恢复机制。临时更新只启动渲染，不逐帧清空TAA；clear和换mesh清理临时层。生成runtime/display提供setLipSyncExpressions(token,pairs)，正式src没有此API。
+- 正式mmd-expressions共用transient Map，合并顺序manual→transient，覆盖mapped嘴型的0权重也参与；物理前/帧末仍走原共享恢复机制。临时更新只启动渲染，不逐帧清空TAA；clear和换mesh清理临时层。正式与独立runtime/display提供setLipSyncExpressions(token,pairs)，构建不重复注入。
 - input上限400码点/4KiB，约260ms一个中文音节，句末400ms/逗号200ms/其他80ms停顿；数字逐位中文读音，ü近似U/I组合，b/p/m先闭合。smoothstep插值，尾部补120ms闭嘴；拉丁拼写和未知汉字明确近似提示。
 - 播放按真实elapsed推进临时Morph，不调用loadSelectedMotion/setMotionPlaybackEnabled或物理reset。停止、异常、换模型/编辑、后台、pagehide释放；旧异步字典失败通过generation保护，不能停止后来开始的新预览。模型同步只在动作面板显示时500ms轮询，播放帧同时校验模型token。
 
 资源准备与web-dist重建成功；5源文件语法、34生成模块语法/相对依赖/指纹、30固定资源大小/SHA-256和差异空白检查通过。后续已发布外网，45项HTTPS大小/SHA-256检查通过。本轮未新增或运行自动/浏览器测试，未执行实际拼音/口型播放；实际设备观感待验收。Offline状态沿用此前正式表情/MPL迁移的待出包状态，本轮未增加正式口型功能。
+
+后续正式TTS迁移见[mmd-display-lipsync.md](mmd-display-lipsync.md)，字典准备脚本和运行模块已共用；独立不绑定音频，保留无声预览。新web-dist未发布。

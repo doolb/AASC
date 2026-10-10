@@ -928,6 +928,8 @@
     root.DisplayMmd = Object.freeze({
         getMplModelState: () => state.modelReady && state.runtimeType === 'pmx'
             ? state.runtime?.getMplModelState?.() : { token: '', ready: false, bones: [], morphs: [] },
+        setLipSyncExpressions: (token, weights) => state.modelReady && state.runtimeType === 'pmx'
+            && state.runtime?.setLipSyncExpressions?.(token, weights),
         getManualExpressions: () => state.modelReady && state.runtimeType === 'pmx'
             ? state.runtime?.getManualExpressions?.() : { token: '', ready: false, items: [] },
         setManualExpression: (index, weight) => state.modelReady && state.runtimeType === 'pmx'
@@ -1006,3 +1008,6 @@ import('./mmd-expressions-ui.mjs').catch(error => console.warn('[MMD] 表情面�
 
 // MPL仅消费已生成的代码，首次编译时才在Worker加载本地WASM。
 import('./mmd-mpl-ui.mjs').catch(error => console.warn('[MMD] MPL面板加载失败:', error));
+
+// 共用文字预览与TTS调度器，口型模块失败不能阻止媒体和语音。
+import('./mmd-lipsync-ui.mjs').catch(error => console.warn('[MMD] 口型面板加载失败:', error));

@@ -214,6 +214,23 @@
                             <p class="mind-basic-note" role="status" aria-live="polite">模型加载后自动读取表情。</p>
                         </details>
                     </section>
+                    <section id="displayMmdLipSyncPanel" data-mmd-production-only="">
+                        <details>
+                            <summary>口型</summary>
+                            <label class="display-mmd-lighting-shadow"><input type="checkbox" data-lipsync-tts checked><span>同步 TTS 口型</span></label>
+                            <label class="display-mmd-lighting-field"><span>文字口型预览</span>
+                                <textarea rows="3" maxlength="800" style="width:100%;box-sizing:border-box;resize:vertical" aria-label="口型预览文字">你好，我是米娅，很高兴见到你。</textarea>
+                            </label>
+                            <div class="display-mmd-ar-actions">
+                                <button type="button" class="display-mmd-ar-action" data-lipsync-play disabled>播放口型</button>
+                                <button type="button" class="display-mmd-ar-action" data-lipsync-stop disabled>停止口型</button>
+                            </div>
+                            <progress max="1" value="0" style="width:100%" aria-label="口型播放进度"></progress>
+                            <p class="mind-basic-note">TTS按音频进度同步，字音节奏为估算；文字预览不发声，最多400字符。口型与角色动作同时播放，停止口型不停止语音。</p>
+                            <details><summary>嘴型映射</summary><div data-lipsync-mapping></div></details>
+                            <p class="mind-basic-note" role="status" aria-live="polite">模型加载后自动匹配嘴型。</p>
+                        </details>
+                    </section>
                     <section id="displayMmdMplPanel" data-mmd-production-only="">
                         <details>
                             <summary>MPL 动作</summary>
@@ -569,6 +586,7 @@
     <script src="js/native-compute.js"></script>
     <script src="/js/sentence-splitter.js"></script>
     <script src="js/chat-markdown.js"></script>
+    <script src="js/display-lipsync-audio.js"></script>
     <script src="js/text-media-player.js"></script>
     <script src="js/ui-theme.js"></script>
     <script src="js/display-background-glow.js"></script>
@@ -2949,6 +2967,7 @@
             if (!currentTtsItem) return;
             clearTtsRecovery();
             const finishedItem = currentTtsItem;
+            if (finishedItem.lipSyncEntry) window.DisplayLipSyncAudio?.clear(ttsAudio, finishedItem.lipSyncEntry);
             const playbackId = finishedItem.voiceTtsPlaybackId;
             currentTtsItem = null;
             ttsPlaybackToken++;
@@ -2964,6 +2983,7 @@
 
         function stopTtsPlayback() {
             clearTtsRecovery();
+            window.DisplayLipSyncAudio?.clear(ttsAudio);
             const playbackIds = [
                 currentTtsItem?.voiceTtsPlaybackId,
                 ...ttsQueue.map((item) => item.voiceTtsPlaybackId)
@@ -2997,6 +3017,7 @@
             });
             const currentMatches = matches(currentTtsItem);
             if (currentTtsItem && currentMatches) {
+                if (currentTtsItem.lipSyncEntry) window.DisplayLipSyncAudio?.clear(ttsAudio, currentTtsItem.lipSyncEntry);
                 if (currentTtsItem.voiceTtsBatchId) removedBatchIds.add(currentTtsItem.voiceTtsBatchId);
                 clearTtsRecovery();
                 const playbackId = currentTtsItem.voiceTtsPlaybackId;
@@ -3028,6 +3049,7 @@
         function startTtsAudio(item, audioUrl) {
             if (currentTtsItem !== item || !isPlayingTts) return;
             item.audioUrl = audioUrl;
+            item.lipSyncEntry = window.DisplayLipSyncAudio?.prepare(ttsAudio, item.text, audioUrl);
             ttsAudio.src = audioUrl;
             recoverTtsPlayback('start');
         }
@@ -3081,10 +3103,12 @@
                 })
                 .then(res => res.json())
                 .then(data => {
+                    if (currentTtsItem !== item || !isPlayingTts) return;
                     if (data.status === 'success') startTtsAudio(item, data.audioUrl);
                     else finishCurrentTts('generate-error');
                 })
                 .catch(err => {
+                    if (currentTtsItem !== item || !isPlayingTts) return;
                     console.error('TTS生成失败:', err);
                     finishCurrentTts('generate-error');
                 });
@@ -3293,6 +3317,7 @@
         function stopRemoteTextAudio(data) {
             const playbackId = remoteTextPlayback?.voiceTtsPlaybackId;
             if (!clearRemoteTextPlayback(data)) return;
+            window.DisplayLipSyncAudio?.clear(ttsAudio);
             ttsAudio.pause();
             ttsAudio.currentTime = 0;
             isPlayingTts = false;
@@ -3321,6 +3346,7 @@
                 cleanup();
                 if (playbackToken !== remoteTextPlaybackToken) return;
                 const finishedData = remoteTextPlayback;
+                window.DisplayLipSyncAudio?.clear(audio, lipSyncEntry);
                 if (finishedData) sendTextSentenceTtsFinished(finishedData, status);
                 if (remotePrefetchedTextPlayback && isNextRemoteTextPlayback(finishedData, remotePrefetchedTextPlayback)) {
                     const cached = remotePrefetchedTextPlayback;
@@ -3337,6 +3363,7 @@
             const onError = () => finishRemoteSentence('failed');
             audio.addEventListener('ended', onEnded, { once: true });
             audio.addEventListener('error', onError, { once: true });
+            const lipSyncEntry = window.DisplayLipSyncAudio?.prepare(audio, data.text, data.audioUrl);
             audio.src = data.audioUrl;
             audio.volume = 1;
             audio.play().catch((error) => {

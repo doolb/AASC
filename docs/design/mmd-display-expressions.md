@@ -11,8 +11,8 @@
 - `mmd-expressions.mjs` 与 `mmd-expressions-ui.mjs` 成为共享实现，正式 runtime/display 提供 get/set/clear API；独立构建仅做面板与缓存指纹适配，禁止重复注入。
 - Three Loader 只增加 Morph 简表，不复制顶点数据或改写 PMX；支持顶点和仅引用顶点的组合 Morph。未实现类型禁用。
 - 本地控制不属于远端持久配置，不新增 HTTP 接口；不新增生产依赖。网页源码变化标记 servicePackage=true。
-- TTS 后续应另设临时口型覆盖层，结束/暂停/中断恢复 VMD/手动表情；精确发音嘴型还需要音素时间数据，不能把本轮接口迁移称为口型同步完成。
+- TTS 已另设共用临时口型覆盖层（见mmd-display-lipsync.md），结束/暂停/中断恢复 VMD/手动表情；精确发音嘴型还需要音素时间数据，不能把本轮接口迁移称为口型同步完成。
 
 ## 状态
 
-正式源码已接入，独立网页共用控制器/UI，web-dist重建成功；8源文件与5生成模块语法、共享模块逐字节一致检查通过。未新增或运行自动/浏览器测试，正式包尚未发布，servicePackage=true。TTS自动口型尚未接入。
+正式源码已接入，独立网页共用控制器/UI，web-dist重建成功；8源文件与5生成模块语法、共享模块逐字节一致检查通过。未新增或运行自动/浏览器测试，正式包尚未发布，servicePackage=true。后续TTS已按文本和音频进度接入共用临时层，见mmd-display-lipsync.md；精确音素时间仍未接入。
