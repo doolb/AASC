@@ -1,5 +1,8 @@
 ### 正式显示端面板与聊天
 
+- ✅ [2026-10-10] 最新布局code-v58.zip构建完成，源提交7139b266，16937493字节，SHA-256 fe9ec07e287beef054023f49d509b2b30101f3c8fa2c38c76201deedb2771e93。
+  - 931文件CRC、资源完整性、快照字节、RSA与组件校验通过，仅排除另行修改的Node本机配置；servicePackage=false，minApk=true/dependenciesPackage=false保持。内外网发布验证进行中。
+
 - ✅ [2026-10-10] 按用户最新布局指示修正：灯光组贴右下，取消58px下方避让；面板放在入口左侧从下向上展开，保持最高交互层；去除右下常驻角色加载状态。
   - display-mmd.css、display-stage.js及布局测试同步；保留独立加载进度、上方失败提示和code57聊天修复。5文件20/20、零跳过，扩展MMD38通过/12既有失败，基线一致。servicePackage=true，code58待构建发布，设备待验收。
 
