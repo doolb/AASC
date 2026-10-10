@@ -1,22 +1,12 @@
 import { createLocalMotionSelection } from './web-local-assets.mjs';
 
-const SAMPLE = `@pose normal {
-    head reset;
+// 示例使用当前PMX真实名称；同一时间点同时定义点头和表情。
+function createSample(names, withBones) {
+    const statements = weight => names.map(name => `    morph ${JSON.stringify(name)} ${weight};`);
+    const normal = [...(withBones ? ['    head reset;'] : []), ...statements(0)].join('\n');
+    const expression = [...(withBones ? ['    head bend forward 20;'] : []), ...statements(0.7)].join('\n');
+    return `@pose normal {\n${normal}\n}\n\n@pose expression {\n${expression}\n}\n\n@animation greet {\n    0: normal;\n    0.5: expression;\n    1.5: normal;\n}\n\nmain {\n    greet;\n}`;
 }
-
-@pose nod {
-    head bend forward 20;
-}
-
-@animation nod_once {
-    0: normal;
-    0.5: nod;
-    1.0: normal;
-}
-
-main {
-    nod_once;
-}`;
 
 function normalizeSource(value) {
     const source = String(value).trim();
@@ -35,13 +25,16 @@ function initMpl() {
     const play = panel.querySelector('[data-mpl="play"]');
     const stop = panel.querySelector('[data-mpl="stop"]');
     const sample = panel.querySelector('[data-mpl="sample"]');
+    const expressionSample = panel.querySelector('[data-mpl="expression-sample"]');
     const save = panel.querySelector('[data-mpl="save"]');
     const message = panel.querySelector('[role="status"]');
     const api = () => window.DisplayMmd;
     let phase = '', cancelCompile = null, session = null, lastResult = null;
-    let closed = false;
+    let closed = false, defaultSamplePending = true, sampleGeneration = 0;
     const resources = new Set();
-    input.value = SAMPLE;
+    input.value = '';
+    input.placeholder = 'PMX 模型加载后自动填入动作＋表情示例，也可直接粘贴 MPL。';
+    input.addEventListener('input', () => { defaultSamplePending = false; sampleGeneration++; });
 
     const status = (text, error = false) => {
         message.textContent = text;
@@ -63,9 +56,53 @@ function initMpl() {
         const profile = currentProfile();
         const mesh = api().getEditorBridge?.()?.context?.mesh;
         if (profile?.modelType !== 'pmx' || !mesh?.isSkinnedMesh || !mesh.geometry?.userData?.MMD) {
-            throw new Error('MPL 需要带 MMD 骨骼的 PMX 模型；静态角色不支持');
+            throw new Error('MPL 需要 PMX 模型；静态角色不支持');
         }
         return { profile, mesh, playing: api().getState().motionPlaybackEnabled === true };
+    }
+
+    function morphMetadata(mesh) {
+        const dictionary = mesh.morphTargetDictionary || {};
+        return (mesh.geometry.userData.MMD.morphs || []).map((item, index) => ({
+            name: item.name, type: item.type,
+            supported: item.supported === true && index < (mesh.morphTargetInfluences?.length || 0)
+                && Object.hasOwn(dictionary, item.name) && dictionary[item.name] === index,
+        }));
+    }
+
+    async function fillExpressionSample(withBones = false, automatic = false) {
+        if (phase || closed) return;
+        if (!automatic) defaultSamplePending = false;
+        const generation = ++sampleGeneration;
+        try {
+            const before = readCurrent(), originalText = input.value;
+            const { encodeMorphName } = await import('__MPL_MORPHS_URL__');
+            if (phase || closed || generation !== sampleGeneration || input.value !== originalText) return;
+            const current = readCurrent();
+            if (current.mesh !== before.mesh) throw new Error('模型已变化，请重新填入表情示例');
+            const items = morphMetadata(current.mesh);
+            const counts = new Map();
+            for (const item of items) counts.set(item.name, (counts.get(item.name) || 0) + 1);
+            const eligible = new Set();
+            for (const item of items) {
+                if (!item.supported || counts.get(item.name) !== 1) continue;
+                try { encodeMorphName(item.name); eligible.add(item.name); }
+                catch { /* 示例跳过无法写入VMD的名称；手动输入仍会得到明确错误。 */ }
+            }
+            const metadata = current.mesh.geometry.userData.MMD.morphs;
+            const selected = [];
+            // 从模型自身分类各取一项，不把米娅名称作为其他模型的预设。
+            for (const group of [3, 2, 1, 4, 0]) {
+                const item = metadata.find(item => item.panel === group && eligible.has(item.name));
+                if (item && selected.length < 3) selected.push(item.name);
+            }
+            if (!selected.length && !withBones) throw new Error('当前 PMX 没有可生成 VMD 的表情');
+            input.value = createSample(selected, withBones);
+            const description = selected.length ? (withBones ? '动作＋表情' : '纯表情') : '点头（当前模型无可写入 VMD 的表情）';
+            status(`已按当前 PMX 填入${description}示例；点击「编译并播放」。表情名称和强度可按「表情」分类调整。`);
+        } catch (error) {
+            if (!closed) status(error?.message || String(error), true);
+        }
     }
 
     function collectResources() {
@@ -87,16 +124,24 @@ function initMpl() {
                 status('当前模型或动作已切换；可以重新编译 MPL。');
             }
             collectResources();
+            // 仅首次模型就绪后自动填入；用户编辑、粘贴或选择示例后不再覆盖输入。
+            if (defaultSamplePending && !input.value && api()?.getState?.().modelReady
+                && currentProfile()?.modelType === 'pmx' && !editorActive()
+                && !document.getElementById('mmdArPhysicsEnabled')?.disabled) {
+                defaultSamplePending = false;
+                void fillExpressionSample(true, true);
+            }
         }
         play.disabled = Boolean(phase);
         sample.disabled = Boolean(phase);
+        expressionSample.disabled = Boolean(phase);
         save.disabled = !lastResult;
         stop.disabled = phase ? phase !== 'compile' : !ownsCurrentMotion();
         stop.textContent = phase === 'compile' ? '取消编译' : '停止并恢复原动作';
         panel.setAttribute('aria-busy', String(Boolean(phase)));
     }
 
-    function compile(source) {
+    function compile(source, morphs) {
         return new Promise((resolve, reject) => {
             let worker, timer, settled = false;
             const finish = (error, result) => {
@@ -114,7 +159,7 @@ function initMpl() {
                 timer = setTimeout(() => finish(new Error('MPL 编译超过30秒，已终止；请缩短代码后重试')), 30000);
                 worker.onmessage = ({ data }) => {
                     if (data?.error) return finish(new Error(data.error));
-                    if (!(data?.buffer instanceof ArrayBuffer) || !Array.isArray(data.bones)) {
+                    if (!(data?.buffer instanceof ArrayBuffer) || !Array.isArray(data.bones) || !Array.isArray(data.morphs)) {
                         return finish(new Error('MPL 编译结果无效'));
                     }
                     finish(null, data);
@@ -124,7 +169,7 @@ function initMpl() {
                     finish(new Error(event.message || 'MPL Worker 加载失败；请检查编译器资源'));
                 };
                 worker.onmessageerror = () => finish(new Error('MPL 编译结果传输失败'));
-                worker.postMessage({ source });
+                worker.postMessage({ source, morphs });
             } catch (error) {
                 finish(error);
             }
@@ -144,7 +189,7 @@ function initMpl() {
             phase = 'compile';
             status('正在加载 MPL 编译器并编译…');
             sync();
-            const result = await compile(source);
+            const result = await compile(source, morphMetadata(before.mesh));
             if (closed) return;
             const current = readCurrent();
             if (current.mesh !== before.mesh || modelKey(current.profile) !== modelKey(before.profile)
@@ -155,8 +200,10 @@ function initMpl() {
             const available = new Set(current.mesh.skeleton.bones.map(bone => bone.name));
             const matched = result.bones.filter(name => available.has(name));
             const missing = result.bones.filter(name => !available.has(name));
+            const availableMorphs = new Set(morphMetadata(current.mesh).filter(item => item.supported).map(item => item.name));
+            const matchedMorphs = result.morphs.filter(name => availableMorphs.has(name));
             lastResult = result;
-            if (!matched.length) throw new Error(`MPL 骨骼与当前 PMX 不匹配：${result.bones.join('、')}`);
+            if (!matched.length && !matchedMorphs.length) throw new Error(`MPL 骨骼/表情与当前 PMX 不匹配：${[...result.bones, ...result.morphs].join('、')}`);
             phase = 'load';
             sync();
             const file = new File([result.buffer], 'mpl-motion.vmd', { type: 'application/octet-stream' });
@@ -172,9 +219,13 @@ function initMpl() {
             }
             session = { modelKey: modelKey(before.profile), original, motion: next };
             api().setMotionPlaybackEnabled(true);
-            status(`MPL 已播放：${result.duration.toFixed(2)}秒，${result.boneFrames}条骨骼帧，匹配${matched.length}个骨骼。`
+            const selectedMorphs = new Set((api().getManualExpressions?.()?.items || [])
+                .filter(item => item.selected).map(item => item.name));
+            const overridden = matchedMorphs.filter(name => selectedMorphs.has(name));
+            status(`MPL 已播放：${result.duration.toFixed(2)}秒，${result.boneFrames}条骨骼帧、${result.morphFrames}条表情帧，匹配${matched.length}个骨骼、${matchedMorphs.length}个表情。`
                 + (result.poseHold ? ' 纯姿势已生成1秒静态保持。' : '')
-                + (missing.length ? ` 未匹配：${missing.join('、')}。` : ''));
+                + (missing.length ? ` 未匹配骨骼：${missing.join('、')}。` : '')
+                + (overridden.length ? ` 手动选择正覆盖表情：${overridden.join('、')}；取消手动选择可查看 MPL 表情。` : ''));
         } catch (error) {
             if (!closed) status(error?.message || String(error), true);
         } finally {
@@ -214,7 +265,8 @@ function initMpl() {
     }
 
     play.addEventListener('click', () => { void compileAndPlay(); });
-    sample.addEventListener('click', () => { input.value = SAMPLE; status('已填入点头示例，点击「编译并播放」。'); });
+    sample.addEventListener('click', () => { void fillExpressionSample(true); });
+    expressionSample.addEventListener('click', () => { void fillExpressionSample(); });
     stop.addEventListener('click', () => {
         if (phase === 'compile') cancelCompile?.();
         else void restore();

@@ -6,6 +6,14 @@ function once(source, anchor, replacement) {
     return source.replace(anchor, replacement);
 }
 
+function addContinuousMotionHelper(source, { webMode = false } = {}) {
+    if (!webMode) return source;
+    // 默认VMD、本地VMD和MPL共用这个helper；循环只回绕动画时间，物理继续步进。
+    // 在helper内容指纹计算前注入，保留显式换动作/模型时的初始化与清理。
+    return once(source, 'new MMDAnimationHelper({ sync: false, pmxAnimation: true });',
+        'new MMDAnimationHelper({ sync: false, pmxAnimation: true, resetPhysicsOnLoop: false });');
+}
+
 function addPhysicsLifecycle(source) {
     let output = once(source, '\t\tthis.vector3s = [];', `\t\tthis.vector3s = [];
         // 所有权仅登记 new 出来的对象；getter 返回值和外部传入 world 不属于此实例。
@@ -154,7 +162,7 @@ ${setup}
     return output;
 }
 
-module.exports = { addPhysicsLifecycle, addAnimationLifecycle };
+module.exports = { addPhysicsLifecycle, addAnimationLifecycle, addContinuousMotionHelper };
 
 // 正式源码已包含此功能时复用共享实现，仅更新构建指纹。
 module.exports = require('./web-production-shared').reuseAdapters(module.exports);

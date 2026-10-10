@@ -56,15 +56,24 @@ async function stage(root, { webMode = false } = {}) {
     source: `https://github.com/AmyangXYZ/MMD-MPL/tree/${COMMIT}`,
     files: FILES.map(([name, bytes, sha256]) => ({ name, bytes, sha256 })),
   }, null, 2) + '\n');
+  // 表情编码复用网页实际VMD解析器，依赖指纹一路传到Worker/UI及入口。
+  const parserHash = (await hashFile(path.join(folder, 'vendor/three/libs/mmdparser.module.js'))).sha256.slice(0, 12);
+  const morphsFile = path.join(folder, 'web-mpl-morphs.mjs');
+  const morphs = (await fs.readFile(path.join(__dirname, 'web-mpl-morphs.mjs'), 'utf8'))
+    .replace('__MPL_CHARSET_URL__', `./vendor/three/libs/mmdparser.module.js?v=${parserHash}`);
+  await fs.writeFile(morphsFile, morphs);
+  const morphsHash = (await hashFile(morphsFile)).sha256.slice(0, 12);
   const workerFile = path.join(folder, 'web-mpl-worker.mjs');
   const worker = (await fs.readFile(path.join(__dirname, 'web-mpl-worker.mjs'), 'utf8'))
-    .replace('__MPL_COMPILER_URL__', `./${relativeVendor}/mmd_mpl.js`);
+    .replace('__MPL_COMPILER_URL__', `./${relativeVendor}/mmd_mpl.js`)
+    .replace('__MPL_MORPHS_URL__', `./web-mpl-morphs.mjs?v=${morphsHash}`);
   await fs.writeFile(workerFile, worker);
   const workerHash = (await hashFile(workerFile)).sha256.slice(0, 12);
   const localHash = (await hashFile(path.join(folder, 'web-local-assets.mjs'))).sha256.slice(0, 12);
   const uiFile = path.join(folder, 'web-mpl-ui.mjs');
   const ui = (await fs.readFile(path.join(__dirname, 'web-mpl-ui.mjs'), 'utf8'))
     .replace('__MPL_WORKER_URL__', `./web-mpl-worker.mjs?v=${workerHash}`)
+    .replace('__MPL_MORPHS_URL__', `./web-mpl-morphs.mjs?v=${morphsHash}`)
     .replace('./web-local-assets.mjs', `./web-local-assets.mjs?v=${localHash}`);
   await fs.writeFile(uiFile, ui);
   const uiHash = (await hashFile(uiFile)).sha256.slice(0, 12);

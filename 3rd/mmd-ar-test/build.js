@@ -301,10 +301,11 @@ async function stageTextAssets() {
         <div class="display-mmd-ar-actions">
           <button type="button" class="display-mmd-ar-action" data-mpl="play">编译并播放</button>
           <button type="button" class="display-mmd-ar-action" data-mpl="stop" disabled>停止并恢复原动作</button>
-          <button type="button" class="display-mmd-ar-action" data-mpl="sample">填入点头示例</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="sample">填入动作＋表情示例</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="expression-sample">填入表情示例</button>
           <button type="button" class="display-mmd-ar-action" data-mpl="save" disabled>下载 VMD</button>
         </div>
-        <p id="mmdArMplHint" class="mind-basic-note">粘贴已生成的 MPL；时间为秒，角度为度。播放会替换当前动作，沿用当前模型的播放方式。需要标准 MMD 骨骼的 PMX。</p>
+        <p id="mmdArMplHint" class="mind-basic-note">粘贴已生成的 MPL；时间为秒，角度为度。pose 内可写 morph "PMX原始表情名" 0.8;，权重0–1，也支持纯表情。名称见「表情」分类；手动选择优先。播放会替换当前动作，沿用当前模型的播放方式；骨骼动作需要标准 MMD 骨骼的 PMX。</p>
         <p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere">点击编译时才加载编译器；代码不上传服务器。</p>
       </div>
     `);
@@ -518,8 +519,10 @@ async function stageTextAssets() {
     await fs.writeFile(physicsLightingPath, WEB_PHYSICS_RATE.addPhysicsRateLighting(
       await fs.readFile(physicsLightingPath, 'utf8')));
     const pmxHelperPath = path.join(GENERATED_ASSETS, 'js/mmd-pmx-helper.mjs');
-    await fs.writeFile(pmxHelperPath, WEB_PHYSICS_SOLVER.addSolverHelper(
-      WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl)));
+    await fs.writeFile(pmxHelperPath, WEB_PHYSICS_LIFECYCLE.addContinuousMotionHelper(
+      WEB_PHYSICS_SOLVER.addSolverHelper(
+        WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl)),
+      { webMode: WEB_MODE }));
     const pmxHelperUrl = `./mmd-pmx-helper.mjs?v=${(await hashFile(pmxHelperPath)).sha256.slice(0, 12)}`;
     const motionSwitchPath = path.join(GENERATED_ASSETS, 'js/web-motion-switch.mjs');
     await fs.writeFile(motionSwitchPath, addClothMotionSwitch((await fs.readFile(path.join(__dirname, 'web-motion-switch.mjs'), 'utf8'))
@@ -582,7 +585,6 @@ async function stageTextAssets() {
       await fs.readFile(pmxRuntimePath, 'utf8'), physicsWindUrl));
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));
     extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE }); await require('./web-editor-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
-    await require('./web-mpl-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
     await require('./web-expressions-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
@@ -604,6 +606,8 @@ async function stageTextAssets() {
   }
   await fs.cp(VENDOR_THREE_SOURCE, path.join(GENERATED_ASSETS, 'js/vendor/three'), { recursive: true });
   const webExpressionLoaderVersion = await require('./web-expressions-build').stageVendor(GENERATED_ASSETS, { webMode: WEB_MODE });
+  // MPL表情编码依赖已复制的MMDParser，再生成Worker/UI与入口指纹。
+  await require('./web-mpl-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
   let webPhysicsHelperVersion = '';
   {
     // 给两端测试副本补齐 native 物理所有权；依赖和 importmap 逐级带指纹，避免继续加载旧缓存。

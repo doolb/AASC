@@ -1,3 +1,36 @@
+### MMD-AR MPL表情与循环连续性提交
+
+- ✅ [2026-10-10] 按用户要求将已发布的MPL Morph解析/同VMD播放导出、动态动作＋表情示例及关闭循环物理reset的代码和对应文档纳入本次Git提交。
+  - 此前web-dist构建/语法与两次外网文件校验通过；本次只整理提交范围，不运行测试、重新构建或发布，未推送。其他工作区变更保持。
+
+### MMD-AR动作循环保持物理连续
+
+- ✅ [2026-10-10] 按用户要求在独立网页共用PMX helper中显式设置resetPhysicsOnLoop=false；默认动作、本地VMD、MPL和物理重载统一沿用该策略，循环不再调用physics.reset，保留姿态/速度/约束状态继续步进。手动换动作、换模型和其他显式初始化保留。
+  - 修改 `web-physics-lifecycle.js`、`build.js`；WEB_MODE限定，在helper指纹计算前注入，helper/runtime/display/index逐级更新。正式源/独立APK不修改，不新增配置。
+  - 复核当前默认VMD与MPL共用helper，修复前均继承库默认true；MPL没有新增专属循环reset。之前默认动作实际运行表现未验证，已修正使用说明。
+- ✅ [2026-10-10] 构建web-dist并同步外网 `https://c.aasc.us/mnt/mmd-ar/`：4个变化文件273,783 bytes，旧文件备份 `/home/as/a/.mmd-ar-publish-20261010-091538-continuous-physics/backup`；HTTPS5项含目录入口全部200且大小/SHA-256与本地一致，checksum差异为空。
+  - 构建、源码及产物语法/差异空白检查通过。记录 `.git/mmd-ar-publish-20261010-091538-continuous-physics`；未运行自动或浏览器测试，未提交/推送；头发衣物实际连续性待浏览器/设备验收。同步MPL design/spec/task/todo/usage。
+
+### MMD-AR动作循环物理行为确认
+
+- ✅ [2026-10-10] 只读确认当前播放器默认resetPhysicsOnLoop=true，物理开启时带骨骼动作循环会调用physics.reset；默认点头＋表情示例符合该条件，纯表情loop事件被过滤。Ammo归位并重置锚点插值，XPBD还清除运动/约束状态。
+  - 同步MPL design/spec、usage和待验收项；未修改源码、运行测试、构建、发布或提交。
+
+### MMD-AR MPL表情与默认示例外网发布
+
+- ✅ [2026-10-10] 将默认点头示例及原示例按钮替换为「动作＋表情」：当前PMX就绪后自动填入一次，动态读取可播放且可编码的真实Morph名称；用户输入/模型切换/后续示例请求均有保护。纯表情示例按钮保留，无Morph时动作例退为点头并提示。
+  - 修改 `web-mpl-ui.mjs`、`build.js`，同步MPL design/spec/task/usage/todo；`npm run build:web:mmd-ar-test` 成功，上传模块语法/差异空白检查通过。未新增或运行自动/浏览器测试。
+- ✅ [2026-10-10] 将MPL表情语法、骨骼/Morph同VMD、纯表情播放/导出与新的混合默认示例发布至 `https://c.aasc.us/mnt/mmd-ar/`。
+  - 5个变化文件，共230,060 bytes；依赖先、入口最后原子替换，旧文件备份 `/home/as/a/.mmd-ar-publish-20261010-085818-mpl-morphs/backup`，保留服务器访问配置。
+  - 全部变化文件及目录入口HTTPS200、大小/SHA-256与本地一致，COOP/COEP有效；发布文件checksum差异为空。入口SHA-256：`8c880fa7e8a20f9985f96f52de51c76ed540d5db437ef38f23fe2abc4b943e74`。记录：`.git/mmd-ar-publish-20261010-085818-mpl-morphs`。尚未实际浏览器验收，未提交或推送。
+
+### MMD-AR MPL表情时间线
+
+- ✅ [2026-10-10] 用户确认后接入 `@pose` 内 `morph "PMX原始表情名" 0.8;`，权重0–1；与骨骼共享绝对时间线，支持组合姿势、纯表情、线性插值、下载含表情的VMD及恢复原动作。
+  - 新增 `web-mpl-morphs.mjs`：通用PMX名称/支持类型/重名检查、Shift-JIS精确往返与15字节限制、量化帧冲突检查和逐帧补齐；复用当前Three解析器，不增加生产依赖。
+  - 修改MPL worker/UI/build及独立构建器：合并Morph区段并保留相机/灯光/IK等后续字节；骨骼和表情零时长均补1秒保持；新增按当前模型自动生成的「填入表情示例」，显示两类帧数和手动覆盖提示。手动表情优先级保留。
+  - 首次构建发现MPL打包早于Three vendor复制，已调整顺序；随后 `npm run build:web:mmd-ar-test` 成功生成web-dist，源码/产物语法与差异空白检查通过。未新增或执行自动/浏览器测试，未发布、提交或推送；正式包/独立APK未接入此扩展。同步design/spec/task/todo/usage。
+
 ### 清空媒体服务包发布
 
 - ✅ [2026-10-10] 服务包v59已发布LAN/WAN，快捷面板「清空媒体」随本次服务更新提供。
