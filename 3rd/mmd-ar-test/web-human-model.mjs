@@ -7,6 +7,9 @@ export const BONE_NAMES = Object.freeze({
     chest: ['上半身2', '上半身２', '上半身', 'Chest', 'chest', 'UpperBody'],
     upperBody: ['上半身', 'UpperBody', 'Spine'], waist: ['腰', 'Waist'],
     hips: ['下半身', 'Hips', 'hips'], neck: ['首', 'Neck', 'neck'], head: ['頭', 'Head', 'head'],
+    eyes: ['両目', '両眼', 'BothEyes', 'Eyes'],
+    leftEye: ['左目', '左眼', 'LeftEye', 'eye_l', 'eye.L'],
+    rightEye: ['右目', '右眼', 'RightEye', 'eye_r', 'eye.R'],
     leftShoulder: ['左肩', 'LeftShoulder'], rightShoulder: ['右肩', 'RightShoulder'],
     leftArm: ['左腕', 'LeftArm'], rightArm: ['右腕', 'RightArm'],
     leftElbow: ['左ひじ', '左肘', 'LeftForeArm'], rightElbow: ['右ひじ', '右肘', 'RightForeArm'],
@@ -28,6 +31,7 @@ const MPL_NAMES = { base: 'root', center: 'center', upper_body: 'upperBody', low
     knee_l: 'leftKnee', knee_r: 'rightKnee', ankle_l: 'leftAnkle', ankle_r: 'rightAnkle',
     toe_l: 'leftToe', toe_r: 'rightToe' };
 const GROUPS = { head: ['neck', 'head'], torso: ['chest', 'upperBody', 'waist', 'hips'], root: ['root', 'center'],
+    eyes: ['eyes', 'leftEye', 'rightEye'],
     leftArm: ['leftShoulder', 'leftArm', 'leftElbow', 'leftWrist'],
     rightArm: ['rightShoulder', 'rightArm', 'rightElbow', 'rightWrist'],
     legs: ['leftLeg', 'rightLeg', 'leftKnee', 'rightKnee', 'leftAnkle', 'rightAnkle', 'leftToe', 'rightToe'] };

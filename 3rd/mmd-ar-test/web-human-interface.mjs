@@ -1,6 +1,7 @@
 import { createHumanModel } from './web-human-model.mjs';
 import { createHumanMixer } from './web-human-mixer.mjs';
 import { createHumanPhysiology } from './web-human-physiology.mjs';
+import { createHumanGaze, normalizeHumanGaze, DEFAULT_GAZE, attachHumanGazePointer } from './web-human-gaze.mjs';
 import { createHumanReflex, DEFAULT_REFLEXES, normalizeHumanReflex } from './web-human-reflex.mjs';
 import { compileHumanMpl } from './web-human-compiler.mjs';
 import { createHumanSampler, readHumanVmd, inspectHumanVmd } from './web-human-vmd.mjs';
@@ -58,6 +59,7 @@ function validateDefinitions(record) {
         Object.entries(choices).forEach(([key, value]) => { name(key); if (value) name(value); });
     }
     createHumanPhysiology().set(record.physiology);
+    normalizeHumanGaze(record.gaze ?? {});
     return record;
 }
 function validateSource(source) {
@@ -66,8 +68,10 @@ function validateSource(source) {
 }
 
 // 一个实例属于一个显示runtime。名称映射、异步令牌和动作所有权都绑定当前PMX。
-export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, manualExpressions, startRendering }) {
+export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, canvas, manualExpressions, startRendering }) {
     const mixer = createHumanMixer(), physiology = createHumanPhysiology(), external = new Map();
+    const gaze = createHumanGaze();
+    let frameDelta = 0;
     const pending = new Map(), cache = new Map();
     let model = null, library = emptyHumanLibrary(), generation = 0, revision = 0, ready = false;
     let warning = '', disposed = false, helperBound = null, motionKey = '', suspended = false, rendererVisible = true, saveQueue = Promise.resolve();
@@ -82,6 +86,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
         document.querySelector('#mmdEditor [data-mode="edit"][aria-pressed="true"]')
         || document.querySelector('#edBlenderSession:not([hidden])')
         || document.getElementById('mmdEditor')?.getAttribute('aria-busy') === 'true');
+    const releasePointer = attachHumanGazePointer(canvas, (x, y) => {
+        if (!model || !ready || suspended || blocked() || disposed) return;
+        if (gaze.point(model, getCamera?.(), x, y)) wake();
+    });
     const reflex = createHumanReflex({ clock: () => mixer.clock, rules: () => library.rules, perform });
     function stop(owner) {
         for (const [key, controller] of pending) if (!owner || owner === key) { controller.abort(); pending.delete(key); }
@@ -99,6 +107,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
         const mesh = getMesh();
         if (mesh === model?.mesh || (!mesh && !model)) return;
         stop(); mixer.clear(); cache.clear(); physiology.reset(); reflex.reset(); detach();
+        gaze.set(DEFAULT_GAZE);
         physiology.set({ breathing: true, blinking: true, strength: 0.35 });
         generation++; ready = false; warning = ''; external.clear();
         model = mesh?.skeleton && mesh.geometry?.userData?.MMD ? createHumanModel(mesh, manualExpressions.getState()) : null;
@@ -117,7 +126,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
             // 空库提供可删除的示例规则，已有库的空规则列表代表用户选择不启用。
             if (!library.initialized) { library.rules = structuredClone(DEFAULT_REFLEXES); library.initialized = true; }
             model = createHumanModel(mesh, manualExpressions.getState(), library.mappings);
-            physiology.set(library.physiology); ready = true; revision++; wake();
+            physiology.set(library.physiology); gaze.set({ ...DEFAULT_GAZE, ...library.gaze }); ready = true; revision++; wake();
         }
     }
     function persist(next) {
@@ -248,7 +257,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
         const eyes = mixer.occupiedEyes(model) || [...external.values()].some(weights =>
             [...weights.keys()].some(index => model.morphs.find(m => m.index === index)?.panel === 2));
         const weights = mixer.mix(model, physiology.sample(model, mixer.clock, eyes, state.items),
-            [...external.values()].map(weights => ({ id: 0, priority: 50, weights })));
+            [...external.values()].map(weights => ({ id: 0, priority: 50, weights })),
+            (save, occupied) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied));
         manualExpressions.setHuman(model.token, [...weights]);
     }
     function before(delta, helper) {
@@ -257,8 +267,9 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
         if (motionKey && key !== motionKey) stop();
         motionKey = key;
         const paused = blocked();
-        if (paused && !suspended) stop();
+        if (paused && !suspended) { stop(); gaze.reset(); }
         suspended = paused;
+        frameDelta = Math.max(0, Math.min(0.1, delta));
         mixer.restore();
         if (!paused) mixer.advance(delta);
         if (helper !== helperBound) {
@@ -266,8 +277,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
             if (helper && model) { helper.onHumanPose = mixPose; helperBound = helper; }
         }
     }
-    function lifecycle() { if (document.hidden) { suspended = true; stop(); } else { suspended = !rendererVisible; wake(); } }
-    const pagehide = () => stop();
+    function lifecycle() { if (document.hidden) { suspended = true; stop(); gaze.reset(); } else { suspended = !rendererVisible; wake(); } }
+    const pagehide = () => { stop(); gaze.reset(); };
     document.addEventListener('visibilitychange', lifecycle);
     window.addEventListener('pagehide', pagehide);
     const learn = {
@@ -332,6 +343,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
             const bound = requireModel(), next = structuredClone(library); next.mappings = structuredClone(value);
             validateDefinitions(next); stop(); mixer.restore(); cache.clear();
             model = createHumanModel(bound.mesh, manualExpressions.getState(), next.mappings);
+            gaze.reset();
             return persist(next);
         },
         export() { requireModel(); return exportHumanLibrary(library); },
@@ -343,6 +355,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
                 for (const [owner, controller] of pending) if (owner !== 'learn') { controller.abort(); pending.delete(owner); }
                 mixer.clear(); cache.clear(); external.clear(); physiology.reset(); reflex.reset();
                 model = createHumanModel(bound.mesh, manualExpressions.getState(), next.mappings);
+                gaze.set({ ...DEFAULT_GAZE, ...next.gaze });
                 physiology.set({ breathing: true, blinking: true, strength: 0.35, ...next.physiology }); await persist(next); check();
             });
         }
@@ -350,7 +363,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
     return Object.freeze({
         capabilities() { bind(); return model?.snapshot() || { missing: ['尚未加载PMX'], bones: [], morphs: [], bindings: {} }; },
         getState() { bind(); return { ready, token: model?.token, signature: model?.signature, revision, warning,
-            physiology: physiology.get(), layers: mixer.snapshot(), pending: pending.size,
+            physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), layers: mixer.snapshot(), pending: pending.size,
             actions: learn.list(), presets: structuredClone(library.presets), rules: structuredClone(library.rules),
             mappings: structuredClone(library.mappings) }; },
         physiology: {
@@ -359,6 +372,15 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
                 requireModel(); const next = structuredClone(library);
                 next.physiology = physiology.set(value); return persist(next);
             }
+        },
+        gaze: {
+            get: gaze.get,
+            set(value) {
+                requireModel(); const next = structuredClone(library);
+                next.gaze = gaze.set(value); return persist(next);
+            },
+            point(x, y) { requireModel(); const changed = gaze.point(model, getCamera?.(), x, y); if (changed) wake(); return changed; },
+            reset() { gaze.returnToCamera(); wake(); }
         },
         reflex, learn, perform, mpl: { play: playMpl }, stop, getRequest: mixer.state,
         face: { set: (...args) => manualExpressions.set(...args), clear: (...args) => manualExpressions.clear(...args), resolve: resolveExpression },
@@ -383,9 +405,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ma
             wake(); return true;
         },
         before,
-        setVisible(value) { rendererVisible = value === true; suspended = !rendererVisible || document.hidden; if (suspended) stop(); },
+        setVisible(value) { rendererVisible = value === true; suspended = !rendererVisible || document.hidden; if (suspended) { stop(); gaze.reset(); } },
         dispose() {
             disposed = true; generation++; stop(); mixer.clear(); detach(); cache.clear();
+            gaze.reset(); releasePointer();
             document.removeEventListener('visibilitychange', lifecycle); window.removeEventListener('pagehide', pagehide);
         }
     });

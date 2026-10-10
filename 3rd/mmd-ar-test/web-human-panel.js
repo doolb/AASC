@@ -11,6 +11,18 @@ function appendPanels(panel) {
         + '<label>' + input('blinking', '', 'checkbox') + '自然眨眼</label></div>'
         + field('生理强度', input('physiologyStrength', '0.35', 'number', 'min="0" max="1" step="0.05"'))
         + button('physiology', '保存生理设置')
+        + '<details open><summary>头部与眼球注视</summary>'
+        + '<p class="mind-basic-note">默认看向相机；轻触或点击画面后临时看向点击位置，再平滑返回。拖动不切换目标，显式头眼动作优先。</p>'
+        + '<div class="mind-basic-imu-options"><label>' + input('gazeHead', '', 'checkbox') + '头部跟随</label>'
+        + '<label>' + input('gazeEyes', '', 'checkbox') + '眼球跟随</label></div>'
+        + field('注视强度', input('gazeStrength', '0.7', 'number', 'min="0" max="1" step="0.05"'))
+        + [['HeadYaw', '头部水平附加角（°）', 45, 85], ['HeadPitch', '头部垂直附加角（°）', 25, 60],
+            ['EyeYaw', '眼球水平附加角（°）', 20, 45], ['EyePitch', '眼球垂直附加角（°）', 15, 40],
+            ['HeadMs', '头部缓动（ms）', 200, 2000], ['EyeMs', '眼球缓动（ms）', 60, 2000]]
+            .map(([key, label, value, max]) => field(label, input('gaze' + key, String(value), 'number', 'min="0" max="' + max + '" step="1"'))).join('')
+        + field('点击目标停留（秒）', input('gazeHoldSeconds', '3', 'number', 'min="0.2" max="30" step="0.1"'))
+        + field('模型正面方向', select('gazeForward', '<option value="+Z">+Z（标准PMX）</option><option value="-Z">-Z</option>'))
+        + '<div class="display-mmd-ar-actions">' + button('gaze', '保存注视设置') + button('gaze-reset', '返回相机') + '</div></details>'
         + '<details><summary>模型能力与人工映射</summary><p class="mind-basic-note" data-human-capabilities></p>'
         + '<div data-human-mappings></div>' + button('mappings', '保存映射') + '</details>'
         + '<details open><summary>后天动作库 / 版本</summary>'

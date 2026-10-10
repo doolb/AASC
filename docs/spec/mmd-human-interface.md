@@ -6,7 +6,8 @@
 - web-human-vmd/compiler.mjs：VMD边界验证与角色轨道采样、按需Worker编译和取消。
 - web-human-mixer.mjs：按轨道混合、绑定姿态增量、淡入淡出、时钟、请求历史、骨骼恢复。
 - web-human-physiology/reflex.mjs：呼吸/眨眼与明确事件规则。
-- web-human-storage/interface.mjs：按模型签名保存行为库、VMD及版本，统一公共入口和生命周期。
+- web-human-gaze.mjs：骨骼继承能力识别、相机/点击世界目标、有界缓动及主指针事件释放。
+- web-human-storage/interface.mjs：按模型签名保存行为库、VMD、注视设置及版本，统一公共入口和生命周期。
 - web-human-panel.js/ui.mjs/build.js：独立面板、接口、生成运行时/共享Morph通道/Helper钩子、指纹。
 - web-mpl-ui、web-reply-player/parser/ui：已有MPL、回复、高级动作、口型改用Human入口。
 
@@ -108,3 +109,53 @@ MPL继承上游固定骨骼角度限制，VMD使用Three原插值；不新增骨
 完成本地web-dist构建及源码/生成模块语法、依赖指纹、面板与固定资源静态检查，具体数量记录changelog。未新增或运行自动/浏览器功能测试，未发布外网。
 
 设备待验收：多PMX/能力缺失/重名、VMD+修正+呼吸+眨眼+反射+口型同播、显式闭眼与手动优先、版本切换/导入导出、暂停/停止恢复、不累加姿态、不重置物理、编辑/模型/后台与异步取消、手机帧时。静态检查不替代设备播放验收。
+
+## 注视层实现伪代码
+
+~~~text
+bind(model):
+  识别head（缺失用neck）与eyes或leftEye/rightEye，人工映射优先
+  检查动态骨骼与grant继承关系，避免共有眼与继承眼重复旋转
+  加载该模型注视设置；缺省启用头部和眼球跟随，目标为相机
+  模型变化重置注视缓动状态，异步结果仍校验generation
+frame(existingHumanHook):
+  读取当前相机世界位置与本帧基础骨骼姿态
+  将注视方向换算到相应骨骼父级坐标，求有界偏转
+  依据帧间隔平滑，头部较慢、眼球较快
+  对可用且已启用的绑定应用低优先贡献，保存基础姿态供下一帧恢复
+  注视世界方向转到当前骨骼局部坐标，默认+Z正面；共有眼参考左右眼中点及预测grant旋转
+  Human显式同部位动作优先；考虑头部变换后计算眼球剩余偏转
+  原IK/grant与物理沿用既有顺序，表情和口型继续独立合成
+  不增加requestAnimationFrame，不在每帧贡献中唤醒渲染
+settings/UI:
+  两个开关、强度、最大转角与缓动，通过Human接口校验并持久化
+  getState/capabilities报告绑定与可用性；缺失不写其他骨骼
+~~~
+
+用户已确认：默认跟随相机，触摸/点击后暂时看向点击位置，再返回相机。
+
+~~~text
+pointer(canvas):
+  只处理主指针轻触/点击，拖动与pointercancel不触发；不阻止原有交互
+  先复用DisplayStage.mapViewportPointToStage换算横竖屏CSS旋转坐标；没有舞台接口才用canvas矩形
+  用当前相机投影及头部深度，把画面点击位置换算成相机平面上的世界目标
+  保存该世界目标与截止时间（默认3秒，可配置0.2–30秒）
+  原有渲染帧内到期切回相机，缓动回归；无定时渲染循环
+  模型切换/编辑/后台/隐藏/销毁清除临时目标和缓动
+mixer.mix末尾:
+  按骨骼记录本帧显式旋转轨道最大权重w；注视贡献乘(1-w)，随动作淡入淡出让位
+  先应用可用头部，再按新头部姿态计算眼球
+  共有眼仅在左右眼都从该骨骼继承非局部旋转、grant比例为1且未同时作为眼骨骼祖先时驱动
+  共有眼与目标眼均不得由动态刚体控制；其他旋转grant跳过；无grant的左右眼可直接驱动
+  非标准旋转grant、动态/歧义/重复绑定降级并报告，不重复施加旋转
+  恢复下一帧基础姿态仍使用原mixer保存流程
+settings:
+  head/eyes=true, strength=0.7, headYaw=45°, headPitch=25°,
+  eyeYaw=20°, eyePitch=15°, headMs=200, eyeMs=60, holdSeconds=3
+  限制的是相对本帧基础姿态的附加角；正面默认+Z，可选择-Z
+highLevelMpl:
+  每条骨骼语句单独一行，不生成“upper_body reset; head reset;”
+  保持固定WASM编译器及已有动作语义
+~~~
+
+公开接口：gaze.get/set、gaze.point(normalizedX,normalizedY)、gaze.reset（平滑返回相机）；getState含gaze与gazeStatus绑定/目标/剩余时间/降级原因。point使用画面NDC [-1,1]、Y向上，临时目标为点击时保存的世界坐标；不追踪拖动，主指针移动达到8 CSS像素或取消/离开不触发。默认旧schema1库没有gaze字段时采用默认设置；设置、导入/导出与模型映射沿用同一动作库持久化。

@@ -47,8 +47,9 @@ export function createHumanMixer() {
                 layer.sampler.tracks.some(track => track.kind === 'morph'
                     && model.morphs.find(m => m.index === track.index)?.panel === 2 && model.allowed(track, layer.mask))));
         },
-        mix(model, physiological = [], external = []) {
+        mix(model, physiological = [], external = [], gaze = null) {
             const morphs = new Map();
+            const occupied = new Map();
             const applyBone = (target, values, property, weight, mode) => {
                 save(target.bone);
                 if (property === 'position') {
@@ -95,7 +96,10 @@ export function createHumanMixer() {
                     for (const track of layer.sampler.tracks) {
                         if (!model.allowed(track, layer.mask)) continue;
                         const values = track.evaluate(sampleTime);
-                        if (track.kind === 'bone') applyBone(model.bones[track.index], values, track.property, weight, layer.mode);
+                        if (track.kind === 'bone') {
+                            if (track.property === 'quaternion') occupied.set(track.index, Math.max(occupied.get(track.index) || 0, weight));
+                            applyBone(model.bones[track.index], values, track.property, weight, layer.mode);
+                        }
                         else {
                             const underlying = morphs.get(track.index) ?? model.mesh.morphTargetInfluences[track.index] ?? 0;
                             morphs.set(track.index, clamp(layer.mode === 'additive' ? underlying + values[0] * weight
@@ -104,6 +108,8 @@ export function createHumanMixer() {
                     }
                 }
             }
+            // 注视在显式动作后计算，但让位给本帧已占用的旋转轨道，眼球使用最终头部姿态。
+            gaze?.(save, occupied);
             model.mesh.updateMatrixWorld(true);
             return morphs;
         },

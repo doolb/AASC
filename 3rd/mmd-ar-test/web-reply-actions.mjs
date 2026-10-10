@@ -14,7 +14,10 @@ export function createHighLevelMpl({ name, duration = 2, strength = 0.7, count =
     if (!Number.isFinite(duration) || duration < 0.2 || duration > 15 || !Number.isFinite(strength) || strength < 0 || strength > 1
         || !Number.isInteger(count) || count < 1 || count > 8) throw new Error('高级动作参数超出范围');
     const reset = name === '挥手' ? 'arm_r reset; elbow_r reset; wrist_r reset;' : name === '鞠躬' ? 'upper_body reset; head reset;' : 'head reset;';
-    const poses = `@pose rest {\n ${reset}\n}\n@pose first {\n ${pair[0]}\n}\n@pose second {\n ${pair[1]}\n}`;
+    // 固定WASM编译器逐行解析骨骼语句；多条指令同行会把后一条当作角度。
+    const lines = commands => commands.split(';').map(command => command.trim()).filter(Boolean)
+        .map(command => ' ' + command + ';').join('\n');
+    const poses = `@pose rest {\n${lines(reset)}\n}\n@pose first {\n${lines(pair[0])}\n}\n@pose second {\n${lines(pair[1])}\n}`;
     const frames = [' 0: rest;'];
     for (let index = 0; index < count; index++) {
         const start = duration * index / count;

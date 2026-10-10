@@ -1,5 +1,5 @@
 const NAME = 'aasc-mmd-human-v1', LIMIT = 64 * 1024 * 1024;
-const fresh = () => ({ schema: 1, actions: [], assets: [], presets: {}, rules: [], mappings: {}, physiology: {} });
+const fresh = () => ({ schema: 1, actions: [], assets: [], presets: {}, rules: [], mappings: {}, physiology: {}, gaze: {} });
 export function validateHumanLibrary(record) {
     if (!record || record.schema !== 1 || !Array.isArray(record.actions) || record.actions.length > 64
         || !Array.isArray(record.assets) || record.assets.length > 64 || !Array.isArray(record.rules) || record.rules.length > 32

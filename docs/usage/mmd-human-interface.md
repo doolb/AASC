@@ -18,6 +18,14 @@
 
 表情、动作、口型可同时播放。相同轨道按优先级混合：生理→高级/回复→反射→手动MPL；手动表情最后覆盖，嘴型由口型播放器控制。动作面板的停止按钮只停止自身动作层。
 
+## 头部与眼球注视
+
+「Human 生理与后天行为 → 头部与眼球注视」中分别开启头部/眼球跟随；新配置默认两者开启，注视强度0.7。默认看向当前相机。轻触或点击画面后暂时看向该位置，默认3秒后平滑返回相机；拖动角色/相机不切换目标。「返回相机」可提前结束临时目标。
+
+修改后点「保存注视设置」，按当前PMX签名保存。可调水平/垂直附加角、头部/眼球缓动及停留时间。附加角是在当前基础动作之上计算，头部默认45°/25°、眼球20°/15°；缓动默认200ms/60ms。标准PMX正面为+Z，正面相反的模型可选-Z。状态区显示实际头部/眼球绑定和不能自动驱动的原因，人工绑定在「模型能力与人工映射」。
+
+注视不影响口型/眨眼/表情。显式Human头部或眼球动作按权重优先，动作结束后回归注视。换模型、进入编辑、后台或隐藏显示清除临时点击目标。非标准旋转继承关系、动态眼球骨骼会跳过；共有眼仅支持已识别的比例1非局部旋转grant。
+
 ## 页面接口
 
 PMX和动作库就绪后使用window.MmdArHumanInterface，current取得当前模型的实际HumanInterfaceElement实例。
@@ -26,6 +34,9 @@ PMX和动作库就绪后使用window.MmdArHumanInterface，current取得当前�
 const human = window.MmdArHumanInterface;
 human.capabilities();
 await human.physiology.set({ breathing: true, blinking: true, strength: 0.35 });
+await human.gaze.set({ head: true, eyes: true, holdSeconds: 3 });
+human.gaze.point(0.5, 0.2); // 画面归一化坐标[-1,1]，Y向上
+human.gaze.reset(); // 平滑返回相机
 await human.learn.register({
     actionId: '招手', vmd: file, mask: ['rightArm'], expression: '友好'
 });

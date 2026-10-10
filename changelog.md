@@ -1,3 +1,12 @@
+### 独立 MMD-AR：头部与眼球视角跟随
+
+- ✅ [2026-10-11] Human生理层接入通用PMX头部/眼球注视，默认启用并看向相机；轻触/点击临时看向点击位置，默认3秒后平滑返回，拖动/双指操作不触发。
+  - 新增web-human-gaze.mjs，调整Human model/mixer/interface、panel/ui、storage/build；复用当前相机、舞台横竖屏坐标及唯一RAF，支持独立开关、强度、附加角、缓动、停留和正面方向，设置按模型保存并随动作库导出/导入。
+  - 显式头眼动作按权重优先，眼球参考更新后的头部姿态；米娅左右眼grant比例1已读取确认，使用共有眼单次驱动。动态/不支持继承降级并报告，生命周期清理临时目标/事件。
+- ✅ [2026-10-11] 修正高级动作鞠躬/挥手模板将多条MPL骨骼指令写在同一行，导致Line 2: Invalid degrees number；统一每条指令一行，编译器版本与动作语义保持。
+  - npm run build:web:mmd-ar-test成功；13源码/15生成模块语法、48依赖指纹、HTML唯一ID/注视字段静态检查通过，未新增或运行自动/浏览器功能测试。
+  - 同步Human设计/spec/usage/task及todo待设备验收；仅独立WEB_MODE，正式源码与Offline状态不受影响。代码/文档提交并推送origion/master，未发布外网；保留并行Native AudioRecord及其他未提交改动。
+
 ### 独立 MMD-AR：Human重复排帧高占用修复
 
 - ✅ [2026-10-10] 修复Human接入后CPU/GPU高占用的一处原因：renderFrame开始清空frameHandle，帧内setHuman触发onTransientChanged/startRendering排队下一帧，帧末又无条件排一帧，导致多条RAF循环重复计算动画、物理、阴影和画面。

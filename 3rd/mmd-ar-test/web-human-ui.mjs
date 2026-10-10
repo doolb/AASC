@@ -36,6 +36,9 @@ function initHuman() {
         catch { runtime.textContent = '等待PMX模型'; return; }
         runtime.textContent = (state.ready ? '动作库就绪' : '正在读取动作库') + ' · 活动层：' + state.layers.length
             + ' · 准备中：' + state.pending + (state.warning ? '\n' + state.warning : '');
+        runtime.textContent += '\n注视：' + (state.gazeStatus.target === 'pointer' ? '点击位置（剩余' + state.gazeStatus.remaining.toFixed(1) + '秒）' : '相机')
+            + ' · 头部：' + (state.gazeStatus.head || '不可用') + ' · 眼球：' + (state.gazeStatus.eyes.join('、') || '不可用')
+            + (state.gazeStatus.issues.length ? '\n' + state.gazeStatus.issues.join('；') : '');
         for (const button of panel.querySelectorAll('[data-human]')) button.disabled = busy || !state.ready;
         const key = state.token + ':' + state.revision;
         if (painted === key) return;
@@ -43,6 +46,11 @@ function initHuman() {
         field('breathing').checked = state.physiology.breathing;
         field('blinking').checked = state.physiology.blinking;
         field('physiologyStrength').value = state.physiology.strength;
+        field('gazeHead').checked = state.gaze.head;
+        field('gazeEyes').checked = state.gaze.eyes;
+        for (const key of ['strength', 'headYaw', 'headPitch', 'eyeYaw', 'eyePitch', 'headMs', 'eyeMs', 'holdSeconds', 'forward']) {
+            field('gaze' + key[0].toUpperCase() + key.slice(1)).value = state.gaze[key];
+        }
         const cap = api.capabilities();
         capabilities.textContent = '骨骼：' + cap.bones.length + ' · 可用表情：' + cap.morphs.length
             + '\n缺失 / 歧义：' + (cap.missing.join('、') || '无');
@@ -64,6 +72,11 @@ function initHuman() {
     const handlers = {
         physiology: api => api.physiology.set({ breathing: field('breathing').checked, blinking: field('blinking').checked,
             strength: numeric('physiologyStrength') }),
+        gaze: api => api.gaze.set({ head: field('gazeHead').checked, eyes: field('gazeEyes').checked,
+            strength: numeric('gazeStrength'), headYaw: numeric('gazeHeadYaw'), headPitch: numeric('gazeHeadPitch'),
+            eyeYaw: numeric('gazeEyeYaw'), eyePitch: numeric('gazeEyePitch'), headMs: numeric('gazeHeadMs'),
+            eyeMs: numeric('gazeEyeMs'), holdSeconds: numeric('gazeHoldSeconds'), forward: value('gazeForward') }),
+        'gaze-reset': api => api.gaze.reset(),
         register: api => api.learn.register({ actionId: value('actionId'), vmd: field('vmd').files[0], mask: mask(), expression: value('expression') }),
         'register-mpl': api => api.learn.register({ actionId: value('actionId'), source: field('source').value, mask: mask(), expression: value('expression') }),
         perform: api => api.perform({ action: value('action'), version: value('version'), owner: 'human:panel' }),
@@ -115,6 +128,8 @@ function initHuman() {
         capabilities: () => human().capabilities(), getState: () => human().getState(),
         perform: intent => human().perform(intent), stop: owner => human().stop(owner),
         physiology: { get: () => human().physiology.get(), set: options => human().physiology.set(options) },
+        gaze: { get: () => human().gaze.get(), set: options => human().gaze.set(options),
+            point: (x, y) => human().gaze.point(x, y), reset: () => human().gaze.reset() },
         reflex: { emit: event => human().reflex.emit(event) },
         mpl: { play: (source, options) => human().mpl.play(source, options) },
         mouth: { play: text => human().mouth.play(text), getState: () => human().mouth.getState(),
