@@ -194,18 +194,34 @@
 
 .display-stage-lighting-control {
     position: absolute;
-    top: calc(max(12px, var(--display-safe-inset-top)) + var(--display-stage-panel-top-gap));
-    right: max(12px, var(--display-safe-inset-right));
+    bottom: calc(max(12px, var(--display-safe-inset-bottom)) + var(--display-keyboard-inset-bottom) + 58px);
+    right: max(12px, calc(var(--display-safe-inset-right) + var(--display-keyboard-inset-right)));
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 8px;
     pointer-events: auto;
+    z-index: 60;
 }
 
-/* 三个入口占三行；面板在窄屏内部滚动，不挤出可视区。 */
+/* 展开面板时覆盖顶部文字与普通弹窗，关闭后恢复原有聊天/媒体层级。 */
+.display-stage-layers:has(.display-stage-lighting-control > section:not([hidden])) {
+    z-index: 10001;
+}
+
+/* 三个入口占三行；面板不参与按钮列排布，从舞台顶部显示并在窄屏内部滚动。 */
 .display-stage-layers {
-    --display-stage-panel-max-height: min(620px, calc(100dvh - var(--display-stage-panel-top-gap) - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - 72px));
+    --display-stage-panel-max-height: min(620px, max(1px, calc(100dvh - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - var(--display-keyboard-inset-top) - var(--display-keyboard-inset-bottom) - 214px)));
+}
+
+.display-stage-lighting-control > .display-mmd-lighting-panel,
+.display-stage-lighting-control > .display-mmd-ar-panel {
+    /* 旋转交互层的 transform 是 fixed 包含块，面板随逻辑舞台旋转而不随按钮组定位。 */
+    position: fixed;
+    top: max(12px, calc(var(--display-safe-inset-top) + var(--display-keyboard-inset-top)));
+    right: max(12px, calc(var(--display-safe-inset-right) + var(--display-keyboard-inset-right)));
+    z-index: 2;
+    box-sizing: border-box;
 }
 
 .display-mmd-panel-group {
@@ -354,7 +370,7 @@
     display: none;
 }
 
-/* 图片定位入口和灯光按钮共用右上角控件列，定位按钮固定在灯光按钮下方。 */
+/* 图片定位入口和灯光按钮共用右下角控件列，定位按钮固定在灯光按钮下方。 */
 .display-mmd-ar-panel {
     width: var(--display-stage-panel-width);
     max-height: var(--display-stage-panel-max-height);
@@ -373,16 +389,10 @@
     display: none;
 }
 
-/* 横屏时面板停靠在按钮列左侧，标题与按钮列顶部对齐，短屏仅滚动面板内容。 */
-.display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control {
-    top: max(12px, var(--display-safe-inset-top));
-}
-
+/* 横屏面板从顶部显示，右侧给三行入口保留空间。 */
 .display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-lighting-panel,
 .display-stage-layers[data-panel-orientation="landscape"] .display-stage-lighting-control > .display-mmd-ar-panel {
-    position: absolute;
-    top: 0;
-    right: calc(100% + 8px);
+    right: calc(max(12px, calc(var(--display-safe-inset-right) + var(--display-keyboard-inset-right))) + 78px);
     z-index: 2;
 }
 

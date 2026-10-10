@@ -27,7 +27,7 @@ test('display.html 使用同页舞台模块，不为聊天或 MMD 创建 iframe'
     assert.doesNotMatch(html, /display(?:Chat|Mmd)[^<]*<iframe/iu);
 });
 
-test('显示端提供右上角灯光按钮和详细设置面板', () => {
+test('显示端提供右下角灯光按钮和详细设置面板', () => {
     const html = readPublic('display.html');
     const css = readPublic('css/display-mmd.css');
     const lighting = readPublic('js/display-mmd-lighting.js');
@@ -38,7 +38,7 @@ test('显示端提供右上角灯光按钮和详细设置面板', () => {
     assert.match(html, /id="displayMmdKeyDirectionLatitude"/u);
     assert.doesNotMatch(html, /displayMmdKeyPosition[XYZ]/u);
     assert.match(html, /js\/display-mmd-lighting\.js/u);
-    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*top:/u);
+    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*bottom:/u);
     assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*right:/u);
     assert.match(css, /\.display-mmd-lighting-panel\s*\{/u);
     assert.match(lighting, /localStorage/u);
@@ -55,17 +55,17 @@ test('正式显示端灯光面板展示 Canvas 实际渲染分辨率', () => {
     assert.match(mmd, /state\.runtime\.resize\(state\.width, state\.height, state\.devicePixelRatio\)/u);
 });
 
-test('灯光按钮位于时间区域下方并提供默认主光源的阴影来源选择', () => {
+test('灯光按钮位于右下角并提供默认主光源的阴影来源选择', () => {
     const html = readPublic('display.html');
     const css = readPublic('css/display-mmd.css');
     const lighting = readPublic('js/display-mmd-lighting.js');
     assert.match(html, /id="displayMmdShadowSource"[\s\S]*value="none"[\s\S]*value="key" selected[\s\S]*value="fill"/u);
-    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*top:\s*calc\(/u);
-    assert.match(css, /clamp\(64px, 12vh, 104px\)/u);
+    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*bottom:\s*calc\(/u);
+    assert.match(css, /var\(--display-keyboard-inset-bottom\)\s*\+\s*58px/u);
     assert.match(lighting, /shadowSource/u);
 });
 
-test('显示端定位入口位于右上角灯光按钮正下方，不新增 AI 模式按钮', () => {
+test('显示端定位入口位于右下角灯光按钮下方，不新增 AI 模式按钮', () => {
     const html = readPublic('display.html');
     const css = readPublic('css/display-mmd.css');
     const ar = readPublic('js/display-mmd-ar.js');

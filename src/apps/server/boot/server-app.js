@@ -10090,11 +10090,15 @@ async function handleControlMessageFallback(data, ws) {
                             : { preserveThink: false };
                         ws.send(JSON.stringify({
                             type: 'chatHistory',
+                            ...(isDisplayChatSource && typeof data.requestId === 'string'
+                                ? { requestId: data.requestId } : {}),
                             history: chat.getHistory(historyOptions)
                         }));
                     } catch (error) {
                         logError('Chat', `读取 WebSocket 聊天历史失败: ${error.message}`);
-                        ws.send(JSON.stringify({ type: 'chatHistoryError', message: error.message }));
+                        ws.send(JSON.stringify({ type: 'chatHistoryError', message: error.message,
+                            ...(data.source === 'displayChat' && typeof data.requestId === 'string'
+                                ? { requestId: data.requestId } : {}) }));
                     }
                     return;
                 } else if (data.type === 'clearChatHistory') {
@@ -10764,7 +10768,9 @@ async function handleControlMessageFallback(data, ws) {
                             ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
                             return;
                         }
-                        ws.send(JSON.stringify({ type: 'roleHistory', role: data.role, history: aiRoles.history(data.role) }));
+                        ws.send(JSON.stringify({ type: 'roleHistory', role: data.role, history: aiRoles.history(data.role),
+                            ...(data.source === 'displayChat' && typeof data.requestId === 'string'
+                                ? { requestId: data.requestId } : {}) }));
                     } catch (err) {
                         ws.send(JSON.stringify({ type: 'roleError', message: err.message }));
                     }

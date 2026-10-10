@@ -24,6 +24,9 @@
         streaming: new Map(),
         ignoredRequestIds: new Set(),
         requestSequence: 0,
+        historyRequestSequence: 0,
+        historyRequestId: null,
+        sessionSnapshotReceived: false,
         hiddenSelection: null,
         send: null,
         bus: null,
@@ -95,22 +98,35 @@
     function requestSessionHistory() {
         const isPrivate = state.session.mode === 'private';
         const isRole = state.session.mode === 'role';
+        // 同范围也可能有多次展开或恢复查询，只允许最新一次快照更新界面。
+        const requestId = `display-history-${Date.now()}-${++state.historyRequestSequence}`;
+        state.historyRequestId = requestId;
         if (isRole) {
             state.send({
                 type: 'roleHistory',
-                role: state.session.roleTarget
+                role: state.session.roleTarget,
+                source: 'displayChat',
+                requestId
             });
             return;
         }
         state.send({
             type: 'chatHistory',
             source: 'displayChat',
+            requestId,
             mode: state.session.mode,
             target: isPrivate
                 ? state.session.privateTarget
                 : (isRole ? state.session.roleTarget : null),
             sessionId: isPrivate ? state.session.privateSessionId : 'default'
         });
+    }
+
+    function isCurrentHistoryResponse(message) {
+        if (typeof message.requestId === 'string') return message.requestId === state.historyRequestId;
+        // 旧服务端不回传标识时继续兼容；明确属于其他会话的历史不能清空当前内容。
+        const history = Array.isArray(message.history) ? message.history : [];
+        return history.length === 0 || history.some(isHistoryItemInCurrentSession);
     }
 
     function getHistoryScopeKey(session = state.session) {
@@ -187,12 +203,7 @@
             source: 'displayChat',
             displayId: state.displayId
         });
-        requestSessionHistory();
-        if (state.session.mode === 'private' && state.session.privateTarget) {
-            state.send({ type: 'listPrivateSessions', target: state.session.privateTarget });
-        }
         renderHeader();
-        renderHistory();
         notifyVoiceConversationContext();
     }
 
@@ -370,6 +381,7 @@
         const item = document.createElement('article');
         item.className = `display-chat-message ${role === 'user' ? 'is-user' : 'is-assistant'}`;
         if (options.requestId) item.dataset.requestId = options.requestId;
+        if (role === 'user') item.dataset.content = String(content || '');
         const author = document.createElement('div');
         author.className = 'display-chat-message-author';
         author.textContent = role === 'user' ? '我' : (options.author || '助手');
@@ -395,6 +407,9 @@
 
     function renderHistory() {
         if (!state.refs.messages) return;
+        // 历史可能在回复生成中返回。保留原节点以维持 streaming Map 的引用和后续分片更新。
+        const liveMessages = [...state.refs.messages.children].filter((item) =>
+            state.streaming.has(item.dataset.requestId));
         state.refs.messages.replaceChildren();
         for (const item of filterHistoryForCurrentSession(state.history)) {
             if (!item || typeof item !== 'object') continue;
@@ -411,6 +426,14 @@
                 appendMessage('assistant', item.content || item.text || '', { reasoning: item.reasoning });
             }
         }
+        for (const item of liveMessages) {
+            const last = state.refs.messages.lastElementChild;
+            // 服务端通常已保存当前用户输入；与历史末条相同则只展示一份。
+            if (item.classList.contains('is-user') && last?.classList.contains('is-user')
+                && last.dataset.content === item.dataset.content) continue;
+            state.refs.messages.appendChild(item);
+        }
+        state.refs.messages.scrollTop = state.refs.messages.scrollHeight;
     }
 
     function setStatus(message, isError = false) {
@@ -448,7 +471,7 @@
             return false;
         }
         input.value = '';
-        appendMessage('user', content);
+        appendMessage('user', content, { requestId });
         const streaming = appendMessage('assistant', '正在思考…', {
             requestId,
             author: state.session.roleTarget || state.session.privateTarget || state.assistantName
@@ -635,6 +658,8 @@
             return true;
         }
         if (message.type === 'chatSession') {
+            const firstSnapshot = !state.sessionSnapshotReceived;
+            state.sessionSnapshotReceived = true;
             const previousScopeKey = getHistoryScopeKey();
             state.session = normalizeSession(message.session || {});
             if (state.session.mode !== 'private') state.privateSessions = [];
@@ -643,25 +668,29 @@
                 abandonStreamingMessages();
                 state.history = [];
                 renderHistory();
-                if (state.visible) requestSessionHistory();
             }
+            // 先获得权威会话再加载对应历史，关闭面板时也预加载恢复对象的记录。
+            if (firstSnapshot || previousScopeKey !== nextScopeKey) requestSessionHistory();
             renderHeader();
             if (state.visible) notifyVoiceConversationContext();
             return true;
         }
         if (message.type === 'chatHistory') {
+            if (!isCurrentHistoryResponse(message)) return true;
             state.history = filterHistoryForCurrentSession(message.history);
             renderHistory();
             return true;
         }
         if (message.type === 'roleHistory') {
-            if (state.session.mode === 'role' && message.role === state.session.roleTarget) {
+            if (state.session.mode === 'role' && message.role === state.session.roleTarget
+                && isCurrentHistoryResponse(message)) {
                 state.history = filterHistoryForCurrentSession(message.history);
                 renderHistory();
             }
             return true;
         }
         if (message.type === 'chatHistoryError') {
+            if (typeof message.requestId === 'string' && !isCurrentHistoryResponse(message)) return true;
             setStatus(message.message || '读取聊天记录失败', true);
             return true;
         }
@@ -686,7 +715,7 @@
             const content = String(message.content || '').trim();
             if (!requestId || !content || state.streaming.has(requestId)) return true;
             state.bus?.publish('chat.activity', { requestId, active: true });
-            appendMessage('user', content);
+            appendMessage('user', content, { requestId });
             const streaming = appendMessage('assistant', '正在思考…', {
                 requestId,
                 author: state.session.roleTarget || state.session.privateTarget || state.assistantName
@@ -718,6 +747,8 @@
                 state.ignoredRequestIds.delete(requestId);
                 return true;
             }
+            // 完成回复已比此前请求的历史快照更新，迟到的旧快照不能擦除这条回复。
+            state.historyRequestId = null;
             if (!message.success) {
                 replaceStreamingMessage(requestId, `错误：${message.error || '聊天请求失败'}`, {
                     author: '系统'
@@ -757,6 +788,11 @@
         if (state.visible && visibilityChanged) {
             restoreHiddenSelection();
             renderHeader();
+            requestSessionHistory();
+            if (state.session.mode === 'private' && state.session.privateTarget) {
+                state.send({ type: 'listPrivateSessions', target: state.session.privateTarget });
+            }
+            if (state.refs.messages) state.refs.messages.scrollTop = state.refs.messages.scrollHeight;
         }
         if (state.visible && focus && state.refs.input) state.refs.input.focus();
         if (!state.visible && document.activeElement === state.refs.input) state.refs.input.blur();
@@ -775,6 +811,11 @@
         state.send = typeof options.send === 'function' ? options.send : () => false;
         if (state.bus) {
             state.bus.subscribe('server.message', handleServerMessage);
+            state.bus.subscribe('transport.changed', ({ available }) => {
+                if (available) return;
+                state.sessionSnapshotReceived = false;
+                state.historyRequestId = null;
+            });
             state.bus.subscribe('display.identity', ({ displayId }) => {
                 state.displayId = displayId;
             });

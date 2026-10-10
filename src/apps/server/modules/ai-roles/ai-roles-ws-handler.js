@@ -64,6 +64,8 @@ function registerAiRoleHandlers(wsServer, { aiRoles, broadcastToControls }) {
             send(ws, {
                 type: 'roleHistory',
                 role: data.role,
+                ...(data.source === 'displayChat' && typeof data.requestId === 'string'
+                    ? { requestId: data.requestId } : {}),
                 history: aiRoles.history(data.role)
             });
         } catch (error) {

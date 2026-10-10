@@ -176,12 +176,12 @@
     }
 
     function requestInitialSnapshot() {
-        if (state.snapshotRequested || typeof state.transport !== 'function') return;
+        if (!state.initialized || state.snapshotRequested || typeof state.transport !== 'function') return;
         const messages = [
             { type: 'roleList' },
             { type: 'getAssistantConfig' },
-            { type: 'getChatSession' },
-            { type: 'chatHistory', source: 'displayChat' }
+            // 聊天模块收到权威会话后自行请求范围历史，避免先读取默认群聊。
+            { type: 'getChatSession' }
         ];
         const sent = messages.every((message) => send(message));
         if (sent) {
@@ -192,6 +192,7 @@
 
     function setTransport(transport) {
         state.transport = typeof transport === 'function' ? transport : null;
+        if (!state.transport) state.snapshotRequested = false;
         publish('transport.changed', { available: state.transport !== null });
         requestInitialSnapshot();
         if (state.initialized && state.transport) syncDisplayChatVoiceContext(state.chatVisible);
@@ -325,8 +326,8 @@
                 ? `min(320px, max(220px, ${Math.round(logicalWidth * 0.38)}px), max(1px, calc(${logicalWidth}px - var(--display-safe-inset-left) - var(--display-safe-inset-right) - 96px)))`
                 : `${Math.min(320, Math.max(1, Math.round(logicalWidth * 0.86)))}px`;
             const panelMaxHeight = isLandscape
-                ? `min(620px, calc(${logicalHeight}px - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - 24px))`
-                : `${Math.min(620, Math.max(1, Math.round(logicalHeight * 0.72)))}px`;
+                ? `min(620px, max(1px, calc(${logicalHeight}px - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - var(--display-keyboard-inset-top) - var(--display-keyboard-inset-bottom) - 82px)))`
+                : `min(620px, max(1px, calc(${logicalHeight}px - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - var(--display-keyboard-inset-top) - var(--display-keyboard-inset-bottom) - 214px)))`;
             refs.stage.style.setProperty('--display-stage-panel-width', panelWidth);
             refs.stage.style.setProperty('--display-stage-panel-max-height', panelMaxHeight);
             refs.stage.style.setProperty('--display-stage-dialog-width', `${Math.min(920, Math.max(1, logicalWidth - 24))}px`);

@@ -1,4 +1,12 @@
+### 正式显示端面板与聊天
+
+- ✅ [2026-10-10] 正式端灯光/动作/定位入口移到右下角，面板从顶部显示并覆盖顶部文字/普通弹窗；修复聊天首次打开内容为空。
+  - display-mmd.css、display-stage.js、display-chat.js、server-app.js、ai-roles-ws-handler.js：权威会话后范围历史、每次展开查询、请求序列丢弃迟到、流式节点保留和重连快照。横竖屏四向旋转、安全区/键盘及顶层验证通过；9文件32项定向通过、零跳过，新增9项。
+  - 同步design/spec/task/todo/usage/self-test，servicePackage=true，服务包待构建发布；既有MMD迁移测试基线另记，设备现场验收待完成。
+  - 静态MMD回归50项38通过12失败；从HEAD读取原始源码与原始测试单独执行，同样12项失败，失败名称完全一致，本轮无新增失败。
+
 ### Offline界面修复构建与原生音量柱排查
+
 
 - ✅ [2026-10-10] 最终code56正式发布完成，已合并固定声纹数据根、竖屏浮动按钮、真实群聊/助手名、未选中主题预览、监听按钮、Native音量柱、VAD卡片模式入口、圆钮VAD/阈值与ASR字号/全宽修复。
   - 21文件93/93、零跳过；LAN/WAN全部组件HTTP大小/SHA-256及RSA通过，签名清单完全一致，精确清理无错误，两端code目录仅code-v56.zip。servicePackage=false，minApk=true/dependenciesPackage=false保持，dependencies6/min34/种子39/dataRepair2复用，无APK构建及旧声纹恢复。
