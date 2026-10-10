@@ -16,3 +16,7 @@
 ## 实现状态
 
 实现完成：通用PMX metadata、按钮/独立滑条、逐帧覆盖与清除、模型切换保护已接入；`npm run build:web:mmd-ar-test` 成功，源模块/生成入口及Loader语法检查、差异空白检查通过。运行效果待浏览器验收，未新增或执行测试；2026-10-10已发布外网，6项资源HTTP大小/SHA-256校验通过。
+
+## 2026-10-10正式端迁移
+
+首版仅独立网页的范围已扩展：控制器/UI迁为正式 `mmd-expressions.mjs` / `mmd-expressions-ui.mjs`，Loader简表和runtime/API在正式源码中实现，独立构建共用并避免重复注入。正式面板和TTS后续边界见 `mmd-display-expressions.md`，本轮不自动驱动TTS口型。

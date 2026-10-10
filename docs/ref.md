@@ -124,3 +124,8 @@ web-mediacenter/
 ## 西施2PMX导出
 
 - [MMD Tools官方仓库](https://github.com/MMD-Blender/blender_mmd_tools)，使用 `mmd_tools/core/pmx` 序列化模块；导出时通过 `MMD_TOOLS_DIR` 指向外部仓库，本项目未复制该库源码。本次资源生成版本 `29d1478cf4385945b1c011d4c1e6adda7ad7cf70`。
+
+## MMD-AR文字口型
+
+- [pinyin-pro API](https://pinyin-pro.cn/use/pinyin.html)：中文转拼音，使用type=array/toneType=none保留按字音节，当前口型节奏由本地估算。
+- [pinyin-pro源码](https://github.com/zh-lx/pinyin-pro)：本轮固定npm 3.29.5，归档SHA-512及逐文件大小/SHA-256记录在独立产物vendor/pinyin-pro/3.29.5/SOURCE.json，附MIT许可证。

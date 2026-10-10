@@ -4,6 +4,7 @@ import { DEFAULT_AR_CAMERA_SETTINGS, normalizeArCameraSettings, classifyHit, dis
 import { createPmxLighting } from './mmd-lighting-runtime.mjs';
 import { createPmxArCamera } from './mmd-ar-camera-runtime.mjs';
 import { createPmxModelResources } from './mmd-model-runtime.mjs';
+import { createManualExpressions } from './mmd-expressions.mjs';
 import { createPmxCameraMotion } from './mmd-camera-motion.mjs';
 import { normalizeWindSettings } from './mmd-physics-wind.mjs';
 import { configureLocalLoader as configureCameraMotionLoader } from './mmd-local-assets.mjs';
@@ -378,6 +379,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         fitShadowCamera(currentRotationPivot || currentMesh);
     };
     const helper = { current: null };
+    // 共用PMX表情覆盖：逐帧恢复动画基线，并在物理前/帧末应用手动选择。
+    const manualExpressions = createManualExpressions({
+        getMesh: () => currentMesh, getHelper: () => helper.current,
+        getProfile: () => currentProfile,
+        onChanged: () => { ambientOcclusion.invalidateTemporal(); startRendering(); }
+    });
     const physicsGate = { paused: false };
     let motionPlaybackEnabled = true;
     let pendingInitialMotionHelper = null;
@@ -656,6 +663,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             if (!advanceCameraMotion(delta)) updateCameraView(delta);
         }
         const frameHelper = motionSwitchMesh === currentMesh ? null : helper.current;
+        manualExpressions.before(frameHelper);
         syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);
         const delayInitialMotion = frameHelper && pendingInitialMotionHelper === frameHelper;
         if (delayInitialMotion) {
@@ -676,6 +684,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
                 rotationPhysicsLimit: lightingState.rotationPhysicsLimit
             });
         } finally {
+            manualExpressions.after();
             if (delayInitialMotion) setPmxMotionPlaybackEnabled(frameHelper, motionPlaybackEnabled);
         }
         const firstFramePivot = delayInitialMotion ? currentRotationPivot : null;
@@ -895,6 +904,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const { advanceCameraMotion, loadCameraMotion, setCameraMotionPlaybackEnabled,
         getCameraMotionProgress, clearCameraMotion } = cameraMotion;
     const dispose = () => {
+        manualExpressions.dispose();
         disposed = true;
         cameraMotion.disposeCameraMotion();
         modelSequence += 1;
@@ -961,6 +971,18 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         getCameraMotionProgress,
         clearCameraMotion,
         // 动作面板只读当前 VMD action；不向外暴露 mixer，也不改变物理状态。
+        getMplModelState: () => {
+            const state = manualExpressions.getState();
+            const dictionary = currentMesh?.morphTargetDictionary || {};
+            return { token: state.token, ready: state.ready,
+                bones: (currentMesh?.skeleton?.bones || []).map(bone => bone.name),
+                morphs: state.items.map(item => ({ name: item.name, type: item.type, panel: item.panel,
+                    supported: item.supported && Object.hasOwn(dictionary, item.name)
+                        && dictionary[item.name] === item.index })) };
+        },
+        getManualExpressions: () => manualExpressions.getState(),
+        setManualExpression: (index, weight) => manualExpressions.set(index, weight),
+        clearManualExpressions: () => manualExpressions.clear(),
         getMotionProgress: () => {
             const action = helper.current?.objects?.get(currentMesh)?.mixer?._actions?.[0];
             const durationSeconds = action?.getClip?.()?.duration;

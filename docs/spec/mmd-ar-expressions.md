@@ -52,3 +52,20 @@ UI:
 ## 本轮结果
 
 通用读取、分组/按钮/强度、VMD基线和helper回调覆盖已实现；构建器的唯一锚点及内容指纹生成成功。web-dist构建、源/生成语法及差异空白检查通过，未新增或运行测试，浏览器效果待验收。
+
+## 当前共享构建（2026-10-10，替代首版注入）
+
+```text
+copy正式mmd-expressions.mjs / mmd-expressions-ui.mjs与runtime/display/Loader
+stageRuntime(webMode):
+  网页验证runtime已含共享控制器before/after与API
+  给display的共享UI动态import添加实际内容指纹
+  runtime静态import由通用fingerprintProductionImports添加指纹
+stageVendor(webMode):
+  验证正式Loader已含Morph简表，只返回实际文件指纹
+  不再注入控制器、API或重复metadata
+源码web-expressions及web-expressions-ui:
+  仅转发正式模块，不维护另一份实现
+```
+
+正式端新增面板/API与servicePackage状态，独立MPL仍读取原getManualExpressions接口。两端源/产物一致且构建通过，实际浏览器回归待验收。

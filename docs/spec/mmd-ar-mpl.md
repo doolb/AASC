@@ -177,3 +177,20 @@ XPBD reset:
 已实施并发布：web-physics-lifecycle新增addContinuousMotionHelper，build在helper指纹前调用且限定WEB_MODE。web-dist构建/语法检查通过，4文件273,783 bytes及目录入口HTTPS大小/SHA-256校验通过，checksum差异为空。默认/本地VMD与MPL运行时共用此helper；未运行自动或浏览器测试，未提交/推送。
 
 提交范围：MPL build/morphs/worker/UI、独立构建及物理生命周期适配、design/spec/task/todo/usage/changelog；不包含产物、模型、日志或其他正在进行的功能。本轮仅提交整理，不运行测试/构建/发布，未推送。
+
+## 当前正式/独立共用构建（2026-10-10，替代首版仅独立注入）
+
+```text
+资源准备 -> 共用scripts/ops/mmd-mpl-assets.js，固定来源/校验保持原样
+正式mmd-mpl-{ui,worker,morphs}.mjs -> 使用实际相对URL可直接部署
+独立源码web-mpl-{ui,worker,morphs}.mjs -> 仅转发正式实现
+build复制正式模块后stage(webMode):
+  复制固定vendor资源
+  parser hash -> morphs hash -> worker hash -> UI hash -> display入口
+  UI本地资源导入改为web-local-assets带指纹，匹配runtime的同一个注册表
+  验证每处唯一锚点；不另追加MPL UI
+UI模型数据 -> getMplModelState快照，不依赖getEditorBridge.context.mesh
+共用mmd-pmx-helper已含resetPhysicsOnLoop=false与共享标记 -> 独立适配直接复用
+```
+
+正式端迁移伪代码与状态见 `mmd-display-mpl.md`；源码/生成语法、依赖指纹和固定资源静态校验、web-dist构建通过。未执行编译器或浏览器测试，本轮未发布。

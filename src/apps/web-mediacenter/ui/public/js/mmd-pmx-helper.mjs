@@ -28,7 +28,9 @@ const buildMotionHelper = ({
     physicsFps,
     physicsSolver
 }) => {
-    const helper = new MMDAnimationHelper({ sync: false, pmxAnimation: true });
+    // 默认动作、本地VMD和MPL循环保留布料的刚体状态，显式切换仍走原初始化。
+    /* aasc-shared:addContinuousMotionHelper */
+    const helper = new MMDAnimationHelper({ sync: false, pmxAnimation: true, resetPhysicsOnLoop: false });
     const options = { physics, physicsSolver };
     if (physics) {
         // 不在隐藏加载阶段推进物理或自动套用 VMD 首帧；动作从可见后的渲染帧开始。

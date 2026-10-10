@@ -926,6 +926,14 @@
     }
 
     root.DisplayMmd = Object.freeze({
+        getMplModelState: () => state.modelReady && state.runtimeType === 'pmx'
+            ? state.runtime?.getMplModelState?.() : { token: '', ready: false, bones: [], morphs: [] },
+        getManualExpressions: () => state.modelReady && state.runtimeType === 'pmx'
+            ? state.runtime?.getManualExpressions?.() : { token: '', ready: false, items: [] },
+        setManualExpression: (index, weight) => state.modelReady && state.runtimeType === 'pmx'
+            && state.runtime?.setManualExpression?.(index, weight),
+        clearManualExpressions: () => state.modelReady && state.runtimeType === 'pmx'
+            && state.runtime?.clearManualExpressions?.(),
         DEFAULT_MMD_LIGHTING,
         getArCameraState: () => root.MmdArAframeMode || root.MmdArTestAframeMode === true ? state.runtime?.getArCameraState?.() : null,
         getArCameraSyncState: () => root.MmdArAframeMode || root.MmdArTestAframeMode === true ? state.runtime?.getArCameraSyncState?.() : null,
@@ -992,3 +1000,9 @@
 /* aasc-shared:addWindDisplay */
 
 /* aasc-shared:addSolverDisplay */
+
+// 表情面板按当前PMX自动生成，界面失败不影响聊天与媒体初始化。
+import('./mmd-expressions-ui.mjs').catch(error => console.warn('[MMD] 表情面板加载失败:', error));
+
+// MPL仅消费已生成的代码，首次编译时才在Worker加载本地WASM。
+import('./mmd-mpl-ui.mjs').catch(error => console.warn('[MMD] MPL面板加载失败:', error));

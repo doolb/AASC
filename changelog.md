@@ -1,3 +1,31 @@
+### 独立MMD-AR文字口型外网发布
+
+- ✅ [2026-10-10] 当前web-dist已发布至 https://c.aasc.us/mnt/mmd-ar/，包含「动作 → 口型」文本输入/播放/停止、嘴型映射、与VMD/MPL同时播放及停止恢复表情，并同步本轮共享表情/MPL模块。
+  - 43个变化文件972,769 bytes；依赖先就位、入口最后原子替换，旧文件备份于 `/home/as/a/.mmd-ar-publish-20261010-190743-lipsync/backup`。未删除旧资源或改远端.htaccess。
+  - 45项HTTPS检查（全部变化文件及两种目录入口）HTTP200，大小/SHA-256与本地快照一致，JS/MJS MIME有效；远端checksum差异为空，COOP same-origin/COEP credentialless保持。首页SHA-256 `6fd707ec1071e9f54d77245b990f8c0ffc7bb327a0efd42b4c31f326776181f0`。
+  - 发布记录 `.git/mmd-ar-publish-20261010-190743-lipsync`。本轮纯发布，不重新构建或修改功能代码、不新增或运行自动/浏览器测试；实际口型观感待设备验收。未提交/推送或发布正式服务包/APK，Offline待出包状态保持。
+
+### 独立MMD-AR文字口型预览
+
+- ✅ [2026-10-10] 动作面板新增「口型」分类、文本输入、播放/停止和嘴型映射，口型可与VMD/MPL动作同时播放。
+  - 新增web-lipsync-build/ui/timeline，只在独立WEB_MODE生成副本增加临时表情层，按PMX原始索引控制A/I/U/E/O并保留尾随空格名称；停止恢复VMD/手动表情，不替换动作、不改播放开关、不重置物理。模型token/异步请求/后台和离页保护避免旧播放污染新模型。
+  - 固定pinyin-pro 3.29.5 npm归档SHA-512及29文件ESM树/LICENSE与SOURCE逐文件清单；首播按需取本地字典，无新增生产依赖。中文拼音+标点停顿和平滑开合，数字逐位读音，未知/缺失元音/拉丁拼写有近似提示；无声音，不是实际TTS同步。
+  - prepare与web-dist构建、5源文件语法、34生成模块语法/依赖/指纹、30拼音资源大小/SHA-256与差异空白检查通过。未新增或运行自动/浏览器测试，未实际播放，未发布；本轮未改正式口型或Offline状态，保留此前表情/MPL迁移待出包状态。
+
+### 正式显示端 MPL 动作与表情
+
+- ✅ [2026-10-10] 按用户要求将MPL接入正式动作面板，与本轮通用表情控制一起迁移。
+  - 输入/编译播放、动态动作＋表情/纯表情示例、取消/停止恢复原动作、VMD下载；共用mmd-mpl-ui/worker/morphs和只读getMplModelState，不依赖独立编辑器mesh。手动表情覆盖仍优先，未自动接入TTS口型。
+  - 共用prepare:mmd-mpl资源准备脚本，正式public保存固定MMD-MPL 0.3.6 JS/WASM、GPL-3.0许可证及来源/哈希清单，编译时才在Worker加载WASM，无新增npm生产依赖。正式默认/本地/MPL共用helper设置resetPhysicsOnLoop=false，独立构建复用共享实现和完整依赖指纹。
+  - 资源准备和web-dist构建成功；12源文件、正式/生成各7模块语法，MPL相对依赖/指纹，两端各3固定资源大小/SHA-256及差异空白检查通过。独立构建显式映射本地资源导入，避免另一个注册表实例。未新增或运行自动/浏览器测试，未执行MPL编译器。servicePackage=true，未提交或发布正式包，原minApk/dependenciesPackage状态保持。
+
+### 正式显示端 PMX 表情控制
+
+- ✅ [2026-10-10] 将独立mmd-ar通用表情面板和控制接口迁入正式显示端源码，供后续TTS口型使用。
+  - 动作下可折叠表情分类自动读取PMX，支持多项选择、独立0–1强度与清除恢复VMD；原始名称/索引保留，未支持Morph禁用，换模型/物理重载沿用原保护。
+  - 新增共享mmd-expressions.mjs/mmd-expressions-ui.mjs，正式Loader/runtime/DisplayMmd接入；独立构建复用同一实现并保持内容指纹，移除重复注入。未接入自动TTS音量/音素口型，未新增依赖。
+  - npm run build:web:mmd-ar-test成功；8源文件与5生成模块语法、共享模块逐字节一致、差异空白检查通过。未新增或运行自动/浏览器测试。servicePackage=true，未构建发布正式包，原minApk/dependenciesPackage状态保持。
+
 ### Offline双页热更新刷新隔离
 
 - ✅ [2026-10-10] 服务包v60已发布至LAN/WAN，包含双页独立刷新修复与「清空媒体」按钮。

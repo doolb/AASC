@@ -293,6 +293,22 @@ async function stageTextAssets() {
       </div>
     `);
     if (WEB_MODE) motionPanel.append(`
+      <div id="mmdArLipSyncPanel">
+        <label class="display-mmd-lighting-field" for="mmdArLipSyncText"><span>口型文本</span></label>
+        <textarea id="mmdArLipSyncText" rows="4" maxlength="800" spellcheck="false"
+          style="width:100%;box-sizing:border-box;resize:vertical;background:#171a22;color:#eef2ff;border:1px solid #758bff88;border-radius:6px;padding:8px"
+          placeholder="输入内容，例如：你好，我是米娅，很高兴见到你。" aria-describedby="mmdArLipSyncHint">你好，我是米娅，很高兴见到你。</textarea>
+        <div class="display-mmd-ar-actions">
+          <button type="button" class="display-mmd-ar-action" data-lipsync-play disabled>播放口型</button>
+          <button type="button" class="display-mmd-ar-action" data-lipsync-stop disabled>停止口型</button>
+        </div>
+        <progress max="1" value="0" style="width:100%" aria-label="口型播放进度"></progress>
+        <p id="mmdArLipSyncHint" class="mind-basic-note">无声文字口型预览，可与 VMD/MPL 动作同时播放。中文按拼音与估算节奏开合，标点处停顿；停止后恢复原有表情。最多400字符，不调用TTS或LLM。</p>
+        <details><summary>嘴型映射</summary><div data-lipsync-mapping></div></details>
+        <p class="mind-basic-note" role="status" aria-live="polite" style="overflow-wrap:anywhere">模型加载后自动匹配嘴型。</p>
+      </div>
+    `);
+    if (WEB_MODE) motionPanel.append(`
       <div id="mmdArMplPanel">
         <label class="display-mmd-lighting-field" for="mmdArMplSource"><span>MPL 动作代码</span></label>
         <textarea id="mmdArMplSource" rows="12" maxlength="65536" spellcheck="false" autocapitalize="off"
@@ -586,6 +602,7 @@ async function stageTextAssets() {
     await fs.writeFile(pmxRuntimePath, WEB_PHYSICS_SOLVER.addSolverRuntime(await fs.readFile(pmxRuntimePath, 'utf8'), webglUrl));
     extraCharacterProfiles = await WEB_CHARACTERS.stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE }); await require('./web-editor-build').stage(GENERATED_ASSETS, { webMode: WEB_MODE });
     await require('./web-expressions-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
+    await require('./web-lipsync-build').stageRuntime(GENERATED_ASSETS, { webMode: WEB_MODE });
     await fs.writeFile(pmxRuntimePath, await require('./web-production-shared').fingerprintProductionImports(
       await fs.readFile(pmxRuntimePath, 'utf8'), GENERATED_ASSETS));
     // 显示模块动态导入 PMX runtime；给该 URL 加内容指纹，避免旧缓存继续使用原阴影逻辑。

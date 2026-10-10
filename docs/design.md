@@ -1,5 +1,11 @@
 # Web MediaCenter - 项目设计文档
 
+- [MMD-AR文字口型预览](design/mmd-ar-lipsync.md)
+
+- [正式显示端 MPL 动作与表情](design/mmd-display-mpl.md)
+
+- [正式显示端 PMX 表情控制](design/mmd-display-expressions.md)
+
 - [独立MMD-AR手动表情面板](design/mmd-ar-expressions.md)
 
 - [独立 MMD-AR MPL 动作输入](design/mmd-ar-mpl.md)

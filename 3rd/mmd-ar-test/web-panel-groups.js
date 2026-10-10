@@ -830,6 +830,7 @@ function groupWebPanels($) {
     motionPanel.append(PHYSICS_SOLVER.SOLVER_PANEL_HTML);
     const motionGroups = [MOTION_GROUPS[0]];
     if ($('#mmdArExpressionPanel').length) motionGroups.push(['表情', ['mmdArExpressionPanel']]);
+    if ($('#mmdArLipSyncPanel').length) motionGroups.push(['口型', ['mmdArLipSyncPanel']]);
     if ($('#mmdArMplPanel').length) motionGroups.push(['MPL 动作', ['mmdArMplPanel']]);
     motionGroups.push(...MOTION_GROUPS.slice(1));
     groupPanel($, motionPanel, 'display-mmd-lighting-header', motionGroups);

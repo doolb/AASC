@@ -1042,6 +1042,10 @@ class GeometryBuilder {
 		geometry.morphTargetsRelative = false;
 
 		geometry.userData.MMD = {
+            // 保存表情简表供显示端控制，保留真实名称与索引，不复制完整顶点数据。
+            morphs: data.morphs.map( morph => ( { name: morph.name, englishName: morph.englishName || '',
+                type: morph.type, panel: morph.panel, supported: morph.elementCount > 0 && ( morph.type === 1
+                    || ( morph.type === 0 && morph.elements.every( element => data.morphs[ element.index ]?.type === 1 ) ) ) } ) ),
 			bones: bones,
 			iks: iks,
 			grants: grants,

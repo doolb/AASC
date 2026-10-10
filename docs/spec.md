@@ -1,5 +1,11 @@
 # Web MediaCenter - 项目实现文档
 
+- [MMD-AR文字口型实现](spec/mmd-ar-lipsync.md)
+
+- [正式显示端 MPL 实现](spec/mmd-display-mpl.md)
+
+- [正式显示端表情实现](spec/mmd-display-expressions.md)
+
 - [独立MMD-AR手动表情实现](spec/mmd-ar-expressions.md)
 
 - [独立 MMD-AR MPL 编译播放](spec/mmd-ar-mpl.md)
