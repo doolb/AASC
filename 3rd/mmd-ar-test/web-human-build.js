@@ -16,7 +16,8 @@ async function stageRuntime(root, { webMode = false } = {}) {
     const start = controller.indexOf('    function setTransient('), end = controller.indexOf('    function setAutomatic(', start);
     if (start < 0 || end < 0) throw new Error('Human构建缺少共享Morph通道');
     const human = controller.slice(start, end).replace('function setTransient(', 'function setHuman(')
-        .replace('transient = next;', 'human = next;').replaceAll('口型', 'Human');
+        .replace('transient = next;', 'human = next;').replaceAll('口型', 'Human')
+        .replace('        onTransientChanged?.();', '        // Human在当前渲染帧内合成，不再次排队渲染；外部操作自行唤醒。');
     controller = controller.slice(0, end) + human + controller.slice(end);
     controller = once(controller, '        setAutomatic,', '        setAutomatic,\n        setHuman,');
     controller = once(controller, 'automatic.clear(); selected.clear();', 'automatic.clear(); human.clear(); selected.clear();');
@@ -28,6 +29,9 @@ async function stageRuntime(root, { webMode = false } = {}) {
         + '        getHelper: () => helper.current, getProfile: () => currentProfile, manualExpressions,\n'
         + '        startRendering: () => startRendering() });\n    const physicsGate =');
     runtime = once(runtime, '        manualExpressions.before(frameHelper);', '        human.before(delta, frameHelper);\n        manualExpressions.before(frameHelper);');
+    // 物理/表情回调可能在帧内唤醒渲染，帧末复用已排队的帧，保持单一RAF循环。
+    runtime = once(runtime, '        shadowMapPreview.update(now);\n        frameHandle = requestAnimationFrame(renderFrame);',
+        '        shadowMapPreview.update(now);\n        if (!frameHandle) frameHandle = requestAnimationFrame(renderFrame);');
     runtime = once(runtime, '        manualExpressions.dispose();', '        human.dispose();\n        manualExpressions.dispose();');
     runtime = once(runtime, 'manualExpressions.setAutomatic(token, weights)', "human.setExpressionWeights('reply', token, weights)");
     runtime = once(runtime, 'manualExpressions.setTransient(token, weights)', 'human.mouth.setWeights(token, weights)');

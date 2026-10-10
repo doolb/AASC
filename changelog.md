@@ -1,3 +1,11 @@
+### 独立 MMD-AR：Human重复排帧高占用修复
+
+- ✅ [2026-10-10] 修复Human接入后CPU/GPU高占用的一处原因：renderFrame开始清空frameHandle，帧内setHuman触发onTransientChanged/startRendering排队下一帧，帧末又无条件排一帧，导致多条RAF循环重复计算动画、物理、阴影和画面。
+  - web-human-build生成的setHuman不再在帧内触发唤醒；外部命令仍负责启动渲染，口型外部唤醒保留。生成renderFrame帧末仅在frameHandle为空时续帧，复用帧内其他回调已排队的帧。
+  - npm run build:web:mmd-ar-test重建成功；1源码/3生成模块语法、35处依赖指纹、Human无帧内唤醒/帧末RAF去重/口型外部唤醒及差异空白静态检查通过。未运行功能测试或CPU/GPU实测，需刷新设备观察占用。
+  - 更新Human设计/spec/task与todo待设备性能验收，正式源码和Offline状态保持；仅提交本次代码/文档并推送origion/master，未发布外网，保留并行的Native AudioRecord等未提交改动。
+
+
 ### 独立 MMD-AR：PMX 初始化失败修复
 
 - ✅ [2026-10-10] 修复Human接入后“PMX运行时不可用”：web-human-build注入的Human构造参数直接读取后面才声明的const startRendering，触发初始化阶段暂时性死区错误；改为startRendering: () => startRendering()，延迟执行。

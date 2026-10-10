@@ -82,6 +82,10 @@ Morph:
   回复自动表情作为priority50贡献；不覆盖更高优先MPL/反射
   帧前恢复Morph基线，物理前/帧末应用，共用setHuman通道
   自有层更新不清空TAA历史，不重置物理
+  帧内setHuman只合成Morph，不调用onTransientChanged/startRendering
+renderFrame结束:
+  若frameHandle为空才requestAnimationFrame，已由其他回调排队则复用
+  startRendering仍保留可见性/已有帧判断；外部操作负责唤醒渲染
 lifecycle:
   模型/基础VMD/helper变化、编辑、后台、隐藏显示和离页取消旧请求
   所有异步结果校验generation/Abort/基础动作/helper/前台状态

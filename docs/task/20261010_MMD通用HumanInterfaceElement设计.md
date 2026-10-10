@@ -33,3 +33,7 @@ npm run build:web:mmd-ar-test成功；19源码/17生成模块语法、57处依�
 ## PMX初始化失败修复
 
 用户反馈PMX运行时不可用。生成runtime在第439行创建Human时直接传入第817行才初始化的const startRendering，导致暂时性死区异常；构建改成延迟回调。顺带修正本地VMD加载器manager/URL签名。重建web-dist，2源码/4生成模块语法、45处指纹与调用签名/差异空白检查通过；未运行功能测试，实际浏览器加载待验收，未发布外网。
+
+## CPU/GPU高占用与startRendering说明
+
+startRendering只负责在可见且没有frameHandle时请求下一帧。新增Human帧内setHuman回调会在frameHandle已清空时再次排帧，原帧末又无条件排帧，产生重复RAF循环。修复为Human内部合成不唤醒、帧末有已有帧则复用。重建web-dist并完成1源码/3生成模块语法、35处指纹及RAF/唤醒静态检查；未运行功能或性能测试，实际CPU/GPU变化待刷新设备观察。
