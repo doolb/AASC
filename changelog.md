@@ -1,5 +1,8 @@
 ### 正式显示端面板与聊天
 
+- ✅ [2026-10-10] 正式端修复服务包code-v57.zip构建完成，源提交d2b72842，16937454字节，SHA-256 e1080872da7d6a3250b9a360accbb99021b2e3260eb185e89ce522a15ea22454。
+  - 931文件与完整运行资源快照一致、CRC/RSA/组件校验通过；仅排除另行修改的voice-display-node/config.json，工作区原文件保持。servicePackage=false，minApk=true/dependenciesPackage=false保持，内外网发布验证进行中。
+
 - ✅ [2026-10-10] 正式端灯光/动作/定位入口移到右下角，面板从顶部显示并覆盖顶部文字/普通弹窗；修复聊天首次打开内容为空。
   - display-mmd.css、display-stage.js、display-chat.js、server-app.js、ai-roles-ws-handler.js：权威会话后范围历史、每次展开查询、请求序列丢弃迟到、流式节点保留和重连快照。横竖屏四向旋转、安全区/键盘及顶层验证通过；9文件32项定向通过、零跳过，新增9项。
   - 同步design/spec/task/todo/usage/self-test，servicePackage=true，服务包待构建发布；既有MMD迁移测试基线另记，设备现场验收待完成。
