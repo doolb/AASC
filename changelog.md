@@ -1,5 +1,10 @@
 ### 正式显示端面板与聊天
 
+- ✅ [2026-10-10] 用户最新布局调整与聊天首次显示修复完成最终发布code58。
+  - code-v58.zip（16,937,493字节，SHA-256 fe9ec07e287beef054023f49d509b2b30101f3c8fa2c38c76201deedb2771e93）已发布LAN/WAN；全部组件HTTP大小/SHA-256及RSA验证通过，清单字节一致，两端代码目录仅code-v58.zip，精确清理无错误。源提交7139b266，dependencies6/min34/种子39/dataRepair2复用，servicePackage=false、minApk=true/dependenciesPackage=false保持。
+  - 入口直接贴右下安全边距，所有面板在右侧按钮左边、底部对齐从下向上显示并保持最高交互层；移除右下常驻角色状态，加载进度及上方失败提示保留。5文件20/20、零跳过；扩展MMD12项失败与基线一致，无新增失败。
+  - 同步design/spec/task/usage/self-test/todo，已完成开发/发布任务移除，仅保留Android设备验收；代码与状态上传origion/master，用户日志、模型、本机配置、原生中间文件及独立MMD发布记录保持。
+
 - ✅ [2026-10-10] 最新布局code-v58.zip构建完成，源提交7139b266，16937493字节，SHA-256 fe9ec07e287beef054023f49d509b2b30101f3c8fa2c38c76201deedb2771e93。
   - 931文件CRC、资源完整性、快照字节、RSA与组件校验通过，仅排除另行修改的Node本机配置；servicePackage=false，minApk=true/dependenciesPackage=false保持。内外网发布验证进行中。
 

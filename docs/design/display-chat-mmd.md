@@ -418,8 +418,10 @@ MMD 交互画布支持桌面和触屏的角色摆放操作，正式显示端与�
 
 服务包code-v57.zip（16,937,454字节，SHA-256 e1080872da7d6a3250b9a360accbb99021b2e3260eb185e89ce522a15ea22454）已发布LAN/WAN；签名及全部组件HTTP大小/SHA-256验证通过，两端清单字节一致、代码目录均仅保留code-v57.zip，精确清理无错误。源提交d2b72842，dependencies6/min34/种子39/dataRepair2复用；servicePackage=false，minApk=true/dependenciesPackage=false保持。
 
-## 2026-10-10 布局修正（已实现，code58待发布）
+## 2026-10-10 布局修正（已实现并发布code58）
 
 用户将方案进一步明确为：右下常驻角色加载状态移除，灯光组贴右下安全边距，不再额外上移避让下方；所有设置面板放在按钮左侧，从下向上显示，保持最高交互层。横竖屏共用底部锚点，宽度为右侧入口留出空间。独立加载进度条保留，失败提示仅在上方出现。
 
 code58的5文件20项定向通过、零跳过，新增布局断言含三字“定位中”入口宽度、底部对齐、面板位于入口左侧、常驻状态隐藏及上方失败提示。MMD扩大回归38通过/12项既有失败，与改动前基线一致。
+
+code-v58.zip（16,937,493字节，SHA-256 fe9ec07e287beef054023f49d509b2b30101f3c8fa2c38c76201deedb2771e93）已发布LAN/WAN；全部组件HTTP大小/SHA-256及RSA验证通过，清单字节一致，两端代码目录仅code-v58.zip，精确清理无错误。源提交7139b266，dependencies6/min34/种子39/dataRepair2复用，servicePackage=false、minApk=true/dependenciesPackage=false保持。 Android现场验收待完成。

@@ -1376,10 +1376,10 @@ setChatSession(session):
 
 新增定义
   历史请求范围 = 模式、目标、会话标识
-  灯光组底边 = 逻辑安全底边 + 键盘避让 + 底部按钮高度及间距
+  灯光组底边 = max(12px, 逻辑安全底边) + 键盘底边避让
 
 操作流程
-  灯光组定位到逻辑右下角底部按钮上方
+  灯光组定位到逻辑右下安全边距
   面板放在入口组左侧，从下向上显示，允许覆盖顶部文字；限制可用高度并内部滚动
   聊天从关闭变为展开
     恢复隐藏期间保存的选择（如有）
@@ -1420,7 +1420,7 @@ setChatSession(session):
 
 验证：9文件32项定向通过、零跳过，旧MMD夹具失败与HEAD基线相同（12项），无新增失败。服务包code-v57.zip（16,937,454字节，SHA-256 e1080872da7d6a3250b9a360accbb99021b2e3260eb185e89ce522a15ea22454）已发布LAN/WAN；签名及全部组件HTTP大小/SHA-256验证通过，两端清单字节一致、代码目录均仅保留code-v57.zip，精确清理无错误。源提交d2b72842，dependencies6/min34/种子39/dataRepair2复用；servicePackage=false，minApk=true/dependenciesPackage=false保持。 Android现场验收待完成。
 
-## 2026-10-10 入口贴底与面板从下向上（已实现code58，待发布）
+## 2026-10-10 入口贴底与面板从下向上（已实现并发布code58）
 
 ```text
 右下入口 bottom = max(12px, 逻辑安全底边) + 键盘底边
@@ -1437,3 +1437,5 @@ setChatSession(session):
 浏览器断言改为面板底部与入口底部对齐，右边在入口左边8px之外
   四向旋转、短屏、键盘、安全区、圆钮与下方按钮、最上层命中一并验证
 ```
+
+最新布局5文件20项通过、零跳过；code-v58.zip（16,937,493字节，SHA-256 fe9ec07e287beef054023f49d509b2b30101f3c8fa2c38c76201deedb2771e93）已发布LAN/WAN；全部组件HTTP大小/SHA-256及RSA验证通过，清单字节一致，两端代码目录仅code-v58.zip，精确清理无错误。源提交7139b266，dependencies6/min34/种子39/dataRepair2复用，servicePackage=false、minApk=true/dependenciesPackage=false保持。
