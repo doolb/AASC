@@ -70,6 +70,34 @@ createRepairModeState():
         使用动态角色列表选择 repairMode.role
 ```
 
+## 显示端 ASR 回显最大时长
+
+```text
+voiceAsrResultHideTimer = null
+voiceAsrResultExpired = false
+
+收到非空 voice.asr-result:
+    清除旧 voiceAsrResultHideTimer
+    voiceAsrResultExpired = false
+    显示识别文本
+    启动 30000ms 定时器
+
+定时器到期:
+    voiceAsrResultExpired = true
+    隐藏 ASR 回显元素
+    保留最近识别文本状态，避免布局刷新重新显示过期文本
+
+收到空 voice.asr-result:
+    清除定时器
+    清除过期状态
+    隐藏 ASR 回显元素
+
+窗口旋转或尺寸变化:
+    只重新计算文本布局
+    不重新启动最大显示时长计时器
+
+```
+
 ## 服务端状态与控制
 
 ```text

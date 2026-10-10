@@ -57,6 +57,27 @@ displayList:
     result 或 error 后删除 session、清理超时
 ```
 
+## Native PCM 频谱监视图
+
+```text
+NativePcmAudioCapture.feedPcm16(base64, sampleRate):
+    解码 PCM16 为归一化 samples
+    计算 latestRms，继续供 VAD 使用
+    将 samples 写入 spectrumSamples 环形窗口
+    若窗口达到 FFT_SIZE:
+        对窗口乘 Hann 窗
+        执行 FFT，计算正频率幅值
+        将频率 bin 按对数频段合并为 latestSpectrum
+        对频段幅值执行噪声门限、平滑和 0..255 映射
+
+drawNativeMonitor(elapsed):
+    latestLevelAt 未超时 -> 平滑读取 latestSpectrum 的每个频段
+    latestLevelAt 超时 -> 频谱整体衰减
+    每个显示柱读取对应频段高度，不复用同一个 barHeight
+```
+
+Native AudioRecord 仍只回传 PCM16；频谱计算在 JavaScript 采集器中完成，RMS 与频谱使用同一批样本，避免改变录音、VAD、WAV 和 ASR 数据流。
+
 ## 显示端录音模式
 
 ```text

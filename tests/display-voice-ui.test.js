@@ -13,6 +13,10 @@ const displayStageCss = fs.readFileSync(
     'src/apps/web-mediacenter/ui/public/css/display-mmd.css',
     'utf8'
 );
+const voiceControls = fs.readFileSync(
+    'src/apps/web-mediacenter/ui/public/js/display-voice-controls.js',
+    'utf8'
+);
 
 assert.match(displayHtml, /<script src="js\/chat-markdown\.js"><\/script>/u, '显示端应加载安全 Markdown 渲染器');
 const voiceResponseStart = displayHtml.indexOf('function showVoiceResponsePopup');
@@ -92,6 +96,9 @@ assert.match(displayHtml, /element\.style\.transform = 'rotate\(270deg\)'/);
 assert.match(displayHtml, /const VOICE_MONITOR_WIDTH\s*=\s*140/);
 assert.match(displayHtml, /monitorWrapper\.style\.width\s*=\s*`\$\{VOICE_MONITOR_WIDTH\}px`/);
 assert.match(displayHtml, /voiceStatusRow[\s\S]*?voiceTextDisplay[\s\S]*?element\.style\.top\s*=\s*offset/);
+assert.match(voiceControls, /let asrResultHideTimer = null/u);
+assert.match(voiceControls, /root\.setTimeout\(\(\) => \{[\s\S]*?refs\.asr\.hidden = true;[\s\S]*?\}, 30000\)/u);
+assert.match(voiceControls, /stage\.resize[\s\S]*?renderAsrResult\(runtime\.snapshot\(\)\.asrText \|\| '', false\)/u);
 
 const monitorStart = displayHtml.indexOf('function drawMonitor');
 const monitorEnd = displayHtml.indexOf('function sendCanvasSize', monitorStart);

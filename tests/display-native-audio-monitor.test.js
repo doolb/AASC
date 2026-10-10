@@ -57,8 +57,7 @@ test('原生 AudioRecord 无 AnalyserNode 时，柱高随真实 PCM 音量变化
     assert.ok(quietHeight > 5 && quietHeight < 20);
     h.feed(0.2);
     for (let time = 700; time <= 1100; time += 100) h.frame(time);
-    assert.ok(h.bars[0] > quietHeight * 2);
-    assert.ok(h.bars.every(height => height === h.bars[0]), '原生 RMS 柱表达统一音量');
+    assert.ok(h.bars.some(height => height > 20), '原生 PCM 频谱应显示有效信号');
     assert.equal(h.context2d.globalAlpha, 1);
     assert.equal(h.frames, 12, '初始化及每帧均只请求一次动画');
 });
@@ -71,7 +70,7 @@ test('原生信号过期后衰减，暂停恢复和停止清除旧音量', () =>
     const activeHeight = h.bars[0];
     h.setNow(10501);
     for (let time = 300; time <= 1200; time += 100) h.frame(time);
-    assert.ok(h.bars[0] < activeHeight / 10);
+    assert.ok(h.bars[0] <= 8, '过期 Native 频谱应衰减到待机柱');
     h.setNow(11000);
     h.feed(0.5);
     h.capture.setPaused(true);
@@ -86,7 +85,7 @@ test('原生信号过期后衰减，暂停恢复和停止清除旧音量', () =>
     assert.equal(h.bars[0], 1, '恢复但未收到新信号时不能显示旧柱高');
     h.feed(0.5);
     h.frame(1500);
-    assert.ok(h.bars[0] > 20);
+    assert.ok(h.bars.some(height => height > 20));
     h.capture.stop();
     assert.equal(h.capture.latestRms, 0);
     assert.equal(h.capture.latestLevelAt, 0);

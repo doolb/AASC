@@ -1461,6 +1461,7 @@
         let monitorDataArray = null;
         let monitorLastFrameAt = 0;
         let monitorNativeLevel = 0;
+        let monitorNativeSpectrumLevels = null;
         const VOICE_MONITOR_WIDTH = 140;
 
         const monitorCanvas = document.getElementById('mini-monitor');
@@ -1499,20 +1500,28 @@
         }
 
         function drawNativeMonitor(elapsed) {
-            // 原生 AudioRecord 没有浏览器频谱节点；已有 PCM RMS 表示真实音量。
-            // 500ms 无分块时衰减到零，平方根映射让轻声也能看见，不改变 VAD 原值。
             const fresh = pcmCapture.latestLevelAt > 0 && Date.now() - pcmCapture.latestLevelAt <= 500;
             const rms = fresh && Number.isFinite(pcmCapture.latestRms)
                 ? Math.max(pcmCapture.latestRms, 0) : 0;
             const target = Math.min(Math.sqrt(rms) * 2, 1);
             const timeConstant = target > monitorNativeLevel ? 0.04 : 0.18;
             monitorNativeLevel += (target - monitorNativeLevel) * (1 - Math.exp(-elapsed / timeConstant));
+            const spectrum = pcmCapture.latestSpectrum;
+            if (!monitorNativeSpectrumLevels || monitorNativeSpectrumLevels.length !== spectrum.length) {
+                monitorNativeSpectrumLevels = new Float32Array(spectrum.length);
+            }
             monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
             monitorCtx.fillStyle = '#00f2ff';
-            monitorCtx.globalAlpha = 0.5 + monitorNativeLevel * 0.5;
-            // 每根柱均表达同一个实时音量，避免把单值 RMS 伪装成不同频段。
-            const barHeight = Math.max(1, monitorNativeLevel * monitorCanvas.height);
             for (let i = 0; i < monitorCanvas.width; i += 4) {
+                const bandIndex = Math.min(spectrum.length - 1, Math.floor(i / monitorCanvas.width * spectrum.length));
+                const bandTarget = fresh ? (spectrum[bandIndex] || 0) / 255 : 0;
+                const bandLevel = monitorNativeSpectrumLevels[bandIndex];
+                const bandTimeConstant = bandTarget > bandLevel ? 0.04 : 0.18;
+                monitorNativeSpectrumLevels[bandIndex] += (bandTarget - bandLevel)
+                    * (1 - Math.exp(-elapsed / bandTimeConstant));
+                const motionFloor = 1;
+                const barHeight = Math.max(motionFloor, monitorNativeSpectrumLevels[bandIndex] * monitorCanvas.height);
+                monitorCtx.globalAlpha = 0.5 + monitorNativeSpectrumLevels[bandIndex] * 0.5;
                 monitorCtx.fillRect(i, monitorCanvas.height - barHeight, 3, barHeight);
             }
             monitorCtx.globalAlpha = 1;

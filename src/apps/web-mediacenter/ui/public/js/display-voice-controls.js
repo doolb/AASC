@@ -7,6 +7,8 @@
     let getStageState = null;
     let pendingId = null;
     let pendingTimer = null;
+    let asrResultHideTimer = null;
+    let asrResultExpired = false;
     let initialized = false;
     let refs = {};
 
@@ -28,7 +30,7 @@
         // 状态和实时数字在同一背景内分别更新，避免覆盖数字节点或重复播报RMS。
         if (refs.statusText && refs.statusText.textContent !== label) refs.statusText.textContent = label;
         renderVad(snapshot);
-        renderAsrResult(snapshot.asrText || '');
+        renderAsrResult(snapshot.asrText || '', false);
         if (refs.button) {
             refs.button.dataset.state = status;
             refs.button.setAttribute('aria-label', `${label}，${snapshot.continuous ? '打断播报' : snapshot.manual ? '结束录音并识别' : '开始一次语音输入'}`);
@@ -61,11 +63,24 @@
         if (refs.vad.textContent !== value) refs.vad.textContent = value;
     }
 
-    function renderAsrResult(text) {
+    function renderAsrResult(text, resetTimer = true) {
         if (!refs.asr) return;
         const value = String(text || '');
+        if (!value) {
+            if (asrResultHideTimer) root.clearTimeout(asrResultHideTimer);
+            asrResultHideTimer = null;
+            asrResultExpired = false;
+        } else if (resetTimer) {
+            if (asrResultHideTimer) root.clearTimeout(asrResultHideTimer);
+            asrResultExpired = false;
+            asrResultHideTimer = root.setTimeout(() => {
+                asrResultExpired = true;
+                asrResultHideTimer = null;
+                refs.asr.hidden = true;
+            }, 30000);
+        }
         if (refs.asr.textContent !== value) refs.asr.textContent = value;
-        refs.asr.hidden = !value;
+        refs.asr.hidden = !value || asrResultExpired;
         const metrics = runtime?.measureAsrText?.(value);
         if (metrics) {
             refs.asr.style.fontSize = `${metrics.fontSize}px`;
@@ -146,8 +161,8 @@
         options.bus.subscribe('server.message', handleServerMessage);
         options.bus.subscribe('voice.runtime', render);
         options.bus.subscribe('voice.vad', () => renderVad());
-        options.bus.subscribe('voice.asr-result', ({ text }) => renderAsrResult(text));
-        options.bus.subscribe('stage.resize', () => renderAsrResult(runtime.snapshot().asrText || ''));
+        options.bus.subscribe('voice.asr-result', ({ text }) => renderAsrResult(text, true));
+        options.bus.subscribe('stage.resize', () => renderAsrResult(runtime.snapshot().asrText || '', false));
         options.bus.subscribe('chat.status-name', render);
         options.bus.subscribe('chat.activity', ({ requestId, active }) => {
             if (!requestId) return;

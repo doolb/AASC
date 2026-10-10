@@ -201,6 +201,59 @@
     // Native AudioRecord 通过 JavaScript bridge 回传 PCM16 分块时使用的采集器。
     // 接口刻意保持与 PcmAudioCapture 的 beginSegment/takeWav/setPaused/stop 一致，
     // 这样 display.html 的 VAD、单次录音和实时录音不需要复制两套业务逻辑。
+    const NATIVE_FFT_SIZE = 256;
+    const NATIVE_SPECTRUM_BANDS = 35;
+    const NATIVE_SPECTRUM_MIN_HZ = 80;
+    const NATIVE_SPECTRUM_MAX_HZ = 7600;
+
+    function calculateNativeSpectrum(samples, sampleRate, bandCount) {
+        const real = new Float32Array(NATIVE_FFT_SIZE);
+        const imaginary = new Float32Array(NATIVE_FFT_SIZE);
+        for (let index = 0; index < NATIVE_FFT_SIZE; index += 1) {
+            const window = 0.5 - 0.5 * Math.cos(2 * Math.PI * index / (NATIVE_FFT_SIZE - 1));
+            real[index] = samples[index] * window;
+        }
+        for (let length = 2; length <= NATIVE_FFT_SIZE; length <<= 1) {
+            const half = length >> 1;
+            const phase = -2 * Math.PI / length;
+            for (let start = 0; start < NATIVE_FFT_SIZE; start += length) {
+                for (let offset = 0; offset < half; offset += 1) {
+                    const angle = phase * offset;
+                    const cosine = Math.cos(angle);
+                    const sine = Math.sin(angle);
+                    const even = start + offset;
+                    const odd = even + half;
+                    const oddReal = real[odd] * cosine - imaginary[odd] * sine;
+                    const oddImaginary = real[odd] * sine + imaginary[odd] * cosine;
+                    real[odd] = real[even] - oddReal;
+                    imaginary[odd] = imaginary[even] - oddImaginary;
+                    real[even] += oddReal;
+                    imaginary[even] += oddImaginary;
+                }
+            }
+        }
+        const magnitudes = new Float32Array(NATIVE_FFT_SIZE / 2);
+        let maximum = 0;
+        for (let index = 1; index < magnitudes.length; index += 1) {
+            const magnitude = Math.sqrt(real[index] ** 2 + imaginary[index] ** 2);
+            magnitudes[index] = magnitude;
+            maximum = Math.max(maximum, magnitude);
+        }
+        const result = new Uint8Array(bandCount);
+        const minLog = Math.log(NATIVE_SPECTRUM_MIN_HZ);
+        const maxLog = Math.log(Math.min(NATIVE_SPECTRUM_MAX_HZ, sampleRate / 2));
+        for (let band = 0; band < bandCount; band += 1) {
+            const startHz = Math.exp(minLog + (maxLog - minLog) * band / bandCount);
+            const endHz = Math.exp(minLog + (maxLog - minLog) * (band + 1) / bandCount);
+            const startBin = Math.max(1, Math.floor(startHz * NATIVE_FFT_SIZE / sampleRate));
+            const endBin = Math.min(magnitudes.length, Math.ceil(endHz * NATIVE_FFT_SIZE / sampleRate));
+            let peak = 0;
+            for (let bin = startBin; bin < endBin; bin += 1) peak = Math.max(peak, magnitudes[bin]);
+            result[band] = maximum > 0 ? Math.min(255, Math.round(Math.sqrt(peak / maximum) * 255)) : 0;
+        }
+        return result;
+    }
+
     class NativePcmAudioCapture {
         constructor(options = {}) {
             this.targetSampleRate = options.targetSampleRate || 16000;
@@ -216,6 +269,9 @@
             this.preRollSampleLimit = 0;
             this.chunks = [];
             this.latestRms = 0;
+            this.latestSpectrum = new Uint8Array(NATIVE_SPECTRUM_BANDS);
+            this.spectrumSamples = new Float32Array(NATIVE_FFT_SIZE);
+            this.spectrumSampleCount = 0;
             this.active = false;
             this.paused = false;
             this.isNative = true;
@@ -232,6 +288,9 @@
             this.preRollSampleCount = 0;
             this.chunks = [];
             this.latestRms = 0;
+            this.latestSpectrum = new Uint8Array(NATIVE_SPECTRUM_BANDS);
+            this.spectrumSamples.fill(0);
+            this.spectrumSampleCount = 0;
             this.paused = false;
             this.active = true;
             this.latestLevelAt = 0;
@@ -257,6 +316,17 @@
             }
             this.sourceSampleRate = sourceRate;
             this.latestRms = Math.sqrt(sumSquares / sampleCount);
+            for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += 1) {
+                this.spectrumSamples[this.spectrumSampleCount] = samples[sampleIndex];
+                this.spectrumSampleCount += 1;
+                if (this.spectrumSampleCount < NATIVE_FFT_SIZE) continue;
+                this.latestSpectrum = calculateNativeSpectrum(
+                    this.spectrumSamples,
+                    this.sourceSampleRate,
+                    NATIVE_SPECTRUM_BANDS
+                );
+                this.spectrumSampleCount = 0;
+            }
             this.latestLevelAt = Date.now();
             if (this.segmentMode && !this.segmentActive) {
                 this.appendPreRoll(samples);
@@ -299,6 +369,9 @@
             this.paused = paused === true;
             // 暂停及恢复都清除旧信号，恢复后必须收到新分块才显示音量。
             this.latestRms = 0;
+            this.latestSpectrum.fill(0);
+            this.spectrumSamples.fill(0);
+            this.spectrumSampleCount = 0;
             this.latestLevelAt = 0;
             this.chunks = [];
             this.preRollChunks = [];
@@ -324,6 +397,9 @@
             this.active = false;
             this.paused = false;
             this.latestRms = 0;
+            this.latestSpectrum.fill(0);
+            this.spectrumSamples.fill(0);
+            this.spectrumSampleCount = 0;
             this.latestLevelAt = 0;
             this.chunks = [];
             this.preRollChunks = [];
