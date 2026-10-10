@@ -1,5 +1,9 @@
 ### 正式显示端面板与聊天
 
+- ✅ [2026-10-10] 正式端面板位置与聊天首次显示修复已完成发布code57。
+  - 服务包code-v57.zip（16,937,454字节，SHA-256 e1080872da7d6a3250b9a360accbb99021b2e3260eb185e89ce522a15ea22454）已发布LAN/WAN；签名及全部组件HTTP大小/SHA-256验证通过，两端清单字节一致、代码目录均仅保留code-v57.zip，精确清理无错误。源提交d2b72842，dependencies6/min34/种子39/dataRepair2复用；servicePackage=false，minApk=true/dependenciesPackage=false保持。
+  - 定向32/32、零跳过；扩大MMD迁移回归中的12项失败与修改前HEAD基线一致，无新增失败。design/spec/task/usage/self-test/todo同步，仅保留设备验收；代码、状态及完成记录上传origion/master，不提交ZIP/APK、日志、模型或无关本机配置。
+
 - ✅ [2026-10-10] 正式端修复服务包code-v57.zip构建完成，源提交d2b72842，16937454字节，SHA-256 e1080872da7d6a3250b9a360accbb99021b2e3260eb185e89ce522a15ea22454。
   - 931文件与完整运行资源快照一致、CRC/RSA/组件校验通过；仅排除另行修改的voice-display-node/config.json，工作区原文件保持。servicePackage=false，minApk=true/dependenciesPackage=false保持，内外网发布验证进行中。
 

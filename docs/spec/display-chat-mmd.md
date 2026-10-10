@@ -1417,3 +1417,5 @@ setChatSession(session):
   展开任何设置面板时舞台 z-index=10001，按钮组 z-index=60，覆盖顶部普通文字及弹窗
   舞台按逻辑高度扣除安全区、键盘及入口占用计算面板最大高度
 ```
+
+验证：9文件32项定向通过、零跳过，旧MMD夹具失败与HEAD基线相同（12项），无新增失败。服务包code-v57.zip（16,937,454字节，SHA-256 e1080872da7d6a3250b9a360accbb99021b2e3260eb185e89ce522a15ea22454）已发布LAN/WAN；签名及全部组件HTTP大小/SHA-256验证通过，两端清单字节一致、代码目录均仅保留code-v57.zip，精确清理无错误。源提交d2b72842，dependencies6/min34/种子39/dataRepair2复用；servicePackage=false，minApk=true/dependenciesPackage=false保持。 Android现场验收待完成。
