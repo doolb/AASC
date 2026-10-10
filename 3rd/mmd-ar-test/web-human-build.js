@@ -25,7 +25,8 @@ async function stageRuntime(root, { webMode = false } = {}) {
     let runtime = await fs.readFile(runtimeFile, 'utf8');
     runtime = "import { createHumanInterfaceElement } from './web-human-interface.mjs';\n" + runtime;
     runtime = once(runtime, '    const physicsGate =', '    const human = createHumanInterfaceElement({ getMesh: () => currentMesh,\n'
-        + '        getHelper: () => helper.current, getProfile: () => currentProfile, manualExpressions, startRendering });\n    const physicsGate =');
+        + '        getHelper: () => helper.current, getProfile: () => currentProfile, manualExpressions,\n'
+        + '        startRendering: () => startRendering() });\n    const physicsGate =');
     runtime = once(runtime, '        manualExpressions.before(frameHelper);', '        human.before(delta, frameHelper);\n        manualExpressions.before(frameHelper);');
     runtime = once(runtime, '        manualExpressions.dispose();', '        human.dispose();\n        manualExpressions.dispose();');
     runtime = once(runtime, 'manualExpressions.setAutomatic(token, weights)', "human.setExpressionWeights('reply', token, weights)");

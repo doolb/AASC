@@ -14,6 +14,8 @@
 
 ~~~text
 createHumanInterfaceElement(runtime):
+  构建注入startRendering: () => startRendering()，延迟到初始化完成后调用
+  不在Human创建点读取尚未声明的const startRendering
   持有model/generation、mixer、physiology、reflex、pending、cache、library
   capabilities读取当前模型绑定；getState读取准备状态/活动层/库/保存错误
 bind(mesh):
@@ -26,6 +28,7 @@ learn.register({actionId,vmd或source,mask,expression,loop}):
   VMD校验header、计数、边界、有限数值、时长；只解析骨骼/Morph
   MPL按需启动固定Worker，最多两组准备请求，30秒超时/Abort取消
   本地文件或已登记本地资源/同源mmd地址读取，不持久化BlobURL
+  已登记本地VMD使用configureLocalLoader({manager},asset)，正确传入加载器manager与资源URL
   保存VMD ArrayBuffer或MPL source为新版本，保留parent与旧版本
 learn.revise(actionId,patch):
   从当前默认版本复制，追加source/mode/mask/start/duration/strength

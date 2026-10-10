@@ -33,7 +33,7 @@ export async function readHumanVmd(asset, signal) {
     if (!local && (url.origin !== location.origin || !url.pathname.toLowerCase().endsWith('.vmd') || url.search || url.hash
         || !/\/mmd\//u.test(url.pathname))) throw new Error('VMD只允许已登记本地资源或同源mmd目录');
     const manager = new THREE.LoadingManager();
-    if (local) configureLocalLoader(manager);
+    if (local) configureLocalLoader({ manager }, asset);
     const response = await fetch(manager.resolveURL(asset), { signal });
     if (!response.ok) throw new Error('读取VMD失败：HTTP ' + response.status);
     if (Number(response.headers.get('content-length')) > 16 * 1024 * 1024) throw new Error('VMD最多16MiB');

@@ -1,3 +1,10 @@
+### 独立 MMD-AR：PMX 初始化失败修复
+
+- ✅ [2026-10-10] 修复Human接入后“PMX运行时不可用”：web-human-build注入的Human构造参数直接读取后面才声明的const startRendering，触发初始化阶段暂时性死区错误；改为startRendering: () => startRendering()，延迟执行。
+  - 同时修正web-human-vmd的本地VMD加载器调用：configureLocalLoader({manager},asset)，传入正确的manager和资源URL，防止登记当前本地动作时访问未解析的虚拟路径。
+  - npm run build:web:mmd-ar-test重建成功；2源码/4生成模块语法、45处依赖内容指纹、初始化回调及本地资源签名静态检查、差异空白检查通过。未运行自动/浏览器功能测试；未发布外网，正式src和Offline状态保持。
+  - 更新Human设计/spec/task与todo待设备验收范围，只提交本次源码/文档并推送origion/master。
+
 ### 独立 MMD-AR：HumanInterfaceElement 与 MPL 后天修正
 
 - ✅ [2026-10-10] 按用户确认实现通用PMX控制层：生理呼吸/眨眼、条件反射、后天VMD/MPL行为与组合表情、低级MPL、原动作覆盖/增量与行为版本保存/切换。
