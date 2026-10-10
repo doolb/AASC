@@ -1,5 +1,30 @@
 # 正式显示端口型实现
 
+## 当前范围修正（2026-10-10，用户确认）
+
+```text
+正式静态目录:
+  保留Morph简表、mmd-expressions控制器和口型UI/player/timeline、拼音资源
+  移除手动表情UI、MPL UI/worker/morphs和MPL编译器JS/WASM/许可证清单
+正式DisplayMmd/runtime:
+  保留getManualExpressions只读模型状态与setLipSyncExpressions临时口型接口
+  移除getMplModelState、setManualExpression、clearManualExpressions调试接口
+display.html:
+  删除表情和MPL面板；口型section仅含现有同步/预览/映射控件
+  口型section不再使用外层原生details/summary
+panelGroups:
+  动作 / 口型 / 物理 / 本地资源为同级分类
+  口型移动原section进标准group body，不复制控件或事件
+  标题共用group-header/toggle样式和aria展开状态
+独立mmd-ar构建:
+  表情UI与MPL三模块来自3rd/mmd-ar-test，固定编译资源仅stage到独立输出
+  在生成副本注入手动表情/MPL快照接口，再计算runtime/display内容指纹
+  表情UI、MPL UI只在WEB_MODE生成副本追加import
+  同一控制器支持独立手动表情及正式TTS临时口型；不重复注入控制器
+```
+
+此前正式手动表情/MPL迁移范围被本节替代；TTS三个消费入口和口型生命周期保持原实现。本轮仅构建及静态语法/资源/导入检查，不新增或运行功能测试，正式更新包待发布。
+
 ## 实现前伪代码
 
 ```text
@@ -51,3 +76,9 @@ assets:
 资源准备与独立web-dist构建成功；13源文件、1段HTML经典脚本、6生成模块语法及口型指纹检查通过，正式/独立各30项拼音资源大小/SHA-256一致，git差异空白检查通过。仅静态检查，不等同实际音频/浏览器功能验收。
 
 Git属性对固定pinyin-pro版本目录禁用文本换行转换，确保检出后的字节仍符合SOURCE.json；此规则只影响归档资源的存储，不改变口型逻辑。
+
+## 本轮隔离修正完成状态
+
+现有npm run build:web:mmd-ar-test已成功重建；9个源码与8个生成模块语法、40处本地依赖指纹、63项固定资源大小/SHA-256、正式调试文件缺失/独立面板与接口存在及同一资源注册表静态检查通过。git差异空白检查通过。未新增或运行自动/浏览器/实际音频播放测试。
+
+正式表情/MPL专用UI和接口/编译资源已移除；独立源码与生成接口/入口已同步。TTS三个消费入口保持，口型分类复用现有分类标题CSS而不新增另一套样式。servicePackage=true，minApk=true/dependenciesPackage=false保持；未构建发布正式服务包/APK，未发布独立外网页面。

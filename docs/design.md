@@ -4,9 +4,9 @@
 
 - [MMD-AR文字口型预览](design/mmd-ar-lipsync.md)
 
-- [正式显示端 MPL 动作与表情](design/mmd-display-mpl.md)
+- [正式显示端 MPL 历史迁移（已撤回调试功能）](design/mmd-display-mpl.md)
 
-- [正式显示端 PMX 表情控制](design/mmd-display-expressions.md)
+- [正式显示端 PMX 表情历史迁移（已撤回调试面板）](design/mmd-display-expressions.md)
 
 - [独立MMD-AR手动表情面板](design/mmd-ar-expressions.md)
 

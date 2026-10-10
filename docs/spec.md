@@ -4,9 +4,9 @@
 
 - [MMD-AR文字口型实现](spec/mmd-ar-lipsync.md)
 
-- [正式显示端 MPL 实现](spec/mmd-display-mpl.md)
+- [正式显示端 MPL 历史实现（调试功能已撤回）](spec/mmd-display-mpl.md)
 
-- [正式显示端表情实现](spec/mmd-display-expressions.md)
+- [正式显示端表情历史实现（仅保留口型底层）](spec/mmd-display-expressions.md)
 
 - [独立MMD-AR手动表情实现](spec/mmd-ar-expressions.md)
 

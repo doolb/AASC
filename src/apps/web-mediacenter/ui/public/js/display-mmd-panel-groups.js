@@ -12,6 +12,7 @@
         ],
         displayMmdMotionPanel: [
             ['动作', ['displayMmdMotionPlayback', 'displayMmdMotionProgress', 'mmdArCameraMotionPlayback', 'mmdArCameraMotionProgress']],
+            ['口型', ['displayMmdLipSyncPanel']],
             ['物理', ['displayMmdPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
             ['本地资源', ['mmdArLocalAssets']]
         ],

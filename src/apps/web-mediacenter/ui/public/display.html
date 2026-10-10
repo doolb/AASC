@@ -205,49 +205,19 @@
                         <span>播放进度 <output id="displayMmdMotionTime">--:-- / --:--</output></span>
                         <progress id="displayMmdMotionProgress" max="1" value="0" aria-label="动作播放进度"></progress>
                     </label>
-                    <section id="displayMmdExpressionPanel" data-mmd-production-only="">
-                        <details>
-                            <summary>表情</summary>
-                            <p class="mind-basic-note">自动读取当前 PMX。点击可叠加，再点取消；拖动强度启用该项。取消或清除后恢复动作自带的表情。</p>
-                            <button type="button" class="display-mmd-ar-action" data-expression-clear disabled>清除手动表情</button>
-                            <div class="mmd-ar-expression-list" data-expression-list></div>
-                            <p class="mind-basic-note" role="status" aria-live="polite">模型加载后自动读取表情。</p>
-                        </details>
-                    </section>
                     <section id="displayMmdLipSyncPanel" data-mmd-production-only="">
-                        <details>
-                            <summary>口型</summary>
-                            <label class="display-mmd-lighting-shadow"><input type="checkbox" data-lipsync-tts checked><span>同步 TTS 口型</span></label>
-                            <label class="display-mmd-lighting-field"><span>文字口型预览</span>
-                                <textarea rows="3" maxlength="800" style="width:100%;box-sizing:border-box;resize:vertical" aria-label="口型预览文字">你好，我是米娅，很高兴见到你。</textarea>
-                            </label>
-                            <div class="display-mmd-ar-actions">
-                                <button type="button" class="display-mmd-ar-action" data-lipsync-play disabled>播放口型</button>
-                                <button type="button" class="display-mmd-ar-action" data-lipsync-stop disabled>停止口型</button>
-                            </div>
-                            <progress max="1" value="0" style="width:100%" aria-label="口型播放进度"></progress>
-                            <p class="mind-basic-note">TTS按音频进度同步，字音节奏为估算；文字预览不发声，最多400字符。口型与角色动作同时播放，停止口型不停止语音。</p>
-                            <details><summary>嘴型映射</summary><div data-lipsync-mapping></div></details>
-                            <p class="mind-basic-note" role="status" aria-live="polite">模型加载后自动匹配嘴型。</p>
-                        </details>
-                    </section>
-                    <section id="displayMmdMplPanel" data-mmd-production-only="">
-                        <details>
-                            <summary>MPL 动作</summary>
-                            <label class="display-mmd-lighting-field" for="displayMmdMplSource"><span>MPL 动作代码</span></label>
-                            <textarea id="displayMmdMplSource" rows="12" maxlength="65536" spellcheck="false" autocapitalize="off"
-                                      style="width:100%;box-sizing:border-box;resize:vertical;background:#171a22;color:#eef2ff;border:1px solid #758bff88;border-radius:6px;padding:8px;font:12px/1.5 monospace"
-                                      aria-describedby="displayMmdMplHint"></textarea>
-                            <div class="display-mmd-ar-actions">
-                                <button type="button" class="display-mmd-ar-action" data-mpl="play">编译并播放</button>
-                                <button type="button" class="display-mmd-ar-action" data-mpl="stop" disabled>停止并恢复原动作</button>
-                                <button type="button" class="display-mmd-ar-action" data-mpl="sample">填入动作＋表情示例</button>
-                                <button type="button" class="display-mmd-ar-action" data-mpl="expression-sample">填入表情示例</button>
-                                <button type="button" class="display-mmd-ar-action" data-mpl="save" disabled>下载 VMD</button>
-                            </div>
-                            <p id="displayMmdMplHint" class="mind-basic-note">粘贴已生成的 MPL，时间为秒、角度为度。pose 内可写 morph "PMX原始表情名" 0.8;，权重0–1，支持纯表情。名称见「表情」，手动选择优先。播放会替换当前动作；骨骼动作需要标准 MMD 骨骼的 PMX。</p>
-                            <p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere">点击编译时才加载编译器；代码不上传服务器。</p>
-                        </details>
+                        <label class="display-mmd-lighting-shadow"><input type="checkbox" data-lipsync-tts checked><span>同步 TTS 口型</span></label>
+                        <label class="display-mmd-lighting-field"><span>文字口型预览</span>
+                            <textarea rows="3" maxlength="800" style="width:100%;box-sizing:border-box;resize:vertical" aria-label="口型预览文字">你好，我是米娅，很高兴见到你。</textarea>
+                        </label>
+                        <div class="display-mmd-ar-actions">
+                            <button type="button" class="display-mmd-ar-action" data-lipsync-play disabled>播放口型</button>
+                            <button type="button" class="display-mmd-ar-action" data-lipsync-stop disabled>停止口型</button>
+                        </div>
+                        <progress max="1" value="0" style="width:100%" aria-label="口型播放进度"></progress>
+                        <p class="mind-basic-note">TTS按音频进度同步，字音节奏为估算；文字预览不发声，最多400字符。口型与角色动作同时播放，停止口型不停止语音。</p>
+                        <details><summary>嘴型映射</summary><div data-lipsync-mapping></div></details>
+                        <p class="mind-basic-note" role="status" aria-live="polite">模型加载后自动匹配嘴型。</p>
                     </section>
                     <label class="display-mmd-lighting-shadow">
                         <input id="displayMmdPhysicsEnabled" type="checkbox" checked>

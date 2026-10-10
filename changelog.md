@@ -1,3 +1,11 @@
+### 正式口型分类与表情/MPL调试隔离
+
+- ✅ [2026-10-10] 按用户确认移除正式显示端的表情/MPL调试面板、专用接口、UI/worker/morphs模块及固定MPL编译器JS/WASM/LICENSE/SOURCE，独立mmd-ar保留对应功能。
+  - 调试UI回迁3rd的web-expressions-ui、web-mpl-ui/worker/morphs；web-expressions-build只向独立生成runtime/display补手动表情和MPL快照，再计算依赖指纹；web-mpl-build从独立源码生成模块，仍与runtime共用同一web-local-assets注册表。删除正式prepare:mmd-mpl，保留prepare:mmd-ar-mpl。
+  - display.html去掉口型外层原生details/summary，display-mmd-panel-groups新增同级口型分类；标题、折叠箭头、透明度、aria状态直接复用动作/物理现有CSS。保留TTS同步/文字预览/映射及底层Morph状态、临时口型层；不改三个实际TTS消费入口或动作/物理循环流程。
+  - 现有npm run build:web:mmd-ar-test已成功重建；9个源码与8个生成模块语法、40处本地依赖指纹、63项固定资源大小/SHA-256、正式调试文件缺失/独立面板与接口存在及同一资源注册表静态检查通过。git差异空白检查通过。未新增或运行自动/浏览器/实际音频播放测试。
+  - servicePackage=true，minApk=true/dependenciesPackage=false保持；正式v61仍为修正前版本，等待后续新包发布。本轮提交修正源码/文档/状态并同步origion/master，不构建发布正式包/APK或独立外网页面，不提交模型/日志/本机配置/生成产物。任务：docs/task/20261010_正式口型分类与调试功能隔离.md。
+
 ### 正式服务包 v61：表情、MPL 与 TTS 口型
 
 - ✅ [2026-10-10] 已提交TTS口型同步源码43b7025f，并发布正式代码包v61至LAN/WAN；同时包含此前通用表情/MPL迁移。

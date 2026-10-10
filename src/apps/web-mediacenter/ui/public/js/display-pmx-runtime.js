@@ -971,20 +971,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         setCameraMotionPlaybackEnabled,
         getCameraMotionProgress,
         clearCameraMotion,
-        // 动作面板只读当前 VMD action；不向外暴露 mixer，也不改变物理状态。
-        getMplModelState: () => {
-            const state = manualExpressions.getState();
-            const dictionary = currentMesh?.morphTargetDictionary || {};
-            return { token: state.token, ready: state.ready,
-                bones: (currentMesh?.skeleton?.bones || []).map(bone => bone.name),
-                morphs: state.items.map(item => ({ name: item.name, type: item.type, panel: item.panel,
-                    supported: item.supported && Object.hasOwn(dictionary, item.name)
-                        && dictionary[item.name] === item.index })) };
-        },
+        // 口型只通过临时Morph层控制，读取当前模型状态，不切换动作或重置物理。
         setLipSyncExpressions: (token, weights) => manualExpressions.setTransient(token, weights),
         getManualExpressions: () => manualExpressions.getState(),
-        setManualExpression: (index, weight) => manualExpressions.set(index, weight),
-        clearManualExpressions: () => manualExpressions.clear(),
+        // 动作面板只读当前 VMD action，不向外暴露 mixer。
         getMotionProgress: () => {
             const action = helper.current?.objects?.get(currentMesh)?.mixer?._actions?.[0];
             const durationSeconds = action?.getClip?.()?.duration;

@@ -1,5 +1,9 @@
 # 正式显示端表情实现
 
+## 当前范围（2026-10-10修正）
+
+用户撤销正式手动表情调试功能。以下迁移记录仅为历史；当前正式无表情面板/UI及set/clear调试接口。PMX元数据、共享Morph控制器与getManualExpressions只读状态保留供TTS口型使用。独立构建从web-expressions-ui源码生成面板模块，在生成runtime/display副本追加手动接口并维护指纹。当前伪代码见mmd-display-lipsync.md「当前范围修正」。
+
 ## 实现前伪代码
 
 ```text

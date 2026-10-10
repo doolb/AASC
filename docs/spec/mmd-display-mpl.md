@@ -1,5 +1,9 @@
 # 正式显示端 MPL 实现
 
+## 当前范围（2026-10-10修正）
+
+用户撤销正式MPL调试功能。以下迁移方案仅为历史；当前正式无MPL面板、UI/worker/morphs、模型快照接口或编译器资源。MPL实现回到3rd/mmd-ar-test，独立WEB_MODE构建才追加入口和getMplModelState快照。共用循环物理连续性保留。当前伪代码见mmd-display-lipsync.md「当前范围修正」。
+
 ## 实现前伪代码
 
 ```text

@@ -1,5 +1,21 @@
 # 独立 MMD-AR：MPL 编译播放实现
 
+## 当前独立构建（2026-10-10修正）
+
+```text
+stage(WEB_MODE):
+  固定编译器JS/WASM/LICENSE/SOURCE仅复制到独立输出
+  copy web-mpl-morphs/worker/ui为输出mmd-mpl-*模块
+  将web-mpl相对依赖替换为生成模块指纹URL
+  parser -> morphs -> worker -> UI依次生成指纹
+  UI web-local-assets使用runtime同一URL和注册表
+  仅独立display生成副本追加MPL UI import
+模型快照在更早的web-expressions stageRuntime中补到生成副本
+正式源码及服务包不包含MPL模块和编译器；prepare:mmd-ar-mpl仅准备校验缓存
+```
+
+本节替代此前正式共享MPL模块方案。
+
 ## 伪代码（实现前同步）
 
 ```text

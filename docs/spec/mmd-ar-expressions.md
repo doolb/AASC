@@ -1,5 +1,19 @@
 # 独立 MMD-AR 手动表情实现
 
+## 当前构建修正（2026-10-10）
+
+```text
+stageRuntime(WEB_MODE):
+  验证正式共享控制器及只读模型状态/临时口型接口
+  生成runtime/display副本在getManualExpressions锚点前注入手动set/clear和MPL快照
+  复制独立web-expressions-ui为输出mmd-expressions-ui
+  追加仅独立的带内容指纹UI动态import
+  后续通用阶段计算runtime和display依赖指纹
+正式源码不加载手动UI、不暴露调试set/clear或MPL快照
+```
+
+本节替代此前共享UI复制方案；共享底层控制器与Loader简表继续复用。
+
 ## 实施前伪代码
 
 ```text
