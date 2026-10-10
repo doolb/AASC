@@ -3,6 +3,9 @@ const WEBSOCKET_RENDER_REFRESH_DIAGNOSTICS_ENABLED = false;
 
 const WebSocketManager = {
     ws: null,
+    // 重启基准属于当前页面实例，不能由其他同源页面的存储写入覆盖。
+    observedServerStartTime: null,
+    serverReloadRequested: false,
     // 临时诊断：统计服务端 displayList 消息，和 DeviceList.render 日志对照刷新来源。
     _displayListDebug: {
         windowStartedAt: 0,
@@ -45,19 +48,26 @@ const WebSocketManager = {
         };
     },
     
+    handleServerStartTime(time) {
+        if (!['number', 'string'].includes(typeof time)) return;
+        const timestamp = Number(time);
+        if (!Number.isFinite(timestamp) || timestamp <= 0) return;
+        const nextTime = String(timestamp);
+        const previousTime = this.observedServerStartTime;
+        this.observedServerStartTime = nextTime;
+        // 首次连接只建立基准；刷新后的新页面不会再读取旧存储而循环刷新。
+        if (previousTime === null || previousTime === nextTime || this.serverReloadRequested) return;
+        this.serverReloadRequested = true;
+        location.reload();
+    },
+
     handleMessage(data) {
         if (data.type === 'ttsAudioCacheConfig') {
             window.TtsAudioCacheSettings?.handleConfig(data);
             return;
         }
         if (data.type === 'serverStartTime') {
-            const storedTime = localStorage.getItem('serverStartTime');
-            if (storedTime && storedTime !== String(data.time)) {
-                localStorage.setItem('serverStartTime', data.time);
-                location.reload();
-            } else {
-                localStorage.setItem('serverStartTime', data.time);
-            }
+            this.handleServerStartTime(data.time);
             return;
         }
         

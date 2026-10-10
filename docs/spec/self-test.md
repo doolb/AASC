@@ -1119,3 +1119,19 @@ Chromium媒体DOM+正式函数 → 图片/视频/音频/HTML/文本都隐藏，�
 ```
 
 新增 tests/floating-media-clear.test.js 7项；12文件103/103通过、零跳过。使用现有npm test对应的node:test机制，因没有定向script，直接node --test --test-concurrency=1运行相关文件；服务包待发布、Android实际验收待完成。
+
+
+## Offline双页热更新刷新隔离自测（2026-10-10）
+
+```text
+正式控制handleMessage + 显示connectWebSocket/socket.onmessage → 首连分别建立基准
+共享存储、显示先/控制先、旧页更新共享标记 → 两页分别reload一次
+同源多个控制页 → 分别reload一次
+同时间/数字字符串/重复/正在刷新后再来新时间 → 不重复导航
+新页面加载 → 首连不刷新；下一次服务重启仍刷新
+旧共享键及聊天对象 → 原值保留；拒绝全部存储访问 → 仍能处理消息和刷新
+无效/非有限/非正时间 → 忽略，不污染基准
+Chromium同源正式页面DOM + 正式模块 → 两页实际重新导航，控制页取得清空媒体按钮
+```
+
+新增tests/offline-page-reload.test.js 10项，与清空媒体、文本/列表恢复、聊天对象恢复和显示语音生命周期合计15文件119/119、零跳过；正式JS语法通过。旧tests/chat-tts-interruption.test.js 3项中1项仍依赖已移除的displayChatTtsStop，未修改HEAD也同样失败，保留该基线问题。设备当前安装版本尚未取得，未冒充Android实际更新验收。

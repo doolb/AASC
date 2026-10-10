@@ -98,3 +98,25 @@ MainActivity.kt:
 - `tests/chat-think-filter.test.js` 验证 `think`/`answer` 阶段随句子传递。
 - `tests/chat-tts-interruption.test.js` 验证服务端协议、显示端/控制端队列入口和 Android 前台轮询契约。
 - 旧版不带聊天字段的消息仍使用原有全局 TTS 队列；本次新增字段不改变普通媒体和报时消息。
+
+
+## Offline 双页重启刷新隔离（2026-10-10，已实现）
+
+```text
+已有声明：WebSocketManager.handleMessage/serverStartTime分支、display页面重启消息分支
+新增定义：各页面实例 observedServerStartTime = 空、serverReloadRequested = 否
+接收serverStartTime：
+    非数字/数字字符串，或非有限正数 → 忽略
+    规范化时间为数字字符串
+    首次消息 → 本页内存记录时间，不刷新
+    时间相同，或本页已经请求刷新 → 返回
+    时间改变 → 先更新本页时间、标记已请求刷新 → location.reload一次
+页面重新加载 → 创建新的空基准；首次连接正常建立基准，不循环刷新
+同源双页/多个控制页 → 内存互不共享；任意重连顺序均各自刷新
+兼容旧共享键 → 不再读取或写入localStorage.serverStartTime，保留该键及其他用户数据
+存储禁用/读写异常 → 本流程不依赖存储，不阻断重启消息
+```
+
+页面加载后第一条消息作为基准，因为此时页面已从服务端重新取得；不使用持久化旧时间触发首连刷新，避免存储写入失败后无限reload。页面仍在旧服务上但从未成功连接过的极端情况无法通过重启时间判断，需要实际重载页面；不扩展原生更新协议。已确认修复已连接两页的竞态，设备实际安装版本/IP仍待确认。
+
+代码映射：websocket.js的WebSocketManager保存observedServerStartTime/serverReloadRequested，handleMessage委托handleServerStartTime；display.html具有同名页面变量与函数，正式socket.onmessage委托处理。tests/offline-page-reload.test.js执行正式函数与实际浏览器刷新，15文件119/119通过。旧聊天按钮契约检查HEAD同样失败，不影响本轮重启流程。

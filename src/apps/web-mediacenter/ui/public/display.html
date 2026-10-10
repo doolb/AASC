@@ -5691,6 +5691,23 @@
             }
         }
 
+        // 每个显示页独立记录服务重启时间，避免控制页先更新共享存储后掩盖重启。
+        let observedServerStartTime = null;
+        let serverReloadRequested = false;
+
+        function handleServerStartTime(time) {
+            if (!['number', 'string'].includes(typeof time)) return;
+            const timestamp = Number(time);
+            if (!Number.isFinite(timestamp) || timestamp <= 0) return;
+            const nextTime = String(timestamp);
+            const previousTime = observedServerStartTime;
+            observedServerStartTime = nextTime;
+            // 新加载页面首连只初始化；同一旧页面在重启后最多请求一次刷新。
+            if (previousTime === null || previousTime === nextTime || serverReloadRequested) return;
+            serverReloadRequested = true;
+            location.reload();
+        }
+
         function clearDisplayReconnectTimer() {
             if (displayReconnectTimer === null) return;
             clearTimeout(displayReconnectTimer);
@@ -5766,13 +5783,7 @@
                     if (window.DisplayStage && window.DisplayStage.handleServerMessage(data)) return;
 
                     if (data.type === 'serverStartTime') {
-                        const storedTime = localStorage.getItem('serverStartTime');
-                        if (storedTime && storedTime !== String(data.time)) {
-                            localStorage.setItem('serverStartTime', data.time);
-                            location.reload();
-                        } else {
-                            localStorage.setItem('serverStartTime', data.time);
-                        }
+                        handleServerStartTime(data.time);
                         return;
                     }
 

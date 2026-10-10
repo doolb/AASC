@@ -1,7 +1,19 @@
+### Offline双页热更新刷新隔离
+
+- ✅ [2026-10-10] 修复同源显示页与控制页共享重启时间导致仅一页刷新、控制页保留旧快捷面板的问题。
+  - websocket.js/display.html各自维护内存重启基准与单次刷新标记，首连只记录；旧共享记录保留但不读取，多个控制页及存储异常不影响判断。仅网页服务代码，servicePackage=true，已有minApk/dependenciesPackage保持。
+  - 新增offline-page-reload.test.js 10项，Chromium实际双页导航后获得清空按钮；15文件119/119、无跳过，JS语法通过。旧聊天按钮契约1项在HEAD也失败，未改无关功能；Android现场未验收。同步design/spec/task/todo/self-test/usage，待构建发布。
+
 ### MMD-AR MPL表情与循环连续性提交
 
 - ✅ [2026-10-10] 按用户要求将已发布的MPL Morph解析/同VMD播放导出、动态动作＋表情示例及关闭循环物理reset的代码和对应文档纳入本次Git提交。
   - 此前web-dist构建/语法与两次外网文件校验通过；本次只整理提交范围，不运行测试、重新构建或发布，未推送。其他工作区变更保持。
+
+### Offline更新后快捷面板未刷新排查
+
+- 📋 [2026-10-10] 用户反馈Offline没有出现「清空媒体」，确认LAN/WAN清单仍为v59且已发布ZIP包含按钮，实际设备版本/IP待回复。
+  - 只读执行正式websocket.js/display.html重启分支，复现共享localStorage.serverStartTime使双页任一顺序仅一页reload；原生控制WebView重复展开保留旧DOM，禁用HTTP缓存仍不能刷新存量页面。
+  - 记录页面实例基准/恢复标记隔离的候选方案和design/spec/task/todo，待用户确认后修改源码。未操作ADB普通APK，未修改功能代码/产物状态，未构建发布。
 
 ### MMD-AR动作循环保持物理连续
 
