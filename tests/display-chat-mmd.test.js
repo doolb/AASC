@@ -61,7 +61,9 @@ test('灯光按钮位于右下角并提供默认主光源的阴影来源选择',
     const lighting = readPublic('js/display-mmd-lighting.js');
     assert.match(html, /id="displayMmdShadowSource"[\s\S]*value="none"[\s\S]*value="key" selected[\s\S]*value="fill"/u);
     assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*bottom:\s*calc\(/u);
-    assert.match(css, /var\(--display-keyboard-inset-bottom\)\s*\+\s*58px/u);
+    const control = css.match(/\.display-stage-lighting-control\s*\{([^}]+)\}/u)?.[1];
+    assert.match(control, /var\(--display-keyboard-inset-bottom\)/u);
+    assert.doesNotMatch(control, /58px/u);
     assert.match(lighting, /shadowSource/u);
 });
 

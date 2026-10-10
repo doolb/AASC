@@ -132,7 +132,7 @@ test('首次展开、会话恢复和迟到历史使用真实聊天与舞台模�
     assert.deepEqual(errors, []);
 });
 
-test('灯光组在逻辑右下角，四向旋转和键盘下的面板均不越界', {
+test('灯光组贴右下角，面板左侧向上展开且四向旋转和键盘下不越界', {
     skip: !fs.existsSync(chrome), timeout: 45000
 }, async (context) => {
     const browser = await puppeteer.launch({ executablePath: chrome, headless: true,
@@ -145,8 +145,14 @@ test('灯光组在逻辑右下角，四向旋转和键盘下的面板均不越�
     await page.setContent($.html());
     await page.addScriptTag({ path: path.join(publicDir, 'js/display-stage.js') });
     await page.addScriptTag({ path: path.join(publicDir, 'js/display-mmd-panel-groups.js') });
+    await page.evaluate(() => { document.getElementById('displayArTargetToggle').textContent = '定位中'; });
     for (const viewport of [{ width: 390, height: 740 }, { width: 840, height: 390 }]) {
         await page.setViewport(viewport);
+        // resize 是异步浏览器事件；先等真实舞台尺寸更新，避免把旧视口当作新视口校验。
+        await page.waitForFunction(({ width, height }) => {
+            const geometry = window.DisplayStage.getRotationGeometry();
+            return geometry.viewportWidth === width && geometry.viewportHeight === height;
+        }, {}, viewport);
         for (const rotation of [0, 90, 180, 270]) {
             await page.evaluate((angle) => window.DisplayStage.setRotation(angle), rotation);
             for (const id of ['displayMmdLightingToggle', 'displayMmdMotionToggle', 'displayArTargetToggle']) {
@@ -174,22 +180,26 @@ test('灯光组在逻辑右下角，四向旋转和键盘下的面板均不越�
                     const circle = document.getElementById('displayVoiceAction').getBoundingClientRect();
                     return { center, dimensions, controlWidth: control.offsetWidth, controlHeight: control.offsetHeight,
                         panel: { left: panelRect.left, right: panelRect.right, top: panelRect.top, bottom: panelRect.bottom },
-                        logicalPanelTop: panelCenter.y - panel.offsetHeight / 2,
+                        logicalPanelBottom: panelCenter.y + panel.offsetHeight / 2,
+                        logicalPanelRight: panelCenter.x + panel.offsetWidth / 2,
                         intersectsCircle: rect.right > circle.left && rect.left < circle.right
                             && rect.bottom > circle.top && rect.top < circle.bottom };
                 });
                 assert.ok(Math.abs(geometry.center.x - (geometry.dimensions.logicalWidth - 12 - geometry.controlWidth / 2)) <= 1);
-                assert.ok(Math.abs(geometry.center.y - (geometry.dimensions.logicalHeight - 70 - geometry.controlHeight / 2)) <= 1);
+                assert.ok(Math.abs(geometry.center.y - (geometry.dimensions.logicalHeight - 12 - geometry.controlHeight / 2)) <= 1);
                 assert.equal(geometry.intersectsCircle, false);
-                assert.ok(Math.abs(geometry.logicalPanelTop - 12) <= 1);
+                assert.ok(Math.abs(geometry.logicalPanelBottom - (geometry.dimensions.logicalHeight - 12)) <= 1);
+                assert.ok(geometry.logicalPanelRight <= geometry.center.x - geometry.controlWidth / 2 - 7);
                 assert.ok(geometry.panel.left >= -1 && geometry.panel.right <= viewport.width + 1, JSON.stringify(geometry));
                 assert.ok(geometry.panel.top >= -1 && geometry.panel.bottom <= viewport.height + 1, JSON.stringify(geometry));
             }
         }
     }
     await page.setViewport({ width: 390, height: 740 });
+    await page.evaluate(() => window.DisplayStage.setRotation(0));
+    await page.waitForFunction(() => window.DisplayStage.getRotationGeometry().logicalWidth === 390
+        && window.DisplayStage.getRotationGeometry().logicalHeight === 740);
     await page.evaluate(() => {
-        window.DisplayStage.setRotation(0);
         const stage = document.getElementById('displayStageLayers');
         stage.style.setProperty('--display-safe-inset-top', '18px');
         stage.style.setProperty('--display-safe-inset-right', '24px');
@@ -204,11 +214,33 @@ test('灯光组在逻辑右下角，四向旋转和键盘下的面板均不越�
     const bounds = await page.evaluate(() => {
         const rect = document.querySelector('.display-stage-lighting-control').getBoundingClientRect();
         const panel = document.getElementById('displayMmdLightingPanel').getBoundingClientRect();
-        return { right: rect.right, bottom: rect.bottom, panelTop: panel.top };
+        return { right: rect.right, bottom: rect.bottom, panelTop: panel.top, panelBottom: panel.bottom,
+            panelRight: panel.right, controlLeft: rect.left };
     });
     assert.equal(bounds.right, 366);
-    assert.equal(bounds.bottom, 562);
-    assert.equal(bounds.panelTop, 18);
+    assert.equal(bounds.bottom, 620);
+    assert.equal(bounds.panelBottom, 620);
+    assert.ok(bounds.panelTop >= 18);
+    assert.ok(bounds.panelRight <= bounds.controlLeft - 8);
+    const modelStatus = await page.evaluate(() => {
+        const status = document.getElementById('displayMmdStatus');
+        status.textContent = 'PMX 模型已加载';
+        const normal = getComputedStyle(status).display;
+        status.classList.add('is-error');
+        status.textContent = '角色模型加载失败';
+        const error = getComputedStyle(status).display;
+        const bounds = status.getBoundingClientRect();
+        const top = bounds.top;
+        const height = bounds.height;
+        status.classList.remove('is-error');
+        status.textContent = '';
+        return { normal, error, top, height, loadingProgress: !!document.getElementById('displayMmdLoadingProgress') };
+    });
+    assert.ok(modelStatus.height > 0 && modelStatus.height < 100);
+    assert.equal(modelStatus.normal, 'none');
+    assert.equal(modelStatus.error, 'block');
+    assert.equal(modelStatus.top, 18);
+    assert.equal(modelStatus.loadingProgress, true);
     const topmost = await page.evaluate(() => {
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;pointer-events:auto';

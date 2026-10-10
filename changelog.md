@@ -1,5 +1,8 @@
 ### 正式显示端面板与聊天
 
+- ✅ [2026-10-10] 按用户最新布局指示修正：灯光组贴右下，取消58px下方避让；面板放在入口左侧从下向上展开，保持最高交互层；去除右下常驻角色加载状态。
+  - display-mmd.css、display-stage.js及布局测试同步；保留独立加载进度、上方失败提示和code57聊天修复。5文件20/20、零跳过，扩展MMD38通过/12既有失败，基线一致。servicePackage=true，code58待构建发布，设备待验收。
+
 - ✅ [2026-10-10] 正式端面板位置与聊天首次显示修复已完成发布code57。
   - 服务包code-v57.zip（16,937,454字节，SHA-256 e1080872da7d6a3250b9a360accbb99021b2e3260eb185e89ce522a15ea22454）已发布LAN/WAN；签名及全部组件HTTP大小/SHA-256验证通过，两端清单字节一致、代码目录均仅保留code-v57.zip，精确清理无错误。源提交d2b72842，dependencies6/min34/种子39/dataRepair2复用；servicePackage=false，minApk=true/dependenciesPackage=false保持。
   - 定向32/32、零跳过；扩大MMD迁移回归中的12项失败与修改前HEAD基线一致，无新增失败。design/spec/task/usage/self-test/todo同步，仅保留设备验收；代码、状态及完成记录上传origion/master，不提交ZIP/APK、日志、模型或无关本机配置。

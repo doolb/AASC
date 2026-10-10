@@ -322,12 +322,9 @@
             refs.stage.style.setProperty('--display-viewport-height', `${height}px`);
             refs.stage.style.setProperty('--display-stage-width', `${logicalWidth}px`);
             refs.stage.style.setProperty('--display-stage-height', `${logicalHeight}px`);
-            const panelWidth = isLandscape
-                ? `min(320px, max(220px, ${Math.round(logicalWidth * 0.38)}px), max(1px, calc(${logicalWidth}px - var(--display-safe-inset-left) - var(--display-safe-inset-right) - 96px)))`
-                : `${Math.min(320, Math.max(1, Math.round(logicalWidth * 0.86)))}px`;
-            const panelMaxHeight = isLandscape
-                ? `min(620px, max(1px, calc(${logicalHeight}px - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - var(--display-keyboard-inset-top) - var(--display-keyboard-inset-bottom) - 82px)))`
-                : `min(620px, max(1px, calc(${logicalHeight}px - var(--display-safe-inset-top) - var(--display-safe-inset-bottom) - var(--display-keyboard-inset-top) - var(--display-keyboard-inset-bottom) - 214px)))`;
+            // 横竖屏都把面板放到右下入口左侧，预留三字入口的宽度与8px间隔。
+            const panelWidth = `min(320px, max(1px, calc(${logicalWidth}px - max(12px, var(--display-safe-inset-left)) - max(12px, var(--display-safe-inset-right)) - var(--display-keyboard-inset-left) - var(--display-keyboard-inset-right) - 84px)))`;
+            const panelMaxHeight = `min(620px, max(1px, calc(${logicalHeight}px - max(12px, var(--display-safe-inset-top)) - max(12px, var(--display-safe-inset-bottom)) - var(--display-keyboard-inset-top) - var(--display-keyboard-inset-bottom))))`;
             refs.stage.style.setProperty('--display-stage-panel-width', panelWidth);
             refs.stage.style.setProperty('--display-stage-panel-max-height', panelMaxHeight);
             refs.stage.style.setProperty('--display-stage-dialog-width', `${Math.min(920, Math.max(1, logicalWidth - 24))}px`);
