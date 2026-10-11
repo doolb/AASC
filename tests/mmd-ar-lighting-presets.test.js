@@ -169,3 +169,70 @@ test('存储访问受限按日光默认处理，兼容旧keyPosition灯光', asy
     memory.set(settingStorageKeys.aoConcavity, 'null');
     assert.equal(hasSavedSettings('aoConcavity', groups, () => storage), false);
 });
+
+
+test('旧库补入内置一次，保持选择，刷新覆盖/删除不复活且导出不含安装标记', async () => {
+    const { api, groups, storage, memory, library, settings } = await fixture();
+    library.save('已有灯光', settings);
+    const selected = library.state().selectedId;
+    const old = JSON.parse(memory.get(api.storageKey)); delete old.installedBundles;
+    memory.set(api.storageKey, JSON.stringify(old)); library.load();
+    const text = JSON.stringify({ format: api.format, version: api.version,
+        presets: [{ id: 'evening', name: '傍晚', settings }] });
+    assert.equal(library.installBundle('evening-v1', text), 1);
+    assert.equal(library.state().selectedId, selected);
+    assert.equal(library.installBundle('evening-v1', text), 0);
+    const edited = { ...settings, lighting: { ...settings.lighting, amount: 7 } };
+    library.overwrite('evening', '傍晚修改', edited);
+    const refreshed = api.createPresetLibrary({ groups, storage }); refreshed.load();
+    assert.equal(refreshed.installBundle('evening-v1', text), 0);
+    assert.equal(refreshed.state().presets[1].settings.lighting.amount, 7);
+    assert.equal(JSON.parse(refreshed.exportText()).installedBundles, undefined);
+    refreshed.remove('evening');
+    const deleted = api.createPresetLibrary({ groups, storage }); deleted.load();
+    assert.equal(deleted.installBundle('evening-v1', text), 0);
+    assert.equal(deleted.state().presets.length, 1);
+});
+
+test('内置相同来源ID保留用户版本，同名不同ID沿用合并重命名', async () => {
+    const { api, library, settings } = await fixture();
+    library.save('傍晚', settings);
+    const before = library.state();
+    const file = { format: api.format, version: api.version,
+        presets: [{ id: before.selectedId, name: '傍晚', settings: { ...settings, lighting: { amount: 8 } } }] };
+    assert.equal(library.installBundle('same-id', JSON.stringify(file)), 0);
+    assert.deepEqual(library.state(), before);
+    file.presets[0].id = 'another-id';
+    assert.equal(library.installBundle('new-id', JSON.stringify(file)), 1);
+    assert.equal(library.state().presets[1].name, '傍晚（导入1）');
+    assert.deepEqual(library.state().presets[0], before.presets[0]);
+});
+
+test('内置补入记录与标记一起保存，失败/坏文件不改变库且可重试', async () => {
+    const { api, storage, memory, library, settings } = await fixture();
+    library.save('保留', settings);
+    const before = library.state(), stored = memory.get(api.storageKey);
+    const file = { format: api.format, version: api.version, presets: [{ id: 'evening', name: '傍晚', settings }] };
+    const setter = storage.setItem;
+    storage.setItem = () => { throw new Error('quota'); };
+    assert.throws(() => library.installBundle('evening-v1', JSON.stringify(file)), /保存失败/u);
+    assert.deepEqual(library.state(), before); assert.equal(memory.get(api.storageKey), stored);
+    storage.setItem = setter;
+    const bad = { ...file, presets: [...file.presets, { name: '坏', settings: { render: { amount: [] } } }] };
+    assert.throws(() => library.installBundle('evening-v1', JSON.stringify(bad)));
+    assert.deepEqual(library.state(), before); assert.equal(memory.get(api.storageKey), stored);
+    assert.equal(library.installBundle('evening-v1', JSON.stringify(file)), 1);
+    assert.deepEqual(JSON.parse(memory.get(api.storageKey)).installedBundles, ['evening-v1']);
+});
+
+test('满库不补入也不写安装标记，释放容量后成功补入', async () => {
+    const { api, memory, library, settings } = await fixture();
+    for (let index = 0; index < 100; index += 1) library.save('已有' + index, settings);
+    const before = library.state(), stored = memory.get(api.storageKey);
+    const text = JSON.stringify({ format: api.format, version: api.version, presets: [{ id: 'evening', name: '傍晚', settings }] });
+    assert.throws(() => library.installBundle('evening-v1', text), /100/u);
+    assert.deepEqual(library.state(), before); assert.equal(memory.get(api.storageKey), stored);
+    library.remove(before.presets[0].id);
+    assert.equal(library.installBundle('evening-v1', text), 1);
+    assert.equal(library.state().presets.length, 100);
+});

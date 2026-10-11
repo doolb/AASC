@@ -25,7 +25,7 @@ test('预设所有操作统一归入可折叠分类，旧亮度选项不再生�
 });
 
 test('真实网页完整灯光预设保存/刷新/文件往返与跨设备限制，保持动作物理定位', {
-    skip: !chrome || !fs.existsSync(path.join(root, 'index.html')), timeout: 180000
+    skip: !chrome || !fs.existsSync(path.join(root, 'index.html')), timeout: 240000
 }, async () => {
     const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'mmd-lighting-presets-'));
     const server = http.createServer((request, response) => {
@@ -48,6 +48,7 @@ test('真实网页完整灯光预设保存/刷新/文件往返与跨设备限制
         const fresh = await freshContext.newPage();
         const freshErrors = []; fresh.on('pageerror', error => freshErrors.push(error.message));
         const defaultSettings = JSON.parse(fs.readFileSync(path.join(__dirname, '../3rd/mmd-ar-test/web-lighting-default-preset.json'), 'utf8')).presets[0].settings;
+        const builtin = JSON.parse(fs.readFileSync(path.join(__dirname, '../3rd/mmd-ar-test/web-lighting-builtin-presets.json'), 'utf8')).presets[0];
         const freshUrl = `http://127.0.0.1:${server.address().port}/mnt/mmd-ar/`;
         const ready = () => fresh.waitForFunction(() => document.querySelector('[data-preset-status]')?.textContent.length > 0
             && document.querySelector('[data-preset-status]')?.dataset.error !== 'true');
@@ -55,8 +56,25 @@ test('真实网页完整灯光预设保存/刷新/文件往返与跨设备限制
             .map(([name, adapter]) => [name, adapter.read()])));
         await fresh.goto(freshUrl, { waitUntil: 'domcontentloaded' }); await ready();
         assert.deepEqual(await freshRead(), defaultSettings, '无存储首次使用完整日光默认');
-        assert.equal(await fresh.$eval('#displayMmdLightingPreset', node => node.options.length), 1, '默认不会创建命名记录');
+        assert.equal(await fresh.$eval('#displayMmdLightingPreset', node => node.options.length), 2, '首次只补入傍晚，默认日光不创建命名记录');
         await fresh.click('#displayMmdLightingToggle');
+        await fresh.select('#displayMmdLightingPreset', builtin.id);
+        assert.deepEqual(await freshRead(), builtin.settings, '选择傍晚完整十组等于源文件');
+        await fresh.evaluate(() => {
+            const group = window.MmdArLightingPresetGroups.lighting;
+            group.apply({ ...group.read(), keyIntensity: 1.9 });
+        });
+        await fresh.click('[data-preset-action="overwrite"]');
+        await fresh.reload({ waitUntil: 'domcontentloaded' }); await ready();
+        assert.equal((await freshRead()).lighting.keyIntensity, 1.9, '内置覆盖后刷新不还原');
+        assert.equal(await fresh.$eval('#displayMmdLightingPreset', node => [...node.options].filter(option => option.textContent === '傍晚').length), 1);
+        await fresh.click('#displayMmdLightingToggle');
+        await fresh.click('[data-preset-action="delete"]');
+        await fresh.reload({ waitUntil: 'domcontentloaded' }); await ready();
+        assert.equal(await fresh.$eval('#displayMmdLightingPreset', node => node.options.length), 1, '删除内置后刷新不复活');
+        await fresh.click('#displayMmdLightingToggle');
+        await fresh.click('#displayMmdLightingReset');
+        assert.deepEqual(await freshRead(), defaultSettings, '傍晚不改变日光恢复默认');
         await fresh.$eval('[data-preset-name]', node => { node.value = '保留的日光'; });
         await fresh.click('[data-preset-action="save"]');
         const savedPresets = await fresh.evaluate(() => JSON.parse(localStorage.getItem('aasc.mmdArTest.lightingPresets.v1')).presets);
@@ -90,6 +108,7 @@ test('真实网页完整灯光预设保存/刷新/文件往返与跨设备限制
                 sessionStorage.setItem('preset-test-seeded', '1');
                 localStorage.setItem('aasc.display.mmdLighting.v1', JSON.stringify({ ambientIntensity: 1.2, physicsFps: 65 }));
                 localStorage.setItem('aasc.mmdArTest.physicsEnabled.v1', 'false');
+                localStorage.setItem('aasc.mmdArTest.lightingPresets.v1', JSON.stringify({ format: 'aasc.mmd-ar.lighting-presets', version: 1, presets: [], selectedId: '' }));
             }
         });
         const url = `http://127.0.0.1:${server.address().port}/mnt/mmd-ar/`;
@@ -164,12 +183,12 @@ test('真实网页完整灯光预设保存/刷新/文件往返与跨设备限制
         await fileInput.uploadFile(badFile);
         await page.waitForFunction(() => document.querySelector('[data-preset-status]').dataset.error === 'true');
         assert.deepEqual(await read(), settings);
-        assert.equal(await page.$eval('#displayMmdLightingPreset', node => node.options.length), 2);
+        assert.equal(await page.$eval('#displayMmdLightingPreset', node => node.options.length), 3);
         await fileInput.uploadFile(singleFile);
         await page.waitForFunction(() => document.querySelector('[data-preset-status]').textContent.includes('已导入1'));
         assert.deepEqual(await read(), settings, '导入不能自动应用或改变场景');
-        const importedId = await page.$eval('#displayMmdLightingPreset', node => node.options[2].value);
-        assert.match(await page.$eval('#displayMmdLightingPreset', node => node.options[2].textContent), /导入1/u);
+        const importedId = await page.$eval('#displayMmdLightingPreset', node => node.options[3].value);
+        assert.match(await page.$eval('#displayMmdLightingPreset', node => node.options[3].textContent), /导入1/u);
         await page.click('#displayMmdLightingReset');
         await page.select('#displayMmdLightingPreset', importedId);
         assert.deepEqual(await read(), settings, '文件往返后全部分组恢复');
@@ -195,8 +214,10 @@ test('真实网页完整灯光预设保存/刷新/文件往返与跨设备限制
         const allFile = path.join(folder, 'mmd-ar-lighting-presets.json');
         for (let retry = 0; retry < 30 && !fs.existsSync(allFile); retry += 1) await new Promise(resolve => setTimeout(resolve, 100));
         const all = JSON.parse(fs.readFileSync(allFile, 'utf8'));
-        assert.equal(all.presets.length, 2);
-        assert.equal(all.presets[1].settings.shadowMap.size, 2048);
+        assert.equal(all.presets.length, 3);
+        assert.deepEqual(all.presets.find(record => record.id === builtin.id).settings, builtin.settings);
+        assert.equal(all.installedBundles, undefined);
+        assert.equal(all.presets[2].settings.shadowMap.size, 2048);
         await page.$eval('[data-preset-name]', field => { field.value = '覆盖后的灯光'; });
         await page.click('[data-preset-action="overwrite"]');
         await page.waitForFunction(() => document.querySelector('[data-preset-status]').textContent.includes('已覆盖'));

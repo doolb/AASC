@@ -1,3 +1,10 @@
+### MMD-AR傍晚灯光预设
+
+- ✅ [2026-10-11] 把用户mmd-ar-lighting-presets.json中的完整“傍晚”加入灯光预设列表，支持选择十组应用、覆盖、删除及导出；首次补入后刷新不重复，保留用户修改/删除结果，日光默认保持。
+  - 新增web-lighting-builtin-presets.json（3028字节，仅傍晚，内容与原记录一致）；修改web-lighting-preset-library.mjs、web-lighting-presets-build.js、web-lighting-presets.mjs。原v1本地库增加installedBundles，记录/标记原子保存，旧库兼容，安装元数据不写标准JSON导出。
+  - 扩展数据及真实网页测试，最终37/37通过；满库/存储失败可重试、同ID/重名保留、十组选择/刷新/文件导出通过；npm网页构建、6项生成导入指纹、原记录/日光默认SHA与语法/diff检查通过。
+  - 更新design/spec/task/todo/usage/self-test；本地web-dist已生成，未发布外网，正式显示端/APK与Offline状态保持。手机观感/性能待设备验收。
+
 ### MMD-AR日光默认设置
 
 - ✅ [2026-10-11] 默认灯光采用用户/mnt/mmd-ar-lighting-preset.json唯一“日光”完整十组；首次无有效保存分组采用日光，已有保存值优先，“恢复默认”完整应用并刷新保持，命名预设库保留。

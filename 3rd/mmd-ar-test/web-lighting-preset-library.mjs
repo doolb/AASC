@@ -68,15 +68,17 @@ export function parsePresetFile(text, groups) {
 export function createPresetLibrary({ storage, groups, createId = createPresetId }) {
     let presets = [];
     let selectedId = '';
+    let installedBundles = [];
     const state = () => ({ presets: clone(presets), selectedId });
-    const commit = (next, selected = selectedId) => {
+    const commit = (next, selected = selectedId, bundles = installedBundles) => {
         if (next.length > maxPresets) throw new Error('最多保存100个灯光预设');
-        const record = { format, version, presets: next, selectedId: selected };
+        const record = { format, version, presets: next, selectedId: selected, installedBundles: bundles };
         const text = JSON.stringify(record);
         if (new TextEncoder().encode(text).byteLength > maxFileBytes) throw new Error('预设库不能超过256 KiB');
         // 先持久化，再替换内存；配额或权限错误时保留原库和选中记录。
         try { storage.setItem(storageKey, text); } catch (error) { throw new Error('保存失败：浏览器本地存储不可用或空间不足'); }
         presets = clone(next); selectedId = selected;
+        installedBundles = [...bundles];
         return state();
     };
     const uniqueId = (used) => {
@@ -93,9 +95,31 @@ export function createPresetLibrary({ storage, groups, createId = createPresetId
             if (!record.id || record.id === 'custom' || ids.has(record.id) || names.has(record.name)) throw new Error('本地预设库含无效或重复记录');
             ids.add(record.id); names.add(record.name);
         }
-        const savedSelection = JSON.parse(text).selectedId;
+        const saved = JSON.parse(text);
+        const bundles = saved.installedBundles ?? [];
+        if (!Array.isArray(bundles) || bundles.some(id => typeof id !== 'string' || !id || id.length > 64)) {
+            throw new Error('本地预设库安装标记无效');
+        }
+        const savedSelection = saved.selectedId;
         presets = loaded; selectedId = ids.has(savedSelection) ? savedSelection : '';
+        installedBundles = [...new Set(bundles)];
         return state();
+    };
+    // 文件导入和内置补入共用重名规则；内置同ID记录保留用户已修改的版本。
+    const mergeRecords = (incoming, preserveIds = false) => {
+        const next = clone(presets), ids = new Set(next.map(record => record.id)), names = new Set(next.map(record => record.name));
+        for (const record of incoming) {
+            if (preserveIds && ids.has(record.id)) continue;
+            const base = record.name;
+            let suffix = 1, name = base;
+            while (names.has(name)) {
+                const ending = `（导入${suffix++}）`;
+                name = base.slice(0, 64 - ending.length) + ending;
+            }
+            const id = record.id && record.id !== 'custom' && !ids.has(record.id) ? record.id : uniqueId(ids);
+            next.push({ ...record, id, name }); ids.add(id); names.add(name);
+        }
+        return next;
     };
     return Object.freeze({ state, load,
         save(name, settings) {
@@ -122,19 +146,19 @@ export function createPresetLibrary({ storage, groups, createId = createPresetId
         importText(text) {
             const incoming = parsePresetFile(text, groups);
             if (!incoming.length) throw new Error('文件中没有灯光预设');
-            const next = clone(presets), ids = new Set(next.map(record => record.id)), names = new Set(next.map(record => record.name));
-            for (const record of incoming) {
-                const base = record.name;
-                let suffix = 1, name = base;
-                while (names.has(name)) {
-                    const ending = `（导入${suffix++}）`;
-                    name = base.slice(0, 64 - ending.length) + ending;
-                }
-                const id = record.id && record.id !== 'custom' && !ids.has(record.id) ? record.id : uniqueId(ids);
-                next.push({ ...record, id, name }); ids.add(id); names.add(name);
-            }
-            commit(next);
+            commit(mergeRecords(incoming));
             return incoming.length;
+        },
+        installBundle(bundleId, text) {
+            const key = normalizeName(bundleId);
+            if (installedBundles.includes(key)) return 0;
+            const incoming = parsePresetFile(text, groups);
+            if (!incoming.length) throw new Error('内置文件中没有灯光预设');
+            const next = mergeRecords(incoming, true);
+            const count = next.length - presets.length;
+            // 标记和记录同时落盘；失败时下次仍可重试，删除后也不会再次补入。
+            commit(next, selectedId, [...installedBundles, key]);
+            return count;
         },
         exportText(id = '') {
             const records = id ? presets.filter(record => record.id === id) : presets;

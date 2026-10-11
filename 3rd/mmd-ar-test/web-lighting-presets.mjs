@@ -1,5 +1,6 @@
 import { createPresetLibrary, groupNames, normalizeSettings, maxFileBytes } from './web-lighting-preset-library.mjs';
 import defaultPreset from './web-lighting-default-preset.mjs';
+import builtinPresets from './web-lighting-builtin-presets.mjs';
 import { applyLightingDefaults } from './web-lighting-defaults.mjs';
 // 与材质运行时使用相同内容指纹，确保UI读写的是同一个高光模块实例。
 import './web-specular.mjs';
@@ -21,6 +22,7 @@ export function initLightingPresets() {
         applyLightingDefaults(defaultPreset, groups, { onlyUnsaved: true });
         library = createPresetLibrary({ storage: localStorage, groups });
         library.load();
+        library.installBundle('mmd-ar.evening.v1', JSON.stringify(builtinPresets));
     } catch (error) {
         report(error.message, true);
         if (!library) { for (const button of Object.values(actions)) button.disabled = true; return; }

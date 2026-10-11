@@ -40,3 +40,13 @@
 已修改web-lighting-presets-build.js与web-lighting-presets.mjs，新增web-lighting-default-preset.json与web-lighting-defaults.mjs；扩展tests/mmd-ar-lighting-presets.test.js和tests/mmd-ar-lighting-presets-browser.test.js。已同步spec/task/todo/changelog/usage/self-test。验收首次无存储、已有保存值优先、十组恢复默认后逐字段相等/刷新保留、预设库保持以及跨设备降档；用npm run build:web:mmd-ar-test构建。用户回复“是”后先更新spec，再实施；全部自测与构建通过，尚未发布。
 
 33项定向检查全部通过（10项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；真实Chromium/SwiftShader验证全新上下文十组日光逐字段相等、保存值优先、坏JSON/null组回日光、完整复位/命名库保持/刷新一致，以及原文件往返与设备降档。npm run build:web:mmd-ar-test成功；5项生成模块导入SHA指纹、默认源与原文件SHA一致、模块语法及git diff --check通过。 本地web-dist已生成，未发布外网；正式/APK及Offline状态保持。
+
+## 加入文件中的傍晚预设（2026-10-11，已实现并验证）
+
+用户要求把mmd-ar-lighting-presets.json中的“傍晚”也加入。已读取/mnt/mmd-ar-lighting-presets.json：5976字节，format=aasc.mmd-ar.lighting-presets/version=1，包含日光与傍晚；傍晚ID为light-53b485ece99511aa361e06f00130b6b2，十组齐全。文件SHA-256：75d0e29fb617e424a87f4f96acd5a7207f0f927d8dc488deef529e83e4c6d6e1.
+
+实现：把唯一“傍晚”记录保存到仓库web-lighting-builtin-presets.json，经独立WEB构建嵌入预设模块；初始化现有库后一次性补入，已有浏览器也可看到，选择后完整应用十组。内置来源只负责首次补入，加入后沿用已有保存/覆盖/删除/导入导出功能。持久化安装标记防止刷新重复添加或用户删除后自动复活；已存在相同来源ID时保留当前记录，同名不同ID按既有合并规则生成名称，不覆盖用户记录。新增列表记录不自动切换场景，日光默认与恢复默认入口继续沿用当前配置。
+
+该文件的日光环境光/主光均为1.25，当前默认是1/2.85；本次明确只提取傍晚，不顺带更新日光默认。傍晚环境光1，主光#fec086/1.6、经度58/纬度46，第一边缘光0.2；其余所有字段按傍晚记录保留并沿用设备能力限制。
+
+受影响文件：新增3rd/mmd-ar-test/web-lighting-builtin-presets.json；修改web-lighting-presets-build.js、web-lighting-presets.mjs与web-lighting-preset-library.mjs，构建复用现有默认源结构校验辅助模块；扩展现有数据及真实网页自测。同步spec/task/todo/changelog，实施后更新usage/self-test。验证首次/已有库补入、选择后十组一致、刷新不重复、已有修改/删除保持、同名/ID兼容及JSON导出包含傍晚；用npm run build:web:mmd-ar-test构建。用户回复“是”后先更新spec再修改代码/预设数据；37项定向自测全部通过（14项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；Chromium/SwiftShader验证首次补入、选择傍晚十组逐字段一致、覆盖后刷新保持、删除后刷新不复活、日光复位/刷新与原文件往返、导出全部包含完整傍晚且不含安装标记。npm run build:web:mmd-ar-test成功；6项生成导入指纹、傍晚与原记录深比较、日光默认SHA保持、模块语法及git diff --check通过。 本地web-dist已生成，未发布。

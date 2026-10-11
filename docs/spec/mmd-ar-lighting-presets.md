@@ -88,3 +88,41 @@
 ```
 
 验证：33项定向检查全部通过（10项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；真实Chromium/SwiftShader验证全新上下文十组日光逐字段相等、保存值优先、坏JSON/null组回日光、完整复位/命名库保持/刷新一致，以及原文件往返与设备降档。npm run build:web:mmd-ar-test成功；5项生成模块导入SHA指纹、默认源与原文件SHA一致、模块语法及git diff --check通过。
+
+## 傍晚内置记录（2026-10-11，已实现并验证）
+
+```text
+已有声明：PresetLibrary、预设JSON校验/合并、十组normalize/read/apply、日光默认入口
+新增定义：BundledPresetFile := 用户文件中唯一傍晚记录的版本化副本
+新增定义：InstalledBundles := 库持久化中的内置来源安装标记集合
+新增定义：傍晚来源标识 := mmd-ar.evening.v1
+入口：PresetLibrary.installBundle → 复用合并逻辑，记录与安装标记同次原子存储
+兼容外部JSON格式不变，state仍只暴露presets/selectedId
+构建WEB → 读取BundledPresetFile → 校验格式/版本/记录与十组结构 → 指纹化数据模块
+初始化 → 加载原预设库 → 判断傍晚来源是否已安装
+  已安装 → 保留原库，覆盖/删除后的记录不复活
+  未安装 → 纯校验全部源记录 → 合并缺失记录，已有相同ID保留
+    同名不同ID → 沿用原合并重命名规则
+    持久化合并记录与安装标记成功 → 更新内存与列表
+    超100条/256KiB或存储失败 → 保留原库/选择/场景并提示
+补入列表 → 不自动应用，不改变日光默认和当前设置
+选择傍晚 → 规范化十组 → 既有各组apply → 同步控件并保存当前设置
+刷新 → 安装标记及当前设置恢复，不重复补入
+导出 → 沿用格式version=1，包含傍晚记录，不输出库安装元数据
+兼容旧库 → 缺安装标记视为尚未安装，保持原记录与选中ID
+自测 → 新/旧库补入 → 标记刷新 → 覆盖/删除保持 → 来源ID/同名 → 十组选择与文件往返
+```
+
+日光默认仍取web-lighting-default-preset.json；本次不从批量文件替换日光值。纯独立WEB范围，正式/APK及Offline状态保持。
+
+
+```text
+实际入口 := createPresetLibrary.installBundle(bundleId, text)
+持久化 := 原v1库记录 + installedBundles；state/标准导出接口不增加安装元数据
+mergeRecords := importText和installBundle共用；install保留已有ID，import仍重新分配冲突ID
+构建 := web-lighting-presets-build.stage → 复用唯一记录/十组校验 + 验证傍晚名称/ID
+  写入web-lighting-builtin-presets.mjs → UI带内容SHA引用
+界面 := 原库load后安装mmd-ar.evening.v1 → 原列表选择/覆盖/删除/导出入口
+```
+
+验证：37项定向自测全部通过（14项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；Chromium/SwiftShader验证首次补入、选择傍晚十组逐字段一致、覆盖后刷新保持、删除后刷新不复活、日光复位/刷新与原文件往返、导出全部包含完整傍晚且不含安装标记。npm run build:web:mmd-ar-test成功；6项生成导入指纹、傍晚与原记录深比较、日光默认SHA保持、模块语法及git diff --check通过。

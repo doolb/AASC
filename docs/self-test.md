@@ -1,5 +1,12 @@
 # 自测功能文档
 
+## MMD-AR傍晚灯光预设（2026-10-11）
+
+37项定向自测全部通过（14项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；Chromium/SwiftShader验证首次补入、选择傍晚十组逐字段一致、覆盖后刷新保持、删除后刷新不复活、日光复位/刷新与原文件往返、导出全部包含完整傍晚且不含安装标记。npm run build:web:mmd-ar-test成功；6项生成导入指纹、傍晚与原记录深比较、日光默认SHA保持、模块语法及git diff --check通过。
+
+命令：`node --test --test-concurrency=1 tests/mmd-ar-lighting-presets.test.js tests/mmd-ar-lighting-presets-browser.test.js tests/mmd-ar-screen-lighting.test.js tests/mmd-ar-temporal-aa.test.js`。新库和无安装标记旧库兼容；补入不改变选择/场景，存储失败/坏文件/满100条无局部修改且可重试；同来源ID保留用户版本，同名不同ID生成后缀。安装元数据只用于浏览器内部库，JSON格式仍v1。独立web-dist已构建，未发布外网；手机验收与此前旧面板回归待处理项保持。
+
+
 ## MMD-AR日光默认配置（2026-10-11）
 
 33项定向检查全部通过（10项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；真实Chromium/SwiftShader验证全新上下文十组日光逐字段相等、保存值优先、坏JSON/null组回日光、完整复位/命名库保持/刷新一致，以及原文件往返与设备降档。npm run build:web:mmd-ar-test成功；5项生成模块导入SHA指纹、默认源与原文件SHA一致、模块语法及git diff --check通过。

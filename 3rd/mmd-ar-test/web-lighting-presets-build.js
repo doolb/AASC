@@ -126,6 +126,11 @@ async function stage(root, { webMode } = {}) {
     const helperName = 'web-lighting-defaults.mjs';
     const { parseDefaultPresetFile } = await import(pathToFileURL(path.join(__dirname, helperName)).href);
     const defaultPreset = parseDefaultPresetFile(await fs.readFile(path.join(__dirname, 'web-lighting-default-preset.json'), 'utf8'));
+    const builtinText = await fs.readFile(path.join(__dirname, 'web-lighting-builtin-presets.json'), 'utf8');
+    const builtin = parseDefaultPresetFile(builtinText);
+    if (typeof builtin.id !== 'string' || !builtin.id || builtin.id.length > 128 || builtin.id === 'custom' || builtin.name !== '傍晚') {
+        throw new Error('内置灯光文件需要唯一傍晚记录及有效ID');
+    }
     const folder = path.join(root, 'js');
     const displayPath = path.join(folder, 'display-mmd.js');
     await fs.writeFile(displayPath, once(await fs.readFile(displayPath, 'utf8'), '        DEFAULT_MMD_LIGHTING,',
@@ -137,11 +142,13 @@ async function stage(root, { webMode } = {}) {
     const defaultName = 'web-lighting-default-preset.mjs';
     // 将版本化JSON写成同源模块，浏览器运行不读取机器上的/mnt文件。
     await fs.writeFile(path.join(folder, defaultName), `export default ${JSON.stringify(defaultPreset)};\n`);
+    const builtinName = 'web-lighting-builtin-presets.mjs';
+    await fs.writeFile(path.join(folder, builtinName), `export default ${JSON.stringify(JSON.parse(builtinText))};\n`);
     const dataHash = (await hashFile(path.join(folder, dataName))).sha256.slice(0, 12);
     const helperSource = (await fs.readFile(path.join(__dirname, helperName), 'utf8')).replace(`./${dataName}`, `./${dataName}?v=${dataHash}`);
     await fs.writeFile(path.join(folder, helperName), helperSource);
     let source = await fs.readFile(path.join(__dirname, 'web-lighting-presets.mjs'), 'utf8');
-    for (const name of [dataName, 'web-specular.mjs', helperName, defaultName]) {
+    for (const name of [dataName, 'web-specular.mjs', helperName, defaultName, builtinName]) {
         const hash = (await hashFile(path.join(folder, name))).sha256.slice(0, 12);
         source = source.replace(`./${name}`, `./${name}?v=${hash}`);
     }
