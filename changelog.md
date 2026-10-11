@@ -1,5 +1,20 @@
 ### MMD-AR灯光与动作同步正式包
 
+- ✅ [2026-10-11] 实现AI回答高级动作随TTS两阶段播放：生成请求启动时并行解析/准备，生成成功后同句id关联，实际发声时提交自动层并按音频时钟推进。
+  - 新增chat-tts-actions.js/mmd-tts-actions.mjs；修改server-app.js/agent-chat-tts.js、display.html/display-lipsync-audio.js及Human interface/mixer。准备不接管模型，独立音频时钟/优先级40，16句缓存/32秒等待；暂停/缓冲/恢复、失败/打断/迟到及手动优先，句尾爱心播放窗口与原600ms衔接。原音频/口型/物理继续复用。
+  - npm单元118/118、TTS集成19/19、正式真实PMX/WASM/WAV浏览器1/1（69.5秒），共138项通过；最后时钟修订复核9/9。修复真实启动帧延迟和暂停缓存；独立WEB构建、HTML/模块语法/差异检查通过，无pageerror。旧停止按钮静态夹具基线问题记todo，不声称全仓通过。
+  - 同步design/spec/task/usage/self-test/todo，开发完成待服务包发布/设备验收；servicePackage=true，原minApk=true/dependenciesPackage=false保持。不发布新包或构建APK，生成资源和其他会话改动不提交。
+
+- ✅ [2026-10-11] 根据用户补充细化TTS动作时序：生成请求开始时并行解析/准备动作，音频生成成功后通过同句标识关联，同步播放。
+  - 核查server-app.js/agent-chat-tts.js实际生成入口和display.html生成/音频队列；修订design/spec/task/todo，补充生成期间不接管模型、多句乱序关联及失败释放验收。当前只更新方案文档，尚未修改运行代码或发布资源。
+
+- ✅ [2026-10-11] 按用户纠正将自动高级动作接入方案改为跟随TTS逐句实际音频播放，不以AI回复完成触发。
+  - 核查display.html逐句队列、DisplayLipSyncAudio与mmd-lipsync-player音频时钟及现有回复/Human轨道；记录design/spec/task/todo和音频暂停/缓冲/恢复/去重/打断边界。当前只完成方案分析，等待方案确认，无运行代码、发布状态或产物变更。
+
+- ✅ [2026-10-11] 核查正式AI回复高级动作触发状态：已发布v64含解析/播放模块，聊天chatResponse仍只更新文本和历史，尚未自动调用高级动作解析。
+  - 本地发布manifest与v64 ZIP网页脚本检索确认，mmd-ar-ai-reply/DisplayMmdReplyPreview仅在接收模块定义；手动AI回复预览和显式调用可用，结构化动作计划独立处理。仅更新design/spec/todo/changelog说明，将MMD待发布条目更正为待设备验收，无代码、配置、发布状态或产物变更。
+
+
 - ✅ [2026-10-11] 将统一灯光预设、Human/600ms头部衔接、刚体手部避让、服务器待机/跳舞、28类高级动作/146符号、表情与MPL编辑/预览/下载接入正式显示页。
   - 修改display.html、display-mmd/display-pmx-runtime、mmd-expressions、Three helper；新增mmd-human/reply/mpl/preset模块与纯形状桥接，共享碰撞增加scanPrepared。默认待机仅未指定动作的米娅采用用户35/10/-10；高级点击播放并静默填入源码，无编辑导航。正式TTS保留唯一audio/player与音频时钟。
   - 正式灯光十组JSON与独立互导，保留旧基础灯光/高光/AO边界存储；日光缺省/复位、傍晚补入，全部组注册后初始化。新增prepare-mmd-production与npm prebuild，生成目录mmd-actions.json、mmd/motions/miya-idle.mpl/vmd、miya-default.vmd及固定版本编译器/许可证，摘要校验后随服务包收录，不提交生成资源。

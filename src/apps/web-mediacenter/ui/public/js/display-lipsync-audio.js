@@ -10,9 +10,9 @@
         changed(audio);
     };
     root.DisplayLipSyncAudio = Object.freeze({
-        prepare(audio, text, src) {
+        prepare(audio, text, src, ttsAction = null) {
             if (!audio) return null;
-            const entry = Object.freeze({ sequence: ++sequence, text: String(text || ''), src: String(src || '') });
+            const entry = Object.freeze({ sequence: ++sequence, text: String(text || ''), src: String(src || ''), ttsAction });
             entries.set(audio, entry);
             if (!watched.has(audio)) {
                 watched.add(audio);

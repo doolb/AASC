@@ -6,10 +6,12 @@ export function createHumanMixer() {
     const requests = new Map(), history = new Map(), saved = new Map();
     const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), weighted = new THREE.Quaternion();
     const clamp = value => Math.max(0, Math.min(1, value));
+    // 外部时钟只影响所属轨道；TTS暂停或缓冲时不推进身体动作，其他轨道照常运行。
+    const elapsed = request => Math.max(0, request.clock ? Number(request.clock()) || 0 : clock - request.start);
     function finish(request, reason) {
         requests.delete(request.id);
         history.set(request.id, { id: request.id, owner: request.owner, duration: request.duration,
-            completed: reason === 'ended', reason, time: Math.min(request.duration, clock - request.start), active: false });
+            completed: reason === 'ended', reason, time: Math.min(request.duration, elapsed(request)), active: false });
         if (history.size > 64) history.delete(history.keys().next().value);
     }
     function stop(owner) {
@@ -28,18 +30,19 @@ export function createHumanMixer() {
         restore, stop,
         advance(delta) { clock += Math.max(0, Math.min(0.1, delta)); },
         get clock() { return clock; },
-        start({ owner, layers, duration, loop = false, priority = 50, fade = 0.12 }) {
+        start({ owner, layers, duration, loop = false, priority = 50, fade = 0.12, clock: sourceClock = null }) {
             if (!Number.isFinite(duration) || duration <= 0 || duration > 3600) throw new Error('动作时长需在0–3600秒内');
+            if (sourceClock !== null && typeof sourceClock !== 'function') throw new Error('动作外部时钟必须是函数');
             stop(owner);
             if (requests.size >= 16) throw new Error('并行动作最多16个，请停止部分动作');
             const id = ++serial;
-            requests.set(id, { id, owner, layers, duration, loop, priority, fade, start: clock });
+            requests.set(id, { id, owner, layers, duration, loop, priority, fade, start: clock, clock: sourceClock });
             return { request: id, id, owner, duration };
         },
         state(id) {
             const request = requests.get(id);
             return request ? { id, owner: request.owner, active: true, completed: false,
-                duration: request.duration, time: Math.max(0, clock - request.start), loop: request.loop }
+                duration: request.duration, time: elapsed(request), loop: request.loop }
                 : history.get(id) || { id, active: false, completed: false, reason: 'missing' };
         },
         occupiedEyes(model) {
@@ -81,7 +84,7 @@ export function createHumanMixer() {
                     for (const [index, value] of request.weights) morphs.set(index, value);
                     continue;
                 }
-                let time = clock - request.start;
+                let time = elapsed(request);
                 if (!request.loop && time >= request.duration) { finish(request, 'ended'); continue; }
                 const cycle = request.loop ? Math.floor(time / request.duration) : 0;
                 if (request.loop) time %= request.duration;
@@ -134,7 +137,7 @@ export function createHumanMixer() {
             return morphs;
         },
         snapshot: () => [...requests.values()].map(r => ({ id: r.id, owner: r.owner, duration: r.duration,
-            loop: r.loop, time: clock - r.start, priority: r.priority })),
+            loop: r.loop, time: elapsed(r), priority: r.priority })),
         clear() { stop(); restore(); history.clear(); clock = 0; },
     };
 }

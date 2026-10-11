@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { createOrderedTaskScheduler } = require('../media/ordered-task-scheduler');
 const { isPunctuationOnly } = require('../../../../core/utils/sentence-splitter');
+const { generateChatTtsActions } = require('./chat-tts-actions');
 
 /**
  * 为工作 AI 角色的完整回复生成 TTS，并沿用普通 LLM 的播放目标优先级。
@@ -32,13 +33,25 @@ async function playAgentTts({
     let sentences = splitIntoSentences(message).filter((sentence) => !isPunctuationOnly(sentence));
     if (sentences.length === 0 && message && !isPunctuationOnly(message)) sentences = [message];
     const scheduler = ttsScheduler || createOrderedTaskScheduler({ concurrency: ttsConcurrency });
+    // 准备和播放共用既有动态路由；目标改变时最终音频仍携带完整同句元数据。
+    const deliver = audioMessage => {
+        const resolved = typeof getDisplayIds === 'function' ? getDisplayIds() : displayIds;
+        const targets = Array.isArray(resolved) ? resolved : [];
+        const single = typeof resolveDisplayId === 'function';
+        const target = single ? resolveDisplayId() : null;
+        if (playOnControl) {
+            const { action, ...message } = audioMessage;
+            sendToControl(action === 'playAudio' ? { ...message, type: 'playOnControl' } : audioMessage);
+        }
+        else if (target) sendToDisplay(target, audioMessage, { allowRepairModeTts });
+        else if (!single && targets.length) for (const id of targets) sendToDisplay(id, audioMessage, { allowRepairModeTts });
+        else if (!single && displayId) sendToDisplay(displayId, audioMessage, { allowRepairModeTts });
+    };
 
     const tasks = sentences.map((sentence) => scheduler.enqueue(async () => {
             if (!isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return null;
-            const cleanText = stripMarkdown(sentence);
-            const audioPath = await generateTTS(cleanText);
-            if (audioPath === null) return null;
-            return { audioPath, sentence };
+            return generateChatTtsActions({ sentence, phase: chatTtsPhase, conversationId: chatTtsConversationId,
+                stripMarkdown, generate: generateTTS, send: deliver });
         }).then((result) => {
             if (!result || !isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return;
             const { audioPath, sentence } = result;
@@ -48,33 +61,10 @@ async function playAgentTts({
                 action: 'playAudio',
                 audioUrl,
                 text: sentence,
+                ...(result.ttsAction ? { ttsAction: result.ttsAction } : {}),
                 ...(chatTtsConversationId ? { chatTtsConversationId, chatTtsPhase } : {})
             };
-            const resolvedDisplayIds = typeof getDisplayIds === 'function'
-                ? getDisplayIds()
-                : displayIds;
-            const targetDisplayIds = Array.isArray(resolvedDisplayIds) ? resolvedDisplayIds : [];
-            const hasSingleTargetResolver = typeof resolveDisplayId === 'function';
-            const targetDisplayId = hasSingleTargetResolver ? resolveDisplayId() : null;
-
-            if (playOnControl) {
-                sendToControl({
-                    type: 'playOnControl',
-                    audioUrl,
-                    text: sentence,
-                    ...(chatTtsConversationId ? { chatTtsConversationId, chatTtsPhase } : {})
-                });
-            } else if (targetDisplayId) {
-                sendToDisplay(targetDisplayId, audioMessage, { allowRepairModeTts });
-            } else if (hasSingleTargetResolver) {
-                // 已明确要求单目标路由但当前没有可用目标时，不能回退到来源端。
-            } else if (targetDisplayIds.length > 0) {
-                for (const targetId of targetDisplayIds) {
-                    sendToDisplay(targetId, audioMessage, { allowRepairModeTts });
-                }
-            } else if (displayId) {
-                sendToDisplay(displayId, audioMessage, { allowRepairModeTts });
-            }
+            deliver(audioMessage);
         }).catch((error) => {
             if (onError) onError(error, sentence);
         }));

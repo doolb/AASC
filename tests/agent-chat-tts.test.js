@@ -53,7 +53,8 @@ test('Agent收到无可朗读音频的跳过结果时继续下一句，不下发
         generatedAudio: text => text === '正常回答。' ? 'reply.wav' : null,
         onError: error => errors.push(error) });
     await playAgentTts(harness.options);
-    assert.deepEqual(harness.controlMessages, [{ type: 'playOnControl', audioUrl: '/uploads/tts/reply.wav', text: '正常回答。' }]);
+    assert.deepEqual(harness.controlMessages.filter(message => message.type === 'playOnControl')
+        .map(({ ttsAction, action, ...message }) => message), [{ type: 'playOnControl', audioUrl: '/uploads/tts/reply.wav', text: '正常回答。' }]);
     assert.deepEqual(errors, []);
 });
 

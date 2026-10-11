@@ -10,6 +10,7 @@ const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts
 const { createQwenChatProvider } = require('../src/apps/server/modules/tts/qwen-chat-tts');
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { wrapPcm } = require('../src/external/tts/tts-wav');
+const { generateChatTtsActions } = require('../src/apps/server/modules/chat/chat-tts-actions');
 
 const serverSource = fs.readFileSync(
     path.join(__dirname, '../src/apps/server/boot/server-app.js'),
@@ -32,7 +33,7 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
         const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence) => {' : 'onSentence: (sentence, _fullMessage');
         const end = serverSource.indexOf('onComplete:', start);
         assert.ok(start > 0 && end > start);
-        const context = { path, ttsScheduler, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
+        const context = { path, ttsScheduler, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
             data: { message: '旧聊天问题' }, content: '本轮问题', displayContent: '本轮显示问题',
             displayId: 'display-a', preferredDisplayId: 'display-a', replyTemplateTts: null,
             chat: { getTemplateByName: () => null }, stripMarkdown: text => text,
@@ -48,8 +49,11 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
         await ttsScheduler.waitForIdle();
         await new Promise(resolve => setImmediate(resolve));
         assert.deepEqual(inputs, ['你好！', '真实失败', '后续正文']);
-        assert.deepEqual(sent.map(message => message.text), ['你好🐱！', '后续正文']);
-        assert.equal(sent[0].audioUrl, '/uploads/tts/reply.wav');
+        const played = sent.filter(message => message.action === 'playAudio');
+        assert.deepEqual(played.map(message => message.text), ['你好🐱！', '后续正文']);
+        assert.equal(played[0].audioUrl, '/uploads/tts/reply.wav');
+        assert.equal(played[0].ttsAction.id, sent.find(message => message.action === 'prepareActions'
+            && message.ttsAction.text === played[0].text).ttsAction.id);
         assert.deepEqual(errors, ['TTS生成失败: 真实失败']);
     });
 });
@@ -77,7 +81,7 @@ test('普通AI真实句子回调和Agent生成回调向豆包传本轮原输入�
         const ttsScheduler = createOrderedTaskScheduler({ concurrency: 2 }); schedulers.push(ttsScheduler);
         const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence) => {' : 'onSentence: (sentence, _fullMessage');
         const end = serverSource.indexOf('onComplete:', start);
-        const context = { path, ttsScheduler, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
+        const context = { path, ttsScheduler, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
             data: { message: input }, content: input, displayContent: input, displayId: 'display-a', preferredDisplayId: 'display-a', replyTemplateTts: null,
             chat: { getTemplateByName: () => null }, stripMarkdown: text => text, isPunctuationOnly: () => false,
             isTemporaryConversation: false, tts: true, isRepairModeTtsSuppressed: () => false, allowRepairModeTts: false,

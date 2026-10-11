@@ -602,6 +602,7 @@
     </div>
 
     <audio id="ttsAudio" style="display:none;"></audio>
+    <script type="module" src="js/mmd-tts-actions.mjs"></script>
     <div id="uiSleepOverlay" class="sleep-overlay sleep-overlay-ui"></div>
     <script src="js/html-to-image.min.js"></script>
     <script src="js/control-mode-utils.js"></script>
@@ -3019,6 +3020,7 @@
         }
 
         function stopTtsPlayback() {
+            window.DisplayMmdTtsActions?.cancel();
             clearTtsRecovery();
             window.DisplayLipSyncAudio?.clear(ttsAudio);
             const playbackIds = [
@@ -3045,6 +3047,7 @@
 
         function stopChatTtsPlayback(conversationId, phase = null) {
             if (!conversationId) return;
+            window.DisplayMmdTtsActions?.cancel({ conversationId, phase });
             const matches = (item) => isChatTtsItemMatch(item, conversationId, phase);
             const removedBatchIds = new Set();
             const queuedItems = ttsQueue.filter((item) => {
@@ -3083,10 +3086,14 @@
             stopChatTts: stopChatTtsPlayback
         });
 
-        function startTtsAudio(item, audioUrl) {
+        async function startTtsAudio(item, audioUrl) {
+            if (currentTtsItem !== item || !isPlayingTts) return;
+            // 生成时已并行准备；同句资源就绪后才交给真实音频时钟，不提前驱动角色。
+            try { await window.DisplayMmdTtsActions?.ready(item.ttsAction); }
+            catch (error) { console.warn('[MMD] 动作准备失败，语音继续:', error); }
             if (currentTtsItem !== item || !isPlayingTts) return;
             item.audioUrl = audioUrl;
-            item.lipSyncEntry = window.DisplayLipSyncAudio?.prepare(ttsAudio, item.text, audioUrl);
+            item.lipSyncEntry = window.DisplayLipSyncAudio?.prepare(ttsAudio, item.ttsAction?.speech ?? item.text, audioUrl, item.ttsAction);
             ttsAudio.src = audioUrl;
             recoverTtsPlayback('start');
         }
@@ -3155,6 +3162,7 @@
         }
 
         function queueTts(item) {
+            window.DisplayMmdTtsActions?.prepare(item.ttsAction);
             registerTtsBatchItem(item);
             ttsQueue.push(item);
             playNextTts();
@@ -3198,6 +3206,7 @@
 
         function handleTTS(data) {
             console.log('[显示端] 收到TTS消息:', data.action, data.audioUrl || data.text);
+            if (window.DisplayMmdTtsActions?.message(data)) return;
             if (data.textPlaybackRemote) {
                 handleRemoteTextPlayback(data);
                 return;
@@ -3213,7 +3222,8 @@
                     voiceTtsBatchId: data.voiceTtsBatchId,
                     voiceTtsBatchEnd: data.voiceTtsBatchEnd === true,
                     chatTtsConversationId: data.chatTtsConversationId,
-                    chatTtsPhase: data.chatTtsPhase
+                    chatTtsPhase: data.chatTtsPhase,
+                    ttsAction: data.ttsAction
                 });
             } else if (data.action === 'playAudio') {
                 queueTts({
@@ -3223,7 +3233,8 @@
                     voiceTtsBatchId: data.voiceTtsBatchId,
                     voiceTtsBatchEnd: data.voiceTtsBatchEnd === true,
                     chatTtsConversationId: data.chatTtsConversationId,
-                    chatTtsPhase: data.chatTtsPhase
+                    chatTtsPhase: data.chatTtsPhase,
+                    ttsAction: data.ttsAction
                 });
             } else if (data.action === 'stop') {
                 if (data.chatOnly && data.chatTtsConversationId) {

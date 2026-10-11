@@ -19,7 +19,7 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
     const $ = cheerio.load(fs.readFileSync(path.join(ROOT, 'display.html'), 'utf8'));
     const scripts = new Set(['display-lipsync-audio.js', 'display-mmd-settings.js', 'display-mmd-human-bridge.js',
         'display-mmd.js', 'display-mmd-panel-groups.js', 'display-mmd-lighting.js', 'display-mmd-production-controls.js',
-        'display-mmd-physics-controls.js', 'mmd-render-settings.mjs', 'mmd-screen-lighting-panel.mjs', 'mmd-actions-ui.mjs']);
+        'display-mmd-physics-controls.js', 'mmd-render-settings.mjs', 'mmd-screen-lighting-panel.mjs', 'mmd-actions-ui.mjs', 'mmd-tts-actions.mjs']);
     $('script').each((_index, node) => {
         if ($(node).attr('type') !== 'importmap' && !scripts.has(path.basename($(node).attr('src') || ''))) $(node).remove();
     });
@@ -56,7 +56,7 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
             ignoreDefaultArgs: ['--disable-dev-shm-usage'], args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
         const page = await browser.newPage();
         page.on('pageerror', error => { errors.push(error.message); console.log('正式页面错误：', error.message); });
-        page.on('console', message => { if (message.type() === 'error') console.log('正式浏览器：', message.text()); });
+        page.on('console', message => { if (['error', 'warn'].includes(message.type())) console.log('正式浏览器：', message.text()); });
         await page.setViewport({ width: 320, height: 480 });
         // 验证正式既有值不会被首次日光默认覆盖，也不会写入独立测试存储。
         await page.evaluateOnNewDocument(() => {
@@ -170,6 +170,41 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
         });
         assert.equal(tts.before.phase, 'tts'); assert.equal(tts.after.phase, 'tts'); assert.equal(tts.before.sequence, tts.after.sequence);
         assert.equal(tts.rejected, true); assert.equal(tts.paused, false); assert.ok(Math.abs(tts.after.time - tts.time) < .05);
+        // 生成期间提前真实编译，随后绑定同句音频；暂停只冻结自动层，基础物理继续。
+        const sync = await page.evaluate(async () => {
+            const human = window.DisplayMmd.getHumanInterface(), player = window.DisplayMmdTtsActions;
+            await window.DisplayMmdReplyPreview.stop(); await window.DisplayMmdMplPlayback.stop(); human.stop();
+            const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const data = { id: 'real-audio-actions', phase: 'answer', conversationId: 'test',
+                text: '[动作:点头 时长=4]你好啊你好啊你好啊', speech: '你好啊你好啊你好啊' };
+            await player.ready(data);
+            const preparedState = player.getState(), methods = [typeof human.prepare, typeof human.startPrepared];
+            const before = human.getState().layers.filter(layer => layer.owner.startsWith('tts:')).length;
+            const bytes = new ArrayBuffer(44 + 16000 * 2 * 6), view = new DataView(bytes);
+            const text = (offset, value) => [...value].forEach((char, i) => view.setUint8(offset + i, char.charCodeAt(0)));
+            text(0, 'RIFF'); view.setUint32(4, bytes.byteLength - 8, true); text(8, 'WAVE'); text(12, 'fmt ');
+            view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+            view.setUint32(24, 16000, true); view.setUint32(28, 32000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+            text(36, 'data'); view.setUint32(40, bytes.byteLength - 44, true);
+            const audio = document.getElementById('ttsAudio'), src = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+            window.DisplayLipSyncAudio.prepare(audio, data.speech, src, data); audio.src = src; await audio.play();
+            await wait(350);
+            const read = () => human.getState().layers.find(layer => layer.owner === 'tts:' + data.id);
+            const started = read(); audio.pause(); const pausedTime = read()?.time; await wait(300); const held = read()?.time;
+            const playingState = player.getState(), source = window.DisplayLipSyncAudio.getState(audio);
+            await audio.play(); await wait(300); const resumed = read();
+            const mouth = window.DisplayMmdLipSyncPreview.getState().phase;
+            player.cancel({ id: data.id });
+            const removed = read() === undefined, voiceContinues = !audio.paused;
+            audio.pause(); window.DisplayLipSyncAudio.clear(audio); audio.removeAttribute('src'); audio.load(); URL.revokeObjectURL(src);
+            return { before, started, pausedTime, held, resumed, removed, voiceContinues, mouth, preparedState, playingState,
+                methods, sourceHasActions: !!source?.ttsAction };
+        });
+        console.log('真实TTS动作同步：', JSON.stringify(sync));
+        assert.equal(sync.before, 0); assert.ok(sync.started?.time > 0);
+        // pause事件异步派发，允许事件前最后一次采样到实际停声位置的亚帧差值。
+        assert.ok(Math.abs(sync.held - sync.pausedTime) < .01); assert.ok(sync.resumed.time > sync.held);
+        assert.equal(sync.mouth, 'tts'); assert.equal(sync.removed, true); assert.equal(sync.voiceContinues, true);
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => window.DisplayMmdLighting && document.getElementById('displayMmdLightingPreset').options.length >= 3);
         assert.equal(await page.evaluate(() => window.DisplayMmdLightingPresetGroups.aoEdgeCorrection.read().enabled), false);

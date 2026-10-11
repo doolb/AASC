@@ -209,7 +209,17 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (resolved.missing) throw new Error(resolved.reason);
         return { duration, tracks: resolved.weights.map(([index, value]) => ({ kind: 'morph', index, evaluate: () => [value] })) };
     }
-    async function perform(intent = {}) {
+    // 准备句柄保存在WeakMap；外部不能注入采样层或把旧模型的动作提交给新模型。
+    const preparedActions = new WeakMap();
+    function startPrepared(prepared, options = {}) {
+        const stored = preparedActions.get(prepared), bound = requireModel();
+        if (!stored || stored.bound !== bound || stored.generation !== generation
+            || stored.motion !== getProfile()?.motionUrl || stored.helper !== getHelper()) throw new Error('准备动作已失效，请重新准备');
+        const result = mixer.start({ ...stored.request, owner: name(options.owner || stored.request.owner),
+            priority: number(options.priority, stored.request.priority, 0, 100, '优先级'), clock: options.clock ?? null });
+        wake(); return { ...result, buffer: prepared.buffer, warnings: prepared.warnings };
+    }
+    async function perform(intent = {}, prepareOnly = false) {
         const owner = name(intent.owner || 'ai');
         return operation(owner, async (bound, signal, check) => {
             const layers = [], warnings = [];
@@ -272,9 +282,11 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                 { strength: intent.strength ?? 1, mask: ['face'], duration }));
             if (!layers.length) throw new Error('需要动作或表情');
             check();
-            const result = mixer.start({ owner, layers, duration, loop: intent.loop ?? version?.loop ?? false,
-                priority: number(intent.priority, 50, 0, 100, '优先级') });
-            wake(); return { ...result, buffer, warnings };
+            const prepared = Object.freeze({ duration, buffer, warnings });
+            preparedActions.set(prepared, { bound, generation, motion: getProfile()?.motionUrl, helper: getHelper(),
+                request: { owner, layers, duration, loop: intent.loop ?? version?.loop ?? false,
+                    priority: number(intent.priority, 50, 0, 100, '优先级') } });
+            return prepareOnly ? prepared : startPrepared(prepared);
         });
     }
     async function playMpl(source, options = {}) {
@@ -428,7 +440,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             point(x, y) { requireModel(); const changed = gaze.point(model, getCamera?.(), x, y); if (changed) wake(); return changed; },
             reset() { gaze.returnToCamera(); wake(); }
         },
-        reflex, learn, serverActions, perform, mpl: { play: playMpl,
+        reflex, learn, serverActions, perform, prepare: intent => perform(intent, true), startPrepared, mpl: { play: playMpl,
             // 使用与实际播放相同的模型能力，编辑器不根据缺少英文别名的能力摘要再次猜表情。
             advancedSource: options => createHighLevelMpl(options, requireModel().morphs)
         }, stop, getRequest: mixer.state,

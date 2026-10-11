@@ -132,6 +132,7 @@ const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
 const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
 const { resolveChatReplyTtsOptions } = require('../modules/chat/chat-reply-tts-context');
+const { generateChatTtsActions } = require('../modules/chat/chat-tts-actions');
 const { adjustWav, decodeAudio } = require('../modules/tts/tts-provider-http');
 const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-router');
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
@@ -10763,12 +10764,11 @@ async function handleControlMessageFallback(data, ws) {
                                 onSentence: (sentence) => {
                                     if (isPunctuationOnly(sentence)) return;
                                     ttsScheduler.enqueue(async () => {
-                                        const cleanText = stripMarkdown(sentence);
-                                        const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, displayId,
-                                            { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts,
-                                                userText: data.message });
-                                        if (audioPath === null) return null;
-                                        return { audioPath, sentence };
+                                        return generateChatTtsActions({ sentence, stripMarkdown,
+                                            conversationId: data.requestId || '', send: message => sendToDisplay(displayId, message),
+                                            generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, displayId,
+                                                { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts,
+                                                    userText: data.message }) });
                                     }).then((result) => {
                                         if (!result) return;
                                         const { audioPath, sentence } = result;
@@ -10777,7 +10777,8 @@ async function handleControlMessageFallback(data, ws) {
                                             type: 'tts',
                                             action: 'playAudio',
                                             audioUrl: `/uploads/tts/${fileName}`,
-                                            text: sentence
+                                            text: sentence,
+                                            ...(result.ttsAction ? { ttsAction: result.ttsAction } : {})
                                         });
                                     }).catch(err => {
                                         logError('Chat', `TTS生成失败: ${err.message}`);
@@ -11113,21 +11114,27 @@ async function handleChatMessage(options) {
                 if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return null;
                 if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return null;
-                const cleanText = stripMarkdown(sentence);
-                const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId,
-                    { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts,
-                        userText: displayContent || content });
-                if (audioPath === null) return null;
-                return { audioPath, sentence };
+                return generateChatTtsActions({ sentence, phase: ttsPhase, conversationId: ttsConversationId,
+                    stripMarkdown, generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId,
+                        { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts,
+                            userText: displayContent || content }),
+                    send: message => {
+                        if (playOnControl) sendToControl(message);
+                        else {
+                            const targets = routeVoiceToPreferredDisplay ? [resolveCurrentVoicePlaybackTarget(preferredDisplayId)]
+                                : displayIds.length ? displayIds : [displayId];
+                            for (const target of targets.filter(Boolean)) sendToDisplay(target, message);
+                        }
+                    } });
             }).then((result) => {
                 if (!result || (isRepairModeTtsSuppressed() && !allowRepairModeTts)) return;
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return;
                 const { audioPath, sentence } = result;
                 const fileName = path.basename(audioPath);
                 const audioUrl = `/uploads/tts/${fileName}`;
-                const ttsMetadata = ttsConversationId
-                    ? { chatTtsConversationId: ttsConversationId, chatTtsPhase: ttsPhase }
-                    : {};
+                const ttsMetadata = { ...(ttsConversationId
+                    ? { chatTtsConversationId: ttsConversationId, chatTtsPhase: ttsPhase } : {}),
+                    ...(result.ttsAction ? { ttsAction: result.ttsAction } : {}) };
 
                 if (playOnControl) {
                     sendToControl({ type: 'playOnControl', audioUrl, text: sentence, ...ttsMetadata });
