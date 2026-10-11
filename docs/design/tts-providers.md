@@ -34,6 +34,16 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 
 本机8081旧进程未下发新TTS配置，符合静态网页与旧运行后端不一致；已通过npm run restart:server重启，本机wss初始化确认新版ttsProviderConfig且无上述旧字段。静态页面隐藏标签的display冲突已修复，真实Chromium截图已查看。用户其他实例仍以实际部署版本为准；未构建或发布Offline包，servicePackage保持true。
 
+## 控制端聊天手动播放读取所属AI语音（2026-10-11 已实现）
+
+用户要求聊天面板手动点击AI回复播放，也读取对应AI语音方式。当前chat.js.playMessage只取speech/content，再由playText发送tts/play文本；服务端控制端tts/play合成未提供businessType/templateTts，因此按systemBroadcast选择，与自动AI/Agent回复不一致。
+
+已让消息播放携带来源上下文，服务端据模板名称读取当前权威tts设置并以ai_reply/agent_reply生成，不从客户端接收端点/凭证。私聊使用消息来源模板，Agent使用来源角色，临时当前/历史组使用各自roleName；群聊无唯一模板、旧消息缺来源或模板已删除时采用AI默认。不得因切换会话而把另一角色音色套给旧消息。原生仍用旧音色路径，qwen-chat仍由Chat2API提供。
+
+已覆盖历史索引播放、流式完成后按钮与chatNewMessage对象入口；保留speech优先、Markdown清理、分句/有序队列、控制端/显示端/多端目标及原自定义播报。修改chat.js/server-app.js，新增chat-reply-tts-context模块校验业务/模板名并读取服务端权威配置。整批分句捕获同一模板配置，下一次播放读取更新值。手动播放允许仅在控制端播放或只指定displayIds，不再因缺少主显示端而提前返回。
+
+95项TTS/聊天回归与5个历史兼容文件（Node6项）通过；新增8项手动路径测试包含真实Chromium按钮点击/只读SelfTest，以及实际服务端完整handler/有序调度/Provider解析。客户端伪造Provider/密钥不进入合成，非法业务/模板名无音频。未运行全仓npm test；真实云端账号和设备声音仍待现场验收。本机服务已重启，HTTP静态脚本与WSS权威配置初始化验证通过。
+
 ## 参考
 
 - [百炼 Qwen TTS API](https://help.aliyun.com/en/model-studio/qwen-tts-api)

@@ -48,6 +48,11 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 控制端聊天面板手动播放AI回复读取所属模板语音配置，与自动AI/Agent回复复用选择规则。
+  - 修改chat.js/server-app.js，新增chat-reply-tts-context.js：私聊/角色/临时历史按来源模板，缺来源用AI默认；流式按钮捕获角色，服务端读取权威配置并固定整批分句快照，不接收客户端凭证/Provider；原speech、队列和播放目标保持。修复无主显示端时控制端独立/仅displayIds播放被提前丢弃。
+  - 新增8项实际Chat/完整服务端handler/Provider调度/Chromium按钮及SelfTest检查，95/95扩大回归与5个历史文件6/6通过，最终手动路径8/8复验、6个JS语法检查通过；同步design/spec/.src/task/todo/usage/self-test，未运行全仓npm test。
+  - 本机服务已重启，HTTP200静态脚本及WSS权威配置初始化通过；servicePackage=true，其他产物状态保持，未构建或发布Offline包，真实云端账号和设备声音待验收。
+
 - ✅ [2026-10-11] 系统原生沿用既有路径，移除Provider重复启用/音色ID/查询；qwen-chat直接由Chat2API提供语音，不再查询或选择账号。
   - 新增Chat2API speech-service/qwen-speech-adapter及POST /v1/audio/speech，复用现有账号、调度和Bearer鉴权；TTS仅转交参数，移除tts-chat2api-accounts及其测试、旧accountId配置和候选WS。修改settings/policy/service/registry/server-app、WAV公共解码、控制端chat/settings/websocket/self-test，原生业务/模板隐藏音色输入并处理display覆盖hidden，保留旧设备/服务器开关/原生名称接口。
   - npm run check:chat2api 100/100、TTS及兼容性去重114/114通过，无跳过；最终界面/原生/HTTP定向9/9复验，真实Chromium截图已查看。npm run restart:server更新本机8081运行后端，WSS初始化已确认无旧system开关/音色及qwen账号ID。同步TTS/Chat2API design/spec、.src/task/todo/usage/self-test。

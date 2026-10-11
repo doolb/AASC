@@ -39,6 +39,26 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'chat_reply_tts_context',
+            name: '聊天回复语音来源',
+            description: '只读检查手动播放的AI/Agent模板解析，不发送语音',
+            category: '语音功能',
+            run: async () => {
+                const chat = window.Chat;
+                if (!chat?.getReplyTtsContext) return { success: false, message: '聊天语音来源模块尚未加载' };
+                const privateReply = chat.getReplyTtsContext({ role: 'assistant', mode: 'private', target: '自测AI' });
+                const agentReply = chat.getReplyTtsContext({ role: 'assistant', mode: 'role', target: '自测Agent' });
+                const temporaryReply = chat.getReplyTtsContext({ role: 'assistant', mode: 'temporary' }, { roleName: '历史角色' });
+                const groupReply = chat.getReplyTtsContext({ role: 'assistant', mode: 'group', name: '显示名' });
+                const valid = privateReply.businessType === 'ai_reply' && privateReply.templateName === '自测AI'
+                    && agentReply.businessType === 'agent_reply' && agentReply.templateName === '自测Agent'
+                    && temporaryReply.templateName === '历史角色' && groupReply.templateName === null
+                    && chat.getReplyTtsContext({ role: 'control', mode: 'private' }) === null;
+                return { success: valid, message: valid ? '聊天回复语音来源解析正常' : '聊天回复语音来源解析失败',
+                    details: '私聊、Agent、临时历史及群聊；实际合成由服务端权威配置处理' };
+            }
+        },
+        {
             id: 'tts_provider_config',
             name: '语音服务配置同步',
             description: '检查服务器权威配置、业务限制及凭证脱敏',

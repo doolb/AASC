@@ -44,6 +44,7 @@ const Chat = {
     isLoading: false,
     currentStreamingMessage: '',
     currentStreamingReasoning: '',
+    currentReplyTtsContext: null,
     activeRequestId: null,
     requestCounter: 0,
     currentUserMessage: '',
@@ -1478,6 +1479,9 @@ const Chat = {
         const requestId = `${Date.now()}-${++this.requestCounter}`;
         this.stopChatTts();
         this.activeRequestId = requestId;
+        this.currentReplyTtsContext = this.getReplyTtsContext({ role: 'assistant', mode,
+            target: mode === 'role' ? this.session.roleTarget : target,
+            templateId: templateTarget }, { roleName: mode === 'role' ? this.session.roleTarget : this.temporaryConversation.roleName });
         this.isLoading = true;
         this.currentStreamingMessage = '';
         const images = this.pendingImages.map((image) => ({
@@ -1849,9 +1853,12 @@ const Chat = {
                 playBtn.className = 'chat-play-btn';
                 playBtn.textContent = '🔊';
                 playBtn.title = '播放语音';
+                const chatReplyContext = this.currentReplyTtsContext;
                 playBtn.onclick = () => this.playMessage({
+                    role: 'assistant',
                     content: data.message,
                     speech: data.speech,
+                    chatReplyContext,
                     displayId: window.currentDisplayId,
                     playOnControl: this.session.playOnControl
                 });
@@ -1898,6 +1905,7 @@ const Chat = {
         if (shouldRender) {
             this.renderHistory();
             this.playMessage({
+                ...msg,
                 content: msg.content,
                 speech: msg.speech,
                 displayId: data.displayId,
@@ -1906,24 +1914,46 @@ const Chat = {
         }
     },
     
+    // 对应.src/framework/tts-provider-configuration.md；仅发来源，服务与音色取服务端权威模板。
+    getReplyTtsContext(message, { roleName = null, mode = message?.mode || this.session.mode } = {}) {
+        if (!message || (message.role !== 'assistant' && typeof message.assistant !== 'string')) return null;
+        if (message.chatReplyContext) return { businessType: message.chatReplyContext.businessType,
+            templateName: message.chatReplyContext.templateName ?? null };
+        const templateId = message.templateId && message.templateId !== 'default' ? message.templateId : null;
+        const sources = {
+            group: templateId,
+            private: templateId || message.target,
+            role: templateId || message.target || roleName,
+            temporary: templateId || roleName
+        };
+        return { businessType: mode === 'role' || message.assistantType === 'agent' ? 'agent_reply' : 'ai_reply',
+            templateName: sources[mode] || null };
+    },
+
     playMessage(indexOrData) {
-        let content, displayId, playOnControl;
+        let content, displayId, playOnControl, chatReplyContext;
         
-        if (typeof indexOrData === 'object') {
+        if (indexOrData && typeof indexOrData === 'object') {
             content = indexOrData.speech || indexOrData.content;
             displayId = indexOrData.displayId;
             playOnControl = indexOrData.playOnControl;
+            const roleName = indexOrData.roleName || (indexOrData.mode === 'temporary'
+                && indexOrData.sessionId === this.temporaryConversation.id ? this.temporaryConversation.roleName : null);
+            chatReplyContext = this.getReplyTtsContext(indexOrData, { roleName });
         } else {
             // 按当前模式取历史数组：角色模式读该角色独立历史（renderHistory 的下标来自 roleHistories），
             // 其余模式读群聊历史，避免下标错位播错消息
             let history;
+            let roleName = null;
             if (this.session.mode === 'temporary') {
                 const viewedGroup = this.temporaryHistoryGroups.find(group => (
                     group.sessionId === this.temporaryHistoryViewSessionId
                 ));
                 history = viewedGroup ? viewedGroup.messages || [] : this.temporaryConversation.messages || [];
+                roleName = viewedGroup ? viewedGroup.roleName : this.temporaryConversation.roleName;
             } else if (this.session.mode === 'role' && this.session.roleTarget) {
                 history = this.roleHistories[this.session.roleTarget] || [];
+                roleName = this.session.roleTarget;
             } else {
                 history = this.history;
             }
@@ -1932,14 +1962,15 @@ const Chat = {
             content = item.speech || item.content || item.assistant || item.user;
             displayId = window.currentDisplayId;
             playOnControl = this.session.playOnControl;
+            chatReplyContext = this.getReplyTtsContext(item, { roleName });
         }
         
         if (!content) return;
         
-        this.playText(content, displayId, playOnControl);
+        this.playText(content, displayId, playOnControl, chatReplyContext);
     },
     
-    playText(text, displayId, playOnControl) {
+    playText(text, displayId, playOnControl, chatReplyContext = null) {
         if (this.noInterruptMode && this.isListening) {
             this.wasListeningBeforePlayback = this.isAlwaysListening;
             this.stopListening();
@@ -1954,6 +1985,7 @@ const Chat = {
                 text: text,
                 playOnControl: playOnControl || !displayId
             };
+            if (chatReplyContext) message.chatReplyContext = chatReplyContext;
             
             if (selectionMode === 'all' || selectionMode === 'adaptive') {
                 const selectedIds = window.DisplayList ? window.DisplayList.getSelectedDisplayIds() : [];
@@ -2524,6 +2556,9 @@ const Chat = {
         if (!data || !data.requestId || !data.content) return;
 
         this.activeRequestId = data.requestId;
+        this.currentReplyTtsContext = this.getReplyTtsContext({ ...data, role: 'assistant' }, {
+            roleName: data.mode === 'role' ? (data.role || this.session.roleTarget) : this.temporaryConversation.roleName
+        });
         this.isLoading = true;
         this.currentStreamingMessage = '';
         this.currentUserMessage = data.content;

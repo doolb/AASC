@@ -114,3 +114,33 @@ Chat2API服务:
   实际system入口执行 -> 显示端生成、原服务端回退、缓存满不回退、速率/音量处理
   回归现有TTS路由、文本媒体、Agent播放与聊天打断
 ```
+
+## 控制端聊天手动播放（2026-10-11 已实现）
+
+```text
+已有声明:
+  Chat.playMessage/playText、history/roleHistories、temporaryConversation/temporaryHistoryGroups
+  消息role/mode/target/templateId、临时历史组roleName、控制端tts/play与显示目标
+  chat.getTemplateByName、BUSINESS_TYPES、generateTtsWithFallback、既有Provider选择与WAV缓存
+新增定义:
+  ChatReplyTtsContext { businessType, templateName }
+  TtsPlayMessage { type=tts, action=play, text, 原播放目标, chatReplyContext? }
+操作流程:
+  历史点击 -> 原当前可见消息数组及索引 -> 当前消息来源上下文
+  助手回复 -> ai_reply；Agent回复 -> agent_reply；普通用户消息 -> 保留旧播报
+  私聊 -> 消息templateId/target；Agent -> 来源角色；临时 -> 被查看历史组或当前会话roleName
+  群聊显式来源templateId -> 该模板；无唯一模板/旧消息来源缺失 -> AI默认，不猜显示名
+  对象入口/流式完成按钮 -> 捕获回复所属上下文，不在点击时套用已切换的会话
+  speech优先于content -> 原playText -> tts/play携带来源，凭证/服务参数不入消息
+  服务端控制端tts/play -> resolveChatReplyTtsOptions校验仅ai_reply/agent_reply
+  模板名限长512字符且无控制字符 -> 读取当前权威tts配置 -> 浅复制快照，不采用客户端Provider/凭证
+  模板不存在 -> AI默认；未带聊天上下文的普通tts/play -> systemBroadcast旧行为
+  请求开始时解析并捕获businessType/templateTts -> 每句generateTtsWithFallback传入相同配置
+  手动tts/play -> 控制端单独播放或displayIds多端，不要求存在单一主显示端
+  原Markdown/分句/调度/控制端及显示端目标 -> 原缓存及播放消息
+自测流程:
+  私聊/Agent/临时当前与旧历史组/群聊/旧记录，切换角色后不串音色
+  手动播放与自动回复一致、模板继承/显式system、qwen-chat仅AI业务
+  speech优先、控制端/显示端/多选目标兼容、无上下文的自定义播报不变
+  本地HTTP/WSS与浏览器或正式Chat模块验证，无真实账号凭证输出
+```

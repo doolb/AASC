@@ -181,3 +181,39 @@
 - 将当前已保存但目录中不存在的音色标记为失效
 - 音色目录查询失败时保留当前已保存音色
 - 仅向前端返回非敏感配置和音色信息
+
+### 聊天手动播放使用所属AI语音（2026-10-11 已确认）
+
+#### 已有声明
+
+- Chat.playMessage/playText、消息role/mode/templateId/target、roleHistories、临时历史组roleName // 来源沿用现有历史，不增加配置查询
+- chat.getTemplateByName、generateTtsWithFallback、BUSINESS_TYPES、控制端tts/play // 复用权威模板及旧缓存播放
+
+#### 新增定义
+
+- ChatReplyTtsContext { businessType, templateName } // 控制端仅发来源，不发凭证或服务地址
+- currentReplyTtsContext // 流式回复开始时捕获，完成按钮不套用新会话
+- chat-reply-tts-context.resolveChatReplyTtsOptions // 服务端校验来源并读取当前模板
+- tests/chat-manual-tts.test.js // 正式Chat模块及服务端手动入口执行测试
+
+#### 操作流程
+
+- 从已显示历史数组读取 message 与所属 roleName // 保持筛选索引、临时历史组和角色隔离
+- 判断 assistant = message.role或旧assistant字段 // 用户消息保留原系统播报
+- 解析 replyContext = AI或Agent业务与消息templateId/target、所属临时组roleName // 缺来源采用AI默认，不猜显示名
+- 在发起流式请求时保存 currentReplyTtsContext // 会话切换不改变回复归属
+- 对象播放使用已捕获replyContext或其消息来源 // 新消息与历史按钮复用同一解析规则
+- 将 speech优先文本、replyContext与原显示目标发到tts/play // 文字/分句及播放协议保持
+- 校验 replyContext业务仅ai_reply/agent_reply、模板名限长无控制字符 // 普通自定义播报不带上下文
+- 读取 templateTts = 服务端当前对应模板配置快照 // 客户端附带Provider/密钥字段不参与生成
+- 允许手动tts/play独立控制端或多端目标，无须单一主显示端 // 原无显示端提前返回会丢弃合法播放
+- 将生成 options = businessType/templateTts传入每句旧generateTtsWithFallback // 整次播放配置一致
+- 模板不存在使用AI默认，显式system沿用原生、qwen-chat交给Chat2API // 与自动回复相同选择规则
+
+#### 自测流程
+
+- 正式Chat输入私聊/角色/临时旧组/群聊/旧记录 -> 断言来源消息、speech与原播放目标 // 覆盖会话切换不串音色
+- 流式完成按钮捕获来源 -> 切换角色再点击 -> 原角色上下文 // 覆盖独立对象入口
+- 执行真实服务端tts/play分支 -> 真实Provider解析及有序调度 -> 捕获AI/Agent音色和旧自定义播报 // 不只检查源码字面量
+- 覆盖当前模板更新、模板删除、继承/原生、qwen-chat、伪造密钥、非法业务/模板名 // 不依赖真实账号
+- 浏览器点击播放按钮与只读SelfTest -> 检查消息而不发送测试音频 // 自测不打断用户播放

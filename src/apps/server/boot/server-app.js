@@ -131,6 +131,7 @@ const { createTtsProviderService } = require('../modules/tts/tts-provider-servic
 const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
 const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
+const { resolveChatReplyTtsOptions } = require('../modules/chat/chat-reply-tts-context');
 const { adjustWav, decodeAudio } = require('../modules/tts/tts-provider-http');
 const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-router');
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
@@ -10543,7 +10544,9 @@ async function handleControlMessageFallback(data, ws) {
                     return;
                 }
 
-                if (!displayData) return;
+                // 手动语音可只在控制端播放或指定displayIds，不要求存在单一主显示端。
+                const isManualTtsPlay = data.type === 'tts' && data.action === 'play' && data.text;
+                if (!displayData && !isManualTtsPlay) return;
 
                 if (data.type === 'getState') {
                     const stateToSend = { ...displayData.state };
@@ -10659,9 +10662,10 @@ async function handleControlMessageFallback(data, ws) {
                                 const targetDisplayIds = data.displayIds || (displayId ? [displayId] : []);
                                 const preferredDisplayId = targetDisplayIds[0] || displayId || null;
                                 const ttsScheduler = createTtsGenerationScheduler(preferredDisplayId);
+                                const replyTtsOptions = resolveChatReplyTtsOptions(data.chatReplyContext, { getTemplateByName: chat.getTemplateByName });
 
                                 const tasks = sentences.map((sentence) => ttsScheduler.enqueue(async () => {
-                                    const audioPath = await generateTtsWithFallback(sentence, undefined, undefined, preferredDisplayId);
+                                    const audioPath = await generateTtsWithFallback(sentence, undefined, undefined, preferredDisplayId, replyTtsOptions);
                                     return { sentence, audioPath };
                                 }).then((result) => {
                                     if (!result || isRepairModeTtsSuppressed()) return;

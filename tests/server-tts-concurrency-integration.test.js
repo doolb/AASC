@@ -16,7 +16,7 @@ test('服务端普通 Chat 和手动 TTS 使用有序调度器', () => {
     assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(preferredDisplayId\);/u);
     assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(displayId\);/u);
     assert.match(serverSource, /await ttsScheduler\.waitForIdle\(\);/u);
-    assert.match(serverSource, /generateTtsWithFallback\(sentence, undefined, undefined, preferredDisplayId\)/u);
+    assert.match(serverSource, /generateTtsWithFallback\(sentence, undefined, undefined, preferredDisplayId, replyTtsOptions\)/u);
     assert.match(serverSource, /generateTtsWithFallback\(cleanText, undefined, undefined, preferredDisplayId,\s*\{ businessType: BUSINESS_TYPES.AI_REPLY/u);
     assert.match(serverSource, /chat\.splitIntoSentences\(cleanText\)[\s\S]*?filter\(\(sentence\) => !isPunctuationOnly\(sentence\)\)/u);
     assert.match(serverSource, /if \(!tts \|\| isPunctuationOnly\(sentence\)\) return;/u);
