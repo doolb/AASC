@@ -1,5 +1,6 @@
 /* 正式 MMD 用户控制：只含参数/状态，不含调试绘制与测时面板。 */
 (function initializeProductionControls() {
+    window.DisplayMmdLightingPresetGroups ||= Object.create(null);
     function initialize() {
         document.querySelectorAll('.mmd-ar-panel-group-toggle').forEach(button => {
             button.addEventListener('click', () => {
@@ -47,6 +48,10 @@
       } catch (error) { /* 缺失、坏 JSON 或存储受限时回到默认参数。 */ }
       if (!saved || typeof saved !== 'object' || Array.isArray(saved)) saved = {};
       apply(saved, false);
+      window.DisplayMmdLightingPresetGroups.keyShadowBias = {
+        normalize: value => Object.fromEntries(shadowBiasFields.map(field => [field.key, normalizeShadowBias(value?.[field.key], field)])),
+        read: () => ({ ...window.DisplayMmdKeyShadowSettings }), apply: value => apply(value, true)
+      };
       const applyInputs = () => apply(Object.fromEntries(controls.map(({ field, input }) => [field.key, input.value])), true);
       for (const { input } of controls) {
         input.addEventListener('input', applyInputs);
@@ -101,6 +106,10 @@
       let saved = {};
       try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch (error) { /* 坏存储回默认。 */ }
       apply(saved, false);
+      window.DisplayMmdLightingPresetGroups.shadowMap = {
+        normalize: value => ({ size: normalizeShadowMapSize(value?.size, window.DisplayMmdShadowMapLimit), cameraScale: normalizeShadowCameraScale(value?.cameraScale), previewEnabled: false, jointFit: false }),
+        read: () => ({ ...window.DisplayMmdShadowMapSettings, previewEnabled: false, jointFit: false }), apply: value => apply(value, true)
+      };
       const applyInputs = () => apply({ size: input.value, cameraScale: cameraInput.value }, true);
       input.addEventListener('change', applyInputs);
       cameraInput.addEventListener('input', applyInputs);
@@ -147,6 +156,9 @@
       try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); }
       catch (error) { /* 损坏或缺失的设置采用默认范围。 */ }
       apply(saved, false);
+      window.DisplayMmdLightingPresetGroups.fillFacing = {
+        normalize: normalizeFillFacingRange, read: () => ({ ...window.DisplayMmdFillFacingRange }), apply: value => apply(value, true)
+      };
       for (const [input, key] of [[start, 'start'], [end, 'end']]) {
         const update = () => apply({ start: start.value, end: end.value }, true, key);
         input.addEventListener('input', update);
@@ -211,6 +223,9 @@
       let saved = null;
       try { saved = localStorage.getItem(storageKey); } catch (error) { /* 存储不可用时使用默认角度。 */ }
       apply(saved, false);
+      window.DisplayMmdLightingPresetGroups.aoConcavity = {
+        normalize: value => ({ angle: normalize(value?.angle) }), read: () => ({ angle: window.DisplayMmdAoConcavityAngle }), apply: value => apply(value.angle, true)
+      };
       input.addEventListener('input', () => apply(input.value, true));
       input.addEventListener('change', () => apply(input.value, true));
       document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => apply(defaultAngle, true));

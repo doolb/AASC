@@ -177,13 +177,17 @@ export function createLipSyncPlayer({ api, modelState, busy, getMapping, syncMod
     document.addEventListener('visibilitychange', visibility);
     return {
         get phase() { return phase; },
+        get previewState() { return { sequence: generation, phase, token: ownedToken,
+            time: entry ? audio.currentTime : Math.max(0, (performance.now() - startAt) / 1000),
+            duration: entry ? audio.duration : timeline?.duration || 0,
+            units: (timeline?.units || []).map(unit => ({ label: unit.label, start: unit.start, end: unit.end })) }; },
         get isTts() { return Boolean(entry); },
         preview(text) {
             if (audio && snapshot() && !audio.paused && !audio.ended && enabled()) {
                 status('TTS正在播放，请结束语音或关闭「同步TTS口型」后预览文字。');
                 return;
             }
-            void start(text);
+            return start(text);
         },
         stop,
         reconcile,

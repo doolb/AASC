@@ -14,7 +14,7 @@ const CHROME = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium']
 test('正式显示端面板分类、动作进度及开关与标题互不干扰', { skip: !CHROME }, async () => {
     const $ = cheerio.load(fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8'));
     $('script, link[rel="stylesheet"]').remove();
-    const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
+    const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, ignoreDefaultArgs: ['--disable-dev-shm-usage'], args: ['--no-sandbox'] });
     try {
         const page = await browser.newPage();
         await page.setViewport({ width: 390, height: 740, deviceScaleFactor: 3 });
@@ -31,7 +31,7 @@ test('正式显示端面板分类、动作进度及开关与标题互不干扰',
                 document.querySelectorAll(`[id="${node.id}"]`).length > 1),
             loadingProgress: !!document.getElementById('displayMmdLoadingProgress')
         }));
-        assert.deepEqual(initial, { lighting: 11, motion: 3, tracking: 6, duplicateIds: false, loadingProgress: true });
+        assert.deepEqual(initial, { lighting: 12, motion: 9, tracking: 6, duplicateIds: false, loadingProgress: true });
         await page.click('#displayMmdMotionToggle');
         const progress = await page.evaluate(() => ({
             visible: !document.getElementById('displayMmdMotionPanel').hidden,

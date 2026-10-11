@@ -75,6 +75,9 @@ function log(message) {
 function webAssetText(source) {
   if (!WEB_MODE) return source;
   return source
+    .replaceAll('DisplayMmdLipSyncPreview', 'MmdArLipSyncPreview')
+    .replaceAll('aasc.display.mmd.handAvoidance.v1', 'aasc.mmdArTest.handAvoidance.v1')
+    .replaceAll("'/mmd/motions/miya-idle.vmd'", "'./mmd/motions/miya-idle.vmd'")
     // 正式静态资源新增版本目录；独立网页文件仍放在本地mmd目录，不依赖服务API。
     .replace(/\/api\/mmd\/static\/[a-f0-9]{64}\/mmd\//giu, `${WEB_BASE_PATH}/mmd/`)
     .replaceAll('/api/mmd/static/mmd/', `${WEB_BASE_PATH}/mmd/`)
@@ -176,6 +179,11 @@ async function stageTextAssets() {
   const arTrackingVideo = $('#displayArTrackingVideo').first();
   const mmdLayer = $('#displayMmdLayer').first().addClass('is-visible').attr('aria-hidden', 'false');
   const controls = $('.display-stage-lighting-control').first();
+  // 正式预设分类只保留旧选择器节点，独立页随后重建自己的预设分类。
+  if ($('#mmdArLightingPresets').length) {
+    const label = $('#displayMmdLightingPreset').closest('label').remove();
+    $('#mmdArLightingPresets').replaceWith(label);
+  }
   $('[data-mmd-production-only]').remove();
   // 分类前取下正式预建渲染组，随后用同一参数清单生成独立页控件。
   $('#mmdArTemporalAA, #mmdArScreenLighting').remove();

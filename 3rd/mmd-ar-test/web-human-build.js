@@ -8,6 +8,7 @@ const once = (source, anchor, value) => {
 };
 async function stageRuntime(root, { webMode = false } = {}) {
     if (!webMode) return;
+    if ((await fs.readFile(path.join(root, 'js/display-pmx-runtime.js'), 'utf8')).includes('aasc-shared:human-runtime')) return;
     const folder = path.join(root, 'js'), controllerFile = path.join(folder, 'mmd-expressions.mjs');
     let controller = await fs.readFile(controllerFile, 'utf8');
     controller = once(controller, '    let automatic = new Map();', '    let automatic = new Map();\n    let human = new Map();');
@@ -62,7 +63,15 @@ async function stage(root, { webMode = false } = {}) {
     const runtimeFile = path.join(folder, 'display-pmx-runtime.js');
     let runtime = await fs.readFile(runtimeFile, 'utf8');
     const oldHash = await version('display-pmx-runtime.js');
-    runtime = once(runtime, './web-human-interface.mjs', './web-human-interface.mjs?v=' + versions.get('web-human-interface.mjs'));
+    if (runtime.includes('./mmd-human-runtime.mjs')) {
+        // 正式桥接在测试副本继续使用独立Human核心，保留测试页尚在编辑的功能。
+        const bridgeFile = path.join(folder, 'mmd-human-runtime.mjs');
+        const bridge = (await fs.readFile(bridgeFile, 'utf8')).replace('./mmd-human-interface.mjs', './web-human-interface.mjs?v=' + versions.get('web-human-interface.mjs'));
+        await fs.writeFile(bridgeFile, bridge);
+        runtime = runtime.replace(/\.\/mmd-human-runtime\.mjs(?:\?v=[a-f0-9]+)?/u, './mmd-human-runtime.mjs?v=' + await version('mmd-human-runtime.mjs'));
+    } else {
+        runtime = once(runtime, './web-human-interface.mjs', './web-human-interface.mjs?v=' + versions.get('web-human-interface.mjs'));
+    }
     await fs.writeFile(runtimeFile, runtime);
     const displayFile = path.join(folder, 'display-mmd.js');
     let display = await fs.readFile(displayFile, 'utf8');
@@ -71,6 +80,7 @@ async function stage(root, { webMode = false } = {}) {
     await fs.writeFile(displayFile, display);
     const helperFile = path.join(folder, 'vendor/three/animation/MMDAnimationHelper.js');
     let helper = await fs.readFile(helperFile, 'utf8');
+    if (helper.includes('aasc-shared:human-helper')) return;
     // 基础姿态备份不含Human增量；每帧只从当前基础姿态合成一次，再进行IK/grant和物理。
     helper = once(helper, '\t\t\t// PMX animation system special path',
         '\t\t}\n\n\t\tif ( this.onHumanPose ) {\n'

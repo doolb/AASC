@@ -352,10 +352,10 @@ export function createPrimitiveContacts() {
     const handlers = { '0:0': roundedPair, '0:2': roundedPair, '2:0': roundedPair, '2:2': roundedPair,
         '0:1': roundedBox, '2:1': roundedBox, '1:0': (a, b) => roundedBox(b, a, true),
         '1:2': (a, b) => roundedBox(b, a, true), '1:1': boxPair };
-    const scan = (bodies, excluded) => {
+    const scan = (bodies, excluded, prepared = false) => {
         count = 0; candidateCount = 0;
         order.length = bodies.length;
-        for (let i = 0; i < bodies.length; i += 1) { prepareCollisionBody(bodies[i]); order[i] = bodies[i]; }
+        for (let i = 0; i < bodies.length; i += 1) { if (!prepared) prepareCollisionBody(bodies[i]); order[i] = bodies[i]; }
         // 沿X轴排序并提前结束，避免对所有PMX刚体进行完整的二次方窄阶段检查。
         order.sort((a, b) => a.min.x - b.min.x || a.index - b.index);
         for (let i = 0; i < order.length; i += 1) {
@@ -374,7 +374,9 @@ export function createPrimitiveContacts() {
         contacts.length = count;
         return contacts;
     };
-    return { scan, get candidateCount() { return candidateCount; }, dispose() {
+    // IK在同帧只移动手部刚体；其余形状已准备，可复用同一窄阶段和过滤而不重复重建边界。
+    return { scan, scanPrepared: (bodies, excluded) => scan(bodies, excluded, true),
+        get candidateCount() { return candidateCount; }, dispose() {
         contacts.length = 0; pool.length = 0; order.length = 0;
     } };
 }

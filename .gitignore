@@ -35,3 +35,8 @@ src/apps/android-display/.kotlin/
 # 独立 MMD AR 的原生定位依赖由固定版本脚本下载到本机构建缓存
 /build/third_party/orb-slam3/
 /build/third_party/mmd-ar-slam/
+
+# 正式MMD动作与固定MPL编译资源由prepare:mmd-production校验生成，服务包仍必须收录
+/src/apps/web-mediacenter/ui/public/mmd/
+/src/apps/web-mediacenter/ui/public/mmd-actions.json
+/src/apps/web-mediacenter/ui/public/js/vendor/mmd-mpl/

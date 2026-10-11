@@ -19,6 +19,7 @@ async function stageRuntime(root, { webMode = false } = {}) {
         || !runtime.includes('manualExpressions.after()')) {
         throw new Error('正式PMX运行时缺少共享表情控制器');
     }
+    if (!runtime.includes('humanRuntimeInterfaces')) {
     runtime = addDebugInterfaces(runtime, '        getManualExpressions: () =>', `        getMplModelState: () => {
             const state = manualExpressions.getState();
             const dictionary = currentMesh?.morphTargetDictionary || {};
@@ -30,6 +31,7 @@ async function stageRuntime(root, { webMode = false } = {}) {
         },
         setManualExpression: (index, weight) => manualExpressions.set(index, weight),
         clearManualExpressions: () => manualExpressions.clear(),`);
+    }
     await fs.writeFile(runtimeFile, runtime);
     const displayFile = path.join(folder, 'display-mmd.js');
     let display = await fs.readFile(displayFile, 'utf8');

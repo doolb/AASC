@@ -71,6 +71,10 @@ export function initScreenLightingPanel() {
         input.addEventListener('input', update);
         if (input.type === 'select-one') input.addEventListener('change', update);
     }
+    window.DisplayMmdLightingPresetGroups ||= Object.create(null);
+    window.DisplayMmdLightingPresetGroups.screenLighting = { normalize: normalizeScreenLightingSettings,
+        read: () => ({ ...value, giBlurRadii: [...value.giBlurRadii], contactBlurRadii: [...value.contactBlurRadii] }),
+        apply: next => { value = normalizeScreenLightingSettings(next); apply(true); } };
     document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => { value = { ...defaults }; apply(true); });
     const status = () => {
         const supported = window.DisplayMmdScreenLightingSupported;

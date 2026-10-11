@@ -117,6 +117,16 @@ function initLipSync() {
     player = createLipSyncPlayer({ api, modelState, busy, getMapping: indexes, syncModel: sync,
         status, progress: value => { progress.value = value; }, changed: () => updateButtons(),
         audio: ttsSwitch ? document.getElementById('ttsAudio') : null });
+    // 回复与Human复用本播放器；TTS优先，预览取消不能中止真实TTS的嘴型。
+    window.DisplayMmdLipSyncPreview = Object.freeze({
+        async play(text) {
+            if (player.isTts) throw new Error('TTS正在播放，请结束语音后预览回复口型');
+            sync(); input.value = text; await player.preview(text); return player.previewState;
+        },
+        getState: () => player.previewState,
+        stop(sequence) { if (!player.isTts && (sequence === undefined || sequence === player.previewState.sequence)) player.stop(); }
+    });
+    window.dispatchEvent(new Event('mmd-ar-lipsync-ready'));
     play.addEventListener('click', () => player.preview(input.value));
     stop.addEventListener('click', () => player.stop('口型已停止，恢复原有表情；角色动作与语音继续播放。', true));
     ttsSwitch?.addEventListener('change', () => {

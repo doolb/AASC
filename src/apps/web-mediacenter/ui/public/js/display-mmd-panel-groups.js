@@ -2,7 +2,7 @@
 (function exposeDisplayMmdPanelGroups(root) {
     const GROUPS = Object.freeze({
         displayMmdLightingPanel: [
-            ['基础光照', ['displayMmdLightingPreset', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
+            ['基础光照', ['displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
             ['高光', ['displayMmdSpecularEnabled', 'displayMmdSpecularColor', 'displayMmdSpecularIntensity', 'displayMmdSpecularShininess']],
             ['AO', ['displayMmdPmxAoEnabled', 'displayMmdPmxAoEdgeCorrection', 'mmdArAoConcavityAngle', 'displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3']],
             ['主光', ['displayMmdKeyShadowEnabled', 'displayMmdKeyColor', 'displayMmdKeyIntensity', 'displayMmdKeyDirectionLongitude', 'mmdArKeyShadowBias', 'mmdArKeyShadowNormalBias', 'mmdArShadowMapSize', 'mmdArShadowCameraScale']],
@@ -12,8 +12,13 @@
         ],
         displayMmdMotionPanel: [
             ['动作', ['displayMmdMotionPlayback', 'displayMmdMotionProgress', 'mmdArCameraMotionPlayback', 'mmdArCameraMotionProgress']],
+            ['高级动作', ['mmdArAdvancedMotionPanel']],
+            ['MPL 低级动作', ['mmdArMplPanel']],
+            ['Human', ['mmdArHumanPanel']],
+            ['表情', ['mmdArExpressionPanel']],
+            ['AI 回复', ['mmdArReplyPanel']],
             ['口型', ['displayMmdLipSyncPanel']],
-            ['物理', ['displayMmdPhysicsEnabled', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
+            ['物理', ['displayMmdPhysicsEnabled', 'mmdArHandAvoidanceRow', 'mmdArHandAvoidanceStatus', 'displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
             ['本地资源', ['mmdArLocalAssets']]
         ],
         displayArTargetPanel: [
@@ -200,7 +205,7 @@
 
     function initialize() {
         // 渲染组在HTML中预建，沿用同一展开语义；开关不触发展开按钮。
-        for (const button of document.querySelectorAll('[data-render-group]')) {
+        for (const button of document.querySelectorAll('[data-render-group], #mmdArLightingPresets .display-mmd-panel-group-toggle')) {
             button.addEventListener('click', (event) => {
                 event.stopPropagation();
                 const body = document.getElementById(button.getAttribute('aria-controls'));

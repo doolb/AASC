@@ -547,6 +547,17 @@ class MMDAnimationHelper {
 
 			this._saveBones( mesh );
 
+		}
+
+		if ( this.onHumanPose ) {
+			if ( ! mixer || ! this.enabled.animation ) {
+				if ( ! objects.backupBones ) this._saveBones( mesh );
+				else this._restoreBones( mesh );
+			}
+			this.onHumanPose( mesh, delta );
+		}
+
+		if ( ( mixer && this.enabled.animation ) || this.onHumanPose ) {
 			// PMX animation system special path
 			if ( this.configuration.pmxAnimation &&
 				mesh.geometry.userData.MMD && mesh.geometry.userData.MMD.format === 'pmx' ) {
@@ -579,6 +590,8 @@ class MMDAnimationHelper {
 
 		}
 
+		if ( this.onHumanAfterIK ) this.onHumanAfterIK( mesh, delta, physics );
+
 		if ( looped === true && this.enabled.physics ) {
 
 			if ( physics && this.configuration.resetPhysicsOnLoop ) physics.reset();
@@ -593,6 +606,8 @@ class MMDAnimationHelper {
 			physics.update( delta );
 
 		}
+
+		if ( this.onHumanAfterPhysics ) this.onHumanAfterPhysics( mesh, physics );
 
 	}
 
@@ -1224,3 +1239,5 @@ export { MMDAnimationHelper };
 /* aasc-shared:addAnimationLifecycle */
 
 /* aasc-shared:addSolverAnimationHelper */
+
+/* aasc-shared:human-helper */

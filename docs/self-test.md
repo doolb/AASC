@@ -1333,3 +1333,9 @@ code48发布验证：931包内文件和工作区一致，RSA清单、LAN/WAN所�
 发布验证：code49的931文件源码一致、ZIP CRC、RSA签名及组件约束通过；LAN/WAN全组件HTTP大小与SHA-256一致，精确清理无错误。首次WAN回读中断，完整流程重试成功。
 
 2026-10-10 最终发布：code-v56.zip已发布LAN/WAN，16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42；源提交34671c31。931文件快照及运行资源完整、ZIP CRC/RSA/组件约束、内外网全部组件HTTP大小/SHA-256通过，签名清单完全一致，精确清理无错误，两端code目录仅保留code-v56.zip。21文件93/93通过，无跳过；servicePackage=false，minApk=true/dependenciesPackage=false保持，未构建原生APK或恢复旧声纹。手机现场验收保留。
+
+## 正式MMD灯光与动作同步（2026-10-11）
+
+npm run test:mmd-production：97/97通过；npm run test:mmd-production:browser：1/1通过（155.0秒）；npm run test:mmd-production:independent：1/1通过（231.7秒）。99项零失败/跳过/pageerror。正式自测包括旧灯光、高光/AO边界键保留、十组预设/保存、固定资源/相对依赖完整、刚体避让解除回归、真实PMX待机/动态目录/MPL无导航及真实WAV/TTS音频时钟互斥。独立覆盖六类源码/预览VMD逐字节一致、下载/迟到保护/原动作/避让/后端重建。
+
+npm run prepare:mmd-production、npm run build:web:mmd-ar-test成功；固定编译器与许可证/待机/舞蹈摘要校验。临时目录配额及测试夹具共用构建目录导致的首轮失败已修正测试环境；最终用任务专属磁盘缓存与固定模型缓存。真实风吹仍有刚体剩余接触，软件GPU观测不证明手机画质/性能或网格零穿模。全仓旧VM/文本及模型依赖失败不在本次扩修，未宣称全仓通过。

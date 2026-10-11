@@ -4,6 +4,7 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
     let applied = false;
     const selected = new Map();
     let transient = new Map();
+    let automatic = new Map(), human = new Map();
     const underlying = new Map();
 
     function restore() {
@@ -32,7 +33,7 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
             nextItems.map(item => [item.name, item.type, item.panel])]);
         // 同模型物理重载保留选择；换模型或Morph索引变化则清空，不能仅按名称复用。
         if (nextKey !== key) selected.clear();
-        transient.clear();
+        transient.clear(); automatic.clear(); human.clear();
         mesh = next;
         items = nextItems;
         key = nextKey;
@@ -41,7 +42,7 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
 
     function apply() {
         if (!mesh?.morphTargetInfluences || applied) return;
-        for (const [index, weight] of new Map([...selected, ...transient])) {
+        for (const [index, weight] of new Map([...automatic, ...human, ...selected, ...transient])) {
             underlying.set(index, mesh.morphTargetInfluences[index]);
             mesh.morphTargetInfluences[index] = weight;
         }
@@ -120,8 +121,47 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
         return true;
     }
 
+    function setAutomatic(token, weights) {
+        bind();
+        if (!mesh || token !== mesh.uuid) return false;
+        bindHelper(getHelper());
+        if (!Array.isArray(weights) || weights.length > items.length) throw new Error('自动表情权重列表无效');
+        const next = new Map();
+        for (const pair of weights) {
+            if (!Array.isArray(pair) || pair.length !== 2 || !Number.isInteger(pair[0])
+                || !items[pair[0]]?.supported || !Number.isFinite(pair[1])) throw new Error('自动表情表情或强度无效');
+            next.set(pair[0], Math.max(0, Math.min(1, pair[1])));
+        }
+        restore();
+        automatic = next;
+        applied = false;
+        apply();
+        onTransientChanged?.();
+        return true;
+    }
+
+    function setHuman(token, weights) {
+        bind();
+        if (!mesh || token !== mesh.uuid) return false;
+        bindHelper(getHelper());
+        if (!Array.isArray(weights) || weights.length > items.length) throw new Error('Human权重列表无效');
+        const next = new Map();
+        for (const pair of weights) {
+            if (!Array.isArray(pair) || pair.length !== 2 || !Number.isInteger(pair[0])
+                || !items[pair[0]]?.supported || !Number.isFinite(pair[1])) throw new Error('Human表情或强度无效');
+            next.set(pair[0], Math.max(0, Math.min(1, pair[1])));
+        }
+        restore();
+        human = next;
+        applied = false;
+        apply();
+        // 当前渲染帧内合成Human，不再次排队渲染。
+        return true;
+    }
+
     return {
         setTransient,
+        setAutomatic, setHuman,
         before,
         after: apply,
         set,
@@ -132,6 +172,8 @@ export function createManualExpressions({ getMesh, getProfile, getHelper, onChan
                 items: items.map(item => ({ ...item, selected: selected.has(item.index),
                     weight: selected.get(item.index) ?? 0 })) };
         },
-        dispose() { restore(); unhook(); transient.clear(); selected.clear(); mesh = null; items = []; },
+        dispose() { restore(); unhook(); transient.clear(); automatic.clear(); human.clear(); selected.clear(); mesh = null; items = []; },
     };
 }
+
+/* aasc-shared:human-expressions */

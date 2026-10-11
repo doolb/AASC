@@ -24,13 +24,10 @@ export function setSpecular(value) {
   return { ...settings };
 }
 
-export function initSpecularPanel(root = document, storage = () => localStorage) {
-  const panel = root.querySelector('.mmd-ar-specular');
-  if (!panel || panel.dataset.bound) return;
-  panel.dataset.bound = 'true';
-  try { setSpecular(JSON.parse(storage().getItem(STORAGE_KEY))); } catch (error) { setSpecular(DEFAULTS); }
-  const fields = [...panel.querySelectorAll('[data-specular]')];
-  const sync = () => {
+export const getSpecular = () => ({ ...settings });
+
+function syncSpecularPanel(root) {
+  const fields = [...root.querySelectorAll('.mmd-ar-specular [data-specular]')];
     for (const field of fields) {
       const key = field.dataset.specular;
       if (key === 'enabled') field.checked = settings.enabled;
@@ -41,7 +38,23 @@ export function initSpecularPanel(root = document, storage = () => localStorage)
       const output = field.parentElement.querySelector('output');
       if (output) output.textContent = String(settings[key]);
     }
-  };
+}
+
+// 预设复用同一高光状态与历史键，同时更新控件，不新建第二套材质配置。
+export function applySpecular(value, root = document, storage = () => localStorage) {
+    setSpecular(value);
+    syncSpecularPanel(root);
+    try { storage().setItem(STORAGE_KEY, JSON.stringify(settings)); }
+    catch (error) { /* 存储失败仍保留本页高光设置。 */ }
+}
+
+export function initSpecularPanel(root = document, storage = () => localStorage) {
+  const panel = root.querySelector('.mmd-ar-specular');
+  if (!panel || panel.dataset.bound) return;
+  panel.dataset.bound = 'true';
+  try { setSpecular(JSON.parse(storage().getItem(STORAGE_KEY))); } catch (error) { setSpecular(DEFAULTS); }
+  const fields = [...panel.querySelectorAll('[data-specular]')];
+  const sync = () => syncSpecularPanel(root);
   for (const field of fields) field.addEventListener('input', () => {
     const key = field.dataset.specular;
     const parsers = { enabled: () => field.checked, color: () => field.value };

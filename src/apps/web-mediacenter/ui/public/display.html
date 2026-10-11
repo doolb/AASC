@@ -205,6 +205,51 @@
                         <span>播放进度 <output id="displayMmdMotionTime">--:-- / --:--</output></span>
                         <progress id="displayMmdMotionProgress" max="1" value="0" aria-label="动作播放进度"></progress>
                     </label>
+
+      <div id="mmdArReplyPanel" data-mmd-production-only="">
+        <label class="display-mmd-lighting-field" for="mmdArReplyText"><span>AI 回复内容</span></label>
+        <textarea id="mmdArReplyText" rows="6" maxlength="65536" spellcheck="false" style="width:100%;box-sizing:border-box;resize:vertical;background:#171a22;color:#eef2ff;border:1px solid #758bff88;border-radius:6px;padding:8px"></textarea>
+        <div class="display-mmd-ar-actions">
+          <button type="button" class="display-mmd-ar-action" data-reply="parse">解析标记</button>
+          <button type="button" class="display-mmd-ar-action" data-reply="play">播放回复预览</button>
+          <button type="button" class="display-mmd-ar-action" data-reply="stop" disabled="">停止并恢复</button>
+          <button type="button" class="display-mmd-ar-action" data-reply="sample">填入示例</button>
+        </div>
+        <p class="mind-basic-note">粘贴已有 AI 回复。识别常见 Emoji（爱心、猫咪、猫爪、拥抱、手势等）、（微笑）、*点头*、[表情:开心]、[动作:点头]。参数：时长=2 强度=0.7 次数=1；明确的 mpl 代码块作为低级动作。表情、身体动作、口型并行。无声预览，不调用 LLM 或 TTS，口型文字最多400字符。</p>
+        <details><summary>识别结果与口型文字</summary>
+          <p class="mind-basic-note" data-reply-speech="" style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
+          <ul class="mind-basic-note" data-reply-tracks="" style="padding-left:20px;overflow-wrap:anywhere"></ul>
+        </details>
+        <progress max="1" value="0" style="width:100%" aria-label="回复预览进度"></progress>
+        <p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
+      </div>
+      <div id="mmdArAdvancedMotionPanel" data-mmd-production-only="">
+        <label class="mind-basic-field"><span>时长（秒）</span><input data-duration="" type="number" min="0.2" max="3600" step="0.1" placeholder="默认 / 原时长"></label>
+        <label class="mind-basic-field"><span>强度</span><input data-strength="" type="number" min="0" max="1" step="0.1" placeholder="默认"></label>
+        <label class="mind-basic-field"><span>次数</span><input data-count="" type="number" min="1" max="8" step="1" placeholder="默认"></label>
+        <div class="display-mmd-ar-actions">
+          <button type="button" class="display-mmd-ar-action" data-advanced-stop="">停止并恢复</button>
+        </div>
+        <div data-builtin-actions="" class="display-mmd-ar-actions"></div>
+        <div data-server-actions="" class="display-mmd-ar-actions"></div>
+        <p data-server-status="" class="mind-basic-note" role="status">正在读取服务器动作…</p>
+        <p class="mind-basic-note">同名登记行为优先，其次服务器动作，最后MPL模板。时长留空使用默认：服务器VMD按原速原长播放。点击动作同时载入可用MPL，供编辑、预览和下载；只有VMD的动作显示暂无源码。基础待机与物理继续运行；手动表情和口型可同时播放。</p>
+        <p class="mind-basic-note" role="status" aria-live="polite">需要标准 MMD 骨骼的 PMX 模型。</p>
+      </div>
+    <div id="mmdArHumanPanel" data-mmd-production-only=""><p class="mind-basic-note">HumanInterfaceElement：生理、反射、后天行为和MPL共用控制层。动作库保存在当前浏览器，按模型匹配；可导出备份。</p><div class="mind-basic-imu-options"><label><input data-human-field="breathing" type="checkbox" value="">呼吸</label><label><input data-human-field="blinking" type="checkbox" value="">自然眨眼</label></div><label class="mind-basic-field"><span>生理强度</span><input data-human-field="physiologyStrength" type="number" value="0.35" min="0" max="1" step="0.05"></label><button type="button" class="display-mmd-ar-action" data-human="physiology">保存生理设置</button><details open=""><summary>头部与眼球注视</summary><p class="mind-basic-note">默认看向相机；轻触或点击画面后临时看向点击位置，再平滑返回。拖动不切换目标，显式头眼动作优先。</p><div class="mind-basic-imu-options"><label><input data-human-field="gazeHead" type="checkbox" value="">头部跟随</label><label><input data-human-field="gazeEyes" type="checkbox" value="">眼球跟随</label></div><label class="mind-basic-field"><span>注视强度</span><input data-human-field="gazeStrength" type="number" value="0.7" min="0" max="1" step="0.05"></label><label class="mind-basic-field"><span>头部水平附加角（°）</span><input data-human-field="gazeHeadYaw" type="number" value="45" min="0" max="85" step="1"></label><label class="mind-basic-field"><span>头部垂直附加角（°）</span><input data-human-field="gazeHeadPitch" type="number" value="25" min="0" max="60" step="1"></label><label class="mind-basic-field"><span>眼球水平附加角（°）</span><input data-human-field="gazeEyeYaw" type="number" value="20" min="0" max="45" step="1"></label><label class="mind-basic-field"><span>眼球垂直附加角（°）</span><input data-human-field="gazeEyePitch" type="number" value="15" min="0" max="40" step="1"></label><label class="mind-basic-field"><span>头部缓动（ms）</span><input data-human-field="gazeHeadMs" type="number" value="200" min="0" max="2000" step="1"></label><label class="mind-basic-field"><span>眼球缓动（ms）</span><input data-human-field="gazeEyeMs" type="number" value="60" min="0" max="2000" step="1"></label><label class="mind-basic-field"><span>点击目标停留（秒）</span><input data-human-field="gazeHoldSeconds" type="number" value="3" min="0.2" max="30" step="0.1"></label><label class="mind-basic-field"><span>模型正面方向</span><select data-human-field="gazeForward"><option value="+Z">+Z（标准PMX）</option><option value="-Z">-Z</option></select></label><div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-human="gaze">保存注视设置</button><button type="button" class="display-mmd-ar-action" data-human="gaze-reset">返回相机</button></div></details><details><summary>模型能力与人工映射</summary><p class="mind-basic-note" data-human-capabilities=""></p><div data-human-mappings=""></div><button type="button" class="display-mmd-ar-action" data-human="mappings">保存映射</button></details><details open=""><summary>后天动作库 / 版本</summary><label class="mind-basic-field"><span>行为名称</span><input data-human-field="actionId" type="text" value="" maxlength="80" placeholder="例如：招手"></label><label class="mind-basic-field"><span>登记VMD（留空可登记当前基础VMD）</span><input data-human-field="vmd" type="file" value="" accept=".vmd"></label><label class="mind-basic-field"><span>组合表情名称（可选）</span><input data-human-field="expression" type="text" value="" maxlength="80"></label><label class="mind-basic-field"><span>控制部位（默认全部非根轨道）</span><select data-human-field="mask"><option value="">代码 / VMD涉及的部位</option><option value="head">head</option><option value="torso">torso</option><option value="leftArm">leftArm</option><option value="rightArm">rightArm</option><option value="legs">legs</option><option value="face">face</option><option value="eyes">eyes</option><option value="mouth">mouth</option><option value="root">root</option><option value="all">all</option></select></label><div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-human="register">登记VMD</button><button type="button" class="display-mmd-ar-action" data-human="register-mpl">登记下面的MPL</button></div><label class="mind-basic-field"><span>已登记行为</span><select data-human-field="action"></select></label><label class="mind-basic-field"><span>行为版本</span><select data-human-field="version"></select></label><div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-human="perform">播放行为</button><button type="button" class="display-mmd-ar-action" data-human="version">切换默认版本</button><button type="button" class="display-mmd-ar-action" data-human="stop">停止本面板动作</button></div></details><details><summary>MPL覆写 / 叠加原动作</summary><textarea data-human-field="source" rows="9" maxlength="65536" spellcheck="false" aria-label="MPL修正代码" style="width:100%;box-sizing:border-box;background:#171a22;color:#eef2ff;resize:vertical"></textarea><label class="mind-basic-field"><span>混合方式</span><select data-human-field="mode"><option value="override">覆写指定部位</option><option value="additive">叠加增量</option></select></label><label class="mind-basic-field"><span>开始时间（秒）</span><input data-human-field="start" type="number" value="0" min="0" max="3600" step="0.1"></label><label class="mind-basic-field"><span>时长（秒，留空采用MPL原时长）</span><input data-human-field="duration" type="number" value="" min="0.03333334" max="3600" step="0.1"></label><label class="mind-basic-field"><span>强度</span><input data-human-field="strength" type="number" value="1" min="0" max="1" step="0.05"></label><div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-human="copy-mpl">从MPL分类复制代码</button><button type="button" class="display-mmd-ar-action" data-human="preview">修正当前基础动作</button><button type="button" class="display-mmd-ar-action" data-human="revise">保存行为的新版本</button></div><p class="mind-basic-note">修正层不改原VMD文件。保存新版本继承当前默认版本，旧版本可随时切回。动态刚体骨骼继续由物理控制。</p></details><details><summary>组合表情</summary><label class="mind-basic-field"><span>表情组合名称</span><input data-human-field="preset" type="text" value="友好"></label><textarea data-human-field="weights" rows="3" aria-label="组合表情权重" style="width:100%;box-sizing:border-box">{"开心":0.7,"害羞":0.3}</textarea><button type="button" class="display-mmd-ar-action" data-human="preset">保存组合</button><button type="button" class="display-mmd-ar-action" data-human="face">预览组合</button></details><details><summary>条件反射</summary><label class="mind-basic-field"><span>规则ID</span><input data-human-field="ruleId" type="text" value="touch-head"></label><label class="mind-basic-field"><span>事件</span><input data-human-field="event" type="text" value="touch.head"></label><label class="mind-basic-field"><span>行为名称（可选）</span><input data-human-field="reflexAction" type="text" value=""></label><label class="mind-basic-field"><span>表情（可选）</span><input data-human-field="reflexExpression" type="text" value="害羞"></label><label class="mind-basic-field"><span>触发阈值</span><input data-human-field="threshold" type="number" value="0.2" min="0" max="1" step="0.1"></label><label class="mind-basic-field"><span>冷却（秒）</span><input data-human-field="cooldown" type="number" value="2" min="0" max="60" step="0.1"></label><label class="mind-basic-field"><span>反射时长（秒）</span><input data-human-field="reflexDuration" type="number" value="1.5" min="0.2" max="15" step="0.1"></label><div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-human="reflex">保存规则</button><button type="button" class="display-mmd-ar-action" data-human="emit">发送测试事件</button><button type="button" class="display-mmd-ar-action" data-human="remove-reflex">删除规则</button></div><p class="mind-basic-note" data-human-rules=""></p></details><div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-human="export">导出动作库</button><button type="button" class="display-mmd-ar-action" data-human="import">导入动作库</button></div><input data-human-field="libraryFile" type="file" value="" accept=".json" hidden=""><p class="mind-basic-note" data-human-runtime=""></p><p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></p></div><div id="mmdArMplPanel" data-mmd-production-only="">
+        <label class="display-mmd-lighting-field" for="mmdArMplSource"><span>MPL 动作代码</span></label>
+        <textarea id="mmdArMplSource" rows="12" maxlength="65536" spellcheck="false" autocapitalize="off" style="width:100%;box-sizing:border-box;resize:vertical;background:#171a22;color:#eef2ff;border:1px solid #758bff88;border-radius:6px;padding:8px;font:12px/1.5 monospace" aria-describedby="mmdArMplHint"></textarea>
+        <div class="display-mmd-ar-actions">
+          <button type="button" class="display-mmd-ar-action" data-mpl="play">编译并播放</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="stop" disabled="">停止MPL层</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="sample">填入动作＋表情示例</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="expression-sample">填入表情示例</button>
+          <button type="button" class="display-mmd-ar-action" data-mpl="save" disabled="">下载 VMD</button>
+        </div>
+        <p id="mmdArMplHint" class="mind-basic-note">粘贴已生成的 MPL；时间为秒，角度为度。pose 内可写 morph "PMX原始表情名" 0.8;，权重0–1，也支持纯表情。名称见「表情」分类；手动选择优先。MPL只覆盖代码涉及的部位，沿用当前播放方式，基础VMD与物理继续运行。可在Human分类保存修正版本。</p>
+        <p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere">点击编译时才加载编译器；代码不上传服务器。</p>
+      </div>
+    <div id="mmdArExpressionPanel" data-mmd-production-only=""><div data-expression-list=""></div><button type="button" class="display-mmd-ar-action" data-expression-clear="">清除手动表情</button><p class="mind-basic-note" role="status" aria-live="polite"></p></div>
                     <section id="displayMmdLipSyncPanel" data-mmd-production-only="">
                         <label class="display-mmd-lighting-shadow"><input type="checkbox" data-lipsync-tts checked><span>同步 TTS 口型</span></label>
                         <label class="display-mmd-lighting-field"><span>文字口型预览</span>
@@ -223,6 +268,7 @@
                         <input id="displayMmdPhysicsEnabled" type="checkbox" checked>
                         <span>启用 PMX 物理（切换时重新加载模型）</span>
                     </label>
+<label id="mmdArHandAvoidanceRow" class="display-mmd-lighting-shadow" data-mmd-production-only><input id="mmdArHandAvoidance" type="checkbox" checked><span>手部防穿模</span></label><p id="mmdArHandAvoidanceStatus" class="mind-basic-note" role="status" data-mmd-production-only></p>
                     <label class="display-mmd-lighting-field">
                         <span>PMX 物理频率 <output id="displayMmdPhysicsFpsValue">90 Hz</output></span>
                         <input id="displayMmdPhysicsFps" type="range" min="30" max="180" step="5" value="90">
@@ -291,15 +337,25 @@
                         </button>
                     </div>
 <label class="mind-basic-field"><span>Canvas渲染倍率 <output data-render-value="canvasScale">1.00×</output></span><input type="range" data-render-setting="canvasScale" min="0.25" max="2" step="0.25" value="1"><small data-render-limit=""></small></label>
-                    <label class="display-mmd-lighting-field">
-                        <span>亮度预设</span>
-                        <select id="displayMmdLightingPreset">
-                            <option value="default">默认</option>
-                            <option value="soft">柔和</option>
-                            <option value="bright">明亮</option>
-                            <option value="custom">自定义</option>
-                        </select>
-                    </label>
+                    <section id="mmdArLightingPresets" class="display-mmd-panel-group" data-mmd-production-only="">
+        <div class="display-mmd-panel-group-header">
+          <button class="display-mmd-panel-group-toggle" type="button" data-group-title="灯光预设" aria-controls="mmdArLightingPresetsBody" aria-expanded="true" aria-label="收起灯光预设设置">
+            <span>灯光预设</span><span class="display-mmd-panel-group-arrow" aria-hidden="true">⌄</span>
+          </button>
+        </div>
+        <div id="mmdArLightingPresetsBody" class="display-mmd-panel-group-body">
+        <label class="mind-basic-field"><span>灯光预设</span><select id="displayMmdLightingPreset"><option value="custom">当前设置（未保存）</option></select></label>
+        <label class="mind-basic-field"><span>预设名称</span><input data-preset-name="" type="text" maxlength="64" placeholder="例如：暖色侧光" style="min-width:0;width:100%;box-sizing:border-box"></label>
+        <div class="display-mmd-ar-actions" style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="display-mmd-ar-action" type="button" data-preset-action="save">保存新预设</button>
+          <button class="display-mmd-ar-action" type="button" data-preset-action="overwrite" disabled="">覆盖所选</button>
+          <button class="display-mmd-ar-action" type="button" data-preset-action="delete" disabled="">删除所选</button>
+          <button class="display-mmd-ar-action" type="button" data-preset-action="import">导入文件</button>
+          <button class="display-mmd-ar-action" type="button" data-preset-action="export" disabled="">导出所选</button>
+          <button class="display-mmd-ar-action" type="button" data-preset-action="exportAll" disabled="">导出全部</button>
+        </div><input type="file" accept="application/json,.json" hidden="">
+        <p class="mind-basic-note" data-preset-status="" role="status" aria-live="polite" style="overflow-wrap:anywhere"></p>
+      </div></section>
                     <label class="display-mmd-lighting-shadow">
                         <input id="displayMmdSpecularEnabled" data-specular="enabled" type="checkbox">
                         <span>启用自定义 Blinn-Phong 高光</span>
@@ -564,11 +620,13 @@
     <script src="js/display-chat.js" defer></script>
     <script src="js/display-voice-controls.js" defer></script>
     <script src="js/display-mmd-settings.js" defer></script>
+    <script src="js/display-mmd-human-bridge.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
     <script type="module" src="js/mmd-screen-lighting-panel.mjs"></script>
     <script type="module" src="js/mmd-render-settings.mjs"></script>
     <script src="js/display-mmd-panel-groups.js" defer></script>
     <script src="js/display-mmd-lighting.js" defer></script>
+    <script type="module" src="js/mmd-actions-ui.mjs" data-mmd-production-only></script>
     <script src="js/mmd-imu-core.js" defer data-mmd-production-only></script>
     <script src="js/display-mmd-ar-imu.js" defer data-mmd-production-only></script>
     <script src="js/display-mmd-gravity-camera.js" defer data-mmd-production-only></script>

@@ -11,6 +11,7 @@ async function stageRuntime(root, { webMode = false } = {}) {
     const folder = path.join(root, 'js');
     const controllerFile = path.join(folder, 'mmd-expressions.mjs');
     let controller = await fs.readFile(controllerFile, 'utf8');
+    if (!controller.includes('aasc-shared:human-expressions')) {
     controller = once(controller, '    let transient = new Map();', '    let transient = new Map();\n    let automatic = new Map();');
     controller = once(controller, '        transient.clear();', '        transient.clear();\n        automatic.clear();');
     controller = once(controller, '...selected, ...transient', '...automatic, ...selected, ...transient');
@@ -21,10 +22,11 @@ async function stageRuntime(root, { webMode = false } = {}) {
     controller = controller.slice(0, end) + '\n' + automatic + controller.slice(end);
     controller = once(controller, '        setTransient,', '        setTransient,\n        setAutomatic,');
     controller = once(controller, 'transient.clear(); selected.clear();', 'transient.clear(); automatic.clear(); selected.clear();');
+    }
     await fs.writeFile(controllerFile, controller);
     const runtimeFile = path.join(folder, 'display-pmx-runtime.js');
     let runtime = await fs.readFile(runtimeFile, 'utf8');
-    runtime = once(runtime, '        setLipSyncExpressions:', '        setReplyExpressions: (token, weights) => manualExpressions.setAutomatic(token, weights),\n        setLipSyncExpressions:');
+    if (!runtime.includes('humanRuntimeInterfaces')) runtime = once(runtime, '        setLipSyncExpressions:', '        setReplyExpressions: (token, weights) => manualExpressions.setAutomatic(token, weights),\n        setLipSyncExpressions:');
     runtime = once(runtime, 'motionResourceId: motion.motionResourceId };', "motionResourceId: motion.motionResourceId, playMode: motion.playMode || currentProfile.playMode };");
     await fs.writeFile(runtimeFile, runtime);
     const displayFile = path.join(folder, 'display-mmd.js');
@@ -36,15 +38,18 @@ async function stageRuntime(root, { webMode = false } = {}) {
     // 独立生成副本暴露现有口型player，避免AI回复另建一个嘴型写入者。
     const playerFile = path.join(folder, 'mmd-lipsync-player.mjs');
     let player = await fs.readFile(playerFile, 'utf8');
+    if (!player.includes('get previewState()')) {
     player = once(player, '            void start(text);', '            return start(text);');
     player = once(player, '        get isTts()', `        get previewState() { return { sequence: generation, phase, token: ownedToken,
             time: entry ? audio.currentTime : Math.max(0, (performance.now() - startAt) / 1000),
             duration: entry ? audio.duration : timeline?.duration || 0,
             units: (timeline?.units || []).map(unit => ({ label: unit.label, start: unit.start, end: unit.end })) }; },
         get isTts()`);
+    }
     await fs.writeFile(playerFile, player);
     const uiFile = path.join(folder, 'mmd-lipsync-ui.mjs');
     let ui = await fs.readFile(uiFile, 'utf8');
+    if (!ui.includes('window.MmdArLipSyncPreview')) {
     ui = once(ui, "    play.addEventListener('click',", `    window.MmdArLipSyncPreview = Object.freeze({
         async play(text) { sync(); input.value = text; await player.preview(text); return player.previewState; },
         getState: () => player.previewState,
@@ -52,6 +57,7 @@ async function stageRuntime(root, { webMode = false } = {}) {
     });
     window.dispatchEvent(new Event('mmd-ar-lipsync-ready'));
     play.addEventListener('click',`);
+    }
     await fs.writeFile(uiFile, ui);
 }
 async function stage(root, { webMode = false } = {}) {

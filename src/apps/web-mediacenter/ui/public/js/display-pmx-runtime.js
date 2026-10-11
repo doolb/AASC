@@ -1,3 +1,4 @@
+import { createHumanRuntime, humanRuntimeInterfaces } from './mmd-human-runtime.mjs';
 import { calculateCanvasSize } from './mmd-render-settings.mjs';
 import { runTemporalAction } from './mmd-temporal-aa.mjs';
 import { DEFAULT_AR_CAMERA_SETTINGS, normalizeArCameraSettings, classifyHit, disposeObject, waitForManagedLoad, normalizeModel, createModelRotationPivot } from './mmd-runtime-utils.mjs';
@@ -42,7 +43,7 @@ import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
 import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights, setPmxFillShadowMode } from './display-pmx-lighting-mode.mjs';
 const TARGET_MODEL_HEIGHT = 1.75;
 const MMD_MODEL_PREFIXES = Object.freeze([
-    '/models/mmd/',
+    '/models/mmd/', '/mmd/',
     '/api/mmd/static/mmd/'
 ]);
 const SHADOW_MAP_SIZE = 1024;
@@ -148,7 +149,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     }
     // 仅独立测试生成副本：渲染前读取主光设置，不改正式配置或补光自己的阴影。
     const syncTestKeyShadowBias = (() => {
-
       const shadowBiasFields = [{"key":"bias","id":"mmdArKeyShadowBias","label":"阴影深度偏移 bias","min":-0.005,"max":0.005,"step":0.0001,"digits":4,"defaultValue":-0.0005},{"key":"normalBias","id":"mmdArKeyShadowNormalBias","label":"阴影法线偏移 normalBias","min":0,"max":0.1,"step":0.001,"digits":3,"defaultValue":0.02}];
       function normalizeShadowBias(value, field) {
   // 空值、布尔值和对象不参与 Number 隐式换算，避免误把坏存储值解释为零。
@@ -388,6 +388,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         onTransientChanged: () => startRendering(),
         onChanged: () => { ambientOcclusion.invalidateTemporal(); startRendering(); }
     });
+    const human = createHumanRuntime({ getMesh: () => currentMesh, getHelper: () => helper.current,
+        getProfile: () => currentProfile, getCamera: () => camera, canvas, manualExpressions, startRendering: () => startRendering() });
     const physicsGate = { paused: false };
     let motionPlaybackEnabled = true;
     let pendingInitialMotionHelper = null;
@@ -644,6 +646,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             if (!advanceCameraMotion(delta)) updateCameraView(delta);
         }
         const frameHelper = motionSwitchMesh === currentMesh ? null : helper.current;
+        human.before(delta, frameHelper);
         manualExpressions.before(frameHelper);
         syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);
         const delayInitialMotion = frameHelper && pendingInitialMotionHelper === frameHelper;
@@ -686,7 +689,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             // 恢复原始可见性，避免覆盖 AR 失锁或其他显示状态。
             if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;
         }
-        frameHandle = requestAnimationFrame(renderFrame);
+        if (!frameHandle) frameHandle = requestAnimationFrame(renderFrame);
     };
     const startRendering = () => {
         if (!visible || disposed || frameHandle) return;
@@ -737,6 +740,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             .then((results) => results.every(Boolean));
     };
     const setVisible = (nextVisible) => {
+        human.setVisible(nextVisible);
         if (nextVisible === true && !visible) {
             helper.current?.objects?.get(currentMesh)?.physics?.resetAnchorInterpolation();
         }
@@ -886,6 +890,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const { advanceCameraMotion, loadCameraMotion, setCameraMotionPlaybackEnabled,
         getCameraMotionProgress, clearCameraMotion } = cameraMotion;
     const dispose = () => {
+        human.dispose();
         manualExpressions.dispose();
         disposed = true;
         cameraMotion.disposeCameraMotion();
@@ -953,8 +958,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         getCameraMotionProgress,
         clearCameraMotion,
         // 口型只通过临时Morph层控制，读取当前模型状态，不切换动作或重置物理。
-        setLipSyncExpressions: (token, weights) => manualExpressions.setTransient(token, weights),
-        getManualExpressions: () => manualExpressions.getState(),
+        ...humanRuntimeInterfaces(human, manualExpressions),
         // 动作面板只读当前 VMD action，不向外暴露 mixer。
         getMotionProgress: () => {
             const action = helper.current?.objects?.get(currentMesh)?.mixer?._actions?.[0];
@@ -992,3 +996,5 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
 /* aasc-shared:screen-lighting */
 /* aasc-shared:render-settings */
 /* aasc-shared:preserve-camera-resize */
+
+/* aasc-shared:human-runtime */

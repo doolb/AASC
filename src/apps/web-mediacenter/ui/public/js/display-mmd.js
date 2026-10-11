@@ -10,7 +10,7 @@
     const STATIC_MODEL_FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:vrm|glb)(?:\.zst)?$/u;
     const DEFAULT_MMD_RESOURCE_ID = 'miya-default';
     const MMD_MODEL_PREFIXES = Object.freeze([
-        '/models/mmd/',
+        '/models/mmd/', '/mmd/',
         '/api/mmd/static/mmd/'
     ]);
     const DEFAULT_MODEL_PROFILE = Object.freeze({
@@ -325,7 +325,6 @@
         state.touchGesture = null;
         state.pressedPoint = null;
     }
-
     function beginRotationDrag(event, point) {
         const hitPart = raycast(point);
         // 命中角色仅保留点击候选；任何起点都允许左键或单指拖动旋转。
@@ -338,7 +337,6 @@
         };
         state.canvas.setPointerCapture?.(event.pointerId);
     }
-
     function beginTouchGesture() {
         const activePointers = [...state.activeTouchPointers.entries()];
         state.pressedPoint = null;
@@ -360,7 +358,6 @@
             lastDistance: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y))
         };
     }
-
     function handlePointerDown(event) {
         if (!state.pointerEnabled || !state.visible) return;
         const point = getCanvasPoint(event);
@@ -387,7 +384,6 @@
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         beginRotationDrag(event, point);
     }
-
     function updateTouchGesture() {
         const gesture = state.touchGesture;
         if (!gesture) return;
@@ -411,7 +407,6 @@
         gesture.lastCenter = center;
         gesture.lastDistance = distance;
     }
-
     function handlePointerMove(event) {
         if (!state.pointerEnabled || !state.visible) return;
         const point = getCanvasPoint(event);
@@ -780,7 +775,8 @@
             || !isSameOriginMmdAsset(resource.motionUrl, '.vmd')) {
             throw new Error('服务端没有返回有效的 PMX 资源清单');
         }
-        return { ...profile, ...resource };
+        return { ...profile, ...resource, ...(profile.resourceId === DEFAULT_MMD_RESOURCE_ID && !profile.motionUrl && !profile.motionResourceId ?
+            { motionUrl: '/mmd/motions/miya-idle.vmd', motionResourceId: 'miya-idle-motion' } : {}) };
     }
 
     async function resolveProfile(profile) {
@@ -928,9 +924,12 @@
     root.DisplayMmd = Object.freeze({
         setLipSyncExpressions: (token, weights) => state.modelReady && state.runtimeType === 'pmx'
             && state.runtime?.setLipSyncExpressions?.(token, weights),
+        getHumanInterface: () => state.modelReady && state.runtimeType === 'pmx' ? state.runtime?.getHumanInterface?.() : null,
+        ...root.DisplayMmdHumanBridge?.create(() => root.DisplayMmd.getHumanInterface()),
         getManualExpressions: () => state.modelReady && state.runtimeType === 'pmx'
             ? state.runtime?.getManualExpressions?.() : { token: '', ready: false, items: [] },
         DEFAULT_MMD_LIGHTING,
+        normalizeLightingPreset: normalizeMmdLighting,
         getArCameraState: () => root.MmdArAframeMode || root.MmdArTestAframeMode === true ? state.runtime?.getArCameraState?.() : null,
         getArCameraSyncState: () => root.MmdArAframeMode || root.MmdArTestAframeMode === true ? state.runtime?.getArCameraSyncState?.() : null,
         getState: () => ({

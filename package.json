@@ -24,6 +24,9 @@
     "prepare:mmd-ar-mpl": "node 3rd/mmd-ar-test/web-mpl-build.js",
     "prepare:mmd-ar-lipsync": "node 3rd/mmd-ar-test/web-lipsync-build.js",
     "prepare:mmd-lipsync": "node scripts/ops/prepare-mmd-lipsync.js",
+    "prepare:mmd-production": "node scripts/ops/prepare-mmd-production.js",
+    "prebuild:server-package": "npm run prepare:mmd-production",
+    "prebuild:offline-update": "npm run prepare:mmd-production",
     "download:llm-model": "node scripts/ops/download-llm-model.js",
     "test": "node --test tests/*.test.js",
     "check:chat2api": "node --test src/apps/server/modules/chat2api/*.test.js src/apps/server/modules/task-engine/builtin-tasks/chat2api-proxy.test.js src/apps/web-mediacenter/ui/public/js/chat2api.test.js",
@@ -41,7 +44,13 @@
     "test:imu:six-axis-test": "node --test tests/imu-six-axis-*.test.js",
     "build:apk:noserver": "node scripts/ops/build-apk.js noserver",
     "upload:apk": "npm run build:apk && node scripts/ops/apk-deploy.js",
-    "start:apk:display": "node scripts/ops/apk-start.js"
+    "start:apk:display": "node scripts/ops/apk-start.js",
+    "test:mmd-production": "node --test tests/display-mmd-production-actions.test.js tests/display-mmd-production-panels.test.js tests/mmd-ar-lighting-presets.test.js tests/mmd-ar-human-actions.test.js tests/mmd-ar-human-head-recovery.test.js tests/mmd-ar-human-arm-avoidance.test.js tests/mmd-ar-emoji-gestures.test.js tests/mmd-ar-physics-lifecycle.test.js tests/mmd-pmx-helper.test.js tests/mmd-ar-production-wind.test.js",
+    "test:mmd-production:browser": "node --test tests/display-mmd-production-actions-browser.test.js",
+    "test:mmd-production:independent": "node --test tests/mmd-ar-human-actions-browser.test.js",
+    "prebuild:apk": "npm run prepare:mmd-production",
+    "prebuild:apk:offline": "npm run prepare:mmd-production",
+    "prebuild:apk:withserver": "npm run prepare:mmd-production"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",

@@ -8,48 +8,7 @@
     const STORAGE_KEY = 'aasc.display.mmdLighting.v1';
     const DEFAULT_PHYSICS_FPS = 90;
     const DEFAULT_ROTATION_PHYSICS_LIMIT = 720;
-    const PRESETS = Object.freeze({
-        default: Object.freeze({
-            ambientColor: '#ffffff',
-            ambientIntensity: 1.8,
-            keyColor: '#ffffff',
-            keyIntensity: 2.3,
-            keyDirection: Object.freeze({ longitude: 31, latitude: 46 }),
-            keyShadowEnabled: true,
-            fillEnabled: false,
-            fillColor: '#ffffff',
-            fillIntensity: 1,
-            fillDirection: Object.freeze({ longitude: -45, latitude: 25 }),
-            rimLights: Object.freeze([
-                Object.freeze({ enabled: false, color: '#8acbff', intensity: 1, direction: Object.freeze({ longitude: -130, latitude: 25 }) }),
-                Object.freeze({ enabled: false, color: '#ffb6d9', intensity: 1, direction: Object.freeze({ longitude: 130, latitude: 25 }) })
-            ]),
-            shadowSource: 'key',
-            pmxToonEnabled: false,
-            pmxAoEnabled: true,
-            pmxAoColor: '#931231',
-            pmxAoIntensity: 0.6,
-            pmxAoRadiusPercent: 6,
-            pmxAoResolution: 'half',
-            pmxAoSampleCount: 24,
-            pmxAoBlurPassCount: 1,
-            pmxAoBlurRadii: Object.freeze([3, 3, 3])
-        }),
-        soft: Object.freeze({
-            ambientColor: '#ffffff',
-            ambientIntensity: 1.45,
-            keyColor: '#fff4df',
-            keyIntensity: 1.65,
-            keyDirection: Object.freeze({ longitude: 29, latitude: 43 })
-        }),
-        bright: Object.freeze({
-            ambientColor: '#ffffff',
-            ambientIntensity: 2.35,
-            keyColor: '#ffffff',
-            keyIntensity: 3.35,
-            keyDirection: Object.freeze({ longitude: 29, latitude: 51 })
-        })
-    });
+    const DEFAULT_LIGHTING = root.DisplayMmd.DEFAULT_MMD_LIGHTING;
 
     const state = {
         initialized: false,
@@ -299,14 +258,8 @@
         if (save) saveLighting(state.lighting);
     }
 
-    function handlePresetChange() {
-        const preset = state.elements.preset.value;
-        if (preset === 'custom') return;
-        applyLighting(PRESETS[preset] || PRESETS.default);
-    }
-
     function markCustomPreset() {
-        state.elements.preset.value = 'custom';
+        // 命名预设的修改状态由统一面板管理。
     }
 
     function handleFormInput() {
@@ -324,14 +277,14 @@
         });
         elements.panel.addEventListener('click', (event) => event.stopPropagation());
         elements.reset.addEventListener('click', () => {
-            elements.preset.value = 'default';
+            elements.preset.value = 'custom';
             applyLighting({
-                ...PRESETS.default,
+                ...DEFAULT_LIGHTING,
                 physicsFps: DEFAULT_PHYSICS_FPS,
                 rotationPhysicsLimit: DEFAULT_ROTATION_PHYSICS_LIMIT
             });
         });
-        elements.preset.addEventListener('change', handlePresetChange);
+
         [
             elements.ambientColor,
             elements.ambientIntensity,
@@ -375,16 +328,26 @@
         )).some((element) => !element)) return;
         state.initialized = true;
         const saved = readSavedLighting();
-        state.lighting = root.DisplayMmd.setLighting(saved || PRESETS.default);
+        state.lighting = root.DisplayMmd.setLighting(saved || DEFAULT_LIGHTING);
         updateForm(state.lighting);
         observeRenderResolution();
-        state.elements.preset.value = saved ? 'custom' : 'default';
+        state.elements.preset.value = 'custom';
+        const stripPhysics = value => {
+            const { physicsFps, rotationPhysicsLimit, shadowEnabled, webFillShadowMode, ...lighting } = value;
+            return lighting;
+        };
+        root.DisplayMmdLightingPresetGroups.lighting = {
+            normalize: value => stripPhysics(root.DisplayMmd.normalizeLightingPreset(value)),
+            read: () => stripPhysics(root.DisplayMmd.getLighting()),
+            apply: value => applyLighting(value)
+        };
         bindEvents();
     }
 
     root.DisplayMmdLighting = Object.freeze({
         close: () => setPanelOpen(false),
-        initialize
+        initialize,
+        apply: value => applyLighting({ ...root.DisplayMmd.getLighting(), ...value })
     });
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initialize, { once: true });
@@ -394,3 +357,5 @@
 }(window));
 
 /* aasc-shared:addPhysicsRateLighting */
+
+/* aasc-shared:lighting-presets */

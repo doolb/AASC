@@ -46,6 +46,9 @@ export function initRenderSettings() {
         value[input.dataset.renderSetting] = input.type === 'checkbox' ? input.checked : input.value;
         apply(true);
     });
+    window.DisplayMmdLightingPresetGroups ||= Object.create(null);
+    window.DisplayMmdLightingPresetGroups.render = { normalize: normalizeRenderSettings, read: () => ({ ...value }),
+        apply: next => { value = normalizeRenderSettings(next); apply(true); } };
     document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => { value = { ...defaults }; apply(true); });
     const status = () => {
         const info = window.DisplayMmdRenderInfo || {};

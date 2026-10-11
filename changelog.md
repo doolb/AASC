@@ -1,3 +1,12 @@
+### MMD-AR灯光与动作同步正式包
+
+- ✅ [2026-10-11] 将统一灯光预设、Human/600ms头部衔接、刚体手部避让、服务器待机/跳舞、28类高级动作/146符号、表情与MPL编辑/预览/下载接入正式显示页。
+  - 修改display.html、display-mmd/display-pmx-runtime、mmd-expressions、Three helper；新增mmd-human/reply/mpl/preset模块与纯形状桥接，共享碰撞增加scanPrepared。默认待机仅未指定动作的米娅采用用户35/10/-10；高级点击播放并静默填入源码，无编辑导航。正式TTS保留唯一audio/player与音频时钟。
+  - 正式灯光十组JSON与独立互导，保留旧基础灯光/高光/AO边界存储；日光缺省/复位、傍晚补入，全部组注册后初始化。新增prepare-mmd-production与npm prebuild，生成目录mmd-actions.json、mmd/motions/miya-idle.mpl/vmd、miya-default.vmd及固定版本编译器/许可证，摘要校验后随服务包收录，不提交生成资源。
+  - 独立build及四个注入器复用正式共享实现，保留用户眼球与debug改动。97项定向+正式/独立真实浏览器2项，共99项通过，零失败/跳过/pageerror；独立构建成功，六类源码预览VMD字节一致、旧值保存/动态目录/真实TTS优先与避让刷新/XPBD通过。真实风吹仍有剩余接触，手机观感/性能待验收。
+  - 同步design/spec/task/usage/self-test/todo；服务代码包准备记录待补。未发布LAN/WAN或构建APK/依赖包，既有minApk=true/dependenciesPackage=false保持。
+
+
 ### MMD-AR高级动作按钮精简与静默填入
 
 - ✅ [2026-10-11] 删除内置与服务器动作旁的多余“编辑MPL”按钮。点击动作仍播放并填入可用源码，保持MPL分类折叠状态、当前滚动及焦点；用户手动打开后可编辑、预览和下载。

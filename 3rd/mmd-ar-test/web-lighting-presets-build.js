@@ -97,6 +97,7 @@ function panelScript(source) {
 }
 
 function lightingSource(source) {
+    if (source.includes('aasc-shared:lighting-presets')) return source.replaceAll('DisplayMmdLightingPresetGroups', 'MmdArLightingPresetGroups');
     const start = source.indexOf('    const PRESETS = Object.freeze({');
     const end = source.indexOf('    const state = {', start);
     if (start < 0 || end < 0) throw new Error('统一灯光预设缺少旧预设定义');
@@ -133,7 +134,8 @@ async function stage(root, { webMode } = {}) {
     }
     const folder = path.join(root, 'js');
     const displayPath = path.join(folder, 'display-mmd.js');
-    await fs.writeFile(displayPath, once(await fs.readFile(displayPath, 'utf8'), '        DEFAULT_MMD_LIGHTING,',
+    const displaySource = await fs.readFile(displayPath, 'utf8');
+    if (!displaySource.includes('normalizeLightingPreset:')) await fs.writeFile(displayPath, once(displaySource, '        DEFAULT_MMD_LIGHTING,',
         '        DEFAULT_MMD_LIGHTING,\n        normalizeLightingPreset: normalizeMmdLighting,'));
     const lightingPath = path.join(folder, 'display-mmd-lighting.js');
     await fs.writeFile(lightingPath, lightingSource(await fs.readFile(lightingPath, 'utf8')));
