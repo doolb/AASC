@@ -1,7 +1,36 @@
 /* PMX 运行时模块：状态由主实例访问器持有，资源不复制。 */
+const MINIMUM_CAMERA_ZOOM = 0.1;
+const MAXIMUM_CAMERA_ZOOM = 10;
+
 export function createPmxArCamera(context) {
-    const { THREE, applyCameraView, arCameraState, arFootAnchor, camera, canvas, fitCameraToModel, getArCameraTargetCenter, getModelBounds, normalizeArCameraSettings, normalizePmxProjectionNear, startRendering } = context;
+    const { THREE, applyCameraView, arCameraState, arFootAnchor, camera, canvas, fitCameraToModel, getArCameraTargetCenter, getModelBounds, normalizeArCameraSettings, normalizePmxProjectionNear, syncCameraClip, startRendering } = context;
 /* aasc-module-body-begin */
+    const zoomCameraBy = (factor) => {
+        const numericFactor = Number(factor);
+        if (!Number.isFinite(numericFactor) || numericFactor <= 0) return false;
+        const nextZoom = Math.max(MINIMUM_CAMERA_ZOOM,
+            Math.min(MAXIMUM_CAMERA_ZOOM, context.cameraZoomFactor * numericFactor));
+        if (Math.abs(nextZoom - context.cameraZoomFactor) < Number.EPSILON) return false;
+        if (arCameraState.active) {
+            const targetCenter = getArCameraTargetCenter(arCameraState.lastPose?.targetAspect || 1);
+            if (!targetCenter) return false;
+            const currentBasePosition = camera.position.clone().sub(targetCenter)
+                .multiplyScalar(context.cameraZoomFactor).add(targetCenter);
+            context.cameraZoomFactor = nextZoom;
+            arCameraState.acceptedPosition.copy(arCameraState.acceptedBasePosition)
+                .sub(targetCenter).multiplyScalar(1 / context.cameraZoomFactor).add(targetCenter);
+            camera.position.copy(currentBasePosition.sub(targetCenter)
+                .multiplyScalar(1 / context.cameraZoomFactor).add(targetCenter));
+            camera.updateMatrix();
+            camera.updateMatrixWorld(true);
+            syncCameraClip();
+        } else {
+            context.cameraZoomFactor = nextZoom;
+            applyCameraView();
+        }
+        startRendering();
+        return true;
+    };
     const resetArCameraPose = () => {
         arFootAnchor.reset();
         if (!arCameraState.active) {
@@ -17,6 +46,7 @@ export function createPmxArCamera(context) {
         arCameraState.targetWidth = 1;
         arCameraState.trackingLost = false;
         arCameraState.lastPose = null;
+        arCameraState.projectionFar = null;
         camera.matrixAutoUpdate = true;
         camera.fov = 28;
         camera.aspect = Math.max(1, canvas.clientWidth) / Math.max(1, canvas.clientHeight);
@@ -59,6 +89,7 @@ export function createPmxArCamera(context) {
                 camera.quaternion.copy(arCameraState.acceptedQuaternion);
                 camera.updateMatrix();
                 camera.updateMatrixWorld(true);
+                syncCameraClip();
             }
         }
         return { ...arCameraState.settings };
@@ -154,12 +185,14 @@ export function createPmxArCamera(context) {
         }
         camera.near = fixedProjection.near;
         camera.far = fixedProjection.far;
+        arCameraState.projectionFar = fixedProjection.far;
         camera.projectionMatrix.fromArray(fixedProjection.matrix);
         camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+        syncCameraClip();
         startRendering();
         return true;
     };
 
 /* aasc-module-body-end */
-    return { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose };
+    return { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose, zoomCameraBy };
 }

@@ -1,5 +1,28 @@
 # MMD AR 独立测试 APK / HTTPS 网页实现规范（伪代码）
 
+## 2026-10-11 镜头拉远同步 far（已实现并验证）
+
+```text
+已有声明：camera、cameraZoomFactor、cameraDistance、模型边界、AR 输入投影
+新增定义：mmd-camera-clip 裁剪参考 { 模型根, 模型局部中心, 模型包围半径, 预览基础 far }
+操作流程：
+  缩放接口由现有相机模块持有 → 主运行时通过共享状态访问器复用，缩放限制仍为0.1至10
+  模型适配 → 将世界边界转换到模型根局部包围球并缓存 → 保存普通预览基础 far
+  每次同步 → 更新根世界矩阵 → 将缓存中心和半径换回世界坐标，不扫描顶点
+  镜头缩放或位姿更新 → 根据实际镜头与模型中心距离、包围半径计算所需 far
+  所需 far := 实际相机到模型世界中心距离 + 两倍世界包围半径
+  所需 far 与当前模式基础远裁面、near+1取最大值 → 得到权威远裁面
+  远裁面误差小于相对1e-10 → 沿用原 far，避免静止浮点扰动
+  far或投影深度系数有变化 → 更新 camera.far 和投影深度系数 → 同步投影逆矩阵
+  AR 新投影 → 单独保存输入基础 far → 保留横纵构图系数 → 同步所需 far
+  AR 缓动及失锁手动缩放 → 使用实际镜头位置同步裁剪
+  拉近或复位 → 根据当前距离恢复合理裁剪范围
+  相机 VMD → 保留既有关键帧最远机位裁剪规则
+性能约束：缓存模型边界参考，不为逐帧裁剪更新扫描顶点；投影未变化时不重复求逆
+```
+
+验证：`tests/mmd-camera-clip.test.js`、`tests/pmx-display-layout.test.js`、`tests/display-mmd-ar-production.test.js`共6项通过；`tests/mmd-ar-camera-runtime.test.js`与`tests/mmd-ar-camera-motion.test.js`共3项通过，包含两个真实米娅浏览器用例，无跳过。网页构建和源码语法检查通过。任务：`docs/task/20261011_MMDAR镜头拉远同步far.md`。
+
 ## 2026-10-09 TAA抖动参数契约（已实现并验证）
 
 ```text

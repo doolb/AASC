@@ -11495,3 +11495,10 @@
 
 - ✅ [2026-10-10] 按确认方案固定声纹AASC_PROJECT_ROOT目录、竖屏三个浮动入口避开底部导航、群聊状态显示群聊且移除虚构助手默认项。
   - 修改voiceprint-store.js、upload.css、display-chat.js/语音控件及既有测试，新增voiceprint-store-persistence与control-floating-layout-browser。5文件30/30通过、无跳过，截图已核对，diff检查通过；设计/伪代码/任务/使用/自测文档同步，代码与servicePackage=true已推送origion/master。用户取消声纹恢复，本轮不扫描/迁移旧库，不宣称已恢复旧记录。主题未选中样例与实时监听按钮已确认并实现；9文件43/43通过、无跳过，深浅主题/默认开启/权威等待与失败/实际按钮/Offline恢复通过，源码语法与diff检查通过，截图已核对。服务包待构建发布，控制端现有监听只控制能力，本轮未新增实时模式控制入口。
+
+### MMD-AR 镜头拉远同步 far
+
+- ✅ [2026-10-11] 修复普通预览与 AR 镜头拉远后 far 不更新、连续定位投影覆盖裁剪范围的问题；拉近和复位恢复合理范围，保留AR偏心构图。
+  - 新增 `mmd-camera-clip.mjs`，更新 `display-pmx-runtime.js`、`mmd-ar-camera-runtime.mjs`；缓存局部包围球，仅调整深度投影并同步逆矩阵，缩放函数归入相机模块，主运行时994行。
+  - 新增裁剪自测并扩展真实米娅相机回归，9/9通过、无跳过，含VMD播放/暂停/AR接管/恢复；源码语法与差异空白检查通过，`npm run build:web:mmd-ar-test`成功。
+  - 同步design/spec/task/使用说明，移除todo本次开发条目；servicePackage=true表示待打包，本地web-dist已生成，未构建APK或发布外网。

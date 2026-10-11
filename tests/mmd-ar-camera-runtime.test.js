@@ -37,6 +37,78 @@ test('平放定位图以锚点逆矩阵驱动 PMX 相机，丢失和停止恢复
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/mnt/mmd-ar/`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.DisplayMmd?.getState?.().modelReady === true, { timeout: 40000 });
+    const clipping = await page.evaluate(async () => {
+      const mmd = window.DisplayMmd;
+      const { THREE, camera, mesh, helper } = mmd.getEditorBridge().context;
+      helper.enable('physics', false);
+      helper.enable('animation', false);
+      const snapshot = () => {
+        camera.updateMatrixWorld(true);
+        const bounds = new THREE.Box3().setFromObject(mesh.parent);
+        const center = bounds.getCenter(new THREE.Vector3());
+        const size = bounds.getSize(new THREE.Vector3());
+        const elements = camera.projectionMatrix.elements;
+        const identity = camera.projectionMatrix.clone().multiply(camera.projectionMatrixInverse);
+        return { far: camera.far, near: camera.near, projectedFar: elements[14] / (elements[10] + 1),
+          matrix: [...elements], inverseError: Math.max(...identity.elements.map((value, index) =>
+            Math.abs(value - (index % 5 === 0 ? 1 : 0)))),
+          requiredFar: camera.position.distanceTo(center) + size.length() / 2,
+          modelPosition: mesh.parent.position.toArray(), modelScale: mesh.parent.scale.toArray() };
+      };
+      const preview = snapshot();
+      mmd.zoomCameraBy(0.1);
+      const previewFar = snapshot();
+      mmd.zoomCameraBy(10);
+      const previewNear = snapshot();
+      mmd.resetArCameraPose();
+      const previewReset = snapshot();
+      mmd.setArCameraSettings({ translationDeadZonePercent: 0, rotationDeadZoneDegrees: 0,
+        smoothingMs: 0, distancePercent: 100 });
+      const inputCamera = new THREE.PerspectiveCamera(55, 0.6, 0.01, 100);
+      inputCamera.setViewOffset(800, 600, 20, 30, 400, 500);
+      const projectionMatrix = inputCamera.projectionMatrix.toArray();
+      const apply = (distance) => mmd.setArCameraPose({
+        anchorMatrix: new THREE.Matrix4().makeTranslation(0, 0, -distance).toArray(), projectionMatrix });
+      apply(3);
+      mmd.zoomCameraBy(0.1);
+      const arFar = snapshot();
+      apply(4);
+      const arUpdated = snapshot();
+      mmd.zoomCameraBy(2);
+      mmd.suspendArCameraPose();
+      mmd.zoomCameraBy(0.5);
+      const arLost = snapshot();
+      mmd.zoomCameraBy(10);
+      const arNear = snapshot();
+      // 缓动期间收到新的定位投影，当前实际机位的远裁面仍足够。
+      mmd.setArCameraSettings({ smoothingMs: 120 });
+      apply(30);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const arSmoothed = snapshot();
+      mmd.resetArCameraPose();
+      const restored = snapshot();
+      return { preview, previewFar, previewNear, previewReset, arFar, arUpdated, arLost, arNear,
+        arSmoothed, restored, projectionMatrix };
+    });
+    assert.ok(clipping.previewFar.far > clipping.preview.far, '普通拉远必须同步far');
+    for (const sample of ['previewFar', 'arFar', 'arUpdated', 'arLost', 'arSmoothed']) {
+      const state = clipping[sample];
+      assert.ok(state.far > state.requiredFar, `${sample}裁剪范围必须覆盖当前模型`);
+      assert.ok(Math.abs(state.projectedFar - state.far) < 1e-6, `${sample}实际深度投影必须同步`);
+      assert.ok(state.inverseError < 1e-10, `${sample}逆投影必须同步`);
+      assert.equal(state.near, 1);
+      assert.deepEqual(state.modelPosition, clipping.preview.modelPosition);
+      assert.deepEqual(state.modelScale, clipping.preview.modelScale);
+    }
+    for (const sample of ['previewNear', 'previewReset', 'restored']) {
+      assert.ok(Math.abs(clipping[sample].far - clipping.preview.far) < 1e-6, `${sample}恢复预览裁剪范围`);
+    }
+    assert.ok(clipping.arNear.far < clipping.arFar.far, 'AR拉近必须缩小扩展后的范围');
+    for (const sample of ['arFar', 'arUpdated', 'arLost', 'arNear', 'arSmoothed']) {
+      clipping.projectionMatrix.forEach((value, index) => {
+        if (index !== 10 && index !== 14) assert.equal(clipping[sample].matrix[index], value, 'AR构图保持');
+      });
+    }
     const state = await page.evaluate(() => {
       const mmd = window.DisplayMmd;
       mmd.setArCameraSettings({

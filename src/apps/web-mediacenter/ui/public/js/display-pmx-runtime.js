@@ -3,6 +3,7 @@ import { runTemporalAction } from './mmd-temporal-aa.mjs';
 import { DEFAULT_AR_CAMERA_SETTINGS, normalizeArCameraSettings, classifyHit, disposeObject, waitForManagedLoad, normalizeModel, createModelRotationPivot } from './mmd-runtime-utils.mjs';
 import { createPmxLighting } from './mmd-lighting-runtime.mjs';
 import { createPmxArCamera } from './mmd-ar-camera-runtime.mjs';
+import { createPmxCameraClip } from './mmd-camera-clip.mjs';
 import { createPmxModelResources } from './mmd-model-runtime.mjs';
 import { createManualExpressions } from './mmd-expressions.mjs';
 import { createPmxCameraMotion } from './mmd-camera-motion.mjs';
@@ -40,8 +41,6 @@ import {
 import { createPmxAmbientOcclusion } from './display-pmx-ao.mjs';
 import { preparePmxLightingMaterial, setPmxLightingMode, setPmxRimLights, setPmxFillShadowMode } from './display-pmx-lighting-mode.mjs';
 const TARGET_MODEL_HEIGHT = 1.75;
-const MINIMUM_CAMERA_ZOOM = 0.1;
-const MAXIMUM_CAMERA_ZOOM = 10;
 const MMD_MODEL_PREFIXES = Object.freeze([
     '/models/mmd/',
     '/api/mmd/static/mmd/'
@@ -79,6 +78,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const camera = new THREE.PerspectiveCamera(28, 1, PMX_CAMERA_NEAR, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
     const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
+    const cameraClip = createPmxCameraClip(THREE, camera);
     let cameraZoomFactor = 1;
     let cameraDistance = TARGET_MODEL_HEIGHT * 2.8;
     const cameraViewState = {
@@ -97,6 +97,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             target.z + Math.cos(cameraViewState.currentYaw) * cosPitch * distance
         );
         camera.lookAt(target);
+        syncCameraClip();
     };
     const updateCameraView = (delta) => {
         const yawDistance = cameraViewState.targetYaw - cameraViewState.currentYaw;
@@ -323,6 +324,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         });
         camera.near = frame.near;
         camera.far = frame.far;
+        cameraClip.fit(root, bounds, frame.far);
         cameraTarget.copy(frame.center);
         cameraDistance = frame.distance;
         cameraZoomFactor = 1;
@@ -447,6 +449,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const arCameraState = {
         active: false,
         trackingLost: false,
+        projectionFar: null,
         savedVisible: null,
         targetPosition: null,
         targetWidth: 1,
@@ -458,6 +461,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         acceptedQuaternion: new THREE.Quaternion(),
         lastPose: null
     };
+    const syncCameraClip = () => cameraClip.sync(arCameraState.active ? arCameraState.projectionFar : undefined);
     const getArCameraTargetCenter = (aspect = 1) => {
         const center = arCameraState.targetPosition?.clone();
         if (!center) return null;
@@ -465,31 +469,6 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             center.y += arCameraState.targetWidth * aspect / 2;
         }
         return center;
-    };
-    const zoomCameraBy = (factor) => {
-        const numericFactor = Number(factor);
-        if (!Number.isFinite(numericFactor) || numericFactor <= 0) return false;
-        const nextZoom = Math.max(MINIMUM_CAMERA_ZOOM,
-            Math.min(MAXIMUM_CAMERA_ZOOM, cameraZoomFactor * numericFactor));
-        if (Math.abs(nextZoom - cameraZoomFactor) < Number.EPSILON) return false;
-        if (arCameraState.active) {
-            const targetCenter = getArCameraTargetCenter(arCameraState.lastPose?.targetAspect || 1);
-            if (!targetCenter) return false;
-            const currentBasePosition = camera.position.clone().sub(targetCenter)
-                .multiplyScalar(cameraZoomFactor).add(targetCenter);
-            cameraZoomFactor = nextZoom;
-            arCameraState.acceptedPosition.copy(arCameraState.acceptedBasePosition)
-                .sub(targetCenter).multiplyScalar(1 / cameraZoomFactor).add(targetCenter);
-            camera.position.copy(currentBasePosition.sub(targetCenter)
-                .multiplyScalar(1 / cameraZoomFactor).add(targetCenter));
-            camera.updateMatrix();
-            camera.updateMatrixWorld(true);
-        } else {
-            cameraZoomFactor = nextZoom;
-            applyCameraView();
-        }
-        startRendering();
-        return true;
     };
     // 手动角度和相机坐标中的重力倾斜分别保存，最终只合成角色锚点四元数。
     const manualRotation = { yaw: 0, pitch: 0 };
@@ -660,6 +639,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             camera.quaternion.slerp(arCameraState.acceptedQuaternion, alpha);
             camera.updateMatrix();
             camera.updateMatrixWorld(true);
+            syncCameraClip();
         } else if (!arCameraState.active) {
             if (!advanceCameraMotion(delta)) updateCameraView(delta);
         }
@@ -823,7 +803,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     });
 /* aasc-module-end:mmd-lighting-runtime.mjs */
 /* aasc-module-start:mmd-ar-camera-runtime.mjs */
-    const { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose } = createPmxArCamera({
+    const { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose, zoomCameraBy } = createPmxArCamera({
         THREE,
         applyCameraView,
         arCameraState,
@@ -835,6 +815,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         getModelBounds,
         normalizeArCameraSettings,
         normalizePmxProjectionNear,
+        syncCameraClip,
         startRendering,
         get currentMesh() { return currentMesh; }, set currentMesh(value) { currentMesh = value; },
         get currentRotationPivot() { return currentRotationPivot; }, set currentRotationPivot(value) { currentRotationPivot = value; },
