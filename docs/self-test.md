@@ -1,5 +1,16 @@
 # 自测功能文档
 
+## MMD-AR统一灯光预设（2026-10-11）
+
+29项定向检查全部通过（6项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；npm run build:web:mmd-ar-test成功。真实Chromium/SwiftShader完成十组逐字段往返、刷新、实际下载/上传、错误文件无副作用、能力降级、覆盖/删除、动作物理定位保持及390px窄屏折叠/无横向溢出；截图已查看。
+
+定向命令：`node --test --test-concurrency=1 tests/mmd-ar-lighting-presets.test.js tests/mmd-ar-lighting-presets-browser.test.js tests/mmd-ar-screen-lighting.test.js tests/mmd-ar-temporal-aa.test.js`。数据检查含坏JSON/版本/字段/第二条记录失败、配额错误的原子性、HTTP ID、100条/256KiB限制和大型库回读。分类检查保留原select ID唯一，旧default/soft/bright不再生成。屏幕光照及TAA旧回归通过。
+
+扩展tests/mmd-ar-web-panel-groups.test.js为6通过/2失败：静态夹具未同步正式页新增控件，groupWebPanels报未分类节点；校准弹窗测试等待关闭相机后的定位按钮禁用超时。原测试未调用本次预设构建适配，未改写夹具或宣称全仓通过；另列待处理。
+
+本地网页已构建，未发布外网；手机观感/性能待现场验收。详情见[任务记录](task/20261011_MMDAR统一灯光预设与文件导入导出.md)。
+
+
 ## 状态圆钮VAD与识别结果尺寸（2026-10-10）
 
 四文件25项通过；真实RMS百分比/阈值同刻度、停录暂停及非法值，ASR共享16–36px布局、旋转和键盘高度；真实Chromium内部48px圆形、半圆填色/红线、短句放大、长结果滚动不越界、安全文本与原圆钮点击通过。截图已查看，93项最终组合及code56内外网发布已完成；手机现场待验收。

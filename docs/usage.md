@@ -1,5 +1,10 @@
 # Web MediaCenter - 使用说明
 
+## 独立MMD-AR统一灯光预设（本地构建，2026-10-11）
+
+「灯光 → 灯光预设」统一提供保存、覆盖、删除及JSON导入导出，保存整个灯光面板（含抗锯齿/Canvas倍率）。分类可折叠，刷新保留预设；导入后手动选择应用。详见[灯光预设使用说明](usage/mmd-ar-lighting-presets.md)。
+
+
 ## 独立MMD-AR Human 生理与后天行为（本地构建，2026-10-10）
 
 打开「动作 → Human 生理与后天行为」，可配置呼吸/眨眼，登记VMD或MPL行为、组合表情及事件反射；MPL支持覆写/增量和行为新版本，原VMD持续运行。动作库按模型保存在浏览器，并支持导出/导入。操作与API见[Human使用说明](usage/mmd-human-interface.md)。当前已生成web-dist，尚未发布外网。

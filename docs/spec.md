@@ -1,5 +1,8 @@
 # Web MediaCenter - 项目实现文档
 
+- [MMD-AR统一灯光预设伪代码（已实现）](spec/mmd-ar-lighting-presets.md)
+
+
 - [独立MMD通用角色控制与MPL修正实现](spec/mmd-human-interface.md)
 
 - [独立MMD-AR回复识别与动作调度](spec/mmd-ar-ai-reply.md)

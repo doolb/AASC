@@ -50,6 +50,15 @@ export function initSpecularPanel(root = document, storage = () => localStorage)
     try { storage().setItem(STORAGE_KEY, JSON.stringify(settings)); } catch (error) { /* 存储失败不阻断本次材质更新。 */ }
   });
   sync();
+  // 只有独立网页创建预设分组表；复用同一模块状态和材质revision，不另建高光实例。
+  if (window.MmdArLightingPresetGroups) window.MmdArLightingPresetGroups.specular = {
+    normalize: normalizeSpecular,
+    read: () => ({ ...settings }),
+    apply: value => {
+      setSpecular(value); sync();
+      storage().setItem(STORAGE_KEY, JSON.stringify(settings));
+    }
+  };
 }
 
 export function prepareTestSpecular(material) {

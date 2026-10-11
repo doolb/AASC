@@ -80,6 +80,12 @@ export function initScreenLightingPanel() {
         for (const input of panel.querySelectorAll('input,select')) input.disabled = supported === false;
     };
     window.addEventListener('mmd-ar-screen-lighting-capability', status); apply(); status();
+    // 预设批量应用仍走本组规范化/表单同步，不触发逐字段事件。
+    if (window.MmdArLightingPresetGroups) window.MmdArLightingPresetGroups.screenLighting = {
+        normalize: normalizeScreenLightingSettings,
+        read: () => normalizeScreenLightingSettings(value),
+        apply: settings => { value = normalizeScreenLightingSettings(settings); apply(true); status(); }
+    };
 }
 
 if (typeof document !== 'undefined') {

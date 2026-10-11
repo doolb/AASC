@@ -21,6 +21,7 @@ const APP_PROJECT = path.join(ANDROID_PROJECT, 'app');
 const SOURCE_PUBLIC = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public');
 const WEB_MODE = process.argv.includes('--web');
 const WEB_PANEL_GROUPS = require('./web-panel-groups');
+const WEB_LIGHTING_PRESETS = require('./web-lighting-presets-build');
 const WEB_CAMERA_MOTION = require('./web-camera-motion-inject');
 const WEB_GRAVITY_MODE = require('./web-gravity-mode');
 const WEB_LOCAL_ASSETS = require('./web-local-assets-inject'), WEB_CHARACTERS = require('./web-characters-build');
@@ -464,6 +465,7 @@ async function stageTextAssets() {
   `);
 
   WEB_CHARACTERS.addPanel($); require('./web-screen-lighting-build').panel($); require('./web-render-settings-build').panel($);
+  if (WEB_MODE) WEB_LIGHTING_PRESETS.panel($);
   let extraCharacterProfiles;
   const assets = [
     ...(await fs.readdir(path.join(SOURCE_PUBLIC, 'js'))).filter(name => /^mmd-.*\.mjs$/u.test(name)).map(name => [path.join(SOURCE_PUBLIC, 'js', name), path.join(GENERATED_ASSETS, 'js', name)]),
@@ -650,7 +652,9 @@ async function stageTextAssets() {
     webPhysicsHelperVersion = (await hashFile(helperPath)).sha256.slice(0, 12);
   }
 
+  await WEB_LIGHTING_PRESETS.stage(GENERATED_ASSETS, { webMode: WEB_MODE });
   const scriptVersion = new Map();
+  if (WEB_MODE) scriptVersion.set('web-lighting-presets.mjs', (await hashFile(path.join(GENERATED_ASSETS, 'js/web-lighting-presets.mjs'))).sha256.slice(0, 12));
   {
     for (const fileName of ['web-render-settings.mjs', 'web-screen-lighting-panel.mjs', 'web-character-panel.mjs', 'display-mmd-settings.js', 'web-local-assets-ui.mjs', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar-benchmark.js', 'display-mmd-ar-sim-camera.js', 'display-mmd-ar-gravity-camera.js', 'display-mmd-ar-aframe.js', 'display-mmd-ar-imu.js', 'display-mmd-ar-native.js', 'mind-basic-imu.js', 'mind-basic-quality.js', 'display-mmd-ar.js']) {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
@@ -793,6 +797,7 @@ async function stageTextAssets() {
     </div>
   </div>
   ${'<script>window.MmdArTestWebFillShadow = true;</script>'}
+  ${WEB_MODE ? '<script>window.MmdArLightingPresetGroups = Object.create(null);</script>' : ''}
   <script src="${scriptUrl('display-mmd-settings.js')}"></script>
   <script src="${scriptUrl('display-mmd.js')}"></script>
   <script src="${scriptUrl('display-mmd-lighting.js')}"></script>
@@ -837,7 +842,7 @@ async function stageTextAssets() {
   <script src="${scriptUrl('display-mmd-ar.js')}"></script>
   ${`<script type="module" src="${scriptUrl('web-local-assets-ui.mjs')}"></script><script type="module" src="${scriptUrl('web-character-panel.mjs')}"></script><script type="module" src="${scriptUrl('web-screen-lighting-panel.mjs')}"></script><script type="module" src="${scriptUrl('web-render-settings.mjs')}"></script>`}
   <script>
-    ${WEB_PANEL_GROUPS.WEB_PANEL_GROUP_JS}
+    ${WEB_MODE ? WEB_LIGHTING_PRESETS.panelScript(WEB_PANEL_GROUPS.WEB_PANEL_GROUP_JS) : WEB_PANEL_GROUPS.WEB_PANEL_GROUP_JS}
     (() => {
       const controls = new Map([
         ['displayMmdLightingToggle', 'displayMmdLightingPanel'],
@@ -898,6 +903,7 @@ async function stageTextAssets() {
       ${webResizeSupport}
     }, { once: true });
   </script>
+  ${WEB_MODE ? `<script type="module" src="${scriptUrl('web-lighting-presets.mjs')}"></script>` : ''}
 </body>
 </html>`;
   const generatedPage = webAssetText(page);

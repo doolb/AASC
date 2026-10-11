@@ -1,3 +1,11 @@
+
+### MMD-AR 统一灯光预设
+
+- ✅ [2026-10-11] 移除旧亮度预设，新增统一“灯光预设”折叠分类，全部操作集中显示；支持完整面板十组参数的命名保存、覆盖、删除、刷新恢复及JSON单项/全部导出和合并导入。
+  - 修改独立build.js和高光/屏幕光照/渲染入口；新增web-lighting-preset-library.mjs、web-lighting-presets.mjs、web-lighting-presets-build.js。文件使用aasc.mmd-ar.lighting-presets/version=1，最多100项/256KiB；坏文件整体验证、重名不覆盖、HTTP ID兼容及导出上限回退；动作物理定位保持。
+  - 新增数据及分类/真实网页自测，最终29/29通过；网页npm构建成功，模块语法与diff检查通过；390px截图已查看。扩展旧面板回归6通过/2失败（静态夹具未分类、关闭相机后定位按钮状态超时）另列todo，不宣称全仓通过。
+  - 同步design/spec/task/todo/usage/self-test及索引；本地web-dist已更新，独立网页未发布外网，不涉及正式显示端/APK或Offline状态变化。
+
 ### MMD-AR 头部动作开始融合
 
 - ✅ [2026-10-11] 头部开始动作、恢复中接管与连续替换从当前显示姿态融合，按用户要求进入与恢复统一600ms。实时动作采样与剩余跟随共同构成目标；短动作先释放时，当前显示姿态转入600ms恢复。

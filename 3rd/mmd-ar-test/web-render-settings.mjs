@@ -59,6 +59,11 @@ export function initRenderSettings() {
     };
     window.addEventListener('mmd-ar-render-capability', status);
     apply(); status();
+    if (window.MmdArLightingPresetGroups) window.MmdArLightingPresetGroups.render = {
+        normalize: normalizeRenderSettings,
+        read: () => ({ ...value }),
+        apply: settings => { value = normalizeRenderSettings(settings); apply(true); status(); }
+    };
 }
 if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initRenderSettings, { once: true });
