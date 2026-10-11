@@ -73,6 +73,10 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 完成Qwen API原WAV故障的首轮排查及错误原因打印方案
+  - 当前qwen3-tts-flash/Maia独立调用返回HTTP 400/Arrearage，未取得音频；与原21:43的WAV块不完整为不同阶段。标准WAV、未知data长度、截断样本三组只读检查分别通过/复现/复现，原故障原因仍未证实；现有TTS Provider集成基线6项通过。
+  - 更新TTS Provider design/spec、task、todo；提出限量读取失败响应及白名单中文错误提示，等待用户按AGENTS.md确认后实施。未修改生产代码，发布状态保持v64已完成；凭证、响应原文和音频URL不写入记录。
+
 - ✅ [2026-10-11] 发布服务代码包v64到局域网与外网，包含已提交TTS修复和MMD正式资源
   - `code/code-v64.zip`：17,572,354字节，SHA-256 `89ee61cabf5bb02835039b46f09e425cf381f6810f04334fc0c052c071bbfd68`；来源3fb5591348f1ed35199615bf73892d2abc881a84。1,028文件CRC与指纹校验通过：507项提交源码、9项固定生成资源、512项既有发布资源；临时输入使用提交里的Node本机配置与静态库，工作区文件保留。
   - 经npm build/publish脚本签名、上传后原子切换manifest；复用dependencies v6、Node min seeds v39、min APK v34及dataRepair v2，两端所有引用资源HTTP大小/SHA-256、RSA签名/组件约束通过。最终manifest SHA-256 `7f644043748deef4b208bbe247dc91926d4ba513b68188232491ff9e9d4c1045`一致，两端code目录仅保留v64，精确清理无错误；记录`.git/offline-publish-qwen-v64/`，ZIP和日志不提交Git。

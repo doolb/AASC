@@ -85,3 +85,13 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 - [百炼 Qwen TTS API](https://help.aliyun.com/en/model-studio/qwen-tts-api)
 - [豆包 V3 单向流式 HTTP](https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh)
 - [国内千问用户指定页面](https://www.qianwen.com/chat/6ca4f1aa0292497095cb46e6ea45e08f)：2026-10-11 核对公开前端 4.9.6 的 doQwenAuth 与 `/api/v3/tts`，未读取私有会话内容。音色克隆的 synthesis_text 只生成采样文本，不能当作音频接口。
+
+## Qwen API 错误提示与 WAV 排查（2026-10-11，待确认实施）
+
+用户报告21:43:57起连续三次“TTS WAV 块不完整”，随后要求将实际错误原因加入打印。现有Qwen API走非流式合成、音频URL下载、本地速率/音量调整和完整WAV校验；报错表示RIFF子块声明长度超过已收集字节，可能为异常长度头或真实截断，尚无原始音频证据，不归因于模型或音色。
+
+使用当前本机百炼配置qwen3-tts-flash/Maia、速率1/音量100独立复测，API返回HTTP 400、Arrearage；本次未进入音频下载。当前欠费与原WAV错误属于不同阶段，不能替代原故障结论。标准WAV通过、未知data长度与截断样本均能触发原错误，证明仅凭错误文字不能区分二者。v64已完成发布，本项尚未实现且不包含在v64中。
+
+拟沿用现有失败日志：HTTP失败响应按小容量和总时限读取，仅提取已知错误码；Qwen API将欠费、凭证、权限、参数、限流等已知原因映射为固定中文提示，包含HTTP状态和白名单错误码。未知/非JSON/超限/中断响应沿用固定HTTP错误，不将上游message、凭证、响应原文或签名音频URL带入日志。HTTP下载及其他Provider保留现有行为。HTTP 200的业务失败也使用相同映射。成功音频、WAV校验、缓存与播放协议保持现有逻辑。
+
+按AGENTS.md先告知文件与方案、等待确认，再修改tts-provider-http.js、tts-provider-registry.js、新增小型错误映射模块并补充tts-provider-integration.test.js。原WAV问题待账户恢复或取得完整音频样本后继续复现，不通过忽略长度校验掩盖真实截断。

@@ -1,5 +1,36 @@
 # TTS Provider 与播报配置实现
 
+## Qwen API 错误原因打印（2026-10-11，待确认，尚未实现）
+
+```text
+已有声明：
+  requestLimited、requestJson、createProviderRegistry.qwen-api.generate
+  现有句子生成失败日志读取error.message；adjustWav、validateWav维持当前严格校验
+新增定义：
+  QwenApiKnownErrors { 白名单错误码, 固定中文提示 }
+  ProviderHttpErrorSummary { HTTP状态, 白名单上游错误码, 固定提示 }
+  QwenApiErrorReadBudget { 小容量上限, 原请求总时限 }
+操作流程：
+  用户确认方案 -> 先同步此伪代码 -> 再实施错误处理与测试
+  Qwen API请求 -> 显式启用已知错误映射，其他HTTP调用维持默认行为
+  非成功HTTP -> 在原总时限与小容量内读取错误体 -> 尝试JSON解析
+  已知错误码 -> 固定中文原因加HTTP状态与白名单错误码 -> 现有失败日志
+  未知码、非JSON、超限、错误体中断 -> 固定HTTP错误，不回显响应原文
+  HTTP成功但业务码失败 -> 相同白名单映射；缺少音频URL -> 原固定合成错误
+  成功音频 -> 原下载、速率/音量处理、WAV校验、缓存、播放
+  调用日志不包含凭证、上游message、响应原文、签名音频URL
+验证：
+  HTTP 400/Arrearage -> 明确欠费提示，且无缓存或Provider回退
+  HTTP鉴权/参数/限流、HTTP 200业务错误 -> 对应固定原因
+  未知/带密钥错误体/非JSON/超限/中断 -> 固定提示、受限读取、不泄露
+  正常WAV下载无Authorization、既有超时与容量限制 -> 保持
+当前证据：
+  本机qwen3-tts-flash/Maia -> HTTP 400/Arrearage -> 无音频下载
+  标准WAV -> 通过；未知data长度与真实截断 -> 均触发原WAV块不完整
+  原日志WAV故障 -> 尚未取得原始音频，不作头长度兼容修复
+```
+
+
 ## qwen3-tts-flash与Maia网页接口实测（2026-10-11）
 
 ```text
