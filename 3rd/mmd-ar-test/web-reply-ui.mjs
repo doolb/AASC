@@ -74,11 +74,6 @@ function initReply() {
     play.addEventListener('click', () => { invalidateSource(); void player.play(input.value).catch(report); });
     stop.addEventListener('click', () => { invalidateSource(); void player.stop().catch(report); });
     advanced.addEventListener('click', event => {
-            const sourceButton = event.target.closest('[data-advanced-source]');
-            if (sourceButton && advanced.contains(sourceButton)) {
-                void editSource(sourceButton.dataset.advancedSource).catch(error => { sourceStatus(error.message); });
-                return;
-            }
             const button = event.target.closest('[data-advanced]');
             if (!button || !advanced.contains(button)) return;
             const options = parameters(button.dataset.advanced), request = ++sourceRequest;
@@ -92,7 +87,7 @@ function initReply() {
         const value = key => { const text = advanced.querySelector('[data-' + key + ']').value.trim(); return text ? Number(text) : undefined; };
         return { name, duration: value('duration'), strength: value('strength'), count: value('count') };
     }
-    async function editSource(name, options = parameters(name), request = ++sourceRequest) {
+    async function editSource(name, options, request) {
         const editor = window.MmdArMplPlayback;
         if (!editor?.editSource) { sourceStatus('MPL编辑器尚未就绪，请稍后重试'); return; }
         const human = api()?.getHumanInterface?.(), token = human?.getState?.().token, revision = editor.getSourceRevision();
@@ -110,19 +105,13 @@ function initReply() {
             sourceStatus('已载入' + name + '源码，可编辑、预览和下载。');
         } catch (error) { if (current()) sourceStatus(error.message); }
     }
-    const sourceButton = name => {
-        const button = document.createElement('button');
-        button.type = 'button'; button.className = 'display-mmd-ar-action';
-        button.dataset.advancedSource = name; button.textContent = name + ' · 编辑MPL';
-        return button;
-    };
     const builtins = document.createDocumentFragment();
     for (const entry of ADVANCED_GESTURES) {
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'display-mmd-ar-action';
         button.dataset.advanced = entry.name; button.textContent = entry.icon + ' ' + entry.name;
         button.title = entry.aliases.join('、');
-        builtins.append(button, sourceButton(entry.name));
+        builtins.append(button);
     }
     advanced.querySelector('[data-builtin-actions]').replaceChildren(builtins);
     void serverActions.load().then(entries => {
@@ -131,7 +120,7 @@ function initReply() {
             const button = document.createElement('button');
             button.type = 'button'; button.className = 'display-mmd-ar-action';
             button.dataset.advanced = entry.name; button.textContent = entry.name;
-            fragment.append(button, sourceButton(entry.name));
+            fragment.append(button);
         }
         advanced.querySelector('[data-server-actions]').replaceChildren(fragment);
         advanced.querySelector('[data-server-status]').textContent = serverActions.getState().warning

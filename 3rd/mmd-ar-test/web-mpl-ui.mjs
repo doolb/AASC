@@ -89,11 +89,9 @@ function initMpl() {
     function editSource(source, name, blend = null) {
         if (closed || typeof source !== 'string' || !source.trim() || new TextEncoder().encode(source).length > 65536) throw new Error('MPL需要1–64KiB代码');
         automatic = false; input.value = source; sourceName = name; sourceRevision++; sourceBlend = blend;
-        // 只载入源码，不启动动作，不登记动作库或替换基础资源。
-        const group = panel.closest('.mmd-ar-panel-group'), body = panel.closest('.mmd-ar-panel-group-body');
-        if (body?.hidden) group.querySelector('.mmd-ar-panel-group-toggle')?.click();
+        // 静默填入源码并更新编辑状态，保留分类折叠、滚动和焦点；由用户手动打开预览。
         status('已载入「' + name + '」MPL。修改后可编译预览、下载；暂不保存高级动作。');
-        sync(); input.scrollIntoView({ block: 'nearest' }); input.focus();
+        sync();
     }
     window.MmdArMplPlayback = Object.freeze({ play, perform, stop: stopOwned, getState, editSource, getSourceRevision: () => sourceRevision });
     window.dispatchEvent(new Event('mmd-ar-mpl-ready'));

@@ -83,6 +83,9 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
         }, Buffer.from(idleScreenshot).toString('base64'));
         assert.ok(modelPixels > 3000, '模型实际截图缺少可见像素：' + modelPixels);
         assert.equal(await page.$$eval('[data-builtin-actions] [data-advanced]', buttons => buttons.length), 28);
+        assert.equal(await page.$$eval('[data-builtin-actions] button', buttons => buttons.length), 28);
+        assert.equal(await page.$$eval('[data-server-actions] button', buttons => buttons.length), 3);
+        assert.equal(await page.$$eval('#mmdArAdvancedMotionPanel [data-advanced-source]', buttons => buttons.length), 0);
         const catalogSymbols = await page.evaluate(() => window.MmdArReplyPreview.parse('❤️🐾🐈‍⬛🫶🏽😊🤷🏾‍♀️'));
         assert.equal(catalogSymbols.speech, '');
         assert.deepEqual(catalogSymbols.events.map(event => event.name), ['比心', '猫爪', '猫咪撒娇', '比心', '开心', '摊手']);
@@ -98,10 +101,36 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
                 document.querySelector('#mmdArAdvancedMotionPanel [data-' + key + ']').value = value;
             }
         });
-        for (const name of ['比心', '猫爪', '猫咪撒娇', '晚安', '开心', '赞同']) {
-            await page.evaluate(name => document.querySelector('[data-advanced="' + name + '"]').click(), name);
+        for (const [index, name] of ['比心', '猫爪', '猫咪撒娇', '晚安', '开心', '赞同'].entries()) {
+            // 使用真实折叠控件与滚动容器，分别验收编辑器折叠/展开时不导航、不抢焦点。
+            const beforeNavigation = await page.evaluate(async ({ name, collapsed }) => {
+                const motionToggle = document.getElementById('mmdArMotionToggle');
+                if (motionToggle.getAttribute('aria-expanded') !== 'true') motionToggle.click();
+                const advanced = document.getElementById('mmdArAdvancedMotionPanel');
+                if (advanced.closest('.mmd-ar-panel-group-body').hidden) advanced.closest('.mmd-ar-panel-group').querySelector('.mmd-ar-panel-group-toggle').click();
+                const mpl = document.getElementById('mmdArMplPanel');
+                if (mpl.closest('.mmd-ar-panel-group-body').hidden !== collapsed) mpl.closest('.mmd-ar-panel-group').querySelector('.mmd-ar-panel-group-toggle').click();
+                const button = advanced.querySelector('[data-advanced="' + name + '"]');
+                button.scrollIntoView({ block: 'center' }); button.focus({ preventScroll: true });
+                await new Promise(requestAnimationFrame);
+                window.__mplNavigationNodes = [];
+                for (let node = button.parentElement; node; node = node.parentElement) window.__mplNavigationNodes.push(node);
+                const positions = window.__mplNavigationNodes.map(node => [node.scrollLeft, node.scrollTop]);
+                button.click();
+                return { collapsed, positions };
+            }, { name, collapsed: index < 3 });
             await page.waitForFunction(name => window.__emojiRuns.some(run => run.name === name), { timeout: 30000 }, name);
             await page.waitForFunction(name => document.getElementById('mmdArMplSource').value === window.DisplayMmd.getHumanInterface().mpl.advancedSource({ name, duration: 2.4, strength: 0.4, count: 2 }), {}, name);
+            const afterNavigation = await page.evaluate(() => ({
+                collapsed: document.getElementById('mmdArMplPanel').closest('.mmd-ar-panel-group-body').hidden,
+                focusedAction: document.activeElement?.dataset.advanced,
+                positions: window.__mplNavigationNodes.map(node => [node.scrollLeft, node.scrollTop])
+            }));
+            assert.equal(afterNavigation.collapsed, beforeNavigation.collapsed, name + '改变了MPL分类折叠状态');
+            assert.equal(afterNavigation.focusedAction, name, name + '填入源码抢走动作按钮焦点');
+            for (let i = 0; i < beforeNavigation.positions.length; i++) {
+                assert.ok(afterNavigation.positions[i].every((value, axis) => Math.abs(value - beforeNavigation.positions[i][axis]) <= 1), name + '填入源码改变了滚动位置');
+            }
             const comparison = await page.evaluate(async name => {
                 const source = document.getElementById('mmdArMplSource').value;
                 const human = window.DisplayMmd.getHumanInterface();
@@ -120,7 +149,7 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
         sourceDelay = 450;
         await page.evaluate(() => {
             document.querySelector('[data-advanced="待机"]').click();
-            document.querySelector('[data-advanced-source="猫爪"]').click();
+            document.querySelector('[data-advanced="猫爪"]').click();
         });
         await page.waitForFunction(() => document.getElementById('mmdArMplSource').value.includes('elbow_l bend forward 48;'));
         await new Promise(resolve => setTimeout(resolve, 750));
@@ -145,29 +174,37 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
         const libraryBeforeEditing = await page.evaluate(() => JSON.stringify(window.DisplayMmd.getHumanInterface().learn.list()));
         await page.waitForFunction(() => window.MmdArMplPlayback?.editSource);
         for (const name of ['点头', '摇头', '挥手', '鞠躬', '歪头']) {
-            await page.evaluate(name => document.querySelector('[data-advanced-source="' + name + '"]').click(), name);
-            await page.waitForFunction(name => document.querySelector('#mmdArMplPanel [role="status"]').textContent.includes('「' + name + '」'), {}, name);
+            await page.evaluate(name => document.querySelector('[data-advanced="' + name + '"]').click(), name);
+            await page.waitForFunction(name => document.getElementById('mmdArMplSource').value === window.DisplayMmd.getHumanInterface().mpl.advancedSource({ name }), {}, name);
             assert.match(await page.$eval('#mmdArMplSource', element => element.value), /@animation gesture/u);
+            await page.evaluate(() => window.MmdArReplyPreview.stop());
         }
         await page.evaluate(() => {
-            document.querySelector('[data-advanced-source="待机"]').click();
+            document.querySelector('[data-advanced="待机"]').click();
             const input = document.getElementById('mmdArMplSource'); input.value = '用户正在编辑'; input.dispatchEvent(new Event('input'));
         });
         await new Promise(resolve => setTimeout(resolve, 500));
         assert.equal(await page.$eval('#mmdArMplSource', element => element.value), '用户正在编辑', '迟到源码不能覆盖用户输入');
-        await page.evaluate(() => document.querySelector('[data-advanced-source="待机"]').click());
-        await page.waitForFunction(() => document.querySelector('#mmdArMplPanel [role="status"]').textContent.includes('「待机」'));
+        await page.evaluate(() => document.querySelector('[data-advanced="待机"]').click());
+        const expectedIdleSource = fs.readFileSync(path.join(ROOT, 'mmd/motions/miya-idle.mpl'), 'utf8');
+        await page.waitForFunction(source => document.getElementById('mmdArMplSource').value === source, {}, expectedIdleSource);
         const idleSource = await page.$eval('#mmdArMplSource', element => element.value);
-        assert.equal(idleSource, fs.readFileSync(path.join(ROOT, 'mmd/motions/miya-idle.mpl'), 'utf8'));
+        assert.equal(idleSource, expectedIdleSource);
         assert.match(idleSource, /wrist_l bend forward -10/u);
+        // 源码已填入，用户手动打开编辑器后仍可预览和下载。
+        await page.evaluate(() => {
+            const panel = document.getElementById('mmdArMplPanel');
+            if (panel.closest('.mmd-ar-panel-group-body').hidden) panel.closest('.mmd-ar-panel-group').querySelector('.mmd-ar-panel-group-toggle').click();
+        });
         assert.equal(await page.$eval('#mmdArMplPanel', element => element.closest('.mmd-ar-panel-group-body').hidden), false);
-        await page.evaluate(() => document.querySelector('[data-advanced-source="跳舞"]').click());
+        await page.evaluate(() => document.querySelector('[data-advanced="跳舞"]').click());
         await page.waitForFunction(() => document.querySelector('#mmdArAdvancedMotionPanel [role="status"]').textContent.includes('暂无MPL源码'));
         assert.equal(await page.$eval('#mmdArMplSource', element => element.value), idleSource);
         await page.evaluate(() => document.querySelector('[data-mpl="download-source"]').click());
         const downloadDeadline = Date.now() + 10000;
         while (!fs.existsSync(path.join(downloads, '待机.mpl')) && Date.now() < downloadDeadline) await new Promise(resolve => setTimeout(resolve, 100));
         assert.equal(fs.readFileSync(path.join(downloads, '待机.mpl'), 'utf8'), idleSource);
+        await page.evaluate(() => window.MmdArReplyPreview.stop());
         await page.evaluate(source => window.MmdArMplPlayback.play(source, 'browser:source', true), idleSource);
         await page.evaluate(() => window.MmdArMplPlayback.stop());
         assert.equal(await page.evaluate(() => JSON.stringify(window.DisplayMmd.getHumanInterface().learn.list())), libraryBeforeEditing);
