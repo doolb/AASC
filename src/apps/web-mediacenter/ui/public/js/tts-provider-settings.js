@@ -1,0 +1,245 @@
+(function () {
+    'use strict';
+
+    const PROVIDERS = { system: '系统原生', 'qwen-chat': '国内千问网页', 'qwen-api': 'Qwen API', 'doubao-api': '豆包 API' };
+    const BUSINESSES = { aiReplyDefault: 'AI / Agent 回复', textMedia: '文本阅读', systemBroadcast: '报时与系统播报' };
+    const NUMBER_FIELDS = { defaultSpeed: [-10, 10], defaultVolume: [0, 100] };
+    const FIELD_LABELS = { endpoint: '服务地址', model: '模型', defaultVoice: '默认音色 ID',
+        defaultSpeed: '语速（−10 至 10）', defaultVolume: '音量（0 至 100）', resourceId: '资源 ID', credential: '凭证' };
+    let config = null;
+    let pendingSave = null;
+    const queries = new Map();
+    const catalogs = new Map();
+    const fields = new Map();
+    const selections = new Map();
+    const element = id => document.getElementById(id);
+    const status = message => { element('ttsProviderStatus').textContent = message; };
+    const requestId = () => `tts-provider-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    function create(tag, text) {
+        const node = document.createElement(tag);
+        if (text) node.textContent = text;
+        return node;
+    }
+
+    function addField(parent, title, node) {
+        const label = create('label', title);
+        label.style.display = 'block';
+        label.style.marginTop = '8px';
+        label.appendChild(node);
+        parent.appendChild(label);
+    }
+
+    function selectProvider(business) {
+        const select = create('select');
+        for (const [id, title] of Object.entries(PROVIDERS)) {
+            if (id === 'qwen-chat' && business !== 'aiReplyDefault') continue;
+            const option = create('option', title);
+            option.value = id;
+            select.appendChild(option);
+        }
+        return select;
+    }
+
+    function send(message) {
+        const ws = window.WebSocketManager?.ws;
+        if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('连接已断开，请等待重连');
+        ws.send(JSON.stringify(message));
+    }
+
+    function clearSave() {
+        if (pendingSave) clearTimeout(pendingSave.timer);
+        pendingSave = null;
+        element('ttsProviderSaveBtn').disabled = !config;
+    }
+
+    function setVoiceList(provider) {
+        const list = element(`ttsProviderVoices-${provider}`);
+        const fragment = document.createDocumentFragment();
+        for (const voice of catalogs.get(provider) || []) {
+            const option = create('option', voice.name || voice.id);
+            option.value = voice.id;
+            fragment.appendChild(option);
+        }
+        list.replaceChildren(fragment);
+        for (const selection of selections.values()) {
+            selection.voice.setAttribute('list', `ttsProviderVoices-${selection.provider.value}`);
+        }
+    }
+
+    function loadVoices(provider) {
+        if (queries.has(provider)) return;
+        const id = requestId();
+        try {
+            send({ type: 'getTtsProviderVoices', provider, requestId: id });
+            const timer = setTimeout(() => {
+                queries.delete(provider);
+                fields.get(provider).voiceStatus.textContent = '音色查询超时，已保留当前 ID';
+            }, 10000);
+            queries.set(provider, { id, timer });
+            fields.get(provider).voiceStatus.textContent = '正在查询音色…';
+        } catch (error) { fields.get(provider).voiceStatus.textContent = error.message; }
+    }
+
+    function init() {
+        const host = element('ttsProviderFields');
+        if (!host) return;
+        const fragment = document.createDocumentFragment();
+        for (const [key, title] of Object.entries(BUSINESSES)) {
+            const group = create('div');
+            group.className = 'tts-provider-business';
+            const provider = selectProvider(key);
+            const voice = create('input');
+            voice.type = 'text';
+            voice.placeholder = '音色 ID，留空使用服务默认';
+            voice.maxLength = 512;
+            provider.addEventListener('change', () => setVoiceList(provider.value));
+            addField(group, title, provider);
+            addField(group, '音色', voice);
+            selections.set(key, { provider, voice });
+            fragment.appendChild(group);
+        }
+        for (const [id, title] of Object.entries(PROVIDERS)) {
+            const group = create('details');
+            group.className = 'tts-provider-details';
+            group.appendChild(create('summary', `${title} 设置`));
+            group.style.marginTop = '16px';
+            const inputs = {};
+            const enabled = create('input');
+            enabled.type = 'checkbox';
+            inputs.enabled = enabled;
+            addField(group, '启用', enabled);
+            const names = id === 'system' ? ['defaultVoice', 'defaultSpeed', 'defaultVolume'] : Object.keys(FIELD_LABELS);
+            for (const name of names) {
+                if (name === 'resourceId' && id !== 'doubao-api') continue;
+                const input = create('input');
+                input.type = name === 'credential' ? 'password' : NUMBER_FIELDS[name] ? 'number' : 'text';
+                input.autocomplete = 'off';
+                input.maxLength = name === 'credential' ? 16384 : name === 'endpoint' ? 2048 : 512;
+                if (NUMBER_FIELDS[name]) [input.min, input.max] = NUMBER_FIELDS[name];
+                if (id === 'qwen-chat' && name === 'endpoint') input.readOnly = true;
+                if (name === 'defaultVoice') input.setAttribute('list', `ttsProviderVoices-${id}`);
+                inputs[name] = input;
+                addField(group, FIELD_LABELS[name], input);
+            }
+            if (id !== 'system') {
+                inputs.clearCredential = create('input');
+                inputs.clearCredential.type = 'checkbox';
+                addField(group, '清除已保存凭证', inputs.clearCredential);
+                group.appendChild(create('p', id === 'qwen-chat'
+                    ? '凭证填写国内千问 Cookie 或登录 ticket；需服务器安装 Chrome。留空保留已保存凭证。'
+                    : '凭证填写 API Key；留空保留已保存凭证。'));
+            }
+            if (id === 'system') group.appendChild(create('p', '服务端使用所选音色，显示端使用已加载的离线音色。'));
+            const query = create('button', '查询音色');
+            query.type = 'button';
+            query.className = 'control-btn';
+            query.addEventListener('click', () => loadVoices(id));
+            group.appendChild(query);
+            inputs.voiceStatus = create('span');
+            inputs.voiceStatus.setAttribute('role', 'status');
+            group.appendChild(inputs.voiceStatus);
+            const list = create('datalist');
+            list.id = `ttsProviderVoices-${id}`;
+            group.appendChild(list);
+            fields.set(id, inputs);
+            fragment.appendChild(group);
+        }
+        host.replaceChildren(fragment);
+        host.querySelectorAll('input:not([type="checkbox"]), select').forEach(input => {
+            input.style.width = '100%';
+            input.style.boxSizing = 'border-box';
+            input.style.marginTop = '4px';
+            input.style.padding = '6px 8px';
+            input.style.borderRadius = '6px';
+        });
+        element('ttsProviderSaveBtn').addEventListener('click', save);
+        element('ttsProviderSaveBtn').disabled = true;
+    }
+
+    function handleConfig(message) {
+        if (!message.config?.providers) return;
+        const isReply = pendingSave && message.requestId === pendingSave.id;
+        config = message.config;
+        for (const [key, selection] of selections) {
+            selection.provider.value = config[key]?.provider || 'system';
+            selection.voice.value = config[key]?.voice || '';
+        }
+        for (const [id, inputs] of fields) {
+            const value = config.providers[id];
+            if (!value) continue;
+            for (const [name, input] of Object.entries(inputs)) {
+                if (name === 'voiceStatus') continue;
+                if (name === 'credential') {
+                    input.value = '';
+                    input.placeholder = value.credentialConfigured ? '已配置，留空保留' : '尚未配置';
+                    continue;
+                }
+                if (input.type === 'checkbox') input.checked = name === 'clearCredential' ? false : Boolean(value[name]);
+                else input.value = value[name] ?? '';
+            }
+            setVoiceList(id);
+        }
+        if (isReply) {
+            clearSave();
+            status(message.success === false ? message.message || '保存失败，已恢复服务器配置' : '已保存，所有控制端已同步');
+        } else if (!pendingSave) {
+            element('ttsProviderSaveBtn').disabled = false;
+            status('已同步服务器配置');
+        }
+    }
+
+    function save() {
+        if (!config || pendingSave) return;
+        const patch = { providers: {} };
+        for (const [key, selection] of selections) patch[key] = { provider: selection.provider.value, voice: selection.voice.value.trim() || null };
+        for (const [id, inputs] of fields) {
+            const settings = {};
+            for (const [name, input] of Object.entries(inputs)) {
+                if (name === 'voiceStatus') continue;
+                settings[name] = input.type === 'checkbox' ? input.checked : input.value;
+            }
+            patch.providers[id] = settings;
+        }
+        const id = requestId();
+        try {
+            send({ type: 'setTtsProviderConfig', requestId: id, config: patch });
+            pendingSave = { id, timer: setTimeout(() => { clearSave(); status('未收到保存确认，请重连后核对配置'); }, 10000) };
+            element('ttsProviderSaveBtn').disabled = true;
+            status('正在等待服务器保存确认…');
+        } catch (error) { status(error.message); }
+    }
+
+    function handleVoices(message) {
+        const pending = queries.get(message.provider);
+        if (!pending || pending.id !== message.requestId) return;
+        clearTimeout(pending.timer);
+        queries.delete(message.provider);
+        const inputs = fields.get(message.provider);
+        if (!message.success) {
+            inputs.voiceStatus.textContent = `${message.message || '查询失败'}，已保留当前 ID`;
+            return;
+        }
+        const voices = (message.voices || []).filter(voice => typeof voice.id === 'string');
+        catalogs.set(message.provider, voices);
+        setVoiceList(message.provider);
+        const custom = inputs.defaultVoice.value && !voices.some(voice => voice.id === inputs.defaultVoice.value);
+        inputs.voiceStatus.textContent = custom ? '当前 ID 不在候选目录中，保留并在合成时验证' : `已加载 ${voices.length} 个音色候选，可填写其他有效 ID`;
+    }
+
+    function handleDisconnected() {
+        clearSave();
+        config = null;
+        element('ttsProviderSaveBtn').disabled = true;
+        for (const [id, pending] of queries) {
+            clearTimeout(pending.timer);
+            fields.get(id).voiceStatus.textContent = '连接已断开，已保留当前 ID';
+        }
+        queries.clear();
+        status('连接已断开，等待服务器重新同步');
+    }
+
+    window.TtsProviderSettings = { init, handleConfig, handleVoices, handleDisconnected, save, loadVoices,
+        getConfig: () => config };
+    init();
+})();

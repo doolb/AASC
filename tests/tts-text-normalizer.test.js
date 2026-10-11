@@ -30,5 +30,5 @@ test('统一 TTS 路由在显示端和服务端生成前使用短停顿文本', 
 
     assert.match(server, /normalizeTtsPauseText/);
     assert.match(server, /sendTtsGenerateToDisplay\([^,]+, ttsText,/);
-    assert.match(server, /tts\.generateTTS\(ttsText, voice, speed\)/);
+    assert.match(server, /tts\.generateTTS\(ttsText, voice, speed, options\.volume\)/);
 });

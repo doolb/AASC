@@ -19,6 +19,8 @@
 
 - [独立 MMD-AR MPL 动作输入](design/mmd-ar-mpl.md)
 
+- [TTS Provider 与播报配置](design/tts-providers.md)
+
 - [显示端监听开关与语音状态按钮](design/display-voice-controls.md)
 
 ## 项目概述

@@ -930,6 +930,13 @@
                 </div>
             </div>
             <div class="control-item voiceprint-card">
+                <label>语音服务与音色</label>
+                <p>分别设置 AI 回复、文本阅读和系统播报；聊天模板可单独指定 AI 回复的声音。</p>
+                <div id="ttsProviderFields"></div>
+                <button class="control-btn" id="ttsProviderSaveBtn" disabled>保存语音配置</button>
+                <span id="ttsProviderStatus" role="status">等待服务器配置（默认系统原生）</span>
+            </div>
+            <div class="control-item voiceprint-card">
                 <label>服务器语音功能</label>
                 <div style="margin-top:6px;font-size:13px;">
                     <label style="display:inline-block;margin-right:16px;">
@@ -975,6 +982,15 @@
                     <select id="templatePermissionProfile" class="chat-template-permission">
                         <option value="readonly">只读（文件搜索、网络查询）</option>
                     </select>
+                    <label for="templateTtsProvider">AI 回复 TTS Provider</label>
+                    <select id="templateTtsProvider" class="chat-template-permission">
+                        <option value="">继承系统 AI 默认</option>
+                        <option value="system">系统原生 TTS</option>
+                        <option value="qwen-chat">Qwen Chat 网页朗读</option>
+                        <option value="qwen-api">Qwen TTS API</option>
+                        <option value="doubao-api">Doubao TTS API</option>
+                    </select>
+                    <input type="text" id="templateTtsVoice" placeholder="音色 ID（留空使用所选服务默认）">
                     <button class="chat-add-btn" onclick="Chat.addTemplate()">添加模板</button>
                 </div>
             </div>
@@ -1177,6 +1193,7 @@
     <script src="js/control-mode-utils.js"></script>
     <script src="js/crop.js"></script>
     <script src="js/tts.js"></script>
+    <script src="js/tts-provider-settings.js"></script>
     <script src="js/controls.js"></script>
     <script src="js/reminder.js"></script>
     <script src="js/chat-markdown.js"></script>

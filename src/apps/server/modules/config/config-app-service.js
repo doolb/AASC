@@ -9,6 +9,9 @@ const {
 } = require('../../../../core/release-runtime-context');
 const { normalizeControlTheme } = require('./control-theme-config');
 const { DEFAULT_MAX_MIB, normalizeAudioCacheMaxMiB } = require('../../../../external/tts/tts-audio-cache-config');
+const { normalizeSettings: normalizeTtsProviderSettings, redactSettings: redactTtsProviderSettings,
+    SELECTION_BUSINESSES } = require('../tts/tts-provider-settings');
+const { normalizeVoiceConfig, validateBusinessProvider } = require('../tts/tts-provider-policy');
 
 const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../../'));
 const RUNTIME_CONTEXT = resolveReleaseRuntimeContext({
@@ -330,7 +333,10 @@ class Config extends DataSnapshot {
             maxErrorBytes: 65536,
             audioCacheMaxMiB: DEFAULT_MAX_MIB,
             device: 'server',
-            serverEnabled: true
+            serverEnabled: true,
+            aiReplyDefault: { provider: 'system', voice: null },
+            textMedia: { provider: 'system', voice: null },
+            systemBroadcast: { provider: 'system', voice: null }
        },
         asr: {
             mode: 'isolated',
@@ -464,6 +470,27 @@ class Config extends DataSnapshot {
             else delete obj[finalKey];
         }
         return saved;
+    }
+
+    setTtsProviderConfig(businessType, value) {
+        if (!Object.hasOwn(SELECTION_BUSINESSES, businessType)) {
+            throw new Error('TTS 业务配置不合法');
+        }
+        const selection = normalizeVoiceConfig(value);
+        validateBusinessProvider(selection.provider, SELECTION_BUSINESSES[businessType]);
+        const previous = this.get(`tts.${businessType}`);
+        if (!this.set(`tts.${businessType}`, selection)) {
+            this._data.tts[businessType] = previous;
+            throw new Error('TTS 业务配置保存失败');
+        }
+        return this.get(`tts.${businessType}`);
+    }
+
+    getTtsProviderConfig(businessType) {
+        if (!Object.hasOwn(SELECTION_BUSINESSES, businessType)) {
+            throw new Error('TTS 业务配置不合法');
+        }
+        return { ...this.get(`tts.${businessType}`, { provider: 'system', voice: null }) };
     }
 
     setTtsConfig(ttsConfig) {
@@ -664,6 +691,38 @@ class UserConfig extends DataSnapshot {
 const config = new Config(CONFIG_FILE);
 const userConfig = new UserConfig(USER_CONFIG_FILE);
 
+// Provider凭证留在用户配置中；业务选择继续通过config.set进入项目权威配置。
+// 对应 .src/framework/tts-provider-configuration.md 的配置保存与脱敏流程。
+function getTtsProviderSettings() {
+    const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, config.getTtsProviderConfig(key)]));
+    const storedProviders = userConfig.get('tts.providers', {});
+    // 未保存Provider专用默认时，沿用旧system音色和速度，避免升级改变已有播报。
+    const providers = { ...storedProviders, system: { defaultVoice: config.get('tts.defaultVoice', null),
+        defaultSpeed: config.get('tts.defaultSpeed', 0), ...storedProviders.system } };
+    return normalizeTtsProviderSettings({ ...selections, providers });
+}
+
+function setTtsProviderSettings(patch) {
+    const previous = getTtsProviderSettings();
+    const candidate = normalizeTtsProviderSettings(patch, previous);
+    const previousTts = JSON.parse(JSON.stringify(config.get('tts', {})));
+    const previousUserTts = JSON.parse(JSON.stringify(userConfig.get('tts', {})));
+    const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, candidate[key]]));
+    if (!userConfig.set('tts', { ...previousUserTts, providers: candidate.providers })) {
+        userConfig._data.tts = previousUserTts;
+        throw new Error('TTS Provider 用户配置保存失败');
+    }
+    if (!config.set('tts', { ...previousTts, ...selections })) {
+        config._data.tts = previousTts;
+        if (!userConfig.set('tts', previousUserTts)) {
+            userConfig._data.tts = previousUserTts;
+            throw new Error('TTS 业务配置保存失败，用户配置回滚失败，请检查磁盘');
+        }
+        throw new Error('TTS 业务配置保存失败，已恢复原配置');
+    }
+    return redactTtsProviderSettings(candidate);
+}
+
 // 迁移:将旧 config/config.json 中的 displayStates/deviceEvents 及 config/ 下的私人文件迁移到 ~/.config/aasc-user/
 function migrateLegacyUserData() {
     const legacyDir = path.dirname(CONFIG_FILE);
@@ -740,6 +799,11 @@ module.exports.get = (key, defaultValue) => config.get(key, defaultValue);
 module.exports.set = (key, value) => config.set(key, value);
 module.exports.setTtsConfig = (ttsConfig) => config.setTtsConfig(ttsConfig);
 module.exports.getTtsConfig = () => config.getTtsConfig();
+module.exports.getTtsProviderConfig = (businessType) => config.getTtsProviderConfig(businessType);
+module.exports.setTtsProviderConfig = (businessType, value) => config.setTtsProviderConfig(businessType, value);
+module.exports.getTtsProviderSettings = getTtsProviderSettings;
+module.exports.getPublicTtsProviderSettings = () => redactTtsProviderSettings(getTtsProviderSettings());
+module.exports.setTtsProviderSettings = setTtsProviderSettings;
 module.exports.normalizeCpuAffinityConfig = (rawConfig, fallbackConfig) => normalizeCpuAffinityConfig(rawConfig, fallbackConfig);
 module.exports.validateCpuAffinityPayload = (payload, fallbackConfig) => validateCpuAffinityPayload(payload, fallbackConfig);
 module.exports.getDefaultDisplayBackgroundGlowConfig = () => ({ ...DEFAULT_DISPLAY_BACKGROUND_GLOW });

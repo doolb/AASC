@@ -1,5 +1,13 @@
 # 服务端 TTS 稳定性设计文档
 
+## 2026-10-11 多 Provider 接入（已实现，账号/设备待验收）
+
+用户已确认多 Provider 续接方案，新增 system、国内千问网页、Qwen API、豆包 API。AI/Agent 按模板或 AI 默认选择，文本媒体与系统播报独立；音色只在相同 Provider 内继承。配置通过既有 AASC/WebSocket 保存、广播脱敏权威值与重连补发；凭证存用户配置，不进入模板或广播。
+
+system 保留原生成设备与回退策略；云端失败明确报告，不切换 Provider。国内千问按用户提供的 www.qianwen.com 页面核对公开前端签名/WebSocket契约，需要显式登录凭证及服务器 Chrome。完整 WAV 进入原内存缓存，音频 URL、句序、播放目标、回执和打断保持。
+
+完整需求、限制与接口参考见 [Provider设计](tts-providers.md)，实现见 [Provider伪代码](../spec/tts-providers.md)。代码和模拟/浏览器验收完成后保留真实账号、设备音频及长期队列验收项；服务代码包待构建发布。
+
 ## 2026-09-30 TTS 音频内存下发（已实现，待现场验收）
 
 用户希望消除服务端下发TTS时的临时WAV及逐文件清理日志。原实现有两个写盘入口：`src/external/tts/tts-service.js` 将外部HTTP音频通过pipeline写盘，`server-app.js` 的 `generateTtsWithFallback` 将显示端回传base64写盘。API、普通聊天、Agent、提醒、报时及文本媒体均主要通过basename构造 `/uploads/tts/<name>.wav` 下发；继续沿用URL可以兼容网页/控制端/Android/Node的队列、播放目标与打断消息。

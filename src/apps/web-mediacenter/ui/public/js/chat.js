@@ -2431,7 +2431,9 @@ const Chat = {
         const name = nameInput.value.trim();
         const content = contentInput.value.trim();
         const permissionProfile = document.getElementById('templatePermissionProfile').value || 'readonly';
-        
+        const ttsProvider = document.getElementById('templateTtsProvider').value;
+        const ttsVoice = document.getElementById('templateTtsVoice').value.trim();
+
         if (!name || !content) {
             window.showToast('请填写模板名称和内容', 'error');
             return;
@@ -2440,7 +2442,7 @@ const Chat = {
         fetch('/api/chat/templates/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, content, permissionProfile: permissionProfile })
+            body: JSON.stringify({ name, content, permissionProfile: permissionProfile, tts: { ...(ttsProvider ? { provider: ttsProvider } : {}), voice: ttsVoice || null } })
         })
         .then(res => res.json())
         .then(data => {
@@ -2451,6 +2453,8 @@ const Chat = {
                 nameInput.value = '';
                 contentInput.value = '';
                 document.getElementById('templatePermissionProfile').value = 'readonly';
+                document.getElementById('templateTtsProvider').value = '';
+                document.getElementById('templateTtsVoice').value = '';
                 this.editingTemplateName = null;
                 const button = document.querySelector('.chat-add-template .chat-add-btn');
                 if (button) button.textContent = '添加模板';
@@ -2467,6 +2471,8 @@ const Chat = {
         document.getElementById('newTemplateName').value = template.name || '';
         document.getElementById('newTemplateContent').value = template.content || '';
         document.getElementById('templatePermissionProfile').value = template.permissionProfile || 'readonly';
+        document.getElementById('templateTtsProvider').value = template.tts?.provider || '';
+        document.getElementById('templateTtsVoice').value = template.tts?.voice || '';
         const button = document.querySelector('.chat-add-template .chat-add-btn');
         if (button) button.textContent = '保存模板';
     },

@@ -832,6 +832,8 @@ function addTemplate(template) {
     if (existing) {
         existing.content = normalized.content;
         existing.permissionProfile = normalized.permissionProfile;
+        // 兼容旧控制端：未提交TTS字段时保留已有声音；提交空对象才显式恢复继承。
+        if (Object.hasOwn(normalized, 'tts')) existing.tts = normalized.tts;
         existing.updatedAt = Date.now();
     } else {
         chatTemplates.push({
@@ -839,6 +841,7 @@ function addTemplate(template) {
             name: normalized.name,
             content: normalized.content,
             permissionProfile: normalized.permissionProfile,
+            tts: normalized.tts,
             createdAt: Date.now()
         });
     }

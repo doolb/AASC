@@ -79,6 +79,7 @@
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
 | ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](spec/asr-memory-upload-vad-unification.md) | ASR Buffer 识别、独立进程传递和 500ms VAD 配置伪代码 |
 | 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求保护、内置 tts.server 服务任务与通用 HTTP URL |
+| TTS Provider 与播报配置 | [tts-providers.md](spec/tts-providers.md) | 模板继承、AI/Agent、文本阅读、系统播报及权威配置伪代码 |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/spec/android-asr-apk.md) | SenseVoice 模型、音频输入、识别耗时和 HTTP 服务伪代码 |
 | 独立 Android RapidOCR HTTP 测试 APK | [android-rapidocr-apk.md](../3rd/tts-server/docs/spec/android-rapidocr-apk.md) | RapidOCR 模型、图片 HTTP 上传和网页测试伪代码 |
 | 独立 Android YOLO11 五模型测速 APK | [android-yolo-apk.md](../3rd/tts-server/docs/spec/android-yolo-apk.md) | 五个 YOLO11 ONNX 模型、目标检测、HTTP/网页和测速伪代码 |

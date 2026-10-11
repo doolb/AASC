@@ -21,7 +21,7 @@ assert.match(server, /allowRepairModeTts: true/);
 assert.match(server, /data\.type === 'tts'[\s\S]*?options\.allowRepairModeTts !== true/);
 assert.match(server, /resolveDisplayId: \(\) => \{/);
 assert.match(server, /resolveCurrentVoicePlaybackTarget\(displayId\)/);
-assert.match(server, /generateTTS: \(ttsText\) => generateTtsWithFallback\(ttsText, undefined, undefined, displayId\)/);
+assert.match(server, /generateTTS: \(ttsText\) => generateTtsWithFallback\(ttsText, undefined, undefined, displayId,\s*\{ businessType: BUSINESS_TYPES.AGENT_REPLY/u);
 assert.equal(typeof config.repairMode?.password, 'string');
 assert.equal(config.repairMode?.role, 'mainfront');
 

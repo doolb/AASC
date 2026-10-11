@@ -43,6 +43,7 @@ const WebSocketManager = {
         
         this.ws.onclose = () => {
             window.TtsAudioCacheSettings?.handleDisconnected();
+            window.TtsProviderSettings?.handleDisconnected();
             window.DeviceList?.handleVoiceContinuousDisconnected?.();
             setTimeout(() => this.connect(), 3000);
         };
@@ -62,6 +63,14 @@ const WebSocketManager = {
     },
 
     handleMessage(data) {
+        if (data.type === 'ttsProviderConfig') {
+            window.TtsProviderSettings?.handleConfig(data);
+            return;
+        }
+        if (data.type === 'ttsProviderVoices') {
+            window.TtsProviderSettings?.handleVoices(data);
+            return;
+        }
         if (data.type === 'ttsAudioCacheConfig') {
             window.TtsAudioCacheSettings?.handleConfig(data);
             return;

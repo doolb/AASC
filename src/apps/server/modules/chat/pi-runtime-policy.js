@@ -1,5 +1,9 @@
 'use strict';
 
+const {
+    normalizeTemplateTts
+} = require('../tts/tts-provider-policy');
+
 const READONLY_TOOLS = Object.freeze([
     'read',
     'grep',
@@ -48,6 +52,9 @@ function normalizeChatTemplate(template = {}) {
     const permissionProfile = normalized.permissionProfile || 'readonly';
     resolvePermissionPolicy(permissionProfile);
     normalized.permissionProfile = permissionProfile;
+    if (Object.prototype.hasOwnProperty.call(normalized, 'tts')) {
+        normalized.tts = normalizeTemplateTts(normalized.tts);
+    }
     delete normalized.tools;
     return normalized;
 }

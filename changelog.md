@@ -13,6 +13,14 @@
   - 更新design/spec/task/todo/usage/self-test；本地web-dist已生成，未发布外网。正式显示端/APK与Offline产物状态保持；手机画质/帧时待现场验收。
 
 
+### TTS 多 Provider 配置与生成
+
+- ✅ [2026-10-11] 接入system、国内千问网页、Qwen API、豆包 API，AI/Agent按模板或AI默认，文本阅读/系统播报独立选择；跨Provider不继承音色，旧客户端保留已保存模板声音。
+  - 新增tts-provider-policy/settings/registry/service/http/ws、qwen-chat-tts和tts-wav模块，修改config-app-service、pi-runtime-policy、llm-service、tts-service、server-app；完整WAV复用tts_mem_<UUID>.wav内存引用和原播放/取消协议。国内千问使用用户指定www.qianwen.com官方公开前端签名及WebSocket朗读，需登录凭证与服务器Chrome，真实账号验收待补。
+  - 新增控制端tts-provider-settings.js，修改upload.html/chat.js/websocket.js/self-test.js；复用AASC/WebSocket规范化持久化、失败回滚、脱敏广播/重连补发，凭证空输入保留/显式清除，查询失败及目录外音色ID保留。
+  - 19文件97/97定向检查通过、无跳过，包含本地真实HTTP/WebSocket模拟、真实配置写盘/回滚、实际system入口与Chromium配置保存/失败/超时/断线/模板自测。另有扩大检查中的旧chat-tts-interruption按钮夹具失败，HEAD同样缺该ID，未改该夹具或宣称全仓通过。
+  - 同步.src、design/spec/task/todo/usage/self-test，完成实现项移出todo，仅保留账号/设备/发布验收。servicePackage=true（原已待打包），minApk与dependenciesPackage保持；未重启、构建或发布运行服务。
+
 ### MMD-AR 统一灯光预设
 
 - ✅ [2026-10-11] 移除旧亮度预设，新增统一“灯光预设”折叠分类，全部操作集中显示；支持完整面板十组参数的命名保存、覆盖、删除、刷新恢复及JSON单项/全部导出和合并导入。

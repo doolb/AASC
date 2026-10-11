@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const audioCache = require('./tts-audio-cache');
+const { adjustWav } = require('./tts-wav');
 
 const UPLOADS_DIR = path.join(process.cwd(), 'res', 'uploads');
 const TTS_DIR = path.join(UPLOADS_DIR, 'tts');
@@ -134,7 +135,7 @@ function callExternalTTS(text, voice, speed) {
     });
 }
 
-async function generateTTS(text, voice, speed) {
+async function generateTTS(text, voice, speed, volume = 100) {
     if (!text) {
         throw new Error('text 不能为空');
     }
@@ -147,7 +148,7 @@ async function generateTTS(text, voice, speed) {
         console.log(`[TTS] 生成: "${text}" | 语音: ${finalVoice} | 语速: ${finalSpeed} | 排队: ${pendingRequests - 1}`);
 
         const buffer = await callExternalTTS(text, voice, speed);
-        return audioCache.storeAudio(buffer);
+        return audioCache.storeAudio(adjustWav(buffer, 0, volume));
     } finally {
         pendingRequests--;
     }

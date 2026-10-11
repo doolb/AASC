@@ -51,6 +51,34 @@
   Offline servicePackage=true；不执行测试、重启或发布
 ```
 
+## Provider 选择边界
+
+### 2026-10-11 多 Provider 已接入
+
+完整伪代码与自测流程见 [tts-providers.md](tts-providers.md)。
+
+```text
+已有声明:
+  normalizeChatTemplate、config.get/setTtsProviderSettings、createProviderRegistry
+  createTtsProviderService、createTtsProviderWs、generateTtsWithFallback、原内存音频缓存
+操作流程:
+  模板省略provider -> AI默认；模板显式provider -> 覆盖
+  AI/Agent -> 来源模板或AI默认；群聊 -> AI默认；临时会话 -> 当前角色模板
+  文本媒体 -> textMedia；报时/状态/任务/自定义 -> systemBroadcast
+  voice -> 模板显式 -> 相同Provider的业务默认 -> 最终Provider默认
+  非AI -> 拒绝qwen-chat
+  WebSocket配置 -> 校验候选 -> 用户Provider参数与config业务选择持久化
+    成功 -> 脱敏权威广播；失败 -> 旧值回滚；初始化/重连 -> 当前脱敏配置
+  system -> 原display/server生成与回退；显示端使用已加载音色
+  qwen-api -> 官方HTTP合成 -> WAV下载；doubao-api -> HTTP完成事件 -> PCM转WAV
+  国内qwen-chat -> 官方网页签名SDK -> WebSocket文本/结束包 -> 完整PCM转WAV
+  cloud完整WAV校验 -> 原缓存引用 -> 原playAudio/playOnControl/textSentenceTts
+  错误/超时/超限/缺完成 -> 明确失败，不切换Provider，不缓存半成品
+  原聊天代次/取消检查 -> 丢弃迟到音频；保持队列/目标/回执
+待现场验收:
+  真实账号、音色权限、设备声音、网页版本兼容、长队列与延迟
+```
+
 ## 模块位置
 
 - `src/external/tts/tts-service.js`

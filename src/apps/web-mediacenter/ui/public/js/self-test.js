@@ -39,6 +39,23 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'tts_provider_config',
+            name: '语音服务配置同步',
+            description: '检查服务器权威配置、业务限制及凭证脱敏',
+            category: '语音功能',
+            run: async () => {
+                const config = window.TtsProviderSettings?.getConfig();
+                if (!config) return { success: false, message: '尚未收到语音服务配置', details: '请等待控制端连接成功' };
+                const providers = ['system', 'qwen-chat', 'qwen-api', 'doubao-api'];
+                const selections = ['aiReplyDefault', 'textMedia', 'systemBroadcast'];
+                const valid = selections.every(key => providers.includes(config[key]?.provider))
+                    && !['textMedia', 'systemBroadcast'].some(key => config[key].provider === 'qwen-chat')
+                    && providers.every(id => config.providers[id] && !Object.hasOwn(config.providers[id], 'credential'));
+                return { success: valid, message: valid ? '业务配置已同步，凭证已脱敏' : '语音服务配置校验失败',
+                    details: '真实账号合成与设备声音需另行验收' };
+            }
+        },
+        {
             id: 'display_connection',
             name: '显示端连接测试',
             description: '检查是否有显示端连接',
