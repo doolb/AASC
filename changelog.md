@@ -1,5 +1,10 @@
 ### MMD-AR灯光与动作同步正式包
 
+- ✅ [2026-10-12] 发布正式Offline服务代码包v65到局域网与外网，包含TTS生成时准备高级动作、音频就绪后同步播放，以及最新已提交TTS修复。
+  - `code/code-v65.zip`：17,585,424字节，SHA-256 `295773152c180ed8fcf3d5e3ad8f1885cff414256d5def59bcd29f055b2ca3b0`；来源`17f2d3dc3059e5c7653cb2e76f89371393ddf6d3`。npm构建生成9项固定资源；1,033文件CRC和逐项指纹通过，包含512项提交源码、9项生成资源及512项既有发布资源。构建输入独立暂存，未切换分支或覆盖工作区，保留本机配置与其他未提交改动。
+  - npm发布脚本上传版本文件后原子切换manifest，复用dependencies v6、Node min seeds v39、min APK v34及dataRepair v2；LAN/WAN所有引用资源HTTP大小/SHA-256、RSA签名及组件约束通过。两端manifest SHA-256均为`e8b68e7cde502ea173d3e1c48c1082c34c2a14818d46ad2fa9ef6e25048598e2`，code目录仅保留v65，清理无错误；记录保存在`.git/offline-publish-mmd-tts-v65/`。
+  - `servicePackage=false`，`minApk=true`、`dependenciesPackage=false`保持；仅服务代码包发布，不构建APK/依赖包，不执行服务器重启或设备安装。按纯发布例外只补充changelog和发布状态；此前138项功能验证沿用，本轮校验发布产物，不提交ZIP、日志或其他会话文件。Android实际同步与性能仍待设备验收。
+
 - ✅ [2026-10-11] 实现AI回答高级动作随TTS两阶段播放：生成请求启动时并行解析/准备，生成成功后同句id关联，实际发声时提交自动层并按音频时钟推进。
   - 新增chat-tts-actions.js/mmd-tts-actions.mjs；修改server-app.js/agent-chat-tts.js、display.html/display-lipsync-audio.js及Human interface/mixer。准备不接管模型，独立音频时钟/优先级40，16句缓存/32秒等待；暂停/缓冲/恢复、失败/打断/迟到及手动优先，句尾爱心播放窗口与原600ms衔接。原音频/口型/物理继续复用。
   - npm单元118/118、TTS集成19/19、正式真实PMX/WASM/WAV浏览器1/1（69.5秒），共138项通过；最后时钟修订复核9/9。修复真实启动帧延迟和暂停缓存；独立WEB构建、HTML/模块语法/差异检查通过，无pageerror。旧停止按钮静态夹具基线问题记todo，不声称全仓通过。
