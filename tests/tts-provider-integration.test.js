@@ -8,6 +8,7 @@ const { createProviderRegistry } = require('../src/apps/server/modules/tts/tts-p
 const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { requestLimited, wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');
+const { createProviderError } = require('../src/apps/server/modules/tts/tts-provider-errors');
 const cache = require('../src/external/tts/tts-audio-cache');
 
 const pcm = Buffer.from([1, 0, 2, 0, 3, 0, 4, 0]);
@@ -136,4 +137,176 @@ test('实际装配连接AI/Agent/临时/文本/系统入口和控制端重连；
     assert.match(source, /action: 'playAudio'/u);
     assert.match(source, /type: 'playOnControl'/u);
     assert.doesNotMatch(source, /app\.(get|post)\(['"]\/api\/tts\/providers/u);
+});
+
+test('Qwen HTTP与业务错误显示已知代码和中文原因，不缓存、不回退、不回显原文', async t => {
+    const secret = 'qwen-fixture-secret';
+    let current;
+    let audioRequests = 0;
+    let cached = 0;
+    let fallback = 0;
+    const url = await mockServer(t, (req, res) => {
+        if (req.method !== 'POST') audioRequests += 1;
+        res.writeHead(current.status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ code: current.code, message: `${secret} https://audio.invalid/?signature=${secret}` }));
+    });
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-api' },
+        providers: { 'qwen-api': { enabled: true, credential: secret, endpoint: url } } });
+    const service = createTtsProviderService({ getSettings: () => settings,
+        registry: createProviderRegistry({ systemGenerate: () => { fallback += 1; } }),
+        storeAudio: () => { cached += 1; } });
+    const cases = [
+        [400, 'Arrearage', '账户欠费'],
+        [401, 'InvalidApiKey', 'API Key 无效'],
+        [403, 'Model.AccessDenied', '模型访问被拒绝'],
+        [403, 'AccessDenied.Unpurchased', '服务尚未开通'],
+        [400, 'InvalidParameter', '请求参数无效'],
+        [400, 'InputRequired', '缺少必需输入'],
+        [404, 'ModelNotFound', '模型不存在'],
+        [429, 'Throttling.RateQuota', '请求频率超限'],
+        [429, 'Throttling.AllocationQuota', '配额或吞吐超限'],
+        [400, 'AllocationQuota.FreeTierOnly', '免费额度已耗尽'],
+        [400, 'DataInspectionFailed', '文本未通过内容检查'],
+        [500, 'InternalError', '上游内部错误'],
+        [200, 'Arrearage', '账户欠费'],
+        [200, 'InvalidParameter', '请求参数无效']
+    ];
+    for (const [status, code, reason] of cases) {
+        await t.test(`${status}/${code}`, async () => {
+            current = { status, code };
+            await assert.rejects(service.generate({ text: '测试', businessType: 'ai_reply' }), error => {
+                assert.equal(error.provider, 'qwen-api');
+                assert.equal(error.upstreamCode, code);
+                assert.ok(error.message.includes(`[${code}]`));
+                assert.ok(error.message.includes(reason));
+                assert.equal(error.message.includes(`HTTP ${status}`), status !== 200);
+                assert.ok(!error.message.includes(secret));
+                assert.ok(!JSON.stringify(error).includes(secret));
+                assert.ok(!error.message.includes('https://'));
+                if ([401, 403].includes(status)) assert.equal(error.code, 'TTS_PROVIDER_AUTH');
+                return true;
+            });
+        });
+    }
+    assert.equal(audioRequests, 0);
+    assert.equal(cached, 0);
+    assert.equal(fallback, 0);
+});
+
+test('豆包HTTP与流内错误按官方固定标记区分参数、并发、音色资源和超时', async t => {
+    const secret = 'doubao-fixture-secret';
+    let current;
+    let cached = 0;
+    let fallback = 0;
+    const url = await mockServer(t, (req, res) => {
+        res.writeHead(current.status, { 'Content-Type': 'application/json' });
+        // 原文故意含敏感字段，验证只输出已知原因，不保留消息或错误体。
+        res.end(JSON.stringify({ code: current.code, message: `${current.marker}; ${secret} https://private.invalid/${secret}` }) + '\n');
+    });
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-api' },
+        providers: { 'doubao-api': { enabled: true, credential: secret, endpoint: url } } });
+    const service = createTtsProviderService({ getSettings: () => settings,
+        registry: createProviderRegistry({ systemGenerate: () => { fallback += 1; } }),
+        storeAudio: () => { cached += 1; } });
+    const cases = [
+        [45000000, 'quota exceeded for types: concurrency', '并发数超限'],
+        [45000000, 'single request size too large', '单次请求过大'],
+        [45000000, 'payload unmarshal: bad request', '请求格式无效'],
+        [45000001, '[Invalid argument] speaker not found', '音色不存在'],
+        [45000001, '[Invalid argument] InvalidModel', '模型参数无效'],
+        [45002000, 'TTS invalid speaker', '音色参数无效'],
+        [45002001, 'No readable text!', '没有可朗读内容'],
+        [55000000, 'resource ID is mismatched with speaker related resource', '音色与资源 ID 不匹配'],
+        [55000000, 'Request timeout: connect downstream service timeout', '连接语音服务超时'],
+        [55000000, 'Request timeout: synthesis processing timeout', '合成处理超时'],
+        [55000000, 'unrecognized internal detail', '上游内部错误']
+    ];
+    for (const [code, marker, reason] of cases) {
+        for (const status of [400, 200]) {
+            await t.test(`${status}/${code}/${reason}`, async () => {
+                current = { status, code, marker };
+                await assert.rejects(service.generate({ text: '测试', businessType: 'ai_reply' }), error => {
+                    assert.equal(error.provider, 'doubao-api');
+                    assert.equal(error.upstreamCode, String(code));
+                    assert.ok(error.message.includes(`[${code}]`));
+                    assert.ok(error.message.includes(reason));
+                    assert.equal(error.message.includes(`HTTP ${status}`), status !== 200);
+                    assert.ok(!error.message.includes(secret));
+                    assert.ok(!JSON.stringify(error).includes(secret));
+                    assert.ok(!error.message.includes('https://'));
+                    return true;
+                });
+            });
+        }
+    }
+    assert.equal(cached, 0);
+    assert.equal(fallback, 0);
+});
+
+test('未知错误码、非JSON、大错误体与中断均只显示固定HTTP原因；成功请求可恢复', async t => {
+    let mode;
+    let successChunks = 0;
+    const secret = 'error-response-secret';
+    const url = await mockServer(t, (req, res) => {
+        if (mode === 'recovery') { res.end(wav); return; }
+        if (mode === 'oversize-header') {
+            res.writeHead(400, { 'Content-Length': 32 * 1024 });
+            res.end(JSON.stringify({ code: 'Arrearage', message: secret }));
+            return;
+        }
+        res.writeHead(400);
+        if (mode === 'oversize-chunked') { res.end('x'.repeat(16 * 1024 + 1)); return; }
+        if (mode === 'abort') { res.write('{"code":"Arrearage",'); setImmediate(() => res.destroy()); return; }
+        if (mode === 'non-json') { res.end(secret); return; }
+        res.end(JSON.stringify({ code: mode === 'prototype' ? '__proto__' : secret, message: secret }));
+    });
+    for (const value of ['unknown', 'prototype', 'non-json', 'oversize-header', 'oversize-chunked', 'abort']) {
+        await t.test(value, async () => {
+            mode = value;
+            await assert.rejects(requestLimited(url, {
+                mapError: (result, status) => createProviderError('qwen-api', result, status),
+                onChunk: () => { successChunks += 1; }
+            }), error => {
+                assert.match(error.message, /^Qwen API HTTP 400：请求无效/u);
+                assert.equal(error.upstreamCode, undefined);
+                assert.equal(error.code, 'TTS_PROVIDER_HTTP');
+                assert.ok(!error.message.includes(secret));
+                return true;
+            });
+        });
+    }
+    assert.equal(successChunks, 0);
+    mode = 'recovery';
+    assert.deepEqual((await requestLimited(url, { mapError: (result, status) => createProviderError('qwen-api', result, status) })).buffer, wav);
+});
+
+test('失败响应保留原总超时，HTTP状态回退与默认调用兼容', async t => {
+    let status = 400;
+    let stalled = false;
+    const url = await mockServer(t, (req, res) => {
+        res.writeHead(status);
+        if (stalled) { res.write('{"code":'); return; }
+        res.end('not-json-private-detail');
+    });
+    for (const [value, expected] of [[401, '凭证失效'], [403, '权限不足'], [429, '请求被限流'], [503, '服务暂不可用']]) {
+        status = value;
+        await assert.rejects(requestLimited(url, { mapError: (result, code) => createProviderError('doubao-api', result, code) }), error => {
+            assert.ok(error.message.includes(`豆包 API HTTP ${value}`));
+            assert.ok(error.message.includes(expected));
+            return true;
+        });
+    }
+    status = 400;
+    // 不启用映射的音频下载、其他旧调用仍保留原错误行为。
+    await assert.rejects(requestLimited(url), /^Error: TTS 上游 HTTP 400$/u);
+    for (const mapError of [() => { throw new Error('private-callback-error'); }, () => null]) {
+        await assert.rejects(requestLimited(url, { mapError }), /^Error: TTS 上游 HTTP 400$/u);
+    }
+    stalled = true;
+    await assert.rejects(requestLimited(url, { timeoutMs: 30,
+        mapError: (result, code) => createProviderError('qwen-api', result, code) }), error => {
+        assert.equal(error.code, 'TTS_PROVIDER_TIMEOUT');
+        assert.equal(error.message, 'TTS 上游请求超时');
+        return true;
+    });
 });

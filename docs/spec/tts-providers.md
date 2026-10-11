@@ -1,35 +1,42 @@
 # TTS Provider 与播报配置实现
 
-## Qwen API 错误原因打印（2026-10-11，待确认，尚未实现）
+## Qwen API与豆包API错误原因打印（2026-10-11，已实现）
 
 ```text
 已有声明：
-  requestLimited、requestJson、createProviderRegistry.qwen-api.generate
-  现有句子生成失败日志读取error.message；adjustWav、validateWav维持当前严格校验
+  requestLimited、requestJson、createProviderRegistry、现有句子生成失败日志
+  adjustWav、validateWav维持当前严格校验
 新增定义：
-  QwenApiKnownErrors { 白名单错误码, 固定中文提示 }
+  ProviderKnownErrors { Provider标识, 白名单错误码, 固定中文提示 }
   ProviderHttpErrorSummary { HTTP状态, 白名单上游错误码, 固定提示 }
-  QwenApiErrorReadBudget { 小容量上限, 原请求总时限 }
+  ErrorReadBudget { 最多16KiB, 原请求总时限 }
+  DoubaoKnownReasonMarkers { 白名单码, 官方固定错误标记, 固定中文原因 }
 操作流程：
-  用户确认方案 -> 先同步此伪代码 -> 再实施错误处理与测试
-  Qwen API请求 -> 显式启用已知错误映射，其他HTTP调用维持默认行为
-  非成功HTTP -> 在原总时限与小容量内读取错误体 -> 尝试JSON解析
+  用户要求其他错误也相应打印 -> 已确认实施，覆盖Qwen API与豆包API
+  Qwen合成JSON请求与豆包合成HTTP请求 -> 显式传入错误映射回调
+  非成功HTTP -> 原总时限内按16KiB读取错误体，不调用成功音频onChunk
+  完整小错误体 -> 尝试JSON解析 -> 白名单code对应固定原因
+  豆包共用码 -> 仅检查官方固定标记，区分并发、请求过大、音色资源不匹配与下游超时
   已知错误码 -> 固定中文原因加HTTP状态与白名单错误码 -> 现有失败日志
-  未知码、非JSON、超限、错误体中断 -> 固定HTTP错误，不回显响应原文
-  HTTP成功但业务码失败 -> 相同白名单映射；缺少音频URL -> 原固定合成错误
-  成功音频 -> 原下载、速率/音量处理、WAV校验、缓存、播放
-  调用日志不包含凭证、上游message、响应原文、签名音频URL
+  未知码、非JSON、超限或错误体中断 -> 根据HTTP状态固定提示，不回显原文
+  原总时限耗尽 -> 仍返回原超时错误
+  Qwen成功HTTP中的业务码失败 -> 同一错误映射；无音频URL -> 原固定合成错误
+  豆包成功HTTP中的流业务码失败 -> 同一错误映射，不缓存、不继续播放
+  成功音频onChunk、容量与中断处理 -> 原流程；下载无Provider凭证
+  原始message前4096字符仅参与固定标记判断，不保留在错误对象、日志或广播
+  未知字符串码不输出；凭证、响应原文、签名音频URL不输出
 验证：
-  HTTP 400/Arrearage -> 明确欠费提示，且无缓存或Provider回退
-  HTTP鉴权/参数/限流、HTTP 200业务错误 -> 对应固定原因
-  未知/带密钥错误体/非JSON/超限/中断 -> 固定提示、受限读取、不泄露
-  正常WAV下载无Authorization、既有超时与容量限制 -> 保持
-当前证据：
+  Qwen欠费/凭证/权限/参数/配额/限流/模型/内部错误 -> 对应白名单中文提示
+  豆包参数/音色/可读文本/并发/请求过大/资源匹配/超时/内部错误 -> 固定中文提示
+  HTTP失败与成功HTTP业务失败 -> 提示一致，无缓存或Provider回退
+  未知/带密钥错误体/非JSON/超限/中断/保持连接 -> 固定提示、受限读取、原超时
+  正常WAV、豆包分片UTF8和PCM、下载无Authorization -> 保持
+当前证据与未实现能力：
   本机qwen3-tts-flash/Maia -> HTTP 400/Arrearage -> 无音频下载
-  标准WAV -> 通过；未知data长度与真实截断 -> 均触发原WAV块不完整
-  原日志WAV故障 -> 尚未取得原始音频，不作头长度兼容修复
+  标准WAV通过；未知data长度与真实截断均触发原WAV块不完整，根因未定
+  豆包context_texts -> 当前无配置或请求字段，尚未接入
+  官方单向HTTP -> req_params.additions序列化JSON中的context_texts，仅合成2.0音色支持
 ```
-
 
 ## qwen3-tts-flash与Maia网页接口实测（2026-10-11）
 

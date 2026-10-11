@@ -73,6 +73,11 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] Qwen API与豆包API失败日志打印已知上游错误码及中文原因
+  - 修改tts-provider-http.js/tts-provider-registry.js，新增tts-provider-errors.js；HTTP失败体限16KiB/原总时限，Qwen业务失败及豆包流错误共用映射。补充欠费、凭证、权限、参数、配额、限流、音色、并发、资源匹配和上游超时原因；未知/非JSON/超限/断开固定回退，敏感原文不进入日志或错误对象。
+  - 集成52项、扩大定向96项全部通过，无失败/跳过；3个生产JS语法检查通过。真实百炼请求显示HTTP 400/Arrearage及中文欠费原因，无音频下载或播放；本机npm重启后静态脚本HTTP 200、/control WSS配置初始化通过。原WAV错误待完整音频复现，豆包context_texts已核对官方支持但当前尚未接入。
+  - 同步design/spec/task/todo/self-test，完成日志任务从todo移除，保留WAV待复现；servicePackage=true，minApk/dependenciesPackage保留，新改动尚未包含在已发布v64中。
+
 - ✅ [2026-10-11] 完成Qwen API原WAV故障的首轮排查及错误原因打印方案
   - 当前qwen3-tts-flash/Maia独立调用返回HTTP 400/Arrearage，未取得音频；与原21:43的WAV块不完整为不同阶段。标准WAV、未知data长度、截断样本三组只读检查分别通过/复现/复现，原故障原因仍未证实；现有TTS Provider集成基线6项通过。
   - 更新TTS Provider design/spec、task、todo；提出限量读取失败响应及白名单中文错误提示，等待用户按AGENTS.md确认后实施。未修改生产代码，发布状态保持v64已完成；凭证、响应原文和音频URL不写入记录。

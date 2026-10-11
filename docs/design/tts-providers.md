@@ -86,12 +86,20 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 - [豆包 V3 单向流式 HTTP](https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh)
 - [国内千问用户指定页面](https://www.qianwen.com/chat/6ca4f1aa0292497095cb46e6ea45e08f)：2026-10-11 核对公开前端 4.9.6 的 doQwenAuth 与 `/api/v3/tts`，未读取私有会话内容。音色克隆的 synthesis_text 只生成采样文本，不能当作音频接口。
 
-## Qwen API 错误提示与 WAV 排查（2026-10-11，待确认实施）
+## Qwen API 错误提示与 WAV 排查（2026-10-11，错误日志已实现，WAV待复现）
 
 用户报告21:43:57起连续三次“TTS WAV 块不完整”，随后要求将实际错误原因加入打印。现有Qwen API走非流式合成、音频URL下载、本地速率/音量调整和完整WAV校验；报错表示RIFF子块声明长度超过已收集字节，可能为异常长度头或真实截断，尚无原始音频证据，不归因于模型或音色。
 
-使用当前本机百炼配置qwen3-tts-flash/Maia、速率1/音量100独立复测，API返回HTTP 400、Arrearage；本次未进入音频下载。当前欠费与原WAV错误属于不同阶段，不能替代原故障结论。标准WAV通过、未知data长度与截断样本均能触发原错误，证明仅凭错误文字不能区分二者。v64已完成发布，本项尚未实现且不包含在v64中。
+使用当前本机百炼配置qwen3-tts-flash/Maia、速率1/音量100独立复测，API返回HTTP 400、Arrearage；本次未进入音频下载。当前欠费与原WAV错误属于不同阶段，不能替代原故障结论。标准WAV通过、未知data长度与截断样本均能触发原错误，证明仅凭错误文字不能区分二者。v64已完成发布，本轮错误日志改动已实现但尚未出新包，不包含在v64中。
 
-拟沿用现有失败日志：HTTP失败响应按小容量和总时限读取，仅提取已知错误码；Qwen API将欠费、凭证、权限、参数、限流等已知原因映射为固定中文提示，包含HTTP状态和白名单错误码。未知/非JSON/超限/中断响应沿用固定HTTP错误，不将上游message、凭证、响应原文或签名音频URL带入日志。HTTP下载及其他Provider保留现有行为。HTTP 200的业务失败也使用相同映射。成功音频、WAV校验、缓存与播放协议保持现有逻辑。
+用户要求其他错误也相应打印，确认前轮方案并扩展豆包API。实施沿用现有失败日志：HTTP失败响应按16KiB和原总时限读取，仅提取已知错误码；Qwen API将欠费、凭证、权限、参数、限流等已知原因映射为固定中文提示，包含HTTP状态和白名单错误码。未知/非JSON/超限/中断响应沿用固定HTTP错误，不将上游message、凭证、响应原文或签名音频URL带入日志。HTTP下载保留现有行为；豆包HTTP失败与成功流中的业务错误使用同一固定映射，共用业务码仅依据官方固定标记细分并发、资源匹配等原因。HTTP 200的业务失败也使用相同映射。成功音频、WAV校验、缓存与播放协议保持现有逻辑。
 
-按AGENTS.md先告知文件与方案、等待确认，再修改tts-provider-http.js、tts-provider-registry.js、新增小型错误映射模块并补充tts-provider-integration.test.js。原WAV问题待账户恢复或取得完整音频样本后继续复现，不通过忽略长度校验掩盖真实截断。
+用户本轮确认错误日志改动；按已告知方案修改tts-provider-http.js、tts-provider-registry.js、新增tts-provider-errors.js错误映射模块并补充tts-provider-integration.test.js。原WAV问题待账户恢复或取得完整音频样本后继续复现，不通过忽略长度校验掩盖真实截断。
+
+## 豆包语音指令核查（2026-10-11，尚未接入）
+
+用户询问context_texts是否已接入。真实请求仅含text/speaker/model/audio_params，规范化配置也没有语音指令字段，因此当前无法发送该字段。官方单向HTTP文档支持在req_params.additions的JSON序列化字符串内提供context_texts，只适用于豆包语音合成模型2.0音色；model参数用于复刻音色，指定后不支持context_texts。本轮只核查并回答，未增加指令配置或固定语气。后续若用户要求接入，应先明确Provider默认与AI模板指令的配置范围，继续使用现有AASC/WebSocket权威配置。
+
+参考： https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh ； https://docs.volcengine.com/docs/DoubaoVoice/error-code-query-1?lang=zh ； https://help.aliyun.com/zh/model-studio/error-code 。
+
+本轮错误提示回归：TTS Provider、手动AI播放、Agent和实际服务端并发共96项通过，无失败/跳过；3个生产JS语法检查通过。真实百炼请求通过生产适配器显示Qwen API HTTP 400 [Arrearage]及固定中文欠费原因，无音频下载。Offline servicePackage设为true，minApk/dependenciesPackage保持，尚未发布新包。

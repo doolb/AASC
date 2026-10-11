@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { StringDecoder } = require('node:string_decoder');
 const { requestLimited, requestJson, decodeAudio, wrapPcm, adjustWav, MAX_AUDIO_BYTES } = require('./tts-provider-http');
 const { createQwenChatProvider } = require('./qwen-chat-tts');
+const { createProviderError } = require('./tts-provider-errors');
 
 // 音色目录为官方常用候选，允许用户填目录外ID；权限和最终可用性由上游合成校验。
 const VOICE_CATALOGS = Object.freeze({
@@ -31,9 +32,11 @@ function createProviderRegistry({ systemGenerate, systemVoices = async () => [],
             const result = await jsonRequest(settings.endpoint, {
                 method: 'POST', timeoutMs: request.timeoutMs,
                 headers: { Authorization: `Bearer ${settings.credential}` },
+                mapError: (result, status) => createProviderError('qwen-api', result, status),
                 body: { model: settings.model, input: { text: request.text, voice: request.voice, language_type: 'Auto' } }
             });
-            if (result.code || (result.status_code && result.status_code !== 200) || !result.output?.audio?.url) throw new Error('Qwen TTS 合成失败，请检查模型、音色和凭证');
+            if (result.code || (result.status_code && result.status_code !== 200)) throw createProviderError('qwen-api', result);
+            if (!result.output?.audio?.url) throw new Error('Qwen TTS 合成失败，响应缺少音频地址，请检查模型、音色和凭证');
             const remaining = deadline - Date.now();
             if (remaining <= 0) throw new Error('TTS 上游请求超时');
             return adjustWav(await download(result.output.audio.url, remaining), request.speed, request.volume);
@@ -53,7 +56,7 @@ function createProviderRegistry({ systemGenerate, systemVoices = async () => [],
                 if (!text || /^(event:|:)/u.test(text)) return;
                 let event;
                 try { event = JSON.parse(text); } catch (error) { throw new Error('豆包 TTS 返回无效流事件'); }
-                if (![0, 20000000].includes(event.code)) throw new Error('豆包 TTS 合成失败，请检查音色权限与凭证');
+                if (![0, 20000000].includes(event.code)) throw createProviderError('doubao-api', event);
                 if (completed) throw new Error('豆包 TTS 完成后收到多余事件');
                 if (event.data) {
                     const chunk = decodeAudio(event.data);
@@ -75,6 +78,7 @@ function createProviderRegistry({ systemGenerate, systemVoices = async () => [],
             await httpRequest(settings.endpoint, {
                 method: 'POST', timeoutMs: request.timeoutMs, maxBytes: 24 * 1024 * 1024,
                 headers: { 'X-Api-Key': settings.credential, 'X-Api-Resource-Id': settings.resourceId, 'X-Api-Request-Id': randomUUID() },
+                mapError: (result, status) => createProviderError('doubao-api', result, status),
                 body: { user: { uid: 'aasc' }, req_params: { text: request.text, speaker: request.voice,
                     ...(settings.model ? { model: settings.model } : {}),
                     audio_params: { format: 'pcm', sample_rate: 24000,
