@@ -258,7 +258,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             [...weights.keys()].some(index => model.morphs.find(m => m.index === index)?.panel === 2));
         const weights = mixer.mix(model, physiology.sample(model, mixer.clock, eyes, state.items),
             [...external.values()].map(weights => ({ id: 0, priority: 50, weights })),
-            (save, occupied) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied));
+            (save, occupied, rotations) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied, rotations));
         manualExpressions.setHuman(model.token, [...weights]);
     }
     function before(delta, helper) {

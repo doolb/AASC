@@ -50,6 +50,7 @@ export function createHumanMixer() {
         mix(model, physiological = [], external = [], gaze = null) {
             const morphs = new Map();
             const occupied = new Map();
+            const rotations = new Map();
             const applyBone = (target, values, property, weight, mode) => {
                 save(target.bone);
                 if (property === 'position') {
@@ -82,22 +83,39 @@ export function createHumanMixer() {
                 }
                 let time = clock - request.start;
                 if (!request.loop && time >= request.duration) { finish(request, 'ended'); continue; }
+                const cycle = request.loop ? Math.floor(time / request.duration) : 0;
                 if (request.loop) time %= request.duration;
                 const fade = Math.min(request.fade, request.duration / 3);
                 const envelope = fade ? clamp(Math.min(time / fade,
                     request.loop ? 1 : (request.duration - time) / fade)) : 1;
-                for (const layer of request.layers) {
+                for (const [layerIndex, layer] of request.layers.entries()) {
                     if (time < layer.start || time > layer.start + layer.duration) continue;
                     const local = time - layer.start, windowFade = Math.min(fade, layer.duration / 3);
                     const windowEnvelope = windowFade && (layer.start > 0 || layer.duration < request.duration)
                         ? clamp(Math.min(local / windowFade, (layer.duration - local) / windowFade)) : 1;
                     const weight = clamp(layer.strength * envelope * windowEnvelope);
+                    const releasing = (!request.loop && fade > 0 && request.duration - time <= fade)
+                        || (windowFade > 0 && (layer.start > 0 || layer.duration < request.duration)
+                            && layer.duration - local <= windowFade);
                     const sampleTime = Math.min(layer.sampler.duration, (time - layer.start) * (layer.speed || 1));
                     for (const track of layer.sampler.tracks) {
                         if (!model.allowed(track, layer.mask)) continue;
                         const values = track.evaluate(sampleTime);
                         if (track.kind === 'bone') {
-                            if (track.property === 'quaternion') occupied.set(track.index, Math.max(occupied.get(track.index) || 0, weight));
+                            if (track.property === 'quaternion') {
+                                occupied.set(track.index, Math.max(occupied.get(track.index) || 0, weight));
+                                // 身份在淡入零权重帧也有效，避免新动作被误当成旧动作释放。
+                                // 零强度层不接管；多个旋转层必须全部淡出才允许头部恢复。
+                                if (layer.strength > 0) {
+                                    let channel = rotations.get(track.index);
+                                    if (!channel) {
+                                        channel = { owners: new Set(), releasing: true };
+                                        rotations.set(track.index, channel);
+                                    }
+                                    channel.owners.add(request.id + ':' + layerIndex + ':' + cycle);
+                                    channel.releasing &&= releasing;
+                                }
+                            }
                             applyBone(model.bones[track.index], values, track.property, weight, layer.mode);
                         }
                         else {
@@ -109,7 +127,7 @@ export function createHumanMixer() {
                 }
             }
             // 注视在显式动作后计算，但让位给本帧已占用的旋转轨道，眼球使用最终头部姿态。
-            gaze?.(save, occupied);
+            gaze?.(save, occupied, rotations);
             model.mesh.updateMatrixWorld(true);
             return morphs;
         },
