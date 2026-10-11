@@ -73,6 +73,10 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 按用户指定实测qwen3-tts-flash与Maia在国内千问网页接口的兼容性
+  - 使用当前Chat2API国内账号，独立诊断直接调用低层网页适配器绕过本地模型白名单；指定组合上游4000002、音频0字节，模型配默认音色同样4000002，QUARK_VOICE配Maia为5000005、0字节。
+  - 五次连接均建立并发送原参数，默认组合前后分别返回97484/98924字节有效WAV；未修改生产代码/配置、未播放声音或构建发布包，发布状态不变。同步TTS design/spec、音色核查task、自测文档与todo待验证音色的证据范围；探测脚本与凭证不提交Git。
+
 - ✅ [2026-10-11] 修复国内千问网页模型保存与生成不一致，并补齐Android恢复Cookie和来源提示
   - tts-provider-settings.js/config-app-service.js严格校验新模型，历史不兼容模型读取恢复QUARK_VOICE并保留其他参数；控制端模型下拉仅QUARK_VOICE/MINI_MAX，提示百炼模型使用Qwen API，SelfTest增加只读模型检查。
   - chat2api-login-profiles.js/chat2api-account-web-session-service.js复用当前ticket/Cookie解析，恢复Cookie覆盖现有www/chat2/chat2-api三个允许HTTPS来源。Chat2ApiCredentialCapture/Restore/AuthWebView统一默认端口与大小写，状态显示脱敏来源，Storage限定当前来源与回调页面；未扩大来源允许范围。

@@ -76,6 +76,10 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 
 用户回复“先修复”确认实施后，控制端网页模型改为QUARK_VOICE与MINI_MAX下拉选择，并提示MINI_MAX需匹配音色、百炼模型应使用Qwen API。服务端在现有WebSocket保存流程严格校验，非法模型失败并回传原权威值；qwen-chat别名规范化为QUARK_VOICE。历史已保存的不兼容模型读取时恢复默认QUARK_VOICE，保留音色、账号和其他参数，下次合法保存持久化。只读SelfTest同步检查模型，不增加云端请求。未扩充未经验证的音色。
 
+## qwen3-tts-flash与Maia网页接口实测（2026-10-11）
+
+用户要求实测指定模型与音色，已使用当前Chat2API国内账号、既有签名和网页WebSocket，以独立诊断直接调用低层适配器绕过本地模型白名单。qwen3-tts-flash+Maia上游4000002、音频0字节；同模型加网页默认音色仍4000002；QUARK_VOICE加Maia为5000005、音频0字节。默认组合前后分别成功生成97484/98924字节有效WAV，五次连接均建立并发送原参数。结论仅适用于当前国内网页接口和账号，不外推其他接口或未来版本；生产模型限制、账号与音色目录不变。百炼官方音色目录列有Maia，本次未调用百炼API。
+
 ## 参考
 
 - [百炼 Qwen TTS API](https://help.aliyun.com/en/model-studio/qwen-tts-api)
