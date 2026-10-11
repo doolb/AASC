@@ -1,4 +1,5 @@
 const http = require('http');
+const { validateWav } = require('../../../../external/tts/tts-wav');
 
 const DEFAULT_CONFIG = Object.freeze({
   host: '127.0.0.1',
@@ -13,6 +14,7 @@ const createChat2ApiProxyService = (options = {}) => {
   const coreAdapter = options.coreAdapter;
   const managementService = options.managementService;
   const responsesService = options.responsesService;
+  const speechService = options.speechService;
   let server = null;
   const sockets = new Set();
   const statistics = {
@@ -140,7 +142,7 @@ const createChat2ApiProxyService = (options = {}) => {
     const url = new URL(request.url || '/', `http://${config.host}`);
     await authorize(request, url.pathname);
     if (request.method === 'GET' && url.pathname === '/') {
-      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models'] });
+      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models', '/v1/audio/speech'] });
       return;
     }
     if (request.method === 'GET' && url.pathname === '/health') {
@@ -213,6 +215,17 @@ const createChat2ApiProxyService = (options = {}) => {
     }
     if (request.method === 'GET' && url.pathname === '/v1/models') {
       sendJson(response, 200, await coreAdapter.listModels());
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/audio/speech') {
+      if (!speechService) throw Object.assign(new Error('Chat2API 语音服务不可用'), { statusCode: 503, code: 'speech_unavailable' });
+      const result = await speechService.generate(await readJson(request));
+      validateWav(result.audio);
+      response.statusCode = 200;
+      response.setHeader('Content-Type', 'audio/wav');
+      response.setHeader('Content-Length', result.audio.length);
+      response.setHeader('Cache-Control', 'no-store');
+      response.end(result.audio);
       return;
     }
     if (request.method === 'POST' && ['/v1/chat/completions', '/v1/completions'].includes(url.pathname)) {

@@ -59,4 +59,11 @@ function adjustWav(buffer, speed = 0, volume = 100) {
 }
 
 
-module.exports = { wrapPcm, adjustWav, validateWav };
+// 两个上游适配器共用限长base64校验，不让Chat2API依赖TTS业务模块。
+function decodeAudio(value) {
+    if (typeof value !== 'string' || !value || value.length > Math.ceil(MAX_AUDIO_BYTES / 3) * 4
+        || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(value)) throw new Error('TTS 音频编码无效或超过上限');
+    return Buffer.from(value, 'base64');
+}
+
+module.exports = { MAX_AUDIO_BYTES, decodeAudio, wrapPcm, adjustWav, validateWav };

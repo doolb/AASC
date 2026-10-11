@@ -2,7 +2,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { WebSocketServer } = require('ws');
-const { createQwenChatProvider, createQwenSigner, parseCookies } = require('../src/apps/server/modules/tts/qwen-chat-tts');
+const { createQwenChatProvider } = require('../src/apps/server/modules/tts/qwen-chat-tts');
+const { createChat2ApiQwenSpeechAdapter, createQwenSigner, parseCookies } = require('../src/apps/server/modules/chat2api/chat2api-qwen-speech-adapter');
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
 const cache = require('../src/external/tts/tts-audio-cache');
@@ -10,14 +11,14 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { createChat2ApiDataStore } = require('../src/apps/server/modules/chat2api/chat2api-data-store');
-const { createTtsChat2ApiAccounts } = require('../src/apps/server/modules/tts/tts-chat2api-accounts');
+const { createChat2ApiSpeechService } = require('../src/apps/server/modules/chat2api/chat2api-speech-service');
 
 async function accountFixture(t, ticket) {
     const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-tts-qwen-account-'));
     t.after(() => fs.rm(rootDir, { recursive: true, force: true }));
     const dataStore = createChat2ApiDataStore({ rootDir });
     await dataStore.saveAccount({ accountId: 'qwen-test', providerId: 'qwen', credentials: { ticket } });
-    return { dataStore, ...createTtsChat2ApiAccounts({ dataStore }) };
+    return { dataStore };
 }
 
 async function socketFixture(t, onPacket) {
@@ -43,9 +44,9 @@ test('国内千问WebSocket真实文本/结束包、同reqid、分片去重、�
     });
     let signing;
     const accounts = await accountFixture(t, 'ticket-value');
-    const adapter = createQwenChatProvider({ resolveCredential: accounts.resolveCredential,
-        sign: async options => { signing = options; return { url, userAgent: 'test-browser' }; } });
-    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat' }, providers: { 'qwen-chat': { enabled: true, chat2apiAccountId: 'qwen-test', defaultSpeed: 10 } } });
+    const adapter = createQwenChatProvider({ speechService: createChat2ApiSpeechService({ dataStore: accounts.dataStore,
+        qwenAdapter: createChat2ApiQwenSpeechAdapter({ sign: async options => { signing = options; return { url, userAgent: 'test-browser' }; } }) }) });
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat' }, providers: { 'qwen-chat': { enabled: true, defaultSpeed: 10 } } });
     const service = createTtsProviderService({ getSettings: () => settings, registry: { 'qwen-chat': adapter } });
     const reference = await service.generate({ text: '国内网页朗读', businessType: 'agent_reply' });
     assert.deepEqual(packets.map(packet => packet.status), [1, 2]);
@@ -81,8 +82,9 @@ test('国内千问错误、缺完成、坏JSON、空音频、超时均无缓存�
         actions[mode]();
     });
     const accounts = await accountFixture(t, 'private-cookie');
-    const adapter = createQwenChatProvider({ resolveCredential: accounts.resolveCredential, sign: async () => url });
-    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat' }, providers: { 'qwen-chat': { enabled: true, chat2apiAccountId: 'qwen-test' } } });
+    const adapter = createQwenChatProvider({ speechService: createChat2ApiSpeechService({ dataStore: accounts.dataStore,
+        qwenAdapter: createChat2ApiQwenSpeechAdapter({ sign: async () => url }) }) });
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat' }, providers: { 'qwen-chat': { enabled: true } } });
     let stores = 0;
     const service = createTtsProviderService({ getSettings: () => settings, registry: { 'qwen-chat': adapter }, timeoutMs: 50, storeAudio: () => { stores += 1; } });
     for (const value of ['auth', 'close', 'invalid', 'empty', 'timeout']) {
@@ -127,27 +129,16 @@ test('签名超时关闭资源、迟到结果忽略；模型音频阶段只使�
     const sign = createQwenSigner({ launch: async () => browser });
     await assert.rejects(sign({ credential: 'ticket', reqid: 'a', timeoutMs: 20 }), /超时/u);
     assert.equal(closed, 1);
-    const provider = createQwenChatProvider({ resolveCredential: async () => 'ticket',
-        sign: async () => { await new Promise(resolve => setTimeout(resolve, 25)); return 'ws://127.0.0.1/tts'; } });
-    await assert.rejects(provider.generate({ text: 'test', timeoutMs: 10 }, { enabled: true, chat2apiAccountId: 'qwen-test' }), /超时/u);
+    const adapter = createChat2ApiQwenSpeechAdapter({ sign: async () => { await new Promise(resolve => setTimeout(resolve, 25)); return 'ws://127.0.0.1/tts'; } });
+    await assert.rejects(adapter.generate({ text: 'test', timeoutMs: 10 }, 'ticket'), /超时/u);
 });
 
-test('手动凭证不能绕过账号选择，账号错误不会调用签名或合成', async () => {
-    let signs = 0;
-    const provider = createQwenChatProvider({ resolveCredential: async () => { throw new Error('账号已停用'); },
-        sign: async () => { signs += 1; } });
-    await assert.rejects(provider.generate({ timeoutMs: 100 }, { enabled: true, credential: 'legacy-ticket' }), /请选择 Chat2API/u);
-    await assert.rejects(provider.generate({ timeoutMs: 100 }, { enabled: true, chat2apiAccountId: 'disabled', credential: 'legacy-ticket' }), /账号已停用/u);
-    assert.equal(signs, 0);
-});
-
-test('账号读取计入总超时，迟到读取不能继续签名', async () => {
-    let signs = 0;
-    let complete;
-    const provider = createQwenChatProvider({ resolveCredential: () => new Promise(resolve => { complete = resolve; }),
-        sign: async () => { signs += 1; } });
-    await assert.rejects(provider.generate({ timeoutMs: 20 }, { enabled: true, chat2apiAccountId: 'a' }), /账号读取超时/u);
-    complete('late-ticket');
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(signs, 0);
+test('TTS只转交Chat2API语音，不读取手动凭证或账号引用', async () => {
+    const requests = [];
+    const provider = createQwenChatProvider({ speechService: { generate: async (...args) => { requests.push(args); return { audio: Buffer.from('test') }; } } });
+    await provider.generate({ text: '测试', voice: 'voice', speed: 10, volume: 70, timeoutMs: 500 },
+        { enabled: true, model: 'QUARK_VOICE', credential: 'legacy-secret', chat2apiAccountId: 'legacy-account' });
+    assert.deepEqual(requests[0], [{ input: '测试', model: 'QUARK_VOICE', voice: 'voice', speed: 2, volume: 70 }, { timeoutMs: 500 }]);
+    assert.ok(!JSON.stringify(requests).includes('legacy'));
+    await assert.rejects(provider.generate({ text: '测试' }, { enabled: false }), /未启用/u);
 });

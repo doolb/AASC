@@ -2,8 +2,7 @@
 
 const http = require('node:http');
 const https = require('node:https');
-const { wrapPcm, adjustWav } = require('../../../../external/tts/tts-wav');
-const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+const { wrapPcm, adjustWav, decodeAudio, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
 
 // 所有网络响应都有总时限与容量边界；错误体不进入日志，避免回显密钥或签名链接。
 function requestLimited(url, { method = 'GET', body, headers = {}, timeoutMs = 60000,
@@ -87,12 +86,5 @@ async function requestJson(url, options = {}) {
         throw new Error('TTS 上游返回了无效 JSON');
     }
 }
-
-function decodeAudio(value) {
-    if (typeof value !== 'string' || !value || value.length > Math.ceil(MAX_AUDIO_BYTES / 3) * 4
-        || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(value)) throw new Error('TTS 音频编码无效或超过上限');
-    return Buffer.from(value, 'base64');
-}
-
 
 module.exports = { MAX_AUDIO_BYTES, requestLimited, requestJson, decodeAudio, wrapPcm, adjustWav };

@@ -26,10 +26,9 @@ function normalizeProvider(value, fallback = 'system') {
 
 function normalizeVoiceConfig(value = {}, fallback = {}) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('TTS 选择必须为对象');
-    return {
-        provider: normalizeProvider(value.provider, fallback.provider || 'system'),
-        voice: normalizeOptionalString(value.voice) || normalizeOptionalString(fallback.voice)
-    };
+    const provider = normalizeProvider(value.provider, fallback.provider || 'system');
+    const voice = normalizeOptionalString(value.voice) || normalizeOptionalString(fallback.voice);
+    return { provider, voice: provider === 'system' ? null : voice };
 }
 
 function normalizeTemplateTts(value) {
@@ -37,7 +36,7 @@ function normalizeTemplateTts(value) {
     const provider = normalizeOptionalString(value.provider);
     return {
         ...(provider ? { provider: normalizeProvider(provider) } : {}),
-        voice: normalizeOptionalString(value.voice)
+        voice: provider === 'system' ? null : normalizeOptionalString(value.voice)
     };
 }
 
@@ -56,6 +55,8 @@ function resolveProviderConfig({ templateTts = null, aiReplyDefault = null,
     const isAi = [BUSINESS_TYPES.AI_REPLY, BUSINESS_TYPES.AGENT_REPLY].includes(businessType);
     const template = isAi && templateTts ? normalizeTemplateTts(templateTts) : {};
     const provider = validateBusinessProvider(template.provider || base.provider, businessType);
+    // 原生沿用设备/服务原有音色，新Provider音色ID不可覆盖该路径。
+    if (provider === 'system') return { provider, voice: null };
     // 只有同一 Provider 的音色 ID 才能继承，云端服务的音色名称并不通用。
     const voice = template.voice || (base.provider === provider ? base.voice : null)
         || normalizeOptionalString(providers[provider]?.defaultVoice);

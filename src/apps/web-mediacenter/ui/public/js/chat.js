@@ -2432,7 +2432,8 @@ const Chat = {
         const content = contentInput.value.trim();
         const permissionProfile = document.getElementById('templatePermissionProfile').value || 'readonly';
         const ttsProvider = document.getElementById('templateTtsProvider').value;
-        const ttsVoice = document.getElementById('templateTtsVoice').value.trim();
+        const voiceInput = document.getElementById('templateTtsVoice');
+        const ttsVoice = voiceInput.disabled ? '' : voiceInput.value.trim();
 
         if (!name || !content) {
             window.showToast('请填写模板名称和内容', 'error');
@@ -2455,6 +2456,7 @@ const Chat = {
                 document.getElementById('templatePermissionProfile').value = 'readonly';
                 document.getElementById('templateTtsProvider').value = '';
                 document.getElementById('templateTtsVoice').value = '';
+                window.TtsProviderSettings?.updateTemplateVoice();
                 this.editingTemplateName = null;
                 const button = document.querySelector('.chat-add-template .chat-add-btn');
                 if (button) button.textContent = '添加模板';
@@ -2473,6 +2475,7 @@ const Chat = {
         document.getElementById('templatePermissionProfile').value = template.permissionProfile || 'readonly';
         document.getElementById('templateTtsProvider').value = template.tts?.provider || '';
         document.getElementById('templateTtsVoice').value = template.tts?.voice || '';
+        window.TtsProviderSettings?.updateTemplateVoice();
         const button = document.querySelector('.chat-add-template .chat-add-btn');
         if (button) button.textContent = '保存模板';
     },

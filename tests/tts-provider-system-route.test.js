@@ -29,7 +29,7 @@ function fixture({ device = 'server', serverEnabled = true, generationError = nu
         tts: { generateTTS: async (...args) => { calls.push({ type: 'server', args }); return 'server-reference.wav'; } }
     };
     vm.runInNewContext(`${source.slice(start, end)}; this.generate = generateTtsWithFallback;`, context);
-    const settings = normalizeSettings({ systemBroadcast: { provider }, providers: { system: { defaultVoice: 'server-voice', defaultSpeed: speed, defaultVolume: volume } } });
+    const settings = normalizeSettings({ systemBroadcast: { provider }, providers: { system: { enabled: false, defaultVoice: 'server-voice', defaultSpeed: speed, defaultVolume: volume } } });
     context.ttsProviderService = createTtsProviderService({ getSettings: () => settings, registry: createProviderRegistry({
         systemGenerate: request => context.generate(request.text, request.voice, request.speed, request.preferredDisplayId,
             { systemRoute: true, volume: request.volume })
@@ -40,7 +40,10 @@ function fixture({ device = 'server', serverEnabled = true, generationError = nu
 test('实际原生system生成路由保留优先目标、参数、短停顿与原缓存引用', async () => {
     const server = fixture({ speed: 4, volume: 60 });
     assert.equal(await server.generate('测试……', undefined, undefined, 'preferred'), 'server-reference.wav');
-    assert.deepEqual(Array.from(server.calls[0].args), ['测试.', 'server-voice', 4, 60]);
+    assert.deepEqual(Array.from(server.calls[0].args), ['测试.', null, 4, 60]);
+    // 旧调用的原生音色名称仍由既有接口传入，不被新增Provider音色ID覆盖。
+    assert.equal(await server.generate('原生接口', 'legacy-native-voice', 1), 'server-reference.wav');
+    assert.deepEqual(Array.from(server.calls[1].args), ['原生接口', 'legacy-native-voice', 1, 60]);
     const display = fixture({ device: 'display', speed: 10, volume: 50 });
     const reference = await display.generate('测试...', undefined, undefined, 'preferred');
     assert.equal(display.calls[0].display.id, 'preferred');

@@ -129,9 +129,9 @@ const { createTextMediaTtsService } = require('../modules/media/text-media-tts-s
 const { createProviderRegistry } = require('../modules/tts/tts-provider-registry');
 const { createTtsProviderService } = require('../modules/tts/tts-provider-service');
 const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
-const { createTtsChat2ApiAccounts } = require('../modules/tts/tts-chat2api-accounts');
+const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
-const { adjustWav, decodeAudio, requestJson } = require('../modules/tts/tts-provider-http');
+const { adjustWav, decodeAudio } = require('../modules/tts/tts-provider-http');
 const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-router');
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
 const { normalizeDisplayCpuStatus, getDisplayTtsConcurrency } = require('../modules/media/display-cpu-status');
@@ -657,26 +657,18 @@ const VISION_REQUEST_TIMEOUT_MS = 120000;
 
 // Android可禁用外部TTS服务，但显示端回传音频的共享缓存仍需恢复已保存容量。
 ttsAudioCache.configure(config.getTtsConfig().audioCacheMaxMiB);
-const ttsChat2ApiAccounts = createTtsChat2ApiAccounts();
+const chat2ApiSpeechService = createChat2ApiSpeechService();
 const ttsProviderService = createTtsProviderService({
     getSettings: config.getTtsProviderSettings,
     registry: createProviderRegistry({
-        resolveQwenChatCredential: ttsChat2ApiAccounts.resolveCredential,
-        systemGenerate: (request, settings) => {
-            if (!settings.enabled) throw new Error('系统TTS Provider 未启用');
+        chat2ApiSpeechService,
+        systemGenerate: request => {
             return generateTtsWithFallback(request.text, request.voice, request.speed, request.preferredDisplayId,
                 { systemRoute: true, volume: request.volume });
-        },
-        systemVoices: async () => {
-            const result = await requestJson(new URL('/api/voices', config.get('tts.serviceUrl')).toString(), { timeoutMs: 10000 });
-            const voices = result.data || result.voices;
-            if (!Array.isArray(voices)) throw new Error('系统音色目录返回无效数据');
-            return voices.map(voice => typeof voice === 'string' ? { id: voice, name: voice, available: true }
-                : { id: voice.id || voice.name, name: voice.name || voice.id, available: true });
         }
     })
 });
-const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService, accounts: ttsChat2ApiAccounts,
+const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService,
     isControl: ws => controlClients.has(ws), broadcast: broadcastToControls });
 if (!ANDROID_NODE_POLICY.enabled) {
     tts.init(config.getTtsConfig());
@@ -1349,7 +1341,7 @@ async function startServer() {
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
                 'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
-                'setTtsProviderConfig', 'getTtsProviderVoices', 'getTtsProviderAccounts',
+                'setTtsProviderConfig', 'getTtsProviderVoices',
                 'setDisplayBackgroundGlowConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
@@ -9172,7 +9164,7 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
-    if (['setTtsProviderConfig', 'getTtsProviderVoices', 'getTtsProviderAccounts'].includes(data.type)) {
+    if (['setTtsProviderConfig', 'getTtsProviderVoices'].includes(data.type)) {
         await ttsProviderWs.handle(ws, data);
         return;
     }

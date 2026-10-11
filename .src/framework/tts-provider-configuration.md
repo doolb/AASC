@@ -15,8 +15,11 @@
 - `src/apps/server/modules/tts/tts-provider-service.js` // 按业务类型解析选择并统一生成音频引用
 - `src/apps/server/modules/tts/tts-provider-settings.js` // 规范化配置及凭证脱敏
 - `src/apps/server/modules/tts/tts-provider-ws.js` // 权威配置与音色消息
-- `src/apps/server/modules/tts/qwen-chat-tts.js` // 国内千问签名及WebSocket朗读
-- `src/apps/server/modules/tts/tts-chat2api-accounts.js` // 国内账号候选及请求内存凭证解析
+- `src/apps/server/modules/tts/qwen-chat-tts.js` // 仅转交Chat2API统一语音请求
+- `src/apps/server/modules/chat2api/chat2api-speech-service.js` // Chat2API调度、凭证及语音服务
+- `src/apps/server/modules/chat2api/chat2api-qwen-speech-adapter.js` // 隔离浏览器签名及WebSocket完整音频
+- `src/apps/server/modules/chat2api/chat2api-runtime.js` // 与聊天共享账号及调度层
+- `src/apps/server/modules/chat2api/chat2api-proxy-service.js` // 鉴权业务接口audio/speech
 - `src/external/tts/tts-wav.js` // PCM包装、WAV完整性和音量/速度变换
 - `src/apps/web-mediacenter/ui/public/js/tts-provider-settings.js` // 控制端配置保存和目录查询
 - `src/apps/web-mediacenter/modules/time/time-announce-app-service.js` // 报时标记为 systemBroadcast 业务
@@ -27,7 +30,7 @@
 
 - 目标语言按当前真实项目使用 Node.js/CommonJS，不创建 Unity、dotnet、golang 或 nodejs 平台镜像目录
 - 保留 `tts.device`、`tts.serverEnabled`、`sendTtsGenerateToDisplay` 和 `/uploads/tts` 音频引用协议 // 新 Provider 只扩展 Provider 选择，不替换现有设备路由
-- API Provider 凭证只保存在用户配置；qwen-chat只保存Chat2API账号引用，模板只保存 `provider` 和 `voice`
+- API Provider 凭证只保存在用户配置；qwen-chat不保存凭证或账号引用，模板只保存 `provider` 和 `voice`
 - Agent 回复属于触发来源聊天模板的 AI 回复
 - 文本媒体阅读使用独立 `tts.textMedia`，不读取聊天模板 TTS
 - 系统播报和报时使用 `tts.systemBroadcast`
@@ -62,7 +65,7 @@
 - 候选配置 -> 用户Provider凭证 -> config业务选择 -> 脱敏权威广播 // 保存失败恢复旧值
 - qwen-api完整音频与doubao-api完成事件PCM -> 限长响应 -> 原内存缓存 // 不缓存半成品
 - qwen-chat使用用户指定国内千问站；先核实朗读契约，克隆采样文字接口不用于音频合成
-- 所选Chat2API国内账号当前Cookie或ticket -> 临时Puppeteer首页 -> 官方doQwenAuth签名 -> WebSocket文本/结束包 -> 去重PCM -> 完成后WAV
+- TTS转交Chat2API speech -> 国内账号调度 -> 当前Cookie或ticket -> 临时Puppeteer首页 -> 官方doQwenAuth签名 -> WebSocket文本/结束包 -> 去重PCM -> 完成后WAV
 - 国内网页所有阶段共享超时；签名并发上限2；finally关闭浏览器；不读取已有浏览器账户
 - 自测映射 `src/apps/server/modules/tts/tts-provider-policy.test.js` 与 `tests/tts-provider-settings/integration/qwen-chat/ws/system-route/ui-browser.test.js`
 - 自测templateTts/businessConfig/providers -> 比对继承、非法输入和业务隔离
@@ -72,34 +75,31 @@
 
 ## 操作流程
 
-### qwen-chat 仅使用 Chat2API 账号（2026-10-11 已实现）
+### 系统原生路径与 Chat2API 统一语音（2026-10-11 已实现）
 
 #### 已有声明
 
-- Chat2API数据存储.listAccounts/getAccount、Provider注册表.getProvider // 复用既有账号库，避免复制凭证
-- config.getTtsProviderSettings/setTtsProviderSettings、qwen-chat签名与生成 // 保持权威配置及音频协议
+- tts.device、tts.serverEnabled、tts.defaultVoice、generateTtsWithFallback // 复用既有原生生成及音色路径
+- Chat2API.runtime/loadBalancer/dataStore/providerRegistry/proxy // 账号与鉴权由Chat2API管理
 
 #### 新增定义
 
-- QwenCredentialReference { chat2apiAccountId } // 仅记录用户明确选择的国内账号
-- PublicAccountChoice { accountId, label, available } // 不向控制端发送凭证
-- AccountChoiceMessage { type, requestId, accounts, success, message } // 用请求ID关联异步结果
+- Chat2ApiSpeechRequest { input, voice, model, speed, volume, timeoutMs } // TTS只传合成参数
+- Chat2ApiSpeechResult { audio, contentType } // 返回完整音频，继续使用原缓存与播放
+- POST /v1/audio/speech，model=qwen-chat/QUARK_VOICE/MINI_MAX、input、voice、speed、volume、response_format=wav // 复用Chat2API业务鉴权
 
 #### 操作流程
 
-- 规范化 selectedAccountId = qwen-chat.chat2apiAccountId // 限长且禁止换行，未选时保留为空
-- 忽略旧 qwen-chat.credential 并在下次配置保存时移除 // 用户指定仅使用Chat2API账号，不暗中继续手动鉴权
-- 保持其他 Provider 的凭证规则 // 本轮仅收敛qwen-chat
-- 查询 publicAccounts = 国内qwen脱敏账号列表 // 只通过控制端WebSocket返回ID、名称、可用状态
-- 渲染账号下拉框并保留失效的 selectedAccountId // 删除/查询失败不自动换号
-- 保存 selectedAccountId = 权威配置回包 // 沿用config持久化、广播与重连初始化
-- 读取 account = Chat2API当前所选账号、provider = 国内qwen当前Provider // 每次生成使用最新凭证，不依赖代理运行
-- 将账号读取计入总超时并丢弃迟到结果 // 防止磁盘异常无限占住生成队列
-- 未选/不存在/停用/错Provider/缺登录字段时返回脱敏错误 // 阻止隐式换号或回退
-- 合并 credential = account.cookie 与 account.credentials.ticket // 当前ticket覆盖同名Cookie，避免使用旧登录值
-- 传递 credential 至本次Chrome签名和WebSocket生成 // 凭证仅存在请求内存，不持久化或广播
-- 完整音频写入原WAV缓存引用 // 播放、模板和业务路由保持既有行为
-- 自测旧手动值忽略、账号候选脱敏、更新/删除/停用、界面保存/失败/重连及真实生成注入点 // 模拟不代替真实声音验收
+- 移除 system Provider 启用与音色ID配置，忽略旧字段 // 避免重复开关和无效ID覆盖既有原生路径
+- 解析 finalProvider = system 后使用既有生成端与原音色 // 服务端回退仍由tts.serverEnabled控制
+- 移除 qwen-chat 账号查询/选择及配置ID // 用户要求由Chat2API直接提供
+- 传入 speechRequest 至 Chat2API语音服务 // TTS不读取登录凭证或自行调度账号
+- 选择 account = Chat2API国内qwen可用账号调度结果 // 沿用既有启用/状态规则
+- 在 Chat2API 内部使用当前凭证完成语音请求 // 凭证不进入TTS配置或控制端
+- 核验网页语音签名的Node执行能力再确定依赖 // 未验证不能把迁移认作消除Chrome
+- 保留Chat2API默认适配器的隔离Chrome签名 // 官方SDK依赖DOM/iframe/AWSC，尚无经过验证的纯Node替代
+- 返回 speechResult.audio 至原WAV缓存 // 保留业务分句、播放与取消协议
+- 部署目标实例后验证WebSocket初始化与实际语音调用 // 避免新静态页面配旧运行后端
 
 ### 保存用户级 Provider 配置
 
@@ -117,7 +117,8 @@
 - 读取聊天模板的 `tts` 字段
 - 读取用户配置中的 `aiReplyDefault`
 - 先确定 Provider：使用模板 Provider，模板未配置时使用系统 AI 默认 Provider，仍未配置时使用 `system` // Provider 先确定，才能选择正确的默认音色
-- 再确定音色：模板显式音色 -> 同一Provider的业务默认音色 -> 最终Provider自身默认音色
+- 原生system音色 = null，保留旧原生接口的名称配置 // 新Provider ID无效
+- 其他Provider再确定音色：模板显式音色 -> 同一Provider的业务默认音色 -> 最终Provider自身默认音色
 - 校验最终 Provider 是否允许用于 AI 回复
 - 返回 AI 回复的 `TtsSelection`
 
@@ -174,7 +175,8 @@
 
 ### 查询音色目录
 
-- 根据 Provider 读取可用音色目录
+- 原生system直接返回空目录，不发送查询 // 既有原生音色保持旧设置职责
+- 其他Provider读取可用音色目录
 - 返回音色 ID、名称和可用状态
 - 将当前已保存但目录中不存在的音色标记为失效
 - 音色目录查询失败时保留当前已保存音色

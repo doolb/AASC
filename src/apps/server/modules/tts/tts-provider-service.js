@@ -38,6 +38,7 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
         },
         async voices(provider) {
             const id = normalizeProvider(provider);
+            if (id === 'system') return [];
             const settings = getSettings().providers[id];
             return registry[id].voices(settings);
         }

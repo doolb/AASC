@@ -14,11 +14,11 @@ test('旧模板继承、显式system、Agent与群聊、文本媒体业务隔离
     assert.throws(() => normalizeTemplateTts({ provider: false }));
     assert.throws(() => normalizeTemplateTts({ provider: 0 }));
     const options = { aiReplyDefault: { provider: 'qwen-api', voice: 'ai-voice' }, textMedia: { provider: 'doubao-api', voice: 'reader' },
-        systemBroadcast: { provider: 'system', voice: 'broadcast' }, providers: { system: { defaultVoice: 'native' } } };
+        systemBroadcast: { provider: 'system', voice: null }, providers: { system: { defaultVoice: 'native' } } };
     assert.deepEqual(resolveProviderConfig({ ...options, businessType: BUSINESS_TYPES.AI_REPLY }), { provider: 'qwen-api', voice: 'ai-voice' });
-    assert.deepEqual(resolveProviderConfig({ ...options, templateTts: { provider: 'system' }, businessType: BUSINESS_TYPES.AGENT_REPLY }), { provider: 'system', voice: 'native' });
+    assert.deepEqual(resolveProviderConfig({ ...options, templateTts: { provider: 'system' }, businessType: BUSINESS_TYPES.AGENT_REPLY }), { provider: 'system', voice: null });
     assert.deepEqual(resolveProviderConfig({ ...options, templateTts: { provider: 'qwen-chat' }, businessType: BUSINESS_TYPES.TEXT_MEDIA }), { provider: 'doubao-api', voice: 'reader' });
-    assert.deepEqual(resolveProviderConfig({ ...options, businessType: BUSINESS_TYPES.SYSTEM_BROADCAST }), { provider: 'system', voice: 'broadcast' });
+    assert.deepEqual(resolveProviderConfig({ ...options, businessType: BUSINESS_TYPES.SYSTEM_BROADCAST }), { provider: 'system', voice: null });
     assert.throws(() => normalizeSettings({ textMedia: { provider: 'qwen-chat' } }), /仅允许/u);
 });
 
@@ -40,16 +40,16 @@ test('部分选择保留Provider、显式空音色清除、范围与凭证保留
         { providers: { 'qwen-chat': { endpoint: 'https://other.example/tts' } } }]) assert.throws(() => normalizeSettings(patch));
 });
 
-test('国内千问仅保存账号ID，旧手动值不保留或广播，非法ID不保存', () => {
-    const old = { providers: { 'qwen-chat': { credential: 'legacy-secret', credentialSource: 'manual' } } };
-    const settings = normalizeSettings({ providers: { 'qwen-chat': { chat2apiAccountId: ' qwen:one ', credential: 'new-secret' } } }, old);
-    assert.equal(settings.providers['qwen-chat'].chat2apiAccountId, 'qwen:one');
-    assert.ok(!Object.hasOwn(settings.providers['qwen-chat'], 'credential'));
-    assert.ok(!Object.hasOwn(settings.providers['qwen-chat'], 'credentialSource'));
-    assert.ok(!JSON.stringify(redactSettings(settings)).includes('secret'));
-    assert.equal(normalizeSettings({}, settings).providers['qwen-chat'].chat2apiAccountId, 'qwen:one');
-    assert.equal(normalizeSettings({ providers: { 'qwen-chat': { chat2apiAccountId: '' } } }, settings).providers['qwen-chat'].chat2apiAccountId, '');
-    for (const value of [false, [], 'id\nsecret', 'a'.repeat(257)]) assert.throws(() => normalizeSettings({ providers: { 'qwen-chat': { chat2apiAccountId: value } } }));
+test('原生无新增开关或音色ID，千问不保存旧凭证或账号引用', () => {
+    const settings = normalizeSettings({ providers: {
+        system: { enabled: false, defaultVoice: 'obsolete-id' },
+        'qwen-chat': { chat2apiAccountId: 'old-account', credential: 'legacy-secret' }
+    } });
+    for (const key of ['enabled', 'defaultVoice']) assert.ok(!Object.hasOwn(settings.providers.system, key));
+    for (const key of ['chat2apiAccountId', 'credential', 'credentialSource']) assert.ok(!Object.hasOwn(settings.providers['qwen-chat'], key));
+    assert.ok(!JSON.stringify(redactSettings(settings)).includes('legacy-secret'));
+    assert.ok(!JSON.stringify(redactSettings(settings)).includes('old-account'));
+    assert.deepEqual(normalizeSettings({ aiReplyDefault: { provider: 'system', voice: 'old-id' } }).aiReplyDefault, { provider: 'system', voice: null });
 });
 
 function loadConfig(t) {
@@ -76,7 +76,8 @@ test('真实配置持久化、重载、旧system默认和保存失败内存/磁�
     const { config, instances, directory } = loadConfig(t);
     config.set('tts.defaultVoice', 'legacy-voice');
     config.set('tts.defaultSpeed', 3);
-    assert.equal(config.getTtsProviderSettings().providers.system.defaultVoice, 'legacy-voice');
+    assert.ok(!Object.hasOwn(config.getTtsProviderSettings().providers.system, 'defaultVoice'));
+    assert.equal(config.get('tts.defaultVoice'), 'legacy-voice');
     assert.equal(config.getTtsProviderSettings().providers.system.defaultSpeed, 3);
     const saved = config.setTtsProviderSettings({ aiReplyDefault: { provider: 'qwen-api' }, providers: { 'qwen-api': { enabled: true, credential: 'private-key' } } });
     assert.equal(saved.providers['qwen-api'].credentialConfigured, true);
@@ -100,9 +101,9 @@ test('真实配置持久化、重载、旧system默认和保存失败内存/磁�
     instances[0]._save = mainSave;
     user._data.tts.providers['qwen-chat'] = { credential: 'obsolete-qwen-secret', enabled: true };
     const accountSaved = config.setTtsProviderSettings({ providers: { 'qwen-chat': { chat2apiAccountId: 'qwen:test' } } });
-    assert.equal(accountSaved.providers['qwen-chat'].chat2apiAccountId, 'qwen:test');
+    assert.ok(!Object.hasOwn(accountSaved.providers['qwen-chat'], 'chat2apiAccountId'));
     assert.ok(!fs.readFileSync(userFile, 'utf8').includes('obsolete-qwen-secret'));
-    assert.equal(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-chat'].chat2apiAccountId, 'qwen:test');
+    assert.ok(!Object.hasOwn(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-chat'], 'chat2apiAccountId'));
     const beforeInvalid = JSON.stringify(config.getTtsProviderSettings());
     assert.throws(() => config.setTtsProviderSettings({ systemBroadcast: { provider: 'qwen-chat' } }), /仅允许/u);
     assert.equal(JSON.stringify(config.getTtsProviderSettings()), beforeInvalid);

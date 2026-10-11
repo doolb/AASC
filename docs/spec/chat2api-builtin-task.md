@@ -577,3 +577,23 @@ syncUpstream(version):
     账号轮询、失败切换、全部失败
     敏感字段脱敏和日志安全
 ```
+
+## 统一语音服务（2026-10-11）
+
+```text
+已有声明: runtime、dataStore、providerRegistry、loadBalancer、authorize、readJson
+新增定义: Chat2ApiSpeechRequest、Chat2ApiSpeechResult、speechService、qwenSpeechAdapter
+runtime装配 -> 与聊天共用账号/Provider/调度层 -> 注入speechService到proxy
+POST /v1/audio/speech:
+  既有Bearer鉴权 -> 读取JSON -> 规范化input/model/voice/speed/volume/response_format
+  input非空且<=16000，model=qwen-chat/QUARK_VOICE/MINI_MAX，speed=0.25..4，volume=0..100，格式仅wav
+  读取保存的loadBalanceStrategy -> 国内qwen可用且有凭证的账号调度
+  重读当前账号/Provider -> 检查启用/状态/限额 -> 内存合并Cookie及当前ticket
+  默认适配器 -> 隔离Chrome官方doQwenAuth -> 签名WSS发送文本与结束包
+  收集去重PCM -> 完成事件 -> 包装/音量调整 -> 验证完整WAV且<=16MiB
+  总超时60秒 -> 剩余时间分配 -> 迟到读取不继续签名 -> finally关闭浏览器
+  成功 -> 清除失败标记 -> 返回audio/wav二进制，Cache-Control=no-store
+  无账号503/上游失败502/总超时504 -> 固定脱敏错误，不回显原始凭证/签名URL
+内部TTS调用 -> 相同speech实现 -> 不要求代理HTTP任务运行 -> 原音频缓存及播放
+自测 -> npm run check:chat2api，账号更新/停用/限额/鉴权/完整WAV/超时与原聊天回归
+```

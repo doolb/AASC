@@ -3,12 +3,12 @@
 const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('./tts-provider-policy');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const PROVIDER_DEFAULTS = Object.freeze({
-    system: { enabled: true, endpoint: '', model: '', credential: '', defaultVoice: null, defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
+    system: { endpoint: '', model: '', credential: '', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
     'qwen-api': { enabled: false, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
         model: 'qwen3-tts-flash', credential: '', defaultVoice: 'Cherry', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
     'doubao-api': { enabled: false, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
         model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', defaultSpeed: 0, defaultVolume: 100, resourceId: 'seed-tts-2.0' },
-    'qwen-chat': { enabled: false, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE', chat2apiAccountId: '',
+    'qwen-chat': { enabled: false, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
         defaultVoice: 'zh_female_quarkF531S0_ptts', defaultSpeed: 0, defaultVolume: 100, resourceId: '' }
 });
 
@@ -30,7 +30,7 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}) {
     if (!PROVIDERS.includes(provider)) throw new Error('不支持的 TTS Provider');
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Provider 配置必须为对象');
     const base = { ...PROVIDER_DEFAULTS[provider], ...previous };
-    if (patch.enabled !== undefined && typeof patch.enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
+    if (provider !== 'system' && patch.enabled !== undefined && typeof patch.enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
     const endpoint = boundedString(patch.endpoint, base.endpoint, 2048);
     if (endpoint) {
         let url;
@@ -38,16 +38,17 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}) {
         if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('TTS 端点必须是无凭证、查询参数和片段的 HTTP(S) 地址');
         if (provider === 'qwen-chat' && endpoint !== PROVIDER_DEFAULTS['qwen-chat'].endpoint) throw new Error('国内千问网页仅支持官方朗读端点');
     }
-    // 国内网页只保存账号引用；忽略历史手动值，禁止复制到新配置或广播。
+    // 国内网页由Chat2API管理账号；旧手动值和账号引用均不进入新配置或广播。
     const incomingCredential = provider === 'qwen-chat' ? '' : boundedString(patch.credential, '', 16384);
     const auth = provider === 'qwen-chat'
-        ? { chat2apiAccountId: boundedString(patch.chat2apiAccountId, base.chat2apiAccountId, 256) }
+        ? {}
         : { credential: patch.clearCredential === true ? '' : incomingCredential || base.credential };
     if (provider !== 'qwen-chat' && patch.clearCredential !== undefined && typeof patch.clearCredential !== 'boolean') throw new Error('clearCredential 必须为布尔值');
     return {
-        enabled: patch.enabled ?? base.enabled, endpoint, model: boundedString(patch.model, base.model),
+        endpoint, model: boundedString(patch.model, base.model),
         ...auth,
-        defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null,
+        ...(provider === 'system' ? {} : { enabled: patch.enabled ?? base.enabled,
+            defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
         defaultSpeed: normalizeNumber(patch.defaultSpeed, base.defaultSpeed, -10, 10),
         defaultVolume: normalizeNumber(patch.defaultVolume, base.defaultVolume, 0, 100),
         resourceId: boundedString(patch.resourceId, base.resourceId)

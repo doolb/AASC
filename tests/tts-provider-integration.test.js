@@ -117,7 +117,7 @@ test('system仍使用原引用、选择默认参数，禁用和600字边界明�
     const settings = normalizeSettings({ systemBroadcast: { voice: 'native' }, providers: { system: { defaultSpeed: 3 } } });
     const service = createTtsProviderService({ registry, getSettings: () => settings });
     assert.equal(await service.generate({ text: '报时', preferredDisplayId: 'display-a' }), 'old-reference.wav');
-    assert.equal(request.voice, 'native');
+    assert.equal(request.voice, null);
     assert.equal(request.speed, 3);
     assert.equal(request.preferredDisplayId, 'display-a');
     await assert.rejects(registry['qwen-api'].generate({ text: 'test' }, settings.providers['qwen-api']), /未启用/u);

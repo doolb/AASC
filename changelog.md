@@ -39,6 +39,11 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 系统原生沿用既有路径，移除Provider重复启用/音色ID/查询；qwen-chat直接由Chat2API提供语音，不再查询或选择账号。
+  - 新增Chat2API speech-service/qwen-speech-adapter及POST /v1/audio/speech，复用现有账号、调度和Bearer鉴权；TTS仅转交参数，移除tts-chat2api-accounts及其测试、旧accountId配置和候选WS。修改settings/policy/service/registry/server-app、WAV公共解码、控制端chat/settings/websocket/self-test，原生业务/模板隐藏音色输入并处理display覆盖hidden，保留旧设备/服务器开关/原生名称接口。
+  - npm run check:chat2api 100/100、TTS及兼容性去重114/114通过，无跳过；最终界面/原生/HTTP定向9/9复验，真实Chromium截图已查看。npm run restart:server更新本机8081运行后端，WSS初始化已确认无旧system开关/音色及qwen账号ID。同步TTS/Chat2API design/spec、.src/task/todo/usage/self-test。
+  - servicePackage=true，其他状态保持；未构建或发布Offline包。Chat2API默认语音适配器仍依赖Chrome执行官方网页签名，真实签名、账号声音与设备性能待验收；不将内部迁移称为消除浏览器依赖。
+
 - ✅ [2026-10-11] qwen-chat只使用Chat2API国内千问账号，移除手动凭证/来源切换。
   - 新增tts-chat2api-accounts，修改settings/registry/qwen-chat-tts/ws/server-app及控制端配置/websocket/self-test；仅存chat2apiAccountId，每次合成读取当前Cookie/ticket，ticket覆盖同名旧Cookie，旧手动值忽略且下次保存移除。未选、账号删除/停用、错Provider及缺凭证明确失败，读取计入总超时；账号候选仅回ID/名称/本地状态，不复制或广播登录凭证。
   - 20个文件104项TTS定向与npm run check:chat2api的94项回归通过，无跳过；含真实临时账号存储/配置写盘/本地WebSocket和Chromium账号选择/查询失败/失效选择保留/重连，自测模块与design/spec/.src/task/todo/usage已同步。servicePackage=true，minApk与dependenciesPackage原状态保留；未重启、构建或发布，真实账号声音待验收。

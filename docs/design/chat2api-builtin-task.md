@@ -168,3 +168,9 @@ Provider adapter
 - 多账号轮询、故障转移和请求统计有效。
 - 停止任务后端口释放，重新启动不会重复注册路由或 OAuth 回调。
 - 上游同步后，适配层回归测试能发现协议、字段和 Provider 行为变化。
+
+## 统一语音服务（2026-10-11）
+
+新增内部speechService和POST /v1/audio/speech业务入口，国内千问语音与聊天复用账号存储、Provider注册表和既有调度策略；接口复用Bearer鉴权，不增加配置接口。TTS qwen-chat仅转交合成参数，不管理账号或凭证。默认适配器由Chat2API负责官方网页签名及WebSocket完整音频，仍需隔离Chrome，不能把聊天Cookie请求当语音签名。
+
+支持qwen-chat/QUARK_VOICE/MINI_MAX、文本/音色、速度倍率及音量，返回完整audio/wav。时限60秒、音频16MiB，错误脱敏，不静默切换TTS Provider。临时账号库、真实HTTP/WSS与Chromium回归完成；真实远端签名和设备音频待验收。具体TTS边界见[统一语音设计](tts-providers.md)。

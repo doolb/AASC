@@ -14,6 +14,7 @@ const { createChat2ApiQwenHistoryService } = require('./chat2api-qwen-history-se
 const { createChat2ApiCredentialValidators } = require('./chat2api-credential-validators');
 const { createChat2ApiManualAccountService } = require('./chat2api-manual-account-service');
 const { createChat2ApiAccountWebSessionService } = require('./chat2api-account-web-session-service');
+const { createChat2ApiSpeechService } = require('./chat2api-speech-service');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -22,6 +23,8 @@ const createChat2ApiRuntime = (options = {}) => {
   const loadBalancer = options.loadBalancer || createChat2ApiLoadBalancer({ providerRegistry, dataStore, modelMapper });
   const rawTrafficLogger = options.rawTrafficLogger || createRawTrafficLogger();
   const getConfig = options.getChat2ApiConfig || (() => dataStore.readCollection('config', {}));
+  const speechService = options.speechService || createChat2ApiSpeechService({ dataStore, providerRegistry, loadBalancer, getConfig,
+    ...(options.qwenSpeechAdapter ? { qwenAdapter: options.qwenSpeechAdapter } : {}) });
   const coreAdapter = options.coreAdapter || createChat2ApiCoreAdapter({
     dataStore,
     providerRegistry,
@@ -58,6 +61,7 @@ const createChat2ApiRuntime = (options = {}) => {
     coreAdapter,
     responsesService,
     managementService,
+    speechService,
   });
 
   const start = async () => proxy.start();
@@ -71,7 +75,7 @@ const createChat2ApiRuntime = (options = {}) => {
     address: proxy.address(),
   });
 
-  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, accountWebSession, managementService, proxy, start, stop, getStatus };
+  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, speechService, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, accountWebSession, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };
