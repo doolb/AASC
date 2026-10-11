@@ -24,11 +24,11 @@ async function fixture(settings = {}) {
         return bones[0].bone.quaternion.clone();
     };
     const action = ({ owner = 'test', angle = -0.6, duration = 1, fade = 0.12, index = 0,
-        strength = 1, loop = false, layerStart = 0, layerDuration = duration, mask } = {}) => {
+        strength = 1, loop = false, layerStart = 0, layerDuration = duration, mask, mode = 'override' } = {}) => {
         const sampler = { duration, tracks: [{ kind: 'bone', index, property: 'quaternion',
-            evaluate: () => quaternion(angle).toArray() }] };
+            evaluate: time => quaternion(typeof angle === 'function' ? angle(time) : angle).toArray() }] };
         return mixer.start({ owner, duration, fade, loop, layers: [{ start: layerStart, duration: layerDuration,
-            strength, sampler, mode: 'override', mask }] }).id;
+            strength, sampler, mode, mask }] }).id;
     };
     const run = (seconds, fps = 60) => {
         let result;
@@ -65,7 +65,7 @@ for (const fps of [30, 60, 120]) {
         f.mixer.stop('test');
         assert.equal(f.mixer.state(id).reason, 'stopped');
         assert.ok(f.frame(1 / fps).angleTo(previous) < 1e-7);
-        assert.ok(f.run(0.3, fps).angleTo(target) > 0.3);
+        assert.ok(f.run(0.3, fps).angleTo(target) > previous.angleTo(target) * 0.4);
         assert.ok(f.run(0.3, fps).angleTo(target) < 1e-7);
     });
 }
@@ -87,11 +87,12 @@ test('恢复时相机目标移动仍更新，零delta不推进，卡顿最多推
 
 test('恢复中新的头部动作接管，零权重淡入帧也取消旧恢复', async () => {
     const f = await fixture();
-    const target = f.frame();
     f.action({ fade: 0 }); f.run(0.2); f.mixer.stop(); f.frame(); f.run(0.1);
+    const previous = f.bones[0].bone.quaternion.clone();
     f.action({ owner: 'next', angle: 0.3 });
-    assert.ok(f.frame(0).angleTo(target) < 1e-7, '新动作从已有混合规则淡入，不能被旧恢复覆盖');
-    assert.ok(f.run(0.2).angleTo(f.quaternion(0.3)) < 1e-7);
+    assert.ok(f.frame(0).angleTo(previous) < 1e-7, '新动作必须从恢复中的当前显示姿态进入');
+    assert.ok(f.run(0.3).angleTo(f.quaternion(0.3)) > 1e-3);
+    assert.ok(f.run(0.3).angleTo(f.quaternion(0.3)) < 1e-7);
 });
 
 test('零强度、遮罩排除和非头部动作不启动头部恢复', async () => {
@@ -113,11 +114,14 @@ test('多owner旋转占用必须全部释放，保留仍在播放的头部动作
 test('层窗口淡出启动恢复，循环下一轮的头部接管取消上一轮恢复', async () => {
     const f = await fixture();
     f.action({ loop: true, duration: 0.6, layerDuration: 0.4 });
-    f.run(0.2);
-    const held = f.bones[0].bone.quaternion.clone();
-    f.run(0.15);
-    assert.ok(f.bones[0].bone.quaternion.angleTo(held) < 0.1);
-    assert.ok(f.run(0.45).angleTo(f.quaternion(-0.6)) < 1e-7, '下一轮动作必须拿回旋转通道');
+    const initial = f.bones[0].bone.quaternion.clone();
+    let previous = initial, moved = 0;
+    for (let i = 0; i < 120; i++) {
+        const current = f.frame();
+        assert.ok(current.angleTo(previous) < 0.07, '层释放和下一轮接管必须连续');
+        moved = Math.max(moved, current.angleTo(initial)); previous = current;
+    }
+    assert.ok(moved > 0.1, '短循环仍应产生动作，不能只跟随相机');
 });
 
 test('reset、关闭头部和换模型清理旧恢复；普通headMs继续指数缓动', async () => {
@@ -145,10 +149,79 @@ test('头部恢复不延长眼球或其他骨骼的停止', async () => {
     const f = await fixture({ eyes: true, eyeMs: 0 });
     f.action({ fade: 0 }); f.action({ owner: 'arm', index: 2, fade: 0 });
     f.action({ owner: 'eye', index: 1, fade: 0 }); f.run(0.2);
+    const previous = f.bones[0].bone.quaternion.clone();
     f.mixer.stop(); const headPose = f.frame();
-    assert.ok(headPose.angleTo(f.quaternion(-0.6)) < 1e-7);
+    assert.ok(headPose.angleTo(previous) < 1e-7);
     assert.ok(f.bones[2].bone.quaternion.angleTo(f.quaternion(0)) < 1e-7);
     assert.ok(f.bones[1].bone.quaternion.angleTo(f.quaternion(Math.min(Math.atan2(4, 5), 20 * Math.PI / 180))) < 1e-7);
+});
+
+for (const fps of [30, 60, 120]) {
+    test(`跟随进入头部动作在${fps}fps保持600ms融合`, async () => {
+        const f = await fixture(); const initial = f.frame();
+        const id = f.action({ duration: 2, fade: 0 });
+        assert.ok(f.frame(0).angleTo(initial) < 1e-7);
+        const halfway = f.run(0.3, fps), actionPose = f.quaternion(-0.6);
+        assert.ok(halfway.angleTo(initial) > 0.4);
+        assert.ok(halfway.angleTo(actionPose) > 0.4, '进入不能在原120ms内完成');
+        assert.ok(f.run(0.3, fps).angleTo(actionPose) < 1e-7);
+        assert.ok(Math.abs(f.mixer.state(id).time - 0.6) < 1e-8, '动作播放时间正常推进');
+    });
+}
+
+test('动作实时采样、相机移动和低强度剩余跟随共同形成动态进入终点', async () => {
+    for (const mode of ['override', 'additive']) {
+        const f = await fixture();
+        let sampled = 0;
+        f.action({ duration: 2, strength: 0.4, fade: 0, mode, angle: time => { sampled = time; return -0.6 + time / 10; } });
+        f.frame(0); f.run(0.3);
+        f.camera.position.set(-4, 0, 5);
+        const result = f.run(0.3);
+        assert.ok(Math.abs(sampled - 0.6) < 1e-8);
+        const baseYaw = (-0.6 + sampled / 10) * 0.4;
+        const expected = baseYaw + (Math.atan2(-4, 5) - baseYaw) * 0.6;
+        assert.ok(result.angleTo(f.quaternion(expected)) < 1e-7);
+        assert.ok(result.angleTo(f.quaternion(baseYaw)) > 0.1, '低强度动作须保留相机跟随');
+        f.mixer.restore(); assert.ok(f.bones[0].bone.quaternion.angleTo(f.quaternion(0)) < 1e-7);
+    }
+});
+
+test('进入过程中再次替换动作从当前姿态重启600ms融合', async () => {
+    const f = await fixture();
+    const first = f.action({ duration: 2, fade: 0 }); f.frame(0); f.run(0.2);
+    const previous = f.bones[0].bone.quaternion.clone();
+    f.action({ duration: 2, fade: 0, angle: 0.9 });
+    assert.equal(f.mixer.state(first).reason, 'stopped');
+    assert.ok(f.frame(0).angleTo(previous) < 1e-7);
+    assert.ok(f.run(0.3).angleTo(f.quaternion(0.9)) > 0.05);
+    assert.ok(f.run(0.3).angleTo(f.quaternion(0.9)) < 1e-7);
+});
+
+test('短动作也保持600ms进入，提前停止或自然淡出承接当前姿态恢复', async () => {
+    for (const manualStop of [true, false]) {
+        const f = await fixture(); const initial = f.frame();
+        const id = f.action({ duration: 0.3, fade: 0.03 }); f.frame(0);
+        const halfway = f.run(0.15);
+        assert.ok(halfway.angleTo(f.quaternion(-0.6)) > 0.8, '不按短动作缩短600ms进入');
+        if (manualStop) f.mixer.stop();
+        if (!manualStop) f.run(0.1);
+        let previous = f.bones[0].bone.quaternion.clone();
+        if (!manualStop) previous = f.frame(1 / 60);
+        assert.ok(f.frame(1 / 60).angleTo(previous) < 1e-7, '停止/淡出首帧承接当前显示姿态');
+        assert.ok(f.run(0.3).angleTo(initial) > 0.02);
+        assert.ok(f.run(0.3).angleTo(initial) < 1e-7);
+        assert.equal(f.mixer.state(id).reason, manualStop ? 'stopped' : 'ended');
+    }
+});
+
+test('进入期间零delta不推进，卡顿有界，reset清理进入状态', async () => {
+    const f = await fixture(); const initial = f.frame();
+    f.action({ duration: 2, fade: 0 });
+    assert.ok(f.frame(0).angleTo(initial) < 1e-7);
+    assert.ok(f.frame(0).angleTo(initial) < 1e-7);
+    assert.ok(f.frame(10).angleTo(initial) < 0.15, '卡顿只推进100ms进入');
+    f.gaze.reset();
+    assert.ok(f.frame(0).angleTo(f.quaternion(-0.6)) < 1e-7);
 });
 
 test('恢复期间点击目标动态生效，返回相机不会重新起计时', async () => {

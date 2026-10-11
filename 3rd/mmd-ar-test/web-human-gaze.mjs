@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-const HEAD_RECOVERY_SECONDS = 0.6;
+// 进入动作与恢复跟随暂时共用600ms，避免两种衔接出现不同的转头速度。
+const HEAD_TRANSITION_SECONDS = 0.6;
 
 export const DEFAULT_GAZE = Object.freeze({ head: true, eyes: true, strength: 0.7,
     headYaw: 45, headPitch: 25, eyeYaw: 20, eyePitch: 15,
@@ -106,27 +107,32 @@ export function createHumanGaze() {
     }
     function rotateHead(head, delta, save, availability, channel) {
         if (!options.head) { headState = null; states.delete(head.index); return; }
-        if (!headState) headState = { displayed: head.bone.quaternion.clone(), owners: new Set(), released: false, recovery: null };
+        if (!headState) headState = { displayed: head.bone.quaternion.clone(), owners: new Set(), released: false, recovery: null, entry: null };
         const owners = channel?.owners || new Set();
         const takeover = [...owners].some(owner => !headState.owners.has(owner));
-        if (takeover) { headState.recovery = null; headState.released = false; }
         let started = false;
+        if (takeover) {
+            // 新动作从真正显示的姿态接管，包括旧动作播放中和600ms恢复途中。
+            headState.entry = { from: headState.displayed.clone(), elapsed: 0 };
+            headState.recovery = null; headState.released = false; started = true;
+        }
         if (!takeover && !headState.released && headState.owners.size && (!owners.size || channel.releasing)) {
             // 从上一帧真正显示的姿态恢复；动作淡出与直接stop只启动一次。
             headState.recovery = { from: headState.displayed.clone(), elapsed: 0 };
+            headState.entry = null;
             headState.released = true; started = true;
         }
         rotate({ target: head, reference: head }, true, options.headYaw, options.headPitch,
             options.headMs, delta, save, availability);
-        const recovery = headState.recovery;
-        if (recovery) {
-            if (!started) recovery.elapsed += Number.isFinite(delta) ? Math.max(0, Math.min(0.1, delta)) : 0;
-            const t = Math.min(1, recovery.elapsed / HEAD_RECOVERY_SECONDS);
+        const transition = headState.entry || headState.recovery;
+        if (transition) {
+            if (!started) transition.elapsed += Number.isFinite(delta) ? Math.max(0, Math.min(0.1, delta)) : 0;
+            const t = Math.min(1, transition.elapsed / HEAD_TRANSITION_SECONDS);
             // 目标仍由普通跟随计算，曲线两端减速；只覆盖当前帧，restore仍恢复基础姿态。
             offset.copy(head.bone.quaternion);
             save(head.bone);
-            head.bone.quaternion.copy(recovery.from).slerp(offset, t * t * (3 - 2 * t)).normalize();
-            if (t >= 1) headState.recovery = null;
+            head.bone.quaternion.copy(transition.from).slerp(offset, t * t * (3 - 2 * t)).normalize();
+            if (t >= 1) { headState.entry = null; headState.recovery = null; }
         }
         headState.displayed.copy(head.bone.quaternion);
         headState.owners = owners;
