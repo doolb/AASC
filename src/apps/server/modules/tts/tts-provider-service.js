@@ -28,6 +28,8 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
                     volume: normalizeNumber(request.volume, settings.defaultVolume, 0, 100), timeoutMs
                 }, settings);
                 if (selection.provider === 'system') return result;
+                // qwen-chat筛选后没有可朗读正文时返回null，播放层跳过该句；不缓存空WAV。
+                if (selection.provider === 'qwen-chat' && result === null) return null;
                 validateWav(result);
                 return storeAudio(result);
             } catch (error) {

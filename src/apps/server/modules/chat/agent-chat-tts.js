@@ -37,6 +37,7 @@ async function playAgentTts({
             if (!isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return null;
             const cleanText = stripMarkdown(sentence);
             const audioPath = await generateTTS(cleanText);
+            if (audioPath === null) return null;
             return { audioPath, sentence };
         }).then((result) => {
             if (!result || !isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return;

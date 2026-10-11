@@ -1,12 +1,16 @@
 'use strict';
 
-// qwen-chat仅转交合成参数；账号、签名和上游连接均由Chat2API管理。
+const { filterQwenChatSpeechText } = require('./qwen-chat-text-filter');
+
+// qwen-chat过滤emoji后转交合成参数；账号、签名和上游连接均由Chat2API管理。
 function createQwenChatProvider({ speechService } = {}) {
     return {
         async generate(request, settings) {
             if (!settings.enabled) throw new Error('TTS Provider 未启用，请先保存配置');
+            const text = filterQwenChatSpeechText(request.text);
+            if (!text) return null;
             if (!speechService) throw new Error('Chat2API 语音服务不可用');
-            const result = await speechService.generate({ input: request.text, model: settings.model,
+            const result = await speechService.generate({ input: text, model: settings.model,
                 voice: request.voice, speed: Math.pow(2, request.speed / 10), volume: request.volume }, { timeoutMs: request.timeoutMs });
             return result.audio;
         },

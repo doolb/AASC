@@ -61,7 +61,7 @@ const SelfTest = {
         {
             id: 'tts_provider_config',
             name: '语音服务配置同步',
-            description: '检查服务器权威配置、Chat2API账号职责及凭证脱敏',
+            description: '检查服务器权威配置、Chat2API账号职责及凭证脱敏；qwen-chat合成前过滤emoji，纯表情跳过',
             category: '语音功能',
             run: async () => {
                 const config = window.TtsProviderSettings?.getConfig();

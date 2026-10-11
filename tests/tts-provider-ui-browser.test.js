@@ -11,9 +11,13 @@ const read = file => fs.readFileSync(path.join(publicDir, file), 'utf8');
 test('真实控制端保存等待/失败/断线/重连、音色保留、模板继承及自测模块', { timeout: 45000 }, async () => {
     const executablePath = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath(), '/usr/bin/chromium'].find(file => file && fs.existsSync(file));
     assert.ok(executablePath, '浏览器验证需要可用Chromium');
-    const browser = await puppeteer.launch({ executablePath, headless: true,
-        args: ['--no-sandbox', '--disable-dev-shm-usage'], env: { ...process.env, TMPDIR: '/tmp' } });
+    // 与手动播放回归一致，隔离浏览器临时存储以避开/tmp用户配额。
+    const temporaryDir = fs.mkdtempSync(path.join(path.resolve(__dirname, '..'), '.tmp-tts-browser-'));
+    let browser;
     try {
+        browser = await puppeteer.launch({ executablePath, headless: true, timeout: 15000,
+            userDataDir: path.join(temporaryDir, 'profile'), args: ['--no-sandbox', '--disable-dev-shm-usage'],
+            env: { ...process.env, TMPDIR: temporaryDir } });
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
@@ -144,5 +148,8 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         const card = await page.$('#ttsProviderFields');
         await card.screenshot({ path: '/tmp/aasc-tts-provider-settings.png' });
         assert.deepEqual(errors, []);
-    } finally { await browser.close(); }
+    } finally {
+        if (browser) await browser.close();
+        fs.rmSync(temporaryDir, { recursive: true, force: true });
+    }
 });

@@ -1,5 +1,53 @@
 # TTS Provider 与播报配置实现
 
+## qwen-chat emoji筛选（2026-10-11，已实现）
+
+```text
+已有声明:
+  createQwenChatProvider.generate、createTtsProviderService.generate
+  手动tts/play、普通AI回调、Agent有序TTS队列与完整WAV校验
+
+新增定义:
+  QwenChatSpeechText { originalText, filteredText, skipAudio }
+  QwenChatSkippedAudio = null
+
+操作流程:
+  qwen-chat请求 -> 先校验Provider启用状态 -> 按Unicode字素簇拆分原文
+  emoji字素簇含图形表情、默认表情、国旗或键帽 -> 移除整个字素簇
+  中文、英文、普通数字、标点、换行与正文内空格 -> 原样保留
+  筛选结果去首尾空白 -> 若没有文字或数字，输出null，不读取Chat2API账号、不请求上游
+  有可朗读正文 -> Chat2API使用筛选文本及原音色、速度、音量合成
+  qwen-chat返回null -> Provider服务返回null，不校验WAV、不缓存音频
+  手动及自动AI/Agent调用收到null -> 不构造音频URL、不播放、不记录失败，继续队列
+  其他Provider -> 沿用原文、WAV校验和缓存规则
+  非空文字上游真实失败 -> 沿用失败报告，不吞掉错误
+```
+
+## 纯表情空音频诊断与原候选草案（2026-10-11，历史方案未采用）
+
+```text
+已有声明:
+  stripMarkdown、chat.splitIntoSentences、isPunctuationOnly、控制端tts/play有序队列
+  collectQwenAudio、wrapPcm、Chat2ApiSpeechService.generate
+
+当前操作流程:
+  原文 -> Markdown清理 -> 12个分句 -> 仅标点过滤 -> 12次生成
+  其中4个纯表情 -> 千问成功完成、无音频 -> wrapPcm拒绝空PCM
+  空PCM异常 -> speech_upstream_error固定通用提示 -> 句子生成失败日志
+  其余文字分句 -> 有效WAV -> 原播放目标，独立于失败分句
+
+待确认新增定义:
+  TtsDecorationOnly { text, hasReadableContent }
+  QwenSpeechEmptyAudio { code, fixedMessage }
+
+待确认操作流程:
+  手动播放清理后的分句 -> TTS专用纯表情与装饰判断 -> 仅可朗读片段入原有队列
+  正文带表情 -> 保留正文及分句顺序；聊天展示原文不变
+  千问完成事件 -> 已收集音频字节数
+  音频字节数为零 -> 固定空音频错误码 -> 固定无可朗读音频提示
+  鉴权、连接、超时错误 -> 保持对应失败；不输出凭证或签名URL
+```
+
 ## 系统原生与 Chat2API 统一语音（2026-10-11 已实现）
 
 ```text

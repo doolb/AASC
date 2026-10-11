@@ -47,6 +47,16 @@ function createHarness(overrides = {}) {
     };
 }
 
+test('Agent收到无可朗读音频的跳过结果时继续下一句，不下发空路径或记失败', async () => {
+    const errors = [];
+    const harness = createHarness({ message: '✨。正常回答。❤️', playOnControl: true,
+        generatedAudio: text => text === '正常回答。' ? 'reply.wav' : null,
+        onError: error => errors.push(error) });
+    await playAgentTts(harness.options);
+    assert.deepEqual(harness.controlMessages, [{ type: 'playOnControl', audioUrl: '/uploads/tts/reply.wav', text: '正常回答。' }]);
+    assert.deepEqual(errors, []);
+});
+
 test('Agent 回复启用控制端播放时逐句发送 playOnControl', async () => {
     const harness = createHarness({ message: '**第一句**。第二句。', playOnControl: true });
 

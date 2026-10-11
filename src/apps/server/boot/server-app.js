@@ -10666,6 +10666,7 @@ async function handleControlMessageFallback(data, ws) {
 
                                 const tasks = sentences.map((sentence) => ttsScheduler.enqueue(async () => {
                                     const audioPath = await generateTtsWithFallback(sentence, undefined, undefined, preferredDisplayId, replyTtsOptions);
+                                    if (audioPath === null) return null;
                                     return { sentence, audioPath };
                                 }).then((result) => {
                                     if (!result || isRepairModeTtsSuppressed()) return;
@@ -10763,8 +10764,11 @@ async function handleControlMessageFallback(data, ws) {
                                         const cleanText = stripMarkdown(sentence);
                                         const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, displayId,
                                             { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts });
+                                        if (audioPath === null) return null;
                                         return { audioPath, sentence };
-                                    }).then(({ audioPath, sentence }) => {
+                                    }).then((result) => {
+                                        if (!result) return;
+                                        const { audioPath, sentence } = result;
                                         const fileName = path.basename(audioPath);
                                         sendToDisplay(displayId, {
                                             type: 'tts',
@@ -11109,6 +11113,7 @@ async function handleChatMessage(options) {
                 const cleanText = stripMarkdown(sentence);
                 const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId,
                     { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts });
+                if (audioPath === null) return null;
                 return { audioPath, sentence };
             }).then((result) => {
                 if (!result || (isRepairModeTtsSuppressed() && !allowRepairModeTts)) return;

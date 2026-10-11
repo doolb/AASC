@@ -1,5 +1,32 @@
 #skill: ai-code-translation
 
+## framework/qwen-chat emoji筛选与跳过契约
+
+### 已有声明
+- createQwenChatProvider.generate、createTtsProviderService.generate // 只在qwen-chat去除不能朗读的表情
+- server-app手动与普通AI回调、playAgentTts // 生成和播放之间传递跳过结果
+
+### 新增定义
+- QwenChatSpeechText { originalText, filteredText, skipAudio } // 原文用于聊天，筛选结果仅用于合成
+- QwenChatSkippedAudio = null // 无朗读内容时不制造空音频
+
+### 操作流程
+- originalText = qwen-chat请求文本；graphemes = 按Unicode字素簇拆分originalText // 家庭、肤色、国旗和键帽按整体移除
+- filteredText = 保留不含emoji的字素簇，再去首尾空白 // 普通数字、正文标点与内部空格保留
+- 如果Provider未启用，维持原启用错误 // 筛选不能掩盖配置问题
+- 如果filteredText没有文字或数字，输出null并停止合成 // 不查询账号或消费一次性令牌
+- 如果filteredText有正文，将其和原请求语音参数转交Chat2API // 不改变其他Provider
+- 如果qwen-chat输出null，Provider服务输出null且不缓存 // 保留有效WAV的完整性校验
+- 如果手动或自动AI/Agent生成结果为null，跳过播放并继续有序队列 // 不把路径空值送入basename，不记失败
+
+### 测试文件映射与自测流程
+- tests/tts-provider-qwen-chat.test.js -> 验证复杂emoji、纯emoji跳过、非emoji数字符号保留、无账号调用与无缓存、正文真实失败仍拒绝 // 对照事故边界
+- tests/chat-manual-tts.test.js -> 使用真实qwen-chat薄适配器验证手动目标和8段正文输出 // 不能只用模拟路径掩盖播放空路径
+- tests/agent-chat-tts.test.js -> 验证跳过结果后正常句播放且无错误 // 覆盖Agent有序队列
+- tests/server-tts-concurrency-integration.test.js -> 执行两条真实自动AI回调的跳过、后续播放及正文失败报告 // 覆盖普通自动聊天
+- 手动浏览器回归使用独立临时目录并清理 // 避免本机临时目录配额使页面回归超时
+- tests/tts-provider-ui-browser.test.js -> 配置页面只读自测说明与独立临时浏览器目录 // 避免同一配额问题影响配置兼容检查
+
 ## framework/国内千问Node语音鉴权（2026-10-11 确认实施）
 
 ### 已有声明
@@ -44,6 +71,7 @@
 - `src/apps/server/modules/tts/tts-provider-settings.js` // 规范化配置及凭证脱敏
 - `src/apps/server/modules/tts/tts-provider-ws.js` // 权威配置与音色消息
 - `src/apps/server/modules/tts/qwen-chat-tts.js` // 仅转交Chat2API统一语音请求
+- `src/apps/server/modules/tts/qwen-chat-text-filter.js` // 按字素簇移除emoji，纯装饰片段输出无正文结果
 - `src/apps/server/modules/chat2api/chat2api-speech-service.js` // Chat2API调度、凭证及语音服务
 - `src/apps/server/modules/chat2api/chat2api-qwen-speech-adapter.js` // 隔离浏览器签名及WebSocket完整音频
 - `src/apps/server/modules/chat2api/chat2api-runtime.js` // 与聊天共享账号及调度层

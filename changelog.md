@@ -64,6 +64,16 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] qwen-chat合成前过滤emoji，纯表情分句跳过，修复正文成功却打印合成失败
+  - 新增qwen-chat-text-filter.js按Unicode字素簇移除肤色、ZWJ家庭、国旗和键帽，普通数字及正文标点保留；qwen-chat-tts.js无正文返回null，不读取账号、不请求上游、不生成空WAV。
+  - tts-provider-service.js、server-app.js手动/普通AI回调及agent-chat-tts.js接受跳过结果，继续有序队列；聊天原文与其他Provider保持。更新只读SelfTest说明，浏览器回归临时目录隔离并清理。
+  - 验证：TTS相关82/82、Chat2API117/117共199项通过，6个生产JS语法检查通过；本机8081重启后，原事故文本实际手动入口返回8段HTTP200有效WAV、14964ms、TTS失败0，未播放设备声音。servicePackage保持true，未构建发布Offline包。
+
+- ✅ [2026-10-11] 查明文字播报成功仍出现4条千问TTS失败日志的原因（诊断阶段记录，后续修复见上）
+  - 实际手动播放文本拆成12段，其中✨、🐱💻⚡、📶🐾、❤️共4段纯表情；通用标点过滤未排除表情。
+  - 同账号真实接口：正常文字49004字节有效WAV；4段纯表情均code=2000000/status=2、0字节音频，空PCM校验异常被转换为账号/环境通用错误。生成验证未播放音频；代码尚未修改。
+  - 同步docs/design/tts-providers.md、docs/spec/tts-providers.md、docs/todo.md及docs/task/20261011_纯表情TTS空音频诊断.md，记录待确认过滤与错误区分方案。
+
 - ✅ [2026-10-11] 国内千问TTS改为Chat2API内部纯Node直接接口，修复Chrome临时配额崩溃引发的逐句合成失败。
   - 新增chat2api-qwen-speech-auth.js及测试：校时、qwen_web关联语音令牌注册/刷新、HMAC-SHA256签名；同账号串行消费、16个闲置30分钟会话、共享超时和有界响应。qwen-speech-adapter移除Chrome/Puppeteer路径，speech-service保留固定脱敏鉴权阶段码；同步SelfTest及TTS/Chat2API design/spec/.src/task/todo/usage。
   - npm run check:chat2api 117/117、TTS及手动播放73/73通过，共190项，无失败/跳过。真实账号原文本WAV252044字节、连续第二句69644字节、令牌刷新后97484字节；禁止浏览器模块后123884字节且浏览器尝试0次，均未播放。生产JS语法检查通过，未全仓测试。

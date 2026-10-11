@@ -54,6 +54,18 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 
 新增qwen-speech-auth，qwen-speech-adapter默认使用Node鉴权，speech-service只按白名单阶段码回传固定提示；校时/注册/刷新失败、超时和忙状态可区分，不采纳上游原文。令牌/Cookie仅内存，响应512KiB、会话16个、有界Cookie与令牌池、不跟随重定向。原生、其他Provider、账号调度、AI上下文和播放协议保持。无新增生产依赖，servicePackage保持true；具体自测、真实生成与部署见对应task。
 
+## 纯表情分句的空音频诊断（2026-10-11，已修复）
+
+19:56:58的控制端手动tts/play文本按当前Markdown清理及分句逻辑输出12个片段，其中4个仅为✨、🐱💻⚡、📶🐾、❤️；isPunctuationOnly不会过滤表情。19:57:00至19:57:06出现4条句子生成失败，其他文字片段仍独立生成并播放。
+
+同一Chat2API国内千问账号直接接口逐段验证：主人好呀！返回49004字节有效WAV；4个纯表情片段各返回code=2000000、status=2、音频0字节。wrapPcm正确拒绝空PCM，但speech-service将错误统一为检查账号及语音运行环境，导致错误归因误导。验证只生成并检查音频，没有播放或更改账号配置。
+
+原候选方案为通用TTS过滤及上游空音频错误码；用户进一步要求仅qwenchat做emoji筛选，因此实施下述qwen-chat入口方案，未采用全Provider过滤和Chat2API错误映射变更。通用分句器仍保留表情，聊天原文不变。
+
+## qwen-chat emoji筛选（2026-10-11，已实现）
+
+用户在诊断方案后要求qwenchat做emoji筛选，视为确认仅针对qwen-chat实施。筛选位于qwen-chat薄适配器，按Unicode字素簇整体去除表情、肤色组合、ZWJ家庭、国旗、键帽与变体选择符，普通数字和文字标点保留；聊天原文不变。纯表情或筛选后仅剩标点/空白返回null，不查询Chat2API账号、不连接语音、不生成假空WAV。Provider服务及手动/自动AI/Agent播放调用共同接受该跳过结果；其他Provider继续原文和现有音频规则。真正正文生成失败仍明确报告，本轮不更改Chat2API鉴权或错误映射。
+
 ## 参考
 
 - [百炼 Qwen TTS API](https://help.aliyun.com/en/model-studio/qwen-tts-api)

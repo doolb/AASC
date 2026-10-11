@@ -12,6 +12,8 @@ const { createProviderRegistry } = require('../src/apps/server/modules/tts/tts-p
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { createOrderedTaskScheduler } = require('../src/apps/server/modules/media/ordered-task-scheduler');
 const { wrapPcm } = require('../src/external/tts/tts-wav');
+const { createQwenChatProvider } = require('../src/apps/server/modules/tts/qwen-chat-tts');
+const { splitIntoSentences } = require('../src/core/utils/sentence-splitter');
 const publicDir = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const chatSource = fs.readFileSync(path.join(publicDir, 'js/chat.js'), 'utf8');
 const serverSource = fs.readFileSync(path.resolve(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
@@ -134,7 +136,9 @@ function serverHarness() {
         return wrapPcm(Buffer.from([1, 0, 2, 0]));
     } });
     const registry = { ...createProviderRegistry({ systemGenerate: async request => { calls.push({ provider: 'system', ...request }); return 'native.wav'; },
-        qwenChat: adapter('qwen-chat') }), 'qwen-api': adapter('qwen-api'), 'doubao-api': adapter('doubao-api') };
+        qwenChat: createQwenChatProvider({ speechService: { generate: async request => ({ audio:
+            await adapter('qwen-chat').generate({ ...request, text: request.input, speed: Math.round(10 * Math.log2(request.speed) * 1e10) / 1e10 }) }) } }) }),
+        'qwen-api': adapter('qwen-api'), 'doubao-api': adapter('doubao-api') };
     let audioIndex = 0;
     const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => `generated-${++audioIndex}.wav` });
     const context = { path, resolveChatReplyTtsOptions,
@@ -152,13 +156,38 @@ function serverHarness() {
     const end = serverSource.indexOf('\nfunction getLocalIP()', start);
     assert.ok(start >= 0 && end > start);
     vm.runInNewContext(serverSource.slice(start, end) + '\nthis.handle = handleControlMessageFallback;', context);
-    return { calls, sent, errors, templates, get lookups() { return lookups; }, async play(payload) {
+    return { calls, sent, errors, templates, useRealSplitter() { context.chat.splitIntoSentences = splitIntoSentences; }, get lookups() { return lookups; }, async play(payload) {
         await context.handle({ type: 'tts', action: 'play', text: '**第一句**|第二句', playOnControl: true, ...payload },
             { send: raw => sent.push(JSON.parse(raw)) });
         await Promise.all(schedulers.map(scheduler => scheduler.waitForIdle()));
         await new Promise(resolve => setImmediate(resolve));
     } };
 }
+
+test('真实手动qwen-chat链路跳过4段emoji，8段正文按顺序下发且无失败', async () => {
+    const route = serverHarness();
+    route.useRealSplitter();
+    const text = '喵呜～主人好呀！✨\n\n人家是**妲己**，一只拥有九条尾巴的**电子猫娘**哦！🐱💻⚡\n\n虽然名字和那个传说中的狐狸精一样，但我可是由数据流和代码构成的可爱存在呢。我的九条尾巴其实是九个高性能的数据处理终端，可以随时帮主人搜索信息、解答难题，或者只是单纯地卖萌打滚求摸摸～ 📶🐾\n\n主人今天想聊些什么呢？是要查询什么情报，还是想听妲己讲讲笑话呢？喵～❤️';
+    await route.play({ text, chatReplyContext: { businessType: 'ai_reply', templateName: 'AI甲' } });
+    assert.equal(route.calls.length, 8);
+    assert.equal(route.sent.length, 8);
+    assert.deepEqual(route.sent.map(message => message.text), route.calls.map(call => call.text));
+    assert.equal(route.calls.at(-1).text, '喵～');
+    assert.deepEqual(route.errors, []);
+    const emojiOnly = serverHarness();
+    await emojiOnly.play({ text: '✨|🐱💻⚡|📶🐾|❤️', chatReplyContext: { businessType: 'ai_reply', templateName: 'AI甲' } });
+    assert.deepEqual([emojiOnly.calls, emojiOnly.sent, emojiOnly.errors], [[], [], []]);
+});
+
+test('手动qwen-chat混合正文只清洗合成输入，其他Provider及播放显示文本保持原文', async () => {
+    const route = serverHarness();
+    await route.play({ text: '你好🐱！', chatReplyContext: { businessType: 'ai_reply', templateName: 'AI甲' } });
+    assert.equal(route.calls[0].text, '你好！');
+    assert.equal(route.sent[0].text, '你好🐱！');
+    const system = serverHarness();
+    await system.play({ text: '你好🐱！' });
+    assert.equal(system.calls[0].text, '你好🐱！');
+});
 
 test('执行服务端真实手动入口：千问AI使用模板音色，整批分句捕获同一权威配置并按序播放', async () => {
     const route = serverHarness();
@@ -212,8 +241,13 @@ test('服务端拒绝非法聊天来源且不生成音频，源配置只从服�
 test('真实浏览器点击AI/Agent/临时历史播放按钮并执行只读语音来源自测', { timeout: 30000 }, async () => {
     const executablePath = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath(), '/usr/bin/chromium'].find(file => file && fs.existsSync(file));
     assert.ok(executablePath);
-    const browser = await puppeteer.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'], env: { ...process.env, TMPDIR: '/tmp' } });
+    // 本机/tmp有用户配额，浏览器回归使用独立临时目录，防止存储异常影响页面验证。
+    const temporaryDir = fs.mkdtempSync(path.join(path.resolve(__dirname, '..'), '.tmp-tts-browser-'));
+    let browser;
     try {
+        browser = await puppeteer.launch({ executablePath, headless: true, timeout: 15000,
+            userDataDir: path.join(temporaryDir, 'profile'), args: ['--no-sandbox', '--disable-dev-shm-usage'],
+            env: { ...process.env, TMPDIR: temporaryDir } });
         const page = await browser.newPage();
         await page.setContent('<div id="chatMessages"></div>');
         await page.evaluate(() => {
@@ -255,5 +289,8 @@ test('真实浏览器点击AI/Agent/临时历史播放按钮并执行只读语�
         const result = await page.evaluate(() => SelfTest.tests.find(test => test.id === 'chat_reply_tts_context').run());
         assert.equal(result.success, true);
         assert.equal(await page.evaluate(() => sent.length), 3);
-    } finally { await browser.close(); }
+    } finally {
+        if (browser) await browser.close();
+        fs.rmSync(temporaryDir, { recursive: true, force: true });
+    }
 });

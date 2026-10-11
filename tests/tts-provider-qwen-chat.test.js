@@ -12,6 +12,58 @@ const os = require('node:os');
 const path = require('node:path');
 const { createChat2ApiDataStore } = require('../src/apps/server/modules/chat2api/chat2api-data-store');
 const { createChat2ApiSpeechService } = require('../src/apps/server/modules/chat2api/chat2api-speech-service');
+const { filterQwenChatSpeechText } = require('../src/apps/server/modules/tts/qwen-chat-text-filter');
+const { wrapPcm } = require('../src/external/tts/tts-wav');
+
+test('qwen-chat按字素簇移除emoji组合，普通数字、标点和正文空格保留', () => {
+    for (const [input, expected] of [
+        ['✨', ''], ['🐱💻⚡', ''], ['📶🐾', ''], ['❤️', ''], ['✨！？～\n❤️', ''],
+        ['你好🐱，主人❤️！', '你好，主人！'], ['早上 👨‍👩‍👧‍👦 好', '早上  好'],
+        ['👍🏽您好', '您好'], ['🇨🇳中文🇺🇸English', '中文English'],
+        ['1️⃣2️⃣#️⃣*️⃣答案2026', '答案2026'], ['☀️天气☀︎不错', '天气不错'],
+        ['🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}测试', '测试'],
+        ['2026 # * + = 版本1.2\n第二行。', '2026 # * + = 版本1.2\n第二行。'],
+        ['  喵呜～主人好呀！✨  ', '喵呜～主人好呀！'], ['   ', '']
+    ]) assert.equal(filterQwenChatSpeechText(input), expected, input);
+});
+
+test('qwen-chat纯emoji不调用Chat2API、不写缓存；正文筛选后继续生成且真实失败仍抛出', async () => {
+    const inputs = [];
+    let stores = 0;
+    let fail = false;
+    const provider = createQwenChatProvider({ speechService: { generate: async request => {
+        inputs.push(request.input);
+        if (fail) throw new Error('实际上游失败');
+        return { audio: wrapPcm(Buffer.from([1, 0])) };
+    } } });
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat' }, providers: { 'qwen-chat': { enabled: true } } });
+    const service = createTtsProviderService({ getSettings: () => settings, registry: { 'qwen-chat': provider },
+        storeAudio: () => { stores += 1; return 'audio.wav'; } });
+    for (const text of ['✨', '🐱💻⚡', '📶🐾', '❤️', '👨‍👩‍👧‍👦！']) {
+        assert.equal(await service.generate({ text, businessType: 'ai_reply' }), null);
+    }
+    assert.deepEqual(inputs, []);
+    assert.equal(stores, 0);
+    assert.equal(await service.generate({ text: '你好🐱！', businessType: 'ai_reply' }), 'audio.wav');
+    assert.deepEqual(inputs, ['你好！']);
+    assert.equal(stores, 1);
+    fail = true;
+    await assert.rejects(service.generate({ text: '继续❤️。', businessType: 'ai_reply' }), /实际上游失败/u);
+    assert.equal(stores, 1);
+    assert.equal(await createQwenChatProvider().generate({ text: '✨', speed: 0 }, { enabled: true }), null);
+    await assert.rejects(provider.generate({ text: '✨' }, { enabled: false }), /未启用/u);
+});
+
+test('qwen-chat筛选不影响其他Provider文本，其他云Provider空结果仍拒绝', async () => {
+    let received;
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-api' }, providers: { 'qwen-api': { enabled: true } } });
+    const service = createTtsProviderService({ getSettings: () => settings, registry: { 'qwen-api': { generate: async request => {
+        received = request.text;
+        return null;
+    } } } });
+    await assert.rejects(service.generate({ text: '你好🐱！', businessType: 'ai_reply' }), /WAV/u);
+    assert.equal(received, '你好🐱！');
+});
 
 async function accountFixture(t, ticket) {
     const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-tts-qwen-account-'));
