@@ -6,8 +6,8 @@ export function createHighLevelMpl({ name, duration = 2, strength = 0.7, count =
         摇头: [`head turn left ${angle(20)};`, `head turn right ${angle(20)};`],
         歪头: ['head reset;', `head sway right ${angle(16)};`],
         鞠躬: ['upper_body reset; head reset;', `upper_body bend forward ${angle(25)}; head bend forward ${angle(10)};`],
-        挥手: [`arm_r bend forward ${angle(65)}; elbow_r bend forward ${angle(65)}; wrist_r sway left ${angle(20)};`,
-            `arm_r bend forward ${angle(65)}; elbow_r bend forward ${angle(65)}; wrist_r sway right ${angle(20)};`],
+        挥手: [`arm_r bend backward ${angle(65)}; elbow_r bend forward ${angle(65)}; wrist_r sway left ${angle(20)};`,
+            `arm_r bend backward ${angle(65)}; elbow_r bend forward ${angle(65)}; wrist_r sway right ${angle(20)};`],
     };
     const pair = pairs[name];
     if (!pair) throw new Error(`没有高级动作模板：${name}`);

@@ -1,4 +1,6 @@
 import { createReplyPlayer } from './web-reply-player.mjs';
+import { serverActions } from './web-human-server-actions.mjs';
+import { getAdvancedMpl } from './web-reply-source.mjs';
 
 const example = '😊你好，主人！*点头* 今天也很高兴见到你。\n[表情:眨眼 时长=1 强度=0.8]我们一起加油吧！\n[动作:挥手 时长=3 强度=0.6 次数=2]下次见！';
 function initReply() {
@@ -10,13 +12,14 @@ function initReply() {
     const progress = panel.querySelector('progress'), advancedStatus = advanced.querySelector('[role="status"]');
     const play = panel.querySelector('[data-reply="play"]'), stop = panel.querySelector('[data-reply="stop"]');
     let lastPaint = 0, lastEvents = null;
+    let sourceRequest = 0;
     const api = () => window.DisplayMmd;
     const busy = () => Boolean(document.querySelector('#mmdEditor [data-mode="edit"][aria-pressed="true"]')
         || document.querySelector('#edBlenderSession:not([hidden])')
         || document.getElementById('mmdEditor')?.getAttribute('aria-busy') === 'true');
     const label = event => {
         if (event.kind === 'mpl') return 'MPL 低级动作（编译后确定时长）';
-        if (event.kind === 'action') return '高级动作：' + event.name + ' · ' + event.duration + '秒 / 强度' + event.strength + ' / ' + event.count + '次';
+        if (event.kind === 'action') return '高级动作：' + event.name + ' · ' + (event.duration == null ? '默认原时长' : event.duration + '秒') + ' / 强度' + (event.strength ?? '默认') + ' / ' + (event.count ?? '默认') + '次';
         return '表情：' + event.name + ' → ' + (event.missing ? event.reason : event.names?.join('、') || '恢复自动表情')
             + ' · ' + event.duration + '秒 / 强度' + event.strength;
     };
@@ -67,14 +70,58 @@ function initReply() {
     panel.querySelector('[data-reply="sample"]').addEventListener('click', () => { input.value = example; parse(); });
     play.addEventListener('click', () => { void player.play(input.value).catch(report); });
     stop.addEventListener('click', () => { void player.stop().catch(report); });
-    for (const button of advanced.querySelectorAll('[data-advanced]')) {
-        button.addEventListener('click', () => {
-            const options = { name: button.dataset.advanced, duration: Number(advanced.querySelector('[data-duration]').value),
-                strength: Number(advanced.querySelector('[data-strength]').value), count: Number(advanced.querySelector('[data-count]').value) };
+    advanced.addEventListener('click', event => {
+            const sourceButton = event.target.closest('[data-advanced-source]');
+            if (sourceButton && advanced.contains(sourceButton)) {
+                void editSource(sourceButton.dataset.advancedSource).catch(error => { advancedStatus.textContent = error.message; });
+                return;
+            }
+            const button = event.target.closest('[data-advanced]');
+            if (!button || !advanced.contains(button)) return;
+            const duration = advanced.querySelector('[data-duration]').value.trim();
+            const strength = advanced.querySelector('[data-strength]').value.trim();
+            const count = advanced.querySelector('[data-count]').value.trim();
+            const options = { name: button.dataset.advanced, duration: duration ? Number(duration) : undefined,
+                strength: strength ? Number(strength) : undefined, count: count ? Number(count) : undefined };
             advancedStatus.textContent = '准备' + options.name + '；原有手动表情与口型可同时播放。';
             void player.playAdvanced(options).catch(report);
-        });
+    });
+    async function editSource(name) {
+        const editor = window.MmdArMplPlayback;
+        if (!editor?.editSource) throw new Error('MPL编辑器尚未就绪，请稍后重试');
+        const request = ++sourceRequest, human = api()?.getHumanInterface?.(), revision = editor.getSourceRevision();
+        const parameter = key => { const value = advanced.querySelector('[data-' + key + ']').value.trim(); return value ? Number(value) : undefined; };
+        advancedStatus.textContent = '正在读取' + name + '的MPL源码…';
+        try {
+            const source = await getAdvancedMpl({ name, duration: parameter('duration'), strength: parameter('strength'), count: parameter('count') }, human, serverActions);
+            // 新选择、用户输入或模型切换拥有更高优先级；迟到结果不能覆盖编辑内容。
+            if (request !== sourceRequest || human !== api()?.getHumanInterface?.() || revision !== editor.getSourceRevision()) return;
+            editor.editSource(source, name);
+            advancedStatus.textContent = '已载入' + name + '源码，可编辑、预览和下载。';
+        } catch (error) {
+            if (request === sourceRequest && human === api()?.getHumanInterface?.() && revision === editor.getSourceRevision()) advancedStatus.textContent = error.message;
+        }
     }
+    const sourceButton = name => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'display-mmd-ar-action';
+        button.dataset.advancedSource = name; button.textContent = name + ' · 编辑MPL';
+        return button;
+    };
+    for (const button of advanced.querySelectorAll('[data-advanced]')) button.after(sourceButton(button.dataset.advanced));
+    void serverActions.load().then(entries => {
+        const fragment = document.createDocumentFragment();
+        for (const entry of entries) {
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'display-mmd-ar-action';
+            button.dataset.advanced = entry.name; button.textContent = entry.name;
+            fragment.append(button, sourceButton(entry.name));
+        }
+        advanced.querySelector('[data-server-actions]').replaceChildren(fragment);
+        advanced.querySelector('[data-server-status]').textContent = serverActions.getState().warning
+            || ('服务器动作：' + entries.length + '个');
+        parse();
+    });
     advanced.querySelector('[data-advanced-stop]').addEventListener('click', () => { void player.stop().catch(report); });
     // 外部只传完整回复；有id时去重，不把聊天历史或流式片段自动当成新动作。
     const seen = new Map();

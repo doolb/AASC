@@ -2,13 +2,16 @@ import { parseReply } from './web-reply-parser.mjs';
 import { resolveReplyExpression, replyExpressionWeights } from './web-reply-expressions.mjs';
 import { createHighLevelMpl } from './web-reply-actions.mjs';
 import { createTextTimeline } from './mmd-lipsync-timeline.mjs';
+import { serverActions } from './web-human-server-actions.mjs';
 
 // 回复调度只持有自动表情与自己的口型/身体请求。后来启动的手动操作不属于它。
-export function createReplyPlayer({ api, lip, body, busy, changed }) {
+export function createReplyPlayer({ api, lip, body, busy, changed, actionCatalog = serverActions }) {
     let sequence = 0, session = null, frame = 0, closed = false;
     let state = { phase: '', time: 0, duration: 0, warnings: [], events: [] };
     const model = () => api()?.getManualExpressions?.() || { ready: false, token: '', items: [] };
-    const parse = value => parseReply(value, { actions: api()?.getHumanInterface?.()?.learn.list().map(a => a.actionId) || [] });
+    const customNames = () => [...(api()?.getHumanInterface?.()?.learn.list().map(a => a.actionId) || []),
+        ...actionCatalog.list().map(a => a.name)];
+    const parse = value => parseReply(value, { actions: customNames() });
     const resolve = (items, name) => api()?.getHumanInterface?.()?.face.resolve(name) || resolveReplyExpression(items, name);
     const live = current => !closed && session === current && current.sequence === sequence;
     const update = patch => { state = { ...state, ...patch }; changed(state); };
@@ -61,6 +64,7 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
             current.lastMotionUrl = result.motionUrl;
             current.warnings.push(...(result.warnings || []));
             current.motionStarted = performance.now();
+            current.duration = Math.max(current.duration, (current.motionStarted - current.startAt) / 1000 + result.duration);
         } catch (error) {
             if (live(current)) current.warnings.push('身体动作未播放：' + error.message);
         } finally {
@@ -194,14 +198,25 @@ export function createReplyPlayer({ api, lip, body, busy, changed }) {
     const pagehide = event => { void stop('页面已离开，回复预览已停止。'); if (!event.persisted) closed = true; };
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('pagehide', pagehide);
+    async function prepareCatalog(work) {
+        const preparedModel = ensureModel(), request = ++sequence, previous = session;
+        session = null; cancelFrame();
+        update({ phase: 'prepare', message: '正在准备动作目录…' });
+        await release(previous);
+        await actionCatalog.load();
+        // 目录网络等待也属于本次播放；停止、新回复、换模型后不得迟到接管。
+        if (closed || request !== sequence || preparedModel.token !== model().token) return;
+        return work();
+    }
     return Object.freeze({
-        play: async value => playParsed(parse(value)),
-        playAdvanced: async options => {
-            const event = { name: options.name, duration: options.duration ?? 2,
-                strength: options.strength ?? 0.7, count: options.count ?? 1 };
-            if (!api()?.getHumanInterface?.()?.learn.list().some(a => a.actionId === event.name)) createHighLevelMpl(event);
+        play: async value => prepareCatalog(() => playParsed(parse(value))),
+        playAdvanced: async options => prepareCatalog(() => {
+            const custom = customNames().includes(options.name);
+            const event = { name: options.name, duration: options.duration ?? (custom ? null : 2),
+                strength: options.strength ?? (custom ? null : 0.7), count: options.count ?? (custom ? null : 1) };
+            if (!custom) createHighLevelMpl(event);
             return playParsed({ speech: '', warnings: [], events: [{ kind: 'action', offset: 0, ...event }] });
-        },
+        }),
         parse: value => {
             const parsed = parse(value);
             return { ...parsed, events: parsed.events.map(event => ({ ...event,

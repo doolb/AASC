@@ -50,8 +50,9 @@ async function stage(root, { webMode = false } = {}) {
     const folder = path.join(root, 'js'), version = async file => (await hashFile(path.join(folder, file))).sha256.slice(0, 12);
     const versions = new Map();
     for (const file of ['web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
-        'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js']) versions.set(file, await version(file));
-    const names = ['model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'interface', 'ui'];
+        'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js', 'web-xpbd-collision.mjs',
+        'web-rigid-body-debug.mjs']) versions.set(file, await version(file));
+    const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'interface', 'ui'];
     for (const suffix of names) {
         const file = 'web-human-' + suffix + '.mjs';
         let source = await fs.readFile(path.join(__dirname, file), 'utf8');
@@ -79,6 +80,10 @@ async function stage(root, { webMode = false } = {}) {
         + '\t\t\tthis.onHumanPose( mesh, delta );\n\t\t}\n\n'
         + '\t\tif ( ( mixer && this.enabled.animation ) || this.onHumanPose ) {\n'
         + '\t\t\t// PMX animation system special path');
+    helper = once(helper, '\t\tif ( looped === true && this.enabled.physics ) {',
+        '\t\tif ( this.onHumanAfterIK ) this.onHumanAfterIK( mesh, delta, physics );\n\n\t\tif ( looped === true && this.enabled.physics ) {');
+    helper = once(helper, '\t\t\tphysics.update( delta );\n\n\t\t}',
+        '\t\t\tphysics.update( delta );\n\n\t\t}\n\n\t\tif ( this.onHumanAfterPhysics ) this.onHumanAfterPhysics( mesh, physics );');
     await fs.writeFile(helperFile, helper);
 }
 module.exports = { stageRuntime, stage };

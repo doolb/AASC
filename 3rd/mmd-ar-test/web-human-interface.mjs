@@ -8,6 +8,8 @@ import { createHumanSampler, readHumanVmd, inspectHumanVmd } from './web-human-v
 import { emptyHumanLibrary, loadHumanLibrary, saveHumanLibrary, validateHumanLibrary,
     exportHumanLibrary, importHumanLibrary } from './web-human-storage.mjs';
 import { createHighLevelMpl } from './web-reply-actions.mjs';
+import { serverActions } from './web-human-server-actions.mjs';
+import { createHumanArmAvoidance, readArmAvoidancePreference, ARM_AVOIDANCE_KEY } from './web-human-arm-avoidance.mjs';
 
 const number = (value, fallback, min, max, label) => {
     const result = value ?? fallback;
@@ -71,6 +73,8 @@ function validateSource(source) {
 export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, canvas, manualExpressions, startRendering }) {
     const mixer = createHumanMixer(), physiology = createHumanPhysiology(), external = new Map();
     const gaze = createHumanGaze();
+    const armAvoidance = createHumanArmAvoidance();
+    let armAvoidanceEnabled = readArmAvoidancePreference();
     let frameDelta = 0;
     const pending = new Map(), cache = new Map();
     let model = null, library = emptyHumanLibrary(), generation = 0, revision = 0, ready = false;
@@ -100,6 +104,9 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     }
     function detach() {
         if (helperBound?.onHumanPose === mixPose) delete helperBound.onHumanPose;
+        if (helperBound?.onHumanAfterIK === avoidArms) delete helperBound.onHumanAfterIK;
+        if (helperBound?.onHumanAfterPhysics === observeArms) delete helperBound.onHumanAfterPhysics;
+        armAvoidance.reset();
         helperBound = null;
     }
     function bind() {
@@ -202,6 +209,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             let buffer, baseDuration = number(intent.duration, 2, 1 / 30, 3600, '动作时长');
             const action = intent.action && library.actions.find(a => a.actionId === intent.action);
             const version = action?.versions.find(v => v.id === (intent.version || action.active));
+            // 本地登记优先；目录失败不阻止内置模板。异步目录结果仍受当前operation令牌约束。
+            const entries = intent.action && !version ? await serverActions.load() : [];
+            check();
+            const remote = entries.find(entry => entry.name === intent.action);
             if (action && !version) throw new Error('动作版本不存在');
             if (version) {
                 let sampler;
@@ -217,20 +228,33 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                 }
                 warnings.push(...sampler.warnings);
             }
-            if (intent.action && !version) {
+            if (remote && !version) {
+                const key = 'server:' + remote.id + ':' + remote.url;
+                let sampler = cache.get(key)?.sampler;
+                if (!sampler) {
+                    const bytes = await readHumanVmd(remote.url, signal); check();
+                    sampler = createHumanSampler(bytes, bound);
+                    cache.set(key, { sampler });
+                    if (cache.size > 8) cache.delete(cache.keys().next().value);
+                }
+                const base = layer(sampler, { ...remote, ...intent, duration: intent.duration ?? remote.duration,
+                    strength: intent.strength ?? remote.strength, mask: intent.mask ?? remote.mask });
+                layers.push(base); baseDuration = base.duration; warnings.push(...sampler.warnings);
+            }
+            if (intent.action && !version && !remote) {
                 const source = createHighLevelMpl({ name: intent.action, duration: Math.min(15, baseDuration), strength: 1, count: intent.count ?? 1 });
                 const result = await mplSampler(source, bound, signal, check); check(); buffer = result.buffer;
                 layers.push(layer(result.sampler, { ...intent, duration: baseDuration }));
                 warnings.push(...result.sampler.warnings);
             }
             const cycleDuration = Math.max(baseDuration, ...layers.map(l => l.start + l.duration));
-            const count = number(intent.count, 1, 1, 8, '重复次数');
+            const count = number(intent.count, remote?.count ?? 1, 1, 8, '重复次数');
             if (!Number.isInteger(count)) throw new Error('重复次数需为整数');
-            if (version && count > 1) {
+            if ((version || remote) && count > 1) {
                 const originals = [...layers];
                 for (let i = 1; i < count; i++) for (const item of originals) layers.push({ ...item, start: item.start + cycleDuration * i });
             }
-            const duration = cycleDuration * (version ? count : 1);
+            const duration = cycleDuration * (version || remote ? count : 1);
             const expression = intent.expression || version?.expression;
             if (expression) layers.push(layer(expressionSampler(expression, duration),
                 { strength: intent.strength ?? 1, mask: ['face'], duration }));
@@ -261,6 +285,13 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             (save, occupied, rotations) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied, rotations));
         manualExpressions.setHuman(model.token, [...weights]);
     }
+    function avoidArms(mesh, delta, physics) {
+        if (mesh !== model?.mesh || !ready || suspended || disposed) return;
+        armAvoidance.apply(model, physics, delta, armAvoidanceEnabled, { paused: helperBound?.enabled.physics === false });
+    }
+    function observeArms(mesh, physics) {
+        if (mesh === model?.mesh && ready && !suspended && armAvoidanceEnabled) armAvoidance.observe(physics, helperBound?.enabled.physics === false);
+    }
     function before(delta, helper) {
         bind();
         const key = getProfile()?.motionUrl || '';
@@ -270,11 +301,14 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (paused && !suspended) { stop(); gaze.reset(); }
         suspended = paused;
         frameDelta = Math.max(0, Math.min(0.1, delta));
-        mixer.restore();
+        armAvoidance.restore(); mixer.restore();
         if (!paused) mixer.advance(delta);
         if (helper !== helperBound) {
             detach();
-            if (helper && model) { helper.onHumanPose = mixPose; helperBound = helper; }
+            if (helper && model) {
+                helper.onHumanPose = mixPose; helper.onHumanAfterIK = avoidArms;
+                helper.onHumanAfterPhysics = observeArms; helperBound = helper;
+            }
         }
     }
     function lifecycle() { if (document.hidden) { suspended = true; stop(); gaze.reset(); } else { suspended = !rendererVisible; wake(); } }
@@ -382,7 +416,14 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             point(x, y) { requireModel(); const changed = gaze.point(model, getCamera?.(), x, y); if (changed) wake(); return changed; },
             reset() { gaze.returnToCamera(); wake(); }
         },
-        reflex, learn, perform, mpl: { play: playMpl }, stop, getRequest: mixer.state,
+        reflex, learn, serverActions, perform, mpl: { play: playMpl }, stop, getRequest: mixer.state,
+        setArmAvoidanceEnabled(value) {
+            armAvoidanceEnabled = value === true;
+            try { localStorage.setItem(ARM_AVOIDANCE_KEY, String(armAvoidanceEnabled)); }
+            catch (error) { /* 存储受限仍在当前页面生效。 */ }
+            wake(); return armAvoidanceEnabled;
+        },
+        getArmAvoidanceState: () => ({ enabled: armAvoidanceEnabled, ...armAvoidance.getState() }),
         face: { set: (...args) => manualExpressions.set(...args), clear: (...args) => manualExpressions.clear(...args), resolve: resolveExpression },
         mouth: {
             setWeights: (token, weights) => manualExpressions.setTransient(token, weights),
@@ -408,7 +449,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         setVisible(value) { rendererVisible = value === true; suspended = !rendererVisible || document.hidden; if (suspended) { stop(); gaze.reset(); } },
         dispose() {
             disposed = true; generation++; stop(); mixer.clear(); detach(); cache.clear();
-            gaze.reset(); releasePointer();
+            gaze.reset(); armAvoidance.dispose(); releasePointer();
             document.removeEventListener('visibilitychange', lifecycle); window.removeEventListener('pagehide', pagehide);
         }
     });

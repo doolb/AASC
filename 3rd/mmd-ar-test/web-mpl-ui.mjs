@@ -8,6 +8,11 @@ function initMpl() {
     const buttons = Object.fromEntries(['play', 'stop', 'sample', 'expression-sample', 'save']
         .map(key => [key, panel.querySelector('[data-mpl="' + key + '"]')]));
     let desired = 0, owner = '', phase = '', session = null, lastResult = null, closed = false, automatic = true;
+    let sourceRevision = 0, sourceName = '';
+    const downloadSource = document.createElement('button');
+    downloadSource.type = 'button'; downloadSource.className = 'display-mmd-ar-action';
+    downloadSource.dataset.mpl = 'download-source'; downloadSource.textContent = '下载 MPL';
+    buttons.save.after(downloadSource);
     const human = () => window.DisplayMmd?.getHumanInterface?.();
     const status = text => { message.textContent = text; };
     const getState = () => {
@@ -36,8 +41,8 @@ function initMpl() {
         } catch (error) { if (request === desired) status(error.message); throw error; }
         finally { if (request === desired) { phase = ''; sync(); } }
     }
-    const play = (source, nextOwner = 'manual:mpl', once = true) => launch(api => api.mpl.play(source,
-        { owner: nextOwner, loop: !once, priority: nextOwner.startsWith('reply:') ? 50 : 100 }), nextOwner);
+    const play = (source, nextOwner = 'manual:mpl', once = true) => launch(async api => ({ ...await api.mpl.play(source,
+        { owner: nextOwner, loop: !once, priority: nextOwner.startsWith('reply:') ? 50 : 100 }), source }), nextOwner);
     const perform = (event, nextOwner) => launch(api => api.perform({ action: event.name,
         duration: event.duration, strength: event.strength, count: event.count,
         owner: nextOwner, priority: 50 }), nextOwner);
@@ -63,6 +68,7 @@ function initMpl() {
                 + names.map(n => ' morph ' + JSON.stringify(n) + ' ' + weight + ';').join('\n') + '\n}\n';
             input.value = pose('normal', false, 0) + pose('expression', true, 0.7)
                 + '@animation greet {\n 0: normal;\n 0.5: expression;\n 1.5: normal;\n}\nmain {\n greet;\n}';
+            sourceRevision++; sourceName = '';
             status('已按当前PMX填入示例。MPL只覆盖代码涉及的骨骼和表情。');
         } catch (error) { status(error.message); }
     }
@@ -74,12 +80,22 @@ function initMpl() {
         buttons.sample.disabled = buttons['expression-sample'].disabled = !!phase || !ready;
         buttons.stop.disabled = !phase && !getState().ownsMotion;
         buttons.stop.textContent = phase ? '取消准备' : '停止MPL层';
-        buttons.save.disabled = !lastResult;
+        buttons.save.disabled = !lastResult || lastResult.source !== input.value;
+        downloadSource.disabled = !input.value.trim();
         panel.setAttribute('aria-busy', String(!!phase));
     }
-    window.MmdArMplPlayback = Object.freeze({ play, perform, stop: stopOwned, getState });
+    function editSource(source, name) {
+        if (closed || typeof source !== 'string' || !source.trim() || new TextEncoder().encode(source).length > 65536) throw new Error('MPL需要1–64KiB代码');
+        automatic = false; input.value = source; sourceName = name; sourceRevision++;
+        // 只载入源码，不启动动作，不登记动作库或替换基础资源。
+        const group = panel.closest('.mmd-ar-panel-group'), body = panel.closest('.mmd-ar-panel-group-body');
+        if (body?.hidden) group.querySelector('.mmd-ar-panel-group-toggle')?.click();
+        status('已载入「' + name + '」MPL。修改后可编译预览、下载；暂不保存高级动作。');
+        sync(); input.scrollIntoView({ block: 'nearest' }); input.focus();
+    }
+    window.MmdArMplPlayback = Object.freeze({ play, perform, stop: stopOwned, getState, editSource, getSourceRevision: () => sourceRevision });
     window.dispatchEvent(new Event('mmd-ar-mpl-ready'));
-    input.addEventListener('input', () => { automatic = false; });
+    input.addEventListener('input', () => { automatic = false; sourceRevision++; downloadSource.disabled = !input.value.trim(); });
     buttons.play.addEventListener('click', () => {
         const once = window.DisplayMmd?.getModelProfile?.()?.playMode === 'once';
         void play(input.value, 'manual:mpl', once).catch(error => status(error.message));
@@ -88,9 +104,16 @@ function initMpl() {
     buttons.sample.addEventListener('click', () => sample(true));
     buttons['expression-sample'].addEventListener('click', () => sample(false));
     buttons.save.addEventListener('click', () => {
-        if (!lastResult) return;
+        if (!lastResult || lastResult.source !== input.value) return;
         const url = URL.createObjectURL(new Blob([lastResult.buffer], { type: 'application/octet-stream' }));
         const link = document.createElement('a'); link.href = url; link.download = 'mpl-motion.vmd'; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    downloadSource.addEventListener('click', () => {
+        if (!input.value.trim()) return;
+        const url = URL.createObjectURL(new Blob([input.value], { type: 'text/plain;charset=utf-8' }));
+        const link = document.createElement('a'); link.href = url;
+        link.download = (sourceName || 'advanced-motion').replace(/[^\p{L}\p{N}_-]/gu, '_') + '.mpl'; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     const timer = setInterval(() => { if (!document.hidden) sync(); }, 1000);

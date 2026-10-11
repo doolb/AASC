@@ -57,8 +57,11 @@ async function stageRuntime(root, { webMode = false } = {}) {
 async function stage(root, { webMode = false } = {}) {
     if (!webMode) return;
     const folder = path.join(root, 'js');
-    const names = ['web-reply-parser.mjs', 'web-reply-expressions.mjs', 'web-reply-actions.mjs', 'web-reply-player.mjs', 'web-reply-ui.mjs'];
+    const names = ['web-reply-parser.mjs', 'web-reply-expressions.mjs', 'web-reply-actions.mjs', 'web-reply-source.mjs', 'web-reply-player.mjs', 'web-reply-ui.mjs'];
     const versions = new Map();
+    // 回复模块先于Human主模块生成，共享目录先复制，随后Human阶段使用相同内容指纹。
+    await fs.copyFile(path.join(__dirname, 'web-human-server-actions.mjs'), path.join(folder, 'web-human-server-actions.mjs'));
+    versions.set('web-human-server-actions.mjs', (await hashFile(path.join(folder, 'web-human-server-actions.mjs'))).sha256.slice(0, 12));
     versions.set('mmd-lipsync-timeline.mjs', (await hashFile(path.join(folder, 'mmd-lipsync-timeline.mjs'))).sha256.slice(0, 12));
     for (const name of names) {
         let source = await fs.readFile(path.join(__dirname, name), 'utf8');

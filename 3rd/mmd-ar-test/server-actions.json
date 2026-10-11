@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "actions": [
+    { "id": "idle", "name": "待机", "type": "vmd", "url": "./mmd/motions/miya-idle.vmd", "mplUrl": "./mmd/motions/miya-idle.mpl", "strength": 1 },
+    { "id": "dance", "name": "跳舞", "type": "vmd", "url": "./mmd/motions/miya-default.vmd", "strength": 1 }
+  ]
+}

@@ -80,6 +80,9 @@ function webAssetText(source) {
     .replaceAll('/api/mmd/static/mmd/', `${WEB_BASE_PATH}/mmd/`)
     .replaceAll('/models/mmd/', `${WEB_BASE_PATH}/mmd/`)
     .replaceAll('/api/mmd/resources', `${WEB_BASE_PATH}/mmd-resources.json`)
+    // 独立端默认站立；服务器动作目录在后续单独生成，保留原舞蹈URL。
+    .replaceAll('mmd/motions/miya-default.vmd', 'mmd/motions/miya-idle.vmd')
+    .replaceAll('miya-default-motion', 'miya-idle-motion')
     .replaceAll('/js/', `${WEB_BASE_PATH}/js/`)
     .replaceAll('/css/', `${WEB_BASE_PATH}/css/`);
 }
@@ -1029,6 +1032,7 @@ async function main() {
   await stageTextAssets();
   await stageOfficialTargetAsset();
   await stageModelAssets();
+  if (WEB_MODE) await require('./web-human-actions-build').stage(GENERATED_ASSETS);
   await stageLocalArVendor();
   if (!WEB_MODE) await stageMindArAssets();
 

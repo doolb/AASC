@@ -21,9 +21,9 @@ function appendPanels(panel) {
         <p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
       </div>
       <div id="mmdArAdvancedMotionPanel">
-        <label class="mind-basic-field"><span>时长（秒）</span><input data-duration type="number" min="0.2" max="15" step="0.1" value="2"></label>
-        <label class="mind-basic-field"><span>强度</span><input data-strength type="number" min="0" max="1" step="0.1" value="0.7"></label>
-        <label class="mind-basic-field"><span>次数</span><input data-count type="number" min="1" max="8" step="1" value="1"></label>
+        <label class="mind-basic-field"><span>时长（秒）</span><input data-duration type="number" min="0.2" max="3600" step="0.1" placeholder="默认 / 原时长"></label>
+        <label class="mind-basic-field"><span>强度</span><input data-strength type="number" min="0" max="1" step="0.1" placeholder="默认"></label>
+        <label class="mind-basic-field"><span>次数</span><input data-count type="number" min="1" max="8" step="1" placeholder="默认"></label>
         <div class="display-mmd-ar-actions">
           <button type="button" class="display-mmd-ar-action" data-advanced="点头">点头</button>
           <button type="button" class="display-mmd-ar-action" data-advanced="摇头">摇头</button>
@@ -32,7 +32,9 @@ function appendPanels(panel) {
           <button type="button" class="display-mmd-ar-action" data-advanced="歪头">歪头</button>
           <button type="button" class="display-mmd-ar-action" data-advanced-stop>停止并恢复</button>
         </div>
-        <p class="mind-basic-note">高级动作优先使用Human中同名登记行为，缺失时使用MPL模板。只覆盖涉及的部位，基础VMD与物理继续运行；手动表情和口型可同时播放。</p>
+        <div data-server-actions class="display-mmd-ar-actions"></div>
+        <p data-server-status class="mind-basic-note" role="status">正在读取服务器动作…</p>
+        <p class="mind-basic-note">同名登记行为优先，其次服务器动作，最后MPL模板。时长留空使用默认：服务器VMD按原速原长播放。基础待机与物理继续运行；手动表情和口型可同时播放。</p>
         <p class="mind-basic-note" role="status" aria-live="polite">需要标准 MMD 骨骼的 PMX 模型。</p>
       </div>
     `);

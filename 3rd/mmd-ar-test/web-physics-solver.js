@@ -128,7 +128,9 @@ const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSol
 const SOLVER_PANEL_HTML = `<label class="mind-basic-field"><span>布料计算</span>
     <select id="mmdArPhysicsSolver" aria-label="布料计算求解器"><option value="ammo" selected>Ammo（原方式）</option>
     <option value="xpbd">XPBD（CPU）</option><option value="xpbd-webgl">XPBD（WebGL2）</option><option value="vertex-cloth">顶点布料（CPU）</option><option value="vertex-cloth-gpu">顶点布料 GPU（WebGL2）</option></select></label>
-    <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>${CLOTH.CLOTH_PANEL_HTML}`;
+    <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>
+    <label class="display-mmd-lighting-field" id="mmdArHandAvoidanceRow" hidden><input id="mmdArHandAvoidance" type="checkbox" checked><span>手部防穿模</span></label>
+    <p id="mmdArHandAvoidanceStatus" class="mind-basic-note" role="status" hidden></p>${CLOTH.CLOTH_PANEL_HTML}`;
 const SOLVER_PANEL_JS = `
     ${CLOTH.CLOTH_PANEL_JS}
     (() => {
@@ -142,6 +144,12 @@ const SOLVER_PANEL_JS = `
         const physicsFps = document.getElementById('displayMmdPhysicsFps');
         const hint = document.getElementById('mmdArPhysicsStabilityReferenceHint');
         const panel = document.getElementById('mmdArMotionPanel');
+        const avoidance = document.getElementById('mmdArHandAvoidance');
+        const avoidanceRow = document.getElementById('mmdArHandAvoidanceRow');
+        const avoidanceStatus = document.getElementById('mmdArHandAvoidanceStatus');
+        avoidance?.addEventListener('change', () => {
+            window.DisplayMmd?.getHumanInterface?.()?.setArmAvoidanceEnabled(avoidance.checked);
+        });
         if (!select || !label) return;
         const key = 'aasc.mmdArTest.physicsSolver.v1';
         let timer = null;
@@ -149,6 +157,14 @@ const SOLVER_PANEL_JS = `
         try { const saved = localStorage.getItem(key); requested = saved === 'vertex-cloth-gpu' || new URLSearchParams(location.search).get('safePhysics') === '1' ? 'ammo' : normalizePhysicsSolver(saved); }
         catch (error) { /* 存储受限按原方式启动。 */ }
         const update = () => {
+            const human = window.DisplayMmd?.getHumanInterface?.();
+            if (avoidanceRow) avoidanceRow.hidden = !human;
+            if (avoidanceStatus) avoidanceStatus.hidden = !human;
+            if (human && avoidance) {
+                const status = human.getArmAvoidanceState(); avoidance.checked = status.enabled;
+                avoidanceStatus.textContent = !status.enabled ? '手部避让已关闭。'
+                    : status.reason || ('复用物理刚体 · 剩余接触 ' + status.remaining + ' · ' + status.frameMs.toFixed(2) + ' ms');
+            }
             const solver = window.DisplayMmd?.getPhysicsSolver?.() || 'ammo';
             const xpbd = solver !== 'ammo';
             select.value = solver;

@@ -31,7 +31,7 @@ for (const [name, icons] of Object.entries({
 })) for (const icon of icons) symbols.set(icon, ['emotion', name]);
 const aliases = (groups, input) => Object.entries(groups).find(([, names]) => names.includes(input.toLowerCase()))?.[0];
 function parameters(value) {
-    const options = { duration: 2, strength: 0.7, count: 1 };
+    const options = { duration: null, strength: null, count: null };
     let name = value.trim();
     if (name.startsWith('"')) {
         const match = name.match(/^"(?:[^"\\]|\\.)*"/u);
@@ -50,8 +50,9 @@ function parameters(value) {
     if (options.name !== undefined && name) throw new Error('标记包含未知参数');
     options.name ??= name;
     if (!options.name || options.name.length > 100) throw new Error('标记名称为空或过长');
-    if (options.duration < 0.2 || options.duration > 15 || options.strength < 0 || options.strength > 1
-        || !Number.isInteger(options.count) || options.count < 1 || options.count > 8) throw new Error('标记参数范围：时长0.2–15秒，强度0–1，次数1–8');
+    if ((options.duration != null && (options.duration < 0.2 || options.duration > 3600))
+        || (options.strength != null && (options.strength < 0 || options.strength > 1))
+        || (options.count != null && (!Number.isInteger(options.count) || options.count < 1 || options.count > 8))) throw new Error('标记参数范围：时长0.2–3600秒，强度0–1，次数1–8');
     return options;
 }
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
@@ -87,7 +88,13 @@ export function parseReply(value, { actions = [] } = {}) {
                 const canonical = (kind === 'action' && actions.includes(opts.name) ? opts.name : '')
                     || aliases(kind === 'emotion' ? EMOTIONS : ACTIONS, opts.name);
                 if (kind === 'action' && !canonical) warnings.push(`未支持高级动作：${opts.name}`);
-                else add(kind, { ...opts, name: canonical || opts.name }, raw);
+                else {
+                    const custom = kind === 'action' && actions.includes(opts.name);
+                    if (!custom && opts.duration > 15) throw new Error('内置模板/表情时长最多15秒');
+                    add(kind, { ...opts, name: canonical || opts.name,
+                        duration: opts.duration ?? (custom ? null : 2),
+                        strength: opts.strength ?? (custom ? null : 0.7), count: opts.count ?? (custom ? null : 1) }, raw);
+                }
                 handled = true;
             } catch (error) { warnings.push(error.message); handled = true; }
         } else {
