@@ -1,6 +1,7 @@
 'use strict';
 
 const { BUSINESS_TYPES } = require('../tts/tts-provider-policy');
+const { normalizeReplyUserText } = require('../tts/tts-reply-user-text');
 const REPLY_BUSINESSES = new Set([BUSINESS_TYPES.AI_REPLY, BUSINESS_TYPES.AGENT_REPLY]);
 
 // 对应.src/framework/tts-provider-configuration.md：手动回复播放只接受来源，配置取服务端权威模板。
@@ -15,7 +16,9 @@ function resolveChatReplyTtsOptions(context, { getTemplateByName } = {}) {
     }
     const template = name.trim() ? getTemplateByName(name.trim()) : null;
     // 在请求开始时复制配置，同一批分句不受后续模板修改影响。
-    return { businessType: context.businessType, templateTts: template?.tts ? { ...template.tts } : undefined };
+    const userText = normalizeReplyUserText(context.userText);
+    return { businessType: context.businessType, templateTts: template?.tts ? { ...template.tts } : undefined,
+        ...(userText ? { userText } : {}) };
 }
 
 module.exports = { resolveChatReplyTtsOptions };

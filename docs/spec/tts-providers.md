@@ -1,5 +1,59 @@
 # TTS Provider 与播报配置实现
 
+## Qwen-Audio 3.1与豆包上一句上下文（2026-10-11，已完成）
+
+```text
+保存AI回复 -> 持久化replyToMessageId=本轮用户消息id
+历史手动播放 -> 先按replyToMessageId查对应用户输入
+  有引用但用户消息不存在 -> 不传context_texts
+  旧记录无引用 -> 在同mode/target/sessionId/profileName内向前查用户输入
+Agent配对历史 -> 直接读取同一记录的user字段
+控制端只读自测 -> 私聊引用对应原用户、Agent配对输入、缺失引用不取其他轮
+```
+
+```text
+已有声明：
+  normalizeSettings、PROVIDER_DEFAULTS、resolveProviderConfig、createProviderRegistry
+  requestJson、requestLimited、wrapPcm、adjustWav、validateWav
+  generateTtsWithFallback、普通AI/Agent/语音聊天入口、resolveChatReplyTtsOptions
+  Chat.playMessage、Chat.getReplyTtsContext、历史消息与流式回复按钮
+新增定义：
+  QwenApiModelContract { 模型系列, 标准接口路径, 请求字段, 默认音色目录 }
+  QwenAudioDefault { qwen-audio-3.1-tts-flash, qiaoxiaojiao_v3.1 }
+  QwenKnownWavPlaceholder { RIFF 0x7fffffbf, data 0x7fffff9b }
+  ReplyUserTextSnapshot { 同一回复回合对应的上一句用户文本, 最多2000 Unicode字符 }
+  DoubaoReplyContext { context_texts单元素数组, additions序列化字符串 }
+操作流程：
+  用户已确认具体方案 -> 先同步伪代码 -> 修改实现与自测
+  三个云端/网页Provider无明确enabled配置 -> 默认开启；已保存enabled -> 保留
+  Qwen API缺少明确配置 -> 使用新模型与乔小娇；已保存其他明确模型/音色 -> 保留
+  Qwen-TTS模型 -> 原标准路径与language_type=Auto
+  Qwen-Audio-TTS模型 -> SpeechSynthesizer标准路径、input.format=wav/sample_rate=24000
+  官方标准端点路径 -> 按模型规范化；自定义端点 -> 保留明确用户选择
+  Qwen音频完整下载 -> 识别已知配对占位头与合法单声道16位PCM
+  已知占位头且真实PCM完整对齐 -> 按实际PCM长度重包装 -> 原严格WAV校验
+  普通WAV -> 原校验；非占位长度错误/断开/空音频/超限/不合法格式 -> 拒绝
+  自动AI/Agent/语音回复 -> 入口捕获当前用户原文 -> 回复分句共用快照
+  手动历史AI回复 -> 同会话、目标、回合中找到此前用户文本 -> 受限上下文
+  流式完成按钮/新消息入口 -> 携带对应输入，后续会话切换不覆盖
+  generateTtsWithFallback -> Provider服务 -> 仅向兼容豆包AI/Agent适配器提供受限用户文本
+  豆包seed-tts-2.0、无复刻model、用户文本非空 -> additions JSON中的context_texts=[用户文本]
+  空上下文/非AI业务/不兼容资源或复刻model -> 不发送context_texts
+  现有AASC配置保存与权威广播、缓存引用、队列、播放回执与打断 -> 继续现有流程
+验证：
+  154项相关回归通过，20个生产JS语法检查通过
+  实际当前Qwen31/乔小娇/speed=1 -> 上游115244字节 -> 生产有效WAV
+  npm重启 -> 3个静态HTTP200 -> /control权威配置脱敏、三个enabled=true
+  新默认组合、旧Qwen3显式配置、自定义端点、目录与WS权威值 -> 正确
+  对比旧契约InvalidParameter与正确契约实际WAV，合法PCM不改变
+  已知占位长度修复；普通截断、恶意长度、空PCM、未对齐、格式异常 -> 拒绝
+  豆包真实HTTP请求捕获additions/context_texts -> 上一句原文单元素数组
+  普通AI、Agent、语音、私聊、群聊、临时及历史按钮 -> 正确回合
+  会话切换、并发与迟到回复 -> 不串上下文；长文本 -> 明确有界
+  其他Provider及非AI业务 -> 不发送用户上下文
+```
+
+
 ## Qwen API与豆包API错误原因打印（2026-10-11，已实现）
 
 ```text

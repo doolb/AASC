@@ -32,6 +32,24 @@ function wrapPcm(pcm, sampleRate = 24000) {
     return Buffer.concat([header, pcm]);
 }
 
+// 百炼完整下载的WAV仍可能保留流式占位头；仅兼容实际验证过的44字节PCM头形状。
+// 普通长度错误不修改，继续交给严格校验拒绝；不能把任意截断文件当完整PCM补齐。
+function normalizeQwenWav(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 44 || buffer.length > MAX_AUDIO_BYTES) return buffer;
+    const knownPlaceholder = buffer.toString('ascii', 0, 4) === 'RIFF'
+        && buffer.toString('ascii', 8, 16) === 'WAVEfmt '
+        && buffer.readUInt32LE(4) === 0x7fffffbf && buffer.readUInt32LE(16) === 16
+        && buffer.toString('ascii', 36, 40) === 'data' && buffer.readUInt32LE(40) === 0x7fffff9b;
+    if (!knownPlaceholder) return buffer;
+    const sampleRate = buffer.readUInt32LE(24);
+    if (buffer.readUInt16LE(20) !== 1 || buffer.readUInt16LE(22) !== 1
+        || buffer.readUInt16LE(32) !== 2 || buffer.readUInt16LE(34) !== 16
+        || !sampleRate || sampleRate > 192000 || buffer.readUInt32LE(28) !== sampleRate * 2) {
+        throw new Error('Qwen TTS WAV 占位头的PCM格式无效');
+    }
+    return wrapPcm(buffer.subarray(44), sampleRate);
+}
+
 // Qwen 非实时接口不提供速率/音量字段，使用本地PCM变换统一参数语义，不写盘。
 function adjustWav(buffer, speed = 0, volume = 100) {
     if (speed === 0 && volume === 100) return buffer;
@@ -66,4 +84,4 @@ function decodeAudio(value) {
     return Buffer.from(value, 'base64');
 }
 
-module.exports = { MAX_AUDIO_BYTES, decodeAudio, wrapPcm, adjustWav, validateWav };
+module.exports = { MAX_AUDIO_BYTES, decodeAudio, wrapPcm, normalizeQwenWav, adjustWav, validateWav };

@@ -1208,6 +1208,9 @@ function addMessage(message) {
         content: content,
         ...(reasoning ? { reasoning } : {}),
         ...(speech ? { speech } : {}),
+        // 保存本轮用户消息引用，历史语音播放不会误取其他并发回复的提问。
+        ...(typeof message.replyToMessageId === 'string'
+            ? { replyToMessageId: message.replyToMessageId.slice(0, 128) } : {}),
         mode: message.mode || chatSession.mode,
         target: message.target || chatSession.privateTarget,
         sessionId: message.sessionId || chatSession.privateSessionId || 'default',

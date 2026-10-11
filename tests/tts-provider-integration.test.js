@@ -36,7 +36,11 @@ test('Qwen HTTP完整WAV进入原缓存，音频下载不携带API凭证', async
     const reference = await service.generate({ text: '你好', businessType: 'ai_reply' });
     assert.deepEqual(cache.getAudio(reference).buffer, wav);
     assert.equal(seen[0].auth, 'Bearer only-api-secret');
-    assert.equal(seen[0].data.input.voice, 'Cherry');
+    assert.equal(seen[0].data.input.voice, 'qiaoxiaojiao_v3.1');
+    assert.equal(seen[0].data.model, 'qwen-audio-3.1-tts-flash');
+    assert.equal(seen[0].data.input.format, 'wav');
+    assert.equal(seen[0].data.input.sample_rate, 24000);
+    assert.equal(seen[0].data.input.language_type, undefined);
     assert.equal(seen[1].auth, undefined);
     assert.ok(cache.isMemoryAudioName(reference));
 });
@@ -64,6 +68,38 @@ test('豆包分片UTF8/SSE完成事件与PCM包装；独立文本业务与参数
     assert.equal(posted.body.req_params.audio_params.speech_rate, -50);
     assert.equal(posted.headers['x-api-key'], 'doubao-key');
     assert.equal(posted.headers['x-api-resource-id'], 'seed-tts-2.0');
+});
+
+test('豆包2.0真实HTTP携带上一句context_texts，其他业务/资源/复刻模型不发送', async t => {
+    const posted = [];
+    const url = await mockServer(t, async (req, res) => {
+        let data = '';
+        for await (const chunk of req) data += chunk;
+        posted.push(JSON.parse(data));
+        res.end(`${JSON.stringify({ code: 0, data: pcm.toString('base64') })}\n${JSON.stringify({ code: 20000000 })}`);
+    });
+    for (const [businessType, userText, resourceId, model, expected] of [
+        ['ai_reply', '你能特别痛心地说吗？', 'seed-tts-2.0', '', '你能特别痛心地说吗？'],
+        ['agent_reply', '上一轮Agent输入', 'seed-tts-2.0', '', '上一轮Agent输入'],
+        ['ai_reply', '😀'.repeat(2100), 'seed-tts-2.0', '', '😀'.repeat(2000)],
+        ['ai_reply', '', 'seed-tts-2.0', '', null],
+        ['text_media', '用户输入', 'seed-tts-2.0', '', null],
+        ['system_broadcast', '用户输入', 'seed-tts-2.0', '', null],
+        ['ai_reply', '用户输入', 'seed-tts-1.0', '', null],
+        ['ai_reply', '用户输入', 'seed-tts-2.0', 'seed-icl-2.0', null]
+    ]) {
+        const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-api' }, textMedia: { provider: 'doubao-api' },
+            systemBroadcast: { provider: 'doubao-api' }, providers: { 'doubao-api': { credential: 'test', endpoint: url, resourceId, model } } });
+        const service = createTtsProviderService({ getSettings: () => settings, registry: createProviderRegistry(), storeAudio: () => 'test.wav' });
+        await service.generate({ text: '朗读正文', businessType, userText });
+        const params = posted.at(-1).req_params;
+        assert.equal(params.text, '朗读正文');
+        if (expected === null) assert.equal(params.additions, undefined);
+        else {
+            assert.equal(typeof params.additions, 'string');
+            assert.deepEqual(JSON.parse(params.additions), { context_texts: [expected] });
+        }
+    }
 });
 
 test('鉴权、无效/截断/空音频、缺少完成事件均无缓存且不切换Provider', async t => {
@@ -121,7 +157,7 @@ test('system仍使用原引用、选择默认参数，禁用和600字边界明�
     assert.equal(request.voice, null);
     assert.equal(request.speed, 3);
     assert.equal(request.preferredDisplayId, 'display-a');
-    await assert.rejects(registry['qwen-api'].generate({ text: 'test' }, settings.providers['qwen-api']), /未启用/u);
+    await assert.rejects(registry['qwen-api'].generate({ text: 'test' }, { ...settings.providers['qwen-api'], enabled: false }), /未启用/u);
     await assert.rejects(registry['qwen-api'].generate({ text: '好'.repeat(601) }, { enabled: true, credential: 'test' }), /600/u);
 });
 

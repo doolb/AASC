@@ -1481,7 +1481,8 @@ const Chat = {
         this.activeRequestId = requestId;
         this.currentReplyTtsContext = this.getReplyTtsContext({ role: 'assistant', mode,
             target: mode === 'role' ? this.session.roleTarget : target,
-            templateId: templateTarget }, { roleName: mode === 'role' ? this.session.roleTarget : this.temporaryConversation.roleName });
+            templateId: templateTarget }, { roleName: mode === 'role' ? this.session.roleTarget : this.temporaryConversation.roleName,
+                userText: displayMessage });
         this.isLoading = true;
         this.currentStreamingMessage = '';
         const images = this.pendingImages.map((image) => ({
@@ -1906,6 +1907,7 @@ const Chat = {
             this.renderHistory();
             this.playMessage({
                 ...msg,
+                chatReplyContext: this.getReplyTtsContext(msg, { history: this.history, index: this.history.length - 1 }),
                 content: msg.content,
                 speech: msg.speech,
                 displayId: data.displayId,
@@ -1915,10 +1917,38 @@ const Chat = {
     },
     
     // 对应.src/framework/tts-provider-configuration.md；仅发来源，服务与音色取服务端权威模板。
-    getReplyTtsContext(message, { roleName = null, mode = message?.mode || this.session.mode } = {}) {
+    // 优先读本轮快照或持久化消息引用；旧历史只在所属会话内向前找用户消息。
+    // 不能回退到currentUserMessage，否则旧回复会使用新一轮的输入。
+    getReplyUserText(message, { history = [], index = -1, mode = message?.mode || this.session.mode } = {}) {
+        if (message.chatReplyContext?.userText) return message.chatReplyContext.userText;
+        if (typeof message.user === 'string' && typeof message.assistant === 'string') return message.user;
+        const sameSession = item => (item.mode || mode) === mode
+            && (item.target || null) === (message.target || null)
+            && (item.sessionId || 'default') === (message.sessionId || 'default')
+            && (item.profileName || null) === (message.profileName || null);
+        const userContent = item => ['user', 'control'].includes(item.role) ? item.content : null;
+        if (message.replyToMessageId) {
+            const user = history.find(item => item.id === message.replyToMessageId && sameSession(item));
+            return user ? userContent(user) : null;
+        }
+        for (let cursor = index - 1; cursor >= 0; cursor--) {
+            const item = history[cursor];
+            if (!sameSession(item)) continue;
+            const text = userContent(item);
+            if (typeof text === 'string') return text;
+        }
+        return null;
+    },
+
+    getReplyTtsContext(message, { roleName = null, mode = message?.mode || this.session.mode,
+        userText = undefined, history = [], index = -1 } = {}) {
         if (!message || (message.role !== 'assistant' && typeof message.assistant !== 'string')) return null;
+        const sourceText = userText ?? this.getReplyUserText(message, { history, index, mode });
+        const limitedText = typeof sourceText === 'string'
+            ? Array.from(sourceText.trim().slice(0, 4000)).slice(0, 2000).join('') : '';
+        const contextText = limitedText ? { userText: limitedText } : {};
         if (message.chatReplyContext) return { businessType: message.chatReplyContext.businessType,
-            templateName: message.chatReplyContext.templateName ?? null };
+            templateName: message.chatReplyContext.templateName ?? null, ...contextText };
         const templateId = message.templateId && message.templateId !== 'default' ? message.templateId : null;
         const sources = {
             group: templateId,
@@ -1927,7 +1957,7 @@ const Chat = {
             temporary: templateId || roleName
         };
         return { businessType: mode === 'role' || message.assistantType === 'agent' ? 'agent_reply' : 'ai_reply',
-            templateName: sources[mode] || null };
+            templateName: sources[mode] || null, ...contextText };
     },
 
     playMessage(indexOrData) {
@@ -1962,7 +1992,7 @@ const Chat = {
             content = item.speech || item.content || item.assistant || item.user;
             displayId = window.currentDisplayId;
             playOnControl = this.session.playOnControl;
-            chatReplyContext = this.getReplyTtsContext(item, { roleName });
+            chatReplyContext = this.getReplyTtsContext(item, { roleName, history, index: indexOrData });
         }
         
         if (!content) return;
@@ -2557,7 +2587,8 @@ const Chat = {
 
         this.activeRequestId = data.requestId;
         this.currentReplyTtsContext = this.getReplyTtsContext({ ...data, role: 'assistant' }, {
-            roleName: data.mode === 'role' ? (data.role || this.session.roleTarget) : this.temporaryConversation.roleName
+            roleName: data.mode === 'role' ? (data.role || this.session.roleTarget) : this.temporaryConversation.roleName,
+            userText: data.content
         });
         this.isLoading = true;
         this.currentStreamingMessage = '';

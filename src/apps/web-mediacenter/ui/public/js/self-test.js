@@ -41,7 +41,7 @@ const SelfTest = {
         {
             id: 'chat_reply_tts_context',
             name: '聊天回复语音来源',
-            description: '只读检查手动播放的AI/Agent模板解析，不发送语音',
+            description: '只读检查AI/Agent模板与对应上一句输入，不发送语音',
             category: '语音功能',
             run: async () => {
                 const chat = window.Chat;
@@ -50,12 +50,22 @@ const SelfTest = {
                 const agentReply = chat.getReplyTtsContext({ role: 'assistant', mode: 'role', target: '自测Agent' });
                 const temporaryReply = chat.getReplyTtsContext({ role: 'assistant', mode: 'temporary' }, { roleName: '历史角色' });
                 const groupReply = chat.getReplyTtsContext({ role: 'assistant', mode: 'group', name: '显示名' });
+                const history = [
+                    { id: 'tts-test-first', role: 'control', mode: 'private', target: '自测AI', content: '原轮输入' },
+                    { id: 'tts-test-next', role: 'control', mode: 'private', target: '自测AI', content: '后轮输入' },
+                    { role: 'assistant', mode: 'private', target: '自测AI', replyToMessageId: 'tts-test-first' }
+                ];
+                const linkedReply = chat.getReplyTtsContext(history[2], { history, index: 2 });
+                const missingReply = chat.getReplyTtsContext({ ...history[2], replyToMessageId: 'missing' }, { history, index: 2 });
+                const pairedReply = chat.getReplyTtsContext({ user: 'Agent原输入', assistant: '回答', mode: 'role' });
                 const valid = privateReply.businessType === 'ai_reply' && privateReply.templateName === '自测AI'
                     && agentReply.businessType === 'agent_reply' && agentReply.templateName === '自测Agent'
                     && temporaryReply.templateName === '历史角色' && groupReply.templateName === null
-                    && chat.getReplyTtsContext({ role: 'control', mode: 'private' }) === null;
+                    && chat.getReplyTtsContext({ role: 'control', mode: 'private' }) === null
+                    && linkedReply.userText === '原轮输入' && !missingReply.userText
+                    && pairedReply.userText === 'Agent原输入';
                 return { success: valid, message: valid ? '聊天回复语音来源解析正常' : '聊天回复语音来源解析失败',
-                    details: '私聊、Agent、临时历史及群聊；实际合成由服务端权威配置处理' };
+                    details: '私聊、Agent、临时历史、群聊与并发回合引用；实际合成由服务端权威配置处理' };
             }
         },
         {

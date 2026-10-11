@@ -73,6 +73,16 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 修复Qwen-Audio 3.1/乔小娇接口与WAV占位长度，豆包2.0自动传上一句用户上下文，三个服务默认开启
+  - tts-provider-settings.js默认Qwen-Audio 3.1/qiaoxiaojiao_v3.1及三个enabled=true，保留显式配置；新增qwen-api-contract.js区分新旧模型接口与显式WAV，自定义地址保持。tts-wav.js仅修复实测配对占位头，Qwen适配器在速度处理前严格校验普通WAV，失败日志仍打印已知码/原因。
+  - 新增tts-reply-user-text.js，server-app.js、tts-provider-service.js、chat-reply-tts-context.js与chat.js传对应原输入；llm-service.js保存replyToMessageId，支持历史、流式按钮、AI/Agent/临时/语音和并发回合。豆包兼容2.0 AI业务使用additions JSON字符串中的context_texts，2000Unicode上限，空值及其他业务/不兼容资源不发送。
+  - 更新self-test.js与新增/扩展测试，154/154相关回归、20个生产JS语法检查通过。真实Qwen新模型/乔小娇/speed=1获取115244字节音频并生成有效WAV；npm重启后三静态HTTP200、/control权威快照正确且凭证脱敏。另有旧显示页静态断言HEAD基线同名失败，记todo维护；真实豆包听感未验收。
+  - 同步design/spec/task/usage/ref/self-test/todo；完成任务与过时欠费待复现移出todo，servicePackage=true/minApk=true/dependenciesPackage=false，本次尚未构建发布新包，v64未含此改动。Git只上传本次范围，不提交诊断音频或其他会话改动。
+
+- ✅ [2026-10-11] 完成Qwen-Audio 3.1乔小娇实际接口与WAV故障定位，整理豆包上一句上下文接入方案
+  - 同账户/模型/音色旧契约返回HTTP400/InvalidParameter；SpeechSynthesizer加显式WAV/24000Hz生成84524字节，RIFF/data配对占位长度0x7fffffbf/0x7fffff9b导致原校验失败。诊断副本保持84480字节PCM，重包装与速率校验通过；无生产配置改动、无声音播放。
+  - 同步design/spec/task/todo/self-test，记录新默认模型/音色、契约适配、有界占位头兼容及豆包按回复回合取上一句原文方案，等待AGENTS.md要求的方案确认；生产代码尚未修改，Offline已有待构建状态保留。
+
 - ✅ [2026-10-11] Qwen API与豆包API失败日志打印已知上游错误码及中文原因
   - 修改tts-provider-http.js/tts-provider-registry.js，新增tts-provider-errors.js；HTTP失败体限16KiB/原总时限，Qwen业务失败及豆包流错误共用映射。补充欠费、凭证、权限、参数、配额、限流、音色、并发、资源匹配和上游超时原因；未知/非JSON/超限/断开固定回退，敏感原文不进入日志或错误对象。
   - 集成52项、扩大定向96项全部通过，无失败/跳过；3个生产JS语法检查通过。真实百炼请求显示HTTP 400/Arrearage及中文欠费原因，无音频下载或播放；本机npm重启后静态脚本HTTP 200、/control WSS配置初始化通过。原WAV错误待完整音频复现，豆包context_texts已核对官方支持但当前尚未接入。

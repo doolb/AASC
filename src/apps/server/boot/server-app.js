@@ -2177,7 +2177,7 @@ async function runRepairModeAgent(displayId, state, text) {
         splitIntoSentences: chat.splitIntoSentences,
         stripMarkdown,
         generateTTS: (ttsText) => generateTtsWithFallback(ttsText, undefined, undefined, displayId,
-            { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(role)?.tts }),
+            { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(role)?.tts, userText: text }),
         sendToControl: broadcastToControls,
         sendToDisplay,
         allowRepairModeTts: true,
@@ -7018,7 +7018,8 @@ function sendTtsGenerateToDisplay(display, text, requestId) {
 async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = null, options = {}) {
     if (options.systemRoute !== true) {
         return ttsProviderService.generate({ text: normalizeTtsPauseText(text), voice, speed, preferredDisplayId,
-            businessType: options.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST, templateTts: options.templateTts });
+            businessType: options.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST, templateTts: options.templateTts,
+            userText: options.userText });
     }
     const ttsText = normalizeTtsPauseText(text);
     const ttsDevice = config.get('tts.device', 'server');
@@ -9092,7 +9093,8 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
                 splitIntoSentences: chat.splitIntoSentences,
                 stripMarkdown,
                 generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId,
-                    { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(data.templateTarget || data.role)?.tts }),
+                    { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(data.templateTarget || data.role)?.tts,
+                        userText: data.displayContent || data.content }),
                 sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
                 sendToDisplay,
                 chatTtsConversationId,
@@ -10763,7 +10765,8 @@ async function handleControlMessageFallback(data, ws) {
                                     ttsScheduler.enqueue(async () => {
                                         const cleanText = stripMarkdown(sentence);
                                         const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, displayId,
-                                            { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts });
+                                            { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts,
+                                                userText: data.message });
                                         if (audioPath === null) return null;
                                         return { audioPath, sentence };
                                     }).then((result) => {
@@ -11112,7 +11115,8 @@ async function handleChatMessage(options) {
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return null;
                 const cleanText = stripMarkdown(sentence);
                 const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId,
-                    { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts });
+                    { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts,
+                        userText: displayContent || content });
                 if (audioPath === null) return null;
                 return { audioPath, sentence };
             }).then((result) => {
@@ -11182,6 +11186,8 @@ async function handleChatMessage(options) {
                     reasoning,
                     speech,
                     mode: messageMode,
+                    // 将本轮输入绑定到回复，历史回放不会借用另一轮或另一会话的最新输入。
+                    replyToMessageId: userMessageRecord.id,
                     target: messageTarget,
                     sessionId: effectiveSessionId,
                     templateId: effectiveTemplateTarget || 'default'

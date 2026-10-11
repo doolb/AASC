@@ -51,6 +51,10 @@
 - [multer](https://github.com/expressjs/multer) - Express 文件上传中间件
 
 ### TTS 语音服务
+
+- [Qwen-Audio HTTP接口](https://help.aliyun.com/en/model-studio/qwen-audio-tts-http-api)：SpeechSynthesizer、format/sample_rate与audio URL。
+- [Qwen-Audio音色目录](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)：qiaoxiaojiao_v3.1。
+- [豆包2.0单向HTTP](https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh)：req_params.additions序列化JSON及context_texts兼容限制。
 - 项目使用自定义 TTS 服务生成语音
 - 配置项：语音服务地址、端口
 

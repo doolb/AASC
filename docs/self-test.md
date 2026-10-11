@@ -36,6 +36,11 @@ npm网页构建、30条Human/reply/MPL生成指纹、默认/服务器待机源�
 
 ## TTS 多 Provider（2026-10-11）
 
+- 最新Qwen-Audio 3.1与豆包上下文：154/154相关回归通过、20个生产JS语法检查通过。新模型/乔小娇及三个默认开关开启；显式配置保留、新旧官方路径与自定义代理、已知WAV占位修复/普通截断拒绝、同轮用户文本/并发引用/临时与Agent配对/缺失来源/2000Unicode上限、豆包真实模拟HTTP中的additions JSON字符串和context_texts、非AI与不兼容资源隔离、只读浏览器自测均通过。真实Qwen当前账户生成115244字节上游WAV，生产speed=1处理后有效；无设备播放。npm重启后3静态脚本200、/control权威配置脱敏、新模型/路径/音色/三个enabled=true。未出新包。
+- 额外旧chat-tts-interruption静态断言1项失败，当前HEAD对照同名失败；期待旧display.html内联结构，另2项通过，记todo维护。以下为历史诊断与验证记录。
+
+- 新需求诊断（尚未实施）：qwen-audio-3.1-tts-flash/qiaoxiaojiao_v3.1旧端点HTTP400/InvalidParameter；正确SpeechSynthesizer契约请求WAV成功84524字节，但RIFF/data占位长度为0x7fffffbf/0x7fffff9b。84480字节PCM、24kHz/mono/16bit、1.76秒；诊断副本重包装后严格校验和speed=1通过，PCM相同。豆包上一句上下文已形成方案，新增生产代码/自测待确认。
+
 - 最新Qwen/豆包错误提示：TTS Provider、手动AI、Agent与服务端并发定向回归96/96，无失败/跳过；集成52项含46项新增父子用例，验证HTTP与成功HTTP业务错误、欠费/凭证/权限/参数/配额/限流/模型、豆包共用码原因、未知码/非JSON/16KiB超限/断开/超时、无原文泄露/无缓存/无回退与成功恢复。3个生产JS语法检查通过。真实百炼调用显示`Qwen API HTTP 400 [Arrearage]：账户欠费，请检查百炼余额及 API Key 所属账户`，未拿到音频或播放。原WAV错误仍待复现；context_texts已核查尚未接入。新增源码与测试已实现；npm run restart:server后HTTP静态脚本200，/control WSS初始化成功。servicePackage=true，尚未出新包。
 
 - 2026-10-11 Qwen API诊断：当前qwen3-tts-flash/Maia请求HTTP 400/Arrearage，无音频下载。标准524字节WAV通过，未知data长度与截断样本均复现原报错；原故障根因未确定。当时仅记录方案；本轮用户确认后已实现，最新回归见上方，原6项集成基线也通过。

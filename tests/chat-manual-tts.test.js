@@ -90,7 +90,7 @@ test('流式完成按钮捕获发起回复的角色，私聊残留目标及后�
     chat.session.roleTarget = '原Agent';
     chat.session.privateTarget = '残留私聊AI';
     chat.sendMessage();
-    assert.deepEqual(plain(chat.currentReplyTtsContext), { businessType: 'agent_reply', templateName: '原Agent' });
+    assert.deepEqual(plain(chat.currentReplyTtsContext), { businessType: 'agent_reply', templateName: '原Agent', userText: '你好' });
     const requestId = chat.activeRequestId;
     chat.session.mode = 'private';
     chat.session.privateTarget = '另一AI';
@@ -99,7 +99,7 @@ test('流式完成按钮捕获发起回复的角色，私聊残留目标及后�
     chat.currentReplyTtsContext = { businessType: 'ai_reply', templateName: '后续AI' };
     button.onclick();
     assert.equal(sent.at(-1).text, '原朗读');
-    assert.deepEqual(sent.at(-1).chatReplyContext, { businessType: 'agent_reply', templateName: '原Agent' });
+    assert.deepEqual(sent.at(-1).chatReplyContext, { businessType: 'agent_reply', templateName: '原Agent', userText: '你好' });
 });
 
 test('新消息对象及显示端聊天输入使用显式来源，不根据当前私聊或助手显示名猜模板', () => {
@@ -112,9 +112,60 @@ test('新消息对象及显示端聊天输入使用显式来源，不根据当�
     chat.handleDisplayChatInput({ requestId: 'display-request', content: '显示端输入', mode: 'private', target: '来源AI' });
     assert.equal(chat.currentReplyTtsContext.templateName, '来源AI');
     chat.handleDisplayChatInput({ requestId: 'agent-request', content: 'Agent输入', mode: 'role', role: '来源Agent' });
-    assert.deepEqual(plain(chat.currentReplyTtsContext), { businessType: 'agent_reply', templateName: '来源Agent' });
+    assert.deepEqual(plain(chat.currentReplyTtsContext), { businessType: 'agent_reply', templateName: '来源Agent', userText: 'Agent输入' });
     chat.playText('普通文字', null, true);
     assert.equal(sent.at(-1).chatReplyContext, undefined);
+});
+
+test('历史上下文按消息引用隔离并发、私聊会话和profile，旧记录同会话查找', () => {
+    const { chat, sent } = chatHarness();
+    const scope = { mode: 'private', target: 'AI甲', sessionId: 'old', profileName: 'profile' };
+    chat.history = [
+        { ...scope, id: 'first', role: 'control', content: '第一轮输入' },
+        { ...scope, id: 'second', role: 'control', content: '并发第二轮' },
+        { ...scope, role: 'assistant', content: '第一轮回复', replyToMessageId: 'first' },
+        { ...scope, sessionId: 'other', role: 'control', content: '其他会话' },
+        { ...scope, target: 'AI乙', role: 'control', content: '其他目标' },
+        { ...scope, profileName: 'other', role: 'control', content: '其他配置' },
+        { ...scope, role: 'assistant', content: '旧历史无引用' },
+        { ...scope, role: 'assistant', content: '引用已删除', replyToMessageId: 'missing' }
+    ];
+    chat.currentUserMessage = '最新输入，不能兜底';
+    for (const index of [2, 6, 7]) chat.playMessage(index);
+    assert.deepEqual(sent.map(message => message.chatReplyContext.userText), ['第一轮输入', '并发第二轮', undefined]);
+    chat.handleNewMessage({ message: { ...scope, role: 'assistant', content: '迟到的新消息', replyToMessageId: 'first' } });
+    assert.equal(chat.getReplyTtsContext(chat.history.at(-1), { history: chat.history, index: chat.history.length - 1 }).userText, '第一轮输入');
+});
+
+test('Agent配对历史、临时旧会话与当前会话的上一句独立，缺少输入不取全局最近值', () => {
+    const { chat, sent } = chatHarness();
+    chat.session.mode = 'role'; chat.session.roleTarget = 'Agent甲';
+    chat.roleHistories['Agent甲'] = [{ user: '配对输入', assistant: '回答', mode: 'role' }];
+    chat.playMessage(0);
+    chat.session.mode = 'temporary';
+    chat.temporaryConversation = { id: 'new', roleName: '新角色', messages: [
+        { role: 'control', mode: 'temporary', sessionId: 'new', content: '新临时输入' },
+        { role: 'assistant', mode: 'temporary', sessionId: 'new', content: '新临时回答' }
+    ] };
+    chat.temporaryHistoryGroups = [{ sessionId: 'old', roleName: '历史角色', messages: [
+        { role: 'control', mode: 'temporary', sessionId: 'old', content: '旧临时输入' },
+        { role: 'assistant', mode: 'temporary', sessionId: 'old', content: '旧临时回答' }
+    ] }];
+    chat.temporaryHistoryViewSessionId = 'old'; chat.playMessage(1);
+    chat.temporaryHistoryViewSessionId = null; chat.playMessage(1);
+    chat.currentUserMessage = '全局最新';
+    chat.playMessage({ role: 'assistant', mode: 'group', content: '来源缺失' });
+    assert.deepEqual(sent.map(message => message.chatReplyContext.userText), ['配对输入', '旧临时输入', '新临时输入', undefined]);
+});
+
+test('群聊新消息与语音输入保留本轮原文，手动来源2000Unicode字符上限', () => {
+    const { chat, sent } = chatHarness();
+    chat.session.mode = 'group';
+    chat.history = [{ id: 'u', role: 'control', mode: 'group', content: '请用伤心语气回答' }];
+    chat.handleNewMessage({ message: { role: 'assistant', mode: 'group', content: '回答', replyToMessageId: 'u' } });
+    assert.equal(sent.at(-1).chatReplyContext.userText, '请用伤心语气回答');
+    chat.handleDisplayChatInput({ requestId: 'voice', mode: 'group', content: '😀'.repeat(2200) });
+    assert.equal(Array.from(chat.currentReplyTtsContext.userText).length, 2000);
 });
 
 function serverHarness() {
@@ -201,6 +252,19 @@ test('执行服务端真实手动入口：千问AI使用模板音色，整批分
     assert.ok(!JSON.stringify(route.calls).includes('private-client'));
     await route.play({ chatReplyContext: { businessType: 'ai_reply', templateName: 'AI甲' } });
     assert.equal(route.calls.at(-1).voice, '后改音色');
+});
+
+test('服务端真实手动入口将上一句快照用于豆包整批分句，其他服务不收到用户输入', async () => {
+    const route = serverHarness();
+    const context = { businessType: 'agent_reply', templateName: 'Agent甲', userText: '请特别痛心地说话' };
+    await route.play({ chatReplyContext: context });
+    context.userText = '之后输入';
+    assert.equal(route.calls.length, 2);
+    assert.ok(route.calls.every(call => call.userText === '请特别痛心地说话'));
+    assert.deepEqual(route.errors, []);
+    const other = serverHarness();
+    await other.play({ chatReplyContext: { businessType: 'ai_reply', templateName: null, userText: '不能传给Qwen' } });
+    assert.ok(other.calls.every(call => call.userText === undefined));
 });
 
 test('服务端Agent/无模板AI/显式原生及普通自定义播报兼容，单端与多端播放目标保持', async () => {

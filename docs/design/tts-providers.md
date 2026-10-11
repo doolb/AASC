@@ -103,3 +103,21 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 参考： https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh ； https://docs.volcengine.com/docs/DoubaoVoice/error-code-query-1?lang=zh ； https://help.aliyun.com/zh/model-studio/error-code 。
 
 本轮错误提示回归：TTS Provider、手动AI播放、Agent和实际服务端并发共96项通过，无失败/跳过；3个生产JS语法检查通过。真实百炼请求通过生产适配器显示Qwen API HTTP 400 [Arrearage]及固定中文欠费原因，无音频下载。Offline servicePackage设为true，minApk/dependenciesPackage保持，尚未发布新包。
+
+## Qwen-Audio 3.1与豆包上一句用户上下文（2026-10-11，已完成）
+
+用户要求qwen-api默认使用qwen-audio-3.1-tts-flash与qiaoxiaojiao_v3.1，修复当前不能使用；豆包语音合成2.0接入context_texts，内容取对应回复的上一句用户对话。此前context_texts仅核查，本轮形成明确接入需求。默认配置改变不自动覆盖已明确保存的其他模型/音色；官方标准端点路径随模型系列适配，用户自定义端点保留。
+
+本机当前已保存新模型与乔小娇，但端点仍为multimodal-generation/generation。独立直接请求保持同账户、同模型、同音色：现有契约HTTP 400/InvalidParameter；SpeechSynthesizer契约加input.format=wav/sample_rate=24000生成84524字节。该WAV为单声道16位PCM、24000Hz、84480字节PCM、1.76秒；RIFF大小0x7fffffbf、data大小0x7fffff9b为远大于实际文件的配对占位值。严格原校验失败；诊断副本以实际PCM重新包装后校验与speed=1处理通过，PCM逐字节不变。未修改账号/生产配置、未播放设备声音，原始响应及签名URL未记录。
+
+已按模型区分Qwen-TTS与Qwen-Audio-TTS契约：前者保持language_type=Auto和原接口；后者使用SpeechSynthesizer及显式WAV/24000Hz。音频完整下载、格式与PCM边界满足时，仅识别已实测的占位头并规范化；普通声明长度异常继续拒绝，不将通用WAV校验改成宽松规则。限时、16MiB、无凭证音频下载、失败提示、缓存与队列继续现有流程。默认新模型与音色组合进入配置/目录及初始化权威快照，已有其他明确配置保持。
+
+豆包只在AI/Agent回复、seed-tts-2.0且未指定复刻model时，向req_params.additions的JSON字符串写context_texts=[对应上一句用户文本]。自动回复在请求开始捕获该回合原用户输入；手动历史播放从同一会话、目标、回合取此前用户消息，不取当前最近全局消息。流式按钮和新消息入口保持对应输入；同一回复所有分句共用快照，并发、会话切换、临时历史、群聊及Agent不能串用其他回合。上下文最多2000个Unicode字符，空值不发送；文字媒体、报时、普通自定义播报与不兼容资源/复刻模型不发送。只传文本，不传图片、系统提示、凭证或完整历史；不新增配置开关、独立配置HTTP或固定情绪指令。
+
+已修改tts-provider-settings.js、tts-provider-registry.js与必要的小型契约模块、tts-wav.js、tts-provider-service.js、server-app.js、chat/chat-reply-tts-context.js、控制端chat.js及相关自测；已先同步spec并按用户确认实施。语音指令传输遵循用户明确选择的上一句原文，不保证普通用户句子一定产生指定情绪。真实豆包效果需账号及听感验收。
+
+参考：[Qwen-Audio HTTP](https://help.aliyun.com/en/model-studio/qwen-audio-tts-http-api)、[乔小娇官方音色](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)、[豆包单向HTTP](https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh)。
+
+用户已回复确认方案，并追加qwen-chat/qwen-api/doubao-api默认开启；无明确保存开关时默认true，显式已保存开关保留，业务Provider仍按现有选择。
+
+完成验证：新增qwen-api-contract.js和tts-reply-user-text.js，llm-service.js持久化replyToMessageId；新回复按引用取原输入，旧历史按相同mode/target/sessionId/profileName查找，Agent配对记录取user。浏览器只读自测覆盖原轮引用/缺失引用/配对输入。154项相关回归全部通过，20个生产JS语法检查通过。真实当前模型/乔小娇/speed=1生成115244字节上游WAV，生产归一化及速度处理后的WAV校验成功。本机npm重启后3个静态脚本HTTP200、/control初始化权威快照的新模型/音色/路径及三个enabled=true均通过，凭证脱敏。servicePackage=true，未构建或发布新包。

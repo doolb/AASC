@@ -1,6 +1,6 @@
 # Qwen API错误提示与WAV排查
 
-日期：2026-10-11。状态：Qwen API与豆包API错误原因打印已实现并验证；原WAV问题待音频复现。
+日期：2026-10-11。状态：Qwen API与豆包API错误原因打印已实现并验证；当前Qwen-Audio 3.1同类WAV问题已在后续任务复现修复，原21:43样本未保留。
 
 ## 任务与需求
 
@@ -42,3 +42,7 @@ WAV待补充：输入输出缺少原始音频头与实际字节，建议只提�
 servicePackage=true，minApk=true、dependenciesPackage=false维持。没有生成APK、生产依赖或新服务包；v64不含本轮改动。原WAV音频仍未取得，不放宽任何音频校验。
 
 通过`npm run restart:server`重启本机8081；静态TTS脚本HTTP 200，正确/control WebSocket初始化收到ttsProviderConfig，服务恢复。
+
+## 后续闭环（2026-10-11）
+
+账户当前可生成音频。后续任务docs/task/20261011_QwenAudio31与豆包上一句上下文接入.md实测新模型旧契约InvalidParameter、正确契约已知RIFF/data占位长度，并有限修复；实际生产乔小娇/speed=1生成有效WAV，154项回归通过。过时欠费待复现条目移出todo；历史21:43原始样本仍无独立证据，不能概括为所有历史故障均同因。豆包context_texts现已按该回复上一句原文接入，旧错误打印继续有效。

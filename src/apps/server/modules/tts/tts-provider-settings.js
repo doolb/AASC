@@ -1,15 +1,16 @@
 'use strict';
 
 const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('./tts-provider-policy');
+const { resolveQwenEndpoint } = require('./qwen-api-contract');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_DEFAULTS = Object.freeze({
     system: { endpoint: '', model: '', credential: '', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
-    'qwen-api': { enabled: false, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
-        model: 'qwen3-tts-flash', credential: '', defaultVoice: 'Cherry', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
-    'doubao-api': { enabled: false, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
+    'qwen-api': { enabled: true, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
+        model: 'qwen-audio-3.1-tts-flash', credential: '', defaultVoice: 'qiaoxiaojiao_v3.1', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
+    'doubao-api': { enabled: true, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
         model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', defaultSpeed: 0, defaultVolume: 100, resourceId: 'seed-tts-2.0' },
-    'qwen-chat': { enabled: false, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
+    'qwen-chat': { enabled: true, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
         defaultVoice: 'zh_female_quarkF531S0_ptts', defaultSpeed: 0, defaultVolume: 100, resourceId: '' }
 });
 
@@ -55,7 +56,7 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         }
     }
     return {
-        endpoint, model,
+        endpoint: provider === 'qwen-api' && endpoint ? resolveQwenEndpoint(endpoint, model) : endpoint, model,
         ...auth,
         ...(provider === 'system' ? {} : { enabled: patch.enabled ?? base.enabled,
             defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
