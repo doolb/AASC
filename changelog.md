@@ -73,6 +73,11 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 发布服务代码包v64到局域网与外网，包含已提交TTS修复和MMD正式资源
+  - `code/code-v64.zip`：17,572,354字节，SHA-256 `89ee61cabf5bb02835039b46f09e425cf381f6810f04334fc0c052c071bbfd68`；来源3fb5591348f1ed35199615bf73892d2abc881a84。1,028文件CRC与指纹校验通过：507项提交源码、9项固定生成资源、512项既有发布资源；临时输入使用提交里的Node本机配置与静态库，工作区文件保留。
+  - 经npm build/publish脚本签名、上传后原子切换manifest；复用dependencies v6、Node min seeds v39、min APK v34及dataRepair v2，两端所有引用资源HTTP大小/SHA-256、RSA签名/组件约束通过。最终manifest SHA-256 `7f644043748deef4b208bbe247dc91926d4ba513b68188232491ff9e9d4c1045`一致，两端code目录仅保留v64，精确清理无错误；记录`.git/offline-publish-qwen-v64/`，ZIP和日志不提交Git。
+  - servicePackage复位false，minApk保持true、dependenciesPackage=false；未构建APK或依赖包，Android原生来源提示仍待新版APK。本轮发布期间新报告的Qwen API WAV解析问题尚未修复，不包含在v64中。
+
 - ✅ [2026-10-11] 按用户指定实测qwen3-tts-flash与Maia在国内千问网页接口的兼容性
   - 使用当前Chat2API国内账号，独立诊断直接调用低层网页适配器绕过本地模型白名单；指定组合上游4000002、音频0字节，模型配默认音色同样4000002，QUARK_VOICE配Maia为5000005、0字节。
   - 五次连接均建立并发送原参数，默认组合前后分别返回97484/98924字节有效WAV；未修改生产代码/配置、未播放声音或构建发布包，发布状态不变。同步TTS design/spec、音色核查task、自测文档与todo待验证音色的证据范围；探测脚本与凭证不提交Git。
