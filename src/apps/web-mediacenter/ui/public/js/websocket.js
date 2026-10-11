@@ -71,6 +71,10 @@ const WebSocketManager = {
             window.TtsProviderSettings?.handleVoices(data);
             return;
         }
+        if (data.type === 'ttsProviderAccounts') {
+            window.TtsProviderSettings?.handleAccounts(data);
+            return;
+        }
         if (data.type === 'ttsAudioCacheConfig') {
             window.TtsAudioCacheSettings?.handleConfig(data);
             return;

@@ -17,7 +17,7 @@ function ensureEnabled(settings) {
 }
 
 function createProviderRegistry({ systemGenerate, systemVoices = async () => [],
-    qwenChat = null, httpRequest = requestLimited, jsonRequest = requestJson } = {}) {
+    qwenChat = null, resolveQwenChatCredential, httpRequest = requestLimited, jsonRequest = requestJson } = {}) {
     const download = async (url, timeoutMs) => {
         // 音频URL可能属于对象存储；绝不沿用Provider的Authorization/Cookie。
         const result = await httpRequest(url, { timeoutMs });
@@ -91,7 +91,7 @@ function createProviderRegistry({ systemGenerate, systemVoices = async () => [],
     return Object.freeze({
         system: { generate: systemGenerate, voices: systemVoices },
         'qwen-api': qwenApi, 'doubao-api': doubaoApi,
-        'qwen-chat': qwenChat || createQwenChatProvider()
+        'qwen-chat': qwenChat || createQwenChatProvider({ resolveCredential: resolveQwenChatCredential })
     });
 }
 

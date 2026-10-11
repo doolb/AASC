@@ -15,6 +15,10 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] qwen-chat只使用Chat2API国内千问账号，移除手动凭证/来源切换。
+  - 新增tts-chat2api-accounts，修改settings/registry/qwen-chat-tts/ws/server-app及控制端配置/websocket/self-test；仅存chat2apiAccountId，每次合成读取当前Cookie/ticket，ticket覆盖同名旧Cookie，旧手动值忽略且下次保存移除。未选、账号删除/停用、错Provider及缺凭证明确失败，读取计入总超时；账号候选仅回ID/名称/本地状态，不复制或广播登录凭证。
+  - 20个文件104项TTS定向与npm run check:chat2api的94项回归通过，无跳过；含真实临时账号存储/配置写盘/本地WebSocket和Chromium账号选择/查询失败/失效选择保留/重连，自测模块与design/spec/.src/task/todo/usage已同步。servicePackage=true，minApk与dependenciesPackage原状态保留；未重启、构建或发布，真实账号声音待验收。
+
 - ✅ [2026-10-11] 接入system、国内千问网页、Qwen API、豆包 API，AI/Agent按模板或AI默认，文本阅读/系统播报独立选择；跨Provider不继承音色，旧客户端保留已保存模板声音。
   - 新增tts-provider-policy/settings/registry/service/http/ws、qwen-chat-tts和tts-wav模块，修改config-app-service、pi-runtime-policy、llm-service、tts-service、server-app；完整WAV复用tts_mem_<UUID>.wav内存引用和原播放/取消协议。国内千问使用用户指定www.qianwen.com官方公开前端签名及WebSocket朗读，需登录凭证与服务器Chrome，真实账号验收待补。
   - 新增控制端tts-provider-settings.js，修改upload.html/chat.js/websocket.js/self-test.js；复用AASC/WebSocket规范化持久化、失败回滚、脱敏广播/重连补发，凭证空输入保留/显式清除，查询失败及目录外音色ID保留。

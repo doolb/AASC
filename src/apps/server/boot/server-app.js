@@ -129,6 +129,7 @@ const { createTextMediaTtsService } = require('../modules/media/text-media-tts-s
 const { createProviderRegistry } = require('../modules/tts/tts-provider-registry');
 const { createTtsProviderService } = require('../modules/tts/tts-provider-service');
 const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
+const { createTtsChat2ApiAccounts } = require('../modules/tts/tts-chat2api-accounts');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
 const { adjustWav, decodeAudio, requestJson } = require('../modules/tts/tts-provider-http');
 const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-router');
@@ -656,9 +657,11 @@ const VISION_REQUEST_TIMEOUT_MS = 120000;
 
 // Android可禁用外部TTS服务，但显示端回传音频的共享缓存仍需恢复已保存容量。
 ttsAudioCache.configure(config.getTtsConfig().audioCacheMaxMiB);
+const ttsChat2ApiAccounts = createTtsChat2ApiAccounts();
 const ttsProviderService = createTtsProviderService({
     getSettings: config.getTtsProviderSettings,
     registry: createProviderRegistry({
+        resolveQwenChatCredential: ttsChat2ApiAccounts.resolveCredential,
         systemGenerate: (request, settings) => {
             if (!settings.enabled) throw new Error('系统TTS Provider 未启用');
             return generateTtsWithFallback(request.text, request.voice, request.speed, request.preferredDisplayId,
@@ -673,7 +676,7 @@ const ttsProviderService = createTtsProviderService({
         }
     })
 });
-const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService,
+const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService, accounts: ttsChat2ApiAccounts,
     isControl: ws => controlClients.has(ws), broadcast: broadcastToControls });
 if (!ANDROID_NODE_POLICY.enabled) {
     tts.init(config.getTtsConfig());
@@ -1346,7 +1349,7 @@ async function startServer() {
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
                 'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
-                'setTtsProviderConfig', 'getTtsProviderVoices',
+                'setTtsProviderConfig', 'getTtsProviderVoices', 'getTtsProviderAccounts',
                 'setDisplayBackgroundGlowConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
@@ -9169,7 +9172,7 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
-    if (['setTtsProviderConfig', 'getTtsProviderVoices'].includes(data.type)) {
+    if (['setTtsProviderConfig', 'getTtsProviderVoices', 'getTtsProviderAccounts'].includes(data.type)) {
         await ttsProviderWs.handle(ws, data);
         return;
     }

@@ -139,18 +139,31 @@ function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } 
     });
 }
 
-function createQwenChatProvider({ sign = createQwenSigner(), Socket = WebSocket } = {}) {
+function createQwenChatProvider({ sign = createQwenSigner(), Socket = WebSocket, resolveCredential } = {}) {
     return {
         async generate(request, settings) {
             if (!settings.enabled) throw new Error('TTS Provider 未启用，请先保存配置');
-            if (!settings.credential) throw new Error('国内千问未配置登录凭证');
             const deadline = Date.now() + request.timeoutMs;
+            if (!settings.chat2apiAccountId) throw new Error('请选择 Chat2API 国内千问账号');
+            if (!resolveCredential) throw new Error('Chat2API 千问账号服务不可用');
+            let credential;
+            let accountTimer;
+            try {
+                // 账号文件读取同样计入总时限，磁盘不可用时不能无限占住生成队列。
+                credential = await Promise.race([resolveCredential(settings.chat2apiAccountId), new Promise((resolve, reject) => {
+                    accountTimer = setTimeout(() => reject(new Error('国内千问账号读取超时')), request.timeoutMs);
+                })]);
+            } finally {
+                clearTimeout(accountTimer);
+            }
+            const signingTimeout = deadline - Date.now();
+            if (signingTimeout <= 0) throw new Error('国内千问朗读超时');
             const reqid = randomUUID();
-            const signed = await sign({ credential: settings.credential, reqid, timeoutMs: request.timeoutMs });
+            const signed = await sign({ credential, reqid, timeoutMs: signingTimeout });
             const remaining = deadline - Date.now();
             if (remaining <= 0) throw new Error('国内千问朗读超时');
             return collectQwenAudio(typeof signed === 'string' ? signed : signed.url,
-                { ...request, userAgent: signed.userAgent, timeoutMs: remaining }, settings, reqid, { Socket });
+                { ...request, userAgent: signed.userAgent, timeoutMs: remaining }, { ...settings, credential }, reqid, { Socket });
         },
         async voices() { return [{ id: QWEN_VOICE, name: '千问默认女声', available: true }]; }
     };

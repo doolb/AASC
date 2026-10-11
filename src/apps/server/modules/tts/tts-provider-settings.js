@@ -8,7 +8,7 @@ const PROVIDER_DEFAULTS = Object.freeze({
         model: 'qwen3-tts-flash', credential: '', defaultVoice: 'Cherry', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
     'doubao-api': { enabled: false, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
         model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', defaultSpeed: 0, defaultVolume: 100, resourceId: 'seed-tts-2.0' },
-    'qwen-chat': { enabled: false, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE', credential: '',
+    'qwen-chat': { enabled: false, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE', chat2apiAccountId: '',
         defaultVoice: 'zh_female_quarkF531S0_ptts', defaultSpeed: 0, defaultVolume: 100, resourceId: '' }
 });
 
@@ -38,11 +38,15 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}) {
         if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('TTS 端点必须是无凭证、查询参数和片段的 HTTP(S) 地址');
         if (provider === 'qwen-chat' && endpoint !== PROVIDER_DEFAULTS['qwen-chat'].endpoint) throw new Error('国内千问网页仅支持官方朗读端点');
     }
-    const incomingCredential = boundedString(patch.credential, '', 16384);
-    if (patch.clearCredential !== undefined && typeof patch.clearCredential !== 'boolean') throw new Error('clearCredential 必须为布尔值');
+    // 国内网页只保存账号引用；忽略历史手动值，禁止复制到新配置或广播。
+    const incomingCredential = provider === 'qwen-chat' ? '' : boundedString(patch.credential, '', 16384);
+    const auth = provider === 'qwen-chat'
+        ? { chat2apiAccountId: boundedString(patch.chat2apiAccountId, base.chat2apiAccountId, 256) }
+        : { credential: patch.clearCredential === true ? '' : incomingCredential || base.credential };
+    if (provider !== 'qwen-chat' && patch.clearCredential !== undefined && typeof patch.clearCredential !== 'boolean') throw new Error('clearCredential 必须为布尔值');
     return {
         enabled: patch.enabled ?? base.enabled, endpoint, model: boundedString(patch.model, base.model),
-        credential: patch.clearCredential === true ? '' : incomingCredential || base.credential,
+        ...auth,
         defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null,
         defaultSpeed: normalizeNumber(patch.defaultSpeed, base.defaultSpeed, -10, 10),
         defaultVolume: normalizeNumber(patch.defaultVolume, base.defaultVolume, 0, 100),
@@ -71,7 +75,7 @@ function normalizeSettings(patch = {}, previous = {}) {
 function redactSettings(settings) {
     return { ...settings, providers: Object.fromEntries(Object.entries(settings.providers).map(([id, value]) => {
         const { credential, ...publicSettings } = value;
-        return [id, { ...publicSettings, credentialConfigured: Boolean(credential) }];
+        return [id, id === 'qwen-chat' ? publicSettings : { ...publicSettings, credentialConfigured: Boolean(credential) }];
     })) };
 }
 

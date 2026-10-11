@@ -40,6 +40,18 @@ test('部分选择保留Provider、显式空音色清除、范围与凭证保留
         { providers: { 'qwen-chat': { endpoint: 'https://other.example/tts' } } }]) assert.throws(() => normalizeSettings(patch));
 });
 
+test('国内千问仅保存账号ID，旧手动值不保留或广播，非法ID不保存', () => {
+    const old = { providers: { 'qwen-chat': { credential: 'legacy-secret', credentialSource: 'manual' } } };
+    const settings = normalizeSettings({ providers: { 'qwen-chat': { chat2apiAccountId: ' qwen:one ', credential: 'new-secret' } } }, old);
+    assert.equal(settings.providers['qwen-chat'].chat2apiAccountId, 'qwen:one');
+    assert.ok(!Object.hasOwn(settings.providers['qwen-chat'], 'credential'));
+    assert.ok(!Object.hasOwn(settings.providers['qwen-chat'], 'credentialSource'));
+    assert.ok(!JSON.stringify(redactSettings(settings)).includes('secret'));
+    assert.equal(normalizeSettings({}, settings).providers['qwen-chat'].chat2apiAccountId, 'qwen:one');
+    assert.equal(normalizeSettings({ providers: { 'qwen-chat': { chat2apiAccountId: '' } } }, settings).providers['qwen-chat'].chat2apiAccountId, '');
+    for (const value of [false, [], 'id\nsecret', 'a'.repeat(257)]) assert.throws(() => normalizeSettings({ providers: { 'qwen-chat': { chat2apiAccountId: value } } }));
+});
+
 function loadConfig(t) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-tts-config-test-'));
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
@@ -86,6 +98,12 @@ test('真实配置持久化、重载、旧system默认和保存失败内存/磁�
     assert.equal(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-api'].credential, 'private-key');
     assert.equal(JSON.parse(fs.readFileSync(mainFile)).tts.aiReplyDefault.provider, 'qwen-api');
     instances[0]._save = mainSave;
+    user._data.tts.providers['qwen-chat'] = { credential: 'obsolete-qwen-secret', enabled: true };
+    const accountSaved = config.setTtsProviderSettings({ providers: { 'qwen-chat': { chat2apiAccountId: 'qwen:test' } } });
+    assert.equal(accountSaved.providers['qwen-chat'].chat2apiAccountId, 'qwen:test');
+    assert.ok(!fs.readFileSync(userFile, 'utf8').includes('obsolete-qwen-secret'));
+    assert.equal(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-chat'].chat2apiAccountId, 'qwen:test');
+    const beforeInvalid = JSON.stringify(config.getTtsProviderSettings());
     assert.throws(() => config.setTtsProviderSettings({ systemBroadcast: { provider: 'qwen-chat' } }), /仅允许/u);
-    assert.equal(JSON.stringify(config.getTtsProviderSettings()), before);
+    assert.equal(JSON.stringify(config.getTtsProviderSettings()), beforeInvalid);
 });

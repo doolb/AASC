@@ -16,6 +16,7 @@
 - `src/apps/server/modules/tts/tts-provider-settings.js` // 规范化配置及凭证脱敏
 - `src/apps/server/modules/tts/tts-provider-ws.js` // 权威配置与音色消息
 - `src/apps/server/modules/tts/qwen-chat-tts.js` // 国内千问签名及WebSocket朗读
+- `src/apps/server/modules/tts/tts-chat2api-accounts.js` // 国内账号候选及请求内存凭证解析
 - `src/external/tts/tts-wav.js` // PCM包装、WAV完整性和音量/速度变换
 - `src/apps/web-mediacenter/ui/public/js/tts-provider-settings.js` // 控制端配置保存和目录查询
 - `src/apps/web-mediacenter/modules/time/time-announce-app-service.js` // 报时标记为 systemBroadcast 业务
@@ -26,7 +27,7 @@
 
 - 目标语言按当前真实项目使用 Node.js/CommonJS，不创建 Unity、dotnet、golang 或 nodejs 平台镜像目录
 - 保留 `tts.device`、`tts.serverEnabled`、`sendTtsGenerateToDisplay` 和 `/uploads/tts` 音频引用协议 // 新 Provider 只扩展 Provider 选择，不替换现有设备路由
-- Provider 凭证只保存在用户配置，模板只保存 `provider` 和 `voice`
+- API Provider 凭证只保存在用户配置；qwen-chat只保存Chat2API账号引用，模板只保存 `provider` 和 `voice`
 - Agent 回复属于触发来源聊天模板的 AI 回复
 - 文本媒体阅读使用独立 `tts.textMedia`，不读取聊天模板 TTS
 - 系统播报和报时使用 `tts.systemBroadcast`
@@ -61,7 +62,7 @@
 - 候选配置 -> 用户Provider凭证 -> config业务选择 -> 脱敏权威广播 // 保存失败恢复旧值
 - qwen-api完整音频与doubao-api完成事件PCM -> 限长响应 -> 原内存缓存 // 不缓存半成品
 - qwen-chat使用用户指定国内千问站；先核实朗读契约，克隆采样文字接口不用于音频合成
-- 国内网页Cookie或ticket -> 临时Puppeteer首页 -> 官方doQwenAuth签名 -> WebSocket文本/结束包 -> 去重PCM -> 完成后WAV
+- 所选Chat2API国内账号当前Cookie或ticket -> 临时Puppeteer首页 -> 官方doQwenAuth签名 -> WebSocket文本/结束包 -> 去重PCM -> 完成后WAV
 - 国内网页所有阶段共享超时；签名并发上限2；finally关闭浏览器；不读取已有浏览器账户
 - 自测映射 `src/apps/server/modules/tts/tts-provider-policy.test.js` 与 `tests/tts-provider-settings/integration/qwen-chat/ws/system-route/ui-browser.test.js`
 - 自测templateTts/businessConfig/providers -> 比对继承、非法输入和业务隔离
@@ -70,6 +71,35 @@
 - 自测serverSource/browserSource -> 比对AI/Agent/textMedia入口与模板继承接线
 
 ## 操作流程
+
+### qwen-chat 仅使用 Chat2API 账号（2026-10-11 已实现）
+
+#### 已有声明
+
+- Chat2API数据存储.listAccounts/getAccount、Provider注册表.getProvider // 复用既有账号库，避免复制凭证
+- config.getTtsProviderSettings/setTtsProviderSettings、qwen-chat签名与生成 // 保持权威配置及音频协议
+
+#### 新增定义
+
+- QwenCredentialReference { chat2apiAccountId } // 仅记录用户明确选择的国内账号
+- PublicAccountChoice { accountId, label, available } // 不向控制端发送凭证
+- AccountChoiceMessage { type, requestId, accounts, success, message } // 用请求ID关联异步结果
+
+#### 操作流程
+
+- 规范化 selectedAccountId = qwen-chat.chat2apiAccountId // 限长且禁止换行，未选时保留为空
+- 忽略旧 qwen-chat.credential 并在下次配置保存时移除 // 用户指定仅使用Chat2API账号，不暗中继续手动鉴权
+- 保持其他 Provider 的凭证规则 // 本轮仅收敛qwen-chat
+- 查询 publicAccounts = 国内qwen脱敏账号列表 // 只通过控制端WebSocket返回ID、名称、可用状态
+- 渲染账号下拉框并保留失效的 selectedAccountId // 删除/查询失败不自动换号
+- 保存 selectedAccountId = 权威配置回包 // 沿用config持久化、广播与重连初始化
+- 读取 account = Chat2API当前所选账号、provider = 国内qwen当前Provider // 每次生成使用最新凭证，不依赖代理运行
+- 将账号读取计入总超时并丢弃迟到结果 // 防止磁盘异常无限占住生成队列
+- 未选/不存在/停用/错Provider/缺登录字段时返回脱敏错误 // 阻止隐式换号或回退
+- 合并 credential = account.cookie 与 account.credentials.ticket // 当前ticket覆盖同名Cookie，避免使用旧登录值
+- 传递 credential 至本次Chrome签名和WebSocket生成 // 凭证仅存在请求内存，不持久化或广播
+- 完整音频写入原WAV缓存引用 // 播放、模板和业务路由保持既有行为
+- 自测旧手动值忽略、账号候选脱敏、更新/删除/停用、界面保存/失败/重连及真实生成注入点 // 模拟不代替真实声音验收
 
 ### 保存用户级 Provider 配置
 

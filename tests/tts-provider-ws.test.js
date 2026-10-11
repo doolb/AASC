@@ -35,3 +35,22 @@ test('控制端保存广播权威脱敏值，失败回旧值；声音查询和�
     assert.equal(queries, 1);
     assert.equal(await handler.handle(control, { type: 'unrelated' }), false);
 });
+
+test('账号候选查询只允许控制端，响应关联请求ID，查询错误不泄露底层信息', async () => {
+    const replies = [];
+    const control = { send: raw => replies.push(JSON.parse(raw)) };
+    let calls = 0;
+    let fail = false;
+    const handler = createTtsProviderWs({ config: { getPublicTtsProviderSettings: () => redactSettings(normalizeSettings()) },
+        accounts: { list: async () => { calls += 1; if (fail) throw new Error('private-secret'); return [{ accountId: 'a', label: '千问', available: true }]; } },
+        isControl: ws => ws === control });
+    await handler.handle({}, { type: 'getTtsProviderAccounts' });
+    assert.equal(calls, 0);
+    await handler.handle(control, { type: 'getTtsProviderAccounts', requestId: 'accounts-one' });
+    assert.deepEqual(replies[0], { type: 'ttsProviderAccounts', requestId: 'accounts-one', accounts: [{ accountId: 'a', label: '千问', available: true }], success: true });
+    fail = true;
+    await handler.handle(control, { type: 'getTtsProviderAccounts', requestId: 'accounts-two' });
+    assert.equal(replies[1].success, false);
+    assert.equal(replies[1].requestId, 'accounts-two');
+    assert.ok(!JSON.stringify(replies).includes('private-secret'));
+});

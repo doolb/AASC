@@ -50,7 +50,9 @@ const SelfTest = {
                 const selections = ['aiReplyDefault', 'textMedia', 'systemBroadcast'];
                 const valid = selections.every(key => providers.includes(config[key]?.provider))
                     && !['textMedia', 'systemBroadcast'].some(key => config[key].provider === 'qwen-chat')
-                    && providers.every(id => config.providers[id] && !Object.hasOwn(config.providers[id], 'credential'));
+                    && providers.every(id => config.providers[id] && !Object.hasOwn(config.providers[id], 'credential'))
+                    && typeof config.providers['qwen-chat'].chat2apiAccountId === 'string'
+                    && !Object.hasOwn(config.providers['qwen-chat'], 'credentialSource');
                 return { success: valid, message: valid ? '业务配置已同步，凭证已脱敏' : '语音服务配置校验失败',
                     details: '真实账号合成与设备声音需另行验收' };
             }

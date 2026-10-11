@@ -8,6 +8,8 @@
         defaultSpeed: '语速（−10 至 10）', defaultVolume: '音量（0 至 100）', resourceId: '资源 ID', credential: '凭证' };
     let config = null;
     let pendingSave = null;
+    let accountQuery = null;
+    let accountChoices = [];
     const queries = new Map();
     const catalogs = new Map();
     const fields = new Map();
@@ -81,6 +83,60 @@
         } catch (error) { fields.get(provider).voiceStatus.textContent = error.message; }
     }
 
+    function renderAccounts(selected = fields.get('qwen-chat').chat2apiAccountId.value) {
+        const select = fields.get('qwen-chat').chat2apiAccountId;
+        const fragment = document.createDocumentFragment();
+        const empty = create('option', '请选择 Chat2API 国内千问账号');
+        empty.value = '';
+        fragment.appendChild(empty);
+        for (const account of accountChoices) {
+            const option = create('option', `${account.label || account.accountId}${account.available ? '' : '（不可用）'}`);
+            option.value = account.accountId;
+            option.disabled = !account.available;
+            fragment.appendChild(option);
+        }
+        // 列表更新与账号删除均保留用户当前选择，禁止默默改用另一个登录账号。
+        if (selected && !accountChoices.some(account => account.accountId === selected)) {
+            const missing = create('option', `已保存账号（不可用或待刷新）：${selected}`);
+            missing.value = selected;
+            missing.disabled = true;
+            fragment.appendChild(missing);
+        }
+        select.replaceChildren(fragment);
+        select.value = selected || '';
+    }
+
+    function loadAccounts() {
+        if (accountQuery) return;
+        const id = requestId();
+        try {
+            send({ type: 'getTtsProviderAccounts', requestId: id });
+            accountQuery = { id, timer: setTimeout(() => {
+                accountQuery = null;
+                element('ttsProviderAccountStatus').textContent = '账号查询超时，已保留当前选择';
+            }, 10000) };
+            element('ttsProviderAccountStatus').textContent = '正在读取 Chat2API 国内千问账号…';
+        } catch (error) { element('ttsProviderAccountStatus').textContent = error.message; }
+    }
+
+    function handleAccounts(message) {
+        if (!accountQuery || accountQuery.id !== message.requestId) return;
+        clearTimeout(accountQuery.timer);
+        accountQuery = null;
+        if (!message.success) {
+            element('ttsProviderAccountStatus').textContent = `${message.message || '账号查询失败'}，已保留当前选择`;
+            return;
+        }
+        accountChoices = (message.accounts || []).filter(account => typeof account.accountId === 'string');
+        renderAccounts();
+        const selected = fields.get('qwen-chat').chat2apiAccountId.value;
+        const available = accountChoices.filter(account => account.available).length;
+        const unavailable = selected && !accountChoices.some(account => account.accountId === selected && account.available);
+        element('ttsProviderAccountStatus').textContent = unavailable
+            ? '所选账号不可用，请在 Chat2API 账户管理中更新或重新选择'
+            : `已加载 ${available} 个可用账号；新增或更新后可刷新列表`;
+    }
+
     function init() {
         const host = element('ttsProviderFields');
         if (!host) return;
@@ -112,6 +168,7 @@
             const names = id === 'system' ? ['defaultVoice', 'defaultSpeed', 'defaultVolume'] : Object.keys(FIELD_LABELS);
             for (const name of names) {
                 if (name === 'resourceId' && id !== 'doubao-api') continue;
+                if (name === 'credential' && id === 'qwen-chat') continue;
                 const input = create('input');
                 input.type = name === 'credential' ? 'password' : NUMBER_FIELDS[name] ? 'number' : 'text';
                 input.autocomplete = 'off';
@@ -122,13 +179,26 @@
                 inputs[name] = input;
                 addField(group, FIELD_LABELS[name], input);
             }
-            if (id !== 'system') {
+            if (id === 'qwen-chat') {
+                inputs.chat2apiAccountId = create('select');
+                inputs.chat2apiAccountId.id = 'ttsProviderChat2ApiAccount';
+                addField(group, 'Chat2API 国内千问账号', inputs.chat2apiAccountId);
+                const refresh = create('button', '刷新账号');
+                refresh.type = 'button';
+                refresh.className = 'control-btn';
+                refresh.addEventListener('click', loadAccounts);
+                group.appendChild(refresh);
+                const accountStatus = create('span');
+                accountStatus.id = 'ttsProviderAccountStatus';
+                accountStatus.setAttribute('role', 'status');
+                group.appendChild(accountStatus);
+                group.appendChild(create('p', '只使用 Chat2API 国内千问账号；请先在账户管理中添加或登录。服务器需安装 Chrome。'));
+            }
+            if (id !== 'system' && id !== 'qwen-chat') {
                 inputs.clearCredential = create('input');
                 inputs.clearCredential.type = 'checkbox';
                 addField(group, '清除已保存凭证', inputs.clearCredential);
-                group.appendChild(create('p', id === 'qwen-chat'
-                    ? '凭证填写国内千问 Cookie 或登录 ticket；需服务器安装 Chrome。留空保留已保存凭证。'
-                    : '凭证填写 API Key；留空保留已保存凭证。'));
+                group.appendChild(create('p', '凭证填写 API Key；留空保留已保存凭证。'));
             }
             if (id === 'system') group.appendChild(create('p', '服务端使用所选音色，显示端使用已加载的离线音色。'));
             const query = create('button', '查询音色');
@@ -159,6 +229,7 @@
 
     function handleConfig(message) {
         if (!message.config?.providers) return;
+        const initial = !config;
         const isReply = pendingSave && message.requestId === pendingSave.id;
         config = message.config;
         for (const [key, selection] of selections) {
@@ -170,6 +241,10 @@
             if (!value) continue;
             for (const [name, input] of Object.entries(inputs)) {
                 if (name === 'voiceStatus') continue;
+                if (name === 'chat2apiAccountId') {
+                    renderAccounts(value[name]);
+                    continue;
+                }
                 if (name === 'credential') {
                     input.value = '';
                     input.placeholder = value.credentialConfigured ? '已配置，留空保留' : '尚未配置';
@@ -187,6 +262,7 @@
             element('ttsProviderSaveBtn').disabled = false;
             status('已同步服务器配置');
         }
+        if (initial) loadAccounts();
     }
 
     function save() {
@@ -236,10 +312,13 @@
             fields.get(id).voiceStatus.textContent = '连接已断开，已保留当前 ID';
         }
         queries.clear();
+        if (accountQuery) clearTimeout(accountQuery.timer);
+        accountQuery = null;
+        element('ttsProviderAccountStatus').textContent = '连接已断开，已保留当前账号';
         status('连接已断开，等待服务器重新同步');
     }
 
-    window.TtsProviderSettings = { init, handleConfig, handleVoices, handleDisconnected, save, loadVoices,
+    window.TtsProviderSettings = { init, handleConfig, handleVoices, handleAccounts, handleDisconnected, save, loadVoices, loadAccounts,
         getConfig: () => config };
     init();
 })();

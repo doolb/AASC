@@ -35,8 +35,31 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
             window.showToast = () => {};
         });
         await page.addScriptTag({ content: read('js/tts-provider-settings.js') });
-        const config = redactSettings(normalizeSettings({ providers: { 'qwen-api': { credential: 'server-secret', defaultVoice: 'custom-saved' } } }));
+        const config = redactSettings(normalizeSettings({ providers: { 'qwen-api': { credential: 'server-secret', defaultVoice: 'custom-saved' },
+            'qwen-chat': { chat2apiAccountId: 'saved-missing' } } }));
         await page.evaluate(value => window.TtsProviderSettings.handleConfig({ type: 'ttsProviderConfig', config: value }), config);
+        const accountQuery = await page.evaluate(() => window.sent.at(-1));
+        assert.equal(accountQuery.type, 'getTtsProviderAccounts');
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount', input => input.value), 'saved-missing');
+        await page.evaluate(value => window.TtsProviderSettings.handleAccounts(value), { type: 'ttsProviderAccounts', requestId: accountQuery.requestId,
+            success: true, accounts: [{ accountId: 'qwen:one', label: '<script>千问</script>', available: true }, { accountId: 'disabled', available: false }] });
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount', input => input.value), 'saved-missing');
+        assert.match(await page.$eval('#ttsProviderAccountStatus', node => node.textContent), /所选账号不可用/u);
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount option[value="qwen:one"]', node => node.textContent), '<script>千问</script>');
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount option[value="disabled"]', node => node.disabled), true);
+        assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(2)', node => node.querySelectorAll('input[type="password"]').length), 0);
+        await page.select('#ttsProviderChat2ApiAccount', 'qwen:one');
+        await page.evaluate(() => window.TtsProviderSettings.loadAccounts());
+        const failedAccounts = await page.evaluate(() => window.sent.at(-1));
+        // 过期响应不得影响最新请求；失败、刷新成功均保留尚未保存的选择。
+        await page.evaluate(value => window.TtsProviderSettings.handleAccounts(value), { type: 'ttsProviderAccounts', requestId: accountQuery.requestId, success: true, accounts: [] });
+        await page.evaluate(value => window.TtsProviderSettings.handleAccounts(value), { type: 'ttsProviderAccounts', requestId: failedAccounts.requestId, success: false, message: '列表读取失败' });
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount', input => input.value), 'qwen:one');
+        await page.evaluate(() => window.TtsProviderSettings.loadAccounts());
+        const refreshedAccounts = await page.evaluate(() => window.sent.at(-1));
+        await page.evaluate(value => window.TtsProviderSettings.handleAccounts(value), { type: 'ttsProviderAccounts', requestId: refreshedAccounts.requestId,
+            success: true, accounts: [{ accountId: 'qwen:one', available: true }] });
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount', input => input.value), 'qwen:one');
         const state = () => page.evaluate(() => ({ disabled: document.getElementById('ttsProviderSaveBtn').disabled,
             status: document.getElementById('ttsProviderStatus').textContent }));
         assert.equal((await state()).disabled, false);
@@ -54,6 +77,9 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         const request = await page.evaluate(() => window.sent.at(-1));
         assert.equal(request.type, 'setTtsProviderConfig');
         assert.equal(request.config.providers['qwen-api'].credential, 'new-input-secret');
+        assert.equal(request.config.providers['qwen-chat'].chat2apiAccountId, 'qwen:one');
+        assert.ok(!Object.hasOwn(request.config.providers['qwen-chat'], 'credential'));
+        assert.ok(!Object.hasOwn(request.config.providers['qwen-chat'], 'clearCredential'));
         const saved = redactSettings(normalizeSettings(request.config, normalizeSettings({ providers: { 'qwen-api': { credential: 'server-secret' } } })));
         await page.evaluate(value => window.TtsProviderSettings.handleConfig(value), { type: 'ttsProviderConfig', requestId: request.requestId, success: true, config: saved });
         assert.equal((await state()).disabled, false);
@@ -97,6 +123,12 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         assert.equal((await state()).disabled, true);
         await page.evaluate(value => { window.WebSocketManager.ws.readyState = 1; window.TtsProviderSettings.handleConfig({ config: value }); }, saved);
         assert.equal((await state()).disabled, false);
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount', input => input.value), 'qwen:one');
+        const reconnectedAccounts = await page.evaluate(() => window.sent.at(-1));
+        assert.equal(reconnectedAccounts.type, 'getTtsProviderAccounts');
+        await page.evaluate(value => window.TtsProviderSettings.handleAccounts(value), { type: 'ttsProviderAccounts', requestId: reconnectedAccounts.requestId, success: true, accounts: [] });
+        assert.equal(await page.$eval('#ttsProviderChat2ApiAccount', input => input.value), 'qwen:one');
+        assert.match(await page.$eval('#ttsProviderAccountStatus', node => node.textContent), /所选账号不可用/u);
         await page.addScriptTag({ content: read('js/chat.js') });
         const templateResults = await page.evaluate(async () => {
             const bodies = [];
@@ -119,6 +151,9 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         await page.addScriptTag({ content: read('js/self-test.js') });
         const selfTest = await page.evaluate(() => SelfTest.tests.find(test => test.id === 'tts_provider_config').run());
         assert.equal(selfTest.success, true);
+        await page.$eval('#ttsProviderFields', element => {
+            for (const node of element.querySelectorAll('details')) node.open = node.querySelector('summary').textContent.startsWith('国内千问');
+        });
         await page.$eval('#ttsProviderFields', element => element.closest('.voiceprint-card').scrollIntoView());
         const card = await page.$('#ttsProviderFields');
         await card.screenshot({ path: '/tmp/aasc-tts-provider-settings.png' });
