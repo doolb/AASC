@@ -25,7 +25,7 @@ export function createHumanArmAvoidance() {
     const euler = new Euler();
     let bound = null, snapshot = null, arms = [], animated = new Set(), sideByIndex = new Map(), excluded = null;
     let state = { available: false, contacts: 0, remaining: 0, candidates: 0, iterations: 0, frameMs: 0,
-        correctionDegrees: 0, stepDegrees: 0, penetration: 0, reason: '等待模型' };
+        correctionDegrees: 0, stepDegrees: 0, penetration: 0, returnAttempts: 0, returning: 0, reason: '等待模型' };
     function restore() {
         for (const [bone, rotation] of saved) bone.quaternion.copy(rotation);
         saved.clear();
@@ -33,7 +33,7 @@ export function createHumanArmAvoidance() {
     function reset() {
         restore(); bound = null; snapshot = null; arms = []; animated = new Set(); sideByIndex = new Map(); excluded = null;
         state = { ...state, available: false, contacts: 0, remaining: 0, correctionDegrees: 0,
-            stepDegrees: 0, penetration: 0, reason: '等待模型' };
+            stepDegrees: 0, penetration: 0, returnAttempts: 0, returning: 0, reason: '等待模型' };
     }
     function bind(model) {
         if (bound === model) return;
@@ -136,6 +136,41 @@ export function createHumanArmAvoidance() {
             link.bone.updateWorldMatrix(true, true);
         }
     }
+    function tryReturn(physics, dt) {
+        // 当前显示姿态安全时才试回归；不能因原动作仍碰衣服而永久保持多余修正。
+        let pending = arms.filter(arm => arm.canReturn && arm.links.some(link => link.current.angleTo(identity) > 1e-8));
+        for (const arm of pending) for (const link of arm.links) {
+            link.desired.copy(link.original).invert().multiply(link.bone.quaternion).normalize();
+        }
+        let attempts = 0, returning = 0;
+        if (dt <= 0) return { attempts, returning };
+        for (const fraction of [1, 0.25]) {
+            if (!pending.length) break;
+            attempts++;
+            for (const arm of pending) {
+                for (const link of arm.links) {
+                    change.copy(link.desired).rotateTowards(identity, dt * MAX_ANGLE / TRANSITION_SECONDS * fraction);
+                    link.bone.quaternion.copy(link.original).multiply(change); limit(link);
+                }
+                arm.links[1].bone.updateWorldMatrix(true, true);
+            }
+            // 两侧合并扫描，只刷新手部；衣服仍使用同一帧快照和原碰撞过滤。
+            const blocked = new Set();
+            for (const contact of scan(physics, false)) {
+                // 保留原形状容差的小间隙，不能刚回到接触边界就被裙摆微小噪声再次推出。
+                if (depth(contact) > -Math.max(1e-6, contact.tolerance)) blocked.add(contactArm(contact));
+            }
+            const retry = [];
+            for (const arm of pending) {
+                if (!blocked.has(arm)) { arm.returning = true; returning++; continue; }
+                // 候选受阻先完整还原，下一轮从同一安全起点试更小步长，不累积试探姿态。
+                for (const link of arm.links) link.bone.quaternion.copy(link.original).multiply(link.desired);
+                arm.links[1].bone.updateWorldMatrix(true, true); retry.push(arm);
+            }
+            pending = retry;
+        }
+        return { attempts, returning };
+    }
     function apply(model, physics, delta, enabled = true, { paused = false } = {}) {
         const started = performance.now(); bind(model);
         if (!state.available) return;
@@ -145,12 +180,12 @@ export function createHumanArmAvoidance() {
             link.previous.copy(link.current);
         }
         let initial = 0, iterations = 0;
-        for (const arm of arms) arm.touched = false;
+        for (const arm of arms) { arm.touched = false; arm.canReturn = false; arm.returning = false; }
         if (enabled) {
             const baseline = scan(physics, true, paused); initial = baseline.length;
             for (const contact of baseline) markContact(contact, depth(contact));
             // 保存原动作之后才暖启动，接触目标沿上一帧显示修正继续求解；
-            // 原动作接触用于判断是否仍需保持避让，不能因手已经移开而立刻回拉。
+            // 原动作接触维持稳定状态；当前显示安全则允许有界试回归，避免永久保持。
             for (const arm of arms) for (const link of arm.links) {
                 link.bone.quaternion.copy(link.original).multiply(link.current); limit(link);
             }
@@ -158,6 +193,10 @@ export function createHumanArmAvoidance() {
         }
         if (enabled) for (let i = 0; i < ITERATIONS; i++) {
             const list = scan(physics, false, paused);
+            if (i === 0) for (const arm of arms) {
+                arm.canReturn = arm.active && arm.touched
+                    && !list.some(contact => contactArm(contact) === arm && depth(contact) > 1e-6);
+            }
             let worst = null, maximum = 1e-6;
             for (const contact of list) {
                 const amount = depth(contact); markContact(contact, amount);
@@ -167,6 +206,7 @@ export function createHumanArmAvoidance() {
             if (!worst) break;
             depth(worst); solve(worst, maximum); iterations++;
         }
+        const returning = enabled ? tryReturn(physics, dt) : { attempts: 0, returning: 0 };
         for (const arm of arms) {
             const wasActive = arm.active;
             arm.quiet = enabled && !arm.touched ? arm.quiet + dt : 0;
@@ -177,7 +217,9 @@ export function createHumanArmAvoidance() {
                     // 接触重入从当前显示修正开始；四元数低通抑制裙摆法线及最深碰撞对切换噪声。
                     if (!wasActive || link.release) link.filtered.copy(link.current);
                     link.release = null;
-                    link.filtered.slerp(link.desired, 1 - Math.exp(-dt / CONTACT_HOLD));
+                    // 安全回归是朝原动作的单调方向，不让旧碰撞目标低通把手再推离原动作。
+                    if (arm.returning) link.filtered.copy(link.desired);
+                    else link.filtered.slerp(link.desired, 1 - Math.exp(-dt / CONTACT_HOLD));
                     link.current.rotateTowards(link.filtered, dt * MAX_ANGLE / TRANSITION_SECONDS);
                 } else {
                     const duration = enabled ? TRANSITION_SECONDS - CONTACT_HOLD : TRANSITION_SECONDS;
@@ -204,7 +246,7 @@ export function createHumanArmAvoidance() {
             stepDegrees = Math.max(stepDegrees, link.current.angleTo(link.previous) * 180 / Math.PI);
         }
         state = { ...state, contacts: initial, remaining, candidates: contacts.candidateCount, iterations,
-            correctionDegrees, stepDegrees, penetration,
+            correctionDegrees, stepDegrees, penetration, returnAttempts: returning.attempts, returning: returning.returning,
             frameMs: performance.now() - started, reason: physics ? '' : '物理实例未准备，无法读取衣服刚体' };
     }
     return { apply, restore, reset, getState: () => ({ ...state }),

@@ -57,15 +57,20 @@ for (const fps of [30, 60, 120]) test(`风吹接触法线交替在${fps}fps保�
     const dt = 1 / fps;
     // 先达到真实接触避让位置，再让同一裙摆刚体在手的前后高速晃动。
     for (let i = 0; i < 2 * fps; i++) frame(true, dt);
-    let previous = wrist.getWorldPosition(new THREE.Vector3()), maximumStep = 0, remaining = 0;
+    let previous = wrist.getWorldPosition(new THREE.Vector3()), remaining = 0, path = 0;
+    const start = previous.clone(), original = new THREE.Vector3(2, 2, 0);
+    let previousDistance = previous.distanceTo(original);
     for (let i = 0; i < 2 * fps; i++) {
         cloth.set(2, 2.15, i % 2 ? 0.12 : -0.12);
         const state = frame(true, dt); remaining += state.remaining;
         const current = wrist.getWorldPosition(new THREE.Vector3());
-        maximumStep = Math.max(maximumStep, current.distanceTo(previous)); previous = current;
+        path += current.distanceTo(previous);
+        assert.ok(current.distanceTo(original) <= previousDistance + 1e-6, '安全回归应单调接近原动作，不能来回抖动');
+        assert.ok(state.stepDegrees <= 35 / 0.6 / fps + 1e-4); assert.ok(state.returnAttempts <= 2);
+        previousDistance = current.distanceTo(original); previous = current;
     }
-    // 原每帧从基础动作重算的实现产生约0.05单位位移，并持续留下碰撞；不能仅检查转角限速。
-    assert.ok(maximumStep < 0.002, '交替接触手部抖动=' + maximumStep); assert.equal(remaining, 0);
+    // 允许安全回归的净位移，但来回抖动会产生明显多余路程；旧重算实现约12单位路径仍失败。
+    assert.ok(path <= start.distanceTo(previous) * 1.1 + 0.002, '交替接触多余路程=' + path); assert.equal(remaining, 0);
     const held = arm.quaternion.clone(); cloth.set(20, 20, 20);
     for (let i = 0; i < Math.floor(fps * 0.05); i++) frame(true, dt);
     assert.ok(arm.quaternion.angleTo(held) < 1e-6);
@@ -77,16 +82,82 @@ for (const fps of [30, 60, 120]) test(`风吹接触法线交替在${fps}fps保�
     avoidance.dispose();
 });
 
-test('弱接触容差抑制首次噪声，连续避让时保留状态，真正离开后释放', async () => {
+test('弱接触首次不激活，已避让时安全回归且边界噪声不来回抖动，真正离开后释放', async () => {
     const { frame, cloth, arm, elbow, THREE, avoidance } = await fixture();
     for (let i = 0; i < 80; i++) { cloth.set(2, 2.4 + (i % 2 ? 0.0001 : -0.0001), 0); frame(); }
     assert.equal(arm.quaternion.w, 1); assert.equal(elbow.quaternion.w, 1);
     cloth.set(2, 2.15, 0); for (let i = 0; i < 120; i++) frame();
-    const before = [arm.quaternion.clone(), elbow.quaternion.clone()];
-    for (let i = 0; i < 120; i++) { cloth.set(2, 2.4 + (i % 2 ? 0.0001 : -0.0001), 0); frame(); }
-    for (const [index, bone] of [arm, elbow].entries()) assert.ok(bone.quaternion.angleTo(before[index]) < 1e-6);
+    const initialAngle = elbow.quaternion.angleTo(new THREE.Quaternion());
+    let previous = elbow.quaternion.angleTo(new THREE.Quaternion());
+    for (let i = 0; i < 120; i++) {
+        cloth.set(2, 2.4 + (i % 2 ? 0.0001 : -0.0001), 0); const state = frame();
+        const angle = elbow.quaternion.angleTo(new THREE.Quaternion());
+        assert.ok(angle <= previous + 1e-6); assert.equal(state.remaining, 0); previous = angle;
+    }
+    assert.ok(previous < initialAngle * 0.1, '弱接触不能永久保持多余避让修正');
     cloth.set(20, 20, 20); for (let i = 0; i < 37; i++) frame();
     assert.ok(elbow.quaternion.angleTo(new THREE.Quaternion()) < 1e-6); avoidance.dispose();
+});
+
+for (const fps of [30, 60, 120]) test(`已显示无穿透且原动作仍有接触时在${fps}fps主动回归，遇阻安全停留`, async () => {
+    const { frame, cloth, arm, elbow, THREE, avoidance } = await fixture();
+    const dt = 1 / fps, identity = new THREE.Quaternion();
+    for (let i = 0; i < 2 * fps; i++) frame(true, dt);
+    const before = Math.max(arm.quaternion.angleTo(identity), elbow.quaternion.angleTo(identity));
+    assert.equal(avoidance.getState().remaining, 0);
+    // 裙摆退让但仍挡住原动作：旧实现因baseline接触永久保持；现在应收回多余修正。
+    cloth.y = 2.25;
+    let accepted = 0, attempted = 0;
+    for (let i = 0; i < 2 * fps; i++) {
+        const state = frame(true, dt); assert.ok(state.contacts > 0); assert.equal(state.remaining, 0);
+        assert.ok(state.stepDegrees <= 35 / 0.6 / fps + 1e-4); assert.ok(state.returnAttempts <= 2);
+        accepted += state.returning; attempted += state.returnAttempts;
+    }
+    const after = Math.max(arm.quaternion.angleTo(identity), elbow.quaternion.angleTo(identity));
+    assert.ok(accepted > 0 && attempted > 0); assert.ok(after < before * 0.8); assert.ok(after > 0.001, '受阻不能强行回到穿透的原动作');
+    // 边界受阻后稳定停留，继续试探但不会把候选穿透应用到骨骼。
+    const held = [arm.quaternion.clone(), elbow.quaternion.clone()];
+    for (let i = 0; i < fps; i++) { const state = frame(true, dt); assert.equal(state.remaining, 0); }
+    for (const [index, bone] of [arm, elbow].entries()) assert.ok(bone.quaternion.angleTo(held[index]) < 1e-6);
+    cloth.set(20, 20, 20); for (let i = 0; i < Math.ceil(0.6 * fps) + 1; i++) frame(true, dt);
+    for (const bone of [arm, elbow]) assert.ok(bone.quaternion.angleTo(identity) < 1e-6);
+    avoidance.dispose();
+});
+
+test('零delta不试回归，暂停求解空间/显式关闭及reset不残留回归状态', async () => {
+    const f = await fixture(); for (let i = 0; i < 120; i++) f.frame();
+    f.cloth.y = 2.25; const before = [f.arm.quaternion.clone(), f.elbow.quaternion.clone()];
+    assert.equal(f.frame(true, 0).returnAttempts, 0);
+    for (const [index, bone] of [f.arm, f.elbow].entries()) assert.ok(bone.quaternion.angleTo(before[index]) < 1e-6);
+    f.avoidance.restore(); f.avoidance.apply(f.model, f.physics, 1 / 60, true, { paused: true });
+    assert.ok(f.avoidance.getState().returnAttempts > 0); assert.equal(f.avoidance.getState().remaining, 0);
+    assert.equal(f.frame(false).returnAttempts, 0); f.avoidance.reset();
+    assert.equal(f.avoidance.getState().returnAttempts, 0); assert.equal(f.avoidance.getState().returning, 0); f.avoidance.dispose();
+});
+
+test('双侧合并探测独立接受/回退，一侧退让不使另一侧穿透或永久保持', async () => {
+    const f = await fixture(), { THREE } = f;
+    const arm = new THREE.Bone(), elbow = new THREE.Bone(), wrist = new THREE.Bone();
+    arm.position.set(0, 2, 0); elbow.position.set(-1, 0, 0); wrist.position.set(-1, 0, 0);
+    arm.add(elbow); elbow.add(wrist); f.mesh.add(arm);
+    f.mesh.bind(new THREE.Skeleton([f.arm, f.elbow, f.wrist, arm, elbow, wrist]));
+    const bodies = f.mesh.geometry.userData.MMD.rigidBodies;
+    bodies.push({ ...bodies[0], boneIndex: 5 }, { ...bodies[1] });
+    const entry = (bone, index) => ({ bone, index, dynamic: false });
+    Object.assign(f.model.bindings, { 'bones:leftArm': entry(arm, 3), 'bones:leftElbow': entry(elbow, 4), 'bones:leftWrist': entry(wrist, 5) });
+    f.model.groups.leftArm = new Set([3, 4, 5]);
+    const cloth = new THREE.Vector3(-2, 2.15, 0);
+    f.physics.getBodyPose = (index, position, quaternion) => {
+        position.copy(index === 1 ? f.cloth : cloth); quaternion.identity(); return index === 1 || index === 3;
+    };
+    for (let i = 0; i < 120; i++) f.frame();
+    const identity = new THREE.Quaternion(), before = f.elbow.quaternion.angleTo(identity), held = elbow.quaternion.clone();
+    f.cloth.y = 2.25; let accepted = 0;
+    for (let i = 0; i < 120; i++) {
+        const state = f.frame(); assert.equal(state.remaining, 0); assert.ok(state.returnAttempts <= 2); accepted += state.returning;
+    }
+    assert.ok(accepted > 0); assert.ok(f.elbow.quaternion.angleTo(identity) < before * 0.8);
+    assert.ok(elbow.quaternion.angleTo(held) < 1e-6, '仍受阻的一侧必须保留安全显示姿态'); f.avoidance.dispose();
 });
 
 test('接触方向反转与新的原动作连续接管，零delta不推进，关闭从当前修正600ms释放', async () => {

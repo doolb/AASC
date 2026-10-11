@@ -121,7 +121,7 @@ test('目录等待时停止或新播放接管，迟到结果不启动旧回复',
     } finally { for (const [key, value] of old) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } }
 });
 
-test('真实固定WASM生成待机只含双臂轨道，挥手腕高于肩且原舞蹈仍15.2秒', async () => {
+test('真实固定WASM生成用户待机六轨道，挥手腕高于肩且原舞蹈仍15.2秒', async t => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-human-actions-'));
     try {
         await require('../3rd/mmd-ar-test/web-human-actions-build').stage(dir);
@@ -189,24 +189,27 @@ test('真实固定WASM生成待机只含双臂轨道，挥手腕高于肩且原�
                 minimum = Math.min(minimum, triangle.closestPointToPoint(position, closest).distanceTo(position));
             }
         }
-        // 按参考红线：上臂接近竖直、肘部内收，前臂仍斜向外；分别验证双侧，保留裙面间距。
+        // 用户指定的待机不含turn；验证双侧自然下放、局部腕弯曲与镜像，不套用旧外斜掌面约束。
+        const wrists = [];
         for (const side of ['左', '右']) {
             const upper = bones.find(b => b.name === side + '腕').getWorldPosition(new THREE.Vector3());
             const elbow = bones.find(b => b.name === side + 'ひじ').getWorldPosition(new THREE.Vector3());
             const wrist = bones.find(b => b.name === side + '手首').getWorldPosition(new THREE.Vector3());
             assert.ok(Math.abs(elbow.x) < 2.05);
             assert.ok(Math.abs(elbow.x - upper.x) / (upper.y - elbow.y) < 0.32);
-            assert.ok(Math.abs(wrist.x - elbow.x) / (elbow.y - wrist.y) > 0.8);
-            assert.ok(Math.abs(wrist.x) > Math.abs(elbow.x) + 1.5);
-            const handAngles = new THREE.Euler().setFromQuaternion(bones.find(b => b.name === side + '手首').getWorldQuaternion(new THREE.Quaternion()));
-            assert.ok(Math.abs(handAngles.x) < 1e-6 && Math.abs(handAngles.y) < 1e-6, '手掌保持默认Tpose掌面，不展开朝镜头');
-            const axis = new THREE.Vector3(side === '左' ? 0.8 : -0.8, -0.6, 0);
-            const forearm = axis.clone().applyQuaternion(bones.find(b => b.name === side + 'ひじ').getWorldQuaternion(new THREE.Quaternion()));
-            const hand = axis.clone().applyQuaternion(bones.find(b => b.name === side + '手首').getWorldQuaternion(new THREE.Quaternion()));
-            const delta = Math.atan2(hand.y, hand.x) - Math.atan2(forearm.y, forearm.x);
-            assert.ok(Math.abs(delta - (side === '左' ? -1 : 1) * Math.PI / 18) < 1e-6, '双手镜像下压10度');
+            assert.ok(wrist.y < elbow.y);
+            const arm = bones.find(b => b.name === side + '腕').quaternion;
+            assert.ok(Math.abs(arm.x) < 1e-6 && Math.abs(arm.y) < 1e-6, '上臂不含额外turn');
+            const hand = bones.find(b => b.name === side + '手首').quaternion;
+            const expected = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, side === '左' ? -1 : 1), -Math.PI / 18);
+            assert.ok(hand.angleTo(expected) < 1e-6, '手腕只执行用户指定局部bend forward -10度');
+            wrists.push(wrist);
         }
-        assert.ok(handCount > 100); assert.ok(minimum > 0.5, '待机真实手部与裙面最小间距=' + minimum);
+        assert.ok(Math.abs(wrists[0].x + wrists[1].x) < 1e-4 && Math.abs(wrists[0].y - wrists[1].y) < 1e-4 && Math.abs(wrists[0].z - wrists[1].z) < 1e-4, '双侧待机镜像');
+        console.log('用户待机蒙皮检查：', JSON.stringify({ minimum, handCount, wrists: wrists.map(value => value.toArray()) }));
+        assert.ok(handCount > 100); assert.ok(Number.isFinite(minimum), '真实手部/裙面几何输入应可计算');
+        // 用户指定姿态覆盖旧静态余量要求；记录接近裙面，不能把原始姿态当作避让后的结果。
+        if (minimum <= 0.5) t.diagnostic('用户MPL原始手部/裙面距离=' + minimum + '，低于旧0.5余量；防穿模需核对运行时刚体IK。');
         const dance = parser.parseVmd(buffer(await fs.readFile(path.join(resources, 'mmd/motions/miya-default.vmd'))), true);
         assert.equal(Math.max(...dance.motions.map(m => m.frameNum)) / 30, 15.2);
     } finally { await fs.rm(dir, { recursive: true, force: true }); }

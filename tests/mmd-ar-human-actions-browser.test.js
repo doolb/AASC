@@ -97,7 +97,7 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
         await page.waitForFunction(() => document.querySelector('#mmdArMplPanel [role="status"]').textContent.includes('「待机」'));
         const idleSource = await page.$eval('#mmdArMplSource', element => element.value);
         assert.equal(idleSource, fs.readFileSync(path.join(ROOT, 'mmd/motions/miya-idle.mpl'), 'utf8'));
-        assert.match(idleSource, /wrist_l bend forward 10/u);
+        assert.match(idleSource, /wrist_l bend forward -10/u);
         assert.equal(await page.$eval('#mmdArMplPanel', element => element.closest('.mmd-ar-panel-group-body').hidden), false);
         await page.evaluate(() => document.querySelector('[data-advanced-source="跳舞"]').click());
         await page.waitForFunction(() => document.querySelector('#mmdArAdvancedMotionPanel [role="status"]').textContent.includes('暂无MPL源码'));
@@ -137,12 +137,15 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
             assert.ok(Number.isFinite(sample.penetration) && Number.isFinite(sample.stepDegrees));
             assert.ok(sample.correctionDegrees <= 35.0001); assert.ok(sample.stepDegrees <= 10.5001);
             assert.ok(sample.iterations <= 4);
+            assert.ok(sample.returnAttempts <= 2 && sample.returning <= 2);
         }
         console.log('真实风吹采样：', JSON.stringify({ frames: wind.length,
             contactFrames: wind.filter(value => value.contacts > 0).length,
             maxCorrection: Math.max(...wind.map(value => value.correctionDegrees)),
             maxStep: Math.max(...wind.map(value => value.stepDegrees)),
-            maxPenetration: Math.max(...wind.map(value => value.penetration)) }));
+            maxPenetration: Math.max(...wind.map(value => value.penetration)),
+            returnAttemptFrames: wind.filter(value => value.returnAttempts > 0).length,
+            returningFrames: wind.filter(value => value.returning > 0).length }));
         const dance = await page.evaluate(async () => {
             const human = window.DisplayMmd.getHumanInterface();
             const result = await human.perform({ action: '跳舞', owner: 'browser:dance' });
