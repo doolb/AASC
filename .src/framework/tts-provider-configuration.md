@@ -1,5 +1,33 @@
 #skill: ai-code-translation
 
+## framework/国内千问Node语音鉴权（2026-10-11 确认实施）
+
+### 已有声明
+- Chat2API账号调度、getQwenCredential、collectQwenAudio、validateWav // 继续使用既有账号与播放职责
+- 官方校时/register/refresh与HMAC-SHA256契约 // 对照公开SDK验证接口，不把聊天接口当朗读接口
+
+### 新增定义
+- QwenSpeechAuthSession { credentialHash, cookieJar, fingerprint, clockOffset, deviceId, sceneToken, signingTokens, expiresAt } // 仅内存隔离各账号
+- QwenSpeechAuthError { stageCode, safeMessage } // 保留失败阶段但不暴露令牌和签名URL
+
+### 操作流程
+- authEvidence = 对照官方SDK实际注册输入和校时Cookie // 找出Node注册D1001原因
+- nodeSession = 用当前账号凭证校时并注册有效令牌 // 先真实验证，再替换生产入口
+- baseScene = qwen_web；relatedScenes = qwen_audio_asr和voice_command；timezoneOffset = 时区字符串 // 直接音频基础场景无UMID注册失败，通用场景关联已真实通过
+- authKey = 子场景一次性令牌加校时毫秒；signText = 基础设备标识加版本加账号hashCookie加固定顺序参数值 // 与公开SDKHMAC-SHA256/base64数据流一致
+- 会话上限16且闲置30分钟清理，活跃会话不驱逐；同账号串行校时/注册/刷新/分配 // 防止无限缓存及并发重复令牌
+- signedRequest = 串联chid、nonce、timestamp并按官方顺序计算HMAC // 签名由Chat2API内部提供
+- nodeAudio = 直接连接官方WSS并收集完整WAV // 无Chrome生成成功才确认可用
+- 如果nodeAudio验证通过，接入Node签名并移除语音浏览器路径 // 防止未经验证的替换导致功能损坏
+- 如果令牌不足或临近过期，刷新nodeSession并串行分配令牌 // 避免并发重用一次性令牌
+- 如果凭证更新，使用新会话且旧会话按闲置/容量驱逐；如果鉴权失败，返回固定阶段错误 // 不复用旧令牌，不误报账号过期，不切换Provider
+
+### 自测流程
+- signatureVector = 验证参数顺序与HMAC固定向量 // 验证算法而非镜像实现
+- authFixture = 模拟校时Cookie、注册/刷新和超时/非法响应 // 覆盖上游边界
+- sessionFixture = 验证账号隔离、凭证更新及并发令牌消费 // 防止跨账号泄漏
+- liveWave = 验证真实账号WAV与无Chrome运行 // 与模拟测试结果分别记录
+
 # framework/tts-provider-configuration
 
 ## 目标文件清单
@@ -47,7 +75,7 @@
 - `textMediaTtsService.handleSentenceRequest`
 - `timeAnnounceAppService.announceTime`
 - `taskManager.setGenerateTts`
-- `Puppeteer`、`ws`、国内千问官方公开前端 doQwenAuth
+- `ws`、Node crypto/fetch、国内千问官方校时/register/refresh与HMAC契约
 
 ## 新增定义
 
@@ -65,8 +93,8 @@
 - 候选配置 -> 用户Provider凭证 -> config业务选择 -> 脱敏权威广播 // 保存失败恢复旧值
 - qwen-api完整音频与doubao-api完成事件PCM -> 限长响应 -> 原内存缓存 // 不缓存半成品
 - qwen-chat使用用户指定国内千问站；先核实朗读契约，克隆采样文字接口不用于音频合成
-- TTS转交Chat2API speech -> 国内账号调度 -> 当前Cookie或ticket -> 临时Puppeteer首页 -> 官方doQwenAuth签名 -> WebSocket文本/结束包 -> 去重PCM -> 完成后WAV
-- 国内网页所有阶段共享超时；签名并发上限2；finally关闭浏览器；不读取已有浏览器账户
+- TTS转交Chat2API speech -> 国内账号调度 -> 当前Cookie或ticket -> Node校时/注册/刷新/HMAC签名 -> WebSocket文本/结束包 -> 去重PCM -> 完成后WAV
+- 所有阶段共享超时；同账号串行分配；16个闲置30分钟会话；不使用浏览器或临时目录
 - 自测映射 `src/apps/server/modules/tts/tts-provider-policy.test.js` 与 `tests/tts-provider-settings/integration/qwen-chat/ws/system-route/ui-browser.test.js`
 - 自测templateTts/businessConfig/providers -> 比对继承、非法输入和业务隔离
 - 自测fakeHttp/fakeWav/fakePcm -> 比对成功引用、完成事件、超时/超限/错误无缓存
@@ -96,8 +124,7 @@
 - 传入 speechRequest 至 Chat2API语音服务 // TTS不读取登录凭证或自行调度账号
 - 选择 account = Chat2API国内qwen可用账号调度结果 // 沿用既有启用/状态规则
 - 在 Chat2API 内部使用当前凭证完成语音请求 // 凭证不进入TTS配置或控制端
-- 核验网页语音签名的Node执行能力再确定依赖 // 未验证不能把迁移认作消除Chrome
-- 保留Chat2API默认适配器的隔离Chrome签名 // 官方SDK依赖DOM/iframe/AWSC，尚无经过验证的纯Node替代
+- 使用qwen_web基础场景注册qwen_audio_asr关联令牌，再用Node HMAC签名 // 真实连续生成与刷新已通过，移除Chrome路径
 - 返回 speechResult.audio 至原WAV缓存 // 保留业务分句、播放与取消协议
 - 部署目标实例后验证WebSocket初始化与实际语音调用 // 避免新静态页面配旧运行后端
 

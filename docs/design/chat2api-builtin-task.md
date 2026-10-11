@@ -171,6 +171,6 @@ Provider adapter
 
 ## 统一语音服务（2026-10-11）
 
-新增内部speechService和POST /v1/audio/speech业务入口，国内千问语音与聊天复用账号存储、Provider注册表和既有调度策略；接口复用Bearer鉴权，不增加配置接口。TTS qwen-chat仅转交合成参数，不管理账号或凭证。默认适配器由Chat2API负责官方网页签名及WebSocket完整音频，仍需隔离Chrome，不能把聊天Cookie请求当语音签名。
+新增内部speechService和POST /v1/audio/speech业务入口，国内千问语音与聊天复用账号存储、Provider注册表和既有调度策略；接口复用Bearer鉴权，不增加配置接口。TTS qwen-chat仅转交合成参数。默认适配器使用纯Node校时、qwen_web关联语音令牌注册/刷新及HMAC签名，直接收集WebSocket完整音频，无Chrome依赖。
 
-支持qwen-chat/QUARK_VOICE/MINI_MAX、文本/音色、速度倍率及音量，返回完整audio/wav。时限60秒、音频16MiB，错误脱敏，不静默切换TTS Provider。临时账号库、真实HTTP/WSS与Chromium回归完成；真实远端签名和设备音频待验收。具体TTS边界见[统一语音设计](tts-providers.md)。
+支持qwen-chat/QUARK_VOICE/MINI_MAX、文本/音色、速度倍率及音量，返回完整audio/wav。时限60秒、音频16MiB，固定鉴权阶段错误，不切换TTS Provider。鉴权会话仅内存、上限16/闲置30分钟，同账号串行令牌分配。真实账号连续生成及不足令牌刷新后生成已通过；其他音色及设备声音待验收。具体TTS边界见[统一语音设计](tts-providers.md)。

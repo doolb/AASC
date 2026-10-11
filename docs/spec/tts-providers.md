@@ -26,10 +26,9 @@
   旧TTS chat2apiAccountId -> 不再参与生成并后续保存移除
   Chat2API语音入口 -> 复用既有业务鉴权，不提供凭证回包或独立HTTP配置接口
   无可用账号/Provider停用/签名失败/超时 -> Chat2API脱敏错误 -> 不静默切换TTS Provider
-  上游语音签名契约 -> 先核验Node执行能力 -> 验证后确定运行依赖
-    已核验官方SDK使用DOM/iframe/AWSC指纹及令牌注册 -> 默认适配器仍运行隔离Chrome
-    Chrome归Chat2API语音内部依赖；TTS只调用speech服务，不显示安装或账号查询流程
-  浏览器代码移入Chat2API -> 不能据此认定已消除Chrome
+  上游语音签名契约 -> Node校时与qwen_web关联语音令牌注册/刷新 -> HMAC签名
+    默认适配器不启动Chrome/DOM/AWSC，不使用临时目录
+    TTS只调用speech服务，不显示安装或账号查询流程
   对应运行实例部署/重启后 -> 检查控制初始化与统一语音入口版本 -> 实际账号试听
 
 Chat2API服务:
@@ -37,7 +36,8 @@ Chat2API服务:
   读取保存的调度策略 -> loadBalancer.selectAccount(model, strategy, qwen, requireSecret=true)
   当前账号与Provider再次检查 -> Cookie/ticket合并 -> qwenAdapter.generate(剩余总时限)
   完整WAV校验 -> 清除账号失败标记 -> 返回audio/contentType
-  上游失败 -> 标记账号失败 -> 固定502；无账号503；总超时504
+  上游失败 -> 标记账号失败 -> 固定502；无账号/鉴权忙503；总超时/鉴权超时504
+  校时/注册/刷新阶段码 -> 白名单固定提示，不采纳上游原文
   总超时发生 -> 标记expired -> 迟到配置/账号/音频不启动后续处理
   HTTP入口 -> 既有authorize/readJson -> speech.generate -> audio/wav及Cache-Control=no-store
   内部TTS入口 -> 将-10..10语速转为2^(speed/10)倍率 -> speech.generate -> 原缓存
@@ -92,12 +92,11 @@ Chat2API服务:
   doubao-api -> API Key/resourceId/requestId -> req_params与PCM音频参数
     NDJSON/SSE事件 -> 校验业务code与完成事件 -> 限长收集base64 PCM -> 包装WAV
   qwen-chat -> 转交Chat2API统一speech服务 -> 调度国内qwen账号当前Cookie/ticket
-  Chat2API默认qwen speech adapter -> 临时无头浏览器加载www.qianwen.com
-    Chrome -> 显式环境路径或Puppeteer缓存或系统常用路径；无可用程序 -> 明确错误
-    官方公开前端doQwenAuth签名 -> speech-tts.qianwen.com/api/v3/tts的签名WebSocket
+  Chat2API默认qwen speech adapter -> Node校时 -> qwen_web注册/刷新关联qwen_audio_asr令牌
+    当前账号Cookie -> 会话内校时Cookie关联 -> 令牌池 -> HMAC签名官方语音WebSocket
     同reqid发送status=1,text,ced与status=2结束包 -> 收集去重PCM -> 完成事件后包装WAV
-    所有阶段共享总超时；浏览器finally关闭；并发签名上限2；不读取已有浏览器账户
-    签名/账号/浏览器不可用 -> 明确错误；不使用音色克隆采样文本接口
+    所有阶段共享总超时；同账号串行鉴权分配、跨账号并发；最多16个闲置30分钟会话
+    签名/账号/上游不可用 -> 固定脱敏阶段错误；不使用音色克隆采样文本接口
   WAV -> 校验与缓存 -> 原uploads/tts引用 -> 原playAudio/playOnControl/textSentenceTts协议
   错误/鉴权失效/超时/超限/空音频/缺少完成 -> 明确脱敏错误 -> 不自动切换Provider
   打断/取消 -> 原代次检查丢弃迟到结果，队列及回执保持
@@ -107,7 +106,7 @@ Chat2API服务:
   textMedia独立选择、非AI拒绝qwen-chat、Agent来源模板与群聊默认
   配置脱敏、空凭证保留、清除、保存失败权威值回退、多端广播及重连
   本地HTTP/WebSocket模拟Provider的成功、鉴权失败、超时、空/超大音频、截断事件
-  假浏览器验证Cookie仅传国内页面、签名参数、资源关闭与超时
+  本地HTTP验证校时Cookie、注册/刷新、签名参数、令牌隔离与超时
   验证完整音频引用可读取、PCM转WAV、下载不带Provider凭证
   验证网页保存等待、断线恢复、目录失败保留选择
   验证保存超时/发送异常/等待时断线不显示成功，迟到目录回包不覆盖当前值
@@ -143,4 +142,35 @@ Chat2API服务:
   手动播放与自动回复一致、模板继承/显式system、qwen-chat仅AI业务
   speech优先、控制端/显示端/多选目标兼容、无上下文的自定义播报不变
   本地HTTP/WSS与浏览器或正式Chat模块验证，无真实账号凭证输出
+```
+
+## 国内千问纯Node接口鉴权（2026-10-11 已实现）
+
+```text
+已有声明:
+  Chat2API账号调度、getQwenCredential、createChat2ApiQwenSpeechAdapter
+  collectQwenAudio、validateWav、官方SDK校时/register/refresh/HMAC算法
+新增定义:
+  QwenSpeechAuthSession { 凭证标识, 校时偏移, 接口Cookie, 设备标识, 场景令牌, 签名令牌池, 有效期 }
+  QwenSpeechStageError { 固定阶段码, 固定脱敏提示 }
+操作流程:
+  用户回复是确认 -> 纯Node原型已生成252044字节WAV、2182ms -> 接入默认生产路径
+  当前Chat2API账号 -> 内存Cookie关联 -> 官方校时携带设备fingerprint
+  注册基础businessScene=qwen_web、unifyRelateGenerate=[qwen_audio_asr,voice_command]
+  timezoneOffset使用时区字符串，chid使用官方时间加随机串格式 -> 校验基础及语音子场景令牌
+  不直接注册qwen_audio_asr基础场景，该场景无UMID时D1001；通用场景注册实际通过
+  注册失败或缺令牌 -> 固定阶段错误，不连接语音，不打印响应原文
+  请求chid/nonce/timestamp -> 固定顺序串联值 -> 基础设备ID+版本+账号hashCookie+参数值
+  子场景一次性令牌+校时毫秒为HMAC密钥 -> SHA256/base64 -> 语音子场景actkn签名WSS
+  令牌不足或临近过期 -> 刷新 -> 同账号串行分配，避免重复消费
+  凭证更新 -> 新凭证键不复用旧会话，旧会话按闲置/容量驱逐；令牌/签名/凭证不写TTS配置或日志
+  所有阶段共享总超时 -> 收集完整PCM -> 校验WAV -> 真实账号验证
+  最大16个账号会话，闲置30分钟清理，活跃会话不驱逐 -> 防止无界缓存及并发重复初始化
+  刷新失败或令牌非法 -> 废弃会话；总超时及迟到注册不继续连接语音
+  纯Node真实验证通过 -> 替换默认鉴权模块 -> 移除语音Chrome依赖，无临时目录
+  原手动/自动AI来源与Chat2API调度 -> 原缓存/播放/取消流程
+自测流程:
+  校时Cookie、注册/刷新、签名顺序与HMAC向量、凭证更新、并发令牌分配
+  非法/空响应、过期、超时及错误脱敏；无Chrome/受限tmp不启动浏览器
+  npm run check:chat2api及TTS/手动播放定向回归；真实WAV成功才确认可用
 ```

@@ -57,6 +57,15 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 国内千问TTS改为Chat2API内部纯Node直接接口，修复Chrome临时配额崩溃引发的逐句合成失败。
+  - 新增chat2api-qwen-speech-auth.js及测试：校时、qwen_web关联语音令牌注册/刷新、HMAC-SHA256签名；同账号串行消费、16个闲置30分钟会话、共享超时和有界响应。qwen-speech-adapter移除Chrome/Puppeteer路径，speech-service保留固定脱敏鉴权阶段码；同步SelfTest及TTS/Chat2API design/spec/.src/task/todo/usage。
+  - npm run check:chat2api 117/117、TTS及手动播放73/73通过，共190项，无失败/跳过。真实账号原文本WAV252044字节、连续第二句69644字节、令牌刷新后97484字节；禁止浏览器模块后123884字节且浏览器尝试0次，均未播放。生产JS语法检查通过，未全仓测试。
+  - 本机8081已重启，实际控制端手动tts/play生成并读取HTTP200/97484字节有效WAV，测试未播放设备声音。servicePackage=true，其他状态保持，无新增生产依赖；未构建或发布Offline包，其他音色权限和设备声音待验收。
+
+- ✅ [2026-10-11] 完成国内千问语音失败诊断及直接接口可行性初步核对，生产修复待方案确认。
+  - 当前账号复现Chrome字体服务Disk quota exceeded(122)/SIGABRT；改用项目临时目录的隔离诊断成功生成用户原文本有效WAV（252044字节、12416ms），未播放。仅凭Cookie及jump_sign的语音请求均401；Node校时成功、注册D1001，纯Node方案尚未跑通。
+  - 更新TTS design/spec、todo及20261011_千问语音直接接口鉴权task；尚未修改源码、重启、提交发布或标记修复完成。未输出凭证/签名/令牌，诊断临时目录已清理。
+
 - ✅ [2026-10-11] 控制端聊天面板手动播放AI回复读取所属模板语音配置，与自动AI/Agent回复复用选择规则。
   - 修改chat.js/server-app.js，新增chat-reply-tts-context.js：私聊/角色/临时历史按来源模板，缺来源用AI默认；流式按钮捕获角色，服务端读取权威配置并固定整批分句快照，不接收客户端凭证/Provider；原speech、队列和播放目标保持。修复无主显示端时控制端独立/仅displayIds播放被提前丢弃。
   - 新增8项实际Chat/完整服务端handler/Provider调度/Chromium按钮及SelfTest检查，95/95扩大回归与5个历史文件6/6通过，最终手动路径8/8复验、6个JS语法检查通过；同步design/spec/.src/task/todo/usage/self-test，未运行全仓npm test。

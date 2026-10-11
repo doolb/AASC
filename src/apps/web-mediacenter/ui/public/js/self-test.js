@@ -61,7 +61,7 @@ const SelfTest = {
         {
             id: 'tts_provider_config',
             name: '语音服务配置同步',
-            description: '检查服务器权威配置、业务限制及凭证脱敏',
+            description: '检查服务器权威配置、Chat2API账号职责及凭证脱敏',
             category: '语音功能',
             run: async () => {
                 const config = window.TtsProviderSettings?.getConfig();
@@ -76,7 +76,7 @@ const SelfTest = {
                     && !Object.hasOwn(config.providers['qwen-chat'], 'chat2apiAccountId')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'credentialSource');
                 return { success: valid, message: valid ? '业务配置已同步，凭证已脱敏' : '语音服务配置校验失败',
-                    details: '真实账号合成与设备声音需另行验收' };
+                    details: '本项只检查配置；千问账号和语音鉴权由Chat2API处理，设备声音另行验收' };
             }
         },
         {

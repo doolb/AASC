@@ -116,3 +116,15 @@ test('runtime语音与聊天共用账号层，HTTP speech沿用Bearer鉴权并�
     assert.equal(unavailable.status, 503);
     assert.equal((await unavailable.json()).error.code, 'no_available_speech_account');
 });
+
+test('语音鉴权阶段码保留，固定提示不采用上游原文或伪造statusCode', async t => {
+    const { dataStore } = await fixture(t);
+    await dataStore.saveAccount({ accountId: 'a', providerId: 'qwen', credentials: { ticket: 'private' } });
+    for (const [code, status] of [['speech_auth_calibration', 502], ['speech_auth_register', 502],
+        ['speech_auth_refresh', 502], ['speech_auth_timeout', 504], ['speech_auth_capacity', 503]]) {
+        const service = createChat2ApiSpeechService({ dataStore, qwenAdapter: { generate: async () => {
+            throw Object.assign(new Error('private-cookie/signature-url'), { code, statusCode: 200 });
+        } } });
+        await assert.rejects(service.generate({ input: '失败阶段' }), e => e.code === code && e.statusCode === status && !e.message.includes('private'));
+    }
+});

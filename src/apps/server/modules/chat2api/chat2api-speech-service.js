@@ -5,6 +5,7 @@ const { createChat2ApiProviderRegistry } = require('./chat2api-provider-registry
 const { createChat2ApiLoadBalancer } = require('./chat2api-load-balancer');
 const { createChat2ApiQwenSpeechAdapter, parseCookies, QWEN_VOICE } = require('./chat2api-qwen-speech-adapter');
 const { validateWav } = require('../../../../external/tts/tts-wav');
+const { AUTH_ERROR_MESSAGES } = require('./chat2api-qwen-speech-auth');
 
 const MODELS = new Set(['qwen-chat', 'QUARK_VOICE', 'MINI_MAX']);
 const STRATEGIES = new Set(['round-robin', 'fill-first', 'failover']);
@@ -100,6 +101,11 @@ function createChat2ApiSpeechService({ dataStore = createChat2ApiDataStore(),
                 } catch (error) {
                     loadBalancer.markAccountFailed?.(account.accountId);
                     if (error.code === 'speech_timeout') throw error;
+                    // 仅按预定义代码映射固定文案，不能回传上游错误原文或签名URL。
+                    if (Object.hasOwn(AUTH_ERROR_MESSAGES, error.code)) {
+                        const status = error.code === 'speech_auth_timeout' ? 504 : error.code === 'speech_auth_capacity' ? 503 : 502;
+                        throw speechError(status, error.code, AUTH_ERROR_MESSAGES[error.code]);
+                    }
                     // 上游异常可能包含签名URL或请求头，统一转换为固定业务错误。
                     throw speechError(502, 'speech_upstream_error', 'Chat2API 国内千问语音合成失败，请检查账号及语音运行环境');
                 }

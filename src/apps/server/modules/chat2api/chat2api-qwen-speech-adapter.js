@@ -2,87 +2,11 @@
 
 const { randomUUID } = require('node:crypto');
 const WebSocket = require('ws');
-const fs = require('node:fs');
+const { createQwenSigner, parseCookies } = require('./chat2api-qwen-speech-auth');
 const { decodeAudio, wrapPcm, adjustWav, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
 
 const QWEN_TTS_ENDPOINT = 'https://speech-tts.qianwen.com/api/v3/tts';
 const QWEN_VOICE = 'zh_female_quarkF531S0_ptts';
-
-function parseCookies(credential) {
-    const isCookie = credential.includes(';') || /^(?:Cookie:\s*)?[A-Za-z_][\w-]{0,63}=/iu.test(credential);
-    const source = isCookie ? credential.replace(/^Cookie:\s*/iu, '') : `tongyi_sso_ticket=${credential}`;
-    return source.split(';').filter(part => part.trim()).map(part => {
-        const index = part.indexOf('=');
-        const name = part.slice(0, index).trim();
-        const value = part.slice(index + 1).trim();
-        if (index < 1 || !/^[\w-]+$/u.test(name) || /[\r\n]/u.test(value)) throw new Error('国内千问Cookie格式不合法');
-        return { name, value, domain: '.qianwen.com', path: '/', secure: true };
-    });
-}
-
-// 使用官方网页签名SDK，避免复制其设备注册/令牌算法。每次使用隔离的临时浏览器。
-function launchQwenBrowser(options) {
-    const puppeteer = require('puppeteer');
-    const executablePath = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath(),
-        '/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser'].find(file => file && fs.existsSync(file));
-    if (!executablePath) throw new Error('Chrome unavailable');
-    return puppeteer.launch({ ...options, executablePath });
-}
-
-function createQwenSigner({ launch = launchQwenBrowser } = {}) {
-    let active = 0;
-    return async ({ credential, reqid, timeoutMs }) => {
-        if (active >= 2) throw new Error('国内千问签名繁忙，请稍后重试');
-        const cookies = parseCookies(credential);
-        active += 1;
-        let browser;
-        let expired = false;
-        let timer;
-        const work = async () => {
-            browser = await launch({ headless: true, timeout: timeoutMs,
-                args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-            if (expired) throw new Error('国内千问签名超时');
-            await browser.setCookie(...cookies);
-            const page = await browser.newPage();
-            await page.goto('https://www.qianwen.com/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-            await page.waitForFunction(() => Boolean(window.webpackChunk_ali_qianwen_web), { timeout: timeoutMs });
-            return page.evaluate(async ({ reqid, endpoint }) => {
-                let runtime;
-                window.webpackChunk_ali_qianwen_web.push([[`aasc-tts-${reqid}`], {}, requireModule => { runtime = requireModule; }]);
-                const { doQwenAuth } = runtime(33669);
-                const url = new URL(endpoint);
-                url.searchParams.set('bizid', 'qwen-chat-pc');
-                url.searchParams.set('chid', reqid);
-                const auth = await doQwenAuth({ url: url.toString(), useSignature: true, forceExternal: true,
-                    businessScene: 'qwen_audio_asr', signScene: 'qwen_audio_asr', appendCommonParams: false, signData: { chid: reqid } });
-                if (!auth.signedHeaders || !Object.keys(auth.signedHeaders).length) throw new Error('missing signature');
-                const signed = new URL(auth.url);
-                for (const [key, value] of Object.entries(auth.signedHeaders)) signed.searchParams.set(key, String(value));
-                signed.protocol = 'wss:';
-                return { url: signed.toString(), userAgent: navigator.userAgent };
-            }, { reqid, endpoint: QWEN_TTS_ENDPOINT });
-        };
-        // 超时关闭已启动的浏览器；启动迟到时work的finally也会关闭，不留下后台签名。
-        const pending = work().finally(async () => {
-            if (browser) await browser.close().catch(() => {});
-            active -= 1;
-        });
-        try {
-            const signed = await Promise.race([pending, new Promise((resolve, reject) => {
-                timer = setTimeout(() => { expired = true; reject(new Error('sign timeout')); }, timeoutMs);
-            })]);
-            const url = new URL(signed.url);
-            if (url.protocol !== 'wss:' || url.hostname !== 'speech-tts.qianwen.com' || url.pathname !== '/api/v3/tts') throw new Error('invalid signed endpoint');
-            return signed;
-        } catch (error) {
-            // Chromium错误可能含签名URL；只向业务层抛出固定消息。
-            throw new Error(expired ? '国内千问签名超时' : 'Chat2API 国内千问签名失败，请检查登录状态和语音运行环境');
-        } finally {
-            clearTimeout(timer);
-            if (expired && browser) await browser.close().catch(() => {});
-        }
-    };
-}
 
 function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } = {}) {
     return new Promise((resolve, reject) => {

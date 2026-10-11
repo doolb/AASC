@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { WebSocketServer } = require('ws');
 const { createQwenChatProvider } = require('../src/apps/server/modules/tts/qwen-chat-tts');
-const { createChat2ApiQwenSpeechAdapter, createQwenSigner, parseCookies } = require('../src/apps/server/modules/chat2api/chat2api-qwen-speech-adapter');
+const { createChat2ApiQwenSpeechAdapter, parseCookies } = require('../src/apps/server/modules/chat2api/chat2api-qwen-speech-adapter');
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
 const cache = require('../src/external/tts/tts-audio-cache');
@@ -98,39 +98,15 @@ test('国内千问错误、缺完成、坏JSON、空音频、超时均无缓存�
     assert.equal(stores, 0);
 });
 
-test('官方网页签名使用隔离Cookie并关闭浏览器；错误不回显私有URL', async () => {
-    let closed = 0;
-    let cookies;
-    let visited;
-    let args;
-    const browser = {
-        setCookie: async (...values) => { cookies = values; },
-        newPage: async () => ({ goto: async value => { visited = value; }, waitForFunction: async () => {},
-            evaluate: async (fn, values) => { args = values; return { url: 'wss://speech-tts.qianwen.com/api/v3/tts?signature=secret', userAgent: 'Chrome-test' }; } }),
-        close: async () => { closed += 1; }
-    };
-    const sign = createQwenSigner({ launch: async () => browser });
-    const result = await sign({ credential: 'tongyi_sso_ticket=private-value; other=ok', reqid: 'request-a', timeoutMs: 1000 });
-    assert.equal(result.userAgent, 'Chrome-test');
-    assert.equal(cookies[0].domain, '.qianwen.com');
-    assert.equal(cookies[0].name, 'tongyi_sso_ticket');
-    assert.equal(visited, 'https://www.qianwen.com/');
-    assert.equal(args.reqid, 'request-a');
-    assert.equal(closed, 1);
-    browser.newPage = async () => { throw new Error('https://secret-url/?ticket=private-value'); };
-    await assert.rejects(sign({ credential: 'ticket', reqid: 'b', timeoutMs: 1000 }), error => !error.message.includes('private-value'));
-    assert.equal(closed, 2);
-    assert.throws(() => parseCookies('Cookie: x=hello\r\nsecret'), /格式/u);
-});
-
-test('签名超时关闭资源、迟到结果忽略；模型音频阶段只使用剩余总时限', async () => {
-    let closed = 0;
-    const browser = { setCookie: async () => {}, newPage: async () => ({ goto: async () => new Promise(() => {}) }), close: async () => { closed += 1; } };
-    const sign = createQwenSigner({ launch: async () => browser });
-    await assert.rejects(sign({ credential: 'ticket', reqid: 'a', timeoutMs: 20 }), /超时/u);
-    assert.equal(closed, 1);
-    const adapter = createChat2ApiQwenSpeechAdapter({ sign: async () => { await new Promise(resolve => setTimeout(resolve, 25)); return 'ws://127.0.0.1/tts'; } });
+test('签名迟到结果不连接音频；音频阶段只使用剩余总时限', async () => {
+    let opened = 0;
+    const adapter = createChat2ApiQwenSpeechAdapter({
+        sign: async () => { await new Promise(resolve => setTimeout(resolve, 25)); return 'ws://127.0.0.1/tts'; },
+        Socket: class { constructor() { opened += 1; } }
+    });
     await assert.rejects(adapter.generate({ text: 'test', timeoutMs: 10 }, 'ticket'), /超时/u);
+    assert.equal(opened, 0);
+    assert.throws(() => parseCookies('Cookie: x=hello\r\nsecret'), /格式/u);
 });
 
 test('TTS只转交Chat2API语音，不读取手动凭证或账号引用', async () => {

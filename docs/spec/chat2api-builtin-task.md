@@ -589,7 +589,9 @@ POST /v1/audio/speech:
   input非空且<=16000，model=qwen-chat/QUARK_VOICE/MINI_MAX，speed=0.25..4，volume=0..100，格式仅wav
   读取保存的loadBalanceStrategy -> 国内qwen可用且有凭证的账号调度
   重读当前账号/Provider -> 检查启用/状态/限额 -> 内存合并Cookie及当前ticket
-  默认适配器 -> 隔离Chrome官方doQwenAuth -> 签名WSS发送文本与结束包
+  默认适配器 -> Node校时及qwen_web关联qwen_audio_asr注册/刷新 -> HMAC签名WSS发送文本与结束包
+  同账号串行消费一次性令牌 -> 最多16会话/闲置30分钟 -> 无Chrome/临时目录
+  校时/注册/刷新失败 -> 白名单固定脱敏阶段码与提示，鉴权超时504/忙503
   收集去重PCM -> 完成事件 -> 包装/音量调整 -> 验证完整WAV且<=16MiB
   总超时60秒 -> 剩余时间分配 -> 迟到读取不继续签名 -> finally关闭浏览器
   成功 -> 清除失败标记 -> 返回audio/wav二进制，Cache-Control=no-store

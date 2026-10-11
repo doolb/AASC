@@ -16,7 +16,7 @@
 
 system 保留显示端优先/服务端回退；API Provider 调用对应端点，qwen-chat调用Chat2API语音服务，失败不切换 system。qwen-api 使用百炼非流式合成及音频 URL 下载；doubao-api 使用 V3 单向 HTTP 流、收集 base64 PCM 并包装 WAV；qwen-chat 通过Chat2API内部语音服务使用国内千问官方公开前端签名与 WebSocket 朗读流程。统一完整 WAV 进入既有内存缓存，不写临时音频文件。响应、超时、解码及音频大小有上限；不将凭证、响应原文或签名 URL 放入日志/广播。
 
-Chat2API默认国内千问语音适配器需服务器具备 Puppeteer 可用的 Chrome，临时浏览器仅使用Chat2API调度的国内千问账号当前Cookie/ticket，不读取既有浏览器账户。加载官方首页并调用前端 doQwenAuth，获取 qwen_audio_asr 场景签名，发送文本/结束包，完整 PCM 转 WAV。默认模型 QUARK_VOICE、音色 zh_female_quarkF531S0_ptts。签名并发上限2，浏览器必在 finally 关闭；无 Chrome 的 Offline Node 需选择其他 Provider。网页版本变化可能使该适配器失效，需要明确报错后更新契约。
+Chat2API默认国内千问语音适配器使用纯Node校时、令牌注册/刷新和HMAC签名，直接连接官方语音WebSocket；无需Chrome、DOM、AWSC或临时目录。qwen_web基础场景注册qwen_audio_asr关联场景令牌，每次使用当前Chat2API账号Cookie/ticket。默认模型QUARK_VOICE、音色zh_female_quarkF531S0_ptts。官方协议变化可能导致鉴权失败，需要根据固定脱敏阶段错误更新契约。
 
 无新增生产依赖。服务端/网页修改只标记 `servicePackage=true`，既有 minApk 状态保留。真实云端鉴权、声音播放、长队列及设备体验需有对应账号现场验收。
 
@@ -30,7 +30,7 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 
 新增Chat2API speech service及默认qwen speech adapter；runtime与聊天共用dataStore/providerRegistry/loadBalancer。代理运行时提供POST /v1/audio/speech，复用既有Bearer鉴权，返回完整audio/wav二进制；TTS内部调用不要求代理HTTP任务持续运行，也不启动第二个代理。输入模型qwen-chat/QUARK_VOICE/MINI_MAX，speed为0.25–4倍，volume为0–100，response_format只支持wav。合成总时限60秒、音频16MiB；无账号、停用、凭证缺失、签名失败和超时返回固定脱敏错误，不切换TTS Provider。
 
-已核验官方SDK依赖DOM、iframe、AWSC指纹及令牌注册。浏览器签名实现归Chat2API语音内部，默认适配器仍需Chrome；迁移不是消除依赖，尚无验证通过的纯Node签名替代。隔离浏览器并发上限2、finally关闭，超时及迟到账号读取不继续签名。真实远端鉴权、音色权限及设备声音保留现场验收。
+前轮曾直接执行依赖DOM/iframe/AWSC的官方SDK；本轮已核对并真实验证通用场景关联语音令牌路径，默认适配器改为纯Node直接接口。账号级串行初始化/刷新/消费，最多16个会话且闲置30分钟清理；凭证变化使用新会话，旧会话按闲置/容量驱逐，不复用旧令牌。超时和迟到请求不继续连接语音。默认音色真实远端合成及刷新已通过，其他音色权限和设备声音仍需现场验收。
 
 本机8081旧进程未下发新TTS配置，符合静态网页与旧运行后端不一致；已通过npm run restart:server重启，本机wss初始化确认新版ttsProviderConfig且无上述旧字段。静态页面隐藏标签的display冲突已修复，真实Chromium截图已查看。用户其他实例仍以实际部署版本为准；未构建或发布Offline包，servicePackage保持true。
 
@@ -43,6 +43,16 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 已覆盖历史索引播放、流式完成后按钮与chatNewMessage对象入口；保留speech优先、Markdown清理、分句/有序队列、控制端/显示端/多端目标及原自定义播报。修改chat.js/server-app.js，新增chat-reply-tts-context模块校验业务/模板名并读取服务端权威配置。整批分句捕获同一模板配置，下一次播放读取更新值。手动播放允许仅在控制端播放或只指定displayIds，不再因缺少主显示端而提前返回。
 
 95项TTS/聊天回归与5个历史兼容文件（Node6项）通过；新增8项手动路径测试包含真实Chromium按钮点击/只读SelfTest，以及实际服务端完整handler/有序调度/Provider解析。客户端伪造Provider/密钥不进入合成，非法业务/模板名无音频。未运行全仓npm test；真实云端账号和设备声音仍待现场验收。本机服务已重启，HTTP静态脚本与WSS权威配置初始化验证通过。
+
+## 国内千问故障与直接接口方案（2026-10-11 已实现）
+
+用户报告display-umwo5k6l逐句生成失败，要求像Chat2API一样模拟接口获取，并回复“是”确认实施。已实现纯Node语音鉴权，继续只用Chat2API账号，签名与令牌归Chat2API内部。
+
+旧路径故障为Chrome执行SDK字体检测时报Disk quota exceeded(122)/SIGABRT，/tmp带usrquota。隔离目录诊断生成252044字节WAV、12416ms；随后纯Node原型同账号同文本生成相同大小有效WAV、2182ms。本轮已移除语音浏览器路径，消除该临时存储依赖；未播放诊断音频，诊断目录已清理。
+
+现有Chat2API国内聊天为chat2.qianwen.com/api/v2/chat；语音为speech-tts.qianwen.com/api/v3/tts。只带Cookie及jump_sign请求均401；直接注册qwen_audio_asr基础场景无UMID返回D1001。已真实验证qwen_web基础场景关联qwen_audio_asr可注册100个一次性令牌，时区输入使用字符串；关联场景继承基础设备ID，校时毫秒兼容数字字符串。
+
+新增qwen-speech-auth，qwen-speech-adapter默认使用Node鉴权，speech-service只按白名单阶段码回传固定提示；校时/注册/刷新失败、超时和忙状态可区分，不采纳上游原文。令牌/Cookie仅内存，响应512KiB、会话16个、有界Cookie与令牌池、不跟随重定向。原生、其他Provider、账号调度、AI上下文和播放协议保持。无新增生产依赖，servicePackage保持true；具体自测、真实生成与部署见对应task。
 
 ## 参考
 
