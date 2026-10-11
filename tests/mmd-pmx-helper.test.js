@@ -248,7 +248,8 @@ test('含刚体的 PMX 在 Ammo 就绪后以 physics true 创建循环动作 hel
     assert.equal(physicsLoads, 1);
     assert.deepEqual(instances[0].addCalls, [{
         mesh,
-        options: { animation: clip, physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 }
+        options: { animation: clip, physics: true, physicsSolver: 'ammo', warmup: 0, animationWarmup: false,
+            unitStep: 1 / 90, maxStepNum: 10, stabilityReferenceHz: 45 }
     }]);
     const action = instances[0].objects.get(mesh).mixer._actions[0];
     assert.deepEqual(action.loops, { loop: 'repeat', repetitions: Infinity });
@@ -328,7 +329,7 @@ test('关闭 PMX 物理时即使模型有刚体也不初始化 Ammo 或执行预
 
     assert.equal(result.physicsEnabled, false);
     assert.equal(result.physicsError, null);
-    assert.deepEqual(instances[0].addCalls, [{ mesh, options: { animation: clip, physics: false } }]);
+    assert.deepEqual(instances[0].addCalls, [{ mesh, options: { animation: clip, physics: false, physicsSolver: 'ammo' } }]);
     assert.equal(instances[0].objects.get(mesh).mixer._actions[0].played, true);
 });
 
@@ -349,7 +350,7 @@ test('Ammo 初始化失败时 PMX 回退为无物理 helper 并保留 VMD', asyn
 
     assert.equal(result.physicsEnabled, false);
     assert.match(result.physicsError.message, /Ammo 不可用/u);
-    assert.deepEqual(instances[0].addCalls, [{ mesh, options: { animation: clip, physics: false } }]);
+    assert.deepEqual(instances[0].addCalls, [{ mesh, options: { animation: clip, physics: false, physicsSolver: 'ammo' } }]);
 });
 
 test('有刚体但没有 VMD 的 PMX 仍创建物理 helper', async () => {
@@ -369,7 +370,8 @@ test('有刚体但没有 VMD 的 PMX 仍创建物理 helper', async () => {
     assert.equal(result.physicsEnabled, true);
     assert.deepEqual(instances[0].addCalls, [{
         mesh,
-        options: { physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 }
+        options: { physics: true, physicsSolver: 'ammo', warmup: 0, animationWarmup: false,
+            unitStep: 1 / 90, maxStepNum: 10, stabilityReferenceHz: 45 }
     }]);
 });
 
@@ -389,8 +391,10 @@ test('PMX 首载及动作切换均不执行隐藏预热或自动应用 VMD 第 0
         });
     }
     assert.deepEqual(instances.map((instance) => instance.addCalls[0].options), [
-        { animation: { name: 'initial' }, physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 },
-        { animation: { name: 'replacement' }, physics: true, warmup: 0, animationWarmup: false, unitStep: 1 / 65, maxStepNum: 3 }
+        { animation: { name: 'initial' }, physics: true, physicsSolver: 'ammo', warmup: 0, animationWarmup: false,
+            unitStep: 1 / 90, maxStepNum: 10, stabilityReferenceHz: 45 },
+        { animation: { name: 'replacement' }, physics: true, physicsSolver: 'ammo', warmup: 0, animationWarmup: false,
+            unitStep: 1 / 90, maxStepNum: 10, stabilityReferenceHz: 45 }
     ]);
 });
 
@@ -452,7 +456,7 @@ test('没有 PMX 物理 helper 时仍推进旋转', async () => {
     assert.deepEqual(events, ['rotation:0.02', 'matrix']);
 });
 
-test('PMX 快转暂停物理但保持动作，减速后对齐刚体并在下一帧恢复', async () => {
+test('PMX 快转每个暂停及恢复帧同步物理姿态，动画只推进一次', async () => {
     const { advancePmxMotionFrame } = await loadFreshPmxHelperModule();
     const events = [];
     const velocities = { linear: 5, angular: 2 };
@@ -468,7 +472,12 @@ test('PMX 快转暂停物理但保持动作，减速后对齐刚体并在下一�
             allocVector3() { return { x: () => 0, setValue() {} }; },
             freeVector3() {}
         },
-        reset() { events.push('reset'); }
+        reset() { throw new Error('暂停同步不能重置布料为动画姿态'); },
+        syncPausedTransform() {
+            events.push('sync');
+            body.setLinearVelocity({ x: () => 0 });
+            body.setAngularVelocity({ x: () => 0 });
+        }
     };
     const helper = {
         enabled: { physics: true },
@@ -486,12 +495,12 @@ test('PMX 快转暂停物理但保持动作，减速后对齐刚体并在下一�
     });
 
     frame(0.2);
-    assert.deepEqual(events, ['matrix', 'animation']);
+    assert.deepEqual(events, ['matrix', 'animation', 'sync']);
     assert.equal(physicsGate.paused, true);
     events.length = 0;
 
     frame(0.01);
-    assert.deepEqual(events, ['matrix', 'animation', 'matrix', 'reset', 'clear-forces', 'activate']);
+    assert.deepEqual(events, ['matrix', 'animation', 'sync']);
     assert.deepEqual(velocities, { linear: 0, angular: 0 });
     assert.equal(physicsGate.paused, false);
     events.length = 0;

@@ -9,6 +9,32 @@ import { hasMmdPhysics } from './mmd-ammo-physics.mjs';
 
 const DEFAULT_PMX_PHYSICS_FPS = 90;
 
+const getPhysicsDebugState = () => {
+    if (globalThis.MmdArPhysicsDebug !== true) return null;
+    if (!globalThis.MmdArPhysicsDebugState) globalThis.MmdArPhysicsDebugState = { events: [], frame: 0 };
+    return globalThis.MmdArPhysicsDebugState;
+};
+
+const summarizeBody = (entry) => {
+    const readVector = (value) => value && ['x', 'y', 'z'].every(key => typeof value[key] === 'function')
+        ? [value.x(), value.y(), value.z()] : null;
+    return {
+        type: entry.params?.type,
+        linearVelocity: readVector(entry.body?.getLinearVelocity?.()),
+        angularVelocity: readVector(entry.body?.getAngularVelocity?.())
+    };
+};
+
+const recordPhysicsDebug = (event, data = {}) => {
+    const state = getPhysicsDebugState();
+    if (!state) return;
+    const row = { event, time: performance.now(), ...data };
+    state.last = row;
+    state.events.push(row);
+    if (state.events.length > 100) state.events.shift();
+    console.debug('[mmd-ar physics]', row);
+};
+
 const normalizePmxPhysicsFps = (value) => {
     if (value === null || (typeof value === 'string' && value.trim() === '')) return DEFAULT_PMX_PHYSICS_FPS;
     const number = Number(value);
@@ -74,31 +100,13 @@ export async function stagePmxMesh({ scene, mesh, createPivot, prepareHelper }) 
  * MMDPhysics 只从骨骼移动 type=0 运动学锚点；动态刚体留在 Bullet 世界里，
  * 由约束产生跟随、滞后与惯性，不在这里整批传送位置或速度。
  */
-function resetPmxPhysicsAfterRotation(physics, pivot) {
-    // 动作已经推进到当前帧；先刷新骨骼矩阵，再让刚体贴合当前姿态。
-    pivot?.updateWorldMatrix?.(true, true);
-    physics.reset();
-    if (physics.engine === 'xpbd') { physics.resetMotion(); return; }
-    const zero = physics.manager.allocVector3();
-    zero.setValue(0, 0, 0);
-    try {
-        for (const entry of physics.bodies) {
-            if (entry.params.type === 0) continue;
-            entry.body.setLinearVelocity(zero);
-            entry.body.setAngularVelocity(zero);
-            entry.body.clearForces();
-            entry.body.activate();
-        }
-    } finally {
-        physics.manager.freeVector3(zero);
-    }
-}
-
 export function advancePmxMotionFrame({
     delta, pivot, helper, advanceRotation, physics, physicsGate, rotationPhysicsLimit
 } = {}) {
     const rotationRadians = advanceRotation?.(delta);
     pivot?.updateWorldMatrix?.(true, true);
+    const debugState = getPhysicsDebugState();
+    if (debugState) debugState.frame = (debugState.frame || 0) + 1;
     if (physics && physicsGate && helper?.enabled) {
         const speed = delta > 0 && Number.isFinite(rotationRadians)
             ? Math.abs(rotationRadians) * 180 / Math.PI / delta
@@ -106,24 +114,46 @@ export function advancePmxMotionFrame({
         const tooFast = Number.isFinite(rotationPhysicsLimit)
             && rotationPhysicsLimit > 0 && speed > rotationPhysicsLimit;
         if (tooFast) {
-            // 只关闭 Ammo 步进；MMDAnimationHelper 仍推进 VMD、IK 和 grant。
+            const enteringPause = !physicsGate.paused;
             helper.enabled.physics = false;
             physicsGate.paused = true;
+            if (enteringPause) recordPhysicsDebug('pause', {
+                frame: debugState?.frame,
+                speed,
+                threshold: rotationPhysicsLimit,
+                engine: physics.engine || 'ammo',
+                bodyCount: physics.bodies?.length || 0
+            });
             helper.update(delta);
+            // 暂停期间每帧同步，防止恢复时一次性追赶整个旋转；同步不执行物理步进。
+            physics.syncPausedTransform();
             return;
         }
         if (physicsGate.paused) {
-            // 减速后的首帧先推进动画，再复位刚体；下一帧才重新步进物理。
             helper.enabled.physics = false;
             helper.update(delta);
-            resetPmxPhysicsAfterRotation(physics, pivot);
+            physics.syncPausedTransform();
             helper.enabled.physics = true;
             physicsGate.paused = false;
+            recordPhysicsDebug('resume', {
+                frame: debugState?.frame,
+                speed,
+                threshold: rotationPhysicsLimit,
+                animationEnabled: helper.enabled.animation,
+                engine: physics.engine || 'ammo'
+            });
             return;
         }
-        helper.enabled.physics = true;
     }
     helper?.update(delta);
+    if (debugState?.last?.event === 'resume' && debugState.last.frame !== debugState.frame) {
+        recordPhysicsDebug('first-physics-frame', {
+            frame: debugState.frame,
+            engine: physics?.engine || 'ammo',
+            frameMs: physics?.frameMs || 0,
+            bodies: physics?.bodies?.filter(entry => entry.params.type !== 0).slice(0, 3).map(summarizeBody) || []
+        });
+    }
 }
 
 /* 只控制 VMD/骨骼动画，保留 Ammo 刚体和布料物理的原有运行状态。 */

@@ -41,6 +41,9 @@ export class XpbdPmxPhysics {
         this.windSamplingPosition = new Vector3();
         this.frameRotation = new Quaternion(); this.deltaRotation = new Quaternion();
         this.matrix = new Matrix4();
+        // 暂停同步必须使用实际求解空间，且历史随物理实例创建/释放。
+        this.physicsTransform = new Matrix4(); this.pausedTransform = new Matrix4();
+        this.pausedRotation = new Quaternion();
         this.bonePosition = new Vector3(); this.boneRotation = new Quaternion(); this.unitScale = new Vector3(1, 1, 1);
         this.frameAction = () => this._advanceFrame();
         this.resetAction = () => this._resetBodies();
@@ -111,6 +114,7 @@ export class XpbdPmxPhysics {
         try {
             if (nonUnit) { mesh.parent = null; mesh.scale.set(1, 1, 1); mesh.updateMatrixWorld(true); }
             action();
+            this.physicsTransform.copy(mesh.matrixWorld);
         } finally {
             if (nonUnit) { mesh.parent = parent; mesh.scale.copy(this.scale); mesh.updateMatrixWorld(true); }
         }
@@ -136,9 +140,35 @@ export class XpbdPmxPhysics {
     resetMotion() {
         for (const body of this.bodies) {
             body.velocity.set(0, 0, 0); body.omega.set(0, 0, 0); body.force.set(0, 0, 0); body.torque.set(0, 0, 0);
+            body.previousPosition.copy(body.position); body.previousQuaternion.copy(body.quaternion);
         }
         this.solver?.reset();
         this.frameSubsteps = 0;
+        return this;
+    }
+
+    // 与Ammo共用暂停契约：刚体整体跟随角色，保留相对形状，不推进求解时钟。
+    syncPausedTransform() {
+        if (this.disposed) return this;
+        this._withPhysicsSpace(() => {
+            this.pausedTransform.copy(this.physicsTransform).invert().premultiply(this.mesh.matrixWorld);
+            this.pausedRotation.setFromRotationMatrix(this.pausedTransform).normalize();
+            for (const body of this.bodies) {
+                body.position.applyMatrix4(this.pausedTransform);
+                body.quaternion.premultiply(this.pausedRotation).normalize();
+                if (body.params.type === 0 && body.params.boneIndex !== -1) {
+                    this._bonePose(body, body.position, body.quaternion);
+                } else if (body.positionDriven) {
+                    this._bonePose(body, body.targetPosition, body.targetQuaternion);
+                    body.position.copy(body.targetPosition);
+                }
+                body.targetPosition.copy(body.position); body.previousTargetPosition.copy(body.position);
+                body.targetQuaternion.copy(body.quaternion); body.previousTargetQuaternion.copy(body.quaternion);
+            }
+            // resetMotion同时重置CPU约束缓存与WebGL纹理，防止GPU读回旧位姿或旧速度。
+            this.resetMotion();
+            this._updateBones();
+        });
         return this;
     }
 

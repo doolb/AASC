@@ -20,10 +20,18 @@ async function fixture() {
         const encode = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
         const source = (name) => fs.readFileSync(path.join(vendor, 'animation', name), 'utf8')
             .replace("from 'three'", `from '${threeUrl}'`);
-        const physicsSource = addPhysicsStability(addPhysicsSubsteps(addPhysicsLifecycle(source('MMDPhysics.js'))));
+        // 共享模块迁移后，data URL必须显式解析构建适配器产生的相对模块依赖。
+        const resolveImports = (text, name) => text.replace(/from\s+(['"])([^'"]+)\1/gu,
+            (match, quote, ref) => {
+                const target = ref.includes('/web-')
+                    ? pathToFileURL(path.resolve(__dirname, '../3rd/mmd-ar-test', ref.split('/').at(-1))).href
+                    : new URL(ref, pathToFileURL(path.join(vendor, 'animation', name))).href;
+                return `from ${quote}${target}${quote}`;
+            });
+        const physicsSource = resolveImports(addPhysicsStability(addPhysicsSubsteps(addPhysicsLifecycle(source('MMDPhysics.js')))), 'MMDPhysics.js');
         const physicsUrl = encode(physicsSource);
-        const helperSource = addAnimationLifecycle(source('MMDAnimationHelper.js'), physicsUrl)
-            .replace('../animation/CCDIKSolver.js', encode(source('CCDIKSolver.js')));
+        const helperSource = resolveImports(addAnimationLifecycle(source('MMDAnimationHelper.js'), physicsUrl)
+            .replace('../animation/CCDIKSolver.js', encode(source('CCDIKSolver.js'))), 'MMDAnimationHelper.js');
         const { MMDPhysics } = await import(physicsUrl);
         const { MMDAnimationHelper } = await import(encode(helperSource));
         globalThis.Ammo = await require(path.join(vendor, 'libs/ammo.wasm.js'))({

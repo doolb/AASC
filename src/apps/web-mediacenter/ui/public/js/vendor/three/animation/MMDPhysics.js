@@ -87,6 +87,10 @@ class MMDPhysics {
         this.interpolationUnitStep = this.unitStep;
         // 独立网页诊断的可选观察入口，未选中骨骼时保持null。
         this.onDiagnosticSubstep = null;
+        // 保存真正参与求解的空间；缩放分支临时脱离父级时不能使用场景世界矩阵。
+        this.physicsTransform = new Matrix4();
+        this.pausedTransform = new Matrix4();
+        this.pausedRotation = new Quaternion();
 
         this.disposed = false;
         try { this._init(mesh, rigidBodyParams, constraintParams); }
@@ -105,14 +109,24 @@ class MMDPhysics {
 	 */
 	update( delta ) {
         // 高频画面帧允许没有物理子步，非法/零时间不采样也不推进。
-        if (!Number.isFinite(delta) || delta <= 0) return this;
+        if (this.disposed || !Number.isFinite(delta) || delta <= 0) return this;
         if (this.windSettings.enabled) {
             this.mesh.getWorldQuaternion(this.windSceneQuaternion);
             this.windSceneMatrix.copy(this.mesh.matrixWorld);
         }
+        this._withPhysicsSpace(() => {
+            this._updateRigidBodies();
+            this._stepSimulation(delta);
+            this._updateBones();
+        });
+        return this;
+    }
 
+    // 普通求解、复位和暂停同步共用同一尺度映射，避免恢复时混用两个坐标系。
+    _withPhysicsSpace(action) {
 		const manager = this.manager;
 		const mesh = this.mesh;
+        mesh.updateWorldMatrix(true, true);
 
 		// rigid bodies and constrains are for
 		// mesh's world scale (1, 1, 1).
@@ -155,10 +169,8 @@ class MMDPhysics {
 		// calculate physics and update bones
 
         try {
-            this._updateRigidBodies();
-            this._stepSimulation(delta);
-            // 骨骼只在所有子步完成后回写一次，VMD/IK仍按画面帧推进。
-            this._updateBones();
+            action();
+            this.physicsTransform.copy(mesh.matrixWorld);
         } finally {
 
 		// restore mesh if converted above
@@ -168,6 +180,7 @@ class MMDPhysics {
 			if ( parent !== null ) mesh.parent = parent;
 
 			mesh.scale.copy( scale );
+            mesh.updateWorldMatrix(true, true);
 
 		}
 
@@ -186,17 +199,66 @@ class MMDPhysics {
 	 * @return {MMDPhysics}
 	 */
 	reset() {
-
-		for ( let i = 0, il = this.bodies.length; i < il; i ++ ) {
-
-			this.bodies[ i ].reset();
-
-		}
-
-        this.resetAnchorInterpolation();
+        if (this.disposed) return this;
+        this._withPhysicsSpace(() => {
+            for (const entry of this.bodies) entry.reset();
+            this.resetAnchorInterpolation();
+        });
 		return this;
 
 	}
+
+    // 暂停的是求解时间，布料相对角色的形状仍须随整个角色一起显示和存储。
+    syncPausedTransform() {
+        if (this.disposed) return this;
+        this._withPhysicsSpace(() => {
+            this.pausedTransform.copy(this.physicsTransform).invert().premultiply(this.mesh.matrixWorld);
+            this.pausedRotation.setFromRotationMatrix(this.pausedTransform).normalize();
+            const manager = this.manager;
+            const position = manager.allocThreeVector3();
+            const quaternion = manager.allocThreeQuaternion();
+            const form = manager.allocTransform();
+            const zero = manager.allocVector3();
+            try {
+                zero.setValue(0, 0, 0);
+                for (const entry of this.bodies) {
+                    this._readAnchorTransform(entry.body.getCenterOfMassTransform(), position, quaternion);
+                    position.applyMatrix4(this.pausedTransform);
+                    quaternion.premultiply(this.pausedRotation).normalize();
+                    manager.setOriginFromThreeVector3(form, position);
+                    manager.setBasisFromThreeQuaternion(form, quaternion);
+                    entry.body.setCenterOfMassTransform(form);
+                    entry.body.getMotionState().setWorldTransform(form);
+                }
+                // 动作仍在推进：锚点取当前骨骼；动态布料不按动作/绑定姿态整体reset。
+                for (const entry of this.bodies) {
+                    if (entry.params.type === 0 && entry.params.boneIndex !== -1) entry.reset();
+                }
+                this._updateBones();
+                for (const entry of this.bodies) {
+                    const body = entry.body;
+                    body.setLinearVelocity(zero);
+                    body.setAngularVelocity(zero);
+                    body.clearForces();
+                    // 此Ammo绑定没有插值setter。Bullet的COM setter会为运动学体保存旧COM，
+                    // 连续写两次同一终态，使其旧/新姿态一致，下一步不回算暂停期间速度。
+                    const pose = body.getCenterOfMassTransform();
+                    body.setCenterOfMassTransform(pose);
+                    body.setCenterOfMassTransform(pose);
+                    body.getMotionState().setWorldTransform(pose);
+                    this.world.updateSingleAabb(body);
+                    body.activate();
+                }
+                this.resetAnchorInterpolation();
+            } finally {
+                manager.freeVector3(zero);
+                manager.freeTransform(form);
+                manager.freeThreeQuaternion(quaternion);
+                manager.freeThreeVector3(position);
+            }
+        });
+        return this;
+    }
 
 	/**
 	 * Warm ups Rigid bodies. Calculates cycles steps.

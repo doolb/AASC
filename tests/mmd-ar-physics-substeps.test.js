@@ -17,7 +17,9 @@ async function fixture() {
         const threeUrl = pathToFileURL(path.join(path.dirname(require.resolve('three')), 'three.module.js')).href;
         const THREE = await import(threeUrl);
         const source = addPhysicsStability(addPhysicsSubsteps(addPhysicsLifecycle(fs.readFileSync(path.join(vendor, 'animation/MMDPhysics.js'), 'utf8'))))
-            .replace("from 'three'", `from '${threeUrl}'`);
+            .replace("from 'three'", `from '${threeUrl}'`)
+            .replaceAll('../../../web-physics-wind.mjs', pathToFileURL(path.resolve(__dirname,
+                '../3rd/mmd-ar-test/web-physics-wind.mjs')).href);
         const { MMDPhysics } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
         globalThis.Ammo = await require(path.join(vendor, 'libs/ammo.wasm.js'))({
             wasmBinary: fs.readFileSync(path.join(vendor, 'libs/ammo.wasm.wasm')) });
@@ -199,7 +201,9 @@ test('真实弹簧关节带动动态刚体，64轮锚点插值native资源和大
 test('后台间隔和显示恢复重置历史，构建锚点缺失或重复立即失败', () => {
     const source = fs.readFileSync(path.join(vendor, 'animation/MMDPhysics.js'), 'utf8');
     assert.throws(() => addPhysicsSubsteps(''), /唯一锚点/u);
-    assert.throws(() => addPhysicsSubsteps(addPhysicsLifecycle(source) + source), /唯一锚点/u);
+    // 已合并源码的适配器直接复用；去掉共享标记后才验证旧构建锚点的重复检测。
+    const legacy = source.replace('/* aasc-shared:addPhysicsSubsteps */', '');
+    assert.throws(() => addPhysicsSubsteps(legacy + legacy), /唯一锚点/u);
     assert.throws(() => addSubstepRuntime(''), /唯一锚点/u);
     const runtime = fs.readFileSync(path.resolve(vendor, '../../display-pmx-runtime.js'), 'utf8');
     const patched = addSubstepRuntime(runtime);
@@ -211,7 +215,9 @@ test('后台间隔和显示恢复重置历史，构建锚点缺失或重复立�
     const currentMesh = {};
     const helper = { current: { objects: new Map([[currentMesh, { physics: { resetAnchorInterpolation() { resets += 1; } } }]]) } };
     // 实际构建补丁片段在可控时间/显隐下执行，不靠字符串存在就宣称后台恢复正确。
-    const runFrame = new Function('helper', 'currentMesh', 'now', 'lastFrameAt', 'visible', `let frameHandle; const disposed=false; ${frame}\n return delta; }; return renderFrame(now);`);
+    const runFrame = new Function('helper', 'currentMesh', 'now', 'lastFrameAt', 'visible', `let frameHandle; const disposed=false;
+        const syncTestKeyShadowBias=()=>{}, syncTestFillFacingRange=()=>{}, syncTestShadowMapSize=()=>{};
+        ${frame}\n return delta; }; return renderFrame(now);`);
     visible = true;
     near(runFrame(helper, currentMesh, 16, lastFrameAt, visible), 0.016);
     assert.equal(resets, 0);

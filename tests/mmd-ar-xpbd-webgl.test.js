@@ -32,6 +32,7 @@ test('WebGL XPBD：数值对照、形状接触、锚点关节、释放与上下�
             const T = await import('three');
             const { createWebglPmxPhysics } = await import('/3rd/mmd-ar-test/web-xpbd-webgl-physics.mjs');
             const { XpbdPmxPhysics } = await import('/3rd/mmd-ar-test/web-xpbd-physics.mjs');
+            const { advancePmxMotionFrame } = await import('/src/apps/web-mediacenter/ui/public/js/mmd-pmx-helper.mjs');
             const renderer = new T.WebGLRenderer(); document.body.append(renderer.domElement);
             const p = { type: 1, boneIndex: -1, shapeType: 0, width: .1, height: .2, depth: .3, weight: 1,
                 position: [0, 0, 0], rotation: [0, 0, 0], positionDamping: 0, rotationDamping: 0,
@@ -73,6 +74,36 @@ test('WebGL XPBD：数值对照、形状接触、锚点关节、释放与上下�
             ensure(renderer.getViewport(new T.Vector4()).equals(new T.Vector4(2, 3, 7, 8)), '物理破坏视口');
             renderer.setRenderTarget(null); renderer.setScissorTest(false); target.dispose();
             gpu.dispose(); cpu.dispose();
+            // 真实GPU纹理暂停同步：CPU镜像正确仍不足以证明恢复求解不会读回旧世界姿态。
+            const paused = make([{ ...p, type: 0, boneIndex: 0, position: [1, 0, 0] },
+                { ...p, position: [2, 0, 0] }], [{ ...joint, position: [1.5, 0, 0] }]);
+            paused.physics.gravity.set(0, 0, 0);
+            const pivot = new T.Group(); pivot.add(paused.physics.mesh); pivot.updateWorldMatrix(true, true);
+            gpuStep(paused);
+            const initial = paused.physics.bodies.map(body => body.position.clone());
+            const gate = { paused: false };
+            let helperUpdates = 0;
+            const helper = { enabled: { physics: true, animation: false }, update(delta) {
+                helperUpdates++; if (this.enabled.physics) paused.physics.update(delta);
+            } };
+            for (const angle of [.4, -.3, .2, .001]) {
+                advancePmxMotionFrame({ delta: 1 / 60, pivot, helper, physics: paused.physics, physicsGate: gate,
+                    rotationPhysicsLimit: 180, advanceRotation() { pivot.rotation.y += angle; return Math.abs(angle); } });
+                paused.physics.bodies.forEach((body, index) => {
+                    ensure(body.position.distanceTo(initial[index].clone().applyMatrix4(pivot.matrixWorld)) < 2e-5,
+                        'GPU暂停期间位置必须同步');
+                    ensure(body.velocity.length() === 0 && body.omega.length() === 0, 'GPU暂停没有残留速度');
+                });
+            }
+            ensure(!gate.paused && !helper.enabled.animation && helperUpdates === 4, 'GPU恢复不得推进动作两次');
+            const resumePositions = paused.physics.bodies.map(body => body.position.clone());
+            const resumeState = gpuStep(paused);
+            ensure(resumeState.readbacks === 1, 'GPU恢复首帧一次读回');
+            paused.physics.bodies.forEach((body, index) => {
+                ensure(body.position.distanceTo(resumePositions[index]) < 2e-5, 'GPU恢复不能读回旧位置');
+                ensure(body.velocity.length() < .01 && body.omega.length() < .01, 'GPU恢复无旋转追赶冲量');
+            });
+            paused.dispose();
             const shapeResults = [];
             for (let a = 0; a < 3; a++) for (let b = a; b < 3; b++) {
                 const fixture = make([{ ...p, shapeType: a, groupTarget: 1 },

@@ -1,3 +1,10 @@
+### MMD-AR 旋转暂停恢复布料连续性
+
+- ✅ [2026-10-11] 修复旋转超过物理暂停阈值后，恢复时布料沿旋转方向追赶旧世界位置或被reset到动画姿态的问题。暂停/恢复帧整体同步全部刚体，保留布料相对形状，动画只更新一次，下一帧恢复求解。
+  - 修改共享 `mmd-pmx-helper.mjs`、内置 `MMDPhysics.js`、共享/独立 `mmd-xpbd-physics.mjs`；Ammo同步COM/MotionState/运动学插值/AABB，XPBD同步历史、目标和GPU纹理。复位/暂停/普通求解使用一致的非单位尺度空间；普通慢速旋转仍由锚点牵引。
+  - 36项helper/真实Ammo/XPBD/风定向、12项生命周期/子步检查、1项真实WebGL2综合检查通过；同步修正旧自测参数、data URL依赖解析与后台测试环境。`npm run build:web:mmd-ar-test`重建成功，未构建Offline APK或发布外网，真机布料观感/性能待验收。
+  - 更新PMX design/spec、usage、task及todo；todo只保留待发布/设备验收。`release/offline-release-status.json`设`servicePackage=true`，其余既有状态保持；保留无关用户改动和生成资源不提交。
+
 ### MMD-AR 手动眼球跟随验证
 
 - ✅ [2026-10-11] 新增独立“眼球跟随”分类，提供左右 `-30°～30°`、上下 `-20°～20°` 滑块，实时控制当前 PMX 模型眼球；手动模式覆盖自动注视，恢复自动后重新跟随相机。

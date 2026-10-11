@@ -1,5 +1,32 @@
 # 本地 PMX 模型与 VMD 动作实现规范
 
+## 旋转暂停恢复连续性（2026-10-11，已实现）
+
+```text
+已有声明：physicsGate、角色枢轴、当前物理实例、helper、旋转暂停阈值
+新增定义：每个物理实例持有 physicsTransform、pausedTransform、pausedRotation
+
+物理初始化/复位/正常步进：保存有效物理空间的模型变换 → physicsTransform
+推进本帧角色旋转 → 旋转量 → 角速度 → 是否超阈值
+推进动画与IK/grant一次 → 当前骨骼姿态
+处于暂停或首次超过阈值：
+  关闭物理求解；按有效物理空间计算整体变换差
+  当前有效空间变换 × physicsTransform的逆 → 整体变换差
+  整体变换差作用于全部刚体位置、姿态，保留布料相对形状
+  锚点/type2位置从当前骨骼采样；同步显示骨骼及历史，不推进模拟时间
+  清零速度/角速度/外力；Ammo用两次COM写入同步运动学插值，更新MotionState/AABB
+  XPBD同步前姿态和目标，resetMotion重置CPU/GPU求解器内部状态
+  保存当前有效空间变换 → physicsTransform
+从暂停恢复：
+  完成本帧整体同步，清除速度、外力与旧采样余量
+  Ammo同步COM、MotionState及插值姿态；XPBD同步历史、目标和GPU状态
+  下一物理帧从一致状态求解，不重复推进恢复帧动画
+正常慢速旋转：沿用现有锚点牵引，不整体搬运动态刚体
+物理实例替换或释放：状态随实例一起丢弃
+```
+
+验收：真实求解器覆盖 yaw、pitch、反转、多帧暂停、非单位缩放与 type=0/1/2；检查恢复前后布料相对形状和恢复首步速度。36项定向、12项生命周期/子步和1项真实 WebGL2 综合测试通过；helper旧默认参数与遗漏动画事件断言已修正。WebGL验证恢复后的纹理读回与首步速度，不用CPU镜像冒充GPU状态。手机真实模型观感/性能待现场验收，构建已完成而外网尚未发布。
+
 ## PMX 物理单位缩放容差
 
 ```text
@@ -570,11 +597,21 @@ PMX runtime.createMotionHelper(mesh, clip)
   如果 PMX 物理可用，且角速度超过 rotationPhysicsLimit
     暂停 helper 中的物理更新，但继续调用 helper.update(delta) 推进 VMD、IK、grant
     记录物理暂停状态
+    调用当前物理实例 syncPausedTransform：整体同步刚体与插值历史，并回写冻结布料骨骼
   否则如果上一帧物理暂停
-    在物理仍暂停时调用 helper.update(delta) 推进动作到当前姿态
-    刷新骨骼世界矩阵，将刚体重置到当前骨骼并清除动态刚体的旧速度与外力
-    结束物理暂停；下一帧恢复物理步进
+    在物理关闭状态推进恢复帧的动作和骨骼
+    syncPausedTransform 同步全部刚体、当前锚点及历史，不把布料 reset 到动画姿态
+    清除线速度、角速度、外力和旧采样余量，不执行物理求解
+    恢复 helper 的物理更新
+    记录物理恢复状态
   否则 helper 存在时正常调用 helper.update(delta)
+
+测试页调试日志
+  仅当 mmd-ar 测试页显式设置 MmdArPhysicsDebug=true 时输出调试信息
+  进入暂停时记录帧序号、旋转速度、阈值、物理后端和刚体数量
+  恢复时记录恢复帧速度、动作开关和物理后端
+  恢复后的首个物理帧记录物理帧耗时和动态刚体状态摘要
+  将最近一次状态保存在 MmdArPhysicsDebugState，供浏览器控制台读取
   MMDAnimationHelper 依次维持 VMD、IK/grant 与已启用的 MMDPhysics
   MMDPhysics 从旋转后的骨骼更新 type=0 运动学刚体锚点
   type=1/2 动态刚体保留 Bullet 世界坐标、姿态及线/角速度
@@ -586,7 +623,7 @@ PMX runtime.createMotionHelper(mesh, clip)
     绘制完成后恢复枢轴原有可见状态，下一帧才可显示模型
   否则渲染当前场景
 
-约束：首次载入带刚体的 PMX 时，Three.js `MMDAnimationHelper.add` 只创建物理世界，显式设置 `warmup=0` 与 `animationWarmup=false`；切换 VMD 时同样不预热。模型提交后的首个实际渲染帧只推进物理且不绘制 PMX，第二帧开始推进 VMD 并显示；绘制后必须恢复枢轴原有可见状态，不能破坏 AR 失锁状态。隐藏或暂停不消耗该首帧标记，显式切换 VMD、暂停恢复不再延迟。若动作播放开关关闭，初始化阶段不套用 VMD 第 0 帧。低于速度阈值的普通旋转沿用运动学锚点牵引，不传送动态刚体。仅从快速旋转的暂停状态恢复时重置刚体并清除旧速度，防止跳变；阈值按实际枢轴位移计算，不按鼠标事件频率计算。物理目标频率和 maxStepNum=3 不变。无 physics 的 PMX 和 VRM 不受影响。
+约束：首次载入带刚体的 PMX 时，Three.js `MMDAnimationHelper.add` 只创建物理世界，显式设置 `warmup=0` 与 `animationWarmup=false`；切换 VMD 时同样不预热。模型提交后的首个实际渲染帧只推进物理且不绘制 PMX，第二帧开始推进 VMD 并显示；绘制后必须恢复枢轴原有可见状态，不能破坏 AR 失锁状态。隐藏或暂停不消耗该首帧标记，显式切换 VMD、暂停恢复不再延迟。若动作播放开关关闭，初始化阶段不套用 VMD 第 0 帧。低于速度阈值的普通旋转沿用运动学锚点牵引，不传送动态刚体。快速旋转暂停/恢复帧同步整体变换，保留布料形状并清除旧运动；恢复帧只推进一次动画，下一帧恢复物理。阈值按实际枢轴位移计算，不按鼠标事件频率计算；物理频率和既有子步预算保持当前配置。无 physics 的 PMX 和 VRM 不受影响。
 ```
 
 ### 固定物理子步中的枢轴同步（备选设计，待现场试验结果，尚未实现）
