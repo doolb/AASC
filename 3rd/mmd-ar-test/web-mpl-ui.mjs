@@ -8,7 +8,7 @@ function initMpl() {
     const buttons = Object.fromEntries(['play', 'stop', 'sample', 'expression-sample', 'save']
         .map(key => [key, panel.querySelector('[data-mpl="' + key + '"]')]));
     let desired = 0, owner = '', phase = '', session = null, lastResult = null, closed = false, automatic = true;
-    let sourceRevision = 0, sourceName = '';
+    let sourceRevision = 0, sourceName = '', sourceBlend = null;
     const downloadSource = document.createElement('button');
     downloadSource.type = 'button'; downloadSource.className = 'display-mmd-ar-action';
     downloadSource.dataset.mpl = 'download-source'; downloadSource.textContent = '下载 MPL';
@@ -42,7 +42,9 @@ function initMpl() {
         finally { if (request === desired) { phase = ''; sync(); } }
     }
     const play = (source, nextOwner = 'manual:mpl', once = true) => launch(async api => ({ ...await api.mpl.play(source,
-        { owner: nextOwner, loop: !once, priority: nextOwner.startsWith('reply:') ? 50 : 100 }), source }), nextOwner);
+        { owner: nextOwner, loop: !once, priority: nextOwner.startsWith('reply:') ? 50 : 100,
+            ...(source === input.value && sourceBlend?.token === api.getState().token ? { gazeStrength: sourceBlend.gazeStrength,
+                strength: sourceBlend.gazeStrength > 0 ? 1 : 0 } : {}) }), source }), nextOwner);
     const perform = (event, nextOwner) => launch(api => api.perform({ action: event.name,
         duration: event.duration, strength: event.strength, count: event.count,
         owner: nextOwner, priority: 50 }), nextOwner);
@@ -68,7 +70,7 @@ function initMpl() {
                 + names.map(n => ' morph ' + JSON.stringify(n) + ' ' + weight + ';').join('\n') + '\n}\n';
             input.value = pose('normal', false, 0) + pose('expression', true, 0.7)
                 + '@animation greet {\n 0: normal;\n 0.5: expression;\n 1.5: normal;\n}\nmain {\n greet;\n}';
-            sourceRevision++; sourceName = '';
+            sourceRevision++; sourceName = ''; sourceBlend = null;
             status('已按当前PMX填入示例。MPL只覆盖代码涉及的骨骼和表情。');
         } catch (error) { status(error.message); }
     }
@@ -84,9 +86,9 @@ function initMpl() {
         downloadSource.disabled = !input.value.trim();
         panel.setAttribute('aria-busy', String(!!phase));
     }
-    function editSource(source, name) {
+    function editSource(source, name, blend = null) {
         if (closed || typeof source !== 'string' || !source.trim() || new TextEncoder().encode(source).length > 65536) throw new Error('MPL需要1–64KiB代码');
-        automatic = false; input.value = source; sourceName = name; sourceRevision++;
+        automatic = false; input.value = source; sourceName = name; sourceRevision++; sourceBlend = blend;
         // 只载入源码，不启动动作，不登记动作库或替换基础资源。
         const group = panel.closest('.mmd-ar-panel-group'), body = panel.closest('.mmd-ar-panel-group-body');
         if (body?.hidden) group.querySelector('.mmd-ar-panel-group-toggle')?.click();

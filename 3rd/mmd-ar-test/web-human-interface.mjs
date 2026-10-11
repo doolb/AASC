@@ -1,3 +1,4 @@
+import { GESTURES } from './web-reply-gestures.mjs';
 import { createHumanModel } from './web-human-model.mjs';
 import { createHumanMixer } from './web-human-mixer.mjs';
 import { createHumanPhysiology } from './web-human-physiology.mjs';
@@ -29,7 +30,8 @@ function patchOptions(value = {}) {
     if (!Array.isArray(mask) || mask.length > 64 || mask.some(p => typeof p !== 'string' || p.length > 120)) throw new Error('部位遮罩无效');
     return { mode, mask, start: number(value.start, 0, 0, 3600, '起始时间'),
         duration: value.duration == null ? null : number(value.duration, null, 1 / 30, 3600, '持续时间'),
-        strength: number(value.strength, 1, 0, 1, '强度') };
+        strength: number(value.strength, 1, 0, 1, '强度'),
+        ...(value.gazeStrength == null ? {} : { gazeStrength: number(value.gazeStrength, 1, 0, 1, '跟随混合强度') }) };
 }
 function validateDefinitions(record) {
     validateHumanLibrary(record);
@@ -242,9 +244,14 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                 layers.push(base); baseDuration = base.duration; warnings.push(...sampler.warnings);
             }
             if (intent.action && !version && !remote) {
-                const source = createHighLevelMpl({ name: intent.action, duration: Math.min(15, baseDuration), strength: 1, count: intent.count ?? 1 });
+                const source = createHighLevelMpl({ name: intent.action, duration: Math.min(15, baseDuration), strength: intent.strength ?? 0.7, count: intent.count ?? 1 }, bound.morphs);
+                const gesture = GESTURES.get(intent.action);
+                if (gesture?.expression && gesture.expression !== '平静' && bound.expression(gesture.expression).missing) {
+                    warnings.push('当前PMX缺少' + gesture.expression + '表情，仅播放骨骼动作');
+                }
                 const result = await mplSampler(source, bound, signal, check); check(); buffer = result.buffer;
-                layers.push(layer(result.sampler, { ...intent, duration: baseDuration }));
+                layers.push(layer(result.sampler, { ...intent, strength: (intent.strength ?? 0.7) > 0 ? 1 : 0,
+                    gazeStrength: intent.strength ?? 0.7, duration: baseDuration }));
                 warnings.push(...result.sampler.warnings);
             }
             const cycleDuration = Math.max(baseDuration, ...layers.map(l => l.start + l.duration));
@@ -416,7 +423,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             point(x, y) { requireModel(); const changed = gaze.point(model, getCamera?.(), x, y); if (changed) wake(); return changed; },
             reset() { gaze.returnToCamera(); wake(); }
         },
-        reflex, learn, serverActions, perform, mpl: { play: playMpl }, stop, getRequest: mixer.state,
+        reflex, learn, serverActions, perform, mpl: { play: playMpl,
+            // 使用与实际播放相同的模型能力，编辑器不根据缺少英文别名的能力摘要再次猜表情。
+            advancedSource: options => createHighLevelMpl(options, requireModel().morphs)
+        }, stop, getRequest: mixer.state,
         setArmAvoidanceEnabled(value) {
             armAvoidanceEnabled = value === true;
             try { localStorage.setItem(ARM_AVOIDANCE_KEY, String(armAvoidanceEnabled)); }

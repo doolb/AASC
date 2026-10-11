@@ -6,6 +6,7 @@ const choices = {
     惊讶: [['上', '驚き', '惊讶', 'surprised'], ['びっくり', '見開き']],
     害羞: [['照れ', '赤面', '害羞', 'blush'], ['にこり'], ['笑い']],
     眨眼: [['ウィンク', 'ウィンク２', 'ｳｨﾝｸ', 'wink']],
+    闭眼: [['まばたき', '瞬き', '眨眼', 'blink']],
 };
 const key = name => String(name).trim().toLowerCase();
 export function resolveReplyExpression(items, name) {

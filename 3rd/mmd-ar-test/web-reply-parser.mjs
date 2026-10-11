@@ -1,34 +1,6 @@
 // 回复标记只识别有限字典；普通括号、Markdown和代码不会被推断为动作。
-export const EMOTIONS = Object.freeze({
-    开心: ['开心', '高兴', '快乐', '微笑', '笑', 'happy', 'smile'],
-    悲伤: ['悲伤', '难过', '伤心', '哭', 'sad'],
-    生气: ['生气', '愤怒', 'angry'],
-    惊讶: ['惊讶', '吃惊', 'surprised'],
-    害羞: ['害羞', '脸红', 'shy'],
-    眨眼: ['眨眼', 'wink'],
-    平静: ['平静', '正常', '恢复', 'neutral'],
-});
-export const ACTIONS = Object.freeze({
-    点头: ['点头', 'nod'], 摇头: ['摇头', 'shake'],
-    挥手: ['挥手', '招手', 'wave'], 鞠躬: ['鞠躬', 'bow'],
-    歪头: ['歪头', 'tilt'],
-});
-const symbols = new Map([
-    ['😊', ['emotion', '开心']], ['😄', ['emotion', '开心']], ['😀', ['emotion', '开心']],
-    ['😆', ['emotion', '开心']], ['🙂', ['emotion', '开心']], ['😢', ['emotion', '悲伤']],
-    ['😭', ['emotion', '悲伤']], ['😞', ['emotion', '悲伤']], ['😠', ['emotion', '生气']],
-    ['😡', ['emotion', '生气']], ['😲', ['emotion', '惊讶']], ['😮', ['emotion', '惊讶']],
-    ['😳', ['emotion', '害羞']], ['☺', ['emotion', '害羞']], ['😉', ['emotion', '眨眼']],
-    ['👋', ['action', '挥手']], ['🙇', ['action', '鞠躬']],
-    ['(*^▽^*)', ['emotion', '开心']], ['(^_^)', ['emotion', '开心']],
-    ['(｡･ω･｡)ﾉ', ['action', '挥手']], ['(T_T)', ['emotion', '悲伤']],
-]);
-// 常见回复Emoji采用同一语义白名单；装饰图标不推断动作。
-for (const [name, icons] of Object.entries({
-    开心: ['😃', '😁', '😂', '🤣', '😅', '🥰', '😍', '😌', '😇'],
-    悲伤: ['🥺', '😔', '😥', '😿'], 生气: ['😤', '🤬'],
-    惊讶: ['😯', '😱', '🤯', '😨'], 害羞: ['🤭', '🫣', '😚', '😘'],
-})) for (const icon of icons) symbols.set(icon, ['emotion', name]);
+import { EMOTIONS, ACTIONS, REPLY_SYMBOLS as symbols, normalizeReplySymbol } from './web-reply-gestures.mjs';
+export { EMOTIONS, ACTIONS };
 const aliases = (groups, input) => Object.entries(groups).find(([, names]) => names.includes(input.toLowerCase()))?.[0];
 function parameters(value) {
     const options = { duration: null, strength: null, count: null };
@@ -56,10 +28,13 @@ function parameters(value) {
     return options;
 }
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-const symbolPattern = [...symbols.keys()].sort((a, b) => b.length - a.length).map(escape).join('|');
+// 完整消费Emoji字素：未知ZWJ也整体保留，不能从猫咪宇航员中截出猫咪动作。
+const symbolPattern = [...symbols.keys()].filter(value => !/[\p{Extended_Pictographic}\u2661]/u.test(value))
+    .sort((a, b) => b.length - a.length).map(escape).join('|');
+const emojiPattern = String.raw`(?:\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3|[\p{Extended_Pictographic}\u2661][\uFE0E\uFE0F\p{Emoji_Modifier}]*(?:\u200D\p{Extended_Pictographic}[\uFE0E\uFE0F\p{Emoji_Modifier}]*)*(?:[\u{E0020}-\u{E007E}]+\u{E007F})?)`;
 const protectedPattern = /```([^\n]*)\r?\n([\s\S]*?)```|`[^`\n]+`|^>[^\n]*(?:\n|$)|\[MPL\]([\s\S]*?)\[\/MPL\]|\[(表情|动作)[:：]([^\]\n]+)\]|(?<!\*)\*(?!\*)([^*\n]{1,80})\*(?!\*)/u;
-const pattern = new RegExp(protectedPattern.source + '|(?:' + symbolPattern
-    + String.raw`)[\uFE0E\uFE0F\p{Emoji_Modifier}]*|[（(]([^（）()\n]{1,80})[）)]`, 'gimu');
+const pattern = new RegExp(protectedPattern.source + '|(?:' + symbolPattern + ')|' + emojiPattern
+    + String.raw`|[（(]([^（）()\n]{1,80})[）)]`, 'gimu');
 
 export function parseReply(value, { actions = [] } = {}) {
     const text = String(value || '');
@@ -98,7 +73,7 @@ export function parseReply(value, { actions = [] } = {}) {
                 handled = true;
             } catch (error) { warnings.push(error.message); handled = true; }
         } else {
-            const symbol = symbols.get(raw.replace(/[\uFE0F\uFE0E\p{Emoji_Modifier}]/gu, ''));
+            const symbol = symbols.get(normalizeReplySymbol(raw));
             const name = starred || bracketed || '';
             const emotion = aliases(EMOTIONS, name), action = aliases(ACTIONS, name);
             if (symbol) { add(symbol[0], { name: symbol[1], duration: 2, strength: 0.7, count: 1 }, raw); handled = true; }

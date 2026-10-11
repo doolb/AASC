@@ -12,7 +12,7 @@ function appendPanels(panel) {
           <button type="button" class="display-mmd-ar-action" data-reply="stop" disabled>停止并恢复</button>
           <button type="button" class="display-mmd-ar-action" data-reply="sample">填入示例</button>
         </div>
-        <p class="mind-basic-note">粘贴已有 AI 回复。识别常见 Emoji、（微笑）、*点头*、[表情:开心]、[动作:点头]。参数：时长=2 强度=0.7 次数=1；明确的 mpl 代码块作为低级动作。表情、身体动作、口型并行。无声预览，不调用 LLM 或 TTS，口型文字最多400字符。</p>
+        <p class="mind-basic-note">粘贴已有 AI 回复。识别常见 Emoji（爱心、猫咪、猫爪、拥抱、手势等）、（微笑）、*点头*、[表情:开心]、[动作:点头]。参数：时长=2 强度=0.7 次数=1；明确的 mpl 代码块作为低级动作。表情、身体动作、口型并行。无声预览，不调用 LLM 或 TTS，口型文字最多400字符。</p>
         <details><summary>识别结果与口型文字</summary>
           <p class="mind-basic-note" data-reply-speech style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
           <ul class="mind-basic-note" data-reply-tracks style="padding-left:20px;overflow-wrap:anywhere"></ul>
@@ -25,16 +25,12 @@ function appendPanels(panel) {
         <label class="mind-basic-field"><span>强度</span><input data-strength type="number" min="0" max="1" step="0.1" placeholder="默认"></label>
         <label class="mind-basic-field"><span>次数</span><input data-count type="number" min="1" max="8" step="1" placeholder="默认"></label>
         <div class="display-mmd-ar-actions">
-          <button type="button" class="display-mmd-ar-action" data-advanced="点头">点头</button>
-          <button type="button" class="display-mmd-ar-action" data-advanced="摇头">摇头</button>
-          <button type="button" class="display-mmd-ar-action" data-advanced="挥手">挥手</button>
-          <button type="button" class="display-mmd-ar-action" data-advanced="鞠躬">鞠躬</button>
-          <button type="button" class="display-mmd-ar-action" data-advanced="歪头">歪头</button>
           <button type="button" class="display-mmd-ar-action" data-advanced-stop>停止并恢复</button>
         </div>
+        <div data-builtin-actions class="display-mmd-ar-actions"></div>
         <div data-server-actions class="display-mmd-ar-actions"></div>
         <p data-server-status class="mind-basic-note" role="status">正在读取服务器动作…</p>
-        <p class="mind-basic-note">同名登记行为优先，其次服务器动作，最后MPL模板。时长留空使用默认：服务器VMD按原速原长播放。基础待机与物理继续运行；手动表情和口型可同时播放。</p>
+        <p class="mind-basic-note">同名登记行为优先，其次服务器动作，最后MPL模板。时长留空使用默认：服务器VMD按原速原长播放。点击动作同时载入可用MPL，供编辑、预览和下载；只有VMD的动作显示暂无源码。基础待机与物理继续运行；手动表情和口型可同时播放。</p>
         <p class="mind-basic-note" role="status" aria-live="polite">需要标准 MMD 骨骼的 PMX 模型。</p>
       </div>
     `);

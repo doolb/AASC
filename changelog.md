@@ -1,3 +1,12 @@
+### MMD-AR Emoji高级动作与自动MPL
+
+- ✅ [2026-10-11] 核对当前113条AI回复/79种图标，补充爱心、猫咪/猫爪及常用候选Emoji；新增共享web-reply-gestures.mjs，统一28类语义、146符号/颜文字和骨骼模板。
+  - 修改web-reply-parser/actions/expressions/source/ui.mjs、web-reply-panel.js、web-reply-build.js与web-human-build.js：完整Emoji/肤色/性别/ZWJ识别，未知组合及内容图标保留，受保护代码/引用和资源上限保持。实际聊天正文/私人标识未进入仓库，历史不自动执行。
+- ✅ [2026-10-11] 高级点击同时播放并载入可用MPL，固定同次参数、当前PMX能力和原来源优先级；快切/编辑/停止/模型token/后台保护迟到源码，纯VMD正常播放并保留编辑器。保持只编辑/预览/下载，无保存入口。
+  - 修改web-human-interface/mixer.mjs及web-mpl-ui.mjs：内置强度写入一次，跟随占用单独保留gazeStrength，0强度不接管；预览同文本/同模型沿用上下文，普通MPL/VMD保持。比心/猫爪/撒娇采用显式胸前屈肘平面，用户待机原文不变。源文件和所有运行变化仅独立WEB，无远端配置/正式端/APK修改。
+  - 新增mmd-ar-emoji-gestures.test.js，扩展真实浏览器自测；57项单元+1项浏览器共58项通过，无失败/跳过/pageerror。146符号、28模板×4强度真实编译（17类可用Morph）、比心胸前双腕镜像、低强度跟随及6类播放/预览VMD字节一致通过；浏览器177.8秒，异步保护与原动作/物理回归通过。
+  - npm网页构建和27条生成导入指纹通过，HEAD加14个源码/自测片段的只读候选57/57再次通过；真实风吹仍有残余接触，手机观感/性能与独立发布待验收。同步Human/AI回复design/spec/usage、task/self-test/todo；不提交生成资源或聊天数据，不发布外网或构建APK。
+
 ### MMD-AR 用户待机与避让安全回归
 
 - ✅ [2026-10-11] 待机完整采用用户最终MPL：双臂35°、双肘10°、双腕bend forward -10°，移除turn，0/8秒同一idle；默认待机与高级动作源码共用同一编译输入。

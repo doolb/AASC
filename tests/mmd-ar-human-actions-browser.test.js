@@ -10,11 +10,12 @@ const ROOT = process.env.AASC_MMD_TEST_WEB_ROOT || path.resolve(__dirname, '../3
 const CHROME = '/usr/bin/chromium';
 
 test('真实米娅默认待机、动态服务器动作、原时长/本地优先与物理开关刷新/后端重建', {
-    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 240000
+    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 300000
 }, async () => {
     const errors = [], timing = [];
     const downloads = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-mmd-source-download-'));
-    const server = http.createServer((request, response) => {
+    let sourceDelay = 0;
+    const server = http.createServer(async (request, response) => {
         const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
         if (pathname === '/mmd-actions.json') {
             const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, 'mmd-actions.json')));
@@ -25,6 +26,7 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
         if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { response.writeHead(404).end(); return; }
         response.setHeader('Content-Type', /\.m?js$/u.test(file) ? 'text/javascript' : /\.html$/u.test(file) ? 'text/html'
             : /\.css$/u.test(file) ? 'text/css' : /\.json$/u.test(file) ? 'application/json' : 'application/octet-stream');
+        if (sourceDelay && pathname.endsWith('/miya-idle.mpl')) await new Promise(resolve => setTimeout(resolve, sourceDelay));
         fs.createReadStream(file).pipe(response);
     });
     let browser;
@@ -80,6 +82,66 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
             return count;
         }, Buffer.from(idleScreenshot).toString('base64'));
         assert.ok(modelPixels > 3000, '模型实际截图缺少可见像素：' + modelPixels);
+        assert.equal(await page.$$eval('[data-builtin-actions] [data-advanced]', buttons => buttons.length), 28);
+        const catalogSymbols = await page.evaluate(() => window.MmdArReplyPreview.parse('❤️🐾🐈‍⬛🫶🏽😊🤷🏾‍♀️'));
+        assert.equal(catalogSymbols.speech, '');
+        assert.deepEqual(catalogSymbols.events.map(event => event.name), ['比心', '猫爪', '猫咪撒娇', '比心', '开心', '摊手']);
+        await page.evaluate(() => {
+            window.__emojiOriginalMpl = window.MmdArMplPlayback; window.__emojiRuns = [];
+            // 仍调用真实Human/Worker，只观察自动按钮实际编译结果，随后与编辑器预览逐字节比较。
+            window.MmdArMplPlayback = Object.freeze({ ...window.__emojiOriginalMpl, async perform(event, owner) {
+                const result = await window.__emojiOriginalMpl.perform(event, owner);
+                window.__emojiRuns.push({ name: event.name, buffer: result.buffer, warnings: result.warnings });
+                return result;
+            } });
+            for (const [key, value] of [['duration', 2.4], ['strength', 0.4], ['count', 2]]) {
+                document.querySelector('#mmdArAdvancedMotionPanel [data-' + key + ']').value = value;
+            }
+        });
+        for (const name of ['比心', '猫爪', '猫咪撒娇', '晚安', '开心', '赞同']) {
+            await page.evaluate(name => document.querySelector('[data-advanced="' + name + '"]').click(), name);
+            await page.waitForFunction(name => window.__emojiRuns.some(run => run.name === name), { timeout: 30000 }, name);
+            await page.waitForFunction(name => document.getElementById('mmdArMplSource').value === window.DisplayMmd.getHumanInterface().mpl.advancedSource({ name, duration: 2.4, strength: 0.4, count: 2 }), {}, name);
+            const comparison = await page.evaluate(async name => {
+                const source = document.getElementById('mmdArMplSource').value;
+                const human = window.DisplayMmd.getHumanInterface();
+                const exactSource = source === human.mpl.advancedSource({ name, duration: 2.4, strength: 0.4, count: 2 });
+                const actual = window.__emojiRuns.find(run => run.name === name);
+                const preview = await window.MmdArMplPlayback.play(source, 'browser:emoji-source', true);
+                const before = new Uint8Array(actual.buffer), after = new Uint8Array(preview.buffer);
+                const identical = before.length > 0 && before.length === after.length && before.every((byte, index) => byte === after[index]);
+                await window.MmdArMplPlayback.stop(); await window.MmdArReplyPreview.stop();
+                return { exactSource, identical, bytes: before.length, warnings: actual.warnings };
+            }, name);
+            assert.ok(comparison.exactSource && comparison.identical, name + '实际播放与编辑预览不一致');
+            console.log('Emoji自动源码与真实Worker一致：', name, JSON.stringify(comparison));
+        }
+        // 延迟服务器源码期间快切、输入和停止，都必须保留较新的编辑状态。
+        sourceDelay = 450;
+        await page.evaluate(() => {
+            document.querySelector('[data-advanced="待机"]').click();
+            document.querySelector('[data-advanced-source="猫爪"]').click();
+        });
+        await page.waitForFunction(() => document.getElementById('mmdArMplSource').value.includes('elbow_l bend forward 48;'));
+        await new Promise(resolve => setTimeout(resolve, 750));
+        assert.match(await page.$eval('#mmdArMplSource', element => element.value), /elbow_l bend forward 48;/u);
+        await page.evaluate(() => {
+            document.querySelector('[data-advanced="待机"]').click();
+            const input = document.getElementById('mmdArMplSource'); input.value = '自动请求期间的用户编辑'; input.dispatchEvent(new Event('input'));
+        });
+        await new Promise(resolve => setTimeout(resolve, 750));
+        assert.equal(await page.$eval('#mmdArMplSource', element => element.value), '自动请求期间的用户编辑');
+        await page.evaluate(() => {
+            document.querySelector('[data-advanced="待机"]').click();
+            document.querySelector('[data-advanced-stop]').click();
+        });
+        await new Promise(resolve => setTimeout(resolve, 750));
+        assert.equal(await page.$eval('#mmdArMplSource', element => element.value), '自动请求期间的用户编辑');
+        sourceDelay = 0;
+        await page.evaluate(() => {
+            window.MmdArMplPlayback = window.__emojiOriginalMpl;
+            for (const key of ['duration', 'strength', 'count']) document.querySelector('#mmdArAdvancedMotionPanel [data-' + key + ']').value = '';
+        });
         const libraryBeforeEditing = await page.evaluate(() => JSON.stringify(window.DisplayMmd.getHumanInterface().learn.list()));
         await page.waitForFunction(() => window.MmdArMplPlayback?.editSource);
         for (const name of ['点头', '摇头', '挥手', '鞠躬', '歪头']) {

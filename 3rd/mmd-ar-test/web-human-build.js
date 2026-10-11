@@ -49,7 +49,7 @@ async function stage(root, { webMode = false } = {}) {
     if (!webMode) return;
     const folder = path.join(root, 'js'), version = async file => (await hashFile(path.join(folder, file))).sha256.slice(0, 12);
     const versions = new Map();
-    for (const file of ['web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
+    for (const file of ['web-reply-gestures.mjs', 'web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
         'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js', 'web-xpbd-collision.mjs',
         'web-rigid-body-debug.mjs']) versions.set(file, await version(file));
     const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'interface', 'ui'];

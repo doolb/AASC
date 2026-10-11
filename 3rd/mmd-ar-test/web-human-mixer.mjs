@@ -44,7 +44,7 @@ export function createHumanMixer() {
         },
         occupiedEyes(model) {
             return [...requests.values()].some(request => request.layers.some(layer =>
-                layer.sampler.tracks.some(track => track.kind === 'morph'
+                layer.strength > 0 && layer.sampler.tracks.some(track => track.kind === 'morph'
                     && model.morphs.find(m => m.index === track.index)?.panel === 2 && model.allowed(track, layer.mask))));
         },
         mix(model, physiological = [], external = [], gaze = null) {
@@ -94,6 +94,8 @@ export function createHumanMixer() {
                     const windowEnvelope = windowFade && (layer.start > 0 || layer.duration < request.duration)
                         ? clamp(Math.min(local / windowFade, (layer.duration - local) / windowFade)) : 1;
                     const weight = clamp(layer.strength * envelope * windowEnvelope);
+                    // 模板已缩放角度时，采样权重与跟随占用分开；普通VMD/MPL继续使用原权重。
+                    const gazeWeight = layer.strength > 0 ? clamp((layer.gazeStrength ?? layer.strength) * envelope * windowEnvelope) : 0;
                     const releasing = (!request.loop && fade > 0 && request.duration - time <= fade)
                         || (windowFade > 0 && (layer.start > 0 || layer.duration < request.duration)
                             && layer.duration - local <= windowFade);
@@ -103,10 +105,10 @@ export function createHumanMixer() {
                         const values = track.evaluate(sampleTime);
                         if (track.kind === 'bone') {
                             if (track.property === 'quaternion') {
-                                occupied.set(track.index, Math.max(occupied.get(track.index) || 0, weight));
+                                occupied.set(track.index, Math.max(occupied.get(track.index) || 0, gazeWeight));
                                 // 身份在淡入零权重帧也有效，避免新动作被误当成旧动作释放。
                                 // 零强度层不接管；多个旋转层必须全部淡出才允许头部恢复。
-                                if (layer.strength > 0) {
+                                if (layer.strength > 0 && (layer.gazeStrength ?? layer.strength) > 0) {
                                     let channel = rotations.get(track.index);
                                     if (!channel) {
                                         channel = { owners: new Set(), releasing: true };

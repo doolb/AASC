@@ -11,5 +11,7 @@ export async function getAdvancedMpl({ name, duration, strength, count }, human,
     }
     const entries = await catalog.load();
     if (entries.some(item => item.name === name)) return catalog.source(name);
-    return createHighLevelMpl({ name, duration, strength, count });
+    return human?.mpl?.advancedSource
+        ? human.mpl.advancedSource({ name, duration, strength, count })
+        : createHighLevelMpl({ name, duration, strength, count });
 }
