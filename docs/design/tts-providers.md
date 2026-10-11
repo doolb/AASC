@@ -66,6 +66,16 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 
 用户在诊断方案后要求qwenchat做emoji筛选，视为确认仅针对qwen-chat实施。筛选位于qwen-chat薄适配器，按Unicode字素簇整体去除表情、肤色组合、ZWJ家庭、国旗、键帽与变体选择符，普通数字和文字标点保留；聊天原文不变。纯表情或筛选后仅剩标点/空白返回null，不查询Chat2API账号、不连接语音、不生成假空WAV。Provider服务及手动/自动AI/Agent播放调用共同接受该跳过结果；其他Provider继续原文和现有音频规则。真正正文生成失败仍明确报告，本轮不更改Chat2API鉴权或错误映射。
 
+## 国内千问音色范围核查（2026-10-11）
+
+针对用户再次确认QUARK_VOICE音色数量：目前只确认zh_female_quarkF531S0_ptts可用，官网默认配置及本项目预置一条不等于模型音色总数为一；其他音色尚无可用ID/目录证据，不承诺可以切换。
+
+当前qwen-chat.voices仅预置已真实合成验证的默认女声zh_female_quarkF531S0_ptts，生成请求仍可传入其他voice，是否可用由上游模型与账号判定。实时核对国内官网4.9.6的js/async/4180.js，公开朗读tts_config默认同为该音色及QUARK_VOICE，该朗读模块未发现音色目录；不能据此断言上游仅支持一种音色。国际版Qwen及百炼API目录不能直接作为国内账号音色。扩充目录需国内官方目录或逐项合成证据，本轮未增加未经验证的音色。
+
+用户进一步把模型改成qwen3-tts-flash后不可用。已查明qwen-chat调用网页WebSocket并使用Chat2API账号Cookie，qwen3-tts-flash则是qwen-api百炼HTTP模型，使用API Key与对应系统音色。修复前配置model接受任意有界字符串，但Chat2API语音请求只接受qwen-chat别名、QUARK_VOICE、MINI_MAX，导致不兼容模型保存成功后生成才失败。QUARK_VOCIE也是拼写错误，正确为QUARK_VOICE。
+
+用户回复“先修复”确认实施后，控制端网页模型改为QUARK_VOICE与MINI_MAX下拉选择，并提示MINI_MAX需匹配音色、百炼模型应使用Qwen API。服务端在现有WebSocket保存流程严格校验，非法模型失败并回传原权威值；qwen-chat别名规范化为QUARK_VOICE。历史已保存的不兼容模型读取时恢复默认QUARK_VOICE，保留音色、账号和其他参数，下次合法保存持久化。只读SelfTest同步检查模型，不增加云端请求。未扩充未经验证的音色。
+
 ## 参考
 
 - [百炼 Qwen TTS API](https://help.aliyun.com/en/model-studio/qwen-tts-api)

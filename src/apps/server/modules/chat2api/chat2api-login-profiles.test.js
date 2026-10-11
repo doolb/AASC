@@ -23,3 +23,9 @@ test('九个内置 Provider 都声明允许来源和必填字段', () => {
     assert.equal(profile.script, undefined);
   }
 });
+
+test('千问恢复Cookie来源固定且全部在允许列表内，不引入通配域名', () => {
+  const profile = getAndroidLoginProfile('qwen');
+  assert.deepEqual(profile.cookies[0].origins, ['https://www.qianwen.com', 'https://chat2.qianwen.com', 'https://chat2-api.qianwen.com']);
+  assert.ok(profile.cookies[0].origins.every(origin => profile.allowedOrigins.includes(origin)));
+});

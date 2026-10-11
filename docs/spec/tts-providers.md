@@ -1,5 +1,41 @@
 # TTS Provider 与播报配置实现
 
+## 网页语音模型保存校验（2026-10-11，已实现）
+
+```text
+已有声明:
+  normalizeSettings、getTtsProviderSettings、setTtsProviderSettings、ttsProviderConfig广播
+
+新增定义:
+  QwenChatModels = QUARK_VOICE、MINI_MAX
+  ReadStoredTtsOptions { recoverLegacyModel }
+
+操作流程:
+  qwen-chat模型别名qwen-chat -> 规范化为QUARK_VOICE
+  新保存模型不在QwenChatModels -> 固定错误提示，不修改现有配置；WS回传权威配置
+  读取历史已保存不兼容模型 -> 回退QUARK_VOICE，保持账号、音色及其他参数；下次保存持久化
+  控制端qwen-chat模型 -> 下拉框仅提供上述两项，提示百炼模型需使用Qwen API
+  qwen-api与其他Provider模型 -> 保持既有规则
+  只读SelfTest -> 检查qwen-chat模型属于QwenChatModels
+```
+
+## 国内千问音色目录现状核查（2026-10-11）
+
+```text
+已有声明:
+  qwen-chat.voices、normalizeSpeechRequest
+
+操作流程:
+  查询qwen-chat音色 -> 输出已预置默认女声zh_female_quarkF531S0_ptts
+  用户查询QUARK_VOICE音色总数 -> 说明仅确认一个可用音色，模型完整音色总数未确定
+  显式填写其他voice -> 校验字符串格式 -> 原voice转交Chat2API上游
+  未填写voice -> 使用默认女声
+  未取得国内目录或真实合成证据 -> 不宣称其他音色可用，不借用国际版或API列表
+  qwen-chat模型为qwen3-tts-flash或QUARK_VOCIE -> normalizeSpeechRequest本地拒绝，不读取账号、不连接语音
+  qwen-chat正确网页默认模型 -> QUARK_VOICE
+  qwen-api模型qwen3-tts-flash -> 百炼HTTP端点、API Key及对应音色
+```
+
 ## qwen-chat emoji筛选（2026-10-11，已实现）
 
 ```text

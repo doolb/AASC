@@ -156,7 +156,7 @@ class Chat2ApiAuthWebView(
     private fun applyRestoreCookies(pageUrl: String) {
         if (restoreStatus == null || !Chat2ApiCredentialCapture.isAllowed(profile, pageUrl)) return
         val manager = CookieManager.getInstance()
-        restoreCookies.filter { it.origin == pageUrlOrigin(pageUrl) }.forEach { mapping ->
+        restoreCookies.filter { Chat2ApiCredentialCapture.normalizeOrigin(it.origin) == pageUrlOrigin(pageUrl) }.forEach { mapping ->
             manager.setCookie(mapping.origin, "${mapping.name}=${mapping.value}; Path=/")
         }
         manager.flush()
@@ -165,39 +165,34 @@ class Chat2ApiAuthWebView(
     private fun restorePageIfNeeded(pageUrl: String) {
         val status = restoreStatus ?: return
         if (!Chat2ApiCredentialCapture.isAllowed(profile, pageUrl)) {
-            status("当前网页不在允许的恢复来源内，已跳过凭证注入")
+            status(Chat2ApiCredentialRestore.pageStatus(profile, pageUrl, false))
             return
         }
         if (restoreCookies.isEmpty() && restoreLocalStorage.isEmpty()) {
-            status("当前 Provider 不支持自动恢复，请在网页中手动登录")
+            status(Chat2ApiCredentialRestore.pageStatus(profile, pageUrl, false))
             return
         }
-        if (restoreLocalStorage.isNotEmpty() && !restoreInjected) {
-            val script = Chat2ApiCredentialRestore.localStorageScript(restoreLocalStorage)
+        val pageStorage = restoreLocalStorage.filter { Chat2ApiCredentialCapture.normalizeOrigin(it.origin) == pageUrlOrigin(pageUrl) }
+        if (pageStorage.isNotEmpty() && !restoreInjected) {
+            val script = Chat2ApiCredentialRestore.localStorageScript(pageStorage)
             evaluateJavascript(script) {
+                if (pageUrlOrigin(url.orEmpty()) != pageUrlOrigin(pageUrl)) return@evaluateJavascript
                 restoreInjected = true
                 if (!restoreReloaded) {
                     restoreReloaded = true
-                    status("已注入网页存储，正在刷新确认登录状态")
+                    status("${Chat2ApiCredentialRestore.sourceLabel(pageUrl)}；已注入网页存储，正在刷新确认登录状态")
                     reload()
                 } else {
-                    status("已尝试恢复登录状态，可继续手动登录")
+                    status(Chat2ApiCredentialRestore.pageStatus(profile, pageUrl, true))
                 }
             }
             return
         }
-        status("已尝试恢复登录状态，可继续手动登录")
+        status(Chat2ApiCredentialRestore.pageStatus(profile, pageUrl, true))
     }
 
     private fun pageUrlOrigin(value: String): String? {
-        return try {
-            java.net.URI(value).let { uri ->
-                val port = if (uri.port > 0) ":${uri.port}" else ""
-                "${uri.scheme}://${uri.host}$port"
-            }
-        } catch (_: Exception) {
-            null
-        }
+        return Chat2ApiCredentialCapture.normalizeOrigin(value)
     }
 
     private fun pollCapture() {

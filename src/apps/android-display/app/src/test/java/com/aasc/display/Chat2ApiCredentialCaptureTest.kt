@@ -8,6 +8,32 @@ import org.junit.Test
 class Chat2ApiCredentialCaptureTest {
 
     @Test
+    fun `默认端口和大小写是等效来源_恶意来源不能恢复`() {
+        val profile = Chat2ApiCaptureProfile(allowedOrigins = listOf("https://www.qianwen.com", "http://local.example"))
+        assertTrue(Chat2ApiCredentialCapture.isAllowed(profile, "HTTPS://WWW.QIANWEN.COM:443/chat/test?ticket=hidden"))
+        assertTrue(Chat2ApiCredentialCapture.isAllowed(profile, "http://local.example:80/page"))
+        for (url in listOf("https://www.qianwen.com:444/", "https://www.qianwen.com.evil.example/", "http://www.qianwen.com/",
+            "https://secret@www.qianwen.com/", "https://www.qianwen.com:0/", "https://www.qianwen.com:65536/", "about:blank", "javascript:alert(1)")) {
+            assertFalse(url, Chat2ApiCredentialCapture.isAllowed(profile, url))
+        }
+    }
+
+    @Test
+    fun `恢复提示显示来源但没有路径查询片段和凭证`() {
+        val profile = Chat2ApiCaptureProfile(allowedOrigins = listOf("https://www.qianwen.com"))
+        val success = Chat2ApiCredentialRestore.pageStatus(profile, "https://WWW.QIANWEN.COM:443/private?ticket=secret#token=hidden", true)
+        assertTrue(success.contains("https://www.qianwen.com"))
+        assertTrue(success.contains("已尝试恢复"))
+        for (value in listOf("private", "ticket", "secret", "token", "hidden", ":443")) assertFalse(success.contains(value))
+        val denied = Chat2ApiCredentialRestore.pageStatus(profile, "https://account.example:8443/login?ticket=secret", true)
+        assertTrue(denied.contains("https://account.example:8443"))
+        assertTrue(denied.contains("已跳过凭证注入"))
+        assertFalse(denied.contains("secret"))
+        assertTrue(Chat2ApiCredentialRestore.pageStatus(profile, "about:blank", true).contains("未知来源"))
+        assertTrue(Chat2ApiCredentialRestore.pageStatus(profile, "https://www.qianwen.com", false).contains("手动登录"))
+    }
+
+    @Test
     fun 只从允许域名和配置字段合并凭据() {
         val profile = Chat2ApiCaptureProfile(
             allowedOrigins = listOf("https://chat.example"),

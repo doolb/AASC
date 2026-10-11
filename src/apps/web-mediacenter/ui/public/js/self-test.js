@@ -74,7 +74,8 @@ const SelfTest = {
                     && !Object.hasOwn(config.providers.system, 'enabled')
                     && !Object.hasOwn(config.providers.system, 'defaultVoice')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'chat2apiAccountId')
-                    && !Object.hasOwn(config.providers['qwen-chat'], 'credentialSource');
+                    && !Object.hasOwn(config.providers['qwen-chat'], 'credentialSource')
+                    && ['QUARK_VOICE', 'MINI_MAX'].includes(config.providers['qwen-chat'].model);
                 return { success: valid, message: valid ? '业务配置已同步，凭证已脱敏' : '语音服务配置校验失败',
                     details: '本项只检查配置；千问账号和语音鉴权由Chat2API处理，设备声音另行验收' };
             }

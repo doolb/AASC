@@ -73,7 +73,10 @@ const ANDROID_LOGIN_PROFILES = freezeDeep({
     allowedOrigins: ['https://www.qianwen.com', 'https://chat2.qianwen.com', 'https://chat2-api.qianwen.com'],
     authorization: null,
     localStorage: [],
-    cookies: [{ name: 'tongyi_sso_ticket', field: 'ticket' }],
+    // 三个正式来源分别设置host-only Cookie，避免网页已恢复但跨子域API仍未登录。
+    cookies: [{ name: 'tongyi_sso_ticket', field: 'ticket', origins: [
+      'https://www.qianwen.com', 'https://chat2.qianwen.com', 'https://chat2-api.qianwen.com',
+    ] }],
     requiredFields: ['ticket'],
   },
   'qwen-ai': {

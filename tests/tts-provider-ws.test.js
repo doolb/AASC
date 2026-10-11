@@ -42,3 +42,22 @@ test('TTS不再处理或调用账号候选查询', async () => {
     assert.equal(await handler.handle({}, { type: 'getTtsProviderAccounts' }), false);
     assert.equal(accessed, false);
 });
+
+test('错误网页模型保存失败回传原权威值，支持的别名广播规范化后值', async () => {
+    let settings = normalizeSettings();
+    const replies = [];
+    const broadcasts = [];
+    const control = { send: raw => replies.push(JSON.parse(raw)) };
+    const handler = createTtsProviderWs({ config: {
+        getPublicTtsProviderSettings: () => redactSettings(settings),
+        setTtsProviderSettings: patch => { settings = normalizeSettings(patch, settings); }
+    }, isControl: ws => ws === control, broadcast: message => broadcasts.push(message) });
+    await handler.handle(control, { type: 'setTtsProviderConfig', requestId: 'bad-model', config: { providers: { 'qwen-chat': { model: 'qwen3-tts-flash' } } } });
+    assert.equal(replies[0].success, false);
+    assert.equal(replies[0].requestId, 'bad-model');
+    assert.match(replies[0].message, /Qwen API/u);
+    assert.equal(replies[0].config.providers['qwen-chat'].model, 'QUARK_VOICE');
+    assert.deepEqual(broadcasts, []);
+    await handler.handle(control, { type: 'setTtsProviderConfig', config: { providers: { 'qwen-chat': { model: 'qwen-chat' } } } });
+    assert.equal(broadcasts[0].config.providers['qwen-chat'].model, 'QUARK_VOICE');
+});

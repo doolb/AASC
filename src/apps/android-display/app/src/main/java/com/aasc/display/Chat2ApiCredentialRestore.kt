@@ -20,6 +20,18 @@ data class Chat2ApiRestoreLocalStorage(
  */
 object Chat2ApiCredentialRestore {
 
+    /** 原生窗口没有地址栏；只显示来源，URL路径、查询和片段可能包含敏感认证信息。 */
+    fun sourceLabel(url: String): String = "当前网页来源：${Chat2ApiCredentialCapture.normalizeOrigin(url) ?: "未知来源"}"
+
+    fun pageStatus(profile: Chat2ApiCaptureProfile, url: String, hasMappings: Boolean): String {
+        val message = when {
+            !Chat2ApiCredentialCapture.isAllowed(profile, url) -> "不在允许的恢复来源内，已跳过凭证注入"
+            !hasMappings -> "当前 Provider 不支持自动恢复，请在网页中手动登录"
+            else -> "已尝试恢复登录状态，可继续手动登录"
+        }
+        return "${sourceLabel(url)}；$message"
+    }
+
     fun supportsAutomaticRestore(profile: Chat2ApiCaptureProfile): Boolean {
         return profile.cookieFields.isNotEmpty() || profile.localStorageFields.isNotEmpty()
     }

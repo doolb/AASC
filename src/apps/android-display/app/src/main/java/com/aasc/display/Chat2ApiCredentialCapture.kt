@@ -114,13 +114,16 @@ object Chat2ApiCredentialCapture {
         return token?.takeIf { it.isNotEmpty() }?.let { field to it }
     }
 
-    private fun normalizeOrigin(value: String): String? {
+    // 对应.src/framework/qwen-chat-restore-and-model.md，匹配与展示共用规范化来源，不显示URL中的凭证。
+    fun normalizeOrigin(value: String): String? {
         return try {
             val uri = URI(value.trim())
             val scheme = uri.scheme?.lowercase(Locale.US) ?: return null
             val host = uri.host?.lowercase(Locale.US) ?: return null
-            if (scheme !in listOf("http", "https")) return null
-            val port = if (uri.port > 0) ":${uri.port}" else ""
+            if (scheme !in listOf("http", "https") || uri.rawUserInfo != null) return null
+            if (uri.port != -1 && uri.port !in 1..65535) return null
+            val defaultPort = if (scheme == "https") 443 else 80
+            val port = if (uri.port == -1 || uri.port == defaultPort) "" else ":${uri.port}"
             "$scheme://$host$port"
         } catch (_: Exception) {
             null

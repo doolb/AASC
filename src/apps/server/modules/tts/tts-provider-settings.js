@@ -2,6 +2,7 @@
 
 const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('./tts-provider-policy');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
+const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_DEFAULTS = Object.freeze({
     system: { endpoint: '', model: '', credential: '', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
     'qwen-api': { enabled: false, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
@@ -26,7 +27,7 @@ function boundedString(value, fallback, max = 512) {
     return value.trim();
 }
 
-function normalizeProviderSettings(provider, patch = {}, previous = {}) {
+function normalizeProviderSettings(provider, patch = {}, previous = {}, { recoverLegacyModel = false } = {}) {
     if (!PROVIDERS.includes(provider)) throw new Error('不支持的 TTS Provider');
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Provider 配置必须为对象');
     const base = { ...PROVIDER_DEFAULTS[provider], ...previous };
@@ -44,8 +45,17 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}) {
         ? {}
         : { credential: patch.clearCredential === true ? '' : incomingCredential || base.credential };
     if (provider !== 'qwen-chat' && patch.clearCredential !== undefined && typeof patch.clearCredential !== 'boolean') throw new Error('clearCredential 必须为布尔值');
+    let model = boundedString(patch.model, base.model);
+    if (provider === 'qwen-chat') {
+        if (model === 'qwen-chat') model = 'QUARK_VOICE';
+        if (!QWEN_CHAT_MODELS.has(model)) {
+            // 对应.src/framework/qwen-chat-restore-and-model.md：历史错误配置可读，新提交必须明确拒绝。
+            if (!recoverLegacyModel) throw new Error('国内千问网页模型仅支持 QUARK_VOICE 或 MINI_MAX；qwen3-tts-flash 请使用 Qwen API');
+            model = PROVIDER_DEFAULTS['qwen-chat'].model;
+        }
+    }
     return {
-        endpoint, model: boundedString(patch.model, base.model),
+        endpoint, model,
         ...auth,
         ...(provider === 'system' ? {} : { enabled: patch.enabled ?? base.enabled,
             defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
@@ -55,14 +65,14 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}) {
     };
 }
 
-function normalizeSettings(patch = {}, previous = {}) {
+function normalizeSettings(patch = {}, previous = {}, options = {}) {
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('TTS 配置必须为对象');
     const providersPatch = patch.providers === undefined ? {} : patch.providers;
     if (!providersPatch || typeof providersPatch !== 'object' || Array.isArray(providersPatch)) throw new Error('providers 必须为对象');
     for (const key of Object.keys(providersPatch)) {
         if (!PROVIDERS.includes(key)) throw new Error('不支持的 TTS Provider');
     }
-    const providers = Object.fromEntries(PROVIDERS.map(id => [id, normalizeProviderSettings(id, providersPatch[id], previous.providers?.[id])]));
+    const providers = Object.fromEntries(PROVIDERS.map(id => [id, normalizeProviderSettings(id, providersPatch[id], previous.providers?.[id], options)]));
     const selections = Object.fromEntries(Object.entries(SELECTION_BUSINESSES).map(([key, business]) => {
         const input = patch[key] === undefined ? previous[key] || {} : patch[key];
         if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('TTS 选择必须为对象');

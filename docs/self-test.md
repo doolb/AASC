@@ -36,6 +36,10 @@ npm网页构建、30条Human/reply/MPL生成指纹、默认/服务器待机源�
 
 ## TTS 多 Provider（2026-10-11）
 
+最新网页模型与Android恢复修复：`npm run check:chat2api`120/120、TTS相关85/85、Android JVM195/195，共400项通过，无失败/跳过；6个修改的生产JS语法检查通过。覆盖历史错误模型读取恢复、非法新模型不落盘与WS原权威值回传、模型下拉、Cookie-only及ticket更新、三个允许来源Cookie、其他Provider/一次性/过期兼容、大小写与默认端口、恶意来源与脱敏提示。Android首次两项旧ASR大文件测试因/tmp配额失败，使用项目缓存临时目录重跑后全通过，Kotlin编译成功。
+
+本机8081已重启，实际WSS拒绝qwen3-tts-flash保存并返回不变配置、模型QUARK_VOICE；HTTP200网页含新模型选项。原事故文本实际手动入口生成8段有效WAV，13915ms、TTS失败0，未播放设备声音。尚未安装新APK或验收原始拒绝来源；minApk/servicePackage保持true。具体命令与临时目录处理见[本轮任务](task/20261011_千问音色与Android恢复来源核查.md)。以下为历史验证记录。
+
 最新qwen-chat emoji筛选：TTS/手动/自动AI/Agent回归82/82、`npm run check:chat2api`117/117，共199项通过，无失败或跳过。事故原文的真实分句与手动handler用例只请求8段正文，4段纯表情不调用Chat2API、不缓存、不下发；肤色、ZWJ家庭、国旗、键帽及普通数字/标点边界已验证。两条普通AI实际回调及Agent队列接受null跳过，正文上游失败仍报告。其他Provider原文与WAV校验保持。浏览器回归使用独立临时目录避免/tmp用户配额，回归后清理；SelfTest仍只读、不请求云端音频。
 
 本机8081已重启加载筛选；通过真实WSS控制端手动入口提交原事故文本，只向诊断控制端返回playOnControl并读取缓存，不播放设备声音。收到8段音频，全部HTTP200并通过WAV校验，分别33128/45682/171976/271510/434282/74356/172798/37588字节，14964ms，期间TTS失败0。6个生产JS语法检查通过；未全仓测试或构建Offline包。见[纯表情TTS任务](task/20261011_纯表情TTS空音频诊断.md)。

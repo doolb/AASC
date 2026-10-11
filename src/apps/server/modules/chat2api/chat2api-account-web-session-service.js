@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const { getAndroidLoginProfile } = require('./chat2api-login-profiles');
+const { getQwenCredential } = require('./chat2api-speech-service');
+const { parseCookies } = require('./chat2api-qwen-speech-auth');
 
 const DEFAULT_TTL_MS = 2 * 60 * 1000;
 
@@ -41,19 +43,26 @@ const createChat2ApiAccountWebSessionService = ({ dataStore, providerRegistry, b
     const origin = (() => {
       try { return new URL(loginUrl).origin; } catch (_error) { return ''; }
     })();
+    const allowedOrigins = resolvedProfile.allowedOrigins && resolvedProfile.allowedOrigins.length > 0
+      ? resolvedProfile.allowedOrigins
+      : (origin ? [origin] : []);
+    if ((provider.id || provider.providerId) === 'qwen') {
+      // 复用Chat2API当前ticket/Cookie规则；缺少凭证仍可打开网页手动登录，不打印原始值。
+      try { credentials.ticket = parseCookies(getQwenCredential(account)).find(item => item.name === 'tongyi_sso_ticket')?.value; }
+      catch (_error) { delete credentials.ticket; }
+    }
     const cookieMappings = (resolvedProfile.cookies || []).flatMap((mapping) => {
       const value = credentials[mapping.field];
       if (typeof value !== 'string' || !value.trim()) return [];
-      return [{ origin, name: mapping.name, value }];
+      const targets = Array.isArray(mapping.origins) ? mapping.origins : [origin];
+      return [...new Set(targets)].filter(target => allowedOrigins.includes(target))
+        .map(target => ({ origin: target, name: mapping.name, value }));
     });
     const localStorageMappings = (resolvedProfile.localStorage || []).flatMap((mapping) => {
       const value = credentials[mapping.field];
       if (typeof value !== 'string' || !value.trim()) return [];
       return [{ origin, key: mapping.key, value }];
     });
-    const allowedOrigins = resolvedProfile.allowedOrigins && resolvedProfile.allowedOrigins.length > 0
-      ? resolvedProfile.allowedOrigins
-      : (origin ? [origin] : []);
     return {
       loginUrl,
       allowedOrigins: clone(allowedOrigins),

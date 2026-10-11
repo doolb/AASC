@@ -73,6 +73,19 @@
 
 ### TTS 多 Provider 配置与生成
 
+- ✅ [2026-10-11] 修复国内千问网页模型保存与生成不一致，并补齐Android恢复Cookie和来源提示
+  - tts-provider-settings.js/config-app-service.js严格校验新模型，历史不兼容模型读取恢复QUARK_VOICE并保留其他参数；控制端模型下拉仅QUARK_VOICE/MINI_MAX，提示百炼模型使用Qwen API，SelfTest增加只读模型检查。
+  - chat2api-login-profiles.js/chat2api-account-web-session-service.js复用当前ticket/Cookie解析，恢复Cookie覆盖现有www/chat2/chat2-api三个允许HTTPS来源。Chat2ApiCredentialCapture/Restore/AuthWebView统一默认端口与大小写，状态显示脱敏来源，Storage限定当前来源与回调页面；未扩大来源允许范围。
+  - 验证：Chat2API120/120、TTS相关85/85、Android195/195，共400项通过，6个JS语法检查通过；Android首次/tmp配额失败两项，缓存临时目录重跑通过。本机8081已重启，实际WS拒绝错误保存且权威值不变；原文本手动生成8段有效WAV、13915ms、TTS失败0。
+  - 同步TTS/Android design/spec、.src伪代码、task、usage、todo和自测文档；minApk/servicePackage保持true、dependenciesPackage=false，未构建发布APK或Offline包。原始拒绝页面来源与真机恢复仍待新版签名APK验收，音色目录未扩充。
+
+- ✅ [2026-10-11] 核查国内千问默认音色与Android恢复来源提示（诊断完成，恢复原因待页面URL确认）
+  - 再次明确QUARK_VOICE音色范围：当前只确认一个可用音色，完整模型音色数量未知；默认配置与项目单条预置不能作为“模型只有一种音色”的证据。
+  - 当前音色目录仅预置已验证女声，合成允许传入其他voice；官网4.9.6公开朗读配置同默认音色，未取得国内可选目录，未增加未验证音色。
+  - Android提示定位到WebView来源拒绝；现有允许来源为www/chat2/chat2-api.qianwen.com的HTTPS origin，恢复Cookie仅映射登录页。正式首页无新域名重定向；实际Android页面来源待补充，本轮未修改代码。
+  - 补充：原生窗口无地址栏，设备只读信息暂未取得页面来源；qwen3-tts-flash及拼写QUARK_VOCIE被本地网页语音模型校验拒绝，正确网页默认为QUARK_VOICE。配置保存缺少对应模型限制，修复方案待确认；百炼模型不能直接用于Cookie网页接口。
+  - 文档：TTS design/spec、Android凭证恢复design/spec、todo与docs/task/20261011_千问音色与Android恢复来源核查.md；未构建APK或修改发布状态。
+
 - ✅ [2026-10-11] qwen-chat合成前过滤emoji，纯表情分句跳过，修复正文成功却打印合成失败
   - 新增qwen-chat-text-filter.js按Unicode字素簇移除肤色、ZWJ家庭、国旗和键帽，普通数字及正文标点保留；qwen-chat-tts.js无正文返回null，不读取账号、不请求上游、不生成空WAV。
   - tts-provider-service.js、server-app.js手动/普通AI回调及agent-chat-tts.js接受跳过结果，继续有序队列；聊天原文与其他Provider保持。更新只读SelfTest说明，浏览器回归临时目录隔离并清理。

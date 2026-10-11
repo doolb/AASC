@@ -2,6 +2,12 @@
 
 ## 状态
 
+2026-10-11 用户报告打开国内千问恢复登录提示“当前网页不在允许的恢复来源内，已跳过凭证注入”。该提示来自Chat2ApiAuthWebView.restorePageIfNeeded的来源不匹配分支；qwen profile允许https://www.qianwen.com、https://chat2.qianwen.com、https://chat2-api.qianwen.com。实时HTTP核对正式首页最终仍为www.qianwen.com，不能假定官网首页改域导致失败。实际Android停留URL尚未取得，需要核对最终origin后确定修复范围。
+
+修复前恢复会话仅向登录页origin设置tongyi_sso_ticket的host-only Cookie，另外两个允许API来源没有恢复映射。用户回复“先修复”后，已补齐这三个既有HTTPS来源的Cookie映射；复用Chat2API凭证解析，兼容仅Cookie账号及独立ticket更新。没有扩大允许来源。该覆盖缺陷修复不能代替本次来源拒绝的直接证据，实际跳转来源仍待真机提示核对。
+
+用户确认原生窗口看不到网页URL；该窗口仅有Provider标题和关闭按钮，没有地址栏。已在原生恢复提示显示scheme/host/port，不显示路径、query、fragment或凭证。来源匹配统一规范化大小写和默认端口，非法端口、userinfo、第三方来源仍拒绝；网页存储仅注入当前来源映射，异步回调确认页面未换来源后才刷新。原生变更需签名出包机生成新版APK后验收，现有手机APK尚未更新。
+
 - 已完成实现与定向回归；Android 真机网页恢复仍需真实账号现场验收。
 - 本功能不改变现有完整配置导入导出接口；账号凭证使用独立的明文 JSON 包。
 

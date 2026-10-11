@@ -699,7 +699,7 @@ function getTtsProviderSettings() {
     // 未保存Provider专用默认时，沿用旧system音色和速度，避免升级改变已有播报。
     const providers = { ...storedProviders, system: { defaultVoice: config.get('tts.defaultVoice', null),
         defaultSpeed: config.get('tts.defaultSpeed', 0), ...storedProviders.system } };
-    return normalizeTtsProviderSettings({ ...selections, providers });
+    return normalizeTtsProviderSettings({ ...selections, providers }, {}, { recoverLegacyModel: true });
 }
 
 function setTtsProviderSettings(patch) {

@@ -1,5 +1,50 @@
 # Chat2API 账号凭证导入导出与 Android 外部网页恢复实现规格
 
+## 国内千问恢复Cookie与来源诊断（2026-10-11，已实现）
+
+```text
+已有声明:
+  qwen登录profile、一次性网页会话、getQwenCredential、Cookie/Storage恢复映射
+  Chat2ApiCredentialCapture、Chat2ApiCredentialRestore、Chat2ApiAuthWebView
+
+新增定义:
+  CookieRestoreMapping { name, field, origins }
+  CanonicalOrigin { scheme, host, port }
+  RestorePageStatus { sourceLabel, allowed, hasMappings }
+
+操作流程:
+  qwen ticket -> 复用Chat2API当前凭证解析，兼容ticket与Cookie字段，缺失则保留手动登录
+  qwen Cookie映射 -> www、chat2、chat2-api三个已允许HTTPS来源逐项映射，不使用通配域名
+  服务端映射origin -> 使用profile预置正式来源并与允许列表精确匹配；其他Provider默认仅登录页
+  Android应用映射origin -> 规范化后与当前页面来源精确匹配
+  Android origin -> 小写scheme/host、去HTTPS443及HTTP80默认端口，拒绝非HTTP/带userinfo/非法端口
+  页面开始 -> 仅对等效允许origin恢复该origin对应Cookie
+  页面完成 -> 提示显示当前规范化origin，不含用户名、路径、查询、片段或凭证
+  不允许来源 -> 显示脱敏来源并跳过注入；允许来源 -> 给出恢复尝试或手动登录提示
+  LocalStorage恢复 -> 只取当前等效origin映射，回调确认页面未换来源才重载
+  原生窗口无地址栏 -> 通过状态提示取得复现来源，不记录URL日志
+```
+
+## 国内千问恢复来源初次核查（2026-10-11，历史诊断；后续实现见上）
+
+```text
+已有声明:
+  getAndroidLoginProfile、toRestorePayload、Chat2ApiCredentialCapture.isAllowed
+  Chat2ApiAuthWebView.restorePageIfNeeded
+
+当前操作流程:
+  qwen网页会话 -> loginUrl为https://www.qianwen.com
+  允许来源 -> www.qianwen.com、chat2.qianwen.com、chat2-api.qianwen.com的HTTPS来源
+  Cookie映射 -> 仅loginUrl的origin和tongyi_sso_ticket字段
+  页面来源不匹配 -> 跳过注入并显示用户报告提示
+
+待确认操作流程:
+  取得实际页面URL -> 仅分析scheme、host、port，不保存查询参数或凭证
+  对比当前origin、允许来源及中间跳转 -> 确认拒绝原因
+  确认方案 -> 限定正式来源映射、等效origin与脱敏诊断回归
+  未验证来源 -> 继续跳过注入
+```
+
 本文件使用伪代码描述实现契约；当前实现已落到对应模块，函数名和响应字段以本文件为准，行为、字段边界和安全约束必须保持一致。
 
 ## 数据结构

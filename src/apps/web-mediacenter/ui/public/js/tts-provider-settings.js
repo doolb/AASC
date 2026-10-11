@@ -136,17 +136,29 @@
             for (const name of names) {
                 if (name === 'resourceId' && id !== 'doubao-api') continue;
                 if (name === 'credential' && id === 'qwen-chat') continue;
-                const input = create('input');
-                input.type = name === 'credential' ? 'password' : NUMBER_FIELDS[name] ? 'number' : 'text';
-                input.autocomplete = 'off';
-                input.maxLength = name === 'credential' ? 16384 : name === 'endpoint' ? 2048 : 512;
-                if (NUMBER_FIELDS[name]) [input.min, input.max] = NUMBER_FIELDS[name];
+                const restrictedModel = id === 'qwen-chat' && name === 'model';
+                const input = create(restrictedModel ? 'select' : 'input');
+                if (restrictedModel) {
+                    for (const [model, title] of Object.entries({ QUARK_VOICE: 'QUARK_VOICE（默认）', MINI_MAX: 'MINI_MAX（需匹配音色）' })) {
+                        const option = create('option', title);
+                        option.value = model;
+                        input.appendChild(option);
+                    }
+                } else {
+                    input.type = name === 'credential' ? 'password' : NUMBER_FIELDS[name] ? 'number' : 'text';
+                    input.autocomplete = 'off';
+                    input.maxLength = name === 'credential' ? 16384 : name === 'endpoint' ? 2048 : 512;
+                    if (NUMBER_FIELDS[name]) [input.min, input.max] = NUMBER_FIELDS[name];
+                }
                 if (id === 'qwen-chat' && name === 'endpoint') input.readOnly = true;
                 if (name === 'defaultVoice') input.setAttribute('list', `ttsProviderVoices-${id}`);
                 inputs[name] = input;
                 addField(group, FIELD_LABELS[name], input);
             }
-            if (id === 'qwen-chat') group.appendChild(create('p', '由 Chat2API 提供语音合成，账号和登录状态请在 Chat2API 账户管理中维护。'));
+            if (id === 'qwen-chat') {
+                group.appendChild(create('p', '由 Chat2API 提供语音合成，账号和登录状态请在 Chat2API 账户管理中维护。'));
+                group.appendChild(create('p', '网页模型默认 QUARK_VOICE；MINI_MAX 需匹配音色。qwen3-tts-flash 请使用 Qwen API。'));
+            }
             if (id !== 'system' && id !== 'qwen-chat') {
                 inputs.clearCredential = create('input');
                 inputs.clearCredential.type = 'checkbox';

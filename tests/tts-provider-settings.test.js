@@ -9,6 +9,17 @@ const { createRequire } = require('node:module');
 const { normalizeSettings, redactSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { normalizeTemplateTts, resolveProviderConfig, BUSINESS_TYPES } = require('../src/apps/server/modules/tts/tts-provider-policy');
 
+test('qwen-chat模型保存校验、别名规范化与历史不兼容模型恢复，API模型规则保持', () => {
+    for (const model of ['qwen3-tts-flash', 'QUARK_VOCIE', '', 'unknown']) {
+        const patch = { providers: { 'qwen-chat': { model } } };
+        assert.throws(() => normalizeSettings(patch), /网页模型仅支持/u);
+        assert.equal(normalizeSettings(patch, {}, { recoverLegacyModel: true }).providers['qwen-chat'].model, 'QUARK_VOICE');
+    }
+    assert.equal(normalizeSettings({ providers: { 'qwen-chat': { model: 'qwen-chat' } } }).providers['qwen-chat'].model, 'QUARK_VOICE');
+    assert.equal(normalizeSettings({ providers: { 'qwen-chat': { model: 'MINI_MAX' } } }).providers['qwen-chat'].model, 'MINI_MAX');
+    assert.equal(normalizeSettings({ providers: { 'qwen-api': { model: 'qwen3-tts-flash' } } }).providers['qwen-api'].model, 'qwen3-tts-flash');
+});
+
 test('旧模板继承、显式system、Agent与群聊、文本媒体业务隔离', () => {
     assert.deepEqual(normalizeTemplateTts({ voice: ' ' }), { voice: null });
     assert.throws(() => normalizeTemplateTts({ provider: false }));
@@ -107,4 +118,17 @@ test('真实配置持久化、重载、旧system默认和保存失败内存/磁�
     const beforeInvalid = JSON.stringify(config.getTtsProviderSettings());
     assert.throws(() => config.setTtsProviderSettings({ systemBroadcast: { provider: 'qwen-chat' } }), /仅允许/u);
     assert.equal(JSON.stringify(config.getTtsProviderSettings()), beforeInvalid);
+});
+
+test('实际配置读取错误网页模型不崩溃；拒绝新错误模型不落盘，合法保存清除旧值', t => {
+    const { config, instances, directory } = loadConfig(t);
+    instances[1]._data.tts = { providers: { 'qwen-chat': { enabled: true, model: 'qwen3-tts-flash', defaultVoice: 'saved-voice' } } };
+    assert.equal(config.getTtsProviderSettings().providers['qwen-chat'].model, 'QUARK_VOICE');
+    assert.equal(config.getTtsProviderSettings().providers['qwen-chat'].defaultVoice, 'saved-voice');
+    assert.throws(() => config.setTtsProviderSettings({ providers: { 'qwen-chat': { model: 'qwen3-tts-flash' } } }), /Qwen API/u);
+    assert.equal(instances[1]._data.tts.providers['qwen-chat'].model, 'qwen3-tts-flash');
+    config.setTtsProviderSettings({ providers: { 'qwen-chat': { defaultSpeed: 2 } } });
+    const saved = JSON.parse(fs.readFileSync(path.join(directory, 'user', 'userconfig.json')));
+    assert.equal(saved.tts.providers['qwen-chat'].model, 'QUARK_VOICE');
+    assert.equal(saved.tts.providers['qwen-chat'].defaultVoice, 'saved-voice');
 });

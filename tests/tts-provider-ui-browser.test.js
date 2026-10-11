@@ -48,7 +48,10 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         assert.equal(await page.$eval('#templateTtsVoice', input => input.hidden), true);
         assert.equal(await page.$eval('#templateTtsVoice', input => getComputedStyle(input).display), 'none');
         assert.equal(await page.$eval('#ttsProviderFields > div input', input => getComputedStyle(input.parentElement).display), 'none');
-        assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(2)', node => node.querySelectorAll('select, input[type="password"]').length), 0);
+        assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(2)', node => node.querySelectorAll('input[type="password"]').length), 0);
+        assert.deepEqual(await page.$eval('#ttsProviderFields details:nth-of-type(2) select', node => [...node.options].map(option => option.value)), ['QUARK_VOICE', 'MINI_MAX']);
+        assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(2) select', node => node.value), 'QUARK_VOICE');
+        assert.match(await page.$eval('#ttsProviderFields details:nth-of-type(2)', node => node.textContent), /qwen3-tts-flash 请使用 Qwen API/u);
         assert.ok(!(await page.$eval('#ttsProviderFields', node => node.textContent)).includes('Chrome'));
         assert.equal(await page.evaluate(() => document.getElementById('ttsProviderChat2ApiAccount')), null);
         const state = () => page.evaluate(() => ({ disabled: document.getElementById('ttsProviderSaveBtn').disabled,
@@ -73,6 +76,7 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         assert.ok(!Object.hasOwn(request.config.providers.system, 'defaultVoice'));
         assert.ok(!Object.hasOwn(request.config.providers['qwen-chat'], 'credential'));
         assert.ok(!Object.hasOwn(request.config.providers['qwen-chat'], 'clearCredential'));
+        assert.equal(request.config.providers['qwen-chat'].model, 'QUARK_VOICE');
         const saved = redactSettings(normalizeSettings(request.config, normalizeSettings({ providers: { 'qwen-api': { credential: 'server-secret' } } })));
         await page.evaluate(value => window.TtsProviderSettings.handleConfig(value), { type: 'ttsProviderConfig', requestId: request.requestId, success: true, config: saved });
         assert.equal((await state()).disabled, false);
