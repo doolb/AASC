@@ -1,5 +1,12 @@
 # 自测功能文档
 
+## MMD-AR日光默认配置（2026-10-11）
+
+33项定向检查全部通过（10项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；真实Chromium/SwiftShader验证全新上下文十组日光逐字段相等、保存值优先、坏JSON/null组回日光、完整复位/命名库保持/刷新一致，以及原文件往返与设备降档。npm run build:web:mmd-ar-test成功；5项生成模块导入SHA指纹、默认源与原文件SHA一致、模块语法及git diff --check通过。
+
+测试命令：`node --test --test-concurrency=1 tests/mmd-ar-lighting-presets.test.js tests/mmd-ar-lighting-presets-browser.test.js tests/mmd-ar-screen-lighting.test.js tests/mmd-ar-temporal-aa.test.js`。默认源JSON与/mnt/mmd-ar-lighting-preset.json SHA-256均为2dba75ef82a7e46f4e6a23877075cfa5f11a937ec8e8ab56003f7bebc264da58（3027字节）。新默认按文件开启全AO/SSGI及2048阴影，不增加逐帧流程；软件GPU结果不替代手机性能验收。已本地构建，未发布外网，先前旧面板回归待处理项保持。
+
+
 ## MMD-AR统一灯光预设（2026-10-11）
 
 29项定向检查全部通过（6项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；npm run build:web:mmd-ar-test成功。真实Chromium/SwiftShader完成十组逐字段往返、刷新、实际下载/上传、错误文件无副作用、能力降级、覆盖/删除、动作物理定位保持及390px窄屏折叠/无横向溢出；截图已查看。

@@ -28,3 +28,15 @@
 新增纯数据与真实网页自测，分类归属/折叠、全部分组逐字段往返、刷新恢复、覆盖/删除、重名合并、坏文件无副作用、能力降级及动作/物理/定位保持均有检查。构建使用`npm run build:web:mmd-ar-test`。验证记录见task和`docs/self-test.md`；本地web-dist已生成，外网尚未发布，手机性能/观感待设备验收。操作不新增逐帧循环。正式显示端、APK及Offline产物状态不属于本轮。
 
 29项定向检查全部通过（6项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；npm run build:web:mmd-ar-test成功。真实Chromium/SwiftShader完成十组逐字段往返、刷新、实际下载/上传、错误文件无副作用、能力降级、覆盖/删除、动作物理定位保持及390px窄屏折叠/无横向溢出；截图已查看。
+
+## 默认灯光采用用户“日光”文件（2026-10-11，已实现并验证）
+
+用户要求把灯光默认设置改为`/mnt/mmd-ar-lighting-preset.json`。已只读检查该文件：3027字节，format=aasc.mmd-ar.lighting-presets/version=1，仅“日光”一项，十组完整。SHA-256：2dba75ef82a7e46f4e6a23877075cfa5f11a937ec8e8ab56003f7bebc264da58。
+
+沿用本轮独立WEB范围，已将文件内容复制到仓库`3rd/mmd-ar-test/web-lighting-default-preset.json`作为可版本化的默认配置，构建时校验格式/版本/唯一项/十组结构并嵌入默认数据模块，网页不依赖机器上的/mnt绝对路径。初次访问或某分组没有有效保存设置时采用相应“日光”默认；已保存设置与命名预设优先保留，不在每次启动覆盖用户调节。“恢复默认”一次应用完整十组日光设置并同步表单/持久化，保留命名库；既有复位物理行为沿用原按钮逻辑，不把物理参数加入灯光默认文件。
+
+代表值：环境光1、主光2.85（经度-68/纬度46）、红色补光5、两路边缘光开启、高光#83c3bc/0.14/10、阴影2048并开启预览、AO全分辨率/32采样、SSGI开启，抗锯齿关闭（保留FSR2模式与配置）。全部字段以文件内容为准，仍遵守设备支持与阴影尺寸上限。
+
+已修改web-lighting-presets-build.js与web-lighting-presets.mjs，新增web-lighting-default-preset.json与web-lighting-defaults.mjs；扩展tests/mmd-ar-lighting-presets.test.js和tests/mmd-ar-lighting-presets-browser.test.js。已同步spec/task/todo/changelog/usage/self-test。验收首次无存储、已有保存值优先、十组恢复默认后逐字段相等/刷新保留、预设库保持以及跨设备降档；用npm run build:web:mmd-ar-test构建。用户回复“是”后先更新spec，再实施；全部自测与构建通过，尚未发布。
+
+33项定向检查全部通过（10项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；真实Chromium/SwiftShader验证全新上下文十组日光逐字段相等、保存值优先、坏JSON/null组回日光、完整复位/命名库保持/刷新一致，以及原文件往返与设备降档。npm run build:web:mmd-ar-test成功；5项生成模块导入SHA指纹、默认源与原文件SHA一致、模块语法及git diff --check通过。 本地web-dist已生成，未发布外网；正式/APK及Offline状态保持。

@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { hashFile } = require('./apk-artifact');
 
 function once(source, anchor, replacement) {
@@ -79,7 +80,8 @@ function panelScript(source) {
       const apply = value => {
         window.MmdArTestNormalPreview = value?.enabled === true;
         toggle.checked = window.MmdArTestNormalPreview;
-        localStorage.setItem(key, JSON.stringify({ enabled: toggle.checked }));
+        try { localStorage.setItem(key, JSON.stringify({ enabled: toggle.checked })); }
+        catch (error) { /* 存储受限时法线预览仍生效。 */ }
       };
       window.MmdArLightingPresetGroups.aoPreview = {
         normalize: value => ({ enabled: value?.enabled === true }),
@@ -121,6 +123,9 @@ function lightingSource(source) {
 
 async function stage(root, { webMode } = {}) {
     if (!webMode) return;
+    const helperName = 'web-lighting-defaults.mjs';
+    const { parseDefaultPresetFile } = await import(pathToFileURL(path.join(__dirname, helperName)).href);
+    const defaultPreset = parseDefaultPresetFile(await fs.readFile(path.join(__dirname, 'web-lighting-default-preset.json'), 'utf8'));
     const folder = path.join(root, 'js');
     const displayPath = path.join(folder, 'display-mmd.js');
     await fs.writeFile(displayPath, once(await fs.readFile(displayPath, 'utf8'), '        DEFAULT_MMD_LIGHTING,',
@@ -129,8 +134,14 @@ async function stage(root, { webMode } = {}) {
     await fs.writeFile(lightingPath, lightingSource(await fs.readFile(lightingPath, 'utf8')));
     const dataName = 'web-lighting-preset-library.mjs';
     await fs.copyFile(path.join(__dirname, dataName), path.join(folder, dataName));
+    const defaultName = 'web-lighting-default-preset.mjs';
+    // 将版本化JSON写成同源模块，浏览器运行不读取机器上的/mnt文件。
+    await fs.writeFile(path.join(folder, defaultName), `export default ${JSON.stringify(defaultPreset)};\n`);
+    const dataHash = (await hashFile(path.join(folder, dataName))).sha256.slice(0, 12);
+    const helperSource = (await fs.readFile(path.join(__dirname, helperName), 'utf8')).replace(`./${dataName}`, `./${dataName}?v=${dataHash}`);
+    await fs.writeFile(path.join(folder, helperName), helperSource);
     let source = await fs.readFile(path.join(__dirname, 'web-lighting-presets.mjs'), 'utf8');
-    for (const name of [dataName, 'web-specular.mjs']) {
+    for (const name of [dataName, 'web-specular.mjs', helperName, defaultName]) {
         const hash = (await hashFile(path.join(folder, name))).sha256.slice(0, 12);
         source = source.replace(`./${name}`, `./${name}?v=${hash}`);
     }

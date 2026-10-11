@@ -1,4 +1,6 @@
 import { createPresetLibrary, groupNames, normalizeSettings, maxFileBytes } from './web-lighting-preset-library.mjs';
+import defaultPreset from './web-lighting-default-preset.mjs';
+import { applyLightingDefaults } from './web-lighting-defaults.mjs';
 // 与材质运行时使用相同内容指纹，确保UI读写的是同一个高光模块实例。
 import './web-specular.mjs';
 
@@ -16,6 +18,7 @@ export function initLightingPresets() {
     const report = (text, error = false) => { message.textContent = text; message.dataset.error = String(error); };
     try {
         if (groupNames.some(key => !groups?.[key])) throw new Error('灯光设置尚未就绪，请刷新后重试');
+        applyLightingDefaults(defaultPreset, groups, { onlyUnsaved: true });
         library = createPresetLibrary({ storage: localStorage, groups });
         library.load();
     } catch (error) {
@@ -80,9 +83,8 @@ export function initLightingPresets() {
     lightingPanel.addEventListener('input', changed);
     lightingPanel.addEventListener('change', changed);
     document.getElementById('displayMmdLightingReset').addEventListener('click', () => run(() => {
-        groups.aoPreview.apply(groups.aoPreview.normalize({}));
-        groups.aoEdgeCorrection.apply(groups.aoEdgeCorrection.normalize({}));
-        library.select(''); dirty = false; refresh(); report('已恢复默认灯光，用户预设保留');
+        applyLightingDefaults(defaultPreset, groups);
+        library.select(''); dirty = false; refresh(); report(`已恢复${defaultPreset.name}默认灯光，用户预设保留`);
     }));
     const state = library.state();
     const record = state.presets.find(item => item.id === state.selectedId);

@@ -106,3 +106,66 @@ test('大型合法库导出仍在文件上限内并可完整重新导入', async
     assert.equal(other.library.importText(exported), 55);
     assert.deepEqual(other.library.state().presets, library.state().presets);
 });
+
+
+test('默认源要求格式版本唯一记录及十组完整，错误输入拒绝', async () => {
+    const { api, settings } = await fixture();
+    const { parseDefaultPresetFile } = await import('../3rd/mmd-ar-test/web-lighting-defaults.mjs');
+    const record = { name: '日光', settings };
+    const file = { format: api.format, version: api.version, presets: [record] };
+    assert.deepEqual(parseDefaultPresetFile(JSON.stringify(file)), record);
+    for (const bad of [{ ...file, version: 2 }, { ...file, presets: [] }, { ...file, presets: [record, record] },
+        { ...file, presets: [{ ...record, settings: { lighting: {} } }] },
+        { ...file, presets: [{ ...record, settings: { ...settings, render: [] } }] }]) {
+        assert.throws(() => parseDefaultPresetFile(JSON.stringify(bad)));
+    }
+    assert.throws(() => parseDefaultPresetFile('bad JSON'));
+});
+
+test('默认只应用无有效保存分组，空/坏结构回默认，历史标量正确保留', async () => {
+    const { groups, settings, memory, storage } = await fixture();
+    const { applyLightingDefaults, settingStorageKeys } = await import('../3rd/mmd-ar-test/web-lighting-defaults.mjs');
+    const applied = [];
+    for (const [key, adapter] of Object.entries(groups)) adapter.apply = value => applied.push([key, value]);
+    memory.set(settingStorageKeys.lighting, JSON.stringify({ amount: 9 }));
+    memory.set(settingStorageKeys.specular, JSON.stringify({ amount: '坏数值' }));
+    memory.set(settingStorageKeys.shadowMap, '{}');
+    memory.set(settingStorageKeys.render, '[]');
+    memory.set(settingStorageKeys.aoConcavity, '15');
+    memory.set(settingStorageKeys.aoEdgeCorrection, 'false');
+    const keys = applyLightingDefaults({ settings }, groups, { onlyUnsaved: true, storage: () => storage });
+    assert.equal(keys.includes('lighting'), false);
+    assert.equal(keys.includes('aoConcavity'), false);
+    assert.equal(keys.includes('aoEdgeCorrection'), false);
+    assert.equal(keys.includes('specular'), true);
+    assert.equal(keys.includes('shadowMap'), true);
+    assert.equal(keys.includes('render'), true);
+    assert.equal(applied.length, keys.length);
+    assert.equal(memory.get(settingStorageKeys.lighting), JSON.stringify({ amount: 9 }));
+});
+
+test('完整恢复默认覆盖所有十组，缺省校验失败时无局部应用', async () => {
+    const { api, groups, settings } = await fixture();
+    const { applyLightingDefaults } = await import('../3rd/mmd-ar-test/web-lighting-defaults.mjs');
+    const applied = [];
+    for (const [key, adapter] of Object.entries(groups)) adapter.apply = value => applied.push([key, value]);
+    assert.deepEqual(applyLightingDefaults({ settings }, groups), api.groupNames);
+    assert.deepEqual(Object.fromEntries(applied), settings);
+    applied.length = 0;
+    assert.throws(() => applyLightingDefaults({ settings: { ...settings, render: { amount: {} } } }, groups));
+    assert.equal(applied.length, 0);
+});
+
+test('存储访问受限按日光默认处理，兼容旧keyPosition灯光', async () => {
+    const { groups, settings, storage, memory } = await fixture();
+    const { applyLightingDefaults, hasSavedSettings, settingStorageKeys } = await import('../3rd/mmd-ar-test/web-lighting-defaults.mjs');
+    const applied = [];
+    for (const [key, adapter] of Object.entries(groups)) adapter.apply = () => applied.push(key);
+    const keys = applyLightingDefaults({ settings }, groups, { onlyUnsaved: true,
+        storage: () => { throw new Error('blocked'); } });
+    assert.equal(keys.length, 10);
+    memory.set(settingStorageKeys.lighting, JSON.stringify({ keyPosition: { x: 1, y: 2, z: 3 } }));
+    assert.equal(hasSavedSettings('lighting', groups, () => storage), true);
+    memory.set(settingStorageKeys.aoConcavity, 'null');
+    assert.equal(hasSavedSettings('aoConcavity', groups, () => storage), false);
+});

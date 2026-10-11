@@ -56,7 +56,8 @@ export function initSpecularPanel(root = document, storage = () => localStorage)
     read: () => ({ ...settings }),
     apply: value => {
       setSpecular(value); sync();
-      storage().setItem(STORAGE_KEY, JSON.stringify(settings));
+      try { storage().setItem(STORAGE_KEY, JSON.stringify(settings)); }
+      catch (error) { /* 存储受限时默认/预设仍更新材质，与手动调节一致。 */ }
     }
   };
 }

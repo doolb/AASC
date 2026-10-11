@@ -53,3 +53,38 @@
 ```
 
 验证：29项定向检查全部通过（6项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；npm run build:web:mmd-ar-test成功。真实Chromium/SwiftShader完成十组逐字段往返、刷新、实际下载/上传、错误文件无副作用、能力降级、覆盖/删除、动作物理定位保持及390px窄屏折叠/无横向溢出；截图已查看。
+
+## 日光默认值（2026-10-11，已实现并验证）
+
+```text
+已有声明：十组normalize/read/apply入口、各组当前设置存储、命名预设库、恢复默认按钮
+新增定义：DefaultPreset := 仓库JSON中的唯一“日光”记录
+新增定义：DefaultSettings := DefaultPreset.settings
+新增定义：DefaultSettingsSource := 用户文件内容的版本化副本
+构建WEB → 读取DefaultSettingsSource → 校验格式/版本/唯一记录/十组完整 → 嵌入构建副本
+  格式/版本/记录数量/分组结构无效 → 构建停止
+  写入指纹化默认数据模块与默认应用模块 → 运行时用十组真实normalize校验字段
+初始化 → 默认设置按十组规范化 → 各组有效保存设置优先
+  无有效保存的分组 → 应用对应DefaultSettings → 同步控件/持久化
+  有效保存判定 → 对象分组包含已知字段且类型通过已有纯校验
+    AO角度读取有限数字，边界修正读取boolean；坏JSON/空/错误结构回日光
+  已有有效保存的分组 → 保留已有配置
+  读取命名库 → 不自动插入/覆盖命名预设 → 显示当前设置
+恢复默认 → 原按钮既有复位行为 → 应用完整DefaultSettings → 同步表单/当前设置存储
+  命名库保持 → 清除所选与修改标记 → 显示已恢复日光默认
+能力不足 → 沿用既有禁用/阴影上限，不修改默认源文件
+自测 → 文件完整字段 → 无存储初次默认 → 已存设置优先 → 十组复位相等/刷新保持
+  命名库不变 → 降档 → 既有灯光预设文件往返回归
+```
+
+实现边界仍是独立WEB生成副本；正式Display、独立APK和Offline产物状态沿用原范围。默认参数变更不新增每帧轮询或运行时读取/mnt文件。
+
+
+```text
+对应入口：web-lighting-defaults.parseDefaultPresetFile/hasSavedSettings/applyLightingDefaults
+构建适配：web-lighting-presets-build.stage → 默认JSON/应用模块 → 五项相对导入指纹
+界面：initLightingPresets → 首次按组缺省应用；reset点击 → 完整十组日光
+存储受限：各组当前会话仍应用；命名库保存失败沿用现有错误提示
+```
+
+验证：33项定向检查全部通过（10项数据、2项分类/真实网页、13项屏幕光照、8项TAA），无失败/跳过；真实Chromium/SwiftShader验证全新上下文十组日光逐字段相等、保存值优先、坏JSON/null组回日光、完整复位/命名库保持/刷新一致，以及原文件往返与设备降档。npm run build:web:mmd-ar-test成功；5项生成模块导入SHA指纹、默认源与原文件SHA一致、模块语法及git diff --check通过。

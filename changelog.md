@@ -1,3 +1,10 @@
+### MMD-AR日光默认设置
+
+- ✅ [2026-10-11] 默认灯光采用用户/mnt/mmd-ar-lighting-preset.json唯一“日光”完整十组；首次无有效保存分组采用日光，已有保存值优先，“恢复默认”完整应用并刷新保持，命名预设库保留。
+  - 新增web-lighting-default-preset.json（与原文件3027字节/SHA完全一致）、web-lighting-defaults.mjs；修改web-lighting-presets-build.js、web-lighting-presets.mjs和web-specular.mjs。构建嵌入默认数据/应用模块并带内容指纹，运行不依赖/mnt文件。
+  - 数据/分类/真实网页/屏幕光照/TAA共33/33通过；默认十组逐字段、坏存储回退、复位/刷新及原预设文件回归通过；npm网页构建、5项生成导入指纹、语法和diff检查通过。
+  - 更新design/spec/task/todo/usage/self-test；本地web-dist已生成，未发布外网。正式显示端/APK与Offline产物状态保持；手机画质/帧时待现场验收。
+
 
 ### MMD-AR 统一灯光预设
 

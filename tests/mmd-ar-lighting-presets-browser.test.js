@@ -43,6 +43,45 @@ test('真实网页完整灯光预设保存/刷新/文件往返与跨设备限制
         await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
         browser = await puppeteer.launch({ executablePath: chrome, headless: true,
             args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
+        // 独立干净浏览器上下文：验证首次默认、保存值优先、坏分组回退及复位刷新。
+        const freshContext = await browser.createBrowserContext();
+        const fresh = await freshContext.newPage();
+        const freshErrors = []; fresh.on('pageerror', error => freshErrors.push(error.message));
+        const defaultSettings = JSON.parse(fs.readFileSync(path.join(__dirname, '../3rd/mmd-ar-test/web-lighting-default-preset.json'), 'utf8')).presets[0].settings;
+        const freshUrl = `http://127.0.0.1:${server.address().port}/mnt/mmd-ar/`;
+        const ready = () => fresh.waitForFunction(() => document.querySelector('[data-preset-status]')?.textContent.length > 0
+            && document.querySelector('[data-preset-status]')?.dataset.error !== 'true');
+        const freshRead = () => fresh.evaluate(() => Object.fromEntries(Object.entries(window.MmdArLightingPresetGroups)
+            .map(([name, adapter]) => [name, adapter.read()])));
+        await fresh.goto(freshUrl, { waitUntil: 'domcontentloaded' }); await ready();
+        assert.deepEqual(await freshRead(), defaultSettings, '无存储首次使用完整日光默认');
+        assert.equal(await fresh.$eval('#displayMmdLightingPreset', node => node.options.length), 1, '默认不会创建命名记录');
+        await fresh.click('#displayMmdLightingToggle');
+        await fresh.$eval('[data-preset-name]', node => { node.value = '保留的日光'; });
+        await fresh.click('[data-preset-action="save"]');
+        const savedPresets = await fresh.evaluate(() => JSON.parse(localStorage.getItem('aasc.mmdArTest.lightingPresets.v1')).presets);
+        await fresh.evaluate(() => {
+            const groups = window.MmdArLightingPresetGroups;
+            groups.lighting.apply({ ...groups.lighting.read(), ambientIntensity: 2.4 });
+            groups.specular.apply({ ...groups.specular.read(), intensity: .7 });
+            localStorage.setItem('aasc.mmdArTest.screenLighting.v1', 'bad JSON');
+            localStorage.setItem('aasc.mmdArTest.aoEdgeCorrection.v1', 'null');
+        });
+        await fresh.reload({ waitUntil: 'domcontentloaded' }); await ready();
+        const preserved = await freshRead();
+        assert.equal(preserved.lighting.ambientIntensity, 2.4);
+        assert.equal(preserved.specular.intensity, .7);
+        assert.deepEqual(preserved.screenLighting, defaultSettings.screenLighting, '坏组回日光');
+        assert.deepEqual(preserved.aoEdgeCorrection, defaultSettings.aoEdgeCorrection);
+        await fresh.click('#displayMmdLightingToggle');
+        await fresh.click('#displayMmdLightingReset');
+        assert.deepEqual(await freshRead(), defaultSettings, '复位完整十组日光');
+        assert.match(await fresh.$eval('[data-preset-status]', node => node.textContent), /日光/u);
+        assert.deepEqual(await fresh.evaluate(() => JSON.parse(localStorage.getItem('aasc.mmdArTest.lightingPresets.v1')).presets), savedPresets);
+        await fresh.reload({ waitUntil: 'domcontentloaded' }); await ready();
+        assert.deepEqual(await freshRead(), defaultSettings, '复位后的日光刷新保持');
+        assert.deepEqual(freshErrors, []);
+        await freshContext.close();
         const page = await browser.newPage();
         await page.setViewport({ width: 390, height: 844 });
         const errors = []; page.on('pageerror', error => errors.push(error.message));
