@@ -87,4 +87,6 @@ PMX 首次提交后第一个实际渲染帧只更新物理、不绘制角色，�
 
 97项定向回归、1项正式真实浏览器（155.0秒）及1项独立真实浏览器（231.7秒），合计99项通过，无失败/跳过/pageerror；独立WEB构建通过。正式覆盖旧值优先/全预设保存、默认待机/未来目录/MPL静默填入与真实TTS音频互斥；独立六类自动源码与预览编译字节一致、避让刷新及XPBD重建通过。真实风吹仍有剩余刚体接触，软件GPU耗时不作为手机性能结论。诊断、Blender、SLAM、顶点布料未进入正式页。
 
-服务代码包准备记录待补；本次不发布LAN/WAN，minApk=true、dependenciesPackage=false保持。Android WebView观感与实际帧时另列待验收。
+签名服务代码包v63已生成：release/offline-update/output-mmd-actions-v63/code/code-v63.zip（4679716字节，SHA-256 b934bf59301820d064d3802ea3b927634f5bb499f091af00e882cb3a62a7c77c），清单manifests/manifest-code-v63.json。516个包内文件逐字节匹配提交5ffa489c的构建快照，ZIP CRC、大小/SHA-256、RSA签名与组件约束通过；dependencies6、Node-min种子39、min APK34、dataRepair2引用沿用。模型资源、固定编译器/许可证与口型字典均齐全。未发布LAN/WAN或构建APK/依赖包。
+
+servicePackage保持true：本次MMD全部收入v63，但工作区其他未提交显示/TTS源码有意未收录，按‘产物未覆盖最新代码时保持true’规则保留全局待出包标记；minApk=true、dependenciesPackage=false保持。包清单gitDirty=true记录原工作区状态，实际包源来自已提交快照并逐文件验证。Android WebView观感与实际帧时另列待验收。

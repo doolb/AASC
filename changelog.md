@@ -4,8 +4,8 @@
   - 修改display.html、display-mmd/display-pmx-runtime、mmd-expressions、Three helper；新增mmd-human/reply/mpl/preset模块与纯形状桥接，共享碰撞增加scanPrepared。默认待机仅未指定动作的米娅采用用户35/10/-10；高级点击播放并静默填入源码，无编辑导航。正式TTS保留唯一audio/player与音频时钟。
   - 正式灯光十组JSON与独立互导，保留旧基础灯光/高光/AO边界存储；日光缺省/复位、傍晚补入，全部组注册后初始化。新增prepare-mmd-production与npm prebuild，生成目录mmd-actions.json、mmd/motions/miya-idle.mpl/vmd、miya-default.vmd及固定版本编译器/许可证，摘要校验后随服务包收录，不提交生成资源。
   - 独立build及四个注入器复用正式共享实现，保留用户眼球与debug改动。97项定向+正式/独立真实浏览器2项，共99项通过，零失败/跳过/pageerror；独立构建成功，六类源码预览VMD字节一致、旧值保存/动态目录/真实TTS优先与避让刷新/XPBD通过。真实风吹仍有剩余接触，手机观感/性能待验收。
-  - 同步design/spec/task/usage/self-test/todo；服务代码包准备记录待补。未发布LAN/WAN或构建APK/依赖包，既有minApk=true/dependenciesPackage=false保持。
-
+  - 同步design/spec/task/usage/self-test/todo；签名服务代码包v63已准备：`release/offline-update/output-mmd-actions-v63/code/code-v63.zip`，4,679,716字节，SHA-256 `b934bf59301820d064d3802ea3b927634f5bb499f091af00e882cb3a62a7c77c`；516文件匹配5ffa489c提交快照，ZIP CRC/RSA/组件约束通过，依赖/种子/min/修复引用沿用。未发布LAN/WAN或构建APK/依赖包。
+  - MMD本次源码与文档推送origion/master；其他未提交显示/TTS变更未收入此包，servicePackage按未覆盖全部最新代码规则保持true，原minApk=true/dependenciesPackage=false保持。用户眼球/debug及其他工作区改动保留，生成产物不进Git。
 
 ### MMD-AR高级动作按钮精简与静默填入
 

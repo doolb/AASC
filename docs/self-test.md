@@ -1339,3 +1339,7 @@ code48发布验证：931包内文件和工作区一致，RSA清单、LAN/WAN所�
 npm run test:mmd-production：97/97通过；npm run test:mmd-production:browser：1/1通过（155.0秒）；npm run test:mmd-production:independent：1/1通过（231.7秒）。99项零失败/跳过/pageerror。正式自测包括旧灯光、高光/AO边界键保留、十组预设/保存、固定资源/相对依赖完整、刚体避让解除回归、真实PMX待机/动态目录/MPL无导航及真实WAV/TTS音频时钟互斥。独立覆盖六类源码/预览VMD逐字节一致、下载/迟到保护/原动作/避让/后端重建。
 
 npm run prepare:mmd-production、npm run build:web:mmd-ar-test成功；固定编译器与许可证/待机/舞蹈摘要校验。临时目录配额及测试夹具共用构建目录导致的首轮失败已修正测试环境；最终用任务专属磁盘缓存与固定模型缓存。真实风吹仍有刚体剩余接触，软件GPU观测不证明手机画质/性能或网格零穿模。全仓旧VM/文本及模型依赖失败不在本次扩修，未宣称全仓通过。
+
+签名服务代码包v63已生成：release/offline-update/output-mmd-actions-v63/code/code-v63.zip（4679716字节，SHA-256 b934bf59301820d064d3802ea3b927634f5bb499f091af00e882cb3a62a7c77c），清单manifests/manifest-code-v63.json。516个包内文件逐字节匹配提交5ffa489c的构建快照，ZIP CRC、大小/SHA-256、RSA签名与组件约束通过；dependencies6、Node-min种子39、min APK34、dataRepair2引用沿用。模型资源、固定编译器/许可证与口型字典均齐全。未发布LAN/WAN或构建APK/依赖包。
+
+servicePackage保持true：本次MMD全部收入v63，但工作区其他未提交显示/TTS源码有意未收录，按‘产物未覆盖最新代码时保持true’规则保留全局待出包标记；minApk=true、dependenciesPackage=false保持。包清单gitDirty=true记录原工作区状态，实际包源来自已提交快照并逐文件验证。

@@ -294,7 +294,7 @@ AO边界组 → 沿用aasc.display.mmdAoEdgeCorrection.v1标量/DisplayMmdAoEdge
 正式TTS播放器 → 暴露受控预览状态/停止 → 真实TTS优先，回复预览不得停止TTS
 独立构建遇正式Human/表情/源码接口标记 → 跳过重复接口与helper注入，映射测试实现/存储
 npm服务包/Offline代码包/带服务器APK入口 → prebuild准备同一固定MMD资源
-静态模块/Worker/WASM/许可证 → 服务包必须收录并验证SHA256，产物成功后才复位服务包状态
+静态模块/Worker/WASM/许可证 → 服务包必须收录并验证SHA256，产物覆盖全部待发布源码后才复位服务包状态
 ```
 
 ### 灯光与动作同步验证（2026-10-11）
@@ -307,5 +307,17 @@ npm独立WEB构建 → 共享Human/helper/表情仅注入一次，独立接口/�
 独立真实浏览器 → 1项通过，6类源码与预览VMD字节一致、异步保护/下载/原动作/开关/XPBD
 合计99项 → 0失败、0跳过、无pageerror
 软件GPU与风吹仍有剩余接触 → Android视觉/帧时及网格穿模另验收
-签名服务代码包 → 待记录版本/ZIP文件一致性/RSA/摘要 → 成功后servicePackage=false
+签名服务代码包 → 待记录版本/ZIP文件一致性/RSA/摘要 → 覆盖全部待发布源码后servicePackage=false
+```
+
+### v63服务代码包准备（未发布）
+
+```text
+输入 → 提交5ffa489c归档 + 固定摘要MPL/动作资源，不含其他未提交服务端/显示配置
+npm build:offline-update → code-only v63，复用现有依赖/种子/min/dataRepair
+输出 → output-mmd-actions-v63/code/code-v63.zip + manifests/manifest-code-v63.json
+校验 → 516文件与快照相同，ZIP CRC/大小/SHA256/RSA及组件约束通过
+全局servicePackage → 其他未提交服务源码尚未覆盖，保持true
+minApk=true、dependenciesPackage=false → 原状态保持
+发布 → 本任务不替换LAN/WAN清单；Android视觉/性能后续验收
 ```
