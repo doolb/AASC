@@ -935,8 +935,8 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
   return { body: normalizeBody(response.data, request.model), nativeState: responseSession?.nativeState || {} };
 };
 
-const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
-  providerId === 'doubaochat' ? createDoubaoChatAdapter({ httpClient }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig }),
+const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig, doubaoBrowserTransport } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
+  providerId === 'doubaochat' ? createDoubaoChatAdapter({ httpClient, browserTransport:doubaoBrowserTransport }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig }),
 ]));
 
 module.exports = { PROVIDER_IDS, createChat2ApiProviderAdapters, buildProviderHeaders, buildRequestBody, createQwenRequest, parseSseStream };

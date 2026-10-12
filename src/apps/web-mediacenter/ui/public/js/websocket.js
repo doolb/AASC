@@ -44,6 +44,7 @@ const WebSocketManager = {
         this.ws.onclose = () => {
             window.TtsAudioCacheSettings?.handleDisconnected();
             window.TtsProviderSettings?.handleDisconnected();
+            window.DoubaoWebSettings?.handleDisconnected();
             window.DeviceList?.handleVoiceContinuousDisconnected?.();
             setTimeout(() => this.connect(), 3000);
         };
@@ -63,6 +64,10 @@ const WebSocketManager = {
     },
 
     handleMessage(data) {
+        if (['doubaoWebRuntimeConfig','doubaoWebTargets'].includes(data.type)) {
+            window.DoubaoWebSettings?.handleMessage(data);
+            return;
+        }
         if (data.type === 'ttsProviderConfig') {
             window.TtsProviderSettings?.handleConfig(data);
             return;

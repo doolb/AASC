@@ -111,6 +111,7 @@
       this.providers = providers;
       this.accounts = accounts;
       this.modelMappings = mappings;
+      window.DoubaoWebSettings?.render(content,accounts);
       const select = document.getElementById('chat2apiProvider');
       const renderFields = () => this.renderCredentialFields(select && select.value);
       if (select) select.addEventListener('change', renderFields);

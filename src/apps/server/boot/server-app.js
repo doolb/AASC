@@ -129,6 +129,8 @@ const { createTextMediaTtsService } = require('../modules/media/text-media-tts-s
 const { createProviderRegistry } = require('../modules/tts/tts-provider-registry');
 const { createTtsProviderService } = require('../modules/tts/tts-provider-service');
 const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
+const { createDoubaoWebWs } = require('../modules/chat2api/chat2api-doubao-web-ws');
+const { createDoubaoBrowserBridge } = require('../modules/chat2api/chat2api-doubao-browser-bridge');
 const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
 const { resolveChatReplyTtsOptions } = require('../modules/chat/chat-reply-tts-context');
@@ -672,6 +674,8 @@ const ttsProviderService = createTtsProviderService({
 });
 const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService,
     isControl: ws => controlClients.has(ws), broadcast: broadcastToControls });
+const doubaoWebWs = createDoubaoWebWs({config,isControl:ws=>controlClients.has(ws),broadcast:broadcastToControls,
+    browser:createDoubaoBrowserBridge({getConfig:()=>config.get('doubaoWebRuntime',{})})});
 if (!ANDROID_NODE_POLICY.enabled) {
     tts.init(config.getTtsConfig());
 }
@@ -1344,6 +1348,7 @@ async function startServer() {
                 'updateDisplayVersionConfig',
                 'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
                 'setTtsProviderConfig', 'getTtsProviderVoices',
+                'setDoubaoWebRuntimeConfig', 'getDoubaoWebTargets',
                 'setDisplayBackgroundGlowConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
@@ -8225,6 +8230,7 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
+        ws.send(JSON.stringify(doubaoWebWs.snapshot()));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         ws.send(JSON.stringify({
             type: 'displayBackgroundGlowConfig',
@@ -9168,6 +9174,10 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
+    if (['setDoubaoWebRuntimeConfig','getDoubaoWebTargets'].includes(data.type)) {
+        await doubaoWebWs.handle(ws,data);
+        return;
+    }
     if (['setTtsProviderConfig', 'getTtsProviderVoices'].includes(data.type)) {
         await ttsProviderWs.handle(ws, data);
         return;

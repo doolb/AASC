@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
+const { normalizeDoubaoWebConfig } = require('./chat2api-doubao-web-config');
+const { browserError } = require('./chat2api-doubao-browser-bridge');
 
 const createHttpError = (statusCode, code, message) => {
   const error = new Error(message);
@@ -8,7 +10,7 @@ const createHttpError = (statusCode, code, message) => {
   return error;
 };
 
-const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, loadBalancer, providerAdapters = {} } = {}) => {
+const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, loadBalancer, providerAdapters = {}, getDoubaoWebConfig } = {}) => {
   if (!dataStore || typeof dataStore.getAccount !== 'function' || typeof dataStore.listAccounts !== 'function') {
     throw new Error('Chat2API 核心适配层需要账号数据存储');
   }
@@ -45,9 +47,13 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
   const forwardChatCompletion = async (request, options = {}) => {
     validateRequest(request);
     const requestedMapping = await modelMapper.resolveModel(request.model);
-    const preferredProviderId = options.preferredProviderId || requestedMapping.preferredProviderId;
+    let preferredProviderId = options.preferredProviderId || requestedMapping.preferredProviderId;
     const preferredAccountId = options.preferredAccountId || requestedMapping.preferredAccountId;
-    const selection = await loadBalancer.selectAccount(
+    if(getDoubaoWebConfig && ['doubao','doubao-think','doubao-expert'].includes(request.model)){
+      if(preferredProviderId && preferredProviderId!=='doubaochat')throw browserError('binding');
+      preferredProviderId='doubaochat';
+    }
+    let selection = await loadBalancer.selectAccount(
       request.model,
       'round-robin',
       preferredProviderId,
@@ -57,9 +63,18 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       throw createHttpError(503, 'no_available_account', `没有可用的模型账号: ${request.model}`);
     }
 
+    // 只约束豆包网页：优先账号不允许绕过绑定或退选到别人账号，旧Provider保持原调度。
+    if(selection.provider.id==='doubaochat'&&getDoubaoWebConfig){
+      let binding;try{binding=normalizeDoubaoWebConfig(getDoubaoWebConfig())}catch{throw browserError('disabled')}
+      if(!binding.enabled)throw browserError('disabled');
+      if((preferredAccountId&&preferredAccountId!==binding.accountId)||(preferredProviderId&&preferredProviderId!=='doubaochat'))throw browserError('binding');
+      selection=await loadBalancer.selectAccount(request.model,'round-robin','doubaochat',binding.accountId,{requiredAccountId:binding.accountId,requireSecret:true});
+      if(!selection||selection.provider.id!=='doubaochat'||selection.account.accountId!==binding.accountId)throw browserError('binding');
+    }
+
     const accountId = selection.account.accountId || selection.account.id;
     const account = await dataStore.getAccount(accountId);
-    if (!account) {
+    if (!account || (selection.provider.id==='doubaochat' && (account.providerId !== selection.provider.id || account.enabled === false || (account.status && account.status !== 'active')))) {
       throw createHttpError(503, 'account_not_found', `账号 ${accountId} 不存在`);
     }
     const providerMapping = await modelMapper.resolveModel(request.model, selection.provider);

@@ -1,6 +1,6 @@
 # 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
 
-> 当前状态（2026-10-12）：文字适配器及HTTP断连取消已实现，Node文字直连403，不能宣称可用。用户已批准B方案，完整Ogg校验、worker解码及Frontier/speech/TTS模拟接线均已实现；豆包网页朗读默认禁用、标为实验性，真实运行未重新验收。受控Chrome网页fetch仍待独立确认。后续最小只读授权仅用于核对公开模块协议，未读取Cookie/聊天内容，也没有新聊天或合成。
+> 当前状态（2026-10-12）：文字适配器及HTTP断连取消已实现，Node文字直连403，不能宣称可用。用户已批准B方案，完整Ogg校验、worker解码及Frontier/speech/TTS模拟接线均已实现；豆包网页朗读默认禁用、标为实验性，真实运行未重新验收。受控Chrome网页fetch已获独立实施确认并完成离线接线，默认关闭；真实账号/官网运行仍待另授权验收。后续最小只读授权仅用于核对公开模块协议，未读取Cookie/聊天内容，也没有新聊天或合成。
 
 > B实施完成：固定ogg-opus-decoder@1.7.5；speech、缓存及下载保持WAV/.wav/audio/wav，A不实施。执行记录见 `docs/task/20261012_豆包网页WAV解码实施计划.md`。最终Chat2API159/162通过，3项仍为既有Windows chmod断言失败；TTS/解码/配置/浏览器回归95/95，既有播报与并发回归19/19。独立审查的总时长和权威音色回填两项问题均先RED再修复。
 
@@ -98,7 +98,44 @@
   优先 npm run check:chat2api；其余使用既有TTS定向测试脚本 // 不自动重启用户服务器
 ```
 
-## 受控网页文字模式（待确认）与音频方案比较（B已实施）
+## 受控网页文字模式（已离线实现）与音频方案比较（B已实施）
+
+> 用户已确认实施文字网页fetch；以下新增实现约束先于运行代码更新。本轮仅离线验证，真实绑定/聊天和凭据读取仍未授权。
+
+```text
+实现接口：
+  normalizeDoubaoWebConfig(raw) → {enabled:false,port:9222,accountId:'',targetId:'',contextId:'',allowSessionCheck:false}
+  enabled=true必须提供账号/target及allowSessionCheck=true // 勾选仅授权运行时选定页面sessionid内存比较，开发不执行
+  createDoubaoBrowserBridge({getConfig,dataStore,connect}) → {request,listTargets,cancel}
+  request({data,accountId,signal,limits}) → {status,headers,data:Readable} // 接口供现有文字解析器消费
+  本机/json/version不接受重定向；有界JSON且CDP websocket必须127.0.0.1同端口 // 不连接远端浏览器
+  根据targetId只选择一个页面并严格核对https://www.doubao.com及contextId // 不访问其它页面正文或凭据
+  在allowSessionCheck门槛内通过所选页面CDP仅取官方来源sessionid内存比较账号库 // 不保存Cookie、不复制至fetch、不返回身份值
+  页面固定fetch('/chat/completion')用credentials:include及页面内CSRF，redirect:error // 不重试、不读取错误正文
+  页面按requestId保存临时reader/controller；服务端按消费速率每次拉取≤64KiB原始响应片段 // 单个上游块≤512KiB、总8MiB
+  浏览器字节经既有SSE UTF-8/模式/完整结束解析，不在页面先解析JSON // 不丢失分片或吞协议错误
+  120秒共享期限覆盖连接/身份检查/页面fetch/流消费；迟到连接立即断开 // 不关闭用户浏览器或标签
+  每500ms核对配置/账号启停/凭据指纹；主frame导航、target销毁、CDP断线和HTTP取消撤销任务
+  Core只对豆包网页传入requiredAccountId且拒绝映射/续聊账号冲突 // 其它Provider保持原调度，网页禁用不回退Node
+  固定doubao/think/expert别名在运行模式中不得映射至其它Provider；默认Provider限定doubaochat // 防同名自定义模型绕过绑定
+  runtime注入bridge及权威配置；WS模块规范化config.set('doubaoWebRuntime')、广播及初始化补发 // 保存不连接Chrome
+  listTargets只在控制端明确点击时查询本机公开CDP target元数据，只回官方origin/targetId/contextId // 不读Cookie/页面正文
+  控制端新独立JS面板继承Chat2API账户管理入口，WS保存默认禁用配置；自测仅检查配置 // 不新增HTTP配置接口
+  隔离Chromium测试用虚构sessionid，拦截所有网页请求并本地回mock官网HTML/SSE // 真实CDP/page.fetch接线验证不向豆包发送网络
+  连接前开始权威配置/账号指纹监控；读取页面Cookie和执行fetch前重新核对授权 // 撤销不等待首个监控周期
+  页面fetch函数自身检查location.origin，注册主frame监听后再核对当前页面origin // 防target.page等待间导航竞态
+  CDP创建/send/detach都参与同一取消/截止竞速，metadata目录全流程≤5秒 // finally不能使任务无限pending
+```
+
+```text
+普通LLM接入（已批准并完成离线接线）：
+  项目普通LLM配置.apiUrl指向所部署Chat2API的/v1/chat/completions，model选择doubao // 地址/端口由用户部署决定，不修改真实配置
+  普通LLM→现有Chat2API鉴权与CoreAdapter→doubaochat文字适配器→已明确绑定页面内fetch
+  新浏览器bridge只负责当前固定同源请求及有界原始响应分片；复用现有SSE解析和模式枚举 // 不新增普通聊天业务服务
+  通过现有WS/config.set保存非秘密运行配置，默认disabled；运行时限定所选账号及target/context // 不新增配置HTTP接口
+  真正建立绑定前须可靠核对账号一致性，无法核对即拒绝 // 不猜测身份，不将本轮询问当凭据或真实聊天授权
+  首轮开发使用本地模拟页面/transport，验收流式与非流式、取消、导航撤销、403及无换号/重试 // 真实官网请求另授权
+```
 
 ```text
 已有声明：
@@ -109,8 +146,8 @@
   Config.get、Config.set、控制端身份检查、WebSocket权威广播与连接初始化
   浏览器Audio播放队列、DisplayLipSyncAudio、旧WAV播放端
 
-新增定义（待实现）：
-  DoubaoWebRuntimeConfig { enabled: false, transport: disabled, port: 9222, accountId }
+新增定义（网页模式已实现，方案A对象仅比较）：
+  DoubaoWebRuntimeConfig { enabled: false, port: 9222, accountId: '', targetId: '', contextId: '', allowSessionCheck: false }
   DoubaoBrowserBinding { accountId, targetId, browserContextId, generation, authorized }
   DoubaoBrowserBridge { binding, requestId, controller, reader, boundedQueue, deadline }
   DoubaoSpeechProfile { model: doubao-chat, voice: 唯一已验音色, speed: 1, volume: 100, sourceFormat: ogg_opus }
@@ -123,7 +160,7 @@
   未收到配置、配置禁用或Android离线服务没有受控Chrome时使用disabled默认值 // 不启动Chrome、不尝试Node回退
   只连接本机127.0.0.1指定端口；校验CDP返回的WebSocket仍为同一本机端口 // 不接受远端CDP或重定向
   用户明确选择并授权唯一豆包target及其browserContext，形成内存绑定 // 不扫描私人页面、Cookie或聊天历史
-  真实绑定校验需要额外授权；最小会话标识只在内存比较所选账号与所选context // 本轮不读取凭据；不导出、打印或保存Cookie
+  真实绑定校验需要额外授权；显式allowSessionCheck授权后，所选页面CDP官方来源Cookie中的sessionid仅在内存与所选账号比较 // 本轮开发不读取真实凭据，不导出/打印/保存Cookie
   未能可靠核对同一会话时绑定失败，不能仅凭豆包网址或已登录头像宣称账号匹配
   调度先限定doubaochat和绑定accountId，再检查Provider启用、账号健康及额度 // preferredAccountId原有偏好回退不满足此约束
   显式模型映射到其他账号时返回绑定冲突，不换号；旧Provider保留原调度契约
@@ -205,4 +242,14 @@
   优先npm run check:chat2api与npm run test:mmd-production:tts；没有对应script的单测用node --test定向执行
   自测面板只核对能力和配置，不能自动触发聊天或语音 // 真实验收次数、文本、账号及凭据访问必须另获明确授权
   模拟通过仅说明实现契约；真实网页模式、当前账号及显示端兼容性分别标记未验收
+```
+
+```text
+最终验收结果：
+  当前实现对应任务20261012_豆包普通LLM网页fetch实施.md，所有运行实现与离线验证步骤已完成
+  npm run check:chat2api → 173/176，失败为同3项既有Windows chmod // 不宣布全仓全绿
+  TTS/解码/权威配置/隔离浏览器 → 97/97；npm run test:mmd-production:tts → 19/19
+  三项独立审查分别新增失败测试后修复；隔离Chromium真实CDP/page.fetch接线通过 // 请求全部本地拦截
+  生产JS语法及本任务diff检查；servicePackage=true，dependenciesPackage及minApk原值保持true
+  真实账号/官网/当前用户Chrome不访问；think/expert及设备仍需独立验收 // 实现批准不扩大为真实请求授权
 ```

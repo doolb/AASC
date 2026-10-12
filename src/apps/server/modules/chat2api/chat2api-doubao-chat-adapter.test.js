@@ -19,6 +19,12 @@ const textBlock = (text, id = 'block_1') => ({ block_type: 10000, block_id: id, 
 const blockEvent = (blocks) => event('STREAM_CHUNK', { patch_op: [{ patch_object: 100, patch_value: { content_block: blocks } }] });
 const response = (parts) => ({ status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' }, data: Readable.from(parts) });
 const collect = async (stream) => { const chunks = []; for await (const chunk of stream) chunks.push(chunk); return chunks; };
+
+test('网页模式只传body及账号标识，复用原SSE解析，不读取Node凭据或回退HTTP',async()=>{
+ let call;const adapter=createDoubaoChatAdapter({httpClient:{request:()=>{throw new Error('不应回退Node')}},browserTransport:{request:async args=>{call=args;return response([blockEvent([textBlock('网页回复')]),event('SSE_REPLY_END')])}}});
+ const account={accountId:'bound',get credentials(){throw new Error('网页模式不能构造Node Cookie头')}};
+ const result=await adapter(input({account}));assert.equal(result.body.choices[0].message.content,'网页回复');assert.equal(call.accountId,'bound');assert.equal(call.headers,undefined);
+});
 const safeFailure = (code) => (error) => {
   assert.equal(error.code, code);
   assert.doesNotMatch(error.message, /mock_session|mock_csrf|mock_ms_token|a_bogus|secret-body|private-url/u);

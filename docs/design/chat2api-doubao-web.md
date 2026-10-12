@@ -2,10 +2,12 @@
 
 > 2026-10-12 用户确认实施纯文字 LLM，并允许用现有 Chrome 9222 的豆包页面进行一条短测试对话和一次朗读观察。本文仅覆盖网页账号；独立的豆包 API TTS 及先前未确认的多模态统一草案均不在本轮改动范围。
 
-> 当前实施状态：用户已批准B方案，完整Ogg校验、worker解码及Frontier/speech/TTS模拟接线均已实现；豆包网页朗读默认禁用、标为实验性，真实运行未重新验收。受控Chrome网页fetch仍待独立确认。后续最小只读授权仅用于核对公开模块协议，未读取Cookie/聊天内容，也没有新聊天或合成。
+> 当前实施状态：用户已批准B方案，完整Ogg校验、worker解码及Frontier/speech/TTS模拟接线均已实现；豆包网页朗读默认禁用、标为实验性，真实运行未重新验收。受控Chrome网页fetch已获独立实施确认并完成离线接线，默认关闭；真实账号/官网运行仍待另授权验收。后续最小只读授权仅用于核对公开模块协议，未读取Cookie/聊天内容，也没有新聊天或合成。
 > 最终Chat2API159/162通过，3项仍为既有Windows chmod断言失败；TTS/解码/配置/浏览器回归95/95，既有播报与并发回归19/19。独立审查的总时长和权威音色回填两项问题均先RED再修复。
 
 ## 目标与边界
+
+用户进一步询问普通LLM接入。按当前网页任务上下文，建议通过项目已有普通LLM配置调用Chat2API的文字模型doubao，而不是使用语音模型doubao-chat；llm-service已有OpenAI兼容地址/模型配置，不需要新增一条业务聊天链路。现有文字适配器和取消已实现，但Node403，当前不能宣布普通豆包聊天可用。待确认工作是登录网页fetch运行路径：新增浏览器桥接及运行配置模块，修改doubao-chat-adapter/provider-adapters/runtime/core的注入与严格账号选择，沿用server-app/config-app-service及chat2api控制端的WS权威配置。真实页面绑定协议尚须可靠核对，核对失败不得仅因网址相同而启用；本轮不连接Chrome、不读凭据、不发真实请求，实施批准与真实验证授权分别处理。
 
 - Chat2API 内置 `doubaochat` 文字 Provider，复用已有 API Key 鉴权、账号持久化与启停、模型列表、调度、会话和管理界面；模型 `doubao`、`doubao-think`、`doubao-expert` 是网页 `need_deep_think` 模式别名，并非三个已证实的独立上游模型。只接文字，图片、视频、音频输入和上游原生函数调用不宣称支持。
 - 目标是在独立文字合成及用户选定的音频格式通过验收后新增业务 TTS Provider `doubao-chat`，与既有 `doubao-api` 和 `qwen-chat` 并存；届时仅允许 AI/Agent 回复与其模板选用。豆包网页账号 Cookie 由 Chat2API 管理，业务 TTS 配置只保存启停、受验证的网页朗读模型/音色及非秘密偏好。复用现有 `setTtsProviderConfig` 权威回传、重连补发、缓存和播报队列，不新增配置 HTTP 接口。**当前已作为默认禁用的实验选项列出；参数来自公开模块，真实账号/音色尚未重新验收。**
@@ -38,7 +40,7 @@
 
 用户后续明确选择B。对外保持WAV/.wav/audio/wav，取消A的Ogg缓存/MIME及播放器扩展范围，不新增通用多格式适配层。拟固定 `ogg-opus-decoder@1.7.5`（npm只读元数据已核对；包自身unpackedSize为10,196,320字节，不等于生产依赖全集大小），普通解码器运行在Node worker_threads，不启用机器学习增强。其返回errors不为空时必须失败，不能接受库继续解码得到的部分PCM。首版只接受单声道，音频时长≤120秒、累计Float32 PCM≤32MiB，WAV含头≤16MiB；以解码器实际采样率复用既有wrapPcm/validateWav。上述界限是项目保护策略，尚未验证上游长度能力。
 
-Chrome网页fetch方案尚待单独确认，不能把这次B选择视为启用9222或授权真实凭据访问。实施顺序及验收任务见[WAV解码实施计划](../task/20261012_豆包网页WAV解码实施计划.md)。后续用户批准B实施，解码及模拟接线已落地；Chrome运行模式仍未实施。
+Chrome网页fetch方案尚待单独确认，不能把这次B选择视为启用9222或授权真实凭据访问。实施顺序及验收任务见[WAV解码实施计划](../task/20261012_豆包网页WAV解码实施计划.md)。后续用户批准B实施，解码及模拟接线已落地；Chrome运行模式后续已实现默认禁用的实验接线，真实运行未验收。
 
 ### B实施记录：校验与解码基础模块（先前阶段）
 
@@ -46,7 +48,7 @@ Chrome网页fetch方案尚待单独确认，不能把这次B选择视为启用92
 
 本地构造的静音及非静音Opus包通过真实WASM，实际48kHz输出、pre-skip/EOS裁剪及signed Q8正负增益得到验证；不是豆包账号语音或实际显示端播放验收。独立审查发现的魔数高位、跨页Tags/continued和输出增益问题分别先复现再修复；解码前将已验证音频包规范化为单包单页的内部布局，保留pre-skip/EOS，头部gain归0并在PCM阶段只应用一次原增益。首版音频包≤65024字节，超大padding拒绝；Tags仍可跨页。当前21项新增本地测试全部通过，现有TTS19/19；Chat2API147项144通过，仍为同样3项Windows chmod断言失败。发布状态servicePackage=true、dependenciesPackage=true、minApk保留原true，未出包/发布。
 
-仅匿名读取公开SDK和官网静态资源，未读取登录态。SDK在 `TextTTSClient` 的构造参数中接收调用方auth.appkey，StartSession转发调用方sessionParams；现有可核对资料不足以确定生产鉴权和默认音色契约。当时任务3/4按资料门槛暂停。后续用户授权最小只读核对，已从公开模块T57/VgE补齐普通网页业务标识、TEXT_TTS=5、默认音色和protobuf；目前模拟接线已完成、Provider默认禁用。企业/飞书账号不支持，实际鉴权与运行仍未重新验收。Chrome fetch仍待确认，真实请求授权仍用完。
+仅匿名读取公开SDK和官网静态资源，未读取登录态。SDK在 `TextTTSClient` 的构造参数中接收调用方auth.appkey，StartSession转发调用方sessionParams；现有可核对资料不足以确定生产鉴权和默认音色契约。当时任务3/4按资料门槛暂停。后续用户授权最小只读核对，已从公开模块T57/VgE补齐普通网页业务标识、TEXT_TTS=5、默认音色和protobuf；目前模拟接线已完成、Provider默认禁用。企业/飞书账号不支持，实际鉴权与运行仍未重新验收。Chrome fetch后续已确认实施并通过离线验证，真实请求授权仍用完。
 
 方案阶段先检查源码/文档并更新伪代码，用户随后批准B实施。按 brainstorming 的架构方案流程审查，因为这次同时改变传输运行环境和语音格式契约。需求分析可选 standard/enterprise；沿用默认 enterprise，但音频方案未选择，先完成明确性检查，最终实现判级在用户选定后补齐。明确的落地边界是把账号绑定、页面桥接、语音状态机、音频验证和缓存契约分别下放为 L4 声明与数据流，不形成一长段条件分支。
 
@@ -118,3 +120,13 @@ MMD、其它多模态、真实配置/凭据和Android原生代码不属于上述
 参考：[Ogg Opus RFC 7845](https://www.rfc-editor.org/rfc/rfc7845.html)、[MDN容器兼容表](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Containers)、[WebKit Safari 18.4](https://webkit.org/blog/16574/webkit-features-in-safari-18-4/)、[Android媒体格式](https://developer.android.com/media/platform/supported-formats)、[WASM Audio Decoders官方项目](https://github.com/eshaz/wasm-audio-decoders)。格式支持文档不等于本项目真机验证。
 
 本地播放补充：`node --test tests/tts-provider-doubao-playback.test.js tests/display-mmd-tts-actions.test.js tests/agent-chat-tts.test.js` 22/22通过。使用本地构造Opus包经真实worker解码、现有内存缓存及隔离HTTP，GET/HEAD/Range/416、Chromium Audio实际播放/ended/停止/下一句和DisplayLipSyncAudio来源清理均验证；无上游请求或账号音频。实际MMD模型、Android及其它设备音频仍未验收。
+
+## 普通LLM网页fetch实施结果（2026-10-12）
+
+用户已单独确认实施，新增chat2api-doubao-web-config.js、browser-bridge.js、web-ws.js及对应测试；修改文字适配器/factory/runtime/core注入，沿用已有SSE、HTTP取消和Responses历史重放。固定doubao/think/expert别名不能通过冲突Provider映射发往其它上游；对doubaochat严格requiredAccountId，不换号/Node回退。生产Runtime默认读主服务权威doubaoWebRuntime，构造与保存不连接Chrome。
+
+server-app复用控制消息白名单、连接初始化和广播；config.set持久化失败恢复原值。控制端新增独立doubao-web-settings.js并在账户管理中显示，未新增HTTP配置入口。端口默认9222、默认禁用，绑定accountId/targetId/contextId；显式allowSessionCheck允许运行时在所选官方标签CDP筛选sessionid、仅内存比较，页面CSRF及fetch仍在页面内，不复制Cookie到Node请求头/日志/配置。目录查询只读取官方标签元数据，无页面标题/路径/正文/凭据。
+
+网页fetch固定同源/chat/completion、credentials:include、redirect:error。页面自身检查location.origin，主frame监听注册后复核当前origin；配置/账号指纹监控在连接前开始，读Cookie与fetch前重查授权。120秒覆盖连接、CDP创建/send/detach、身份和流；目录查询全流程≤5秒。原始流按≤64KiB拉取，单块≤512KiB、总8MiB，保留SSE字节分片；取消仅清理对应页面临时状态并断调试连接，不关闭用户标签或Chrome。
+
+独立审查3项重要竞态（导航漏检、连接阶段授权撤销、detach挂起）均先RED后GREEN；实际隔离Chromium还复现并修正Puppeteer使用off而非Node removeListener的接线差异，contextId使用实际CDP元数据，不假定默认context为空。所有网页请求被拦截为本地HTML/SSE，假sessionid仅用于测试profile，无真实上游或用户凭据。最终Chat2API173/176（同3项Windows chmod）、TTS/解码/配置/浏览器97/97、旧播报19/19。真实官网/账号、网页think/expert及Android/设备能力仍未验收，不宣布生产可用。

@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { randomUUID } = require('crypto');
 const { TextDecoder } = require('util');
+const { browserError } = require('./chat2api-doubao-browser-bridge');
 
 // 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
 const DOUBAO_ORIGIN = 'https://www.doubao.com';
@@ -119,9 +120,9 @@ const getRequestText = (request, limits) => {
  * 现场仅确认了首轮 ACK，未确认原生第二轮的服务器行为。当前每轮创建新网页会话并重放调用方
  * 提供的文字历史；保存 observedConversationId 仅供状态观测，不让 Responses 误认为原生续接可用。
  */
-const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = DOUBAO_LIMITS }) => {
+const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = DOUBAO_LIMITS, pageCredentials = false }) => {
   assertDoubaoProvider(provider);
-  const credentials = normalizeDoubaoCredentials(account && account.credentials);
+  const credentials = pageCredentials ? {cookie:''} : normalizeDoubaoCredentials(account && account.credentials);
   const model = actualModel || request.model;
   if (!Object.hasOwn(DOUBAO_MODEL_MODES, model)) throw doubaoError('doubao_unsupported_model');
   const text = getRequestText(request, limits);
@@ -158,7 +159,7 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
   return {
     method: 'POST', url: DOUBAO_COMPLETION_URL, data,
     headers: {
-      Cookie: credentials.cookie, 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default'),
+      ...(!pageCredentials ? {Cookie: credentials.cookie, 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default')} : {}),
       Accept: 'text/event-stream', 'Content-Type': 'application/json', Origin: DOUBAO_ORIGIN, Referer: `${DOUBAO_ORIGIN}/`, 'agw-js-conv': 'str',
     },
     // 禁止重定向和环境代理；Node 独立 HTTP 是否需要网页签名尚未验证，不伪造签名或挪用 Chrome。
@@ -275,7 +276,8 @@ const createRequestControl = (signal, timeoutMs) => {
       if (stoppedError) throw stoppedError;
       return Promise.race([pending, stopped]);
     },
-    normalizeError: (error) => stoppedError || (ERROR_DEFINITIONS[error && error.code] ? doubaoError(error.code) : doubaoError('doubao_upstream_failed')),
+    normalizeError: (error) => stoppedError || (ERROR_DEFINITIONS[error && error.code] ? doubaoError(error.code)
+      : error?.code?.startsWith('doubao_browser_') ? browserError(error.code.slice('doubao_browser_'.length)) : doubaoError('doubao_upstream_failed')),
     cleanup: () => {
       clearTimeout(timer);
       if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onAbort);
@@ -440,20 +442,22 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
 };
 
 /** 未走通用 rawTrafficLogger：原始网页错误可在任意字符串携带凭据，不能仅依靠键名脱敏。 */
-const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {} } = {}) => {
+const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}, browserTransport } = {}) => {
   // 测试可收紧容量/超时，但调用方不能放宽生产安全上限。
   const limits = Object.fromEntries(Object.entries(DOUBAO_LIMITS).map(([key, maximum]) => [key,
     Number.isSafeInteger(customLimits[key]) && customLimits[key] > 0 ? Math.min(customLimits[key], maximum) : maximum,
   ]));
   return async ({ request, account, provider, actualModel, responseSession, context = {} }) => {
-    const prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits });
+    const prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits, pageCredentials: Boolean(browserTransport) });
     const nativeState = responseSession?.nativeState && isRecord(responseSession.nativeState) ? responseSession.nativeState : {};
     const control = createRequestControl(context.signal || request.signal, limits.timeoutMs);
     let response;
     try {
       control.check();
       // 若客户端忽略取消后才交回流，也必须立即关闭，避免后台请求成为泄漏的资源。
-      const pending = Promise.resolve(httpClient.request({ ...prepared, signal: control.signal })).then((value) => {
+      const pending = Promise.resolve(browserTransport
+        ? browserTransport.request({data:prepared.data,accountId:account.accountId,signal:control.signal,limits})
+        : httpClient.request({ ...prepared, signal: control.signal })).then((value) => {
         control.attach(value?.data);
         return value;
       });

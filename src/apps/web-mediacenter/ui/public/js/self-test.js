@@ -39,6 +39,23 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'doubao_web_runtime_config',
+            name: '豆包普通LLM网页运行配置',
+            description: '只读检查默认关闭、严格绑定和显式会话核对授权，不访问Chrome或发送聊天',
+            category: '语音功能',
+            run: async () => {
+                const value = window.DoubaoWebSettings?.getConfig();
+                const valid = value && typeof value.enabled === 'boolean' && Number.isInteger(value.port)
+                    && value.port >= 1024 && value.port <= 65535
+                    && ['accountId','targetId','contextId'].every(key => typeof value[key] === 'string')
+                    && typeof value.allowSessionCheck === 'boolean'
+                    && (!value.enabled || (value.accountId && value.targetId && value.allowSessionCheck))
+                    && !Object.keys(value).some(key => /cookie|token|password/iu.test(key));
+                return { success: Boolean(valid), message: valid ? '网页运行配置结构正常；实际账号与官网尚未验收' : '网页运行配置缺失或不合法',
+                    details: '只检查权威配置，不连接浏览器、不核对会话、不合成或聊天' };
+            }
+        },
+        {
             id: 'chat_reply_tts_context',
             name: '聊天回复语音来源',
             description: '只读检查AI/Agent模板与对应上一句输入，不发送语音',
