@@ -1,4 +1,5 @@
 import { getWebPhysicsStepOptions } from './mmd-physics-rate.mjs';
+import { instrumentPhysics } from './mmd-performance.mjs';
 /*
  * PMX 的 MMDAnimationHelper 创建逻辑。
  *
@@ -66,6 +67,8 @@ const buildMotionHelper = ({
     }
     if (clip) options.animation = clip;
     helper.add(mesh, options);
+    // 包装实际实例而非第三方原型，Ammo/XPBD与独立后端沿用相同口径。
+    instrumentPhysics(helper.objects.get(mesh)?.physics);
 
     const action = helper.objects.get(mesh)?.mixer?._actions?.[0];
     if (action) {

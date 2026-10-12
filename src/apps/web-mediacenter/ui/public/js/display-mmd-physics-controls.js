@@ -26,8 +26,16 @@
             if (hint) hint.textContent = xpbd
                 ? '基准数值作为每帧子步数，每子步 1 轮；物理 Hz 不参与 XPBD。'
                 : '按基准频率换算关节纠错强度；弹簧、质量、阻尼沿用 PMX。';
-            status.textContent = xpbd ? 'XPBD · 每帧 ' + baseline.value + ' 子步' : 'Ammo';
+            const solverState = root.DisplayMmd?.getPhysicsSolverState?.();
+            const name = xpbd ? 'XPBD · 每帧 ' + (baseline?.value || '--') + ' 子步' : 'Ammo';
+            const running = solverState?.running === true;
+            status.textContent = name + (running
+                ? ' · 物理耗时 ' + Number(solverState.frameMs || 0).toFixed(2) + ' ms'
+                : toggle.checked ? ' · 物理未运行' : ' · 物理已关闭');
         };
+        document.getElementById('displayMmdCanvas')?.addEventListener('mmd-performance', () => {
+            if (!switching && !toggle.disabled && !select.disabled) refresh();
+        });
         select.addEventListener('change', async () => {
             if (switching) return;
             switching = true;

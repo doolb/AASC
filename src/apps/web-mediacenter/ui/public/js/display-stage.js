@@ -263,6 +263,18 @@
 
     function setMmdVisible(visible) {
         state.mmdVisible = visible === true;
+        if (refs.mmdControls) {
+            refs.mmdControls.hidden = !state.mmdVisible;
+            if (!state.mmdVisible) {
+                root.DisplayMmdLighting?.close?.();
+                root.DisplayMmdAr?.closePanel?.();
+                // 只收起顶层面板，保留分类展开偏好和定位/摄像头运行状态。
+                refs.mmdControls.querySelectorAll(':scope > section').forEach(panel => { panel.hidden = true; });
+                refs.mmdControls.querySelectorAll(':scope > button[aria-expanded]').forEach(button => {
+                    button.setAttribute('aria-expanded', 'false');
+                });
+            }
+        }
         if (refs.mmdLayer) {
             refs.mmdLayer.classList.toggle('is-visible', state.mmdVisible);
             refs.mmdLayer.setAttribute('aria-hidden', String(!state.mmdVisible));
@@ -397,6 +409,7 @@
         refs.voiceTextDisplay = document.getElementById('voiceTextDisplay');
         refs.chatToggle = document.getElementById('displayChatToggle');
         refs.mmdToggle = document.getElementById('displayMmdToggle');
+        refs.mmdControls = document.querySelector('.display-stage-lighting-control');
 
         if (!refs.stage || !refs.chatLayer || !refs.mmdLayer) return;
 

@@ -60,7 +60,7 @@ const MINDAR_TEST_SOURCE_FILES = Object.freeze([
   'display-mmd-ar-benchmark-compiler.js', 'display-mmd-ar-benchmark-metrics.js', 'display-mmd-ar-benchmark.js',
 ]);
 const SOURCE_ASSET_FILES = Object.freeze([
-  'display-mmd-settings.js', 'display-mmd.js', 'display-mmd-lighting.js', 'display-mmd-ar.js',
+  'display-mmd-settings.js', 'display-mmd.js', 'display-mmd-performance.js', 'display-mmd-lighting.js', 'display-mmd-ar.js',
   'display-pmx-runtime.js', 'display-mmd-ar-pose.js', 'display-pmx-ao.mjs', 'display-pmx-ao-size.mjs',
   'display-pmx-lighting-mode.mjs', 'display-pmx-specular.mjs',
   'mmd-ammo-physics.mjs', 'mmd-pmx-helper.mjs', 'pmx-display-layout.mjs',
@@ -178,7 +178,7 @@ async function stageTextAssets() {
   const $ = cheerio.load(await fs.readFile(DISPLAY_HTML_SOURCE, 'utf8'));
   const arTrackingVideo = $('#displayArTrackingVideo').first();
   const mmdLayer = $('#displayMmdLayer').first().addClass('is-visible').attr('aria-hidden', 'false');
-  const controls = $('.display-stage-lighting-control').first();
+  const controls = $('.display-stage-lighting-control').first().removeAttr('hidden');
   // 正式预设分类只保留旧选择器节点，独立页随后重建自己的预设分类。
   if ($('#mmdArLightingPresets').length) {
     const label = $('#displayMmdLightingPreset').closest('label').remove();
@@ -550,10 +550,10 @@ async function stageTextAssets() {
     await fs.writeFile(physicsLightingPath, WEB_PHYSICS_RATE.addPhysicsRateLighting(
       await fs.readFile(physicsLightingPath, 'utf8')));
     const pmxHelperPath = path.join(GENERATED_ASSETS, 'js/mmd-pmx-helper.mjs');
-    await fs.writeFile(pmxHelperPath, WEB_PHYSICS_LIFECYCLE.addContinuousMotionHelper(
+    await fs.writeFile(pmxHelperPath, await require('./web-production-shared').fingerprintProductionImports(WEB_PHYSICS_LIFECYCLE.addContinuousMotionHelper(
       WEB_PHYSICS_SOLVER.addSolverHelper(
         WEB_PHYSICS_RATE.addPhysicsRateHelper(await fs.readFile(pmxHelperPath, 'utf8'), physicsRateUrl)),
-      { webMode: WEB_MODE }));
+      { webMode: WEB_MODE }), GENERATED_ASSETS));
     const pmxHelperUrl = `./mmd-pmx-helper.mjs?v=${(await hashFile(pmxHelperPath)).sha256.slice(0, 12)}`;
     const motionSwitchPath = path.join(GENERATED_ASSETS, 'js/web-motion-switch.mjs');
     await fs.writeFile(motionSwitchPath, addClothMotionSwitch((await fs.readFile(path.join(__dirname, 'web-motion-switch.mjs'), 'utf8'))
@@ -671,6 +671,7 @@ async function stageTextAssets() {
       scriptVersion.set(fileName, (await hashFile(path.join(GENERATED_ASSETS, 'js', fileName))).sha256.slice(0, 12));
     }
   }
+  scriptVersion.set('display-mmd-performance.js', (await hashFile(path.join(GENERATED_ASSETS, 'js/display-mmd-performance.js'))).sha256.slice(0, 12));
   const scriptUrl = (fileName) => `/js/${fileName}${scriptVersion.has(fileName) ? `?v=${scriptVersion.get(fileName)}` : ''}`;
 
   const page = `<!doctype html>
@@ -722,6 +723,8 @@ async function stageTextAssets() {
     @media (orientation: portrait) {
       .mmd-ar-test-label { right: calc(var(--mmd-ar-safe-inset-right) + 82px); }
     }
+    /* 左上角优先显示FPS，原测试页说明向下留出一行。 */
+    .mmd-ar-test-label { top: calc(var(--mmd-ar-safe-inset-top) + 48px); }
     .display-mmd-ar-background { z-index: 2; }
     .mmd-ar-benchmark { display: grid; gap: 8px; margin: 4px 0 12px; padding: 10px; border: 1px solid #758bff66; border-radius: 10px; background: color-mix(in srgb, #171a22 var(--display-mmd-panel-opacity, 50%), transparent); }
     .mmd-ar-benchmark-live { margin: 0; color: #d3d9e8; font-size: 12px; line-height: 1.45; }
@@ -811,6 +814,7 @@ async function stageTextAssets() {
   ${WEB_MODE ? '<script>window.MmdArLightingPresetGroups = Object.create(null);</script>' : ''}
   <script src="${scriptUrl('display-mmd-settings.js')}"></script>
   <script src="${scriptUrl('display-mmd.js')}"></script>
+  <script src="${scriptUrl('display-mmd-performance.js')}"></script>
   <script src="${scriptUrl('display-mmd-lighting.js')}"></script>
   <script>
     window.MmdArTestMindArOnly = true;

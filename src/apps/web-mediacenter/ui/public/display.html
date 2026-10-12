@@ -68,6 +68,7 @@
     <div id="displayStageLayers" class="display-stage-layers" aria-label="显示端交互层">
         <div id="displayMmdLayer" class="display-mmd-layer" aria-hidden="true">
             <canvas id="displayMmdCanvas" aria-label="MMD 角色画布"></canvas>
+            <output id="displayMmdFps" class="display-mmd-fps" aria-label="角色渲染帧率" aria-live="off" hidden>-- FPS</output>
             <div id="displayMmdStatus" class="display-mmd-status" role="status" aria-live="polite"></div>
         </div>
         <div id="displayMmdLoadingProgress" class="display-mmd-loading-progress" role="progressbar"
@@ -80,7 +81,7 @@
         </div>
         <section id="displayChatLayer" class="display-chat-layer" aria-hidden="true"></section>
         <div id="displayInteractionLayer" class="display-interaction-layer">
-            <div class="display-stage-lighting-control">
+            <div class="display-stage-lighting-control" hidden>
                 <button id="displayMmdLightingToggle" class="display-stage-button" type="button"
                         aria-controls="displayMmdLightingPanel" aria-expanded="false">灯光</button>
                 <button id="displayMmdMotionToggle" class="display-stage-button" type="button"
@@ -336,6 +337,7 @@
                             恢复默认
                         </button>
                     </div>
+                    <p class="display-mmd-render-time">渲染耗时 <output id="displayMmdRenderTime" aria-live="off">-- ms</output>（CPU 提交）</p>
 <label class="mind-basic-field"><span>Canvas渲染倍率 <output data-render-value="canvasScale">1.00×</output></span><input type="range" data-render-setting="canvasScale" min="0.25" max="2" step="0.25" value="1"><small data-render-limit=""></small></label>
                     <section id="mmdArLightingPresets" class="display-mmd-panel-group" data-mmd-production-only="">
         <div class="display-mmd-panel-group-header">
@@ -623,6 +625,7 @@
     <script src="js/display-mmd-settings.js" defer></script>
     <script src="js/display-mmd-human-bridge.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
+    <script src="js/display-mmd-performance.js" defer></script>
     <script type="module" src="js/mmd-screen-lighting-panel.mjs"></script>
     <script type="module" src="js/mmd-render-settings.mjs"></script>
     <script src="js/display-mmd-panel-groups.js" defer></script>

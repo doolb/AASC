@@ -10,6 +10,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { createArFootAnchor } from './display-mmd-ar-pose.js';
+import { createCanvasPerformance } from './mmd-performance.mjs';
 
 // v2 表示服务端已经把 VRoid optimized_preview 的顶点恢复为正常 GLB；不能继续复用
 // 旧版本缓存中的压缩顶点，否则模型会出现拉伸、破面或看似空白。
@@ -96,6 +97,7 @@ function classifyHit(object) {
 
 export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     if (!canvas) throw new Error('VRM Canvas 不存在');
+    const framePerformance = createCanvasPerformance(canvas);
 
     const renderer = new THREE.WebGLRenderer({
         canvas,
@@ -397,7 +399,9 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         if (currentVrm) currentVrm.update(delta);
         updateModelRotation(delta);
         updateCameraView(delta);
+        const renderStarted = performance.now();
         renderer.render(scene, camera);
+        if (currentVrm) framePerformance.record({ now, renderMs: performance.now() - renderStarted });
         frameHandle = requestAnimationFrame(renderFrame);
     }
 
@@ -408,6 +412,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     }
 
     function disposeCurrentModel() {
+        framePerformance.reset();
         if (!currentVrm) return;
         arFootAnchor.reset();
         scene.remove(currentRotationPivot || currentVrm.scene);
@@ -463,6 +468,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     }
 
     function setVisible(nextVisible) {
+        framePerformance.reset();
         visible = nextVisible === true;
         if (visible) {
             startRendering();
@@ -516,6 +522,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     }
 
     function dispose() {
+        framePerformance.dispose();
         if (frameHandle) cancelAnimationFrame(frameHandle);
         frameHandle = 0;
         disposeCurrentModel();
@@ -528,6 +535,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
 
     return Object.freeze({
         dispose,
+        getPerformanceState: framePerformance.getState,
         finishModelRotation,
         handleActionPlan,
         load,

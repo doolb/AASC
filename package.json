@@ -45,13 +45,14 @@
     "build:apk:noserver": "node scripts/ops/build-apk.js noserver",
     "upload:apk": "npm run build:apk && node scripts/ops/apk-deploy.js",
     "start:apk:display": "node scripts/ops/apk-start.js",
-    "test:mmd-production": "node --test tests/display-mmd-production-actions.test.js tests/display-mmd-production-panels.test.js tests/mmd-ar-lighting-presets.test.js tests/mmd-ar-human-actions.test.js tests/mmd-ar-human-head-recovery.test.js tests/mmd-ar-human-arm-avoidance.test.js tests/mmd-ar-emoji-gestures.test.js tests/mmd-ar-physics-lifecycle.test.js tests/mmd-pmx-helper.test.js tests/mmd-ar-production-wind.test.js tests/display-mmd-tts-actions.test.js tests/agent-chat-tts.test.js",
+    "test:mmd-production": "node --test tests/display-mmd-production-actions.test.js tests/display-mmd-production-panels.test.js tests/mmd-ar-lighting-presets.test.js tests/mmd-ar-human-actions.test.js tests/mmd-ar-human-head-recovery.test.js tests/mmd-ar-human-arm-avoidance.test.js tests/mmd-ar-emoji-gestures.test.js tests/mmd-ar-physics-lifecycle.test.js tests/mmd-pmx-helper.test.js tests/mmd-ar-production-wind.test.js tests/display-mmd-tts-actions.test.js tests/agent-chat-tts.test.js tests/display-mmd-performance.test.js",
     "test:mmd-production:browser": "node --test tests/display-mmd-production-actions-browser.test.js",
     "test:mmd-production:independent": "node --test tests/mmd-ar-human-actions-browser.test.js",
     "prebuild:apk": "npm run prepare:mmd-production",
     "prebuild:apk:offline": "npm run prepare:mmd-production",
     "prebuild:apk:withserver": "npm run prepare:mmd-production",
-    "test:mmd-production:tts": "node --test tests/chat-manual-tts.test.js tests/server-tts-concurrency-integration.test.js"
+    "test:mmd-production:tts": "node --test tests/chat-manual-tts.test.js tests/server-tts-concurrency-integration.test.js",
+    "test:mmd-performance": "node --test tests/display-mmd-performance.test.js"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",

@@ -19,7 +19,7 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
     const $ = cheerio.load(fs.readFileSync(path.join(ROOT, 'display.html'), 'utf8'));
     const scripts = new Set(['display-lipsync-audio.js', 'display-mmd-settings.js', 'display-mmd-human-bridge.js',
         'display-mmd.js', 'display-mmd-panel-groups.js', 'display-mmd-lighting.js', 'display-mmd-production-controls.js',
-        'display-mmd-physics-controls.js', 'mmd-render-settings.mjs', 'mmd-screen-lighting-panel.mjs', 'mmd-actions-ui.mjs', 'mmd-tts-actions.mjs']);
+        'display-mmd-physics-controls.js', 'display-mmd-performance.js', 'mmd-render-settings.mjs', 'mmd-screen-lighting-panel.mjs', 'mmd-actions-ui.mjs', 'mmd-tts-actions.mjs']);
     $('script').each((_index, node) => {
         if ($(node).attr('type') !== 'importmap' && !scripts.has(path.basename($(node).attr('src') || ''))) $(node).remove();
     });
@@ -101,6 +101,28 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
         });
         try { await page.waitForFunction(() => window.DisplayMmd?.getHumanInterface?.()?.getState().ready, { timeout: 90000 }); }
         catch (error) { console.log(await page.evaluate(() => ({ state: window.DisplayMmd.getState(), status: document.getElementById('displayMmdStatus')?.textContent }))); throw error; }
+        // 初始化正式舞台而不连接服务器；验证真实渲染计时及角色控件生命周期。
+        await page.addScriptTag({ path: path.join(ROOT, 'js/display-stage.js') });
+        await page.waitForFunction(() => window.DisplayMmd.getPerformanceState()?.ready
+            && window.DisplayMmd.getPhysicsSolverState().running, { timeout: 30000 });
+        const performanceState = await page.evaluate(() => ({ state: window.DisplayMmd.getPerformanceState(),
+            physics: window.DisplayMmd.getPhysicsSolverState(), fps: document.getElementById('displayMmdFps').textContent,
+            render: document.getElementById('displayMmdRenderTime').textContent,
+            physicalLabel: document.getElementById('mmdArPhysicsSolverStatus').textContent }));
+        assert.ok(performanceState.state.fps > 0); assert.ok(performanceState.state.renderMs >= 0);
+        assert.ok(performanceState.physics.frameMs > 0); assert.match(performanceState.fps, /\d+\.\d FPS/u);
+        assert.match(performanceState.render, /\d+\.\d+ ms/u); assert.match(performanceState.physicalLabel, /物理耗时/u);
+        const hiddenControls = await page.evaluate(() => {
+            document.getElementById('displayMmdLightingToggle').click(); window.DisplayStage.setMmdVisible(false);
+            return { controls: getComputedStyle(document.querySelector('.display-stage-lighting-control')).display,
+                hidden: document.getElementById('displayMmdFps').hidden,
+                panels: [...document.querySelectorAll('.display-stage-lighting-control > section')].every(panel => panel.hidden),
+                ready: window.DisplayMmd.getPerformanceState().ready, physicsMs: window.DisplayMmd.getPhysicsSolverState().frameMs };
+        });
+        assert.deepEqual(hiddenControls, { controls: 'none', hidden: true, panels: true, ready: false, physicsMs: 0 });
+        await page.evaluate(() => window.DisplayStage.setMmdVisible(true));
+        await page.waitForFunction(() => window.DisplayMmd.getPerformanceState()?.ready, { timeout: 30000 });
+        console.log('正式性能/隐藏：', JSON.stringify(performanceState));
         assert.match(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl), /miya-idle\.vmd$/u);
         await page.waitForFunction(() => document.querySelectorAll('[data-server-actions] [data-advanced]').length === 3);
         assert.equal(await page.$$eval('[data-builtin-actions] button', nodes => nodes.length), 28);
@@ -214,6 +236,16 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface()?.getState().ready, { timeout: 90000 });
         await page.waitForFunction(() => !document.getElementById('mmdArHandAvoidance').checked);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getArmAvoidanceState().enabled), false);
+        assert.equal(await page.evaluate(async () => window.DisplayMmd.setPhysicsSolver('xpbd')), true);
+        await page.waitForFunction(() => window.DisplayMmd.getPerformanceState()?.ready
+            && window.DisplayMmd.getPhysicsSolverState().running, { timeout: 90000 });
+        const xpbdTiming = await page.evaluate(() => window.DisplayMmd.getPhysicsSolverState());
+        assert.equal(xpbdTiming.solver, 'xpbd'); assert.ok(xpbdTiming.frameMs > 0);
+        assert.equal(await page.evaluate(async () => window.DisplayMmd.setPhysicsEnabled(false)), true);
+        await page.waitForFunction(() => window.DisplayMmd.getState().modelReady && window.DisplayMmd.getPerformanceState()?.ready, { timeout: 90000 });
+        const stoppedTiming = await page.evaluate(() => ({ physics: window.DisplayMmd.getPhysicsSolverState(),
+            label: document.getElementById('mmdArPhysicsSolverStatus').textContent }));
+        assert.equal(stoppedTiming.physics.frameMs, 0); assert.match(stoppedTiming.label, /物理已关闭|物理未运行/u);
         assert.deepEqual(errors, []); assert.deepEqual(missing.filter(name => name !== 'favicon.ico'), []);
         console.log('正式集成：灯光/保存/动态动作/MPL/真实音频通过');
     } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

@@ -2,7 +2,7 @@ import { clone,createHistory,putDocument,validateDocument,boneOrigins } from './
 import { createEditorView } from './web-editor-view.mjs';
 import { saveProject,openProject,exportPmx,download } from './web-editor-project.mjs';
 const style=document.createElement('style');style.textContent=`
-#mmdEditor{position:fixed;left:10px;top:10px;z-index:80;color:#eee;font:13px system-ui;max-width:calc(100vw - 80px)}
+#mmdEditor{position:fixed;left:10px;top:calc(var(--mmd-ar-safe-inset-top,0px) + 48px);z-index:80;color:#eee;font:13px system-ui;max-width:calc(100vw - 80px)}
 #mmdEditor button,#mmdEditor select,#mmdEditor input{font:inherit;color:inherit;background:#242936;border:1px solid #525d73;border-radius:5px;padding:5px;margin:2px;box-sizing:border-box}
 #mmdEditor button:disabled{opacity:.4}#mmdEditor button[aria-pressed=true]{background:#245783}#mmdEditor nav{display:flex;gap:3px;flex-wrap:wrap}
 #mmdEditor .ed-panel{background:rgba(18,23,32,.94);border:1px solid #536078;border-radius:8px;padding:8px;margin-top:6px;max-height:75vh;overflow:auto;width:300px;max-width:calc(100vw - 100px)}

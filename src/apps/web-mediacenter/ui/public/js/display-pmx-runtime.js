@@ -1,4 +1,5 @@
 import { createHumanRuntime, humanRuntimeInterfaces } from './mmd-human-runtime.mjs';
+import { createCanvasPerformance, getPhysicsTiming } from './mmd-performance.mjs';
 import { calculateCanvasSize } from './mmd-render-settings.mjs';
 import { runTemporalAction } from './mmd-temporal-aa.mjs';
 import { DEFAULT_AR_CAMERA_SETTINGS, normalizeArCameraSettings, classifyHit, disposeObject, waitForManagedLoad, normalizeModel, createModelRotationPivot } from './mmd-runtime-utils.mjs';
@@ -391,6 +392,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const human = createHumanRuntime({ getMesh: () => currentMesh, getHelper: () => helper.current,
         getProfile: () => currentProfile, getCamera: () => camera, canvas, manualExpressions, startRendering: () => startRendering() });
     const physicsGate = { paused: false };
+    const framePerformance = createCanvasPerformance(canvas);
+    let physicsFrame = { running: false, frameMs: 0 };
     let motionPlaybackEnabled = true;
     let pendingInitialMotionHelper = null;
     let motionSwitchMesh = null;
@@ -405,7 +408,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         if (!physics) return { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 };
         return { solver: physics.engine || 'ammo', active: physicsEnabled,
             bodyCount: physics.bodies.length, jointCount: physics.constraints.length,
-            frameMs: physics.frameMs || 0, ...physics.getState?.() };
+            ...physics.getState?.(), running: physicsFrame.running && visible && !document.hidden,
+            frameMs: physicsFrame.running && visible && !document.hidden ? physicsFrame.frameMs : 0 };
     };
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -609,6 +613,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentMotionResourceId = null;
     };
     const disposeCurrentModel = () => {
+        framePerformance.reset();
+        physicsFrame = { running: false, frameMs: 0 };
         ambientOcclusion.invalidateTemporal();
         motionSequence += 1;
         stopMotion();
@@ -646,6 +652,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             if (!advanceCameraMotion(delta)) updateCameraView(delta);
         }
         const frameHelper = motionSwitchMesh === currentMesh ? null : helper.current;
+        const framePhysics = frameHelper?.objects?.get(currentMesh)?.physics;
+        const physicsSequence = getPhysicsTiming(framePhysics).sequence;
         human.before(delta, frameHelper);
         manualExpressions.before(frameHelper);
         syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);
@@ -672,8 +680,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             if (delayInitialMotion) setPmxMotionPlaybackEnabled(frameHelper, motionPlaybackEnabled);
         }
         const firstFramePivot = delayInitialMotion ? currentRotationPivot : null;
+        const measuredPhysics = getPhysicsTiming(framePhysics);
+        physicsFrame = { running: measuredPhysics.sequence !== physicsSequence,
+            frameMs: measuredPhysics.sequence !== physicsSequence ? measuredPhysics.frameMs : 0 };
         const firstFramePivotVisible = firstFramePivot?.visible;
         if (firstFramePivot) firstFramePivot.visible = false;
+        const renderStarted = performance.now();
         try {
             // 首帧物理照常运行，但不把动作起始姿态绘制出来；下一帧才显示模型。
             followTestShadowRoot();
@@ -689,6 +701,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             // 恢复原始可见性，避免覆盖 AR 失锁或其他显示状态。
             if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;
         }
+        if (currentMesh) framePerformance.record({ now, renderMs: performance.now() - renderStarted,
+            physicsRunning: physicsFrame.running, physicsMs: physicsFrame.frameMs });
         if (!frameHandle) frameHandle = requestAnimationFrame(renderFrame);
     };
     const startRendering = () => {
@@ -740,6 +754,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             .then((results) => results.every(Boolean));
     };
     const setVisible = (nextVisible) => {
+        framePerformance.reset();
+        physicsFrame = { running: false, frameMs: 0 };
         human.setVisible(nextVisible);
         if (nextVisible === true && !visible) {
             helper.current?.objects?.get(currentMesh)?.physics?.resetAnchorInterpolation();
@@ -890,6 +906,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const { advanceCameraMotion, loadCameraMotion, setCameraMotionPlaybackEnabled,
         getCameraMotionProgress, clearCameraMotion } = cameraMotion;
     const dispose = () => {
+        framePerformance.dispose();
         human.dispose();
         manualExpressions.dispose();
         disposed = true;
@@ -951,6 +968,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         getWindSettings: () => ({ ...windSettings }),
         setPhysicsSolver,
         getPhysicsSolverState,
+        getPerformanceState: framePerformance.getState,
         setMotionPlaybackEnabled,
         getMotionPlaybackEnabled: () => motionPlaybackEnabled,
         loadCameraMotion,

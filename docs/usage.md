@@ -1,5 +1,7 @@
 # Web MediaCenter - 使用说明
 
+MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件规则见[帧率与耗时](usage/mmd-performance.md)，源码与独立WEB构建已完成，正式发布状态见changelog。
+
 ## TTS 多 Provider 配置（已实现，账号/设备待验收）
 
 在「声纹 → 语音服务与音色」分别配置 AI / Agent、文本阅读和系统播报；聊天模板可继承 AI 默认或单独指定服务。支持系统原生、国内千问网页、Qwen API、豆包 API，凭证留空保留且只回传配置状态。三个服务默认开启，国内千问使用Chat2API国内账号、直接调用接口，无需Chrome；Qwen API默认Qwen-Audio 3.1/乔小娇，豆包2.0自动读取对应上一句用户对话。操作与当前限制见 [语音服务与音色](usage/tts-providers.md)。

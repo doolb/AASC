@@ -2,7 +2,7 @@
 (function exposeDisplayMmdPanelGroups(root) {
     const GROUPS = Object.freeze({
         displayMmdLightingPanel: [
-            ['基础光照', ['displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
+            ['基础光照', ['displayMmdRenderTime', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
             ['高光', ['displayMmdSpecularEnabled', 'displayMmdSpecularColor', 'displayMmdSpecularIntensity', 'displayMmdSpecularShininess']],
             ['AO', ['displayMmdPmxAoEnabled', 'displayMmdPmxAoEdgeCorrection', 'mmdArAoConcavityAngle', 'displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3']],
             ['主光', ['displayMmdKeyShadowEnabled', 'displayMmdKeyColor', 'displayMmdKeyIntensity', 'displayMmdKeyDirectionLongitude', 'mmdArKeyShadowBias', 'mmdArKeyShadowNormalBias', 'mmdArShadowMapSize', 'mmdArShadowCameraScale']],
@@ -245,6 +245,9 @@
             setMotionOpen(open);
         });
         motionPanel.addEventListener('click', (event) => event.stopPropagation());
+        root.addEventListener('display-mmd-visibility', event => {
+            if (event.detail?.visible !== true) setMotionOpen(false);
+        });
         for (const [buttonId] of PANELS.filter(([id]) => id !== 'displayMmdMotionToggle')) {
             document.getElementById(buttonId)?.addEventListener('click', () => setMotionOpen(false));
         }

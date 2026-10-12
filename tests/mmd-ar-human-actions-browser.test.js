@@ -274,6 +274,16 @@ test('真实米娅默认待机、动态服务器动作、原时长/本地优先�
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getArmAvoidanceState().enabled), false);
         assert.match(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl), /miya-idle\.vmd$/u);
         assert.equal(await page.evaluate(async () => window.DisplayMmd.setPhysicsSolver('xpbd')), true); await ready();
+        await page.waitForFunction(() => window.DisplayMmd.getPerformanceState()?.ready
+            && window.DisplayMmd.getPhysicsSolverState().running, { timeout: 30000 });
+        const performanceState = await page.evaluate(() => ({ stats: window.DisplayMmd.getPerformanceState(),
+            physics: window.DisplayMmd.getPhysicsSolverState(), fps: document.getElementById('displayMmdFps').textContent,
+            render: document.getElementById('displayMmdRenderTime').textContent,
+            pointer: getComputedStyle(document.getElementById('displayMmdFps')).pointerEvents }));
+        assert.ok(performanceState.stats.fps > 0); assert.ok(performanceState.stats.renderMs >= 0);
+        assert.ok(performanceState.physics.frameMs > 0); assert.match(performanceState.fps, /\d+\.\d FPS/u);
+        assert.match(performanceState.render, /\d+\.\d+ ms/u); assert.equal(performanceState.pointer, 'none');
+        console.log('独立性能：', JSON.stringify(performanceState));
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getArmAvoidanceState().enabled), false);
         await page.evaluate(() => window.DisplayMmd.getHumanInterface().setArmAvoidanceEnabled(true));
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getArmAvoidanceState().available);

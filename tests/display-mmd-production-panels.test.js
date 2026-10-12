@@ -20,6 +20,8 @@ test('正式显示端面板分类、动作进度及开关与标题互不干扰',
         await page.setViewport({ width: 390, height: 740, deviceScaleFactor: 3 });
         await page.setContent($.html());
         await page.evaluate(() => {
+            // 此夹具只加载分类模块，模拟正式舞台初始化后已显示角色的入口状态。
+            document.querySelector('.display-stage-lighting-control').hidden = false;
             window.DisplayMmd = { getMotionProgress: () => ({ timeSeconds: 5, durationSeconds: 20 }) };
         });
         await page.addScriptTag({ path: path.join(PUBLIC, 'js/display-mmd-panel-groups.js') });

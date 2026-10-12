@@ -523,6 +523,7 @@
 
     function setVisible(visible) {
         state.visible = visible === true;
+        root.dispatchEvent(new CustomEvent('display-mmd-visibility', { detail: { visible: state.visible } }));
         if (!state.visible) cancelPointerInteraction();
         if (state.runtime) state.runtime.setVisible(state.visible);
         if (state.visible && !state.modelReady && !state.runtime) {
@@ -939,6 +940,7 @@
             physicsEnabled: state.physicsEnabled
         }),
         getLighting,
+        getPerformanceState: () => state.runtime?.getPerformanceState?.() ?? null,
         getMotionProgress: () => state.runtime?.getMotionProgress?.() ?? null,
         handleActionPlan,
         init,

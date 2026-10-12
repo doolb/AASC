@@ -1,5 +1,14 @@
 ### MMD-AR灯光与动作同步正式包
 
+- ✅ [2026-10-12] 两端新增左上角FPS和灯光CPU渲染耗时，正式物理状态显示实际耗时，隐藏角色时收起右侧灯光/动作/定位按钮与面板。
+  - 新增mmd-performance.mjs/display-mmd-performance.js，修改PMX/VRM运行时、helper、DisplayMmd/舞台/物理/分类控制、HTML/CSS；按实际帧间隔统计，500ms窗口，物理update与绘制单独计时。后台/隐藏/模型切换清窗口，暂停清旧值，不增加绘制/GPU等待。独立build/面板/扩展复用同一指纹模块，去掉重复测时，编辑工具栏下移避开FPS；既有眼球/debug及其他工作区改动保留。
+  - npm定向最终128/128、正式真实PMX1/1（133.4秒）、独立真实PMX1/1（191.8秒），共130项通过；原动作/MPL/灯光/TTS、风/避让/物理开关重建兼容，VRM帧入口、完整CSS与安全区不遮挡通过，最终WEB构建/JS语法/diff通过，无pageerror。额外旧runtime夹具8项失败与HEAD基线一致，记录todo，不宣称全仓通过；手机/实际GLB/VRM观感另验收。
+  - 同步design/spec/task/usage/self-test/todo；实现项移出todo，保留发布/设备与既有夹具维护。servicePackage=true，原minApk=true/dependenciesPackage=false保持；按前轮授权继续正式服务包发布，独立外网待同步，不构建APK或提交日志/生成资源。
+
+- ✅ [2026-10-12] 完成FPS/耗时与角色控件隐藏方案核查：正式物理面板未显示耗时，Ammo需补实际步进计时，角色隐藏尚未联动右侧控件。
+  - 更新两端design/spec、task和todo，明确约500ms共享统计、CPU渲染口径、后台窗口重置及正式按钮/面板收起；按AGENTS待确认后实施。未修改运行代码、发布状态或v65产物，未运行新增测试/构建。
+
+
 - ✅ [2026-10-12] 发布正式Offline服务代码包v65到局域网与外网，包含TTS生成时准备高级动作、音频就绪后同步播放，以及最新已提交TTS修复。
   - `code/code-v65.zip`：17,585,424字节，SHA-256 `295773152c180ed8fcf3d5e3ad8f1885cff414256d5def59bcd29f055b2ca3b0`；来源`17f2d3dc3059e5c7653cb2e76f89371393ddf6d3`。npm构建生成9项固定资源；1,033文件CRC和逐项指纹通过，包含512项提交源码、9项生成资源及512项既有发布资源。构建输入独立暂存，未切换分支或覆盖工作区，保留本机配置与其他未提交改动。
   - npm发布脚本上传版本文件后原子切换manifest，复用dependencies v6、Node min seeds v39、min APK v34及dataRepair v2；LAN/WAN所有引用资源HTTP大小/SHA-256、RSA签名及组件约束通过。两端manifest SHA-256均为`e8b68e7cde502ea173d3e1c48c1082c34c2a14818d46ad2fa9ef6e25048598e2`，code目录仅保留v65，清理无错误；记录保存在`.git/offline-publish-mmd-tts-v65/`。

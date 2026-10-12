@@ -15,19 +15,8 @@ function addClothSupport(source, operation, args) {
             once(text, '\t_createMMDPhysics( mesh, params ) {', `\t_createMMDPhysics( mesh, params ) {
         if (['vertex-cloth', 'vertex-cloth-gpu'].includes(params.physicsSolver)) return new VertexClothPmxPhysics(mesh, params,
             (target, bodies, joints, options) => new MMDPhysics(target, bodies, joints, options));`),
-        addSolverRuntime: text => once(once(text, '    const setPhysicsSolver =', `    const timedPhysics = new WeakSet();
-    const timePhysics = physics => {
-        if (!physics || timedPhysics.has(physics)) return;
-        const update = physics.update;
-        physics.update = function(delta) {
-            const begin = performance.now();
-            try { return update.call(this, delta); }
-            finally { this.frameMs = performance.now() - begin; }
-        };
-        timedPhysics.add(physics);
-    };
-    const setPhysicsSolver =`).replace('        syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);',
-            '        syncPhysicsWind(frameHelper?.objects?.get(currentMesh)?.physics);\n        timePhysics(frameHelper?.objects?.get(currentMesh)?.physics);'), '        setPhysicsSolver,', `        setVertexClothGroup: (id, enabled) => {
+        // 实例物理计时已由正式mmd-performance包装，独立后端不再重复包装。
+        addSolverRuntime: text => once(text, '        setPhysicsSolver,', `        setVertexClothGroup: (id, enabled) => {
             const result = helper.current?.objects?.get(currentMesh)?.physics?.setGroupEnabled?.(id, enabled) === true;
             startRendering(); return result;
         },

@@ -1,4 +1,22 @@
 /* 显示端 MMD/VRM 层：Canvas 与聊天共享舞台，不创建独立 viewport。 */
+.display-mmd-fps {
+    position: absolute;
+    top: max(12px, var(--display-safe-inset-top, 0px));
+    left: max(12px, var(--display-safe-inset-left, 0px));
+    z-index: 2;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #171a22bb;
+    color: #f4f6fb;
+    font: 12px/1.5 monospace;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
+/* flex控件列会覆盖浏览器默认hidden样式，必须显式隐藏整个入口与面板。 */
+.display-stage-lighting-control[hidden], .display-mmd-fps[hidden] { display: none !important; }
+.display-mmd-render-time { margin: 8px 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+
 .display-stage-layers {
     --display-viewport-width: 100vw;
     --display-viewport-height: 100vh;

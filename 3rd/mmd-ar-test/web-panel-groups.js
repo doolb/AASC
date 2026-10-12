@@ -9,7 +9,7 @@ const PHYSICS_SOLVER = require('./web-physics-solver');
 
 // 仅用于 HTTPS 测试页生成阶段：移动现有控件节点，不重建输入框或改变原 ID。
 const LIGHTING_GROUPS = Object.freeze([
-  ['基础光照', ['displayMmdLightingPreset', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
+  ['基础光照', ['displayMmdLightingPreset', 'displayMmdRenderTime', 'displayMmdPmxToonEnabled', 'displayMmdAmbientColor', 'displayMmdAmbientIntensity']],
   ['高光', []],
   ['AO', ['displayMmdPmxAoColor', 'displayMmdPmxAoIntensity', 'displayMmdPmxAoRadiusPercent', 'displayMmdPmxAoResolution', 'displayMmdPmxAoSampleCount', 'displayMmdPmxAoBlurPassCount', 'displayMmdPmxAoBlurRadius1', 'displayMmdPmxAoBlurRadius2', 'displayMmdPmxAoBlurRadius3'], 'displayMmdPmxAoEnabled'],
   ['主光', ['displayMmdKeyColor', 'displayMmdKeyIntensity', 'displayMmdKeyDirectionLongitude'], 'displayMmdKeyShadowEnabled'],
