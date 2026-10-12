@@ -36,6 +36,7 @@
     "publish:ai-models": "node scripts/models/publish-ai-models.js",
     "sync:ai-models": "node scripts/models/sync-ai-models.js",
     "test:ai-models": "node --test tests/ai-model-sync.test.js tests/ai-model-publish.test.js",
+    "test:offline-sync": "node --test tests/offline-update-sync.test.js tests/ai-model-sync.test.js",
     "stress:tts": "node scripts/stress/tts-stress-test.js",
     "build:apk": "node scripts/ops/build-apk.js withserver",
     "build:apk:offline": "node scripts/ops/build-apk.js allserver",

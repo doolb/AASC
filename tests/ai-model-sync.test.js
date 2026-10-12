@@ -62,6 +62,60 @@ test('下载正确文件后重复同步完全复用，额外文件保持', async
     assert.equal(await fs.readFile(path.join(root, 'sensevoice/extra.txt'), 'utf8'), 'keep');
 });
 
+test('镜像根清单只在模型完整成功后原子写入，内容相同则保持原文件', async t => {
+    const root = await fixture(t), bytes = Buffer.from('模型测试'), requested = [];
+    const file = item('sensevoice/model.int8.onnx', bytes), value = manifest([file]);
+    const fetchImpl = remote(value, { [file.path]: bytes }, requested);
+    const first = await syncModels({ root, fetchImpl, mirrorManifest: true, log() {} });
+    const manifestPath = path.join(root, 'manifest.json');
+    const firstStat = await fs.stat(manifestPath);
+    assert.equal(first.manifest, 'written');
+    assert.deepEqual(await fs.readFile(manifestPath), common.manifestBytes(value));
+
+    requested.length = 0;
+    const second = await syncModels({ root, fetchImpl, mirrorManifest: true, log() {} });
+    assert.equal(second.manifest, 'reused');
+    assert.deepEqual(requested, ['manifest.json']);
+    assert.equal((await fs.stat(manifestPath)).mtimeMs, firstStat.mtimeMs);
+
+    const restoredRoot = await fixture(t);
+    const mirrorFetch = async url => {
+        const relativePath = new URL(url).pathname.slice('/aimodel/'.length);
+        try {
+            return new Response(await fs.readFile(path.join(root, relativePath)));
+        } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+            return new Response('', { status: 404 });
+        }
+    };
+    const restored = await syncModels({
+        source: 'https://mirror.example/aimodel/',
+        root: restoredRoot,
+        fetchImpl: mirrorFetch,
+        log() {}
+    });
+    assert.deepEqual(restored.downloaded, [file.path]);
+    assert.deepEqual(await fs.readFile(path.join(restoredRoot, file.path)), bytes);
+});
+
+test('镜像下载失败时保留旧根清单', async t => {
+    const root = await fixture(t), oldManifest = Buffer.from('{"old":true}\n');
+    const file = item('sensevoice/model.int8.onnx', Buffer.from('right'));
+    await fs.writeFile(path.join(root, 'manifest.json'), oldManifest);
+    const fetchImpl = async url => new URL(url).pathname.endsWith('manifest.json')
+        ? Response.json(manifest([file])) : new Response('wrong');
+    await assert.rejects(syncModels({ root, fetchImpl, mirrorManifest: true, log() {} }), /大小\/SHA-256/u);
+    assert.deepEqual(await fs.readFile(path.join(root, 'manifest.json')), oldManifest);
+});
+
+test('根清单符号链接不能被镜像写入覆盖', async t => {
+    const root = await fixture(t), outside = await fixture(t), bytes = Buffer.from('x');
+    const file = item('sensevoice/model.int8.onnx', bytes);
+    await fs.symlink(path.join(outside, 'manifest.json'), path.join(root, 'manifest.json'));
+    const fetchImpl = remote(manifest([file]), { [file.path]: bytes });
+    await assert.rejects(syncModels({ root, fetchImpl, mirrorManifest: true, log() {} }), /符号链接/u);
+});
+
 for (const [name, body, status] of [['坏哈希', 'wrong', 200], ['截断', 'x', 200], ['超长', 'exceeds-length', 200], ['HTTP失败', 'error', 503]]) {
     test(`下载${name}保留旧模型且清理临时文件`, async t => {
         const root = await fixture(t), file = item('sensevoice/model.int8.onnx', Buffer.from('right'));

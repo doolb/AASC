@@ -67,6 +67,8 @@ L4拆解为模型规则→本地清单→远端/本地比较→变化项传输�
 
 ## 2026-10-12 实现与发布验证
 
+Offline可选镜像已实现：`sync:offline-update`默认不请求模型；使用`-aimodel`或`--aimodel`后，将同级全部模型和`manifest.json`镜像到本地静态`aimodel/`目录。父目录源和直接`aasc-offline/`源均映射到服务资源旁的同级目录；watch复用相同开关，逐轮串行。模型校验/下载失败时保留旧根清单；内容一致时复用模型和清单。独立`sync:ai-models`仍默认同步到项目`res/models`且不写根清单。详细行为见Offline design/spec及任务`docs/task/20261012_Offline同步增加aimodel开关.md`。
+
 三个脚本与27项定向自测已完成，通过SHA-256流式处理、固定分类、SSH/rsync暂存、失败回滚和清单最后切换实施。首次上传30项1,042,798,505字节；重复发布复用30项无重传。服务器通过回环TCP与公开Host/SNI/CA验证读取同一HTTPS路径，完整校验30项；本机外网清单与目录HTTP200、13项小文件完整校验通过。客户端全分类同步复用30项，空目录GTCRN真实下载后再次复用。外网大文件全量客户端校验因下行较慢主动终止，改为上述回环全量与外网样例验证，不将回环校验记成跨WAN全文件传输。清单快照SHA-256为5e8d4daae59aa6fb9bbef3b58ec75c72737f832eabbd3b2e117f3846cb1356f8。
 
 用户确认正式包只使用部分模型：当前普通APK按需取得默认YOLO11n和base FP32/Pyannote，正式代码包不带模型；实际已发布完整Offline v23与当前allserver profile，在本次范围内仅内置SenseVoice/base FP32/Pyannote三个ONNX。此次服务器资源归档不扩展运行时加载或APK白名单。其他文件需主动选择或实验使用，模型格式/精度的实际推理能力沿用既有模块。

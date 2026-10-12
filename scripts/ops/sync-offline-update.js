@@ -16,6 +16,7 @@ const {
     cleanupLocalPublishedArtifacts,
     validateRelativePath
 } = require('./publish-offline-update');
+const { syncModels } = require('../models/sync-ai-models');
 
 const DEFAULT_SOURCE_URL = 'http://120.79.245.103/mnt/aasc-offline/';
 const DEFAULT_LOCAL_ROOT = '/mnt/aasc-offline';
@@ -693,6 +694,22 @@ async function syncOfflineUpdate(options = {}) {
     const mmd = options.mmdSourceUrl && options.mmdLocalRoot
         ? await syncMmdDirectory(options.mmdSourceUrl, options.mmdLocalRoot, options)
         : null;
+    let aimodel = null;
+    if (options.aimodel === true) {
+        const modelRoots = options.aimodelSourceUrl && options.aimodelLocalRoot
+            ? options
+            : resolveCliSyncRoots({ sourceUrl, localRoot, aimodel: true });
+        const modelRoot = path.resolve(modelRoots.aimodelLocalRoot);
+        const occupiedRoots = [localRoot, options.mmdLocalRoot].filter(Boolean).map((root) => path.resolve(root));
+        if (occupiedRoots.includes(modelRoot)) {
+            throw new Error('aimodel 同步目录不能与 Offline 或 MMD 目录相同');
+        }
+        aimodel = await syncModels({
+            source: modelRoots.aimodelSourceUrl,
+            root: modelRoots.aimodelLocalRoot,
+            mirrorManifest: true
+        });
+    }
     return {
         sourceUrl,
         localRoot,
@@ -703,7 +720,8 @@ async function syncOfflineUpdate(options = {}) {
         installed,
         skipped,
         cleanup,
-        mmd
+        mmd,
+        aimodel
     };
 }
 
@@ -713,18 +731,25 @@ function resolveCliSyncRoots(options = {}) {
     const configuredLocal = options.localRoot || process.env[LOCAL_ROOT_ENV];
     const pathname = new URL(sourceRoot).pathname.replace(/\/+$/, '').toLowerCase();
     if (pathname.endsWith('/aasc-offline')) {
-        return {
+        const localRoot = configuredLocal || DEFAULT_LOCAL_ROOT;
+        const roots = {
             sourceUrl: sourceRoot,
-            localRoot: configuredLocal || DEFAULT_LOCAL_ROOT,
+            localRoot,
             sourceRoot,
-            localParentRoot: configuredLocal || DEFAULT_LOCAL_ROOT,
+            localParentRoot: localRoot,
             mmdSourceUrl: null,
             mmdLocalRoot: null
         };
+        if (options.aimodel) {
+            const aimodelSourceUrl = parentDirectoryUrl(sourceRoot);
+            roots.aimodelSourceUrl = new URL('aimodel/', aimodelSourceUrl).toString();
+            roots.aimodelLocalRoot = path.join(path.dirname(path.resolve(localRoot)), 'aimodel');
+        }
+        return roots;
     }
 
     const localParentRoot = configuredLocal || DEFAULT_SYNC_LOCAL_ROOT;
-    return {
+    const roots = {
         sourceUrl: new URL('aasc-offline/', sourceRoot).toString(),
         localRoot: path.join(localParentRoot, 'aasc-offline'),
         sourceRoot,
@@ -732,18 +757,34 @@ function resolveCliSyncRoots(options = {}) {
         mmdSourceUrl: new URL('mmd/', sourceRoot).toString(),
         mmdLocalRoot: path.join(localParentRoot, 'mmd')
     };
+    if (options.aimodel) {
+        roots.aimodelSourceUrl = new URL('aimodel/', sourceRoot).toString();
+        roots.aimodelLocalRoot = path.join(localParentRoot, 'aimodel');
+    }
+    return roots;
+}
+
+function parentDirectoryUrl(value) {
+    // 直接传入aasc-offline目录时，模型静态目录应从其同级aimodel目录读取。
+    const url = new URL(value);
+    const segments = url.pathname.split('/').filter(Boolean);
+    segments.pop();
+    url.pathname = `/${segments.length ? `${segments.join('/')}/` : ''}`;
+    return url.toString();
 }
 
 function parseCliArguments(argv) {
     const parsed = {};
     for (let index = 0; index < argv.length; index += 1) {
         const token = argv[index];
-        if (!token.startsWith('--')) throw new Error(`不支持的位置参数: ${token}`);
+        const isShortAimodel = token === '-aimodel';
+        if (!token.startsWith('--') && !isShortAimodel) throw new Error(`不支持的位置参数: ${token}`);
         const equalIndex = token.indexOf('=');
-        const key = equalIndex >= 0 ? token.slice(2, equalIndex) : token.slice(2);
-        if (key === 'skip-signature-verification' || key === 'watch') {
+        const key = isShortAimodel ? 'aimodel' : (equalIndex >= 0 ? token.slice(2, equalIndex) : token.slice(2));
+        if (key === 'skip-signature-verification' || key === 'watch' || key === 'aimodel') {
             if (equalIndex >= 0) throw new Error(`参数 --${key} 不接受值`);
-            const fieldName = key === 'watch' ? 'watch' : 'skipSignatureVerification';
+            const fieldName = key === 'watch' ? 'watch'
+                : key === 'aimodel' ? 'aimodel' : 'skipSignatureVerification';
             if (Object.hasOwn(parsed, fieldName)) throw new Error(`参数 --${key} 不能重复`);
             parsed[fieldName] = true;
             continue;
@@ -752,7 +793,7 @@ function parseCliArguments(argv) {
         if (!['source-url', 'local-root', 'public-key', 'interval-minutes'].includes(key)) {
             throw new Error(`未知同步参数: --${key}`);
         }
-        if (typeof value !== 'string' || value.startsWith('--')) {
+        if (typeof value !== 'string' || value.startsWith('-')) {
             throw new Error(`参数 --${key} 缺少值`);
         }
         const fieldName = key.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
@@ -850,6 +891,13 @@ function logSyncResult(result) {
         console.log(
             `MMD 已安装 ${result.mmd.installed.length} 个文件；已复用 ${result.mmd.skipped.length} 个文件；` +
             `总大小 ${formatProgressBytes(result.mmd.totalBytes)}`
+        );
+    }
+    if (result.aimodel) {
+        console.log(`AI模型目录同步完成: ${result.aimodel.source} -> ${result.aimodel.root}`);
+        console.log(
+            `AI模型已下载 ${result.aimodel.downloaded.length} 个文件；已复用 ${result.aimodel.reused.length} 个文件；` +
+            `总大小 ${formatProgressBytes(result.aimodel.totalBytes)}；根清单${result.aimodel.manifest === 'written' ? '已更新' : '已复用'}`
         );
     }
     if (result.cleanup.errors.length > 0) {

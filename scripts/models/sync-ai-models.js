@@ -6,14 +6,15 @@ const crypto = require('node:crypto');
 const common = require('./ai-model-common');
 
 async function syncModels({ source = common.SOURCE_URL, root = common.MODEL_ROOT, groups = common.GROUPS,
-    fetchImpl = fetch, log = message => process.stderr.write(`${message}\n`) } = {}) {
+    fetchImpl = fetch, mirrorManifest = false, log = message => process.stderr.write(`${message}\n`) } = {}) {
     if (!Array.isArray(groups) || !groups.length || groups.some(group => !common.GROUPS.includes(group))) {
         throw new Error('模型分类无效');
     }
     const manifest = await common.readManifest(source, fetchImpl);
     const files = manifest.files.filter(item => groups.includes(item.path.split('/')[0]));
     if (!files.length) throw new Error('远端清单没有所选分类');
-    const report = { source: common.normalizeSource(source), root: path.resolve(root), reused: [], downloaded: [] };
+    const report = { source: common.normalizeSource(source), root: path.resolve(root), reused: [], downloaded: [],
+        totalBytes: files.reduce((total, item) => total + item.size, 0) };
     for (const item of files) {
         if (await common.matchesFile(root, item)) {
             report.reused.push(item.path); log(`[复用] ${item.path}`); continue;
@@ -42,7 +43,39 @@ async function syncModels({ source = common.SOURCE_URL, root = common.MODEL_ROOT
             throw error;
         } finally { await fs.rm(temporary, { force: true }); }
     }
+    if (mirrorManifest) {
+        report.manifest = await mirrorRootManifest(root, manifest);
+    }
     return report;
+}
+
+async function mirrorRootManifest(root, manifest) {
+    // 所有模型文件通过大小和哈希校验后才提交根清单，避免清单提前指向未就绪的文件。
+    const target = await common.safeFile(root, 'manifest.json', { allowManifest: true });
+    const bytes = common.manifestBytes(manifest);
+    try {
+        const current = await fs.readFile(target);
+        if (current.equals(bytes)) return 'reused';
+    } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+    }
+
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    const temporary = `${target}.tmp-${crypto.randomUUID()}`;
+    const handle = await fs.open(temporary, 'wx', 0o644);
+    try {
+        await handle.writeFile(bytes);
+        await handle.sync();
+        await handle.close();
+        await common.safeFile(root, 'manifest.json', { allowManifest: true });
+        await fs.rename(temporary, target);
+        return 'written';
+    } catch (error) {
+        await handle.close().catch(() => {});
+        throw error;
+    } finally {
+        await fs.rm(temporary, { force: true });
+    }
 }
 
 async function main() {

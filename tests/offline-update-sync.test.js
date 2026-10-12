@@ -12,6 +12,7 @@ const {
     parseCliArguments,
     selectSyncComponents,
     syncOfflineUpdate,
+    resolveCliSyncRoots,
     runWatchMode,
     waitForInterval
 } = require('../scripts/ops/sync-offline-update');
@@ -71,7 +72,33 @@ async function createFixture() {
         components
     };
     const manifest = { payload, signature: signManifestPayload(payload, privateKeyPem) };
+    const modelBytes = Buffer.from('small-ai-model');
+    const modelManifest = {
+        schemaVersion: 1,
+        files: [{
+            path: 'sensevoice/model.int8.onnx',
+            size: modelBytes.length,
+            sha256: sha256(modelBytes)
+        }],
+        totalBytes: modelBytes.length
+    };
+    const aimodelRequests = [];
     const server = http.createServer((request, response) => {
+        if (request.url?.startsWith('/mnt/aimodel/')) {
+            const relativePath = request.url.slice('/mnt/aimodel/'.length);
+            aimodelRequests.push(relativePath);
+            const content = relativePath === 'manifest.json'
+                ? Buffer.from(JSON.stringify(modelManifest))
+                : relativePath === 'sensevoice/model.int8.onnx' ? modelBytes : null;
+            if (content) {
+                response.writeHead(200, { 'content-length': content.length });
+                response.end(content);
+                return;
+            }
+            response.writeHead(404);
+            response.end();
+            return;
+        }
         if (request.url === '/mnt/aasc-offline/manifest.json') {
             response.writeHead(200, { 'content-type': 'application/json' });
             response.end(JSON.stringify(manifest));
@@ -94,6 +121,8 @@ async function createFixture() {
         localRoot,
         publicKeyPem,
         manifest,
+        modelManifest,
+        aimodelRequests,
         server,
         sourceUrl: `http://127.0.0.1:${address.port}/mnt/aasc-offline/`
     };
@@ -115,6 +144,43 @@ test('sync CLI parses source and local target overrides', () => {
         publicKey: '/tmp/public.pem'
     });
     assert.throws(() => parseCliArguments(['--source-url=a', '--source-url=b']), /重复/);
+});
+
+test('aimodel开关支持短写、长写与watch组合，默认关闭且不能重复', () => {
+    assert.deepEqual(parseCliArguments([]), {});
+    assert.deepEqual(parseCliArguments(['-aimodel']), { aimodel: true });
+    assert.deepEqual(parseCliArguments(['--aimodel', '--watch']), {
+        aimodel: true,
+        watch: true,
+        intervalMinutes: 10
+    });
+    assert.throws(() => parseCliArguments(['-aimodel', '--aimodel']), /重复/u);
+    assert.throws(() => parseCliArguments(['--aimodel=true']), /不接受值/u);
+    assert.throws(() => parseCliArguments(['--source-url', '-aimodel']), /缺少值/u);
+});
+
+test('aimodel来源和目标映射到aasc-offline同级目录', () => {
+    assert.deepEqual(resolveCliSyncRoots({
+        sourceUrl: 'https://models.example/mnt/',
+        localRoot: '/var/cache/aasc',
+        aimodel: true
+    }), {
+        sourceUrl: 'https://models.example/mnt/aasc-offline/',
+        localRoot: '/var/cache/aasc/aasc-offline',
+        sourceRoot: 'https://models.example/mnt/',
+        localParentRoot: '/var/cache/aasc',
+        mmdSourceUrl: 'https://models.example/mnt/mmd/',
+        mmdLocalRoot: '/var/cache/aasc/mmd',
+        aimodelSourceUrl: 'https://models.example/mnt/aimodel/',
+        aimodelLocalRoot: '/var/cache/aasc/aimodel'
+    });
+    const direct = resolveCliSyncRoots({
+        sourceUrl: 'https://models.example/mnt/aasc-offline/',
+        localRoot: '/var/cache/aasc/aasc-offline',
+        aimodel: true
+    });
+    assert.equal(direct.aimodelSourceUrl, 'https://models.example/mnt/aimodel/');
+    assert.equal(direct.aimodelLocalRoot, '/var/cache/aasc/aimodel');
 });
 
 test('sync downloads only manifest service components and preserves full APK files', async (t) => {
@@ -145,6 +211,52 @@ test('sync downloads only manifest service components and preserves full APK fil
     assert.deepEqual(selectSyncComponents(fixture.manifest).map(({ name }) => name), [
         'code', 'dependencies', 'apkMin'
     ]);
+    assert.deepEqual(fixture.aimodelRequests, []);
+});
+
+test('开启aimodel后镜像模型及根清单，重复同步复用模型文件', async (t) => {
+    const fixture = await createFixture();
+    t.after(() => closeFixture(fixture));
+    const roots = resolveCliSyncRoots({
+        sourceUrl: fixture.sourceUrl,
+        localRoot: fixture.localRoot,
+        aimodel: true
+    });
+    const first = await syncOfflineUpdate({ ...roots, aimodel: true, publicKeyPem: fixture.publicKeyPem });
+    const modelPath = path.join(roots.aimodelLocalRoot, 'sensevoice/model.int8.onnx');
+    const mirroredManifest = path.join(roots.aimodelLocalRoot, 'manifest.json');
+    assert.deepEqual(first.aimodel.downloaded, ['sensevoice/model.int8.onnx']);
+    assert.equal(first.aimodel.manifest, 'written');
+    assert.deepEqual(fs.readFileSync(modelPath), Buffer.from('small-ai-model'));
+    assert.deepEqual(JSON.parse(fs.readFileSync(mirroredManifest, 'utf8')), fixture.modelManifest);
+
+    fixture.aimodelRequests.length = 0;
+    const second = await syncOfflineUpdate({ ...roots, aimodel: true, publicKeyPem: fixture.publicKeyPem });
+    assert.deepEqual(second.aimodel.reused, ['sensevoice/model.int8.onnx']);
+    assert.equal(second.aimodel.manifest, 'reused');
+    assert.deepEqual(fixture.aimodelRequests, ['manifest.json']);
+});
+
+test('watch组合-aimodel并在后续轮次复用已镜像模型', async t => {
+    const fixture = await createFixture();
+    t.after(() => closeFixture(fixture));
+    const roots = resolveCliSyncRoots({ sourceUrl: fixture.sourceUrl, localRoot: fixture.localRoot, aimodel: true });
+    const parsed = parseCliArguments(['-aimodel', '--watch']);
+    const options = { ...roots, ...parsed, publicKeyPem: fixture.publicKeyPem };
+    const controller = new AbortController();
+    let lastResult;
+    const result = await runWatchMode(options, {
+        signal: controller.signal,
+        logger: { log() {}, error() {} },
+        async wait() { return true; },
+        onSuccess(syncResult, round) {
+            lastResult = syncResult;
+            if (round === 2) controller.abort();
+        }
+    });
+    assert.deepEqual(result, { rounds: 2 });
+    assert.equal(lastResult.aimodel.manifest, 'reused');
+    assert.deepEqual(fixture.aimodelRequests, ['manifest.json', 'sensevoice/model.int8.onnx', 'manifest.json']);
 });
 
 test('sync refuses same-version hash conflicts before replacing the manifest', async (t) => {

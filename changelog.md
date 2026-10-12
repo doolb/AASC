@@ -1,5 +1,12 @@
 ### AI模型外网发布与双向同步
 
+- ✅ [2026-10-12] Offline同步新增可选aimodel镜像：默认不请求模型，`-aimodel`/`--aimodel`开启后同步同级全部模型和根manifest，watch逐轮复用。
+  - `scripts/ops/sync-offline-update.js`负责开关及父目录/直接源映射；`scripts/models/sync-ai-models.js`在所有模型完成后原子保存根manifest，相同内容不重写；`ai-model-common.js`只对镜像入口开放根manifest安全路径。镜像不参与Offline版本清理，不更改Android/APK或服务RSA清单。
+  - 新增`npm run test:offline-sync`；33/33定向测试及`npm run test:ai-models`的30/30回归通过，脚本语法和`git diff --check`通过。覆盖默认零模型请求、短/长参数与拒绝重复、两种目录映射、watch两轮串行复用、镜像可作为后续下载源、失败保留旧manifest。未同步生产模型目录或构建/发布APK、服务包；Offline待打包状态保持原值。
+
+- ✅ [2026-10-12] 实施前核查sync:offline-update同步范围：父目录模式为aasc-offline及mmd，直接服务目录模式只同步服务更新；AI模型此前由独立sync:ai-models恢复到项目res/models。
+  - 仅补充AI模型usage/design/spec及既有待验收事项的命令说明，不修改同步器代码、发布状态或模型，不新增任务/测试、构建或发布。
+
 - ✅ [2026-10-12] 已按用户确认将YOLO、ASR、全部声纹变体及分段/降噪和配套共30项、1,042,798,505字节发布至https://c.aasc.us/mnt/aimodel/，保留分类与文件名。
   - 新增`scripts/models/ai-model-common.js`、`publish-ai-models.js`、`sync-ai-models.js`及`ai-model-catalog.json`，package.json新增上传/下载/自测命令，新增两个测试文件及usage。固定分类、流式大小/SHA-256、路径/链接保护、SSH/rsync增量暂存、失败回滚与清单最后切换；下载临时文件校验后替换，保留额外文件；不新增Git模型二进制。清单快照SHA-256 `5e8d4daae59aa6fb9bbef3b58ec75c72737f832eabbd3b2e117f3846cb1356f8`。
   - 27/27定向测试及三个脚本语法通过；首次上传后重复发布复用30项。远端文件全量指纹与服务器回环HTTPS全30项完整检查通过（公开URL/Host/SNI、默认CA/主机名验证保持）；客户端外网目录/清单HTTP200、13项小文件完整指纹、GTCRN空目录实际下载/重复复用、本地全30项复用通过。跨WAN客户端大文件验证因下行较慢主动终止，改为上述验证，不把回环全量校验记成跨WAN全部下载。审计`.git/ai-model-publish-20261012`，首次远端暂存/备份`/home/as/a/.aimodel-publish-cvftn8sq/backup`。

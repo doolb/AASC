@@ -1,5 +1,15 @@
 # Android Offline APK 热更新与原生增量 APK
 
+## 2026-10-12 aimodel可选镜像（已实现）
+
+用户要求`sync:offline-update`支持aimodel，并进一步指定通过`-aimodel`开关启用，因为模型通常不变。方案默认仍只同步原有资源，不自动下载约1GB模型；兼容`-aimodel`和`--aimodel`两个无值布尔开关。显式开启后，父目录模式把远端同级aimodel同步到本地同步根下aimodel；直接aasc-offline源模式开启时从同级aimodel读取，目标为本地服务更新目录旁的aimodel。单次和watch均使用同一选项，每轮串行执行，模型一致时复用。
+
+修改`scripts/ops/sync-offline-update.js`：CLI开关、目录映射、调用共享模型同步器和结果汇总；复用`scripts/models/sync-ai-models.js`，增加受控镜像清单保存，修改`scripts/models/ai-model-common.js`提供仅用于镜像的根manifest安全路径校验。模型下载成功后最后原子保存aimodel/manifest.json，清单内容一致则不重写。独立sync:ai-models仍默认恢复项目res/models，不自动保存根镜像清单。
+
+同步失败保留模型原文件/旧清单与已完成的Offline/MMD结果；单次按既有失败退出码报告，watch下一轮继续。模型镜像不参与Offline版本文件清理，不扩展服务RSA清单或修改Android下载API/打包范围。实现修改`scripts/ops/sync-offline-update.js`、`scripts/models/sync-ai-models.js`、`scripts/models/ai-model-common.js`，扩展现有Offline/模型测试并新增`test:offline-sync`。
+
+需求等级为L6模块与L5串行同步流程，enterprise评分94/100、置信度0.90。实现以显式开关和独立目标目录隔离模型镜像；清单仅在模型完整成功后原子更新；Offline版本清理仍只作用服务更新目录。定向33项自测通过，默认流程没有aimodel请求，镜像可作为后续静态下载源，watch复用通过。
+
 ## Offline 待打包状态记录（2026-09-23）
 
 Offline 产物是否待打包集中记录在 `release/offline-release-status.json`，字段为 `minApk`、`servicePackage` 和 `dependenciesPackage`，初始值均为 `false`。代码变更后根据实际影响将对应字段置为 `true`，并和代码一起上传 Git；未受影响的产物不变。

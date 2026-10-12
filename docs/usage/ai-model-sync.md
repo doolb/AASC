@@ -4,6 +4,15 @@
 
 ## 下载到当前项目
 
+`npm run sync:offline-update`默认只同步原有Offline资源和MMD，不请求aimodel。模型通常不变，因此需要时再显式启用；`-aimodel`和`--aimodel`都可用，watch模式每轮也会同步并复用一致文件。
+
+```bash
+npm run sync:offline-update -- -aimodel
+npm run sync:offline-update -- --aimodel --watch
+```
+
+父目录模式会把远端`aimodel/`镜像到本地同步根同级目录，例如默认`/mnt/aimodel/`；直接指定`aasc-offline/`源时，镜像到本地服务更新目录旁的`aimodel/`。模型文件与`manifest.json`可作为静态下载源供其他机器使用。重复同步会读取清单并校验本地模型，文件一致时不下载也不改写清单。若不需要这个静态镜像，可单独使用以下命令，默认目标仍为当前项目的`res/models`。
+
 ```bash
 npm run sync:ai-models
 ```

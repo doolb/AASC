@@ -1,5 +1,43 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+## aimodel可选镜像伪代码（2026-10-12，已实现）
+
+```text
+已有声明 := syncOfflineUpdate + resolveCliSyncRoots + runWatchMode + 共享syncModels
+新增开关 := -aimodel或--aimodel → aimodel=true；默认false；不接受值或重复开关
+父目录模式:
+  原映射 := source/aasc-offline → local/aasc-offline；source/mmd → local/mmd
+  aimodel=true → source/aimodel → local/aimodel
+直接aasc-offline模式:
+  原映射 := 直接源 → 服务更新目录；mmd不启用
+  aimodel=true → 源同级aimodel → 服务更新目标同级aimodel
+aimodel=false := 模型源/目标为空；无模型清单或文件请求；旧行为保持
+单轮数据流:
+  既有服务验签/同步/清理 → 既有MMD同步 → aimodel开关选中时调用syncModels
+  syncModels(source, root=aimodel镜像目录, mirrorManifest=true) → 下载/复用报告
+  report := 原服务结果 + MMD结果 + aimodel结果；回显模型源、目标、下载/复用与总字节
+watch := 每轮沿用开关；完成当前轮后等待；失败记录后下一轮重试；无并发轮次
+```
+
+```text
+镜像manifest:
+  safeFile(root, manifest.json, allowManifest=true)只供镜像入口使用
+  清单内模型路径规则保持原固定分类/两段路径；不能将manifest.json作为模型项
+  模型全部成功 → 规范化模型清单字节 → 比较旧根manifest
+  完全一致 → 复用，不改变旧manifest内容/mtime
+  有差异 → 同目录独占临时文件 → 完整写入 → 再验路径无链接 → 原子替换
+  任一模型失败 → 不更新旧根manifest，已完成其他资源保持，下轮复用已成功文件
+  独立sync:ai-models := mirrorManifest默认false，继续恢复项目res/models
+边界:
+  aimodel镜像不进入Offline版本文件清理或服务RSA清单
+  旧默认命令、传统直达源、单次失败退出码与watch间隔保持
+验证 := 两种开关/拒绝重复和值 + 默认零aimodel请求 + 两种目录模式 + 镜像作为新下载源
+       + manifest最后保存/复用 + 坏哈希/链接旧清单保持 + watch开启/关闭与失败重试
+实现映射 := sync-offline-update.js解析短/长开关；sync-ai-models.js可选原子镜像根清单；ai-model-common.js仅给根manifest开放安全路径
+自测入口 := npm run test:offline-sync → Offline更新测试 + AI模型同步测试
+当前状态 := 已实现；定向33项通过；未改变Android/APK或服务更新清单
+```
+
 ## Offline 待打包状态伪代码（2026-09-23）
 
 ```text
@@ -211,7 +249,7 @@ publishOfflineUpdate:
     LAN source list does not create additional upload targets
 ```
 
-实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。父目录模式默认源为公网 `/mnt/`、本地根为 `/mnt`；服务更新分别位于 `aasc-offline/`，MMD 资源递归同步至同级 `mmd/`。可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。同步显示当前文件名、单文件字节/百分比和总字节/百分比；MMD 递归目录以 HEAD 元数据和本地 SHA-256 状态跳过重复下载，并逐文件原子替换，不清理本地额外文件。旧的直接 `/aasc-offline/` 源地址继续只同步服务更新。Node 同步定向测试 18/18、Android Offline JVM 单测 25/25 通过（此前同步功能记录）。
+实现结果：`sync:offline-update` 已接入 `scripts/ops/sync-offline-update.js`。父目录模式默认源为公网 `/mnt/`、本地根为 `/mnt`；服务更新分别位于 `aasc-offline/`，MMD 资源递归同步至同级 `mmd/`。可由 `--source-url`、`--local-root` 或 `AASC_OFFLINE_LOCAL_ROOT` 覆盖；固定允许同步 code、dependencies、apkMin、dataRepair，忽略 full APK。默认加载公钥并验签；显式传入 `--skip-signature-verification` 时不加载公钥并输出来源未认证警告，其他清单及资源校验不变，Android 客户端仍验签。同步显示当前文件名、单文件字节/百分比和总字节/百分比；MMD 递归目录以 HEAD 元数据和本地 SHA-256 状态跳过重复下载，并逐文件原子替换，不清理本地额外文件。直接 `/aasc-offline/` 源默认只同步服务更新；另加 `-aimodel` 或 `--aimodel` 时才镜像同级模型。Node更新同步既有测试18/18、Android Offline JVM单测25/25及aimodel扩展测试33/33通过（对应日期时的结果）。
 
 watch 实现结果：`--watch` 未指定 `--interval-minutes` 时默认 10 分钟；显式间隔仅接受可安全转换的正整数分钟。首轮立即执行，每轮结束后开始间隔等待，失败不终止循环，SIGINT 取消等待或在活动轮结束后安全退出。无 `--watch` 保持单次模式；watch 专项回归 8/8 通过。
 

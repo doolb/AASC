@@ -47,9 +47,10 @@ function manifestBytes(manifest) {
     return Buffer.from(JSON.stringify(validateManifest(manifest), null, 2) + '\n');
 }
 
-// 逐层检查目标路径，既不读取链接指向的模型，也不通过父目录链接写出模型根目录。
-async function safeFile(root, relativePath) {
-    if (!allowedPath(relativePath)) throw new Error('模型路径不在允许范围');
+// 逐层检查根目录、分类和目标文件并拒绝符号链接；allowManifest只给镜像入口开放已校验根清单，不放宽模型项白名单。
+async function safeFile(root, relativePath, options = {}) {
+    const isRootManifest = options.allowManifest === true && relativePath === 'manifest.json';
+    if (!isRootManifest && !allowedPath(relativePath)) throw new Error('模型路径不在允许范围');
     const absoluteRoot = path.resolve(root);
     const target = path.join(absoluteRoot, ...relativePath.split('/'));
     const parsed = path.parse(absoluteRoot);

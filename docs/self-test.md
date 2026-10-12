@@ -1408,3 +1408,9 @@ servicePackage保持true：本次MMD全部收入v63，但工作区其他未提�
 运行npm run test:ai-models，27/27通过，无失败/跳过。覆盖固定分类/稳定清单/拒绝测试数据、重复项和非法路径、符号链接、HTTP截断/超限/坏哈希/错误状态、下载原文件保留及临时清理、分类选择、SSH显式shell、真实Python事务/备份/第二次替换失败回滚、HTTP内容校验与重定向拒绝，以及上传整链路的重复复用。三个源文件语法通过，无新增生产依赖。
 
 实际首次发布30项约1.04GB，重复上传复用30项；远端全量文件指纹与服务器回环HTTPS 30项通过，公开Host/SNI与CA验证保持。客户端外网目录/清单HTTP200、13项小文件完整指纹、GTCRN空目录真实下载/再同步复用、现有模型全30项复用通过；不将回环校验声称为跨WAN全量下载。未运行推理或构建APK，Windows实际兼容待使用环境验证。审计位于.git/ai-model-publish-20261012。
+
+## Offline aimodel开关（2026-10-12）
+
+`TMPDIR=/mnt/AASC/.git/offline-aimodel-sync-20261012 npm run test:offline-sync`：33/33通过，无失败/跳过。覆盖默认关闭且零aimodel请求、`-aimodel`/`--aimodel`与watch组合、重复/带值拒绝、父目录/直接源映射、模型下载和二次复用、根manifest原子写入/不变复用、镜像作为后续下载源、坏哈希保留旧manifest及根manifest符号链接拒绝。watch连续两轮串行成功，后续轮次复用已镜像模型。未运行全仓测试，未同步生产模型目录。
+
+`TMPDIR=/mnt/AASC/.git/offline-aimodel-sync-20261012 npm run test:ai-models`：30/30通过，无失败/跳过；覆盖共用安全路径变更对既有独立模型下载、上传与回滚的回归。

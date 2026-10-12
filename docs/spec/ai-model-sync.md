@@ -65,7 +65,10 @@
 失败回滚 := 本次已替换项从备份还原；新项移回暂存；旧清单保持
 发布前提 := 远端root与父目录均无符号链接；路径/主机参数使用安全规则与显式shell引用
 下载入口 := 默认全分类；--groups允许按分类恢复；失败保留旧文件，成功文件可被下次复用
-CLI入口 := npm run publish:ai-models / npm run sync:ai-models / npm run test:ai-models
+CLI入口 := npm run publish:ai-models / npm run sync:ai-models / npm run test:ai-models / npm run test:offline-sync
+Offline同步入口 := 默认只映射aasc-offline与mmd/服务更新；-aimodel或--aimodel显式开启时映射同级aimodel源和目标，单次/watch共用开关
+模型同步入口 := 独立sync:ai-models → 默认项目res/models且不保存根manifest；Offline显式镜像时传mirrorManifest=true
+镜像清单 := 模型全部成功 → 安全解析根manifest路径 → 内容一致复用，否则同目录临时写入/原子替换；失败保留旧manifest
 完整性验证 := 发布后HTTPS清单一致 + 全文件流式大小/SHA-256校验
 校验位置 := 默认客户端完整校验；--verify-from server使SSH远端通过同一HTTP(S)地址完整校验，并保留客户端清单比对
 校验服务器 := HTTPS通过服务器回环地址连接，公开URL/Host/SNI保持不变，默认CA及主机名验证保持，禁止代理/重定向，文件流式读取
