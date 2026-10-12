@@ -1,3 +1,14 @@
+### 正式与独立 MMD-AR FSR 倍率收敛
+
+- ✅ [2026-10-12] 按反馈移除正式显示端与独立 MMD-AR 的FSR输出重建倍率控件；内部倍率固定为 `1×`，其它历史存储值和预设值归一为1，内部渲染比例保持独立。
+  - 更新两端面板与设置归一器、独立网页README及对应测试和Design/Spec/Task/自测文档。`node --test tests/mmd-fsr-reconstruction.test.js` 8/8、正式真实PMX集成测试2/2、独立轻量UI浏览器回归1/1通过，正式与独立端真实GPU Shader各10角度通过；独立WEB构建及语法、差异检查通过。独立端真实模型回归因浏览器资源不足未到达modelReady。Offline状态项原值均为true，保持不变；未构建APK或发布网页/服务包。
+
+### 独立 MMD-AR FSR 输出倍率
+
+- ✅ [2026-10-12] 独立 MMD-AR 新增 0.25×/0.5×FSR输出重建档位，正式显示端保持不变。
+  - 修改 `3rd/mmd-ar-test/web-render-settings.mjs` 与 `web-render-settings-build.js`，并扩展 `tests/mmd-fsr-reconstruction.test.js`、`tests/mmd-ar-temporal-aa-browser.test.js`。低倍率维持场景输入尺寸，缩小输出Canvas和时域历史目标；菜单/状态同步说明由页面放大及画质成本取舍。
+  - 单测8/8通过；Chromium SwiftShader Shader覆盖10个角度、独立端50组与正式端原30组均通过。`npm run build:web:mmd-ar-test`成功，生成页五档控件已核对；出现既有Vite大chunk提示。design/spec/task/自测/todo及独立端README同步。未修改正式端源码、Offline发布状态或服务器，未发布网页/服务包/APK；手机画质与性能待验收。
+
 ### MMD-AR PMX全身 IK
 
 - ✅ [2026-10-12] 独立 MMD-AR 增加 PMX 头部、双手和双脚交互控制点。
