@@ -4,6 +4,10 @@
 
 独立与正式端共享实际帧FPS与CPU渲染提交耗时，左上角FPS、灯光基础光照分类耗时，约500ms统计窗口，不拦截指针、不增加绘制或GPU等待。PMX/静态GLB沿原共享入口，VRM沿原独立循环；隐藏/后台/换模型重置，恢复重算。独立物理状态行保留，删除旧重复测时；helper/runtime导入同一指纹URL，避免两个WeakMap模块实例。编辑器工具栏下移48px并叠加安全区，为FPS留出首行，真实CSS/矩形检查与截图通过。保留未提交眼球改动。130项定向+两端真实PMX浏览器共132项通过，独立浏览器191.8秒、无pageerror，WEB最终构建成功；真实VRM/GLB与手机观感待验收。正式隐藏联动见正式design。任务：`docs/task/20261012_MMD帧率耗时与角色控件隐藏.md`；独立外网资源尚未同步。
 
+## 2026-10-11 VRM与PMX能力边界（只读核对）
+
+VRM格式具有Expression表情、人形骨骼和SpringBone摆动能力，具体能力取决于模型内容与播放器实现。当前共享VRM运行时更新VRM并提供简单happy表情；PMX的VMD、Human/MPL及Ammo/XPBD读取MMD专用数据，未提供VRM适配。VMD复用需要骨骼重定向与表情映射；SpringBone不等同于PMX刚体/关节，也不自动保留转换前的物理设置。本轮只补充能力说明，未新增开发任务或改变运行代码；操作文档见`docs/usage/mmd-human-interface.md`。
+
 ## 2026-10-11 镜头拉远同步 far（已实现并验证）
 
 用户反馈镜头拉远后 far 不更新。共享 `display-pmx-runtime.js` 在模型取景时设置裁剪范围，但普通预览 `applyCameraView` 和 AR `zoomCameraBy` 后续只移动相机；`mmd-ar-camera-runtime.mjs` 接收定位时又直接使用输入投影的 far，可能覆盖手动缩放所需范围。

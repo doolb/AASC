@@ -15,6 +15,21 @@ PMX/GLB/VRM实际绘制 → 采样FPS与CPU绘制耗时 → 约500ms批量回显
 状态 → WEB最终构建完成，独立外网同步及手机/真实VRM/GLB观感待验收
 ```
 
+## 2026-10-11 VRM现有运行边界（只读核对）
+
+```text
+VRM加载 := GLTFLoader + VRMLoaderPlugin → 获得VRM实例
+每帧 := VRM.update(delta) → 更新模型已有表情、弹簧骨骼等组件 → 渲染
+简单开心动作 := 存在happy Expression时设置权重1 → 700毫秒后恢复0
+PMX Human适配 := 读取geometry.userData.MMD中的骨骼/Morph与rigidBodyType
+兼容边界 := VRM路径未接入上述PMX适配、VMD播放或Ammo/XPBD刚体求解
+格式扩展能力 := VRMA可描述人形骨骼、表情、视线动画；当前运行时未接入VRMA加载
+复用VMD的前提 := 骨骼重定向 + 初始姿态/坐标转换 + 表情映射
+物理边界 := SpringBone摆动/碰撞数据不自动承载PMX刚体和关节参数
+```
+
+已核对`display-vrm-runtime.js`及`web-human-model.mjs`；本轮无运行代码修改，未新增测试或构建。
+
 ## 2026-10-11 镜头拉远同步 far（已实现并验证）
 
 ```text

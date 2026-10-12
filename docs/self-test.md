@@ -30,7 +30,6 @@
 
 独立WEB npm构建、正式HTML内联及模块语法/差异检查通过。额外旧chat-tts-interruption仍断言不存在的displayChatTtsStop，修改前快照已无该控件，见todo，不声称全仓通过。新服务包尚未发布，手机视觉/性能待验收。
 
-
 ## MMD-AR高级动作单按钮与静默填入MPL（2026-10-11）
 
 删除内置/服务器动作旁独立“编辑MPL”按钮，真实目录28个内置及测试注入后的3个服务器条目均只有动作按钮。6类动作前3次MPL折叠、后3次展开，真实动作按钮获得焦点并记录各祖先滚动位置；源码填入/实际编译后，折叠状态与焦点保持，各滚动轴偏移不超过1px；实际播放与手动预览VMD逐字节一致。快切/输入/停止迟到保护、待机原文、用户手动打开编辑器后下载/预览、纯VMD保留文本、动作库不变，以及原时长/本地优先/物理开关刷新/XPBD回归通过。
@@ -121,7 +120,6 @@ npm网页构建、30条Human/reply/MPL生成指纹、默认/服务器待机源�
 扩展tests/mmd-ar-web-panel-groups.test.js为6通过/2失败：静态夹具未同步正式页新增控件，groupWebPanels报未分类节点；校准弹窗测试等待关闭相机后的定位按钮禁用超时。原测试未调用本次预设构建适配，未改写夹具或宣称全仓通过；另列待处理。
 
 本地网页已构建，未发布外网；手机观感/性能待现场验收。详情见[任务记录](task/20261011_MMDAR统一灯光预设与文件导入导出.md)。
-
 
 ## 状态圆钮VAD与识别结果尺寸（2026-10-10）
 
@@ -1380,6 +1378,7 @@ code48发布验证：931包内文件和工作区一致，RSA清单、LAN/WAN所�
 
 2026-10-10 最终发布：code-v56.zip已发布LAN/WAN，16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42；源提交34671c31。931文件快照及运行资源完整、ZIP CRC/RSA/组件约束、内外网全部组件HTTP大小/SHA-256通过，签名清单完全一致，精确清理无错误，两端code目录仅保留code-v56.zip。21文件93/93通过，无跳过；servicePackage=false，minApk=true/dependenciesPackage=false保持，未构建原生APK或恢复旧声纹。手机现场验收保留。
 
+
 ## 正式MMD灯光与动作同步（2026-10-11）
 
 npm run test:mmd-production：97/97通过；npm run test:mmd-production:browser：1/1通过（155.0秒）；npm run test:mmd-production:independent：1/1通过（231.7秒）。99项零失败/跳过/pageerror。正式自测包括旧灯光、高光/AO边界键保留、十组预设/保存、固定资源/相对依赖完整、刚体避让解除回归、真实PMX待机/动态目录/MPL无导航及真实WAV/TTS音频时钟互斥。独立覆盖六类源码/预览VMD逐字节一致、下载/迟到保护/原动作/避让/后端重建。
@@ -1389,3 +1388,7 @@ npm run prepare:mmd-production、npm run build:web:mmd-ar-test成功；固定编
 签名服务代码包v63已生成：release/offline-update/output-mmd-actions-v63/code/code-v63.zip（4679716字节，SHA-256 b934bf59301820d064d3802ea3b927634f5bb499f091af00e882cb3a62a7c77c），清单manifests/manifest-code-v63.json。516个包内文件逐字节匹配提交5ffa489c的构建快照，ZIP CRC、大小/SHA-256、RSA签名与组件约束通过；dependencies6、Node-min种子39、min APK34、dataRepair2引用沿用。模型资源、固定编译器/许可证与口型字典均齐全。未发布LAN/WAN或构建APK/依赖包。
 
 servicePackage保持true：本次MMD全部收入v63，但工作区其他未提交显示/TTS源码有意未收录，按‘产物未覆盖最新代码时保持true’规则保留全局待出包标记；minApk=true、dependenciesPackage=false保持。包清单gitDirty=true记录原工作区状态，实际包源来自已提交快照并逐文件验证。
+
+## 工作区非日志/模型源码归档（2026-10-12）
+
+`npm run test:mmd-production -- tests/mmd-ar-human-gaze.test.js`：226项，225通过、0失败、1跳过（本机浏览器未暴露GPU时间查询）。新增3项覆盖手动字段默认值、合法角度/边界拒绝及共有眼grant读取；已有真实DOM与GPU降级、MPL/动作/物理/头部/TTS回归通过。5份修改源码语法与npm独立WEB构建成功。首轮/tmp配额触发10项环境失败，改用项目内TMPDIR后复查；未为环境问题修改代码。手动眼球真实模型与手机观感未验收，本轮只提交Git，未部署新网页/正式包或APK。

@@ -21,7 +21,19 @@
     "maxErrorBytes": 65536,
     "audioCacheMaxMiB": 128,
     "device": "display",
-    "serverEnabled": false
+    "serverEnabled": false,
+    "aiReplyDefault": {
+      "provider": "qwen-api",
+      "voice": null
+    },
+    "textMedia": {
+      "provider": "system",
+      "voice": null
+    },
+    "systemBroadcast": {
+      "provider": "system",
+      "voice": null
+    }
   },
   "asr": {
     "mode": "isolated",
@@ -49,7 +61,7 @@
     ]
   },
   "ui": {
-    "controlTheme": "mint"
+    "controlTheme": "girl-pink"
   },
   "display": {
     "versionCheckIntervalMs": 300000

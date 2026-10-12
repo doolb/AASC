@@ -48,6 +48,12 @@ function initHuman() {
         field('physiologyStrength').value = state.physiology.strength;
         field('gazeHead').checked = state.gaze.head;
         field('gazeEyes').checked = state.gaze.eyes;
+        field('gazeManual').checked = state.gaze.manual;
+        for (const key of ['manualYaw', 'manualPitch']) {
+            const input = field('gazeManual' + (key === 'manualYaw' ? 'Yaw' : 'Pitch'));
+            input.value = state.gaze[key];
+            panel.querySelector('[data-human-output="gazeManual' + (key === 'manualYaw' ? 'Yaw' : 'Pitch') + '"]').textContent = state.gaze[key] + '°';
+        }
         for (const key of ['strength', 'headYaw', 'headPitch', 'eyeYaw', 'eyePitch', 'headMs', 'eyeMs', 'holdSeconds', 'forward']) {
             field('gaze' + key[0].toUpperCase() + key.slice(1)).value = state.gaze[key];
         }
@@ -73,10 +79,13 @@ function initHuman() {
         physiology: api => api.physiology.set({ breathing: field('breathing').checked, blinking: field('blinking').checked,
             strength: numeric('physiologyStrength') }),
         gaze: api => api.gaze.set({ head: field('gazeHead').checked, eyes: field('gazeEyes').checked,
-            strength: numeric('gazeStrength'), headYaw: numeric('gazeHeadYaw'), headPitch: numeric('gazeHeadPitch'),
+            strength: numeric('gazeStrength'), manual: field('gazeManual').checked,
+            manualYaw: numeric('gazeManualYaw'), manualPitch: numeric('gazeManualPitch'),
+            headYaw: numeric('gazeHeadYaw'), headPitch: numeric('gazeHeadPitch'),
             eyeYaw: numeric('gazeEyeYaw'), eyePitch: numeric('gazeEyePitch'), headMs: numeric('gazeHeadMs'),
             eyeMs: numeric('gazeEyeMs'), holdSeconds: numeric('gazeHoldSeconds'), forward: value('gazeForward') }),
         'gaze-reset': api => api.gaze.reset(),
+        'gaze-auto': api => api.gaze.set({ manual: false }),
         register: api => api.learn.register({ actionId: value('actionId'), vmd: field('vmd').files[0], mask: mask(), expression: value('expression') }),
         'register-mpl': api => api.learn.register({ actionId: value('actionId'), source: field('source').value, mask: mask(), expression: value('expression') }),
         perform: api => api.perform({ action: value('action'), version: value('version'), owner: 'human:panel' }),
@@ -106,6 +115,19 @@ function initHuman() {
         },
         import: () => { field('libraryFile').click(); }
     };
+    for (const key of ['gazeManual', 'gazeManualYaw', 'gazeManualPitch']) {
+        field(key).addEventListener('input', () => {
+            try {
+                const api = human();
+                const manual = field('gazeManual').checked;
+                const yaw = numeric('gazeManualYaw'), pitch = numeric('gazeManualPitch');
+                api.gaze.set({ manual, manualYaw: yaw, manualPitch: pitch });
+                panel.querySelector('[data-human-output="gazeManualYaw"]').textContent = yaw + '°';
+                panel.querySelector('[data-human-output="gazeManualPitch"]').textContent = pitch + '°';
+                painted = '';
+            } catch (error) { report(error.message); }
+        });
+    }
     for (const button of panel.querySelectorAll('[data-human]')) button.addEventListener('click', async () => {
         const key = button.dataset.human;
         try {

@@ -1,3 +1,10 @@
+### 非日志与模型的工作区源码归档
+
+- ✅ [2026-10-12] 按用户要求提交剩余源码、测试、文档、无新增凭证的配置变更和待机参考图；包含独立手动眼球/绑定别名/注视阻塞恢复、物理调试开关，以及VaM/HS2可行性、VRM能力与TTS凭证位置说明。
+  - 提交`3rd/mmd-ar-test`五份源码及`runimg/h.JPG`（38,371字节）、`tests/mmd-ar-human-gaze.test.js`、两份已有配置及对应docs/changelog；不提交任务results、日志、模型、APK/ZIP、构建缓存、浏览器缓存或`release/1.txt`运行错误记录。
+  - 5份修改源码语法检查与npm独立网页构建通过；`npm run test:mmd-production -- tests/mmd-ar-human-gaze.test.js`共226项，225通过、0失败、1跳过（浏览器不支持GPU时间查询），含新增眼球3项。首次测试因/tmp配额产生10项环境失败，改用项目内TMPDIR后上述复查通过；不修改功能代码解决环境问题。手动眼球真实姿态/手机仍待验收。
+  - 修正文档围栏并更新已完成外网发布的todo状态；源码归档不重新发布网页/正式包或构建APK。Offline待出包保持servicePackage=true/minApk=true/dependenciesPackage=false，外网独立页仍是本轮此前校验的db9898fe构建；新增手动眼球与远端GPU/面板透明度改动未再次发布。
+
 ### Git 同步
 
 - ✅ [2026-10-12] master快进同步远端GPU渲染计时与分类标题透明度提交，保留此前正式包与独立网页发布记录。
@@ -47,11 +54,13 @@
 - ✅ [2026-10-12] 完成FPS/耗时与角色控件隐藏方案核查：正式物理面板未显示耗时，Ammo需补实际步进计时，角色隐藏尚未联动右侧控件。
   - 更新两端design/spec、task和todo，明确约500ms共享统计、CPU渲染口径、后台窗口重置及正式按钮/面板收起；按AGENTS待确认后实施。未修改运行代码、发布状态或v65产物，未运行新增测试/构建。
 
-
 - ✅ [2026-10-12] 发布正式Offline服务代码包v65到局域网与外网，包含TTS生成时准备高级动作、音频就绪后同步播放，以及最新已提交TTS修复。
   - `code/code-v65.zip`：17,585,424字节，SHA-256 `295773152c180ed8fcf3d5e3ad8f1885cff414256d5def59bcd29f055b2ca3b0`；来源`17f2d3dc3059e5c7653cb2e76f89371393ddf6d3`。npm构建生成9项固定资源；1,033文件CRC和逐项指纹通过，包含512项提交源码、9项生成资源及512项既有发布资源。构建输入独立暂存，未切换分支或覆盖工作区，保留本机配置与其他未提交改动。
   - npm发布脚本上传版本文件后原子切换manifest，复用dependencies v6、Node min seeds v39、min APK v34及dataRepair v2；LAN/WAN所有引用资源HTTP大小/SHA-256、RSA签名及组件约束通过。两端manifest SHA-256均为`e8b68e7cde502ea173d3e1c48c1082c34c2a14818d46ad2fa9ef6e25048598e2`，code目录仅保留v65，清理无错误；记录保存在`.git/offline-publish-mmd-tts-v65/`。
   - `servicePackage=false`，`minApk=true`、`dependenciesPackage=false`保持；仅服务代码包发布，不构建APK/依赖包，不执行服务器重启或设备安装。按纯发布例外只补充changelog和发布状态；此前138项功能验证沿用，本轮校验发布产物，不提交ZIP、日志或其他会话文件。Android实际同步与性能仍待设备验收。
+
+- ✅ [2026-10-12] 核查TTS高级动作改动的生效方式：服务端启动加载模块，无源码热重载，需要重启服务并刷新显示端。
+  - 核查package.json、restart-server.js、server-launcher.js及服务端入口；补充usage/design/spec/todo。Offline需先更新新服务代码包，仅重启旧v64不启用新功能；未执行重启、代码修改或发布。
 
 - ✅ [2026-10-11] 实现AI回答高级动作随TTS两阶段播放：生成请求启动时并行解析/准备，生成成功后同句id关联，实际发声时提交自动层并按音频时钟推进。
   - 新增chat-tts-actions.js/mmd-tts-actions.mjs；修改server-app.js/agent-chat-tts.js、display.html/display-lipsync-audio.js及Human interface/mixer。准备不接管模型，独立音频时钟/优先级40，16句缓存/32秒等待；暂停/缓冲/恢复、失败/打断/迟到及手动优先，句尾爱心播放窗口与原600ms衔接。原音频/口型/物理继续复用。
@@ -66,7 +75,6 @@
 
 - ✅ [2026-10-11] 核查正式AI回复高级动作触发状态：已发布v64含解析/播放模块，聊天chatResponse仍只更新文本和历史，尚未自动调用高级动作解析。
   - 本地发布manifest与v64 ZIP网页脚本检索确认，mmd-ar-ai-reply/DisplayMmdReplyPreview仅在接收模块定义；手动AI回复预览和显式调用可用，结构化动作计划独立处理。仅更新design/spec/todo/changelog说明，将MMD待发布条目更正为待设备验收，无代码、配置、发布状态或产物变更。
-
 
 - ✅ [2026-10-11] 将统一灯光预设、Human/600ms头部衔接、刚体手部避让、服务器待机/跳舞、28类高级动作/146符号、表情与MPL编辑/预览/下载接入正式显示页。
   - 修改display.html、display-mmd/display-pmx-runtime、mmd-expressions、Three helper；新增mmd-human/reply/mpl/preset模块与纯形状桥接，共享碰撞增加scanPrepared。默认待机仅未指定动作的米娅采用用户35/10/-10；高级点击播放并静默填入源码，无编辑导航。正式TTS保留唯一audio/player与音频时钟。
@@ -100,6 +108,11 @@
   - 49项单元+1项真实浏览器共50项通过，无失败/跳过/pageerror；浏览器146.4秒，MPL载入/预览/下载、动作、开关刷新/XPBD通过。真实风吹6帧仍有接触（最大剩余穿透0.00993888），未触发安全回归；受控夹具验证回归，不能据此宣称实际裙面零穿模或手机性能通过。
   - npm网页构建、30条生成导入指纹/源码一致/原舞蹈检查通过；HEAD加13文件片段的只读候选49/49单元再次通过；同步Human design/spec/usage、两个task、self-test/todo。仅独立WEB源码，不发布外网或构建APK，待手机验收与独立发布。
 
+### MMD-AR HS2 ZIPMOD接入评估
+
+- [2026-10-11] 核对Honey Select 2 zipmod结构及接入边界：包包含清单及Unity资源，需样例验证数据完整性与转换/运行时适配，不能以解包作为角色导入完成。
+  - 新增mmd-ar-hs2-zipmod的design/spec、可行性task及索引/todo；源码与作者文档核对完成，样例和范围待确认。未改运行代码、安装转换工具、构建或发布。
+
 ### MMD-AR 待机姿态、连续风吹与源码编辑
 
 - ✅ [2026-10-11] 待机按参考红线调整上臂靠近躯干、肘内收、前臂外斜，手掌保持默认Tpose掌面并再下压10°。
@@ -110,19 +123,20 @@
   - 新增web-reply-source.mjs，修改目录/构建/reply-ui/web-mpl-ui，复制miya-idle.mpl。只编辑、预览和下载，按用户要求暂不提供保存入口；本地来源优先、迟到不覆盖输入/新模型、64KiB/10秒读取有界，源码下载对应当前文本，过期编译VMD下载禁用。
   - 44项受控单元与1项真实浏览器通过，共45项，无失败/跳过/pageerror；浏览器约152.4秒。网页构建与30条生成指纹/默认资源/唯一开关通过；真实风吹软件GPU采样4帧、4帧存在接触，最大修正6.715102°、最大步长0.766802°、最大剩余穿透0.013714模型单位；每方向3秒有界采样，连续30/60/120fps由单元覆盖。待机采样求解帧时中位13.6ms/最大34.4ms，不能代替手机性能或承诺任意网格零穿模。同步Human design/spec/三个task/usage/self-test/todo；外网发布/手机观感和性能待验收。
 
-### MMD-AR 服务器动作、待机与手部IK避让
+### VaM资源格式说明
 
-- ✅ [2026-10-11] 独立网页默认使用待机；原VMD命名“跳舞”手动选择，服务器目录支持后续新增动作；修正挥手压低右臂的问题。
-  - 新增server-actions.json/web-human-server-actions.mjs、idle.mpl/web-human-actions-build.js，生成mmd-actions.json和miya-idle.vmd（8秒，仅双臂六轨道）；跳舞仍引用miya-default.vmd，未指定时长按原15.2秒播放。同名登记优先，目录/面板/回复名称动态扩展，停止/网络/模型取消与原时长队列相容。
-- ✅ [2026-10-11] 物理面板增加默认开启的“手部防穿模”开关，复用原物理刚体检测、真实姿态与碰撞过滤，再用手臂IK有界避让；保存选择并刷新/模型/后端重建恢复。
-  - 新增web-human-rigid-snapshot.mjs/web-human-arm-avoidance.mjs，接入Human接口/构建、原IK/grant之后/物理之前和物理后观测；球/盒/胶囊形状复用原XPBD窄阶段，scanPrepared缓存同帧边界。4次迭代/35度限位、600ms释放、不累计；旋转暂停按保存求解空间采样，保留原布料暂停恢复链路。不另建衣服网格碰撞或GPU布料读回。
-  - 修改web-reply-actions/parser/player/panel/ui/build、web-physics-solver.js、web-panel-groups.js及独立build.js；新增3个自测文件。首版37项单元与1项浏览器通过；最终追加红线/风吹/源码编辑后44单元+1真实浏览器通过，共45项；真实蒙皮待机手部/裙面间距约0.570。npm网页构建成功；同步Human design/spec/task/usage/todo/self-test。仅独立WEB，未发布外网/打APK，Offline状态保持。
-  - 扩展物理旧回归35项13通过/22失败，修改前HEAD ea3de4b3同样失败；旧频率/接口/唯一锚点和data URL导入夹具另记待办。手机动态裙摆/手指与性能仍待验收，刚体近似/不可达目标不保证任意网格零穿模。
+- ✅ [2026-10-11] 核对VaM 1.x官方文件类型，补充资源包、场景/预设、Morph、衣服/发型、Unity资源和插件的用途与人物模型完整性边界。
+  - 新增docs/usage/vam-resource-formats.md及使用入口，补充已有VAM design/spec与待确认todo；未改运行代码，未新增开发任务或构建/发布。
 
-### MMD-AR 高级动作保存格式说明
+### MMD-AR VAM模型接入评估
 
-- ✅ [2026-10-11] 根据现有源码核对高级动作与保存格式：内置MPL模板播放不自动入库，同名登记版本优先；动作库IndexedDB存结构化定义与MPL文本/VMD二进制，JSON导出内嵌Base64 VMD，单动作另可下载VMD。
-  - 同步Human usage/design/spec及todo中的既有导入导出待验收描述；只补充现状说明，未改源码、运行测试、构建或发布。
+- [2026-10-11] 核对VAM模型接入可行性：原生VAR需依赖与角色数据适配，转换路线需核对骨骼、Morph及物理保留情况；当前本地加载器只接受PMX，GLB路径用于静态角色。
+  - 新增mmd-ar-vam-models的design/spec及可行性task，更新索引和todo；输入格式、样例、保留功能待用户确认。只读核对源码和VaM官方文档，未改运行代码、构建或发布。
+
+### MMD-AR模型格式能力说明
+
+- ✅ [2026-10-11] 核对VRM表情、动作与物理能力及当前项目实现：VRM具备Expression、VRMA与SpringBone格式能力，当前PMX的VMD/Human/MPL/刚体链路未提供VRM适配。
+  - 补充mmd-ar-test-apk的design/spec及mmd-human-interface使用说明；核对官方VRMA/SpringBone规范及共享VRM/Human源码，无运行代码改动，不新增待办、构建或发布。
 
 ### MMD-AR傍晚灯光预设
 
@@ -138,8 +152,19 @@
   - 数据/分类/真实网页/屏幕光照/TAA共33/33通过；默认十组逐字段、坏存储回退、复位/刷新及原预设文件回归通过；npm网页构建、5项生成导入指纹、语法和diff检查通过。
   - 更新design/spec/task/todo/usage/self-test；本地web-dist已生成，未发布外网。正式显示端/APK与Offline产物状态保持；手机画质/帧时待现场验收。
 
+### MMD-AR 服务器动作、待机与手部IK避让
+
+- ✅ [2026-10-11] 独立网页默认使用待机；原VMD命名“跳舞”手动选择，服务器目录支持后续新增动作；修正挥手压低右臂的问题。
+  - 新增server-actions.json/web-human-server-actions.mjs、idle.mpl/web-human-actions-build.js，生成mmd-actions.json和miya-idle.vmd（8秒，仅双臂六轨道）；跳舞仍引用miya-default.vmd，未指定时长按原15.2秒播放。同名登记优先，目录/面板/回复名称动态扩展，停止/网络/模型取消与原时长队列相容。
+- ✅ [2026-10-11] 物理面板增加默认开启的“手部防穿模”开关，复用原物理刚体检测、真实姿态与碰撞过滤，再用手臂IK有界避让；保存选择并刷新/模型/后端重建恢复。
+  - 新增web-human-rigid-snapshot.mjs/web-human-arm-avoidance.mjs，接入Human接口/构建、原IK/grant之后/物理之前和物理后观测；球/盒/胶囊形状复用原XPBD窄阶段，scanPrepared缓存同帧边界。4次迭代/35度限位、600ms释放、不累计；旋转暂停按保存求解空间采样，保留原布料暂停恢复链路。不另建衣服网格碰撞或GPU布料读回。
+  - 修改web-reply-actions/parser/player/panel/ui/build、web-physics-solver.js、web-panel-groups.js及独立build.js；新增3个自测文件。首版37项单元与1项浏览器通过；最终追加红线/风吹/源码编辑后44单元+1真实浏览器通过，共45项；真实蒙皮待机手部/裙面间距约0.570。npm网页构建成功；同步Human design/spec/task/usage/todo/self-test。仅独立WEB，未发布外网/打APK，Offline状态保持。
+  - 扩展物理旧回归35项13通过/22失败，修改前HEAD ea3de4b3同样失败；旧频率/接口/唯一锚点和data URL导入夹具另记待办。手机动态裙摆/手指与性能仍待验收，刚体近似/不可达目标不保证任意网格零穿模。
 
 ### TTS 多 Provider 配置与生成
+
+- ✅ [2026-10-12] 核实并补充Qwen API与豆包API Key存储位置说明
+  - 根据config-app-service.js与release-runtime-context.js确认普通用户目录及release/userconfig/userconfig.json、tts.providers对应credential字段和控制端脱敏状态；同步usage/design/spec与todo文档入口。仅核查路径及代码，不读取Key原文，不修改配置或发布状态。
 
 - ✅ [2026-10-11] 修复Qwen-Audio 3.1/乔小娇接口与WAV占位长度，豆包2.0自动传上一句用户上下文，三个服务默认开启
   - tts-provider-settings.js默认Qwen-Audio 3.1/qiaoxiaojiao_v3.1及三个enabled=true，保留显式配置；新增qwen-api-contract.js区分新旧模型接口与显式WAV，自定义地址保持。tts-wav.js仅修复实测配对占位头，Qwen适配器在速度处理前严格校验普通WAV，失败日志仍打印已知码/原因。
@@ -221,6 +246,11 @@
   - 19文件97/97定向检查通过、无跳过，包含本地真实HTTP/WebSocket模拟、真实配置写盘/回滚、实际system入口与Chromium配置保存/失败/超时/断线/模板自测。另有扩大检查中的旧chat-tts-interruption按钮夹具失败，HEAD同样缺该ID，未改该夹具或宣称全仓通过。
   - 同步.src、design/spec/task/todo/usage/self-test，完成实现项移出todo，仅保留账号/设备/发布验收。servicePackage=true（原已待打包），minApk与dependenciesPackage保持；未重启、构建或发布运行服务。
 
+### MMD-AR 高级动作保存格式说明
+
+- ✅ [2026-10-11] 根据现有源码核对高级动作与保存格式：内置MPL模板播放不自动入库，同名登记版本优先；动作库IndexedDB存结构化定义与MPL文本/VMD二进制，JSON导出内嵌Base64 VMD，单动作另可下载VMD。
+  - 同步Human usage/design/spec及todo中的既有导入导出待验收描述；只补充现状说明，未改源码、运行测试、构建或发布。
+
 ### MMD-AR 统一灯光预设
 
 - ✅ [2026-10-11] 移除旧亮度预设，新增统一“灯光预设”折叠分类，全部操作集中显示；支持完整面板十组参数的命名保存、覆盖、删除、刷新恢复及JSON单项/全部导出和合并导入。
@@ -256,6 +286,9 @@
 
 ### 独立 MMD-AR：头部与眼球视角跟随
 
+- ✅ [2026-10-11] 修正普通动作完全占用头部/眼球时的注视恢复：动作结束释放占用后，头部和眼球从零角度重新按各自缓动时长计时。
+  - 被动作阻塞期间保留注视通道状态，释放后的第一帧重新开始插值，避免动作结束后注视状态看似已完成但画面不再缓动。
+
 - ✅ [2026-10-11] Human生理层接入通用PMX头部/眼球注视，默认启用并看向相机；轻触/点击临时看向点击位置，默认3秒后平滑返回，拖动/双指操作不触发。
   - 新增web-human-gaze.mjs，调整Human model/mixer/interface、panel/ui、storage/build；复用当前相机、舞台横竖屏坐标及唯一RAF，支持独立开关、强度、附加角、缓动、停留和正面方向，设置按模型保存并随动作库导出/导入。
   - 显式头眼动作按权重优先，眼球参考更新后的头部姿态；米娅左右眼grant比例1已读取确认，使用共有眼单次驱动。动态/不支持继承降级并报告，生命周期清理临时目标/事件。
@@ -271,7 +304,15 @@
   - 更新Human设计/spec/task与todo待设备性能验收，正式源码和Offline状态保持；仅提交本次代码/文档并推送origion/master，未发布外网，保留并行的Native AudioRecord等未提交改动。
 
 
-### 显示端 ASR 回显自动隐藏
+### MMD-AR 旋转暂停物理调试日志
+
+- [2026-10-11] 为独立 mmd-ar 测试页增加旋转暂停/恢复物理调试日志，记录暂停速度、恢复 reset、恢复后首个物理帧及动态刚体速度摘要；正式显示端不启用。
+
+
+- [2026-10-11] 修复旋转速度超过阈值暂停物理后，拖动结束恢复时布料出现单帧跳动的问题。
+  - 根因是恢复首帧调用 `MMDPhysics.reset()` 并清零动态刚体速度，导致布料从暂停期间的世界姿态瞬移到当前骨骼姿态。
+  - 恢复策略调整为先推进恢复帧骨骼，再用该骨骼状态重置刚体，并在同一帧执行一次物理，避免恢复时使用旧锚点。
+
 
 - ✅ [2026-10-11] 修复 ASR 识别回显长期停留的问题。
   - 新的非空识别结果默认显示最多 30 秒，新的识别结果会重新计时。
@@ -11746,7 +11787,6 @@
 
 - ✅ [2026-10-10] 按确认方案固定声纹AASC_PROJECT_ROOT目录、竖屏三个浮动入口避开底部导航、群聊状态显示群聊且移除虚构助手默认项。
   - 修改voiceprint-store.js、upload.css、display-chat.js/语音控件及既有测试，新增voiceprint-store-persistence与control-floating-layout-browser。5文件30/30通过、无跳过，截图已核对，diff检查通过；设计/伪代码/任务/使用/自测文档同步，代码与servicePackage=true已推送origion/master。用户取消声纹恢复，本轮不扫描/迁移旧库，不宣称已恢复旧记录。主题未选中样例与实时监听按钮已确认并实现；9文件43/43通过、无跳过，深浅主题/默认开启/权威等待与失败/实际按钮/Offline恢复通过，源码语法与diff检查通过，截图已核对。服务包待构建发布，控制端现有监听只控制能力，本轮未新增实时模式控制入口。
-
 ### MMD-AR 镜头拉远同步 far
 
 - ✅ [2026-10-11] 修复普通预览与 AR 镜头拉远后 far 不更新、连续定位投影覆盖裁剪范围的问题；拉近和复位恢复合理范围，保留AR偏心构图。
