@@ -1,3 +1,9 @@
+### MMD-AR PMX全身 IK
+
+- ✅ [2026-10-12] 独立 MMD-AR 增加 PMX 头部、双手和双脚交互控制点。
+  - 新增`3rd/mmd-ar-test/web-human-ik.mjs`；修改Human帧接口、构建桥接和动作面板。五个控制点使用限位CCD，保留原IK/grant与既有手部避让/物理顺序；默认关闭，模型/后台/编辑/销毁时清理，不持久化。独立WEB构建副本传入场景引用，正式端源码不变。
+  - 更新Human design/spec、usage、自测说明、任务与索引。`npm run build:web:mmd-ar-test`、5个相关模块语法检查及定向diff检查通过；没有运行自动化/浏览器交互测试，手机姿态与性能待验收。仅本地生成忽略的web-dist，未发布或构建APK。
+
 ### Android ASR 测试网页
 
 - ✅ [2026-10-12] 将独立 Android ASR 测试 APK 的基础离线测试流程迁移为 Apache 可托管网页，默认直接读取同源 `/mnt/aimodel/`。
@@ -5,6 +11,9 @@
   - 固定 vendored Sherpa JS/WASM 运行文件及 MIT/Apache-2.0 许可说明，不新增生产依赖。新增 `npm run build:web:android-asr` 与 `npm run test:android-asr-web`，构建输出为忽略目录 `3rd/tts-server/android-asr/web-dist/`；16个文件约13.5 MB，不含模型。
   - 4/4 Node 自测通过；真实 Chromium 使用本地同步模型经同源 HTTP 映射，验证 ASR、512维登记、单段匹配及 Pyannote 多段/快速多人并记录耗时。design/spec/task/usage/自测文档已同步，完成项从 todo 删除。Apache 尚未部署，本次未修改 APK、Apache配置、正式业务API或 Offline 发布状态。
   - 补测 `zh.wav`/`en.wav` 自动语言识别分别返回“开放时间早上9点至下午5点。”与“The tribal chieftain called for the boy and presented him with 50 pieces of gold.”；网页解码耗时2831/3824 ms，点击到结果7537/3981 ms（首条含本机首次模型装载）。本地ONNX及tokens与Apache模型路径校验一致；Apache整模型冷下载受约0.66 MiB/s链路限制，180秒内未完成，因此不把公网下载时间计为ASR耗时。
+
+- ✅ [2026-10-12] 在 SM-N9500 Android 9 上用 test_wavs 全部7个音频完成原生 APK 与 Samsung Internet 网页 Worker 的双轮速度/结果一致性对比；两端模型 SHA-256 一致，14/14 配对输出相同，平均热态推理 Web 6354.6 ms、原生 4094.1 ms，原生约快1.55倍。
+  - 同一设备以 你好，小爱.wav 分别测试 CPU 大核4–7和小核0–3各3轮：平均1409 ms与2970 ms，小核约慢2.11倍；原生运行配置已恢复 AUTO，原生/网页线程均为1。记录设备、逐音频结果、格式限制及无人工转写真值无法计算 CER/WER 于 docs/task/20261012_AndroidASR原生网页真机对比.md 和 docs/spec/self-test.md；本轮未改运行代码。
 
 ### 独立MMD-AR GPU物理骨骼纹理直连
 

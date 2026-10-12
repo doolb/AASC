@@ -11,6 +11,7 @@ import { emptyHumanLibrary, loadHumanLibrary, saveHumanLibrary, validateHumanLib
 import { createHighLevelMpl } from './web-reply-actions.mjs';
 import { serverActions } from './web-human-server-actions.mjs';
 import { createHumanArmAvoidance, readArmAvoidancePreference, ARM_AVOIDANCE_KEY } from './web-human-arm-avoidance.mjs';
+import { createHumanIK } from './web-human-ik.mjs';
 
 const number = (value, fallback, min, max, label) => {
     const result = value ?? fallback;
@@ -72,7 +73,7 @@ function validateSource(source) {
 }
 
 // 一个实例属于一个显示runtime。名称映射、异步令牌和动作所有权都绑定当前PMX。
-export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, canvas, manualExpressions, startRendering }) {
+export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, getScene, canvas, manualExpressions, startRendering }) {
     const mixer = createHumanMixer(), physiology = createHumanPhysiology(), external = new Map();
     const gaze = createHumanGaze();
     const armAvoidance = createHumanArmAvoidance();
@@ -92,11 +93,17 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         document.querySelector('#mmdEditor [data-mode="edit"][aria-pressed="true"]')
         || document.querySelector('#edBlenderSession:not([hidden])')
         || document.getElementById('mmdEditor')?.getAttribute('aria-busy') === 'true');
+    // 先注册IK控制点指针，再注册轻触注视；命中控制点时阻断后续注视事件。
+    const interactiveIK = createHumanIK({ getScene, getCamera, canvas, onChange: wake });
     const releasePointer = attachHumanGazePointer(canvas, (x, y) => {
         if (!model || !ready || suspended || blocked() || disposed) return;
         if (gaze.point(model, getCamera?.(), x, y)) wake();
     });
     const reflex = createHumanReflex({ clock: () => mixer.clock, rules: () => library.rules, perform });
+    function clearInteractiveIK() {
+        // 避让基线是在IK之后保存的，必须先撤销避让，再撤销IK，避免上帧增量回写。
+        armAvoidance.restore(); interactiveIK.reset();
+    }
     function stop(owner) {
         for (const [key, controller] of pending) if (!owner || owner === key) { controller.abort(); pending.delete(key); }
         mixer.stop(owner);
@@ -108,7 +115,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (helperBound?.onHumanPose === mixPose) delete helperBound.onHumanPose;
         if (helperBound?.onHumanAfterIK === avoidArms) delete helperBound.onHumanAfterIK;
         if (helperBound?.onHumanAfterPhysics === observeArms) delete helperBound.onHumanAfterPhysics;
-        armAvoidance.reset();
+        armAvoidance.reset(); interactiveIK.reset();
         helperBound = null;
     }
     function bind() {
@@ -294,6 +301,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     }
     function avoidArms(mesh, delta, physics) {
         if (mesh !== model?.mesh || !ready || suspended || disposed) return;
+        interactiveIK.apply(model);
         armAvoidance.apply(model, physics, delta, armAvoidanceEnabled, { paused: helperBound?.enabled.physics === false });
     }
     function observeArms(mesh, physics) {
@@ -305,10 +313,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (motionKey && key !== motionKey) stop();
         motionKey = key;
         const paused = blocked();
-        if (paused && !suspended) { stop(); gaze.reset(); }
+        if (paused && !suspended) { stop(); gaze.reset(); clearInteractiveIK(); }
         suspended = paused;
         frameDelta = Math.max(0, Math.min(0.1, delta));
-        armAvoidance.restore(); mixer.restore();
+        armAvoidance.restore(); interactiveIK.restore(); mixer.restore();
         if (!paused) mixer.advance(delta);
         if (helper !== helperBound) {
             detach();
@@ -318,8 +326,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             }
         }
     }
-    function lifecycle() { if (document.hidden) { suspended = true; stop(); gaze.reset(); } else { suspended = !rendererVisible; wake(); } }
-    const pagehide = () => { stop(); gaze.reset(); };
+    function lifecycle() { if (document.hidden) { suspended = true; stop(); gaze.reset(); clearInteractiveIK(); } else { suspended = !rendererVisible; wake(); } }
+    const pagehide = () => { stop(); gaze.reset(); clearInteractiveIK(); };
     document.addEventListener('visibilitychange', lifecycle);
     window.addEventListener('pagehide', pagehide);
     const learn = {
@@ -404,7 +412,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     return Object.freeze({
         capabilities() { bind(); return model?.snapshot() || { missing: ['尚未加载PMX'], bones: [], morphs: [], bindings: {} }; },
         getState() { bind(); return { ready, token: model?.token, signature: model?.signature, revision, warning,
-            physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), layers: mixer.snapshot(), pending: pending.size,
+            physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), interactiveIK: interactiveIK.getState(),
+            layers: mixer.snapshot(), pending: pending.size,
             actions: learn.list(), presets: structuredClone(library.presets), rules: structuredClone(library.rules),
             mappings: structuredClone(library.mappings) }; },
         physiology: {
@@ -434,6 +443,14 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             wake(); return armAvoidanceEnabled;
         },
         getArmAvoidanceState: () => ({ enabled: armAvoidanceEnabled, ...armAvoidance.getState() }),
+        setInteractiveIKEnabled(value) {
+            const bound = requireModel();
+            armAvoidance.restore();
+            const result = interactiveIK.setEnabled(value, bound);
+            wake(); return result;
+        },
+        resetInteractiveIK() { requireModel(); armAvoidance.restore(); interactiveIK.resetTargets(); wake(); return interactiveIK.getState(); },
+        getInteractiveIKState: () => interactiveIK.getState(),
         face: { set: (...args) => manualExpressions.set(...args), clear: (...args) => manualExpressions.clear(...args), resolve: resolveExpression },
         mouth: {
             setWeights: (token, weights) => manualExpressions.setTransient(token, weights),
@@ -456,10 +473,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             wake(); return true;
         },
         before,
-        setVisible(value) { rendererVisible = value === true; suspended = !rendererVisible || document.hidden; if (suspended) { stop(); gaze.reset(); } },
+        setVisible(value) { rendererVisible = value === true; suspended = !rendererVisible || document.hidden; if (suspended) { stop(); gaze.reset(); clearInteractiveIK(); } },
         dispose() {
             disposed = true; generation++; stop(); mixer.clear(); detach(); cache.clear();
-            gaze.reset(); armAvoidance.dispose(); releasePointer();
+            gaze.reset(); armAvoidance.dispose(); interactiveIK.dispose(); releasePointer();
             document.removeEventListener('visibilitychange', lifecycle); window.removeEventListener('pagehide', pagehide);
         }
     });
