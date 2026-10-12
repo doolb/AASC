@@ -1,3 +1,11 @@
+### Android ASR 测试网页
+
+- ✅ [2026-10-12] 将独立 Android ASR 测试 APK 的基础离线测试流程迁移为 Apache 可托管网页，默认直接读取同源 `/mnt/aimodel/`。
+  - 新增 `3rd/tts-server/android-asr/web/`：WAV/麦克风输入、SenseVoice 单次 ASR、ERes2Net base 声纹注册与 Sherpa 单段/多人/快速多人测试；多段使用 Pyannote。音频在浏览器 Worker 本地处理，注册库只在页面内存，不接正式 ASR/声纹 API、不含流式识别或降噪。WASM 就绪后自动 HEAD 检查四个模型文件，推理时按需加载。
+  - 固定 vendored Sherpa JS/WASM 运行文件及 MIT/Apache-2.0 许可说明，不新增生产依赖。新增 `npm run build:web:android-asr` 与 `npm run test:android-asr-web`，构建输出为忽略目录 `3rd/tts-server/android-asr/web-dist/`；16个文件约13.5 MB，不含模型。
+  - 4/4 Node 自测通过；真实 Chromium 使用本地同步模型经同源 HTTP 映射，验证 ASR、512维登记、单段匹配及 Pyannote 多段/快速多人并记录耗时。design/spec/task/usage/自测文档已同步，完成项从 todo 删除。Apache 尚未部署，本次未修改 APK、Apache配置、正式业务API或 Offline 发布状态。
+  - 补测 `zh.wav`/`en.wav` 自动语言识别分别返回“开放时间早上9点至下午5点。”与“The tribal chieftain called for the boy and presented him with 50 pieces of gold.”；网页解码耗时2831/3824 ms，点击到结果7537/3981 ms（首条含本机首次模型装载）。本地ONNX及tokens与Apache模型路径校验一致；Apache整模型冷下载受约0.66 MiB/s链路限制，180秒内未完成，因此不把公网下载时间计为ASR耗时。
+
 ### 独立MMD-AR GPU物理骨骼纹理直连
 
 - ✅ [2026-10-12] 按用户要求归档本次GPU骨骼直连与拖动修复源码、自测和文档；同步远端Git后仅提交本任务内容，保留其他任务暂存项、配置、results与本地生成资源。

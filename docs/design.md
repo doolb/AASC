@@ -96,6 +96,7 @@
 | ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](design/asr-memory-upload-vad-unification.md) | ASR Buffer 输入、无临时文件处理、网页与 Node 子显示端 VAD 参数同步 |
 | 服务端 TTS | [tts.md](design/tts.md) | 外部 TTS 调用保护、内置 tts.server Wine/Linux HTTP 服务与统一路由 |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/design/android-asr-apk.md) | 内置 SenseVoice、录音/文件识别、HTTP 测试和 CPU 核心模式 |
+| Android ASR 测试 APK 网页版 | [android-asr-web-test.md](design/android-asr-web-test.md) | Apache 同源模型目录、浏览器离线识别与临时声纹对比 |
 | 独立 Android RapidOCR HTTP 测试 APK | [android-rapidocr-apk.md](../3rd/tts-server/docs/design/android-rapidocr-apk.md) | 内置 RapidOCR、图片 HTTP 上传和网页测试 |
 | 独立 Android YOLO11 五模型测速 APK | [android-yolo-apk.md](../3rd/tts-server/docs/design/android-yolo-apk.md) | 五个 YOLO11 模型、图片 HTTP 检测、网页测试和手机端速度对比 |
 | Linux TTS 服务 | [tts-linux.md](design/tts-linux.md) | Embedded Speech Linux TTS HTTP 服务与 NaturalVoice 运行时解耦 |

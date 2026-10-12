@@ -440,6 +440,18 @@ Windows Node 子显示端的系统级语音转文字输入说明也见：[Window
 
 普通正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。需要完整离线包时运行下面的独立命令，模型会从 `res/models` 按固定白名单打入 APK：
 
+### 独立 ASR 测试网页
+
+网页源码在 `3rd/tts-server/android-asr/web/`，运行下面命令生成 Apache 可直接托管的静态目录：
+
+```bash
+npm run build:web:android-asr
+```
+
+将 `3rd/tts-server/android-asr/web-dist/` 内容部署到 Apache 页面目录；页面默认从同站点 `/mnt/aimodel/` 读取已同步模型。打开页面后会自动检查模型文件是否可访问，不会因此下载模型。首次运行对应流程时才加载 SenseVoice INT8、ERes2Net base FP32 或多人分段所需的 Pyannote INT8。跨源模型目录须允许 Apache CORS；麦克风录音需要 HTTPS 或 localhost。
+
+网页迁移了 APK 的单次 SenseVoice 识别、Sherpa 声纹注册、单段/多人/快速多人测试，支持 WAV 文件与浏览器麦克风输入并显示分段和耗时；不包含流式 ASR 或降噪。声纹登记只存在当前页面 Worker 内存，刷新后清空。音频和识别数据在浏览器本地处理，不调用正式 ASR/声纹接口。自测命令：`npm run test:android-asr-web`。当前构建仅生成本地部署目录，本次未发布 Apache。
+
 ### 独立 ASR 测试 APK 的 Sherpa 声纹测试
 
 独立测试 APK 位于 `3rd/tts-server/android-asr`，构建并安装 Debug APK：

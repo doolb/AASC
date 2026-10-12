@@ -1,5 +1,23 @@
 # 自测功能实现文档
 
+## Android ASR 测试网页自测（2026-10-12）
+
+```text
+npm run build:web:android-asr -> 16个静态文件，约13.5 MB；输出不含模型
+npm run test:android-asr-web -> 4/4通过：Apache模型路径/正式API隔离、16 kHz PCM/WAV、多人片段合并/回查、WASM构建资产/许可
+真实Chromium + HTTP同源模型映射 -> Worker/WASM正常初始化，四个Apache模型路径可用
+实际测试WAV -> SenseVoice识别“你好啊你好啊你好啊。”
+声纹 -> ZH注册成功，512维；单段匹配ZH/1.000
+Pyannote多人与快速多人 -> 分段均返回1.01–3.63秒cluster 1/ZH；相似度0.943，分段耗时分别684/323 ms
+实际浏览器运行耗时 -> ASR 2384 ms；注册1706 ms；单段3832 ms；多人4107 ms；快速多人3658 ms
+zh.wav / en.wav自动语言实测 -> “开放时间早上9点至下午5点。”/“The tribal chieftain called for the boy and presented him with 50 pieces of gold.”
+网页耗时 -> 解码2831/3824 ms；按钮到结果7537/3981 ms，前者含本机首次模型装载，后者模型已热
+模型校验 -> Apache sidecar与本地ONNX SHA-256一致，tokens.txt两端SHA-256一致；本机同源HTTP映射使用相同文件
+冷下载边界 -> Apache 239,233,841字节模型约0.66 MiB/s；直接浏览器冷载180秒未完成，故点击到结果不代表公网冷下载时间
+节点和差异检查 -> 页面/Worker/工具语法检查、git diff --check通过
+边界 -> Chromium使用本地已同步模型目录经同源HTTP映射；未部署Apache、未测手机/Firefox/Safari及真实麦克风硬件
+```
+
 ## Git 构建产物忽略检查（2026-10-12）
 
 ```text
