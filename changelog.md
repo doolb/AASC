@@ -1,3 +1,15 @@
+### MMD-AR 渲染 GPU 耗时
+
+- ✅ [2026-10-12] 独立MMD-AR与正式PMX/VRM在基础光照状态行分别显示CPU/GPU渲染耗时，异步查询不阻塞GPU。
+  - 新增mmd-gpu-timer.mjs及82项专项自测；修改mmd-performance.mjs/display-mmd-performance.js、PMX/VRM runtime、display.html、web-production-shared.js、package.json及性能自测。WebGL1/2、查询上限4、外部查询避让、有效样本单独平均、disjoint/上下文/后台/模型失效、finally与资源释放；CPU/FPS/物理口径保留，GPU不含物理或AR识别，CPU/GPU不相加。共享GPU叶子先指纹，重复静态导入去重。
+  - npm性能100/100（含真实DOM及WebGL2，零跳过），390px状态行/占位与角色隐藏恢复、GL错误0和模拟失去/延后恢复通过，截图已查看；生产218项211通过/6失败/1跳过，HEAD旧物理fixture同名6项路径错误复现，不宣称全仓通过或手机性能通过。
+  - 既有生产准备与WEB构建成功，164非vendor脚本语法、147内容指纹检查通过。MPL原TLS下载失败后从已发布HTTP站点取得同版本3资源，原大小/SHA-256全部匹配，不改资源版本或绕过校验。
+  - 同步design/spec/task/usage/self-test/todo，实施项移出todo，仅保留发布/真机与历史夹具待办；servicePackage=true，原minApk=true/dependenciesPackage=false保留。未发布/打APK/操作服务器，保留用户配置与results改动；缓存/生成文件/截图不入Git。
+
+- ✅ [2026-10-12] 完成现有 CPU 渲染口径、共享构建与 GPU 时间查询方案核查，实施待用户确认。
+  - 核查性能统计/显示、PMX/VRM 绘制入口、独立 build/共享指纹与既有 GPU 物理查询；拟保留 CPU，新增有界异步 WebGL GPU 采样，明确不支持/失效占位、非阻塞与生命周期清理。
+  - 更新 docs/design/mmd-ar-production-offline.md、docs/spec/mmd-ar-production-offline.md、docs/task/20261012_MMDAR渲染GPU耗时.md、docs/todo.md；尚未修改运行代码、发布状态或产物，未运行测试/构建，不发布或重启服务器，保留既有用户配置和 results 改动。
+
 ### 独立 MMD-AR 性能与高级动作外网发布
 
 - ✅ [2026-10-12] 独立网页已发布至 https://c.aasc.us/mnt/mmd-ar/，同步已提交的左上角FPS、灯光面板CPU渲染耗时、物理耗时、最新待机及高级动作/MPL交互。

@@ -1,5 +1,15 @@
 # 自测功能文档
 
+## MMD CPU/GPU渲染耗时（2026-10-12）
+
+`npm run test:mmd-performance` 100/100通过，零失败/跳过：82项纯mock覆盖WebGL1/2异步/多个结果、合法零值与异常、查询容量4/所有权、disjoint、上下文失效/恢复、释放与持续驱动异常；18项性能/接入/指纹及真实浏览器验证窗口独立均值、代次失效/无旧值、CPU不含query且物理在区间外、finally异常语义、后台/模型重置与监听释放。Windows已安装Chrome运行真实DOM390px：CPU/GPU数值与不支持/失效占位、FPS与工具栏/安全区/指针、面板显示/角色隐藏恢复通过，截图已查看。
+
+真实WebGL2 data-URL测试无HTTP服务器：timer支持，异步三角形查询返回有限非负毫秒（示例0.01024、0），GL错误0，队列≤4，reset清空；模拟contextLost后延后100ms恢复，状态重新supported、代次递增、dispose幂等。模拟恢复最初立即请求超时，测试改为事件派发后的延后恢复；生产计时器不新增等待或定时器。软件GPU只证明流程，不作为手机性能结论。
+
+`npm run prepare:mmd-production`与`npm run build:web:mmd-ar-test`成功。固定MPL上游TLS失败后，从已发布HTTP目录取得同一版本3文件，大小/SHA-256与原清单全部一致，未改资源版本；164个非vendor/Blender脚本语法与147条模块指纹通过，GPU叶子→性能→runtime顺序及重复import去重已回归，ShadowMap注入锚点保留。
+
+`npm run test:mmd-production` 218项211通过/6失败/1跳过；失败都为旧物理fixture解析three绝对URL时误识别web目录，找不到3rd/mmd-ar-test/three.module.js。fixture及适配依赖未改，与HEAD同名6项失败复现，另列todo，不改运行代码迎合夹具。未运行完整PMX/VRM/独立重型浏览器或手机验收，未全仓测试。新增GPU功能尚未发布或构建APK，servicePackage=true；缓存、截图与生成产物不提交。
+
 ## MMD帧率/耗时与角色控件隐藏（2026-10-12）
 
 `npm run test:mmd-production`最终130/130通过，包括新增性能12项（采样与真实间隔、低频发布、物理异常/实例包装、后台与模型重置、VRM帧入口、真实DOM/完整CSS/编辑工具栏与安全区）。正式PMX浏览器1/1（133.4秒）与独立PMX浏览器1/1（191.8秒）通过，无pageerror，共132项。正式验证Ammo/XPBD实际耗时、关闭清值、HUD及右侧按钮/面板隐藏与恢复；原灯光/动作/MPL/真实TTS、独立Worker/风/避让与物理重建兼容。最终WEB构建及语法/diff通过，截图已检查，软件GPU耗时不作为手机性能结论。

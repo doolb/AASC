@@ -97,8 +97,6 @@ function classifyHit(object) {
 
 export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     if (!canvas) throw new Error('VRM Canvas 不存在');
-    const framePerformance = createCanvasPerformance(canvas);
-
     const renderer = new THREE.WebGLRenderer({
         canvas,
         alpha: true,
@@ -106,6 +104,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         powerPreference: 'high-performance',
         preserveDrawingBuffer: false
     });
+    const framePerformance = createCanvasPerformance(canvas, renderer);
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -399,9 +398,15 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         if (currentVrm) currentVrm.update(delta);
         updateModelRotation(delta);
         updateCameraView(delta);
+        if (currentVrm) framePerformance.beginRender();
         const renderStarted = performance.now();
-        renderer.render(scene, camera);
-        if (currentVrm) framePerformance.record({ now, renderMs: performance.now() - renderStarted });
+        let renderMs = 0;
+        try { renderer.render(scene, camera); }
+        finally {
+            renderMs = performance.now() - renderStarted;
+            if (currentVrm) framePerformance.endRender();
+        }
+        if (currentVrm) framePerformance.record({ now, renderMs });
         frameHandle = requestAnimationFrame(renderFrame);
     }
 

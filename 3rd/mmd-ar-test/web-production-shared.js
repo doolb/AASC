@@ -80,10 +80,19 @@ module.exports.reuseRenderStage = async (root, names) => {
 module.exports.fingerprintProductionImports = async (source, generatedAssets) => {
     const fs = require('node:fs/promises'), path = require('node:path');
     const { createHash } = require('node:crypto');
-    for (const match of [...source.matchAll(/from ['"](\.\/mmd-[^'"?]+\.mjs)['"]/gu)]) {
-        const bytes = await fs.readFile(path.join(generatedAssets, 'js', match[1]));
+    // 先处理叶子依赖，再给helper/runtime引用的性能模块算指纹，避免GPU模块被旧缓存复用。
+    const performancePath = path.join(generatedAssets, 'js/mmd-performance.mjs');
+    const performanceSource = await fs.readFile(performancePath, 'utf8');
+    const gpuBytes = await fs.readFile(path.join(generatedAssets, 'js/mmd-gpu-timer.mjs'));
+    const gpuVersion = createHash('sha256').update(gpuBytes).digest('hex').slice(0, 12);
+    const fingerprinted = performanceSource.replace(/(['"])\.\/mmd-gpu-timer\.mjs(?:\?v=[a-f0-9]+)?\1/gu,
+        () => JSON.stringify(`./mmd-gpu-timer.mjs?v=${gpuVersion}`));
+    if (fingerprinted !== performanceSource) await fs.writeFile(performancePath, fingerprinted);
+    const imports = new Set([...source.matchAll(/from ['"](\.\/mmd-[^'"?]+\.mjs)['"]/gu)].map(match => match[1]));
+    for (const file of imports) {
+        const bytes = await fs.readFile(path.join(generatedAssets, 'js', file));
         const version = createHash('sha256').update(bytes).digest('hex').slice(0, 12);
-        source = source.replaceAll(match[1], `${match[1]}?v=${version}`);
+        source = source.replaceAll(file, `${file}?v=${version}`);
     }
     return source;
 };

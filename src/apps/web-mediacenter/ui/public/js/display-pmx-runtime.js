@@ -392,7 +392,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const human = createHumanRuntime({ getMesh: () => currentMesh, getHelper: () => helper.current,
         getProfile: () => currentProfile, getCamera: () => camera, canvas, manualExpressions, startRendering: () => startRendering() });
     const physicsGate = { paused: false };
-    const framePerformance = createCanvasPerformance(canvas);
+    const framePerformance = createCanvasPerformance(canvas, renderer);
     let physicsFrame = { running: false, frameMs: 0 };
     let motionPlaybackEnabled = true;
     let pendingInitialMotionHelper = null;
@@ -686,7 +686,9 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             frameMs: measuredPhysics.sequence !== physicsSequence ? measuredPhysics.frameMs : 0 };
         const firstFramePivotVisible = firstFramePivot?.visible;
         if (firstFramePivot) firstFramePivot.visible = false;
+        if (currentMesh) framePerformance.beginRender();
         const renderStarted = performance.now();
+        let renderMs = 0;
         try {
             // 首帧物理照常运行，但不把动作起始姿态绘制出来；下一帧才显示模型。
             followTestShadowRoot();
@@ -699,10 +701,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             }
             else renderer.render(scene, camera);
         } finally {
+            renderMs = performance.now() - renderStarted;
+            if (currentMesh) framePerformance.endRender();
             // 恢复原始可见性，避免覆盖 AR 失锁或其他显示状态。
             if (firstFramePivot) firstFramePivot.visible = firstFramePivotVisible;
         }
-        if (currentMesh) framePerformance.record({ now, renderMs: performance.now() - renderStarted,
+        if (currentMesh) framePerformance.record({ now, renderMs,
             physicsRunning: physicsFrame.running, physicsMs: physicsFrame.frameMs });
         if (!frameHandle) frameHandle = requestAnimationFrame(renderFrame);
     };

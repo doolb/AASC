@@ -1,5 +1,40 @@
 # 正式 Offline 显示端 MMD AR 同步实现规范（伪代码）
 
+## 2026-10-12 渲染 GPU 耗时（已实现，未发布）
+
+```text
+已有声明 → PMX/VRM实际绘制入口、framePerformance、CPU渲染耗时、独立构建共享与指纹
+新增定义 → createGpuRenderTimer(gl)，固定容量4，状态supported/unsupported/disjoint/lost/error及失效代次
+GPU接口 → poll返回{samples, status, generation}；begin/end/reset/contextLost/restore/dispose/getState
+查询适配 → WebGL2使用gl原生query接口；WebGL1使用EXT query接口；缺失扩展返回unsupported
+性能接口 → createFramePerformance可注入gpuTimer/canvasRef；createCanvasPerformance(canvas,renderer)创建timer
+性能接口 → beginRender先poll收集前帧结果，再begin；endRender结束自身query
+新增快照 → 保留renderMs等原字段，增加gpuRenderMs空值或毫秒、gpuStatus
+beginRender → 保存本帧收集结果及代次；GPU计时调用置于原CPU测量区间之外
+绘制finally → 先保存原CPU耗时，再endRender，原异常继续上抛
+已有活动时间查询/队列满 → 跳过，不嵌套或结束其他模块查询
+poll → 仅查询可用性为真的结果，纳秒转毫秒，按提交顺序逐项收集一次并释放
+record → 当前timer代次改变则丢弃窗口旧GPU样本；只接收相同代次的有限非负样本
+record → 更新gpuStatus；失效立即清旧GPU回显，其他DOM仍随原约500ms窗口批量发布
+统计窗口 → GPU按窗口收到的有效样本数单独平均；窗口无结果显示空，不用0/旧值替代
+查询异常 → 清理自身资源，状态error，诊断不阻断原绘制
+disjoint → 丢弃全部待收query及本窗口旧GPU样本，后续有效帧自动恢复
+隐藏/后台/模型切换 → reset释放query、清窗口与旧值；恢复重新采样
+Canvas上下文丢失 → timer.contextLost后reset；恢复 → timer.restore重新探测扩展并reset
+销毁 → 移除document/Canvas监听、释放自身query；dispose幂等且不结束外部查询
+UI → 现有CPU output保留，旁边GPU output；unsupported显示不支持，其余无值-- ms
+范围 → 主角色绘制含阴影/AO/SSGI/TAA/FSR2，不含物理、AR识别和浏览器合成；CPU/GPU不相加
+独立构建 → 自动复制mmd模块；先GPU叶子→性能模块指纹，再runtime；重复静态import去重，ShadowMap锚点保持
+验证 → 性能100/100，含82项mock、真实DOM窄屏与真实WebGL2异步查询/丢失恢复，无GL错误
+验证 → 生产218项211通过/6失败/1跳过，6个旧物理模块解析错误在HEAD同名复现
+验证 → 既有WEB构建成功，164脚本语法与147条内容指纹通过；缓存/生成资源不入Git
+边界 → 软件GPU不代表手机速度，完整PMX/VRM设备验收及发布待处理
+验收 → WebGL1/2、异步/多结果、有效样本均值、有界队列/外部活动查询、异常/disjoint
+验收 → 后台/隐藏/模型与上下文恢复/销毁、CPU/FPS不变、UI及独立导入指纹
+授权 → 用户“是”确认两端共享；本轮开发、自测与本地WEB构建，不发布/打APK/操作服务器
+产物 → 网页代码修改标记servicePackage=true，保留minApk/dependenciesPackage原值
+```
+
 ## 2026-10-12 性能与角色控件（已实现）
 
 ```text
