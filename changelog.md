@@ -1,5 +1,11 @@
 ### MMD-AR灯光与动作同步正式包
 
+- ✅ [2026-10-12] 正式服务代码包v66已发布到局域网与外网，包含FPS/渲染/物理耗时、角色控件隐藏及重置回调修正。
+  - `code/code-v66.zip`：17,589,217字节，SHA-256 `15ec15e36ae4fa860b4b20938c9c7a3a2a1edc5b2b161e7ccd253e74dcc0589a`；源码`eba0eb0da9125b5312fd03abdc97c9f6dcc07909`。1,035文件CRC与逐项指纹通过，514提交源码、9固定生成资源、512既有发布资源；两项性能模块与HTML已收录，临时输入不覆盖工作区。
+  - npm code-only构建/发布、RSA签名与组件约束、两端所有引用资源HTTP大小/SHA-256通过；manifest SHA-256均为`b84cdc4c34a5fdc6a79bc51c8e0ff8ca0f807a2e2ff51a16c1fc2794b196ef78`，code目录仅保留v66，清理无错误。复用dependencies v6、Node min seeds v39、min APK v34及dataRepair v2，记录`.git/offline-publish-mmd-performance-v66-final/`。
+  - servicePackage=false，原minApk=true/dependenciesPackage=false保持；代码、状态及发布记录上传Git。功能132项通过，设备需应用新代码并刷新显示端；独立WEB已重建，外网同步/手机与实际VRM/GLB观感继续待验收，未构建APK或执行服务器重启/设备安装。日志、ZIP与其他未提交改动不入Git。
+
+
 - ✅ [2026-10-12] 两端新增左上角FPS和灯光CPU渲染耗时，正式物理状态显示实际耗时，隐藏角色时收起右侧灯光/动作/定位按钮与面板。
   - 新增mmd-performance.mjs/display-mmd-performance.js，修改PMX/VRM运行时、helper、DisplayMmd/舞台/物理/分类控制、HTML/CSS；按实际帧间隔统计，500ms窗口，物理update与绘制单独计时。后台/隐藏/模型切换清窗口，暂停清旧值，不增加绘制/GPU等待。独立build/面板/扩展复用同一指纹模块，去掉重复测时，编辑工具栏下移避开FPS；既有眼球/debug及其他工作区改动保留。
   - npm定向最终130/130、正式真实PMX1/1（133.4秒）、独立真实PMX1/1（191.8秒），共132项通过；原动作/MPL/灯光/TTS、风/避让/物理开关重建兼容，VRM帧入口、完整CSS与安全区不遮挡通过，最终WEB构建/JS语法/diff通过，无pageerror。额外旧runtime夹具8项失败与HEAD基线一致，记录todo，不宣称全仓通过；手机/实际GLB/VRM观感另验收。
