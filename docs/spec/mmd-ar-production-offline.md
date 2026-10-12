@@ -1,5 +1,28 @@
 # 正式 Offline 显示端 MMD AR 同步实现规范（伪代码）
 
+## 2026-10-12 分类与子分类标题透明度（已实现，未发布）
+
+```text
+已有声明 → 三面板共用--display-mmd-panel-opacity、默认50%、范围0..100、原localStorage键
+已有问题 → 浅色theme普通button重要渐变覆盖分类按钮透明背景，旧式子分类样式未统一
+限定范围 → displayStageLayers中的灯光/动作/定位分类和子分类，不修改其他页面普通按钮
+分类表面 → display-mmd-panel-group和舞台内旧mmd-ar-panel-group共用主题背景alpha
+标题表面 → 两种group-header使用主题背景与强调色混合，再按共用opacity混入transparent
+原生子分类 → 保留details/summary开合；标题背景使用同一alpha且不改变文字opacity
+展开按钮 → 背景transparent，由header提供底色；浅色主题局部重要规则覆盖普通按钮渐变
+展开按钮文字 → 使用text-primary，不继承浅色普通按钮固定白字；箭头/开关行为不变
+滑条input → 沿用现有applyOpacity，批量同步三个input/output并更新单一舞台变量
+滑条change → 沿用原存储键持久化；刷新恢复，坏值和存储受限明确默认50
+背景堆叠 → 各背景表面使用相同alpha，透明区域叠加遵循浏览器原规则，不用整体opacity
+验收 → 完整正式CSS深/浅主题各0/50/100；分类/SSGI/旧式子分类/summary背景alpha匹配
+验收 → 标题按钮无background-image，文字/图标/开关/输入自身opacity仍1
+验收 → 三滑条同步与刷新恢复；点击标题不切开关、子分类开合、窄屏内容可达
+性能 → 仅CSS级背景变化，不新增定时器、查询模型、渲染遍或重建Canvas
+验证 → 面板浏览器6/6、既有性能100/100、主题28/28，共134通过，零失败/跳过
+环境 → 初次npm通用入口/浏览器调试管道受沙箱限制，非功能断言结果；用户调整权限后正常回归
+产物 → servicePackage=true原值保持，minApk/dependenciesPackage保留；未构建发布APK/服务包
+```
+
 ## 2026-10-12 渲染 GPU 耗时（已实现，未发布）
 
 ```text

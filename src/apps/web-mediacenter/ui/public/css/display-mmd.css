@@ -247,7 +247,8 @@
     box-sizing: border-box;
 }
 
-.display-mmd-panel-group {
+.display-mmd-panel-group,
+:is(#displayMmdLightingPanel, #displayMmdMotionPanel, #displayArTargetPanel) .mmd-ar-panel-group {
     margin: 9px 0;
     border: 1px solid var(--border-color);
     border-radius: 10px;
@@ -255,14 +256,28 @@
     background: color-mix(in srgb, var(--bg-secondary) var(--display-mmd-panel-opacity), transparent);
 }
 
-.display-mmd-panel-group-header {
+.display-mmd-panel-group-header,
+:is(#displayMmdLightingPanel, #displayMmdMotionPanel, #displayArTargetPanel) .mmd-ar-panel-group-header {
     display: flex;
     align-items: center;
     gap: 9px;
     min-height: 44px;
+}
+
+/* 分类、旧式子分类和原生折叠标题共用背景alpha；不对容器设置opacity，保持文字与控件清晰。 */
+.display-mmd-panel-group-header,
+:is(#displayMmdLightingPanel, #displayMmdMotionPanel, #displayArTargetPanel) :is(.mmd-ar-panel-group-header, details > summary) {
     background: color-mix(in srgb,
         color-mix(in srgb, var(--bg-secondary) 65%, var(--accent-color)) var(--display-mmd-panel-opacity),
         transparent);
+}
+
+:is(#displayMmdLightingPanel, #displayMmdMotionPanel, #displayArTargetPanel) details > summary {
+    padding: 8px 11px;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font: 600 13px/1.4 system-ui, sans-serif;
+    cursor: pointer;
 }
 
 .display-mmd-panel-group-switch {
@@ -284,6 +299,13 @@
     text-align: left;
     font: 600 13px/1.4 system-ui, sans-serif;
     cursor: pointer;
+}
+
+/* 浅色主题给普通button设置了重要渐变；仅展开标题保持透明，底色交由上面的header绘制。 */
+:root[data-theme-mode="light"] :is(#displayMmdLightingPanel, #displayMmdMotionPanel, #displayArTargetPanel)
+    :is(.display-mmd-panel-group-toggle, .mmd-ar-panel-group-toggle) {
+    background: transparent !important;
+    color: var(--text-primary) !important;
 }
 
 .display-mmd-panel-group-toggle::after {

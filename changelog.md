@@ -1,3 +1,11 @@
+### 正式MMD面板分类标题透明度
+
+- ✅ [2026-10-12] 正式灯光、动作、定位面板的分类及子分类标题背景跟随共用不透明度滑条，修复浅色主题标题残留不透明渐变。
+  - 仅修改`css/display-mmd.css`与`tests/display-mmd-production-panels.test.js`：浅色两类分类按钮局部important透明背景/主题文字色，旧式本地资源与8个details/summary子标题复用背景alpha；原HTML、折叠事件、参数、共享theme和runtime不改，不降低文字/可用控件透明度，普通按钮及禁用态保持。
+  - 面板浏览器6/6、已有npm性能100/100、主题28/28，共134项通过，零失败/跳过；dark/light/warm各0/50/100覆盖28分类与8原生标题，控件自身样式稳定、滑条同步/保存恢复/存储异常、SSGI与旧子组开合、summary键盘、390×740/844×390滚动及Canvas稳定通过。补强普通动作/禁用按钮与输入断言后，最终面板6/6复验通过；语法及diff空白检查通过，只读复核无阻断问题。
+  - 最初通用npm入口与Chrome调试管道受沙箱spawn EPERM，不计作功能结果；用户调整权限后定向回归正常。源码修复前浅/暖色真实复现梯度覆盖；测试保留原disabled弱化，不改运行行为迎合断言。不宣称全仓或Android设备通过。
+  - 同步design/spec/task/usage/self-test/todo；实施完成从todo移除，仅保留正式代码包发布及设备验收。`servicePackage=true`已有值保持，minApk=true/dependenciesPackage=false不变；未构建发布APK/服务包或独立网页、未操作服务器，保留用户配置/results/缓存改动。
+
 ### MMD-AR 渲染 GPU 耗时
 
 - ✅ [2026-10-12] 独立MMD-AR与正式PMX/VRM在基础光照状态行分别显示CPU/GPU渲染耗时，异步查询不阻塞GPU。

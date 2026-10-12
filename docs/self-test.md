@@ -1,5 +1,13 @@
 # 自测功能文档
 
+## 正式分类与子分类标题背景透明度（2026-10-12）
+
+面板浏览器6/6、`npm run test:mmd-performance`100/100、共享主题28/28，共134项通过，零失败/跳过。面板定向命令：`node --test --experimental-test-isolation=none tests/display-mmd-production-panels.test.js`；主题定向包括display-theme-sync/ui-theme/ui-theme-card-contrast/ui-theme-preview。使用已安装Chrome，真实正式HTML按原link顺序加载全部CSS，无启动/重启HTTP服务器或加载模型。
+
+深色、浅色、暖色各0/50/100覆盖28分类标题和8原生子分类，按实际background-color alpha验证，按钮background-image为none、标题主题文字色与可用控件/祖先opacity=1；原禁用控件弱化及普通浅色按钮渐变保留。三滑条/output同步、change持久化37、重建页面恢复、坏值/存储禁止默认50且写失败仍回显25；SSGI/本地资源嵌套开合不误切开关，嘴型summary Enter可开合，390×740和844×390面板不越界可滚动，Canvas身份/尺寸不变。
+
+修复前浅/暖色两项确实捕获标题残留不透明渐变；深色首次暴露测试误把disabled控件既有弱化当失败，调整仅保留既有禁用态，不改运行代码迎合断言。最初npm通用入口无法限定文件且测试隔离受沙箱spawn EPERM，单进程浏览器又因调试管道被拒；均非功能结果。用户调整权限后全部回归通过，不宣称全仓或Android真机通过。只修改CSS、测试和文档，服务代码包仍待出包，未构建发布APK/服务包或独立网页。
+
 ## MMD CPU/GPU渲染耗时（2026-10-12）
 
 `npm run test:mmd-performance` 100/100通过，零失败/跳过：82项纯mock覆盖WebGL1/2异步/多个结果、合法零值与异常、查询容量4/所有权、disjoint、上下文失效/恢复、释放与持续驱动异常；18项性能/接入/指纹及真实浏览器验证窗口独立均值、代次失效/无旧值、CPU不含query且物理在区间外、finally异常语义、后台/模型重置与监听释放。Windows已安装Chrome运行真实DOM390px：CPU/GPU数值与不支持/失效占位、FPS与工具栏/安全区/指针、面板显示/角色隐藏恢复通过，截图已查看。

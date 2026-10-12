@@ -1242,7 +1242,7 @@
 
 过程 initializeSharedMmdPanelOpacity(panels)
   opacity = 从 localStorage 读取 aasc.display.mmdPanelOpacity.v1
-  opacity = 校验后限制在 0..100；存储不可用或值非法时默认为 96
+  opacity = 校验后限制在 0..100；存储不可用或值非法时默认为 50
   对每个 panel
     在顶部添加面板不透明度 range 输入和百分比 output
     将 range.value 设置为 opacity
@@ -1251,9 +1251,12 @@
     opacity = 当前 range.value
     同步三个 range 和 output
     更新 displayStageLayers 的 --display-mmd-panel-opacity
-    尝试写回 localStorage；失败时保留本页内存状态
-  CSS 将不透明度应用于面板、分类卡片和分类标题背景
-  CSS 不改变文本、表单控件和图标的不透明度
+  range change 时
+    同步上述值并尝试写回 localStorage；失败时保留本页内存状态
+  CSS 将不透明度应用于面板、分类卡片和分类/子分类标题背景
+  浅色主题仅在三面板展开按钮覆盖普通button重要渐变，背景保持transparent，文字使用主题色
+  旧式group-header和details直接summary复用同一背景alpha，保留折叠事件
+  CSS 不改变文本、表单控件和图标的不透明度，原禁用控件弱化保持
 ```
 
 - 灯光、动作/物理、定位三个面板共用一份透明度状态；关闭后切换另一个面板时读取同一数值，刷新后恢复本地保存值。
