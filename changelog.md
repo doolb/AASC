@@ -1,3 +1,10 @@
+### 独立 MMD-AR 性能与高级动作外网发布
+
+- ✅ [2026-10-12] 独立网页已发布至 https://c.aasc.us/mnt/mmd-ar/，同步已提交的左上角FPS、灯光面板CPU渲染耗时、物理耗时、最新待机及高级动作/MPL交互。
+  - 从`db9898fe58f3c14449ea6353949c9402f1c0a5e3`的438个源文件构建，保留工作区未提交的注视/调试等改动；通过`npm run build:web:mmd-ar-test`生成独立产物。163个JS/MJS语法及146条内容指纹引用检查通过，真实PMX浏览器回归1/1通过（188.7秒），无失败/跳过/pageerror，验证动作源码/播放、风吹、物理开关/后端重建与FPS/CPU耗时显示；软件GPU结果不代表手机性能。
+  - 更新93个文件、1,077,594字节，依赖先就位、首页最后原子替换；旧文件备份于`/home/as/a/.mmd-ar-publish-20261012-performance/backup`。268个产物远端大小/SHA-256全部一致；95项HTTPS检查（变化文件及两种目录入口）HTTP200、大小/SHA-256与本地一致，JS/MJS MIME及COOP same-origin/COEP credentialless正常。首页SHA-256 `2c0879762fa21f0c61ac12a40745c96a1bdc62c3c8e3005b92ecdda63a653c3d`。
+  - 审计记录`.git/mmd-ar-publish-20261012-performance/`；未删除旧资源、修改Apache配置、重启服务器或构建APK，Offline发布状态保持。按纯构建/发布例外仅补充changelog，本次发布记录单独提交并推送，其他代码与文档改动保留。
+
 ### MMD-AR灯光与动作同步正式包
 
 - ✅ [2026-10-12] 正式服务代码包v66已发布到局域网与外网，包含FPS/渲染/物理耗时、角色控件隐藏及重置回调修正。
