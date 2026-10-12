@@ -32,9 +32,27 @@ src/apps/android-display/.kotlin/
 # 本地任务实例运行产物；results/index.json 仍由 Git 跟踪
 /res/tasks/*/results/*/
 
-# 独立 MMD AR 的原生定位依赖由固定版本脚本下载到本机构建缓存
-/build/third_party/orb-slam3/
-/build/third_party/mmd-ar-slam/
+# 构建脚本下载的第三方依赖只作为本机构建缓存
+/build/third_party/
+
+# 临时发布快照和离线打包工作目录
+/.cache/mmd-ar-publish-*/
+/.offline-build-stale/
+/offline-build-tmp.*/
+
+# Android 本机编译缓存
+/3rd/tts-server/android-asr/.kotlin/
+/src/apps/android-display/app/.cxx/
+
+# APK profile 的构建中间目录；保留同级 app.json 配置
+/release/apkbuild/*/gradle/
+/release/apkbuild/*/output/
+/release/apkbuild/*/runtime/
+/release/apkbuild/*/package/
+
+# Offline 更新包构建输出和 Node 编译缓存
+/release/offline-update/output*/
+/release/offline-update/node-compile-cache/
 
 # 正式MMD动作与固定MPL编译资源由prepare:mmd-production校验生成，服务包仍必须收录
 /src/apps/web-mediacenter/ui/public/mmd/

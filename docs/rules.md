@@ -95,6 +95,13 @@ PORT=3000 npm start
 - 对应文件名为 `allserver-min.js`、`aasc-display-noserver.apk`、`aasc-display-withserver.apk`。每次修改启动器或重新构建这两种 APK profile 后，上传对应文件，并核对公网 HTTP 状态、大小和 SHA-256 与本地一致。
 - 这些是独立部署资源，不包含在签名 `manifest.json` 的服务代码 ZIP 中；发布服务代码包或更新 `nodeMinSeeds` 不会代替它们的独立上传。
 
+## 构建产物与本地缓存
+
+- `.gitignore` 只忽略明确的构建输出、下载缓存和临时目录；不对 `release/`、`build/`、`.cache/`、模型或任务输入目录作整树忽略。
+- `release/apkbuild/<profile>/app.json` 是受版本控制的打包配置；各 profile 的 `gradle/`、`output/`、`runtime/`、`package/` 是本机生成目录。
+- `release/config/`、`release/userconfig/`、`release/task/` 是 APK 首次启动输入种子，`release/task/*/results/` 不能作为普通构建输出忽略。
+- 已跟踪的本机缓存需从 Git 索引解除跟踪后，忽略规则才能生效；使用 `git rm --cached` 时保留本地文件，不删除用户数据。其余已跟踪文件不因新增忽略规则而改变。
+
 ## 1. 项目结构
 
 ```

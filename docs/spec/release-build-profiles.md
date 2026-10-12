@@ -179,6 +179,31 @@ release/apkbuild/<profile>/:
 
 构建过程使用临时目录完成原子替换；不同 profile 不共享 package、assets、Gradle cache 或最终 APK 文件。
 
+## Git 忽略的构建缓存与输出
+
+```text
+gitIgnoreGeneratedArtifacts:
+    忽略 release/apkbuild/<profile> 下的 gradle/、output/、runtime/、package/
+    忽略 release/offline-update 下的 output*/ 和 node-compile-cache/
+    忽略根目录离线构建临时目录、build/third_party/ 下载缓存
+    忽略 Android app/.cxx/ 与独立 ASR APK 的 .kotlin/ 构建缓存
+    忽略命名为 mmd-ar-publish-* 的 .cache 发布快照，不忽略其他 .cache 内容
+
+preservePackageInputs:
+    保留 release/apkbuild/<profile>/app.json
+    保留 release/config/、release/userconfig/、release/task/ 及其 results/ 输入
+    保留 res/models/ 模型文件和测试样本
+    保留可能包含源码、审计或用户数据的其他缓存与临时文件
+
+untrackExistingLocalCaches:
+    对已纳入 Git 的 Android app/.cxx/ 与 tmp/puppeteer_dev_chrome_profile-*/
+        只从 Git 索引移除
+        本地存在的文件保持不变
+    其他已跟踪文件不随忽略规则解除跟踪
+```
+
+忽略规则按构建器实际输出目录精确限定，不忽略整个 `release/`、`build/`、`.cache/` 或模型目录。仓库根目录现有 `/tmp/` 规则覆盖 Puppeteer 临时 profile。
+
 ## noserver 行为
 
 ```text

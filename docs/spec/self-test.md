@@ -1,5 +1,15 @@
 # 自测功能实现文档
 
+## Git 构建产物忽略检查（2026-10-12）
+
+```text
+git check-ignore -v --no-index -> profile 的 gradle/output/runtime/package、offline-update output*/编译缓存、第三方构建缓存与临时目录均命中
+git check-ignore -v --no-index -> release/apkbuild/<profile>/app.json、release/task/*/results、模型、普通 .cache 文件均不命中
+git ls-files --error-unmatch -> .cxx 与 Puppeteer profile 在解除跟踪后不再由索引跟踪
+文件系统检查 -> .cxx/Puppeteer 本地目录仍存在；仅列出其已跟踪项的待提交索引删除，不列出缓存文件为未跟踪项
+其他工作区修改保持原样；不运行 APK、服务包或模型同步脚本
+```
+
 ## 正式面板分类标题透明度自测（2026-10-12）
 
 ```text

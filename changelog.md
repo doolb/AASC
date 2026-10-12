@@ -1,3 +1,10 @@
+### 构建产物与本机缓存忽略
+
+- ✅ [2026-10-12] 为 APK/Offline 构建输出和本机编译缓存新增精确 Git 忽略规则。
+  - 更新 `.gitignore` 与 Release profile design/spec；规则覆盖 APK profile 的 `gradle/output/runtime/package`、Offline `output*`/Node 编译缓存、`build/third_party`、Android `.cxx`/Kotlin、离线临时目录及 `mmd-ar-publish-*` 快照。
+  - 从 Git 索引解除已跟踪的 `.cxx` 和 Puppeteer profile 共 232 项，保留本地文件；显式保留 profile `app.json`、`release/task` 结果、模型、普通 `.cache` 文件和未知 release 文件。
+  - 更新项目规则、自测文档和任务记录；`docs/todo.md` 中的临时进行中条目在完成后移除。验证规则命中、保护路径未命中、本地缓存留存、其他工作区改动可见及 `git diff --check`。待提交的缓存索引删除由用户确认，未提交或清理工作区。
+
 ### AI模型外网发布与双向同步
 
 - ✅ [2026-10-12] Offline同步新增可选aimodel镜像：默认不请求模型，`-aimodel`/`--aimodel`开启后同步同级全部模型和根manifest，watch逐轮复用。

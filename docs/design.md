@@ -152,4 +152,4 @@
 | 动态画面填充模式 | [dynamic-fit-mode.md](design/dynamic-fit-mode.md) | 适应与铺满循环过渡、控制端时间配置 |
 | 服务器发布包 | [server-release.md](design/server-release.md) | npm 显式生成服务器发布包、清单读取和子服务器更新边界 |
 | Node Offline min 跨平台热更新入口 | [offline-node-min-runtime.md](design/offline-node-min-runtime.md) | Windows/Linux 单文件入口、签名下载 release 种子与 code 更新、失败回滚 |
-| Release 配置与 APK 构建 profile | [release-build-profiles.md](design/release-build-profiles.md) | release 服务器配置、任务结果恢复、三种 APK profile 和模型/功能选择 |
+| Release 配置与 APK 构建 profile | [release-build-profiles.md](design/release-build-profiles.md) | release 服务器配置、任务结果恢复、三种 APK profile、模型选择与构建产物忽略边界 |

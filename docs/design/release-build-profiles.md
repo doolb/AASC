@@ -55,6 +55,12 @@ APK 构建生成的 `output/build-manifest.json` 记录 `source.gitCommit` 完�
 - `release/task` 的定义、实例索引、日志和输出进入 APK 的运行目录；安装后这些目录变为可写运行数据。Android assets 不支持隐藏文件和软链接时，`.task-links.json`、`results/latest` 使用 marker，在首次安装后恢复。
 - `noserver` 不生成服务器运行包、Runtime、任务和模型资产，仅读取自己的 `app.json`，保留显示端访问主服务器的能力；因此不要求 release 服务器任务目录可用。
 
+## Git 忽略的构建缓存与输出
+
+Git 忽略规则覆盖 APK profile 的 Gradle 缓存、运行时暂存、服务器 package 中间目录和 APK 输出，以及 Offline 更新包的版本化构建输出与编译缓存。另忽略 Android `.cxx` / Kotlin 本机缓存、下载到 `build/third_party` 的构建依赖和离线打包临时目录。
+
+规则仅匹配构建器生成的子目录，并按 `mmd-ar-publish-*` 前缀限定发布快照；不得因此忽略整个 `release/`、`build/` 或 `.cache/`。Profile 配置 `app.json`、`release/config`、`release/userconfig`、`release/task` 及其用于首次启动恢复的结果、模型与测试样本继续保持可见。已跟踪的 Android `.cxx` 和 Puppeteer 临时 profile 只从 Git 索引移除，本机副本不删除；根目录 `/tmp/` 规则继续覆盖 Puppeteer profile。
+
 ## 失败处理与兼容性
 
 - profile 配置 JSON、模型 ID、任务结果索引格式或 release 输入目录无效时，构建阶段失败并说明具体路径。
