@@ -37,9 +37,9 @@ test('编辑器姿态/动作跳转清TAA历史，图片捕获绕过并恢复绘�
 
 test('渲染设置规范化，倍率以自动DPR为基准并按设备上限等比限制', async () => {
     const { normalizeRenderSettings: normalize, calculateCanvasSize: size } = await import('../3rd/mmd-ar-test/web-render-settings.mjs');
-    assert.deepEqual(normalize({}), { taaEnabled: false, aaMode: 'taa', fsr2Scale: .67, taaHistoryWeight: .9, canvasScale: 1, taaJitterScale: 1, taaJitterSamples: 8 });
+    assert.deepEqual(normalize({}), { taaEnabled: false, aaMode: 'taa', fsr2Scale: .67, fsr2ReconstructionScale: 1, taaHistoryWeight: .9, canvasScale: 1, taaJitterScale: 1, taaJitterSamples: 8 });
     assert.deepEqual(normalize({ taaEnabled: true, taaHistoryWeight: 9, canvasScale: .61 }),
-        { taaEnabled: true, aaMode: 'taa', fsr2Scale: .67, taaHistoryWeight: .95, canvasScale: .5, taaJitterScale: 1, taaJitterSamples: 8 });
+        { taaEnabled: true, aaMode: 'taa', fsr2Scale: .67, fsr2ReconstructionScale: 1, taaHistoryWeight: .95, canvasScale: .5, taaJitterScale: 1, taaJitterSamples: 8 });
     assert.equal(normalize({ canvasScale: -1 }).canvasScale, .25);
     assert.equal(normalize({ canvasScale: '', taaHistoryWeight: 'bad' }).canvasScale, 1);
     assert.equal(normalize({ aaMode: 'fsr2', fsr2Scale: .734 }).fsr2Scale, .73);

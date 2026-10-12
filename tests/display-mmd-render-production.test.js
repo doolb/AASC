@@ -26,7 +26,7 @@ test('正式渲染参数默认关闭、倍率硬件上限与独立存储', async
     assert.equal(normalizeScreenLightingSettings({}).contactEnabled, false);
     assert.equal(normalizeScreenLightingSettings({}).giEnabled, false);
     assert.deepEqual(normalizeRenderSettings({ canvasScale: 8, taaJitterScale: -1, taaJitterSamples: 6 }),
-        { taaEnabled: false, aaMode: 'taa', fsr2Scale: .67, canvasScale: 2, taaHistoryWeight: .9, taaJitterScale: 0, taaJitterSamples: 8 });
+        { taaEnabled: false, aaMode: 'taa', fsr2Scale: .67, fsr2ReconstructionScale: 1, canvasScale: 2, taaHistoryWeight: .9, taaJitterScale: 0, taaJitterSamples: 8 });
     const limited = calculateCanvasSize(1000, 500, 2, 2, 1024);
     assert.deepEqual([limited.width, limited.height, limited.limited], [1024, 512, true]);
 });
@@ -76,6 +76,8 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
             set('data-render-setting', 'taaJitterSamples', 16);
             set('data-render-setting', 'aaMode', 'fsr2');
             set('data-render-setting', 'fsr2Scale', .5);
+            set('data-render-setting', 'taaEnabled', true);
+            set('data-render-setting', 'fsr2ReconstructionScale', 2);
             set('data-screen-lighting', 'contactEnabled', true);
             set('data-screen-lighting', 'giEnabled', true);
             const toggle = document.querySelector('#mmdArTemporalAA [data-render-group]');
@@ -89,6 +91,7 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         assert.equal(controls.render.taaJitterSamples, 16);
         assert.equal(controls.render.aaMode, 'fsr2');
         assert.equal(controls.render.fsr2Scale, .5);
+        assert.equal(controls.render.fsr2ReconstructionScale, 2);
         assert.equal(controls.lighting.contactEnabled, true);
         assert.equal(controls.open, true);
         assert.equal(controls.duplicateIds, false);
@@ -96,7 +99,8 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         assert.equal(controls.voice, true);
         await page.reload();
         await page.waitForFunction(() => window.DisplayMmdRenderSettings?.canvasScale === .5
-            && window.DisplayMmdRenderSettings?.aaMode === 'fsr2' && window.DisplayMmdRenderSettings?.fsr2Scale === .5);
+            && window.DisplayMmdRenderSettings?.aaMode === 'fsr2' && window.DisplayMmdRenderSettings?.fsr2Scale === .5
+            && window.DisplayMmdRenderSettings?.fsr2ReconstructionScale === 2);
         const runtime = await page.evaluate(async () => {
             const { createDisplayPmxRuntime } = await import('/js/display-pmx-runtime.js');
             const canvas = document.getElementById('displayMmdCanvas');
@@ -118,7 +122,7 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         });
         assert.deepEqual(runtime.after.cameraPosition, runtime.before.cameraPosition);
         assert.deepEqual(runtime.after.cameraQuaternion, runtime.before.cameraQuaternion);
-        assert.deepEqual(runtime.size, [160, 240]);
+        assert.deepEqual(runtime.size, [320, 480]);
         const gpu = await page.evaluate(async () => {
             const THREE = await import('three');
             const { createPmxAmbientOcclusion } = await import('/js/display-pmx-ao.mjs');
@@ -138,6 +142,10 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
             window.DisplayMmdRenderSettings = { ...window.DisplayMmdRenderSettings, aaMode: 'fsr2', fsr2Scale: .5 };
             ao.render(); const fsr2First = ao.getTemporalState();
             ao.render(); const fsr2Accumulated = ao.getTemporalState();
+            window.DisplayMmdRenderSettings = { ...window.DisplayMmdRenderSettings, fsr2ReconstructionScale: 2 };
+            renderer.setSize(130, 194); ao.render(); const reconstructed = ao.getTemporalState();
+            window.DisplayMmdRenderSettings = { ...window.DisplayMmdRenderSettings, fsr2ReconstructionScale: 1 };
+            renderer.setSize(65, 97);
             // 观察实际场景目标，确保空间合成的深度/颜色真正降采样，不能只检查TAA内部目标。
             const originalRender = renderer.render, sceneSizes = [];
             renderer.render = function(nextScene, nextCamera) {
@@ -153,12 +161,14 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
             ao.invalidateTemporal(); const reset = ao.getTemporalState();
             window.DisplayMmdRenderSettings = { taaEnabled: false }; ao.render(); const closed = ao.getTemporalState();
             ao.dispose(); mesh.geometry.dispose(); mesh.material.dispose(); renderer.dispose();
-            return { accumulated, fsr2First, fsr2Accumulated, sceneSizes, bypassed, resumed, switched, reset, closed,
+            return { accumulated, fsr2First, fsr2Accumulated, reconstructed, sceneSizes, bypassed, resumed, switched, reset, closed,
                 opaque: pixels.filter((value, index) => index % 4 === 3 && value > 0).length, error: gl.getError() };
         });
         assert.equal(gpu.accumulated.lastHistoryUsed, true);
         assert.equal(gpu.fsr2First.lastHistoryUsed, false);
         assert.equal(gpu.fsr2Accumulated.lastHistoryUsed, true);
+        assert.deepEqual([gpu.reconstructed.inputWidth, gpu.reconstructed.inputHeight, gpu.reconstructed.width, gpu.reconstructed.height], [32, 48, 130, 194]);
+        assert.equal(gpu.reconstructed.lastHistoryUsed, false);
         assert.deepEqual([gpu.fsr2Accumulated.inputWidth, gpu.fsr2Accumulated.inputHeight,
             gpu.fsr2Accumulated.width, gpu.fsr2Accumulated.height], [32, 48, 65, 97]);
         assert.deepEqual(gpu.sceneSizes, [[32, 48], [65, 97], [32, 48], [65, 97]]);
@@ -178,6 +188,7 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         assert.equal(reset.render.taaEnabled, false);
         assert.equal(reset.render.aaMode, 'taa');
         assert.equal(reset.render.fsr2Scale, .67);
+        assert.equal(reset.render.fsr2ReconstructionScale, 1);
         assert.equal(reset.screen.contactEnabled, false);
         assert.equal(reset.screen.giEnabled, false);
         assert.deepEqual(errors, []);

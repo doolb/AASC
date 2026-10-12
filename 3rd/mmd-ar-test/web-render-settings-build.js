@@ -23,21 +23,21 @@ async function stage(root) {
         const settings = normalizeRenderSettings(window.MmdArRenderSettings);
         const upscale = camera.userData.mmdArTaaUpscaleActive === true && camera.userData.mmdArTaaBypass !== true && !normalPreview && renderer.capabilities.isWebGL2 === true;
         const outputSize = renderer.getDrawingBufferSize(new THREE.Vector2());
-        const internalScale = upscale ? settings.fsr2Scale : 1;
-        const internalWidth = Math.max(1, Math.floor(outputSize.x * internalScale));
-        const internalHeight = Math.max(1, Math.floor(outputSize.y * internalScale));
+        const [internalWidth, internalHeight] = upscale
+            ? calculateTemporalInputSize(outputSize.x, outputSize.y, settings, camera.userData.mmdArRenderSize)
+            : [outputSize.x, outputSize.y];
         if (fullWidth !== internalWidth || fullHeight !== internalHeight) resize(internalWidth, internalHeight);`);
     if (ao.includes('/* aasc-shared:render-settings */')) {
         await require('./web-production-shared').reuseRenderStage(root, ['web-temporal-aa.mjs', 'web-render-settings.mjs']);
         ao = await fs.readFile(aoPath, 'utf8');
         if (!ao.includes('/* aasc-shared:fsr2-internal-size */')) {
-            ao = `import { normalizeRenderSettings } from '${settingsUrl}';\n` + withInternalSize(ao);
+            ao = `import { normalizeRenderSettings, calculateTemporalInputSize } from '${settingsUrl}';\n` + withInternalSize(ao);
             ao = once(ao, 'bypass: options.bypassTemporal === true ||', 'bypass: camera.userData.mmdArTaaBypass === true || options.bypassTemporal === true ||');
             await fs.writeFile(aoPath, ao);
         }
         return;
     }
-    ao = `import { createTemporalAA } from '${await url('web-temporal-aa.mjs')}';\nimport { normalizeRenderSettings } from '${settingsUrl}';\n` + ao;
+    ao = `import { createTemporalAA } from '${await url('web-temporal-aa.mjs')}';\nimport { normalizeRenderSettings, calculateTemporalInputSize } from '${settingsUrl}';\n` + ao;
     ao = once(ao, '    let resources = null;', '    let resources = null;\n    let temporalContentKey = "";\n    const temporalAA = createTemporalAA({ THREE, renderer, camera });');
     ao = once(ao, '    const render = () => {', '    const renderSpatial = () => {');
     ao = withInternalSize(ao);
@@ -59,10 +59,11 @@ async function stage(root) {
     await fs.writeFile(aoPath, ao);
     const runtimePath = path.join(folder, 'display-pmx-runtime.js');
     let runtime = await fs.readFile(runtimePath, 'utf8');
-    runtime = `import { calculateCanvasSize } from '${settingsUrl}';\nimport { runTemporalAction } from '${await url('web-temporal-aa.mjs')}';\n` + runtime;
+    runtime = `import { calculateRenderSize } from '${settingsUrl}';\nimport { runTemporalAction } from '${await url('web-temporal-aa.mjs')}';\n` + runtime;
     runtime = once(runtime, 'const pixelRatio = Math.min(2, Math.max(1, Number(devicePixelRatio) || 1));', `const gl = renderer.getContext();
         const limit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
-        const renderSize = calculateCanvasSize(safeWidth, safeHeight, devicePixelRatio, window.MmdArRenderSettings?.canvasScale, limit);
+        const renderSize = calculateRenderSize(safeWidth, safeHeight, devicePixelRatio, window.MmdArRenderSettings, limit, renderer.capabilities.isWebGL2 === true);
+        camera.userData.mmdArRenderSize = renderSize;
         const pixelRatio = renderSize.pixelRatio;
         window.MmdArRenderInfo = { taaSupported: renderer.capabilities.isWebGL2 === true, ...renderSize };
         window.dispatchEvent(new Event('mmd-ar-render-capability'));`);
@@ -86,6 +87,8 @@ function panel($) {
       <div id="mmdArTemporalAABody" class="mmd-ar-panel-group-body" hidden>
         <label class="mind-basic-field"><span>抗锯齿方式</span><select data-render-setting="aaMode"><option value="taa" selected>TAA</option><option value="fsr2">FSR2（无运动矢量）</option></select></label>
         <label class="mind-basic-field"><span>FSR2内部渲染比例 <output data-render-value="fsr2Scale">0.67×</output></span><input type="range" data-render-setting="fsr2Scale" min="0.5" max="1" step="0.01" value="0.67"></label>
+        <label class="mind-basic-field"><span>FSR输出重建倍率</span><select data-render-setting="fsr2ReconstructionScale"><option value="1" selected>1×（原输出）</option><option value="2">2×</option><option value="4">4×</option></select></label>
+        <p class="mind-basic-note">Canvas倍率控制基础尺寸；内部比例控制场景输入；重建倍率提高输出尺寸，并增加GPU与显存成本。</p>
         <label class="mind-basic-field"><span>TAA累积强度 <output data-render-value="taaHistoryWeight">0.90</output></span><input type="range" data-render-setting="taaHistoryWeight" min="0" max="0.95" step="0.05" value="0.9"></label>
         <label class="mind-basic-field"><span>抖动强度 <output data-render-value="taaJitterScale">1.00</output></span><input type="range" data-render-setting="taaJitterScale" min="0" max="2" step="0.05" value="1"></label>
         <label class="mind-basic-field"><span>抖动周期</span><select data-render-setting="taaJitterSamples"><option value="4">4帧</option><option value="8" selected>8帧</option><option value="16">16帧</option><option value="32">32帧</option></select></label>

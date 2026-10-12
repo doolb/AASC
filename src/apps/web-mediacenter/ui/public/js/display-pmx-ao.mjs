@@ -1,4 +1,4 @@
-import { normalizeRenderSettings } from './mmd-render-settings.mjs';
+import { normalizeRenderSettings, calculateTemporalInputSize } from './mmd-render-settings.mjs';
 import { createTemporalAA } from './mmd-temporal-aa.mjs';
 import { createScreenLighting } from './mmd-screen-lighting.mjs';
 import { compositeChunk } from './mmd-screen-lighting-shader.mjs';
@@ -689,13 +689,13 @@ export function createPmxAmbientOcclusion({ THREE, renderer, scene, camera, keyL
     const renderSpatial = () => {
         const normalPreview = window.MmdArTestNormalPreview === true;
         /* aasc-shared:fsr2-internal-size */
-        // 只缩小场景输入；历史和输出保持实际Canvas尺寸，旁路绘制恢复完整尺寸。
+        // 时域与AO共用独立输入尺寸；输出重建倍率不抬高场景成本，旁路使用请求尺寸。
         const settings = normalizeRenderSettings(window.DisplayMmdRenderSettings);
         const upscale = camera.userData.mmdArTaaUpscaleActive === true && camera.userData.mmdArTaaBypass !== true && !normalPreview && renderer.capabilities.isWebGL2 === true;
         const outputSize = renderer.getDrawingBufferSize(new THREE.Vector2());
-        const internalScale = upscale ? settings.fsr2Scale : 1;
-        const internalWidth = Math.max(1, Math.floor(outputSize.x * internalScale));
-        const internalHeight = Math.max(1, Math.floor(outputSize.y * internalScale));
+        const [internalWidth, internalHeight] = upscale
+            ? calculateTemporalInputSize(outputSize.x, outputSize.y, settings, camera.userData.mmdArRenderSize)
+            : [outputSize.x, outputSize.y];
         if (fullWidth !== internalWidth || fullHeight !== internalHeight) resize(internalWidth, internalHeight);
         if ((!enabled && !normalPreview && !screenLighting.active() && !temporalAA.active()) || !supported) {
             screenLighting.dispose();

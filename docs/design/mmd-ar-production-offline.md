@@ -144,3 +144,7 @@ PMX 首次提交后第一个实际渲染帧只更新物理、不绘制角色，�
 签名服务代码包v63已生成：release/offline-update/output-mmd-actions-v63/code/code-v63.zip（4679716字节，SHA-256 b934bf59301820d064d3802ea3b927634f5bb499f091af00e882cb3a62a7c77c），清单manifests/manifest-code-v63.json。516个包内文件逐字节匹配提交5ffa489c的构建快照，ZIP CRC、大小/SHA-256、RSA签名与组件约束通过；dependencies6、Node-min种子39、min APK34、dataRepair2引用沿用。模型资源、固定编译器/许可证与口型字典均齐全。未发布LAN/WAN或构建APK/依赖包。
 
 servicePackage保持true：本次MMD全部收入v63，但工作区其他未提交显示/TTS源码有意未收录，按‘产物未覆盖最新代码时保持true’规则保留全局待出包标记；minApk=true、dependenciesPackage=false保持。包清单gitDirty=true记录原工作区状态，实际包源来自已提交快照并逐文件验证。Android WebView观感与实际帧时另列待验收。
+
+## 2026-10-12 FSR输出重建倍率（已实现，未发布）
+
+正式与独立PMX渲染同步1/2/4倍输出重建、默认1；存储键继续隔离。内部比例按基础Canvas尺寸计算输入，输出与历史独立升采样；上限限制不反向降低输入。新增控件仅在FSR开启时可操作，真实输入/输出像素可见；现有预设/localStorage/刷新/复位沿用，不增加HTTP或远端配置流程。普通TAA、关闭/不支持WebGL2与PNG请求尺寸保持原语义。正式控件保存/刷新/复位与实际PMX及AO/时域组合已验证；网页热更新代码影响服务包，servicePackage=true原值保持，既有min APK与依赖状态不变。未构建发布任何APK/服务包。

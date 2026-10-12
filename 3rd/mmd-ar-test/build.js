@@ -429,7 +429,7 @@ async function stageTextAssets() {
       let previousWidth = 0;
       let previousHeight = 0;
       let previousPixelRatio = 0;
-      let previousCanvasScale = 0;
+      let previousRenderKey = '';
       let resizeFrame = 0;
       const applyStageSize = () => {
         resizeFrame = 0;
@@ -448,11 +448,13 @@ async function stageTextAssets() {
           'min(620px, calc(' + height + 'px - var(--mmd-ar-safe-inset-top) - var(--mmd-ar-safe-inset-bottom) - 24px))');
         const pixelRatio = Math.min(2, Math.max(1, Number(window.devicePixelRatio) || 1));
         const canvasScale = window.MmdArRenderSettings?.canvasScale || 1;
-        if (width !== previousWidth || height !== previousHeight || pixelRatio !== previousPixelRatio || canvasScale !== previousCanvasScale) {
+        const s = window.MmdArRenderSettings;
+        const renderKey = JSON.stringify([canvasScale, s?.taaEnabled, s?.aaMode, s?.fsr2Scale, s?.fsr2ReconstructionScale]);
+        if (width !== previousWidth || height !== previousHeight || pixelRatio !== previousPixelRatio || renderKey !== previousRenderKey) {
           previousWidth = width;
           previousHeight = height;
           previousPixelRatio = pixelRatio;
-          previousCanvasScale = canvasScale;
+          previousRenderKey = renderKey;
           window.DisplayMmd.resize(width, height);
         }
       };

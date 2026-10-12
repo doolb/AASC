@@ -457,3 +457,16 @@ npm build:offline-update → code-only v63，复用现有依赖/种子/min/dataR
 minApk=true、dependenciesPackage=false → 原状态保持
 发布 → 本任务不替换LAN/WAN清单；Android视觉/性能后续验收
 ```
+
+## 2026-10-12 FSR输出重建倍率（已实现，未发布）
+
+```text
+正式设置归一 → fsr2ReconstructionScale=1/2/4，默认及旧存储迁移1
+Canvas基础尺寸×内部比例 → FSR场景输入；Canvas基础尺寸×重建倍率 → 独立输出
+仅FSR开启且WebGL2可用应用重建倍率；输出限制不反向缩小输入
+运行时尺寸元数据 → 时域与AO取相同基础/输入尺寸；输出与历史使用真实Canvas尺寸
+设置变化 → 重算输出、清历史，保存/刷新/复位走既有正式render存储与预设
+PNG/普通TAA/关闭 → 旧旁路及基础尺寸语义；状态呈现实际输入/输出与上限
+```
+
+具体字段与尺寸边界见独立渲染spec同日章节；网页代码变更保持servicePackage=true，min APK与依赖状态不另改。先测试后实施，当前未发布。

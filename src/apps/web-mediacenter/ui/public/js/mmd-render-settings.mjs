@@ -1,13 +1,15 @@
 // 正式显示端渲染设置：与独立测试页分开保存，范围与渲染算法保持一致。
-export const defaults = Object.freeze({ taaEnabled: false, aaMode: 'taa', fsr2Scale: .67, taaHistoryWeight: .9, canvasScale: 1, taaJitterScale: 1, taaJitterSamples: 8 });
+export const defaults = Object.freeze({ taaEnabled: false, aaMode: 'taa', fsr2Scale: .67, fsr2ReconstructionScale: 1, taaHistoryWeight: .9, canvasScale: 1, taaJitterScale: 1, taaJitterSamples: 8 });
 export const jitterSampleCounts = Object.freeze([4, 8, 16, 32]);
 export const storageKey = 'aasc.display.mmd.render.v1';
 const number = (raw, fallback, min, max) => raw == null || raw === '' || typeof raw === 'boolean' || !Number.isFinite(Number(raw))
     ? fallback : Math.min(max, Math.max(min, Number(raw)));
 export function normalizeRenderSettings(input) {
     const samples = number(input?.taaJitterSamples, 8, -Infinity, Infinity);
+    const reconstruction = number(input?.fsr2ReconstructionScale, 1, -Infinity, Infinity);
     return { taaEnabled: input?.taaEnabled === true, aaMode: input?.aaMode === 'fsr2' ? 'fsr2' : 'taa',
         fsr2Scale: Math.round(number(input?.fsr2Scale, .67, .5, 1) * 100) / 100,
+        fsr2ReconstructionScale: [1, 2, 4].includes(reconstruction) ? reconstruction : 1,
         taaHistoryWeight: number(input?.taaHistoryWeight, .9, 0, .95),
         canvasScale: Math.round(number(input?.canvasScale, 1, .25, 2) * 4) / 4,
         taaJitterScale: number(input?.taaJitterScale, 1, 0, 2),
@@ -21,6 +23,34 @@ export function calculateCanvasSize(width, height, dpr, scale, limit = 8192) {
     const ratio = Math.min(requestedRatio, safeLimit / Math.max(cssWidth, cssHeight));
     return { width: Math.max(1, Math.floor(cssWidth * ratio)), height: Math.max(1, Math.floor(cssHeight * ratio)),
         pixelRatio: ratio, limited: ratio < requestedRatio, automaticDpr };
+}
+/**
+ * 场景基准保持Canvas倍率；仅FSR把呈现画布独立放大。
+ * 输出限制单独计算，避免低显存设备限制输出时反向改变场景采样量。
+ */
+export function calculateRenderSize(width, height, dpr, settings, limit = 8192, supported = true) {
+    const config = normalizeRenderSettings(settings), base = calculateCanvasSize(width, height, dpr, config.canvasScale, limit);
+    const fsr = supported && config.taaEnabled && config.aaMode === 'fsr2';
+    const factor = fsr ? config.fsr2ReconstructionScale : 1;
+    const cssWidth = Math.max(1, Number(width) || 1), cssHeight = Math.max(1, Number(height) || 1);
+    const requestedRatio = base.pixelRatio * factor;
+    const ratio = Math.min(requestedRatio, Math.max(1, Math.floor(Number(limit) || 8192)) / Math.max(cssWidth, cssHeight));
+    return { ...base, width: Math.max(1, Math.floor(cssWidth * ratio)), height: Math.max(1, Math.floor(cssHeight * ratio)),
+        pixelRatio: ratio, limited: base.limited || ratio < requestedRatio, baseWidth: base.width, baseHeight: base.height,
+        inputWidth: Math.max(1, Math.floor(base.width * (fsr ? config.fsr2Scale : 1))),
+        inputHeight: Math.max(1, Math.floor(base.height * (fsr ? config.fsr2Scale : 1))) };
+}
+/**
+ * 正常运行取resize保存的实际基础尺寸；直接调用或异尺寸捕获时回退到当前输出。
+ * 只匹配当前输出的元数据，防止PNG临时尺寸套用预览场景尺寸。
+ */
+export function calculateTemporalInputSize(width, height, settings, renderSize) {
+    const config = normalizeRenderSettings(settings);
+    if (!config.taaEnabled || config.aaMode !== 'fsr2') return [width, height];
+    const matching = renderSize?.width === width && renderSize?.height === height;
+    const baseWidth = matching ? renderSize.baseWidth : Math.max(1, Math.floor(width / config.fsr2ReconstructionScale));
+    const baseHeight = matching ? renderSize.baseHeight : Math.max(1, Math.floor(height / config.fsr2ReconstructionScale));
+    return [Math.max(1, Math.floor(baseWidth * config.fsr2Scale)), Math.max(1, Math.floor(baseHeight * config.fsr2Scale))];
 }
 export function initRenderSettings() {
     const panel = document.getElementById('mmdArTemporalAA');
@@ -41,27 +71,33 @@ export function initRenderSettings() {
         document.querySelector('[data-render-value="canvasScale"]').textContent = `${value.canvasScale.toFixed(2)}×`;
         if (persist) try { localStorage.setItem(storageKey, JSON.stringify(value)); } catch (error) { /* 当前会话仍可调整。 */ }
         window.dispatchEvent(new Event('mmd-ar-render-settings'));
+        status();
     };
     for (const input of document.querySelectorAll('[data-render-setting]')) input.addEventListener('input', () => {
         value[input.dataset.renderSetting] = input.type === 'checkbox' ? input.checked : input.value;
         apply(true);
     });
-    window.DisplayMmdLightingPresetGroups ||= Object.create(null);
-    window.DisplayMmdLightingPresetGroups.render = { normalize: normalizeRenderSettings, read: () => ({ ...value }),
-        apply: next => { value = normalizeRenderSettings(next); apply(true); } };
     document.getElementById('displayMmdLightingReset')?.addEventListener('click', () => { value = { ...defaults }; apply(true); });
     const status = () => {
         const info = window.DisplayMmdRenderInfo || {};
         for (const input of panel.querySelectorAll('input, select')) input.disabled = info.taaSupported === false;
+        const reconstructionInput = panel.querySelector('[data-render-setting="fsr2ReconstructionScale"]');
+        if (reconstructionInput) reconstructionInput.disabled = info.taaSupported === false || !value.taaEnabled || value.aaMode !== 'fsr2';
         panel.querySelector('[data-taa-status]').textContent = info.taaSupported === false
             ? '当前设备不支持WebGL2，TAA/FSR2不可用。'
             : value.taaEnabled && value.aaMode === 'fsr2'
-                ? 'FSR2模式为时域升采样近似，不读取物体运动矢量；动态角色可能残影。'
+                ? `FSR2输入 ${info.inputWidth || '—'}×${info.inputHeight || '—'} → 输出 ${info.width || '—'}×${info.height || '—'}；较高重建倍率增加GPU与显存成本。`
                 : value.taaEnabled ? 'TAA多帧减少锯齿和采样闪烁；快速运动可能产生残影。' : '选择TAA或FSR2；快速运动可能产生残影。';
         document.querySelector('[data-render-limit]').textContent = info.limited ? '已按设备尺寸上限限制' : '';
     };
     window.addEventListener('mmd-ar-render-capability', status);
     apply(); status();
+    window.DisplayMmdLightingPresetGroups ||= Object.create(null);
+    window.DisplayMmdLightingPresetGroups.render = {
+        normalize: normalizeRenderSettings,
+        read: () => ({ ...value }),
+        apply: settings => { value = normalizeRenderSettings(settings); apply(true); status(); }
+    };
 }
 if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initRenderSettings, { once: true });

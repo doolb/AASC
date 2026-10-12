@@ -1,6 +1,6 @@
 import { createHumanRuntime, humanRuntimeInterfaces } from './mmd-human-runtime.mjs';
 import { createCanvasPerformance, getPhysicsTiming } from './mmd-performance.mjs';
-import { calculateCanvasSize } from './mmd-render-settings.mjs';
+import { calculateRenderSize } from './mmd-render-settings.mjs';
 import { runTemporalAction } from './mmd-temporal-aa.mjs';
 import { DEFAULT_AR_CAMERA_SETTINGS, normalizeArCameraSettings, classifyHit, disposeObject, waitForManagedLoad, normalizeModel, createModelRotationPivot } from './mmd-runtime-utils.mjs';
 import { createPmxLighting } from './mmd-lighting-runtime.mjs';
@@ -726,9 +726,10 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         const safeHeight = Math.max(1, Number(height) || window.innerHeight || 1);
         const gl = renderer.getContext();
         const limit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
-        const renderSize = calculateCanvasSize(safeWidth, safeHeight, devicePixelRatio, window.DisplayMmdRenderSettings?.canvasScale, limit);
+        const renderSize = calculateRenderSize(safeWidth, safeHeight, devicePixelRatio, window.DisplayMmdRenderSettings, limit, renderer.capabilities.isWebGL2 === true);
         const pixelRatio = renderSize.pixelRatio;
         window.DisplayMmdRenderInfo = { taaSupported: renderer.capabilities.isWebGL2 === true, ...renderSize };
+        camera.userData.mmdArRenderSize = renderSize;
         window.dispatchEvent(new Event('mmd-ar-render-capability'));
         renderer.setPixelRatio(pixelRatio);
         renderer.setSize(safeWidth, safeHeight, false);

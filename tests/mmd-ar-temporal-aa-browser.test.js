@@ -186,6 +186,77 @@ test('真实GPU FSR2模式编译并将低分辨率TAA输入升采样到输出画
     });
 });
 
+test('真实GPU FSR输出重建倍率保持低输入并改善显示尺寸斜边', { skip: !chrome, timeout: 60000 }, async context => {
+    await withBrowser(async (page, origin) => {
+        await page.goto(`${origin}/__source/package.json`);
+        const result = await page.evaluate(async () => {
+            const THREE = await import('/__source/node_modules/three/build/three.module.js');
+            const prefix = window.__testMmdRenderModulePrefix;
+            const { calculateRenderSize } = await import(`${prefix}render-settings.mjs`);
+            const { createTemporalAA } = await import(`${prefix}temporal-aa.mjs`);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
+            const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 20);
+            camera.position.z = 4; camera.updateMatrixWorld();
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, .35), new THREE.MeshBasicMaterial({ color: 0x54aadd })); scene.add(mesh);
+            const source = new THREE.WebGLRenderTarget(64, 64, { depthTexture: new THREE.DepthTexture(64, 64, THREE.UnsignedIntType) });
+            const copy = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+                uniforms: { tColor: { value: source.texture } }, vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+                fragmentShader: 'uniform sampler2D tColor;varying vec2 vUv;void main(){gl_FragColor=texture2D(tColor,vUv);}' });
+            const copyScene = new THREE.Scene(), copyGeometry = new THREE.PlaneGeometry(2, 2); copyScene.add(new THREE.Mesh(copyGeometry, copy));
+            const config = { taaEnabled: true, aaMode: 'fsr2', canvasScale: .25, fsr2Scale: 1, fsr2ReconstructionScale: 1,
+                taaHistoryWeight: 0, taaJitterScale: 0 };
+            const temporal = createTemporalAA({ THREE, renderer, camera, getSettings: () => config });
+            const display = document.createElement('canvas'); display.width = 256; display.height = 256;
+            const context = display.getContext('2d'); context.imageSmoothingEnabled = true;
+            const cases = [];
+            for (const degrees of [15, 30, 45, 60, 75, -15, -30, -45, -60, -75]) {
+                const radians = degrees * Math.PI / 180, cosine = Math.cos(radians), sine = Math.sin(radians);
+                mesh.rotation.z = radians; mesh.updateMatrixWorld();
+                const reference = new Float32Array(256 * 256);
+                // 独立几何参考覆盖；固定显示尺寸评估，同时涵盖浏览器放大后的边缘模糊。
+                for (let y = 0; y < 256; y += 1) for (let x = 0; x < 256; x += 1) {
+                    let coverage = 0;
+                    for (let sy = 0; sy < 8; sy += 1) for (let sx = 0; sx < 8; sx += 1) {
+                        const px = (x + (sx + .5) / 8) / 128 - 1, py = 1 - (y + (sy + .5) / 8) / 128;
+                        if (Math.abs(px * cosine + py * sine) < .75 && Math.abs(-px * sine + py * cosine) < .175) coverage += 1 / 64;
+                    }
+                    reference[y * 256 + x] = coverage;
+                }
+                for (const factor of [1, 2, 4]) {
+                    config.fsr2ReconstructionScale = factor;
+                    const size = calculateRenderSize(256, 256, 1, config); camera.userData.mmdArRenderSize = size;
+                    renderer.setPixelRatio(size.pixelRatio); renderer.setSize(256, 256); temporal.invalidate();
+                    let input;
+                    temporal.render(() => {
+                        const target = renderer.getRenderTarget(); input = [target.width, target.height];
+                        renderer.setRenderTarget(source); renderer.clear(); renderer.render(scene, camera);
+                        renderer.setRenderTarget(target); renderer.clear(); renderer.render(copyScene, camera);
+                    }, () => source.depthTexture);
+                    context.clearRect(0, 0, 256, 256); context.drawImage(renderer.domElement, 0, 0, 256, 256);
+                    const rgba = context.getImageData(0, 0, 256, 256).data;
+                    let error = 0;
+                    for (let index = 0; index < reference.length; index += 1) error += Math.abs(rgba[index * 4 + 3] / 255 - reference[index]);
+                    cases.push({ degrees, factor, input, output: [renderer.domElement.width, renderer.domElement.height],
+                        error: error / reference.length, centerAlpha: rgba[(128 * 256 + 128) * 4 + 3] });
+                }
+            }
+            const glError = renderer.getContext().getError();
+            temporal.dispose(); source.dispose(); copy.dispose(); copyGeometry.dispose(); mesh.geometry.dispose(); mesh.material.dispose(); renderer.dispose();
+            return { cases, glError };
+        });
+        const mean = factor => result.cases.filter(item => item.factor === factor).reduce((sum, item) => sum + item.error, 0) / 10;
+        context.diagnostic(JSON.stringify({ errors: [1, 2, 4].map(factor => ({ factor, mean: mean(factor) })), cases: result.cases }));
+        for (const item of result.cases) {
+            assert.deepEqual(item.input, [64, 64], '所有重建档位必须保持0.25场景输入');
+            assert.deepEqual(item.output, [64 * item.factor, 64 * item.factor]);
+            assert.equal(item.centerAlpha, 255);
+        }
+        assert.ok(mean(2) < mean(1), '2倍重建的显示尺寸斜边覆盖误差应降低');
+        assert.ok(mean(4) < mean(1), '4倍重建的显示尺寸斜边覆盖误差应降低');
+        assert.equal(result.glError, 0);
+    });
+});
+
 test('真实GPU FSR2覆盖重建保持像素中心与多角度轮廓面积', { skip: !chrome, timeout: 60000 }, async context => {
     await withBrowser(async (page, origin) => {
         await page.goto(`${origin}/__source/package.json`);
@@ -318,7 +389,8 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
             await page.setViewport({ width: 320, height: 400, deviceScaleFactor: dpr });
             for (const scale of [.25, .5, 1, 1.5, 2]) { await update('canvasScale', scale); await size(320 * dpr * scale, 400 * dpr * scale); }
         }
-        await update('canvasScale', .5); await update('taaEnabled', true);
+        // 真实灯光预设会覆盖历史强度；固定本夹具的输入，避免依赖默认预设取值。
+        await update('taaHistoryWeight', .9); await update('canvasScale', .5); await update('taaEnabled', true);
         await size(320, 400);
         const picture = await page.evaluate(async () => {
             const bridge = window.DisplayMmd.getEditorBridge(), c = bridge.context;
@@ -427,6 +499,27 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         assert.deepEqual([fsr2.state.inputWidth, fsr2.state.inputHeight], [160, 200]);
         assert.equal(fsr2.state.lastHistoryUsed, true); assert.equal(fsr2.error, 0);
         assert.ok(fsr2.pixel[3] > 100, 'FSR2输出分辨率画布必须存在模型画面');
+        await update('canvasScale', .25); await update('fsr2Scale', 1);
+        const reconstructedSizes = [];
+        for (const factor of [1, 2, 4]) {
+            await update('fsr2ReconstructionScale', factor); await size(160 * factor, 200 * factor);
+            reconstructedSizes.push(await page.evaluate(() => {
+                const c = window.DisplayMmd.getEditorBridge().context, sceneTargets = [], original = c.renderer.render;
+                c.renderer.render = function(scene, camera, ...args) {
+                    if (scene === c.scene) sceneTargets.push([this.getRenderTarget()?.width, this.getRenderTarget()?.height]);
+                    return original.call(this, scene, camera, ...args);
+                };
+                try { c.ambientOcclusion.render(); } finally { c.renderer.render = original; }
+                return { state: c.ambientOcclusion.getTemporalState(), sceneTargets, error: c.renderer.getContext().getError() };
+            }));
+        }
+        for (let index = 0; index < reconstructedSizes.length; index += 1) {
+            const factor = [1, 2, 4][index], observed = reconstructedSizes[index];
+            assert.deepEqual([observed.state.inputWidth, observed.state.inputHeight], [160, 200]);
+            assert.deepEqual([observed.state.width, observed.state.height], [160 * factor, 200 * factor]);
+            assert.ok(observed.sceneTargets.length > 0 && observed.sceneTargets.every(([width, height]) => width === 160 && height === 200), '真实场景输入不能随重建倍率提高');
+            assert.equal(observed.error, 0);
+        }
         const fsr2Capture = await page.evaluate(async () => {
             const bridge = window.DisplayMmd.getEditorBridge(), c = bridge.context;
             const before = [c.renderer.domElement.width, c.renderer.domElement.height], originalRender = c.renderer.render, sceneTargets = [];
@@ -447,13 +540,13 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         assert.deepEqual(fsr2Capture.size, [160, 200]); assert.deepEqual(fsr2Capture.after, fsr2Capture.before);
         assert.ok(fsr2Capture.sceneTargets.some(([width, height, targetWidth, targetHeight]) =>
             width === 160 && height === 200 && targetWidth === 160 && targetHeight === 200), '导出场景必须用请求尺寸绘制');
-        assert.ok(!fsr2Capture.sceneTargets.some(([width, height, targetWidth, targetHeight]) =>
-            width === 160 && height === 200 && targetWidth === 80 && targetHeight === 100), '导出不能再应用FSR2内部比例');
+        assert.ok(fsr2Capture.sceneTargets.filter(([width, height]) => width === 160 && height === 200)
+            .every(([, , targetWidth, targetHeight]) => targetWidth === 160 && targetHeight === 200), 'PNG读取期间所有帧都不能叠乘内部比例或重建倍率');
         const fsr2Timing = { scale: .5, mode: 'fsr2', input: `${fsr2.state.inputWidth}x${fsr2.state.inputHeight}`,
             output: `${fsr2.state.width}x${fsr2.state.height}`, medianMs: fsr2.medianMs, targets: fsr2.state.targetCount,
             extraBytes: fsr2.state.inputWidth * fsr2.state.inputHeight * fsr2.colorBytes
                 + fsr2.state.width * fsr2.state.height * (2 * fsr2.colorBytes + 8) };
-        await update('aaMode', 'taa'); await update('fsr2Scale', .67);
+        await update('fsr2ReconstructionScale', 1); await update('aaMode', 'taa'); await update('fsr2Scale', .67);
         const timings = [];
         for (const scale of [.5, 1, 2]) {
             await update('canvasScale', scale); await size(640 * scale, 800 * scale);
@@ -480,13 +573,17 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         context.diagnostic(`完整GPU完成耗时（软件GPU）：${JSON.stringify({ timings, fsr2Timing })}`);
         await update('canvasScale', .5); await update('taaEnabled', true); await size(320, 400);
         await update('taaJitterScale', .35); await update('taaJitterSamples', 32);
+        await update('aaMode', 'fsr2'); await update('fsr2ReconstructionScale', 2); await update('aaMode', 'taa');
+        await size(320, 400);
         await page.reload({ waitUntil: 'domcontentloaded' }); await ready(); await size(320, 400);
         assert.deepEqual(await page.evaluate(() => window.MmdArRenderSettings),
-            { taaEnabled: true, aaMode: 'taa', fsr2Scale: .67, taaHistoryWeight: .9, canvasScale: .5, taaJitterScale: .35, taaJitterSamples: 32 });
+            { taaEnabled: true, aaMode: 'taa', fsr2Scale: .67, fsr2ReconstructionScale: 2, taaHistoryWeight: .9, canvasScale: .5, taaJitterScale: .35, taaJitterSamples: 32 });
         await page.$eval('#displayMmdLightingReset', node => node.click()); await size(640, 800);
         assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaEnabled), false);
-        assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaJitterScale), 1);
+        // 恢复默认由现有灯光默认预设接管，其抖动值为0.20，不是裸render模块的1。
+        assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaJitterScale), .2);
         assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaJitterSamples), 8);
+        assert.equal(await page.evaluate(() => window.MmdArRenderSettings.fsr2ReconstructionScale), 1);
         await page.click('#displayMmdLightingToggle');
         const layout = await page.$eval('[data-render-setting="canvasScale"]', node => {
             const bounds = node.getBoundingClientRect(), panel = document.getElementById('displayMmdLightingPanel').getBoundingClientRect();

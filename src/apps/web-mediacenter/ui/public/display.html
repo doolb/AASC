@@ -561,6 +561,8 @@
       <div id="mmdArTemporalAABody" class="display-mmd-panel-group-body" hidden="">
         <label class="mind-basic-field"><span>抗锯齿方式</span><select data-render-setting="aaMode"><option value="taa" selected>TAA</option><option value="fsr2">FSR2（无运动矢量）</option></select></label>
         <label class="mind-basic-field"><span>FSR2内部渲染比例 <output data-render-value="fsr2Scale">0.67×</output></span><input type="range" data-render-setting="fsr2Scale" min="0.5" max="1" step="0.01" value="0.67"></label>
+        <label class="mind-basic-field"><span>FSR输出重建倍率</span><select data-render-setting="fsr2ReconstructionScale"><option value="1" selected>1×（原输出）</option><option value="2">2×</option><option value="4">4×</option></select></label>
+        <p class="mind-basic-note">Canvas倍率控制基础尺寸；内部比例控制场景输入；重建倍率提高输出尺寸，并增加GPU与显存成本。</p>
         <label class="mind-basic-field"><span>TAA累积强度 <output data-render-value="taaHistoryWeight">0.90</output></span><input type="range" data-render-setting="taaHistoryWeight" min="0" max="0.95" step="0.05" value="0.9"></label>
         <label class="mind-basic-field"><span>抖动强度 <output data-render-value="taaJitterScale">1.00</output></span><input type="range" data-render-setting="taaJitterScale" min="0" max="2" step="0.05" value="1"></label>
         <label class="mind-basic-field"><span>抖动周期</span><select data-render-setting="taaJitterSamples"><option value="4">4帧</option><option value="8" selected="">8帧</option><option value="16">16帧</option><option value="32">32帧</option></select></label>

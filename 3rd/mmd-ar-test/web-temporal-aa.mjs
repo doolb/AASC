@@ -1,6 +1,6 @@
 import { vertexShader, resolveShader, depthShader, presentShader } from './web-temporal-aa-shader.mjs';
 import { isCameraCut } from './web-screen-lighting.mjs';
-import { normalizeRenderSettings, jitterSampleCounts } from './web-render-settings.mjs';
+import { normalizeRenderSettings, jitterSampleCounts, calculateTemporalInputSize } from './web-render-settings.mjs';
 
 // 异步等待期间旧动作仍可绘制，提交后的再次失效防止重播同一ID复用旧姿态历史。
 export async function runTemporalAction(invalidate, action) {
@@ -75,10 +75,10 @@ export function createTemporalAA({ THREE, renderer, camera, getSettings = () => 
         }
         renderer.getDrawingBufferSize(outputSize);
         const upscaleEnabled = config.aaMode === 'fsr2';
-        const inputScale = upscaleEnabled ? config.fsr2Scale : 1;
-        inputSize.set(Math.max(1, Math.floor(outputSize.x * inputScale)), Math.max(1, Math.floor(outputSize.y * inputScale)));
+        // 输入来自基础Canvas尺寸；提高重建输出倍率不改变场景采样和jitter尺度。
+        inputSize.set(...calculateTemporalInputSize(outputSize.x, outputSize.y, config, camera.userData.mmdArRenderSize));
         create(inputSize.x, inputSize.y, outputSize.x, outputSize.y);
-        const nextSignature = `${config.aaMode}:${config.fsr2Scale}:${config.taaHistoryWeight}:${config.taaJitterScale}:${config.taaJitterSamples}:${signature}`;
+        const nextSignature = `${config.aaMode}:${config.fsr2Scale}:${config.fsr2ReconstructionScale}:${config.taaHistoryWeight}:${config.taaJitterScale}:${config.taaJitterSamples}:${signature}`;
         if (lastSignature !== nextSignature) invalidate(); lastSignature = nextSignature;
         camera.updateMatrixWorld(true); base.copy(camera.projectionMatrix); inverse.copy(camera.projectionMatrixInverse);
         if (valid && isCameraCut(previousWorld, camera.matrixWorld, previousBase, base)) invalidate();
