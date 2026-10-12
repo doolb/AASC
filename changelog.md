@@ -1,3 +1,22 @@
+### AI模型外网发布与双向同步
+
+- ✅ [2026-10-12] 已按用户确认将YOLO、ASR、全部声纹变体及分段/降噪和配套共30项、1,042,798,505字节发布至https://c.aasc.us/mnt/aimodel/，保留分类与文件名。
+  - 新增`scripts/models/ai-model-common.js`、`publish-ai-models.js`、`sync-ai-models.js`及`ai-model-catalog.json`，package.json新增上传/下载/自测命令，新增两个测试文件及usage。固定分类、流式大小/SHA-256、路径/链接保护、SSH/rsync增量暂存、失败回滚与清单最后切换；下载临时文件校验后替换，保留额外文件；不新增Git模型二进制。清单快照SHA-256 `5e8d4daae59aa6fb9bbef3b58ec75c72737f832eabbd3b2e117f3846cb1356f8`。
+  - 27/27定向测试及三个脚本语法通过；首次上传后重复发布复用30项。远端文件全量指纹与服务器回环HTTPS全30项完整检查通过（公开URL/Host/SNI、默认CA/主机名验证保持）；客户端外网目录/清单HTTP200、13项小文件完整指纹、GTCRN空目录实际下载/重复复用、本地全30项复用通过。跨WAN客户端大文件验证因下行较慢主动终止，改为上述验证，不把回环全量校验记成跨WAN全部下载。审计`.git/ai-model-publish-20261012`，首次远端暂存/备份`/home/as/a/.aimodel-publish-cvftn8sq/backup`。
+  - 正式服务代码包不带模型；普通APK按需使用默认YOLO11n与base FP32/Pyannote。实际已发布完整Offline v23在本次范围内仅内置SenseVoice/base FP32/Pyannote，已修正旧设计说明的泛化描述；上传不改API/模型加载或APK白名单，不构建发布APK/正式包、不重启服务器。Offline状态保持servicePackage=true/minApk=true/dependenciesPackage=false。design/spec/task/self-test/usage同步、todo完成项已删除；脚本/清单/文档提交推送Git，日志、模型与构建产物保留本地。
+
+### AI模型外网发布与双向同步方案
+
+- ✅ [2026-10-12] 补充30项完整文件表与体积解释：YOLO465.46MB、SenseVoice239.55MB、Zipformer49.75MB、声纹/分段287.50MB、GTCRN0.54MB，18个模型加12个配套文件共1.043GB（0.971GiB）。范围保持用户选择的全部型号/精度，代码方案仍待确认，未上传。
+
+- ✅ [2026-10-12] 完成用户指定aimodel发布范围与脚本方案核查；用户确认全部模型、支持上传和下载，现有五组30个文件1,042,798,505字节，包含YOLO各尺寸及分割PT、ASR、全部声纹变体与分段/降噪及必要配套。
+  - SSH核对/home/as/a/aimodel尚不存在，指定HTTPS目录当前404；新增design/spec/task和索引/todo，明确固定分类、大小/SHA-256清单、增量复用、暂存/原子替换与额外文件保留。按AGENTS待具体代码方案确认后新增脚本，当前未写运行代码、上传模型、构建/发布APK或修改Offline状态，未运行新测试。
+
+### ASR 测试 APK 模型 Git 状态核查
+
+- ✅ [2026-10-12] 核对独立ASR测试APK Gradle白名单、本地APK ZIP目录与Git HEAD：7个内置ONNX中6个历史模型已提交，SenseVoice主模型239,233,841字节尚未提交且被忽略，词表及SHA-256校验文件已提交。
+  - 已提交的是Zipformer encoder/decoder/joiner、ERes2Net-base FP32、Pyannote分段及GTCRN；6个Git模型对象大小与本地文件一致，非LFS指针。本轮仅补充usage/design/spec及既有待验收事项的模型准备说明，不新增任务、不修改模型/打包/源码、不运行测试或重新构建发布，未提交或推送本轮说明。
+
 ### 非日志与模型的工作区源码归档
 
 - ✅ [2026-10-12] 按用户要求提交剩余源码、测试、文档、无新增凭证的配置变更和待机参考图；包含独立手动眼球/绑定别名/注视阻塞恢复、物理调试开关，以及VaM/HS2可行性、VRM能力与TTS凭证位置说明。

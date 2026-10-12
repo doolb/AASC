@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "path": "sensevoice/LICENSE",
+      "size": 71,
+      "sha256": "221c6df10b0931a5629adad671ea48fb7747e034c414b6d2bfa275bc3dd4ea17"
+    },
+    {
+      "path": "sensevoice/model.int8.onnx",
+      "size": 239233841,
+      "sha256": "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"
+    },
+    {
+      "path": "sensevoice/model.int8.onnx.sha256",
+      "size": 65,
+      "sha256": "e2b6b8264ac2a165ec3818bd73e2729d1ae5797af14797d8dfe2ef8006254f16"
+    },
+    {
+      "path": "sensevoice/README.md",
+      "size": 104,
+      "sha256": "763991a00edaea534ab36bf1b7cf89e61e911666dcfabbba71f91f9f7c593a63"
+    },
+    {
+      "path": "sensevoice/tokens.txt",
+      "size": 315894,
+      "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
+    },
+    {
+      "path": "sensevoice/tokens.txt.sha256",
+      "size": 65,
+      "sha256": "2eb5b2f42515440b39f116d25e29f4d65f97cd4af85586cea5c71e43ae9a60f0"
+    },
+    {
+      "path": "speech-enhancement/gtcrn_simple.onnx",
+      "size": 535638,
+      "sha256": "e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534"
+    },
+    {
+      "path": "streaming-zipformer/decoder.int8.onnx",
+      "size": 3486740,
+      "sha256": "4b618d383af304cfae281dbf0a53e8bf442c2f0502256cd5694bd6567ebdd834"
+    },
+    {
+      "path": "streaming-zipformer/encoder.int8.onnx",
+      "size": 42980793,
+      "sha256": "db6f51551762e40e549166fe041ea3e45464370b595e9ad23f06478ec3794fbb"
+    },
+    {
+      "path": "streaming-zipformer/joiner.int8.onnx",
+      "size": 3228485,
+      "sha256": "bdda356d6f9b8c2d7cee9ee0e26075fa537490f7fd06520be408d287073667b9"
+    },
+    {
+      "path": "streaming-zipformer/tokens.txt",
+      "size": 56317,
+      "sha256": "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3"
+    },
+    {
+      "path": "voiceprint/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k_int8.onnx",
+      "size": 10507249,
+      "sha256": "8d24c8f4d5dbf5e37eea0a9ca0262bb487980854b510b487c76c418087ad8a0f"
+    },
+    {
+      "path": "voiceprint/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+      "size": 39593761,
+      "sha256": "1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b"
+    },
+    {
+      "path": "voiceprint/3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k_int8.onnx",
+      "size": 29798398,
+      "sha256": "994797028c02987452a90a0354fa112b7f947f72bf9c260005d21d355340411d"
+    },
+    {
+      "path": "voiceprint/3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx",
+      "size": 116058710,
+      "sha256": "19547e85b6c14ec44b8add4e7cb9ce353c7e995d4f1c9ffd408176ac3a2d6895"
+    },
+    {
+      "path": "voiceprint/3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common_int8.onnx",
+      "size": 18563540,
+      "sha256": "a7b4045c96893f162bbea57e6076c4c301361c93eb5692e9f4e11c062f4e501f"
+    },
+    {
+      "path": "voiceprint/3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common.onnx",
+      "size": 71441526,
+      "sha256": "bf1a75b9930474cf3389ef415e6e5d38ca96fea4a3a00f7e301d080a58ee2239"
+    },
+    {
+      "path": "voiceprint/pyannote_segmentation_3_0_int8.onnx",
+      "size": 1540506,
+      "sha256": "d582f4b4c6b48205de7e0643c57df0df5615a3c176189be3fc461e9d18827b5d"
+    },
+    {
+      "path": "yolo11/README.md",
+      "size": 527,
+      "sha256": "74cb56356eccc4f32c928d9299c73226e5ccf86a44cc51a60918c243d3862d0b"
+    },
+    {
+      "path": "yolo11/yolo11l.classes.json",
+      "size": 938,
+      "sha256": "231e0d76d271f507c902b2cf03fe2e1f6924210dd86b743b571151815d9a0ac2"
+    },
+    {
+      "path": "yolo11/yolo11l.onnx",
+      "size": 101744167,
+      "sha256": "b1b6377c755f0bab8a1594ced853aefae46e8ef2f89256347a8b62a022ddd5a5"
+    },
+    {
+      "path": "yolo11/yolo11m.classes.json",
+      "size": 938,
+      "sha256": "94c5af9b189853c4ae38fe03041e240baf4d88a93d07a054d9d05261df0ffe8e"
+    },
+    {
+      "path": "yolo11/yolo11m.onnx",
+      "size": 80673677,
+      "sha256": "72523c000421234f457dd39a9bb5de24f30208b4523661046491b536ea84d27e"
+    },
+    {
+      "path": "yolo11/yolo11n-seg.pt",
+      "size": 6182636,
+      "sha256": "55ed65c56c91713d23e8402371c6c49a6fd84f257f7dce452e8d70e41dcbe152"
+    },
+    {
+      "path": "yolo11/yolo11n.classes.json",
+      "size": 938,
+      "sha256": "dc8f1255353ddfa9d8b768a2287212812d302bb5a28fed4037f21b42bd65a21e"
+    },
+    {
+      "path": "yolo11/yolo11n.onnx",
+      "size": 10741399,
+      "sha256": "56fa1370e54a1e999c3ad8397c39b164ff787d94993039f2fc11cb5153f22166"
+    },
+    {
+      "path": "yolo11/yolo11s.classes.json",
+      "size": 938,
+      "sha256": "65998c62c83bf7f54d77826c4cbe5cb0199537ac5ef2b012509bd85350987dcb"
+    },
+    {
+      "path": "yolo11/yolo11s.onnx",
+      "size": 38051785,
+      "sha256": "34e4c69dc9fd75b125eabb03d54b57e2fade524a734dcce1fd7b19fbe45d3ad3"
+    },
+    {
+      "path": "yolo11/yolo11x.classes.json",
+      "size": 938,
+      "sha256": "9424b11adae1a004e1a777dee122721f36bcc3c81b47386e235c2f1d80609915"
+    },
+    {
+      "path": "yolo11/yolo11x.onnx",
+      "size": 228057921,
+      "sha256": "03267940c3030984a974db6165bbe59b4fbeba2f95969c9519ab1df5a7458d90"
+    }
+  ],
+  "totalBytes": 1042798505
+}
