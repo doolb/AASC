@@ -1,5 +1,7 @@
 # TTS Provider 与播报配置
 
+凭证存储路径（2026-10-12核查）：Qwen API与豆包API的credential只持久化在服务器用户配置userconfig.json的tts.providers对应Provider下；普通模式使用服务器用户主目录/.config/aasc-user，release模式使用运行项目目录/release/userconfig。主配置仅保存业务选择，控制端仅接收credentialConfigured状态。当前开发机用户配置为/home/as/.config/aasc-user/userconfig.json，不读取或记录Key原文。
+
 ## 需求与范围
 
 2026-10-11 用户确认继续多 Provider 方案。在现有 system TTS 上增加 qwen-chat、qwen-api、doubao-api。AI 与 Agent 回复按来源聊天模板解析选择；文本媒体与系统播报分别有独立默认配置。群聊没有唯一模板时使用 AI 默认，临时会话使用当前角色模板。只扩展合成入口，保留音频 URL、目标选择、有序队列、回执和聊天打断。

@@ -2,16 +2,17 @@ import * as THREE from 'three';
 
 // 进入动作与恢复跟随暂时共用600ms，避免两种衔接出现不同的转头速度。
 const HEAD_TRANSITION_SECONDS = 0.6;
-
 export const DEFAULT_GAZE = Object.freeze({ head: true, eyes: true, strength: 0.7,
     headYaw: 45, headPitch: 25, eyeYaw: 20, eyePitch: 15,
-    headMs: 200, eyeMs: 60, holdSeconds: 3, forward: '+Z' });
+    headMs: 200, eyeMs: 60, holdSeconds: 3, forward: '+Z', manual: false,
+    manualYaw: 0, manualPitch: 0 });
 const ranges = { strength: [0, 1], headYaw: [0, 85], headPitch: [0, 60],
-    eyeYaw: [0, 45], eyePitch: [0, 40], headMs: [0, 2000], eyeMs: [0, 2000], holdSeconds: [0.2, 30] };
+    eyeYaw: [0, 45], eyePitch: [0, 40], headMs: [0, 2000], eyeMs: [0, 2000], holdSeconds: [0.2, 30],
+    manualYaw: [-30, 30], manualPitch: [-20, 20] };
 export function normalizeHumanGaze(value = {}, previous = DEFAULT_GAZE) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('注视设置格式无效');
     const result = { ...previous };
-    for (const key of ['head', 'eyes']) {
+    for (const key of ['head', 'eyes', 'manual']) {
         if (value[key] == null) continue;
         if (typeof value[key] !== 'boolean') throw new Error('注视开关需要布尔值');
         result[key] = value[key];
@@ -31,7 +32,8 @@ export function normalizeHumanGaze(value = {}, previous = DEFAULT_GAZE) {
 // 只自动处理能明确解释的骨骼关系；共有眼驱动和左右眼直接驱动不能叠加。
 export function humanGazeBinding(model) {
     const bindings = model.bindings, data = model.mesh.geometry.userData.MMD;
-    const grants = new Map((data.grants || []).filter(g => g.affectRotation).map(g => [g.index, g]));
+    const grants = new Map((data.grants || data.bones?.flatMap((bone, index) => bone.grant ? [{ ...bone.grant, index }] : [] ) || [])
+        .filter(g => g.affectRotation).map(g => [g.index, g]));
     const issues = [], common = bindings['bones:eyes'];
     const left = bindings['bones:leftEye'], right = bindings['bones:rightEye'];
     const valid = target => Boolean(target && !target.dynamic);
@@ -77,7 +79,7 @@ export function createHumanGaze() {
         reference.bone.updateWorldMatrix(true, false);
         reference.bone.matrixWorld.decompose(origin, worldRotation, scale);
     }
-    function rotate(item, enabled, yawLimit, pitchLimit, milliseconds, delta, save, availability) {
+    function rotate(item, enabled, yawLimit, pitchLimit, milliseconds, delta, save, availability, fixed = null) {
         const { target: bone, reference, other, inherited } = item;
         if (!enabled) { states.delete(bone.index); return; }
         pose(reference);
@@ -89,17 +91,24 @@ export function createHumanGaze() {
         // 共有眼通常不在眼球父链中。原Helper稍后才施加grant，此处预测它的方向。
         if (inherited) worldRotation.multiply(inherited.bone.quaternion);
         inverse.copy(worldRotation).invert();
-        direction.copy(target).sub(origin).applyQuaternion(inverse);
-        if (direction.lengthSq() < 1e-10) return;
         const sign = options.forward === '+Z' ? 1 : -1;
-        const yaw = limit(Math.atan2(direction.x * sign, direction.z * sign), yawLimit) * options.strength;
-        const pitch = limit(-Math.atan2(direction.y * sign, Math.hypot(direction.x, direction.z)), pitchLimit) * options.strength;
+        let yaw, pitch;
+        if (fixed) {
+            yaw = fixed.yaw * Math.PI / 180;
+            pitch = fixed.pitch * Math.PI / 180;
+        } else {
+            direction.copy(target).sub(origin).applyQuaternion(inverse);
+            if (direction.lengthSq() < 1e-10) return;
+            yaw = limit(Math.atan2(direction.x * sign, direction.z * sign), yawLimit) * options.strength;
+            pitch = limit(-Math.atan2(direction.y * sign, Math.hypot(direction.x, direction.z)), pitchLimit) * options.strength;
+        }
         let state = states.get(bone.index);
-        if (!state) { state = { yaw: 0, pitch: 0 }; states.set(bone.index, state); }
+        if (!state) { state = { yaw: 0, pitch: 0, blocked: false }; states.set(bone.index, state); }
+        if (availability <= 1e-5) { state.blocked = true; return; }
+        if (state.blocked) { state.yaw = 0; state.pitch = 0; state.blocked = false; }
         const alpha = milliseconds > 0 ? -Math.expm1(-Math.max(0, delta) * 1000 / milliseconds) : 1;
         state.yaw += (yaw - state.yaw) * alpha; state.pitch += (pitch - state.pitch) * alpha;
         // 随显式动作淡入淡出让出同一旋转通道，避免瞬间关闭注视导致头部跳变。
-        if (availability <= 1e-5) return;
         yawRotation.setFromAxisAngle(yAxis, state.yaw * availability); pitchRotation.setFromAxisAngle(xAxis, state.pitch * availability);
         offset.copy(yawRotation).multiply(pitchRotation);
         save(bone.bone);
@@ -141,7 +150,7 @@ export function createHumanGaze() {
         reset,
         returnToCamera() { temporary = false; expires = 0; },
         get: () => ({ ...options }),
-        set(value) { options = normalizeHumanGaze(value, options); reset(); return { ...options }; },
+        set(value) { options = normalizeHumanGaze(value, options); return { ...options }; },
         status(model) {
             const cap = model ? resolve(model) : null;
             return { target: temporary && performance.now() < expires ? 'pointer' : 'camera',
@@ -170,16 +179,19 @@ export function createHumanGaze() {
             return true;
         },
         apply(model, camera, delta, save, occupied, rotations = null) {
-            if (!camera || (!options.head && !options.eyes) || options.strength === 0) { states.clear(); headState = null; return; }
+            if ((!camera && !options.manual) || (!options.head && !options.eyes) || (options.strength === 0 && !options.manual)) { states.clear(); headState = null; return; }
             const cap = resolve(model);
-            if (temporary && performance.now() >= expires) temporary = false;
-            if (temporary) target.copy(clickTarget); else camera.getWorldPosition(target);
+            if (!options.manual) {
+                if (temporary && performance.now() >= expires) temporary = false;
+                if (temporary) target.copy(clickTarget); else camera.getWorldPosition(target);
+            }
             if (cap.head) rotateHead(cap.head, delta, save, 1 - (occupied.get(cap.head.index) || 0), rotations?.get(cap.head.index));
             // 显式控制任一眼球/共有眼时，整组眼球让位，避免grant把另一只眼睛重复驱动。
             let eyeWeight = 0;
             for (const index of cap.occupiedEyes) eyeWeight = Math.max(eyeWeight, occupied.get(index) || 0);
             for (const eye of cap.eyes) rotate(eye, options.eyes,
-                options.eyeYaw, options.eyePitch, options.eyeMs, delta, save, 1 - eyeWeight);
+                options.eyeYaw, options.eyePitch, options.eyeMs, delta, save, eyeWeight > 1e-5 ? 0 : 1,
+                options.manual ? { yaw: options.manualYaw, pitch: options.manualPitch } : null);
         }
     };
 }

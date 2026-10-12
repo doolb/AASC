@@ -2,6 +2,8 @@
 
 控制端「声纹」页面展开「语音服务与音色」，分别选择AI/Agent回复、文本阅读、报时与系统播报的服务，然后「保存语音配置」并等待服务器确认。其他控制端同步权威值，重连后重新获取。
 
+Qwen API与豆包API的Key保存在服务器用户配置文件中：普通运行为`~/.config/aasc-user/userconfig.json`，当前开发机为`/home/as/.config/aasc-user/userconfig.json`；release模式为运行项目目录下的`release/userconfig/userconfig.json`。字段分别是`tts.providers["qwen-api"].credential`与`tts.providers["doubao-api"].credential`。保存在JSON文件内，不保存在控制端浏览器或主`config.json`；页面只收到是否已配置的状态。
+
 系统原生沿用现有TTS生成设备、服务器开关和原生音色配置，此面板只提供语速、音量，不增加启用开关或音色ID。业务或模板选中系统原生时隐藏音色ID输入；旧Provider级开关和音色ID不会阻断或覆盖原有路径。
 
 国内千问网页仅用于AI/Agent回复，由Chat2API提供语音合成。先在Chat2API账户管理中添加或登录国内千问（qwen）账号，并启用对应账号及Provider；在语音面板启用国内千问、设置模型/默认音色并保存。TTS不再查询或选择账号，Chat2API按已保存的调度策略自动使用可用国内账号，更新登录后下次合成读取最新值。国际qwen-ai不适用于该语音协议。未提供可用账号、登录失效或上游失败会明确报错，不切换到系统原生。

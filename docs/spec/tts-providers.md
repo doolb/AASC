@@ -1,5 +1,15 @@
 # TTS Provider 与播报配置实现
 
+```text
+API凭证保存路径核查（2026-10-12）：
+  普通模式 -> 服务器用户主目录/.config/aasc-user/userconfig.json
+  release模式 -> 运行项目目录/release/userconfig/userconfig.json
+  qwen-api Key -> tts.providers["qwen-api"].credential
+  doubao-api Key -> tts.providers["doubao-api"].credential
+  保存 -> userConfig.set(tts.providers)；回传 -> redact，仅credentialConfigured
+  路径说明核查 -> 不读取、不打印凭证原文；不改变配置规则
+```
+
 ## Qwen-Audio 3.1与豆包上一句上下文（2026-10-11，已完成）
 
 ```text

@@ -813,6 +813,7 @@ async function stageTextAssets() {
     </div>
   </div>
   ${'<script>window.MmdArTestWebFillShadow = true;</script>'}
+  <script>window.MmdArPhysicsDebug = true;</script>
   ${WEB_MODE ? '<script>window.MmdArLightingPresetGroups = Object.create(null);</script>' : ''}
   <script src="${scriptUrl('display-mmd-settings.js')}"></script>
   <script src="${scriptUrl('display-mmd.js')}"></script>

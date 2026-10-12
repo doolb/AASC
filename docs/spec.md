@@ -1,7 +1,10 @@
 # Web MediaCenter - 项目实现文档
 
-- [MMD-AR统一灯光预设伪代码（已实现）](spec/mmd-ar-lighting-presets.md)
+- [MMD-AR HS2 ZIPMOD候选伪代码（尚未实现）](spec/mmd-ar-hs2-zipmod.md)
 
+- [MMD-AR VAM接入候选伪代码（尚未实现）](spec/mmd-ar-vam-models.md)
+
+- [MMD-AR统一灯光预设伪代码（已实现）](spec/mmd-ar-lighting-presets.md)
 
 - [独立MMD通用角色控制与MPL修正实现](spec/mmd-human-interface.md)
 

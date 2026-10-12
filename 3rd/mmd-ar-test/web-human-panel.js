@@ -11,7 +11,13 @@ function appendPanels(panel) {
         + '<label>' + input('blinking', '', 'checkbox') + '自然眨眼</label></div>'
         + field('生理强度', input('physiologyStrength', '0.35', 'number', 'min="0" max="1" step="0.05"'))
         + button('physiology', '保存生理设置')
-        + '<details open><summary>头部与眼球注视</summary>'
+        + '<details open><summary>眼球跟随</summary>'
+        + '<p class="mind-basic-note">手动模式优先于自动眼球跟随；拖动滑块实时控制当前模型，恢复自动后重新看向相机。</p>'
+        + '<div class="mind-basic-imu-options"><label>' + input('gazeManual', '', 'checkbox') + '手动控制</label></div>'
+        + field('左右角度 <output data-human-output="gazeManualYaw">0°</output>', input('gazeManualYaw', '0', 'range', 'min="-30" max="30" step="1"'))
+        + field('上下角度 <output data-human-output="gazeManualPitch">0°</output>', input('gazeManualPitch', '0', 'range', 'min="-20" max="20" step="1"'))
+        + '<button type="button" class="display-mmd-ar-action" data-human="gaze-auto">恢复自动跟随</button></details>'
+        + '<details open><summary>头部注视设置</summary>'
         + '<p class="mind-basic-note">默认看向相机；轻触或点击画面后临时看向点击位置，再平滑返回。拖动不切换目标，显式头眼动作优先。</p>'
         + '<div class="mind-basic-imu-options"><label>' + input('gazeHead', '', 'checkbox') + '头部跟随</label>'
         + '<label>' + input('gazeEyes', '', 'checkbox') + '眼球跟随</label></div>'

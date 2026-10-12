@@ -1,7 +1,10 @@
 # Web MediaCenter - 项目设计文档
 
-- [MMD-AR统一灯光预设（已实现，本地构建）](design/mmd-ar-lighting-presets.md)
+- [MMD-AR HS2 ZIPMOD接入可行性（待样例，尚未实现）](design/mmd-ar-hs2-zipmod.md)
 
+- [MMD-AR VAM模型接入可行性（待明确，尚未实现）](design/mmd-ar-vam-models.md)
+
+- [MMD-AR统一灯光预设（已实现，本地构建）](design/mmd-ar-lighting-presets.md)
 
 - [独立MMD通用HumanInterfaceElement（已实现，本地构建）](design/mmd-human-interface.md)
 
