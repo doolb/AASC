@@ -1,4 +1,6 @@
 import { Euler, Group, Mesh, MeshBasicMaterial, Plane, Quaternion, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
+import { calculateInverseRotationalMass, calculateKneePoleTarget, calculatePbdAngularCorrections,
+    KNEE_POLE_STRENGTH, PBD_MAX_ITERATIONS, PBD_TARGET_EPSILON } from './web-human-ik-pbd.mjs';
 
 const TARGETS = [
     { key: 'head', label: '头部', bone: 'head', color: 0xffd166 },
@@ -9,10 +11,9 @@ const TARGETS = [
     { key: 'leftFoot', label: '左脚', bone: 'leftAnkle', color: 0x77dfb0 },
     { key: 'rightFoot', label: '右脚', bone: 'rightAnkle', color: 0xd59bff },
 ];
-const MAX_LINKS = 12, MAX_ITERATIONS = 12;
-const MAX_STEP = 15 * Math.PI / 180;
+const MAX_LINKS = 12;
 const MAX_CORRECTION = 45 * Math.PI / 180, MAX_KNEE_CORRECTION = 150 * Math.PI / 180;
-const TARGET_EPSILON = 0.025, UNREACHABLE_DISTANCE = 0.08, MAX_DRAG_DISTANCE = 10;
+const UNREACHABLE_DISTANCE = 0.08, MAX_DRAG_DISTANCE = 10;
 const ROTATION_AXES = ['x', 'y', 'z'];
 const ancestor = (bone, parent) => {
     for (let node = bone; node; node = node.parent) if (node === parent) return true;
@@ -46,7 +47,7 @@ export function clampIKBoneRotation(rotation, original, maximumCorrection, limit
 export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {} } = {}) {
     const raycaster = new Raycaster(), pointer = new Vector2(), plane = new Plane();
     const planeNormal = new Vector3(), intersection = new Vector3();
-    const endPosition = new Vector3(), jointPosition = new Vector3(), from = new Vector3(), to = new Vector3();
+    const endPosition = new Vector3();
     const worldChange = new Quaternion(), parentRotation = new Quaternion(), localChange = new Quaternion();
     const baseline = new Map(), linkLimits = new Map(), kneeIndices = new Set();
     let enabled = false, bound = null, helperRoot = null, handles = [], drag = null;
@@ -104,10 +105,15 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     }
     function chainFor(model, endpoint) {
         const chain = [];
+        let child = endpoint.bone;
         for (let bone = endpoint.bone.parent; bone && chain.length < MAX_LINKS; bone = bone.parent) {
             const index = model.mesh.skeleton.bones.indexOf(bone);
             if (index < 0) break;
-            if (!model.bones[index]?.dynamic && !model.groups.root.has(index)) chain.push(model.bones[index]);
+            if (!model.bones[index]?.dynamic && !model.groups.root.has(index)) {
+                // 逆转动权重参考父子骨段长度；短骨允许分担更多角度，零长度链节由下限保护。
+                chain.push({ ...model.bones[index], segmentLength: child.position.length() });
+            }
+            child = bone;
             // 不通过PMX全身根骨旋转角色整体；center以上不再参与该末端的定位。
             if (bone.name === model.bindings['bones:center']?.name || bone.name === model.bindings['bones:root']?.name) break;
         }
@@ -131,6 +137,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         helperRoot = new Group();
         scene.add(helperRoot);
         const radius = Math.max(0.018, Math.min(0.09, (model.mesh.geometry.boundingSphere?.radius || 1) * 0.035));
+        model.mesh.updateMatrixWorld(true);
         for (const spec of TARGETS) {
             const endpoint = model.bindings['bones:' + spec.bone];
             if (!endpoint || endpoint.dynamic) continue;
@@ -143,7 +150,6 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             helperRoot.add(mesh);
             handles.push({ ...spec, endpoint, chain, mesh, target: new Vector3(), active: false });
         }
-        model.mesh.updateMatrixWorld(true);
         for (const handle of handles) {
             handle.endpoint.bone.getWorldPosition(handle.target);
             handle.mesh.position.copy(handle.target);
@@ -224,28 +230,32 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             linkLimits.get(link.index)
         ));
     }
-    function targetDistance(handle) {
+    function targetDistance(handle, target = handle.target) {
         const endpoint = handle.endpoint.bone;
         endpoint.updateWorldMatrix(true, false);
         endpoint.getWorldPosition(endPosition);
-        return endPosition.distanceTo(handle.target);
+        return endPosition.distanceTo(target);
     }
-    function solveSweep(handle) {
+    function solvePbdConstraint(handle, target, strength = 1) {
         const endpoint = handle.endpoint.bone;
-        if (targetDistance(handle) <= TARGET_EPSILON) return false;
+        if (targetDistance(handle, target) <= PBD_TARGET_EPSILON) return false;
+        endpoint.updateWorldMatrix(true, false);
+        endpoint.getWorldPosition(endPosition);
+        const joints = handle.chain.map(link => {
+            link.bone.updateWorldMatrix(true, false);
+            return {
+                link,
+                position: link.bone.getWorldPosition(new Vector3()),
+                inverseRotationalMass: calculateInverseRotationalMass(link.segmentLength)
+            };
+        });
+        const corrections = calculatePbdAngularCorrections(endPosition, target, joints, { strength });
         let changed = false;
-        for (const link of handle.chain) {
+        for (const correction of corrections) {
+            const { joint, axis, angle } = correction, link = joint.link;
             const bone = link.bone, original = baseline.get(bone);
-            bone.updateWorldMatrix(true, false);
-            bone.getWorldPosition(jointPosition);
-            endpoint.updateWorldMatrix(true, false);
-            endpoint.getWorldPosition(endPosition);
-            from.subVectors(endPosition, jointPosition); to.subVectors(handle.target, jointPosition);
-            if (from.lengthSq() < 1e-10 || to.lengthSq() < 1e-10) continue;
-            const angle = from.angleTo(to);
-            if (angle < 1e-5) continue;
-            worldChange.setFromUnitVectors(from.normalize(), to.normalize());
-            if (angle > MAX_STEP) worldChange.slerp(new Quaternion(), 1 - MAX_STEP / angle);
+            if (!original) continue;
+            worldChange.setFromAxisAngle(axis, angle);
             bone.parent?.getWorldQuaternion(parentRotation) || parentRotation.identity();
             localChange.copy(parentRotation).invert().multiply(worldChange).multiply(parentRotation);
             const before = bone.quaternion.clone();
@@ -254,15 +264,33 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             bone.updateWorldMatrix(true, false);
             endpoint.updateWorldMatrix(true, false);
             changed ||= before.angleTo(bone.quaternion) > 1e-7;
-            if (targetDistance(handle) <= TARGET_EPSILON) break;
         }
         return changed;
     }
-    function solveTargets(active) {
-        for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    function createKneePoleConstraints(active) {
+        const activeKeys = new Set(active.map(handle => handle.key));
+        const constraints = [];
+        for (const side of ['left', 'right']) {
+            const foot = handles.find(handle => handle.key === side + 'Foot');
+            const knee = handles.find(handle => handle.key === side + 'Knee');
+            const hip = bound?.bindings['bones:' + side + 'Leg']?.bone;
+            if (!foot?.active || !knee || activeKeys.has(knee.key) || !hip) continue;
+            bound.mesh.updateMatrixWorld(true);
+            const hipPosition = hip.getWorldPosition(new Vector3());
+            const kneePosition = knee.endpoint.bone.getWorldPosition(new Vector3());
+            const anklePosition = foot.endpoint.bone.getWorldPosition(new Vector3());
+            const target = calculateKneePoleTarget(hipPosition, kneePosition, anklePosition, foot.target);
+            if (target) constraints.push({ handle: knee, target });
+        }
+        return constraints;
+    }
+    function solveTargets(active, kneePoles) {
+        for (let iteration = 0; iteration < PBD_MAX_ITERATIONS; iteration++) {
             let changed = false;
-            for (const handle of active) changed = solveSweep(handle) || changed;
-            if (!changed || active.every(handle => targetDistance(handle) <= TARGET_EPSILON)) break;
+            // 膝盖软偏好先给出弯曲方向，随后硬目标再次投影，保证用户目标具有更高优先级。
+            for (const pole of kneePoles) changed = solvePbdConstraint(pole.handle, pole.target, KNEE_POLE_STRENGTH) || changed;
+            for (const handle of active) changed = solvePbdConstraint(handle, handle.target) || changed;
+            if (!changed || active.every(handle => targetDistance(handle) <= PBD_TARGET_EPSILON)) break;
         }
         return active.reduce((count, handle) => count + Number(targetDistance(handle) > UNREACHABLE_DISTANCE), 0);
     }
@@ -273,10 +301,12 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         restore();
         const active = handles.filter(handle => handle.active);
         if (!active.length) { updateMarkers(); return; }
-        for (const handle of active) for (const link of handle.chain) {
+        const kneePoles = createKneePoleConstraints(active);
+        const participants = [...active, ...kneePoles.map(pole => pole.handle)];
+        for (const handle of participants) for (const link of handle.chain) {
             if (!baseline.has(link.bone)) baseline.set(link.bone, link.bone.quaternion.clone());
         }
-        const unreachable = solveTargets(active);
+        const unreachable = solveTargets(active, kneePoles);
         state.unreachable = unreachable;
         state.reason = unreachable ? '部分目标超出骨骼链或角度限制的可达范围' : '';
         updateMarkers();

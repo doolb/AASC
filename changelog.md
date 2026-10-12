@@ -1,3 +1,9 @@
+### 独立 MMD-AR PBD 全身 IK
+
+- ✅ [2026-10-13] 参考 UE5 FullBodyIK 的 PBD/NPGS 思路，将独立 PMX 多末端 IK 改为共享祖先旋转约束迭代，并增加脚踝目标下的膝盖弯曲面偏好。
+  - 新增 `3rd/mmd-ar-test/web-human-ik-pbd.mjs`，更新 `web-human-ik.mjs` 与 `web-human-build.js` 的模块指纹依赖；保留七个头/腕/膝/踝控制点、每轮15°及膝150°/其他骨45°总修正预算，PMX IK link限位继续生效。骨骼平移/缩放、正式显示端和物理碰撞链路不变。
+  - 更新Human design/spec、独立测试页README、自测、参考资料和任务文档。PBD/相机定向测试8/8、真实米娅PMX浏览器相机/控制点回归1/1、`npm run build:web:mmd-ar-test`通过；手机姿态及性能待验收。APK/网页未发布。
+
 ### 独立 MMD-AR IK 镜头与膝关节控制
 
 - ✅ [2026-10-12] 修正 IK 模式左右镜头环绕方向，新增左右膝可拖动点，并修复膝关节超过旧45°限幅后无法继续弯曲的问题。

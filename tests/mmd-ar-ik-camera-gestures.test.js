@@ -65,9 +65,10 @@ test('膝关节有独立修正预算且 PMX IK 角度范围仍是最终限制', 
     assert.ok(Math.abs(baseline.angleTo(pmxLimitedKnee) - 0.5) < 1e-10);
     assert.match(ik, /\{ key: 'leftKnee',[^\n]+\}/u);
     assert.match(ik, /\{ key: 'rightKnee',[^\n]+\}/u);
-    assert.match(ik, /const MAX_LINKS = 12, MAX_ITERATIONS = 12/u);
-    assert.match(ik, /const MAX_STEP = 15 \* Math\.PI \/ 180/u);
-    assert.match(ik, /for \(const handle of active\) changed = solveSweep\(handle\) \|\| changed/u);
+    assert.match(ik, /const MAX_LINKS = 12/u);
+    assert.match(ik, /PBD_MAX_ITERATIONS/u);
+    assert.match(ik, /calculatePbdAngularCorrections/u);
+    assert.match(ik, /for \(const handle of active\) changed = solvePbdConstraint\(handle, handle\.target\) \|\| changed/u);
 });
 
 test('膝点与脚踝可同时拖动，脚目标可驱动超过旧限幅的膝屈曲', async () => {
@@ -152,11 +153,27 @@ test('膝点与脚踝可同时拖动，脚目标可驱动超过旧限幅的膝�
         dragTarget('leftKnee', new THREE.Vector3(0.2, 0.05, 0), 1);
         dragTarget('leftFoot', new THREE.Vector3(1.45, -0.7, 0), 2);
         assert.equal(controller.getState().activeTargets, 2);
-        const kneeBaseline = knee.quaternion.clone();
+        const kneeBaseline = knee.quaternion.clone(), thighBaseline = thigh.quaternion.clone();
+        const segmentLengths = [[thigh, knee], [knee, ankle]].map(([parent, child]) => {
+            parent.updateWorldMatrix(true, false); child.updateWorldMatrix(true, false);
+            return parent.getWorldPosition(new THREE.Vector3()).distanceTo(child.getWorldPosition(new THREE.Vector3()));
+        });
+        const footTarget = new THREE.Vector3(1.45, -0.7, 0);
+        const footErrorBefore = ankle.getWorldPosition(new THREE.Vector3()).distanceTo(footTarget);
         controller.apply(model);
         assert.ok(kneeBaseline.angleTo(knee.quaternion) > 45 * Math.PI / 180,
             `膝骨修正未超过旧45°上限：${(kneeBaseline.angleTo(knee.quaternion) * 180 / Math.PI).toFixed(2)}°`);
+        assert.ok(thighBaseline.angleTo(thigh.quaternion) > 1e-4, '全身约束没有把目标误差分配到膝以上骨骼');
+        mesh.updateMatrixWorld(true);
+        const segmentLengthsAfter = [[thigh, knee], [knee, ankle]].map(([parent, child]) =>
+            parent.getWorldPosition(new THREE.Vector3()).distanceTo(child.getWorldPosition(new THREE.Vector3())));
+        segmentLengthsAfter.forEach((length, index) => assert.ok(Math.abs(length - segmentLengths[index]) < 1e-8,
+            `骨段${index}长度发生变化：${length} vs ${segmentLengths[index]}`));
+        assert.ok(ankle.getWorldPosition(new THREE.Vector3()).distanceTo(footTarget) < footErrorBefore,
+            'PBD迭代没有缩小脚踝位置误差');
         assert.ok(Number.isFinite(controller.getState().unreachable));
+        controller.resetTargets();
+        assert.ok(thighBaseline.angleTo(thigh.quaternion) < 1e-8, '重置后没有还原全身共同修正');
     } finally {
         controller.dispose();
         if (previousWindow === undefined) delete globalThis.window;
