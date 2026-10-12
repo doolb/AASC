@@ -2,9 +2,46 @@
 const MINIMUM_CAMERA_ZOOM = 0.1;
 const MAXIMUM_CAMERA_ZOOM = 10;
 
+export function calculateCameraPanOffset({ deltaX, deltaY, distance, fovRadians, viewportHeight, right, up } = {}) {
+    const x = Number(deltaX), y = Number(deltaY), viewDistance = Number(distance);
+    const fov = Number(fovRadians), height = Number(viewportHeight);
+    if (![x, y, viewDistance, fov, height].every(Number.isFinite)
+        || viewDistance <= 0 || fov <= 0 || fov >= Math.PI || height <= 0
+        || !Array.isArray(right) || !Array.isArray(up)
+        || [...right, ...up].length !== 6 || [...right, ...up].some(value => !Number.isFinite(value))) return null;
+    // 先求相机视平面每个CSS像素对应的世界距离，再分别投影到镜头右/上轴。
+    const worldUnitsPerPixel = 2 * viewDistance * Math.tan(fov / 2) / height;
+    return {
+        x: -x * worldUnitsPerPixel * right[0] + y * worldUnitsPerPixel * up[0],
+        y: -x * worldUnitsPerPixel * right[1] + y * worldUnitsPerPixel * up[1],
+        z: -x * worldUnitsPerPixel * right[2] + y * worldUnitsPerPixel * up[2]
+    };
+}
+
 export function createPmxArCamera(context) {
-    const { THREE, applyCameraView, arCameraState, arFootAnchor, camera, canvas, fitCameraToModel, getArCameraTargetCenter, getModelBounds, normalizeArCameraSettings, normalizePmxProjectionNear, syncCameraClip, startRendering } = context;
+    const { THREE, applyCameraView, arCameraState, arFootAnchor, camera, cameraTarget, canvas, fitCameraToModel, getArCameraTargetCenter, getModelBounds, normalizeArCameraSettings, normalizePmxProjectionNear, syncCameraClip, startRendering } = context;
 /* aasc-module-body-begin */
+    const panCameraByPixels = (deltaX, deltaY) => {
+        if (arCameraState.active) return false;
+        camera.updateMatrixWorld(true);
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        const offset = calculateCameraPanOffset({
+            deltaX,
+            deltaY,
+            distance: Number(context.cameraDistance) / Number(context.cameraZoomFactor),
+            fovRadians: THREE.MathUtils.degToRad(camera.fov),
+            viewportHeight: canvas.clientHeight,
+            right: [right.x, right.y, right.z],
+            up: [up.x, up.y, up.z]
+        });
+        if (!offset) return false;
+        cameraTarget.add(new THREE.Vector3(offset.x, offset.y, offset.z));
+        applyCameraView();
+        startRendering();
+        return true;
+    };
+
     const zoomCameraBy = (factor) => {
         const numericFactor = Number(factor);
         if (!Number.isFinite(numericFactor) || numericFactor <= 0) return false;
@@ -194,5 +231,5 @@ export function createPmxArCamera(context) {
     };
 
 /* aasc-module-body-end */
-    return { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose, zoomCameraBy };
+    return { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose, panCameraByPixels, zoomCameraBy };
 }

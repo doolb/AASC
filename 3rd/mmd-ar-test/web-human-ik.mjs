@@ -4,16 +4,43 @@ const TARGETS = [
     { key: 'head', label: '头部', bone: 'head', color: 0xffd166 },
     { key: 'leftHand', label: '左手', bone: 'leftWrist', color: 0xff7777 },
     { key: 'rightHand', label: '右手', bone: 'rightWrist', color: 0x78aaff },
+    { key: 'leftKnee', label: '左膝', bone: 'leftKnee', color: 0xffad66 },
+    { key: 'rightKnee', label: '右膝', bone: 'rightKnee', color: 0xf2e66c },
     { key: 'leftFoot', label: '左脚', bone: 'leftAnkle', color: 0x77dfb0 },
     { key: 'rightFoot', label: '右脚', bone: 'rightAnkle', color: 0xd59bff },
 ];
-const MAX_LINKS = 12, MAX_ITERATIONS = 6;
-const MAX_STEP = 12 * Math.PI / 180, MAX_CORRECTION = 45 * Math.PI / 180;
+const MAX_LINKS = 12, MAX_ITERATIONS = 12;
+const MAX_STEP = 15 * Math.PI / 180;
+const MAX_CORRECTION = 45 * Math.PI / 180, MAX_KNEE_CORRECTION = 150 * Math.PI / 180;
 const TARGET_EPSILON = 0.025, UNREACHABLE_DISTANCE = 0.08, MAX_DRAG_DISTANCE = 10;
+const ROTATION_AXES = ['x', 'y', 'z'];
 const ancestor = (bone, parent) => {
     for (let node = bone; node; node = node.parent) if (node === parent) return true;
     return false;
 };
+
+export function getJointCorrectionLimit(boneIndex, kneeIndices) {
+    return kneeIndices?.has(boneIndex) ? MAX_KNEE_CORRECTION : MAX_CORRECTION;
+}
+
+// 先限制相对本帧原姿态的总旋转，再夹紧PMX原生IK link范围；放宽膝关节预算不覆盖模型限位。
+export function clampIKBoneRotation(rotation, original, maximumCorrection, limits) {
+    const proposed = rotation.clone();
+    const constrained = proposed.clone();
+    const originalAngle = original.angleTo(proposed);
+    if (originalAngle > maximumCorrection) {
+        constrained.copy(original).slerp(proposed, maximumCorrection / originalAngle);
+    }
+    if (!limits) return constrained;
+
+    const axisValue = (value, axis) => Array.isArray(value) ? value[ROTATION_AXES.indexOf(axis)] : value[axis];
+    const euler = new Euler().setFromQuaternion(constrained, 'XYZ');
+    for (const axis of ROTATION_AXES) {
+        const minimum = axisValue(limits.rotationMin, axis), maximum = axisValue(limits.rotationMax, axis);
+        if (Number.isFinite(minimum) && Number.isFinite(maximum)) euler[axis] = Math.max(minimum, Math.min(maximum, euler[axis]));
+    }
+    return constrained.setFromEuler(euler);
+}
 
 // PMX 控制点使用原骨架姿态作为每帧基准，不把 IK 修正累计到 VMD 或物理骨骼。
 export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {} } = {}) {
@@ -21,7 +48,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     const planeNormal = new Vector3(), intersection = new Vector3();
     const endPosition = new Vector3(), jointPosition = new Vector3(), from = new Vector3(), to = new Vector3();
     const worldChange = new Quaternion(), parentRotation = new Quaternion(), localChange = new Quaternion();
-    const baseline = new Map(), linkLimits = new Map(), euler = new Euler();
+    const baseline = new Map(), linkLimits = new Map(), kneeIndices = new Set();
     let enabled = false, bound = null, helperRoot = null, handles = [], drag = null;
     let state = { enabled: false, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '已关闭' };
 
@@ -64,6 +91,11 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     }
     function readLimits(model) {
         linkLimits.clear();
+        kneeIndices.clear();
+        for (const semantic of ['leftKnee', 'rightKnee']) {
+            const index = model.bindings['bones:' + semantic]?.index;
+            if (Number.isInteger(index)) kneeIndices.add(index);
+        }
         for (const ik of model.mesh.geometry.userData.MMD.iks || []) {
             for (const link of ik.links || []) {
                 if (link.rotationMin && link.rotationMax && Number.isInteger(link.index)) linkLimits.set(link.index, link);
@@ -184,52 +216,55 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         event.stopImmediatePropagation(); event.preventDefault(); stopDrag(); onChange();
     }
     function applyLimit(link, original) {
-        const originalAngle = original.angleTo(link.bone.quaternion);
-        if (originalAngle > MAX_CORRECTION) {
-            link.bone.quaternion.copy(original).slerp(link.bone.quaternion, MAX_CORRECTION / originalAngle);
-        }
-        const limits = linkLimits.get(link.index);
-        if (!limits) return;
-        const axisValue = (value, axis) => Array.isArray(value) ? value[['x', 'y', 'z'].indexOf(axis)] : value[axis];
-        euler.setFromQuaternion(link.bone.quaternion, 'XYZ');
-        for (const axis of ['x', 'y', 'z']) {
-            const minimum = axisValue(limits.rotationMin, axis), maximum = axisValue(limits.rotationMax, axis);
-            if (Number.isFinite(minimum) && Number.isFinite(maximum)) euler[axis] = Math.max(minimum, Math.min(maximum, euler[axis]));
-        }
-        link.bone.quaternion.setFromEuler(euler);
+        const maximumCorrection = getJointCorrectionLimit(link.index, kneeIndices);
+        link.bone.quaternion.copy(clampIKBoneRotation(
+            link.bone.quaternion,
+            original,
+            maximumCorrection,
+            linkLimits.get(link.index)
+        ));
     }
-    function solve(handle) {
-        const model = bound, endpoint = handle.endpoint.bone;
-        for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-            endpoint.updateWorldMatrix(true, false);
-            endpoint.getWorldPosition(endPosition);
-            if (endPosition.distanceTo(handle.target) <= TARGET_EPSILON) break;
-            let changed = false;
-            for (const link of handle.chain) {
-                const bone = link.bone, original = baseline.get(bone);
-                bone.updateWorldMatrix(true, false);
-                bone.getWorldPosition(jointPosition);
-                endpoint.updateWorldMatrix(true, false);
-                endpoint.getWorldPosition(endPosition);
-                from.subVectors(endPosition, jointPosition); to.subVectors(handle.target, jointPosition);
-                if (from.lengthSq() < 1e-10 || to.lengthSq() < 1e-10) continue;
-                const angle = from.angleTo(to);
-                if (angle < 1e-5) continue;
-                worldChange.setFromUnitVectors(from.normalize(), to.normalize());
-                if (angle > MAX_STEP) worldChange.slerp(new Quaternion(), 1 - MAX_STEP / angle);
-                bone.parent?.getWorldQuaternion(parentRotation) || parentRotation.identity();
-                localChange.copy(parentRotation).invert().multiply(worldChange).multiply(parentRotation);
-                bone.quaternion.premultiply(localChange).normalize();
-                applyLimit(link, original);
-                bone.updateWorldMatrix(true, false);
-                endpoint.updateWorldMatrix(true, false);
-                changed = true;
-            }
-            if (!changed) break;
-        }
+    function targetDistance(handle) {
+        const endpoint = handle.endpoint.bone;
         endpoint.updateWorldMatrix(true, false);
         endpoint.getWorldPosition(endPosition);
         return endPosition.distanceTo(handle.target);
+    }
+    function solveSweep(handle) {
+        const endpoint = handle.endpoint.bone;
+        if (targetDistance(handle) <= TARGET_EPSILON) return false;
+        let changed = false;
+        for (const link of handle.chain) {
+            const bone = link.bone, original = baseline.get(bone);
+            bone.updateWorldMatrix(true, false);
+            bone.getWorldPosition(jointPosition);
+            endpoint.updateWorldMatrix(true, false);
+            endpoint.getWorldPosition(endPosition);
+            from.subVectors(endPosition, jointPosition); to.subVectors(handle.target, jointPosition);
+            if (from.lengthSq() < 1e-10 || to.lengthSq() < 1e-10) continue;
+            const angle = from.angleTo(to);
+            if (angle < 1e-5) continue;
+            worldChange.setFromUnitVectors(from.normalize(), to.normalize());
+            if (angle > MAX_STEP) worldChange.slerp(new Quaternion(), 1 - MAX_STEP / angle);
+            bone.parent?.getWorldQuaternion(parentRotation) || parentRotation.identity();
+            localChange.copy(parentRotation).invert().multiply(worldChange).multiply(parentRotation);
+            const before = bone.quaternion.clone();
+            bone.quaternion.premultiply(localChange).normalize();
+            applyLimit(link, original);
+            bone.updateWorldMatrix(true, false);
+            endpoint.updateWorldMatrix(true, false);
+            changed ||= before.angleTo(bone.quaternion) > 1e-7;
+            if (targetDistance(handle) <= TARGET_EPSILON) break;
+        }
+        return changed;
+    }
+    function solveTargets(active) {
+        for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+            let changed = false;
+            for (const handle of active) changed = solveSweep(handle) || changed;
+            if (!changed || active.every(handle => targetDistance(handle) <= TARGET_EPSILON)) break;
+        }
+        return active.reduce((count, handle) => count + Number(targetDistance(handle) > UNREACHABLE_DISTANCE), 0);
     }
     function apply(model) {
         if (!enabled || !model) return;
@@ -241,7 +276,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         for (const handle of active) for (const link of handle.chain) {
             if (!baseline.has(link.bone)) baseline.set(link.bone, link.bone.quaternion.clone());
         }
-        const unreachable = active.reduce((count, handle) => count + Number(solve(handle) > UNREACHABLE_DISTANCE), 0);
+        const unreachable = solveTargets(active);
         state.unreachable = unreachable;
         state.reason = unreachable ? '部分目标超出骨骼链或角度限制的可达范围' : '';
         updateMarkers();

@@ -1238,3 +1238,16 @@ npm run build:web:mmd-ar-test → 成功；生成页确认包含五档选项及�
 正式真实PMX面板/渲染/历史生命周期 → 2项通过；配置旧2×回退1×，两端均不显示重建倍率控件
 独立与正式运行时尺寸/时域单测 → 8/8通过；独立WEB重建成功
 ```
+
+## 独立 MMD-AR IK 镜头方向与膝关节（2026-10-12）
+
+```text
+IK镜头水平符号 → 单测确认屏幕向右拖动传负yaw；IK关闭仍调用旧模型旋转分支
+膝关节修正 → 合成四元数确认膝骨上限150°、普通骨骼45°；PMX IK范围将膝骨进一步收紧
+膝点+脚踝同时拖动 → 合成腿链交替CCD通过，膝骨修正超过旧45°且状态返回正常
+真实米娅PMX → 7个头/腕/膝/踝点可绑定；左拖环绕、双指中心平移与捏合分别改变画布截图
+node --test tests/mmd-ar-ik-camera-gestures.test.js → 5/5通过
+node --test tests/mmd-ar-ik-camera-gestures-browser.test.js → 1/1通过，约166秒
+npm run build:web:mmd-ar-test → 成功；Vite输出既有大chunk体积提示
+手机触控手感、不同PMX限位/骨名及真实深屈膝造型 → 待设备人工验收
+```

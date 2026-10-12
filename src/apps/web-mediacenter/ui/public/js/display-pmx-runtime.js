@@ -129,6 +129,16 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         startRendering();
         return true;
     };
+    const rotateCameraViewBy = (yawDelta, pitchDelta = 0) => {
+        const yaw = Number(yawDelta);
+        const pitch = Number(pitchDelta);
+        if (arCameraState.active || !Number.isFinite(yaw) || !Number.isFinite(pitch)) return null;
+        const fullTurn = Math.PI * 2;
+        // 手动环绕允许连续跨过正负180度，避免拖到边界后镜头停止旋转。
+        const wrappedYaw = ((cameraViewState.targetYaw + yaw + Math.PI) % fullTurn + fullTurn) % fullTurn - Math.PI;
+        if (!setCameraViewRotation(wrappedYaw, cameraViewState.targetPitch + pitch)) return null;
+        return { yaw: cameraViewState.targetYaw, pitch: cameraViewState.targetPitch };
+    };
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
     const ambientOcclusion = createPmxAmbientOcclusion({ THREE, renderer, scene, camera, keyLight });
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
@@ -829,12 +839,13 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     });
 /* aasc-module-end:mmd-lighting-runtime.mjs */
 /* aasc-module-start:mmd-ar-camera-runtime.mjs */
-    const { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose, zoomCameraBy } = createPmxArCamera({
+    const { resetArCameraPose, resetArPose, suspendArCameraPose, setArCameraSettings, setArCameraPose, panCameraByPixels, zoomCameraBy } = createPmxArCamera({
         THREE,
         applyCameraView,
         arCameraState,
         arFootAnchor,
         camera,
+        cameraTarget,
         canvas,
         fitCameraToModel,
         getArCameraTargetCenter,
@@ -962,6 +973,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         resetArPose,
         resetArCameraPose,
         rotateModelBy,
+        rotateCameraViewBy,
         setModelGravityRotation,
         setModelGravitySettings,
         getModelGravityState: () => gravityFilter.getState(),
@@ -995,6 +1007,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         setPhysicsEnabled,
         getPhysicsEnabled: () => physicsEnabled,
         setArPose: arFootAnchor.setPose,
+        panCameraByPixels,
         translateModelByPixels: arFootAnchor.translateByPixels,
         zoomCameraBy,
         resize,
