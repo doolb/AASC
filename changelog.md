@@ -2,7 +2,8 @@
 
 - ✅ [2026-10-12] 两端新增左上角FPS和灯光CPU渲染耗时，正式物理状态显示实际耗时，隐藏角色时收起右侧灯光/动作/定位按钮与面板。
   - 新增mmd-performance.mjs/display-mmd-performance.js，修改PMX/VRM运行时、helper、DisplayMmd/舞台/物理/分类控制、HTML/CSS；按实际帧间隔统计，500ms窗口，物理update与绘制单独计时。后台/隐藏/模型切换清窗口，暂停清旧值，不增加绘制/GPU等待。独立build/面板/扩展复用同一指纹模块，去掉重复测时，编辑工具栏下移避开FPS；既有眼球/debug及其他工作区改动保留。
-  - npm定向最终128/128、正式真实PMX1/1（133.4秒）、独立真实PMX1/1（191.8秒），共130项通过；原动作/MPL/灯光/TTS、风/避让/物理开关重建兼容，VRM帧入口、完整CSS与安全区不遮挡通过，最终WEB构建/JS语法/diff通过，无pageerror。额外旧runtime夹具8项失败与HEAD基线一致，记录todo，不宣称全仓通过；手机/实际GLB/VRM观感另验收。
+  - npm定向最终130/130、正式真实PMX1/1（133.4秒）、独立真实PMX1/1（191.8秒），共132项通过；原动作/MPL/灯光/TTS、风/避让/物理开关重建兼容，VRM帧入口、完整CSS与安全区不遮挡通过，最终WEB构建/JS语法/diff通过，无pageerror。额外旧runtime夹具8项失败与HEAD基线一致，记录todo，不宣称全仓通过；手机/实际GLB/VRM观感另验收。
+  - 发布前复核修正物理状态清理与快照发布顺序，后台恢复未实际渲染前不回显旧帧；补2项回调/恢复用例，最终130项定向通过，独立WEB重新构建通过。
   - 同步design/spec/task/usage/self-test/todo；实现项移出todo，保留发布/设备与既有夹具维护。servicePackage=true，原minApk=true/dependenciesPackage=false保持；按前轮授权继续正式服务包发布，独立外网待同步，不构建APK或提交日志/生成资源。
 
 - ✅ [2026-10-12] 完成FPS/耗时与角色控件隐藏方案核查：正式物理面板未显示耗时，Ammo需补实际步进计时，角色隐藏尚未联动右侧控件。

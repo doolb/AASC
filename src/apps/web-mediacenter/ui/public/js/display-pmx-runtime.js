@@ -406,10 +406,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const getPhysicsSolverState = () => {
         const physics = helper.current?.objects?.get(currentMesh)?.physics;
         if (!physics) return { solver: physicsSolver, active: false, bodyCount: 0, frameMs: 0 };
+        const running = physicsFrame.running && visible && !document.hidden && framePerformance.getState().running;
         return { solver: physics.engine || 'ammo', active: physicsEnabled,
             bodyCount: physics.bodies.length, jointCount: physics.constraints.length,
-            ...physics.getState?.(), running: physicsFrame.running && visible && !document.hidden,
-            frameMs: physicsFrame.running && visible && !document.hidden ? physicsFrame.frameMs : 0 };
+            ...physics.getState?.(), running,
+            frameMs: running ? physicsFrame.frameMs : 0 };
     };
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -613,8 +614,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentMotionResourceId = null;
     };
     const disposeCurrentModel = () => {
-        framePerformance.reset();
         physicsFrame = { running: false, frameMs: 0 };
+        framePerformance.reset();
         ambientOcclusion.invalidateTemporal();
         motionSequence += 1;
         stopMotion();
@@ -754,8 +755,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             .then((results) => results.every(Boolean));
     };
     const setVisible = (nextVisible) => {
-        framePerformance.reset();
         physicsFrame = { running: false, frameMs: 0 };
+        framePerformance.reset();
         human.setVisible(nextVisible);
         if (nextVisible === true && !visible) {
             helper.current?.objects?.get(currentMesh)?.physics?.resetAnchorInterpolation();
@@ -906,6 +907,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const { advanceCameraMotion, loadCameraMotion, setCameraMotionPlaybackEnabled,
         getCameraMotionProgress, clearCameraMotion } = cameraMotion;
     const dispose = () => {
+        physicsFrame = { running: false, frameMs: 0 };
         framePerformance.dispose();
         human.dispose();
         manualExpressions.dispose();

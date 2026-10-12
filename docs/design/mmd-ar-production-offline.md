@@ -6,7 +6,7 @@
 
 已复用实际渲染循环与实例物理update，共享采样/显示模块，约500ms窗口随实际帧批量回显。FPS按实际有效帧间隔汇总；CPU渲染提交耗时包含阴影/AO/SSGI/TAA绘制且排除物理，不声称GPU执行耗时。隐藏/后台/模型切换重置窗口，恢复重新计帧；物理停止不显示旧耗时。指示位于安全区域且不拦截指针；独立编辑工具栏让出FPS首行。隐藏控件不额外关闭原定位/摄像头状态，动作面板进度计时器随隐藏清理。
 
-修改正式两个运行时、helper、DisplayMmd/舞台/物理/分类模块与HTML/CSS；新增mmd-performance.mjs/display-mmd-performance.js。独立build/web-production-test-extras/web-panel-groups复用同一实现与测时模块指纹，删除旧重复包装，编辑器工具栏下移。保留眼球等已有工作区改动。128项定向与两端真实PMX浏览器共130项通过；后台/暂停/恢复/模型重置、FPS/绘制与物理分离、VRM帧入口和控件隐藏均验证，完整CSS/安全区与编辑器不重叠已查看截图，独立WEB重建成功。额外旧运行时静态夹具8项失败在修改前HEAD同样出现；手机性能、实际VRM头像与静态GLB场景观感待设备验收。servicePackage=true，新正式包发布记录见changelog。
+修改正式两个运行时、helper、DisplayMmd/舞台/物理/分类模块与HTML/CSS；新增mmd-performance.mjs/display-mmd-performance.js。独立build/web-production-test-extras/web-panel-groups复用同一实现与测时模块指纹，删除旧重复包装，编辑器工具栏下移。保留眼球等已有工作区改动。130项定向与两端真实PMX浏览器共132项通过；后台/暂停/恢复/模型重置、FPS/绘制与物理分离、VRM帧入口和控件隐藏均验证，完整CSS/安全区与编辑器不重叠已查看截图，独立WEB重建成功。额外旧运行时静态夹具8项失败在修改前HEAD同样出现；手机性能、实际VRM头像与静态GLB场景观感待设备验收。servicePackage=true，新正式包发布记录见changelog。
 
 enterprise分析：主L6、次L5，置信度6/9×0.90=0.60，93分、风险低，按L4采样/计时/回显/可见性四段实现；用户“是”确认后开发。任务：`docs/task/20261012_MMD帧率耗时与角色控件隐藏.md`。
 

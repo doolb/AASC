@@ -121,6 +121,37 @@ test('VRM实际帧入口只统计绘制，排除动画更新，隐藏后不继�
     framePerformance.dispose();
 });
 
+test('PMX重置先清物理状态再发布，同步面板回调不会读到旧耗时', () => {
+    const source = fs.readFileSync(path.join(PUBLIC, 'js/display-pmx-runtime.js'), 'utf8');
+    for (const [name, next, call] of [
+        ['disposeCurrentModel', 'renderFrame', 'disposeCurrentModel()'],
+        ['setVisible', 'rotateModelBy', 'setVisible(false)']
+    ]) {
+        const body = source.slice(source.indexOf('    const ' + name + ' ='), source.indexOf('    const ' + next + ' ='));
+        const values = [];
+        const context = vm.createContext({ physicsFrame: { running: true, frameMs: 23 },
+            framePerformance: { reset() { values.push({ ...context.physicsFrame }); } },
+            ambientOcclusion: { invalidateTemporal() {} }, motionSequence: 0, stopMotion() {}, currentMesh: null,
+            visible: true, frameHandle: 0, human: { setVisible() {} } });
+        vm.runInContext(body + '\n' + call, context);
+        assert.deepEqual(values, [{ running: false, frameMs: 0 }]);
+    }
+});
+
+test('PMX后台恢复尚未渲染时不暴露旧物理帧，实际新帧才恢复回显', () => {
+    const source = fs.readFileSync(path.join(PUBLIC, 'js/display-pmx-runtime.js'), 'utf8');
+    const body = source.slice(source.indexOf('    const getPhysicsSolverState ='), source.indexOf('    const raycaster ='));
+    const mesh = {}, physics = { bodies: [{}], constraints: [], getState: () => ({}) };
+    let rendered = false;
+    const context = vm.createContext({ currentMesh: mesh, helper: { current: { objects: new Map([[mesh, { physics }]]) } },
+        physicsSolver: 'ammo', physicsEnabled: true, visible: true, document: { hidden: false },
+        physicsFrame: { running: true, frameMs: 23 }, framePerformance: { getState: () => ({ running: rendered }) } });
+    vm.runInContext(body + '\nglobalThis.readPhysics = getPhysicsSolverState;', context);
+    assert.equal(context.readPhysics().running, false); assert.equal(context.readPhysics().frameMs, 0);
+    rendered = true; assert.equal(context.readPhysics().running, true); assert.equal(context.readPhysics().frameMs, 23);
+    context.document.hidden = true; assert.equal(context.readPhysics().frameMs, 0);
+});
+
 test('真实DOM：左上角FPS不挡指针，灯光耗时与角色隐藏/面板收起一致', {
     skip: !fs.existsSync('/usr/bin/chromium')
 }, async () => {
