@@ -65,3 +65,11 @@ test('指定 Provider 的用户模型映射不要求别名存在于内置模型�
   assert.equal(selection.provider.id, 'qwen');
   assert.equal(selection.actualModel, 'Qwen3.7');
 });
+// 严格账号约束是显式网页语音绑定，旧preferredAccountId仍保持原有偏好回退行为。
+test('requiredAccountId不可用时不回退其它账号', async () => {
+  const registry={listProviders:async()=>[{id:'demo'}],getEffectiveModels:()=>[{displayName:'demo',actualModelId:'demo'}]};
+  const dataStore={listAccounts:async()=>[{accountId:'other',providerId:'demo',secretConfigured:true}]};
+  const balancer=createChat2ApiLoadBalancer({providerRegistry:registry,dataStore});
+  assert.equal(await balancer.selectAccount('demo','round-robin','demo','missing',{requiredAccountId:'missing'}),null);
+  assert.equal((await balancer.selectAccount('demo','round-robin','demo','missing')).account.accountId,'other');
+});

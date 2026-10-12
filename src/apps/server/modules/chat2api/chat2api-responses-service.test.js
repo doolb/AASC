@@ -116,6 +116,23 @@ test('Responses 没有原生会话时续接仍重放本地历史', async () => {
   assert.deepEqual(requests[1].messages.map((message) => message.content), ['第一轮', '完成', '第二轮']);
 });
 
+test('豆包仅观测到conversationId不宣称原生续接，Responses继续本地文字历史重放', async () => {
+  const sessionStore = createFakeSessionStore();
+  const requests = [];
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: { forwardChatCompletion: async (request) => {
+      requests.push(request);
+      return { body: { choices: [{ message: { role: 'assistant', content: '完成' } }] },
+        providerId: 'doubaochat', accountId: 'doubao_mock', actualModel: 'doubao',
+        nativeState: { observedConversationId: 'observed_1', conversationId: 'unverified_old' } };
+    } },
+  });
+  const first = await service.createResponse({ model: 'doubao', input: '第一轮' });
+  await service.createResponse({ model: 'doubao', previous_response_id: first.body.id, input: '第二轮' });
+  assert.deepEqual(requests[1].messages.map((message) => message.content), ['第一轮', '完成', '第二轮']);
+});
+
 test('Pi snapshot 会话允许首次建立并在重建时清空旧 Provider 状态', async () => {
   const sessionStore = createFakeSessionStore();
   const requests = [];
@@ -298,4 +315,35 @@ test('Responses 流式服务把 Chat Completions 工具调用转换为 Responses
   assert.equal(events[4].arguments, '{"city":"成都"}');
   assert.equal(events.at(-1).response.output[0].type, 'function_call');
   assert.equal(events.at(-1).response.output[0].name, 'weather');
+});
+
+test('Responses只透传服务调用参数中的取消signal，提前return会关闭未读取的上游且不保存会话', async () => {
+  const sessionStore = createFakeSessionStore();
+  const controller = new AbortController();
+  const inputs = [];
+  let returns = 0;
+  let reads = 0;
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: { forwardChatCompletion: async (request, options) => {
+      inputs.push({ request, options });
+      return { providerId: 'doubaochat', stream: {
+        [Symbol.asyncIterator]() { return this; },
+        next: async () => { reads += 1; return { done: true }; },
+        return: async () => { returns += 1; return { done: true }; },
+      } };
+    } },
+  });
+  const payload = { model: 'doubao', input: 'hello', stream: true, signal: '客户端JSON不得当内部信号' };
+  const first = await service.createResponse(payload, { signal: controller.signal });
+  assert.equal((await first.stream.next()).value.type, 'response.created');
+  await first.stream.return();
+  const second = await service.createResponse(payload);
+  await second.stream.return();
+  assert.equal(inputs[0].options.signal, controller.signal);
+  assert.equal(inputs[0].request.signal, undefined);
+  assert.equal(inputs[1].options.signal, undefined);
+  assert.equal(returns, 2);
+  assert.equal(reads, 0);
+  assert.equal(sessionStore.sessions.size, 0);
 });

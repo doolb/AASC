@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { StringDecoder } = require('node:string_decoder');
 const { requestLimited, requestJson, decodeAudio, wrapPcm, adjustWav, MAX_AUDIO_BYTES } = require('./tts-provider-http');
 const { createQwenChatProvider } = require('./qwen-chat-tts');
+const { createDoubaoChatProvider } = require('./doubao-chat-tts');
 const { createProviderError } = require('./tts-provider-errors');
 const { resolveQwenEndpoint, createQwenInput } = require('./qwen-api-contract');
 const { normalizeQwenWav, validateWav } = require('../../../../external/tts/tts-wav');
@@ -106,7 +107,8 @@ function createProviderRegistry({ systemGenerate, systemVoices = async () => [],
     return Object.freeze({
         system: { generate: systemGenerate, voices: systemVoices },
         'qwen-api': qwenApi, 'doubao-api': doubaoApi,
-        'qwen-chat': qwenChat || createQwenChatProvider({ speechService: chat2ApiSpeechService })
+        'qwen-chat': qwenChat || createQwenChatProvider({ speechService: chat2ApiSpeechService }),
+        'doubao-chat': createDoubaoChatProvider({ speechService: chat2ApiSpeechService })
     });
 }
 

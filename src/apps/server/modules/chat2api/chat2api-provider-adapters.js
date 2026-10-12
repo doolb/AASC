@@ -5,9 +5,11 @@ const { Readable } = require('stream');
 const { createHash, createHmac, randomUUID } = require('crypto');
 const { createBrotliDecompress, createGunzip, createInflate } = require('zlib');
 
+const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
+
 let deepSeekWasmPromise;
 
-const PROVIDER_IDS = Object.freeze(['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'perplexity', 'qwen', 'qwen-ai', 'zai']);
+const PROVIDER_IDS = Object.freeze(['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'perplexity', 'qwen', 'qwen-ai', 'zai', 'doubaochat']);
 
 const getCredentials = (account) => account && (account.credentials || account) || {};
 
@@ -933,6 +935,8 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
   return { body: normalizeBody(response.data, request.model), nativeState: responseSession?.nativeState || {} };
 };
 
-const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId, createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig })]));
+const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
+  providerId === 'doubaochat' ? createDoubaoChatAdapter({ httpClient }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig }),
+]));
 
 module.exports = { PROVIDER_IDS, createChat2ApiProviderAdapters, buildProviderHeaders, buildRequestBody, createQwenRequest, parseSseStream };

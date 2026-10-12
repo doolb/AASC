@@ -43,6 +43,34 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
             'qwen-chat': { chat2apiAccountId: 'saved-missing' } } }));
         await page.evaluate(value => window.TtsProviderSettings.handleConfig({ type: 'ttsProviderConfig', config: value }), config);
         assert.equal(await page.evaluate(() => window.sent.length), 0);
+        await page.evaluate(() => {
+            const selection=document.querySelector('#ttsProviderFields > div select');selection.value='doubao-chat';
+            selection.dispatchEvent(new Event('change',{bubbles:true}));
+            document.getElementById('templateTtsProvider').value='doubao-chat';
+            document.getElementById('templateTtsProvider').dispatchEvent(new Event('change',{bubbles:true}));
+        });
+        assert.equal(await page.$eval('#ttsProviderFields > div input',input=>input.readOnly),true);
+        assert.equal(await page.$eval('#templateTtsVoice',input=>input.readOnly),true);
+        assert.ok(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.textContent.includes('实验性')));
+        assert.equal(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.querySelector('input[type="checkbox"]').checked),false);
+        assert.equal(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.querySelectorAll('input[type="password"], input[type="number"]').length),0);
+        assert.equal(await page.$eval('#ttsProviderFields > div:nth-of-type(2) select',node=>[...node.options].some(o=>o.value==='doubao-chat')),false);
+        assert.equal(await page.evaluate(()=>window.sent.length),0);
+        // 权威广播从豆包切回其它来源时，保留服务端音色并原样保存。
+        const switchedConfig=structuredClone(config);
+        switchedConfig.aiReplyDefault={provider:'qwen-api',voice:'Cherry'};
+        await page.evaluate(value=>window.TtsProviderSettings.handleConfig({type:'ttsProviderConfig',config:value}),switchedConfig);
+        assert.equal(await page.$eval('#ttsProviderFields > div input',input=>input.value),'Cherry');
+        assert.equal(await page.$eval('#ttsProviderFields > div input',input=>input.readOnly),false);
+        await page.click('#ttsProviderSaveBtn');
+        const switchedRequest=await page.evaluate(()=>window.sent.at(-1));
+        assert.equal(switchedRequest.config.aiReplyDefault.voice,'Cherry');
+        await page.evaluate(value=>window.TtsProviderSettings.handleConfig({type:'ttsProviderConfig',requestId:value.requestId,success:true,config:value.config}),switchedRequest);
+        await page.evaluate(value=>window.TtsProviderSettings.handleConfig({type:'ttsProviderConfig',config:value}),config);
+        await page.evaluate(()=>{
+            document.getElementById('templateTtsProvider').value='';
+            document.getElementById('templateTtsProvider').dispatchEvent(new Event('change',{bubbles:true}));
+        });
         assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(1)', node => node.querySelectorAll('input[type="checkbox"], input[list], button').length), 0);
         assert.equal(await page.$eval('#ttsProviderFields > div input', input => input.disabled), true);
         assert.equal(await page.$eval('#templateTtsVoice', input => input.hidden), true);

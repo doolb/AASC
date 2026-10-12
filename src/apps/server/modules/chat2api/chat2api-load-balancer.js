@@ -82,10 +82,12 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, modelMapper, 
     return selected;
   };
 
-  const selectAccount = async (model, strategy = 'round-robin', preferredProviderId, preferredAccountId, { requireSecret = false } = {}) => {
+  const selectAccount = async (model, strategy = 'round-robin', preferredProviderId, preferredAccountId, { requireSecret = false, requiredAccountId } = {}) => {
     // 语音调用要求已有登录凭证；默认保持既有聊天调用的候选契约。
     const candidates = (await availableCandidates(model, preferredProviderId, strategy === 'failover'))
-      .filter(candidate => !requireSecret || candidate.account.secretConfigured === true);
+      .filter(candidate => !requireSecret || candidate.account.secretConfigured === true)
+      // 显式网页语音绑定不允许退选；未传该字段的旧聊天/千问调用保持原行为。
+      .filter(candidate => requiredAccountId === undefined || (candidate.account.accountId === requiredAccountId && !isFailed(candidate.account.accountId)));
     if (candidates.length === 0) {
       return null;
     }

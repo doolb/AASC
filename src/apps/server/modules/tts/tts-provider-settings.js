@@ -2,6 +2,7 @@
 
 const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('./tts-provider-policy');
 const { resolveQwenEndpoint } = require('./qwen-api-contract');
+const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_DEFAULTS = Object.freeze({
@@ -10,6 +11,8 @@ const PROVIDER_DEFAULTS = Object.freeze({
         model: 'qwen-audio-3.1-tts-flash', credential: '', defaultVoice: 'qiaoxiaojiao_v3.1', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
     'doubao-api': { enabled: true, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
         model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', defaultSpeed: 0, defaultVolume: 100, resourceId: 'seed-tts-2.0' },
+    'doubao-chat': { enabled: false, endpoint: 'https://www.doubao.com', model: 'doubao-chat',
+        defaultVoice: DOUBAO_SPEECH_VOICE, defaultSpeed: 0, defaultVolume: 100, resourceId: '', experimental: true },
     'qwen-chat': { enabled: true, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
         defaultVoice: 'zh_female_quarkF531S0_ptts', defaultSpeed: 0, defaultVolume: 100, resourceId: '' }
 });
@@ -31,6 +34,22 @@ function boundedString(value, fallback, max = 512) {
 function normalizeProviderSettings(provider, patch = {}, previous = {}, { recoverLegacyModel = false } = {}) {
     if (!PROVIDERS.includes(provider)) throw new Error('不支持的 TTS Provider');
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Provider 配置必须为对象');
+    if (provider === 'doubao-chat') {
+        const fixed = PROVIDER_DEFAULTS[provider];
+        const allowed = new Set(['enabled', 'endpoint', 'model', 'defaultVoice', 'defaultSpeed', 'defaultVolume', 'resourceId', 'experimental']);
+        if (Object.keys(patch).some(key => !allowed.has(key))) throw new Error('豆包网页朗读配置不接受凭据、账号或额外参数');
+        if (patch.enabled !== undefined && typeof patch.enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
+        // 规范化后的配置会再次用于重载；固定实验性标识可原样读回，但不能由控制端取消。
+        if (patch.experimental !== undefined && patch.experimental !== true) throw new Error('豆包网页朗读目前只能作为实验性来源');
+        for (const key of ['endpoint', 'model', 'defaultVoice', 'resourceId']) {
+            if (patch[key] !== undefined && patch[key] !== fixed[key]) throw new Error('豆包网页朗读仅支持固定网页默认配置');
+        }
+        for (const key of ['defaultSpeed', 'defaultVolume']) {
+            if (patch[key] !== undefined && Number(patch[key]) !== fixed[key]) throw new Error('豆包网页朗读速度和音量暂不可调整');
+        }
+        // 历史非秘密参数恢复固定值；任何旧凭据/账号引用均不进入新配置或广播。
+        return { ...fixed, enabled: patch.enabled ?? (typeof previous.enabled === 'boolean' ? previous.enabled : false) };
+    }
     const base = { ...PROVIDER_DEFAULTS[provider], ...previous };
     if (provider !== 'system' && patch.enabled !== undefined && typeof patch.enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
     const endpoint = boundedString(patch.endpoint, base.endpoint, 2048);
@@ -78,6 +97,10 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
         const input = patch[key] === undefined ? previous[key] || {} : patch[key];
         if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('TTS 选择必须为对象');
         const value = normalizeVoiceConfig({ ...previous[key], ...input });
+        if (value.provider === 'doubao-chat') {
+            if (input.provider === 'doubao-chat' && input.voice === undefined && previous[key]?.provider !== 'doubao-chat') value.voice = null;
+            if (value.voice && value.voice !== DOUBAO_SPEECH_VOICE) throw new Error('豆包网页朗读仅支持网页默认音色');
+        }
         validateBusinessProvider(value.provider, business);
         return [key, value];
     }));
@@ -87,7 +110,7 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
 function redactSettings(settings) {
     return { ...settings, providers: Object.fromEntries(Object.entries(settings.providers).map(([id, value]) => {
         const { credential, ...publicSettings } = value;
-        return [id, id === 'qwen-chat' ? publicSettings : { ...publicSettings, credentialConfigured: Boolean(credential) }];
+        return [id, ['qwen-chat', 'doubao-chat'].includes(id) ? publicSettings : { ...publicSettings, credentialConfigured: Boolean(credential) }];
     })) };
 }
 

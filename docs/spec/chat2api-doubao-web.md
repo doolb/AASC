@@ -1,8 +1,36 @@
 # 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
 
-> 2026-10-12：文字适配器与 HTTP 断连取消已实现；Node 直连实测 403，不能宣称可用。以下网页运行模式及音频扩展是待确认伪代码，不代表已经实现。真实请求及凭据访问授权已用完，本轮仅更新文档。
+> 当前状态（2026-10-12）：文字适配器及HTTP断连取消已实现，Node文字直连403，不能宣称可用。用户已批准B方案，完整Ogg校验、worker解码及Frontier/speech/TTS模拟接线均已实现；豆包网页朗读默认禁用、标为实验性，真实运行未重新验收。受控Chrome网页fetch仍待独立确认。后续最小只读授权仅用于核对公开模块协议，未读取Cookie/聊天内容，也没有新聊天或合成。
 
-> 后续确认：用户已选择B并确认实施。Ogg验证及隔离WAV解码已实现；方案A不实施。受控Chrome网页fetch及真实账号/凭据访问未获新增授权。Frontier生产鉴权/音色资料未补齐，speech/TTS接线保持阻断，不能宣称网页TTS可用。执行记录见 `docs/task/20261012_豆包网页WAV解码实施计划.md`。
+> B实施完成：固定ogg-opus-decoder@1.7.5；speech、缓存及下载保持WAV/.wav/audio/wav，A不实施。执行记录见 `docs/task/20261012_豆包网页WAV解码实施计划.md`。最终Chat2API159/162通过，3项仍为既有Windows chmod断言失败；TTS/解码/配置/浏览器回归95/95，既有播报与并发回归19/19。独立审查的总时长和权威音色回填两项问题均先RED再修复。
+
+> 后续只读授权：用户允许对唯一既有豆包标签只读核对最小参数。已从加载的公开模块T57/VgE及语音SDK核对普通网页账号业务标识、TEXT_TTS=5、默认音色与protobuf；未读取/保存Cookie、聊天正文或发送新聊天/合成。此前协议资料门槛已补齐，按批准计划继续模拟接线；真实运行仍未重新验收，Chrome网页fetch模式仍未获实施确认。
+
+```text
+任务3/4新增定义与落实流程：
+  DoubaoSpeechProtocol { 固定Frontier来源, 普通网页公开appkey, VoiceGenie, TEXT_TTS:5, 24kHz, ogg_opus }
+  DoubaoSpeechRequest { voice:zh_female_wenroutaozi_uranus_bigtts, speed:1, volume:100, format:wav }
+  DoubaoSpeechState { taskId, sessionId, phase, currentSentence, sentences, totalAudioBytes, eventCount }
+  按公开protobuf字段编码请求/解码响应，严格UTF-8、wire类型、字段长度/重复及1MiB帧上限 // 不复制SDK日志/重连代码
+  普通网页业务appkey固定来自公开代码；飞书/企业账号暂不支持，不换appkey重试 // Cookie仍由所选Chat2API账号提供，不从Chrome导出
+  Session使用空conversation/message及新建文本会话；固定普通助手botId，默认音色和1倍速 // 不借原网页聊天回复
+  音色是公开默认值，未重新实测；业务Provider默认禁用并标实验性 // 不把静态配置核对视为登录或真实成功
+  Chat2API模型映射中为doubao-chat显式指定doubaochat与preferredAccountId // 复用已有映射业务入口，TTS配置不保存账号
+  LoadBalancer新增可选requiredAccountId，严格限制对应账号且检查健康/启停/额度/秘密 // 找不到不按偏好回退；旧调用保持
+  normalizeSpeechRequest先按模型描述校验：豆包1–1000字符/UTF-8≤4000字节、固定voice/1倍/100音量、只wav // 无效请求不读账号
+  generate共享60秒deadline与当前HTTP的AbortSignal；同账号同时仅1个任务 // 忙时拒绝，不排无限队列
+  WS打开发送StartTask；TaskStarted核对taskId并发送StartSession；SessionStarted发送一次BidirectionalTTS与EndTTS
+  按TTSSentenceStart→TTSResponse→TTSSentenceEnd收集每句Ogg；最多64句/10000事件，总压缩音频≤16MiB // WS帧不等于Ogg页
+  TTSEnded要求处于句间且至少有完整句子，关闭当前WS后才逐句调用decodeOggOpusToWav // 不拼接多个Ogg逻辑流
+  各句WAV必须同采样率、单声道16位PCM；累计PCM含WAV头≤16MiB且累计样本数/采样率≤120秒，wrapPcm包装一次 // 每句独立校验EOS/pre-skip/gain，不能用分句绕过总时长
+  固定官方WSS与Origin，Cookie只在当前连接内存；响应401/403/429映射固定错误，清理握手/WS // 零自动重连/重试
+  定时Ping/Pong只维持当前任务；取消、超时、错任务/会话/顺序、协议错误时终止连接并释放监听/timer
+  Proxy speech在读取请求体后复用withResponseCancellation，仍validateWav/audio/wav // 不新增HTTP配置接口
+  新doubao-chat TTS薄层返回WAV Buffer；业务仅AI/Agent及模板，默认禁用，端点/模型/音色/速度/音量固定
+  setTtsProviderConfig仍规范化持久化/权威广播/重连补发；网页UI无Cookie/账号输入及无效滑条 // 查询音色及自测均不合成
+  权威配置回填先更新来源控件状态，再写服务端音色；用户离开豆包固定音色时才清空旧值 // 防止广播或重连清空其它来源已保存音色
+  全部测试使用假Cookie与fakeWS/临时账号库，本轮不调用真实上游 // 实际账号、音色与播放端验收继续单列
+```
 
 ```text
 已有声明：
@@ -46,19 +74,19 @@
   额外授权的一次Node HTTP /chat/completion返回403风控，停止直接重试 // 纯Node网页文字当前未验收
   额外授权的Frontier独立文字测试返回TaskStarted→SessionStarted→TTSResponse→TTSEnded // 没有原对话ID，证实一例短文独立合成
   官方protobuf TTSResponse.data为Ogg Opus，实测包含OggS起始标记 // 不是PCM或WAV
-  待用户确认扩大语音接口格式：仅新doubao-chat模型显式Ogg响应并同步缓存/MIME及播放器回归，旧模型保持WAV // 不提前改运行逻辑
+  用户选择B后仅新doubao-chat内部收集完整Ogg并解码为WAV；旧模型、缓存、MIME和播放器契约保持 // 不提供Ogg响应分支
   待用户确认browser_client方式：仅受控本机Chrome、匹配被选豆包账号、网页内fetch，不绕过验证码 // 离线Android不能隐式依赖浏览器
   如果不能合成外部传入的任意文本，标记doubao-chat为未支持并停止业务接入 // 不能用开放API或播放已有回答冒充TTS
   如果音频不能通过用户选定格式的完整性校验，停止语音接入并记录错误 // Ogg不能标记为WAV，不从OggS魔数推断完整性
 
-操作流程：原WAV接入草案，尚未实现；仅选择方案B后落实
+操作流程：已实现的B方案WAV接入（模拟验收，真实运行未验收）
   SpeechService通过显式model映射选择qwen或doubaochat账号与对应适配器 // 千问旧默认完全不变
   语音请求先校验长度、voice、speed、volume、wav格式与60秒总时限 // 非法请求不触碰账号
   选取启用且有有效Cookie的网页豆包账号，重读权威Provider和当前凭据 // 不复制Cookie到TTS配置
   DoubaoSpeechAdapter按实测网页协议合成有界完整音频 // 禁止使用doubao-api密钥和seed-tts-2.0
   如果返回可验证PCM，依据实际采样率包装WAV；其他格式须有确证的解码方案 // WAV校验不能放宽
   validateWav验证成功后返回audio/wav；失败固定错误并记录账户健康 // 不切换system或doubao-api
-  TTS薄适配器从业务选项传入指定文本与可验证参数，音色列表仅含已验收项 // 不承诺网页没有的音色
+  TTS薄适配器传指定文本与固定参数；音色列表只有公开默认ID并标available=false、待真实验收 // 查询不合成，不承诺其它音色
   TTS Provider只开放ai_reply与agent_reply，模板和AI默认可选 // 文本阅读/系统播报沿用原服务
   setTtsProviderConfig规范化持久化、广播权威值、连接补发；无凭证字段 // 防止浏览器配置泄漏账号
 
@@ -70,7 +98,7 @@
   优先 npm run check:chat2api；其余使用既有TTS定向测试脚本 // 不自动重启用户服务器
 ```
 
-## 受控网页文字运行模式与音频方案（待用户选择）
+## 受控网页文字模式（待确认）与音频方案比较（B已实施）
 
 ```text
 已有声明：
@@ -140,7 +168,7 @@
   浏览器播放前检查audio/ogg与opus能力；播放错误按既有队列结束语义释放 // 不静默回退Provider
   Android WebView及MMD音频进度需本地样本真机回归；Node Windows/Linux、C#和Go显示端不列入首版支持
 
-操作流程：方案B，Ogg解码为WAV（校验/解码已实现，上游接线未开放）
+操作流程：方案B，Ogg解码为WAV（已模拟接线、默认禁用、真实运行待验收）
   validateOggOpus先校验完整单一容器，返回channels/preSkip/sampleCount48k/durationMs/pageEnds // 固定上限并允许测试收紧，不放宽
   createOpusWavDecoder在容器校验后启动隔离worker，使用已安装ogg-opus-decoder固定版本1.7.5 // 无本机ffmpeg依赖
   首版只接受单声道Opus，音频时长不超过120秒，累计Float32样本不超过32MiB // 项目保护界限，不宣称上游能力保证
@@ -163,7 +191,7 @@
   package/锁文件已安装精确版本；dependenciesPackage已置true，servicePackage保持true，minApk保持既有true // 需要打包不等于已出包
   在出包机验证Android Node的WASM/worker可用性；本轮不构建APK
   转WAV只解决音频播放格式；Android离线服务仍不会因此获得本机Chrome能力
-  公开SDK的appkey和会话参数由调用方注入，默认音色/生产鉴权未能可靠补齐 // 按任务3前置门槛停止上游接线，不新增假可用模型或业务选项
+  公开SDK由调用方注入参数，后续最小只读授权已核对公开T57/VgE定义并完成模拟接线 // 普通网页静态参数不等于真实登录成功，动态身份元数据与账号验收仍待确认
 
 验收流程：
   全部账号/浏览器/Frontier测试使用虚构凭据及本地模拟transport // 不连接9222、不读真实配置或账号库
@@ -171,6 +199,8 @@
   覆盖分片UTF-8/SSE、错误正文脱敏、慢消费者、EOF缺结束与所有容量界限
   覆盖Ogg跨帧分页、CRC损坏、页序/serial错、无头/无EOS、TTSEnded缺失、尾随垃圾与格式冒充
   用公开许可或本地生成的合成音频检验浏览器实际解码/ended/停止/下一句/Range；不保留真实用户音频
+  本地Opus夹具经真实worker转换WAV、存现有缓存，以隔离HTTP验证GET/HEAD/Range/416 // 不启动主服务
+  隔离Chromium用Audio播放并加载现有DisplayLipSyncAudio；核对ended清理、暂停/停止清理与下一句来源 // 无账号音频、无用户浏览器上下文，不代替Android真机
   方案B额外验证解码失败、WAV真实参数、PCM上限和worker终止；旧Provider行为与音色不变
   优先npm run check:chat2api与npm run test:mmd-production:tts；没有对应script的单测用node --test定向执行
   自测面板只核对能力和配置，不能自动触发聊天或语音 // 真实验收次数、文本、账号及凭据访问必须另获明确授权

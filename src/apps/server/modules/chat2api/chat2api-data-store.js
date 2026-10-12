@@ -13,6 +13,7 @@ const {
   equalSecretHash,
 } = require('./chat2api-secret');
 const { selectAccountId } = require('./chat2api-account-identity');
+const { normalizeDoubaoCredentials } = require('./chat2api-doubao-chat-adapter');
 
 const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.config', 'aasc-user', 'chat2api');
 const DEFAULT_LEGACY_DATA_PATH = path.join(os.homedir(), '.chat2api', 'data.json');
@@ -30,7 +31,7 @@ const IMPORT_COLLECTIONS = Object.freeze(['providers', 'accounts', 'modelMapping
 const MAX_IMPORT_ITEMS = 1000;
 const OAUTH_SESSION_TTL_MS = 5 * 60 * 1000;
 const ACCOUNT_INFO_FIELDS = new Set(['id', 'userId', 'realUserID', 'name', 'nickname', 'username', 'email', 'phone']);
-const BUILTIN_PROVIDER_IDS = new Set(['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai']);
+const BUILTIN_PROVIDER_IDS = new Set(['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai', 'doubaochat']);
 
 const assertCollectionName = (name) => {
   if (!Object.prototype.hasOwnProperty.call(COLLECTION_FILES, name)) {
@@ -158,7 +159,17 @@ const createChat2ApiDataStore = (options = {}) => {
     }
     const accountId = ensureId(account.accountId, 'accountId', 'Chat2API 账号');
     const providerId = ensureId(account.providerId, 'providerId', 'Chat2API 账号');
-    return { ...cloneValue(account), accountId, providerId };
+    const normalized = { ...cloneValue(account), accountId, providerId };
+    if (providerId === 'doubaochat') {
+      // 账号导入只表示用户恢复凭据，不表示已验证登录；秘密不得散落在顶层或其他 secret 字段。
+      const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'lastUsed', 'credentials', 'accountInfo']);
+      if (Object.keys(account).some((key) => !accountFields.has(key))) {
+        throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie'), { statusCode: 422, code: 'doubao_invalid_credentials' });
+      }
+      normalized.credentials = normalizeDoubaoCredentials(account.credentials);
+      normalized.accountInfo = selectAccountInfo(account.accountInfo);
+    }
+    return normalized;
   };
 
   const selectAccountInfo = (accountInfo) => {
@@ -456,7 +467,7 @@ const createChat2ApiDataStore = (options = {}) => {
         throw new Error(`Chat2API 账号凭证包包含重复 accountId: ${account.accountId}`);
       }
       incomingIds.add(account.accountId);
-      return account;
+      return account.providerId === 'doubaochat' ? validateAccount(account) : account;
     });
     return accounts;
   };

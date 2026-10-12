@@ -101,19 +101,38 @@ const createChat2ApiProxyService = (options = {}) => {
     return true;
   };
 
+  /**
+   * 必须在请求体读取结束后绑定当前响应：正常 request.close 表示上传结束，不是客户端断连。
+   * 只监听 response.close 且 writableEnded 尚未成立的分支，避免正常完成后误取消或影响别的账号。
+   */
+  const withResponseCancellation = async (response, operation) => {
+    const controller = new AbortController();
+    const onClose = () => {
+      if (!response.writableEnded) controller.abort();
+    };
+    response.once('close', onClose);
+    if (response.destroyed && !response.writableEnded) controller.abort();
+    try {
+      return await operation(controller.signal);
+    } finally {
+      response.removeListener('close', onClose);
+    }
+  };
+
   const writeStream = async (response, stream) => {
     response.statusCode = 200;
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-cache');
     response.setHeader('Connection', 'keep-alive');
     for await (const chunk of stream) {
-      if (response.writableEnded) {
+      // for-await 的 break 会调用流迭代器 return，配合 close signal 立即释放上游。
+      if (response.destroyed || response.writableEnded) {
         break;
       }
       const data = typeof chunk === 'string' && chunk.startsWith('data:') ? chunk : JSON.stringify(chunk);
       response.write(`data: ${data}\n\n`);
     }
-    if (!response.writableEnded) {
+    if (!response.destroyed && !response.writableEnded) {
       response.end('data: [DONE]\n\n');
     }
   };
@@ -124,10 +143,10 @@ const createChat2ApiProxyService = (options = {}) => {
     response.setHeader('Cache-Control', 'no-cache');
     response.setHeader('Connection', 'keep-alive');
     for await (const event of stream) {
-      if (response.writableEnded) break;
+      if (response.destroyed || response.writableEnded) break;
       response.write(`data: ${JSON.stringify(event)}\n\n`);
     }
-    if (!response.writableEnded) response.end('data: [DONE]\n\n');
+    if (!response.destroyed && !response.writableEnded) response.end('data: [DONE]\n\n');
   };
 
   const handleRequest = async (request, response) => {
@@ -219,13 +238,16 @@ const createChat2ApiProxyService = (options = {}) => {
     }
     if (request.method === 'POST' && url.pathname === '/v1/audio/speech') {
       if (!speechService) throw Object.assign(new Error('Chat2API 语音服务不可用'), { statusCode: 503, code: 'speech_unavailable' });
-      const result = await speechService.generate(await readJson(request));
-      validateWav(result.audio);
-      response.statusCode = 200;
-      response.setHeader('Content-Type', 'audio/wav');
-      response.setHeader('Content-Length', result.audio.length);
-      response.setHeader('Cache-Control', 'no-store');
-      response.end(result.audio);
+      const payload = await readJson(request);
+      await withResponseCancellation(response, async (signal) => {
+        const result = await speechService.generate(payload, { signal });
+        validateWav(result.audio);
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'audio/wav');
+        response.setHeader('Content-Length', result.audio.length);
+        response.setHeader('Cache-Control', 'no-store');
+        response.end(result.audio);
+      });
       return;
     }
     if (request.method === 'POST' && ['/v1/chat/completions', '/v1/completions'].includes(url.pathname)) {
@@ -233,12 +255,14 @@ const createChat2ApiProxyService = (options = {}) => {
       const chatRequest = url.pathname === '/v1/completions'
         ? { ...payload, messages: [{ role: 'user', content: payload.prompt || '' }] }
         : payload;
-      const result = await coreAdapter.forwardChatCompletion(chatRequest);
-      if (result.stream) {
-        await writeStream(response, result.stream);
-        return;
-      }
-      sendJson(response, 200, result.body);
+      await withResponseCancellation(response, async (signal) => {
+        const result = await coreAdapter.forwardChatCompletion(chatRequest, { signal });
+        if (result.stream) {
+          await writeStream(response, result.stream);
+          return;
+        }
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result.body);
+      });
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v1/responses') {
@@ -248,12 +272,15 @@ const createChat2ApiProxyService = (options = {}) => {
         error.code = 'responses_unavailable';
         throw error;
       }
-      const result = await responsesService.createResponse(await readJson(request));
-      if (result.stream) {
-        await writeResponsesStream(response, result.stream);
-        return;
-      }
-      sendJson(response, 200, result.body);
+      const payload = await readJson(request);
+      await withResponseCancellation(response, async (signal) => {
+        const result = await responsesService.createResponse(payload, { signal });
+        if (result.stream) {
+          await writeResponsesStream(response, result.stream);
+          return;
+        }
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result.body);
+      });
       return;
     }
     const error = new Error(`路由不存在: ${request.method} ${url.pathname}`);
@@ -272,6 +299,7 @@ const createChat2ApiProxyService = (options = {}) => {
         statistics.successRequests += 1;
       }).catch((error) => {
         statistics.failedRequests += 1;
+        if (response.destroyed || response.writableEnded) return;
         if (!response.headersSent) {
           sendError(response, error);
         } else {

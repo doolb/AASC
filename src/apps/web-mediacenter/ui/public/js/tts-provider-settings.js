@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const PROVIDERS = { system: '系统原生', 'qwen-chat': '国内千问网页', 'qwen-api': 'Qwen API', 'doubao-api': '豆包 API' };
+    const PROVIDERS = { system: '系统原生', 'qwen-chat': '国内千问网页', 'qwen-api': 'Qwen API', 'doubao-api': '豆包 API', 'doubao-chat': '豆包网页朗读（实验）' };
     const BUSINESSES = { aiReplyDefault: 'AI / Agent 回复', textMedia: '文本阅读', systemBroadcast: '报时与系统播报' };
     const NUMBER_FIELDS = { defaultSpeed: [-10, 10], defaultVolume: [0, 100] };
     const FIELD_LABELS = { endpoint: '服务地址', model: '模型', defaultVoice: '默认音色 ID',
@@ -33,7 +33,7 @@
     function selectProvider(business) {
         const select = create('select');
         for (const [id, title] of Object.entries(PROVIDERS)) {
-            if (id === 'qwen-chat' && business !== 'aiReplyDefault') continue;
+            if (['qwen-chat', 'doubao-chat'].includes(id) && business !== 'aiReplyDefault') continue;
             const option = create('option', title);
             option.value = id;
             select.appendChild(option);
@@ -69,6 +69,11 @@
 
     function updateSelectionVoice(selection) {
         const native = selection.provider.value === 'system';
+        const fixed = selection.provider.value === 'doubao-chat';
+        const wasFixed = selection.voice.readOnly;
+        selection.voice.readOnly = fixed;
+        if (fixed) selection.voice.value = config?.providers['doubao-chat']?.defaultVoice || '';
+        else if (wasFixed) selection.voice.value = '';
         selection.voice.disabled = native;
         selection.voice.parentElement.hidden = native;
         // 标签原有内联display会覆盖hidden，显式隐藏避免原生显示无效音色输入。
@@ -81,7 +86,13 @@
         const provider = element('templateTtsProvider');
         const voice = element('templateTtsVoice');
         if (!provider || !voice) return;
-        const native = (provider.value || selections.get('aiReplyDefault')?.provider.value || 'system') === 'system';
+        const selected = provider.value || selections.get('aiReplyDefault')?.provider.value || 'system';
+        const native = selected === 'system';
+        const fixed = selected === 'doubao-chat';
+        const wasFixed = voice.readOnly;
+        voice.readOnly = fixed;
+        if (fixed) voice.value = config?.providers['doubao-chat']?.defaultVoice || '';
+        else if (wasFixed) voice.value = '';
         voice.disabled = native;
         voice.hidden = native;
         voice.style.display = native ? 'none' : '';
@@ -132,7 +143,7 @@
                 inputs.enabled = enabled;
                 addField(group, '启用', enabled);
             }
-            const names = id === 'system' ? ['defaultSpeed', 'defaultVolume'] : Object.keys(FIELD_LABELS);
+            const names = id === 'doubao-chat' ? ['defaultVoice'] : id === 'system' ? ['defaultSpeed', 'defaultVolume'] : Object.keys(FIELD_LABELS);
             for (const name of names) {
                 if (name === 'resourceId' && id !== 'doubao-api') continue;
                 if (name === 'credential' && id === 'qwen-chat') continue;
@@ -151,6 +162,7 @@
                     if (NUMBER_FIELDS[name]) [input.min, input.max] = NUMBER_FIELDS[name];
                 }
                 if (id === 'qwen-chat' && name === 'endpoint') input.readOnly = true;
+                if (id === 'doubao-chat') input.readOnly = true;
                 if (name === 'defaultVoice') input.setAttribute('list', `ttsProviderVoices-${id}`);
                 inputs[name] = input;
                 addField(group, FIELD_LABELS[name], input);
@@ -159,7 +171,11 @@
                 group.appendChild(create('p', '由 Chat2API 提供语音合成，账号和登录状态请在 Chat2API 账户管理中维护。'));
                 group.appendChild(create('p', '网页模型默认 QUARK_VOICE；MINI_MAX 需匹配音色。qwen3-tts-flash 请使用 Qwen API。'));
             }
-            if (id !== 'system' && id !== 'qwen-chat') {
+            if (id === 'doubao-chat') {
+                group.appendChild(create('p', '实验性网页朗读，默认关闭，尚未重新进行真实账号合成验收。'));
+                group.appendChild(create('p', '先在Chat2API为doubao-chat映射到doubaochat及指定账号；固定网页默认音色、速度与音量，失败不切换其它来源。'));
+            }
+            if (id !== 'system' && !['qwen-chat', 'doubao-chat'].includes(id)) {
                 inputs.clearCredential = create('input');
                 inputs.clearCredential.type = 'checkbox';
                 addField(group, '清除已保存凭证', inputs.clearCredential);
@@ -199,8 +215,9 @@
         config = message.config;
         for (const [key, selection] of selections) {
             selection.provider.value = config[key]?.provider || 'system';
-            selection.voice.value = config[key]?.voice || '';
             updateSelectionVoice(selection);
+            // 权威配置回填在来源状态更新后进行，避免离开豆包只读状态时误清空服务端音色。
+            selection.voice.value = config[key]?.voice || (selection.provider.value === 'doubao-chat' ? config.providers['doubao-chat']?.defaultVoice || '' : '');
         }
         for (const [id, inputs] of fields) {
             const value = config.providers[id];
@@ -261,7 +278,8 @@
         catalogs.set(message.provider, voices);
         setVoiceList(message.provider);
         const custom = inputs.defaultVoice.value && !voices.some(voice => voice.id === inputs.defaultVoice.value);
-        inputs.voiceStatus.textContent = custom ? '当前 ID 不在候选目录中，保留并在合成时验证' : `已加载 ${voices.length} 个音色候选，可填写其他有效 ID`;
+        inputs.voiceStatus.textContent = message.provider === 'doubao-chat' ? '网页固定默认音色，尚未重新进行真实合成验收'
+            : custom ? '当前 ID 不在候选目录中，保留并在合成时验证' : `已加载 ${voices.length} 个音色候选，可填写其他有效 ID`;
     }
 
     function handleDisconnected() {

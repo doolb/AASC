@@ -1,0 +1,528 @@
+const axios = require('axios');
+const { randomUUID } = require('crypto');
+const { TextDecoder } = require('util');
+
+// 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
+const DOUBAO_ORIGIN = 'https://www.doubao.com';
+const DOUBAO_COMPLETION_URL = `${DOUBAO_ORIGIN}/chat/completion`;
+const DOUBAO_MODEL_MODES = Object.freeze({ doubao: 0, 'doubao-think': 1, 'doubao-expert': 3 });
+const DOUBAO_LIMITS = Object.freeze({
+  timeoutMs: 120_000,
+  requestBytes: 256 * 1024,
+  streamBytes: 8 * 1024 * 1024,
+  eventBytes: 512 * 1024,
+  outputBytes: 2 * 1024 * 1024,
+  events: 20_000,
+  blocks: 2048,
+});
+// 仅接受参考协议明确使用的名称。用户可以提供这些字段组成的最小 Cookie，不能猜测未知字段的用途。
+const COOKIE_NAMES = new Set(['sessionid', 'passport_csrf_token', 'passport_csrf_token_default', 'msToken', 'ttwid', 's_v_web_id']);
+const ERROR_DEFINITIONS = Object.freeze({
+  doubao_invalid_credentials: [422, '豆包 Cookie 或 CSRF 格式无效，请检查网页登录凭据'],
+  doubao_invalid_provider: [422, '豆包网页 Provider 仅允许固定官方 HTTPS 来源'],
+  doubao_unsupported_model: [400, '豆包网页不支持该文字模型模式'],
+  doubao_text_only: [400, '豆包网页适配器仅支持纯文字，不支持多模态或原生工具调用'],
+  doubao_invalid_request: [400, '豆包文字请求格式无效或缺少用户文字'],
+  doubao_request_too_large: [413, '豆包文字请求超过容量限制'],
+  doubao_auth_expired: [401, '豆包网页登录已失效，请在官网重新登录'],
+  doubao_risk_control: [403, '豆包网页要求安全验证，请在官网处理后重试'],
+  doubao_rate_limited: [429, '豆包网页请求过于频繁，请稍后重试'],
+  doubao_cancelled: [499, '豆包文字请求已取消'],
+  doubao_timeout: [504, '豆包文字请求超时'],
+  doubao_stream_limit: [502, '豆包网页响应超过安全容量限制'],
+  doubao_protocol_error: [502, '豆包网页返回了无法安全解析的响应'],
+  doubao_incomplete_response: [502, '豆包网页响应未完整结束，请稍后重试'],
+  doubao_empty_response: [502, '豆包网页未返回有效文字'],
+  doubao_upstream_failed: [502, '豆包网页请求失败，请稍后重试'],
+});
+
+/** 所有异常都来自固定白名单；绝不把 Axios 对象、上游错误正文或签名 URL 放进 message/cause。 */
+const doubaoError = (code) => {
+  const [statusCode, message] = ERROR_DEFINITIONS[code] || ERROR_DEFINITIONS.doubao_upstream_failed;
+  return Object.assign(new Error(message), { statusCode, code: ERROR_DEFINITIONS[code] ? code : 'doubao_upstream_failed' });
+};
+
+/**
+ * 账号秘密只允许既有 credentials.cookie。严格检查总长度、名称、重复键和 RFC Cookie 字符，
+ * CSRF 必须从 Cookie 自身取得，禁止用独立字段或 Provider headers 覆盖，更不能静默忽略非法片段。
+ */
+const normalizeDoubaoCredentials = (credentials) => {
+  if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)
+    || Object.keys(credentials).some((key) => key !== 'cookie')) throw doubaoError('doubao_invalid_credentials');
+  const source = credentials.cookie;
+  if (typeof source !== 'string' || source.length === 0 || source.length > 16 * 1024
+    || /[^\x20-\x7E]/u.test(source)) throw doubaoError('doubao_invalid_credentials');
+  const cookies = new Map();
+  for (const segment of source.split(';')) {
+    const part = segment.trim();
+    const separator = part.indexOf('=');
+    if (separator < 1) throw doubaoError('doubao_invalid_credentials');
+    const name = part.slice(0, separator);
+    const value = part.slice(separator + 1);
+    if (!COOKIE_NAMES.has(name) || cookies.has(name) || !value || value.length > 4096
+      || !/^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]+$/u.test(value)) throw doubaoError('doubao_invalid_credentials');
+    cookies.set(name, value);
+  }
+  const sessionId = cookies.get('sessionid') || '';
+  const csrf = cookies.get('passport_csrf_token') || cookies.get('passport_csrf_token_default') || '';
+  if (!/^[a-zA-Z0-9_-]{16,512}$/u.test(sessionId) || !/^[a-zA-Z0-9_-]{16,128}$/u.test(csrf)) {
+    throw doubaoError('doubao_invalid_credentials');
+  }
+  // 两个同名用途的 CSRF Cookie 同时存在时也必须各自合法，防止备用字段携带注入内容。
+  for (const name of ['passport_csrf_token', 'passport_csrf_token_default']) {
+    if (cookies.has(name) && !/^[a-zA-Z0-9_-]{16,128}$/u.test(cookies.get(name))) throw doubaoError('doubao_invalid_credentials');
+  }
+  return { cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; ') };
+};
+
+const assertDoubaoProvider = (provider) => {
+  if (!provider || (provider.id || provider.providerId) !== 'doubaochat' || provider.enabled === false
+    || (provider.apiEndpoint !== undefined && provider.apiEndpoint !== DOUBAO_ORIGIN)
+    || (provider.chatPath !== undefined && provider.chatPath !== '/chat/completion')) throw doubaoError('doubao_invalid_provider');
+};
+
+/** 保留角色边界并明确拒绝非文字部件；共享工具层已转换的文字标签仍只是文字，不代表网页原生工具。 */
+const getRequestText = (request, limits) => {
+  if (!request || !Array.isArray(request.messages) || request.messages.length === 0 || request.messages.length > 1024) {
+    throw doubaoError('doubao_invalid_request');
+  }
+  if ((request.tools !== undefined && (!Array.isArray(request.tools) || request.tools.length > 0))
+    || (request.tool_choice !== undefined && request.tool_choice !== 'none') || request.functions !== undefined
+    || request.function_call !== undefined || request.audio !== undefined || request.modalities !== undefined) throw doubaoError('doubao_text_only');
+  let hasUserText = false;
+  let bytes = 0;
+  const parts = request.messages.map((message) => {
+    if (!message || typeof message !== 'object' || !['system', 'developer', 'user', 'assistant', 'tool'].includes(message.role)) {
+      throw doubaoError('doubao_invalid_request');
+    }
+    if (message.tool_calls || message.function_call) throw doubaoError('doubao_text_only');
+    const content = message.content;
+    let text;
+    if (typeof content === 'string') text = content;
+    else if (Array.isArray(content)) {
+      text = content.map((part) => {
+        if (!part || !['text', 'input_text', 'output_text'].includes(part.type) || typeof part.text !== 'string') throw doubaoError('doubao_text_only');
+        return part.text;
+      }).join('\n');
+    } else throw doubaoError('doubao_invalid_request');
+    if (message.role === 'user' && text.trim()) hasUserText = true;
+    bytes += Buffer.byteLength(text, 'utf8');
+    if (bytes > limits.requestBytes) throw doubaoError('doubao_request_too_large');
+    const role = { system: 'System', developer: 'System', user: 'User', assistant: 'Assistant', tool: 'Tool' }[message.role];
+    return `${role}: ${text}`;
+  });
+  if (!hasUserText) throw doubaoError('doubao_invalid_request');
+  return parts.join('\n\n');
+};
+
+/**
+ * 现场仅确认了首轮 ACK，未确认原生第二轮的服务器行为。当前每轮创建新网页会话并重放调用方
+ * 提供的文字历史；保存 observedConversationId 仅供状态观测，不让 Responses 误认为原生续接可用。
+ */
+const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = DOUBAO_LIMITS }) => {
+  assertDoubaoProvider(provider);
+  const credentials = normalizeDoubaoCredentials(account && account.credentials);
+  const model = actualModel || request.model;
+  if (!Object.hasOwn(DOUBAO_MODEL_MODES, model)) throw doubaoError('doubao_unsupported_model');
+  const text = getRequestText(request, limits);
+  const cookieMap = new Map(credentials.cookie.split('; ').map((part) => [part.slice(0, part.indexOf('=')), part.slice(part.indexOf('=') + 1)]));
+  const mode = DOUBAO_MODEL_MODES[model];
+  const data = {
+    client_meta: {
+      local_conversation_id: `local_${randomUUID().replaceAll('-', '').slice(0, 16)}`,
+      conversation_id: '', bot_id: '7338286299411103781', last_section_id: '', last_message_index: null,
+    },
+    messages: [{
+      local_message_id: randomUUID(), message_status: 0,
+      content_block: [{
+        block_type: 10000, block_id: randomUUID(), parent_id: '', meta_info: [], append_fields: [],
+        content: { text_block: { text, icon_url: '', icon_url_dark: '', summary: '' }, pc_event_block: '' },
+      }],
+    }],
+    option: {
+      send_message_scene: '', create_time_ms: Date.now(), collect_id: '',
+      is_audio: false, answer_with_suggest: false, tts_switch: false, need_deep_think: mode,
+      click_clear_context: false, from_suggest: false, is_regen: false, is_replace: false,
+      disable_sse_cache: false, select_text_action: '', resend_for_regen: false, scene_type: 0,
+      unique_key: randomUUID(), start_seq: 0, need_create_conversation: true,
+      conversation_init_option: { need_ack_conversation: true },
+      regen_query_id: [], edit_query_id: [], regen_instruction: '', no_replace_for_regen: false,
+      message_from: 0, shared_app_name: '', shared_app_id: '', is_ai_playground: false,
+      support_lazy_fetch_stream: true,
+      // 当次网页捕获为 false，但仍出现 CHUNK_DELTA；不将此值解释为所有版本的通用开关语义。
+      sse_recv_event_options: { support_chunk_delta: false },
+    },
+    ext: { use_deep_think: String(mode), collection_id: '', commerce_credit_config_enable: '0', sub_conv_firstmet_type: '1' },
+  };
+  if (Buffer.byteLength(JSON.stringify(data), 'utf8') > limits.requestBytes) throw doubaoError('doubao_request_too_large');
+  return {
+    method: 'POST', url: DOUBAO_COMPLETION_URL, data,
+    headers: {
+      Cookie: credentials.cookie, 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default'),
+      Accept: 'text/event-stream', 'Content-Type': 'application/json', Origin: DOUBAO_ORIGIN, Referer: `${DOUBAO_ORIGIN}/`, 'agw-js-conv': 'str',
+    },
+    // 禁止重定向和环境代理；Node 独立 HTTP 是否需要网页签名尚未验证，不伪造签名或挪用 Chrome。
+    responseType: 'stream', maxRedirects: 0, proxy: false, timeout: limits.timeoutMs,
+    maxBodyLength: limits.requestBytes, maxContentLength: limits.streamBytes, validateStatus: () => true,
+  };
+};
+
+const getHeader = (headers, name) => String(Object.entries(headers || {}).find(([key]) => key.toLowerCase() === name)?.[1] || '');
+const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const parseJson = (text) => {
+  try { return JSON.parse(text); } catch { throw doubaoError('doubao_protocol_error'); }
+};
+const safeId = (value) => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/u.test(value) && value !== '0' ? value : '';
+
+/** 仅使用数值错误码分类，不读取/返回上游 msg、extra、验证码参数或任意未知错误字段。 */
+const getUpstreamError = (data, event = '') => {
+  if (!isRecord(data)) return null;
+  const rawCode = data.error_code ?? data.code ?? 0;
+  const code = Number(rawCode);
+  if (code === 710012001 || code === 401) return doubaoError('doubao_auth_expired');
+  if ([710022002, 710022004, 403].includes(code)) return doubaoError('doubao_risk_control');
+  if (code === 429) return doubaoError('doubao_rate_limited');
+  if (code !== 0 || ['gateway-error', 'STREAM_ERROR'].includes(event)) return doubaoError('doubao_upstream_failed');
+  return null;
+};
+
+/** 增量 UTF-8 解码和完整 SSE 帧解析；未知事件忽略，但带 data 的损坏 JSON 不可冒充心跳。 */
+const parseDoubaoEvents = async function* (source, limits, control) {
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  let buffer = '';
+  let totalBytes = 0;
+  let count = 0;
+  const iterator = source[Symbol.asyncIterator]();
+  const parseBlock = (block) => {
+    if (Buffer.byteLength(block, 'utf8') > limits.eventBytes) throw doubaoError('doubao_stream_limit');
+    let event = '';
+    const data = [];
+    for (const line of block.split(/\r?\n/u)) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /u, ''));
+    }
+    if (data.length === 0) return null;
+    const raw = data.join('\n');
+    if (raw === '[DONE]') return { event: 'UNCONFIRMED_DONE', data: {} };
+    const parsed = parseJson(raw);
+    if (!isRecord(parsed)) throw doubaoError('doubao_protocol_error');
+    return { event: event || parsed._event || '', data: parsed };
+  };
+  while (true) {
+    const item = await control.wait(iterator.next());
+    if (item.done) break;
+    const bytes = Buffer.isBuffer(item.value) ? item.value : Buffer.from(item.value);
+    totalBytes += bytes.length;
+    if (totalBytes > limits.streamBytes) throw doubaoError('doubao_stream_limit');
+    try { buffer += decoder.decode(bytes, { stream: true }); } catch { throw doubaoError('doubao_protocol_error'); }
+    let boundary;
+    while ((boundary = /\r?\n\r?\n/u.exec(buffer))) {
+      const block = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary[0].length);
+      count += 1;
+      if (count > limits.events) throw doubaoError('doubao_stream_limit');
+      const parsed = parseBlock(block);
+      if (parsed) yield parsed;
+    }
+    if (Buffer.byteLength(buffer, 'utf8') > limits.eventBytes) throw doubaoError('doubao_stream_limit');
+  }
+  try { buffer += decoder.decode(); } catch { throw doubaoError('doubao_protocol_error'); }
+  // 最后一帧没有空行也允许解析，但只有真正的 SSE_REPLY_END 才会完成回答。
+  if (buffer.trim()) {
+    count += 1;
+    if (count > limits.events) throw doubaoError('doubao_stream_limit');
+    const parsed = parseBlock(buffer);
+    if (parsed) yield parsed;
+  }
+};
+
+/**
+ * 单个请求的生命周期贯穿握手和读取；Promise.race 也约束不响应 signal 的 mock/异常客户端。
+ * 总超时不依赖下一片数据到达，取消时立即销毁上游流，迭代器提前 return 同样进入 finally。
+ */
+const createRequestControl = (signal, timeoutMs) => {
+  const controller = new AbortController();
+  let source;
+  let stoppedError;
+  let rejectStop;
+  const stopped = new Promise((resolve, reject) => { rejectStop = reject; });
+  stopped.catch(() => {});
+  const stop = (code) => {
+    if (stoppedError) return;
+    stoppedError = doubaoError(code);
+    controller.abort();
+    if (source && typeof source.destroy === 'function') source.destroy();
+    rejectStop(stoppedError);
+  };
+  const onAbort = () => stop('doubao_cancelled');
+  const timer = setTimeout(() => stop('doubao_timeout'), timeoutMs);
+  if (signal && typeof signal.addEventListener === 'function') {
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  }
+  return {
+    signal: controller.signal,
+    attach: (value) => {
+      source = value;
+      if (stoppedError) {
+        if (source && typeof source.destroy === 'function') source.destroy();
+        throw stoppedError;
+      }
+    },
+    cancel: () => stop('doubao_cancelled'),
+    check: () => { if (stoppedError) throw stoppedError; },
+    wait: async (pending) => {
+      if (stoppedError) throw stoppedError;
+      return Promise.race([pending, stopped]);
+    },
+    normalizeError: (error) => stoppedError || (ERROR_DEFINITIONS[error && error.code] ? doubaoError(error.code) : doubaoError('doubao_upstream_failed')),
+    cleanup: () => {
+      clearTimeout(timer);
+      if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onAbort);
+      controller.abort();
+      if (source && typeof source.destroy === 'function') source.destroy();
+    },
+  };
+};
+
+const createChunk = (id, model, delta, finishReason = null) => ({
+  id, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model,
+  choices: [{ index: 0, delta, finish_reason: finishReason }],
+});
+
+/**
+ * 正文、思考和状态各走独立通道。10040 是参考协议的思考边界块；只按白名单文字块解析，
+ * FULL_MSG_NOTIFY 可能是用户回显，永不当回答。累计快照只补未输出后缀，不重发 CHUNK_DELTA。
+ */
+const consumeDoubaoStream = async function* ({ source, model, mode, nativeState, limits, control }) {
+  const id = `chatcmpl-${randomUUID().replaceAll('-', '')}`;
+  const blocks = new Map();
+  let activeBlock = null;
+  let textChannelAllowed = true;
+  let thinkingBoundaries = 0;
+  // 思考/专家模式如不提供可识别边界，默认隔离为思考；宁可明确空正文失败，也不泄露思考文本。
+  let inThinking = mode !== 0;
+  let bodyBytes = 0;
+  let content = '';
+  let reasoning = '';
+  let observedConversationId = '';
+  let observedSectionId = '';
+  const appendText = (text, channel) => {
+    if (typeof text !== 'string' || !text) return null;
+    const delta = text;
+    bodyBytes += Buffer.byteLength(delta, 'utf8');
+    if (bodyBytes > limits.outputBytes) throw doubaoError('doubao_stream_limit');
+    if (channel === 'reasoning_content') reasoning += delta;
+    else content += delta;
+    return delta ? createChunk(id, model, { [channel]: delta }) : null;
+  };
+  const visitBlock = (block, snapshot = false) => {
+    if (!isRecord(block)) throw doubaoError('doubao_protocol_error');
+    const key = safeId(block.block_id);
+    const type = Number(block.block_type);
+    const previous = key && blocks.get(key);
+    if (type === 10040) {
+      // 同一个参考边界的重复快照不应再次翻转思考状态；边界语义仍需独立真实验收。
+      if (!previous) {
+        thinkingBoundaries += 1;
+        inThinking = thinkingBoundaries === 1;
+      }
+      // is_finish 的含义尚未现场确认，不能用它猜测思考结束并把后续思考泄露成正文。
+      activeBlock = null;
+      textChannelAllowed = true;
+      if (key) blocks.set(key, { channel: 'reasoning_content', type });
+      if (blocks.size > limits.blocks) throw doubaoError('doubao_stream_limit');
+      return null;
+    }
+    if (type !== 10000) {
+      activeBlock = null;
+      textChannelAllowed = false;
+      return null;
+    }
+    textChannelAllowed = true;
+    const channel = previous?.channel || (inThinking ? 'reasoning_content' : 'content');
+    const record = previous || { channel, type, text: '' };
+    if (key) {
+      blocks.set(key, record);
+      if (blocks.size > limits.blocks) throw doubaoError('doubao_stream_limit');
+    }
+    activeBlock = record;
+    const text = block.content?.text_block?.text;
+    if (typeof text !== 'string' || !text) return null;
+    if (snapshot && record.text) {
+      if (record.text.startsWith(text)) return null;
+      if (!text.startsWith(record.text)) throw doubaoError('doubao_protocol_error');
+      const delta = text.slice(record.text.length);
+      record.text = text;
+      return appendText(delta, channel);
+    }
+    record.text += text;
+    return appendText(text, channel);
+  };
+  try {
+    for await (const { event, data } of parseDoubaoEvents(source, limits, control)) {
+      const error = getUpstreamError(data, event);
+      if (error) throw error;
+      switch (event) {
+        case 'SSE_ACK': {
+          const ack = data.ack_client_meta;
+          observedConversationId = safeId(ack?.conversation_id) || observedConversationId;
+          observedSectionId = safeId(ack?.last_section_id) || observedSectionId;
+          break;
+        }
+        case 'FULL_MSG_NOTIFY':
+          // 完整消息通知包含用户回显/会话元数据，不作为 assistant 内容。真正正文由流事件提供。
+          break;
+        case 'CHUNK_DELTA': {
+          if (!textChannelAllowed && data.block_type === undefined) break;
+          const block = safeId(data.block_id) && blocks.get(data.block_id) || activeBlock;
+          const channel = block?.channel || (inThinking ? 'reasoning_content' : 'content');
+          if (data.block_type !== undefined && ![10000, 10040].includes(Number(data.block_type))) break;
+          if (typeof data.text !== 'string') throw doubaoError('doubao_protocol_error');
+          if (block) block.text = (block.text || '') + data.text;
+          const chunk = appendText(data.text, Number(data.block_type) === 10040 ? 'reasoning_content' : channel);
+          if (chunk) yield chunk;
+          break;
+        }
+        case 'STREAM_MSG_NOTIFY':
+        case 'STREAM_CHUNK': {
+          const snapshot = event === 'STREAM_MSG_NOTIFY';
+          const message = isRecord(data.message) ? data.message : null;
+          if (message && ['user', 'human'].includes(message.role)) break;
+          const contentBlocks = message?.content_block || data.content?.content_block;
+          if (Array.isArray(contentBlocks)) {
+            for (const block of contentBlocks) {
+              const chunk = visitBlock(block, true);
+              if (chunk) yield chunk;
+            }
+          }
+          const patches = data.patch_op;
+          if (patches !== undefined && !Array.isArray(patches)) throw doubaoError('doubao_protocol_error');
+          for (const patch of patches || []) {
+            if (!isRecord(patch) || !isRecord(patch.patch_value)) throw doubaoError('doubao_protocol_error');
+            const value = patch.patch_value;
+            if (Array.isArray(value.content_block)) {
+              for (const block of value.content_block) {
+                const chunk = visitBlock(block, snapshot);
+                if (chunk) yield chunk;
+              }
+            }
+            // 102 是参考客户端的文字块增量，content 是一个 JSON 字符串而不是可回显的任意正文。
+            if (Number(patch.patch_object) === 102 && typeof value.content === 'string' && textChannelAllowed) {
+              const parsed = parseJson(value.content);
+              const channel = activeBlock?.channel || (inThinking ? 'reasoning_content' : 'content');
+              if (activeBlock) activeBlock.text = (activeBlock.text || '') + (typeof parsed.text === 'string' ? parsed.text : '');
+              const chunk = appendText(parsed.text, channel);
+              if (chunk) yield chunk;
+            }
+          }
+          break;
+        }
+        case 'SSE_REPLY_END': {
+          if (!content.trim()) throw doubaoError('doubao_empty_response');
+          // 只有正文非空且收到显式结束事件才提交观测状态；失败/取消不会污染下一轮会话。
+          if (observedConversationId) nativeState.observedConversationId = observedConversationId;
+          if (observedSectionId) nativeState.observedSectionId = observedSectionId;
+          yield createChunk(id, model, {}, 'stop');
+          return;
+        }
+        default:
+          // 心跳、搜索/音频/工具描述以及未知协议事件均不作为正文；EOF 仍必须有显式结束。
+          break;
+      }
+    }
+    throw doubaoError('doubao_incomplete_response');
+  } catch (error) {
+    throw control.normalizeError(error);
+  } finally {
+    control.cleanup();
+  }
+};
+
+/** 未走通用 rawTrafficLogger：原始网页错误可在任意字符串携带凭据，不能仅依靠键名脱敏。 */
+const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {} } = {}) => {
+  // 测试可收紧容量/超时，但调用方不能放宽生产安全上限。
+  const limits = Object.fromEntries(Object.entries(DOUBAO_LIMITS).map(([key, maximum]) => [key,
+    Number.isSafeInteger(customLimits[key]) && customLimits[key] > 0 ? Math.min(customLimits[key], maximum) : maximum,
+  ]));
+  return async ({ request, account, provider, actualModel, responseSession, context = {} }) => {
+    const prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits });
+    const nativeState = responseSession?.nativeState && isRecord(responseSession.nativeState) ? responseSession.nativeState : {};
+    const control = createRequestControl(context.signal || request.signal, limits.timeoutMs);
+    let response;
+    try {
+      control.check();
+      // 若客户端忽略取消后才交回流，也必须立即关闭，避免后台请求成为泄漏的资源。
+      const pending = Promise.resolve(httpClient.request({ ...prepared, signal: control.signal })).then((value) => {
+        control.attach(value?.data);
+        return value;
+      });
+      response = await control.wait(pending);
+      const status = Number(response && response.status);
+      if (status !== 200) {
+        if (status === 401) throw doubaoError('doubao_auth_expired');
+        if (status === 403) throw doubaoError('doubao_risk_control');
+        if (status === 429) throw doubaoError('doubao_rate_limited');
+        throw doubaoError('doubao_upstream_failed');
+      }
+      // 自动重定向由 maxRedirects=0 关闭；仍核对客户端给出的最终 URL，禁止不受控实现悄悄换来源。
+      const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL;
+      if (finalUrl && finalUrl !== DOUBAO_COMPLETION_URL) throw doubaoError('doubao_invalid_provider');
+      if (!response.data || typeof response.data[Symbol.asyncIterator] !== 'function') throw doubaoError('doubao_protocol_error');
+      const contentType = getHeader(response.headers, 'content-type').toLowerCase();
+      if (!/^text\/event-stream(?:\s*;|$)/u.test(contentType)) {
+        // JSON 登录失效可分类，其余响应只返回固定错误；读取本身同样受总时间/字节限制。
+        let bytes = 0;
+        const pieces = [];
+        const iterator = response.data[Symbol.asyncIterator]();
+        while (true) {
+          const part = await control.wait(iterator.next());
+          if (part.done) break;
+          const piece = Buffer.from(part.value);
+          bytes += piece.length;
+          if (bytes > Math.min(limits.eventBytes, 64 * 1024)) throw doubaoError('doubao_stream_limit');
+          pieces.push(piece);
+        }
+        if (contentType.startsWith('application/json')) {
+          const data = parseJson(Buffer.concat(pieces).toString('utf8'));
+          throw getUpstreamError(data) || doubaoError('doubao_protocol_error');
+        }
+        throw doubaoError('doubao_protocol_error');
+      }
+      const events = consumeDoubaoStream({ source: response.data, model: request.originalModel || request.model,
+        mode: DOUBAO_MODEL_MODES[actualModel || request.model], nativeState, limits, control });
+      const stream = {
+        [Symbol.asyncIterator]() { return this; },
+        next: () => events.next(),
+        return: async () => {
+          control.cancel();
+          try { return await events.return(); } finally { control.cleanup(); }
+        },
+      };
+      if (request.stream === true) return { stream, nativeState };
+      let content = '';
+      let reasoning = '';
+      let id = '';
+      for await (const chunk of stream) {
+        id = chunk.id;
+        content += chunk.choices[0].delta.content || '';
+        reasoning += chunk.choices[0].delta.reasoning_content || '';
+      }
+      return {
+        body: {
+          id, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: request.originalModel || request.model,
+          choices: [{ index: 0, message: { role: 'assistant', content, ...(reasoning ? { reasoning_content: reasoning } : {}) }, finish_reason: 'stop' }],
+        },
+        nativeState,
+      };
+    } catch (error) {
+      control.cleanup();
+      throw control.normalizeError(error);
+    }
+  };
+};
+
+module.exports = {
+  DOUBAO_ORIGIN, DOUBAO_COMPLETION_URL, DOUBAO_MODEL_MODES, DOUBAO_LIMITS,
+  normalizeDoubaoCredentials, assertDoubaoProvider, buildDoubaoRequest, createDoubaoChatAdapter,
+};

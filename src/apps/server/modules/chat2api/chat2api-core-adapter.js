@@ -79,6 +79,8 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       startTime: Date.now(),
       ...(options.conversationId ? { conversationId: options.conversationId } : {}),
       ...(options.piSessionId ? { piSessionId: options.piSessionId } : {}),
+      // HTTP 响应断连信号只放在内部 context，不混进模型请求体或持久化会话。
+      ...(options.signal ? { signal: options.signal } : {}),
     };
 
     try {

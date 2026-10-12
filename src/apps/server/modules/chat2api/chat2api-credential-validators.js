@@ -1,5 +1,6 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const { normalizeDoubaoCredentials, assertDoubaoProvider } = require('./chat2api-doubao-chat-adapter');
 
 const VALIDATION_TIMEOUT_MS = 15 * 1000;
 
@@ -205,7 +206,22 @@ const validateZai = async (credentials, httpClient) => {
   return failure(response.status === 401 ? 'Token 已过期或无效' : 'Z.ai 凭据校验失败');
 };
 
+/**
+ * 本轮没有已确认的安全只读登录检查端点，不能用官网首页 200、Cookie 非空或发送测试消息
+ * 伪造账号验证成功。先本地严格校验，再返回固定阻塞原因；未来只有协议实测后才能开放入库。
+ */
+const validateDoubao = async (credentials, httpClient, provider) => {
+  try {
+    assertDoubaoProvider(provider);
+    normalizeDoubaoCredentials(credentials);
+  } catch (error) {
+    return failure(error.message);
+  }
+  return failure('豆包安全只读登录校验端点尚未确认，暂不能添加账号');
+};
+
 const VALIDATORS = Object.freeze({
+  doubaochat: validateDoubao,
   deepseek: validateDeepSeek,
   glm: validateGlm,
   kimi: validateKimi,
@@ -221,7 +237,7 @@ const createChat2ApiCredentialValidators = ({ httpClient = axios } = {}) => Obje
   Object.entries(VALIDATORS).map(([providerId, validate]) => [providerId, {
     validate: async (credentials, provider) => {
       if (getProviderId(provider) !== providerId) return failure('Provider 与登录凭据不匹配');
-      return validate(getCredentials(credentials), httpClient);
+      return validate(getCredentials(credentials), httpClient, provider);
     },
   }]),
 );

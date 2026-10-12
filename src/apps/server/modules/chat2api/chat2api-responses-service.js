@@ -227,7 +227,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
     return next;
   };
 
-  const createResponse = async (request) => {
+  const createResponse = async (request, options = {}) => {
     validateRequest(request);
     const inputMessages = normalizeInput(request);
     const piContext = getPiContext(request);
@@ -258,6 +258,8 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
         preferredAccountId: session.accountId || undefined,
         responseSession,
         ...(piContext ? { conversationId, piSessionId: piContext.sessionId } : {}),
+        // 信号只取服务调用参数；客户端 JSON 中的 signal 不得控制其他会话或污染请求内容。
+        ...(options.signal ? { signal: options.signal } : {}),
       });
       const responseId = createResponseId();
       if (!result.stream) {
@@ -269,7 +271,9 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
     });
   };
 
-  const createResponseStream = ({ result, responseId, conversationId, previousResponseId, request, session, inputMessages, persist, piContext }) => (async function* responseEvents() {
+  const createResponseStream = ({ result, responseId, conversationId, previousResponseId, request, session, inputMessages, persist, piContext }) => {
+    const upstream = result.stream[Symbol.asyncIterator]();
+    const events = (async function* responseEvents() {
     const outputItemId = createMessageId();
     const created = createResponseBody({ responseId, conversationId, previousResponseId, request, chatBody: { choices: [{ message: { role: 'assistant', content: '' } }] }, textOverride: '' });
     yield { type: 'response.created', response: { ...created, status: 'in_progress', output: [], output_text: '' } };
@@ -326,7 +330,8 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
         function: { name: toolCall.name, arguments: toolCall.arguments },
       })),
     });
-    for await (const chunk of result.stream) {
+    const upstreamIterable = { [Symbol.asyncIterator]: () => upstream };
+    for await (const chunk of upstreamIterable) {
       const delta = chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
       const deltaToolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : [];
       for (const deltaToolCall of deltaToolCalls) {
@@ -383,7 +388,21 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
     }
     await persist({ session, conversationId, request, inputMessages, chatBody: { choices: [{ message: assistantMessage }] }, result, responseId, piContext });
     yield { type: 'response.completed', response: finalBody };
-  }());
+    }());
+    return {
+      [Symbol.asyncIterator]() { return this; },
+      next: () => events.next(),
+      return: async () => {
+        // 外层可能仍停在 response.created，尚未进入 for-await；显式关闭上游而不是等待下一片。
+        try {
+          if (typeof upstream.return === 'function') await upstream.return();
+        } finally {
+          await events.return();
+        }
+        return { done: true, value: undefined };
+      },
+    };
+  };
 
   return { createResponse, normalizeInput, normalizeTools };
 };

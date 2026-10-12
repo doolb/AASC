@@ -211,3 +211,27 @@ test('核心适配层兼容没有工具指纹的旧原生会话并避免重复 S
   assert.equal(received.request.tools, undefined);
   assert.match(responseSession.nativeState.managedToolPromptHash, /^[a-f0-9]{64}$/u);
 });
+
+test('核心层仅把可选取消signal传到context，不混入请求体或其他Provider会话', async () => {
+  const received = [];
+  const adapter = createChat2ApiCoreAdapter({
+    dataStore: { getAccount: async () => account, listAccounts: async () => [account] },
+    providerRegistry: { listProviders: async () => [provider] },
+    modelMapper: { resolveModel: async (model) => ({ actualModel: model }) },
+    loadBalancer: { selectAccount: async () => ({ provider, account, actualModel: 'public-chat' }) },
+    providerAdapters: { deepseek: async (input) => {
+      received.push(input);
+      return { body: { choices: [{ message: { role: 'assistant', content: 'ok' } }] } };
+    } },
+  });
+  const controller = new AbortController();
+  const payload = { model: 'public-chat', messages: [{ role: 'user', content: 'hello' }] };
+  await adapter.forwardChatCompletion(payload, { signal: controller.signal });
+  await adapter.forwardChatCompletion(payload);
+  assert.equal(received[0].context.signal, controller.signal);
+  assert.equal(received[0].request.signal, undefined);
+  assert.equal(received[1].context.signal, undefined);
+  controller.abort();
+  assert.equal(received[0].context.signal.aborted, true);
+  assert.equal(received[1].context.signal, undefined);
+});

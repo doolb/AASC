@@ -7,7 +7,7 @@ const { createChat2ApiProviderAdapters, buildProviderHeaders, createQwenRequest 
 const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
 const { createRawTrafficLogger } = require('./chat2api-raw-traffic-logger');
 
-test('九个 Provider 都注册统一 HTTP adapter，并按账号凭据生成认证头', async () => {
+test('十个 Provider 注册 HTTP adapter，并按账号凭据生成认证头', async () => {
   const calls = [];
   const adapters = createChat2ApiProviderAdapters({
     httpClient: {
@@ -19,7 +19,7 @@ test('九个 Provider 都注册统一 HTTP adapter，并按账号凭据生成认
       },
     },
   });
-  assert.deepEqual(Object.keys(adapters).sort(), ['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'perplexity', 'qwen', 'qwen-ai', 'zai']);
+  assert.deepEqual(Object.keys(adapters).sort(), ['deepseek', 'doubaochat', 'glm', 'kimi', 'mimo', 'minimax', 'perplexity', 'qwen', 'qwen-ai', 'zai']);
   await adapters.deepseek({
     request: { model: 'deepseek-v4-flash', messages: [{ role: 'user', content: 'hi' }], stream: false },
     account: { credentials: { token: 'token-secret', powResponse: 'pow-response' } },

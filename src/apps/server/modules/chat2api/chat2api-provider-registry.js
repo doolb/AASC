@@ -38,6 +38,13 @@ const BUILTIN_PROVIDERS = Object.freeze([
     supportedModels: ['GLM-5.1', 'GLM-5-Turbo', 'GLM-5V-Turbo', 'GLM-5', 'GLM-4.7'],
     modelMappings: { 'GLM-5.1': 'GLM-5.1', 'GLM-5-Turbo': 'GLM-5-Turbo', 'GLM-5V-Turbo': 'GLM-5v-Turbo', 'GLM-5': 'glm-5', 'GLM-4.7': 'glm-4.7' }, credentialFields: [{ name: 'token', label: 'Access Token', type: 'password', required: true }, { name: 'captcha_verify_param', label: 'Captcha Verify Param', type: 'password', required: false }], authMethods: ['manual'],
   },
+  {
+    // 公开名称只表示网页思考模式，不能宣传为三个独立权重或原生多模态/工具模型。
+    id: 'doubaochat', name: '豆包网页（纯文字）', authType: 'cookie', apiEndpoint: 'https://www.doubao.com', loginUrl: 'https://www.doubao.com', chatPath: '/chat/completion',
+    supportedModels: ['doubao', 'doubao-think', 'doubao-expert'], modelMappings: { doubao: 'doubao', 'doubao-think': 'doubao-think', 'doubao-expert': 'doubao-expert' },
+    credentialFields: [{ name: 'cookie', label: '豆包网页 Cookie', type: 'textarea', required: true, helpText: '仅接收已确认的登录/CSRF Cookie；安全只读登录校验端点尚未确认，手动添加暂时拒绝入库' }], authMethods: ['manual', 'cookie'],
+    capabilities: { text: true, nativeTools: false, multimodal: false, nativeContinuation: false },
+  },
 ]);
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -76,6 +83,13 @@ const createChat2ApiProviderRegistry = ({ dataStore } = {}) => {
       ...storedById.get(builtin.id),
       id: builtin.id,
       providerId: builtin.id,
+      // 豆包网页是固定来源的独立协议，用户覆盖只保留启停/备注；禁止把它变成任意来源的凭据转发器。
+      ...(builtin.id === 'doubaochat' ? {
+        type: 'builtin', authType: builtin.authType, apiEndpoint: builtin.apiEndpoint, loginUrl: builtin.loginUrl,
+        chatPath: builtin.chatPath, headers: {}, supportedModels: clone(builtin.supportedModels),
+        modelMappings: clone(builtin.modelMappings), credentialFields: clone(builtin.credentialFields),
+        authMethods: clone(builtin.authMethods), capabilities: clone(builtin.capabilities),
+      } : {}),
     }));
     const builtinIds = new Set(BUILTIN_PROVIDERS.map((provider) => provider.id));
     const customProviders = stored.filter((provider) => !builtinIds.has(provider.id));

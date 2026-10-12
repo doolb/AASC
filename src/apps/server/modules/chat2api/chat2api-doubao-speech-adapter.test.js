@@ -1,0 +1,79 @@
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
+const { fixture } = require('../../../../../tests/helpers/ogg-opus-fixture');
+const { validateWav, wrapPcm } = require('../../../../external/tts/tts-wav');
+const { createDoubaoSpeechAdapter } = require('./chat2api-doubao-speech-adapter');
+
+const cookie = 'sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678';
+const field = (id, text) => { const bytes=Buffer.isBuffer(text)?text:Buffer.from(text); const n=bytes.length; const length=[]; let value=n; do { const byte=value&127;value>>>=7;length.push(byte|(value?128:0)); }while(value); return Buffer.from([(id<<3)|2,...length,...bytes]); };
+function event(name, options = {}) { return Buffer.concat([field(1, options.task || 'task'),field(3,'VoiceGenie'),field(4,name),
+    ...(options.data ? [field(8,options.data)] : []), ...(options.session ? [field(10,options.session)] : [])]); }
+function setup(options = {}) {
+    const sockets = [];
+    const adapter = createDoubaoSpeechAdapter({ createSocket: (url, config) => {
+        const socket = new EventEmitter(); socket.url=url;socket.config=config;socket.sent=[];socket.destroyed=false;
+        socket.send=bytes=>socket.sent.push(bytes);socket.terminate=()=>{socket.destroyed=true}; sockets.push(socket); return socket;
+    }, ...options });
+    const generate = (context = {}) => adapter.generate({ text:'本地模拟短文' }, cookie,
+        { accountId:'demo', deadline:Date.now()+10000, ...context });
+    return { sockets, generate };
+}
+function start(socket) { socket.emit('open');socket.emit('message',event('TaskStarted'),true);socket.emit('message',event('SessionStarted',{session:'session'}),true); }
+function sentence(socket, audio = fixture()) { socket.emit('message',event('TTSSentenceStart'),true);socket.emit('message',event('TTSResponse',{data:audio.subarray(0,10)}),true);socket.emit('message',event('TTSResponse',{data:audio.subarray(10)}),true);socket.emit('message',event('TTSSentenceEnd'),true); }
+
+test('Frontier模拟分片/多句完整结束后真实解码为单一WAV，清理连接且不重试', async () => {
+    const { generate,sockets }=setup();const task=generate();const socket=sockets[0];start(socket);sentence(socket);sentence(socket);
+    socket.emit('message',event('TTSEnded'),true);const result=await task;
+    assert.equal(validateWav(result).samples.length,3840);assert.equal(socket.destroyed,true);assert.equal(sockets.length,1);
+    assert.equal(socket.listenerCount('message'),0);assert.equal(socket.sent.length,4);
+    assert.equal(new URL(socket.url).hostname,'frontier-audio-web-ws.doubao.com');assert.equal(socket.config.headers.Cookie,cookie);
+});
+test('取消/超时与关闭缺TTSEnded固定拒绝，销毁当前socket，不接受迟到帧', async () => {
+    for (const reason of ['abort','timeout','close']) {
+        const {generate,sockets}=setup();const control=new AbortController();
+        const task=generate({signal:control.signal,deadline:Date.now()+(reason==='timeout'?20:1000)});
+        const rejection=assert.rejects(task,e=>['doubao_speech_cancelled','doubao_speech_timeout','doubao_speech_incomplete'].includes(e.code));
+        const socket=sockets[0];start(socket);
+        if(reason==='abort')control.abort();if(reason==='close')socket.emit('close');
+        await rejection;assert.equal(socket.destroyed,true);assert.equal(sockets.length,1);
+    }
+});
+test('错任务/消息顺序/无完整句、空音频和不完整Ogg拒绝', async () => {
+    for(const scenario of ['wrong','order','empty','partial']) {
+        const {generate,sockets}=setup();const task=generate();const rejection=assert.rejects(task,e=>/^doubao_speech_/u.test(e.code));
+        const socket=sockets[0];start(socket);
+        if(scenario==='wrong')socket.emit('message',event('TTSSentenceStart',{task:'other'}),true);
+        if(scenario==='order')socket.emit('message',event('TTSResponse',{data:fixture()}),true);
+        if(scenario==='empty')socket.emit('message',event('TTSEnded'),true);
+        if(scenario==='partial'){sentence(socket,fixture().subarray(0,-1));socket.emit('message',event('TTSEnded'),true)}
+        await rejection;assert.equal(socket.destroyed,true);
+    }
+});
+test('握手401/403/429和原始异常只回固定代码，不输出凭据或重试', async () => {
+    for(const status of [401,403,429]){
+        const {generate,sockets}=setup();const task=generate();const rejection=assert.rejects(task,e=>!e.message.includes('private')&&e.statusCode===status);
+        const response={statusCode:status,destroy(){this.destroyed=true}};const req={destroy(){this.destroyed=true}};
+        sockets[0].emit('unexpected-response',req,response);await rejection;assert.ok(req.destroyed&&response.destroyed);assert.equal(sockets.length,1);
+    }
+});
+test('同账号单任务、取消后释放容量；预取消与坏Cookie不创建连接', async () => {
+    const {generate,sockets}=setup();const control=new AbortController();const first=generate({signal:control.signal});const rejected=assert.rejects(first);
+    await assert.rejects(generate(),e=>e.code==='doubao_speech_busy');control.abort();await rejected;
+    const second=generate();const rejected2=assert.rejects(second);sockets[1].emit('close');await rejected2;
+    await assert.rejects(generate({signal:control.signal}),e=>e.code==='doubao_speech_cancelled');assert.equal(sockets.length,2);
+});
+module.exports = { event };
+
+test('每句合规但累计超过120秒拒绝，恰好120秒允许', async () => {
+    for (const seconds of [60, 61]) {
+        const {generate,sockets}=setup({decodeAudio:async()=>wrapPcm(Buffer.alloc(seconds*24000*2),24000)});
+        const task=generate();
+        const result=seconds===61?assert.rejects(task,e=>e.code==='doubao_speech_limit'):task;
+        start(sockets[0]);sentence(sockets[0]);sentence(sockets[0]);sockets[0].emit('message',event('TTSEnded'),true);
+        const audio=await result;
+        if(seconds===60)assert.equal(validateWav(audio).samples.length,120*24000*2);
+        assert.equal(sockets[0].destroyed,true);
+    }
+});

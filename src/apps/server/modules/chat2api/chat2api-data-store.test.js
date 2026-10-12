@@ -271,3 +271,26 @@ test('账号和模型映射支持更新与删除', async () => {
   assert.equal((await store.listModelMappings()).length, 1);
   assert.equal(await store.deleteModelMapping('chat'), true);
 });
+
+test('豆包账号凭证导入恢复credentials.cookie并脱敏，导入不代表登录验证成功', async () => {
+  const store = createChat2ApiDataStore({ rootDir: await makeTempDir() });
+  const cookie = 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789; msToken=mock_ms_token';
+  const payload = { format: 'aasc-chat2api-accounts', version: 1, accounts: [{
+    accountId: 'doubao_mock', providerId: 'doubaochat', label: '恢复测试账号', credentials: { cookie },
+  }] };
+  const preview = await store.previewAccountImport(payload);
+  assert.deepEqual(preview.counts, { new: 1, update: 0, invalid: 0 });
+  assert.deepEqual(preview.items[0].credentialFields, ['cookie']);
+  assert.equal(preview.items[0].secretConfigured, true);
+  assert.doesNotMatch(JSON.stringify(preview), /mock_session|mock_csrf|mock_ms_token/u);
+  const merged = await store.mergeAccountImport(payload, preview.confirmation, true);
+  assert.equal(merged.accounts[0].secretConfigured, true);
+  assert.doesNotMatch(JSON.stringify(merged), /mock_session|mock_csrf|mock_ms_token/u);
+  assert.deepEqual((await store.getAccount('doubao_mock')).credentials, { cookie });
+  for (const credentials of [{ cookies: cookie }, { cookie, token: 'wrong-secret' }, { cookie: `${cookie}; unknown=x` }]) {
+    await assert.rejects(() => store.previewAccountImport({ ...payload, accounts: [{ ...payload.accounts[0], credentials }] }), /Cookie 或 CSRF 格式无效/u);
+  }
+  await assert.rejects(() => store.saveAccount({ ...payload.accounts[0], cookie }), /秘密只允许 credentials.cookie/u);
+  await store.writeCollection('providers', [{ providerId: 'doubaochat', enabled: false }]);
+  assert.equal((await store.previewAccountImport(payload)).counts.invalid, 1);
+});

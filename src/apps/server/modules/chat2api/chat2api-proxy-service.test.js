@@ -3,6 +3,10 @@ const http = require('http');
 const test = require('node:test');
 
 const { createChat2ApiProxyService } = require('./chat2api-proxy-service');
+const { createChat2ApiCoreAdapter } = require('./chat2api-core-adapter');
+const { createChat2ApiResponsesService } = require('./chat2api-responses-service');
+const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
+const { PassThrough } = require('stream');
 
 const request = (port, options, body) => new Promise((resolve, reject) => {
   const req = http.request({ port, host: '127.0.0.1', ...options }, (res) => {
@@ -197,4 +201,133 @@ test('代理服务透传 Responses 上游账号不可用错误', async () => {
   } finally {
     await service.stop();
   }
+});
+
+// 本地真实 HTTP 仅测试客户端断连；官网请求由注入 mock 接管，不读取真实账号或操作 Chrome。
+const createDeferred = () => {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+};
+const withDeadline = async (promise) => {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('断连未在测试期限内取消')), 1500); })]);
+  } finally { clearTimeout(timer); }
+};
+const createDoubaoHttpFixture = (httpClient) => {
+  const provider = { id: 'doubaochat', apiEndpoint: 'https://www.doubao.com', chatPath: '/chat/completion' };
+  const account = { accountId: 'doubao_mock', providerId: 'doubaochat', credentials: {
+    cookie: 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789',
+  } };
+  const sessions = new Map();
+  const coreAdapter = createChat2ApiCoreAdapter({
+    dataStore: { getAccount: async () => account, listAccounts: async () => [account] },
+    providerRegistry: { listProviders: async () => [provider] },
+    modelMapper: { resolveModel: async (model) => ({ actualModel: model }) },
+    loadBalancer: { selectAccount: async () => ({ provider, account, actualModel: 'doubao' }) },
+    providerAdapters: { doubaochat: createDoubaoChatAdapter({ httpClient }) },
+  });
+  const responsesService = createChat2ApiResponsesService({
+    coreAdapter,
+    sessionStore: {
+      get: async (id) => sessions.get(id), findByResponseId: async () => null,
+      save: async (session) => { sessions.set(session.conversationId, session); },
+      withLock: async (id, operation) => operation(),
+    },
+  });
+  const service = createChat2ApiProxyService({
+    host: '127.0.0.1', port: 0, config: { enableApiKey: false }, coreAdapter, responsesService,
+  });
+  return { service, sessions };
+};
+
+test('HTTP流式客户端断线立即取消豆包上游；Chat与Responses都释放源且不保存不完整会话', { timeout: 5000 }, async () => {
+  for (const path of ['/v1/chat/completions', '/v1/responses']) {
+    const source = new PassThrough();
+    source.write('event: CHUNK_DELTA\ndata: {"text":"首片"}\n\n');
+    const cancelled = createDeferred();
+    const closed = createDeferred();
+    source.once('close', closed.resolve);
+    let signal;
+    const { service, sessions } = createDoubaoHttpFixture({ request: async (config) => {
+      signal = config.signal;
+      signal.addEventListener('abort', cancelled.resolve, { once: true });
+      return { status: 200, headers: { 'content-type': 'text/event-stream' }, data: source };
+    } });
+    await service.start();
+    let client;
+    try {
+      const first = createDeferred();
+      client = http.request({ host: '127.0.0.1', port: service.address().port, path, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (res) => {
+        res.once('data', () => { res.destroy(); first.resolve(); });
+        res.on('error', () => {});
+      });
+      client.on('error', () => {});
+      client.end(JSON.stringify(path === '/v1/responses' ? { model: 'doubao', input: 'hello', stream: true }
+        : { model: 'doubao', messages: [{ role: 'user', content: 'hello' }], stream: true }));
+      await withDeadline(first.promise);
+      await withDeadline(cancelled.promise);
+      await withDeadline(closed.promise);
+      assert.equal(signal.aborted, true);
+      assert.equal(source.destroyed, true);
+      assert.equal(sessions.size, 0);
+    } finally {
+      if (client) client.destroy();
+      source.destroy();
+      await service.stop();
+    }
+  }
+});
+
+test('HTTP非流式握手等待期间断线立即中止豆包请求，上传正常完成本身不误触发取消', { timeout: 5000 }, async () => {
+  for (const path of ['/v1/chat/completions', '/v1/completions', '/v1/responses']) {
+    const started = createDeferred();
+    const cancelled = createDeferred();
+    let signal;
+    const { service, sessions } = createDoubaoHttpFixture({ request: (config) => {
+      signal = config.signal;
+      started.resolve();
+      return new Promise((resolve, reject) => signal.addEventListener('abort', () => {
+        cancelled.resolve(); reject(new Error('mock上游取消，不得暴露原文'));
+      }, { once: true }));
+    } });
+    await service.start();
+    let client;
+    try {
+      client = http.request({ host: '127.0.0.1', port: service.address().port, path, method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      client.on('error', () => {});
+      const payload = path === '/v1/responses' ? { model: 'doubao', input: 'hello' }
+        : path === '/v1/completions' ? { model: 'doubao', prompt: 'hello' }
+          : { model: 'doubao', messages: [{ role: 'user', content: 'hello' }] };
+      client.end(JSON.stringify(payload));
+      await withDeadline(started.promise);
+      assert.equal(signal.aborted, false);
+      client.destroy();
+      await withDeadline(cancelled.promise);
+      assert.equal(signal.aborted, true);
+      assert.equal(sessions.size, 0);
+    } finally {
+      if (client) client.destroy();
+      await service.stop();
+    }
+  }
+});
+
+test('正常HTTP非流和流结束不触发内部signal取消，各请求signal独立', async () => {
+  const signals = [];
+  const service = createService(false, { forwardChatCompletion: async (payload, options) => {
+    signals.push(options.signal);
+    if (payload.stream) return { stream: (async function* chunks() { yield { choices: [{ delta: { content: 'ok' } }] }; }()) };
+    return { body: { choices: [{ message: { content: 'ok' } }] } };
+  } });
+  await service.start();
+  try {
+    for (const stream of [false, true]) await request(service.address().port,
+      { path: '/v1/chat/completions', method: 'POST', headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify({ model: 'public-chat', messages: [{ role: 'user', content: 'hello' }], stream }));
+    assert.equal(signals.length, 2);
+    assert.notEqual(signals[0], signals[1]);
+    assert.equal(signals.every((signal) => signal.aborted === false), true);
+  } finally { await service.stop(); }
 });

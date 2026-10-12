@@ -9,6 +9,52 @@ const { createChat2ApiSpeechService, normalizeSpeechRequest, getQwenCredential }
 const { createChat2ApiRuntime } = require('./chat2api-runtime');
 const { wrapPcm } = require('../../../../external/tts/tts-wav');
 const audio = wrapPcm(Buffer.from([1, 0, 2, 0]));
+const { DOUBAO_SPEECH_VOICE } = require('./chat2api-doubao-speech-protocol');
+
+test('doubao-chat语音严格采用显式映射账号，不回退其他账号或千问，读取权威更新', async t => {
+    const calls=[];const {dataStore,service}=await fixture(t,{doubaoAdapter:{generate:async(...args)=>{calls.push(args);return audio}}});
+    const cookie='sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678';
+    await dataStore.saveAccount({accountId:'bound',providerId:'doubaochat',credentials:{cookie}});
+    await dataStore.saveAccount({accountId:'other',providerId:'doubaochat',credentials:{cookie}});
+    await assert.rejects(service.generate({input:'未绑定',model:'doubao-chat'}),e=>e.code==='doubao_speech_binding');
+    await dataStore.writeCollection('modelMappings',[{model:'doubao-chat',actualModel:'doubao-chat',preferredProviderId:'doubaochat',preferredAccountId:'bound'}]);
+    assert.deepEqual(await service.generate({input:'模拟语音',model:'doubao-chat'}),{audio,contentType:'audio/wav'});
+    assert.equal(calls[0][0].voice,DOUBAO_SPEECH_VOICE);assert.equal(calls[0][2].accountId,'bound');
+    await dataStore.updateAccount('bound',{enabled:false});
+    await assert.rejects(service.generate({input:'禁止回退',model:'doubao-chat'}),e=>e.code==='no_available_speech_account');assert.equal(calls.length,1);
+});
+test('豆包固定参数、文本字节/字符及格式先校验，不能使用千问音色或API参数', () => {
+    for(const patch of [{voice:'zh_female_quarkF531S0_ptts'},{speed:2},{volume:90},{response_format:'ogg'},
+        {input:'x'.repeat(1001)},{input:'😀'.repeat(600)}]) {
+        assert.throws(()=>normalizeSpeechRequest({input:'x',model:'doubao-chat',...patch}),e=>e.code==='invalid_speech_request');
+    }
+    assert.equal(normalizeSpeechRequest({input:'x',model:'doubao-chat'}).voice,DOUBAO_SPEECH_VOICE);
+});
+test('豆包请求取消/超时透传signal，坏上游错误固定脱敏', async t => {
+    const controller=new AbortController();controller.abort();let calls=0;
+    const {dataStore,service}=await fixture(t,{doubaoAdapter:{generate:async()=>{calls++;throw new Error('private-cookie')}}});
+    await assert.rejects(service.generate({input:'x',model:'doubao-chat'},{signal:controller.signal}),e=>e.code==='doubao_speech_cancelled');
+    assert.equal(calls,0);
+    await dataStore.saveAccount({accountId:'bound',providerId:'doubaochat',credentials:{cookie:'sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678'}});
+    await dataStore.writeCollection('modelMappings',[{model:'doubao-chat',actualModel:'doubao-chat',preferredProviderId:'doubaochat',preferredAccountId:'bound'}]);
+    await assert.rejects(service.generate({input:'x',model:'doubao-chat'}),e=>!e.message.includes('private')&&e.code==='doubao_speech_upstream');
+});
+
+test('HTTP speech客户端断连取消对应豆包任务，不继续生成或影响后续请求', async t => {
+    const http=require('node:http');let entered,aborted;
+    const begun=new Promise(resolve=>{entered=resolve});const stopped=new Promise(resolve=>{aborted=resolve});
+    const {rootDir,dataStore}=await fixture(t);
+    await dataStore.saveAccount({accountId:'bound',providerId:'doubaochat',credentials:{cookie:'sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678'}});
+    await dataStore.writeCollection('modelMappings',[{model:'doubao-chat',actualModel:'doubao-chat',preferredProviderId:'doubaochat',preferredAccountId:'bound'}]);
+    const runtime=createChat2ApiRuntime({rootDir,dataStore,host:'127.0.0.1',port:0,doubaoSpeechAdapter:{generate:(request,credential,context)=>new Promise((resolve,reject)=>{
+        entered();context.signal.addEventListener('abort',()=>{aborted();reject(Object.assign(new Error('已取消'),{code:'doubao_speech_cancelled'}))},{once:true});
+    })}});
+    await runtime.start();t.after(()=>runtime.stop());const key=await dataStore.createApiKey({label:'local-cancel'});
+    const req=http.request(`http://127.0.0.1:${runtime.getStatus().address.port}/v1/audio/speech`,{method:'POST',headers:{Authorization:`Bearer ${key.value}`,'Content-Type':'application/json'}});
+    req.on('error',()=>{});req.end(JSON.stringify({input:'本地模拟',model:'doubao-chat'}));
+    await Promise.race([begun,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('mock未开始')),1000);timer.unref()})]);req.destroy();
+    await Promise.race([stopped,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('取消未到达')),1000);timer.unref()})]);
+});
 
 async function fixture(t, options = {}) {
     const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-chat2api-speech-'));
