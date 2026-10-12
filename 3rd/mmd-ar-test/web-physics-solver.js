@@ -124,11 +124,14 @@ function addSolverDisplay(source) {
         setMotionPlaybackEnabled,`);
 }
 
-const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', ...CLOTH.CLOTH_CONTROL_IDS]);
+const SOLVER_CONTROL_IDS = Object.freeze(['mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus',
+    'mmdArGpuBoneTexture', 'mmdArGpuBoneTextureStatus', ...CLOTH.CLOTH_CONTROL_IDS]);
 const SOLVER_PANEL_HTML = `<label class="mind-basic-field"><span>布料计算</span>
     <select id="mmdArPhysicsSolver" aria-label="布料计算求解器"><option value="ammo" selected>Ammo（原方式）</option>
     <option value="xpbd">XPBD（CPU）</option><option value="xpbd-webgl">XPBD（WebGL2）</option><option value="vertex-cloth">顶点布料（CPU）</option><option value="vertex-cloth-gpu">顶点布料 GPU（WebGL2）</option></select></label>
     <p id="mmdArPhysicsSolverStatus" class="mind-basic-note" role="status">Ammo · 等待模型</p>
+    <label class="display-mmd-lighting-field"><input id="mmdArGpuBoneTexture" type="checkbox"><span>GPU 物理直连骨骼纹理（仅XPBD WebGL2）</span></label>
+    <p id="mmdArGpuBoneTextureStatus" class="mind-basic-note" role="status">默认关闭，保持同步回读。</p>
     <label class="display-mmd-lighting-field" id="mmdArHandAvoidanceRow" hidden><input id="mmdArHandAvoidance" type="checkbox" checked><span>手部防穿模</span></label>
     <p id="mmdArHandAvoidanceStatus" class="mind-basic-note" role="status" hidden></p>${CLOTH.CLOTH_PANEL_HTML}`;
 const SOLVER_PANEL_JS = `
@@ -147,7 +150,24 @@ const SOLVER_PANEL_JS = `
         const avoidance = document.getElementById('mmdArHandAvoidance');
         const avoidanceRow = document.getElementById('mmdArHandAvoidanceRow');
         const avoidanceStatus = document.getElementById('mmdArHandAvoidanceStatus');
+        const directSwitch = document.getElementById('mmdArGpuBoneTexture');
+        const directStatus = document.getElementById('mmdArGpuBoneTextureStatus');
+        const directKey = 'aasc.mmdArTest.gpuPhysicsBoneTexture.v1';
+        try { if (directSwitch) directSwitch.checked = localStorage.getItem(directKey) === 'true'; }
+        catch (error) { /* 禁用存储时保持默认关闭。 */ }
+        directSwitch?.addEventListener('change', () => {
+            window.DisplayMmd?.setGpuPhysicsBoneTextureEnabled?.(directSwitch.checked);
+            try { localStorage.setItem(directKey, String(directSwitch.checked)); }
+            catch (error) { /* 当前页面的选择仍生效。 */ }
+            update();
+        });
+        for (const id of ['mmdArSkeletonEnabled', 'mmdArRigidBodyEnabled']) {
+            document.getElementById(id)?.addEventListener('change', event => {
+                if (event.target.checked) window.DisplayMmd?.syncGpuPhysicsPose?.();
+            });
+        }
         avoidance?.addEventListener('change', () => {
+            if (avoidance.checked) window.DisplayMmd?.syncGpuPhysicsPose?.();
             window.DisplayMmd?.getHumanInterface?.()?.setArmAvoidanceEnabled(avoidance.checked);
         });
         if (!select || !label) return;
@@ -184,13 +204,22 @@ const SOLVER_PANEL_JS = `
             if (hint) hint.textContent = xpbd ? '复用基准值作为每帧子步数：3表示3个子步；' + roundsHint + '，步长为本帧时间÷子步数。' + (['vertex-cloth', 'vertex-cloth-gpu'].includes(solver) ? '骨骼Ammo仍使用已有物理Hz，顶点修正按子步计算。' : '物理Hz暂不使用。')
                 : '按该频率的关节纠错率换算到当前物理频率；只改纠错强度，不动弹簧/质量/阻尼。';
             const state = window.DisplayMmd?.getPhysicsSolverState?.();
+            const requestedDirect = window.DisplayMmd?.getGpuPhysicsBoneTextureRequested?.() ?? directSwitch?.checked;
+            if (directSwitch) directSwitch.checked = requestedDirect === true;
+            if (directStatus) {
+                directStatus.textContent = !requestedDirect ? '未请求直连 · 保留原同步读回。'
+                    : solver !== 'xpbd-webgl' ? '已请求 · 当前不是XPBD WebGL2，不适用。'
+                        : !state?.active ? '已请求 · 物理未运行，等待有效物理帧。'
+                            : state.directActive ? 'GPU直连生效 · 本帧完整读回 0 · 累计按需/兼容读回 ' + Number(state.readbacks || 0)
+                                : '同步兼容 · ' + (state.directCompatibilityReason || state.directReason || state.fallbackReason || '等待直连帧');
+            }
             const name = { ammo: 'Ammo', xpbd: 'XPBD（CPU）', 'xpbd-webgl': 'XPBD（WebGL2）', 'vertex-cloth': '顶点布料CPU', 'vertex-cloth-gpu': '顶点布料GPU' }[solver] || 'Ammo';
             const particleInfo = ['vertex-cloth', 'vertex-cloth-gpu'].includes(solver) ? ' · ' + state?.particleCount + ' 粒子 / ' + state?.constraintCount + ' 约束' : '';
             label.textContent = !state?.active ? name + ' · 物理未运行'
                 : name + ' · ' + state.bodyCount + ' 个刚体'
                     + (xpbd ? ' · 当前子步数 ' + state.substeps + ' · 每子步1轮' : '')
                     + (state.rotationLockProjections > 0 ? ' + 旋转锁轴纠正' : '')
-                    + particleInfo + (state.backend === 'webgl2' ? ' · WebGL2 · CPU提交耗时 ' : ' · 帧物理耗时 ') + Number(state.frameMs || 0).toFixed(2) + ' ms' + (state.gpuFallback ? ' · 已回退Ammo：' + state.gpuFallback : '') + (state.computePending ? ' · GPU分批计算中' : '')
+                    + particleInfo + (state.backend === 'webgl2' && !state.directActive ? ' · WebGL2 · CPU提交耗时 ' : ' · 帧物理耗时 ') + Number(state.frameMs || 0).toFixed(2) + ' ms' + (state.gpuFallback ? ' · 已回退Ammo：' + state.gpuFallback : '') + (state.computePending ? ' · GPU分批计算中' : '')
                     + (state.computeBackend === 'webgl2' ? ' · 读回 ' + Number(state.readbackMs || 0).toFixed(2) + ' ms · ' + state.passCount + ' passes · GPU ' + (state.gpuMs == null ? '计时不可用' : Number(state.gpuMs).toFixed(2) + ' ms') : '')
                     + (state.fallbackReason ? ' · CPU回退：' + state.fallbackReason : '');
         };

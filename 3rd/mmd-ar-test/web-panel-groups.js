@@ -30,7 +30,7 @@ const TRACKING_GROUPS = Object.freeze([
 
 const MOTION_GROUPS = Object.freeze([
   ['动作', ['mmdArMotionPlayback', 'mmdArCameraMotionPlayback', 'mmdArMotionProgress', 'mmdArCameraMotionProgress']],
-  ['物理', ['mmdArPhysicsEnabled', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'mmdArHandAvoidanceRow', 'mmdArHandAvoidanceStatus', 'mmdArVertexClothPanel', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
+  ['物理', ['mmdArPhysicsEnabled', 'mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus', 'mmdArGpuBoneTexture', 'mmdArGpuBoneTextureStatus', 'mmdArHandAvoidanceRow', 'mmdArHandAvoidanceStatus', 'mmdArVertexClothPanel', 'displayMmdPhysicsFps', 'mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceHint', 'displayMmdRotationPhysicsLimit', 'mmdArWindEnabled', 'mmdArWindStrength', 'mmdArWindLongitude', 'mmdArWindLatitude', 'mmdArWindGust', 'mmdArWindHint']],
   ['骨骼', ['mmdArSkeletonLegend', 'mmdArSkeletonSize', 'mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonJointParametersEnabled', 'mmdArSkeletonJointLegend', 'mmdArSkeletonJointDetails', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus', 'mmdArRigidBodyControls', 'mmdArRigidBodyLegend'], 'mmdArSkeletonEnabled'],
 ]);
 

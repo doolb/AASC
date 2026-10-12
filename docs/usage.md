@@ -1,5 +1,7 @@
 # Web MediaCenter - 使用说明
 
+独立MMD-AR测试网页的「GPU物理直连骨骼纹理」开关、默认手部防穿模同步兼容和诊断/编辑行为见[XPBD WebGL2使用说明](usage/mmd-xpbd-webgl.md)。本地实现，尚未发布。
+
 YOLO、ASR和声纹模型的外网目录、上传/下载同步命令及正式包模型边界见[AI模型同步](usage/ai-model-sync.md)。30项模型与配套文件已发布，模型二进制不新增到Git。
 
 MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件规则见[帧率与耗时](usage/mmd-performance.md)，源码与独立WEB构建已完成，正式发布状态见changelog。

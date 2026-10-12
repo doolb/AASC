@@ -1,6 +1,9 @@
 // 闭包桥接只暴露给编辑器，不依赖场景扫描或Three原型补丁。
 export function createEditorBridge(context) {
     const { THREE,renderer,camera,scene,ambientOcclusion }=context;
+    // 编辑器需要真实CPU骨树；直连模式在消费时同步一次，CPU物理无此方法时沿用原行为。
+    const physics = () => context.helper?.objects?.get(context.mesh)?.physics;
+    const syncPose = () => physics()?.syncGpuPose?.();
     return { context,
         cameraView:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray()}),
         setCameraView(view){
@@ -42,10 +45,10 @@ export function createEditorBridge(context) {
                 }
             };
         },
-        face(direction){const box=new THREE.Box3().setFromObject(context.mesh),center=box.getCenter(new THREE.Vector3());const distance=Math.max(box.getSize(new THREE.Vector3()).length(),1)*1.5;
+        face(direction){syncPose();const box=new THREE.Box3().setFromObject(context.mesh),center=box.getCenter(new THREE.Vector3());const distance=Math.max(box.getSize(new THREE.Vector3()).length(),1)*1.5;
             camera.position.copy(center).add(new THREE.Vector3(...direction).multiplyScalar(distance));camera.lookAt(center);this.setCameraView(this.cameraView());},
-        rest(){const mesh=context.mesh;if(!mesh?.isSkinnedMesh)throw new Error('请选择PMX角色');ambientOcclusion.invalidateTemporal?.();mesh.pose();mesh.updateMatrixWorld(true);},
-        read(){const mesh=context.mesh;if(!mesh?.geometry?.userData?.MMD)throw new Error('当前角色不是可编辑PMX');return {mesh,profile:context.profile};},
+        rest(){const mesh=context.mesh;if(!mesh?.isSkinnedMesh)throw new Error('请选择PMX角色');syncPose();ambientOcclusion.invalidateTemporal?.();mesh.pose();mesh.updateMatrixWorld(true);physics()?.reset();},
+        read(){const mesh=context.mesh;if(!mesh?.geometry?.userData?.MMD)throw new Error('当前角色不是可编辑PMX');syncPose();return {mesh,profile:context.profile};},
         async capture(width,height,transparent){
             width=Math.round(Number(width));height=Math.round(Number(height));
             const limit=Math.min(4096,renderer.capabilities.maxTextureSize);

@@ -5,10 +5,12 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const puppeteer = require('puppeteer-core');
+const chrome = [process.env.CHROMIUM_PATH, '/usr/bin/chromium', require('puppeteer').executablePath()]
+    .find(candidate => candidate && fs.existsSync(candidate));
 const root = path.resolve(__dirname, '..');
 
 // 使用真实WebGL2软件驱动验证shader、读回和资源生命周期，不用CPU替身冒充GPU测试。
-test('WebGL XPBD：数值对照、形状接触、锚点关节、释放与上下文恢复', { timeout: 240000 }, async () => {
+test('WebGL XPBD：数值对照、形状接触、锚点关节、释放与上下文恢复', { skip: !chrome, timeout: 240000 }, async () => {
     const server = http.createServer((req, res) => {
         const pathname = new URL(req.url, 'http://localhost').pathname;
         if (pathname === '/') {
@@ -16,14 +18,14 @@ test('WebGL XPBD：数值对照、形状接触、锚点关节、释放与上下�
             res.end('<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script>'); return;
         }
         const file = path.resolve(root, '.' + decodeURIComponent(pathname));
-        if (!file.startsWith(root + '/') || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404).end(); return; }
+        if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404).end(); return; }
         res.setHeader('Content-Type', /\.m?js$/.test(file) ? 'text/javascript' : 'application/octet-stream');
         fs.createReadStream(file).pipe(res);
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let browser;
     try {
-        browser = await puppeteer.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
+        browser = await puppeteer.launch({ executablePath: chrome,
             headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
         const page = await browser.newPage();
         page.on('console', message => { if (message.type() === 'warn') console.log(message.text()); });
@@ -142,5 +144,80 @@ test('WebGL XPBD：数值对照、形状接触、锚点关节、释放与上下�
         });
         assert.equal(result.shapeResults.length, 6);
         console.log('WebGL XPBD实测', JSON.stringify(result));
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+// 接触位置修正之后可能已分离；直接执行真实速度shader，独立验证单边约束而非照抄CPU实现。
+test('WebGL接触速度：分离不注能、法向只推不拉、反弹与摩擦', { skip: !chrome, timeout: 60000 }, async t => {
+    const server = http.createServer((request, response) => {
+        const relative = new URL(request.url, 'http://localhost').pathname;
+        if (relative === '/') {
+            response.setHeader('Content-Type', 'text/html');
+            response.end('<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script>'); return;
+        }
+        const file = path.resolve(root, '.' + decodeURIComponent(relative));
+        if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+            response.writeHead(404).end(); return;
+        }
+        response.setHeader('Content-Type', 'text/javascript'); fs.createReadStream(file).pipe(response);
+    });
+    let browser;
+    try {
+        await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+        browser = await puppeteer.launch({ executablePath: chrome, headless: true,
+            args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
+        const page = await browser.newPage();
+        await page.goto('http://127.0.0.1:' + server.address().port);
+        const samples = await page.evaluate(async () => {
+            const T = await import('three');
+            const { createGpuState } = await import('/3rd/mmd-ar-test/web-xpbd-webgl-state.mjs');
+            const { contactSolve } = await import('/3rd/mmd-ar-test/web-xpbd-webgl-collision.mjs');
+            const renderer = new T.WebGLRenderer(), gpu = createGpuState(renderer);
+            const material = gpu.material(contactSolve), target = gpu.target(7);
+            const cases = [
+                { name: '关节已推开旧接触，不产生分离能量', gap: .1, velocity: [0, 0, 0], expected: [0, 0, 0] },
+                { name: '间距允许以现有速度闭合', gap: .1, velocity: [-5, 0, 0], expected: [-5, 0, 0] },
+                { name: '过快闭合只限制到间距时长下界', gap: .1, velocity: [-20, 0, 0], expected: [-10, 0, 0] },
+                { name: '正在离开接触面不施加拉力', gap: 0, velocity: [3, 0, 0], expected: [3, 0, 0] },
+                { name: '仍穿透时消除闭合速度', gap: -.01, velocity: [-1, 0, 0], expected: [0, 0, 0] },
+                { name: '有效入射反弹保留恢复系数', gap: 0, velocity: [-3, 0, 0], incoming: -3, restitution: .5, expected: [1.5, 0, 0] },
+                { name: '速度级摩擦保留lambda预算', gap: 0, velocity: [0, 2, 0], friction: .5, lambda: .01, expected: [0, 1.5, 0] },
+                { name: '已分离的旧接触不继续施加摩擦', gap: .1, velocity: [0, 2, 0], friction: .5, lambda: .01, expected: [0, 2, 0] }
+            ];
+            try {
+                return cases.map(sample => {
+                    const state = new Float32Array(48), metadata = new Float32Array(56);
+                    for (let i = 0; i < 2; i++) {
+                        state[i * 24 + 7] = state[i * 24 + 23] = 1;
+                        metadata.set([i, i === 0 ? 1 : 0, 0, 0], i * 28);
+                        metadata.set([.1, .1, .1, 1], i * 28 + 8);
+                        metadata.set([0, 0, sample.friction || 0, sample.restitution || 0], i * 28 + 12);
+                    }
+                    state[24] = sample.gap; state.set(sample.velocity, 32);
+                    const contacts = new Float32Array(96), previous = new Float32Array(28);
+                    // 保存先前窄相生成的局部接触点；关节修正后当前有间距，速度pass仍会见到这条记录。
+                    contacts[3] = 1; contacts[7] = sample.incoming ?? sample.velocity[0]; contacts[8] = 1;
+                    previous[16] = sample.lambda || 0;
+                    const textures = [gpu.data(state), gpu.data(metadata), gpu.data(new Float32Array([0, 1, 0, 0])),
+                        gpu.data(contacts), gpu.data(previous)];
+                    try {
+                        const output = new Float32Array(target.width * target.height * 4);
+                        gpu.scope(() => {
+                            gpu.draw(material, target, { uState: textures[0], uMeta: textures[1], uPairs: textures[2],
+                                uContacts: textures[3], uPreviousCorrections: textures[4], uPairCount: 1,
+                                uMode: 1, uH: .01, uGravity: new T.Vector3() });
+                            renderer.readRenderTargetPixels(target, 0, 0, target.width, target.height, output);
+                        });
+                        if (renderer.getContext().getError() !== 0) throw new Error('接触速度shader GL错误');
+                        return { ...sample, actual: sample.velocity.map((value, i) => value + output[8 + i]),
+                            staticChange: Array.from(output.slice(0, 3)) };
+                    } finally { for (const texture of textures) texture.dispose(); }
+                });
+            } finally { gpu.dispose(); renderer.dispose(); renderer.forceContextLoss(); }
+        });
+        for (const sample of samples) await t.test(sample.name, () => {
+            assert.deepEqual(sample.staticChange, [0, 0, 0], '静态刚体速度不可更改');
+            sample.expected.forEach((value, i) => assert.ok(Math.abs(sample.actual[i] - value) < 1e-5, JSON.stringify(sample)));
+        });
     } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 });

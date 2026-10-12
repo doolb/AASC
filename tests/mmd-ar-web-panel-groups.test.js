@@ -11,11 +11,19 @@ const { groupWebPanels, WEB_PANEL_GROUP_CSS, WEB_PANEL_GROUP_JS } = require('../
 
 const DISPLAY_SOURCE = path.join(__dirname, '../src/apps/web-mediacenter/ui/public/display.html');
 const GENERATED_PAGE = path.join(__dirname, '../3rd/mmd-ar-test/web-dist/index.html');
-const CHROME = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium']
+const CHROME = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium', require('puppeteer').executablePath()]
   .find((candidate) => candidate && fs.existsSync(candidate));
 const CAMERA_CONTROL_IDS = ['mmdArTranslationDeadZone', 'mmdArRotationDeadZone', 'mmdArSmoothingMs', 'mmdArCameraDistance'];
 
 function addCameraControls($) {
+  // 与build.js同序过滤正式专属控件，不能把正式面板演进误报成新物理控件回归。
+  if ($('#mmdArLightingPresets').length) {
+    const label = $('#displayMmdLightingPreset').closest('label').remove();
+    $('#mmdArLightingPresets').replaceWith(label);
+  }
+  $('[data-mmd-production-only]').remove();
+  $('#mmdArTemporalAA, #mmdArScreenLighting').remove();
+  $('[data-render-setting="canvasScale"]').closest('label').remove();
   // 测试网页构建器先移除正式页新控件，再注入测试专用的一套参数。
   for (const id of ['displayMmdPhysicsFps', 'displayMmdRotationPhysicsLimit']) {
     $('#displayMmdLightingPanel').append($(`#${id}`).closest('label'));
@@ -104,12 +112,14 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
 
   groupWebPanels($);
   originalIds.get('#mmdArMotionPanel').push(...require('../3rd/mmd-ar-test/web-physics-wind').WIND_CONTROL_IDS);
-  originalIds.get('#mmdArMotionPanel').push('mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus');
+  originalIds.get('#mmdArMotionPanel').push('mmdArPhysicsSolver', 'mmdArPhysicsSolverStatus',
+    'mmdArGpuBoneTexture', 'mmdArGpuBoneTextureStatus', 'mmdArHandAvoidance', 'mmdArHandAvoidanceRow',
+    'mmdArHandAvoidanceStatus', ...require('../3rd/mmd-ar-test/web-vertex-cloth-inject').CLOTH_CONTROL_IDS);
   originalIds.get('#displayMmdLightingPanel').push('mmdArAoConcavityAngle', 'mmdArAoConcavityAngleValue');
   originalIds.get('#displayMmdLightingPanel').push('mmdArShadowMapSize', 'mmdArShadowMapSizeValue',
     'mmdArShadowMapPreviewEnabled', 'mmdArShadowMapPreviewRows', 'mmdArShadowMapKeyStatus',
     'mmdArShadowMapKeyCanvas', 'mmdArShadowMapFillStatus', 'mmdArShadowMapFillCanvas',
-    'mmdArShadowCameraScale', 'mmdArShadowCameraScaleValue');
+    'mmdArShadowCameraScale', 'mmdArShadowCameraScaleValue', 'mmdArShadowJointFit');
   // 工作区已有补光角度控件和小球遮挡控件，完整ID校验夹具须包含这些现有节点。
   originalIds.get('#displayMmdLightingPanel').push('mmdArFillFacingStart', 'mmdArFillFacingStartValue',
     'mmdArFillFacingEnd', 'mmdArFillFacingEndValue');
@@ -118,6 +128,8 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonEnabled', 'mmdArSkeletonLegend', 'mmdArRigidBodyEnabled', 'mmdArRigidBodyStatus');
   originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonSize', 'mmdArSkeletonSizeValue', 'mmdArSkeletonNamesEnabled', 'mmdArSkeletonSelectionStatus', 'mmdArSkeletonClearContacts', 'mmdArSkeletonHint');
   originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonOcclusionEnabled', 'mmdArSkeletonOccludedOpacity', 'mmdArSkeletonOccludedOpacityValue');
+  originalIds.get('#mmdArMotionPanel').push('mmdArSkeletonJointParametersEnabled', 'mmdArSkeletonJointLegend',
+    'mmdArSkeletonJointDetails');
   originalIds.get('#mmdArMotionPanel').push('mmdArRigidBodyLegend', 'mmdArRigidBodyMassRange');
   originalIds.get('#mmdArMotionPanel').push('mmdArRigidBodyControls', 'mmdArRigidBodyStyle', 'mmdArCharacterHiddenEnabled');
   originalIds.get('#mmdArMotionPanel').push('mmdArPhysicsStabilityReference', 'mmdArPhysicsStabilityReferenceValue', 'mmdArPhysicsStabilityReferenceHint');
@@ -187,6 +199,9 @@ test('测试网页灯光和定位控件按类折叠，原控件 ID 与按钮保�
   assert.equal($('#mmdArCameraMotionPlayback').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
   assert.equal($('#mmdArCameraMotionPlayback').is('[checked]'), true);
   assert.equal($('#mmdArCameraMotionProgress').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '动作');
+  assert.equal($('#mmdArGpuBoneTexture').is('[checked]'), false, 'GPU骨骼直连默认关闭');
+  assert.equal($('#mmdArGpuBoneTexture').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
+  assert.equal($('#mmdArGpuBoneTextureStatus').closest('.mmd-ar-panel-group').find('button').attr('data-group-title'), '物理');
   assert.match(WEB_PANEL_GROUP_CSS, /background: color-mix\(in srgb, #39455c var\(--display-mmd-panel-opacity, 50%\), transparent\)/u);
   const specular = $('.mmd-ar-specular');
   assert.equal(specular.is('section.mmd-ar-panel-group'), true);

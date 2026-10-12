@@ -89,8 +89,11 @@ void main(){int idx=pixelIndex(),pair=idx/7,f=idx%7;if(pair>=uPairCount){outputV
  float lambda=fetchData(uPreviousCorrections,pair*7+4+i/4)[i%4];lambdas[i]=lambda;
  vec3 rel=b.v+cross(b.w,pb-b.p)-a.v-cross(a.w,pa-a.p);float vn=dot(rel,n),sep=dot(pb-pa,n);
  float threshold=max(max(.5,2.0*length(uGravity)*uH),tol/uH);float restitution=abs(cb.w)>threshold?.5*(clamp(a.props.w,0.0,1.0)+clamp(b.props.w,0.0,1.0)):0.0;
- float target=sep<=0.0?max(-cb.w*restitution,0.0):sep/uH;vec3 tangent=rel-n*vn;float speed=length(tangent);vec3 change=n*(target-vn);
- if(speed>1e-6)change-=tangent*min(friction*lambda/uH,speed)/speed;float len=length(change);
+ // 正间距允许物体以负间距/时长闭合，不能制造正向分离速度；法向约束只推不拉。
+ // 窄相之后关节可将旧接触点推开，此时继续按正间距加速会在拖动时反复注入能量。
+ float target=sep<=0.0?max(-cb.w*restitution,0.0):-sep/uH;vec3 tangent=rel-n*vn;float speed=length(tangent);vec3 change=n*max(target-vn,0.0);
+ // 已被关节推开且超出接触容差时，不再使用旧lambda施加摩擦。
+ if(sep<=tol&&speed>1e-6)change-=tangent*min(friction*lambda/uH,speed)/speed;float len=length(change);
  if(len>1e-6){change/=len;ga=-cross(pa-a.p,change);gb=cross(pb-b.p,change);impulse(a,b,change,ga,gb,len);}
  }}
  if(f==4||f==5){int k=(f-4)*4;outputValue=vec4(lambdas[k],lambdas[k+1],lambdas[k+2],lambdas[k+3]);return;}

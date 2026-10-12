@@ -4,6 +4,7 @@ import { common, integrate, bindings, recoverVelocity, copy } from './web-xpbd-w
 import { prepareTopology, jointShader, jointGather } from './web-xpbd-webgl-joints.mjs';
 import { contactShader, contactSolve, contactGather } from './web-xpbd-webgl-collision.mjs';
 import { advanceWindState } from './web-physics-wind.mjs';
+import { createGpuBonePalette } from './web-xpbd-webgl-bones.mjs';
 
 const put = (array, index, values) => array.set(values, index * 4);
 const pack = common + `uniform sampler2D uFlags;void main(){int idx=pixelIndex();outputValue=idx<uCount*6?fetchData(uState,idx):idx<uCount*6+uPairCount?fetchData(uFlags,idx-uCount*6):vec4(0);}`;
@@ -17,6 +18,7 @@ export function createWebglSolver(renderer, bodies, joints) {
     if (np > 32768 || n > 4096 || topology.colors > 128) throw new Error('模型超出WebGL XPBD容量预算，使用CPU XPBD');
     const gpu = createGpuState(renderer);
     let disposed = false, state, other, flags, nextFlags, readbackMs = 0, gpuMs = null, readbacks = 0, contacts = [];
+    let palette = null, directActive = false, directReason = '';
     const queries = [], gl = gpu.gl, timer = gl.getExtension('EXT_disjoint_timer_query_webgl2');
     try {
         state = gpu.target(n * 6); other = gpu.target(n * 6);
@@ -61,6 +63,7 @@ export function createWebglSolver(renderer, bodies, joints) {
         };
         const reset = () => {
             if (disposed) return;
+            palette?.invalidate(); directActive = false;
             // reset同步直接全锁绑定，避免第一子步把非零锁定值误算成速度。
             for (const [id, binding] of topology.bindings) {
                 const b = bodies[id], a = bodies[binding.anchor];
@@ -90,17 +93,59 @@ export function createWebglSolver(renderer, bodies, joints) {
             }
             if (disjoint) gpuMs = null;
         };
-        const runFrame = (owner, steps, h) => gpu.scope(() => {
+        const prepareDirect = mesh => {
+            if (disposed || !mesh || gl.isContextLost()) { directReason = 'GPU上下文或模型不可用'; return false; }
+            if (!palette) {
+                if (directReason) return false;
+                try { palette = createGpuBonePalette(gpu, mesh, bodies); }
+                catch (error) { directReason = error.message || 'GPU骨骼纹理初始化失败'; return false; }
+            }
+            directReason = palette.reason || '';
+            return !directReason;
+        };
+        // 诊断、精确拾取、关闭直连及CPU回退才调用；普通直连帧不打包整批刚体。
+        const syncState = () => gpu.scope(() => {
+            if (disposed || gl.isContextLost()) throw new Error('GPU物理状态不可读，需重置物理');
+            draw('pack', packed, { uFlags: flags.texture });
+            const begin = performance.now(); renderer.readRenderTargetPixels(packed, 0, 0, packed.width, packed.height, output);
+            readbackMs = performance.now() - begin; readbacks += 1;
+            for (let i = 0; i < n * 24; i += 1) if (!Number.isFinite(output[i])) throw new Error('WebGL XPBD产生非有限位姿');
+            for (let i = 0; i < n; i += 1) if (Math.hypot(...output.subarray(i * 24 + 4, i * 24 + 8)) < .5) throw new Error('WebGL XPBD未产生有效四元数');
+            bodies.forEach((b, i) => {
+                b.position.fromArray(output, i * 24); b.quaternion.fromArray(output, i * 24 + 4).normalize();
+                b.velocity.fromArray(output, i * 24 + 8); b.omega.fromArray(output, i * 24 + 12);
+                b.previousPosition.fromArray(output, i * 24 + 16); b.previousQuaternion.fromArray(output, i * 24 + 20);
+                if (directActive && (b.params.type === 0 || b.positionDriven)) {
+                    // 直连期间CPU目标缓存没有逐帧更新。同步消费/拾取后重新种子必须沿用GPU最终锚点，
+                    // 否则首子步会跳回进入直连前的位置，再追赶当前目标并产生虚假速度。
+                    b.targetPosition.copy(b.position); b.previousTargetPosition.copy(b.position);
+                    b.targetQuaternion.copy(b.quaternion); b.previousTargetQuaternion.copy(b.quaternion);
+                }
+            });
+            contacts = [];
+            topology.pairs.forEach(([a, b], i) => { if (output[n * 24 + i * 4] > .5) contacts.push({ a: bodies[a], b: bodies[b] }); });
+            // 兼容帧会继续改变CPU骨树；下次直连必须从最新骨树重新种子，不能保留退出时的GPU局部姿态。
+            palette?.invalidate(); directActive = false;
+        });
+        const runFrame = (owner, steps, h, useDirect = false) => gpu.scope(() => {
             if (disposed || gl.isContextLost()) return;
             gpu.resetStats(); pollQueries();
-            bodies.forEach((b, i) => {
-                put(targets.image.data, i * 4, b.previousTargetPosition.toArray()); put(targets.image.data, i * 4 + 1, b.previousTargetQuaternion.toArray());
-                put(targets.image.data, i * 4 + 2, b.targetPosition.toArray()); put(targets.image.data, i * 4 + 3, b.targetQuaternion.toArray());
-            }); targets.needsUpdate = true; uniforms.uH = h; uniforms.uGravity.copy(owner.gravity);
+            if (!useDirect) {
+                bodies.forEach((b, i) => {
+                    put(targets.image.data, i * 4, b.previousTargetPosition.toArray()); put(targets.image.data, i * 4 + 1, b.previousTargetQuaternion.toArray());
+                    put(targets.image.data, i * 4 + 2, b.targetPosition.toArray()); put(targets.image.data, i * 4 + 3, b.targetQuaternion.toArray());
+                });
+                targets.needsUpdate = true; uniforms.uTargets = targets;
+            }
+            uniforms.uH = h; uniforms.uGravity.copy(owner.gravity);
             owner.frameRotation.copy(owner.windSceneRotation).invert();
             uniforms.uWindDirection.set(owner.windDirection.x, owner.windDirection.y, owner.windDirection.z).applyQuaternion(owner.frameRotation);
             owner.mesh.getWorldQuaternion(owner.frameRotation); uniforms.uWindDirection.applyQuaternion(owner.frameRotation);
             uniforms.uWindMatrix.copy(owner.mesh.matrixWorld).invert().premultiply(owner.windSceneMatrix);
+            if (useDirect) {
+                uniforms.uTargets = palette.prepareTargets(owner.mesh.matrixWorld, owner.renderRoot,
+                    state.texture, owner.poseAnimated);
+            }
             const query = timer && queries.length < 4 && !gl.getQuery(timer.TIME_ELAPSED_EXT, gl.CURRENT_QUERY) ? gl.createQuery() : null;
             if (query) gl.beginQuery(timer.TIME_ELAPSED_EXT, query);
             try {
@@ -125,27 +170,29 @@ export function createWebglSolver(renderer, bodies, joints) {
                     }
                     jointsPass(2);
                 }
-                draw('pack', packed, { uFlags: flags.texture });
+                if (useDirect) palette.finish(owner.mesh.matrixWorld, owner.renderRoot,
+                    state.texture, owner.poseAnimated);
             } finally { if (query) { gl.endQuery(timer.TIME_ELAPSED_EXT); queries.push(query); } }
-            const begin = performance.now(); renderer.readRenderTargetPixels(packed, 0, 0, packed.width, packed.height, output);
-            readbackMs = performance.now() - begin; readbacks += 1;
-            // 全部检查通过再提交CPU快照，异常时保留最后一次有效骨骼姿态。
-            for (let i = 0; i < n * 24; i += 1) if (!Number.isFinite(output[i])) throw new Error('WebGL XPBD产生非有限位姿');
-            for (let i = 0; i < n; i += 1) if (Math.hypot(...output.subarray(i * 24 + 4, i * 24 + 8)) < .5) throw new Error('WebGL XPBD未产生有效四元数');
-            bodies.forEach((b, i) => {
-                b.position.fromArray(output, i * 24); b.quaternion.fromArray(output, i * 24 + 4).normalize();
-                b.velocity.fromArray(output, i * 24 + 8); b.omega.fromArray(output, i * 24 + 12);
-                b.previousPosition.fromArray(output, i * 24 + 16); b.previousQuaternion.fromArray(output, i * 24 + 20);
-            });
-            contacts = [];
-            topology.pairs.forEach(([a, b], i) => { if (output[n * 24 + i * 4] > .5) contacts.push({ a: bodies[a], b: bodies[b] }); });
+            if (useDirect) {
+                directActive = true; contacts = []; readbackMs = 0;
+                return true;
+            }
+            syncState();
+            return false;
         });
         reset();
-        return { reset, runFrame, get contacts() { return contacts; }, getState: () => ({ computeBackend: 'webgl2', solver: 'xpbd-webgl',
+        return { reset, runFrame, prepareDirect, syncState,
+            getDirectBoneTarget: () => palette?.target || null,
+            releaseDirect: () => { palette?.detach(); directActive = false; },
+            resetAnchorInterpolation: () => palette?.resetInterpolation(),
+            get directActive() { return directActive; },
+            get contacts() { return contacts; }, getState: () => ({ computeBackend: 'webgl2', solver: 'xpbd-webgl',
             candidates: np, contacts: contacts.length, jointColors: topology.colors, passCount: gpu.passes, gpuMs, readbackMs,
-            readbacks, memoryBytes: gpu.bytes, diagnosticSampling: 'frame-accumulated', anchoredBodyCount: topology.bindings.size,
+            readbacks, memoryBytes: gpu.bytes, directActive, directReason,
+            diagnosticSampling: directActive ? 'direct-no-cpu-contacts' : 'frame-accumulated', anchoredBodyCount: topology.bindings.size,
             rotationLockProjections: joints.some((j, i) => topology.jointColors[i] >= 0 && j.params.rotationLimitation1.some((v, k) => v === j.params.rotationLimitation2[k])) ? 1 : 0, iterations: 1 }), dispose() {
-            if (disposed) return; disposed = true; for (const q of queries) gl.deleteQuery(q); queries.length = 0; gpu.dispose(); contacts = [];
+            if (disposed) return; palette?.detach(); disposed = true;
+            for (const q of queries) gl.deleteQuery(q); queries.length = 0; gpu.dispose(); contacts = [];
         } };
     } catch (error) { gpu.dispose(); throw error; }
 }

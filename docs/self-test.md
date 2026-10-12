@@ -1,5 +1,33 @@
 # 自测功能文档
 
+## 独立MMD-AR拖动飞散修复（2026-10-12，独立场景验收完成）
+
+先跑`npm run build:web:mmd-ar-test`。定向命令：`node --test tests/mmd-ar-xpbd-webgl-bone-texture.test.js tests/mmd-ar-xpbd-webgl.test.js tests/mmd-pmx-helper.test.js`；真实PMX拖动与生命周期分别串行运行`node --test tests/mmd-ar-xpbd-webgl-drag-browser.test.js`和`node --test tests/mmd-ar-xpbd-webgl-browser.test.js`。package没有这组专用script，未跑全仓通用test或APK构建。
+
+接触shader新增八个真实WebGL2场景：正间距静止、允许闭合、过快闭合、已分离速度、重叠、反弹、接触摩擦及已分离旧摩擦。旧公式前四项失败，新增失效摩擦也先失败；修复后八项通过。小骨架连续根移动/旋转、显式同步后重新直连，旧端点缓存导致type2速度不连续，修复后通过；最终补齐type0位置/旋转端点和type2位置缓存覆盖后，定向26/26通过，零跳过（14.0秒），50次GPU资源循环回到0，骨矩阵最大误差7.7858567237854e-6。
+
+真实PMX拖动测试调用原页面renderFrame，固定60Hz正delta，验证每普通帧均实际推进physics，播放mixer时间增加、暂停不变；鼠标右键平移/左键旋转、触摸双指平移/单指旋转均断言枢轴确实变化。诊断边界按需同步后遍历全部实际蒙皮顶点，不使用缓存boundingBox；同时检查刚体范围、速度、GL错误及普通帧真实readRenderTargetPixels调用。3/45子步×播放/暂停×直连/同步，每配置四个连续输入场景，共32段；各配置起点重置，配置内不重置，最终1/1通过（846.0秒）。最大蒙皮半径10.83、刚体半径10.76、速度217.22，GL错误0；实际输入期间物理推进且普通直连帧完整读回0。截图已保存为`%TEMP%/mmd-webgl-drag-independent-3-45-20261012.png`并查看，无跨屏飞散；局部饰物动态观感仍需实机验收。
+
+最新生成页生命周期1/1通过（215.5秒）：默认防穿模兼容提示、开关单次读回、连续播放/暂停普通帧零读回、UI/API诊断、编辑/T Pose、上下文解绑/恢复、两轮后端重建、关开物理及VMD重载通过，无pageerror；GPU/CPU矩阵最大误差6.9141387939453125e-6。直连截图`%TEMP%/mmd-webgl-direct-lifecycle-20261012.png`已查看；定向核心合计28/28通过、零跳过，排除下述未解决序列。生成collision/solver/physics依赖11条指纹通过，语法及定向空白检查通过；README既有FSR末行CRLF空白提示保留，不改其他任务内容。
+
+45子步纯直连不重置累计验收1/1通过（382.2秒），暂停/播放八段鼠标/触摸平移/旋转；普通帧完整读回0，最大蒙皮半径10.38/刚体9.99/速度96.67，GL错误0。最终真实直连截图已保存为`%TEMP%/mmd-webgl-drag-cumulative-45-direct-20261012.png`并查看，裙摆正常、无跨屏飞散。运行中不重置或裁剪状态，测试末帧仍调用真正页面渲染。
+
+验收限制：首次未重置的累计序列在3子步同步触摸旋转出现蒙皮半径83.19、刚体半径82.40、速度345.61。最终3子步累计复跑仍失败（82.8秒），播放同步触摸平移的蒙皮半径84.14/刚体83.74，最后速度222.27、期间瞬时速度1891.34/锚点目标变化约0.98；GL错误0、正delta及输入仍真实生效，尚未定位剩余原因。默认独立配置及45直连通过不能替代该失败；最终轮合计30项29通过/1累计失败/0跳过。
+
+在PowerShell设置`$env:MMD_DRAG_ACCUMULATE='1'`、`$env:MMD_DRAG_SUBSTEPS='3'`运行拖动测试，仅检查3子步并保留跨配置状态；结束后移除这两个环境变量。45子步纯直连累计验收使用`MMD_DRAG_SUBSTEPS='45'`及`MMD_DRAG_DIRECT_ONLY='1'`，执行后清理本次三个环境变量。测试提供已有CPU状态的目标/速度trace，不新增读回。一轮模型加载超时未产生物理结论；并发重型软件GPU测试的生命周期超时也不算成功。手机、长时运行/更多模型及性能未验收，未发布、提交或改用户配置/results。
+
+## 独立MMD-AR GPU物理直连骨骼纹理（2026-10-12）
+
+命令：`node --test tests/mmd-ar-xpbd-webgl-bone-texture.test.js tests/mmd-ar-xpbd-webgl.test.js tests/mmd-ar-xpbd-webgl-browser.test.js tests/mmd-pmx-helper.test.js`；面板另跑 `node --test tests/mmd-ar-web-panel-groups.test.js`。本地Chrome/SwiftShader执行真实WebGL2，测试端生成页加载真实米娅PMX；未使用CPU替身冒充GPU。
+
+骨骼纹理2项、求解器1项和PMX helper14项最终17/17通过，零跳过：type0/1/2、暂停、模型缩放/旋转、矩阵与CPU对照、无普通帧读回、退出单次同步；父type1/子type2在门控暂停时平移+旋转一致，兼容10帧后type0子锚点恢复一致。修复前分别捕获吞根变换及0.22231375锚点误差；修复后通过。矩阵最大误差7.7858567237854e-6；50次创建/直连/退出/重置/幂等释放后geometry/texture/program由0回0。
+
+最后模式转换修正后的真实PMX生成页复验1/1通过（205.3秒），核心合计18/18通过，零失败/跳过；覆盖默认关闭和存储选择、默认手部防穿模同步兼容提示、连续播放/暂停至少3物理帧且renderer实际读回调用不增长、UI/API诊断即时/逐帧同步及退出恢复、编辑read/T Pose、显式同步和矩阵对照、上下文丢失解绑/恢复重建、两轮CPU/GPU后端重建释放旧实例、关开物理及默认VMD重载。真实PMX矩阵最大误差7.614493370056152e-6；恢复首直连帧readbacks=0、319pass、预算9050752 bytes。不把SwiftShader帧时写作手机性能。逐像素颜色/深度/阴影、实际点击拾取和手机P95不在已验证清单。
+
+面板8项6通过2失败，零跳过；原灯光未分类静态夹具按build过滤正式专属节点后通过，新增开关默认关闭/归属物理、ID完整保留及未知控件停止构建均通过。其余两项为高光开关状态失败、关闭相机等待定位按钮禁用超时；用HEAD测试源码在相同当前生成页复现同名失败，另列todo，不改灯光/AR运行代码迎合断言。
+
+`npm run build:web:mmd-ar-test`成功；10项源码/测试语法、25条XPBD/编辑生成模块内容指纹通过。构建保留既有Blender大chunk提示，不作为失败。没有全仓/手机验收，不声明提速；未改正式端/Offline产物状态，未提交或发布网页、模型、APK/ZIP、配置及results。
+
 ## 正式分类与子分类标题背景透明度（2026-10-12）
 
 面板浏览器6/6、`npm run test:mmd-performance`100/100、共享主题28/28，共134项通过，零失败/跳过。面板定向命令：`node --test --experimental-test-isolation=none tests/display-mmd-production-panels.test.js`；主题定向包括display-theme-sync/ui-theme/ui-theme-card-contrast/ui-theme-preview。使用已安装Chrome，真实正式HTML按原link顺序加载全部CSS，无启动/重启HTTP服务器或加载模型。
