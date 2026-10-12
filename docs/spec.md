@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [AI模型发布与下载同步伪代码（已实现并验证）](spec/ai-model-sync.md)
+
 - [MMD-AR HS2 ZIPMOD候选伪代码（尚未实现）](spec/mmd-ar-hs2-zipmod.md)
 
 - [MMD-AR VAM接入候选伪代码（尚未实现）](spec/mmd-ar-vam-models.md)

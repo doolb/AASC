@@ -1,5 +1,7 @@
 # Web MediaCenter - 使用说明
 
+YOLO、ASR和声纹模型的外网目录、上传/下载同步命令及正式包模型边界见[AI模型同步](usage/ai-model-sync.md)。30项模型与配套文件已发布，模型二进制不新增到Git。
+
 MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件规则见[帧率与耗时](usage/mmd-performance.md)，源码与独立WEB构建已完成，正式发布状态见changelog。
 
 Virt-A-Mate文件类型说明见[VaM 1.x资源格式](usage/vam-resource-formats.md)，列出资源包、场景、预设、Morph、衣服/头发、Unity资源和插件；这是格式参考，mmd-ar导入尚未实现。
@@ -446,6 +448,8 @@ adb install -r 3rd/tts-server/android-asr/app/build/outputs/apk/debug/app-debug.
 ```
 
 当前测试 APK 暂时只内置 `ERes2Net-base FP32` 声纹模型和多人分段所需的 Pyannote 模型，不包含 large、V2 或 INT8 声纹 embedding 模型。
+
+模型Git状态（2026-10-12核查）：当前本地Debug APK内置7个ONNX文件。Zipformer的encoder/decoder/joiner、ERes2Net-base FP32、Pyannote分段及GTCRN降噪共6个模型已在Git中；SenseVoice主模型`res/models/sensevoice/model.int8.onnx`为239,233,841字节，尚未提交并由`.gitignore`明确忽略，但词表及SHA-256校验文件已提交。因此新检出源码后需另行准备该SenseVoice文件，才能完整打包测试APK。本轮Git归档未新增模型。
 
 打开 APK 后先录音或选择 WAV。普通 ASR 的“ASR 文字降噪”只影响文字识别；Sherpa 区域的“声纹降噪”只影响声纹注册、分段和匹配。输入名称后点击“注册当前音频声纹”，再使用单段、多段或快速多段测试；多人测试可选择自动估计或 1-5 人。结果区域会显示 ASR 文本、匹配名称、相似度、阈值、阶段耗时，以及每个分段的 speaker、相似度、文字和错误。
 

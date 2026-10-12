@@ -1,5 +1,17 @@
 # 独立 Android 声纹对比测试 APK 实现文档（伪代码）
 
+## 模型Git状态核查伪代码（2026-10-12）
+
+```text
+当前打包输入 := Gradle模型白名单 → SenseVoice 1 + Zipformer 3 + 声纹/分段 2 + 降噪 1
+当前APK核查 := ZIP目录存在对应7个ONNX条目；不解包或重新构建
+已提交模型 := Zipformer三文件 + ERes2Net-base FP32 + Pyannote + GTCRN
+SenseVoice主模型 := 本地239233841字节；Git HEAD无文件；gitignore明确忽略
+SenseVoice配套 := tokens.txt + 主模型/词表SHA-256校验文件已在Git
+构建前提 := 新检出源码后另行准备SenseVoice主模型
+本轮操作 := 只读核查并补充说明；不提交模型或改变运行逻辑
+```
+
 ## 数据结构
 
 ```text

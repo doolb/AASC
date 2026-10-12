@@ -11,7 +11,7 @@
 - 新增 `npm run build:apk:offline`，复用现有 Android Node Runtime 准备流程，并在构建生成目录中加入固定白名单模型。
 - 离线 APK 的文件名为 `aasc-display-offline.apk`，包名为 `com.aasc.display.offline`，应用名称为 `AASC 显示端 Offline`，版本名追加 `-offline`。
 - 包名不能包含连字符，因此使用 Android 合法的 `.offline` 后缀；文件名和版本名保留 `-offline` 标识。
-- 离线模型包含当前正式显示端运行集：SenseVoice、streaming Zipformer、正式声纹 base FP32 与 pyannote、GTCRN、嵌入式 TTS、RapidOCR，以及默认 `yolo11n` 和类别文件。不包含测试 WAV、测试 APK 专用声纹变体、YOLO 其他尺寸、LFM-VL 和分割 PT 文件。
+- 离线模型以当前`release/apkbuild/allserver/app.json`的models与实际APK目录为准。2026-10-12核对当前profile选择Qwen、SenseVoice、TTS与voiceprint；声纹仍只选base FP32和Pyannote。实际已发布完整v23在YOLO/ASR/声纹同步范围内仅内置SenseVoice/base FP32/Pyannote三个ONNX，不把历史兼容列表中的Zipformer/GTCRN/OCR/YOLO自动视为已内置。不包含测试APK专用声纹变体、YOLO其他尺寸、LFM-VL或分割PT。
 - 模型由构建脚本从仓库 `res/models` 复制到生成的 Node Runtime assets，模型文件不要求提交到 Git；manifest 记录大小和 SHA-256。
 - Runtime 安装器将 `server/res/models` 安装到 APK 私有根目录的 `res/models`，Node 服务器继续通过既有模型路由和模型清单提供本地模型。
 - 离线模式写入 `aasc.role = main`，本机 Node 只监听本地服务，不启动 AASC 子服务器远端连接流程；普通 APK 继续写入 `subserver`。

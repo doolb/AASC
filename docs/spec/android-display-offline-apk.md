@@ -1,6 +1,21 @@
 # 正式 Android 显示端完整离线 APK 实现规格（伪代码）
 
-## 构建伪代码
+## 现行模型选择（2026-10-12核查）
+
+```text
+profile := loadApkProfile(allserver) → release/apkbuild/allserver/app.json
+modelIds := Qwen 0.8B + sensevoice + tts + voiceprint
+模型输入 := resolveSelectedModelFiles(modelRoot, modelIds)
+voiceprint选择 := MODEL_FILE_SELECTIONS.voiceprint → base FP32 + Pyannote两文件
+实际已发布完整v23 := 本次YOLO/ASR/声纹范围内包含SenseVoice/base FP32/Pyannote三个ONNX
+allserver-min := updateOnly=true, models=[] → 不内置模型
+其他分类 := 未列入当前profile时，不因res/models已有文件或外网aimodel归档而自动打包
+历史OFFLINE_MODEL_FILES常量 := 兼容测试参考；不能代替profile模型选择或实际APK目录
+```
+
+现行入口为`npm run build:apk:offline`与`scripts/ops/build-apk.js`，打包输入及路径以profile规则为准。以下原始构建/固定列表保留为历史参考，不作为当前实包模型范围。
+
+## 原构建伪代码（历史参考）
 
 ```text
 build:apk:offline:

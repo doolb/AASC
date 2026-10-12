@@ -1,5 +1,9 @@
 # 独立 Android 声纹对比测试 APK设计
 
+## 模型仓库存储边界（2026-10-12核查）
+
+当前Gradle白名单与本地Debug APK均包含7个ONNX。Zipformer三个流式模型、ERes2Net-base FP32、Pyannote分段及GTCRN降噪共6个已作为真实模型文件提交Git；普通ASR的SenseVoice主模型239,233,841字节只在本地，由`.gitignore`忽略，词表与校验文件已提交。仅检出源码不足以完整构建该测试APK，需另行准备SenseVoice模型。本轮只核对已有模型与仓库状态，不改变打包白名单或提交模型。
+
 ## 目标
 
 在 `3rd/tts-server/android-asr` 独立 APK 中增加声纹对比测试能力，保留现有原生 ASR 页面，并通过 APK 内置 HTTPS 服务向电脑或手机浏览器提供测试网页。
