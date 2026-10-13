@@ -20,6 +20,12 @@
   - 原生 `DisplayWebView` 保存并经 `NativeBridge` 返回相同缩放百分比；显示页对 TTS/ASR 共用语音文本节点的 0°/180°固定偏移做反向换算，90°/270°锚点、整页缩放和控制页保持原样。浏览器/普通 APK/旧桥回退 100%。
   - Chromium 在 100%/112%/150%/300%及四个方向完成 DPI 布局模拟；Android `:app:testDebugUnitTest` 成功，12项定向网页回归通过。完整网页文件里的既有1200×800、DPR3弹窗等待用例仍超时，单独旋转锚点回归通过。此次未构建 APK；代码包发布成功后，状态为 `servicePackage=false`、`dependenciesPackage=false`、`minApk=true`。任务：`docs/task/20261012_OfflineAPK_TTS位置匹配ADB.md`。
 
+### Offline APK WebView 文件选择器
+
+- ✅ [2026-10-13] 修复 APK WebView 网页文件输入不弹出系统选择器的问题，支持 Chat2API 控制端导入账号凭证 JSON。
+  - `DisplayWebView.kt` 将 WebChromeClient 文件选择请求交给 `MainActivity.kt` 的 Activity Result 选择器；显示页和控制页共用 `FileChooserParams.createIntent()` / `parseResult()`，选择、取消、异常和 Activity 销毁时均清理网页 callback，不增加通用存储权限。新增 Offline 静态回归，更新 design/spec/task/todo。
+  - 定向 Node 静态回归 2/2、Android `:app:testDebugUnitTest` 通过；完整 Offline 静态套件 24/27，3 项无关既有断言/用户结果夹具失败。未构建/发布 APK，`minApk=true`；待签名 min 安装后真机验收。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
+
 ### Offline 热更旧版本目录回收
 
 - ✅ [2026-10-13] Offline服务release健康确认后清理不再使用的代码/依赖版本目录，回收热更累积占用。

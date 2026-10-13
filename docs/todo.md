@@ -1,3 +1,5 @@
+- ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成，`minApk=true`；待签名 min APK 安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
+
 - ⏳待长期/模式/设备验收 [2026-10-13] 豆包普通LLM：think/expert、令牌过期维护、多账号及Android/Linux尚待真实验收；Cookie-only网页bridge仍待query profile完善与官网验证。网页朗读仍待真实账号/音色、完整Ogg至WAV链路和设备播放验收；手动安全只读登录校验尚缺。任务：`docs/task/20261013_豆包纯Node协议接入.md`、`docs/task/20261012_豆包普通LLM网页fetch实施.md`、`docs/task/20261012_豆包网页WAV解码实施计划.md`。
 
 - ⏳待人工/手机验收 [2026-10-13] 独立 MMD-AR PMX PBD 全身 IK：七个头/腕/膝/踝控制点采用共享祖先旋转约束迭代和脚踝弯曲面偏好；PBD/IK/相机定向测试8/8、真实米娅PMX控制点加载/相机手势回归1/1及WEB构建通过。浏览器未自动拖动真实控制点；待不同PMX限位/骨名、真实拖点姿态、VMD与原生IK共存、模型切换清理及手机帧时/姿势观感验收。任务：`docs/task/20261013_MMDAR_PBD全身IK.md`、`docs/task/20261012_MMDAR_IK镜头手势.md`。
