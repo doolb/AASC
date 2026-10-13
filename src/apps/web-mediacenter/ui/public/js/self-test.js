@@ -453,7 +453,7 @@ const SelfTest = {
         {
             id: 'tts_custom',
             name: '自定义语音播报测试',
-            description: '播报后核对三行白字、主题色细描边及0.3半透明模糊背景；30秒隐藏保留历史',
+            description: '播报后核对三行白字、主题色细描边及0.2半透明模糊背景；30秒隐藏保留历史',
             category: '语音功能',
             run: async () => {
                 if (!window.currentDisplayId) {
@@ -461,7 +461,7 @@ const SelfTest = {
                 }
                 try {
                     window.WebSocketManager.sendTts('play', { text: '自测语音播报测试' });
-                    return { success: true, message: 'TTS命令已发送，字幕显示待人工验收', details: '核对逐行显示、固定3行、字号保持；白字配0.5px主题色细描边和时间文本同款阴影；上下渐隐背景最高0.3并模糊；切换主题只改变边缘颜色，字幕进度/历史保留，30秒无新行隐藏，再次播报保留历史；最多100行。此结果只表示命令已发送。' };
+                    return { success: true, message: 'TTS命令已发送，字幕显示待人工验收', details: '核对逐行显示、固定3行、字号保持；白字配0.5px主题色细描边和时间文本同款阴影；上下渐隐背景最高0.2并模糊；切换主题只改变边缘颜色，字幕进度/历史保留，30秒无新行隐藏，再次播报保留历史；最多100行。此结果只表示命令已发送。' };
                 } catch (err) {
                     return { success: false, message: '发送失败', details: err.message };
                 }

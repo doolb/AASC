@@ -12093,3 +12093,14 @@ TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c7
 
 - ✅ [2026-10-13] 用户明确暂时不处理APK数据修复重复提示和首装版本链兼容问题。
   - 已记录暂缓状态到offline-data-repair design/spec、原定位task与todo，保留候选方案。未修改代码、修复成功记录、包元数据或发布状态，未运行修复、构建或发布；待用户明确恢复后继续。
+
+### Offline背景光晕夜间黑底定位
+
+- ✅ [2026-10-13] ADB Note8/min40/code73确认背景变黑由23:00–08:00定时睡眠遮罩造成；权威光晕参数仍为#8FA8D5/10%/58%，现有60秒临时激活后截图确认光晕正常。
+  - 普通版占用8081时Offline出现EADDRINUSE并加载旧服务；停止普通版、重启Offline后/api/status确认真实v73/依赖8及代码目录。未修改睡眠配置、源码、发布状态或数据修复逻辑。
+  - 用户明确先不处理夜间显示策略，记录到display-background-glow design/spec、task/todo；保留定时睡眠，临时激活到期按原配置自动回落。
+
+### TTS背景最高alpha 0.2
+
+- ✅ [2026-10-13] 用户确认将TTS黑色背景渐变峰值从0.3调整到0.2，保留上下渐隐、8px模糊及白字/主题色细边/三行播报进度。
+  - 先更新display-chat-mmd spec/design，再修改display.css/self-test.js；同步usage、自测说明、task/todo，servicePackage=true待构建发布。没有新增自动化测试或修改睡眠配置。
