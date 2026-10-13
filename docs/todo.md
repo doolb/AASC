@@ -1,6 +1,4 @@
-- 🔄进行中 [2026-10-13] 修复Offline v69/v70因Android系统路径别名误判而启动失败/更新回滚；ZIP导出保存到Download，启动/应用更新错误持续可见。用户已确认；任务：`docs/task/20261013_2016_Offline启动回滚与Download备份修复.md`。
-
-- ⏳待设备验收 [2026-10-13] 全量配置 ZIP 功能与自动重启已完成，后端/浏览器/Android编译通过；待新版 min APK 在设备上核对系统ZIP保存位置、选择导入与重连刷新。任务：`docs/task/20261013_全量配置与聊天数据ZIP导入导出.md`。
+- ⏳待设备验收 [2026-10-13] 全量配置 ZIP 功能与自动重启已完成，后端/浏览器/Android编译通过；API28 Download保存位置已验证；待设备核对选择导入与导入后的重连刷新。任务：`docs/task/20261013_全量配置与聊天数据ZIP导入导出.md`。
 
 - ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成，`minApk=true`；待签名 min APK 安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
 

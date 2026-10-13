@@ -1,6 +1,6 @@
 # Offline启动回滚与Download备份修复
 
-状态：用户已确认修复并补充错误提示需求，实施中。
+状态：已完成，源码/构建/发布/ADB与回归验证通过。
 
 ## 需求与design
 
@@ -26,7 +26,7 @@ analyze-requirement-level enterprise：主L6（目录/下载/错误呈现契约�
 
 受信任项目根realpath规范化及根内路径映射完成；工作/配置内部链接仍拒绝。ZIP直接流式写入Download，旧系统重名独占新文件、失败只清理新目标，API29+MediaStore pending提交。Native实际错误摘要和UI错误保持完成；所有Offline启动核对实际版本/路径，候选健康后才成功，失败回滚带保留版本。
 
-Node/浏览器17项通过；24MiB往返1809ms、RSS267MiB含夹具。首次/tmp配额失败，改TMPDIR=/var/tmp后通过。Android JVM208项通过，新增下载/错误5项；首次编译发现旧保存选择器引用，移除后通过。最后增加健康后刷新失败页/控制页，由产物构建与ADB验证。min profile升39/0.2.37；servicePackage/minApk=true，依赖不变。待构建v71/min39并完成设备验收。
+Node/浏览器17项通过；24MiB往返1809ms、RSS267MiB含夹具。首次/tmp配额失败，改TMPDIR=/var/tmp后通过。Android JVM208项通过，新增下载/错误5项；首次编译发现旧保存选择器引用，移除后通过。最后增加健康后刷新失败页/控制页，由产物构建与ADB验证。min profile升39/0.2.37；servicePackage/minApk=true，依赖不变。后续已完成v71/min39及最终min40构建和设备验收，见下文。
 
 补充：真机控制页实际路由/control，保存策略已兼容/control与旧upload.html；4项原生策略定向通过。原npm APK脚本assembleDebug未产出预期文件，且其全局daemon清理中断并行定向测试；改为顺序执行并使用已准备资源签名Release构建。
 
@@ -36,4 +36,10 @@ min39安装后真实启动错误和失败候选更新同时显示且保持；通
 
 检查发现签名拒绝等更新检查错误只记日志，已先补spec后修改OfflineUpdateManager显式failed标志、MainActivity检查提示；LAN/WAN最终网络异常保留原因、正常无更新不报错，网页重试超时不覆盖真实原因。min升40/0.2.38，服务继续复用已构建v71。
 
-最终原生构建：min40/0.2.38-offline-min，81124288字节，SHA256=21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5，与full38同证书。APK CRC/profile/版本通过，API28安装后status=ok、APK0.2.38/code71；原生全套209/209通过（0失败/错误）。servicePackage/minApk均已由成功构建设false；min40最终WAN HTTP校验/精确清理进行中。
+最终原生构建：min40/0.2.38-offline-min，81124288字节，SHA256=21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5，与full38同证书。APK CRC/profile/版本通过，API28安装后status=ok、APK0.2.38/code71；原生全套209/209通过（0失败/错误）。servicePackage/minApk均已由成功构建设false；min40最终LAN/WAN全组件HTTP大小/SHA256和精确清理通过。
+
+## 最终发布与收尾
+
+code-v71.zip：17721071字节，SHA256=b6fd67e22d6499bf323f3369c6a9690826466e8c5d7821d13818412802c6fb7b；最终APK为aasc-display-offline-min-v40.apk。复用dependencies8/nodeMinSeeds69/dataRepair2。LAN /mnt/aasc-offline与WAN /home/as/a/aasc-offline独立发布，版本文件预校验上传后原子切换签名manifest；最终清单SHA256=69e3d4852ef056d3431ca6afb36c29f7c92dd6f269e7cf47c9d153ddd0a143ae。两端全组件HTTP大小/SHA256通过，旧code70/min37与中间min39按精确规则清理，full38保留，无清理错误。
+
+最终APK重启后status=ok/服务v71，无错误遮罩。todo删除本修复条目；TTS主题渐变按用户要求单独记录为待实施。真实ZIP导入和API29+设备不在本次已执行验收内。

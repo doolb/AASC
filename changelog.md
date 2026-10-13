@@ -2,7 +2,7 @@
 
 - ✅ [2026-10-13] ADB安装full APK v38并复现内置v69与热更v70启动失败；确认系统/data/user/0链接被备份工作目录检查误拒绝，70切换后回滚。
   - 已修复full-config-backup-service可信项目根realpath/根内路径映射；Android新增FullConfigBackupDownloads、NodeStartupDiagnostics、OfflineFailureState，更新MainActivity/NodeServerService及aasc-user-config.js。最终ZIP保存Download，内部事务私有；实际启动/应用更新错误持续可见，服务候选版本和代码路径健康确认后才成功。
-  - 备份Node/浏览器17/17通过，Android JVM208/208通过；24MiB往返1809ms、峰值RSS267MiB含夹具。首次临时目录配额失败改用/var/tmp；原保存选择器残留引用已修正。同步design/spec/usage/self-test/task/todo。min APK profile升39/0.2.37，servicePackage=true、minApk=true，依赖集合未变；修复包构建与设备验收进行中。
+  - 备份Node/浏览器17/17通过，Android JVM208/208通过；24MiB往返1809ms、峰值RSS267MiB含夹具。首次临时目录配额失败改用/var/tmp；原保存选择器残留引用已修正。同步design/spec/usage/self-test/task/todo。最终min APK v40/0.2.38与服务v71已构建发布并通过API28设备验收；servicePackage/minApk=false，依赖集合未变。
 
 ### 独立 MMD-AR VaM 式身体物理控制
 
@@ -12033,9 +12033,16 @@
 ### Offline更新检查错误补齐
 
 - ✅ [2026-10-13] 更新检查结果新增failed标志，服务与min APK签名拒绝/版本不兼容/失败候选均提示；LAN/WAN最终网络失败带原因，网页重试耗尽保持真实启动错误。
-  - 修改OfflineUpdateManager/MainActivity与诊断自测；min升40/0.2.38，服务包继续v71。min39+v71已在API28真机验证健康恢复、服务器页面v71、Download ZIP和重启；补齐min40/0.2.38已签名构建并安装API28：81124288字节，SHA256 21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5；全套209/209通过，实际APK0.2.38/code71健康。servicePackage/minApk=false；min40最终HTTP校验/清理进行中。
+  - 修改OfflineUpdateManager/MainActivity与诊断自测；min升40/0.2.38，服务包继续v71。min39+v71已在API28真机验证健康恢复、服务器页面v71、Download ZIP和重启；补齐min40/0.2.38已签名构建并安装API28：81124288字节，SHA256 21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5；全套209/209通过，实际APK0.2.38/code71健康。servicePackage/minApk=false；min40最终LAN/WAN全组件HTTP大小/SHA256与精确清理通过。
 
 ### TTS字幕主题对比度方案记录
 
 - ✅ [2026-10-13] 记录已确认的字号保持、主题深浅对比文字色和上下柔和背景渐变方案。
   - 用户要求先记录，未修改字幕代码，未改变出包状态；同步display-chat-mmd design/spec、task与todo。
+
+### Offline启动与更新修复发布验收
+
+- ✅ [2026-10-13] 发布服务v71和最终min APK v40（0.2.38-offline-min）；SM-N9500/API28原位更新及重启均正常，服务器页面/API实际v71，启动/更新错误可见、健康后恢复，ZIP直接保存Download且CRC通过。
+  - code/code-v71.zip：17721071字节，SHA256 b6fd67e22d6499bf323f3369c6a9690826466e8c5d7821d13818412802c6fb7b；apk/aasc-display-offline-min-v40.apk：81124288字节，SHA256 21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5。复用dependencies8/nodeMinSeeds69/dataRepair2，完整full38保留。
+  - LAN/WAN签名清单SHA256 69e3d4852ef056d3431ca6afb36c29f7c92dd6f269e7cf47c9d153ddd0a143ae；版本文件/证书/profile/CRC及全组件HTTP大小SHA256通过，旧code70/min37/中间min39按精确规则清理，无清理错误。初次发布进程终止后幂等重试成功。
+  - Node/浏览器17/17、最终Android209/209通过；状态全部false，任务完成并从todo移除。保留未执行的真实ZIP导入与API29+设备验收；TTS主题渐变仅记录待实施。

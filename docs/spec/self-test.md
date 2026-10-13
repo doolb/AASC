@@ -1349,7 +1349,7 @@ npm run build:web:mmd-ar-test → 成功；Vite输出既有大chunk体积提示
 
 补充确认：用户选择按播报进度逐行显示；使用现有音频来源记录及playing/timeupdate事件，按时长和字符数估算行时机。暂无逐字时间戳；暂停不推进，下一条来源替换未显示内容。
 
-## Offline v70启动回滚及Download修复自测（2026-10-13，实施中）
+## Offline v70启动回滚及Download修复自测（2026-10-13，已完成）
 
 ```text
 ADB已复现 := SM-N9500/Android API28安装full38；版本/签名/大小/SHA256/CRC/profile通过
@@ -1362,7 +1362,7 @@ ADB已复现 := SM-N9500/Android API28安装full38；版本/签名/大小/SHA256
 设备计划 := 安装修复min（复用MNN），通过Native更新修复代码；api/status与服务器列表均显示新版本；导出ZIP出现在Download
 ```
 
-进度：TMPDIR=/var/tmp下npm run test:config-backup 17/17通过（首轮/tmp配额不足，换临时根重跑成功）；Android JVM 208/208通过，新增下载2项与诊断/状态3项。源脚本语法通过。v71/min39构建与ADB实际启动/Download/错误显示仍在进行；API29+MediaStore真机另需验收。
+进度：TMPDIR=/var/tmp下npm run test:config-backup 17/17通过（首轮/tmp配额不足，换临时根重跑成功）；Android JVM 208/208通过，新增下载2项与诊断/状态3项。源脚本语法通过。v71/min39/min40构建、ADB实际启动/Download/错误显示与重启通过；最终原生209/209通过，LAN/WAN全组件HTTP大小/SHA256和精确清理通过；API29+MediaStore暂无对应真机。
 
 补齐检查错误验收伪代码（2026-10-13）：
 
