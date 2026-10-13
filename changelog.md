@@ -12077,3 +12077,6 @@ TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c7
 
 - ✅ [2026-10-13] 只读定位min40重复数据修复提示：ADB/code73日志显示hide-offline-display-status-bar-v2被rejected-data-version拒绝（包要求数据版本1→2），没有完成成功记录；Native只按服务健康误报应用成功，后续再次提示。
   - 记录offline-data-repair design/spec、task/todo及自测候选；具体当前dataVersion未直接读取，不宣称0。候选修正Native完成判断、真实原因和同失败去重/手动重试，按AGENTS等待用户确认；未修改代码/profile/发布状态或运行真实修复。
+
+- ✅ [2026-10-13] 补充数据修复拒绝根因：旧v1为0→1、当前v2要求1→2；full未携带修复state，缺记录按0，而当前发布只提供v2，不能补链。两脚本分别修改声纹开关/状态栏，缺首装兼容。
+  - 已核对旧清单、两份repair.js、full runtime文件列表及LAN data目录；不宣称读取了设备当前版本。同步offline-data-repair design/spec、task/todo与自测记录；仅原因分析，未改代码/发布状态或执行真实修复。

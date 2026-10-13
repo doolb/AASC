@@ -344,3 +344,9 @@ module.exports = async ({ services }) => {
 用户反馈已应用仍反复提示。ADB/API28/min40/code73日志实测修复hide-offline-display-status-bar-v2在启动前返回rejected-data-version，签名元数据要求dataVersion=1、目标2。执行器只在applied成功后写state.appliedRepairs；版本拒绝保留pending且不写成功标记。Native健康检查只确认服务代码/路径正常，随后将“已准备数据修复”当成应用成功通知；下一次检查因缺少repairId成功记录再给出提示。没有证据证明此设备的v2实际成功执行；当前具体dataVersion未直接读取，不推定为0。
 
 候选方案：Native通过同一私有projectRoot读取实际修复成功记录，只有目标repairId已应用才报数据修复成功；版本不兼容回报真实原因，对repairId/repairVersion/实际数据版本相同的失败提示去重，手动重试或状态/清单变化重新检查。服务代码健康提交与修复失败区分，不因数据拒绝回滚正常代码、不伪造应用记录、不跳过版本门控。修改OfflineUpdateManager、NodeServerService、MainActivity及对应自测，重出min APK；用户确认前不改代码。
+
+### 拒绝条件与首装链路补充（2026-10-13，只读确认）
+
+当前v2清单要求数据版本精确为1。旧v1清单定义enable-voice-input-during-tts-without-voiceprint-v1为0→1，脚本只修改voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint；v2只修改offline-display.showStatusBar=false，两者没有脚本业务依赖。full运行种子未包含data-repair/state.json，记录缺失按0处理；当前LAN data目录只有data-repair-v2.zip，最新单修复清单不会自动补执行v1。缺少v1记录的新安装路径因此会被v2门控拒绝。此结论说明首装兼容缺口，仍不宣称直接读取了设备当前数值。
+
+后续修复范围应同时评估首装兼容及真实成功判断，不能只隐藏提示，也不能伪造v1成功记录。兼容方案需按已签名元数据声明支持的实际数据状态，保持成功记录/幂等/回滚契约；新增方案需在代码实施前明确并按AGENTS确认。目前仅记录原因。

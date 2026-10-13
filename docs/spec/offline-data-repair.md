@@ -332,3 +332,15 @@ Node server boot:
 候选状态 := 服务代码健康和数据修复应用结果分开；修复拒绝不回滚健康服务，也不冒充已应用
 执行状态 := 只定位/设计，等待用户按AGENTS确认后修改Native与自测/重出min APK
 ```
+
+首装拒绝链路伪代码（2026-10-13，现状说明）：
+
+```text
+state缺失 := normalizeState返回dataVersion0、空appliedRepairs
+旧修复1 := requiredDataVersion0 → 开启voiceprint特定开关 → 成功记录dataVersion1
+当前修复2 := requiredDataVersion1 → 隐藏offline-display状态栏 → 成功记录dataVersion2
+full种子 := 未携带data-repair/state.json
+更新源 := 当前只提供修复2；单修复清单不补跑修复1
+未有修复1记录的首装 := dataVersion0 != 修复2要求1 → rejected-data-version
+说明边界 := 当前设备具体数值没有直接读取；两脚本业务独立，首装兼容方案尚未实施
+```
