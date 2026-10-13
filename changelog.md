@@ -12050,6 +12050,12 @@
 ### TTS字幕主题对比度修复
 
 - ✅ [2026-10-13] 恢复已确认的TTS方案，字号保持；深色白字/黑色边缘、浅色深字/白色边缘，背景上下渐隐且最高alpha0.1，保留8px背景模糊与三行滚动。
-  - 修改display.css与self-test.js；复用UiTheme根data-theme-mode，更新display-chat-mmd design/spec、原task、usage和自测文档。源脚本语法/定向差异空白检查通过，servicePackage=true，服务包与设备观察进行中。
+  - 修改display.css与self-test.js；复用UiTheme根data-theme-mode，更新display-chat-mmd design/spec、原task、usage和自测文档。源脚本语法/定向差异空白检查通过，servicePackage=true，已随服务v72发布LAN/WAN并通过全组件HTTP大小/SHA256与精确清理；API28真实播报、主题切换、闲置隐藏和历史恢复通过。
 
-TTS主题对比度构建进度：已有40项主题/旋转/DPI回归通过，Chromium核对dark/light/mint/new-year-red颜色、字号36px/三行高度151.1875px一致与blur8px。code-v72.zip 17721571字节，SHA256 ea1e63968318b87a8c01946653e86115a3095b98100cc4ffea5b9a89cc3ed3ce；CRC、源码对应及与v71仅两文件差异通过。真机已健康提交v72，servicePackage=false；最终LAN/WAN HTTP验证及实际播报观察进行中。
+TTS主题对比度构建进度：已有40项主题/旋转/DPI回归通过，Chromium核对dark/light/mint/new-year-red颜色、字号36px/三行高度151.1875px一致与blur8px。code-v72.zip 17721571字节，SHA256 ea1e63968318b87a8c01946653e86115a3095b98100cc4ffea5b9a89cc3ed3ce；CRC、源码对应及与v71仅两文件差异通过。真机已健康提交v72，servicePackage=false；最终LAN/WAN HTTP验证及实际播报/主题切换/闲置隐藏/历史恢复均通过。
+
+### TTS主题对比度服务72发布验收
+
+- ✅ [2026-10-13] code/code-v72.zip已发布LAN/WAN：17721571字节，SHA256 ea1e63968318b87a8c01946653e86115a3095b98100cc4ffea5b9a89cc3ed3ce；签名清单SHA256 136f8ffd286b686dedd91988de25575b7bc121ab0148319cee83526bda10f8f5。
+  - 与v71仅display.css/self-test.js变化，CRC/源码/签名及全组件HTTP大小SHA256通过；精确清理旧code71，保留dependencies8/min40/full38/nodeMinSeeds69/dataRepair2，无清理错误。首次发布进程终止后幂等重试成功。
+  - 40项主题/旋转/DPI回归通过；Chromium四主题颜色/字号/三行高度与明暗分区截图通过；SM-N9500/API28真实播报、dark/mint即时切换、闲置隐藏和新播报恢复历史截图通过，原主题已恢复。servicePackage=false，未重出APK/依赖，todo移除完成任务，design/spec/task/usage/self-test同步。
