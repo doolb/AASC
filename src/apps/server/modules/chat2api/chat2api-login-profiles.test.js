@@ -14,8 +14,8 @@ test('内置 Provider 返回 Android WebView 捕获配置且不返回任意脚�
   assert.equal(getAndroidLoginProfile('custom'), null);
 });
 
-test('九个内置 Provider 都声明允许来源和必填字段', () => {
-  for (const providerId of ['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai']) {
+test('十个内置网页 Provider 都声明允许来源和必填字段', () => {
+  for (const providerId of ['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai', 'doubaochat']) {
     const profile = getAndroidLoginProfile(providerId);
     assert.ok(profile);
     assert.ok(profile.allowedOrigins.length > 0);

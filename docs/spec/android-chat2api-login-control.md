@@ -314,3 +314,5 @@ OAuth账号元数据 := 显式嵌套accountInfo合并校验输出，避免凭据
 补充同步：普通手动添加与OAuth均须显式保存嵌套accountInfo，避免丢失format-only标记；同步chat2api-manual-account-service.js。Provider字段提示同步“允许添加、未远端验证”。
 
 自测模块增加只读原生入口/未验证状态映射检查，既有导入豆包账号也显示未远端验证；不触发登录或保存。
+
+现有验证断言同步新契约：原豆包“禁止添加”断言改为“允许添加且format-only”，Provider覆盖表由九项扩为十项。只修改已有用例，不新增或运行自动化测试。
