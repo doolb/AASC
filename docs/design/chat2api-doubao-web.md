@@ -1,5 +1,17 @@
 # 豆包网页文字 Chat2API 与网页登录朗读 TTS 设计
 
+## 2026-10-13 豆包纯Node会话复用完成（普通模式）
+
+用户要求像Qwen网页端一样支持会话复用。Qwen通过`/v1/responses`的`previous_response_id`或AASC `conversation`续接，服务保存账号及上游nativeState，下一轮仅传新增input。普通LLM的`llm-service.js`已有Responses引用保存及模板/模型/系统提示指纹；修改前豆包仅保存observedConversationId/observedSectionId，逐轮新建并重放历史。
+
+已在`nodeProfile`普通模式实现Responses原生续接，不增加另一套业务会话缓存。两轮真实协议验证：首轮记住随机标记，第二轮只发回忆问题、同ACK会话且准确返回标记；断CDP后由Node发送。已验证continue使用conversation_id、空section、null index及need_create_conversation=false；不把ACK中的section_id猜成last_section_id。Cookie-only网页、think/expert暂不提升为原生续接。
+
+新增`chat2api-doubao-session.js`集中处理版本化ready/uncertain状态，接通文字适配器、node-protocol、Responses服务、ResponseSessionStore及受限能力声明。私有nativeState只保存上游ID、账号/模式和身份摘要，不包含Cookie/token/profile；旧观测状态不直接升级。中间msg/answer结束事件不提交状态，最终正文非空并完整结束才提交。原生continue发送后失败/取消则标记uncertain，保留完成历史并要求新会话，不重发；发送前账号/身份/模式冲突不误伤ready，Pi snapshot新建失败不误伤旧上游。动态CSRF/msToken变化不等同登录身份变化。
+
+豆包Node流式锁保持到结束/取消/超时及保存完成；未消费也主动清理。排队和执行共享原120秒预算，单会话16、全局256租约，取消排队项不能越过前任。不同会话生成并行，整个JSON集合的保存串行，避免并发丢状态；uncertain写失败时实例内阻断续接且返回固定存储错误。Qwen/其它Provider请求协议和原流式行为保持，已回归。
+
+验收：真实协议两轮已通过，之后没有追加真实请求；正式实现通过20项新增模拟测试，覆盖增量、持久化重建、并发/取消、身份隔离、旧观测、Pi、写失败和总时限。Chat2API201/204（同3项旧Windows chmod），普通LLM/Core/Responses兼容24/24、旧TTS19/19。独立审查无重要缺陷，过时注释和排队预算两项小问题已修复。使用已有openai-responses客户端自动保存引用；无引用chat/completions保持无状态。本轮凭据仅内存、未读旧聊天、未保存原始帧、未重启主服务或出包。真实正式端、长期和设备能力不扩大声明。
+
 ## 2026-10-13 纯Node普通LLM接入完成
 
 用户扩大授权后完成控制变量验证：完整官网请求、去a_bogus请求、Node自行构造的新会话及参考SDK桌面profile均正常返回。进一步仅保留五类Cookie及同账号device/web/fp/UA资料，断开CDP后由Node自行构造query/body，正式Provider工厂和CoreAdapter的流式、非流式均实际回复OK并正常结束；不使用页面fetch或签名。

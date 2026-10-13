@@ -3,6 +3,7 @@ const { randomUUID } = require('crypto');
 const { TextDecoder } = require('util');
 const { browserError } = require('./chat2api-doubao-browser-bridge');
 const { normalizeDoubaoNodeProfile, applyDoubaoNodeProtocol } = require('./chat2api-doubao-node-protocol');
+const { createDoubaoSessionFlow } = require('./chat2api-doubao-session');
 
 // 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
 const DOUBAO_ORIGIN = 'https://www.doubao.com';
@@ -36,6 +37,8 @@ const ERROR_DEFINITIONS = Object.freeze({
   doubao_incomplete_response: [502, '豆包网页响应未完整结束，请稍后重试'],
   doubao_empty_response: [502, '豆包网页未返回有效文字'],
   doubao_upstream_failed: [502, '豆包网页请求失败，请稍后重试'],
+  doubao_session_conflict: [409, '豆包会话的账号、登录身份或模式不匹配，请新建会话'],
+  doubao_session_uncertain: [409, '豆包上游会话位置已不确定，请新建会话'],
 });
 
 /** 所有异常都来自固定白名单；绝不把 Axios 对象、上游错误正文或签名 URL 放进 message/cause。 */
@@ -121,10 +124,10 @@ const getRequestText = (request, limits) => {
 };
 
 /**
- * 现场仅确认了首轮 ACK，未确认原生第二轮的服务器行为。当前每轮创建新网页会话并重放调用方
- * 提供的文字历史；保存 observedConversationId 仅供状态观测，不让 Responses 误认为原生续接可用。
+ * 普通Node模式已有两轮增量记忆正例，由内部nativeSession选择续接；旧观测状态、网页
+ * 模式及其它模式继续新建并重放调用方历史，不凭一个裸conversationId宣称原生能力。
  */
-const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = DOUBAO_LIMITS, pageCredentials = false }) => {
+const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = DOUBAO_LIMITS, pageCredentials = false, nativeSession }) => {
   assertDoubaoProvider(provider);
   const credentials = pageCredentials ? {cookie:''} : normalizeDoubaoCredentials(account && account.credentials);
   const model = actualModel || request.model;
@@ -159,6 +162,11 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
     },
     ext: { use_deep_think: String(mode), collection_id: '', commerce_credit_config_enable: '0', sub_conv_firstmet_type: '1' },
   };
+  if (nativeSession) {
+    Object.assign(data.client_meta, { conversation_id: nativeSession.conversationId, local_conversation_id: '', last_section_id: '', last_message_index: null });
+    data.option.need_create_conversation = false;
+    data.ext.sub_conv_firstmet_type = '0';
+  }
   const nodeProtocol = credentials.nodeProfile ? applyDoubaoNodeProtocol({ data, profile: credentials.nodeProfile, cookieMap }) : null;
   if (Buffer.byteLength(JSON.stringify(data), 'utf8') > limits.requestBytes) throw doubaoError('doubao_request_too_large');
   return {
@@ -302,7 +310,7 @@ const createChunk = (id, model, delta, finishReason = null) => ({
  * 正文、思考和状态各走独立通道。10040 是参考协议的思考边界块；只按白名单文字块解析，
  * FULL_MSG_NOTIFY 可能是用户回显，永不当回答。累计快照只补未输出后缀，不重发 CHUNK_DELTA。
  */
-const consumeDoubaoStream = async function* ({ source, model, mode, nativeState, limits, control }) {
+const consumeDoubaoStream = async function* ({ source, model, mode, nativeState, limits, control, sessionFlow }) {
   const id = `chatcmpl-${randomUUID().replaceAll('-', '')}`;
   const blocks = new Map();
   let activeBlock = null;
@@ -374,7 +382,9 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
       switch (event) {
         case 'SSE_ACK': {
           const ack = data.ack_client_meta;
-          observedConversationId = safeId(ack?.conversation_id) || observedConversationId;
+          const conversationId = safeId(ack?.conversation_id);
+          sessionFlow?.observe(ack?.conversation_id);
+          observedConversationId = conversationId || observedConversationId;
           observedSectionId = safeId(ack?.last_section_id) || observedSectionId;
           break;
         }
@@ -427,10 +437,15 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
           break;
         }
         case 'SSE_REPLY_END': {
+          // 现场出现消息结束、答案结束、总结束三类通知；前两类不能提前提交原生状态。
+          if (Object.hasOwn(data, 'msg_finish_attr') || Object.hasOwn(data, 'answer_finish_attr')) break;
           if (!content.trim()) throw doubaoError('doubao_empty_response');
+          control.check();
+          const completedSession = sessionFlow?.complete(observedConversationId);
           // 只有正文非空且收到显式结束事件才提交观测状态；失败/取消不会污染下一轮会话。
           if (observedConversationId) nativeState.observedConversationId = observedConversationId;
           if (observedSectionId) nativeState.observedSectionId = observedSectionId;
+          if (completedSession) Object.assign(nativeState, completedSession);
           yield createChunk(id, model, {}, 'stop');
           return;
         }
@@ -458,12 +473,27 @@ const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}
     // 网页调用方可用惰性 getter 隔离凭据；检查自有数据属性，不能为判断模式触发 getter。
     const accountCredentials = Object.getOwnPropertyDescriptor(account || {}, 'credentials')?.value;
     const transport = accountCredentials && Object.hasOwn(accountCredentials, 'nodeProfile') ? null : browserTransport;
-    const prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits, pageCredentials: Boolean(transport) });
     const nativeState = responseSession?.nativeState && isRecord(responseSession.nativeState) ? responseSession.nativeState : {};
-    const control = createRequestControl(context.signal || request.signal, limits.timeoutMs);
+    const mode = DOUBAO_MODEL_MODES[actualModel || request.model];
+    const sessionFlow = createDoubaoSessionFlow({ account, mode, state: nativeState, nodeMode: Boolean(accountCredentials?.nodeProfile) });
+    const prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits, pageCredentials: Boolean(transport),
+      ...(sessionFlow.continuing ? { nativeSession: nativeState } : {}) });
+    // Responses内部截止时间不可由请求JSON覆盖；排队已经消耗的时间不能重新赋给执行阶段。
+    const remaining = sessionFlow.enabled && Number.isFinite(responseSession?.doubaoDeadlineAt)
+      ? responseSession.doubaoDeadlineAt - Date.now() : limits.timeoutMs;
+    if (remaining <= 0) throw doubaoError('doubao_timeout');
+    const timeoutMs = Math.min(limits.timeoutMs,remaining);
+    prepared.timeout = timeoutMs;
+    const control = createRequestControl(context.signal || request.signal, timeoutMs);
     let response;
     try {
       control.check();
+      // 仅内部Responses生命周期读取这些标记；不属于nativeState，不会持久化到会话历史。
+      if (responseSession && sessionFlow.enabled) {
+        responseSession.doubaoNodeMode = true;
+        responseSession.doubaoRequestStarted = true;
+        responseSession.doubaoContinuationStarted = sessionFlow.continuing;
+      }
       // 若客户端忽略取消后才交回流，也必须立即关闭，避免后台请求成为泄漏的资源。
       const pending = Promise.resolve(transport
         ? transport.request({data:prepared.data,accountId:account.accountId,signal:control.signal,limits})
@@ -504,7 +534,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}
         throw doubaoError('doubao_protocol_error');
       }
       const events = consumeDoubaoStream({ source: response.data, model: request.originalModel || request.model,
-        mode: DOUBAO_MODEL_MODES[actualModel || request.model], nativeState, limits, control });
+        mode, nativeState, limits, control, sessionFlow });
       const stream = {
         [Symbol.asyncIterator]() { return this; },
         next: () => events.next(),
@@ -513,7 +543,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}
           try { return await events.return(); } finally { control.cleanup(); }
         },
       };
-      if (request.stream === true) return { stream, nativeState };
+      if (request.stream === true) return { stream, nativeState, cancel: () => control.cancel() };
       let content = '';
       let reasoning = '';
       let id = '';

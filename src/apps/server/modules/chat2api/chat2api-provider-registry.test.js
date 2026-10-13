@@ -68,6 +68,8 @@ test('豆包内置固定来源、凭据和三个文字模式不允许存量覆�
   assert.deepEqual(provider.supportedModels, ['doubao', 'doubao-think', 'doubao-expert']);
   assert.deepEqual(provider.credentialFields.map((field) => field.name), ['cookie']);
   assert.equal(provider.capabilities.nativeTools, false);
-  assert.equal(provider.capabilities.nativeContinuation, false);
+  assert.equal(provider.capabilities.nativeContinuation, true);
+  assert.deepEqual(provider.capabilities.nativeContinuationTransports, ['node-http']);
+  assert.deepEqual(provider.capabilities.nativeContinuationModels, ['doubao']);
   assert.equal((await registry.listModels()).includes('doubao'), false);
 });

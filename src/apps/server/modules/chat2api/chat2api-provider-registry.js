@@ -43,7 +43,9 @@ const BUILTIN_PROVIDERS = Object.freeze([
     id: 'doubaochat', name: '豆包网页（纯文字）', authType: 'cookie', apiEndpoint: 'https://www.doubao.com', loginUrl: 'https://www.doubao.com', chatPath: '/chat/completion',
     supportedModels: ['doubao', 'doubao-think', 'doubao-expert'], modelMappings: { doubao: 'doubao', 'doubao-think': 'doubao-think', 'doubao-expert': 'doubao-expert' },
     credentialFields: [{ name: 'cookie', label: '豆包网页 Cookie', type: 'textarea', required: true, helpText: '仅接收已确认的登录/CSRF Cookie；安全只读登录校验端点尚未确认，手动添加暂时拒绝入库' }], authMethods: ['manual', 'cookie'],
-    capabilities: { text: true, nativeTools: false, multimodal: false, nativeContinuation: false },
+    // 只有已验证的普通Node模式可原生续接；网页传输及think/expert不能由布尔能力自动推定。
+    capabilities: { text: true, nativeTools: false, multimodal: false, nativeContinuation: true,
+      nativeContinuationTransports: ['node-http'], nativeContinuationModels: ['doubao'] },
   },
 ]);
 

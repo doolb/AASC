@@ -41,7 +41,8 @@ const applyDoubaoNodeProtocol = ({ data, profile, cookieMap }) => {
   });
   const msToken = cookieMap.get('msToken') || profile.msToken;
   if (msToken) params.set('msToken', msToken);
-  data.client_meta.last_message_index = 0;
+  // 首轮为0；续接已由会话模块设置为真实验证的null，不得在此覆盖为旧索引。
+  if (data.option.need_create_conversation !== false) data.client_meta.last_message_index = 0;
   Object.assign(data.messages[0].content_block[0], { is_finish: true, patch_type: 2 });
   Object.assign(data.option, { create_time_ms: 0, answer_with_suggest: true, action_bar_skill_id: 0,
     sse_recv_event_options: { support_chunk_delta: true } });

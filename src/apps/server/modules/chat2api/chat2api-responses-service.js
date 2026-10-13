@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto');
+const { isDoubaoSession, isReadyDoubaoSession, sessionError } = require('./chat2api-doubao-session');
 
 const createError = (statusCode, code, message) => {
   const error = new Error(message);
@@ -95,6 +96,8 @@ const NATIVE_CONTINUATION_FIELDS = Object.freeze({
 });
 
 const hasNativeContinuation = (session) => {
+  // 豆包旧observed/裸conversationId没有通过原生续接验证，不能仅因字段存在而跳过历史。
+  if (session?.providerId === 'doubaochat') return isReadyDoubaoSession(session.nativeState);
   const fields = NATIVE_CONTINUATION_FIELDS[session && session.providerId] || [];
   const nativeState = session && session.nativeState;
   return fields.some((field) => typeof nativeState?.[field] === 'string' && nativeState[field].length > 0);
@@ -175,13 +178,65 @@ const createChatHistory = (session, inputMessages, assistantMessage) => [
   { role: 'assistant', content: getAssistantText(assistantMessage), ...(assistantMessage.tool_calls ? { tool_calls: assistantMessage.tool_calls } : {}) },
 ];
 
-const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
+/**
+ * 豆包Node原生流的租约覆盖实际消费和最终保存。即使调用方从未next，原截止时间或
+ * HTTP断连仍会主动取消上游、标记位置不确定并释放锁；其它Provider不进入此分支。
+ */
+const manageDoubaoStream = ({ stream, cancel, signal, timeoutMs, onIncomplete, hasPersisted, release }) => {
+  let stoppedError, finalizing, closing;
+  const finish = () => {
+    if (!finalizing) {
+      clearTimeout(timer); signal?.removeEventListener('abort', onAbort);
+      finalizing = Promise.resolve().then(async () => { if (!hasPersisted()) await onIncomplete(); }).finally(release);
+    }
+    return finalizing;
+  };
+  const close = () => {
+    if (!closing) {
+      try { cancel?.(); } catch {}
+      closing = Promise.resolve().then(() => stream.return()).finally(finish);
+    }
+    return closing;
+  };
+  const stop = (code, message) => {
+    if (!stoppedError) stoppedError = createError(code === 'doubao_timeout' ? 504 : 499,code,message);
+    // 自动取消是后台清理，但失败状态已通过onIncomplete阻断后续续接，不输出原始存储错误。
+    close().catch(() => {});
+  };
+  const onAbort = () => stop('doubao_cancelled','豆包文字请求已取消');
+  const timer = setTimeout(() => stop('doubao_timeout','豆包文字请求超时'), Math.max(1,timeoutMs));
+  signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) onAbort();
+  return {
+    [Symbol.asyncIterator]() { return this; },
+    next: async () => {
+      if (stoppedError) { await finish(); throw stoppedError; }
+      try {
+        const value = await stream.next();
+        if (stoppedError) throw stoppedError;
+        if (value.done || value.value?.type === 'response.completed') await finish();
+        return value;
+      } catch (error) {
+        try { cancel?.(); } catch {}
+        await finish(); throw stoppedError || error;
+      }
+    },
+    return: async () => {
+      if (!stoppedError) stoppedError = createError(499,'doubao_cancelled','豆包文字请求已取消');
+      await close(); return { done: true, value: undefined };
+    },
+  };
+};
+
+const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, doubaoSessionTimeoutMs = 120000 } = {}) => {
   if (!sessionStore || typeof sessionStore.get !== 'function' || typeof sessionStore.save !== 'function' || typeof sessionStore.withLock !== 'function') {
     throw new Error('Responses 服务需要会话存储');
   }
   if (!coreAdapter || typeof coreAdapter.forwardChatCompletion !== 'function') {
     throw new Error('Responses 服务需要核心 Chat2API 适配层');
   }
+  const uncertainConversations = new Set();
+  let blockContinuations = false;
 
   const validateRequest = (request) => {
     if (!request || typeof request !== 'object') throw createError(400, 'invalid_request_error', '请求体必须是 JSON 对象');
@@ -228,13 +283,18 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
   };
 
   const createResponse = async (request, options = {}) => {
+    const startedAt = Date.now();
     validateRequest(request);
     const inputMessages = normalizeInput(request);
     const piContext = getPiContext(request);
     const { conversationId, session: initialSession } = await resolveConversation(request, piContext);
-    return sessionStore.withLock(conversationId, async () => {
+    const duration = Number.isSafeInteger(doubaoSessionTimeoutMs) && doubaoSessionTimeoutMs > 0 ? Math.min(doubaoSessionTimeoutMs,120000) : 120000;
+    let retainsLease = false;
+    const operation = async (releaseLease = () => {}) => {
       // 在锁内重新读取，避免并发请求在锁外取得同一份旧历史后互相覆盖。
       const session = await sessionStore.get(conversationId) || initialSession || { conversationId, history: [], nativeState: {} };
+      if (piContext?.mode !== 'snapshot' && (uncertainConversations.has(conversationId)
+        || (session.providerId === 'doubaochat' && isDoubaoSession(session.nativeState) && session.nativeState.status === 'uncertain'))) throw sessionError('doubao_session_uncertain');
       const canUseNativeContinuation = hasNativeContinuation(session);
       const messages = piContext?.mode === 'snapshot' || canUseNativeContinuation
         ? inputMessages
@@ -243,6 +303,33 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
         nativeState: piContext?.mode === 'snapshot'
           ? {}
           : { ...(session.nativeState || {}) },
+      };
+      // 私有非枚举属性保持既有Provider参数契约，不持久化，也不接受客户端metadata指定。
+      Object.defineProperty(responseSession,'doubaoDeadlineAt',{value:startedAt+duration});
+      let persisted = false, markingUncertain;
+      const markUncertain = () => {
+        if (persisted || !responseSession.doubaoContinuationStarted || !isReadyDoubaoSession(session.nativeState)) return Promise.resolve();
+        if (!markingUncertain) {
+          // 写失败也不能在当前运行实例中继续使用旧上游位置。集合有界，满后保守阻断原生续接。
+          if (uncertainConversations.size < 1024) uncertainConversations.add(conversationId); else blockContinuations = true;
+          markingUncertain = sessionStore.save({ ...session, nativeState: { ...session.nativeState, status: 'uncertain' } }).catch(() => {
+            throw createError(503,'doubao_session_storage_failed','豆包会话状态保存失败，请新建会话');
+          });
+        }
+        return markingUncertain;
+      };
+      if (blockContinuations && canUseNativeContinuation && session.providerId === 'doubaochat' && piContext?.mode !== 'snapshot') throw sessionError('doubao_session_uncertain');
+      const saveCompleted = async (args) => {
+        if (responseSession.doubaoNodeMode && options.signal?.aborted) throw createError(499,'doubao_cancelled','豆包文字请求已取消');
+        try {
+          const saved = await persist(args);
+          persisted = true;
+          uncertainConversations.delete(conversationId);
+          return saved;
+        } catch (error) {
+          if (responseSession.doubaoNodeMode) throw createError(503,'doubao_session_storage_failed','豆包会话状态保存失败，请新建会话');
+          throw error;
+        }
       };
       const chatRequest = {
         model: request.model,
@@ -253,6 +340,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
         ...(normalizeTools(request.tools) ? { tools: normalizeTools(request.tools) } : {}),
         ...(request.tool_choice === undefined ? {} : { tool_choice: request.tool_choice }),
       };
+      try {
       const result = await coreAdapter.forwardChatCompletion(chatRequest, {
         preferredProviderId: session.providerId || undefined,
         preferredAccountId: session.accountId || undefined,
@@ -264,11 +352,25 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
       const responseId = createResponseId();
       if (!result.stream) {
         const body = createResponseBody({ responseId, conversationId, previousResponseId: request.previous_response_id, request, chatBody: result.body });
-        await persist({ session, conversationId, request, inputMessages, chatBody: result.body, result, responseId, piContext });
+        await saveCompleted({ session, conversationId, request, inputMessages, chatBody: result.body, result, responseId, piContext });
         return { body };
       }
-      return { stream: createResponseStream({ result, responseId, conversationId, previousResponseId: request.previous_response_id, request, session, inputMessages, persist, piContext }) };
-    });
+      const stream = createResponseStream({ result, responseId, conversationId, previousResponseId: request.previous_response_id, request, session, inputMessages, persist: saveCompleted, piContext });
+      if (result.providerId === 'doubaochat' && responseSession.doubaoNodeMode) {
+        retainsLease = true;
+        return { stream: manageDoubaoStream({ stream, cancel: result.cancel, signal: options.signal,
+          timeoutMs: duration - (Date.now() - startedAt), onIncomplete: markUncertain, hasPersisted: () => persisted, release: releaseLease }) };
+      }
+      return { stream };
+      } catch (error) {
+        await markUncertain(); throw error;
+      }
+    };
+    // 自定义旧Store保留withLock兼容；生产Store租约允许豆包流返回后仍持锁。
+    if (typeof sessionStore.acquireLock !== 'function') return sessionStore.withLock(conversationId, () => operation());
+    const lease = await sessionStore.acquireLock(conversationId, { signal: options.signal, timeoutMs: Math.max(1,duration-(Date.now()-startedAt)) });
+    try { return await operation(() => lease.release()); }
+    finally { if (!retainsLease) lease.release(); }
   };
 
   const createResponseStream = ({ result, responseId, conversationId, previousResponseId, request, session, inputMessages, persist, piContext }) => {

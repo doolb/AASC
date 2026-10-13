@@ -1,7 +1,52 @@
 # 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
 
 ```text
-2026-10-13 已验证独立Node协议，生产接入方案（先于运行代码更新）
+2026-10-13 纯Node会话复用（已实现，普通模式）
+  两轮真实协议验证通过：第一轮随机标记/OK，第二轮纯增量准确回忆；ACK会话ID一致，无历史重放
+  本轮两次请求已用完；正式实现继续离线验证，不擅自增加真实请求
+已有声明：
+  LLM.buildResponsesPayload、saveResponseReference、getResponsesFingerprint
+  Responses.resolveConversation、hasNativeContinuation、persist、createResponseStream
+  ResponseSessionStore.get、findByResponseId、save、withLock
+  Core.forwardChatCompletion固定Provider/account；Doubao.buildRequest、consumeStream、NodeProtocol
+新增定义：
+  DoubaoSessionState { version: 1, transport: node-http, status: ready|uncertain,
+    conversationId, accountId, mode: 0, identityFingerprint }
+  identityFingerprint = SHA256(所选账号ID及sessionid/deviceId/webId/fp的规范身份串) // 不保存原始凭据；不把动态msToken/CSRF变化当换账号
+  PendingDoubaoState = 每次请求隔离的临时ACK/消息状态；只有完整结束后提交
+  DoubaoSessionFlow = first|continue|legacyReplay|reject；旧observed字段不是ready状态
+操作流程：
+  先用两轮纯Node短文本诊断验证最小conversation_id续接字段和第二轮记忆 // 所选账号资料仅内存，断CDP后发送，不使用原有私人会话
+  参考browser_client仅作为候选：continue时local_conversation_id=''、need_create_conversation=false、sub_conv_firstmet_type='0'
+  已验证continue固定last_section_id=''和last_message_index=null；不猜测local_permissions // ACK为section_id并非旧last_section_id，首版不传回未验证section
+  NodeProtocol只为first设置last_message_index=0，不再覆写continue已选择的状态
+  Responses通过previous_response_id/conversation读取私有会话；仅version1+node-http+ready的豆包状态允许原生续接
+  首轮和legacyReplay沿现有完整文字输入；continue只传新增input，保留必要本轮instructions及工具转文字契约
+  adapter收到状态后校验账号/身份/模式；冲突在发送前拒绝，不换号/新建或重放
+  ACK仅更新PendingDoubaoState；重复ACK不得换conversation_id，continue ACK必须与已存会话一致
+  SSE_REPLY_END带msg_finish_attr/answer_finish_attr的是已观察的中间结束通知，不提交状态；等待最终无该属性的结束事件
+  正文非空、最终SSE_REPLY_END及取消检查通过后输出ready状态 // HTTP200/ACK本身不是成功；缺ACK首轮不能获得原生复用状态
+  Responses完成持久化后才能释放豆包会话锁，保存历史和nativeState到已有私有存储 // 无新增配置接口，无Cookie/token/profile落库
+  ResponseSessionStore.save对整个JSON集合的读改写串行；不同会话生成仍并行，防止并发保存丢失nativeState
+  ResponseSessionStore.acquireLock提供可释放租约，复用同一locks链；等待接受signal/时限，单会话最多16/总256个新租约
+  Responses从进入请求时建立内部非枚举doubaoDeadlineAt；Node控制器及HTTP握手使用剩余预算，排队不重置120秒
+  豆包Node流式锁覆盖握手、读取、持久化；取消、超时、提前return和未消费都关闭上游并幂等释放；生命周期按原120秒界限
+  同会话取消排队的租约仍在旧任务链后释放，不能越过正在执行任务；其它Provider保持原有流式行为和请求协议
+  continue发送后失败/取消且上游位置不确定：原会话status=uncertain，已完成历史不变，下次明确拒绝并提示新建 // 不静默重发或使用旧父状态
+  只有实际原生continue才标记uncertain；Pi snapshot发起的新上游失败不误伤旧会话
+  uncertain写入失败时当前实例以有界禁用集合阻断续接，容量满则保守阻断豆包原生continue；固定存储错误不泄露路径
+  外层Pi snapshot明确重建上游状态，delta续接；新模板/模型/系统提示沿现有LLM指纹开新外层会话
+  未传会话引用的chat/completions继续无状态；Cookie-only网页模式沿旧历史重放，不从Node复用能力推定可用
+验收边界：
+  新增20项模拟自测通过；Chat2API201/204，同3项既有Windows chmod；普通LLM/Core/Responses24/24、旧TTS19/19
+  独立审查无Important/Critical；过时注释修正，排队后重置时限先RED再GREEN修复 // 无新真实请求、无主服务操作
+  模拟覆盖首次/续接/旧观测、缺ACK、状态字段错误、账号模式冲突、403/EOF/断连、并发流与未消费释放、重建Store恢复、Pi和Qwen回归
+  真实普通模式两轮验证同上游ID与第二轮记忆，正文/秘密/原始帧不保存 // 主服务器不启动、停止或重启
+  优先npm run check:chat2api；现有llm-service-responses及TTS定向回归 // 正式部署/设备/长期验证另列，不等同模拟数量
+```
+
+```text
+2026-10-13 初次独立Node协议接入记录（后续会话复用以文首实现为准）
   实现验收：正式Provider工厂与CoreAdapter在CDP断开后，Node自行构造的新会话流式/非流式均实际回复OK并正常结束
   模拟验收：新增8项，Chat2API181/184（同3项既有Windows chmod），Ogg/WASM21/21，旧TTS19/19
   整块profile脱敏与混合账号池两项独立审查问题先RED再GREEN；不重启服务、不保存真实凭据、不出包
