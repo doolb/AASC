@@ -16,7 +16,10 @@
 
 - ✅ [2026-10-13] 构建 Offline min APK v35（`0.2.33-offline-min`），包含热更旧版本目录回收修复。
   - 本地文件：`release/apkbuild/allserver-min/output/aasc-display-offline-min.apk`，大小 `89308538` bytes，SHA-256 `65b78ff10dd5abb10b59ff4153661a78799ffb9b45470f8216fdcd1828f43801`；APK ZIP 完整性、`versionCode=35`、`versionName` 和 v2 签名校验通过，签名证书 SHA-256 为 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
-  - 构建源提交为 `caaa29891728f9d9c4cbb88254ac1795bac3847a`；构建清单标记工作区有未提交改动，已确认 Android 源码无额外差异。APK 仅本地生成，未发布；构建结束时 Kotlin 编译守护进程清理提示失败，但 Gradle 构建退出码为 0，产物独立校验通过。
+  - 构建源提交为 `caaa29891728f9d9c4cbb88254ac1795bac3847a`；构建清单标记工作区有未提交改动，已确认 Android 源码无额外差异。APK 构建后已发布到 LAN 与 WAN，发布校验见下条记录；构建结束时 Kotlin 编译守护进程清理提示失败，但 Gradle 构建退出码为 0，产物独立校验通过。
+
+- ✅ [2026-10-13] 发布 Offline min APK v35 到 LAN 与 WAN 更新源。
+  - `apk/aasc-display-offline-min-v35.apk` 大小 `89308538` bytes，SHA-256 `65b78ff10dd5abb10b59ff4153661a78799ffb9b45470f8216fdcd1828f43801`。两端签名清单一致并通过验签，v35 HTTP 200 且大小匹配；WAN 文件 SHA-256 与本地一致。两端旧 min APK v34 已精确清理，HTTP 返回 404；完整 APK 未发布。
 
 ### Chat2API 豆包纯Node普通LLM
 
