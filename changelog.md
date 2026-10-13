@@ -1,25 +1,8 @@
-### Chat2API 豆包纯Node会话复用
-
-### Git 同步
-
-- ✅ [2026-10-13] 再次同步远端 `b2e5cb7e` 的 Offline min APK v35 发布记录；本地暂存与未暂存差异分别应用同一远端补丁，逆向校验逐字节一致，其他文件与未跟踪项保持。本轮仅 Git 同步，不重启服务器、不构建或发布产物。
-
-- ✅ [2026-10-13] 本地 master 同步远端 13 个提交至 `eec8bf17`，包含已上传的豆包纯 Node 会话复用及其他任务的 MMD/Android 更新。
-  - 逐层合并暂存与未暂存文档差异，更新过时 FSR/IK/豆包说明并去除合并重复；原始 index 和重叠文档副本保留于 `.git/sync-20261013/`。本机配置、任务 results 和未跟踪文件保持，未提交其他任务的工作区改动。
-  - 本轮只校验 Git 内容与暂存边界，不新增聊天/合成、不重启服务器、不运行构建或发布；Offline 状态沿用远端。
-
-- ✅ [2026-10-13] 豆包普通Node模式接通Qwen同类Responses原生续接，仅发送本轮新增输入。
-  - 新增`chat2api-doubao-session.js`及两个自测模块；修改文字适配器、node-protocol、Responses服务、会话存储及Provider能力。ready/uncertain和身份摘要绑定，同账号/模式复用，旧观测字段不升级。
-  - 两轮真实纯Node协议测试准确回忆随机标记、同ACK会话、无历史重放；正式实现新增20项模拟测试，Chat2API201/204（同3项旧Windows chmod）、普通LLM/Core/Responses24/24、旧TTS19/19。
-  - 流式租约贯穿消费/保存，未消费/取消清理，排队和执行共用120秒；16/256容量，JSON保存不丢并发记录，Pi snapshot失败隔离，写失败实例内阻断。独立审查无重要缺陷，时限问题先RED再修复。
-  - design/spec/task/todo/usage/self-test已同步；servicePackage=true，依赖及Android原生未改，不出包或重启主服务。两次请求后未再真实请求，未保存实际凭据/原始帧，保留其它任务改动。
-
 ### Offline min APK 构建
 
 - ✅ [2026-10-13] 构建 Offline min APK v35（`0.2.33-offline-min`），包含热更旧版本目录回收修复。
   - 本地文件：`release/apkbuild/allserver-min/output/aasc-display-offline-min.apk`，大小 `89308538` bytes，SHA-256 `65b78ff10dd5abb10b59ff4153661a78799ffb9b45470f8216fdcd1828f43801`；APK ZIP 完整性、`versionCode=35`、`versionName` 和 v2 签名校验通过，签名证书 SHA-256 为 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
-  - 构建源提交为 `caaa29891728f9d9c4cbb88254ac1795bac3847a`；构建清单标记工作区有未提交改动，已确认 Android 源码无额外差异。APK 构建后已发布到 LAN 与 WAN，发布校验见下条记录；构建结束时 Kotlin 编译守护进程清理提示失败，但 Gradle 构建退出码为 0，产物独立校验通过。
-
+  - 构建源提交为 `caaa29891728f9d9c4cbb88254ac1795bac3847a`；构建清单标记工作区有未提交改动，已确认 Android 源码无额外差异。构建结束时 Kotlin 编译守护进程清理提示失败，但 Gradle 构建退出码为 0，产物独立校验通过。
 - ✅ [2026-10-13] 发布 Offline min APK v35 到 LAN 与 WAN 更新源。
   - `apk/aasc-display-offline-min-v35.apk` 大小 `89308538` bytes，SHA-256 `65b78ff10dd5abb10b59ff4153661a78799ffb9b45470f8216fdcd1828f43801`。两端签名清单一致并通过验签，v35 HTTP 200 且大小匹配；WAN 文件 SHA-256 与本地一致。两端旧 min APK v34 已精确清理，HTTP 返回 404；完整 APK 未发布。
 
@@ -88,6 +71,8 @@
 
 - ✅ [2026-10-12] 在 SM-N9500 Android 9 上用 test_wavs 全部7个音频完成原生 APK 与 Samsung Internet 网页 Worker 的双轮速度/结果一致性对比；两端模型 SHA-256 一致，14/14 配对输出相同，平均热态推理 Web 6354.6 ms、原生 4094.1 ms，原生约快1.55倍。
   - 同一设备以 你好，小爱.wav 分别测试 CPU 大核4–7和小核0–3各3轮：平均1409 ms与2970 ms，小核约慢2.11倍；原生运行配置已恢复 AUTO，原生/网页线程均为1。记录设备、逐音频结果、格式限制及无人工转写真值无法计算 CER/WER 于 docs/task/20261012_AndroidASR原生网页真机对比.md 和 docs/spec/self-test.md；本轮未改运行代码。
+
+- ✅ [2026-10-12] 用用户指定标注“妲已妈妈”复测 `妲已妈妈.wav`：网页热态均值4588 ms，原生大核1266 ms、小核2669.7 ms；三种模式均输出“打住妈妈。”，字符 CER 为50%。原生模式恢复 AUTO，临时 HTTPS/ADB 映射已清理；design/spec/task/todo/自测文档已同步，未改产品代码。
 
 ### 独立MMD-AR GPU物理骨骼纹理直连
 

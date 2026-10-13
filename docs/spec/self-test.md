@@ -26,8 +26,33 @@ zh.wav / en.wav自动语言实测 -> “开放时间早上9点至下午5点。�
 模型校验 -> Apache sidecar与本地ONNX SHA-256一致，tokens.txt两端SHA-256一致；本机同源HTTP映射使用相同文件
 冷下载边界 -> Apache 239,233,841字节模型约0.66 MiB/s；直接浏览器冷载180秒未完成，故点击到结果不代表公网冷下载时间
 节点和差异检查 -> 页面/Worker/工具语法检查、git diff --check通过
-边界 -> Chromium使用本地已同步模型目录经同源HTTP映射；未部署Apache、未测手机/Firefox/Safari及真实麦克风硬件
+边界（初始网页验收） -> Chromium使用本地已同步模型目录经同源HTTP映射；未部署Apache、未测手机/Firefox/Safari及真实麦克风硬件。Android真机网页性能与原生识别对比见下节
 ```
+
+## Android ASR 原生/网页真机对比（2026-10-12）
+
+~~~text
+设备 -> SM-N9500，Android 9，arm64-v8a；原生测试 APK 0.1.0/1；Samsung Internet 26.1（UA Chromium 122），设备系统 WebView 132 已安装但本轮网页测试走 Samsung Internet
+运行配置 -> 原生 ASR numThreads=1、language=auto、ASR降噪关闭；网页 Worker numThreads=1、language=auto；原生 CPU 模式为 AUTO（0–7 全核可调度），浏览器不绑核
+模型一致 -> SenseVoice INT8 SHA-256 c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51；tokens SHA-256 f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc
+输入一致 -> 网页 AudioContext 解码目录中全部 7 个文件并转 16 kHz 单声道；同一份 PCM 送 Web Worker 与原生本机 HTTPS API；原生 elapsedMs 与 Web Worker elapsedMs 分别统计推理，不含 Web 冷下载
+每文件两轮 -> 14 对推理输出逐条完全一致，均无两端文本差异；没有人工真值，未计算 CER/WER
+平均热态推理 -> Web 6354.6 ms/文件，原生 4094.1 ms/文件；本组原生约快 1.55 倍（原生平均延迟少约 35.6%）
+网页冷启动 -> 首个 Web 请求 wall 20192 ms，其中模型下载/初始化与推理混合；其单独 worker elapsedMs 为 4794 ms。该 229 MiB 模型从本机 HTTP 映射加载，不代表公网 Apache 冷下载
+原生冷启动 -> 测量前 APK 模型已就绪，故本轮未测原生首次启动/模型载入耗时；首个预热识别 wall 3915 ms、推理 3678 ms，不与 Web 冷启动作等条件比较
+全部文件时延 -> a.wav Web 7413/7106 ms、原生 5247/5224 ms，文本“123321。”；a.wav.converted.wav 7118/7485、5174/5254，文本“123321。”；dajimama.wav 4624/5009、3127/3195，文本“打字妈妈。”
+全部文件时延续 -> dajimama2.wav 6519/6968、4075/4158，文本“打字妈妈。”；你好啊你好啊你好啊.wav 8723/8768、5258/5264，文本“你好啊你好啊你好啊。”；你好，小爱.wav 5082/5076、2943/2976，文本“你好，小爱。”；妲已妈妈.wav 4547/4527、2763/2659，文本“打住妈妈。”
+大/小核对比 -> 你好，小爱.wav 同一 APK、模型与语言模式，大核4–7为1400/1406/1422 ms，平均1409 ms；小核0–3为2960/3040/2910 ms，平均2970 ms。小核约为大核2.11倍耗时，大核平均少约52.5%；两组输出均为“你好，小爱。”
+AUTO观察 -> 全量对比中该文件原生为2943/2976 ms、平均2960 ms，接近固定小核的2970 ms；因未采样每次推理的 sched_getcpu，不能据此断定 AUTO 当时实际运行在哪个核心
+核心来源 -> APK 运行时确认 BIG=核心4,5,6,7、LITTLE=核心0,1,2,3；设备频率上限分别为2361600与1900800 kHz；原生设回AUTO并确认健康接口状态为AUTO
+格式边界 -> a.wav 实际为48 kHz mono WebM/Opus，虽有.wav扩展名；网页解码后同份PCM送两端，因此该测试比较推理引擎，不比较原生MediaExtractor与浏览器解码器兼容性
+性能边界 -> 测试时设备有其他显示端/WebView活动，所有结果是此设备和当前负载下的单机基准；两轮全文件结果足以对照但不是P95/长稳报告
+清理 -> 关闭原生 HTTPS 测试服务，删除本轮 ADB forward/reverse 映射；不修改仓库源代码、APK、模型或正式服务
+用户标注样本补测 -> 妲已妈妈.wav（16 kHz/mono/2.304 s），参考文本“妲已妈妈”；Samsung Internet Web 热态 3 次 4588/4645/4531 ms，均值4588 ms；原生大核4–7为1276/1263/1259 ms，均值1266 ms；小核0–3为2677/2712/2620 ms，均值2669.7 ms
+补测输出 -> Web/原生大核/原生小核均为“打住妈妈。”；忽略句末标点后参考与输出的字符编辑距离为2/4，CER=50%；所有模式输出一致但均与该样本标注有两字差异
+补测加载与核心 -> Web首轮模型加载 wall 20275 ms、其中推理4947 ms；Web不绑核；原生健康接口确认 BIG/LITTLE 核心组，线程数1、language=auto、降噪关闭；网页与原生分开运行以避免内存竞争
+补测清理 -> 原生 CPU 模式恢复 AUTO 并由健康接口核实；停止 HTTPS 服务，清除 ADB forward/reverse；未改产品代码、APK、模型或服务器
+~~~
 
 ## Git 构建产物忽略检查（2026-10-12）
 

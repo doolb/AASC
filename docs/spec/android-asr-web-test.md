@@ -88,6 +88,48 @@ SHERPA_MULTI_FAST(samples):
   结束或失败 -> 清理临时 stream，恢复按钮和 Worker 忙闲状态
 ```
 
+## Android 原生与网页性能对比伪代码
+
+~~~text
+设备 := 同一 Android 真机
+原生模型 := APK 内 SenseVoice INT8 + tokens
+网页模型 := 本机模型目录经本机 HTTP 映射；要求模型和 tokens SHA-256 与原生资源一致
+文件集合 := test_wavs 目录中的全部普通音频文件
+
+每个文件:
+  browserDecoded := AudioContext.decodeAudioData(file)
+  samples := downmix + resample(browserDecoded, 16000 Hz, mono)
+  对同一个 samples:
+    WebResult := 单 Worker 串行 recognize(samples, auto)
+    NativeResult := 本机 HTTPS /api/asr(language=auto, asrDenoise=0)
+    Native 输入 := samples 转为 signed 16-bit little-endian PCM
+  记录两端模型就绪后的 elapsedMs 与输出文本
+  对同一文件重复两轮；另将首个模型冷加载调用单独记录为启动数据
+
+核心模式对比(单个 WAV):
+  文件 := 你好，小爱.wav
+  对 mode in [BIG, LITTLE]:
+    原生 CPU 绑定 := 通过 APK CPU 模式选择器设置，并检查状态中的实际核心编号
+    连续识别 3 次，语言 auto、ASR 降噪关闭
+    记录 RecognitionResult.elapsedMs 与识别文本
+  比较两组平均推理耗时和文本一致性
+
+用户指定标注样本复测:
+  文件 := 妲已妈妈.wav
+  reference := 用户明确指定的文件名（去扩展名）
+  Web := AudioContext 解码原始 16 kHz mono WAV -> 16 kHz mono Float32 PCM -> Worker
+  Native := 原生 /api/asr 接收 audio/wav -> 原生解码/采样 -> 同步推理
+  Web Worker 热态串行识别 3 次，记录 elapsedMs 和输出
+  Native APK 分别设 BIG、LITTLE；从健康接口核实核心组后各识别 3 次
+  计时只取推理 elapsedMs；模型首次下载/初始化单独记录
+  计算 CER 前删除输出末尾标点和空白，再按汉字字符计算编辑距离
+
+准确度解释:
+  两端转写一致 -> 记为引擎输出一致
+  用户没有明确提供人工标注 -> 不计算 CER/WER，也不将文件名推定为真值
+  用户明确指定单条文件名为标注 -> 只对该样本按指定文本计算 CER/WER
+~~~
+
 ## 静态构建和验证
 
 ```text

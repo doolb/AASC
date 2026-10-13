@@ -86,7 +86,7 @@
 | 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求保护、内置 tts.server 服务任务与通用 HTTP URL |
 | TTS Provider 与播报配置 | [tts-providers.md](spec/tts-providers.md) | 模板继承、AI/Agent、文本阅读、系统播报及权威配置伪代码 |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/spec/android-asr-apk.md) | SenseVoice 模型、音频输入、识别耗时和 HTTP 服务伪代码 |
-| Android ASR 测试 APK 网页版 | [android-asr-web-test.md](spec/android-asr-web-test.md) | Apache 模型目录、浏览器离线 ASR、临时注册与多段声纹测试伪代码 |
+| Android ASR 测试 APK 网页版 | [android-asr-web-test.md](spec/android-asr-web-test.md) | Apache 模型目录、浏览器离线 ASR、临时声纹与原生/网页对比伪代码 |
 | 独立 Android RapidOCR HTTP 测试 APK | [android-rapidocr-apk.md](../3rd/tts-server/docs/spec/android-rapidocr-apk.md) | RapidOCR 模型、图片 HTTP 上传和网页测试伪代码 |
 | 独立 Android YOLO11 五模型测速 APK | [android-yolo-apk.md](../3rd/tts-server/docs/spec/android-yolo-apk.md) | 五个 YOLO11 ONNX 模型、目标检测、HTTP/网页和测速伪代码 |
 | Linux TTS 服务 | [tts-linux.md](spec/tts-linux.md) | Linux Embedded Speech TTS HTTP 服务、队列与独立运行时路径 |
