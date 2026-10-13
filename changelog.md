@@ -1,3 +1,11 @@
+### TTS 三行字幕服务包发布
+
+- ✅ [2026-10-13] 构建并发布服务代码包 v70，包含按音频进度逐行显示的三行滚动字幕。
+  - 通过`npm run build:offline-update` code-only模式生成`code/code-v70.zip`：17,720,868 bytes，SHA-256 `8d44da0740484fd8d8ffcdbda1b41778a8db276178f03995f890e883e81dcbed`；来源提交`bcdda0518d9d0a6c721885ed5b246ea23958904d`。ZIP完整性、1,072个文件与源码逐字节比对、RSA签名与组件契约通过；复用dependencies v8、Node-min seeds v69、min APK v37及dataRepair v2。
+  - `npm run publish:offline-update`已发布到LAN `/mnt/aasc-offline`与WAN `/home/as/a/aasc-offline`：先版本文件后原子切换清单，全部组件HTTP大小/SHA-256与签名通过；两端清单3,483 bytes，SHA-256 `45acc58cb555e99a95ce9fbe0a9ac0854108c723de21fd6565139ea19a95ef70`，字节一致。代码v70两端HTTP 200，旧code v69两端HTTP 404，精确清理无错误。
+  - `servicePackage=false`，minApk/dependenciesPackage均保持false；发布产物不提交Git。本轮属于纯构建发布，仅补充本日志及构建状态。
+  - 用户反馈外网真机更新70后服务显示68：尚缺设备地址/服务代码路径。已检查版本读取和更新流程：服务版本读取本地active-release；原生“应用成功”通知先于新服务健康检查，候选启动失败可回滚。尚未确认该设备是界面缓存、连接了其他服务还是启动回滚；未修改相关代码或操作真机。
+
 ### TTS 三行滚动字幕
 
 - ✅ [2026-10-13] 实现音频进度驱动的三行字幕，新TTS从新行开始、逐行向上滚动，背景黑色0.1不透明度加8px背景模糊。
