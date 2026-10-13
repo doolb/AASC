@@ -10,7 +10,8 @@
   - `dependencies/dependencies-v8.zip`：131,317,625 bytes，SHA-256 `98e4f6e0e638e3074dd258b1faa287806071b6f9013e53ad0ba7433e78af8362`。
   - `node-min-seeds/node-min-seeds-v69.zip`：35,287 bytes，SHA-256 `daf4fdea807e5851c30c0dc02f18b607d7a34b6c7f2382eeb780c841dea25546`。
   - `apk/aasc-display-offline-min-v37.apk`：81,119,364 bytes，SHA-256 `1922f60642704dda2c3c30d51c7398a321f31aae551c9c77bd2931eec1f61928`。
-  - 来源提交 `3f092143c1dc01826083210f1cc8c9aa2678b490`；min APK 为 `allserver-min`/`0.2.35-offline-min`，APK v2 签名及版本/CRC通过，签名身份沿用 v36。MNN SHA-256 与 v36 相同，跳过 MNN prepare；JNI 桥使用 Release 优化编译。三项发布需求状态设回 false；完整 APK 未构建，正在执行 LAN/WAN 发布。
+  - 来源提交 `3f092143c1dc01826083210f1cc8c9aa2678b490`；min APK 为 `allserver-min`/`0.2.35-offline-min`，APK v2 签名及版本/CRC通过，签名身份沿用 v36。MNN SHA-256 与 v36 相同，跳过 MNN prepare；JNI 桥使用 Release 优化编译。三项发布需求状态设回 false；完整 APK 未构建。
+  - LAN/WAN 已发布并通过全组件 HTTP 大小/SHA-256 与签名清单校验；min APK v37 先校验上传版本文件，再通过现有 publisher 原子切换合并清单。清单均为 3,483 bytes，SHA-256 `37f5f707cb75ca85f415ac72cfa5b9b936bd2ca9d2fa86c7186e87046e8771f6`；旧 code v68、dependencies v7、min APK v36 已精确清理，两端 HTTP 404，无清理错误。
 
 ### 显示端聊天与 MMD 控件层级
 
