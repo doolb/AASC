@@ -5,6 +5,13 @@
   - APK NativeControl 新增系统文档流式 ZIP 保存，复用已有 TLS 连接策略；新增 FullConfigBackupSavePolicy 与原生测试。新增生产依赖 yazl 3.3.1，发布时重出依赖包。更新 design/spec/task/index/usage/self-test/todo，受影响发布项均标 true。
   - 验证：后端11/11、真实 Chromium 4场景（含父用例5/5）通过；Android `:app:testDebugUnitTest` 成功，新增策略4项通过。24 MiB聊天往返1802 ms、峰值RSS259 MiB（包含夹具）。重启启动器/历史兼容/发布器29/29通过；更新启动器自测以覆盖共用重启流程，重复调用仅一次通知和退出。测试使用临时数据和虚构凭证，未操作真实配置或重启主服务；设备系统保存交互待安装验收。
 
+- ✅ [2026-10-13] 完成代码包 v69、重新生成的生产依赖包 v8 和签名 min APK v37 构建。
+  - `code/code-v69.zip`：17,717,059 bytes，SHA-256 `f6a1ebc1120154e10178e41a09ceee2addb985f712b9293f17043134a9dc948f`。
+  - `dependencies/dependencies-v8.zip`：131,317,625 bytes，SHA-256 `98e4f6e0e638e3074dd258b1faa287806071b6f9013e53ad0ba7433e78af8362`。
+  - `node-min-seeds/node-min-seeds-v69.zip`：35,287 bytes，SHA-256 `daf4fdea807e5851c30c0dc02f18b607d7a34b6c7f2382eeb780c841dea25546`。
+  - `apk/aasc-display-offline-min-v37.apk`：81,119,364 bytes，SHA-256 `1922f60642704dda2c3c30d51c7398a321f31aae551c9c77bd2931eec1f61928`。
+  - 来源提交 `3f092143c1dc01826083210f1cc8c9aa2678b490`；min APK 为 `allserver-min`/`0.2.35-offline-min`，APK v2 签名及版本/CRC通过，签名身份沿用 v36。MNN SHA-256 与 v36 相同，跳过 MNN prepare；JNI 桥使用 Release 优化编译。三项发布需求状态设回 false；完整 APK 未构建，正在执行 LAN/WAN 发布。
+
 ### 显示端聊天与 MMD 控件层级
 
 - ✅ [2026-10-13] 聊天打开时将右侧灯光/动作/定位控件组放到聊天层下方，关闭聊天后恢复原层级。
