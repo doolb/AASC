@@ -1,3 +1,8 @@
+### 当前文档提交
+
+- ✅ [2026-10-13] 按用户要求提交当前9份文档：MMD README、design/spec索引、自测、todo、usage、TTS使用说明、changelog及豆包.src伪代码。
+  - 包含各文档当前暂存和未暂存版本；仅提交Markdown，配置/config、显示端配置和任务results继续保留原暂存。验证提交范围及Markdown差异，不新增代码、自测执行、真实请求、主服务操作或构建发布。
+
 ### TTS 三行滚动字幕
 
 - ✅ [2026-10-13] 实现音频进度驱动的三行字幕，新TTS从新行开始、逐行向上滚动，背景黑色0.1不透明度加8px背景模糊。
@@ -49,16 +54,46 @@
 
 ### Chat2API 四路统一模型与语音
 
+
 - ✅ [2026-10-13] 实现qwen/qwen-api/doubao/doubaapi模型→Provider→应用分流，保留旧文字别名和网页账户/会话ID，TTS映射可同时指定真实模型与默认音色（qiaoxiaojiao示例）。
   - 新增chat2api-content/system-controls/model-capabilities/application-service/api-account/api-speech-adapters；更新mapper/data-store/registry/runtime/responses/core/speech/proxy和两处配置UI。四路TTS业务统一读取Chat2API账号，API账户只做格式校验；旧私有密钥保留但不回退。Responses返回项目扩展output_audio WAV Base64，旧speech/cache/download仍audio/wav；未支持媒体明确拒绝。
   - 更新TTS业务薄层、HTTP取消、安全错误和日志，自测只读检查、design/spec/task/todo及使用说明。总60秒包含规划/合成/下载，断连取消；拒绝TTS聊天续接和Pi元数据，原文字工具/SSE/原生会话继续。独立终审两项Important均修复并定向验证。
   - 验证：Chat2API 228/231（3项修改前已有Windows chmod断言失败）、TTS Provider 85/85、旧业务TTS 19/19、普通LLM 19/19；模拟API/媒体与浏览器配置用例通过。servicePackage=true，依赖与Android未变；未发真实请求、未读取迁移真实凭据、未重启主服务或出包。真实账户和设备待部署验收。
 
+### Chat2API 豆包纯Node会话复用
+
+### Chat2API 四路统一接口（方案待确认）
+
+- ✅ [2026-10-13] 根据用户补充收敛对外来源名为qwen/qwen-api/doubao/doubaapi，并将TTS别名映射加入统一接口候选。
+  - 核查model-mapper/data-store及映射UI：当前解析只有目标模型和账号偏好，尚无生成用默认音色。design/spec/task/todo补充保留qwen3.6flash等旧映射，qiaoxiaojiao→限定Qwen API模型＋qiaoxiaojiao_v3.1默认音色，以及参数优先级、编辑/导入导出和会话绑定验收。仅修改方案文档，未修改运行代码、实际映射配置或凭据。
+
+- ✅ [2026-10-13] 续接qwen-chat/qwen-api/doubao-api/doubaochat统一入口需求，完成源码核查与实施前文档候选。
+  - 更新多模态design/spec、todo和旧任务入口，新增`docs/task/20261013_Chat2API四路统一模型应用分流.md`；确认网页两路语音已走Chat2API、API两路仍直连，修正旧三路/豆包状态。候选为模型→Provider→应用、类型化内容及instructions音色控制块，首批现有聊天＋四路TTS。
+  - 范围/协议/API账号准备待确认；无新运行代码、真实请求、凭据读取迁移、主服务操作或构建发布。保留其他任务未提交内容和暂存区。
+
+### Git 同步
+
+- ✅ [2026-10-13] 同步远端8个提交至`bcdda051`，包含配置ZIP备份/自动恢复、Offline完整包同步与发布记录及显示端逐行字幕。
+  - 暂存区和工作区分别应用同一远端变更，逆向校验原Git tree完全一致；索引文档头部纯新增链接和todo唯一原文替换保留本地重排。保留本地配置、MMD/results、未跟踪内容和暂存状态，仅另提交本次Git同步记录。未安装依赖、操作主服务器、构建或发布产物。
+
+- ✅ [2026-10-13] 再次同步远端 `b2e5cb7e` 的 Offline min APK v35 发布记录；本地暂存与未暂存差异分别应用同一远端补丁，逆向校验逐字节一致，其他文件与未跟踪项保持。本轮仅 Git 同步，不重启服务器、不构建或发布产物。
+
+- ✅ [2026-10-13] 本地 master 同步远端 13 个提交至 `eec8bf17`，包含已上传的豆包纯 Node 会话复用及其他任务的 MMD/Android 更新。
+  - 逐层合并暂存与未暂存文档差异，更新过时 FSR/IK/豆包说明并去除合并重复；原始 index 和重叠文档副本保留于 `.git/sync-20261013/`。本机配置、任务 results 和未跟踪文件保持，未提交其他任务的工作区改动。
+  - 本轮只校验 Git 内容与暂存边界，不新增聊天/合成、不重启服务器、不运行构建或发布；Offline 状态沿用远端。
+
+- ✅ [2026-10-13] 豆包普通Node模式接通Qwen同类Responses原生续接，仅发送本轮新增输入。
+  - 新增`chat2api-doubao-session.js`及两个自测模块；修改文字适配器、node-protocol、Responses服务、会话存储及Provider能力。ready/uncertain和身份摘要绑定，同账号/模式复用，旧观测字段不升级。
+  - 两轮真实纯Node协议测试准确回忆随机标记、同ACK会话、无历史重放；正式实现新增20项模拟测试，Chat2API201/204（同3项旧Windows chmod）、普通LLM/Core/Responses24/24、旧TTS19/19。
+  - 流式租约贯穿消费/保存，未消费/取消清理，排队和执行共用120秒；16/256容量，JSON保存不丢并发记录，Pi snapshot失败隔离，写失败实例内阻断。独立审查无重要缺陷，时限问题先RED再修复。
+  - design/spec/task/todo/usage/self-test已同步；servicePackage=true，依赖及Android原生未改，不出包或重启主服务。两次请求后未再真实请求，未保存实际凭据/原始帧，保留其它任务改动。
+
 ### Offline min APK 构建
 
 - ✅ [2026-10-13] 构建 Offline min APK v35（`0.2.33-offline-min`），包含热更旧版本目录回收修复。
   - 本地文件：`release/apkbuild/allserver-min/output/aasc-display-offline-min.apk`，大小 `89308538` bytes，SHA-256 `65b78ff10dd5abb10b59ff4153661a78799ffb9b45470f8216fdcd1828f43801`；APK ZIP 完整性、`versionCode=35`、`versionName` 和 v2 签名校验通过，签名证书 SHA-256 为 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
-  - 构建源提交为 `caaa29891728f9d9c4cbb88254ac1795bac3847a`；构建清单标记工作区有未提交改动，已确认 Android 源码无额外差异。构建结束时 Kotlin 编译守护进程清理提示失败，但 Gradle 构建退出码为 0，产物独立校验通过。
+  - 构建源提交为 `caaa29891728f9d9c4cbb88254ac1795bac3847a`；构建清单标记工作区有未提交改动，已确认 Android 源码无额外差异。APK 构建后已发布到 LAN 与 WAN，发布校验见下条记录；构建结束时 Kotlin 编译守护进程清理提示失败，但 Gradle 构建退出码为 0，产物独立校验通过。
+
 - ✅ [2026-10-13] 发布 Offline min APK v35 到 LAN 与 WAN 更新源。
   - `apk/aasc-display-offline-min-v35.apk` 大小 `89308538` bytes，SHA-256 `65b78ff10dd5abb10b59ff4153661a78799ffb9b45470f8216fdcd1828f43801`。两端签名清单一致并通过验签，v35 HTTP 200 且大小匹配；WAN 文件 SHA-256 与本地一致。两端旧 min APK v34 已精确清理，HTTP 返回 404；完整 APK 未发布。
 - ✅ [2026-10-13] 构建 Offline min APK v36（`0.2.34-offline-min`），修复 APK WebView 文件选择器。
@@ -174,38 +209,83 @@
 
 - ✅ [2026-10-12] 实施前核查sync:offline-update同步范围：父目录模式为aasc-offline及mmd，直接服务目录模式只同步服务更新；AI模型此前由独立sync:ai-models恢复到项目res/models。
   - 仅补充AI模型usage/design/spec及既有待验收事项的命令说明，不修改同步器代码、发布状态或模型，不新增任务/测试、构建或发布。
-
 - ✅ [2026-10-12] 已按用户确认将YOLO、ASR、全部声纹变体及分段/降噪和配套共30项、1,042,798,505字节发布至https://c.aasc.us/mnt/aimodel/，保留分类与文件名。
   - 新增`scripts/models/ai-model-common.js`、`publish-ai-models.js`、`sync-ai-models.js`及`ai-model-catalog.json`，package.json新增上传/下载/自测命令，新增两个测试文件及usage。固定分类、流式大小/SHA-256、路径/链接保护、SSH/rsync增量暂存、失败回滚与清单最后切换；下载临时文件校验后替换，保留额外文件；不新增Git模型二进制。清单快照SHA-256 `5e8d4daae59aa6fb9bbef3b58ec75c72737f832eabbd3b2e117f3846cb1356f8`。
   - 27/27定向测试及三个脚本语法通过；首次上传后重复发布复用30项。远端文件全量指纹与服务器回环HTTPS全30项完整检查通过（公开URL/Host/SNI、默认CA/主机名验证保持）；客户端外网目录/清单HTTP200、13项小文件完整指纹、GTCRN空目录实际下载/重复复用、本地全30项复用通过。跨WAN客户端大文件验证因下行较慢主动终止，改为上述验证，不把回环全量校验记成跨WAN全部下载。审计`.git/ai-model-publish-20261012`，首次远端暂存/备份`/home/as/a/.aimodel-publish-cvftn8sq/backup`。
   - 正式服务代码包不带模型；普通APK按需使用默认YOLO11n与base FP32/Pyannote。实际已发布完整Offline v23在本次范围内仅内置SenseVoice/base FP32/Pyannote，已修正旧设计说明的泛化描述；上传不改API/模型加载或APK白名单，不构建发布APK/正式包、不重启服务器。Offline状态保持servicePackage=true/minApk=true/dependenciesPackage=false。design/spec/task/self-test/usage同步、todo完成项已删除；脚本/清单/文档提交推送Git，日志、模型与构建产物保留本地。
 
-### AI模型外网发布与双向同步方案
+### 豆包网页文字 Chat2API 与网页登录朗读（实验性，待验收）
 
-- ✅ [2026-10-12] 补充30项完整文件表与体积解释：YOLO465.46MB、SenseVoice239.55MB、Zipformer49.75MB、声纹/分段287.50MB、GTCRN0.54MB，18个模型加12个配套文件共1.043GB（0.971GiB）。范围保持用户选择的全部型号/精度，代码方案仍待确认，未上传。
+- ✅ [2026-10-13] 按新增授权，沿用官网原标签成功的会话做一次纯Node文字诊断，仍未得到有效回复。
+  - 仅内存取得当前会话、Cookie白名单和UA，先断CDP再Axios发送；诊断wrapper设conversation_id/need_create_conversation=false等续聊字段，未调用页面fetch或签名函数，未读取历史正文。一次POST、529ms、HTTP200/SSE、STREAM_ERROR业务718013001，无有效回复，固定映射doubao_upstream_failed/502。
+  - 两仓源码无该数字专门释义，不将它写成先前710022004或HTTP502，也不宣称已突破风控。未完整复现官网query/profile/signature；停止不重试，无凭据/会话ID/原始流保存，无生产代码/配置/状态修改、测试或主服务器操作，保留其它暂存工作。
 
-- ✅ [2026-10-12] 完成用户指定aimodel发布范围与脚本方案核查；用户确认全部模型、支持上传和下载，现有五组30个文件1,042,798,505字节，包含YOLO各尺寸及分割PT、ASR、全部声纹变体与分段/降噪及必要配套。
-  - SSH核对/home/as/a/aimodel尚不存在，指定HTTPS目录当前404；新增design/spec/task和索引/todo，明确固定分类、大小/SHA-256清单、增量复用、暂存/原子替换与额外文件保留。按AGENTS待具体代码方案确认后新增脚本，当前未写运行代码、上传模型、构建/发布APK或修改Offline状态，未运行新测试。
+- ✅ [2026-10-13] 按新增授权使用用户原Chrome豆包标签发送一次短消息成功，补充原页既有会话与临时页新会话的证据边界。
+  - 实际POST /chat/completion、mode0/newConversation=false/tts=false；HTTP200/SSE含ACK、回复事件和SSE_REPLY_END，无业务错误码。输入框原为空，未新建页/导航/关闭原标签，已恢复临时拦截/监听并仅断CDP；不打印保存Cookie、签名URL或正文，不读取旧聊天。
+  - 原页脚本输入也能成功，不能将临时页710022004简单归因所有自动化受限；新会话/页面状态/协议参数差异仍待控制变量验证。官网UI成功不等于项目bridge或纯Node成功；同步design/spec/task/todo/usage/self-test，无运行代码/配置/状态修改，无单测或主服务器操作。
 
-### ASR 测试 APK 模型 Git 状态核查
+- ✅ [2026-10-13] 完成一次获授权的官网临时页输入及路径观察，记录与用户手动成功的差异，停止自动重发。
+  - 实际POST /chat/completion，query包含a_bogus/msToken及设备、版本、平台等字段；body含user_context，mode0/newConversation=true/tts=false。HTTP200/SSE返回业务码710022004，无有效回复；只记录路径/字段名，不输出保存Cookie、签名值/URL或原始帧，已关闭自建页并断CDP，保留原标签与Chrome。
+  - 用户随后报告手动浏览器消息成功，尚未独立观察对应成功请求；不能把脚本临时页失败推定为账号或整个Chrome失效，也不能仅归因缺签名。澄清成功标签来源后优先比较手动请求；本轮不改运行代码、配置或状态，不操作主服务器，保留其它工作。
 
-- ✅ [2026-10-12] 核对独立ASR测试APK Gradle白名单、本地APK ZIP目录与Git HEAD：7个内置ONNX中6个历史模型已提交，SenseVoice主模型239,233,841字节尚未提交且被忽略，词表及SHA-256校验文件已提交。
-  - 已提交的是Zipformer encoder/decoder/joiner、ERes2Net-base FP32、Pyannote分段及GTCRN；6个Git模型对象大小与本地文件一致，非LFS指针。本轮仅补充usage/design/spec及既有待验收事项的模型准备说明，不新增任务、不修改模型/打包/源码、不运行测试或重新构建发布，未提交或推送本轮说明。
+- ✅ [2026-10-13] 完成豆包脱离浏览器的可行性源码核查与候选方案：独立SDK正常聊天为aiohttp桌面profile/CSRF/Cookie直连，默认验证码分支依赖浏览器且可关闭。
+  - 记录独立Node协议/mock→另授权真实验收→明确transport分阶段方案；拒绝沿用作者硬编码设备身份、自动验证码处理或重试，不把当前一次风控当所有Node协议均不可行。SDK缺乏已证实的完整令牌刷新链路和当前账号成功证据。
+  - 更新design/spec/task/todo，仅方案文档；未读真实凭据或账号、未发请求、未改运行代码/配置/状态、未测试或操作主服务器。
 
-### 非日志与模型的工作区源码归档
+- ✅ [2026-10-13] 只读核对doubao2api实际连接方式：默认OpenAI服务调用BrowserClient的登录页面fetch与SSE回传桥接；独立SDK使用aiohttp桌面端profile，不能混为一条路径。
+  - 源码定位__main__.py/unified_server.py、browser_client.py的start/_build_query_params/chat_completion/_browser_fetch_stream及client.py的_security_params/session.post。模块顶部httpx说明有过时内容，以实际聊天调用链为准。
+  - 记录本项目桥接尚缺参考网页query profile与fetch封装就绪检查，补充design/spec/task/todo；此前离线结果仅证明基础接线，不宣称完整复刻。未读真实session/凭据、未发请求、未改运行代码或发布状态、未测试或操作主服务器；其它工作区及暂存改动保留。
 
-- ✅ [2026-10-12] 按用户要求提交剩余源码、测试、文档、无新增凭证的配置变更和待机参考图；包含独立手动眼球/绑定别名/注视阻塞恢复、物理调试开关，以及VaM/HS2可行性、VRM能力与TTS凭证位置说明。
-  - 提交`3rd/mmd-ar-test`五份源码及`runimg/h.JPG`（38,371字节）、`tests/mmd-ar-human-gaze.test.js`、两份已有配置及对应docs/changelog；不提交任务results、日志、模型、APK/ZIP、构建缓存、浏览器缓存或`release/1.txt`运行错误记录。
-  - 5份修改源码语法检查与npm独立网页构建通过；`npm run test:mmd-production -- tests/mmd-ar-human-gaze.test.js`共226项，225通过、0失败、1跳过（浏览器不支持GPU时间查询），含新增眼球3项。首次测试因/tmp配额产生10项环境失败，改用项目内TMPDIR后上述复查通过；不修改功能代码解决环境问题。手动眼球真实姿态/手机仍待验收。
-  - 修正文档围栏并更新已完成外网发布的todo状态；源码归档不重新发布网页/正式包或构建APK。Offline待出包保持servicePackage=true/minApk=true/dependenciesPackage=false，外网独立页仍是本轮此前校验的db9898fe构建；新增手动眼球与远端GPU/面板透明度改动未再次发布。
+- ✅ [2026-10-13] 按新增明确授权，用当前Chrome唯一官方标签凭据完成一次Node普通LLM最小真实请求验证，结果仍遭业务风控。
+  - 使用既有createDoubaoChatAdapter的Node直连路径，doubao普通模式、文本“请只回复：OK”、60秒期限、最多1次POST；HTTP200/SSE，适配器识别doubao_risk_control并映射403，completeReply=false，502ms。与此前HTTP403实测区分，不能宣称Node已可用。
+  - Cookie白名单仅内存使用，输出仅状态/固定错误/完整回复布尔与时长，不保存凭据、原始帧或正文；不重试、不切网页fetch或TTS、不操作主服务器。同步design/spec/task/todo/usage/self-test；运行代码、真实配置、发布状态不变，未运行离线回归或出包，保留其它暂存工作。
 
-### Git 同步
+- ✅ [2026-10-12] 普通LLM经Chat2API接通受控豆包登录页面fetch，默认关闭、严格绑定所选账号/target/context，真实官网尚未重新验收。
+  - 新增chat2api-doubao-web-config/browser-bridge/web-ws及测试，修改文字适配器/Core/factory/runtime、server-app控制消息/初始化广播，新增doubao-web-settings控制面板并接入chat2api/websocket/upload和只读self-test。用config.set持久化非秘密参数，不新增HTTP配置接口；保存不连接Chrome，目录查询只元数据。
+  - 显式allowSessionCheck仅允许运行时所选官方页面会话内存比较，Cookie不进Node fetch头/日志/配置。页面固定同源POST、credentials/include、redirect/error；120秒、256KiB请求、8MiB流、64KiB拉取，同绑定一任务。不换号/标签、不重试、Node回退或启动/关闭用户Chrome，Android无受控Chrome默认不可用。
+  - 审查三项导航/撤销授权/detach挂起竞态均先RED后修复；另覆盖Provider映射冲突、真实Puppeteer off API及CDP contextId。隔离Chromium真实CDP/page.fetch/SSE测试所有网页请求均本地拦截，未访问用户Chrome、真实凭据或上游、未操作主服务器。
+  - Chat2API173/176（原3chmod），TTS/解码/配置/浏览器97/97，旧播报19/19。同步design/spec/task/todo/usage/self-test；servicePackage=true，dependenciesPackage/minApk保留原true，未出包。其它工作区/暂存改动保留；共享文档更新留工作区，专属代码/文档按本任务上传Git。
+  - 25个相关文件以 `b6cb3f71` 提交推送origin/master，发布状态已随先前提交上传且本轮保持；逐条核对其余原暂存Blob/权限完全一致。共享文档仍保留本轮增量与其它任务原暂存内容，不混合提交。
 
-- ✅ [2026-10-13] 同步远端8个提交至`bcdda051`，包含配置ZIP备份/自动恢复、Offline完整包同步与发布记录及显示端逐行字幕。
-  - 暂存区和工作区分别应用同一远端变更，逆向校验原Git tree完全一致；索引文档头部纯新增链接和todo唯一原文替换保留本地重排。保留本地配置、MMD/results、未跟踪内容和暂存状态，仅另提交本次Git同步记录。未安装依赖、操作主服务器、构建或发布产物。
 
-- ✅ [2026-10-12] master快进同步远端GPU渲染计时与分类标题透明度提交，保留此前正式包与独立网页发布记录。
-  - 6份重叠文档三方合并无冲突，逆向合并与原文逐字节一致；24项本地源码/文档/配置改动完整保留。只提交本轮同步记录，不纳入未完成的手动眼球/调试代码、本机配置、模型、日志及构建产物；未重新测试、构建或发布，Offline状态沿用远端。
+- ✅ [2026-10-12] 核对普通LLM接入路径：项目现有LLM支持OpenAI兼容地址，可复用Chat2API的doubao文字模型；文字适配器已有，但Node直连403，网页fetch运行路径仍待确认。同步design/spec/task/todo，只更新方案，未改运行代码/真实配置、未访问Chrome或凭据、未发请求、未操作服务器。本轮未运行测试，不增加验证通过数量。
+
+- ✅ [2026-10-12] 按用户选择B接通Frontier独立TEXT_TTS、Chat2API speech及AI/Agent的doubao-chat实验选项，默认禁用，输出完整校验并解码的WAV。
+  - 新增chat2api-doubao-speech-protocol/adapter及测试、doubao-chat-tts.js；修改speech/runtime/proxy/load-balancer、TTS policy/settings/registry及控制端设置/self-test/upload。通过现有模型映射严格指定doubaochat账号，不换号；无业务Cookie/账号输入，无新HTTP配置入口。
+  - 最小只读授权核对公开模块T57/VgE与语音SDK，固定普通网页业务标识、TEXT_TTS=5和默认音色；未读取凭据/聊天内容，没有新真实聊天或合成。动态身份查询元数据及真实普通账号、音色、Android/显示端尚未验收，Chrome网页fetch仍待确认。
+  - 单任务60秒/同账号单连接，1–1000 UTF-16字符且UTF-8≤4000字节；完整句/TTSEnded、16MiB和累计120秒限制，取消释放WS/worker，零重试/重连。修复多句总时长越界及权威配置切换丢音色，两项均先RED再修复；缓存.wav/audio/wav及旧Provider行为保持。
+  - 新增本地Opus→WAV→缓存HTTP→Chromium Audio播放验收，GET/HEAD/Range/416、ended/停止/下一句及DisplayLipSyncAudio来源事件均通过；连同既有Agent/MMD动作回归22/22。没有实际MMD模型或Android设备验收。
+  - Chat2API159/162通过（原有3项Windows chmod失败），TTS/解码/配置/浏览器95/95，旧播报与并发19/19。同步专属design/spec/task与共享todo/usage/changelog/自测；servicePackage=true、dependenciesPackage=true，minApk保留原true，未出包、未操作主服务器。
+  - 相关代码与专属文档以 `f9cdf77e` 上传origin/master，包含本任务既有文字适配器/断连基础接线以保证提交可运行；发布状态已随前一解码提交上传，本次保持。其余原暂存Blob和权限逐条核对保持不变；共享文档更新仍留工作区，避免混入其它任务暂存内容。
+
+
+- ✅ [2026-10-12] 先前阶段落地B的完整Ogg Opus校验与可取消worker解码WAV基础模块；当时Frontier接线因调用方资料不足暂停，后续模拟接线完成情况见上条。
+  - 新增 `src/external/tts/tts-ogg.js`、`tts-opus-decoder.js`、`tts-opus-decode-worker.js` 和对应两组测试/本地夹具；package/lock固定ogg-opus-decoder@1.7.5。旧speech、tts-wav、缓存、下载MIME及播放器保持WAV。
+  - 单声道、120秒、Ogg/WAV16MiB、Float32 32MiB、最多2个worker且无无限队列；取消/超时终止worker后再核对状态。完整校验后内部重组跨页包，正确处理pre-skip/EOS及signed Q8增益。独立审查的魔数高位、跨页Tags/continued、增益3项问题均先失败再修复。
+  - 新增本地21/21；Chat2API144/147（3项既有Windows chmod断言失败）、TTS19/19。同步design/spec/task/todo/usage/自测文档；servicePackage=true、dependenciesPackage=true、minApk保持原true，未出包。
+  - 解码代码、依赖、状态和专属design/spec/task以 `ee3c6193` 上传origin/master；共享changelog/todo/usage/self-test的本轮文字更新留在工作区，不混入其他任务已有暂存内容。已逐条核对其他原暂存Blob/权限保持不变。
+  - 仅核对匿名公开SDK/静态资源，调用方appkey/session及默认音色仍缺可复核契约，任务3/4阻断；未连接Chrome、访问登录凭据、发送聊天/合成、操作主服务器或发布，保留其它未提交/已暂存改动。
+
+- ✅ [2026-10-12] 用户选定B：豆包Ogg Opus解码后返回WAV；完成选定方案伪代码与实施计划收敛，未修改运行代码。
+  - 新增 `docs/task/20261012_豆包网页WAV解码实施计划.md`，同步豆包design/spec/主task/todo。固定依赖候选为ogg-opus-decoder@1.7.5，worker中校验解码errors及PCM界限，复用wrapPcm/validateWav；不扩展Ogg缓存、MIME或播放器，不改变旧Provider。
+  - 只读核对npm版本/README；依赖未安装、测试未运行、发布状态未改变。受控Chrome网页fetch尚待确认；未连接Chrome、读取真实凭据、聊天/合成、操作主服务器或出包，保留其它未提交改动。
+
+- ✅ [2026-10-12] 完成豆包续接的源码/文档/未提交改动核查及文件级方案；仅修正文档，音频方案与受控网页fetch运行代码待用户确认。
+  - 更新 `docs/design/chat2api-doubao-web.md`、先补充 `docs/spec/chat2api-doubao-web.md` L4伪代码，同步现有豆包task、todo、usage及tts-providers；保留MMD、多模态及真实配置改动。A为新模型显式ogg/.ogg/audio/ogg，B为固定版本解码worker转WAV，旧Provider保留WAV；尚未安装依赖。
+  - 补充最新验证：Node文字直连一次HTTP403；独立Frontier短文一次收到TaskStarted、SessionStarted、4个TTSResponse及TTSEnded，约5KiB带OggS。HTTP断连取消已接通。未保存Cookie、原始帧或音频；完整Ogg、音色、网页模式及跨显示端兼容仍待验收。
+  - 用户提供最新既有测试：Chat2API 147项144通过/3项既有Windows chmod失败、断连43/43、TTS19/19，本轮未重跑。未读取登录凭据、连接Chrome、发送真实请求、操作主服务器、出包或发布。实读发布状态servicePackage=true、minApk=true、dependenciesPackage=false，保持原值。
+
+- ✅ [2026-10-12] 新增 `doubaochat` 纯文字 Provider：独立适配器与17项mock，固定官方网页地址与Cookie/CSRF隔离；`doubao`/`doubao-think`/`doubao-expert` 对应快速/思考/专家模式，支持有界SSE、固定脱敏错误和显式取消。修改 provider registry/adapter factory/data store/credential validator及相关测试；Responses目前本地历史重放，未启用未确认的原生续聊。
+  - 账号手动添加**因未找到安全只读身份检查端点而固定拒绝**；既有账号凭证包可预览、确认并导入合法Cookie，但此举并不验证登录或证明Node独立HTTP签名可用。真实浏览器只发送1条无隐私短消息，官网 `POST /chat/completion` 收到 HTTP200/SSE_REPLY_END；没有用现有凭证测试 Node 直连。TTS网页业务 Provider **未接入**。
+  - 获授权对该回复朗读恰好1次，实测 `frontier-audio-web-ws.doubao.com/api/v2/sami/voicegenie` 二进制WS；公开网页语音SDK带 `BidirectionalTTS{text}` 和 Ogg Opus 解码链，但会话还带已有消息 ID，当时不能证明独立业务文本合成或安全返回WAV；追加授权随后取得一例独立短文Frontier成功，本次已完成离线WAV接线。第三方 `callmerio/doubao-tts` 采用与现场不同的旧 Samantha WS、授权说明矛盾，未移植。需要进一步授权与独立能力验证后才考虑 `doubao-chat` 语音业务选项。
+  - `npm run check:chat2api` 142项139通过/3项失败，三项均与改动前一致的 Windows chmod 权限断言；定向5文件50/50通过，`npm run test:mmd-production:tts` 19/19通过。已同步独立design/spec/task、索引、todo、usage；`release/offline-release-status.json`原 `servicePackage=true`、`minApk=true`、`dependenciesPackage=false`保持不变。未复制或持久化现场Cookie/帧/私人对话，未操作用户主服务器，不发布或出包；保存其他未提交工作区改动。
+
+### Chat2API 多模态统一接口与三路语音 Provider（方案待确认）
+
+- ✅ [2026-10-12] 完成 qwen-chat、qwen-api、doubao-api 的当前调用链和多模态能力边界核查；记录待确认设计，不修改运行代码。
+  - 新增 `docs/design/chat2api-multimodal-routing.md`、`docs/spec/chat2api-multimodal-routing.md`、`docs/task/20261012_Chat2API多模态统一接口.md`；更新设计/实现索引与 `docs/todo.md` 待确认条目。
+  - 现状：qwen-chat TTS 已复用 Chat2API speech；qwen-api/豆包仍由独立 TTS Registry 直连；Chat2API Responses 目前仅文字/工具子集，图片/音频不能安全透传；语音接口只支持国内千问网页模型。未验收其它模态、未运行测试或真实上游请求。
+  - 草案采用模型归属 → Provider 应用适配器 → 类型化输出；系统提示词仅约定受控指令，不按自由文本猜路由。待确认首批实施范围、音色指令格式、凭证迁移方式；未重启服务、迁移凭证、修改发布状态或构建发包，保留原有用户改动。
 
 ### 正式MMD面板分类标题透明度
 
@@ -251,13 +331,11 @@
 - ✅ [2026-10-12] 完成FPS/耗时与角色控件隐藏方案核查：正式物理面板未显示耗时，Ammo需补实际步进计时，角色隐藏尚未联动右侧控件。
   - 更新两端design/spec、task和todo，明确约500ms共享统计、CPU渲染口径、后台窗口重置及正式按钮/面板收起；按AGENTS待确认后实施。未修改运行代码、发布状态或v65产物，未运行新增测试/构建。
 
+
 - ✅ [2026-10-12] 发布正式Offline服务代码包v65到局域网与外网，包含TTS生成时准备高级动作、音频就绪后同步播放，以及最新已提交TTS修复。
   - `code/code-v65.zip`：17,585,424字节，SHA-256 `295773152c180ed8fcf3d5e3ad8f1885cff414256d5def59bcd29f055b2ca3b0`；来源`17f2d3dc3059e5c7653cb2e76f89371393ddf6d3`。npm构建生成9项固定资源；1,033文件CRC和逐项指纹通过，包含512项提交源码、9项生成资源及512项既有发布资源。构建输入独立暂存，未切换分支或覆盖工作区，保留本机配置与其他未提交改动。
   - npm发布脚本上传版本文件后原子切换manifest，复用dependencies v6、Node min seeds v39、min APK v34及dataRepair v2；LAN/WAN所有引用资源HTTP大小/SHA-256、RSA签名及组件约束通过。两端manifest SHA-256均为`e8b68e7cde502ea173d3e1c48c1082c34c2a14818d46ad2fa9ef6e25048598e2`，code目录仅保留v65，清理无错误；记录保存在`.git/offline-publish-mmd-tts-v65/`。
   - `servicePackage=false`，`minApk=true`、`dependenciesPackage=false`保持；仅服务代码包发布，不构建APK/依赖包，不执行服务器重启或设备安装。按纯发布例外只补充changelog和发布状态；此前138项功能验证沿用，本轮校验发布产物，不提交ZIP、日志或其他会话文件。Android实际同步与性能仍待设备验收。
-
-- ✅ [2026-10-12] 核查TTS高级动作改动的生效方式：服务端启动加载模块，无源码热重载，需要重启服务并刷新显示端。
-  - 核查package.json、restart-server.js、server-launcher.js及服务端入口；补充usage/design/spec/todo。Offline需先更新新服务代码包，仅重启旧v64不启用新功能；未执行重启、代码修改或发布。
 
 - ✅ [2026-10-11] 实现AI回答高级动作随TTS两阶段播放：生成请求启动时并行解析/准备，生成成功后同句id关联，实际发声时提交自动层并按音频时钟推进。
   - 新增chat-tts-actions.js/mmd-tts-actions.mjs；修改server-app.js/agent-chat-tts.js、display.html/display-lipsync-audio.js及Human interface/mixer。准备不接管模型，独立音频时钟/优先级40，16句缓存/32秒等待；暂停/缓冲/恢复、失败/打断/迟到及手动优先，句尾爱心播放窗口与原600ms衔接。原音频/口型/物理继续复用。
@@ -272,6 +350,7 @@
 
 - ✅ [2026-10-11] 核查正式AI回复高级动作触发状态：已发布v64含解析/播放模块，聊天chatResponse仍只更新文本和历史，尚未自动调用高级动作解析。
   - 本地发布manifest与v64 ZIP网页脚本检索确认，mmd-ar-ai-reply/DisplayMmdReplyPreview仅在接收模块定义；手动AI回复预览和显式调用可用，结构化动作计划独立处理。仅更新design/spec/todo/changelog说明，将MMD待发布条目更正为待设备验收，无代码、配置、发布状态或产物变更。
+
 
 - ✅ [2026-10-11] 将统一灯光预设、Human/600ms头部衔接、刚体手部避让、服务器待机/跳舞、28类高级动作/146符号、表情与MPL编辑/预览/下载接入正式显示页。
   - 修改display.html、display-mmd/display-pmx-runtime、mmd-expressions、Three helper；新增mmd-human/reply/mpl/preset模块与纯形状桥接，共享碰撞增加scanPrepared。默认待机仅未指定动作的米娅采用用户35/10/-10；高级点击播放并静默填入源码，无编辑导航。正式TTS保留唯一audio/player与音频时钟。
@@ -305,11 +384,6 @@
   - 49项单元+1项真实浏览器共50项通过，无失败/跳过/pageerror；浏览器146.4秒，MPL载入/预览/下载、动作、开关刷新/XPBD通过。真实风吹6帧仍有接触（最大剩余穿透0.00993888），未触发安全回归；受控夹具验证回归，不能据此宣称实际裙面零穿模或手机性能通过。
   - npm网页构建、30条生成导入指纹/源码一致/原舞蹈检查通过；HEAD加13文件片段的只读候选49/49单元再次通过；同步Human design/spec/usage、两个task、self-test/todo。仅独立WEB源码，不发布外网或构建APK，待手机验收与独立发布。
 
-### MMD-AR HS2 ZIPMOD接入评估
-
-- [2026-10-11] 核对Honey Select 2 zipmod结构及接入边界：包包含清单及Unity资源，需样例验证数据完整性与转换/运行时适配，不能以解包作为角色导入完成。
-  - 新增mmd-ar-hs2-zipmod的design/spec、可行性task及索引/todo；源码与作者文档核对完成，样例和范围待确认。未改运行代码、安装转换工具、构建或发布。
-
 ### MMD-AR 待机姿态、连续风吹与源码编辑
 
 - ✅ [2026-10-11] 待机按参考红线调整上臂靠近躯干、肘内收、前臂外斜，手掌保持默认Tpose掌面并再下压10°。
@@ -320,20 +394,19 @@
   - 新增web-reply-source.mjs，修改目录/构建/reply-ui/web-mpl-ui，复制miya-idle.mpl。只编辑、预览和下载，按用户要求暂不提供保存入口；本地来源优先、迟到不覆盖输入/新模型、64KiB/10秒读取有界，源码下载对应当前文本，过期编译VMD下载禁用。
   - 44项受控单元与1项真实浏览器通过，共45项，无失败/跳过/pageerror；浏览器约152.4秒。网页构建与30条生成指纹/默认资源/唯一开关通过；真实风吹软件GPU采样4帧、4帧存在接触，最大修正6.715102°、最大步长0.766802°、最大剩余穿透0.013714模型单位；每方向3秒有界采样，连续30/60/120fps由单元覆盖。待机采样求解帧时中位13.6ms/最大34.4ms，不能代替手机性能或承诺任意网格零穿模。同步Human design/spec/三个task/usage/self-test/todo；外网发布/手机观感和性能待验收。
 
-### VaM资源格式说明
+### MMD-AR 服务器动作、待机与手部IK避让
 
-- ✅ [2026-10-11] 核对VaM 1.x官方文件类型，补充资源包、场景/预设、Morph、衣服/发型、Unity资源和插件的用途与人物模型完整性边界。
-  - 新增docs/usage/vam-resource-formats.md及使用入口，补充已有VAM design/spec与待确认todo；未改运行代码，未新增开发任务或构建/发布。
+- ✅ [2026-10-11] 独立网页默认使用待机；原VMD命名“跳舞”手动选择，服务器目录支持后续新增动作；修正挥手压低右臂的问题。
+  - 新增server-actions.json/web-human-server-actions.mjs、idle.mpl/web-human-actions-build.js，生成mmd-actions.json和miya-idle.vmd（8秒，仅双臂六轨道）；跳舞仍引用miya-default.vmd，未指定时长按原15.2秒播放。同名登记优先，目录/面板/回复名称动态扩展，停止/网络/模型取消与原时长队列相容。
+- ✅ [2026-10-11] 物理面板增加默认开启的“手部防穿模”开关，复用原物理刚体检测、真实姿态与碰撞过滤，再用手臂IK有界避让；保存选择并刷新/模型/后端重建恢复。
+  - 新增web-human-rigid-snapshot.mjs/web-human-arm-avoidance.mjs，接入Human接口/构建、原IK/grant之后/物理之前和物理后观测；球/盒/胶囊形状复用原XPBD窄阶段，scanPrepared缓存同帧边界。4次迭代/35度限位、600ms释放、不累计；旋转暂停按保存求解空间采样，保留原布料暂停恢复链路。不另建衣服网格碰撞或GPU布料读回。
+  - 修改web-reply-actions/parser/player/panel/ui/build、web-physics-solver.js、web-panel-groups.js及独立build.js；新增3个自测文件。首版37项单元与1项浏览器通过；最终追加红线/风吹/源码编辑后44单元+1真实浏览器通过，共45项；真实蒙皮待机手部/裙面间距约0.570。npm网页构建成功；同步Human design/spec/task/usage/todo/self-test。仅独立WEB，未发布外网/打APK，Offline状态保持。
+  - 扩展物理旧回归35项13通过/22失败，修改前HEAD ea3de4b3同样失败；旧频率/接口/唯一锚点和data URL导入夹具另记待办。手机动态裙摆/手指与性能仍待验收，刚体近似/不可达目标不保证任意网格零穿模。
 
-### MMD-AR VAM模型接入评估
+### MMD-AR 高级动作保存格式说明
 
-- [2026-10-11] 核对VAM模型接入可行性：原生VAR需依赖与角色数据适配，转换路线需核对骨骼、Morph及物理保留情况；当前本地加载器只接受PMX，GLB路径用于静态角色。
-  - 新增mmd-ar-vam-models的design/spec及可行性task，更新索引和todo；输入格式、样例、保留功能待用户确认。只读核对源码和VaM官方文档，未改运行代码、构建或发布。
-
-### MMD-AR模型格式能力说明
-
-- ✅ [2026-10-11] 核对VRM表情、动作与物理能力及当前项目实现：VRM具备Expression、VRMA与SpringBone格式能力，当前PMX的VMD/Human/MPL/刚体链路未提供VRM适配。
-  - 补充mmd-ar-test-apk的design/spec及mmd-human-interface使用说明；核对官方VRMA/SpringBone规范及共享VRM/Human源码，无运行代码改动，不新增待办、构建或发布。
+- ✅ [2026-10-11] 根据现有源码核对高级动作与保存格式：内置MPL模板播放不自动入库，同名登记版本优先；动作库IndexedDB存结构化定义与MPL文本/VMD二进制，JSON导出内嵌Base64 VMD，单动作另可下载VMD。
+  - 同步Human usage/design/spec及todo中的既有导入导出待验收描述；只补充现状说明，未改源码、运行测试、构建或发布。
 
 ### MMD-AR傍晚灯光预设
 
@@ -349,19 +422,8 @@
   - 数据/分类/真实网页/屏幕光照/TAA共33/33通过；默认十组逐字段、坏存储回退、复位/刷新及原预设文件回归通过；npm网页构建、5项生成导入指纹、语法和diff检查通过。
   - 更新design/spec/task/todo/usage/self-test；本地web-dist已生成，未发布外网。正式显示端/APK与Offline产物状态保持；手机画质/帧时待现场验收。
 
-### MMD-AR 服务器动作、待机与手部IK避让
-
-- ✅ [2026-10-11] 独立网页默认使用待机；原VMD命名“跳舞”手动选择，服务器目录支持后续新增动作；修正挥手压低右臂的问题。
-  - 新增server-actions.json/web-human-server-actions.mjs、idle.mpl/web-human-actions-build.js，生成mmd-actions.json和miya-idle.vmd（8秒，仅双臂六轨道）；跳舞仍引用miya-default.vmd，未指定时长按原15.2秒播放。同名登记优先，目录/面板/回复名称动态扩展，停止/网络/模型取消与原时长队列相容。
-- ✅ [2026-10-11] 物理面板增加默认开启的“手部防穿模”开关，复用原物理刚体检测、真实姿态与碰撞过滤，再用手臂IK有界避让；保存选择并刷新/模型/后端重建恢复。
-  - 新增web-human-rigid-snapshot.mjs/web-human-arm-avoidance.mjs，接入Human接口/构建、原IK/grant之后/物理之前和物理后观测；球/盒/胶囊形状复用原XPBD窄阶段，scanPrepared缓存同帧边界。4次迭代/35度限位、600ms释放、不累计；旋转暂停按保存求解空间采样，保留原布料暂停恢复链路。不另建衣服网格碰撞或GPU布料读回。
-  - 修改web-reply-actions/parser/player/panel/ui/build、web-physics-solver.js、web-panel-groups.js及独立build.js；新增3个自测文件。首版37项单元与1项浏览器通过；最终追加红线/风吹/源码编辑后44单元+1真实浏览器通过，共45项；真实蒙皮待机手部/裙面间距约0.570。npm网页构建成功；同步Human design/spec/task/usage/todo/self-test。仅独立WEB，未发布外网/打APK，Offline状态保持。
-  - 扩展物理旧回归35项13通过/22失败，修改前HEAD ea3de4b3同样失败；旧频率/接口/唯一锚点和data URL导入夹具另记待办。手机动态裙摆/手指与性能仍待验收，刚体近似/不可达目标不保证任意网格零穿模。
 
 ### TTS 多 Provider 配置与生成
-
-- ✅ [2026-10-12] 核实并补充Qwen API与豆包API Key存储位置说明
-  - 根据config-app-service.js与release-runtime-context.js确认普通用户目录及release/userconfig/userconfig.json、tts.providers对应credential字段和控制端脱敏状态；同步usage/design/spec与todo文档入口。仅核查路径及代码，不读取Key原文，不修改配置或发布状态。
 
 - ✅ [2026-10-11] 修复Qwen-Audio 3.1/乔小娇接口与WAV占位长度，豆包2.0自动传上一句用户上下文，三个服务默认开启
   - tts-provider-settings.js默认Qwen-Audio 3.1/qiaoxiaojiao_v3.1及三个enabled=true，保留显式配置；新增qwen-api-contract.js区分新旧模型接口与显式WAV，自定义地址保持。tts-wav.js仅修复实测配对占位头，Qwen适配器在速度处理前严格校验普通WAV，失败日志仍打印已知码/原因。
@@ -443,11 +505,6 @@
   - 19文件97/97定向检查通过、无跳过，包含本地真实HTTP/WebSocket模拟、真实配置写盘/回滚、实际system入口与Chromium配置保存/失败/超时/断线/模板自测。另有扩大检查中的旧chat-tts-interruption按钮夹具失败，HEAD同样缺该ID，未改该夹具或宣称全仓通过。
   - 同步.src、design/spec/task/todo/usage/self-test，完成实现项移出todo，仅保留账号/设备/发布验收。servicePackage=true（原已待打包），minApk与dependenciesPackage保持；未重启、构建或发布运行服务。
 
-### MMD-AR 高级动作保存格式说明
-
-- ✅ [2026-10-11] 根据现有源码核对高级动作与保存格式：内置MPL模板播放不自动入库，同名登记版本优先；动作库IndexedDB存结构化定义与MPL文本/VMD二进制，JSON导出内嵌Base64 VMD，单动作另可下载VMD。
-  - 同步Human usage/design/spec及todo中的既有导入导出待验收描述；只补充现状说明，未改源码、运行测试、构建或发布。
-
 ### MMD-AR 统一灯光预设
 
 - ✅ [2026-10-11] 移除旧亮度预设，新增统一“灯光预设”折叠分类，全部操作集中显示；支持完整面板十组参数的命名保存、覆盖、删除、刷新恢复及JSON单项/全部导出和合并导入。
@@ -483,9 +540,6 @@
 
 ### 独立 MMD-AR：头部与眼球视角跟随
 
-- ✅ [2026-10-11] 修正普通动作完全占用头部/眼球时的注视恢复：动作结束释放占用后，头部和眼球从零角度重新按各自缓动时长计时。
-  - 被动作阻塞期间保留注视通道状态，释放后的第一帧重新开始插值，避免动作结束后注视状态看似已完成但画面不再缓动。
-
 - ✅ [2026-10-11] Human生理层接入通用PMX头部/眼球注视，默认启用并看向相机；轻触/点击临时看向点击位置，默认3秒后平滑返回，拖动/双指操作不触发。
   - 新增web-human-gaze.mjs，调整Human model/mixer/interface、panel/ui、storage/build；复用当前相机、舞台横竖屏坐标及唯一RAF，支持独立开关、强度、附加角、缓动、停留和正面方向，设置按模型保存并随动作库导出/导入。
   - 显式头眼动作按权重优先，眼球参考更新后的头部姿态；米娅左右眼grant比例1已读取确认，使用共有眼单次驱动。动态/不支持继承降级并报告，生命周期清理临时目标/事件。
@@ -501,15 +555,7 @@
   - 更新Human设计/spec/task与todo待设备性能验收，正式源码和Offline状态保持；仅提交本次代码/文档并推送origion/master，未发布外网，保留并行的Native AudioRecord等未提交改动。
 
 
-### MMD-AR 旋转暂停物理调试日志
-
-- [2026-10-11] 为独立 mmd-ar 测试页增加旋转暂停/恢复物理调试日志，记录暂停速度、恢复 reset、恢复后首个物理帧及动态刚体速度摘要；正式显示端不启用。
-
-
-- [2026-10-11] 修复旋转速度超过阈值暂停物理后，拖动结束恢复时布料出现单帧跳动的问题。
-  - 根因是恢复首帧调用 `MMDPhysics.reset()` 并清零动态刚体速度，导致布料从暂停期间的世界姿态瞬移到当前骨骼姿态。
-  - 恢复策略调整为先推进恢复帧骨骼，再用该骨骼状态重置刚体，并在同一帧执行一次物理，避免恢复时使用旧锚点。
-
+### 显示端 ASR 回显自动隐藏
 
 - ✅ [2026-10-11] 修复 ASR 识别回显长期停留的问题。
   - 新的非空识别结果默认显示最多 30 秒，新的识别结果会重新计时。
@@ -11984,6 +12030,7 @@
 
 - ✅ [2026-10-10] 按确认方案固定声纹AASC_PROJECT_ROOT目录、竖屏三个浮动入口避开底部导航、群聊状态显示群聊且移除虚构助手默认项。
   - 修改voiceprint-store.js、upload.css、display-chat.js/语音控件及既有测试，新增voiceprint-store-persistence与control-floating-layout-browser。5文件30/30通过、无跳过，截图已核对，diff检查通过；设计/伪代码/任务/使用/自测文档同步，代码与servicePackage=true已推送origion/master。用户取消声纹恢复，本轮不扫描/迁移旧库，不宣称已恢复旧记录。主题未选中样例与实时监听按钮已确认并实现；9文件43/43通过、无跳过，深浅主题/默认开启/权威等待与失败/实际按钮/Offline恢复通过，源码语法与diff检查通过，截图已核对。服务包待构建发布，控制端现有监听只控制能力，本轮未新增实时模式控制入口。
+
 ### MMD-AR 镜头拉远同步 far
 
 - ✅ [2026-10-11] 修复普通预览与 AR 镜头拉远后 far 不更新、连续定位投影覆盖裁剪范围的问题；拉近和复位恢复合理范围，保留AR偏心构图。
