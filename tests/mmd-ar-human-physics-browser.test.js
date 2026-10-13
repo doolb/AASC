@@ -38,7 +38,12 @@ test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模�
         await page.waitForFunction(() => !document.getElementById('mmdArIKPanel').hidden);
         assert.equal(await page.$eval('#mmdArIKToggle', element => element.getAttribute('aria-expanded')), 'true');
         assert.equal(await page.$eval('#mmdArHumanPanel', element => element.querySelectorAll('[data-body], [data-human-ik-status]').length), 0);
-        await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(false));
+        await page.evaluate(async () => {
+            window.DisplayMmd.setMotionPlaybackEnabled(false);
+            const api = window.DisplayMmd.getHumanInterface();
+            await api.physiology.set({ breathing: false, blinking: false });
+            await api.gaze.set({ head: false, eyes: false });
+        });
         await page.select('#mmdArIKPanel [data-body="mode"]', 'physics');
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().mode === 'physics', { timeout: 20000 });
         await page.waitForFunction(() => !document.querySelector('#mmdArIKPanel [data-ik-action="enable"]').disabled);
@@ -78,6 +83,27 @@ test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模�
         const dragged = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
         assert.ok(dragged.controls.some(item => item.positionState === 'On'), '实际指针没有激活物理位置驱动');
         assert.ok(dragged.controls.some(item => item.target.some((value, i) => Math.abs(value - item.achieved[i]) > 1e-5)));
+        // 按实际物理子步计时，软件WebGL低帧率也需真正运行10秒物理；只保留当前一个鼠标目标。
+        const stability = await page.evaluate(async () => {
+            const api = window.DisplayMmd.getHumanInterface(), samples = [];
+            let steps = 0;
+            while (steps < 900) {
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                const state = api.getInteractiveIKState(); steps += state.physics.substeps;
+                if (steps >= 810) samples.push(state.controls.map(item => item.achieved));
+            }
+            const final = samples.at(-1), state = api.getInteractiveIKState();
+            const head = state.controls.find(item => item.key === 'head').achieved;
+            const foot = state.controls.find(item => item.key === 'rightFoot').achieved;
+            const height = Math.max(0.1, Math.abs(head[1] - foot[1]));
+            let span = 0;
+            for (const sample of samples) sample.forEach((point, index) => {
+                span = Math.max(span, Math.hypot(...point.map((value, axis) => value - final[index][axis])) / height);
+            });
+            return { span, steps, samples: samples.length, activeTargets: state.activeTargets };
+        });
+        assert.equal(stability.activeTargets, 1, '持续稳定测试必须为单点');
+        assert.ok(stability.samples > 3 && stability.span < 0.025, '真实页面未牵引部位持续漂摆：' + JSON.stringify(stability));
         const before = dragged.controls.map(item => item.achieved);
         await page.evaluate(() => {
             const api = window.DisplayMmd.getHumanInterface(), state = api.getInteractiveIKState();

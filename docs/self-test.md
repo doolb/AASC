@@ -1502,3 +1502,11 @@ servicePackage保持true：本次MMD全部收入v63，但工作区其他未提�
 `TMPDIR=/mnt/AASC/.git/offline-aimodel-sync-20261012 npm run test:offline-sync`：33/33通过，无失败/跳过。覆盖默认关闭且零aimodel请求、`-aimodel`/`--aimodel`与watch组合、重复/带值拒绝、父目录/直接源映射、模型下载和二次复用、根manifest原子写入/不变复用、镜像作为后续下载源、坏哈希保留旧manifest及根manifest符号链接拒绝。watch连续两轮串行成功，后续轮次复用已镜像模型。未运行全仓测试，未同步生产模型目录。
 
 `TMPDIR=/mnt/AASC/.git/offline-aimodel-sync-20261012 npm run test:ai-models`：30/30通过，无失败/跳过；覆盖共用安全路径变更对既有独立模型下载、上传与回滚的回归。
+
+## MMD-AR单点牵引稳定性回归（2026-10-14）
+
+`tests/mmd-ar-human-physics.test.js`16/16：真实米娅父空间metadata高度、默认深肘屈曲、手/脚/头/骨盆各10秒无重力单点全骨骼位置/转角跨度、反复目标30/60/120fps一致性；兼容原On/Hold/Off/Comply、自由/旋转、PMX限位、骨长、取消加载及原生资源释放。全身末秒位置最大13.64mm、转角最大0.03590rad，可达末端误差小于20mm；不可达目标保留原值。
+
+身体/PBD/标记23项、镜头手势5项、动作7项共35项通过；真实米娅浏览器实际鼠标单点拖动，按900物理子步采样最后90步十一点跨度小于身高2.5%，多目标/重置/模式及面板横竖屏1/1通过。`npm run build:web:mmd-ar-test`通过。桌面无渲染物理步进中位约2.1–2.3ms、P95约3.0–6.7ms，原生分配恒定；不代表手机或完整渲染性能。未出APK/部署，其他PMX/实时动画服饰/AR/手机仍待人工验收。
+
+额外`tests/mmd-ar-camera-motion.test.js`相机VMD回归：默认Chromium参数出现页面断开/模型就绪超时；/tmp包装显式使用共享内存后原测试2/2通过，未改相机源码或测试。

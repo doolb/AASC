@@ -25,14 +25,14 @@ function initIKPanel() {
         <label>牵引强度 <input data-body="strength" type="range" min="0.05" max="1" step="0.05" value="0.85"></label>
         <label>阻尼 <input data-body="damping" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
         <label><input data-body="gravity" type="checkbox" checked>重力</label>
-        <label><input data-body="freePelvis" type="checkbox">骨盆自由（允许身体受力移动）</label>
+        <label><input data-body="freePelvis" type="checkbox">骨盆自由（允许身体受力移动与转动）</label>
         <label>控制点 <select data-body="target"></select></label>
         <label>位置状态 <select data-body="positionState"><option>Off</option><option>On</option><option>Hold</option><option>Comply</option></select></label>
         <label>旋转状态 <select data-body="rotationState"><option>Off</option><option>On</option><option>Hold</option><option>Comply</option></select></label>
         <div>目标世界旋转（°） <label>X <input data-body="rotationX" type="number" min="-180" max="180" step="5" value="0" style="width:5em"></label>
         <label>Y <input data-body="rotationY" type="number" min="-180" max="180" step="5" value="0" style="width:5em"></label>
         <label>Z <input data-body="rotationZ" type="number" min="-180" max="180" step="5" value="0" style="width:5em"></label></div>
-        <p>On牵引；Hold保持目标；Off放开；Comply受力让步。人体模拟由全身IK开关控制。人体碰撞使用简化形状，衣物暂不向身体反向施力。</p>
+        <p>On牵引；Hold保持目标；Off放开；Comply受力让步。默认保持骨盆位置与朝向；拖骨盆可移动，旋转目标可转动。人体模拟由全身IK开关控制。人体碰撞使用简化形状，衣物暂不向身体反向施力。</p>
         <p data-body="status" role="status"></p></div>`;
     panel.querySelector('[data-human-ik-status]').insertAdjacentElement('afterend', bodyPanel);
     const bodyField = key => bodyPanel.querySelector('[data-body="' + key + '"]');

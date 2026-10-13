@@ -143,3 +143,7 @@ web-mediacenter/
 
 - [pinyin-pro API](https://pinyin-pro.cn/use/pinyin.html)：中文转拼音，使用type=array/toneType=none保留按字音节，当前口型节奏由本地估算。
 - [pinyin-pro源码](https://github.com/zh-lx/pinyin-pro)：本轮固定npm 3.29.5，归档SHA-512及逐文件大小/SHA-256记录在独立产物vendor/pinyin-pro/3.29.5/SOURCE.json，附MIT许可证。
+
+## MMD-AR人体位置弹簧参考（2026-10-14）
+
+[Bullet btGeneric6DofSpringConstraint原始实现](https://raw.githubusercontent.com/bulletphysics/bullet3/master/src/BulletDynamics/ConstraintSolver/btGeneric6DofSpringConstraint.cpp)：internalUpdateSprings将误差×刚度，再经fps×damping/solverIterations转换目标速度。因此本项目按目标响应率归一化旧Ammo弹簧damping，并由实际WASM回归验证；它与普通PD阻尼比的语义不同。只参考原生接口语义，没有复制VaM反编译源码。

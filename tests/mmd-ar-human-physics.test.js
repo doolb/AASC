@@ -11,6 +11,108 @@ function realAmmo() {
     return ammoPromise;
 }
 
+test('真实PMX父空间静止坐标正确换算身高，不受待机姿态和模型变换影响', async () => {
+    const { makeModel } = require('./helpers/mmd-human-real-pmx');
+    const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
+    for (const idle of [false, true]) {
+        const { model } = await makeModel(idle);
+        model.mesh.scale.setScalar(3); model.mesh.position.set(2, -5, 7); model.mesh.rotation.y = 0.6;
+        const rig = createHumanPhysicsRig(model);
+        assert.ok(Math.abs(rig.metersPerUnit - 0.10255717603951485) < 1e-9);
+    }
+});
+
+test('默认肘铰链超过90度保持真实屈曲，不发生Y轴Euler折返', async () => {
+    const f = await fixture();
+    const { createHumanPhysicsRig, nodeOffset } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
+    const rig = createHumanPhysicsRig(f.model), animated = rig.animatedPoses();
+    try {
+        const node = rig.nodes.find(item => item.semantic === 'leftElbow');
+        const bend = node.limits.high[node.hingeAxis] > 2 ? 2 : -2;
+        const rotation = animated.get(node.parentNode).quaternion.clone().multiply(node.jointFrameRotation)
+            .multiply(new f.T.Quaternion().setFromAxisAngle(new f.T.Vector3().setComponent(node.hingeAxis, 1), bend));
+        const poses = new Map([...animated].map(([key, pose]) => [key, { position: pose.position.clone()
+            .add(nodeOffset(key, pose.quaternion)), quaternion: pose.quaternion.clone() }]));
+        poses.get(node).quaternion.copy(rotation);
+        rig.write(poses, animated);
+        assert.ok(rig.animatedPoses().get(node).quaternion.angleTo(rotation) < 1e-7, '深屈肘被折返或误锁');
+    } finally { rig.restore(); f.controller.dispose(); }
+});
+
+test('真实米娅无重力手脚头骨盆单点保持10秒，全身位置与转角稳定且骨长不变', async t => {
+    const { makeModel } = require('./helpers/mmd-human-real-pmx');
+    const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
+    const { createHumanPhysicsDrive } = await import('../3rd/mmd-ar-test/web-human-physics-drive.mjs');
+    for (const semantic of ['leftWrist', 'leftAnkle', 'head', 'hips']) {
+        const { T, model } = await makeModel(), rig = createHumanPhysicsRig(model);
+        const original = JSON.stringify(model.mesh.geometry.userData.MMD);
+        const locals = model.bones.map(item => item.bone.position.clone());
+        const drive = createHumanPhysicsDrive(await realAmmo(), rig), allocations = drive.getState().allocations;
+        const node = rig.nodes.find(item => item.semantic === semantic);
+        const goal = model.bindings['bones:' + semantic].bone.getWorldPosition(new T.Vector3()).add(new T.Vector3(0, 3, 3));
+        const target = { node, target: goal.clone(), positionState: 'On', rotationState: 'Off' };
+        const tail = [], times = []; let peakOmega = 0;
+        try {
+            for (let frame = 0; frame < 600; frame++) {
+                rig.restore();
+                const poses = drive.step(1 / 60, rig.animatedPoses(), [target], { gravity: false, freePelvis: false });
+                times.push(drive.getState().frameMs);
+                for (const pose of poses.values()) peakOmega = Math.max(peakOmega, pose.omega.length());
+                if (frame >= 540) tail.push(rig.animatedPoses());
+            }
+            let positionSpan = 0, angleSpan = 0;
+            for (const sample of tail) for (const [key, pose] of sample) {
+                const final = tail.at(-1).get(key);
+                positionSpan = Math.max(positionSpan, pose.position.distanceTo(final.position));
+                angleSpan = Math.max(angleSpan, pose.quaternion.angleTo(final.quaternion));
+            }
+            // 米制1.6米人体：末秒全部主要骨骼跨度最多2厘米/约3.4度；不能只验目标点或finite。
+            assert.ok(positionSpan < 0.02, `${semantic}全身摆幅${positionSpan}m`);
+            assert.ok(angleSpan < 0.06, `${semantic}全身角跨度${angleSpan}rad`);
+            assert.ok(peakOmega <= 8.00001, `${semantic}角速度失控${peakOmega}`);
+            assert.ok(tail.at(-1).get(rig.pelvis).quaternion.angleTo(rig.initial.get(rig.pelvis).quaternion) < 1e-7);
+            assert.deepEqual(target.target.toArray(), goal.toArray(), '不可达包络不得改写用户目标');
+            const error = model.bindings['bones:' + semantic].bone.getWorldPosition(new T.Vector3()).distanceTo(goal) * rig.metersPerUnit;
+            if (semantic !== 'head') assert.ok(error < 0.02, `${semantic}可达目标误差${error}m`);
+            model.bones.forEach((item, index) => {
+                if (item.bone !== model.bindings['bones:center'].bone) assert.ok(item.bone.position.distanceTo(locals[index]) < 1e-8);
+            });
+            assert.equal(drive.getState().allocations, allocations);
+            assert.equal(JSON.stringify(model.mesh.geometry.userData.MMD), original);
+            times.sort((a, b) => a - b);
+            t.diagnostic(`${semantic}: span=${positionSpan.toFixed(5)}m/${angleSpan.toFixed(5)}rad, error=${error.toFixed(5)}m, CPU median/p95=${times[300].toFixed(2)}/${times[570].toFixed(2)}ms`);
+        } finally { rig.restore(); drive.dispose(); }
+        assert.equal(drive.getState().allocations, 0);
+    }
+});
+
+test('真实PMX反复改变单点目标，在30/60/120fps等物理时长下结果一致', async () => {
+    const { makeModel } = require('./helpers/mmd-human-real-pmx');
+    const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
+    const { createHumanPhysicsDrive } = await import('../3rd/mmd-ar-test/web-human-physics-drive.mjs');
+    const results = [];
+    for (const fps of [30, 60, 120]) {
+        const { T, model } = await makeModel(), rig = createHumanPhysicsRig(model);
+        const drive = createHumanPhysicsDrive(await realAmmo(), rig), node = rig.nodes.find(item => item.semantic === 'leftWrist');
+        const initial = model.bindings['bones:leftWrist'].bone.getWorldPosition(new T.Vector3());
+        const target = { node, target: initial.clone(), positionState: 'On', rotationState: 'Off' };
+        try {
+            for (let frame = 0; frame < fps * 4; frame++) {
+                if (frame % fps === 0) target.target.copy(initial).add(new T.Vector3(0, 2, (frame / fps % 2 ? -1 : 1) * 2));
+                rig.restore(); drive.step(1 / fps, rig.animatedPoses(), [target], { gravity: false });
+            }
+            results.push(rig.animatedPoses());
+        } finally { rig.restore(); drive.dispose(); }
+    }
+    for (let i = 1; i < results.length; i++) {
+        const previous = [...results[i - 1].values()], current = [...results[i].values()];
+        current.forEach((pose, index) => {
+            assert.ok(pose.position.distanceTo(previous[index].position) < 0.003, '相同子步时长产生全身位置差');
+            assert.ok(pose.quaternion.angleTo(previous[index].quaternion) < 0.02, '相同子步时长产生全身转角差');
+        });
+    }
+});
+
 async function fixture(loadAmmo = realAmmo) {
     const T = await import('three');
     const { createHumanIK } = await import('../3rd/mmd-ar-test/web-human-ik.mjs');

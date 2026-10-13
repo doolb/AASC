@@ -35,9 +35,22 @@ export function createHumanPhysicsRig(model) {
         }));
     }
     const initial = sample();
-    const rest = semantic => model.bindings['bones:' + semantic]?.restPosition;
-    const feet = ['leftAnkle', 'rightAnkle'].map(rest).filter(Boolean);
-    const restHeight = rest('head') && feet.length ? rest('head').y - Math.min(...feet.map(point => point.y)) : 0;
+    // MMD元数据pos是父空间静止位移；合成整条父链后才可比较头踝高度。
+    const metadata = mesh.geometry.userData.MMD.bones;
+    function restPosition(semantic) {
+        const binding = model.bindings['bones:' + semantic];
+        if (!binding) return null;
+        if (!metadata) return initial.get(nodes.find(node => node.semantic === semantic))?.position;
+        const point = new Vector3(), visited = new Set();
+        for (let index = binding.index; index >= 0 && metadata[index]; index = metadata[index].parent) {
+            if (visited.has(index)) throw new Error('人体静止骨架父链存在循环');
+            visited.add(index); point.add(new Vector3().fromArray(metadata[index].pos));
+        }
+        return point;
+    }
+    const feet = ['leftAnkle', 'rightAnkle'].map(restPosition).filter(Boolean);
+    const headRest = restPosition('head');
+    const restHeight = headRest && feet.length ? headRest.y - Math.min(...feet.map(point => point.y)) : 0;
     const heights = [...initial.values()].map(pose => pose.position.y);
     const height = restHeight > 0.01 ? restHeight : Math.max(...heights) - Math.min(...heights);
     if (!Number.isFinite(height) || height < 0.01) throw new Error('人体骨架尺寸退化，无法建立物理代理');
@@ -76,7 +89,7 @@ export function createHumanPhysicsRig(model) {
         let limit = limits.get(node.index);
         if (!limit) {
             const range = ['Arm', 'Leg'].includes(kind) ? 2.2 : ['Wrist', 'Ankle'].includes(kind) ? 1 : 0.8;
-            limit = { low: [-range, -range, -range], high: [range, range, range] };
+            limit = { low: [-range, -Math.min(range, 1.2), -range], high: [range, Math.min(range, 1.2), range] };
             if (kind === 'Knee') limit = { low: [-2.8, 0, 0], high: [0.04, 0, 0] };
             if (kind === 'Elbow') {
                 const bend = node.offset.clone().cross(new Vector3(0, 0, 1));
@@ -87,8 +100,11 @@ export function createHumanPhysicsRig(model) {
             }
         }
         node.limits = limit;
-        node.jointFrameRotation = node.parentNode ? initial.get(node.parentNode).quaternion.clone().invert()
-            .multiply(node.quaternion).multiply(node.bone.quaternion.clone().invert()) : new Quaternion();
+        const freeAxes = [0, 1, 2].filter(axis => limit.high[axis] - limit.low[axis] > 1e-6);
+        node.hingeAxis = freeAxes.length === 1 ? freeAxes[0] : null;
+        node.jointFrameRotation = node.parentNode ? initial.get(node.parentNode).quaternion.clone().invert().multiply(node.quaternion) : new Quaternion();
+        // 缺少模型范围时以有效绑定姿态为零角，避免默认轴把原待机姿态强制投影成直臂。
+        if (node.hasModelLimits) node.jointFrameRotation.multiply(node.bone.quaternion.clone().invert());
     }
     const ordered = [...nodes].sort((a, b) => depth(a.bone) - depth(b.bone));
     function restore() {
@@ -116,14 +132,23 @@ export function createHumanPhysicsRig(model) {
             const pose = poses.get(node);
             node.bone.parent?.getWorldQuaternion(parentRotation) || parentRotation.identity();
             const rotation = parentRotation.clone().invert().multiply(worldRotation).multiply(pose.quaternion).normalize();
-            // 膝/肘与PMX link限位最终在骨骼局部轴验证；投影同时反馈代理，避免两份姿态脱节。
+            // 默认铰链按关节twist验证，PMX显式范围按骨骼局部XYZ验证；越界投影反馈代理。
             // 人体默认限位属于物理父关节；PMX上下半身常为center同级，不能把躯干世界转角误当成关节弯曲。
             const basis = !node.hasModelLimits && node.parentNode
                 ? poses.get(node.parentNode).quaternion.clone().multiply(node.jointFrameRotation) : null;
             const constraintRotation = basis ? basis.clone().invert().multiply(pose.quaternion) : rotation;
-            const euler = new Euler().setFromQuaternion(constraintRotation, 'XYZ');
-            for (let axis = 0; axis < 3; axis++) euler[['x', 'y', 'z'][axis]] = Math.max(node.limits.low[axis], Math.min(node.limits.high[axis], euler[['x', 'y', 'z'][axis]]));
-            const limited = new Quaternion().setFromEuler(euler);
+            let limited;
+            if (!node.hasModelLimits && node.hingeAxis !== null) {
+                // 单轴默认范围用twist角，不把超过90度的Y轴屈曲误折返成带180度X/Z的Euler角。
+                let angle = 2 * Math.atan2(constraintRotation[['x', 'y', 'z'][node.hingeAxis]], constraintRotation.w);
+                angle = Math.atan2(Math.sin(angle), Math.cos(angle));
+                angle = Math.max(node.limits.low[node.hingeAxis], Math.min(node.limits.high[node.hingeAxis], angle));
+                limited = new Quaternion().setFromAxisAngle(new Vector3().setComponent(node.hingeAxis, 1), angle);
+            } else {
+                const euler = new Euler().setFromQuaternion(constraintRotation, 'XYZ');
+                for (let axis = 0; axis < 3; axis++) euler[['x', 'y', 'z'][axis]] = Math.max(node.limits.low[axis], Math.min(node.limits.high[axis], euler[['x', 'y', 'z'][axis]]));
+                limited = new Quaternion().setFromEuler(euler);
+            }
             const unrestrictedRoot = node === pelvis && !node.hasModelLimits;
             const mapped = basis ? parentRotation.clone().invert().multiply(worldRotation).multiply(basis).multiply(limited) : limited;
             node.bone.quaternion.copy(unrestrictedRoot ? rotation : mapped);
