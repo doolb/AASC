@@ -12059,3 +12059,8 @@ TTS主题对比度构建进度：已有40项主题/旋转/DPI回归通过，Chro
 - ✅ [2026-10-13] code/code-v72.zip已发布LAN/WAN：17721571字节，SHA256 ea1e63968318b87a8c01946653e86115a3095b98100cc4ffea5b9a89cc3ed3ce；签名清单SHA256 136f8ffd286b686dedd91988de25575b7bc121ab0148319cee83526bda10f8f5。
   - 与v71仅display.css/self-test.js变化，CRC/源码/签名及全组件HTTP大小SHA256通过；精确清理旧code71，保留dependencies8/min40/full38/nodeMinSeeds69/dataRepair2，无清理错误。首次发布进程终止后幂等重试成功。
   - 40项主题/旋转/DPI回归通过；Chromium四主题颜色/字号/三行高度与明暗分区截图通过；SM-N9500/API28真实播报、dark/mint即时切换、闲置隐藏和新播报恢复历史截图通过，原主题已恢复。servicePackage=false，未重出APK/依赖，todo移除完成任务，design/spec/task/usage/self-test同步。
+
+### TTS白字主题色细描边与0.3背景
+
+- ✅ [2026-10-13] 按用户最终明确要求参考时间文本：白色文字、0.5px主题色细描边、时间同款阴影，黑色背景上下渐隐并将最高alpha改为0.3，保留8px模糊。
+  - 修改display.css/self-test.js；字号、字重、三行和历史规则保持，删除浅色主题深字/白底覆盖。先更新display-chat-mmd spec/design与新task，同步usage/todo/self-test；脚本语法/定向空白检查通过，servicePackage=true，服务73构建发布/设备观察进行中。

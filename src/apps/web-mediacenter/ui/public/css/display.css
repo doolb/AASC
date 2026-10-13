@@ -580,40 +580,29 @@ body {
 }
 
 /*
- * TTS复用根元素的主题深浅状态：默认白字配黑色边缘，浅色主题反向处理。
- * 纵向渐变让上下边界自然融入画面，最浓处仍只有10%不透明度；
+ * TTS参考时间文本的白色填色和阴影，主题强调色只用于细描边与下沿投影。
+ * 描边先绘制，白色字面后绘制，避免细字被描边挤成空心字。
+ * 纵向渐变让上下边界自然融入画面，最浓处保持30%不透明度；
  * backdrop-filter仅模糊字幕背后的画面，不对文字使用filter或整体opacity。
  */
 #voiceTextDisplay[data-voice-text-mode="tts"] {
-    --tts-subtitle-background-rgb: 0, 0, 0;
-    --tts-subtitle-text-color: #ffffff;
-    --tts-subtitle-outline-color: rgba(0, 0, 0, 0.95);
-    color: var(--tts-subtitle-text-color);
+    color: rgba(255, 255, 255, 0.9);
+    -webkit-text-stroke: 0.5px var(--accent-color, #00d2ff);
+    paint-order: stroke fill;
     background: linear-gradient(
         to bottom,
-        rgba(var(--tts-subtitle-background-rgb), 0) 0%,
-        rgba(var(--tts-subtitle-background-rgb), 0.1) 18%,
-        rgba(var(--tts-subtitle-background-rgb), 0.1) 82%,
-        rgba(var(--tts-subtitle-background-rgb), 0) 100%
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.3) 18%,
+        rgba(0, 0, 0, 0.3) 82%,
+        rgba(0, 0, 0, 0) 100%
     );
-    /* 四向细阴影形成反色边缘；不改字重和字号，保持现有测量分行一致。 */
-    text-shadow:
-        -1px 0 0 var(--tts-subtitle-outline-color),
-        1px 0 0 var(--tts-subtitle-outline-color),
-        0 -1px 0 var(--tts-subtitle-outline-color),
-        0 1px 0 var(--tts-subtitle-outline-color),
-        0 2px 4px var(--tts-subtitle-outline-color);
+    /* 与时间文本共用阴影写法；旧版浏览器不支持color-mix时沿用前一条声明。 */
+    text-shadow: 0 2px 0 var(--accent-color, #00d2ff), 2px 2px 8px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 2px 0 color-mix(in srgb, var(--accent-color, #00d2ff) 65%, transparent), 2px 2px 8px rgba(0, 0, 0, 0.8);
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     overflow: hidden;
     line-height: 1.4;
-}
-
-/* UiTheme负责初始化与远端主题同步；CSS随状态立即生效，不重建字幕历史。 */
-:root[data-theme-mode="light"] #voiceTextDisplay[data-voice-text-mode="tts"] {
-    --tts-subtitle-background-rgb: 255, 255, 255;
-    --tts-subtitle-text-color: #111827;
-    --tts-subtitle-outline-color: rgba(255, 255, 255, 0.95);
 }
 
 /* 滚动发生在内层，避免改变外层的旋转和居中锚点；空白也占满三个视觉行。 */
