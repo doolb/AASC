@@ -12064,3 +12064,5 @@ TTS主题对比度构建进度：已有40项主题/旋转/DPI回归通过，Chro
 
 - ✅ [2026-10-13] 按用户最终明确要求参考时间文本：白色文字、0.5px主题色细描边、时间同款阴影，黑色背景上下渐隐并将最高alpha改为0.3，保留8px模糊。
   - 修改display.css/self-test.js；字号、字重、三行和历史规则保持，删除浅色主题深字/白底覆盖。先更新display-chat-mmd spec/design与新task，同步usage/todo/self-test；脚本语法/定向空白检查通过，servicePackage=true，服务73构建发布/设备观察进行中。
+
+TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c79d9ef28d903e62257fe8366108655867545af2a6fd7b6cc93bff085fb；CRC/源码/v72仅两文件差异通过。40项主题旋转DPI回归通过，Chromium四主题白色填色/0.5px accent描边、时间阴影一致、0.3背景/blur8px及三行字号通过。servicePackage=false；LAN/WAN完整校验和ADB观察进行中。
