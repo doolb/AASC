@@ -1,5 +1,11 @@
 ### Chat2API 豆包纯Node会话复用
 
+### Git 同步
+
+- ✅ [2026-10-13] 本地 master 同步远端 13 个提交至 `eec8bf17`，包含已上传的豆包纯 Node 会话复用及其他任务的 MMD/Android 更新。
+  - 逐层合并暂存与未暂存文档差异，更新过时 FSR/IK/豆包说明并去除合并重复；原始 index 和重叠文档副本保留于 `.git/sync-20261013/`。本机配置、任务 results 和未跟踪文件保持，未提交其他任务的工作区改动。
+  - 本轮只校验 Git 内容与暂存边界，不新增聊天/合成、不重启服务器、不运行构建或发布；Offline 状态沿用远端。
+
 - ✅ [2026-10-13] 豆包普通Node模式接通Qwen同类Responses原生续接，仅发送本轮新增输入。
   - 新增`chat2api-doubao-session.js`及两个自测模块；修改文字适配器、node-protocol、Responses服务、会话存储及Provider能力。ready/uncertain和身份摘要绑定，同账号/模式复用，旧观测字段不升级。
   - 两轮真实纯Node协议测试准确回忆随机标记、同ACK会话、无历史重放；正式实现新增20项模拟测试，Chat2API201/204（同3项旧Windows chmod）、普通LLM/Core/Responses24/24、旧TTS19/19。
