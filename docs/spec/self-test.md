@@ -10,7 +10,10 @@
 full发布 := APK哈希/实际包名版本/签名校验 → 版本文件上传 → 独立索引原子替换；服务清单保持
 远端顺序 := scp APK先于full索引；命令经/bin/sh -c；清理只用受限规则
 已运行 := npm run test:offline-sync 36/36；offline-update-publish.test.js 17/17；差异检查通过
-待验证 := full v38签名构建、MNN复用、内置最新服务与生产依赖及LAN/WAN真实发布
+已验证 := full v38 ZIP/签名/实际版本、MNN复用、内置代码69/依赖8及最新备份源码；LAN/WAN独立索引一致，APK大小及文件SHA-256通过，旧23返回404
+实际镜像 := 6项哈希复用，apkFull为第6项；服务清单SHA-256未改
+构建恢复 := /tmp配额和Java堆错误 → Java临时目录/var/tmp + 4GiB堆 + 2 workers + 复用已准备输入 → 构建成功
+边界 := 整包传输由SCP文件哈希与HTTP长度校验；未重复从WAN下载1GiB或安装真机
 ```
 
 ## 全量配置 ZIP 与自动重启自测（2026-10-13）

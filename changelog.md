@@ -1,9 +1,20 @@
+### TTS 三行透明滚动字幕
+
+- ✅ [2026-10-13] 完成现有实现检查并记录待确认修改方案，功能尚未实现。
+  - 当前逐句替换并在播放结束时隐藏；拟改固定三行、透明背景、追加滚动及30秒闲置隐藏。更新display-chat-mmd设计/伪代码、self-test验收计划、task和todo；未修改代码、未运行测试，发布状态保持。
+
 ### 完整 Offline APK 同步与重建
 
 - ✅ [2026-10-13] 将完整 Offline APK 加入默认镜像同步，新增独立 RSA 签名 `full-apk-manifest.json`，保留服务清单格式。
   - 新增 `offline-full-apk-manifest.js`，更新 `sync-offline-update.js` 与 `publish-offline-update.js`：full纳入进度/复用/大小与SHA-256校验，旧源404兼容，校验完成后精确清理旧full；发布验证构建哈希、实际包名/版本和签名，先APK后独立索引。原服务清单不包含full。
-  - `release/apkbuild/allserver/app.json` 更新至v38/0.2.36-offline，基线代码69/依赖8；更新design/spec/task/usage/self-test/todo。三项发布状态保持，脚本修改不影响服务热更/依赖/min资源；full构建发布进行中，复用已编译MNN。
+  - `release/apkbuild/allserver/app.json` 更新至v38/0.2.36-offline，基线代码69/依赖8；更新design/spec/task/usage/self-test/todo。三项发布状态保持，脚本修改不影响服务热更/依赖/min资源；full构建发布已完成，复用已编译MNN。
   - 验证：同步与模型36/36、发布器17/17通过，包含full完整往返/重复复用、非法签名/路径/坏APK、链接拒绝、实际包名/哈希拒绝和远端APK先于索引上传；`git diff --check`通过。
+
+- ✅ [2026-10-13] 构建并发布完整 Offline APK v38（0.2.36-offline）到LAN/WAN，并完成真实同步复用验收。
+  - `apk/aasc-display-offline-v38.apk`：979,394,539 bytes（934.0 MiB），SHA-256 `f49c9e00bdb99ef3405bf58f465346d2adbebe478b9bde955b992e18b0e00b7e`，来源 `d8bc9694949811d35e1a8fdb130eb05e4f4981d4`。allserver profile、ZIP CRC、APK版本与v2签名通过，证书沿用 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`；内置代码69、依赖8/yazl3.3.1与最新备份源码，MNN库与min37相同。
+  - 首轮Java临时文件配额与堆内存不足；将Java临时目录设到`/var/tmp`，4 GiB堆、2 workers，复用准备输入及37项编译结果后成功，未重编译MNN。
+  - 独立 `full-apk-manifest.json` 两端1282 bytes、SHA-256 `01ef2efb5784968f4ce50584e29df2cc3f461a3b021ad117e350ebd6514bc806`；签名、文件SHA-256和HTTP长度校验通过，旧full23两端HTTP404，清理无错误；服务清单SHA-256保持 `37f5f707cb75ca85f415ac72cfa5b9b936bd2ca9d2fa86c7186e87046e8771f6`。
+  - 真实 `npm run sync:offline-update` 指定Offline源与LAN目录后显示6项完整哈希复用，包含第6项apkFull。三项发布状态仍为false；未重复HTTP下载整包、未安装设备，APK/模型/日志未提交Git；移除已完成todo任务。
 
 ### 全量配置与聊天数据 ZIP 备份
 
