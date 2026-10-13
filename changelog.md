@@ -12046,3 +12046,8 @@
   - code/code-v71.zip：17721071字节，SHA256 b6fd67e22d6499bf323f3369c6a9690826466e8c5d7821d13818412802c6fb7b；apk/aasc-display-offline-min-v40.apk：81124288字节，SHA256 21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5。复用dependencies8/nodeMinSeeds69/dataRepair2，完整full38保留。
   - LAN/WAN签名清单SHA256 69e3d4852ef056d3431ca6afb36c29f7c92dd6f269e7cf47c9d153ddd0a143ae；版本文件/证书/profile/CRC及全组件HTTP大小SHA256通过，旧code70/min37/中间min39按精确规则清理，无清理错误。初次发布进程终止后幂等重试成功。
   - Node/浏览器17/17、最终Android209/209通过；状态全部false，任务完成并从todo移除。保留未执行的真实ZIP导入与API29+设备验收；TTS主题渐变仅记录待实施。
+
+### TTS字幕主题对比度修复
+
+- ✅ [2026-10-13] 恢复已确认的TTS方案，字号保持；深色白字/黑色边缘、浅色深字/白色边缘，背景上下渐隐且最高alpha0.1，保留8px背景模糊与三行滚动。
+  - 修改display.css与self-test.js；复用UiTheme根data-theme-mode，更新display-chat-mmd design/spec、原task、usage和自测文档。源脚本语法/定向差异空白检查通过，servicePackage=true，服务包与设备观察进行中。
