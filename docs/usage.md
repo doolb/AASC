@@ -12,6 +12,16 @@ MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件�
 
 Virt-A-Mate文件类型说明见[VaM 1.x资源格式](usage/vam-resource-formats.md)，列出资源包、场景、预设、Morph、衣服/头发、Unity资源和插件；这是格式参考，mmd-ar导入尚未实现。
 
+## 豆包普通LLM纯Node（2026-10-13已真实验证）
+
+`doubaochat`账号在凭证包中提供同账号`credentials.cookie`和`credentials.nodeProfile`后，普通LLM直接通过Node调用豆包官网，不需要运行Chrome、9222或页面fetch/签名。正式Provider工厂和CoreAdapter在断开CDP后，流式/非流式均实际收到`OK`并正常结束。本轮只在内存初始化真实资料，未保存到账号库，未重启主服务；部署及一次性资料导入说明见[豆包纯Node普通LLM](usage/chat2api-doubao-node.md)。
+
+普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。`doubao-think`/`doubao-expert`保留模式映射但真实待验，工具/多模态/原生续聊不承诺；Responses重放本地文字历史。profile导入只校验格式，手动添加仍因缺安全只读身份校验而拒绝；登录过期由用户更新，不自动处理验证码或重发。
+
+Cookie-only旧账号继续“豆包普通LLM · 网页模式”：默认关闭，通过现有权威配置显式选择账号、官方target/context并授权会话核对，保存不会连接Chrome。该项目bridge真实官网仍待单独验收；原标签UI成功不能替代它。早期缺完整profile的Node403/718013001失败已保留在设计历史，不能继续认定独立Node不可用。Android/Linux及长期令牌维持尚未真实验证，语音格式仍走Frontier/WAV。
+
+`doubao-chat`已接入 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭，真实运行未重新验收。先在现有Chat2API模型映射中为doubao-chat指定preferredProviderId=doubaochat及preferredAccountId，所选账号和Provider须启用且可用；严格绑定，不自动换号。业务面板无Cookie/账号输入。固定音色zh_female_wenroutaozi_uranus_bigtts、speech speed=1/volume=100，业务语速0；input最多1000个UTF-16字符且UTF-8≤4000字节，只接受wav。Frontier收集完整Ogg、校验并解码为单声道PCM WAV，缓存及下载仍为.wav/audio/wav；错误不重试、不切换其它来源。公开协议已核对，本地模拟及WASM样本通过；新真实聊天/合成需独立明确授权，Android Node/WASM、音色听感与设备播放尚未验收。文字网页fetch已实现为默认关闭的实验功能，真实运行未验收。
+
 ## TTS 多 Provider 配置（已实现，账号/设备待验收）
 
 在「声纹 → 语音服务与音色」分别配置 AI / Agent、文本阅读和系统播报；聊天模板可继承 AI 默认或单独指定服务。支持系统原生、国内千问网页、Qwen API、豆包 API，凭证留空保留且只回传配置状态。三个服务默认开启，国内千问使用Chat2API国内账号、直接调用接口，无需Chrome；Qwen API默认Qwen-Audio 3.1/乔小娇，豆包2.0自动读取对应上一句用户对话。操作与当前限制见 [语音服务与音色](usage/tts-providers.md)。

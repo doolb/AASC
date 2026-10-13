@@ -1,3 +1,11 @@
+### Chat2API 豆包纯Node普通LLM
+
+- ✅ [2026-10-13] 独立Node收发接入并真实验证，流式/非流式实际回复OK且正常结束。
+  - 新增`chat2api-doubao-node-protocol.js`及8项自测；修改文字适配器、core、data-store、load-balancer和secret。一次性同账号设备资料初始化后，固定官网query/body，无页面fetch、CDP或a_bogus依赖；历史重放、容量和取消沿旧契约。
+  - `credentials.nodeProfile`显式选Node，默认Node候选池，明确映射不可退选；完整profile公共摘要脱敏。独立审查的泄漏和混合池问题先RED再GREEN；不自动回退或重发。
+  - Chat2API181/184（同3项既有Windows chmod失败），Ogg/WASM21/21、旧TTS19/19。think/expert、长期令牌、多账号、Android/Linux及网页bridge另验；已同步专属design/spec/task、使用和自测说明。
+  - `servicePackage=true`保持，dependenciesPackage/minApk原值保持；未保存真实凭据、未重启主服务、未出包，保留其它MMD/多模态工作。
+
 ### Offline Android TTS 位置
 
 - ✅ [2026-10-13] Offline APK 的 TTS 固定边距按显示 WebView 实际 DPI 初始缩放归一，匹配当前 Android 的物理位置。

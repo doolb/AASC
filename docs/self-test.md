@@ -1,3 +1,19 @@
+## 豆包纯Node普通LLM（2026-10-13）
+
+新增自测模块`chat2api-doubao-node-protocol.test.js`：8项覆盖profile字段/同账号fp、0/1/3模式、无浏览器传输、流式结束、最终URL、取消/403无重试、凭证包导入脱敏、真实Store混合账号池和msToken优先级。只使用虚构身份及临时存储，不访问用户Chrome。执行`npm run check:chat2api`：181/184，同3项旧Windows chmod失败；Ogg/WASM21/21、旧TTS19/19。
+
+独立获授权的真实诊断：读取一次所选账号Cookie/device/web/fp/UA到内存后断CDP，正式Provider工厂和CoreAdapter由Node自行构造新会话，流式/非流式均实际回复OK并正常结束，无a_bogus、页面fetch或浏览器签名。本轮未保存真实凭据或原始响应；仅普通模式Windows Node正例，不扩大为think/expert、长期运行或设备能力。UI只读自测不能自动发送新的聊天或语音。
+
+# 自测功能文档
+
+2026-10-13新增一次原会话Node诊断（不计离线通过）：用户明确授权当前会话、凭据仅内存，断CDP后Node发送一次，newConversation=false、HTTP200/SSE、529ms、STREAM_ERROR数字718013001，无有效回复，固定映射doubao_upstream_failed/502。该码专门含义未在两仓源码中确认，不等于先前710022004；仅测试现有Node请求加会话字段，并未完整复制网页参数/签名。停止不重试，无新网页fetch/TTS或主服务器操作，不改测试代码。
+
+2026-10-13原Chrome标签真实测试成功（不计离线通过数量）：用户明确另授权原标签测试，空输入框中脚本发送一次短文；POST /chat/completion、普通mode0、既有会话newConversation=false、无TTS，HTTP200/SSE无业务错误并正常SSE_REPLY_END。恢复监听/拦截且不关闭原标签/Chrome，无秘密或正文存盘。前次自建临时页的新会话710022004不能归纳为账号/Chrome或所有自动化均不可用；原标签成功不等同于项目bridge或纯Node成功。本轮没有运行单元测试或修改自测代码。
+
+2026-10-13新增真实官网路径观察（不计离线测试通过）：获授权在同登录context的自建临时官方页输入一次“请只回复：OK”，POST /chat/completion带a_bogus/msToken等query，HTTP200/SSE、STREAM_ERROR业务码710022004，无有效回复；结束并关闭自建页，不重试、不保存秘密或原始流。用户随后报告手动浏览器消息成功，这是用户证据，未被本工具独立捕获；需区分原标签手动与临时页自动输入，不宣称整个账号/Chrome均遭风控或“只因缺签名”。无新运行代码或主服务器操作。
+
+2026-10-13豆包新增真实诊断（不计离线用例通过数量）：用户明确授权Chrome凭据及一次Node短消息，唯一官方标签Cookie仅内存使用；doubao普通模式“请只回复：OK”，实际一次POST、502ms、HTTP200/SSE，业务风控被现有适配器映射doubao_risk_control/403，没有有效完整回复。未记录具体上游原始码/帧/响应正文，未保存凭据；停止且不重试，未调用真实网页fetch/TTS、未操作主服务器。本轮不改自测代码，面板仍不得自动进行真实请求。
+
 # 自测功能文档
 
 ## 独立 MMD-AR PMX PBD 全身 IK（2026-10-13）
