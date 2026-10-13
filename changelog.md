@@ -12051,3 +12051,5 @@
 
 - ✅ [2026-10-13] 恢复已确认的TTS方案，字号保持；深色白字/黑色边缘、浅色深字/白色边缘，背景上下渐隐且最高alpha0.1，保留8px背景模糊与三行滚动。
   - 修改display.css与self-test.js；复用UiTheme根data-theme-mode，更新display-chat-mmd design/spec、原task、usage和自测文档。源脚本语法/定向差异空白检查通过，servicePackage=true，服务包与设备观察进行中。
+
+TTS主题对比度构建进度：已有40项主题/旋转/DPI回归通过，Chromium核对dark/light/mint/new-year-red颜色、字号36px/三行高度151.1875px一致与blur8px。code-v72.zip 17721571字节，SHA256 ea1e63968318b87a8c01946653e86115a3095b98100cc4ffea5b9a89cc3ed3ce；CRC、源码对应及与v71仅两文件差异通过。真机已健康提交v72，servicePackage=false；最终LAN/WAN HTTP验证及实际播报观察进行中。
