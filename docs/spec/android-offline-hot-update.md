@@ -1040,3 +1040,18 @@ Build/device checks:
     verify /api/status, /v1/models, chat, ASR/TTS and display UI
     compare configuration, tasks/results, logs, ASR/TTS files and LLM cache before/after
 ```
+
+## Native错误与健康确认伪代码（2026-10-13，已实现，待设备复测）
+
+```text
+每次启动 := 创建diagnostics与独立代次/一次性健康处理标识；stderr/错误行形成有界脱敏摘要
+进程退出 := 等待stdout/stderr读取线程 → 摘要+退出码 → pending候选回滚 → 失败状态+保留版本
+本地健康 := GET/api/status成功 → status=ok → versions.code与活动版本一致 → canonical codePath与实际目标一致
+健康成功 := 标记候选healthy → READY → 若存在待确认更新，发送APPLIED并清除待确认状态
+健康失败/超时 := 同代次且未处理 → rollback → FAILED和UPDATE_FAILED → 停止候选；旧事件不能覆盖新进程
+UI失败 := 保存startupError/updateError → 显示原因与重试入口 → 自动重试/网页等待保留原错误
+UI健康 := 清除startupError并刷新错误网页；APPLIED清除updateError并刷新控制页
+UI更新错误 := 取消自动折叠；Activity保存/恢复错误；用户新尝试或成功后清除对应错误
+```
+
+映射：NodeStartupDiagnostics、OfflineFailureState、NodeServerService与MainActivity。默认健康时限仍为120秒，未增加配置接口。

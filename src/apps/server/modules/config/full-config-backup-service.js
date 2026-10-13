@@ -176,10 +176,18 @@ function validateJsonFile(filePath, name) {
 }
 
 function createFullConfigBackupService(options = {}) {
-    const projectRoot = path.resolve(options.projectRoot || process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../..'));
+    // Android的/data/user/0可能是系统别名；只解析受信任根，根内部仍逐级拒绝链接。
+    const requestedRoot = path.resolve(options.projectRoot || process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../..'));
+    const projectRoot = fs.realpathSync(requestedRoot);
+    const projectPath = value => {
+        const absolute = path.resolve(value);
+        const relative = path.relative(requestedRoot, absolute);
+        const withinRoot = relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+        return withinRoot ? path.join(projectRoot, relative) : absolute;
+    };
     const context = options.context || resolveReleaseRuntimeContext({ projectRoot });
-    const roots = { config: path.dirname(context.configFile), userconfig: context.userConfigDir };
-    const stateRoot = path.resolve(options.stateRoot || path.join(projectRoot, 'res/config-backup'));
+    const roots = { config: path.dirname(projectPath(context.configFile)), userconfig: projectPath(context.userConfigDir) };
+    const stateRoot = projectPath(options.stateRoot || path.join(projectRoot, 'res/config-backup'));
     const uploadDir = path.join(stateRoot, 'uploads');
     const pendingPath = path.join(stateRoot, 'pending.json');
     const resultPath = path.join(stateRoot, 'last-result.json');

@@ -76,20 +76,9 @@ class MainActivity : AppCompatActivity() {
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
     private data class BackupExportRequest(val id: String, val page: WebView, val url: String)
-    private var pendingBackupExport: BackupExportRequest? = null
     private var backupExportInProgress = false
     private val backupExportExecutor = Executors.newSingleThreadExecutor()
     @Volatile private var backupExportConnection: HttpURLConnection? = null
-    private val backupExportLauncher = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/zip")
-    ) { uri ->
-        val request = pendingBackupExport
-        pendingBackupExport = null
-        if (request != null) {
-            if (uri == null) completeBackupExport(request, "cancelled")
-            else saveBackupExport(request, uri)
-        }
-    }
     private var pendingWebFileChooser: ValueCallback<Array<Uri>>? = null
     private val webFileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -149,6 +138,7 @@ class MainActivity : AppCompatActivity() {
     private var offlineDisplayRetryCount = 0
     // WebView 连接失败后可能继续回调 onPageFinished；该标记阻止错误页误判为成功页。
     private var offlineDisplayLoadFailed = false
+    private val offlineFailures = OfflineFailureState()
     // 整个 APK 只维护一个原生音频焦点；网页媒体不按 TTS/视频拆分申请焦点。
     private val audioFocusController by lazy {
         AudioFocusController(this) { change ->
@@ -413,8 +403,10 @@ class MainActivity : AppCompatActivity() {
         setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
+        offlineFailures.restore(savedInstanceState?.getString("offlineStartupError"), savedInstanceState?.getString("offlineUpdateError"))
         embeddedNode = resources.getBoolean(R.bool.aasc_embedded_node)
         updateOnlyMode = resources.getBoolean(R.bool.aasc_update_only_mode)
+        offlineFailures.updateError?.let { handleServiceUpdateFailed(it) }
         refreshOfflineDisplayInfo()
         if (updateOnlyMode && !NodeRuntimeInstaller.hasFullOfflineInstall(
                 File(filesDir, "aasc-server")
@@ -440,10 +432,10 @@ class MainActivity : AppCompatActivity() {
             offlineMode
         )
         serverInput.setText(selectedServerUrl)
-        connectBtn.setOnClickListener { connect() }
-        serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
+        connectBtn.setOnClickListener { connect(true) }
+        serverInput.setOnEditorActionListener { _, _, _ -> connect(true); true }
         controlToggleButton.setOnClickListener { handleControlButtonClick() }
-        offlineStartupRetry.setOnClickListener { connect() }
+        offlineStartupRetry.setOnClickListener { connect(true) }
         offlineUpdateDownload.setOnClickListener { startAvailableOfflineUpdate() }
         offlineUpdateLater.setOnClickListener { dismissAvailableOfflineUpdate() }
         offlineUpdateCollapsedTab.setOnClickListener { expandOfflineUpdatePanel() }
@@ -498,13 +490,17 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("offlineStartupError", offlineFailures.startupError)
+        outState.putString("offlineUpdateError", offlineFailures.updateError)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onDestroy() {
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         cancelOfflineUpdatePanelCollapse()
         completePendingWebFileChooser(null)
-        pendingBackupExport?.let { completeBackupExport(it, "cancelled") }
-        pendingBackupExport = null
         backupExportConnection?.disconnect()
         backupExportExecutor.shutdownNow()
         nativeDisplayBridge?.release()
@@ -539,6 +535,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun scheduleOfflineUpdatePanelCollapse() {
         cancelOfflineUpdatePanelCollapse()
+        if (offlineFailures.updateError != null) return
         if (!activityResumed || !offlineMode) return
         if (offlineUpdatePanel.visibility != View.VISIBLE) return
         mainHandler.postDelayed(
@@ -640,7 +637,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun connect() {
+    private fun connect(clearFailure: Boolean = false) {
+        if (clearFailure) offlineFailures.retryStartup()
         val input = serverInput.text.toString().trim()
         if (input.isEmpty()) {
             Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
@@ -754,6 +752,11 @@ class MainActivity : AppCompatActivity() {
                 checkForServiceUpdateOnce()
                 checkForMinApkUpdateOnce()
             }
+            NodeServerService.STATUS_READY -> {
+                offlineFailures.retryStartup()
+                hideOfflineStartupPanel()
+                if (offlineDisplayLoadFailed) webView?.reload()
+            }
             NodeServerService.STATUS_SERVICE_UPDATE_APPLYING,
             NodeServerService.STATUS_SERVICE_UPDATE_PROGRESS -> {
                 updateServiceUpdateProgress(phase, detail, completedBytes, totalBytes)
@@ -821,6 +824,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (!result.hasUpdate) {
                     android.util.Log.i("MainActivity", "Offline 服务更新检查: ${result.status}")
+                    if (result.status.contains("失败")) handleServiceUpdateFailed(result.status)
                     // 本轮无更新后释放检查闸门；如果检查线程在后台完成，下一次 onResume 仍可立即重试。
                     serviceUpdateCheckStarted = false
                     return@runOnUiThread
@@ -866,6 +870,7 @@ class MainActivity : AppCompatActivity() {
         val codeVersion = result.targetCodeVersion ?: return
         val dependencyVersion = result.targetDependencyVersion ?: return
         serviceUpdateCandidate = result
+        if (offlineFailures.updateError != null) return
         serviceUpdateStarted = false
         showOfflineUpdatePanel()
         val repair = result.dataRepair
@@ -903,6 +908,7 @@ class MainActivity : AppCompatActivity() {
     private fun showMinApkUpdatePrompt(result: MinApkUpdateResult) {
         val metadata = result.metadata ?: return
         minApkUpdateCandidate = result
+        if (offlineFailures.updateError != null) return
         if (serviceUpdateCandidate != null) return
         minApkDownloadStarted = false
         showOfflineUpdatePanel()
@@ -932,12 +938,22 @@ class MainActivity : AppCompatActivity() {
     private fun startAvailableOfflineUpdate() {
         if (serviceUpdateCandidate != null) {
             startServiceUpdate()
-        } else {
-            startMinApkDownload()
+            return
         }
+        if (minApkUpdateCandidate?.metadata != null) {
+            startMinApkDownload()
+            return
+        }
+        offlineFailures.retryUpdate()
+        offlineUpdateMessage.text = "正在重新检查更新…"
+        serviceUpdateCheckStarted = false
+        minApkUpdateCheckStarted = false
+        checkForServiceUpdateOnce()
+        checkForMinApkUpdateOnce()
     }
 
     private fun dismissAvailableOfflineUpdate() {
+        offlineFailures.retryUpdate()
         if (serviceUpdateCandidate != null) {
             serviceUpdateCandidate = null
             if (minApkUpdateCandidate?.metadata != null) {
@@ -954,6 +970,7 @@ class MainActivity : AppCompatActivity() {
     /** 用户确认服务更新后交给 NodeServerService，确保停止旧进程再切换 active release。 */
     private fun startServiceUpdate() {
         if (serviceUpdateStarted || serviceUpdateCandidate == null) return
+        offlineFailures.retryUpdate()
         cancelOfflineUpdatePanelCollapse()
         expandOfflineUpdatePanel()
         serviceUpdateStarted = true
@@ -1008,6 +1025,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleServiceUpdateApplied(detail: String?) {
+        offlineFailures.retryUpdate()
+        controlWebView?.reload()
         serviceUpdateCandidate = null
         serviceUpdateStarted = false
         offlineUpdateProgress.visibility = View.VISIBLE
@@ -1027,6 +1046,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleServiceUpdateFailed(detail: String?) {
+        offlineFailures.updateFailed(detail?.takeIf { it.isNotBlank() } ?: "服务更新失败")
+        offlineUpdateTitle.text = "服务更新失败"
         serviceUpdateStarted = false
         showOfflineUpdatePanel()
         updateCollapsedUpdateTab("failed")
@@ -1057,6 +1078,7 @@ class MainActivity : AppCompatActivity() {
     /** 用户点击下载后才开始网络传输；进度回调切回主线程更新浮动卡片，卡片可在下载期间收起。 */
     private fun startMinApkDownload() {
         if (minApkDownloadStarted || minApkUpdateCandidate?.metadata == null) return
+        offlineFailures.retryUpdate()
         cancelOfflineUpdatePanelCollapse()
         expandOfflineUpdatePanel()
         minApkDownloadStarted = true
@@ -1078,6 +1100,8 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (result.apkFile == null) {
+                    offlineFailures.updateFailed(result.status)
+                    offlineUpdateTitle.text = "APK更新失败"
                     minApkDownloadStarted = false
                     showOfflineUpdatePanel()
                     offlineUpdateDownload.visibility = View.VISIBLE
@@ -1137,6 +1161,7 @@ class MainActivity : AppCompatActivity() {
                 offlineUpdateMessage.text = getString(R.string.offline_update_confirm_install)
             }
             android.content.pm.PackageInstaller.STATUS_SUCCESS -> {
+                offlineFailures.retryUpdate()
                 offlineUpdateProgress.progress = 100
                 updateCollapsedUpdateTab("success")
                 offlineUpdateMessage.text = getString(R.string.offline_update_success)
@@ -1145,6 +1170,9 @@ class MainActivity : AppCompatActivity() {
                 offlineUpdatePanel.postDelayed({ hideOfflineUpdatePanel() }, 2_000L)
             }
             else -> {
+                offlineFailures.updateFailed(detail.ifBlank { "APK应用更新失败" })
+                offlineUpdateTitle.text = "APK更新失败"
+                cancelOfflineUpdatePanelCollapse()
                 minApkDownloadStarted = false
                 updateCollapsedUpdateTab("failed")
                 offlineUpdateProgress.visibility = View.GONE
@@ -1212,6 +1240,12 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (error: Exception) {
             android.util.Log.e("MainActivity", "提交 Offline min APK 安装失败", error)
+            offlineFailures.updateFailed(error.message ?: "APK应用更新失败")
+            showOfflineUpdatePanel()
+            offlineUpdateMessage.text = offlineFailures.updateError
+            offlineUpdateProgress.visibility = View.GONE
+            offlineUpdateDownload.isEnabled = true
+            offlineUpdateDownload.visibility = View.VISIBLE
             Toast.makeText(this, "Offline 更新安装失败：${error.message}", Toast.LENGTH_LONG).show()
         }
     }
@@ -1275,22 +1309,26 @@ class MainActivity : AppCompatActivity() {
         totalBytes: Long? = null
     ) {
         if (!offlineMode) return
+        val displayMessage = offlineFailures.startup(message, failed)
+        val isFailure = offlineFailures.startupError != null
+        findViewById<TextView>(R.id.offlineStartupTitle).text = if (isFailure) "服务启动失败" else "正在准备离线服务"
         offlineStartupPanel.visibility = View.VISIBLE
-        offlineStartupProgress.visibility = if (failed) View.GONE else View.VISIBLE
-        if (!failed && totalBytes != null && totalBytes > 0L && completedBytes != null) {
+        offlineStartupProgress.visibility = if (isFailure) View.GONE else View.VISIBLE
+        if (!isFailure && totalBytes != null && totalBytes > 0L && completedBytes != null) {
             offlineStartupProgress.isIndeterminate = false
             offlineStartupProgress.max = 100
             offlineStartupProgress.progress = (completedBytes * 100L / totalBytes)
                 .coerceIn(0L, 100L)
                 .toInt()
-        } else if (!failed) {
+        } else if (!isFailure) {
             offlineStartupProgress.isIndeterminate = true
         }
-        offlineStartupRetry.visibility = if (failed) View.VISIBLE else View.GONE
-        offlineStartupMessage.text = message
+        offlineStartupRetry.visibility = if (isFailure) View.VISIBLE else View.GONE
+        offlineStartupMessage.text = displayMessage
     }
 
     private fun hideOfflineStartupPanel() {
+        if (offlineFailures.startupError != null) return
         if (::offlineStartupPanel.isInitialized) {
             offlineStartupPanel.visibility = View.GONE
         }
@@ -1357,33 +1395,31 @@ class MainActivity : AppCompatActivity() {
         callback.onReceiveValue(result)
     }
 
-    /** 系统创建文档由用户选择位置，无需新增通用存储权限。 */
+    /** 最终ZIP直接保存到系统Download；现有同来源桥负责流式下载和结果回传。 */
     private fun requestFullConfigBackupSave(requestId: String): Boolean {
         if (backupExportInProgress || isFinishing || isDestroyed) return false
         val page = controlWebView ?: return false
         val downloadUrl = FullConfigBackupSavePolicy.downloadUrl(page.url) ?: return false
         val request = BackupExportRequest(requestId, page, downloadUrl)
-        pendingBackupExport = request
         backupExportInProgress = true
         return try {
-            backupExportLauncher.launch("aasc-full-config-${System.currentTimeMillis()}.zip")
+            saveBackupExport(request)
             true
         } catch (_: Exception) {
-            pendingBackupExport = null
             backupExportInProgress = false
             false
         }
     }
 
-    private fun saveBackupExport(request: BackupExportRequest, uri: Uri) {
+    private fun saveBackupExport(request: BackupExportRequest) {
         if (FullConfigBackupSavePolicy.downloadUrl(request.page.url) != request.url) {
-            try { contentResolver.delete(uri, null, null) } catch (_: Exception) { /* 保留来源错误。 */ }
             completeBackupExport(request, "error", "控制页来源已改变，请重新导出")
             return
         }
         val cookie = CookieManager.getInstance().getCookie(request.url)
         backupExportExecutor.execute {
             var connection: HttpURLConnection? = null
+            var target: FullConfigBackupDownloads.Target? = null
             var saved = false
             var message = "保存 ZIP 失败"
             try {
@@ -1410,7 +1446,9 @@ class MainActivity : AppCompatActivity() {
                     }
                     check(headerSize == 4 && FullConfigBackupSavePolicy.isZipHeader(header)) { "备份 ZIP 文件头无效" }
                     input.reset()
-                    contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                    val destination = FullConfigBackupDownloads.create(this, "aasc-full-config-${System.currentTimeMillis()}.zip")
+                    target = destination
+                    destination.open().use { output ->
                         val buffer = ByteArray(64 * 1024)
                         var total = 0L
                         while (true) {
@@ -1423,7 +1461,9 @@ class MainActivity : AppCompatActivity() {
                         }
                         check(expected < 0 || total == expected) { "ZIP 下载不完整，请重新导出" }
                         output.flush()
-                    } ?: error("无法打开选择的保存位置")
+                    }
+                    destination.commit()
+                    message = "全量 ZIP 已保存到 Download/${destination.fileName}"
                 }
                 saved = true
             } catch (error: Exception) {
@@ -1432,10 +1472,10 @@ class MainActivity : AppCompatActivity() {
                 connection?.disconnect()
                 backupExportConnection = null
                 if (!saved) {
-                    try { contentResolver.delete(uri, null, null) } catch (_: Exception) { /* 不覆盖原始失败信息。 */ }
+                    try { target?.discard() } catch (_: Exception) { /* 不覆盖原始失败信息。 */ }
                 }
             }
-            runOnUiThread { completeBackupExport(request, if (saved) "saved" else "error", if (saved) "" else message) }
+            runOnUiThread { completeBackupExport(request, if (saved) "saved" else "error", message) }
         }
     }
 

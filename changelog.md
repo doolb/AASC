@@ -1,3 +1,9 @@
+### Offline启动回滚、Download备份与错误提示修复
+
+- ✅ [2026-10-13] ADB安装full APK v38并复现内置v69与热更v70启动失败；确认系统/data/user/0链接被备份工作目录检查误拒绝，70切换后回滚。
+  - 已修复full-config-backup-service可信项目根realpath/根内路径映射；Android新增FullConfigBackupDownloads、NodeStartupDiagnostics、OfflineFailureState，更新MainActivity/NodeServerService及aasc-user-config.js。最终ZIP保存Download，内部事务私有；实际启动/应用更新错误持续可见，服务候选版本和代码路径健康确认后才成功。
+  - 备份Node/浏览器17/17通过，Android JVM208/208通过；24MiB往返1809ms、峰值RSS267MiB含夹具。首次临时目录配额失败改用/var/tmp；原保存选择器残留引用已修正。同步design/spec/usage/self-test/task/todo。min APK profile升39/0.2.37，servicePackage=true、minApk=true，依赖集合未变；修复包构建与设备验收进行中。
+
 ### TTS 三行字幕服务包发布
 
 - ✅ [2026-10-13] 构建并发布服务代码包 v70，包含按音频进度逐行显示的三行滚动字幕。

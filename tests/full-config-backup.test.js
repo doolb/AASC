@@ -31,6 +31,32 @@ function fixture(t, name, extra = {}) {
     return { root, context, write, read, service };
 }
 
+test('Android系统祖先别名可启动并完成ZIP恢复，根内工作目录链接仍拒绝', async t => {
+    const source = fixture(t, 'alias-source');
+    const target = fixture(t, 'alias-target');
+    const alias = `${target.root}-alias`;
+    fs.symlinkSync(target.root, alias);
+    t.after(() => fs.unlinkSync(alias));
+    const aliasService = createFullConfigBackupService({
+        projectRoot: alias,
+        context: { configFile: path.join(alias, 'release/config/config.json'), userConfigDir: path.join(alias, 'release/userconfig') },
+        stateRoot: path.join(alias, 'res/config-backup')
+    });
+    aliasService.prepareUpload();
+    assert.equal(aliasService.stateRoot, path.join(target.root, 'res/config-backup'));
+    const archive = await source.service.exportArchive();
+    t.after(archive.dispose);
+    const preview = await aliasService.previewArchive(archive.archivePath);
+    aliasService.commitPreview(preview.id, 'merge', true);
+    assert.equal(aliasService.applyPending().status, 'applied');
+    assert.deepEqual(JSON.parse(target.read('config/config.json')), JSON.parse(source.read('config/config.json')));
+    const outside = path.join(target.root, 'outside');
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(aliasService.stateRoot, 'exports'));
+    await assert.rejects(aliasService.exportArchive(), /链接/u);
+    assert.deepEqual(fs.readdirSync(outside), []);
+});
+
 async function zipFixture(t, files, manifestOverride, modeOverride = {}) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-backup-zip-'));
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }));

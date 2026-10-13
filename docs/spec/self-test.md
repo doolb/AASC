@@ -1332,3 +1332,18 @@ npm run build:web:mmd-ar-test → 成功；Vite输出既有大chunk体积提示
 ```
 
 补充确认：用户选择按播报进度逐行显示；使用现有音频来源记录及playing/timeupdate事件，按时长和字符数估算行时机。暂无逐字时间戳；暂停不推进，下一条来源替换未显示内容。
+
+## Offline v70启动回滚及Download修复自测（2026-10-13，实施中）
+
+```text
+ADB已复现 := SM-N9500/Android API28安装full38；版本/签名/大小/SHA256/CRC/profile通过
+设备条件 := 普通withserver占用8081，测试前停止；Offline安装首次恢复内置服务69与依赖8
+失败证据 := full-config-backup-service.js:45拒绝/data/user/0系统链接，69和70均退出1
+更新证据 := Native已原子切换code70/dependencies8 → 候选未就绪 → active release回滚；随后拒绝重复失败候选
+本地隔离复现 := 同一真实目录通过；系统风格祖先别名路径失败（未修改真实配置）
+回归计划 := 别名根下prepareUpload/导出/恢复；内部恶意链接仍拒绝；原ZIP事务用例继续通过
+原生计划 := Download唯一文件/失败清理；错误摘要有界脱敏；退出/超时/回滚UI不被自动重试覆盖
+设备计划 := 安装修复min（复用MNN），通过Native更新修复代码；api/status与服务器列表均显示新版本；导出ZIP出现在Download
+```
+
+进度：TMPDIR=/var/tmp下npm run test:config-backup 17/17通过（首轮/tmp配额不足，换临时根重跑成功）；Android JVM 208/208通过，新增下载2项与诊断/状态3项。源脚本语法通过。v71/min39构建与ADB实际启动/Download/错误显示仍在进行；API29+MediaStore真机另需验收。

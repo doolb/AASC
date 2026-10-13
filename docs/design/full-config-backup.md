@@ -26,7 +26,7 @@
 
 ## 浏览器与 Offline APK
 
-浏览器使用普通下载与 ZIP 文件选择。APK 导入复用已修复的 WebView 文件选择器；NativeControl 已有16MiB小文件保存能力，全量 ZIP 在该桥增加流式保存入口和系统创建文档选择器。原生端只接受当前控制页服务来源的备份下载，复用现有证书校验，保存完成/取消/失败均返回页面，不增加通用存储权限。修改 Chat2ApiNativeBridge、MainActivity，并复用 ModelDownloader 连接能力。
+浏览器使用普通下载与 ZIP 文件选择。APK 导入复用已修复的 WebView 文件选择器；NativeControl 已有16MiB小文件保存能力，全量 ZIP 在该桥使用流式保存入口直接写入系统Download。原生端只接受当前控制页服务来源的备份下载，复用现有证书校验，保存完成/取消/失败均返回页面，不增加通用存储权限。修改 Chat2ApiNativeBridge、MainActivity，并复用 ModelDownloader 连接能力。
 
 ## 已落实约定
 
@@ -43,3 +43,11 @@
 ## 发布约定
 
 实际修改服务/网页后 servicePackage=true；新增 ZIP 直接生产依赖并按用户要求重出依赖包，dependenciesPackage=true；新增 APK 导出原生能力后 minApk=true。完成验证后发布新代码包和新生产依赖包；min APK 复用已编译 MNN。实现测试不导入真实配置、不重启主服务。
+
+## Android路径别名与Download导出修复（2026-10-13，源码已完成，出包与设备复测中）
+
+ADB安装full v38后复现内置v69启动失败，安装v70后同样失败并触发回滚。Android系统`/data/user/0 -> /data/data`被工作目录父级链接检查拒绝。受信任项目根先解析为真实目录，默认备份工作目录与配置范围据此派生；根内部的工作目录/配置文件链接仍拒绝。
+
+用户已确认最终ZIP直接保存到系统Download；上传、解包与恢复事务仍在服务内部。Android复用现有同来源流式下载与100MiB约束，API29+使用MediaStore pending文件，旧系统使用Download独占新文件，失败只清理本次新文件，完成回传文件名与保存位置。
+
+用户要求启动和应用更新错误可见。Native收集有界、脱敏的实际错误摘要；失败/回滚显示原因与保留版本，直到重试或健康启动。更新成功必须等待实际候选服务版本/路径通过健康检查，不能在文件切换后提前提示成功。
