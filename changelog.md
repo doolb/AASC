@@ -12114,3 +12114,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-14] 完成源码：10个内置网页Provider具备Android捕获配置，隔离登录及账号外部网页统一完成/取消；补齐豆包白名单Cookie集合捕获/恢复。
   - 豆包自动/手动添加采用严格本地格式校验，嵌套元数据保留未远端验证标记，结果和旧导入账号状态明确；其他Provider现有校验保持。用户要求请求会话列表验证仅记录待办。
   - 先同步android-chat2api-login-control/chat2api-doubao-web design/spec/task再改Native/服务/网页，更新只读自测说明与usage/todo；min profile41，minApk=true/servicePackage=true，dependenciesPackage=false。构建发布和ADB入口观察进行中，未新增或运行自动化测试。
+
+### TTS参数服务75发布与外部登录配套构建
+
+- ✅ [2026-10-14] TTS最终参数alpha0.2/blur4px已发布服务75：17721484字节，SHA256 16ad6ebdbb949598f561e34b301b8222d060999fb3b09615920e8b269a915dd1；签名清单SHA256 111499d8855d1dabf6dbac6bc27fcdf284af434edad6712a02b8eeb5bb93a163。LAN/WAN完整组件HTTP校验与精确清理通过。
+  - 更新display-chat-mmd design/spec、task/usage，移除TTS完成todo；真实新版参数观察随配套min41/code76进行。
+- ✅ [2026-10-14] 标准npm script生成min41（89327222字节，SHA256 42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340），签名与已安装版一致，profile/updateOnly/版本/CRC及新集合捕获DEX通过；ADB覆盖安装成功。
+  - 配套code76为17722423字节，SHA256 f26196d5afa10d227abdb0485887c2f6922dc89a1e27854ea9cba17b2609cdfe；CRC/最新源码通过，含10个变更文件（两项既有断言同步，未新增或运行自动化测试）。min41/code76待发布完成及入口观察；minApk=false/servicePackage=false/dependenciesPackage=false。Provider验证方法已记录，豆包会话列表校验先暂缓。

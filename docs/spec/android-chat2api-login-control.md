@@ -316,3 +316,10 @@ OAuth账号元数据 := 显式嵌套accountInfo合并校验输出，避免凭据
 自测模块增加只读原生入口/未验证状态映射检查，既有导入豆包账号也显示未远端验证；不触发登录或保存。
 
 现有验证断言同步新契约：原豆包“禁止添加”断言改为“允许添加且format-only”，Provider覆盖表由九项扩为十项。只修改已有用例，不新增或运行自动化测试。
+
+```text
+当前远端校验声明 := Qwen会话列表 / QwenAI用户 / DeepSeek当前用户 / Perplexity会话
+其他声明 := GLM刷新Token / Kimi订阅 / MiniMax设备注册 / MiMo入口 / Z.ai设置
+验收边界 := MiMo和Z.ai主要看HTTP成功，身份依据较弱；本轮未发送真实请求
+豆包会话列表 := 仅记后续方法；当前返回format-only元数据而非remote验证结果
+```

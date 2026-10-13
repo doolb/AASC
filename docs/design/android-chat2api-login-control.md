@@ -142,3 +142,20 @@ Android 登录 WebView：
 补充同步：普通手动添加与OAuth均须显式保存嵌套accountInfo，避免丢失format-only标记；同步chat2api-manual-account-service.js。Provider字段提示同步“允许添加、未远端验证”。
 
 自测模块增加只读原生入口/未验证状态映射检查，既有导入豆包账号也显示未远端验证；不触发登录或保存。
+
+## 既有Provider验证方法记录（2026-10-14）
+
+| Provider | 当前项目请求与判断 |
+|---|---|
+| Qwen | POST会话列表，响应success=true |
+| Qwen AI | GET用户信息，响应含data |
+| DeepSeek | GET当前用户，code=0且有biz_data |
+| Perplexity | GET登录会话，响应含user |
+| GLM | POST刷新Token，响应含access_token |
+| Kimi | POST查询订阅，响应含subscription |
+| MiniMax | POST设备注册，响应含deviceIDStr |
+| MiMo | GET站点入口，主要按HTTP成功判断，较弱 |
+| Z.ai | GET用户设置，主要按HTTP成功判断，较弱 |
+| 豆包 | 当前严格本地格式校验并允许未验证添加；请求会话列表验证仅记录待办 |
+
+以上描述当前项目代码，不宣称本轮已真实访问这些站点或验证账号。
