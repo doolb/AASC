@@ -132,8 +132,33 @@ test('Offline 仅控制端禁用输入框聚焦后的页面自动缩放', () => 
     assert.match(displayWebView, /maximum-scale=1\.0/u);
     assert.match(displayWebView, /user-scalable=no/u);
     assert.match(displayWebView, /applyInputAutoZoomPolicy/u);
-    assert.match(activity, /DisplayWebView\(this, offlineMode, disableInputAutoZoom = offlineMode\)/u);
+    assert.match(
+        activity,
+        /val control = DisplayWebView\(\s*this,\s*offlineMode,\s*disableInputAutoZoom = offlineMode,[\s\S]*?onFileChooserRequested = ::requestWebViewFileChooser\s*\)/u
+    );
     assert.match(activity, /view\s+is\s+DisplayWebView[\s\S]*?applyInputAutoZoomPolicy\(\)/u);
+});
+
+test('APK WebView 文件输入使用系统选择器并回传选择或取消结果', () => {
+    const displayWebView = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/DisplayWebView.kt'
+    );
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+
+    assert.match(displayWebView, /override fun onShowFileChooser\(/u);
+    assert.match(displayWebView, /onFileChooserRequested\(callback, chooserParams\)/u);
+    assert.match(activity, /registerForActivityResult\([\s\S]*?StartActivityForResult/u);
+    assert.match(activity, /chooserParams\.createIntent\(\)/u);
+    assert.match(activity, /FileChooserParams\.parseResult\(result\.resultCode, result\.data\)/u);
+    assert.match(activity, /override fun onDestroy\(\)[\s\S]*?completePendingWebFileChooser\(null\)/u);
+    assert.equal(
+        activity.match(/onFileChooserRequested\s*=\s*::requestWebViewFileChooser/gu)?.length,
+        2,
+        '显示页和控制页 WebView 都应使用同一个系统文件选择流程'
+    );
+    assert.match(activity, /callback\.onReceiveValue\(result\)/u);
 });
 
 test('offline APK 首次解包显示原生启动状态遮罩', () => {

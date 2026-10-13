@@ -24,6 +24,8 @@ import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.SslErrorHandler
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
@@ -33,6 +35,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import java.io.File
@@ -69,6 +72,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var offlineDisplayInfo: TextView
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
+    private var pendingWebFileChooser: ValueCallback<Array<Uri>>? = null
+    private val webFileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val callback = pendingWebFileChooser
+        pendingWebFileChooser = null
+        if (callback != null) {
+            val selectedUris = try {
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+            } catch (error: Exception) {
+                android.util.Log.w("MainActivity", "解析 WebView 文件选择结果失败", error)
+                null
+            }
+            callback.onReceiveValue(selectedUris)
+        }
+    }
     private var nativeDisplayBridge: NativeBridge? = null
     private var offlineMode = false
     private var embeddedNode = true
@@ -465,6 +484,7 @@ class MainActivity : AppCompatActivity() {
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         cancelOfflineUpdatePanelCollapse()
+        completePendingWebFileChooser(null)
         nativeDisplayBridge?.release()
         audioFocusController.abandon()
         super.onDestroy()
@@ -1256,7 +1276,11 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String, baseUrl: String) {
-        val wv = DisplayWebView(this, offlineMode)
+        val wv = DisplayWebView(
+            this,
+            offlineMode,
+            onFileChooserRequested = ::requestWebViewFileChooser
+        )
         val bridge = NativeBridge(
             wv,
             audioFocusController,
@@ -1272,13 +1296,43 @@ class MainActivity : AppCompatActivity() {
         webView = wv
         wv.loadUrl(url)
 
-        val control = DisplayWebView(this, offlineMode, disableInputAutoZoom = offlineMode)
+        val control = DisplayWebView(
+            this,
+            offlineMode,
+            disableInputAutoZoom = offlineMode,
+            onFileChooserRequested = ::requestWebViewFileChooser
+        )
         control.visibility = View.GONE
         control.addJavascriptInterface(Chat2ApiNativeBridge(this), "NativeControl")
         control.webViewClient = createWebViewClient(null, baseUrl, false)
         // 插入到 display WebView 之上、控制按钮和启动遮罩之下，避免控制页被显示页覆盖。
         webContainer.addView(control, 1)
         controlWebView = control
+    }
+
+    /** 将网页文件输入请求交给系统选择器，并把 URI 结果返回给发起请求的 WebView。 */
+    private fun requestWebViewFileChooser(
+        callback: ValueCallback<Array<Uri>>,
+        chooserParams: WebChromeClient.FileChooserParams
+    ): Boolean {
+        completePendingWebFileChooser(null)
+        pendingWebFileChooser = callback
+        return try {
+            webFileChooserLauncher.launch(chooserParams.createIntent())
+            true
+        } catch (error: Exception) {
+            android.util.Log.w("MainActivity", "启动 WebView 文件选择器失败", error)
+            completePendingWebFileChooser(null)
+            Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show()
+            true
+        }
+    }
+
+    /** 选择、取消、启动失败和 Activity 结束都通过同一入口清理 WebView 回调。 */
+    private fun completePendingWebFileChooser(result: Array<Uri>?) {
+        val callback = pendingWebFileChooser ?: return
+        pendingWebFileChooser = null
+        callback.onReceiveValue(result)
     }
 
     @SuppressLint("SetJavaScriptEnabled")

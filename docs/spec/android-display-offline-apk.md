@@ -172,6 +172,30 @@ DisplayWebView.initControlPageZoomPolicy(disableInputAutoZoom):
         将 content 规范化为 width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no
     不修改显示 WebView、普通 APK 或服务端 upload.html 源文件
 
+MainActivity.registerWebViewFileChooser:
+    创建 Activity Result 文件选择启动器
+    保存当前等待结果的 WebChromeClient.ValueCallback<Array<Uri>>
+    收到新选择请求时：
+        若旧 callback 尚未完成：以 null 完成旧 callback
+        使用 WebChromeClient.FileChooserParams.createIntent() 创建系统文件选择 Intent
+        启动系统文件选择器
+        启动失败时：以 null 完成当前 callback，并记录可诊断错误
+    收到选择器结果时：
+        使用 WebChromeClient.FileChooserParams.parseResult(resultCode, data) 解析 URI 数组
+        以解析结果（取消时为 null）完成当前 callback，并清空等待状态
+    Activity 销毁时：以 null 完成等待中的 callback
+
+DisplayWebView.onShowFileChooser(callback, chooserParams):
+    将 callback 和 chooserParams 交给 MainActivity 的系统文件选择流程
+    显示 WebView 与控制 WebView 使用同一选择流程
+    选择器取消或不可启动时结束本次选择，不申请通用存储权限
+
+实现状态（2026-10-13）：
+    MainActivity 以 ActivityResultContracts.StartActivityForResult 注册系统选择器
+    显示与控制 DisplayWebView 均将文件选择请求绑定到同一个 MainActivity 回调
+    选择结果由 FileChooserParams.parseResult 转换为 URI 数组；取消/异常/Activity 销毁会清理 pending callback
+    release/offline-release-status.json 的 minApk=true，等待签名构建；当前未构建或发布 APK
+
 实现状态（2026-09-18）：
     DisplayWebView 增加 disableInputAutoZoom 参数，MainActivity 仅为 Offline 控制 WebView 传入 true
     onPageFinished 调用 applyInputAutoZoomPolicy()

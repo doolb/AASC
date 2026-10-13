@@ -2,7 +2,9 @@ package com.aasc.display
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.net.Uri
 import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -12,7 +14,11 @@ import android.webkit.WebView
 class DisplayWebView(
     context: Context,
     offlineMode: Boolean,
-    private val disableInputAutoZoom: Boolean = false
+    private val disableInputAutoZoom: Boolean = false,
+    private val onFileChooserRequested: (
+        ValueCallback<Array<Uri>>,
+        WebChromeClient.FileChooserParams
+    ) -> Boolean
 ) : WebView(context) {
 
     // 保留传给 setInitialScale 的值，显示页需要按同一实际比例校正 TTS 固定边距。
@@ -48,6 +54,20 @@ class DisplayWebView(
 
         // getUserMedia 音频采集：APK 内直接授予，无需弹窗（无人值守的显示端）
         webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                val callback = filePathCallback ?: return false
+                val chooserParams = fileChooserParams
+                if (chooserParams == null) {
+                    callback.onReceiveValue(null)
+                    return true
+                }
+                return onFileChooserRequested(callback, chooserParams)
+            }
+
             override fun onPermissionRequest(request: PermissionRequest) {
                 val granted = request.resources.filter {
                     it == PermissionRequest.RESOURCE_AUDIO_CAPTURE

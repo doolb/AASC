@@ -82,6 +82,14 @@
 
 录音或摄像头权限在本轮启动中获准后，等权限队列结束再统一重载 WebView，使网页能力探测读取最终授权状态；通知权限不触发 WebView 重载。权限请求不改变用户主动关闭显示端语音监听的设置。
 
+## Offline APK WebView 文件选择器（2026-10-13）
+
+- WebView 页面通过 `<input type="file">` 发起文件选择时，由 Android 原生层启动系统文件选择器，并将所选 URI 交还给网页。显示页 WebView 与控制页 WebView 共用该流程，因此 Chat2API 控制页的账号凭证 JSON 导入可以直接弹出系统文件选择界面。
+- 原生层采用 Activity Result API 管理选择器结果，并使用 WebView 提供的 `FileChooserParams.createIntent()` / `parseResult()` 保留页面声明的类型筛选和多选行为。
+- 同一 Activity 只保留一个未完成的文件选择回调；新请求会先以取消结果结束旧请求，用户取消、启动失败或 Activity 销毁时也会以空结果完成回调，避免网页选择状态悬挂。
+- 仅授予系统文件选择器返回的 URI，不新增通用存储权限；普通 APK 和 Offline APK 的页面能力保持一致。
+- 已完成 `DisplayWebView` 与 `MainActivity` 接入，Node 静态定向回归通过，Android JVM 单元测试通过；`minApk=true` 等待下次签名构建，真机文件选择交互待安装新包后确认。
+
 ## Offline 显示端固定 ID（2026-09-17）
 
 - Offline APK 使用专用显示端 ID `offline-display`，显示页加载时将该 ID 作为 `/display` 查询参数，并由页面 WebSocket 连接沿用该值。
