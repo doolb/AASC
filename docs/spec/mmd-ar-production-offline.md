@@ -461,7 +461,7 @@ minApk=true、dependenciesPackage=false → 原状态保持
 发布 → 本任务不替换LAN/WAN清单；Android视觉/性能后续验收
 ```
 
-## 2026-10-12 FSR输出重建倍率（已实现，未发布）
+## 2026-10-12 FSR输出重建倍率（初始多档实现，后续已调整）
 
 ```text
 正式设置归一 → fsr2ReconstructionScale=1/2/4，默认及旧存储迁移1
@@ -473,3 +473,17 @@ PNG/普通TAA/关闭 → 旧旁路及基础尺寸语义；状态呈现实际输�
 ```
 
 具体字段与尺寸边界见独立渲染spec同日章节；网页代码变更保持servicePackage=true，min APK与依赖状态不另改。先测试后实施，当前未发布。
+
+## 2026-10-12 正式与独立FSR仅保留1×（当前契约）
+
+```text
+正式与独立设置归一 → fsr2ReconstructionScale=1；缺失及任何非1历史值都补1
+正式/独立抗锯齿面板 → 不渲染重建倍率控件；旧值由归一器固定为1
+FSR启用且WebGL2可用 → 输出尺寸=BaseSize×1；场景输入尺寸仍=BaseSize×fsr2Scale
+普通TAA/抗锯齿关闭/设备不支持 → 忽略旧重建档位，沿用基础尺寸
+PNG/诊断请求 → 按请求尺寸绘制/读取，完成后恢复预览尺寸与历史
+历史签名、resize、AO共享输入及显存上限 → 保持原接口与约束
+网页代码修改 → servicePackage=true；minApk和dependenciesPackage仅按实际状态保持
+```
+
+本节覆盖先前正式与独立端1/2/4的当前配置契约；用户反馈其余档位效果不好，已移除两端控件并在内部固定为1。实施及回归见 `docs/task/20261012_MMDARFSR仅保留1x.md`。

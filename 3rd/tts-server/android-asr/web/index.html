@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:,">
+  <title>Android ASR / 声纹测试</title>
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">AASC · 离线模型测试</p>
+        <h1>ASR 与声纹测试</h1>
+        <p class="intro">在浏览器本地运行 SenseVoice 与 Sherpa 声纹流程。音频不会上传，注册声纹仅保存在当前页面内存。</p>
+      </div>
+      <span id="runtimeBadge" class="status-badge pending">WASM 初始化中</span>
+    </header>
+
+    <section class="panel" aria-labelledby="modelHeading">
+      <div class="section-heading">
+        <div>
+          <h2 id="modelHeading">Apache 模型目录</h2>
+          <p>默认从当前站点的 <code>/mnt/aimodel/</code> 按需读取；首次推理会下载对应模型。</p>
+        </div>
+        <button id="checkModelsButton" class="button secondary" type="button">检查模型路径</button>
+      </div>
+      <div class="model-root-row">
+        <label for="modelRootInput">模型 HTTP 根路径</label>
+        <input id="modelRootInput" type="url" spellcheck="false">
+        <button id="applyModelRootButton" class="button secondary" type="button">应用</button>
+      </div>
+      <p id="modelRootNote" class="hint"></p>
+      <div class="model-grid" id="modelGrid" aria-live="polite">
+        <div class="model-card" data-model="sensevoice"><span>SenseVoice INT8 + tokens</span><strong>待检查</strong></div>
+        <div class="model-card" data-model="voiceprint"><span>3D-Speaker ERes2Net base FP32</span><strong>待加载</strong></div>
+        <div class="model-card" data-model="diarization"><span>Pyannote segmentation INT8</span><strong>多人模式加载</strong></div>
+      </div>
+      <p id="modelProgress" class="progress-line" aria-live="polite">等待 WASM 初始化</p>
+    </section>
+
+    <section class="panel" aria-labelledby="audioHeading">
+      <div class="section-heading">
+        <div>
+          <h2 id="audioHeading">音频输入</h2>
+          <p>选择 WAV，或用麦克风录制一段不超过 60 秒的音频。</p>
+        </div>
+      </div>
+      <div class="audio-controls">
+        <label class="file-picker" for="audioFileInput">
+          <span>选择 WAV 文件</span>
+          <input id="audioFileInput" type="file" accept="audio/wav,.wav">
+        </label>
+        <button id="recordButton" class="button secondary" type="button">开始录音</button>
+        <button id="downloadAudioButton" class="button secondary" type="button" disabled>下载当前 WAV</button>
+      </div>
+      <p id="audioStatus" class="hint">尚未选择音频</p>
+      <audio id="audioPlayer" controls preload="metadata" hidden></audio>
+    </section>
+
+    <section class="panel" aria-labelledby="asrHeading">
+      <div class="section-heading">
+        <div>
+          <h2 id="asrHeading">SenseVoice 识别</h2>
+          <p>单次离线识别，不包含流式 ASR。</p>
+        </div>
+      </div>
+      <div class="control-row">
+        <label for="languageSelect">识别语言</label>
+        <select id="languageSelect">
+          <option value="auto">自动</option>
+          <option value="zh">中文</option>
+          <option value="en">英文</option>
+        </select>
+        <button id="recognizeButton" class="button primary" type="button" disabled>开始识别</button>
+      </div>
+      <pre id="asrResult" class="result-box">等待识别</pre>
+    </section>
+
+    <section class="panel" aria-labelledby="voiceprintHeading">
+      <div class="section-heading">
+        <div>
+          <h2 id="voiceprintHeading">Sherpa 声纹测试</h2>
+          <p>先用一段 WAV 注册，再选择待测音频运行单段或多人流程。</p>
+        </div>
+      </div>
+      <div class="control-grid">
+        <label class="field-label" for="speakerNameInput">注册名称</label>
+        <input id="speakerNameInput" type="text" maxlength="40" placeholder="例如：ZH 或 EN">
+        <label class="field-label" for="speakerCountSelect">多人模式人数</label>
+        <select id="speakerCountSelect">
+          <option value="0">自动</option>
+          <option value="1">1 人</option>
+          <option value="2">2 人</option>
+          <option value="3">3 人</option>
+          <option value="4">4 人</option>
+          <option value="5">5 人</option>
+        </select>
+      </div>
+      <div class="button-row">
+        <button id="registerButton" class="button secondary" type="button" disabled>注册当前音频</button>
+        <button id="singleTestButton" class="button secondary" type="button" disabled>Sherpa 单段</button>
+        <button id="multiTestButton" class="button secondary" type="button" disabled>Sherpa 多段</button>
+        <button id="fastMultiTestButton" class="button secondary" type="button" disabled>Sherpa 快速多段</button>
+        <button id="clearSpeakersButton" class="button subtle" type="button" disabled>清空临时注册</button>
+      </div>
+      <div class="speaker-list-row">
+        <span>当前临时注册</span>
+        <strong id="speakerList">无</strong>
+        <span id="speakerModelInfo" class="hint">阈值 0.50 · 尚未加载模型</span>
+      </div>
+      <pre id="voiceprintResult" class="result-box">等待声纹测试</pre>
+    </section>
+
+    <footer class="page-footer">
+      <span>模型由浏览器直接从配置的 HTTP 路径读取；跨源模型地址需要 Apache CORS 配置。</span>
+      <a href="./vendor/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer">第三方组件许可</a>
+    </footer>
+  </main>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

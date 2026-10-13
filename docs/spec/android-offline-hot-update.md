@@ -1,5 +1,27 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+## Offline 热更旧版本目录回收（2026-10-13，已实现）
+
+```text
+启动Node进程后：
+  pendingHealth=true 或存在可识别的过期code/dependencies目录 -> 启动本地健康监视
+  本地HTTP健康检查成功且进程代次仍匹配：
+    pendingHealth=true -> 先原子提交当前release为健康并清除previous回滚指针
+    pendingHealth=false -> 沿用当前健康release
+    读取active-release.json作为唯一活动版本依据
+    精确扫描updates/code/code-v<数字>与updates/dependencies/dependencies-v<数字>
+    保留活动codeVersion和dependencyVersion对应目录
+    只删除目录名严格匹配且不是活动版本的普通目录
+    任一目标自身或内部存在符号链接 -> 跳过该目录，不跟随、不删除链接
+    保留updates其他子目录、普通文件、staging、APK、data-repair、模型、配置、任务和结果
+    清理失败 -> 记录失败并保留剩余目录，后续健康启动再试
+  健康失败/进程退出/代次变化：
+    pendingHealth=true -> 原流程回滚，旧版本未提前删除
+    pendingHealth=false -> 不清理
+```
+
+验证：新版本pending时旧版保留；健康提交后只保留活动code/dependencies；历史过期目录在下一次健康启动回收；健康失败和回滚保持旧目录；非法文件名、符号链接、APK/data-repair/模型/用户数据保留。预期跳过链接树不调用Android日志；实际删除异常单独记警告。实现文件：OfflineUpdateManager.kt、NodeServerService.kt；Android JVM回归：`./gradlew :app:testDebugUnitTest --no-daemon` 199项通过。min APK待出包后设备生效。
+
 ## aimodel可选镜像伪代码（2026-10-12，已实现）
 
 ```text

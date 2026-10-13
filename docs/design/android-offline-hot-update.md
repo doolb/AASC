@@ -1,5 +1,17 @@
 # Android Offline APK 热更新与原生增量 APK
 
+## Offline 热更旧版本目录回收（2026-10-13，已完成）
+
+Offline Android 服务热更将代码与生产依赖逐版解压到`files/aasc-server/updates/code/code-vN`和`updates/dependencies/dependencies-vN`。`active-release.json`只在切换时保存候选与上一健康版本；健康提交后previous字段清空，但原版本目录仍留盘，导致设备存储随热更增长。min APK成功安装后的APK下载缓存已有独立清理逻辑，本需求处理服务代码/依赖版本目录。
+
+更新发布后先保留active release中的previous版本，供新服务启动健康监测失败时恢复。仅当本地API健康且进程代次仍有效，确认当前release健康并清除previous指针后，按active-release.json仅保留当前codeVersion和dependencyVersion。启动时若已有健康release且检测到历史旧目录，同样等待本地API健康后回收，覆盖此前已累积文件。pendingHealth期间、健康失败、服务退出或重启代次变化均不能回收版本目录。
+
+仅扫描updates/code和updates/dependencies直属目录下严格命名`code-v<数字>`、`dependencies-v<数字>`的普通版本目录；保留活动版本。符号链接本身及含链接的候选树跳过，不跟随也不删除。其他子目录/文件，包括staging、active/failed状态、data-repair、APK、模型、配置、任务和结果均保留。每目录失败独立报告并保留剩余内容，后续健康启动重试。预期跳过链接树不触发Android日志调用；实际删除异常仍记录警告。清理不改变更新清单、包签名、依赖决策、回滚协议、APK下载缓存、用户数据和服务发布流程。
+
+影响文件：`OfflineUpdateManager.kt`提供安全识别/回收与健康提交后的调用；`NodeServerService.kt`在有历史旧目录时接入一次本地健康监视；`OfflineUpdateManagerTest.kt`覆盖活动/回滚/旧目录/链接与非版本数据保护。只修改Android原生/min APK内代码，因此`minApk=true`，servicePackage与dependenciesPackage保持已有状态。
+
+实现及Android JVM回归已完成：pending版本不会清理；健康确认后只保留active release引用目录；已有健康release在后续健康启动时回收历史目录。`./gradlew :app:testDebugUnitTest --no-daemon`全套199项通过。源码已完成，min APK尚未出包，设备需安装新min APK后才会应用清理逻辑。
+
 ## 2026-10-12 aimodel可选镜像（已实现）
 
 用户要求`sync:offline-update`支持aimodel，并进一步指定通过`-aimodel`开关启用，因为模型通常不变。方案默认仍只同步原有资源，不自动下载约1GB模型；兼容`-aimodel`和`--aimodel`两个无值布尔开关。显式开启后，父目录模式把远端同级aimodel同步到本地同步根下aimodel；直接aasc-offline源模式开启时从同级aimodel读取，目标为本地服务更新目录旁的aimodel。单次和watch均使用同一选项，每轮串行执行，模型一致时复用。

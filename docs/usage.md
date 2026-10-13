@@ -2,11 +2,25 @@
 
 独立MMD-AR测试网页的「GPU物理直连骨骼纹理」开关、默认手部防穿模同步兼容和诊断/编辑行为见[XPBD WebGL2使用说明](usage/mmd-xpbd-webgl.md)。本地实现，尚未发布。
 
+独立MMD-AR的PMX全身IK位于「动作 → Human 生理与后天行为 → PMX 全身 IK」。启用后可拖动头部、双手、双膝和双脚的彩色控制点；尚未拖动的点跟随当前动作，拖动后成为固定目标。「重置控制点」解除固定目标，关闭功能或切换模型会清除全部目标。拖脚可调整踝部目标，拖膝可提供腿部弯曲位置参考；求解受PMX骨骼链、刚体驱动状态和PMX角度限制影响，深屈膝时仍以模型自身限位为准。
+
+IK开启时，在控制点以外的空白画布单指/鼠标左拖环绕镜头（向右拖时镜头向左绕），双指中心/鼠标右键拖动平移镜头，捏合或滚轮缩放；拖动控制点仍只修改骨骼目标。IK关闭时沿用原模型旋转/平移操作。VaM风格控制点与深屈膝只做交互和姿势求解近似，不包含VaM的关节弹簧、软体和皮肤碰撞物理。本功能仅在独立PMX测试网页提供。
+
 YOLO、ASR和声纹模型的外网目录、上传/下载同步命令及正式包模型边界见[AI模型同步](usage/ai-model-sync.md)。30项模型与配套文件已发布，模型二进制不新增到Git。
 
 MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件规则见[帧率与耗时](usage/mmd-performance.md)，源码与独立WEB构建已完成，正式发布状态见changelog。
 
 Virt-A-Mate文件类型说明见[VaM 1.x资源格式](usage/vam-resource-formats.md)，列出资源包、场景、预设、Morph、衣服/头发、Unity资源和插件；这是格式参考，mmd-ar导入尚未实现。
+
+## 豆包普通LLM纯Node（2026-10-13已真实验证）
+
+`doubaochat`账号在凭证包中提供同账号`credentials.cookie`和`credentials.nodeProfile`后，普通LLM直接通过Node调用豆包官网，不需要运行Chrome、9222或页面fetch/签名。正式Provider工厂和CoreAdapter在断开CDP后，流式/非流式均实际收到`OK`并正常结束。本轮只在内存初始化真实资料，未保存到账号库，未重启主服务；部署及一次性资料导入说明见[豆包纯Node普通LLM](usage/chat2api-doubao-node.md)。
+
+普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。普通Node模式通过`/v1/responses`保存引用、复用同账号上游会话并仅发送新增输入；两轮纯Node协议记忆验证通过。选择已有`openai-responses`协议即可由普通LLM自动保存引用；无引用chat/completions仍重放历史。`doubao-think`/`doubao-expert`及Cookie-only网页原生复用待验，工具/多模态不承诺。profile导入只校验格式，手动添加仍因缺安全只读身份校验而拒绝；登录过期由用户更新，不自动处理验证码或重发。
+
+Cookie-only旧账号继续“豆包普通LLM · 网页模式”：默认关闭，通过现有权威配置显式选择账号、官方target/context并授权会话核对，保存不会连接Chrome。该项目bridge真实官网仍待单独验收；原标签UI成功不能替代它。早期缺完整profile的Node403/718013001失败已保留在设计历史，不能继续认定独立Node不可用。Android/Linux及长期令牌维持尚未真实验证，语音格式仍走Frontier/WAV。
+
+`doubao-chat`已接入 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭，真实运行未重新验收。先在现有Chat2API模型映射中为doubao-chat指定preferredProviderId=doubaochat及preferredAccountId，所选账号和Provider须启用且可用；严格绑定，不自动换号。业务面板无Cookie/账号输入。固定音色zh_female_wenroutaozi_uranus_bigtts、speech speed=1/volume=100，业务语速0；input最多1000个UTF-16字符且UTF-8≤4000字节，只接受wav。Frontier收集完整Ogg、校验并解码为单声道PCM WAV，缓存及下载仍为.wav/audio/wav；错误不重试、不切换其它来源。公开协议已核对，本地模拟及WASM样本通过；新真实聊天/合成需独立明确授权，Android Node/WASM、音色听感与设备播放尚未验收。文字网页fetch已实现为默认关闭的实验功能，真实运行未验收。
 
 ## TTS 多 Provider 配置（已实现，账号/设备待验收）
 
@@ -439,6 +453,18 @@ Windows Node 子显示端的系统级语音转文字输入说明也见：[Window
 因此，同一个 `llm-server` 或其他任务可以分别运行在不同设备上，每台设备使用自己的 `8081`；同一设备内相同的 HTTP 方法和路径不能被多个任务实例同时占用。当前不提供跨设备统一负载均衡，也不新增独立的 HTTP 配置保存接口。
 
 普通正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。需要完整离线包时运行下面的独立命令，模型会从 `res/models` 按固定白名单打入 APK：
+
+### 独立 ASR 测试网页
+
+网页源码在 `3rd/tts-server/android-asr/web/`，运行下面命令生成 Apache 可直接托管的静态目录：
+
+```bash
+npm run build:web:android-asr
+```
+
+将 `3rd/tts-server/android-asr/web-dist/` 内容部署到 Apache 页面目录；页面默认从同站点 `/mnt/aimodel/` 读取已同步模型。打开页面后会自动检查模型文件是否可访问，不会因此下载模型。首次运行对应流程时才加载 SenseVoice INT8、ERes2Net base FP32 或多人分段所需的 Pyannote INT8。跨源模型目录须允许 Apache CORS；麦克风录音需要 HTTPS 或 localhost。
+
+网页迁移了 APK 的单次 SenseVoice 识别、Sherpa 声纹注册、单段/多人/快速多人测试，支持 WAV 文件与浏览器麦克风输入并显示分段和耗时；不包含流式 ASR 或降噪。声纹登记只存在当前页面 Worker 内存，刷新后清空。音频和识别数据在浏览器本地处理，不调用正式 ASR/声纹接口。自测命令：`npm run test:android-asr-web`。当前构建仅生成本地部署目录，本次未发布 Apache。
 
 ### 独立 ASR 测试 APK 的 Sherpa 声纹测试
 

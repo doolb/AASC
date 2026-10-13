@@ -15,6 +15,10 @@ class DisplayWebView(
     private val disableInputAutoZoom: Boolean = false
 ) : WebView(context) {
 
+    // 保留传给 setInitialScale 的值，显示页需要按同一实际比例校正 TTS 固定边距。
+    var initialScalePercent: Int = 100
+        private set
+
     init {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -30,15 +34,14 @@ class DisplayWebView(
         // 显示页和控制页按 APK 构建模式使用一致的页面比例；Offline 同时参考当前 Display 的设备类别、长边分辨率和 densityDpi。
         val displayMetrics = resources.displayMetrics
         val deviceClass = WebViewScalePolicy.deviceClass(resources.configuration.smallestScreenWidthDp)
-        setInitialScale(
-            WebViewScalePolicy.initialScalePercent(
-                offlineMode = offlineMode,
-                widthPixels = displayMetrics.widthPixels,
-                heightPixels = displayMetrics.heightPixels,
-                densityDpi = displayMetrics.densityDpi,
-                deviceClass = deviceClass
-            )
+        initialScalePercent = WebViewScalePolicy.initialScalePercent(
+            offlineMode = offlineMode,
+            widthPixels = displayMetrics.widthPixels,
+            heightPixels = displayMetrics.heightPixels,
+            densityDpi = displayMetrics.densityDpi,
+            deviceClass = deviceClass
         )
+        setInitialScale(initialScalePercent)
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()

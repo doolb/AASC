@@ -11,6 +11,10 @@ function appendPanels(panel) {
         + '<label>' + input('blinking', '', 'checkbox') + '自然眨眼</label></div>'
         + field('生理强度', input('physiologyStrength', '0.35', 'number', 'min="0" max="1" step="0.05"'))
         + button('physiology', '保存生理设置')
+        + '<details><summary>PMX 全身 IK</summary>'
+        + '<p class="mind-basic-note">启用后拖动头部、双手和双脚的彩色控制点；控制点未拖动时跟随动作，拖动后固定目标。目标会受 PMX 骨骼链和角度限制影响；重置可解除全部目标。</p>'
+        + '<div class="display-mmd-ar-actions">' + button('ik-toggle', '启用全身 IK') + button('ik-reset', '重置控制点') + '</div>'
+        + '<p class="mind-basic-note" data-human-ik-status>全身 IK 已关闭</p></details>'
         + '<details open><summary>眼球跟随</summary>'
         + '<p class="mind-basic-note">手动模式优先于自动眼球跟随；拖动滑块实时控制当前模型，恢复自动后重新看向相机。</p>'
         + '<div class="mind-basic-imu-options"><label>' + input('gazeManual', '', 'checkbox') + '手动控制</label></div>'

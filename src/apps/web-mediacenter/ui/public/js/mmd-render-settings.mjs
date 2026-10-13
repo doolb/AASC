@@ -6,10 +6,9 @@ const number = (raw, fallback, min, max) => raw == null || raw === '' || typeof 
     ? fallback : Math.min(max, Math.max(min, Number(raw)));
 export function normalizeRenderSettings(input) {
     const samples = number(input?.taaJitterSamples, 8, -Infinity, Infinity);
-    const reconstruction = number(input?.fsr2ReconstructionScale, 1, -Infinity, Infinity);
     return { taaEnabled: input?.taaEnabled === true, aaMode: input?.aaMode === 'fsr2' ? 'fsr2' : 'taa',
         fsr2Scale: Math.round(number(input?.fsr2Scale, .67, .5, 1) * 100) / 100,
-        fsr2ReconstructionScale: [1, 2, 4].includes(reconstruction) ? reconstruction : 1,
+        fsr2ReconstructionScale: 1,
         taaHistoryWeight: number(input?.taaHistoryWeight, .9, 0, .95),
         canvasScale: Math.round(number(input?.canvasScale, 1, .25, 2) * 4) / 4,
         taaJitterScale: number(input?.taaJitterScale, 1, 0, 2),
@@ -81,12 +80,10 @@ export function initRenderSettings() {
     const status = () => {
         const info = window.DisplayMmdRenderInfo || {};
         for (const input of panel.querySelectorAll('input, select')) input.disabled = info.taaSupported === false;
-        const reconstructionInput = panel.querySelector('[data-render-setting="fsr2ReconstructionScale"]');
-        if (reconstructionInput) reconstructionInput.disabled = info.taaSupported === false || !value.taaEnabled || value.aaMode !== 'fsr2';
         panel.querySelector('[data-taa-status]').textContent = info.taaSupported === false
             ? '当前设备不支持WebGL2，TAA/FSR2不可用。'
             : value.taaEnabled && value.aaMode === 'fsr2'
-                ? `FSR2输入 ${info.inputWidth || '—'}×${info.inputHeight || '—'} → 输出 ${info.width || '—'}×${info.height || '—'}；较高重建倍率增加GPU与显存成本。`
+                ? `FSR2输入 ${info.inputWidth || '—'}×${info.inputHeight || '—'} → 输出 ${info.width || '—'}×${info.height || '—'}。`
                 : value.taaEnabled ? 'TAA多帧减少锯齿和采样闪烁；快速运动可能产生残影。' : '选择TAA或FSR2；快速运动可能产生残影。';
         document.querySelector('[data-render-limit]').textContent = info.limited ? '已按设备尺寸上限限制' : '';
     };

@@ -1,3 +1,83 @@
+### Chat2API 豆包纯Node会话复用
+
+- ✅ [2026-10-13] 豆包普通Node模式接通Qwen同类Responses原生续接，仅发送本轮新增输入。
+  - 新增`chat2api-doubao-session.js`及两个自测模块；修改文字适配器、node-protocol、Responses服务、会话存储及Provider能力。ready/uncertain和身份摘要绑定，同账号/模式复用，旧观测字段不升级。
+  - 两轮真实纯Node协议测试准确回忆随机标记、同ACK会话、无历史重放；正式实现新增20项模拟测试，Chat2API201/204（同3项旧Windows chmod）、普通LLM/Core/Responses24/24、旧TTS19/19。
+  - 流式租约贯穿消费/保存，未消费/取消清理，排队和执行共用120秒；16/256容量，JSON保存不丢并发记录，Pi snapshot失败隔离，写失败实例内阻断。独立审查无重要缺陷，时限问题先RED再修复。
+  - design/spec/task/todo/usage/self-test已同步；servicePackage=true，依赖及Android原生未改，不出包或重启主服务。两次请求后未再真实请求，未保存实际凭据/原始帧，保留其它任务改动。
+
+### Offline min APK 构建
+
+- ✅ [2026-10-13] 构建 Offline min APK v35（`0.2.33-offline-min`），包含热更旧版本目录回收修复。
+  - 本地文件：`release/apkbuild/allserver-min/output/aasc-display-offline-min.apk`，大小 `89308538` bytes，SHA-256 `65b78ff10dd5abb10b59ff4153661a78799ffb9b45470f8216fdcd1828f43801`；APK ZIP 完整性、`versionCode=35`、`versionName` 和 v2 签名校验通过，签名证书 SHA-256 为 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
+  - 构建源提交为 `caaa29891728f9d9c4cbb88254ac1795bac3847a`；构建清单标记工作区有未提交改动，已确认 Android 源码无额外差异。APK 仅本地生成，未发布；构建结束时 Kotlin 编译守护进程清理提示失败，但 Gradle 构建退出码为 0，产物独立校验通过。
+
+### Chat2API 豆包纯Node普通LLM
+
+- ✅ [2026-10-13] 独立Node收发接入并真实验证，流式/非流式实际回复OK且正常结束。
+  - 新增`chat2api-doubao-node-protocol.js`及8项自测；修改文字适配器、core、data-store、load-balancer和secret。一次性同账号设备资料初始化后，固定官网query/body，无页面fetch、CDP或a_bogus依赖；历史重放、容量和取消沿旧契约。
+  - `credentials.nodeProfile`显式选Node，默认Node候选池，明确映射不可退选；完整profile公共摘要脱敏。独立审查的泄漏和混合池问题先RED再GREEN；不自动回退或重发。
+  - Chat2API181/184（同3项既有Windows chmod失败），Ogg/WASM21/21、旧TTS19/19。think/expert、长期令牌、多账号、Android/Linux及网页bridge另验；已同步专属design/spec/task、使用和自测说明。
+  - `servicePackage=true`保持，dependenciesPackage/minApk原值保持；未保存真实凭据、未重启主服务、未出包，保留其它MMD/多模态工作。
+
+### Offline Android TTS 位置
+
+- ✅ [2026-10-13] Offline APK 的 TTS 固定边距按显示 WebView 实际 DPI 初始缩放归一，匹配当前 Android 的物理位置。
+  - 原生 `DisplayWebView` 保存并经 `NativeBridge` 返回相同缩放百分比；显示页对 TTS/ASR 共用语音文本节点的 0°/180°固定偏移做反向换算，90°/270°锚点、整页缩放和控制页保持原样。浏览器/普通 APK/旧桥回退 100%。
+  - Chromium 在 100%/112%/150%/300%及四个方向完成 DPI 布局模拟；Android `:app:testDebugUnitTest` 成功，12项定向网页回归通过。完整网页文件里的既有1200×800、DPR3弹窗等待用例仍超时，单独旋转锚点回归通过。此次未构建 APK；代码包发布成功后，状态为 `servicePackage=false`、`dependenciesPackage=false`、`minApk=true`。任务：`docs/task/20261012_OfflineAPK_TTS位置匹配ADB.md`。
+
+### Offline 热更旧版本目录回收
+
+- ✅ [2026-10-13] Offline服务release健康确认后清理不再使用的代码/依赖版本目录，回收热更累积占用。
+  - `OfflineUpdateManager.kt`仅扫描严格命名的直属版本目录，并按健康`active-release.json`保留活动版本；pending期间保留回滚版本。`NodeServerService.kt`也会在既有release本地API健康后回收历史残留，并将健康清理与新release应用/回滚串行化。符号链接或不可读目录树整体跳过；APK、data-repair、模型和其他用户数据保留。
+  - Android JVM 单测199/199通过，覆盖pending保护、活动版本、历史清理、链接目标和非版本数据。design/spec/task/自测文档已同步并移除todo完成项；`minApk=true`。本轮未构建APK，设备需安装后续min APK后生效。
+
+### Offline 更新代码包发布
+
+- ✅ [2026-10-13] 将 Offline 更新代码 v67、依赖包 v7 和 Node min 种子 v67 发布到 LAN 与 WAN。
+  - `code/code-v67.zip`：17,656,690 bytes，SHA-256 `7da09c04cbc0a046a04c70650e83cf141382243dd2db406322f10d65bc73fb48`；`dependencies/dependencies-v7.zip`：131,289,833 bytes，SHA-256 `b15e554d51e7867b76aee2ed7875474a1793866ff91e1b8c4576ca7befb96762`；`node-min-seeds/node-min-seeds-v67.zip`：35,287 bytes，SHA-256 `395957cdef6db214d8dd096c6293267edd11b54f2ad1cd90faa26ae25b6eb70c`。
+  - code-only 构建因本地 `package-lock.json` 与当前依赖包锁指纹不同，按发布规则自动升级为 all，并重新生成匹配依赖包与种子包。签名清单引用 code v67/dependencies v7/seeds v67，保留 min APK v34；LAN/WAN 清单验签且一致，三项新资源 HTTP 200/长度匹配，全清单组件 SHA-256 校验通过，版本文件精确清理无错误。未构建或发布 APK。
+
+### 独立 MMD-AR PBD 全身 IK
+
+- ✅ [2026-10-13] 参考 UE5 FullBodyIK 的 PBD/NPGS 思路，将独立 PMX 多末端 IK 改为共享祖先旋转约束迭代，并增加脚踝目标下的膝盖弯曲面偏好。
+  - 新增 `3rd/mmd-ar-test/web-human-ik-pbd.mjs`，更新 `web-human-ik.mjs` 与 `web-human-build.js` 的模块指纹依赖；保留七个头/腕/膝/踝控制点、每轮15°及膝150°/其他骨45°总修正预算，PMX IK link限位继续生效。骨骼平移/缩放、正式显示端和物理碰撞链路不变。
+  - 更新Human design/spec、独立测试页README、自测、参考资料和任务文档。PBD/相机定向测试8/8、真实米娅PMX浏览器相机/控制点回归1/1、`npm run build:web:mmd-ar-test`通过；手机姿态及性能待验收。APK/网页未发布。
+
+### 独立 MMD-AR IK 镜头与膝关节控制
+
+- ✅ [2026-10-12] 修正 IK 模式左右镜头环绕方向，新增左右膝可拖动点，并修复膝关节超过旧45°限幅后无法继续弯曲的问题。
+  - `web-human-ik.mjs` 将活动目标改为最多12轮交替CCD；膝骨修正上限150°、其他骨骼45°，原PMX IK link范围始终生效。修复四元数限幅共用目标对象导致姿势回退；IK相机水平yaw改为负像素增量，IK关闭模型操作保持原行为。
+  - 更新独立 MMD-AR Human design/spec、使用说明、README、自测及任务记录。定向测试5/5、真实PMX浏览器回归1/1、`npm run build:web:mmd-ar-test`通过；手机触控、非标准PMX与姿势观感待验收。未发布网页或构建APK。
+
+### 正式与独立 MMD-AR FSR 倍率收敛
+
+- ✅ [2026-10-12] 按反馈移除正式显示端与独立 MMD-AR 的FSR输出重建倍率控件；内部倍率固定为 `1×`，其它历史存储值和预设值归一为1，内部渲染比例保持独立。
+  - 更新两端面板与设置归一器、独立网页README及对应测试和Design/Spec/Task/自测文档。`node --test tests/mmd-fsr-reconstruction.test.js` 8/8、正式真实PMX集成测试2/2、独立轻量UI浏览器回归1/1通过，正式与独立端真实GPU Shader各10角度通过；独立WEB构建及语法、差异检查通过。独立端真实模型回归因浏览器资源不足未到达modelReady。Offline状态项原值均为true，保持不变；未构建APK或发布网页/服务包。
+
+### 独立 MMD-AR FSR 输出倍率
+
+- ✅ [2026-10-12] 独立 MMD-AR 新增 0.25×/0.5×FSR输出重建档位，正式显示端保持不变。
+  - 修改 `3rd/mmd-ar-test/web-render-settings.mjs` 与 `web-render-settings-build.js`，并扩展 `tests/mmd-fsr-reconstruction.test.js`、`tests/mmd-ar-temporal-aa-browser.test.js`。低倍率维持场景输入尺寸，缩小输出Canvas和时域历史目标；菜单/状态同步说明由页面放大及画质成本取舍。
+  - 单测8/8通过；Chromium SwiftShader Shader覆盖10个角度、独立端50组与正式端原30组均通过。`npm run build:web:mmd-ar-test`成功，生成页五档控件已核对；出现既有Vite大chunk提示。design/spec/task/自测/todo及独立端README同步。未修改正式端源码、Offline发布状态或服务器，未发布网页/服务包/APK；手机画质与性能待验收。
+
+### MMD-AR PMX全身 IK
+
+- ✅ [2026-10-12] 独立 MMD-AR 增加 PMX 头部、双手和双脚交互控制点。
+  - 新增`3rd/mmd-ar-test/web-human-ik.mjs`；修改Human帧接口、构建桥接和动作面板。五个控制点使用限位CCD，保留原IK/grant与既有手部避让/物理顺序；默认关闭，模型/后台/编辑/销毁时清理，不持久化。独立WEB构建副本传入场景引用，正式端源码不变。
+  - 更新Human design/spec、usage、自测说明、任务与索引。`npm run build:web:mmd-ar-test`、5个相关模块语法检查及定向diff检查通过；没有运行自动化/浏览器交互测试，手机姿态与性能待验收。仅本地生成忽略的web-dist，未发布或构建APK。
+
+### Android ASR 测试网页
+
+- ✅ [2026-10-12] 将独立 Android ASR 测试 APK 的基础离线测试流程迁移为 Apache 可托管网页，默认直接读取同源 `/mnt/aimodel/`。
+  - 新增 `3rd/tts-server/android-asr/web/`：WAV/麦克风输入、SenseVoice 单次 ASR、ERes2Net base 声纹注册与 Sherpa 单段/多人/快速多人测试；多段使用 Pyannote。音频在浏览器 Worker 本地处理，注册库只在页面内存，不接正式 ASR/声纹 API、不含流式识别或降噪。WASM 就绪后自动 HEAD 检查四个模型文件，推理时按需加载。
+  - 固定 vendored Sherpa JS/WASM 运行文件及 MIT/Apache-2.0 许可说明，不新增生产依赖。新增 `npm run build:web:android-asr` 与 `npm run test:android-asr-web`，构建输出为忽略目录 `3rd/tts-server/android-asr/web-dist/`；16个文件约13.5 MB，不含模型。
+  - 4/4 Node 自测通过；真实 Chromium 使用本地同步模型经同源 HTTP 映射，验证 ASR、512维登记、单段匹配及 Pyannote 多段/快速多人并记录耗时。design/spec/task/usage/自测文档已同步，完成项从 todo 删除。Apache 尚未部署，本次未修改 APK、Apache配置、正式业务API或 Offline 发布状态。
+  - 补测 `zh.wav`/`en.wav` 自动语言识别分别返回“开放时间早上9点至下午5点。”与“The tribal chieftain called for the boy and presented him with 50 pieces of gold.”；网页解码耗时2831/3824 ms，点击到结果7537/3981 ms（首条含本机首次模型装载）。本地ONNX及tokens与Apache模型路径校验一致；Apache整模型冷下载受约0.66 MiB/s链路限制，180秒内未完成，因此不把公网下载时间计为ASR耗时。
+
+- ✅ [2026-10-12] 在 SM-N9500 Android 9 上用 test_wavs 全部7个音频完成原生 APK 与 Samsung Internet 网页 Worker 的双轮速度/结果一致性对比；两端模型 SHA-256 一致，14/14 配对输出相同，平均热态推理 Web 6354.6 ms、原生 4094.1 ms，原生约快1.55倍。
+  - 同一设备以 你好，小爱.wav 分别测试 CPU 大核4–7和小核0–3各3轮：平均1409 ms与2970 ms，小核约慢2.11倍；原生运行配置已恢复 AUTO，原生/网页线程均为1。记录设备、逐音频结果、格式限制及无人工转写真值无法计算 CER/WER 于 docs/task/20261012_AndroidASR原生网页真机对比.md 和 docs/spec/self-test.md；本轮未改运行代码。
+
 ### 独立MMD-AR GPU物理骨骼纹理直连
 
 - ✅ [2026-10-12] 按用户要求归档本次GPU骨骼直连与拖动修复源码、自测和文档；同步远端Git后仅提交本任务内容，保留其他任务暂存项、配置、results与本地生成资源。

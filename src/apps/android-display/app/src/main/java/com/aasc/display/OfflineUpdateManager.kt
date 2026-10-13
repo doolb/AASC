@@ -21,10 +21,14 @@ import java.net.InetAddress
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
+import java.nio.file.FileVisitResult
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.security.MessageDigest
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.zip.ZipFile
 import org.json.JSONObject
 
@@ -559,6 +563,130 @@ class OfflineUpdateManager(
         private const val UNIX_FILE_TYPE_MASK = 0xf000
         private const val UNIX_REGULAR_FILE = 0x8000
         private const val UNIX_DIRECTORY = 0x4000
+
+        /** 健康 release 仅在有严格命名的非活动版本目录时才需要额外监视。 */
+        @JvmStatic
+        fun hasObsoleteReleaseDirectories(root: File): Boolean {
+            val active = readHealthyReleaseVersions(root) ?: return false
+            return hasObsoleteVersionDirectory(File(root, "updates/code"), "code-v", active.first)
+                || hasObsoleteVersionDirectory(File(root, "updates/dependencies"), "dependencies-v", active.second)
+        }
+
+        /** 仅清理健康 active-release 未引用的版本目录；符号链接及含链接目录树完整跳过。 */
+        @JvmStatic
+        fun cleanupObsoleteReleaseDirectories(root: File): Int {
+            val active = readHealthyReleaseVersions(root) ?: return 0
+            var removedDirectories = 0
+            listOf(
+                Triple(File(root, "updates/code"), "code-v", active.first),
+                Triple(File(root, "updates/dependencies"), "dependencies-v", active.second)
+            ).forEach parentLoop@{ (parent, prefix, activeVersion) ->
+                if (Files.isSymbolicLink(parent.toPath()) || !parent.isDirectory) return@parentLoop
+                val candidates = parent.listFiles().orEmpty().filter { child ->
+                    val version = parseVersionDirectory(child.name, prefix)
+                    version != null && version != activeVersion && !Files.isSymbolicLink(child.toPath())
+                        && child.isDirectory && runCatching { child.canonicalFile.parentFile == parent.canonicalFile }.getOrDefault(false)
+                }
+                candidates.forEach candidateLoop@{ candidate ->
+                    if (containsSymbolicLinkOrUnreadablePath(candidate)) {
+                        // 含链接或不可读项的版本树是预期跳过场景，不能跟随或部分删除。
+                        return@candidateLoop
+                    }
+                    try {
+                        deleteDirectoryWithoutFollowingLinks(candidate)
+                        removedDirectories += 1
+                    } catch (error: Exception) {
+                        Log.w(TAG, "Offline 旧版本目录清理失败，将在后续健康启动重试: ${candidate.name}", error)
+                    }
+                }
+            }
+            return removedDirectories
+        }
+
+        private fun readHealthyReleaseVersions(root: File): Pair<Int, Int?>? = runCatching {
+            val rootPath = root.toPath()
+            if (Files.isSymbolicLink(rootPath) || !root.isDirectory) return@runCatching null
+            val updates = File(root, "updates")
+            if (Files.isSymbolicLink(updates.toPath()) || !updates.isDirectory) return@runCatching null
+            val pointerFile = File(updates, "active-release.json")
+            if (Files.isSymbolicLink(pointerFile.toPath()) || !pointerFile.isFile) return@runCatching null
+            val pointer = JSONObject(pointerFile.readText())
+            val codeVersion = pointer.optInt("codeVersion", -1)
+            val dependencyVersion = pointer.optInt("dependencyVersion", -1)
+            if (pointer.optBoolean("pendingHealth", false) || codeVersion <= 0 || dependencyVersion <= 0) {
+                return@runCatching null
+            }
+            if (!isSafeVersionDirectory(root, "code", "code-v", codeVersion)) return@runCatching null
+            val legacyDependencies = pointer.optBoolean("legacyDependencies", false)
+            if (!legacyDependencies && !isSafeVersionDirectory(root, "dependencies", "dependencies-v", dependencyVersion)) {
+                return@runCatching null
+            }
+            codeVersion to dependencyVersion.takeUnless { legacyDependencies }
+        }.getOrNull()
+
+        private fun isSafeVersionDirectory(root: File, bucketName: String, prefix: String, version: Int): Boolean {
+            val parent = File(root, "updates/$bucketName")
+            val directory = File(parent, "$prefix$version")
+            if (Files.isSymbolicLink(parent.toPath()) || !parent.isDirectory
+                || Files.isSymbolicLink(directory.toPath()) || !directory.isDirectory) return false
+            return runCatching {
+                directory.canonicalFile.parentFile == parent.canonicalFile
+            }.getOrDefault(false)
+        }
+
+        private fun hasObsoleteVersionDirectory(parent: File, prefix: String, activeVersion: Int?): Boolean {
+            if (Files.isSymbolicLink(parent.toPath()) || !parent.isDirectory) return false
+            return parent.listFiles().orEmpty().any { child ->
+                val version = parseVersionDirectory(child.name, prefix)
+                version != null && version != activeVersion && !Files.isSymbolicLink(child.toPath())
+                    && child.isDirectory && runCatching { child.canonicalFile.parentFile == parent.canonicalFile }.getOrDefault(false)
+            }
+        }
+
+        private fun parseVersionDirectory(name: String, prefix: String): Int? {
+            val match = Regex("^${Regex.escape(prefix)}([0-9]+)$").matchEntire(name) ?: return null
+            val version = match.groupValues[1].toIntOrNull()?.takeIf { it > 0 } ?: return null
+            return version.takeIf { name == "$prefix$version" }
+        }
+
+        private fun containsSymbolicLinkOrUnreadablePath(directory: File): Boolean {
+            var rejected = false
+            try {
+                Files.walkFileTree(directory.toPath(), object : SimpleFileVisitor<Path>() {
+                    override fun visitFile(file: Path, attributes: BasicFileAttributes): FileVisitResult {
+                        if (Files.isSymbolicLink(file)) {
+                            rejected = true
+                            return FileVisitResult.TERMINATE
+                        }
+                        return FileVisitResult.CONTINUE
+                    }
+
+                    override fun visitFileFailed(file: Path, error: IOException): FileVisitResult {
+                        rejected = true
+                        return FileVisitResult.TERMINATE
+                    }
+                })
+            } catch (_: IOException) {
+                rejected = true
+            }
+            return rejected
+        }
+
+        private fun deleteDirectoryWithoutFollowingLinks(directory: File) {
+            Files.walkFileTree(directory.toPath(), object : SimpleFileVisitor<Path>() {
+                override fun visitFile(file: Path, attributes: BasicFileAttributes): FileVisitResult {
+                    check(!Files.isSymbolicLink(file)) { "拒绝删除 Offline 版本目录中的符号链接" }
+                    Files.delete(file)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun postVisitDirectory(directory: Path, error: IOException?): FileVisitResult {
+                    if (error != null) throw error
+                    Files.delete(directory)
+                    return FileVisitResult.CONTINUE
+                }
+            })
+        }
     }
 
     /** 只读取并验签服务清单，供前台显示服务代码/依赖更新提示，不下载更新包。 */
@@ -1423,6 +1551,8 @@ class OfflineUpdateManager(
             previousLegacyDependencies = null
         ))
         File(root, "updates/failed-release.json").delete()
+        val removed = cleanupObsoleteReleaseDirectories(root)
+        if (removed > 0) Log.i(TAG, "健康 Offline release 已清理 $removed 个旧版本目录")
         return true
     }
 

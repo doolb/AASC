@@ -8,7 +8,7 @@
 
 - [MMD-AR统一灯光预设伪代码（已实现）](spec/mmd-ar-lighting-presets.md)
 
-- [独立MMD通用角色控制与MPL修正实现](spec/mmd-human-interface.md)
+- [独立MMD通用角色控制、MPL修正与PMX全身IK伪代码（已实现，本地构建）](spec/mmd-human-interface.md)
 
 - [独立MMD-AR回复识别与动作调度](spec/mmd-ar-ai-reply.md)
 
@@ -75,7 +75,7 @@
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | Android Termux服务器节点 | [android-termux-server.md](spec/android-termux-server.md) | Termux 服务目录、依赖安装、启动监督和验证伪代码 |
 | APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](spec/android-embedded-node-server.md) | APK Runtime 安装、launcher 进程、主服务器连接和能力裁剪伪代码 |
-| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](spec/android-display-offline-apk.md) | 离线模型打包、本机启动、独立包名和控制端 WebView 伪代码 |
+| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](spec/android-display-offline-apk.md) | 离线模型打包、本机启动、独立包名、控制端 WebView 与 TTS DPI 位置校准伪代码 |
 | Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](spec/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
 | Android offline 模型资产按需加载 | [android-offline-model-assets.md](spec/android-offline-model-assets.md) | LLM asset 与 Node Runtime 安装边界、显示端按需物化伪代码 |
 | Android Offline APK 服务热更新与原生增量 APK | [android-offline-hot-update.md](spec/android-offline-hot-update.md) | 签名更新清单、code/dependencies 原子切换、update-only APK 与模型保留伪代码 |
@@ -86,13 +86,14 @@
 | 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求保护、内置 tts.server 服务任务与通用 HTTP URL |
 | TTS Provider 与播报配置 | [tts-providers.md](spec/tts-providers.md) | 模板继承、AI/Agent、文本阅读、系统播报及权威配置伪代码 |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/spec/android-asr-apk.md) | SenseVoice 模型、音频输入、识别耗时和 HTTP 服务伪代码 |
+| Android ASR 测试 APK 网页版 | [android-asr-web-test.md](spec/android-asr-web-test.md) | Apache 模型目录、浏览器离线 ASR、临时注册与多段声纹测试伪代码 |
 | 独立 Android RapidOCR HTTP 测试 APK | [android-rapidocr-apk.md](../3rd/tts-server/docs/spec/android-rapidocr-apk.md) | RapidOCR 模型、图片 HTTP 上传和网页测试伪代码 |
 | 独立 Android YOLO11 五模型测速 APK | [android-yolo-apk.md](../3rd/tts-server/docs/spec/android-yolo-apk.md) | 五个 YOLO11 ONNX 模型、目标检测、HTTP/网页和测速伪代码 |
 | Linux TTS 服务 | [tts-linux.md](spec/tts-linux.md) | Linux Embedded Speech TTS HTTP 服务、队列与独立运行时路径 |
 | 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/spec/android-offline-tts-apk.md) | 内置模型离线合成、WAV 播放和耗时显示伪代码 |
 | Android TTS CPU 核心模式 | [android-tts-cpu-affinity.md](../3rd/tts-server/docs/spec/android-tts-cpu-affinity.md) | CPU 核心识别、JNI affinity、回退和状态显示伪代码 |
 | 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
-| 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、旋转重力方向调整、设备事件防抖 |
+| 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、旋转重力方向调整、设备事件防抖与 Offline DPI 字幕边距校准 |
 | 显示端分布式能力 | [display-capability.md](spec/display-capability.md) | 显示端能力声明、能力路由、能力编辑 |
 | 显示端语音唤醒与监听控制 | [display-voice-conversation.md](spec/display-voice-conversation.md) | 监听开关、唤醒状态、TTS结束计时和声纹独立语义 |
 | Windows子显示端语音转文字输入 | [windows-voice-text-input.md](spec/windows-voice-text-input.md) | Windows 前台窗口文本注入、快捷键、语音命令和 ASR 旁路伪代码 |

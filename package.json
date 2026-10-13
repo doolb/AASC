@@ -25,6 +25,8 @@
     "prepare:mmd-ar-lipsync": "node 3rd/mmd-ar-test/web-lipsync-build.js",
     "prepare:mmd-lipsync": "node scripts/ops/prepare-mmd-lipsync.js",
     "prepare:mmd-production": "node scripts/ops/prepare-mmd-production.js",
+    "build:web:android-asr": "node scripts/ops/build-android-asr-web.js",
+    "test:android-asr-web": "node --test tests/android-asr-web.test.js",
     "prebuild:server-package": "npm run prepare:mmd-production",
     "prebuild:offline-update": "npm run prepare:mmd-production",
     "download:llm-model": "node scripts/ops/download-llm-model.js",

@@ -27,7 +27,7 @@ async function stageRuntime(root, { webMode = false } = {}) {
     let runtime = await fs.readFile(runtimeFile, 'utf8');
     runtime = "import { createHumanInterfaceElement } from './web-human-interface.mjs';\n" + runtime;
     runtime = once(runtime, '    const physicsGate =', '    const human = createHumanInterfaceElement({ getMesh: () => currentMesh,\n'
-        + '        getHelper: () => helper.current, getProfile: () => currentProfile, getCamera: () => camera, canvas, manualExpressions,\n'
+        + '        getHelper: () => helper.current, getProfile: () => currentProfile, getCamera: () => camera, getScene: () => scene, canvas, manualExpressions,\n'
         + '        startRendering: () => startRendering() });\n    const physicsGate =');
     runtime = once(runtime, '        manualExpressions.before(frameHelper);', '        human.before(delta, frameHelper);\n        manualExpressions.before(frameHelper);');
     // 物理/表情回调可能在帧内唤醒渲染，帧末复用已排队的帧，保持单一RAF循环。
@@ -53,7 +53,7 @@ async function stage(root, { webMode = false } = {}) {
     for (const file of ['web-reply-gestures.mjs', 'web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
         'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js', 'web-xpbd-collision.mjs',
         'web-rigid-body-debug.mjs']) versions.set(file, await version(file));
-    const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'interface', 'ui'];
+    const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'ik-pbd', 'ik', 'interface', 'ui'];
     for (const suffix of names) {
         const file = 'web-human-' + suffix + '.mjs';
         let source = await fs.readFile(path.join(__dirname, file), 'utf8');
@@ -62,6 +62,10 @@ async function stage(root, { webMode = false } = {}) {
     }
     const runtimeFile = path.join(folder, 'display-pmx-runtime.js');
     let runtime = await fs.readFile(runtimeFile, 'utf8');
+    // Human共享桥接已存在时只在独立WEB副本补入场景引用，不修改正式显示端源码。
+    if (runtime.includes("getCamera: () => camera, canvas, manualExpressions")) {
+        runtime = once(runtime, 'getCamera: () => camera, canvas, manualExpressions', 'getCamera: () => camera, getScene: () => scene, canvas, manualExpressions');
+    }
     const oldHash = await version('display-pmx-runtime.js');
     if (runtime.includes('./mmd-human-runtime.mjs')) {
         // 正式桥接在测试副本继续使用独立Human核心，保留测试页尚在编辑的功能。

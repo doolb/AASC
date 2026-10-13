@@ -1,5 +1,37 @@
 # 自测功能文档
 
+## 豆包纯Node Responses会话复用（2026-10-13）
+
+新增`chat2api-doubao-session.test.js`与`chat2api-doubao-responses.test.js`共20项：版本化状态/身份摘要、旧observed、ACK冲突/缺ACK、中间结束隔离、同ID增量、私有Store重建、流式/非流式、取消/未消费/排队、16/256容量、并行JSON保存、Pi snapshot、写失败阻断和总时限。测试仅虚构Cookie/profile与隔离内存Store；`npm run check:chat2api`201/204，同3项旧Windows chmod；普通LLM/Core/Responses24/24、旧TTS19/19。
+
+真实协议仅获确认的两轮：首轮随机标记/OK，第二轮不携带旧正文且同ACK会话，准确回忆；CDP已断、Node传输、空section/null index。之后正式实现只做模拟验证，没有新增真实请求。独立审查无重要缺陷，两项小问题已修复；不重启主服务或保存实际凭据/原始帧。UI只读自测不能自动请求，正式部署/长期/设备/think/expert仍另验。
+
+## Offline 热更旧版本目录回收（2026-10-13）
+
+`cd src/apps/android-display && ./gradlew :app:testDebugUnitTest --no-daemon`，199/199通过。新增用例覆盖pending health期间保留回滚目录、健康版本只清理非活动严格命名目录、历史目录回收、符号链接树整体跳过且目标不变、APK/data-repair/模型/其他数据保留、缺失或pending活动指针时不清理。首次回归发现预期跳过链接树时Android `Log.w` 的JVM桩会抛异常；该跳过分支不再调用Android日志，实际删除错误仍保留警告。
+
+本轮只完成源码与JVM回归，没有构建或发布min APK；`release/offline-release-status.json.minApk=true`，设备清理行为需安装包含本改动的min APK后生效。
+
+## 豆包纯Node普通LLM（2026-10-13）
+
+新增自测模块`chat2api-doubao-node-protocol.test.js`：8项覆盖profile字段/同账号fp、0/1/3模式、无浏览器传输、流式结束、最终URL、取消/403无重试、凭证包导入脱敏、真实Store混合账号池和msToken优先级。只使用虚构身份及临时存储，不访问用户Chrome。执行`npm run check:chat2api`：181/184，同3项旧Windows chmod失败；Ogg/WASM21/21、旧TTS19/19。
+
+独立获授权的真实诊断：读取一次所选账号Cookie/device/web/fp/UA到内存后断CDP，正式Provider工厂和CoreAdapter由Node自行构造新会话，流式/非流式均实际回复OK并正常结束，无a_bogus、页面fetch或浏览器签名。本轮未保存真实凭据或原始响应；仅普通模式Windows Node正例，不扩大为think/expert、长期运行或设备能力。UI只读自测不能自动发送新的聊天或语音。
+
+## 独立 MMD-AR PMX PBD 全身 IK（2026-10-13）
+
+定向验证：`node --test tests/mmd-ar-human-ik-pbd.test.js tests/mmd-ar-ik-camera-gestures.test.js`，8/8通过。PBD数学用例检查误差按角度杠杆分配、每轮限幅、零梯度/非有限权重安全返回和膝盖偏好弯曲面；合成三骨腿链检查膝/踝同时拖动、深屈膝、祖先共同旋转、骨段长度不变、脚目标误差下降、PMX范围及reset恢复。
+
+真实浏览器：`node --test tests/mmd-ar-ik-camera-gestures-browser.test.js`，1/1通过；加载米娅 PMX、显示七个头/腕/膝/踝控制点，检查IK镜头环绕、双指平移与捏合缩放，并确认无pageerror。该用例未自动拖动真实模型控制点；实际PMX拖点造型、其他模型和手机帧时仍待人工验收。
+
+`npm run build:web:mmd-ar-test`成功，新PBD模块已进入版本化构建依赖。构建保留既有 Blender 大 chunk 提示。未构建APK、未发布网页/服务包；Offline发布状态未修改。
+
+## 独立MMD-AR PMX全身IK（2026-10-12）
+
+构建：`npm run build:web:mmd-ar-test`。人工验收在独立网页加载标准日文骨骼名、英文别名及缺失末端的PMX，打开「动作 → Human 生理与后天行为 → PMX 全身 IK」，核对七个控制点、未拖动时跟随VMD、拖动后保持目标、重置/关闭/换模型清理；拖动时不触发相机旋转或轻触注视。继续核对原生IK/grant后、手部避让前的帧顺序，以及Ammo/XPBD、物理暂停和模型/helper销毁。记录移动设备帧时与复杂服饰观感；桌面结果不替代手机验收。
+
+自动化覆盖见上方2026-10-13 PBD全身IK记录；实际拖点姿态、骨骼限位、恢复和手机性能仍待浏览器/设备验收。
+
 ## 独立MMD-AR拖动飞散修复（2026-10-12，独立场景验收完成）
 
 先跑`npm run build:web:mmd-ar-test`。定向命令：`node --test tests/mmd-ar-xpbd-webgl-bone-texture.test.js tests/mmd-ar-xpbd-webgl.test.js tests/mmd-pmx-helper.test.js`；真实PMX拖动与生命周期分别串行运行`node --test tests/mmd-ar-xpbd-webgl-drag-browser.test.js`和`node --test tests/mmd-ar-xpbd-webgl-browser.test.js`。package没有这组专用script，未跑全仓通用test或APK构建。

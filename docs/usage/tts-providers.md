@@ -8,6 +8,10 @@ Qwen API与豆包API的Key保存在服务器用户配置文件中：普通运行
 
 国内千问网页仅用于AI/Agent回复，由Chat2API提供语音合成。先在Chat2API账户管理中添加或登录国内千问（qwen）账号，并启用对应账号及Provider；在语音面板启用国内千问、设置模型/默认音色并保存。TTS不再查询或选择账号，Chat2API按已保存的调度策略自动使用可用国内账号，更新登录后下次合成读取最新值。国际qwen-ai不适用于该语音协议。未提供可用账号、登录失效或上游失败会明确报错，不切换到系统原生。
 
+豆包普通文字doubaochat已于2026-10-13用正式Node适配器真实验证流式/非流式OK，现支持Responses同账号原生续接、仅发新增输入，两轮纯Node协议记忆验证通过；同账号nodeProfile初始化后不依赖Chrome或页面签名，详情见[纯Node普通LLM](chat2api-doubao-node.md)。这不代表网页朗读链路完成真实验收。
+
+`doubao-chat`已接入 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭，真实运行未重新验收。先在现有Chat2API模型映射中为doubao-chat指定preferredProviderId=doubaochat及preferredAccountId，所选账号和Provider须启用且可用；严格绑定，不自动换号。业务面板无Cookie/账号输入。固定音色zh_female_wenroutaozi_uranus_bigtts、speech speed=1/volume=100，业务语速0；input最多1000个UTF-16字符且UTF-8≤4000字节，只接受wav。Frontier收集完整Ogg、校验并解码为单声道PCM WAV，缓存及下载仍为.wav/audio/wav；错误不重试、不切换其它来源。公开协议已核对，本地模拟及WASM样本通过；新真实聊天/合成需独立明确授权，Android Node/WASM、音色听感与设备播放尚未验收。文字网页fetch已实现为默认关闭的实验功能，真实运行未验收。
+
 网页模型默认选择QUARK_VOICE，MINI_MAX需另有匹配的可用音色；目前预置的已验证音色是zh_female_quarkF531S0_ptts，完整国内音色目录尚未取得。qwen3-tts-flash应配置在Qwen API中并使用百炼API Key，不能保存为国内千问网页模型。历史错误模型读取时恢复QUARK_VOICE并保留其他参数，下一次合法保存会写回；服务端拒绝新提交的错误模型并保留原配置。
 
 Android账户管理“打开外部网页”会向现有允许的www/chat2/chat2-api.qianwen.com三个HTTPS来源恢复登录Cookie。新版APK的恢复提示会显示当前网页来源，便于核对跳转；提示不包含网址路径或查询参数。原生来源提示需更新APK，网页或服务代码热更新无法替换原生窗口。
@@ -28,8 +32,8 @@ qwen-chat合成前自动去掉emoji，包含肤色、家庭组合、国旗和键
 
 语速−10至10，音量0至100。原生显示端与Qwen API使用PCM重采样，可能改变音高；服务端原生与豆包/国内千问使用生成参数。Qwen API单次最多600字符，较长回复沿用业务分句，单句超限报错。每段完整音频最多16MiB，默认总时限60秒，不保存临时音频文件。
 
-Chat2API代理另提供POST /v1/audio/speech，沿用既有Bearer API Key鉴权；input为文本，model支持qwen-chat、QUARK_VOICE、MINI_MAX，voice为音色ID，speed为0.25–4倍，volume为0–100，response_format仅wav，成功返回audio/wav二进制。
+Chat2API代理另提供POST /v1/audio/speech，沿用既有Bearer API Key鉴权；input为文本，旧模型支持qwen-chat、QUARK_VOICE、MINI_MAX，voice为音色ID，speed为0.25–4倍，volume为0–100；新增实验性doubao-chat仅接受上述固定参数与显式账号映射。response_format仅wav，成功返回audio/wav二进制。
 
 国内千问默认音色已用真实账号验证连续生成和令牌刷新后的生成；其他音色权限及设备声音需现场验收。若提示校时、令牌注册或刷新失败，检查服务器网络及Chat2API账户登录状态。其他运行实例需加载最新后端；Offline服务代码包尚未构建发布。
 
-本机8081已重启加载纯Node版本，控制端聊天手动播放入口生成并读取音频HTTP200验证通过；刷新控制端后可继续使用。
+先前千问纯Node版本曾通过本机8081手动播放及音频HTTP200验证；该历史记录不代表本次豆包实验选项已加载或验收。本次未重启主服务器，运行实例需在用户自行安排加载后使用最新代码。
