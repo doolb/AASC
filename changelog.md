@@ -12025,7 +12025,7 @@
 ### Offline更新检查错误补齐
 
 - ✅ [2026-10-13] 更新检查结果新增failed标志，服务与min APK签名拒绝/版本不兼容/失败候选均提示；LAN/WAN最终网络失败带原因，网页重试耗尽保持真实启动错误。
-  - 修改OfflineUpdateManager/MainActivity与诊断自测；min升40/0.2.38，服务包继续v71。min39+v71已在API28真机验证健康恢复、服务器页面v71、Download ZIP和重启；检查阶段补齐正在出包。
+  - 修改OfflineUpdateManager/MainActivity与诊断自测；min升40/0.2.38，服务包继续v71。min39+v71已在API28真机验证健康恢复、服务器页面v71、Download ZIP和重启；补齐min40/0.2.38已签名构建并安装API28：81124288字节，SHA256 21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5；全套209/209通过，实际APK0.2.38/code71健康。servicePackage/minApk=false；min40最终HTTP校验/清理进行中。
 
 ### TTS字幕主题对比度方案记录
 

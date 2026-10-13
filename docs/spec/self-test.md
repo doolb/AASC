@@ -1354,5 +1354,5 @@ ADB已复现 := SM-N9500/Android API28安装full38；版本/签名/大小/SHA256
 更新结果 := 正常无更新failed=false；签名拒绝/HTTP异常failed=true，与中文文案独立
 UI检查失败 := 服务和min都显示错误；网页超时不覆盖已记录的真实进程原因
 已完成设备 := min39+v71健康提交、服务器页面v71、Download ZIP 3077字节4项CRC通过、重启仍v71
-原生补齐 := min40构建后安装复测；API29+MediaStore尚无对应真机
+原生补齐 := min40签名构建/CRC/profile/版本通过并安装；APK0.2.38/code71健康；209项0失败/错误；API29+MediaStore尚无对应真机
 ```

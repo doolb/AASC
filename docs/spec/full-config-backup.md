@@ -74,7 +74,7 @@ ZIP 写入采用直接生产依赖 yazl 的流式归档，读取复用 yauzl。�
 
 验证覆盖：普通/release 目录映射、全局与聊天多文件往返、默认合并与明确替换、取消不写入、备份回滚、重启前不应用、启动时应用、延迟保存一致性、损坏 ZIP/哈希、路径穿越、链接、解压上限和 APK 文件保存结果。
 
-## Android路径与Download修复伪代码（2026-10-13，源码已完成，出包与设备复测中）
+## Android路径与Download修复伪代码（2026-10-13，已实现，API28 Download与启动复测通过）
 
 ```text
 已有声明 := projectRoot、resolveReleaseRuntimeContext、mkdirPrivate、NativeControl保存桥、NodeServerService状态广播
@@ -90,4 +90,11 @@ Download写入 := API29+创建pending MediaStore条目；旧系统独占创建�
 更新完成 := 下载/原子切换只是等待健康；健康确认后回传应用成功
 更新失败 := 保存失败原因 → 回滚候选（若pending）→ 回传保留版本 → 错误面板保持直到重试/成功
 界面 := 自动重试/网页连接失败不覆盖已有实际错误；错误更新面板不自动折叠
+```
+
+```text
+API28实测 := /control原生桥 → 流式保存Download → 成功回调含路径
+产物实测 := ZIP3077字节/4项/CRC通过；未执行真实数据导入
+启动实测 := code71真实根/data/data → 备份工作目录就绪 → /api/status=ok；重启正常
+API29+ := pending MediaStore路径已实现，暂无对应硬件实测
 ```

@@ -35,3 +35,5 @@ Node/浏览器17项通过；24MiB往返1809ms、RSS267MiB含夹具。首次/tmp�
 min39安装后真实启动错误和失败候选更新同时显示且保持；通过原生按钮应用服务v71，实际codePath为/data/data/.../updates/code/code-v71，健康提交后错误遮罩清除。控制端服务器页面显示v71；ZIP按钮直接生成Download/aasc-full-config-1791897877802.zip（3077字节、4项、CRC通过），测试拉取副本已清理，设备文件保留。强制停止后再启动仍status=ok/v71。
 
 检查发现签名拒绝等更新检查错误只记日志，已先补spec后修改OfflineUpdateManager显式failed标志、MainActivity检查提示；LAN/WAN最终网络异常保留原因、正常无更新不报错，网页重试超时不覆盖真实原因。min升40/0.2.38，服务继续复用已构建v71。
+
+最终原生构建：min40/0.2.38-offline-min，81124288字节，SHA256=21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5，与full38同证书。APK CRC/profile/版本通过，API28安装后status=ok、APK0.2.38/code71；原生全套209/209通过（0失败/错误）。servicePackage/minApk均已由成功构建设false；min40最终WAN HTTP校验/精确清理进行中。

@@ -1041,7 +1041,7 @@ Build/device checks:
     compare configuration, tasks/results, logs, ASR/TTS files and LLM cache before/after
 ```
 
-## Native错误与健康确认伪代码（2026-10-13，已实现，待设备复测）
+## Native错误与健康确认伪代码（2026-10-13，已实现，API28设备复测通过）
 
 ```text
 每次启动 := 创建diagnostics与独立代次/一次性健康处理标识；stderr/错误行形成有界脱敏摘要
@@ -1063,4 +1063,11 @@ UI更新错误 := 取消自动折叠；Activity保存/恢复错误；用户新�
 清单获取 := LAN失败继续WAN；最终网络失败抛出包含原因的异常；所有源404保持无更新
 检查完成 := failed时显示原生更新失败卡片；服务与min APK检查统一执行，不依赖中文关键词
 网页重试耗尽 := 已有startupError则保持原始原因，否则显示等待超时
+```
+
+```text
+设备验收 := SM-N9500/API28 full38 → min39 → code71健康提交 → min40
+UI验收 := 真实启动Error与失败候选同时可见；健康恢复清除错误并刷新；服务器页v71
+运行验收 := /api/status status=ok，APK0.2.38、codev71、canonical codePath/code-v71；重启保持版本
+发布验收 := code71与min39 LAN/WAN文件/签名/HTTP大小SHA256通过；min40最终发布验证另记changelog
 ```
