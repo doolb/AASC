@@ -216,6 +216,11 @@
     pointer-events: none;
 }
 
+/* 聊天打开时整组交互入口让位给聊天层，避免右下设置按钮压住聊天输入与消息。 */
+body.display-chat-open .display-interaction-layer {
+    z-index: 14;
+}
+
 .display-stage-lighting-control {
     position: absolute;
     bottom: calc(max(12px, var(--display-safe-inset-bottom)) + var(--display-keyboard-inset-bottom));

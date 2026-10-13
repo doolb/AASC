@@ -503,8 +503,12 @@
   state.chatVisible = visible
   更新 chatLayer 的可见性和 pointer-events
   如果 visible
-    interactionLayer 保持可操作
+    body 设置 display-chat-open
+    interactionLayer.zIndex = 14
+    确保 interactionLayer 低于 chatLayer（under-mmd 时为 15，否则为 20）
   否则
+    body 移除 display-chat-open
+    interactionLayer.zIndex 恢复为 50
     清除输入焦点和键盘 inset
   不停止 mediaLayer 或 mmdLayer
 ```
@@ -552,7 +556,8 @@
     mmdLayer 的视觉层级低于 chatLayer
   如果 order 是 over-chat
     mmdLayer 的视觉层级高于 chatLayer
-    interactionLayer 仍保持最高层级
+    聊天关闭时 interactionLayer 保持最高交互层级
+    聊天打开时 interactionLayer 仍低于 chatLayer
   保存为显示端本地偏好或通过既有远端配置流程保存
 ```
 
@@ -867,7 +872,9 @@
   displayChatLayer.zIndex = DISPLAY_CHAT_Z_INDEX
   voiceTextDisplay 挂在 displayBroadcastLayer 内并使用绝对定位
   voiceConversationCountdown 与 voiceConversationConfirmationCountdown 继续沿用原有位置、旋转和计时刷新
-  因 displayChatLayer 高于 displayBroadcastLayer，聊天层始终覆盖 TTS 文字与天气详情；交互控件继续高于所有舞台内容
+  因 displayChatLayer 高于 displayBroadcastLayer，聊天层始终覆盖 TTS 文字与天气详情
+  聊天打开时 displayInteractionLayer.zIndex = 14，低于聊天层的 15/20
+  聊天关闭时 displayInteractionLayer.zIndex 恢复为 50，保持原有控件层级
   聊天打开或异步 TTS 文本更新时，不改变倒计时状态，不允许语音文字越过聊天层
 ```
 
@@ -1418,6 +1425,7 @@ setChatSession(session):
   面板相对入口组 absolute 定位，bottom=0，right=入口组实际宽度+8px
   横竖屏共用左侧底部锚点，面板从下向上显示
   展开任何设置面板时舞台 z-index=10001，按钮组 z-index=60，覆盖顶部普通文字及弹窗
+  聊天打开时交互层整体降至 z-index=14，仍低于聊天层；聊天关闭后恢复默认 z-index=50
   舞台按逻辑高度扣除上下安全区与键盘计算面板最大高度
 ```
 

@@ -1,3 +1,10 @@
+### 显示端聊天与 MMD 控件层级
+
+- ✅ [2026-10-13] 聊天打开时将右侧灯光/动作/定位控件组放到聊天层下方，关闭聊天后恢复原层级。
+  - 修改 `display-mmd.css`，复用 `display-chat-open` 状态，不改聊天/MMD层序、服务端协议或 APK 资源；更新 display chat/MMD design、spec、task 和 todo。
+  - 浏览器回归 `tests/display-chat-opening-browser.test.js` 10/10 通过，覆盖两种 MMD 层序、聊天输入/发送命中和关闭后灯光按钮恢复；`git diff --check` 通过。合并运行的 `display-chat-mmd` 静态套件为48通过、12失败，失败在独立 AR/MMD 控件及 runtime 断言，与本次层级 CSS 无关。
+  - `servicePackage=true` 保持；未构建 APK 或依赖包。
+
 ### 国内千问全场景播报
 
 - ✅ [2026-10-13] 解除qwen-chat仅限AI/Agent回复的业务限制，文本阅读、报时/提醒、自定义文字、语音命令及系统播报可选国内千问，已有默认选择保持。

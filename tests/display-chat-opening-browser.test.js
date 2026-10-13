@@ -41,6 +41,74 @@ test('首次展开、会话恢复和迟到历史使用真实聊天与舞台模�
         ['chatHistory', 'roleHistory'].includes(message.type)));
     const text = () => page.$eval('[data-role="messages"]', (element) => element.textContent);
 
+    await context.test('聊天打开时右侧设置入口位于聊天下方，关闭后恢复', async () => {
+        await reset();
+        await page.evaluate(() => {
+            document.querySelector('.display-stage-lighting-control').hidden = false;
+        });
+
+        for (const order of ['under-chat', 'over-chat']) {
+            await page.evaluate((mmdOrder) => {
+                window.DisplayStage.setMmdOrder(mmdOrder);
+                window.DisplayStage.setChatVisible(true);
+            }, order);
+            const openLayers = await page.evaluate(() => {
+                const interaction = document.getElementById('displayInteractionLayer');
+                const chat = document.getElementById('displayChatLayer');
+                const lighting = document.getElementById('displayMmdLightingToggle');
+                const input = chat.querySelector('[data-role="input"]');
+                const send = chat.querySelector('.display-chat-send');
+                const lightingRect = lighting.getBoundingClientRect();
+                const inputRect = input.getBoundingClientRect();
+                const sendRect = send.getBoundingClientRect();
+                const lightingHit = document.elementFromPoint(
+                    (lightingRect.left + lightingRect.right) / 2,
+                    (lightingRect.top + lightingRect.bottom) / 2
+                );
+                const inputHit = document.elementFromPoint(
+                    (inputRect.left + inputRect.right) / 2,
+                    (inputRect.top + inputRect.bottom) / 2
+                );
+                const sendHit = document.elementFromPoint(
+                    (sendRect.left + sendRect.right) / 2,
+                    (sendRect.top + sendRect.bottom) / 2
+                );
+                return {
+                    interactionZ: getComputedStyle(interaction).zIndex,
+                    chatZ: getComputedStyle(chat).zIndex,
+                    chatOpen: document.body.classList.contains('display-chat-open'),
+                    chatOwnsLightingPoint: Boolean(lightingHit?.closest('.display-chat-window')),
+                    inputOwnsPoint: inputHit === input,
+                    sendOwnsPoint: sendHit === send
+                };
+            });
+            assert.equal(openLayers.chatOpen, true);
+            assert.equal(openLayers.interactionZ, '14');
+            assert.equal(openLayers.chatZ, order === 'over-chat' ? '15' : '20');
+            assert.equal(openLayers.chatOwnsLightingPoint, true);
+            assert.equal(openLayers.inputOwnsPoint, true);
+            assert.equal(openLayers.sendOwnsPoint, true);
+
+            await page.evaluate(() => window.DisplayStage.setChatVisible(false));
+            const closedLayers = await page.evaluate(() => {
+                const interaction = document.getElementById('displayInteractionLayer');
+                const lighting = document.getElementById('displayMmdLightingToggle');
+                const rect = lighting.getBoundingClientRect();
+                return {
+                    interactionZ: getComputedStyle(interaction).zIndex,
+                    chatOpen: document.body.classList.contains('display-chat-open'),
+                    lightingOwnsPoint: document.elementFromPoint(
+                        (rect.left + rect.right) / 2,
+                        (rect.top + rect.bottom) / 2
+                    ) === lighting
+                };
+            });
+            assert.equal(closedLayers.chatOpen, false);
+            assert.equal(closedLayers.interactionZ, '50');
+            assert.equal(closedLayers.lightingOwnsPoint, true);
+        }
+    });
+
     await context.test('恢复私聊后首次展开直接加载当前历史，无默认群聊请求', async () => {
         await reset();
         assert.equal(await latestHistory(), undefined);
