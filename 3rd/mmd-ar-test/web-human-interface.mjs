@@ -454,6 +454,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         },
         resetInteractiveIK() { requireModel(); armAvoidance.restore(); interactiveIK.resetTargets(); wake(); return interactiveIK.getState(); },
         getInteractiveIKState: () => interactiveIK.getState(),
+        setInteractiveMarkerDiameter(value) { const result = interactiveIK.setMarkerDiameter(value); wake(); return result; },
         async setInteractiveIKMode(value) {
             const bound = requireModel(); armAvoidance.restore();
             const result = await interactiveIK.setMode(value, bound); wake(); return result;

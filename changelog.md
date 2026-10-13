@@ -1,3 +1,11 @@
+### 独立MMD-AR全身IK面板、控制点与牵引
+
+- ✅ [2026-10-13] 全身IK迁到独立按钮/面板，放大控制点并增强身体物理牵引。
+  - 新增`web-human-ik-ui.mjs`/`web-human-ik-markers.mjs`，更新build/Human panel/UI/build/IK/interface及现有面板互斥；旧Human IK入口移除。收起面板保留姿态/目标，模式/启用/关闭/重置统一在新面板，横竖屏布局和Escape支持。
+  - 控制点默认32 CSS px、可调20–48px，镜头近远保持屏幕尺寸，命中至少44px，重叠选最近中心；排除相机后方/视锥外点，适配舞台四向旋转。
+  - `web-human-physics-drive.mjs`默认强度0.85，目标响应和力/力矩预算联动；Hold系数1.2、Comply系数0.55，自然姿态独立2.4Hz，保留PMX限位和固定子步。合成17体同目标0.5/1秒误差约降低40%，有界瞬态超调；实际手机/其他模型手感列待办。
+  - 新增标记自测，扩展身体与真实浏览器面板用例；定向31/31、真实米娅面板/鼠标拖点和镜头浏览器2/2、`npm run build:web:mmd-ar-test`、14模块语法和定向差异空白检查通过。同步design/spec/task/usage/README/self-test与todo；只生成本地独立WEB，不出APK/部署，不改变Offline发布状态。
+
 ### Offline启动回滚、Download备份与错误提示修复
 
 - ✅ [2026-10-13] ADB安装full APK v38并复现内置v69与热更v70启动失败；确认系统/data/user/0链接被备份工作目录检查误拒绝，70切换后回滚。

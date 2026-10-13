@@ -53,7 +53,7 @@ async function stage(root, { webMode = false } = {}) {
     for (const file of ['web-reply-gestures.mjs', 'web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
         'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js', 'web-xpbd-collision.mjs',
         'web-rigid-body-debug.mjs', 'mmd-ammo-physics.mjs']) versions.set(file, await version(file));
-    const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'ik-pbd', 'physics-rig', 'physics-drive', 'ik', 'interface', 'ui'];
+    const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'ik-pbd', 'ik-markers', 'physics-rig', 'physics-drive', 'ik', 'interface', 'ik-ui', 'ui'];
     for (const suffix of names) {
         const file = 'web-human-' + suffix + '.mjs';
         let source = await fs.readFile(path.join(__dirname, file), 'utf8');
@@ -81,6 +81,7 @@ async function stage(root, { webMode = false } = {}) {
     let display = await fs.readFile(displayFile, 'utf8');
     display = once(display, './display-pmx-runtime.js?v=' + oldHash, './display-pmx-runtime.js?v=' + await version('display-pmx-runtime.js'));
     display += "\nimport('./web-human-ui.mjs?v=" + versions.get('web-human-ui.mjs') + "').catch(error => console.warn('[MMD] Human面板加载失败:', error));\n";
+    display += "\nimport('./web-human-ik-ui.mjs?v=" + versions.get('web-human-ik-ui.mjs') + "').catch(error => console.warn('[MMD] IK面板加载失败:', error));\n";
     await fs.writeFile(displayFile, display);
     const helperFile = path.join(folder, 'vendor/three/animation/MMDAnimationHelper.js');
     let helper = await fs.readFile(helperFile, 'utf8');

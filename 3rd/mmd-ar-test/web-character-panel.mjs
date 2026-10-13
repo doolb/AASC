@@ -16,7 +16,7 @@ function initCharacterPanel() {
     panel.addEventListener('click', event => event.stopPropagation());
     document.addEventListener('click', event => { if (!panel.contains(event.target) && !button.contains(event.target)) setOpen(false); });
     document.addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
-    for (const id of ['displayMmdLightingToggle', 'mmdArMotionToggle', 'displayArTargetToggle']) {
+    for (const id of ['displayMmdLightingToggle', 'mmdArMotionToggle', 'displayArTargetToggle', 'mmdArIKToggle']) {
         document.getElementById(id)?.addEventListener('click', () => setOpen(false));
     }
     const sync = () => {

@@ -34,18 +34,27 @@ test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模�
             await page.waitForFunction(() => window.DisplayMmd?.getHumanInterface?.()?.getState().ready
                 && window.DisplayMmd.getState().modelReady && window.DisplayMmd.getState().visible, { timeout: 180000 });
         } catch (error) { throw new Error(error.message + '\n页面异常：' + JSON.stringify(errors) + '\n资源失败：' + JSON.stringify(transportErrors)); }
-        await page.waitForSelector('[data-body="mode"]');
-        await page.evaluate(() => {
-            window.DisplayMmd.setMotionPlaybackEnabled(false);
-            const select = document.querySelector('[data-body="mode"]');
-            select.value = 'physics'; select.dispatchEvent(new Event('change', { bubbles: true }));
-        });
+        await page.click('#mmdArIKToggle');
+        await page.waitForFunction(() => !document.getElementById('mmdArIKPanel').hidden);
+        assert.equal(await page.$eval('#mmdArIKToggle', element => element.getAttribute('aria-expanded')), 'true');
+        assert.equal(await page.$eval('#mmdArHumanPanel', element => element.querySelectorAll('[data-body], [data-human-ik-status]').length), 0);
+        await page.evaluate(() => window.DisplayMmd.setMotionPlaybackEnabled(false));
+        await page.select('#mmdArIKPanel [data-body="mode"]', 'physics');
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().mode === 'physics', { timeout: 20000 });
+        await page.waitForFunction(() => !document.querySelector('#mmdArIKPanel [data-ik-action="enable"]').disabled);
+        await page.click('#mmdArIKPanel [data-ik-action="enable"]');
         const initial = await page.evaluate(() => {
             const api = window.DisplayMmd.getHumanInterface();
-            api.setInteractiveBodySettings({ gravity: false }); return api.setInteractiveIKEnabled(true);
+            api.setInteractiveBodySettings({ gravity: false }); return api.getInteractiveIKState();
         });
         assert.equal(initial.available, true, initial.reason); assert.equal(initial.targets, 11); assert.ok(initial.physics.bodyCount >= 15);
+        assert.equal(initial.settings.strength, 0.85); assert.equal(initial.markerDiameter, 32);
+        await page.$eval('[data-ik-size]', element => { element.value = '40'; element.dispatchEvent(new Event('input', { bubbles: true })); });
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().markerDiameter), 40);
+        await page.$eval('[data-ik-size]', element => { element.value = '32'; element.dispatchEvent(new Event('input', { bubbles: true })); });
+        await page.click('#mmdArIKClose');
+        assert.equal(await page.$eval('#mmdArIKPanel', element => element.hidden), true);
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled), true);
         // 页面物理与镜头仍在更新，紧邻按下读取真实标记，排除画布外和被面板覆盖的坐标。
         const marker = await page.evaluate(() => {
             const state = window.DisplayMmd.getHumanInterface().getInteractiveIKState();
@@ -87,11 +96,29 @@ test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模�
         assert.equal(after.available, true, after.reason);
         assert.ok(after.controls.every(item => [...item.achieved, ...item.target, ...item.rotation].every(Number.isFinite)));
         assert.ok(after.activeTargets >= 2);
-        const reset = await page.evaluate(() => window.DisplayMmd.getHumanInterface().resetInteractiveIK());
-        assert.equal(reset.activeTargets, 0);
-        const pbd = await page.evaluate(() => window.DisplayMmd.getHumanInterface().setInteractiveIKMode('pbd'));
+        await page.click('#mmdArIKToggle');
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().activeTargets), after.activeTargets);
+        await page.click('#mmdArIKPanel [data-ik-action="reset"]');
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().activeTargets), 0);
+        await page.select('#mmdArIKPanel [data-body="mode"]', 'pbd');
+        await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().mode === 'pbd');
+        const pbd = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
         assert.equal(pbd.physics, null); assert.equal(pbd.targets, 7);
-        await page.evaluate(() => window.DisplayMmd.getHumanInterface().setInteractiveIKEnabled(false));
+        await page.waitForFunction(() => !document.querySelector('#mmdArIKPanel [data-ik-action="enable"]').disabled);
+        await page.click('#mmdArIKPanel [data-ik-action="enable"]');
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled), false);
+        await page.keyboard.press('Escape');
+        assert.equal(await page.$eval('#mmdArIKPanel', element => element.hidden), true);
+        for (const viewport of [{ width: 540, height: 800 }, { width: 800, height: 540 }]) {
+            await page.setViewport(viewport); await page.click('#mmdArIKToggle');
+            const bounds = await page.$eval('#mmdArIKPanel', element => { const b = element.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom }; });
+            assert.ok(bounds.left >= -1 && bounds.right <= viewport.width + 1 && bounds.top >= -1 && bounds.bottom <= viewport.height + 1, JSON.stringify(bounds));
+            await page.click('#mmdArMotionToggle');
+            assert.equal(await page.$eval('#mmdArIKPanel', element => element.hidden), true);
+            await page.click('#mmdArIKToggle');
+            assert.equal(await page.$eval('#mmdArMotionPanel', element => element.hidden), true);
+            await page.keyboard.press('Escape');
+        }
         assert.deepEqual(errors, [], '真实模型或身体设置面板出现页面异常');
     } finally {
         await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));

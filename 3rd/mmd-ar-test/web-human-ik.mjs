@@ -4,6 +4,8 @@ import { calculateInverseRotationalMass, calculateKneePoleTarget, calculatePbdAn
 import { createHumanPhysicsRig } from './web-human-physics-rig.mjs';
 import { BODY_STATES, createHumanPhysicsDrive, normalizeBodySettings } from './web-human-physics-drive.mjs';
 
+import { normalizeMarkerDiameter, projectIKMarker, pickIKMarker } from './web-human-ik-markers.mjs';
+
 const TARGETS = [
     { key: 'head', label: '头部', bone: 'head', color: 0xffd166 },
     { key: 'leftHand', label: '左手', bone: 'leftWrist', color: 0xff7777 },
@@ -60,7 +62,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     const baseline = new Map(), linkLimits = new Map(), kneeIndices = new Set();
     let enabled = false, bound = null, helperRoot = null, handles = [], drag = null;
     let mode = 'pbd', ammoModule = null, bodyRig = null, bodyDrive = null, loadEpoch = 0, selected = '';
-    let bodySettings = normalizeBodySettings();
+    let bodySettings = normalizeBodySettings(), markerDiameter = normalizeMarkerDiameter();
     let state = { enabled: false, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '已关闭' };
 
     function stopDrag() {
@@ -160,7 +162,6 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         // 独立场景容器让控制点留在世界空间，不跟随模型根节点移动。
         helperRoot = new Group();
         scene.add(helperRoot);
-        const radius = Math.max(0.018, Math.min(0.09, (model.mesh.geometry.boundingSphere?.radius || 1) * 0.035));
         model.mesh.updateMatrixWorld(true);
         const specs = mode === 'physics' ? BODY_TARGETS : TARGETS;
         for (const spec of specs) {
@@ -170,7 +171,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             const node = bodyRig?.nodes.find(node => node.bone === endpoint.bone);
             if (mode === 'physics' ? !node : !chain.length || chain.some(link => !ancestor(endpoint.bone, link.bone))) continue;
             const material = new MeshBasicMaterial({ color: spec.color, depthTest: false, depthWrite: false });
-            const mesh = new Mesh(new SphereGeometry(radius, 12, 8), material);
+            const mesh = new Mesh(new SphereGeometry(1, 12, 8), material);
             mesh.renderOrder = 1200;
             mesh.userData.humanIKTarget = spec.key;
             helperRoot.add(mesh);
@@ -181,6 +182,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             handle.endpoint.bone.getWorldPosition(handle.target);
             handle.mesh.position.copy(handle.target);
         }
+        resizeMarkers();
         selected = handles[0]?.key || '';
         const missing = specs.filter(spec => !handles.some(handle => handle.key === spec.key)).map(spec => spec.label);
         state = { enabled, available: handles.length > 0, targets: handles.length, activeTargets: 0, unreachable: 0,
@@ -200,11 +202,21 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             1 - (event.clientY - rect.top) / rect.height * 2);
         return true;
     }
+    function markerGeometry() { return window.DisplayStage?.getRotationGeometry?.(); }
+    function resizeMarkers() {
+        const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.(), geometry = markerGeometry();
+        if (!camera || !rect) return;
+        for (const handle of handles) {
+            const screen = projectIKMarker(handle.mesh.getWorldPosition(new Vector3()), camera, rect, geometry, markerDiameter);
+            handle.mesh.visible = screen?.visible === true;
+            if (screen?.radius > 0) handle.mesh.scale.setScalar(screen.radius);
+        }
+    }
     function pick(event) {
-        const camera = getCamera?.();
-        if (!camera || !ndc(event)) return null;
-        raycaster.setFromCamera(pointer, camera);
-        return raycaster.intersectObjects(handles.map(handle => handle.mesh), false)[0] || null;
+        const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();
+        if (!camera || !rect) return null;
+        resizeMarkers();
+        return pickIKMarker(handles, { x: event.clientX, y: event.clientY }, camera, rect, markerGeometry(), markerDiameter);
     }
     function pointerDown(event) {
         if (!enabled || !state.available || event.button !== 0 || event.isPrimary === false) return;
@@ -360,6 +372,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             if (!handle.active || (mode === 'physics' && handle.positionState === 'Off')) handle.endpoint.bone.getWorldPosition(handle.target);
             handle.mesh.position.copy(handle.target);
         }
+        resizeMarkers();
     }
     function setEnabled(value, model) {
         loadEpoch++; restore(); stopDrag();
@@ -426,18 +439,20 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         }
         handle.active = true; selected = key; onChange(); return getState();
     }
+    function setMarkerDiameter(value) {
+        markerDiameter = normalizeMarkerDiameter(value); resizeMarkers(); onChange(); return getState();
+    }
     function getState() {
         const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();
-        return { ...state, mode, settings: { ...bodySettings }, selected, enabled, targets: handles.length,
+        return { ...state, mode, markerDiameter, settings: { ...bodySettings }, selected, enabled, targets: handles.length,
             activeTargets: handles.filter(handle => handle.active).length, physics: bodyDrive?.getState() || null,
             controls: handles.map(handle => {
                 const achieved = handle.endpoint.bone.getWorldPosition(new Vector3());
                 // 活动标记停留在目标点，屏幕位置必须投影标记；达成位置单独用于误差诊断。
-                const screen = camera && handle.mesh.getWorldPosition(new Vector3()).project(camera);
+                const screen = projectIKMarker(handle.mesh.getWorldPosition(new Vector3()), camera, rect, markerGeometry(), markerDiameter);
                 return { key: handle.key, label: handle.label, positionState: handle.positionState, rotationState: handle.rotationState,
                     target: handle.target.toArray(), rotation: handle.targetRotation.toArray(), achieved: achieved.toArray(),
-                    screen: screen && rect ? { x: rect.left + (screen.x + 1) * rect.width / 2,
-                        y: rect.top + (1 - screen.y) * rect.height / 2, visible: screen.z >= -1 && screen.z <= 1 } : null };
+                    screen: screen ? { x: screen.x, y: screen.y, visible: screen.visible, diameter: markerDiameter } : null };
             }) };
     }
 
@@ -450,7 +465,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     window.addEventListener('pointercancel', pointerUp, true);
 
     return {
-        apply, restore, reset, resetTargets, setEnabled, setMode, setBodySettings, setTargetState, setTarget, getState,
+        apply, restore, reset, resetTargets, setEnabled, setMode, setBodySettings, setTargetState, setTarget, setMarkerDiameter, getState,
         isPhysicsEnabled: () => enabled && mode === 'physics' && bodyDrive !== null,
         dispose() {
             reset();

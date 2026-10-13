@@ -218,3 +218,52 @@ test('center同级上下半身随物理骨盆转动，默认人体限位使用�
         assert.ok(rotation.y > 0.9, `躯干世界转角被误限幅：${rotation.y}`);
     } finally { f.controller.dispose(); }
 });
+
+test('增强默认牵引在0.5/1秒内减小可达目标误差，软档保留且超调有界', async () => {
+    const results = [];
+    for (const strength of [0.15, null]) {
+        const f = await fixture();
+        try {
+            await f.enable();
+            if (strength !== null) f.controller.setBodySettings({ strength });
+            else assert.equal(f.controller.getState().settings.strength, 0.85);
+            const initial = f.point('leftWrist'), goal = initial.clone().add(new f.T.Vector3(0.08, 0.22, 0.22));
+            f.controller.setTarget('leftHand', goal);
+            const errors = []; let peak = 0;
+            for (let frame = 1; frame <= 180; frame++) {
+                f.run(1); peak = Math.max(peak, f.point('leftWrist').distanceTo(initial));
+                if ([30, 60, 180].includes(frame)) errors.push(f.point('leftWrist').distanceTo(goal));
+            }
+            assert.ok(peak < initial.distanceTo(goal) * 1.35, `牵引超调过大：${peak}`);
+            results.push(errors);
+        } finally { f.controller.dispose(); }
+    }
+    for (const index of [0, 1]) {
+        assert.ok(results[1][index] < 0.01, `默认${index ? 1 : 0.5}秒误差：${results[1][index]}`);
+        assert.ok(results[1][index] < results[0][index] * 0.7, '软硬档未产生实际响应差异');
+    }
+});
+
+test('强档保持与多点对抗在重力下持续稳定并保留PMX限位', async () => {
+    const f = await fixture();
+    try {
+        await f.enable(); f.controller.setBodySettings({ strength: 1, gravity: true });
+        for (const [key, semantic, offset] of [['leftHand', 'leftWrist', [-0.1, 0.2, 0.1]],
+            ['rightHand', 'rightWrist', [0.1, 0.2, -0.1]], ['leftFoot', 'leftAnkle', [0, 0.2, 0.1]],
+            ['pelvis', 'hips', [0, 0.04, 0]]]) {
+            f.controller.setTarget(key, f.point(semantic).add(new f.T.Vector3(...offset)));
+            f.controller.setTargetState(key, 'Hold', 'Off');
+        }
+        const allocations = f.controller.getState().physics.allocations;
+        for (let i = 0; i < 600; i++) {
+            f.run(1);
+            assert.ok(f.bones.every(bone => [...bone.position.toArray(), ...bone.quaternion.toArray()].every(Number.isFinite)));
+            assert.ok(f.point('hips').distanceTo(f.initial[f.bindings['bones:hips'].index].position) < 0.3);
+            for (const side of ['left', 'right']) {
+                const angle = new f.T.Euler().setFromQuaternion(f.bindings['bones:' + side + 'Knee'].bone.quaternion);
+                assert.ok(angle.x >= -2.600001 && angle.x <= 0.000001 && Math.abs(angle.y) < 1e-6 && Math.abs(angle.z) < 1e-6);
+            }
+        }
+        assert.equal(f.controller.getState().physics.allocations, allocations);
+    } finally { f.controller.dispose(); }
+});

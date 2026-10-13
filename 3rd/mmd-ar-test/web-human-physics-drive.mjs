@@ -4,7 +4,7 @@ import { nodeOffset } from './web-human-physics-rig.mjs';
 export const BODY_STATES = Object.freeze(['Off', 'On', 'Hold', 'Comply']);
 export function normalizeBodySettings(value = {}) {
     const number = (name, fallback, low, high) => Number.isFinite(value[name]) ? Math.max(low, Math.min(high, value[name])) : fallback;
-    return { strength: number('strength', 0.6, 0.05, 1), damping: number('damping', 1, 0.2, 2.5),
+    return { strength: number('strength', 0.85, 0.05, 1), damping: number('damping', 1, 0.2, 2.5),
         gravity: value.gravity !== false, freePelvis: value.freePelvis === true };
 }
 
@@ -109,20 +109,20 @@ export function createHumanPhysicsDrive(Ammo, rig) {
         floor = addBody(plane, 0, new Vector3(0, ground, 0), new Quaternion(), 2, 1);
     } catch (error) { dispose(); throw error; }
 
-    function applyForce(record, point, target, frequency, damping) {
+    function applyForce(record, point, target, frequency, damping, maximumAcceleration = 80) {
         const omega = frequency * Math.PI * 2, denominator = 1 + 2 * damping * omega * h + omega * omega * h * h;
         const lever = point.clone().sub(record.position);
         const velocity = record.omega.clone().cross(lever).add(record.velocity);
         vector.subVectors(target, point).multiplyScalar(omega * omega)
             .addScaledVector(velocity, -2 * damping * omega).multiplyScalar(record.mass / denominator);
-        vector.clampLength(0, record.mass * 80);
+        vector.clampLength(0, record.mass * maximumAcceleration);
         scratchVector.setValue(vector.x, vector.y, vector.z);
         const force = scratchVector;
         // 同一原生向量不能同时作为force与lever；relVector为独立可复用分配。
         relVector.setValue(lever.x, lever.y, lever.z); record.body.applyForce(force, relVector); record.body.activate();
     }
     const relVector = own(new Ammo.btVector3(0, 0, 0));
-    function applyTorque(record, desired, frequency, damping, parent = null) {
+    function applyTorque(record, desired, frequency, damping, parent = null, maximumAcceleration = 150) {
         delta.copy(desired).multiply(record.quaternion.clone().invert()).normalize();
         if (delta.w < 0) delta.set(-delta.x, -delta.y, -delta.z, -delta.w);
         const sine = Math.hypot(delta.x, delta.y, delta.z);
@@ -130,10 +130,17 @@ export function createHumanPhysicsDrive(Ammo, rig) {
         const angularVelocity = record.omega.clone(); if (parent) angularVelocity.sub(parent.omega);
         const omega = frequency * Math.PI * 2, denominator = 1 + 2 * damping * omega * h + omega * omega * h * h;
         vector.set(delta.x, delta.y, delta.z).multiplyScalar(angle * omega * omega)
-            .addScaledVector(angularVelocity, -2 * damping * omega).multiplyScalar(1 / denominator).clampLength(0, 150);
+            .addScaledVector(angularVelocity, -2 * damping * omega).multiplyScalar(1 / denominator).clampLength(0, maximumAcceleration);
         vector.applyQuaternion(record.quaternion.clone().invert()).multiply(record.inertia).applyQuaternion(record.quaternion);
         scratchVector.setValue(vector.x, vector.y, vector.z); record.body.applyTorque(scratchVector);
         if (parent) { scratchVector.setValue(-vector.x, -vector.y, -vector.z); parent.body.applyTorque(scratchVector); }
+    }
+    // 自然关节保留柔和低频；外部目标的强度同时影响响应和施力预算，Hold更强、Comply更软。
+    function targetDrive(state, settings) {
+        const factor = ({ On: 1, Hold: 1.2, Comply: 0.55 })[state] || 0;
+        return { frequency: (3 + 15 * settings.strength) * factor,
+            acceleration: (60 + 240 * settings.strength) * factor,
+            angularAcceleration: (150 + 550 * settings.strength) * factor };
     }
     function step(seconds, animated, targets, requestedSettings = {}) {
         if (disposed) throw new Error('人体物理世界已释放');
@@ -147,7 +154,7 @@ export function createHumanPhysicsDrive(Ammo, rig) {
                 const record = bodies.get(node), parent = node.parentNode && bodies.get(node.parentNode);
                 const desired = animated.get(node).quaternion.clone();
                 if (parent) desired.premultiply(animated.get(node.parentNode).quaternion.clone().invert()).premultiply(parent.quaternion);
-                applyTorque(record, desired, 1.5 + settings.strength * 1.5, settings.damping, parent);
+                applyTorque(record, desired, 2.4, settings.damping, parent);
             }
             const pelvisControlled = targets.some(target => target.node === rig.pelvis && target.positionState !== 'Off');
             if (!settings.freePelvis && !pelvisControlled) {
@@ -162,11 +169,13 @@ export function createHumanPhysicsDrive(Ammo, rig) {
                     if (target.positionState === 'Comply' && goal.distanceTo(origin) > 0.01) {
                         target.target.lerp(rig.targetToWorld(origin), 1 - Math.exp(-3 * h));
                     }
-                    applyForce(record, origin, rig.targetToLocal(target.target), 3 + 9 * settings.strength, settings.damping);
+                    const drive = targetDrive(target.positionState, settings);
+                    applyForce(record, origin, rig.targetToLocal(target.target), drive.frequency, settings.damping, drive.acceleration);
                 }
                 if (target.rotationState !== 'Off') {
                     if (target.rotationState === 'Comply') target.targetRotation.slerp(rig.targetRotationToWorld(record.quaternion), 1 - Math.exp(-3 * h));
-                    applyTorque(record, rig.targetRotationToLocal(target.targetRotation), 3 + 9 * settings.strength, settings.damping);
+                    const drive = targetDrive(target.rotationState, settings);
+                    applyTorque(record, rig.targetRotationToLocal(target.targetRotation), drive.frequency, settings.damping, null, drive.angularAcceleration);
                 }
             }
             world.stepSimulation(h, 0, h); accumulator -= h; substeps++;
