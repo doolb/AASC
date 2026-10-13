@@ -12106,3 +12106,5 @@ TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c7
   - 先更新display-chat-mmd spec/design，再修改display.css/self-test.js；同步usage、自测说明、task/todo，servicePackage=true待构建发布。没有新增自动化测试或修改睡眠配置。
 
 TTS参数补充：用户要求将8px背景模糊减半至4px，与alpha0.2合并。先更新spec再修改两条backdrop-filter，提示/usage同步；第一次74构建未发布，最终包重新构建覆盖最新源码。
+
+TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 16ad6ebdbb949598f561e34b301b8222d060999fb3b09615920e8b269a915dd1；CRC/包内最新CSS与自测提示对应通过，与73仅display.css/self-test.js两文件变化。alpha0.2、blur4px已包含；servicePackage=false。初次74未发布，追加4px后同版本构建被禁止覆盖，改用新版本75；内外网发布和HTTP校验进行中。未新增或运行自动化测试。
