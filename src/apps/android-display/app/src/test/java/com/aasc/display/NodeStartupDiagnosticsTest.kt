@@ -36,4 +36,11 @@ class NodeStartupDiagnosticsTest {
         restored.retryUpdate()
         assertNull(restored.updateError)
     }
+    @Test fun 更新检查错误使用明确标志而非中文关键词() {
+        assertFalse(ServiceUpdateResult("服务已是当前版本").failed)
+        assertFalse(MinApkUpdateResult("当前没有可用的 min APK 更新").failed)
+        assertTrue(ServiceUpdateResult("签名拒绝", failed = true).failed)
+        assertTrue(MinApkUpdateResult("HTTP 503", failed = true).failed)
+    }
+
 }

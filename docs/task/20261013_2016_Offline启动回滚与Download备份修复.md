@@ -29,3 +29,9 @@ analyze-requirement-level enterprise：主L6（目录/下载/错误呈现契约�
 Node/浏览器17项通过；24MiB往返1809ms、RSS267MiB含夹具。首次/tmp配额失败，改TMPDIR=/var/tmp后通过。Android JVM208项通过，新增下载/错误5项；首次编译发现旧保存选择器引用，移除后通过。最后增加健康后刷新失败页/控制页，由产物构建与ADB验证。min profile升39/0.2.37；servicePackage/minApk=true，依赖不变。待构建v71/min39并完成设备验收。
 
 补充：真机控制页实际路由/control，保存策略已兼容/control与旧upload.html；4项原生策略定向通过。原npm APK脚本assembleDebug未产出预期文件，且其全局daemon清理中断并行定向测试；改为顺序执行并使用已准备资源签名Release构建。
+
+## 真机进度与补齐
+
+min39安装后真实启动错误和失败候选更新同时显示且保持；通过原生按钮应用服务v71，实际codePath为/data/data/.../updates/code/code-v71，健康提交后错误遮罩清除。控制端服务器页面显示v71；ZIP按钮直接生成Download/aasc-full-config-1791897877802.zip（3077字节、4项、CRC通过），测试拉取副本已清理，设备文件保留。强制停止后再启动仍status=ok/v71。
+
+检查发现签名拒绝等更新检查错误只记日志，已先补spec后修改OfflineUpdateManager显式failed标志、MainActivity检查提示；LAN/WAN最终网络异常保留原因、正常无更新不报错，网页重试超时不覆盖真实原因。min升40/0.2.38，服务继续复用已构建v71。

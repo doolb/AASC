@@ -824,7 +824,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (!result.hasUpdate) {
                     android.util.Log.i("MainActivity", "Offline 服务更新检查: ${result.status}")
-                    if (result.status.contains("失败")) handleServiceUpdateFailed(result.status)
+                    if (result.failed) handleServiceUpdateFailed(result.status)
                     // 本轮无更新后释放检查闸门；如果检查线程在后台完成，下一次 onResume 仍可立即重试。
                     serviceUpdateCheckStarted = false
                     return@runOnUiThread
@@ -853,6 +853,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (result.metadata == null) {
                     android.util.Log.i("MainActivity", "Offline min APK 更新检查: ${result.status}")
+                    if (result.failed) handleServiceUpdateFailed(result.status, "APK更新检查失败")
                     // 本轮无更新后释放检查闸门；后台完成后回到前台可立即重新检查。
                     minApkUpdateCheckStarted = false
                     return@runOnUiThread
@@ -1045,9 +1046,9 @@ class MainActivity : AppCompatActivity() {
         }, 2_000L)
     }
 
-    private fun handleServiceUpdateFailed(detail: String?) {
+    private fun handleServiceUpdateFailed(detail: String?, title: String = "服务更新失败") {
         offlineFailures.updateFailed(detail?.takeIf { it.isNotBlank() } ?: "服务更新失败")
-        offlineUpdateTitle.text = "服务更新失败"
+        offlineUpdateTitle.text = title
         serviceUpdateStarted = false
         showOfflineUpdatePanel()
         updateCollapsedUpdateTab("failed")
@@ -1666,6 +1667,8 @@ class MainActivity : AppCompatActivity() {
     private fun scheduleOfflineDisplayRetry(view: WebView, baseUrl: String) {
         if (!offlineMode || view !== webView || view.visibility != View.VISIBLE) return
         if (offlineDisplayRetryCount >= maxOfflineDisplayRetries) {
+            // 网页超时只是补充状态，不覆盖进程已报告的真实错误。
+            if (offlineFailures.startupError != null) return
             showOfflineStartupMessage(getString(R.string.offline_startup_failed, getString(R.string.offline_startup_timeout)), true)
             return
         }

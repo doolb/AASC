@@ -1347,3 +1347,12 @@ ADB已复现 := SM-N9500/Android API28安装full38；版本/签名/大小/SHA256
 ```
 
 进度：TMPDIR=/var/tmp下npm run test:config-backup 17/17通过（首轮/tmp配额不足，换临时根重跑成功）；Android JVM 208/208通过，新增下载2项与诊断/状态3项。源脚本语法通过。v71/min39构建与ADB实际启动/Download/错误显示仍在进行；API29+MediaStore真机另需验收。
+
+补齐检查错误验收伪代码（2026-10-13）：
+
+```text
+更新结果 := 正常无更新failed=false；签名拒绝/HTTP异常failed=true，与中文文案独立
+UI检查失败 := 服务和min都显示错误；网页超时不覆盖已记录的真实进程原因
+已完成设备 := min39+v71健康提交、服务器页面v71、Download ZIP 3077字节4项CRC通过、重启仍v71
+原生补齐 := min40构建后安装复测；API29+MediaStore尚无对应真机
+```

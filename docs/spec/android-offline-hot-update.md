@@ -1055,3 +1055,12 @@ UI更新错误 := 取消自动折叠；Activity保存/恢复错误；用户新�
 ```
 
 映射：NodeStartupDiagnostics、OfflineFailureState、NodeServerService与MainActivity。默认健康时限仍为120秒，未增加配置接口。
+
+补齐检查阶段伪代码：
+
+```text
+检查结果 := status + failed明确标志；无更高版本failed=false；缺公钥/版本不兼容/拒绝候选/异常failed=true
+清单获取 := LAN失败继续WAN；最终网络失败抛出包含原因的异常；所有源404保持无更新
+检查完成 := failed时显示原生更新失败卡片；服务与min APK检查统一执行，不依赖中文关键词
+网页重试耗尽 := 已有startupError则保持原始原因，否则显示等待超时
+```
