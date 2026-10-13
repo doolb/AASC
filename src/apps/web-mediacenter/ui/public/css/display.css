@@ -599,8 +599,8 @@ body {
     /* 与时间文本共用阴影写法；旧版浏览器不支持color-mix时沿用前一条声明。 */
     text-shadow: 0 2px 0 var(--accent-color, #00d2ff), 2px 2px 8px rgba(0, 0, 0, 0.8);
     text-shadow: 0 2px 0 color-mix(in srgb, var(--accent-color, #00d2ff) 65%, transparent), 2px 2px 8px rgba(0, 0, 0, 0.8);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
     overflow: hidden;
     line-height: 1.4;
 }

@@ -12104,3 +12104,5 @@ TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c7
 
 - ✅ [2026-10-13] 用户确认将TTS黑色背景渐变峰值从0.3调整到0.2，保留上下渐隐、8px模糊及白字/主题色细边/三行播报进度。
   - 先更新display-chat-mmd spec/design，再修改display.css/self-test.js；同步usage、自测说明、task/todo，servicePackage=true待构建发布。没有新增自动化测试或修改睡眠配置。
+
+TTS参数补充：用户要求将8px背景模糊减半至4px，与alpha0.2合并。先更新spec再修改两条backdrop-filter，提示/usage同步；第一次74构建未发布，最终包重新构建覆盖最新源码。
