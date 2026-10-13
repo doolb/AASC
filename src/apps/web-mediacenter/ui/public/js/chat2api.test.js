@@ -2,6 +2,7 @@ const assert = require('assert/strict');
 const fs = require('fs');
 const path = require('path');
 const test = require('node:test');
+const vm = require('node:vm');
 
 test('控制端 Chat2API 弹窗包含登录、账号和 API Key 管理流程', () => {
   const source = fs.readFileSync(path.join(__dirname, 'chat2api.js'), 'utf8');
@@ -93,4 +94,28 @@ test('Chat2API 导出在 Android WebView 优先交给原生 Download 保存并�
   assert.match(source, /blobToBase64/);
   assert.match(source, /chat2api-accounts-\$\{stamp\}\.json/);
   assert.match(source, /chat2api-config-\$\{stamp\}\.json/);
+});
+
+test('模型映射编辑保存往返合成默认值，旧文字映射不新增应用字段', async () => {
+  const suffixes = ['Editor', 'Model', 'ActualModel', 'Provider', 'Account', 'Application', 'Voice', 'Speed', 'Volume', 'Format', 'EditorTitle', 'Cancel'];
+  const inputs = Object.fromEntries(suffixes.map(name => {
+    let inputValue = '';
+    return [`chat2apiMapping${name}`, { get value() { return inputValue; }, set value(value) { inputValue = String(value); }, focus() {} }];
+  }));
+  const context = { window: {}, document: { getElementById: id => inputs[id] || null } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'chat2api.js'), 'utf8'), context);
+  const control = context.window.Chat2APIControl;
+  const writes = [];
+  // 只替代管理 API 网络边界；编辑器填值、收集字段及校验仍运行正式实现。
+  control.request = async (endpoint, options) => writes.push({ endpoint, options: JSON.parse(options.body) });
+  control.refresh = async () => {};
+  const mapping = { model: 'qiaoxiaojiao', actualModel: 'qwen-api/qwen-audio-3.1-tts-flash',
+    preferredProviderId: 'qwen-api', preferredAccountId: 'sample-account', application: 'tts',
+    parameters: { voice: 'qiaoxiaojiao_v3.1', speed: 1.25, volume: 0, format: 'wav' } };
+  control.openMappingEditor(mapping);
+  await control.saveModelMapping();
+  assert.deepEqual(writes[0], { endpoint: '/api/chat2api/model-mappings', options: mapping });
+  control.openMappingEditor({ model: 'qwen3.6flash', actualModel: 'Qwen3.6', preferredProviderId: 'qwen' });
+  await control.saveModelMapping();
+  assert.deepEqual(writes[1].options, { model: 'qwen3.6flash', actualModel: 'Qwen3.6', preferredProviderId: 'qwen' });
 });

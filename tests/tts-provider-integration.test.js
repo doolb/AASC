@@ -4,11 +4,15 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { createProviderRegistry } = require('../src/apps/server/modules/tts/tts-provider-registry');
 const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
-const { requestLimited, wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');
+const { requestLimited, requestJson, wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');
 const { createProviderError } = require('../src/apps/server/modules/tts/tts-provider-errors');
+const { createChat2ApiDataStore } = require('../src/apps/server/modules/chat2api/chat2api-data-store');
+const { createChat2ApiSpeechService } = require('../src/apps/server/modules/chat2api/chat2api-speech-service');
+const { createApiSpeechAdapters } = require('../src/apps/server/modules/chat2api/chat2api-api-speech-adapters');
 const cache = require('../src/external/tts/tts-audio-cache');
 
 const pcm = Buffer.from([1, 0, 2, 0, 3, 0, 4, 0]);
@@ -18,6 +22,34 @@ async function mockServer(t, handler) {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     t.after(() => { server.closeAllConnections(); server.close(); });
     return `http://127.0.0.1:${server.address().port}`;
+}
+
+// 旧settings中的值仅用于准备虚构测试账号；运行时生成仍经过真实Chat2API调度。
+// 所有网络边界强制限定本地mock，配置接线错误也不得触碰真实官方接口。
+async function registryFixture(t, settings, { seedAccounts = true, httpRequest = requestLimited,
+    jsonRequest = requestJson, ...registryOptions } = {}) {
+    const rootDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-tts-api-integration-'));
+    t.after(async () => {
+        assert.equal(path.dirname(rootDir), path.resolve(os.tmpdir()));
+        assert.ok(path.basename(rootDir).startsWith('aasc-tts-api-integration-'));
+        await fs.promises.rm(rootDir, { recursive: true, force: true });
+    });
+    const dataStore = createChat2ApiDataStore({ rootDir });
+    for (const [businessId, providerId] of [['qwen-api', 'qwen-api'], ['doubao-api', 'doubaapi']]) {
+        const values = settings.providers[businessId];
+        if (!seedAccounts || !values?.credential) continue;
+        await dataStore.saveAccount({ accountId: `fixture-${providerId}`, providerId,
+            credentials: { apiKey: values.credential }, accountInfo: { endpoint: values.endpoint, resourceId: values.resourceId } });
+        if (values.model) await dataStore.saveModelMapping({ model: values.model, actualModel: values.model,
+            preferredProviderId: providerId, application: 'tts' });
+    }
+    const localOnly = transport => async (url, options) => {
+        assert.equal(new URL(url).hostname, '127.0.0.1', '集成测试只允许本地HTTP');
+        return transport(url, options);
+    };
+    const apiAdapters = createApiSpeechAdapters({ httpRequest: localOnly(httpRequest), jsonRequest: localOnly(jsonRequest) });
+    const chat2ApiSpeechService = createChat2ApiSpeechService({ dataStore, apiAdapters });
+    return createProviderRegistry({ ...registryOptions, chat2ApiSpeechService });
 }
 
 test('Qwen HTTP完整WAV进入原缓存，音频下载不携带API凭证', async t => {
@@ -32,7 +64,7 @@ test('Qwen HTTP完整WAV进入原缓存，音频下载不携带API凭证', async
     });
     const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-api' },
         providers: { 'qwen-api': { enabled: true, credential: 'only-api-secret', endpoint: `${url}/api` } } });
-    const service = createTtsProviderService({ getSettings: () => settings, registry: createProviderRegistry() });
+    const service = createTtsProviderService({ getSettings: () => settings, registry: await registryFixture(t, settings) });
     const reference = await service.generate({ text: '你好', businessType: 'ai_reply' });
     assert.deepEqual(cache.getAudio(reference).buffer, wav);
     assert.equal(seen[0].auth, 'Bearer only-api-secret');
@@ -42,6 +74,50 @@ test('Qwen HTTP完整WAV进入原缓存，音频下载不携带API凭证', async
     assert.equal(seen[0].data.input.sample_rate, 24000);
     assert.equal(seen[0].data.input.language_type, undefined);
     assert.equal(seen[1].auth, undefined);
+    assert.ok(cache.isMemoryAudioName(reference));
+});
+
+test('缺少Chat2API账号时不使用旧settings密钥、不请求上游或回退system', async t => {
+    let upstreamCalls = 0;
+    let fallback = 0;
+    let stored = 0;
+    const url = await mockServer(t, (req, res) => { upstreamCalls += 1; res.end(wav); });
+    for (const provider of ['qwen-api', 'doubao-api']) {
+        const settings = normalizeSettings({ aiReplyDefault: { provider },
+            providers: { [provider]: { credential: 'legacy-fixture-key-only', endpoint: url } } });
+        const registry = await registryFixture(t, settings, { seedAccounts: false, systemGenerate: () => { fallback += 1; } });
+        const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => { stored += 1; } });
+        await assert.rejects(service.generate({ text: '需要用户准备API账号', businessType: 'ai_reply' }), error => {
+            assert.equal(error.code, 'no_available_speech_account');
+            assert.equal(error.provider, provider);
+            assert.ok(!error.message.includes('legacy-fixture-key-only'));
+            return true;
+        });
+    }
+    assert.equal(upstreamCalls, 0); assert.equal(fallback, 0); assert.equal(stored, 0);
+});
+
+test('模板语音从Chat2API账号读取权威密钥与端点，原缓存仍保存完整WAV', async t => {
+    const posted = [];
+    const url = await mockServer(t, async (req, res) => {
+        if (req.url === '/audio') { res.end(wav); return; }
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        posted.push({ auth: req.headers.authorization, body: JSON.parse(body) });
+        res.end(JSON.stringify({ output: { audio: { url: `${url}/audio` } } }));
+    });
+    const settings = normalizeSettings({ providers: { 'qwen-api': { credential: 'account-fixture-authoritative', endpoint: `${url}/api` } } });
+    const registry = await registryFixture(t, settings);
+    // 完成测试账号准备后刻意改变旧业务配置，运行时必须继续使用账号内的权威值。
+    settings.providers['qwen-api'].credential = 'obsolete-fixture-do-not-use';
+    settings.providers['qwen-api'].endpoint = 'https://must-not-request.invalid/legacy';
+    const service = createTtsProviderService({ getSettings: () => settings, registry });
+    const reference = await service.generate({ text: '模板选择保持', businessType: 'ai_reply',
+        templateTts: { provider: 'qwen-api', voice: 'template-fixture-voice' } });
+    assert.equal(posted.length, 1);
+    assert.equal(posted[0].auth, 'Bearer account-fixture-authoritative');
+    assert.equal(posted[0].body.input.voice, 'template-fixture-voice');
+    assert.deepEqual(cache.getAudio(reference).buffer, wav);
     assert.ok(cache.isMemoryAudioName(reference));
 });
 
@@ -59,7 +135,7 @@ test('豆包分片UTF8/SSE完成事件与PCM包装；独立文本业务与参数
     });
     const settings = normalizeSettings({ textMedia: { provider: 'doubao-api', voice: 'custom-reader' },
         providers: { 'doubao-api': { enabled: true, credential: 'doubao-key', endpoint: url, defaultSpeed: -10, defaultVolume: 50 } } });
-    const service = createTtsProviderService({ getSettings: () => settings, registry: createProviderRegistry() });
+    const service = createTtsProviderService({ getSettings: () => settings, registry: await registryFixture(t, settings) });
     const reference = await service.generate({ text: '阅读', businessType: 'text_media', templateTts: { provider: 'qwen-chat' } });
     const result = cache.getAudio(reference).buffer;
     assert.equal(result.readUInt32LE(24), 24000);
@@ -90,10 +166,11 @@ test('豆包2.0真实HTTP携带上一句context_texts，其他业务/资源/复�
     ]) {
         const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-api' }, textMedia: { provider: 'doubao-api' },
             systemBroadcast: { provider: 'doubao-api' }, providers: { 'doubao-api': { credential: 'test', endpoint: url, resourceId, model } } });
-        const service = createTtsProviderService({ getSettings: () => settings, registry: createProviderRegistry(), storeAudio: () => 'test.wav' });
+        const service = createTtsProviderService({ getSettings: () => settings, registry: await registryFixture(t, settings), storeAudio: () => 'test.wav' });
         await service.generate({ text: '朗读正文', businessType, userText });
         const params = posted.at(-1).req_params;
         assert.equal(params.text, '朗读正文');
+        assert.equal(params.model, model || undefined);
         if (expected === null) assert.equal(params.additions, undefined);
         else {
             assert.equal(typeof params.additions, 'string');
@@ -113,10 +190,10 @@ test('鉴权、无效/截断/空音频、缺少完成事件均无缓存且不切
     });
     let systemCalls = 0;
     let cached = 0;
-    const registry = createProviderRegistry({ systemGenerate: () => { systemCalls += 1; },
-        jsonRequest: async () => ({ output: { audio: { url } } }) });
     for (const [provider, modes] of [['qwen-api', ['auth', 'wav']], ['doubao-api', ['auth', 'empty', 'business', 'truncated']]]) {
         const settings = normalizeSettings({ aiReplyDefault: { provider }, providers: { [provider]: { enabled: true, credential: 'private-key', endpoint: url } } });
+        const registry = await registryFixture(t, settings, { systemGenerate: () => { systemCalls += 1; },
+            jsonRequest: async () => ({ output: { audio: { url } } }) });
         const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => { cached += 1; } });
         for (const value of modes) {
             mode = value;
@@ -148,17 +225,18 @@ test('HTTP总超时、容量限制与响应中断；成功后可继续生成', a
     assert.deepEqual((await requestLimited(url)).buffer, wav);
 });
 
-test('system仍使用原引用、选择默认参数，禁用和600字边界明确失败', async () => {
+test('system仍使用原引用、选择默认参数，禁用和600字边界明确失败', async t => {
     let request;
-    const registry = createProviderRegistry({ systemGenerate: async value => { request = value; return 'old-reference.wav'; } });
-    const settings = normalizeSettings({ systemBroadcast: { voice: 'native' }, providers: { system: { defaultSpeed: 3 } } });
+    const settings = normalizeSettings({ systemBroadcast: { voice: 'native' }, providers: { system: { defaultSpeed: 3 },
+        'qwen-api': { credential: 'test', endpoint: 'http://127.0.0.1:1/unused' } } });
+    const registry = await registryFixture(t, settings, { systemGenerate: async value => { request = value; return 'old-reference.wav'; } });
     const service = createTtsProviderService({ registry, getSettings: () => settings });
     assert.equal(await service.generate({ text: '报时', preferredDisplayId: 'display-a' }), 'old-reference.wav');
     assert.equal(request.voice, null);
     assert.equal(request.speed, 3);
     assert.equal(request.preferredDisplayId, 'display-a');
     await assert.rejects(registry['qwen-api'].generate({ text: 'test' }, { ...settings.providers['qwen-api'], enabled: false }), /未启用/u);
-    await assert.rejects(registry['qwen-api'].generate({ text: '好'.repeat(601) }, { enabled: true, credential: 'test' }), /600/u);
+    await assert.rejects(registry['qwen-api'].generate({ text: '好'.repeat(601) }, settings.providers['qwen-api']), /600/u);
 });
 
 test('实际装配连接AI/Agent/临时/文本/系统入口和控制端重连；播放协议保持', () => {
@@ -189,7 +267,7 @@ test('Qwen HTTP与业务错误显示已知代码和中文原因，不缓存、�
     const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-api' },
         providers: { 'qwen-api': { enabled: true, credential: secret, endpoint: url } } });
     const service = createTtsProviderService({ getSettings: () => settings,
-        registry: createProviderRegistry({ systemGenerate: () => { fallback += 1; } }),
+        registry: await registryFixture(t, settings, { systemGenerate: () => { fallback += 1; } }),
         storeAudio: () => { cached += 1; } });
     const cases = [
         [400, 'Arrearage', '账户欠费'],
@@ -242,7 +320,7 @@ test('豆包HTTP与流内错误按官方固定标记区分参数、并发、音�
     const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-api' },
         providers: { 'doubao-api': { enabled: true, credential: secret, endpoint: url } } });
     const service = createTtsProviderService({ getSettings: () => settings,
-        registry: createProviderRegistry({ systemGenerate: () => { fallback += 1; } }),
+        registry: await registryFixture(t, settings, { systemGenerate: () => { fallback += 1; } }),
         storeAudio: () => { cached += 1; } });
     const cases = [
         [45000000, 'quota exceeded for types: concurrency', '并发数超限'],

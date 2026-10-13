@@ -228,7 +228,7 @@ const manageDoubaoStream = ({ stream, cancel, signal, timeoutMs, onIncomplete, h
   };
 };
 
-const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, doubaoSessionTimeoutMs = 120000 } = {}) => {
+const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, applicationService, speechTimeoutMs = 60000, doubaoSessionTimeoutMs = 120000 } = {}) => {
   if (!sessionStore || typeof sessionStore.get !== 'function' || typeof sessionStore.save !== 'function' || typeof sessionStore.withLock !== 'function') {
     throw new Error('Responses 服务需要会话存储');
   }
@@ -285,6 +285,28 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, doubaoSessi
   const createResponse = async (request, options = {}) => {
     const startedAt = Date.now();
     validateRequest(request);
+    if(applicationService){
+      const budget=Number.isFinite(speechTimeoutMs)&&speechTimeoutMs>0?Math.min(speechTimeoutMs,60000):60000;
+      const deadline=startedAt+budget;
+      let timer,onAbort,plan;
+      // 映射IO也属于入口请求；取消/截止不能等到开始合成才生效。
+      try {
+        if(options.signal?.aborted)throw createError(499,'request_cancelled','请求已取消');
+        plan=await Promise.race([applicationService.plan(request),new Promise((resolve,reject)=>{
+          onAbort=()=>reject(createError(499,'request_cancelled','请求已取消'));
+          options.signal?.addEventListener('abort',onAbort,{once:true});
+          if(options.signal?.aborted)return onAbort();
+          timer=setTimeout(()=>reject(createError(504,'application_timeout','模型应用规划超时')),Math.max(0,deadline-Date.now()));
+        })]);
+      }finally{clearTimeout(timer);options.signal?.removeEventListener('abort',onAbort);}
+      if(options.signal?.aborted)throw createError(499,'request_cancelled','请求已取消');
+      if(plan.application==='tts'){
+        const remaining=deadline-Date.now();
+        if(remaining<=0)throw createError(504,'speech_timeout','语音请求超时');
+        return applicationService.createAudioResponse(request,plan,{...options,timeoutMs:remaining});
+      }
+      request={...request,instructions:plan.instructions};
+    }else require('./chat2api-content').assertTextOnly(request.input);
     const inputMessages = normalizeInput(request);
     const piContext = getPiContext(request);
     const { conversationId, session: initialSession } = await resolveConversation(request, piContext);
@@ -306,6 +328,8 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, doubaoSessi
       };
       // 私有非枚举属性保持既有Provider参数契约，不持久化，也不接受客户端metadata指定。
       Object.defineProperty(responseSession,'doubaoDeadlineAt',{value:startedAt+duration});
+      // 原生会话的上游模型不可被后续映射编辑悄悄替换；私有元数据不写入Provider消息体。
+      if(canUseNativeContinuation&&piContext?.mode!=='snapshot')Object.defineProperty(responseSession,'boundModel',{value:{model:session.actualModel,providerId:session.providerId,accountId:session.accountId}});
       let persisted = false, markingUncertain;
       const markUncertain = () => {
         if (persisted || !responseSession.doubaoContinuationStarted || !isReadyDoubaoSession(session.nativeState)) return Promise.resolve();

@@ -1,4 +1,6 @@
 const lower = (value) => String(value || '').toLowerCase();
+const {validateMappingExtension}=require('./chat2api-system-controls');
+const {canonicalProviderId}=require('./chat2api-model-capabilities');
 
 const matchesPattern = (model, pattern) => {
   const normalizedModel = lower(model);
@@ -37,14 +39,17 @@ const createChat2ApiModelMapper = ({ dataStore } = {}) => {
     const mapping = mappings.find((item) => {
       const mappedProviderId = item.preferredProviderId || item.providerId;
       const providerMatches = !mappedProviderId || !provider || mappedProviderId === provider.id;
-      return providerMatches && matchesPattern(requestedModel, item.model);
+      return (providerMatches || (provider && canonicalProviderId(mappedProviderId)===canonicalProviderId(provider.id))) && matchesPattern(requestedModel, item.model);
     });
     const preferredProviderId = mapping && (mapping.preferredProviderId || mapping.providerId);
+    if(mapping)validateMappingExtension(mapping);
     return {
       requestedModel,
       actualModel: mapping ? mapping.actualModel : requestedModel,
-      preferredProviderId,
+      preferredProviderId: canonicalProviderId(preferredProviderId),
       preferredAccountId: mapping && mapping.preferredAccountId,
+      ...(mapping?.application ? {application:mapping.application} : {}),
+      ...(mapping?.parameters ? {parameters:{...mapping.parameters}} : {}),
     };
   };
 

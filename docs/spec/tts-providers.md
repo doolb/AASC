@@ -1,7 +1,32 @@
 # TTS Provider 与播报配置实现
 
+## 四路统一实现（2026-10-13，当前伪代码）
+
 ```text
-API凭证保存路径核查（2026-10-12）：
+createTtsProviderService -> 捕获settings/config快照、业务/模板选择
+显式voice/speed/volume -> parameterOverrides；Provider偏好 -> parameterDefaults
+system -> 原生生成；不继承API音色，不读云端账号
+qwen-chat -> emoji入口过滤、已登记网页模型或映射别名、expectedProviderId=qwen
+qwen-api -> 已知原模型转换限定别名，用户映射别名保持 -> expectedProviderId=qwen-api
+doubao-api -> 默认doubaapi/tts或用户映射别名 -> expectedProviderId=doubaapi
+doubao-chat -> 原严格账号映射、固定网页参数 -> expectedProviderId=doubaochat
+四路薄层 -> Chat2API speech.generate；不读取旧密钥或构造HTTP
+speech -> application.plan -> 显式参数 > 映射默认 > 业务默认 > 模型默认
+能力校验 -> 在归属Provider中调度账号 -> 当前credentials.apiKey或网页凭据
+API endpoint/resourceId -> accountInfo优先Provider默认，与密钥分离
+apiSpeechAdapters -> 原Qwen接口与完整下载 / 豆包V3完成事件PCM封装
+trusted legacyReplyContext -> 仅原AI/Agent豆包兼容资源/无复刻模型传上一句
+60秒deadline + signal -> 规划/账号/合成/下载/解码；迟到结果拒绝
+validateWav -> 原缓存URL/Range/播放回执；不回退另一来源
+TTS页 -> 只保存偏好，原setTtsProviderConfig/权威广播/重连
+Chat2API API账号表单 -> 格式校验并记录format-only，不做远端验证
+网页qwen新映射别名保存mappedModel -> 重载保留；旧无标记非法值恢复默认
+独立终审 -> 规划预算/取消 + Pi metadata拒绝修复，定向8/8
+本地模拟回归 -> TTS85/85、旧业务19/19；无真实凭据/远端请求/主服务操作
+```
+
+```text
+历史API凭证保存路径核查（2026-10-12，运行时已改用Chat2API账号）：
   普通模式 -> 服务器用户主目录/.config/aasc-user/userconfig.json
   release模式 -> 运行项目目录/release/userconfig/userconfig.json
   qwen-api Key -> tts.providers["qwen-api"].credential

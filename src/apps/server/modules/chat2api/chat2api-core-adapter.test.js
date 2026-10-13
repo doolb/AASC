@@ -235,3 +235,19 @@ test('核心层仅把可选取消signal传到context，不混入请求体或其�
   assert.equal(received[0].context.signal.aborted, true);
   assert.equal(received[1].context.signal, undefined);
 });
+
+
+test('原生续接的映射目标变化拒绝请求，不向旧会话发送新模型',async()=>{
+ let forwarded=0;
+ const adapter=createChat2ApiCoreAdapter({
+  dataStore:{getAccount:async()=>account,listAccounts:async()=>[account]},
+  providerRegistry:{listProviders:async()=>[provider]},
+  modelMapper:{resolveModel:async()=>({actualModel:'different-model'})},
+  loadBalancer:{selectAccount:async()=>({provider,account,actualModel:'different-model'})},
+  providerAdapters:{deepseek:async()=>{forwarded++;return {body:{}};}}
+ });
+ const responseSession={nativeState:{}};
+ Object.defineProperty(responseSession,'boundModel',{value:{model:'old-model',providerId:'deepseek',accountId:'main'}});
+ await assert.rejects(adapter.forwardChatCompletion({model:'alias',messages:[{role:'user',content:'继续'}]},{responseSession}),e=>e.code==='conversation_model_conflict');
+ assert.equal(forwarded,0);
+});

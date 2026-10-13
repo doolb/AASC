@@ -67,6 +67,18 @@
       }
     },
 
+    providerLabel(providerId, providers = this.providers || []) {
+      const provider = providers.find((item) => item.id === providerId || item.publicId === providerId);
+      return provider ? provider.publicId || provider.name || provider.id : providerId;
+    },
+
+    accountStatus(account) {
+      if (account.enabled === false) return '已禁用';
+      // API 凭证入库仅校验格式，调度启用状态不能充当远端鉴权成功证据。
+      if (account.accountInfo?.credentialVerification === 'format-only' || ['qwen-api', 'doubaapi', 'doubao-api'].includes(account.providerId)) return '已配置，未远端验证';
+      return '已登录';
+    },
+
     async refresh() {
       try {
         const [config, providers, accounts, apiKeys, modelMappings] = await Promise.all([
@@ -87,13 +99,13 @@
       const mappings = Array.isArray(data.modelMappings) ? data.modelMappings : [];
       const content = document.getElementById('chat2apiContent');
       if (!content) return;
-      const providerOptions = providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(provider.name || provider.id)}</option>`).join('');
-      const mappingProviderOptions = ['<option value="">自动选择 Provider</option>', ...providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(provider.name || provider.id)}</option>`)].join('');
-      const mappingAccountOptions = ['<option value="">自动选择账号</option>', ...accounts.map((account) => `<option value="${this.escapeHtml(account.accountId || account.id)}">${this.escapeHtml(account.label || account.name || account.accountId || account.id)}（${this.escapeHtml(account.providerId)}）</option>`)].join('');
-      const accountRows = accounts.length ? accounts.map((account) => `<div class="chat2api-list-row"><span>${this.escapeHtml(account.label || account.accountId)} <small class="chat2api-secondary-text">${this.escapeHtml(account.providerId)}</small></span><span class="chat2api-row-actions"><span class="chat2api-success-text">${account.enabled === false ? '已禁用' : '已登录'}</span><button class="task-card-btn" data-chat2api-account-web="${this.escapeHtml(account.accountId)}">打开外部网页</button><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无已登录账号</div>';
+      const providerOptions = providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(this.providerLabel(provider.id, providers))}</option>`).join('');
+      const mappingProviderOptions = ['<option value="">自动选择 Provider</option>', ...providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(this.providerLabel(provider.id, providers))}</option>`)].join('');
+      const mappingAccountOptions = ['<option value="">自动选择账号</option>', ...accounts.map((account) => `<option value="${this.escapeHtml(account.accountId || account.id)}">${this.escapeHtml(account.label || account.name || account.accountId || account.id)}（${this.escapeHtml(this.providerLabel(account.providerId, providers))}）</option>`)].join('');
+      const accountRows = accounts.length ? accounts.map((account) => `<div class="chat2api-list-row"><span>${this.escapeHtml(account.label || account.accountId)} <small class="chat2api-secondary-text">${this.escapeHtml(this.providerLabel(account.providerId, providers))}</small></span><span class="chat2api-row-actions"><span class="chat2api-success-text">${this.escapeHtml(this.accountStatus(account))}</span><button class="task-card-btn" data-chat2api-account-web="${this.escapeHtml(account.accountId)}">打开外部网页</button><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无已配置账号</div>';
       const keyRows = apiKeys.length ? apiKeys.map((key) => `<div class="chat2api-list-row"><span>${this.escapeHtml(key.label || key.id)}</span><span class="chat2api-row-actions"><code class="chat2api-code">${this.escapeHtml(key.maskedValue || '')}</code><button class="task-card-btn" data-chat2api-key-disable="${this.escapeHtml(key.id)}">禁用</button><button class="task-card-btn danger" data-chat2api-key-delete="${this.escapeHtml(key.id)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无 API Key</div>';
-      const mappingRows = mappings.length ? mappings.map((mapping) => `<div class="chat2api-mapping-row"><span class="chat2api-mapping-values"><code class="chat2api-code">${this.escapeHtml(mapping.model)}</code><span class="chat2api-secondary-text">→</span><code class="chat2api-code">${this.escapeHtml(mapping.actualModel)}</code><small class="chat2api-secondary-text">${this.escapeHtml(mapping.preferredProviderId || mapping.providerId || '自动 Provider')}</small></span><span class="chat2api-row-actions"><button class="task-card-btn" data-chat2api-mapping-edit="${this.escapeHtml(mapping.model)}">编辑</button><button class="task-card-btn danger" data-chat2api-mapping-delete="${this.escapeHtml(mapping.model)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无模型映射</div>';
-      const mappingEditor = `<div id="chat2apiMappingEditor" class="chat2api-mapping-editor" hidden><div class="chat2api-section-heading"><h5 id="chat2apiMappingEditorTitle" class="chat2api-editor-title">新增模型映射</h5><button class="task-card-btn" id="chat2apiMappingCancel" hidden>取消编辑</button></div><div class="chat2api-mapping-form"><label class="chat2api-field">请求模型<input id="chat2apiMappingModel" placeholder="例如 Qwen3.6-Flash"></label><label class="chat2api-field">实际模型<input id="chat2apiMappingActualModel" placeholder="例如 Qwen3.7"></label><label class="chat2api-field">优先 Provider<select id="chat2apiMappingProvider">${mappingProviderOptions}</select></label><label class="chat2api-field">优先账号<select id="chat2apiMappingAccount">${mappingAccountOptions}</select></label></div><button class="task-card-btn primary chat2api-save-button" id="chat2apiMappingSave">保存映射</button></div>`;
+      const mappingRows = mappings.length ? mappings.map((mapping) => `<div class="chat2api-mapping-row"><span class="chat2api-mapping-values"><code class="chat2api-code">${this.escapeHtml(mapping.model)}</code><span class="chat2api-secondary-text">→</span><code class="chat2api-code">${this.escapeHtml(mapping.actualModel)}</code><small class="chat2api-secondary-text">${this.escapeHtml(this.providerLabel(mapping.preferredProviderId || mapping.providerId, providers) || '自动 Provider')}${mapping.application ? ` · 应用 ${this.escapeHtml(mapping.application)}` : ''}${mapping.parameters?.voice ? ` · 默认音色 ${this.escapeHtml(mapping.parameters.voice)}` : ''}</small></span><span class="chat2api-row-actions"><button class="task-card-btn" data-chat2api-mapping-edit="${this.escapeHtml(mapping.model)}">编辑</button><button class="task-card-btn danger" data-chat2api-mapping-delete="${this.escapeHtml(mapping.model)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无模型映射</div>';
+      const mappingEditor = `<div id="chat2apiMappingEditor" class="chat2api-mapping-editor" hidden><div class="chat2api-section-heading"><h5 id="chat2apiMappingEditorTitle" class="chat2api-editor-title">新增模型映射</h5><button class="task-card-btn" id="chat2apiMappingCancel" hidden>取消编辑</button></div><div class="chat2api-mapping-form"><label class="chat2api-field">请求模型<input id="chat2apiMappingModel" placeholder="例如 qiaoxiaojiao"></label><label class="chat2api-field">实际模型<input id="chat2apiMappingActualModel" placeholder="例如 qwen-api/qwen-audio-3.1-tts-flash"></label><label class="chat2api-field">优先 Provider<select id="chat2apiMappingProvider">${mappingProviderOptions}</select></label><label class="chat2api-field">优先账号<select id="chat2apiMappingAccount">${mappingAccountOptions}</select></label><label class="chat2api-field">应用<select id="chat2apiMappingApplication"><option value="">使用模型默认应用</option><option value="chat">chat（文字聊天）</option><option value="tts">tts（语音合成）</option></select></label><label class="chat2api-field">默认音色 ID<input id="chat2apiMappingVoice" maxlength="512" placeholder="例如 qiaoxiaojiao_v3.1"></label><label class="chat2api-field">默认语速倍率<input id="chat2apiMappingSpeed" type="number" min="0.25" max="4" step="0.01" placeholder="留空使用模型默认"></label><label class="chat2api-field">默认音量<input id="chat2apiMappingVolume" type="number" min="0" max="100" step="1" placeholder="留空使用模型默认"></label><label class="chat2api-field">音频格式<select id="chat2apiMappingFormat"><option value="">使用模型默认格式</option><option value="wav">wav</option></select></label></div><p class="chat2api-secondary-text">应用和参数留空时保留原文字映射行为；请求中的显式合成参数优先于映射默认值。</p><button class="task-card-btn primary chat2api-save-button" id="chat2apiMappingSave">保存映射</button></div>`;
       const config = data.config || {};
       const configSection = `<section class="chat2api-section chat2api-section-wide"><h4 class="chat2api-section-title">代理配置</h4><div class="chat2api-config-grid"><label class="chat2api-field">监听地址<input id="chat2apiConfigHost" value="${this.escapeHtml(config.host || '127.0.0.1')}"></label><label class="chat2api-field">端口<input id="chat2apiConfigPort" type="number" value="${this.escapeHtml(config.port || 8080)}"></label><label class="chat2api-field">负载均衡<select id="chat2apiConfigStrategy"><option value="round-robin" ${config.loadBalanceStrategy === 'round-robin' ? 'selected' : ''}>轮询</option><option value="fill-first" ${config.loadBalanceStrategy === 'fill-first' ? 'selected' : ''}>最低用量</option><option value="failover" ${config.loadBalanceStrategy === 'failover' ? 'selected' : ''}>故障转移</option></select></label><label class="chat2api-field">原始日志最大字节数<input id="chat2apiConfigRawTrafficMaxBytes" type="number" min="1024" max="2097152" step="1" value="${this.escapeHtml(config.rawTrafficMaxBytes || 262144)}"></label><label class="chat2api-field">原始日志模式<select id="chat2apiConfigRawTrafficMode"><option value="full" ${config.rawTrafficMode !== 'compact' ? 'selected' : ''}>完整（含 URL、请求头和原始数据）</option><option value="compact" ${config.rawTrafficMode === 'compact' ? 'selected' : ''}>简洁（模型、文本和输出）</option></select></label></div><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiConfigApiKey" ${config.enableApiKey !== false ? 'checked' : ''}> 启用 API Key 鉴权</label><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiConfigDebugRawTraffic" ${config.debugRawTraffic === true ? 'checked' : ''}> 记录发给 AI 的原始请求和返回结果</label><div class="chat2api-secondary-text">调试日志默认关闭；简洁模式只记录模型、用户文本和最终输出，不记录原始 URL、请求头或流式分块。</div><button class="task-card-btn primary chat2api-save-button" id="chat2apiSaveConfig">保存配置</button></section>`;
       content.innerHTML = '<div class="chat2api-grid">' +
@@ -104,7 +116,7 @@
           '<div id="chat2apiManualHint" class="chat2api-secondary-text">选择 Provider 后，当前 Provider 可填写对应字段或粘贴完整 Cookie；普通网页不打开登录页。</div>' +
           '<div class="chat2api-actions"><button class="task-card-btn primary" id="chat2apiManualAdd">添加外部认证</button><button class="task-card-btn" id="chat2apiOpenLogin" hidden>Android 外部登录</button><button class="task-card-btn primary" id="chat2apiCompleteLogin" hidden>完成登录</button></div>' +
         '</section>' +
-        '<section class="chat2api-section"><h4 class="chat2api-section-title">已登录账号</h4><div id="chat2apiAccounts">' + accountRows + '</div></section>' +
+        '<section class="chat2api-section"><h4 class="chat2api-section-title">已配置账号</h4><div id="chat2apiAccounts">' + accountRows + '</div></section>' +
         '<section class="chat2api-section chat2api-section-wide"><div class="chat2api-section-heading"><h4 class="chat2api-section-title">代理 API Key</h4><button class="task-card-btn" id="chat2apiCreateKey">新建 Key</button></div><div>' + keyRows + '</div></section>' +
         '<section class="chat2api-section chat2api-section-wide"><div class="chat2api-section-heading"><h4 class="chat2api-section-title">模型映射</h4><button class="task-card-btn primary" id="chat2apiMappingNew">新增映射</button></div><div>' + mappingRows + '</div>' + mappingEditor + '</section>' +
       '</div>';
@@ -171,6 +183,23 @@
       actualModelInput.value = current ? current.actualModel || '' : '';
       providerSelect.value = current ? current.preferredProviderId || current.providerId || '' : '';
       accountSelect.value = current ? current.preferredAccountId || current.accountId || '' : '';
+      // 账号被禁用、删除或 Provider 暂不可见时仍保留显式绑定，不能在编辑保存时偷偷改成自动选取。
+      const preferences = [[providerSelect, current?.preferredProviderId || current?.providerId],
+        [accountSelect, current?.preferredAccountId || current?.accountId]];
+      for (const [select, value] of preferences) {
+        if (!value || select.value === value) continue;
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = `${value}（当前绑定，暂不可用）`;
+        select.appendChild(option);
+        select.value = value;
+      }
+      const defaults = { Application: current?.application, Voice: current?.parameters?.voice,
+        Speed: current?.parameters?.speed, Volume: current?.parameters?.volume, Format: current?.parameters?.format };
+      for (const [name, value] of Object.entries(defaults)) {
+        const input = document.getElementById(`chat2apiMapping${name}`);
+        if (input) input.value = value ?? '';
+      }
       if (title) title.textContent = current ? '编辑模型映射' : '新增模型映射';
       if (cancelButton) cancelButton.hidden = !current;
       modelInput.focus();
@@ -196,6 +225,23 @@
       const payload = { model, actualModel };
       if (providerSelect && providerSelect.value) payload.preferredProviderId = providerSelect.value;
       if (accountSelect && accountSelect.value) payload.preferredAccountId = accountSelect.value;
+      const application = document.getElementById('chat2apiMappingApplication')?.value;
+      if (application) payload.application = application;
+      // 只收集白名单业务参数，旧映射的空字段不写入，避免改变原文字路由。
+      const parameters = {};
+      for (const [name, suffix] of Object.entries({ voice: 'Voice', speed: 'Speed', volume: 'Volume', format: 'Format' })) {
+        const value = document.getElementById(`chat2apiMapping${suffix}`)?.value.trim();
+        if (!value) continue;
+        parameters[name] = ['speed', 'volume'].includes(name) ? Number(value) : value;
+      }
+      const ranges = { speed: [0.25, 4, '语速倍率'], volume: [0, 100, '音量'] };
+      for (const [name, [min, max, title]] of Object.entries(ranges)) {
+        if (Object.hasOwn(parameters, name) && (!Number.isFinite(parameters[name]) || parameters[name] < min || parameters[name] > max)) {
+          this.message(`${title}必须在 ${min} 至 ${max} 之间。`, true);
+          return;
+        }
+      }
+      if (Object.keys(parameters).length) payload.parameters = parameters;
       try {
         await this.request('/api/chat2api/model-mappings', { method: 'POST', body: JSON.stringify(payload) });
         if (this.mappingEditingModel && this.mappingEditingModel !== model) {
@@ -224,7 +270,7 @@
       const fieldMarkup = fields.map((field) => {
         const label = this.escapeHtml(field.label || field.name);
         const name = this.escapeHtml(field.name);
-        const placeholder = this.escapeHtml(field.placeholder || '');
+        const placeholder = this.escapeHtml(field.placeholder || field.helpText || '');
         if (field.type === 'textarea') {
           return `<label class="chat2api-field">${label}<textarea data-chat2api-credential="${name}" placeholder="${placeholder}"></textarea></label>`;
         }
@@ -239,13 +285,15 @@
         : '';
       container.innerHTML = fieldMarkup + cookieMarkup;
       const hint = document.getElementById('chat2apiManualHint');
+      const isApi = ['qwen-api', 'doubaapi', 'doubao-api'].includes(providerId);
       if (hint) hint.textContent = supportsCookie
         ? `当前 Provider 按 Chat2API 规则填写字段，或粘贴完整 Cookie（支持提取：${cookieNames}）；普通网页不打开登录页。`
         : '按 Chat2API 的 Provider 字段填写 Token、Ticket 等凭据；普通网页不打开登录页。';
+      if (hint && isApi) hint.textContent = '填写 API Key，可在添加 API 账号时填写可选端点与资源 ID；留空使用官方默认。保存只校验格式，不发送远端合成或登录请求，账号显示未远端验证。';
       const openButton = document.getElementById('chat2apiOpenLogin');
       const completeButton = document.getElementById('chat2apiCompleteLogin');
       const hasNativeLogin = typeof window !== 'undefined' && window.NativeControl && typeof window.NativeControl.openChat2ApiLogin === 'function';
-      if (openButton) openButton.hidden = !hasNativeLogin;
+      if (openButton) openButton.hidden = !hasNativeLogin || isApi;
       if (completeButton) completeButton.hidden = !this.loginSession;
     },
 
@@ -268,7 +316,8 @@
         document.querySelectorAll('[data-chat2api-credential]').forEach((element) => { element.value = ''; });
         if (cookieElement) cookieElement.value = '';
         await this.refresh();
-        this.message('外部认证已验证，账号已保存。');
+        this.message(['qwen-api', 'doubaapi', 'doubao-api'].includes(providerSelect.value)
+          ? 'API 账号已保存，凭证格式已校验；尚未进行远端验证。' : '外部认证已验证，账号已保存。');
       } catch (error) { this.message(`外部认证添加失败：${error.message}`, true); }
     },
 

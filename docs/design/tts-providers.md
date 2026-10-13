@@ -1,6 +1,14 @@
 # TTS Provider 与播报配置
 
-凭证存储路径（2026-10-12核查）：Qwen API与豆包API的credential只持久化在服务器用户配置userconfig.json的tts.providers对应Provider下；普通模式使用服务器用户主目录/.config/aasc-user，release模式使用运行项目目录/release/userconfig。主配置仅保存业务选择，控制端仅接收credentialConfigured状态。当前开发机用户配置为/home/as/.config/aasc-user/userconfig.json，不读取或记录Key原文。
+## 四路统一实现（2026-10-13，当前规则）
+
+网页qwen/doubao及API qwen-api/doubaapi均由Chat2API共享speech与应用规划生成，业务Registry仅转换模型/参数。API Key从Chat2API所选账号读取，端点/resourceId在账号非秘密元数据；旧tts.providers私有密钥留作回滚，不迁移、不参与生成，TTS页面不再编辑或回传这些值。API账号由用户手动准备，保存格式校验不表示鉴权成功。
+
+模型与默认音色使用同一modelMappings，显式请求/模板/同来源业务值优先于映射默认，映射默认再优先Provider默认。参数defaults与overrides分开，业务速度仅转换一次；system不继承API音色，网页qwen新别名带mappedModel标记保留，旧非法模型按原默认恢复。仍由现有AASC消息保存业务偏好、广播权威值与重连补发；不新增配置HTTP接口。
+
+Responses的tts返回非持久化output_audio WAV Base64；旧speech、内存缓存及下载仍WAV。首批拒绝媒体/联合音频文字/流式TTS/续接和Pi字段。60秒包含模型规划、账号、HTTP、下载与解码；断连终止，受控错误及媒体日志不包含原始秘密/音频。详见[统一设计](chat2api-multimodal-routing.md)。仅离线验收，主服务未重启、真实账号未迁移或访问；部署前配置新账户。
+
+历史凭证存储路径（2026-10-12核查，已被上方当前规则替代）：Qwen API与豆包API的credential只持久化在服务器用户配置userconfig.json的tts.providers对应Provider下；普通模式使用服务器用户主目录/.config/aasc-user，release模式使用运行项目目录/release/userconfig。主配置仅保存业务选择，控制端仅接收credentialConfigured状态。当前开发机用户配置为/home/as/.config/aasc-user/userconfig.json，不读取或记录Key原文。
 
 ## 需求与范围
 

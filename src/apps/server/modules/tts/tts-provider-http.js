@@ -6,9 +6,13 @@ const { wrapPcm, adjustWav, decodeAudio, MAX_AUDIO_BYTES } = require('../../../.
 
 // 所有网络响应都有总时限与容量边界；错误体不进入日志，避免回显密钥或签名链接。
 function requestLimited(url, { method = 'GET', body, headers = {}, timeoutMs = 60000,
-    maxBytes = MAX_AUDIO_BYTES, onChunk = null, mapError = null } = {}) {
+    maxBytes = MAX_AUDIO_BYTES, onChunk = null, mapError = null, signal = null } = {}) {
     return new Promise((resolve, reject) => {
-        const target = new URL(url);
+        // 取消原因由调用方控制，不能将原始reason带入上游错误或日志。
+        const abortedError = () => Object.assign(new Error('TTS 上游请求已取消'), { name: 'AbortError', code: 'ABORT_ERR' });
+        if (signal?.aborted) { reject(abortedError()); return; }
+        let target;
+        try { target = new URL(url); } catch (error) { reject(new Error('TTS 上游地址无效')); return; }
         if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password) {
             reject(new Error('TTS 上游地址无效'));
             return;
@@ -24,11 +28,13 @@ function requestLimited(url, { method = 'GET', body, headers = {}, timeoutMs = 6
             ...headers, ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {})
         } });
         const timer = setTimeout(() => finish(Object.assign(new Error('TTS 上游请求超时'), { code: 'TTS_PROVIDER_TIMEOUT' })), timeoutMs);
+        const onAbort = () => finish(abortedError());
 
         function finish(error, value) {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
             chunks = [];
             if (error) {
                 response?.destroy();
@@ -95,6 +101,9 @@ function requestLimited(url, { method = 'GET', body, headers = {}, timeoutMs = 6
                 finish(null, { buffer: onChunk ? null : Buffer.concat(chunks, received), headers: res.headers });
             });
         });
+        signal?.addEventListener('abort', onAbort, { once: true });
+        // 注册前后的状态再次检查，避免预取消与监听安装之间留下漏取消窗口。
+        if (signal?.aborted) { onAbort(); return; }
         req.end(payload);
     });
 }

@@ -76,6 +76,8 @@ const HTTP_ERRORS = Object.freeze({
     504: '上游网关超时，请稍后重试'
 });
 
+const providerErrors=new WeakSet();
+const isProviderError=error=>providerErrors.has(error);
 function createProviderError(provider, result, httpStatus = null) {
     const doubao = provider === 'doubao-api';
     const catalog = doubao ? DOUBAO_ERRORS : QWEN_ERRORS;
@@ -93,7 +95,8 @@ function createProviderError(provider, result, httpStatus = null) {
     error.code = [401, 403].includes(status) ? 'TTS_PROVIDER_AUTH' : (status ? 'TTS_PROVIDER_HTTP' : 'TTS_PROVIDER_UPSTREAM');
     if (status) error.httpStatus = status;
     if (upstreamCode) error.upstreamCode = upstreamCode;
+    providerErrors.add(error);
     return error;
 }
 
-module.exports = { createProviderError };
+module.exports = { createProviderError,isProviderError };

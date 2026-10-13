@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
 const { normalizeDoubaoWebConfig } = require('./chat2api-doubao-web-config');
 const { browserError } = require('./chat2api-doubao-browser-bridge');
+const {assertTextOnly}=require('./chat2api-content');
+const {getSpeechBinding,canonicalProviderId}=require('./chat2api-model-capabilities');
 
 const createHttpError = (statusCode, code, message) => {
   const error = new Error(message);
@@ -46,8 +48,10 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
 
   const forwardChatCompletion = async (request, options = {}) => {
     validateRequest(request);
+    for(const message of request.messages)assertTextOnly(message?.content);
     const requestedMapping = await modelMapper.resolveModel(request.model);
-    let preferredProviderId = options.preferredProviderId || requestedMapping.preferredProviderId;
+    if(requestedMapping.application==='tts'||getSpeechBinding(requestedMapping.actualModel,requestedMapping.preferredProviderId,requestedMapping.application))throw createHttpError(400,'unsupported_application','语音模型请使用Responses或speech接口');
+    let preferredProviderId = canonicalProviderId(options.preferredProviderId || requestedMapping.preferredProviderId);
     const preferredAccountId = options.preferredAccountId || requestedMapping.preferredAccountId;
     if(getDoubaoWebConfig && ['doubao','doubao-think','doubao-expert'].includes(request.model)){
       if(preferredProviderId && preferredProviderId!=='doubaochat')throw browserError('binding');
@@ -98,6 +102,9 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
     }
     const providerMapping = await modelMapper.resolveModel(request.model, selection.provider);
     const actualModel = selection.actualModel || providerMapping.actualModel || request.model;
+    const bound=options.responseSession?.boundModel;
+    if(bound&&((bound.providerId!=='doubaochat'&&bound.model&&actualModel!==bound.model)||(requestedMapping.preferredProviderId&&canonicalProviderId(requestedMapping.preferredProviderId)!==bound.providerId)
+      ||(requestedMapping.preferredAccountId&&requestedMapping.preferredAccountId!==bound.accountId)))throw createHttpError(400,'conversation_model_conflict','会话绑定与当前模型映射不一致，请新建会话');
     const providerRequest = prepareManagedToolRequest({
       ...request,
       model: actualModel,

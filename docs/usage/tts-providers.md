@@ -1,8 +1,12 @@
 # 语音服务与音色
 
+## 四路统一与模型映射（2026-10-13）
+
+四路网页/API请求均由Chat2API生成，旧业务ID保持。模型映射可同时指定application=tts和parameters.voice，映射默认先于Provider默认；如qiaoxiaojiao映射Qwen31及乔小娇。旧speech现在也接受API限定模型和已登记TTS映射，WAV播放/缓存协议保持。完整配置示例见[统一应用](chat2api-unified-applications.md)。网页qwen新保存的合法映射别名重载保留；升级前旧错误模型仍恢复QUARK_VOICE。
+
 控制端「声纹」页面展开「语音服务与音色」，分别选择AI/Agent回复、文本阅读、报时与系统播报的服务，然后「保存语音配置」并等待服务器确认。其他控制端同步权威值，重连后重新获取。
 
-Qwen API与豆包API的Key保存在服务器用户配置文件中：普通运行为`~/.config/aasc-user/userconfig.json`，当前开发机为`/home/as/.config/aasc-user/userconfig.json`；release模式为运行项目目录下的`release/userconfig/userconfig.json`。字段分别是`tts.providers["qwen-api"].credential`与`tts.providers["doubao-api"].credential`。保存在JSON文件内，不保存在控制端浏览器或主`config.json`；页面只收到是否已配置的状态。
+Qwen API与豆包API的运行凭据由Chat2API所选账号管理（qwen-api/doubaapi）；端点和资源ID为账号非秘密参数。旧服务器tts.providers私有密钥保留用于回滚，但不再参与生成；本次不自动读取或迁移。保存账号只校验格式，未做远端鉴权。
 
 系统原生沿用现有TTS生成设备、服务器开关和原生音色配置，此面板只提供语速、音量，不增加启用开关或音色ID。业务或模板选中系统原生时隐藏音色ID输入；旧Provider级开关和音色ID不会阻断或覆盖原有路径。
 
@@ -18,7 +22,7 @@ Android账户管理“打开外部网页”会向现有允许的www/chat2/chat2-
 
 旧qwen-chat手动凭证及chat2apiAccountId不再使用，下次保存时移除，不会自动导入账户管理。账号凭证只由Chat2API管理。内部语音服务不要求代理HTTP任务持续运行；自定义rootDir独立库不会自动扫描。国内千问语音已由Chat2API直接调用接口生成，无需安装Chrome，也不查询浏览器账号。
 
-Qwen API默认qwen-audio-3.1-tts-flash与乔小娇qiaoxiaojiao_v3.1，填写百炼API Key，豆包API填写API Key及匹配音色的资源ID；qwen-chat、qwen-api、doubao-api默认开启，明确保存过的开关值继续保留；仍需配置各自账号或API凭证。音色目录可查询或手工填写有效ID，查询失败保留当前值。凭证留空保留已保存值，勾选「清除已保存凭证」才删除；保存后清空输入框，页面仅显示是否配置。业务选择存主配置，服务参数及API凭证存用户配置，模板仅存provider/voice。
+Qwen API默认qwen-audio-3.1-tts-flash与乔小娇qiaoxiaojiao_v3.1。两路API Key改在Chat2API账号管理中配置：qwen-api或doubaapi，端点和豆包资源ID为账号可选参数；保存只校验格式，不发送远端请求。旧TTS私有密钥保留但不再用于生成。TTS面板只保存业务选择、启用、模型、音色和参数，仍使用原WebSocket权威配置；原有开关保留。音色可查询或填写合法ID，真实权限需合成验收。
 
 Qwen API根据模型选择官方语音接口：Qwen-Audio使用SpeechSynthesizer并请求WAV，旧Qwen-TTS模型使用原接口；官方标准路径自动适配，自定义代理地址保持。已有明确模型/音色不自动覆盖。
 

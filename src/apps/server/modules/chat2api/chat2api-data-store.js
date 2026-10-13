@@ -14,6 +14,9 @@ const {
 } = require('./chat2api-secret');
 const { selectAccountId } = require('./chat2api-account-identity');
 const { normalizeDoubaoCredentials } = require('./chat2api-doubao-chat-adapter');
+const {canonicalProviderId}=require('./chat2api-model-capabilities');
+const {validateMappingExtension}=require('./chat2api-system-controls');
+const {normalizeApiAccount}=require('./chat2api-api-account');
 
 const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.config', 'aasc-user', 'chat2api');
 const DEFAULT_LEGACY_DATA_PATH = path.join(os.homedir(), '.chat2api', 'data.json');
@@ -30,8 +33,8 @@ const ACCOUNT_EXPORT_FORMAT = 'aasc-chat2api-accounts';
 const IMPORT_COLLECTIONS = Object.freeze(['providers', 'accounts', 'modelMappings']);
 const MAX_IMPORT_ITEMS = 1000;
 const OAUTH_SESSION_TTL_MS = 5 * 60 * 1000;
-const ACCOUNT_INFO_FIELDS = new Set(['id', 'userId', 'realUserID', 'name', 'nickname', 'username', 'email', 'phone']);
-const BUILTIN_PROVIDER_IDS = new Set(['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai', 'doubaochat']);
+const ACCOUNT_INFO_FIELDS = new Set(['id', 'userId', 'realUserID', 'name', 'nickname', 'username', 'email', 'phone','credentialVerification','endpoint','resourceId']);
+const BUILTIN_PROVIDER_IDS = new Set(['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai', 'doubaochat','qwen-api','doubaapi']);
 
 const assertCollectionName = (name) => {
   if (!Object.prototype.hasOwnProperty.call(COLLECTION_FILES, name)) {
@@ -158,8 +161,11 @@ const createChat2ApiDataStore = (options = {}) => {
       throw new Error('Chat2API 账号必须是对象');
     }
     const accountId = ensureId(account.accountId, 'accountId', 'Chat2API 账号');
-    const providerId = ensureId(account.providerId, 'providerId', 'Chat2API 账号');
+    const providerId = canonicalProviderId(ensureId(account.providerId, 'providerId', 'Chat2API 账号'));
     const normalized = { ...cloneValue(account), accountId, providerId };
+    if(['qwen-api','doubaapi'].includes(providerId)) {
+      Object.assign(normalized,normalizeApiAccount(account.credentials,selectAccountInfo(account.accountInfo)));
+    }
     if (providerId === 'doubaochat') {
       // 账号导入只表示用户恢复凭据，不表示已验证登录；秘密不得散落在顶层或其他 secret 字段。
       const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'lastUsed', 'credentials', 'accountInfo']);
@@ -269,6 +275,7 @@ const createChat2ApiDataStore = (options = {}) => {
   };
 
   const saveModelMapping = async (mapping) => {
+    validateMappingExtension(mapping || {});
     if (!mapping || typeof mapping.model !== 'string' || mapping.model.trim().length === 0 || typeof mapping.actualModel !== 'string' || mapping.actualModel.trim().length === 0) {
       throw new Error('Chat2API 模型映射必须包含 model 和 actualModel');
     }
@@ -597,7 +604,7 @@ const createChat2ApiDataStore = (options = {}) => {
     const accounts = ensureArray(data.accounts || [], 'accounts').map((account) => validateAccount(account));
     const modelMappings = ensureArray(data.modelMappings || [], 'modelMappings');
     providers.forEach((provider) => ensureId(provider.providerId, 'providerId', 'Chat2API Provider'));
-    modelMappings.forEach((mapping) => ensureId(mapping.model, 'model', 'Chat2API 模型映射'));
+    modelMappings.forEach((mapping) => {ensureId(mapping.model, 'model', 'Chat2API 模型映射');validateMappingExtension(mapping);});
     return {
       config: normalizeImportConfig(data.config),
       providers: cloneValue(providers),

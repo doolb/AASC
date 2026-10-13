@@ -41,7 +41,15 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         await page.addScriptTag({ content: read('js/tts-provider-settings.js') });
         const config = redactSettings(normalizeSettings({ providers: { 'qwen-api': { credential: 'server-secret', defaultVoice: 'custom-saved' },
             'qwen-chat': { chat2apiAccountId: 'saved-missing' } } }));
+        // 模拟旧服务回填过时私有字段；页面不得渲染或再次发送这些值。
+        Object.assign(config.providers['qwen-api'], { credential: 'legacy-hidden-secret', endpoint: 'https://legacy.invalid/private-endpoint', resourceId: 'legacy-private-resource' });
         await page.evaluate(value => window.TtsProviderSettings.handleConfig({ type: 'ttsProviderConfig', config: value }), config);
+        const visibleValues = await page.$eval('#ttsProviderFields', node => [...node.querySelectorAll('input')].map(input => input.value).join(' '));
+        assert.doesNotMatch(visibleValues, /legacy-hidden-secret|legacy\.invalid|legacy-private-resource/u);
+        assert.equal((await page.$$('#ttsProviderFields input[type="password"]')).length, 0);
+        for (const number of [2, 3, 4, 5]) {
+            assert.match(await page.$eval(`#ttsProviderFields details:nth-of-type(${number})`, node => node.textContent), /Chat2API/u);
+        }
         assert.equal(await page.evaluate(() => window.sent.length), 0);
         await page.evaluate(() => {
             const selection=document.querySelector('#ttsProviderFields > div select');selection.value='doubao-chat';
@@ -77,8 +85,8 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         assert.equal(await page.$eval('#templateTtsVoice', input => getComputedStyle(input).display), 'none');
         assert.equal(await page.$eval('#ttsProviderFields > div input', input => getComputedStyle(input.parentElement).display), 'none');
         assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(2)', node => node.querySelectorAll('input[type="password"]').length), 0);
-        assert.deepEqual(await page.$eval('#ttsProviderFields details:nth-of-type(2) select', node => [...node.options].map(option => option.value)), ['QUARK_VOICE', 'MINI_MAX']);
-        assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(2) select', node => node.value), 'QUARK_VOICE');
+        assert.deepEqual(await page.$eval('#ttsProviderModels-qwen-chat', node => [...node.options].map(option => option.value)), ['QUARK_VOICE', 'MINI_MAX']);
+        assert.equal(await page.$eval('#ttsProviderFields details:nth-of-type(2) input[data-tts-field="model"]', node => node.value), 'QUARK_VOICE');
         assert.match(await page.$eval('#ttsProviderFields details:nth-of-type(2)', node => node.textContent), /qwen3-tts-flash 请使用 Qwen API/u);
         assert.ok(!(await page.$eval('#ttsProviderFields', node => node.textContent)).includes('Chrome'));
         assert.equal(await page.evaluate(() => document.getElementById('ttsProviderChat2ApiAccount')), null);
@@ -91,14 +99,20 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
             groups[0].querySelector('select').value = 'qwen-api';
             const qwen = [...document.querySelectorAll('#ttsProviderFields details')].find(node => node.querySelector('summary').textContent.startsWith('Qwen API'));
             qwen.open = true;
-            qwen.querySelector('input[type="password"]').value = 'new-input-secret';
+            qwen.querySelector('input[data-tts-field="model"]').value = 'qiaoxiaojiao';
             qwen.querySelector('input[type="number"]').value = '4';
         });
         await page.click('#ttsProviderSaveBtn');
         assert.equal((await state()).disabled, true);
         const request = await page.evaluate(() => window.sent.at(-1));
         assert.equal(request.type, 'setTtsProviderConfig');
-        assert.equal(request.config.providers['qwen-api'].credential, 'new-input-secret');
+        assert.equal(request.config.providers['qwen-api'].model, 'qiaoxiaojiao');
+        assert.equal(request.config.providers['qwen-api'].defaultSpeed, '4');
+        for (const id of ['qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat']) {
+            for (const name of ['credential', 'clearCredential', 'endpoint', 'resourceId', 'chat2apiAccountId']) {
+                assert.ok(!Object.hasOwn(request.config.providers[id], name), `${id} 不发送账号管理字段 ${name}`);
+            }
+        }
         assert.ok(!Object.hasOwn(request.config.providers['qwen-chat'], 'chat2apiAccountId'));
         assert.ok(!Object.hasOwn(request.config.providers.system, 'enabled'));
         assert.ok(!Object.hasOwn(request.config.providers.system, 'defaultVoice'));
@@ -109,7 +123,7 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         await page.evaluate(value => window.TtsProviderSettings.handleConfig(value), { type: 'ttsProviderConfig', requestId: request.requestId, success: true, config: saved });
         assert.equal((await state()).disabled, false);
         assert.match((await state()).status, /已保存/u);
-        assert.equal(await page.$eval('#ttsProviderFields input[type="password"]', input => input.value), '');
+        assert.equal((await page.$$('#ttsProviderFields input[type="password"]')).length, 0);
         await page.evaluate(() => window.TtsProviderSettings.loadVoices('qwen-api'));
         const query = await page.evaluate(() => window.sent.at(-1));
         await page.evaluate(value => window.TtsProviderSettings.handleVoices(value), { ...query, type: 'ttsProviderVoices', success: false, message: '权限不足' });
@@ -178,7 +192,7 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         });
         await page.$eval('#ttsProviderFields', element => element.closest('.voiceprint-card').scrollIntoView());
         const card = await page.$('#ttsProviderFields');
-        await card.screenshot({ path: '/tmp/aasc-tts-provider-settings.png' });
+        await card.screenshot({ path: path.join(temporaryDir, 'aasc-tts-provider-settings.png') });
         assert.deepEqual(errors, []);
     } finally {
         if (browser) await browser.close();

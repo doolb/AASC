@@ -10,8 +10,8 @@ function createQwenChatProvider({ speechService } = {}) {
             const text = filterQwenChatSpeechText(request.text);
             if (!text) return null;
             if (!speechService) throw new Error('Chat2API 语音服务不可用');
-            const result = await speechService.generate({ input: text, model: settings.model,
-                voice: request.voice, speed: Math.pow(2, request.speed / 10), volume: request.volume }, { timeoutMs: request.timeoutMs });
+            const explicit=request.parameterOverrides||{...(request.voice?{voice:request.voice}:{}),speed:Math.pow(2,request.speed/10),volume:request.volume};
+            const result = await speechService.generate({ input: text, model: settings.model,...explicit }, { timeoutMs: request.timeoutMs,signal:request.signal,parameterDefaults:request.parameterDefaults,expectedProviderId:'qwen' });
             return result.audio;
         },
         async voices() { return [{ id: 'zh_female_quarkF531S0_ptts', name: '千问默认女声', available: true }]; }

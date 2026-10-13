@@ -166,7 +166,7 @@ test('TTS只转交Chat2API语音，不读取手动凭证或账号引用', async 
     const provider = createQwenChatProvider({ speechService: { generate: async (...args) => { requests.push(args); return { audio: Buffer.from('test') }; } } });
     await provider.generate({ text: '测试', voice: 'voice', speed: 10, volume: 70, timeoutMs: 500 },
         { enabled: true, model: 'QUARK_VOICE', credential: 'legacy-secret', chat2apiAccountId: 'legacy-account' });
-    assert.deepEqual(requests[0], [{ input: '测试', model: 'QUARK_VOICE', voice: 'voice', speed: 2, volume: 70 }, { timeoutMs: 500 }]);
+    assert.deepEqual(requests[0], [{ input: '测试', model: 'QUARK_VOICE', voice: 'voice', speed: 2, volume: 70 }, { timeoutMs: 500, signal:undefined, parameterDefaults:undefined, expectedProviderId:"qwen" }]);
     assert.ok(!JSON.stringify(requests).includes('legacy'));
     await assert.rejects(provider.generate({ text: '测试' }, { enabled: false }), /未启用/u);
 });

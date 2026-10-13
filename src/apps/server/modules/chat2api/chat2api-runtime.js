@@ -15,6 +15,7 @@ const { createChat2ApiCredentialValidators } = require('./chat2api-credential-va
 const { createChat2ApiManualAccountService } = require('./chat2api-manual-account-service');
 const { createChat2ApiAccountWebSessionService } = require('./chat2api-account-web-session-service');
 const { createChat2ApiSpeechService } = require('./chat2api-speech-service');
+const {createChat2ApiApplicationService}=require('./chat2api-application-service');
 const { createDoubaoBrowserBridge } = require('./chat2api-doubao-browser-bridge');
 
 const createChat2ApiRuntime = (options = {}) => {
@@ -28,6 +29,7 @@ const createChat2ApiRuntime = (options = {}) => {
   const getDoubaoWebConfig = options.getDoubaoWebConfig || (() => require('../config/config-app-service').get('doubaoWebRuntime', {}));
   const doubaoBrowser = options.doubaoBrowserTransport || createDoubaoBrowserBridge({getConfig:getDoubaoWebConfig,dataStore});
   const speechService = options.speechService || createChat2ApiSpeechService({ dataStore, providerRegistry, loadBalancer, getConfig, modelMapper,
+    ...(options.apiSpeechAdapters?{apiAdapters:options.apiSpeechAdapters}:{}),
     ...(options.doubaoSpeechAdapter ? { doubaoAdapter: options.doubaoSpeechAdapter } : {}),
     ...(options.qwenSpeechAdapter ? { qwenAdapter: options.qwenSpeechAdapter } : {}) });
   const coreAdapter = options.coreAdapter || createChat2ApiCoreAdapter({
@@ -39,7 +41,8 @@ const createChat2ApiRuntime = (options = {}) => {
     getDoubaoWebConfig,
   });
   const responseSessionStore = options.responseSessionStore || createChat2ApiResponseSessionStore({ dataStore });
-  const responsesService = options.responsesService || createChat2ApiResponsesService({ sessionStore: responseSessionStore, coreAdapter });
+  const applicationService=createChat2ApiApplicationService({modelMapper,speechService});
+  const responsesService = options.responsesService || createChat2ApiResponsesService({ sessionStore: responseSessionStore, coreAdapter, applicationService });
   const qwenHistoryService = options.qwenHistoryService || createChat2ApiQwenHistoryService({
     dataStore,
     providerRegistry,

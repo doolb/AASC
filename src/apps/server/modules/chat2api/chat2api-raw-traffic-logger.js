@@ -41,7 +41,8 @@ const sanitizeValue = (value, seen = new WeakSet()) => {
     try {
       return sanitizeValue(JSON.parse(text));
     } catch {
-      return { type: 'binary', encoding: 'base64', value: buffer.toString('base64') };
+      // 文字SSE仍按原预算记录，不透明二进制只记录长度，禁止将音频编码写入日志。
+      return /^(?:data:|event:)/mu.test(text) ? text : { type:'binary',byteLength:buffer.length };
     }
   }
   if (seen.has(value)) return '[Circular]';
@@ -49,6 +50,9 @@ const sanitizeValue = (value, seen = new WeakSet()) => {
   if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, seen));
   if (value instanceof URL) return sanitizeUrl(value.toString());
   if (typeof value === 'object') {
+    if(['input_audio','output_audio','input_image','input_video','image_url'].includes(value.type)) {
+      return {type:value.type,...(typeof value.format==='string'?{format:value.format.slice(0,40)}:{}),...(typeof value.mime_type==='string'?{mime_type:value.mime_type.slice(0,80)}:{})};
+    }
     const result = {};
     for (const [key, item] of Object.entries(value)) {
       result[key] = isSensitiveKey(key) ? '[REDACTED]' : key === 'url' ? sanitizeUrl(item) : sanitizeValue(item, seen);

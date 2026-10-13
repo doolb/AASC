@@ -10,7 +10,7 @@ const { normalizeSettings, redactSettings } = require('../src/apps/server/module
 const { normalizeTemplateTts, resolveProviderConfig, BUSINESS_TYPES } = require('../src/apps/server/modules/tts/tts-provider-policy');
 
 test('qwen-chat模型保存校验、别名规范化与历史不兼容模型恢复，API模型规则保持', () => {
-    for (const model of ['qwen3-tts-flash', 'QUARK_VOCIE', '', 'unknown']) {
+    for (const model of ['qwen3-tts-flash', 'QUARK_VOCIE', '']) {
         const patch = { providers: { 'qwen-chat': { model } } };
         assert.throws(() => normalizeSettings(patch), /网页模型仅支持/u);
         assert.equal(normalizeSettings(patch, {}, { recoverLegacyModel: true }).providers['qwen-chat'].model, 'QUARK_VOICE');
@@ -42,7 +42,7 @@ test('部分选择保留Provider、显式空音色清除、范围与凭证保留
     assert.equal(changed.providers['qwen-api'].defaultSpeed, 10);
     assert.equal(changed.providers['qwen-api'].defaultVolume, 0);
     const publicConfig = redactSettings(changed);
-    assert.equal(publicConfig.providers['qwen-api'].credentialConfigured, true);
+    assert.equal(publicConfig.providers['qwen-api'].credentialSource, 'chat2api');
     assert.ok(!JSON.stringify(publicConfig).includes('test-secret'));
     assert.equal(normalizeSettings({ providers: { 'qwen-api': { clearCredential: true } } }, initial).providers['qwen-api'].credential, '');
     for (const patch of [{ providers: null }, { providers: [] }, { providers: { bad: {} } }, { aiReplyDefault: [] },
@@ -91,7 +91,7 @@ test('真实配置持久化、重载、旧system默认和保存失败内存/磁�
     assert.equal(config.get('tts.defaultVoice'), 'legacy-voice');
     assert.equal(config.getTtsProviderSettings().providers.system.defaultSpeed, 3);
     const saved = config.setTtsProviderSettings({ aiReplyDefault: { provider: 'qwen-api' }, providers: { 'qwen-api': { enabled: true, credential: 'private-key' } } });
-    assert.equal(saved.providers['qwen-api'].credentialConfigured, true);
+    assert.equal(saved.providers['qwen-api'].credentialSource, 'chat2api');
     const mainFile = path.join(directory, 'config', 'config.json');
     const userFile = path.join(directory, 'user', 'userconfig.json');
     assert.ok(!fs.readFileSync(mainFile, 'utf8').includes('private-key'));
@@ -131,4 +131,11 @@ test('实际配置读取错误网页模型不崩溃；拒绝新错误模型不�
     const saved = JSON.parse(fs.readFileSync(path.join(directory, 'user', 'userconfig.json')));
     assert.equal(saved.tts.providers['qwen-chat'].model, 'QUARK_VOICE');
     assert.equal(saved.tts.providers['qwen-chat'].defaultVoice, 'saved-voice');
+});
+
+
+test('新保存的网页映射别名重载不恢复为QUARK，旧错误配置仍恢复',()=>{
+ const updated=normalizeSettings({providers:{'qwen-chat':{model:'my-voice'}}});
+ assert.equal(normalizeSettings(updated,{}, {recoverLegacyModel:true}).providers['qwen-chat'].model,'my-voice');
+ assert.equal(normalizeSettings({providers:{'qwen-chat':{model:'unknown'}}},{},{recoverLegacyModel:true}).providers['qwen-chat'].model,'QUARK_VOICE');
 });

@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## Chat2API 四路统一应用与音色映射（2026-10-13）
+
+`npm run check:chat2api` 231项：228通过，3项为基线已有Windows chmod断言；TTS Provider全集85/85，`npm run test:mmd-production:tts`19/19，普通LLM19/19。新增用例覆盖旧映射兼容、qiaoxiaojiao模型/音色默认、覆盖与冲突、typed媒体零请求拒绝、API账号格式元数据、四路speech/Responses、取消/截止、安全日志和网页配置往返。旧API集成使用隔离Chat2API库与localhost-only请求，55/55通过。独立终审两个问题（规划预算/取消、Pi metadata拒绝）均修复并验证，定向8/8。
+
+控制端TTS自测仍只读，接受映射模型名并显示四路账号管理边界；不自动聊天或合成。全部为虚构凭据/本地音频/隔离浏览器测试，未读取真实账号、主服务未重启，真实API/网页完整业务/设备声音仍待授权验收。
+
 ## 豆包纯Node Responses会话复用（2026-10-13）
 
 新增`chat2api-doubao-session.test.js`与`chat2api-doubao-responses.test.js`共20项：版本化状态/身份摘要、旧observed、ACK冲突/缺ACK、中间结束隔离、同ID增量、私有Store重建、流式/非流式、取消/未消费/排队、16/256容量、并行JSON保存、Pi snapshot、写失败阻断和总时限。测试仅虚构Cookie/profile与隔离内存Store；`npm run check:chat2api`201/204，同3项旧Windows chmod；普通LLM/Core/Responses24/24、旧TTS19/19。

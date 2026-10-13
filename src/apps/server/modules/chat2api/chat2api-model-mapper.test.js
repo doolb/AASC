@@ -3,6 +3,18 @@ const test = require('node:test');
 
 const { createChat2ApiModelMapper } = require('./chat2api-model-mapper');
 
+test('TTS别名保留应用与默认音色，旧文字映射不新增语音字段', async () => {
+  const mapper = createChat2ApiModelMapper({dataStore:{readCollection:async()=>[
+    {model:'qiaoxiaojiao',actualModel:'qwen-api/qwen-audio-3.1-tts-flash',application:'tts',parameters:{voice:'qiaoxiaojiao_v3.1'},preferredProviderId:'qwen-api',preferredAccountId:'api-one'},
+    {model:'qwen3.6flash',actualModel:'Qwen3.5-Flash',providerId:'qwen'},
+  ]}});
+  const speech=await mapper.resolveModel('QIAOXIAOJIAO');
+  assert.equal(speech.application,'tts');
+  assert.deepEqual(speech.parameters,{voice:'qiaoxiaojiao_v3.1'});
+  assert.equal(speech.preferredAccountId,'api-one');
+  assert.deepEqual(await mapper.resolveModel('qwen3.6flash'),{requestedModel:'qwen3.6flash',actualModel:'Qwen3.5-Flash',preferredProviderId:'qwen',preferredAccountId:undefined});
+});
+
 test('模型映射支持 Provider 映射、全局精确映射和通配符', async () => {
   const mapper = createChat2ApiModelMapper({
     dataStore: {

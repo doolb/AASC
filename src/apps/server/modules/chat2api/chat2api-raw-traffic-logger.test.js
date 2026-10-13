@@ -233,3 +233,12 @@ test('简洁模式会先解压 gzip SSE 再记录输出', async () => {
 
   assert.deepEqual(records.find((record) => record.event === 'response').data, { output: '压缩响应' });
 });
+
+
+test('媒体和不透明二进制日志只保留元数据，不写音频或签名下载地址',()=>{
+ const {sanitizeValue}=require('./chat2api-raw-traffic-logger');
+ const media=sanitizeValue({type:'output_audio',data:'private-audio-base64',mime_type:'audio/wav',url:'https://private/audio?secret'});
+ assert.ok(!JSON.stringify(media).includes('private'));
+ const binary=sanitizeValue(Buffer.from('OggS-private-audio'));
+ assert.equal(binary.byteLength,18);assert.equal(binary.value,undefined);
+});

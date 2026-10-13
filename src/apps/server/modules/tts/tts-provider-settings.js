@@ -66,16 +66,21 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         : { credential: patch.clearCredential === true ? '' : incomingCredential || base.credential };
     if (provider !== 'qwen-chat' && patch.clearCredential !== undefined && typeof patch.clearCredential !== 'boolean') throw new Error('clearCredential 必须为布尔值');
     let model = boundedString(patch.model, base.model);
+    let mappedModel=false;
     if (provider === 'qwen-chat') {
         if (model === 'qwen-chat') model = 'QUARK_VOICE';
-        if (!QWEN_CHAT_MODELS.has(model)) {
+        const reserved=/^(?:qwen(?:\d|[-_])|QUARK_|MINI_)/iu.test(model);
+        const alias=/^[\w.\/-]{1,200}$/u.test(model)&&!reserved;
+        if (!QWEN_CHAT_MODELS.has(model) && (!alias || (recoverLegacyModel && patch.mappedModel!==true && base.mappedModel!==true))) {
             // 对应.src/framework/qwen-chat-restore-and-model.md：历史错误配置可读，新提交必须明确拒绝。
             if (!recoverLegacyModel) throw new Error('国内千问网页模型仅支持 QUARK_VOICE 或 MINI_MAX；qwen3-tts-flash 请使用 Qwen API');
             model = PROVIDER_DEFAULTS['qwen-chat'].model;
         }
+        mappedModel=!QWEN_CHAT_MODELS.has(model);
     }
     return {
         endpoint: provider === 'qwen-api' && endpoint ? resolveQwenEndpoint(endpoint, model) : endpoint, model,
+        ...(mappedModel?{mappedModel:true}:{}),
         ...auth,
         ...(provider === 'system' ? {} : { enabled: patch.enabled ?? base.enabled,
             defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
@@ -110,7 +115,12 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
 function redactSettings(settings) {
     return { ...settings, providers: Object.fromEntries(Object.entries(settings.providers).map(([id, value]) => {
         const { credential, ...publicSettings } = value;
-        return [id, ['qwen-chat', 'doubao-chat'].includes(id) ? publicSettings : { ...publicSettings, credentialConfigured: Boolean(credential) }];
+        // API旧秘密仍在私有配置供回滚；公共页面和生成链不再使用或宣传该值的配置状态。
+        if(['qwen-api','doubao-api'].includes(id)){
+            const {endpoint,resourceId,...preferences}=publicSettings;
+            return [id,{...preferences,credentialSource:'chat2api'}];
+        }
+        return [id,publicSettings];
     })) };
 }
 

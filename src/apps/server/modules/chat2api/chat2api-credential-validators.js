@@ -221,6 +221,8 @@ const validateDoubao = async (credentials, httpClient, provider) => {
 };
 
 const VALIDATORS = Object.freeze({
+  'qwen-api':async credentials=>validateApiFormat(credentials),
+  doubaapi:async credentials=>validateApiFormat(credentials),
   doubaochat: validateDoubao,
   deepseek: validateDeepSeek,
   glm: validateGlm,
@@ -232,6 +234,12 @@ const VALIDATORS = Object.freeze({
   'qwen-ai': validateQwenAi,
   zai: validateZai,
 });
+
+// API密钥入库只核对本地格式，不以保存动作触发收费请求或声称鉴权成功。
+function validateApiFormat(credentials) {
+  try {return {valid:true,...require('./chat2api-api-account').normalizeApiAccount(credentials)};}
+  catch(error){return failure(error.message);}
+}
 
 const createChat2ApiCredentialValidators = ({ httpClient = axios } = {}) => Object.fromEntries(
   Object.entries(VALIDATORS).map(([providerId, validate]) => [providerId, {

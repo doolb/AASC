@@ -187,8 +187,8 @@ function serverHarness() {
         return wrapPcm(Buffer.from([1, 0, 2, 0]));
     } });
     const registry = { ...createProviderRegistry({ systemGenerate: async request => { calls.push({ provider: 'system', ...request }); return 'native.wav'; },
-        qwenChat: createQwenChatProvider({ speechService: { generate: async request => ({ audio:
-            await adapter('qwen-chat').generate({ ...request, text: request.input, speed: Math.round(10 * Math.log2(request.speed) * 1e10) / 1e10 }) }) } }) }),
+        qwenChat: createQwenChatProvider({ speechService: { generate: async (request, options) => ({ audio:
+            await adapter('qwen-chat').generate({ ...options.parameterDefaults, ...request, text: request.input, speed: Math.round(10 * Math.log2(request.speed ?? options.parameterDefaults?.speed) * 1e10) / 1e10 }) }) } }) }),
         'qwen-api': adapter('qwen-api'), 'doubao-api': adapter('doubao-api') };
     let audioIndex = 0;
     const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => `generated-${++audioIndex}.wav` });

@@ -1,3 +1,10 @@
+### Chat2API 四路统一模型与语音
+
+- ✅ [2026-10-13] 实现qwen/qwen-api/doubao/doubaapi模型→Provider→应用分流，保留旧文字别名和网页账户/会话ID，TTS映射可同时指定真实模型与默认音色（qiaoxiaojiao示例）。
+  - 新增chat2api-content/system-controls/model-capabilities/application-service/api-account/api-speech-adapters；更新mapper/data-store/registry/runtime/responses/core/speech/proxy和两处配置UI。四路TTS业务统一读取Chat2API账号，API账户只做格式校验；旧私有密钥保留但不回退。Responses返回项目扩展output_audio WAV Base64，旧speech/cache/download仍audio/wav；未支持媒体明确拒绝。
+  - 更新TTS业务薄层、HTTP取消、安全错误和日志，自测只读检查、design/spec/task/todo及使用说明。总60秒包含规划/合成/下载，断连取消；拒绝TTS聊天续接和Pi元数据，原文字工具/SSE/原生会话继续。独立终审两项Important均修复并定向验证。
+  - 验证：Chat2API 228/231（3项修改前已有Windows chmod断言失败）、TTS Provider 85/85、旧业务TTS 19/19、普通LLM 19/19；模拟API/媒体与浏览器配置用例通过。servicePackage=true，依赖与Android未变；未发真实请求、未读取迁移真实凭据、未重启主服务或出包。真实账户和设备待部署验收。
+
 ### Offline min APK 构建
 
 - ✅ [2026-10-13] 构建 Offline min APK v35（`0.2.33-offline-min`），包含热更旧版本目录回收修复。

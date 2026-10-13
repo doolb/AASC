@@ -9,6 +9,10 @@ const { AUTH_ERROR_MESSAGES } = require('./chat2api-qwen-speech-auth');
 const { createChat2ApiModelMapper } = require('./chat2api-model-mapper');
 const { createDoubaoSpeechAdapter, getDoubaoSpeechCredential } = require('./chat2api-doubao-speech-adapter');
 const { DOUBAO_SPEECH_VOICE, doubaoSpeechError, SPEECH_ERRORS } = require('./chat2api-doubao-speech-protocol');
+const {createChat2ApiApplicationService}=require('./chat2api-application-service');
+const {createApiSpeechAdapters}=require('./chat2api-api-speech-adapters');
+const {listSpeechModels,getSpeechBinding}=require('./chat2api-model-capabilities');
+const {isProviderError}=require('../tts/tts-provider-errors');
 
 const MODELS = new Set(['qwen-chat', 'QUARK_VOICE', 'MINI_MAX', 'doubao-chat']);
 const STRATEGIES = new Set(['round-robin', 'fill-first', 'failover']);
@@ -61,14 +65,14 @@ function getQwenCredential(account) {
     }
 }
 
-function createChat2ApiSpeechService({ dataStore = createChat2ApiDataStore(),
+function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
     providerRegistry = createChat2ApiProviderRegistry({ dataStore }),
     loadBalancer = createChat2ApiLoadBalancer({ dataStore, providerRegistry }),
     getConfig = () => dataStore.readCollection('config', {}),
     modelMapper = createChat2ApiModelMapper({ dataStore }),
     qwenAdapter = createChat2ApiQwenSpeechAdapter(), doubaoAdapter = createDoubaoSpeechAdapter() } = {}) {
     return {
-        async generate(request, { timeoutMs = 60000, signal } = {}) {
+        async generate(request, { timeoutMs = 60000, signal, mappedBinding } = {}) {
             const normalized = normalizeSpeechRequest(request);
             const doubao = normalized.model === 'doubao-chat';
             const providerId = doubao ? 'doubaochat' : 'qwen';
@@ -93,14 +97,14 @@ function createChat2ApiSpeechService({ dataStore = createChat2ApiDataStore(),
                     const config = await getConfig();
                     remaining();
                     const strategy = STRATEGIES.has(config?.loadBalanceStrategy) ? config.loadBalanceStrategy : 'round-robin';
-                    let boundAccount;
+                    let boundAccount=mappedBinding?.preferredAccountId;
                     if (doubao) {
-                        const mapping = await modelMapper.resolveModel('doubao-chat'); remaining();
+                        const mapping = mappedBinding?.preferredAccountId ? mappedBinding : await modelMapper.resolveModel('doubao-chat'); remaining();
                         if (mapping.preferredProviderId !== 'doubaochat' || typeof mapping.preferredAccountId !== 'string' || !mapping.preferredAccountId) throw doubaoSpeechError('doubao_speech_binding');
                         boundAccount = mapping.preferredAccountId;
                     }
                     selection = await loadBalancer.selectAccount(normalized.model, strategy, providerId, boundAccount,
-                        { requireSecret: true, ...(doubao ? { requiredAccountId: boundAccount } : {}) });
+                        { requireSecret: true, ...(boundAccount ? { requiredAccountId: boundAccount } : {}) });
                     remaining();
                     if (selection) [account, provider] = await Promise.all([
                         dataStore.getAccount(selection.account.accountId), providerRegistry.getProvider(providerId)
@@ -150,6 +154,68 @@ function createChat2ApiSpeechService({ dataStore = createChat2ApiDataStore(),
             } finally { clearTimeout(timer); if (abort) signal?.removeEventListener('abort', abort); controller.abort(); }
         }
     };
+}
+
+// HTTP代理与业务薄层共享这一入口。先解析映射/应用/参数，再由Provider策略选择账号和协议。
+function createChat2ApiSpeechService(options={}) {
+    const dataStore=options.dataStore||createChat2ApiDataStore();
+    const providerRegistry=options.providerRegistry||createChat2ApiProviderRegistry({dataStore});
+    const modelMapper=options.modelMapper||createChat2ApiModelMapper({dataStore});
+    const loadBalancer=options.loadBalancer||createChat2ApiLoadBalancer({dataStore,providerRegistry,modelMapper});
+    const getConfig=options.getConfig||(()=>dataStore.readCollection('config',{}));
+    const web=createWebSpeechService({...options,dataStore,providerRegistry,modelMapper,loadBalancer,getConfig});
+    const apiAdapters=options.apiAdapters||createApiSpeechAdapters();
+    const planner=createChat2ApiApplicationService({modelMapper});
+    const generate=async(request,{timeoutMs=60000,signal,resolvedPlan,legacyReplyContext,parameterDefaults,expectedProviderId}={})=>{
+        if(!Number.isFinite(timeoutMs)||timeoutMs<=0||timeoutMs>60000)throw speechError(400,'invalid_speech_request','语音超时参数不合法');
+        const deadline=Date.now()+timeoutMs;const controller=new AbortController();let timer,onAbort,expired=false;
+        const cancelled=()=>request?.model==='doubao-chat'?doubaoSpeechError('doubao_speech_cancelled'):speechError(499,'speech_cancelled','语音生成已取消');
+        const remaining=()=>{if(signal?.aborted)throw cancelled();if(expired||Date.now()>=deadline)throw speechError(504,'speech_timeout','Chat2API语音生成超时');return deadline-Date.now();};
+        const work=async()=>{
+            remaining();const plan=resolvedPlan||await planner.plan(request,{defaultModel:'qwen-chat',parameterDefaults});remaining();
+            if(plan.application!=='tts')throw speechError(400,'invalid_speech_request','模型不是语音应用');
+            if(expectedProviderId&&plan.providerId!==expectedProviderId)throw speechError(400,'model_provider_conflict','业务选择与模型映射Provider不一致');
+            const normalized={input:plan.text,model:plan.speechModel,voice:plan.parameters.voice,speed:plan.parameters.speed,volume:plan.parameters.volume,response_format:'wav'};
+            if(['qwen','doubaochat'].includes(plan.providerId))return web.generate(normalized,{timeoutMs:remaining(),signal:controller.signal,mappedBinding:plan});
+            const config=await getConfig();remaining();
+            const selected=await loadBalancer.selectAccount(plan.speechModel,STRATEGIES.has(config?.loadBalanceStrategy)?config.loadBalanceStrategy:'round-robin',plan.providerId,plan.preferredAccountId,
+                {requireSecret:true,...(plan.preferredAccountId?{requiredAccountId:plan.preferredAccountId}:{})});remaining();
+            if(!selected)throw speechError(503,'no_available_speech_account','请在Chat2API配置并启用对应API账号');
+            const [account,provider]=await Promise.all([dataStore.getAccount(selected.account.accountId),providerRegistry.getProvider(plan.providerId)]);remaining();
+            if(!account||account.providerId!==plan.providerId||account.enabled===false||(account.status&&account.status!=='active')||!provider||provider.enabled===false)throw speechError(503,'no_available_speech_account','所选语音账号不可用');
+            const adapter=apiAdapters[plan.providerId];
+            if(!adapter)throw speechError(501,'unsupported_application','语音适配器未接入');
+            try {
+                const audio=await adapter.generate({text:plan.text,model:plan.upstreamModel,...plan.parameters,timeoutMs:remaining(),signal:controller.signal},account.credentials?.apiKey,
+                    {provider:{...provider,...(account.accountInfo?.endpoint?{apiEndpoint:account.accountInfo.endpoint}:{}),...(account.accountInfo?.resourceId?{resourceId:account.accountInfo.resourceId}:{})},account,signal:controller.signal,deadline,...(legacyReplyContext?{legacyReplyContext}:{})});
+                remaining();validateWav(audio);loadBalancer.clearAccountFailure?.(account.accountId);return {audio,contentType:'audio/wav'};
+            }catch(error){
+                remaining();
+                if(error.code==='ABORT_ERR'||controller.signal.aborted)throw cancelled();
+                loadBalancer.markAccountFailed?.(account.accountId);
+                if(isProviderError(error)){error.statusCode=502;throw error;}
+                throw speechError(error.code==='TTS_PROVIDER_TIMEOUT'?504:502,error.code==='TTS_PROVIDER_TIMEOUT'?'speech_timeout':'speech_upstream_error','Chat2API API语音生成失败，请检查账号、模型和音色');
+            }
+        };
+        try {return await Promise.race([work(),new Promise((resolve,reject)=>{
+            onAbort=()=>{controller.abort();reject(cancelled());};signal?.addEventListener('abort',onAbort,{once:true});
+            if(signal?.aborted)return onAbort();
+            timer=setTimeout(()=>{expired=true;controller.abort();reject(speechError(504,'speech_timeout','Chat2API语音生成超时'));},timeoutMs);
+        })]);}finally{clearTimeout(timer);signal?.removeEventListener('abort',onAbort);controller.abort();}
+    };
+    const voices=async(model)=>{
+        const plan=await planner.plan({model,input:'音色查询'});
+        if(apiAdapters[plan.providerId])return apiAdapters[plan.providerId].voices({model:plan.upstreamModel});
+        return [{id:plan.parameters.voice,name:plan.parameters.voice,available:plan.providerId==='qwen'}];
+    };
+    const listModels=async()=>{
+        const [accounts,providers,mappings]=await Promise.all([dataStore.listAccounts(),providerRegistry.listProviders(),dataStore.readCollection('modelMappings',[])]);
+        const available=id=>providers.some(p=>p.id===id&&p.enabled!==false)&&accounts.some(a=>a.providerId===id&&a.enabled!==false&&(!a.status||a.status==='active')&&a.secretConfigured);
+        const models=listSpeechModels().filter(m=>available(m.providerId));
+        for(const mapping of mappings){const binding=getSpeechBinding(mapping.actualModel,mapping.preferredProviderId||mapping.providerId,mapping.application);if(binding&&available(binding.providerId))models.push({id:mapping.model,providerId:binding.providerId,application:'tts',input_modalities:['text'],output_modalities:['audio'],stream:false});}
+        return models.map(m=>({...m,object:'model',owned_by:m.providerId==='doubaochat'?'doubao':m.providerId}));
+    };
+    return {generate,voices,listModels,planner};
 }
 
 module.exports = { createChat2ApiSpeechService, normalizeSpeechRequest, getQwenCredential };

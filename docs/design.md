@@ -154,3 +154,4 @@
 | 服务器发布包 | [server-release.md](design/server-release.md) | npm 显式生成服务器发布包、清单读取和子服务器更新边界 |
 | Node Offline min 跨平台热更新入口 | [offline-node-min-runtime.md](design/offline-node-min-runtime.md) | Windows/Linux 单文件入口、签名下载 release 种子与 code 更新、失败回滚 |
 | Release 配置与 APK 构建 profile | [release-build-profiles.md](design/release-build-profiles.md) | release 服务器配置、任务结果恢复、三种 APK profile、模型选择与构建产物忽略边界 |
+| Chat2API 四路统一模型与应用分流 | [chat2api-multimodal-routing.md](design/chat2api-multimodal-routing.md) | 既有文字＋四路TTS、默认音色映射、受控系统指令及媒体拒绝；首批已实现 |

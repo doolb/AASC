@@ -233,7 +233,9 @@ const createChat2ApiProxyService = (options = {}) => {
       return;
     }
     if (request.method === 'GET' && url.pathname === '/v1/models') {
-      sendJson(response, 200, await coreAdapter.listModels());
+      const result=await coreAdapter.listModels();
+      const speechModels=await speechService?.listModels?.()||[];
+      sendJson(response,200,{...result,data:[...new Map([...result.data,...speechModels].map(model=>[model.id,model])).values()]});
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v1/audio/speech') {

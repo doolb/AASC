@@ -281,3 +281,4 @@
 | 服务器发布包 | [server-release.md](spec/server-release.md) | npm 显式生成发布包、清单读取和子服务器更新伪代码 |
 | Node Offline min 跨平台热更新入口 | [offline-node-min-runtime.md](spec/offline-node-min-runtime.md) | 从签名清单下载 release 种子和 code ZIP、npm 依赖安装及代码回滚伪代码 |
 | Release 配置与 APK 构建 profile | [release-build-profiles.md](spec/release-build-profiles.md) | release 路径解析、任务 results 恢复、三种 APK profile、模型选择和构建产物忽略伪代码 |
+| Chat2API 四路统一模型与应用分流 | [chat2api-multimodal-routing.md](spec/chat2api-multimodal-routing.md) | 既有文字＋四路TTS、默认音色映射、受控系统指令及媒体拒绝；首批已实现 |

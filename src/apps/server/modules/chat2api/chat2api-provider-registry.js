@@ -1,4 +1,14 @@
+const {canonicalProviderId}=require('./chat2api-model-capabilities');
 const BUILTIN_PROVIDERS = Object.freeze([
+  {
+    id:'qwen-api',publicId:'qwen-api',name:'Qwen API',authType:'apiKey',apiEndpoint:'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
+    supportedModels:['qwen-api/qwen-audio-3.1-tts-flash','qwen-api/qwen-audio-3.0-tts-flash','qwen-api/qwen-audio-3.0-tts-plus','qwen-api/qwen3-tts-flash'],
+    credentialFields:[{name:'apiKey',label:'API Key（保存仅验证格式）',type:'password',required:true},{name:'endpoint',label:'可选API端点',type:'text',required:false,helpText:'留空使用官方默认端点'}],authMethods:['manual'],capabilities:{applications:['tts'],text:false,audio:true},
+  },
+  {
+    id:'doubaapi',publicId:'doubaapi',name:'豆包 API',authType:'apiKey',apiEndpoint:'https://openspeech.bytedance.com/api/v3/tts/unidirectional',resourceId:'seed-tts-2.0',
+    supportedModels:['doubaapi/tts'],credentialFields:[{name:'apiKey',label:'API Key（保存仅验证格式）',type:'password',required:true},{name:'endpoint',label:'可选API端点',type:'text',required:false,helpText:'留空使用官方默认端点'},{name:'resourceId',label:'可选资源ID',type:'text',required:false,helpText:'留空使用seed-tts-2.0'}],authMethods:['manual'],capabilities:{applications:['tts'],text:false,audio:true},
+  },
   {
     id: 'deepseek', name: 'DeepSeek', authType: 'userToken', apiEndpoint: 'https://chat.deepseek.com/api', loginUrl: 'https://chat.deepseek.com', chatPath: '/v0/chat/completion',
     supportedModels: ['deepseek-v4-flash', 'deepseek-v4-pro'], modelMappings: { 'deepseek-v4-flash': 'deepseek-v4-flash', 'deepseek-v4-pro': 'deepseek-v4-pro' }, credentialFields: [{ name: 'token', label: 'User Token', type: 'password', required: true }], authMethods: ['manual'],
@@ -40,7 +50,7 @@ const BUILTIN_PROVIDERS = Object.freeze([
   },
   {
     // 公开名称只表示网页思考模式，不能宣传为三个独立权重或原生多模态/工具模型。
-    id: 'doubaochat', name: '豆包网页（纯文字）', authType: 'cookie', apiEndpoint: 'https://www.doubao.com', loginUrl: 'https://www.doubao.com', chatPath: '/chat/completion',
+    id: 'doubaochat', publicId:'doubao', name: '豆包网页（doubao）', authType: 'cookie', apiEndpoint: 'https://www.doubao.com', loginUrl: 'https://www.doubao.com', chatPath: '/chat/completion',
     supportedModels: ['doubao', 'doubao-think', 'doubao-expert'], modelMappings: { doubao: 'doubao', 'doubao-think': 'doubao-think', 'doubao-expert': 'doubao-expert' },
     credentialFields: [{ name: 'cookie', label: '豆包网页 Cookie', type: 'textarea', required: true, helpText: '仅接收已确认的登录/CSRF Cookie；安全只读登录校验端点尚未确认，手动添加暂时拒绝入库' }], authMethods: ['manual', 'cookie'],
     // 只有已验证的普通Node模式可原生续接；网页传输及think/expert不能由布尔能力自动推定。
@@ -107,7 +117,7 @@ const createChat2ApiProviderRegistry = ({ dataStore } = {}) => {
 
   const getProvider = async (providerId) => {
     const providers = await listProviders();
-    return providers.find((provider) => provider.id === providerId) || null;
+    return providers.find((provider) => provider.id === canonicalProviderId(providerId)) || null;
   };
 
   const validateProvider = (provider) => {

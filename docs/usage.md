@@ -1,5 +1,9 @@
 # Web MediaCenter - 使用说明
 
+## Chat2API 四路统一文字与语音（2026-10-13）
+
+qwen/qwen-api/doubao/doubaapi由同一模型映射和应用服务分流；旧文字别名继续，TTS可配置qiaoxiaojiao→qwen-api/qwen-audio-3.1-tts-flash及默认音色qiaoxiaojiao_v3.1。两路API凭据改由Chat2API账户管理手动配置，不自动迁移旧密钥；首批文字与TTS，未接入媒体明确拒绝。接口示例、账号准备和部署边界见[统一应用使用说明](usage/chat2api-unified-applications.md)。
+
 独立MMD-AR测试网页的「GPU物理直连骨骼纹理」开关、默认手部防穿模同步兼容和诊断/编辑行为见[XPBD WebGL2使用说明](usage/mmd-xpbd-webgl.md)。本地实现，尚未发布。
 
 独立MMD-AR的PMX全身IK位于「动作 → Human 生理与后天行为 → PMX 全身 IK」。启用后可拖动头部、双手、双膝和双脚的彩色控制点；尚未拖动的点跟随当前动作，拖动后成为固定目标。「重置控制点」解除固定目标，关闭功能或切换模型会清除全部目标。拖脚可调整踝部目标，拖膝可提供腿部弯曲位置参考；求解受PMX骨骼链、刚体驱动状态和PMX角度限制影响，深屈膝时仍以模型自身限位为准。

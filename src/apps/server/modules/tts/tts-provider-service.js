@@ -14,22 +14,32 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
         const selection = resolveProviderConfig({ ...settings, templateTts: request.templateTts,
             businessType: request.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST });
         const providerSettings = settings.providers[selection.provider];
-        return { settings: providerSettings, selection };
+        return { settings: providerSettings, selection, configuration:settings };
     };
     return {
         resolve,
         async generate(request) {
             if (typeof request.text !== 'string' || !request.text.trim()) throw new Error('TTS 文本不能为空');
-            const { settings, selection } = resolve(request);
+            const { settings, selection, configuration } = resolve(request);
             const adapter = registry[selection.provider];
             try {
                 const { userText, ...providerRequest } = request;
                 // 其他Provider和非AI业务不接收上一句对话，避免把聊天内容混进普通播报。
                 const replyUserText = selection.provider === 'doubao-api' && isReplyBusiness(request.businessType)
                     ? normalizeReplyUserText(userText) : null;
+                const requestedModel=settings.model;
+                const knownModel=selection.provider==='qwen-api'? /^(qwen-audio-|qwen3-tts-)/u.test(requestedModel||'') : selection.provider==='qwen-chat'?['QUARK_VOICE','MINI_MAX'].includes(requestedModel):true;
+                const selectedVoice=normalizeOptionalString(request.voice)||selection.voice;
+                // 映射别名的默认音色由Chat2API解析；业务没有显式选择时不以旧Provider默认值遮盖映射。
+                const businessSelection=configuration?.[({ai_reply:'aiReplyDefault',agent_reply:'aiReplyDefault',text_media:'textMedia',system_broadcast:'systemBroadcast'})[request.businessType||BUSINESS_TYPES.SYSTEM_BROADCAST]];
+                const templateVoice=isReplyBusiness(request.businessType)&&selection.provider!=='system'?normalizeOptionalString(request.templateTts?.voice):null;
+                const explicitVoice=normalizeOptionalString(request.voice)||templateVoice
+                    || (selection.provider!=='system'&&businessSelection?.provider===selection.provider?normalizeOptionalString(businessSelection.voice):null);
                 const result = await adapter.generate({ ...providerRequest,
                     ...(replyUserText ? { userText: replyUserText } : {}),
-                    ...selection, voice: normalizeOptionalString(request.voice) || selection.voice,
+                    ...selection, voice: explicitVoice || (knownModel?selectedVoice:undefined),
+                    parameterOverrides:{...(explicitVoice?{voice:explicitVoice}:{}),...(request.speed!==undefined?{speed:Math.pow(2,normalizeNumber(request.speed,0,-10,10)/10)}:{}),...(request.volume!==undefined?{volume:normalizeNumber(request.volume,100,0,100)}:{})},
+                    parameterDefaults:{...(settings.defaultVoice?{voice:settings.defaultVoice}:{}),speed:Math.pow(2,settings.defaultSpeed/10),volume:settings.defaultVolume},
                     speed: normalizeNumber(request.speed, settings.defaultSpeed, -10, 10),
                     volume: normalizeNumber(request.volume, settings.defaultVolume, 0, 100), timeoutMs
                 }, settings);

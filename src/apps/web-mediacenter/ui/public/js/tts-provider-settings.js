@@ -4,8 +4,9 @@
     const PROVIDERS = { system: '系统原生', 'qwen-chat': '国内千问网页', 'qwen-api': 'Qwen API', 'doubao-api': '豆包 API', 'doubao-chat': '豆包网页朗读（实验）' };
     const BUSINESSES = { aiReplyDefault: 'AI / Agent 回复', textMedia: '文本阅读', systemBroadcast: '报时与系统播报' };
     const NUMBER_FIELDS = { defaultSpeed: [-10, 10], defaultVolume: [0, 100] };
-    const FIELD_LABELS = { endpoint: '服务地址', model: '模型', defaultVoice: '默认音色 ID',
-        defaultSpeed: '语速（−10 至 10）', defaultVolume: '音量（0 至 100）', resourceId: '资源 ID', credential: '凭证' };
+    // 此页仅编辑业务偏好；凭证、服务地址和资源 ID 统一交由 Chat2API 账户管理。
+    const FIELD_LABELS = { model: '模型或 Chat2API 映射别名', defaultVoice: '默认音色 ID',
+        defaultSpeed: '语速（−10 至 10）', defaultVolume: '音量（0 至 100）' };
     let config = null;
     let pendingSave = null;
     const queries = new Map();
@@ -134,6 +135,7 @@
         for (const [id, title] of Object.entries(PROVIDERS)) {
             const group = create('details');
             group.className = 'tts-provider-details';
+            group.dataset.ttsProvider = id;
             group.appendChild(create('summary', `${title} 设置`));
             group.style.marginTop = '16px';
             const inputs = {};
@@ -145,23 +147,25 @@
             }
             const names = id === 'doubao-chat' ? ['defaultVoice'] : id === 'system' ? ['defaultSpeed', 'defaultVolume'] : Object.keys(FIELD_LABELS);
             for (const name of names) {
-                if (name === 'resourceId' && id !== 'doubao-api') continue;
-                if (name === 'credential' && id === 'qwen-chat') continue;
                 const restrictedModel = id === 'qwen-chat' && name === 'model';
-                const input = create(restrictedModel ? 'select' : 'input');
+                const input = create('input');
+                input.dataset.ttsField = name;
+                input.type = NUMBER_FIELDS[name] ? 'number' : 'text';
+                input.autocomplete = 'off';
+                input.maxLength = 512;
+                if (NUMBER_FIELDS[name]) [input.min, input.max] = NUMBER_FIELDS[name];
                 if (restrictedModel) {
+                    // 保留网页支持模型候选，同时允许显式映射别名；实际目标能力由服务器校验。
+                    const models = create('datalist');
+                    models.id = 'ttsProviderModels-qwen-chat';
                     for (const [model, title] of Object.entries({ QUARK_VOICE: 'QUARK_VOICE（默认）', MINI_MAX: 'MINI_MAX（需匹配音色）' })) {
                         const option = create('option', title);
                         option.value = model;
-                        input.appendChild(option);
+                        models.appendChild(option);
                     }
-                } else {
-                    input.type = name === 'credential' ? 'password' : NUMBER_FIELDS[name] ? 'number' : 'text';
-                    input.autocomplete = 'off';
-                    input.maxLength = name === 'credential' ? 16384 : name === 'endpoint' ? 2048 : 512;
-                    if (NUMBER_FIELDS[name]) [input.min, input.max] = NUMBER_FIELDS[name];
+                    group.appendChild(models);
+                    input.setAttribute('list', models.id);
                 }
-                if (id === 'qwen-chat' && name === 'endpoint') input.readOnly = true;
                 if (id === 'doubao-chat') input.readOnly = true;
                 if (name === 'defaultVoice') input.setAttribute('list', `ttsProviderVoices-${id}`);
                 inputs[name] = input;
@@ -169,17 +173,15 @@
             }
             if (id === 'qwen-chat') {
                 group.appendChild(create('p', '由 Chat2API 提供语音合成，账号和登录状态请在 Chat2API 账户管理中维护。'));
-                group.appendChild(create('p', '网页模型默认 QUARK_VOICE；MINI_MAX 需匹配音色。qwen3-tts-flash 请使用 Qwen API。'));
+                group.appendChild(create('p', '网页模型默认 QUARK_VOICE；MINI_MAX 需匹配音色。可填写映射到该网页来源的 Chat2API 别名；qwen3-tts-flash 请使用 Qwen API。'));
             }
             if (id === 'doubao-chat') {
                 group.appendChild(create('p', '实验性网页朗读，默认关闭，尚未重新进行真实账号合成验收。'));
                 group.appendChild(create('p', '先在Chat2API为doubao-chat映射到doubaochat及指定账号；固定网页默认音色、速度与音量，失败不切换其它来源。'));
             }
-            if (id !== 'system' && !['qwen-chat', 'doubao-chat'].includes(id)) {
-                inputs.clearCredential = create('input');
-                inputs.clearCredential.type = 'checkbox';
-                addField(group, '清除已保存凭证', inputs.clearCredential);
-                group.appendChild(create('p', '凭证填写 API Key；留空保留已保存凭证。'));
+            if (['qwen-api', 'doubao-api'].includes(id)) {
+                group.appendChild(create('p', `由 Chat2API 的 ${id === 'qwen-api' ? 'qwen-api' : 'doubaapi'} 提供语音合成。请在 Chat2API 添加 API 账号时配置 API Key、可选服务端点${id === 'doubao-api' ? '与资源 ID' : ''}；留空使用官方默认。`));
+                group.appendChild(create('p', `可填写该来源的模型或映射别名${id === 'qwen-api' ? '，例如 qiaoxiaojiao' : ''}；这里只保存启用、模型、音色、语速和音量偏好。账号保存仅校验格式，尚未远端验证。`));
             }
             if (id === 'system') group.appendChild(create('p', '沿用现有 TTS 生成设备、服务器开关及原生音色配置。'));
             const query = create('button', '查询音色');
@@ -224,12 +226,7 @@
             if (!value) continue;
             for (const [name, input] of Object.entries(inputs)) {
                 if (name === 'voiceStatus') continue;
-                if (name === 'credential') {
-                    input.value = '';
-                    input.placeholder = value.credentialConfigured ? '已配置，留空保留' : '尚未配置';
-                    continue;
-                }
-                if (input.type === 'checkbox') input.checked = name === 'clearCredential' ? false : Boolean(value[name]);
+                if (input.type === 'checkbox') input.checked = Boolean(value[name]);
                 else input.value = value[name] ?? '';
             }
             setVoiceList(id);

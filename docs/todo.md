@@ -1,5 +1,7 @@
 - ⏳待长期/模式/设备验收 [2026-10-13] 豆包普通LLM：think/expert、令牌过期维护、多账号及Android/Linux尚待真实验收；Cookie-only网页bridge仍待query profile完善与官网验证。网页朗读仍待真实账号/音色、完整Ogg至WAV链路和设备播放验收；手动安全只读登录校验尚缺。任务：`docs/task/20261013_豆包纯Node协议接入.md`、`docs/task/20261012_豆包普通LLM网页fetch实施.md`、`docs/task/20261012_豆包网页WAV解码实施计划.md`。
 
+- ⏳待部署/现场验收 [2026-10-13] Chat2API四路统一首批已实现：运行实例加载新版后手动配置qwen-api/doubaapi账号，验收真实API、网页朗读完整业务及设备播放；未迁移真实凭据、未重启或出包。详见`docs/usage/chat2api-unified-applications.md`及`docs/task/20261013_Chat2API四路统一模型应用分流.md`。
+
 - ⏳待人工/手机验收 [2026-10-13] 独立 MMD-AR PMX PBD 全身 IK：七个头/腕/膝/踝控制点采用共享祖先旋转约束迭代和脚踝弯曲面偏好；PBD/IK/相机定向测试8/8、真实米娅PMX控制点加载/相机手势回归1/1及WEB构建通过。浏览器未自动拖动真实控制点；待不同PMX限位/骨名、真实拖点姿态、VMD与原生IK共存、模型切换清理及手机帧时/姿势观感验收。任务：`docs/task/20261013_MMDAR_PBD全身IK.md`、`docs/task/20261012_MMDAR_IK镜头手势.md`。
 
 - ⏳待维护 [2026-10-12] MMD-AR既有面板浏览器回归：高光开关状态断言失败、关闭相机后等待定位按钮禁用超时；HEAD测试代码同名两项复现。静态正式控件过滤夹具已补齐，不再保留未分类问题待办。记录：`docs/task/20261012_MMDAR_GPU物理骨骼纹理直连.md`。
