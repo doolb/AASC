@@ -17,6 +17,7 @@ const {
     validateRelativePath
 } = require('./publish-offline-update');
 const { syncModels } = require('../models/sync-ai-models');
+const { FULL_APK_MANIFEST_FILE, readFullApkManifest } = require('./offline-full-apk-manifest');
 
 const DEFAULT_SOURCE_URL = 'http://120.79.245.103/mnt/aasc-offline/';
 const DEFAULT_LOCAL_ROOT = '/mnt/aasc-offline';
@@ -591,8 +592,8 @@ async function installArtifact(stagingPath, targetPath, component) {
     return true;
 }
 
-async function writeManifestLast(localRoot, manifest, syncId) {
-    const target = path.join(localRoot, 'manifest.json');
+async function writeManifestLast(localRoot, manifest, syncId, filename = 'manifest.json') {
+    const target = path.join(localRoot, filename);
     const existing = await fs.promises.lstat(target).catch((error) => {
         if (error.code === 'ENOENT') return null;
         throw error;
@@ -600,7 +601,7 @@ async function writeManifestLast(localRoot, manifest, syncId) {
     if (existing && (!existing.isFile() || existing.isSymbolicLink())) {
         throw new Error(`拒绝覆盖非普通本地清单: ${target}`);
     }
-    const temporary = path.join(localRoot, `manifest.json.tmp-${syncId}`);
+    const temporary = path.join(localRoot, `${filename}.tmp-${syncId}`);
     const handle = await fs.promises.open(temporary, 'wx', 0o644);
     try {
         await handle.writeFile(JSON.stringify(manifest, null, 2) + '\n');
@@ -632,6 +633,15 @@ async function syncOfflineUpdate(options = {}) {
     if (!skipSignatureVerification) verifySignedManifest(manifest, key.publicKeyPem);
     validateManifestComponents(manifest);
     const components = selectSyncComponents(manifest);
+    const fullManifest = await readFullApkManifest(sourceUrl, key?.publicKeyPem, {
+        ...options, skipSignatureVerification
+    });
+    if (fullManifest) components.push({ name: 'apkFull', component: fullManifest.payload.apkFull });
+    if (fullManifest) {
+        const indexPath = await resolveSafePath(localRoot, FULL_APK_MANIFEST_FILE);
+        const indexStat = await fs.promises.lstat(indexPath).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+        if (indexStat && !indexStat.isFile()) throw new Error('完整 APK 本地索引必须为普通文件');
+    }
     if (components.length === 0) throw new Error('清单没有可同步的服务资源');
 
     const componentPlan = [];
@@ -686,11 +696,14 @@ async function syncOfflineUpdate(options = {}) {
             completedSyncBytes += component.size;
         }
         await writeManifestLast(localRoot, manifest, syncId);
+        if (fullManifest) await writeManifestLast(localRoot, fullManifest, syncId, FULL_APK_MANIFEST_FILE);
     } finally {
         await fs.promises.rm(stagingRoot, { recursive: true, force: true });
     }
 
-    const cleanup = await cleanupLocalPublishedArtifacts(localRoot, manifest);
+    const cleanup = await cleanupLocalPublishedArtifacts(localRoot, manifest, fullManifest ? {
+        includeFullApk: true, currentFullApkRelativeUrl: fullManifest.payload.apkFull.relativeUrl
+    } : {});
     const mmd = options.mmdSourceUrl && options.mmdLocalRoot
         ? await syncMmdDirectory(options.mmdSourceUrl, options.mmdLocalRoot, options)
         : null;
@@ -716,6 +729,7 @@ async function syncOfflineUpdate(options = {}) {
         sourceRoot: options.sourceRoot || null,
         localParentRoot: options.localParentRoot || null,
         manifest,
+        fullManifest,
         signatureVerificationSkipped: skipSignatureVerification,
         installed,
         skipped,

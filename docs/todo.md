@@ -1,3 +1,5 @@
+- 🔄进行中 [2026-10-13] 完整Offline APK加入默认同步，独立签名full索引；复用MNN构建发布full v38，验证后精确清理。任务：`docs/task/20261013_完整OfflineAPK同步与重建.md`。
+
 - ⏳待设备验收 [2026-10-13] 全量配置 ZIP 功能与自动重启已完成，后端/浏览器/Android编译通过；待新版 min APK 在设备上核对系统ZIP保存位置、选择导入与重连刷新。任务：`docs/task/20261013_全量配置与聊天数据ZIP导入导出.md`。
 
 - ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成，`minApk=true`；待签名 min APK 安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。

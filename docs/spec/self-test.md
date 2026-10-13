@@ -1,5 +1,18 @@
 # 自测功能实现文档
 
+## 完整 Offline APK 同步与发布自测（2026-10-13）
+
+```text
+现有同步fixture := 无full索引404 → 继续同步服务且保留full；service中的未使用full字段不作为来源
+独立索引集成 := RSA签名full → 默认下载/进度/结果apkFull → 第二次哈希复用
+清理兼容 := 只移除严格数字版本旧full普通文件；min、非版本文件、链接及外部目标保留
+失败集成 := 坏签名、签名正确但越界路径、坏APK长度/哈希、本地索引链接 → 不提交索引或清理旧full
+full发布 := APK哈希/实际包名版本/签名校验 → 版本文件上传 → 独立索引原子替换；服务清单保持
+远端顺序 := scp APK先于full索引；命令经/bin/sh -c；清理只用受限规则
+已运行 := npm run test:offline-sync 36/36；offline-update-publish.test.js 17/17；差异检查通过
+待验证 := full v38签名构建、MNN复用、内置最新服务与生产依赖及LAN/WAN真实发布
+```
+
 ## 全量配置 ZIP 与自动重启自测（2026-10-13）
 
 ```text

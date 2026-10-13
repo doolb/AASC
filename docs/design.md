@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [完整 Offline APK 同步与重建](design/offline-full-apk-sync.md)
+
 - [全量配置与聊天数据 ZIP 备份](design/full-config-backup.md)
 
 - [AI模型外网发布与双向同步（已实现并发布）](design/ai-model-sync.md)

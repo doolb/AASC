@@ -11,6 +11,8 @@ const {
     validateManifestComponents
 } = require('./offline-update-package');
 const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
+const { readSignerSha256 } = require('./offline-min-apk-package');
+const { FULL_APK_MANIFEST_FILE, createFullApkManifest, readFullApkManifest } = require('./offline-full-apk-manifest');
 
 const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(__dirname, '../..');
@@ -281,8 +283,8 @@ async function installLocalArtifact(sourcePath, rootDirectory, relativePath, exp
     }
 }
 
-async function writeLocalManifestLast(manifestBytes, rootDirectory, publishId) {
-    const target = path.join(path.resolve(rootDirectory), 'manifest.json');
+async function writeLocalManifestLast(manifestBytes, rootDirectory, publishId, filename = 'manifest.json') {
+    const target = path.join(path.resolve(rootDirectory), filename);
     const rootStat = await fs.promises.lstat(path.resolve(rootDirectory)).catch((error) => {
         if (error.code === 'ENOENT') return null;
         throw error;
@@ -298,7 +300,7 @@ async function writeLocalManifestLast(manifestBytes, rootDirectory, publishId) {
     if (existingStat && (!existingStat.isFile() || existingStat.isSymbolicLink())) {
         throw new Error(`拒绝覆盖非普通签名清单或符号链接: ${target}`);
     }
-    const temporaryPath = path.join(rootDirectory, `manifest.json.tmp-${publishId}`);
+    const temporaryPath = path.join(rootDirectory, `${filename}.tmp-${publishId}`);
     const fileHandle = await fs.promises.open(temporaryPath, 'wx', 0o644);
     try {
         await fileHandle.writeFile(manifestBytes);
@@ -462,19 +464,20 @@ async function installRemoteArtifact(commandRunner, remote, sourcePath, relative
     await runRemoteCommand(commandRunner, remote.host, finalizer);
 }
 
-async function writeRemoteManifestLast(commandRunner, remote, manifestBytes, publishId) {
+async function writeRemoteManifestLast(commandRunner, remote, manifestBytes, publishId, filename = 'manifest.json') {
     const temporaryPath = path.join(os.tmpdir(), `aasc-offline-manifest-${publishId}.json`);
     await fs.promises.writeFile(temporaryPath, manifestBytes, { flag: 'wx', mode: 0o600 });
     try {
-        const remoteTemporaryPath = `${remote.directory}/manifest.json.tmp-${publishId}`;
+        const remoteTemporaryPath = `${remote.directory}/${filename}.tmp-${publishId}`;
         await commandRunner('scp', [temporaryPath, `${remote.host}:${remoteTemporaryPath}`], { stdio: 'inherit' });
         const assignment = remoteRootAssignment(remote.directory);
         await runRemoteCommand(commandRunner, remote.host, [
             'set -eu',
             assignment,
-            'target="$root/manifest.json"',
-            'temporary="$root/manifest.json.tmp-' + publishId + '"',
+            `target="$root/${filename}"`,
+            `temporary="$root/${filename}.tmp-${publishId}"`,
             'if [ -L "$target" ]; then echo symlink >&2; exit 31; fi',
+            'if [ -e "$target" ] && [ ! -f "$target" ]; then echo not-file >&2; exit 32; fi',
             'chmod 0644 -- "$temporary"',
             'mv -- "$temporary" "$target"'
         ].join('\n'));
@@ -562,6 +565,7 @@ async function readFullApkMetadata(apkPath, buildManifestPath) {
         size: sourceStat.size,
         sha256: await sha256File(sourcePath)
     };
+    if (buildManifest.sha256 !== metadata.sha256) throw new Error('完整 APK 与 build manifest 的 SHA-256 不一致');
     validateRelativePath(relativeUrl);
     return { sourcePath, buildManifest, metadata };
 }
@@ -573,6 +577,26 @@ async function publishOfflineFullApk(options = {}) {
         throw new Error('完整 APK 发布必须指定 apkPath 和 buildManifestPath');
     }
     const { sourcePath, buildManifest, metadata } = await readFullApkMetadata(apkPath, buildManifestPath);
+    const commandRunner = options.commandRunner || execFileAsync;
+    const apksignerPath = options.apksignerPath || process.env.AASC_APKSIGNER || 'apksigner';
+    const signerSha256 = await readSignerSha256(sourcePath, { commandRunner, apksignerPath });
+    const aaptPath = options.aaptPath || process.env.AASC_AAPT || path.join(path.dirname(apksignerPath), 'aapt');
+    const identity = await commandRunner(aaptPath, ['dump', 'badging', sourcePath], { encoding: 'utf8' });
+    const packageMatch = identity.stdout?.match(/package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/u);
+    if (!packageMatch || packageMatch[1] !== 'com.aasc.display.offline'
+        || Number(packageMatch[2]) !== metadata.versionCode || packageMatch[3] !== metadata.versionName) {
+        throw new Error('完整 APK 实际包名或版本与构建清单不一致');
+    }
+    Object.assign(metadata, { packageName: packageMatch[1], profile: 'allserver', updateOnly: false,
+        signerSha256, ...(buildManifest.source ? { source: buildManifest.source } : {}) });
+    const keyPair = await loadOfflineUpdateKeyPair(options);
+    const fullManifest = createFullApkManifest(metadata, keyPair.privateKeyPem);
+    const manifestBytes = Buffer.from(`${JSON.stringify(fullManifest, null, 2)}\n`);
+    const verifyIndex = async baseUrl => {
+        const index = await readFullApkManifest(baseUrl, keyPair.publicKeyPem, options);
+        if (JSON.stringify(index) !== JSON.stringify(fullManifest)) throw new Error('HTTP 完整 APK 索引与本次发布不一致');
+        await verifyHttpArtifactHead(baseUrl, metadata.relativeUrl, metadata, options.fetchImpl);
+    };
     const publishId = `${Date.now()}-${process.pid}`;
     const localRoot = options.localRoot ? path.resolve(options.localRoot) : null;
     const remote = options.remote || null;
@@ -585,8 +609,10 @@ async function publishOfflineFullApk(options = {}) {
     if (localRoot) {
         await installLocalArtifact(sourcePath, localRoot, metadata.relativeUrl, metadata, publishId);
         localPublishedPaths.push(metadata.relativeUrl);
+        await writeLocalManifestLast(manifestBytes, localRoot, publishId, FULL_APK_MANIFEST_FILE);
+        localPublishedPaths.push(FULL_APK_MANIFEST_FILE);
         if (options.localVerifyUrl) {
-            await verifyHttpArtifactHead(options.localVerifyUrl, metadata.relativeUrl, metadata, options.fetchImpl);
+            await verifyIndex(options.localVerifyUrl);
         }
         const cleanupResult = await cleanupLocalPublishedArtifacts(localRoot, null, {
             includeApkMin: false,
@@ -597,11 +623,12 @@ async function publishOfflineFullApk(options = {}) {
     }
 
     if (remote) {
-        const commandRunner = options.commandRunner || execFileAsync;
         await installRemoteArtifact(commandRunner, remote, sourcePath, metadata.relativeUrl, metadata, publishId);
         remotePublishedPaths.push(metadata.relativeUrl);
+        await writeRemoteManifestLast(commandRunner, remote, manifestBytes, publishId, FULL_APK_MANIFEST_FILE);
+        remotePublishedPaths.push(FULL_APK_MANIFEST_FILE);
         if (options.remoteVerifyUrl) {
-            await verifyHttpArtifactHead(options.remoteVerifyUrl, metadata.relativeUrl, metadata, options.fetchImpl);
+            await verifyIndex(options.remoteVerifyUrl);
         }
         try {
             await cleanupRemotePublishedArtifacts(commandRunner, remote, null, {
@@ -615,6 +642,7 @@ async function publishOfflineFullApk(options = {}) {
     }
     return {
         buildManifest,
+        fullManifest,
         metadata,
         publishedRelativePaths: localRoot ? localPublishedPaths : remotePublishedPaths,
         localPublishedPaths,

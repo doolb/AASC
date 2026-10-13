@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [完整 Offline APK 同步伪代码](spec/offline-full-apk-sync.md)
+
 - [全量配置与聊天数据 ZIP 备份伪代码](spec/full-config-backup.md)
 
 - [AI模型发布与下载同步伪代码（已实现并验证）](spec/ai-model-sync.md)

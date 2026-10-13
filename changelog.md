@@ -1,3 +1,10 @@
+### 完整 Offline APK 同步与重建
+
+- ✅ [2026-10-13] 将完整 Offline APK 加入默认镜像同步，新增独立 RSA 签名 `full-apk-manifest.json`，保留服务清单格式。
+  - 新增 `offline-full-apk-manifest.js`，更新 `sync-offline-update.js` 与 `publish-offline-update.js`：full纳入进度/复用/大小与SHA-256校验，旧源404兼容，校验完成后精确清理旧full；发布验证构建哈希、实际包名/版本和签名，先APK后独立索引。原服务清单不包含full。
+  - `release/apkbuild/allserver/app.json` 更新至v38/0.2.36-offline，基线代码69/依赖8；更新design/spec/task/usage/self-test/todo。三项发布状态保持，脚本修改不影响服务热更/依赖/min资源；full构建发布进行中，复用已编译MNN。
+  - 验证：同步与模型36/36、发布器17/17通过，包含full完整往返/重复复用、非法签名/路径/坏APK、链接拒绝、实际包名/哈希拒绝和远端APK先于索引上传；`git diff --check`通过。
+
 ### 全量配置与聊天数据 ZIP 备份
 
 - ✅ [2026-10-13] 新增全局配置、用户配置与聊天数据 ZIP 导入导出；预览确认后服务器自动重启，在新进程加载配置前恢复。

@@ -1,5 +1,10 @@
 # Web MediaCenter - 使用说明
 
+## 完整 Offline APK 镜像同步
+
+`npm run sync:offline-update` 默认也同步完整 Offline APK，进入下载进度和已安装/已复用列表。完整 APK 由独立签名 `full-apk-manifest.json` 指定最新版本，下载和SHA-256校验成功后才清理旧full版本。服务 `manifest.json` 继续管理代码、依赖和min APK。旧源没有独立full索引（HTTP404）时继续同步原服务资源，并保留已有full APK；坏索引或坏包会报错。
+
+
 ## 全量配置与聊天数据 ZIP 备份
 
 在控制端的配置导入导出区域，点“导出全量配置 ZIP”下载全局配置、用户配置和聊天数据。API Key、账号凭证也包含在包内，请妥善保存。浏览器直接下载；新版 APK 弹出系统保存位置，旧 APK 可用原有16 MiB保存桥。

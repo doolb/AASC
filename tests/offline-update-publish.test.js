@@ -485,16 +485,26 @@ test('完整 Offline APK 发布到本地目标并清理旧 full APK，不覆盖�
         updateOnly: false,
         versionCode: 3,
         versionName: '0.3.0-offline',
-        apk: 'aasc-display-offline.apk'
+        apk: 'aasc-display-offline.apk',
+        sha256: crypto.createHash('sha256').update(apkBytes).digest('hex')
     }));
+    const keyPair = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 
-    const result = await publishOfflineFullApk({
+    const options = {
         apkPath,
         buildManifestPath,
-        localRoot
-    });
+        localRoot,
+        privateKeyPem: keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+        publicKeyPem: keyPair.publicKey.export({ type: 'spki', format: 'pem' }),
+        commandRunner: async (file) => ({ stdout: file.endsWith('apksigner')
+            ? `Signer #1 certificate SHA-256 digest: ${'b'.repeat(64)}`
+            : "package: name='com.aasc.display.offline' versionCode='3' versionName='0.3.0-offline'", stderr: '' })
+    };
+    const result = await publishOfflineFullApk(options);
 
-    assert.deepEqual(result.localPublishedPaths, ['apk/aasc-display-offline-v3.apk']);
+    assert.deepEqual(result.localPublishedPaths, ['apk/aasc-display-offline-v3.apk', 'full-apk-manifest.json']);
+    assert.equal(result.fullManifest.payload.apkFull.signerSha256, 'b'.repeat(64));
+    assert.deepEqual(JSON.parse(await fs.promises.readFile(path.join(localRoot, 'full-apk-manifest.json'))), result.fullManifest);
     assert.equal(fs.existsSync(path.join(localRoot, 'apk/aasc-display-offline-v3.apk')), true);
     assert.equal(fs.existsSync(path.join(localRoot, 'apk/aasc-display-offline-v1.apk')), false);
     assert.equal(fs.existsSync(path.join(localRoot, 'apk/aasc-display-offline-v2.apk')), false);
@@ -502,6 +512,23 @@ test('完整 Offline APK 发布到本地目标并清理旧 full APK，不覆盖�
     assert.equal((await fs.promises.readFile(path.join(localRoot, 'keep.txt'), 'utf8')), 'keep');
     assert.equal((await fs.promises.lstat(path.join(localRoot, 'apk/aasc-display-offline.apk'))).isSymbolicLink(), true);
     assert.equal((await fs.promises.readFile(symlinkTarget, 'utf8')), 'keep linked apk');
+    const fullIndexPath = path.join(localRoot, 'full-apk-manifest.json');
+    const indexBytes = await fs.promises.readFile(fullIndexPath);
+    const build = JSON.parse(await fs.promises.readFile(buildManifestPath));
+    await fs.promises.writeFile(buildManifestPath, JSON.stringify({ ...build, sha256: '0'.repeat(64) }));
+    await assert.rejects(publishOfflineFullApk(options), /SHA-256/u);
+    assert.deepEqual(await fs.promises.readFile(fullIndexPath), indexBytes);
+    await fs.promises.writeFile(buildManifestPath, JSON.stringify(build));
+    await assert.rejects(publishOfflineFullApk({ ...options, commandRunner: async file => ({ stdout: file.endsWith('apksigner')
+        ? `certificate SHA-256 digest: ${'b'.repeat(64)}` : "package: name='wrong.package' versionCode='3' versionName='0.3.0-offline'" }) }), /包名/u);
+    assert.deepEqual(await fs.promises.readFile(fullIndexPath), indexBytes);
+    const calls = [];
+    const remoteResult = await publishOfflineFullApk({ ...options, localRoot: null, remote: { host: 'test', directory: '/release' },
+        commandRunner: async (file, args) => { calls.push({ file, args }); return options.commandRunner(file, args); } });
+    assert.deepEqual(remoteResult.remotePublishedPaths, ['apk/aasc-display-offline-v3.apk', 'full-apk-manifest.json']);
+    const copies = calls.filter(call => call.file === 'scp');
+    assert.match(copies[0].args[1], /aasc-display-offline-v3\.apk/u);
+    assert.match(copies[1].args[1], /full-apk-manifest\.json/u);
 });
 
 test('远端清理脚本只包含受限版本模式和符号链接保护', async (t) => {

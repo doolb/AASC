@@ -17,12 +17,13 @@ const {
     waitForInterval
 } = require('../scripts/ops/sync-offline-update');
 const { signManifestPayload } = require('../scripts/ops/offline-update-package');
+const { FULL_APK_MANIFEST_FILE, createFullApkManifest } = require('../scripts/ops/offline-full-apk-manifest');
 
 function sha256(value) {
     return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-async function createFixture() {
+async function createFixture(options = {}) {
     const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-offline-sync-'));
     const localRoot = path.join(root, 'published');
     const keyPair = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -72,6 +73,14 @@ async function createFixture() {
         components
     };
     const manifest = { payload, signature: signManifestPayload(payload, privateKeyPem) };
+    if (options.fullApk) {
+        const relativeUrl = 'apk/aasc-display-offline-v5.apk';
+        files[relativeUrl] = Buffer.from('signed full apk fixture');
+        const full = createFullApkManifest({ profile: 'allserver', updateOnly: false, packageName: 'com.aasc.display.offline',
+            versionCode: 5, versionName: '0.5.0-offline', relativeUrl, size: files[relativeUrl].length,
+            sha256: sha256(files[relativeUrl]), signerSha256: 'b'.repeat(64) }, privateKeyPem);
+        files[FULL_APK_MANIFEST_FILE] = Buffer.from(JSON.stringify(full));
+    }
     const modelBytes = Buffer.from('small-ai-model');
     const modelManifest = {
         schemaVersion: 1,
@@ -83,7 +92,9 @@ async function createFixture() {
         totalBytes: modelBytes.length
     };
     const aimodelRequests = [];
+    const requests = [];
     const server = http.createServer((request, response) => {
+        requests.push(request.url);
         if (request.url?.startsWith('/mnt/aimodel/')) {
             const relativePath = request.url.slice('/mnt/aimodel/'.length);
             aimodelRequests.push(relativePath);
@@ -120,6 +131,9 @@ async function createFixture() {
         root,
         localRoot,
         publicKeyPem,
+        privateKeyPem,
+        files,
+        requests,
         manifest,
         modelManifest,
         aimodelRequests,
@@ -212,6 +226,60 @@ test('sync downloads only manifest service components and preserves full APK fil
         'code', 'dependencies', 'apkMin'
     ]);
     assert.deepEqual(fixture.aimodelRequests, []);
+});
+
+test('full独立签名索引纳入默认同步；复用、精确清理且不改服务清单', async t => {
+    const fixture = await createFixture({ fullApk: true }); t.after(() => closeFixture(fixture));
+    const apkDir = path.join(fixture.localRoot, 'apk'); await fs.promises.mkdir(apkDir, { recursive: true });
+    await fs.promises.writeFile(path.join(apkDir, 'aasc-display-offline-v1.apk'), 'old full');
+    await fs.promises.writeFile(path.join(apkDir, 'aasc-display-offline.apk'), 'keep unversioned');
+    const outside = path.join(fixture.root, 'outside.apk'); await fs.promises.writeFile(outside, 'keep outside');
+    await fs.promises.symlink(outside, path.join(apkDir, 'aasc-display-offline-v2.apk'));
+    const options = { sourceUrl: fixture.sourceUrl, localRoot: fixture.localRoot, publicKeyPem: fixture.publicKeyPem };
+    const first = await syncOfflineUpdate(options);
+    assert.ok(first.installed.includes('apkFull'));
+    assert.equal(fs.existsSync(path.join(apkDir, 'aasc-display-offline-v1.apk')), false);
+    assert.equal(fs.lstatSync(path.join(apkDir, 'aasc-display-offline-v2.apk')).isSymbolicLink(), true);
+    assert.equal(fs.readFileSync(outside, 'utf8'), 'keep outside');
+    assert.equal(fs.readFileSync(path.join(apkDir, 'aasc-display-offline.apk'), 'utf8'), 'keep unversioned');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(fixture.localRoot, 'manifest.json'))), fixture.manifest);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(fixture.localRoot, FULL_APK_MANIFEST_FILE))), first.fullManifest);
+    assert.deepEqual(fs.readFileSync(path.join(apkDir, 'aasc-display-offline-v5.apk')), fixture.files['apk/aasc-display-offline-v5.apk']);
+    const second = await syncOfflineUpdate(options); assert.ok(second.skipped.includes('apkFull'));
+    assert.equal(fixture.requests.filter(url => url.endsWith('/aasc-display-offline-v5.apk')).length, 1);
+});
+
+test('full索引坏签名、越界路径和坏APK均不提交索引或清理旧full', async t => {
+    const fixture = await createFixture({ fullApk: true }); t.after(() => closeFixture(fixture));
+    const apkDir = path.join(fixture.localRoot, 'apk'); await fs.promises.mkdir(apkDir, { recursive: true });
+    const old = path.join(apkDir, 'aasc-display-offline-v1.apk'); await fs.promises.writeFile(old, 'old full');
+    const original = fixture.files[FULL_APK_MANIFEST_FILE];
+    const index = JSON.parse(original);
+    index.payload.apkFull.size += 1;
+    fixture.files[FULL_APK_MANIFEST_FILE] = Buffer.from(JSON.stringify(index));
+    const options = { sourceUrl: fixture.sourceUrl, localRoot: fixture.localRoot, publicKeyPem: fixture.publicKeyPem };
+    await assert.rejects(syncOfflineUpdate(options), /签名/u);
+    index.payload.apkFull.relativeUrl = '../outside.apk';
+    index.signature = signManifestPayload(index.payload, fixture.privateKeyPem);
+    fixture.files[FULL_APK_MANIFEST_FILE] = Buffer.from(JSON.stringify(index));
+    await assert.rejects(syncOfflineUpdate(options), /路径/u);
+    fixture.files[FULL_APK_MANIFEST_FILE] = original;
+    fixture.files['apk/aasc-display-offline-v5.apk'] = Buffer.from('bad');
+    await assert.rejects(syncOfflineUpdate(options), /SHA-256/u);
+    assert.equal(fs.readFileSync(old, 'utf8'), 'old full');
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, FULL_APK_MANIFEST_FILE)), false);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'manifest.json')), false);
+});
+
+test('full本地索引链接在提交服务清单前被拒绝，外部文件不被覆盖', async t => {
+    const fixture = await createFixture({ fullApk: true }); t.after(() => closeFixture(fixture));
+    await fs.promises.mkdir(fixture.localRoot, { recursive: true });
+    const outside = path.join(fixture.root, 'outside.json'); await fs.promises.writeFile(outside, 'keep outside');
+    await fs.promises.symlink(outside, path.join(fixture.localRoot, FULL_APK_MANIFEST_FILE));
+    await assert.rejects(syncOfflineUpdate({ sourceUrl: fixture.sourceUrl, localRoot: fixture.localRoot,
+        publicKeyPem: fixture.publicKeyPem }), /链接/u);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'manifest.json')), false);
+    assert.equal(fs.readFileSync(outside, 'utf8'), 'keep outside');
 });
 
 test('开启aimodel后镜像模型及根清单，重复同步复用模型文件', async (t) => {
