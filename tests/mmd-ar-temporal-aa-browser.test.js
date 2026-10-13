@@ -8,6 +8,7 @@ const puppeteer = require('puppeteer');
 const project = path.resolve(__dirname, '..'), root = path.join(project, '3rd/mmd-ar-test/web-dist');
 const chrome = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath(), 'C:/Program Files/Google/Chrome/Application/chrome.exe']
     .find(file => file && fs.existsSync(file));
+const reconstructionScales = [1];
 
 async function withBrowser(action) {
     const server = http.createServer((request, response) => {
@@ -186,10 +187,10 @@ test('真实GPU FSR2模式编译并将低分辨率TAA输入升采样到输出画
     });
 });
 
-test('真实GPU FSR输出重建倍率保持低输入并改善显示尺寸斜边', { skip: !chrome, timeout: 60000 }, async context => {
+test('真实GPU FSR输出重建固定1x并保持基础Canvas尺寸', { skip: !chrome, timeout: 60000 }, async context => {
     await withBrowser(async (page, origin) => {
         await page.goto(`${origin}/__source/package.json`);
-        const result = await page.evaluate(async () => {
+        const result = await page.evaluate(async scales => {
             const THREE = await import('/__source/node_modules/three/build/three.module.js');
             const prefix = window.__testMmdRenderModulePrefix;
             const { calculateRenderSize } = await import(`${prefix}render-settings.mjs`);
@@ -222,7 +223,7 @@ test('真实GPU FSR输出重建倍率保持低输入并改善显示尺寸斜边'
                     }
                     reference[y * 256 + x] = coverage;
                 }
-                for (const factor of [1, 2, 4]) {
+                for (const factor of scales) {
                     config.fsr2ReconstructionScale = factor;
                     const size = calculateRenderSize(256, 256, 1, config); camera.userData.mmdArRenderSize = size;
                     renderer.setPixelRatio(size.pixelRatio); renderer.setSize(256, 256); temporal.invalidate();
@@ -243,16 +244,14 @@ test('真实GPU FSR输出重建倍率保持低输入并改善显示尺寸斜边'
             const glError = renderer.getContext().getError();
             temporal.dispose(); source.dispose(); copy.dispose(); copyGeometry.dispose(); mesh.geometry.dispose(); mesh.material.dispose(); renderer.dispose();
             return { cases, glError };
-        });
+        }, reconstructionScales);
         const mean = factor => result.cases.filter(item => item.factor === factor).reduce((sum, item) => sum + item.error, 0) / 10;
-        context.diagnostic(JSON.stringify({ errors: [1, 2, 4].map(factor => ({ factor, mean: mean(factor) })), cases: result.cases }));
+        context.diagnostic(JSON.stringify({ error: mean(1), cases: result.cases }));
         for (const item of result.cases) {
-            assert.deepEqual(item.input, [64, 64], '所有重建档位必须保持0.25场景输入');
+            assert.deepEqual(item.input, [64, 64], 'FSR内部输入必须保持0.25场景尺寸');
             assert.deepEqual(item.output, [64 * item.factor, 64 * item.factor]);
             assert.equal(item.centerAlpha, 255);
         }
-        assert.ok(mean(2) < mean(1), '2倍重建的显示尺寸斜边覆盖误差应降低');
-        assert.ok(mean(4) < mean(1), '4倍重建的显示尺寸斜边覆盖误差应降低');
         assert.equal(result.glError, 0);
     });
 });
@@ -367,6 +366,7 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         await page.goto(`${origin}/?safePhysics=1`, { waitUntil: 'domcontentloaded' });
         const ready = () => page.waitForFunction(() => window.DisplayMmd?.getState().modelReady, { timeout: 45000 });
         await ready();
+        assert.equal(await page.$('[data-render-setting="fsr2ReconstructionScale"]'), null);
         const update = async (name, value) => page.$eval(`[data-render-setting="${name}"]`, (node, setting) => {
             if (node.type === 'checkbox') node.checked = setting; else node.value = String(setting);
             node.dispatchEvent(new Event('input', { bubbles: true }));
@@ -501,8 +501,8 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         assert.ok(fsr2.pixel[3] > 100, 'FSR2输出分辨率画布必须存在模型画面');
         await update('canvasScale', .25); await update('fsr2Scale', 1);
         const reconstructedSizes = [];
-        for (const factor of [1, 2, 4]) {
-            await update('fsr2ReconstructionScale', factor); await size(160 * factor, 200 * factor);
+        for (const factor of reconstructionScales) {
+            await size(160 * factor, 200 * factor);
             reconstructedSizes.push(await page.evaluate(() => {
                 const c = window.DisplayMmd.getEditorBridge().context, sceneTargets = [], original = c.renderer.render;
                 c.renderer.render = function(scene, camera, ...args) {
@@ -514,7 +514,7 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
             }));
         }
         for (let index = 0; index < reconstructedSizes.length; index += 1) {
-            const factor = [1, 2, 4][index], observed = reconstructedSizes[index];
+            const factor = reconstructionScales[index], observed = reconstructedSizes[index];
             assert.deepEqual([observed.state.inputWidth, observed.state.inputHeight], [160, 200]);
             assert.deepEqual([observed.state.width, observed.state.height], [160 * factor, 200 * factor]);
             assert.ok(observed.sceneTargets.length > 0 && observed.sceneTargets.every(([width, height]) => width === 160 && height === 200), '真实场景输入不能随重建倍率提高');
@@ -546,7 +546,7 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
             output: `${fsr2.state.width}x${fsr2.state.height}`, medianMs: fsr2.medianMs, targets: fsr2.state.targetCount,
             extraBytes: fsr2.state.inputWidth * fsr2.state.inputHeight * fsr2.colorBytes
                 + fsr2.state.width * fsr2.state.height * (2 * fsr2.colorBytes + 8) };
-        await update('fsr2ReconstructionScale', 1); await update('aaMode', 'taa'); await update('fsr2Scale', .67);
+        await update('aaMode', 'taa'); await update('fsr2Scale', .67);
         const timings = [];
         for (const scale of [.5, 1, 2]) {
             await update('canvasScale', scale); await size(640 * scale, 800 * scale);
@@ -573,11 +573,16 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         context.diagnostic(`完整GPU完成耗时（软件GPU）：${JSON.stringify({ timings, fsr2Timing })}`);
         await update('canvasScale', .5); await update('taaEnabled', true); await size(320, 400);
         await update('taaJitterScale', .35); await update('taaJitterSamples', 32);
-        await update('aaMode', 'fsr2'); await update('fsr2ReconstructionScale', 2); await update('aaMode', 'taa');
+        await update('aaMode', 'fsr2'); await update('aaMode', 'taa');
         await size(320, 400);
+        await page.evaluate(() => {
+            const saved = JSON.parse(localStorage.getItem('aasc.mmdArTest.render.v1'));
+            saved.fsr2ReconstructionScale = 2;
+            localStorage.setItem('aasc.mmdArTest.render.v1', JSON.stringify(saved));
+        });
         await page.reload({ waitUntil: 'domcontentloaded' }); await ready(); await size(320, 400);
         assert.deepEqual(await page.evaluate(() => window.MmdArRenderSettings),
-            { taaEnabled: true, aaMode: 'taa', fsr2Scale: .67, fsr2ReconstructionScale: 2, taaHistoryWeight: .9, canvasScale: .5, taaJitterScale: .35, taaJitterSamples: 32 });
+            { taaEnabled: true, aaMode: 'taa', fsr2Scale: .67, fsr2ReconstructionScale: 1, taaHistoryWeight: .9, canvasScale: .5, taaJitterScale: .35, taaJitterSamples: 32 });
         await page.$eval('#displayMmdLightingReset', node => node.click()); await size(640, 800);
         assert.equal(await page.evaluate(() => window.MmdArRenderSettings.taaEnabled), false);
         // 恢复默认由现有灯光默认预设接管，其抖动值为0.20，不是裸render模块的1。
@@ -618,5 +623,18 @@ test('真实模型倍率/DPR/保存复位、TAA组合和后台相机保留', {
         assert.equal(staticPicture.type, 'glb'); assert.ok(staticPicture.pixels > 1000);
         assert.equal(staticPicture.state.lastHistoryUsed, true); assert.equal(staticPicture.error, 0);
         context.diagnostic(`静态GLB有效像素：${staticPicture.pixels}`);
+    });
+});
+
+test('独立MMD-AR面板不显示FSR输出重建倍率控件', { skip: !chrome, timeout: 60000 }, async () => {
+    await withBrowser(async (page, origin) => {
+        await page.setRequestInterception(true);
+        page.on('request', request => /\/(?:mmd\/miya|mmd\/motions)\//u.test(new URL(request.url()).pathname)
+            ? request.abort() : request.continue());
+        await page.evaluateOnNewDocument(() => localStorage.setItem('aasc.mmdArTest.render.v1', JSON.stringify({ fsr2ReconstructionScale: 2 })));
+        await page.goto(`${origin}/?safePhysics=1`, { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('#mmdArTemporalAA');
+        assert.equal(await page.$('[data-render-setting="fsr2ReconstructionScale"]'), null);
+        await page.waitForFunction(() => window.MmdArRenderSettings?.fsr2ReconstructionScale === 1);
     });
 });

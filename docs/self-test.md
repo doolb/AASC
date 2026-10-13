@@ -1,5 +1,19 @@
 # 自测功能文档
 
+## 独立 MMD-AR PMX PBD 全身 IK（2026-10-13）
+
+定向验证：`node --test tests/mmd-ar-human-ik-pbd.test.js tests/mmd-ar-ik-camera-gestures.test.js`，8/8通过。PBD数学用例检查误差按角度杠杆分配、每轮限幅、零梯度/非有限权重安全返回和膝盖偏好弯曲面；合成三骨腿链检查膝/踝同时拖动、深屈膝、祖先共同旋转、骨段长度不变、脚目标误差下降、PMX范围及reset恢复。
+
+真实浏览器：`node --test tests/mmd-ar-ik-camera-gestures-browser.test.js`，1/1通过；加载米娅 PMX、显示七个头/腕/膝/踝控制点，检查IK镜头环绕、双指平移与捏合缩放，并确认无pageerror。该用例未自动拖动真实模型控制点；实际PMX拖点造型、其他模型和手机帧时仍待人工验收。
+
+`npm run build:web:mmd-ar-test`成功，新PBD模块已进入版本化构建依赖。构建保留既有 Blender 大 chunk 提示。未构建APK、未发布网页/服务包；Offline发布状态未修改。
+
+## 独立MMD-AR PMX全身IK（2026-10-12）
+
+构建：`npm run build:web:mmd-ar-test`。人工验收在独立网页加载标准日文骨骼名、英文别名及缺失末端的PMX，打开「动作 → Human 生理与后天行为 → PMX 全身 IK」，核对七个控制点、未拖动时跟随VMD、拖动后保持目标、重置/关闭/换模型清理；拖动时不触发相机旋转或轻触注视。继续核对原生IK/grant后、手部避让前的帧顺序，以及Ammo/XPBD、物理暂停和模型/helper销毁。记录移动设备帧时与复杂服饰观感；桌面结果不替代手机验收。
+
+自动化覆盖见上方2026-10-13 PBD全身IK记录；实际拖点姿态、骨骼限位、恢复和手机性能仍待浏览器/设备验收。
+
 ## 独立MMD-AR拖动飞散修复（2026-10-12，独立场景验收完成）
 
 先跑`npm run build:web:mmd-ar-test`。定向命令：`node --test tests/mmd-ar-xpbd-webgl-bone-texture.test.js tests/mmd-ar-xpbd-webgl.test.js tests/mmd-pmx-helper.test.js`；真实PMX拖动与生命周期分别串行运行`node --test tests/mmd-ar-xpbd-webgl-drag-browser.test.js`和`node --test tests/mmd-ar-xpbd-webgl-browser.test.js`。package没有这组专用script，未跑全仓通用test或APK构建。

@@ -31,7 +31,7 @@ test('正式渲染参数默认关闭、倍率硬件上限与独立存储', async
     assert.deepEqual([limited.width, limited.height, limited.limited], [1024, 512, true]);
 });
 
-test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、TAA历史释放', {
+test('正式面板隐藏重建倍率、保存复位与真实PMX渲染组合、TAA历史释放', {
     skip: !chrome || !fs.existsSync(path.join(models, 'miya/miya.pmx')), timeout: 120000
 }, async () => {
     // 只移除服务器/语音业务脚本，保留实际正式HTML、CSS、面板和ESM资源用于集成验收。
@@ -77,13 +77,13 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
             set('data-render-setting', 'aaMode', 'fsr2');
             set('data-render-setting', 'fsr2Scale', .5);
             set('data-render-setting', 'taaEnabled', true);
-            set('data-render-setting', 'fsr2ReconstructionScale', 2);
             set('data-screen-lighting', 'contactEnabled', true);
             set('data-screen-lighting', 'giEnabled', true);
             const toggle = document.querySelector('#mmdArTemporalAA [data-render-group]');
             toggle.click();
             return { render: window.DisplayMmdRenderSettings, lighting: window.DisplayMmdScreenLighting,
                 open: !document.getElementById('mmdArTemporalAABody').hidden,
+                hasReconstructionControl: !!document.querySelector('[data-render-setting="fsr2ReconstructionScale"]'),
                 duplicateIds: new Set([...document.querySelectorAll('[id]')].map(node => node.id)).size !== document.querySelectorAll('[id]').length,
                 testStorage: localStorage.getItem('aasc.mmdArTest.render.v1'), voice: !!document.getElementById('displayVoiceAction') };
         });
@@ -91,7 +91,8 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         assert.equal(controls.render.taaJitterSamples, 16);
         assert.equal(controls.render.aaMode, 'fsr2');
         assert.equal(controls.render.fsr2Scale, .5);
-        assert.equal(controls.render.fsr2ReconstructionScale, 2);
+        assert.equal(controls.render.fsr2ReconstructionScale, 1);
+        assert.equal(controls.hasReconstructionControl, false);
         assert.equal(controls.lighting.contactEnabled, true);
         assert.equal(controls.open, true);
         assert.equal(controls.duplicateIds, false);
@@ -100,7 +101,7 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         await page.reload();
         await page.waitForFunction(() => window.DisplayMmdRenderSettings?.canvasScale === .5
             && window.DisplayMmdRenderSettings?.aaMode === 'fsr2' && window.DisplayMmdRenderSettings?.fsr2Scale === .5
-            && window.DisplayMmdRenderSettings?.fsr2ReconstructionScale === 2);
+            && window.DisplayMmdRenderSettings?.fsr2ReconstructionScale === 1);
         const runtime = await page.evaluate(async () => {
             const { createDisplayPmxRuntime } = await import('/js/display-pmx-runtime.js');
             const canvas = document.getElementById('displayMmdCanvas');
@@ -122,7 +123,7 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         });
         assert.deepEqual(runtime.after.cameraPosition, runtime.before.cameraPosition);
         assert.deepEqual(runtime.after.cameraQuaternion, runtime.before.cameraQuaternion);
-        assert.deepEqual(runtime.size, [320, 480]);
+        assert.deepEqual(runtime.size, [160, 240]);
         const gpu = await page.evaluate(async () => {
             const THREE = await import('three');
             const { createPmxAmbientOcclusion } = await import('/js/display-pmx-ao.mjs');
@@ -143,7 +144,7 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
             ao.render(); const fsr2First = ao.getTemporalState();
             ao.render(); const fsr2Accumulated = ao.getTemporalState();
             window.DisplayMmdRenderSettings = { ...window.DisplayMmdRenderSettings, fsr2ReconstructionScale: 2 };
-            renderer.setSize(130, 194); ao.render(); const reconstructed = ao.getTemporalState();
+            ao.render(); const reconstructed = ao.getTemporalState();
             window.DisplayMmdRenderSettings = { ...window.DisplayMmdRenderSettings, fsr2ReconstructionScale: 1 };
             renderer.setSize(65, 97);
             // 观察实际场景目标，确保空间合成的深度/颜色真正降采样，不能只检查TAA内部目标。
@@ -167,8 +168,8 @@ test('正式面板保存/复位与真实PMX渲染组合、倍率保留视角、T
         assert.equal(gpu.accumulated.lastHistoryUsed, true);
         assert.equal(gpu.fsr2First.lastHistoryUsed, false);
         assert.equal(gpu.fsr2Accumulated.lastHistoryUsed, true);
-        assert.deepEqual([gpu.reconstructed.inputWidth, gpu.reconstructed.inputHeight, gpu.reconstructed.width, gpu.reconstructed.height], [32, 48, 130, 194]);
-        assert.equal(gpu.reconstructed.lastHistoryUsed, false);
+        assert.deepEqual([gpu.reconstructed.inputWidth, gpu.reconstructed.inputHeight, gpu.reconstructed.width, gpu.reconstructed.height], [32, 48, 65, 97]);
+        assert.equal(gpu.reconstructed.lastHistoryUsed, true, '被归一化掉的旧倍率不应改变输出目标或清空有效历史');
         assert.deepEqual([gpu.fsr2Accumulated.inputWidth, gpu.fsr2Accumulated.inputHeight,
             gpu.fsr2Accumulated.width, gpu.fsr2Accumulated.height], [32, 48, 65, 97]);
         assert.deepEqual(gpu.sceneSizes, [[32, 48], [65, 97], [32, 48], [65, 97]]);

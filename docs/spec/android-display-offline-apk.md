@@ -149,6 +149,21 @@ DisplayWebView.init(context, offlineMode):
         offlineMode, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi, deviceClass
     )
     setInitialScale(scale)
+    保存 scale 为 initialScalePercent
+
+MainActivity.setupWebView:
+    创建显示 WebView 后，将该 WebView 的 initialScalePercent 传给 NativeBridge
+
+NativeBridge.getDisplayWebViewInitialScalePercent:
+    返回创建显示 WebView 时保存的 initialScalePercent
+    不从控制 WebView 或系统全局设置重新推导，确保与 setInitialScale 使用同一数值
+
+display.html.applyVoiceTopCenterLayout:
+    scalePercent = NativeDisplay.getDisplayWebViewInitialScalePercent()；缺少原生桥或读取失败时使用 100
+    voiceStatusRow 使用原有边距
+    voiceTextDisplay 在 0°/180°的固定偏移 = rotationLayout.margin × 8 / (scalePercent / 100)
+    voiceTextDisplay 在 90°/270°保留旋转包围盒中心锚点
+    不修改 Offline WebView 初始缩放、控制 WebView、普通浏览器 CSS 或其他显示元素
 
 DisplayWebView.initControlPageZoomPolicy(disableInputAutoZoom):
     如果 disableInputAutoZoom == false：不注入控制端专用 viewport
@@ -236,6 +251,14 @@ Android JVM 测试：
     离线无地址时选择 127.0.0.1:8081
     离线配置 role == main，普通配置 role == subserver
     离线环境包含 AASC_OFFLINE_MODE=1，普通环境为 0
+    WebViewScalePolicy 对 1920×1080@320dpi 电脑类返回 150%，对 720×1480@280dpi 手机类返回 112%
+    NativeBridge 返回与显示 DisplayWebView.setInitialScale 相同的百分比
+
+Chromium 浏览器布局测试：
+    以相同物理视口模拟 100%、112%、150%、300% 初始缩放
+    使用相同 TTS 文本覆盖 0°/90°/180°/270°
+    0°/180°TTS 固定边距换算回物理像素后保持 160px
+    90°/270°旋转包围盒继续贴合原有自适应边缘锚点
 
 静态构建/UI 测试：
     Gradle 离线属性设置 applicationId、label、versionName

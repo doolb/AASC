@@ -1,5 +1,9 @@
 # Web MediaCenter - 项目参考文档
 
+## MMD-AR 全身 IK 约束求解（2026-10-13）
+
+- 用户提供 [UE5 FullBodyIK学习](https://zhuanlan.zhihu.com/p/381469750)，介绍基于PBD/NPGS的骨骼约束、末端目标、关节角度限制与偏好角度。独立MMD-AR只借鉴静态全身约束迭代和多目标共享祖先的处理思路；PMX实现保持骨长并在局部旋转中应用PMX IK link限位，不移植UE刚体质量/碰撞，也不等同VaM关节物理或软体模拟。
+
 ## MPL动作编译器（2026-10-10）
 
 - Human MPL轨道筛选按固定提交 [bone.rs](https://github.com/AmyangXYZ/MMD-MPL/blob/2d3b1c7e3429b508443500801e94c41fd47c9f31/src/bone.rs) 的名称转换表处理；上半身/腰/足先EX/单独手指节分别映射，避免把编译器未控制的零轨道当成修正。

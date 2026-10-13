@@ -40,6 +40,13 @@ function initHuman() {
             + ' · 头部：' + (state.gazeStatus.head || '不可用') + ' · 眼球：' + (state.gazeStatus.eyes.join('、') || '不可用')
             + (state.gazeStatus.issues.length ? '\n' + state.gazeStatus.issues.join('；') : '');
         for (const button of panel.querySelectorAll('[data-human]')) button.disabled = busy || !state.ready;
+        const ikState = state.interactiveIK;
+        const ikToggle = panel.querySelector('[data-human="ik-toggle"]'), ikReset = panel.querySelector('[data-human="ik-reset"]');
+        ikToggle.textContent = ikState.enabled ? '关闭全身 IK' : '启用全身 IK';
+        ikReset.disabled = busy || !state.ready || !ikState.enabled || !ikState.activeTargets;
+        panel.querySelector('[data-human-ik-status]').textContent = ikState.enabled
+            ? '控制点：' + ikState.targets + ' · 固定目标：' + ikState.activeTargets + (ikState.reason ? '\n' + ikState.reason : '')
+            : '全身 IK 已关闭' + (ikState.reason && ikState.reason !== '已关闭' ? '\n' + ikState.reason : '');
         const key = state.token + ':' + state.revision;
         if (painted === key) return;
         painted = key;
@@ -86,6 +93,8 @@ function initHuman() {
             eyeMs: numeric('gazeEyeMs'), holdSeconds: numeric('gazeHoldSeconds'), forward: value('gazeForward') }),
         'gaze-reset': api => api.gaze.reset(),
         'gaze-auto': api => api.gaze.set({ manual: false }),
+        'ik-toggle': api => api.setInteractiveIKEnabled(!api.getInteractiveIKState().enabled),
+        'ik-reset': api => api.resetInteractiveIK(),
         register: api => api.learn.register({ actionId: value('actionId'), vmd: field('vmd').files[0], mask: mask(), expression: value('expression') }),
         'register-mpl': api => api.learn.register({ actionId: value('actionId'), source: field('source').value, mask: mask(), expression: value('expression') }),
         perform: api => api.perform({ action: value('action'), version: value('version'), owner: 'human:panel' }),

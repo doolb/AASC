@@ -1,5 +1,34 @@
 # 自测功能实现文档
 
+## Offline APK 高 DPI TTS 位置浏览器自测（2026-10-13）
+
+```text
+Chromium加载实际display.html与display.css，模拟同一物理视口的100%/112%/150%/300%初始缩放
+显示 WebView 原生桥模拟 -> 0°/180°TTS物理边距均为160px；90°/270°旋转后物理边缘间距约24px
+原生桥不含缩放getter/调用getter抛错 -> 两种情况都回退100%，0°TTS边距160px
+定向浏览器回归 -> TTS|旋转|媒体名|天气共12项通过；单独新增DPI用例通过
+Android -> ./gradlew :app:testDebugUnitTest 成功，包含原生缩放策略和桥接代码编译
+边界 -> 完整回归中的既有1200×800、DPR3弹窗边距用例等待handleVoiceCommand超时；单独旋转锚点用例通过。未构建/安装APK，真机验收待出包
+```
+
+## Android ASR 测试网页自测（2026-10-12）
+
+```text
+npm run build:web:android-asr -> 16个静态文件，约13.5 MB；输出不含模型
+npm run test:android-asr-web -> 4/4通过：Apache模型路径/正式API隔离、16 kHz PCM/WAV、多人片段合并/回查、WASM构建资产/许可
+真实Chromium + HTTP同源模型映射 -> Worker/WASM正常初始化，四个Apache模型路径可用
+实际测试WAV -> SenseVoice识别“你好啊你好啊你好啊。”
+声纹 -> ZH注册成功，512维；单段匹配ZH/1.000
+Pyannote多人与快速多人 -> 分段均返回1.01–3.63秒cluster 1/ZH；相似度0.943，分段耗时分别684/323 ms
+实际浏览器运行耗时 -> ASR 2384 ms；注册1706 ms；单段3832 ms；多人4107 ms；快速多人3658 ms
+zh.wav / en.wav自动语言实测 -> “开放时间早上9点至下午5点。”/“The tribal chieftain called for the boy and presented him with 50 pieces of gold.”
+网页耗时 -> 解码2831/3824 ms；按钮到结果7537/3981 ms，前者含本机首次模型装载，后者模型已热
+模型校验 -> Apache sidecar与本地ONNX SHA-256一致，tokens.txt两端SHA-256一致；本机同源HTTP映射使用相同文件
+冷下载边界 -> Apache 239,233,841字节模型约0.66 MiB/s；直接浏览器冷载180秒未完成，故点击到结果不代表公网冷下载时间
+节点和差异检查 -> 页面/Worker/工具语法检查、git diff --check通过
+边界 -> Chromium使用本地已同步模型目录经同源HTTP映射；未部署Apache、未测手机/Firefox/Safari及真实麦克风硬件
+```
+
 ## Git 构建产物忽略检查（2026-10-12）
 
 ```text
@@ -1196,4 +1225,40 @@ Chromium同源正式页面DOM + 正式模块 → 两页实际重新导航，控�
 4×预览→160×200 PNG→所有异步读取帧场景同请求尺寸→恢复原预览
 TAA/关闭→不应用重建；存储/刷新/复位→保留选择或默认1
 当前灯光默认预设→历史0.85/抖动0.20；自测显式设置历史输入并按实际默认预设断言复位
+```
+
+## 独立MMD-AR低倍率FSR扩展（2026-10-12，后续已撤回）
+
+```text
+独立端合法倍率0.25/0.5/1/2/4，正式端仍为1/2/4；旧/非法值补1 → 单测8/8通过
+固定BaseSize与SceneSize → 独立端输出16/32/64/128/256（64基准），SceneSize保持64
+时域历史目标尺寸 → 跟随当前输出倍率；切档清历史，后续帧恢复历史混合
+Chromium SwiftShader + 10正负角度 → 独立端50组FSR Shader输出与透明主体检查通过、GL错误0
+同一浏览器夹具以正式端源码运行 → 原30组FSR Shader输出通过
+npm run build:web:mmd-ar-test → 成功；生成页确认包含五档选项及低倍率画质提示
+低倍率 → 确认场景输入固定，输出更小，显示放大后覆盖误差高于1/2/4档；手机实机观感仍待验收
+```
+
+## 正式与独立MMD-AR FSR仅保留1×（2026-10-12）
+
+```text
+两端设置归一 → 仅接受fsr2ReconstructionScale=1；历史0.25/0.5/2/4 → 1
+两端抗锯齿面板 → 不显示FSR输出重建倍率控件
+基础Canvas尺寸固定 → FSR场景输入按内部比例；FSR输出与基础Canvas尺寸相同
+独立端真实Shader 10角度×1档 + 正式端真实Shader 10角度×1档 → 无GL错误、中心覆盖不透明
+正式真实PMX面板/渲染/历史生命周期 → 2项通过；配置旧2×回退1×，两端均不显示重建倍率控件
+独立与正式运行时尺寸/时域单测 → 8/8通过；独立WEB重建成功
+```
+
+## 独立 MMD-AR IK 镜头方向与膝关节（2026-10-12）
+
+```text
+IK镜头水平符号 → 单测确认屏幕向右拖动传负yaw；IK关闭仍调用旧模型旋转分支
+膝关节修正 → 合成四元数确认膝骨上限150°、普通骨骼45°；PMX IK范围将膝骨进一步收紧
+膝点+脚踝同时拖动 → 合成腿链交替CCD通过，膝骨修正超过旧45°且状态返回正常
+真实米娅PMX → 7个头/腕/膝/踝点可绑定；左拖环绕、双指中心平移与捏合分别改变画布截图
+node --test tests/mmd-ar-ik-camera-gestures.test.js → 5/5通过
+node --test tests/mmd-ar-ik-camera-gestures-browser.test.js → 1/1通过，约166秒
+npm run build:web:mmd-ar-test → 成功；Vite输出既有大chunk体积提示
+手机触控手感、不同PMX限位/骨名及真实深屈膝造型 → 待设备人工验收
 ```

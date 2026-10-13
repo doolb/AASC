@@ -56,6 +56,10 @@
 - 旋转时同步调整长文本最大宽度，避免放大字号后覆盖整个显示区；不使用 `text-orientation: mixed`，避免汉字保持正立而未随画面旋转。
 - 播报文本淡入动画只改变透明度，不写入 `transform`，避免覆盖旋转分支设置的方向变换。
 
+### Offline DPI 缩放下的 TTS 位置
+
+Offline 显示 WebView 按目标屏幕的分辨率和 DPI 使用 `setInitialScale`。TTS/ASR 共用语音文本节点的固定 `160px` CSS 偏移会随该比例放大，导致 0°/180°时字幕离屏幕边缘更远。`NativeDisplay.getDisplayWebViewInitialScalePercent()` 返回当前显示 WebView 实际使用的比例；普通 APK 返回 100，浏览器或旧版原生桥缺少该方法时回退 100。语音文本节点的 0°/180°固定偏移按 `160 / (scalePercent / 100)` 换算，保证相对于 100% APK 的物理偏移不变；整页、语音状态行、控制页缩放策略不变。90°/270°继续使用旋转包围盒中心锚点和自适应边距。
+
 ### 旋转后逻辑画布布局
 
 90°/270°不能继续直接使用未旋转视口的物理宽高定位文本元素。显示端先生成旋转后的逻辑画布尺寸，再使用该尺寸计算文本的最大可用区域和边距：
@@ -103,7 +107,7 @@
         monitorWrapper: bottom=20px, right=20px
         // 语音状态 - 右下（在音频可视化上方）
         voiceStatus: bottom=80px, right=20px
-        voiceTextDisplay: bottom=140px, right=20px
+        voiceTextDisplay: top=适配DPI的TTS偏移，left=50%，transform=translateX(-50%)
 
     否则如果 currentRotation === 90:
         // 重力向右，固定文本整体顺时针旋转90°，汉字字形不单独保持正立
@@ -117,7 +121,7 @@
         monitorWrapper: bottom=20px, left=20px
         // 语音状态 - 0度右下 → 90度左下
         voiceStatus: bottom=80px, left=20px, transform=rotate(90deg)
-        voiceTextDisplay: bottom=140px, left=20px, transform=rotate(90deg)
+        voiceTextDisplay: top=50%，right=适配DPI的TTS偏移，transform=rotate(90deg)，随后应用中心锚点
 
     否则如果 currentRotation === 180:
         // 重力向上，文字翻转180度
@@ -131,7 +135,7 @@
         monitorWrapper: top=20px, left=20px
         // 语音状态 - 0度右下 → 180度左上
         voiceStatus: top=80px, left=20px, transform=rotate(180deg)
-        voiceTextDisplay: top=140px, left=20px, transform=rotate(180deg)
+        voiceTextDisplay: bottom=适配DPI的TTS偏移，left=50%，transform=translateX(-50%) rotate(180deg)
 
     否则如果 currentRotation === 270:
         // 重力向左，固定文本整体逆时针旋转90°，汉字字形随画面旋转
@@ -145,7 +149,11 @@
         monitorWrapper: top=20px, right=20px
         // 语音状态 - 0度右下 → 270度右上
         voiceStatus: top=80px, right=20px, transform=rotate(270deg)
-        voiceTextDisplay: top=140px, right=20px, transform=rotate(270deg)
+        voiceTextDisplay: top=50%，left=适配DPI的TTS偏移，transform=rotate(270deg)，随后应用中心锚点
+
+    // 0°/180°的固定TTS边距按 Offline 初始缩放比例换算，保证物理边距一致。
+    scalePercent = NativeDisplay.getDisplayWebViewInitialScalePercent() 或 100
+    ttsOffset = rotationLayout.margin * 8 / (scalePercent / 100)
 
     // 4. 以实际变换后的包围盒对齐固定定位锚点
     对于每个可见旋转文本元素:

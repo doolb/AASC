@@ -1257,7 +1257,12 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String, baseUrl: String) {
         val wv = DisplayWebView(this, offlineMode)
-        val bridge = NativeBridge(wv, audioFocusController, offlineMode) { allowed -> setControlPageAccess(allowed) }
+        val bridge = NativeBridge(
+            wv,
+            audioFocusController,
+            offlineMode,
+            displayWebViewInitialScalePercent = wv.initialScalePercent
+        ) { allowed -> setControlPageAccess(allowed) }
         nativeDisplayBridge = bridge
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")

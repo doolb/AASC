@@ -301,7 +301,7 @@
         releasePointerCapture(pointerId);
         state.rotationDrag = null;
         state.canvas?.classList.remove('is-dragging');
-        if (drag.didRotate && typeof state.runtime?.finishModelRotation === 'function') {
+        if (drag.didRotate && !drag.cameraControl && typeof state.runtime?.finishModelRotation === 'function') {
             state.runtime.finishModelRotation();
         }
         return drag.didRotate;
@@ -327,18 +327,20 @@
     }
     function beginRotationDrag(event, point) {
         const hitPart = raycast(point);
-        // 命中角色仅保留点击候选；任何起点都允许左键或单指拖动旋转。
+        // IK开启时空白区域拖动相机；命中IK控制点的事件已由Human捕获阶段截断。
         state.pressedPoint = hitPart ? { point, hitPart, pointerId: event.pointerId } : null;
         state.rotationDrag = {
             pointerId: event.pointerId,
             startPoint: point,
             lastPoint: point,
-            didRotate: false
+            didRotate: false,
+            cameraControl: isInteractiveIKEnabled()
         };
         state.canvas.setPointerCapture?.(event.pointerId);
     }
     function beginTouchGesture() {
         const activePointers = [...state.activeTouchPointers.entries()];
+        const cameraControl = state.rotationDrag?.cameraControl ?? isInteractiveIKEnabled();
         state.pressedPoint = null;
         if (state.rotationDrag) finishRotationDrag(state.rotationDrag.pointerId);
         state.touchGesture = null;
@@ -355,7 +357,8 @@
         state.touchGesture = {
             pointerIds: activePointers.map(([pointerId]) => pointerId),
             lastCenter: center,
-            lastDistance: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y))
+            lastDistance: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y)),
+            cameraControl
         };
     }
     function handlePointerDown(event) {
@@ -376,7 +379,8 @@
                 pointerId: event.pointerId,
                 startPoint: point,
                 lastPoint: point,
-                didTranslate: false
+                didTranslate: false,
+                cameraControl: isInteractiveIKEnabled()
             };
             state.canvas.setPointerCapture?.(event.pointerId);
             return;
@@ -398,7 +402,8 @@
         const deltaX = center.x - gesture.lastCenter.x;
         const deltaY = center.y - gesture.lastCenter.y;
         if (Math.abs(deltaX) >= Number.EPSILON || Math.abs(deltaY) >= Number.EPSILON) {
-            state.runtime?.translateModelByPixels?.(deltaX, deltaY);
+            if (gesture.cameraControl) state.runtime?.panCameraByPixels?.(deltaX, deltaY);
+            else state.runtime?.translateModelByPixels?.(deltaX, deltaY);
         }
         const scaleFactor = distance / gesture.lastDistance;
         if (Number.isFinite(scaleFactor) && Math.abs(scaleFactor - 1) >= Number.EPSILON) {
@@ -429,7 +434,8 @@
             translation.didTranslate = true;
             state.canvas.classList.add('is-translating');
             if (Math.abs(deltaX) >= Number.EPSILON || Math.abs(deltaY) >= Number.EPSILON) {
-                state.runtime?.translateModelByPixels?.(deltaX, deltaY);
+                if (translation.cameraControl) state.runtime?.panCameraByPixels?.(deltaX, deltaY);
+                else state.runtime?.translateModelByPixels?.(deltaX, deltaY);
             }
             return;
         }
@@ -445,7 +451,11 @@
         drag.didRotate = true;
         state.canvas.classList.add('is-dragging');
         if (Math.abs(deltaX) < Number.EPSILON && Math.abs(deltaY) < Number.EPSILON) return;
-        state.runtime?.rotateModelBy?.(deltaX * ROTATION_RADIANS_PER_PIXEL, deltaY * ROTATION_RADIANS_PER_PIXEL);
+        if (drag.cameraControl) {
+            rotateCameraViewByPixels(deltaX, deltaY);
+        } else {
+            state.runtime?.rotateModelBy?.(deltaX * ROTATION_RADIANS_PER_PIXEL, deltaY * ROTATION_RADIANS_PER_PIXEL);
+        }
     }
 
     function handlePointerUp(event) {
@@ -587,6 +597,20 @@
             state.cameraViewRotation.pitch
         );
         return { ...state.cameraViewRotation };
+    }
+
+    function rotateCameraViewByPixels(deltaX, deltaY) {
+        const nextRotation = state.runtime?.rotateCameraViewBy?.(
+            -deltaX * ROTATION_RADIANS_PER_PIXEL,
+            deltaY * ROTATION_RADIANS_PER_PIXEL
+        );
+        if (!nextRotation || typeof nextRotation !== 'object') return false;
+        state.cameraViewRotation = normalizeCameraViewRotation(nextRotation.yaw, nextRotation.pitch);
+        return true;
+    }
+
+    function isInteractiveIKEnabled() {
+        return state.runtime?.getHumanInterface?.()?.getInteractiveIKState?.().enabled === true;
     }
 
     function resetCameraViewRotation() {

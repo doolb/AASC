@@ -42,6 +42,7 @@ src/apps/android-display/.kotlin/
 
 # Android 本机编译缓存
 /3rd/tts-server/android-asr/.kotlin/
+/3rd/tts-server/android-asr/web-dist/
 /src/apps/android-display/app/.cxx/
 
 # APK profile 的构建中间目录；保留同级 app.json 配置
