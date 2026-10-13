@@ -1,0 +1,220 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+let ammoPromise;
+function realAmmo() {
+    ammoPromise ||= require('../src/apps/web-mediacenter/ui/public/js/vendor/three/libs/ammo.wasm.js')({
+        wasmBinary: fs.readFileSync(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/vendor/three/libs/ammo.wasm.wasm')) });
+    return ammoPromise;
+}
+
+async function fixture(loadAmmo = realAmmo) {
+    const T = await import('three');
+    const { createHumanIK } = await import('../3rd/mmd-ar-test/web-human-ik.mjs');
+    const scene = new T.Scene(), mesh = new T.Group(), bones = [], bindings = {};
+    const add = (name, parent, position) => {
+        const bone = new T.Bone(); bone.name = name; bone.position.fromArray(position);
+        (parent || mesh).add(bone); const index = bones.length; bones.push(bone);
+        bindings['bones:' + name] = { bone, index, dynamic: false, name }; return bone;
+    };
+    const root = add('root', null, [0, 0, 0]), center = add('center', root, [0, 0, 0]);
+    const hips = add('hips', center, [0, 1, 0]);
+    const torso = add('upperBody', center, [0, 1.14, 0]), chest = add('chest', torso, [0, 0.18, 0]);
+    const neck = add('neck', chest, [0, 0.22, 0]); add('head', neck, [0, 0.14, 0]);
+    for (const [side, sign] of [['left', -1], ['right', 1]]) {
+        const arm = add(side + 'Arm', chest, [0.18 * sign, 0.1, 0]);
+        const elbow = add(side + 'Elbow', arm, [0.3 * sign, 0, 0]); add(side + 'Wrist', elbow, [0.28 * sign, 0, 0]);
+        const leg = add(side + 'Leg', hips, [0.09 * sign, -0.04, 0]);
+        const knee = add(side + 'Knee', leg, [0, -0.43, 0]); add(side + 'Ankle', knee, [0, -0.43, 0]);
+    }
+    mesh.geometry = new T.BufferGeometry(); mesh.geometry.boundingSphere = new T.Sphere(new T.Vector3(), 1);
+    mesh.geometry.userData.MMD = { iks: [{ links: ['left', 'right'].map(side => ({
+        index: bindings['bones:' + side + 'Knee'].index, rotationMin: [-2.6, 0, 0], rotationMax: [0, 0, 0] })) }] };
+    mesh.skeleton = { bones }; scene.add(mesh); scene.updateMatrixWorld(true);
+    for (const binding of Object.values(bindings)) binding.restPosition = binding.bone.getWorldPosition(new T.Vector3());
+    const model = { mesh, bindings, bones: bones.map((bone, index) => ({ bone, index, dynamic: false })), groups: { root: new Set([0, 1]) } };
+    const canvas = { addEventListener() {}, removeEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 600, height: 600 }) };
+    const camera = new T.PerspectiveCamera(55, 1, 0.1, 50); camera.position.set(0, 1, 4); camera.lookAt(0, 1, 0); camera.updateMatrixWorld();
+    globalThis.window ||= { addEventListener() {}, removeEventListener() {} };
+    const controller = createHumanIK({ getScene: () => scene, getCamera: () => camera, canvas, loadAmmo });
+    const initial = bones.map(bone => ({ position: bone.position.clone(), rotation: bone.quaternion.clone() }));
+    const point = key => bindings['bones:' + key].bone.getWorldPosition(new T.Vector3());
+    const run = (frames, dt = 1 / 60) => { for (let i = 0; i < frames; i++) controller.apply(model, dt); };
+    async function enable() {
+        await controller.setMode('physics', model); controller.setEnabled(true, model);
+        controller.setBodySettings({ gravity: false });
+        assert.equal(controller.getState().available, true, controller.getState().reason);
+    }
+    return { T, model, controller, bones, bindings, initial, point, run, enable, camera };
+}
+
+test('真Ammo人体牵引手腕带动躯干、缩小误差且原生分配不随帧增长', async () => {
+    const f = await fixture();
+    try {
+        await f.enable(); const c = f.controller;
+        assert.equal(c.getState().targets, 11);
+        const initial = f.point('leftWrist'), target = initial.clone().add(new f.T.Vector3(0.08, 0.22, 0.22));
+        const allocations = c.getState().physics.allocations;
+        c.setTarget('leftHand', target); f.run(180);
+        const error = f.point('leftWrist').distanceTo(target);
+        assert.ok(error < initial.distanceTo(target), `手腕误差未收敛：${error}`);
+        const control = c.getState().controls.find(item => item.key === 'leftHand'), projected = target.clone().project(f.camera);
+        assert.ok(Math.abs(control.screen.x - (projected.x + 1) * 300) < 1e-6, '屏幕命中坐标未对应活动目标标记');
+        assert.ok(Math.abs(control.screen.y - (1 - projected.y) * 300) < 1e-6);
+        assert.ok(f.bindings['bones:chest'].bone.quaternion.angleTo(new f.T.Quaternion()) > 0.002, '躯干未参与受力');
+        assert.equal(c.getState().physics.allocations, allocations);
+        for (const bone of f.bones) assert.ok([...bone.quaternion.toArray(), ...bone.position.toArray()].every(Number.isFinite));
+    } finally { f.controller.dispose(); }
+});
+
+test('真Ammo膝脚多目标产生深屈膝，PMX旋转范围及骨长保持', async () => {
+    const f = await fixture();
+    try {
+        await f.enable();
+        const foot = f.point('leftAnkle'), knee = f.point('leftKnee');
+        const target = foot.clone().add(new f.T.Vector3(0, 0.45, 0.2));
+        f.controller.setTarget('leftFoot', target);
+        f.controller.setTarget('leftKnee', knee.clone().add(new f.T.Vector3(0, 0.1, -0.25)));
+        f.run(300);
+        const rotation = f.bindings['bones:leftKnee'].bone.quaternion;
+        const euler = new f.T.Euler().setFromQuaternion(rotation, 'XYZ');
+        assert.ok(rotation.angleTo(new f.T.Quaternion()) > Math.PI / 4, `深屈膝不足：${euler.x}`);
+        assert.ok(euler.x >= -2.6 - 1e-6 && euler.x <= 1e-6);
+        assert.ok(Math.abs(euler.y) < 1e-6 && Math.abs(euler.z) < 1e-6);
+        assert.ok(f.point('leftAnkle').distanceTo(target) < foot.distanceTo(target));
+        f.bones.forEach((bone, index) => {
+            if (bone !== f.bindings['bones:center'].bone) assert.ok(bone.position.distanceTo(f.initial[index].position) < 1e-8, `骨长发生变化：${bone.name}`);
+        });
+    } finally { f.controller.dispose(); }
+});
+
+test('On固定目标、Hold拒绝修改、Comply让步，旋转目标产生实际力矩', async () => {
+    const f = await fixture();
+    try {
+        await f.enable(); const c = f.controller;
+        const goal = f.point('leftWrist').add(new f.T.Vector3(-0.9, 0, 0));
+        c.setTarget('leftHand', goal); f.run(45);
+        assert.deepEqual(c.getState().controls.find(item => item.key === 'leftHand').target, goal.toArray());
+        c.setTargetState('leftHand', 'Hold', 'Off');
+        assert.throws(() => c.setTarget('leftHand', goal), /保持目标/u);
+        c.setTargetState('leftHand', 'Comply', 'Off'); f.run(120);
+        const moved = new f.T.Vector3().fromArray(c.getState().controls.find(item => item.key === 'leftHand').target);
+        assert.ok(moved.distanceTo(goal) > 0.05, 'Comply没有让步');
+        c.resetTargets();
+        const rotation = new f.T.Quaternion().setFromAxisAngle(new f.T.Vector3(0, 0, 1), 0.6);
+        c.setTarget('rightHand', null, rotation); f.run(120);
+        assert.ok(f.bindings['bones:rightWrist'].bone.quaternion.angleTo(new f.T.Quaternion()) > 0.05);
+    } finally { f.controller.dispose(); }
+});
+
+test('骨盆目标移动center，重置/关闭/模式切换恢复全部人体增量', async () => {
+    const f = await fixture();
+    try {
+        await f.enable(); const c = f.controller;
+        c.setTarget('pelvis', f.point('hips').add(new f.T.Vector3(0.16, 0.06, 0))); f.run(90);
+        assert.ok(f.bindings['bones:center'].bone.position.x > 0.04, '骨盆位移未传递center');
+        c.resetTargets();
+        f.bones.forEach((bone, index) => {
+            assert.ok(bone.position.distanceTo(f.initial[index].position) < 1e-8);
+            assert.ok(bone.quaternion.angleTo(f.initial[index].rotation) < 1e-8);
+        });
+        c.setTarget('leftHand', f.point('leftWrist').add(new f.T.Vector3(0, 0.2, 0))); f.run(60);
+        await c.setMode('pbd', f.model);
+        assert.equal(c.getState().physics, null); assert.equal(c.getState().targets, 7);
+        f.bones.forEach((bone, index) => assert.ok(bone.quaternion.angleTo(f.initial[index].rotation) < 1e-8));
+        c.setEnabled(false); assert.equal(c.getState().targets, 0);
+    } finally { f.controller.dispose(); }
+});
+
+test('相同物理时间在30/60/120fps下保持接近结果', async () => {
+    const points = [];
+    for (const fps of [30, 60, 120]) {
+        const f = await fixture();
+        try {
+            await f.enable(); f.controller.setTarget('leftHand', f.point('leftWrist').add(new f.T.Vector3(0, 0.15, 0.15)));
+            f.run(fps * 2, 1 / fps); points.push(f.point('leftWrist'));
+        } finally { f.controller.dispose(); }
+    }
+    assert.ok(points[0].distanceTo(points[1]) < 0.04, `30/60fps偏差：${points[0].distanceTo(points[1])}`);
+    assert.ok(points[1].distanceTo(points[2]) < 0.04, `60/120fps偏差：${points[1].distanceTo(points[2])}`);
+});
+
+test('关闭期间迟到Ammo加载不重新接管，加载失败保留可用PBD', async () => {
+    let complete;
+    const f = await fixture(() => new Promise(resolve => { complete = resolve; }));
+    try {
+        const request = f.controller.setMode('physics', f.model);
+        f.controller.setEnabled(false); complete(await realAmmo()); await request;
+        assert.equal(f.controller.getState().mode, 'pbd'); assert.equal(f.controller.getState().physics, null);
+        f.controller.setEnabled(true, f.model);
+        const oldModelRequest = f.controller.setMode('physics', f.model);
+        f.controller.apply({ ...f.model }); complete(await realAmmo()); await oldModelRequest;
+        assert.equal(f.controller.getState().mode, 'pbd', '迟到初始化重新接管了旧模型');
+        const failure = await fixture(async () => { throw new Error('fixture unavailable'); });
+        try {
+            failure.controller.setEnabled(true, failure.model);
+            await assert.rejects(failure.controller.setMode('physics', failure.model), /unavailable/u);
+            assert.equal(failure.controller.getState().mode, 'pbd'); assert.equal(failure.controller.getState().available, true);
+        } finally { failure.controller.dispose(); }
+    } finally { f.controller.dispose(); }
+});
+
+test('人体世界释放所有分配并保持原PMX配置', async () => {
+    const f = await fixture();
+    const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
+    const { createHumanPhysicsDrive } = await import('../3rd/mmd-ar-test/web-human-physics-drive.mjs');
+    const original = JSON.stringify(f.model.mesh.geometry.userData.MMD), rig = createHumanPhysicsRig(f.model);
+    const drive = createHumanPhysicsDrive(await realAmmo(), rig);
+    try { assert.ok(drive.getState().allocations > 0); }
+    finally { rig.restore(); drive.dispose(); f.controller.dispose(); }
+    assert.equal(drive.getState().allocations, 0); assert.equal(drive.getState().bodyCount, 0);
+    assert.equal(JSON.stringify(f.model.mesh.geometry.userData.MMD), original);
+});
+
+test('Off取消目标后人体惯性与重力继续，骨盆自由仍由人体物理运动', async () => {
+    const f = await fixture();
+    try {
+        await f.enable();
+        const initial = f.point('hips');
+        f.controller.setBodySettings({ gravity: false, freePelvis: true });
+        f.controller.setTarget('pelvis', initial.clone().add(new f.T.Vector3(0, 0.3, 0))); f.run(120);
+        const airborne = f.point('hips');
+        assert.ok(airborne.y > initial.y + 0.15, '骨盆目标没有使身体离地');
+        f.controller.setTargetState('pelvis', 'Off', 'Off');
+        f.controller.setBodySettings({ gravity: true }); f.run(30);
+        assert.equal(f.controller.getState().activeTargets, 0);
+        assert.ok(f.point('hips').y < airborne.y - 0.05, '取消离地目标后没有继续身体重力');
+        assert.ok(f.controller.getState().physics.substeps > 0);
+        f.run(60);
+        assert.ok(Math.min(f.point('leftAnkle').y, f.point('rightAnkle').y) > 0.02, '地面没有约束下落脚部');
+        f.controller.setEnabled(false);
+        assert.ok(f.point('hips').distanceTo(initial) < 1e-8);
+    } finally { f.controller.dispose(); }
+});
+
+test('骨盆存在PMX显式限位时也约束物理旋转，不因根代理而跳过', async () => {
+    const f = await fixture();
+    try {
+        f.model.mesh.geometry.userData.MMD.iks[0].links.push({ index: f.bindings['bones:hips'].index,
+            rotationMin: [-0.1, -0.1, -0.1], rotationMax: [0.1, 0.1, 0.1] });
+        await f.enable();
+        f.controller.setTarget('pelvis', null, new f.T.Quaternion().setFromAxisAngle(new f.T.Vector3(0, 0, 1), 0.6));
+        f.run(90);
+        const rotation = new f.T.Euler().setFromQuaternion(f.bindings['bones:hips'].bone.quaternion);
+        assert.ok([rotation.x, rotation.y, rotation.z].every(value => Math.abs(value) <= 0.100001));
+    } finally { f.controller.dispose(); }
+});
+
+test('center同级上下半身随物理骨盆转动，默认人体限位使用关节相对角', async () => {
+    const f = await fixture();
+    try {
+        await f.enable();
+        f.controller.setTarget('pelvis', null, new f.T.Quaternion().setFromAxisAngle(new f.T.Vector3(0, 1, 0), 1.3));
+        f.run(180);
+        const rotation = new f.T.Euler().setFromQuaternion(f.bindings['bones:upperBody'].bone.quaternion, 'YXZ');
+        assert.ok(rotation.y > 0.9, `躯干世界转角被误限幅：${rotation.y}`);
+    } finally { f.controller.dispose(); }
+});

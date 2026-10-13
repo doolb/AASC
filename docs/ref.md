@@ -1,5 +1,9 @@
 # Web MediaCenter - 项目参考文档
 
+## VaM身体控制本地证据（2026-10-13）
+
+用户提供`/mnt/vam/Managed/Assembly-CSharp.dll`，SHA-256 `3c314d55ece06924064c9165f9124f1666f4d33967a02f78b97cf3a932d62f2f`。使用临时ILSpy CLI11.1只读分析：FreeControllerV3.Init/SetJointSprings/ApplyComply连接物理体并设置关节驱动/让步；FollowPhysicallySingle.FixedUpdate施加力与力矩；AllJointsController批量切换控制状态。主程序集类型索引未发现独立FullBodyIK/VRIK类。DLL未提供Unity预制体实际质量/关节/碰撞参数或原生PhysX求解器，因此本项目采用独立Ammo人体代理实现类似机制，不宣称参数或结果完全等价。原DLL/临时反编译源码不纳入仓库；实现与验证见`docs/task/20261013_MMDAR_VaM身体物理控制.md`。
+
 ## MMD-AR 全身 IK 约束求解（2026-10-13）
 
 - 用户提供 [UE5 FullBodyIK学习](https://zhuanlan.zhihu.com/p/381469750)，介绍基于PBD/NPGS的骨骼约束、末端目标、关节角度限制与偏好角度。独立MMD-AR只借鉴静态全身约束迭代和多目标共享祖先的处理思路；PMX实现保持骨长并在局部旋转中应用PMX IK link限位，不移植UE刚体质量/碰撞，也不等同VaM关节物理或软体模拟。

@@ -301,11 +301,13 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     }
     function avoidArms(mesh, delta, physics) {
         if (mesh !== model?.mesh || !ready || suspended || disposed) return;
-        interactiveIK.apply(model);
+        interactiveIK.apply(model, delta);
+        // 人体代理在物理世界处理自身碰撞；原几何手臂避让不能再覆写同一批身体骨骼。
+        if (interactiveIK.isPhysicsEnabled()) return;
         armAvoidance.apply(model, physics, delta, armAvoidanceEnabled, { paused: helperBound?.enabled.physics === false });
     }
     function observeArms(mesh, physics) {
-        if (mesh === model?.mesh && ready && !suspended && armAvoidanceEnabled) armAvoidance.observe(physics, helperBound?.enabled.physics === false);
+        if (mesh === model?.mesh && ready && !suspended && armAvoidanceEnabled && !interactiveIK.isPhysicsEnabled()) armAvoidance.observe(physics, helperBound?.enabled.physics === false);
     }
     function before(delta, helper) {
         bind();
@@ -442,7 +444,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             catch (error) { /* 存储受限仍在当前页面生效。 */ }
             wake(); return armAvoidanceEnabled;
         },
-        getArmAvoidanceState: () => ({ enabled: armAvoidanceEnabled, ...armAvoidance.getState() }),
+        getArmAvoidanceState: () => ({ enabled: armAvoidanceEnabled, ...armAvoidance.getState(),
+            ...(interactiveIK.isPhysicsEnabled() ? { reason: '身体物理模式使用人体代理碰撞；此开关在PBD模式生效' } : {}) }),
         setInteractiveIKEnabled(value) {
             const bound = requireModel();
             armAvoidance.restore();
@@ -451,6 +454,13 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         },
         resetInteractiveIK() { requireModel(); armAvoidance.restore(); interactiveIK.resetTargets(); wake(); return interactiveIK.getState(); },
         getInteractiveIKState: () => interactiveIK.getState(),
+        async setInteractiveIKMode(value) {
+            const bound = requireModel(); armAvoidance.restore();
+            const result = await interactiveIK.setMode(value, bound); wake(); return result;
+        },
+        setInteractiveBodySettings(value) { requireModel(); return interactiveIK.setBodySettings(value); },
+        setInteractiveTargetState(key, position, rotation) { requireModel(); return interactiveIK.setTargetState(key, position, rotation); },
+        setInteractiveTarget(key, position, rotation) { requireModel(); return interactiveIK.setTarget(key, position, rotation); },
         face: { set: (...args) => manualExpressions.set(...args), clear: (...args) => manualExpressions.clear(...args), resolve: resolveExpression },
         mouth: {
             setWeights: (token, weights) => manualExpressions.setTransient(token, weights),

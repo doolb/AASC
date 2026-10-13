@@ -4,6 +4,18 @@
 
 ## 操作
 
+### PMX 身体物理与 PBD 姿态
+
+在「PMX 全身 IK」中选择求解模式，然后点「启用全身 IK」。默认是PBD姿态；选择「身体物理（VaM式）」会加载人体物理，最多显示头、双腕、双膝、双踝、骨盆、胸部和双肘共11点，缺骨骼时减少控制点并显示原因。
+
+拖动彩色点设置位置目标；选择具体控制点后，位置和旋转可以分别设为On（牵引）、Hold（保持且不可修改）、Off（放开）、Comply（受力让步）。旋转设为On后用X/Y/Z输入目标世界角度。牵引强度越高越接近目标，阻尼用于减小摆动；重力可以单独关闭。骨盆默认保持原动画位置，拖骨盆目标或打开「骨盆自由」可让身体整体移动。
+
+人体物理启用时，即使控制点全Off，重力和惯性仍继续；「重置控制点」清除所有牵引并从当前原动作重新对齐，「关闭全身IK」释放人体模拟并恢复动作。镜头空白拖动/双指/滚轮与原IK手势相同。人体模拟由全身IK开关控制，服饰的物理开关和计算后端仍单独管理；原手部防穿模开关在PBD模式生效，身体物理模式使用人体代理碰撞。
+
+当前为独立本地网页的首阶段实现；人体碰撞是简化胶囊/球体，地面以启用时脚踝高度估计。衣服/头发接受身体姿态，暂没有衣物向身体反向施力、皮肤软体或精确皮肤网格碰撞。PMX角度限制优先，目标未到达时可能由限位、碰撞或牵引强度造成。设置仅保留在本次页面会话，不保证与VaM逐帧相同，手机观感/性能待验收。
+
+脚本可调用Human接口 `setInteractiveIKMode('physics'|'pbd')`（异步）、`setInteractiveBodySettings({strength,damping,gravity,freePelvis})`、`setInteractiveTargetState(key,positionState,rotationState)` 与 `setInteractiveTarget(key,worldPosition,worldQuaternion)`；位置为3个有限数值，旋转为4个有效四元数分量，不填写的目标使用null。状态与控制点通过 `getInteractiveIKState()` 获取，PBD只支持位置目标。
+
 格式边界（2026-10-11核对）：VRM可定义Expression表情、人形骨骼及SpringBone摆动，但当前Human模型适配读取PMX的MMD骨骼/Morph元数据；不能将这里的VMD、MPL和刚体功能直接视为VRM支持。VRM动作可使用VRMA，VMD需要骨骼重定向、坐标/初始姿态和表情映射；SpringBone用于头发/衣物摆动及碰撞，不自动继承PMX刚体和关节。共享VRM运行时每帧调用VRM更新并支持简单happy表情，未接入PMX的VMD或Ammo/XPBD刚体链路。参见[VRMA规范](https://vrm.dev/en/vrma/)及[SpringBone规范](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_springBone-1.0/README.md)。
 
 1. 加载PMX，等待动作库就绪。呼吸、自然眨眼默认开启，生理强度0.35，可关闭或调整。自然眨眼避开显式眼部动作。

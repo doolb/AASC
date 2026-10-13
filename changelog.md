@@ -4,6 +4,14 @@
   - 已修复full-config-backup-service可信项目根realpath/根内路径映射；Android新增FullConfigBackupDownloads、NodeStartupDiagnostics、OfflineFailureState，更新MainActivity/NodeServerService及aasc-user-config.js。最终ZIP保存Download，内部事务私有；实际启动/应用更新错误持续可见，服务候选版本和代码路径健康确认后才成功。
   - 备份Node/浏览器17/17通过，Android JVM208/208通过；24MiB往返1809ms、峰值RSS267MiB含夹具。首次临时目录配额失败改用/var/tmp；原保存选择器残留引用已修正。同步design/spec/usage/self-test/task/todo。min APK profile升39/0.2.37，servicePackage=true、minApk=true，依赖集合未变；修复包构建与设备验收进行中。
 
+### 独立 MMD-AR VaM 式身体物理控制
+
+- ✅ [2026-10-13] 完成首阶段独立Ammo人体代理、关节与位置/旋转牵引，保留PBD模式。
+  - 新增`web-human-physics-rig.mjs`/`web-human-physics-drive.mjs`；更新Human IK/interface/UI/build，IK分类内提供11控制点、On/Hold/Off/Comply、强度/阻尼/重力/骨盆自由与世界旋转。身体姿态向原服饰单向传递；没有皮肤软体或服饰反向受力，不保证完整VaM一致。
+  - 默认人体限位使用物理父关节相对角，PMX显式限位使用真实骨骼局部XYZ；Bullet界限反号交换，center同级上下半身随骨盆转动。暂停原几何手臂避让，关闭/重置/换模式/模型令牌取消恢复增量并释放本模式原生资源。
+  - 新增真Ammo与真实米娅浏览器自测；定向18/18、物理实际鼠标拖点及原镜头手势浏览器各1/1、独立WEB构建与语法/空白检查通过。合成骨架双目标约106°屈膝；其他模型/VMD/服饰后端/AR和手机观感待验收。同步design/spec/task/usage/ref/self-test/README，todo只保留待人工验收。
+  - 只生成本地独立WEB，未出APK/部署；独立源码不进入Offline服务/min/依赖输入，发布状态保留其他任务值。VaM DLL只读分析，不提交DLL或反编译源码。
+
 ### TTS 三行字幕服务包发布
 
 - ✅ [2026-10-13] 构建并发布服务代码包 v70，包含按音频进度逐行显示的三行滚动字幕。
