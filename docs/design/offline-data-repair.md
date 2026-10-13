@@ -350,3 +350,7 @@ module.exports = async ({ services }) => {
 当前v2清单要求数据版本精确为1。旧v1清单定义enable-voice-input-during-tts-without-voiceprint-v1为0→1，脚本只修改voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint；v2只修改offline-display.showStatusBar=false，两者没有脚本业务依赖。full运行种子未包含data-repair/state.json，记录缺失按0处理；当前LAN data目录只有data-repair-v2.zip，最新单修复清单不会自动补执行v1。缺少v1记录的新安装路径因此会被v2门控拒绝。此结论说明首装兼容缺口，仍不宣称直接读取了设备当前数值。
 
 后续修复范围应同时评估首装兼容及真实成功判断，不能只隐藏提示，也不能伪造v1成功记录。兼容方案需按已签名元数据声明支持的实际数据状态，保持成功记录/幂等/回滚契约；新增方案需在代码实施前明确并按AGENTS确认。目前仅记录原因。
+
+## 用户暂缓决定（2026-10-13）
+
+用户明确“暂时先不处理”。只读定位与候选方案保留为待办；当前停止此问题的实施，不修改修复执行逻辑、成功记录、包元数据或APK，不运行修复、不构建或发布相关产物。后续由用户明确恢复后继续。
