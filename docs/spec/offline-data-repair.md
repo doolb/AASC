@@ -320,3 +320,15 @@ Node server boot:
             stop temporary runtime
     then continue normal server listen
 ```
+
+## APK成功误判与重复提示候选伪代码（2026-10-13，未实施）
+
+```text
+已定位现状 := 执行器rejected-data-version → 保留pending/不写成功state → 服务健康 → Native误发APPLIED → 再次提示同一修复
+包契约 := 当前v2 requiredDataVersion=1、targetDataVersion=2；设备具体当前值待原生读取
+候选完成条件 := 读取私有root/data-repair/state.json → appliedRepairs存在预期repairId → 才报告修复成功
+候选拒绝条件 := 实际dataVersion与签名requiredDataVersion不一致 → 回报原因，保持真实数据及成功记录
+候选去重 := 失败指纹repairId/repairVersion/实际数据版本不变 → 自动检查不重复弹同一失败；手动重试或指纹变化可再检查
+候选状态 := 服务代码健康和数据修复应用结果分开；修复拒绝不回滚健康服务，也不冒充已应用
+执行状态 := 只定位/设计，等待用户按AGENTS确认后修改Native与自测/重出min APK
+```

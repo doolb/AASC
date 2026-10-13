@@ -338,3 +338,9 @@ module.exports = async ({ services }) => {
 - 未注册业务类、路径访问、动态加载、网络和命令执行均被拒绝。
 - LAN/WAN 发布后的清单和修复包大小、hash、签名一致。
 - 旧 APK 仍能读取包含未知 `dataRepair` 字段的清单并继续使用原有服务更新流程。
+
+## APK重复数据修复提示定位（2026-10-13，待方案确认）
+
+用户反馈已应用仍反复提示。ADB/API28/min40/code73日志实测修复hide-offline-display-status-bar-v2在启动前返回rejected-data-version，签名元数据要求dataVersion=1、目标2。执行器只在applied成功后写state.appliedRepairs；版本拒绝保留pending且不写成功标记。Native健康检查只确认服务代码/路径正常，随后将“已准备数据修复”当成应用成功通知；下一次检查因缺少repairId成功记录再给出提示。没有证据证明此设备的v2实际成功执行；当前具体dataVersion未直接读取，不推定为0。
+
+候选方案：Native通过同一私有projectRoot读取实际修复成功记录，只有目标repairId已应用才报数据修复成功；版本不兼容回报真实原因，对repairId/repairVersion/实际数据版本相同的失败提示去重，手动重试或状态/清单变化重新检查。服务代码健康提交与修复失败区分，不因数据拒绝回滚正常代码、不伪造应用记录、不跳过版本门控。修改OfflineUpdateManager、NodeServerService、MainActivity及对应自测，重出min APK；用户确认前不改代码。

@@ -12072,3 +12072,8 @@ TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c7
 - ✅ [2026-10-13] 发布code/code-v73.zip到LAN/WAN：17721468字节，SHA256 cd990c79d9ef28d903e62257fe8366108655867545af2a6fd7b6cc93bff085fb，最终签名清单SHA256 5e24c48d91529e05bc7931dc695397513bb045ac30e290649daff3038dacec99。
   - 与v72仅display.css/self-test.js变化，CRC/源码/签名及全组件HTTP大小SHA256通过；精确清理旧code72，保留dependencies8/min40/full38/nodeMinSeeds69/dataRepair2，无清理错误。
   - 40项既有主题/旋转/DPI回归通过；四主题白色填色与时间文本一致、0.5px accent描边、时间阴影一致、0.3背景/blur8px/三行字号通过；API28/min40实际播报及dark→mint主题细边变化通过，原主题已恢复。servicePackage=false，todo移除完成任务，design/spec/task/usage/self-test同步。
+
+### APK数据修复重复提示定位
+
+- ✅ [2026-10-13] 只读定位min40重复数据修复提示：ADB/code73日志显示hide-offline-display-status-bar-v2被rejected-data-version拒绝（包要求数据版本1→2），没有完成成功记录；Native只按服务健康误报应用成功，后续再次提示。
+  - 记录offline-data-repair design/spec、task/todo及自测候选；具体当前dataVersion未直接读取，不宣称0。候选修正Native完成判断、真实原因和同失败去重/手动重试，按AGENTS等待用户确认；未修改代码/profile/发布状态或运行真实修复。
