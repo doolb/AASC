@@ -453,7 +453,7 @@ const SelfTest = {
         {
             id: 'tts_custom',
             name: '自定义语音播报测试',
-            description: '测试自定义TTS播报',
+            description: '播报后人工核对三行字幕逐行上移、0.1背景和模糊；30秒隐藏后保留历史',
             category: '语音功能',
             run: async () => {
                 if (!window.currentDisplayId) {
@@ -461,7 +461,7 @@ const SelfTest = {
                 }
                 try {
                     window.WebSocketManager.sendTts('play', { text: '自测语音播报测试' });
-                    return { success: true, message: 'TTS命令已发送', details: 'text: 自测语音播报测试' };
+                    return { success: true, message: 'TTS命令已发送，字幕显示待人工验收', details: '核对音频开始后逐行显示、固定3行、黑色0.1背景与模糊；30秒无新字幕隐藏，再次播报保留历史；最多100行。此结果只表示命令已发送。' };
                 } catch (err) {
                     return { success: false, message: '发送失败', details: err.message };
                 }

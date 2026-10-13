@@ -616,6 +616,7 @@
     <script src="/js/sentence-splitter.js"></script>
     <script src="js/chat-markdown.js"></script>
     <script src="js/display-lipsync-audio.js"></script>
+    <script src="js/display-tts-subtitles.js"></script>
     <script src="js/text-media-player.js"></script>
     <script src="js/ui-theme.js"></script>
     <script src="js/display-background-glow.js"></script>
@@ -667,6 +668,14 @@
         const mediaTextContent = document.getElementById('mediaTextContent');
         const mediaTextStatus = document.getElementById('mediaTextStatus');
         const ttsAudio = document.getElementById('ttsAudio');
+        const ttsSubtitles = window.DisplayTtsSubtitles.create({
+            element: voiceTextDisplay,
+            audio: ttsAudio,
+            onChange: () => {
+                window.DisplayStage?.refreshVoiceTextVisibility?.();
+                scheduleRotationTextLayout();
+            }
+        });
         const taskStatusDisplay = document.getElementById('taskStatusDisplay');
         const taskStatusModel = document.getElementById('taskStatusModel');
         const taskStatusProgress = document.getElementById('taskStatusProgress');
@@ -1843,7 +1852,9 @@
         function getVoiceTextAdaptiveMetrics(layout) {
             const shortSide = Math.max(Math.min(layout.layoutWidth, layout.layoutHeight), 1);
             // 同一套字号/边距规则用于顶部播报文字和下方ASR，避免移动位置后缩成固定小字。
-            const textLength = Array.from(layout.text ?? voiceTextDisplay?.textContent ?? '').length;
+            // 累计字幕的字号只取决于视口，避免100行历史让文字越来越小。
+            const textLength = voiceTextDisplay?.dataset?.voiceTextMode === 'tts'
+                ? 0 : Array.from(layout.text ?? voiceTextDisplay?.textContent ?? '').length;
             const edgeMargin = Math.round(clampVoiceTextMetric(shortSide * 0.04, 8, 32));
             const availableWidth = Math.max(layout.layoutWidth - edgeMargin * 2, 1);
             const viewportScale = clampVoiceTextMetric(shortSide / 720, 0.6, 1);
@@ -1868,7 +1879,9 @@
             voiceTextDisplay.style.fontSize = `${metrics.fontSize}px`;
             voiceTextDisplay.style.maxWidth = `${metrics.availableWidth}px`;
             voiceTextDisplay.style.maxHeight = `${metrics.maxHeight}px`;
-            voiceTextDisplay.style.overflowY = 'auto';
+            const isSubtitle = voiceTextDisplay.dataset.voiceTextMode === 'tts';
+            voiceTextDisplay.style.width = isSubtitle ? `${metrics.availableWidth}px` : '';
+            voiceTextDisplay.style.overflowY = isSubtitle ? 'hidden' : 'auto';
             voiceTextDisplay.style.overflowWrap = 'anywhere';
             voiceTextDisplay.style.wordBreak = 'break-word';
         }
@@ -3029,7 +3042,7 @@
             const playbackId = finishedItem.voiceTtsPlaybackId;
             currentTtsItem = null;
             ttsPlaybackToken++;
-            hideTtsText();
+            // 普通句结束保留当前字幕，由最后一行的30秒闲置计时控制隐藏。
             isPlayingTts = false;
             markTtsBatchItemFinished(finishedItem);
             sendVoiceTtsPlaybackFinished(playbackId);
@@ -3210,18 +3223,12 @@
         });
 
         function showTtsText(text) {
-            if (voiceTextDisplay && text) {
-                voiceTextDisplay.textContent = text;
-                voiceTextDisplay.className = 'voice-text-visible';
-                window.DisplayStage?.refreshVoiceTextVisibility?.();
-            }
+            // 入队/生成阶段只准备文字；真实音频playing后才逐行显示。
+            ttsSubtitles.prepare(text);
         }
 
         function hideTtsText() {
-            if (voiceTextDisplay) {
-                voiceTextDisplay.className = 'voice-text-hidden';
-                window.DisplayStage?.refreshVoiceTextVisibility?.();
-            }
+            ttsSubtitles.hide();
         }
 
         function handleTTS(data) {
@@ -6770,15 +6777,7 @@
         }
 
         function updateVoiceTextDisplay(text, isFinal) {
-            if (!voiceTextDisplay) return;
-
-            if (text) {
-                voiceTextDisplay.textContent = text + (isFinal ? '' : '…');
-                voiceTextDisplay.className = 'voice-text-visible';
-            } else {
-                voiceTextDisplay.className = 'voice-text-hidden';
-            }
-            window.DisplayStage?.refreshVoiceTextVisibility?.();
+            ttsSubtitles.showStatus(text, isFinal);
         }
 
         // 按真实采集、识别及播放事件刷新圆形按钮，不增加音频轮询。
@@ -7512,6 +7511,7 @@
                 }
 
                 // 文本显示能力关闭 → 隐藏提醒弹窗和文字覆盖层
+                ttsSubtitles.setEnabled(data.capabilities.displayText);
                 if (!data.capabilities.displayText) {
                     const popup = document.querySelector('.reminder-popup');
                     if (popup) popup.remove();

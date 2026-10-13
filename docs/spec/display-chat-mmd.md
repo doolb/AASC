@@ -1450,3 +1450,31 @@ setChatSession(session):
 ```
 
 最新布局5文件20项通过、零跳过；code-v58.zip（16,937,493字节，SHA-256 fe9ec07e287beef054023f49d509b2b30101f3c8fa2c38c76201deedb2771e93）已发布LAN/WAN；全部组件HTTP大小/SHA-256及RSA验证通过，清单字节一致，两端代码目录仅code-v58.zip，精确清理无错误。源提交7139b266，dependencies6/min34/种子39/dataRepair2复用，servicePackage=false、minApk=true/dependenciesPackage=false保持。
+
+## TTS 三行滚动字幕伪代码（2026-10-13，已实现，待设备验收）
+
+```text
+已有声明 := voiceTextDisplay、showTtsText、hideTtsText、updateVoiceTextDisplay、DisplayStage、旋转布局
+新增定义 := SubtitleState { historyLines, hideTimer, generation, scrollFrame, source, viewport }
+常量 := visibleRows=3、maxHistoryLines=100、idleMs=30000、backgroundAlpha=0.1、blurPx=8
+准备播报 := 读取DisplayLipSyncAudio当前来源 → 保存文字与来源代次，不提前显示
+音频playing/timeupdate := 来源匹配 → 按可用宽度测量拆行
+  累计字符数/全文字符数×真实音频时长 = 每行估算开始时刻
+  当前时间进入下一行 → 只追加当前一行 → 保留最近100个已显示行
+  用textContent与DocumentFragment批量刷新历史 → 显示外层 → 下一帧向上滚动
+  重设30秒隐藏计时，回调检查内容来源与代次
+暂停/等待 := 不推进字幕；来源清除/错误/停止 := 取消未显示行
+无逐字时间戳 := 按字符长度估算，不声称逐字精确对齐
+字幕布局 := 字号仅按逻辑视口适配；宽度为可用宽度；内部高度=字号×1.4×3
+  外层加上下padding → background rgba(0,0,0,0.1) → backdrop-filter blur(8px)
+闲置隐藏/主动停止 := 取消计时与滚动 → 隐藏外层 → 保留全部有界历史
+普通句结束 := 保留字幕和计时 → 继续音频队列
+ASR/模型提示 := 非空提示取消TTS旧任务与待显示行 → 切换来源 → 用原样式更新提示；历史保留
+空提示清理 := 来源不是提示则忽略 → 否则隐藏，避免旧提示回调隐藏TTS
+聊天抑制 := 缓存与计时继续 → 复用DisplayStage隐藏 → 关闭时仅恢复仍可见状态
+布局/方向变化 := 重排后重新定位最新行，不刷新闲置计时
+```
+
+代码映射：`js/display-tts-subtitles.js`负责历史/计时/滚动；`display.html`接入显示和停止/ASR事件；`css/display.css`负责三行与模糊背景。
+
+补充确认：用户选择按播报进度逐行显示；使用现有音频来源记录及playing/timeupdate事件，按时长和字符数估算行时机。暂无逐字时间戳；暂停不推进，下一条来源替换未显示内容。

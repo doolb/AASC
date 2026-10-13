@@ -579,6 +579,41 @@ body {
     text-shadow: 1px 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.8));
 }
 
+/* TTS背景仅有10%不透明度；只模糊背景，字幕文字保持清晰。 */
+#voiceTextDisplay[data-voice-text-mode="tts"] {
+    background: rgba(0, 0, 0, 0.1);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+    line-height: 1.4;
+}
+
+/* 滚动发生在内层，避免改变外层的旋转和居中锚点；空白也占满三个视觉行。 */
+.tts-subtitle-viewport {
+    height: 4.2em;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    overscroll-behavior: contain;
+}
+
+.tts-subtitle-viewport::-webkit-scrollbar {
+    display: none;
+}
+
+.tts-subtitle-content {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+.tts-subtitle-line {
+    flex: none;
+    min-height: 1.4em;
+    white-space: pre-wrap;
+}
+
 /* 聊天层打开时不让播报字幕遮挡聊天内容；关闭聊天后由原有 class 恢复显示。 */
 body.display-chat-open #voiceTextDisplay {
     display: none !important;

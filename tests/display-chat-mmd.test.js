@@ -475,7 +475,7 @@ test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {
     assert.match(stage, /dataset\.chatSuppressed = String\(state\.chatVisible\)/u);
     assert.match(displayCss, /body\.display-chat-open #voiceTextDisplay\s*\{[\s\S]*display:\s*none !important/u);
     assert.match(displayCss, /#voiceTextDisplay\[data-chat-suppressed="true"\][\s\S]*display:\s*none !important/u);
-    assert.match(displayHtml, /function showTtsText\(text\)[\s\S]*voiceTextDisplay\.className = 'voice-text-visible'/u);
+    assert.match(displayHtml, /function showTtsText\(text\)[\s\S]*?ttsSubtitles\.prepare\(text\)/u);
     assert.match(displayHtml, /ttsAudio\.play\(\)/u);
     assert.match(stage, /refreshVoiceTextVisibility/u);
     assert.match(displayHtml, /DisplayStage\?\.refreshVoiceTextVisibility/u);

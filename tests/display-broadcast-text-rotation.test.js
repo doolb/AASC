@@ -56,8 +56,8 @@ function getRotationBranch(rotation) {
 }
 
 test('TTS 播报文本与语音识别文本共用旋转适配节点', () => {
-    assert.match(DISPLAY_HTML, /function showTtsText\(text\)[\s\S]*voiceTextDisplay\.className = 'voice-text-visible'/u);
-    assert.match(DISPLAY_HTML, /function updateVoiceTextDisplay\(text, isFinal\)[\s\S]*voiceTextDisplay\.className = 'voice-text-visible'/u);
+    assert.match(DISPLAY_HTML, /function showTtsText\(text\)[\s\S]*?ttsSubtitles\.prepare\(text\)/u);
+    assert.match(DISPLAY_HTML, /function updateVoiceTextDisplay\(text, isFinal\)[\s\S]*?ttsSubtitles\.showStatus\(text, isFinal\)/u);
 });
 
 test('播报文本整体跟随90°/180°/270°旋转且不使用竖排字形', () => {
