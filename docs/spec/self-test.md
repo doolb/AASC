@@ -1,5 +1,16 @@
 # 自测功能实现文档
 
+## Offline APK 高 DPI TTS 位置浏览器自测（2026-10-13）
+
+```text
+Chromium加载实际display.html与display.css，模拟同一物理视口的100%/112%/150%/300%初始缩放
+显示 WebView 原生桥模拟 -> 0°/180°TTS物理边距均为160px；90°/270°旋转后物理边缘间距约24px
+原生桥不含缩放getter/调用getter抛错 -> 两种情况都回退100%，0°TTS边距160px
+定向浏览器回归 -> TTS|旋转|媒体名|天气共12项通过；单独新增DPI用例通过
+Android -> ./gradlew :app:testDebugUnitTest 成功，包含原生缩放策略和桥接代码编译
+边界 -> 完整回归中的既有1200×800、DPR3弹窗边距用例等待handleVoiceCommand超时；单独旋转锚点用例通过。未构建/安装APK，真机验收待出包
+```
+
 ## Android ASR 测试网页自测（2026-10-12）
 
 ```text

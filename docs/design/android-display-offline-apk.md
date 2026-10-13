@@ -61,6 +61,13 @@
 - 显示页、控制页、render-display 内容和 Offline 诊断浮层复用同一策略，避免诊断值与实际比例不一致。
 - Android JVM 单元测试已通过；min v23（`0.2.21-offline-min`）已重新构建并发布到 LAN/WAN。APK 大小 `89264066` bytes，SHA-256 为 `dfed13b4b2a1946dd14c64ae0cfae1881ea1728184d82a43ea58c92e533950d0`；两端签名清单、HTTP `200`/`Content-Length` 和旧 min 精确清理通过。
 
+## Offline 高 DPI 屏幕上的 TTS 位置（2026-10-12）
+
+- Offline 显示 WebView 保留现有分辨率/DPI 初始缩放；仅归一化 TTS/ASR 共用语音文本节点在 0°/180°使用的固定边距。
+- `DisplayWebView` 保存实际传给 `setInitialScale` 的百分比，并由显示页的 `NativeBridge` getter 原样提供。语音文本节点将 160 CSS px 基准偏移除以初始缩放因子，使 112%、150%、300%缩放下的物理偏移仍为 160 px。
+- 90°/270°继续使用原有旋转包围盒中心锚点；普通 APK、浏览器和不支持新 getter 的旧 APK 回退到 100%。语音状态行和 Offline 控制页不随本次调整。
+- 变更触及 Android 原生桥和服务网页：`minApk`、`servicePackage` 状态保持 true，待下次出包/服务包处理；本次不构建或发布 APK。
+
 ## Offline 控制端输入框聚焦缩放（2026-09-18）
 
 - Offline 控制端单独关闭输入框获得焦点时的页面自动缩放，避免弹出软键盘后控制页面被放大；显示端 WebView、普通 APK 和用户已有页面缩放行为保持不变。

@@ -1965,6 +1965,23 @@
             if (forceVoiceTextLayout) element.style.display = '';
         }
 
+        // 固定 TTS 边距需抵消 Offline WebView 初始 DPI 缩放；普通浏览器/旧版原生桥按 100% 处理。
+        let voiceTextDisplayScaleFactor = null;
+        function getVoiceTextDisplayScaleFactor() {
+            if (voiceTextDisplayScaleFactor !== null) return voiceTextDisplayScaleFactor;
+            let scalePercent = 100;
+            try {
+                const nativeScalePercent = Number(window.NativeDisplay?.getDisplayWebViewInitialScalePercent?.());
+                if (Number.isFinite(nativeScalePercent) && nativeScalePercent > 0) {
+                    scalePercent = nativeScalePercent;
+                }
+            } catch (error) {
+                console.warn('[显示页] 读取 WebView 初始缩放失败，TTS 边距回退到 100%', error);
+            }
+            voiceTextDisplayScaleFactor = Math.max(scalePercent, 1) / 100;
+            return voiceTextDisplayScaleFactor;
+        }
+
         function repositionRotationTextElement(element, layout) {
             if (!element) return;
             if (element.dataset.voiceCentered === 'true') {
@@ -2087,7 +2104,7 @@
                 if (!element) return;
                 const offset = index === 0
                     ? `${rotationLayout.margin}px`
-                    : `${rotationLayout.margin * 8}px`;
+                    : `${rotationLayout.margin * 8 / getVoiceTextDisplayScaleFactor()}px`;
                 element.dataset.voiceCentered = 'true';
                 element.style.position = element === voiceTextDisplay ? 'absolute' : 'fixed';
                 element.style.bottom = '';

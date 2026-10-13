@@ -139,6 +139,93 @@ test('300% 缩放下播报文字字号和旋转包围盒仍适配手机视口', 
     await page.close();
 });
 
+test('Offline DPI 缩放下 TTS 固定边距保持相同物理位置且四向锚点稳定', async () => {
+    const physicalViewport = { width: 800, height: 600 };
+    const page = await browser.newPage();
+    try {
+        await page.setViewport({ width: physicalViewport.width, height: physicalViewport.height, deviceScaleFactor: 1 });
+        await page.evaluateOnNewDocument(() => {
+            window.__testInitialScalePercent = 100;
+            window.NativeDisplay = {
+                getDisplayWebViewInitialScalePercent: () => Number(window.__testInitialScalePercent || 100)
+            };
+        });
+        await page.goto(
+            `http://127.0.0.1:${server.address().port}/display.html?displayId=voice-dpi-simulation`,
+            { waitUntil: 'domcontentloaded', timeout: 20000 }
+        );
+        await page.waitForFunction(() => typeof window.handleControl === 'function', { timeout: 10000 });
+
+        for (const scalePercent of [100, 112, 150, 300]) {
+            const scaleFactor = scalePercent / 100;
+            await page.setViewport({
+                width: Math.round(physicalViewport.width / scaleFactor),
+                height: Math.round(physicalViewport.height / scaleFactor),
+                deviceScaleFactor: scaleFactor
+            });
+            await page.evaluate((value) => {
+                window.__testInitialScalePercent = value;
+                // 页面仅加载一次；重置缓存以模拟每个倍率下新建的原生显示 WebView。
+                voiceTextDisplayScaleFactor = null;
+            }, scalePercent);
+
+            const measurements = await page.evaluate(async () => {
+                const voiceText = document.getElementById('voiceTextDisplay');
+                voiceText.textContent = '测试高 DPI 屏幕上的 TTS 字幕位置';
+                voiceText.className = 'voice-text-visible';
+                const result = {};
+                for (const rotation of [0, 90, 180, 270]) {
+                    handleControl({ action: 'rotate', value: rotation });
+                    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                    const rect = voiceText.getBoundingClientRect();
+                    result[rotation] = {
+                        top: Number.parseFloat(voiceText.style.top) || 0,
+                        bottom: Number.parseFloat(voiceText.style.bottom) || 0,
+                        physicalLeftInset: rect.left * window.devicePixelRatio,
+                        physicalRightInset: (window.innerWidth - rect.right) * window.devicePixelRatio,
+                        hasNativeScale: typeof window.NativeDisplay?.getDisplayWebViewInitialScalePercent === 'function'
+                    };
+                }
+                return result;
+            });
+
+            assert.ok(measurements[0].hasNativeScale, '测试页应注入模拟的原生缩放桥');
+            assert.ok(
+                Math.abs(measurements[0].top * scaleFactor - 160) <= 2,
+                `${scalePercent}% 时 0° TTS 物理上边距应为160px: ${JSON.stringify(measurements[0])}`
+            );
+            assert.ok(
+                Math.abs(measurements[180].bottom * scaleFactor - 160) <= 2,
+                `${scalePercent}% 时 180° TTS 物理下边距应为160px: ${JSON.stringify(measurements[180])}`
+            );
+            for (const rotation of [90, 270]) {
+                const edgeInset = rotation === 90
+                    ? measurements[rotation].physicalRightInset
+                    : measurements[rotation].physicalLeftInset;
+                assert.ok(
+                    Math.abs(edgeInset - 24) <= 5,
+                    `${scalePercent}% 时 ${rotation}° TTS 应保留约24px自适应边距: ${JSON.stringify(measurements[rotation])}`
+                );
+            }
+        }
+
+        for (const bridgeMode of ['missing', 'throws']) {
+            const fallbackTop = await page.evaluate(async (mode) => {
+                window.NativeDisplay = mode === 'missing'
+                    ? {}
+                    : { getDisplayWebViewInitialScalePercent: () => { throw new Error('bridge unavailable'); } };
+                voiceTextDisplayScaleFactor = null;
+                handleControl({ action: 'rotate', value: 0 });
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return Number.parseFloat(document.getElementById('voiceTextDisplay').style.top);
+            }, bridgeMode);
+            assert.equal(fallbackTop, 160, `${bridgeMode} 时应回退至100%并保持160px偏移`);
+        }
+    } finally {
+        await page.close();
+    }
+});
+
 test('媒体名字号按约定放大一倍', () => {
     assert.match(
         DISPLAY_CSS,

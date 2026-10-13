@@ -1,3 +1,15 @@
+### Offline Android TTS 位置
+
+- ✅ [2026-10-13] Offline APK 的 TTS 固定边距按显示 WebView 实际 DPI 初始缩放归一，匹配当前 Android 的物理位置。
+  - 原生 `DisplayWebView` 保存并经 `NativeBridge` 返回相同缩放百分比；显示页对 TTS/ASR 共用语音文本节点的 0°/180°固定偏移做反向换算，90°/270°锚点、整页缩放和控制页保持原样。浏览器/普通 APK/旧桥回退 100%。
+  - Chromium 在 100%/112%/150%/300%及四个方向完成 DPI 布局模拟；Android `:app:testDebugUnitTest` 成功，12项定向网页回归通过。完整网页文件里的既有1200×800、DPR3弹窗等待用例仍超时，单独旋转锚点回归通过。此次未构建 APK；代码包发布成功后，状态为 `servicePackage=false`、`dependenciesPackage=false`、`minApk=true`。任务：`docs/task/20261012_OfflineAPK_TTS位置匹配ADB.md`。
+
+### Offline 更新代码包发布
+
+- ✅ [2026-10-13] 将 Offline 更新代码 v67、依赖包 v7 和 Node min 种子 v67 发布到 LAN 与 WAN。
+  - `code/code-v67.zip`：17,656,690 bytes，SHA-256 `7da09c04cbc0a046a04c70650e83cf141382243dd2db406322f10d65bc73fb48`；`dependencies/dependencies-v7.zip`：131,289,833 bytes，SHA-256 `b15e554d51e7867b76aee2ed7875474a1793866ff91e1b8c4576ca7befb96762`；`node-min-seeds/node-min-seeds-v67.zip`：35,287 bytes，SHA-256 `395957cdef6db214d8dd096c6293267edd11b54f2ad1cd90faa26ae25b6eb70c`。
+  - code-only 构建因本地 `package-lock.json` 与当前依赖包锁指纹不同，按发布规则自动升级为 all，并重新生成匹配依赖包与种子包。签名清单引用 code v67/dependencies v7/seeds v67，保留 min APK v34；LAN/WAN 清单验签且一致，三项新资源 HTTP 200/长度匹配，全清单组件 SHA-256 校验通过，版本文件精确清理无错误。未构建或发布 APK。
+
 ### 独立 MMD-AR PBD 全身 IK
 
 - ✅ [2026-10-13] 参考 UE5 FullBodyIK 的 PBD/NPGS 思路，将独立 PMX 多末端 IK 改为共享祖先旋转约束迭代，并增加脚踝目标下的膝盖弯曲面偏好。

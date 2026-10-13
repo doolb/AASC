@@ -26,6 +26,7 @@ class NativeBridge(
     private val webView: WebView,
     private val audioFocusController: AudioFocusController,
     private val offlineMode: Boolean = false,
+    private val displayWebViewInitialScalePercent: Int = 100,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
     private val onControlPageAccessChanged: ((Boolean) -> Unit)? = null
 ) {
@@ -150,6 +151,10 @@ class NativeBridge(
 
     @JavascriptInterface
     fun isAvailable(): Boolean = true
+
+    /** 返回显示 WebView 实际使用的初始缩放百分比，供字幕边距维持物理位置一致。 */
+    @JavascriptInterface
+    fun getDisplayWebViewInitialScalePercent(): Int = displayWebViewInitialScalePercent.coerceAtLeast(1)
 
     /** 服务端下发显示端控制端开放状态，原生按钮只在主线程根据权威值更新。 */
     @JavascriptInterface

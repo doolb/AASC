@@ -307,6 +307,8 @@
 
 ## Android APK
 
+- ⏳待 min APK 出包/真机验收 [2026-10-12] Offline APK 高 DPI 下 TTS 位置匹配当前 Android：源码已按原生 WebView 初始缩放反向换算 0°/180°字幕边距；Chromium 四向 DPI 回归和 Android JVM 测试通过。待 min APK 构建安装后确认真机四向位置。未构建或发布 APK。任务：`docs/task/20261012_OfflineAPK_TTS位置匹配ADB.md`。
+
 - ⏳待下一次出包验收 [2026-09-25] APK 与 Offline 热更清单中的 Git 来源信息
   - 用 `build:apk:offline` 核对 `build-manifest.json` 的完整 `source.gitCommit` 和 `source.gitDirty`；生成 code-only/all 服务包及 min APK 清单，确认各自组件来源与签名校验一致。
   - 关联任务：`docs/task/2026-09-25_构建产物Git提交信息.md`。
