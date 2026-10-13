@@ -323,3 +323,13 @@ OAuth账号元数据 := 显式嵌套accountInfo合并校验输出，避免凭据
 验收边界 := MiMo和Z.ai主要看HTTP成功，身份依据较弱；本轮未发送真实请求
 豆包会话列表 := 仅记后续方法；当前返回format-only元数据而非remote验证结果
 ```
+
+## 外部登录配套发布与ADB观察完成（2026-10-14）
+
+min41/code76已发布LAN/WAN，复用依赖8、种子69和修复2；完整HTTP组件大小/SHA256、RSA签名、APK signer/profile与精确旧版本清理通过，保留full38，没有清理失败。最终清单SHA256 216921e970b9dc4e53bca3d9eb232824e067b0df0a6aba058b3e3a5749b3e4a6，两端一致。
+
+ADB Note8/API28已覆盖安装min41并健康提交服务76，/api/status确认实际code-v76目录和依赖8。通过不含真实账号凭据的公开profile会话观察豆包原生页：完成/取消均可见；未登录点击完成保留页面，取消返回MainActivity。没有实际登录账号、调用真实远端身份验证或发送聊天/合成请求。
+
+真机显示页计算样式确认TTS渐变峰值0.2、blur4px、白色rgba(255,255,255,0.9)与0.5px细边；临时设置仅用于读取TTS模式计算值，已恢复原属性。控制页未验证标签和新版完成/手动添加提示已加载。编译与Node语法检查通过；仅同步既有测试断言，未新增或运行自动化测试。10个Provider真实登录/凭据捕获/账号保存仍待用户账号验收。
+
+豆包会话列表验证与夜间显示策略保留用户暂缓决定。发布后工作区另有display-mmd.css/display.html/display-stage.js网页修改，未包含本次76、也未提交这些文件，servicePackage按未覆盖网页修改保持true；本任务min APK已生成，minApk=false、dependenciesPackage=false。

@@ -214,7 +214,7 @@
   从官方豆包页面只读确认当前请求版本和来源，不打印登录凭证 // 参考项目版本可能滞后
   ProviderRegistry登记doubaochat与doubao/doubao-think/doubao-expert别名 // 模型是网页思考模式，不冒充独立上游权重
   DataStore把doubaochat加入内置集合，账号凭据只用已脱敏的credentials.cookie // 支持现有秘钥判断和账号导入
-  ManualAccountService校验Cookie长度、名称及字符；尚无安全只读身份端点时固定拒绝手动新增 // 绝不把非空Cookie或首页200当真实登录成功
+  ManualAccountService校验Cookie长度、名称及字符 → 允许新增并保存credentialVerification=format-only // 会话列表校验仅记录，不把格式合法当真实身份验证
   DataStore允许既有账号凭证包经预览及明确确认导入有效格式的Cookie // 导入只验证结构，不能宣称登录态或签名可用
   CredentialValidators仅在证实固定官方HTTPS只读身份校验协议后允许手动入库 // 未验的生产功能保持阻断
   CoreAdapter选择豆包账号和独立文字适配器 // 保留原鉴权、负载均衡和其他Provider
@@ -428,3 +428,5 @@ Android登录候选 := 豆包官方来源 + 白名单Cookie集合
 后续远端验证 := 用户指定请求会话列表；目前只记录，保留未验证可添加
 禁止混淆 := 格式校验和Native捕获完成不等于远端登录验证
 ```
+
+min41/code76已发布；真实账号捕获与会话身份验证分别留作用户验收和暂缓任务。

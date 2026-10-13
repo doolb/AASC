@@ -12121,3 +12121,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 更新display-chat-mmd design/spec、task/usage，移除TTS完成todo；真实新版参数观察随配套min41/code76进行。
 - ✅ [2026-10-14] 标准npm script生成min41（89327222字节，SHA256 42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340），签名与已安装版一致，profile/updateOnly/版本/CRC及新集合捕获DEX通过；ADB覆盖安装成功。
   - 配套code76为17722423字节，SHA256 f26196d5afa10d227abdb0485887c2f6922dc89a1e27854ea9cba17b2609cdfe；CRC/最新源码通过，含10个变更文件（两项既有断言同步，未新增或运行自动化测试）。min41/code76待发布完成及入口观察；minApk=false/servicePackage=false/dependenciesPackage=false。Provider验证方法已记录，豆包会话列表校验先暂缓。
+
+### Android外部登录min41与服务76发布验收
+
+- ✅ [2026-10-14] min41/code76发布LAN/WAN完成：min APK89327222字节/SHA256 42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340，代码17722423字节/SHA256 f26196d5afa10d227abdb0485887c2f6922dc89a1e27854ea9cba17b2609cdfe，最终清单SHA256 216921e970b9dc4e53bca3d9eb232824e067b0df0a6aba058b3e3a5749b3e4a6。
+  - signer/profile/CRC/最新本任务源码及全组件HTTP大小SHA256通过，两端清单一致；精确清理旧min40/code75，保留依赖8/full38/种子69/修复2，无清理失败。
+  - ADB/API28已覆盖安装min41并健康提交实际code-v76；豆包公开profile原生按钮/缺字段完成保留/取消返回通过，未执行真实账号登录或上游请求。真机TTS计算alpha0.2/blur4px/白色填色/0.5px细边与未验证标签通过，临时属性已恢复；真实账号全链路保留验收todo。
+  - 移除实现进行中todo，同步相关design/spec/task/usage/self-test；豆包会话列表验证仅记录，夜间显示/数据修复继续暂缓。发布后另有三份网页工作区改动未包含76且未提交，servicePackage=true保留其待打包状态；minApk=false/dependenciesPackage=false。
