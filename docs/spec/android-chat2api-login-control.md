@@ -289,3 +289,28 @@ offline APK 重打包契约
     → 安装后 /api/chat2api 路由与 /v1/chat/completions、/v1/responses 共用当前本地 server-app
     → 仅验证本地协议和包内容，不在自动验收中写入真实 Provider 凭据
 ```
+
+## 全Provider按钮与豆包格式校验保存伪代码（2026-10-14，代码前更新）
+
+```text
+已有声明 := 内置Provider注册表、Android捕获profile、隔离Activity/WebView、OAuth会话及账号存储
+新增定义 := CookieBundle { field, names, requiredNames, requiredAnyNames }
+豆包profile := https://www.doubao.com + 白名单六种Cookie + bundle.field=cookie
+完整条件 := sessionid存在 + 两种CSRF Cookie至少一种存在；输出仅含已声明名称
+Cookie集合捕获 := 解析CookieManager当前允许来源 → 筛选/去重/限长 → 完整才组装cookie字段
+服务端登录保存 := OAuth state/Provider匹配 → Provider现有validate → 严格规范化 → 保存
+豆包校验 := 来源合法 + normalizeDoubaoCredentials → valid=true + credentialVerification=format-only
+普通手动添加 := 复用相同豆包格式校验，允许添加并标记未远端验证
+OAuth账号元数据 := 显式嵌套accountInfo合并校验输出，避免凭据/状态散落顶层
+控制端结果 := format-only → 已配置未远端验证；其他 → 沿用验证成功提示
+标题栏 := 各capture Provider共用完成/取消；account-web同名按钮只关闭浏览页
+已保存豆包网页恢复 := 只把bundle声明名称映射回允许来源的Cookie；不扩大到未知名称
+取消或缺字段 := 不保存；缺字段保留登录页；取消清理临时Cookie/Storage
+后续待办 := 豆包请求会话列表验证；本轮只记录，不发校验/聊天请求
+```
+
+兼容：旧APK忽略未知Cookie集合字段会保持缺cookie状态，不冒充成功；配套新min APK和服务包启用完整捕获。所有内置网页Provider为deepseek/glm/kimi/minimax/mimo/perplexity/qwen/qwen-ai/zai/doubaochat。自定义Provider仍须声明对应来源/字段，不凭URL推断任意秘密。
+
+补充同步：普通手动添加与OAuth均须显式保存嵌套accountInfo，避免丢失format-only标记；同步chat2api-manual-account-service.js。Provider字段提示同步“允许添加、未远端验证”。
+
+自测模块增加只读原生入口/未验证状态映射检查，既有导入豆包账号也显示未远端验证；不触发登录或保存。

@@ -136,6 +136,23 @@ const SelfTest = {
             }
         },
         {
+            id: 'android_external_login_entry',
+            name: 'Android外部登录入口',
+            description: '只读检查原生登录入口和豆包未验证状态，不打开官网或添加账号',
+            category: '基础功能',
+            run: async () => {
+                const native = window.NativeControl;
+                if (!native) return { success: true, message: '非Android控制页，跳过原生登录检查', details: '顶部完成/取消需在Android隔离登录页检查' };
+                const chat = window.Chat2APIControl;
+                const valid = typeof native.openChat2ApiLogin === 'function'
+                    && typeof native.openChat2ApiAccountWeb === 'function'
+                    && typeof chat?.completeNativeLogin === 'function'
+                    && chat?.accountStatus?.({ providerId: 'doubaochat', status: 'active', accountInfo: { credentialVerification: 'format-only' } })?.includes('未远端验证');
+                return { success: Boolean(valid), message: valid ? '原生登录入口与未验证提示可用' : '原生登录入口或提示缺失',
+                    details: '本项不验证实际凭据捕获；顶部完成/取消、网页登录和账号保存需在真机确认，豆包会话列表验证尚未接入' };
+            }
+        },
+        {
             id: 'display_connection',
             name: '显示端连接测试',
             description: '检查是否有显示端连接',

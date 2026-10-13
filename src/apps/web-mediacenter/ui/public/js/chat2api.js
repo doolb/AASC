@@ -75,7 +75,7 @@
     accountStatus(account) {
       if (account.enabled === false) return '已禁用';
       // API 凭证入库仅校验格式，调度启用状态不能充当远端鉴权成功证据。
-      if (account.accountInfo?.credentialVerification === 'format-only' || ['qwen-api', 'doubaapi', 'doubao-api'].includes(account.providerId)) return '已配置，未远端验证';
+      if (account.accountInfo?.credentialVerification === 'format-only' || ['qwen-api', 'doubaapi', 'doubao-api', 'doubaochat'].includes(account.providerId)) return '已配置，未远端验证';
       return '已登录';
     },
 
@@ -309,14 +309,16 @@
       });
       const cookieElement = document.getElementById('chat2apiManualCookie');
       try {
-        await this.request('/api/chat2api/accounts/manual', {
+        const result = await this.request('/api/chat2api/accounts/manual', {
           method: 'POST',
           body: JSON.stringify({ providerId: providerSelect.value, credentials, cookie: cookieElement ? cookieElement.value.trim() : '' }),
         });
         document.querySelectorAll('[data-chat2api-credential]').forEach((element) => { element.value = ''; });
         if (cookieElement) cookieElement.value = '';
         await this.refresh();
-        this.message(['qwen-api', 'doubaapi', 'doubao-api'].includes(providerSelect.value)
+        this.message(result.account?.accountInfo?.credentialVerification === 'format-only'
+          ? '账号已保存，凭证格式已校验；尚未进行远端验证。'
+          : ['qwen-api', 'doubaapi', 'doubao-api'].includes(providerSelect.value)
           ? 'API 账号已保存，凭证格式已校验；尚未进行远端验证。' : '外部认证已验证，账号已保存。');
       } catch (error) { this.message(`外部认证添加失败：${error.message}`, true); }
     },
@@ -331,7 +333,7 @@
           && typeof window.NativeControl.openChat2ApiLogin === 'function') {
           const opened = window.NativeControl.openChat2ApiLogin(JSON.stringify(this.loginSession));
           if (opened) {
-            this.message('已在 Android 隔离登录页打开官方页面，完成登录后会自动验证并保存账号。');
+            this.message('已打开 Android 隔离登录页，顶部可完成或取消；捕获到凭据后会校验并保存账号，未远端验证的账号会明确标注。');
             return;
           }
           this.message('Android 隔离登录页打开失败，已回退到手工凭据方式。', true);
@@ -355,7 +357,7 @@
         return;
       }
       try {
-        await this.request('/api/chat2api/oauth/complete', {
+        const result = await this.request('/api/chat2api/oauth/complete', {
           method: 'POST',
           body: JSON.stringify({
             state: this.loginSession.state,
@@ -364,7 +366,8 @@
           }),
         });
         this.loginSession = null;
-        this.message('登录成功，账号已保存。');
+        this.message(result.account?.accountInfo?.credentialVerification === 'format-only'
+          ? '账号已保存，已配置、未远端验证。' : '登录成功，账号已保存。');
         if (window.NativeControl && typeof window.NativeControl.closeChat2ApiLogin === 'function') {
           window.NativeControl.closeChat2ApiLogin();
         }
@@ -378,9 +381,10 @@
       document.querySelectorAll('[data-chat2api-credential]').forEach((element) => { if (element.value) credentials[element.dataset.chat2apiCredential] = element.value; });
       const cookieElement = document.getElementById('chat2apiManualCookie');
       try {
-        await this.request('/api/chat2api/oauth/complete', { method: 'POST', body: JSON.stringify({ state: this.loginSession.state, providerId: this.loginSession.providerId, credentials, cookie: cookieElement ? cookieElement.value.trim() : '' }) });
+        const result = await this.request('/api/chat2api/oauth/complete', { method: 'POST', body: JSON.stringify({ state: this.loginSession.state, providerId: this.loginSession.providerId, credentials, cookie: cookieElement ? cookieElement.value.trim() : '' }) });
         this.loginSession = null;
-        this.message('登录成功，账号已保存。');
+        this.message(result.account?.accountInfo?.credentialVerification === 'format-only'
+          ? '账号已保存，已配置、未远端验证。' : '登录成功，账号已保存。');
         await this.refresh();
       } catch (error) { this.message(error.message, true); }
     },

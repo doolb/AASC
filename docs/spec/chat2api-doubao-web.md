@@ -417,3 +417,14 @@
   生产JS语法及本任务diff检查；servicePackage=true，dependenciesPackage及minApk原值保持true
   真实账号/官网/当前用户Chrome不访问；think/expert及设备仍需独立验收 // 实现批准不扩大为真实请求授权
 ```
+
+## Android捕获保存与验证待办（2026-10-14）
+
+```text
+Android登录候选 := 豆包官方来源 + 白名单Cookie集合
+保存前检查 := 现有严格Cookie规范化，包括sessionid/CSRF与字符长度边界
+豆包校验结果 := 允许保存 + accountInfo.credentialVerification=format-only
+普通手动入口 := 同样允许格式校验后保存未验证账号
+后续远端验证 := 用户指定请求会话列表；目前只记录，保留未验证可添加
+禁止混淆 := 格式校验和Native捕获完成不等于远端登录验证
+```

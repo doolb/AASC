@@ -128,3 +128,17 @@ Android 登录 WebView：
 收缩标签固定吸附在左侧边缘，使用独立的短文案和无障碍描述；展开状态使用原有完整按钮文案。启动遮罩或更新卡片显示时，入口仍遵循现有层级和可见性约束。
 - 普通 APK 已完成真机启动冒烟和无崩溃检查；Provider 真实网页登录需要测试账号，暂留现场验收，不将测试凭据写入项目或日志。
 - 2026-09-18 已将本机 Qwen 账号导入 SM-N9500 Offline Chat2API，账号列表和 6 个 Qwen 模型可见，最小 Chat Completions 请求返回成功；凭据未写入项目或日志。
+
+## 所有内置网页Provider统一按钮与豆包自动保存（2026-10-14，已确认实施）
+
+所有10个内置网页Provider均提供Android隔离登录页，标题栏统一显示“完成”“取消”；完成触发当前Provider捕获，取消返回控制端且不保存。已保存账号的外部网页也显示同一按钮；该浏览模式完成仅关闭网页，不修改账号。API Key类沿用已有手动添加入口。
+
+豆包新增固定官方来源的Cookie集合捕获，仅收集sessionid、passport_csrf_token、passport_csrf_token_default、msToken、ttwid、s_v_web_id；需要sessionid及至少一种CSRF Cookie后才返回完整cookie字段，后端再使用已有严格规范化。豆包Android登录完成允许本地格式校验后保存，accountInfo.credentialVerification=format-only，控制端显示“已配置，未远端验证”；普通手动添加也允许本地格式校验后保存未验证账号。其余Provider沿用当前远端校验，不保证未经真实登录验收的站点可用性。
+
+用户明确先记录“豆包请求会话列表验证”的方法，本轮不接入该远端校验；未验证账号仍可添加。具体会话列表来源、登录失败/响应契约在后续恢复实施时核对，不以首页HTTP成功认定身份有效。
+
+修改Chat2ApiLoginActivity/CredentialCapture/AuthWebView、login-profiles/oauth-service/credential-validators/account-web-session-service、chat2api控制页，按实际修改标记min APK和服务包；生产依赖保持。
+
+补充同步：普通手动添加与OAuth均须显式保存嵌套accountInfo，避免丢失format-only标记；同步chat2api-manual-account-service.js。Provider字段提示同步“允许添加、未远端验证”。
+
+自测模块增加只读原生入口/未验证状态映射检查，既有导入豆包账号也显示未远端验证；不触发登录或保存。

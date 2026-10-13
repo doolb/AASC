@@ -178,3 +178,9 @@ server-app复用控制消息白名单、连接初始化和广播；config.set持
 网页fetch固定同源/chat/completion、credentials:include、redirect:error。页面自身检查location.origin，主frame监听注册后复核当前origin；配置/账号指纹监控在连接前开始，读Cookie与fetch前重查授权。120秒覆盖连接、CDP创建/send/detach、身份和流；目录查询全流程≤5秒。原始流按≤64KiB拉取，单块≤512KiB、总8MiB，保留SSE字节分片；取消仅清理对应页面临时状态并断调试连接，不关闭用户标签或Chrome。
 
 独立审查3项重要竞态（导航漏检、连接阶段授权撤销、detach挂起）均先RED后GREEN；实际隔离Chromium还复现并修正Puppeteer使用off而非Node removeListener的接线差异，contextId使用实际CDP元数据，不假定默认context为空。所有网页请求被拦截为本地HTML/SSE，假sessionid仅用于测试profile，无真实上游或用户凭据。最终Chat2API173/176（同3项Windows chmod）、TTS/解码/配置/浏览器97/97、旧播报19/19。真实官网/账号、网页think/expert及Android/设备能力仍未验收，不宣布生产可用。
+
+## Android网页登录添加与后续验证方法（2026-10-14）
+
+用户已明确批准所有内置外部登录统一完成/取消，并允许豆包网页登录捕获后自动保存为未远端验证。Android登录和普通手动添加均采用严格Cookie本地规范化与format-only状态，允许未验证添加。Cookie仅按已确认的六名称捕获和恢复，秘密继续存credentials.cookie。
+
+“请求豆包会话列表验证”按用户要求先记录待办，本轮不选择未确认的URL或请求参数，不实施远端会话校验。该策略不能作为已验证登录宣称；未验证账号可添加并正常显示明确状态。

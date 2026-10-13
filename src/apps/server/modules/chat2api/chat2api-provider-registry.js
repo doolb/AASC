@@ -52,7 +52,7 @@ const BUILTIN_PROVIDERS = Object.freeze([
     // 公开名称只表示网页思考模式，不能宣传为三个独立权重或原生多模态/工具模型。
     id: 'doubaochat', publicId:'doubao', name: '豆包网页（doubao）', authType: 'cookie', apiEndpoint: 'https://www.doubao.com', loginUrl: 'https://www.doubao.com', chatPath: '/chat/completion',
     supportedModels: ['doubao', 'doubao-think', 'doubao-expert'], modelMappings: { doubao: 'doubao', 'doubao-think': 'doubao-think', 'doubao-expert': 'doubao-expert' },
-    credentialFields: [{ name: 'cookie', label: '豆包网页 Cookie', type: 'textarea', required: true, helpText: '仅接收已确认的登录/CSRF Cookie；安全只读登录校验端点尚未确认，手动添加暂时拒绝入库' }], authMethods: ['manual', 'cookie'],
+    credentialFields: [{ name: 'cookie', label: '豆包网页 Cookie', type: 'textarea', required: true, helpText: '仅接收已确认的登录/CSRF Cookie；添加后显示已配置、未远端验证' }], authMethods: ['manual', 'cookie'],
     // 只有已验证的普通Node模式可原生续接；网页传输及think/expert不能由布尔能力自动推定。
     capabilities: { text: true, nativeTools: false, multimodal: false, nativeContinuation: true,
       nativeContinuationTransports: ['node-http'], nativeContinuationModels: ['doubao'] },

@@ -51,13 +51,22 @@ const createChat2ApiAccountWebSessionService = ({ dataStore, providerRegistry, b
       try { credentials.ticket = parseCookies(getQwenCredential(account)).find(item => item.name === 'tongyi_sso_ticket')?.value; }
       catch (_error) { delete credentials.ticket; }
     }
-    const cookieMappings = (resolvedProfile.cookies || []).flatMap((mapping) => {
+    const mappedCookies = (resolvedProfile.cookies || []).flatMap((mapping) => {
       const value = credentials[mapping.field];
       if (typeof value !== 'string' || !value.trim()) return [];
       const targets = Array.isArray(mapping.origins) ? mapping.origins : [origin];
       return [...new Set(targets)].filter(target => allowedOrigins.includes(target))
         .map(target => ({ origin: target, name: mapping.name, value }));
     });
+    // Cookie集合与Android登录捕获使用同一声明，恢复时只写入白名单名称和允许来源。
+    const bundledCookies = (resolvedProfile.cookieBundles || []).flatMap((bundle) => {
+      const value = credentials[bundle.field];
+      if (typeof value !== 'string' || !value.trim() || !allowedOrigins.includes(origin)) return [];
+      const allowedNames = new Set(bundle.names || []);
+      return parseCookies(value).filter(item => allowedNames.has(item.name))
+        .map(item => ({ origin, name: item.name, value: item.value }));
+    });
+    const cookieMappings = [...mappedCookies, ...bundledCookies];
     const localStorageMappings = (resolvedProfile.localStorage || []).flatMap((mapping) => {
       const value = credentials[mapping.field];
       if (typeof value !== 'string' || !value.trim()) return [];

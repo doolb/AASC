@@ -12108,3 +12108,9 @@ TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c7
 TTS参数补充：用户要求将8px背景模糊减半至4px，与alpha0.2合并。先更新spec再修改两条backdrop-filter，提示/usage同步；第一次74构建未发布，最终包重新构建覆盖最新源码。
 
 TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 16ad6ebdbb949598f561e34b301b8222d060999fb3b09615920e8b269a915dd1；CRC/包内最新CSS与自测提示对应通过，与73仅display.css/self-test.js两文件变化。alpha0.2、blur4px已包含；servicePackage=false。初次74未发布，追加4px后同版本构建被禁止覆盖，改用新版本75；内外网发布和HTTP校验进行中。未新增或运行自动化测试。
+
+### Android外部登录统一按钮与豆包自动保存
+
+- ✅ [2026-10-14] 完成源码：10个内置网页Provider具备Android捕获配置，隔离登录及账号外部网页统一完成/取消；补齐豆包白名单Cookie集合捕获/恢复。
+  - 豆包自动/手动添加采用严格本地格式校验，嵌套元数据保留未远端验证标记，结果和旧导入账号状态明确；其他Provider现有校验保持。用户要求请求会话列表验证仅记录待办。
+  - 先同步android-chat2api-login-control/chat2api-doubao-web design/spec/task再改Native/服务/网页，更新只读自测说明与usage/todo；min profile41，minApk=true/servicePackage=true，dependenciesPackage=false。构建发布和ADB入口观察进行中，未新增或运行自动化测试。

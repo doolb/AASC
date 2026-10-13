@@ -79,20 +79,14 @@ class Chat2ApiLoginActivity : Activity() {
         val header = createHeader("${parsed.optString("providerName", parsed.optString("providerId"))} 登录")
         val webView = Chat2ApiAuthWebView(this, profile) { credentials -> finishWithSuccess(credentials) }
         authWebView = webView
-        val complete = Button(this).apply {
-            text = "完成"
-            setOnClickListener {
+        addHeaderActions(header,
+            onComplete = {
                 webView.completeCapture { message ->
                     Toast.makeText(this@Chat2ApiLoginActivity, message, Toast.LENGTH_SHORT).show()
                 }
-            }
-        }
-        val cancel = Button(this).apply {
-            text = "取消"
-            setOnClickListener { finishWithError("用户取消登录") }
-        }
-        header.addView(complete, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        header.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            },
+            onCancel = { finishWithError("用户取消登录") }
+        )
         root.addView(header)
         root.addView(webView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -102,11 +96,17 @@ class Chat2ApiLoginActivity : Activity() {
     private fun setupAccountWebShell(parsed: JSONObject) {
         val root = createRootLayout()
         val header = createHeader("${parsed.optString("providerName", parsed.optString("providerId"))} 外部网页")
-        val cancel = Button(this).apply {
-            text = "关闭"
-            setOnClickListener { finishWithError("用户关闭外部网页") }
-        }
-        header.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // 已保存账号的网页只供浏览，完成/取消均结束本窗口，不调用登录凭据保存流程。
+        addHeaderActions(header,
+            onComplete = {
+                if (!finished) {
+                    finished = true
+                    setResult(RESULT_OK)
+                    finish()
+                }
+            },
+            onCancel = { finishWithError("用户取消外部网页") }
+        )
         root.addView(header)
         statusText = TextView(this).apply {
             text = "正在准备隔离网页…"
@@ -153,6 +153,17 @@ class Chat2ApiLoginActivity : Activity() {
         }
         header.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         return header
+    }
+
+    /** 所有Provider共用顶部操作栏，按钮位于网页外部，不随页面导航或滚动消失。 */
+    private fun addHeaderActions(header: LinearLayout, onComplete: () -> Unit, onCancel: () -> Unit) {
+        listOf("完成" to onComplete, "取消" to onCancel).forEach { (label, action) ->
+            val button = Button(this).apply {
+                text = label
+                setOnClickListener { action() }
+            }
+            header.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
     }
 
     private fun consumeAccountWebSession(parsed: JSONObject): AccountWebState {

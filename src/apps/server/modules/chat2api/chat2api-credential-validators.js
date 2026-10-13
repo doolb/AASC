@@ -207,17 +207,17 @@ const validateZai = async (credentials, httpClient) => {
 };
 
 /**
- * 本轮没有已确认的安全只读登录检查端点，不能用官网首页 200、Cookie 非空或发送测试消息
- * 伪造账号验证成功。先本地严格校验，再返回固定阻塞原因；未来只有协议实测后才能开放入库。
+ * 豆包当前只做严格本地格式校验，按用户确认允许添加，但必须明确标记未远端验证。
+ * 请求会话列表的验证方法仅记录为后续任务；不以网页HTTP成功或Cookie非空冒充身份验证。
  */
 const validateDoubao = async (credentials, httpClient, provider) => {
   try {
     assertDoubaoProvider(provider);
-    normalizeDoubaoCredentials(credentials);
+    const normalized = normalizeDoubaoCredentials(credentials);
+    return { valid: true, credentials: normalized, accountInfo: { credentialVerification: 'format-only' } };
   } catch (error) {
     return failure(error.message);
   }
-  return failure('豆包安全只读登录校验端点尚未确认，暂不能添加账号');
 };
 
 const VALIDATORS = Object.freeze({

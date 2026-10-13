@@ -9,12 +9,20 @@ import java.util.Locale
  * 服务端下发的 Android 登录捕获配置，只描述字段映射，不包含可执行脚本。
  * 该数据类和解析器保持纯逻辑，便于在 Android JVM 单测中验证凭据边界。
  */
+data class Chat2ApiCookieBundle(
+    val field: String,
+    val names: List<String>,
+    val requiredNames: List<String> = emptyList(),
+    val requiredAnyNames: List<String> = emptyList()
+)
+
 data class Chat2ApiCaptureProfile(
     val allowedOrigins: List<String>,
     val authorizationField: String? = null,
     val cookieFields: Map<String, String> = emptyMap(),
     val localStorageFields: Map<String, String> = emptyMap(),
-    val requiredFields: List<String> = emptyList()
+    val requiredFields: List<String> = emptyList(),
+    val cookieBundles: List<Chat2ApiCookieBundle> = emptyList()
 ) {
     companion object {
         fun fromJson(json: JSONObject): Chat2ApiCaptureProfile {
@@ -41,12 +49,25 @@ data class Chat2ApiCaptureProfile(
                 val field = required.optString(index).trim()
                 if (field.isNotEmpty()) requiredFields.add(field)
             }
+            val cookieBundles = mutableListOf<Chat2ApiCookieBundle>()
+            val bundles = json.optJSONArray("cookieBundles") ?: JSONArray()
+            for (index in 0 until bundles.length()) {
+                val item = bundles.optJSONObject(index) ?: continue
+                val field = item.optString("field").trim()
+                val names = item.optJSONArray("names").toStringList().distinct()
+                val requiredNames = item.optJSONArray("requiredNames").toStringList().distinct()
+                val requiredAnyNames = item.optJSONArray("requiredAnyNames").toStringList().distinct()
+                if (field.isEmpty() || names.isEmpty() || names.size > 32) continue
+                if ((requiredNames + requiredAnyNames).any { it !in names }) continue
+                cookieBundles.add(Chat2ApiCookieBundle(field, names, requiredNames, requiredAnyNames))
+            }
             return Chat2ApiCaptureProfile(
                 allowedOrigins = json.optJSONArray("allowedOrigins").toStringList(),
                 authorizationField = authorization?.optString("field")?.trim()?.takeIf { it.isNotEmpty() },
                 cookieFields = cookieFields,
                 localStorageFields = localStorageFields,
-                requiredFields = requiredFields
+                requiredFields = requiredFields,
+                cookieBundles = cookieBundles
             )
         }
 
@@ -74,15 +95,31 @@ object Chat2ApiCredentialCapture {
 
     fun extractCookies(rawCookie: String?, profile: Chat2ApiCaptureProfile): Map<String, String> {
         if (rawCookie.isNullOrBlank()) return emptyMap()
-        val cookies = rawCookie.split(';').mapNotNull { part ->
+        val parsed = rawCookie.split(';').mapNotNull { part ->
             val separator = part.indexOf('=')
             if (separator <= 0) return@mapNotNull null
             val name = part.substring(0, separator).trim()
             val value = part.substring(separator + 1).trim()
-            val field = profile.cookieFields[name]
-            if (field.isNullOrEmpty() || value.isEmpty()) null else field to value
+            if (name.isEmpty() || value.isEmpty()) null else name to value
         }
-        return cookies.toMap()
+        val cookies = parsed.toMap()
+        val credentials = linkedMapOf<String, String>()
+        cookies.forEach { (name, value) ->
+            profile.cookieFields[name]?.let { credentials[it] = value }
+        }
+        // 单字段映射沿用既有行为；Cookie集合必须满足声明的完整条件，才允许触发完成回调。
+        profile.cookieBundles.forEach { bundle ->
+            if (bundle.requiredNames.any { it !in cookies }) return@forEach
+            if (bundle.requiredAnyNames.isNotEmpty() && bundle.requiredAnyNames.none { it in cookies }) return@forEach
+            val selected = bundle.names.mapNotNull { name -> cookies[name]?.let { name to it } }
+            if (selected.any { (name, value) ->
+                    parsed.count { it.first == name } != 1 || value.length > 4096 ||
+                        !Regex("^[\\x21\\x23-\\x2B\\x2D-\\x3A\\x3C-\\x5B\\x5D-\\x7E]+$").matches(value)
+                }) return@forEach
+            val packed = selected.joinToString("; ") { (name, value) -> "$name=$value" }
+            if (packed.isNotEmpty() && packed.length <= 16 * 1024) credentials[bundle.field] = packed
+        }
+        return credentials
     }
 
     fun merge(

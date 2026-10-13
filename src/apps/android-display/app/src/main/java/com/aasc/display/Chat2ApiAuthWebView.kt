@@ -214,6 +214,12 @@ class Chat2ApiAuthWebView(
             callback(emptyMap())
             return
         }
+        // 仅Cookie认证的Provider直接读取CookieManager，集合筛选仍由同一声明式捕获器执行。
+        // 不执行空的网页存储脚本，减少完成按钮与页面导航之间的异步窗口。
+        if (profile.localStorageFields.isEmpty()) {
+            callback(Chat2ApiCredentialCapture.merge(profile, pageUrl, cookies = CookieManager.getInstance().getCookie(pageUrl)))
+            return
+        }
         val storageKeys = JSONArray(profile.localStorageFields.keys.toList()).toString()
         val script = """
             (function() {
