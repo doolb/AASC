@@ -1,5 +1,41 @@
 # 豆包网页文字 Chat2API 与网页登录朗读 TTS 设计
 
+## 2026-10-13 纯Node普通LLM接入完成
+
+用户扩大授权后完成控制变量验证：完整官网请求、去a_bogus请求、Node自行构造的新会话及参考SDK桌面profile均正常返回。进一步仅保留五类Cookie及同账号device/web/fp/UA资料，断开CDP后由Node自行构造query/body，正式Provider工厂和CoreAdapter的流式、非流式均实际回复OK并正常结束；不使用页面fetch或签名。
+
+新增账号级可选nodeProfile明确选择Node传输，固定官方网页profile与来源；旧Cookie-only账号仍走既有受控网页模式。无显式账号映射时只在Node候选池调度；显式账号不可用时拒绝，不发送后换号/切传输。公开摘要剔除整块profile，格式校验不等于登录成功。请求容量、取消、SSE正文/思考边界保持原契约。本轮未保存真实凭据、未重启主服务、未出包；普通模式已真实验证，think/expert、长期令牌维护、Android/Linux仍待验收。使用资料见[纯Node普通LLM](../usage/chat2api-doubao-node.md)。
+
+## 2026-10-13 早期缺完整profile的Node诊断失败（历史）
+
+用户明确另授权“使用这个会话做纯Node发送”。仅从原Chrome官方target提取当前会话标识、白名单Cookie及UserAgent到内存，断CDP后由Axios直接发送一次“请只回复：OK”；未调用页面fetch/签名函数、未复制聊天历史。诊断wrapper设置conversation_id为当前会话、local_conversation_id为空、need_create_conversation=false、sub_conv_firstmet_type=0，并使用当前UA/官方会话Referer；生产代码未修改。实际529ms、HTTP200/SSE、SSE_HEARTBEAT→STREAM_ERROR→SSE_REPLY_END，业务码718013001，无有效回复，现有适配器映射doubao_upstream_failed/502。
+
+该码在本项目及参考SDK源码中没有专门释义，不能写成此前710022004验证码风控或声称已通过风控。原标签官网UI成功与此次同会话Node失败并存，沿用conversation_id并不足以证明Node可用；本次没有逐项复制官网query/signature/profile/user_context，不能据此否定所有纯HTTP协议。停止且不重试，凭据/会话ID/原始帧/回复正文均未保存，Chrome与原标签保持，无主服务器操作；下一步协议完善与新的真实请求仍需单独确认/授权。
+
+## 2026-10-13 原标签真实收发成功
+
+用户明确要求使用正在操作的原Chrome标签测试。仅连接先前核对的唯一官方target，不新建页、不导航；核对可见输入框为空后，通过现有contenteditable输入一次“请只回复：OK”。当前会话中实际POST /chat/completion，mode=0、newConversation=false、tts=false；HTTP200/SSE正常包含SSE_ACK、FULL_MSG_NOTIFY、STREAM_MSG_NOTIFY、STREAM_CHUNK及SSE_REPLY_END，无业务错误码。未保存或输出回复正文/Cookie/签名URL；临时观察与拦截状态已恢复，只断CDP，保留原标签/Chrome，未操作主服务器。
+
+这次也由脚本操作而成功，因此不能将前次临时页失败简单归因于“所有自动化都被阻断”。已知差别之一是原标签沿用既有会话，而临时页新建会话；页面状态/参数/新会话流程差异尚未控制变量验证，不能指定唯一根因。此为官网UI原标签成功，不是本项目固定path bridge的真实验收，也不是纯Node桌面协议成功。仍需按批准范围补齐协议并单独验证，不能将成功请求中的会话ID或秘密签名复制给其它账号。
+
+## 2026-10-13 实际官网路径与手动成功的区别
+
+在用户新增浏览器收发/路径观察授权下，新建同一Chrome登录context的临时官方页，由脚本通过输入框发送一次“请只回复：OK”。实际POST /chat/completion，query字段包括a_bogus、msToken、aid/real_aid、device_id、fp、web_id/tea_uuid/web_tab_id、版本/平台/时区；正文包含client_meta/ext/messages/option/user_context，普通模式0、新会话、tts_switch=false。HTTP200/SSE返回SSE_HEARTBEAT、STREAM_ERROR、SSE_REPLY_END，业务码710022004，无有效回复。临时测试页已关闭，原标签和Chrome保留，未重试；只记录路径/参数名/结构及固定状态，不保存凭据/签名URL/原始帧。
+
+用户随后说明自己在浏览器手动发送能成功。此为用户提供的成功证据，本轮没有观察那条手动成功请求；不能将脚本临时页的失败推定为账号失效或整个Chrome环境不可用。新页/已有页状态、页面初始化和自动化输入等因素尚未逐项排除，真实请求已包含安全签名字段，也不能仅以“缺a_bogus”解释失败。下一步优先比较用户原标签的手动成功请求（标签来源待用户补充），仅做已授权范围内的路径/字段结构观察，不自动重复发消息；SDK桌面profile和纯Node能否稳定成功仍独立待验证。
+
+## 2026-10-13 脱离浏览器的Node候选方案（待确认，不改运行代码）
+
+用户希望像其它Chat2API网页Provider一样由Node直接收发。源码核对：独立client.py正常请求链路使用aiohttp Cookie/CSRF、_security_params桌面端profile和SSE，不需要Playwright/page.evaluate；默认captcha_handler=auto的挑战处理会打开浏览器，None可关闭该分支。未发现该SDK在正常聊天路径中调用frontierSign，也未发现完整自动刷新self.ms_token的逻辑；不能据此推定服务端不校验其它状态或当前账号稳定可用。qr_login.py存在纯HTTP扫码代码，但登录端点/设备身份生成及默认设备值均未经本项目真实验收，不自动采用随机或作者设备身份。
+
+可先做独立Node桌面协议等价实现并mock验证：新增chat2api-doubao-desktop-protocol.js及测试，复用现有请求限额、固定来源、SSE解析和错误脱敏；Cookie来自显式所选账号，设备/profile必须同账号来源且格式规范，拒绝缺字段，不复制SDK硬编码默认身份。遇风控/验证码立即失败、零自动重试，不创建浏览器。真实单请求验收需重新明确授权。只有完整回复得到确认后再把desktop-http作为明确选择的实验transport接入既有runtime/core/WS控制配置，不自动在网页与Node之间回退。
+
+后续候选影响文件：doubao-chat-adapter及测试（传输注入/保留SSE）、data-store/credential-validators及测试（仅经用户确认的账号级设备profile白名单/导入；仍不把格式校验当登录成功）、doubao-web-config/web-ws/runtime/core及测试（显式transport、严格绑定），doubao-web-settings/self-test（只读能力、默认禁用、不要求浏览器target的Node模式）。第一阶段不修改真实账号、配置或现有网页运行模式。尚缺项是可验证的账号设备元信息来源及真实无验证码有效回复；该候选记录属于当时阶段；现在选择已验证的官网网页query profile实现Node，参见文首，不以早期失败否定现状。
+
+> 2026-10-13参考源码进一步核对：doubao2api默认CLI进入unified_server，服务启动BrowserClient，由Playwright自行启动/维持登录浏览器，chat_completion构造带网页aid/device_id/web_id/tea_uuid/fp/版本/msToken的query，再page.evaluate内fetch，以expose_function/asyncio.Queue回传SSE；网页fetch封装自动补安全参数是其设计意图，源码的非native检查不能代替真实请求证据。另一独立DoubaoChatClient SDK使用aiohttp直连、桌面端aid/client_platform及安全参数，并有验证码处理/重试分支；服务主文字路径没有调用该SDK。其browser_client模块顶部“all actual API traffic through httpx”注释与当前聊天函数不符，解释以实际调用链为准。我们的受控桥接已有页面fetch基础，但固定/chat/completion尚未补齐参考query profile与hook就绪检查；这部分是后续协议完善范围，不应把离线接线通过写作完全复刻或生产验收。今日Node实测仅针对现有Node适配器，并未逐项复现该SDK桌面端协议。此次只读源码，未读取运行session文件、凭据或发请求，未改运行代码。
+
+> 2026-10-13新增真实Node诊断：用户明确授权使用Chrome凭据。唯一官方豆包page的Cookie仅内存用于一次doubao普通模式“请只回复：OK”请求；HTTP200、text/event-stream，但SSE业务错误被现有适配器识别为doubao_risk_control（对外映射403），没有完整有效回复。仅说明当前账号/环境/请求路径仍遭业务风控；不把HTTP200当成功，也不推定其它路径永不可用。停止且不重试，没有网页fetch/TTS真实请求，没有保存凭据、原始帧或响应正文，未操作主服务器。既有Node HTTP403是先前独立测试记录，不能混写为本次HTTP状态。
+
 > 2026-10-12 用户确认实施纯文字 LLM，并允许用现有 Chrome 9222 的豆包页面进行一条短测试对话和一次朗读观察。本文仅覆盖网页账号；独立的豆包 API TTS 及先前未确认的多模态统一草案均不在本轮改动范围。
 
 > 当前实施状态：用户已批准B方案，完整Ogg校验、worker解码及Frontier/speech/TTS模拟接线均已实现；豆包网页朗读默认禁用、标为实验性，真实运行未重新验收。受控Chrome网页fetch已获独立实施确认并完成离线接线，默认关闭；真实账号/官网运行仍待另授权验收。后续最小只读授权仅用于核对公开模块协议，未读取Cookie/聊天内容，也没有新聊天或合成。
@@ -7,7 +43,7 @@
 
 ## 目标与边界
 
-用户进一步询问普通LLM接入。按当前网页任务上下文，建议通过项目已有普通LLM配置调用Chat2API的文字模型doubao，而不是使用语音模型doubao-chat；llm-service已有OpenAI兼容地址/模型配置，不需要新增一条业务聊天链路。现有文字适配器和取消已实现，但Node403，当前不能宣布普通豆包聊天可用。待确认工作是登录网页fetch运行路径：新增浏览器桥接及运行配置模块，修改doubao-chat-adapter/provider-adapters/runtime/core的注入与严格账号选择，沿用server-app/config-app-service及chat2api控制端的WS权威配置。真实页面绑定协议尚须可靠核对，核对失败不得仅因网址相同而启用；本轮不连接Chrome、不读凭据、不发真实请求，实施批准与真实验证授权分别处理。
+用户进一步询问普通LLM接入。按当前网页任务上下文，建议通过项目已有普通LLM配置调用Chat2API的文字模型doubao，而不是使用语音模型doubao-chat；llm-service已有OpenAI兼容地址/模型配置，不需要新增一条业务聊天链路。早期文字适配器和取消已实现，但当时缺完整profile的Node403；现在普通Node已按文首方案真实验证。以下为当时拟议的登录网页fetch路径：新增浏览器桥接及运行配置模块，修改doubao-chat-adapter/provider-adapters/runtime/core的注入与严格账号选择，沿用server-app/config-app-service及chat2api控制端的WS权威配置。真实页面绑定协议尚须可靠核对，核对失败不得仅因网址相同而启用；本轮不连接Chrome、不读凭据、不发真实请求，实施批准与真实验证授权分别处理。
 
 - Chat2API 内置 `doubaochat` 文字 Provider，复用已有 API Key 鉴权、账号持久化与启停、模型列表、调度、会话和管理界面；模型 `doubao`、`doubao-think`、`doubao-expert` 是网页 `need_deep_think` 模式别名，并非三个已证实的独立上游模型。只接文字，图片、视频、音频输入和上游原生函数调用不宣称支持。
 - 目标是在独立文字合成及用户选定的音频格式通过验收后新增业务 TTS Provider `doubao-chat`，与既有 `doubao-api` 和 `qwen-chat` 并存；届时仅允许 AI/Agent 回复与其模板选用。豆包网页账号 Cookie 由 Chat2API 管理，业务 TTS 配置只保存启停、受验证的网页朗读模型/音色及非秘密偏好。复用现有 `setTtsProviderConfig` 权威回传、重连补发、缓存和播报队列，不新增配置 HTTP 接口。**当前已作为默认禁用的实验选项列出；参数来自公开模块，真实账号/音色尚未重新验收。**

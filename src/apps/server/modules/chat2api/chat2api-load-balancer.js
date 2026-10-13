@@ -82,10 +82,13 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, modelMapper, 
     return selected;
   };
 
-  const selectAccount = async (model, strategy = 'round-robin', preferredProviderId, preferredAccountId, { requireSecret = false, requiredAccountId } = {}) => {
+  const selectAccount = async (model, strategy = 'round-robin', preferredProviderId, preferredAccountId, { requireSecret = false, requiredAccountId, allowedAccountIds } = {}) => {
+    // 内部调用方可在发送前限定可用传输的账号池；未指定时保留旧Provider的全部候选。
+    const allowedIds = Array.isArray(allowedAccountIds) ? new Set(allowedAccountIds) : null;
     // 语音调用要求已有登录凭证；默认保持既有聊天调用的候选契约。
     const candidates = (await availableCandidates(model, preferredProviderId, strategy === 'failover'))
       .filter(candidate => !requireSecret || candidate.account.secretConfigured === true)
+      .filter(candidate => !allowedIds || allowedIds.has(candidate.account.accountId))
       // 显式网页语音绑定不允许退选；未传该字段的旧聊天/千问调用保持原行为。
       .filter(candidate => requiredAccountId === undefined || (candidate.account.accountId === requiredAccountId && !isFailed(candidate.account.accountId)));
     if (candidates.length === 0) {

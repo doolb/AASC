@@ -53,18 +53,36 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       if(preferredProviderId && preferredProviderId!=='doubaochat')throw browserError('binding');
       preferredProviderId='doubaochat';
     }
+    // 凭据包显式配置了Node账号时，未指定账号的豆包请求在发送前只调度Node池。
+    // 这不是失败后的回退；明确映射的网页账号仍按网页绑定验证，不偷偷换到Node账号。
+    const isDoubao = preferredProviderId === 'doubaochat' || ['doubao', 'doubao-think', 'doubao-expert'].includes(request.model);
+    let selectionOptions = {};
+    if (isDoubao && preferredAccountId) selectionOptions = { requiredAccountId: preferredAccountId, requireSecret: true };
+    if (isDoubao && !preferredAccountId && typeof dataStore.listDoubaoNodeAccountIds === 'function') {
+      const nodeIds = await dataStore.listDoubaoNodeAccountIds();
+      if (nodeIds.length > 0) selectionOptions = { allowedAccountIds: nodeIds, requireSecret: true };
+    }
     let selection = await loadBalancer.selectAccount(
       request.model,
       'round-robin',
       preferredProviderId,
       preferredAccountId,
+      ...(isDoubao ? [selectionOptions] : []),
     );
     if (!selection) {
       throw createHttpError(503, 'no_available_account', `没有可用的模型账号: ${request.model}`);
     }
 
+    // 先核对所选豆包账号的显式传输资料。Node 账号不读取 Chrome 配置；Cookie-only 账号
+    // 保持既有网页绑定流程。仅凭字段存在选择模式，格式错误交给适配器拒绝，不自动回退。
+    let selectedDoubaoAccount;
+    if (selection.provider.id === 'doubaochat') {
+      selectedDoubaoAccount = await dataStore.getAccount(selection.account.accountId || selection.account.id);
+    }
+    const nodeMode = selectedDoubaoAccount?.credentials && Object.hasOwn(selectedDoubaoAccount.credentials, 'nodeProfile');
+    if (nodeMode && preferredAccountId && preferredAccountId !== (selection.account.accountId || selection.account.id)) throw browserError('binding');
     // 只约束豆包网页：优先账号不允许绕过绑定或退选到别人账号，旧Provider保持原调度。
-    if(selection.provider.id==='doubaochat'&&getDoubaoWebConfig){
+    if(selection.provider.id==='doubaochat'&&getDoubaoWebConfig&&!nodeMode){
       let binding;try{binding=normalizeDoubaoWebConfig(getDoubaoWebConfig())}catch{throw browserError('disabled')}
       if(!binding.enabled)throw browserError('disabled');
       if((preferredAccountId&&preferredAccountId!==binding.accountId)||(preferredProviderId&&preferredProviderId!=='doubaochat'))throw browserError('binding');
@@ -73,7 +91,8 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
     }
 
     const accountId = selection.account.accountId || selection.account.id;
-    const account = await dataStore.getAccount(accountId);
+    const account = selectedDoubaoAccount && (selectedDoubaoAccount.accountId || selectedDoubaoAccount.id) === accountId
+      ? selectedDoubaoAccount : await dataStore.getAccount(accountId);
     if (!account || (selection.provider.id==='doubaochat' && (account.providerId !== selection.provider.id || account.enabled === false || (account.status && account.status !== 'active')))) {
       throw createHttpError(503, 'account_not_found', `账号 ${accountId} 不存在`);
     }

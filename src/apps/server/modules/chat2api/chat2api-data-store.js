@@ -164,7 +164,7 @@ const createChat2ApiDataStore = (options = {}) => {
       // 账号导入只表示用户恢复凭据，不表示已验证登录；秘密不得散落在顶层或其他 secret 字段。
       const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'lastUsed', 'credentials', 'accountInfo']);
       if (Object.keys(account).some((key) => !accountFields.has(key))) {
-        throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie'), { statusCode: 422, code: 'doubao_invalid_credentials' });
+        throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie 及 credentials.nodeProfile'), { statusCode: 422, code: 'doubao_invalid_credentials' });
       }
       normalized.credentials = normalizeDoubaoCredentials(account.credentials);
       normalized.accountInfo = selectAccountInfo(account.accountInfo);
@@ -224,6 +224,15 @@ const createChat2ApiDataStore = (options = {}) => {
     const accounts = await readCollection('accounts', []);
     ensureArray(accounts, 'accounts');
     return accounts.map((account) => publicAccount(account));
+  };
+
+  /** 内部调度只需账号ID；一次读取集合，避免为判断传输而逐个读秘密或公开设备资料。 */
+  const listDoubaoNodeAccountIds = async () => {
+    const accounts = await readCollection('accounts', []);
+    ensureArray(accounts, 'accounts');
+    return accounts.filter(account => account.providerId === 'doubaochat' && account.enabled !== false
+      && (!account.status || account.status === 'active') && account.credentials?.nodeProfile)
+      .map(account => account.accountId);
   };
 
   const getAccount = async (accountId) => {
@@ -744,6 +753,7 @@ const createChat2ApiDataStore = (options = {}) => {
     mergeAccountImport,
     saveAccount,
     listAccounts,
+    listDoubaoNodeAccountIds,
     getAccount,
     updateAccount,
     deleteAccount,
