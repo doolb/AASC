@@ -12063,6 +12063,12 @@ TTS主题对比度构建进度：已有40项主题/旋转/DPI回归通过，Chro
 ### TTS白字主题色细描边与0.3背景
 
 - ✅ [2026-10-13] 按用户最终明确要求参考时间文本：白色文字、0.5px主题色细描边、时间同款阴影，黑色背景上下渐隐并将最高alpha改为0.3，保留8px模糊。
-  - 修改display.css/self-test.js；字号、字重、三行和历史规则保持，删除浅色主题深字/白底覆盖。先更新display-chat-mmd spec/design与新task，同步usage/todo/self-test；脚本语法/定向空白检查通过，servicePackage=true，服务73构建发布/设备观察进行中。
+  - 修改display.css/self-test.js；字号、字重、三行和历史规则保持，删除浅色主题深字/白底覆盖。先更新display-chat-mmd spec/design与新task，同步usage/todo/self-test；脚本语法/定向空白检查通过，servicePackage=true，服务73已发布LAN/WAN，40项回归/四主题计算值/API28实际播报与主题切换通过，完整HTTP大小SHA256/签名及精确清理通过。
 
-TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c79d9ef28d903e62257fe8366108655867545af2a6fd7b6cc93bff085fb；CRC/源码/v72仅两文件差异通过。40项主题旋转DPI回归通过，Chromium四主题白色填色/0.5px accent描边、时间阴影一致、0.3背景/blur8px及三行字号通过。servicePackage=false；LAN/WAN完整校验和ADB观察进行中。
+TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c79d9ef28d903e62257fe8366108655867545af2a6fd7b6cc93bff085fb；CRC/源码/v72仅两文件差异通过。40项主题旋转DPI回归通过，Chromium四主题白色填色/0.5px accent描边、时间阴影一致、0.3背景/blur8px及三行字号通过。servicePackage=false；LAN/WAN完整校验和ADB观察均通过。
+
+### TTS白字主题色细描边服务73发布验收
+
+- ✅ [2026-10-13] 发布code/code-v73.zip到LAN/WAN：17721468字节，SHA256 cd990c79d9ef28d903e62257fe8366108655867545af2a6fd7b6cc93bff085fb，最终签名清单SHA256 5e24c48d91529e05bc7931dc695397513bb045ac30e290649daff3038dacec99。
+  - 与v72仅display.css/self-test.js变化，CRC/源码/签名及全组件HTTP大小SHA256通过；精确清理旧code72，保留dependencies8/min40/full38/nodeMinSeeds69/dataRepair2，无清理错误。
+  - 40项既有主题/旋转/DPI回归通过；四主题白色填色与时间文本一致、0.5px accent描边、时间阴影一致、0.3背景/blur8px/三行字号通过；API28/min40实际播报及dark→mint主题细边变化通过，原主题已恢复。servicePackage=false，todo移除完成任务，design/spec/task/usage/self-test同步。
