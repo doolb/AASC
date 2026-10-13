@@ -1,3 +1,10 @@
+### 全量配置与聊天数据 ZIP 备份
+
+- ✅ [2026-10-13] 新增全局配置、用户配置与聊天数据 ZIP 导入导出；预览确认后服务器自动重启，在新进程加载配置前恢复。
+  - 新增 full-config-backup-service/http，更新 server-app、llm-service、upload.html、aasc-user-config.js/self-test.js；保留旧 JSON 功能。默认文件合并，可选完整替换；SHA-256/路径/JSON/数量与大小校验，事务备份、失败和进程中断回滚，重启响应处理幂等。
+  - APK NativeControl 新增系统文档流式 ZIP 保存，复用已有 TLS 连接策略；新增 FullConfigBackupSavePolicy 与原生测试。新增生产依赖 yazl 3.3.1，发布时重出依赖包。更新 design/spec/task/index/usage/self-test/todo，受影响发布项均标 true。
+  - 验证：后端11/11、真实 Chromium 4场景（含父用例5/5）通过；Android `:app:testDebugUnitTest` 成功，新增策略4项通过。24 MiB聊天往返1802 ms、峰值RSS259 MiB（包含夹具）。重启启动器/历史兼容/发布器29/29通过；更新启动器自测以覆盖共用重启流程，重复调用仅一次通知和退出。测试使用临时数据和虚构凭证，未操作真实配置或重启主服务；设备系统保存交互待安装验收。
+
 ### 显示端聊天与 MMD 控件层级
 
 - ✅ [2026-10-13] 聊天打开时将右侧灯光/动作/定位控件组放到聊天层下方，关闭聊天后恢复原层级。

@@ -776,6 +776,25 @@
             <div class="section" style="margin-top: 24px;">
                 <h2>aasc-user 配置备份</h2>
                 <div class="control-item" style="margin-top: 12px;">
+                    <label>全量 ZIP 备份（全局配置、用户配置与聊天数据）</label>
+                    <div class="control-buttons">
+                        <button class="control-btn" data-full-config-control onclick="AascUserConfig.exportFullConfig()">导出全量 ZIP</button>
+                        <button class="control-btn" data-full-config-control onclick="AascUserConfig.selectFullImport()">导入全量 ZIP</button>
+                        <select id="fullConfigBackupMode" data-full-config-control aria-label="全量配置恢复方式">
+                            <option value="merge">合并：覆盖同路径，保留额外文件</option>
+                            <option value="replace">完整替换：移除多余配置文件</option>
+                        </select>
+                        <input type="file" id="fullConfigBackupImportInput" accept="application/zip,.zip" hidden onchange="AascUserConfig.previewFullImport(this.files[0]); this.value=''">
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-secondary);">包含账号凭证和 API Key，请妥善保存。导入先校验和预览，确认后自动重启服务器并恢复配置。</p>
+                    <div id="fullConfigBackupPreview" hidden>
+                        <p id="fullConfigBackupPreviewText"></p>
+                        <button class="control-btn" data-full-config-control onclick="AascUserConfig.confirmFullImport()">确认导入并自动重启</button>
+                        <button class="control-btn" data-full-config-control onclick="AascUserConfig.cancelFullPreview()">取消</button>
+                    </div>
+                    <p id="fullConfigBackupStatus" role="status" aria-live="polite" style="font-size: 12px; color: var(--text-secondary);"></p>
+                </div>
+                <div class="control-item" style="margin-top: 12px;">
                     <label>导入/导出全部持久化配置</label>
                     <div class="control-buttons">
                         <button class="control-btn" onclick="AascUserConfig.exportConfig()">导出配置目录</button>

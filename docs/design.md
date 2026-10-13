@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [全量配置与聊天数据 ZIP 备份](design/full-config-backup.md)
+
 - [AI模型外网发布与双向同步（已实现并发布）](design/ai-model-sync.md)
 
 - [MMD-AR HS2 ZIPMOD接入可行性（待样例，尚未实现）](design/mmd-ar-hs2-zipmod.md)

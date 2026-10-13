@@ -17,7 +17,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** 控制 WebView 的原生桥：只负责启动/关闭隔离登录 Activity，不读取或记录凭据。 */
-class Chat2ApiNativeBridge(private val activity: Activity) {
+class Chat2ApiNativeBridge(
+    private val activity: Activity,
+    private val onFullConfigBackupSave: ((String) -> Boolean)? = null
+) {
 
     companion object {
         const val LOGIN_REQUEST_CODE = 1006
@@ -77,6 +80,27 @@ class Chat2ApiNativeBridge(private val activity: Activity) {
     @JavascriptInterface
     fun closeChat2ApiLogin() {
         // 登录成功后 Activity 已经通过 RESULT_OK 关闭，此方法保留作版本兼容的无操作确认接口。
+    }
+
+    /** 全量 ZIP 只传请求标识，文件由受限服务来源流式下载，避免大包经过 Base64 桥。 */
+    @JavascriptInterface
+    fun saveFullConfigBackup(requestId: String): Boolean {
+        if (!FullConfigBackupSavePolicy.validRequestId(requestId)
+            || activity.isFinishing || activity.isDestroyed) return false
+        val callback = onFullConfigBackupSave ?: return false
+        val accepted = AtomicBoolean(false)
+        val completed = CountDownLatch(1)
+        val launch = {
+            try { accepted.set(callback(requestId)) }
+            catch (_: Exception) { /* 页面根据返回值报告失败，不记录备份内容。 */ }
+            finally { completed.countDown() }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) launch()
+        else {
+            activity.runOnUiThread(launch)
+            completed.await(2, TimeUnit.SECONDS)
+        }
+        return accepted.get()
     }
 
     /** 将控制端导出的 JSON 保存到系统 Download 目录，不记录或回显文件内容。 */

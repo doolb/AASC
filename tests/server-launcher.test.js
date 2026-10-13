@@ -153,12 +153,33 @@ test('服务器重启接口只通知启动器，不再 detached 启动新进程'
     const source = fs.readFileSync(SERVER_PATH, 'utf8');
     const restartStart = source.indexOf("app.post('/api/restart'");
     const restartEnd = source.indexOf('let processShutdownStarted');
-    const restartBlock = source.slice(restartStart, restartEnd);
+    const restartRoute = source.slice(restartStart, restartEnd);
+    assert.match(restartRoute, /res\.once\(['"]finish['"],\s*requestManagedServerRestart\)/u);
+    const restartBlock = source.slice(source.indexOf('let serverRestartScheduled = false'), restartStart);
 
     assert.match(restartBlock, /process\.send\(\{\s*type:\s*['"]restartRequested['"]/u);
     assert.match(restartBlock, /tui\.destroy\(\)/u);
     assert.doesNotMatch(restartBlock, /detached\s*:\s*true/u);
     assert.doesNotMatch(restartBlock, /stdio\s*:\s*['"]ignore['"]/u);
+});
+
+test('共用重启流程重复触发仍只通知一次启动器并退出一次', () => {
+    const source = fs.readFileSync(SERVER_PATH, 'utf8');
+    const block = source.slice(source.indexOf('let serverRestartScheduled = false'), source.indexOf("app.post('/api/restart'"));
+    const vm = require('node:vm');
+    const sent = []; const timers = []; const exits = [];
+    let closed = 0; let destroyed = 0;
+    const context = vm.createContext({
+        process: { send: message => sent.push(message.type) }, log: () => {}, logError: () => {},
+        setTimeout: callback => timers.push(callback),
+        wss: { clients: [{ close: () => { closed += 1; } }] },
+        tui: { destroy: () => { destroyed += 1; } }, shutdownManagedRuntimes: code => exits.push(code)
+    });
+    vm.runInContext(`${block}\nrequestManagedServerRestart();requestManagedServerRestart();`, context);
+    assert.equal(timers.length, 1);
+    timers[0]();
+    assert.deepEqual(sent, ['restartRequested']); assert.deepEqual(exits, [0]);
+    assert.equal(closed, 1); assert.equal(destroyed, 1);
 });
 
 test('npm start 和 main 入口均指向前台启动器', () => {

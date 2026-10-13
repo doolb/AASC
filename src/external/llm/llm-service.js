@@ -2090,6 +2090,12 @@ function exportUserConfig() {
     return historyStore.createUserConfigExport();
 }
 
+// 全量导出只刷新确有待保存的聊天，不能因一次备份把磁盘历史重写成裁剪后的内存快照。
+function flushPendingHistoryForBackup() {
+    if (!historySaveTimer && pendingChangedHistoryFiles.size === 0) return;
+    if (!flushHistorySave()) throw new Error('聊天历史保存失败，未生成全量备份');
+}
+
 function importUserConfig(payload, options = {}) {
     if (!flushHistorySave()) throw new Error('聊天历史保存失败');
     const result = historyStore.importUserConfig(payload, options);
@@ -2151,6 +2157,7 @@ module.exports = {
     exportHistory,
     importHistory,
     exportUserConfig,
+    flushPendingHistoryForBackup,
     importUserConfig,
     chat,
     chatStream,

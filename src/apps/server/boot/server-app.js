@@ -8,6 +8,13 @@ const fs = require('fs');
 const { spawn } = require('node:child_process');
 const { pipeline } = require('stream');
 const multer = require('multer');
+// 全量恢复只能在旧进程退出后、任何配置缓存加载前应用，避免服务启动又写回旧值。
+const { createFullConfigBackupService, applyPendingConfigImport } = require('../modules/config/full-config-backup-service');
+const configImportResult = applyPendingConfigImport();
+if (configImportResult) {
+    const output = configImportResult.status === 'failed' ? console.error : console.log;
+    output(`[ConfigBackup] 启动前恢复 status=${configImportResult.status}${configImportResult.message ? ` error=${configImportResult.message}` : ''}`);
+}
 const config = require('../modules/config/config-app-service');
 const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
@@ -5295,6 +5302,15 @@ app.post('/api/chat/history/import', (req, res) => {
     }
 });
 
+const { mountFullConfigBackupRoutes } = require('../modules/config/full-config-backup-http');
+const fullConfigBackupService = createFullConfigBackupService({ prepareExport: () => chat.flushPendingHistoryForBackup() });
+mountFullConfigBackupRoutes(app, {
+    service: fullConfigBackupService,
+    canRestart: () => typeof process.send === 'function' && process.connected === true,
+    requestRestart: requestManagedServerRestart,
+    logger: (level, message) => level === 'error' ? logError('Config', message) : log('Config', message)
+});
+
 app.get('/api/aasc-user/export', (req, res) => {
     try {
         const payload = chat.exportUserConfig();
@@ -6281,9 +6297,10 @@ app.post('/api/unmute', (req, res) => {
     });
 });
 
-app.post('/api/restart', (req, res) => {
-    res.json({ status: 'success', message: '服务器正在重启...' });
-
+let serverRestartScheduled = false;
+function requestManagedServerRestart() {
+    if (serverRestartScheduled) return;
+    serverRestartScheduled = true;
     log('系统', '收到重启请求，正在关闭服务器...');
 
     setTimeout(() => {
@@ -6303,6 +6320,12 @@ app.post('/api/restart', (req, res) => {
         tui.destroy();
         void shutdownManagedRuntimes(0);
     }, 100);
+}
+
+app.post('/api/restart', (req, res) => {
+    res.once('finish', requestManagedServerRestart);
+    res.once('close', requestManagedServerRestart);
+    res.json({ status: 'success', message: '服务器正在重启...' });
 });
 
 let processShutdownStarted = false;

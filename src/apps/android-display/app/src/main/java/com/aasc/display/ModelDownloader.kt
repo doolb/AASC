@@ -108,7 +108,8 @@ object ModelDownloader {
         }
     }
 
-    private fun openConnection(urlStr: String): HttpURLConnection {
+    // 配置 ZIP 保存复用同一系统/固定证书校验，不能另建跳过验证的 HTTPS 客户端。
+    internal fun openConnection(urlStr: String): HttpURLConnection {
         val raw = URL(urlStr).openConnection()
         if (raw !is HttpsURLConnection) return raw as HttpURLConnection
         val sslContext = SSLContext.getInstance("TLS")

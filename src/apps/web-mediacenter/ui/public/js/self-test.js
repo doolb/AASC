@@ -39,6 +39,29 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'full_config_zip_backup',
+            name: '全量配置 ZIP 备份入口',
+            description: '只读检查全量备份控件与恢复结果接口，不导出、导入或重启',
+            category: '系统功能',
+            run: async () => {
+                const controller = window.AascUserConfig;
+                const input = document.getElementById('fullConfigBackupImportInput');
+                const mode = document.getElementById('fullConfigBackupMode');
+                const valid = controller && typeof controller.exportFullConfig === 'function'
+                    && typeof controller.confirmFullImport === 'function' && input?.accept.includes('.zip')
+                    && mode && [...mode.options].map(option => option.value).join(',') === 'merge,replace';
+                if (!valid) return { success: false, message: '全量 ZIP 备份控件或模块缺失' };
+                try {
+                    const response = await fetch('/api/config-backup/status', { cache: 'no-store' });
+                    const data = await response.json();
+                    const success = response.ok && data.status === 'success'
+                        && ['idle', 'pending', 'applied', 'failed'].includes(data.result?.status);
+                    return { success, message: success ? 'ZIP 备份入口与只读状态正常' : 'ZIP 恢复状态异常',
+                        details: '本项不生成备份文件，不修改配置，不触发自动重启' };
+                } catch (error) { return { success: false, message: `状态读取失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'doubao_web_runtime_config',
             name: '豆包普通LLM网页运行配置',
             description: '只读检查默认关闭、严格绑定和显式会话核对授权，不访问Chrome或发送聊天',

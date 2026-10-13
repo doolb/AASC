@@ -28,6 +28,7 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.CookieManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -39,6 +40,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import java.io.File
+import java.net.HttpURLConnection
+import java.util.concurrent.Executors
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
@@ -72,6 +75,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var offlineDisplayInfo: TextView
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
+    private data class BackupExportRequest(val id: String, val page: WebView, val url: String)
+    private var pendingBackupExport: BackupExportRequest? = null
+    private var backupExportInProgress = false
+    private val backupExportExecutor = Executors.newSingleThreadExecutor()
+    @Volatile private var backupExportConnection: HttpURLConnection? = null
+    private val backupExportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        val request = pendingBackupExport
+        pendingBackupExport = null
+        if (request != null) {
+            if (uri == null) completeBackupExport(request, "cancelled")
+            else saveBackupExport(request, uri)
+        }
+    }
     private var pendingWebFileChooser: ValueCallback<Array<Uri>>? = null
     private val webFileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -485,6 +503,10 @@ class MainActivity : AppCompatActivity() {
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         cancelOfflineUpdatePanelCollapse()
         completePendingWebFileChooser(null)
+        pendingBackupExport?.let { completeBackupExport(it, "cancelled") }
+        pendingBackupExport = null
+        backupExportConnection?.disconnect()
+        backupExportExecutor.shutdownNow()
         nativeDisplayBridge?.release()
         audioFocusController.abandon()
         super.onDestroy()
@@ -1303,7 +1325,7 @@ class MainActivity : AppCompatActivity() {
             onFileChooserRequested = ::requestWebViewFileChooser
         )
         control.visibility = View.GONE
-        control.addJavascriptInterface(Chat2ApiNativeBridge(this), "NativeControl")
+        control.addJavascriptInterface(Chat2ApiNativeBridge(this, ::requestFullConfigBackupSave), "NativeControl")
         control.webViewClient = createWebViewClient(null, baseUrl, false)
         // 插入到 display WebView 之上、控制按钮和启动遮罩之下，避免控制页被显示页覆盖。
         webContainer.addView(control, 1)
@@ -1333,6 +1355,97 @@ class MainActivity : AppCompatActivity() {
         val callback = pendingWebFileChooser ?: return
         pendingWebFileChooser = null
         callback.onReceiveValue(result)
+    }
+
+    /** 系统创建文档由用户选择位置，无需新增通用存储权限。 */
+    private fun requestFullConfigBackupSave(requestId: String): Boolean {
+        if (backupExportInProgress || isFinishing || isDestroyed) return false
+        val page = controlWebView ?: return false
+        val downloadUrl = FullConfigBackupSavePolicy.downloadUrl(page.url) ?: return false
+        val request = BackupExportRequest(requestId, page, downloadUrl)
+        pendingBackupExport = request
+        backupExportInProgress = true
+        return try {
+            backupExportLauncher.launch("aasc-full-config-${System.currentTimeMillis()}.zip")
+            true
+        } catch (_: Exception) {
+            pendingBackupExport = null
+            backupExportInProgress = false
+            false
+        }
+    }
+
+    private fun saveBackupExport(request: BackupExportRequest, uri: Uri) {
+        if (FullConfigBackupSavePolicy.downloadUrl(request.page.url) != request.url) {
+            try { contentResolver.delete(uri, null, null) } catch (_: Exception) { /* 保留来源错误。 */ }
+            completeBackupExport(request, "error", "控制页来源已改变，请重新导出")
+            return
+        }
+        val cookie = CookieManager.getInstance().getCookie(request.url)
+        backupExportExecutor.execute {
+            var connection: HttpURLConnection? = null
+            var saved = false
+            var message = "保存 ZIP 失败"
+            try {
+                val activeConnection = ModelDownloader.openConnection(request.url)
+                connection = activeConnection
+                backupExportConnection = activeConnection
+                activeConnection.instanceFollowRedirects = false
+                activeConnection.connectTimeout = 15_000
+                activeConnection.readTimeout = 30_000
+                activeConnection.setRequestProperty("Cache-Control", "no-cache")
+                if (!cookie.isNullOrEmpty()) activeConnection.setRequestProperty("Cookie", cookie)
+                check(activeConnection.responseCode == 200) { "备份下载失败：HTTP ${activeConnection.responseCode}" }
+                check(activeConnection.contentType.orEmpty().substringBefore(';').trim() == "application/zip") { "服务器未返回 ZIP 文件" }
+                val expected = activeConnection.contentLengthLong
+                check(expected <= FullConfigBackupSavePolicy.MAX_ZIP_BYTES) { "ZIP 超过 100 MiB 保存上限" }
+                activeConnection.inputStream.buffered().use { input ->
+                    input.mark(4)
+                    val header = ByteArray(4)
+                    var headerSize = 0
+                    while (headerSize < header.size) {
+                        val count = input.read(header, headerSize, header.size - headerSize)
+                        if (count < 0) break
+                        headerSize += count
+                    }
+                    check(headerSize == 4 && FullConfigBackupSavePolicy.isZipHeader(header)) { "备份 ZIP 文件头无效" }
+                    input.reset()
+                    contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var total = 0L
+                        while (true) {
+                            check(!Thread.currentThread().isInterrupted) { "已取消保存 ZIP" }
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            check(total <= FullConfigBackupSavePolicy.MAX_ZIP_BYTES) { "ZIP 超过 100 MiB 保存上限" }
+                            output.write(buffer, 0, count)
+                        }
+                        check(expected < 0 || total == expected) { "ZIP 下载不完整，请重新导出" }
+                        output.flush()
+                    } ?: error("无法打开选择的保存位置")
+                }
+                saved = true
+            } catch (error: Exception) {
+                message = error.message ?: message
+            } finally {
+                connection?.disconnect()
+                backupExportConnection = null
+                if (!saved) {
+                    try { contentResolver.delete(uri, null, null) } catch (_: Exception) { /* 不覆盖原始失败信息。 */ }
+                }
+            }
+            runOnUiThread { completeBackupExport(request, if (saved) "saved" else "error", if (saved) "" else message) }
+        }
+    }
+
+    /** 保存完成、取消和失败返回同一页面回调，避免网页长时间停留在忙碌状态。 */
+    private fun completeBackupExport(request: BackupExportRequest, status: String, message: String = "") {
+        backupExportInProgress = false
+        if (isDestroyed || controlWebView !== request.page
+            || FullConfigBackupSavePolicy.downloadUrl(request.page.url) != request.url) return
+        val payload = JSONObject().put("requestId", request.id).put("status", status).put("message", message)
+        request.page.evaluateJavascript("window.onFullConfigBackupSaved && window.onFullConfigBackupSaved($payload);", null)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
