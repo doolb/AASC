@@ -3,7 +3,7 @@ const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-prot
 
 // 业务选择对应 .src/framework/tts-provider-configuration.md；模板空 Provider 表示继承。
 const PROVIDERS = Object.freeze(['system', 'qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat']);
-const SYSTEM_BROADCAST_PROVIDERS = new Set(['system', 'qwen-api', 'doubao-api']);
+const SYSTEM_BROADCAST_PROVIDERS = new Set(['system', 'qwen-chat', 'qwen-api', 'doubao-api']);
 const BUSINESS_TYPES = Object.freeze({
     AI_REPLY: 'ai_reply', AGENT_REPLY: 'agent_reply',
     TEXT_MEDIA: 'text_media', SYSTEM_BROADCAST: 'system_broadcast'

@@ -133,6 +133,7 @@ const { createDoubaoWebWs } = require('../modules/chat2api/chat2api-doubao-web-w
 const { createDoubaoBrowserBridge } = require('../modules/chat2api/chat2api-doubao-browser-bridge');
 const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
+const { filterQwenChatSpeechText } = require('../modules/tts/qwen-chat-text-filter');
 const { resolveChatReplyTtsOptions } = require('../modules/chat/chat-reply-tts-context');
 const { generateChatTtsActions } = require('../modules/chat/chat-tts-actions');
 const { adjustWav, decodeAudio } = require('../modules/tts/tts-provider-http');
@@ -1213,6 +1214,7 @@ async function startServer() {
         voiceCommand.setTtsRouter({
             speak: async ({ displayId, text, action, extra }) => {
                 const audioPath = await generateTtsWithFallback(text, undefined, undefined, displayId);
+                if (audioPath === null) return true;
                 sendToDisplay(displayId, {
                     type: 'voiceCommand',
                     action,
@@ -3751,6 +3753,10 @@ app.post('/api/tts/generate', async (req, res) => {
         }
         
         const audioPath = await generateTtsWithFallback(text, voice, speed);
+        // qwen-chat仅表情输入是正常跳过，返回明确结果而不是构造不存在的音频URL。
+        // 旧显示端只在success时加载audioUrl；独立skipped状态使其正常结束当前项，
+        // 避免success加空URL让播放器等待一个永远不会到达的音频结束事件。
+        if (audioPath === null) return res.json({ status: 'skipped', skipped: true, audioUrl: null, message: '无可朗读正文，已跳过' });
         const fileName = path.basename(audioPath);
         res.json({
             status: 'success',
@@ -7025,7 +7031,7 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
     if (options.systemRoute !== true) {
         return ttsProviderService.generate({ text: normalizeTtsPauseText(text), voice, speed, preferredDisplayId,
             businessType: options.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST, templateTts: options.templateTts,
-            userText: options.userText });
+            userText: options.userText }, { configuration: options.ttsConfiguration });
     }
     const ttsText = normalizeTtsPauseText(text);
     const ttsDevice = config.get('tts.device', 'server');
@@ -7083,8 +7089,10 @@ async function sendVoiceInputTts(text, playbackOptions = {}) {
         text,
         undefined,
         undefined,
-        initialTargetDisplayId
+        initialTargetDisplayId,
+        { ttsConfiguration: playbackOptions.ttsConfiguration }
     );
+    if (audioPath === null) return 0;
     const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
     const targetDisplayId = resolveCurrentVoicePlaybackTarget(preferredDisplayId);
     if (!targetDisplayId) {
@@ -7127,6 +7135,7 @@ async function sendTextInputAnnouncement(displayId, data) {
 
     try {
         const audioPath = await generateTtsWithFallback(text, undefined, undefined, displayId);
+        if (audioPath === null) return false;
         const sent = sendToDisplay(displayId, {
             type: 'tts',
             action: 'playAudio',
@@ -7154,6 +7163,7 @@ async function sendMediaNameTts(displayId, text) {
 
     try {
         const audioPath = await generateTtsWithFallback(normalizedText, undefined, undefined, displayId);
+        if (audioPath === null) return false;
         return sendToDisplay(displayId, {
             type: 'tts',
             action: 'playAudio',
@@ -7170,12 +7180,20 @@ async function sendMediaNameTts(displayId, text) {
 // 回调内部仍负责选择通用或控制端定向播放目标，本函数只负责分句和顺序。
 async function sendVoiceTtsSentences(text, sendSentence) {
     const sentences = chat.splitIntoSentences(text);
-    const orderedSentences = sentences.length > 0 ? sentences : [text];
+    const candidates = sentences.length > 0 ? sentences : [text];
+    const snapshot = ttsProviderService.resolve({ businessType: BUSINESS_TYPES.SYSTEM_BROADCAST });
+    const provider = snapshot.selection.provider;
+    // 仅千问会跳过表情句，先排除这些句子再确定批次尾标记；原显示文字保持，
+    // 避免最后一段没有音频时丢失结束标记。其它Provider沿用原文和原分句。
+    const orderedSentences = provider === 'qwen-chat'
+        ? candidates.filter(sentence => Boolean(filterQwenChatSpeechText(sentence))) : candidates;
+    if (orderedSentences.length === 0) return;
     const batchId = generateCorrelationId('voice-tts-batch');
     for (let index = 0; index < orderedSentences.length; index++) {
         await sendSentence(orderedSentences[index], {
             batchId,
-            batchEnd: index === orderedSentences.length - 1
+            batchEnd: index === orderedSentences.length - 1,
+            ttsConfiguration: snapshot.configuration
         });
     }
 }
@@ -7208,8 +7226,10 @@ async function sendVoiceCommandTts(text, targetDisplayId, playbackOptions = {}) 
         text,
         undefined,
         undefined,
-        initialTargetDisplayId
+        initialTargetDisplayId,
+        { ttsConfiguration: playbackOptions.ttsConfiguration }
     );
+    if (audioPath === null) return false;
     const actualTargetDisplayId = resolveCurrentVoicePlaybackTarget(targetDisplayId);
     if (!actualTargetDisplayId) {
         log('TTS', 'TTS 生成完成但没有可用语音播放显示端，跳过控制端语音下发');
@@ -9827,6 +9847,7 @@ async function handleControlMessageFallback(data, ws) {
                                     if (isRepairModeTtsSuppressed()) return;
                                     try {
                                         const audioPath = await generateTtsWithFallback(text);
+                                        if (audioPath === null) return;
                                         const fileName = path.basename(audioPath);
                                         sendToControl({
                                             type: 'playOnControl',
@@ -9841,6 +9862,7 @@ async function handleControlMessageFallback(data, ws) {
                                     if (isRepairModeTtsSuppressed()) return;
                                     try {
                                         const audioPath = await generateTtsWithFallback(text);
+                                        if (audioPath === null) return;
                                         const fileName = path.basename(audioPath);
                                         sendToControl({
                                             type: 'playOnControl',
@@ -10126,6 +10148,7 @@ async function handleControlMessageFallback(data, ws) {
                             const text = todayReminders.map(r => `${r.time} ${r.content}`).join('，');
                             try {
                                 const audioPath = await generateTtsWithFallback(`今日提醒：${text}`);
+                                if (audioPath === null) return;
                                 const fileName = path.basename(audioPath);
                                 sendToDisplay(displayId, {
                                     type: 'tts',
@@ -10139,6 +10162,7 @@ async function handleControlMessageFallback(data, ws) {
                         } else if (displayId) {
                             try {
                                 const audioPath = await generateTtsWithFallback('今天没有提醒');
+                                if (audioPath === null) return;
                                 const fileName = path.basename(audioPath);
                                 sendToDisplay(displayId, {
                                     type: 'tts',
@@ -11263,6 +11287,7 @@ async function sendSearchTts(text, options = {}) {
 
     if (playOnControl) {
         const audioPath = await generateTtsWithFallback(text);
+        if (audioPath === null) return;
         sendToControl({
             type: 'playOnControl',
             audioUrl: `/uploads/tts/${path.basename(audioPath)}`,

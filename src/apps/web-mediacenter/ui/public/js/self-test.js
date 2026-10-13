@@ -96,7 +96,7 @@ const SelfTest = {
                 const providers = ['system', 'qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat'];
                 const selections = ['aiReplyDefault', 'textMedia', 'systemBroadcast'];
                 const valid = selections.every(key => providers.includes(config[key]?.provider))
-                    && !['textMedia', 'systemBroadcast'].some(key => ['qwen-chat', 'doubao-chat'].includes(config[key].provider))
+                    && !['textMedia', 'systemBroadcast'].some(key => config[key].provider === 'doubao-chat')
                     && providers.every(id => config.providers[id] && !Object.hasOwn(config.providers[id], 'credential'))
                     && !Object.hasOwn(config.providers.system, 'enabled')
                     && !Object.hasOwn(config.providers.system, 'defaultVoice')

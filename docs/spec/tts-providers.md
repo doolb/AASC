@@ -1,5 +1,47 @@
 # TTS Provider 与播报配置实现
 
+## 开放qwen-chat非AI业务（2026-10-13，已实现伪代码）
+
+```text
+已有声明：
+  BUSINESS_TYPES/BUSINESS_KEYS、SYSTEM_BROADCAST_PROVIDERS、validateBusinessProvider
+  normalizeSettings -> 业务选择校验；resolveProviderConfig -> 生成前相同校验
+  TtsProviderSettings.selectProvider、SelfTest.tts_provider_config
+  createQwenChatProvider -> emoji过滤；无正文返回null
+  textMediaTtsService -> 当前句/预取/目标路由；textSentenceTtsError -> 播放器跳过
+  generateTtsWithFallback -> 统一业务合成；系统/控制端/语音命令 -> 音频路径消费
+新增定义：
+  非AI可用Provider -> 原system/qwen-api/doubao-api + qwen-chat
+  NoSpeechResult -> 既有null，不制造空音频、临时文件或新播放命令
+操作流程：
+  保存或生成的text_media/system_broadcast选择qwen-chat -> 策略允许
+  ai_reply/agent_reply -> 原模板与AI默认规则
+  页面三类业务选择 -> 均显示qwen-chat；不替换现有保存值
+  self-test -> 三类选择可为qwen-chat，只读、不发送合成
+  同Provider音色继承/模型映射/速度音量 -> 原统一规划，不跨来源继承
+  qwen正文 -> Chat2API当前账号合成 -> 完整WAV -> 原缓存/播放
+  qwen过滤后无正文 -> null -> 消费端识别后跳过，不调用basename或下发空URL
+  文本阅读null -> 清理预取状态、发送原可定位跳过通知、继续下一句
+  系统/自定义/语音命令null -> 按已有响应/批次契约完成跳过，不记录生成失败
+  语音命令批次所选systemBroadcast为qwen-chat -> 先按既有过滤器去除不能朗读片段
+  可朗读句子 -> 编号/标记最后一句 -> 原串行发送；全空 -> 不创建播放批次
+  其它Provider批次 -> 原文与原分句；不共用qwen专属筛选
+  语音命令批次 -> resolve捕获规范化configuration与selection；过滤和生成共用同一快照
+  playbackOptions.ttsConfiguration -> generateTtsWithFallback内部选项 -> service.generate第二参数configuration
+  service.resolve(request,configuration=getSettings()) -> 同快照的业务选择/参数；账号与映射仍由Chat2API实时读取
+  批次内权威配置变化 -> 不改当前批次Provider/音色；下一批读取新配置
+  该快照不是公共请求字段，不接受控制端指定Provider或凭据
+  自定义/api/tts/generate无正文 -> HTTP200，status=skipped/skipped=true/audioUrl=null
+  原显示端只在status=success时启动音频 -> skipped沿用原结束当前项分支，释放队列/批次
+  不返回success加空URL，避免旧显示端陷入无法触发ended的播放状态
+  非null错误 -> 原失败提示，不回退system或其它来源
+验收：
+  四种业务解析成功，未知业务/Provider仍拒绝；豆包网页原限制仍有效
+  textMedia/systemBroadcast保存、权威广播与重连保留qwen-chat/音色
+  隔离浏览器选项和只读自测；本地模拟生成及emoji空句跳过/队列推进
+  无账号/停用/上游失败原错误；旧AI/Agent、其它Provider、WAV缓存播放回归
+```
+
 ## 四路统一实现（2026-10-13，当前伪代码）
 
 ```text
@@ -305,7 +347,7 @@ Chat2API服务:
   AI/Agent来源模板 -> 模板Provider或AI默认Provider -> 最终Provider
   无模板群聊 -> AI默认Provider；临时角色 -> 当前模板
   文本媒体 -> textMedia；报时/状态/任务/自定义 -> systemBroadcast
-  非AI业务 -> 拒绝qwen-chat
+  非AI业务 -> 允许qwen-chat，豆包网页仍按原实验范围拒绝
   system音色 -> 新选择voice=null -> 旧生成接口/原生音色
   其他Provider音色 -> 显式音色 -> 相同Provider的业务默认音色 -> 最终Provider自身默认
   参数 -> 规范化有限数字 -> Provider默认速度/音量
@@ -333,7 +375,7 @@ Chat2API服务:
 
 自测流程:
   模板继承、显式system、Provider切换、同Provider音色默认、空值与非法输入
-  textMedia独立选择、非AI拒绝qwen-chat、Agent来源模板与群聊默认
+  textMedia独立选择、非AI允许qwen-chat且豆包网页限制保留、Agent来源模板与群聊默认
   配置脱敏、空凭证保留、清除、保存失败权威值回退、多端广播及重连
   本地HTTP/WebSocket模拟Provider的成功、鉴权失败、超时、空/超大音频、截断事件
   本地HTTP验证校时Cookie、注册/刷新、签名参数、令牌隔离与超时
@@ -369,7 +411,7 @@ Chat2API服务:
   原Markdown/分句/调度/控制端及显示端目标 -> 原缓存及播放消息
 自测流程:
   私聊/Agent/临时当前与旧历史组/群聊/旧记录，切换角色后不串音色
-  手动播放与自动回复一致、模板继承/显式system、qwen-chat仅AI业务
+  手动播放与自动回复一致、模板继承/显式system、qwen-chat全部既有业务
   speech优先、控制端/显示端/多选目标兼容、无上下文的自定义播报不变
   本地HTTP/WSS与浏览器或正式Chat模块验证，无真实账号凭证输出
 ```

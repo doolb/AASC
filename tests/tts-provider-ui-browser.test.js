@@ -185,8 +185,31 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         });
         assert.deepEqual(templateResults.map(body => body.tts), [{ voice: null }, { provider: 'system', voice: null }]);
         await page.addScriptTag({ content: read('js/self-test.js') });
+        // 非AI业务可保存国内千问，权威回填和重连后自测仍合法且不请求上游。
+        for (const group of [2, 3]) {
+            const values = await page.$eval(`#ttsProviderFields > div:nth-of-type(${group}) select`, node => [...node.options].map(option => option.value));
+            assert.ok(values.includes('qwen-chat'));
+            assert.ok(!values.includes('doubao-chat'));
+        }
+        await page.evaluate(() => {
+            for (const group of [2, 3]) {
+                const select = document.querySelector(`#ttsProviderFields > div:nth-of-type(${group}) select`);
+                select.value = 'qwen-chat';
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+        await page.click('#ttsProviderSaveBtn');
+        const qwenRequest = await page.evaluate(() => window.sent.at(-1));
+        assert.equal(qwenRequest.config.textMedia.provider, 'qwen-chat');
+        assert.equal(qwenRequest.config.systemBroadcast.provider, 'qwen-chat');
+        const qwenSaved = redactSettings(normalizeSettings(qwenRequest.config));
+        await page.evaluate(value => window.TtsProviderSettings.handleConfig({ type: 'ttsProviderConfig', success: true, config: value }), qwenSaved);
+        await page.evaluate(() => window.TtsProviderSettings.handleDisconnected());
+        await page.evaluate(value => window.TtsProviderSettings.handleConfig({ type: 'ttsProviderConfig', config: value }), qwenSaved);
+        const sentBeforeSelfTest = await page.evaluate(() => window.sent.length);
         const selfTest = await page.evaluate(() => SelfTest.tests.find(test => test.id === 'tts_provider_config').run());
         assert.equal(selfTest.success, true);
+        assert.equal(await page.evaluate(() => window.sent.length), sentBeforeSelfTest);
         await page.$eval('#ttsProviderFields', element => {
             for (const node of element.querySelectorAll('details')) node.open = /^(系统原生|国内千问)/u.test(node.querySelector('summary').textContent);
         });

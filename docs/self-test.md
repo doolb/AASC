@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## qwen-chat全部播报业务（2026-10-13）
+
+定向TTS Provider＋policy＋文本媒体服务/player＋语音/提醒路由＋隔离浏览器配置151/151，npm run test:mmd-production:tts19/19。先运行RED，再实现：非AI业务解析、保存/重载与权威回填/重连、页面两类选项和只读自测、四业务各自音色、纯表情零上游/缓存、文本预取null释放/取消迟到隔离、正式系统及自定义生成跳过、语音批次尾标记、其他来源原文保持。终审2项Important均修复：批次期间切换Provider仍按快照收尾，旧显示端处理status=skipped后推进下一项并清理批次，正式函数VM模拟验证。
+
+所有生成使用模拟服务或localhost；隔离Chromium不读取实际浏览器账号。未发送真实合成或操作主服务器，真实阅读/声音和设备体验待部署验收。
+
 ## Chat2API 四路统一应用与音色映射（2026-10-13）
 
 `npm run check:chat2api` 231项：228通过，3项为基线已有Windows chmod断言；TTS Provider全集85/85，`npm run test:mmd-production:tts`19/19，普通LLM19/19。新增用例覆盖旧映射兼容、qiaoxiaojiao模型/音色默认、覆盖与冲突、typed媒体零请求拒绝、API账号格式元数据、四路speech/Responses、取消/截止、安全日志和网页配置往返。旧API集成使用隔离Chat2API库与localhost-only请求，55/55通过。独立终审两个问题（规划预算/取消、Pi metadata拒绝）均修复并验证，定向8/8。

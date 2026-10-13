@@ -559,6 +559,14 @@ function createTextMediaTtsService({
                 const audioPath = await generateTTS(data.text);
                 if (!isPlaybackActive(displayId, data.playbackId, requestToken)) return;
 
+                // 千问筛选后可能没有可朗读正文；沿用定位回包让播放器推进下一句，
+                // 同时释放预取槽位，不把正常跳过记录为合成失败或生成空音频引用。
+                if (audioPath === null) {
+                    finishPrefetch(playbackContext, data, 'clear');
+                    sendError(displayId, data, '无可朗读正文，已跳过', 'noReadableText');
+                    return;
+                }
+
                 // 合成可能持续较长时间，发送前再次读取设备状态，避免把音频发给已失效目标。
                 routeResult = resolveRequestTarget(displayId, playbackContext, data.prefetch === true);
                 if (routeResult.message) {

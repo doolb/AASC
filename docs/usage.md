@@ -1,5 +1,9 @@
 # Web MediaCenter - 使用说明
 
+## 国内千问网页可用于全部播报（2026-10-13）
+
+在「语音服务与音色」中，文本阅读、报时与系统播报也可选择国内千问网页（qwen-chat），保存后按服务器权威配置生效；已有默认选择保持。继续使用Chat2API国内账号和模型/音色映射。纯表情段落自动跳过，文本阅读继续下一句；具体配置见[语音服务与音色](usage/tts-providers.md)。需要运行实例加载新版；本轮未重启或出包。
+
 ## Chat2API 四路统一文字与语音（2026-10-13）
 
 qwen/qwen-api/doubao/doubaapi由同一模型映射和应用服务分流；旧文字别名继续，TTS可配置qiaoxiaojiao→qwen-api/qwen-audio-3.1-tts-flash及默认音色qiaoxiaojiao_v3.1。两路API凭据改由Chat2API账户管理手动配置，不自动迁移旧密钥；首批文字与TTS，未接入媒体明确拒绝。接口示例、账号准备和部署边界见[统一应用使用说明](usage/chat2api-unified-applications.md)。

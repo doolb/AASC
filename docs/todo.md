@@ -1,5 +1,7 @@
 - ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成，`minApk=true`；待签名 min APK 安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
 
+- ⏳待部署/设备验收 [2026-10-13] qwen-chat已开放文本阅读和系统播报；运行实例加载新版后在语音配置选择国内千问，验收长阅读、报时/提醒、自定义文字与停止恢复。源码离线151/151、旧聊天19/19，未重启主服务或出包。任务：`docs/task/20261013_qwenchat开放全部播报业务.md`。
+
 - ⏳待长期/模式/设备验收 [2026-10-13] 豆包普通LLM：think/expert、令牌过期维护、多账号及Android/Linux尚待真实验收；Cookie-only网页bridge仍待query profile完善与官网验证。网页朗读仍待真实账号/音色、完整Ogg至WAV链路和设备播放验收；手动安全只读登录校验尚缺。任务：`docs/task/20261013_豆包纯Node协议接入.md`、`docs/task/20261012_豆包普通LLM网页fetch实施.md`、`docs/task/20261012_豆包网页WAV解码实施计划.md`。
 
 - ⏳待部署/现场验收 [2026-10-13] Chat2API四路统一首批已实现：运行实例加载新版后手动配置qwen-api/doubaapi账号，验收真实API、网页朗读完整业务及设备播放；未迁移真实凭据、未重启或出包。详见`docs/usage/chat2api-unified-applications.md`及`docs/task/20261013_Chat2API四路统一模型应用分流.md`。

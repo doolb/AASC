@@ -30,7 +30,8 @@ test('旧模板继承、显式system、Agent与群聊、文本媒体业务隔离
     assert.deepEqual(resolveProviderConfig({ ...options, templateTts: { provider: 'system' }, businessType: BUSINESS_TYPES.AGENT_REPLY }), { provider: 'system', voice: null });
     assert.deepEqual(resolveProviderConfig({ ...options, templateTts: { provider: 'qwen-chat' }, businessType: BUSINESS_TYPES.TEXT_MEDIA }), { provider: 'doubao-api', voice: 'reader' });
     assert.deepEqual(resolveProviderConfig({ ...options, businessType: BUSINESS_TYPES.SYSTEM_BROADCAST }), { provider: 'system', voice: null });
-    assert.throws(() => normalizeSettings({ textMedia: { provider: 'qwen-chat' } }), /仅允许/u);
+    assert.equal(normalizeSettings({ textMedia: { provider: 'qwen-chat' } }).textMedia.provider, 'qwen-chat');
+    assert.throws(() => normalizeSettings({ textMedia: { provider: 'doubao-chat' } }), /仅允许/u);
 });
 
 test('部分选择保留Provider、显式空音色清除、范围与凭证保留/清除/脱敏', () => {
@@ -115,8 +116,14 @@ test('真实配置持久化、重载、旧system默认和保存失败内存/磁�
     assert.ok(!Object.hasOwn(accountSaved.providers['qwen-chat'], 'chat2apiAccountId'));
     assert.ok(!fs.readFileSync(userFile, 'utf8').includes('obsolete-qwen-secret'));
     assert.ok(!Object.hasOwn(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-chat'], 'chat2apiAccountId'));
+    const opened = config.setTtsProviderSettings({ systemBroadcast: { provider: 'qwen-chat', voice: 'system-voice' },
+        textMedia: { provider: 'qwen-chat', voice: 'reading-voice' } });
+    assert.equal(opened.systemBroadcast.provider, 'qwen-chat');
+    assert.equal(opened.textMedia.voice, 'reading-voice');
+    assert.equal(JSON.parse(fs.readFileSync(mainFile)).tts.systemBroadcast.provider, 'qwen-chat');
+    assert.equal(config.getTtsProviderSettings().textMedia.provider, 'qwen-chat');
     const beforeInvalid = JSON.stringify(config.getTtsProviderSettings());
-    assert.throws(() => config.setTtsProviderSettings({ systemBroadcast: { provider: 'qwen-chat' } }), /仅允许/u);
+    assert.throws(() => config.setTtsProviderSettings({ systemBroadcast: { provider: 'doubao-chat' } }), /仅允许/u);
     assert.equal(JSON.stringify(config.getTtsProviderSettings()), beforeInvalid);
 });
 

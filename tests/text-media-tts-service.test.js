@@ -4,6 +4,35 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createTextMediaTtsService } = require('../src/apps/server/modules/media/text-media-tts-service');
 
+test('无正文分句跳过且释放预取状态，下一句仍可播放', async () => {
+    const messages = [], errors = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async text => text === '✨' ? null : '/tmp/next.wav',
+        sendToDisplay: (_, message) => messages.push(message),
+        logError: (...args) => errors.push(args)
+    });
+    const location = { playbackId: 'qwen-empty', pageIndex: 0, sentenceIndex: 1, prefetch: true };
+    await service.handleSentenceRequest('source', { ...location, text: '✨' });
+    assert.equal(messages[0].type, 'textSentenceTtsError');
+    assert.equal(messages[0].errorCode, 'noReadableText');
+    assert.equal(messages[0].prefetch, true);
+    assert.equal(errors.length, 0);
+    await service.handleSentenceRequest('source', { ...location, text: '正常正文' });
+    assert.equal(messages.at(-1).audioUrl, '/uploads/tts/next.wav');
+});
+
+test('取消后的无正文迟到结果不发送跳过回包', async () => {
+    let finish;
+    const messages = [];
+    const service = createTextMediaTtsService({ generateTTS: () => new Promise(resolve => { finish = resolve; }),
+        sendToDisplay: (_, value) => messages.push(value), logError: () => {} });
+    const pending = service.handleSentenceRequest('source', { playbackId: 'cancelled', pageIndex: 0, sentenceIndex: 0, text: '✨' });
+    service.cancel('source', 'cancelled');
+    finish(null);
+    await pending;
+    assert.deepEqual(messages, []);
+});
+
 test('合成单个请求分句并返回带播放定位标签的音频消息', async () => {
     const messages = [];
     const service = createTextMediaTtsService({

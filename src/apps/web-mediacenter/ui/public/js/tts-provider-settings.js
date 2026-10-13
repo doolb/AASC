@@ -34,7 +34,7 @@
     function selectProvider(business) {
         const select = create('select');
         for (const [id, title] of Object.entries(PROVIDERS)) {
-            if (['qwen-chat', 'doubao-chat'].includes(id) && business !== 'aiReplyDefault') continue;
+            if (id === 'doubao-chat' && business !== 'aiReplyDefault') continue;
             const option = create('option', title);
             option.value = id;
             select.appendChild(option);

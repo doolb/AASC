@@ -9,8 +9,7 @@ const { isReplyBusiness, normalizeReplyUserText } = require('./tts-reply-user-te
 // Provider负责生成，业务层仍使用原音频引用、队列、目标和打断协议。
 function createTtsProviderService({ getSettings, registry, storeAudio = audioCache.storeAudio,
     timeoutMs = 60000 } = {}) {
-    const resolve = request => {
-        const settings = getSettings();
+    const resolve = (request, settings = getSettings()) => {
         const selection = resolveProviderConfig({ ...settings, templateTts: request.templateTts,
             businessType: request.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST });
         const providerSettings = settings.providers[selection.provider];
@@ -18,9 +17,10 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
     };
     return {
         resolve,
-        async generate(request) {
+        async generate(request, { configuration: configurationSnapshot } = {}) {
             if (typeof request.text !== 'string' || !request.text.trim()) throw new Error('TTS 文本不能为空');
-            const { settings, selection, configuration } = resolve(request);
+            // 配置快照只来自内部批次的第二参数；公开请求不能改变权威Provider配置。
+            const { settings, selection, configuration } = resolve(request, configurationSnapshot);
             const adapter = registry[selection.provider];
             try {
                 const { userText, ...providerRequest } = request;

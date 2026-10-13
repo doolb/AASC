@@ -1,5 +1,27 @@
 #skill: ai-code-translation
 
+## framework/qwen-chat开放非AI业务（2026-10-13，已实现）
+
+已有声明
+- validateBusinessProvider、normalizeSettings、resolveProviderConfig // 保存和执行复用业务校验
+- selectProvider、tts_provider_config SelfTest // 页面选项和只读校验
+- qwen-chat过滤后null；textMediaTtsService与系统/命令音频消费 // 空结果必须先识别
+
+新增定义
+- NonAiProviders = 原非AI来源 + qwen-chat // 不改默认Provider；豆包网页原策略
+
+操作流程
+- text_media/system_broadcast保存或执行qwen-chat -> 业务白名单接受 // 包含阅读、报时、提醒和自定义
+- 三类配置控件提供qwen-chat -> 原AASC保存、规范化权威回填和重连 // 不新增配置HTTP接口
+- 正文 -> 原Chat2API账号和映射 -> WAV缓存/播放 // 不复制凭据
+- 过滤无正文 -> null -> 消费端跳过，不构造basename/URL // 不制造空WAV
+- 文本当前句/预取null -> 原定位跳过通知并清理状态 -> 下一句 // 取消后的回包失效
+- 系统/命令null -> 原批次/响应收尾，停止后状态正常 // 不记合成失败
+- qwen系统语音批次按可朗读句子编号和标记最后一句 // 保留原显示文字，避免末尾emoji丢失结束标记
+- 过滤与生成共用开始时的语音配置快照，下一批读新值 // 内部第二参数，不接受公共请求传配置
+- 自定义生成无正文status=skipped，旧显示端释放当前项与队列 // 不返回success加空URL
+- 用户已确认并完成目标代码和离线验证 // 历史规则按当前业务范围同步
+
 ## framework/qwen-chat emoji筛选与跳过契约
 
 ### 已有声明
@@ -90,7 +112,7 @@
 - Agent 回复属于触发来源聊天模板的 AI 回复
 - 文本媒体阅读使用独立 `tts.textMedia`，不读取聊天模板 TTS
 - 系统播报和报时使用 `tts.systemBroadcast`
-- `qwen-chat` 只允许 AI 回复，凭证失效只报告错误，不自动回退
+- `qwen-chat` 允许全部既有播报业务，凭证失效只报告错误，不自动回退
 
 ## 已有声明
 
@@ -200,7 +222,7 @@
 - 系统播报未配置 Provider 时使用 `system`
 - 使用系统播报配置音色
 - 音色未配置时使用最终 Provider 的默认音色
-- 校验最终 Provider 不得为 `qwen-chat` // Qwen Chat 网页朗读暂时只开放给 AI 回复
+- 校验最终Provider在非AI白名单（含qwen-chat） // 原业务选择与同来源音色继承
 - 将解析结果传入报时、状态、任务结果、错误提示和控制反馈播报流程
 
 ### 生成 AI 回复音频

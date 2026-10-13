@@ -1,3 +1,10 @@
+### 国内千问全场景播报
+
+- ✅ [2026-10-13] 解除qwen-chat仅限AI/Agent回复的业务限制，文本阅读、报时/提醒、自定义文字、语音命令及系统播报可选国内千问，已有默认选择保持。
+  - 修改tts-provider-policy.js、控制端tts-provider-settings.js/self-test.js、text-media-tts-service.js和server-app.js；保存与生成复用业务白名单，账号/模型音色映射继续归Chat2API，豆包网页实验限制保留。
+  - 纯emoji/null消费端跳过、不构造空路径或WAV；文本预取槽清理并定位跳过到下一句，qwen语音批次按可朗读句子标记最后一句，tts-provider-service内部配置快照保证批次不被中途切换Provider打断。自定义/api/tts/generate无正文返回status=skipped/skipped=true/audioUrl=null，兼容旧显示端队列。更新design/spec/.src/task/usage/self-test/todo。
+  - 验证：定向TTS/阅读/路由/配置UI151/151，旧聊天播放19/19；独立终审2项Important均RED→GREEN。仅虚构账户与本地传输，无真实请求/凭据读取/主服务重启或出包。servicePackage=true，其他发布状态保留；真实声音与设备待部署验收。
+
 ### Chat2API 四路统一模型与语音
 
 - ✅ [2026-10-13] 实现qwen/qwen-api/doubao/doubaapi模型→Provider→应用分流，保留旧文字别名和网页账户/会话ID，TTS映射可同时指定真实模型与默认音色（qiaoxiaojiao示例）。

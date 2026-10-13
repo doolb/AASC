@@ -1,5 +1,15 @@
 # TTS Provider 与播报配置
 
+## 开放qwen-chat非AI业务（2026-10-13，已实现）
+
+用户要求取消此前国内千问网页只允许AI/Agent回复的业务限制。已允许既有ai_reply、agent_reply、text_media、system_broadcast四种业务使用qwen-chat，覆盖文本阅读、报时、提醒、自定义文字、语音命令和系统提示。只开放选择，不自动修改任何现有业务默认Provider或真实配置。豆包网页的实验范围按原规则保留。
+
+现有限制在tts-provider-policy的非AI白名单、tts-provider-settings页面选项、self-test只读业务断言。normalizeSettings和生成服务均调用同一业务策略；更新策略即可使保存和执行一致。已有Chat2API国内账号调度、模型/音色映射、启用检查、WAV缓存、速度/音量及错误语义继续复用，无新增依赖或远端配置接口。
+
+开放后沿用qwen-chat的emoji过滤；仅emoji或装饰片段仍返回null。文本阅读应沿用可定位的跳过通知推进下一句，普通播报/自定义生成在下发前识别null，不构造音频URL、不记录合成失败。文字阅读的当前句/预取、取消后迟到结果及语音命令批次收尾需回归，避免只改白名单造成播放器卡住。报时与提醒本身包含可朗读时间正文，验证其共享业务路由即可。
+
+需求分析（enterprise）：主L5业务规则、次L6业务契约；实现能力下放L4，现有模块内改动，无架构迁移。直接风险是空结果传播及前后端范围不一致，风险中、边界明确；无需新增用户配置。实施文件和离线验收见任务20261013_qwenchat开放全部播报业务。用户回复“是”确认后已实现并完成离线回归151/151、旧聊天播放19/19；未发送真实请求、读取凭据或操作主服务。
+
 ## 四路统一实现（2026-10-13，当前规则）
 
 网页qwen/doubao及API qwen-api/doubaapi均由Chat2API共享speech与应用规划生成，业务Registry仅转换模型/参数。API Key从Chat2API所选账号读取，端点/resourceId在账号非秘密元数据；旧tts.providers私有密钥留作回滚，不迁移、不参与生成，TTS页面不再编辑或回传这些值。API账号由用户手动准备，保存格式校验不表示鉴权成功。
@@ -14,7 +24,7 @@ Responses的tts返回非持久化output_audio WAV Base64；旧speech、内存缓
 
 2026-10-11 用户确认继续多 Provider 方案。在现有 system TTS 上增加 qwen-chat、qwen-api、doubao-api。AI 与 Agent 回复按来源聊天模板解析选择；文本媒体与系统播报分别有独立默认配置。群聊没有唯一模板时使用 AI 默认，临时会话使用当前角色模板。只扩展合成入口，保留音频 URL、目标选择、有序队列、回执和聊天打断。
 
-模板可选择“继承系统 AI 默认”，或显式选择 Provider；未填音色时，仅在最终 Provider 与业务默认 Provider 相同时继承业务默认音色，否则使用最终 Provider 自身默认音色。避免跨 Provider 搬运音色 ID。qwen-chat 只允许 AI/Agent 回复，文本媒体、报时、自定义文字和系统提示拒绝使用。
+模板可选择“继承系统 AI 默认”，或显式选择 Provider；未填音色时，仅在最终 Provider 与业务默认 Provider 相同时继承业务默认音色，否则使用最终 Provider 自身默认音色。避免跨 Provider 搬运音色 ID。qwen-chat现允许AI/Agent、文本阅读、报时/提醒、自定义和系统提示，使用各自业务选择；旧AI专用限制已于2026-10-13解除。
 
 ## 配置与接口
 
