@@ -27,3 +27,5 @@ analyze-requirement-level enterprise：主L6（目录/下载/错误呈现契约�
 受信任项目根realpath规范化及根内路径映射完成；工作/配置内部链接仍拒绝。ZIP直接流式写入Download，旧系统重名独占新文件、失败只清理新目标，API29+MediaStore pending提交。Native实际错误摘要和UI错误保持完成；所有Offline启动核对实际版本/路径，候选健康后才成功，失败回滚带保留版本。
 
 Node/浏览器17项通过；24MiB往返1809ms、RSS267MiB含夹具。首次/tmp配额失败，改TMPDIR=/var/tmp后通过。Android JVM208项通过，新增下载/错误5项；首次编译发现旧保存选择器引用，移除后通过。最后增加健康后刷新失败页/控制页，由产物构建与ADB验证。min profile升39/0.2.37；servicePackage/minApk=true，依赖不变。待构建v71/min39并完成设备验收。
+
+补充：真机控制页实际路由/control，保存策略已兼容/control与旧upload.html；4项原生策略定向通过。原npm APK脚本assembleDebug未产出预期文件，且其全局daemon清理中断并行定向测试；改为顺序执行并使用已准备资源签名Release构建。

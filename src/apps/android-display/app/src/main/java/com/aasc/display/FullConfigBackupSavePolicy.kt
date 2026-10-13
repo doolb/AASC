@@ -11,7 +11,7 @@ object FullConfigBackupSavePolicy {
     fun downloadUrl(pageUrl: String?): String? = try {
         val page = URI(pageUrl ?: "")
         if (page.scheme !in listOf("http", "https") || page.host.isNullOrBlank()
-            || page.userInfo != null || !page.path.endsWith("/upload.html")) {
+            || page.userInfo != null || !(page.path.endsWith("/upload.html") || page.path.trimEnd('/') == "/control")) {
             null
         } else {
             URI(page.scheme, null, page.host, page.port, "/api/config-backup/export", null, null).toString()
