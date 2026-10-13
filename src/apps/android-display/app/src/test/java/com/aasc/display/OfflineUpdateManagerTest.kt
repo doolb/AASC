@@ -9,6 +9,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -235,6 +236,112 @@ class OfflineUpdateManagerTest {
         }
 
         OfflineUpdateManager.extractZipArchive(archive, temporaryFolder.newFolder("safe"))
+    }
+
+    @Test
+    fun pendingHealth期间保留候选和previous版本供回滚() {
+        val root = temporaryFolder.newFolder("pending-release")
+        createReleaseDirectories(root, codeVersion = 5, dependencyVersion = 7, pendingHealth = true)
+        val oldCode = File(root, "updates/code/code-v4")
+        val oldDependencies = File(root, "updates/dependencies/dependencies-v6")
+        check(oldCode.mkdirs())
+        check(oldDependencies.mkdirs())
+
+        assertFalse(OfflineUpdateManager.hasObsoleteReleaseDirectories(root))
+        assertEquals(0, OfflineUpdateManager.cleanupObsoleteReleaseDirectories(root))
+        assertTrue(oldCode.isDirectory)
+        assertTrue(oldDependencies.isDirectory)
+        assertTrue(File(root, "updates/active-release.json").readText().contains("\"pendingHealth\":true"))
+    }
+
+    @Test
+    fun 健康release清理旧代码依赖并保留活动版本及其他Offline数据() {
+        val root = temporaryFolder.newFolder("healthy-release")
+        createReleaseDirectories(root, codeVersion = 5, dependencyVersion = 7, pendingHealth = false)
+        val activeCode = File(root, "updates/code/code-v5/src/active.js")
+        val activeDependencies = File(root, "updates/dependencies/dependencies-v7/node_modules/active.js")
+        check(activeCode.parentFile.mkdirs())
+        check(activeDependencies.parentFile.mkdirs())
+        activeCode.writeText("active code")
+        activeDependencies.writeText("active dependency")
+        val oldCode = File(root, "updates/code/code-v4/src/old.js")
+        val oldDependencies = File(root, "updates/dependencies/dependencies-v6/node_modules/old.js")
+        check(oldCode.parentFile.mkdirs())
+        check(oldDependencies.parentFile.mkdirs())
+        oldCode.writeText("old code")
+        oldDependencies.writeText("old dependency")
+        val invalidName = File(root, "updates/code/code-v05")
+        check(invalidName.mkdirs())
+        val staging = File(root, "updates/.staging-retain")
+        check(staging.mkdirs())
+        val repair = File(root, "updates/data-repair/data-repair-v2/repair.js")
+        check(repair.parentFile.mkdirs())
+        repair.writeText("repair")
+        val apk = File(root, "updates/apk/aasc-display-offline-min-v35.apk")
+        check(apk.parentFile.mkdirs())
+        apk.writeText("apk")
+        val model = File(root, "models/llm/model.bin")
+        check(model.parentFile.mkdirs())
+        model.writeText("model")
+
+        assertTrue(OfflineUpdateManager.hasObsoleteReleaseDirectories(root))
+        assertEquals(2, OfflineUpdateManager.cleanupObsoleteReleaseDirectories(root))
+        assertTrue(activeCode.isFile)
+        assertTrue(activeDependencies.isFile)
+        assertFalse(File(root, "updates/code/code-v4").exists())
+        assertFalse(File(root, "updates/dependencies/dependencies-v6").exists())
+        assertTrue(invalidName.isDirectory)
+        assertTrue(staging.isDirectory)
+        assertTrue(repair.isFile)
+        assertTrue(apk.isFile)
+        assertTrue(model.isFile)
+        assertFalse(OfflineUpdateManager.hasObsoleteReleaseDirectories(root))
+    }
+
+    @Test
+    fun 含符号链接的旧版本目录整棵跳过且链接目标保持() {
+        val root = temporaryFolder.newFolder("symlink-release")
+        createReleaseDirectories(root, codeVersion = 5, dependencyVersion = 7, pendingHealth = false)
+        val activeCode = File(root, "updates/code/code-v5")
+        val activeDependencies = File(root, "updates/dependencies/dependencies-v7")
+        check(activeCode.mkdirs())
+        check(activeDependencies.mkdirs())
+        val oldCode = File(root, "updates/code/code-v4")
+        check(oldCode.mkdirs())
+        val linkTarget = temporaryFolder.newFolder("linked-target")
+        val targetFile = File(linkTarget, "keep.txt").apply { writeText("keep") }
+        val link = File(oldCode, "linked-target")
+        Files.createSymbolicLink(link.toPath(), linkTarget.toPath())
+        val oldDependencies = File(root, "updates/dependencies/dependencies-v6")
+        check(oldDependencies.mkdirs())
+
+        assertTrue(OfflineUpdateManager.hasObsoleteReleaseDirectories(root))
+        assertEquals(1, OfflineUpdateManager.cleanupObsoleteReleaseDirectories(root))
+        assertTrue(oldCode.isDirectory)
+        assertTrue(Files.isSymbolicLink(link.toPath()))
+        assertEquals("keep", targetFile.readText())
+        assertFalse(oldDependencies.exists())
+    }
+
+    @Test
+    fun 缺少可信activeRelease或当前release待健康时不清理任何版本() {
+        val root = temporaryFolder.newFolder("no-release-pointer")
+        val old = File(root, "updates/code/code-v1")
+        check(old.mkdirs())
+        assertEquals(0, OfflineUpdateManager.cleanupObsoleteReleaseDirectories(root))
+        assertTrue(old.isDirectory)
+
+        createReleaseDirectories(root, codeVersion = 2, dependencyVersion = 3, pendingHealth = true)
+        assertEquals(0, OfflineUpdateManager.cleanupObsoleteReleaseDirectories(root))
+        assertTrue(old.isDirectory)
+    }
+
+    private fun createReleaseDirectories(root: File, codeVersion: Int, dependencyVersion: Int, pendingHealth: Boolean) {
+        val updates = File(root, "updates")
+        check(updates.mkdirs() || updates.isDirectory)
+        File(updates, "active-release.json").writeText(
+            """{"schemaVersion":1,"codeVersion":$codeVersion,"dependencyVersion":$dependencyVersion,"lockSha256":"${LOCK_A}","legacyDependencies":false,"pendingHealth":$pendingHealth,"previous":null}"""
+        )
     }
 
     private fun manifest(codeVersion: Int, dependencyVersion: Int, lock: String): OfflineUpdateManifest {

@@ -204,6 +204,8 @@ class NodeServerService : Service() {
         Thread(runnable, "aasc-node-start").apply { isDaemon = true }
     }
     private val restartGeneration = AtomicInteger(0)
+    // 健康提交后的旧版本清理与热更解压/切换串行执行，避免误删刚下载的候选目录。
+    private val offlineReleaseDirectoryLock = Any()
     @Volatile
     private var nodeProcess: Process? = null
     private var restartAttempt = 0
@@ -373,7 +375,8 @@ class NodeServerService : Service() {
             updateNotification(
                 if (offlineMode) "Node.js 本地服务运行中" else "Node.js 子服务器运行中，正在连接主服务器"
             )
-            if (updateManager?.isReleaseHealthPending(root) == true) {
+            val releaseHealthPending = updateManager?.isReleaseHealthPending(root) == true
+            if (updateManager != null && (releaseHealthPending || OfflineUpdateManager.hasObsoleteReleaseDirectories(root))) {
                 monitorPendingRelease(root, process, generation, updateManager)
             }
             readProcessOutput(process, false)
@@ -423,15 +426,17 @@ class NodeServerService : Service() {
             try {
                 val root = NodeRuntimeInstaller(this).ensureInstalled()
                 sendStatus(STATUS_SERVICE_UPDATE_APPLYING, "正在停止当前服务并准备更新")
-                stopNodeProcess()
-                val result = OfflineUpdateManager(this).applyServerUpdate(root) { progress ->
-                    sendStatus(
-                        STATUS_SERVICE_UPDATE_PROGRESS,
-                        progress.detail,
-                        progress.phase,
-                        progress.completedBytes,
-                        progress.totalBytes
-                    )
+                val result = synchronized(offlineReleaseDirectoryLock) {
+                    stopNodeProcess()
+                    OfflineUpdateManager(this).applyServerUpdate(root) { progress ->
+                        sendStatus(
+                            STATUS_SERVICE_UPDATE_PROGRESS,
+                            progress.detail,
+                            progress.phase,
+                            progress.completedBytes,
+                            progress.totalBytes
+                        )
+                    }
                 }
                 if (result.applied || result.status == "服务已是当前版本") {
                     sendStatus(STATUS_SERVICE_UPDATE_APPLIED, result.status)
@@ -476,14 +481,25 @@ class NodeServerService : Service() {
                 }
             }
             if (healthy) {
-                if (updateManager.markCurrentReleaseHealthy(root)) {
-                    android.util.Log.i("AASC-Node", "Offline 候选服务已通过健康检查并提交")
+                synchronized(offlineReleaseDirectoryLock) {
+                    if (generation != restartGeneration.get() || serviceUpdateApplying.get()) return@synchronized
+                    if (updateManager.markCurrentReleaseHealthy(root)) {
+                        android.util.Log.i("AASC-Node", "Offline 候选服务已通过健康检查并提交")
+                    } else {
+                        val removed = OfflineUpdateManager.cleanupObsoleteReleaseDirectories(root)
+                        if (removed > 0) {
+                            android.util.Log.i("AASC-Node", "健康 Offline 服务已清理 $removed 个历史版本目录")
+                        }
+                    }
                 }
                 return@Thread
             }
-            if (generation == restartGeneration.get() && updateManager.rollbackPendingRelease(root)) {
-                android.util.Log.e("AASC-Node", "Offline 候选服务未就绪，已回滚并停止候选进程")
-                if (process.isAlive) process.destroyForcibly()
+            synchronized(offlineReleaseDirectoryLock) {
+                if (generation == restartGeneration.get() && !serviceUpdateApplying.get()
+                    && updateManager.rollbackPendingRelease(root)) {
+                    android.util.Log.e("AASC-Node", "Offline 候选服务未就绪，已回滚并停止候选进程")
+                    if (process.isAlive) process.destroyForcibly()
+                }
             }
         }.apply {
             name = "aasc-offline-release-health"

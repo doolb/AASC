@@ -12,6 +12,12 @@
   - 原生 `DisplayWebView` 保存并经 `NativeBridge` 返回相同缩放百分比；显示页对 TTS/ASR 共用语音文本节点的 0°/180°固定偏移做反向换算，90°/270°锚点、整页缩放和控制页保持原样。浏览器/普通 APK/旧桥回退 100%。
   - Chromium 在 100%/112%/150%/300%及四个方向完成 DPI 布局模拟；Android `:app:testDebugUnitTest` 成功，12项定向网页回归通过。完整网页文件里的既有1200×800、DPR3弹窗等待用例仍超时，单独旋转锚点回归通过。此次未构建 APK；代码包发布成功后，状态为 `servicePackage=false`、`dependenciesPackage=false`、`minApk=true`。任务：`docs/task/20261012_OfflineAPK_TTS位置匹配ADB.md`。
 
+### Offline 热更旧版本目录回收
+
+- ✅ [2026-10-13] Offline服务release健康确认后清理不再使用的代码/依赖版本目录，回收热更累积占用。
+  - `OfflineUpdateManager.kt`仅扫描严格命名的直属版本目录，并按健康`active-release.json`保留活动版本；pending期间保留回滚版本。`NodeServerService.kt`也会在既有release本地API健康后回收历史残留，并将健康清理与新release应用/回滚串行化。符号链接或不可读目录树整体跳过；APK、data-repair、模型和其他用户数据保留。
+  - Android JVM 单测199/199通过，覆盖pending保护、活动版本、历史清理、链接目标和非版本数据。design/spec/task/自测文档已同步并移除todo完成项；`minApk=true`。本轮未构建APK，设备需安装后续min APK后生效。
+
 ### Offline 更新代码包发布
 
 - ✅ [2026-10-13] 将 Offline 更新代码 v67、依赖包 v7 和 Node min 种子 v67 发布到 LAN 与 WAN。

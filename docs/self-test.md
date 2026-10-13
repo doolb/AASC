@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## Offline 热更旧版本目录回收（2026-10-13）
+
+`cd src/apps/android-display && ./gradlew :app:testDebugUnitTest --no-daemon`，199/199通过。新增用例覆盖pending health期间保留回滚目录、健康版本只清理非活动严格命名目录、历史目录回收、符号链接树整体跳过且目标不变、APK/data-repair/模型/其他数据保留、缺失或pending活动指针时不清理。首次回归发现预期跳过链接树时Android `Log.w` 的JVM桩会抛异常；该跳过分支不再调用Android日志，实际删除错误仍保留警告。
+
+本轮只完成源码与JVM回归，没有构建或发布min APK；`release/offline-release-status.json.minApk=true`，设备清理行为需安装包含本改动的min APK后生效。
+
 ## 豆包纯Node普通LLM（2026-10-13）
 
 新增自测模块`chat2api-doubao-node-protocol.test.js`：8项覆盖profile字段/同账号fp、0/1/3模式、无浏览器传输、流式结束、最终URL、取消/403无重试、凭证包导入脱敏、真实Store混合账号池和msToken优先级。只使用虚构身份及临时存储，不访问用户Chrome。执行`npm run check:chat2api`：181/184，同3项旧Windows chmod失败；Ogg/WASM21/21、旧TTS19/19。
