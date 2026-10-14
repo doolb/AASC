@@ -1,3 +1,10 @@
+### Offline分组修复版本发布与ADB外网验收
+
+- ✅ [2026-10-14] full50/min51正式发布LAN/WAN，修复原生分组误报全局清单缺失和生产锁拒绝@scope。
+  - min51两端完整HTTP大小/SHA验证，full50目标大小/SHA/签名与profile、HTTP独立索引/HEAD验证；旧版本严格清理errors=[]。服务manifest SHA249cd5b5a9aa913bb65edb1b3d71f324debe923d930f5f209d2cf1a5c0eb7158，两端同85/9/51/repair3/seeds85，独立full索引50；所有待出包项false。代码/deps9/repair3/seeds85未改，APK/ZIP/模型不提交Git。
+  - ADB实际full50 DEX在独立76/8目录仅公网源执行applyServerUpdate，返回已应用85/9，common+android归档/实际内容/生产锁验证与pending指针安装通过；不把隔离指针称为服务启动成功。真实应用HTTPS status ok与生产健康=true，实际根code85/deps9/bundled-baseline、旧code76已删；冷启动不再安装环境。普通8071/offline8081并存；本次fixture、DEX/JAR及ADB18081转发精确清理，实际手机保留full50。
+  - Android251/251、bootstrap62/62；design/spec/task/self-test/usage更新，完成任务移出todo；源码与状态、文档推origion。用户其他外网设备需覆盖安装min51或full50后重试，JS修复包无法修复旧原生APK。
+
 ### Offline修复APK构建与ADB覆盖
 
 - ✅ [2026-10-14] 已生成full50与min51，原生分组ZIP和@scope生产锁修复均被打入APK，minApk状态false并上传origion。

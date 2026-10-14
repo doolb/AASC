@@ -2,7 +2,7 @@
 
 ## Offline分组依赖真实归档验证（2026-10-14）
 
-Android251/251、test:offline-bootstrap62/62通过。OfflineDependencyGroupsTest新增真实ZIP分组入口与排他合并、旧完整单包必须manifest/Express、缺失/空组/越界/其他文件拒绝、篡改内容SHA拒绝、scoped及嵌套生产锁路径、错版本/链接拒绝。额外用出包机签名清单及v9 common/android包完成归档SHA/大小、安全解压、组内容指纹、合并及code85生产锁版本校验；通过AASC_OFFLINE_GROUP_ARCHIVE_ROOT、AASC_OFFLINE_GROUP_MANIFEST、AASC_OFFLINE_GROUP_PUBLIC_KEY显式提供，不依赖联网。此额外真实包用例在未提供归档的开发机跳过，其余ZIP夹具独立运行。common含35502项，内存盘缩短自测逐文件sync耗时，生产调用未绕过。ADB设备实测待构建完成。
+Android251/251、test:offline-bootstrap62/62通过。OfflineDependencyGroupsTest新增真实ZIP分组入口与排他合并、旧完整单包必须manifest/Express、缺失/空组/越界/其他文件拒绝、篡改内容SHA拒绝、scoped及嵌套生产锁路径、错版本/链接拒绝。额外用出包机签名清单及v9 common/android包完成归档SHA/大小、安全解压、组内容指纹、合并及code85生产锁版本校验；通过AASC_OFFLINE_GROUP_ARCHIVE_ROOT、AASC_OFFLINE_GROUP_MANIFEST、AASC_OFFLINE_GROUP_PUBLIC_KEY显式提供，不依赖联网。此额外真实包用例在未提供归档的开发机跳过，其余ZIP夹具独立运行。common含35502项，内存盘缩短自测逐文件sync耗时，生产调用未绕过。ADB SM-N9500 full50覆盖后85/9双版本/根路径/bundled-baseline、健康后旧code76清理与日常重启标记不变通过；同一actual APK DEX在隔离目录仅公网源完成原生ALL下载、校验、分组、锁及pending指针安装。隔离服务未启动，真实环境另验HTTPS/API与生产健康=true；fixture、自有ADB转发及推送JAR/DEX均已清理。min51/full50两端发布完成，min完整HTTP SHA验证、full目标SHA及索引/HEAD通过。
 
 ## 全身IK独立面板、像素控制点与牵引调硬（2026-10-13）
 

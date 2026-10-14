@@ -29,3 +29,10 @@ full50已生成：544317641 bytes，SHA1ab230d62b1ece03bd59331adba9a836430725012
 ADB SM-N9500安装full50成功。原code76/deps8及min41，启动后原生健康提交ready/85/9，旧code-v76清理1项无重试；手机LAN直连HTTPS /api/status显示apk-0.2.50-offline、v85/v9，codePath根目录、dependenciesPath根node_modules、dependencySource=bundled-baseline。普通8071与offline8081同时监听。ADB forward的回环代理探测失败，直接LAN HTTPS成功，另运行实际APK DEX原生isLocalServerHealthy=true。
 
 出包机归档及实际APK DEX都已验证；在手机应用独立测试目录使用actual50 DEX调用applyServerUpdate，测试进程内只保留外网120.79.245.103更新源、隔离76/8基线触发ALL，以验证公网签名/下载/分组/锁/指针安装链。测试只改变自己的进程常量及目录，不修改真实应用的指针；待结果。最初ADB shell sh -c参数引用不正确导致find枚举过广，已改直接调用/显式远端引用，只输出所需目录；不用该结果宣称私人账号hash保留。实际用户数据未清空，账号保留以源码和单元为证据。
+
+### 发布与真机验收完成
+公网原生ALL安装返回applied=true、“已应用服务更新85/9”，实际APK v50 DEX在Android上完成公网签名、归档/内容、common+android合并、@scope生产锁及待健康指针安装；进程只保留公网源，不能回退LAN。隔离fixture pendingHealth属于预期，不把隔离安装结果称作该fixture的服务健康启动；真实应用另由HTTPS /api/status及生产isLocalServerHealthy=true验证内置85/9根路径。冷启动复验仍status ok、85/9、bundled-baseline，.runtime-version mtime不变，未重复安装环境。独立fixture及本次推送的DEX/JAR已精确清理，自有ADB18081转发删除，原19222转发保留；真实APK仍full50、普通8071不变。
+
+full50正式通过publish:offline-apk:full发布LAN/WAN，目标文件SHA/大小、签名/profile及公网索引/HEAD校验成功。min51正式发布LAN/WAN，完整HTTP下载两端APK并SHA校验，其他代码/分组通过同URL强ETag缓存复用完整字节后再次SHA；android小包、repair、seed重新HTTP读取。清理errors=[]，版本化旧APK严格清理；seeds69/79、repair旧包等不误删。两端服务manifest字节一致，SHA249cd5b5a9aa913bb65edb1b3d71f324debe923d930f5f209d2cf1a5c0eb7158，组合85/9/min51/repair3/seeds85；独立full索引50。生产代码、依赖归档、修复脚本与种子均未改变。
+
+使用：[min51](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v51.apk)覆盖现有安装后重试；[full50](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v50.apk)提供整包。已装min51不能直接覆盖到较低full50。用户原先外网设备仍须安装新APK，此Bug不能由JS数据修复热更解决。源码18481cac、构建/状态c7101eb2及最终文档均推origion。

@@ -1,6 +1,6 @@
 # 正式 Android 显示端完整离线 APK
 
-## 整包安装后一次性切回内置服务（2026-10-14，已实现并发布full48）
+## 整包安装后一次性切回内置服务（2026-10-14，已实现并发布full50）
 
 用户确认仅在安装整包后的首次启动使用APK内置服务和生产依赖，随后仍允许热更新；追加要求删除之前下载的代码和依赖目录。当前NodeRuntimeInstaller迁移整个updates目录，旧active-release.json仍有优先级，因此整包内置版本可能没有实际启动。
 
@@ -256,4 +256,6 @@ active release 并标记为 `legacy-root`。该问题只记录在此，暂不改
 
 外网真机报告缺少dependency-manifest.json。根因为OfflineDependencyGroups把组ZIP交给旧完整依赖校验；common仅有dependency-group.json，android组也不含Express。按组件分派验证规则，保留归档安全、签名SHA、实际内容指纹、组合后的Express和生产锁检查。已批准的原生更新器范围内补充修复与真实ZIP回归；发布修复原生APK，现有v9分组包不修改、不伪造额外Express或全局元数据。full48已发布，修复版用新数字版本，不覆盖旧产物。
 
-修复已实现并通过Android251项及真实v9组合/锁验证：dependencyGroup单独校验；生产锁使用本地安全路径检查允许@scope，下载URL限制保持原规则。追加ADB SM-N9500覆盖与更新验收已获用户授权；full50/min51构建发布进行中。
+修复已实现并通过Android251项及真实v9组合/锁验证：dependencyGroup单独校验；生产锁使用本地安全路径检查允许@scope，下载URL限制保持原规则。追加ADB SM-N9500覆盖与更新验收已获用户授权；full50/min51已正式发布两端，ADB实际APK公网隔离安装链与真实应用健康/清理/日常重启验收完成。
+
+当前正式完整APK为v50、min为v51，服务85/9/repair3/seeds85。真实Note8覆盖启动后根路径85/9，旧code76健康后清理，日常重启无再次安装；公网原生ALL安装在独立目录验证，fixture已清理。原生修复不能仅依赖JS数据修复包，旧客户端须安装新APK。

@@ -1,12 +1,12 @@
 ## 整包安装后的内置版本
 
-新版完整Offline APK每次安装后的首次启动会切回APK内置服务和依赖；同版本重装也会触发。通过实际版本、目录与API健康检查后，自动删除以前下载的代码/依赖版本目录。配置、账号、模型缓存、任务及数据修复记录保留；下载ZIP继续保留。此后确认的热更新照常使用，日常重启不会再次切回整包。失败保留旧目录并回退存在的旧版本指针，不误报切换成功。整包v48已发布并具有该行为；新发现的分组更新校验问题正在修复并构建full50/min51，旧版报缺少dependency-manifest.json时须安装修复APK后重试。旧full46不具备一次性切回行为。
+新版完整Offline APK每次安装后的首次启动会切回APK内置服务和依赖；同版本重装也会触发。通过实际版本、目录与API健康检查后，自动删除以前下载的代码/依赖版本目录。配置、账号、模型缓存、任务及数据修复记录保留；下载ZIP继续保留。此后确认的热更新照常使用，日常重启不会再次切回整包。失败保留旧目录并回退存在的旧版本指针，不误报切换成功。[整包v50](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v50.apk)已正式发布并包含分组校验修复；已有设备可用[min v51](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v51.apk)覆盖安装后重试更新。已装v51不能直接降装较低v50。旧full46不具备一次性切回行为。
 
 # Web MediaCenter - 使用说明
 
 ## Chat2API 默认模型与已有账号
 
-无需先添加映射即可使用预置DeepSeek模式别名、Qwen历史别名与豆包三种Chat模式；已保存账号自动参与调度，缺少登录资料时提示登录。自定义规则优先，release基线3保留公开映射。当前旧min41需先从[公网min47 APK](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v47.apk)覆盖安装，再更新服务并确认v3；旧版不能解析新的分组清单。豆包Node无需开启折叠的旧Chrome入口，语音模型默认与各业务音色区别见[统一账号与应用](usage/chat2api-unified-applications.md)及[豆包Node](usage/chat2api-doubao-node.md)。
+无需先添加映射即可使用预置DeepSeek模式别名、Qwen历史别名与豆包三种Chat模式；已保存账号自动参与调度，缺少登录资料时提示登录。自定义规则优先，release基线3保留公开映射。当前旧min41需先从[公网min51 APK](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v51.apk)覆盖安装，再更新服务并确认v3；旧版不能解析新的分组清单。豆包Node无需开启折叠的旧Chrome入口，语音模型默认与各业务音色区别见[统一账号与应用](usage/chat2api-unified-applications.md)及[豆包Node](usage/chat2api-doubao-node.md)。
 
 ## 完整 Offline APK 镜像同步
 

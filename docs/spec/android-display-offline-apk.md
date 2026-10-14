@@ -1,6 +1,6 @@
 # 正式 Android 显示端完整离线 APK 实现规格（伪代码）
 
-## 整包首次启动强制内置版本增量（2026-10-14，已实现并发布full48）
+## 整包首次启动强制内置版本增量（2026-10-14，已实现并发布full50）
 
 ```text
 已有 := NodeRuntimeInstaller.ensureInstalled + updates可变目录 + NodeServerService健康监视 + active-release指针
@@ -665,3 +665,12 @@ validateLock(directory, codeLock):
     校验实际package.json存在且版本与锁一致
 ```
 实际v9组合测试追加生产锁校验时发现旧URL白名单不允许@scope；修复属于同一依赖安装校验链。
+
+```text
+已发布 := LAN/WAN full50 + min51；manifest服务组合85/9/51/repair3/seeds85
+ADB当前 := full50 / HTTPS status ok / 根code85+根dependencies9 / activation.ready
+健康后旧code76删除；日常重启Runtime标记未变
+公网回归 := actual50 DEX + 独立76/8基线目录 + 仅公网源 → applyServerUpdate.applied=true
+隔离指针pendingHealth不代替服务启动；真实根环境另验健康，fixture与自有转发已清理
+minApk/servicePackage/dependenciesPackage := false/false/false
+```
