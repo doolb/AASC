@@ -12168,3 +12168,17 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 更新透明度design/spec、self-test伪代码、任务/todo；Offline code v78签名、组件大小/SHA-256及ZIP完整性校验通过。`code-v78.zip`为17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`。
   - 普通子服务器`aasc-server-1.0.0.tar.gz`重打为4,598,415 bytes，SHA-256 `2d734589793d4efe5bf7572c084be17fe06be816c379da11d74bc666a1fbb055`；主控 `/server/manifest` 已指向新包。产物未提交Git。
   - APK-SM-N9500定向强制更新请求返回accepted，但服务启动时间未变化，不能确认已安装；Offline code v78未发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。任务列表拖动滚动按用户要求暂缓，待真机试用后再定。
+
+### TTS 背景透明度范围扩展与子服务器包重打
+
+- ✅ [2026-10-14] TTS 字幕背景透明度滑块扩至0%–100%，保留1%步长和20%默认值；服务端及WebSocket仍以0–1 alpha比例保存/传输，旧配置值保持兼容。
+  - 修改`upload.html`、`config-app-service.js`、`display.html`和`self-test.js`；浏览器验证0%、20%、73%、100%双向换算，服务端边界/规范化和渐变alpha 1通过，`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js`共7/7通过。
+  - 更新透明度design/spec、self-test伪代码、任务/todo；Offline code v78签名、组件大小/SHA-256及ZIP完整性校验通过。`code-v78.zip`为17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`。
+  - 普通子服务器`aasc-server-1.0.0.tar.gz`重打为4,598,415 bytes，SHA-256 `2d734589793d4efe5bf7572c084be17fe06be816c379da11d74bc666a1fbb055`；主控 `/server/manifest` 已指向新包。产物未提交Git。
+  - APK-SM-N9500定向强制更新请求返回accepted，但服务启动时间未变化，不能确认已安装；Offline code v78未发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。任务列表拖动滚动按用户要求暂缓，待真机试用后再定。
+
+### Offline服务代码v78发布
+
+- ✅ [2026-10-14] Offline服务代码v78已发布至LAN与WAN：`code/code-v78.zip`，17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`；发布清单SHA-256 `47f08d0e7920b86aff6ace6a40180ae7a5100fa03a993dcd2193a1f284dd9444`。
+  - 签名清单与全组件HTTP大小/SHA-256校验通过，两端清单一致，旧版本精确清理成功；未构建或发布APK。`servicePackage=false`、`minApk=false`、`dependenciesPackage=false`。
+  - APK-SM-N9500仍报告代码`1.0.0`及`package-root`，尚未应用Offline热更新；待在设备更新卡片确认安装后复核版本。
