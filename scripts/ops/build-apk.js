@@ -114,13 +114,16 @@ async function prepareRuntimeForProfile(options = {}) {
         runtimeDir: process.env.AASC_ANDROID_NODE_RUNTIME_DIR,
         verifyRuntime: profile.verifyRuntime,
         profileMetadata,
+        includeModelCatalog: profile.offline,
         offlineUpdatePublicKeyPem: options.offlineUpdatePublicKeyPem,
         offlineUpdatePublicKeyPath: options.offlineUpdatePublicKeyPath,
         outputDir: plan.runtimeAssetsDir,
         nativeOutputDir: plan.runtimeJniLibsDir
     };
     if (profile.updateOnly) {
-        return prepareRuntime({ ...sharedRuntimeOptions, updateOnly: true, modelIds: [] });
+        return prepareRuntime({ ...sharedRuntimeOptions, updateOnly: true, modelIds: [],
+            certDir: process.env.AASC_ANDROID_NODE_CERT_DIR || path.join(projectRoot, 'res', 'certs'),
+            includeBootstrap: true });
     }
 
     const prepareServerPackage = options.prepareServerPackage || prepareAndroidServerPackage;

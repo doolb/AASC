@@ -543,7 +543,11 @@ adb -s <设备序列号> shell am start --display 2 --windowingMode 1 \
 
 真机验收时，ASR 可上传 `res/models/sensevoice/test_wavs/你好，小爱.wav` 验证原生识别；TTS 可调用 `/api/tts/generate` 后检查返回的 `audio/wav`，再发送控制端 `tts` 播放消息验证播放结束事件。
 
-当前离线包内置正式运行集约 949.3 MiB 模型（含默认的 `qwen3.5-0.8b-claude-opus-distilled-mnn`、SenseVoice、streaming Zipformer、声纹 base FP32 + pyannote、GTCRN、嵌入式 TTS、RapidOCR 和 YOLO11n）。offline APK 首次启动无历史选择时会直接从 APK 安装目录加载该 Qwen 模型，不复制到在线模型 active 目录。显示页右上角的“控制端”按钮可弹出或隐藏同源控制端页面；普通 APK 不受此构建命令影响。
+已发布 full38 内置 Qwen、SenseVoice、TTS 和声纹模型，min41 仍用于覆盖已有环境。2026-10-14 的独立 min 首装与完整包移除 LLM 权重已完成源码，尚未生成正式发行产物；不要用旧发布包验收新流程。
+
+新版签名 min 发布后，干净安装首次启动需在原生页面确认下载服务环境；确认前展示下载量，完成代码、依赖、种子和 HTTPS 初始化并通过健康检查后进入显示页。发布源必须提供带运行契约的签名代码清单及种子。显示页“本机模型”入口可查看模型状态，再明确选择加载本地文件或确认下载；模型文件就绪与引擎就绪分别显示，查询不下载，准备完成也不重放旧录音、播报或聊天请求。
+
+新版完整 Offline APK 配置只内置 SenseVoice、TTS 和声纹，LLM 定义保留、权重通过同一“本机模型”流程准备。已有 Qwen 缓存优先校验复用，不复制到 Node 服务目录。显示页右上角的“控制端”按钮可弹出或隐藏同源控制端页面。
 
 Android 9/API 28 设备首次启动 APK 时，会弹出“照片、媒体内容和文件”共享存储授权框。选择允许后，APK 内置 Node 子服务器即可按媒体库配置访问 `/storage/emulated/0/` 及其子目录，例如：
 

@@ -39,6 +39,29 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'offline_native_models',
+            name: 'Offline 本机模型状态',
+            description: '只读检查模型文件状态，不下载、加载或执行推理',
+            category: '系统功能',
+            run: async () => {
+                const bridge = window.NativeOfflineModels;
+                if (!bridge || typeof bridge.status !== 'function') {
+                    return { success: true, message: '无新版 Offline 原生桥，跳过模型状态检查',
+                        details: '独立 min 首装、下载取消与无网推理仍需新版 APK 真机验收' };
+                }
+                try {
+                    const models = JSON.parse(bridge.status());
+                    if (!models.length) return { success: true, message: '当前为在线 APK，跳过 Offline 模型检查' };
+                    const valid = Array.isArray(models) && new Set(models.map(model => model.modelId)).size === models.length
+                        && models.every(model => typeof model.modelId === 'string' && model.modelId
+                            && Number.isSafeInteger(model.totalBytes) && model.totalBytes > 0
+                            && ['filesPresent', 'filesReady', 'downloading'].every(key => typeof model[key] === 'boolean'));
+                    return { success: valid, message: valid ? '本机模型目录与文件状态可查询' : '本机模型状态格式异常',
+                        details: 'filesReady 仅表示文件已验证，原生引擎是否就绪由 ASR/TTS/LLM 各自状态决定' };
+                } catch (error) { return { success: false, message: `本机模型状态读取失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'full_config_zip_backup',
             name: '全量配置 ZIP 备份入口',
             description: '只读检查全量备份控件与恢复结果接口，不导出、导入或重启',

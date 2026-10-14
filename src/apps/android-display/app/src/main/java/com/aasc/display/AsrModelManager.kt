@@ -13,14 +13,15 @@ import java.util.concurrent.Executors
 class AsrModelManager(
     private val context: Context,
     private val modelDirectory: File? = null,
-    private val uiHandler: Handler = Handler(Looper.getMainLooper())
+    private val uiHandler: Handler = Handler(Looper.getMainLooper()),
+    private val modelDirectoryProvider: (() -> File?)? = null
 ) {
     // offline APK 直接使用 Node Runtime 已解包的模型目录；online APK 才使用可下载缓存。
-    private val modelDir = modelDirectory ?: File(context.filesDir, "models/sensevoice")
-    private val modelFile = File(modelDir, "model.int8.onnx")
-    private val tokensFile = File(modelDir, "tokens.txt")
-    private val modelHashFile = File(modelDir, "model.int8.onnx.sha256")
-    private val tokensHashFile = File(modelDir, "tokens.txt.sha256")
+    private val modelDir get() = modelDirectoryProvider?.invoke() ?: modelDirectory ?: File(context.filesDir, "models/sensevoice")
+    private val modelFile get() = File(modelDir, "model.int8.onnx")
+    private val tokensFile get() = File(modelDir, "tokens.txt")
+    private val modelHashFile get() = File(modelDir, "model.int8.onnx.sha256")
+    private val tokensHashFile get() = File(modelDir, "tokens.txt.sha256")
     private val downloadPool: ExecutorService = Executors.newSingleThreadExecutor()
     private val lock = Any()
 

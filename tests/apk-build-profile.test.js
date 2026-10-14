@@ -80,8 +80,10 @@ test('allserver-min profile 是 update-only、无模型并使用递增 APK 版�
     assert.equal(profile.embeddedNode, true);
     assert.equal(profile.updateOnly, true);
     assert.deepEqual(profile.models, []);
-    assert.equal(profile.versionCode, 31);
-    assert.equal(profile.versionName, '0.2.29-offline-min');
+    const full = await loadApkProfile({ projectRoot, profile: 'allserver' });
+    assert.ok(profile.versionCode > full.versionCode);
+    assert.match(profile.versionName, /^\d+\.\d+\.\d+-offline-min$/u);
+    assert.deepEqual(full.models, ['sensevoice', 'tts', 'voiceprint']);
 });
 
 test('full offline profile 内置声纹模型，供 Offline 原生注册复用', async () => {

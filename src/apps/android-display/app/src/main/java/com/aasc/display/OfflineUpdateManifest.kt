@@ -24,7 +24,8 @@ data class OfflineMinApkArtifact(
     val packageName: String,
     val signerSha256: String,
     val modelCompatibilitySha256: String,
-    val releaseNotes: String? = null
+    val releaseNotes: String? = null,
+    val runtimeCompatibility: JSONObject? = null
 )
 
 data class OfflineDataRepairArtifact(
@@ -45,7 +46,9 @@ data class OfflineUpdateManifest(
     val code: OfflineUpdateArtifact,
     val dependencies: OfflineUpdateArtifact,
     val apkMin: OfflineMinApkArtifact?,
-    val dataRepair: OfflineDataRepairArtifact? = null
+    val dataRepair: OfflineDataRepairArtifact? = null,
+    val nodeMinSeeds: OfflineUpdateArtifact? = null,
+    val runtimeCompatibility: JSONObject? = null
 ) {
     companion object {
         private const val SIGNATURE_ALGORITHM = "SHA256withRSA"
@@ -116,7 +119,9 @@ data class OfflineUpdateManifest(
                 ),
                 dependencies.copy(lockSha256 = dependencyLockSha256),
                 apkMin,
-                dataRepair
+                dataRepair,
+                components.optJSONObject("nodeMinSeeds")?.let { parseArtifact(it, "nodeMinSeeds") },
+                codeJson.optJSONObject("runtimeCompatibility")
             )
         }
 
@@ -184,7 +189,8 @@ data class OfflineUpdateManifest(
                 packageName = packageName,
                 signerSha256 = readSha256(value, "signerSha256"),
                 modelCompatibilitySha256 = readSha256(value, "modelCompatibilitySha256"),
-                releaseNotes = releaseNotes
+                releaseNotes = releaseNotes,
+                runtimeCompatibility = value.optJSONObject("runtimeCompatibility")
             )
         }
 

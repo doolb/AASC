@@ -421,7 +421,7 @@ test('offline 启动遮罩不会被错误页 onPageFinished 隐藏', () => {
     assert.match(activity, /isDisplayPageUrl\(pageUrl, baseUrl\)/u);
 });
 
-test('离线 APK 将 Qwen MNNChat 作为默认模型并按需物化显示端资产', () => {
+test('离线 APK 保留 Qwen 默认定义但状态查询不触发模型加载', () => {
     const bridge = read(
         'src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt'
     );
@@ -436,7 +436,9 @@ test('离线 APK 将 Qwen MNNChat 作为默认模型并按需物化显示端资�
     );
 
     assert.match(bridge, /DEFAULT_OFFLINE_LLM_MODEL_ID/u);
-    assert.match(bridge, /ensureDefaultModel\(\)/u);
+    const status = bridge.slice(bridge.indexOf('fun llmStatus()'), bridge.indexOf('fun offlineShowModels()'));
+    assert.doesNotMatch(status, /ensureDefaultModel\(\)/u);
+    assert.match(manager, /offlineModelStore\.requirePrepared/u);
     assert.match(manager, /bundledModelId/u);
     assert.match(manager, /models[\\/]llm[\\/]bundled/u);
     assert.match(manager, /AssetManager/u);
@@ -444,7 +446,7 @@ test('离线 APK 将 Qwen MNNChat 作为默认模型并按需物化显示端资�
     assert.match(manager, /bundledModelRoot\.isDirectory\s*\|\|\s*bundledModelRoot\.mkdirs\(\)/u);
     assert.match(manager, /remoteModelManager\.ensureModel/u);
     assert.match(manager, /candidate\.load\(modelDirectory\)/u);
-    assert.match(activity, /NativeBridge\(wv, audioFocusController, offlineMode\)/u);
+    assert.match(activity, /NativeBridge\(\s*wv,\s*audioFocusController,\s*offlineMode,/u);
     assert.match(installer, /bundled-manifest\.json/u);
     assert.match(installer, /\.manifest\.json/u);
     assert.match(installer, /modelAssets/u);

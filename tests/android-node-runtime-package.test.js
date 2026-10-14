@@ -177,6 +177,43 @@ test('update-only Runtime 生成允许列表动态库资产并保留 Node 可执
     )).size > 0);
 });
 
+test('独立 min 的HTTPS/可信目录单独打包，不扩大Runtime动态库白名单', async () => {
+    const runtimeDir = await createRuntime(tempDir);
+    const certDir = path.join(tempDir, 'certs');
+    await fs.promises.mkdir(certDir);
+    await fs.promises.writeFile(path.join(certDir, 'cert.pem'), 'certificate-fixture');
+    await fs.promises.writeFile(path.join(certDir, 'key.pem'), 'key-fixture');
+    const outputDir = path.join(tempDir, 'bootstrap-assets');
+    const result = await prepareAndroidNodeRuntime({ projectRoot: path.resolve(__dirname, '..'), runtimeDir,
+        updateOnly: true, includeBootstrap: true, certDir, outputDir,
+        nativeOutputDir: path.join(tempDir, 'bootstrap-native') });
+    const bootstrap = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'offline-bootstrap-manifest.json')));
+    assert.equal(bootstrap.runtimeCompatibility.nodeMajor, 26);
+    assert.deepEqual(bootstrap.files.map(file => file.path).sort(),
+        ['offline-model-catalog.json', 'res/certs/cert.pem', 'res/certs/key.pem']);
+    assert.ok(result.manifest.files.every(file => file.path.startsWith('runtime/arm64-v8a/lib/')));
+    assert.equal(fs.existsSync(path.join(outputDir, 'server')), false);
+    assert.equal(fs.existsSync(path.join(outputDir, 'display-models')), false);
+});
+
+test('完整Offline无LLM权重仍携带小型定义及合法空内置集合', async () => {
+    const runtimeDir = await createRuntime(tempDir);
+    const packageDir = await createServerPackage(tempDir);
+    const modelRoot = path.join(tempDir, 'models');
+    await fs.promises.mkdir(path.join(modelRoot, 'sensevoice'), { recursive: true });
+    await fs.promises.writeFile(path.join(modelRoot, 'sensevoice/model.int8.onnx'), 'asr-fixture');
+    await fs.promises.writeFile(path.join(modelRoot, 'sensevoice/tokens.txt'), 'tokens-fixture');
+    const outputDir = path.join(tempDir, 'full-without-llm');
+    const result = await prepareAndroidNodeRuntime({ projectRoot: path.resolve(__dirname, '..'), runtimeDir,
+        packageDir, modelRoot, includeOfflineModels: true, modelIds: ['sensevoice'], includeModelCatalog: true,
+        outputDir, nativeOutputDir: path.join(tempDir, 'full-without-llm-native') });
+    const metadata = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'offline-model-manifest.json')));
+    assert.deepEqual(metadata.models, []);
+    assert.deepEqual(result.manifest.modelAssets, []);
+    assert.ok(result.manifest.files.some(file => file.path === 'server/res/models/llm/manifest.json'));
+    assert.equal(result.manifest.files.some(file => file.path.includes('/llm/') && file.path !== 'server/res/models/llm/manifest.json'), false);
+});
+
 test('update-only APK 可携带验证公钥但公钥不进入可安装 Runtime 文件列表', async () => {
     const runtimeDir = await createRuntime(tempDir);
     const projectRoot = path.join(tempDir, 'project');

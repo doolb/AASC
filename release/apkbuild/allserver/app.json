@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "embeddedNode": true,
-  "versionCode": 38,
-  "versionName": "0.2.36-offline",
+  "versionCode": 43,
+  "versionName": "0.2.41-offline",
   "serviceVersions": {
-    "codeVersion": 69,
+    "codeVersion": 79,
     "dependencyVersion": 8
   },
   "verifyRuntime": false,
@@ -16,7 +16,6 @@
     "render-display"
   ],
   "models": [
-    "qwen3.5-0.8b-claude-opus-distilled-mnn",
     "sensevoice",
     "tts",
     "voiceprint"

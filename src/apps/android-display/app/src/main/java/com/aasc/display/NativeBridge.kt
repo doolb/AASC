@@ -231,15 +231,17 @@ class NativeBridge(
     // offline 语音模型由 NodeRuntimeInstaller 解包到 aasc-server 资源目录，ASR/TTS 直接复用；
     // LLM 权重属于显示端 display-models asset，由 MnnLlmModelManager 按需物化。
     private val offlineVoiceModelRoot = File(webView.context.filesDir, "aasc-server/res/models")
+    private val offlineModelStore = if (offlineMode) OfflineModelStore(webView.context) else null
 
     private fun offlineVoiceModelDirectory(name: String): File? {
-        return if (offlineMode) File(offlineVoiceModelRoot, name) else null
+        return offlineModelStore?.directoryFor(name)
     }
 
     // ---- ASR 原生识别桥（sherpa-onnx，模型按需下载）----
     private val asrModelManager = AsrModelManager(
         webView.context,
-        offlineVoiceModelDirectory("sensevoice")
+        offlineVoiceModelDirectory("sensevoice"),
+        modelDirectoryProvider = { offlineVoiceModelDirectory("sensevoice") }
     )
     // ASR 桥任务允许并发进入 AsrEnginePool；真实并发上限由 pool slot 队列控制，超额任务在池内排队。
     private val asrExecutor = Executors.newCachedThreadPool()
@@ -253,7 +255,8 @@ class NativeBridge(
     // ---- 声纹识别桥（speaker identification / 多人分割）----
    private val voiceprintModelManager = VoiceprintModelManager(
        webView.context,
-       offlineVoiceModelDirectory("voiceprint")
+       offlineVoiceModelDirectory("voiceprint"),
+       modelDirectoryProvider = { offlineVoiceModelDirectory("voiceprint") }
    )
    private var voiceprintEnabled = false
     private var voiceprintThreshold = 0.3f
@@ -264,7 +267,8 @@ class NativeBridge(
     // ---- TTS 嵌入式语音合成桥（Microsoft Embedded Speech SDK，模型按需下载）----
     private val ttsModelManager = TtsModelManager(
         webView.context,
-        offlineVoiceModelDirectory("tts")
+        offlineVoiceModelDirectory("tts"),
+        modelDirectoryProvider = { offlineVoiceModelDirectory("tts") }
     )
     // TTS 桥侧自身即完成有限准入：worker 数和队列容量都等于当前 policy 的 slotCount。
     // TtsEnginePool 的公平 Semaphore 仍保留，作为进入真实 synthesizer 槽位前的第二层保护。
@@ -283,8 +287,10 @@ class NativeBridge(
                 preferBigCores = true
             )
         },
-        bundledModelId = DEFAULT_OFFLINE_LLM_MODEL_ID.takeIf { offlineMode },
-        bundledModelRevision = DEFAULT_OFFLINE_LLM_MODEL_REVISION.takeIf { offlineMode }
+        bundledModelId = DEFAULT_OFFLINE_LLM_MODEL_ID.takeIf { offlineMode &&
+            OfflineModelStore.hasBundledModel(webView.context, DEFAULT_OFFLINE_LLM_MODEL_ID) },
+        bundledModelRevision = DEFAULT_OFFLINE_LLM_MODEL_REVISION.takeIf { offlineMode },
+        offlineModelStore = offlineModelStore
     )
     // 模型切换、下载、推理队列状态变化都主动通知页面，页面再转发权威状态给服务端。
     init {
@@ -465,6 +471,7 @@ class NativeBridge(
     // 进度与结果通过 window.onNativeAsrModel 回调（主线程 evaluateJavascript）
     @JavascriptInterface
     fun asrEnsureModel(): String {
+        if (offlineModelStore?.hasLocalFiles("sensevoice") == false) return "not_ready"
         val baseUrl = serverBaseUrl()
         if (baseUrl.isEmpty()) return JSONObject().put("error", "无法确定服务器地址").toString()
         return asrModelManager.ensureModel(baseUrl) { event ->
@@ -686,12 +693,32 @@ class NativeBridge(
 
     // ---- MNN-LLM 本地推理桥：模型下载和推理都在 APK 内完成 ----
 
-    /** 返回本 APK 的 MNN-LLM 状态；offline APK 首次查询时排队内置默认模型。 */
+    /** 查询只读取状态；模型加载和下载由明确操作触发。 */
     @JavascriptInterface
     fun llmStatus(): String {
-        llmModelManager.ensureDefaultModel()
         return llmModelManager.status().toJson().toString()
     }
+
+    /** 用户主动打开本机模型列表；下载完成只准备能力，不重发旧业务请求。 */
+    @JavascriptInterface
+    fun offlineShowModels(): Boolean {
+        val store = offlineModelStore ?: return false
+        val activity = webView.context as? android.app.Activity ?: return false
+        webView.post {
+            OfflineModelPreparationDialog.show(activity, store) { modelId ->
+                when (modelId) {
+                    "sensevoice" -> asrEnsureModel()
+                    "tts" -> ttsEnsureModel()
+                    "voiceprint" -> Unit // 下一次启用声纹时加载；不改变现有用户开关。
+                    else -> llmModelManager.selectModel(serverBaseUrl(), modelId)
+                }
+            }
+        }
+        return true
+    }
+
+    @JavascriptInterface
+    fun offlineModelsStatus(): String = offlineModelStore?.statusJson() ?: "[]"
 
     /** 根据服务端 LLM 能力开关释放或恢复模型运行时；磁盘模型缓存始终保留。 */
     @JavascriptInterface
@@ -1117,6 +1144,7 @@ class NativeBridge(
     // 进度与结果通过 window.onNativeTtsModel 回调（主线程 evaluateJavascript）
     @JavascriptInterface
     fun ttsEnsureModel(): String {
+        if (offlineModelStore?.hasLocalFiles("tts") == false) return "not_ready"
         val baseUrl = serverBaseUrl()
         if (baseUrl.isEmpty()) return JSONObject().put("error", "无法确定服务器地址").toString()
         return ttsModelManager.ensureModel(baseUrl) { event ->

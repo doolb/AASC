@@ -1,5 +1,26 @@
 # 自测功能实现文档
 
+## 独立 min / LLM 外置源码验收（2026-10-14）
+
+```text
+模型测试 := npm run test:ai-models → 36/36通过；含控制端NativeOfflineModels只读自测
+首装打包 := npm run test:offline-bootstrap → 60/60通过；独立HTTPS资产/空LLM/full无权重/旧指纹保留
+Android := testDebugUnitTest编译与218/218单元通过；首装版本目录/种子/latest/ZIP/LAN/空集合/WebSocket/中断恢复
+扩展回归 := Android静态+LLM/能力释放/更新镜像46项43通过3失败；同名失败在HEAD已存在
+HEAD基线 := Android静态27项23通过4失败；本次受影响Qwen绑定断言已同步，多余3项保留待维护
+执行环境 := /tmp配额与沙箱子进程限制 → 项目tmp并按授权重试 → 核心测试全通过
+边界 := 未签名出包/未部署/未实物模型上传/未在干净设备安装；无网推理和真实cohort另验
+```
+
+## 独立 min 本机模型只读自测（2026-10-14，源码完成）
+
+```text
+控制端 NativeOfflineModels.status → 只读小型定义/文件属性/验证标记
+自测 offline_native_models → 检查模型ID唯一、总量整数及文件/引擎状态边界
+无原生桥或在线APK空列表 → 明确跳过说明；不执行下载、加载、推理或配置修改
+首装页面/WebSocket → 原生健康提交前检查HTTPS页面与Upgrade握手
+```
+
 ## 全身IK独立面板与牵引调硬自测（2026-10-13）
 
 ~~~text
@@ -31,6 +52,23 @@ PMX同级上下半身 + 骨盆旋转 → 验证躯干随动；显式骨盆范围
 
 定向18/18、身体物理与原镜头浏览器各1/1；本地构建通过。其他PMX/服饰后端/VMD/AR/手机帧时与观感仍为人工验收。
 
+## 独立 min / LLM 外置实施设计验证（2026-10-13）
+
+```text
+本轮已验证 := npm run test:ai-models → 30/30通过；现行分类无变化
+聚焦打包基线 := 四个build-profile/min-package/signing文件 → 23项22通过1失败
+失败证据 := apk-build-profile.test.js:83期望min31，实际37；旧versionName断言同样待维护
+后续维护 := 隔离fixture验证版本字段 + 当前full/min/发布索引递增契约；不退回旧profile
+设计产物 := 原生首装事务/签名快照/种子与HTTPS + 模型确认/归并/取消 + 旧cohort过渡
+计划测试 := 空models环境复用 + active-release版本目录 + 无previous失败 + 进程中断
+计划集成 := HTTPS状态/控制页/WebSocket + 本机原生模式 + files/models单份Qwen
+计划模型 := 可信摘要映射/LAN专用策略 + 查询无网 + ASR/TTS回退 + 过时请求不重播
+计划兼容 := full23/full38/min36/min37指纹cohort + 新无LLM full + 干净min首装/后续更新
+计划性能 := 单模型并发只下载一次 + 二次无网无复制 + 流式峰值空间/RSS + 启动健康120秒
+自测界面目标 := 只读展示环境/模型分别就绪；不得在自测查询中开始模型下载
+验证边界 := 新功能尚未实现；未改测试源码/构建APK/操作设备/上传模型
+```
+
 ## 完整 Offline APK 同步与发布自测（2026-10-13）
 
 ```text
@@ -60,6 +98,20 @@ Android := :app:testDebugUnitTest成功，保存来源/请求标识/文件头/�
 兼容回归 := 启动器/历史隔离/历史profile/发布器29/29通过；共用重启重复调用仅一次通知和退出
 性能夹具 := 24 MiB聊天ZIP往返1802 ms；峰值RSS259 MiB，含测试夹具
 边界 := 未导入真实数据，未自动重启主服务；系统文档保存真机交互待设备验收
+```
+
+## Offline min 独立安装与模型外置评审验证（2026-10-13）
+
+```text
+本轮已运行 := npm run test:ai-models → 30/30通过；无跳过
+已探测 := 当前TTS/LLM路径被白名单拒绝；仅选择sensevoice/tts/voiceprint → 29项，无llm定义/权重
+结论边界 := 现有同步正常；不代表TTS/LLM新增同步或min首装已经实现
+计划自测 := 环境/模型独立就绪 + 合法空bundled集合 + 损坏元数据拒绝
+计划兼容 := 旧full/旧min过渡升级 + 新full无Qwen升级 + 干净min首装及后续升级
+计划异常 := lock/ABI/哈希不匹配 + 截断/空间不足/中断/取消 + 并发归并 + 坏缓存恢复
+计划真测 := LAN/WAN模型下载 + 已下载模型无网加载 + 配置/任务/旧Qwen缓存保留
+计划性能 := 环境下载/校验/解包/健康就绪与模型下载/校验/加载分别记录
+状态 := 仅完成评审验证；后续新增测试模块随已确认的源码设计落地
 ```
 
 ## Offline APK 高 DPI TTS 位置浏览器自测（2026-10-13）

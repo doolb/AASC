@@ -54,7 +54,8 @@ class MnnLlmModelManager(
     context: Context,
     private val cpuPolicyProvider: () -> CpuPolicy?,
     private val bundledModelId: String? = null,
-    private val bundledModelRevision: String? = null
+    private val bundledModelRevision: String? = null,
+    private val offlineModelStore: OfflineModelStore? = null
 ) {
     private val modelRoot = File(context.filesDir, "models/llm")
     private val activeDirectory = File(modelRoot, "active")
@@ -432,7 +433,10 @@ class MnnLlmModelManager(
         try {
             val bundledDirectory = bundledModelDirectory(modelId)
             val modelDirectory: File
-            if (bundledDirectory != null) {
+            if (offlineModelStore != null && bundledDirectory == null) {
+                publishState("loading", false, modelId)
+                modelDirectory = offlineModelStore.requirePrepared(modelId)
+            } else if (bundledDirectory != null) {
                 publishState("loading", false, modelId)
                 ensureBundledModelFromAssets(modelId)
                 check(isBundledModelReady(bundledDirectory)) {
@@ -475,6 +479,7 @@ class MnnLlmModelManager(
                 loadedCpuPolicyGeneration = loadGeneration
                 selectedModelId = modelId
                 selectedRevision = install?.model?.revision?.ifBlank { install?.model?.id }
+                    ?: offlineModelStore?.definition(modelId)?.revision
                     ?: bundledModelRevision?.takeIf { it.isNotBlank() }
                     ?: modelId
                 loadedModelId = modelId

@@ -14,12 +14,13 @@ import java.util.concurrent.Executors
 class TtsModelManager(
     private val context: Context,
     private val modelDirectory: File? = null,
-    private val uiHandler: Handler = Handler(Looper.getMainLooper())
+    private val uiHandler: Handler = Handler(Looper.getMainLooper()),
+    private val modelDirectoryProvider: (() -> File?)? = null
 ) {
     // offline APK 直接使用 Node Runtime 已解包的内置目录；online APK 才使用下载缓存。
-    private val modelDir = modelDirectory ?: File(context.filesDir, "models/tts")
+    private val modelDir get() = modelDirectoryProvider?.invoke() ?: modelDirectory ?: File(context.filesDir, "models/tts")
     // 本地已验证 hash 记录（重启时只比较记录与服务器 manifest，不重新读取大文件计算 hash）
-    private val localHashFile = File(modelDir, "hashes.json")
+    private val localHashFile get() = File(modelDir, "hashes.json")
     private val downloadPool: ExecutorService = Executors.newSingleThreadExecutor()
     private val lock = Any()
 

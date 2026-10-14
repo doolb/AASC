@@ -97,7 +97,7 @@
 | 子服务器 | [sub-server.md](design/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | Android Termux服务器节点 | [android-termux-server.md](design/android-termux-server.md) | Termux Node.js 服务器试运行、节点运行边界与后续演进 |
 | APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](design/android-embedded-node-server.md) | APK 前台 Service、arm64 Runtime、AASC 主动连接和能力裁剪 |
-| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](design/android-display-offline-apk.md) | 独立离线包、内置模型、本机 main 服务和顶层控制端页面 |
+| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](design/android-display-offline-apk.md) | 独立min首装与LLM外置源码完成，正式出包/部署与真机待验收 |
 | 服务端语音识别 | [sherpa-asr.md](design/sherpa-asr.md) | ASR 串行识别、native 资源释放、临时文件清理 |
 | ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](design/asr-memory-upload-vad-unification.md) | ASR Buffer 输入、无临时文件处理、网页与 Node 子显示端 VAD 参数同步 |
 | 服务端 TTS | [tts.md](design/tts.md) | 外部 TTS 调用保护、内置 tts.server Wine/Linux HTTP 服务与统一路由 |

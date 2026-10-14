@@ -157,7 +157,7 @@ class NodeRuntimeManifestTest {
     }
 
     @Test
-    fun 离线Runtime快速复用时只检查内置模型元数据不要求LLM文件已解包() {
+    fun 离线Runtime快速复用不要求内置LLM集合非空() {
         val root = Files.createTempDirectory("aasc-offline-runtime-fast-path").toFile()
         try {
             File(root, ".runtime-version").writeText("dev")
@@ -174,6 +174,7 @@ class NodeRuntimeManifestTest {
             File(root, "offline-model-manifest.json").writeText(
                 """{"version":1,"models":[{"modelId":"qwen-test","files":[] }]}"""
             )
+            File(root, "node_modules/express/package.json").apply { parentFile!!.mkdirs(); writeText("{}") }
             File(root, "config/config.json").apply {
                 parentFile?.mkdirs()
                 writeText("{\"chat\":{}}")
@@ -181,7 +182,7 @@ class NodeRuntimeManifestTest {
 
             assertTrue(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
             File(root, "offline-model-manifest.json").writeText("{\"models\":[]}")
-            assertFalse(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
+            assertTrue(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
         } finally {
             root.deleteRecursively()
         }
@@ -347,7 +348,7 @@ class NodeRuntimeManifestTest {
     }
 
     @Test
-    fun minAPK只能复用已存在的完整offline运行目录() {
+    fun minAPK复用有效环境时不要求内置模型元数据() {
         val root = Files.createTempDirectory("aasc-full-offline-guard").toFile()
         try {
             assertFalse(NodeRuntimeInstaller.hasFullOfflineInstall(root))
@@ -368,7 +369,10 @@ class NodeRuntimeManifestTest {
             File(root, "offline-model-manifest.json").writeText(
                 """{"models":[{"modelId":"qwen-test","files":[]}]}"""
             )
+            File(root, "config/config.json").apply { parentFile!!.mkdirs(); writeText("{}") }
 
+            assertTrue(NodeRuntimeInstaller.hasFullOfflineInstall(root))
+            File(root, "offline-model-manifest.json").delete()
             assertTrue(NodeRuntimeInstaller.hasFullOfflineInstall(root))
         } finally {
             root.deleteRecursively()

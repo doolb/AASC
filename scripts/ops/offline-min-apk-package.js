@@ -11,6 +11,7 @@ const {
     validateManifestComponents
 } = require('./offline-update-package');
 const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
+const { RUNTIME_COMPATIBILITY } = require('./offline-runtime-contract');
 
 const execFileAsync = promisify(execFile);
 const MAX_RELEASE_NOTES_CHARS = 4096;
@@ -101,7 +102,11 @@ async function createOfflineMinApkArtifact(options = {}) {
         apkPath,
         buildManifestPath
     });
-    const compatibility = JSON.parse(await fs.promises.readFile(modelCompatibilityPath, 'utf8'));
+    // 过渡清单优先沿用已经签名发布的 legacy cohort，不能从新 full 的空模型集合派生。
+    const legacySha256 = !options.modelCompatibilityPath && currentManifest.payload.components.apkMin?.modelCompatibilitySha256;
+    const compatibility = legacySha256
+        ? { schemaVersion: 1, modelCompatibilitySha256: legacySha256 }
+        : JSON.parse(await fs.promises.readFile(modelCompatibilityPath, 'utf8'));
     if (compatibility.schemaVersion !== 1 || !/^[a-f0-9]{64}$/u.test(compatibility.modelCompatibilitySha256 || '')) {
         throw new Error('完整 Offline APK 的 model compatibility 清单无效');
     }
@@ -123,6 +128,7 @@ async function createOfflineMinApkArtifact(options = {}) {
         packageName: 'com.aasc.display.offline',
         signerSha256,
         modelCompatibilitySha256: compatibility.modelCompatibilitySha256,
+        runtimeCompatibility: RUNTIME_COMPATIBILITY,
         relativeUrl,
         size,
         sha256,

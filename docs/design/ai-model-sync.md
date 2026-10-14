@@ -1,5 +1,44 @@
 # AI模型外网发布与双向同步
 
+## TTS / LLM 归档与原生来源实现（2026-10-14，源码完成、待发布）
+
+`ai-model-common`、远端Python事务及镜像共用规则已扩展至tts/llm；TTS严格要求全部14个声明文件，LLM目录存在但缺文件/摘要不符时阻止发布，完全缺失目录只保留定义。根清单仍是files/path结构，LLM三段路径按安全目录与必要文件名白名单校验，不收集测试音频、脚本或推理缓存marker。
+
+新增源码小型`offline-model-catalog.json`与`llm-model-definitions.json`，共8种定义（ASR/TTS/声纹及5种LLM）；构建读取同一可信目录，APK无权重也能提供模型列表，服务代码无res/models/llm仍能枚举定义且ready=false。当前可验证的Qwen必要文件仍为9项544,130,168 bytes；其余4种LLM没有本机权重，不表示已发布或可下载。
+
+APK来源适配以固定可信文件定义校验aimodel主清单，所有必要项大小/摘要一致才开始传输。LAN HTTP仅限192.168.1.39与10.221.70.87的/mnt/aimodel/路径，WAN使用https://c.aasc.us/mnt/aimodel/；凭证、查询参数、重定向、越界文件名均拒绝。在线通用下载器的HTTPS/回环规则保持；Offline默认镜像不开-aimodel时仍不请求模型。
+
+本轮36项模型测试通过，包含真实本地Python事务、HTTP夹具、完整集合与路径拒绝、自测只读和无权重定义查询。TTS/Qwen实物上传、LAN镜像及公网实际下载未执行，仍需按部署顺序先更新同步器再扩展公开清单。详见[任务](../task/20261014_OfflineMin独立首装与LLM外置实现.md)；下文“待实施”是2026-10-13历史方案。
+
+## TTS / LLM 发布及 APK 来源契约（2026-10-13，设计完成、待实施）
+
+延续下节评审，主清单仍为 schemaVersion=1 的 files/path/size/sha256/totalBytes，不把 APK 的 models 结构混入镜像协议。新增 tts 与 llm 分类时，本地共享规则、远端 Python 事务、同步器、Offline `-aimodel` 路径验证与选组参数同步更新；原五组保持既有行为。先部署兼容客户端再扩展清单，不允许旧同步器忽略未知项后提交不完整清单。未知外部客户端继续使用发布前旧镜像或升级同步器；本期不另建版本化公开入口。
+
+| 分类 | 允许文件 | 收集依据 |
+|---|---|---|
+| tts | `tts/manifest.json` 及清单中的14个必要文件，已有 README/LICENSE 可按白名单保留 | 读取声明逐项校验；缺少任意必要文件或哈希不匹配则该完整模型不可发布 |
+| llm | `llm/manifest.json` 及 `llm/<directory>/<declaredFile>` | modelId/directory 安全且唯一，文件名为单段白名单，逐项大小/SHA-256校验 |
+
+LLM 只发布实际本地完整模型的声明运行文件；本机 Qwen 目前9项、544,130,168 bytes，约518.92 MiB，其余4种只有定义。定义列表可以保留5种，但 aimodel 下载可用列表只能包含全部必要项已发布的模型。完全缺失的目录记为未发布并跳过；目录存在但不完整或哈希不符，发布预检失败，不能用它覆盖当前完整发布。未知文件、测试音频、缓存 marker、推理日志、脚本与符号链接不收集；不再上传 `.manifest.json` 推理缓存标记。
+
+新增模型目录生成器，从可信声明生成统一运行定义 `{modelId, revision, files[{name,path,size,sha256}], totalBytes}`。TTS 声明不含大小，生成器从已核验的发布目录计算大小；不能在 APK 端写死75MB。ASR/声纹从既有目录定义生成。目录作为小型资产进入 APK，并作为生成文件进入 code ZIP 的 src 模块目录；两处使用同一生成规则。上传/下载后的 aimodel 文件清单须与该定义匹配。LLM 小型定义独立打包，不要求本机有该模型权重；已发布可用列表仍以真实文件核验为准。
+
+原生 Offline 来源适配器将统一定义与 aimodel 主清单映射为现有管理器的文件列表，不新增独立配置 HTTP 接口，不把 `/api/llm/model/...` 指向本机不存在的权重。已有在线模型 API 保持职责；可配置运行选项继续经过 AASC/WebSocket 权威配置。LAN 固定源仅通过 Offline 专用策略启用 HTTP，使用 APK/签名 code 中的可信摘要校验；WAN 使用 HTTPS，所有跳转拒绝。同一模型 revision 失败换源时只能继续相同文件指纹，不能接受不同清单内容。
+
+模型归档先验证本地及远端路径规则 → 完整性预检 → 版本/暂存文件上传与校验 → 主清单原子切换 → WAN HTTP 大小/SHA-256验收；镜像同样在全部选中项完整后提交主清单。现有 `sync:offline-update` 不带 `-aimodel` 时仍不请求模型。APK 端按需下载不要求先镜像全部模型；源不可用不影响已有本地缓存离线加载。
+
+该协议尚未实现或发布，实施与验证矩阵见 [任务](../task/20261013_OfflineMin独立安装与LLM外置实施设计.md)。
+
+## TTS 与 LLM 扩展评审（2026-10-13，待实施）
+
+用户追加TTS和LLM模型上传到同一外网aimodel目录。本机TTS当前15项、77,727,859字节；LLM目录12项、544,140,129字节，其中实际完整模型仅为Qwen3.5 0.8B Claude Opus distilled，9个声明运行文件共544,130,168字节。LLM定义清单还有其他4种模型，但本机没有它们的文件。按全部上述源文件估算，现有30项加TTS/LLM共约1.665GB；最终发布项由必要文件白名单与完整性检查确定，不能硬编码此数量。
+
+当前本地共享规则和远端Python校验均不支持tts/llm，且只允许两段路径。需增加TTS声明文件规则、LLM模型ID与三段路径规则，并同步上传、下载、Offline镜像和远端事务校验。测试音频、代码、推理缓存和未知子目录不因递归扫描而进入清单。LLM定义清单与已发布文件清单共同决定某模型是否可下载，只有定义不能标记可用。
+
+aimodel主清单的files/path结构与APK现有models/id/files/name结构不同，需要明确适配层与下载路径映射。原生LLM下载器目前只允许HTTPS或回环HTTP，直接换成LAN的Apache HTTP路径不可行；LAN适配应单独定义，不全局放宽现有下载器。下载后的模型由APK单独持有，避免Qwen同时存入Node服务和显示端缓存。
+
+新增分类会使旧版固定白名单同步器拒绝整个manifest，发布前必须先部署新版同步器或明确版本化清单入口。既有`sync:offline-update`默认不请求模型，`-aimodel`显式开启的规则继续保留。本轮现有模型同步自测30/30通过，TTS/LLM上传、HTTP验收和APK按需下载尚未执行。详见 `../task/20261013_OfflineMin独立安装与模型外置设计评审.md`。
+
 ## 需求与当前状态
 
 2026-10-12用户要求上传YOLO、ASR和声纹模型至`https://c.aasc.us/mnt/aimodel/`，并明确选择全部本地模型、同时支持上传和下载。当前范围以`res/models`内五组目录为准：`yolo11`、`sensevoice`、`streaming-zipformer`、`voiceprint`、`speech-enhancement`；包含全部现有ONNX、现有YOLO分割PT、词表、类别JSON、已有校验文件及README/LICENSE，不包含WAV、代码、训练缓存、日志或其他模型目录。

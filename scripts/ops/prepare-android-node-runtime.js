@@ -4,6 +4,8 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadOfflineUpdatePublicKey } = require('./offline-update-signing');
+const { RUNTIME_COMPATIBILITY } = require('./offline-runtime-contract');
+const { CATALOG_RELATIVE_PATH, DEFINITIONS_RELATIVE_PATH, readOfflineModelCatalog } = require('../models/offline-model-catalog');
 
 const ANDROID_ABI = 'arm64-v8a';
 const DEFAULT_RUNTIME_DIR = path.resolve(__dirname, '../../3rd/android-node-runtime', ANDROID_ABI);
@@ -772,6 +774,16 @@ async function prepareUpdateOnlyRuntime(options = {}) {
                 'utf8'
             );
         }
+        if (options.includeBootstrap) {
+            const bootstrapFiles = await copyCertificates(options.certDir, temporaryOutputDir);
+            if (bootstrapFiles.length !== 2) throw new Error('min 首装必须携带本机 HTTPS 证书对');
+            await readOfflineModelCatalog(projectRoot);
+            bootstrapFiles.push(await copyFileWithManifest(projectRoot, CATALOG_RELATIVE_PATH,
+                temporaryOutputDir, 'offline-model-catalog.json'));
+            await fs.promises.writeFile(path.join(temporaryOutputDir, 'offline-bootstrap-manifest.json'),
+                JSON.stringify({ schemaVersion: 1, runtimeCompatibility: RUNTIME_COMPATIBILITY,
+                    files: bootstrapFiles }, null, 2) + '\n');
+        }
         await fs.promises.rm(outputDir, { recursive: true, force: true });
         await fs.promises.rm(nativeOutputDir, { recursive: true, force: true });
         await fs.promises.rename(temporaryOutputDir, outputDir);
@@ -861,6 +873,14 @@ async function prepareAndroidNodeRuntime(options = {}) {
             : { files: [], modelAssets: [], models: [] };
         files.push(...offlineModelPackage.files);
         const modelAssets = offlineModelPackage.modelAssets;
+        if (options.includeModelCatalog) {
+            await readOfflineModelCatalog(options.projectRoot || process.cwd());
+            files.push(await copyFileWithManifest(options.projectRoot || process.cwd(), CATALOG_RELATIVE_PATH,
+                temporaryOutputDir, 'offline-model-catalog.json'));
+            // 定义单独保留，任何 LLM 权重均不因此进入 Runtime。
+            files.push(await copyFileWithManifest(options.projectRoot || process.cwd(), DEFINITIONS_RELATIVE_PATH,
+                temporaryOutputDir, 'server/res/models/llm/manifest.json'));
+        }
         const offlineTaskFiles = includeOfflineTasks
             ? await copyOfflineTasks(taskRoot, temporaryOutputDir)
             : [];

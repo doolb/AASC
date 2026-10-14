@@ -144,7 +144,10 @@ class LlmModelManifestService {
         try {
             stat = fs.statSync(this.manifestPath);
         } catch (error) {
-            return [];
+            // Offline 无权重安装仍可枚举小型模型定义；显式测试/在线目录保持空目录语义。
+            if (process.env.AASC_OFFLINE_MODE !== '1') return [];
+            this.manifestPath = path.join(__dirname, '../model-distribution/llm-model-definitions.json');
+            stat = fs.statSync(this.manifestPath);
         }
 
         if (this.manifestCache

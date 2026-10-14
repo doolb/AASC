@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "modelId": "minicpm4-0.5b-mnn",
+      "displayName": "MiniCPM4 0.5B (MNN)",
+      "engine": "mnn-llm",
+      "architecture": "MiniCPM4",
+      "revision": "e5bdf87306c63328e408a6a39d78a4ea27df5468",
+      "directory": "minicpm4-0.5b-mnn",
+      "source": {
+        "provider": "modelscope",
+        "repository": "MNN/MiniCPM4-0.5B-MNN",
+        "revision": "e5bdf87306c63328e408a6a39d78a4ea27df5468"
+      },
+      "files": [
+        {
+          "name": "config.json",
+          "size": 338,
+          "sha256": "e26e12426d4e49e9c4db7513da3f8276634dd28513b26d82e1dccccbde28be30"
+        },
+        {
+          "name": "configuration.json",
+          "size": 46,
+          "sha256": "56c362f108bb9f17fc0e7b490b7e8927c03dc4478631b4f771c37728019beaa2"
+        },
+        {
+          "name": "llm.mnn",
+          "size": 422080,
+          "sha256": "991d18a07edcbfb47217793cfe578e91986b3ca3cd2d20b399f3a108e2ff0bdb"
+        },
+        {
+          "name": "llm.mnn.weight",
+          "size": 309150586,
+          "sha256": "167ac75b4ca98bc32ba138a4ec9dfb2cdaa0ad128ad472819290a75b24a0aaf3"
+        },
+        {
+          "name": "llm_config.json",
+          "size": 753,
+          "sha256": "4ff8d3898e538daf4fff5983b95161404eacf20b08005d1601a658f2dc09f399"
+        },
+        {
+          "name": "tokenizer.txt",
+          "size": 1485381,
+          "sha256": "2cfdff08627bb8000ef14208301d40bf6e586b30219e59e914dfe768e1c919d5"
+        }
+      ]
+    },
+    {
+      "modelId": "qwen3-0.6b-mnn",
+      "displayName": "Qwen3 0.6B (MNN)",
+      "engine": "mnn-llm",
+      "architecture": "Qwen3",
+      "revision": "b15ed9fe8b50ef26afca5868065273955fbdf03a",
+      "directory": "qwen3-0.6b-mnn",
+      "source": {
+        "provider": "modelscope",
+        "repository": "MNN/Qwen3-0.6B-MNN",
+        "revision": "b15ed9fe8b50ef26afca5868065273955fbdf03a"
+      },
+      "files": [
+        {
+          "name": "config.json",
+          "size": 403,
+          "sha256": "d74912484c7f0527494c9184d8d6806554be501e15ca559a1610370b80839ef7"
+        },
+        {
+          "name": "configuration.json",
+          "size": 46,
+          "sha256": "56c362f108bb9f17fc0e7b490b7e8927c03dc4478631b4f771c37728019beaa2"
+        },
+        {
+          "name": "llm.mnn",
+          "size": 461520,
+          "sha256": "d426c65a5159c938ccc237cdfbd982137f276804f27b414ca0ecf3fc0a660f8c"
+        },
+        {
+          "name": "llm.mnn.weight",
+          "size": 450810338,
+          "sha256": "953afb7e0165818add34a7a6caf0af5d0ed9428da102eb22c9b98ee9da292e9f"
+        },
+        {
+          "name": "llm_config.json",
+          "size": 4880,
+          "sha256": "63f9a2f67ec2ae98b4c2363b46355040c34ca5c87a740ab3c94e08288a53225a"
+        },
+        {
+          "name": "tokenizer.txt",
+          "size": 3193569,
+          "sha256": "77009625db0b18e74315dd89557c76feaab57e1d54e3240b442649a3c16ec4fb"
+        }
+      ]
+    },
+    {
+      "modelId": "hunyuan-0.5b-instruct-mnn",
+      "displayName": "Hunyuan 0.5B Instruct (MNN)",
+      "engine": "mnn-llm",
+      "architecture": "Hunyuan",
+      "revision": "2481c21da1e1569cf97a3e9146e79234549b7b3b",
+      "directory": "hunyuan-0.5b-instruct-mnn",
+      "source": {
+        "provider": "modelscope",
+        "repository": "MNN/Hunyuan-0.5B-Instruct-MNN",
+        "revision": "2481c21da1e1569cf97a3e9146e79234549b7b3b"
+      },
+      "files": [
+        {
+          "name": "config.json",
+          "size": 403,
+          "sha256": "34f0b365c5da80f4d3e22f88ed009eb1dc11fecdc0985bdbfc3893f599fcd595"
+        },
+        {
+          "name": "configuration.json",
+          "size": 46,
+          "sha256": "56c362f108bb9f17fc0e7b490b7e8927c03dc4478631b4f771c37728019beaa2"
+        },
+        {
+          "name": "llm.mnn",
+          "size": 397696,
+          "sha256": "e2f524d5e1a280026fccd0f68363304f38b3f1b9c9fbf218d8b4c8aecee31a17"
+        },
+        {
+          "name": "llm.mnn.json",
+          "size": 832780,
+          "sha256": "4bfb64c6801d971e4bf5ebaf30daaa70e41a608613e4db9ac29bb746231773d2"
+        },
+        {
+          "name": "llm.mnn.weight",
+          "size": 399159418,
+          "sha256": "cf39dfd5c54b1859c7106337a352e706afed0b57b3716708753b360474d62073"
+        },
+        {
+          "name": "llm_config.json",
+          "size": 5537,
+          "sha256": "f2998c7f2a8c7e03be26cfd1efa37ec23648d60f067e4847b75bc085d023fc0e"
+        },
+        {
+          "name": "tokenizer.txt",
+          "size": 1354705,
+          "sha256": "152f87c05c609199c1e24cc29cd79e5b582b4a1ce81eea1f9d8693eca55c4a4d"
+        }
+      ]
+    },
+    {
+      "modelId": "qwen3.5-0.8b-claude-opus-distilled-mnn",
+      "displayName": "Qwen3.5 0.8B Claude Opus Reasoning Distilled (MNN)",
+      "aliases": [
+        "qwen3.5",
+        "Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN"
+      ],
+      "engine": "mnn-llm",
+      "architecture": "qwen3_5",
+      "multimodal": true,
+      "revision": "c1bc31b15286afa708f37f690099d10f21d1cc74",
+      "directory": "qwen3.5-0.8b-claude-opus-distilled-mnn",
+      "source": {
+        "provider": "modelscope",
+        "repository": "MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN",
+        "revision": "c1bc31b15286afa708f37f690099d10f21d1cc74"
+      },
+      "files": [
+        {
+          "name": "config.json",
+          "size": 652,
+          "sha256": "92853033efe602f95efca3e1c05cd8b108f973c8beed417843a9671f8147ed8d"
+        },
+        {
+          "name": "configuration.json",
+          "size": 46,
+          "sha256": "56c362f108bb9f17fc0e7b490b7e8927c03dc4478631b4f771c37728019beaa2"
+        },
+        {
+          "name": "llm.mnn",
+          "size": 2148136,
+          "sha256": "4f7c7399a78e3983ee112a42a771eed05e8eb3406c67bbd2e8cd647897c85070"
+        },
+        {
+          "name": "llm.mnn.json",
+          "size": 5343877,
+          "sha256": "055d38f38e131f8eef9dbdcf39795c955c7f48672246247acbe1c9427942765d"
+        },
+        {
+          "name": "llm.mnn.weight",
+          "size": 470382614,
+          "sha256": "55aad7cb6c019c8db59163f99f0a1bbbfb170bdf40da1b8a4ceac5b87f64b4f4"
+        },
+        {
+          "name": "llm_config.json",
+          "size": 4900,
+          "sha256": "e57ac01268d6ffd706ead31182420d42451ec53fef99ac977972123fd3690051"
+        },
+        {
+          "name": "tokenizer.txt",
+          "size": 2955203,
+          "sha256": "3f1f5a131d209db739382cd25cf5cc0b2769c87503878a12e4f3a1ed4ca2311c"
+        },
+        {
+          "name": "visual.mnn",
+          "size": 251528,
+          "sha256": "dd3da9d6d7e090394b7d6fba4240288621f3e105488d8cca600ff4a095b2ee4f"
+        },
+        {
+          "name": "visual.mnn.weight",
+          "size": 63043212,
+          "sha256": "4c03fcac0d164d014e5cd1a1d7ab4fc95babbec724a268f3ba486c5db3511161"
+        }
+      ]
+    },
+    {
+      "modelId": "ernie-4.5-0.3b-pt-mnn",
+      "displayName": "ERNIE 4.5 0.3B PT (MNN)",
+      "engine": "mnn-llm",
+      "architecture": "ERNIE",
+      "revision": "d2fe72db9513014e01c00b0d026c9a9089979d59",
+      "directory": "ernie-4.5-0.3b-pt-mnn",
+      "source": {
+        "provider": "modelscope",
+        "repository": "MNN/ERNIE-4.5-0.3B-PT-MNN",
+        "revision": "d2fe72db9513014e01c00b0d026c9a9089979d59"
+      },
+      "files": [
+        {
+          "name": "config.json",
+          "size": 214,
+          "sha256": "55b6960f5301e5172aa942cfef72b2585ab7120077b3a7ad45acf9a5d1576c9c"
+        },
+        {
+          "name": "configuration.json",
+          "size": 46,
+          "sha256": "56c362f108bb9f17fc0e7b490b7e8927c03dc4478631b4f771c37728019beaa2"
+        },
+        {
+          "name": "llm.mnn",
+          "size": 580688,
+          "sha256": "ba38639b24ee71d0b8ac5efc19bb876215637d55b274172de2dcbf7b3c39a4d7"
+        },
+        {
+          "name": "llm.mnn.weight",
+          "size": 278813662,
+          "sha256": "3f95666049a080fa77acdf819f5b6378f46ae08adca9cc23da6a441d8d5e281f"
+        },
+        {
+          "name": "llm_config.json",
+          "size": 1390,
+          "sha256": "f6ce3e48f3d51cbe4583239383839bb9ba20208a0738f1f617f5dd42c0d91bd8"
+        },
+        {
+          "name": "tokenizer.txt",
+          "size": 2144703,
+          "sha256": "3a1cf9d5168e69e9ecc62bafd0929d15d5bec9f32517ba9f52768c04d9623b8f"
+        }
+      ]
+    }
+  ]
+}

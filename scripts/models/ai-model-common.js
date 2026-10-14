@@ -12,16 +12,24 @@ const RULES = Object.freeze({
     sensevoice: /^(?:model(?:\.[A-Za-z0-9_-]+)*\.onnx|tokens\.txt)(?:\.sha256)?$/u,
     'streaming-zipformer': /^(?:(?:encoder|decoder|joiner)(?:\.[A-Za-z0-9_-]+)*\.onnx|tokens\.txt)(?:\.sha256)?$/u,
     voiceprint: /^(?:3dspeaker_[A-Za-z0-9_-]+|pyannote_[A-Za-z0-9_-]+)\.onnx(?:\.sha256)?$/u,
-    'speech-enhancement': /^gtcrn_[A-Za-z0-9_-]+\.onnx(?:\.sha256)?$/u
+    'speech-enhancement': /^gtcrn_[A-Za-z0-9_-]+\.onnx(?:\.sha256)?$/u,
+    tts: /^(?:manifest\.json|2052\.INI|MSTTSLoc(?:EnUS\.dat|ZhCN\.(?:dat|ini))|Tokens\.xml|ZhCN\.(?:address|message|mixlingual|name)\.dat|am_v5_(?:decoder|encoder)\.bin|device_vocoder_v6_streaming\.bin|phones\.txt|punc\.txt)$/u,
+    llm: /^manifest\.json$/u
 });
 const GROUPS = Object.freeze(Object.keys(RULES));
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 ** 3;
 const MAX_TOTAL_BYTES = 10 * 1024 ** 3;
+const TTS_FILE_NAMES = require('../../src/apps/server/modules/model-distribution/offline-model-catalog.json')
+    .models.find(model => model.modelId === 'tts').files.map(file => file.name);
 
 function allowedPath(value) {
     if (typeof value !== 'string') return false;
     const parts = value.split('/');
+    if (parts.length === 3 && parts[0] === 'llm') {
+        return /^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(parts[1])
+            && /^(?:config(?:uration)?\.json|llm_config\.json|llm\.mnn(?:\.weight|\.json)?|tokenizer\.txt|visual\.mnn(?:\.weight)?)$/u.test(parts[2]);
+    }
     return parts.length === 2 && Object.hasOwn(RULES, parts[0])
         && (['README.md', 'LICENSE'].includes(parts[1]) || RULES[parts[0]].test(parts[1]));
 }
@@ -96,6 +104,8 @@ async function collectModels(root = MODEL_ROOT) {
         let entries;
         try { entries = await fs.promises.readdir(path.join(root, group), { withFileTypes: true }); }
         catch (error) { if (error.code !== 'ENOENT') throw error; continue; }
+        // 声明驱动的分类在下方统一校验，不能把不完整目录当作零散文件发布。
+        if (group === 'tts' || group === 'llm') continue;
         for (const entry of entries) {
             const name = `${group}/${entry.name}`;
             if (!allowedPath(name)) continue;
@@ -109,7 +119,54 @@ async function collectModels(root = MODEL_ROOT) {
             files.push({ path: name, ...result });
         }
     }
+    await collectDeclaredModels(root, files);
     return validateManifest({ schemaVersion: 1, files, totalBytes: files.reduce((sum, item) => sum + item.size, 0) });
+}
+
+async function collectDeclaredModels(root, files) {
+    const add = async (relativePath, declaration) => {
+        const source = await safeFile(root, relativePath);
+        const actual = await hashFile(source);
+        if (declaration && (actual.sha256 !== declaration.sha256
+            || (declaration.size !== undefined && actual.size !== declaration.size))) {
+            throw new Error(`声明模型文件不完整或校验失败：${relativePath}`);
+        }
+        files.push({ path: relativePath, ...actual });
+    };
+    for (const group of ['tts', 'llm']) {
+        const manifestPath = `${group}/manifest.json`;
+        const manifestFile = await safeFile(root, manifestPath);
+        let definition;
+        try { definition = JSON.parse(await fs.promises.readFile(manifestFile, 'utf8')); }
+        catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+        if (group === 'tts') {
+            if (!Array.isArray(definition) || definition.length !== TTS_FILE_NAMES.length
+                || new Set(definition.map(file => file.name)).size !== TTS_FILE_NAMES.length
+                || definition.some(file => !TTS_FILE_NAMES.includes(file.name))) throw new Error('TTS 模型声明不完整或重复');
+            for (const file of definition) await add(`tts/${file.name}`, file);
+        } else {
+            if (!Array.isArray(definition.models)) throw new Error('LLM 模型声明无效');
+            const ids = new Set();
+            for (const model of definition.models) {
+                if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(model.modelId)
+                    || ids.has(model.modelId) || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(model.directory)) {
+                    throw new Error('LLM 模型 ID 或目录无效');
+                }
+                ids.add(model.modelId);
+                const directory = path.join(root, 'llm', model.directory);
+                const stat = await fs.promises.lstat(directory).catch(error => {
+                    if (error.code === 'ENOENT') return null;
+                    throw error;
+                });
+                if (!stat) continue;
+                if (!stat.isDirectory() || stat.isSymbolicLink() || !model.files?.length) {
+                    throw new Error('LLM 模型目录或声明无效');
+                }
+                for (const file of model.files) await add(`llm/${model.directory}/${file.name}`, file);
+            }
+        }
+        await add(manifestPath);
+    }
 }
 
 function normalizeSource(value = SOURCE_URL) {

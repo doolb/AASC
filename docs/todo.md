@@ -2,6 +2,10 @@
 
 - ⏳待设备验收 [2026-10-13] 全量配置 ZIP 功能与自动重启已完成，后端/浏览器/Android编译通过；API28 Download保存位置已验证；待设备核对选择导入与导入后的重连刷新。任务：`docs/task/20261013_全量配置与聊天数据ZIP导入导出.md`。
 
+- ⏳待部署/真机验收 [2026-10-14] 独立Offline min首装与LLM外置源码完成；待先部署兼容模型同步器、上传并核验TTS/Qwen实物，再生成带运行契约的代码包及签名min，验收干净首装/旧full38与min41升级/模型取消与无网推理。完整无LLM APK仍需用户明确要求才构建；工作区full43/min44，发布状态minApk与servicePackage为true。任务：`docs/task/20261014_OfflineMin独立首装与LLM外置实现.md`。
+
+- ⏳待自测维护 [2026-10-14] `android-offline-apk.test.js`尚有3项HEAD同名基线失败：旧浮层leftMargin、旧固定displayId种子、登录完成按钮旧实现锚点；本次受影响版本和Qwen绑定用例已修复，核心模型/打包与Android单元通过。记录：`docs/task/20261014_OfflineMin独立首装与LLM外置实现.md`。
+
 - ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成，`minApk=true`；待签名 min APK 安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
 
 - ⏳待部署/设备验收 [2026-10-13] qwen-chat已开放文本阅读和系统播报；运行实例加载新版后在语音配置选择国内千问，验收长阅读、报时/提醒、自定义文字与停止恢复。源码离线151/151、旧聊天19/19，未重启主服务或出包。任务：`docs/task/20261013_qwenchat开放全部播报业务.md`。

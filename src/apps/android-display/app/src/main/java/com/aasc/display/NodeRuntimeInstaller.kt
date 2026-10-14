@@ -69,7 +69,7 @@ class NodeRuntimeInstaller(
                 )
                 requiredFiles.all { it.isFile && it.length() > 0L } &&
                     hasPiSdkManifest(root) &&
-                    (mode != OFFLINE_MODE || hasOfflineModels(root)) &&
+                    (mode != OFFLINE_MODE || OfflineRuntimeState.hasServiceEnvironment(root)) &&
                     File(root, "config/config.json").isFile &&
                     File(root, RUNTIME_LIB_DIR).listFiles()?.any { it.isFile && it.length() > 0L } == true
             } catch (_: Exception) {
@@ -146,29 +146,12 @@ class NodeRuntimeInstaller(
         }
 
         /**
-         * update-only APK 只能覆盖完整 Offline APK 已经释放出的 Runtime 动态库。
-         * 旧版完整包没有 marker 时，使用模型清单、Node 服务入口和 production dependencies
-         * 识别既有安装，避免误拦截升级；全新安装的 min APK 不满足这些条件。
+         * 历史方法名供现有调用方复用；现在按环境而非内置模型集合识别有效安装。
+         * min 首装采用版本目录，完整包旧根目录通过同一适配检查。
          */
         @JvmStatic
         fun hasFullOfflineInstall(root: File): Boolean {
-            return try {
-                val requiredFiles = listOf(
-                    File(root, "src/apps/server/boot/server-launcher.js"),
-                    File(root, "package.json"),
-                    File(root, "package-lock.json"),
-                    File(root, "node_modules/express/package.json"),
-                    File(root, OFFLINE_MODEL_METADATA_FILE)
-                )
-                val complete = requiredFiles.all { it.isFile } && hasOfflineModels(root) &&
-                    File(root, RUNTIME_LIB_DIR).listFiles()?.any { it.isFile && it.length() > 0L } == true
-                if (complete && !File(root, FULL_OFFLINE_INSTALL_MARKER).isFile) {
-                    File(root, FULL_OFFLINE_INSTALL_MARKER).writeText("schemaVersion=1\n")
-                }
-                complete
-            } catch (_: Exception) {
-                false
-            }
+            return OfflineRuntimeState.hasServiceEnvironment(root)
         }
 
         /**
@@ -194,7 +177,11 @@ class NodeRuntimeInstaller(
 
         @JvmStatic
         fun canApplyUpdateOnlyRuntime(root: File, manifest: NodeRuntimeManifest): Boolean {
-            return manifest.updateOnly && manifest.allowedRuntimeLibraryPaths.isNotEmpty() &&
+            return isUpdateOnlyManifestValid(manifest) && hasFullOfflineInstall(root)
+        }
+
+        private fun isUpdateOnlyManifestValid(manifest: NodeRuntimeManifest): Boolean =
+            manifest.updateOnly && manifest.allowedRuntimeLibraryPaths.isNotEmpty() &&
                 manifest.files.map { it.path }.toSet() == manifest.allowedRuntimeLibraryPaths &&
                 manifest.files.all { file ->
                     file.path.startsWith("runtime/${manifest.abi}/lib/") &&
@@ -203,8 +190,7 @@ class NodeRuntimeInstaller(
                             "libcrypto.so.3", "libssl.so.3", "libicui18n.so.78",
                             "libicuuc.so.78", "libicudata.so.78"
                         )
-                } && hasFullOfflineInstall(root)
-        }
+                }
 
         private fun hasOfflineModels(root: File): Boolean {
             val metadataFile = File(root, OFFLINE_MODEL_METADATA_FILE)
@@ -212,7 +198,6 @@ class NodeRuntimeInstaller(
                 val metadata = JSONObject(metadataFile.readText())
                 val models = metadata.optJSONArray("models")
                 if (models != null) {
-                    if (models.length() == 0) return false
                     for (index in 0 until models.length()) {
                         val model = models.optJSONObject(index) ?: return false
                         if (model.optString("modelId").trim().isEmpty()
@@ -267,7 +252,7 @@ class NodeRuntimeInstaller(
             val updateManifest = readManifest()
             require(updateManifest.updateOnly) { "update-only APK 内置 Runtime manifest 模式不匹配" }
             check(canApplyUpdateOnlyRuntime(root, updateManifest)) {
-                "此为 Offline 增量更新 APK，请先安装并启动完整 Offline APK"
+                "本机服务环境尚未准备，请在首装界面确认下载"
             }
             installUpdateOnlyRuntime(root, updateManifest)
             android.util.Log.i("AASC-Node", "Offline Runtime 动态库增量更新完成，版本=${updateManifest.version}")
@@ -322,6 +307,14 @@ class NodeRuntimeInstaller(
             staging.deleteRecursively()
             throw IllegalStateException("安装 Android Node Runtime 失败: ${error.message}", error)
         }
+    }
+
+    /** 首装仅复制 APK 白名单动态库；首装管理器随后安装并验证服务目录。 */
+    internal fun installBootstrapLibraries(root: File) {
+        val manifest = readManifest()
+        require(isUpdateOnlyManifestValid(manifest)) { "min 首装 Runtime 白名单无效" }
+        check(root.isDirectory || root.mkdirs()) { "无法创建首装目录" }
+        installUpdateOnlyRuntime(root, manifest)
     }
 
     private data class RuntimeFileReplacement(val destination: File, val backup: File?)

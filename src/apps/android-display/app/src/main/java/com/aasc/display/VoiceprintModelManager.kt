@@ -12,12 +12,13 @@ import java.util.concurrent.Executors
 class VoiceprintModelManager(
     private val context: Context,
     private val modelDirectory: File? = null,
-    private val uiHandler: Handler = Handler(Looper.getMainLooper())
+    private val uiHandler: Handler = Handler(Looper.getMainLooper()),
+    private val modelDirectoryProvider: (() -> File?)? = null
 ) {
     // Offline APK 直接使用 Node Runtime 解压的模型目录；在线 APK 才使用可下载缓存目录。
-    private val modelDir = modelDirectory ?: File(context.filesDir, "models/voiceprint")
-    val embeddingFile = File(modelDir, VoiceprintModelFiles.EMBEDDING_FILE_NAME)
-    val segmentationFile = File(modelDir, VoiceprintModelFiles.SEGMENTATION_FILE_NAME)
+    private val modelDir get() = modelDirectoryProvider?.invoke() ?: modelDirectory ?: File(context.filesDir, "models/voiceprint")
+    val embeddingFile get() = File(modelDir, VoiceprintModelFiles.EMBEDDING_FILE_NAME)
+    val segmentationFile get() = File(modelDir, VoiceprintModelFiles.SEGMENTATION_FILE_NAME)
     private val downloadPool: ExecutorService = Executors.newSingleThreadExecutor()
     private val lock = Any()
 

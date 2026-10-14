@@ -33,7 +33,12 @@ def matches(file,row):
     return file.is_file() and file.stat().st_size==row['size'] and digest(file)==row['sha256']
 for row in m['files']:
     parts=row['path'].split('/')
-    assert len(parts)==2 and parts[0] in ['yolo11','sensevoice','streaming-zipformer','voiceprint','speech-enhancement']
+    import re
+    rules=json.loads(base64.b64decode('${Buffer.from(JSON.stringify(Object.fromEntries(Object.entries(common.RULES).map(([group, rule]) => [group, rule.source])))).toString('base64')}'))
+    allowed=len(parts)==2 and parts[0] in rules and (parts[1] in ['README.md','LICENSE'] or re.fullmatch(rules[parts[0]],parts[1]))
+    llmFile=r'(?:config(?:uration)?\.json|llm_config\.json|llm\.mnn(?:\.weight|\.json)?|tokenizer\.txt|visual\.mnn(?:\.weight)?)'
+    allowed=allowed or (len(parts)==3 and parts[0]=='llm' and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*',parts[1]) and re.fullmatch(llmFile,parts[2]))
+    assert allowed,'模型路径不在允许范围'
     assert all(part not in ['', '.', '..'] and '\\' not in part for part in parts)
 parents(root)
 root.mkdir(parents=True,exist_ok=True)

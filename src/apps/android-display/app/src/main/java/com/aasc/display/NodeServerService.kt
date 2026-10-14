@@ -37,6 +37,9 @@ class NodeServerService : Service() {
         const val EXTRA_MAIN_SERVER_URL = "main_server_url"
         const val EXTRA_OFFLINE_MODE = "offline_mode"
         const val EXTRA_APPLY_SERVER_UPDATE = "apply_server_update"
+        const val EXTRA_BOOTSTRAP_MANIFEST = "bootstrap_manifest"
+        const val EXTRA_BOOTSTRAP_SOURCE = "bootstrap_source"
+        const val EXTRA_CANCEL_BOOTSTRAP = "cancel_bootstrap"
         const val ACTION_STATUS = "com.aasc.display.action.NODE_STATUS"
         const val EXTRA_STATUS = "status"
         const val EXTRA_DETAIL = "detail"
@@ -215,6 +218,8 @@ class NodeServerService : Service() {
     private var offlineMode = false
     private var safMediaServer: SafMediaServer? = null
     private val serviceUpdateApplying = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val bootstrapManager by lazy { OfflineBootstrapManager(this) }
+    @Volatile private var bootstrapPreview: OfflineBootstrapManager.Preview? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -231,6 +236,15 @@ class NodeServerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.getBooleanExtra(EXTRA_CANCEL_BOOTSTRAP, false) == true) {
+            bootstrapManager.cancel()
+            return START_NOT_STICKY
+        }
+        intent?.getStringExtra(EXTRA_BOOTSTRAP_MANIFEST)?.let { raw ->
+            bootstrapManager.resetCancellation()
+            bootstrapPreview = OfflineBootstrapManager.Preview(
+                intent.getStringExtra(EXTRA_BOOTSTRAP_SOURCE).orEmpty(), raw, 0L)
+        }
         val requestedUrl = intent?.getStringExtra(EXTRA_MAIN_SERVER_URL)?.trim().orEmpty()
         val preferences = getSharedPreferences("aasc_display", MODE_PRIVATE)
         val savedUrl = preferences
@@ -308,6 +322,17 @@ class NodeServerService : Service() {
         try {
             sendStatus(STATUS_PREPARING)
             sendStatus(STATUS_INSTALLING)
+            val installRoot = File(filesDir, "aasc-server")
+            if (offlineMode && resources.getBoolean(R.bool.aasc_update_only_mode)
+                && !OfflineRuntimeState.hasServiceEnvironment(installRoot)) {
+                val consent = bootstrapPreview ?: error("本机服务尚未准备，请确认首次下载")
+                bootstrapManager.install(consent) { progress ->
+                    if (generation != restartGeneration.get()) throw java.util.concurrent.CancellationException("首装请求已被替换")
+                    sendStatus(STATUS_INSTALLING, progress.detail, progress.phase,
+                        progress.completedBytes, progress.totalBytes)
+                }
+                bootstrapPreview = null
+            }
             val root = NodeRuntimeInstaller(this).ensureInstalled { progress ->
                 sendStatus(
                     STATUS_INSTALLING,
@@ -333,6 +358,7 @@ class NodeServerService : Service() {
                 }
             }
             val runtimeReadyAt = SystemClock.elapsedRealtime()
+            if (generation != restartGeneration.get()) return
             NodeServerConfig.write(
                 root,
                 serverUrl,
@@ -420,6 +446,7 @@ class NodeServerService : Service() {
                 start()
             }
         } catch (error: Exception) {
+            if (generation != restartGeneration.get()) return
             nodeProcess = null
             android.util.Log.e("AASC-Node", "Node launcher 启动失败", error)
             sendStatus(STATUS_FAILED, error.message ?: "未知启动错误")
@@ -431,7 +458,10 @@ class NodeServerService : Service() {
                 if (offlineMode) "Node.js 本地服务启动失败：${error.message}"
                 else "Node.js 子服务器启动失败：${error.message}"
             )
-            scheduleRestart(generation, -1)
+            if (error !is java.util.concurrent.CancellationException
+                && (!offlineMode || OfflineRuntimeState.hasServiceEnvironment(File(filesDir, "aasc-server")))) {
+                scheduleRestart(generation, -1)
+            }
         }
     }
 
@@ -517,6 +547,10 @@ class NodeServerService : Service() {
                         }
                     }
                     releaseHealthy.set(true)
+                    if (OfflineRuntimeState.isStandalone(root)) {
+                        OfflineBootstrapManager.writeJson(File(root, "updates/bootstrap-state.json"),
+                            JSONObject().put("phase", "ready").put("standalone", true))
+                    }
                     sendStatus(STATUS_READY)
                     pendingServiceUpdateResult?.let { result ->
                         pendingServiceUpdateResult = null
@@ -588,6 +622,8 @@ class NodeServerService : Service() {
                 connection.hostnameVerifier = javax.net.ssl.HostnameVerifier { hostname, _ -> hostname == "127.0.0.1" }
             }
             if (connection.responseCode != 200) return false
+            if (OfflineRuntimeState.isStandalone(root)
+                && (connection !is HttpsURLConnection || !OfflineBootstrapHealth.check(endpoint.port, connection))) return false
             val body = connection.inputStream.bufferedReader().use { it.readText() }
             return runCatching {
                 val status = JSONObject(body)
@@ -655,7 +691,10 @@ class NodeServerService : Service() {
     }
 
     private fun enqueueNodeProcessStart(serverUrl: String, offlineMode: Boolean) {
-        startExecutor.execute { startNodeProcess(serverUrl, offlineMode) }
+        val requestedGeneration = restartGeneration.get()
+        startExecutor.execute {
+            if (requestedGeneration == restartGeneration.get()) startNodeProcess(serverUrl, offlineMode)
+        }
     }
 
     private fun stopNodeProcess() {

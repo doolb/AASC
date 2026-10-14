@@ -87,6 +87,23 @@
   - 来源提交 `3f092143c1dc01826083210f1cc8c9aa2678b490`；min APK 为 `allserver-min`/`0.2.35-offline-min`，APK v2 签名及版本/CRC通过，签名身份沿用 v36。MNN SHA-256 与 v36 相同，跳过 MNN prepare；JNI 桥使用 Release 优化编译。三项发布需求状态设回 false；完整 APK 未构建。
   - LAN/WAN 已发布并通过全组件 HTTP 大小/SHA-256 与签名清单校验；min APK v37 先校验上传版本文件，再通过现有 publisher 原子切换合并清单。清单均为 3,483 bytes，SHA-256 `37f5f707cb75ca85f415ac72cfa5b9b936bd2ca9d2fa86c7186e87046e8771f6`；旧 code v68、dependencies v7、min APK v36 已精确清理，两端 HTTP 404，无清理错误。
 
+### Offline min 独立安装与模型外置设计评审
+
+- ✅ [2026-10-14] 实施独立min首次准备环境与完整Offline不内置LLM模型源码，模型缺失不再阻断服务环境和后续升级。
+  - 新增OfflineBootstrapManager/RuntimeState/BootstrapHealth、OfflineModelStore/Recovery/PreparationDialog/StatusBridge及可信小型目录；修改原生入口、安装/更新/健康流程、模型管理器及显示页“本机模型”入口。支持签名快照code/dependencies/nodeMinSeeds、HTTPS独立资产、种子/latest恢复、取消代次、缓存保护和空bundled更新。
+  - TTS/LLM加入模型归档与远端Python白名单，定义与权重分离；Node无LLM资源仍能列定义，Qwen仅在APK缓存。过渡清单保留既有签名旧指纹；full配置v43/code79/deps8仅SenseVoice/TTS/声纹，min配置v44保持update-only空模型。本轮未生成正式产物。
+  - 核心模型36/36、首装打包60/60通过，Android编译与218/218单元通过；扩展46项43通过3个HEAD同名旧断言失败。新增只读原生模型自测，更新design/spec/task/usage/index/todo；旧版本硬编码待维护项完成移除。`minApk=true`、`servicePackage=true`、`dependenciesPackage=false`；未发布资源、上传模型、操作设备或重启服务。
+
+- ✅ [2026-10-13] 继续独立min与Offline不内置LLM模型的设计，补齐可实施的首装、按需模型和旧包过渡契约。
+  - 更新Offline/AI模型design与spec、索引、self-test、todo；新增`docs/task/20261013_OfflineMin独立安装与LLM外置实施设计.md`，记录具体代码文件、分批实施、兼容/异常/性能用例。纠正历史基线为full38/min37，新min需高于两包与发布索引最高版本；保留旧评审作为历史证据。
+  - 确定同一签名快照code/dependencies/nodeMinSeeds、原生运行兼容要求、独立HTTPS资产、种子映射与健康提交；模型查询无下载、可信目录/LAN专用适配、取消归并和过时业务不重播；过渡旧指纹不能从新full空集合派生。
+  - 验证：`npm run test:ai-models`30/30通过；四文件打包/签名基线22/23通过，既有min版本断言写死v31而实际v37，已列待维护；定向差异空白检查、5份主要文档的代码块/相对链接/未实现标记检查通过。仅文档设计，新功能未实现；未改源码/profile/发布状态，未构建、上传或发布。
+
+- ✅ [2026-10-13] 核对现有min首装方案、TTS/LLM外网归档与full移除Qwen设计，记录实施前必须补齐的初始化和升级契约。
+  - min已携带Node本体/动态库；发现空内置LLM集合阻断环境识别与升级、Qwen默认与bundled绑定、LLM定义随权重移除、旧更新器指纹前置限制、种子/HTTPS首装缺失及aimodel/API/LAN格式不兼容。
+  - 更新Offline与AI模型design/spec、self-test及todo；新增`docs/task/20261013_OfflineMin独立安装与模型外置设计评审.md`。候选方案明确标记尚未实现，todo只保留待确认的实现工作。
+  - 验证：`npm run test:ai-models`30/30通过；只读路径/模型选择探测通过。本轮没有源码、APK配置或发布状态修改，没有模型上传、构建或发布。
+
 ### 显示端聊天与 MMD 控件层级
 
 - ✅ [2026-10-13] 聊天打开时将右侧灯光/动作/定位控件组放到聊天层下方，关闭聊天后恢复原层级。

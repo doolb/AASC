@@ -81,7 +81,7 @@
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | Android Termux服务器节点 | [android-termux-server.md](spec/android-termux-server.md) | Termux 服务目录、依赖安装、启动监督和验证伪代码 |
 | APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](spec/android-embedded-node-server.md) | APK Runtime 安装、launcher 进程、主服务器连接和能力裁剪伪代码 |
-| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](spec/android-display-offline-apk.md) | 离线模型打包、本机启动、独立包名、控制端 WebView 与 TTS DPI 位置校准伪代码 |
+| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](spec/android-display-offline-apk.md) | 独立min首装、模型来源/缓存、空LLM更新与打包实现；正式产物未出 |
 | Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](spec/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
 | Android offline 模型资产按需加载 | [android-offline-model-assets.md](spec/android-offline-model-assets.md) | LLM asset 与 Node Runtime 安装边界、显示端按需物化伪代码 |
 | Android Offline APK 服务热更新与原生增量 APK | [android-offline-hot-update.md](spec/android-offline-hot-update.md) | 签名更新清单、code/dependencies 原子切换、update-only APK 与模型保留伪代码 |

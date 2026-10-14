@@ -575,6 +575,7 @@
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
                     aria-controls="displayMmdLayer" aria-expanded="false">角色</button>
+            <button id="displayOfflineModels" class="display-stage-button" type="button" hidden>本机模型</button>
             <button id="displayVoiceContinuous" class="display-stage-button display-voice-switch" type="button"
                     aria-pressed="true" disabled>实时监听</button>
             <div class="display-voice-action-group">
@@ -4317,6 +4318,17 @@
 
         // APK 原生桥探测（Android APK 显示端注入：真实像素截图 + 跨域输入注入）
         const nativeBridge = window.NativeDisplay || null;
+        // 本机模型入口只在 Offline APK 开放；读取列表不下载、不加载模型。
+        const offlineModelsButton = document.getElementById('displayOfflineModels');
+        try {
+            if (nativeBridge && typeof nativeBridge.offlineModelsStatus === 'function'
+                && JSON.parse(nativeBridge.offlineModelsStatus()).length > 0) {
+                offlineModelsButton.hidden = false;
+                offlineModelsButton.addEventListener('click', () => nativeBridge.offlineShowModels());
+            }
+        } catch (error) {
+            console.warn('[Offline] 本机模型入口尚不可用:', error);
+        }
 
         // CPU 配置只交给异步原生桥；重复广播去重，避免 WebView 消息线程等待 native pool 换代。
         let lastAppliedCpuConfigKey = '';

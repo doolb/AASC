@@ -408,17 +408,6 @@ class MainActivity : AppCompatActivity() {
         updateOnlyMode = resources.getBoolean(R.bool.aasc_update_only_mode)
         offlineFailures.updateError?.let { handleServiceUpdateFailed(it) }
         refreshOfflineDisplayInfo()
-        if (updateOnlyMode && !NodeRuntimeInstaller.hasFullOfflineInstall(
-                File(filesDir, "aasc-server")
-            )) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("需要完整 Offline APK")
-                .setMessage("此安装包只更新原生运行库。请先安装完整 Offline APK 并启动一次，再安装此增量更新包。")
-                .setCancelable(false)
-                .setPositiveButton("知道了") { _, _ -> finish() }
-                .show()
-            return
-        }
         if (embeddedNode && offlineMode) {
             // 离线 APK 的控制端与本地 Node 服务同包，启动即允许访问同源 /control。
             setControlPageAccess(true)
@@ -435,7 +424,15 @@ class MainActivity : AppCompatActivity() {
         connectBtn.setOnClickListener { connect(true) }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(true); true }
         controlToggleButton.setOnClickListener { handleControlButtonClick() }
-        offlineStartupRetry.setOnClickListener { connect(true) }
+        offlineStartupRetry.setOnClickListener {
+            if (bootstrapWorking) {
+                ContextCompat.startForegroundService(this, Intent(this, NodeServerService::class.java)
+                    .putExtra(NodeServerService.EXTRA_CANCEL_BOOTSTRAP, true))
+                bootstrapWorking = false
+                showOfflineStartupMessage("已取消服务准备，可稍后重试", true)
+                offlineStartupRetry.text = "重试"
+            } else connect(true)
+        }
         offlineUpdateDownload.setOnClickListener { startAvailableOfflineUpdate() }
         offlineUpdateLater.setOnClickListener { dismissAvailableOfflineUpdate() }
         offlineUpdateCollapsedTab.setOnClickListener { expandOfflineUpdatePanel() }
@@ -497,6 +494,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        bootstrapExecutor.shutdownNow()
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         cancelOfflineUpdatePanelCollapse()
@@ -637,7 +635,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun connect(clearFailure: Boolean = false) {
+    private val bootstrapExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var bootstrapChecking = false
+    private var bootstrapWorking = false
+
+    /** 初始化页先读取小型签名清单；环境 ZIP 只在原生确认后开始下载。 */
+    private fun requestBootstrap() {
+        if (bootstrapChecking || bootstrapWorking) return
+        bootstrapChecking = true
+        showOfflineStartupMessage("正在检查首次安装所需资源", false)
+        bootstrapExecutor.execute {
+            try {
+                val preview = OfflineBootstrapManager(this).preview()
+                runOnUiThread {
+                    bootstrapChecking = false
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("准备本机服务")
+                        .setMessage("首次安装需下载服务和初始数据，约 ${preview.downloadBytes / (1024 * 1024)} MiB。\n来源：${preview.baseUrl}\nASR/TTS/LLM 模型另外按需准备。")
+                        .setPositiveButton("下载") { _, _ ->
+                            bootstrapWorking = true
+                            connect(true, preview)
+                            offlineStartupRetry.text = "取消下载"
+                            offlineStartupRetry.visibility = View.VISIBLE
+                        }
+                        .setNegativeButton("稍后") { _, _ -> showOfflineStartupMessage("本机服务尚未准备，点击重试开始安装", true) }
+                        .setOnCancelListener { showOfflineStartupMessage("本机服务尚未准备，点击重试开始安装", true) }
+                        .show()
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    bootstrapChecking = false
+                    showOfflineStartupMessage(error.message ?: "首次安装检查失败", true)
+                }
+            }
+        }
+    }
+
+    private fun connect(clearFailure: Boolean = false, preview: OfflineBootstrapManager.Preview? = null) {
+        if (updateOnlyMode && preview == null && !OfflineRuntimeState.hasServiceEnvironment(File(filesDir, "aasc-server"))) {
+            requestBootstrap()
+            return
+        }
         if (clearFailure) offlineFailures.retryStartup()
         val input = serverInput.text.toString().trim()
         if (input.isEmpty()) {
@@ -657,6 +696,9 @@ class MainActivity : AppCompatActivity() {
             val serviceIntent = Intent(this, NodeServerService::class.java)
                 .putExtra(NodeServerService.EXTRA_MAIN_SERVER_URL, mainServerUrl)
                 .putExtra(NodeServerService.EXTRA_OFFLINE_MODE, offlineMode)
+            if (preview != null) serviceIntent
+                .putExtra(NodeServerService.EXTRA_BOOTSTRAP_MANIFEST, preview.signedManifest)
+                .putExtra(NodeServerService.EXTRA_BOOTSTRAP_SOURCE, preview.baseUrl)
             ContextCompat.startForegroundService(this, serviceIntent)
         }
 
@@ -745,6 +787,10 @@ class MainActivity : AppCompatActivity() {
                 val phaseMessage = startupPhaseMessage(phase)
                 val progressMessage = formatProgressMessage(phaseMessage, detail, completedBytes, totalBytes)
                 showOfflineStartupMessage(progressMessage, false, completedBytes, totalBytes)
+                if (bootstrapWorking) {
+                    offlineStartupRetry.text = "取消下载"
+                    offlineStartupRetry.visibility = View.VISIBLE
+                }
             }
             NodeServerService.STATUS_STARTING -> {
                 showOfflineStartupMessage(getString(R.string.offline_startup_starting), false)
@@ -753,6 +799,8 @@ class MainActivity : AppCompatActivity() {
                 checkForMinApkUpdateOnce()
             }
             NodeServerService.STATUS_READY -> {
+                bootstrapWorking = false
+                offlineStartupRetry.text = "重试"
                 offlineFailures.retryStartup()
                 hideOfflineStartupPanel()
                 if (offlineDisplayLoadFailed) webView?.reload()
@@ -768,6 +816,8 @@ class MainActivity : AppCompatActivity() {
                 handleServiceUpdateFailed(detail)
             }
             NodeServerService.STATUS_FAILED -> {
+                bootstrapWorking = false
+                offlineStartupRetry.text = "重试"
                 val failure = detail?.trim()?.takeIf { it.isNotEmpty() }
                     ?: getString(R.string.offline_startup_unknown_error)
                 showOfflineStartupMessage(getString(R.string.offline_startup_failed, failure), true)
@@ -1365,6 +1415,7 @@ class MainActivity : AppCompatActivity() {
         )
         control.visibility = View.GONE
         control.addJavascriptInterface(Chat2ApiNativeBridge(this, ::requestFullConfigBackupSave), "NativeControl")
+        control.addJavascriptInterface(OfflineModelStatusBridge(this, offlineMode), "NativeOfflineModels")
         control.webViewClient = createWebViewClient(null, baseUrl, false)
         // 插入到 display WebView 之上、控制按钮和启动遮罩之下，避免控制页被显示页覆盖。
         webContainer.addView(control, 1)

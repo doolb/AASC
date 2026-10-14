@@ -1,5 +1,184 @@
 # 正式 Android 显示端完整离线 APK 实现规格（伪代码）
 
+## 独立 min / 无 LLM 权重完整包实际流程（2026-10-14，源码完成）
+
+```text
+已有声明:
+  OfflineBootstrapManager + OfflineRuntimeState + OfflineBootstrapHealth
+  OfflineModelStore + OfflineModelRecovery + OfflineModelPreparationDialog + OfflineModelStatusBridge
+  现有安装器/更新器/Node服务/ASR/TTS/声纹/LLM管理器
+新增定义:
+  standalone := bootstrap-state标记独立首装；文件完整与pendingHealth/ready分别判断
+  runtimeCompatibility := ABI arm64-v8a + Node主版本26 + contractVersion1
+  bootstrapAssets := HTTPS证书对 + offline-model-catalog；独立于Runtime动态库files
+  本机模型状态 := filesPresent / filesReady / downloading；引擎ready另查原生管理器
+操作流程:
+  min环境缺失 → 原生读取并验签小型清单 → 显示来源/下载量 → 用户确认
+  捕获同一签名code/依赖/种子 + lock/运行契约匹配 → 下载摘要固定的组件
+  文件锁 → 清理本模块严格命名且无链接的中断staging → 校验大小/摘要/ZIP/空间
+  config/userconfig/task → 缺失才补种 → 有效latest文本按同results实例恢复相对链接
+  APK动态库 + bootstrap资产 → code/dependencies版本目录 → client元数据 + pendingHealth指针
+  API真实版本/代码路径 + HTTPS控制/显示页 + 无业务角色WebSocket握手 → 健康提交
+  首装失败无previous → 撤候选指针；原有用户数据/验过的下载保留 → 下次重新确认
+  cancel → 固定本轮AtomicBoolean令牌；新请求换令牌，不重置旧令牌
+  启动代次变化 → 忽略排队旧启动/旧失败，避免多次拉起Node争抢端口
+  full配置 := v43/0.2.41-offline，模型SenseVoice/TTS/声纹，待发布code79/依赖8
+  min配置 := v44/0.2.42-offline-min，updateOnly=true/models=[]；未生成APK
+  小型LLM定义 → 单独进APK及服务src；所有LLM运行文件 → 不内置full
+  模型状态/自测查询 → 只读小型目录/属性/验证标记；不触发网络或加载
+  本机模型按钮 → 原生选择/确认 → 已验缓存或固定aimodel来源 → 流式下载及校验
+  模型目录同卷切换 → 被中断时恢复旧备份/仅清理自身暂存 → 原生管理器动态选择目录
+  本地加载确认 + 文件损坏 → 提示重新确认下载；不隐式开始网络
+  ASR/TTS → 缓存就绪后显式准备引擎；不重播历史业务；LLM → 选择该模型revision后加载
+  旧Qwen缓存 → 文件集/摘要匹配则复用；Node不另存一份权重
+  新min签名清单 → 旧字段优先保留已签名旧cohort；新增运行兼容字段 → 空models也可更新
+  发布需求 := minApk=true / servicePackage=true / dependenciesPackage=false
+```
+
+历史设计中的通用跨revision模型目录热更新尚无设备验证；当前APK读取自身可信目录，服务代码携带同源定义。真实首装/升级/无网推理与实物发布待验收，不以单元测试替代。
+
+## 2026-10-14 已确认实施增量（进行中）
+
+```text
+用户确认 := 继续实施前轮列明的源码方案；当前min已41，full仍38
+版本策略 := 新min42；新full配置高于两包，出包仍需用户明确要求
+运行检查 := OfflineRuntimeState解析active-release或legacy根，服务完整独立于models集合
+首装协调 := 原生确认捕获签名快照 → OfflineBootstrapManager复用受限ZIP/摘要工具
+首装资源 := update-only动态库 + 独立bootstrap资产清单；配置/任务种子由nodeMinSeeds恢复
+候选安装 := 版本目录 + client元数据 + pendingHealth指针；健康失败无previous则撤销指针
+模型准备 := 同一可信目录生成器 → 固定aimodel来源适配 → 原生确认 → 缓存/加载
+查询语义 := 状态查询不触发网络或模型切换；模型缺失不阻断服务启动/更新
+过渡发布 := 旧指纹从既有签名清单保留；新版使用runtimeCompatibility
+进度边界 := 本节记录实施目标，完成验证后再记录实际实现和剩余设备验收
+```
+
+## 独立 min / 无 LLM 完整包实施伪代码（2026-10-13，尚未实现）
+
+```text
+已有声明:
+  原生资产 := libaasc_node + ABI动态库 + MNN/JNI + Offline验签公钥
+  发布快照 := 已验签payload中的code / dependencies / nodeMinSeeds / apkMin
+  活动版本 := updates/active-release.json；版本目录 / 旧根目录由兼容适配解析
+  用户目录 := config + home/.config/aasc-user + res/tasks + 现有可变目录
+新增定义:
+  bootstrapAssets := 独立资产清单中的HTTPS证书对 + Offline模式元数据 + 小型模型定义
+  runtimeRequirements := ABI + Node主版本 + 运行契约版本；来自签名发布元数据
+  runtimeReady := 原生资产匹配 + 服务/依赖/lock有效 + 配置与HTTPS有效 + 健康提交
+  modelFilesReady := 该modelId/revision所有必要文件的大小及摘要已验证
+  modelReady := modelFilesReady + 引擎自检/预热通过
+  bootstrapState := missing / awaiting_confirmation / downloading / verifying / installing / starting / ready / error / cancelled
+  modelPreparation := modelId + revision + generation + 等待者 + 验证目录 + 当前状态
+操作流程:
+  当前full版本38、min版本37 → 下次min高于两profile及发布索引最高值；出包时重新求值
+  现有环境 → 解析active-release或legacy目录 → 模型无关的完整性检查
+  runtimeReady为真 → 复用环境并启动；模型缺失独立报告
+  runtimeReady为假 → 原生初始化页 → 明确用户确认 → 捕获并验签一个发布快照
+  同快照code/依赖/种子 + lock/运行契约匹配 → 流式下载到同卷staging
+  备用源只能返回捕获快照相同的版本/大小/摘要 → 不拼接各源最新组件
+  首装缺nodeMinSeeds或运行契约 → 拒绝并提示发布端补齐；旧环境更新保持兼容
+  ZIP大小/摘要 + 条目/重复/链接/路径/展开空间 → 验证后解包
+  APK原生运行文件 → 安装受限库目录；bootstrapAssets → 单独校验安装
+  config种子 → config；userconfig种子 → home/.config/aasc-user；task种子 → res/tasks
+  latest文本实例ID + 同results真实实例目录 → 恢复相对链接；未知链接拒绝
+  已有文件 → 保留；缺失种子文件 → 补齐；现有NodeServerConfig → 本机main/native模式
+  code-vN + dependencies-vN + lock → 候选active-release + offline-update-client
+  HTTPS状态/实际版本 + 控制页资源 + WebSocket初始化 → pendingHealth提交 → 环境确认标记
+  无previous且健康失败 → 撤候选指针 → 首装可重试；有previous → 回滚旧环境
+  进程退出 → 读事务记录 → 未提交候选不判ready；保留已验下载及旧数据
+```
+
+```text
+已有声明:
+  内置模型 := APK实际资产 / 旧解包模型；下载缓存 := files/models
+  aimodel文件清单 := 已发布files/path/size/sha256；可信定义 := APK或签名code生成目录
+新增定义:
+  localSources := 已验内置目录 / 已验下载缓存；不能按offlineMode伪造bundled来源
+  downloadSources := 固定LAN aimodel / HTTPS WAN；专用策略不放宽通用下载器
+  definitionOnly := llm/manifest.json及统一目录；不包含LLM目录内任何运行文件
+操作流程:
+  status查询 / 自动预热 / 定时业务 → 仅检查状态；不开始网络、不隐式弹窗
+  用户明确准备modelId → 查本地完整文件 → 可用则加载；缺失则显示体积/来源并等待确认
+  同意 → 按modelId/revision归并任务 → 可信定义与已发布清单交集校验
+  相同文件指纹 + 专用LAN或WAN来源 → 流式下载 → staging大小/摘要验证 → 同卷切换
+  modelFilesReady → 原生加载/自检 → modelReady；内存不足保留文件、状态为加载失败
+  ASR/TTS指定Offline目录缺文件 → 缓存/远端来源回退；不能永久只查内置目录
+  LLM默认ID + 无实际资产 → missing；旧Qwen缓存完整 → 可显式加载；Node不复制权重
+  下载完成 → ASR可重新开始 / TTS新请求可播放 / LLM输入可重试；不自动重放过时请求
+  取消 → 通知所有等待者 + 撤本轮临时项；保留已验文件和旧revision
+  新模型选择 → generation换代 → 旧请求不再恢复；不同revision串行
+  断网重启 → 本地定义/验证缓存 → 无网可加载；坏模型只影响对应modelId
+  完整profile目标models := sensevoice + tts + voiceprint；小型定义单独保留
+  min目标models := 空；update-only动态库白名单不含bootstrapAssets
+```
+
+```text
+新增定义:
+  legacyCompatibility := 已发布旧full真实模型指纹，保留在过渡apkMin旧字段
+  runtimeCompatibility := 新版更新器使用的ABI / Node主版本 / 运行契约
+操作流程:
+  旧full23/full38/min36/min37 → 核对指纹cohort；单字段不能覆盖不同指纹
+  相同旧指纹 → 旧更新器预物化资产 → 新min系统覆盖安装 → 新运行环境检查
+  不同旧指纹 → 明确手动升级路径；不能伪称自动迁移成功
+  新full空bundled集合 / 干净min → 新运行兼容契约 → 允许后续min更新
+  合法空models → 可解析；字段缺失/损坏 → 对应模型异常；不替代环境损坏判断
+  每次APK替换前 → 仅保护当前APK实际持有且缓存未就绪的模型；空集合无需物化
+  新full空集合 → 不覆盖legacyCompatibility来源，不生成虚构模型条目
+  发布顺序 := 同步器兼容 → 模型HTTP核验 → 环境契约与种子发布 → 过渡min → 兼容验收
+  完整APK仅用户明确要求才构建；沿用独立full-apk-manifest，不进入服务manifest
+  本轮状态 := 仅设计；源码/app.json/发布需求状态保持原值
+```
+
+## min 独立安装与 Qwen 外置设计评审（2026-10-13，尚未实现）
+
+```text
+当前证据:
+  min profile = allserver-min + updateOnly=true + models=[]
+  min 已携带 Node 可执行库与 allowlist 动态库；不包含服务代码、生产依赖和初始化种子
+  Activity 发现没有 hasFullOfflineInstall → 显示要求完整 APK 的提示 → 结束启动
+  hasFullOfflineInstall / Offline 快速复用 → 检查非空的 offline-model-manifest.models
+  offline-model-manifest.models := 仅从 display-models 的内置 LLM 权重生成
+  只保留 sensevoice / tts / voiceprint → 29 个模型配套文件 + 空 LLM models
+  空 LLM models → 当前快速复用、min 安装前提和模型兼容解析失败
+  Offline NativeBridge → 固定向 MnnLlmModelManager 注入 bundled Qwen
+  当前模型选择移除 Qwen → 同时没有选中 llm/manifest.json → 服务 LLM 目录定义缺失
+```
+
+```text
+候选已有声明:
+  runtimeAssets := APK 中的 Node 本体 + 动态库 + 更新验签公钥
+  releaseManifest := 已签名的 code + dependencies + nodeMinSeeds + apkMin
+  nativeModelStatus := APK 上报的模型准备和推理状态
+候选新增定义:
+  runtimeReady := 服务代码 / dependencies / 配置与任务种子 / 本机 HTTPS / ABI 都就绪
+  modelReady := 指定模型的完整文件及指纹已验证；独立于 runtimeReady
+  bootstrapState := missing → awaiting_confirmation → downloading → verifying → installing → starting → ready
+  modelState := missing → awaiting_confirmation → downloading → verifying → ready
+  legacyModelCompatibility := 旧更新器读取的兼容字段；不能直接换成空集合的新指纹
+候选操作流程:
+  已有有效 runtimeReady → 复用安装 → 原有原生更新路径 → 本机 Node 启动
+  缺少 runtimeReady → 原生界面确认 → LAN/WAN 获取并验签同一次发布快照
+  code / dependencies / nodeMinSeeds → 校验大小和 SHA-256 → 同级 staging
+  APK runtimeAssets + staging 服务文件 + 首次种子恢复 + 本机 HTTPS 资源 → 完整启动目录
+  code.requiredDependencyVersion = dependencies.version 且 code.requiredLockSha256 = dependencies.lockSha256 → 初始化版本化 active-release
+  启动与健康检查通过 → 确认发布；失败或退出 → 保留旧目录 / 下次可重试
+  声音 / LLM 首次使用 → 已验证内置目录或旧 bundled 缓存优先复用
+  没有完整缓存 → 提示对应模型体积与来源 → 同意后下载 → 校验 → 原子安装
+  查询状态 / 环境安装结束 → 不隐式开始模型下载，不误报模型 ready
+  full 模型配置 := sensevoice + tts + voiceprint；LLM 定义和默认选择独立保留为小型元数据
+  首个过渡 min 清单保留旧更新器可识别的兼容字段 → 升级到新逻辑后按运行环境 / ABI 判断原生兼容
+  无内置 LLM / 已按需下载 LLM → 均允许后续 min 更新；旧 APK 替换前仍保护其尚未物化的内置权重
+```
+
+```text
+评审待补齐:
+  Android 需解析并初始化 nodeMinSeeds；当前 OfflineUpdateManifest 未建模该组件
+  首次初始化不得依赖尚未启动的 WebView / 本地服务接口
+  本机 HTTPS 启动资源缺失时不得继续沿用 https://127.0.0.1:8081 并误报健康
+  模型缺失时的业务恢复 / 取消规则、并发下载归并、磁盘预算与中断恢复需在实施前写实
+  缺少元数据是安装损坏，合法空的内置 LLM 集合不是损坏；不能简单删除全部检查
+  本节是候选设计；现行实现仍按后续“现行模型选择”执行
+```
+
 ## 现行模型选择（2026-10-12核查）
 
 ```text

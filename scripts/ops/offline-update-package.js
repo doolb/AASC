@@ -12,6 +12,7 @@ const {
     validateGitSourceMetadata
 } = require('./git-source-metadata');
 const { stageNodeMinSeeds } = require('./node-min-seeds');
+const { RUNTIME_COMPATIBILITY, validateRuntimeCompatibility } = require('./offline-runtime-contract');
 
 const execFileAsync = promisify(execFile);
 const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
@@ -109,6 +110,8 @@ function validateManifestComponents(manifest) {
         throw new Error('Offline 更新清单 schemaVersion/components 无效');
     }
     const { code, dependencies, apkMin } = manifest.payload.components;
+    if (code?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(code.runtimeCompatibility);
+    if (apkMin?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(apkMin.runtimeCompatibility);
     validateArtifactEntry(code, 'code');
     validateArtifactEntry(dependencies, 'dependencies');
     if (manifest.payload.components.nodeMinSeeds !== undefined) {
@@ -446,7 +449,8 @@ async function buildDependencyArchive(options) {
     await fs.promises.rm(path.join(stagingDirectory, 'package-lock.json'));
     await fs.promises.writeFile(path.join(stagingDirectory, 'dependency-manifest.json'), JSON.stringify({
         version: dependencyVersion,
-        lockSha256
+        lockSha256,
+        runtimeCompatibility: RUNTIME_COMPATIBILITY
     }, null, 2) + '\n');
 
     const archivePath = path.join(workDirectory, `dependencies-v${dependencyVersion}.zip`);
@@ -686,6 +690,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
                     version: codeVersion,
                     requiredDependencyVersion: dependencyVersion,
                     requiredLockSha256: lockSha256,
+                    runtimeCompatibility: RUNTIME_COMPATIBILITY,
                     source,
                     ...(await describeArtifact(stagedCodeArchive, `code/${path.basename(codeDestination)}`))
                 },

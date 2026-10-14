@@ -1,5 +1,95 @@
 # 正式 Android 显示端完整离线 APK
 
+## 独立 min 与 LLM 外置源码实现（2026-10-14）
+
+前轮方案已确认并完成源码实施。新增 `OfflineBootstrapManager`、`OfflineRuntimeState`、`OfflineBootstrapHealth` 和本机模型管理模块；以下描述新版源码行为，正式资源尚未构建或部署。工作区配置为 full v43 / min v44，完整包服务基线改为待发布 code79/dependencies8，避免被现有 code78错误覆盖；LAN 当前发布仍为 code78/dependencies8/min41/full38。
+
+- min首次安装不再要求已有full。原生界面先验签清单并显示总大小与来源，确认后下载同一快照的code/dependencies/nodeMinSeeds；只复用APK里的Node本体与动态库，不执行Android npm安装。发布清单需包含新增的arm64/Node26/contract1运行契约，旧清单无法作为干净首装来源。
+- 首装使用文件锁、独占staging、大小/SHA-256和既有受限ZIP检查；config、userconfig、task分别恢复到config、home/.config/aasc-user、res/tasks，已有用户文件保持。已有文本latest会在实例目录就绪后恢复为相对链接，重试保持已有有效链接；进程中断后只清理严格命名的首装暂存目录。
+- HTTPS证书对与可信模型目录由独立bootstrap资产清单提供，不扩大update-only动态库白名单。候选active-release经本机API版本/路径、HTTPS控制页/显示页及WebSocket Upgrade校验后提交；探测使用无业务角色路径，不创建临时显示端。无previous失败撤销指针，下载缓存与用户目录保留；当前代码不把模型就绪作为环境检查条件。
+- 首装取消使用每次请求独立令牌与启动代次；后来的确认不能恢复旧取消任务，排队旧启动会被忽略。断线与失败可重新确认后重试，不自动重新下载未获确认的环境。
+- 显示页增加“本机模型”原生列表，可逐项确认下载/校验/加载，固定LAN源和HTTPS WAN源必须满足APK可信文件定义。缓存优先，SDK状态查询、自测和定时业务不触发模型下载；坏本地文件需要重新确认下载，不把“加载”确认转为隐式下载。模型管理器动态选择有效缓存，TTS/ASR下载结束不重放旧请求。
+- Qwen与其他LLM由APK持有文件，Node只保留定义；旧files/models/llm/bundled缓存可校验复用。下载任务串行、按模型归并；取消保留旧完整文件，进程中断恢复旧缓存目录且不跟随链接。已验证文件状态与引擎ready分开，文件属性未变时复用验证标记；切换其他LLM使用该模型自己的revision。
+- full配置只选择SenseVoice/TTS/声纹，LLM的图、权重、tokenizer、视觉文件及目录内配置均不进入APK。保留MNN/JNI和两种包共用的小型可信目录/LLM定义。min继续models=[]与updateOnly=true。
+- 新更新器使用runtimeCompatibility且允许空bundled集合；过渡清单默认保留既有签名min清单的旧模型指纹，不从新full空集合派生。当前LAN旧指纹为`e64518394baf8576a6b69b6e737b074412dafd7cc6eb43c67b00f09088449aeb`；不同旧cohort和full23真实设备仍待迁移验收。
+
+原生/资产及服务/网页受影响，`minApk=true`、`servicePackage=true`；生产依赖集合未变且旧依赖元数据保持兼容，`dependenciesPackage=false`。验证及发布门槛见 [实现任务](../task/20261014_OfflineMin独立首装与LLM外置实现.md)。下文2026-10-13“待实施”段为历史设计，当前源码以本节及对应spec完成记录为准。
+
+## min 独立安装与 LLM 模型外置实施设计（2026-10-13，待代码方案确认）
+
+本节继续前次评审并补齐实施契约；以下均为目标行为，尚未实现。前次评审中的 full v23 / min v36 是历史基线；本轮工作区为 full v38 / min v37，full v38 仍包含 Qwen。沿用 `allserver`、`allserver-min`、`com.aasc.display.offline` 和既有签名；下次 min 版本必须高于当前两种包及发布索引中的最高 versionCode，当前最低为 v39，实际出包时重新检查。
+
+### 产品边界
+
+| 安装方式 | APK 内资源 | 首次使用 | 后续离线使用 |
+|---|---|---|---|
+| 新 min 独立安装 | Node 本体/动态库、原生推理库、验签公钥、首装元数据、本机 HTTPS 资源；无服务代码/生产依赖/模型权重 | 原生确认后下载 code、dependencies、nodeMinSeeds；模型逐项确认下载 | 环境与已下载模型均复用，不要求安装 full |
+| 新完整 Offline APK | 现有服务环境、SenseVoice/TTS/声纹、小型模型定义；不带任何 LLM 模型运行文件 | 控制端及 ASR/TTS 可离线使用；本机 LLM 首次需准备模型 | 已下载 LLM 可离线推理 |
+| 旧 full / min 升级 | 原有有效环境、用户数据和旧 Qwen 缓存 | 先保护旧 APK 独有资产，再覆盖升级 | 保留已验证模型与用户配置 |
+
+“不打包 LLM”按此前评审范围定义为不内置 LLM 模型文件，包括图、权重、视觉分支、tokenizer 和模型目录内配置；保留 MNN/JNI 推理能力及 `llm/manifest.json` 小型定义。安装新 min 无需另一个 full APK，但空白设备首次准备环境需要联网。环境未下载时显示原生初始化页；环境就绪而模型缺失时仍允许控制页、媒体展示和服务更新。
+
+### 首装环境与就绪契约
+
+新增独立 `OfflineBootstrapManager`，复用更新器的验签、受限 ZIP、流式下载、版本目录和健康提交能力；将共用能力抽到小模块，不向 Activity/更新器堆叠条件分支。保留 update-only Runtime manifest 的动态库白名单；HTTPS、模式及模型定义走独立的 `offline-bootstrap-manifest.json` 资产清单，不能混进 allowedRuntimeLibraryPaths。完整包与 min 从同一生成器取得小型定义。
+
+服务安装检查改为 `runtimeReady`：检查 APK Node 可执行库、ABI/受支持的 Node 主版本与运行契约、已安装动态库、有效配置、证书对、服务入口、生产依赖、包/lock 指纹及已确认的 release 元数据。读取 active-release 时检查其指向的版本目录，不能仍固定检查根目录的 src/node_modules。旧根目录完整安装采用兼容适配，检查通过后写新的环境标记。`offline-model-manifest` 格式缺失、字段错误属于模型元数据异常；合法 `models=[]` 可解析。模型异常只影响对应能力，不能用它代替环境检查；内置模型缓存就绪另查完整文件。
+
+原生首装操作：
+
+1. 先检查已有环境；完整可用则直接启动，缺失则显示“准备本机服务”及下载源、实际包大小、所需空间、下载/稍后按钮。未同意不下载，首次模型准备另行确认。
+2. 使用现有 Offline LAN/WAN 源和 APK 公钥获取已验签快照。code、dependencies、nodeMinSeeds 必须来自同一 payload；code.requiredDependencyVersion、code.requiredLockSha256 必须与 dependencies 匹配。新增首装流程要求 nodeMinSeeds，旧环境更新仍允许旧清单缺该组件。同版本不同摘要拒绝；备用源仅能提供该快照相同摘要的组件，不组合各源的“最新版本”。
+3. 将原生运行要求加入签名发布元数据，并与 APK 的 ABI、Node 主版本和运行契约版本比较。依赖包的 lock 一致不能证明 Android 可用；保留现有 Android 能力策略，并验证实际服务启动与必需模块导入。首装不在 Android 上执行 npm install，不下载另一个 Node 可执行文件。旧清单没有新契约时可供旧环境更新，但不作为新版干净首装的依据。
+4. 使用应用私有目录、单一安装锁与持久事务记录准备 staging。先验签/大小/SHA-256，检查 ZIP 展开总量、条目数、重复条目、路径及链接，再解包。下载前预算压缩包与保留目录；解包前按真实展开量再次检查空间。已有有效环境/配置/模型不被覆盖。
+5. 种子仅允许 config/userconfig/task：config → `config/`，userconfig → `home/.config/aasc-user/`，task → `res/tasks/`。`results/latest` 的普通文本实例 ID 仅在同一 results 下存在对应目录时恢复为相对链接；未知链接拒绝。保留已有用户文件，缺失文件才补种；不从 app.json 新增 tasks。调用现有 `NodeServerConfig` 设置本机端口、Offline main 身份和原生 ASR/TTS 模式。
+6. 本机 cert.pem/key.pem 沿用当前 APK 证书构建输入，经 min 独立资产清单校验后安装到 `res/certs/`；不放进公开种子 ZIP。两者不全、无法建立 HTTPS 则不进入 ready，不因 HTTP `/api/status` 可访问而误判 Offline 页面可用。
+7. 将 code/dependencies 安装为 `updates/code/code-vN`、`updates/dependencies/dependencies-vN`，创建 `offline-update-client.json` 与候选 active-release，复用现有 pendingHealth 流程。干净首装没有 previous；健康失败时撤销候选指针，回到可重试首装页，保留验过的下载文件。已有环境则回滚 previous。证书 HTTPS 状态、服务/依赖版本、控制页资源与 WebSocket 初始化均通过后才写环境确认标记。
+
+### 模型准备、缓存与来源
+
+新增来源适配/准备协调模块，供 ASR/TTS/声纹/LLM 管理器使用。每个模型以 `{modelId, revision, files, totalBytes}` 描述；定义中的每项含安全相对路径、大小和 SHA-256。可信定义来自 APK 资产或已验签代码包中的生成目录，aimodel 根清单用于确认已发布完整性，不能用 LAN 返回的新哈希替代可信定义。
+
+已有有效 APK 资产/旧解包目录和 `files/models` 缓存优先；无有效本地文件才读取 aimodel。ASR/TTS 不再因为传入 Offline 目录就永久禁用远端回退；无 Qwen 资产时不能注入假的 bundled 来源。LLM 默认 ID 保留，状态查询只返回 missing/available/ready 等状态，不触发下载或加载；用户选择/请求明确准备才进入协调器。
+
+模型准备状态与原生引擎加载状态分开：文件 verified 后才可 load，只有原生自检/预热成功才报 ready；内存不足保留已验模型。网络缓存落在现有 `files/models` 对应目录，不复制 Qwen 到 Node 的 res/models；服务持有小型目录定义，Offline 原生模型请求从适配的 aimodel 来源取得文件，避免向本机缺失权重接口请求形成循环。
+
+LAN 下载通过专用 Offline 模型来源策略接入：仅接受现有发布源对应的固定局域网 IP 和 `/mnt/aimodel/` 前缀、无凭证/查询/重定向；由可信定义校验大小与哈希。WAN 使用 `https://c.aasc.us/mnt/aimodel/`。通用 `RemoteModelManager` 的 HTTPS/回环 HTTP 规则保持，专用策略显式注入，不全局允许任意 HTTP。已有在线 APK 的模型 API 继续使用原接口。
+
+业务交互约定：
+
+- 首次缺模型显示名称、总大小、来源和“下载/稍后”；查询、预热、定时任务不弹框或自动联网。缺模型的定时报时/提醒返回 model_not_ready 并记录，不延后播放。
+- 下载任务按模型 ID+revision 归并，多个调用者收到相同进度；同一模型不同 revision 串行，新选择使旧请求失效。同一设备默认一个模型下载任务运行，其他等待；环境首装先完成。
+- ASR 下载后进入“可开始录音”，用户重新开始，下载期间不缓存麦克风音频。TTS 不积压旧播报；LLM 保留用户输入供重试，不自动发送旧请求。后续需要恢复原请求时必须携带 requestId/generation 并验证有效，本期不自动重放。
+- 取消中止本轮模型准备并通知全部等待者，清理本轮未完成临时文件，保留验证完整的缓存及旧 revision。不会顺带卸载已就绪模型。进程退出后通过事务记录恢复；本期以单文件完整重试为准，不承诺 HTTP Range 续传。
+- 模型文件 staging 完整验过后同卷切换；引擎未释放旧目录时不删除旧 revision。单纯更新 APK 不清除模型。坏缓存只将该模型标记缺失并允许重试，不重新下载服务环境。
+
+### 旧更新器迁移与版本发布
+
+第一版支持首装的新 min 必须采用过渡清单。`apkMin.modelCompatibilitySha256` 保留经过核验的旧 Qwen cohort 指纹；从已发布旧 full 的真实构建元数据提取，禁止从新 full 的空集合自动派生。新字段声明 runtimeCompatibility 供新版更新器判断环境兼容；旧字段继续在签名中。旧 full 升级路径仍先将 APK 内模型物化到 files/models，再请求系统安装；新更新器允许内置模型集合为空。
+
+发布前对 full v23、full v38、min v36/v37 的模型指纹逐一核验。单一旧字段只能兼容一种指纹，不能声称支持所有旧 cohort；相同指纹走自动迁移，不同指纹保留旧入口并提供明确的手动升级路径，已就绪缓存保留。未经物化直接手动覆盖旧 full 可能丢失 APK 独有 Qwen，需重新下载，不能承诺其原始 assets 自动保留。新 full 无 Qwen 和干净 min 安装统一使用新运行兼容契约，后续无需伪造旧模型条目。
+
+顺序为：完成同步器新分类兼容与测试 → 上传并核验实际 TTS/Qwen 文件 → 发布含小型模型目录和首装契约的 code/dependencies/nodeMinSeeds → 发布高版本过渡 min → 验收旧包覆盖/新包首装 → 用户明确要求时构建不含 LLM 的 full。全量 full 使用现有独立 `full-apk-manifest.json`，不写入服务 manifest。本轮只做文档，现有 app.json、发布状态、源码与资源均不变。
+
+实施文件、L4 伪代码、自测与待确认范围见 [实施任务](../task/20261013_OfflineMin独立安装与LLM外置实施设计.md)；前次评审证据在下文保留，实施时以本节补充契约为准。
+
+## min 独立安装与 Qwen 外置评审（2026-10-13，待方案确认）
+
+用户要求沿用当前 min APK 产品，在没有安装 full APK 时支持下载服务运行环境和 ASR/TTS 模型；TTS、LLM 同时归档至外网 aimodel，完整 Offline APK 不再打入 Qwen。评审结论为方向可行、需补齐初始化与迁移契约，尚未开始源码实施。详细证据与验收矩阵见 `../task/20261013_OfflineMin独立安装与模型外置设计评审.md`。
+
+纠正前一版下载范围：现有 min APK 已携带 Node 可执行库和所需动态库，首装应复用它们，主要下载服务代码、生产依赖和初始化种子。继续使用 `allserver-min`、`com.aasc.display.offline` 和现有签名，不新增 APK 产品；新增能力仍需要发布高于当前 v36 的 min 版本。
+
+必须修订的设计：
+
+- 服务环境就绪和模型就绪分开。当前 `offline-model-manifest.models` 实际仅包含内置 LLM，Qwen 移除后它为空；不能再把它的非空条件作为服务完整、快速复用或 min 升级的前提。保留对服务、依赖、ABI和元数据合法性的检查。
+- 原生首装界面在本机服务启动前完成来源选择、下载确认、验签和安装。复用签名清单里的 code/dependencies/nodeMinSeeds，并补齐配置、userconfig、任务/results、latest恢复及本机HTTPS资源；code.requiredDependencyVersion与dependencies.version、code.requiredLockSha256与dependencies.lockSha256匹配，首次建立版本化active-release。
+- Qwen默认选择、可下载定义、内置资产和本地缓存是四个不同状态。保留小型LLM定义，检测实际资产后才选择bundled路径；旧full物化的Qwen缓存可复用，新安装则提示下载，单纯状态查询不触发网络下载。服务进程不再另存一份Qwen推理权重。
+- 旧更新器会先校验min清单中的modelCompatibilitySha256。过渡发布须保留其可接受字段或安排显式手动升级，不能只修改新APK内部逻辑并换成空模型集合指纹。新更新流程以服务/ABI兼容为依据，模型集合不阻断原生升级；替换旧APK之前仍保护尚未物化的内置权重。
+- 完整APK拟仅保留SenseVoice、TTS与现有voiceprint白名单；新min首装可在模型全部缺失时正常运行控制页，再逐项准备模型。首次使用未下载的LLM依赖联网，缓存就绪后可本机推理。
+- aimodel的新分类/目录、APK清单适配、LAN HTTP下载限制和旧同步器迁移要同时完成；`-aimodel`仍是显式镜像开关。不能把模型文件已上传等同于APK已支持下载。
+
+首装断网、坏包、空间不足、进程退出和健康检查失败须能重试且保留已有有效目录；同一模型多次触发下载必须归并。下载期间业务暂停/恢复、取消和缓存损坏处理仍需在实施设计中写明。已有发布状态保留，本轮只完成评审与文档。
+
 ## 需求
 
 新增一个独立的正式显示端离线 APK 构建入口。该 APK 在包内携带 Android Node.js Runtime、正式显示端服务器代码、生产依赖和当前正式运行模型；安装后不要求连接外部主服务器即可在本机启动服务器、加载显示页面和控制页面。

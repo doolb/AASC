@@ -93,6 +93,17 @@ test('min APK 打包清单绑定 APK 签名、应用版本和完整包模型兼�
     assert.equal(result.manifest.payload.components.apkMin.packageName, 'com.aasc.display.offline');
     assert.equal(result.manifest.payload.components.apkMin.signerSha256, signerSha256);
     assert.equal(result.manifest.payload.components.apkMin.modelCompatibilitySha256, modelCompatibilitySha256);
+    assert.deepEqual(result.manifest.payload.components.apkMin.runtimeCompatibility,
+        { abi: 'arm64-v8a', nodeMajor: 26, contractVersion: 1 });
+    // 新 full 的空模型集合不能覆盖已发布的旧 cohort；默认路径即使不存在也不应被读取。
+    await fs.promises.writeFile(currentManifestPath, JSON.stringify(result.manifest));
+    const nextBuild = JSON.parse(await fs.promises.readFile(buildManifestPath, 'utf8'));
+    nextBuild.versionCode = 4; nextBuild.versionName = '0.2.2-offline-min';
+    await fs.promises.writeFile(buildManifestPath, JSON.stringify(nextBuild));
+    const transition = await createOfflineMinApkArtifact({ projectRoot, apkPath, buildManifestPath,
+        currentManifestPath, outputDir: path.join(projectRoot, 'transition-output'), privateKeyPath, publicKeyPath,
+        commandRunner: async () => ({ stdout: `Signer #1 certificate SHA-256 digest: ${signerSha256}\n`, stderr: '' }) });
+    assert.equal(transition.manifest.payload.components.apkMin.modelCompatibilitySha256, modelCompatibilitySha256);
     assert.equal(result.manifest.payload.components.apkMin.releaseNotes, '修复 Offline 显示缩放\n\n- 1920@160dpi 调整为 100%');
     assert.equal(await fs.promises.readFile(result.apkPath, 'utf8'), 'signed apk bytes');
 });

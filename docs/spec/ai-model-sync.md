@@ -1,5 +1,81 @@
 # AI模型发布/下载实现伪代码
 
+## TTS / LLM 归档实际流程（2026-10-14，源码完成、未发布资源）
+
+```text
+已有声明 := ai-model-common规则 + 发布器Python事务 + 同步器 + 源码可信模型目录
+新增组 := tts / llm；根清单schemaVersion仍为1
+TTS输入 := manifest的14个唯一必要名字 → 全部文件摘要验证 → 加入主清单
+LLM输入 := 安全唯一modelId/directory + 声明文件 → 完整目录逐项验证
+缺整个LLM目录 → 未发布/只保留定义；已有目录缺项或坏hash → 发布前失败
+本地/远端路径 := 两段TTS及llm/manifest + 三段LLM必要文件；未知目录/脚本/cache拒绝
+可信目录 := src内固定小型目录；APK读取相同资产，code持有服务定义
+APK下载 := 可信定义 与 aimodel实际发布项逐项相等 → 专用LAN/WAN → 流式完整校验
+缓存所有者 := APK files/models；LLM定义查询不物化或下载Node权重
+镜像 := 无-aimodel无模型请求；启用后全部选中项成功再原子提交根清单
+发布顺序 := 先部署兼容同步器 → 实物模型上传与HTTP摘要验收 → 新运行契约代码包 → 新min
+本轮结果 := 模型36/36通过；未上传TTS/LLM实物，公开清单未切换
+```
+
+## 2026-10-14 已确认实施增量（进行中）
+
+```text
+新增组 := tts、llm；所有本地/远端/镜像路径校验同步扩展
+收集策略 := 声明驱动；存在但不完整模型阻止发布，完全缺失目录仅保留定义
+可信目录 := 小型定义从源码声明/已核验文件生成，独立进入APK及签名code
+模型可用 := aimodel实际文件集合与可信定义逐项大小/摘要匹配
+下载策略 := 已验缓存优先；固定LAN专用HTTP + WAN HTTPS；状态查询不触发下载
+```
+
+## TTS / LLM 归档与可信目录实施草案（2026-10-13，尚未实现）
+
+```text
+已有声明:
+  rootManifest := schemaVersion=1 + files/path/size/sha256 + totalBytes
+  TTS声明 := manifest中的14项name/sha256；LLM声明 := 5种定义及每种必要文件
+  当前完整LLM := Qwen9项544130168字节；其余4种只有定义
+新增定义:
+  expandedGroups := 原五组 + tts + llm
+  ttsPaths := tts/manifest.json + 声明文件 + 已有README/LICENSE白名单
+  llmPaths := llm/manifest.json + 安全唯一directory/单段声明文件名
+  runtimeCatalog := modelId + revision + files/name/path/size/sha256 + totalBytes
+操作流程:
+  本地规则/远端Python/镜像选组与路径校验 → 同步扩展并先部署兼容同步器
+  TTS声明 → 必需文件完整/哈希校验 → 实测大小 → 运行目录定义
+  LLM定义 → 安全路径/唯一ID检查 → 完整目录逐项校验
+  完全缺失LLM目录 → 未发布并跳过；存在但不完整/坏哈希 → 阻止发布
+  .manifest.json缓存/脚本/测试音频/未知文件/链接 → 排除
+  APK资产 + code ZIP中src生成目录 → 使用同一可信定义生成器
+  小型LLM定义独立于权重打包；只含定义 → 不能宣称模型可下载或ready
+  运行目录必要文件集合 与 aimodel主清单相同大小/摘要 → 可下载模型
+  LAN HTTP固定源 + 可信定义摘要 → 专用Offline来源适配；WAN HTTPS → 校验TLS
+  选择modelId → 映射所需文件 → 保持同revision指纹 → 原生缓存；不下载全部归档
+  上传暂存/远端校验 → 主清单最后切换 → WAN HTTP大小/摘要核验
+  镜像缺-aimodel → 不读模型清单；带开关 → 成功完成选中项后原子提交
+  旧客户端不接受新分类 → 升级或保留旧镜像；不忽略未知项后覆盖清单
+```
+
+## TTS / LLM 外置评审（2026-10-13，尚未实现）
+
+```text
+当前分类 := 五组固定分类；只允许 group/filename 两段路径
+当前远端发布校验 := 独立 Python 白名单，同样只接受上述五组与两段路径
+路径探测 := tts/MSTTSLocZhCN.dat → 拒绝；llm/<modelId>/llm.mnn → 拒绝
+现有 APK 下载清单 := models[{id,revision,files[{name,size,sha256}]}]
+aimodel 主清单 := files[{path,size,sha256}]；不能直接传给 APK 现有解析器
+候选分类 := 原五组 + tts + llm；相对路径规则按分类限定，不改成任意递归上传
+候选 TTS 输入 := 已声明的必要模型文件 + tts/manifest.json
+候选 LLM 输入 := llm 定义元数据 + 本机完整的模型目录内声明文件 / 必要校验元数据
+候选发布 := 本地与远端统一规则 → 完整模型校验 → 增量上传 → 清单最后切换 → HTTPS 校验
+候选运行时 := 按产品模型 ID 选择主清单项 → 模型定义映射 → 原下载器的元数据 / URL 适配
+LLM 可下载 := 对应声明文件在已发布主清单中全部存在；仅有定义不能宣称可下载
+源选择 := 优先已有有效本地文件 → LAN 镜像 / WAN aimodel；同一模型文件集合保持一致
+LAN 约束 := 当前 RemoteModelManager 拒绝非回环 HTTP；需要专门确定 LAN 下载适配契约
+缓存所有者 := APK 持有推理权重；服务端持有定义并消费原生就绪状态，避免重复缓存 Qwen
+旧同步器 := 遇到新增分类会拒绝整个主清单；扩展主清单前应部署新版同步器或采用版本化入口
+Offline 镜像 := -aimodel 开关继续显式开启；无开关不新增模型同步或网络请求
+```
+
 ```text
 已有声明:
   modelRoot = 项目res/models

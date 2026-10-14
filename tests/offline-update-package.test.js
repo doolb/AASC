@@ -28,6 +28,11 @@ function createFixture() {
     fs.writeFileSync(path.join(sourceRoot, 'apps/server/boot/server-launcher.js'), 'process.exit(0);\n');
     fs.writeFileSync(path.join(sourceRoot, 'apps/web-mediacenter/ui/index.html'), '<main>fixture</main>\n');
     fs.writeFileSync(path.join(sourceRoot, 'apps/android-display/not-server.js'), 'excluded\n');
+    // 首装种子已经是服务发行组成部分，夹具也提供完整目录，不依赖开发机真实配置。
+    for (const directory of ['config', 'userconfig', 'task']) {
+        fs.mkdirSync(path.join(projectRoot, 'release', directory), { recursive: true });
+    }
+    fs.writeFileSync(path.join(projectRoot, 'release/config/config.json'), '{}\n');
     fs.writeFileSync(path.join(projectRoot, 'package.json'), JSON.stringify({
         name: 'fixture',
         version: '1.0.0',
@@ -120,6 +125,9 @@ test('code-only builds the complete server/UI source archive without invoking np
     assert.equal(result.manifest.payload.components.apkMin.versionCode, 3);
     assert.equal(result.manifest.payload.components.code.requiredDependencyVersion, 1);
     assert.equal(result.manifest.payload.components.code.requiredLockSha256, fixture.lockSha256);
+    // 独立 min 依赖签名 code 内的运行契约，不能只写到 components 的其他层级。
+    assert.deepEqual(result.manifest.payload.components.code.runtimeCompatibility,
+        { abi: 'arm64-v8a', nodeMajor: 26, contractVersion: 1 });
     assert.equal(verifySignedManifest(result.manifest, fixture.publicKeyPem), true);
 });
 

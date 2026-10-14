@@ -1530,3 +1530,9 @@ Offline Android WebView的真实布局/滑块和托管服务器实际端口切�
 真实米娅On3秒→Off10秒，关重力末秒全骨位置跨度0.08–1.12mm、角跨度≤0.00240rad、最大角速度≤0.0028rad/s；开重力位置跨度2.75–5.20mm、角跨度≤0.05619rad、最大角速度≤1.621rad/s，仍有接触抖动。原生分配恒定、销毁归零；桌面无渲染物理CPU中位约1.77–2.08ms/P95约2.18–3.95ms，不代表手机完整帧时。
 
 `npm run build:web:mmd-ar-test`及6个源/测试模块语法、定向差异空白检查通过。`TMPDIR=/var/tmp node --test tests/mmd-ar-human-physics-browser.test.js`1/1通过（约348秒）：真实拖点→保持→面板Off→主动重力，每段实际采样904子步，最后12帧Off摆幅占身高0.023%、主动重力0.213%，标记跟随正确；随后多目标/重置/模式与横竖屏继续通过。首轮临时IndexedDB IO失败改用/var/tmp；SwiftShader全灯光约0.3fps导致采样超时，测试通过现有设置关闭阴影/AO/GI/抗锯齿并降至0.25倍率，保留真实蒙皮/衣物物理和全部物理子步，不改产品画面默认。未出APK/发布，手机/其他PMX和实时VMD服饰/AR仍待验收。
+
+## Offline min 独立首装与 LLM 外置自测（2026-10-14）
+
+`npm run test:ai-models`36/36、`npm run test:offline-bootstrap`60/60及Android `:app:testDebugUnitTest`218/218通过。验证可信目录/TTS与LLM完整集、归档路径、服务种子、独立HTTPS资产、空内置LLM集合、旧兼容指纹、首装版本目录/latest恢复、WebSocket握手和模型/首装中断恢复；控制端`offline_native_models`仅查询原生状态，不下载或加载模型。
+
+扩展回归46项43通过3失败；浮层leftMargin、固定displayId种子和登录按钮旧锚点均在HEAD基线重现，列为自测维护待办。干净设备首装、实际模型上传/无网推理与旧APK覆盖安装仍待验证，未构建或发布正式APK。任务见`docs/task/20261014_OfflineMin独立首装与LLM外置实现.md`。

@@ -86,7 +86,7 @@ class OfflineUpdateManager(
         DATA_REPAIR_ONLY
     }
 
-    private data class ManifestSource(val baseUrl: String, val manifest: OfflineUpdateManifest)
+    internal data class ManifestSource(val baseUrl: String, val manifest: OfflineUpdateManifest, val rawJson: String = "")
 
     private data class ReleasePointer(
         val codeVersion: Int,
@@ -98,7 +98,7 @@ class OfflineUpdateManager(
         val previousLegacyDependencies: Boolean?
     )
 
-    private data class DownloadedArtifact(val metadata: OfflineUpdateArtifact, val file: File)
+    internal data class DownloadedArtifact(val metadata: OfflineUpdateArtifact, val file: File)
 
     data class ZipInspection(val expandedBytes: Long, val entryNames: Set<String>)
 
@@ -449,8 +449,8 @@ class OfflineUpdateManager(
                     .put("files", org.json.JSONArray(stableFiles.sortedBy { it.optString("name") }))
                 modelIds += modelId
             }
-            require(modelIds.isNotEmpty() && modelIds.distinct().size == modelIds.size) {
-                "Offline 模型兼容清单为空或包含重复模型"
+            require(modelIds.distinct().size == modelIds.size) {
+                "Offline 模型兼容清单包含重复模型"
             }
             val payload = JSONObject()
                 .put("schemaVersion", 1)
@@ -1001,11 +1001,20 @@ class OfflineUpdateManager(
             "min APK signer 与当前已安装 Offline APK 不一致"
         }
 
-        val (modelCompatibilitySha256, modelIds) = readModelCompatibility(root)
-        require(minApk.modelCompatibilitySha256 == modelCompatibilitySha256) {
-            "min APK 模型兼容指纹与当前完整 Offline APK 不一致"
+        val compatibility = minApk.runtimeCompatibility
+        val modelIds = if (compatibility != null) {
+            OfflineRuntimeState.requireCompatible(compatibility)
+            // 新契约只保护当前 APK 真正持有的模型；历史记录不能伪造新 APK 的 assets。
+            runCatching {
+                val metadata = JSONObject(assetManager.open("offline-model-manifest.json").bufferedReader().use { it.readText() })
+                val models = metadata.getJSONArray("models")
+                (0 until models.length()).map { models.getJSONObject(it).getString("modelId") }
+            }.getOrDefault(emptyList())
+        } else {
+            val (legacySha256, legacyIds) = readModelCompatibility(root)
+            require(minApk.modelCompatibilitySha256 == legacySha256) { "min APK 旧模型兼容指纹不匹配" }
+            legacyIds
         }
-        require(modelIds.isNotEmpty()) { "当前完整 Offline APK 没有可保留的 bundled 模型" }
 
         val apkFile = File(root, "updates/apk/aasc-display-offline-min-v${minApk.versionCode}.apk")
         return MinApkCandidate(source, minApk, apkFile, modelIds)
@@ -1127,7 +1136,7 @@ class OfflineUpdateManager(
         return true
     }
 
-    private fun readPublicKeyOrNull(): String? {
+    internal fun readPublicKeyOrNull(): String? {
         return try {
             assetManager.open(PUBLIC_KEY_ASSET).bufferedReader().use { it.readText() }
                 .takeIf { it.isNotBlank() }
@@ -1136,7 +1145,7 @@ class OfflineUpdateManager(
         }
     }
 
-    private fun fetchManifest(publicKeyPem: String): ManifestSource? {
+    internal fun fetchManifest(publicKeyPem: String): ManifestSource? {
         var lastError: IOException? = null
         for (baseUrl in resolveConfiguredUpdateBaseUrls(UPDATE_BASE_URLS)) {
             var connection: HttpURLConnection? = null
@@ -1145,13 +1154,14 @@ class OfflineUpdateManager(
                     connectTimeout = CONNECT_TIMEOUT_MS
                     readTimeout = READ_TIMEOUT_MS
                     requestMethod = "GET"
+                    instanceFollowRedirects = false
                 }
                 val status = connection.responseCode
                 if (status == HttpURLConnection.HTTP_NOT_FOUND) continue
                 if (status !in 200..299) throw IOException("读取更新清单 HTTP $status")
                 val raw = connection.inputStream.use { readBoundedText(it, MAX_MANIFEST_BYTES) }
                 // 响应正常但签名错误时直接拒绝，不把信任失败伪装成网络故障回退。
-                return ManifestSource(baseUrl, OfflineUpdateManifest.parse(raw, publicKeyPem))
+                return ManifestSource(baseUrl, OfflineUpdateManifest.parse(raw, publicKeyPem), raw)
             } catch (error: IOException) {
                 lastError = error
             } finally {
@@ -1162,7 +1172,7 @@ class OfflineUpdateManager(
         return null
     }
 
-    private fun downloadArtifact(
+    internal fun downloadArtifact(
         source: ManifestSource,
         metadata: OfflineUpdateArtifact,
         destination: File,
@@ -1181,6 +1191,7 @@ class OfflineUpdateManager(
                     connectTimeout = CONNECT_TIMEOUT_MS
                     readTimeout = READ_TIMEOUT_MS
                     requestMethod = "GET"
+                    instanceFollowRedirects = false
                 }
                 val status = connection.responseCode
                 if (status !in 200..299) throw IOException("下载 ${metadata.relativeUrl} HTTP $status")
@@ -1230,12 +1241,13 @@ class OfflineUpdateManager(
                 temporary.delete()
             } finally {
                 connection?.disconnect()
+                temporary.delete()
             }
         }
         throw IOException("局域网和外网均无法下载 ${metadata.relativeUrl}: ${lastError?.message}", lastError)
     }
 
-    private fun validateComponentArchive(archiveFile: File, component: String): ZipInspection {
+    internal fun validateComponentArchive(archiveFile: File, component: String): ZipInspection {
         val inspection = inspectZipArchive(archiveFile)
         for (entryName in inspection.entryNames) {
             if (entryName.isEmpty()) continue
@@ -1301,7 +1313,7 @@ class OfflineUpdateManager(
         writeJsonAtomically(pendingFile, pending)
     }
 
-    private fun validateCodePackage(directory: File, expected: OfflineUpdateArtifact) {
+    internal fun validateCodePackage(directory: File, expected: OfflineUpdateArtifact) {
         val launcher = File(directory, "src/apps/server/boot/server-launcher.js")
         val packageJson = File(directory, "package.json")
         val packageLock = File(directory, "package-lock.json")
@@ -1316,7 +1328,7 @@ class OfflineUpdateManager(
         }
     }
 
-    private fun validateDependencyPackage(directory: File, expected: OfflineUpdateArtifact) {
+    internal fun validateDependencyPackage(directory: File, expected: OfflineUpdateArtifact) {
         val metadata = JSONObject(File(directory, "dependency-manifest.json").readText())
         require(metadata.optInt("version", -1) == expected.version) { "dependencies 版本与签名清单不匹配" }
         require(metadata.optString("lockSha256").equals(expected.lockSha256, ignoreCase = true)) {
@@ -1396,7 +1408,7 @@ class OfflineUpdateManager(
         }
     }
 
-    private fun installVersionDirectory(
+    internal fun installVersionDirectory(
         stageDirectory: File,
         destination: File,
         component: OfflineUpdateArtifact,
