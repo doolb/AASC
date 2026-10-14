@@ -207,6 +207,73 @@ const SelfTest = {
             }
         },
         {
+            id: 'display_tts_background_opacity',
+            name: 'TTS 背景透明度设置',
+            description: '检查透明度滑块范围、权威配置和百分比标签',
+            category: '界面布局',
+            run: async () => {
+                const input = document.getElementById('displayTtsBackgroundOpacity');
+                const output = document.getElementById('displayTtsBackgroundOpacityValue');
+                const opacity = window.Settings?.ttsBackgroundOpacity;
+                const valid = Boolean(input && output && Number.isFinite(opacity)
+                    && Number(input.min) === 0 && Number(input.max) === 0.2
+                    && Number(input.step) === 0.01 && opacity >= 0 && opacity <= 0.2);
+                return {
+                    success: valid,
+                    message: valid ? 'TTS 背景透明度设置正常' : 'TTS 背景透明度控件或权威值异常',
+                    details: valid ? `当前峰值 ${Math.round(opacity * 100)}%` : '检查滑块范围、步长和服务端配置同步'
+                };
+            }
+        },
+        {
+            id: 'server_port_setting',
+            name: '服务器端口设置',
+            description: '检查服务器端口输入边界和权威值',
+            category: '界面布局',
+            run: async () => {
+                const input = document.getElementById('serverPortInput');
+                const port = window.Settings?.serverPort;
+                const valid = Boolean(input && Number(input.min) === 1 && Number(input.max) === 65535
+                    && Number(input.step) === 1 && Number.isInteger(port) && port >= 1 && port <= 65535);
+                return {
+                    success: valid,
+                    message: valid ? `服务器端口设置正常：${port}` : '服务器端口控件或权威值异常',
+                    details: '端口变更由服务端 WebSocket 配置保存并触发托管重启'
+                };
+            }
+        },
+        {
+            id: 'task_panel_portrait_layout',
+            name: '任务面板竖屏布局',
+            description: '检查竖屏任务条横向滚动及实例/结果列全宽堆叠',
+            category: '界面布局',
+            run: async () => {
+                const panel = document.getElementById('panel-task');
+                const layout = panel?.querySelector('.task-three-col');
+                if (!layout || panel.offsetParent === null) {
+                    return { success: true, message: '任务面板尚未打开，跳过布局检查', details: '打开任务面板后可再次运行自测' };
+                }
+                const portrait = window.matchMedia('(orientation: portrait)').matches;
+                const direction = getComputedStyle(layout).flexDirection;
+                const rail = layout.querySelector('.task-list-rail');
+                const instances = layout.querySelector('.task-instances-col');
+                const result = layout.querySelector('.task-result-col');
+                const inBounds = [instances, result].every(column => {
+                    if (!column) return false;
+                    const rect = column.getBoundingClientRect();
+                    return rect.left >= -1 && rect.right <= window.innerWidth + 1;
+                });
+                const valid = portrait
+                    ? direction === 'column' && getComputedStyle(rail).overflowX === 'auto' && inBounds
+                    : direction === 'row';
+                return {
+                    success: valid,
+                    message: valid ? '任务面板方向布局正常' : '任务面板布局或列边界异常',
+                    details: portrait ? '竖屏横向任务条与全宽实例/结果列' : '横屏三列布局'
+                };
+            }
+        },
+        {
             id: 'display_status_bar_vad_location',
             name: '显示状态栏开关位置',
             description: '确认当前显示端的独立开关位于 VAD 卡片',
@@ -470,7 +537,7 @@ const SelfTest = {
         {
             id: 'tts_custom',
             name: '自定义语音播报测试',
-            description: '播报后核对三行白字、主题色细描边及0.2半透明背景和4px模糊；30秒隐藏保留历史',
+            description: '播报后核对三行白字、主题色细描边、设置的背景透明度和4px模糊；30秒隐藏保留历史',
             category: '语音功能',
             run: async () => {
                 if (!window.currentDisplayId) {
@@ -478,7 +545,8 @@ const SelfTest = {
                 }
                 try {
                     window.WebSocketManager.sendTts('play', { text: '自测语音播报测试' });
-                    return { success: true, message: 'TTS命令已发送，字幕显示待人工验收', details: '核对逐行显示、固定3行、字号保持；白字配0.5px主题色细描边和时间文本同款阴影；上下渐隐背景最高0.2并使用4px背景模糊；切换主题只改变边缘颜色，字幕进度/历史保留，30秒无新行隐藏，再次播报保留历史；最多100行。此结果只表示命令已发送。' };
+                    const opacity = Number(window.Settings?.ttsBackgroundOpacity ?? 0.2);
+                    return { success: true, message: 'TTS命令已发送，字幕显示待人工验收', details: `核对逐行显示、固定3行、字号保持；白字配0.5px主题色细描边和时间文本同款阴影；上下渐隐背景峰值${Math.round(opacity * 100)}%并使用4px背景模糊；切换主题只改变边缘颜色，字幕进度/历史保留，30秒无新行隐藏，再次播报保留历史；最多100行。此结果只表示命令已发送。` };
                 } catch (err) {
                     return { success: false, message: '发送失败', details: err.message };
                 }

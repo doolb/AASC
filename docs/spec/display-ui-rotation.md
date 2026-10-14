@@ -185,6 +185,51 @@ Offline 显示 WebView 按目标屏幕的分辨率和 DPI 使用 `setInitialScal
     监听 window.resize，重新执行 applyRotation()
 ```
 
+## PMX模型加载进度条旋转适配（2026-10-14）
+
+PMX 加载进度属于显示舞台覆盖层，不能脱离 `DisplayStage.resize()` 的逻辑画布旋转。它使用独立全屏层，保持角色可见性开关不影响加载状态；进度条锚定旋转后逻辑画布的底边中心，中文阶段文字、进度轨道与填充一起旋转。
+
+```text
+display.html:
+  displayStageLayers 包含 displayMmdLoadingLayer
+  displayMmdLoadingLayer 包含 displayMmdLoadingProgress/text/track/fill
+  初始 loadingLayer.ariaHidden = true
+
+DisplayStage.initialize():
+  loadingLayer = 查询 displayMmdLoadingLayer
+  将 loadingLayer 纳入舞台旋转层列表
+
+DisplayStage.resize():
+  geometry = getRotationGeometry(viewportWidth, viewportHeight, currentRotation)
+  对每个旋转层（包含 loadingLayer）:
+    layer.width = geometry.logicalWidth
+    layer.height = geometry.logicalHeight
+    layer.transform = translate(-50%, -50%) rotate(geometry.rotation)
+  stage 的安全区变量按旋转角映射到逻辑边
+
+PMX onLoadProgress(progress):
+  如果加载失败:
+    progress.hidden = true
+    loadingLayer.ariaHidden = true
+  否则:
+    value = clamp(round(progress.percent), 0, 100)
+    progress.hidden = false
+    loadingLayer.ariaHidden = false
+    progress.ariaValueNow = value
+    progress.text = progress.phase + value + '%'
+    fill.width = value + '%'
+    如果 value == 100:
+      1500ms 后隐藏 progress 并设置 loadingLayer.ariaHidden = true
+
+CSS:
+  progress.width = min(440px, logicalWidth - 28px)
+  progress.left = logicalWidth / 2
+  progress.bottom = logicalSafeInsetBottom + 48px
+  progress.transform = translateX(-50%)
+```
+
+加载提示继续使用现有 MMD 回调、百分比和完成后 1.5 秒隐藏时序，不新增旋转配置或 WebSocket 消息。
+
 ## 设备连线指令TTS防抖
 
 ### 问题
@@ -227,5 +272,6 @@ const DEVICE_EVENT_DEBOUNCE_MS = 30000  // 30秒内同一IP同一事件不重复
 |------|------|
 | public/display.html | 显示端页面，applyRotation 函数 |
 | public/css/display.css | 显示端样式，UI元素定位 |
-| public/js/display-stage.js | 交互舞台几何与时间避让计算 |
+| public/css/display-mmd.css | PMX加载提示在旋转后逻辑画布内的位置和尺寸 |
+| public/js/display-stage.js | 交互舞台几何、旋转层变换与时间避让计算 |
 | server.js | executeDeviceEvent 函数，设备事件防抖 |

@@ -3961,6 +3961,11 @@ input[type="range"]::-webkit-slider-thumb:active {
   flex-shrink: 0;
   overflow-y: auto;
 }
+.task-list-rail,
+.task-list-group,
+.task-group-cards {
+  display: contents;
+}
 .task-list-col-header {
   display: flex;
   gap: 6px;
@@ -3996,6 +4001,85 @@ input[type="range"]::-webkit-slider-thumb:active {
 .task-card.selected {
   border-color: rgba(0,210,255,0.4);
   background: rgba(0,210,255,0.08);
+}
+
+/* 竖屏任务面板将任务卡片变成横向任务条，实例和结果顺序铺满其下方。 */
+@media (orientation: portrait) {
+  #panel-task .task-three-col {
+    height: auto;
+    min-height: 0;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  #panel-task .task-list-col {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    overflow: hidden;
+  }
+
+  #panel-task .task-list-rail {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  #panel-task .task-list-group {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    width: max-content;
+    min-width: 0;
+  }
+
+  #panel-task .task-list-group .task-group-title {
+    margin: 8px 0;
+  }
+
+  #panel-task .task-group-cards {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  #panel-task .task-group-cards > .task-card,
+  #panel-task .task-group-cards > .task-empty-state {
+    box-sizing: border-box;
+    width: 78vw;
+    max-width: 300px;
+    flex: 0 0 auto;
+    margin: 0;
+  }
+
+  #panel-task .task-group-cards > .task-empty-state {
+    padding: 20px 12px;
+  }
+
+  #panel-task .task-instances-col,
+  #panel-task .task-result-col {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+
+  #panel-task .task-instances-col {
+    min-height: 180px;
+    max-height: 38vh;
+  }
+
+  #panel-task .task-result-col {
+    min-height: 220px;
+    max-height: 48vh;
+  }
 }
 /* ---- 结果视图 ---- */
 .task-result-layout {

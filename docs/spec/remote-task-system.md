@@ -479,3 +479,30 @@ _log(cat, ...args)   // 统一日志入口，_debug[cat]=true 时输出
 11. 实例名在 UI 中显示完整字符串 + title 悬浮提示，不再截断
 12. one-shot 任务 Widget 使用硬编码默认值（不依赖 {{var}} 实时推送），未运行时参数面板始终可见
 13. one-shot 任务通过 TaskPanel._saveWidgetGlobalConfig() 保存全局配置（task:set_config）
+
+## 控制端任务面板竖屏布局伪代码（2026-10-14）
+
+```text
+渲染任务列表:
+  task-list-col-header = 搜索框 + 新建按钮
+  对每个任务分类:
+    groupRail = 分类标题 + task-card 列表
+  task-list-rail = groupRail 按行排列
+  task-three-col = task-list-col + task-instances-col + task-result-col
+
+横屏:
+  task-three-col = 水平三列
+  task-list-rail 和 groupRail 使用 display: contents 保持原有纵向任务列表
+  实例列固定原宽，结果列占余下宽度
+
+竖屏:
+  task-three-col = 垂直排列
+  task-list-col = 全宽任务条
+  task-list-rail = 水平 flex + overflow-x: auto
+  groupRail 和 task-card = 不收缩的横向卡片组
+  task-instances-col、task-result-col = 全宽并依次位于任务条下方
+
+任务过滤、选择和实例刷新:
+  继续以 task-card、taskInstancesCol、taskResultCol 的既有语义节点查询
+  不更改 task:* WebSocket 消息或任务状态
+```

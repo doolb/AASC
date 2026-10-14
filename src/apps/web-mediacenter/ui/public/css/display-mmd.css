@@ -135,6 +135,14 @@
     z-index: 30;
 }
 
+/* 加载提示独立于角色显隐，但与角色层共享旋转后的逻辑画布。 */
+.display-mmd-loading-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 45;
+    pointer-events: none;
+}
+
 /* 播报文字/天气详情位于 MMD 上方、聊天下方；聊天打开时只隐藏其内容，不销毁计时节点。 */
 .display-stage-broadcast-layer {
     position: absolute;
@@ -367,12 +375,10 @@ body.display-chat-open .display-interaction-layer {
 
 .display-mmd-loading-progress {
     position: absolute;
-    z-index: 45;
-    left: max(10vw, 14px);
-    right: max(10vw, 14px);
+    left: 50%;
     bottom: calc(max(12px, var(--display-safe-inset-bottom)) + 48px);
-    max-width: 440px;
-    margin: 0 auto;
+    width: min(440px, max(1px, calc(var(--display-stage-width) - 28px)));
+    transform: translateX(-50%);
     padding: 10px 14px;
     border: 1px solid var(--border-color);
     border-radius: 12px;

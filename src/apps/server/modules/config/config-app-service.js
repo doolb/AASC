@@ -41,6 +41,8 @@ const CPU_AFFINITY_ENGINES = ['asr', 'tts', 'llm'];
 const CPU_AFFINITY_FIELDS = ['bigCoreCount', 'littleCoreCount'];
 const CPU_AFFINITY_BOOLEAN_FIELDS = ['preferBigCores'];
 const DEFAULT_DISPLAY_BACKGROUND_GLOW = Object.freeze({ color: '#8FA8D5', centerRange: 10, spread: 58 });
+const DEFAULT_TTS_BACKGROUND_OPACITY = 0.2;
+const DEFAULT_SERVER_PORT = 8081;
 const DEFAULT_CPU_AFFINITY = {
     asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
     tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
@@ -108,6 +110,36 @@ function validateDisplayBackgroundGlowPayload(payload, fallbackConfig = DEFAULT_
         ok: true,
         config: normalizeDisplayBackgroundGlowConfig(payload, fallbackConfig)
     };
+}
+
+// TTS 仅调字幕背景峰值，不把整体 opacity 施加到文字；同时对齐控制端百分比滑块的 0.01 步长。
+function normalizeTtsBackgroundOpacity(value, fallback = DEFAULT_TTS_BACKGROUND_OPACITY) {
+    const normalizeValue = candidate => {
+        if (!Number.isFinite(candidate)) return null;
+        return Math.min(0.2, Math.max(0, Math.round(candidate * 100) / 100));
+    };
+    return normalizeValue(value) ?? normalizeValue(fallback) ?? DEFAULT_TTS_BACKGROUND_OPACITY;
+}
+
+function validateTtsBackgroundOpacity(value) {
+    if (!Number.isFinite(value) || value < 0 || value > 0.2) {
+        return { ok: false, message: 'TTS 背景透明度必须是 0–0.2 之间的数值' };
+    }
+    return { ok: true, opacity: normalizeTtsBackgroundOpacity(value) };
+}
+
+// 端口必须是合法整数；读取持久化配置时可安全回退，接收远端写入时则由 validateServerPort 严格拒绝。
+function normalizeServerPort(value, fallback = DEFAULT_SERVER_PORT) {
+    const isValidPort = candidate => Number.isInteger(candidate) && candidate >= 1 && candidate <= 65535;
+    if (isValidPort(value)) return value;
+    return isValidPort(fallback) ? fallback : DEFAULT_SERVER_PORT;
+}
+
+function validateServerPort(value) {
+    if (!Number.isInteger(value) || value < 1 || value > 65535) {
+        return { ok: false, message: '服务器端口必须是 1–65535 之间的整数' };
+    }
+    return { ok: true, port: value };
 }
 
 function cloneCpuAffinityConfig(cpuAffinity = DEFAULT_CPU_AFFINITY) {
@@ -813,6 +845,12 @@ module.exports.normalizeDisplayBackgroundGlowConfig = (rawConfig, fallbackConfig
 module.exports.validateDisplayBackgroundGlowPayload = (payload, fallbackConfig) => (
     validateDisplayBackgroundGlowPayload(payload, fallbackConfig)
 );
+module.exports.getDefaultTtsBackgroundOpacity = () => DEFAULT_TTS_BACKGROUND_OPACITY;
+module.exports.normalizeTtsBackgroundOpacity = (value, fallback) => normalizeTtsBackgroundOpacity(value, fallback);
+module.exports.validateTtsBackgroundOpacity = value => validateTtsBackgroundOpacity(value);
+module.exports.getDefaultServerPort = () => DEFAULT_SERVER_PORT;
+module.exports.normalizeServerPort = (value, fallback) => normalizeServerPort(value, fallback);
+module.exports.validateServerPort = value => validateServerPort(value);
 module.exports.normalizeLlmDefaultModelMappings = (rawMappings, availableModelIds, reservedNames) => (
     normalizeLlmDefaultModelMappings(rawMappings, availableModelIds, reservedNames)
 );

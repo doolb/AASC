@@ -12129,9 +12129,26 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-14] 标准npm script生成min41（89327222字节，SHA256 42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340），签名与已安装版一致，profile/updateOnly/版本/CRC及新集合捕获DEX通过；ADB覆盖安装成功。
   - 配套code76为17722423字节，SHA256 f26196d5afa10d227abdb0485887c2f6922dc89a1e27854ea9cba17b2609cdfe；CRC/最新源码通过，含10个变更文件（两项既有断言同步，未新增或运行自动化测试）。min41/code76待发布完成及入口观察；minApk=false/servicePackage=false/dependenciesPackage=false。Provider验证方法已记录，豆包会话列表校验先暂缓。
 
+### 显示端PMX加载进度条旋转适配
+
+- ✅ [2026-10-14] PMX加载进度条接入显示舞台旋转层，按0°/90°/180°/270°跟随逻辑画布旋转并保持在屏幕范围内。
+  - 修改`display.html`、`display-stage.js`、`display-mmd.css`；进度阶段文字、轨道和填充随层旋转，宽度受逻辑画布约束，原有百分比及隐藏时序保持。新增`tests/display-mmd-loading-rotation.test.js`，覆盖1280×720/360×800和四个方向；旋转回归共5/5通过。
+  - 同步display design/spec、自测和任务文档；Offline Android WebView现场验收待完成。本轮不构建/发布，`release/offline-release-status.json`将`servicePackage=true`，min APK与依赖状态保持不变。
+
 ### Android外部登录min41与服务76发布验收
 
 - ✅ [2026-10-14] min41/code76发布LAN/WAN完成：min APK89327222字节/SHA256 42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340，代码17722423字节/SHA256 f26196d5afa10d227abdb0485887c2f6922dc89a1e27854ea9cba17b2609cdfe，最终清单SHA256 216921e970b9dc4e53bca3d9eb232824e067b0df0a6aba058b3e3a5749b3e4a6。
   - signer/profile/CRC/最新本任务源码及全组件HTTP大小SHA256通过，两端清单一致；精确清理旧min40/code75，保留依赖8/full38/种子69/修复2，无清理失败。
   - ADB/API28已覆盖安装min41并健康提交实际code-v76；豆包公开profile原生按钮/缺字段完成保留/取消返回通过，未执行真实账号登录或上游请求。真机TTS计算alpha0.2/blur4px/白色填色/0.5px细边与未验证标签通过，临时属性已恢复；真实账号全链路保留验收todo。
   - 移除实现进行中todo，同步相关design/spec/task/usage/self-test；豆包会话列表验证仅记录，夜间显示/数据修复继续暂缓。发布后另有三份网页工作区改动未包含76且未提交，servicePackage=true保留其待打包状态；minApk=false/dependenciesPackage=false。
+
+### 控制端竖屏任务面板与显示/服务器设置
+
+- ✅ [2026-10-14] 控制端任务面板适配竖屏：任务卡片横向滚动，实例和结果列在下方全宽排列，横屏继续三列。
+  - 修改`task-panel.js`、`upload.css`，更新remote-task-system design/spec并新增任务文档；浏览器布局测试2/2通过，搜索过滤行为通过。
+- ✅ [2026-10-14] 界面主题新增TTS背景透明度设置：0%–20%、步长1%、默认20%，沿用AASC WebSocket远端配置和服务端持久化；显示端渐变读取配置变量，旧配置默认保留alpha0.2。
+  - 修改`upload.html`、`websocket.js`、`display.html`、`display.css`、`config-app-service.js`、`server-app.js`；透明度测试3/3通过，计算alpha0.13/4px模糊/文字不透明通过。
+- ✅ [2026-10-14] 服务端卡片新增服务器端口设置：校验1–65535，经WebSocket权威广播并持久化；端口变化后托管重启，控制端和显示端等待新端口可用后保留地址路径并跳转；重启排队期间拒绝再次改端口。
+  - 修改`upload.html`、`websocket.js`、`display.html`、`config-app-service.js`、`server-app.js`；端口测试3/3通过。未在运行服务上切换端口或重启。
+  - 新增三组design/spec/task及文档索引；更新self-test和todo。相关主题/背景光晕/任务链接回归39/39、显示端重连4/4通过。
+  - 本轮未构建或发布；`release/offline-release-status.json`保持`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。Offline Android WebView与真实端口重启验收待完成。

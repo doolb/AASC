@@ -1503,6 +1503,18 @@ servicePackage保持true：本次MMD全部收入v63，但工作区其他未提�
 
 `TMPDIR=/mnt/AASC/.git/offline-aimodel-sync-20261012 npm run test:ai-models`：30/30通过，无失败/跳过；覆盖共用安全路径变更对既有独立模型下载、上传与回滚的回归。
 
+## PMX加载进度条显示端旋转自测（2026-10-14）
+
+`node --test tests/display-mmd-loading-rotation.test.js tests/display-stage-rotation.test.js` 共5/5通过。测试使用正式显示页结构和舞台/MMD样式，在1280×720横屏与360×800竖屏下分别设置0°/90°/180°/270°；检查文字与进度条旋转方向、屏幕四边界、显示状态、ARIA百分比和填充比例。未构建或发布服务包/APK；Android Offline WebView安全区与实际观感待设备验收，`servicePackage=true`。
+
+## 控制端任务面板、TTS透明度和服务器端口自测（2026-10-14）
+
+`node --test tests/task-panel-portrait-layout.test.js` 共2/2通过：360×800竖屏任务卡片横向滚动、实例/结果列不越界且文档无横向溢出；1280×720横屏仍保持三列。任务筛选继续有效。
+
+`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js` 共6/6通过：TTS透明度默认/边界/规范化、WebSocket持久化和连接补发、Chromium渐变alpha与4px模糊/文字不透明度；服务器端口1/65535边界与非法值拒绝、远端消息契约、控制端和显示端跳转代码及内联脚本解析。另运行 `tests/display-websocket-reconnect.test.js` 4/4通过；任务链接、主题及光晕相关回归39/39通过。
+
+Offline Android WebView的真实布局/滑块和托管服务器实际端口切换尚未现场执行；本轮未构建或发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。
+
 ## MMD-AR单点牵引稳定性回归（2026-10-14）
 
 `tests/mmd-ar-human-physics.test.js`16/16：真实米娅父空间metadata高度、默认深肘屈曲、手/脚/头/骨盆各10秒无重力单点全骨骼位置/转角跨度、反复目标30/60/120fps一致性；兼容原On/Hold/Off/Comply、自由/旋转、PMX限位、骨长、取消加载及原生资源释放。全身末秒位置最大13.64mm、转角最大0.03590rad，可达末端误差小于20mm；不可达目标保留原值。

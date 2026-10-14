@@ -348,7 +348,8 @@
                 refs.stage.style.setProperty(`--display-keyboard-inset-${edge}`, `${Math.round(geometry.keyboardInsets[edge])}px`);
             }
         }
-        for (const layer of [refs.mmdLayer, refs.chatLayer, refs.interactionLayer, refs.arCalibration]) {
+        // PMX 加载提示与 MMD 使用同一套旋转后逻辑画布，避免进度条留在未旋转的物理视口中。
+        for (const layer of [refs.mmdLayer, refs.loadingLayer, refs.chatLayer, refs.interactionLayer, refs.arCalibration]) {
             if (!layer) continue;
             layer.style.inset = 'auto';
             layer.style.left = '50%';
@@ -402,6 +403,7 @@
         refs.stage = document.getElementById('displayStageLayers');
         refs.arTrackingVideo = document.getElementById('displayArTrackingVideo');
         refs.mmdLayer = document.getElementById('displayMmdLayer');
+        refs.loadingLayer = document.getElementById('displayMmdLoadingLayer');
         refs.chatLayer = document.getElementById('displayChatLayer');
         refs.interactionLayer = document.getElementById('displayInteractionLayer');
         refs.arCalibration = document.getElementById('displayArCalibration');
@@ -429,6 +431,7 @@
             if (state.chatVisible) syncDisplayChatVoiceContext(true);
         });
         if (root.DisplayMmd && typeof root.DisplayMmd.init === 'function') {
+            const loadingLayer = document.getElementById('displayMmdLoadingLayer');
             const loading = document.getElementById('displayMmdLoadingProgress');
             const loadingText = document.getElementById('displayMmdLoadingText');
             const loadingFill = document.getElementById('displayMmdLoadingFill');
@@ -442,15 +445,20 @@
                     loadingHideTimer = null;
                     if (error) {
                         loading.hidden = true;
+                        loadingLayer?.setAttribute('aria-hidden', 'true');
                         return;
                     }
                     const value = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
                     loading.hidden = false;
+                    loadingLayer?.setAttribute('aria-hidden', 'false');
                     loading.setAttribute('aria-valuenow', String(value));
                     loadingText.textContent = `${phase} ${value}%`;
                     loadingFill.style.width = `${value}%`;
                     if (value === 100) {
-                        loadingHideTimer = root.setTimeout(() => { loading.hidden = true; }, 1500);
+                        loadingHideTimer = root.setTimeout(() => {
+                            loading.hidden = true;
+                            loadingLayer?.setAttribute('aria-hidden', 'true');
+                        }, 1500);
                     }
                 },
                 bus,

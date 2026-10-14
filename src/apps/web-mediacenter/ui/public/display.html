@@ -71,10 +71,12 @@
             <output id="displayMmdFps" class="display-mmd-fps" aria-label="角色渲染帧率" aria-live="off" hidden>-- FPS</output>
             <div id="displayMmdStatus" class="display-mmd-status" role="status" aria-live="polite"></div>
         </div>
-        <div id="displayMmdLoadingProgress" class="display-mmd-loading-progress" role="progressbar"
-             aria-label="模型加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
-            <span id="displayMmdLoadingText">准备模型 0%</span>
-            <div class="display-mmd-loading-track"><div id="displayMmdLoadingFill" class="display-mmd-loading-fill"></div></div>
+        <div id="displayMmdLoadingLayer" class="display-mmd-loading-layer" aria-hidden="true">
+            <div id="displayMmdLoadingProgress" class="display-mmd-loading-progress" role="progressbar"
+                 aria-label="模型加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+                <span id="displayMmdLoadingText">准备模型 0%</span>
+                <div class="display-mmd-loading-track"><div id="displayMmdLoadingFill" class="display-mmd-loading-fill"></div></div>
+            </div>
         </div>
         <div id="displayBroadcastLayer" class="display-stage-broadcast-layer" aria-hidden="true">
             <div id="voiceTextDisplay" class="voice-text-hidden"></div>
@@ -734,6 +736,9 @@
         // 显示端重连必须单飞：原生 ASR/TTS 同步阻塞 WebView 时，旧 close 回调不能再创建第二个连接。
         let displayReconnectTimer = null;
         let displayPageActive = true;
+        let displayPortRedirectTimer = null;
+        let displayPortRedirectActive = false;
+        let displayPortRedirectAttempts = 0;
         // 服务器重启后 ASR 可能比 WebSocket 晚就绪，使用独立单飞定时器轮询恢复状态。
         const ASR_STATUS_RETRY_MS = 5000;
         let asrStatusRetryTimer = null;
@@ -5853,6 +5858,36 @@
             }, 3000);
         }
 
+        function waitForDisplayServerPort(port) {
+            if (displayPortRedirectActive || !Number.isInteger(port) || port < 1 || port > 65535) return;
+            const targetUrl = new URL(window.location.href);
+            targetUrl.port = String(port);
+            if (targetUrl.origin === window.location.origin) return;
+
+            displayPortRedirectActive = true;
+            displayPortRedirectAttempts = 0;
+            const probe = async () => {
+                if (!displayPageActive || !displayPortRedirectActive) return;
+                displayPortRedirectAttempts += 1;
+                try {
+                    // 显示页与控制页一样先等待新监听端口可达，避免服务重启窗口内跳转到不可用地址。
+                    const probeUrl = new URL('/api/status', targetUrl.origin);
+                    probeUrl.searchParams.set('portProbe', String(Date.now()));
+                    await fetch(probeUrl.href, { mode: 'no-cors', cache: 'no-store' });
+                    displayPortRedirectActive = false;
+                    window.location.assign(targetUrl.href);
+                } catch (error) {
+                    if (displayPortRedirectAttempts >= 90) {
+                        displayPortRedirectActive = false;
+                        console.error(`服务器端口 ${port} 暂不可用，显示端将保留当前页面并继续重连`);
+                        return;
+                    }
+                    displayPortRedirectTimer = window.setTimeout(probe, 1000);
+                }
+            };
+            displayPortRedirectTimer = window.setTimeout(probe, 1200);
+        }
+
         function isCurrentDisplaySocket(socket) {
             return displayPageActive && displayWs === socket;
         }
@@ -5926,6 +5961,11 @@
                         return;
                     }
 
+                    if (data.type === 'serverPortConfig') {
+                        if (data.restartRequired === true) waitForDisplayServerPort(Number(data.port));
+                        return;
+                    }
+
                     if (data.type === 'displayStatusBarConfig') {
                         if (!data.displayId || data.displayId === displayId) {
                             applyDisplayStatusBarVisibility(data.showStatusBar);
@@ -5936,6 +5976,17 @@
                     if (data.type === 'displayBackgroundGlowConfig') {
                         if (window.DisplayBackgroundGlow) {
                             window.DisplayBackgroundGlow.handleConfig(data);
+                        }
+                        return;
+                    }
+
+                    if (data.type === 'displayTtsBackgroundOpacityConfig') {
+                        const opacity = Number(data.opacity);
+                        if (Number.isFinite(opacity) && opacity >= 0 && opacity <= 0.2) {
+                            document.documentElement.style.setProperty(
+                                '--tts-subtitle-background-opacity',
+                                String(Math.round(opacity * 100) / 100)
+                            );
                         }
                         return;
                     }
@@ -6356,6 +6407,9 @@
             displayPageActive = false;
             cancelVoiceInteraction();
             clearDisplayReconnectTimer();
+            if (displayPortRedirectTimer !== null) clearTimeout(displayPortRedirectTimer);
+            displayPortRedirectTimer = null;
+            displayPortRedirectActive = false;
             clearAsrStatusRetryTimer();
             asrStatusRequestToken += 1;
             // 页面离开时主动释放麦克风和音频上下文，避免 WebView 保留旧的持续监听链路。

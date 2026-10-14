@@ -62,9 +62,11 @@
 | MMD刚体XPBD WebGL2 | [mmd-xpbd-webgl.md](design/mmd-xpbd-webgl.md) | 测试版WebGL2 ping-pong刚体后端、碰撞/约束并行、骨骼读回与CPU回退 |
 | 六轴IMU共享3D测试网页 | [imu-six-axis-test.md](design/imu-six-axis-test.md) | 手机/电脑模拟六轴输入、校准/滤波、真值对照及多设备房间（已实现，Android真实采集验证） |
 | 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](design/display-camera-chat.md) | 摄像头能力开关、单摄像头拍照、实时预览和聊天图片输入 |
-| 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪、选择模式 |
+| 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪、PMX进度提示与选择模式 |
 | 显示端代码变化检测远端配置 | [display-version-remote-config.md](design/display-version-remote-config.md) | 控制端通过 AASC 远端配置显示端代码检测间隔 |
 | 显示端背景光晕 | [display-background-glow.md](design/display-background-glow.md) | 全局调节显示端媒体空白区域的中心亮度与扩散范围 |
+| 显示端 TTS 字幕背景透明度 | [display-tts-background-opacity.md](design/display-tts-background-opacity.md) | 控制端配置 TTS 字幕背景峰值透明度并通过 WebSocket 同步 |
+| 控制端服务器端口设置 | [server-port-config.md](design/server-port-config.md) | 通过远端配置修改服务端监听端口并托管重启 |
 | 显示端状态栏独立开关 | [display-status-bar.md](design/display-status-bar.md) | 控制端按 displayId 独立控制状态提示显示，保留时间和媒体名称 |
 | 控制端主导航响应式布局 | [control-sidebar.md](design/control-sidebar.md) | 横屏左侧纵向导航、竖屏底部横向导航 |
 | 控制端 | [control.md](design/control.md) | 媒体管理、显示控制、裁剪预览 |

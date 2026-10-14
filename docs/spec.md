@@ -72,6 +72,8 @@
 | 显示端选择 | [display-selection.md](spec/display-selection.md) | 单选、全选、自适应选择模式 |
 | 显示端代码变化检测远端配置 | [display-version-remote-config.md](spec/display-version-remote-config.md) | 显示端代码版本检测间隔的 WebSocket 远端配置伪代码 |
 | 显示端背景光晕 | [display-background-glow.md](spec/display-background-glow.md) | 全局光晕参数的 WebSocket 配置与显示端 CSS 应用伪代码 |
+| 显示端 TTS 字幕背景透明度 | [display-tts-background-opacity.md](spec/display-tts-background-opacity.md) | TTS字幕背景透明度的WebSocket配置、持久化与CSS应用伪代码 |
+| 控制端服务器端口设置 | [server-port-config.md](spec/server-port-config.md) | 服务端口校验、权威广播、控制端跳转与托管重启伪代码 |
 | 显示端状态栏独立开关 | [display-status-bar.md](spec/display-status-bar.md) | 按 displayId 持久化状态栏显隐、初始化补发和控制端同步伪代码 |
 | 设备列表 | [device-list.md](spec/device-list.md) | 设备列表组件，合并 DisplayList 和 DeviceTree |
 | 设备树 | [device-tree.md](spec/device-tree.md) | 树状结构设备列表（已合并到 device-list） |
@@ -97,7 +99,7 @@
 | 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/spec/android-offline-tts-apk.md) | 内置模型离线合成、WAV 播放和耗时显示伪代码 |
 | Android TTS CPU 核心模式 | [android-tts-cpu-affinity.md](../3rd/tts-server/docs/spec/android-tts-cpu-affinity.md) | CPU 核心识别、JNI affinity、回退和状态显示伪代码 |
 | 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
-| 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、旋转重力方向调整、设备事件防抖与 Offline DPI 字幕边距校准 |
+| 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、PMX进度层旋转、重力方向调整、设备事件防抖与 Offline DPI 字幕边距校准 |
 | 显示端分布式能力 | [display-capability.md](spec/display-capability.md) | 显示端能力声明、能力路由、能力编辑 |
 | 显示端语音唤醒与监听控制 | [display-voice-conversation.md](spec/display-voice-conversation.md) | 监听开关、唤醒状态、TTS结束计时和声纹独立语义 |
 | Windows子显示端语音转文字输入 | [windows-voice-text-input.md](spec/windows-voice-text-input.md) | Windows 前台窗口文本注入、快捷键、语音命令和 ASR 旁路伪代码 |
