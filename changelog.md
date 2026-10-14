@@ -1,3 +1,9 @@
+### Offline修复APK构建与ADB覆盖
+
+- ✅ [2026-10-14] 已生成full50与min51，原生分组ZIP和@scope生产锁修复均被打入APK，minApk状态false并上传origion。
+  - full50：544317641 bytes / SHA1ab230d62b1ece03bd59331adba9a83643072501266a6ae288b5e78b535bcccc；min51：89412146 bytes / SHA5099960c5da396f38df2b8861aacf32c8d6efa3d2f42d7787fdfbeb3578310a1。同一签名，复用85/9/repair3/seeds85；正式镜像发布与公网原生安装链验收进行中。
+  - ADB SM-N9500由min41覆盖full50，原生ready且实际API v85/v9、根代码/根node_modules/bundled-baseline，旧code76健康后删除；普通8071/offline8081共存。真实应用无清空，公网ALL更新在独立测试目录验证。
+
 ### Offline分组依赖更新校验
 
 - ✅ [2026-10-14] 修复分组依赖更新误报缺少dependency-manifest.json，以及后续生产锁拒绝npm @scope路径的问题。

@@ -22,3 +22,10 @@ full48已经完成两端发布；不可覆盖。新候选full50/min51，保留co
 Android全部251/251通过，0失败/错误/跳过（包括出包机真实v9归档）；test:offline-bootstrap62/62与diff空白检查通过。分组入口/完整单包/空组和非法路径/内容篡改/@scope及嵌套生产锁/版本不符/链接拒绝覆盖。真实common35502条目，421633741展开bytes；同一生产解压代码逐文件sync在磁盘较慢，主动停止仅本次测试worker143并改内存盘后重跑完成，已清理唯一中断临时目录。初次测试字符串插值编译错误已修正。真实包自测需AASC_OFFLINE_GROUP_ARCHIVE_ROOT、AASC_OFFLINE_GROUP_MANIFEST和AASC_OFFLINE_GROUP_PUBLIC_KEY；开发机缺少fixture时仅该项跳过。
 
 用户追加允许ADB Android真机测试；当前192.168.1.6:5555 SM-N9500上offline min41，普通APK v2。构建后覆盖安装并核对实际版本/路径/健康与更新链；保留普通APK8071，不清空应用数据。源码与状态先提交origion，再构建full50/min51并发布。
+
+### 修复APK与ADB整包覆盖
+full50已生成：544317641 bytes，SHA1ab230d62b1ece03bd59331adba9a83643072501266a6ae288b5e78b535bcccc；min51已生成：89412146 bytes，SHA5099960c5da396f38df2b8861aacf32c8d6efa3d2f42d7787fdfbeb3578310a1。均a57fd4c3…同一签名，full内置85/9/数据3/10映射，无accounts或LLM模型。min51签名过渡清单成功，保持服务85/9/repair3/seeds85，未替换v9归档。对应minApk=false，代码/依赖false。
+
+ADB SM-N9500安装full50成功。原code76/deps8及min41，启动后原生健康提交ready/85/9，旧code-v76清理1项无重试；手机LAN直连HTTPS /api/status显示apk-0.2.50-offline、v85/v9，codePath根目录、dependenciesPath根node_modules、dependencySource=bundled-baseline。普通8071与offline8081同时监听。ADB forward的回环代理探测失败，直接LAN HTTPS成功，另运行实际APK DEX原生isLocalServerHealthy=true。
+
+出包机归档及实际APK DEX都已验证；在手机应用独立测试目录使用actual50 DEX调用applyServerUpdate，测试进程内只保留外网120.79.245.103更新源、隔离76/8基线触发ALL，以验证公网签名/下载/分组/锁/指针安装链。测试只改变自己的进程常量及目录，不修改真实应用的指针；待结果。最初ADB shell sh -c参数引用不正确导致find枚举过广，已改直接调用/显式远端引用，只输出所需目录；不用该结果宣称私人账号hash保留。实际用户数据未清空，账号保留以源码和单元为证据。
