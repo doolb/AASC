@@ -60,6 +60,20 @@
 
 自动化覆盖见上方2026-10-13 PBD全身IK记录；实际拖点姿态、骨骼限位、恢复和手机性能仍待浏览器/设备验收。
 
+2026-10-13新增一次原会话Node诊断（不计离线通过）：用户明确授权当前会话、凭据仅内存，断CDP后Node发送一次，newConversation=false、HTTP200/SSE、529ms、STREAM_ERROR数字718013001，无有效回复，固定映射doubao_upstream_failed/502。该码专门含义未在两仓源码中确认，不等于先前710022004；仅测试现有Node请求加会话字段，并未完整复制网页参数/签名。停止不重试，无新网页fetch/TTS或主服务器操作，不改测试代码。
+
+2026-10-13原Chrome标签真实测试成功（不计离线通过数量）：用户明确另授权原标签测试，空输入框中脚本发送一次短文；POST /chat/completion、普通mode0、既有会话newConversation=false、无TTS，HTTP200/SSE无业务错误并正常SSE_REPLY_END。恢复监听/拦截且不关闭原标签/Chrome，无秘密或正文存盘。前次自建临时页的新会话710022004不能归纳为账号/Chrome或所有自动化均不可用；原标签成功不等同于项目bridge或纯Node成功。本轮没有运行单元测试或修改自测代码。
+
+2026-10-13新增真实官网路径观察（不计离线测试通过）：获授权在同登录context的自建临时官方页输入一次“请只回复：OK”，POST /chat/completion带a_bogus/msToken等query，HTTP200/SSE、STREAM_ERROR业务码710022004，无有效回复；结束并关闭自建页，不重试、不保存秘密或原始流。用户随后报告手动浏览器消息成功，这是用户证据，未被本工具独立捕获；需区分原标签手动与临时页自动输入，不宣称整个账号/Chrome均遭风控或“只因缺签名”。无新运行代码或主服务器操作。
+
+2026-10-13豆包新增真实诊断（不计离线用例通过数量）：用户明确授权Chrome凭据及一次Node短消息，唯一官方标签Cookie仅内存使用；doubao普通模式“请只回复：OK”，实际一次POST、502ms、HTTP200/SSE，业务风控被现有适配器映射doubao_risk_control/403，没有有效完整回复。未记录具体上游原始码/帧/响应正文，未保存凭据；停止且不重试，未调用真实网页fetch/TTS、未操作主服务器。本轮不改自测代码，面板仍不得自动进行真实请求。
+
+## 豆包网页朗读WAV（2026-10-12，离线模拟通过，真实运行待验收）
+
+执行 `node --test tests/tts-ogg.test.js tests/tts-opus-decoder.test.js`：21/21通过。使用本地构造的静音/非静音Opus包，没有读取凭据或请求豆包。覆盖精确魔数、CRC、页序/serial、Opus头/标签、跨页Tags/音频包、四种帧结构、BOS/EOS、pre-skip/末尾裁剪、Q8增益、实际48kHz WAV、32MiB PCM/16MiB音频、双worker容量、取消/超时及固定错误。三项独立审查问题各先RED再修复。
+
+最终Chat2API159/162通过，3项仍为既有Windows chmod断言失败；TTS/解码/配置/浏览器回归95/95，既有播报与并发回归19/19。独立审查的总时长和权威音色回填两项问题均先RED再修复。 新增Frontier协议/适配器10/10、speech11/11，覆盖独立会话、多句完整结束、严格绑定、不换号/重试、403/取消/超时、总120秒及HTTP断连；业务薄层/默认关闭/AI限制/固定参数与无凭据、权威音色回填和保存均通过。公开模块最小只读核对不读取Cookie/聊天内容，不发新聊天/合成。speech、缓存和播放器保持WAV；Android Node/WASM及显示端声音、队列与MMD事件待设备验收。浏览器自测和音色查询只读，不自动合成。
+
 ## 独立MMD-AR拖动飞散修复（2026-10-12，独立场景验收完成）
 
 先跑`npm run build:web:mmd-ar-test`。定向命令：`node --test tests/mmd-ar-xpbd-webgl-bone-texture.test.js tests/mmd-ar-xpbd-webgl.test.js tests/mmd-pmx-helper.test.js`；真实PMX拖动与生命周期分别串行运行`node --test tests/mmd-ar-xpbd-webgl-drag-browser.test.js`和`node --test tests/mmd-ar-xpbd-webgl-browser.test.js`。package没有这组专用script，未跑全仓通用test或APK构建。
@@ -117,6 +131,7 @@
 `npm run test:mmd-production` 118/118，`npm run test:mmd-production:tts` 19/19，`npm run test:mmd-production:browser` 1/1（69.5秒），共138项无失败/跳过/pageerror；最后时钟修订复核9/9动作单元。新增动作自测覆盖生成准备/失败释放、并发乱序同句关联、未发声不接管、暂停/缓冲/续播、跳播去重、手动接管及句尾爱心。扩展正式真实PMX/WASM/WAV：提前准备1动作但零自动层，发声后轨道推进；暂停差0.172ms并保持，恢复继续，取消自动层时音频/口型继续。初轮发现的启动帧延迟和暂停位置缓存已修复；普通/Agent路由及Provider原输入并发回合回归通过。
 
 独立WEB npm构建、正式HTML内联及模块语法/差异检查通过。额外旧chat-tts-interruption仍断言不存在的displayChatTtsStop，修改前快照已无该控件，见todo，不声称全仓通过。新服务包尚未发布，手机视觉/性能待验收。
+
 
 ## MMD-AR高级动作单按钮与静默填入MPL（2026-10-11）
 
@@ -208,6 +223,7 @@ npm网页构建、30条Human/reply/MPL生成指纹、默认/服务器待机源�
 扩展tests/mmd-ar-web-panel-groups.test.js为6通过/2失败：静态夹具未同步正式页新增控件，groupWebPanels报未分类节点；校准弹窗测试等待关闭相机后的定位按钮禁用超时。原测试未调用本次预设构建适配，未改写夹具或宣称全仓通过；另列待处理。
 
 本地网页已构建，未发布外网；手机观感/性能待现场验收。详情见[任务记录](task/20261011_MMDAR统一灯光预设与文件导入导出.md)。
+
 
 ## 状态圆钮VAD与识别结果尺寸（2026-10-10）
 
@@ -1466,7 +1482,6 @@ code48发布验证：931包内文件和工作区一致，RSA清单、LAN/WAN所�
 
 2026-10-10 最终发布：code-v56.zip已发布LAN/WAN，16,936,308字节，SHA-256 3ca3606613e95faa931daa8a974154f2776a6cd6e087beba525cf3d421731e42；源提交34671c31。931文件快照及运行资源完整、ZIP CRC/RSA/组件约束、内外网全部组件HTTP大小/SHA-256通过，签名清单完全一致，精确清理无错误，两端code目录仅保留code-v56.zip。21文件93/93通过，无跳过；servicePackage=false，minApk=true/dependenciesPackage=false保持，未构建原生APK或恢复旧声纹。手机现场验收保留。
 
-
 ## 正式MMD灯光与动作同步（2026-10-11）
 
 npm run test:mmd-production：97/97通过；npm run test:mmd-production:browser：1/1通过（155.0秒）；npm run test:mmd-production:independent：1/1通过（231.7秒）。99项零失败/跳过/pageerror。正式自测包括旧灯光、高光/AO边界键保留、十组预设/保存、固定资源/相对依赖完整、刚体避让解除回归、真实PMX待机/动态目录/MPL无导航及真实WAV/TTS音频时钟互斥。独立覆盖六类源码/预览VMD逐字节一致、下载/迟到保护/原动作/避让/后端重建。
@@ -1503,6 +1518,11 @@ servicePackage保持true：本次MMD全部收入v63，但工作区其他未提�
 
 `TMPDIR=/mnt/AASC/.git/offline-aimodel-sync-20261012 npm run test:ai-models`：30/30通过，无失败/跳过；覆盖共用安全路径变更对既有独立模型下载、上传与回滚的回归。
 
+本地播放补充：`node --test tests/tts-provider-doubao-playback.test.js tests/display-mmd-tts-actions.test.js tests/agent-chat-tts.test.js` 22/22通过。使用本地构造Opus包经真实worker解码、现有内存缓存及隔离HTTP，GET/HEAD/Range/416、Chromium Audio实际播放/ended/停止/下一句和DisplayLipSyncAudio来源清理均验证；无上游请求或账号音频。实际MMD模型、Android及其它设备音频仍未验收。
+
+## 豆包普通LLM网页fetch（2026-10-12）
+
+Chat2API173/176通过，仍同3项Windows chmod失败；TTS/解码/权威配置/浏览器97/97，旧播报19/19。bridge9项覆盖背压、来源/context/session绑定、配置关闭/冲突/容量/403/预取消、iframe与主frame导航、连接期间导航/授权撤销/换凭据、迟到连接及CDP detach/目录send挂起截止。配置浏览器验证默认关闭、显式会话授权、WS成功/失败回填/断线与只读自测；真实隔离Chromium CDP、HttpOnly假sessionid与页面fetch/SSE接线通过，所有网页请求本地拦截、清理不关用户标签。自测新增doubao_web_runtime_config只读结构检查，不连接浏览器、读取会话或发聊天。实际官网/用户账号/think和expert/设备未验收。
 ## PMX加载进度条显示端旋转自测（2026-10-14）
 
 `node --test tests/display-mmd-loading-rotation.test.js tests/display-stage-rotation.test.js` 共5/5通过。测试使用正式显示页结构和舞台/MMD样式，在1280×720横屏与360×800竖屏下分别设置0°/90°/180°/270°；检查文字与进度条旋转方向、屏幕四边界、显示状态、ARIA百分比和填充比例。未构建或发布服务包/APK；Android Offline WebView安全区与实际观感待设备验收，`servicePackage=true`。
