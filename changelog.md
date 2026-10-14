@@ -44,6 +44,13 @@
   - 扩展身体/实际浏览器自测：身体20/PBD3/标记4/镜头手势5/动作7，共39/39通过；真实米娅拖点/面板Off/重力开关900子步、多点/重置/模式/横竖屏1/1通过；WEB构建、6模块语法与差异空白检查通过。关重力释放末秒全骨位置最多1.12mm，开重力最多5.20mm；仍有简化接触抖动。
   - 网页测试使用/var/tmp避开临时IndexedDB IO失败，降低SwiftShader画面特效/渲染倍率，保留蒙皮/衣物物理和真实子步。同步design/spec/task/usage/README/self-test/todo，移除实现任务，只保留设备/其他模型验收；仅本地WEB，未出APK/部署，保留其他任务Offline状态与无关改动。
 
+### Offline代码包与普通子服务器发布包重打
+
+- ✅ [2026-10-14] 重打 Offline code-only v77 与普通子服务器发布包 v1.0.0；仅生成本地产物，未上传或发布。
+  - Offline `code-v77.zip`：17,727,206 bytes，SHA-256 `14c6bf57ea3df69776b4413bd5884a5092fc609e20ed41381a4b4a3556694e54`；复用 dependencies v8、Node-min seeds v69。RSA签名、manifest组件契约、ZIP完整性及1,293个条目白名单检查通过。来源提交 `15e7f6cacd01909148f123100fabb51c4ac95751`；`gitDirty=true` 是工作区其他既有未提交改动造成，`src/`、`package.json`和`package-lock.json`干净。
+  - `aasc-server-1.0.0.tar.gz`：4,598,329 bytes，SHA-256 `080e60e8e7eb7fccffe773733944372b6661ff3412beae777acc2f8128962e74`；manifest大小/SHA-256与产物一致，692个条目符合普通子服务包白名单。
+  - 两次构建前置的 MMD 生产资源校验均通过。`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`保持不变，待后续发布。
+
 ### 独立MMD-AR单点牵引稳定性修复
 
 - ✅ [2026-10-14] 修复关重力后单点牵引导致骨骼漂摆、关节过度回弹。
@@ -12266,20 +12273,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 普通子服务器`aasc-server-1.0.0.tar.gz`重打为4,598,415 bytes，SHA-256 `2d734589793d4efe5bf7572c084be17fe06be816c379da11d74bc666a1fbb055`；主控 `/server/manifest` 已指向新包。产物未提交Git。
   - APK-SM-N9500定向强制更新请求返回accepted，但服务启动时间未变化，不能确认已安装；Offline code v78未发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。任务列表拖动滚动按用户要求暂缓，待真机试用后再定。
 
-### TTS 背景透明度范围扩展与子服务器包重打
-
-- ✅ [2026-10-14] TTS 字幕背景透明度滑块扩至0%–100%，保留1%步长和20%默认值；服务端及WebSocket仍以0–1 alpha比例保存/传输，旧配置值保持兼容。
-  - 修改`upload.html`、`config-app-service.js`、`display.html`和`self-test.js`；浏览器验证0%、20%、73%、100%双向换算，服务端边界/规范化和渐变alpha 1通过，`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js`共7/7通过。
-  - 更新透明度design/spec、self-test伪代码、任务/todo；Offline code v78签名、组件大小/SHA-256及ZIP完整性校验通过。`code-v78.zip`为17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`。
-  - 普通子服务器`aasc-server-1.0.0.tar.gz`重打为4,598,415 bytes，SHA-256 `2d734589793d4efe5bf7572c084be17fe06be816c379da11d74bc666a1fbb055`；主控 `/server/manifest` 已指向新包。产物未提交Git。
-  - APK-SM-N9500定向强制更新请求返回accepted，但服务启动时间未变化，不能确认已安装；Offline code v78未发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。任务列表拖动滚动按用户要求暂缓，待真机试用后再定。
-
 ### Offline服务代码v78发布
 
 - ✅ [2026-10-14] Offline服务代码v78已发布至LAN与WAN：`code/code-v78.zip`，17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`；发布清单SHA-256 `47f08d0e7920b86aff6ace6a40180ae7a5100fa03a993dcd2193a1f284dd9444`。
   - 签名清单与全组件HTTP大小/SHA-256校验通过，两端清单一致，旧版本精确清理成功；未构建或发布APK。`servicePackage=false`、`minApk=false`、`dependenciesPackage=false`。
   - APK-SM-N9500仍报告代码`1.0.0`及`package-root`，尚未应用Offline热更新；待在设备更新卡片确认安装后复核版本。
-
 ### 共享服务更新包与平台依赖
 
 - ✅ [2026-10-14] 主服务器与Offline共用RSA签名清单和版本化ZIP；普通APK/Termux仍从主服务器更新，依赖拆为common/android/linux64/win64独立组。
