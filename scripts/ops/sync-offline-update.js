@@ -527,7 +527,8 @@ function selectSyncComponents(manifest) {
     const components = manifest?.payload?.components || {};
     return [...SYNC_COMPONENT_NAMES
         .map((name) => ({ name, component: components[name] })),
-        ...GROUPS.map(group => ({ name: `dependencies.${group}`, component: components.dependencies?.groups?.[group] }))]
+        ...GROUPS.map(group => ({ name: `dependencies.${group}`, component: components.dependencies?.groups?.[group] })),
+        ...Object.entries(components.taskDependencies || {}).map(([id, component]) => ({ name: `taskDependencies.${id}`, component }))]
         .filter(({ component }) => component && typeof component.relativeUrl === 'string');
 }
 

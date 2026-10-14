@@ -83,6 +83,7 @@ async function downloadCode(candidate, destination, options = {}) {
         let received = 0;
         const limit = new Transform({ transform(chunk, encoding, next) {
             received += chunk.length;
+            if (received <= candidate.size && options.onProgress) options.onProgress(received, candidate.size);
             next(received > candidate.size ? new Error('代码包超过清单大小') : null, chunk);
         } });
         await pipeline(response, limit, fs.createWriteStream(destination, { flags: 'wx' }));

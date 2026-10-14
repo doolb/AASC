@@ -19,6 +19,7 @@ module.exports = {
     return Object.values(tasks).map(t => ({
       id: t.id, name: t.name, description: t.description,
       target: t.target || 'server',
+      dependencies: t.dependencies || [],
       mode: t.mode || 'one-shot',
       params: t.params || [],
       widget: t.widget || null,

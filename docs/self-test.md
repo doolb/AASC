@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## 模型任务依赖首次下载与懒加载（2026-10-14）
+
+`npm run test:task-dependencies`106/106通过；新任务依赖用例覆盖真实签名ZIP、本机HTTP下载、并发去重、重启离线缓存、SHA/版本/签名/元数据篡改、链接/额外包拒绝、失败后重试、停止后不转发、common排除ORT与独立版本复用、发布/同步/HTTP验收与精确清理。完整Offline资产用例验证ORT未进入APK暂存资产且打包输入保留。
+
+`npm run test:task-dependencies:browser`真实Chromium1/1通过：实际npm的ort.webgpu.min.js由生产懒加载器加载，首屏无ORT请求、同页只加载一次、InferenceSession入口及WASM同源路径正确。未使用LFM-VL模型做真实GPU推理，Android与正式独立生产ZIP待部署验收。`git diff --check`与受影响入口语法检查通过。
+
 ## Offline分组依赖真实归档验证（2026-10-14）
 
 Android251/251、test:offline-bootstrap62/62通过。OfflineDependencyGroupsTest新增真实ZIP分组入口与排他合并、旧完整单包必须manifest/Express、缺失/空组/越界/其他文件拒绝、篡改内容SHA拒绝、scoped及嵌套生产锁路径、错版本/链接拒绝。额外用出包机签名清单及v9 common/android包完成归档SHA/大小、安全解压、组内容指纹、合并及code85生产锁版本校验；通过AASC_OFFLINE_GROUP_ARCHIVE_ROOT、AASC_OFFLINE_GROUP_MANIFEST、AASC_OFFLINE_GROUP_PUBLIC_KEY显式提供，不依赖联网。此额外真实包用例在未提供归档的开发机跳过，其余ZIP夹具独立运行。common含35502项，内存盘缩短自测逐文件sync耗时，生产调用未绕过。ADB SM-N9500 full50覆盖后85/9双版本/根路径/bundled-baseline、健康后旧code76清理与日常重启标记不变通过；同一actual APK DEX在隔离目录仅公网源完成原生ALL下载、校验、分组、锁及pending指针安装。隔离服务未启动，真实环境另验HTTPS/API与生产健康=true；fixture、自有ADB转发及推送JAR/DEX均已清理。min51/full50两端发布完成，min完整HTTP SHA验证、full目标SHA及索引/HEAD通过。

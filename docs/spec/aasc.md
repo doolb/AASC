@@ -1,5 +1,28 @@
 # AASC 系统实现文档
 
+## 任务依赖签名分发伪代码（2026-10-14）
+
+```text
+校验签名清单:
+  基础dependencies仍要求固定四组
+  若taskDependencies存在，逐项匹配已注册ID、包名、真实版本、内容SHA与数字版本ZIP路径
+  任务依赖必须跨平台，target为空
+
+构建与发布:
+  从三平台生产树提取optional ORT并验证文件集合与内容一致
+  从基础四组剔除ORT，生成独立ZIP及元数据
+  指纹与版本一致复用已校验原件，否则生成更高制品版本
+  all上传代码、基础组与任务包，再原子切换签名清单
+  其他发布模式必须确认保留的任务包已存在且摘要匹配
+  镜像同步和HTTP发布验收逐项验证任务包大小与SHA
+  精确清理只处理该目录的普通dependencies-v数字.zip，保留清单引用
+
+服务文件分发:
+  读取当前签名清单并校验所引用制品
+  /server/dependencies的task参数必须为注册ID
+  版本与SHA查询值不匹配返回409，匹配则流式发送既有ZIP
+```
+
 ## 概述
 
 AASC（Actor-based Asynchronous Service Communication）系统的核心实现，包含消息总线、执行者模型、消息路由等核心组件。

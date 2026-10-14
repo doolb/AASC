@@ -114,6 +114,7 @@ function validateManifestComponents(manifest) {
         throw new Error('Offline 更新清单 schemaVersion/components 无效');
     }
     const { code, dependencies, apkMin } = manifest.payload.components;
+    sharedUpdate.validateTaskDependencies(manifest.payload.components.taskDependencies);
     if (code?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(code.runtimeCompatibility);
     if (apkMin?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(apkMin.runtimeCompatibility);
     validateArtifactEntry(code, 'code');
@@ -654,7 +655,8 @@ async function createOfflineUpdateArtifacts(options = {}) {
             let dependencyRoots = options.dependencyRoots;
             if (typeof dependencyRoots === 'string') dependencyRoots = JSON.parse(await fs.promises.readFile(dependencyRoots, 'utf8'));
             stagedDependencies = await buildDependencyGroups({ projectRoot, workDirectory, dependencyVersion, lockSha256,
-                source, outputDir, currentArtifactRoot: options.currentArtifactRoot, currentDependencies: currentComponents.dependencies, commandRunner, dependencyRoots, nodeAbi: options.nodeAbi });
+                source, outputDir, currentArtifactRoot: options.currentArtifactRoot, currentDependencies: currentComponents.dependencies,
+                currentTaskDependencies: currentComponents.taskDependencies, commandRunner, dependencyRoots, nodeAbi: options.nodeAbi });
             for (const artifact of stagedDependencies.artifacts) {
                 if (!artifact.reused && fs.existsSync(path.join(outputDir, artifact.relativeUrl))) throw new Error(`依赖组版本已存在，拒绝覆盖：${artifact.relativeUrl}`);
             }
@@ -680,7 +682,10 @@ async function createOfflineUpdateArtifacts(options = {}) {
                 }
             }
         };
-        if (mode === 'all') payload.components.dependencies = stagedDependencies.dependencies;
+        if (mode === 'all') {
+            payload.components.dependencies = stagedDependencies.dependencies;
+            payload.components.taskDependencies = stagedDependencies.taskDependencies;
+        }
 
         const manifest = {
             payload,

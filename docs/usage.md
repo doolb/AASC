@@ -4,6 +4,10 @@
 
 # Web MediaCenter - 使用说明
 
+## 模型推理按任务准备运行库
+
+源码已实现首次模型任务下载独立ORT运行库、后续和重启后复用缓存；正式新依赖与服务制品待发布，详见 [任务依赖使用说明](usage/task-dependencies.md)。
+
 ## Chat2API 默认模型与已有账号
 
 无需先添加映射即可使用预置DeepSeek模式别名、Qwen历史别名与豆包三种Chat模式；已保存账号自动参与调度，缺少登录资料时提示登录。自定义规则优先，release基线3保留公开映射。当前旧min41需先从[公网min51 APK](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v51.apk)覆盖安装，再更新服务并确认v3；旧版不能解析新的分组清单。豆包Node无需开启折叠的旧Chrome入口，语音模型默认与各业务音色区别见[统一账号与应用](usage/chat2api-unified-applications.md)及[豆包Node](usage/chat2api-doubao-node.md)。

@@ -114,6 +114,7 @@ const { normalizeNodeRegistration } = require('../../../framework/aasc/node-prot
 const { AascNodeConnector } = require('../../../framework/aasc/node-connector');
 const { buildNormalReplayMessages } = require('../../../framework/aasc/media-replay');
 const { ServerReleaseService } = require('../modules/aasc/server-release-service');
+const { TaskDependencyManager } = require('../modules/aasc/task-dependency-manager');
 const { getRuntimeVersionInfo } = require('../modules/aasc/runtime-version-info');
 const { requestManagedUpdate } = require('../modules/aasc/subserver-update-request');
 const {
@@ -358,6 +359,7 @@ const serverReleaseService = new ServerReleaseService({
     projectRoot: PROJECT_ROOT,
     version: process.env.AASC_SERVER_VERSION || null
 });
+const taskDependencyManager = new TaskDependencyManager({ projectRoot: PROJECT_ROOT, codeRoot: CODE_ROOT, nodeModulesRoot: NODE_MODULES_ROOT });
 const RES_DIR = path.join(PROJECT_ROOT, 'res');
 const MMD_STATIC_CACHE_DIR = path.join(RES_DIR, 'temp', 'mmd-static-cache');
 const modelManifestService = new ModelManifestService({
@@ -1457,6 +1459,7 @@ async function startServer() {
             // 初始化远程任务引擎
             taskManager = new TaskManager({
                 maxInstances: 50,
+                ensureTaskDependencies: (ids, onProgress) => taskDependencyManager.ensure(ids, onProgress),
                 chatService: chat,
                 serverExecutionDisabled: ANDROID_NODE_POLICY.enabled,
                 serverExecutionError: 'Android APK 节点不支持需要创建子进程的服务端任务',
@@ -2923,7 +2926,13 @@ app.use('/uploads/tts', serveTtsAudio);
 app.use('/uploads', staticWithMhtmlMime(UPLOADS_DIR));
 app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
-app.use('/js/lib', express.static(path.join(NODE_MODULES_ROOT, 'onnxruntime-web', 'dist')));
+app.use('/js/lib', (req, res, next) => {
+    try {
+        const directory = taskDependencyManager.assetDirectory('onnxruntime-web');
+        if (!directory) return res.status(404).send('ORT任务依赖尚未准备');
+        return express.static(directory)(req, res, next);
+    } catch (error) { next(error); }
+});
 app.use(express.json({ limit: '50mb' }));
 
 // VRoid 页面地址只用于解析模型 ID；浏览器实际加载同源代理，避免 WebView 直接处理
@@ -3128,6 +3137,10 @@ app.get('/server/package', async (req, res) => {
 });
 app.get('/server/dependencies', async (req, res) => {
     try {
+        if (typeof req.query.task === 'string' && req.query.group === undefined) {
+            await serverReleaseService.streamPackage(res, req.query, null, req.query.task);
+            return;
+        }
         if (typeof req.query.group !== 'string') {
             res.status(400).json({ status: 'error', message: '依赖下载必须指定group' }); return;
         }

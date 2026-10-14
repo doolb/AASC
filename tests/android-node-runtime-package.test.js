@@ -93,6 +93,22 @@ test('完整Offline打包真实release修复基线，版本与配置资产同步
     assert.equal(JSON.parse(await fs.promises.readFile(path.join(outputDir, 'release-config.json'))).seedValue, true);
 });
 
+test('完整Offline资产不夹带任务可选ORT，保留打包输入并支持任务后续准备', async () => {
+    const runtimeDir = await createRuntime(tempDir);
+    const packageDir = await createServerPackage(tempDir);
+    await fs.promises.writeFile(path.join(packageDir, 'package.json'), JSON.stringify({ name: 'aasc-server',
+        optionalDependencies: { 'onnxruntime-web': '^1.26.0' } }));
+    const script = path.join(packageDir, 'node_modules/onnxruntime-web/dist/ort.webgpu.min.js');
+    await fs.promises.mkdir(path.dirname(script), { recursive: true }); await fs.promises.writeFile(script, 'runtime');
+    const keys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const outputDir = path.join(tempDir, 'output');
+    const result = await prepareAndroidNodeRuntime({ runtimeDir, packageDir, outputDir, profileMetadata: { offline: true },
+        offlineUpdatePublicKeyPem: keys.publicKey.export({ type: 'spki', format: 'pem' }) });
+    assert.equal(result.manifest.files.some(file => file.path.includes('/node_modules/onnxruntime-web/')), false);
+    assert.equal(fs.existsSync(path.join(outputDir, 'server/node_modules/onnxruntime-web')), false);
+    assert.equal(await fs.promises.readFile(script, 'utf8'), 'runtime');
+});
+
 test('Runtime 输入缺少 node 时拒绝生成 assets', async () => {
     const runtimeDir = path.join(tempDir, 'runtime');
     await fs.promises.mkdir(runtimeDir, { recursive: true });

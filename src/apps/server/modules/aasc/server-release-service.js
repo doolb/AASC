@@ -49,7 +49,8 @@ class ServerReleaseService {
     }
     async getManifest() {
         const manifest = await this._readManifest();
-        for (const entry of [manifest.payload.components.code, ...shared.dependencyArtifacts(manifest.payload.components.dependencies)]) {
+        for (const entry of [manifest.payload.components.code, ...shared.dependencyArtifacts(manifest.payload.components.dependencies),
+            ...Object.values(manifest.payload.components.taskDependencies || {})]) {
             const opened = await this._openArtifact(entry); await opened.handle.close();
         }
         return manifest;
@@ -60,11 +61,12 @@ class ServerReleaseService {
         const code = manifest.payload.components.code;
         return { filePath: path.join(this.releaseRoot, code.relativeUrl), size: code.size, sha256: code.sha256, manifest };
     }
-    async streamPackage(response, query = {}, group = null) {
+    async streamPackage(response, query = {}, group = null, taskId = null) {
         const manifest = await this._readManifest();
         const components = manifest.payload.components;
         if (group && !shared.GROUPS.includes(group)) throw new Error('未知依赖组');
-        const entry = group ? components.dependencies.groups?.[group] : components.code;
+        if (taskId && !Object.hasOwn(shared.TASK_DEPENDENCIES, taskId)) throw new Error('未知任务依赖');
+        const entry = taskId ? components.taskDependencies?.[taskId] : group ? components.dependencies.groups?.[group] : components.code;
         if (!entry || String(query.version) !== String(entry.version) || query.sha256 !== entry.sha256) {
             const error = new Error('请求的发布版本已过期，请重新读取主服务器清单'); error.statusCode = 409; throw error;
         }

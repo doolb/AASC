@@ -41,6 +41,8 @@
     "sync:ai-models": "node scripts/models/sync-ai-models.js",
     "test:ai-models": "node --test tests/ai-model-sync.test.js tests/ai-model-publish.test.js tests/offline-model-catalog.test.js",
     "test:offline-bootstrap": "node --test tests/apk-build-profile.test.js tests/offline-apk-build-profile.test.js tests/offline-min-apk-package.test.js tests/android-node-runtime-package.test.js tests/offline-update-package.test.js",
+    "test:task-dependencies": "node --test --test-concurrency=1 --test-reporter=tap tests/task-dependency-manager.test.js tests/dependency-groups.test.js tests/offline-update-package.test.js tests/offline-update-publish.test.js tests/offline-update-sync.test.js tests/server-release-service.test.js tests/android-node-runtime-package.test.js",
+    "test:task-dependencies:browser": "node --test tests/task-onnx-runtime-browser.test.js",
     "test:offline-sync": "node --test tests/offline-update-sync.test.js tests/ai-model-sync.test.js",
     "stress:tts": "node scripts/stress/tts-stress-test.js",
     "build:apk": "node scripts/ops/build-apk.js withserver",
@@ -76,7 +78,6 @@
     "express": "^4.18.2",
     "multer": "^2.1.1",
     "ogg-opus-decoder": "1.7.5",
-    "onnxruntime-web": "^1.26.0",
     "pixi.js": "^7.4.3",
     "puppeteer": "^24.40.0",
     "puppeteer-core": "^24.40.0",
@@ -86,5 +87,8 @@
     "ws": "^8.14.2",
     "yauzl": "2.10.0",
     "yazl": "3.3.1"
+  },
+  "optionalDependencies": {
+    "onnxruntime-web": "^1.26.0"
   }
 }

@@ -1,3 +1,9 @@
+### 模型推理任务与Offline依赖
+
+- ✅ [2026-10-14] ORT运行库从common拆为任务可选依赖，由model.inference首次运行触发下载与校验，后续及重启后复用缓存。
+  - `package.json/package-lock.json`、`dependency-groups.js`、Offline构建/发布/sync及共享签名清单支持 `dependencies/task-onnxruntime-web/dependencies-vN.zip`；基础四组名称不变，完整Offline资产也剔除ORT。`task-dependency-manager.js`、任务定义/管理/注册表/WS元数据、`server-app.js`实现独立缓存与前置准备，`task-onnx-runtime.js/display.html`改WebGPU入口按任务懒加载。准备失败可重试，停止实例不再派发，不更改基础依赖指纹。
+  - `npm run test:task-dependencies`106/106、真实Chromium `test:task-dependencies:browser`1/1、入口语法与diff空白检查通过。设计/伪代码/task/usage/self-test已同步；todo仅保留发布和真机验收。servicePackage/dependenciesPackage=true，minApk保持false；正式制品尚未出包，线上common v9体积尚未变化，新包预计减少约128MiB展开内容。未进行真实LFM-VL模型/GPU推理。
+
 ### Offline分组修复版本发布与ADB外网验收
 
 - ✅ [2026-10-14] full50/min51正式发布LAN/WAN，修复原生分组误报全局清单缺失和生产锁拒绝@scope。

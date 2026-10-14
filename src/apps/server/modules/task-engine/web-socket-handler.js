@@ -36,6 +36,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           name: t.name,
           params: t.params || [],
           target: t.target || 'server',
+          dependencies: t.dependencies || [],
           mode: t.mode || 'one-shot',
           widget: t.widget || null,
           sidebar: t.sidebar || null,

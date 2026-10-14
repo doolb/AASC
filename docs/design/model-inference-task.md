@@ -4,6 +4,18 @@
 
 在远程任务系统中增加模型推理能力，通过通用 ModelManager 架构管理多种 AI 模型，在显示端浏览器中执行推理。
 
+## 2026-10-14 任务声明依赖并触发下载（源码已完成，待发布）
+
+用户确认将 `onnxruntime-web` 从 Offline common 拆成独立任务依赖，由 `model.inference` 任务声明并在首次执行前自动准备。普通首装和页面打开不准备ORT；依赖完成后同页按需加载运行库，已校验缓存供后续任务和重启后离线复用。下载落在负责提供显示网页的Node服务；Offline Android的服务就在本机。
+
+基础清单保持四组，在签名components旁增加taskDependencies。包按代码锁的真实版本校验，使用独立缓存，避免运行时改变基础依赖指纹；任务停止后不再继续执行，失败返回任务错误，可重试。`onnxruntime-web`移到optionalDependencies使既有Node/Android生产锁验证允许其缺席。当前仅拆ORT包本身，其其他小型共享依赖继续留在基础组。
+
+enterprise评审：主L6、次L7，置信度0.77，88/100，风险中，可开发；下放L4为任务声明→基础分包→签名制品→准备缓存→懒加载。实施记录：`docs/task/20261014_模型推理依赖按任务触发下载.md`；伪代码：`docs/spec/model-inference-task.md`。
+
+实现使用 `TaskDependencyManager` 在任务运行前准备，缓存附带原签名清单并核对真实文件指纹，重启后无需联网即可复用。同一包并发任务共享准备Promise；下载/版本/指纹失败终止该任务，停止等待的任务不再派发。网页先检查WebGPU，再懒加载支持该后端的 `ort.webgpu.min.js`，WASM目录固定为服务同源 `/js/lib/`。基础common及新完整Offline APK资产均剔除ORT本身；本轮未构建生产制品，既有common v9与旧APK包含ORT的现状须等待新制品发布或安装。
+
+`npm run test:task-dependencies`106/106，真实Chromium `test:task-dependencies:browser`1/1通过。发布需求servicePackage/dependenciesPackage=true；minApk沿用已有false。真实LFM-VL模型、GPU推理及Android现场验收待部署后执行。
+
 ## 系统架构
 
 ```

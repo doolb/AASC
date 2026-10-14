@@ -35,6 +35,7 @@ class TaskManager extends EventEmitter {
     this._llmHttpHandlers = options.llmHttpHandlers || null;
     this._serverExecutionError = options.serverExecutionError || '当前节点不支持服务端任务执行';
     this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
+    this._ensureTaskDependencies = options.ensureTaskDependencies || null;
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
     this._isRestoring = false;
     this._builtinServiceEnsures = new Map();
@@ -55,6 +56,18 @@ class TaskManager extends EventEmitter {
   async init() {
     this.taskLinks = await this.taskIO.loadTaskLinks();
     console.log('[TaskManager] 已恢复 ' + this.taskLinks.size + ' 条任务链');
+  }
+
+  /** 任务定义控制依赖ID；准备阶段复用标准进度与日志，不能执行半下载的任务。 */
+  async _prepareTaskDependencies(definition, instanceId = null) {
+    const dependencies = definition?.dependencies || [];
+    if (!dependencies.length) return;
+    if (!this._ensureTaskDependencies) throw new Error('任务依赖准备服务不可用');
+    await this._ensureTaskDependencies(dependencies, (progress) => {
+      if (!instanceId || this.instances.get(instanceId)?.status === 'stopped') return;
+      this.emit('progress', instanceId, '准备任务依赖', Math.floor((progress.percent || 0) * 0.4));
+      if (progress.message) this.emit('log', instanceId, 'system', 'info', progress.message);
+    });
   }
 
   _generateId() {
@@ -82,6 +95,7 @@ class TaskManager extends EventEmitter {
     if (!builtinRegistry) throw new Error('内置任务模块不可用');
     const task = builtinRegistry.getTask(builtinId);
     if (!task) throw new Error('内置任务不存在: ' + builtinId);
+    await this._prepareTaskDependencies(task);
 
     return builtinRegistry.run(builtinId, {
       ...extraContext,
@@ -341,6 +355,10 @@ class TaskManager extends EventEmitter {
       if (this._serverExecutionDisabled && this._requiresServerProcess(task)) {
         throw new Error(this._serverExecutionError);
       }
+      if (task.taskType === 'builtin') {
+        await this._prepareTaskDependencies(builtinRegistry?.getTask(task.builtinId), instanceId);
+        if (instance.status === 'stopped') return { taskName, instanceId, status: 'stopped' };
+      }
 
       if (task.mode === 'service') {
         for (const [sid, svc] of this._services) {
@@ -450,6 +468,8 @@ class TaskManager extends EventEmitter {
       return { taskName, instanceId, status: 'running' };
 
     } catch (err) {
+      // 等待依赖期间停止实例时，后续下载错误不能把stopped重新覆盖成failed。
+      if (instance?.status === 'stopped') return { taskName, instanceId, status: 'stopped' };
       if (instance) instance.status = 'failed';
       this.emit('log', instanceId, 'system', 'error', '执行异常: ' + err.message);
       this.emit('progress', instanceId, 'failed', 0);

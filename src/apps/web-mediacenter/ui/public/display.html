@@ -614,7 +614,7 @@
     <script src="js/dynamic-fit-controller.js"></script>
     <script src="js/sherpa-asr.js"></script>
     <script src="js/pcm-audio-capture.js"></script>
-    <script src="/js/lib/ort.min.js"></script>
+    <script src="js/task-onnx-runtime.js"></script>
     <script src="js/native-compute.js"></script>
     <script src="/js/sentence-splitter.js"></script>
     <script src="js/chat-markdown.js"></script>
@@ -8878,33 +8878,25 @@
             this.modelBaseUrl = '';
         };
 
-        LfmVlAdapter.prototype.load = function(baseUrl) {
-            var self = this;
+        LfmVlAdapter.prototype.load = async function(baseUrl) {
             this.modelBaseUrl = baseUrl;
-            if (typeof ort === 'undefined') {
-                return Promise.reject(new Error('ONNX Runtime 未加载'));
-            }
-            return new Promise(function(resolve, reject) {
-                if (!navigator.gpu) {
-                    reject(new Error('当前浏览器不支持 WebGPU'));
-                    return;
-                }
-                var opts = { executionProviders: ['webgpu', 'wasm'] };
-                Promise.all([
+            if (!navigator.gpu) throw new Error('当前浏览器不支持 WebGPU');
+            try {
+                const ort = await window.TaskOnnxRuntime.load();
+                const opts = { executionProviders: ['webgpu', 'wasm'] };
+                const sessions = await Promise.all([
                     ort.InferenceSession.create(baseUrl + 'embed_images_fp16.onnx', opts),
                     ort.InferenceSession.create(baseUrl + 'decoder_q4.onnx', opts)
-                ]).then(function(sessions) {
-                    self.imageSession = sessions[0];
-                    self.textSession = sessions[1];
-                    self.state = 'ready';
-                    console.log('[LfmVl] 模型已加载到 WebGPU');
-                    resolve();
-                }).catch(function(err) {
-                    self.state = 'error';
-                    console.error('[LfmVl] 模型加载失败:', err);
-                    reject(err);
-                });
-            });
+                ]);
+                this.imageSession = sessions[0];
+                this.textSession = sessions[1];
+                this.state = 'ready';
+                console.log('[LfmVl] 模型已加载到 WebGPU');
+            } catch (error) {
+                this.state = 'error';
+                console.error('[LfmVl] 模型加载失败:', error);
+                throw error;
+            }
         };
 
         LfmVlAdapter.prototype.release = function() {

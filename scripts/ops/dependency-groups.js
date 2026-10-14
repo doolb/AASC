@@ -108,12 +108,16 @@ async function prepareTrees(options) {
 /** 共有且内容完全一致的跨平台文件只出现一次；原生包/资源全部进入对应平台层。 */
 async function buildDependencyGroups(options) {
     const trees = await prepareTrees(options);
+    const packageJson = JSON.parse(await fs.promises.readFile(path.join(options.projectRoot, 'package.json'), 'utf8'));
+    const taskIds = Object.keys(shared.TASK_DEPENDENCIES).filter(id => Object.hasOwn(packageJson.optionalDependencies || {}, id));
     const outputs = Object.fromEntries(shared.GROUPS.map(name => [name, path.join(options.workDirectory, `group-${name}`)]));
     for (const directory of Object.values(outputs)) await fs.promises.mkdir(path.join(directory, 'node_modules'), { recursive: true });
     const common = new Set([...trees.android.keys()].filter(file => Object.values(trees).every(tree => tree.get(file) &&
         !tree.get(file).platformSpecific && tree.get(file).sha256 === trees.android.get(file).sha256)));
     for (const [name, files] of Object.entries(trees)) {
         for (const [relative, entry] of files) {
+            // 可选任务包仅进入独立制品，不因跨平台内容相同而混入common。
+            if (taskIds.some(id => relative.startsWith(`${shared.TASK_DEPENDENCIES[id].packagePath}/`))) continue;
             if (common.has(relative) && name !== 'android') continue;
             const destination = path.join(outputs[common.has(relative) ? 'common' : name], 'node_modules', relative);
             await fs.promises.mkdir(path.dirname(destination), { recursive: true });
@@ -164,7 +168,60 @@ async function buildDependencyGroups(options) {
     const dependencies = { version: options.dependencyVersion, lockSha256: options.lockSha256, source: options.source,
         groups, sha256: shared.hash(shared.canonicalJson(groups)), size: Object.values(groups).reduce((sum, group) => sum + group.size, 0) };
     shared.validateDependencies(dependencies);
-    return { dependencies, artifacts };
+    const taskDependencies = await buildTaskDependencyArtifacts(options, trees, taskIds, artifacts);
+    return { dependencies, taskDependencies, artifacts };
+}
+
+/** 任务包只允许三目标共有的浏览器资源；每包独立指纹与版本，变更无关组时可复用。 */
+async function buildTaskDependencyArtifacts(options, trees, ids, artifacts) {
+    const result = {};
+    const lock = JSON.parse(await fs.promises.readFile(path.join(options.projectRoot, 'package-lock.json'), 'utf8'));
+    for (const id of ids) {
+        const definition = shared.TASK_DEPENDENCIES[id];
+        const selected = [...trees.android.entries()].filter(([relative]) => relative.startsWith(`${definition.packagePath}/`));
+        const packageVersion = lock.packages?.[`node_modules/${definition.packagePath}`]?.version;
+        if (!selected.length || !packageVersion) throw new Error(`任务依赖${id}缺少真实生产包或锁版本`);
+        if (Object.values(trees).some(tree => [...tree.keys()].filter(file => file.startsWith(`${definition.packagePath}/`)).length !== selected.length)) {
+            throw new Error(`任务依赖${id}三个目标文件集合不一致`);
+        }
+        const directory = path.join(options.workDirectory, definition.directory);
+        for (const [relative, entry] of selected) {
+            if (Object.values(trees).some(tree => !tree.get(relative) || tree.get(relative).platformSpecific || tree.get(relative).sha256 !== entry.sha256)) {
+                throw new Error(`任务依赖${id}不是三目标相同的跨平台文件：${relative}`);
+            }
+            const destination = path.join(directory, 'node_modules', relative);
+            await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+            await fs.promises.copyFile(entry.source, destination);
+        }
+        const installed = JSON.parse(await fs.promises.readFile(path.join(directory, 'node_modules', definition.packagePath, 'package.json'), 'utf8'));
+        if (installed.name !== id || installed.version !== packageVersion) throw new Error(`任务依赖${id}真实包版本不符`);
+        const contentSha256 = await archive.contentHash(path.join(directory, 'node_modules'));
+        const previous = options.currentTaskDependencies?.[id];
+        if (previous?.contentSha256 === contentSha256 && previous.packageVersion === packageVersion) {
+            shared.validateTaskDependencies({ [id]: previous });
+            const destination = path.join(options.outputDir, previous.relativeUrl);
+            const root = fs.existsSync(destination) ? options.outputDir : options.currentArtifactRoot || '/mnt/aasc-offline';
+            const file = path.join(root, previous.relativeUrl);
+            require('../../src/apps/server/modules/aasc/dependency-tree').assertNoLinks(root, file);
+            if (!fs.existsSync(file) || (await fs.promises.stat(file)).size !== previous.size || await archive.hashFile(file) !== previous.sha256) {
+                throw new Error(`复用任务依赖${id}缺少校验通过的原文件`);
+            }
+            result[id] = previous;
+            if (file !== destination) artifacts.push({ archivePath: file, relativeUrl: previous.relativeUrl, reused: true });
+            continue;
+        }
+        const version = previous ? previous.version + 1 : options.dependencyVersion;
+        const metadata = { group: definition.directory, version, contentSha256, target: null, packageName: id, packageVersion };
+        await fs.promises.writeFile(path.join(directory, 'dependency-group.json'), `${JSON.stringify(metadata)}\n`);
+        const archivePath = path.join(options.workDirectory, `${definition.directory}-dependencies-v${version}.zip`);
+        await deterministicZip(directory, archivePath);
+        const relativeUrl = `dependencies/${definition.directory}/dependencies-v${version}.zip`;
+        result[id] = { version, contentSha256, target: null, packageName: id, packageVersion, relativeUrl,
+            size: (await fs.promises.stat(archivePath)).size, sha256: await archive.hashFile(archivePath) };
+        artifacts.push({ archivePath, relativeUrl });
+    }
+    shared.validateTaskDependencies(result);
+    return result;
 }
 async function deterministicZip(directory, destination) {
     const yazl = require('yazl'); const { pipeline } = require('node:stream/promises'); const zip = new yazl.ZipFile();

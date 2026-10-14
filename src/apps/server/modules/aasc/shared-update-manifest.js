@@ -2,6 +2,10 @@
 
 const crypto = require('node:crypto');
 const GROUPS = Object.freeze(['common', 'android', 'linux64', 'win64']);
+// 任务只引用已注册的依赖ID，制品路径由签名清单确定，不接受任务传入任意URL。
+const TASK_DEPENDENCIES = Object.freeze({
+    'onnxruntime-web': Object.freeze({ directory: 'task-onnxruntime-web', packagePath: 'onnxruntime-web' })
+});
 const TARGETS = Object.freeze({
     android: { os: 'android', arch: 'arm64', libc: 'bionic', nodeMajor: 26 },
     linux64: { os: 'linux', arch: 'x64', libc: 'glibc' },
@@ -54,6 +58,19 @@ function validateDependencies(dependencies) {
     if (dependencies.sha256 !== hash(canonicalJson(groups)) || dependencies.size !== GROUPS.reduce((sum, name) => sum + groups[name].size, 0)) throw new Error('依赖组合指纹/大小不匹配');
     return dependencies;
 }
+/** 附加任务依赖不进入基础四组；旧APK可忽略附加组件并继续验证基础组。 */
+function validateTaskDependencies(entries = {}) {
+    if (!entries || typeof entries !== 'object' || Array.isArray(entries)) throw new Error('任务依赖清单无效');
+    for (const [id, entry] of Object.entries(entries)) {
+        if (!Object.hasOwn(TASK_DEPENDENCIES, id)) throw new Error(`未注册的任务依赖：${id}`);
+        const definition = TASK_DEPENDENCIES[id];
+        artifact(entry, version => `dependencies/${definition.directory}/dependencies-v${version}.zip`);
+        if (entry.packageName !== id || typeof entry.packageVersion !== 'string' ||
+            !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/.test(entry.packageVersion) ||
+            !SHA256.test(entry.contentSha256) || entry.target !== null) throw new Error(`任务依赖${id}包契约无效`);
+    }
+    return entries;
+}
 function verifyManifest(manifest, publicKey = PUBLIC_KEY, options = {}) {
     if (!manifest?.payload || manifest.signature?.algorithm !== 'SHA256withRSA' ||
         typeof manifest.signature.value !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(manifest.signature.value) ||
@@ -61,6 +78,7 @@ function verifyManifest(manifest, publicKey = PUBLIC_KEY, options = {}) {
     const { schemaVersion, components } = manifest.payload;
     if (schemaVersion !== 1 || !components) throw new Error('共享更新清单schemaVersion/components无效');
     artifact(components.code, version => `code/code-v${version}.zip`);
+    validateTaskDependencies(components.taskDependencies);
     const dependencies = components.dependencies;
     // 已发布的单依赖包仍可供旧Offline读取；新版普通节点必须使用平台分组。
     if (dependencies?.groups) validateDependencies(dependencies);
@@ -89,4 +107,5 @@ function assertRuntime(target, options = {}) {
         (target.napiVersion && target.napiVersion > Number(options.napiVersion || process.versions.napi))) throw new Error('目标依赖平台/Node ABI不兼容，保留当前版本');
 }
 function dependencyArtifacts(dependencies) { return dependencies.groups ? GROUPS.map(name => dependencies.groups[name]) : [dependencies]; }
-module.exports = { GROUPS, TARGETS, PUBLIC_KEY, canonicalJson, hash, artifact, validateDependencies, verifyManifest, selectTarget, assertRuntime, dependencyArtifacts };
+module.exports = { GROUPS, TARGETS, TASK_DEPENDENCIES, PUBLIC_KEY, canonicalJson, hash, artifact, validateDependencies,
+    validateTaskDependencies, verifyManifest, selectTarget, assertRuntime, dependencyArtifacts };

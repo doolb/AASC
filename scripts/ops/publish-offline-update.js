@@ -20,12 +20,14 @@ const DEFAULT_LOCAL_ROOT = '/mnt/aasc-offline';
 const DEFAULT_LOCAL_VERIFY_URL = 'http://192.168.1.39/mnt/aasc-offline/';
 // c.aasc.us 当前作为 DNS 入口使用；发布校验阶段直接访问已解析的公网 IP，避免代理返回 403。
 const DEFAULT_WAN_VERIFY_URL = 'http://120.79.245.103/mnt/aasc-offline/';
-const { GROUPS, dependencyArtifacts } = require('../../src/apps/server/modules/aasc/shared-update-manifest');
+const { GROUPS, TASK_DEPENDENCIES, dependencyArtifacts } = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 const CLEANUP_RULES = Object.freeze([
     { componentName: 'code', directory: 'code', prefix: 'code-v', suffix: '.zip' },
     { componentName: 'nodeMinSeeds', directory: 'node-min-seeds', prefix: 'node-min-seeds-v', suffix: '.zip' },
     { componentName: 'dependencies', directory: 'dependencies', prefix: 'dependencies-v', suffix: '.zip' },
     ...GROUPS.map(group => ({ componentName: `dependencies.${group}`, directory: `dependencies/${group}`, prefix: 'dependencies-v', suffix: '.zip' })),
+    ...Object.entries(TASK_DEPENDENCIES).map(([id, definition]) => ({ componentName: `taskDependencies.${id}`,
+        directory: `dependencies/${definition.directory}`, prefix: 'dependencies-v', suffix: '.zip' })),
     { componentName: 'dataRepair', directory: 'data', prefix: 'data-repair-v', suffix: '.zip' },
     { componentName: 'apkMin', directory: 'apk', prefix: 'aasc-display-offline-min-v', suffix: '.apk' },
     { componentName: 'apkFull', directory: 'apk', prefix: 'aasc-display-offline-v', suffix: '.apk' }
@@ -64,7 +66,7 @@ function getPublishComponents(manifest, mode) {
     }
     const selected = [components.code];
     if (components.nodeMinSeeds) selected.push(components.nodeMinSeeds);
-    if (mode === 'all') selected.push(...dependencyArtifacts(components.dependencies));
+    if (mode === 'all') selected.push(...dependencyArtifacts(components.dependencies), ...Object.values(components.taskDependencies || {}));
     return selected;
 }
 
@@ -101,6 +103,10 @@ function createCleanupSpecifications(manifest, options = {}) {
         const component = components.dependencies?.groups?.[group];
         const rule = CLEANUP_RULES.find(candidate => candidate.componentName === `dependencies.${group}`);
         if (component && getCleanupRule(component.relativeUrl) === rule) specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
+    }
+    for (const [id, component] of Object.entries(components.taskDependencies || {})) {
+        const rule = CLEANUP_RULES.find(candidate => candidate.componentName === `taskDependencies.${id}`);
+        if (rule && getCleanupRule(component.relativeUrl) === rule) specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
     }
     if (options.includeFullApk) {
         const currentFullApkRelativeUrl = options.currentFullApkRelativeUrl;
@@ -518,7 +524,8 @@ async function verifyHttpTarget(baseUrl, manifest, publicKeyPem, fetchImpl = glo
     for (const [name, component] of Object.entries(manifest.payload.components)) {
         if (!component) continue;
         // 分组依赖没有顶层下载地址，必须逐组校验，不能被单包路径条件略过。
-        const artifacts = component.groups ? dependencyArtifacts(component) : component.relativeUrl ? [component] : [];
+        const artifacts = name === 'taskDependencies' ? Object.values(component) :
+            component.groups ? dependencyArtifacts(component) : component.relativeUrl ? [component] : [];
         for (const artifact of artifacts) {
             const artifactResponse = await fetchImpl(new URL(artifact.relativeUrl, baseUrl));
             const actual = await streamHash(artifactResponse);
@@ -698,6 +705,8 @@ async function publishOfflineUpdate(options = {}) {
             ? [manifest.payload.components.code, manifest.payload.components.nodeMinSeeds, manifest.payload.components.dependencies].filter(Boolean)
             : [];
     const preserved = preservedBase.flatMap(component => component.groups ? dependencyArtifacts(component) : [component]);
+    // 非all发布也必须证明独立任务包已存在，避免切换签名清单后任务才发现缺包。
+    if (mode !== 'all') preserved.push(...Object.values(manifest.payload.components.taskDependencies || {}));
     const publishId = `${Date.now()}-${process.pid}`;
     const localRoot = options.localRoot ? path.resolve(options.localRoot) : null;
     const remote = options.remote || null;

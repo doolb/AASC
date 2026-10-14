@@ -856,6 +856,11 @@ async function prepareAndroidNodeRuntime(options = {}) {
         const nodeFile = await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
         // PMX/VMD 与纹理始终经服务同源代理按需读取，不能随任何 Runtime profile 进入 APK assets。
         const excludedPrefixes = [path.join('res', 'models', 'mmd')];
+        // Offline首装与common一致：任务运行库在首次执行时准备，不夹带旧宿主安装的ORT。
+        const serverPackageJson = JSON.parse(await fs.promises.readFile(path.join(packageDir, 'package.json'), 'utf8'));
+        if (options.profileMetadata?.offline === true && serverPackageJson.optionalDependencies?.['onnxruntime-web']) {
+            excludedPrefixes.push(path.join('node_modules', 'onnxruntime-web'));
+        }
         if (includeOfflineModels) excludedPrefixes.push('res/models');
         if (includeOfflineTasks) excludedPrefixes.push('res/tasks');
         files.push(...await copyDirectoryWithManifest(

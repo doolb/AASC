@@ -3,6 +3,8 @@ module.exports = {
   name: '模型推理',
   description: '在显示端执行 AI 模型推理',
   target: 'display',
+  // 浏览器推理运行库由任务启动前准备，普通页面和基础Offline安装不下载。
+  dependencies: ['onnxruntime-web'],
   params: [
     { name: 'modelId', type: 'select', required: true, options: ['lfm-vl'], label: '模型' },
     { name: 'image', type: 'file', required: true, label: '图片' },
