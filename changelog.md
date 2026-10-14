@@ -1,3 +1,10 @@
+### 显示端
+
+- ✅ [2026-10-14] 修复 render-display 高 DPI 过大、Offline 本机模型入口位置和 MMD 隐藏重连恢复。
+  - `render-display` 按 `devicePixelRatio` 反向缩放并约束四向旋转包围盒；Offline“本机模型”入口移到左上安全区；MMD 状态要求 `config.set` 成功后广播，显示舞台初始化前收到的权威状态会暂存并应用。
+  - 新增高 DPI/视口浏览器回归 2/2、MMD/按钮/初始化竞态定向回归 4/4；严格配置保存回归 7/7，render-display 冒烟、JS 语法和 diff 检查通过。宽范围 `display-chat-mmd` 测试的 12 项 AR/灯光/物理断言未通过，本次相关用例通过。
+  - 更新设计、伪代码 spec、task、自测和 todo。`servicePackage=true`、`minApk=true`、`dependenciesPackage=false`；未构建 APK、未发布，待正式产物及设备验收。
+
 ### PiAgent可选依赖与Offline min首装修复
 
 - ✅ [2026-10-14] Pi SDK按LLM配置下载，min54卸载后独立首装通过。
