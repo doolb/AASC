@@ -12328,3 +12328,12 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 公网并行下载校验因带宽限制超时，继续完成新增 code/seed 整包 HTTP 大小/SHA-256 校验；未变化的 dependencies8/min45/dataRepair2 沿用前轮已通过的 HTTP 整包结果，并逐项复核当前远端完整大小/SHA-256 与 HTTP HEAD。最终清单验签/版本及远端所有资源复核通过。
   - 精确清理仅执行 code/dependencies/min 的数字版本普通文件，旧 code78 已清理，deps8/min45/seeds79及原 seeds69/dataRepair2 均保留，无清理错误。真实 Android 完成入列表、官网账号验证和空白设备首装仍待验收；模型需按使用需求另行准备，未执行真实凭据请求或模型下载。
   - 这是已有功能的资源发布，按纯发布例外仅更新 changelog；其他未覆盖的源码/原生改动仍有待打包需求，聚合状态 minApk=true、servicePackage=true、dependenciesPackage=false 保持不变。局域网优先设备需先同步此清单才会读取本次更新。
+
+### 不含 LLM 权重的 Offline full v46 重构建
+
+- ✅ [2026-10-14] 按用户要求通过 `npm run build:apk:offline` 完整重打 Offline full v46/0.2.46-offline；仅生成本地产物，未发布 LAN/WAN、未安装设备。
+  - 原始产物 `release/apkbuild/allserver/output/aasc-display-offline.apk`，版本化副本 `release/offline-update/output/apk/aasc-display-offline-v46.apk`；544,298,500 bytes（约 519 MiB），SHA-256 `095286a0cc69315aba557cbd5377402a8dd8641fe66b32763130ffcba6e15dfd`。副本与 build-manifest 摘要一致，完整 APK 不进入服务更新清单。
+  - 更新 `release/apkbuild/allserver/app.json` 的出包服务基线为 code v84/dependencies v8，避免新完整包源码被当前外网 code83 反向覆盖；不改变 full v46、模型白名单或打包规则。后续服务发布需要考虑完整包 v84 的代码基线。
+  - 确认只内置 SenseVoice/TTS/声纹的 29 个模型文件，模型合计 359,368,691 bytes；保留 LLM 推理功能、库及小型模型定义，LLM 内置集合和权重文件均为 0。所有 29 个模型的包内大小与 SHA-256、全 APK ZIP CRC 通过。
+  - APK 包名 `com.aasc.display.offline`，allserver/offline/updateOnly=false 及 v46 版本核对通过；apksigner 验签及与已有版本相同 signer `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df` 通过。Runtime 内容版本 `content-e78cd3653c14089c72dc5646`；豆包保存网页/列表验证、受管更新器、release 配置及数据修复种子包内摘要通过，193 个关键构建输入保持一致。
+  - MMD 生产资源前置校验及 profile/model 回归 14/14 通过；构建退出码 0。Gradle 收尾的 Kotlin daemon 无匹配进程清理命令报告提示，未影响 APK 生成与验证。仅 full 出包，不清除 min APK 或服务 ZIP 尚待打包状态，原有聚合状态保持 minApk=true/servicePackage=true/dependenciesPackage=false。
