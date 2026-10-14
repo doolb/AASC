@@ -12337,7 +12337,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 确认只内置 SenseVoice/TTS/声纹的 29 个模型文件，模型合计 359,368,691 bytes；保留 LLM 推理功能、库及小型模型定义，LLM 内置集合和权重文件均为 0。所有 29 个模型的包内大小与 SHA-256、全 APK ZIP CRC 通过。
   - APK 包名 `com.aasc.display.offline`，allserver/offline/updateOnly=false 及 v46 版本核对通过；apksigner 验签及与已有版本相同 signer `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df` 通过。Runtime 内容版本 `content-e78cd3653c14089c72dc5646`；豆包保存网页/列表验证、受管更新器、release 配置及数据修复种子包内摘要通过，193 个关键构建输入保持一致。
   - MMD 生产资源前置校验及 profile/model 回归 14/14 通过；构建退出码 0。Gradle 收尾的 Kotlin daemon 无匹配进程清理命令报告提示，未影响 APK 生成与验证。仅 full 出包，不清除 min APK 或服务 ZIP 尚待打包状态，原有聚合状态保持 minApk=true/servicePackage=true/dependenciesPackage=false。
+
 ### Chat2API 默认配置与修复包需求分析
 
 - ✅ [2026-10-14] 已定位release缺少模型映射种子，找到历史DeepSeek6条与Qwen1条；记录新增豆包3条、空自定义映射兜底和账号资料复用方案。
-  - 用户确认复用已有资料、缺失时提示登录。记录Node与旧Chrome路径、语音默认参数与业务选择的区别，以及LAN/WAN不同服务/min旧基线；更新Chat2API design/spec/task/todo。完整方案待确认，尚未修改源码或发布新包。
+  - 用户确认复用已有资料、缺失时提示登录。记录Node与旧Chrome路径、语音默认参数与业务选择的区别，以及LAN/WAN不同服务/min旧基线；更新Chat2API design/spec/task/todo。新服务须高于已生成full v46的code84基线；完整方案待确认，尚未修改源码或发布新包。
