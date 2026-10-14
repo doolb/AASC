@@ -643,3 +643,5 @@
 
 - ⏳待部署/设备验收 [2026-10-14] 共享签名包及common/android/linux64/win64已实现，62项定向与223项Android自测通过；LAN/WAN四组依赖9及服务85/min47清单已上线；待普通APK重装、Termux启动器更新、Offline min迁移、Windows实机运行/健康回滚验收。任务：`docs/task/20261014_子服务器主服务器更新修复.md`。
 - ⏳待发布/设备验收 [2026-10-14] 模型任务ORT依赖按需下载源码与106项定向、Chromium1项验证完成；需出包机生成新服务/基础四组/独立ORT签名ZIP并发布，核对新版common体积及Android首次下载、离线缓存与LFM-VL真实推理。servicePackage/dependenciesPackage=true；任务：`docs/task/20261014_模型推理依赖按任务触发下载.md`。
+- ⏳待方案确认 [2026-10-14] PiAgent SDK 与完整闭包拆为三平台可选包，仅 agent/pi 触发；首次聊天/切换即下载的具体方案已询问，源码未实施。ADB 单装 min51 验收另记 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。
+- ⏳待修复/方案确认 [2026-10-14] min51卸载full后独立首装失败：restoreSeeds只复制文件、漏建llm-server/time.announce空实例目录，latest校验阻断启动。目录恢复/原生回归/新版min重测方案已提出，未修改原生源码；见 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。

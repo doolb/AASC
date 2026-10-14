@@ -1,3 +1,10 @@
+### Offline min 干净首装测试与 Pi 可选依赖方案
+
+- ✅ [2026-10-14] 完成ADB卸载full50后单装min51测试，定位环境首装失败。
+  - min51安装成功，89412146bytes/SHA256 `5099960c5da396f38df2b8861aacf32c8d6efa3d2f42d7787fdfbeb3578310a1`；LAN确认约130MiB，code85/common9/android9/seeds85准备后在种子恢复失败，API未启动，独立首装未通过。
+  - seeds85的llm-server/time.announce latest指向合法空目录，OfflineBootstrapManager仅恢复文件、漏建目录，报“任务 latest 指向无效实例”。修复/原生回归/新版min重测方案待确认，未改原生源码或线上资源；本机.cache保留381976576bytes数据备份，不提交Git。
+  - Pi两根SDK/完整三平台闭包可选、仅agent/pi触发的方案待确认，未实施；design/spec/task/self-test/todo已记录。ORT提交eee66af6已推origion/master，servicePackage/dependenciesPackage保持true、minApk保持false；新可选包未发布。
+
 ### 模型推理任务与Offline依赖
 
 - ✅ [2026-10-14] ORT运行库从common拆为任务可选依赖，由model.inference首次运行触发下载与校验，后续及重启后复用缓存。

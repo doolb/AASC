@@ -1,5 +1,18 @@
 # 自测功能实现文档
 
+## min51 干净首装与 Pi 可选方案自测（2026-10-14）
+
+```text
+ADB实际 := SM-N9500 full50备份 → 卸载Success/无pm path → 单装min51Success/新firstInstallTime/无旧files
+APK := 89412146bytes/SHA5099960c…/CRC通过/allserver-min/updateOnly
+下载 := LAN原生确认约130MiB → code85/common9/android9/seeds85准备及锁验证
+失败 := restoreSeeds报任务latest指向无效实例 → 无active服务/无API → 首装不通过
+根因 := llm-server/40f3b6b1与time.announce/728486a7空目录 → isFile遍历遗漏 → latest目标缺失
+原生回归待确认 := 空/非空实例 + 重试 + 文本latest中断 + 父目录链接 + 无效指针
+Pi待确认 := 模式隔离 + 触发时机 + 三平台完整闭包/ESM导入 + 缓存/并发/失败
+边界 := 新ORT/Pi制品未发布；旧v9首装不作减重验证；私有备份保留不入Git
+```
+
 ## Chat2API 默认映射与账号复用（2026-10-14）
 
 ```text

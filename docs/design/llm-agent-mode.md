@@ -1,5 +1,13 @@
 # LLM 配置 Agent 模式设计文档
 
+## Pi SDK 可选依赖扩展（2026-10-14，方案待确认）
+
+用户要求 PiAgent 从 Offline 基础依赖剥离，只在 LLM 选择 PiAgent 方式后准备。当前 `@earendil-works/pi-ai`、`@earendil-works/pi-coding-agent` 仍是必需生产依赖；本节是待实施设计。
+
+建议复用 ORT 的签名可选依赖与独立缓存，将两个 Pi 根包及完整依赖闭包按 Android arm64/Bionic、Linux x64/glibc、Windows x64 分包；基础四组仅移除 Pi 独占依赖，共享依赖保留。SDK 和只读工具从同一独立模块根解析，不修改基础依赖或全局模块根，不在 Android 运行 npm。
+
+建议当前 profile 为 `mode=agent/backend=pi` 的首次实际聊天前准备；普通 LLM、Codex、首屏和闲置 profile 不触发。切换到 Pi profile 后立即准备作为另一待确认选项。失败明确回报并允许重试，并发共享准备，已校验本机包或缓存可离线复用。任务见 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。
+
 ## 需求概述
 
 普通聊天的每个 LLM profile 增加独立调用模式。`llm` 模式继续直接调用 profile 配置的 OpenAI 兼容接口；`agent` 模式支持 Pi 或 Codex，由服务器进程分别管理同进程 Pi SDK AgentSession 或 Codex app-server 子进程。

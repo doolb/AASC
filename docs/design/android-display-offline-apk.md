@@ -1,5 +1,13 @@
 # 正式 Android 显示端完整离线 APK
 
+## min51 干净首装实测与空实例修复方案（2026-10-14，修复待确认）
+
+SM-N9500备份数据、卸载full50后单独安装min51成功，启动前无旧files/环境。原生LAN确认约130MiB，code85、common/android9、seeds85准备及依赖锁校验结束，但restoreSeeds报“任务 latest 指向无效实例”，无活动服务/API，独立首装未通过。
+
+根因：seeds85的llm-server/results/40f3b6b1和time.announce/results/728486a7是合法空目录；恢复器仅遍历文件，未创建实例目录，latest校验失败。待确认方案：OfflineBootstrapManager.restoreSeeds恢复目录与文件，目录就绪后转latest链接，保留已有用户数据、路径/父目录链接防护及重试；补OfflineBootstrapTest空实例/重试/链接用例，通过后生成发布新版min并重测。未改原生代码、发布状态或线上种子。
+
+备份与证据见 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。ORT/Pi新制品未发布，common v9仍含原依赖。
+
 ## 整包安装后一次性切回内置服务（2026-10-14，已实现并发布full50）
 
 用户确认仅在安装整包后的首次启动使用APK内置服务和生产依赖，随后仍允许热更新；追加要求删除之前下载的代码和依赖目录。当前NodeRuntimeInstaller迁移整个updates目录，旧active-release.json仍有优先级，因此整包内置版本可能没有实际启动。
