@@ -1,12 +1,14 @@
 # 正式 Android 显示端完整离线 APK
 
-## min51 干净首装实测与空实例修复方案（2026-10-14，修复待确认）
+## min 独立首装修复（2026-10-14，min54已生成，干净首装通过）
 
-SM-N9500备份数据、卸载full50后单独安装min51成功，启动前无旧files/环境。原生LAN确认约130MiB，code85、common/android9、seeds85准备及依赖锁校验结束，但restoreSeeds报“任务 latest 指向无效实例”，无活动服务/API，独立首装未通过。
+SM-N9500卸载完整Offline APK后单独安装min，首装暴露两处问题：min51的种子恢复遗漏合法空实例目录，使latest校验失败；min52恢复目录后，Node缺少配套`libc++_shared.so`；min53已打入该库但安装器另一份旧白名单仍拒绝。最终min54恢复目录与文件，在目录就绪后转换latest，解析器和安装器共用精确动态库白名单，保留链接防护、已有文件和重试行为，不人工制造结果文件。
 
-根因：seeds85的llm-server/results/40f3b6b1和time.announce/results/728486a7是合法空目录；恢复器仅遍历文件，未创建实例目录，latest校验失败。待确认方案：OfflineBootstrapManager.restoreSeeds恢复目录与文件，目录就绪后转latest链接，保留已有用户数据、路径/父目录链接防护及重试；补OfflineBootstrapTest空实例/重试/链接用例，通过后生成发布新版min并重测。未改原生代码、发布状态或线上种子。
+min54：89914041 bytes，SHA256 `ed8075e671415711da0ad11c103eafa7b6f595c27c1c2b97f030b61a7e19cc14`，同一签名、allserver-min/updateOnly、CRC及配套库真实字节验证通过。再次卸载并从空应用目录独立安装54，原生确认LAN约60MiB，下载code87/common10/android9/seeds86，HTTPS status=ok，活动指针pendingHealth=false；llm-server/results/40f3b6b1与time.announce/results/728486a7已恢复，latest为有效相对链接。首装不恢复旧备份，不借旧服务或诊断复制文件。
 
-备份与证据见 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。ORT/Pi新制品未发布，common v9仍含原依赖。
+Node由ProcessBuilder启动独立子进程，只在子进程环境搜索Node配套C++库；MNN在Android应用进程使用APK的NDK C++库。两者地址空间与库路径分离，不替换MNN运行库。此前APK库无法提供Node所需符号，不能互相代用。当前验证覆盖Node启动及库映射，未进行MNN真实模型推理。
+
+Pi30/30、依赖106/106、首装63/63、Android254项0失败/1既有环境跳过。服务87/依赖10和独立ORT/Pi已发布，common展开由约402MiB降至130MiB。min54覆盖本次修复；其后其他TTS原生/服务修改仍要求新产物，保留minApk/servicePackage=true，dependenciesPackage=false。备份与验收证据见 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。
 
 ## 整包安装后一次性切回内置服务（2026-10-14，已实现并发布full50）
 

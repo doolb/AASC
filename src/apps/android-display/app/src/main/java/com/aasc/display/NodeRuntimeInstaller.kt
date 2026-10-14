@@ -181,16 +181,11 @@ class NodeRuntimeInstaller(
             return isUpdateOnlyManifestValid(manifest) && hasFullOfflineInstall(root)
         }
 
-        private fun isUpdateOnlyManifestValid(manifest: NodeRuntimeManifest): Boolean =
+        internal fun isUpdateOnlyManifestValid(manifest: NodeRuntimeManifest): Boolean =
             manifest.updateOnly && manifest.allowedRuntimeLibraryPaths.isNotEmpty() &&
                 manifest.files.map { it.path }.toSet() == manifest.allowedRuntimeLibraryPaths &&
                 manifest.files.all { file ->
-                    file.path.startsWith("runtime/${manifest.abi}/lib/") &&
-                        File(file.path).name in setOf(
-                            "libz.so.1", "libcares.so", "libsqlite3.so", "libffi.so",
-                            "libcrypto.so.3", "libssl.so.3", "libicui18n.so.78",
-                            "libicuuc.so.78", "libicudata.so.78"
-                        )
+                    NodeRuntimeManifest.isAllowedUpdateOnlyLibraryPath(file.path, manifest.abi)
                 }
 
         private fun hasOfflineModels(root: File): Boolean {

@@ -1,12 +1,16 @@
 # LLM 配置 Agent 模式设计文档
 
-## Pi SDK 可选依赖扩展（2026-10-14，方案待确认）
+## Pi SDK 可选依赖扩展（2026-10-14，已实现并发布服务87/依赖10）
 
-用户要求 PiAgent 从 Offline 基础依赖剥离，只在 LLM 选择 PiAgent 方式后准备。当前 `@earendil-works/pi-ai`、`@earendil-works/pi-coding-agent` 仍是必需生产依赖；本节是待实施设计。
+用户要求 PiAgent 从 Offline 基础依赖剥离，只在 LLM 选择 PiAgent 方式后准备。`@earendil-works/pi-ai`、`@earendil-works/pi-coding-agent` 已移为可选生产依赖，SDK三平台包已发布。
 
-建议复用 ORT 的签名可选依赖与独立缓存，将两个 Pi 根包及完整依赖闭包按 Android arm64/Bionic、Linux x64/glibc、Windows x64 分包；基础四组仅移除 Pi 独占依赖，共享依赖保留。SDK 和只读工具从同一独立模块根解析，不修改基础依赖或全局模块根，不在 Android 运行 npm。
+复用 ORT 的签名可选依赖与独立缓存，将两个 Pi 根包及完整依赖闭包按 Android arm64/Bionic、Linux x64/glibc、Windows x64 分包；基础四组仅移除 Pi 独占依赖，共享依赖保留。SDK 和只读工具从同一独立模块根解析，不修改基础依赖或全局模块根，不在 Android 运行 npm。
 
-建议当前 profile 为 `mode=agent/backend=pi` 的首次实际聊天前准备；普通 LLM、Codex、首屏和闲置 profile 不触发。切换到 Pi profile 后立即准备作为另一待确认选项。失败明确回报并允许重试，并发共享准备，已校验本机包或缓存可离线复用。任务见 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。
+用户补充明确：保存配置时提示下载，取消还原配置；启动也检查配置下载。保存或切换当前选中、主动保存或发生变更的Pi配置时，通过AASC/WebSocket预检，依赖缺失先返回下载确认；确认后准备依赖，成功才config.set和广播权威配置。取消/失败恢复旧表单及服务器权威配置，不先写再回滚，避免覆盖其他控制端变更。提交携带旧配置指纹，下载期间发生并发配置变化则拒绝过期提交。已有本机SDK/缓存时直接保存，不提示重复下载。服务启动仅按当前选中的Pi配置自动准备，普通LLM/Codex不触发；失败保留配置并提供明确依赖错误，服务其他功能继续启动。
+
+SDK/只读工具从同一独立缓存根导入，不用全局变量改模块根；会话创建仍校验准备结果，避免启动未完成时抢跑。新增WS消息均含type，控制端连接时补发权威配置/依赖状态，旧HTTP配置入口复用同一事务逻辑，不新增配置HTTP接口。任务见 `docs/task/20261014_PiAgent可选依赖与minAPK干净首装.md`。
+
+实际min54 Android控制WS已验证缺包预检、取消保持权威配置、确认下载提交及恢复默认LLM；Android Node26.4.0从独立缓存真实导入两SDK与只读工具成功。默认模式冷启动及缓存保留通过，未发送真实LLM请求。
 
 ## 需求概述
 

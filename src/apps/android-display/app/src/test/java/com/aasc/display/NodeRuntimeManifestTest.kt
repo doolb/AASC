@@ -330,6 +330,27 @@ class NodeRuntimeManifestTest {
         assertEquals(setOf("runtime/arm64-v8a/lib/libz.so.1"), manifest.allowedRuntimeLibraryPaths)
     }
 
+    @Test
+    fun updateOnly允许Node配套Cxx库的精确Runtime路径() {
+        val manifest = NodeRuntimeManifest.parse("""
+            {"version":"update-cxx","abi":"arm64-v8a","updateOnly":true,
+             "allowedRuntimeLibraryPaths":["runtime/arm64-v8a/lib/libc++_shared.so"],
+             "files":[{"path":"runtime/arm64-v8a/lib/libc++_shared.so","size":3,"sha256":"${"a".repeat(64)}"}]}
+        """.trimIndent())
+        assertEquals(setOf("runtime/arm64-v8a/lib/libc++_shared.so"), manifest.allowedRuntimeLibraryPaths)
+        assertTrue(NodeRuntimeInstaller.isUpdateOnlyManifestValid(manifest))
+        val invalidPath = "runtime/arm64-v8a/lib/../lib/libc++_shared.so"
+        assertFalse(NodeRuntimeInstaller.isUpdateOnlyManifestValid(manifest.copy(
+            files = manifest.files.map { it.copy(path = invalidPath) },
+            allowedRuntimeLibraryPaths = setOf(invalidPath)
+        )))
+        val arbitraryPath = "runtime/arm64-v8a/lib/unknown.so"
+        assertFalse(NodeRuntimeInstaller.isUpdateOnlyManifestValid(manifest.copy(
+            files = manifest.files.map { it.copy(path = arbitraryPath) },
+            allowedRuntimeLibraryPaths = setOf(arbitraryPath)
+        )))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun updateOnlyManifest不能覆盖服务代码或模型() {
         NodeRuntimeManifest.parse(

@@ -4,7 +4,12 @@ const crypto = require('node:crypto');
 const GROUPS = Object.freeze(['common', 'android', 'linux64', 'win64']);
 // 任务只引用已注册的依赖ID，制品路径由签名清单确定，不接受任务传入任意URL。
 const TASK_DEPENDENCIES = Object.freeze({
-    'onnxruntime-web': Object.freeze({ directory: 'task-onnxruntime-web', packagePath: 'onnxruntime-web' })
+    'onnxruntime-web': Object.freeze({ directory: 'task-onnxruntime-web', packagePath: 'onnxruntime-web' }),
+    ...Object.fromEntries(['android', 'linux64', 'win64'].map(targetName => [`pi-agent-${targetName}`, Object.freeze({
+        directory: `task-pi-agent-${targetName}`, packagePath: '@earendil-works/pi-coding-agent',
+        packageName: '@earendil-works/pi-coding-agent', targetName,
+        optionalNames: ['@earendil-works/pi-ai', '@earendil-works/pi-coding-agent']
+    })]))
 });
 const TARGETS = Object.freeze({
     android: { os: 'android', arch: 'arm64', libc: 'bionic', nodeMajor: 26 },
@@ -67,7 +72,21 @@ function validateTaskDependencies(entries = {}) {
         artifact(entry, version => `dependencies/${definition.directory}/dependencies-v${version}.zip`);
         if (entry.packageName !== id || typeof entry.packageVersion !== 'string' ||
             !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/.test(entry.packageVersion) ||
-            !SHA256.test(entry.contentSha256) || entry.target !== null) throw new Error(`任务依赖${id}包契约无效`);
+            !SHA256.test(entry.contentSha256)) throw new Error(`任务依赖${id}包契约无效`);
+        if (!definition.targetName) {
+            if (entry.target !== null) throw new Error(`任务依赖${id}包契约无效`);
+            continue;
+        }
+        if (!entry.target || Object.entries(TARGETS[definition.targetName]).some(([key, value]) => entry.target[key] !== value) ||
+            (entry.target.nodeAbi !== undefined && !/^[1-9][0-9]{0,4}$/.test(String(entry.target.nodeAbi))) ||
+            (entry.target.napiVersion !== undefined && !positive(entry.target.napiVersion))) throw new Error(`任务依赖${id}平台契约无效`);
+        if (!entry.packageVersions || typeof entry.packageVersions !== 'object' || Array.isArray(entry.packageVersions)) throw new Error('Pi依赖缺少包版本集合');
+        for (const [key, version] of Object.entries(entry.packageVersions)) {
+            if (!key.startsWith('node_modules/') || key.split('/').some(part => !part || part === '.' || part === '..' || !/^[A-Za-z0-9@_.-]+$/.test(part)) ||
+                typeof version !== 'string' || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/.test(version)) throw new Error('Pi依赖包路径/版本无效');
+        }
+        if (entry.packageVersions[`node_modules/${definition.packagePath}`] !== entry.packageVersion ||
+            !entry.packageVersions['node_modules/@earendil-works/pi-ai']) throw new Error('Pi依赖缺少根SDK');
     }
     return entries;
 }

@@ -13,17 +13,26 @@ qwen-chat/doubao-chat -> 不包含账号ID/凭证状态，固定模型契约有�
 
 Qwen API按模型而非仅按Provider判断语速能力：Qwen-Audio 3.0/3.1 TTS保留speed设置，Qwen3-TTS HTTP与未知映射别名不得暴露未确认的原生字段。此检查与声纹面板同用`supportsNativeSpeed`规则。
 
-## min51 干净首装与 Pi 可选方案自测（2026-10-14）
+## Pi 可选依赖与 min54 干净首装自测（2026-10-14）
 
 ```text
-ADB实际 := SM-N9500 full50备份 → 卸载Success/无pm path → 单装min51Success/新firstInstallTime/无旧files
-APK := 89412146bytes/SHA5099960c…/CRC通过/allserver-min/updateOnly
-下载 := LAN原生确认约130MiB → code85/common9/android9/seeds85准备及锁验证
-失败 := restoreSeeds报任务latest指向无效实例 → 无active服务/无API → 首装不通过
-根因 := llm-server/40f3b6b1与time.announce/728486a7空目录 → isFile遍历遗漏 → latest目标缺失
-原生回归待确认 := 空/非空实例 + 重试 + 文本latest中断 + 父目录链接 + 无效指针
-Pi待确认 := 模式隔离 + 触发时机 + 三平台完整闭包/ESM导入 + 缓存/并发/失败
-边界 := 新ORT/Pi制品未发布；旧v9首装不作减重验证；私有备份保留不入Git
+ADB实际 := SM-N9500 full50私有备份 → 卸载 → min51/52/53失败定位 → 再次卸载 → 空目录单装min54
+历史故障 := min51遗漏空实例 → min52缺Node配套C++ → min53安装器旧白名单拒绝
+最终APK := 89914041bytes/SHAed8075e6…/同签名/CRC通过/allserver-min/updateOnly
+首装 := LAN原生确认约60MiB → code87/common10/android9/seeds86 → HTTPS status=ok
+实例 := llm-server/40f3b6b1与time.announce/728486a7目录存在 → latest有效相对链接
+健康 := active-release code87/deps10/实际版本目录 → pendingHealth=false/previous=null
+Pi源码 := test:pi-optional30/30 → 保存确认/取消表单/失败不写/并发冲突/仅选中Pi启动准备
+SDK实际 := /var/tmp隔离完整闭包 → 真实SDK/readonly-tools/provider资源/model注册成功
+源码回归 := test:task-dependencies106/106 + test:offline-bootstrap63/63
+原生回归 := Android254项/0失败/1既有环境跳过 → 空实例重试/链接拒绝/CPP解析与安装白名单
+正式制品 := code87/deps10/ORT10/Pi三平台10/min54；common展开402MiB降至130MiB
+Pi真机 := WS缺包预检downloadRequired → 取消保持revision/default → 确认PiAndroid10校验ready/提交qwen3.5 → 恢复default
+Android真实SDK := Node26.4.0/platform=android → 独立缓存导入两SDK/createAgentSession/ModelRuntime/只读工具入口均成功
+冷启动 := 默认LLM启动status=ok/code87/deps10/pendingHealth=false/原缓存保留
+发布 := LAN/WAN全部组件HTTP大小/SHA/签名一致 → 精确清理无错误
+C++隔离 := Node独立子进程映射runtime/libc++ → APK/MNN主进程使用NDK库
+边界 := 不恢复私人备份、不借旧环境；未执行真实LLM/MNN/LFM-VL模型推理；后续其他TTS源码仍需出包
 ```
 
 ## Chat2API 默认映射与账号复用（2026-10-14）

@@ -6,6 +6,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const shared = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 const archive = require('../../src/apps/server/modules/aasc/update-archive');
+const closure = require('../../src/apps/server/modules/aasc/dependency-closure');
 const execFileAsync = promisify(execFile);
 
 function matches(values, value) {
@@ -109,7 +110,11 @@ async function prepareTrees(options) {
 async function buildDependencyGroups(options) {
     const trees = await prepareTrees(options);
     const packageJson = JSON.parse(await fs.promises.readFile(path.join(options.projectRoot, 'package.json'), 'utf8'));
-    const taskIds = Object.keys(shared.TASK_DEPENDENCIES).filter(id => Object.hasOwn(packageJson.optionalDependencies || {}, id));
+    const taskIds = Object.keys(shared.TASK_DEPENDENCIES).filter(id =>
+        (shared.TASK_DEPENDENCIES[id].optionalNames || [id]).every(name => Object.hasOwn(packageJson.optionalDependencies || {}, name)));
+    const lock = JSON.parse(await fs.promises.readFile(path.join(options.projectRoot, 'package-lock.json'), 'utf8'));
+    const exclusive = closure.piExclusivePackages(packageJson, lock);
+    const packageKeys = new Set(Object.keys(lock.packages || {}));
     const outputs = Object.fromEntries(shared.GROUPS.map(name => [name, path.join(options.workDirectory, `group-${name}`)]));
     for (const directory of Object.values(outputs)) await fs.promises.mkdir(path.join(directory, 'node_modules'), { recursive: true });
     const common = new Set([...trees.android.keys()].filter(file => Object.values(trees).every(tree => tree.get(file) &&
@@ -117,7 +122,8 @@ async function buildDependencyGroups(options) {
     for (const [name, files] of Object.entries(trees)) {
         for (const [relative, entry] of files) {
             // 可选任务包仅进入独立制品，不因跨平台内容相同而混入common。
-            if (taskIds.some(id => relative.startsWith(`${shared.TASK_DEPENDENCIES[id].packagePath}/`))) continue;
+            if (exclusive.has(closure.packageOwnerKey(relative, packageKeys)) || taskIds.some(id =>
+                !shared.TASK_DEPENDENCIES[id].targetName && relative.startsWith(`${shared.TASK_DEPENDENCIES[id].packagePath}/`))) continue;
             if (common.has(relative) && name !== 'android') continue;
             const destination = path.join(outputs[common.has(relative) ? 'common' : name], 'node_modules', relative);
             await fs.promises.mkdir(path.dirname(destination), { recursive: true });
@@ -178,6 +184,10 @@ async function buildTaskDependencyArtifacts(options, trees, ids, artifacts) {
     const lock = JSON.parse(await fs.promises.readFile(path.join(options.projectRoot, 'package-lock.json'), 'utf8'));
     for (const id of ids) {
         const definition = shared.TASK_DEPENDENCIES[id];
+        if (definition.targetName) {
+            result[id] = await buildPiDependencyArtifact(options, trees[definition.targetName], lock, id, artifacts);
+            continue;
+        }
         const selected = [...trees.android.entries()].filter(([relative]) => relative.startsWith(`${definition.packagePath}/`));
         const packageVersion = lock.packages?.[`node_modules/${definition.packagePath}`]?.version;
         if (!selected.length || !packageVersion) throw new Error(`任务依赖${id}缺少真实生产包或锁版本`);
@@ -222,6 +232,76 @@ async function buildTaskDependencyArtifacts(options, trees, ids, artifacts) {
     }
     shared.validateTaskDependencies(result);
     return result;
+}
+
+/** Pi包含完整依赖闭包，独立缓存中的ESM可以直接解析；原生资源只来自相应目标生产树。 */
+async function buildPiDependencyArtifact(options, tree, lock, id, artifacts) {
+    const definition = shared.TASK_DEPENDENCIES[id];
+    const keys = closure.dependencyClosure(lock, closure.PI_PACKAGES);
+    const allKeys = new Set(Object.keys(lock.packages));
+    const selected = [...tree.entries()].filter(([file]) => keys.has(closure.packageOwnerKey(file, allKeys)));
+    const directory = path.join(options.workDirectory, definition.directory);
+    const packageVersions = {};
+    for (const [relative, entry] of selected) {
+        const destination = path.join(directory, 'node_modules', relative);
+        await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+        await fs.promises.copyFile(entry.source, destination);
+        if (relative.endsWith('/package.json')) {
+            const key = `node_modules/${relative.slice(0, -'/package.json'.length)}`;
+            if (keys.has(key)) {
+                const installed = JSON.parse(await fs.promises.readFile(destination, 'utf8'));
+                if (installed.version !== lock.packages[key].version) throw new Error(`Pi真实生产包与锁版本不符：${key}`);
+                packageVersions[key] = installed.version;
+            }
+        }
+    }
+    const packageVersion = lock.packages[`node_modules/${definition.packagePath}`]?.version;
+    if (!packageVersion || !closure.PI_PACKAGES.every(name => packageVersions[`node_modules/${name}`])) throw new Error('Pi目标生产树缺少根SDK');
+    for (const key of keys) {
+        if (!packageVersions[key] && !lock.packages[key].optional && packageAllows(lock.packages[key], shared.TARGETS[definition.targetName])) {
+            throw new Error(`Pi目标生产树缺少必需依赖：${key}`);
+        }
+        if (packageVersions[key]) {
+            const metadata = JSON.parse(await fs.promises.readFile(path.join(directory, key, 'package.json'), 'utf8'));
+            for (const name of Object.keys(metadata.dependencies || {})) {
+                if (!metadata.optionalDependencies?.[name] && !closure.resolveLockedPackage(packageVersions, key, name)) {
+                    throw new Error(`Pi独立制品缺少必需依赖：${key}/${name}`);
+                }
+            }
+        }
+    }
+    const target = { ...shared.TARGETS[definition.targetName] };
+    for (const [relative, entry] of selected.filter(([file]) => file.endsWith('.node'))) {
+        const bytes = await fs.promises.readFile(entry.source);
+        const napi = /napi/i.test(relative) || bytes.includes(Buffer.from('napi_register_module_v1')) || bytes.includes(Buffer.from('node_api_module_get_api_version_v1'));
+        if (napi) { target.napiVersion = Number(process.versions.napi); continue; }
+        const abi = bytes.toString('latin1').match(/node_register_module_v([0-9]+)/)?.[1] || options.nodeAbi;
+        if (!abi || (target.nodeAbi && String(target.nodeAbi) !== String(abi))) throw new Error('Pi原生依赖缺少一致的Node ABI契约');
+        target.nodeAbi = String(abi);
+    }
+    const contentSha256 = await archive.contentHash(path.join(directory, 'node_modules'));
+    const previous = options.currentTaskDependencies?.[id];
+    if (previous?.contentSha256 === contentSha256 && shared.canonicalJson(previous.target) === shared.canonicalJson(target) &&
+        shared.canonicalJson(previous.packageVersions) === shared.canonicalJson(packageVersions)) {
+        shared.validateTaskDependencies({ [id]: previous });
+        const destination = path.join(options.outputDir, previous.relativeUrl);
+        const root = fs.existsSync(destination) ? options.outputDir : options.currentArtifactRoot || '/mnt/aasc-offline';
+        const file = path.join(root, previous.relativeUrl);
+        require('../../src/apps/server/modules/aasc/dependency-tree').assertNoLinks(root, file);
+        if (!fs.existsSync(file) || (await fs.promises.stat(file)).size !== previous.size || await archive.hashFile(file) !== previous.sha256) throw new Error('Pi复用制品校验失败');
+        if (file !== destination) artifacts.push({ archivePath: file, relativeUrl: previous.relativeUrl, reused: true });
+        return previous;
+    }
+    const version = previous ? previous.version + 1 : options.dependencyVersion;
+    const metadata = { group: definition.directory, version, contentSha256, target, packageName: id, packageVersion, packageVersions };
+    await fs.promises.writeFile(path.join(directory, 'dependency-group.json'), `${JSON.stringify(metadata)}\n`);
+    const archivePath = path.join(options.workDirectory, `${definition.directory}-dependencies-v${version}.zip`);
+    await deterministicZip(directory, archivePath);
+    const relativeUrl = `dependencies/${definition.directory}/dependencies-v${version}.zip`;
+    artifacts.push({ archivePath, relativeUrl });
+    const entry = { ...metadata, relativeUrl, size: (await fs.promises.stat(archivePath)).size, sha256: await archive.hashFile(archivePath) };
+    delete entry.group;
+    return entry;
 }
 async function deterministicZip(directory, destination) {
     const yazl = require('yazl'); const { pipeline } = require('node:stream/promises'); const zip = new yazl.ZipFile();

@@ -6,6 +6,7 @@ const shared = require('./shared-update-manifest');
 const archive = require('./update-archive');
 const { assertNoLinks } = require('./dependency-tree');
 const feed = require('./main-server-update-feed');
+const closure = require('./dependency-closure');
 
 // 与现有Offline启动器使用同一环境变量及LAN/WAN镜像地址，不新增远端配置通道。
 const DEFAULT_SOURCES = Object.freeze(['http://192.168.1.39/mnt/aasc-offline/',
@@ -47,6 +48,22 @@ class TaskDependencyManager {
     }
 
     localPackage(id) {
+        if (shared.TASK_DEPENDENCIES[id].targetName) {
+            try {
+                const versions = {};
+                const lock = JSON.parse(fs.readFileSync(path.join(this.codeRoot, 'package-lock.json'), 'utf8'));
+                for (const key of closure.dependencyClosure(lock, closure.PI_PACKAGES)) {
+                    const file = path.join(this.nodeModulesRoot, key.slice('node_modules/'.length), 'package.json');
+                    assertNoLinks(this.nodeModulesRoot, file);
+                    if (fs.existsSync(file)) versions[key] = JSON.parse(fs.readFileSync(file, 'utf8')).version;
+                }
+                this.verifyPiPackages(this.nodeModulesRoot, versions);
+                return path.join(this.nodeModulesRoot, shared.TASK_DEPENDENCIES[id].packagePath);
+            } catch (error) {
+                if (error.message.includes('链接') || error.message.includes('越界')) throw error;
+                return null;
+            }
+        }
         const directory = path.join(this.nodeModulesRoot, shared.TASK_DEPENDENCIES[id].packagePath);
         assertNoLinks(this.nodeModulesRoot, directory);
         assertNoLinks(this.nodeModulesRoot, path.join(directory, 'package.json'));
@@ -69,10 +86,56 @@ class TaskDependencyManager {
         return path.join(directory, 'dist');
     }
 
+    piDependencyId() {
+        return `pi-agent-${shared.selectTarget(this.options.runtime || {})}`;
+    }
+
+    moduleRoot(id) {
+        const directory = this.ready.get(id) || this.localPackage(id);
+        if (!directory) throw new Error(`依赖尚未准备：${id}`);
+        return path.resolve(directory, ...shared.TASK_DEPENDENCIES[id].packagePath.split('/').map(() => '..'));
+    }
+
+    async isReady(id) {
+        this.expectedVersion(id);
+        if (shared.TASK_DEPENDENCIES[id].targetName) shared.assertRuntime(shared.TARGETS[shared.TASK_DEPENDENCIES[id].targetName], this.options.runtime || {});
+        const directory = this.localPackage(id) || await this.cachedPackage(id);
+        if (!directory) return false;
+        this.ready.set(id, directory);
+        return true;
+    }
+
+    /** SDK缓存必须包含代码锁允许的完整依赖；不借用进程全局node_modules填补缺包。 */
+    verifyPiPackages(modules, versions) {
+        const lock = JSON.parse(fs.readFileSync(path.join(this.codeRoot, 'package-lock.json'), 'utf8'));
+        const keys = closure.dependencyClosure(lock, closure.PI_PACKAGES);
+        for (const name of closure.PI_PACKAGES) {
+            if (!versions[`node_modules/${name}`]) throw new Error('Pi依赖缺少根SDK');
+        }
+        for (const [key, version] of Object.entries(versions)) {
+            if (!keys.has(key) || version !== lock.packages[key]?.version) throw new Error(`Pi依赖版本与代码锁不符：${key}`);
+            const file = path.join(modules, key.slice('node_modules/'.length), 'package.json');
+            assertNoLinks(modules, file);
+            const metadata = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (metadata.version !== version) throw new Error(`Pi真实依赖版本不符：${key}`);
+            for (const name of Object.keys(metadata.dependencies || {})) {
+                if (!metadata.optionalDependencies?.[name] && !closure.resolveLockedPackage(versions, key, name)) {
+                    throw new Error(`Pi缓存缺少必需依赖：${key}/${name}`);
+                }
+            }
+        }
+        for (const name of closure.PI_PACKAGES) {
+            const file = path.join(modules, name, 'dist/index.js');
+            assertNoLinks(modules, file);
+            if (!fs.statSync(file).isFile()) throw new Error('Pi依赖缺少SDK入口');
+        }
+    }
+
     async ensure(ids, onProgress = () => {}) {
         if (!Array.isArray(ids)) throw new Error('任务dependencies必须为依赖ID数组');
         for (const id of new Set(ids)) {
             this.expectedVersion(id);
+            if (shared.TASK_DEPENDENCIES[id].targetName) shared.assertRuntime(shared.TARGETS[shared.TASK_DEPENDENCIES[id].targetName], this.options.runtime || {});
             let pending = this.pending.get(id);
             if (!pending) {
                 pending = { listeners: new Set() };
@@ -106,18 +169,26 @@ class TaskDependencyManager {
         for (const name of names) assertNoLinks(this.cacheRoot, path.join(directory, name));
         const modules = path.join(directory, 'node_modules');
         const packages = await fs.promises.readdir(modules);
-        if (packages.length !== 1 || packages[0] !== definition.packagePath) throw new Error('任务依赖包包含其他生产包');
+        if (!definition.targetName && (packages.length !== 1 || packages[0] !== definition.packagePath)) throw new Error('任务依赖包包含其他生产包');
         const metadata = JSON.parse(await fs.promises.readFile(path.join(directory, 'dependency-group.json'), 'utf8'));
         const expected = { group: definition.directory, version: entry.version, contentSha256: entry.contentSha256,
-            target: null, packageName: id, packageVersion: entry.packageVersion };
+            target: entry.target, packageName: id, packageVersion: entry.packageVersion,
+            ...(definition.targetName ? { packageVersions: entry.packageVersions } : {}) };
         if (shared.canonicalJson(metadata) !== shared.canonicalJson(expected)) throw new Error('任务依赖组元数据不匹配');
         if (await archive.contentHash(modules) !== entry.contentSha256) throw new Error('任务依赖实际内容指纹不匹配');
         const root = path.join(modules, definition.packagePath);
         const packageJson = JSON.parse(await fs.promises.readFile(path.join(root, 'package.json'), 'utf8'));
-        if (packageJson.name !== id || packageJson.version !== entry.packageVersion || entry.packageVersion !== this.expectedVersion(id)) {
+        if (packageJson.name !== (definition.packageName || id) || packageJson.version !== entry.packageVersion || entry.packageVersion !== this.expectedVersion(id)) {
             throw new Error('任务依赖真实包版本与代码锁不匹配');
         }
-        if (!(await fs.promises.stat(path.join(root, 'dist/ort.webgpu.min.js'))).isFile()) throw new Error('任务依赖缺少WebGPU入口');
+        if (definition.targetName) {
+            shared.assertRuntime(entry.target, this.options.runtime || {});
+            this.verifyPiPackages(modules, entry.packageVersions);
+            const keys = new Set(Object.keys(entry.packageVersions));
+            for (const file of await archive.treeFiles(modules)) {
+                if (!closure.packageOwnerKey(file.path, keys)) throw new Error('Pi缓存包含未声明的生产文件');
+            }
+        } else if (!(await fs.promises.stat(path.join(root, 'dist/ort.webgpu.min.js'))).isFile()) throw new Error('任务依赖缺少WebGPU入口');
         return root;
     }
 
@@ -133,6 +204,10 @@ class TaskDependencyManager {
             shared.verifyManifest(manifest, this.publicKeyPem);
             const entry = manifest.payload.components.taskDependencies?.[id];
             if (!entry || entry.packageVersion !== this.expectedVersion(id)) continue;
+            if (entry.packageVersions) {
+                const lock = JSON.parse(fs.readFileSync(path.join(this.codeRoot, 'package-lock.json'), 'utf8'));
+                if (Object.entries(entry.packageVersions).some(([key, version]) => lock.packages?.[key]?.version !== version)) continue;
+            }
             if (name !== `dependencies-v${entry.version}-${entry.sha256.slice(0, 12)}`) throw new Error('任务依赖缓存目录与签名版本不匹配');
             return this.verifyLayer(directory, id, entry);
         }
@@ -153,6 +228,7 @@ class TaskDependencyManager {
                 shared.verifyManifest(manifest, this.publicKeyPem);
                 const entry = manifest.payload.components.taskDependencies?.[id];
                 if (!entry || entry.packageVersion !== this.expectedVersion(id)) throw new Error(`更新源缺少与当前代码兼容的任务依赖 ${id}`);
+                if (entry.target) shared.assertRuntime(entry.target, this.options.runtime || {});
                 const root = path.join(this.cacheRoot, id);
                 assertNoLinks(this.projectRoot, root);
                 await fs.promises.mkdir(root, { recursive: true, mode: 0o700 });

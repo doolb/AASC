@@ -67,6 +67,10 @@ const Chat = {
     noInterruptMode: true,
     profiles: [],
     activeProfile: '',
+    profileRevision: '',
+    profileRequests: new Map(),
+    profileSaving: false,
+    editingProfileName: null,
     editingTemplateName: null,
     // 图片只保留在当前待发送消息中，实时预览帧不会进入这里。
     pendingImages: [],
@@ -419,31 +423,72 @@ const Chat = {
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'success') {
-                    this.profiles = data.profiles || [];
-                    this.activeProfile = data.activeProfile || '';
-                    this.renderProfileSelector();
+                    this.handleProfilesConfig(data);
                 }
             })
             .catch(err => console.error('加载LLM配置失败:', err));
     },
 
-    switchProfile(name) {
-        fetch('/api/chat/profiles/switch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                this.activeProfile = data.activeProfile;
-                window.showToast(`已切换到配置: ${data.activeProfile} (${data.config.model})`, 'success');
-                this.renderProfileSelector();
-            } else {
-                window.showToast('切换配置失败: ' + (data.message || data.error), 'error');
-            }
-        })
-        .catch(err => window.showToast('切换配置失败', 'error'));
+    async switchProfile(name) {
+        try {
+            const result = await this.submitProfiles({ type: 'chatProfileSwitch', name });
+            if (result.status === 'success') window.showToast(`已切换到配置: ${result.activeProfile}`, 'success');
+        } catch (error) { window.showToast(error.message, 'error'); }
+    },
+
+    requestProfiles(data) {
+        const ws = window.WebSocketManager?.ws;
+        if (!ws || ws.readyState !== 1) return Promise.reject(new Error('控制连接未就绪，原配置保持不变'));
+        const requestId = `profiles-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.profileRequests.delete(requestId);
+                reject(new Error('配置请求超时，请重新连接核对配置'));
+            }, 20 * 60 * 1000);
+            this.profileRequests.set(requestId, { resolve, reject, timer });
+            try { ws.send(JSON.stringify({ ...data, requestId, revision: data.revision || this.profileRevision })); }
+            catch (error) { clearTimeout(timer); this.profileRequests.delete(requestId); reject(error); }
+        });
+    },
+
+    handleProfilesConfig(data) {
+        this.profiles = data.profiles || [];
+        this.activeProfile = data.activeProfile || '';
+        this.profileRevision = data.revision || '';
+        this.piDependencyStatus = data.dependency;
+        this.renderProfileSelector();
+        const pending = this.profileRequests.get(data.requestId);
+        if (pending) {
+            clearTimeout(pending.timer);
+            this.profileRequests.delete(data.requestId);
+            pending.resolve(data);
+        }
+    },
+
+    handlePiDependencyStatus(data) {
+        const previous = this.piDependencyStatus?.phase;
+        this.piDependencyStatus = data;
+        if (data.phase === previous) return;
+        if (data.phase === 'preparing') window.showToast('正在准备 PiAgent 依赖…', 'info');
+        if (data.phase === 'error') window.showToast(data.message || 'PiAgent 依赖准备失败', 'error');
+    },
+
+    onProfileConnectionClosed() {
+        for (const pending of this.profileRequests.values()) {
+            clearTimeout(pending.timer);
+            pending.reject(new Error('控制连接已断开，重连后核对权威配置'));
+        }
+        this.profileRequests.clear();
+    },
+
+    async submitProfiles(candidate) {
+        let result = await this.requestProfiles(candidate);
+        if (result.status === 'downloadRequired') {
+            if (!window.confirm(result.message)) return { ...result, status: 'cancelled' };
+            result = await this.requestProfiles({ ...candidate, revision: result.revision, downloadConfirmed: true });
+        }
+        if (result.status === 'error') throw new Error(result.message || '保存配置失败');
+        return result;
     },
 
     handleProfileSwitched(data) {
@@ -2291,6 +2336,7 @@ const Chat = {
     },
 
     showAddProfile() {
+        this.editingProfileName = null;
         document.getElementById('profileEditName').value = '';
         document.getElementById('profileEditMode').value = 'llm';
         document.getElementById('profileEditBackend').value = 'pi';
@@ -2308,6 +2354,7 @@ const Chat = {
     editProfile(name) {
         const profile = this.profiles.find(p => p.name === name);
         if (!profile) return;
+        this.editingProfileName = name;
         document.getElementById('profileEditName').value = profile.name || '';
         document.getElementById('profileEditMode').value = profile.mode || 'llm';
         document.getElementById('profileEditBackend').value = profile.backend || 'pi';
@@ -2327,7 +2374,8 @@ const Chat = {
         document.getElementById('profileEditor').style.display = 'none';
     },
 
-    saveProfile() {
+    async saveProfile() {
+        if (this.profileSaving) return;
         const name = document.getElementById('profileEditName').value.trim();
         const apiUrl = document.getElementById('profileEditApiUrl').value.trim();
         const model = document.getElementById('profileEditModel').value.trim();
@@ -2359,49 +2407,36 @@ const Chat = {
         const profile = { name, protocol, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode };
         if (mode === 'agent') profile.backend = backend;
 
-        if (existingIdx >= 0) {
-            this.profiles[existingIdx] = profile;
-        } else {
-            this.profiles.push(profile);
-        }
-
-        fetch('/api/chat/profiles', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ profiles: this.profiles })
-        })
-        .then(res => res.json())
-        .then(data => {
+        // 草稿不写入权威列表；下载被取消/失败时旧配置和表单都可直接恢复。
+        const previousName = this.editingProfileName;
+        const candidate = this.profiles.map(item => ({ ...item }));
+        if (existingIdx >= 0) candidate[existingIdx] = profile;
+        else candidate.push(profile);
+        this.profileSaving = true;
+        try {
+            const data = await this.submitProfiles({ type: 'chatProfilesSave', profiles: candidate, profileName: profile.name });
             if (data.status === 'success') {
                 window.showToast(existingIdx >= 0 ? '配置已更新' : '配置已添加', 'success');
                 this.cancelEditProfile();
                 this.renderProfileSelector();
-            } else {
-                window.showToast('保存配置失败: ' + (data.message || data.error), 'error');
-            }
-        })
-        .catch(err => window.showToast('保存配置失败', 'error'));
+            } else this.restoreProfileEditor(previousName);
+        } catch (error) {
+            this.restoreProfileEditor(previousName);
+            window.showToast(`保存配置失败：${error.message}`, 'error');
+        } finally { this.profileSaving = false; }
     },
 
-    deleteProfile(name) {
-        if (!confirm(`确定删除配置 "${name}" ？`)) return;
-        this.profiles = this.profiles.filter(p => p.name !== name);
+    restoreProfileEditor(name) {
+        if (name && this.profiles.some(profile => profile.name === name)) this.editProfile(name);
+        else this.cancelEditProfile();
+    },
 
-        fetch('/api/chat/profiles', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ profiles: this.profiles })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                window.showToast('配置已删除', 'success');
-                this.renderProfileSelector();
-            } else {
-                window.showToast('删除配置失败: ' + (data.message || data.error), 'error');
-            }
-        })
-        .catch(err => window.showToast('删除配置失败', 'error'));
+    async deleteProfile(name) {
+        if (!confirm(`确定删除配置 "${name}" ？`)) return;
+        try {
+            const data = await this.submitProfiles({ type: 'chatProfilesSave', profiles: this.profiles.filter(profile => profile.name !== name) });
+            if (data.status === 'success') window.showToast('配置已删除', 'success');
+        } catch (error) { window.showToast(`删除配置失败：${error.message}`, 'error'); }
     },
     
     hideConfig() {

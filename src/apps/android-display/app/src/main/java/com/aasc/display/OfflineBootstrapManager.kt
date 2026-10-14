@@ -173,7 +173,9 @@ internal class OfflineBootstrapManager(private val context: Context) {
             for ((sourceName, targetName) in mapping) {
                 val source = File(seeds, sourceName)
                 require(source.isDirectory) { "种子目录缺少 $sourceName" }
-                for (file in source.walkTopDown().filter { it.isFile }) {
+                // 空实例目录同样是合法种子；先恢复目录，再在全部文件就绪后转换latest。
+                for (file in source.walkTopDown()) {
+                    require(!Files.isSymbolicLink(file.toPath())) { "种子源路径为链接" }
                     val relative = file.relativeTo(source).invariantSeparatorsPath
                     val destination = File(root, "$targetName/$relative")
                     val isLatest = sourceName == "task" && relative.split('/').let { it.size == 3 && it[1] == "results" && it[2] == "latest" }
@@ -183,6 +185,12 @@ internal class OfflineBootstrapManager(private val context: Context) {
                         require(!Files.isSymbolicLink(ancestor.toPath())) { "种子目标或父目录为链接" }
                         ancestor = ancestor.parentFile
                     }
+                    if (file.isDirectory) {
+                        require(!destination.exists() || destination.isDirectory) { "种子目录目标不是目录" }
+                        require(destination.isDirectory || destination.mkdirs()) { "无法恢复种子目录" }
+                        continue
+                    }
+                    require(file.isFile) { "种子包含非普通文件" }
                     if (destination.exists()) {
                         // 进程可能在写入文本 marker 后退出；下次补种完成后再恢复链接。
                         if (isLatest && destination.isFile) latestMarkers += destination

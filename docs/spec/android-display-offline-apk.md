@@ -1,16 +1,26 @@
 # 正式 Android 显示端完整离线 APK 实现规格（伪代码）
 
-## min51 空实例首装故障与待确认修复（2026-10-14）
+## min51 空实例首装故障与修复实施（2026-10-14）
 
 ```text
 实际输入 := seeds85的llm-server/40f3b6b1与time.announce/728486a7为空目录 + latest文本指向它们
-当前行为 := 只复制文件 → 空目录遗漏 → latest目标缺失 → 首装失败/无active服务/无API
+历史min51行为 := 只复制文件 → 空目录遗漏 → latest目标缺失 → 首装失败/无active服务/无API
 已验证 := full50卸载 + 空应用单装min51 + LAN原生确认 + code/common/android/种子准备
-未通过 := 种子恢复/服务启动/健康提交/重启复用；不得标记首装成功
-待确认修复 := 受限映射遍历目录和文件 → 目标及父目录链接检查 → 补缺失目录 → 补缺失文件 → 目录就绪后转换latest
+最终min54 := 空应用独立安装 → 目录/latest恢复 → Node26启动 → code87/deps10健康提交；历史失败不计成功
+修复 := 用户追加报告ADB启动失败后按已告知方案实施 → 受限映射遍历目录和文件 → 目标及父目录链接检查 → 补缺失目录 → 补缺失文件 → 目录就绪后转换latest
 兼容 := 已有用户数据保留；合法相对链接复用；部分恢复补目录；无效指针/越界/链接拒绝
-待执行 := 空/非空实例 + 文本latest中断恢复 + 重复执行 + 父目录链接 + 无效指针
-发布 := 原生修改确认后minApk=true → 新min构建发布 → 重复卸载单装验证健康和路径
+已验证 := 空/非空实例 + 文本latest中断恢复 + 重复执行 + 父目录链接 + 无效指针；Android254项0失败/1环境跳过
+发布 := min54签名构建/两端发布 → 再次卸载单装 → API版本路径及pendingHealth=false；其他后续原生改动保留minApk=true
+```
+
+## min52 首装动态链接故障修复伪代码（2026-10-14）
+
+```text
+现场 := 空实例/latest已恢复 → Node启动报libc++_shared.so缺失 → 候选回滚
+对照 := APK的NDK libc++提供后仍缺Node所需C++符号；Node运行库配套libc++提供后--version=v26.4.0/退出0
+修复 := prepare-android-node-runtime必需库增加配套libc++_shared.so → min复制并记录大小/SHA → NodeRuntimeManifest共享精确白名单供解析器和NodeRuntimeInstaller同时使用 → 既有暂存/校验/安装 → 原LD_LIBRARY_PATH正确加载
+边界 := 不使用APK另一套NDK库替代、不放宽任意动态库/源码/模型白名单；无需改变服务依赖或Node-major契约
+验证 := JS打包保证配套文件真实字节 + Kotlin解析和安装都允许对应Runtime路径/拒绝外部路径 + 新min54干净首装/真实Node服务健康；min53因安装器旧白名单拒绝，未通过首装
 ```
 
 ## 整包首次启动强制内置版本增量（2026-10-14，已实现并发布full50）

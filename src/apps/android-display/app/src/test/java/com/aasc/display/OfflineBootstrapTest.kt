@@ -119,6 +119,47 @@ class OfflineBootstrapTest {
     }
 
     @Test
+    fun 空任务实例目录恢复latest且中断重试保持数据() {
+        val parent = Files.createTempDirectory("aasc-bootstrap-empty-instance").toFile()
+        val seeds = File(parent, "seeds")
+        val root = File(parent, "root")
+        try {
+            File(seeds, "config/config.json").apply { parentFile!!.mkdirs(); writeText("{}") }
+            File(seeds, "userconfig").mkdirs()
+            for (name in listOf("llm-server", "time.announce")) {
+                File(seeds, "task/$name/results/empty").mkdirs()
+                File(seeds, "task/$name/results/latest").writeText("empty\n")
+            }
+            val old = File(root, "res/tasks/llm-server/results/latest").apply { parentFile!!.mkdirs(); writeText("empty\n") }
+            OfflineBootstrapManager.restoreSeeds(seeds, root)
+            OfflineBootstrapManager.restoreSeeds(seeds, root)
+            for (name in listOf("llm-server", "time.announce")) {
+                val instance = File(root, "res/tasks/$name/results/empty")
+                assertTrue(instance.isDirectory)
+                assertEquals(0, instance.list()!!.size)
+                assertEquals("empty", Files.readSymbolicLink(File(instance.parentFile, "latest").toPath()).toString())
+            }
+            assertTrue(Files.isSymbolicLink(old.toPath()))
+        } finally { parent.deleteRecursively() }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun 空目录恢复拒绝链接父目录() {
+        val parent = Files.createTempDirectory("aasc-bootstrap-directory-link").toFile()
+        try {
+            val seeds = File(parent, "seeds")
+            val root = File(parent, "root")
+            File(seeds, "config/config.json").apply { parentFile!!.mkdirs(); writeText("{}") }
+            File(seeds, "userconfig").mkdirs()
+            File(seeds, "task/example/results/empty").mkdirs()
+            val outside = File(parent, "outside").apply { mkdirs() }
+            val target = File(root, "res/tasks/example").apply { parentFile!!.mkdirs() }
+            Files.createSymbolicLink(target.toPath(), outside.toPath())
+            OfflineBootstrapManager.restoreSeeds(seeds, root)
+        } finally { parent.deleteRecursively() }
+    }
+
+    @Test
     fun LAN模型下载策略只允许固定源与安全相对文件路径() {
         OfflineModelStore.requireAllowedSource("http://192.168.1.39/mnt/aimodel/tts/MSTTSLocZhCN.dat")
         OfflineModelStore.requireAllowedSource("https://c.aasc.us/mnt/aimodel/llm/qwen-test/llm.mnn")

@@ -8,12 +8,14 @@ import { normalizePiApiKey } from './pi-runtime-policy.js';
 import continuationTrackerModule from './pi-responses-continuation.js';
 
 const { resolveActivePiModule } = runtimeModulePaths;
+// 缓存根作为模块实例参数传递，不修改服务器的全局基础依赖根。
+const moduleOptions = { nodeModulesRoot: new URL(import.meta.url).searchParams.get('nodeModulesRoot') || undefined };
 const [piAiModule, piAiCompatModule, piCodingAgentModule] = await Promise.all([
-    import(resolveActivePiModule('@earendil-works/pi-ai', 'dist/index.js')),
+    import(resolveActivePiModule('@earendil-works/pi-ai', 'dist/index.js', moduleOptions)),
     import(resolveActivePiModule('@earendil-works/pi-ai', 'dist/compat.js', {
-        fallbackSpecifier: '@earendil-works/pi-ai/compat'
+        fallbackSpecifier: '@earendil-works/pi-ai/compat', ...moduleOptions
     })),
-    import(resolveActivePiModule('@earendil-works/pi-coding-agent', 'dist/index.js'))
+    import(resolveActivePiModule('@earendil-works/pi-coding-agent', 'dist/index.js', moduleOptions))
 ]);
 const {
     Type,

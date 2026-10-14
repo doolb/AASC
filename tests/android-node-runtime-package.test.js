@@ -206,6 +206,10 @@ test('update-only Runtime 生成允许列表动态库资产并保留 Node 可执
     const allowedPaths = REQUIRED_RUNTIME_LIBRARIES.map((name) => `runtime/arm64-v8a/lib/${name}`).sort();
 
     assert.equal(manifest.updateOnly, true);
+    const cpp = manifest.files.find(file => file.path === 'runtime/arm64-v8a/lib/libc++_shared.so');
+    assert.ok(cpp, 'min必须携带Node配套C++库，不能依赖完整APK遗留文件');
+    assert.deepEqual(await fs.promises.readFile(path.join(outputDir, cpp.path)),
+        await fs.promises.readFile(path.join(runtimeDir, 'lib/libc++_shared.so')));
     assert.deepEqual(manifest.files.map((file) => file.path).sort(), allowedPaths);
     assert.equal(manifest.files.some((file) => file.path.startsWith('server/')), false);
     assert.equal(manifest.files.some((file) => file.path.endsWith('/node')), false);

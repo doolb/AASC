@@ -67,12 +67,15 @@ class PiRuntimeManager {
         this.requestTimeoutMs = options.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
         this.requestQueueTimeoutMs = options.requestQueueTimeoutMs || DEFAULT_REQUEST_QUEUE_TIMEOUT_MS;
         this.logger = typeof options.logger === 'function' ? options.logger : () => {};
+        this.ensureDependency = options.ensureDependency;
+        this.nodeModulesRoot = options.nodeModulesRoot;
         this.sdkLoader = options.sdkLoader || (() => import(resolveActivePiModule(
             '@earendil-works/pi-coding-agent',
-            'dist/index.js'
+            'dist/index.js', { nodeModulesRoot: this.nodeModulesRoot }
         )));
         this.readonlyToolsLoader = options.readonlyToolsLoader || (() => import(
-            pathToFileURL(path.join(__dirname, 'pi-readonly-tools.mjs')).href
+            pathToFileURL(path.join(__dirname, 'pi-readonly-tools.mjs')).href +
+                (this.nodeModulesRoot ? `?nodeModulesRoot=${encodeURIComponent(this.nodeModulesRoot)}` : '')
         ));
         this.createSdkSession = typeof options.createSdkSession === 'function'
             ? options.createSdkSession
@@ -278,6 +281,7 @@ class PiRuntimeManager {
     }
 
     async createDefaultSdkSession(profile, template, conversationId) {
+        if (this.ensureDependency) this.nodeModulesRoot = await this.ensureDependency();
         const sdk = await this.sdkLoader();
         const toolsModule = await this.readonlyToolsLoader();
         const policy = resolvePermissionPolicy(template.permissionProfile);

@@ -2,9 +2,11 @@
 
 ## 任务可选依赖制品（2026-10-14，源码已实现）
 
+Pi扩展沿用附加组件，注册 `pi-agent-android/linux64/win64`，分别使用 `dependencies/task-pi-agent-<target>/dependencies-vN.zip`；每个SDK包含两个根包和完整依赖闭包，基础集合仅去掉Pi独占包，共享包仍保留。校验包版本集合与代码锁、平台/ABI及实际内容；独立缓存的模块根传给SDK/只读工具，不影响基础更新指纹。下载触发由已确认的profile保存/启动规则协调，见llm-agent-mode设计。源码回归已完成，服务87/依赖10及独立ORT/Pi三平台制品已发布LAN/WAN。
+
 基础common/android/linux64/win64继续固定四组，签名清单新增 `components.taskDependencies`，首项为 `onnxruntime-web`，对应 `dependencies/task-onnxruntime-web/dependencies-vN.zip`。制品包含该npm包本身，其小型共享依赖仍在基础组；依赖声明在任务定义上，运行前由Node服务下载、验证并独立缓存。附加组件可被旧APK清单解析器忽略，optional锁条目允许基础包缺席，不修改Android原生协议。
 
-all构建/发布和镜像同步包含独立包；code-only/min/repair发布先验证已存在的独立包；HTTP验收核对全部组件SHA。清理范围仅该依赖目录下严格数字版本普通ZIP，保留签名引用。普通 `/server/dependencies` 文件下载业务可用task参数选择任务包，不新增配置HTTP接口。当前源码与用例完成，正式包尚未生成。详细流程见 [模型任务规格](../spec/model-inference-task.md)。
+all构建/发布和镜像同步包含独立包；code-only/min/repair发布先验证已存在的独立包；HTTP验收核对全部组件SHA。清理范围仅该依赖目录下严格数字版本普通ZIP，保留签名引用。普通 `/server/dependencies` 文件下载业务可用task参数选择任务包，不新增配置HTTP接口。正式包已生成并发布，基础common展开约130MiB（原v9约402MiB）。详细流程见 [模型任务规格](../spec/model-inference-task.md)。
 
 ## 主服务器共享发布文件与分层依赖（2026-10-14，已实现）
 

@@ -133,6 +133,7 @@ const AiRolesService = require('../modules/ai-roles/ai-roles-service');
 const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
 const { CodexRuntimeManager } = require('../modules/chat/codex-runtime-manager');
 const { PiRuntimeManager } = require('../modules/chat/pi-runtime-manager');
+const { PiProfileConfig } = require('../modules/chat/pi-profile-config');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const { createTextMediaTtsService } = require('../modules/media/text-media-tts-service');
 const { createProviderRegistry } = require('../modules/tts/tts-provider-registry');
@@ -359,7 +360,8 @@ const serverReleaseService = new ServerReleaseService({
     projectRoot: PROJECT_ROOT,
     version: process.env.AASC_SERVER_VERSION || null
 });
-const taskDependencyManager = new TaskDependencyManager({ projectRoot: PROJECT_ROOT, codeRoot: CODE_ROOT, nodeModulesRoot: NODE_MODULES_ROOT });
+const taskDependencyManager = new TaskDependencyManager({ projectRoot: PROJECT_ROOT, codeRoot: CODE_ROOT,
+    nodeModulesRoot: NODE_MODULES_ROOT, runtime: { android: ANDROID_NODE_POLICY.enabled } });
 const RES_DIR = path.join(PROJECT_ROOT, 'res');
 const MMD_STATIC_CACHE_DIR = path.join(RES_DIR, 'temp', 'mmd-static-cache');
 const modelManifestService = new ModelManifestService({
@@ -656,8 +658,11 @@ const aiRoles = new AiRolesService({
     disabled: ANDROID_NODE_POLICY.enabled
 });
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
+const piProfileConfig = new PiProfileConfig({ chat, config, dependencies: taskDependencyManager,
+    broadcast: broadcastToControls, isControl: ws => controlClients.has(ws) });
 const piRuntimeManager = new PiRuntimeManager({
-    projectRoot: PROJECT_ROOT
+    projectRoot: PROJECT_ROOT,
+    ensureDependency: () => piProfileConfig.prepare()
 });
 const codexRuntimeManager = new CodexRuntimeManager({
     projectRoot: PROJECT_ROOT,
@@ -703,6 +708,8 @@ chat.init(config.get('chat', {}), {
     localLlmBaseUrl: `${useHttps ? 'https' : 'http'}://127.0.0.1:${PORT}/v1`,
     localLlmHostnames: [getLocalIP()]
 });
+// 已保存Pi配置代表之前选择的能力，启动补齐依赖不阻塞媒体/配置等其它服务。
+piProfileConfig.startup().catch(error => logError('Pi依赖', `启动准备失败：${error.message}`));
 // 提醒必须复用统一 TTS 路由，确保 display 模式优先使用显示端并按策略回退。
 reminder.init({ generateTTS: generateTtsWithFallback });
 voiceCommand.init(config.get('voiceCommand', {}));
@@ -1333,6 +1340,7 @@ async function startServer() {
                 'getChatCommands', 'setChatCommands', 'mute', 'unmute', 'todayReminders',
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
+                'getChatProfilesConfig', 'chatProfilesSave', 'chatProfileSwitch',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
                 'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
@@ -5221,66 +5229,19 @@ app.post('/api/ai-roles/stop-all', async (req, res) => {
 app.get('/api/chat/profiles', (req, res) => {
     res.json({
         status: 'success',
-        profiles: chat.getProfiles(),
-        activeProfile: chat.getActiveProfile()
+        ...piProfileConfig.snapshot()
     });
 });
 
-app.post('/api/chat/profiles', (req, res) => {
-    try {
-        const profiles = chat.setProfiles(req.body.profiles);
-        const chatCfg = chat.getConfig();
-        config.set('chat', {
-            ...chatCfg,
-            llmProfiles: profiles,
-            activeProfile: chat.getActiveProfile()
-        });
-        res.json({
-            status: 'success',
-            profiles: profiles,
-            activeProfile: chat.getActiveProfile()
-        });
-    } catch (err) {
-        res.status(400).json({ status: 'error', message: `配置更新失败: ${err.message}` });
-    }
+// 历史HTTP调用仍复用同一预检/事务；控制端配置保存已经迁移到AASC/WebSocket。
+app.post('/api/chat/profiles', async (req, res) => {
+    const result = await piProfileConfig.update({ ...req.body, type: 'chatProfilesSave' });
+    res.status(result.status === 'error' ? 400 : 200).json(result);
 });
 
-app.post('/api/chat/profiles/switch', (req, res) => {
-    try {
-        const { name } = req.body;
-        if (!name) {
-            return res.status(400).json({ status: 'error', message: '请指定配置名称' });
-        }
-        const success = chat.switchProfile(name);
-        if (!success) {
-            return res.status(404).json({ status: 'error', message: `未找到配置: ${name}` });
-        }
-        const chatCfg = chat.getConfig();
-        config.set('chat', {
-            ...chatCfg,
-            activeProfile: chat.getActiveProfile(),
-            llmProfiles: chat.getProfiles()
-        });
-        // 广播配置切换
-        broadcastToControls({
-            type: 'profileSwitched',
-            activeProfile: chat.getActiveProfile(),
-            config: {
-                apiUrl: chatCfg.apiUrl,
-                model: chatCfg.model
-            }
-        });
-        res.json({
-            status: 'success',
-            activeProfile: chat.getActiveProfile(),
-            config: {
-                apiUrl: chatCfg.apiUrl,
-                model: chatCfg.model
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ status: 'error', message: '切换配置失败' });
-    }
+app.post('/api/chat/profiles/switch', async (req, res) => {
+    const result = await piProfileConfig.update({ ...req.body, type: 'chatProfileSwitch' });
+    res.status(result.status === 'error' ? 400 : 200).json(result);
 });
 
 app.get('/api/chat/history', (req, res) => {
@@ -8313,6 +8274,7 @@ wss.on('connection', (ws, req) => {
         log('连接', `控制端已连接，当前连接数: ${controlClients.size}`);
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
+        ws.send(JSON.stringify(piProfileConfig.snapshot()));
         ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
         ws.send(JSON.stringify(doubaoWebWs.snapshot()));
@@ -9269,6 +9231,10 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
+    if (['getChatProfilesConfig', 'chatProfilesSave', 'chatProfileSwitch', 'switchProfile'].includes(data.type)) {
+        await piProfileConfig.handle(ws, data);
+        return;
+    }
     if (['setDoubaoWebRuntimeConfig','getDoubaoWebTargets'].includes(data.type)) {
         await doubaoWebWs.handle(ws,data);
         return;
@@ -11076,35 +11042,8 @@ async function handleControlMessageFallback(data, ws) {
                             logError('Commands', `执行失败: ${err.message}`);
                         }
                     })();
-                } else if (data.type === 'switchProfile') {
-                    try {
-                        const { name } = data;
-                        if (name && chat.switchProfile(name)) {
-                            const chatCfg = chat.getConfig();
-                            config.set('chat', {
-                                ...chatCfg,
-                                activeProfile: chat.getActiveProfile()
-                            });
-                            ws.send(JSON.stringify({
-                                type: 'profileSwitched',
-                                activeProfile: chat.getActiveProfile(),
-                                config: { apiUrl: chatCfg.apiUrl, model: chatCfg.model }
-                            }));
-                            broadcastToControls({
-                                type: 'profileSwitched',
-                                activeProfile: chat.getActiveProfile(),
-                                config: { apiUrl: chatCfg.apiUrl, model: chatCfg.model }
-                            });
-                        } else {
-                            ws.send(JSON.stringify({
-                                type: 'profileSwitched',
-                                error: `未找到配置: ${name}`
-                            }));
-                        }
-                    } catch (err) {
-                        logError('Profile', `切换失败: ${err.message}`);
-                    }
                 }
+
 }
 
 function getLocalIP() {

@@ -6,6 +6,8 @@
   - 服务code87/依赖10、ORT10/Pi三平台10已发布LAN/WAN；common ZIP113.7→43.6MiB、展开402.1→130.1MiB。min54为89914041bytes/SHA256 `ed8075e671415711da0ad11c103eafa7b6f595c27c1c2b97f030b61a7e19cc14`，同签名/profile校验通过。ADB SM-N9500再次卸载后空目录安装54，确认约60MiB，实际HTTPS code87/deps10健康提交，两个latest目标正确；私人备份保留不入Git，完整full50未改。
   - Pi30/30、依赖106/106、首装63/63、Android254项0失败/1既有环境跳过；真实隔离SDK/provider资源导入成功。design/spec/task/usage/self-test同步，todo移除Pi/min修复完成项，保留真实模型/GPU推理验收。发布快照后的其他TTS修改仍需新服务/min产物，状态保留servicePackage/minApk=true、dependenciesPackage=false。
 
+  - 最终真机Pi预检/取消保持/确认下载提交/恢复默认LLM通过，Android Node26.4.0从独立缓存真实导入SDK及只读工具成功；默认LLM冷启动复用健康环境。min54发布器LAN/WAN全组件HTTP校验及精确清理完成，无清理错误。
+
 ### TTS 语速仅使用原生接口
 
 - ✅ [2026-10-14] WAV 不再本地变速；语速只通过 Provider/模型原生字段或 Android Embedded Speech SSML 设置。

@@ -27,6 +27,8 @@ data class NodeRuntimeManifest(
         private const val REQUIRED_NODE_PATH = "native/arm64-v8a/libaasc_node.so"
         private val SHA256_PATTERN = Regex("^[a-fA-F0-9]{64}$")
         private val UPDATE_ONLY_RUNTIME_LIBRARIES = setOf(
+            // 独立min必须包含Node配套C++库，APK的NDK库不能替代其符号ABI。
+            "libc++_shared.so",
             "libz.so.1",
             "libcares.so",
             "libsqlite3.so",
@@ -72,15 +74,13 @@ data class NodeRuntimeManifest(
             }
             val allowedRuntimeLibraryPaths = parseAllowedRuntimeLibraryPaths(root.optJSONArray("allowedRuntimeLibraryPaths"))
             if (updateOnly) {
-                val expectedPrefix = "runtime/$abi/lib/"
                 require(modelAssets.isEmpty()) { "update-only Runtime 不允许模型资产" }
                 require(allowedRuntimeLibraryPaths.isNotEmpty() && files.map { it.path }.toSet() == allowedRuntimeLibraryPaths) {
                     "update-only Runtime files 必须与动态库允许列表完全一致"
                 }
-                require(files.all { file ->
-                    file.path.startsWith(expectedPrefix) &&
-                        file.path.substringAfterLast('/') in UPDATE_ONLY_RUNTIME_LIBRARIES
-                }) { "update-only Runtime 只能包含指定 Node 动态库" }
+                require(files.all { file -> isAllowedUpdateOnlyLibraryPath(file.path, abi) }) {
+                    "update-only Runtime 只能包含指定 Node 动态库"
+                }
             } else {
                 require(allowedRuntimeLibraryPaths.isEmpty()) {
                     "普通 Runtime manifest 不允许声明 update-only 动态库列表"
@@ -111,6 +111,12 @@ data class NodeRuntimeManifest(
             }
             return paths
         }
+
+        /** 解析和安装共用精确白名单，防止新增合法运行库后两层校验不一致。 */
+        internal fun isAllowedUpdateOnlyLibraryPath(relativePath: String, abi: String): Boolean =
+            abi == REQUIRED_ABI && isSafeRelativePath(relativePath) &&
+                relativePath.startsWith("runtime/$abi/lib/") &&
+                relativePath.substringAfterLast('/') in UPDATE_ONLY_RUNTIME_LIBRARIES
 
         private fun parseFiles(rawFiles: JSONArray?, fieldName: String = "files"): List<NodeRuntimeFile> {
             if (rawFiles == null) {

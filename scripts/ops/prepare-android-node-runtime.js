@@ -20,7 +20,9 @@ const REQUIRED_RUNTIME_LIBRARIES = Object.freeze([
     'libssl.so.3',
     'libicui18n.so.78',
     'libicuuc.so.78',
-    'libicudata.so.78'
+    'libicudata.so.78',
+    // Node依赖Termux配套C++ ABI，不能依赖APK为MNN携带的另一份NDK libc++。
+    'libc++_shared.so'
 ]);
 const REQUIRED_PACKAGE_ENTRIES = [
     'src/apps/server/boot/server-launcher.js',
@@ -860,6 +862,11 @@ async function prepareAndroidNodeRuntime(options = {}) {
         const serverPackageJson = JSON.parse(await fs.promises.readFile(path.join(packageDir, 'package.json'), 'utf8'));
         if (options.profileMetadata?.offline === true && serverPackageJson.optionalDependencies?.['onnxruntime-web']) {
             excludedPrefixes.push(path.join('node_modules', 'onnxruntime-web'));
+        }
+        if (options.profileMetadata?.offline === true) {
+            const lock = JSON.parse(await fs.promises.readFile(path.join(packageDir, 'package-lock.json'), 'utf8'));
+            const { piExclusivePackages } = require('../../src/apps/server/modules/aasc/dependency-closure');
+            for (const key of piExclusivePackages(serverPackageJson, lock)) excludedPrefixes.push(key);
         }
         if (includeOfflineModels) excludedPrefixes.push('res/models');
         if (includeOfflineTasks) excludedPrefixes.push('res/tasks');

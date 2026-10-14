@@ -2117,6 +2117,7 @@ module.exports = {
     pickGlobalChatConfig,
     getProfiles,
     setProfiles,
+    normalizeLlmProfile,
     switchProfile,
     getActiveProfile,
     getProfileByName,
