@@ -683,6 +683,14 @@ class OfflineUpdateManager(
                 }
             })
         }
+
+        /** 整包健康提交复用受限删除器；整个目录含链接时保持，不能跟随链接或部分删除。 */
+        internal fun removeDownloadedVersionDirectory(directory: File): Boolean {
+            if (!Files.isDirectory(directory.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || containsSymbolicLinkOrUnreadablePath(directory)) return false
+            deleteDirectoryWithoutFollowingLinks(directory)
+            return true
+        }
     }
 
     /** 只读取并验签服务清单，供前台显示服务代码/依赖更新提示，不下载更新包。 */
@@ -1521,6 +1529,7 @@ class OfflineUpdateManager(
     }
 
     fun rollbackPendingRelease(root: File): Boolean {
+        if (OfflineFullApkActivation.isPending(root)) return OfflineFullApkActivation.rollbackPending(root)
         val pointer = readReleasePointer(root) ?: return false
         if (!pointer.pendingHealth) return false
         writeJsonAtomically(

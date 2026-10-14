@@ -1593,3 +1593,8 @@ Android单元232/232（0失败/错误/跳过）、打包profile与端口契约16
 
 
 默认映射发布终验：LAN/WAN最终清单字节一致(code85/deps9四组/min47/repair3/seeds85/数据基线3)；全部资源真实HTTP字节/大小/SHA匹配。最终重复核验仅复用已下载且同URL/强ETag/大小的大文件，清单/修复/种子重新请求。严格四类清理白名单本地/远端回归扩充后47/47；旧LAN seed69/WAN seed79已校验恢复，旧v2归档SHA保持。APK归档DEX核查min41不支持分组/累计兼容，min45支持分组，min47支持分组与compatibleDataVersions，三者均具备最低APK门控；设备未升级，min41需直链安装47。
+
+
+## 整包首次启动与旧下载目录清理（2026-10-14）
+
+Android完整单元246/246（新增OfflineFullApkActivationTest14项），test:offline-bootstrap62/62。真实临时目录验证安装身份、full/min/普通分支、强制根服务入口、代码/依赖版本及路径、健康前不删/失败回退、同版本重装/日常热更、中断恢复/并发指针、冻结目录/active与previous保护、未知目录/链接/私人数据/ZIP、额外模型保留及备份不跟随链接。未覆盖安装当前ADB Offline，正式full构建/发布与手机真实健康仍未完成。

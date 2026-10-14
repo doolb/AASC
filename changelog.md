@@ -1,3 +1,14 @@
+### Offline 整包一次性切回内置版本
+
+- ✅ [2026-10-14] 实现整包安装首次启动强制内置服务/依赖，健康后删除旧下载版本目录，后续允许热更新。
+  - 新增OfflineFullApkActivation.kt和14项测试，修改NodeRuntimeInstaller/NodeServerService/OfflineUpdateManager：同版本重装可识别、绕过旧快速复用、指针退役/中断/安装撤销与运行回退、双版本/双路径验证、冻结清理/后续引用保护与重试。私人配置/账号/任务/修复记录/模型缓存及ZIP保留；额外Node模型文件保留，备份不跟随链接。
+  - Android246/246、test:offline-bootstrap62/62；用户已追加授权构建发布新full，候选48(code85/deps9/基线3)，正式产物尚未生成。共享原生变化标minApk=true，servicePackage/dependenciesPackage=false；仅full出包不清除未覆盖的min需求。
+
+### Offline 整包安装版本选择
+
+- ✅ [2026-10-14] 核查整包安装仍保留active-release指针的问题并记录一次性切回方案。
+  - 用户已选整包安装首次启动用内置版本、后续允许热更，并要求删除旧下载代码/依赖目录。拟修改NodeRuntimeInstaller/NodeServerService/OfflineUpdateManager并新增安装身份与健康后清理模块；design/spec/task/todo已更新，具体代码方案待确认，尚未修改原生代码或构建新的完整APK。
+
 ### Chat2API 数据修复 v3 与配套版本发布
 
 - ✅ [2026-10-14] LAN/WAN发布code85、四组deps9、min47及repair3/seeds85，公开默认映射与真实release基线3同步。

@@ -339,14 +339,13 @@ class NodeServerService : Service() {
                 }
                 bootstrapPreview = null
             }
-            val root = NodeRuntimeInstaller(this).ensureInstalled { progress ->
-                sendStatus(
-                    STATUS_INSTALLING,
-                    progress.detail,
-                    progress.phase,
-                    progress.completedBytes,
-                    progress.totalBytes
-                )
+            val root = synchronized(offlineReleaseDirectoryLock) {
+                NodeRuntimeInstaller(this).ensureInstalled { progress ->
+                    sendStatus(STATUS_INSTALLING, progress.detail, progress.phase,
+                        progress.completedBytes, progress.totalBytes)
+                }.also { installed ->
+                    if (offlineMode) OfflineFullApkActivation.resumePending(installed)
+                }
             }
             val updateManager = if (offlineMode) OfflineUpdateManager(this) else null
             if (offlineMode) {
@@ -454,6 +453,11 @@ class NodeServerService : Service() {
             }
         } catch (error: Exception) {
             if (generation != restartGeneration.get()) return
+            if (offlineMode) runCatching {
+                OfflineFullApkActivation.rollbackPending(File(filesDir, "aasc-server"))
+            }.onFailure { rollbackError ->
+                android.util.Log.w("AASC-Node", "整包启动失败后的指针恢复失败", rollbackError)
+            }
             nodeProcess = null
             android.util.Log.e("AASC-Node", "Node launcher 启动失败", error)
             sendStatus(STATUS_FAILED, error.message ?: "未知启动错误")
@@ -483,6 +487,7 @@ class NodeServerService : Service() {
                 val root = NodeRuntimeInstaller(this).ensureInstalled()
                 sendStatus(STATUS_SERVICE_UPDATE_APPLYING, "正在停止当前服务并准备更新")
                 val result = synchronized(offlineReleaseDirectoryLock) {
+                    check(!OfflineFullApkActivation.isPending(root)) { "整包内置服务正在验证，请就绪后再更新" }
                     stopNodeProcess()
                     OfflineUpdateManager(this).applyServerUpdate(root) { progress ->
                         sendStatus(
@@ -545,6 +550,13 @@ class NodeServerService : Service() {
                 synchronized(offlineReleaseDirectoryLock) {
                     if (generation != restartGeneration.get() || serviceUpdateApplying.get()
                         || !releaseResolved.compareAndSet(false, true)) return@synchronized
+                    runCatching { OfflineFullApkActivation.markHealthyAndCleanup(root) }
+                        .onSuccess { result ->
+                            if (result != null) android.util.Log.i("AASC-Node",
+                                "整包内置版本已健康启动，清理旧目录${result.removed}个，待重试${result.errors.size}项")
+                        }.onFailure { error ->
+                            android.util.Log.w("AASC-Node", "整包版本已健康启动，切换记录或目录清理待重试", error)
+                        }
                     if (updateManager.markCurrentReleaseHealthy(root)) {
                         android.util.Log.i("AASC-Node", "Offline 候选服务已通过健康检查并提交")
                     } else {
@@ -651,6 +663,7 @@ class NodeServerService : Service() {
                 status.optString("status") == "ok" && NodeStartupDiagnostics.matchesRuntime(
                     versions.optString("code"), File(versions.optString("codePath")).canonicalPath,
                     expectedVersion, expectedRoot.canonicalPath)
+                    && OfflineFullApkActivation.matchesPendingHealth(root, versions)
             }.getOrDefault(false)
         } catch (_: Exception) {
             return false

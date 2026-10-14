@@ -1,5 +1,14 @@
 # 正式 Android 显示端完整离线 APK
 
+## 整包安装后一次性切回内置服务（2026-10-14，源码已完成）
+
+用户确认仅在安装整包后的首次启动使用APK内置服务和生产依赖，随后仍允许热更新；追加要求删除之前下载的代码和依赖目录。当前NodeRuntimeInstaller迁移整个updates目录，旧active-release.json仍有优先级，因此整包内置版本可能没有实际启动。
+
+方案采用APK安装身份（versionCode、lastUpdateTime及内置Runtime版本）的一次性状态，区分每次整包安装与日常重启；同版本重装也触发，min/普通APK不触发。新整包强制执行内置环境安装与校验，事务切换后退出旧active指针，启动根目录内置服务/根node_modules。保存必要的旧指针与切换状态，健康检查核对内置版本、路径和服务能力，成功后才提交完成状态与删除旧下载版本目录；失败不清理旧目录，并报告/沿用已有回滚能力。后续热更新可以再次创建active指针，不因日常重启被重置。
+
+清理严格限定aasc-server/updates/code/code-v<digits>和updates/dependencies/dependencies-v<digits>普通目录，子项删除不跟随链接，未匹配项保持；不会删除APK根目录源码/node_modules、私人配置/账号、本机模型缓存、任务/results、日志、data-repair或下载ZIP。完整环境换根保留额外下载的Node模型文件，新包自带同路径定义采用APK版本；本次备份清理不跟随链接。用户已追加授权验证后构建并发布新整包；新versionCode高于当前最高47，整包包含code85/deps9/基线3，完整发布不替换服务manifest。具体安装身份、健康提交与中断恢复见新task/spec；已完成原生源码与246项单元验证，整包待构建发布。
+
+
 ## origion 仓库合并（2026-10-14）
 
 独立 min / LLM 外置源码与 `origion/master` 的文档、豆包登录保存和只读列表验证提交合并，双方功能与验收记录保留。项目默认 Git 远端明确为 `origion`；本次未出包，已提交的 minApk/servicePackage 待出包状态不得被远端旧值清除。另一任务未提交的分层依赖和发布状态在工作区继续保留。

@@ -244,6 +244,39 @@ class NodeRuntimeInstaller(
         private fun mapAssetPath(assetPath: String): String {
             return if (assetPath.startsWith("server/")) assetPath.removePrefix("server/") else assetPath
         }
+
+        /** 完整包保留此前额外下载的模型文件；新 APK 自带的同路径定义仍采用当前资产。 */
+        internal fun moveUnbundledModelFiles(sourceRoot: File, targetRoot: File, movedPaths: MutableList<String>) {
+            val models = File(sourceRoot, "res/models")
+            if (!Files.isDirectory(models.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) return
+            Files.walkFileTree(models.toPath(), object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+                override fun visitFile(file: java.nio.file.Path, attributes: java.nio.file.attribute.BasicFileAttributes): java.nio.file.FileVisitResult {
+                    val relative = sourceRoot.toPath().relativize(file).toString()
+                    val target = File(targetRoot, relative)
+                    if (Files.exists(target.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) return java.nio.file.FileVisitResult.CONTINUE
+                    val parent = target.parentFile ?: error("模型文件缺少父目录")
+                    check(parent.isDirectory || parent.mkdirs()) { "无法保留下载模型目录" }
+                    Files.move(file, target.toPath())
+                    movedPaths += relative
+                    return java.nio.file.FileVisitResult.CONTINUE
+                }
+            })
+        }
+
+        /** 只删除本次换根产生的备份，不跟随旧模型或依赖目录中的符号链接。 */
+        internal fun deleteOwnedRuntimeBackup(directory: File) {
+            Files.walkFileTree(directory.toPath(), object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+                override fun visitFile(file: java.nio.file.Path, attributes: java.nio.file.attribute.BasicFileAttributes): java.nio.file.FileVisitResult {
+                    Files.delete(file)
+                    return java.nio.file.FileVisitResult.CONTINUE
+                }
+                override fun postVisitDirectory(path: java.nio.file.Path, error: java.io.IOException?): java.nio.file.FileVisitResult {
+                    if (error != null) throw error
+                    Files.delete(path)
+                    return java.nio.file.FileVisitResult.CONTINUE
+                }
+            })
+        }
     }
 
     fun ensureInstalled(onProgress: ((RuntimeInstallProgress) -> Unit)? = null): File {
@@ -261,7 +294,11 @@ class NodeRuntimeInstaller(
         }
         val runtimeVersion = readRuntimeVersion()
         val runtimeMode = readRuntimeMode()
-        if (runtimeVersion != null && canReuseInstalledRuntime(root, runtimeVersion, runtimeMode)) {
+        val fullInstallation = if (OfflineFullApkActivation.isFullProfile(runtimeMode, false)) {
+            readFullInstallation(runtimeVersion ?: readManifest().version)
+        } else null
+        val activateBundled = fullInstallation?.let { OfflineFullApkActivation.requiresInstallation(root, it) } == true
+        if (!activateBundled && runtimeVersion != null && canReuseInstalledRuntime(root, runtimeVersion, runtimeMode)) {
             onProgress?.invoke(RuntimeInstallProgress("reused", 1L, 1L, "已复用已安装 Runtime"))
             if (runtimeMode == OFFLINE_MODE) markFullOfflineInstall(root)
             android.util.Log.i(
@@ -273,7 +310,7 @@ class NodeRuntimeInstaller(
 
         // 兼容未携带 runtime-version.txt 的旧 APK；只在这个兼容路径解析一次完整 manifest。
         val manifest = readManifest()
-        if (runtimeVersion == null && canReuseInstalledRuntime(root, manifest)) {
+        if (!activateBundled && runtimeVersion == null && canReuseInstalledRuntime(root, manifest)) {
             onProgress?.invoke(RuntimeInstallProgress("reused", 1L, 1L, "已复用已安装 Runtime"))
             if (File(root, OFFLINE_MODEL_METADATA_FILE).isFile) markFullOfflineInstall(root)
             android.util.Log.i(
@@ -296,7 +333,7 @@ class NodeRuntimeInstaller(
                 validateInstalledFilePresence(manifest, staging)
                 android.util.Log.i("AASC-Node", "Runtime 已跳过完整 SHA-256 内容校验")
             }
-            installCodeFiles(root, staging, manifest.version)
+            installCodeFiles(root, staging, manifest.version, fullInstallation?.takeIf { activateBundled })
             onProgress?.invoke(RuntimeInstallProgress("starting_node", 1L, 1L, "Runtime 文件已就绪，正在启动本地服务"))
             if (File(root, OFFLINE_MODEL_METADATA_FILE).isFile) markFullOfflineInstall(root)
             android.util.Log.i(
@@ -431,6 +468,18 @@ class NodeRuntimeInstaller(
         }
     }
 
+    /** 系统安装时间区分同版本重装与日常启动；只在完整 Offline 分支调用。 */
+    private fun readFullInstallation(runtimeVersion: String): OfflineFullApkActivation.Installation {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        val version = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            info.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode
+        }
+        return OfflineFullApkActivation.Installation(version, info.lastUpdateTime, runtimeVersion)
+    }
+
     private fun copyManifestFiles(
         manifest: NodeRuntimeManifest,
         staging: File,
@@ -508,11 +557,14 @@ class NodeRuntimeInstaller(
      * 因此近 1 GB 的 res/models 不再经历 staging 到正式目录的第二次复制。
      * 可变目录在新 Runtime 就位后从 backup 移回，保证升级不会覆盖用户数据。
      */
-    private fun installCodeFiles(root: File, staging: File, runtimeVersion: String) {
+    private fun installCodeFiles(root: File, staging: File, runtimeVersion: String,
+        fullInstallation: OfflineFullApkActivation.Installation? = null) {
         val parent = root.parentFile ?: throw IllegalStateException("Runtime 父目录不存在")
         val backup = File(parent, "$ROOT_NAME$BACKUP_PREFIX${System.currentTimeMillis()}")
         var oldRootMoved = false
         val movedMutableDirectories = mutableListOf<String>()
+        val movedModelFiles = mutableListOf<String>()
+        var activationStarted = false
         try {
             if (root.exists()) {
                 check(root.renameTo(backup)) { "无法暂存旧 Android Node Runtime 目录" }
@@ -522,6 +574,7 @@ class NodeRuntimeInstaller(
             check(staging.renameTo(root)) { "无法将已校验 Runtime 目录切换为正式目录" }
             if (oldRootMoved) {
                 moveMutableDirectories(backup, root, movedPaths = movedMutableDirectories)
+                if (fullInstallation != null) moveUnbundledModelFiles(backup, root, movedModelFiles)
             }
             materializeBundledOpenAiVendor(root)
             materializeBundledPackageManifests(root)
@@ -541,10 +594,31 @@ class NodeRuntimeInstaller(
             marker.parentFile?.mkdirs()
             marker.writeText(runtimeVersion)
 
-            if (oldRootMoved && backup.exists() && !backup.deleteRecursively()) {
-                android.util.Log.w("AASC-Node", "旧 Runtime backup 清理失败: ${backup.absolutePath}")
+            if (fullInstallation != null) {
+                activationStarted = true
+                OfflineFullApkActivation.begin(root, fullInstallation)
+            }
+
+            if (oldRootMoved && backup.exists()) {
+                runCatching { deleteOwnedRuntimeBackup(backup) }.onFailure { error ->
+                    android.util.Log.w("AASC-Node", "旧 Runtime backup 清理失败: ${backup.absolutePath}", error)
+                }
             }
         } catch (error: Exception) {
+            if (activationStarted && fullInstallation != null) {
+                try { OfflineFullApkActivation.cancelInstallation(root, fullInstallation) }
+                catch (restoreError: Exception) { error.addSuppressed(restoreError) }
+            }
+            if (oldRootMoved) {
+                for (relative in movedModelFiles.asReversed()) {
+                    try {
+                        val restored = File(backup, relative)
+                        val parent = restored.parentFile ?: error("模型文件缺少父目录")
+                        check(parent.isDirectory || parent.mkdirs()) { "无法恢复模型目录" }
+                        Files.move(File(root, relative).toPath(), restored.toPath())
+                    } catch (restoreError: Exception) { error.addSuppressed(restoreError) }
+                }
+            }
             // 新目录安装失败时，把已经移入新目录的用户数据移回 backup，再恢复旧 Runtime。
             if (oldRootMoved && movedMutableDirectories.isNotEmpty()) {
                 try {
