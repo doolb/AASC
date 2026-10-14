@@ -1,4 +1,8 @@
-# 豆包网页文字 Chat2API 与网页登录朗读 TTS 设计
+# 豆包网页账号Node文字与朗读 TTS 设计
+
+当前行为以2026-10-15完成段为准；下方注明日期的旧网页桥/候选方案只供历史对照，不属于当前运行实现。
+
+完成：code90/min56/deps10已发布并在手机健康提交，主服务器已重启；正式两端无映射三句WAV均通过，文档与自测已同步。用户稍后补Node登录资料再做真实LLM验收；跨批次账号队列暂缓。发布证据见三个对应task文档。
 
 ## 2026-10-15 分句并发临时降低（用户已选择）
 
@@ -6,13 +10,13 @@
 
 此临时修复只约束同一分句批次；多个独立请求仍可能撞到同账号busy，跨批次排队用户暂缓，不扩大修复声明。对应任务20261015_豆包分句临时串行，服务代码需code90，APK/依赖沿用。
 
-## 2026-10-15 纯Node文字与自动语音账号（实施中）
+## 2026-10-15 纯Node文字与自动语音账号（已完成code90发布）
 
 用户确认doubao-chat像qwen-chat自动识别，并明确要求删除网页兼容分支；实际调用端为192.168.1.39:8081主服务器。普通LLM使用doubao，语音使用doubao-chat；文字彻底去除Chrome传输、专用网页运行配置及控制端入口。缺Node资料的旧账号明确提示正常重新登录，不读旧开关或退回页面；官网登录采集和通用账号外部网页职责保持。
 
 语音模型已有内置Provider绑定，仅移除speech-service额外的强制映射门槛，复用现有可用账号/策略选择；显式账号严格限定，不把失败当成换号或重发机会。TTS只需要该账号Cookie，无须普通文字Node资料。已补自动选择/边界/无网页分支测试，Chat2API246/246；兼容豆包旧todayLimit与通用dailyLimit，保持秘密白名单和现有配额流程。发布code89并重启主服务器，min56与依赖10沿用。
 
-## 2026-10-14 Node账号采集与TTS修复（用户已确认，实施中）
+## 2026-10-14 Node账号采集与TTS修复（已完成min56/code90发布）
 
 用户已选择同时修复。Android正常隔离登录时只采集同官网两项已知localStorage中的web_id、当前navigator.userAgent及同一Cookie的fp，组装既有nodeProfile；新登录必须取得完整资料才自动/手动完成，缺失可等待或取消。资料只由现有登录回调传到已有账号规范化保存流程，不新增配置接口、脚本下载或设备ID生成。文字推理沿用Node协议；旧账号无profile且未明确开启旧版兼容时返回补全提示，不建议网页聊天。TTS接受0/20000000成功，保持真错误拒绝和现有状态机/超时/取消/解码。
 
@@ -20,13 +24,13 @@
 
 实现与测试已通过：新增纯采集器与嵌套回调，复用现有服务端账号规范化保存，旧账号返回补全错误；Android271项零失败、Chat2API254/254、音频34/34。真实语音进一步暴露Offline分目录Worker的ESM加载问题，已先复现再改为require.resolve定位加绝对文件URL导入；不新增依赖。修改后Android真实短句WAV163652bytes、48kHz、1704.25ms、非静音；当前进入code88/min56构建发布及正式路径复验。
 
-## Offline保存账号真实测试（2026-10-14，发现问题，修复待确认）
+## Offline保存账号修复前定位（2026-10-14，历史记录）
 
 用户明确授权测试当前Offline APK豆包账号的LLM与网页TTS。在min55/code87/deps10、Android Node26.4.0、同一启用Cookie-only账号下，LLM正式CoreAdapter返回503/doubao_browser_disabled，未向官方发推理；缺少Node初始化资料且网页环境未启用。TTS使用正式SpeechService的仅内存账号绑定，返回502/doubao_speech_upstream，无音频；账号与长期业务配置不变。
 
 用户随后要求Node直连，不需要网页聊天。直接调用当前code87适配器且不注入browserTransport，Android Node实际发出短句请求：448ms，HTTP200/text-event-stream，但SSE业务结果为doubao_risk_control，映射403，无有效文字。仅表明Cookie-only直连仍遭业务风控，不能把HTTP200当成功或断言完整Node协议不可用；未打开官网网页，也未自动重试。候选方案是在正常账号登录时补齐并保存既有nodeProfile，让聊天复用已验证Node协议，旧账号缺资料明确提示补全；不伪造设备身份或换账号。原生采集若实施会同时影响min与服务包，当前尚待方案确认。
 
-只记录事件名/数值码的真实WS诊断显示连接open、VoiceGenie TaskStarted/status=20000000；适配器现有非零状态判断误将其归为失败，尚未发StartSession。候选TTS修复仅在speech-adapter和测试中接受实际成功码20000000、兼容无状态码/0，真正错误仍拒绝，更新全链路夹具并用同一账号复验；单独TTS修复只影响服务代码包。当前尚未修改生产代码。任务：`docs/task/20261014_Offline豆包网页LLM与TTS真实测试.md`。
+只记录事件名/数值码的真实WS诊断显示连接open、VoiceGenie TaskStarted/status=20000000；适配器现有非零状态判断误将其归为失败，尚未发StartSession。候选TTS修复仅在speech-adapter和测试中接受实际成功码20000000、兼容无状态码/0，真正错误仍拒绝，更新全链路夹具并用同一账号复验；单独TTS修复只影响服务代码包。该定位阶段尚未修改生产代码，后续已完成修复。任务：`docs/task/20261014_Offline豆包网页LLM与TTS真实测试.md`。
 
 
 ## 2026-10-13 豆包纯Node会话复用完成（普通模式）
@@ -45,7 +49,7 @@
 
 用户扩大授权后完成控制变量验证：完整官网请求、去a_bogus请求、Node自行构造的新会话及参考SDK桌面profile均正常返回。进一步仅保留五类Cookie及同账号device/web/fp/UA资料，断开CDP后由Node自行构造query/body，正式Provider工厂和CoreAdapter的流式、非流式均实际回复OK并正常结束；不使用页面fetch或签名。
 
-新增账号级可选nodeProfile明确选择Node传输，固定官方网页profile与来源；旧Cookie-only账号仍走既有受控网页模式。无显式账号映射时只在Node候选池调度；显式账号不可用时拒绝，不发送后换号/切传输。公开摘要剔除整块profile，格式校验不等于登录成功。请求容量、取消、SSE正文/思考边界保持原契约。本轮未保存真实凭据、未重启主服务、未出包；普通模式已真实验证，think/expert、长期令牌维护、Android/Linux仍待验收。使用资料见[纯Node普通LLM](../usage/chat2api-doubao-node.md)。
+新增账号级nodeProfile承载Node资料，固定官方协议与来源；2026-10-15起Cookie-only文字提示补全，受控网页模式已删除。无显式账号映射时只在Node候选池调度；显式账号不可用时拒绝，不发送后换号/切传输。公开摘要剔除整块profile，格式校验不等于登录成功。请求容量、取消、SSE正文/思考边界保持原契约。本轮未保存真实凭据、未重启主服务、未出包；普通模式已真实验证，think/expert、长期令牌维护、Android/Linux仍待验收。使用资料见[纯Node普通LLM](../usage/chat2api-doubao-node.md)。
 
 ## 2026-10-13 早期缺完整profile的Node诊断失败（历史）
 
@@ -198,7 +202,7 @@ MMD、其它多模态、真实配置/凭据和Android原生代码不属于上述
 
 本地播放补充：`node --test tests/tts-provider-doubao-playback.test.js tests/display-mmd-tts-actions.test.js tests/agent-chat-tts.test.js` 22/22通过。使用本地构造Opus包经真实worker解码、现有内存缓存及隔离HTTP，GET/HEAD/Range/416、Chromium Audio实际播放/ended/停止/下一句和DisplayLipSyncAudio来源清理均验证；无上游请求或账号音频。实际MMD模型、Android及其它设备音频仍未验收。
 
-## 普通LLM网页fetch实施结果（2026-10-12）
+## 普通LLM网页fetch历史实现（2026-10-12；2026-10-15已删除）
 
 用户已单独确认实施，新增chat2api-doubao-web-config.js、browser-bridge.js、web-ws.js及对应测试；修改文字适配器/factory/runtime/core注入，沿用已有SSE、HTTP取消和Responses历史重放。固定doubao/think/expert别名不能通过冲突Provider映射发往其它上游；对doubaochat严格requiredAccountId，不换号/Node回退。生产Runtime默认读主服务权威doubaoWebRuntime，构造与保存不连接Chrome。
 

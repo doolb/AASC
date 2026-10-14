@@ -1,4 +1,6 @@
-# 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
+# 豆包网页账号Node文字与朗读 TTS 实现伪代码
+
+当前约束以2026-10-15文首伪代码为准；注明历史的旧网页运行协议已删除，不属于当前实现。
 
 ## 2026-10-15 用户选择临时降低豆包分句并发
 
@@ -47,8 +49,8 @@ Android捕获 := 已有隔离登录WebView；只读两项官网localStorage及na
 完成条件 := Cookie与profile全部有效 → 单次返回；未齐全→提示Node资料未就绪/可等待或取消
 回调载荷 := 内部Map.nodeProfile是JSON串 → Activity转换为嵌套JSONObject → 既有登录API
 服务保存 := 已有normalizeDoubaoCredentials验证嵌套profile/fp → 私有账号存储；公共摘要继续脱敏
-旧账号文字 := 网页兼容模式未显式启用且无profile → 422/doubao_node_profile_required/提示重新登录补全
-已有profile := 既有Node协议 → 不访问网页运行配置；显式旧兼容模式沿用绑定
+旧账号文字 := 无profile → 422/doubao_node_profile_required/提示重新登录补全
+已有profile := 既有Node协议 → 不访问网页运行配置；网页兼容模式已删除
 TTS状态 := 0或20000000允许继续；401/403/429映射原固定错误，其他非零拒绝
 TTS生命周期 := 原Task/Session/句子/结束状态机、身份/容量/超时/取消/解码与无重试保持
 Offline解码 := 代码与依赖分目录，worker内裸ESM import不使用NODE_PATH → 模拟分目录复现
@@ -58,7 +60,7 @@ Offline解码 := 代码与依赖分目录，worker内裸ESM import不使用NODE_
 验收 := 正式账号保存profile/摘要脱敏/缺字段不完成 + Node不调用浏览器 + 实际状态全链路WAV + 真机短句
 ```
 
-## Offline真实测试与候选状态码修复（2026-10-14，未实施）
+## Offline修复前真实定位（2026-10-14，历史记录）
 
 ```text
 实际环境 := min55/code87/deps10 + 保存Cookie-only账号 + 正式Core/SpeechService
@@ -115,7 +117,7 @@ TTS当前 := 官方WS open → TaskStarted/status=20000000 → 非零状态被�
   只有实际原生continue才标记uncertain；Pi snapshot发起的新上游失败不误伤旧会话
   uncertain写入失败时当前实例以有界禁用集合阻断续接，容量满则保守阻断豆包原生continue；固定存储错误不泄露路径
   外层Pi snapshot明确重建上游状态，delta续接；新模板/模型/系统提示沿现有LLM指纹开新外层会话
-  未传会话引用的chat/completions继续无状态；Cookie-only网页模式沿旧历史重放，不从Node复用能力推定可用
+  未传会话引用的chat/completions继续无状态；Cookie-only文字拒绝并提示补齐，不从Node复用能力推定可用
 验收边界：
   新增20项模拟自测通过；Chat2API201/204，同3项既有Windows chmod；普通LLM/Core/Responses24/24、旧TTS19/19
   独立审查无Important/Critical；过时注释修正，排队后重置时限先RED再GREEN修复 // 无新真实请求、无主服务操作
@@ -132,9 +134,9 @@ TTS当前 := 官方WS open → TaskStarted/status=20000000 → 非零状态被�
   审查修正：Secret.sanitizeSecrets剔除整个nodeProfile及msToken，所有预览/列表/配置导出均不得泄露身份资料
   DataStore.listDoubaoNodeAccountIds只在内部读取账号集合，返回启用且active的Node账号ID // 不新增秘密HTTP接口
   Core无显式账号映射时优先Node账号候选池；LoadBalancer.allowedAccountIds在调度前筛选，仍保留Provider/额度检查
-  显式账号映射则使用requiredAccountId，不在不可用时退选；无Node池时继续既有网页绑定流程 // 无发送后重试/换传输
+  显式账号映射则使用requiredAccountId，不在不可用时退选；无Node资料则提示重新登录补齐 // 无发送后重试/换传输
   Credentials { cookie, nodeProfile?: { deviceId, webId, fp, userAgent, pcVersion?: '3.41.0', msToken?: string } }
-  nodeProfile存在表示该账号显式使用node-http；不存在继续既有受控网页模式 // 不自动换传输或账号
+  nodeProfile存在表示该账号显式使用node-http；不存在拒绝文字并提示补齐 // 不自动换传输或账号
   normalizeNodeProfile只接受规定字段、十进制设备ID、安全fp/UA/version/token；返回规范副本
   normalizeCredentials仍校验原六类Cookie，nodeProfile.fp必须等于同账号s_v_web_id // Cookie-only旧包不扩展权限
   NodeProtocol使用固定https://www.doubao.com/chat/completion及官方网页profile aid=497858
@@ -143,9 +145,9 @@ TTS当前 := 官方WS open → TaskStarted/status=20000000 → 非零状态被�
   请求body采用已验证的新会话字段：last_message_index=0、text block is_finish/patch_type、create_time_ms=0
   设置support_chunk_delta=true、chat_ability={}、ext.fp与use_submit_pipeline=1；tts_switch=false
   文字历史继续由调用方重放，mode=0/1/3仍沿原别名；原生续聊与think/expert真实能力不扩大声明
-  适配器按账号profile选Node；否则使用注入browserTransport；Node失败不fallback、不自动重试
+  适配器只使用Node；无profile不发送；Node失败不fallback、不自动重试
   最终URL必须严格等于本次构造URL，禁止跳转或Provider覆写，保留120秒/8MiB/取消/固定脱敏错误
-  Core先读取初选账号的秘密；nodeProfile账号走Node且显式账号映射必须一致，其它账号仍按现有网页绑定严格选取
+  Core先读取初选账号的秘密；nodeProfile账号走Node且显式账号映射必须一致，缺profile账号提示补齐，不读取网页开关
   模拟测试覆盖profile导入校验、传输隔离、错误/跳转/取消、模式与现有Provider/网页/TTS回归
   当前诊断只读所选页Cookie/storage后断CDP，Node自行构造新会话：流式及非流式均实际回复OK且正常结束
   正式实现后再用同一内存资料验证正式适配器；本轮不保存真实凭据或改真实服务配置
@@ -341,7 +343,7 @@ TTS当前 := 官方WS open → TaskStarted/status=20000000 → 非零状态被�
   优先 npm run check:chat2api；其余使用既有TTS定向测试脚本 // 不自动重启用户服务器
 ```
 
-## 受控网页文字模式（已离线实现）与音频方案比较（B已实施）
+## 历史：受控网页文字模式（2026-10-15已删除）与旧音频方案比较
 
 > 用户已确认实施文字网页fetch；以下新增实现约束先于运行代码更新。本轮仅离线验证，真实绑定/聊天和凭据读取仍未授权。
 

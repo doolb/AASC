@@ -2,7 +2,7 @@
 
 ## 豆包网页账号TTS自动选择与临时并发（2026-10-15）
 
-用户确认doubao-chat像qwen-chat自动选择已登录doubaochat账号，不必手动映射；显式账号严格限定，只有Cookie也能合成。真实VoiceGenie状态20000000已支持，并修复Offline分目录Worker解码加载。用户面对多句busy选择临时降低分句并发，不实施账号队列；调度按权威业务/模板解析真实Provider，豆包网页TTS同批次单路，其余Provider保持已有规则及句序，多个请求批次同账号仍可能busy。对应chat2api-doubao-web spec及20261015_豆包分句临时串行任务，服务代码需发布，min56/依赖10沿用。
+用户确认doubao-chat像qwen-chat自动选择已登录doubaochat账号，不必手动映射；显式账号严格限定，只有Cookie也能合成。真实VoiceGenie状态20000000已支持，并修复Offline分目录Worker解码加载。用户面对多句busy选择临时降低分句并发，不实施账号队列；调度按权威业务/模板解析真实Provider，豆包网页TTS同批次单路，其余Provider保持已有规则及句序，多个请求批次同账号仍可能busy。对应chat2api-doubao-web spec及20261015_豆包分句临时串行任务，最终code90/min56/依赖10已发布，主服务器重启，正式两端三句合成通过；跨批次排队仍暂缓。
 
 ## Provider 原生语速与全局音量入口（2026-10-14，需求修正）
 

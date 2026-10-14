@@ -1,8 +1,17 @@
+### 豆包修复最终发布与验证
+
+- ✅ [2026-10-15] 主服务器和ADB Offline已加载纯Node/自动语音账号/临时分句单路修复，正式三句TTS通过。
+  - `192.168.1.39:8081`通过npm restart:server加载当前源码并健康；无手动映射、无内存映射覆盖，正式SpeechService三句WAV71204/127772/107996bytes，48kHz/非静音，主服务6009ms、Android3743ms，无播放。LLM模型doubao，TTS模型doubao-chat；当前文字账号Node资料用户选择稍后补齐，未宣称LLM成功。
+  - min56：89930725bytes/SHA256 `3721749c9e5280202d413a5b38e419dd66260aad19a37f3826003060b1e50068`，签名/profile/CRC通过；code90：17771622bytes/SHA256 `bf80b1dd1a3f8a7af3bc0f5c549082f5cfc87d4374a60383645d23e3fdfdaf0a`，与当前1082项生产源码一致，源码提交2068fbf5。code89仅中间生成未发布，未构建完整APK。
+  - 按顺序预上传已验证版本文件→原子切换最终清单→LAN全组件HTTP摘要；WAN在资源服务器HTTP loopback加公网Host完整核对12项共337164095bytes，公网清单签名/12项HEAD通过。跨网重复读取较慢的校验已停止，未回滚；原发布模块精确清理LAN/WAN零错误，保留deps10/repair3/seeds86/full50。
+  - ADB覆盖安装保留账号/模型，原生入口提交code90/deps10且pendingHealth=false，HTTPS健康；TTS/ASR引擎ready100/error空、三模型filesReady=true。未重新清空56首装，XML和19223转发清理，原19222保留；模型/APK/ZIP/cache与凭据不入Git。
+  - 最终自测：Chat2API246/246、音频34/34、原生271项零失败/1既有跳过、新采集6项通过、首装63/63、分句20/20与定向15/15。todo仅保留用户稍后登录的真实LLM验收及暂缓跨批次队列；design/spec/task/self-test/changelog同步，三个出包状态均false。
+
 ### 豆包多句TTS临时并发调整
 
 - ✅ [2026-10-15] 按用户选择将豆包网页TTS同一分句批次限制为串行，保留Qwen/原生规则。
   - busy来自本地适配器Set，不是本次观察到的官网并发拒绝；`server-app.js`调度入口按权威业务/模板解析有效Provider，普通AI/Agent/手动回复/修复模式传同样上下文，仅doubao-chat并发1。
-  - 真实入口/有序调度测试验证豆包maxActive1、Qwen/原生显示槽位2、三句有序交付；分句20/20、Agent/调度/Provider15/15，JS语法通过。跨批次账号队列用户暂缓，仍保留busy边界；进入code90/min56最终发布及实际合成复验。
+  - 真实入口/有序调度测试验证豆包maxActive1、Qwen/原生显示槽位2、三句有序交付；分句20/20、Agent/调度/Provider15/15，JS语法通过。跨批次账号队列用户暂缓，仍保留busy边界；code90/min56已完成发布与两端正式三句合成，详见下项最终验证。
 
 ### 豆包纯Node与语音自动账号
 

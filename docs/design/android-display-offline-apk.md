@@ -1,8 +1,8 @@
 # 正式 Android 显示端完整离线 APK
 
-## 豆包登录Node资料采集（2026-10-14，已实现，待min56发布）
+## 豆包登录Node资料采集（已实现并发布min56/code90）
 
-正常隔离登录WebView读取固定官网设备/web资料与当前UA，使用同批Cookie fp组装既有nodeProfile，资料完整后才完成账号回调。Activity将profile由内部字符串转换为嵌套JSON，既有服务账号校验/保存流程持久化；聊天请求无需网页。新增纯采集器6项测试及原生271项零失败/1既有环境跳过。account-web只读模式保持不提交账号，旧账号需正常重新登录补全；不自动生成设备身份。代码/spec/self-test对应chat2api-doubao-web，min56出包和正式真机结果后续记录。
+正常隔离登录WebView读取固定官网设备/web资料与当前UA，使用同批Cookie fp组装既有nodeProfile，资料完整后才完成账号回调。Activity将profile由内部字符串转换为嵌套JSON，既有服务账号校验/保存流程持久化；聊天请求无需网页。新增纯采集器6项测试及原生271项零失败/1既有环境跳过。account-web只读模式保持不提交账号，旧账号需正常重新登录补全；不自动生成设备身份。代码/spec/self-test对应chat2api-doubao-web，min56覆盖安装/code90正式TTS三句WAV及模型保留验证通过；当前账号实际网页登录采集/文字回复待用户稍后登录。
 
 ## min 首次语音模型提示与ASR/声纹分组（2026-10-14，已实现并发布min55）
 

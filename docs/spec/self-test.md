@@ -20,7 +20,7 @@
 模板改qwen-chat/system且显示槽位2 → maxActive=2；每组三句按原句序交付
 手动回复/AI/Agent/修复路径传递对应business/template；原句子上下文/取消/播放目标回归
 test:mmd-production:tts 20/20；Agent/有序调度/Provider定向15/15；server-app语法通过
-边界 := 没有新增跨批次队列；不同请求仍保留同账号busy；主服务/实际WAV复验后续记录
+边界 := 没有新增跨批次队列；不同请求仍保留同账号busy；主服务与Android正式三句WAV均48kHz/非静音/有序，6009ms/3743ms
 ```
 
 ## 豆包纯Node/语音自动账号自测（2026-10-15）
@@ -31,7 +31,7 @@ Chat2API := 246/246；纯Node请求/SSE/Responses/HTTP断连/账号保存与摘�
 自动语音 := 无映射单/多账号轮询、排除停用/配额、权威凭据更新、删除后提示登录、失败仅发一次
 显式语音 := 指定账号停用则报错，不退选其他账号；Cookie即可、不强制文字profile
 配额 := dailyLimit及旧todayLimit均有效；旧脚本/设置/广播/消息路由全部移除，JS语法检查通过
-正式验收 := code89发布/主服务器重启与APK当前账号无映射实际WAV后续追加
+正式验收 := 最终code90/min56/deps10发布；主服务重启与APK当前账号无映射三句实际WAV均通过
 ```
 
 ## Offline豆包网页账号真实测试（2026-10-14）
@@ -42,7 +42,7 @@ Chat2API := 246/246；纯Node请求/SSE/Responses/HTTP断连/账号保存与摘�
 保存链路 := 正式OAuth+凭据校验+账号Store→有效profile保存→公共列表脱敏；JSON串形式拒绝且state仍可重试
 Offline解码回归 := 临时代码目录没有node_modules、NODE_PATH指向独立依赖→旧实现失败TTS_OPUS_INVALID→绝对入口导入通过真实WASM
 Android短句 := 同真实账号 + 修改后适配器/Worker临时内存加载 → Task到TTSEnded完整 → WAV163652bytes/48000Hz/1704.25ms/非静音
-待正式验收 := 安装新包正式路径复验；当前账号缺profile，不能伪造设备身份宣称LLM通过
+正式验收 := 新包正式SpeechService三句WAV通过；当前账号缺profile，用户稍后补资料，LLM未宣称通过
 ```
 
 ```text
