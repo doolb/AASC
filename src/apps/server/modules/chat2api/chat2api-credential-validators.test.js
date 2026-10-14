@@ -41,16 +41,17 @@ test('缺少 Provider 凭据时验证器不发起外部请求', async () => {
   assert.equal(requestCount, 0);
 });
 
-test('豆包添加严格校验格式并标记未远端验证，不发网', async () => {
+test('豆包添加严格校验格式，远端未知响应仍允许保存未验证账号', async () => {
   let requests = 0;
   const validators = createChat2ApiCredentialValidators({ httpClient: { request: async () => { requests += 1; return { status: 200 }; } } });
   const cookie = 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789';
   const provider = BUILTIN_PROVIDERS.find((item) => item.id === 'doubaochat');
   const result = await validators.doubaochat.validate({ cookie }, provider);
   assert.equal(result.valid, true);
-  assert.deepEqual(result.accountInfo, { credentialVerification: 'format-only' });
+  assert.equal(result.accountInfo.credentialVerification, 'format-only');
+  assert.equal(result.accountInfo.credentialVerificationStatus, 'failed');
   assert.deepEqual(result.credentials, { cookie });
-  assert.equal(requests, 0);
+  assert.equal(requests, 1);
   for (const credentials of [{ cookie: `${cookie}\r\nmalicious=x` }, { ticket: 'qwen-ticket' }, { cookie, token: 'secret' }]) {
     const failed = await validators.doubaochat.validate(credentials, provider);
     assert.equal(failed.valid, false);
@@ -59,6 +60,7 @@ test('豆包添加严格校验格式并标记未远端验证，不发网', async
   const wrongOrigin = await validators.doubaochat.validate({ cookie }, { ...provider, apiEndpoint: 'https://attacker.test' });
   assert.equal(wrongOrigin.valid, false);
   assert.match(wrongOrigin.error, /固定官方 HTTPS 来源/u);
+  assert.equal(requests, 1);
 });
 
 test('豆包手动添加允许保存本地格式合法账号并保留未验证标记', async () => {

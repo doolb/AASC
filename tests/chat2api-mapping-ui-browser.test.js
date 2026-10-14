@@ -5,6 +5,66 @@ const fs = require('node:fs');
 const path = require('node:path');
 const puppeteer = require('puppeteer');
 
+test('豆包Android完成后账号可见并能点击复验，独立Chromium仅使用虚构接口', { timeout: 45000 }, async () => {
+    const executablePath = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath()].find(file => file && fs.existsSync(file));
+    assert.ok(executablePath);
+    const temporaryDir = fs.mkdtempSync(path.join(path.resolve(__dirname, '..'), '.tmp-chat2api-login-'));
+    let browser;
+    try {
+        browser = await puppeteer.launch({ executablePath, headless: true, userDataDir: path.join(temporaryDir, 'profile'), args: ['--no-sandbox'] });
+        const page = await browser.newPage();
+        await page.setContent('<html><body></body></html>');
+        await page.evaluate(() => {
+            window.savedAccounts = [];
+            window.completeCalls = 0;
+            window.verifyCalls = 0;
+            window.fetch = async (url, options = {}) => {
+                const endpoint = new URL(url).pathname;
+                const provider = { id: 'doubaochat', publicId: 'doubao', credentialFields: [{ name: 'cookie', type: 'textarea' }] };
+                let body;
+                if (endpoint === '/api/chat2api/oauth/complete') {
+                    window.completeCalls++;
+                    const input = JSON.parse(options.body);
+                    if (input.credentials.cookie !== 'fictional-cookie') throw new Error('原生凭据未传递');
+                    const account = { accountId: 'fictional-account', providerId: 'doubaochat', label: '测试豆包', accountInfo: { credentialVerification: 'format-only', credentialVerificationStatus: 'failed', credentialVerificationError: 'risk' } };
+                    window.savedAccounts.push(account);
+                    body = { account };
+                } else if (endpoint === '/api/chat2api/accounts/fictional-account/verify') {
+                    window.verifyCalls++;
+                    window.savedAccounts[0].accountInfo = { credentialVerification: 'conversation-list' };
+                    body = { account: window.savedAccounts[0] };
+                } else {
+                    const values = { '/api/chat2api/config': {}, '/api/chat2api/providers': [provider], '/api/chat2api/accounts': window.savedAccounts,
+                        '/api/chat2api/api-keys': [], '/api/chat2api/model-mappings': [] };
+                    if (!Object.hasOwn(values, endpoint)) throw new Error('意外请求');
+                    body = values[endpoint];
+                }
+                return { ok: true, json: async () => body };
+            };
+        });
+        await page.addScriptTag({ content: fs.readFileSync(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/chat2api.js'), 'utf8') });
+        await page.evaluate(async () => {
+            const control = window.Chat2APIControl;
+            await control.open();
+            control.loginSession = { state: 'fictional-state', providerId: 'doubaochat' };
+            await control.completeNativeLogin({ success: true, state: 'fictional-state', providerId: 'doubaochat', credentials: { cookie: 'fictional-cookie' } });
+        });
+        assert.equal(await page.evaluate(() => window.completeCalls), 1);
+        assert.match(await page.$eval('#chat2apiAccounts', node => node.textContent), /测试豆包.*未远端验证/);
+        assert.match(await page.$eval('#chat2apiMessage', node => node.textContent), /账号已保存.*接口拒绝访问/);
+        await page.click('[data-chat2api-account-verify="fictional-account"]');
+        await page.waitForFunction(() => document.querySelector('#chat2apiMessage').textContent.includes('会话列表访问已验证'));
+        assert.equal(await page.evaluate(() => window.verifyCalls), 1);
+        assert.match(await page.$eval('#chat2apiAccounts', node => node.textContent), /会话列表已验证/);
+    } finally {
+        if (browser) await browser.close();
+        const root = path.resolve(__dirname, '..');
+        assert.ok(path.resolve(temporaryDir).startsWith(root + path.sep));
+        assert.ok(path.basename(temporaryDir).startsWith('.tmp-chat2api-login-'));
+        fs.rmSync(temporaryDir, { recursive: true, force: true });
+    }
+});
+
 test('模型映射编辑保存保留 TTS 默认值、账号偏好和旧文字映射', { timeout: 45000 }, async () => {
     const executablePath = [process.env.PUPPETEER_EXECUTABLE_PATH, puppeteer.executablePath()].find(file => file && fs.existsSync(file));
     assert.ok(executablePath, '浏览器验证需要可用 Chromium');

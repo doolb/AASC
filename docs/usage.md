@@ -31,13 +31,11 @@ YOLO、ASR和声纹模型的外网目录、上传/下载同步命令及正式包
 
 MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件规则见[帧率与耗时](usage/mmd-performance.md)，源码与独立WEB构建已完成，正式发布状态见changelog。
 
-Virt-A-Mate文件类型说明见[VaM 1.x资源格式](usage/vam-resource-formats.md)，列出资源包、场景、预设、Morph、衣服/头发、Unity资源和插件；这是格式参考，mmd-ar导入尚未实现。
-
 ## 豆包普通LLM纯Node（2026-10-13已真实验证）
 
 `doubaochat`账号在凭证包中提供同账号`credentials.cookie`和`credentials.nodeProfile`后，普通LLM直接通过Node调用豆包官网，不需要运行Chrome、9222或页面fetch/签名。正式Provider工厂和CoreAdapter在断开CDP后，流式/非流式均实际收到`OK`并正常结束。本轮只在内存初始化真实资料，未保存到账号库，未重启主服务；部署及一次性资料导入说明见[豆包纯Node普通LLM](usage/chat2api-doubao-node.md)。
 
-普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。普通Node模式通过`/v1/responses`保存引用、复用同账号上游会话并仅发送新增输入；两轮纯Node协议记忆验证通过。选择已有`openai-responses`协议即可由普通LLM自动保存引用；无引用chat/completions仍重放历史。`doubao-think`/`doubao-expert`及Cookie-only网页原生复用待验，工具/多模态不承诺。profile导入及手动/Android捕获添加均只校验格式，显示已配置、未远端验证；请求会话列表校验先记录待办；登录过期由用户更新，不自动处理验证码或重发。
+普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。普通Node模式通过`/v1/responses`保存引用、复用同账号上游会话并仅发送新增输入；两轮纯Node协议记忆验证通过。选择已有`openai-responses`协议即可由普通LLM自动保存引用；无引用chat/completions仍重放历史。`doubao-think`/`doubao-expert`及Cookie-only网页原生复用待验，工具/多模态不承诺。profile导入只校验格式并重置验证；手动/Android添加尝试一次只读列表验证，失败仍保存未验证账号，已有账号可显式复验；会话列表访问验证不代表聊天/TTS通过；登录过期由用户更新，不自动处理验证码或重发。
 
 Cookie-only旧账号继续“豆包普通LLM · 网页模式”：默认关闭，通过现有权威配置显式选择账号、官方target/context并授权会话核对，保存不会连接Chrome。该项目bridge真实官网仍待单独验收；原标签UI成功不能替代它。早期缺完整profile的Node403/718013001失败已保留在设计历史，不能继续认定独立Node不可用。Android/Linux及长期令牌维持尚未真实验证，语音格式仍走Frontier/WAV。
 
@@ -45,15 +43,16 @@ Cookie-only旧账号继续“豆包普通LLM · 网页模式”：默认关闭�
 
 ## TTS 多 Provider 配置（已实现，账号/设备待验收）
 
-在「声纹 → 语音服务与音色」分别配置 AI / Agent、文本阅读和系统播报；聊天模板可继承 AI 默认或单独指定服务。支持系统原生、国内千问网页、Qwen API、豆包 API，凭证留空保留且只回传配置状态。三个服务默认开启，国内千问使用Chat2API国内账号、直接调用接口，无需Chrome；Qwen API默认Qwen-Audio 3.1/乔小娇，豆包2.0自动读取对应上一句用户对话。操作与当前限制见 [语音服务与音色](usage/tts-providers.md)。
+在「声纹 → 语音服务与音色」分别配置 AI / Agent、文本阅读和系统播报；聊天模板可继承 AI 默认或单独指定服务。支持系统原生、国内千问网页、Qwen API、豆包 API，以及默认关闭的豆包网页朗读实验选项（仅AI/Agent），凭证留空保留且只回传配置状态。三个服务默认开启，国内千问使用Chat2API国内账号、直接调用接口，无需Chrome；Qwen API默认Qwen-Audio 3.1/乔小娇，豆包2.0自动读取对应上一句用户对话。操作与当前限制见 [语音服务与音色](usage/tts-providers.md)。
 
 ## 独立MMD-AR统一灯光预设（本地构建，2026-10-11）
 
 「灯光 → 灯光预设」统一提供保存、覆盖、删除及JSON导入导出，保存整个灯光面板（含抗锯齿/Canvas倍率）。列表增加可选“傍晚”，首次补入后保留用户的修改/删除结果。分类可折叠，刷新保留预设；导入后手动选择应用。首次缺省及「恢复默认」采用用户文件中的完整“日光”配置，已有保存值优先。详见[灯光预设使用说明](usage/mmd-ar-lighting-presets.md)。
 
+
 ## 独立MMD-AR Human 生理与后天行为（本地构建，2026-10-10）
 
-打开「动作 → Human 生理与后天行为」，可配置呼吸/眨眼，登记VMD或MPL行为、组合表情及事件反射；MPL支持覆写/增量和行为新版本，原VMD持续运行。动作库按模型保存在浏览器，并支持导出/导入。操作与API见[Human使用说明](usage/mmd-human-interface.md)。该说明同时列出VRM与PMX表情、动作及物理的兼容边界。当前已生成web-dist，尚未发布外网。
+打开「动作 → Human 生理与后天行为」，可配置呼吸/眨眼，登记VMD或MPL行为、组合表情及事件反射；MPL支持覆写/增量和行为新版本，原VMD持续运行。动作库按模型保存在浏览器，并支持导出/导入。操作与API见[Human使用说明](usage/mmd-human-interface.md)。当前已生成web-dist，尚未发布外网。
 
 ## 独立MMD-AR AI回复与高级动作（本地构建，2026-10-10）
 
@@ -497,8 +496,6 @@ adb install -r 3rd/tts-server/android-asr/app/build/outputs/apk/debug/app-debug.
 ```
 
 当前测试 APK 暂时只内置 `ERes2Net-base FP32` 声纹模型和多人分段所需的 Pyannote 模型，不包含 large、V2 或 INT8 声纹 embedding 模型。
-
-模型Git状态（2026-10-12核查）：当前本地Debug APK内置7个ONNX文件。Zipformer的encoder/decoder/joiner、ERes2Net-base FP32、Pyannote分段及GTCRN降噪共6个模型已在Git中；SenseVoice主模型`res/models/sensevoice/model.int8.onnx`为239,233,841字节，尚未提交并由`.gitignore`明确忽略，但词表及SHA-256校验文件已提交。因此新检出源码后需另行准备该SenseVoice文件，才能完整打包测试APK。本轮Git归档未新增模型。
 
 打开 APK 后先录音或选择 WAV。普通 ASR 的“ASR 文字降噪”只影响文字识别；Sherpa 区域的“声纹降噪”只影响声纹注册、分段和匹配。输入名称后点击“注册当前音频声纹”，再使用单段、多段或快速多段测试；多人测试可选择自动估计或 1-5 人。结果区域会显示 ASR 文本、匹配名称、相似度、阈值、阶段耗时，以及每个分段的 speaker、相似度、文字和错误。
 
@@ -1014,4 +1011,4 @@ FSR2是WebGL2时域升采样近似，不使用物体运动矢量，动作较快�
 
 ### Android外部登录统一入口与豆包账号（2026-10-14）
 
-内置网页Provider的Android隔离登录统一显示完成/取消；豆包可自动捕获或手动添加合法Cookie，明确显示已配置、未远端验证。会话列表校验按用户要求仅记录为后续任务。配套min41/code76已发布，Note8按钮及取消返回已检查，真实账号登录保存待验收；详见[Chat2API账号与应用说明](usage/chat2api-unified-applications.md)。
+内置网页Provider的Android隔离登录统一显示完成/取消；豆包可捕获或手动添加合法Cookie。已修复“完成”回调未发保存请求的问题，并接入一次只读列表验证与已有账号“验证登录”；失败仍保存未验证账号。配套原生min41/code76为历史发布，本次服务/网页代码尚未出包，真实Android保存及官网响应仍待验收；详见[Chat2API账号与应用说明](usage/chat2api-unified-applications.md)。

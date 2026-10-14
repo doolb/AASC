@@ -1,5 +1,9 @@
 # 正式 Android 显示端完整离线 APK
 
+## origion 仓库合并（2026-10-14）
+
+独立 min / LLM 外置源码与 `origion/master` 的文档、豆包登录保存和只读列表验证提交合并，双方功能与验收记录保留。项目默认 Git 远端明确为 `origion`；本次未出包，已提交的 minApk/servicePackage 待出包状态不得被远端旧值清除。另一任务未提交的分层依赖和发布状态在工作区继续保留。
+
 ## 独立 min 与 LLM 外置源码实现（2026-10-14）
 
 前轮方案已确认并完成源码实施。新增 `OfflineBootstrapManager`、`OfflineRuntimeState`、`OfflineBootstrapHealth` 和本机模型管理模块；以下描述新版源码行为，正式资源尚未构建或部署。工作区配置为 full v43 / min v44，完整包服务基线改为待发布 code79/dependencies8，避免被现有 code78错误覆盖；LAN 当前发布仍为 code78/dependencies8/min41/full38。

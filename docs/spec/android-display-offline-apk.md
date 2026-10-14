@@ -1,5 +1,16 @@
 # 正式 Android 显示端完整离线 APK 实现规格（伪代码）
 
+## origion 同步与冲突处理（2026-10-14）
+
+```text
+已有 := 独立min源码提交 + origion/master远端提交 + 工作区其他任务改动
+获取origion → 仅保存重叠未提交文件 → 合并提交历史
+自测/待办冲突 → 保留两边有效记录，消除合并引入的相同待办
+发布状态冲突 → minApk/servicePackage保留true；未出包不得清除
+校验合并快照 → 提交到master → 恢复其他任务未提交改动 → 推送origion/master
+未提交dependenciesPackage状态 → 连同对应分层依赖工作继续保留，不代为发布或提交
+```
+
 ## 独立 min / 无 LLM 权重完整包实际流程（2026-10-14，源码完成）
 
 ```text

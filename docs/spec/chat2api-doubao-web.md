@@ -418,15 +418,76 @@
   真实账号/官网/当前用户Chrome不访问；think/expert及设备仍需独立验收 // 实现批准不扩大为真实请求授权
 ```
 
-## Android捕获保存与验证待办（2026-10-14）
+## Android完成保存与会话列表校验（2026-10-14，已确认实施L4）
+
+```text
+已有声明：
+  Android RESULT_OK -> MainActivity.deliverChat2ApiLoginResult -> Chat2APIControl.completeNativeLogin
+  /oauth/complete -> OAuthService -> credentialAdapters.validate -> DataStore.saveAccount
+  ManualAccountService -> 相同凭据校验；账号列表读取公开accountInfo
+  normalizeDoubaoCredentials/assertDoubaoProvider -> 固定来源、Cookie/CSRF白名单
+新增定义：
+  NativeLoginResult与SavedLoginResult -> 不同变量，禁止同名遮蔽
+  DoubaoConversationVerifier -> 所选账号的一次只读验证，固定请求/解析/有界失败
+  VerificationMeta -> method/status/checkedAt/errorCode，不保存会话内容
+  元数据字段 -> credentialVerification/credentialVerificationStatus/credentialVerificationCheckedAt/credentialVerificationError
+  同根目录账号写入队列 -> 保存/更新/删除/导入/验证结果比较并写入全部串行
+  凭据版本 -> 规范化凭据的内部摘要，验证开始时取值，写入锁内比较；公开响应不含摘要
+  内部credentialRevision -> 保存/更换凭据/导入时生成UUID，防止删除重建或相同凭据重新导入时误接旧结果；公开列表/导出剔除
+  验证结果 -> format-only或conversation-list，不占用active/disabled调度状态
+操作流程：原生保存
+  接收原生回调 -> 验证success/state/provider与等待会话匹配
+  nativeResult.credentials -> /oauth/complete一次 -> savedResult.account
+  保存成功 -> 清理对应loginSession -> 刷新列表 -> 显示保存和验证状态
+  保存失败 -> 明确错误，保留session供重试；不误清空或显示登录成功
+操作流程：远端只读验证
+  本地凭据非法 -> 原格式失败，不请求上游/不保存
+  本地格式成功 -> 固定HTTPS POST /im/chain/recent_conv
+  请求 -> cmd=3200/channel=2/version=1/sequence_id，pull_recent_conv_chain_uplink_body
+  列表游标=首次/limit=1/not_need_message=true -> 不翻页、不读取或保存正文
+  账号已有合规nodeProfile -> 仅允许已确认同源查询参数；缺失不伪造身份数据
+  HTTP状态 + 已确认业务成功及列表结构 -> 解析验证结论
+  首版成功契约 -> HTTP200 + status_code严格为0 + cmd严格为3200 + downlink_body及cells数组
+  明确匿名标记或未知封装 -> 拒绝，真实接口响应结构仍待独立验收
+  下行pull_recent_conv_chain_downlink_body.cells -> 空数组允许；不返回标题或详情
+  HTML/重定向/业务拒绝/未知结构/匿名结果 -> 未通过，固定脱敏错误
+  15秒/512KiB/取消 -> 及时失败，无重试、聊天、合成或验证码处理
+  验证成功 -> accountInfo conversation-list与时间，页面显示会话列表已验证
+  验证失败 -> 保存format-only及失败状态，不因网络问题丢失新增账号
+操作流程：已有账号复验
+  账号列表验证按钮 -> 现有管理鉴权 -> 指定accountId验证业务端点
+  服务从账号库取得所选账号 -> 同一验证器 -> 元数据更新
+  账号凭据版本改变/删除/Provider不匹配 -> 不写迟到结果
+  失败复验 -> 撤销旧成功标记；导入/换凭据 -> 未验证，不继承来源状态
+  公开返回 -> 脱敏账号和固定验证结果，不包含Cookie/请求URL/响应原文
+验收：
+  原生回调真实模块执行，虚构凭据保存请求1次/列表刷新1次
+  失败/取消/会话不匹配/保存错误不串状态；其它网页登录Provider回归
+  会话列表正常/空/登录失效/403/HTML/结构异常/超限/超时与版本改变
+  登录保存失败不清session，远端校验失败仍可见未验证账号
+  仅模拟/本地HTTP；真实已登录会话请求另需明确授权，不访问用户Chrome
+```
+
+## Android捕获保存与验证待办（2026-10-14，历史首版）
 
 ```text
 Android登录候选 := 豆包官方来源 + 白名单Cookie集合
 保存前检查 := 现有严格Cookie规范化，包括sessionid/CSRF与字符长度边界
 豆包校验结果 := 允许保存 + accountInfo.credentialVerification=format-only
 普通手动入口 := 同样允许格式校验后保存未验证账号
-后续远端验证 := 用户指定请求会话列表；目前只记录，保留未验证可添加
+历史远端验证 := 首版仅记录；现由上方已确认L4接入，继续保留未验证可添加
 禁止混淆 := 格式校验和Native捕获完成不等于远端登录验证
 ```
 
-min41/code76已发布；真实账号捕获与会话身份验证分别留作用户验收和暂缓任务。
+min41/code76为历史发布；本次新增代码未出包。真实账号捕获保存与只读会话列表契约仍待独立验收。
+
+```text
+本次离线验收：
+  check:chat2api -> 243项/240通过，3项与修改前同为Windows chmod断言
+  隔离Chromium -> 原生完成后账号可见/复验按钮与提示/原API映射流程2项通过
+  本地HTTP端到端 -> 正式JS/OAuth/验证器/存储/列表：403仍保存，复验空列表通过
+  非回环本机HTTP -> 无Key拒绝，已有Key通过，只取路径accountId，忽略请求体凭据
+  同根目录并发账号写入 -> 不丢账号；导入/换凭据/删除重建 -> 迟到结果409
+  独立只读审查 -> 无Important/Critical问题；真实官网/用户Chrome/Android真机未访问
+  发布状态 -> 仅servicePackage=true，minApk/dependenciesPackage保持false；未构建/发布/重启
+```

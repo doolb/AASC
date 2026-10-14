@@ -37,6 +37,12 @@
 
 ## 开发命令
 
+### Git 同步远端
+
+- 项目代码提交默认推送到 `origion`（`vivaldi@c.aasc.us:/home/vivaldi/web-mediacenter.git`）。
+- `master` 跟踪 `origion/master`；同步先获取远端变更、保留工作区改动并合并，随后显式执行 `git push origion master`。
+- GitHub 远端的额外同步按用户明确要求执行。
+
 ```bash
 # 安装依赖
 npm install

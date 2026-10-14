@@ -17,6 +17,8 @@ const { createChat2ApiAccountWebSessionService } = require('./chat2api-account-w
 const { createChat2ApiSpeechService } = require('./chat2api-speech-service');
 const {createChat2ApiApplicationService}=require('./chat2api-application-service');
 const { createDoubaoBrowserBridge } = require('./chat2api-doubao-browser-bridge');
+const { createDoubaoAccountVerifier } = require('./chat2api-doubao-account-verifier');
+const { createChat2ApiAccountVerificationService } = require('./chat2api-account-verification-service');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -49,7 +51,9 @@ const createChat2ApiRuntime = (options = {}) => {
     httpClient: options.httpClient,
     projectRoot: options.projectRoot,
   });
-  const credentialAdapters = options.credentialAdapters || createChat2ApiCredentialValidators({ httpClient: options.httpClient });
+  const doubaoAccountVerifier = options.doubaoAccountVerifier || createDoubaoAccountVerifier({ httpClient: options.httpClient });
+  const credentialAdapters = options.credentialAdapters || createChat2ApiCredentialValidators({ httpClient: options.httpClient, doubaoVerifier: doubaoAccountVerifier });
+  const accountVerificationService = options.accountVerificationService || createChat2ApiAccountVerificationService({ dataStore, providerRegistry, verifier: doubaoAccountVerifier });
   const oauth = options.oauth || createChat2ApiOAuthService({
     dataStore,
     providerRegistry,
@@ -61,7 +65,7 @@ const createChat2ApiRuntime = (options = {}) => {
     providerRegistry,
     baseUrl: options.accountWebSessionBaseUrl || `http://${options.host || '127.0.0.1'}:${options.port || 8080}`,
   });
-  const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth, manualAccount, accountWebSession, qwenHistoryService });
+  const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth, manualAccount, accountWebSession, qwenHistoryService, accountVerificationService });
   const proxy = options.proxy || createChat2ApiProxyService({
     host: options.host,
     port: options.port,
@@ -85,7 +89,7 @@ const createChat2ApiRuntime = (options = {}) => {
     address: proxy.address(),
   });
 
-  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, speechService, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, accountWebSession, managementService, proxy, start, stop, getStatus };
+  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, speechService, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, accountWebSession, accountVerificationService, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };

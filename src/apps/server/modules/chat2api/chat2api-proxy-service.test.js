@@ -8,6 +8,24 @@ const { createChat2ApiResponsesService } = require('./chat2api-responses-service
 const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
 const { PassThrough } = require('stream');
 
+test('账号复验沿用非本机管理API鉴权，不信任请求体传入凭据或账号', async t => {
+  const address = Object.values(require('os').networkInterfaces()).flat().find(item => item.family === 'IPv4' && !item.internal)?.address;
+  if (!address) { t.skip('没有非回环本机IPv4，非本机鉴权留到有网卡的测试机'); return; }
+  const calls = [];
+  const service = createChat2ApiProxyService({ host: address, port: 0, config: { enableApiKey: true },
+    dataStore: { validateApiKey: async value => value === 'fictional-management-key' },
+    coreAdapter: {}, managementService: { verifyAccount: async id => { calls.push(id); return { account: { accountId: id } }; } },
+  });
+  await service.start();
+  t.after(() => service.stop());
+  const options = { host: address, localAddress: address, path: '/api/chat2api/accounts/selected%3Aaccount/verify', method: 'POST' };
+  assert.equal((await request(service.address().port, options, '{}')).statusCode, 401);
+  assert.equal(calls.length, 0);
+  const response = await request(service.address().port, { ...options, headers: { Authorization: 'Bearer fictional-management-key' } }, JSON.stringify({ accountId: 'wrong', credentials: { cookie: 'fake' } }));
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls, ['selected:account']);
+});
+
 const request = (port, options, body) => new Promise((resolve, reject) => {
   const req = http.request({ port, host: '127.0.0.1', ...options }, (res) => {
     let text = '';
@@ -91,6 +109,7 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
       mergeAccountImport: async (data, confirmation, confirmed) => ({ data, confirmation, confirmed }),
       createAccountWebSession: async (accountId) => ({ mode: 'account-web', sessionId: 'session-1', accountId }),
       consumeAccountWebSession: async (sessionId) => ({ sessionId, loginUrl: 'https://www.qianwen.com', credentials: {} }),
+      verifyAccount: async accountId => ({ account: { accountId, accountInfo: { credentialVerification: 'format-only' } }, verification: { verified: false } }),
       startLogin: async () => ({ state: 'state-1' }),
       previewLegacyImport: async () => ({ counts: { providers: 1, accounts: 1, modelMappings: 1 } }),
       mergeLegacyImport: async (confirmed) => ({ confirmed }),
@@ -120,6 +139,10 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     const consumedSession = await request(service.address().port, { path: '/api/chat2api/accounts/web-session/consume', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ sessionId: 'session-1' }));
     assert.equal(JSON.parse(consumedSession.text).sessionId, 'session-1');
     assert.equal(consumedSession.headers['cache-control'], 'no-store');
+    const verification = await request(service.address().port, { path: '/api/chat2api/accounts/doubao%3Asample/verify', method: 'POST', headers: { 'Content-Type': 'application/json' } }, '{}');
+    assert.equal(verification.statusCode, 200);
+    assert.equal(JSON.parse(verification.text).account.accountId, 'doubao:sample');
+    assert.equal(verification.headers['cache-control'], 'no-store');
     const login = await request(service.address().port, { path: '/api/chat2api/oauth/start', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ providerId: 'deepseek' }));
     assert.equal(login.statusCode, 200);
     assert.equal(JSON.parse(login.text).state, 'state-1');
