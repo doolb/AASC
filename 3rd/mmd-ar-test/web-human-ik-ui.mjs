@@ -24,7 +24,7 @@ function initIKPanel() {
         <div data-body="settings" hidden>
         <label>牵引强度 <input data-body="strength" type="range" min="0.05" max="1" step="0.05" value="0.85"></label>
         <label>阻尼 <input data-body="damping" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
-        <label><input data-body="gravity" type="checkbox" checked>重力</label>
+        <label><input data-body="gravity" type="checkbox">重力</label>
         <label><input data-body="freePelvis" type="checkbox">骨盆自由（允许身体受力移动与转动）</label>
         <label>控制点 <select data-body="target"></select></label>
         <label>位置状态 <select data-body="positionState"><option>Off</option><option>On</option><option>Hold</option><option>Comply</option></select></label>

@@ -132,7 +132,7 @@ export function createHumanPhysicsRig(model) {
             const pose = poses.get(node);
             node.bone.parent?.getWorldQuaternion(parentRotation) || parentRotation.identity();
             const rotation = parentRotation.clone().invert().multiply(worldRotation).multiply(pose.quaternion).normalize();
-            // 默认铰链按关节twist验证，PMX显式范围按骨骼局部XYZ验证；越界投影反馈代理。
+            // 显示骨架保持长度/范围；返回限位基准供耗能速度纠正，不将显示姿态瞬移回刚体。
             // 人体默认限位属于物理父关节；PMX上下半身常为center同级，不能把躯干世界转角误当成关节弯曲。
             const basis = !node.hasModelLimits && node.parentNode
                 ? poses.get(node.parentNode).quaternion.clone().multiply(node.jointFrameRotation) : null;
@@ -153,10 +153,10 @@ export function createHumanPhysicsRig(model) {
             const mapped = basis ? parentRotation.clone().invert().multiply(worldRotation).multiply(basis).multiply(limited) : limited;
             node.bone.quaternion.copy(unrestrictedRoot ? rotation : mapped);
             node.bone.updateWorldMatrix(false, true);
-            if (!unrestrictedRoot && limited.angleTo(constraintRotation) > 1e-5) projected.push(node);
+            if (!unrestrictedRoot && limited.angleTo(constraintRotation) > 1e-5) projected.push({ node,
+                basis: basis || worldRotation.clone().invert().multiply(parentRotation), rotation: limited });
         }
-        const corrected = animatedPoses();
-        return projected.map(node => ({ node, position: corrected.get(node).position.clone().add(nodeOffset(node, corrected.get(node).quaternion)), quaternion: corrected.get(node).quaternion }));
+        return projected;
     }
     function targetToLocal(target) { return mesh.worldToLocal(target.clone()).multiplyScalar(metersPerUnit); }
     function targetRotationToLocal(rotation) { mesh.getWorldQuaternion(worldRotation); return worldRotation.clone().invert().multiply(rotation); }

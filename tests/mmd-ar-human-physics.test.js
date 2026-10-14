@@ -11,6 +11,92 @@ function realAmmo() {
     return ammoPromise;
 }
 
+test('人体重力缺省关闭，只有显式true开启，面板缺省不勾选', async () => {
+    const { normalizeBodySettings } = await import('../3rd/mmd-ar-test/web-human-physics-drive.mjs');
+    for (const value of [{}, { gravity: false }, { gravity: null }, { gravity: 'true' }]) {
+        assert.equal(normalizeBodySettings(value).gravity, false);
+    }
+    assert.equal(normalizeBodySettings({ gravity: true }).gravity, true);
+    const ui = fs.readFileSync(path.resolve(__dirname, '../3rd/mmd-ar-test/web-human-ik-ui.mjs'), 'utf8');
+    assert.match(ui, /data-body="gravity" type="checkbox">重力/u);
+});
+
+test('真实PMX单点On→Off及全Off静置，重力开关下全身摆幅和角速度收敛', async t => {
+    const { makeModel } = require('./helpers/mmd-human-real-pmx');
+    const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
+    const { createHumanPhysicsDrive } = await import('../3rd/mmd-ar-test/web-human-physics-drive.mjs');
+    for (const gravity of [false, true]) for (const semantic of ['none', 'leftWrist', 'leftAnkle', 'head', 'hips']) {
+        const { T, model } = await makeModel(), rig = createHumanPhysicsRig(model);
+        const drive = createHumanPhysicsDrive(await realAmmo(), rig), allocations = drive.getState().allocations;
+        const node = rig.nodes.find(item => item.semantic === semantic);
+        const target = node && { node, target: model.bindings['bones:' + semantic].bone.getWorldPosition(new T.Vector3())
+            .add(new T.Vector3(0, 3, 3)), positionState: 'On', rotationState: 'Off' };
+        const original = JSON.stringify(model.mesh.geometry.userData.MMD);
+        const locals = model.bones.map(item => item.bone.position.clone());
+        const tail = [], earlySpeeds = [], tailSpeeds = []; let tailOmega = 0;
+        try {
+            for (let frame = 0; frame < 780; frame++) {
+                rig.restore();
+                const poses = drive.step(1 / 60, rig.animatedPoses(), frame < 180 && target ? [target] : [], { gravity });
+                const motion = [...poses.values()].reduce((sum, pose) => sum + pose.omega.lengthSq(), 0);
+                if (frame >= 180 && frame < 240) earlySpeeds.push(motion);
+                if (frame >= 720) {
+                    tail.push(rig.animatedPoses()); tailSpeeds.push(motion);
+                    tailOmega = Math.max(tailOmega, ...[...poses.values()].map(pose => pose.omega.length()));
+                }
+            }
+            let span = 0, angle = 0;
+            for (const sample of tail) for (const [key, pose] of sample) {
+                span = Math.max(span, pose.position.distanceTo(tail.at(-1).get(key).position));
+                angle = Math.max(angle, pose.quaternion.angleTo(tail.at(-1).get(key).quaternion));
+            }
+            const mean = values => values.reduce((sum, value) => sum + value, 0) / values.length;
+            // 放开不能用锁点或清零速度伪造稳定：同时验证全骨位姿和原生速度；重力允许自然姿态变化。
+            assert.ok(span < (gravity ? 0.025 : 0.003), `${semantic}/gravity=${gravity}: 漂摆${span}m`);
+            assert.ok(angle < (gravity ? 0.12 : 0.01), `${semantic}/gravity=${gravity}: 转角漂摆${angle}rad`);
+            assert.ok(tailOmega < (gravity ? 3 : 0.1), `${semantic}/gravity=${gravity}: 持续角速度${tailOmega}`);
+            if (!gravity && ['leftWrist', 'leftAnkle', 'head'].includes(semantic)) {
+                assert.ok(mean(tailSpeeds) < mean(earlySpeeds) * 0.02, 'Off后相对运动未明显衰减');
+            }
+            model.bones.forEach((item, index) => {
+                if (item.bone !== model.bindings['bones:center'].bone) assert.ok(item.bone.position.distanceTo(locals[index]) < 1e-8);
+            });
+            assert.equal(JSON.stringify(model.mesh.geometry.userData.MMD), original);
+            assert.equal(drive.getState().allocations, allocations);
+            t.diagnostic(`${semantic}/gravity=${gravity}: span=${span.toFixed(5)}m/${angle.toFixed(5)}rad, tailOmega=${tailOmega.toFixed(4)}`);
+        } finally { rig.restore(); drive.dispose(); }
+        assert.equal(drive.getState().allocations, 0);
+    }
+});
+
+test('真实PMX自由骨盆释放后惯性衰减，保持释放的整体位置而不重置身体', async () => {
+    const { makeModel } = require('./helpers/mmd-human-real-pmx');
+    const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
+    const { createHumanPhysicsDrive } = await import('../3rd/mmd-ar-test/web-human-physics-drive.mjs');
+    const { T, model } = await makeModel(), rig = createHumanPhysicsRig(model);
+    const drive = createHumanPhysicsDrive(await realAmmo(), rig);
+    const initial = rig.animatedPoses().get(rig.pelvis).position.clone();
+    const target = { node: rig.pelvis, target: model.bindings['bones:hips'].bone.getWorldPosition(new T.Vector3())
+        .add(new T.Vector3(0, 3, 3)), positionState: 'On', rotationState: 'Off' };
+    const tail = []; let firstSpeed = 0, finalSpeed = 0;
+    try {
+        for (let frame = 0; frame < 780; frame++) {
+            rig.restore();
+            const poses = drive.step(1 / 60, rig.animatedPoses(), frame < 180 ? [target] : [], { gravity: false, freePelvis: true });
+            const speed = Math.max(...[...poses.values()].map(pose => pose.velocity.length()));
+            if (frame === 180) firstSpeed = speed;
+            if (frame === 779) finalSpeed = speed;
+            if (frame >= 720) tail.push(rig.animatedPoses());
+        }
+        let span = 0;
+        for (const sample of tail) for (const [node, pose] of sample) span = Math.max(span,
+            pose.position.distanceTo(tail.at(-1).get(node).position));
+        assert.ok(span < 0.005, `自由身体末秒仍持续漂移${span}m`);
+        assert.ok(finalSpeed < Math.max(0.005, firstSpeed * 0.05), '自由身体惯性未衰减');
+        assert.ok(tail.at(-1).get(rig.pelvis).position.distanceTo(initial) > 0.1, 'Off暗中重置了整体位置');
+    } finally { rig.restore(); drive.dispose(); }
+});
+
 test('真实PMX父空间静止坐标正确换算身高，不受待机姿态和模型变换影响', async () => {
     const { makeModel } = require('./helpers/mmd-human-real-pmx');
     const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');
@@ -138,7 +224,9 @@ async function fixture(loadAmmo = realAmmo) {
     mesh.skeleton = { bones }; scene.add(mesh); scene.updateMatrixWorld(true);
     for (const binding of Object.values(bindings)) binding.restPosition = binding.bone.getWorldPosition(new T.Vector3());
     const model = { mesh, bindings, bones: bones.map((bone, index) => ({ bone, index, dynamic: false })), groups: { root: new Set([0, 1]) } };
-    const canvas = { addEventListener() {}, removeEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 600, height: 600 }) };
+    const pointerHandlers = new Map();
+    const canvas = { addEventListener(name, callback) { pointerHandlers.set(name, callback); }, removeEventListener() {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 600, height: 600 }) };
     const camera = new T.PerspectiveCamera(55, 1, 0.1, 50); camera.position.set(0, 1, 4); camera.lookAt(0, 1, 0); camera.updateMatrixWorld();
     globalThis.window ||= { addEventListener() {}, removeEventListener() {} };
     const controller = createHumanIK({ getScene: () => scene, getCamera: () => camera, canvas, loadAmmo });
@@ -147,11 +235,36 @@ async function fixture(loadAmmo = realAmmo) {
     const run = (frames, dt = 1 / 60) => { for (let i = 0; i < frames; i++) controller.apply(model, dt); };
     async function enable() {
         await controller.setMode('physics', model); controller.setEnabled(true, model);
+        assert.equal(controller.getState().settings.gravity, false);
         controller.setBodySettings({ gravity: false });
         assert.equal(controller.getState().available, true, controller.getState().reason);
     }
-    return { T, model, controller, bones, bindings, initial, point, run, enable, camera };
+    return { T, model, controller, bones, bindings, initial, point, run, enable, camera, pointerHandlers, canvas };
 }
+
+test('位置Off仍保留显式旋转驱动，标记立即跟随骨骼；放开取消残余拖动', async () => {
+    const f = await fixture();
+    try {
+        await f.enable(); const c = f.controller;
+        c.setTarget('leftHand', f.point('leftWrist').add(new f.T.Vector3(0, 0.12, 0.12)),
+            new f.T.Quaternion().setFromAxisAngle(new f.T.Vector3(0, 0, 1), 0.4));
+        f.run(60); c.setTargetState('leftHand', 'Off', 'On');
+        const released = c.getState().controls.find(item => item.key === 'leftHand');
+        assert.equal(c.getState().activeTargets, 1); assert.equal(released.rotationState, 'On');
+        assert.ok(new f.T.Vector3().fromArray(released.target).distanceTo(f.point('leftWrist')) < 1e-8);
+        c.setTargetState('leftHand', 'Off', 'Off');
+        const marker = c.getState().controls.find(item => item.key === 'leftHand');
+        const event = { button: 0, isPrimary: true, pointerId: 7, clientX: marker.screen.x, clientY: marker.screen.y,
+            currentTarget: f.canvas, stopImmediatePropagation() {}, preventDefault() {} };
+        f.pointerHandlers.get('pointerdown')(event);
+        assert.equal(c.getState().controls.find(item => item.key === 'leftHand').positionState, 'On');
+        c.setTargetState('leftHand', 'Off', 'Off');
+        f.pointerHandlers.get('pointermove')({ ...event, currentTarget: window, clientX: event.clientX + 80 });
+        const final = c.getState().controls.find(item => item.key === 'leftHand');
+        assert.equal(c.getState().activeTargets, 0);
+        assert.ok(new f.T.Vector3().fromArray(final.target).distanceTo(f.point('leftWrist')) < 1e-8, '放开后旧拖动改写标记位置');
+    } finally { f.controller.dispose(); }
+});
 
 test('真Ammo人体牵引手腕带动躯干、缩小误差且原生分配不随帧增长', async () => {
     const f = await fixture();

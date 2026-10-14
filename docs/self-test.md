@@ -1522,3 +1522,11 @@ Offline Android WebView的真实布局/滑块和托管服务器实际端口切�
 身体/PBD/标记23项、镜头手势5项、动作7项共35项通过；真实米娅浏览器实际鼠标单点拖动，按900物理子步采样最后90步十一点跨度小于身高2.5%，多目标/重置/模式及面板横竖屏1/1通过。`npm run build:web:mmd-ar-test`通过。桌面无渲染物理步进中位约2.1–2.3ms、P95约3.0–6.7ms，原生分配恒定；不代表手机或完整渲染性能。未出APK/部署，其他PMX/实时动画服饰/AR/手机仍待人工验收。
 
 额外`tests/mmd-ar-camera-motion.test.js`相机VMD回归：默认Chromium参数出现页面断开/模型就绪超时；/tmp包装显式使用共享内存后原测试2/2通过，未改相机源码或测试。
+
+## MMD-AR Off释放稳定与默认关闭重力（2026-10-14）
+
+`node --test tests/mmd-ar-human-physics.test.js tests/mmd-ar-human-ik-pbd.test.js tests/mmd-ar-ik-markers.test.js tests/mmd-ar-ik-camera-gestures.test.js tests/mmd-ar-human-actions.test.js`：39/39通过，无跳过。身体20项包含重力缺省/显式true和UI未勾选、10个真实PMX释放/全Off静置场景、自由身体释放仍保持整体位置、位置Off/旋转On独立状态及取消残余拖动；旧目标/骨长/限位/生命周期和30/60/120fps继续通过。
+
+真实米娅On3秒→Off10秒，关重力末秒全骨位置跨度0.08–1.12mm、角跨度≤0.00240rad、最大角速度≤0.0028rad/s；开重力位置跨度2.75–5.20mm、角跨度≤0.05619rad、最大角速度≤1.621rad/s，仍有接触抖动。原生分配恒定、销毁归零；桌面无渲染物理CPU中位约1.77–2.08ms/P95约2.18–3.95ms，不代表手机完整帧时。
+
+`npm run build:web:mmd-ar-test`及6个源/测试模块语法、定向差异空白检查通过。`TMPDIR=/var/tmp node --test tests/mmd-ar-human-physics-browser.test.js`1/1通过（约348秒）：真实拖点→保持→面板Off→主动重力，每段实际采样904子步，最后12帧Off摆幅占身高0.023%、主动重力0.213%，标记跟随正确；随后多目标/重置/模式与横竖屏继续通过。首轮临时IndexedDB IO失败改用/var/tmp；SwiftShader全灯光约0.3fps导致采样超时，测试通过现有设置关闭阴影/AO/GI/抗锯齿并降至0.25倍率，保留真实蒙皮/衣物物理和全部物理子步，不改产品画面默认。未出APK/发布，手机/其他PMX和实时VMD服饰/AR仍待验收。

@@ -5,7 +5,7 @@ export const BODY_STATES = Object.freeze(['Off', 'On', 'Hold', 'Comply']);
 export function normalizeBodySettings(value = {}) {
     const number = (name, fallback, low, high) => Number.isFinite(value[name]) ? Math.max(low, Math.min(high, value[name])) : fallback;
     return { strength: number('strength', 0.85, 0.05, 1), damping: number('damping', 1, 0.2, 2.5),
-        gravity: value.gravity !== false, freePelvis: value.freePelvis === true };
+        gravity: value.gravity === true, freePelvis: value.freePelvis === true };
 }
 
 // 独立人体世界用原生位置弹簧及PD力矩驱动：关节、碰撞和惯性由Ammo共同求解。
@@ -51,7 +51,8 @@ export function createHumanPhysicsDrive(Ammo, rig) {
         const transform = nativeTransform(position, rotation), motion = own(new Ammo.btDefaultMotionState(transform));
         const info = own(new Ammo.btRigidBodyConstructionInfo(mass, motion, shape, inertia));
         const body = own(new Ammo.btRigidBody(info));
-        body.setDamping(0.18, 0.65); body.setFriction(0.7); body.setRestitution(0);
+        // 放开后线动量也应衰减；只保留很小的线阻尼会使整条关节链长时间继续滑动。
+        body.setDamping(0.65, 0.65); body.setFriction(0.7); body.setRestitution(0);
         if (mass) body.setActivationState(4);
         world.addRigidBody(body, group, mask);
         return { body, motion, mass, inertia: new Vector3(inertia.x(), inertia.y(), inertia.z()),
@@ -111,7 +112,8 @@ export function createHumanPhysicsDrive(Ammo, rig) {
             const high = hinge === null ? node.limits.low.map(angle => -angle) : [-node.limits.low[hinge], 0, 0];
             joint.setAngularLowerLimit(nativeVector(new Vector3(...low)));
             joint.setAngularUpperLimit(nativeVector(new Vector3(...high)));
-            if (joint.setParam) for (let axis = 0; axis < 6; axis++) joint.setParam(2, 0.6, axis);
+            // 关节锚点/限位由迭代逐步纠正，过高的stop ERP会和重力接触反复对抗。
+            if (joint.setParam) for (let axis = 0; axis < 6; axis++) joint.setParam(2, 0.2, axis);
             world.addConstraint(joint, true); constraints.push(joint);
         }
         // 位置目标与人体关节在同一原生求解轮里受力；预建关闭的弹簧避免拖动时追加原生分配。
@@ -144,6 +146,12 @@ export function createHumanPhysicsDrive(Ammo, rig) {
         relVector.setValue(lever.x, lever.y, lever.z); record.body.applyForce(force, relVector); record.body.activate();
     }
     const relVector = own(new Ammo.btVector3(0, 0, 0));
+    function inverseInertia(record) {
+        if (record.rotationPinned) return new Matrix3().set(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        const rotation = new Matrix3().setFromMatrix4(new Matrix4().makeRotationFromQuaternion(record.quaternion));
+        const inertia = new Matrix3().set(1 / record.inertia.x, 0, 0, 0, 1 / record.inertia.y, 0, 0, 0, 1 / record.inertia.z);
+        return rotation.clone().multiply(inertia).multiply(rotation.transpose());
+    }
     function applyTorque(record, desired, frequency, damping, parent = null, maximumAcceleration = 150) {
         delta.copy(desired).multiply(record.quaternion.clone().invert()).normalize();
         if (delta.w < 0) delta.set(-delta.x, -delta.y, -delta.z, -delta.w);
@@ -155,11 +163,6 @@ export function createHumanPhysicsDrive(Ammo, rig) {
             .addScaledVector(angularVelocity, -2 * damping * omega).multiplyScalar(1 / denominator).clampLength(0, maximumAcceleration);
         if (parent && !parent.rotationPinned) {
             // 成对力矩必须使用两端有效惯量，避免轻父体被重子体的回复力矩过度加速。
-            const inverseInertia = body => {
-                const rotation = new Matrix3().setFromMatrix4(new Matrix4().makeRotationFromQuaternion(body.quaternion));
-                const inertia = new Matrix3().set(1 / body.inertia.x, 0, 0, 0, 1 / body.inertia.y, 0, 0, 0, 1 / body.inertia.z);
-                return rotation.clone().multiply(inertia).multiply(rotation.transpose());
-            };
             const total = inverseInertia(record), parentInverse = inverseInertia(parent);
             for (let i = 0; i < 9; i++) total.elements[i] += parentInverse.elements[i];
             vector.applyMatrix3(total.invert());
@@ -288,56 +291,61 @@ export function createHumanPhysicsDrive(Ammo, rig) {
                 scratchVector.setValue(record.velocity.x, record.velocity.y, record.velocity.z); record.body.setLinearVelocity(scratchVector);
             }
             const poses = new Map([...bodies]);
-            synchronizeRig(rig.write(poses, animated)); rig.restore();
+            dissipateJointMotion(rig.write(poses, animated), targets); rig.restore();
             accumulator -= h; substeps++;
         }
         const poses = new Map([...bodies].map(([node, record]) => [node, read(record)]));
         rig.write(poses, animated);
-        // 子步已同步原生姿态；帧末仅显示，避免不同帧率重复投影速度。
+        // 原生关节维护代理锚点，显示骨架只做长度/角度保护，不瞬移反馈接触体。
         frameMs = performance.now() - started;
         return poses;
     }
-    // 每子步同时投影姿态与速度：只消除骨段伸缩、锁轴和越界方向，保留可控的关节运动。
-    function synchronizeRig(projections) {
-        const pending = new Map(projections.map(pose => [pose.node, pose]));
-        function synchronize(node) {
-            const pose = pending.get(node); if (!pose) return;
-            if (node.parentNode) synchronize(node.parentNode);
-            pending.delete(node);
+    // 关节释放后仍耗散相对运动。等反角冲量保留自由身体的整体运动，不重置姿态或清零全部速度。
+    function dissipateJointMotion(projections, targets) {
+        const inverses = new Map([...bodies].map(([node, record]) => [node, inverseInertia(record)]));
+        function correct(node, change) {
             const record = bodies.get(node), parent = node.parentNode && bodies.get(node.parentNode);
-            let omega = record.omega.clone();
-            if (record.rotationPinned) omega.set(0, 0, 0);
+            if (record.rotationPinned || change.lengthSq() < 1e-16) return;
+            const childInverse = inverses.get(node), total = childInverse.clone();
             if (parent) {
-                const basis = parent.quaternion.clone().multiply(node.jointFrameRotation);
-                const relative = omega.sub(parent.omega).applyQuaternion(basis.clone().invert());
-                const relativeRotation = basis.clone().invert().multiply(pose.quaternion);
-                const angle = new Euler().setFromQuaternion(relativeRotation);
-                if (!node.hasModelLimits && node.hingeAxis !== null) {
-                    const axis = ['x', 'y', 'z'][node.hingeAxis];
-                    const twist = 2 * Math.atan2(relativeRotation[axis], relativeRotation.w);
-                    angle[axis] = Math.atan2(Math.sin(twist), Math.cos(twist));
-                }
-                for (let axis = 0; axis < 3; axis++) {
-                    const low = node.limits.low[axis], high = node.limits.high[axis], value = relative.getComponent(axis);
-                    const current = angle[['x', 'y', 'z'][axis]];
-                    if (high - low < 1e-6 || (current <= low + 1e-5 && value < 0) || (current >= high - 1e-5 && value > 0)) relative.setComponent(axis, 0);
-                }
-                omega.copy(relative.applyQuaternion(basis).add(parent.omega));
+                const parentInverse = inverses.get(node.parentNode);
+                for (let i = 0; i < 9; i++) total.elements[i] += parentInverse.elements[i];
             }
-            let velocity = record.velocity.clone();
-            if (parent) {
-                const parentOffset = nodeOffset(node.parentNode, parent.quaternion), offset = nodeOffset(node, pose.quaternion);
-                const parentOrigin = parent.position.clone().sub(parentOffset), origin = pose.position.clone().sub(offset);
-                velocity.copy(parent.velocity).sub(parent.omega.clone().cross(parentOffset))
-                    .add(parent.omega.clone().cross(origin.sub(parentOrigin))).add(omega.clone().cross(offset));
-            }
-            if (record.positionPinned) velocity.set(0, 0, 0);
-            omega.clampLength(0, 8); velocity.clampLength(0, 4);
-            write(record, pose.position, pose.quaternion);
-            scratchVector.setValue(omega.x, omega.y, omega.z); record.body.setAngularVelocity(scratchVector); record.omega.copy(omega);
-            scratchVector.setValue(velocity.x, velocity.y, velocity.z); record.body.setLinearVelocity(scratchVector); record.velocity.copy(velocity);
+            const relative = record.omega.clone(); if (parent) relative.sub(parent.omega);
+            const impulse = change.clone().applyMatrix3(total.clone().invert());
+            const work = impulse.dot(relative), curvature = impulse.dot(impulse.clone().applyMatrix3(total));
+            // 各向异性惯量下，直接夹角速度分量也可能增能；按真实角动能变化限制冲量。
+            if (work >= 0 || curvature < 1e-16) return;
+            impulse.multiplyScalar(Math.min(1, -work / curvature));
+            record.omega.add(impulse.clone().applyMatrix3(childInverse));
+            if (parent) parent.omega.sub(impulse.applyMatrix3(inverses.get(node.parentNode)));
         }
-        for (const node of rig.nodes) synchronize(node);
+        for (const { node, basis, rotation } of projections) {
+            const record = bodies.get(node), parent = node.parentNode && bodies.get(node.parentNode);
+            const relative = record.omega.clone(); if (parent) relative.sub(parent.omega);
+            relative.applyQuaternion(basis.clone().invert());
+            const limited = relative.clone(), angle = new Euler().setFromQuaternion(rotation, 'XYZ');
+            if (!node.hasModelLimits && node.hingeAxis !== null) {
+                const axis = ['x', 'y', 'z'][node.hingeAxis], twist = 2 * Math.atan2(rotation[axis], rotation.w);
+                angle[axis] = Math.atan2(Math.sin(twist), Math.cos(twist));
+            }
+            for (let axis = 0; axis < 3; axis++) {
+                const low = node.limits.low[axis], high = node.limits.high[axis], value = limited.getComponent(axis);
+                const current = angle[['x', 'y', 'z'][axis]];
+                if (high - low < 1e-6 || (current <= low + 1e-5 && value < 0) || (current >= high - 1e-5 && value > 0)) limited.setComponent(axis, 0);
+            }
+            correct(node, limited.sub(relative).applyQuaternion(basis));
+        }
+        for (const [node, record] of bodies) {
+            if (!node.parentNode) continue;
+            const active = targets.some(target => target.node === node && (target.positionState !== 'Off' || target.rotationState !== 'Off'));
+            const relative = record.omega.clone().sub(bodies.get(node.parentNode).omega);
+            correct(node, relative.multiplyScalar(Math.exp(-(active ? 2 : 12) * h) - 1));
+        }
+        for (const record of bodies.values()) {
+            record.omega.clampLength(0, 8);
+            scratchVector.setValue(record.omega.x, record.omega.y, record.omega.z); record.body.setAngularVelocity(scratchVector);
+        }
     }
     function reset(animated = null) {
         rig.restore(); animated ||= rig.animatedPoses(); accumulator = 0;

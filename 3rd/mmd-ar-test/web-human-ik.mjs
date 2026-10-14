@@ -414,10 +414,12 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         const handle = handles.find(handle => handle.key === key);
         if (mode !== 'physics' || !handle) throw new Error('请先启用身体物理模式并选择控制点');
         if (!BODY_STATES.includes(positionState) || !BODY_STATES.includes(rotationState)) throw new Error('不支持的控制点状态');
+        if (positionState === 'Off' && drag?.handle === handle) stopDrag();
         if (handle.positionState === 'Off' && positionState !== 'Off') handle.endpoint.bone.getWorldPosition(handle.target);
         if (handle.rotationState === 'Off' && rotationState !== 'Off') handle.endpoint.bone.getWorldQuaternion(handle.targetRotation);
         handle.positionState = positionState; handle.rotationState = rotationState;
         handle.active = positionState !== 'Off' || rotationState !== 'Off'; selected = key;
+        updateMarkers();
         onChange(); return getState();
     }
     function setTarget(key, position, rotation) {

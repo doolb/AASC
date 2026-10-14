@@ -11,9 +11,34 @@ const CHROME = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
 const MIME = new Map([['.js', 'text/javascript'], ['.mjs', 'text/javascript'], ['.wasm', 'application/wasm'],
     ['.css', 'text/css'], ['.html', 'text/html'], ['.json', 'application/json']]);
 
-test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模式/重置回归', {
-    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 300000
-}, async () => {
+// 按实际物理子步计时，低帧率也必须真正运行10秒物理，再观察最后1秒全部控制点。
+async function sampleMotion(page, phase) {
+    try { return await page.evaluate(async () => {
+        const api = window.DisplayMmd.getHumanInterface(), samples = [];
+        const started = performance.now(); let steps = 0, frames = 0;
+        while (steps < 900) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            const state = api.getInteractiveIKState(); steps += state.physics.substeps; frames++;
+            if (performance.now() - started > 150000) throw new Error('物理采样未完成：' + JSON.stringify({ steps, frames, state }));
+            if (steps >= 810) samples.push(state.controls.map(item => item.achieved));
+        }
+        const final = samples.at(-1), state = api.getInteractiveIKState();
+        const head = state.controls.find(item => item.key === 'head').achieved;
+        const foot = state.controls.find(item => item.key === 'rightFoot').achieved;
+        const height = Math.max(0.1, Math.abs(head[1] - foot[1]));
+        let span = 0;
+        for (const sample of samples) sample.forEach((point, index) => {
+            span = Math.max(span, Math.hypot(...point.map((value, axis) => value - final[index][axis])) / height);
+        });
+        return { span, steps, samples: samples.length, activeTargets: state.activeTargets, gravity: state.settings.gravity,
+            markersFollow: state.controls.filter(item => item.positionState === 'Off').every(item =>
+                Math.hypot(...item.target.map((value, index) => value - item.achieved[index])) < 1e-6) };
+    }); } catch (error) { throw new Error(phase + '：' + error.message); }
+}
+
+test('真实米娅默认关重力、实际拖点与Off释放稳定、多目标和模式/重置回归', {
+    skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(ROOT, 'index.html')), timeout: 600000
+}, async t => {
     const errors = [], transportErrors = [], server = http.createServer((request, response) => {
         const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
         const file = path.resolve(ROOT, '.' + (pathname === '/' ? '/index.html' : pathname));
@@ -34,6 +59,13 @@ test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模�
             await page.waitForFunction(() => window.DisplayMmd?.getHumanInterface?.()?.getState().ready
                 && window.DisplayMmd.getState().modelReady && window.DisplayMmd.getState().visible, { timeout: 180000 });
         } catch (error) { throw new Error(error.message + '\n页面异常：' + JSON.stringify(errors) + '\n资源失败：' + JSON.stringify(transportErrors)); }
+        // 此用例验证真实蒙皮/物理和指针，不评测灯光。SwiftShader关闭昂贵画面效果，保留原服饰物理。
+        await page.evaluate(() => {
+            const groups = window.MmdArLightingPresetGroups;
+            groups.lighting.apply({ ...groups.lighting.read(), pmxAoEnabled: false, shadowSource: 'none', keyShadowEnabled: false });
+            groups.screenLighting.apply({ ...groups.screenLighting.read(), giEnabled: false, contactEnabled: false });
+            groups.render.apply({ ...groups.render.read(), aaMode: 'taa', taaEnabled: false, canvasScale: 0.25 });
+        });
         await page.click('#mmdArIKToggle');
         await page.waitForFunction(() => !document.getElementById('mmdArIKPanel').hidden);
         assert.equal(await page.$eval('#mmdArIKToggle', element => element.getAttribute('aria-expanded')), 'true');
@@ -48,12 +80,11 @@ test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模�
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().mode === 'physics', { timeout: 20000 });
         await page.waitForFunction(() => !document.querySelector('#mmdArIKPanel [data-ik-action="enable"]').disabled);
         await page.click('#mmdArIKPanel [data-ik-action="enable"]');
-        const initial = await page.evaluate(() => {
-            const api = window.DisplayMmd.getHumanInterface();
-            api.setInteractiveBodySettings({ gravity: false }); return api.getInteractiveIKState();
-        });
+        const initial = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
         assert.equal(initial.available, true, initial.reason); assert.equal(initial.targets, 11); assert.ok(initial.physics.bodyCount >= 15);
         assert.equal(initial.settings.strength, 0.85); assert.equal(initial.markerDiameter, 32);
+        assert.equal(initial.settings.gravity, false);
+        assert.equal(await page.$eval('[data-body="gravity"]', element => element.checked), false);
         await page.$eval('[data-ik-size]', element => { element.value = '40'; element.dispatchEvent(new Event('input', { bubbles: true })); });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().markerDiameter), 40);
         await page.$eval('[data-ik-size]', element => { element.value = '32'; element.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -83,27 +114,24 @@ test('真实米娅PMX启用人体物理、实际指针拖动、多目标和模�
         const dragged = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
         assert.ok(dragged.controls.some(item => item.positionState === 'On'), '实际指针没有激活物理位置驱动');
         assert.ok(dragged.controls.some(item => item.target.some((value, i) => Math.abs(value - item.achieved[i]) > 1e-5)));
-        // 按实际物理子步计时，软件WebGL低帧率也需真正运行10秒物理；只保留当前一个鼠标目标。
-        const stability = await page.evaluate(async () => {
-            const api = window.DisplayMmd.getHumanInterface(), samples = [];
-            let steps = 0;
-            while (steps < 900) {
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                const state = api.getInteractiveIKState(); steps += state.physics.substeps;
-                if (steps >= 810) samples.push(state.controls.map(item => item.achieved));
-            }
-            const final = samples.at(-1), state = api.getInteractiveIKState();
-            const head = state.controls.find(item => item.key === 'head').achieved;
-            const foot = state.controls.find(item => item.key === 'rightFoot').achieved;
-            const height = Math.max(0.1, Math.abs(head[1] - foot[1]));
-            let span = 0;
-            for (const sample of samples) sample.forEach((point, index) => {
-                span = Math.max(span, Math.hypot(...point.map((value, axis) => value - final[index][axis])) / height);
-            });
-            return { span, steps, samples: samples.length, activeTargets: state.activeTargets };
-        });
+        const stability = await sampleMotion(page, '保持目标');
+        t.diagnostic('保持目标采样完成：' + JSON.stringify(stability));
         assert.equal(stability.activeTargets, 1, '持续稳定测试必须为单点');
         assert.ok(stability.samples > 3 && stability.span < 0.025, '真实页面未牵引部位持续漂摆：' + JSON.stringify(stability));
+        await page.click('#mmdArIKToggle');
+        await page.select('[data-body="target"]', marker.key);
+        await page.select('[data-body="positionState"]', 'Off');
+        const released = await sampleMotion(page, '关重力Off');
+        t.diagnostic('关重力Off采样完成：' + JSON.stringify(released));
+        assert.equal(released.activeTargets, 0); assert.equal(released.gravity, false); assert.equal(released.markersFollow, true);
+        assert.ok(released.span < 0.005, '真实页面Off后仍持续漂摆：' + JSON.stringify(released));
+        await page.click('[data-body="gravity"]');
+        const gravityReleased = await sampleMotion(page, '开重力Off');
+        assert.equal(gravityReleased.gravity, true); assert.equal(gravityReleased.activeTargets, 0);
+        assert.equal(gravityReleased.markersFollow, true);
+        assert.ok(gravityReleased.span < 0.02, '真实页面开重力全Off持续乱摆：' + JSON.stringify(gravityReleased));
+        await page.click('[data-body="gravity"]'); await page.click('#mmdArIKClose');
+        t.diagnostic('真实网页Off/重力开启摆幅占身高：' + released.span.toFixed(5) + '/' + gravityReleased.span.toFixed(5));
         const before = dragged.controls.map(item => item.achieved);
         await page.evaluate(() => {
             const api = window.DisplayMmd.getHumanInterface(), state = api.getInteractiveIKState();
