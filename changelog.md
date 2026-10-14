@@ -12318,3 +12318,13 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - APK 为 89,389,058 bytes，SHA-256 `8a9f0f8418f4ed67e32e0e0837e715d6e17d91269a0c0302e8dd3fb9e6ebc3fd`；清单 SHA-256 `d9f453d0d6b6e71727cb27a650378f92334c37da4db4cdb510a3e65bc89c7350`。APK 签名/profile/package、RSA 清单及外网全部组件 HTTP 完整大小/SHA-256 校验通过。
   - 复用现有发布函数仅执行 WAN 目标；精确清理限定 code/dependencies/min 数字版本普通文件，旧 min v41 已清理，清单引用的代码、依赖、种子和数据修复保留，无清理错误。未构建或安装 APK，产物待打包聚合状态保持不变。
   - 当前 `sync:offline-update` 已支持全部 common/android/linux64/win64 组，并兼容旧单包；对实际 v83 分组清单及过渡清单执行资源选择断言通过。旧版本脚本需先更新仓库。设备优先读取可用 LAN 清单，因此 LAN 仍为 v41 时不会从 WAN 自动比较更高 v45；同步过渡清单到 LAN 后才可在该 LAN 提示 v45。APK 实际更新提示待设备验收。
+
+### 豆包修复与 Offline min 首装配套外网发布
+
+- ✅ [2026-10-14] 已一起发布豆包 Android 完成保存/会话列表验证修复及 min 独立首装所需服务资源；外网签名清单现为 code v83、旧单包 dependencies v8、min APK v45、Node min seeds v79，保留数据修复 v2。LAN 未发布，仍为 code v78/dependencies v8/min v41/seeds v69。
+  - 复用已有 code v83 的真实 ZIP、运行契约及 seeds v79，按同一 lock 指纹重新签名绑定旧 dependencies v8；517 个必需生产包版本与 code ZIP 锁文件全部匹配。保留旧解析器所需单包字段，避免切换四组依赖再次阻断旧 APK 更新提示；本轮未修改源码或构建新 APK。
+  - `code/code-v83.zip`：17,763,416 bytes，SHA-256 `f3da48376380eec98241094901c48634e54ffb4a8ba5167ee0c3814cfde22aec`；`node-min-seeds/node-min-seeds-v79.zip`：35,287 bytes，SHA-256 `9bfa0b21b616b13ff650e83ee60571504709fee6d3c2a653da4b0d2446263008`；兼容清单 SHA-256 `f51242323a5ea89f5bcb41f90445225b0401bbd5998649d56d4ee9c134c1a280`，本地配套产物在 `release/offline-update/legacy-runtime-release/`。
+  - 核对 v83 中全部 Chat2API 非测试模块及网页与当前修复源码一致；`npm run check:chat2api` 243/243、`npm run test:offline-bootstrap` 62/62 通过。代码/依赖 ZIP CRC、min45 首装资产摘要和运行契约、种子配置/任务及旧依赖锁检查通过。
+  - 公网并行下载校验因带宽限制超时，继续完成新增 code/seed 整包 HTTP 大小/SHA-256 校验；未变化的 dependencies8/min45/dataRepair2 沿用前轮已通过的 HTTP 整包结果，并逐项复核当前远端完整大小/SHA-256 与 HTTP HEAD。最终清单验签/版本及远端所有资源复核通过。
+  - 精确清理仅执行 code/dependencies/min 的数字版本普通文件，旧 code78 已清理，deps8/min45/seeds79及原 seeds69/dataRepair2 均保留，无清理错误。真实 Android 完成入列表、官网账号验证和空白设备首装仍待验收；模型需按使用需求另行准备，未执行真实凭据请求或模型下载。
+  - 这是已有功能的资源发布，按纯发布例外仅更新 changelog；其他未覆盖的源码/原生改动仍有待打包需求，聚合状态 minApk=true、servicePackage=true、dependenciesPackage=false 保持不变。局域网优先设备需先同步此清单才会读取本次更新。
