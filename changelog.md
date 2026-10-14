@@ -11,7 +11,7 @@
 - ✅ [2026-10-14] WAV 不再本地变速；语速只通过 Provider/模型原生字段或 Android Embedded Speech SSML 设置。
   - 新增模型级语速能力判断：Qwen-Audio 3.0/3.1 将倍率传给上游 `input.rate`；Qwen3-TTS HTTP 隐藏语速设置并不发送未确认字段。豆包 API、国内千问网页及 system 保持原生语速参数，豆包网页朗读不提供语速。
   - `adjustWavVolume` 只缩放 PCM 幅值，不改变样本数、采样率或时长；Android `ttsGenerate` 传递 Provider 语速，新桥使用 SSML `prosody rate`，旧 APK 零语速兼容、非零语速显式回错并进入既有回退。
-  - 更新 Provider/Android design、spec、usage、自测和任务文档。TTS Node 40/40、浏览器 1/1、MMD 生产 TTS 19/19、Chat2API 250/250、TTS 集成回归 63/63、Android Gradle 单测通过；`servicePackage=true`、`minApk=true`、`dependenciesPackage=false`。未构建 APK、未发布或做真机验收。
+  - 更新 Provider/Android design、spec、usage、自测和任务文档。TTS Node 40/40、浏览器 1/1、MMD 生产 TTS 19/19、Chat2API 250/250、TTS 集成回归 63/63、Android Gradle 单测通过；`servicePackage=true`、`minApk=true`，生产依赖集合未变且不调整 `dependenciesPackage`。未构建 APK、未发布或做真机验收。
 
 ### 声纹面板按 Provider 配置语速与全局音量
 
