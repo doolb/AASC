@@ -115,6 +115,7 @@ const { AascNodeConnector } = require('../../../framework/aasc/node-connector');
 const { buildNormalReplayMessages } = require('../../../framework/aasc/media-replay');
 const { ServerReleaseService } = require('../modules/aasc/server-release-service');
 const { getRuntimeVersionInfo } = require('../modules/aasc/runtime-version-info');
+const { requestManagedUpdate } = require('../modules/aasc/subserver-update-request');
 const {
     createAndroidCapabilityUnavailableError,
     getAndroidNodePolicy
@@ -943,15 +944,20 @@ function ensureAascNodeId() {
 /**
  * 子服务器收到主服务器请求后的白名单处理器。
  *
- * 媒体索引直接在本地生成；更新和重启只返回“已接受”，实际动作交给一次性
- * Bootstrap 或当前服务的双进程启动器，避免 WebSocket 会话进程承担生命周期管理。
+ * 媒体索引直接在本地生成；更新和重启只返回“已接受”，实际动作交给受管启动器。
+ * APK与Termux均从已配置主服务器取普通包，WebSocket会话进程不承担安装和生命周期管理。
  */
 async function handleSubServerNodeRequest(request) {
     const handlers = new Map([
         ...aascRemoteMediaLibraryHandlers,
         ['media.index.local', async payload => aascMediaIndexService.buildLocalIndex(payload.path || '/')],
         ['task.execute', async payload => executeSubServerTask(payload)],
-        ['server.update', async payload => spawnSubServerBootstrap('update', payload)],
+        ['server.update', async payload => requestManagedUpdate({
+            payload,
+            mainServerUrl: config.get('aasc.mainServerUrl', 'https://192.168.1.39:8081'),
+            send: typeof process.send === 'function' ? process.send.bind(process) : null,
+            healthUrl: `${useHttps ? 'https' : 'http'}://127.0.0.1:${PORT}`
+        })],
         ['server.restart', async () => requestSubServerRestart()]
     ]);
     const handler = handlers.get(request.type);
@@ -974,37 +980,6 @@ async function executeSubServerTask(payload = {}) {
         routing: 'server'
     });
     return taskManager.runInstance(submitted.taskName, submitted.instanceId);
-}
-
-function spawnSubServerBootstrap(command, options = {}) {
-    const bootstrapPath = path.join(PROJECT_ROOT, 'scripts/termux/aasc-server-bootstrap.cjs');
-    const mainServerUrl = config.get('aasc.mainServerUrl', 'https://192.168.1.39:8081');
-    const bootstrapArguments = [
-        bootstrapPath,
-        command,
-        '--server-url',
-        mainServerUrl,
-        '--project-root',
-        PROJECT_ROOT
-    ];
-    if (options.force === true) {
-        bootstrapArguments.push('--force');
-    }
-    const child = spawn(process.execPath, bootstrapArguments, {
-        cwd: PROJECT_ROOT,
-        detached: true,
-        stdio: 'ignore'
-    });
-    child.unref();
-    const action = command === 'update'
-        ? (options.force === true ? '强制更新' : '更新')
-        : '重启';
-    log('AASC', `已接受子服务器${action}请求，Bootstrap PID: ${child.pid}`);
-    const result = { accepted: true, command, pid: child.pid || null };
-    if (options.force === true) {
-        result.force = true;
-    }
-    return result;
 }
 
 function requestSubServerRestart() {
@@ -1085,7 +1060,7 @@ function startAascNodeConnector(localIP, protocol) {
         capabilities: {
             ...getSubServerCapabilities()
         },
-        metadata: {
+        getMetadata: () => ({
             role: 'subserver',
             platform: process.platform,
             arch: process.arch,
@@ -1096,7 +1071,7 @@ function startAascNodeConnector(localIP, protocol) {
                 serverVersion: process.env.AASC_SERVER_VERSION,
                 displayVersion: getDisplayVersion()
             })
-        },
+        }),
         heartbeatIntervalMs: config.get('aasc.heartbeatIntervalMs', 30000),
         reconnectMinMs: config.get('aasc.reconnectMinMs', 1000),
         reconnectMaxMs: config.get('aasc.reconnectMaxMs', 30000),
@@ -3142,15 +3117,27 @@ app.get('/server/manifest', sendServerReleaseManifest);
 
 app.get('/server/package', async (req, res) => {
     try {
-        await serverReleaseService.streamPackage(res);
+        await serverReleaseService.streamPackage(res, req.query);
     } catch (error) {
         if (!res.headersSent) {
-            res.status(500).json({ status: 'error', message: `读取服务器代码包失败: ${error.message}` });
+            res.status(error.statusCode || 500).json({ status: 'error', message: `读取服务器代码包失败: ${error.message}` });
         } else {
             res.destroy(error);
         }
     }
 });
+app.get('/server/dependencies', async (req, res) => {
+    try {
+        if (typeof req.query.group !== 'string') {
+            res.status(400).json({ status: 'error', message: '依赖下载必须指定group' }); return;
+        }
+        await serverReleaseService.streamPackage(res, req.query, req.query.group);
+    } catch (error) {
+        if (!res.headersSent) res.status(error.statusCode || 500).json({ status: 'error', message: error.message });
+        else res.destroy(error);
+    }
+});
+
 
 function parseMultipart(req) {
     return new Promise((resolve, reject) => {

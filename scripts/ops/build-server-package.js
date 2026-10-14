@@ -9,9 +9,9 @@ async function main() {
     const packageInfo = await service.buildPackage();
 
     process.stdout.write([
-        '服务器发布包已生成',
+        '共享发布文件已校验',
         `文件: ${packageInfo.filePath}`,
-        `版本: ${packageInfo.manifest.version}`,
+        `版本: ${packageInfo.manifest.payload.components.code.version}`,
         `大小: ${packageInfo.size} bytes`,
         `SHA-256: ${packageInfo.sha256}`
     ].join('\n') + '\n');

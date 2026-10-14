@@ -1012,3 +1012,11 @@ FSR2是WebGL2时域升采样近似，不使用物体运动矢量，动作较快�
 ### Android外部登录统一入口与豆包账号（2026-10-14）
 
 内置网页Provider的Android隔离登录统一显示完成/取消；豆包可捕获或手动添加合法Cookie。已修复“完成”回调未发保存请求的问题，并接入一次只读列表验证与已有账号“验证登录”；失败仍保存未验证账号。配套原生min41/code76为历史发布，本次服务/网页代码尚未出包，真实Android保存及官网响应仍待验收；详见[Chat2API账号与应用说明](usage/chat2api-unified-applications.md)。
+
+## 共享服务更新文件与依赖分组（2026-10-14）
+
+普通APK和Termux从配置的主服务器更新；Offline APK和Node min从原LAN/WAN更新。主服务器默认读取`/mnt/aasc-offline/manifest.json`及其引用的相同ZIP，可通过环境变量`AASC_UPDATE_RELEASE_ROOT`指定已发布根；清单须有效签名，文件大小与SHA一致。控制端“更新”或“强制获取最新代码”仍走AASC，最近结果与实际目录可在服务器列表及自测看到。
+
+依赖目录为`dependencies/common|android|linux64|win64/dependencies-vN.zip`，每个客户端获取common加本平台；Android要求ARM64/Bionic/Node26，Linux64要求x64/glibc，Windows要求x64，原生ABI不符会拒绝。普通旧APK需要重装最新版withserver，Termux需更新受管启动器；旧Offline APK需要先手动安装新版min。
+
+`npm run build:offline-update -- --mode=all --code-version=<新版本> --dependency-version=<新组合版本> --manifest-file=<当前签名清单>`生成分组；内容不变复用原组，后续code-only可沿用签名组合。跨平台安装使用npm的os/cpu/libc覆写，安装脚本保持关闭；需要外部构建的依赖可通过`--dependency-roots=<JSON映射文件>`导入携带`dependency-target.json`和无链接生产node_modules的目标树。`npm run build:server-package`只验证共享根当前包，不再生成tar。构建后仍需既有签名发布流程才能替换LAN/WAN清单。

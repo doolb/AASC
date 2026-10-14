@@ -1601,3 +1601,19 @@ fixture := 临时私有账号目录 + 虚构Cookie + 注入只读transport，不
 命令 := npm run check:chat2api；无专用script的浏览器/手动账号用node --test
 边界 := 不在自动自测面板发真实验证，官网和Android真机另获授权验收；列表成功不证明聊天/TTS
 ~~~
+
+## 共享包与平台依赖自测伪代码（2026-10-14）
+
+```text
+npm test:subserver-update → 62项；offline-bootstrap → 60项；offline-sync → 36项；签名/发布 → 23项
+目标生产树 → 同内容跨平台归common；os/CPU/libc/native/prebuild归平台
+仅linux资源变更 → common/android/win64版本和SHA不变
+真实HTTP+双进程 → 主服务器清单/代码/common/linux64 → 本机API实际版本和目录确认
+Node min → Offline common+本平台 → 无npm → 后续复用缓存
+坏签名/锁/ZIP/冲突/ABI/缓存 → 准备失败不停车；健康失败 → 恢复上一代码+完整依赖
+2MiB随机数据ZIP → Node26builtin范围读取背压完成且全部字节一致
+控制端server_runtime_version → 查询实际目录/来源；最近更新failed则返回失败详情
+Android全部223项 → 分组签名/选择/指纹/ABI/冲突/链接，兼容旧单包读取及bootstrap
+生产四组v9 → ZIP展开与实际内容指纹核对；目标组合版本匹配锁；Linux原生模块加载
+设备/Windows运行及发布结果 := 单独记录，不由单测推断
+```

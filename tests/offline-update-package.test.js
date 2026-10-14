@@ -82,6 +82,10 @@ function createFixture() {
         },
         signature: null
     };
+    const shared = require('../src/apps/server/modules/aasc/shared-update-manifest');
+    const groups = Object.fromEntries(shared.GROUPS.map(name => [name, { version: 1,
+        relativeUrl: `dependencies/${name}/dependencies-v1.zip`, size: 1, sha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), target: name === 'common' ? null : shared.TARGETS[name] }]));
+    currentManifest.payload.components.dependencies = { version: 1, lockSha256, groups, size: 4, sha256: shared.hash(shared.canonicalJson(groups)) };
     currentManifest.signature = signManifestPayload(currentManifest.payload, privateKeyPem);
     return { projectRoot, outputDir, privateKeyPem, publicKeyPem, currentManifest, lockSha256 };
 }
@@ -143,7 +147,7 @@ test('all builds matching source and Android production dependency archives', as
         dependencyVersion: 2,
         commandRunner: async (_file, args, options) => {
             commandCount += 1;
-            assert.deepEqual(args, ['ci', '--omit=dev', '--ignore-scripts']);
+            assert.ok(args.includes('ci') && args.includes('--omit=dev') && args.some(arg => arg.startsWith('--os=')));
             assert.ok(fs.existsSync(path.join(options.cwd, 'package-lock.json')));
             const expressDir = path.join(options.cwd, 'node_modules/express');
             await fs.promises.mkdir(expressDir, { recursive: true });
@@ -155,11 +159,11 @@ test('all builds matching source and Android production dependency archives', as
         }
     });
 
-    const dependencyEntries = archiveEntries(result.dependenciesArchivePath);
-    assert.equal(commandCount, 1);
+    const dependencyEntries = archiveEntries(result.dependencyArtifacts.find(file => file.includes('/common/')));
+    assert.equal(commandCount, 3);
     assert.ok(dependencyEntries.includes('node_modules/express/index.js'));
     assert.ok(!dependencyEntries.some((entry) => entry.includes('node_modules/.bin/')));
-    assert.ok(dependencyEntries.includes('dependency-manifest.json'));
+    assert.ok(dependencyEntries.includes('dependency-group.json'));
     assert.equal(result.manifest.payload.components.code.requiredDependencyVersion, 2);
     assert.equal(result.manifest.payload.components.dependencies.version, 2);
     assert.equal(result.manifest.payload.components.dependencies.lockSha256, fixture.lockSha256);
@@ -216,11 +220,12 @@ test('all publishes code, dependencies, and manifest when output is on a differe
     });
 
     assert.equal(fs.existsSync(result.codeArchivePath), true);
-    assert.equal(fs.existsSync(result.dependenciesArchivePath), true);
+    assert.equal(result.dependencyArtifacts.length, 4);
+    assert.ok(result.dependencyArtifacts.every(file => fs.existsSync(file)));
     assert.equal(fs.existsSync(result.manifestPath), true);
     assert.equal(verifySignedManifest(result.manifest, fixture.publicKeyPem), true);
     assert.equal((await fs.promises.readdir(path.join(outputDir, 'code'))).length, 1);
-    assert.equal((await fs.promises.readdir(path.join(outputDir, 'dependencies'))).length, 1);
+    assert.equal((await fs.promises.readdir(path.join(outputDir, 'dependencies'))).length, 4);
     assert.equal((await fs.promises.readdir(path.join(outputDir, 'manifests'))).length, 1);
 });
 
@@ -258,7 +263,7 @@ test('code-only automatically upgrades to all when the package-lock fingerprint 
         codeVersion: 2,
         commandRunner: async (_file, args, options) => {
             commandCount += 1;
-            assert.deepEqual(args, ['ci', '--omit=dev', '--ignore-scripts']);
+            assert.ok(args.includes('ci') && args.includes('--omit=dev') && args.some(arg => arg.startsWith('--os=')));
             const expressDirectory = path.join(options.cwd, 'node_modules/express');
             await fs.promises.mkdir(expressDirectory, { recursive: true });
             await fs.promises.writeFile(path.join(expressDirectory, 'package.json'), JSON.stringify({ name: 'express' }));
@@ -268,8 +273,8 @@ test('code-only automatically upgrades to all when the package-lock fingerprint 
     assert.equal(result.requestedMode, 'code-only');
     assert.equal(result.mode, 'all');
     assert.equal(result.autoDependencyUpgrade, true);
-    assert.equal(commandCount, 1);
-    assert.ok(result.dependenciesArchivePath);
+    assert.equal(commandCount, 3);
+    assert.equal(result.dependencyArtifacts.length, 4);
     assert.equal(result.manifest.payload.components.dependencies.version, 2);
     assert.equal(result.manifest.payload.components.dependencies.lockSha256, sha256(fs.readFileSync(path.join(fixture.projectRoot, 'package-lock.json'))));
     assert.equal(result.manifest.payload.components.code.requiredDependencyVersion, 2);

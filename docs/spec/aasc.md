@@ -1745,3 +1745,35 @@ MediaLibrary.loadContent(path)
     → 始终使用 APK 保存的主服务器地址
     → 不增加子服务器显示路由或自动切换
 ```
+
+## 共享发布文件与分层依赖伪代码（2026-10-14，已实现）
+
+```text
+唯一已发布根 := /mnt/aasc-offline；最新入口 := RSA签名manifest.json，schemaVersion=1
+dependencies := {version,lockSha256,sha256=SHA256(canonical(groups)),size=sum(groups.size),groups}
+groups := 固定common/android/linux64/win64；每组{version,relativeUrl,size,sha256,contentSha256,target}
+组文件 := dependencies/{group}/dependencies-v{独立版本}.zip
+组内元数据 := {group,version,contentSha256,target}，不嵌入全局lock，避免无关lock变化重发common
+code := 同一code/code-vN.zip；签名绑定requiredDependencyVersion与requiredLockSha256
+构建 := npm ci --omit=dev --ignore-scripts --os/--cpu/--libc创建三个目标生产树，或显式导入目标树
+分类 := 包os/cpu/libc限制 + prebuild目标 + 原生二进制目标；全部目标共有且内容相同的跨平台文件归common
+原生文件 := 必须进入对应平台层并验证架构/平台；未知目标不得误标；Android JNI保留在APK
+平台 := android arm64 Bionic Node26；linux64 x64 glibc；win64 x64；非NAPI模块绑定Node ABI
+组版本 := 内容/target不变复用前组；改变仅递增该组版本；组合version/全局lock由签名绑定
+主服务器/server := 每次读取当前签名清单并返回原签名数据，不生成另一套tar.gz
+主服务器/server/package及/server/dependencies := 参数group/version/sha256绑定当前清单 → 文件大小/SHA验证 → 流式相同ZIP
+文件缓存 := 路径+inode+size+mtime+ctime；身份变化重验；过期请求明确失败，不混用新旧组件
+普通APK/Termux := 从已配置主服务器获取清单/代码/common/本平台组；Offline APK保持LAN/WAN
+ZIP读取 := 中央目录由现有yauzl解析，文件范围由Node builtin读取，避开旧fd-slicer在Node26的大文件背压停滞
+节点事务 := 验签/平台ABI检查 → 已验证组缓存复用 → 下载改变组 → 安全ZIP暂存 → 拒绝重复路径/链接/文件冲突
+组装 := common+本平台node_modules；验证组元数据及代码锁与真实生产包 → 独立版本目录
+切换 := 停止受管子进程 → 原子写pending指针{code,deps,groups,previous,ownerPid} → 启动候选
+健康 := 本机/api/status版本/代码目录/依赖目录一致（已存在目录使用realpath归一化，兼容Android的/data/data与/data/user/0别名） → 提交；失败/更新所有者意外退出 → 整组回滚
+force := 刷新主服务器清单并校验完整事务，不能跳过签名/哈希/锁/健康
+minAPK迁移 := 新版min含分组解析/组装，旧APK手动下载安装；完整APK按明确请求单独构建
+Node min := 先验签代码ZIP → 从代码包加载纯builtin组工具 → common+本平台缓存 → 组合指纹和生产锁校验 → 原有监督/回滚
+APK首装及Offline热更新 := 下载common+android并组装，继续复用已有组合目录/回滚指针
+发布/同步 := flatten groups → 校验 → 上传版本文件 → 原子manifest → LAN/WAN验证 → 精确清理
+清理 := 固定code/dependencies及四分组/apk目录，严格数字版本普通文件；保留所有清单引用，拒绝链接
+build:server-package := 校验并报告当前共享资源；唯一出包链 := build:offline-update/publish:offline-update
+```

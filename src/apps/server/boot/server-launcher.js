@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const { hasReleaseFlag } = require('../../../core/release-runtime-context');
+const { readStartupContext, createMainServerSubserverUpdater } = require('../modules/aasc/subserver-main-update');
 
 const DEFAULT_RESTART_DELAY_MS = 1000;
 const MAX_CRASH_RESTARTS = 5;
@@ -13,6 +14,9 @@ function createServerLauncher(options = {}) {
         ? options.processArguments.slice()
         : process.argv.slice(2);
     const environment = options.environment || process.env;
+    const projectRoot = path.resolve(options.projectRoot || environment.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../..'));
+    // 普通APK和Termux共享主服务器更新指针；Offline APK保留原生管理器指针。
+    let activeContext = environment.AASC_OFFLINE_MODE === '1' ? null : readStartupContext(projectRoot);
     const releaseMode = hasReleaseFlag(processArguments);
     const spawnChild = options.spawnChild || ((file, args, spawnOptions) => fork(file, args, spawnOptions));
     const schedule = options.schedule || ((callback, delayMs) => setTimeout(callback, delayMs));
@@ -24,6 +28,53 @@ function createServerLauncher(options = {}) {
     let restartRequested = false;
     let restartTimer = null;
     let crashCount = 0;
+    let updateInProgress = false;
+    let updatePromise = null;
+
+    async function stopChildForUpdate() {
+        const current = child;
+        if (!current) return;
+        clearRestartTimer();
+        await new Promise((resolve, reject) => {
+            let forcedTimeout = null;
+            const timeout = setTimeout(() => {
+                forcedTimeout = setTimeout(() => reject(new Error('子服务器进程无法停止')), 3000);
+                current.kill('SIGKILL');
+            }, 12000);
+            current.once('exit', () => { clearTimeout(timeout); if (forcedTimeout) clearTimeout(forcedTimeout); resolve(); });
+            current.kill('SIGTERM');
+        });
+    }
+
+    function requestServiceUpdate(message) {
+        if (stopping || updateInProgress || typeof message.requestId !== 'string' ||
+            !/^[a-zA-Z0-9-]{1,128}$/.test(message.requestId) || typeof message.force !== 'boolean') return;
+        updateInProgress = true;
+        const createUpdater = options.createUpdater || createMainServerSubserverUpdater;
+        const updater = createUpdater({
+            projectRoot, healthUrl: message.healthUrl,
+            serverUrl: message.mainServerUrl, android: environment.AASC_ANDROID_NODE === '1',
+            isRunning: () => !!child,
+            serviceController: {
+                stop: stopChildForUpdate,
+                async start(context) {
+                    if (stopping) throw new Error('启动器正在退出，取消更新启动');
+                    activeContext = context;
+                    spawnServerChild();
+                }
+            }
+        });
+        updatePromise = updater.update(message).then(result => {
+            console.log(`[启动器] 主服务器代码更新结果: ${JSON.stringify(result)}`);
+            return result;
+        }).catch(error => {
+            console.error(`[启动器] 主服务器代码更新失败: ${error.message}`);
+        }).finally(() => {
+            updateInProgress = false;
+            // 准备阶段旧子进程若自行退出且准备失败，恢复监督，不能让节点停在无进程状态。
+            if (!child && !stopping) spawnServerChild();
+        });
+    }
 
     function clearRestartTimer() {
         if (restartTimer === null) return;
@@ -33,6 +84,10 @@ function createServerLauncher(options = {}) {
 
     function handleChildMessage(message) {
         if (!message || typeof message !== 'object') return;
+        if (message.type === 'serverUpdateRequested') {
+            requestServiceUpdate(message);
+            return;
+        }
         if (message.type === 'restartRequested') {
             restartRequested = true;
             return;
@@ -50,6 +105,9 @@ function createServerLauncher(options = {}) {
             exit(typeof code === 'number' ? code : 0);
             return;
         }
+
+        // 更新事务显式管理stop/start，不能在切换窗口触发自动重启旧代码。
+        if (updateInProgress) return;
 
         if (restartRequested) {
             restartRequested = false;
@@ -82,9 +140,16 @@ function createServerLauncher(options = {}) {
         if (stopping || child) return child;
 
         try {
-            const childEnvironment = { ...environment, AASC_SERVER_CHILD: '1' };
+            const childEnvironment = { ...environment, AASC_SERVER_CHILD: '1', AASC_SUBSERVER_UPDATE_IPC: '1' };
+            const selectedServerPath = activeContext?.codeVersion
+                ? path.join(activeContext.codeRoot, 'src/apps/server/boot/server-app.js') : serverPath;
+            if (activeContext?.codeVersion) {
+                childEnvironment.AASC_PROJECT_ROOT = projectRoot;
+                childEnvironment.AASC_NODE_MODULES_DIR = activeContext.nodeModulesRoot;
+                childEnvironment.NODE_PATH = [activeContext.nodeModulesRoot, environment.NODE_PATH].filter(Boolean).join(path.delimiter);
+            }
             if (releaseMode) childEnvironment.AASC_RELEASE_MODE = '1';
-            child = spawnChild(serverPath, processArguments, {
+            child = spawnChild(selectedServerPath, processArguments, {
                 stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
                 env: childEnvironment
             });
@@ -125,6 +190,8 @@ function createServerLauncher(options = {}) {
         requestStop,
         handleChildMessage,
         handleChildExit,
+        requestServiceUpdate,
+        getUpdatePromise: () => updatePromise,
         constants: {
             DEFAULT_RESTART_DELAY_MS,
             MAX_CRASH_RESTARTS
@@ -133,6 +200,18 @@ function createServerLauncher(options = {}) {
 }
 
 function main() {
+    // 完整退出后使用最新版本的launcher实现；正在运行的监督器稳定完成本次更新事务。
+    if (process.env.AASC_OFFLINE_MODE !== '1') {
+        const root = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../..'));
+        const context = readStartupContext(root);
+        if (context.codeVersion) {
+            const launcherPath = path.join(context.codeRoot, 'src/apps/server/boot/server-launcher.js');
+            if (path.resolve(launcherPath) !== path.resolve(__filename)) {
+                process.env.AASC_PROJECT_ROOT = root;
+                return require(launcherPath).main();
+            }
+        }
+    }
     const launcher = createServerLauncher();
     process.once('SIGINT', () => launcher.requestStop('SIGINT'));
     process.once('SIGTERM', () => launcher.requestStop('SIGTERM'));

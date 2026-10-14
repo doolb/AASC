@@ -42,11 +42,14 @@ function getRuntimeVersionInfo(options = {}) {
         ? options.serverVersion.trim()
         : '';
     const activeRelease = readJsonObject(path.join(projectRoot, 'updates', 'active-release.json'));
+    const subserverRelease = readJsonObject(path.join(projectRoot, 'updates/subserver/active-release.json'));
+    const nodeMinRelease = readJsonObject(path.join(projectRoot, 'updates/allserver-min/active-release.json'));
     const bundledBaseline = readJsonObject(path.join(projectRoot, 'offline-update-client.json'));
-    const serviceSource = activeRelease || bundledBaseline || {};
+    const serviceSource = activeRelease || subserverRelease || nodeMinRelease || bundledBaseline || {};
     const dependencySource = activeRelease
         ? activeRelease.legacyDependencies === true ? 'legacy-root' : 'active-release'
-        : bundledBaseline ? 'bundled-baseline' : 'package-root';
+        : subserverRelease ? 'target-node' : nodeMinRelease ? 'offline-node' : bundledBaseline ? 'bundled-baseline' : 'package-root';
+    const lastUpdate = readJsonObject(path.join(projectRoot, 'updates/subserver/update-result.json'));
 
     return {
         apk: serverVersion || packageVersion,
@@ -57,7 +60,8 @@ function getRuntimeVersionInfo(options = {}) {
             : String(options.displayVersion),
         codePath: codeRoot,
         dependenciesPath: nodeModulesRoot,
-        dependencySource
+        dependencySource,
+        ...(lastUpdate ? { update: lastUpdate } : {})
     };
 }
 

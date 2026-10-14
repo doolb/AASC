@@ -93,7 +93,7 @@ test('Bootstrap 成功更新代码并保留配置、资源、依赖和日志', a
         healthCheck: async () => true
     });
 
-    const result = await bootstrap.update();
+    const result = await bootstrap.updateLegacy();
 
     assert.deepEqual(result, { success: true, version: 'new', rolledBack: false });
     assert.deepEqual(events, ['stop', 'start']);
@@ -133,7 +133,7 @@ test('Bootstrap 健康检查失败时恢复旧代码并重启服务', async () =
         healthCheck: async () => false
     });
 
-    const result = await bootstrap.update();
+    const result = await bootstrap.updateLegacy();
 
     assert.equal(result.success, false);
     assert.equal(result.version, 'broken');
@@ -167,7 +167,7 @@ test('Bootstrap 在包校验失败或路径越界时不会停止服务', async (
         }
     });
 
-    const result = await bootstrap.update();
+    const result = await bootstrap.updateLegacy();
 
     assert.equal(result.success, false);
     assert.equal(result.rolledBack, false);
@@ -232,7 +232,7 @@ test('Bootstrap 强制更新为清单和代码包请求增加缓存绕过参数'
         healthCheck: async () => true
     });
 
-    const result = await bootstrap.update({ force: true });
+    const result = await bootstrap.updateLegacy({ force: true });
 
     assert.equal(result.success, true);
     assert.equal(result.forced, true);

@@ -60,7 +60,8 @@
     "prebuild:apk:withserver": "npm run prepare:mmd-production",
     "test:mmd-production:tts": "node --test tests/chat-manual-tts.test.js tests/server-tts-concurrency-integration.test.js",
     "test:mmd-performance": "node --test tests/display-mmd-performance.test.js tests/mmd-gpu-timer.test.js",
-    "test:config-backup": "node --test tests/full-config-backup.test.js tests/full-config-backup-browser.test.js"
+    "test:config-backup": "node --test tests/full-config-backup.test.js tests/full-config-backup-browser.test.js",
+    "test:subserver-update": "node --test tests/subserver-main-update.test.js tests/dependency-groups.test.js tests/termux-server-bootstrap.test.js tests/server-release-service.test.js tests/server-launcher.test.js tests/runtime-version-info.test.js tests/aasc-node-connector.test.js tests/server-list-ui.test.js"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",

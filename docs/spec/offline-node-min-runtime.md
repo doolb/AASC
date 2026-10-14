@@ -85,3 +85,15 @@ Node Offline min 配套资源位于独立公网目录 /mnt/node-min/
 - 旧清单在本地 release 数据完整时可以继续启动；无本地数据时给出发布要求。
 - 签名错误、大小/hash 不符、恶意 ZIP 路径或 ZIP 根目录多出项目均不得写入 release。
 - Windows x64 和 Linux x64 启动、热更新、自动重启和回滚仍需在目标机现场验收。
+
+## 共享平台依赖（2026-10-14）
+
+```text
+验签代码ZIP → 从已验证代码加载纯builtin shared-update-manifest/dependency-tree
+签名组合为四组 → 校验目标os/arch/libc/ABI/NAPI → common+本平台
+相同已验组缓存 → 重验元数据/实际内容SHA后复用；新组从原LAN/WAN取相同ZIP
+组合复制拒绝链接/覆盖 → 代码锁版本匹配 → 组合内容指纹 → 原有版本指针与受管健康/回滚
+活动指针与previous保留dependencyVersion；服务API回报offline-node来源
+历史单依赖清单 → 保留目标机npm路径；新版组不再重新npm安装
+独立启动器发布 → /home/as/a/node-min/allserver-min.js + HTTP大小/SHA核对
+```

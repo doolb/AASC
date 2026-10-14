@@ -765,6 +765,7 @@ async function readActiveState(projectRoot, activeFile) {
     return {
         schemaVersion: 1,
         codeVersion: parsed.codeVersion,
+        dependencyVersion: parsed.dependencyVersion || null,
         lockSha256: parsed.lockSha256,
         codeSha256: parsed.codeSha256,
         codeDirectory: parsed.codeDirectory,
@@ -794,6 +795,7 @@ function createEmptyContext(projectRoot) {
 function contextSnapshot(context) {
     return {
         codeVersion: context.codeVersion,
+        dependencyVersion: context.dependencyVersion || null,
         lockSha256: context.lockSha256,
         codeSha256: context.codeSha256 || null,
         codeDirectory: context.codeDirectory,
@@ -806,6 +808,7 @@ function activeStateFromContext(context, pendingHealth = false, previous = null)
     return {
         schemaVersion: 1,
         codeVersion: context.codeVersion,
+        dependencyVersion: context.dependencyVersion || null,
         lockSha256: context.lockSha256,
         codeSha256: context.codeSha256,
         codeDirectory: context.codeDirectory,
@@ -866,6 +869,10 @@ async function prepareRelease(options) {
         }
         const lockInfo = await parsePackageLockVersion(finalCodeRoot);
         if (lockInfo.sha256 !== code.requiredLockSha256) throw new Error('已缓存代码包 lock 指纹与签名清单不匹配');
+        if (candidate.manifest.payload.components.dependencies?.groups) {
+            await prepareGroupedDependencies(candidate, finalCodeRoot, projectRoot, options);
+            return createPreparedContext(projectRoot, code, codeRelativeDirectory, path.join(finalCodeRoot, 'node_modules'), lockInfo.sha256);
+        }
         let nodeModulesRoot = currentContext.lockSha256 === lockInfo.sha256
             ? currentContext.nodeModulesRoot
             : path.join(finalCodeRoot, 'node_modules');
@@ -906,7 +913,10 @@ async function prepareRelease(options) {
         }
 
         let nodeModulesRoot;
-        if (currentContext.lockSha256 === lockInfo.sha256 &&
+        if (candidate.manifest.payload.components.dependencies?.groups) {
+            await prepareGroupedDependencies(candidate, stageRoot, projectRoot, options);
+            nodeModulesRoot = path.join(finalCodeRoot, 'node_modules');
+        } else if (currentContext.lockSha256 === lockInfo.sha256 &&
             fs.existsSync(path.join(currentContext.nodeModulesRoot, 'express', 'package.json'))) {
             nodeModulesRoot = currentContext.nodeModulesRoot;
         } else {
@@ -933,11 +943,67 @@ async function prepareRelease(options) {
     }
 }
 
+/** 同一签名依赖组合只安装common和本平台；代码包内工具仅依赖Node builtin。 */
+async function prepareGroupedDependencies(candidate, codeRoot, projectRoot, options) {
+    const moduleRoot = path.join(codeRoot, 'src/apps/server/modules/aasc');
+    const shared = require(path.join(moduleRoot, 'shared-update-manifest.js'));
+    const tree = require(path.join(moduleRoot, 'dependency-tree.js'));
+    shared.verifyManifest(candidate.manifest, options.publicKeyPem || OFFLINE_UPDATE_PUBLIC_KEY, { requireGroups: true });
+    const dependencies = candidate.manifest.payload.components.dependencies;
+    const group = shared.selectTarget(); shared.assertRuntime(dependencies.groups[group].target);
+    const assembly = path.join(codeRoot, 'node_modules');
+    const fingerprint = path.join(codeRoot, '.node-min-dependencies.json');
+    tree.assertNoLinks(projectRoot, assembly); tree.assertNoLinks(projectRoot, fingerprint);
+    if (fs.existsSync(assembly)) {
+        const previous = JSON.parse(await fs.promises.readFile(fingerprint, 'utf8'));
+        if (previous.sha256 === dependencies.sha256 && previous.contentSha256 === await tree.contentHash(assembly)) return;
+        throw new Error('已有分层依赖组合与清单不匹配，保留当前服务');
+    }
+    for (const name of ['common', group]) {
+        const entry = dependencies.groups[name];
+        const relative = `updates/allserver-min/dependency-groups/${name}/dependencies-v${entry.version}-${entry.sha256.slice(0, 12)}`;
+        const cache = resolveManagedPath(projectRoot, relative, '依赖组缓存');
+        tree.assertNoLinks(projectRoot, cache);
+        const verify = async directory => {
+            tree.assertNoLinks(directory, path.join(directory, 'dependency-group.json'));
+            const metadata = JSON.parse(await fs.promises.readFile(path.join(directory, 'dependency-group.json'), 'utf8'));
+            if (metadata.group !== name || metadata.version !== entry.version || metadata.contentSha256 !== entry.contentSha256 ||
+                shared.canonicalJson(metadata.target) !== shared.canonicalJson(entry.target) ||
+                await tree.contentHash(path.join(directory, 'node_modules')) !== entry.contentSha256) throw new Error(`依赖组${name}内容校验失败`);
+        };
+        if (fs.existsSync(cache)) await verify(cache);
+        else {
+            await fs.promises.mkdir(path.dirname(cache), { recursive: true });
+            const archivePath = `${cache}.zip`; const staging = `${cache}.staging-${process.pid}`;
+            try {
+                await downloadComponentArchive(candidate, entry, archivePath, options.baseUrls, `依赖组${name}`);
+                await extractZipSafely(archivePath, staging);
+                const items = await fs.promises.readdir(staging);
+                if (items.some(item => !['node_modules', 'dependency-group.json'].includes(item))) throw new Error('依赖组包含非依赖资源');
+                await verify(staging); await fs.promises.rename(staging, cache);
+            } finally {
+                await fs.promises.rm(archivePath, { force: true });
+                await fs.promises.rm(staging, { recursive: true, force: true });
+            }
+        }
+        await tree.mergeTree(path.join(cache, 'node_modules'), assembly);
+    }
+    const lock = JSON.parse(await fs.promises.readFile(path.join(codeRoot, 'package-lock.json'), 'utf8'));
+    for (const [relative, expected] of Object.entries(lock.packages || {})) {
+        if (!relative || expected.dev || expected.optional) continue;
+        if (!relative.startsWith('node_modules/') || relative.split('/').some(part => !part || part === '..' || part === '.') || relative.includes('\\')) throw new Error('依赖锁路径无效');
+        const actual = JSON.parse(await fs.promises.readFile(path.join(codeRoot, relative, 'package.json'), 'utf8'));
+        if (actual.version !== expected.version) throw new Error(`组合依赖包版本不匹配：${relative}`);
+    }
+    await fs.promises.writeFile(fingerprint, JSON.stringify({ sha256: dependencies.sha256, contentSha256: await tree.contentHash(assembly) }), { flag: 'wx' });
+}
+
 function createPreparedContext(projectRoot, code, codeRelativeDirectory, nodeModulesRoot, lockSha256) {
     const finalCodeRoot = resolveManagedPath(projectRoot, codeRelativeDirectory, '活动代码目录');
     return {
         schemaVersion: 1,
         codeVersion: code.version,
+        dependencyVersion: code.requiredDependencyVersion,
         lockSha256,
         codeSha256: code.sha256,
         codeDirectory: codeRelativeDirectory.split(path.sep).join('/'),
@@ -1133,6 +1199,7 @@ async function startManager(options) {
         const fallback = {
             schemaVersion: 1,
             codeVersion: previous.codeVersion,
+            dependencyVersion: previous.dependencyVersion || null,
             lockSha256: previous.lockSha256,
             codeSha256: previous.codeSha256 || null,
             codeDirectory: previous.codeDirectory,
@@ -1316,6 +1383,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+    prepareGroupedDependencies,
     ENTRYPOINT,
     MIN_NODE_VERSION,
     RECOMMENDED_NODE_MAJOR,

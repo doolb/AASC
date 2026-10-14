@@ -27,6 +27,7 @@ const DEFAULT_WATCH_INTERVAL_MINUTES = 10;
 const SOURCE_ENV = 'AASC_OFFLINE_SYNC_SOURCE';
 const LOCAL_ROOT_ENV = 'AASC_OFFLINE_LOCAL_ROOT';
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
+const { GROUPS } = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 const SYNC_COMPONENT_NAMES = Object.freeze(['code', 'nodeMinSeeds', 'dependencies', 'apkMin', 'dataRepair']);
 const MMD_SYNC_STATE_FILE = '.offline-mmd-sync-state.json';
 const MAX_MMD_INDEX_BYTES = 2 * 1024 * 1024;
@@ -524,8 +525,9 @@ async function resolveSafePath(rootDirectory, relativePath) {
 
 function selectSyncComponents(manifest) {
     const components = manifest?.payload?.components || {};
-    return SYNC_COMPONENT_NAMES
-        .map((name) => ({ name, component: components[name] }))
+    return [...SYNC_COMPONENT_NAMES
+        .map((name) => ({ name, component: components[name] })),
+        ...GROUPS.map(group => ({ name: `dependencies.${group}`, component: components.dependencies?.groups?.[group] }))]
         .filter(({ component }) => component && typeof component.relativeUrl === 'string');
 }
 

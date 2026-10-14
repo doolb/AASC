@@ -15,6 +15,8 @@ const { stageNodeMinSeeds } = require('./node-min-seeds');
 const { RUNTIME_COMPATIBILITY, validateRuntimeCompatibility } = require('./offline-runtime-contract');
 
 const execFileAsync = promisify(execFile);
+const sharedUpdate = require('../../src/apps/server/modules/aasc/shared-update-manifest');
+const { buildDependencyGroups } = require('./dependency-groups');
 const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
 const DATA_REPAIR_ENTRYPOINT = 'repair.js';
 const DATA_REPAIR_CAPABILITIES = Object.freeze([
@@ -113,7 +115,8 @@ function validateManifestComponents(manifest) {
     if (code?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(code.runtimeCompatibility);
     if (apkMin?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(apkMin.runtimeCompatibility);
     validateArtifactEntry(code, 'code');
-    validateArtifactEntry(dependencies, 'dependencies');
+    if (dependencies?.groups) sharedUpdate.validateDependencies(dependencies);
+    else validateArtifactEntry(dependencies, 'dependencies');
     if (manifest.payload.components.nodeMinSeeds !== undefined) {
         validateArtifactEntry(manifest.payload.components.nodeMinSeeds, 'nodeMinSeeds');
         validateGitSourceMetadata(manifest.payload.components.nodeMinSeeds.source, 'components.nodeMinSeeds.source');
@@ -376,89 +379,11 @@ async function createZip(stagingDirectory, archivePath, commandRunner) {
     }
 }
 
-async function assertTreeHasNoSpecialEntries(rootDirectory, label) {
-    const pendingDirectories = [rootDirectory];
-    while (pendingDirectories.length > 0) {
-        const currentDirectory = pendingDirectories.pop();
-        const entries = await fs.promises.readdir(currentDirectory, { withFileTypes: true });
-        for (const entry of entries) {
-            const fullPath = path.join(currentDirectory, entry.name);
-            const stat = await fs.promises.lstat(fullPath);
-            const relativePath = path.relative(rootDirectory, fullPath);
-            if (stat.isSymbolicLink()) throw new Error(`${label} 不允许符号链接: ${relativePath}`);
-            if (stat.isDirectory()) pendingDirectories.push(fullPath);
-            else if (!stat.isFile()) throw new Error(`${label} 包含不支持的文件类型: ${relativePath}`);
-        }
-    }
-}
-
-async function removeNpmToolShimDirectories(rootDirectory, relativePath = '') {
-    const currentDirectory = path.join(rootDirectory, relativePath);
-    const entries = await fs.promises.readdir(currentDirectory, { withFileTypes: true });
-    for (const entry of entries) {
-        const childRelativePath = path.join(relativePath, entry.name);
-        const childPath = path.join(rootDirectory, childRelativePath);
-        const stat = await fs.promises.lstat(childPath);
-        if (entry.name === '.bin') {
-            if (!stat.isDirectory() || stat.isSymbolicLink()) {
-                throw new Error(`Android production dependencies 的 npm .bin 必须是普通目录: ${childRelativePath}`);
-            }
-            // APK Node Runtime 不运行 npm CLI，.bin 仅是 npm 生成的可执行入口软链接。
-            // 移除整个工具目录，避免把主机路径软链接带进 Android 更新 ZIP。
-            await fs.promises.rm(childPath, { recursive: true, force: true });
-            continue;
-        }
-        if (stat.isDirectory() && !stat.isSymbolicLink()) {
-            await removeNpmToolShimDirectories(rootDirectory, childRelativePath);
-        }
-    }
-}
-
 async function readManifest(value) {
     if (typeof value === 'string') {
         return JSON.parse(await fs.promises.readFile(value, 'utf8'));
     }
     return value;
-}
-
-async function runNpmCi(stagingDirectory, commandRunner) {
-    const npmCommand = process.env.npm_execpath || 'npm';
-    await commandRunner(npmCommand, ['ci', '--omit=dev', '--ignore-scripts'], {
-        cwd: stagingDirectory,
-        env: process.env
-    });
-}
-
-async function buildDependencyArchive(options) {
-    const { projectRoot, workDirectory, dependencyVersion, lockSha256, commandRunner, zipRunner } = options;
-    const stagingDirectory = path.join(workDirectory, 'dependencies');
-    await fs.promises.mkdir(stagingDirectory, { recursive: true });
-    await fs.promises.copyFile(path.join(projectRoot, 'package.json'), path.join(stagingDirectory, 'package.json'));
-    await fs.promises.copyFile(path.join(projectRoot, 'package-lock.json'), path.join(stagingDirectory, 'package-lock.json'));
-    await runNpmCi(stagingDirectory, commandRunner);
-
-    const packageJson = JSON.parse(await fs.promises.readFile(path.join(stagingDirectory, 'package.json'), 'utf8'));
-    const nodeModules = path.join(stagingDirectory, 'node_modules');
-    const expressPackage = path.join(nodeModules, 'express', 'package.json');
-    if (!packageJson.dependencies?.express || !fs.existsSync(expressPackage)) {
-        throw new Error('Android production dependencies 缺少 express');
-    }
-    await removeNpmToolShimDirectories(nodeModules);
-    await assertTreeHasNoSpecialEntries(nodeModules, 'Android production dependencies');
-    await fs.promises.rm(path.join(stagingDirectory, 'package.json'));
-    await fs.promises.rm(path.join(stagingDirectory, 'package-lock.json'));
-    await fs.promises.writeFile(path.join(stagingDirectory, 'dependency-manifest.json'), JSON.stringify({
-        version: dependencyVersion,
-        lockSha256,
-        runtimeCompatibility: RUNTIME_COMPATIBILITY
-    }, null, 2) + '\n');
-
-    const archivePath = path.join(workDirectory, `dependencies-v${dependencyVersion}.zip`);
-    await createZip(stagingDirectory, archivePath, zipRunner);
-    return {
-        archivePath,
-        relativeUrl: `dependencies/${path.basename(archivePath)}`
-    };
 }
 
 async function loadCurrentManifest(options, publicKeyPem) {
@@ -617,13 +542,15 @@ async function createOfflineUpdateArtifacts(options = {}) {
     if (!packageJson.dependencies || !Object.keys(packageJson.dependencies).length) {
         throw new Error('服务 package.json 缺少 production dependencies');
     }
+    const migratingGroups = !currentComponents.dependencies?.groups;
     const updatePlan = resolveUpdatePlan({
-        requestedMode,
+        requestedMode: migratingGroups ? 'all' : requestedMode,
         currentDependencies: currentComponents.dependencies,
         lockSha256,
-        dependencyVersion: options.dependencyVersion
+        dependencyVersion: options.dependencyVersion ?? (migratingGroups ? (currentComponents.dependencies?.version || 0) + 1 : undefined)
     });
-    const { mode, dependencyVersion, autoDependencyUpgrade } = updatePlan;
+    const { mode, dependencyVersion } = updatePlan;
+    const autoDependencyUpgrade = updatePlan.autoDependencyUpgrade || (migratingGroups && requestedMode === 'code-only');
     const reuseNodeMinSeeds = options.reuseNodeMinSeeds === true;
     if (reuseNodeMinSeeds && (mode !== 'code-only' || !currentComponents.nodeMinSeeds)) {
         throw new Error('复用 Node min 种子只允许已有种子清单的 code-only 更新');
@@ -638,7 +565,6 @@ async function createOfflineUpdateArtifacts(options = {}) {
     const nodeMinSeedsArchivePath = path.join(outputDir, 'node-min-seeds', path.basename(stagedNodeMinSeedsArchive));
     let codeArchivePath = null;
     let finalNodeMinSeedsArchivePath = null;
-    let dependenciesArchivePath = null;
     try {
         const codeDirectory = path.join(workDirectory, 'code');
         await fs.promises.mkdir(codeDirectory, { recursive: true });
@@ -663,22 +589,14 @@ async function createOfflineUpdateArtifacts(options = {}) {
         await fs.promises.mkdir(codeDestinationDirectory, { recursive: true });
 
         let stagedDependencies = null;
-        let finalDependenciesArchivePath = null;
         if (mode === 'all') {
-            finalDependenciesArchivePath = path.join(outputDir, 'dependencies', `dependencies-v${dependencyVersion}.zip`);
-            if (fs.existsSync(finalDependenciesArchivePath)) {
-                throw new Error(`依赖包版本文件已存在，拒绝覆盖: ${finalDependenciesArchivePath}`);
+            let dependencyRoots = options.dependencyRoots;
+            if (typeof dependencyRoots === 'string') dependencyRoots = JSON.parse(await fs.promises.readFile(dependencyRoots, 'utf8'));
+            stagedDependencies = await buildDependencyGroups({ projectRoot, workDirectory, dependencyVersion, lockSha256,
+                source, outputDir, currentArtifactRoot: options.currentArtifactRoot, currentDependencies: currentComponents.dependencies, commandRunner, dependencyRoots, nodeAbi: options.nodeAbi });
+            for (const artifact of stagedDependencies.artifacts) {
+                if (!artifact.reused && fs.existsSync(path.join(outputDir, artifact.relativeUrl))) throw new Error(`依赖组版本已存在，拒绝覆盖：${artifact.relativeUrl}`);
             }
-            stagedDependencies = await buildDependencyArchive({
-                projectRoot,
-                workDirectory,
-                outputDir,
-                dependencyVersion,
-                lockSha256,
-                commandRunner,
-                zipRunner
-            });
-            dependenciesArchivePath = stagedDependencies.archivePath;
         }
 
         const payload = {
@@ -701,14 +619,8 @@ async function createOfflineUpdateArtifacts(options = {}) {
                 }
             }
         };
-        if (mode === 'all') {
-            payload.components.dependencies = {
-                version: dependencyVersion,
-                lockSha256,
-                source,
-                ...(await describeArtifact(dependenciesArchivePath, `dependencies/${path.basename(dependenciesArchivePath)}`))
-            };
-        }
+        if (mode === 'all') payload.components.dependencies = stagedDependencies.dependencies;
+
         const manifest = {
             payload,
             signature: signManifestPayload(payload, privateKeyPem)
@@ -727,9 +639,11 @@ async function createOfflineUpdateArtifacts(options = {}) {
             finalNodeMinSeedsArchivePath = nodeMinSeedsArchivePath;
         }
         if (mode === 'all') {
-            await fs.promises.mkdir(path.dirname(finalDependenciesArchivePath), { recursive: true });
-            await atomicallyCopyToOutput(dependenciesArchivePath, finalDependenciesArchivePath);
-            dependenciesArchivePath = finalDependenciesArchivePath;
+            for (const artifact of stagedDependencies.artifacts) {
+                const destination = path.join(outputDir, artifact.relativeUrl);
+                await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+                await atomicallyCopyToOutput(artifact.archivePath, destination);
+            }
         }
         await fs.promises.mkdir(manifestDirectory, { recursive: true });
         await atomicallyWriteOutput(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
@@ -741,7 +655,8 @@ async function createOfflineUpdateArtifacts(options = {}) {
             manifestPath,
             codeArchivePath,
             nodeMinSeedsArchivePath: finalNodeMinSeedsArchivePath,
-            dependenciesArchivePath,
+            dependenciesArchivePath: null,
+            dependencyArtifacts: stagedDependencies?.artifacts.map(artifact => path.join(outputDir, artifact.relativeUrl)) || [],
             publicKeyPem,
             publicKeyPath: keyPair.publicKeyPath
         };
@@ -769,7 +684,7 @@ function parseCliArguments(argv) {
         if (!['mode', 'code-version', 'dependency-version', 'output-dir', 'manifest-file',
             'data-repair-file', 'repair-version', 'repair-id', 'required-code-version',
             'required-apk-version-code', 'required-data-version', 'target-data-version',
-            'repair-capabilities', 'release-notes', 'sensitive', 'reuse-node-min-seeds'].includes(key)) {
+            'repair-capabilities', 'release-notes', 'sensitive', 'reuse-node-min-seeds', 'dependency-roots', 'node-abi'].includes(key)) {
             throw new Error(`未知构建参数: --${key}`);
         }
         if (typeof value !== 'string' || value.startsWith('--')) throw new Error(`参数 --${key} 缺少值`);
@@ -814,7 +729,7 @@ async function runCli(argv = process.argv.slice(2)) {
         }
         console.log(`代码包: ${result.codeArchivePath}`);
         if (result.nodeMinSeedsArchivePath) console.log(`Node min 初始配置和任务包: ${result.nodeMinSeedsArchivePath}`);
-        if (result.dependenciesArchivePath) console.log(`依赖包: ${result.dependenciesArchivePath}`);
+        for (const file of result.dependencyArtifacts || []) console.log(`依赖组: ${file}`);
         if (result.dataRepairArchivePath) console.log(`数据修复包: ${result.dataRepairArchivePath}`);
         console.log(`签名清单: ${result.manifestPath}`);
         console.log(`验证公钥: ${result.publicKeyPath || '由调用方提供'}`);

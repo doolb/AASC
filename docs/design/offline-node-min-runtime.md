@@ -47,3 +47,7 @@
 - 首次种子会收录 `release/task` 的定义和结果索引；其中 `status=running` 的实例会按服务既有规则尝试恢复。
 - Node min 不下载 Android Offline dependencies ZIP；依赖由目标机 npm 按 code ZIP 中的 lock 文件安装。
 - 解压器支持当前生成的 ZIP32/Deflate，不包含 ZIP64、多卷 ZIP 或加密 ZIP。
+
+## 共享平台依赖（2026-10-14）
+
+Node min继续通过原LAN/WAN获取相同签名文件，在已验签代码内加载无外部依赖的分组工具，只安装common加目标平台组，按内容指纹复用缓存并验证生产锁。目标ABI不符保留旧服务，活动和回滚指针均记录依赖版本。历史单包清单仍支持旧目标机npm路径；独立启动器每次变更单独上传node-min公网目录并核对SHA。

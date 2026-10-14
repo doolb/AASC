@@ -29,6 +29,7 @@ class AascNodeConnector {
         this.version = options.version || 'unknown';
         this.capabilities = cloneObject(options.capabilities || {});
         this.metadata = cloneObject(options.metadata || { role: 'subserver' });
+        this.getMetadata = options.getMetadata || (() => this.metadata);
         this.getRuntime = options.getRuntime || (() => ({}));
         this.heartbeatIntervalMs = normalizePositiveInteger(
             options.heartbeatIntervalMs,
@@ -133,7 +134,7 @@ class AascNodeConnector {
             url: this._getAdvertisedUrl(),
             version: this.version,
             capabilities: this.capabilities,
-            metadata: this.metadata,
+            metadata: this._getMetadata(),
             runtime: this._getRuntime()
         });
     }
@@ -209,7 +210,7 @@ class AascNodeConnector {
                 url: this._getAdvertisedUrl(),
                 version: this.version,
                 capabilities: this.capabilities,
-                metadata: this.metadata,
+                metadata: this._getMetadata(),
                 runtime: this._getRuntime()
             });
         }, this.heartbeatIntervalMs);
@@ -246,6 +247,15 @@ class AascNodeConnector {
         } catch (error) {
             this.onError(new Error(`AASC 节点运行数据采集失败: ${error.message}`));
             return {};
+        }
+    }
+
+    /** 更新完成通常晚于首次注册；每次心跳重新读取实际版本及最后结果。 */
+    _getMetadata() {
+        try { return cloneObject(this.getMetadata()); }
+        catch (error) {
+            this.onError(new Error(`AASC节点版本信息采集失败: ${error.message}`));
+            return cloneObject(this.metadata);
         }
     }
 

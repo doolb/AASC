@@ -593,3 +593,16 @@ JVM `:app:testDebugUnitTest` BUILD SUCCESSFUL。
 
 该行为暂时保留，后续需要决定是否在首次安装时生成版本化基线 release，或增加独立的
 `bundled-baseline` 依赖来源字段，避免把完整包内置依赖显示为 `legacy-root`。
+
+## 平台依赖组合伪代码（2026-10-14）
+
+```text
+Manifest.dependencies.groups 存在 → 四组键/路径/target + SHA(canonical(groups)) + 总大小校验
+androidLayers := common+android；nodeMajor26、ARM64/Bionic、ABI147或NAPI<=10
+下载预算 := 所选两组大小，缓存复用前验证元数据与node_modules路径/内容SHA
+未缓存组 → 下载与压缩包SHA校验 → 受限ZIP → 内容SHA校验 → 原子写组缓存
+组装 → common与android普通文件排他复制 → 冲突拒绝 → dependency-manifest版本/lock
+真实生产包版本与代码锁一致 → 安装原有dependencies-vN目录 → 原有pending指针/本机健康/回滚
+min首装与热更新 → 同一prepare函数；legacy单依赖包 → 原有读法
+用户配置/results/models/logs与APK JNI → 保持原职责
+```

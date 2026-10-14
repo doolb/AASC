@@ -695,6 +695,30 @@ const SelfTest = {
             }
         },
         {
+            id: 'server_runtime_version',
+            name: '服务更新版本来源测试',
+            description: '检查实际代码、依赖目录和最近受管更新结果',
+            category: 'AASC系统',
+            run: async () => {
+                try {
+                    const response = await fetch('/api/status');
+                    const data = await response.json();
+                    const versions = data.versions;
+                    const required = ['code', 'dependencies', 'codePath', 'dependenciesPath', 'dependencySource'];
+                    if (!response.ok || !versions || required.some(key => typeof versions[key] !== 'string' || !versions[key])) {
+                        return { success: false, message: '实际运行版本或依赖路径缺失', details: JSON.stringify(versions || {}) };
+                    }
+                    if (versions.update?.status === 'failed') {
+                        return { success: false, message: '最近一次服务更新失败', details: versions.update.message || JSON.stringify(versions.update) };
+                    }
+                    return { success: true, message: `代码 ${versions.code} / 依赖 ${versions.dependencies}`,
+                        details: `${versions.dependencySource}；代码：${versions.codePath}；依赖：${versions.dependenciesPath}` };
+                } catch (error) {
+                    return { success: false, message: '无法读取服务运行版本', details: error.message };
+                }
+            }
+        },
+        {
             id: 'aasc_module_load',
             name: 'AASC模块加载测试',
             description: '检查AASC系统模块是否正确加载',

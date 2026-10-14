@@ -27,7 +27,7 @@ internal class OfflineBootstrapManager(private val context: Context) {
         val source = updater.fetchManifest(updater.readPublicKeyOrNull()
             ?: error("APK 缺少更新验证公钥")) ?: error("没有可用的服务安装清单")
         validateSnapshot(source.manifest)
-        val total = listOf(source.manifest.code, source.manifest.dependencies, source.manifest.nodeMinSeeds!!)
+        val total = listOf(source.manifest.code, *source.manifest.dependencies.androidLayers().map { it.second }.toTypedArray(), source.manifest.nodeMinSeeds!!)
             .fold(0L) { total, artifact -> Math.addExact(total, artifact.size) }
         return Preview(source.baseUrl, source.rawJson, total)
     }
@@ -54,8 +54,8 @@ internal class OfflineBootstrapManager(private val context: Context) {
                 checkCancelled(token)
                 if (OfflineRuntimeState.hasServiceEnvironment(root)) return root
                 recoverStages(root)
-                val artifacts = listOf("code" to manifest.code, "dependencies" to manifest.dependencies, "nodeMinSeeds" to manifest.nodeMinSeeds!!)
-                val pendingBytes = artifacts.fold(0L) { total, (_, item) -> Math.addExact(total, item.size) }
+                val artifacts = listOf("code" to manifest.code, "nodeMinSeeds" to manifest.nodeMinSeeds!!)
+                val pendingBytes = Math.addExact(artifacts.sumOf { (_, item) -> item.size }, manifest.dependencies.androidDownloadBytes())
                 require(OfflineUpdateManager.hasEnoughSpace(StatFs(root.path).availableBytes, pendingBytes, 0, RESERVE)) {
                     "空间不足，尚未下载本机服务"
                 }
@@ -88,7 +88,8 @@ internal class OfflineBootstrapManager(private val context: Context) {
                         OfflineUpdateManager.extractZipArchive(archive, File(stage, kind))
                     }
                     updater.validateCodePackage(File(stage, "code"), manifest.code)
-                    updater.validateDependencyPackage(File(stage, "dependencies"), manifest.dependencies)
+                    OfflineDependencyGroups.prepare(root, source, stage, updater) { progress -> checkCancelled(token); onProgress(progress) }
+                    OfflineDependencyGroups.validateLock(File(stage, "dependencies"), File(stage, "code/package-lock.json"))
                     restoreSeeds(File(stage, "nodeMinSeeds"), root)
                     NodeRuntimeInstaller(context).installBootstrapLibraries(root)
                     installBootstrapAssets(root)

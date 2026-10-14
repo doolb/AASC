@@ -112,6 +112,19 @@ test('注册和心跳都上报最新的子服务器地址', () => {
     assert.equal(socket.sent[2].payload.url, advertisedUrl);
 });
 
+test('更新结束后无需重连，下一次心跳即上报最新版本与完成结果', () => {
+    let metadata = { role: 'subserver', versions: { code: '1.0.0', update: { status: 'preparing' } } };
+    const { connector, timers } = createConnector({ getMetadata: () => metadata });
+    connector.start();
+    const socket = FakeWebSocket.instances[0]; socket.open();
+    socket.receive({ type: 'node.registered', payload: { nodeId: 'node-a' } });
+    metadata = { role: 'subserver', versions: { code: '1.0.0+123456abcdef', update: { status: 'completed' } } };
+    timers[0].callback();
+    assert.equal(socket.sent[0].payload.metadata.versions.code, '1.0.0');
+    assert.equal(socket.sent[1].payload.metadata.versions.update.status, 'completed');
+    assert.equal(socket.sent[1].payload.metadata.versions.code, metadata.versions.code);
+});
+
 test('收到主服务器请求后调用处理器并返回 node.response', async () => {
     const { connector } = createConnector({
         onRequest: async ({ type, payload }) => ({ type, accepted: payload.action === 'restart' })

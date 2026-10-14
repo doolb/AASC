@@ -41,7 +41,7 @@ function createBootstrap(options = {}) {
         return launcher.start();
     }
 
-    async function update(options = {}) {
+    async function updateLegacy(options = {}) {
         const force = options.force === true;
         let manifest = null;
         let backup = null;
@@ -105,7 +105,21 @@ function createBootstrap(options = {}) {
         }
     }
 
-    return { run, update };
+    async function update(request = {}) {
+        const { createMainServerSubserverUpdater } = require(path.join(projectRoot,
+            'src/apps/server/modules/aasc/subserver-main-update.js'));
+        const configFile = path.join(projectRoot, 'config/config.json');
+        const config = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf8')) : {};
+        const port = Number(config.server?.port) || 8081;
+        const scheme = fs.existsSync(path.join(projectRoot, 'res/certs/cert.pem')) &&
+            fs.existsSync(path.join(projectRoot, 'res/certs/key.pem')) ? 'https' : 'http';
+        return createMainServerSubserverUpdater({ projectRoot, serverUrl, serviceController,
+            healthUrl: `${scheme}://127.0.0.1:${port}`,
+            ...(options.healthCheck ? { healthCheck: options.healthCheck } : {})
+        }).update(request);
+    }
+
+    return { run, update, updateLegacy };
 }
 
 function createRunitServiceController(serviceName) {

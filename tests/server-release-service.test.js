@@ -1,102 +1,48 @@
 'use strict';
-
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
-const { test, afterEach } = require('node:test');
+const { test } = require('node:test');
+const { Writable } = require('node:stream');
+const { fixture } = require('./helpers/shared-update-fixture');
 const { ServerReleaseService } = require('../src/apps/server/modules/aasc/server-release-service');
 
-const execFileAsync = promisify(execFile);
-const temporaryRoots = [];
-
-function createFixture() {
-    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-release-'));
-    temporaryRoots.push(projectRoot);
-    fs.mkdirSync(path.join(projectRoot, 'src/apps/server/boot'), { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, 'res/tasks'), { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, 'logs'), { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, '3rd/example'), { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, 'node_modules/example'), { recursive: true });
-    fs.writeFileSync(path.join(projectRoot, 'src/apps/server/boot/server-app.js'), 'module.exports = "release";');
-    fs.writeFileSync(path.join(projectRoot, 'src/runtime.js'), 'module.exports = true;');
-    fs.writeFileSync(path.join(projectRoot, 'res/tasks/example.js'), 'user task data');
-    fs.writeFileSync(path.join(projectRoot, 'package.json'), '{"name":"aasc-test","version":"9.9.9"}');
-    fs.writeFileSync(path.join(projectRoot, 'package-lock.json'), '{"name":"aasc-test","lockfileVersion":3}');
-    fs.writeFileSync(path.join(projectRoot, 'logs/server.jsonl'), 'private log');
-    fs.writeFileSync(path.join(projectRoot, '3rd/example/private.js'), 'private third party');
-    fs.writeFileSync(path.join(projectRoot, 'node_modules/example/private.js'), 'private dependency');
-    return projectRoot;
+async function serviceFixture(t) {
+    const f = await fixture(t); return { ...f, service: new ServerReleaseService({ releaseRoot: f.published, publicKeyPem: f.publicKeyPem }) };
 }
-
-afterEach(() => {
-    for (const projectRoot of temporaryRoots.splice(0)) {
-        fs.rmSync(projectRoot, { recursive: true, force: true });
-    }
+test('读取相同共享签名清单；build入口只验证现有文件', async t => {
+    const f = await serviceFixture(t);
+    assert.deepEqual(await f.service.getManifest(), f.manifest);
+    const result = await f.service.buildPackage(); assert.equal(result.filePath, f.codeArchive); assert.equal(result.sha256, f.manifest.payload.components.code.sha256);
+    assert.equal(fs.existsSync(path.join(f.root, 'res/temp/aasc-server-release')), false);
 });
-
-test('未显式生成发布包时，读取清单不会自动打包', async () => {
-    const projectRoot = createFixture();
-    const service = new ServerReleaseService({ projectRoot });
-
-    await assert.rejects(
-        service.getManifest(),
-        /请先执行 npm run build:server-package/
-    );
-    assert.equal(
-        fs.existsSync(path.join(projectRoot, 'res/temp/aasc-server-release/manifest.json')),
-        false
-    );
+test('最新清单原子替换后立即读取新组合，不缓存旧manifest', async t => {
+    const f = await serviceFixture(t); await f.service.getManifest();
+    await f.group('linux64', { 'platform/new.txt': 'new' }, 2);
+    f.manifest.payload.components.dependencies.version = 2; f.manifest.payload.components.code.requiredDependencyVersion = 2; await f.sign();
+    assert.equal((await f.service.getManifest()).payload.components.dependencies.version, 2);
 });
-
-test('显式构建发布包后，清单和压缩包可读取', async () => {
-    const projectRoot = createFixture();
-    const service = new ServerReleaseService({ projectRoot, version: 'test-1' });
-
-    const packageInfo = await service.buildPackage();
-    const manifest = await service.getManifest();
-
-    assert.equal(manifest.version, 'test-1');
-    assert.equal(manifest.packageUrl, '/server/package?version=test-1');
-    assert.equal(manifest.size, packageInfo.size);
-    assert.equal(manifest.sha256, packageInfo.sha256);
-    assert.deepEqual(manifest.files, ['src', 'package.json', 'package-lock.json']);
-    assert.equal(
-        fs.existsSync(path.join(projectRoot, 'res/temp/aasc-server-release/manifest.json')),
-        true
-    );
-
-    const { stdout } = await execFileAsync('tar', ['-tzf', packageInfo.filePath]);
-    assert.match(stdout, /src\/apps\/server\/boot\/server-app\.js/);
-    assert.match(stdout, /package-lock\.json/);
-    assert.doesNotMatch(stdout, /res\/tasks|logs|3rd|node_modules|config|cert/);
+test('同大小文件篡改也触发SHA-256重验，不复用旧缓存', async t => {
+    const f = await serviceFixture(t); await f.service.getManifest();
+    const content = fs.readFileSync(f.codeArchive); content[20] ^= 1; fs.writeFileSync(f.codeArchive, content);
+    await assert.rejects(f.service.getManifest(), /SHA-256/);
 });
-
-test('清单读取会校验现有压缩包与 SHA-256 一致', async () => {
-    const projectRoot = createFixture();
-    const service = new ServerReleaseService({ projectRoot, version: 'test-integrity' });
-
-    const packageInfo = await service.buildPackage();
-    fs.appendFileSync(packageInfo.filePath, 'tampered');
-
-    await assert.rejects(
-        service.getManifest(),
-        /清单与代码包不一致/
-    );
+test('过期版本或指纹返回409；未知组/路径不能读取', async t => {
+    const f = await serviceFixture(t);
+    await assert.rejects(f.service.streamPackage({}, { version: 1, sha256: 'a'.repeat(64) }), { statusCode: 409 });
+    await assert.rejects(f.service.streamPackage({}, {}, '../config'), /未知/);
 });
-
-test('并发显式构建同一版本时只复用一个打包任务', async () => {
-    const projectRoot = createFixture();
-    const service = new ServerReleaseService({ projectRoot, version: 'test-concurrent' });
-
-    const results = await Promise.all([
-        service.buildPackage(),
-        service.buildPackage(),
-        service.buildPackage()
-    ]);
-
-    assert.equal(new Set(results.map(result => result.filePath)).size, 1);
-    assert.equal(new Set(results.map(result => result.sha256)).size, 1);
+test('流式下载的字节与Offline相同ZIP完全一致', async t => {
+    const f = await serviceFixture(t); const parts = []; const headers = {};
+    const response = new Writable({ write(chunk, encoding, done) { parts.push(chunk); done(); } }); response.setHeader = (name, value) => { headers[name] = value; };
+    const code = f.manifest.payload.components.code;
+    await f.service.streamPackage(response, { version: code.version, sha256: code.sha256 });
+    assert.deepEqual(Buffer.concat(parts), fs.readFileSync(f.codeArchive)); assert.equal(headers['Content-Type'], 'application/zip');
+});
+test('发布根、manifest及依赖父目录链接都拒绝且不跟随', async t => {
+    const f = await serviceFixture(t); const link = path.join(f.root, 'published-link'); fs.symlinkSync(f.published, link);
+    await assert.rejects(new ServerReleaseService({ releaseRoot: link }).getManifest(), /符号链接/);
+    fs.renameSync(path.join(f.published, 'dependencies'), path.join(f.root, 'outside'));
+    fs.symlinkSync(path.join(f.root, 'outside'), path.join(f.published, 'dependencies'));
+    await assert.rejects(f.service.getManifest(), /符号链接/);
 });

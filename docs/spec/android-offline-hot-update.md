@@ -1071,3 +1071,16 @@ UI验收 := 真实启动Error与失败候选同时可见；健康恢复清除错
 运行验收 := /api/status status=ok，APK0.2.38、codev71、canonical codePath/code-v71；重启保持版本
 发布验收 := code71与min39 LAN/WAN文件/签名/HTTP大小SHA256通过；min40最终发布验证另记changelog
 ```
+
+## 平台依赖组合伪代码（2026-10-14）
+
+```text
+Manifest.dependencies.groups 存在 → 四组键/路径/target + SHA(canonical(groups)) + 总大小校验
+androidLayers := common+android；nodeMajor26、ARM64/Bionic、ABI147或NAPI<=10
+下载预算 := 所选两组大小，缓存复用前验证元数据与node_modules路径/内容SHA
+未缓存组 → 下载与压缩包SHA校验 → 受限ZIP → 内容SHA校验 → 原子写组缓存
+组装 → common与android普通文件排他复制 → 冲突拒绝 → dependency-manifest版本/lock
+真实生产包版本与代码锁一致 → 安装原有dependencies-vN目录 → 原有pending指针/本机健康/回滚
+min首装与热更新 → 同一prepare函数；legacy单依赖包 → 原有读法
+用户配置/results/models/logs与APK JNI → 保持原职责
+```

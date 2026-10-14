@@ -1,5 +1,21 @@
 # AASC 系统架构设计文档
 
+## 主服务器共享发布文件与分层依赖（2026-10-14，已实现）
+
+普通APK、Termux及普通Node子服务器通过AASC `server.update` 请求受管启动器，从已配置主服务器获取更新。Offline APK与独立Node min继续通过原LAN/WAN获取。两种传输使用同一RSA签名清单及同一版本化ZIP，不再独立生成普通tar包；主服务器默认读取 `/mnt/aasc-offline/manifest.json`，可由运维环境变量 `AASC_UPDATE_RELEASE_ROOT`指定共享根。
+
+主服务器每次读取当前清单；版本/指纹参数绑定下载组件，过期请求返回409。被引用文件大小与SHA-256验证通过才分发，校验缓存按路径、inode、大小、mtime、ctime及预期SHA区分；清单始终重新读取。`build:server-package`保留为共享资源校验入口。
+
+依赖分为common、android、linux64、win64：common存放三个目标共同且内容相同的跨平台JS/资源；平台限制包、预编译目录及原生二进制进入对应平台组。构建通过同锁文件的npm os/cpu/libc覆写生成目标生产树，也支持带目标/锁契约的外部树。二进制ELF/PE头、包平台声明和预编译路径共同校验，不能把宿主Linux原生文件改名作为Android包。Android为ARM64/Bionic/Node26，Linux64为x64/glibc，Win64为x64；原生Node ABI/NAPI不兼容时明确拒绝。APK专用JNI仍由APK携带。
+
+每组使用 `dependencies/<group>/dependencies-vN.zip`，具有独立内容指纹、版本、包SHA和target。内容/target不变复用组版本；全局lock变化不会单独迫使common重发。依赖组合的version、lock与四组声明由单份签名绑定，代码声明所需组合版本和lock。客户端只下载common和本平台，缓存复用前核对元数据及实际文件指纹，组装拒绝文件覆盖，验证真实生产包版本。
+
+普通更新器在 `updates/subserver/releases`暂存代码及组合依赖；全部校验完成后停止子进程、写原子pending指针并启动候选。仅本机API的代码版本/代码目录/依赖目录一致才提交（物理目录归一化，兼容Android数据路径别名）；失败恢复上一整组，更新所有者异常退出恢复旧健康指针。原源码、配置、tasks/results、模型、证书和日志不覆盖。注册/心跳动态返回vN与最近更新结果，accepted只表示请求已接收。force重新取代码并再次校验已有组缓存。
+
+Android Offline热更新及min独立首装均选择common+android，复用既有组合版本目录和健康回滚。Node min由已验签代码包内的纯Node builtin工具完成分组缓存及组合，无需在支持的平台重新npm安装；历史单依赖清单仍保留原目标机npm路径。普通APK和Termux需新版受管启动器，旧APK按用户确认可重装；旧Offline APK解析器不能直接使用分组清单，需安装新版min。原有单包仅用于迁移读取，不再生成新单包。
+
+发布、镜像与精确清理扩展固定四组目录。清理保留清单全部引用，只处理严格数字版本的普通文件，拒绝依赖父目录链接和非版本文件，不递归清理用户数据目录。实现与签名出包验证完成不等于已替换LAN/WAN清单或已安装设备；实际发布结果单独记录在任务和changelog。
+
 ## 概述
 
 AASC（Actor-based Asynchronous Service Communication）是一个基于消息总线的分布式系统架构，将所有系统能力抽象为"执行者"（Actor）实体，通过发布-订阅模式实现松耦合的消息流转。

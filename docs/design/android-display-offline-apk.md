@@ -238,3 +238,7 @@ manifest，min APK 发布时原子更新 manifest 并继续引用 code v19/depen
 `updates/active-release.json`、版本化 code 目录或版本化 dependencies 目录。
 因此首次 code-only 更新若找不到对应的版本化依赖，会把根目录内置依赖写入
 active release 并标记为 `legacy-root`。该问题只记录在此，暂不改变启动和更新行为。
+
+## 平台依赖分组（2026-10-14）
+
+签名清单增加固定common/android/linux64/win64依赖组，组合版本和锁指纹绑定代码。Android只选择common+android，要求ARM64/Bionic/Node26，原生Node ABI147/NAPI最高10；组内容未变复用缓存，元数据及实际文件指纹均验证，组装拒绝覆盖。热更新和min首装共享OfflineDependencyGroups，继续使用现有完整依赖版本目录、pending健康指针及整组回滚。组JNI仍在APK；旧单包可读取用于迁移，旧解析器需先安装新版min。

@@ -493,6 +493,7 @@ class OfflineUpdateManager(
                         !normalizedEntryName.startsWith("src/apps/android-display/"))
                 "dependencies" -> normalizedEntryName == "node_modules" ||
                     normalizedEntryName == "dependency-manifest.json" ||
+                    normalizedEntryName == "dependency-group.json" ||
                     normalizedEntryName.startsWith("node_modules/")
                 "dataRepair" -> normalizedEntryName == "repair.js"
                 else -> false
@@ -738,7 +739,7 @@ class OfflineUpdateManager(
             }
             val downloadBytes = when (plan) {
                 ServiceUpdatePlan.CODE_ONLY -> source.manifest.code.size
-                ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.size)
+                ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.androidDownloadBytes())
                     ?: throw IllegalArgumentException("更新下载总大小溢出")
                 else -> 0L
             }?.let { base -> if (pendingRepair == null) base else safeAdd(base, pendingRepair.artifact.size) }
@@ -825,7 +826,7 @@ class OfflineUpdateManager(
         check(updatesDirectory.isDirectory || updatesDirectory.mkdirs()) { "无法创建 Offline 更新目录" }
         val requiredDownloads = when (effectivePlan) {
             ServiceUpdatePlan.CODE_ONLY -> source.manifest.code.size
-            ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.size)
+            ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.androidDownloadBytes())
                 ?: throw IllegalArgumentException("更新下载总大小溢出")
             ServiceUpdatePlan.DATA_REPAIR_ONLY -> 0L
             else -> 0L
@@ -846,19 +847,13 @@ class OfflineUpdateManager(
             } else {
                 null
             }
-            val dependencyArchive = if (effectivePlan == ServiceUpdatePlan.ALL) {
-                downloadArtifact(source, source.manifest.dependencies, File(stage, "dependencies.zip"), onProgress)
-            } else {
-                null
-            }
             val repairArchive = pendingRepair?.let {
                 downloadArtifact(source, it.artifact, File(stage, "data-repair.zip"), onProgress)
             }
             onProgress?.invoke(OfflineUpdateProgress("verifying", 0L, 1L, "正在校验服务更新包"))
             val codeInspection = codeArchive?.let { validateComponentArchive(it.file, "code") }
-            val dependencyInspection = dependencyArchive?.let { validateComponentArchive(it.file, "dependencies") }
             val repairInspection = repairArchive?.let { validateComponentArchive(it.file, "dataRepair") }
-            val expandedBytes = safeAdd(codeInspection?.expandedBytes ?: 0L, dependencyInspection?.expandedBytes ?: 0L)
+            val expandedBytes = safeAdd(codeInspection?.expandedBytes ?: 0L, 0L)
                 ?.let { safeAdd(it, repairInspection?.expandedBytes ?: 0L) }
                 ?: throw IllegalArgumentException("更新展开大小溢出")
             val afterDownloadAvailable = StatFs(root.absolutePath).availableBytes
@@ -880,19 +875,13 @@ class OfflineUpdateManager(
                 null
             }
 
-            val dependencyDirectory = if (dependencyArchive != null) {
-                val dependencyStage = File(stage, "dependencies")
-                extractZipArchive(dependencyArchive.file, dependencyStage)
-                validateDependencyPackage(dependencyStage, source.manifest.dependencies)
-                installVersionDirectory(
-                    stageDirectory = dependencyStage,
-                    destination = File(updatesDirectory, "dependencies/dependencies-v${source.manifest.dependencies.version}"),
-                    component = source.manifest.dependencies,
-                    kind = "dependencies"
-                )
-            } else {
-                null
-            }
+            val dependencyDirectory = if (effectivePlan == ServiceUpdatePlan.ALL) {
+                val dependencyStage = OfflineDependencyGroups.prepare(root, source, stage, this, onProgress)
+                OfflineDependencyGroups.validateLock(dependencyStage, File(codeDirectory, "package-lock.json"))
+                installVersionDirectory(dependencyStage,
+                    File(updatesDirectory, "dependencies/dependencies-v${source.manifest.dependencies.version}"),
+                    source.manifest.dependencies, "dependencies")
+            } else null
 
             val oldPointer = readReleasePointer(root)
             val dependencyResolution = if (dependencyDirectory == null) {

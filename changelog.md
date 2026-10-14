@@ -12271,3 +12271,16 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-14] Offline服务代码v78已发布至LAN与WAN：`code/code-v78.zip`，17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`；发布清单SHA-256 `47f08d0e7920b86aff6ace6a40180ae7a5100fa03a993dcd2193a1f284dd9444`。
   - 签名清单与全组件HTTP大小/SHA-256校验通过，两端清单一致，旧版本精确清理成功；未构建或发布APK。`servicePackage=false`、`minApk=false`、`dependenciesPackage=false`。
   - APK-SM-N9500仍报告代码`1.0.0`及`package-root`，尚未应用Offline热更新；待在设备更新卡片确认安装后复核版本。
+
+### 共享服务更新包与平台依赖
+
+- ✅ [2026-10-14] 主服务器与Offline共用RSA签名清单和版本化ZIP；普通APK/Termux仍从主服务器更新，依赖拆为common/android/linux64/win64独立组。
+  - 修改`ServerReleaseService`、`server-app/launcher`、包内feed/组合事务、运行版本/动态心跳、Termux与Node min、分组builder/publisher/sync及Android清单/热更新/min首装；主服务器按当前清单及version/SHA绑定分发原文件，过期返回409。更新准备完成才停车，健康失败整组回滚，缓存重验内容并拒绝覆盖/链接，数据目录保持。
+  - 新增控制端`server_runtime_version`自测；62项定向、Offline打包60项、同步36项、签名/发布23项及Android全部223项通过。修复Node26旧fd-slicer大文件背压停滞，2MiB随机ZIP回归通过；健康检查支持Android数据目录别名。
+  - 真实四组v9全部内容指纹及Android/Linux/Windows组合生产锁通过；Linux express/ws/sherpa-onnx-node加载通过。完整生产检查约超过120秒诊断预算，但全部断言完成；Windows执行和设备迁移待实机验证。
+- ✅ [2026-10-14] 已生成服务代码v83、分层依赖v9和Offline min v45；普通APK完成并封入最终更新器。产物未提交Git，LAN/WAN服务清单尚未替换。
+  - `code/code-v83.zip`：17,763,416 bytes，SHA-256 `f3da48376380eec98241094901c48634e54ffb4a8ba5167ee0c3814cfde22aec`；依赖组合SHA `a3556b2fde7a15e0c10121e04f37d8a3ffbc9382e81452dfa096f67e6d1c3903`，沿用Node min seeds v79。
+  - `dependencies/common/dependencies-v9.zip`约113.77MiB、android约0.23MiB、linux64约10.45MiB、win64约8.36MiB；每组独立元数据、ZIP SHA和内容指纹，组合由单份RSA签名绑定。
+  - `apk/aasc-display-offline-min-v45.apk`：89,389,058 bytes，SHA-256 `8a9f0f8418f4ed67e32e0e0837e715d6e17d91269a0c0302e8dd3fb9e6ebc3fd`；min清单与v83/依赖v9绑定。普通withserver：284,446,879 bytes，SHA-256 `79352d5288413585eb95cbf5af0b5d3dc63a55fe8c2ef9dd979f725febdbbfeb`；签名和APK内更新器/安装指纹核对通过，复用准备资源增量封装最后源码修正。
+  - 独立`allserver-min.js`已上传`/home/as/a/node-min/`，公网HTTP200、67,295 bytes、SHA-256 `bfc119ac00c7793b0ad815f3238de33c20a87befc0f984de5da4e8e33d0ec23e`与本地一致。普通APK公网同步结果另行追加。
+  - 主服务器已重启，实际`/server`读取共享发布根当前v78签名清单，`build:server-package`只校验同一v78 ZIP，不再生成普通tar。本方案已出包；其他并行数据修复改动未被本轮min/代码包覆盖，聚合状态保留minApk=true、servicePackage=true、dependenciesPackage=false；旧普通APK需重装、旧Offline APK需手动安装新版min，设备安装/新分组清单发布未执行。

@@ -14,8 +14,15 @@ data class OfflineUpdateArtifact(
     val sha256: String,
     val requiredDependencyVersion: Int? = null,
     val requiredLockSha256: String? = null,
-    val lockSha256: String? = null
-)
+    val lockSha256: String? = null,
+    val groups: Map<String, OfflineUpdateArtifact> = emptyMap(),
+    val contentSha256: String? = null,
+    val target: JSONObject? = null
+) {
+    fun androidLayers(): List<Pair<String, OfflineUpdateArtifact>> = if (groups.isEmpty()) listOf("dependencies" to this)
+        else listOf("common" to groups.getValue("common"), "android" to groups.getValue("android"))
+    fun androidDownloadBytes(): Long = androidLayers().fold(0L) { sum, layer -> Math.addExact(sum, layer.second.size) }
+}
 
 data class OfflineMinApkArtifact(
     val versionCode: Int,
@@ -102,7 +109,7 @@ data class OfflineUpdateManifest(
             val dependenciesJson = components.optJSONObject("dependencies")
                 ?: throw IllegalArgumentException("Offline 更新清单缺少 dependencies 组件")
             val code = parseArtifact(codeJson, "code")
-            val dependencies = parseArtifact(dependenciesJson, "dependencies")
+            val dependencies = parseDependencies(dependenciesJson)
             val requiredDependencyVersion = readPositiveInt(codeJson, "requiredDependencyVersion")
             val requiredLockSha256 = readSha256(codeJson, "requiredLockSha256")
             val dependencyLockSha256 = readSha256(dependenciesJson, "lockSha256")
@@ -147,6 +154,40 @@ data class OfflineUpdateManifest(
                 segment.isNotEmpty() && segment != "." && segment != ".." &&
                     RELATIVE_PATH_SEGMENT_PATTERN.matches(segment)
             }
+        }
+
+        /** 签名覆盖完整四组，设备只选择common和Android，绝不混用Linux原生文件。 */
+        private fun parseDependencies(value: JSONObject): OfflineUpdateArtifact {
+            val groupJson = value.optJSONObject("groups") ?: return parseArtifact(value, "dependencies")
+            val names = setOf("common", "android", "linux64", "win64")
+            require(groupJson.keys().asSequence().toSet() == names) { "依赖清单必须包含固定四组" }
+            val groups = names.associateWith { name ->
+                val entry = groupJson.getJSONObject(name)
+                val artifact = parseArtifact(entry, "dependencies.$name")
+                require(artifact.relativeUrl == "dependencies/$name/dependencies-v${artifact.version}.zip") { "依赖组路径与版本不匹配" }
+                val target = entry.optJSONObject("target")
+                if (name == "common") require(entry.has("target") && entry.isNull("target")) { "common不可绑定平台" }
+                else {
+                    val expected = when (name) {
+                        "android" -> listOf("android", "arm64", "bionic")
+                        "linux64" -> listOf("linux", "x64", "glibc")
+                        else -> listOf("win32", "x64", "none")
+                    }
+                    require(target != null && listOf("os", "arch", "libc").map { target.optString(it) } == expected) { "依赖组${name}平台契约不匹配" }
+                    if (name == "android") {
+                        require(target.optInt("nodeMajor") == 26) { "Android依赖需要Node26运行时" }
+                        require(!target.has("nodeAbi") || target.optString("nodeAbi") == "147") { "Android依赖Node ABI不匹配" }
+                        require(!target.has("napiVersion") || target.optInt("napiVersion") in 1..10) { "Android依赖NAPI不兼容" }
+                    }
+                }
+                artifact.copy(contentSha256 = readSha256(entry, "contentSha256"), target = target)
+            }
+            val digest = java.security.MessageDigest.getInstance("SHA-256").digest(canonicalJson(groupJson).toByteArray())
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            require(digest == readSha256(value, "sha256")) { "依赖组合指纹不匹配" }
+            val size = readInteger(value, "size")
+            require(size == groups.values.fold(0L) { sum, item -> Math.addExact(sum, item.size) }) { "依赖组合大小不匹配" }
+            return OfflineUpdateArtifact(readPositiveInt(value, "version"), "", size, digest, groups = groups)
         }
 
         private fun parseArtifact(value: JSONObject, name: String): OfflineUpdateArtifact {

@@ -1562,3 +1562,9 @@ Offline Android WebView的真实布局/滑块和托管服务器实际端口切�
 `npm run check:chat2api`：243项，240通过；三项Windows chmod断言与修改前基线一致。新增测试使用虚构凭据覆盖正式原生回调、固定只读协议、空列表、401/403/匿名/HTML/异常业务/结构/超限/超时/取消、同账号去重及凭据版本保护；本地HTTP贯通正式JS/OAuth/存储及非回环管理鉴权。
 
 `node --test tests/chat2api-mapping-ui-browser.test.js tests/chat2api-manual-account.test.js`：隔离Chromium2项、手动账号7项通过。独立浏览器不加载用户profile，不访问豆包；账号新增/失败仍保存/复验更新和旧API映射通过。真实Android登录完成保存、官网列表响应契约和聊天/TTS能力各自待独立验收。
+
+## 主服务器共享包与平台依赖自测（2026-10-14）
+
+`npm run test:subserver-update`62/62，包含组构建/独立版本复用、主服务器同源ZIP下载与真实双进程API健康、Node min直接Offline分组安装、发布/镜像、平台ABI与文件冲突、缓存篡改和整组回滚。控制端新增`server_runtime_version`，读取实际code/dependencies目录并显示最近更新失败。2MiB随机文件覆盖Node26大ZIP背压回归。
+
+`test:offline-bootstrap`60/60、`test:offline-sync`36/36、签名/发布23/23；Android全部223/223，包括新增5项分组解析/内容指纹/链接/冲突测试。两个ASR大文件夹具在默认/tmp遇配额错误，改用`JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/var/tmp`后通过。真实四组v9内容指纹及Android/Linux/Windows组合锁验证通过，Linux express/ws/sherpa-onnx-node加载通过；Windows及Android/Termux设备安装、更新、回滚待实机验收。

@@ -20,10 +20,12 @@ const DEFAULT_LOCAL_ROOT = '/mnt/aasc-offline';
 const DEFAULT_LOCAL_VERIFY_URL = 'http://192.168.1.39/mnt/aasc-offline/';
 // c.aasc.us 当前作为 DNS 入口使用；发布校验阶段直接访问已解析的公网 IP，避免代理返回 403。
 const DEFAULT_WAN_VERIFY_URL = 'http://120.79.245.103/mnt/aasc-offline/';
+const { GROUPS, dependencyArtifacts } = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 const CLEANUP_RULES = Object.freeze([
     { componentName: 'code', directory: 'code', prefix: 'code-v', suffix: '.zip' },
     { componentName: 'nodeMinSeeds', directory: 'node-min-seeds', prefix: 'node-min-seeds-v', suffix: '.zip' },
     { componentName: 'dependencies', directory: 'dependencies', prefix: 'dependencies-v', suffix: '.zip' },
+    ...GROUPS.map(group => ({ componentName: `dependencies.${group}`, directory: `dependencies/${group}`, prefix: 'dependencies-v', suffix: '.zip' })),
     { componentName: 'dataRepair', directory: 'data', prefix: 'data-repair-v', suffix: '.zip' },
     { componentName: 'apkMin', directory: 'apk', prefix: 'aasc-display-offline-min-v', suffix: '.apk' },
     { componentName: 'apkFull', directory: 'apk', prefix: 'aasc-display-offline-v', suffix: '.apk' }
@@ -61,7 +63,7 @@ function getPublishComponents(manifest, mode) {
     }
     const selected = [components.code];
     if (components.nodeMinSeeds) selected.push(components.nodeMinSeeds);
-    if (mode === 'all') selected.push(components.dependencies);
+    if (mode === 'all') selected.push(...dependencyArtifacts(components.dependencies));
     return selected;
 }
 
@@ -92,6 +94,11 @@ function createCleanupSpecifications(manifest, options = {}) {
         const rule = CLEANUP_RULES.find((candidate) => candidate.componentName === componentName);
         if (!rule || !getCleanupRule(component.relativeUrl)) continue;
         specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
+    }
+    for (const group of GROUPS) {
+        const component = components.dependencies?.groups?.[group];
+        const rule = CLEANUP_RULES.find(candidate => candidate.componentName === `dependencies.${group}`);
+        if (component && getCleanupRule(component.relativeUrl) === rule) specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
     }
     if (options.includeDataRepair !== false) {
         const component = components.dataRepair;
@@ -150,6 +157,13 @@ async function cleanupLocalPublishedArtifacts(rootDirectory, manifest, options =
         return result;
     }
     for (const specification of specifications) {
+        if (specification.directory.startsWith('dependencies/')) {
+            const parent = await fs.promises.lstat(path.join(rootPath, 'dependencies')).catch(() => null);
+            if (!parent?.isDirectory() || parent.isSymbolicLink()) {
+                result.errors.push({ relativePath: 'dependencies', message: '依赖清理父目录不是普通目录' });
+                continue;
+            }
+        }
         const directoryPath = path.join(rootPath, specification.directory);
         const directoryStat = await fs.promises.lstat(directoryPath).catch((error) => {
             if (error.code === 'ENOENT') return null;
@@ -354,6 +368,7 @@ function buildRemoteCleanupCommand(remote, manifest, options = {}) {
     const lines = [
         'set -eu',
         remoteRootAssignment(remote.directory),
+        '[ -L "$root" ] && exit 0',
         'cleanup_versioned_files() {',
         '  directory="$1"',
         '  prefix="$2"',
@@ -362,6 +377,7 @@ function buildRemoteCleanupCommand(remote, manifest, options = {}) {
         '  directory_path="$root/$directory"',
         '  [ -d "$directory_path" ] || return 0',
         '  [ -L "$directory_path" ] && return 0',
+        '  case "$directory" in dependencies/*) [ -L "$root/dependencies" ] && return 0 ;; esac',
         '  for file in "$directory_path"/*; do',
         '    [ -e "$file" ] || continue',
         '    [ -L "$file" ] && continue',
@@ -673,15 +689,17 @@ async function publishOfflineUpdate(options = {}) {
         uploads.push({ component, artifactPath: await validateLocalArtifact(artifactRoot, component.relativeUrl, component) });
     }
 
-    const preserved = mode === 'code-only'
+    const preservedBase = mode === 'code-only'
         ? [manifest.payload.components.dependencies]
         : mode === 'data-repair'
             ? Object.entries(manifest.payload.components)
-                .filter(([name, component]) => name !== 'dataRepair' && component && component.relativeUrl)
+                .filter(([name, component]) => name !== 'dataRepair'
+                    && component && (component.relativeUrl || component.groups))
                 .map(([, component]) => component)
         : mode === 'apk-min'
             ? [manifest.payload.components.code, manifest.payload.components.nodeMinSeeds, manifest.payload.components.dependencies].filter(Boolean)
             : [];
+    const preserved = preservedBase.flatMap(component => component.groups ? dependencyArtifacts(component) : [component]);
     const publishId = `${Date.now()}-${process.pid}`;
     const localRoot = options.localRoot ? path.resolve(options.localRoot) : null;
     const remote = options.remote || null;
@@ -814,6 +832,7 @@ function parsePublisherCliArguments(argv) {
 if (require.main === module) runCli();
 
 module.exports = {
+    getPublishComponents,
     publishOfflineUpdate,
     publishOfflineFullApk,
     cleanupLocalPublishedArtifacts,

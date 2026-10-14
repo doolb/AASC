@@ -94,6 +94,7 @@
         if (!versions || typeof versions !== 'object') {
             return formatValue(fallback);
         }
+        const updateStates = { completed: '已完成', failed: '失败', preparing: '准备中', applying: '应用中' };
         const fields = [
             ['APK', versions.apk],
             ['服务代码', versions.code],
@@ -101,7 +102,10 @@
             ['显示端', versions.display],
             ['服务代码路径', versions.codePath],
             ['依赖路径', versions.dependenciesPath],
-            ['依赖来源', versions.dependencySource]
+            ['依赖来源', versions.dependencySource],
+            ['服务更新', versions.update ? [updateStates[versions.update.status] || versions.update.status,
+                versions.update.message, versions.update.cleanupError]
+                .filter(Boolean).join(' · ') : undefined]
         ].filter(([, value]) => value !== undefined && value !== null && value !== '');
         if (fields.length === 0) return formatValue(fallback);
         return fields.map(([label, value]) => `${label}: ${escapeHtml(value)}`).join('<br>');
