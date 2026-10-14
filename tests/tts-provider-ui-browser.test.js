@@ -46,9 +46,10 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         await page.evaluate(value => window.TtsProviderSettings.handleConfig({ type: 'ttsProviderConfig', config: value }), config);
         const visibleValues = await page.$eval('#ttsProviderFields', node => [...node.querySelectorAll('input')].map(input => input.value).join(' '));
         assert.doesNotMatch(visibleValues, /legacy-hidden-secret|legacy\.invalid|legacy-private-resource/u);
-        assert.equal((await page.$$('#ttsProviderFields input[data-tts-shared-field="defaultSpeed"]')).length, 1);
+        assert.equal((await page.$$('#ttsProviderFields input[data-tts-shared-field="defaultSpeed"]')).length, 0);
         assert.equal((await page.$$('#ttsProviderFields input[data-tts-shared-field="defaultVolume"]')).length, 1);
-        assert.equal((await page.$$('#ttsProviderFields details input[type="number"]')).length, 0);
+        assert.equal((await page.$$('#ttsProviderFields details input[data-tts-field="defaultSpeed"]')).length, 4);
+        assert.equal((await page.$$('#ttsProviderFields details:last-of-type input[data-tts-field="defaultSpeed"]')).length, 0);
         assert.equal((await page.$$('#ttsProviderFields input[type="password"]')).length, 0);
         for (const number of [2, 3, 4, 5]) {
             assert.match(await page.$eval(`#ttsProviderFields details:nth-of-type(${number})`, node => node.textContent), /Chat2API/u);
@@ -103,17 +104,18 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
             const qwen = [...document.querySelectorAll('#ttsProviderFields details')].find(node => node.querySelector('summary').textContent.startsWith('Qwen API'));
             qwen.open = true;
             qwen.querySelector('input[data-tts-field="model"]').value = 'qiaoxiaojiao';
-            document.querySelector('#ttsProviderFields input[data-tts-shared-field="defaultSpeed"]').value = '4';
+            qwen.querySelector('input[data-tts-field="defaultSpeed"]').value = '4';
         });
         await page.click('#ttsProviderSaveBtn');
         assert.equal((await state()).disabled, true);
         const request = await page.evaluate(() => window.sent.at(-1));
         assert.equal(request.type, 'setTtsProviderConfig');
         assert.equal(request.config.providers['qwen-api'].model, 'qiaoxiaojiao');
-        assert.equal(request.config.defaultSpeed, '4');
+        assert.ok(!Object.hasOwn(request.config, 'defaultSpeed'));
         assert.equal(request.config.defaultVolume, '100');
-        assert.ok(!Object.hasOwn(request.config.providers['qwen-api'], 'defaultSpeed'));
+        assert.equal(request.config.providers['qwen-api'].defaultSpeed, '4');
         assert.ok(!Object.hasOwn(request.config.providers['qwen-api'], 'defaultVolume'));
+        assert.ok(!Object.hasOwn(request.config.providers['doubao-chat'], 'defaultSpeed'));
         for (const id of ['qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat']) {
             for (const name of ['credential', 'clearCredential', 'endpoint', 'resourceId', 'chat2apiAccountId']) {
                 assert.ok(!Object.hasOwn(request.config.providers[id], name), `${id} 不发送账号管理字段 ${name}`);

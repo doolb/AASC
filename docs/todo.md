@@ -221,7 +221,7 @@
 - ⏳待维护 [2026-10-11] chat-tts-interruption.test.js旧显示页静态断言：仍查找display.html中的displayChatTtsStop与内联函数；当前HEAD也同名失败，需按现有模块结构维护，未影响本轮154项TTS/历史回归。
 
 
-- ⏳待账号/设备验收 [2026-10-11] TTS 多 Provider：待其他音色权限、百炼/豆包账号、真实设备声音、过期凭证与长队列体验。Offline服务代码包待构建发布，其他运行实例需加载最新后端。任务：`docs/task/20261011_原生TTS路径与Chat2API统一语音.md`、`docs/task/20261011_聊天手动播放使用AI语音配置.md`、`docs/task/20261011_千问语音直接接口鉴权.md`。
+- ⏳待账号/设备验收 [2026-10-11] TTS 多 Provider：待其他音色权限、百炼/豆包账号、真实设备声音、过期凭证与长队列体验。声纹面板按Provider分别配置语速、音量全局共用及doubao-chat隐藏语速的修正已实现；Offline服务代码包需包含本次修正并发布，其他运行实例需加载最新后端。任务：`docs/task/20261011_原生TTS路径与Chat2API统一语音.md`、`docs/task/20261011_聊天手动播放使用AI语音配置.md`、`docs/task/20261011_千问语音直接接口鉴权.md`、`docs/task/20261014_语速按TTS方式分别配置.md`。
 
 
 - ⏳待现场验收/发布 [2026-09-30] TTS内存音频URL、128MiB可配置容量与Node无文件播放

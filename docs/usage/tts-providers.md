@@ -6,13 +6,15 @@
 
 控制端「声纹」页面展开「语音服务与音色」，分别选择AI/Agent回复、文本阅读、报时与系统播报的服务，然后「保存语音配置」并等待服务器确认。其他控制端同步权威值，重连后重新获取。
 
+语速−10至10按Provider分别保存；仅上游原生接受语速参数的方式显示语速输入。音量0至100只在面板保留一个全局入口，所有业务和Provider共用。豆包网页朗读的上游语速固定，因此不显示语速设置；其生成后的WAV只应用全局音量。
+
 系统原生沿用现有TTS生成设备、服务器开关和原生音色配置，此面板只提供语速、音量，不增加启用开关或音色ID。业务或模板选中系统原生时隐藏音色ID输入；旧Provider级开关和音色ID不会阻断或覆盖原有路径。
 
 国内千问网页可用于AI/Agent回复、文本阅读、报时/提醒、自定义文字和系统播报，由Chat2API提供语音合成。文本阅读、报时与系统播报的选择框均可选国内千问，保存后等待权威回填；已有默认选择保持。先在Chat2API账户管理中添加或登录国内千问（qwen）账号，并启用对应账号及Provider；在语音面板启用国内千问、设置模型/默认音色并保存。TTS不再查询或选择账号，Chat2API按已保存的调度策略自动使用可用国内账号，更新登录后下次合成读取最新值。国际qwen-ai不适用于该语音协议。未提供可用账号、登录失效或上游失败会明确报错，不切换到系统原生。
 
 豆包普通文字doubaochat已于2026-10-13用正式Node适配器真实验证流式/非流式OK，现支持Responses同账号原生续接、仅发新增输入，两轮纯Node协议记忆验证通过；同账号nodeProfile初始化后不依赖Chrome或页面签名，详情见[纯Node普通LLM](chat2api-doubao-node.md)。这不代表网页朗读链路完成真实验收。
 
-`doubao-chat`已接入 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭，真实运行未重新验收。先在现有Chat2API模型映射中为doubao-chat指定preferredProviderId=doubaochat及preferredAccountId，所选账号和Provider须启用且可用；严格绑定，不自动换号。业务面板无Cookie/账号输入。固定音色zh_female_wenroutaozi_uranus_bigtts、speech speed=1/volume=100，业务语速0；input最多1000个UTF-16字符且UTF-8≤4000字节，只接受wav。Frontier收集完整Ogg、校验并解码为单声道PCM WAV，缓存及下载仍为.wav/audio/wav；错误不重试、不切换其它来源。公开协议已核对，本地模拟及WASM样本通过；新真实聊天/合成需独立明确授权，Android Node/WASM、音色听感与设备播放尚未验收。文字网页fetch已实现为默认关闭的实验功能，真实运行未验收。
+`doubao-chat`已接入 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭，真实运行未重新验收。先在现有Chat2API模型映射中为doubao-chat指定preferredProviderId=doubaochat及preferredAccountId，所选账号和Provider须启用且可用；严格绑定，不自动换号。业务面板无Cookie/账号输入。固定音色zh_female_wenroutaozi_uranus_bigtts、上游speech speed=1/volume=100；上游不接受可配置语速，因此面板隐藏其语速输入，后处理只使用全局音量。input最多1000个UTF-16字符且UTF-8≤4000字节，只接受wav。Frontier收集完整Ogg、校验并解码为单声道PCM WAV，缓存及下载仍为.wav/audio/wav；错误不重试、不切换其它来源。公开协议已核对，本地模拟及WASM样本通过；新真实聊天/合成需独立明确授权，Android Node/WASM、音色听感与设备播放尚未验收。文字网页fetch已实现为默认关闭的实验功能，真实运行未验收。
 
 网页模型默认选择QUARK_VOICE，MINI_MAX需另有匹配的可用音色；目前预置的已验证音色是zh_female_quarkF531S0_ptts，完整国内音色目录尚未取得。qwen3-tts-flash应配置在Qwen API中并使用百炼API Key，不能保存为国内千问网页模型。历史错误模型读取时恢复QUARK_VOICE并保留其他参数，下一次合法保存会写回；服务端拒绝新提交的错误模型并保留原配置。
 
@@ -32,7 +34,7 @@ Qwen API根据模型选择官方语音接口：Qwen-Audio使用SpeechSynthesizer
 
 qwen-chat合成前自动去掉emoji，包含肤色、家庭组合、国旗和键帽；正文文字及标点仍朗读，聊天显示保留原文。纯emoji分句直接跳过，不请求音频，也不会产生“句子生成失败”日志。此规则同时适用于手动/自动AI/Agent和文本阅读/系统播报；无正文阅读段落跳过后继续下一句，自定义生成API返回skipped=true及audioUrl=null；其他语音服务沿用原文本规则。
 
-语速−10至10，音量0至100。原生显示端与Qwen API使用PCM重采样，可能改变音高；服务端原生与豆包/国内千问使用生成参数。Qwen API单次最多600字符，较长回复沿用业务分句，单句超限报错。每段完整音频最多16MiB，默认总时限60秒，不保存临时音频文件。
+语速−10至10按Provider分别配置，音量0至100全局共用。原生显示端与Qwen API使用PCM重采样，可能改变音高；服务端原生、豆包API与国内千问使用上游参数。豆包网页朗读不显示语速设置。Qwen API单次最多600字符，较长回复沿用业务分句，单句超限报错。每段完整音频最多16MiB，默认总时限60秒，不保存临时音频文件。
 
 Chat2API代理另提供POST /v1/audio/speech，沿用既有Bearer API Key鉴权；input为文本，旧模型支持qwen-chat、QUARK_VOICE、MINI_MAX，voice为音色ID，speed为0.25–4倍，volume为0–100；新增实验性doubao-chat仅接受上述固定参数与显式账号映射。response_format仅wav，成功返回audio/wav二进制。
 

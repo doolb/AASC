@@ -21,9 +21,12 @@ test('豆包网页TTS默认禁用且上游固定参数，无凭据/账号字段�
         {credential:'private-cookie'},{chat2apiAccountId:'private-id'}]){
         assert.throws(()=>normalizeSettings({providers:{'doubao-chat':patch}}));
     }
-    assert.equal(normalizeSettings({defaultSpeed:2,defaultVolume:90}).defaultSpeed,2);
-    assert.equal(normalizeSettings({defaultSpeed:2,defaultVolume:90}).defaultVolume,90);
+    const migrated=normalizeSettings({defaultSpeed:2,defaultVolume:90});
+    assert.equal(migrated.providers['qwen-api'].defaultSpeed,2);
+    assert.equal(migrated.defaultVolume,90);
+    assert.ok(!Object.hasOwn(migrated,'defaultSpeed'));
     assert.ok(!Object.hasOwn(value,'defaultSpeed'));assert.ok(!Object.hasOwn(value,'defaultVolume'));
+    assert.ok(!Object.hasOwn(normalizeSettings({providers:{'doubao-chat':{defaultSpeed:8}}}).providers['doubao-chat'],'defaultSpeed'));
     assert.ok(!JSON.stringify(redactSettings(defaults)).includes('private'));
     assert.deepEqual(normalizeSettings(defaults),defaults);
 });
@@ -44,7 +47,7 @@ test('现有Registry/ProviderService对新来源仍缓存WAV引用，音色查�
     const registry=createProviderRegistry({systemGenerate:async()=>{},chat2ApiSpeechService:{generate:async()=>{calls++;return{audio,contentType:'audio/wav'}}}});
     const service=createTtsProviderService({getSettings:()=>settings,registry,storeAudio:bytes=>{stored=bytes;return'tts_mem_demo.wav'}});
     assert.equal(await service.generate({text:'本地测试',businessType:'ai_reply'}),'tts_mem_demo.wav');
-    assert.notEqual(stored,audio);assert.equal(stored.readInt16LE(44),500);assert.equal(stored.length,56);
+    assert.notEqual(stored,audio);assert.equal(stored.readInt16LE(44),500);assert.equal(stored.length,60);
     const voices=await service.voices('doubao-chat');assert.equal(voices[0].id,DOUBAO_SPEECH_VOICE);assert.equal(calls,1);
 });
 

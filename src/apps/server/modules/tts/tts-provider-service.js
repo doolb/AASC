@@ -2,7 +2,7 @@
 
 const audioCache = require('../../../../external/tts/tts-audio-cache');
 const { BUSINESS_TYPES, resolveProviderConfig, normalizeProvider, normalizeOptionalString } = require('./tts-provider-policy');
-const { normalizeNumber } = require('./tts-provider-settings');
+const { normalizeNumber, PROVIDER_CAPABILITIES } = require('./tts-provider-settings');
 const { adjustWav, validateWav } = require('../../../../external/tts/tts-wav');
 const { isReplyBusiness, normalizeReplyUserText } = require('./tts-reply-user-text');
 
@@ -23,7 +23,8 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
             const { settings, selection, configuration } = resolve(request, configurationSnapshot);
             const adapter = registry[selection.provider];
             try {
-                const speed = normalizeNumber(request.speed, configuration.defaultSpeed, -10, 10);
+                const supportsSpeed = PROVIDER_CAPABILITIES[selection.provider]?.supportsSpeed === true;
+                const speed = supportsSpeed ? normalizeNumber(request.speed, settings.defaultSpeed, -10, 10) : 0;
                 const volume = normalizeNumber(request.volume, configuration.defaultVolume, 0, 100);
                 const { userText, ...providerRequest } = request;
                 // 其他Provider和非AI业务不接收上一句对话，避免把聊天内容混进普通播报。
@@ -40,8 +41,8 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
                 const result = await adapter.generate({ ...providerRequest,
                     ...(replyUserText ? { userText: replyUserText } : {}),
                     ...selection, voice: explicitVoice || (knownModel?selectedVoice:undefined),
-                    parameterOverrides:{...(explicitVoice?{voice:explicitVoice}:{}),...(request.speed!==undefined?{speed:Math.pow(2,normalizeNumber(request.speed,0,-10,10)/10)}:{}),...(request.volume!==undefined?{volume:normalizeNumber(request.volume,100,0,100)}:{})},
-                    parameterDefaults:{...(settings.defaultVoice?{voice:settings.defaultVoice}:{}),speed:Math.pow(2,configuration.defaultSpeed/10),volume:configuration.defaultVolume},
+                    parameterOverrides:{...(explicitVoice?{voice:explicitVoice}:{}),...(supportsSpeed&&request.speed!==undefined?{speed:Math.pow(2,normalizeNumber(request.speed,0,-10,10)/10)}:{}),...(request.volume!==undefined?{volume:normalizeNumber(request.volume,100,0,100)}:{})},
+                    parameterDefaults:{...(settings.defaultVoice?{voice:settings.defaultVoice}:{}),...(supportsSpeed?{speed:Math.pow(2,settings.defaultSpeed/10)}:{}),volume:configuration.defaultVolume},
                     speed, volume, timeoutMs
                 }, settings);
                 if (selection.provider === 'system') return result;

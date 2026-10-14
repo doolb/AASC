@@ -1,12 +1,14 @@
 # TTS Provider 与播报配置
 
-## 全局语速与音量共用入口（2026-10-14，已实现）
+## Provider 独立语速与全局音量入口（2026-10-14，需求修正）
 
-控制端声纹面板的“语音服务与音色”区域只提供一组语速和音量设置，统一作用于 AI/Agent 回复、文本阅读、系统播报以及当前可用的全部 TTS Provider。语速范围保持 -10 至 10，音量范围保持 0 至 100。业务的 Provider 选择、模板音色以及各 Provider 的启用、模型和音色偏好仍可分别配置；单次合成显式携带的语速或音量继续覆盖全局默认值。
+控制端声纹面板的“语音服务与音色”区域只提供一组全局音量设置；语速继续按 TTS Provider 分别配置，范围保持 -10 至 10，音量范围为 0 至 100。每个 Provider 声明是否原生接受语速参数；不支持语速的 Provider 不显示语速输入，也不接受或回传其历史语速字段。豆包网页朗读上游使用固定音色、1 倍速和 100% 音量，不接受语速参数，因此按用户确认隐藏语速；本地 WAV 后处理只应用全局音量。业务 Provider 选择、模板音色、模型和 Provider 启用状态继续分别配置；单次合成显式语速/音量分别覆盖所选 Provider 默认语速和全局音量。
 
-全局默认值作为 `ttsProviderConfig` 权威快照的根级字段，持久化在现有 `config.tts.sharedParameters` 中，并通过 `setTtsProviderConfig` / `ttsProviderConfig` 复用现有 WebSocket 保存、规范化、广播及重连快照，不新增 HTTP 配置接口。Provider 用户配置仍保存服务偏好和音色，不再输出或消费 Provider 专属默认语速、音量。首次迁移时沿用当前 AI/Agent 默认 Provider 的旧参数；没有可用旧值时用语速 0、音量 100。AI/Agent 默认 Provider 为 system 时，旧 `config.tts.defaultSpeed` 继续作为其语速迁移来源。
+当前能力声明：system、qwen-chat、qwen-api、doubao-api 接收语速设置；doubao-chat 使用上游固定语速，不接收语速设置。
 
-豆包网页朗读上游保持固定音色、1 倍速和 100% 音量；收到音频后复用本地 WAV 调整逻辑应用全局值，再进入现有校验、缓存和播放链路。其他 Provider 继续通过各自现有适配器处理全局参数。语速按当前统一倍率语义处理；本地 WAV 变速会改变音高。配置保存失败时，两侧配置回滚并向控制端回传旧权威值。
+每 Provider 语速随 `ttsProviderConfig.providers[id].defaultSpeed` 进入权威快照并持久化在 `tts.providers`；共享音量仍在根级 `defaultVolume`，并持久化到 `config.tts.sharedParameters.defaultVolume`。继续复用 `setTtsProviderConfig` / `ttsProviderConfig` 的 WebSocket 保存、规范化、广播及重连快照，不新增 HTTP 配置接口。旧共享语速迁移时，先保留旧 Provider 专属值；缺少该值的支持语速 Provider 使用旧共享语速初始化，system 最后回退到 `config.tts.defaultSpeed`，再缺省为 0。没有旧音量时使用 100。system Provider 语速同步旧 `config.tts.defaultSpeed` 以兼容原生 TTS 路径。配置保存失败时保持两侧回滚并向控制端回传旧权威值。
+
+支持语速的 Provider 继续通过已有适配器处理各自语速与全局音量；豆包网页朗读上游固定为 1 倍速和 100% 音量，配置面板不提供语速，本地 WAV 后处理只应用全局音量，随后进入现有校验、缓存和播放链路。
 
 ## 开放qwen-chat非AI业务（2026-10-13，已实现）
 
@@ -36,7 +38,7 @@ Responses的tts返回非持久化output_audio WAV Base64；旧speech、内存缓
 
 ## 配置与接口
 
-业务选择存 `config.tts.aiReplyDefault/textMedia/systemBroadcast`；共享语速和音量存 `config.tts.sharedParameters`；端点、模型、API凭证和Provider默认音色存用户配置 `tts.providers`。system不保存Provider级enabled/defaultVoice/语速/音量，qwen-chat不保存凭证或账号ID，模板仅保存 Provider/voice。Provider 默认关闭云端/网页能力，system 沿用旧开关与设备选择。空凭证输入保留旧值，显式清除单独处理。保存失败保持原权威配置。
+业务选择存 `config.tts.aiReplyDefault/textMedia/systemBroadcast`；共享音量存 `config.tts.sharedParameters.defaultVolume`；支持语速的 Provider 各自将 `defaultSpeed` 与端点、模型、凭证及音色偏好存入用户配置 `tts.providers`。system不保存Provider级enabled/defaultVoice，但语速配置同时同步旧 `config.tts.defaultSpeed` 兼容原生路径；qwen-chat不保存凭证或账号ID，模板仅保存 Provider/voice。Provider 默认关闭云端/网页能力，system 沿用旧开关与设备选择。空凭证输入保留旧值，显式清除单独处理。保存失败保持原权威配置。
 
 控制端通过 `setTtsProviderConfig` 提交业务选择和 Provider 参数，服务端规范化并持久化，广播 `ttsProviderConfig` 脱敏权威值；初始化/重连补发当前状态，不新增 HTTP 配置接口。音色目录通过 `getTtsProviderVoices/ttsProviderVoices` 查询，失败不覆盖已选音色；已保存但目录不存在的 ID 保留并标注，最终有效性由合成接口判定。
 
@@ -48,7 +50,7 @@ Chat2API默认国内千问语音适配器使用纯Node校时、令牌注册/刷�
 
 无新增生产依赖。服务端/网页修改只标记 `servicePackage=true`，既有 minApk 状态保留。真实云端鉴权、声音播放、长队列及设备体验需有对应账号现场验收。
 
-system 音色沿用旧 tts.defaultVoice及原生显示端已加载音色；首次迁移时，当前AI/Agent默认Provider的旧速度和音量初始化共享参数，选择system时旧tts.defaultSpeed作为速度来源。显示端、Qwen API及豆包网页朗读语速采用本地 PCM 重采样，会改变音高；豆包API/国内千问使用生成参数。音量在入缓存前调整。Qwen API 单次600字符，沿用业务分句，单句超限明确失败。
+system 音色沿用旧 tts.defaultVoice及原生显示端已加载音色；旧共享语速迁移到缺少Provider专属值的支持方式，已有值优先，system 最后回退旧 `tts.defaultSpeed`；旧音量继续作为全局音量来源。原生显示端与Qwen API使用本地 PCM 重采样，可能改变音高；豆包API/国内千问使用上游生成参数。豆包网页朗读不接受原生语速参数，固定上游速度，WAV 后处理只应用全局音量。音量在入缓存前调整。Qwen API 单次600字符，沿用业务分句，单句超限明确失败。
 
 ## 系统原生路径与 Chat2API 统一语音（2026-10-11 已实现）
 

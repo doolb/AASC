@@ -176,9 +176,9 @@ function serverHarness() {
     const templates = new Map([['AI甲', { tts: { provider: 'qwen-chat', voice: '甲音色' } }],
         ['Agent甲', { tts: { provider: 'doubao-api', voice: 'Agent音色' } }], ['原生', { tts: { provider: 'system' } }]]);
     let lookups = 0;
-    const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-api', voice: 'AI默认音色' },
+    const settings = normalizeSettings({ defaultVolume: 65, aiReplyDefault: { provider: 'qwen-api', voice: 'AI默认音色' },
         systemBroadcast: { provider: 'system' }, providers: {
-            'qwen-chat': { enabled: true, defaultSpeed: 4, defaultVolume: 65 }, 'qwen-api': { enabled: true }, 'doubao-api': { enabled: true }
+            'qwen-chat': { enabled: true, defaultSpeed: 4 }, 'qwen-api': { enabled: true }, 'doubao-api': { enabled: true }
         } });
     const adapter = provider => ({ generate: async request => {
         calls.push({ provider, ...request });

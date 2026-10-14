@@ -1,3 +1,10 @@
+### 声纹面板按 Provider 配置语速与全局音量
+
+- ✅ [2026-10-14] 语速按 Provider 分别配置，音量全局共用；语速控件遵循上游原生能力，豆包网页朗读隐藏语速。
+  - `system`、`qwen-chat`、`qwen-api`、`doubao-api` 在各自设置卡显示 -10 至 10 语速；`doubao-chat` 上游固定 1 倍速，不渲染、保存或广播语速字段，后处理只应用全局音量 0 至 100。旧共享语速迁移到缺省的支持方式，已有 Provider 语速优先。
+  - 更新服务端配置规范化/持久化、TTS 参数解析、声纹面板、自测及手动入口测试夹具；同步 design/spec/task/usage/todo。复用既有 WebSocket 权威配置，没有增加 HTTP 配置接口。
+  - TTS Provider 定向测试83/83、手动TTS/并发回归19/19通过；服务代码包状态 `servicePackage=true`，本轮未构建或发布Offline包，未改变APK/依赖包状态。
+
 ### Offline min 干净首装测试与 Pi 可选依赖方案
 
 - ✅ [2026-10-14] 完成ADB卸载full50后单装min51测试，定位环境首装失败。

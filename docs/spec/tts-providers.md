@@ -1,6 +1,6 @@
 # TTS Provider 与播报配置实现
 
-## 全局语速与音量共用入口（2026-10-14，已实现伪代码）
+## Provider 独立语速与全局音量入口（2026-10-14，需求修正伪代码）
 
 ```text
 已有声明：
@@ -8,27 +8,35 @@
   getTtsProviderSettings/setTtsProviderSettings、setTtsProviderConfig/ttsProviderConfig
   createTtsProviderService.generate、adjustWav、SelfTest.tts_provider_config
 新增定义：
-  SharedTtsParameters { defaultSpeed, defaultVolume }；权威快照根级，持久化于 config.tts.sharedParameters
-  defaultSpeed 范围 -10..10，defaultVolume 范围 0..100
-  ProviderSettings 保留启用、模型、音色和服务偏好；不再保存 Provider 专属语速/音量
+  TtsProviderCapabilities { supportsSpeed }；每个 Provider 声明上游是否原生接受语速参数
+  ProviderSettings.defaultSpeed；仅 supportsSpeed=true 的 Provider 保存，范围 -10..10
+  SharedTtsParameters { defaultVolume }；权威快照根级，持久化于 config.tts.sharedParameters，范围 0..100
+  当前 supportsSpeed=true：system、qwen-chat、qwen-api、doubao-api
+  doubao-chat 上游不接受语速参数 -> supportsSpeed=false；隐藏语速控件并忽略历史语速
+  doubao-chat 的本地 WAV 后处理只应用全局音量，不视为 Provider 原生语速能力
 操作流程：
-  读取旧配置 -> 找到当前 aiReplyDefault 选择的 Provider -> 以该 Provider 的旧默认语速/音量初始化全局值
-  当前 aiReplyDefault 为 system -> system 旧语速优先取 config.tts.defaultSpeed；缺省语速/音量回退 0/100
-  TTS 面板 -> 只渲染一组全局语速/音量 -> 三类业务与所有 Provider 共用
+  读取旧配置 -> 保留已有每Provider语速；无每Provider值时，以旧共享语速初始化所有支持语速的 Provider
+  system 没有旧共享语速 -> 沿用 config.tts.defaultSpeed；缺省语速/音量回退 0/100
+  TTS 面板 -> 只渲染一组全局音量；每个 Provider 设置卡按 supportsSpeed 显示独立语速输入
+  语速不受支持的 Provider -> 不渲染语速控件、不提交 defaultSpeed，服务端丢弃历史字段
   三类业务选择、模板音色、Provider 模型/音色/启用状态 -> 保持原独立配置
-  保存 -> setTtsProviderConfig -> 规范化全局范围与业务/Provider 字段
-  config.set(tts.sharedParameters 与业务选择) -> 持久化全局值；userConfig.set(tts.providers) -> 持久化 Provider 服务偏好
+  保存 -> setTtsProviderConfig -> 规范化各 Provider 语速、全局音量与业务/Provider 字段
+  config.set(tts.sharedParameters.defaultVolume 与业务选择) -> 持久化共享音量
+  userConfig.set(tts.providers) -> 持久化 Provider 服务偏好与每Provider语速
+  system defaultSpeed -> 同步原 config.tts.defaultSpeed 兼容旧 system TTS 入口
   任一持久化失败 -> 回滚两侧旧值 -> 返回失败与原权威配置
-  保存成功 -> 广播包含全局值的脱敏 ttsProviderConfig -> 其他控制端及重连页面回填同一组值
-  配置输出 -> 移除 Provider 专属 defaultSpeed/defaultVolume；凭证脱敏与 Provider 模型/音色字段保持原规则
-  TTS 请求显式 speed/volume -> 覆盖全局默认；缺省参数 -> 使用 SharedTtsParameters
+  保存成功 -> 广播含各Provider语速与全局音量的脱敏 ttsProviderConfig -> 控制端同步/重连回填
+  配置输出 -> 只输出支持语速 Provider 的 defaultSpeed；音量不写入 Provider；凭证继续脱敏
+  TTS 请求显式 speed -> 覆盖所选Provider默认；缺省 speed -> 使用该 Provider.defaultSpeed
+  TTS 请求显式 volume -> 覆盖全局音量；缺省 volume -> 使用 SharedTtsParameters.defaultVolume
   语速转换为倍率时仅转换一次；音量继续使用 0..100
-  doubao-chat -> 上游仍按固定 1 倍/100% 生成 -> 本地 adjustWav 应用全局语速/音量 -> 原 WAV 校验与缓存
-  其他 Provider -> 将全局默认传入既有适配器 -> 原合成、缓存、播放、取消和队列流程
+  doubao-chat -> 上游仍按固定 1 倍/100% 生成 -> 本地 adjustWav 保持中性语速并应用全局音量 -> 原 WAV 校验与缓存
+  其他 Provider -> 将所选Provider语速和全局音量传入既有适配器 -> 原合成、缓存、播放、取消和队列流程
 自测流程：
-  单个控件对所有业务/Provider 生效；边界值、非法值、旧配置迁移与双存储回滚
+  每Provider语速互不覆盖；全局音量对所有业务/Provider生效
+  supportsSpeed=false 时不显示、不提交语速字段；边界值、旧共享语速迁移与双存储回滚
   多控制端保存广播、断线重连回填；Provider/业务/模板音色设置保持独立
-  明确请求参数优先于全局值；doubao-chat 固定上游音频按全局值完成本地调整
+  显式请求参数分别优先于所选Provider语速和全局音量；doubao-chat固定上游音频按本地值调整
 ```
 
 ## 开放qwen-chat非AI业务（2026-10-13，已实现伪代码）
@@ -77,12 +85,12 @@
 
 ```text
 createTtsProviderService -> 捕获settings/config快照、业务/模板选择
-显式voice/speed/volume -> parameterOverrides；Provider音色/模型偏好与全局语速音量 -> parameterDefaults
+显式voice/speed/volume -> parameterOverrides；Provider音色/模型偏好、各Provider语速与全局音量 -> parameterDefaults
 system -> 原生生成；不继承API音色，不读云端账号
 qwen-chat -> emoji入口过滤、已登记网页模型或映射别名、expectedProviderId=qwen
 qwen-api -> 已知原模型转换限定别名，用户映射别名保持 -> expectedProviderId=qwen-api
 doubao-api -> 默认doubaapi/tts或用户映射别名 -> expectedProviderId=doubaapi
-doubao-chat -> 原严格账号映射、固定网页音色与上游参数 -> expectedProviderId=doubaochat -> 本地adjustWav应用全局语速/音量
+doubao-chat -> 原严格账号映射、固定网页音色与上游参数 -> expectedProviderId=doubaochat -> 本地adjustWav(0, 全局音量)
 四路薄层 -> Chat2API speech.generate；不读取旧密钥或构造HTTP
 speech -> application.plan -> 显式参数 > 映射默认 > 业务默认 > 模型默认
 能力校验 -> 在归属Provider中调度账号 -> 当前credentials.apiKey或网页凭据
@@ -365,9 +373,9 @@ Chat2API服务:
 新增定义:
   TtsBusiness { aiReply, agentReply, textMedia, systemBroadcast }
   TtsSelection { provider, voice }
-  ProviderSettings { enabled?, endpoint, model, credential?, defaultVoice?, resourceId }
-  SharedTtsParameters { defaultSpeed, defaultVolume }；位于 TTS 权威快照根级，持久化于 config.tts.sharedParameters
-  system无enabled/defaultVoice；qwen-chat无credential/chat2apiAccountId；API Provider保存credential
+  ProviderSettings { enabled?, endpoint, model, credential?, defaultVoice?, defaultSpeed?, resourceId }
+  SharedTtsParameters { defaultVolume }；位于 TTS 权威快照根级，持久化于 config.tts.sharedParameters
+  system无enabled/defaultVoice；支持语速的Provider持久化defaultSpeed；qwen-chat无credential/chat2apiAccountId；API Provider保存credential
   TtsConfigMessage { type, requestId, config, success, message }
   VoiceEntry { id, name, available }
   AudioRequest { text, provider, voice, speed, volume, businessType, templateTts, preferredDisplayId }
@@ -382,12 +390,14 @@ Chat2API服务:
   非AI业务 -> 允许qwen-chat，豆包网页仍按原实验范围拒绝
   system音色 -> 新选择voice=null -> 旧生成接口/原生音色
   其他Provider音色 -> 显式音色 -> 相同Provider的业务默认音色 -> 最终Provider自身默认
-  参数 -> 显式请求值优先，否则读取全局默认 -> 规范化有限数字
-  控制端setTtsProviderConfig -> 校验完整候选配置 -> config.set保存tts.sharedParameters与业务选择
-    -> userConfig保存Provider服务偏好；保存失败时回滚另一侧
-  首次迁移 -> aiReplyDefault当前Provider旧默认值 -> SharedTtsParameters；无旧值 -> 0/100
-  Provider配置输出 -> 不再包含Provider专属defaultSpeed/defaultVolume；现有Provider偏好和凭证脱敏保持原规则
-  doubao-chat固定参数上游结果 -> adjustWav(全局语速,全局音量) -> 原WAV校验/缓存/播放
+  参数 -> 显式请求值优先，否则读取所选Provider默认语速与全局音量 -> 规范化有限数字
+  控制端setTtsProviderConfig -> 校验完整候选配置 -> config.set保存tts.sharedParameters.defaultVolume与业务选择
+    -> userConfig保存Provider服务偏好及支持语速Provider的defaultSpeed；保存失败时回滚另一侧
+  旧共享语速迁移 -> 已有Provider语速优先 -> 缺失值的支持语速Provider读取旧共享语速
+    -> system再回退config.tts.defaultSpeed，音量读取旧共享值或旧Provider值；最终默认0/100
+  Provider配置输出 -> 仅支持语速Provider包含defaultSpeed；所有Provider均不含defaultVolume；凭证脱敏保持原规则
+  system defaultSpeed -> 同步旧config.tts.defaultSpeed以兼容原生入口
+  doubao-chat固定参数上游结果 -> adjustWav(0,全局音量) -> 原WAV校验/缓存/播放
   保存失败 -> 恢复旧内存值 -> 回传旧脱敏配置和错误
   保存成功 -> 向所有控制端广播脱敏权威值 -> 初始化/重连补发
   API凭证空输入 -> 保留；明确clearCredential -> 清除；API广播仅credentialConfigured

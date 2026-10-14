@@ -5,6 +5,13 @@ const { resolveQwenEndpoint } = require('./qwen-api-contract');
 const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
+const PROVIDER_CAPABILITIES = Object.freeze({
+    system: Object.freeze({ supportsSpeed: true }),
+    'qwen-chat': Object.freeze({ supportsSpeed: true }),
+    'qwen-api': Object.freeze({ supportsSpeed: true }),
+    'doubao-api': Object.freeze({ supportsSpeed: true }),
+    'doubao-chat': Object.freeze({ supportsSpeed: false })
+});
 const PROVIDER_DEFAULTS = Object.freeze({
     system: { endpoint: '', model: '', credential: '', resourceId: '' },
     'qwen-api': { enabled: true, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
@@ -44,7 +51,7 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         for (const key of ['endpoint', 'model', 'defaultVoice', 'resourceId']) {
             if (patch[key] !== undefined && patch[key] !== fixed[key]) throw new Error('豆包网页朗读仅支持固定网页默认配置');
         }
-        // 忽略历史Provider专属速度/音量；共享值由全局字段统一校验和保存。
+        // 豆包网页上游固定语速，不提供Provider语速配置；兼容读取时丢弃历史字段。
         // 任何旧凭据/账号引用均不进入新配置或广播。
         return { ...fixed, enabled: patch.enabled ?? (typeof previous.enabled === 'boolean' ? previous.enabled : false) };
     }
@@ -76,10 +83,13 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         }
         mappedModel=!QWEN_CHAT_MODELS.has(model);
     }
+    const defaultSpeed = PROVIDER_CAPABILITIES[provider].supportsSpeed
+        ? normalizeNumber(patch.defaultSpeed, previous.defaultSpeed ?? 0, -10, 10) : undefined;
     return {
         endpoint: provider === 'qwen-api' && endpoint ? resolveQwenEndpoint(endpoint, model) : endpoint, model,
         ...(mappedModel?{mappedModel:true}:{}),
         ...auth,
+        ...(defaultSpeed === undefined ? {} : { defaultSpeed }),
         ...(provider === 'system' ? {} : { enabled: patch.enabled ?? base.enabled,
             defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
         resourceId: boundedString(patch.resourceId, base.resourceId)
@@ -100,7 +110,14 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
     for (const key of Object.keys(providersPatch)) {
         if (!PROVIDERS.includes(key)) throw new Error('不支持的 TTS Provider');
     }
-    const providers = Object.fromEntries(PROVIDERS.map(id => [id, normalizeProviderSettings(id, providersPatch[id], previous.providers?.[id], options)]));
+    const migratedSpeed = patch.defaultSpeed ?? previous.defaultSpeed;
+    const providers = Object.fromEntries(PROVIDERS.map(id => {
+        const providerPatch = providersPatch[id] || {};
+        const previousProvider = previous.providers?.[id] || {};
+        const speed = providerPatch.defaultSpeed ?? previousProvider.defaultSpeed ?? migratedSpeed;
+        const withMigratedSpeed = PROVIDER_CAPABILITIES[id].supportsSpeed ? { ...providerPatch, defaultSpeed: speed } : providerPatch;
+        return [id, normalizeProviderSettings(id, withMigratedSpeed, previousProvider, options)];
+    }));
     const selections = Object.fromEntries(Object.entries(SELECTION_BUSINESSES).map(([key, business]) => {
         const input = patch[key] === undefined ? previous[key] || {} : patch[key];
         if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('TTS 选择必须为对象');
@@ -112,9 +129,8 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
         validateBusinessProvider(value.provider, business);
         return [key, value];
     }));
-    const defaultSpeed = normalizeNumber(patch.defaultSpeed, migratedSharedParameter('defaultSpeed', patch, previous), -10, 10);
     const defaultVolume = normalizeNumber(patch.defaultVolume, migratedSharedParameter('defaultVolume', patch, previous), 0, 100);
-    return { ...selections, defaultSpeed, defaultVolume, providers };
+    return { ...selections, defaultVolume, providers };
 }
 
 function redactSettings(settings) {
@@ -129,4 +145,4 @@ function redactSettings(settings) {
     })) };
 }
 
-module.exports = { PROVIDER_DEFAULTS, SELECTION_BUSINESSES, normalizeSettings, redactSettings, normalizeNumber };
+module.exports = { PROVIDER_DEFAULTS, PROVIDER_CAPABILITIES, SELECTION_BUSINESSES, normalizeSettings, redactSettings, normalizeNumber };

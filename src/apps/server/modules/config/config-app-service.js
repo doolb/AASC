@@ -723,7 +723,7 @@ class UserConfig extends DataSnapshot {
 const config = new Config(CONFIG_FILE);
 const userConfig = new UserConfig(USER_CONFIG_FILE);
 
-// Provider凭证留在用户配置中；业务选择继续通过config.set进入项目权威配置。
+// Provider凭证与独立语速留在用户配置中；业务选择和全局音量继续通过config.set进入项目权威配置。
 // 对应 .src/framework/tts-provider-configuration.md 的配置保存与脱敏流程。
 function getTtsProviderSettings() {
     const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, config.getTtsProviderConfig(key)]));
@@ -750,8 +750,10 @@ function setTtsProviderSettings(patch) {
     const previousTts = JSON.parse(JSON.stringify(config.get('tts', {})));
     const previousUserTts = JSON.parse(JSON.stringify(userConfig.get('tts', {})));
     const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, candidate[key]]));
-    const nextTts = { ...previousTts, ...selections,
-        sharedParameters: { ...(previousTts.sharedParameters || {}), defaultSpeed: candidate.defaultSpeed, defaultVolume: candidate.defaultVolume } };
+    const sharedParameters = { ...(previousTts.sharedParameters || {}) };
+    delete sharedParameters.defaultSpeed;
+    const nextTts = { ...previousTts, ...selections, defaultSpeed: candidate.providers.system.defaultSpeed,
+        sharedParameters: { ...sharedParameters, defaultVolume: candidate.defaultVolume } };
     if (!userConfig.set('tts', { ...previousUserTts, providers: candidate.providers })) {
         userConfig._data.tts = previousUserTts;
         throw new Error('TTS Provider 用户配置保存失败');

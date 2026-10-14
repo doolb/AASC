@@ -2,6 +2,8 @@
     'use strict';
 
     const PROVIDERS = { system: '系统原生', 'qwen-chat': '国内千问网页', 'qwen-api': 'Qwen API', 'doubao-api': '豆包 API', 'doubao-chat': '豆包网页朗读（实验）' };
+    const PROVIDER_CAPABILITIES = { system: { supportsSpeed: true }, 'qwen-chat': { supportsSpeed: true },
+        'qwen-api': { supportsSpeed: true }, 'doubao-api': { supportsSpeed: true }, 'doubao-chat': { supportsSpeed: false } };
     const BUSINESSES = { aiReplyDefault: 'AI / Agent 回复', textMedia: '文本阅读', systemBroadcast: '报时与系统播报' };
     const NUMBER_FIELDS = { defaultSpeed: [-10, 10], defaultVolume: [0, 100] };
     // 此页仅编辑业务偏好；凭证、服务地址和资源 ID 统一交由 Chat2API 账户管理。
@@ -120,9 +122,9 @@
         const fragment = document.createDocumentFragment();
         const shared = create('section');
         shared.className = 'tts-provider-shared-parameters';
-        shared.appendChild(create('strong', '全局语速与音量'));
-        shared.appendChild(create('p', '对 AI/Agent 回复、文本阅读、系统播报和所有语音服务生效；单次合成参数可覆盖此默认值。'));
-        for (const [name, title] of [['defaultSpeed', '语速（−10 至 10）'], ['defaultVolume', '音量（0 至 100）']]) {
+        shared.appendChild(create('strong', '全局音量'));
+        shared.appendChild(create('p', '对 AI/Agent 回复、文本阅读、系统播报和所有语音服务生效；单次合成音量可覆盖此默认值。语速在各 Provider 设置中分别配置。'));
+        for (const [name, title] of [['defaultVolume', '音量（0 至 100）']]) {
             const input = create('input');
             input.dataset.ttsSharedField = name;
             input.type = 'number';
@@ -161,6 +163,17 @@
                 inputs.enabled = enabled;
                 addField(group, '启用', enabled);
             }
+            if (PROVIDER_CAPABILITIES[id]?.supportsSpeed) {
+                const speed = create('input');
+                speed.dataset.ttsField = 'defaultSpeed';
+                speed.type = 'number';
+                speed.min = NUMBER_FIELDS.defaultSpeed[0];
+                speed.max = NUMBER_FIELDS.defaultSpeed[1];
+                speed.step = '1';
+                speed.autocomplete = 'off';
+                inputs.defaultSpeed = speed;
+                addField(group, '语速（−10 至 10）', speed);
+            }
             const names = id === 'system' ? [] : id === 'doubao-chat' ? ['defaultVoice'] : Object.keys(FIELD_LABELS);
             for (const name of names) {
                 const restrictedModel = id === 'qwen-chat' && name === 'model';
@@ -193,11 +206,11 @@
             }
             if (id === 'doubao-chat') {
                 group.appendChild(create('p', '实验性网页朗读，默认关闭，尚未重新进行真实账号合成验收。'));
-                group.appendChild(create('p', '先在Chat2API为doubao-chat映射到doubaochat及指定账号；上游保持固定音色、速度和音量，返回后应用全局语速与音量，失败不切换其它来源。'));
+                group.appendChild(create('p', '先在Chat2API为doubao-chat映射到doubaochat及指定账号；上游使用固定音色、速度和音量，返回后只应用全局音量，失败不切换其它来源。'));
             }
             if (['qwen-api', 'doubao-api'].includes(id)) {
                 group.appendChild(create('p', `由 Chat2API 的 ${id === 'qwen-api' ? 'qwen-api' : 'doubaapi'} 提供语音合成。请在 Chat2API 添加 API 账号时配置 API Key、可选服务端点${id === 'doubao-api' ? '与资源 ID' : ''}；留空使用官方默认。`));
-                group.appendChild(create('p', `可填写该来源的模型或映射别名${id === 'qwen-api' ? '，例如 qiaoxiaojiao' : ''}；这里只保存启用、模型和音色偏好，语速与音量使用上方全局设置。账号保存仅校验格式，尚未远端验证。`));
+                group.appendChild(create('p', `可填写该来源的模型或映射别名${id === 'qwen-api' ? '，例如 qiaoxiaojiao' : ''}；这里只保存启用、模型、音色及本Provider语速；音量使用上方全局设置。账号保存仅校验格式，尚未远端验证。`));
             }
             if (id === 'system') group.appendChild(create('p', '沿用现有 TTS 生成设备、服务器开关及原生音色配置。'));
             const query = create('button', '查询音色');
@@ -310,6 +323,6 @@
     }
 
     window.TtsProviderSettings = { init, handleConfig, handleVoices, handleDisconnected, save, loadVoices, updateTemplateVoice,
-        getConfig: () => config };
+        getConfig: () => config, getProviderCapabilities: () => PROVIDER_CAPABILITIES };
     init();
 })();
