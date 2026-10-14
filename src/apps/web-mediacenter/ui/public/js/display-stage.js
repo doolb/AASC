@@ -21,11 +21,17 @@
         'roleHistory',
         'roleList'
     ]);
+    function consumePendingMmdVisibility() {
+        const pending = root.__pendingDisplayMmdVisibility;
+        if (typeof pending !== 'boolean') return true;
+        delete root.__pendingDisplayMmdVisibility;
+        return pending;
+    }
     const state = {
         initialized: false,
         chatVisible: false,
         // MMD 默认显示；服务端连接后会用按 displayId 保存的权威值覆盖它。
-        mmdVisible: true,
+        mmdVisible: consumePendingMmdVisibility(),
         mmdOrder: 'under-chat',
         rotation: 0,
         rotationGeometry: null,

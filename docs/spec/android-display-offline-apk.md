@@ -480,6 +480,22 @@ onBackPressed:
     否则：隐藏显示 WebView 和控制按钮，恢复配置栏
 ```
 
+## 本机模型入口位置（2026-10-14）
+
+```text
+显示页初始化 Offline 原生模型入口
+  如果 NativeDisplay/模型管理能力存在
+    显示 displayOfflineModels
+  否则
+    隐藏 displayOfflineModels
+
+显示交互舞台布局
+  聊天/MMD/语音入口沿用左下角 flex 组
+  displayOfflineModels 独立绝对定位到舞台左上角
+  top/left 使用旋转映射后的安全区与键盘内缩值，并至少留 12px
+  不改变其他按钮位置和模型下载/加载确认流程
+```
+
 ## Node 配置伪代码
 
 ```text

@@ -19,6 +19,44 @@ function shiftOverlay(axis, delta) {
     }
 }
 
+function getDeviceScale() {
+    const rawDpr = Number(window.devicePixelRatio);
+    const dpr = Number.isFinite(rawDpr) && rawDpr > 0 ? rawDpr : 1;
+    return Math.max(0.5, Math.min(1, 1 / dpr));
+}
+
+function setOverlayTransform(rot, scale) {
+    const scaleTransform = 'scale(' + scale + ')';
+    if (rot === 90) {
+        overlay.style.transform = 'rotate(90deg) ' + scaleTransform;
+        overlay.style.transformOrigin = 'center center';
+    } else if (rot === 180) {
+        overlay.style.transform = 'rotate(180deg) ' + scaleTransform;
+        overlay.style.transformOrigin = 'center center';
+    } else if (rot === 270) {
+        overlay.style.transform = 'rotate(-90deg) ' + scaleTransform;
+        overlay.style.transformOrigin = 'center center';
+    } else {
+        overlay.style.transform = scale < 1 ? scaleTransform : '';
+        overlay.style.transformOrigin = scale < 1 ? 'left bottom' : '';
+    }
+}
+
+function constrainOverlayToViewport(viewportWidth, viewportHeight, gap) {
+    if (typeof overlay.getBoundingClientRect !== 'function') return;
+    let rect = overlay.getBoundingClientRect();
+    let deltaX = 0;
+    if (rect.left < gap) deltaX = gap - rect.left;
+    else if (rect.right > viewportWidth - gap) deltaX = viewportWidth - gap - rect.right;
+    if (deltaX) shiftOverlay('x', deltaX);
+
+    rect = overlay.getBoundingClientRect();
+    let deltaY = 0;
+    if (rect.top < gap) deltaY = gap - rect.top;
+    else if (rect.bottom > viewportHeight - gap) deltaY = viewportHeight - gap - rect.bottom;
+    if (deltaY) shiftOverlay('y', deltaY);
+}
+
 // 旋转后覆盖层与媒体名共用角落，按实际包围盒保留 0°时的上侧相对层级。
 function avoidFileNameOverlap(rot) {
     if (!overlay || (rot !== 0 && rot !== 90 && rot !== 180 && rot !== 270) || overlay.offsetWidth === 0 || overlay.offsetHeight === 0) return;
@@ -95,7 +133,28 @@ function applyRotationStyle(rot) {
         overlay.style.transform = 'rotate(-90deg)';
         overlay.style.transformOrigin = 'center center';
     }
+
+    // 根据 DPR 等比缩放整个监控条，并在旋转后按实际包围盒限制最大占用。
+    const baseScale = getDeviceScale();
+    if (typeof overlay.getBoundingClientRect !== 'function') {
+        setOverlayTransform(rot, baseScale);
+        avoidFileNameOverlap(rot);
+        return;
+    }
+    const documentElement = document.documentElement || {};
+    const viewportWidth = documentElement.clientWidth || window.innerWidth || overlay.offsetWidth || 1;
+    const viewportHeight = documentElement.clientHeight || window.innerHeight || overlay.offsetHeight || 1;
+    const gap = 24;
+    setOverlayTransform(rot, baseScale);
+    const initialRect = overlay.getBoundingClientRect();
+    const fitScale = Math.min(
+        1,
+        Math.max(1, viewportWidth - gap * 2) / Math.max(1, initialRect.width),
+        Math.max(1, viewportHeight - gap * 2) / Math.max(1, initialRect.height)
+    );
+    setOverlayTransform(rot, baseScale * fitScale);
     avoidFileNameOverlap(rot);
+    constrainOverlayToViewport(viewportWidth, viewportHeight, gap);
 }
 applyRotationStyle(rotation);
 

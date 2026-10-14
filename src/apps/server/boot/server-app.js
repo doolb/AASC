@@ -2859,7 +2859,7 @@ function updateDisplayMmdVisibility(displayData, visible) {
 
     const normalizedVisible = normalizeMmdVisibility(visible);
     try {
-        persistDisplayState(displayData, { mmdVisible: normalizedVisible });
+        persistDisplayState(displayData, { mmdVisible: normalizedVisible }, { requireSave: true });
         displayData.state.mmdVisible = normalizedVisible;
         sendToDisplay(displayData.displayId, {
             type: 'control',

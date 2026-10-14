@@ -1694,6 +1694,18 @@ Offline配置 → 固定8081；普通健康URL → 实际8071 + 当前证书协�
 Offline := 仅配置8081核对，未安装/启动；公网HTTP := HEAD200 + 同ETag的16段206 → 顺序拼接全字节 → 大小/SHA与本地一致
 ```
 
+## render-display 高 DPI、Offline 模型入口与 MMD 重连自测（2026-10-14）
+
+```text
+render-display := DPR1/DPR2 × 0/90/180/270 → 覆盖层比例按 DPR 反向缩小、媒体名避让、包围盒保持在视口内
+Offline模型入口 := Offline 原生能力存在时显示在左上安全区；网页无原生桥时隐藏；旋转与软键盘内缩不遮挡
+MMD权威状态 := 隐藏请求 → config.set 成功后广播 false；模拟保存失败 → 不广播成功状态
+MMD初始化竞态 := 舞台模块注册前收到 false → 缓存待处理值 → 初始化后仍隐藏
+MMD重连 := displayId 保存 false → 新显示端连接接收 false → 角色层、按钮和指针交互保持隐藏
+自动验证 := render-display旋转/DPR浏览器2项、MMD/Offline入口定向4项、结构冒烟及JS语法通过
+设备边界 := Offline APK本机按钮安全区、高DPI实机比例与真实WebSocket断线重连等待发布后验收
+```
+
 
 ## 整包安装身份与清理自测（2026-10-14）
 

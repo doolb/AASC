@@ -563,8 +563,49 @@ test('控制端通过单按钮控制 MMD，显示端手动操作同步到服务�
     assert.match(display, /ackExtra = \{ mmdVisible: data\.value === true \}/u);
     assert.match(server, /mmdVisibilityRequest/u);
     assert.match(server, /mmdVisible: true/u);
-    assert.match(server, /persistDisplayState\(displayData, \{ mmdVisible: normalizedVisible \}\)/u);
+    assert.match(server, /persistDisplayState\(displayData, \{ mmdVisible: normalizedVisible \}, \{ requireSave: true \}\)/u);
     assert.match(config, /mmdVisible: true/u);
+});
+
+test('MMD权威状态可跨舞台初始化时序恢复，Offline模型入口位于左上安全区', () => {
+    const display = readPublic('display.html');
+    const stage = readPublic('js/display-stage.js');
+    const css = readPublic('css/display-mmd.css');
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    const visibilityHandler = server.match(/function updateDisplayMmdVisibility\([\s\S]*?\n\}\n\nfunction sendMmdVisibilityError/u)?.[0] || '';
+    assert.match(display, /__pendingDisplayMmdVisibility = data\.value === true/u);
+    assert.match(stage, /consumePendingMmdVisibility\(\)[\s\S]*delete root\.__pendingDisplayMmdVisibility/u);
+    assert.match(stage, /mmdVisible: consumePendingMmdVisibility\(\)/u);
+    assert.match(server, /savedState\?\.mmdVisible/u);
+    assert.match(server, /action: 'mmdVisibility',[\s\S]*normalizeMmdVisibility\(displayClients\.get\(displayId\)\?\.state\.mmdVisible\)/u);
+    assert.match(visibilityHandler, /persistDisplayState\(displayData, \{ mmdVisible: normalizedVisible \}, \{ requireSave: true \}\)/u);
+    assert.ok(visibilityHandler.indexOf('requireSave: true') < visibilityHandler.indexOf('displayData.state.mmdVisible = normalizedVisible'));
+    assert.ok(visibilityHandler.indexOf('displayData.state.mmdVisible = normalizedVisible') < visibilityHandler.indexOf('sendToDisplay('));
+    assert.match(visibilityHandler, /catch \(error\)[\s\S]*MMD 状态保存失败/u);
+    assert.match(css, /#displayOfflineModels\s*\{[\s\S]*position:\s*absolute[\s\S]*top:\s*max\(12px,[\s\S]*left:\s*max\(12px,/u);
+    assert.match(css, /var\(--display-safe-inset-top\)[\s\S]*var\(--display-keyboard-inset-top\)/u);
+    assert.match(css, /var\(--display-safe-inset-left\)[\s\S]*var\(--display-keyboard-inset-left\)/u);
+    assert.match(display, /offlineModelsButton\.hidden = false[\s\S]*offlineShowModels\(\)/u);
+});
+
+test('DisplayStage加载时消费初始化前收到的MMD隐藏状态', () => {
+    const stageSource = readPublic('js/display-stage.js');
+    const listeners = new Map();
+    const root = {
+        __pendingDisplayMmdVisibility: false,
+        addEventListener: () => {},
+        dispatchEvent: () => true
+    };
+    const document = {
+        readyState: 'loading',
+        addEventListener: (type, handler) => listeners.set(type, handler)
+    };
+
+    vm.runInNewContext(stageSource, { window: root, document });
+
+    assert.equal(root.DisplayStage.getState().mmdVisible, false);
+    assert.equal(Object.hasOwn(root, '__pendingDisplayMmdVisibility'), false);
+    assert.equal(typeof listeners.get('DOMContentLoaded'), 'function');
 });
 
 test('显示端聊天和 MMD 开关固定在左下角并避让安全区', () => {

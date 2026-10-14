@@ -75,6 +75,35 @@
   mmdVisibilityControls
 ```
 
+## 服务端权威 MMD 显隐与初始化消息暂存（2026-10-14）
+
+```text
+过程 updateDisplayMmdVisibility(display, visible)
+  验证 display 存在且 visible 为布尔值，否则返回错误
+  normalized = 规范化后的 visible
+  尝试 config.updateDisplayStateById(displayId, ip, { mmdVisible: normalized }, { requireSave: true })
+  如果持久化失败
+    返回保存错误，不更新内存，不发送成功广播
+  display.state.mmdVisible = normalized
+  向该 displayId 的显示端发送 control/mmdVisibility(normalized)
+  向控制端广播 mmdVisibilityChanged(displayId, normalized)
+  返回权威值
+
+显示端收到 control/mmdVisibility
+  如果 DisplayStage 已注册
+    调用 DisplayStage.setMmdVisible(value)
+  否则
+    将布尔值写入 pendingDisplayMmdVisibility
+
+DisplayStage 创建初始状态
+  如果 pendingDisplayMmdVisibility 是布尔值
+    使用它作为 mmdVisible 并清除待处理值
+  否则
+    使用明确默认值 true
+显示端初始化时将 mmdVisible 应用到角色层、控件和指针路由
+重连时服务端从 displayState 按 displayId 补发权威值
+```
+
 ## 2. 显示端舞台初始化
 
 ```text

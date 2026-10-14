@@ -5460,6 +5460,9 @@
                     // 只切换 MMD/VRM 层的可见性，不销毁模型、动作或聊天上下文。
                     if (window.DisplayStage && typeof window.DisplayStage.setMmdVisible === 'function') {
                         window.DisplayStage.setMmdVisible(data.value === true);
+                    } else {
+                        // defer 舞台脚本注册前可能先收到连接快照，暂存权威状态供舞台初始化消费。
+                        window.__pendingDisplayMmdVisibility = data.value === true;
                     }
                     break;
 

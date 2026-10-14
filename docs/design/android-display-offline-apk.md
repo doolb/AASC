@@ -23,6 +23,10 @@ Pi30/30、依赖106/106、首装63/63、Android254项0失败/1既有环境跳过
 
 独立 min / LLM 外置源码与 `origion/master` 的文档、豆包登录保存和只读列表验证提交合并，双方功能与验收记录保留。项目默认 Git 远端明确为 `origion`；本次未出包，已提交的 minApk/servicePackage 待出包状态不得被远端旧值清除。另一任务未提交的分层依赖和发布状态在工作区继续保留。
 
+## Offline 显示端本机模型入口位置（2026-10-14）
+
+Offline APK 显示页的“本机模型”入口在具备原生模型管理能力时显示，并固定在交互舞台左上角，按屏幕安全区及软键盘内缩量留边；聊天、角色按钮和语音控件继续位于原交互位置。网页端不显示该原生入口。布局位置使用显示舞台现有旋转安全区变量，避免刘海和横竖屏旋转遮挡。
+
 ## 独立 min 与 LLM 外置源码实现（2026-10-14）
 
 前轮方案已确认并完成源码实施。新增 `OfflineBootstrapManager`、`OfflineRuntimeState`、`OfflineBootstrapHealth` 和本机模型管理模块；以下描述新版源码行为，正式资源尚未构建或部署。工作区配置为 full v43 / min v44，完整包服务基线改为待发布 code79/dependencies8，避免被现有 code78错误覆盖；LAN 当前发布仍为 code78/dependencies8/min41/full38。

@@ -115,3 +115,59 @@ test('render-display旋转后保持覆盖层与媒体名的相对位置', async 
     }
     await page.close();
 });
+
+test('render-display按DPR反向缩放并将旋转包围盒限制在视口内', async () => {
+    const page = await browser.newPage();
+    const viewport = { width: 1920, height: 1080 };
+    await page.setViewport({ ...viewport, deviceScaleFactor: 1 });
+    await page.goto(`http://127.0.0.1:${server.address().port}/display.html?displayId=render-dpr-test`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000
+    });
+    await page.waitForFunction(() => typeof window.handleControl === 'function', { timeout: 10000 });
+
+    const renderFiles = RENDER_FILES;
+    const measure = async (deviceScaleFactor, size = viewport) => {
+        await page.setViewport({ ...size, deviceScaleFactor });
+        return page.evaluate(async (files) => {
+            if (!window._renderTaskUpdates?.['dpr-test']) {
+                executeRenderTask({
+                    files,
+                    params: {},
+                    taskName: 'render-display',
+                    instanceId: 'dpr-test'
+                });
+            }
+            const update = window._renderTaskUpdates['dpr-test'];
+            const source = { hostname: 'DPR设备', cpuPercent: 45, memPercent: 55, memUsed: 4, memTotal: 8 };
+            const results = {};
+            for (const angle of [0, 90, 180, 270]) {
+                handleControl({ action: 'rotate', value: angle });
+                update(source);
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                const rect = document.getElementById('monitorOverlay').getBoundingClientRect();
+                results[angle] = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+            }
+            return { dpr: window.devicePixelRatio, results };
+        }, renderFiles);
+    };
+
+    const normal = await measure(1);
+    const highDpi = await measure(2);
+    const compactViewport = await measure(1, { width: 800, height: 500 });
+    assert.equal(normal.dpr, 1);
+    assert.equal(highDpi.dpr, 2);
+    assert.ok(
+        highDpi.results[0].width <= normal.results[0].width * 0.55,
+        `DPR 2 下覆盖层应近似缩小一半: ${JSON.stringify({ normal: normal.results[0], highDpi: highDpi.results[0] })}`
+    );
+    for (const angle of [0, 90, 180, 270]) {
+        const rect = highDpi.results[angle];
+        assert.ok(rect.left >= -1 && rect.right <= viewport.width + 1, `${angle}°横向越界: ${JSON.stringify(rect)}`);
+        assert.ok(rect.top >= -1 && rect.bottom <= viewport.height + 1, `${angle}°纵向越界: ${JSON.stringify(rect)}`);
+        const compactRect = compactViewport.results[angle];
+        assert.ok(compactRect.left >= -1 && compactRect.right <= 801, `${angle}°窄视口横向越界: ${JSON.stringify(compactRect)}`);
+        assert.ok(compactRect.top >= -1 && compactRect.bottom <= 501, `${angle}°窄视口纵向越界: ${JSON.stringify(compactRect)}`);
+    }
+    await page.close();
+});
