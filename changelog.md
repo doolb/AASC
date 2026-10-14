@@ -1,3 +1,17 @@
+### min首次语音模型提示与下载分组
+
+- ✅ [2026-10-14] min55首次健康启动提示准备TTS与ASR/声纹，默认两组勾选，手动入口ASR与声纹合组。
+  - `OfflineModelPreparationPlan.kt`、`OfflineModelPreparationDialog.kt`、`MainActivity.kt`实现原ID/路径不变的分组、仅缺项量、字节进度、取消/重试、服务健康与显示页成功双门槛及本机首次标记。已有验证缓存跳过提示，稍后后可手动准备，不重发旧请求、不改变声纹启用开关。
+  - Android265项0失败/1既有环境跳过，新增9项全通过及最终UI定向复验；首装63/63。ADB min54覆盖55保留账号/模型，默认勾选、空选择禁用、取消不下载、冷启动不重复通过；ASR/声纹仅补41134267bytes声纹，ASR大小/mtime保持，三模型filesReady=true、TTS/ASR引擎ready。
+  - min55：89928481bytes/SHA256 `4b6f6c134211bd2e3b5a2d189e4df2bf6831a4db864fad697f9f1d7014483410`，同签名/profile/CRC通过，LAN/WAN全组件HTTP校验与精确清理成功。code87/deps10/full50保持；minApk=false、servicePackage=true、dependenciesPackage=false。design/spec/task/self-test/todo同步；未清空应用另做55干净首装，模型/APK/cache不入Git。
+
+### Offline豆包网页账号真实测试
+
+- ✅ [2026-10-14] 按用户授权在当前APK UID、Android Node26.4.0及实际code87/deps10测试保存的同一豆包账号，发现LLM配置门槛与TTS协议错误。
+  - 账号启用但只有Cookie、无nodeProfile；正式CoreAdapter返回503/doubao_browser_disabled（25ms），没有向官方发送推理。TTS使用正式SpeechService及临时内存账号绑定，返回502/doubao_speech_upstream（334ms），未生成音频；未改账号或长期业务配置、不导出凭据、不读无关聊天。
+  - 用户随后明确Node直连，不需要网页聊天；直接用已安装code87适配器，不注入browserTransport、不改凭据，Android Node448ms收到HTTP200/text-event-stream，但SSE业务风控映射doubao_risk_control/403，无文字。未打开官网网页、未自动重试，不能把HTTP200当LLM成功。候选在正常登录时补齐同账号nodeProfile，旧账号缺资料明确提示补全。
+  - 定向WS诊断已open并收到VoiceGenie TaskStarted/status=20000000；现行适配器`if(event.status_code)`将其当错误并在StartSession之前关闭。修复方案为兼容成功码0/20000000、保留真正错误/风险码判断、更新真实状态夹具及定向复验；生产代码尚未修改。Node资料采集/TTS修复具体方案已提出，按AGENTS规则等待确认。
+
 ### Offline min TTS / ASR 模型资源补齐
 
 - ✅ [2026-10-14] 修复min54无法下载TTS/ASR：补齐模型发布与局域网镜像，真机两引擎ready。

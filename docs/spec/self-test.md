@@ -1,5 +1,32 @@
 # 自测功能实现文档
 
+## min55首次语音提示与下载入口分组（2026-10-14）
+
+```text
+分组 := TTS + ASR/声纹{sensevoice,voiceprint} + 各LLM；模型ID/文件路径/独立缓存不变
+原生 := 265项0失败/1既有环境跳过；新增分组/取消/字节进度/健康与页面顺序/首次持久化9项全通过
+打包 := test:offline-bootstrap63/63；min55签名/profile/CRC通过
+实际 := SM-N9500 min54覆盖55保留TTS/ASR缓存 → 首次两组默认checked=true → 提示只需补40MiB声纹
+取消 := 两组取消勾选 → 按钮禁用；稍后 → 声纹仍缺失/无下载 → 冷启动不重复提示
+手动 := ASR/声纹组 → 补声纹41134267bytes → ASR大小/mtime保持 → 三模型filesReady=true/TTS与ASR引擎ready
+发布 := LAN/WAN min55完整HTTP校验/精确清理完成；89928481bytes/SHA4b6f6c13…；code87/deps10保持
+边界 := 未清空应用重做55干净首装；声纹仅准备文件、不改变启用开关；真实MNN推理未测
+```
+
+## Offline豆包网页账号真实测试（2026-10-14）
+
+```text
+授权 := 用户明确要求当前Offline账号的LLM/TTS真实测试；账号只在APK UID内读取/不导出凭据
+环境 := min55/code87/deps10/Android Node26.4.0；启用账号1个，Cookie-only/nodeProfile缺失
+LLM := 正式CoreAdapter+显式同账号 → 503/doubao_browser_disabled/25ms → 无官方推理请求
+Node直连 := 用户要求无需网页聊天 → 实际code87适配器不注入browserTransport → HTTP200/SSE/448ms
+直连业务 := doubao_risk_control映射403 → 无有效文字；不等同HTTP403，风险后未重试/未打开官网网页
+TTS := 正式SpeechService+仅内存显式绑定 → 502/doubao_speech_upstream/334ms → 无音频
+诊断 := 原WebSocket适配器监听 → open + TaskStarted/status=20000000 → 当前if(status_code)当错误 → 未发StartSession
+边界 := 没有证明LLM/TTS成功；未改账号/长期业务配置；未读无关会话/日志凭据；待具体方案确认后修复
+```
+
+
 ## TTS Provider 原生语速配置自测（2026-10-14）
 
 ```text

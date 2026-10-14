@@ -1,5 +1,26 @@
 # 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
 
+## Offline真实测试与候选状态码修复（2026-10-14，未实施）
+
+```text
+实际环境 := min55/code87/deps10 + 保存Cookie-only账号 + 正式Core/SpeechService
+LLM当前 := 无nodeProfile + doubaoWebRuntime.enabled=false → 503/doubao_browser_disabled → 不发官方推理
+用户纠正 := 文字使用Node直连；不需要网页聊天
+直连诊断 := 同账号 + 当前适配器 + 不注入browserTransport → Android Node HTTP请求
+直连结果 := HTTP200/text-event-stream → SSE业务风险 → doubao_risk_control/403；耗时448ms，无有效正文
+风险后 := 不自动重试；不打开官网网页；不等同HTTP403或Node协议不可用
+候选账号采集 := 正常登录同上下文deviceId/webId/fp/UA → 校验 → credentials.nodeProfile → 已有Node协议
+候选缺资料 := 明确提示补全；不伪造设备身份，不以网页聊天回退
+TTS当前 := 官方WS open → TaskStarted/status=20000000 → 非零状态被当错误 → 502/关闭 → 无StartSession/无音频
+夹具断点 := 模拟事件未写status字段 → decoder默认0 → 未覆盖实际20000000
+候选成功状态 := 0或20000000；其他状态 := 沿用固定错误/风险/鉴权处理
+候选测试 := 完整Task/Session/句子/结束使用20000000 + 0兼容 + 真错误拒绝 + 超时/取消/迟到清理
+候选验收 := 明确确认后改source/测试 → 新签名code包 → Android同账号生成完整非静音WAV
+测试约束 := 临时绑定仅内存/凭据留APK UID/不读无关聊天/不改长期业务配置
+状态 := 真实测试完成；TTS修复与LLM初始化待确认
+```
+
+
 ```text
 2026-10-13 纯Node会话复用（已实现，普通模式）
   两轮真实协议验证通过：第一轮随机标记/OK，第二轮纯增量准确回忆；ACK会话ID一致，无历史重放

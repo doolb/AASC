@@ -1,5 +1,14 @@
 # 豆包网页文字 Chat2API 与网页登录朗读 TTS 设计
 
+## Offline保存账号真实测试（2026-10-14，发现问题，修复待确认）
+
+用户明确授权测试当前Offline APK豆包账号的LLM与网页TTS。在min55/code87/deps10、Android Node26.4.0、同一启用Cookie-only账号下，LLM正式CoreAdapter返回503/doubao_browser_disabled，未向官方发推理；缺少Node初始化资料且网页环境未启用。TTS使用正式SpeechService的仅内存账号绑定，返回502/doubao_speech_upstream，无音频；账号与长期业务配置不变。
+
+用户随后要求Node直连，不需要网页聊天。直接调用当前code87适配器且不注入browserTransport，Android Node实际发出短句请求：448ms，HTTP200/text-event-stream，但SSE业务结果为doubao_risk_control，映射403，无有效文字。仅表明Cookie-only直连仍遭业务风控，不能把HTTP200当成功或断言完整Node协议不可用；未打开官网网页，也未自动重试。候选方案是在正常账号登录时补齐并保存既有nodeProfile，让聊天复用已验证Node协议，旧账号缺资料明确提示补全；不伪造设备身份或换账号。原生采集若实施会同时影响min与服务包，当前尚待方案确认。
+
+只记录事件名/数值码的真实WS诊断显示连接open、VoiceGenie TaskStarted/status=20000000；适配器现有非零状态判断误将其归为失败，尚未发StartSession。候选TTS修复仅在speech-adapter和测试中接受实际成功码20000000、兼容无状态码/0，真正错误仍拒绝，更新全链路夹具并用同一账号复验；单独TTS修复只影响服务代码包。当前尚未修改生产代码。任务：`docs/task/20261014_Offline豆包网页LLM与TTS真实测试.md`。
+
+
 ## 2026-10-13 豆包纯Node会话复用完成（普通模式）
 
 用户要求像Qwen网页端一样支持会话复用。Qwen通过`/v1/responses`的`previous_response_id`或AASC `conversation`续接，服务保存账号及上游nativeState，下一轮仅传新增input。普通LLM的`llm-service.js`已有Responses引用保存及模板/模型/系统提示指纹；修改前豆包仅保存observedConversationId/observedSectionId，逐轮新建并重放历史。

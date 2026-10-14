@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         private const val OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS = 10_000L
         private const val OFFLINE_UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1_000L
         private const val OFFLINE_UPDATE_PANEL_COLLAPSE_DELAY_MS = 10_000L
+        private const val OFFLINE_VOICE_PROMPT_KEY = "offline_voice_first_run_v1"
     }
 
     private lateinit var configBar: View
@@ -99,6 +100,8 @@ class MainActivity : AppCompatActivity() {
     private var offlineMode = false
     private var embeddedNode = true
     private var updateOnlyMode = false
+    private val offlineVoiceFirstRun = OfflineVoiceFirstRunState()
+    private val offlineVoiceModels by lazy { OfflineModelStore(this) }
     private var serviceUpdateCheckStarted = false
     private var serviceUpdateCandidate: ServiceUpdateResult? = null
     private var serviceUpdateStarted = false
@@ -406,6 +409,8 @@ class MainActivity : AppCompatActivity() {
         offlineFailures.restore(savedInstanceState?.getString("offlineStartupError"), savedInstanceState?.getString("offlineUpdateError"))
         embeddedNode = resources.getBoolean(R.bool.aasc_embedded_node)
         updateOnlyMode = resources.getBoolean(R.bool.aasc_update_only_mode)
+        offlineVoiceFirstRun.prompted = getSharedPreferences("aasc_display", MODE_PRIVATE)
+            .getBoolean(OFFLINE_VOICE_PROMPT_KEY, false)
         offlineFailures.updateError?.let { handleServiceUpdateFailed(it) }
         refreshOfflineDisplayInfo()
         if (embeddedNode && offlineMode) {
@@ -781,6 +786,7 @@ class MainActivity : AppCompatActivity() {
         if (!offlineMode) return
         when (status) {
             NodeServerService.STATUS_PREPARING -> {
+                offlineVoiceFirstRun.nodeReady = false
                 showOfflineStartupMessage(getString(R.string.offline_startup_preparing), false)
             }
             NodeServerService.STATUS_INSTALLING -> {
@@ -793,17 +799,20 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             NodeServerService.STATUS_STARTING -> {
+                offlineVoiceFirstRun.nodeReady = false
                 showOfflineStartupMessage(getString(R.string.offline_startup_starting), false)
                 scheduleOfflineDisplayInfoHide()
                 checkForServiceUpdateOnce()
                 checkForMinApkUpdateOnce()
             }
             NodeServerService.STATUS_READY -> {
+                offlineVoiceFirstRun.nodeReady = true
                 bootstrapWorking = false
                 offlineStartupRetry.text = "重试"
                 offlineFailures.retryStartup()
                 hideOfflineStartupPanel()
                 if (offlineDisplayLoadFailed) webView?.reload()
+                maybePromptOfflineVoiceModels()
             }
             NodeServerService.STATUS_SERVICE_UPDATE_APPLYING,
             NodeServerService.STATUS_SERVICE_UPDATE_PROGRESS -> {
@@ -816,6 +825,7 @@ class MainActivity : AppCompatActivity() {
                 handleServiceUpdateFailed(detail)
             }
             NodeServerService.STATUS_FAILED -> {
+                offlineVoiceFirstRun.nodeReady = false
                 bootstrapWorking = false
                 offlineStartupRetry.text = "重试"
                 val failure = detail?.trim()?.takeIf { it.isNotEmpty() }
@@ -823,6 +833,25 @@ class MainActivity : AppCompatActivity() {
                 showOfflineStartupMessage(getString(R.string.offline_startup_failed, failure), true)
             }
         }
+    }
+
+    /** 首次语音提示晚于服务健康和页面成功，取消后保留手动入口，不在重连时反复打扰。 */
+    private fun maybePromptOfflineVoiceModels() {
+        if (!offlineMode || !updateOnlyMode || isFinishing || isDestroyed || nativeDisplayBridge == null ||
+            !offlineVoiceFirstRun.nodeReady || !offlineVoiceFirstRun.displayReady || offlineVoiceFirstRun.prompted) return
+        val groups = OfflineModelPreparationPlan.groups(offlineVoiceModels.definitions).filter { it.defaultSelected }
+        val required = groups.flatMap { it.modelIds }.toSet()
+        val states = org.json.JSONArray(offlineVoiceModels.statusJson())
+        val verified = (0 until states.length()).map { states.getJSONObject(it) }
+            .filter { it.optBoolean("filesReady") }.map { it.getString("modelId") }.toSet()
+        val show = offlineVoiceFirstRun.claim(offlineMode, updateOnlyMode, !verified.containsAll(required))
+        if (show && !OfflineModelPreparationDialog.showFirstRun(this, offlineVoiceModels) { modelId ->
+            when (modelId) {
+                "tts" -> nativeDisplayBridge?.ttsEnsureModel()
+                "sensevoice" -> nativeDisplayBridge?.asrEnsureModel()
+            }
+        }) return
+        getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putBoolean(OFFLINE_VOICE_PROMPT_KEY, true).apply()
     }
 
     private fun startupPhaseMessage(phase: String?): String = when (phase) {
@@ -1680,6 +1709,7 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
                 if (retryOfflinePage) {
+                    offlineVoiceFirstRun.displayReady = false
                     // 新一轮主页面请求开始，清除上一轮连接失败状态。
                     offlineDisplayLoadFailed = false
                 }
@@ -1697,6 +1727,8 @@ class MainActivity : AppCompatActivity() {
                     offlineDisplayRetryCount = 0
                     hideOfflineStartupPanel()
                     restoreControlPageButton()
+                    offlineVoiceFirstRun.displayReady = true
+                    maybePromptOfflineVoiceModels()
                 }
                 super.onPageFinished(view, pageUrl)
             }
