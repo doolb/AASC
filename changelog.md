@@ -1,3 +1,11 @@
+### Offline min TTS / ASR 模型资源补齐
+
+- ✅ [2026-10-14] 修复min54无法下载TTS/ASR：补齐模型发布与局域网镜像，真机两引擎ready。
+  - 排查时LAN `/mnt/aimodel/manifest.json`返回404，公网仍是原五组30项且缺全部TTS声明文件；SM-N9500公网HTTPS发生TLS连接重置。按APK可信定义准备原30项+TTS14文件及清单，不扩展其他新模型，使用`npm run publish:ai-models`增量上传15项77727859bytes，原30项指纹保持；45项共1120526364bytes均通过服务器公网HTTPS大小/SHA-256校验。
+  - 建立LAN `/mnt/aimodel`镜像，实际45项HTTP内容大小/SHA-256通过后原子提交清单；LAN/WAN清单一致，SHA256 `1d709c1b6ac065d58ac79c0cda5aac0bf1c63f9c947851af53267fddbc0f40ec`。TTS必要文件77726160bytes、SenseVoice239549735bytes；模型不入Git、不打入min APK。
+  - ADB SM-N9500/min54从原生“本机模型”入口分别确认下载TTS/SenseVoice，实际独立缓存`files/models/tts`和`files/models/sensevoice`摘要已验证、filesReady=true；TTS与ASR均state=ready/progress=100/error为空，ASR加载预热通过，原生TTS“测试”合成33648bytes音频，无播放或旧请求重发。`npm run test:ai-models`36/36通过。
+  - 本次仅资源发布/同步，按项目纯操作例外只更新changelog，未改代码/配置规则或重建APK，Offline待出包标记保留其他任务值。手机公网TLS1.2连接重置仍存在，本机通过已补齐LAN镜像下载后可离线使用；未放宽HTTPS/可信摘要策略。精确清理本轮测试XML与19223转发，保留原19222映射和模型缓存。
+
 ### 显示端
 
 - ✅ [2026-10-14] 修复 render-display 高 DPI 过大、Offline 本机模型入口位置和 MMD 隐藏重连恢复。
