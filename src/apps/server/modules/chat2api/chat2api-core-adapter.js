@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
-const { normalizeDoubaoWebConfig } = require('./chat2api-doubao-web-config');
-const { browserError } = require('./chat2api-doubao-browser-bridge');
+const { doubaoError } = require('./chat2api-doubao-chat-adapter');
 const {assertTextOnly}=require('./chat2api-content');
 const {getSpeechBinding,canonicalProviderId}=require('./chat2api-model-capabilities');
 
@@ -11,9 +10,8 @@ const createHttpError = (statusCode, code, message) => {
   error.code = code;
   return error;
 };
-const nodeProfileRequired = () => createHttpError(422,'doubao_node_profile_required','该豆包账号缺少Node直连资料，请重新登录豆包并完成账号保存');
 
-const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, loadBalancer, providerAdapters = {}, getDoubaoWebConfig } = {}) => {
+const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, loadBalancer, providerAdapters = {} } = {}) => {
   if (!dataStore || typeof dataStore.getAccount !== 'function' || typeof dataStore.listAccounts !== 'function') {
     throw new Error('Chat2API 核心适配层需要账号数据存储');
   }
@@ -54,12 +52,12 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
     if(requestedMapping.application==='tts'||getSpeechBinding(requestedMapping.actualModel,requestedMapping.preferredProviderId,requestedMapping.application))throw createHttpError(400,'unsupported_application','语音模型请使用Responses或speech接口');
     let preferredProviderId = canonicalProviderId(options.preferredProviderId || requestedMapping.preferredProviderId);
     const preferredAccountId = options.preferredAccountId || requestedMapping.preferredAccountId;
-    if(getDoubaoWebConfig && ['doubao','doubao-think','doubao-expert'].includes(request.model)){
-      if(preferredProviderId && preferredProviderId!=='doubaochat')throw browserError('binding');
+    if(['doubao','doubao-think','doubao-expert'].includes(request.model)){
+      if(preferredProviderId && preferredProviderId!=='doubaochat')throw doubaoError('doubao_account_conflict');
       preferredProviderId='doubaochat';
     }
     // 凭据包显式配置了Node账号时，未指定账号的豆包请求在发送前只调度Node池。
-    // 这不是失败后的回退；明确映射的网页账号仍按网页绑定验证，不偷偷换到Node账号。
+    // 明确映射的账号仍严格限定；缺资料时提示补全，不偷偷换到其他Node账号。
     const isDoubao = preferredProviderId === 'doubaochat' || ['doubao', 'doubao-think', 'doubao-expert'].includes(request.model);
     let selectionOptions = {};
     if (isDoubao && preferredAccountId) selectionOptions = { requiredAccountId: preferredAccountId, requireSecret: true };
@@ -67,7 +65,7 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       const nodeIds = await dataStore.listDoubaoNodeAccountIds();
       if (nodeIds.length > 0) selectionOptions = { allowedAccountIds: nodeIds, requireSecret: true };
     }
-    let selection = await loadBalancer.selectAccount(
+    const selection = await loadBalancer.selectAccount(
       request.model,
       'round-robin',
       preferredProviderId,
@@ -78,21 +76,15 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       throw createHttpError(503, 'no_available_account', `没有可用的模型账号: ${request.model}；请先在 Chat2API 登录对应账号，或恢复已有登录资料`);
     }
 
-    // 先核对所选豆包账号的显式传输资料。Node 账号不读取 Chrome 配置；Cookie-only 账号
-    // 保持既有网页绑定流程。仅凭字段存在选择模式，格式错误交给适配器拒绝，不自动回退。
+    // 豆包文字只支持Node；旧Cookie-only账号在发送前要求补齐，已保存网页开关不再读取。
     let selectedDoubaoAccount;
     if (selection.provider.id === 'doubaochat') {
       selectedDoubaoAccount = await dataStore.getAccount(selection.account.accountId || selection.account.id);
     }
     const nodeMode = selectedDoubaoAccount?.credentials && Object.hasOwn(selectedDoubaoAccount.credentials, 'nodeProfile');
-    if (nodeMode && preferredAccountId && preferredAccountId !== (selection.account.accountId || selection.account.id)) throw browserError('binding');
-    // 只约束豆包网页：优先账号不允许绕过绑定或退选到别人账号，旧Provider保持原调度。
-    if(selection.provider.id==='doubaochat'&&getDoubaoWebConfig&&!nodeMode){
-      let binding;try{binding=normalizeDoubaoWebConfig(getDoubaoWebConfig())}catch{throw nodeProfileRequired()}
-      if(!binding.enabled)throw nodeProfileRequired();
-      if((preferredAccountId&&preferredAccountId!==binding.accountId)||(preferredProviderId&&preferredProviderId!=='doubaochat'))throw browserError('binding');
-      selection=await loadBalancer.selectAccount(request.model,'round-robin','doubaochat',binding.accountId,{requiredAccountId:binding.accountId,requireSecret:true});
-      if(!selection||selection.provider.id!=='doubaochat'||selection.account.accountId!==binding.accountId)throw browserError('binding');
+    if(selection.provider.id==='doubaochat'){
+      if(preferredAccountId && preferredAccountId !== (selection.account.accountId || selection.account.id)) throw doubaoError('doubao_account_conflict');
+      if(!nodeMode)throw doubaoError('doubao_node_profile_required');
     }
 
     const accountId = selection.account.accountId || selection.account.id;

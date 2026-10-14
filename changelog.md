@@ -1,3 +1,9 @@
+### 豆包纯Node与语音自动账号
+
+- ✅ [2026-10-15] 按用户要求删除文字网页兼容分支，doubao-chat像qwen-chat自动识别账号。
+  - Core/适配器/runtime/Provider工厂只走Node，旧Cookie-only账号明确422补资料；删除browser-bridge/web-config/web-ws、控制端settings与路由/广播/旧自测，保留正常网页登录采集。LLM模型doubao，TTS模型doubao-chat。
+  - SpeechService无需手动映射即可调度可用doubaochat账号，显式账号仍严格限定，失败不重发或换号；配额兼容todayLimit/dailyLimit，已保存资料不被改写。Chat2API246/246和JS语法通过，受影响仅服务代码；进入code89发布及主服务器重启，min56沿用。
+
 ### 豆包Node登录采集与网页账号TTS
 
 - ✅ [2026-10-14] 实现Android登录采集Node资料，修正真实语音成功码及Offline分目录解码加载。

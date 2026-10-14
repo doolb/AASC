@@ -241,7 +241,8 @@ const withDeadline = async (promise) => {
 const createDoubaoHttpFixture = (httpClient) => {
   const provider = { id: 'doubaochat', apiEndpoint: 'https://www.doubao.com', chatPath: '/chat/completion' };
   const account = { accountId: 'doubao_mock', providerId: 'doubaochat', credentials: {
-    cookie: 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789',
+    cookie: 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789; s_v_web_id=verify_mock_123456789',
+    nodeProfile: {deviceId:'1234567890123456789',webId:'9876543210123456789',fp:'verify_mock_123456789',userAgent:'Mozilla/5.0 (Linux; Android 9) Chrome/138.0.0.0'},
   } };
   const sessions = new Map();
   const coreAdapter = createChat2ApiCoreAdapter({

@@ -139,8 +139,6 @@ const { createTextMediaTtsService } = require('../modules/media/text-media-tts-s
 const { createProviderRegistry } = require('../modules/tts/tts-provider-registry');
 const { createTtsProviderService } = require('../modules/tts/tts-provider-service');
 const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
-const { createDoubaoWebWs } = require('../modules/chat2api/chat2api-doubao-web-ws');
-const { createDoubaoBrowserBridge } = require('../modules/chat2api/chat2api-doubao-browser-bridge');
 const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
 const { filterQwenChatSpeechText } = require('../modules/tts/qwen-chat-text-filter');
@@ -693,8 +691,6 @@ const ttsProviderService = createTtsProviderService({
 });
 const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService,
     isControl: ws => controlClients.has(ws), broadcast: broadcastToControls });
-const doubaoWebWs = createDoubaoWebWs({config,isControl:ws=>controlClients.has(ws),broadcast:broadcastToControls,
-    browser:createDoubaoBrowserBridge({getConfig:()=>config.get('doubaoWebRuntime',{})})});
 if (!ANDROID_NODE_POLICY.enabled) {
     tts.init(config.getTtsConfig());
 }
@@ -1345,7 +1341,6 @@ async function startServer() {
                 'updateDisplayVersionConfig',
                 'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
                 'setTtsProviderConfig', 'getTtsProviderVoices',
-                'setDoubaoWebRuntimeConfig', 'getDoubaoWebTargets',
                 'setDisplayBackgroundGlowConfig',
                 'setDisplayTtsBackgroundOpacityConfig', 'setServerPortConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
@@ -8277,7 +8272,6 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify(piProfileConfig.snapshot()));
         ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
-        ws.send(JSON.stringify(doubaoWebWs.snapshot()));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         ws.send(JSON.stringify({
             type: 'displayBackgroundGlowConfig',
@@ -9233,10 +9227,6 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 async function handleControlMessageFallback(data, ws) {
     if (['getChatProfilesConfig', 'chatProfilesSave', 'chatProfileSwitch', 'switchProfile'].includes(data.type)) {
         await piProfileConfig.handle(ws, data);
-        return;
-    }
-    if (['setDoubaoWebRuntimeConfig','getDoubaoWebTargets'].includes(data.type)) {
-        await doubaoWebWs.handle(ws,data);
         return;
     }
     if (['setTtsProviderConfig', 'getTtsProviderVoices'].includes(data.type)) {

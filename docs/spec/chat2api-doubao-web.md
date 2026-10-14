@@ -1,5 +1,23 @@
 # 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
 
+## 2026-10-15 豆包纯Node文字与语音自动账号（用户已授权）
+
+```text
+文字 := 固定豆包别名→doubaochat；账号明确绑定不可退选，未绑定优先Node池
+文字凭据 := normalizeCookie/profile → profile缺失则422/doubao_node_profile_required → 不发推理
+唯一文字传输 := Node HTTP + 既有query/body/SSE/Responses原生会话；不读取网页配置/不创建Chrome桥
+删旧分支 := 专用browser-bridge/web-config/web-ws及控制端settings、WS消息路由/广播/初始化与旧自测
+旧配置 := 已保存doubaoWebRuntime不再读取、不会恢复网页兼容；不改无关用户配置
+语音 := doubao-chat→内置doubaochat绑定；不要求自定义映射/指定账号
+语音选择 := 现有strategy + 当前启用/有效/有凭据/未限额同Provider账号；只在发送前选择一次
+配额兼容 := dailyLimit优先，缺失使用旧豆包todayLimit；Store允许两个公开字段，发送前及秘密读取后复核
+显式语音账号 := requiredAccountId严格限制，缺失/停用报错，不退选或重发
+语音登录资料 := Cookie即可；不要求文字Node资料；无可用账号提示登录/恢复
+产物 := 仅新增服务代码变化→servicePackage=true；已完成min56采集代码保持；依赖集合不变
+验收 := 自动单/多账号/排除停用限额无秘密/更新凭据/无账号/严格映射/失败无重试；控制端无网页设置
+主服务器 := 192.168.1.39:8081通过现有restart:server脚本加载最新代码，再验证入口/健康
+```
+
 ## 2026-10-14 已确认实施：Android登录保存Node资料及TTS成功状态
 
 ```text

@@ -8,11 +8,12 @@ const { createChat2ApiProviderAdapters } = require('./chat2api-provider-adapters
 const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
 
 // 所有凭据和网络数据均为纯 mock，不连接官网、Chrome 或真实账号库。
-const COOKIE = 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789; msToken=mock_ms_token';
+const COOKIE = 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789; msToken=mock_ms_token; s_v_web_id=verify_mock_123456789';
+const PROFILE = {deviceId:'1234567890123456789',webId:'9876543210123456789',fp:'verify_mock_123456789',userAgent:'Mozilla/5.0 (Linux; Android 9) Chrome/138.0.0.0'};
 const provider = { id: 'doubaochat', apiEndpoint: 'https://www.doubao.com', chatPath: '/chat/completion', headers: {} };
 const input = (extra = {}) => ({
   request: { model: 'doubao', messages: [{ role: 'user', content: '你好' }], stream: false },
-  actualModel: 'doubao', provider, account: { credentials: { cookie: COOKIE } }, ...extra,
+  actualModel: 'doubao', provider, account: { accountId: 'node-mock', credentials: { cookie: COOKIE, nodeProfile: PROFILE } }, ...extra,
 });
 const event = (name, data = {}) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
 const textBlock = (text, id = 'block_1') => ({ block_type: 10000, block_id: id, content: { text_block: { text } } });
@@ -20,10 +21,9 @@ const blockEvent = (blocks) => event('STREAM_CHUNK', { patch_op: [{ patch_object
 const response = (parts) => ({ status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' }, data: Readable.from(parts) });
 const collect = async (stream) => { const chunks = []; for await (const chunk of stream) chunks.push(chunk); return chunks; };
 
-test('网页模式只传body及账号标识，复用原SSE解析，不读取Node凭据或回退HTTP',async()=>{
- let call;const adapter=createDoubaoChatAdapter({httpClient:{request:()=>{throw new Error('不应回退Node')}},browserTransport:{request:async args=>{call=args;return response([blockEvent([textBlock('网页回复')]),event('SSE_REPLY_END')])}}});
- const account={accountId:'bound',get credentials(){throw new Error('网页模式不能构造Node Cookie头')}};
- const result=await adapter(input({account}));assert.equal(result.body.choices[0].message.content,'网页回复');assert.equal(call.accountId,'bound');assert.equal(call.headers,undefined);
+test('Cookie-only文字必须补齐Node资料，旧网页transport参数不能恢复兼容分支',async()=>{
+ let calls=0;const adapter=createDoubaoChatAdapter({httpClient:{request:()=>{calls++;}},browserTransport:{request:()=>{throw Error('页面不得运行')}}});
+ await assert.rejects(adapter(input({account:{credentials:{cookie:COOKIE}}})),e=>e.code==='doubao_node_profile_required'&&e.statusCode===422);assert.equal(calls,0);
 });
 const safeFailure = (code) => (error) => {
   assert.equal(error.code, code);
@@ -39,13 +39,13 @@ test('豆包三个公开模型按 0/1/3 请求固定官方来源，无音频、B
       actualModel: model,
       provider: { ...provider, headers: { Authorization: 'Bearer other-secret', Cookie: 'attacker', Host: 'attacker.test', Origin: 'https://attacker.test' } },
     }));
-    assert.equal(call.url, DOUBAO_COMPLETION_URL);
+    assert.equal(new URL(call.url).origin+new URL(call.url).pathname, DOUBAO_COMPLETION_URL);
     assert.equal(call.data.option.need_deep_think, mode);
     assert.equal(call.data.ext.use_deep_think, String(mode));
     assert.equal(call.data.option.is_audio, false);
     assert.equal(call.data.option.tts_switch, false);
     assert.equal(call.data.option.support_lazy_fetch_stream, true);
-    assert.equal(call.data.option.sse_recv_event_options.support_chunk_delta, false);
+    assert.equal(call.data.option.sse_recv_event_options.support_chunk_delta, true);
     assert.equal(call.headers.Cookie, COOKIE);
     assert.equal(call.headers['x-tt-passport-csrf-token'], 'mock_csrf_123456789');
     assert.equal(call.headers.Authorization, undefined);
@@ -119,7 +119,10 @@ test('非流式等待明确结束、正文与思考隔离，用户回显及其�
   assert.equal(result.body.choices[0].message.reasoning_content, '思考内容');
   assert.equal(result.body.choices[0].finish_reason, 'stop');
   assert.equal(result.nativeState, state.nativeState);
-  assert.deepEqual(result.nativeState, { observedConversationId: 'conversation_1', observedSectionId: 'section_1' });
+  assert.equal(result.nativeState.observedConversationId,'conversation_1');
+  assert.equal(result.nativeState.observedSectionId,'section_1');
+  assert.equal(result.nativeState.status,'ready');assert.equal(result.nativeState.transport,'node-http');
+  assert.equal(result.nativeState.accountId,'node-mock');assert.match(result.nativeState.identityFingerprint,/^[a-f0-9]{64}$/u);
 });
 
 test('流式中文逐字节 UTF-8 分片安全，CRLF、多行 data、心跳与最后无空行结束均正确', async () => {

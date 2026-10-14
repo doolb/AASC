@@ -62,7 +62,9 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, modelMapper, 
         if (account.providerId !== provider.id || account.enabled === false || account.secretConfigured === false || (account.status && account.status !== 'active')) {
           continue;
         }
-        if (account.dailyLimit && (account.todayUsed || 0) >= account.dailyLimit) {
+        // 豆包旧凭证包使用todayLimit；与通用dailyLimit采用相同的发送前配额约束。
+        const dailyLimit = account.dailyLimit ?? account.todayLimit;
+        if (dailyLimit && (account.todayUsed || 0) >= dailyLimit) {
           continue;
         }
         if (excludeFailed && isFailed(account.accountId)) {

@@ -80,7 +80,7 @@ test('Core的Node账号不要求启用Chrome；显式账号映射不允许退选
   await core.forwardChatCompletion(input.request);
   assert.equal(received.account.accountId, account.accountId);
   assert.equal(secretReads, 1);
-  await assert.rejects(() => core.forwardChatCompletion(input.request, { preferredAccountId: 'another-account' }), error => error.code === 'doubao_browser_binding');
+  await assert.rejects(() => core.forwardChatCompletion(input.request, { preferredAccountId: 'another-account' }), error => error.code === 'doubao_account_conflict');
 });
 test('Node profile沿凭证包导入保存，预览和账号列表不泄露profile或Cookie', async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-doubao-node-profile-'));

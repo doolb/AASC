@@ -69,7 +69,6 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
     providerRegistry = createChat2ApiProviderRegistry({ dataStore }),
     loadBalancer = createChat2ApiLoadBalancer({ dataStore, providerRegistry }),
     getConfig = () => dataStore.readCollection('config', {}),
-    modelMapper = createChat2ApiModelMapper({ dataStore }),
     qwenAdapter = createChat2ApiQwenSpeechAdapter(), doubaoAdapter = createDoubaoSpeechAdapter() } = {}) {
     return {
         async generate(request, { timeoutMs = 60000, signal, mappedBinding } = {}) {
@@ -97,12 +96,9 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
                     const config = await getConfig();
                     remaining();
                     const strategy = STRATEGIES.has(config?.loadBalanceStrategy) ? config.loadBalanceStrategy : 'round-robin';
-                    let boundAccount=mappedBinding?.preferredAccountId;
-                    if (doubao) {
-                        const mapping = mappedBinding?.preferredAccountId ? mappedBinding : await modelMapper.resolveModel('doubao-chat'); remaining();
-                        if (mapping.preferredProviderId !== 'doubaochat' || typeof mapping.preferredAccountId !== 'string' || !mapping.preferredAccountId) throw doubaoSpeechError('doubao_speech_binding');
-                        boundAccount = mapping.preferredAccountId;
-                    }
+                    // 语音Provider已由统一应用规划器识别；未显式绑定时复用千问的可用账号调度。
+                    // 明确指定账号仍传requiredAccountId，发送失败不退选其他账号或重新合成。
+                    const boundAccount=mappedBinding?.preferredAccountId;
                     selection = await loadBalancer.selectAccount(normalized.model, strategy, providerId, boundAccount,
                         { requireSecret: true, ...(boundAccount ? { requiredAccountId: boundAccount } : {}) });
                     remaining();
@@ -114,9 +110,10 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
                     throw speechError(503, 'speech_account_unavailable', doubao ? 'Chat2API 豆包语音账号读取失败' : 'Chat2API 国内千问账号读取失败');
                 }
                 remaining();
+                const dailyLimit = account?.dailyLimit ?? account?.todayLimit;
                 if (!account || account.providerId !== providerId || account.accountId !== selection.account.accountId || account.enabled === false
                     || (account.status && account.status !== 'active') || !provider || provider.enabled === false
-                    || (account.dailyLimit && (account.todayUsed || 0) >= account.dailyLimit)) throw speechError(503, 'no_available_speech_account', doubao ? 'Chat2API 没有可用的所选豆包语音账号，请先登录或恢复资料' : 'Chat2API 没有可用的国内千问语音账号，请先登录或恢复资料');
+                    || (dailyLimit && (account.todayUsed || 0) >= dailyLimit)) throw speechError(503, 'no_available_speech_account', doubao ? 'Chat2API 没有可用的豆包语音账号，请先登录或恢复资料' : 'Chat2API 没有可用的国内千问语音账号，请先登录或恢复资料');
                 const credential = doubao ? getDoubaoSpeechCredential(account) : getQwenCredential(account);
                 let audio;
                 try {
@@ -206,7 +203,7 @@ function createChat2ApiSpeechService(options={}) {
     const voices=async(model)=>{
         const plan=await planner.plan({model,input:'音色查询'});
         if(apiAdapters[plan.providerId])return apiAdapters[plan.providerId].voices({model:plan.upstreamModel});
-        return [{id:plan.parameters.voice,name:plan.parameters.voice,available:plan.providerId==='qwen'}];
+        return [{id:plan.parameters.voice,name:plan.parameters.voice,available:['qwen','doubaochat'].includes(plan.providerId)}];
     };
     const listModels=async()=>{
         const [accounts,providers,mappings]=await Promise.all([dataStore.listAccounts(),providerRegistry.listProviders(),dataStore.readCollection('modelMappings',[])]);

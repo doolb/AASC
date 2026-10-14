@@ -16,7 +16,6 @@ const { createChat2ApiManualAccountService } = require('./chat2api-manual-accoun
 const { createChat2ApiAccountWebSessionService } = require('./chat2api-account-web-session-service');
 const { createChat2ApiSpeechService } = require('./chat2api-speech-service');
 const {createChat2ApiApplicationService}=require('./chat2api-application-service');
-const { createDoubaoBrowserBridge } = require('./chat2api-doubao-browser-bridge');
 const { createDoubaoAccountVerifier } = require('./chat2api-doubao-account-verifier');
 const { createChat2ApiAccountVerificationService } = require('./chat2api-account-verification-service');
 
@@ -28,9 +27,6 @@ const createChat2ApiRuntime = (options = {}) => {
   const loadBalancer = options.loadBalancer || createChat2ApiLoadBalancer({ providerRegistry, dataStore, modelMapper });
   const rawTrafficLogger = options.rawTrafficLogger || createRawTrafficLogger();
   const getConfig = options.getChat2ApiConfig || (() => dataStore.readCollection('config', {}));
-  // 统一读取主服务WS权威配置；无配置时由规范化器使用disabled默认值，构造runtime不会连接Chrome。
-  const getDoubaoWebConfig = options.getDoubaoWebConfig || (() => require('../config/config-app-service').get('doubaoWebRuntime', {}));
-  const doubaoBrowser = options.doubaoBrowserTransport || createDoubaoBrowserBridge({getConfig:getDoubaoWebConfig,dataStore});
   const speechService = options.speechService || createChat2ApiSpeechService({ dataStore, providerRegistry, loadBalancer, getConfig, modelMapper,
     ...(options.apiSpeechAdapters?{apiAdapters:options.apiSpeechAdapters}:{}),
     ...(options.doubaoSpeechAdapter ? { doubaoAdapter: options.doubaoSpeechAdapter } : {}),
@@ -40,8 +36,7 @@ const createChat2ApiRuntime = (options = {}) => {
     providerRegistry,
     modelMapper,
     loadBalancer,
-    providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig, doubaoBrowserTransport:doubaoBrowser }),
-    getDoubaoWebConfig,
+    providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig }),
   });
   const responseSessionStore = options.responseSessionStore || createChat2ApiResponseSessionStore({ dataStore });
   const applicationService=createChat2ApiApplicationService({modelMapper,speechService});
@@ -80,7 +75,6 @@ const createChat2ApiRuntime = (options = {}) => {
 
   const start = async () => proxy.start();
   const stop = async () => {
-    doubaoBrowser.cancel?.();
     await oauth.stop();
     accountWebSession.clear();
     await proxy.stop();

@@ -18,7 +18,7 @@ const SPEECH_ERRORS = Object.freeze({
     doubao_speech_cancelled: [499,'豆包网页语音已取消'],
     doubao_speech_timeout: [504,'豆包网页语音生成超时'],
     doubao_speech_busy: [503,'所选豆包语音账号正在生成，请稍后重试'],
-    doubao_speech_binding: [503,'请在Chat2API为doubao-chat显式映射启用的豆包账号']
+    doubao_speech_binding: [503,'豆包语音账号选择无效，请在Chat2API登录并启用豆包账号']
 });
 function doubaoSpeechError(code) {
     const safe = Object.hasOwn(SPEECH_ERRORS,code) ? code : 'doubao_speech_upstream';

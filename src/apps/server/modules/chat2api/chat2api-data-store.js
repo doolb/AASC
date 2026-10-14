@@ -197,7 +197,7 @@ const createChat2ApiDataStore = (options = {}) => {
     }
     if (providerId === 'doubaochat') {
       // 账号导入只表示用户恢复凭据，不表示已验证登录；秘密不得散落在顶层或其他 secret 字段。
-      const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'lastUsed', 'credentials', 'accountInfo', 'credentialRevision']);
+      const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'dailyLimit', 'lastUsed', 'credentials', 'accountInfo', 'credentialRevision']);
       if (Object.keys(account).some((key) => !accountFields.has(key))) {
         throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie 及 credentials.nodeProfile'), { statusCode: 422, code: 'doubao_invalid_credentials' });
       }

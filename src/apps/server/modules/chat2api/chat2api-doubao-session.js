@@ -28,8 +28,8 @@ const getDoubaoIdentity = (account) => {
 };
 
 /**
- * 旧observed字段只用于历史观测。经过两轮验证的普通Node模式才建立版本化状态；网页传输
- * 不触碰惰性凭据getter。续接在发送前核对身份，ACK只进入临时状态，完成时才提交。
+ * 旧observed字段只用于历史观测。经过两轮验证的普通Node模式才建立版本化状态。
+ * 续接在发送前核对身份，ACK只进入临时状态，完成时才提交。
  */
 const createDoubaoSessionFlow = ({ account, mode, state = {}, nodeMode = Boolean(account?.credentials?.nodeProfile) }) => {
   const saved = isDoubaoSession(state);

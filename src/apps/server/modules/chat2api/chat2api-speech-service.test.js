@@ -11,12 +11,44 @@ const { wrapPcm } = require('../../../../external/tts/tts-wav');
 const audio = wrapPcm(Buffer.from([1, 0, 2, 0]));
 const { DOUBAO_SPEECH_VOICE } = require('./chat2api-doubao-speech-protocol');
 
+test('doubao-chat无手动映射自动选择同Provider可用账号并读取更新凭据', async t => {
+    const calls=[];const {dataStore,service}=await fixture(t,{doubaoAdapter:{generate:async(...args)=>{calls.push(args);return audio;}}});
+    const cookie='sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678';
+    for(const account of [
+        {accountId:'qwen',providerId:'qwen',credentials:{ticket:'private-qwen'}},
+        {accountId:'disabled',providerId:'doubaochat',enabled:false,credentials:{cookie}},
+        {accountId:'limited',providerId:'doubaochat',todayUsed:2,todayLimit:2,credentials:{cookie}},
+        {accountId:'daily-limited',providerId:'doubaochat',todayUsed:2,dailyLimit:2,credentials:{cookie}},
+        {accountId:'available',providerId:'doubaochat',credentials:{cookie}},
+    ])await dataStore.saveAccount(account);
+    assert.equal((await service.voices('doubao-chat'))[0].available,true);
+    assert.deepEqual(await service.generate({input:'自动选择',model:'doubao-chat'}),{audio,contentType:'audio/wav'});
+    assert.equal(calls[0][2].accountId,'available');assert.equal(calls[0][1],cookie);
+    const next='sessionid=updated_session_123456789; passport_csrf_token=updated_csrf_123456789';
+    await dataStore.updateAccount('available',{credentials:{cookie:next}});
+    await service.generate({input:'更新凭据',model:'doubao-chat'});
+    assert.equal(calls[1][1],next);
+    await dataStore.deleteAccount('available');
+    await assert.rejects(service.generate({input:'无可用账号',model:'doubao-chat'}),e=>e.code==='no_available_speech_account'&&/登录/u.test(e.message));
+    assert.equal(calls.length,2);
+});
+
+test('豆包未绑定多账号轮询_一次上游失败不重发或调用千问', async t => {
+    const calls=[];let fail=false;
+    const {dataStore,service}=await fixture(t,{doubaoAdapter:{generate:async(request,credential,context)=>{calls.push(context.accountId);if(fail)throw Error('private-cookie');return audio;}}});
+    const cookie='sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678';
+    for(const accountId of ['one','two'])await dataStore.saveAccount({accountId,providerId:'doubaochat',credentials:{cookie}});
+    await service.generate({input:'第一次',model:'doubao-chat'});await service.generate({input:'第二次',model:'doubao-chat'});
+    assert.deepEqual(calls,['one','two']);fail=true;
+    await assert.rejects(service.generate({input:'失败一次',model:'doubao-chat'}),e=>e.code==='doubao_speech_upstream');
+    assert.equal(calls.length,3);
+});
+
 test('doubao-chat语音严格采用显式映射账号，不回退其他账号或千问，读取权威更新', async t => {
     const calls=[];const {dataStore,service}=await fixture(t,{doubaoAdapter:{generate:async(...args)=>{calls.push(args);return audio}}});
     const cookie='sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678';
     await dataStore.saveAccount({accountId:'bound',providerId:'doubaochat',credentials:{cookie}});
     await dataStore.saveAccount({accountId:'other',providerId:'doubaochat',credentials:{cookie}});
-    await assert.rejects(service.generate({input:'未绑定',model:'doubao-chat'}),e=>e.code==='doubao_speech_binding');
     await dataStore.writeCollection('modelMappings',[{model:'doubao-chat',actualModel:'doubao-chat',preferredProviderId:'doubaochat',preferredAccountId:'bound'}]);
     assert.deepEqual(await service.generate({input:'模拟语音',model:'doubao-chat'}),{audio,contentType:'audio/wav'});
     assert.equal(calls[0][0].voice,DOUBAO_SPEECH_VOICE);assert.equal(calls[0][2].accountId,'bound');
