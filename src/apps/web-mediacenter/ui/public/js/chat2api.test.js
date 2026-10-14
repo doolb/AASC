@@ -4,6 +4,71 @@ const path = require('path');
 const test = require('node:test');
 const vm = require('node:vm');
 
+const nativeControlFixture = () => {
+  const context = { window: {}, document: { getElementById: () => null } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'chat2api.js'), 'utf8'), context);
+  const control = context.window.Chat2APIControl;
+  control.loginSession = { state: 'sample-state', providerId: 'doubaochat' };
+  const requests = [], messages = [];
+  let refreshes = 0;
+  control.request = async (endpoint, options) => {
+    requests.push({ endpoint, body: JSON.parse(options.body) });
+    return { account: { accountInfo: { credentialVerification: 'format-only' } } };
+  };
+  control.message = text => messages.push(text);
+  control.refresh = async () => { refreshes++; control.message(''); };
+  return { control, requests, messages, refreshes: () => refreshes };
+};
+
+test('Android完成回调提交原生凭据一次，刷新后保留保存提示', async () => {
+  for (const providerId of ['doubaochat', 'qwen']) {
+    const fixture = nativeControlFixture();
+    fixture.control.loginSession.providerId = providerId;
+    await fixture.control.completeNativeLogin({ success: true, state: 'sample-state', providerId, credentials: { cookie: 'fictional-cookie' } });
+    assert.deepEqual(fixture.requests, [{ endpoint: '/api/chat2api/oauth/complete', body: {
+      state: 'sample-state', providerId, credentials: { cookie: 'fictional-cookie' },
+    } }]);
+    assert.equal(fixture.refreshes(), 1);
+    assert.equal(fixture.control.loginSession, null);
+    assert.match(fixture.messages.at(-1), /账号已保存/);
+  }
+});
+
+test('Android取消、错会话、保存失败保留等待会话且不误报成功', async () => {
+  for (const packet of [{ success: false }, { success: true, state: 'wrong', providerId: 'doubaochat' }]) {
+    const fixture = nativeControlFixture();
+    await fixture.control.completeNativeLogin(packet);
+    assert.equal(fixture.requests.length, 0);
+    assert.ok(fixture.control.loginSession);
+  }
+  const fixture = nativeControlFixture();
+  fixture.control.request = async () => { throw new Error('模拟保存失败'); };
+  await fixture.control.completeNativeLogin({ success: true, state: 'sample-state', providerId: 'doubaochat', credentials: {} });
+  assert.ok(fixture.control.loginSession);
+  assert.equal(fixture.refreshes(), 0);
+  assert.equal(fixture.messages.at(-1), '模拟保存失败');
+});
+
+test('豆包验证按钮按指定账号复验，重复点击只请求一次，状态不夸大聊天能力', async () => {
+  const { control, messages } = nativeControlFixture();
+  assert.equal(control.accountStatus({ providerId: 'doubaochat', accountInfo: { credentialVerification: 'conversation-list' } }), '会话列表已验证');
+  assert.equal(control.accountStatus({ providerId: 'qwen-api' }), '已配置，未远端验证');
+  let release;
+  const calls = [];
+  control.request = async (endpoint, options) => {
+    calls.push({ endpoint, method: options.method });
+    return new Promise(resolve => { release = resolve; });
+  };
+  const pending = control.verifyAccount('doubao:test@example.com');
+  await control.verifyAccount('doubao:test@example.com');
+  assert.equal(calls.length, 1);
+  release({ account: { providerId: 'doubaochat', accountInfo: { credentialVerification: 'format-only', credentialVerificationError: 'risk' } } });
+  await pending;
+  assert.deepEqual(calls, [{ endpoint: '/api/chat2api/accounts/doubao%3Atest%40example.com/verify', method: 'POST' }]);
+  assert.match(messages.at(-1), /未验证/);
+  assert.match(fs.readFileSync(path.join(__dirname, 'chat2api.js'), 'utf8'), /data-chat2api-account-verify/);
+});
+
 test('控制端 Chat2API 弹窗包含登录、账号和 API Key 管理流程', () => {
   const source = fs.readFileSync(path.join(__dirname, 'chat2api.js'), 'utf8');
   assert.match(source, /window\.Chat2APIControl/);

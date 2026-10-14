@@ -35,7 +35,7 @@ MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件�
 
 `doubaochat`账号在凭证包中提供同账号`credentials.cookie`和`credentials.nodeProfile`后，普通LLM直接通过Node调用豆包官网，不需要运行Chrome、9222或页面fetch/签名。正式Provider工厂和CoreAdapter在断开CDP后，流式/非流式均实际收到`OK`并正常结束。本轮只在内存初始化真实资料，未保存到账号库，未重启主服务；部署及一次性资料导入说明见[豆包纯Node普通LLM](usage/chat2api-doubao-node.md)。
 
-普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。普通Node模式通过`/v1/responses`保存引用、复用同账号上游会话并仅发送新增输入；两轮纯Node协议记忆验证通过。选择已有`openai-responses`协议即可由普通LLM自动保存引用；无引用chat/completions仍重放历史。`doubao-think`/`doubao-expert`及Cookie-only网页原生复用待验，工具/多模态不承诺。profile导入及手动/Android捕获添加均只校验格式，显示已配置、未远端验证；请求会话列表校验先记录待办；登录过期由用户更新，不自动处理验证码或重发。
+普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。普通Node模式通过`/v1/responses`保存引用、复用同账号上游会话并仅发送新增输入；两轮纯Node协议记忆验证通过。选择已有`openai-responses`协议即可由普通LLM自动保存引用；无引用chat/completions仍重放历史。`doubao-think`/`doubao-expert`及Cookie-only网页原生复用待验，工具/多模态不承诺。profile导入只校验格式并重置验证；手动/Android添加尝试一次只读列表验证，失败仍保存未验证账号，已有账号可显式复验；会话列表访问验证不代表聊天/TTS通过；登录过期由用户更新，不自动处理验证码或重发。
 
 Cookie-only旧账号继续“豆包普通LLM · 网页模式”：默认关闭，通过现有权威配置显式选择账号、官方target/context并授权会话核对，保存不会连接Chrome。该项目bridge真实官网仍待单独验收；原标签UI成功不能替代它。早期缺完整profile的Node403/718013001失败已保留在设计历史，不能继续认定独立Node不可用。Android/Linux及长期令牌维持尚未真实验证，语音格式仍走Frontier/WAV。
 
@@ -1007,4 +1007,4 @@ FSR2是WebGL2时域升采样近似，不使用物体运动矢量，动作较快�
 
 ### Android外部登录统一入口与豆包账号（2026-10-14）
 
-内置网页Provider的Android隔离登录统一显示完成/取消；豆包可自动捕获或手动添加合法Cookie，明确显示已配置、未远端验证。会话列表校验按用户要求仅记录为后续任务。配套min41/code76已发布，Note8按钮及取消返回已检查，真实账号登录保存待验收；详见[Chat2API账号与应用说明](usage/chat2api-unified-applications.md)。
+内置网页Provider的Android隔离登录统一显示完成/取消；豆包可捕获或手动添加合法Cookie。已修复“完成”回调未发保存请求的问题，并接入一次只读列表验证与已有账号“验证登录”；失败仍保存未验证账号。配套原生min41/code76为历史发布，本次服务/网页代码尚未出包，真实Android保存及官网响应仍待验收；详见[Chat2API账号与应用说明](usage/chat2api-unified-applications.md)。

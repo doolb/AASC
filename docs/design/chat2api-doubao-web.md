@@ -179,10 +179,26 @@ server-app复用控制消息白名单、连接初始化和广播；config.set持
 
 独立审查3项重要竞态（导航漏检、连接阶段授权撤销、detach挂起）均先RED后GREEN；实际隔离Chromium还复现并修正Puppeteer使用off而非Node removeListener的接线差异，contextId使用实际CDP元数据，不假定默认context为空。所有网页请求被拦截为本地HTML/SSE，假sessionid仅用于测试profile，无真实上游或用户凭据。最终Chat2API173/176（同3项Windows chmod）、TTS/解码/配置/浏览器97/97、旧播报19/19。真实官网/账号、网页think/expert及Android/设备能力仍未验收，不宣布生产可用。
 
-## Android网页登录添加与后续验证方法（2026-10-14）
+## Android完成后保存与会话列表验证（2026-10-14，代码已完成、真实接口待验收）
+
+用户要求继续此前暂缓的“请求会话列表验证登录”，并报告Android外部登录后点击完成没有进入账号列表。这次两项一起处理，未授权新的真实聊天/合成、读取现有浏览器凭据或操作主服务器。
+
+已确定保存故障：chat2api.js的completeNativeLogin(result)在try内声明同名const result，构造保存请求体时引用result.credentials触发JavaScript暂时性死区。使用正式网页模块和虚构原生回调只读复现：请求0次、刷新0次、保留登录session，提示Cannot access 'result' before initialization。服务器OAuth和AndroidCookie捕获无需为此改写；修复网页回调命名，保存成功才清理会话并刷新列表，保存失败保留可重试状态。
+
+原实现只校验格式且页面按Provider固定显示未验证。本次已新增独立有界只读会话验证器，网页登录/手动添加完成本地校验后执行一次；成功记录conversation-list，失败仍保存未远端验证账号并显示固定脱敏原因，不能让网络失败再次导致账号消失。原有凭证导入继续只校验格式。已有账号可通过显式“验证登录”按钮复验，不依赖重新登录或隐藏的后台循环。
+
+2026-10-14无Cookie访问公开官网HTML/静态JS，核对当前前端采用POST /im/chain/recent_conv、PULL_RECENT_CONV_CHAIN=3200、channel=2/version=1/sequence_id；请求限制1项且not_need_message=true，不读正文，不翻页。响应列表位于downlink_body.pull_recent_conv_chain_downlink_body.cells。公开前端协议只是接线依据，不代表已获真实账号响应或身份语义验证；HTTP200、HTML跳转、任意code=0、匿名响应不能单独判定登录有效，未知结构不升级状态。
+
+验证固定www.doubao.com官方HTTPS，最多15秒、响应512KiB，无重定向/重试；仅临时使用所选账号规范化凭据。响应标题/消息/URL/原始JSON不返回客户端、不记录或持久化，仅保存验证方法、时间、状态和固定失败码。空列表可通过结构校验，不要求用户先建立会话；仅宣称“会话列表访问已验证”，不冒充聊天/TTS可用或已验证实名身份。新增配置不走独立HTTP读写，复验端点是现有受保护账号管理下的业务操作。
+
+需要防止失败复验留下旧成功标记、导入/更换凭据继承验证结果、请求过程中换凭据后迟到结果更新新账号；复验更新仅针对同一凭据版本。具体L4和文件范围见docs/spec/chat2api-doubao-web.md及任务20261014_豆包Android完成保存与会话列表验证。用户确认方案后已完成运行代码，账号写操作在同根目录队列中串行，验证在锁内比较规范化凭据摘要和内部revision；删除重建或相同凭据导入也拒绝迟到结果。未实际请求官网会话接口。
+
+公开协议参考（2026-10-14匿名获取）：[官网chat页面](https://www.doubao.com/chat/)、[当前主前端脚本](https://lf-flow-web-cdn.doubao.com/obj/flow-doubao/doubao/chat/static/js/chat.a5ff61a604.js)、[async-fallback-logics](https://lf-flow-web-cdn.doubao.com/obj/flow-doubao/doubao/chat/static/js/async/async-fallback-logics.bc78fd2002.js)。主模块CA/CL给出cmd和direction枚举，异步模块Rms/WE给出列表请求/通用IM包装，MM给出cells访问位置；这些构建URL随官网版本变化，不作为运行时动态下载依赖。
+
+## Android网页登录添加与后续验证方法（2026-10-14，历史首版）
 
 用户已明确批准所有内置外部登录统一完成/取消，并允许豆包网页登录捕获后自动保存为未远端验证。Android登录和普通手动添加均采用严格Cookie本地规范化与format-only状态，允许未验证添加。Cookie仅按已确认的六名称捕获和恢复，秘密继续存credentials.cookie。
 
 “请求豆包会话列表验证”按用户要求先记录待办，本轮不选择未确认的URL或请求参数，不实施远端会话校验。该策略不能作为已验证登录宣称；未验证账号可添加并正常显示明确状态。
 
-Android捕获与未验证添加已随min41/code76发布内外网，ADB顶部按钮/缺字段保留/取消返回与未验证提示通过；真实账号登录仍待用户验收。
+历史首版的列表暂缓策略已由上述2026-10-14实现取代；原Android捕获与未验证添加已随min41/code76发布内外网，ADB顶部按钮/缺字段保留/取消返回与未验证提示通过；真实账号登录仍待用户验收。

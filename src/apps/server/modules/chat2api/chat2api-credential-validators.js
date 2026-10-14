@@ -1,6 +1,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const { normalizeDoubaoCredentials, assertDoubaoProvider } = require('./chat2api-doubao-chat-adapter');
+const { createDoubaoAccountVerifier, verificationAccountInfo } = require('./chat2api-doubao-account-verifier');
 
 const VALIDATION_TIMEOUT_MS = 15 * 1000;
 
@@ -207,14 +208,14 @@ const validateZai = async (credentials, httpClient) => {
 };
 
 /**
- * 豆包当前只做严格本地格式校验，按用户确认允许添加，但必须明确标记未远端验证。
- * 请求会话列表的验证方法仅记录为后续任务；不以网页HTTP成功或Cookie非空冒充身份验证。
+ * 格式合法后尝试一次只读验证；远端失败仍可保存，避免丢失原生登录捕获结果。
  */
-const validateDoubao = async (credentials, httpClient, provider) => {
+const validateDoubao = async (credentials, verifier, provider) => {
   try {
     assertDoubaoProvider(provider);
     const normalized = normalizeDoubaoCredentials(credentials);
-    return { valid: true, credentials: normalized, accountInfo: { credentialVerification: 'format-only' } };
+    const verification = await verifier.verify(normalized, provider);
+    return { valid: true, credentials: normalized, accountInfo: verificationAccountInfo(verification) };
   } catch (error) {
     return failure(error.message);
   }
@@ -241,11 +242,11 @@ function validateApiFormat(credentials) {
   catch(error){return failure(error.message);}
 }
 
-const createChat2ApiCredentialValidators = ({ httpClient = axios } = {}) => Object.fromEntries(
+const createChat2ApiCredentialValidators = ({ httpClient = axios, doubaoVerifier = createDoubaoAccountVerifier({ httpClient }) } = {}) => Object.fromEntries(
   Object.entries(VALIDATORS).map(([providerId, validate]) => [providerId, {
     validate: async (credentials, provider) => {
       if (getProviderId(provider) !== providerId) return failure('Provider 与登录凭据不匹配');
-      return validate(getCredentials(credentials), httpClient, provider);
+      return validate(getCredentials(credentials), providerId === 'doubaochat' ? doubaoVerifier : httpClient, provider);
     },
   }]),
 );

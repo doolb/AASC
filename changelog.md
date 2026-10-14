@@ -1,4 +1,15 @@
+### Chat2API豆包账号登录
+
+- ✅ [2026-10-14] 修复Android外部登录“完成”后不保存，接入只读会话列表验证与已有账号复验。
+  - `chat2api.js`修复原生结果变量遮蔽，保存后刷新并保留提示；新增`chat2api-doubao-account-verifier.js`及`chat2api-account-verification-service.js`，固定官方只读协议、15秒/512KiB/无重试；验证失败仍保存未验证账号。
+  - validators/runtime/management/proxy接线；data-store增加安全验证元数据、同目录账号写锁及凭据revision保护，导入/换凭据重置且迟到结果不写回。导入不发验证请求，API Provider仍仅校验格式。
+  - Chat2API 243项240通过，3项为修改前Windows chmod；隔离Chromium2/2、手动认证7/7，独立审查无Important/Critical。真实官网与Android完成保存未验收。
+  - 仅`servicePackage=true`，保留`minApk=false/dependenciesPackage=false`；未出包、未重启主服务器。design/spec/task/todo/usage/self-test同步。
+
 ### 当前文档提交
+
+- ✅ [2026-10-14] 完成豆包Android“完成后未入账号列表”定位，并补齐会话列表验证的实施前文件方案。
+  - 通过正式chat2api.js模块和虚构原生回调复现result变量遮蔽：保存请求0次、刷新0次，错误Cannot access 'result' before initialization；未访问真实凭据。核对匿名公开官网JS的只读recent_conv协议，更新doubao-web design/spec、task及todo；尚未修改运行代码或请求实际会话列表，不操作主服务器或出包。
 
 - ✅ [2026-10-13] 按用户要求提交当前9份文档：MMD README、design/spec索引、自测、todo、usage、TTS使用说明、changelog及豆包.src伪代码。
   - 包含各文档当前暂存和未暂存版本；仅提交Markdown，配置/config、显示端配置和任务results继续保留原暂存。验证提交范围及Markdown差异，不新增代码、自测执行、真实请求、主服务操作或构建发布。

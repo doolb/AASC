@@ -74,9 +74,39 @@
 
     accountStatus(account) {
       if (account.enabled === false) return '已禁用';
+      if (account.providerId === 'doubaochat' && account.accountInfo?.credentialVerification === 'conversation-list') return '会话列表已验证';
       // API 凭证入库仅校验格式，调度启用状态不能充当远端鉴权成功证据。
       if (account.accountInfo?.credentialVerification === 'format-only' || ['qwen-api', 'doubaapi', 'doubao-api', 'doubaochat'].includes(account.providerId)) return '已配置，未远端验证';
       return '已登录';
+    },
+
+    savedAccountMessage(account, providerId = account?.providerId) {
+      if (account?.accountInfo?.credentialVerification === 'conversation-list') return '账号已保存，会话列表访问已验证。';
+      if (['qwen-api', 'doubaapi', 'doubao-api'].includes(providerId)) return 'API 账号已保存，凭证格式已校验；尚未进行远端验证。';
+      if (account?.accountInfo?.credentialVerificationStatus === 'failed') return `账号已保存。${this.verificationMessage(account)}`;
+      if (account?.accountInfo?.credentialVerification === 'format-only') return '账号已保存，凭证格式已校验；远端访问未验证，可点击“验证登录”复验。';
+      return '登录成功，账号已保存。';
+    },
+
+    verificationMessage(account) {
+      if (account?.accountInfo?.credentialVerification === 'conversation-list') return '会话列表访问已验证；聊天和语音能力需分别验收。';
+      const reasons = { auth: '登录已失效', risk: '接口拒绝访问', timeout: '请求超时', network: '网络请求失败',
+        response: '响应格式未确认', anonymous: '返回匿名状态', business: '上游业务拒绝', busy: '验证服务忙',
+        size: '响应超过大小限制', redirect: '上游返回重定向', credentials: '凭据格式无效', http: 'HTTP请求失败', cancelled: '验证已取消' };
+      return `账号已保留，远端访问未验证（${reasons[account?.accountInfo?.credentialVerificationError] || '未通过会话列表校验'}）。`;
+    },
+
+    async verifyAccount(accountId) {
+      this.verifyingAccounts ||= new Set();
+      if (this.verifyingAccounts.has(accountId)) return;
+      this.verifyingAccounts.add(accountId);
+      this.message('正在验证所选豆包账号的会话列表访问…');
+      try {
+        const result = await this.request(`/api/chat2api/accounts/${encodeURIComponent(accountId)}/verify`, { method: 'POST', body: '{}' });
+        await this.refresh();
+        this.message(this.verificationMessage(result.account));
+      } catch (error) { this.message(error.message, true); }
+      finally { this.verifyingAccounts.delete(accountId); }
     },
 
     async refresh() {
@@ -102,7 +132,7 @@
       const providerOptions = providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(this.providerLabel(provider.id, providers))}</option>`).join('');
       const mappingProviderOptions = ['<option value="">自动选择 Provider</option>', ...providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(this.providerLabel(provider.id, providers))}</option>`)].join('');
       const mappingAccountOptions = ['<option value="">自动选择账号</option>', ...accounts.map((account) => `<option value="${this.escapeHtml(account.accountId || account.id)}">${this.escapeHtml(account.label || account.name || account.accountId || account.id)}（${this.escapeHtml(this.providerLabel(account.providerId, providers))}）</option>`)].join('');
-      const accountRows = accounts.length ? accounts.map((account) => `<div class="chat2api-list-row"><span>${this.escapeHtml(account.label || account.accountId)} <small class="chat2api-secondary-text">${this.escapeHtml(this.providerLabel(account.providerId, providers))}</small></span><span class="chat2api-row-actions"><span class="chat2api-success-text">${this.escapeHtml(this.accountStatus(account))}</span><button class="task-card-btn" data-chat2api-account-web="${this.escapeHtml(account.accountId)}">打开外部网页</button><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无已配置账号</div>';
+      const accountRows = accounts.length ? accounts.map((account) => `<div class="chat2api-list-row"><span>${this.escapeHtml(account.label || account.accountId)} <small class="chat2api-secondary-text">${this.escapeHtml(this.providerLabel(account.providerId, providers))}</small></span><span class="chat2api-row-actions"><span class="chat2api-success-text">${this.escapeHtml(this.accountStatus(account))}</span>${account.providerId === 'doubaochat' ? `<button class="task-card-btn" data-chat2api-account-verify="${this.escapeHtml(account.accountId)}">验证登录</button>` : ''}<button class="task-card-btn" data-chat2api-account-web="${this.escapeHtml(account.accountId)}">打开外部网页</button><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无已配置账号</div>';
       const keyRows = apiKeys.length ? apiKeys.map((key) => `<div class="chat2api-list-row"><span>${this.escapeHtml(key.label || key.id)}</span><span class="chat2api-row-actions"><code class="chat2api-code">${this.escapeHtml(key.maskedValue || '')}</code><button class="task-card-btn" data-chat2api-key-disable="${this.escapeHtml(key.id)}">禁用</button><button class="task-card-btn danger" data-chat2api-key-delete="${this.escapeHtml(key.id)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无 API Key</div>';
       const mappingRows = mappings.length ? mappings.map((mapping) => `<div class="chat2api-mapping-row"><span class="chat2api-mapping-values"><code class="chat2api-code">${this.escapeHtml(mapping.model)}</code><span class="chat2api-secondary-text">→</span><code class="chat2api-code">${this.escapeHtml(mapping.actualModel)}</code><small class="chat2api-secondary-text">${this.escapeHtml(this.providerLabel(mapping.preferredProviderId || mapping.providerId, providers) || '自动 Provider')}${mapping.application ? ` · 应用 ${this.escapeHtml(mapping.application)}` : ''}${mapping.parameters?.voice ? ` · 默认音色 ${this.escapeHtml(mapping.parameters.voice)}` : ''}</small></span><span class="chat2api-row-actions"><button class="task-card-btn" data-chat2api-mapping-edit="${this.escapeHtml(mapping.model)}">编辑</button><button class="task-card-btn danger" data-chat2api-mapping-delete="${this.escapeHtml(mapping.model)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无模型映射</div>';
       const mappingEditor = `<div id="chat2apiMappingEditor" class="chat2api-mapping-editor" hidden><div class="chat2api-section-heading"><h5 id="chat2apiMappingEditorTitle" class="chat2api-editor-title">新增模型映射</h5><button class="task-card-btn" id="chat2apiMappingCancel" hidden>取消编辑</button></div><div class="chat2api-mapping-form"><label class="chat2api-field">请求模型<input id="chat2apiMappingModel" placeholder="例如 qiaoxiaojiao"></label><label class="chat2api-field">实际模型<input id="chat2apiMappingActualModel" placeholder="例如 qwen-api/qwen-audio-3.1-tts-flash"></label><label class="chat2api-field">优先 Provider<select id="chat2apiMappingProvider">${mappingProviderOptions}</select></label><label class="chat2api-field">优先账号<select id="chat2apiMappingAccount">${mappingAccountOptions}</select></label><label class="chat2api-field">应用<select id="chat2apiMappingApplication"><option value="">使用模型默认应用</option><option value="chat">chat（文字聊天）</option><option value="tts">tts（语音合成）</option></select></label><label class="chat2api-field">默认音色 ID<input id="chat2apiMappingVoice" maxlength="512" placeholder="例如 qiaoxiaojiao_v3.1"></label><label class="chat2api-field">默认语速倍率<input id="chat2apiMappingSpeed" type="number" min="0.25" max="4" step="0.01" placeholder="留空使用模型默认"></label><label class="chat2api-field">默认音量<input id="chat2apiMappingVolume" type="number" min="0" max="100" step="1" placeholder="留空使用模型默认"></label><label class="chat2api-field">音频格式<select id="chat2apiMappingFormat"><option value="">使用模型默认格式</option><option value="wav">wav</option></select></label></div><p class="chat2api-secondary-text">应用和参数留空时保留原文字映射行为；请求中的显式合成参数优先于映射默认值。</p><button class="task-card-btn primary chat2api-save-button" id="chat2apiMappingSave">保存映射</button></div>`;
@@ -157,6 +187,7 @@
       if (saveMappingButton) saveMappingButton.addEventListener('click', () => this.saveModelMapping());
       const cancelMappingButton = document.getElementById('chat2apiMappingCancel');
       if (cancelMappingButton) cancelMappingButton.addEventListener('click', () => this.resetMappingEditor());
+      content.querySelectorAll('[data-chat2api-account-verify]').forEach((button) => button.addEventListener('click', () => this.verifyAccount(button.dataset.chat2apiAccountVerify)));
       content.querySelectorAll('[data-chat2api-account-toggle]').forEach((button) => button.addEventListener('click', () => this.updateAccount(button.dataset.chat2apiAccountToggle, button.textContent === '启用')));
       content.querySelectorAll('[data-chat2api-account-web]').forEach((button) => button.addEventListener('click', () => this.openExternalAccountWeb(button.dataset.chat2apiAccountWeb)));
       content.querySelectorAll('[data-chat2api-account-delete]').forEach((button) => button.addEventListener('click', () => this.deleteAccount(button.dataset.chat2apiAccountDelete)));
@@ -316,10 +347,7 @@
         document.querySelectorAll('[data-chat2api-credential]').forEach((element) => { element.value = ''; });
         if (cookieElement) cookieElement.value = '';
         await this.refresh();
-        this.message(result.account?.accountInfo?.credentialVerification === 'format-only'
-          ? '账号已保存，凭证格式已校验；尚未进行远端验证。'
-          : ['qwen-api', 'doubaapi', 'doubao-api'].includes(providerSelect.value)
-          ? 'API 账号已保存，凭证格式已校验；尚未进行远端验证。' : '外部认证已验证，账号已保存。');
+        this.message(this.savedAccountMessage(result.account, providerSelect.value));
       } catch (error) { this.message(`外部认证添加失败：${error.message}`, true); }
     },
 
@@ -343,35 +371,36 @@
       } catch (error) { this.message(error.message, true); }
     },
 
-    async completeNativeLogin(result) {
+    async completeNativeLogin(nativeResult) {
       if (!this.loginSession) {
         this.message('没有等待完成的 Android 登录。', true);
         return;
       }
-      if (!result || result.success !== true) {
-        this.message(result && result.error ? result.error : 'Android 登录未完成。', true);
+      if (!nativeResult || nativeResult.success !== true) {
+        this.message(nativeResult && nativeResult.error ? nativeResult.error : 'Android 登录未完成。', true);
         return;
       }
-      if (result.state !== this.loginSession.state || result.providerId !== this.loginSession.providerId) {
+      if (nativeResult.state !== this.loginSession.state || nativeResult.providerId !== this.loginSession.providerId) {
         this.message('Android 登录结果与当前登录会话不匹配。', true);
         return;
       }
+      const session = this.loginSession;
       try {
-        const result = await this.request('/api/chat2api/oauth/complete', {
+        const savedResult = await this.request('/api/chat2api/oauth/complete', {
           method: 'POST',
           body: JSON.stringify({
-            state: this.loginSession.state,
-            providerId: this.loginSession.providerId,
-            credentials: result.credentials && typeof result.credentials === 'object' ? result.credentials : {},
+            state: session.state,
+            providerId: session.providerId,
+            credentials: nativeResult.credentials && typeof nativeResult.credentials === 'object' ? nativeResult.credentials : {},
           }),
         });
-        this.loginSession = null;
-        this.message(result.account?.accountInfo?.credentialVerification === 'format-only'
-          ? '账号已保存，已配置、未远端验证。' : '登录成功，账号已保存。');
+        // 请求期间可能开始另一个登录，迟到结果不能清理新的会话。
+        if (this.loginSession === session) this.loginSession = null;
         if (window.NativeControl && typeof window.NativeControl.closeChat2ApiLogin === 'function') {
           window.NativeControl.closeChat2ApiLogin();
         }
         await this.refresh();
+        this.message(this.savedAccountMessage(savedResult.account));
       } catch (error) { this.message(error.message, true); }
     },
 
@@ -383,9 +412,8 @@
       try {
         const result = await this.request('/api/chat2api/oauth/complete', { method: 'POST', body: JSON.stringify({ state: this.loginSession.state, providerId: this.loginSession.providerId, credentials, cookie: cookieElement ? cookieElement.value.trim() : '' }) });
         this.loginSession = null;
-        this.message(result.account?.accountInfo?.credentialVerification === 'format-only'
-          ? '账号已保存，已配置、未远端验证。' : '登录成功，账号已保存。');
         await this.refresh();
+        this.message(this.savedAccountMessage(result.account));
       } catch (error) { this.message(error.message, true); }
     },
 

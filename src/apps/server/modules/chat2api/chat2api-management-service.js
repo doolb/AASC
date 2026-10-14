@@ -50,6 +50,10 @@ const createChat2ApiManagementService = (runtime) => {
   const listAccounts = () => dataStore.listAccounts();
   const updateAccount = (accountId, patch) => dataStore.updateAccount(accountId, patch);
   const deleteAccount = (accountId) => dataStore.deleteAccount(accountId);
+  const verifyAccount = accountId => {
+    if (!runtime.accountVerificationService) throw new Error('Chat2API 账号验证服务不可用');
+    return runtime.accountVerificationService.verifyAccount(accountId);
+  };
   const listModelMappings = () => dataStore.listModelMappings();
   const saveModelMapping = (mapping) => dataStore.saveModelMapping(mapping);
   const deleteModelMapping = (model) => dataStore.deleteModelMapping(model);
@@ -106,6 +110,7 @@ const createChat2ApiManagementService = (runtime) => {
     listAccounts,
     updateAccount,
     deleteAccount,
+    verifyAccount,
     listModelMappings,
     saveModelMapping,
     deleteModelMapping,

@@ -205,6 +205,11 @@ const createChat2ApiProxyService = (options = {}) => {
           const accountId = decodeURIComponent(url.pathname.slice(prefix.length, -suffix.length));
           return managementService.createAccountWebSession(accountId);
         }
+        if (request.method === 'POST' && url.pathname.startsWith('/api/chat2api/accounts/') && url.pathname.endsWith('/verify')) {
+          const accountId = url.pathname.slice('/api/chat2api/accounts/'.length, -'/verify'.length);
+          if (!accountId || accountId.includes('/')) throw Object.assign(new Error('账号验证路径无效'), { statusCode: 400 });
+          return managementService.verifyAccount(decodeURIComponent(accountId));
+        }
         if (request.method === 'PUT' && url.pathname.startsWith('/api/chat2api/accounts/')) return managementService.updateAccount(decodeURIComponent(url.pathname.split('/').pop()), body);
         if (request.method === 'DELETE' && url.pathname.startsWith('/api/chat2api/accounts/')) return managementService.deleteAccount(decodeURIComponent(url.pathname.split('/').pop()));
         if (request.method === 'GET' && url.pathname === '/api/chat2api/model-mappings') return managementService.listModelMappings();
@@ -228,7 +233,7 @@ const createChat2ApiProxyService = (options = {}) => {
         throw error;
       })();
       sendJson(response, 200, await managementResult, {
-        noStore: url.pathname === '/api/chat2api/accounts/web-session/consume',
+        noStore: url.pathname === '/api/chat2api/accounts/web-session/consume' || url.pathname.endsWith('/verify'),
       });
       return;
     }

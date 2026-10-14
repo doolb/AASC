@@ -1550,3 +1550,9 @@ Offline Android WebView的真实布局/滑块和托管服务器实际端口切�
 真实米娅On3秒→Off10秒，关重力末秒全骨位置跨度0.08–1.12mm、角跨度≤0.00240rad、最大角速度≤0.0028rad/s；开重力位置跨度2.75–5.20mm、角跨度≤0.05619rad、最大角速度≤1.621rad/s，仍有接触抖动。原生分配恒定、销毁归零；桌面无渲染物理CPU中位约1.77–2.08ms/P95约2.18–3.95ms，不代表手机完整帧时。
 
 `npm run build:web:mmd-ar-test`及6个源/测试模块语法、定向差异空白检查通过。`TMPDIR=/var/tmp node --test tests/mmd-ar-human-physics-browser.test.js`1/1通过（约348秒）：真实拖点→保持→面板Off→主动重力，每段实际采样904子步，最后12帧Off摆幅占身高0.023%、主动重力0.213%，标记跟随正确；随后多目标/重置/模式与横竖屏继续通过。首轮临时IndexedDB IO失败改用/var/tmp；SwiftShader全灯光约0.3fps导致采样超时，测试通过现有设置关闭阴影/AO/GI/抗锯齿并降至0.25倍率，保留真实蒙皮/衣物物理和全部物理子步，不改产品画面默认。未出APK/发布，手机/其他PMX和实时VMD服饰/AR仍待验收。
+
+## 豆包Android完成保存与会话列表复验（2026-10-14）
+
+`npm run check:chat2api`：243项，240通过；三项Windows chmod断言与修改前基线一致。新增测试使用虚构凭据覆盖正式原生回调、固定只读协议、空列表、401/403/匿名/HTML/异常业务/结构/超限/超时/取消、同账号去重及凭据版本保护；本地HTTP贯通正式JS/OAuth/存储及非回环管理鉴权。
+
+`node --test tests/chat2api-mapping-ui-browser.test.js tests/chat2api-manual-account.test.js`：隔离Chromium2项、手动账号7项通过。独立浏览器不加载用户profile，不访问豆包；账号新增/失败仍保存/复验更新和旧API映射通过。真实Android登录完成保存、官网列表响应契约和聊天/TTS能力各自待独立验收。

@@ -17,6 +17,22 @@ const { normalizeDoubaoCredentials } = require('./chat2api-doubao-chat-adapter')
 const {canonicalProviderId}=require('./chat2api-model-capabilities');
 const {validateMappingExtension}=require('./chat2api-system-controls');
 const {normalizeApiAccount}=require('./chat2api-api-account');
+const { ERROR_CODES } = require('./chat2api-doubao-account-verifier');
+
+// 同一进程内多个runtime可能共用账号目录，锁以目录为键；空闲后释放，不积累全局状态。
+const accountWriteQueues = new Map();
+const accountCredentialVersion = account => hashSecret(JSON.stringify({
+  providerId: account.providerId,
+  revision: account.credentialRevision || '',
+  credentials: normalizeDoubaoCredentials(account.credentials),
+}));
+const VERIFICATION_FIELDS = ['credentialVerification', 'credentialVerificationStatus', 'credentialVerificationCheckedAt', 'credentialVerificationError'];
+const resetDoubaoVerification = account => {
+  if (account.providerId !== 'doubaochat') return account;
+  const accountInfo = { ...(account.accountInfo || {}) };
+  VERIFICATION_FIELDS.forEach(key => delete accountInfo[key]);
+  return { ...account, credentialRevision: crypto.randomUUID(), accountInfo: { ...accountInfo, credentialVerification: 'format-only' } };
+};
 
 const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.config', 'aasc-user', 'chat2api');
 const DEFAULT_LEGACY_DATA_PATH = path.join(os.homedir(), '.chat2api', 'data.json');
@@ -33,7 +49,7 @@ const ACCOUNT_EXPORT_FORMAT = 'aasc-chat2api-accounts';
 const IMPORT_COLLECTIONS = Object.freeze(['providers', 'accounts', 'modelMappings']);
 const MAX_IMPORT_ITEMS = 1000;
 const OAUTH_SESSION_TTL_MS = 5 * 60 * 1000;
-const ACCOUNT_INFO_FIELDS = new Set(['id', 'userId', 'realUserID', 'name', 'nickname', 'username', 'email', 'phone','credentialVerification','endpoint','resourceId']);
+const ACCOUNT_INFO_FIELDS = new Set(['id', 'userId', 'realUserID', 'name', 'nickname', 'username', 'email', 'phone', ...VERIFICATION_FIELDS, 'endpoint','resourceId']);
 const BUILTIN_PROVIDER_IDS = new Set(['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai', 'doubaochat','qwen-api','doubaapi']);
 
 const assertCollectionName = (name) => {
@@ -74,6 +90,14 @@ const createChat2ApiDataStore = (options = {}) => {
   const oauthSessionDir = path.join(rootDir, 'oauth-sessions');
   const accountImportPreviews = new Map();
   const ACCOUNT_IMPORT_PREVIEW_TTL_MS = 5 * 60 * 1000;
+
+  const withAccountLock = async operation => {
+    const previous = accountWriteQueues.get(rootDir) || Promise.resolve();
+    const pending = previous.catch(() => {}).then(operation);
+    accountWriteQueues.set(rootDir, pending);
+    try { return await pending; }
+    finally { if (accountWriteQueues.get(rootDir) === pending) accountWriteQueues.delete(rootDir); }
+  };
 
   const ensurePrivateDirectory = async () => {
     await fs.mkdir(rootDir, { recursive: true, mode: 0o700 });
@@ -132,7 +156,7 @@ const createChat2ApiDataStore = (options = {}) => {
     }
   };
 
-  const writeCollection = async (name, value) => {
+  const writeCollectionUnlocked = async (name, value) => {
     assertCollectionName(name);
     await ensurePrivateDirectory();
     const target = filePath(name);
@@ -156,6 +180,9 @@ const createChat2ApiDataStore = (options = {}) => {
     }
   };
 
+  const writeCollection = (name, value) => name === 'accounts'
+    ? withAccountLock(() => writeCollectionUnlocked(name, value)) : writeCollectionUnlocked(name, value);
+
   const validateAccount = (account) => {
     if (!account || typeof account !== 'object') {
       throw new Error('Chat2API 账号必须是对象');
@@ -168,7 +195,7 @@ const createChat2ApiDataStore = (options = {}) => {
     }
     if (providerId === 'doubaochat') {
       // 账号导入只表示用户恢复凭据，不表示已验证登录；秘密不得散落在顶层或其他 secret 字段。
-      const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'lastUsed', 'credentials', 'accountInfo']);
+      const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'lastUsed', 'credentials', 'accountInfo', 'credentialRevision']);
       if (Object.keys(account).some((key) => !accountFields.has(key))) {
         throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie 及 credentials.nodeProfile'), { statusCode: 422, code: 'doubao_invalid_credentials' });
       }
@@ -180,10 +207,15 @@ const createChat2ApiDataStore = (options = {}) => {
 
   const selectAccountInfo = (accountInfo) => {
     if (!accountInfo || typeof accountInfo !== 'object' || Array.isArray(accountInfo)) return {};
-    return Object.fromEntries(Object.entries(accountInfo).filter(([key, value]) => (
+    const selected = Object.fromEntries(Object.entries(accountInfo).filter(([key, value]) => (
       ACCOUNT_INFO_FIELDS.has(key)
       && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
     )));
+    if (!['format-only', 'conversation-list'].includes(selected.credentialVerification)) delete selected.credentialVerification;
+    if (!['verified', 'failed'].includes(selected.credentialVerificationStatus)) delete selected.credentialVerificationStatus;
+    if (selected.credentialVerificationError !== '' && !ERROR_CODES.has(selected.credentialVerificationError)) delete selected.credentialVerificationError;
+    if (typeof selected.credentialVerificationCheckedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(selected.credentialVerificationCheckedAt)) delete selected.credentialVerificationCheckedAt;
+    return selected;
   };
 
   const selectAccountCredentialFields = (account) => {
@@ -213,18 +245,22 @@ const createChat2ApiDataStore = (options = {}) => {
   const createImportConfirmation = (accounts, items) => hashSecret(JSON.stringify(sortKeysDeep({ accounts, items })));
   const createAccountImportPayloadHash = (data) => hashSecret(JSON.stringify(sortKeysDeep(data)));
 
-  const publicAccount = (account) => ({
-    ...sanitizeSecrets(account),
-    secretConfigured: hasConfiguredSecret(account),
-  });
+  const publicAccount = (account) => {
+    const { credentialRevision, ...publicFields } = account;
+    return { ...sanitizeSecrets(publicFields), secretConfigured: hasConfiguredSecret(account) };
+  };
 
-  const saveAccount = async (account) => {
+  const saveAccount = account => withAccountLock(async () => {
     const normalized = validateAccount(account);
+    if (normalized.providerId === 'doubaochat') {
+      normalized.credentialRevision = crypto.randomUUID();
+      normalized.accountInfo.credentialVerification ||= 'format-only';
+    }
     const current = await readCollection('accounts', []);
     const next = mergeByKey(current, [normalized], (item) => item.accountId);
-    await writeCollection('accounts', next);
+    await writeCollectionUnlocked('accounts', next);
     return publicAccount(normalized);
-  };
+  });
 
   const listAccounts = async () => {
     const accounts = await readCollection('accounts', []);
@@ -247,26 +283,42 @@ const createChat2ApiDataStore = (options = {}) => {
     return accounts.find((account) => account.accountId === accountId) || null;
   };
 
-  const updateAccount = async (accountId, patch = {}) => {
+  const updateAccount = (accountId, patch = {}) => withAccountLock(async () => {
     const current = await getAccount(accountId);
     if (!current) {
       return null;
     }
-    const next = validateAccount({ ...current, ...patch, accountId: current.accountId, providerId: current.providerId, credentials: patch.credentials || current.credentials });
+    let next = validateAccount({ ...current, ...patch, accountId: current.accountId, providerId: current.providerId, credentials: patch.credentials || current.credentials });
+    if (next.providerId === 'doubaochat') {
+      // 普通编辑不能伪造远端检查结果；专用比较写入接口才允许推进验证状态。
+      next.credentialRevision = current.credentialRevision;
+      next.accountInfo = { ...next.accountInfo };
+      VERIFICATION_FIELDS.forEach(key => { delete next.accountInfo[key]; if (current.accountInfo?.[key] !== undefined) next.accountInfo[key] = current.accountInfo[key]; });
+      if (accountCredentialVersion(next) !== accountCredentialVersion(current)) next = resetDoubaoVerification(next);
+    }
     const accounts = await readCollection('accounts', []);
-    await writeCollection('accounts', accounts.map((account) => account.accountId === accountId ? next : account));
+    await writeCollectionUnlocked('accounts', accounts.map((account) => account.accountId === accountId ? next : account));
     return publicAccount(next);
-  };
+  });
 
-  const deleteAccount = async (accountId) => {
+  const updateAccountVerification = (accountId, expectedVersion, metadata) => withAccountLock(async () => {
+    const accounts = await readCollection('accounts', []);
+    const current = accounts.find(account => account.accountId === accountId);
+    if (!current || current.providerId !== 'doubaochat' || accountCredentialVersion(current) !== expectedVersion) return null;
+    const next = validateAccount({ ...current, accountInfo: { ...current.accountInfo, ...selectAccountInfo(metadata) } });
+    await writeCollectionUnlocked('accounts', accounts.map(account => account.accountId === accountId ? next : account));
+    return publicAccount(next);
+  });
+
+  const deleteAccount = accountId => withAccountLock(async () => {
     const accounts = await readCollection('accounts', []);
     const next = accounts.filter((account) => account.accountId !== accountId);
     if (next.length === accounts.length) {
       return false;
     }
-    await writeCollection('accounts', next);
+    await writeCollectionUnlocked('accounts', next);
     return true;
-  };
+  });
 
   const listModelMappings = async () => {
     const mappings = await readCollection('modelMappings', []);
@@ -452,7 +504,7 @@ const createChat2ApiDataStore = (options = {}) => {
       exportedAt: new Date().toISOString(),
       config: cloneValue(config),
       providers: cloneValue(providers),
-      accounts: cloneValue(accounts),
+      accounts: accounts.map(({ credentialRevision, ...account }) => cloneValue(account)),
       modelMappings: cloneValue(modelMappings),
     };
   };
@@ -483,7 +535,7 @@ const createChat2ApiDataStore = (options = {}) => {
         throw new Error(`Chat2API 账号凭证包包含重复 accountId: ${account.accountId}`);
       }
       incomingIds.add(account.accountId);
-      return account.providerId === 'doubaochat' ? validateAccount(account) : account;
+      return canonicalProviderId(account.providerId) === 'doubaochat' ? resetDoubaoVerification(validateAccount(account)) : account;
     });
     return accounts;
   };
@@ -556,7 +608,7 @@ const createChat2ApiDataStore = (options = {}) => {
     };
   };
 
-  const mergeAccountImport = async (data, confirmation, confirmed) => {
+  const mergeAccountImport = (data, confirmation, confirmed) => withAccountLock(async () => {
     if (confirmed !== true) {
       throw new Error('Chat2API 账号凭证导入必须先预览并明确确认');
     }
@@ -582,16 +634,16 @@ const createChat2ApiDataStore = (options = {}) => {
       const current = currentById.get(account.accountId);
       const next = current ? { ...current, ...account } : account;
       if (current && account.accountInfo) next.accountInfo = { ...(current.accountInfo || {}), ...account.accountInfo };
-      return validateAccount(next);
+      return resetDoubaoVerification(validateAccount(next));
     });
     const nextAccounts = mergeByKey(currentAccounts, merged, (account) => account.accountId);
-    await writeCollection('accounts', nextAccounts);
+    await writeCollectionUnlocked('accounts', nextAccounts);
     return {
       version: 1,
       counts: preview.counts,
       accounts: merged.map(publicAccount),
     };
-  };
+  });
 
   const normalizeImport = (data) => {
     if (!data || typeof data !== 'object' || data.version !== 1) {
@@ -601,7 +653,7 @@ const createChat2ApiDataStore = (options = {}) => {
       throw new Error('Chat2API 导入文件格式不受支持');
     }
     const providers = ensureArray(data.providers || [], 'providers');
-    const accounts = ensureArray(data.accounts || [], 'accounts').map((account) => validateAccount(account));
+    const accounts = ensureArray(data.accounts || [], 'accounts').map(account => resetDoubaoVerification(validateAccount(account)));
     const modelMappings = ensureArray(data.modelMappings || [], 'modelMappings');
     providers.forEach((provider) => ensureId(provider.providerId, 'providerId', 'Chat2API Provider'));
     modelMappings.forEach((mapping) => {ensureId(mapping.model, 'model', 'Chat2API 模型映射');validateMappingExtension(mapping);});
@@ -627,7 +679,7 @@ const createChat2ApiDataStore = (options = {}) => {
 
   const previewImport = async (data) => importPreview(data);
 
-  const mergeImport = async (data, confirmed) => {
+  const mergeImport = (data, confirmed) => withAccountLock(async () => {
     if (confirmed !== true) {
       throw new Error('Chat2API 导入必须先预览并明确确认');
     }
@@ -646,7 +698,7 @@ const createChat2ApiDataStore = (options = {}) => {
         (item) => `${item.providerId || ''}:${item.model}`,
       ),
     };
-    const writes = IMPORT_COLLECTIONS.map((name) => writeCollection(name, next[name]));
+    const writes = IMPORT_COLLECTIONS.map((name) => writeCollectionUnlocked(name, next[name]));
     if (Object.keys(normalized.config).length > 0) {
       writes.push(writeCollection('config', {
         ...(currentConfig && !Array.isArray(currentConfig) ? currentConfig : {}),
@@ -659,7 +711,7 @@ const createChat2ApiDataStore = (options = {}) => {
       counts: Object.fromEntries(IMPORT_COLLECTIONS.map((name) => [name, normalized[name].length])),
       accounts: normalized.accounts.map((account) => publicAccount(account)),
     };
-  };
+  });
 
   const readLegacyData = async () => {
     let content;
@@ -763,6 +815,7 @@ const createChat2ApiDataStore = (options = {}) => {
     listDoubaoNodeAccountIds,
     getAccount,
     updateAccount,
+    updateAccountVerification,
     deleteAccount,
     listModelMappings,
     saveModelMapping,
@@ -789,5 +842,6 @@ module.exports = {
   DEFAULT_ROOT_DIR,
   DEFAULT_LEGACY_DATA_PATH,
   ACCOUNT_EXPORT_FORMAT,
+  accountCredentialVersion,
   createChat2ApiDataStore,
 };
