@@ -1,8 +1,8 @@
 {
   "format": "aasc-offline-data-baseline",
   "schemaVersion": 1,
-  "dataVersion": 2,
-  "latestRepairVersion": 2,
+  "dataVersion": 3,
+  "latestRepairVersion": 3,
   "includedRepairs": [
     {
       "repairId": "enable-voice-input-during-tts-without-voiceprint-v1",
@@ -23,6 +23,18 @@
       "capabilities": [
         "user-config"
       ]
+    },
+    {
+      "repairId": "restore-chat-model-mappings-and-offline-config-v3",
+      "repairVersion": 3,
+      "scriptSha256": "66c32d4575297f8ab1070159a8fa1d13c302adbeb40073d9931c8262e73867fa",
+      "targetDataVersion": 3,
+      "appliedAt": "2026-10-14T07:45:55.439Z",
+      "capabilities": [
+        "config",
+        "user-config",
+        "chat2api.model-mappings"
+      ]
     }
   ],
   "files": [
@@ -30,6 +42,11 @@
       "path": "config/config.json",
       "size": 5106,
       "sha256": "d26d96813e78da00fbb7e1926bc68ff091b4368ec1a25448443875fce32092b1"
+    },
+    {
+      "path": "userconfig/chat2api/model-mappings.json",
+      "size": 1111,
+      "sha256": "c49ee3484a640d8c03f9eadc4894c1537449d5e26f4022a56a82cba63727a12c"
     },
     {
       "path": "userconfig/userconfig.json",

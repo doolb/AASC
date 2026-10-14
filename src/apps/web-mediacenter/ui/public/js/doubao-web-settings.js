@@ -14,8 +14,8 @@
   get('doubaoWebEnabled').checked=config.enabled;get('doubaoWebPort').value=config.port;get('doubaoWebAccount').value=config.accountId;
   get('doubaoWebAllowSession').checked=config.allowSessionCheck;targetOptions();get('doubaoWebSave').disabled=Boolean(pending);
  }
- function render(parent,accounts){get('doubaoWebSettings')?.remove();const section=document.createElement('section');section.id='doubaoWebSettings';section.className='chat2api-section';
-  section.innerHTML='<h4>豆包普通LLM · 网页模式（实验）</h4><p>默认关闭。只使用所选本机登录标签；Android无受控Chrome时不可用。真实官网运行尚未验收。</p>'+
+ function render(parent,accounts){get('doubaoWebSettings')?.remove();const section=document.createElement('details');section.id='doubaoWebSettings';section.className='chat2api-section';section.open=config.enabled;
+  section.innerHTML='<summary>豆包 · 旧版 Chrome 兼容模式</summary><p>Node直连账号无需开启此项。这里只供依赖本机Chrome登录标签的旧账号使用，默认关闭；Android没有受控Chrome时不可用。</p>'+
    '<label><input id="doubaoWebEnabled" type="checkbox">启用登录网页内请求</label><label>本机调试端口<input id="doubaoWebPort" type="number" min="1024" max="65535"></label>'+
    '<label>绑定账号<select id="doubaoWebAccount"></select></label><label>绑定标签<select id="doubaoWebTarget"></select></label>'+
    '<button id="doubaoWebTargets" type="button">查询本机豆包标签</button><p>改端口后先在关闭状态保存，再查询标签；查询只读取官方标签标识，不读取登录凭据或聊天。</p>'+

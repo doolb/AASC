@@ -21,7 +21,8 @@ const { createDoubaoAccountVerifier } = require('./chat2api-doubao-account-verif
 const { createChat2ApiAccountVerificationService } = require('./chat2api-account-verification-service');
 
 const createChat2ApiRuntime = (options = {}) => {
-  const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
+  const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir, legacyDataPath: options.legacyDataPath,
+    restoreLegacyAccounts: options.restoreLegacyAccounts });
   const providerRegistry = options.providerRegistry || createChat2ApiProviderRegistry({ dataStore });
   const modelMapper = options.modelMapper || createChat2ApiModelMapper({ dataStore });
   const loadBalancer = options.loadBalancer || createChat2ApiLoadBalancer({ providerRegistry, dataStore, modelMapper });

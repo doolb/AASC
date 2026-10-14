@@ -28,7 +28,8 @@ async function main() {
     let chat2api;
     if (request.repairs.some(item => item.metadata.capabilities.some(capability => capability.startsWith('chat2api.')))) {
         chat2api = require('../../src/apps/server/modules/chat2api/chat2api-runtime').createChat2ApiRuntime({
-            rootDir: path.join(root, 'release/userconfig/chat2api'), projectRoot: root
+            rootDir: path.join(root, 'release/userconfig/chat2api'), projectRoot: root, restoreLegacyAccounts: false,
+            legacyDataPath: path.join(root, 'home/.chat2api/data.json')
         });
     }
     try {

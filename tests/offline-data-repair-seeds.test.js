@@ -104,12 +104,15 @@ test('累计脚本在旧0/1环境补修，在版本2保留用户后续状态栏�
         const script = path.resolve(__dirname, '../release/offline-update/repair-sources/offline-config-baseline-v3/repair.js');
         const tx = await prepareReleaseRepairs({ projectRoot: root, repairs: [{ script, metadata: { repairId: 'cumulative-3', repairVersion: 3,
             requiredCodeVersion: 1, requiredApkVersionCode: 46, requiredDataVersion: 0, targetDataVersion: 3,
-            compatibleDataVersions: [0, 1, 2], capabilities: ['config', 'user-config'], scriptSha256: sha256Buffer(await fs.readFile(script)) } }] });
+            compatibleDataVersions: [0, 1, 2], capabilities: ['config', 'user-config', 'chat2api.model-mappings'], scriptSha256: sha256Buffer(await fs.readFile(script)) } }] });
         t.after(tx.dispose); await tx.commit();
         const user = JSON.parse(await fs.readFile(path.join(releaseRoot, 'userconfig/userconfig.json')));
         assert.equal(user.displayStates['offline-display'].showStatusBar, version === 2);
         assert.equal(JSON.parse(await fs.readFile(path.join(releaseRoot, 'config/config.json'))).voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint, true);
         assert.equal((await readBaseline(releaseRoot)).dataVersion, 3);
+        const mappings = JSON.parse(await fs.readFile(path.join(releaseRoot, 'userconfig/chat2api/model-mappings.json')));
+        assert.deepEqual(mappings, require('../src/apps/server/modules/chat2api/chat2api-default-model-mappings').DEFAULT_MODEL_MAPPINGS);
+        await assert.rejects(fs.stat(path.join(releaseRoot, 'userconfig/chat2api/accounts.json')), { code: 'ENOENT' });
     }
 });
 

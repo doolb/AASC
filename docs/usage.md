@@ -1,5 +1,9 @@
 # Web MediaCenter - 使用说明
 
+## Chat2API 默认模型与已有账号
+
+无需先添加映射即可使用预置DeepSeek模式别名、Qwen历史别名与豆包三种Chat模式；已保存账号自动参与调度，缺少登录资料时提示登录。自定义规则优先，release基线3保留公开映射。豆包Node无需开启折叠的旧Chrome入口，语音模型默认与各业务音色区别见[统一账号与应用](usage/chat2api-unified-applications.md)及[豆包Node](usage/chat2api-doubao-node.md)。
+
 ## 完整 Offline APK 镜像同步
 
 `npm run sync:offline-update` 默认也同步完整 Offline APK，进入下载进度和已安装/已复用列表。完整 APK 由独立签名 `full-apk-manifest.json` 指定最新版本，下载和SHA-256校验成功后才清理旧full版本。服务 `manifest.json` 继续管理代码、依赖和min APK。旧源没有独立full索引（HTTP404）时继续同步原服务资源，并保留已有full APK；坏索引或坏包会报错。

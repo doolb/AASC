@@ -1,3 +1,11 @@
+### Chat2API 默认映射与已有账号复用
+
+- ✅ [2026-10-14] 完成默认模型规则、私人旧资料复用与累计数据修复基线3。
+  - 新增chat2api-default-model-mappings.js及defaults自测；mapper自定义优先、data-store一次性旧账号恢复/删除保护、management有效列表与原始列表区分、load-balancer凭据过滤及Core/speech登录提示。网页标明内置默认、自定义覆盖，豆包Chrome兼容入口折叠，Node无需开启。
+  - release补齐DeepSeek6条、Qwen历史1条、豆包3条，真实执行累计v3后更新data-repair-state.json；seed-worker禁用私人资料恢复，修复只补缺失项并保留版本2后的偏好。不写账号到release或ZIP；原v1/v2脚本与签名ZIP不改写。
+  - check:chat2api249/249、test:offline-data-repair47/47、test:offline-bootstrap62/62、隔离Chromium2/2通过；修复publisher分组依赖HTTP校验遗漏，新增四组全字节与篡改拒绝测试。首次自测暴露测试根隐式读取旧资料，已收紧自定义根恢复授权并清理临时副本。
+  - 已用现有scripts生成code85、min47、repair3及seeds85，复用现有四组deps9；运行代码与code85逐字节一致，种子基线3/10条映射/文件摘要匹配。源码profile更新未来打包输入85/9；旧full46仍84/8/基线2。本次LAN/WAN发布进展另行记录，设备升级/真实账号验收未执行。
+
 ### 普通 APK 监听端口保持与 8071 真机切换
 
 - ✅ [2026-10-14] SM-N9500普通APK通过现有WebSocket端口配置改为8071，并修复冷启动强制写回8081的问题。

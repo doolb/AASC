@@ -524,11 +524,15 @@ async function verifyHttpTarget(baseUrl, manifest, publicKeyPem, fetchImpl = glo
         throw new Error(`HTTP 返回的已发布清单与本次清单不一致: ${baseUrl}`);
     }
     for (const [name, component] of Object.entries(manifest.payload.components)) {
-        if (!component || !component.relativeUrl) continue;
-        const artifactResponse = await fetchImpl(new URL(component.relativeUrl, baseUrl));
-        const actual = await streamHash(artifactResponse);
-        if (actual.size !== component.size || actual.sha256 !== component.sha256) {
-            throw new Error(`HTTP 已发布 ${name} 包大小或 SHA-256 不匹配: ${baseUrl}`);
+        if (!component) continue;
+        // 分组依赖没有顶层下载地址，必须逐组校验，不能被单包路径条件略过。
+        const artifacts = component.groups ? dependencyArtifacts(component) : component.relativeUrl ? [component] : [];
+        for (const artifact of artifacts) {
+            const artifactResponse = await fetchImpl(new URL(artifact.relativeUrl, baseUrl));
+            const actual = await streamHash(artifactResponse);
+            if (actual.size !== artifact.size || actual.sha256 !== artifact.sha256) {
+                throw new Error(`HTTP 已发布 ${name} 包大小或 SHA-256 不匹配: ${baseUrl}`);
+            }
         }
     }
 }

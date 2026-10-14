@@ -74,7 +74,7 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       ...(isDoubao ? [selectionOptions] : []),
     );
     if (!selection) {
-      throw createHttpError(503, 'no_available_account', `没有可用的模型账号: ${request.model}`);
+      throw createHttpError(503, 'no_available_account', `没有可用的模型账号: ${request.model}；请先在 Chat2API 登录对应账号，或恢复已有登录资料`);
     }
 
     // 先核对所选豆包账号的显式传输资料。Node 账号不读取 Chrome 配置；Cookie-only 账号
@@ -167,6 +167,7 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
   const listModels = async () => {
     const providers = await providerRegistry.listProviders();
     const accounts = await dataStore.listAccounts();
+    const mappings = dataStore.listEffectiveModelMappings ? await dataStore.listEffectiveModelMappings() : [];
     const activeProviderIds = new Set(accounts
       .filter((account) => account.enabled !== false && (!account.status || account.status === 'active'))
       .map((account) => account.providerId));
@@ -176,7 +177,9 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       if (provider.enabled === false || !activeProviderIds.has(provider.id)) {
         continue;
       }
-      const models = provider.supportedModels || Object.keys(provider.modelMappings || {});
+      const aliases = mappings.filter(rule => canonicalProviderId(rule.preferredProviderId || rule.providerId) === provider.id
+        && !rule.model.includes('*') && rule.application !== 'tts' && !getSpeechBinding(rule.actualModel, provider.id, rule.application)).map(rule => rule.model);
+      const models = [...(provider.supportedModels || Object.keys(provider.modelMappings || {})), ...aliases];
       for (const id of models) {
         if (!added.has(id)) {
           added.add(id);

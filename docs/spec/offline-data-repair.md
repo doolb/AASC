@@ -1,5 +1,22 @@
 # Offline 通用数据修复包实现规格（伪代码）
 
+## 累计v3物理映射与发布组合（2026-10-14）
+
+```text
+已有 := release/config + release/userconfig + repair真实事务 + 内置运行时默认视图
+readVersion.dataVersion ∈ {0,1,2} → 只补缺失历史配置阶段
+services.chat2api.listModelMappings(includeDefaults=false) → 原始保存项
+十条公开规则逐项匹配精确/单通配 → 未覆盖则saveModelMapping → 重新读取并断言全覆盖
+隔离seed-worker → restoreLegacyAccounts=false → 不写账号、不读开发机旧账号
+真实执行成功 → 基线3/脚本摘要/配置摘要 → repair3与种子同一事务提交
+min47签名/大小/SHA/profile/模型指纹验证 → 各镜像保留各自旧组件并先发布min
+code85 + 四组已存在deps9 + seeds85 → 沿用原归档 → 两端上传与清单原子替换
+初稿repair元数据 + 验证后的服务/min组件 → releaseSeedVersion=85且种子真实dataVersion=3 → 最终重新签名
+repair3最低code85/APK46/兼容0,1,2 → 两端发布 → 所有组件全部HTTP字节核验
+旧full46/v1/v2不可变归档 → 不覆盖；设备确认执行及登录验收另计
+```
+
+
 ## release 基线与修复结果实际流程（2026-10-14，源码完成）
 
 ```text

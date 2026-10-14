@@ -2,6 +2,8 @@
 
 2026-10-13已用当前授权账号验证：在取得一次账号资料并断开Chrome调试连接后，正式Chat2API Provider工厂和CoreAdapter完全通过Node发起新会话，流式与非流式均实际回复`OK`并正常结束。不使用页面fetch、浏览器签名或`a_bogus`。这次没有保存真实凭据或修改正在运行的主服务。
 
+豆包普通LLM有完整nodeProfile时不需要开启网页开关；设置里的“旧版Chrome兼容模式”默认收起，仅供Cookie-only旧账号沿用Chrome绑定。
+
 普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。`doubao-chat`是语音模型。`doubao-think`和`doubao-expert`保留模式映射，但本轮真实验收只覆盖普通模式。
 
 在现有“导入账号凭证”流程中，给对应`doubaochat`账号添加`credentials.nodeProfile`。导入会先预览并要求明确确认；它只校验格式，不能据此宣称登录成功。以下所有值都是虚构示例，需要替换为同一账号资料：

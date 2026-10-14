@@ -54,7 +54,9 @@ const createChat2ApiManagementService = (runtime) => {
     if (!runtime.accountVerificationService) throw new Error('Chat2API 账号验证服务不可用');
     return runtime.accountVerificationService.verifyAccount(accountId);
   };
-  const listModelMappings = () => dataStore.listModelMappings();
+  // 设置页显示有效规则；修复脚本可明确查询实际持久化项，避免把内置兜底误当种子已写入。
+  const listModelMappings = (options = {}) => options.includeDefaults === false || !dataStore.listEffectiveModelMappings
+    ? dataStore.listModelMappings() : dataStore.listEffectiveModelMappings();
   const saveModelMapping = (mapping) => dataStore.saveModelMapping(mapping);
   const deleteModelMapping = (model) => dataStore.deleteModelMapping(model);
   const startLogin = (providerId) => oauth.startLogin(providerId);

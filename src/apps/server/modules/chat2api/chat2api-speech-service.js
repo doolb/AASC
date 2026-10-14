@@ -116,7 +116,7 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
                 remaining();
                 if (!account || account.providerId !== providerId || account.accountId !== selection.account.accountId || account.enabled === false
                     || (account.status && account.status !== 'active') || !provider || provider.enabled === false
-                    || (account.dailyLimit && (account.todayUsed || 0) >= account.dailyLimit)) throw speechError(503, 'no_available_speech_account', doubao ? 'Chat2API 没有可用的所选豆包语音账号' : 'Chat2API 没有可用的国内千问语音账号');
+                    || (account.dailyLimit && (account.todayUsed || 0) >= account.dailyLimit)) throw speechError(503, 'no_available_speech_account', doubao ? 'Chat2API 没有可用的所选豆包语音账号，请先登录或恢复资料' : 'Chat2API 没有可用的国内千问语音账号，请先登录或恢复资料');
                 const credential = doubao ? getDoubaoSpeechCredential(account) : getQwenCredential(account);
                 let audio;
                 try {

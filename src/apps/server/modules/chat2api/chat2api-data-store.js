@@ -18,6 +18,7 @@ const {canonicalProviderId}=require('./chat2api-model-capabilities');
 const {validateMappingExtension}=require('./chat2api-system-controls');
 const {normalizeApiAccount}=require('./chat2api-api-account');
 const { ERROR_CODES } = require('./chat2api-doubao-account-verifier');
+const { effectiveModelMappings } = require('./chat2api-default-model-mappings');
 
 // 同一进程内多个runtime可能共用账号目录，锁以目录为键；空闲后释放，不积累全局状态。
 const accountWriteQueues = new Map();
@@ -43,6 +44,7 @@ const COLLECTION_FILES = Object.freeze({
   apiKeys: 'api-keys.json',
   modelMappings: 'model-mappings.json',
   responsesSessions: 'responses-sessions.json',
+  legacyAccountReuse: 'legacy-account-reuse.json',
 });
 const EXPORT_FORMAT = 'aasc-chat2api-config';
 const ACCOUNT_EXPORT_FORMAT = 'aasc-chat2api-accounts';
@@ -263,6 +265,7 @@ const createChat2ApiDataStore = (options = {}) => {
   });
 
   const listAccounts = async () => {
+    await restoreLegacyAccounts();
     const accounts = await readCollection('accounts', []);
     ensureArray(accounts, 'accounts');
     return accounts.map((account) => publicAccount(account));
@@ -270,6 +273,7 @@ const createChat2ApiDataStore = (options = {}) => {
 
   /** 内部调度只需账号ID；一次读取集合，避免为判断传输而逐个读秘密或公开设备资料。 */
   const listDoubaoNodeAccountIds = async () => {
+    await restoreLegacyAccounts();
     const accounts = await readCollection('accounts', []);
     ensureArray(accounts, 'accounts');
     return accounts.filter(account => account.providerId === 'doubaochat' && account.enabled !== false
@@ -310,15 +314,20 @@ const createChat2ApiDataStore = (options = {}) => {
     return publicAccount(next);
   });
 
-  const deleteAccount = accountId => withAccountLock(async () => {
+  const deleteAccount = async accountId => {
+    await restoreLegacyAccounts();
+    return withAccountLock(async () => {
     const accounts = await readCollection('accounts', []);
     const next = accounts.filter((account) => account.accountId !== accountId);
     if (next.length === accounts.length) {
       return false;
     }
+    // 删除是明确的用户决定，即使旧资料后来出现，也不能自动复活被删除账号。
+    await writeCollectionUnlocked('legacyAccountReuse', { schemaVersion: 1, completed: true });
     await writeCollectionUnlocked('accounts', next);
     return true;
-  });
+    });
+  };
 
   const listModelMappings = async () => {
     const mappings = await readCollection('modelMappings', []);
@@ -326,20 +335,23 @@ const createChat2ApiDataStore = (options = {}) => {
     return cloneValue(mappings);
   };
 
+  const listEffectiveModelMappings = async () => effectiveModelMappings(await listModelMappings());
+
   const saveModelMapping = async (mapping) => {
     validateMappingExtension(mapping || {});
     if (!mapping || typeof mapping.model !== 'string' || mapping.model.trim().length === 0 || typeof mapping.actualModel !== 'string' || mapping.actualModel.trim().length === 0) {
       throw new Error('Chat2API 模型映射必须包含 model 和 actualModel');
     }
-    const normalized = { ...cloneValue(mapping), model: mapping.model.trim(), actualModel: mapping.actualModel.trim() };
+    const { builtinDefault, ...fields } = cloneValue(mapping);
+    const normalized = { ...fields, model: mapping.model.trim(), actualModel: mapping.actualModel.trim() };
     const mappings = await listModelMappings();
-    await writeCollection('modelMappings', mergeByKey(mappings, [normalized], (item) => item.model));
+    await writeCollection('modelMappings', mergeByKey(mappings, [normalized], (item) => item.model.toLowerCase()));
     return normalized;
   };
 
   const deleteModelMapping = async (model) => {
     const mappings = await listModelMappings();
-    const next = mappings.filter((mapping) => mapping.model !== model);
+    const next = mappings.filter((mapping) => mapping.model.toLowerCase() !== model.toLowerCase());
     if (next.length === mappings.length) return false;
     await writeCollection('modelMappings', next);
     return true;
@@ -736,6 +748,44 @@ const createChat2ApiDataStore = (options = {}) => {
     }
   };
 
+  let legacyAccountRestore;
+  // 仅恢复项目原有资料，按目录串行；已有账号/禁用状态优先，绝不读取任意浏览器。
+  // 先原子保存账号再保存标记；中断重试通过身份与已有Provider去重，不丢失资料。
+  const restoreLegacyAccounts = async () => {
+    if (options.restoreLegacyAccounts === false) return false;
+    // 自定义数据根（含手动导入/测试根）默认隔离，必须明确授权恢复，不能仅凭路径触发。
+    if (rootDir !== path.resolve(DEFAULT_ROOT_DIR) && options.restoreLegacyAccounts !== true) return false;
+    if (!legacyAccountRestore) legacyAccountRestore = withAccountLock(async () => {
+      const marker = await readCollection('legacyAccountReuse', {});
+      if (marker?.completed === true) return false;
+      const stat = await fs.lstat(legacyDataPath).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+      if (!stat || !stat.isFile() || stat.isSymbolicLink() || stat.size > 2 * 1024 * 1024) return false;
+      let source;
+      try { source = JSON.parse(await fs.readFile(legacyDataPath, 'utf8')); }
+      catch { return false; }
+      if (!Array.isArray(source?.accounts) || source.accounts.length > MAX_IMPORT_ITEMS) return false;
+      const current = await readCollection('accounts', []);
+      ensureArray(current, 'accounts');
+      const providers = new Set(current.map(account => canonicalProviderId(account.providerId)));
+      const ids = new Set(current.map(account => account.accountId));
+      const incoming = [];
+      for (const value of source.accounts) {
+        if (!['qwen', 'doubaochat', 'deepseek'].includes(canonicalProviderId(value?.providerId)) || providers.has(canonicalProviderId(value.providerId))) continue;
+        try {
+          const { id, name, ...fields } = value;
+          const account = validateAccount({ ...fields, accountId: value.accountId || id, label: value.label || name });
+          if (ids.has(account.accountId) || !hasConfiguredSecret(account)) continue;
+          ids.add(account.accountId);
+          incoming.push(account.providerId === 'doubaochat' ? resetDoubaoVerification(account) : account);
+        } catch { /* 单条旧资料不合法时跳过；不影响已有账号，也不公开凭据内容。 */ }
+      }
+      if (incoming.length) await writeCollectionUnlocked('accounts', [...current, ...incoming]);
+      await writeCollectionUnlocked('legacyAccountReuse', { schemaVersion: 1, completed: true });
+      return incoming.length > 0;
+    }).catch(error => { legacyAccountRestore = undefined; throw error; });
+    return legacyAccountRestore;
+  };
+
   const normalizeLegacyConfig = (legacyConfig = {}) => {
     const config = {};
     const mappings = legacyConfig.modelMappings && typeof legacyConfig.modelMappings === 'object' && !Array.isArray(legacyConfig.modelMappings)
@@ -818,6 +868,7 @@ const createChat2ApiDataStore = (options = {}) => {
     updateAccountVerification,
     deleteAccount,
     listModelMappings,
+    listEffectiveModelMappings,
     saveModelMapping,
     deleteModelMapping,
     createOAuthSession,

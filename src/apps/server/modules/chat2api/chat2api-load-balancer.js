@@ -59,7 +59,7 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, modelMapper, 
         continue;
       }
       for (const account of accounts) {
-        if (account.providerId !== provider.id || account.enabled === false || (account.status && account.status !== 'active')) {
+        if (account.providerId !== provider.id || account.enabled === false || account.secretConfigured === false || (account.status && account.status !== 'active')) {
           continue;
         }
         if (account.dailyLimit && (account.todayUsed || 0) >= account.dailyLimit) {

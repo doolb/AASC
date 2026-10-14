@@ -1,0 +1,52 @@
+[
+  {
+    "model": "deepseek-v4-flash-think",
+    "actualModel": "deepseek-v4-flash",
+    "providerId": "deepseek"
+  },
+  {
+    "model": "deepseek-v4-flash-search",
+    "actualModel": "deepseek-v4-flash",
+    "providerId": "deepseek"
+  },
+  {
+    "model": "deepseek-v4-flash-think-search",
+    "actualModel": "deepseek-v4-flash",
+    "providerId": "deepseek"
+  },
+  {
+    "model": "deepseek-v4-pro-think",
+    "actualModel": "deepseek-v4-pro",
+    "providerId": "deepseek"
+  },
+  {
+    "model": "deepseek-v4-pro-search",
+    "actualModel": "deepseek-v4-pro",
+    "providerId": "deepseek"
+  },
+  {
+    "model": "deepseek-v4-pro-think-search",
+    "actualModel": "deepseek-v4-pro",
+    "providerId": "deepseek"
+  },
+  {
+    "model": "Qwen3.6-Flash",
+    "actualModel": "Qwen3.7",
+    "providerId": "qwen"
+  },
+  {
+    "model": "doubao",
+    "actualModel": "doubao",
+    "providerId": "doubaochat"
+  },
+  {
+    "model": "doubao-think",
+    "actualModel": "doubao-think",
+    "providerId": "doubaochat"
+  },
+  {
+    "model": "doubao-expert",
+    "actualModel": "doubao-expert",
+    "providerId": "doubaochat"
+  }
+]

@@ -1,5 +1,14 @@
 # Offline 通用数据修复包
 
+## 累计基线3与默认模型映射（2026-10-14）
+
+现行release基线3由累计repair3真实执行后生成，新增公开chat2api/model-mappings.json十条，保留v1/v2配置效果及记录。历史同步v1/v2得到基线2的说明保留用于回溯；后续打包输入采用基线3。旧APK不会因release变化自动得到新状态。
+
+累计脚本对0补两项历史配置、对1仅补状态栏、对2不重置原偏好，再读取原始自定义映射并只补精确/通配未覆盖的默认项。运行时内置默认列表是虚拟有效视图，因此修复明确使用includeDefaults=false，避免将虚拟默认误当作种子已有数据。隔离worker禁止私人旧账号恢复，ZIP不含accounts.json。最低code85/APK46，支持compatibleDataVersions=[0,1,2]；旧min先升级47，再按提示确认修复。
+
+最终发布组合code85、四组deps9、min47、repair3及seeds85；先核验各不可变归档再组合并签名最终清单，dataRepair.releaseSeedVersion与nodeMinSeeds.version配对且种子dataVersion=3。初稿低版本服务/min清单不发布；不改写旧v1/v2 ZIP。本次未重建full，另一任务已发布full46仍包含code84/deps8/基线2。详见Chat2API默认映射任务。
+
+
 ## 修复包与 release 数据基线统一（2026-10-14，源码完成）
 
 用户恢复处理此前新包数据修复验证不通过的问题，并要求新增数据修复包时同步修改 release 配置、递增数据版本，后续新包携带该版本。本段取代下方“暂缓处理”的当前状态；历史定位记录保留。用户已确认完整方案；源码与种子已实施，正式修复包/APK/服务包尚未构建或发布。

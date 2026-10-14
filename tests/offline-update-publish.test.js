@@ -440,6 +440,31 @@ test('publisher npm script is registered', async () => {
     assert.equal(packageJson.scripts['publish:offline-apk:full'], 'node scripts/ops/publish-offline-update.js --mode apk-full');
 });
 
+test('HTTP核验覆盖四组依赖，任意组内容篡改均拒绝', async t => {
+    const fixture = await createFixture('all');
+    t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));
+    const groups = {};
+    for (const name of ['common', 'android', 'linux64', 'win64']) {
+        const bytes = Buffer.from(`synthetic-${name}`);
+        const relativeUrl = `dependencies/${name}/dependencies-v9.zip`;
+        await writePublishedFile(fixture.artifactRoot, relativeUrl, bytes);
+        groups[name] = { version: 9, relativeUrl, size: bytes.length, sha256: sha256(bytes) };
+    }
+    fixture.manifest.payload.components.dependencies = { version: 9, groups };
+    fixture.manifest.signature = signManifestPayload(fixture.manifest.payload, fixture.privateKeyPem);
+    const calls = [];
+    const fetcher = tamper => async url => {
+        if (String(url).endsWith('/manifest.json')) return { ok: true, json: async () => fixture.manifest };
+        const relative = new URL(url).pathname.replace('/channel/', '');
+        calls.push(relative);
+        const bytes = tamper && relative.includes('/android/') ? Buffer.from('tampered') : await fs.promises.readFile(path.join(fixture.artifactRoot, relative));
+        return { ok: true, status: 200, body: Readable.from([bytes]) };
+    };
+    await verifyHttpTarget('http://update.test/channel/', fixture.manifest, fixture.publicKeyPem, fetcher(false));
+    assert.ok(Object.values(groups).every(group => calls.includes(group.relativeUrl)));
+    await assert.rejects(verifyHttpTarget('http://update.test/channel/', fixture.manifest, fixture.publicKeyPem, fetcher(true)), /大小或 SHA-256/);
+});
+
 test('发布后只清理精确匹配的旧版本文件，并保留清单版本、非版本文件和符号链接', async (t) => {
     const fixture = await createFixture('apk-min');
     t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));

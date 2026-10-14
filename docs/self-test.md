@@ -1585,3 +1585,8 @@ Offline Android WebView的真实布局/滑块和托管服务器实际端口切�
 Android单元232/232（0失败/错误/跳过）、打包profile与端口契约16/16通过。新增回归覆盖8071重复启动保持、1/65535合法边界、类型/浮点/超界回退、Offline8081兼容，以及健康URL读取真实配置并拒绝损坏JSON。设备通过现有WebSocket设置8071，权威回传和HTTPS 200通过；普通APK同签名v2覆盖安装并force-stop重开后，配置8071、/api/status 200/ok、新连接权威8071与主节点目录在线URL8071通过，nodeId和主地址保持。Offline仅配置8081核对，无安装或启动。
 
 配套`aasc-display-withserver.apk`已原子同步外网node-min；公网HEAD200、16段Range206按ETag锁定同文件，完整282,548,655字节合并SHA-256 `26e01a04bfd42d8609c3fe324a1c8563005d3dc16224735de028cd11eb1a184c`与本地一致。
+
+
+## Chat2API 默认映射与账号复用（2026-10-14）
+
+`npm run check:chat2api`249/249、`npm run test:offline-data-repair`47/47、`npm run test:offline-bootstrap`62/62，独立Chromium模型编辑/账号2/2。新增defaults模块6项使用虚构账号，覆盖全部10条兜底、未知模型、精确/通配优先、大小写覆盖/删除恢复默认、有效列表只读、并发导入去重、禁用/删除保护、自定义根隔离及真实调度与登录提示。release基线3已真实执行累计修复，种子不含accounts.json；发布器新增四组依赖全字节验证与篡改拒绝用例。首次自测的隐式私人旧资料读取已收紧和清理临时副本，最终测试不使用真实账号。未操作手机升级或运行真实官网聊天。

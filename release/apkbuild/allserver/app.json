@@ -4,8 +4,8 @@
   "versionCode": 46,
   "versionName": "0.2.46-offline",
   "serviceVersions": {
-    "codeVersion": 84,
-    "dependencyVersion": 8
+    "codeVersion": 85,
+    "dependencyVersion": 9
   },
   "verifyRuntime": false,
   "features": [
