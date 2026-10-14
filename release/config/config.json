@@ -80,7 +80,8 @@
     "pauseRecordingDuringPlayback": false,
     "vadSilenceDurationMs": 500,
     "vadMinSpeechDurationMs": 300,
-    "asrResultDetailLog": true
+    "asrResultDetailLog": true,
+    "acceptVoiceInputDuringTtsWithoutVoiceprint": true
   },
   "voiceCommand": {
     "conversationConfirmationMode": "off",

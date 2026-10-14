@@ -54,17 +54,19 @@ async function copySeedEntry(sourceRoot, stagingRoot, relativePath) {
     await fs.promises.copyFile(sourcePath, targetPath, fs.constants.COPYFILE_EXCL);
 }
 
-async function stageNodeMinSeeds(releaseRoot, stagingRoot) {
+async function stageNodeMinSeeds(releaseRoot, stagingRoot, options = {}) {
     const sourceRoot = path.resolve(releaseRoot);
     const targetRoot = path.resolve(stagingRoot);
     await fs.promises.mkdir(targetRoot, { recursive: false });
     for (const directory of SEED_DIRECTORIES) {
-        const sourcePath = path.join(sourceRoot, directory);
+        const selectedRoot = directory !== 'task' && options.configReleaseRoot
+            ? path.resolve(options.configReleaseRoot) : sourceRoot;
+        const sourcePath = path.join(selectedRoot, directory);
         const stat = await fs.promises.lstat(sourcePath).catch(() => null);
         if (!stat?.isDirectory() || stat.isSymbolicLink()) {
             throw new Error(`Node min release 种子目录缺失或类型错误: ${sourcePath}`);
         }
-        await copySeedEntry(sourceRoot, targetRoot, directory);
+        await copySeedEntry(selectedRoot, targetRoot, directory);
     }
     const configStat = await fs.promises.lstat(path.join(targetRoot, 'config', 'config.json')).catch(() => null);
     if (!configStat?.isFile() || configStat.isSymbolicLink()) {

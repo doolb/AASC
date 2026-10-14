@@ -875,3 +875,5 @@ module.exports.setDeviceEvent = (ip, eventConfig) => userConfig.setDeviceEvent(i
 module.exports.removeDeviceEvent = (ip) => userConfig.removeDeviceEvent(ip);
 module.exports.getUserConfigDir = () => USER_CONFIG_DIR;
 module.exports.getRuntimeContext = () => ({ ...RUNTIME_CONTEXT });
+// 启动前修复回滚后刷新两个业务对象，避免文件已恢复但内存仍保留失败脚本的值。
+module.exports.reloadForDataRepair = () => { config._load(); userConfig._load(); };

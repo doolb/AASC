@@ -68,6 +68,31 @@ async function createRuntime(rootDir, { includeLibraries = true } = {}) {
     return runtimeDir;
 }
 
+test('完整Offline打包真实release修复基线，版本与配置资产同步', async () => {
+    const projectRoot = path.join(tempDir, 'seed-project');
+    for (const directory of ['config', 'userconfig', 'task']) await fs.promises.mkdir(path.join(projectRoot, 'release', directory), { recursive: true });
+    await fs.promises.writeFile(path.join(projectRoot, 'release/config/config.json'), '{}\n');
+    const repairFile = path.join(projectRoot, 'repair.js');
+    const source = "module.exports=async({services})=>services.config.set('seedValue',true);\n";
+    await fs.promises.writeFile(repairFile, source);
+    const { prepareReleaseRepairs } = require('../scripts/ops/offline-data-repair-seeds');
+    const tx = await prepareReleaseRepairs({ projectRoot, repairs: [{ script: repairFile, metadata: {
+        repairId: 'runtime-seed-1', repairVersion: 1, requiredCodeVersion: 1, requiredDataVersion: 0, targetDataVersion: 1,
+        capabilities: ['config'], scriptSha256: crypto.createHash('sha256').update(source).digest('hex')
+    } }] });
+    try { await tx.commit(); } finally { await tx.dispose(); }
+    const runtimeDir = await createRuntime(tempDir);
+    const packageDir = await createServerPackage(tempDir);
+    const keys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const outputDir = path.join(tempDir, 'output');
+    const result = await prepareAndroidNodeRuntime({ projectRoot, runtimeDir, packageDir, outputDir,
+        configFile: path.join(projectRoot, 'release/config/config.json'), userConfigDir: path.join(projectRoot, 'release/userconfig'),
+        profileMetadata: { offline: true }, offlineUpdatePublicKeyPem: keys.publicKey.export({ type: 'spki', format: 'pem' }) });
+    assert.ok(result.manifest.files.some(file => file.path === 'release-data-repair-state.json'));
+    assert.equal(JSON.parse(await fs.promises.readFile(path.join(outputDir, 'release-data-repair-state.json'))).dataVersion, 1);
+    assert.equal(JSON.parse(await fs.promises.readFile(path.join(outputDir, 'release-config.json'))).seedValue, true);
+});
+
 test('Runtime 输入缺少 node 时拒绝生成 assets', async () => {
     const runtimeDir = path.join(tempDir, 'runtime');
     await fs.promises.mkdir(runtimeDir, { recursive: true });

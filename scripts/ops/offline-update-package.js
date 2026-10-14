@@ -12,6 +12,8 @@ const {
     validateGitSourceMetadata
 } = require('./git-source-metadata');
 const { stageNodeMinSeeds } = require('./node-min-seeds');
+const { prepareReleaseRepairs } = require('./offline-data-repair-seeds');
+const { normalizeCompatibleDataVersions } = require('../../src/apps/server/modules/data-repair/data-repair-js-runner');
 const { RUNTIME_COMPATIBILITY, validateRuntimeCompatibility } = require('./offline-runtime-contract');
 
 const execFileAsync = promisify(execFile);
@@ -159,6 +161,10 @@ function validateDataRepairComponent(component) {
     if (component.requiredApkVersionCode !== undefined &&
         (!Number.isSafeInteger(component.requiredApkVersionCode) || component.requiredApkVersionCode < 1)) {
         throw new Error('Offline 清单 dataRepair.requiredApkVersionCode 无效');
+    }
+    normalizeCompatibleDataVersions(component.compatibleDataVersions, component.requiredDataVersion, component.targetDataVersion);
+    if (component.compatibleDataVersions?.length > 1 && component.requiredApkVersionCode === undefined) {
+        throw new Error('累计迁移必须声明最低APK版本');
     }
     if (!isSha256(component.scriptSha256)) throw new Error('Offline 清单 dataRepair.scriptSha256 无效');
     if (!Array.isArray(component.capabilities) || component.capabilities.length === 0 ||
@@ -379,6 +385,24 @@ async function createZip(stagingDirectory, archivePath, commandRunner) {
     }
 }
 
+async function nextNodeMinSeedVersion(outputDir, minimum) {
+    const directory = path.join(outputDir, 'node-min-seeds');
+    const stat = await fs.promises.lstat(directory).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+    if (!stat) return minimum;
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('首装种子输出目录不能是链接或文件');
+    let version = minimum;
+    for (const name of await fs.promises.readdir(directory)) {
+        const match = /^node-min-seeds-v([0-9]+)\.zip$/u.exec(name);
+        if (!match) continue;
+        const entry = await fs.promises.lstat(path.join(directory, name));
+        if (entry.isSymbolicLink()) throw new Error('首装种子版本文件不能是链接');
+        const existing = Number(match[1]);
+        if (entry.isFile() && Number.isSafeInteger(existing)) version = Math.max(version, existing + 1);
+    }
+    assertVersion(version, 'nodeMinSeedVersion');
+    return version;
+}
+
 async function readManifest(value) {
     if (typeof value === 'string') {
         return JSON.parse(await fs.promises.readFile(value, 'utf8'));
@@ -441,7 +465,7 @@ async function createDataRepairArtifacts(options = {}) {
         ? requiredDataVersion + 1
         : Number(options.targetDataVersion);
     if (!Number.isSafeInteger(requiredDataVersion) || requiredDataVersion < 0 ||
-        !Number.isSafeInteger(targetDataVersion) || targetDataVersion < requiredDataVersion) {
+        !Number.isSafeInteger(targetDataVersion) || targetDataVersion <= requiredDataVersion) {
         throw new Error('requiredDataVersion/targetDataVersion 无效');
     }
     const repairId = String(options.repairId || `data-repair-${repairVersion}`).trim();
@@ -450,6 +474,15 @@ async function createDataRepairArtifacts(options = {}) {
     const sensitive = options.sensitive === true || options.sensitive === 'true';
     if (capabilities.includes('chat2api.accounts') && !sensitive) {
         throw new Error('dataRepair 访问 Chat2API 账号必须通过 --sensitive=true 显式允许');
+    }
+    const compatibleDataVersions = options.compatibleDataVersions === undefined ? undefined
+        : normalizeCompatibleDataVersions(typeof options.compatibleDataVersions === 'string'
+            ? options.compatibleDataVersions.split(',').map(Number) : options.compatibleDataVersions, requiredDataVersion, targetDataVersion);
+    if (compatibleDataVersions && targetDataVersion <= Math.max(...compatibleDataVersions)) {
+        throw new Error('新修复目标数据版本必须高于全部兼容前置版本');
+    }
+    if (compatibleDataVersions?.length > 1 && options.requiredApkVersionCode === undefined) {
+        throw new Error('多前置版本的累计修复必须声明支持它的最低 APK 版本');
     }
     const repairSource = await fs.promises.readFile(repairFile);
     const workDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-data-repair-'));
@@ -471,42 +504,68 @@ async function createDataRepairArtifacts(options = {}) {
                 : { requiredApkVersionCode: Number(options.requiredApkVersionCode) }),
             requiredDataVersion,
             targetDataVersion,
+            ...(compatibleDataVersions ? { compatibleDataVersions } : {}),
             capabilities,
             sensitive,
             scriptSha256: sha256Buffer(repairSource),
             ...(options.releaseNotes ? { releaseNotes: String(options.releaseNotes).trim() } : {}),
             ...(await describeArtifact(archivePath, `data/data-repair-v${repairVersion}.zip`))
         };
-        const payload = {
-            ...currentManifest.payload,
-            generatedAt: options.generatedAt || new Date().toISOString(),
-            components: {
-                ...currentManifest.payload.components,
-                dataRepair
-            }
-        };
-        const manifest = {
-            payload,
-            signature: signManifestPayload(payload, privateKeyPem)
-        };
-        verifySignedManifest(manifest, publicKeyPem);
-        validateManifestComponents(manifest);
-        const manifestDirectory = path.join(outputDir, 'manifests');
-        const manifestPath = path.join(manifestDirectory, `manifest-data-repair-v${repairVersion}.json`);
-        if (fs.existsSync(manifestPath)) throw new Error(`dataRepair 清单文件已存在，拒绝覆盖: ${manifestPath}`);
-        await fs.promises.mkdir(path.dirname(finalArchivePath), { recursive: true });
-        await atomicallyCopyToOutput(archivePath, finalArchivePath);
-        await fs.promises.mkdir(manifestDirectory, { recursive: true });
-        await atomicallyWriteOutput(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-        return {
-            requestedMode: 'data-repair',
-            mode: 'data-repair',
-            manifest,
-            manifestPath,
-            dataRepairArchivePath: finalArchivePath,
-            publicKeyPem,
-            publicKeyPath: keyPair.publicKeyPath
-        };
+        // 同一脚本先真实修复隔离种子；新 min 首装与完整 APK 使用相同数据基线。
+        const seedTransaction = await prepareReleaseRepairs({ projectRoot, outputDir,
+            repairs: [{ script: repairFile, metadata: dataRepair }] });
+        try {
+            const seedVersion = await nextNodeMinSeedVersion(outputDir, Math.max(currentManifest.payload.components.code.version,
+                (currentManifest.payload.components.nodeMinSeeds?.version || 0) + 1));
+            dataRepair.releaseSeedVersion = seedVersion;
+            const seedArchive = path.join(workDirectory, `node-min-seeds-v${seedVersion}.zip`);
+            const seedDestination = path.join(outputDir, 'node-min-seeds', path.basename(seedArchive));
+            if (fs.existsSync(seedDestination)) throw new Error(`Node min 种子版本已存在: ${seedDestination}`);
+            const seedStage = path.join(workDirectory, 'node-min-seeds');
+            await stageNodeMinSeeds(path.join(projectRoot, 'release'), seedStage,
+                { configReleaseRoot: seedTransaction.releaseRoot });
+            await createZip(seedStage, seedArchive, options.zipRunner || execFileAsync);
+            if ((await fs.promises.stat(seedArchive)).size > MAX_NODE_MIN_SEEDS_ARCHIVE_BYTES) throw new Error('首装种子包超过大小限制');
+            const seedSource = readGitSourceMetadata(projectRoot);
+            if (seedSource.gitCommit) seedSource.gitDirty = true; // 种子包含本次暂存修复，尚未提交到来源提交。
+            const payload = {
+                ...currentManifest.payload,
+                generatedAt: options.generatedAt || new Date().toISOString(),
+                components: {
+                    ...currentManifest.payload.components,
+                    dataRepair,
+                    nodeMinSeeds: { version: seedVersion, dataVersion: seedTransaction.baseline.dataVersion, source: seedSource,
+                        ...(await describeArtifact(seedArchive, `node-min-seeds/${path.basename(seedArchive)}`)) }
+                }
+            };
+            const manifest = {
+                payload,
+                signature: signManifestPayload(payload, privateKeyPem)
+            };
+            verifySignedManifest(manifest, publicKeyPem);
+            validateManifestComponents(manifest);
+            const manifestDirectory = path.join(outputDir, 'manifests');
+            const manifestPath = path.join(manifestDirectory, `manifest-data-repair-v${repairVersion}.json`);
+            if (fs.existsSync(manifestPath)) throw new Error(`dataRepair 清单文件已存在，拒绝覆盖: ${manifestPath}`);
+            const stagedManifest = path.join(workDirectory, 'signed-manifest.json');
+            await fs.promises.writeFile(stagedManifest, JSON.stringify(manifest, null, 2) + '\n');
+            await seedTransaction.commit([
+                { source: archivePath, destination: finalArchivePath },
+                { source: seedArchive, destination: seedDestination },
+                { source: stagedManifest, destination: manifestPath }
+            ], options.beforeSeedCommit);
+            return {
+                requestedMode: 'data-repair',
+                mode: 'data-repair',
+                manifest,
+                manifestPath,
+                dataRepairArchivePath: finalArchivePath,
+                nodeMinSeedsArchivePath: seedDestination,
+                dataVersion: seedTransaction.baseline.dataVersion,
+                publicKeyPem,
+                publicKeyPath: keyPair.publicKeyPath
+            };
+        } finally { await seedTransaction.dispose(); }
     } finally {
         await fs.promises.rm(workDirectory, { recursive: true, force: true });
     }
@@ -561,7 +620,9 @@ async function createOfflineUpdateArtifacts(options = {}) {
     const workDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-offline-update-'));
     const stagedCodeArchive = path.join(workDirectory, `code-v${codeVersion}.zip`);
     const stagedNodeMinSeedsDirectory = path.join(workDirectory, 'node-min-seeds');
-    const stagedNodeMinSeedsArchive = path.join(workDirectory, `node-min-seeds-v${codeVersion}.zip`);
+    const nodeMinSeedVersion = reuseNodeMinSeeds ? currentComponents.nodeMinSeeds.version
+        : await nextNodeMinSeedVersion(outputDir, Math.max(codeVersion, (currentComponents.nodeMinSeeds?.version || 0) + 1));
+    const stagedNodeMinSeedsArchive = path.join(workDirectory, `node-min-seeds-v${nodeMinSeedVersion}.zip`);
     const nodeMinSeedsArchivePath = path.join(outputDir, 'node-min-seeds', path.basename(stagedNodeMinSeedsArchive));
     let codeArchivePath = null;
     let finalNodeMinSeedsArchivePath = null;
@@ -613,7 +674,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
                     ...(await describeArtifact(stagedCodeArchive, `code/${path.basename(codeDestination)}`))
                 },
                 nodeMinSeeds: reuseNodeMinSeeds ? currentComponents.nodeMinSeeds : {
-                    version: codeVersion,
+                    version: nodeMinSeedVersion,
                     source,
                     ...(await describeArtifact(stagedNodeMinSeedsArchive, `node-min-seeds/${path.basename(nodeMinSeedsArchivePath)}`))
                 }
@@ -683,7 +744,7 @@ function parseCliArguments(argv) {
         const value = equalIndex >= 0 ? token.slice(equalIndex + 1) : argv[++index];
         if (!['mode', 'code-version', 'dependency-version', 'output-dir', 'manifest-file',
             'data-repair-file', 'repair-version', 'repair-id', 'required-code-version',
-            'required-apk-version-code', 'required-data-version', 'target-data-version',
+            'required-apk-version-code', 'required-data-version', 'target-data-version', 'compatible-data-versions',
             'repair-capabilities', 'release-notes', 'sensitive', 'reuse-node-min-seeds', 'dependency-roots', 'node-abi'].includes(key)) {
             throw new Error(`未知构建参数: --${key}`);
         }

@@ -1,0 +1,54 @@
+{
+  "payload": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-09-23T09:19:53.768Z",
+    "components": {
+      "code": {
+        "version": 37,
+        "requiredDependencyVersion": 6,
+        "requiredLockSha256": "8b9059b613da92403b78f5f582fabf2c70b928d9714287921fb5e97e36ca2e4d",
+        "relativeUrl": "code/code-v37.zip",
+        "size": 15646732,
+        "sha256": "346e65176cbeffc0b001710cee79612cc627a552d6d39b495242f5d2b32f3f0c"
+      },
+      "dependencies": {
+        "version": 6,
+        "lockSha256": "8b9059b613da92403b78f5f582fabf2c70b928d9714287921fb5e97e36ca2e4d",
+        "relativeUrl": "dependencies/dependencies-v6.zip",
+        "size": 117378766,
+        "sha256": "8a9346e725d23fba554cd83a1356cfbf72f4c439fb8314f9138caf0e7bd9bbaa"
+      },
+      "apkMin": {
+        "versionCode": 34,
+        "versionName": "0.2.32-offline-min",
+        "packageName": "com.aasc.display.offline",
+        "signerSha256": "a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df",
+        "modelCompatibilitySha256": "e64518394baf8576a6b69b6e737b074412dafd7cc6eb43c67b00f09088449aeb",
+        "relativeUrl": "apk/aasc-display-offline-min-v34.apk",
+        "size": 89302814,
+        "sha256": "b8d79679859edcd1553eef187ecf4fb7739e1a190f30f23330ddfb7d95a591ea"
+      },
+      "dataRepair": {
+        "version": 1,
+        "repairVersion": 1,
+        "repairId": "enable-voice-input-during-tts-without-voiceprint-v1",
+        "requiredCodeVersion": 36,
+        "requiredDataVersion": 0,
+        "targetDataVersion": 1,
+        "capabilities": [
+          "config"
+        ],
+        "sensitive": false,
+        "scriptSha256": "6717b7b03c8262c2a5cc426a400111e6a7111fad23a9ddbe611bd7b0e9c3cb08",
+        "releaseNotes": "开启声纹关闭时处理 TTS 期间语音输入",
+        "relativeUrl": "data/data-repair-v1.zip",
+        "size": 440,
+        "sha256": "c63785b2e7aae7ef1594cc032640e6b191e8772498222c158161e71ab1bec8c5"
+      }
+    }
+  },
+  "signature": {
+    "algorithm": "SHA256withRSA",
+    "value": "aAFLdSIhrCUo2PYG8T5j9PvtCFrY+UA/m2naNT1lsHKlcPspNPQF1QPbLGShtHUt0BdIBPZYrO/pJl4Am7g5c+X4vzU2X8SNKGvoDIMzyzwflZxDg8Pr+lDFDLPfLvvHmaHgZpuIWYlUZlcrPKr7aIxLC99u/vL+Gt15KhZhQYHlqPLhXoRqffIdtF7mvL0u60/W6psgBf5vE+VN8SnDqDZhKb9TIxU8hB3KnAuyEkzkAeP/CdepubDrfkfpDdDCqgbb83R4Ok62nlzdqqC+Yp7LnhjCjpwBTHN+0XtQf+hGdb9JyxvjMIduP51WPpAkD6tckpBsZLdn8b1WA6JhRWFzMnq5bk6RQ0QRG5gLmEBjA2l7gi+myvKikFwMNe/dstIlwQFxbjFxLZ2nO3DBuwmWcaXzfVxnRtiYEclPlIWcojPLK4K0ExDkuKwC0UBpFpCdANtkpz5jnV4xApsKEFs3R/YuFAT3V73QKTyjkNv/cgzIcp/RkmkfeD71vWCU"
+  }
+}

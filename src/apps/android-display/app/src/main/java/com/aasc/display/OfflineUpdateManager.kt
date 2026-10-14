@@ -216,14 +216,7 @@ class OfflineUpdateManager(
 
         @JvmStatic
         fun isDataRepairApplied(root: File, repair: OfflineDataRepairArtifact): Boolean {
-            val stateFile = File(root, "data-repair/state.json")
-            if (!stateFile.isFile) return false
-            return runCatching {
-                val applied = JSONObject(stateFile.readText()).optJSONArray("appliedRepairs") ?: return@runCatching false
-                (0 until applied.length()).any { index ->
-                    applied.optJSONObject(index)?.optString("repairId") == repair.repairId
-                }
-            }.getOrDefault(false)
+            return OfflineDataRepairState.satisfied(root, repair)
         }
 
         /**
@@ -693,7 +686,7 @@ class OfflineUpdateManager(
     }
 
     /** 只读取并验签服务清单，供前台显示服务代码/依赖更新提示，不下载更新包。 */
-    fun checkForServerUpdate(root: File): ServiceUpdateResult {
+    fun checkForServerUpdate(root: File, manualRetry: Boolean = false): ServiceUpdateResult {
         return try {
             val publicKeyPem = readPublicKeyOrNull()
                 ?: return ServiceUpdateResult("未配置 Offline 更新验证公钥", failed = true)
@@ -710,10 +703,19 @@ class OfflineUpdateManager(
                 )
             }
             val plan = planServiceUpdate(current, source.manifest)
-            val pendingRepair = source.manifest.dataRepair?.takeUnless { isDataRepairApplied(root, it) }
+            val pendingRepair = source.manifest.dataRepair?.takeUnless {
+                isDataRepairApplied(root, it) || (!manualRetry && OfflineDataRepairState.failure(root, it) != null)
+            }
             if (plan == ServiceUpdatePlan.CURRENT) {
                 if (pendingRepair == null) {
                     return ServiceUpdateResult("服务已是当前版本", installed = current, plan = plan)
+                }
+                val minimumApk = pendingRepair.requiredApkVersionCode
+                if (minimumApk != null && packageVersionCode(getInstalledPackageInfo()) < minimumApk.toLong()) {
+                    return ServiceUpdateResult("数据修复需要先安装 APK v$minimumApk 或更高版本", installed = current, plan = plan)
+                }
+                if (pendingRepair.requiredCodeVersion > current.codeVersion) {
+                    return ServiceUpdateResult("数据修复需要先更新服务代码到 v${pendingRepair.requiredCodeVersion}", installed = current, plan = plan)
                 }
                 return ServiceUpdateResult(
                     status = "发现 Offline 数据修复",
@@ -790,6 +792,7 @@ class OfflineUpdateManager(
         onProgress: ((OfflineUpdateProgress) -> Unit)? = null
     ): ServiceUpdateApplyResult {
         return try {
+            File(root, "data-repair/notified-failure.json").delete()
             val status = checkAndApplyServerUpdateInternal(root, onProgress)
             ServiceUpdateApplyResult(
                 status,
@@ -1294,6 +1297,7 @@ class OfflineUpdateManager(
             .put("requiredCodeVersion", metadata.requiredCodeVersion)
             .put("requiredDataVersion", metadata.requiredDataVersion)
             .put("targetDataVersion", metadata.targetDataVersion)
+            .put("compatibleDataVersions", org.json.JSONArray(metadata.compatibleDataVersions))
             .put("script", scriptRelativePath)
             .put("scriptSha256", metadata.scriptSha256)
             .put("capabilities", org.json.JSONArray(metadata.capabilities))

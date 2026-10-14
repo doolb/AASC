@@ -242,6 +242,25 @@ test('apk-min 发布只上传 min APK，先验证并保留已有代码和依赖�
         fixture.manifest.payload.components.dependencies.relativeUrl)), true);
 });
 
+test('新数据修复同时上传对应首装种子，全部校验后才切换签名清单', async t => {
+    const fixture = await createFixture('data-repair');
+    t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));
+    const bytes = Buffer.from('new release baseline seeds');
+    const component = { version: 2, relativeUrl: 'node-min-seeds/node-min-seeds-v2.zip', size: bytes.length, sha256: sha256(bytes) };
+    fixture.manifest.payload.components.nodeMinSeeds = component;
+    fixture.manifest.payload.components.dataRepair.releaseSeedVersion = 2;
+    fixture.manifest.signature = signManifestPayload(fixture.manifest.payload, fixture.privateKeyPem);
+    await fs.promises.writeFile(fixture.manifestPath, JSON.stringify(fixture.manifest));
+    await writePublishedFile(fixture.artifactRoot, component.relativeUrl, bytes);
+    for (const entry of [fixture.manifest.payload.components.code, fixture.manifest.payload.components.dependencies]) {
+        await writePublishedFile(fixture.localRoot, entry.relativeUrl, await fs.promises.readFile(path.join(fixture.artifactRoot, entry.relativeUrl)));
+    }
+    const result = await publishOfflineUpdate({ mode: 'data-repair', artifactRoot: fixture.artifactRoot,
+        manifestPath: fixture.manifestPath, publicKeyPem: fixture.publicKeyPem, localRoot: fixture.localRoot });
+    assert.deepEqual(result.publishedRelativePaths, ['data/data-repair-v1.zip', component.relativeUrl, 'manifest.json']);
+    assert.equal(JSON.parse(await fs.promises.readFile(path.join(fixture.localRoot, 'manifest.json'))).payload.components.nodeMinSeeds.version, 2);
+});
+
 test('publisher validates signature and every component size/hash before changing a target', async (t) => {
     const fixture = await createFixture('all');
     t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));

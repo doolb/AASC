@@ -44,6 +44,7 @@ class NodeRuntimeInstaller(
         private const val BACKUP_PREFIX = ".backup-"
         private val MUTABLE_DIRECTORIES = listOf(
             "config",
+            "data-repair",
             "home",
             "logs",
             "updates",
@@ -526,9 +527,14 @@ class NodeRuntimeInstaller(
             materializeBundledPackageManifests(root)
             materializeBundledModelMarkers(root)
             materializeTaskMarkers(root)
+            OfflineDataRepairState.beginSeed(root, File(root, "release-data-repair-state.json")) { name ->
+                File(root, if (name == "config/config.json") RELEASE_CONFIG_SEED_FILE
+                    else "$RELEASE_USER_CONFIG_PREFIX/${name.removePrefix("userconfig/")}")
+            }
             seedFileIfAbsent(root, root, RELEASE_CONFIG_SEED_FILE, "config/config.json")
             seedFileIfAbsent(root, root, OFFLINE_CONFIG_SEED_FILE, "config/config.json")
             seedDirectoryFilesIfAbsent(root, RELEASE_USER_CONFIG_PREFIX, "home/.config/aasc-user")
+            OfflineDataRepairState.finishSeed(root)
             preserveMutableDirectories(root)
             removeLegacyNativeVoiceModelCopies(root)
             val marker = File(root, VERSION_MARKER)

@@ -10,6 +10,8 @@
     "build:offline-update": "node scripts/ops/offline-update-package.js",
     "sync:offline-update": "node scripts/ops/sync-offline-update.js",
     "build:offline-data-repair": "node scripts/ops/offline-update-package.js --mode=data-repair",
+    "sync:offline-data-repair-seeds": "node scripts/ops/sync-offline-data-repair-seeds.js",
+    "test:offline-data-repair": "node --test tests/offline-data-repair-seeds.test.js src/apps/server/modules/data-repair/data-repair-js-runner.test.js tests/offline-update-package.test.js tests/offline-update-publish.test.js",
     "publish:offline-update": "node scripts/ops/publish-offline-update.js",
     "publish:offline-data-repair": "node scripts/ops/publish-offline-update.js --mode=data-repair",
     "publish:offline-apk:full": "node scripts/ops/publish-offline-update.js --mode apk-full",

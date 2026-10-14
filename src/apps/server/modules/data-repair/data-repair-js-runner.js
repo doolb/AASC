@@ -10,6 +10,7 @@ const FORMAT = 'aasc-offline-data-repair';
 const SCHEMA_VERSION = 1;
 const STATE_FILE = 'data-repair/state.json';
 const PENDING_FILE = 'data-repair/pending-repair.json';
+const RESULT_FILE = 'data-repair/last-result.json';
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const REPAIR_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const MAX_SCRIPT_BYTES = 512 * 1024;
@@ -139,6 +140,8 @@ function validatePendingRepair(rawValue) {
     return {
         ...rawValue,
         capabilities,
+        compatibleDataVersions: normalizeCompatibleDataVersions(rawValue.compatibleDataVersions,
+            rawValue.requiredDataVersion, rawValue.targetDataVersion),
         sensitive: rawValue.sensitive === true
     };
 }
@@ -147,9 +150,25 @@ function isSha256(value) {
     return typeof value === 'string' && SHA256_PATTERN.test(value);
 }
 
+// 兼容范围必须由签名清单显式声明；旧包继续要求唯一的前置数据版本。
+function normalizeCompatibleDataVersions(value, requiredVersion, targetVersion) {
+    if (value === undefined) return [requiredVersion];
+    if (!Array.isArray(value) || value.length < 1 || value.length > 32
+        || value.some(item => !isNonNegativeInteger(item) || item > targetVersion)
+        || new Set(value).size !== value.length || !value.includes(requiredVersion)) {
+        throw new Error('compatibleDataVersions 必须是包含前置版本的明确合法版本集合');
+    }
+    return value.slice().sort((a, b) => a - b);
+}
+
 function normalizeState(rawValue) {
-    if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
-        return { dataVersion: 0, latestRepairVersion: 0, appliedRepairs: [] };
+    if (rawValue === null || rawValue === undefined) {
+        return { dataVersion: 0, latestRepairVersion: 0, appliedRepairs: [], includedRepairs: [] };
+    }
+    if (typeof rawValue !== 'object' || Array.isArray(rawValue)
+        || ['dataVersion', 'latestRepairVersion'].some(key => rawValue[key] !== undefined && !isNonNegativeInteger(rawValue[key]))
+        || ['appliedRepairs', 'includedRepairs'].some(key => rawValue[key] !== undefined && !Array.isArray(rawValue[key]))) {
+        throw new Error('数据修复状态损坏，不能作为版本0执行迁移');
     }
     const appliedRepairs = Array.isArray(rawValue.appliedRepairs)
         ? rawValue.appliedRepairs.filter((item) => item && typeof item.repairId === 'string')
@@ -159,7 +178,8 @@ function normalizeState(rawValue) {
         latestRepairVersion: isNonNegativeInteger(rawValue.latestRepairVersion)
             ? rawValue.latestRepairVersion
             : 0,
-        appliedRepairs
+        appliedRepairs,
+        includedRepairs: Array.isArray(rawValue.includedRepairs) ? rawValue.includedRepairs : []
     };
 }
 
@@ -346,26 +366,46 @@ function createDataRepairRunner(options = {}) {
         const pending = validatePendingRepair(pendingRaw);
         const statePath = path.join(projectRoot, STATE_FILE);
         const state = normalizeState(await readJsonFile(statePath, null));
-        const applied = state.appliedRepairs.some((item) => item.repairId === pending.repairId);
+        const finish = async (result) => {
+            await writeJsonAtomically(path.join(projectRoot, RESULT_FILE), {
+                ...result, repairId: pending.repairId, repairVersion: pending.repairVersion,
+                scriptSha256: pending.scriptSha256, actualDataVersion: state.dataVersion,
+                requiredDataVersion: pending.requiredDataVersion, targetDataVersion: pending.targetDataVersion,
+                completedAt: new Date().toISOString()
+            });
+            return result;
+        };
+        const applied = state.dataVersion >= pending.targetDataVersion && [...state.appliedRepairs, ...(state.includedRepairs || [])]
+            .some(item => item.repairId === pending.repairId
+                && (item.repairVersion === undefined || item.repairVersion === pending.repairVersion)
+                && (!item.scriptSha256 || item.scriptSha256 === pending.scriptSha256)
+                && (item.targetDataVersion === undefined || item.targetDataVersion >= pending.targetDataVersion));
         if (applied) {
             await fsPromises.rm(pendingPath, { force: true });
             log('跳过已成功应用的修复', pending);
-            return { status: 'skipped', repairId: pending.repairId };
+            return finish({ status: 'skipped', repairId: pending.repairId });
         }
         if (codeVersion < pending.requiredCodeVersion) {
-            return { status: 'waiting-code-version', repairId: pending.repairId };
+            return finish({ status: 'waiting-code-version', repairId: pending.repairId });
         }
         if (pending.requiredApkVersionCode !== undefined &&
             apkVersionCode < pending.requiredApkVersionCode) {
-            return { status: 'waiting-apk-version', repairId: pending.repairId };
+            return finish({ status: 'waiting-apk-version', repairId: pending.repairId });
         }
-        if (state.dataVersion !== pending.requiredDataVersion) {
-            return { status: 'rejected-data-version', repairId: pending.repairId };
+        const covered = [...state.appliedRepairs, ...(state.includedRepairs || [])].some(item =>
+            item.repairVersion === state.latestRepairVersion && item.targetDataVersion >= pending.targetDataVersion
+            && item.targetDataVersion <= state.dataVersion && isSha256(item.scriptSha256));
+        if (pending.repairVersion < state.latestRepairVersion && state.dataVersion >= pending.targetDataVersion && covered) {
+            await fsPromises.rm(pendingPath, { force: true });
+            return finish({ status: 'skipped-old-version', repairId: pending.repairId });
+        }
+        if (!pending.compatibleDataVersions.includes(state.dataVersion)) {
+            return finish({ status: 'rejected-data-version', repairId: pending.repairId });
         }
         if (pending.repairVersion <= state.latestRepairVersion) {
             await fsPromises.rm(pendingPath, { force: true });
             log('跳过较旧修复版本', pending);
-            return { status: 'skipped-old-version', repairId: pending.repairId };
+            return finish({ status: 'skipped-old-version', repairId: pending.repairId });
         }
 
         const scriptPath = path.resolve(projectRoot, pending.script);
@@ -381,7 +421,7 @@ function createDataRepairRunner(options = {}) {
             throw new Error('repair.js SHA-256 与签名清单不匹配');
         }
         const snapshots = await snapshotFiles(managedFiles);
-        const stateSnapshot = await snapshotFiles([statePath]);
+        const stateSnapshot = await snapshotFiles([statePath, pendingPath]);
         const scriptServices = buildScriptServices(services, pending.capabilities);
         const entry = createScriptSandbox(scriptSource, scriptPath);
         const context = Object.freeze({
@@ -408,11 +448,13 @@ function createDataRepairRunner(options = {}) {
             const nextState = {
                 dataVersion: pending.targetDataVersion,
                 latestRepairVersion: pending.repairVersion,
+                includedRepairs: state.includedRepairs || [],
                 appliedRepairs: [
                     ...state.appliedRepairs,
                     {
                         repairId: pending.repairId,
                         repairVersion: pending.repairVersion,
+                        scriptSha256: pending.scriptSha256,
                         targetDataVersion: pending.targetDataVersion,
                         appliedAt: new Date().toISOString(),
                         capabilities: pending.capabilities.slice()
@@ -423,11 +465,12 @@ function createDataRepairRunner(options = {}) {
             await fsPromises.rm(pendingPath, { force: true });
             options.onApplied?.(nextState, pending);
             log('数据修复已应用', { ...pending, status: 'applied' });
-            return { status: 'applied', repairId: pending.repairId, state: nextState };
+            return finish({ status: 'applied', repairId: pending.repairId, dataVersion: nextState.dataVersion });
         } catch (error) {
             try {
                 await restoreSnapshots(snapshots);
                 await restoreSnapshots(stateSnapshot);
+                services.config?.reloadForDataRepair?.();
             } catch (rollbackError) {
                 logger.error?.(`[数据修复] 回滚失败: ${rollbackError.message}`);
             }
@@ -436,11 +479,7 @@ function createDataRepairRunner(options = {}) {
                 status: 'rolled-back',
                 errorCode: error.code || 'repair_failed'
             });
-            return {
-                status: 'rolled-back',
-                repairId: pending.repairId,
-                error: error.message
-            };
+            return finish({ status: 'rolled-back', repairId: pending.repairId, error: String(error.message).slice(0, 512) });
         }
     });
 
@@ -461,9 +500,12 @@ module.exports = {
     SCHEMA_VERSION,
     STATE_FILE,
     PENDING_FILE,
+    RESULT_FILE,
+    normalizeCompatibleDataVersions,
     createDataRepairRunner,
     validatePendingRepair,
     normalizeState,
+    writeJsonAtomically,
     snapshotFiles,
     restoreSnapshots,
     sha256Buffer,

@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "embeddedNode": true,
-  "versionCode": 43,
-  "versionName": "0.2.41-offline",
+  "versionCode": 46,
+  "versionName": "0.2.46-offline",
   "serviceVersions": {
-    "codeVersion": 79,
-    "dependencyVersion": 8
+    "codeVersion": 80,
+    "dependencyVersion": 9
   },
   "verifyRuntime": false,
   "features": [

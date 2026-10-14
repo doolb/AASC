@@ -135,6 +135,24 @@ test('code-only builds the complete server/UI source archive without invoking np
     assert.equal(verifySignedManifest(result.manifest, fixture.publicKeyPem), true);
 });
 
+test('数据修复构建同步实际release配置和版本，失败保持原种子及发行清单', async t => {
+    const fixture = createFixture(); t.after(() => removeFixture(fixture));
+    const repairFile = path.join(fixture.projectRoot, 'repair.js');
+    await fs.promises.writeFile(repairFile, "module.exports=async({services})=>services.config.set('testValue',true);\n");
+    const before = fs.readFileSync(path.join(fixture.projectRoot, 'release/config/config.json'));
+    const options = { ...fixture, mode: 'data-repair', dataRepairFile: repairFile, repairVersion: 1,
+        repairId: 'config-baseline-1', requiredDataVersion: 0, targetDataVersion: 1, repairCapabilities: ['config'] };
+    await assert.rejects(createOfflineUpdateArtifacts({ ...options, beforeSeedCommit() { throw Error('提交失败'); } }));
+    assert.deepEqual(fs.readFileSync(path.join(fixture.projectRoot, 'release/config/config.json')), before);
+    assert.equal(fs.existsSync(path.join(fixture.outputDir, 'data/data-repair-v1.zip')), false);
+    const result = await createOfflineUpdateArtifacts(options);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(fixture.projectRoot, 'release/config/config.json'))).testValue, true);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(fixture.projectRoot, 'release/config/data-repair-state.json'))).dataVersion, 1);
+    assert.equal(result.manifest.payload.components.nodeMinSeeds.dataVersion, 1);
+    assert.equal(result.manifest.payload.components.dataRepair.releaseSeedVersion, result.manifest.payload.components.nodeMinSeeds.version);
+    assert.ok(archiveEntries(result.nodeMinSeedsArchivePath).includes('config/data-repair-state.json'));
+});
+
 test('all builds matching source and Android production dependency archives', async (t) => {
     const fixture = createFixture();
     t.after(() => removeFixture(fixture));

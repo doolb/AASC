@@ -1568,3 +1568,9 @@ Offline Android WebView的真实布局/滑块和托管服务器实际端口切�
 `npm run test:subserver-update`62/62，包含组构建/独立版本复用、主服务器同源ZIP下载与真实双进程API健康、Node min直接Offline分组安装、发布/镜像、平台ABI与文件冲突、缓存篡改和整组回滚。控制端新增`server_runtime_version`，读取实际code/dependencies目录并显示最近更新失败。2MiB随机文件覆盖Node26大ZIP背压回归。
 
 `test:offline-bootstrap`60/60、`test:offline-sync`36/36、签名/发布23/23；Android全部223/223，包括新增5项分组解析/内容指纹/链接/冲突测试。两个ASR大文件夹具在默认/tmp遇配额错误，改用`JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/var/tmp`后通过。真实四组v9内容指纹及Android/Linux/Windows组合锁验证通过，Linux express/ws/sherpa-onnx-node加载通过；Windows及Android/Termux设备安装、更新、回滚待实机验收。
+
+## 数据修复与 release 基线自测（2026-10-14）
+
+`npm run test:offline-data-repair`46/46、`npm run test:offline-bootstrap`62/62通过；覆盖同源脚本真实执行、配置/版本/产物事务、并发拒绝、中断恢复、签名首装种子联动、0/1/2累计迁移、损坏状态拒绝和只读自测。现有v1/v2验签及原脚本摘要验证通过，实际release数据版本2、两项业务效果正确；重复同步通过。提交快照Android228/228通过（52个测试类，0失败/错误/跳过），包括首装/覆盖保护、签名兼容集合、成功证明与失败去重。
+
+控制端`offline_data_repair_baseline`只读原生版本与pending状态，不执行修复或联网；正式min/服务/累计包发布、真实设备升级与干净安装另验。

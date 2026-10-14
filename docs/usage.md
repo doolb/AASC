@@ -555,6 +555,16 @@ Android 9/API 28 设备首次启动 APK 时，会弹出“照片、媒体内容�
 
 媒体库的 `path` 仍通过控制端的本地媒体库配置设置；上传、创建目录和删除操作受媒体库 `readonly` 设置保护。拒绝授权不会阻塞显示端连接，但共享存储媒体库会返回权限错误。当前实现只保证 Android 9/API 28，Android 10+ 的整个共享存储访问不在本功能范围内。
 
+### Offline 数据修复与新包数据版本
+
+2026-10-14源码已支持修复包与release种子同步，正式新版尚未出包。当前release种子已实际包含两项旧修复：允许声纹关闭时处理TTS期间语音、隐藏offline-display状态栏；数据版本为2。新版完整包以及独立min下载的首装种子携带对应版本，全新初始化后可在控制端自测查看“Offline 数据修复基线”。覆盖安装保留已有配置与数据版本，不将旧设备直接标成新版本。
+
+`npm run sync:offline-data-repair-seeds`可在已配置Offline公钥的开发/出包环境中，验签已归档的两个旧清单并校验脚本摘要后同步release；重复运行保持同一基线。新增修复仍使用`npm run build:offline-data-repair`，同一repair.js先在隔离release副本执行，成功后一起提交配置、数据版本、修复包、新首装种子和签名清单；失败保持原版本。手工改变release配置造成摘要不一致时，构建会明确拒绝，避免配置未修好却携带较高版本。
+
+旧0/1设备需要新版服务和原生APK，再发布累计迁移脚本`release/offline-update/repair-sources/offline-config-baseline-v3/repair.js`，明确设置`--compatible-data-versions 0,1,2 --required-data-version 0 --target-data-version 3`及支持它的最低代码/APK版本。版本2不会重置用户后续调整的状态栏偏好。原生显示真实失败与版本差异；“重新检查”先刷新确认卡片，随后明确确认才下载，不以服务健康代替修复成功。
+
+本任务候选full46/min47、full代码80/依赖9；出包时再次核对实际发布最高版本与覆盖源码。完整APK仍须明确要求才构建；本任务尚未发布累计v3或操作设备。
+
 ### Offline 热更源与资源同步
 
 Offline APK 会按顺序尝试家庭内网、公司内网和外网热更源：

@@ -168,6 +168,7 @@ internal class OfflineBootstrapManager(private val context: Context) {
             val mapping = mapOf("config" to "config", "userconfig" to "home/.config/aasc-user", "task" to "res/tasks")
             require(File(seeds, "config/config.json").isFile)
             JSONObject(File(seeds, "config/config.json").readText())
+            OfflineDataRepairState.beginSeed(root, File(seeds, "config/data-repair-state.json")) { name -> File(seeds, name) }
             val latestMarkers = mutableListOf<File>()
             for ((sourceName, targetName) in mapping) {
                 val source = File(seeds, sourceName)
@@ -199,6 +200,7 @@ internal class OfflineBootstrapManager(private val context: Context) {
                 latest.delete()
                 Files.createSymbolicLink(latest.toPath(), java.nio.file.Paths.get(id))
             }
+            OfflineDataRepairState.finishSeed(root)
         }
 
         internal fun writeJson(target: File, value: JSONObject) {

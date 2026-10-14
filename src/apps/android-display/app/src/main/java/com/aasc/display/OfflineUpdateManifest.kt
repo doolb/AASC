@@ -46,7 +46,8 @@ data class OfflineDataRepairArtifact(
     val scriptSha256: String,
     val capabilities: List<String>,
     val sensitive: Boolean,
-    val releaseNotes: String? = null
+    val releaseNotes: String? = null,
+    val compatibleDataVersions: List<Int> = listOf(requiredDataVersion)
 )
 
 data class OfflineUpdateManifest(
@@ -254,6 +255,19 @@ data class OfflineUpdateManifest(
             require(targetDataVersion >= requiredDataVersion) {
                 "Offline 清单 dataRepair.targetDataVersion 不能小于 requiredDataVersion"
             }
+            if (value.has("compatibleDataVersions")) require(value.optJSONArray("compatibleDataVersions") != null) { "兼容数据版本必须为数组" }
+            val compatible = value.optJSONArray("compatibleDataVersions")?.let { values ->
+                require(values.length() in 1..32) { "兼容数据版本数量无效" }
+                (0 until values.length()).map { index ->
+                    val item = values.get(index)
+                    require(item is Number && item.toDouble() == item.toInt().toDouble()
+                        && item.toInt() in 0..targetDataVersion) { "兼容数据版本无效" }
+                    item.toInt()
+                }.also { versions ->
+                    require(versions.distinct().size == versions.size && requiredDataVersion in versions)
+                    require(versions.size == 1 || requiredApkVersionCode != null) { "累计迁移缺少最低APK版本" }
+                }
+            } ?: listOf(requiredDataVersion)
             val scriptSha256 = readSha256(value, "scriptSha256")
             val capabilitiesJson = value.optJSONArray("capabilities")
                 ?: throw IllegalArgumentException("Offline 清单 dataRepair.capabilities 缺失")
@@ -289,7 +303,8 @@ data class OfflineUpdateManifest(
                 scriptSha256,
                 capabilities,
                 sensitive,
-                releaseNotes
+                releaseNotes,
+                compatible
             )
         }
 

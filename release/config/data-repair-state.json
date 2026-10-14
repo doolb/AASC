@@ -1,0 +1,40 @@
+{
+  "format": "aasc-offline-data-baseline",
+  "schemaVersion": 1,
+  "dataVersion": 2,
+  "latestRepairVersion": 2,
+  "includedRepairs": [
+    {
+      "repairId": "enable-voice-input-during-tts-without-voiceprint-v1",
+      "repairVersion": 1,
+      "scriptSha256": "6717b7b03c8262c2a5cc426a400111e6a7111fad23a9ddbe611bd7b0e9c3cb08",
+      "targetDataVersion": 1,
+      "appliedAt": "2026-10-14T04:13:11.023Z",
+      "capabilities": [
+        "config"
+      ]
+    },
+    {
+      "repairId": "hide-offline-display-status-bar-v2",
+      "repairVersion": 2,
+      "scriptSha256": "09d755cbafeb1c9b09979301f793846f6d7e1580fcc554b350be60edf7b80b55",
+      "targetDataVersion": 2,
+      "appliedAt": "2026-10-14T04:13:11.041Z",
+      "capabilities": [
+        "user-config"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "config/config.json",
+      "size": 5106,
+      "sha256": "d26d96813e78da00fbb7e1926bc68ff091b4368ec1a25448443875fce32092b1"
+    },
+    {
+      "path": "userconfig/userconfig.json",
+      "size": 578,
+      "sha256": "eaf679b5ae863b4a9280cdb19764c2447b4653461284e316e34892698568f3af"
+    }
+  ]
+}

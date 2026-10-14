@@ -55,7 +55,8 @@ function getPublishComponents(manifest, mode) {
     const components = manifest.payload.components;
     if (mode === 'data-repair') {
         if (!components.dataRepair) throw new Error('data-repair 发布要求签名清单包含 dataRepair 组件');
-        return [components.dataRepair];
+        return [components.dataRepair, ...(components.nodeMinSeeds && components.dataRepair.releaseSeedVersion === components.nodeMinSeeds.version
+            ? [components.nodeMinSeeds] : [])];
     }
     if (mode === 'apk-min') {
         if (!components.apkMin) throw new Error('apk-min 发布要求签名清单包含 apkMin 组件');
@@ -694,6 +695,7 @@ async function publishOfflineUpdate(options = {}) {
         : mode === 'data-repair'
             ? Object.entries(manifest.payload.components)
                 .filter(([name, component]) => name !== 'dataRepair'
+                    && !(name === 'nodeMinSeeds' && manifest.payload.components.dataRepair.releaseSeedVersion === component?.version)
                     && component && (component.relativeUrl || component.groups))
                 .map(([, component]) => component)
         : mode === 'apk-min'

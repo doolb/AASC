@@ -860,12 +860,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 启动后只读取一次签名服务清单；真正下载必须经过用户确认。 */
+    private var manualDataRepairRetry = false
+
     private fun checkForServiceUpdateOnce() {
         if (!offlineMode || serviceUpdateCheckStarted || serviceUpdateStarted) return
         serviceUpdateCheckStarted = true
         Thread({
+            val manual = manualDataRepairRetry
+            manualDataRepairRetry = false
             val result = offlineUpdateManager.checkForServerUpdate(
-                File(filesDir, "aasc-server")
+                File(filesDir, "aasc-server"), manual
             )
             runOnUiThread {
                 if (isFinishing || isDestroyed) {
@@ -875,6 +879,10 @@ class MainActivity : AppCompatActivity() {
                 if (!result.hasUpdate) {
                     android.util.Log.i("MainActivity", "Offline 服务更新检查: ${result.status}")
                     if (result.failed) handleServiceUpdateFailed(result.status)
+                    else if (manual && serviceUpdateCandidate == null && minApkUpdateCandidate == null) {
+                        offlineUpdateMessage.text = result.status
+                        offlineUpdateDownload.text = "重新检查"
+                    }
                     // 本轮无更新后释放检查闸门；如果检查线程在后台完成，下一次 onResume 仍可立即重试。
                     serviceUpdateCheckStarted = false
                     return@runOnUiThread
@@ -987,6 +995,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startAvailableOfflineUpdate() {
+        if (offlineFailures.updateError != null) {
+            // 失败后的点击只重新检查并显示确认卡片，不能复用尚未展示的另一类候选直接下载。
+            serviceUpdateCandidate = null
+            minApkUpdateCandidate = null
+            retryOfflineUpdateCheck()
+            return
+        }
         if (serviceUpdateCandidate != null) {
             startServiceUpdate()
             return
@@ -995,8 +1010,13 @@ class MainActivity : AppCompatActivity() {
             startMinApkDownload()
             return
         }
+        retryOfflineUpdateCheck()
+    }
+
+    private fun retryOfflineUpdateCheck() {
         offlineFailures.retryUpdate()
         offlineUpdateMessage.text = "正在重新检查更新…"
+        manualDataRepairRetry = true
         serviceUpdateCheckStarted = false
         minApkUpdateCheckStarted = false
         checkForServiceUpdateOnce()
@@ -1108,7 +1128,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             getString(R.string.offline_update_failed_detail, detail)
         }
-        offlineUpdateDownload.text = getString(R.string.offline_service_update_download)
+        offlineUpdateDownload.text = "重新检查"
         offlineUpdateDownload.visibility = View.VISIBLE
         offlineUpdateDownload.isEnabled = true
         offlineUpdateLater.visibility = View.VISIBLE

@@ -10,6 +10,7 @@ src/apps/voice-display-node/run-task/
 
 # 仓库根目录临时文件
 /tmp/
+release/.data-repair-seed-transaction.json
 
 # Android APK 显示端构建产物
 src/apps/android-display/.gradle/

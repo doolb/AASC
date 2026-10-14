@@ -1,5 +1,41 @@
 # Offline 通用数据修复包实现规格（伪代码）
 
+## release 基线与修复结果实际流程（2026-10-14，源码完成）
+
+```text
+已有声明 := repair.js + createDataRepairRunner + config/chat2api业务服务 + 签名dataRepair组件
+已有种子 := release/config + release/userconfig + release/task
+新增基线 := release/config/data-repair-state.json { dataVersion, latestRepairVersion, includedRepairs }
+新增结果 := 私有data-repair/last-result.json { repairId, repairVersion, actualVersion, requiredVersion, targetVersion, status }
+
+现有v1/v2 → 验签归档清单 + 原脚本SHA → 隔离按0/1/2执行 → release基线2，includedRepairs记录真实种子包含
+新增修复包 → 校验已发布签名/递增修复版本/合法数据前置版本
+读取release基线 → 隔离复制配置 → 使用相同脚本与业务服务完成真实修复
+修复成功 + 配置校验 + 源文件未并发变化 → 配置/数据版本/归档/签名元数据一起提交
+提交 → 保存私有撤销日志 → 写配置/基线/修复ZIP/对应nodeMinSeeds/签名清单 → 删除撤销日志
+任何失败 → 恢复原release配置和版本；中断后相同输出目录重试恢复；不得先抬版本再执行脚本
+
+完整APK打包 → 携带release业务配置与基线
+nodeMinSeeds打包 → 携带相同基线；独立min仍只内置动态库/bootstrap资产
+真正全新配置初始化 → 完成配置与用户配置恢复 → 初始化私有数据状态
+覆盖安装/已有配置 → 保留原数据版本和成功记录；只更新代码不提升数据版本
+初始化中断 → 恢复同一初始化事务，不能误把旧用户配置认成新版种子
+
+旧修复无compatibleDataVersions → actualVersion必须等于requiredDataVersion
+新累计修复声明compatibleDataVersions → actualVersion必须属于已签名明确集合
+缺前序记录设备 → 实际补齐对应配置效果 → 校验后记录新目标版本
+未知版本/损坏state → 拒绝；不把坏状态规范化为0
+较旧包 → 仅凭真实成功/包含记录与数据版本、摘要证明跳过；不凭空抬版本或伪造旧repairId已运行
+
+Node启动前修复 → 记录真实执行结果
+Native健康成功 → 单独提交健康服务代码
+预期修复结果/身份吻合且有成功或首装包含证明 → 修复满足
+拒绝/回滚 → 报告实际与要求版本；相同自动失败指纹去重
+手动重试/数据或清单变化 → 允许重新检查
+```
+
+已实现构建器、隔离业务worker、签名已有修复同步器、基线验证、Runtime/种子初始化、Node真实结果与原生健康通知；具体测试和范围见`../task/20261014_数据修复同步Release基线与版本.md`。既有严格单版本签名格式继续兼容；新的多版本声明需匹配支持版本的APK/服务端。
+
 修复包的业务内容使用 `repair.js`，不使用 `repair.json` 或 JSON payload。现有 Offline `manifest.json` 继续承担版本、下载地址和 hash 元数据；服务内部状态文件仍可使用现有 JSON 格式。
 
 ## 数据结构

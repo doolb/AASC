@@ -213,6 +213,7 @@ class NodeServerService : Service() {
     @Volatile
     private var nodeProcess: Process? = null
     @Volatile private var pendingServiceUpdateResult: String? = null
+    @Volatile private var pendingDataRepair: JSONObject? = null
     private var restartAttempt = 0
     private var mainServerUrl = ""
     private var offlineMode = false
@@ -357,6 +358,7 @@ class NodeServerService : Service() {
                     }
                 }
             }
+            pendingDataRepair = OfflineDataRepairState.pending(root)
             val runtimeReadyAt = SystemClock.elapsedRealtime()
             if (generation != restartGeneration.get()) return
             NodeServerConfig.write(
@@ -552,9 +554,18 @@ class NodeServerService : Service() {
                             JSONObject().put("phase", "ready").put("standalone", true))
                     }
                     sendStatus(STATUS_READY)
-                    pendingServiceUpdateResult?.let { result ->
-                        pendingServiceUpdateResult = null
-                        sendStatus(STATUS_SERVICE_UPDATE_APPLIED, result)
+                    val repair = pendingDataRepair
+                    pendingDataRepair = null
+                    val updateResult = pendingServiceUpdateResult
+                    pendingServiceUpdateResult = null
+                    if (repair != null) {
+                        val (succeeded, message) = OfflineDataRepairState.completion(root, repair)
+                        if (succeeded) sendStatus(STATUS_SERVICE_UPDATE_APPLIED, message)
+                        else if (OfflineDataRepairState.shouldNotifyFailure(root, repair)) {
+                            sendStatus(STATUS_SERVICE_UPDATE_FAILED, message)
+                        }
+                    } else if (updateResult != null) {
+                        sendStatus(STATUS_SERVICE_UPDATE_APPLIED, updateResult)
                     }
                 }
                 return@Thread

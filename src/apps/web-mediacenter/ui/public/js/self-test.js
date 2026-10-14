@@ -39,6 +39,28 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'offline_data_repair_baseline',
+            name: 'Offline 数据修复基线',
+            description: '只读检查数据版本与待执行修复结果，不运行修复',
+            category: '系统功能',
+            run: async () => {
+                const bridge = window.NativeOfflineModels;
+                if (!bridge || typeof bridge.dataRepairStatus !== 'function') {
+                    return { success: true, message: '无新版 Offline 数据状态桥，跳过检查' };
+                }
+                try {
+                    const state = JSON.parse(bridge.dataRepairStatus());
+                    if (!Object.keys(state).length) return { success: true, message: '在线 APK，跳过 Offline 数据检查' };
+                    const valid = Number.isSafeInteger(state.dataVersion) && state.dataVersion >= 0
+                        && Number.isSafeInteger(state.latestRepairVersion) && state.latestRepairVersion >= 0
+                        && typeof state.pending === 'boolean' && typeof state.satisfied === 'boolean';
+                    return { success: valid && (!state.pending || state.satisfied),
+                        message: valid ? `数据版本 ${state.dataVersion}；${state.pending && !state.satisfied ? '修复未完成，请查看原生失败原因' : '状态可查询'}` : '数据修复状态格式无效',
+                        details: '服务健康与数据修复成功分别验证；查询不改变配置或数据版本' };
+                } catch (error) { return { success: false, message: `读取数据修复状态失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'offline_native_models',
             name: 'Offline 本机模型状态',
             description: '只读检查模型文件状态，不下载、加载或执行推理',

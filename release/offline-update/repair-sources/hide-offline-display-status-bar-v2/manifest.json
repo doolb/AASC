@@ -1,0 +1,76 @@
+{
+  "payload": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-14T00:43:35.554Z",
+    "components": {
+      "code": {
+        "version": 78,
+        "requiredDependencyVersion": 8,
+        "requiredLockSha256": "2451f13be48ea673629d243f8d0ae660d445fcd7fee5719750c5c09dca6f6799",
+        "source": {
+          "gitCommit": "15e7f6cacd01909148f123100fabb51c4ac95751",
+          "gitDirty": true
+        },
+        "relativeUrl": "code/code-v78.zip",
+        "size": 17727240,
+        "sha256": "2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202"
+      },
+      "dependencies": {
+        "version": 8,
+        "lockSha256": "2451f13be48ea673629d243f8d0ae660d445fcd7fee5719750c5c09dca6f6799",
+        "source": {
+          "gitCommit": "3f092143c1dc01826083210f1cc8c9aa2678b490",
+          "gitDirty": true
+        },
+        "relativeUrl": "dependencies/dependencies-v8.zip",
+        "size": 131317625,
+        "sha256": "98e4f6e0e638e3074dd258b1faa287806071b6f9013e53ad0ba7433e78af8362"
+      },
+      "apkMin": {
+        "versionCode": 41,
+        "versionName": "0.2.39-offline-min",
+        "packageName": "com.aasc.display.offline",
+        "signerSha256": "a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df",
+        "modelCompatibilitySha256": "e64518394baf8576a6b69b6e737b074412dafd7cc6eb43c67b00f09088449aeb",
+        "relativeUrl": "apk/aasc-display-offline-min-v41.apk",
+        "size": 89327222,
+        "sha256": "42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340",
+        "source": {
+          "gitCommit": "81fb0b91309b3d35df221c9707fd191a13ba07cf",
+          "gitDirty": true
+        }
+      },
+      "dataRepair": {
+        "version": 2,
+        "repairVersion": 2,
+        "repairId": "hide-offline-display-status-bar-v2",
+        "requiredCodeVersion": 46,
+        "requiredDataVersion": 1,
+        "targetDataVersion": 2,
+        "capabilities": [
+          "user-config"
+        ],
+        "sensitive": false,
+        "scriptSha256": "09d755cbafeb1c9b09979301f793846f6d7e1580fcc554b350be60edf7b80b55",
+        "releaseNotes": "隐藏 Offline 本机显示端状态栏",
+        "relativeUrl": "data/data-repair-v2.zip",
+        "size": 486,
+        "sha256": "924b7f9ab8a70d3017391236cb3af7a53a47540d286736dce50ceb0a8a7147d6"
+      },
+      "nodeMinSeeds": {
+        "version": 69,
+        "source": {
+          "gitCommit": "3f092143c1dc01826083210f1cc8c9aa2678b490",
+          "gitDirty": true
+        },
+        "relativeUrl": "node-min-seeds/node-min-seeds-v69.zip",
+        "size": 35287,
+        "sha256": "daf4fdea807e5851c30c0dc02f18b607d7a34b6c7f2382eeb780c841dea25546"
+      }
+    }
+  },
+  "signature": {
+    "algorithm": "SHA256withRSA",
+    "value": "TQ+7nimEXngZke9ZeFC4a7C5gZR9kv1C++wzS/5DNWbho+/RB5fpcLA/AT6nnmbPRuI2gPZxSGNEJOiR3G0sVAxPc9q0Jm3zu6h52XubOxcIHyF1+d6RmQ3TZrDxw/pvWIG9g7/wCNBuWIFzzQB7PKsfhjzu3RGq3g35Qdq4FGBHfn//Jb5gmRSW7cwPKPqppswbODcwY0T2XD9cexZJTRpRks9rmkCBDna8Ki2ZeMcH7WENxxGBn+x7lGMunsdRLrDve7KNfzQPpdTCyUf3yM5nJ6U8WUM5FBmoeT6w4myd/5OL8vdhGHYlNL9RM6MIsYB0EqMQXwJiAKQrnxylWjBIiB1LiDAxdbkHxWYVgV96zwgnMSzACDK5juG6w/kr5x9JZmucctWMR2Wgu9z7+1I2ovw2M1CM4taZXv1gKAAj5EOSFTBBlGSEi650B3qE65oi8q4n/kQ8tTjo8LT2z182kDApfkYIb+9LyvLquufqJsvfEJjbUY1FB7Qj6eWk"
+  }
+}

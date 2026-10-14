@@ -1,3 +1,11 @@
+### 数据修复与 release 配置基线
+
+- ✅ [2026-10-14] 新增修复包同步实际release配置及数据版本，补齐新包首装版本与真实修复结果。
+  - 新增隔离seed-worker/基线验证/同步器和`release/config/data-repair-state.json`；验签两个现有修复并执行原脚本，声纹开关true、offline-display状态栏false，种子数据版本2；新包带基线，覆盖安装保留已有状态。
+  - 修复构建将配置/版本、repair ZIP、对应nodeMinSeeds和签名清单一起提交；失败回滚/中断恢复/并发拒绝，发布新修复同时上传首装种子。新增累计v3脚本及显式0/1/2兼容元数据，旧v2不改写；Native依据记录回报真实结果，失败去重、手动重试先重新确认。
+  - 原生升级保留data-repair目录，新增只读数据基线自测；候选full46/code80/deps9与min47，minApk/servicePackage重新标为true，依赖状态保留。本轮只有源码与种子，未生成正式修复包、APK、服务包或部署设备。
+  - 提交快照验证：`test:offline-data-repair`46/46、`test:offline-bootstrap`62/62、Android228/228通过；原签名/脚本摘要与release配置摘要核对通过，重复同步幂等。
+
 ### origion 仓库同步
 
 - ✅ [2026-10-14] 纠正上轮推送目标，合并独立 min / LLM 外置提交与 `origion/master` 的5个远端提交。

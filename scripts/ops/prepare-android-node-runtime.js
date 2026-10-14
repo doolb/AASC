@@ -905,6 +905,17 @@ async function prepareAndroidNodeRuntime(options = {}) {
             ));
         }
         files.push(...await copyUserConfigSeeds(options.userConfigDir, temporaryOutputDir));
+        if (options.profileMetadata?.offline === true && options.configFile) {
+            const baselinePath = path.join(path.dirname(options.configFile), 'data-repair-state.json');
+            if (fs.existsSync(baselinePath)) {
+                const { readBaseline, verifyBaselineFiles } = require('../../src/apps/server/modules/data-repair/data-repair-baseline');
+                const releaseRoot = path.dirname(path.dirname(options.configFile));
+                const baseline = await readBaseline(releaseRoot);
+                await verifyBaselineFiles(releaseRoot, baseline);
+                files.push(await copyFileWithManifest(path.dirname(options.configFile), 'data-repair-state.json',
+                    temporaryOutputDir, 'release-data-repair-state.json'));
+            }
+        }
         if (options.profileMetadata) {
             files.push(await writeGeneratedFileWithManifest(
                 temporaryOutputDir,

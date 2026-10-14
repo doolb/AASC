@@ -13,6 +13,34 @@ const {
     validatePendingRepair
 } = require('./data-repair-js-runner');
 
+test('显式累计迁移支持0/1/2，未知版本拒绝且留下真实结果', async () => {
+    for (const version of [0, 1, 2, 7]) {
+        const root = await createTempRoot();
+        try {
+            await writeRepair(root, 'module.exports=async()=>{};', { requiredDataVersion: 0,
+                targetDataVersion: 3, repairVersion: 3, compatibleDataVersions: [0, 1, 2] });
+            await fs.writeFile(path.join(root, 'data-repair/state.json'), JSON.stringify({ dataVersion: version, latestRepairVersion: 0, appliedRepairs: [] }));
+            const runner = createDataRepairRunner({ projectRoot: root, codeVersion: 1, services: {} });
+            const result = await runner.applyPendingRepair();
+            assert.equal(result.status, version === 7 ? 'rejected-data-version' : 'applied');
+            const recorded = JSON.parse(await fs.readFile(path.join(root, 'data-repair/last-result.json')));
+            assert.equal(recorded.actualDataVersion, version);
+            assert.equal(recorded.status, result.status);
+        } finally { await fs.rm(root, { recursive: true, force: true }); }
+    }
+});
+
+test('损坏的状态版本不能默认为0绕过累计迁移门控', async () => {
+    const root = await createTempRoot();
+    try {
+        await writeRepair(root, 'module.exports=async()=>{throw Error("不应执行");};', { compatibleDataVersions: [0], targetDataVersion: 1 });
+        const file = path.join(root, 'data-repair/state.json'); const bytes = '{"dataVersion":"broken"}';
+        await fs.writeFile(file, bytes);
+        await assert.rejects(createDataRepairRunner({ projectRoot: root, codeVersion: 1 }).applyPendingRepair(), /状态损坏/u);
+        assert.equal(await fs.readFile(file, 'utf8'), bytes);
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
 const createTempRoot = () => fs.mkdtemp(path.join(os.tmpdir(), 'aasc-data-repair-'));
 
 async function writeRepair(root, source, overrides = {}) {
