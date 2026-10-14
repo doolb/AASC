@@ -1,5 +1,9 @@
 # 自测功能文档
 
+## Offline分组依赖真实归档验证（2026-10-14）
+
+Android251/251、test:offline-bootstrap62/62通过。OfflineDependencyGroupsTest新增真实ZIP分组入口与排他合并、旧完整单包必须manifest/Express、缺失/空组/越界/其他文件拒绝、篡改内容SHA拒绝、scoped及嵌套生产锁路径、错版本/链接拒绝。额外用出包机签名清单及v9 common/android包完成归档SHA/大小、安全解压、组内容指纹、合并及code85生产锁版本校验；通过AASC_OFFLINE_GROUP_ARCHIVE_ROOT、AASC_OFFLINE_GROUP_MANIFEST、AASC_OFFLINE_GROUP_PUBLIC_KEY显式提供，不依赖联网。此额外真实包用例在未提供归档的开发机跳过，其余ZIP夹具独立运行。common含35502项，内存盘缩短自测逐文件sync耗时，生产调用未绕过。ADB设备实测待构建完成。
+
 ## 全身IK独立面板、像素控制点与牵引调硬（2026-10-13）
 
 `tests/mmd-ar-ik-markers.test.js`4/4验证近远视距/相机zoom/正交投影的32px尺寸、20–48px规范化、四方向舞台与非正方形画布、相机后方/视锥外过滤、44px命中及重叠最近点。真Ammo身体新增两项覆盖默认强度0.85的0.5/1秒误差小于0.01模型单位、软硬档响应差异、峰值位移小于初始目标距离1.35倍，以及强档Hold四目标/重力600帧有限姿态/PMX限位/分配稳定。与原身体/PBD/镜头/动作用例合计31/31通过。

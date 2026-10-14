@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "embeddedNode": true,
-  "versionCode": 48,
-  "versionName": "0.2.48-offline",
+  "versionCode": 50,
+  "versionName": "0.2.50-offline",
   "serviceVersions": {
     "codeVersion": 85,
     "dependencyVersion": 9

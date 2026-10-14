@@ -1,6 +1,6 @@
 # 正式 Android 显示端完整离线 APK 实现规格（伪代码）
 
-## 整包首次启动强制内置版本增量（2026-10-14，源码已完成）
+## 整包首次启动强制内置版本增量（2026-10-14，已实现并发布full48）
 
 ```text
 已有 := NodeRuntimeInstaller.ensureInstalled + updates可变目录 + NodeServerService健康监视 + active-release指针
@@ -20,6 +20,7 @@ Node启动 → 预期code/dependency来自内置client metadata，预期codePath
 min或普通APK → 既有路径；不新增该切换或清理动作
 删除 → 普通版本根目录+受限父目录 → 无FOLLOW_LINKS → 保留未匹配项/配置/账号/模型/任务/修复/ZIP
 自测 → 首装/高版本active覆盖/同版本重装/日常重启保留热更/失败不删/链接保护/中断重试/profile隔离
+APK共享versionCode → full候选48高于已发布min47 → 下一次min候选49（未构建）；发布索引仍min47
 ```
 
 
@@ -629,3 +630,38 @@ androidLayers := common+android；nodeMajor26、ARM64/Bionic、ABI147或NAPI<=10
 min首装与热更新 → 同一prepare函数；legacy单依赖包 → 原有读法
 用户配置/results/models/logs与APK JNI → 保持原职责
 ```
+
+## 分组ZIP校验修复（2026-10-14，先更新伪代码）
+
+```text
+validateComponentArchive(archive, component):
+    inspection := inspectZipArchive(archive)  // 保持ZIP路径、重复项、链接和膨胀大小检查
+    每个条目必须属于对应组件白名单
+    按component分派必需条目:
+        code := launcher + package.json + package-lock.json
+        dependencies := dependency-manifest.json + node_modules/express/package.json
+        dependencyGroup := dependency-group.json + 至少一个node_modules普通文件
+        dataRepair := repair.js
+        未知组件 := 拒绝
+    返回inspection
+OfflineDependencyGroups.prepare:
+    legacy单包调用dependencies校验
+    common/android各ZIP调用dependencyGroup校验
+    解压后仍验证签名绑定的组名称/版本/target及真实内容SHA
+    合并后生成dependency-manifest.json，再执行完整依赖及生产锁版本校验
+发布:
+    full48已发布且不可覆盖；修复版候选full50/min51
+    只改变Android原生验证，复用code85/deps9/repair3/seeds85
+    minApk保持true，待实际修复APK构建成功后清零
+```
+
+```text
+validateLock(directory, codeLock):
+    读取已通过签名归档/锁SHA校验的packages
+    跳过根项及dev/optional
+    relative必须以node_modules/开始且通过本地归档路径安全检查
+    本地包路径允许@scope和嵌套node_modules；不套用下载URL白名单
+    assertSafePath逐级拒绝符号链接
+    校验实际package.json存在且版本与锁一致
+```
+实际v9组合测试追加生产锁校验时发现旧URL白名单不允许@scope；修复属于同一依赖安装校验链。

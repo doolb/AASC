@@ -1,3 +1,15 @@
+### Offline分组依赖更新校验
+
+- ✅ [2026-10-14] 修复分组依赖更新误报缺少dependency-manifest.json，以及后续生产锁拒绝npm @scope路径的问题。
+  - OfflineUpdateManager按组件分派ZIP必需文件/白名单；OfflineDependencyGroups只对组合结果要求全局清单/Express，签名与实际内容指纹检查保留。生产锁使用本地安全路径规则，仍拒绝越界和链接、核对实际版本。
+  - Android251/251与真实v9 common/android归档SHA、解压、组内容、组合生产锁验证通过，test:offline-bootstrap62/62。full50/min51候选，minApk保持true；服务/生产依赖未变，不重新出代码或依赖包。用户授权ADB覆盖与更新验收，当前旧min41与普通v2数据保留。
+
+### Offline 整包v48发布
+
+- ✅ [2026-10-14] 一次性切回内置版本的full48构建并发布LAN/WAN，内置code85/deps9/数据基线3，无LLM模型与私人账号。
+  - apk/aasc-display-offline-v48.apk：544316585 bytes，SHA3188a1707fea1eb3d9c7c6cf1da01eeb435b594c1cbf9a15d2c4c6c923437d23；同一v2签名，目标文件及HTTP索引/HEAD验证通过。单独full-apk-manifest.json更新，服务manifest SHA843bb4…保持不变。
+  - 发布后用户报告原生分组更新校验缺陷，v48尚不含该修复；接续新版本，不覆盖已发布APK。未安装真机；minApk待出包状态保持true。
+
 ### Offline 整包一次性切回内置版本
 
 - ✅ [2026-10-14] 实现整包安装首次启动强制内置服务/依赖，健康后删除旧下载版本目录，后续允许热更新。

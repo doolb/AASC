@@ -488,9 +488,58 @@ class OfflineUpdateManager(
                     normalizedEntryName == "dependency-manifest.json" ||
                     normalizedEntryName == "dependency-group.json" ||
                     normalizedEntryName.startsWith("node_modules/")
+                "dependencyGroup" -> normalizedEntryName == "node_modules" ||
+                    normalizedEntryName == "dependency-group.json" ||
+                    normalizedEntryName.startsWith("node_modules/")
                 "dataRepair" -> normalizedEntryName == "repair.js"
                 else -> false
             }
+        }
+
+        /** 分组只检查组契约；完整依赖在合并后再检查Express及全局清单，不能混用两个阶段。 */
+        internal fun inspectComponentArchive(archiveFile: File, component: String): ZipInspection {
+            require(component in setOf("code", "dependencies", "dependencyGroup", "dataRepair")) {
+                "未知更新包组件: $component"
+            }
+            val inspection = inspectZipArchive(archiveFile)
+            for (entryName in inspection.entryNames) {
+                if (entryName.isEmpty()) continue
+                require(isAllowedComponentEntry(component, entryName)) {
+                    "${component} 更新包包含不允许的路径: $entryName"
+                }
+            }
+            when (component) {
+                "code" -> {
+                    require(inspection.entryNames.contains("src/apps/server/boot/server-launcher.js")) {
+                        "服务代码更新包缺少 Node launcher"
+                    }
+                    require(inspection.entryNames.containsAll(setOf("package.json", "package-lock.json"))) {
+                        "服务代码更新包缺少 package 元信息"
+                    }
+                }
+                "dataRepair" -> require(inspection.entryNames.contains("repair.js")) {
+                    "dataRepair 更新包缺少 repair.js"
+                }
+                "dependencies" -> {
+                    require(inspection.entryNames.contains("dependency-manifest.json")) {
+                        "依赖更新包缺少 dependency-manifest.json"
+                    }
+                    require(inspection.entryNames.contains("node_modules/express/package.json")) {
+                        "依赖更新包缺少 express"
+                    }
+                }
+                "dependencyGroup" -> {
+                    require(inspection.entryNames.contains("dependency-group.json")) {
+                        "依赖组更新包缺少 dependency-group.json"
+                    }
+                    ZipFile(archiveFile).use { zip ->
+                        require(zip.entries().asSequence().any { !it.isDirectory && it.name.startsWith("node_modules/") }) {
+                            "依赖组更新包缺少 node_modules 文件"
+                        }
+                    }
+                }
+            }
+            return inspection
         }
 
         private fun validateUnixZipEntryTypes(archive: File) {
@@ -1247,34 +1296,8 @@ class OfflineUpdateManager(
         throw IOException("局域网和外网均无法下载 ${metadata.relativeUrl}: ${lastError?.message}", lastError)
     }
 
-    internal fun validateComponentArchive(archiveFile: File, component: String): ZipInspection {
-        val inspection = inspectZipArchive(archiveFile)
-        for (entryName in inspection.entryNames) {
-            if (entryName.isEmpty()) continue
-            val allowed = isAllowedComponentEntry(component, entryName)
-            require(allowed) { "${component} 更新包包含不允许的路径: $entryName" }
-        }
-        if (component == "code") {
-            require(inspection.entryNames.contains("src/apps/server/boot/server-launcher.js")) {
-                "服务代码更新包缺少 Node launcher"
-            }
-            require(inspection.entryNames.contains("package.json") && inspection.entryNames.contains("package-lock.json")) {
-                "服务代码更新包缺少 package 元信息"
-            }
-        } else if (component == "dataRepair") {
-            require(inspection.entryNames.contains("repair.js")) {
-                "dataRepair 更新包缺少 repair.js"
-            }
-        } else {
-            require(inspection.entryNames.contains("dependency-manifest.json")) {
-                "依赖更新包缺少 dependency-manifest.json"
-            }
-            require(inspection.entryNames.contains("node_modules/express/package.json")) {
-                "依赖更新包缺少 express"
-            }
-        }
-        return inspection
-    }
+    internal fun validateComponentArchive(archiveFile: File, component: String): ZipInspection =
+        inspectComponentArchive(archiveFile, component)
 
     private fun validateDataRepairPackage(directory: File, expected: OfflineDataRepairArtifact) {
         val script = File(directory, "repair.js")

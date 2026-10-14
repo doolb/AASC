@@ -9,6 +9,10 @@ import org.json.JSONObject
 
 /** 只处理签名清单指定的依赖层，组合目录继续交由现有版本指针和健康回滚管理。 */
 internal object OfflineDependencyGroups {
+    /** 首装与热更新共用该归档入口，Android原生层无需包含完整依赖中的Express。 */
+    internal fun inspectArchive(archive: File): OfflineUpdateManager.ZipInspection =
+        OfflineUpdateManager.inspectComponentArchive(archive, "dependencyGroup")
+
     fun hashFile(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
@@ -90,7 +94,7 @@ internal object OfflineDependencyGroups {
                 if (cache.exists()) require(verifyLayer(cache, name, entry)) { "缓存依赖组${name}已损坏，保留当前版本" }
                 else {
                     val downloaded = updater.downloadArtifact(source, entry, File(stage, "$name.zip"), onProgress)
-                    val inspection = updater.validateComponentArchive(downloaded.file, "dependencies")
+                    val inspection = inspectArchive(downloaded.file)
                     checkSpace(root, Math.multiplyExact(inspection.expandedBytes, 2))
                     val layer = File(stage, "group-$name")
                     OfflineUpdateManager.extractZipArchive(downloaded.file, layer)
@@ -118,7 +122,10 @@ internal object OfflineDependencyGroups {
             if (relative.isEmpty()) continue
             val entry = packages.getJSONObject(relative)
             if (entry.optBoolean("dev") || entry.optBoolean("optional")) continue
-            require(relative.startsWith("node_modules/") && OfflineUpdateManifest.isSafeRelativePath(relative)) { "生产锁文件路径无效" }
+            // packages是本地路径，允许npm的@scope；下载URL白名单不能用于包目录。
+            require(relative.startsWith("node_modules/") && OfflineUpdateManager.isSafeArchivePath(relative)) {
+                "生产锁文件路径无效：$relative"
+            }
             val manifest = File(directory, "$relative/package.json")
             assertSafePath(directory, manifest)
             require(manifest.isFile && JSONObject(manifest.readText()).optString("version") == entry.optString("version")) { "生产包与代码锁版本不匹配：$relative" }
