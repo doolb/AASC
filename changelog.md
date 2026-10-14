@@ -12297,3 +12297,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 使用 `release/apkbuild/withserver/output/aasc-display.apk`，284,446,879 bytes，SHA-256 `79352d5288413585eb95cbf5af0b5d3dc63a55fe8c2ef9dd979f725febdbbfeb`；签名验证与普通 profile/package 核对通过。
   - Runtime 内容版本由 `content-2561019af4057512930183cf` 更新为 `content-a4f60c3d9024c33d741e24c0`；设备 `subserver-main-update.js` 与本地最终更新器 SHA-256 一致，首次准备耗时约 140 秒。
   - `/api/status` 返回 ok，主服务器确认 `apk-subserver-a716877c37d8465f` 在线，原有两个媒体库已恢复加载，NodeServerService 运行中。APK 展示版本仍为 apk-0.1.0，包内服务代码展示为 1.0.0；此次仅安装普通 APK，未触发签名服务清单更新或发布 Offline LAN/WAN 新清单。
+
+### 旧 Offline APK 升级过渡清单
+
+- ✅ [2026-10-14] 使用现有 `package:offline-apk:min` 生成旧单包依赖兼容清单，仅升级 min APK 至 v45，保留已发布 code v78、dependencies v8、Node min 种子与数据修复组件；只生成本地产物，尚未发布 LAN/WAN。
+  - 产物位于 `release/offline-update/legacy-apk-bridge/`；签名清单 `manifests/manifest-apk-min-v45.json` SHA-256 为 `d9f453d0d6b6e71727cb27a650378f92334c37da4db4cdb510a3e65bc89c7350`，APK SHA-256 为 `8a9f0f8418f4ed67e32e0e0837e715d6e17d91269a0c0302e8dd3fb9e6ebc3fd`。
+  - RSA 验签、旧依赖字段及 code/dependencies 绑定检查通过，保留组件与当前发布清单逐项相同，APK signer 与旧 min 一致；min 打包与发布现有测试 21/21 通过。未修改源码或产物待打包状态，APK 实际提示及覆盖安装待设备验收。
+  - 这是升级更新器的过渡清单；切换四组清单之后，未升级的旧 APK 将再次无法解析。因此发布分组清单前应先完成旧设备 APK 升级；若需长期兼容旧设备，应另外设计保留旧清单的发布通道。
