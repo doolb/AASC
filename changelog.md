@@ -12284,3 +12284,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - `apk/aasc-display-offline-min-v45.apk`：89,389,058 bytes，SHA-256 `8a9f0f8418f4ed67e32e0e0837e715d6e17d91269a0c0302e8dd3fb9e6ebc3fd`；min清单与v83/依赖v9绑定。普通withserver：284,446,879 bytes，SHA-256 `79352d5288413585eb95cbf5af0b5d3dc63a55fe8c2ef9dd979f725febdbbfeb`；签名和APK内更新器/安装指纹核对通过，复用准备资源增量封装最后源码修正。
   - 独立`allserver-min.js`已上传`/home/as/a/node-min/`，公网HTTP200、67,295 bytes、SHA-256 `bfc119ac00c7793b0ad815f3238de33c20a87befc0f984de5da4e8e33d0ec23e`与本地一致。普通APK已同步到`http://120.79.245.103/mnt/node-min/aasc-display-withserver.apk`，公网HTTP200、284,446,879 bytes、完整SHA-256与本地一致；未自动安装设备。
   - 主服务器已重启，实际`/server`读取共享发布根当前v78签名清单，`build:server-package`只校验同一v78 ZIP，不再生成普通tar。本方案已出包；其他并行数据修复改动未被本轮min/代码包覆盖，聚合状态保留minApk=true、servicePackage=true、dependenciesPackage=false；旧普通APK需重装、旧Offline APK需手动安装新版min，设备安装/新分组清单发布未执行。
+
+### 普通 APK 真机覆盖更新
+
+- ✅ [2026-10-14] 已通过 ADB 覆盖更新 SM-N9500（`192.168.1.6:5555`）的普通 `com.aasc.display` APK，保留应用数据，未卸载或清空；安装返回 Success，最后更新时间为 2026-10-14 12:53:48。
+  - 使用 `release/apkbuild/withserver/output/aasc-display.apk`，284,446,879 bytes，SHA-256 `79352d5288413585eb95cbf5af0b5d3dc63a55fe8c2ef9dd979f725febdbbfeb`；签名验证与普通 profile/package 核对通过。
+  - Runtime 内容版本由 `content-2561019af4057512930183cf` 更新为 `content-a4f60c3d9024c33d741e24c0`；设备 `subserver-main-update.js` 与本地最终更新器 SHA-256 一致，首次准备耗时约 140 秒。
+  - `/api/status` 返回 ok，主服务器确认 `apk-subserver-a716877c37d8465f` 在线，原有两个媒体库已恢复加载，NodeServerService 运行中。APK 展示版本仍为 apk-0.1.0，包内服务代码展示为 1.0.0；此次仅安装普通 APK，未触发签名服务清单更新或发布 Offline LAN/WAN 新清单。
