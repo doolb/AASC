@@ -6,20 +6,20 @@ const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-prot
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_DEFAULTS = Object.freeze({
-    system: { endpoint: '', model: '', credential: '', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
+    system: { endpoint: '', model: '', credential: '', resourceId: '' },
     'qwen-api': { enabled: true, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-        model: 'qwen-audio-3.1-tts-flash', credential: '', defaultVoice: 'qiaoxiaojiao_v3.1', defaultSpeed: 0, defaultVolume: 100, resourceId: '' },
+        model: 'qwen-audio-3.1-tts-flash', credential: '', defaultVoice: 'qiaoxiaojiao_v3.1', resourceId: '' },
     'doubao-api': { enabled: true, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
-        model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', defaultSpeed: 0, defaultVolume: 100, resourceId: 'seed-tts-2.0' },
+        model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', resourceId: 'seed-tts-2.0' },
     'doubao-chat': { enabled: false, endpoint: 'https://www.doubao.com', model: 'doubao-chat',
-        defaultVoice: DOUBAO_SPEECH_VOICE, defaultSpeed: 0, defaultVolume: 100, resourceId: '', experimental: true },
+        defaultVoice: DOUBAO_SPEECH_VOICE, resourceId: '', experimental: true },
     'qwen-chat': { enabled: true, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
-        defaultVoice: 'zh_female_quarkF531S0_ptts', defaultSpeed: 0, defaultVolume: 100, resourceId: '' }
+        defaultVoice: 'zh_female_quarkF531S0_ptts', resourceId: '' }
 });
 
 function normalizeNumber(value, fallback, min, max) {
-    if (value === undefined) return fallback;
-    const number = typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
+    const input = value === undefined ? fallback : value;
+    const number = typeof input === 'number' || (typeof input === 'string' && input.trim()) ? Number(input) : NaN;
     if (!Number.isFinite(number)) throw new Error('TTS 参数必须为有限数字');
     return Math.min(max, Math.max(min, Math.round(number)));
 }
@@ -44,10 +44,8 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         for (const key of ['endpoint', 'model', 'defaultVoice', 'resourceId']) {
             if (patch[key] !== undefined && patch[key] !== fixed[key]) throw new Error('豆包网页朗读仅支持固定网页默认配置');
         }
-        for (const key of ['defaultSpeed', 'defaultVolume']) {
-            if (patch[key] !== undefined && Number(patch[key]) !== fixed[key]) throw new Error('豆包网页朗读速度和音量暂不可调整');
-        }
-        // 历史非秘密参数恢复固定值；任何旧凭据/账号引用均不进入新配置或广播。
+        // 忽略历史Provider专属速度/音量；共享值由全局字段统一校验和保存。
+        // 任何旧凭据/账号引用均不进入新配置或广播。
         return { ...fixed, enabled: patch.enabled ?? (typeof previous.enabled === 'boolean' ? previous.enabled : false) };
     }
     const base = { ...PROVIDER_DEFAULTS[provider], ...previous };
@@ -84,10 +82,15 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         ...auth,
         ...(provider === 'system' ? {} : { enabled: patch.enabled ?? base.enabled,
             defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
-        defaultSpeed: normalizeNumber(patch.defaultSpeed, base.defaultSpeed, -10, 10),
-        defaultVolume: normalizeNumber(patch.defaultVolume, base.defaultVolume, 0, 100),
         resourceId: boundedString(patch.resourceId, base.resourceId)
     };
+}
+
+function migratedSharedParameter(name, patch, previous) {
+    const selectedProvider = patch.aiReplyDefault?.provider || previous.aiReplyDefault?.provider || 'system';
+    const legacyProvider = { ...previous.providers?.[selectedProvider], ...patch.providers?.[selectedProvider] };
+    const fallback = name === 'defaultSpeed' ? 0 : 100;
+    return legacyProvider[name] === undefined ? previous[name] ?? fallback : legacyProvider[name];
 }
 
 function normalizeSettings(patch = {}, previous = {}, options = {}) {
@@ -109,7 +112,9 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
         validateBusinessProvider(value.provider, business);
         return [key, value];
     }));
-    return { ...selections, providers };
+    const defaultSpeed = normalizeNumber(patch.defaultSpeed, migratedSharedParameter('defaultSpeed', patch, previous), -10, 10);
+    const defaultVolume = normalizeNumber(patch.defaultVolume, migratedSharedParameter('defaultVolume', patch, previous), 0, 100);
+    return { ...selections, defaultSpeed, defaultVolume, providers };
 }
 
 function redactSettings(settings) {

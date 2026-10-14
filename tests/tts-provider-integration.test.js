@@ -121,6 +121,30 @@ test('模板语音从Chat2API账号读取权威密钥与端点，原缓存仍保
     assert.ok(cache.isMemoryAudioName(reference));
 });
 
+test('共享语速音量进入不同Provider默认参数，单次显式参数优先', async () => {
+    const settings = normalizeSettings({ defaultSpeed: 4, defaultVolume: 65,
+        aiReplyDefault: { provider: 'qwen-api' }, textMedia: { provider: 'doubao-api' },
+        systemBroadcast: { provider: 'qwen-chat' } });
+    const requests = {};
+    const registry = Object.fromEntries(['qwen-api', 'doubao-api', 'qwen-chat'].map(id => [id, {
+        generate: async request => { requests[id] = request; return wav; }
+    }]));
+    const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => 'shared.wav' });
+    await service.generate({ text: 'AI回复', businessType: 'ai_reply' });
+    await service.generate({ text: '文本阅读', businessType: 'text_media' });
+    await service.generate({ text: '系统播报', businessType: 'system_broadcast', speed: -3, volume: 22 });
+    for (const id of ['qwen-api', 'doubao-api']) {
+        assert.equal(requests[id].speed, 4);
+        assert.equal(requests[id].volume, 65);
+        assert.equal(requests[id].parameterDefaults.speed, Math.pow(2, 4 / 10));
+        assert.equal(requests[id].parameterDefaults.volume, 65);
+    }
+    assert.equal(requests['qwen-chat'].speed, -3);
+    assert.equal(requests['qwen-chat'].volume, 22);
+    assert.equal(requests['qwen-chat'].parameterOverrides.speed, Math.pow(2, -3 / 10));
+    assert.equal(requests['qwen-chat'].parameterOverrides.volume, 22);
+});
+
 test('豆包分片UTF8/SSE完成事件与PCM包装；独立文本业务与参数传递', async t => {
     let posted;
     const url = await mockServer(t, async (req, res) => {
@@ -134,7 +158,8 @@ test('豆包分片UTF8/SSE完成事件与PCM包装；独立文本业务与参数
         res.end(JSON.stringify({ code: 20000000 }));
     });
     const settings = normalizeSettings({ textMedia: { provider: 'doubao-api', voice: 'custom-reader' },
-        providers: { 'doubao-api': { enabled: true, credential: 'doubao-key', endpoint: url, defaultSpeed: -10, defaultVolume: 50 } } });
+        defaultSpeed: -10, defaultVolume: 50,
+        providers: { 'doubao-api': { enabled: true, credential: 'doubao-key', endpoint: url } } });
     const service = createTtsProviderService({ getSettings: () => settings, registry: await registryFixture(t, settings) });
     const reference = await service.generate({ text: '阅读', businessType: 'text_media', templateTts: { provider: 'qwen-chat' } });
     const result = cache.getAudio(reference).buffer;

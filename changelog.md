@@ -12415,3 +12415,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 发布前 signer/profile/package/版本/SHA-256 校验通过；两端 HTTP HEAD 200、大小及 206 首 1 MiB 内容摘要与本地一致，本地部署副本及外网文件整包 SHA-256 与原始 APK 相同。
   - 两端精确清理旧 full v38，无清理错误；保留 LAN min41、WAN min45，以及代码/依赖/种子/数据修复资源。两端服务 `manifest.json` 字节摘要与发布前一致（LAN code78/deps8/min41，WAN code83/deps8/min45），完整 APK 不写入服务更新清单。
   - 本次仅发布，未构建、未安装设备；只更新 changelog，原有待打包聚合状态保持 minApk=true/servicePackage=true/dependenciesPackage=false。公网下载入口：`http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v46.apk`。
+
+### 声纹面板统一语速和音量入口
+
+- ✅ [2026-10-14] 声纹面板只保留一组全局语速（−10 至 10）和音量（0 至 100），应用于所有业务和 TTS Provider；显式单次参数仍优先。
+  - 修改控制端 `upload.html`、`tts-provider-settings.js` 和 `self-test.js`；服务端在权威 `ttsProviderConfig` 根级同步共享参数，持久化到 `config.tts.sharedParameters`，移除 Provider 快照中的专属速度/音量。旧配置首次读取时从当前 AI/Agent 默认 Provider 迁移，缺省回退 0/100，system 旧速度沿用 `config.tts.defaultSpeed`。
+  - 豆包网页朗读仍以固定上游参数生成，收到 WAV 后应用共享速度/音量，再校验并缓存。更新 TTS design/spec/task，删除已完成 todo 项。
+  - `node --test tests/tts-provider-settings.test.js tests/tts-provider-ui-browser.test.js tests/tts-provider-integration.test.js tests/tts-provider-doubao-chat.test.js tests/tts-provider-ws.test.js tests/tts-provider-system-route.test.js tests/tts-provider-qwen-chat.test.js` 81/81 通过；包含 Chromium 界面检查、迁移/持久化/回滚、广播/重连、跨 Provider 参数和单次覆盖。
+  - `git diff --check` 通过；未构建或发布APK/服务包，已有 `servicePackage=true` 状态保持。

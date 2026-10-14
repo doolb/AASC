@@ -156,7 +156,7 @@ const SelfTest = {
         {
             id: 'tts_provider_config',
             name: '语音服务配置同步',
-            description: '检查服务器权威配置、Chat2API账号职责及凭证脱敏；qwen-chat合成前过滤emoji，纯表情跳过',
+            description: '检查全局语速音量、服务器权威配置、Chat2API账号职责及凭证脱敏；qwen-chat合成前过滤emoji，纯表情跳过',
             category: '语音功能',
             run: async () => {
                 const config = window.TtsProviderSettings?.getConfig();
@@ -164,8 +164,11 @@ const SelfTest = {
                 const providers = ['system', 'qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat'];
                 const selections = ['aiReplyDefault', 'textMedia', 'systemBroadcast'];
                 const valid = selections.every(key => providers.includes(config[key]?.provider))
+                    && Number.isInteger(config.defaultSpeed) && config.defaultSpeed >= -10 && config.defaultSpeed <= 10
+                    && Number.isInteger(config.defaultVolume) && config.defaultVolume >= 0 && config.defaultVolume <= 100
                     && !['textMedia', 'systemBroadcast'].some(key => config[key].provider === 'doubao-chat')
                     && providers.every(id => config.providers[id] && !Object.hasOwn(config.providers[id], 'credential'))
+                    && providers.every(id => !Object.hasOwn(config.providers[id], 'defaultSpeed') && !Object.hasOwn(config.providers[id], 'defaultVolume'))
                     && !Object.hasOwn(config.providers.system, 'enabled')
                     && !Object.hasOwn(config.providers.system, 'defaultVoice')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'chat2apiAccountId')
@@ -173,11 +176,9 @@ const SelfTest = {
                     && typeof config.providers['qwen-chat'].model==='string' && Boolean(config.providers['qwen-chat'].model.trim())
                     && !Object.hasOwn(config.providers['doubao-chat'], 'chat2apiAccountId')
                     && !Object.hasOwn(config.providers['doubao-chat'], 'credentialSource')
-                    && config.providers['doubao-chat'].model === 'doubao-chat'
-                    && config.providers['doubao-chat'].defaultSpeed === 0
-                    && config.providers['doubao-chat'].defaultVolume === 100;
-                return { success: valid, message: valid ? '业务配置已同步，凭证已脱敏' : '语音服务配置校验失败',
-                    details: '本项只检查配置；四路账号和语音调用统一由Chat2API处理，设备声音与API权限另行验收' };
+                    && config.providers['doubao-chat'].model === 'doubao-chat';
+                return { success: valid, message: valid ? '业务配置已同步，全局参数有效且凭证已脱敏' : '语音服务配置校验失败',
+                    details: '本项检查共用语速音量、配置同步与凭证脱敏；四路账号和语音调用统一由Chat2API处理，设备声音与API权限另行验收' };
             }
         },
         {

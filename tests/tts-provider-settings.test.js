@@ -40,14 +40,18 @@ test('部分选择保留Provider、显式空音色清除、范围与凭证保留
     const changed = normalizeSettings({ aiReplyDefault: { voice: null }, providers: { 'qwen-api': { credential: '' } } }, initial);
     assert.deepEqual(changed.aiReplyDefault, { provider: 'qwen-api', voice: null });
     assert.equal(changed.providers['qwen-api'].credential, 'test-secret');
-    assert.equal(changed.providers['qwen-api'].defaultSpeed, 10);
-    assert.equal(changed.providers['qwen-api'].defaultVolume, 0);
+    assert.equal(initial.defaultSpeed, 10);
+    assert.equal(initial.defaultVolume, 0);
+    assert.equal(changed.defaultSpeed, 10);
+    assert.equal(changed.defaultVolume, 0);
+    assert.ok(!Object.hasOwn(changed.providers['qwen-api'], 'defaultSpeed'));
+    assert.ok(!Object.hasOwn(changed.providers['qwen-api'], 'defaultVolume'));
     const publicConfig = redactSettings(changed);
     assert.equal(publicConfig.providers['qwen-api'].credentialSource, 'chat2api');
     assert.ok(!JSON.stringify(publicConfig).includes('test-secret'));
     assert.equal(normalizeSettings({ providers: { 'qwen-api': { clearCredential: true } } }, initial).providers['qwen-api'].credential, '');
     for (const patch of [{ providers: null }, { providers: [] }, { providers: { bad: {} } }, { aiReplyDefault: [] },
-        { providers: { 'qwen-api': { defaultSpeed: 'NaN' } } }, { providers: { 'qwen-api': { enabled: 'true' } } },
+        { defaultSpeed: 'NaN' }, { defaultVolume: 'NaN' }, { providers: { 'qwen-api': { enabled: 'true' } } },
         { providers: { 'qwen-api': { endpoint: 'https://key:secret@host/path' } } },
         { providers: { 'qwen-chat': { endpoint: 'https://other.example/tts' } } }]) assert.throws(() => normalizeSettings(patch));
 });
@@ -90,13 +94,18 @@ test('真实配置持久化、重载、旧system默认和保存失败内存/磁�
     config.set('tts.defaultSpeed', 3);
     assert.ok(!Object.hasOwn(config.getTtsProviderSettings().providers.system, 'defaultVoice'));
     assert.equal(config.get('tts.defaultVoice'), 'legacy-voice');
-    assert.equal(config.getTtsProviderSettings().providers.system.defaultSpeed, 3);
+    assert.equal(config.getTtsProviderSettings().defaultSpeed, 3);
+    assert.equal(config.getTtsProviderSettings().defaultVolume, 100);
     const saved = config.setTtsProviderSettings({ aiReplyDefault: { provider: 'qwen-api' }, providers: { 'qwen-api': { enabled: true, credential: 'private-key' } } });
     assert.equal(saved.providers['qwen-api'].credentialSource, 'chat2api');
     const mainFile = path.join(directory, 'config', 'config.json');
     const userFile = path.join(directory, 'user', 'userconfig.json');
     assert.ok(!fs.readFileSync(mainFile, 'utf8').includes('private-key'));
     assert.equal(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-api'].credential, 'private-key');
+    assert.equal(JSON.parse(fs.readFileSync(mainFile)).tts.sharedParameters.defaultSpeed, 3);
+    assert.equal(JSON.parse(fs.readFileSync(mainFile)).tts.sharedParameters.defaultVolume, 100);
+    assert.ok(!Object.hasOwn(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-api'], 'defaultSpeed'));
+    assert.ok(!Object.hasOwn(JSON.parse(fs.readFileSync(userFile)).tts.providers['qwen-api'], 'defaultVolume'));
     const before = JSON.stringify(config.getTtsProviderSettings());
     const user = instances[1];
     const originalSave = user._save;
@@ -138,6 +147,22 @@ test('实际配置读取错误网页模型不崩溃；拒绝新错误模型不�
     const saved = JSON.parse(fs.readFileSync(path.join(directory, 'user', 'userconfig.json')));
     assert.equal(saved.tts.providers['qwen-chat'].model, 'QUARK_VOICE');
     assert.equal(saved.tts.providers['qwen-chat'].defaultVoice, 'saved-voice');
+    assert.ok(!Object.hasOwn(saved.tts.providers['qwen-chat'], 'defaultSpeed'));
+});
+
+test('首次全局参数迁移取当前AI默认Provider旧值，缺省参数使用0和100', t => {
+    const { config, instances } = loadConfig(t);
+    config.setTtsProviderConfig('aiReplyDefault', { provider: 'qwen-api', voice: null });
+    instances[1]._data.tts = { providers: { 'qwen-api': { defaultSpeed: -4, defaultVolume: 72 } } };
+    assert.equal(config.getTtsProviderSettings().defaultSpeed, -4);
+    assert.equal(config.getTtsProviderSettings().defaultVolume, 72);
+    config.setTtsProviderSettings({ aiReplyDefault: { provider: 'qwen-api', voice: null } });
+    const shared = config.get('tts.sharedParameters');
+    assert.equal(shared.defaultSpeed, -4);
+    assert.equal(shared.defaultVolume, 72);
+    const fresh = loadConfig(t).config;
+    assert.equal(fresh.getTtsProviderSettings().defaultSpeed, 0);
+    assert.equal(fresh.getTtsProviderSettings().defaultVolume, 100);
 });
 
 

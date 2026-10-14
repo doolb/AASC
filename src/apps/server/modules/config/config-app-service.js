@@ -727,11 +727,21 @@ const userConfig = new UserConfig(USER_CONFIG_FILE);
 // 对应 .src/framework/tts-provider-configuration.md 的配置保存与脱敏流程。
 function getTtsProviderSettings() {
     const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, config.getTtsProviderConfig(key)]));
-    const storedProviders = userConfig.get('tts.providers', {});
-    // 未保存Provider专用默认时，沿用旧system音色和速度，避免升级改变已有播报。
-    const providers = { ...storedProviders, system: { defaultVoice: config.get('tts.defaultVoice', null),
-        defaultSpeed: config.get('tts.defaultSpeed', 0), ...storedProviders.system } };
-    return normalizeTtsProviderSettings({ ...selections, providers }, {}, { recoverLegacyModel: true });
+    const savedProviders = userConfig.get('tts.providers', {});
+    const storedProviders = savedProviders && typeof savedProviders === 'object' && !Array.isArray(savedProviders) ? savedProviders : {};
+    const providers = { ...storedProviders, system: { defaultVoice: config.get('tts.defaultVoice', null), ...storedProviders.system } };
+    const savedSharedParameters = config.get('tts.sharedParameters', {});
+    const sharedParameters = savedSharedParameters && typeof savedSharedParameters === 'object' && !Array.isArray(savedSharedParameters)
+        ? savedSharedParameters : {};
+    const selectedProvider = selections.aiReplyDefault?.provider || 'system';
+    const legacyProvider = storedProviders[selectedProvider] || {};
+    const legacySpeed = selectedProvider === 'system'
+        ? legacyProvider.defaultSpeed ?? config.get('tts.defaultSpeed', 0)
+        : legacyProvider.defaultSpeed ?? 0;
+    const legacyVolume = legacyProvider.defaultVolume ?? 100;
+    return normalizeTtsProviderSettings({ ...selections, providers,
+        defaultSpeed: sharedParameters.defaultSpeed ?? legacySpeed,
+        defaultVolume: sharedParameters.defaultVolume ?? legacyVolume }, {}, { recoverLegacyModel: true });
 }
 
 function setTtsProviderSettings(patch) {
@@ -740,11 +750,13 @@ function setTtsProviderSettings(patch) {
     const previousTts = JSON.parse(JSON.stringify(config.get('tts', {})));
     const previousUserTts = JSON.parse(JSON.stringify(userConfig.get('tts', {})));
     const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, candidate[key]]));
+    const nextTts = { ...previousTts, ...selections,
+        sharedParameters: { ...(previousTts.sharedParameters || {}), defaultSpeed: candidate.defaultSpeed, defaultVolume: candidate.defaultVolume } };
     if (!userConfig.set('tts', { ...previousUserTts, providers: candidate.providers })) {
         userConfig._data.tts = previousUserTts;
         throw new Error('TTS Provider 用户配置保存失败');
     }
-    if (!config.set('tts', { ...previousTts, ...selections })) {
+    if (!config.set('tts', nextTts)) {
         config._data.tts = previousTts;
         if (!userConfig.set('tts', previousUserTts)) {
             userConfig._data.tts = previousUserTts;
