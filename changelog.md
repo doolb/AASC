@@ -12342,3 +12342,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 
 - ✅ [2026-10-14] 已定位release缺少模型映射种子，找到历史DeepSeek6条与Qwen1条；记录新增豆包3条、空自定义映射兜底和账号资料复用方案。
   - 用户确认复用已有资料、缺失时提示登录。记录Node与旧Chrome路径、语音默认参数与业务选择的区别，以及LAN/WAN不同服务/min旧基线；更新Chat2API design/spec/task/todo。新服务须高于已生成full v46的code84基线；完整方案待确认，尚未修改源码或发布新包。
+
+### Offline full v46 双站点发布
+
+- ✅ [2026-10-14] 使用 `npm run publish:offline-apk:full` 将不含 LLM 权重的 full v46 发布到 LAN `/mnt/aasc-offline` 与 WAN `as@120.79.245.103:~/a/aasc-offline`；版本化文件为 `apk/aasc-display-offline-v46.apk`，原子更新独立 `full-apk-manifest.json`。
+  - APK 为 544,298,500 bytes（约 519 MiB），SHA-256 `095286a0cc69315aba557cbd5377402a8dd8641fe66b32763130ffcba6e15dfd`；两端独立签名索引字节一致，SHA-256 `da4b8a82275843d57633b8d0910f21bfeeaaa399eb49846e10449e321d024668`，均指向 v46/0.2.46-offline。
+  - 发布前 signer/profile/package/版本/SHA-256 校验通过；两端 HTTP HEAD 200、大小及 206 首 1 MiB 内容摘要与本地一致，本地部署副本及外网文件整包 SHA-256 与原始 APK 相同。
+  - 两端精确清理旧 full v38，无清理错误；保留 LAN min41、WAN min45，以及代码/依赖/种子/数据修复资源。两端服务 `manifest.json` 字节摘要与发布前一致（LAN code78/deps8/min41，WAN code83/deps8/min45），完整 APK 不写入服务更新清单。
+  - 本次仅发布，未构建、未安装设备；只更新 changelog，原有待打包聚合状态保持 minApk=true/servicePackage=true/dependenciesPackage=false。公网下载入口：`http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v46.apk`。
