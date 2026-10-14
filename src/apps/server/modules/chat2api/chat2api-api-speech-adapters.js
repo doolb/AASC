@@ -4,9 +4,9 @@ const { randomUUID } = require('node:crypto');
 const { StringDecoder } = require('node:string_decoder');
 const { requestLimited, requestJson } = require('../tts/tts-provider-http');
 const { createProviderError } = require('../tts/tts-provider-errors');
-const { resolveQwenEndpoint, createQwenInput } = require('../tts/qwen-api-contract');
+const { resolveQwenEndpoint, createQwenInput, isQwenAudioModel } = require('../tts/qwen-api-contract');
 const { createDoubaoAdditions } = require('../tts/tts-reply-user-text');
-const { MAX_AUDIO_BYTES, decodeAudio, wrapPcm, normalizeQwenWav, adjustWav, validateWav } = require('../../../../external/tts/tts-wav');
+const { MAX_AUDIO_BYTES, decodeAudio, wrapPcm, normalizeQwenWav, adjustWavVolume, validateWav } = require('../../../../external/tts/tts-wav');
 
 const ENDPOINTS = Object.freeze({
     'qwen-api': 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
@@ -25,6 +25,7 @@ function validateRequest(request, credential) {
     const volume = request.volume ?? 100;
     if (typeof speed !== 'number' || !Number.isFinite(speed) || speed < 0.25 || speed > 4
         || typeof volume !== 'number' || !Number.isFinite(volume) || volume < 0 || volume > 100) throw new Error('TTS 速度或音量超出范围');
+    if (isQwenAudioModel(request.model) && (speed < 0.5 || speed > 2)) throw new Error('Qwen-Audio TTS 原生语速范围为0.5至2');
     if (typeof request.voice !== 'string' || !request.voice.trim() || request.voice.length > 512 || /[\r\n\x00-\x1f]/u.test(request.voice)) throw new Error('TTS 音色无效');
     if (request.model !== undefined && (typeof request.model !== 'string' || request.model.length > 512 || /[\r\n\x00-\x1f]/u.test(request.model))) throw new Error('TTS 模型无效');
     return { ...request, speed, volume };
@@ -89,7 +90,7 @@ function createApiSpeechAdapters({ httpRequest = requestLimited, jsonRequest = r
             budget.remaining();
             const wav = normalizeQwenWav(downloaded.buffer);
             validateWav(wav);
-            return adjustWav(wav, 10 * Math.log2(request.speed), request.volume);
+            return adjustWavVolume(wav, request.volume);
         }),
         async voices(request = {}) {
             const voices = request.model === 'qwen-audio-3.1-tts-flash' ? ['qiaoxiaojiao_v3.1']
@@ -146,7 +147,7 @@ function createApiSpeechAdapters({ httpRequest = requestLimited, jsonRequest = r
             consume(decoder.end());
             if (pending.trim()) consumeLine(pending);
             if (!completed) throw new Error('豆包 TTS 未收到合成完成事件');
-            return adjustWav(wrapPcm(Buffer.concat(chunks, bytes)), 0, request.volume);
+            return adjustWavVolume(wrapPcm(Buffer.concat(chunks, bytes)), request.volume);
         }),
         async voices() { return VOICES.doubaapi.map(id => ({ id, name: id, available: true })); }
     };

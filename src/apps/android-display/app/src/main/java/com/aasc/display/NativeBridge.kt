@@ -1157,6 +1157,17 @@ class NativeBridge(
     // TTS 桥任务提交到有界 executor，真实推理由 TtsEnginePool 槽位限制；桥调用最多等待 60 秒。
     @JavascriptInterface
     fun ttsSynthesize(text: String): String {
+        return ttsSynthesizeWithSpeedInternal(text, 0)
+    }
+
+    // 新版页面使用独立带速度入口；保留旧方法签名供已发布页面和APK兼容。
+    @JavascriptInterface
+    fun ttsSynthesizeWithSpeed(text: String, speed: Int): String {
+        return ttsSynthesizeWithSpeedInternal(text, speed)
+    }
+
+    private fun ttsSynthesizeWithSpeedInternal(text: String, speed: Int): String {
+        if (speed !in -10..10) return JSONObject().put("error", "原生 TTS 语速参数无效").toString()
         var future: Future<ByteArray>? = null
         return try {
             if (!ttsModelManager.isReady) {
@@ -1164,7 +1175,7 @@ class NativeBridge(
             }
             future = synchronized(ttsExecutorLock) {
                 ttsExecutor.submit(Callable<ByteArray> {
-                    TtsEngine.synthesize(text)
+                    TtsEngine.synthesize(text, speed)
                 })
             }
             val audio = future.get(TTS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -1182,6 +1193,18 @@ class NativeBridge(
     // 异步 TTS：JavaScript bridge 线程立即返回，生成结果通过主线程回调 window.onNativeTtsResult。
     @JavascriptInterface
     fun ttsSynthesizeAsync(requestId: String, text: String): String {
+        return ttsSynthesizeAsyncWithSpeedInternal(requestId, text, 0)
+    }
+
+    @JavascriptInterface
+    fun ttsSynthesizeAsyncWithSpeed(requestId: String, text: String, speed: Int): String {
+        return ttsSynthesizeAsyncWithSpeedInternal(requestId, text, speed)
+    }
+
+    private fun ttsSynthesizeAsyncWithSpeedInternal(requestId: String, text: String, speed: Int): String {
+        if (speed !in -10..10) {
+            return JSONObject().put("accepted", false).put("error", "原生 TTS 语速参数无效").toString()
+        }
         if (!ttsModelManager.isReady) {
             return JSONObject().put("accepted", false).put("error", "模型未就绪").toString()
         }
@@ -1192,7 +1215,7 @@ class NativeBridge(
             future = synchronized(ttsExecutorLock) {
                 ttsExecutor.submit(Callable {
                     val result = try {
-                        val audio = TtsEngine.synthesize(text)
+                        val audio = TtsEngine.synthesize(text, speed)
                         JSONObject().put("audio", Base64.encodeToString(audio, Base64.NO_WRAP))
                     } catch (e: Exception) {
                         JSONObject().put("error", e.message ?: "合成失败")

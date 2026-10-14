@@ -12,11 +12,39 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
 class TtsEnginePoolTest {
+
+    @Test
+    fun 原生语速转换为SSML并转义用户文本和声线名() {
+        val slow = createTtsSpeedSsml("主人 <& \"喵\"", "voice & <name>", -10)
+        val fast = createTtsSpeedSsml("快一点", "voice", 10)
+        assertTrue(slow.contains("rate=\"-50%\""))
+        assertTrue(slow.contains("voice &amp; &lt;name&gt;"))
+        assertTrue(slow.contains("主人 &lt;&amp; &quot;喵&quot;"))
+        assertTrue(fast.contains("rate=\"100%\""))
+        assertThrows(IllegalArgumentException::class.java) { createTtsSpeedSsml("text", "voice", 0) }
+    }
+
+    @Test
+    fun TtsPool将原生语速传给合成器() {
+        val factory = RecordingSynthesizerFactory(operationDelayMs = 0)
+        val pool = TtsEnginePool.configure(
+            policy = CpuTopology(listOf(0 to 1200000L)).policy(bigCoreCount = 0, littleCoreCount = 1),
+            modelDir = File("models/tts"), voiceName = "Microsoft Xiaoxiao", embeddedKey = "test-key",
+            synthesizerFactory = factory, affinityApplier = { true }
+        )
+        try {
+            pool.synthesize("稍微慢一点", -4)
+            assertEquals(listOf(-4), factory.speeds.toList())
+        } finally {
+            pool.retire()
+        }
+    }
 
     @Test
     fun 并发上限等于两个槽位且第三个请求排队返回Wav() {
@@ -180,11 +208,13 @@ class TtsEnginePoolTest {
         private val calls = AtomicInteger(0)
         val maxConcurrentObserved = AtomicInteger(0)
         val outputModes = Collections.synchronizedList(mutableListOf<TtsEnginePool.AudioOutputMode>())
+        val speeds = Collections.synchronizedList(mutableListOf<Int>())
 
         override fun create(request: TtsEnginePool.SynthesizerRequest): TtsEnginePool.Synthesizer {
             outputModes.add(request.outputMode)
             return object : TtsEnginePool.Synthesizer {
-                override fun synthesize(text: String): ByteArray {
+                override fun synthesize(text: String, speed: Int): ByteArray {
+                    speeds.add(speed)
                     val nowActive = active.incrementAndGet()
                     maxConcurrentObserved.updateAndGet { previous -> maxOf(previous, nowActive) }
                     try {
@@ -209,7 +239,7 @@ class TtsEnginePoolTest {
 
         override fun create(request: TtsEnginePool.SynthesizerRequest): TtsEnginePool.Synthesizer {
             return object : TtsEnginePool.Synthesizer {
-                override fun synthesize(text: String): ByteArray {
+                override fun synthesize(text: String, speed: Int): ByteArray {
                     val call = calls.incrementAndGet()
                     if (call == 1) {
                         firstStarted.countDown()

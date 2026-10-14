@@ -10,7 +10,7 @@ import com.microsoft.cognitiveservices.speech.VoiceInfo
 import java.io.File
 
 // Microsoft Embedded Speech SDK 封装：离线 TTS 合成（zh-CN Xiaoxiao，Riff24Khz16BitMonoPcm）
-// 使用 EmbeddedSpeechConfig.fromPath 和 SpeakText 完成离线语音合成
+// 使用 EmbeddedSpeechConfig.fromPath 和原生 SpeakText/SSML prosody rate 完成离线语音合成
 object TtsEngine {
 
     // 嵌入式语音授权密钥（与参考 POC 一致，模型内置授权）
@@ -91,14 +91,15 @@ object TtsEngine {
 
     // 同步合成文本为 WAV 字节（Riff24Khz16BitMonoPcm）；调用方需保证 ready
     @Throws(Exception::class)
-    fun synthesize(text: String): ByteArray {
+    fun synthesize(text: String, speed: Int = 0): ByteArray {
         if (text.isBlank()) throw IllegalArgumentException("合成文本为空")
+        if (speed !in -10..10) throw IllegalArgumentException("原生 TTS 语速参数无效")
         val pool = synchronized(lock) {
             if (!ready) throw IllegalStateException("TTS 引擎未加载")
             (currentPool ?: throw IllegalStateException("TTS 引擎未加载")).retain()
         }
         return try {
-            pool.synthesizeRetained(text)
+            pool.synthesizeRetained(text, speed)
         } finally {
             pool.releaseRetain()
         }

@@ -145,7 +145,7 @@ const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
 const { filterQwenChatSpeechText } = require('../modules/tts/qwen-chat-text-filter');
 const { resolveChatReplyTtsOptions } = require('../modules/chat/chat-reply-tts-context');
 const { generateChatTtsActions } = require('../modules/chat/chat-tts-actions');
-const { adjustWav, decodeAudio } = require('../modules/tts/tts-provider-http');
+const { adjustWavVolume, decodeAudio } = require('../modules/tts/tts-provider-http');
 const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-router');
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
 const { normalizeDisplayCpuStatus, getDisplayTtsConcurrency } = require('../modules/media/display-cpu-status');
@@ -7033,7 +7033,7 @@ function stopChatTtsPlayback({
 }
 
 // 向显示端发送 TTS 生成请求，等待 base64 WAV 回包；超时 60s
-function sendTtsGenerateToDisplay(display, text, requestId) {
+function sendTtsGenerateToDisplay(display, text, requestId, speed = 0) {
     return new Promise((resolve, reject) => {
         const pending = {
             displayId: display.id,
@@ -7062,7 +7062,8 @@ function sendTtsGenerateToDisplay(display, text, requestId) {
             const sent = sendToDisplay(display.id, {
                 type: 'ttsGenerate',
                 text: text,
-                requestId: requestId
+                requestId: requestId,
+                speed: Number.isFinite(Number(speed)) ? Math.max(-10, Math.min(10, Math.round(Number(speed)))) : 0
             });
             if (!sent) {
                 clearTimeout(pending.timer);
@@ -7094,9 +7095,9 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
         if (display) {
             const requestId = 'tts-' + Date.now() + '-' + (++pendingDisplayTtsRequestId);
             try {
-                const result = await sendTtsGenerateToDisplay(display, ttsText, requestId);
+                const result = await sendTtsGenerateToDisplay(display, ttsText, requestId, speed);
                 // 显示端返回 base64 WAV 直接进入内存缓存，原 URL/队列协议保持。
-                const audioReference = ttsAudioCache.storeAudio(adjustWav(decodeAudio(result.audioData), speed, options.volume));
+                const audioReference = ttsAudioCache.storeAudio(adjustWavVolume(decodeAudio(result.audioData), options.volume));
                 log('TTS', '显示端生成成功 (displayId=' + display.id + ' audio=' + audioReference + ')');
                 return audioReference;
             } catch (err) {

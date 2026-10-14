@@ -3,7 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const WebSocket = require('ws');
 const { createQwenSigner, parseCookies } = require('./chat2api-qwen-speech-auth');
-const { decodeAudio, wrapPcm, adjustWav, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
+const { decodeAudio, wrapPcm, adjustWavVolume, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
 
 const QWEN_TTS_ENDPOINT = 'https://speech-tts.qianwen.com/api/v3/tts';
 const QWEN_VOICE = 'zh_female_quarkF531S0_ptts';
@@ -54,7 +54,7 @@ function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } 
                 }
                 if (Number(data.status) === 2 || event.type === 'user.tts.ended') {
                     const sampleRate = settings.model === 'MINI_MAX' ? 32000 : 24000;
-                    finish(null, adjustWav(wrapPcm(Buffer.concat(chunks, bytes), sampleRate), 0, request.volume));
+                    finish(null, adjustWavVolume(wrapPcm(Buffer.concat(chunks, bytes), sampleRate), request.volume));
                 }
             } catch (error) {
                 finish(error instanceof SyntaxError ? new Error('国内千问返回无效朗读事件') : error);

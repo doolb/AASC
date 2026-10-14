@@ -2,7 +2,7 @@
 
 const http = require('node:http');
 const https = require('node:https');
-const { wrapPcm, adjustWav, decodeAudio, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
+const { wrapPcm, adjustWavVolume, decodeAudio, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
 
 // 所有网络响应都有总时限与容量边界；错误体不进入日志，避免回显密钥或签名链接。
 function requestLimited(url, { method = 'GET', body, headers = {}, timeoutMs = 60000,
@@ -117,4 +117,4 @@ async function requestJson(url, options = {}) {
     }
 }
 
-module.exports = { MAX_AUDIO_BYTES, requestLimited, requestJson, decodeAudio, wrapPcm, adjustWav };
+module.exports = { MAX_AUDIO_BYTES, requestLimited, requestJson, decodeAudio, wrapPcm, adjustWavVolume };

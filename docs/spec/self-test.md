@@ -1,5 +1,18 @@
 # 自测功能实现文档
 
+## TTS Provider 原生语速配置自测（2026-10-14）
+
+```text
+读取 TtsProviderSettings 权威快照 -> 校验业务Provider/全局音量/Provider字段脱敏
+遍历 Provider -> supportsNativeSpeed(provider, model) 判断当前上游/模型能力
+原生支持 -> defaultSpeed为整数且范围-10..10；不支持 -> 不存在defaultSpeed
+遍历 Provider -> 不存在独立defaultVolume；系统原生不暴露enabled/defaultVoice
+qwen-chat/doubao-chat -> 不包含账号ID/凭证状态，固定模型契约有效
+输出只读结果 -> 不请求语音服务、不连接上游、不更改配置
+```
+
+Qwen API按模型而非仅按Provider判断语速能力：Qwen-Audio 3.0/3.1 TTS保留speed设置，Qwen3-TTS HTTP与未知映射别名不得暴露未确认的原生字段。此检查与声纹面板同用`supportsNativeSpeed`规则。
+
 ## min51 干净首装与 Pi 可选方案自测（2026-10-14）
 
 ```text

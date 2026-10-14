@@ -35,13 +35,13 @@ test('Qwen完整WAV与真实模型/音色合同；下载不带任何凭证', asy
     });
     const result = await adapters()['qwen-api'].generate(request, 'qwen-fixture-key', { provider: { apiEndpoint: `${url}/api` } });
     assert.deepEqual(result, wav);
-    assert.deepEqual(seen[0].body, { model: 'qwen-audio-3.1-tts-flash', input: { text: '朗读😀', voice: 'qiaoxiaojiao_v3.1', format: 'wav', sample_rate: 24000 } });
+    assert.deepEqual(seen[0].body, { model: 'qwen-audio-3.1-tts-flash', input: { text: '朗读😀', voice: 'qiaoxiaojiao_v3.1', format: 'wav', sample_rate: 24000, rate: 1 } });
     assert.equal(seen[0].headers.authorization, 'Bearer qwen-fixture-key');
     for (const key of ['authorization', 'cookie', 'x-api-key']) assert.equal(seen[1].headers[key], undefined);
     assert.ok(!JSON.stringify(seen[0].body).includes('qwen-fixture-key'));
 });
 
-test('Qwen官方路径、600 Unicode边界、占位WAV头与倍率速度保持原语义', async () => {
+test('Qwen官方路径、600 Unicode边界、占位WAV头与原生语速/全局音量', async () => {
     const calls = [];
     const placeholder = Buffer.from(wav);
     placeholder.writeUInt32LE(0x7fffffbf, 4); placeholder.writeUInt32LE(0x7fffff9b, 40);
@@ -50,10 +50,23 @@ test('Qwen官方路径、600 Unicode边界、占位WAV头与倍率速度保持�
     const result = await api['qwen-api'].generate({ ...request, text: '好' + '😀'.repeat(599), speed: 2, volume: 50 }, 'fixture', { provider: { apiEndpoint: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation' } });
     validateWav(result);
     assert.equal(calls[0].url, 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer');
-    assert.equal(result.length, 48); assert.equal(result.readInt16LE(44), 50); assert.equal(result.readInt16LE(46), 150);
+    assert.equal(calls[0].options.body.input.rate, 2);
+    assert.equal(result.length, 52, '语速由上游处理，WAV后处理不缩短样本');
+    assert.equal(result.readInt16LE(44), 50); assert.equal(result.readInt16LE(46), 100);
     await assert.rejects(api['qwen-api'].generate({ ...request, text: '好' + '😀'.repeat(600) }, 'fixture', {}), /600/u);
+    await assert.rejects(api['qwen-api'].generate({ ...request, speed: 0.25 }, 'fixture', {}), /原生语速范围/u);
     assert.equal(calls.length, 1);
     assert.equal((await api['qwen-api'].voices({ model: request.model }))[0].id, 'qiaoxiaojiao_v3.1');
+});
+
+test('Qwen3-TTS未声明原生rate时不发送速度字段且不在WAV本地变速', async () => {
+    const calls = [];
+    const api = adapters({ jsonRequest: async (url, options) => { calls.push({ url, body: options.body }); return { output: { audio: { url: 'https://audio.invalid/qwen3' } } }; },
+        httpRequest: async () => ({ buffer: wav }) });
+    const result = await api['qwen-api'].generate({ ...request, model: 'qwen3-tts-flash', speed: 2, volume: 100 }, 'fixture', {});
+    assert.equal(calls[0].body.model, 'qwen3-tts-flash');
+    assert.equal(Object.hasOwn(calls[0].body.input, 'rate'), false);
+    assert.equal(result.length, wav.length);
 });
 
 test('豆包流的UTF8分片/完成事件输出WAV，资源与复刻model分开', async t => {

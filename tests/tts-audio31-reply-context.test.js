@@ -6,11 +6,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { normalizeSettings, redactSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { resolveQwenEndpoint } = require('../src/apps/server/modules/tts/qwen-api-contract');
-const { createProviderRegistry } = require('../src/apps/server/modules/tts/tts-provider-registry');
+const { createApiSpeechAdapters } = require('../src/apps/server/modules/chat2api/chat2api-api-speech-adapters');
 const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
 const { normalizeReplyUserText } = require('../src/apps/server/modules/tts/tts-reply-user-text');
 const { resolveChatReplyTtsOptions } = require('../src/apps/server/modules/chat/chat-reply-tts-context');
-const { normalizeQwenWav, wrapPcm, validateWav, adjustWav, MAX_AUDIO_BYTES } = require('../src/external/tts/tts-wav');
+const { normalizeQwenWav, wrapPcm, validateWav, adjustWavVolume, MAX_AUDIO_BYTES } = require('../src/external/tts/tts-wav');
 const pcm = Buffer.from([1, 0, 2, 0, 3, 0, 4, 0]);
 const wav = wrapPcm(pcm);
 const audioPath = '/api/v1/services/audio/tts/SpeechSynthesizer';
@@ -50,13 +50,17 @@ test('Qwen官方路径随模型规范化，workspace支持，自定义代理地�
     }
 });
 
-test('已知占位头按真实长度还原，PCM逐字节一致，语速调整仍生成合法WAV', () => {
+test('已知占位头按真实长度还原，PCM逐字节一致，音量调整保留WAV样本长度', () => {
     const raw = placeholder();
     assert.throws(() => validateWav(raw));
     const normalized = normalizeQwenWav(raw);
     assert.deepEqual(normalized, wav);
     assert.deepEqual(validateWav(normalized).samples, pcm);
-    for (const speed of [0, 1]) validateWav(adjustWav(normalized, speed, 100));
+    const quiet = adjustWavVolume(normalized, 50);
+    validateWav(quiet);
+    assert.equal(quiet.length, normalized.length);
+    assert.deepEqual(validateWav(quiet).samples, Buffer.from([1, 0, 1, 0, 2, 0, 2, 0]));
+    assert.deepEqual(adjustWavVolume(normalized, 100), normalized);
     assert.equal(normalizeQwenWav(wav), wav);
     assert.equal(raw.readUInt32LE(4), 0x7fffffbf);
 });
@@ -80,21 +84,23 @@ test('普通截断、未知占位、错误PCM格式、空/奇数PCM及超限仍�
 test('Qwen适配器新旧实际请求契约、占位修复、目录及非零速度下普通截断校验', async () => {
     const seen = [];
     let audio = placeholder();
-    const registry = createProviderRegistry({ jsonRequest: async (endpoint, options) => {
+    const registry = createApiSpeechAdapters({ jsonRequest: async (endpoint, options) => {
         seen.push({ endpoint, body: options.body }); return { output: { audio: { url: 'https://audio.example/test' } } };
     }, httpRequest: async () => ({ buffer: audio }) });
     const newSettings = normalizeSettings({ providers: { 'qwen-api': { credential: 'test' } } }).providers['qwen-api'];
-    validateWav(await registry['qwen-api'].generate({ text: '你好', voice: newSettings.defaultVoice, speed: 1, volume: 100, timeoutMs: 1000 }, newSettings));
+    const generate = (settings, text, speed, voice = settings.defaultVoice) => registry['qwen-api'].generate(
+        { text, model: settings.model, voice, speed, volume: 100, timeoutMs: 1000 }, 'fixture-api-key', { provider: { apiEndpoint: settings.endpoint } });
+    validateWav(await generate(newSettings, '你好', 1));
     assert.ok(seen[0].endpoint.endsWith(audioPath));
-    assert.deepEqual(seen[0].body.input, { text: '你好', voice: 'qiaoxiaojiao_v3.1', format: 'wav', sample_rate: 24000 });
+    assert.deepEqual(seen[0].body.input, { text: '你好', voice: 'qiaoxiaojiao_v3.1', format: 'wav', sample_rate: 24000, rate: 1 });
     const oldSettings = { ...newSettings, model: 'qwen3-tts-flash', defaultVoice: 'Maia' };
-    await registry['qwen-api'].generate({ text: '旧模型', voice: 'Maia', speed: 0, volume: 100, timeoutMs: 1000 }, oldSettings);
+    await generate(oldSettings, '旧模型', 1, 'Maia');
     assert.ok(seen[1].endpoint.endsWith(legacyPath));
     assert.deepEqual(seen[1].body.input, { text: '旧模型', voice: 'Maia', language_type: 'Auto' });
-    assert.deepEqual(await registry['qwen-api'].voices(newSettings), [{ id: 'qiaoxiaojiao_v3.1', name: '乔小娇', available: true }]);
-    assert.ok((await registry['qwen-api'].voices(oldSettings)).some(voice => voice.id === 'Cherry'));
+    assert.deepEqual(await registry['qwen-api'].voices({ model: newSettings.model }), [{ id: 'qiaoxiaojiao_v3.1', name: '乔小娇', available: true }]);
+    assert.ok((await registry['qwen-api'].voices({ model: oldSettings.model })).some(voice => voice.id === 'Cherry'));
     audio = wav.subarray(0, wav.length - 2);
-    await assert.rejects(registry['qwen-api'].generate({ text: '截断', voice: 'Maia', speed: 1, volume: 100, timeoutMs: 1000 }, oldSettings), /截断/u);
+    await assert.rejects(generate(oldSettings, '截断', 1, 'Maia'), /截断/u);
 });
 
 test('上一句输入有界Unicode快照、非法来源拒绝，模板仍由服务端权威读取', () => {

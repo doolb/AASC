@@ -1,3 +1,18 @@
+### PiAgent可选依赖与Offline min首装修复
+
+- ✅ [2026-10-14] Pi SDK按LLM配置下载，min54卸载后独立首装通过。
+  - 两根Pi SDK移optional，完整闭包独立发布Android/Linux64/Win64包；配置保存/切换经AASC WebSocket先提示，取消/失败恢复原配置，确认下载成功且指纹未变才持久化/广播；启动仅准备当前选中的Pi配置，SDK及只读工具使用同一独立模块根。
+  - `OfflineBootstrapManager`恢复合法空实例目录后转换latest；`prepare-android-node-runtime`补Node配套`libc++_shared.so`，`NodeRuntimeManifest/Installer`共用精确白名单。Node独立子进程与APK/MNN进程分别使用各自C++库。
+  - 服务code87/依赖10、ORT10/Pi三平台10已发布LAN/WAN；common ZIP113.7→43.6MiB、展开402.1→130.1MiB。min54为89914041bytes/SHA256 `ed8075e671415711da0ad11c103eafa7b6f595c27c1c2b97f030b61a7e19cc14`，同签名/profile校验通过。ADB SM-N9500再次卸载后空目录安装54，确认约60MiB，实际HTTPS code87/deps10健康提交，两个latest目标正确；私人备份保留不入Git，完整full50未改。
+  - Pi30/30、依赖106/106、首装63/63、Android254项0失败/1既有环境跳过；真实隔离SDK/provider资源导入成功。design/spec/task/usage/self-test同步，todo移除Pi/min修复完成项，保留真实模型/GPU推理验收。发布快照后的其他TTS修改仍需新服务/min产物，状态保留servicePackage/minApk=true、dependenciesPackage=false。
+
+### TTS 语速仅使用原生接口
+
+- ✅ [2026-10-14] WAV 不再本地变速；语速只通过 Provider/模型原生字段或 Android Embedded Speech SSML 设置。
+  - 新增模型级语速能力判断：Qwen-Audio 3.0/3.1 将倍率传给上游 `input.rate`；Qwen3-TTS HTTP 隐藏语速设置并不发送未确认字段。豆包 API、国内千问网页及 system 保持原生语速参数，豆包网页朗读不提供语速。
+  - `adjustWavVolume` 只缩放 PCM 幅值，不改变样本数、采样率或时长；Android `ttsGenerate` 传递 Provider 语速，新桥使用 SSML `prosody rate`，旧 APK 零语速兼容、非零语速显式回错并进入既有回退。
+  - 更新 Provider/Android design、spec、usage、自测和任务文档。TTS Node 40/40、浏览器 1/1、MMD 生产 TTS 19/19、Chat2API 250/250、TTS 集成回归 63/63、Android Gradle 单测通过；`servicePackage=true`、`minApk=true`、`dependenciesPackage=false`。未构建 APK、未发布或做真机验收。
+
 ### 声纹面板按 Provider 配置语速与全局音量
 
 - ✅ [2026-10-14] 语速按 Provider 分别配置，音量全局共用；语速控件遵循上游原生能力，豆包网页朗读隐藏语速。

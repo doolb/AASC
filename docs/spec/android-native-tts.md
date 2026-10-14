@@ -7,8 +7,10 @@ APK 通过 `addJavascriptInterface` 注入，display.html 探测到 `window.Nati
 ```
 ttsStatus() -> String JSON              # {"state":"ready|downloading|not_ready|error","progress":0-100,"error":"..."}
 ttsEnsureModel() -> String              # "ready" | "downloading" | {"error":"..."}；异步经 onNativeTtsModel 回调
-ttsSynthesizeAsync(requestId,text) -> String JSON # 成功提交 accepted:true；桥侧满载 accepted:false；已提交结果经 onNativeTtsResult 回调
-ttsSynthesize(text) -> String JSON      # 旧 APK 兼容入口；同步阻塞≤60s
+ttsSynthesizeAsyncWithSpeed(requestId,text,speed) -> String JSON # speed -10..10；使用原生SSML rate
+ttsSynthesizeWithSpeed(text,speed) -> String JSON # 同步带原生语速入口；阻塞≤60s
+ttsSynthesizeAsync(requestId,text) -> String JSON # 兼容旧调用，委托速度0
+ttsSynthesize(text) -> String JSON      # 旧 APK 兼容入口；原生速度0；同步阻塞≤60s
 window.onNativeTtsModel({state,progress,error})  # 原生→JS：downloading(进度)/ready/error
 window.onNativeTtsResult({requestId,audio,error}) # 原生→JS：异步 WAV 结果
 WS ttsGenerating{requestId}              # 显示端接受生成任务后的开始回执
@@ -94,10 +96,11 @@ configurePolicy(policy):
   构造成功 → 替换 currentPool；旧 pool retire；return true
   构造失败 → 保留旧 pool 和旧 ready 状态；return false
 
-synthesize(text):
+synthesize(text, speed=0):
   text 为空 → 抛异常
+  speed不在-10..10 → 拒绝
   synchronized(lock) retain 当前 pool；未加载 → 抛异常
-  pool.synthesizeRetained(text) → 返回 WAV bytes
+  pool.synthesizeRetained(text,speed) → 返回 WAV bytes
   finally releaseRetain，确保旧 pool 最后一个 caller 退出后才释放 idle slot
 
 probeVoice(modelDir):
@@ -133,24 +136,27 @@ TtsEnginePool.configure(policy, modelDir, voiceName, embeddedKey, synthesizerFac
   任一 slot 构造失败 → 释放已构造 slot 后抛异常
   返回 pool(slots, idleSlots)
 
-pool.synthesize(text):
+pool.synthesize(text,speed):
   retain()
-  try synthesizeRetained(text)
+  try synthesizeRetained(text,speed)
   finally releaseRetain()
 
-pool.synthesizeRetained(text):
+pool.synthesizeRetained(text,speed):
   admission.tryAcquire() 失败 -> 抛 RejectedExecutionException("TTS 请求过多，请稍后重试")
   idleSlots.take() 获取 bounded slot；最多只有 slotCount 个 caller 在这里排队
-  try slot.synthesize(text)
+  try slot.synthesize(text,speed)
   finally:
     returnOrRelease(slot)
     admission.release()  # 无论 idleSlots.take 或合成是否抛异常都必须释放
 
-slot.synthesize(text):
+slot.synthesize(text,speed):
   提交到 slot 单线程 worker:
     CpuAffinity.applyCurrentThread(cpuMask)
     # affinity false 是性能降级，不改变合成结果
-    result = synthesizer.SpeakText(text)
+    speed == 0 -> result = synthesizer.SpeakText(text)
+    speed != 0 -> ratePercent = round((2^(speed/10)-1)*100)
+      ssml = speak/voice/prosody(ratePercent,text)，文本与voice名XML转义
+      result = synthesizer.SpeakSsml(ssml)
     reason == SynthesizingAudioCompleted → return result.audioData
     否则 → 抛命名错误（含取消详情）
     finally result.close()
@@ -165,6 +171,8 @@ returnOrRelease(slot):
   retired 且没有其他 retained caller 等待该旧池 → release slot
   否则 slot 放回 idle queue，继续服务已 retain 的旧请求
 ```
+
+`NativeBridge.ttsSynthesizeAsyncWithSpeed/ttsSynthesizeWithSpeed` 将语速校验后传入 `TtsEngine.synthesize(text,speed)`。旧 APK 不含带语速桥时，speed=0 调用旧入口；speed!=0 立即回传原生语速不支持，服务端遵循既有 `serverEnabled` 决定回退。WAV 音量阶段统一调用 `adjustWavVolume(buffer,volume)`，不改变样本数和时长。
 
 ## NativeBridge（异步合成桥）
 

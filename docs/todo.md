@@ -218,6 +218,8 @@
 
 ## TTS
 
+- ⏳待发布/设备验收 [2026-10-14] TTS原生语速源码及定向 Node/浏览器/Android 单测已通过；需将`servicePackage=true`服务包、`minApk=true` APK发布后，确认旧 APK 回退、新 APK 原生语速及 WAV 仅调音量。源码任务：`docs/task/20261014_TTS语速仅走原生接口.md`。
+
 - ⏳待维护 [2026-10-11] chat-tts-interruption.test.js旧显示页静态断言：仍查找display.html中的displayChatTtsStop与内联函数；当前HEAD也同名失败，需按现有模块结构维护，未影响本轮154项TTS/历史回归。
 
 

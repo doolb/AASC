@@ -1,7 +1,7 @@
 'use strict';
 const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
 
-// 业务薄层不选择/保存账号；上游使用固定网页参数，统一语速和音量在返回WAV后本地应用。
+// 业务薄层不选择/保存账号；上游使用固定网页语速和音量，返回后只应用全局音量。
 function createDoubaoChatProvider({ speechService } = {}) {
     return {
         async generate(request, settings) {

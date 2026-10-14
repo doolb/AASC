@@ -15,6 +15,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 class TtsEnginePool private constructor(
     private val slots: List<Slot>,
@@ -40,7 +42,7 @@ class TtsEnginePool private constructor(
 
     interface Synthesizer {
         @Throws(Exception::class)
-        fun synthesize(text: String): ByteArray
+        fun synthesize(text: String, speed: Int): ByteArray
 
         fun release()
     }
@@ -97,10 +99,10 @@ class TtsEnginePool private constructor(
     private var activeUsers = 0
 
     @Throws(Exception::class)
-    fun synthesize(text: String): ByteArray {
+    fun synthesize(text: String, speed: Int = 0): ByteArray {
         retain()
         return try {
-            synthesizeRetained(text)
+            synthesizeRetained(text, speed)
         } finally {
             releaseRetain()
         }
@@ -123,14 +125,14 @@ class TtsEnginePool private constructor(
     }
 
     @Throws(Exception::class)
-    internal fun synthesizeRetained(text: String): ByteArray {
+    internal fun synthesizeRetained(text: String, speed: Int = 0): ByteArray {
         if (!admission.tryAcquire()) {
             throw RejectedExecutionException(OVERLOAD_ERROR_MESSAGE)
         }
         var slot: Slot? = null
         return try {
             slot = idleSlots.take()
-            slot.synthesize(text, affinityApplier)
+            slot.synthesize(text, speed, affinityApplier)
         } finally {
             if (slot != null) {
                 returnOrRelease(slot)
@@ -179,11 +181,11 @@ class TtsEnginePool private constructor(
         }
 
         @Throws(Exception::class)
-        fun synthesize(text: String, affinityApplier: (Long) -> Boolean): ByteArray {
+        fun synthesize(text: String, speed: Int, affinityApplier: (Long) -> Boolean): ByteArray {
             val future = executor.submit(Callable {
                 // affinity 只影响调度位置；失败时继续使用 Android 默认调度，不能影响语音生成结果。
                 affinityApplier(cpuMask)
-                synthesizer.synthesize(text)
+                synthesizer.synthesize(text, speed)
             })
             var interrupted = false
             try {
@@ -225,15 +227,18 @@ class TtsEnginePool private constructor(
             config.setSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
             config.setSpeechSynthesisVoice(request.voiceName, request.embeddedKey)
             // 生成端只拿 WAV 数据，必须显式传 null AudioConfig，禁止 SDK 连接默认扬声器。
-            return MicrosoftSynthesizer(SpeechSynthesizer(config, null))
+            return MicrosoftSynthesizer(SpeechSynthesizer(config, null), request.voiceName)
         }
     }
 
     private class MicrosoftSynthesizer(
-        private val synthesizer: SpeechSynthesizer
+        private val synthesizer: SpeechSynthesizer,
+        private val voiceName: String
     ) : Synthesizer {
-        override fun synthesize(text: String): ByteArray {
-            val result: SpeechSynthesisResult = synthesizer.SpeakText(text)
+        override fun synthesize(text: String, speed: Int): ByteArray {
+            if (speed !in -10..10) throw IllegalArgumentException("原生 TTS 语速参数无效")
+            val result: SpeechSynthesisResult = if (speed == 0) synthesizer.SpeakText(text)
+                else synthesizer.SpeakSsml(createTtsSpeedSsml(text, voiceName, speed))
             try {
                 if (result.getReason() != ResultReason.SynthesizingAudioCompleted) {
                     val details = SpeechSynthesisCancellationDetails.fromResult(result)
@@ -249,4 +254,25 @@ class TtsEnginePool private constructor(
             synthesizer.close()
         }
     }
+}
+
+internal fun createTtsSpeedSsml(text: String, voiceName: String, speed: Int): String {
+    require(speed in -10..10 && speed != 0) { "原生 TTS 语速参数无效" }
+    val ratePercent = ((2.0.pow(speed.toDouble() / 10.0) - 1.0) * 100.0).roundToInt()
+    return "<speak version=\"1.0\" xmlns=\"http://www.w3.org/2001/10/synthesis\" xml:lang=\"zh-CN\">" +
+        "<voice name=\"${escapeTtsXml(voiceName)}\"><prosody rate=\"${ratePercent}%\">${escapeTtsXml(text)}</prosody></voice></speak>"
+}
+
+private fun escapeTtsXml(value: String): String {
+    val valid = buildString {
+        for (codePoint in value.codePoints().toArray()) {
+            if (codePoint == 0x9 || codePoint == 0xA || codePoint == 0xD
+                || codePoint in 0x20..0xD7FF || codePoint in 0xE000..0xFFFD
+                || codePoint in 0x10000..0x10FFFF) {
+                append(String(Character.toChars(codePoint)))
+            }
+        }
+    }
+    return valid.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&apos;")
 }

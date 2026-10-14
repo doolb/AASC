@@ -8,7 +8,7 @@ const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts
 const { createProviderRegistry } = require('../src/apps/server/modules/tts/tts-provider-registry');
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { normalizeTtsPauseText } = require('../src/apps/server/modules/media/tts-text-normalizer');
-const { adjustWav, decodeAudio, wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');
+const { adjustWavVolume, decodeAudio, wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');
 const cache = require('../src/external/tts/tts-audio-cache');
 const source = fs.readFileSync(path.resolve(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
 const start = source.indexOf('async function generateTtsWithFallback(');
@@ -20,11 +20,11 @@ function fixture({ device = 'server', serverEnabled = true, generationError = nu
     for (let i = 0; i < 8; i++) pcm.writeInt16LE(1000, i * 2);
     const audio = wrapPcm(pcm);
     const calls = [];
-    const context = { normalizeTtsPauseText, adjustWav, decodeAudio, BUSINESS_TYPES: { SYSTEM_BROADCAST: 'system_broadcast' },
+    const context = { normalizeTtsPauseText, adjustWavVolume, decodeAudio, BUSINESS_TYPES: { SYSTEM_BROADCAST: 'system_broadcast' },
         pendingDisplayTtsRequestId: 0, log() {},
         config: { get: () => device }, isServerTtsEnabled: () => serverEnabled,
         findDisplayWithTts: id => noDisplay ? null : { id },
-        sendTtsGenerateToDisplay: async (display, text) => { calls.push({ type: 'display', display, text }); if (generationError) throw generationError; return { audioData: audio.toString('base64') }; },
+        sendTtsGenerateToDisplay: async (display, text, requestId, nativeSpeed) => { calls.push({ type: 'display', display, text, nativeSpeed }); if (generationError) throw generationError; return { audioData: audio.toString('base64') }; },
         ttsAudioCache: { storeAudio: store },
         tts: { generateTTS: async (...args) => { calls.push({ type: 'server', args }); return 'server-reference.wav'; } }
     };
@@ -48,9 +48,10 @@ test('实际原生system生成路由保留优先目标、参数、短停顿与�
     const reference = await display.generate('测试...', undefined, undefined, 'preferred');
     assert.equal(display.calls[0].display.id, 'preferred');
     assert.equal(display.calls[0].text, '测试.');
+    assert.equal(display.calls[0].nativeSpeed, 10);
     assert.equal(display.calls.length, 1);
     const result = cache.getAudio(reference).buffer;
-    assert.equal(result.length, 52);
+    assert.equal(result.length, 60, 'WAV 语速处理不得改变样本数或时长');
     assert.equal(result.readInt16LE(44), 500);
 });
 

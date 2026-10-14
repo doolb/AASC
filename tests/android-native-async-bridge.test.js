@@ -16,6 +16,8 @@ test('原生桥提供 ASR/TTS 异步入口并通过主线程回调 JS', () => {
 
     assert.match(bridge, /fun asrRecognizeAsync\(/);
     assert.match(bridge, /fun ttsSynthesizeAsync\(/);
+    assert.match(bridge, /fun ttsSynthesizeAsyncWithSpeed\(/);
+    assert.match(bridge, /fun ttsSynthesizeWithSpeed\(/);
     assert.match(bridge, /mainHandler\.post/);
     assert.match(bridge, /onNativeAsrResult/);
     assert.match(bridge, /onNativeTtsResult/);
@@ -29,6 +31,8 @@ test('录音端使用公共路径，APK 提供端保留原生异步入口', () =
     assert.match(display, /window\.onNativeTtsResult\s*=\s*function/);
     assert.match(display, /nativeBridge\.ttsSynthesizeAsync\(/);
     assert.match(display, /typeof nativeBridge\.ttsSynthesizeAsync/);
+    assert.match(display, /nativeBridge\.ttsSynthesizeAsyncWithSpeed\(/);
+    assert.match(display, /data\.speed === undefined \? 0 : Number\(data\.speed\)/);
     assert.match(display, /fetch\('\/api\/asr\/recognize'/);
     assert.match(display, /nativeBridge\.asrRecognizeAsyncWithOptions\(/);
     assert.match(display, /window\.onNativeAsrResult\s*=\s*function/);
@@ -55,6 +59,14 @@ test('服务端显示端模式按连接顺序转发 ASR，并保持 60 秒超时
     assert.match(server, /function sendAudioToDisplayAsr[\s\S]*?const timeoutMs = 60000/);
     assert.match(server, /type:\s*['"]asrAudio['"]/);
     assert.doesNotMatch(server, /192\.168\.1\.6/);
+});
+
+test('显示端离线TTS请求将Provider语速传给原生合成桥', () => {
+    const server = read(SERVER);
+    assert.match(server, /function sendTtsGenerateToDisplay\(display, text, requestId, speed = 0\)/);
+    assert.match(server, /type: 'ttsGenerate',[\s\S]*?speed: Number\.isFinite\(Number\(speed\)\)/);
+    assert.match(server, /sendTtsGenerateToDisplay\(display, ttsText, requestId, speed\)/);
+    assert.match(server, /adjustWavVolume\(decodeAudio\(result\.audioData\), options\.volume\)/);
 });
 
 test('TTS 原生桥在提交边界按 policy slotCount 有界并同步换代', () => {

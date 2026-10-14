@@ -3311,6 +3311,11 @@
 
         // 服务端 tts.device='display' 时下发离线合成请求；模型未就绪先触下载并快速回错由服务端回退
         function handleTtsGenerate(data) {
+            const speed = data.speed === undefined ? 0 : Number(data.speed);
+            if (!Number.isInteger(speed) || speed < -10 || speed > 10) {
+                sendTtsResult(data.requestId, { error: '原生 TTS 语速参数无效' });
+                return;
+            }
             if (!nativeTtsAvailable) {
                 sendTtsResult(data.requestId, { error: '原生 TTS 不可用' });
                 return;
@@ -3322,7 +3327,25 @@
                 sendTtsResult(data.requestId, { error: '模型下载中' });
                 return;
             }
-            if (typeof nativeBridge.ttsSynthesizeAsync === 'function') {
+            if (typeof nativeBridge.ttsSynthesizeAsyncWithSpeed === 'function') {
+                try {
+                    const accepted = JSON.parse(nativeBridge.ttsSynthesizeAsyncWithSpeed(data.requestId, data.text || '', speed));
+                    if (!accepted.accepted) {
+                        sendTtsResult(data.requestId, { error: accepted.error || '语音合成任务提交失败' });
+                    } else {
+                        sendTtsGenerating(data.requestId);
+                    }
+                } catch (e) {
+                    sendTtsResult(data.requestId, { error: e.message || '语音合成任务提交异常' });
+                }
+                return;
+            }
+
+            if (speed !== 0 && typeof nativeBridge.ttsSynthesizeWithSpeed !== 'function') {
+                sendTtsResult(data.requestId, { error: '当前 APK 原生 TTS 不支持语速设置' });
+                return;
+            }
+            if (speed === 0 && typeof nativeBridge.ttsSynthesizeAsync === 'function') {
                 try {
                     const accepted = JSON.parse(nativeBridge.ttsSynthesizeAsync(data.requestId, data.text || ''));
                     if (!accepted.accepted) {
@@ -3339,7 +3362,10 @@
             // 旧 APK 没有异步桥方法时保留同步回退，避免服务器页面升级后旧包完全失去 TTS。
             sendTtsGenerating(data.requestId);
             try {
-                const res = JSON.parse(nativeBridge.ttsSynthesize(data.text || ''));
+                const synthesize = typeof nativeBridge.ttsSynthesizeWithSpeed === 'function'
+                    ? nativeBridge.ttsSynthesizeWithSpeed
+                    : nativeBridge.ttsSynthesize;
+                const res = JSON.parse(synthesize.call(nativeBridge, data.text || '', speed));
                 if (res && res.audio) {
                     sendTtsResult(data.requestId, { audioData: res.audio });
                 } else {

@@ -1,7 +1,7 @@
 'use strict';
 
 const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('./tts-provider-policy');
-const { resolveQwenEndpoint } = require('./qwen-api-contract');
+const { resolveQwenEndpoint, isQwenAudioModel } = require('./qwen-api-contract');
 const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
@@ -23,6 +23,11 @@ const PROVIDER_DEFAULTS = Object.freeze({
     'qwen-chat': { enabled: true, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
         defaultVoice: 'zh_female_quarkF531S0_ptts', resourceId: '' }
 });
+
+function supportsNativeSpeed(provider, model) {
+    if (PROVIDER_CAPABILITIES[provider]?.supportsSpeed !== true) return false;
+    return provider !== 'qwen-api' || isQwenAudioModel(model);
+}
 
 function normalizeNumber(value, fallback, min, max) {
     const input = value === undefined ? fallback : value;
@@ -83,7 +88,7 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         }
         mappedModel=!QWEN_CHAT_MODELS.has(model);
     }
-    const defaultSpeed = PROVIDER_CAPABILITIES[provider].supportsSpeed
+    const defaultSpeed = supportsNativeSpeed(provider, model)
         ? normalizeNumber(patch.defaultSpeed, previous.defaultSpeed ?? 0, -10, 10) : undefined;
     return {
         endpoint: provider === 'qwen-api' && endpoint ? resolveQwenEndpoint(endpoint, model) : endpoint, model,
@@ -115,7 +120,8 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
         const providerPatch = providersPatch[id] || {};
         const previousProvider = previous.providers?.[id] || {};
         const speed = providerPatch.defaultSpeed ?? previousProvider.defaultSpeed ?? migratedSpeed;
-        const withMigratedSpeed = PROVIDER_CAPABILITIES[id].supportsSpeed ? { ...providerPatch, defaultSpeed: speed } : providerPatch;
+        const model = providerPatch.model ?? previousProvider.model ?? PROVIDER_DEFAULTS[id].model;
+        const withMigratedSpeed = supportsNativeSpeed(id, model) ? { ...providerPatch, defaultSpeed: speed } : providerPatch;
         return [id, normalizeProviderSettings(id, withMigratedSpeed, previousProvider, options)];
     }));
     const selections = Object.fromEntries(Object.entries(SELECTION_BUSINESSES).map(([key, business]) => {
@@ -145,4 +151,4 @@ function redactSettings(settings) {
     })) };
 }
 
-module.exports = { PROVIDER_DEFAULTS, PROVIDER_CAPABILITIES, SELECTION_BUSINESSES, normalizeSettings, redactSettings, normalizeNumber };
+module.exports = { PROVIDER_DEFAULTS, PROVIDER_CAPABILITIES, SELECTION_BUSINESSES, normalizeSettings, redactSettings, normalizeNumber, supportsNativeSpeed };

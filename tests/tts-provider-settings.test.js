@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
-const { normalizeSettings, redactSettings, PROVIDER_CAPABILITIES } = require('../src/apps/server/modules/tts/tts-provider-settings');
+const { normalizeSettings, redactSettings, PROVIDER_CAPABILITIES, supportsNativeSpeed } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { normalizeTemplateTts, resolveProviderConfig, BUSINESS_TYPES } = require('../src/apps/server/modules/tts/tts-provider-policy');
 
 test('qwen-chat模型保存校验、别名规范化与历史不兼容模型恢复，API模型规则保持', () => {
@@ -174,6 +174,19 @@ test('语速能力声明与不支持Provider的历史语速清理一致', () => 
     const settings = normalizeSettings({ defaultSpeed: 8, providers: { 'doubao-chat': { defaultSpeed: -5 } } });
     assert.ok(!Object.hasOwn(settings.providers['doubao-chat'], 'defaultSpeed'));
     assert.equal(settings.providers['qwen-api'].defaultSpeed, 8);
+});
+
+test('Qwen API只对原生声明rate的Qwen-Audio模型保存语速', () => {
+    assert.equal(supportsNativeSpeed('qwen-api', 'qwen-audio-3.1-tts-flash'), true);
+    assert.equal(supportsNativeSpeed('qwen-api', 'qwen-audio-3.0-tts-plus'), true);
+    assert.equal(supportsNativeSpeed('qwen-api', 'qwen3-tts-flash'), false);
+    assert.equal(supportsNativeSpeed('qwen-api', 'custom-qwen-alias'), false);
+    const audioModel = normalizeSettings({ providers: { 'qwen-api': { defaultSpeed: 4 } } });
+    assert.equal(audioModel.providers['qwen-api'].defaultSpeed, 4);
+    const unsupported = normalizeSettings({ providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultSpeed: 4 } } });
+    assert.ok(!Object.hasOwn(unsupported.providers['qwen-api'], 'defaultSpeed'));
+    const switched = normalizeSettings({}, { providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultSpeed: 7 } } });
+    assert.ok(!Object.hasOwn(switched.providers['qwen-api'], 'defaultSpeed'));
 });
 
 

@@ -46,7 +46,7 @@
 
 【控制端】                  【服务器】                【显示端 display.html】
   语音生成设备(server/display) → ttsConfig → 检测/下载模型 → ttsGeneration 能力
-                                    │  ttsGenerate（base64 WAV）
+                                    │  ttsGenerate（text、speed -10..10）
                                     ├─ ttsGenerating（3s 内确认）
                                     └─ ttsResult ─► 写临时 wav → 播放
                                     回退：显示端失败 → 服务端 generateTTS
@@ -63,10 +63,14 @@ Embedded Speech SDK 的 `SpeechSynthesizer` 封装。
 - 授权：嵌入式语音密钥与参考 POC 一致，模型内置授权
 - 并发：`TtsEnginePool` 按 `max(1, CpuPolicy.totalCoreCount)` 创建槽位；每个槽拥有独立 `SpeechSynthesizer` 和单线程 worker，并额外使用公平 `Semaphore(slotCount * 2)` 做显式有限准入（`slotCount` 活跃 + `slotCount` 排队），超限请求立即抛出明确的 `RejectedExecutionException`，而不是无限阻塞线程
 - 绑定：每个槽在自己的 worker 线程调用 `CpuAffinity.applyCurrentThread(cpuMask)`；失败只降级为 Android 默认调度，不让合成失败
-- 合成：`SpeakText(text)` 返回 WAV 字节；构造主合成器和声线探测器时均显式传入空 `AudioConfig`，禁止 Embedded Speech SDK 自动连接默认扬声器；`probeVoice()` 同时关闭 `SynthesisVoicesResult` 和探测 synthesizer，避免 SDK 结果对象泄漏
+- 合成：0 语速使用 `SpeakText(text)`，非 0 语速用 `SpeakSsml()` 的 SSML `prosody rate` 原生控制，速度映射范围为原速的 0.5 至 2 倍；文本和 voice 名 XML 转义。两种方式均返回 WAV 字节，不做 WAV 样本数重采样。构造主合成器和声线探测器时均显式传入空 `AudioConfig`，禁止 Embedded Speech SDK 自动连接默认扬声器；`probeVoice()` 同时关闭 `SynthesisVoicesResult` 和探测 synthesizer，避免 SDK 结果对象泄漏
 - 重配：模型加载或 TTS CPU policy 变更时先构造新 pool，替换成功后旧 pool 进入 retire；已经 retain、in-flight 或等待旧 slot 的请求继续完成，最后一个旧 caller 退出后再释放 slot
 - 播放职责：APK 原生层只负责生成并回传 WAV，服务器收到后统一通过现有 `playAudio` 流程播放，避免生成阶段和服务器播放阶段各播一次
 - 释放：`release()` 置 `ready=false` 并 retire 当前 pool；不直接释放正在执行的合成器
+
+### 2026-10-14 原生语速接口
+
+服务端向显示端的 `ttsGenerate` 消息增加 `speed`（-10 至 10）；Android 新增独立的同步/异步带语速桥方法，旧 `ttsSynthesize(text)` 与 `ttsSynthesizeAsync(requestId,text)` 保持兼容并默认 0 语速。新 APK 通过 Embedded Speech SDK 的 SSML `prosody rate` 处理非 0 语速，WAV 阶段不改样本数；旧 APK 收到非 0 语速请求时回报“不支持原生语速”，由既有服务器回退策略处理。WAV 进入统一缓存前仍可按全局音量调节 PCM 幅值。
 
 ### 2. TtsModelFiles（新增纯逻辑）
 

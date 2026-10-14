@@ -23,7 +23,7 @@ function resolveQwenEndpoint(endpoint, model) {
 function createQwenInput(request, model) {
     const input = { text: request.text, voice: request.voice };
     return isQwenAudioModel(model)
-        ? { ...input, format: 'wav', sample_rate: 24000 }
+        ? { ...input, format: 'wav', sample_rate: 24000, rate: request.speed }
         : { ...input, language_type: 'Auto' };
 }
 

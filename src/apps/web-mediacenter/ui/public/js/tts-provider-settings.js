@@ -4,6 +4,7 @@
     const PROVIDERS = { system: '系统原生', 'qwen-chat': '国内千问网页', 'qwen-api': 'Qwen API', 'doubao-api': '豆包 API', 'doubao-chat': '豆包网页朗读（实验）' };
     const PROVIDER_CAPABILITIES = { system: { supportsSpeed: true }, 'qwen-chat': { supportsSpeed: true },
         'qwen-api': { supportsSpeed: true }, 'doubao-api': { supportsSpeed: true }, 'doubao-chat': { supportsSpeed: false } };
+    const QWEN_API_RATE_MODELS = new Set(['qwen-audio-3.1-tts-flash', 'qwen-audio-3.0-tts-flash', 'qwen-audio-3.0-tts-plus']);
     const BUSINESSES = { aiReplyDefault: 'AI / Agent 回复', textMedia: '文本阅读', systemBroadcast: '报时与系统播报' };
     const NUMBER_FIELDS = { defaultSpeed: [-10, 10], defaultVolume: [0, 100] };
     // 此页仅编辑业务偏好；凭证、服务地址和资源 ID 统一交由 Chat2API 账户管理。
@@ -31,6 +32,22 @@
         label.style.marginTop = '8px';
         label.appendChild(node);
         parent.appendChild(label);
+        return label;
+    }
+
+    function supportsNativeSpeed(provider, model) {
+        if (PROVIDER_CAPABILITIES[provider]?.supportsSpeed !== true) return false;
+        return provider !== 'qwen-api' || QWEN_API_RATE_MODELS.has(String(model || '').trim());
+    }
+
+    function updateSpeedVisibility(provider) {
+        const inputs = fields.get(provider);
+        if (!inputs?.defaultSpeed) return;
+        const supported = supportsNativeSpeed(provider, inputs.model?.value);
+        const wrapper = inputs.defaultSpeed.parentElement;
+        inputs.defaultSpeed.disabled = !supported;
+        wrapper.hidden = !supported;
+        wrapper.style.display = supported ? 'block' : 'none';
     }
 
     function selectProvider(business) {
@@ -211,6 +228,7 @@
             if (['qwen-api', 'doubao-api'].includes(id)) {
                 group.appendChild(create('p', `由 Chat2API 的 ${id === 'qwen-api' ? 'qwen-api' : 'doubaapi'} 提供语音合成。请在 Chat2API 添加 API 账号时配置 API Key、可选服务端点${id === 'doubao-api' ? '与资源 ID' : ''}；留空使用官方默认。`));
                 group.appendChild(create('p', `可填写该来源的模型或映射别名${id === 'qwen-api' ? '，例如 qiaoxiaojiao' : ''}；这里只保存启用、模型、音色及本Provider语速；音量使用上方全局设置。账号保存仅校验格式，尚未远端验证。`));
+                if (id === 'qwen-api') group.appendChild(create('p', '语速只对原生支持 input.rate 的 Qwen-Audio 3.0/3.1 TTS 模型显示；Qwen3-TTS HTTP 接口未声明语速参数时隐藏。'));
             }
             if (id === 'system') group.appendChild(create('p', '沿用现有 TTS 生成设备、服务器开关及原生音色配置。'));
             const query = create('button', '查询音色');
@@ -225,6 +243,8 @@
             list.id = `ttsProviderVoices-${id}`;
             group.appendChild(list);
             fields.set(id, inputs);
+            inputs.model?.addEventListener('input', () => updateSpeedVisibility(id));
+            updateSpeedVisibility(id);
             fragment.appendChild(group);
         }
         host.replaceChildren(fragment);
@@ -259,6 +279,7 @@
                 if (input.type === 'checkbox') input.checked = Boolean(value[name]);
                 else input.value = value[name] ?? '';
             }
+            updateSpeedVisibility(id);
             setVoiceList(id);
         }
         if (isReply) {
@@ -279,6 +300,7 @@
             const settings = {};
             for (const [name, input] of Object.entries(inputs)) {
                 if (name === 'voiceStatus') continue;
+                if (name === 'defaultSpeed' && input.disabled) continue;
                 settings[name] = input.type === 'checkbox' ? input.checked : input.value;
             }
             patch.providers[id] = settings;
@@ -323,6 +345,6 @@
     }
 
     window.TtsProviderSettings = { init, handleConfig, handleVoices, handleDisconnected, save, loadVoices, updateTemplateVoice,
-        getConfig: () => config, getProviderCapabilities: () => PROVIDER_CAPABILITIES };
+        getConfig: () => config, getProviderCapabilities: () => PROVIDER_CAPABILITIES, supportsNativeSpeed };
     init();
 })();

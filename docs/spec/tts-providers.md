@@ -1,24 +1,27 @@
 # TTS Provider 与播报配置实现
 
-## Provider 独立语速与全局音量入口（2026-10-14，需求修正伪代码）
+## Provider 原生语速与全局音量入口（2026-10-14，需求修正伪代码）
 
 ```text
 已有声明：
   TtsProviderSettings.init/save/handleConfig、normalizeSettings
   getTtsProviderSettings/setTtsProviderSettings、setTtsProviderConfig/ttsProviderConfig
-  createTtsProviderService.generate、adjustWav、SelfTest.tts_provider_config
+  createTtsProviderService.generate、adjustWavVolume、SelfTest.tts_provider_config
 新增定义：
   TtsProviderCapabilities { supportsSpeed }；每个 Provider 声明上游是否原生接受语速参数
-  ProviderSettings.defaultSpeed；仅 supportsSpeed=true 的 Provider 保存，范围 -10..10
+  supportsNativeSpeed(provider, model)；qwen-api 按模型原生能力动态判定，其它 Provider 使用能力声明
+  ProviderSettings.defaultSpeed；仅向当前原生支持语速的方式展示并应用，范围 -10..10
   SharedTtsParameters { defaultVolume }；权威快照根级，持久化于 config.tts.sharedParameters，范围 0..100
-  当前 supportsSpeed=true：system、qwen-chat、qwen-api、doubao-api
+  Provider固定支持语速：system、qwen-chat、doubao-api；qwen-api按模型能力判定
+  Qwen-Audio 3.0/3.1 TTS -> 上游 input.rate 范围 0.5..2；Qwen3-TTS HTTP文档未声明rate -> 隐藏语速、不发送rate
   doubao-chat 上游不接受语速参数 -> supportsSpeed=false；隐藏语速控件并忽略历史语速
-  doubao-chat 的本地 WAV 后处理只应用全局音量，不视为 Provider 原生语速能力
+  TtsEngine.synthesize(text, speed)；Android Embedded Speech SSML prosody rate原生控制语速
+  adjustWavVolume(buffer, volume)；仅调整单声道16位PCM幅值，不调整样本数/时长
 操作流程：
   读取旧配置 -> 保留已有每Provider语速；无每Provider值时，以旧共享语速初始化所有支持语速的 Provider
   system 没有旧共享语速 -> 沿用 config.tts.defaultSpeed；缺省语速/音量回退 0/100
-  TTS 面板 -> 只渲染一组全局音量；每个 Provider 设置卡按 supportsSpeed 显示独立语速输入
-  语速不受支持的 Provider -> 不渲染语速控件、不提交 defaultSpeed，服务端丢弃历史字段
+  TTS 面板 -> 只渲染一组全局音量；每个 Provider按当前原生模型能力显示独立语速输入
+  语速不受支持的 Provider/模型 -> 隐藏语速控件；doubao-chat不保存defaultSpeed，其它同Provider可切换模型时保留已有偏好但不发送
   三类业务选择、模板音色、Provider 模型/音色/启用状态 -> 保持原独立配置
   保存 -> setTtsProviderConfig -> 规范化各 Provider 语速、全局音量与业务/Provider 字段
   config.set(tts.sharedParameters.defaultVolume 与业务选择) -> 持久化共享音量
@@ -30,13 +33,19 @@
   TTS 请求显式 speed -> 覆盖所选Provider默认；缺省 speed -> 使用该 Provider.defaultSpeed
   TTS 请求显式 volume -> 覆盖全局音量；缺省 volume -> 使用 SharedTtsParameters.defaultVolume
   语速转换为倍率时仅转换一次；音量继续使用 0..100
-  doubao-chat -> 上游仍按固定 1 倍/100% 生成 -> 本地 adjustWav 保持中性语速并应用全局音量 -> 原 WAV 校验与缓存
-  其他 Provider -> 将所选Provider语速和全局音量传入既有适配器 -> 原合成、缓存、播放、取消和队列流程
+  qwen-api且模型原生支持rate -> 倍率写入上游input.rate -> WAV只按全局音量处理
+  doubao-api/qwen-chat/system -> 将语速传入既有上游/原生接口 -> WAV只按全局音量处理
+  Android显示端 -> ttsGenerate携带-10..10 -> 新原生桥使用Embedded Speech SSML prosody rate -> WAV只按全局音量处理
+  旧APK无带语速桥且speed=0 -> 调用旧原生入口；旧APK无带语速桥且speed!=0 -> 返回不支持，由既有服务器fallback处理
+  qwen-api且模型不支持rate -> 隐藏语速控件、不发送input.rate，不做本地变速
+  所有音量后处理 -> adjustWavVolume -> 不改变样本数、播放时长或采样率 -> 原WAV校验/缓存/播放
 自测流程：
   每Provider语速互不覆盖；全局音量对所有业务/Provider生效
-  supportsSpeed=false 时不显示、不提交语速字段；边界值、旧共享语速迁移与双存储回滚
+  非原生支持Provider/模型隐藏语速；Qwen-Audio传input.rate且WAV样本数不受本地语速处理影响
+  Qwen3-TTS不传rate；doubao-chat隐藏语速；Android SSML映射/转义及旧APK非零语速fallback
+  WAV音量调整只改变幅值且样本数不变；边界值、旧共享语速迁移与双存储回滚
   多控制端保存广播、断线重连回填；Provider/业务/模板音色设置保持独立
-  显式请求参数分别优先于所选Provider语速和全局音量；doubao-chat固定上游音频按本地值调整
+  显式请求参数分别优先于所选Provider语速和全局音量；任一WAV后处理不得改变语速
 ```
 
 ## 开放qwen-chat非AI业务（2026-10-13，已实现伪代码）
@@ -90,7 +99,7 @@ system -> 原生生成；不继承API音色，不读云端账号
 qwen-chat -> emoji入口过滤、已登记网页模型或映射别名、expectedProviderId=qwen
 qwen-api -> 已知原模型转换限定别名，用户映射别名保持 -> expectedProviderId=qwen-api
 doubao-api -> 默认doubaapi/tts或用户映射别名 -> expectedProviderId=doubaapi
-doubao-chat -> 原严格账号映射、固定网页音色与上游参数 -> expectedProviderId=doubaochat -> 本地adjustWav(0, 全局音量)
+doubao-chat -> 原严格账号映射、固定网页音色与上游参数 -> expectedProviderId=doubaochat -> 本地adjustWavVolume(全局音量)
 四路薄层 -> Chat2API speech.generate；不读取旧密钥或构造HTTP
 speech -> application.plan -> 显式参数 > 映射默认 > 业务默认 > 模型默认
 能力校验 -> 在归属Provider中调度账号 -> 当前credentials.apiKey或网页凭据
@@ -130,7 +139,7 @@ Agent配对历史 -> 直接读取同一记录的user字段
 ```text
 已有声明：
   normalizeSettings、PROVIDER_DEFAULTS、resolveProviderConfig、createProviderRegistry
-  requestJson、requestLimited、wrapPcm、adjustWav、validateWav
+  requestJson、requestLimited、wrapPcm、adjustWavVolume、validateWav
   generateTtsWithFallback、普通AI/Agent/语音聊天入口、resolveChatReplyTtsOptions
   Chat.playMessage、Chat.getReplyTtsContext、历史消息与流式回复按钮
 新增定义：
@@ -175,7 +184,7 @@ Agent配对历史 -> 直接读取同一记录的user字段
 ```text
 已有声明：
   requestLimited、requestJson、createProviderRegistry、现有句子生成失败日志
-  adjustWav、validateWav维持当前严格校验
+  adjustWavVolume、validateWav维持当前严格校验
 新增定义：
   ProviderKnownErrors { Provider标识, 白名单错误码, 固定中文提示 }
   ProviderHttpErrorSummary { HTTP状态, 白名单上游错误码, 固定提示 }
@@ -397,7 +406,7 @@ Chat2API服务:
     -> system再回退config.tts.defaultSpeed，音量读取旧共享值或旧Provider值；最终默认0/100
   Provider配置输出 -> 仅支持语速Provider包含defaultSpeed；所有Provider均不含defaultVolume；凭证脱敏保持原规则
   system defaultSpeed -> 同步旧config.tts.defaultSpeed以兼容原生入口
-  doubao-chat固定参数上游结果 -> adjustWav(0,全局音量) -> 原WAV校验/缓存/播放
+  doubao-chat固定参数上游结果 -> adjustWavVolume(全局音量) -> 原WAV校验/缓存/播放
   保存失败 -> 恢复旧内存值 -> 回传旧脱敏配置和错误
   保存成功 -> 向所有控制端广播脱敏权威值 -> 初始化/重连补发
   API凭证空输入 -> 保留；明确clearCredential -> 清除；API广播仅credentialConfigured

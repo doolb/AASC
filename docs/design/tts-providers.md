@@ -1,14 +1,14 @@
 # TTS Provider 与播报配置
 
-## Provider 独立语速与全局音量入口（2026-10-14，需求修正）
+## Provider 原生语速与全局音量入口（2026-10-14，需求修正）
 
-控制端声纹面板的“语音服务与音色”区域只提供一组全局音量设置；语速继续按 TTS Provider 分别配置，范围保持 -10 至 10，音量范围为 0 至 100。每个 Provider 声明是否原生接受语速参数；不支持语速的 Provider 不显示语速输入，也不接受或回传其历史语速字段。豆包网页朗读上游使用固定音色、1 倍速和 100% 音量，不接受语速参数，因此按用户确认隐藏语速；本地 WAV 后处理只应用全局音量。业务 Provider 选择、模板音色、模型和 Provider 启用状态继续分别配置；单次合成显式语速/音量分别覆盖所选 Provider 默认语速和全局音量。
+控制端声纹面板的“语音服务与音色”区域只提供一组全局音量设置；语速继续按 TTS Provider 分别配置，范围保持 -10 至 10，音量范围为 0 至 100。只有上游原生接口明确支持语速的 Provider/模型才显示语速项；不支持的方式不做 WAV 变速。WAV 后处理只调音量，不改变样本数、时长或音高。业务 Provider 选择、模板音色、模型和 Provider 启用状态继续分别配置；单次合成显式语速/音量分别覆盖所选 Provider 默认语速和全局音量。
 
-当前能力声明：system、qwen-chat、qwen-api、doubao-api 接收语速设置；doubao-chat 使用上游固定语速，不接收语速设置。
+当前能力声明：system、qwen-chat、doubao-api 使用原生语速参数；qwen-api 仅对官方明确支持 `input.rate` 的 Qwen-Audio 3.0/3.1 TTS 模型显示语速，Qwen3-TTS HTTP 接口未声明语速字段时隐藏；doubao-chat 使用上游固定语速，不显示语速。Qwen-Audio 的 `input.rate` 直接传入上游，Android Embedded Speech 使用 SSML `prosody rate`，豆包 API 使用现有 `speech_rate`，国内千问网页使用现有原生 speed 字段。
 
 每 Provider 语速随 `ttsProviderConfig.providers[id].defaultSpeed` 进入权威快照并持久化在 `tts.providers`；共享音量仍在根级 `defaultVolume`，并持久化到 `config.tts.sharedParameters.defaultVolume`。继续复用 `setTtsProviderConfig` / `ttsProviderConfig` 的 WebSocket 保存、规范化、广播及重连快照，不新增 HTTP 配置接口。旧共享语速迁移时，先保留旧 Provider 专属值；缺少该值的支持语速 Provider 使用旧共享语速初始化，system 最后回退到 `config.tts.defaultSpeed`，再缺省为 0。没有旧音量时使用 100。system Provider 语速同步旧 `config.tts.defaultSpeed` 以兼容原生 TTS 路径。配置保存失败时保持两侧回滚并向控制端回传旧权威值。
 
-支持语速的 Provider 继续通过已有适配器处理各自语速与全局音量；豆包网页朗读上游固定为 1 倍速和 100% 音量，配置面板不提供语速，本地 WAV 后处理只应用全局音量，随后进入现有校验、缓存和播放链路。
+支持语速的 Provider 继续通过已有原生适配器处理语速；全局音量通过上游原生音量字段或 WAV 幅值处理应用。`adjustWavVolume` 不接受速度参数，只能改变 PCM 幅值，随后进入现有校验、缓存和播放链路。旧 Android APK 没有带速度的原生桥时，0 语速继续调用兼容入口；非 0 语速明确回错，由现有服务端 TTS fallback 决定是否接手。
 
 ## 开放qwen-chat非AI业务（2026-10-13，已实现）
 
@@ -50,7 +50,7 @@ Chat2API默认国内千问语音适配器使用纯Node校时、令牌注册/刷�
 
 无新增生产依赖。服务端/网页修改只标记 `servicePackage=true`，既有 minApk 状态保留。真实云端鉴权、声音播放、长队列及设备体验需有对应账号现场验收。
 
-system 音色沿用旧 tts.defaultVoice及原生显示端已加载音色；旧共享语速迁移到缺少Provider专属值的支持方式，已有值优先，system 最后回退旧 `tts.defaultSpeed`；旧音量继续作为全局音量来源。原生显示端与Qwen API使用本地 PCM 重采样，可能改变音高；豆包API/国内千问使用上游生成参数。豆包网页朗读不接受原生语速参数，固定上游速度，WAV 后处理只应用全局音量。音量在入缓存前调整。Qwen API 单次600字符，沿用业务分句，单句超限明确失败。
+system 音色沿用旧 tts.defaultVoice及原生显示端已加载音色；旧共享语速迁移到缺少Provider专属值的原生支持方式，已有值优先，system 最后回退旧 `tts.defaultSpeed`；旧音量继续作为全局音量来源。原生显示端、Qwen API、豆包 API 与国内千问均通过原生语音接口传语速；WAV 后处理只改音量幅值，不改变时长或音高。豆包网页朗读不接受语速参数，固定上游速度并隐藏设置。音量在入缓存前调整。Qwen API 单次600字符，沿用业务分句，单句超限明确失败。
 
 ## 系统原生路径与 Chat2API 统一语音（2026-10-11 已实现）
 
