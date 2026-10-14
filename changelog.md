@@ -12304,3 +12304,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 产物位于 `release/offline-update/legacy-apk-bridge/`；签名清单 `manifests/manifest-apk-min-v45.json` SHA-256 为 `d9f453d0d6b6e71727cb27a650378f92334c37da4db4cdb510a3e65bc89c7350`，APK SHA-256 为 `8a9f0f8418f4ed67e32e0e0837e715d6e17d91269a0c0302e8dd3fb9e6ebc3fd`。
   - RSA 验签、旧依赖字段及 code/dependencies 绑定检查通过，保留组件与当前发布清单逐项相同，APK signer 与旧 min 一致；min 打包与发布现有测试 21/21 通过。未修改源码或产物待打包状态，APK 实际提示及覆盖安装待设备验收。
   - 这是升级更新器的过渡清单；切换四组清单之后，未升级的旧 APK 将再次无法解析。因此发布分组清单前应先完成旧设备 APK 升级；若需长期兼容旧设备，应另外设计保留旧清单的发布通道。
+
+### 旧 Offline APK 过渡更新外网发布
+
+- ✅ [2026-10-14] 已将旧格式过渡更新发布至 `as@120.79.245.103:~/a/aasc-offline`，只上传 `apk/aasc-display-offline-min-v45.apk` 并原子替换外网 `manifest.json`；保留 code v78、单包 dependencies v8、Node min 种子 v69 与数据修复 v2。局域网未发布，仍为 min v41。
+  - APK 为 89,389,058 bytes，SHA-256 `8a9f0f8418f4ed67e32e0e0837e715d6e17d91269a0c0302e8dd3fb9e6ebc3fd`；清单 SHA-256 `d9f453d0d6b6e71727cb27a650378f92334c37da4db4cdb510a3e65bc89c7350`。APK 签名/profile/package、RSA 清单及外网全部组件 HTTP 完整大小/SHA-256 校验通过。
+  - 复用现有发布函数仅执行 WAN 目标；精确清理限定 code/dependencies/min 数字版本普通文件，旧 min v41 已清理，清单引用的代码、依赖、种子和数据修复保留，无清理错误。未构建或安装 APK，产物待打包聚合状态保持不变。
+  - 当前 `sync:offline-update` 已支持全部 common/android/linux64/win64 组，并兼容旧单包；对实际 v83 分组清单及过渡清单执行资源选择断言通过。旧版本脚本需先更新仓库。设备优先读取可用 LAN 清单，因此 LAN 仍为 v41 时不会从 WAN 自动比较更高 v45；同步过渡清单到 LAN 后才可在该 LAN 提示 v45。APK 实际更新提示待设备验收。
