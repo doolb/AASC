@@ -112,18 +112,18 @@ function validateDisplayBackgroundGlowPayload(payload, fallbackConfig = DEFAULT_
     };
 }
 
-// TTS 仅调字幕背景峰值，不把整体 opacity 施加到文字；同时对齐控制端百分比滑块的 0.01 步长。
+// TTS 仅调字幕背景峰值，不把整体 opacity 施加到文字；远端值使用 0..1 比例并按 1% 步长规范化。
 function normalizeTtsBackgroundOpacity(value, fallback = DEFAULT_TTS_BACKGROUND_OPACITY) {
     const normalizeValue = candidate => {
         if (!Number.isFinite(candidate)) return null;
-        return Math.min(0.2, Math.max(0, Math.round(candidate * 100) / 100));
+        return Math.min(1, Math.max(0, Math.round(candidate * 100) / 100));
     };
     return normalizeValue(value) ?? normalizeValue(fallback) ?? DEFAULT_TTS_BACKGROUND_OPACITY;
 }
 
 function validateTtsBackgroundOpacity(value) {
-    if (!Number.isFinite(value) || value < 0 || value > 0.2) {
-        return { ok: false, message: 'TTS 背景透明度必须是 0–0.2 之间的数值' };
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+        return { ok: false, message: 'TTS 背景透明度必须是 0–1 之间的数值' };
     }
     return { ok: true, opacity: normalizeTtsBackgroundOpacity(value) };
 }

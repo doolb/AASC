@@ -5982,7 +5982,7 @@
 
                     if (data.type === 'displayTtsBackgroundOpacityConfig') {
                         const opacity = Number(data.opacity);
-                        if (Number.isFinite(opacity) && opacity >= 0 && opacity <= 0.2) {
+                        if (Number.isFinite(opacity) && opacity >= 0 && opacity <= 1) {
                             document.documentElement.style.setProperty(
                                 '--tts-subtitle-background-opacity',
                                 String(Math.round(opacity * 100) / 100)

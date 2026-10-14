@@ -36,20 +36,28 @@ after(async () => {
     if (!closed) browser.process()?.kill();
 });
 
-test('TTS 背景透明度规范化默认值、步进和有效边界', () => {
+test('TTS 背景透明度规范化默认值、1%步进和0–100%有效边界', () => {
     assert.equal(configService.getDefaultTtsBackgroundOpacity(), 0.2);
     assert.equal(configService.normalizeTtsBackgroundOpacity(undefined), 0.2);
     assert.equal(configService.normalizeTtsBackgroundOpacity(0.136), 0.14);
     assert.equal(configService.normalizeTtsBackgroundOpacity(-1), 0);
-    assert.equal(configService.normalizeTtsBackgroundOpacity(1), 0.2);
+    assert.equal(configService.normalizeTtsBackgroundOpacity(1), 1);
+    assert.equal(configService.normalizeTtsBackgroundOpacity(1.006), 1);
     assert.deepEqual(configService.validateTtsBackgroundOpacity(0), { ok: true, opacity: 0 });
     assert.deepEqual(configService.validateTtsBackgroundOpacity(0.2), { ok: true, opacity: 0.2 });
+    assert.deepEqual(configService.validateTtsBackgroundOpacity(1), { ok: true, opacity: 1 });
     assert.equal(configService.validateTtsBackgroundOpacity('0.1').ok, false);
-    assert.equal(configService.validateTtsBackgroundOpacity(0.21).ok, false);
+    assert.equal(configService.validateTtsBackgroundOpacity(-0.01).ok, false);
+    assert.equal(configService.validateTtsBackgroundOpacity(1.01).ok, false);
 });
 
 test('TTS 背景透明度通过远端配置持久化、广播并在两端连接时补发', () => {
-    assert.match(upload, /id="displayTtsBackgroundOpacity"[^>]+min="0" max="0\.2" step="0\.01" value="0\.2"/);
+    assert.match(upload, /id="displayTtsBackgroundOpacity"[^>]+min="0" max="100" step="1" value="20"/);
+    assert.match(upload, /String\(Math\.round\(this\.ttsBackgroundOpacity \* 100\)\)/);
+    assert.match(upload, /const opacity = percent \/ 100;/);
+    assert.match(upload, /opacity < 0 \|\| opacity > 1/);
+    assert.match(display, /Number\.isFinite\(opacity\) && opacity >= 0 && opacity <= 1/);
+    assert.match(selfTest, /Number\(input\.max\) === 100/);
     assert.ok(upload.indexOf('displayBackgroundGlowPreview') < upload.indexOf('displayTtsBackgroundOpacity'),
         'TTS 透明度应位于背景光晕设置之后');
     assert.match(upload, /type: 'setDisplayTtsBackgroundOpacityConfig'/);
@@ -63,6 +71,43 @@ test('TTS 背景透明度通过远端配置持久化、广播并在两端连接�
     assert.match(selfTest, /id: 'display_tts_background_opacity'/);
 });
 
+test('控制端把百分比映射为 alpha 比例，并将权威比例映射回百分比', { timeout: 30000 }, async () => {
+    const page = await browser.newPage();
+    try {
+        await page.setContent(`
+            <input id="displayTtsBackgroundOpacity" type="range" min="0" max="100" step="1" value="20">
+            <output id="displayTtsBackgroundOpacityValue">20%</output>
+        `);
+        const settingsDeclaration = upload.match(/    const Settings = \{[\s\S]*?\n    \};/);
+        assert.ok(settingsDeclaration, '应能从正式控制页读取 Settings 实现');
+        await page.addScriptTag({ content: `window.__opacitySettings = (() => { ${settingsDeclaration[0].trim()}; return Settings; })();` });
+        const result = await page.evaluate(() => {
+            const settings = window.__opacitySettings;
+            const sent = [];
+            window.WebSocketManager = { send: message => sent.push(message) };
+            settings.updateUI();
+            const input = document.getElementById('displayTtsBackgroundOpacity');
+            input.value = '73';
+            settings.previewTtsBackgroundOpacity();
+            const preview = document.getElementById('displayTtsBackgroundOpacityValue').textContent;
+            settings.saveTtsBackgroundOpacityConfig();
+            settings.handleTtsBackgroundOpacityConfig({ opacity: 1 });
+            return {
+                preview,
+                sent: sent[0],
+                authoritativeInput: input.value,
+                authoritativeOutput: document.getElementById('displayTtsBackgroundOpacityValue').textContent
+            };
+        });
+        assert.equal(result.preview, '73%');
+        assert.deepEqual(result.sent, { type: 'setDisplayTtsBackgroundOpacityConfig', opacity: 0.73 });
+        assert.equal(result.authoritativeInput, '100');
+        assert.equal(result.authoritativeOutput, '100%');
+    } finally {
+        await page.close();
+    }
+});
+
 test('字幕背景渐变读取透明度变量且不改变4px背景模糊和文字不透明度', { timeout: 30000 }, async () => {
     const page = await browser.newPage();
     try {
@@ -71,11 +116,15 @@ test('字幕背景渐变读取透明度变量且不改变4px背景模糊和文�
         const result = await page.evaluate(() => {
             const element = document.getElementById('voiceTextDisplay');
             document.documentElement.style.setProperty('--tts-subtitle-background-opacity', '0.13');
-            const style = getComputedStyle(element);
-            return { backgroundImage: style.backgroundImage, backdropFilter: style.backdropFilter,
-                color: style.color, opacity: style.opacity };
+            const partial = getComputedStyle(element);
+            const partialBackground = partial.backgroundImage;
+            document.documentElement.style.setProperty('--tts-subtitle-background-opacity', '1');
+            const full = getComputedStyle(element);
+            return { backgroundImage: partialBackground, fullBackgroundImage: full.backgroundImage,
+                backdropFilter: partial.backdropFilter, color: partial.color, opacity: partial.opacity };
         });
         assert.match(result.backgroundImage, /rgba\(0, 0, 0, 0\.13\)/);
+        assert.match(result.fullBackgroundImage, /(?:rgba\(0, 0, 0, 1\)|rgb\(0, 0, 0\))/);
         assert.equal(result.backdropFilter, 'blur(4px)');
         assert.equal(result.opacity, '1', '透明度只作用于字幕背景，不淡化文字');
     } finally {

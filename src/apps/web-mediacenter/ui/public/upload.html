@@ -733,7 +733,7 @@
                         <label class="display-background-glow-control" for="displayTtsBackgroundOpacity">
                             <span>TTS 背景透明度</span>
                             <output id="displayTtsBackgroundOpacityValue" for="displayTtsBackgroundOpacity">20%</output>
-                            <input id="displayTtsBackgroundOpacity" type="range" min="0" max="0.2" step="0.01" value="0.2" data-ui-type="slider"
+                            <input id="displayTtsBackgroundOpacity" type="range" min="0" max="100" step="1" value="20" data-ui-type="slider"
                                 oninput="Settings.previewTtsBackgroundOpacity()" onchange="Settings.saveTtsBackgroundOpacityConfig()">
                         </label>
                         <div class="routing-hint" data-ui-type="tip">全局共享。中心亮度范围是中心颜色保持完整的区域，超过后向外围过渡；媒体画面和睡眠遮罩不受影响。</div>
@@ -1312,7 +1312,7 @@
                 displayVersionInput.value = String(this.displayVersionIntervalMs / 1000);
             }
             const ttsOpacityInput = document.getElementById('displayTtsBackgroundOpacity');
-            if (ttsOpacityInput) ttsOpacityInput.value = String(this.ttsBackgroundOpacity);
+            if (ttsOpacityInput) ttsOpacityInput.value = String(Math.round(this.ttsBackgroundOpacity * 100));
             const ttsOpacityOutput = document.getElementById('displayTtsBackgroundOpacityValue');
             if (ttsOpacityOutput) ttsOpacityOutput.textContent = `${Math.round(this.ttsBackgroundOpacity * 100)}%`;
             const serverPortInput = document.getElementById('serverPortInput');
@@ -1322,16 +1322,16 @@
         previewTtsBackgroundOpacity() {
             const input = document.getElementById('displayTtsBackgroundOpacity');
             const output = document.getElementById('displayTtsBackgroundOpacityValue');
-            const value = Number(input?.value);
-            if (!Number.isFinite(value) || value < 0 || value > 0.2) return;
-            if (output) output.textContent = `${Math.round(value * 100)}%`;
+            const percent = Number(input?.value);
+            if (!Number.isInteger(percent) || percent < 0 || percent > 100) return;
+            if (output) output.textContent = `${percent}%`;
         },
 
         saveTtsBackgroundOpacityConfig() {
             const input = document.getElementById('displayTtsBackgroundOpacity');
-            const opacity = Number(input?.value);
-            if (!Number.isFinite(opacity) || opacity < 0 || opacity > 0.2) {
-                showToast('TTS 背景透明度必须是 0%–20%', 'error');
+            const percent = Number(input?.value);
+            if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
+                showToast('TTS 背景透明度必须是 0%–100% 的整数', 'error');
                 this.updateUI();
                 return;
             }
@@ -1340,12 +1340,13 @@
                 this.updateUI();
                 return;
             }
+            const opacity = percent / 100;
             window.WebSocketManager.send({ type: 'setDisplayTtsBackgroundOpacityConfig', opacity });
         },
 
         handleTtsBackgroundOpacityConfig(data) {
             const opacity = Number(data?.opacity);
-            if (!Number.isFinite(opacity) || opacity < 0 || opacity > 0.2) return;
+            if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) return;
             this.ttsBackgroundOpacity = Math.round(opacity * 100) / 100;
             this.updateUI();
         },

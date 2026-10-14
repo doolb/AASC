@@ -216,12 +216,12 @@ const SelfTest = {
                 const output = document.getElementById('displayTtsBackgroundOpacityValue');
                 const opacity = window.Settings?.ttsBackgroundOpacity;
                 const valid = Boolean(input && output && Number.isFinite(opacity)
-                    && Number(input.min) === 0 && Number(input.max) === 0.2
-                    && Number(input.step) === 0.01 && opacity >= 0 && opacity <= 0.2);
+                    && Number(input.min) === 0 && Number(input.max) === 100
+                    && Number(input.step) === 1 && opacity >= 0 && opacity <= 1);
                 return {
                     success: valid,
                     message: valid ? 'TTS 背景透明度设置正常' : 'TTS 背景透明度控件或权威值异常',
-                    details: valid ? `当前峰值 ${Math.round(opacity * 100)}%` : '检查滑块范围、步长和服务端配置同步'
+                    details: valid ? `当前峰值 ${Math.round(opacity * 100)}%（alpha ${opacity}）` : '检查0–100%滑块范围、1%步长和服务端配置同步'
                 };
             }
         },

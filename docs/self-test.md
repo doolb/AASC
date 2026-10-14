@@ -1511,9 +1511,9 @@ servicePackage保持true：本次MMD全部收入v63，但工作区其他未提�
 
 `node --test tests/task-panel-portrait-layout.test.js` 共2/2通过：360×800竖屏任务卡片横向滚动、实例/结果列不越界且文档无横向溢出；1280×720横屏仍保持三列。任务筛选继续有效。
 
-`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js` 共6/6通过：TTS透明度默认/边界/规范化、WebSocket持久化和连接补发、Chromium渐变alpha与4px模糊/文字不透明度；服务器端口1/65535边界与非法值拒绝、远端消息契约、控制端和显示端跳转代码及内联脚本解析。另运行 `tests/display-websocket-reconnect.test.js` 4/4通过；任务链接、主题及光晕相关回归39/39通过。
+`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js` 共7/7通过：TTS透明度默认20%、0%–100%范围/1%步长/规范化、正式控制端Settings双向百分比换算、WebSocket持久化和连接补发、Chromium渐变alpha0.13/1与4px模糊/文字不透明度；服务器端口1/65535边界与非法值拒绝、远端消息契约、控制端和显示端跳转代码及内联脚本解析。Offline code v78签名、大小/SHA-256和ZIP完整性通过；普通子服务包manifest大小/SHA-256匹配。另运行 `tests/display-websocket-reconnect.test.js` 4/4通过；任务链接、主题及光晕相关回归39/39通过。
 
-Offline Android WebView的真实布局/滑块和托管服务器实际端口切换尚未现场执行；本轮未构建或发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。
+Offline Android WebView的真实布局/滑块和托管服务器实际端口切换尚未现场执行。Offline code v78未发布；针对SM-N9500的通用强制更新请求被接受但设备服务启动时间未变化，不能视为已更新。`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。
 
 ## MMD-AR单点牵引稳定性回归（2026-10-14）
 
