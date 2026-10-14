@@ -48,7 +48,8 @@ data class OfflineUpdateProgress(
 data class MinApkUpdateResult(
     val status: String,
     val apkFile: File? = null,
-    val metadata: OfflineMinApkArtifact? = null
+    val metadata: OfflineMinApkArtifact? = null,
+    val failed: Boolean = false
 )
 
 data class ServiceUpdateResult(
@@ -59,7 +60,8 @@ data class ServiceUpdateResult(
     val targetCodeVersion: Int? = null,
     val targetDependencyVersion: Int? = null,
     val downloadBytes: Long = 0L,
-    val dataRepair: OfflineDataRepairArtifact? = null
+    val dataRepair: OfflineDataRepairArtifact? = null,
+    val failed: Boolean = false
 )
 
 data class ServiceUpdateApplyResult(
@@ -693,7 +695,7 @@ class OfflineUpdateManager(
     fun checkForServerUpdate(root: File): ServiceUpdateResult {
         return try {
             val publicKeyPem = readPublicKeyOrNull()
-                ?: return ServiceUpdateResult("未配置 Offline 更新验证公钥")
+                ?: return ServiceUpdateResult("未配置 Offline 更新验证公钥", failed = true)
             val source = fetchManifest(publicKeyPem)
                 ?: return ServiceUpdateResult("局域网与外网均无可用更新清单")
             val current = readInstalledServiceVersion(root)
@@ -702,7 +704,8 @@ class OfflineUpdateManager(
                     "候选服务版本此前启动失败，已跳过自动重试",
                     installed = current,
                     targetCodeVersion = source.manifest.code.version,
-                    targetDependencyVersion = source.manifest.dependencies.version
+                    targetDependencyVersion = source.manifest.dependencies.version,
+                    failed = true
                 )
             }
             val plan = planServiceUpdate(current, source.manifest)
@@ -727,6 +730,7 @@ class OfflineUpdateManager(
                     "服务版本/依赖指纹不匹配，需要发布 all 更新",
                     installed = current,
                     plan = plan,
+                    failed = true,
                     targetCodeVersion = source.manifest.code.version,
                     targetDependencyVersion = source.manifest.dependencies.version,
                     dataRepair = pendingRepair
@@ -751,7 +755,7 @@ class OfflineUpdateManager(
             )
         } catch (error: Exception) {
             Log.e(TAG, "Offline 服务更新检查失败: ${error.message}", error)
-            ServiceUpdateResult("拒绝服务更新：${error.message ?: "检查失败"}")
+            ServiceUpdateResult("拒绝服务更新：${error.message ?: "检查失败"}", failed = true)
         }
     }
 
@@ -957,7 +961,7 @@ class OfflineUpdateManager(
             }
         } catch (error: Exception) {
             Log.e(TAG, "Offline min APK 更新检查失败: ${error.message}", error)
-            MinApkUpdateResult("拒绝 min APK 更新：${error.message ?: "校验失败"}")
+            MinApkUpdateResult("拒绝 min APK 更新：${error.message ?: "校验失败"}", failed = true)
         }
     }
 
@@ -970,7 +974,7 @@ class OfflineUpdateManager(
             checkAndPrepareMinApkUpdateInternal(root, onProgress)
         } catch (error: Exception) {
             Log.e(TAG, "Offline min APK 更新检查失败: ${error.message}", error)
-            MinApkUpdateResult("拒绝 min APK 更新：${error.message ?: "校验失败"}")
+            MinApkUpdateResult("拒绝 min APK 更新：${error.message ?: "校验失败"}", failed = true)
         }
     }
 
@@ -1154,7 +1158,7 @@ class OfflineUpdateManager(
                 connection?.disconnect()
             }
         }
-        if (lastError != null) Log.w(TAG, "LAN/WAN 更新清单不可用: ${lastError.message}")
+        if (lastError != null) throw IOException("LAN/WAN 更新清单读取失败：${lastError.message}", lastError)
         return null
     }
 

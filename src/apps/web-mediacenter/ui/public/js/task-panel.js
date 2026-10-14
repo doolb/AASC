@@ -145,38 +145,48 @@
     },
 
     _renderTaskList: function() {
-      var container = document.getElementById('taskTabList');
+      const container = document.getElementById('taskTabList');
       if (!container) return;
 
-      var builtin = this.taskList.filter(function(t) { return t.taskType === 'builtin'; });
-      var user = this.taskList.filter(function(t) { return t.taskType !== 'builtin'; });
+      const builtin = this.taskList.filter(function(t) { return t.taskType === 'builtin'; });
+      const user = this.taskList.filter(function(t) { return t.taskType !== 'builtin'; });
 
       // 左列：任务列表
-      var leftHtml = '<div class="task-list-col-header">' +
+      const headerHtml = '<div class="task-list-col-header">' +
         '<input class="task-search" id="taskSearch" placeholder="搜索任务..." oninput="TaskPanel._filterTasks()">' +
         '<button class="task-card-btn" onclick="TaskPanel._switchToNew()" style="flex-shrink:0;white-space:nowrap">+ 新建</button>' +
       '</div>';
+      const taskGroups = [];
 
       if (builtin.length > 0) {
-        leftHtml += '<div class="task-group-title">内置任务（只读）</div>';
-        leftHtml += builtin.map(function(t) { return this._taskCardHTML(t); }, this).join('');
+        taskGroups.push('<div class="task-list-group">' +
+          '<div class="task-group-title">内置任务（只读）</div>' +
+          '<div class="task-group-cards">' +
+            builtin.map(function(t) { return this._taskCardHTML(t); }, this).join('') +
+          '</div>' +
+        '</div>');
       }
 
-      leftHtml += '<div class="task-group-title">用户任务</div>';
+      let userTasksHtml = '';
       if (user.length === 0) {
-        leftHtml += '<div class="task-empty-state">' +
+        userTasksHtml = '<div class="task-empty-state">' +
           '<div class="task-empty-state-icon">⚡</div>' +
           '<div class="task-empty-state-text">还没有用户任务</div>' +
         '</div>';
       } else {
-        leftHtml += user.map(function(t) { return this._taskCardHTML(t); }, this).join('');
+        userTasksHtml = user.map(function(t) { return this._taskCardHTML(t); }, this).join('');
       }
+      taskGroups.push('<div class="task-list-group">' +
+        '<div class="task-group-title">用户任务</div>' +
+        '<div class="task-group-cards">' + userTasksHtml + '</div>' +
+      '</div>');
+      const leftHtml = headerHtml + '<div class="task-list-rail">' + taskGroups.join('') + '</div>';
 
-      var middleHtml = this._selectedTaskName
+      const middleHtml = this._selectedTaskName
         ? this._renderInstancesCol(this._selectedTaskName)
         : '<div class="task-three-col-placeholder">选择一个任务查看执行记录</div>';
 
-      var rightHtml = this._selectedTaskName && this._selectedInstanceId
+      const rightHtml = this._selectedTaskName && this._selectedInstanceId
         ? this._renderResultCol(this._selectedTaskName, this._selectedInstanceId)
         : '<div class="task-three-col-placeholder">选择一条执行记录查看详情</div>';
 

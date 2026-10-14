@@ -1,5 +1,21 @@
 # 自测功能文档
 
+## 全身IK独立面板、像素控制点与牵引调硬（2026-10-13）
+
+`tests/mmd-ar-ik-markers.test.js`4/4验证近远视距/相机zoom/正交投影的32px尺寸、20–48px规范化、四方向舞台与非正方形画布、相机后方/视锥外过滤、44px命中及重叠最近点。真Ammo身体新增两项覆盖默认强度0.85的0.5/1秒误差小于0.01模型单位、软硬档响应差异、峰值位移小于初始目标距离1.35倍，以及强档Hold四目标/重力600帧有限姿态/PMX限位/分配稳定。与原身体/PBD/镜头/动作用例合计31/31通过。
+
+真实米娅浏览器1/1通过独立按钮/面板、旧Human入口移除、模式与实际启用/重置/关闭按钮、32→40→32px调节、收起保留IK和目标、实际Chromium鼠标拖点、多点/旋转、PBD七点与物理十一点、Escape及540×800/800×540面板边界和动作面板互斥。原镜头浏览器1/1通过（约159秒）。
+
+`npm run build:web:mmd-ar-test`成功，14源/测试文件语法及定向差异空白检查通过。17体合成目标相同初始状态的新旧默认短测：0.5/1秒误差0.01189/0.01332→0.00719/0.00793模型单位，降低39.6%/40.5%；旧驱动仅临时读取，不复制提交。新默认峰值位移0.39035（原目标距离约0.32125），仍有瞬时超调，较高阻尼可减小摆动；此例不能推广至任意PMX/手机或所有强度单调更好。手机真实触控/手感、其他骨骼及VMD/服饰/AR共存待人工验收。
+
+## 独立MMD-AR身体物理（2026-10-13）
+
+`tests/mmd-ar-human-physics.test.js`使用项目实际Ammo/WASM及17体合成PMX骨架，10/10；合并既有PBD与IK/镜头用例18/18。覆盖手部牵引带动躯干、膝脚多目标/PMX限制/骨长、On/Hold/Comply/旋转、Off后的重力与地面、骨盆center平移/相对关节角、30/60/120fps、重置/关闭/模式切换、迟到加载取消/失败保持PBD、原生分配稳定及释放。
+
+`tests/mmd-ar-human-physics-browser.test.js`真实米娅1/1：通过实际UI切换模式、11点与至少15体、鼠标拖手、脚与手旋转目标、有限姿态、重置/切PBD/关闭和零pageerror。`tests/mmd-ar-ik-camera-gestures-browser.test.js`1/1：原反向环绕、双指平移/缩放及膝点。Chromium使用仓库既有共享内存参数；拖点读取最新实际标记并由原生输入发送鼠标事件，屏幕坐标与达成骨骼分开。早期资源耗尽/拖点超时未被当作成功或跳过。
+
+`npm run build:web:mmd-ar-test`、修改模块语法与定向差异空白检查通过。桌面合成17体膝脚双目标约106.09°屈膝；1/2/7目标各预热30帧、采样150帧，人体步骤中位数0.59/0.55/0.55ms，P95 1.94/2.22/2.31ms（含骨骼回写，不含衣物/GPU）。只代表本机短测；手机性能、其他PMX、VMD/各服饰后端/AR实际共存及皮肤穿模观感待人工验收。
+
 ## qwen-chat全部播报业务（2026-10-13）
 
 定向TTS Provider＋policy＋文本媒体服务/player＋语音/提醒路由＋隔离浏览器配置151/151，npm run test:mmd-production:tts19/19。先运行RED，再实现：非AI业务解析、保存/重载与权威回填/重连、页面两类选项和只读自测、四业务各自音色、纯表情零上游/缓存、文本预取null释放/取消迟到隔离、正式系统及自定义生成跳过、语音批次尾标记、其他来源原文保持。终审2项Important均修复：批次期间切换Provider仍按快照收尾，旧显示端处理status=skipped后推进下一项并清理批次，正式函数VM模拟验证。
@@ -1507,3 +1523,30 @@ servicePackage保持true：本次MMD全部收入v63，但工作区其他未提�
 ## 豆包普通LLM网页fetch（2026-10-12）
 
 Chat2API173/176通过，仍同3项Windows chmod失败；TTS/解码/权威配置/浏览器97/97，旧播报19/19。bridge9项覆盖背压、来源/context/session绑定、配置关闭/冲突/容量/403/预取消、iframe与主frame导航、连接期间导航/授权撤销/换凭据、迟到连接及CDP detach/目录send挂起截止。配置浏览器验证默认关闭、显式会话授权、WS成功/失败回填/断线与只读自测；真实隔离Chromium CDP、HttpOnly假sessionid与页面fetch/SSE接线通过，所有网页请求本地拦截、清理不关用户标签。自测新增doubao_web_runtime_config只读结构检查，不连接浏览器、读取会话或发聊天。实际官网/用户账号/think和expert/设备未验收。
+## PMX加载进度条显示端旋转自测（2026-10-14）
+
+`node --test tests/display-mmd-loading-rotation.test.js tests/display-stage-rotation.test.js` 共5/5通过。测试使用正式显示页结构和舞台/MMD样式，在1280×720横屏与360×800竖屏下分别设置0°/90°/180°/270°；检查文字与进度条旋转方向、屏幕四边界、显示状态、ARIA百分比和填充比例。未构建或发布服务包/APK；Android Offline WebView安全区与实际观感待设备验收，`servicePackage=true`。
+
+## 控制端任务面板、TTS透明度和服务器端口自测（2026-10-14）
+
+`node --test tests/task-panel-portrait-layout.test.js` 共2/2通过：360×800竖屏任务卡片横向滚动、实例/结果列不越界且文档无横向溢出；1280×720横屏仍保持三列。任务筛选继续有效。
+
+`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js` 共7/7通过：TTS透明度默认20%、0%–100%范围/1%步长/规范化、正式控制端Settings双向百分比换算、WebSocket持久化和连接补发、Chromium渐变alpha0.13/1与4px模糊/文字不透明度；服务器端口1/65535边界与非法值拒绝、远端消息契约、控制端和显示端跳转代码及内联脚本解析。Offline code v78签名、大小/SHA-256和ZIP完整性通过；普通子服务包manifest大小/SHA-256匹配。另运行 `tests/display-websocket-reconnect.test.js` 4/4通过；任务链接、主题及光晕相关回归39/39通过。
+
+Offline Android WebView的真实布局/滑块和托管服务器实际端口切换尚未现场执行。Offline code v78未发布；针对SM-N9500的通用强制更新请求被接受但设备服务启动时间未变化，不能视为已更新。`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。
+
+## MMD-AR单点牵引稳定性回归（2026-10-14）
+
+`tests/mmd-ar-human-physics.test.js`16/16：真实米娅父空间metadata高度、默认深肘屈曲、手/脚/头/骨盆各10秒无重力单点全骨骼位置/转角跨度、反复目标30/60/120fps一致性；兼容原On/Hold/Off/Comply、自由/旋转、PMX限位、骨长、取消加载及原生资源释放。全身末秒位置最大13.64mm、转角最大0.03590rad，可达末端误差小于20mm；不可达目标保留原值。
+
+身体/PBD/标记23项、镜头手势5项、动作7项共35项通过；真实米娅浏览器实际鼠标单点拖动，按900物理子步采样最后90步十一点跨度小于身高2.5%，多目标/重置/模式及面板横竖屏1/1通过。`npm run build:web:mmd-ar-test`通过。桌面无渲染物理步进中位约2.1–2.3ms、P95约3.0–6.7ms，原生分配恒定；不代表手机或完整渲染性能。未出APK/部署，其他PMX/实时动画服饰/AR/手机仍待人工验收。
+
+额外`tests/mmd-ar-camera-motion.test.js`相机VMD回归：默认Chromium参数出现页面断开/模型就绪超时；/tmp包装显式使用共享内存后原测试2/2通过，未改相机源码或测试。
+
+## MMD-AR Off释放稳定与默认关闭重力（2026-10-14）
+
+`node --test tests/mmd-ar-human-physics.test.js tests/mmd-ar-human-ik-pbd.test.js tests/mmd-ar-ik-markers.test.js tests/mmd-ar-ik-camera-gestures.test.js tests/mmd-ar-human-actions.test.js`：39/39通过，无跳过。身体20项包含重力缺省/显式true和UI未勾选、10个真实PMX释放/全Off静置场景、自由身体释放仍保持整体位置、位置Off/旋转On独立状态及取消残余拖动；旧目标/骨长/限位/生命周期和30/60/120fps继续通过。
+
+真实米娅On3秒→Off10秒，关重力末秒全骨位置跨度0.08–1.12mm、角跨度≤0.00240rad、最大角速度≤0.0028rad/s；开重力位置跨度2.75–5.20mm、角跨度≤0.05619rad、最大角速度≤1.621rad/s，仍有接触抖动。原生分配恒定、销毁归零；桌面无渲染物理CPU中位约1.77–2.08ms/P95约2.18–3.95ms，不代表手机完整帧时。
+
+`npm run build:web:mmd-ar-test`及6个源/测试模块语法、定向差异空白检查通过。`TMPDIR=/var/tmp node --test tests/mmd-ar-human-physics-browser.test.js`1/1通过（约348秒）：真实拖点→保持→面板Off→主动重力，每段实际采样904子步，最后12帧Off摆幅占身高0.023%、主动重力0.213%，标记跟随正确；随后多目标/重置/模式与横竖屏继续通过。首轮临时IndexedDB IO失败改用/var/tmp；SwiftShader全灯光约0.3fps导致采样超时，测试通过现有设置关闭阴影/AO/GI/抗锯齿并降至0.25倍率，保留真实蒙皮/衣物物理和全部物理子步，不改产品画面默认。未出APK/发布，手机/其他PMX和实时VMD服饰/AR仍待验收。

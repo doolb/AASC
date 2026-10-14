@@ -349,7 +349,10 @@ function getTopSmapsRss(topN = 8) {
 
 const app = express();
 
-const PORT = config.get('server.port', 8081);
+const PORT = config.normalizeServerPort(
+    config.get('server.port', config.getDefaultServerPort()),
+    config.getDefaultServerPort()
+);
 const serverReleaseService = new ServerReleaseService({
     projectRoot: PROJECT_ROOT,
     version: process.env.AASC_SERVER_VERSION || null
@@ -1359,6 +1362,7 @@ async function startServer() {
                 'setTtsProviderConfig', 'getTtsProviderVoices',
                 'setDoubaoWebRuntimeConfig', 'getDoubaoWebTargets',
                 'setDisplayBackgroundGlowConfig',
+                'setDisplayTtsBackgroundOpacityConfig', 'setServerPortConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
                 'getTemporaryConversation', 'clearTemporaryConversation',
@@ -3843,6 +3847,33 @@ function broadcastDisplayBackgroundGlowConfig(displayBackgroundGlow = getDisplay
     displayClients.forEach((_, displayId) => sendToDisplay(displayId, message));
 }
 
+function getDisplayTtsBackgroundOpacity() {
+    return config.normalizeTtsBackgroundOpacity(
+        config.get('ui.displayTtsBackgroundOpacity'),
+        config.getDefaultTtsBackgroundOpacity()
+    );
+}
+
+// 服务端是字幕透明度唯一权威来源，控制端和在线显示端共用同一份规范化配置。
+function broadcastDisplayTtsBackgroundOpacity(opacity = getDisplayTtsBackgroundOpacity()) {
+    const message = { type: 'displayTtsBackgroundOpacityConfig', opacity };
+    broadcastToControls(message);
+    displayClients.forEach((_, displayId) => sendToDisplay(displayId, message));
+}
+
+function getServerPortConfig() {
+    return config.normalizeServerPort(
+        config.get('server.port', config.getDefaultServerPort()),
+        config.getDefaultServerPort()
+    );
+}
+
+// 监听端口变化会让当前页面 origin 失效，因此同时通知控制页和显示页迁移到新端口。
+function broadcastServerPortConfig(message) {
+    broadcastToControls(message);
+    displayClients.forEach((_, displayId) => sendToDisplay(displayId, message));
+}
+
 function broadcastControlTheme(theme) {
     displayClients.forEach((_, displayId) => {
         sendToDisplay(displayId, { type: 'controlThemeChanged', theme });
@@ -6298,7 +6329,7 @@ app.post('/api/unmute', (req, res) => {
 });
 
 let serverRestartScheduled = false;
-function requestManagedServerRestart() {
+function requestManagedServerRestart(delayMs = 100) {
     if (serverRestartScheduled) return;
     serverRestartScheduled = true;
     log('系统', '收到重启请求，正在关闭服务器...');
@@ -6319,7 +6350,7 @@ function requestManagedServerRestart() {
 
         tui.destroy();
         void shutdownManagedRuntimes(0);
-    }, 100);
+    }, Number.isFinite(delayMs) ? Math.max(0, delayMs) : 100);
 }
 
 app.post('/api/restart', (req, res) => {
@@ -7923,6 +7954,16 @@ wss.on('connection', (ws, req) => {
             type: 'displayBackgroundGlowConfig',
             config: getDisplayBackgroundGlowConfig()
         }));
+        ws.send(JSON.stringify({
+            type: 'displayTtsBackgroundOpacityConfig',
+            opacity: getDisplayTtsBackgroundOpacity()
+        }));
+        ws.send(JSON.stringify({
+            type: 'serverPortConfig',
+            port: getServerPortConfig(),
+            success: true,
+            restartRequired: false
+        }));
         ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
         ws.send(JSON.stringify({ type: 'controlThemeChanged', theme: getControlTheme() }));
         ws.send(JSON.stringify({ type: 'displayVersionConfig', ...getDisplayVersionConfig() }));
@@ -8278,6 +8319,16 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({
             type: 'displayBackgroundGlowConfig',
             config: getDisplayBackgroundGlowConfig()
+        }));
+        ws.send(JSON.stringify({
+            type: 'displayTtsBackgroundOpacityConfig',
+            opacity: getDisplayTtsBackgroundOpacity()
+        }));
+        ws.send(JSON.stringify({
+            type: 'serverPortConfig',
+            port: getServerPortConfig(),
+            success: true,
+            restartRequired: false
         }));
         ws.send(JSON.stringify({
             type: 'llm.modelManifest',
@@ -9374,6 +9425,91 @@ async function handleControlMessageFallback(data, ws) {
                 type: 'displayBackgroundGlowConfigError',
                 config: getDisplayBackgroundGlowConfig(),
                 message: '背景光晕配置保存失败'
+            }));
+        }
+        return;
+    }
+
+    if (data.type === 'setDisplayTtsBackgroundOpacityConfig') {
+        if (!controlClients.has(ws)) return;
+        const currentOpacity = getDisplayTtsBackgroundOpacity();
+        const validation = config.validateTtsBackgroundOpacity(data.opacity);
+        if (!validation.ok) {
+            ws.send(JSON.stringify({
+                type: 'displayTtsBackgroundOpacityConfigError',
+                opacity: currentOpacity,
+                message: validation.message
+            }));
+            return;
+        }
+
+        try {
+            if (!config.set('ui.displayTtsBackgroundOpacity', validation.opacity)) {
+                ws.send(JSON.stringify({
+                    type: 'displayTtsBackgroundOpacityConfigError',
+                    opacity: getDisplayTtsBackgroundOpacity(),
+                    message: 'TTS 背景透明度保存失败'
+                }));
+                return;
+            }
+            broadcastDisplayTtsBackgroundOpacity(validation.opacity);
+            log('配置', `TTS 字幕背景透明度已更新为 ${Math.round(validation.opacity * 100)}%`);
+        } catch (error) {
+            logError('配置', `保存 TTS 字幕背景透明度失败: ${error.message}`);
+            ws.send(JSON.stringify({
+                type: 'displayTtsBackgroundOpacityConfigError',
+                opacity: getDisplayTtsBackgroundOpacity(),
+                message: 'TTS 背景透明度保存失败'
+            }));
+        }
+        return;
+    }
+
+    if (data.type === 'setServerPortConfig') {
+        if (!controlClients.has(ws)) return;
+        const currentPort = getServerPortConfig();
+        if (serverRestartScheduled) {
+            ws.send(JSON.stringify({
+                type: 'serverPortConfigError',
+                port: currentPort,
+                message: '服务端正在重启，暂时不能修改端口'
+            }));
+            return;
+        }
+        const validation = config.validateServerPort(data.port);
+        if (!validation.ok) {
+            ws.send(JSON.stringify({
+                type: 'serverPortConfigError',
+                port: currentPort,
+                message: validation.message
+            }));
+            return;
+        }
+
+        try {
+            if (!config.set('server.port', validation.port)) {
+                ws.send(JSON.stringify({
+                    type: 'serverPortConfigError',
+                    port: getServerPortConfig(),
+                    message: '服务器端口保存失败'
+                }));
+                return;
+            }
+            const restartRequired = validation.port !== PORT;
+            broadcastServerPortConfig({
+                type: 'serverPortConfig',
+                port: validation.port,
+                success: true,
+                restartRequired
+            });
+            log('配置', `服务器监听端口已保存为 ${validation.port}${restartRequired ? '，即将重启' : ''}`);
+            if (restartRequired) requestManagedServerRestart(1000);
+        } catch (error) {
+            logError('配置', `保存服务器端口失败: ${error.message}`);
+            ws.send(JSON.stringify({
+                type: 'serverPortConfigError',
+                port: getServerPortConfig(),
+                message: '服务器端口保存失败'
             }));
         }
         return;

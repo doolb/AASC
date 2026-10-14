@@ -11,10 +11,6 @@ function appendPanels(panel) {
         + '<label>' + input('blinking', '', 'checkbox') + '自然眨眼</label></div>'
         + field('生理强度', input('physiologyStrength', '0.35', 'number', 'min="0" max="1" step="0.05"'))
         + button('physiology', '保存生理设置')
-        + '<details><summary>PMX 全身 IK</summary>'
-        + '<p class="mind-basic-note">启用后拖动头部、双手和双脚的彩色控制点；控制点未拖动时跟随动作，拖动后固定目标。目标会受 PMX 骨骼链和角度限制影响；重置可解除全部目标。</p>'
-        + '<div class="display-mmd-ar-actions">' + button('ik-toggle', '启用全身 IK') + button('ik-reset', '重置控制点') + '</div>'
-        + '<p class="mind-basic-note" data-human-ik-status>全身 IK 已关闭</p></details>'
         + '<details open><summary>眼球跟随</summary>'
         + '<p class="mind-basic-note">手动模式优先于自动眼球跟随；拖动滑块实时控制当前模型，恢复自动后重新看向相机。</p>'
         + '<div class="mind-basic-imu-options"><label>' + input('gazeManual', '', 'checkbox') + '手动控制</label></div>'
@@ -72,4 +68,17 @@ function appendPanels(panel) {
         + '<p class="mind-basic-note" data-human-runtime></p>'
         + '<p class="mind-basic-note" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></p></div>');
 }
-module.exports = { appendPanels };
+// IK专用面板与Human动作库分开布局，仍调用同一个角色控制接口。
+function appendIKPanel($) {
+    $('#mmdArMotionToggle').after('<button id="mmdArIKToggle" class="display-stage-button" type="button" aria-controls="mmdArIKPanel" aria-expanded="false">全身 IK</button>');
+    $('#mmdArMotionPanel').after(`<section id="mmdArIKPanel" class="display-mmd-lighting-panel" hidden aria-label="全身IK设置">
+        <div class="display-mmd-lighting-header"><strong>全身 IK</strong><button id="mmdArIKClose" type="button" class="display-mmd-ar-action">收起</button></div>
+        <p class="mind-basic-note">拖动彩色控制点调整姿态。收起面板保留控制目标；关闭全身IK恢复动作。</p>
+        <div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-ik-action="enable">启用全身 IK</button>
+        <button type="button" class="display-mmd-ar-action" data-ik-action="reset">重置控制点</button></div>
+        <label class="mind-basic-field">控制点大小 <output data-ik-size-output>32px</output><input data-ik-size type="range" min="20" max="48" step="2" value="32"></label>
+        <p class="mind-basic-note" data-human-ik-status>全身 IK 已关闭</p>
+        <p class="mind-basic-note" data-ik-message role="status" aria-live="polite"></p>
+        </section>`);
+}
+module.exports = { appendPanels, appendIKPanel };

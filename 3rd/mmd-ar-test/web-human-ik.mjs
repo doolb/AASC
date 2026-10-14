@@ -1,6 +1,10 @@
 import { Euler, Group, Mesh, MeshBasicMaterial, Plane, Quaternion, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
 import { calculateInverseRotationalMass, calculateKneePoleTarget, calculatePbdAngularCorrections,
     KNEE_POLE_STRENGTH, PBD_MAX_ITERATIONS, PBD_TARGET_EPSILON } from './web-human-ik-pbd.mjs';
+import { createHumanPhysicsRig } from './web-human-physics-rig.mjs';
+import { BODY_STATES, createHumanPhysicsDrive, normalizeBodySettings } from './web-human-physics-drive.mjs';
+
+import { normalizeMarkerDiameter, projectIKMarker, pickIKMarker } from './web-human-ik-markers.mjs';
 
 const TARGETS = [
     { key: 'head', label: '头部', bone: 'head', color: 0xffd166 },
@@ -11,6 +15,11 @@ const TARGETS = [
     { key: 'leftFoot', label: '左脚', bone: 'leftAnkle', color: 0x77dfb0 },
     { key: 'rightFoot', label: '右脚', bone: 'rightAnkle', color: 0xd59bff },
 ];
+const BODY_TARGETS = [...TARGETS,
+    { key: 'pelvis', label: '骨盆', bone: 'hips', color: 0xffffff },
+    { key: 'chest', label: '胸部', bone: 'upperBody', color: 0xffb0d8 },
+    { key: 'leftElbow', label: '左肘', bone: 'leftElbow', color: 0xff7777 },
+    { key: 'rightElbow', label: '右肘', bone: 'rightElbow', color: 0x78aaff }];
 const MAX_LINKS = 12;
 const MAX_CORRECTION = 45 * Math.PI / 180, MAX_KNEE_CORRECTION = 150 * Math.PI / 180;
 const UNREACHABLE_DISTANCE = 0.08, MAX_DRAG_DISTANCE = 10;
@@ -44,13 +53,16 @@ export function clampIKBoneRotation(rotation, original, maximumCorrection, limit
 }
 
 // PMX 控制点使用原骨架姿态作为每帧基准，不把 IK 修正累计到 VMD 或物理骨骼。
-export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {} } = {}) {
+export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {},
+    loadAmmo = async () => (await import('./mmd-ammo-physics.mjs')).ensureAmmoPhysics() } = {}) {
     const raycaster = new Raycaster(), pointer = new Vector2(), plane = new Plane();
     const planeNormal = new Vector3(), intersection = new Vector3();
     const endPosition = new Vector3();
     const worldChange = new Quaternion(), parentRotation = new Quaternion(), localChange = new Quaternion();
     const baseline = new Map(), linkLimits = new Map(), kneeIndices = new Set();
     let enabled = false, bound = null, helperRoot = null, handles = [], drag = null;
+    let mode = 'pbd', ammoModule = null, bodyRig = null, bodyDrive = null, loadEpoch = 0, selected = '';
+    let bodySettings = normalizeBodySettings(), markerDiameter = normalizeMarkerDiameter();
     let state = { enabled: false, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '已关闭' };
 
     function stopDrag() {
@@ -73,17 +85,19 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         helperRoot = null;
     }
     function restore() {
+        bodyRig?.restore();
         for (const [bone, rotation] of baseline) bone.quaternion.copy(rotation);
         baseline.clear();
         if (bound?.mesh) bound.mesh.updateMatrixWorld(true);
     }
     function resetTargets() {
-        restore();
-        for (const handle of handles) handle.active = false;
+        stopDrag(); restore(); bodyDrive?.reset();
+        for (const handle of handles) { handle.active = false; handle.positionState = 'Off'; handle.rotationState = 'Off'; }
         state = { ...state, activeTargets: 0, unreachable: 0, reason: enabled ? (state.available ? '' : state.reason) : '已关闭' };
         onChange();
     }
     function reset() {
+        loadEpoch++; restore(); bodyDrive?.dispose(); bodyDrive = null; bodyRig = null;
         enabled = false;
         disposeHelpers();
         bound = null;
@@ -121,7 +135,9 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     }
     function bind(model) {
         if (bound === model) return;
-        restore(); disposeHelpers(); bound = model;
+        loadEpoch++;
+        restore(); bodyDrive?.dispose(); bodyDrive = null; bodyRig = null;
+        disposeHelpers(); bound = model;
         if (!model || !enabled) {
         state = { enabled, available: false, targets: 0, activeTargets: 0, unreachable: 0,
                 reason: enabled ? '等待PMX模型' : '已关闭' };
@@ -133,28 +149,42 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             state = { enabled, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '三维场景尚未就绪' };
             return;
         }
+        if (mode === 'physics') {
+            try {
+                if (!ammoModule) throw new Error('请先选择身体物理模式，等待Ammo就绪');
+                bodyRig = createHumanPhysicsRig(model); bodyDrive = createHumanPhysicsDrive(ammoModule, bodyRig);
+            } catch (error) {
+                bodyRig?.restore(); bodyDrive?.dispose(); bodyDrive = null; bodyRig = null;
+                state = { enabled, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: error.message };
+                return;
+            }
+        }
         // 独立场景容器让控制点留在世界空间，不跟随模型根节点移动。
         helperRoot = new Group();
         scene.add(helperRoot);
-        const radius = Math.max(0.018, Math.min(0.09, (model.mesh.geometry.boundingSphere?.radius || 1) * 0.035));
         model.mesh.updateMatrixWorld(true);
-        for (const spec of TARGETS) {
+        const specs = mode === 'physics' ? BODY_TARGETS : TARGETS;
+        for (const spec of specs) {
             const endpoint = model.bindings['bones:' + spec.bone];
             if (!endpoint || endpoint.dynamic) continue;
             const chain = chainFor(model, endpoint);
-            if (!chain.length || chain.some(link => !ancestor(endpoint.bone, link.bone))) continue;
+            const node = bodyRig?.nodes.find(node => node.bone === endpoint.bone);
+            if (mode === 'physics' ? !node : !chain.length || chain.some(link => !ancestor(endpoint.bone, link.bone))) continue;
             const material = new MeshBasicMaterial({ color: spec.color, depthTest: false, depthWrite: false });
-            const mesh = new Mesh(new SphereGeometry(radius, 12, 8), material);
+            const mesh = new Mesh(new SphereGeometry(1, 12, 8), material);
             mesh.renderOrder = 1200;
             mesh.userData.humanIKTarget = spec.key;
             helperRoot.add(mesh);
-            handles.push({ ...spec, endpoint, chain, mesh, target: new Vector3(), active: false });
+            handles.push({ ...spec, endpoint, chain, mesh, node, target: new Vector3(),
+                targetRotation: endpoint.bone.getWorldQuaternion(new Quaternion()), positionState: 'Off', rotationState: 'Off', active: false });
         }
         for (const handle of handles) {
             handle.endpoint.bone.getWorldPosition(handle.target);
             handle.mesh.position.copy(handle.target);
         }
-        const missing = TARGETS.filter(spec => !handles.some(handle => handle.key === spec.key)).map(spec => spec.label);
+        resizeMarkers();
+        selected = handles[0]?.key || '';
+        const missing = specs.filter(spec => !handles.some(handle => handle.key === spec.key)).map(spec => spec.label);
         state = { enabled, available: handles.length > 0, targets: handles.length, activeTargets: 0, unreachable: 0,
             reason: handles.length ? (missing.length ? '部分控制点不可用：' + missing.join('、') : '') : '未找到可用的头/腕/踝语义骨骼链' };
     }
@@ -172,18 +202,31 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             1 - (event.clientY - rect.top) / rect.height * 2);
         return true;
     }
+    function markerGeometry() { return window.DisplayStage?.getRotationGeometry?.(); }
+    function resizeMarkers() {
+        const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.(), geometry = markerGeometry();
+        if (!camera || !rect) return;
+        for (const handle of handles) {
+            const screen = projectIKMarker(handle.mesh.getWorldPosition(new Vector3()), camera, rect, geometry, markerDiameter);
+            handle.mesh.visible = screen?.visible === true;
+            if (screen?.radius > 0) handle.mesh.scale.setScalar(screen.radius);
+        }
+    }
     function pick(event) {
-        const camera = getCamera?.();
-        if (!camera || !ndc(event)) return null;
-        raycaster.setFromCamera(pointer, camera);
-        return raycaster.intersectObjects(handles.map(handle => handle.mesh), false)[0] || null;
+        const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();
+        if (!camera || !rect) return null;
+        resizeMarkers();
+        return pickIKMarker(handles, { x: event.clientX, y: event.clientY }, camera, rect, markerGeometry(), markerDiameter);
     }
     function pointerDown(event) {
         if (!enabled || !state.available || event.button !== 0 || event.isPrimary === false) return;
         const hit = pick(event), handle = handles.find(item => item.mesh === hit?.object);
         if (!handle) return;
         event.stopImmediatePropagation(); event.preventDefault();
+        selected = handle.key;
+        if (mode === 'physics' && handle.positionState === 'Hold') { onChange(); return; }
         handle.endpoint.bone.getWorldPosition(handle.target);
+        if (mode === 'physics' && handle.positionState !== 'Comply') handle.positionState = 'On';
         handle.active = true;
         const camera = getCamera();
         camera.getWorldDirection(planeNormal).normalize();
@@ -294,12 +337,23 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         }
         return active.reduce((count, handle) => count + Number(targetDistance(handle) > UNREACHABLE_DISTANCE), 0);
     }
-    function apply(model) {
+    function apply(model, delta = 1 / 60) {
         if (!enabled || !model) return;
         bind(model);
         if (!state.available) return;
         restore();
         const active = handles.filter(handle => handle.active);
+        if (mode === 'physics') {
+            try {
+                bodyDrive.step(delta, bodyRig.animatedPoses(), active, bodySettings);
+                state.unreachable = active.filter(handle => handle.positionState !== 'Off' && targetDistance(handle) * bodyRig.metersPerUnit > 0.05).length;
+                state.reason = state.unreachable ? '部分目标受关节限位、碰撞或牵引强度影响，尚未到达' : '';
+            } catch (error) {
+                restore(); bodyDrive?.dispose(); bodyDrive = null;
+                state.available = false; state.reason = error.message;
+            }
+            updateMarkers(); return;
+        }
         if (!active.length) { updateMarkers(); return; }
         const kneePoles = createKneePoleConstraints(active);
         const participants = [...active, ...kneePoles.map(pole => pole.handle)];
@@ -315,14 +369,16 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         if (!bound || !enabled) return;
         bound.mesh.updateMatrixWorld(true);
         for (const handle of handles) {
-            if (!handle.active) handle.endpoint.bone.getWorldPosition(handle.target);
+            if (!handle.active || (mode === 'physics' && handle.positionState === 'Off')) handle.endpoint.bone.getWorldPosition(handle.target);
             handle.mesh.position.copy(handle.target);
         }
+        resizeMarkers();
     }
     function setEnabled(value, model) {
-        restore(); stopDrag();
+        loadEpoch++; restore(); stopDrag();
         enabled = value === true;
         if (!enabled) {
+            bodyDrive?.dispose(); bodyDrive = null; bodyRig = null;
             disposeHelpers(); bound = null;
             state = { enabled: false, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '已关闭' };
             onChange(); return getState();
@@ -331,8 +387,76 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         state.enabled = true;
         onChange(); return getState();
     }
-    function getState() { return { ...state, enabled, targets: handles.length,
-        activeTargets: handles.filter(handle => handle.active).length }; }
+    async function setMode(value, model = bound) {
+        if (!['pbd', 'physics'].includes(value)) throw new Error('不支持的人体控制模式');
+        const epoch = ++loadEpoch;
+        if (value === 'physics' && !ammoModule) {
+            state.reason = '正在加载人体物理…'; onChange();
+            let loaded;
+            try { loaded = await loadAmmo(); }
+            catch (error) {
+                if (epoch === loadEpoch) { state.reason = '人体物理加载失败：' + error.message; onChange(); }
+                throw error;
+            }
+            if (epoch !== loadEpoch) return getState();
+            ammoModule = loaded;
+        }
+        if (epoch !== loadEpoch) return getState();
+        restore(); bodyDrive?.dispose(); bodyDrive = null; bodyRig = null; disposeHelpers(); bound = null;
+        mode = value;
+        if (enabled) bind(model);
+        onChange(); return getState();
+    }
+    function setBodySettings(value) {
+        bodySettings = normalizeBodySettings({ ...bodySettings, ...value }); onChange(); return getState();
+    }
+    function setTargetState(key, positionState, rotationState) {
+        const handle = handles.find(handle => handle.key === key);
+        if (mode !== 'physics' || !handle) throw new Error('请先启用身体物理模式并选择控制点');
+        if (!BODY_STATES.includes(positionState) || !BODY_STATES.includes(rotationState)) throw new Error('不支持的控制点状态');
+        if (positionState === 'Off' && drag?.handle === handle) stopDrag();
+        if (handle.positionState === 'Off' && positionState !== 'Off') handle.endpoint.bone.getWorldPosition(handle.target);
+        if (handle.rotationState === 'Off' && rotationState !== 'Off') handle.endpoint.bone.getWorldQuaternion(handle.targetRotation);
+        handle.positionState = positionState; handle.rotationState = rotationState;
+        handle.active = positionState !== 'Off' || rotationState !== 'Off'; selected = key;
+        updateMarkers();
+        onChange(); return getState();
+    }
+    function setTarget(key, position, rotation) {
+        const handle = handles.find(handle => handle.key === key);
+        if (!handle) throw new Error('控制点不存在');
+        if (!position && !rotation) throw new Error('请提供目标位置或旋转');
+        if (rotation && mode !== 'physics') throw new Error('PBD姿态模式只支持位置目标');
+        if (position) {
+            const values = position.isVector3 ? position.toArray() : position;
+            if (!Array.isArray(values) || values.length !== 3 || !values.every(Number.isFinite)) throw new Error('目标位置需要三个有限数值');
+            if (mode === 'physics' && handle.positionState === 'Hold') throw new Error('请将位置状态改为On后移动保持目标');
+            handle.target.fromArray(values); handle.positionState = handle.positionState === 'Comply' ? 'Comply' : 'On';
+        }
+        if (rotation) {
+            const values = rotation.isQuaternion ? rotation.toArray() : rotation;
+            if (!Array.isArray(values) || values.length !== 4 || !values.every(Number.isFinite) || Math.hypot(...values) < 1e-8) throw new Error('目标旋转需要有效四元数');
+            if (mode === 'physics' && handle.rotationState === 'Hold') throw new Error('请将旋转状态改为On后移动保持目标');
+            handle.targetRotation.fromArray(values).normalize(); handle.rotationState = handle.rotationState === 'Comply' ? 'Comply' : 'On';
+        }
+        handle.active = true; selected = key; onChange(); return getState();
+    }
+    function setMarkerDiameter(value) {
+        markerDiameter = normalizeMarkerDiameter(value); resizeMarkers(); onChange(); return getState();
+    }
+    function getState() {
+        const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();
+        return { ...state, mode, markerDiameter, settings: { ...bodySettings }, selected, enabled, targets: handles.length,
+            activeTargets: handles.filter(handle => handle.active).length, physics: bodyDrive?.getState() || null,
+            controls: handles.map(handle => {
+                const achieved = handle.endpoint.bone.getWorldPosition(new Vector3());
+                // 活动标记停留在目标点，屏幕位置必须投影标记；达成位置单独用于误差诊断。
+                const screen = projectIKMarker(handle.mesh.getWorldPosition(new Vector3()), camera, rect, markerGeometry(), markerDiameter);
+                return { key: handle.key, label: handle.label, positionState: handle.positionState, rotationState: handle.rotationState,
+                    target: handle.target.toArray(), rotation: handle.targetRotation.toArray(), achieved: achieved.toArray(),
+                    screen: screen ? { x: screen.x, y: screen.y, visible: screen.visible, diameter: markerDiameter } : null };
+            }) };
+    }
 
     canvas?.addEventListener('pointerdown', pointerDown, true);
     canvas?.addEventListener('pointermove', pointerMove, true);
@@ -343,7 +467,8 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     window.addEventListener('pointercancel', pointerUp, true);
 
     return {
-        apply, restore, reset, resetTargets, setEnabled, getState,
+        apply, restore, reset, resetTargets, setEnabled, setMode, setBodySettings, setTargetState, setTarget, setMarkerDiameter, getState,
+        isPhysicsEnabled: () => enabled && mode === 'physics' && bodyDrive !== null,
         dispose() {
             reset();
             canvas?.removeEventListener('pointerdown', pointerDown, true);

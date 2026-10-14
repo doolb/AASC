@@ -46,6 +46,7 @@ class NodeServerService : Service() {
         const val STATUS_PREPARING = "preparing"
         const val STATUS_INSTALLING = "installing"
         const val STATUS_STARTING = "starting"
+        const val STATUS_READY = "ready"
         const val STATUS_FAILED = "failed"
         const val STATUS_SERVICE_UPDATE_APPLYING = "service_update_applying"
         const val STATUS_SERVICE_UPDATE_PROGRESS = "service_update_progress"
@@ -208,6 +209,7 @@ class NodeServerService : Service() {
     private val offlineReleaseDirectoryLock = Any()
     @Volatile
     private var nodeProcess: Process? = null
+    @Volatile private var pendingServiceUpdateResult: String? = null
     private var restartAttempt = 0
     private var mainServerUrl = ""
     private var offlineMode = false
@@ -366,6 +368,9 @@ class NodeServerService : Service() {
                 )
             )
             val process = processBuilder.start()
+            val diagnostics = NodeStartupDiagnostics()
+            val releaseResolved = java.util.concurrent.atomic.AtomicBoolean(false)
+            val releaseHealthy = java.util.concurrent.atomic.AtomicBoolean(false)
             nodeProcess = process
             sendStatus(STATUS_STARTING)
             android.util.Log.i(
@@ -375,18 +380,23 @@ class NodeServerService : Service() {
             updateNotification(
                 if (offlineMode) "Node.js 本地服务运行中" else "Node.js 子服务器运行中，正在连接主服务器"
             )
-            val releaseHealthPending = updateManager?.isReleaseHealthPending(root) == true
-            if (updateManager != null && (releaseHealthPending || OfflineUpdateManager.hasObsoleteReleaseDirectories(root))) {
-                monitorPendingRelease(root, process, generation, updateManager)
+            val stdout = readProcessOutput(process, false, diagnostics)
+            val stderr = readProcessOutput(process, true, diagnostics)
+            if (updateManager != null) {
+                monitorPendingRelease(root, process, generation, updateManager, diagnostics, releaseResolved, releaseHealthy)
             }
-            readProcessOutput(process, false)
-            readProcessOutput(process, true)
             Thread {
                 val exitCode = try {
                     process.waitFor()
                 } catch (error: InterruptedException) {
                     Thread.currentThread().interrupt()
                     -1
+                }
+                try {
+                    stdout.join(500L)
+                    stderr.join(500L)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
                 }
                 mainHandler.post {
                     if (generation != restartGeneration.get()) return@post
@@ -395,7 +405,12 @@ class NodeServerService : Service() {
                     if (exitCode == 0) {
                         updateNotification("Node.js 子服务器已停止")
                     } else {
-                        sendStatus(STATUS_FAILED, "Node launcher 退出码: $exitCode")
+                        val reason = diagnostics.describe("服务退出，退出码: $exitCode")
+                        if (updateManager != null && releaseResolved.compareAndSet(false, true)) {
+                            failOfflineRelease(root, generation, updateManager, reason)
+                        } else if (updateManager == null || releaseHealthy.get()) {
+                            sendStatus(STATUS_FAILED, reason)
+                        }
                         scheduleRestart(generation, exitCode)
                     }
                 }
@@ -408,6 +423,10 @@ class NodeServerService : Service() {
             nodeProcess = null
             android.util.Log.e("AASC-Node", "Node launcher 启动失败", error)
             sendStatus(STATUS_FAILED, error.message ?: "未知启动错误")
+            if (pendingServiceUpdateResult != null) {
+                pendingServiceUpdateResult = null
+                sendStatus(STATUS_SERVICE_UPDATE_FAILED, "更新启动失败：${NodeStartupDiagnostics.sanitize(error.message ?: "未知错误")}")
+            }
             updateNotification(
                 if (offlineMode) "Node.js 本地服务启动失败：${error.message}"
                 else "Node.js 子服务器启动失败：${error.message}"
@@ -439,7 +458,9 @@ class NodeServerService : Service() {
                     }
                 }
                 if (result.applied || result.status == "服务已是当前版本") {
-                    sendStatus(STATUS_SERVICE_UPDATE_APPLIED, result.status)
+                    // 文件切换完成后仍需验证真实运行版本，成功通知由健康监视统一发出。
+                    pendingServiceUpdateResult = result.status
+                    sendStatus(STATUS_SERVICE_UPDATE_PROGRESS, "服务文件已准备，正在验证启动", "starting")
                 } else {
                     sendStatus(STATUS_SERVICE_UPDATE_FAILED, result.status)
                 }
@@ -463,7 +484,10 @@ class NodeServerService : Service() {
         root: File,
         process: Process,
         generation: Int,
-        updateManager: OfflineUpdateManager
+        updateManager: OfflineUpdateManager,
+        diagnostics: NodeStartupDiagnostics,
+        releaseResolved: java.util.concurrent.atomic.AtomicBoolean,
+        releaseHealthy: java.util.concurrent.atomic.AtomicBoolean
     ) {
         Thread {
             val deadline = SystemClock.elapsedRealtime() + RELEASE_HEALTH_TIMEOUT_MS
@@ -482,7 +506,8 @@ class NodeServerService : Service() {
             }
             if (healthy) {
                 synchronized(offlineReleaseDirectoryLock) {
-                    if (generation != restartGeneration.get() || serviceUpdateApplying.get()) return@synchronized
+                    if (generation != restartGeneration.get() || serviceUpdateApplying.get()
+                        || !releaseResolved.compareAndSet(false, true)) return@synchronized
                     if (updateManager.markCurrentReleaseHealthy(root)) {
                         android.util.Log.i("AASC-Node", "Offline 候选服务已通过健康检查并提交")
                     } else {
@@ -491,13 +516,20 @@ class NodeServerService : Service() {
                             android.util.Log.i("AASC-Node", "健康 Offline 服务已清理 $removed 个历史版本目录")
                         }
                     }
+                    releaseHealthy.set(true)
+                    sendStatus(STATUS_READY)
+                    pendingServiceUpdateResult?.let { result ->
+                        pendingServiceUpdateResult = null
+                        sendStatus(STATUS_SERVICE_UPDATE_APPLIED, result)
+                    }
                 }
                 return@Thread
             }
             synchronized(offlineReleaseDirectoryLock) {
                 if (generation == restartGeneration.get() && !serviceUpdateApplying.get()
-                    && updateManager.rollbackPendingRelease(root)) {
-                    android.util.Log.e("AASC-Node", "Offline 候选服务未就绪，已回滚并停止候选进程")
+                    && releaseResolved.compareAndSet(false, true)) {
+                    failOfflineRelease(root, generation, updateManager,
+                        diagnostics.describe("服务未通过启动健康检查"))
                     if (process.isAlive) process.destroyForcibly()
                 }
             }
@@ -505,6 +537,27 @@ class NodeServerService : Service() {
             name = "aasc-offline-release-health"
             isDaemon = true
             start()
+        }
+    }
+
+    /** 失败提示带上回滚结果；健康超时与进程退出共用一次性处理，避免竞态覆盖。 */
+    private fun failOfflineRelease(root: File, generation: Int, manager: OfflineUpdateManager, reason: String) {
+        synchronized(offlineReleaseDirectoryLock) {
+            if (generation != restartGeneration.get()) return
+            val rollback = runCatching { manager.rollbackPendingRelease(root) }
+            val version = runCatching { readActiveRelease(root)?.codeVersion
+                ?: JSONObject(File(root, "offline-update-client.json").readText()).optInt("codeVersion") }.getOrNull()
+            val rollbackDetail = when {
+                rollback.isFailure -> "；回滚失败：${rollback.exceptionOrNull()?.message}"
+                rollback.getOrDefault(false) -> "；已回滚，保留服务${version?.let { "v$it" } ?: "原版本"}"
+                else -> ""
+            }
+            val detail = NodeStartupDiagnostics.sanitize(reason + rollbackDetail)
+            sendStatus(STATUS_FAILED, detail)
+            if (pendingServiceUpdateResult != null) {
+                pendingServiceUpdateResult = null
+                sendStatus(STATUS_SERVICE_UPDATE_FAILED, detail)
+            }
         }
     }
 
@@ -536,7 +589,17 @@ class NodeServerService : Service() {
             }
             if (connection.responseCode != 200) return false
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            return runCatching { JSONObject(body).optString("status") == "ok" }.getOrDefault(false)
+            return runCatching {
+                val status = JSONObject(body)
+                val versions = status.optJSONObject("versions") ?: return@runCatching false
+                val active = readActiveRelease(root)
+                val expectedVersion = active?.codeVersion
+                    ?: JSONObject(File(root, "offline-update-client.json").readText()).optInt("codeVersion")
+                val expectedRoot = active?.let { File(root, "updates/code/code-v${it.codeVersion}") } ?: root
+                status.optString("status") == "ok" && NodeStartupDiagnostics.matchesRuntime(
+                    versions.optString("code"), File(versions.optString("codePath")).canonicalPath,
+                    expectedVersion, expectedRoot.canonicalPath)
+            }.getOrDefault(false)
         } catch (_: Exception) {
             return false
         } finally {
@@ -544,12 +607,13 @@ class NodeServerService : Service() {
         }
     }
 
-    private fun readProcessOutput(process: Process, errorStream: Boolean) {
+    private fun readProcessOutput(process: Process, errorStream: Boolean, diagnostics: NodeStartupDiagnostics): Thread {
         val stream = if (errorStream) process.errorStream else process.inputStream
-        Thread {
+        return Thread {
             try {
                 stream.bufferedReader().useLines { lines ->
                     lines.forEach { line ->
+                        diagnostics.record(line, errorStream)
                         val level = if (errorStream) "E" else "I"
                         android.util.Log.println(
                             if (errorStream) android.util.Log.ERROR else android.util.Log.INFO,

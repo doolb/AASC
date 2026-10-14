@@ -289,3 +289,47 @@ offline APK 重打包契约
     → 安装后 /api/chat2api 路由与 /v1/chat/completions、/v1/responses 共用当前本地 server-app
     → 仅验证本地协议和包内容，不在自动验收中写入真实 Provider 凭据
 ```
+
+## 全Provider按钮与豆包格式校验保存伪代码（2026-10-14，代码前更新）
+
+```text
+已有声明 := 内置Provider注册表、Android捕获profile、隔离Activity/WebView、OAuth会话及账号存储
+新增定义 := CookieBundle { field, names, requiredNames, requiredAnyNames }
+豆包profile := https://www.doubao.com + 白名单六种Cookie + bundle.field=cookie
+完整条件 := sessionid存在 + 两种CSRF Cookie至少一种存在；输出仅含已声明名称
+Cookie集合捕获 := 解析CookieManager当前允许来源 → 筛选/去重/限长 → 完整才组装cookie字段
+服务端登录保存 := OAuth state/Provider匹配 → Provider现有validate → 严格规范化 → 保存
+豆包校验 := 来源合法 + normalizeDoubaoCredentials → valid=true + credentialVerification=format-only
+普通手动添加 := 复用相同豆包格式校验，允许添加并标记未远端验证
+OAuth账号元数据 := 显式嵌套accountInfo合并校验输出，避免凭据/状态散落顶层
+控制端结果 := format-only → 已配置未远端验证；其他 → 沿用验证成功提示
+标题栏 := 各capture Provider共用完成/取消；account-web同名按钮只关闭浏览页
+已保存豆包网页恢复 := 只把bundle声明名称映射回允许来源的Cookie；不扩大到未知名称
+取消或缺字段 := 不保存；缺字段保留登录页；取消清理临时Cookie/Storage
+后续待办 := 豆包请求会话列表验证；本轮只记录，不发校验/聊天请求
+```
+
+兼容：旧APK忽略未知Cookie集合字段会保持缺cookie状态，不冒充成功；配套新min APK和服务包启用完整捕获。所有内置网页Provider为deepseek/glm/kimi/minimax/mimo/perplexity/qwen/qwen-ai/zai/doubaochat。自定义Provider仍须声明对应来源/字段，不凭URL推断任意秘密。
+
+补充同步：普通手动添加与OAuth均须显式保存嵌套accountInfo，避免丢失format-only标记；同步chat2api-manual-account-service.js。Provider字段提示同步“允许添加、未远端验证”。
+
+自测模块增加只读原生入口/未验证状态映射检查，既有导入豆包账号也显示未远端验证；不触发登录或保存。
+
+现有验证断言同步新契约：原豆包“禁止添加”断言改为“允许添加且format-only”，Provider覆盖表由九项扩为十项。只修改已有用例，不新增或运行自动化测试。
+
+```text
+当前远端校验声明 := Qwen会话列表 / QwenAI用户 / DeepSeek当前用户 / Perplexity会话
+其他声明 := GLM刷新Token / Kimi订阅 / MiniMax设备注册 / MiMo入口 / Z.ai设置
+验收边界 := MiMo和Z.ai主要看HTTP成功，身份依据较弱；本轮未发送真实请求
+豆包会话列表 := 仅记后续方法；当前返回format-only元数据而非remote验证结果
+```
+
+## 外部登录配套发布与ADB观察完成（2026-10-14）
+
+min41/code76已发布LAN/WAN，复用依赖8、种子69和修复2；完整HTTP组件大小/SHA256、RSA签名、APK signer/profile与精确旧版本清理通过，保留full38，没有清理失败。最终清单SHA256 216921e970b9dc4e53bca3d9eb232824e067b0df0a6aba058b3e3a5749b3e4a6，两端一致。
+
+ADB Note8/API28已覆盖安装min41并健康提交服务76，/api/status确认实际code-v76目录和依赖8。通过不含真实账号凭据的公开profile会话观察豆包原生页：完成/取消均可见；未登录点击完成保留页面，取消返回MainActivity。没有实际登录账号、调用真实远端身份验证或发送聊天/合成请求。
+
+真机显示页计算样式确认TTS渐变峰值0.2、blur4px、白色rgba(255,255,255,0.9)与0.5px细边；临时设置仅用于读取TTS模式计算值，已恢复原属性。控制页未验证标签和新版完成/手动添加提示已加载。编译与Node语法检查通过；仅同步既有测试断言，未新增或运行自动化测试。10个Provider真实登录/凭据捕获/账号保存仍待用户账号验收。
+
+豆包会话列表验证与夜间显示策略保留用户暂缓决定。发布后工作区另有display-mmd.css/display.html/display-stage.js网页修改，未包含本次76、也未提交这些文件，servicePackage按未覆盖网页修改保持true；本任务min APK已生成，minApk=false、dependenciesPackage=false。

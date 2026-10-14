@@ -440,7 +440,7 @@ const WEB_PANEL_GROUP_JS = `
         setOpen(nextOpen);
       });
       panel.addEventListener('click', (event) => event.stopPropagation());
-      for (const buttonId of ['displayMmdLightingToggle', 'displayArTargetToggle']) {
+      for (const buttonId of ['displayMmdLightingToggle', 'displayArTargetToggle', 'mmdArIKToggle']) {
         document.getElementById(buttonId)?.addEventListener('click', () => setOpen(false));
       }
       document.addEventListener('click', (event) => {

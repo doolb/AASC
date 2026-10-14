@@ -31,8 +31,8 @@ const AascUserConfig = {
             const bridge = window.NativeControl;
             if (bridge && typeof bridge.saveFullConfigBackup === 'function') {
                 this.nativeBackupRequestId = `backup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                if (!bridge.saveFullConfigBackup(this.nativeBackupRequestId)) throw new Error('无法打开系统保存文件选择器');
-                this.setFullStatus('请选择 ZIP 的保存位置');
+                if (!bridge.saveFullConfigBackup(this.nativeBackupRequestId)) throw new Error('无法开始保存 ZIP 到 Download');
+                this.setFullStatus('正在保存 ZIP 到系统 Download…');
                 return;
             }
             const response = await fetch('/api/config-backup/export');
@@ -74,7 +74,7 @@ const AascUserConfig = {
         if (!result || result.requestId !== this.nativeBackupRequestId) return;
         this.nativeBackupRequestId = null;
         this.setFullBusy(false);
-        const message = result.status === 'saved' ? '全量 ZIP 已保存'
+        const message = result.status === 'saved' ? (result.message || '全量 ZIP 已保存')
             : result.status === 'cancelled' ? '已取消 ZIP 保存' : (result.message || '保存 ZIP 失败');
         this.setFullStatus(message, result.status === 'error');
         if (result.status !== 'cancelled') window.showToast(message, result.status === 'saved' ? 'success' : 'error');

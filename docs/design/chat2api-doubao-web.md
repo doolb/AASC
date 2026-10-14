@@ -64,7 +64,7 @@
 
 ## 文字账号与请求
 
-- Provider 固定豆包 HTTPS 官方来源；手动添加要求实际登录验证成功后才入库，安全只读身份端点未证实前固定拒绝该入口。现有凭证包导入仅格式校验并要求用户明确确认，不能代称登录已验证。服务端错误/日志/API 返回中不暴露 Cookie、CSRF、`msToken` 或签名参数。仅允许已确认的 Cookie 名称、合法长度与字符；自定义上游不能借网页 Provider 发送凭据到任意主机。Android 自动登录与二维码另行确认。
+- Provider 固定豆包 HTTPS 官方来源；按2026-10-14用户确认，手动/Android捕获添加经严格本地格式校验后允许保存，明确显示未远端验证；会话列表身份校验仅记录待办。现有凭证包导入仅格式校验并要求用户明确确认，不能代称登录已验证。服务端错误/日志/API 返回中不暴露 Cookie、CSRF、`msToken` 或签名参数。仅允许已确认的 Cookie 名称、合法长度与字符；自定义上游不能借网页 Provider 发送凭据到任意主机。Android自动登录已确认并实现；二维码另行确认。
 - 已落地的文字模块按参考项目构造 Node 独立 HTTP 请求/SSE，但额外获授权使用 Chrome 豆包域 Cookie 在内存中仅做一次极短 Node 直连：`POST /chat/completion` 被 HTTP 403 拒绝并映射为固定 `doubao_risk_control`；未吐正文，**生产聊天并未验收通过**，不得自动再试或绕过验证码。若需采用登录网页内 fetch，须独立评估受控 CDP 实例与账号绑定；不能隐式挪用其他账号的 Chrome 标签，也不能把当前 Chrome 当成所有部署环境的必备依赖。CDP 仅允许本机指定豆包页面，断连只断调试会话、不关闭用户 Chrome。
 - 账号格式严格限制为 `credentials.cookie` 中的 sessionid 与 CSRF 等已知项。安全只读身份验证端点尚未确认，**普通手动新增固定失败**；现有账号凭证包可以预览、明确确认后导入格式正确的 Cookie，但导入不代表真实登录验证或上游请求可用。这一缺口须在对用户宣布生产可用前解决。
 - request/messages 映射为一轮文字网页请求；当前只证实首轮 conversationId，Responses 续聊每次创建新网页会话并重放本地文字历史，仅保留 ACK ID 供诊断，不将 `doubaochat` 加入原生续聊字段表。将来证实原生续接后才切换为仅发送本轮增量，防止双重叠加历史。SSE 区分正文、思考、会话 ACK、风控和结束；分片 UTF-8、流取消、容量与超时均有上限。非流式收集同样依赖完整结束信号，失败不当空回答成功。
@@ -178,3 +178,11 @@ server-app复用控制消息白名单、连接初始化和广播；config.set持
 网页fetch固定同源/chat/completion、credentials:include、redirect:error。页面自身检查location.origin，主frame监听注册后复核当前origin；配置/账号指纹监控在连接前开始，读Cookie与fetch前重查授权。120秒覆盖连接、CDP创建/send/detach、身份和流；目录查询全流程≤5秒。原始流按≤64KiB拉取，单块≤512KiB、总8MiB，保留SSE字节分片；取消仅清理对应页面临时状态并断调试连接，不关闭用户标签或Chrome。
 
 独立审查3项重要竞态（导航漏检、连接阶段授权撤销、detach挂起）均先RED后GREEN；实际隔离Chromium还复现并修正Puppeteer使用off而非Node removeListener的接线差异，contextId使用实际CDP元数据，不假定默认context为空。所有网页请求被拦截为本地HTML/SSE，假sessionid仅用于测试profile，无真实上游或用户凭据。最终Chat2API173/176（同3项Windows chmod）、TTS/解码/配置/浏览器97/97、旧播报19/19。真实官网/账号、网页think/expert及Android/设备能力仍未验收，不宣布生产可用。
+
+## Android网页登录添加与后续验证方法（2026-10-14）
+
+用户已明确批准所有内置外部登录统一完成/取消，并允许豆包网页登录捕获后自动保存为未远端验证。Android登录和普通手动添加均采用严格Cookie本地规范化与format-only状态，允许未验证添加。Cookie仅按已确认的六名称捕获和恢复，秘密继续存credentials.cookie。
+
+“请求豆包会话列表验证”按用户要求先记录待办，本轮不选择未确认的URL或请求参数，不实施远端会话校验。该策略不能作为已验证登录宣称；未验证账号可添加并正常显示明确状态。
+
+Android捕获与未验证添加已随min41/code76发布内外网，ADB顶部按钮/缺字段保留/取消返回与未验证提示通过；真实账号登录仍待用户验收。

@@ -579,11 +579,28 @@ body {
     text-shadow: 1px 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.8));
 }
 
-/* TTS背景仅有10%不透明度；只模糊背景，字幕文字保持清晰。 */
+/*
+ * TTS参考时间文本的白色填色和阴影，主题强调色只用于细描边与下沿投影。
+ * 描边先绘制，白色字面后绘制，避免细字被描边挤成空心字。
+ * 纵向渐变让上下边界自然融入画面，背景峰值由控制端设置，默认和上限均为20%；
+ * backdrop-filter仅模糊字幕背后的画面，不对文字使用filter或整体opacity。
+ */
 #voiceTextDisplay[data-voice-text-mode="tts"] {
-    background: rgba(0, 0, 0, 0.1);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
+    color: rgba(255, 255, 255, 0.9);
+    -webkit-text-stroke: 0.5px var(--accent-color, #00d2ff);
+    paint-order: stroke fill;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, var(--tts-subtitle-background-opacity, 0.2)) 18%,
+        rgba(0, 0, 0, var(--tts-subtitle-background-opacity, 0.2)) 82%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    /* 与时间文本共用阴影写法；旧版浏览器不支持color-mix时沿用前一条声明。 */
+    text-shadow: 0 2px 0 var(--accent-color, #00d2ff), 2px 2px 8px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 2px 0 color-mix(in srgb, var(--accent-color, #00d2ff) 65%, transparent), 2px 2px 8px rgba(0, 0, 0, 0.8);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
     overflow: hidden;
     line-height: 1.4;
 }

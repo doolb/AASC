@@ -1,5 +1,11 @@
 // 临时 render 刷新诊断默认关闭，保留埋点便于后续现场需要时重新开启。
 const WEBSOCKET_RENDER_REFRESH_DIAGNOSTICS_ENABLED = false;
+const CONTROL_REMOTE_CONFIG_HANDLERS = Object.freeze({
+    displayTtsBackgroundOpacityConfig: data => window.Settings?.handleTtsBackgroundOpacityConfig(data),
+    displayTtsBackgroundOpacityConfigError: data => window.Settings?.handleTtsBackgroundOpacityConfigError(data),
+    serverPortConfig: data => window.Settings?.handleServerPortConfig(data),
+    serverPortConfigError: data => window.Settings?.handleServerPortConfigError(data)
+});
 
 const WebSocketManager = {
     ws: null,
@@ -82,6 +88,11 @@ const WebSocketManager = {
         }
         if (data.type === 'serverStartTime') {
             this.handleServerStartTime(data.time);
+            return;
+        }
+        const remoteConfigHandler = CONTROL_REMOTE_CONFIG_HANDLERS[data.type];
+        if (remoteConfigHandler) {
+            remoteConfigHandler(data);
             return;
         }
         

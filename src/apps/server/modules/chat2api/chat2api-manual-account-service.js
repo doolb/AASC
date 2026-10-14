@@ -149,7 +149,8 @@ const createChat2ApiManualAccountService = ({ dataStore, providerRegistry, crede
     );
     const now = Date.now();
     const saved = await dataStore.saveAccount({
-      ...accountInfo,
+      // 手动与Android捕获使用相同公开元数据结构，确保未远端验证状态不会被丢弃。
+      accountInfo: { ...accountInfo, ...(validated.accountInfo || {}) },
       accountId: resolvedAccountId,
       providerId: provider.id,
       label: label || validated.accountInfo?.name || provider.name,

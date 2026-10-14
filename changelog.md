@@ -2,6 +2,50 @@
 
 - ✅ [2026-10-13] 按用户要求提交当前9份文档：MMD README、design/spec索引、自测、todo、usage、TTS使用说明、changelog及豆包.src伪代码。
   - 包含各文档当前暂存和未暂存版本；仅提交Markdown，配置/config、显示端配置和任务results继续保留原暂存。验证提交范围及Markdown差异，不新增代码、自测执行、真实请求、主服务操作或构建发布。
+### 独立MMD-AR控制点Off稳定与默认重力
+
+- ✅ [2026-10-14] 修复控制点放开后的持续漂摆，人体重力改为默认关闭，支持手动开启。
+  - 修改`web-human-physics-drive.mjs`/`web-human-physics-rig.mjs`：限位显示不再瞬移反馈native姿态/COM；按两端惯量施加耗能等反角冲量，保持Off相对关节阻尼与线动量衰减；stop ERP=0.2抑制重力接触反复对抗。固定骨长/PMX限位、惯性和主动重力保留。
+  - `web-human-ik.mjs`释放时取消残余拖动并立即更新标记；位置/旋转状态独立，不隐式Hold或整体重置；`web-human-ik-ui.mjs`重力初始不勾选。
+  - 扩展身体/实际浏览器自测：身体20/PBD3/标记4/镜头手势5/动作7，共39/39通过；真实米娅拖点/面板Off/重力开关900子步、多点/重置/模式/横竖屏1/1通过；WEB构建、6模块语法与差异空白检查通过。关重力释放末秒全骨位置最多1.12mm，开重力最多5.20mm；仍有简化接触抖动。
+  - 网页测试使用/var/tmp避开临时IndexedDB IO失败，降低SwiftShader画面特效/渲染倍率，保留蒙皮/衣物物理和真实子步。同步design/spec/task/usage/README/self-test/todo，移除实现任务，只保留设备/其他模型验收；仅本地WEB，未出APK/部署，保留其他任务Offline状态与无关改动。
+
+### 独立MMD-AR单点牵引稳定性修复
+
+- ✅ [2026-10-14] 修复关重力后单点牵引导致骨骼漂摆、关节过度回弹。
+  - 修改`web-human-physics-rig.mjs`/`web-human-physics-drive.mjs`/`web-human-ik-ui.mjs`：父链静止坐标统一米制；默认骨盆保持位置/朝向，拖骨盆有界平移，开启自由/旋转目标恢复运动；分区碰撞、有效惯量/耗能阻尼、原生同轮目标弹簧及限位速度反馈。默认单轴深弯曲避免Euler折返，显式PMX范围/骨长保持。
+  - 新增真实PMX自测夹具，扩展身体/实际网页测试。身体16/PBD3/标记4/镜头手势5/动作7共35项通过；真实米娅实际鼠标拖点、900子步单点保持、多目标/重置/模式/面板1/1通过，额外相机VMD2/2在Chromium共享内存启动下通过，独立WEB构建通过。四单点各10秒末秒全身位置跨度0.57–13.64mm、最大转角跨度0.03590rad；不可达头目标保持原目标并受可达包络约束。
+  - 同步design/spec/task/usage/README/ref/self-test与todo，移除实现待办，只保留手机/其他PMX/实时VMD服饰与AR验收。仅本地WEB，不出APK/部署；保留其他任务Offline发布状态及无关改动。
+
+### 独立MMD-AR全身IK面板、控制点与牵引
+
+- ✅ [2026-10-13] 全身IK迁到独立按钮/面板，放大控制点并增强身体物理牵引。
+  - 新增`web-human-ik-ui.mjs`/`web-human-ik-markers.mjs`，更新build/Human panel/UI/build/IK/interface及现有面板互斥；旧Human IK入口移除。收起面板保留姿态/目标，模式/启用/关闭/重置统一在新面板，横竖屏布局和Escape支持。
+  - 控制点默认32 CSS px、可调20–48px，镜头近远保持屏幕尺寸，命中至少44px，重叠选最近中心；排除相机后方/视锥外点，适配舞台四向旋转。
+  - `web-human-physics-drive.mjs`默认强度0.85，目标响应和力/力矩预算联动；Hold系数1.2、Comply系数0.55，自然姿态独立2.4Hz，保留PMX限位和固定子步。合成17体同目标0.5/1秒误差约降低40%，有界瞬态超调；实际手机/其他模型手感列待办。
+  - 新增标记自测，扩展身体与真实浏览器面板用例；定向31/31、真实米娅面板/鼠标拖点和镜头浏览器2/2、`npm run build:web:mmd-ar-test`、14模块语法和定向差异空白检查通过。同步design/spec/task/usage/README/self-test与todo；只生成本地独立WEB，不出APK/部署，不改变Offline发布状态。
+
+### Offline启动回滚、Download备份与错误提示修复
+
+- ✅ [2026-10-13] ADB安装full APK v38并复现内置v69与热更v70启动失败；确认系统/data/user/0链接被备份工作目录检查误拒绝，70切换后回滚。
+  - 已修复full-config-backup-service可信项目根realpath/根内路径映射；Android新增FullConfigBackupDownloads、NodeStartupDiagnostics、OfflineFailureState，更新MainActivity/NodeServerService及aasc-user-config.js。最终ZIP保存Download，内部事务私有；实际启动/应用更新错误持续可见，服务候选版本和代码路径健康确认后才成功。
+  - 备份Node/浏览器17/17通过，Android JVM208/208通过；24MiB往返1809ms、峰值RSS267MiB含夹具。首次临时目录配额失败改用/var/tmp；原保存选择器残留引用已修正。同步design/spec/usage/self-test/task/todo。最终min APK v40/0.2.38与服务v71已构建发布并通过API28设备验收；servicePackage/minApk=false，依赖集合未变。
+
+### 独立 MMD-AR VaM 式身体物理控制
+
+- ✅ [2026-10-13] 完成首阶段独立Ammo人体代理、关节与位置/旋转牵引，保留PBD模式。
+  - 新增`web-human-physics-rig.mjs`/`web-human-physics-drive.mjs`；更新Human IK/interface/UI/build，IK分类内提供11控制点、On/Hold/Off/Comply、强度/阻尼/重力/骨盆自由与世界旋转。身体姿态向原服饰单向传递；没有皮肤软体或服饰反向受力，不保证完整VaM一致。
+  - 默认人体限位使用物理父关节相对角，PMX显式限位使用真实骨骼局部XYZ；Bullet界限反号交换，center同级上下半身随骨盆转动。暂停原几何手臂避让，关闭/重置/换模式/模型令牌取消恢复增量并释放本模式原生资源。
+  - 新增真Ammo与真实米娅浏览器自测；定向18/18、物理实际鼠标拖点及原镜头手势浏览器各1/1、独立WEB构建与语法/空白检查通过。合成骨架双目标约106°屈膝；其他模型/VMD/服饰后端/AR和手机观感待验收。同步design/spec/task/usage/ref/self-test/README，todo只保留待人工验收。
+  - 只生成本地独立WEB，未出APK/部署；独立源码不进入Offline服务/min/依赖输入，发布状态保留其他任务值。VaM DLL只读分析，不提交DLL或反编译源码。
+
+### TTS 三行字幕服务包发布
+
+- ✅ [2026-10-13] 构建并发布服务代码包 v70，包含按音频进度逐行显示的三行滚动字幕。
+  - 通过`npm run build:offline-update` code-only模式生成`code/code-v70.zip`：17,720,868 bytes，SHA-256 `8d44da0740484fd8d8ffcdbda1b41778a8db276178f03995f890e883e81dcbed`；来源提交`bcdda0518d9d0a6c721885ed5b246ea23958904d`。ZIP完整性、1,072个文件与源码逐字节比对、RSA签名与组件契约通过；复用dependencies v8、Node-min seeds v69、min APK v37及dataRepair v2。
+  - `npm run publish:offline-update`已发布到LAN `/mnt/aasc-offline`与WAN `/home/as/a/aasc-offline`：先版本文件后原子切换清单，全部组件HTTP大小/SHA-256与签名通过；两端清单3,483 bytes，SHA-256 `45acc58cb555e99a95ce9fbe0a9ac0854108c723de21fd6565139ea19a95ef70`，字节一致。代码v70两端HTTP 200，旧code v69两端HTTP 404，精确清理无错误。
+  - `servicePackage=false`，minApk/dependenciesPackage均保持false；发布产物不提交Git。本轮属于纯构建发布，仅补充本日志及构建状态。
+  - 用户反馈外网真机更新70后服务显示68：尚缺设备地址/服务代码路径。已检查版本读取和更新流程：服务版本读取本地active-release；原生“应用成功”通知先于新服务健康检查，候选启动失败可回滚。尚未确认该设备是界面缓存、连接了其他服务还是启动回滚；未修改相关代码或操作真机。
 
 ### TTS 三行滚动字幕
 
@@ -12054,3 +12098,133 @@
   - 两端8项新单元及原时域共16/16；相同64输入/256显示的30组空间GPU对照：2/4倍平均覆盖误差较1倍下降约32%/47%，两端结果相同、中心色/alpha与GL无错误。定向首轮62项有1项旧默认预设假设失败，固定输入并修正现有预设复位断言后真实模型复跑1/1通过。
   - 本地WEB构建成功；预览4倍PNG仍按请求尺寸绘制并恢复；输出相关GPU/历史成本增加，手机动态效果未验收。全仓和Git集成结果见任务末尾；servicePackage=true原值保持，min APK/依赖状态不另改，未发布或构建APK。
   - 全仓结束后核心四文件23/23串行复核通过、无跳过，含原FSR GPU模式、三档真实模型、设置刷新/复位和PNG全帧旁路。全仓1694项1545通过/131失败/11取消/7跳过，APK-parity挂起子进程精确终止；失败/取消全名单保存在任务，不宣称全仓通过。
+
+### Offline更新检查错误补齐
+
+- ✅ [2026-10-13] 更新检查结果新增failed标志，服务与min APK签名拒绝/版本不兼容/失败候选均提示；LAN/WAN最终网络失败带原因，网页重试耗尽保持真实启动错误。
+  - 修改OfflineUpdateManager/MainActivity与诊断自测；min升40/0.2.38，服务包继续v71。min39+v71已在API28真机验证健康恢复、服务器页面v71、Download ZIP和重启；补齐min40/0.2.38已签名构建并安装API28：81124288字节，SHA256 21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5；全套209/209通过，实际APK0.2.38/code71健康。servicePackage/minApk=false；min40最终LAN/WAN全组件HTTP大小/SHA256与精确清理通过。
+
+### TTS字幕主题对比度方案记录
+
+- ✅ [2026-10-13] 记录已确认的字号保持、主题深浅对比文字色和上下柔和背景渐变方案。
+  - 用户要求先记录，未修改字幕代码，未改变出包状态；同步display-chat-mmd design/spec、task与todo。
+
+### Offline启动与更新修复发布验收
+
+- ✅ [2026-10-13] 发布服务v71和最终min APK v40（0.2.38-offline-min）；SM-N9500/API28原位更新及重启均正常，服务器页面/API实际v71，启动/更新错误可见、健康后恢复，ZIP直接保存Download且CRC通过。
+  - code/code-v71.zip：17721071字节，SHA256 b6fd67e22d6499bf323f3369c6a9690826466e8c5d7821d13818412802c6fb7b；apk/aasc-display-offline-min-v40.apk：81124288字节，SHA256 21099968269ef4c4712edb6ed0d2f7ac3822dd3c29a4268bc8ccadc4845428b5。复用dependencies8/nodeMinSeeds69/dataRepair2，完整full38保留。
+  - LAN/WAN签名清单SHA256 69e3d4852ef056d3431ca6afb36c29f7c92dd6f269e7cf47c9d153ddd0a143ae；版本文件/证书/profile/CRC及全组件HTTP大小SHA256通过，旧code70/min37/中间min39按精确规则清理，无清理错误。初次发布进程终止后幂等重试成功。
+  - Node/浏览器17/17、最终Android209/209通过；状态全部false，任务完成并从todo移除。保留未执行的真实ZIP导入与API29+设备验收；TTS主题渐变仅记录待实施。
+
+### TTS字幕主题对比度修复
+
+- ✅ [2026-10-13] 恢复已确认的TTS方案，字号保持；深色白字/黑色边缘、浅色深字/白色边缘，背景上下渐隐且最高alpha0.1，保留8px背景模糊与三行滚动。
+  - 修改display.css与self-test.js；复用UiTheme根data-theme-mode，更新display-chat-mmd design/spec、原task、usage和自测文档。源脚本语法/定向差异空白检查通过，servicePackage=true，已随服务v72发布LAN/WAN并通过全组件HTTP大小/SHA256与精确清理；API28真实播报、主题切换、闲置隐藏和历史恢复通过。
+
+TTS主题对比度构建进度：已有40项主题/旋转/DPI回归通过，Chromium核对dark/light/mint/new-year-red颜色、字号36px/三行高度151.1875px一致与blur8px。code-v72.zip 17721571字节，SHA256 ea1e63968318b87a8c01946653e86115a3095b98100cc4ffea5b9a89cc3ed3ce；CRC、源码对应及与v71仅两文件差异通过。真机已健康提交v72，servicePackage=false；最终LAN/WAN HTTP验证及实际播报/主题切换/闲置隐藏/历史恢复均通过。
+
+### TTS主题对比度服务72发布验收
+
+- ✅ [2026-10-13] code/code-v72.zip已发布LAN/WAN：17721571字节，SHA256 ea1e63968318b87a8c01946653e86115a3095b98100cc4ffea5b9a89cc3ed3ce；签名清单SHA256 136f8ffd286b686dedd91988de25575b7bc121ab0148319cee83526bda10f8f5。
+  - 与v71仅display.css/self-test.js变化，CRC/源码/签名及全组件HTTP大小SHA256通过；精确清理旧code71，保留dependencies8/min40/full38/nodeMinSeeds69/dataRepair2，无清理错误。首次发布进程终止后幂等重试成功。
+  - 40项主题/旋转/DPI回归通过；Chromium四主题颜色/字号/三行高度与明暗分区截图通过；SM-N9500/API28真实播报、dark/mint即时切换、闲置隐藏和新播报恢复历史截图通过，原主题已恢复。servicePackage=false，未重出APK/依赖，todo移除完成任务，design/spec/task/usage/self-test同步。
+
+### TTS白字主题色细描边与0.3背景
+
+- ✅ [2026-10-13] 按用户最终明确要求参考时间文本：白色文字、0.5px主题色细描边、时间同款阴影，黑色背景上下渐隐并将最高alpha改为0.3，保留8px模糊。
+  - 修改display.css/self-test.js；字号、字重、三行和历史规则保持，删除浅色主题深字/白底覆盖。先更新display-chat-mmd spec/design与新task，同步usage/todo/self-test；脚本语法/定向空白检查通过，servicePackage=true，服务73已发布LAN/WAN，40项回归/四主题计算值/API28实际播报与主题切换通过，完整HTTP大小SHA256/签名及精确清理通过。
+
+TTS白字主题色细描边构建：code-v73.zip 17721468字节，SHA256 cd990c79d9ef28d903e62257fe8366108655867545af2a6fd7b6cc93bff085fb；CRC/源码/v72仅两文件差异通过。40项主题旋转DPI回归通过，Chromium四主题白色填色/0.5px accent描边、时间阴影一致、0.3背景/blur8px及三行字号通过。servicePackage=false；LAN/WAN完整校验和ADB观察均通过。
+
+### TTS白字主题色细描边服务73发布验收
+
+- ✅ [2026-10-13] 发布code/code-v73.zip到LAN/WAN：17721468字节，SHA256 cd990c79d9ef28d903e62257fe8366108655867545af2a6fd7b6cc93bff085fb，最终签名清单SHA256 5e24c48d91529e05bc7931dc695397513bb045ac30e290649daff3038dacec99。
+  - 与v72仅display.css/self-test.js变化，CRC/源码/签名及全组件HTTP大小SHA256通过；精确清理旧code72，保留dependencies8/min40/full38/nodeMinSeeds69/dataRepair2，无清理错误。
+  - 40项既有主题/旋转/DPI回归通过；四主题白色填色与时间文本一致、0.5px accent描边、时间阴影一致、0.3背景/blur8px/三行字号通过；API28/min40实际播报及dark→mint主题细边变化通过，原主题已恢复。servicePackage=false，todo移除完成任务，design/spec/task/usage/self-test同步。
+
+### APK数据修复重复提示定位
+
+- ✅ [2026-10-13] 只读定位min40重复数据修复提示：ADB/code73日志显示hide-offline-display-status-bar-v2被rejected-data-version拒绝（包要求数据版本1→2），没有完成成功记录；Native只按服务健康误报应用成功，后续再次提示。
+  - 记录offline-data-repair design/spec、task/todo及自测候选；具体当前dataVersion未直接读取，不宣称0。候选修正Native完成判断、真实原因和同失败去重/手动重试，按AGENTS等待用户确认；未修改代码/profile/发布状态或运行真实修复。
+
+- ✅ [2026-10-13] 补充数据修复拒绝根因：旧v1为0→1、当前v2要求1→2；full未携带修复state，缺记录按0，而当前发布只提供v2，不能补链。两脚本分别修改声纹开关/状态栏，缺首装兼容。
+  - 已核对旧清单、两份repair.js、full runtime文件列表及LAN data目录；不宣称读取了设备当前版本。同步offline-data-repair design/spec、task/todo与自测记录；仅原因分析，未改代码/发布状态或执行真实修复。
+
+### 数据修复问题暂缓
+
+- ✅ [2026-10-13] 用户明确暂时不处理APK数据修复重复提示和首装版本链兼容问题。
+  - 已记录暂缓状态到offline-data-repair design/spec、原定位task与todo，保留候选方案。未修改代码、修复成功记录、包元数据或发布状态，未运行修复、构建或发布；待用户明确恢复后继续。
+
+### Offline背景光晕夜间黑底定位
+
+- ✅ [2026-10-13] ADB Note8/min40/code73确认背景变黑由23:00–08:00定时睡眠遮罩造成；权威光晕参数仍为#8FA8D5/10%/58%，现有60秒临时激活后截图确认光晕正常。
+  - 普通版占用8081时Offline出现EADDRINUSE并加载旧服务；停止普通版、重启Offline后/api/status确认真实v73/依赖8及代码目录。未修改睡眠配置、源码、发布状态或数据修复逻辑。
+  - 用户明确先不处理夜间显示策略，记录到display-background-glow design/spec、task/todo；保留定时睡眠，临时激活到期按原配置自动回落。
+
+### TTS背景最高alpha 0.2
+
+- ✅ [2026-10-13] 用户确认将TTS黑色背景渐变峰值从0.3调整到0.2，保留上下渐隐、8px模糊及白字/主题色细边/三行播报进度。
+  - 先更新display-chat-mmd spec/design，再修改display.css/self-test.js；同步usage、自测说明、task/todo，servicePackage=true待构建发布。没有新增自动化测试或修改睡眠配置。
+
+TTS参数补充：用户要求将8px背景模糊减半至4px，与alpha0.2合并。先更新spec再修改两条backdrop-filter，提示/usage同步；第一次74构建未发布，最终包重新构建覆盖最新源码。
+
+TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 16ad6ebdbb949598f561e34b301b8222d060999fb3b09615920e8b269a915dd1；CRC/包内最新CSS与自测提示对应通过，与73仅display.css/self-test.js两文件变化。alpha0.2、blur4px已包含；servicePackage=false。初次74未发布，追加4px后同版本构建被禁止覆盖，改用新版本75；内外网发布和HTTP校验进行中。未新增或运行自动化测试。
+
+### Android外部登录统一按钮与豆包自动保存
+
+- ✅ [2026-10-14] 完成源码：10个内置网页Provider具备Android捕获配置，隔离登录及账号外部网页统一完成/取消；补齐豆包白名单Cookie集合捕获/恢复。
+  - 豆包自动/手动添加采用严格本地格式校验，嵌套元数据保留未远端验证标记，结果和旧导入账号状态明确；其他Provider现有校验保持。用户要求请求会话列表验证仅记录待办。
+  - 先同步android-chat2api-login-control/chat2api-doubao-web design/spec/task再改Native/服务/网页，更新只读自测说明与usage/todo；min profile41，minApk=true/servicePackage=true，dependenciesPackage=false。构建发布和ADB入口观察进行中，未新增或运行自动化测试。
+
+### TTS参数服务75发布与外部登录配套构建
+
+- ✅ [2026-10-14] TTS最终参数alpha0.2/blur4px已发布服务75：17721484字节，SHA256 16ad6ebdbb949598f561e34b301b8222d060999fb3b09615920e8b269a915dd1；签名清单SHA256 111499d8855d1dabf6dbac6bc27fcdf284af434edad6712a02b8eeb5bb93a163。LAN/WAN完整组件HTTP校验与精确清理通过。
+  - 更新display-chat-mmd design/spec、task/usage，移除TTS完成todo；真实新版参数观察随配套min41/code76进行。
+- ✅ [2026-10-14] 标准npm script生成min41（89327222字节，SHA256 42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340），签名与已安装版一致，profile/updateOnly/版本/CRC及新集合捕获DEX通过；ADB覆盖安装成功。
+  - 配套code76为17722423字节，SHA256 f26196d5afa10d227abdb0485887c2f6922dc89a1e27854ea9cba17b2609cdfe；CRC/最新源码通过，含10个变更文件（两项既有断言同步，未新增或运行自动化测试）。min41/code76待发布完成及入口观察；minApk=false/servicePackage=false/dependenciesPackage=false。Provider验证方法已记录，豆包会话列表校验先暂缓。
+
+### 显示端PMX加载进度条旋转适配
+
+- ✅ [2026-10-14] PMX加载进度条接入显示舞台旋转层，按0°/90°/180°/270°跟随逻辑画布旋转并保持在屏幕范围内。
+  - 修改`display.html`、`display-stage.js`、`display-mmd.css`；进度阶段文字、轨道和填充随层旋转，宽度受逻辑画布约束，原有百分比及隐藏时序保持。新增`tests/display-mmd-loading-rotation.test.js`，覆盖1280×720/360×800和四个方向；旋转回归共5/5通过。
+  - 同步display design/spec、自测和任务文档；Offline Android WebView现场验收待完成。本轮不构建/发布，`release/offline-release-status.json`将`servicePackage=true`，min APK与依赖状态保持不变。
+
+### Android外部登录min41与服务76发布验收
+
+- ✅ [2026-10-14] min41/code76发布LAN/WAN完成：min APK89327222字节/SHA256 42b2ad7ba4734ec205bd29b2e1d7968cbf1d7435b0edc942f4580fb9d3d8c340，代码17722423字节/SHA256 f26196d5afa10d227abdb0485887c2f6922dc89a1e27854ea9cba17b2609cdfe，最终清单SHA256 216921e970b9dc4e53bca3d9eb232824e067b0df0a6aba058b3e3a5749b3e4a6。
+  - signer/profile/CRC/最新本任务源码及全组件HTTP大小SHA256通过，两端清单一致；精确清理旧min40/code75，保留依赖8/full38/种子69/修复2，无清理失败。
+  - ADB/API28已覆盖安装min41并健康提交实际code-v76；豆包公开profile原生按钮/缺字段完成保留/取消返回通过，未执行真实账号登录或上游请求。真机TTS计算alpha0.2/blur4px/白色填色/0.5px细边与未验证标签通过，临时属性已恢复；真实账号全链路保留验收todo。
+  - 移除实现进行中todo，同步相关design/spec/task/usage/self-test；豆包会话列表验证仅记录，夜间显示/数据修复继续暂缓。发布后另有三份网页工作区改动未包含76且未提交，servicePackage=true保留其待打包状态；minApk=false/dependenciesPackage=false。
+
+### 控制端竖屏任务面板与显示/服务器设置
+
+- ✅ [2026-10-14] 控制端任务面板适配竖屏：任务卡片横向滚动，实例和结果列在下方全宽排列，横屏继续三列。
+  - 修改`task-panel.js`、`upload.css`，更新remote-task-system design/spec并新增任务文档；浏览器布局测试2/2通过，搜索过滤行为通过。
+- ✅ [2026-10-14] 界面主题新增TTS背景透明度设置：0%–20%、步长1%、默认20%，沿用AASC WebSocket远端配置和服务端持久化；显示端渐变读取配置变量，旧配置默认保留alpha0.2。
+  - 修改`upload.html`、`websocket.js`、`display.html`、`display.css`、`config-app-service.js`、`server-app.js`；透明度测试3/3通过，计算alpha0.13/4px模糊/文字不透明通过。
+- ✅ [2026-10-14] 服务端卡片新增服务器端口设置：校验1–65535，经WebSocket权威广播并持久化；端口变化后托管重启，控制端和显示端等待新端口可用后保留地址路径并跳转；重启排队期间拒绝再次改端口。
+  - 修改`upload.html`、`websocket.js`、`display.html`、`config-app-service.js`、`server-app.js`；端口测试3/3通过。未在运行服务上切换端口或重启。
+  - 新增三组design/spec/task及文档索引；更新self-test和todo。相关主题/背景光晕/任务链接回归39/39、显示端重连4/4通过。
+  - 本轮未构建或发布；`release/offline-release-status.json`保持`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。Offline Android WebView与真实端口重启验收待完成。
+
+### TTS 背景透明度范围扩展与子服务器包重打
+
+- ✅ [2026-10-14] TTS 字幕背景透明度滑块扩至0%–100%，保留1%步长和20%默认值；服务端及WebSocket仍以0–1 alpha比例保存/传输，旧配置值保持兼容。
+  - 修改`upload.html`、`config-app-service.js`、`display.html`和`self-test.js`；浏览器验证0%、20%、73%、100%双向换算，服务端边界/规范化和渐变alpha 1通过，`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js`共7/7通过。
+  - 更新透明度design/spec、self-test伪代码、任务/todo；Offline code v78签名、组件大小/SHA-256及ZIP完整性校验通过。`code-v78.zip`为17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`。
+  - 普通子服务器`aasc-server-1.0.0.tar.gz`重打为4,598,415 bytes，SHA-256 `2d734589793d4efe5bf7572c084be17fe06be816c379da11d74bc666a1fbb055`；主控 `/server/manifest` 已指向新包。产物未提交Git。
+  - APK-SM-N9500定向强制更新请求返回accepted，但服务启动时间未变化，不能确认已安装；Offline code v78未发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。任务列表拖动滚动按用户要求暂缓，待真机试用后再定。
+
+### TTS 背景透明度范围扩展与子服务器包重打
+
+- ✅ [2026-10-14] TTS 字幕背景透明度滑块扩至0%–100%，保留1%步长和20%默认值；服务端及WebSocket仍以0–1 alpha比例保存/传输，旧配置值保持兼容。
+  - 修改`upload.html`、`config-app-service.js`、`display.html`和`self-test.js`；浏览器验证0%、20%、73%、100%双向换算，服务端边界/规范化和渐变alpha 1通过，`node --test tests/display-tts-background-opacity.test.js tests/server-port-config.test.js`共7/7通过。
+  - 更新透明度design/spec、self-test伪代码、任务/todo；Offline code v78签名、组件大小/SHA-256及ZIP完整性校验通过。`code-v78.zip`为17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`。
+  - 普通子服务器`aasc-server-1.0.0.tar.gz`重打为4,598,415 bytes，SHA-256 `2d734589793d4efe5bf7572c084be17fe06be816c379da11d74bc666a1fbb055`；主控 `/server/manifest` 已指向新包。产物未提交Git。
+  - APK-SM-N9500定向强制更新请求返回accepted，但服务启动时间未变化，不能确认已安装；Offline code v78未发布，`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`。任务列表拖动滚动按用户要求暂缓，待真机试用后再定。
+
+### Offline服务代码v78发布
+
+- ✅ [2026-10-14] Offline服务代码v78已发布至LAN与WAN：`code/code-v78.zip`，17,727,240 bytes，SHA-256 `2c5a665fcf09e7a0666832c10d46eec05c07bb199be7b368eb6ea70506c48202`；发布清单SHA-256 `47f08d0e7920b86aff6ace6a40180ae7a5100fa03a993dcd2193a1f284dd9444`。
+  - 签名清单与全组件HTTP大小/SHA-256校验通过，两端清单一致，旧版本精确清理成功；未构建或发布APK。`servicePackage=false`、`minApk=false`、`dependenciesPackage=false`。
+  - APK-SM-N9500仍报告代码`1.0.0`及`package-root`，尚未应用Offline热更新；待在设备更新卡片确认安装后复核版本。

@@ -5,6 +5,10 @@ import org.junit.Test
 
 class FullConfigBackupSavePolicyTest {
     @Test fun 只从当前控制页来源构造固定下载路径() {
+        assertEquals("https://127.0.0.1:8081/api/config-backup/export",
+            FullConfigBackupSavePolicy.downloadUrl("https://127.0.0.1:8081/control?v=71"))
+        assertEquals("https://example.com/api/config-backup/export",
+            FullConfigBackupSavePolicy.downloadUrl("https://example.com/control/"))
         assertEquals("http://127.0.0.1:8081/api/config-backup/export",
             FullConfigBackupSavePolicy.downloadUrl("http://127.0.0.1:8081/upload.html?v=1"))
         assertEquals("https://example.com/api/config-backup/export",

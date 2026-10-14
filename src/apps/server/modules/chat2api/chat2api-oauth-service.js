@@ -81,7 +81,8 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
       );
       const now = Date.now();
       const saved = await dataStore.saveAccount({
-        ...accountInfo,
+        // 验证方式等公开元数据单独保存，豆包本地格式校验不能丢失“未远端验证”标记。
+        accountInfo: { ...accountInfo, ...(validated.accountInfo || {}) },
         accountId: resolvedAccountId,
         providerId: provider.id,
         label: label || validated.accountInfo?.name || provider.name,

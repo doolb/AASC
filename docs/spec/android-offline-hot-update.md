@@ -1040,3 +1040,34 @@ Build/device checks:
     verify /api/status, /v1/models, chat, ASR/TTS and display UI
     compare configuration, tasks/results, logs, ASR/TTS files and LLM cache before/after
 ```
+
+## Native错误与健康确认伪代码（2026-10-13，已实现，API28设备复测通过）
+
+```text
+每次启动 := 创建diagnostics与独立代次/一次性健康处理标识；stderr/错误行形成有界脱敏摘要
+进程退出 := 等待stdout/stderr读取线程 → 摘要+退出码 → pending候选回滚 → 失败状态+保留版本
+本地健康 := GET/api/status成功 → status=ok → versions.code与活动版本一致 → canonical codePath与实际目标一致
+健康成功 := 标记候选healthy → READY → 若存在待确认更新，发送APPLIED并清除待确认状态
+健康失败/超时 := 同代次且未处理 → rollback → FAILED和UPDATE_FAILED → 停止候选；旧事件不能覆盖新进程
+UI失败 := 保存startupError/updateError → 显示原因与重试入口 → 自动重试/网页等待保留原错误
+UI健康 := 清除startupError并刷新错误网页；APPLIED清除updateError并刷新控制页
+UI更新错误 := 取消自动折叠；Activity保存/恢复错误；用户新尝试或成功后清除对应错误
+```
+
+映射：NodeStartupDiagnostics、OfflineFailureState、NodeServerService与MainActivity。默认健康时限仍为120秒，未增加配置接口。
+
+补齐检查阶段伪代码：
+
+```text
+检查结果 := status + failed明确标志；无更高版本failed=false；缺公钥/版本不兼容/拒绝候选/异常failed=true
+清单获取 := LAN失败继续WAN；最终网络失败抛出包含原因的异常；所有源404保持无更新
+检查完成 := failed时显示原生更新失败卡片；服务与min APK检查统一执行，不依赖中文关键词
+网页重试耗尽 := 已有startupError则保持原始原因，否则显示等待超时
+```
+
+```text
+设备验收 := SM-N9500/API28 full38 → min39 → code71健康提交 → min40
+UI验收 := 真实启动Error与失败候选同时可见；健康恢复清除错误并刷新；服务器页v71
+运行验收 := /api/status status=ok，APK0.2.38、codev71、canonical codePath/code-v71；重启保持版本
+发布验收 := code71与min39 LAN/WAN文件/签名/HTTP大小SHA256通过；min40最终发布验证另记changelog
+```

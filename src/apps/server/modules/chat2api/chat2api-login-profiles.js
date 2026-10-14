@@ -13,6 +13,21 @@ const freezeDeep = (value) => {
  * 配置中故意不提供可执行脚本，避免 Provider 页面或远端配置扩大凭据采集范围。
  */
 const ANDROID_LOGIN_PROFILES = freezeDeep({
+  doubaochat: {
+    loginUrl: 'https://www.doubao.com',
+    allowedOrigins: ['https://www.doubao.com'],
+    authorization: null,
+    localStorage: [],
+    cookies: [],
+    // 豆包使用一组Cookie完成认证；只打包明确声明的名称，避免导出站点的其他Cookie。
+    cookieBundles: [{
+      field: 'cookie',
+      names: ['sessionid', 'passport_csrf_token', 'passport_csrf_token_default', 'msToken', 'ttwid', 's_v_web_id'],
+      requiredNames: ['sessionid'],
+      requiredAnyNames: ['passport_csrf_token', 'passport_csrf_token_default'],
+    }],
+    requiredFields: ['cookie'],
+  },
   deepseek: {
     loginUrl: 'https://chat.deepseek.com',
     allowedOrigins: ['https://chat.deepseek.com'],

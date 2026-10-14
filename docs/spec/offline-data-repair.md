@@ -320,3 +320,31 @@ Node server boot:
             stop temporary runtime
     then continue normal server listen
 ```
+
+## APK成功误判与重复提示候选伪代码（2026-10-13，未实施）
+
+```text
+已定位现状 := 执行器rejected-data-version → 保留pending/不写成功state → 服务健康 → Native误发APPLIED → 再次提示同一修复
+包契约 := 当前v2 requiredDataVersion=1、targetDataVersion=2；设备具体当前值待原生读取
+候选完成条件 := 读取私有root/data-repair/state.json → appliedRepairs存在预期repairId → 才报告修复成功
+候选拒绝条件 := 实际dataVersion与签名requiredDataVersion不一致 → 回报原因，保持真实数据及成功记录
+候选去重 := 失败指纹repairId/repairVersion/实际数据版本不变 → 自动检查不重复弹同一失败；手动重试或指纹变化可再检查
+候选状态 := 服务代码健康和数据修复应用结果分开；修复拒绝不回滚健康服务，也不冒充已应用
+执行状态 := 只定位/设计，等待用户按AGENTS确认后修改Native与自测/重出min APK
+```
+
+首装拒绝链路伪代码（2026-10-13，现状说明）：
+
+```text
+state缺失 := normalizeState返回dataVersion0、空appliedRepairs
+旧修复1 := requiredDataVersion0 → 开启voiceprint特定开关 → 成功记录dataVersion1
+当前修复2 := requiredDataVersion1 → 隐藏offline-display状态栏 → 成功记录dataVersion2
+full种子 := 未携带data-repair/state.json
+更新源 := 当前只提供修复2；单修复清单不补跑修复1
+未有修复1记录的首装 := dataVersion0 != 修复2要求1 → rejected-data-version
+说明边界 := 当前设备具体数值没有直接读取；两脚本业务独立，首装兼容方案尚未实施
+```
+
+## 用户暂缓决定（2026-10-13）
+
+用户明确“暂时先不处理”。只读定位与候选方案保留为待办；当前停止此问题的实施，不修改修复执行逻辑、成功记录、包元数据或APK，不运行修复、不构建或发布相关产物。后续由用户明确恢复后继续。

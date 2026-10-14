@@ -1,8 +1,22 @@
 # 独立 MMD-AR Human 生理与后天行为
 
-当前在本地生成的3rd/mmd-ar-test/web-dist提供，尚未发布外网。打开「动作 → Human 生理与后天行为」。
+当前在本地生成的3rd/mmd-ar-test/web-dist提供，尚未发布外网。动作库与生理设置打开「动作 → Human 生理与后天行为」；全身IK使用右侧独立「全身 IK」按钮。
 
 ## 操作
+
+### PMX 身体物理与 PBD 姿态
+
+点击右侧「全身 IK」打开专用面板，选择求解模式，然后点「启用全身 IK」。默认是PBD姿态；选择「身体物理（VaM式）」会加载人体物理，最多显示头、双腕、双膝、双踝、骨盆、胸部和双肘共11点，缺骨骼时减少控制点并显示原因。
+
+控制点默认屏幕直径32px，可用「控制点大小」调节20–48px；镜头拉远仍保持屏幕大小，鼠标/手指命中直径至少44px。相邻点重叠时选离触点中心最近的点。
+
+拖动彩色点设置位置目标；选择具体控制点后，位置和旋转可以分别设为On（牵引）、Hold（保持且不可修改）、Off（放开）、Comply（受力让步）。旋转设为On后用X/Y/Z输入目标世界角度。牵引强度默认0.85，强度同时提高目标响应和最大力/力矩预算；Hold的保持更强，Comply更柔和。可降低强度获得软牵引，阻尼用于减小摆动；人体重力默认关闭，可按需要勾选开启。骨盆默认保持原动画位置和朝向，拖骨盆点可平移整个身体；开启「骨盆自由」允许身体受力移动与转动，骨盆旋转目标可控制转向。保持目标后关节会逐渐稳定，PMX骨长固定。
+
+Off取消该点对应的牵引，标记跟随实际骨骼，身体关节阻尼会让残余运动逐渐衰减；位置与旋转状态相互独立。人体物理启用时，即使控制点全Off，惯性及主动开启的重力仍继续；「重置控制点」清除所有牵引并从当前原动作重新对齐，「关闭全身IK」释放人体模拟并恢复动作。点击「收起」、外部或Escape只收起面板并保留目标；点击角色/灯光/动作/定位会切换面板。镜头空白拖动/双指/滚轮与原IK手势相同。人体模拟由全身IK开关控制，服饰的物理开关和计算后端仍单独管理；原手部防穿模开关在PBD模式生效，身体物理模式使用人体代理碰撞。
+
+当前为独立本地网页的首阶段实现；人体碰撞是简化胶囊/球体，地面以启用时脚踝高度估计。衣服/头发接受身体姿态，暂没有衣物向身体反向施力、皮肤软体或精确皮肤网格碰撞。PMX角度限制优先，目标未到达时可能由骨长可达范围、限位、碰撞或牵引强度造成；过远目标不会持续拉伸骨段。设置仅保留在本次页面会话，不保证与VaM逐帧相同，手机观感/性能待验收。
+
+脚本可调用Human接口 `setInteractiveIKMode('physics'|'pbd')`（异步）、`setInteractiveMarkerDiameter(sizePx)`（20–48px）、`setInteractiveBodySettings({strength,damping,gravity,freePelvis})`、`setInteractiveTargetState(key,positionState,rotationState)` 与 `setInteractiveTarget(key,worldPosition,worldQuaternion)`；位置为3个有限数值，旋转为4个有效四元数分量，不填写的目标使用null。状态与控制点通过 `getInteractiveIKState()` 获取，PBD只支持位置目标。
 
 格式边界（2026-10-11核对）：VRM可定义Expression表情、人形骨骼及SpringBone摆动，但当前Human模型适配读取PMX的MMD骨骼/Morph元数据；不能将这里的VMD、MPL和刚体功能直接视为VRM支持。VRM动作可使用VRMA，VMD需要骨骼重定向、坐标/初始姿态和表情映射；SpringBone用于头发/衣物摆动及碰撞，不自动继承PMX刚体和关节。共享VRM运行时每帧调用VRM更新并支持简单happy表情，未接入PMX的VMD或Ammo/XPBD刚体链路。参见[VRMA规范](https://vrm.dev/en/vrma/)及[SpringBone规范](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_springBone-1.0/README.md)。
 

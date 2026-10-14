@@ -297,7 +297,10 @@ async function stageTextAssets() {
     `);
     const motionPanel = $('#mmdArMotionPanel');
     if (WEB_MODE) require('./web-reply-panel').appendPanels(motionPanel);
-    if (WEB_MODE) require('./web-human-panel').appendPanels(motionPanel);
+    if (WEB_MODE) {
+      const humanPanels = require('./web-human-panel');
+      humanPanels.appendPanels(motionPanel); humanPanels.appendIKPanel($);
+    }
     if (WEB_MODE) motionPanel.append(`
       <div id="mmdArExpressionPanel">
         <button type="button" class="display-mmd-ar-action" data-expression-clear disabled>清除手动表情</button>
@@ -865,11 +868,12 @@ async function stageTextAssets() {
       const controls = new Map([
         ['displayMmdLightingToggle', 'displayMmdLightingPanel'],
         ['mmdArMotionToggle', 'mmdArMotionPanel'],
+        ['mmdArIKToggle', 'mmdArIKPanel'],
         ['displayArTargetToggle', 'displayArTargetPanel']
       ]);
       const findControl = (target) => {
         if (!(target instanceof Element)) return null;
-        const button = target.closest('#displayMmdLightingToggle, #mmdArMotionToggle, #displayArTargetToggle');
+        const button = target.closest('#displayMmdLightingToggle, #mmdArMotionToggle, #mmdArIKToggle, #displayArTargetToggle');
         return button && controls.has(button.id) ? button : null;
       };
 
@@ -934,6 +938,9 @@ async function stageTextAssets() {
     seenIds.add(id);
   });
   const lightingSource = await fs.readFile(path.join(GENERATED_ASSETS, 'js/display-mmd-lighting.js'), 'utf8');
+  if (WEB_MODE) for (const id of ['mmdArIKToggle', 'mmdArIKPanel', 'mmdArIKClose']) {
+    if (!seenIds.has(id)) throw new Error(`独立IK页面缺少必需控件：${id}`);
+  }
   const requiredIds = new Set([...lightingSource.matchAll(/byId\('([^']+)'\)/gu)].map((match) => match[1]));
   for (const id of WEB_PHYSICS_SOLVER.SOLVER_CONTROL_IDS) requiredIds.add(id);
   for (const id of ['mmdArMotionToggle', 'mmdArMotionPanel', 'mmdArLocalAssets',

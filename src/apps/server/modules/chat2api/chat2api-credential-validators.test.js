@@ -41,15 +41,15 @@ test('缺少 Provider 凭据时验证器不发起外部请求', async () => {
   assert.equal(requestCount, 0);
 });
 
-test('豆包登录验证缺少安全只读协议时失败关闭，不发网或返回凭据', async () => {
+test('豆包添加严格校验格式并标记未远端验证，不发网', async () => {
   let requests = 0;
   const validators = createChat2ApiCredentialValidators({ httpClient: { request: async () => { requests += 1; return { status: 200 }; } } });
   const cookie = 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789';
   const provider = BUILTIN_PROVIDERS.find((item) => item.id === 'doubaochat');
   const result = await validators.doubaochat.validate({ cookie }, provider);
-  assert.equal(result.valid, false);
-  assert.match(result.error, /安全只读登录校验端点尚未确认/u);
-  assert.doesNotMatch(JSON.stringify(result), /mock_session|mock_csrf/u);
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.accountInfo, { credentialVerification: 'format-only' });
+  assert.deepEqual(result.credentials, { cookie });
   assert.equal(requests, 0);
   for (const credentials of [{ cookie: `${cookie}\r\nmalicious=x` }, { ticket: 'qwen-ticket' }, { cookie, token: 'secret' }]) {
     const failed = await validators.doubaochat.validate(credentials, provider);
@@ -61,21 +61,17 @@ test('豆包登录验证缺少安全只读协议时失败关闭，不发网或�
   assert.match(wrongOrigin.error, /固定官方 HTTPS 来源/u);
 });
 
-test('豆包手动账号添加实际执行验证，无法验证登录时不会写入账号库', async () => {
+test('豆包手动添加允许保存本地格式合法账号并保留未验证标记', async () => {
   let writes = 0;
   const provider = BUILTIN_PROVIDERS.find((item) => item.id === 'doubaochat');
   const service = createChat2ApiManualAccountService({
-    dataStore: { saveAccount: async () => { writes += 1; } },
+    dataStore: { saveAccount: async account => { writes += 1; return account; } },
     providerRegistry: { getProvider: async () => provider },
     credentialAdapters: createChat2ApiCredentialValidators({ httpClient: { request: async () => { throw new Error('不得发网'); } } }),
   });
-  await assert.rejects(() => service.addManualAccount({
+  const result = await service.addManualAccount({
     providerId: 'doubaochat', cookie: 'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789',
-  }), (error) => {
-    assert.equal(error.code, 'credential_validation_failed');
-    assert.match(error.message, /安全只读登录校验端点尚未确认/u);
-    assert.doesNotMatch(error.message, /mock_session|mock_csrf/u);
-    return true;
   });
-  assert.equal(writes, 0);
+  assert.equal(result.account.accountInfo.credentialVerification, 'format-only');
+  assert.equal(writes, 1);
 });
