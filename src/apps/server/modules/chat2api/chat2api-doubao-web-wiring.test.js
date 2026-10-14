@@ -10,7 +10,7 @@ function setup(mapping={},runtime=config){let calls=0;const selects=[];
 const request={model:'doubao',messages:[{role:'user',content:'文字'}]};
 test('文字Core显式限定网页绑定账号；映射冲突/配置禁用拒绝，不发送上游',async()=>{
  const f=setup();await f.core.forwardChatCompletion(request);assert.equal(f.selects.at(-1)[4].requiredAccountId,'bound');assert.equal(f.calls(),1);
- for(const [mapping,runtime] of [[{preferredAccountId:'other'},config],[{},{}]]){const g=setup(mapping,runtime);await assert.rejects(g.core.forwardChatCompletion(request),e=>/^doubao_browser_/u.test(e.code));assert.equal(g.calls(),0)}
+ for(const [mapping,runtime,code] of [[{preferredAccountId:'other'},config,'doubao_browser_binding'],[{}, {},'doubao_node_profile_required']]){const g=setup(mapping,runtime);await assert.rejects(g.core.forwardChatCompletion(request),e=>e.code===code);assert.equal(g.calls(),0)}
 });
 
 test('网页模式的豆包固定别名不能经冲突Provider映射发送到其它上游',async()=>{

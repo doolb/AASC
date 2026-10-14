@@ -2,6 +2,8 @@
 
 ## 用户授权与范围
 
+后续确认：用户已明确选择“同时修复Node资料采集与TTS”，授权实施所列生产文件、自测、受影响出包及真机复测。先更新spec的已确认实施段再写代码，当前进入修复阶段。
+
 用户明确要求使用当前Offline APK已有豆包账号测试网页登录账号的LLM与TTS，随后明确“node应该可以直连，不需要网页”。允许短文字/语音请求及必要的协议诊断；文字通过Node直连，不打开官网网页。账号秘密只在APK UID内存使用，不读取无关会话，不导出Cookie/账号设备标识，不改变长期业务配置。生产修复方案已提出，尚待确认。
 
 ## Design/Spec与评审
@@ -24,6 +26,10 @@ min55/code87/deps10，Android Node26.4.0；启用豆包账号仅1个，保存Coo
 
 ## 自测、兼容、性能与风险
 
+实施进度：新增Chat2ApiDoubaoNodeCapture纯采集/校验器，服务端profile声明要求cookie和nodeProfile，WebView只读取固定两存储键与当前UA，Activity转换嵌套对象；既有OAuth/normalizeDoubaoCredentials保存路径无需重写，新增正式保存/脱敏测试。旧账号非兼容模式返回422/doubao_node_profile_required。TTS接受20000000；真实Android进一步定位到Worker裸ESM import不能读取独立依赖目录，新增tts-opus-decode-worker.js绝对入口导入修复及分目录RED/GREEN真实WASM测试。
+
+自测：Chat2API254/254、音频34/34、Android271项零失败/1既有跳过，新采集6项全过。Android当前账号短句使用修改后适配器/Worker临时内存加载已完整生成WAV163652bytes/48000Hz/1704.25ms/非静音，无播放；尚待新包正式SpeechService复验。servicePackage/minApk均true，依赖集合不变；计划code88/min56保留deps10和现有数据种子。当前账号的合法Node设备资料仍需正常登录取得，不把虚构资料用于真实验收。
+
 以20000000贯穿TaskStarted/SessionStarted/句子/TTSEnded，保留0兼容和401/403/429/未知错误、取消/超时/迟到帧；Android/WASM完整Ogg转WAV、非静音/时长与单声道验证。当前TTS仅测到TaskStarted，不称为合成成功或登录完整验收；LLM直连发到上游但遭业务风控，不称为文字成功。短句/限时，无错误自动重试、不改变账号池、不静默回退系统原生。
 
-候选修复估计1–2小时与服务发布/真机复验另计；真实上游风控或过期凭据需用户登录，不能伪造初始化身份。当前测试已完成，修复等待具体方案确认。
+修复估计2–4小时与服务发布/真机复验另计；真实上游风控或过期凭据需用户登录，不能伪造初始化身份。测试定位已完成，用户已确认同时实施Node资料采集及TTS，进度/实测结果后续追加。

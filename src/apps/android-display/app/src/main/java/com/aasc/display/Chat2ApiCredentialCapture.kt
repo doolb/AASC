@@ -22,7 +22,8 @@ data class Chat2ApiCaptureProfile(
     val cookieFields: Map<String, String> = emptyMap(),
     val localStorageFields: Map<String, String> = emptyMap(),
     val requiredFields: List<String> = emptyList(),
-    val cookieBundles: List<Chat2ApiCookieBundle> = emptyList()
+    val cookieBundles: List<Chat2ApiCookieBundle> = emptyList(),
+    val captureDoubaoNodeProfile: Boolean = false
 ) {
     companion object {
         fun fromJson(json: JSONObject): Chat2ApiCaptureProfile {
@@ -67,7 +68,8 @@ data class Chat2ApiCaptureProfile(
                 cookieFields = cookieFields,
                 localStorageFields = localStorageFields,
                 requiredFields = requiredFields,
-                cookieBundles = cookieBundles
+                cookieBundles = cookieBundles,
+                captureDoubaoNodeProfile = json.optString("nodeProfile") == "doubao"
             )
         }
 
@@ -127,7 +129,8 @@ object Chat2ApiCredentialCapture {
         url: String,
         authorization: String? = null,
         cookies: String? = null,
-        localStorage: Map<String, String> = emptyMap()
+        localStorage: Map<String, String> = emptyMap(),
+        userAgent: String? = null
     ): Map<String, String> {
         if (!isAllowed(profile, url)) return emptyMap()
         val merged = linkedMapOf<String, String>()
@@ -137,11 +140,21 @@ object Chat2ApiCredentialCapture {
             val value = localStorage[key]?.trim()
             if (!value.isNullOrEmpty()) merged[field] = value
         }
+        if (profile.captureDoubaoNodeProfile && normalizeOrigin(url) == "https://www.doubao.com") {
+            Chat2ApiDoubaoNodeCapture.build(merged["cookie"], localStorage, userAgent)?.let { merged["nodeProfile"] = it }
+        }
         return merged
     }
 
     fun hasRequiredFields(profile: Chat2ApiCaptureProfile, credentials: Map<String, String>): Boolean {
         return profile.requiredFields.all { field -> credentials[field]?.isNotBlank() == true }
+    }
+
+    /** 内部字符串快照便于串行捕获；回传服务端时profile必须是嵌套对象，不能作为JSON字符串保存。 */
+    fun credentialsJson(credentials: Map<String, String>): JSONObject {
+        val result = JSONObject(credentials)
+        credentials["nodeProfile"]?.let { result.put("nodeProfile", JSONObject(it)) }
+        return result
     }
 
     private fun parseAuthorizationValue(value: String?, profile: Chat2ApiCaptureProfile): Pair<String, String>? {

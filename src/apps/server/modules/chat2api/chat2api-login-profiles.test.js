@@ -29,3 +29,11 @@ test('千问恢复Cookie来源固定且全部在允许列表内，不引入通�
   assert.deepEqual(profile.cookies[0].origins, ['https://www.qianwen.com', 'https://chat2.qianwen.com', 'https://chat2-api.qianwen.com']);
   assert.ok(profile.cookies[0].origins.every(origin => profile.allowedOrigins.includes(origin)));
 });
+test('豆包新登录要求Cookie和Node资料，固定采集器不接任意脚本或存储键', () => {
+  const profile=getAndroidLoginProfile('doubaochat');
+  assert.deepEqual(profile.allowedOrigins,['https://www.doubao.com']);
+  assert.deepEqual(profile.requiredFields,['cookie','nodeProfile']);
+  assert.equal(profile.nodeProfile,'doubao');assert.deepEqual(profile.localStorage,[]);
+  assert.equal(profile.script,undefined);
+  profile.requiredFields.pop();assert.equal(getAndroidLoginProfile('doubaochat').requiredFields.length,2);
+});

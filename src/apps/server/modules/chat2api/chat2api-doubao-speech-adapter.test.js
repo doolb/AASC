@@ -7,8 +7,14 @@ const { validateWav, wrapPcm } = require('../../../../external/tts/tts-wav');
 const { createDoubaoSpeechAdapter } = require('./chat2api-doubao-speech-adapter');
 
 const cookie = 'sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678';
+const statusField = status => {
+    const bytes=[40];let value=status>>>0;
+    do {const byte=value&127;value>>>=7;bytes.push(byte|(value?128:0));} while(value);
+    return Buffer.from(bytes);
+};
 const field = (id, text) => { const bytes=Buffer.isBuffer(text)?text:Buffer.from(text); const n=bytes.length; const length=[]; let value=n; do { const byte=value&127;value>>>=7;length.push(byte|(value?128:0)); }while(value); return Buffer.from([(id<<3)|2,...length,...bytes]); };
 function event(name, options = {}) { return Buffer.concat([field(1, options.task || 'task'),field(3,'VoiceGenie'),field(4,name),
+    statusField(options.status ?? 20000000),
     ...(options.data ? [field(8,options.data)] : []), ...(options.session ? [field(10,options.session)] : [])]); }
 function setup(options = {}) {
     const sockets = [];
@@ -29,6 +35,25 @@ test('Frontier模拟分片/多句完整结束后真实解码为单一WAV，清�
     assert.equal(validateWav(result).samples.length,3840);assert.equal(socket.destroyed,true);assert.equal(sockets.length,1);
     assert.equal(socket.listenerCount('message'),0);assert.equal(socket.sent.length,4);
     assert.equal(new URL(socket.url).hostname,'frontier-audio-web-ws.doubao.com');assert.equal(socket.config.headers.Cookie,cookie);
+});
+test('旧成功码0与实际20000000均完成音频，业务失败保留固定分类并释放资源', async () => {
+    for(const status of [0,20000000,401,403,429,20000001,-1]) {
+        const {generate,sockets}=setup();const task=generate();const socket=sockets[0];socket.emit('open');
+        if(status!==0&&status!==20000000) {
+            const expected=({401:'doubao_speech_auth',403:'doubao_speech_risk',429:'doubao_speech_rate'})[status]||'doubao_speech_upstream';
+            const rejection=assert.rejects(task,e=>e.code===expected&&!e.message.includes(cookie));
+            socket.emit('message',event('TaskStarted',{status}),true);await rejection;
+            assert.equal(socket.sent.length,1);
+        } else {
+            socket.emit('message',event('TaskStarted',{status}),true);
+            socket.emit('message',event('SessionStarted',{status,session:'session'}),true);
+            for(const name of ['TTSSentenceStart','TTSResponse','TTSSentenceEnd','TTSEnded'])
+                socket.emit('message',event(name,{status,...(name==='TTSResponse'?{data:fixture()}: {})}),true);
+            assert.ok(validateWav(await task).samples.length>0);
+        }
+        socket.emit('message',event('TaskStarted'),true);
+        assert.equal(socket.destroyed,true);assert.equal(sockets.length,1);assert.equal(socket.listenerCount('message'),0);
+    }
 });
 test('取消/超时与关闭缺TTSEnded固定拒绝，销毁当前socket，不接受迟到帧', async () => {
     for (const reason of ['abort','timeout','close']) {

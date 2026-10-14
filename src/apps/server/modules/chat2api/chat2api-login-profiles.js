@@ -18,6 +18,8 @@ const ANDROID_LOGIN_PROFILES = freezeDeep({
     allowedOrigins: ['https://www.doubao.com'],
     authorization: null,
     localStorage: [],
+    // 只读官网既定设备资料；Android使用内置采集器，不接受远端脚本或任意设备ID。
+    nodeProfile: 'doubao',
     cookies: [],
     // 豆包使用一组Cookie完成认证；只打包明确声明的名称，避免导出站点的其他Cookie。
     cookieBundles: [{
@@ -26,7 +28,7 @@ const ANDROID_LOGIN_PROFILES = freezeDeep({
       requiredNames: ['sessionid'],
       requiredAnyNames: ['passport_csrf_token', 'passport_csrf_token_default'],
     }],
-    requiredFields: ['cookie'],
+    requiredFields: ['cookie', 'nodeProfile'],
   },
   deepseek: {
     loginUrl: 'https://chat.deepseek.com',

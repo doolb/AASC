@@ -649,4 +649,4 @@
 - ⏳待真实模型验收 [2026-10-14] ORT按任务下载、服务87/common10/独立ORT10已发布，min54干净首装通过；仍需LFM-VL真实模型/WebGPU推理及设备性能验收。任务：`docs/task/20261014_模型推理依赖按任务触发下载.md`。
 
 
-- ⏳待方案确认 [2026-10-14] Offline豆包按用户要求走Node直连：当前Cookie-only账号实际HTTP200/SSE业务风控，缺完整Node初始化资料，候选为正常登录时采集保存nodeProfile并明确提示旧账号补全；TTS实际TaskStarted/status=20000000被误判，候选修正成功码并真实合成复验。生产代码、账号与长期配置未改，见`docs/task/20261014_Offline豆包网页LLM与TTS真实测试.md`。
+- ⏳进行中 [2026-10-14] 用户已确认同时修复Offline豆包Node登录资料采集与TTS真实成功码20000000；正常登录保存nodeProfile、旧账号提示补全，补自测、出服务包/min及真机复验。见`docs/task/20261014_Offline豆包网页LLM与TTS真实测试.md`。

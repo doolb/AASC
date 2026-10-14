@@ -11,6 +11,7 @@ const createHttpError = (statusCode, code, message) => {
   error.code = code;
   return error;
 };
+const nodeProfileRequired = () => createHttpError(422,'doubao_node_profile_required','该豆包账号缺少Node直连资料，请重新登录豆包并完成账号保存');
 
 const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, loadBalancer, providerAdapters = {}, getDoubaoWebConfig } = {}) => {
   if (!dataStore || typeof dataStore.getAccount !== 'function' || typeof dataStore.listAccounts !== 'function') {
@@ -87,8 +88,8 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
     if (nodeMode && preferredAccountId && preferredAccountId !== (selection.account.accountId || selection.account.id)) throw browserError('binding');
     // 只约束豆包网页：优先账号不允许绕过绑定或退选到别人账号，旧Provider保持原调度。
     if(selection.provider.id==='doubaochat'&&getDoubaoWebConfig&&!nodeMode){
-      let binding;try{binding=normalizeDoubaoWebConfig(getDoubaoWebConfig())}catch{throw browserError('disabled')}
-      if(!binding.enabled)throw browserError('disabled');
+      let binding;try{binding=normalizeDoubaoWebConfig(getDoubaoWebConfig())}catch{throw nodeProfileRequired()}
+      if(!binding.enabled)throw nodeProfileRequired();
       if((preferredAccountId&&preferredAccountId!==binding.accountId)||(preferredProviderId&&preferredProviderId!=='doubaochat'))throw browserError('binding');
       selection=await loadBalancer.selectAccount(request.model,'round-robin','doubaochat',binding.accountId,{requiredAccountId:binding.accountId,requireSecret:true});
       if(!selection||selection.provider.id!=='doubaochat'||selection.account.accountId!==binding.accountId)throw browserError('binding');

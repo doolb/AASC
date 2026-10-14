@@ -1,6 +1,7 @@
 'use strict';
 
 const { isMainThread, parentPort } = require('node:worker_threads');
+const { pathToFileURL } = require('node:url');
 const { validateOggOpus, createOpusDecodePages } = require('./tts-ogg');
 const { MAX_AUDIO_BYTES, wrapPcm, validateWav } = require('./tts-wav');
 
@@ -25,7 +26,9 @@ function checkDecoded(result, expectedRate = null) {
 async function decodeAudio(bytes) {
     const input = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const metadata = validateOggOpus(input, { collectPackets: true });
-    const { OggOpusDecoder } = await import('ogg-opus-decoder');
+    // Offline代码/依赖各自版本目录独立，裸ESM import不查NODE_PATH。
+    // 先沿用运行时CommonJS依赖定位，再以绝对文件URL导入同一包，保留其自身ESM依赖解析。
+    const { OggOpusDecoder } = await import(pathToFileURL(require.resolve('ogg-opus-decoder')).href);
     const decoder = new OggOpusDecoder({ forceStereo: false, speechQualityEnhancement: 'none' });
     const chunks = [];
     let count = 0, rate = null;

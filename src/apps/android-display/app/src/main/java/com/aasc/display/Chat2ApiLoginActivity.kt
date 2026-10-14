@@ -240,12 +240,17 @@ class Chat2ApiLoginActivity : Activity() {
             finishWithError("Android 登录会话已失效")
             return
         }
+        val payload = try { Chat2ApiCredentialCapture.credentialsJson(credentials).toString() }
+        catch (_: Exception) {
+            finishWithError("登录资料格式无效，请重新登录")
+            return
+        }
         finished = true
         val result = android.content.Intent()
             .putExtra(EXTRA_SUCCESS, true)
             .putExtra(EXTRA_STATE, current.optString("state"))
             .putExtra(EXTRA_PROVIDER_ID, current.optString("providerId"))
-            .putExtra(EXTRA_CREDENTIALS_JSON, JSONObject(credentials).toString())
+            .putExtra(EXTRA_CREDENTIALS_JSON, payload)
         setResult(RESULT_OK, result)
         finish()
     }

@@ -118,7 +118,7 @@ test('真实Store与轮询器混合网页/Node账号时只调度Node池，指定
     });
     for (let index = 0; index < 4; index++) await core.forwardChatCompletion(input.request);
     assert.equal(calls, 4);
-    await assert.rejects(() => core.forwardChatCompletion(input.request, { preferredAccountId: 'old-browser' }), error => error.code === 'doubao_browser_disabled');
+    await assert.rejects(() => core.forwardChatCompletion(input.request, { preferredAccountId: 'old-browser' }), error => error.code === 'doubao_node_profile_required' && error.statusCode === 422 && /重新登录/u.test(error.message));
     await assert.rejects(() => core.forwardChatCompletion(input.request, { preferredAccountId: 'missing-account' }), error => error.code === 'no_available_account');
     await store.updateAccount(account.accountId, { enabled: false });
     assert.deepEqual(await store.listDoubaoNodeAccountIds(), []);

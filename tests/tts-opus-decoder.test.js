@@ -7,6 +7,22 @@ const { validateWav, wrapPcm } = require('../src/external/tts/tts-wav');
 const { decodeOggOpusToWav, createOpusWavDecoder } = require('../src/external/tts/tts-opus-decoder');
 const { checkDecoded } = require('../src/external/tts/tts-opus-decode-worker');
 
+test('Offline代码与依赖分目录时worker仍通过NODE_PATH加载真实WASM', async () => {
+    const fs=require('node:fs/promises');const os=require('node:os');const path=require('node:path');
+    const {promisify}=require('node:util');const execFile=promisify(require('node:child_process').execFile);
+    const root=await fs.mkdtemp(path.join(os.tmpdir(),'aasc-opus-split-runtime-'));
+    try {
+        const code=path.join(root,'code');await fs.mkdir(code);
+        for(const name of ['tts-opus-decoder.js','tts-opus-decode-worker.js','tts-ogg.js','tts-wav.js'])
+            await fs.copyFile(path.join(__dirname,'../src/external/tts',name),path.join(code,name));
+        const input=path.join(root,'input.ogg');await fs.writeFile(input,fixture({packets:2}));
+        const script="const fs=require('node:fs');require(process.argv[1]).decodeOggOpusToWav(fs.readFileSync(process.argv[2])).then(b=>console.log(b.length)).catch(e=>{console.error(e.code);process.exitCode=1;});";
+        const result=await execFile(process.execPath,['-e',script,path.join(code,'tts-opus-decoder.js'),input],
+            {cwd:root,env:{...process.env,NODE_PATH:path.resolve(__dirname,'../node_modules')},timeout:15000});
+        assert.equal(Number(result.stdout.trim()),3840+44);
+    } finally {await fs.rm(root,{recursive:true,force:true});}
+});
+
 test('头部暂不输出PCM时允许零声道空结果；解码错误及NaN不得因部分PCM被忽略', () => {
     assert.equal(checkDecoded({ errors: [], channelData: [], samplesDecoded: 0, sampleRate: 48000 }).length, 0);
     for (const patch of [{ errors: [{ message: 'private' }] }, { channelData: [Float32Array.of(NaN)] },

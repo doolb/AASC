@@ -1,5 +1,13 @@
 # 豆包网页文字 Chat2API 与网页登录朗读 TTS 设计
 
+## 2026-10-14 Node账号采集与TTS修复（用户已确认，实施中）
+
+用户已选择同时修复。Android正常隔离登录时只采集同官网两项已知localStorage中的web_id、当前navigator.userAgent及同一Cookie的fp，组装既有nodeProfile；新登录必须取得完整资料才自动/手动完成，缺失可等待或取消。资料只由现有登录回调传到已有账号规范化保存流程，不新增配置接口、脚本下载或设备ID生成。文字推理沿用Node协议；旧账号无profile且未明确开启旧版兼容时返回补全提示，不建议网页聊天。TTS接受0/20000000成功，保持真错误拒绝和现有状态机/超时/取消/解码。
+
+涉及login-profiles/core-adapter/speech-adapter与Android捕获/WebView/Activity及对应测试，服务包和min需发布，依赖集合不变。验收包括账号端到端保存、公开摘要脱敏、缺字段不提前完成、Node不访问浏览器及实际语音完整WAV。现有Cookie-only账号不能通过伪造身份补全；必要时由用户正常重新登录。
+
+实现与测试已通过：新增纯采集器与嵌套回调，复用现有服务端账号规范化保存，旧账号返回补全错误；Android271项零失败、Chat2API254/254、音频34/34。真实语音进一步暴露Offline分目录Worker的ESM加载问题，已先复现再改为require.resolve定位加绝对文件URL导入；不新增依赖。修改后Android真实短句WAV163652bytes、48kHz、1704.25ms、非静音；当前进入code88/min56构建发布及正式路径复验。
+
 ## Offline保存账号真实测试（2026-10-14，发现问题，修复待确认）
 
 用户明确授权测试当前Offline APK豆包账号的LLM与网页TTS。在min55/code87/deps10、Android Node26.4.0、同一启用Cookie-only账号下，LLM正式CoreAdapter返回503/doubao_browser_disabled，未向官方发推理；缺少Node初始化资料且网页环境未启用。TTS使用正式SpeechService的仅内存账号绑定，返回502/doubao_speech_upstream，无音频；账号与长期业务配置不变。

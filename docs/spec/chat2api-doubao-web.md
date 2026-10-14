@@ -1,5 +1,29 @@
 # 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
 
+## 2026-10-14 已确认实施：Android登录保存Node资料及TTS成功状态
+
+```text
+授权 := 用户选择“同时修复Node资料采集与TTS”；先更新本节再修改生产代码
+LoginProfile.doubaochat := 固定官网来源 + nodeProfile='doubao' + requiredFields=[cookie,nodeProfile]
+Android捕获 := 已有隔离登录WebView；只读两项官网localStorage及navigator.userAgent
+固定存储键 := samantha_web_web_id / __tea_cache_tokens_497858
+资料组装 := 前者web_id→deviceId；后者web_id→webId；已筛Cookie.s_v_web_id→fp；同页UA→userAgent
+合法资料 := 有限长度JSON/数字ID/合法fp和UA；缺失或非法不生成profile，不编造身份
+采集快照 := 同官方来源有效回调 + Cookie/profile同批合并；新的Cookie不得沿用旧profile
+完成条件 := Cookie与profile全部有效 → 单次返回；未齐全→提示Node资料未就绪/可等待或取消
+回调载荷 := 内部Map.nodeProfile是JSON串 → Activity转换为嵌套JSONObject → 既有登录API
+服务保存 := 已有normalizeDoubaoCredentials验证嵌套profile/fp → 私有账号存储；公共摘要继续脱敏
+旧账号文字 := 网页兼容模式未显式启用且无profile → 422/doubao_node_profile_required/提示重新登录补全
+已有profile := 既有Node协议 → 不访问网页运行配置；显式旧兼容模式沿用绑定
+TTS状态 := 0或20000000允许继续；401/403/429映射原固定错误，其他非零拒绝
+TTS生命周期 := 原Task/Session/句子/结束状态机、身份/容量/超时/取消/解码与无重试保持
+Offline解码 := 代码与依赖分目录，worker内裸ESM import不使用NODE_PATH → 模拟分目录复现
+解码依赖入口 := 用既有CommonJS require.resolve定位ogg-opus-decoder → pathToFileURL → import绝对入口
+解码验收 := 同分离目录/同NODE_PATH真实WASM回归；不新增依赖或放宽音频容器校验
+产物 := 服务代码变化→servicePackage=true；Android采集变化→minApk=true；依赖集合不变
+验收 := 正式账号保存profile/摘要脱敏/缺字段不完成 + Node不调用浏览器 + 实际状态全链路WAV + 真机短句
+```
+
 ## Offline真实测试与候选状态码修复（2026-10-14，未实施）
 
 ```text

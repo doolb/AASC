@@ -16,6 +16,15 @@
 ## Offline豆包网页账号真实测试（2026-10-14）
 
 ```text
+修复回归 := check:chat2api 254/254；音频/Ogg/Worker/TTS 34/34；Android271项0失败/1既有跳过
+登录新增 := 六项JVM测试覆盖嵌套JSON、Cookie-only不完成、缺失/非法资料、整数精确、固定来源与旧Provider兼容
+保存链路 := 正式OAuth+凭据校验+账号Store→有效profile保存→公共列表脱敏；JSON串形式拒绝且state仍可重试
+Offline解码回归 := 临时代码目录没有node_modules、NODE_PATH指向独立依赖→旧实现失败TTS_OPUS_INVALID→绝对入口导入通过真实WASM
+Android短句 := 同真实账号 + 修改后适配器/Worker临时内存加载 → Task到TTSEnded完整 → WAV163652bytes/48000Hz/1704.25ms/非静音
+待正式验收 := 安装新包正式路径复验；当前账号缺profile，不能伪造设备身份宣称LLM通过
+```
+
+```text
 授权 := 用户明确要求当前Offline账号的LLM/TTS真实测试；账号只在APK UID内读取/不导出凭据
 环境 := min55/code87/deps10/Android Node26.4.0；启用账号1个，Cookie-only/nodeProfile缺失
 LLM := 正式CoreAdapter+显式同账号 → 503/doubao_browser_disabled/25ms → 无官方推理请求

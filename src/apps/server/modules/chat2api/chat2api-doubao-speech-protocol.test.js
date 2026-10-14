@@ -20,6 +20,11 @@ test('响应拒绝截断、重复、wire错、非法UTF-8及超限；固定脱�
         assert.throws(() => decodeSpeechResponse(frame), e => e.code === 'doubao_speech_protocol');
     }
 });
+test('官方成功状态20000000与旧省略状态0可准确解码', () => {
+    const name=Buffer.from([34,11,...Buffer.from('TaskStarted')]);
+    assert.equal(decodeSpeechResponse(name).status_code,0);
+    assert.equal(decodeSpeechResponse(Buffer.concat([name,Buffer.from([40,128,218,196,9])])).status_code,20000000);
+});
 test('独立文字会话固定TEXT_TTS=5与网页默认音色，不关联已有对话', () => {
     const result = createTextTtsSession();
     assert.equal(result.request_type, 5); assert.equal(result.conversation_id, ''); assert.equal(result.chat.message_id, '');

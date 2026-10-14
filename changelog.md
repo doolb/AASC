@@ -1,3 +1,10 @@
+### 豆包Node登录采集与网页账号TTS
+
+- ✅ [2026-10-14] 实现Android登录采集Node资料，修正真实语音成功码及Offline分目录解码加载。
+  - `chat2api-login-profiles`声明固定采集器/完整条件，新增`Chat2ApiDoubaoNodeCapture`校验同上下文device/web/fp/UA；WebView不提前完成，Activity回传嵌套JSON，复用服务端已有规范化账号保存。旧Cookie-only账号LLM明确提示重新登录补齐，已有profile继续Node直连；账号摘要仍脱敏。
+  - `chat2api-doubao-speech-adapter`接受0/20000000成功，真实错误继续拒绝；`tts-opus-decode-worker`使用CommonJS定位加文件URL导入，修复独立依赖目录下裸ESM不查NODE_PATH。分目录测试先RED再GREEN，不新增依赖。
+  - Chat2API254/254、音频34/34、Android271项零失败/1既有跳过；Android同账号以修改模块临时内存验证完整WAV163652bytes/48kHz/1704.25ms/非静音。进入code88/min56构建发布，正式路径及账号重新登录验收待完成；servicePackage/minApk=true，dependenciesPackage=false。
+
 ### min首次语音模型提示与下载分组
 
 - ✅ [2026-10-14] min55首次健康启动提示准备TTS与ASR/声纹，默认两组勾选，手动入口ASR与声纹合组。

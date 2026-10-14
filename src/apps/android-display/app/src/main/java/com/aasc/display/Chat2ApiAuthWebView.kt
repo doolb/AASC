@@ -112,9 +112,9 @@ class Chat2ApiAuthWebView(
             return
         }
         readPageCredentials(currentUrl) { merged ->
-            synchronized(captured) { captured.putAll(merged) }
+            mergeCaptured(merged)
             if (!emitIfComplete()) {
-                onIncomplete("尚未捕获完整登录凭据，请完成网页登录后重试")
+                onIncomplete(if (profile.captureDoubaoNodeProfile) "豆包Node登录资料尚未就绪，请等待登录完成后重试" else "尚未捕获完整登录凭据，请完成网页登录后重试")
             }
         }
     }
@@ -200,7 +200,7 @@ class Chat2ApiAuthWebView(
         pollCount += 1
         val captureUrl = lastUrl
         readPageCredentials(captureUrl) { merged ->
-            synchronized(captured) { captured.putAll(merged) }
+            mergeCaptured(merged)
             emitIfComplete()
             val snapshot = synchronized(captured) { captured.toMap() }
             if (!stopped.get() && !Chat2ApiCredentialCapture.hasRequiredFields(profile, snapshot)) {
@@ -216,23 +216,38 @@ class Chat2ApiAuthWebView(
         }
         // 仅Cookie认证的Provider直接读取CookieManager，集合筛选仍由同一声明式捕获器执行。
         // 不执行空的网页存储脚本，减少完成按钮与页面导航之间的异步窗口。
-        if (profile.localStorageFields.isEmpty()) {
+        if (profile.localStorageFields.isEmpty() && !profile.captureDoubaoNodeProfile) {
             callback(Chat2ApiCredentialCapture.merge(profile, pageUrl, cookies = CookieManager.getInstance().getCookie(pageUrl)))
             return
         }
-        val storageKeys = JSONArray(profile.localStorageFields.keys.toList()).toString()
+        val keys = profile.localStorageFields.keys.toList() +
+            if (profile.captureDoubaoNodeProfile) Chat2ApiDoubaoNodeCapture.storageKeys else emptyList()
+        val storageKeys = JSONArray(keys.distinct()).toString()
         val script = """
             (function() {
               const keys = $storageKeys;
               const result = {};
               for (const key of keys) { try { const value = localStorage.getItem(key); if (value) result[key] = value; } catch (_) {} }
-              return JSON.stringify(result);
+              return JSON.stringify({ storage: result, userAgent: navigator.userAgent });
             })();
         """.trimIndent()
         evaluateJavascript(script) { raw ->
-            val localStorage = parseLocalStorage(raw)
+            // 导航或停止后返回的旧页面结果不能与新页面Cookie拼接。
+            if (stopped.get() || pageUrlOrigin(url.orEmpty()) != pageUrlOrigin(pageUrl)) {
+                callback(emptyMap())
+                return@evaluateJavascript
+            }
+            val page = parsePageCredentials(raw, keys)
             val cookies = CookieManager.getInstance().getCookie(pageUrl)
-            callback(Chat2ApiCredentialCapture.merge(profile, pageUrl, cookies = cookies, localStorage = localStorage))
+            callback(Chat2ApiCredentialCapture.merge(profile, pageUrl, cookies = cookies, localStorage = page.first, userAgent = page.second))
+        }
+    }
+
+    /** 更新Cookie的同批结果没有有效profile时删除旧资料，避免一次登录中身份切换后拼出混合快照。 */
+    private fun mergeCaptured(merged: Map<String, String>) {
+        synchronized(captured) {
+            if (profile.captureDoubaoNodeProfile && merged.containsKey("cookie")) captured.remove("nodeProfile")
+            captured.putAll(merged)
         }
     }
 
@@ -247,15 +262,16 @@ class Chat2ApiAuthWebView(
         return Chat2ApiCredentialCapture.hasRequiredFields(profile, snapshot)
     }
 
-    private fun parseLocalStorage(raw: String?): Map<String, String> {
-        if (raw.isNullOrBlank() || raw == "null") return emptyMap()
+    private fun parsePageCredentials(raw: String?, keys: List<String>): Pair<Map<String, String>, String?> {
+        if (raw.isNullOrBlank() || raw == "null" || raw.length > 128 * 1024) return emptyMap<String, String>() to null
         return try {
             val decoded = JSONObject("{\"value\":$raw}").optString("value")
             val json = JSONObject(decoded)
-            profile.localStorageFields.keys.associateWith { key -> json.optString(key).takeIf(String::isNotEmpty) ?: "" }
-                .filterValues(String::isNotEmpty)
+            val storage = json.optJSONObject("storage") ?: JSONObject()
+            keys.associateWith { key -> storage.optString(key).takeIf(String::isNotEmpty) ?: "" }
+                .filterValues(String::isNotEmpty) to json.optString("userAgent").takeIf(String::isNotEmpty)
         } catch (_: Exception) {
-            emptyMap()
+            emptyMap<String, String>() to null
         }
     }
 }

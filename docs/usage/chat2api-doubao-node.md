@@ -4,6 +4,8 @@
 
 豆包普通LLM有完整nodeProfile时不需要开启网页开关；设置里的“旧版Chrome兼容模式”默认收起，仅供Cookie-only旧账号沿用Chrome绑定。
 
+Android新版登录会一起保存同账号的Node资料，登录完成后文字请求直接由Node发送，无需保持网页打开。旧账号只保存Cookie时，普通LLM会提示“缺少Node直连资料，请重新登录豆包并完成账号保存”；重新使用Android登录入口完成登录即可补齐新账号资料，或按下文导入完整资料。原有账号不会被静默改写，也不会自动生成设备ID。此采集流程需更新到包含修复的min56及配套服务包。
+
 普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。`doubao-chat`是语音模型。`doubao-think`和`doubao-expert`保留模式映射，但本轮真实验收只覆盖普通模式。
 
 在现有“导入账号凭证”流程中，给对应`doubaochat`账号添加`credentials.nodeProfile`。导入会先预览并要求明确确认；它只校验格式，不能据此宣称登录成功。以下所有值都是虚构示例，需要替换为同一账号资料：

@@ -1,5 +1,15 @@
 # 正式 Android 显示端完整离线 APK 实现规格（伪代码）
 
+## 豆包Node登录捕获（2026-10-14）
+
+```text
+服务profile标记doubao → 固定官网两存储键 + 当前UA + Cookie.fp → Chat2ApiDoubaoNodeCapture校验
+Cookie-only或字段不完整 → 不完成；点击完成显示资料未就绪，可等待/取消
+合法快照 → Map内部字符串 → Activity嵌套JSONObject → 原OAuth回调 → 私有credentials.nodeProfile
+已有账号只读account-web → 不走捕获/保存；不读取未声明网页存储
+原生271项0失败/1既有跳过；新增采集6项全部通过；min56待正式发布/安装复验
+```
+
 ## min首次语音模型与分组伪代码（2026-10-14，min55已实现）
 
 ```text

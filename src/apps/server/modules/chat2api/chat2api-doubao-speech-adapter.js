@@ -58,7 +58,9 @@ function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(ur
                 const message=(bytes,isBinary)=>{if(settled)return;try{
                     check();if(isBinary===false||++events>10000)throw doubaoSpeechError('doubao_speech_protocol');
                     const event=decodeSpeechResponse(bytes);
-                    if(event.status_code)throw doubaoSpeechError(({401:'doubao_speech_auth',403:'doubao_speech_risk',429:'doubao_speech_rate'})[event.status_code]);
+                    // 官网VoiceGenie实际成功帧使用20000000；兼容旧帧省略状态字段时decoder提供的0。
+                    // 只接受这两个明确成功值，未知非零值仍拒绝，避免误把上游失败推进到下一阶段。
+                    if(event.status_code !== 0 && event.status_code !== 20000000)throw doubaoSpeechError(({401:'doubao_speech_auth',403:'doubao_speech_risk',429:'doubao_speech_rate'})[event.status_code]);
                     if(event.namespace!=='VoiceGenie')throw doubaoSpeechError('doubao_speech_protocol');
                     if(event.event==='Pong'){lastPong=Date.now();return;}
                     if(taskId&&event.task_id!==taskId)throw doubaoSpeechError('doubao_speech_protocol');
