@@ -1025,6 +1025,8 @@ FSR2是WebGL2时域升采样近似，不使用物体运动矢量，动作较快�
 
 ## 共享服务更新文件与依赖分组（2026-10-14）
 
+普通APK与Offline同机运行时，可以在普通服务控制端“服务端”卡片修改监听端口。普通withserver v2起冷启动保留已保存的合法端口；缺省仍8081。当前SM-N9500普通服务使用`https://192.168.1.6:8071`，Offline配置仍8081，普通APK的主服务器连接地址继续为`https://192.168.1.39:8081`。修改的是本机监听端口，地址输入框里的主服务器地址保持原值。
+
 普通APK和Termux从配置的主服务器更新；Offline APK和Node min从原LAN/WAN更新。主服务器默认读取`/mnt/aasc-offline/manifest.json`及其引用的相同ZIP，可通过环境变量`AASC_UPDATE_RELEASE_ROOT`指定已发布根；清单须有效签名，文件大小与SHA一致。控制端“更新”或“强制获取最新代码”仍走AASC，最近结果与实际目录可在服务器列表及自测看到。
 
 依赖目录为`dependencies/common|android|linux64|win64/dependencies-vN.zip`，每个客户端获取common加本平台；Android要求ARM64/Bionic/Node26，Linux64要求x64/glibc，Windows要求x64，原生ABI不符会拒绝。普通旧APK需要重装最新版withserver，Termux需更新受管启动器；旧Offline APK需要先手动安装新版min。

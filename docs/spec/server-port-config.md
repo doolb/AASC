@@ -1,5 +1,22 @@
 # 控制端服务器端口设置实现伪代码
 
+## APK 冷启动保留端口（2026-10-14）
+
+```text
+已有声明 := NodeServerConfig.write + 持久化 server.port + NodeServerService 本机健康检查
+新增定义 := 有效端口 = 数值整数且属于 1..65535，缺省端口 = 8081
+普通 APK 启动配置 → 读取原配置 → 保留有效 server.port，否则写缺省端口
+Offline APK 启动配置 → 继续写 8081，与本机 WebView 首装地址一致
+本机健康 URL → 读取当前配置端口 + 证书决定协议 + 回环地址 + /api/status
+损坏配置 → 健康检查失败，不探测另一个 APK 的缺省端口
+ADB 普通 APK → 已经通过 setServerPortConfig 保存 8071 → 覆盖安装 → 完全停止并重开
+普通 withserver 出包版本 := versionCode 2，versionName 0.1.1；与当前设备普通 v1 区分
+验收 → 普通配置/监听/权威广播均 8071；Offline 配置 8081；普通节点仍连接原主服务器
+实际验收 := 普通APK v2覆盖 + force-stop + 重新启动 → /api/status 200/ok + 权威端口8071
+主服务器目录 := 同一nodeId在线，URL8071，版本apk-0.1.1；Offline仅配置核对8081
+自动验证 := Android232/232 + profile/端口契约16/16，无失败/跳过
+```
+
 ```text
 DEFAULT_SERVER_PORT = 8081
 

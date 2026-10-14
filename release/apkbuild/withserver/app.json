@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
   "embeddedNode": true,
+  "versionCode": 2,
+  "versionName": "0.1.1",
   "verifyRuntime": true,
   "features": ["display", "asr", "tts", "llm"],
   "models": []

@@ -64,6 +64,11 @@ class NodeServerService : Service() {
         private const val RELEASE_HEALTH_TIMEOUT_MS = 120_000L
         private const val NODE_LIBRARY_NAME = "libaasc_node.so"
 
+        /** 只读取本机实际监听端口；协议仍由安装的证书决定。 */
+        @JvmStatic
+        fun localServerHealthUrl(rootDir: File, useHttps: Boolean): String =
+            "${if (useHttps) "https" else "http"}://127.0.0.1:${NodeServerConfig.readServerPort(rootDir)}/api/status"
+
         @JvmStatic
         fun readActiveRelease(rootDir: File): ActiveRelease? {
             val pointer = File(rootDir, "updates/active-release.json")
@@ -610,7 +615,7 @@ class NodeServerService : Service() {
         val certificateFile = File(root, "res/certs/cert.pem")
         val keyFile = File(root, "res/certs/key.pem")
         val useHttps = certificateFile.isFile && keyFile.isFile
-        val endpoint = URL("${if (useHttps) "https" else "http"}://127.0.0.1:8081/api/status")
+        val endpoint = runCatching { URL(localServerHealthUrl(root, useHttps)) }.getOrElse { return false }
         val connection = endpoint.openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 500

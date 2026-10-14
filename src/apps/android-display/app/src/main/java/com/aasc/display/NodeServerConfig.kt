@@ -24,7 +24,9 @@ object NodeServerConfig {
         val stableNodeId = nodeId?.trim()?.takeIf { it.isNotEmpty() } ?: readOrCreateNodeId(rootDir, config)
 
         val server = config.optJSONObject("server") ?: JSONObject()
-        server.put("port", SERVER_PORT)
+        // 普通 APK 的监听端口由远端配置持久化，冷启动不能覆盖用户已保存的值。
+        // Offline 首装页面仍使用固定的回环 8081 地址，保持既有启动约定。
+        server.put("port", if (offlineMode) SERVER_PORT else normalizeServerPort(server.opt("port")))
         config.put("server", server)
 
         val aasc = config.optJSONObject("aasc") ?: JSONObject()
@@ -59,6 +61,16 @@ object NodeServerConfig {
             throw IllegalStateException("替换 APK 子服务器配置失败")
         }
         return configFile
+    }
+
+    /** 健康探测读取同一份监听配置，避免误连共存的另一个 APK。损坏 JSON 继续报错。 */
+    fun readServerPort(rootDir: File): Int =
+        normalizeServerPort(readConfig(File(rootDir, CONFIG_RELATIVE_PATH)).optJSONObject("server")?.opt("port"))
+
+    private fun normalizeServerPort(value: Any?): Int {
+        val number = value as? Number ?: return SERVER_PORT
+        val port = number.toInt()
+        return port.takeIf { it in 1..65535 && number.toDouble() == it.toDouble() } ?: SERVER_PORT
     }
 
     fun readOrCreateNodeId(rootDir: File): String {

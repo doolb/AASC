@@ -11,6 +11,20 @@ import org.json.JSONObject
 class NodeServerServiceTest {
 
     @Test
+    fun 本机健康URL使用实际8071监听端口并拒绝损坏配置() {
+        val root = Files.createTempDirectory("aasc-node-health-port").toFile()
+        try {
+            val file = File(root, "config/config.json")
+            file.parentFile?.mkdirs()
+            file.writeText("""{"server":{"port":8071}}""")
+            assertEquals("https://127.0.0.1:8071/api/status", NodeServerService.localServerHealthUrl(root, true))
+            assertEquals("http://127.0.0.1:8071/api/status", NodeServerService.localServerHealthUrl(root, false))
+            file.writeText("{损坏")
+            assertTrue(runCatching { NodeServerService.localServerHealthUrl(root, true) }.isFailure)
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test
     fun Node命令使用私有目录launcher并关闭TUI() {
         val root = File("/data/user/0/com.aasc.display/files/aasc-server")
 

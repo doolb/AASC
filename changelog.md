@@ -1,3 +1,10 @@
+### 普通 APK 监听端口保持与 8071 真机切换
+
+- ✅ [2026-10-14] SM-N9500普通APK通过现有WebSocket端口配置改为8071，并修复冷启动强制写回8081的问题。
+  - 修改NodeServerConfig/NodeServerService及对应测试：普通APK保留合法持久端口，非法值回退8081，健康URL读取实际配置；Offline首装端口仍8081。Android232/232、profile/端口契约16/16通过。
+  - 普通withserver v2/0.1.1通过`npm run build:apk`生成；与设备v1签名一致，覆盖安装并完全停止重开后8071 API200/ok、权威广播和主服务器目录在线URL8071通过；原nodeId和主地址保持，Offline未安装/启动。
+  - `aasc-display-withserver.apk`：282548655 bytes，SHA-256 `26e01a04bfd42d8609c3fe324a1c8563005d3dc16224735de028cd11eb1a184c`；已原子同步至外网`/home/as/a/node-min/`且远端大小/SHA一致，公网HEAD200与16段206的完整HTTP响应大小/SHA一致。未生成或发布Offline完整/min APK，既有minApk/servicePackage需求保持true。
+
 ### 数据修复与 release 配置基线
 
 - ✅ [2026-10-14] 新增修复包同步实际release配置及数据版本，补齐新包首装版本与真实修复结果。

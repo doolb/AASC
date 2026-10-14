@@ -1579,3 +1579,9 @@ Offline Android WebView的真实布局/滑块和托管服务器实际端口切�
 `npm run test:offline-data-repair`46/46、`npm run test:offline-bootstrap`62/62通过；覆盖同源脚本真实执行、配置/版本/产物事务、并发拒绝、中断恢复、签名首装种子联动、0/1/2累计迁移、损坏状态拒绝和只读自测。现有v1/v2验签及原脚本摘要验证通过，实际release数据版本2、两项业务效果正确；重复同步通过。提交快照Android228/228通过（52个测试类，0失败/错误/跳过），包括首装/覆盖保护、签名兼容集合、成功证明与失败去重。
 
 控制端`offline_data_repair_baseline`只读原生版本与pending状态，不执行修复或联网；正式min/服务/累计包发布、真实设备升级与干净安装另验。
+
+## 普通 APK 冷启动端口保留自测（2026-10-14）
+
+Android单元232/232（0失败/错误/跳过）、打包profile与端口契约16/16通过。新增回归覆盖8071重复启动保持、1/65535合法边界、类型/浮点/超界回退、Offline8081兼容，以及健康URL读取真实配置并拒绝损坏JSON。设备通过现有WebSocket设置8071，权威回传和HTTPS 200通过；普通APK同签名v2覆盖安装并force-stop重开后，配置8071、/api/status 200/ok、新连接权威8071与主节点目录在线URL8071通过，nodeId和主地址保持。Offline仅配置8081核对，无安装或启动。
+
+配套`aasc-display-withserver.apk`已原子同步外网node-min；公网HEAD200、16段Range206按ETag锁定同文件，完整282,548,655字节合并SHA-256 `26e01a04bfd42d8609c3fe324a1c8563005d3dc16224735de028cd11eb1a184c`与本地一致。
