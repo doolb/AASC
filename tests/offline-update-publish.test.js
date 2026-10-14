@@ -12,6 +12,7 @@ const {
     publishOfflineUpdate,
     publishOfflineFullApk,
     cleanupRemotePublishedArtifacts,
+    buildRemoteCleanupCommand,
     verifyHttpTarget,
     buildRemoteShellArguments
 } = require('../scripts/ops/publish-offline-update');
@@ -484,6 +485,8 @@ test('发布后只清理精确匹配的旧版本文件，并保留清单版本�
     await writePublishedFile(fixture.localRoot, 'apk/aasc-display-offline-v1.apk', 'old full');
     await writePublishedFile(fixture.localRoot, 'apk/aasc-display-offline-v2.apk', 'current full');
     await writePublishedFile(fixture.localRoot, 'keep.txt', 'keep');
+    await writePublishedFile(fixture.localRoot, 'data/data-repair-v0.zip', 'keep historical repair');
+    await writePublishedFile(fixture.localRoot, 'node-min-seeds/node-min-seeds-v0.zip', 'keep historical seed');
     const symlinkTarget = await writePublishedFile(fixture.root, 'outside.apk', 'do not touch');
     await fs.promises.symlink(symlinkTarget, path.join(fixture.localRoot, 'apk/aasc-display-offline-v0.apk'));
 
@@ -504,6 +507,14 @@ test('发布后只清理精确匹配的旧版本文件，并保留清单版本�
     assert.equal(fs.existsSync(path.join(fixture.localRoot, 'apk/aasc-display-offline-v1.apk')), true);
     assert.equal(fs.existsSync(path.join(fixture.localRoot, 'apk/aasc-display-offline-v2.apk')), true);
     assert.equal((await fs.promises.readFile(path.join(fixture.localRoot, 'keep.txt'), 'utf8')), 'keep');
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'data/data-repair-v0.zip')), true);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'node-min-seeds/node-min-seeds-v0.zip')), true);
+    const cleanupScript = buildRemoteCleanupCommand({ host: 'example.test', directory: '/srv/aasc-offline' }, {
+        payload: { components: { ...fixture.manifest.payload.components,
+            dataRepair: { relativeUrl: 'data/data-repair-v1.zip' }, nodeMinSeeds: { relativeUrl: 'node-min-seeds/node-min-seeds-v1.zip' } } }
+    });
+    assert.equal(cleanupScript.includes('data-repair-v'), false);
+    assert.equal(cleanupScript.includes('node-min-seeds-v'), false);
     const symlinkStat = await fs.promises.lstat(path.join(fixture.localRoot, 'apk/aasc-display-offline-v0.apk'));
     assert.equal(symlinkStat.isSymbolicLink(), true);
     assert.equal((await fs.promises.readFile(symlinkTarget, 'utf8')), 'do not touch');

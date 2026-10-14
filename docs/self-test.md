@@ -1590,3 +1590,6 @@ Android单元232/232（0失败/错误/跳过）、打包profile与端口契约16
 ## Chat2API 默认映射与账号复用（2026-10-14）
 
 `npm run check:chat2api`249/249、`npm run test:offline-data-repair`47/47、`npm run test:offline-bootstrap`62/62，独立Chromium模型编辑/账号2/2。新增defaults模块6项使用虚构账号，覆盖全部10条兜底、未知模型、精确/通配优先、大小写覆盖/删除恢复默认、有效列表只读、并发导入去重、禁用/删除保护、自定义根隔离及真实调度与登录提示。release基线3已真实执行累计修复，种子不含accounts.json；发布器新增四组依赖全字节验证与篡改拒绝用例。首次自测的隐式私人旧资料读取已收紧和清理临时副本，最终测试不使用真实账号。未操作手机升级或运行真实官网聊天。
+
+
+默认映射发布终验：LAN/WAN最终清单字节一致(code85/deps9四组/min47/repair3/seeds85/数据基线3)；全部资源真实HTTP字节/大小/SHA匹配。最终重复核验仅复用已下载且同URL/强ETag/大小的大文件，清单/修复/种子重新请求。严格四类清理白名单本地/远端回归扩充后47/47；旧LAN seed69/WAN seed79已校验恢复，旧v2归档SHA保持。APK归档DEX核查min41不支持分组/累计兼容，min45支持分组，min47支持分组与compatibleDataVersions，三者均具备最低APK门控；设备未升级，min41需直链安装47。

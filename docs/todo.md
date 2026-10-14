@@ -1,16 +1,14 @@
-- ⏳发布中 [2026-10-14] Chat2API默认映射/旧账号复用与release基线3源码及自测完成；配套code85/min47/deps9/累计repair3/seeds85正在LAN/WAN分阶段发布，待完整HTTP核验和设备验收。任务：`docs/task/20261014_Chat2API默认映射账号复用与修复包发布.md`。
-
-- ⏳待出包/真机验收 [2026-10-14] 数据修复与release基线源码完成，现有v1/v2已实际写入种子，数据版本2；待发布新版服务/min及累计迁移v3，验收已有0/1设备迁移、full/min干净首装版本与配置一致、覆盖保留和失败去重。工作区候选full46/min47，正式产物未生成；完整APK仍仅用户明确要求才构建。任务：`docs/task/20261014_数据修复同步Release基线与版本.md`。
+- ⏳待真机验收 [2026-10-14] 数据修复与release基线3已完成并发布LAN/WAN code85/deps9/min47/repair3/seeds85；待已有0/1设备迁移、full/min干净首装与配置一致、覆盖保留和失败去重。当前旧min41须APK直链先覆盖安装47；默认映射、私人旧资料复用、登录提示源码和249项自测完成，真实账号与设备效果待验收。任务：`docs/task/20261014_数据修复同步Release基线与版本.md`。
 
 - ⏳待设备验收 [2026-10-13] 全量配置 ZIP 功能与自动重启已完成，后端/浏览器/Android编译通过；API28 Download保存位置已验证；待设备核对选择导入与导入后的重连刷新。任务：`docs/task/20261013_全量配置与聊天数据ZIP导入导出.md`。
 
-- ⏳待部署/真机验收 [2026-10-14] 独立Offline min首装与LLM外置源码完成；待先部署兼容模型同步器、上传并核验TTS/Qwen实物，再生成带运行契约的代码包及签名min，验收干净首装/旧full38与min41升级/模型取消与无网推理。完整无LLM APK仍需用户明确要求才构建；工作区full43/min44，发布状态minApk与servicePackage为true。任务：`docs/task/20261014_OfflineMin独立首装与LLM外置实现.md`。
+- ⏳待模型资源/真机验收 [2026-10-14] 独立Offline min首装与LLM外置源码完成，code85/min47和另一任务full46已发布；仍需核对TTS/Qwen实物资源同步、干净首装/旧full38与min41升级/模型取消与无网推理。min41不识别分组清单，应先直链覆盖安装min47；minApk/servicePackage当前产物需求false。任务：`docs/task/20261014_OfflineMin独立首装与LLM外置实现.md`。
 
 - ⏳待自测维护 [2026-10-14] `android-offline-apk.test.js`尚有3项HEAD同名基线失败：旧浮层leftMargin、旧固定displayId种子、登录完成按钮旧实现锚点；本次受影响版本和Qwen绑定用例已修复，核心模型/打包与Android单元通过。记录：`docs/task/20261014_OfflineMin独立首装与LLM外置实现.md`。
 
 - ⏳待部署/设备验收 [2026-10-13] qwen-chat已开放文本阅读和系统播报；运行实例加载新版后在语音配置选择国内千问，验收长阅读、报时/提醒、自定义文字与停止恢复。源码离线151/151、旧聊天19/19，未重启主服务或出包。任务：`docs/task/20261013_qwenchat开放全部播报业务.md`。
 
-- ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成，`minApk=true`；待签名 min APK 安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
+- ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成；min47已签名发布，待安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
 
 - ⏳待长期/模式/设备验收 [2026-10-13] 豆包普通LLM：think/expert、令牌过期维护、多账号及Android/Linux尚待真实验收；Cookie-only网页bridge仍待query profile完善与官网验证。网页朗读仍待真实账号/音色、完整Ogg至WAV链路和设备播放验收；手动安全只读登录校验尚缺。任务：`docs/task/20261013_豆包纯Node协议接入.md`、`docs/task/20261012_豆包普通LLM网页fetch实施.md`、`docs/task/20261012_豆包网页WAV解码实施计划.md`。
 
@@ -643,4 +641,4 @@
 - ⏸待用户真机试用 [2026-10-14] 任务面板横向任务条是否增加鼠标/触控笔拖动滚动：用户先在真机试用现有触屏滑动，再决定是否实施；本轮未改拖动逻辑。
 - ⏳待部署集成验收 [2026-10-14] 服务器端口设置实际修改、控制端和显示端迁移、托管进程重启及新端口可用性；本地只通过边界单测和消息契约检查，未重启当前服务。任务：`docs/task/20261014_服务器端口设置.md`。
 
-- ⏳待部署/设备验收 [2026-10-14] 共享签名包及common/android/linux64/win64已实现，62项定向与223项Android自测通过；待LAN/WAN新分组清单上线及普通APK重装、Termux启动器更新、Offline min迁移、Windows实机运行/健康回滚验收。任务：`docs/task/20261014_子服务器主服务器更新修复.md`。
+- ⏳待部署/设备验收 [2026-10-14] 共享签名包及common/android/linux64/win64已实现，62项定向与223项Android自测通过；LAN/WAN四组依赖9及服务85/min47清单已上线；待普通APK重装、Termux启动器更新、Offline min迁移、Windows实机运行/健康回滚验收。任务：`docs/task/20261014_子服务器主服务器更新修复.md`。

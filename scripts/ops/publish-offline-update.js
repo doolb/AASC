@@ -86,9 +86,10 @@ function parseVersionedFileName(fileName, rule) {
 function createCleanupSpecifications(manifest, options = {}) {
     const components = manifest?.payload?.components || {};
     const specifications = [];
+    // 项目发布清理白名单仅包含代码、依赖和 APK；修复与首装种子历史归档必须保留。
     const componentNames = options.includeApkMin === false
-        ? ['code', 'nodeMinSeeds', 'dependencies', 'dataRepair']
-        : ['code', 'nodeMinSeeds', 'dependencies', 'apkMin'];
+        ? ['code', 'dependencies']
+        : ['code', 'dependencies', 'apkMin'];
     for (const componentName of componentNames) {
         const component = components[componentName];
         if (!component || typeof component.relativeUrl !== 'string') continue;
@@ -100,15 +101,6 @@ function createCleanupSpecifications(manifest, options = {}) {
         const component = components.dependencies?.groups?.[group];
         const rule = CLEANUP_RULES.find(candidate => candidate.componentName === `dependencies.${group}`);
         if (component && getCleanupRule(component.relativeUrl) === rule) specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
-    }
-    if (options.includeDataRepair !== false) {
-        const component = components.dataRepair;
-        if (component && typeof component.relativeUrl === 'string') {
-            const rule = CLEANUP_RULES.find((candidate) => candidate.componentName === 'dataRepair');
-            if (rule && getCleanupRule(component.relativeUrl)) {
-                specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
-            }
-        }
     }
     if (options.includeFullApk) {
         const currentFullApkRelativeUrl = options.currentFullApkRelativeUrl;

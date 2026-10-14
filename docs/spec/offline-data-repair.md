@@ -13,7 +13,9 @@ min47签名/大小/SHA/profile/模型指纹验证 → 各镜像保留各自旧�
 code85 + 四组已存在deps9 + seeds85 → 沿用原归档 → 两端上传与清单原子替换
 初稿repair元数据 + 验证后的服务/min组件 → releaseSeedVersion=85且种子真实dataVersion=3 → 最终重新签名
 repair3最低code85/APK46/兼容0,1,2 → 两端发布 → 所有组件全部HTTP字节核验
-旧full46/v1/v2不可变归档 → 不覆盖；设备确认执行及登录验收另计
+旧full46/v1/v2不可变归档 → 不覆盖；旧data与seeds不清理
+清理白名单 → 仅code/dependencies/min及明确full版本；恢复本任务已删的旧镜像seed69/79 → 大小/SHA一致
+设备确认执行及登录验收另计
 ```
 
 
@@ -284,7 +286,7 @@ publishOfflineDataRepair(manifest, artifactRoot, localRoot, remoteRoot):
     upload data repair artifact to LAN and WAN version path
     verify HTTP response and remote hash
     atomically replace manifest.json last
-    delete only old data/data-repair-v<digits>.zip files not referenced by manifest
+    keep historical data repair and seed archives; project cleanup permits only code/dependencies/min/full numeric version files
 ```
 
 ## 状态和错误

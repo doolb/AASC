@@ -9,7 +9,8 @@ check:chat2api → 249/249 → 十条规则/自定义优先/大小写覆盖/有�
 test:offline-data-repair → 47/47 → 累计0/1/2迁移/真实物理十条映射/种子无账号/四组HTTP篡改拒绝
 test:offline-bootstrap → 62/62 → min/full种子与模型分离、签名APK和平台依赖契约
 独立Chromium → 映射编辑和账号界面2/2 → 虚构接口，无用户profile/官网请求
-发布核验 → 签名 + 每个组件全部HTTP字节/大小/SHA → 旧修复归档保持
+发布核验 → LAN/WAN最终同清单85/9/47/3/85 → 签名 + 每个组件全部HTTP字节/大小/SHA → 旧修复归档保持
+清理白名单回归 → 仅四类版本文件 → seed/data历史不删 → 已删seed69/79从原件校验恢复
 现场边界 → 未操作手机升级/数据修复确认，真实账号能力与Android/Linux/Windows另验
 ```
 

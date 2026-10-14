@@ -1,3 +1,11 @@
+### Chat2API 数据修复 v3 与配套版本发布
+
+- ✅ [2026-10-14] LAN/WAN发布code85、四组deps9、min47及repair3/seeds85，公开默认映射与真实release基线3同步。
+  - 先逐端保留旧组件发布min47，再两端发布服务/分组依赖，最后配对修复与首装种子；最终签名清单字节相同，SHA-256 `843bb4e101caebb808b5aa7fe62cd5c99c0f79a5982616863b87b0cab555fb64`。所有资源完整HTTP大小/SHA验证，重复阶段大文件同URL/强ETag/大小缓存重新计算SHA；清单/修复/种子新请求。
+  - repair3要求code85/APK46，兼容真实数据0/1/2，releaseSeedVersion85/dataVersion3；脚本与原件SHA见任务产物表。旧min41不支持分组，提供min47直链覆盖升级；min45可读取分组但必须先满足修复APK门槛。未通过ADB操作Offline升级或修复确认，现场账号/设备验收保留todo。
+  - 收紧publish-offline-update.js清理到AGENTS四类白名单，data/首装种子归档保留；本次被旧清理器删除的LAN seed69/WAN seed79已从验签校验原件恢复并完整HTTP验证。扩充本地/远端用例后test:offline-data-repair47/47，旧v2 ZIP SHA不变；所有阶段无清理错误。
+  - 源码/文档已推送origion，产物/日志不入Git；minApk/servicePackage=false，dependenciesPackage保持false。未重建完整APK，另一任务已发布full46仍为code84/deps8/基线2；不将源profile85/9或基线3追溯成旧APK内容。
+
 ### Chat2API 默认映射与已有账号复用
 
 - ✅ [2026-10-14] 完成默认模型规则、私人旧资料复用与累计数据修复基线3。
