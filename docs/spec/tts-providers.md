@@ -1,5 +1,17 @@
 # TTS Provider 与播报配置实现
 
+## 豆包网页账号自动识别与临时分句单路（2026-10-15）
+
+```text
+doubao-chat → 内置doubaochat → 当前有效账号；自定义映射优先、指定账号不能退选
+Cookie-only允许语音；文字仍需Node资料；真实成功码0/20000000允许，Offline Worker定位独立依赖
+createTtsGenerationScheduler(display,options) → 同生成businessType/templateTts → 权威Provider
+Provider=doubao-chat → 单批次并发1；其余→既有server1/display回报1–2；所有发送按句序
+普通Chat/Agent/手动回复/修复入口 → 同一业务/模板上下文传入调度与生成
+跨批次并发 := 本地账号busy保持，账号队列用户暂缓；不增加重试或音色改变
+验证 := Chat2API246/246；临时串行20/20及定向15/15；正式发布/主服务短句另记任务
+```
+
 ## Provider 原生语速与全局音量入口（2026-10-14，需求修正伪代码）
 
 ```text

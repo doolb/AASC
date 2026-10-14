@@ -60,15 +60,37 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
 
 test('服务端普通 Chat 和手动 TTS 使用有序调度器', () => {
     assert.match(serverSource, /const \{ createOrderedTaskScheduler \} = require\('\.\.\/modules\/media\/ordered-task-scheduler'\)/u);
-    assert.match(serverSource, /function createTtsGenerationScheduler\(preferredDisplayId = null\)/u);
-    assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(preferredDisplayId\);/u);
-    assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(displayId\);/u);
+    assert.match(serverSource, /function createTtsGenerationScheduler\(preferredDisplayId = null, ttsOptions = \{\}\)/u);
+    assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(preferredDisplayId, replyTtsOptions\);/u);
+    assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(displayId,\s*\{ businessType: BUSINESS_TYPES.AI_REPLY/u);
     assert.match(serverSource, /await ttsScheduler\.waitForIdle\(\);/u);
     assert.match(serverSource, /generateTtsWithFallback\(sentence, undefined, undefined, preferredDisplayId, replyTtsOptions\)/u);
     assert.match(serverSource, /generateTtsWithFallback\(cleanText, undefined, undefined, preferredDisplayId,\s*\{ businessType: BUSINESS_TYPES.AI_REPLY/u);
     assert.match(serverSource, /chat\.splitIntoSentences\(cleanText\)[\s\S]*?filter\(\(sentence\) => !isPunctuationOnly\(sentence\)\)/u);
     assert.match(serverSource, /if \(!tts \|\| isPunctuationOnly\(sentence\)\) return;/u);
     assert.doesNotMatch(serverSource, /let ttsQueue = Promise\.resolve\(\)/u);
+});
+
+test('实际调度入口按权威模板让豆包分句单路_Qwen及原生显示槽位保持双路且发送有序', async () => {
+    const {BUSINESS_TYPES}=require('../src/apps/server/modules/tts/tts-provider-policy');
+    const {getDisplayTtsConcurrency}=require('../src/apps/server/modules/media/display-cpu-status');
+    const start=serverSource.indexOf('function createTtsGenerationScheduler(');
+    const end=serverSource.indexOf('const pendingDisplayTtsRequests',start);
+    const settings=normalizeSettings({aiReplyDefault:{provider:'doubao-chat'}});
+    const providerService=createTtsProviderService({getSettings:()=>settings,registry:{}});
+    const factory=vm.runInNewContext(`${serverSource.slice(start,end)};createTtsGenerationScheduler`,{
+        BUSINESS_TYPES,ttsProviderService:providerService,createOrderedTaskScheduler,getDisplayTtsConcurrency,
+        config:{get:()=> 'display'},findDisplayWithTts:()=>({id:'display'}),
+        displayClients:new Map([['display',{state:{cpuStatus:{tts:{totalCoreCount:2}}}}]])});
+    for(const [templateProvider,expected] of [[undefined,1],['qwen-chat',2],['system',2]]) {
+        const scheduler=factory('display',{businessType:BUSINESS_TYPES.AI_REPLY,
+            ...(templateProvider?{templateTts:{provider:templateProvider}}:{})});
+        let active=0,max=0;const delivered=[];
+        await Promise.all([1,2,3].map(index=>scheduler.enqueue(async()=>{
+            active++;max=Math.max(max,active);await new Promise(resolve=>setImmediate(resolve));active--;return index;
+        }).then(index=>delivered.push(index))));
+        assert.equal(max,expected);assert.deepEqual(delivered,[1,2,3]);
+    }
 });
 
 test('普通AI真实句子回调和Agent生成回调向豆包传本轮原输入，不串并发回合', async () => {

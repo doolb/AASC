@@ -1,5 +1,21 @@
 # 豆包网页文字 Chat2API 与朗读 TTS 实现伪代码
 
+## 2026-10-15 用户选择临时降低豆包分句并发
+
+```text
+证据 := 本地doubao适配器busy Set拒绝同账号重叠；不是本次官方返回的并发错误
+用户选择 := 暂时只降低分句并发；暂不增加账号级排队
+批次入口 := createTtsGenerationScheduler(displayId,ttsOptions)
+有效Provider := 现有ttsProviderService.resolve(批次businessType/templateTts) → 权威选择
+豆包网页TTS := 有效Provider=doubao-chat → 当前分句批次concurrency=1
+其它Provider := 保持既有server单路/display槽位1–2路；生成并行可用时仍按句序释放播放
+上下文同步 := 普通Chat/手动回复播放/Agent/修复模式向调度器传入与生成相同的businessType和templateTts
+取消/超时 := 既有批次代次和Provider超时逻辑保持；不启动额外账号队列或重试
+边界 := 不同请求批次仍可同时调用同账号；这种情况保留busy拒绝，账号排队另记用户暂缓
+验证 := 实际入口VM加载+真实OrderedScheduler→豆包最大活动1/Qwen及原生槽位2保持/来源选取一致
+发布 := 仅服务代码，继续code90/min56/deps10；主服务器脚本重启；实际多短句WAV
+```
+
 ## 2026-10-15 豆包纯Node文字与语音自动账号（用户已授权）
 
 ```text

@@ -2173,7 +2173,8 @@ async function runRepairModeAgent(displayId, state, text) {
             rememberVoicePlaybackTarget(displayId, targetDisplayId);
             return targetDisplayId;
         },
-        ttsScheduler: createTtsGenerationScheduler(displayId),
+        ttsScheduler: createTtsGenerationScheduler(displayId,
+            { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(role)?.tts }),
         splitIntoSentences: chat.splitIntoSentences,
         stripMarkdown,
         generateTTS: (ttsText) => generateTtsWithFallback(ttsText, undefined, undefined, displayId,
@@ -6895,7 +6896,14 @@ function findDisplayWithTts(preferredDisplayId = null) {
 
 // 普通 Chat/手动 TTS 只在显示端有明确的 TTS 槽位回报时启用双路生成，
 // 控制端播放、服务端生成、旧 APK 和无状态显示端都安全回退单路。
-function createTtsGenerationScheduler(preferredDisplayId = null) {
+function createTtsGenerationScheduler(preferredDisplayId = null, ttsOptions = {}) {
+    // 先按生成时相同的业务/模板确定Provider，避免远端豆包沿用本地显示端的双槽位。
+    // 本次只降低一个分句批次的并发；独立批次的同账号排队仍由用户另行选择。
+    const resolved = ttsProviderService.resolve({ businessType: ttsOptions.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST,
+        templateTts: ttsOptions.templateTts });
+    if (resolved.selection.provider === 'doubao-chat') {
+        return createOrderedTaskScheduler({ concurrency: 1 });
+    }
     if (config.get('tts.device', 'server') !== 'display') {
         return createOrderedTaskScheduler({ concurrency: 1 });
     }
@@ -9147,7 +9155,8 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
                 playOnControl,
                 displayId: targetDisplayId,
                 displayIds: targetDisplayIds,
-                ttsScheduler: createTtsGenerationScheduler(preferredDisplayId),
+                ttsScheduler: createTtsGenerationScheduler(preferredDisplayId,
+                    { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(data.templateTarget || data.role)?.tts }),
                 splitIntoSentences: chat.splitIntoSentences,
                 stripMarkdown,
                 generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId,
@@ -10814,8 +10823,8 @@ async function handleControlMessageFallback(data, ws) {
                                     .filter((sentence) => !isPunctuationOnly(sentence));
                                 const targetDisplayIds = data.displayIds || (displayId ? [displayId] : []);
                                 const preferredDisplayId = targetDisplayIds[0] || displayId || null;
-                                const ttsScheduler = createTtsGenerationScheduler(preferredDisplayId);
                                 const replyTtsOptions = resolveChatReplyTtsOptions(data.chatReplyContext, { getTemplateByName: chat.getTemplateByName });
+                                const ttsScheduler = createTtsGenerationScheduler(preferredDisplayId, replyTtsOptions);
 
                                 const tasks = sentences.map((sentence) => ttsScheduler.enqueue(async () => {
                                     const audioPath = await generateTtsWithFallback(sentence, undefined, undefined, preferredDisplayId, replyTtsOptions);
@@ -10898,7 +10907,8 @@ async function handleControlMessageFallback(data, ws) {
                 } else if (data.type === 'chat') {
                     (async () => {
                         try {
-                            const ttsScheduler = createTtsGenerationScheduler(displayId);
+                            const ttsScheduler = createTtsGenerationScheduler(displayId,
+                                { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts });
                             await chat.chatStream(data.message, {
                                 useTemplate: data.useTemplate,
                                 displayId: displayId
@@ -11170,7 +11180,8 @@ async function handleChatMessage(options) {
         });
     }
     const ttsToken = chatTtsToken || beginChatTtsGeneration(ttsConversationId);
-    const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId) : null;
+    const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId,
+        { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts }) : null;
     const sendChatResponse = (payload) => {
         const responseLength = typeof payload.message === 'string' ? payload.message.length : 0;
         log('WS', `>> chatResponse requestId=${effectiveRequestId} success=${payload.success} messageLength=${responseLength}`, {

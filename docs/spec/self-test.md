@@ -13,6 +13,16 @@
 边界 := 未清空应用重做55干净首装；声纹仅准备文件、不改变启用开关；真实MNN推理未测
 ```
 
+## 豆包分句临时串行自测（2026-10-15）
+
+```text
+实际server-app调度入口 + 权威Provider resolver + OrderedScheduler → 豆包同批次maxActive=1
+模板改qwen-chat/system且显示槽位2 → maxActive=2；每组三句按原句序交付
+手动回复/AI/Agent/修复路径传递对应business/template；原句子上下文/取消/播放目标回归
+test:mmd-production:tts 20/20；Agent/有序调度/Provider定向15/15；server-app语法通过
+边界 := 没有新增跨批次队列；不同请求仍保留同账号busy；主服务/实际WAV复验后续记录
+```
+
 ## 豆包纯Node/语音自动账号自测（2026-10-15）
 
 ```text
