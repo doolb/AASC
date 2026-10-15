@@ -12675,3 +12675,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 新增`web-human-body-damping.mjs`共享预设；修改`web-human-physics-drive.mjs`、`web-human-ik.mjs`、`web-human-ik-ui.mjs`与`web-human-build.js`，覆盖自然姿态、骨盆导引、目标位置/旋转、释放耗散及指数原生阻尼。面板可调0.2～2.5并恢复默认，左右共用，局部更新/状态副本隔离，PBD设置保留。
   - 默认骨盆1.40、躯干1.30、颈1.15、头1.10、肩1.05、肘0.95、腕0.85、髋1.20、膝1.10、踝1.15；既有质量/有效惯量换算保留。工程预设不宣称人体实测常数。真实十部位释放末秒最大漂移3.03mm、角速度0.0096rad/s，原生分配不增长；45项定向及浏览器1项通过，含四种范围端点真实关节链检查；网页构建成功。
   - 补充`mmd-ar-human-damping`自测、既有physics/browser与Windows夹具文件URL兼容；同步design/spec/task/usage/self-test。独立`3rd/mmd-ar-test/web-dist`已生成，正式src/原生/生产依赖未变，Offline三状态保持false；未构建APK、服务包或对外发布。其他PMX/手机验收保留todo。
+
+### MMD-AR 全身IK图片姿态本地 ONNX
+
+- ✅ [2026-10-15] 仅在全身IK面板增加选择图片、本地识别、关键点预览、应用及取消；页面暂时屏蔽PBD，自动准备VaM式人体物理，底层PBD保留。
+  - 新增`web-human-pose-{core,worker,client,retarget,ui}.mjs`、`web-human-ik-mode.mjs`、`web-human-pose-assets.js`与许可说明，修改IK/UI/Human接口与构建。固定OpenCV Zoo人物检测/Pose ONNX的版本、大小/SHA-256；复用已安装ORT Web1.26.0，WASM单线程Worker按需推理，同源加载/可用时缓存，图片不上传。
+  - 33个人体点/估计3D按真实PMX骨长生成最多11个目标，原子应用与模型token校验，坏输入不部分覆盖；缺点跳过、继续手动拖动。修复等待Ammo时取消/收起仍可能启用IK的时序问题，延迟加载用例RED→GREEN，独立审查确认闭环。
+  - 53项定向通过；图片流程与原物理浏览器各1项通过，无跳过。真实参考图33/33可信点、左右腕/右膝方向检查、应用11目标后270子步、取消/无人图保护通过。网页构建、18项源/生成语法、9项内容与22项依赖指纹、两模型大小/SHA-256通过。
+  - design/spec/task/usage/self-test完成同步，todo只保留手机/更多图与模型/官方逐点对照验收。只改独立测试网页；已有Offline四状态保持原值，未构建APK/服务包或发布；模型/ORT二进制留本地生成目录，不提交Git。

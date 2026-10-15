@@ -462,6 +462,11 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         setInteractiveBodySettings(value) { requireModel(); return interactiveIK.setBodySettings(value); },
         setInteractiveTargetState(key, position, rotation) { requireModel(); return interactiveIK.setTargetState(key, position, rotation); },
         setInteractiveTarget(key, position, rotation) { requireModel(); return interactiveIK.setTarget(key, position, rotation); },
+        applyInteractiveImagePose(pose, expectedToken) {
+            const bound = requireModel();
+            if (expectedToken !== bound.token) throw new Error('模型已经切换，请重新识别或选择图片');
+            const result = interactiveIK.applyImagePose(pose); wake(); return result;
+        },
         face: { set: (...args) => manualExpressions.set(...args), clear: (...args) => manualExpressions.clear(...args), resolve: resolveExpression },
         mouth: {
             setWeights: (token, weights) => manualExpressions.setTransient(token, weights),

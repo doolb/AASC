@@ -3,6 +3,7 @@ import { calculateInverseRotationalMass, calculateKneePoleTarget, calculatePbdAn
     KNEE_POLE_STRENGTH, PBD_MAX_ITERATIONS, PBD_TARGET_EPSILON } from './web-human-ik-pbd.mjs';
 import { createHumanPhysicsRig } from './web-human-physics-rig.mjs';
 import { BODY_STATES, createHumanPhysicsDrive, normalizeBodySettings } from './web-human-physics-drive.mjs';
+import { retargetImagePose } from './web-human-pose-retarget.mjs';
 
 import { normalizeMarkerDiameter, projectIKMarker, pickIKMarker } from './web-human-ik-markers.mjs';
 
@@ -448,6 +449,21 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     function setMarkerDiameter(value) {
         markerDiameter = normalizeMarkerDiameter(value); resizeMarkers(); onChange(); return getState();
     }
+    function applyImagePose(pose) {
+        if (!enabled || mode !== 'physics' || !bodyRig || !bodyDrive) throw new Error('请先启用身体物理模式');
+        // 先构造全部目标再提交，坏点/退化姿态不能部分覆盖用户原有的控制目标。
+        const proposed = retargetImagePose(pose, bodyRig).map(target => ({ ...target, handle: handles.find(handle => handle.key === target.key) }))
+            .filter(target => target.handle);
+        if (proposed.length < 3) throw new Error('当前模型可用的图片姿态控制点不足');
+        stopDrag();
+        for (const handle of handles) { handle.positionState = 'Off'; handle.rotationState = 'Off'; handle.active = false; }
+        for (const target of proposed) {
+            const handle = target.handle;
+            handle.target.fromArray(target.position); handle.positionState = 'On'; handle.active = true;
+            if (target.rotation) { handle.targetRotation.fromArray(target.rotation).normalize(); handle.rotationState = 'On'; }
+        }
+        selected = proposed[0].key; updateMarkers(); onChange(); return getState();
+    }
     function getState() {
         const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();
         return { ...state, mode, markerDiameter, settings: { ...bodySettings, dampingMultipliers: { ...bodySettings.dampingMultipliers } }, selected, enabled, targets: handles.length,
@@ -471,7 +487,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     window.addEventListener('pointercancel', pointerUp, true);
 
     return {
-        apply, restore, reset, resetTargets, setEnabled, setMode, setBodySettings, setTargetState, setTarget, setMarkerDiameter, getState,
+        apply, restore, reset, resetTargets, setEnabled, setMode, setBodySettings, setTargetState, setTarget, setMarkerDiameter, applyImagePose, getState,
         isPhysicsEnabled: () => enabled && mode === 'physics' && bodyDrive !== null,
         dispose() {
             reset();

@@ -1,5 +1,7 @@
 import { Euler, Quaternion } from 'three';
 import { BODY_DAMPING_PARTS, normalizeDampingMultipliers } from './web-human-body-damping.mjs';
+import { installImagePose } from './web-human-pose-ui.mjs';
+import { ensureInteractivePhysics } from './web-human-ik-mode.mjs';
 
 function initIKPanel() {
     const panel = document.getElementById('mmdArIKPanel'), toggle = document.getElementById('mmdArIKToggle');
@@ -21,7 +23,7 @@ function initIKPanel() {
     }
     // 专用IK面板直接同步当前Human实例，收起界面不解除目标或关闭物理。
     const bodyPanel = document.createElement('div');
-    bodyPanel.innerHTML = `<label>求解模式 <select data-body="mode"><option value="pbd">PBD 姿态</option><option value="physics">身体物理（VaM式）</option></select></label>
+    bodyPanel.innerHTML = `<label>求解模式 <select data-body="mode"><option value="physics">身体物理（VaM式）</option></select></label>
         <div data-body="settings" hidden>
         <label>牵引强度 <input data-body="strength" type="range" min="0.05" max="1" step="0.05" value="0.85"></label>
         <label>全局阻尼 <input data-body="damping" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
@@ -43,9 +45,16 @@ function initIKPanel() {
         <p data-body="status" role="status"></p></div>`;
     panel.querySelector('[data-human-ik-status]').insertAdjacentElement('afterend', bodyPanel);
     const bodyField = key => bodyPanel.querySelector('[data-body="' + key + '"]');
+    async function ensurePhysics(options = {}) {
+        busy = true; sync();
+        try {
+            return await ensureInteractivePhysics(human(), { isCurrent: () => !closed && (options.isCurrent?.() ?? true) });
+        } finally { busy = false; sync(); }
+    }
+    const imagePose = installImagePose(panel, { human, ensurePhysics });
     function syncBody(ik, ready) {
-        bodyField('mode').value = ik.mode || 'pbd'; bodyField('mode').disabled = busy || !ready;
-        bodyField('settings').hidden = ik.mode !== 'physics';
+        bodyField('mode').value = 'physics'; bodyField('mode').disabled = true;
+        bodyField('settings').hidden = false;
         if (!ik.settings) return;
         for (const key of ['strength', 'damping']) if (document.activeElement !== bodyField(key)) bodyField(key).value = ik.settings[key];
         for (const { key, factor } of BODY_DAMPING_PARTS) {
@@ -90,8 +99,10 @@ function initIKPanel() {
         if (document.activeElement !== size) size.value = ik.markerDiameter;
         panel.querySelector('[data-ik-size-output]').textContent = ik.markerDiameter + 'px';
         syncBody(ik, ready);
+        imagePose.sync(ready);
     }
     function setOpen(open) {
+        if (!open) imagePose.cancel();
         if (timer !== null) { clearInterval(timer); timer = null; }
         if (open) {
             window.DisplayMmdLighting?.close?.(); window.DisplayMmdAr?.closePanel?.();
@@ -112,10 +123,13 @@ function initIKPanel() {
     for (const id of ['displayMmdLightingToggle', 'mmdArMotionToggle', 'displayArTargetToggle', 'mmdArCharacterToggle']) {
         document.getElementById(id)?.addEventListener('click', () => setOpen(false));
     }
-    for (const button of panel.querySelectorAll('[data-ik-action]')) button.addEventListener('click', () => {
+    for (const button of panel.querySelectorAll('[data-ik-action]')) button.addEventListener('click', async () => {
         try {
             const api = human();
-            if (button.dataset.ikAction === 'enable') api.setInteractiveIKEnabled(!api.getInteractiveIKState().enabled);
+            if (button.dataset.ikAction === 'enable') {
+                if (api.getInteractiveIKState().enabled) api.setInteractiveIKEnabled(false);
+                else await ensurePhysics();
+            }
             if (button.dataset.ikAction === 'reset') api.resetInteractiveIK();
             sync();
         } catch (error) { report(error.message); }
@@ -162,7 +176,7 @@ function initIKPanel() {
         } catch (error) { report(error.message); }
     });
     window.addEventListener('pagehide', event => {
-        if (!event.persisted) { closed = true; if (timer !== null) clearInterval(timer); timer = null; }
+        if (!event.persisted) { closed = true; imagePose.dispose(); if (timer !== null) clearInterval(timer); timer = null; }
     });
     sync();
 }

@@ -264,6 +264,28 @@ test('部位设置连续局部合并，状态快照与输入不能改写内部�
     } finally { f.controller.dispose(); }
 });
 
+test('图片姿态批量应用生成可编辑物理目标，坏输入不部分覆盖旧目标', async () => {
+    const f = await fixture();
+    try {
+        await f.enable();
+        assert.equal(typeof f.controller.applyImagePose, 'function', '缺少图片姿态应用入口');
+        f.controller.setTarget('leftHand', f.point('leftWrist').add(new f.T.Vector3(0, 0.1, 0)));
+        const before = f.controller.getState().controls.map(({ key, target, positionState }) => ({ key, target, positionState }));
+        assert.throws(() => f.controller.applyImagePose({ landmarks: [], confidence: 1 }), /关键点/u);
+        assert.deepEqual(f.controller.getState().controls.map(({ key, target, positionState }) => ({ key, target, positionState })), before);
+        const landmarks = Array.from({ length: 33 }, () => ({ world: [0, -1.5, 0], visibility: 1, presence: 1 }));
+        for (const [i, value] of [[11, [0.2, -1, 0]], [12, [-0.2, -1, 0]], [13, [0.5, -1, 0]], [14, [-0.5, -1, 0]],
+            [15, [0.8, -1, 0]], [16, [-0.8, -1, 0]], [23, [0.1, 0, 0]], [24, [-0.1, 0, 0]],
+            [25, [0.1, 0.4, 0]], [26, [-0.1, 0.4, 0]], [27, [0.1, 0.8, 0]], [28, [-0.1, 0.8, 0]]]) landmarks[i].world = value;
+        f.controller.applyImagePose({ landmarks, confidence: 1 });
+        assert.equal(f.controller.getState().activeTargets, 11);
+        f.run(30);
+        f.controller.setTarget('leftHand', f.point('leftWrist').add(new f.T.Vector3(0, 0.02, 0)));
+        assert.equal(f.controller.getState().controls.find(item => item.key === 'leftHand').positionState, 'On');
+        assert.ok(f.bones.every(bone => [...bone.position.toArray(), ...bone.quaternion.toArray()].every(Number.isFinite)));
+    } finally { f.controller.dispose(); }
+});
+
 test('位置Off仍保留显式旋转驱动，标记立即跟随骨骼；放开取消残余拖动', async () => {
     const f = await fixture();
     try {

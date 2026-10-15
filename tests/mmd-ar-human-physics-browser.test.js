@@ -173,7 +173,9 @@ test('真实米娅默认关重力、实际拖点与Off释放稳定、多目标�
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().activeTargets), after.activeTargets);
         await page.click('#mmdArIKPanel [data-ik-action="reset"]');
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().activeTargets), 0);
-        await page.select('#mmdArIKPanel [data-body="mode"]', 'pbd');
+        assert.deepEqual(await page.$$eval('#mmdArIKPanel [data-body="mode"] option', options => options.map(option => option.value)), ['physics']);
+        // 页面暂时屏蔽PBD；底层切换仍保留，供将来恢复及生命周期回归。
+        await page.evaluate(() => window.DisplayMmd.getHumanInterface().setInteractiveIKMode('pbd'));
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().mode === 'pbd');
         const pbd = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
         assert.equal(pbd.physics, null); assert.equal(pbd.targets, 7);
