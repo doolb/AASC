@@ -89,11 +89,7 @@
 
     function updateSelectionVoice(selection) {
         const native = selection.provider.value === 'system';
-        const fixed = selection.provider.value === 'doubao-chat';
-        const wasFixed = selection.voice.readOnly;
-        selection.voice.readOnly = fixed;
-        if (fixed) selection.voice.value = config?.providers['doubao-chat']?.defaultVoice || '';
-        else if (wasFixed) selection.voice.value = '';
+        selection.voice.readOnly = false;
         selection.voice.disabled = native;
         selection.voice.parentElement.hidden = native;
         // 标签原有内联display会覆盖hidden，显式隐藏避免原生显示无效音色输入。
@@ -108,11 +104,7 @@
         if (!provider || !voice) return;
         const selected = provider.value || selections.get('aiReplyDefault')?.provider.value || 'system';
         const native = selected === 'system';
-        const fixed = selected === 'doubao-chat';
-        const wasFixed = voice.readOnly;
-        voice.readOnly = fixed;
-        if (fixed) voice.value = config?.providers['doubao-chat']?.defaultVoice || '';
-        else if (wasFixed) voice.value = '';
+        voice.readOnly = false;
         voice.disabled = native;
         voice.hidden = native;
         voice.style.display = native ? 'none' : '';
@@ -212,7 +204,7 @@
                     group.appendChild(models);
                     input.setAttribute('list', models.id);
                 }
-                if (id === 'doubao-chat') input.readOnly = true;
+                if (id === 'doubao-chat') input.readOnly = false;
                 if (name === 'defaultVoice') input.setAttribute('list', `ttsProviderVoices-${id}`);
                 inputs[name] = input;
                 addField(group, FIELD_LABELS[name], input);
@@ -223,7 +215,7 @@
             }
             if (id === 'doubao-chat') {
                 group.appendChild(create('p', '实验性网页朗读，默认关闭，尚未重新进行真实账号合成验收。'));
-                group.appendChild(create('p', '先在Chat2API为doubao-chat映射到doubaochat及指定账号；上游使用固定音色、速度和音量，返回后只应用全局音量，失败不切换其它来源。'));
+                group.appendChild(create('p', '在Chat2API启用可用豆包网页账号，显式账号映射仍优先；音色由Chat2API官网目录提供，上游使用固定速度和音量，返回后只应用全局音量，失败不切换其它来源。'));
             }
             if (['qwen-api', 'doubao-api'].includes(id)) {
                 group.appendChild(create('p', `由 Chat2API 的 ${id === 'qwen-api' ? 'qwen-api' : 'doubaapi'} 提供语音合成。请在 Chat2API 添加 API 账号时配置 API Key、可选服务端点${id === 'doubao-api' ? '与资源 ID' : ''}；留空使用官方默认。`));

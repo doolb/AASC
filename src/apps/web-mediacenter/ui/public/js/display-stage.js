@@ -430,6 +430,7 @@
         if (root.DisplayChat && typeof root.DisplayChat.init === 'function') {
             root.DisplayChat.init({ root: refs.chatLayer, bus, send, getState: () => ({ ...state }) });
         }
+        root.DisplayTtsVoices?.init({ bus, send });
         root.DisplayVoiceControls?.init({
             runtime: root.DisplayVoiceRuntime, bus, send, getState: () => ({ ...state })
         });

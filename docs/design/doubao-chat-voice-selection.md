@@ -1,6 +1,6 @@
 # 豆包Chat音色目录、显示端快选与回复播放
 
-日期：2026-10-15。状态：已根据用户“暂时就使用当前声纹设置的一样”明确复用现有「声纹 → 语音服务与音色」配置和优先级；完整实施方案待确认，尚未修改生产代码。
+日期：2026-10-15。状态：用户已确认，源码及定向回归完成。已先合并远端并推送1fb11b7c，再实施；运行实例尚未重启，Offline服务包待出包。
 
 ## 用户需求
 
@@ -10,7 +10,7 @@
 - 显示端AI完成回复后增加播放图标，与控制端一样，点击播放该条回复的TTS。
 - 用户补充：界面再增加TTS方式选择，音色选项随当前方式变化，并修改对应方式的音色。
 
-## 当前代码证据
+## 实施前代码证据（历史基线）
 
 - `chat2api-speech-service.js`、`chat2api-doubao-speech-protocol.js`、`tts-provider-policy.js`、`tts-provider-settings.js`及`doubao-chat-tts.js`均存在固定温柔桃子约束；需要贯通参数，不能仅新增UI。
 - `speechService.voices(model)`已有业务目录方法；TTS Provider已有`voices()`及`getTtsProviderVoices`查询消息。当前后者仅允许控制端；显示端读取目录需独立的窄权限接线，不开放完整控制端权限。
@@ -33,17 +33,17 @@
 
 ## 目录与Provider契约
 
-拟新增`src/apps/server/modules/chat2api/doubao-chat-voices.json`，顶层`female/male`数组，每项仅`name/style_id/tags`。从已验证94项快照生成，不保存Cookie、预览签名URL或调研元数据。
+已新增`src/apps/server/modules/chat2api/doubao-chat-voices.json`，顶层`female/male`数组，每项仅`name/style_id/tags`。从已验证94项快照生成，不保存Cookie、预览签名URL或调研元数据。
 
-拟新增目录读取模块，为Chat2API及业务TTS层提供同一目录、style_id集合与缺省音色。Provider返回UI兼容的`id=style_id`、中文名称、gender、tags；未知style_id明确拒绝，不从名称推测、不回退另一个音色。目录发现不代表94项均已完成真实合成验收。
+已新增目录读取模块，为Chat2API及业务TTS层提供同一目录、style_id集合与缺省音色。Provider返回UI兼容的`id=style_id`、中文名称、gender、tags；未知style_id明确拒绝，不从名称推测、不回退另一个音色。目录发现不代表94项均已完成真实合成验收。
 
 `/v1/audio/speech`继续接收`model=doubao-chat`与`voice=style_id`；沿用现有账号调度、每账号队列、1倍速、默认上游音量及WAV解码。目录只读查询不调用豆包上游，无新增配置HTTP读写入口。
 
 豆包静态目录查询直接读取共享JSON，不先调用依赖模型映射/账号的planner；无账号或Provider禁用时目录仍可离线查看，启用/可合成状态单独表示。生成请求仍严格走已有账号/配置校验。
 
-### Chat2API对外音色目录接口（新增方案，尚未实现）
+### Chat2API对外音色目录接口（已实现）
 
-当前代码只有内部`speechService.voices(model)`，`chat2api-proxy-service.js`尚无对外音色列表HTTP路由。按用户补充，将新增Chat2API扩展接口`GET /v1/audio/voices?model=doubao-chat`，由代理服务复用相同目录方法；各方式通过对应语音模型查询，不在页面维护各自副本。
+原实现只有内部目录；本次已在`chat2api-proxy-service.js`接入Chat2API扩展接口`GET /v1/audio/voices?model=doubao-chat`，由代理服务复用相同目录方法；各方式通过对应语音模型查询，不在页面维护各自副本。
 
 - 使用代理现有Bearer或X-API-Key鉴权，不需要客户端提供豆包Cookie；缺少/无效Key返回现有401语义。缺少、重复或不支持的model查询参数返回400，不能静默变为另一个方式。
 - 成功响应为`{object: list, model: 请求模型, data: 音色数组}`。豆包每项含`id=style_id`、`style_id`、`name`、`gender=female/male`、`tags`，共94项；其它方式沿用其真实目录能力及统一基础字段，不承诺不存在的男女标签。
@@ -64,7 +64,7 @@
 
 现有控制端手动播放没有完整生成状态回执；抽取服务时新增有requestId/本端播放代次的开始、生成失败和结束状态，使按钮恢复不依赖猜测时限。播放/停止/取消均使用服务端绑定目标及代次过滤迟到结果。
 
-## 拟修改文件
+## 实际修改文件与职责
 
 | 范围 | 文件（相对项目根） | 变更 |
 |---|---|---|
@@ -72,8 +72,8 @@
 | 豆包合成 | 同目录`chat2api-speech-service.js`、`chat2api-doubao-speech-protocol.js`、`chat2api-doubao-speech-adapter.js` | 接受已登记音色并传入tts.speaker，缺省兼容 |
 | 对外目录 | 同目录`chat2api-proxy-service.js`及其测试 | 新增GET /v1/audio/voices?model=，复用目录服务、现有鉴权及错误格式，更新能力入口 |
 | 业务TTS | `src/apps/server/modules/tts/doubao-chat-tts.js`、`tts-provider-policy.js`、`tts-provider-settings.js`及必要的`tts-provider-service.js` | 移除固定单音色约束，复用目录与参数校验 |
-| 权威配置 | `src/apps/server/modules/tts/tts-provider-ws.js`、必要的`config-app-service.js`与`server-app.js`接线；必要时新增窄权限`display-chat-tts-ws.js` | 复用现有AI/Agent默认和Provider音色配置，显示端仅获方式/音色写权限；回显/广播/初始化，不新增持久化配置结构 |
-| 回复重播 | 新增`src/apps/server/modules/chat/chat-manual-tts.js`；`server-app.js`及必要的`chat-reply-tts-context.js` | 抽取既有手动TTS流程，本端播放权限及原模板/默认音色解析 |
+| 权威配置 | `src/apps/server/modules/tts/tts-provider-ws.js`与`server-app.js`接线 | 复用现有AI/Agent默认和Provider音色配置，显示端仅获方式/音色写权限；回显/广播/初始化，不新增持久化配置结构 |
+| 回复重播 | 新增`src/apps/server/modules/chat/chat-manual-tts.js`及`server-app.js` | 抽取既有手动TTS流程，本端播放权限及原模板/默认音色解析 |
 | 快选UI | `src/apps/web-mediacenter/ui/public/display.html`、新增`js/display-tts-voices.js`、`js/display-stage.js`、`css/display-mmd.css` | 灯光上方入口、TTS方式、该方式音色、豆包男女目录、搜索/选择/权威回显 |
 | 播放UI | `js/display-chat.js`、`css/display-chat.css` | 完成回复和历史重播按钮及上下文 |
 | 控制端一致性 | `src/apps/web-mediacenter/ui/public/js/tts-provider-settings.js` | 豆包音色可选并共享Provider目录，移除只读单音色UI约束 |
@@ -94,7 +94,7 @@
 
 ## 需求等级分析（enterprise，方案阶段）
 
-主等级L6（目录、Provider参数、回复播放三个模块契约），次等级L5（选择/重播流程）、L7（AASC权威同步）；必须拆到L4数据流实施。证据分别为“由Provider支持提供”“一份JSON男/女名称style_id标签”“回复后播放对应TTS”；流程和同步为中等证据。强证据权重9、总权重13、邻层一致系数0.90，置信度约0.62。配置作用范围和优先级已由用户补充为复用现有声纹页TTS设置；评分：层级24/25、证据18/20、完备19/20、风险19/20、L4落地14/15，总94/100。结论为方案可开发，仍须遵守代码实施前的完整方案确认，不代表实现或测试通过。
+主等级L6（目录、Provider参数、回复播放三个模块契约），次等级L5（选择/重播流程）、L7（AASC权威同步）；必须拆到L4数据流实施。证据分别为“由Provider支持提供”“一份JSON男/女名称style_id标签”“回复后播放对应TTS”；流程和同步为中等证据。强证据权重9、总权重13、邻层一致系数0.90，置信度约0.62。配置作用范围和优先级已由用户补充为复用现有声纹页TTS设置；评分：层级24/25、证据18/20、完备19/20、风险19/20、L4落地14/15，总94/100。结论为方案可开发，用户后续已确认并要求先同步Git，现已完成实现；具体验证边界见任务记录。
 
 ## L4草案
 
@@ -108,4 +108,4 @@
 重播 := 完成回复speech/正文 + 来源上下文 -> 本端权限 -> 既有分句TTS -> 自身播放与回执
 ```
 
-独立builder check已完成；用户后续已明确复用现有声纹页配置，撤销此前按端保存与多目标分组候选。停止权限、目录离线可读、原生路由兼容、字段级patch与播放状态回执仍纳入本方案；未执行实现或测试。
+实现及独立终审已完成：本端输入上下文、顶层speech、普通AI/Agent整批快照和远程停止均补充回归。TTS及浏览器定向201/201、既有手动/并发21/21通过；Chat2API259/262，3项为既有Windows权限断言。Android真机和94项逐一真实听感待验收。

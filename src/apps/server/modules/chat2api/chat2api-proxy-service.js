@@ -161,7 +161,7 @@ const createChat2ApiProxyService = (options = {}) => {
     const url = new URL(request.url || '/', `http://${config.host}`);
     await authorize(request, url.pathname);
     if (request.method === 'GET' && url.pathname === '/') {
-      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models', '/v1/audio/speech'] });
+      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models', '/v1/audio/speech', '/v1/audio/voices'] });
       return;
     }
     if (request.method === 'GET' && url.pathname === '/health') {
@@ -241,6 +241,13 @@ const createChat2ApiProxyService = (options = {}) => {
       const result=await coreAdapter.listModels();
       const speechModels=await speechService?.listModels?.()||[];
       sendJson(response,200,{...result,data:[...new Map([...result.data,...speechModels].map(model=>[model.id,model])).values()]});
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/audio/voices') {
+      if (!speechService?.voices) throw Object.assign(new Error('Chat2API语音目录不可用'), { statusCode: 503, code: 'speech_unavailable' });
+      const models = url.searchParams.getAll('model');
+      if (models.length !== 1 || !models[0].trim()) throw Object.assign(new Error('必须提供唯一的语音model'), { statusCode: 400, code: 'invalid_speech_request' });
+      sendJson(response, 200, { object: 'list', model: models[0], data: await speechService.voices(models[0]) });
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v1/audio/speech') {

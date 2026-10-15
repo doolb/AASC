@@ -1,5 +1,9 @@
 # 自测功能文档
 
+## 豆包Chat音色快选与显示端重播（2026-10-15）
+
+新增只读`doubao_voice_catalog`面板测试，核对94项、女32/男62、唯一id=style_id。真实Chromium含390×740视口、搜索、方式隔离、保存失败、最终回复重播/原输入/顶层speech及停止恢复；TTS/浏览器/协议定向201/201、既有手动与并发21/21通过。Chat2API259/262，3项既有Windows权限失败；旧MMD测试同HEAD基线13项失败未扩大修复。没有逐一真实合成或Android实物播放。详见[任务记录](task/20261015_豆包Chat音色快选与显示端回复播放.md)。
+
 ## 独立任务代码ZIP（2026-10-15）
 
 `npm run test:task-code-sync`66/66、`npm run test:task-dependencies`106/106通过；Android JVM `:app:testDebugUnitTest`285项0失败/1既有归档环境跳过，新任务原生11项全通过。定向夹具覆盖独立签名ZIP、任务与服务/依赖兼容性、白名单/链接/越界/额外文件、有效HTTP/入口/重发来源、Node和Puppeteer代码与数据目录分离、受管前置只读、任务单独下载预算、完整组合回滚和精确清理。VM中同实例恢复20次后仍只有一个计时器、一组监听和一份DOM，停止后为零；Puppeteer用例使用evaluate VM夹具，未启动真实Chromium。

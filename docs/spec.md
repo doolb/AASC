@@ -1,6 +1,6 @@
 # Web MediaCenter - 项目实现文档
 
-- [豆包Chat音色快选与显示端回复播放伪代码（尚未实现）](spec/doubao-chat-voice-selection.md)
+- [豆包Chat音色快选与显示端回复播放伪代码](spec/doubao-chat-voice-selection.md)
 
 - [独立任务代码 ZIP 同步伪代码（源码已实现，待出包迁移）](spec/task-code-sync.md)
 

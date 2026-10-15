@@ -142,6 +142,7 @@ const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
 const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
 const { filterQwenChatSpeechText } = require('../modules/tts/qwen-chat-text-filter');
+const { createManualChatTtsService } = require('../modules/chat/chat-manual-tts');
 const { resolveChatReplyTtsOptions } = require('../modules/chat/chat-reply-tts-context');
 const { generateChatTtsActions } = require('../modules/chat/chat-tts-actions');
 const { adjustWavVolume, decodeAudio } = require('../modules/tts/tts-provider-http');
@@ -692,7 +693,30 @@ const ttsProviderService = createTtsProviderService({
     })
 });
 const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService,
-    isControl: ws => controlClients.has(ws), broadcast: broadcastToControls });
+    isControl: ws => controlClients.has(ws),
+    isDisplay: ws => [...displayClients.values()].some(display => display.ws === ws),
+    broadcast: message => {
+        broadcastToControls(message);
+        for (const [id] of displayClients) sendToDisplay(id, message);
+    } });
+// 手动回复与控制端共用分句服务；每批捕获原声纹页配置，快选不会在半句中改变音色。
+const manualChatTts = createManualChatTtsService({
+    split: text => chat.splitIntoSentences(text).filter(sentence => !isPunctuationOnly(sentence)),
+    strip: stripMarkdown,
+    resolveOptions: context => {
+        const options = resolveChatReplyTtsOptions(context, { getTemplateByName: chat.getTemplateByName });
+        return ttsProviderService.snapshot(options);
+    },
+    scheduler: createTtsGenerationScheduler,
+    generate: (text, displayId, options) => generateTtsWithFallback(text, undefined, undefined, displayId, options),
+    toAudioUrl: reference => '/uploads/tts/' + path.basename(reference),
+    send: sendToDisplay, capabilities: getDisplayCapabilities,
+    broadcast: message => sendToDisplaysWithCapability('voicePlayback', message),
+    suppressed: isRepairModeTtsSuppressed,
+    onError: error => logError('TTS', '手动播放失败: ' + (error.code || 'tts_failed'))
+});
+function playManualChatTts(data, ws, options) { return manualChatTts.play(data, { ws, ...options }); }
+
 if (!ANDROID_NODE_POLICY.enabled) {
     tts.init(config.getTtsConfig());
 }
@@ -1251,7 +1275,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setDisplayVoiceListeningConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'setDisplayVoiceListeningConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -2166,6 +2190,8 @@ async function runRepairModeAgent(displayId, state, text) {
         return;
     }
 
+    const repairTtsOptions = ttsProviderService.snapshot({ businessType: BUSINESS_TYPES.AGENT_REPLY,
+        templateTts: chat.getTemplateByName(role)?.tts, userText: text });
     const agentTtsStream = createAgentTtsStream({
         playOnControl: false,
         // 修复模式也遵循来源显示端优先、在线语音播放端兜底的单目标规则。
@@ -2176,12 +2202,10 @@ async function runRepairModeAgent(displayId, state, text) {
             rememberVoicePlaybackTarget(displayId, targetDisplayId);
             return targetDisplayId;
         },
-        ttsScheduler: createTtsGenerationScheduler(displayId,
-            { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(role)?.tts }),
+        ttsScheduler: createTtsGenerationScheduler(displayId, repairTtsOptions),
         splitIntoSentences: chat.splitIntoSentences,
         stripMarkdown,
-        generateTTS: (ttsText) => generateTtsWithFallback(ttsText, undefined, undefined, displayId,
-            { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(role)?.tts, userText: text }),
+        generateTTS: (ttsText) => generateTtsWithFallback(ttsText, undefined, undefined, displayId, repairTtsOptions),
         sendToControl: broadcastToControls,
         sendToDisplay,
         allowRepairModeTts: true,
@@ -6904,7 +6928,7 @@ function createTtsGenerationScheduler(preferredDisplayId = null, ttsOptions = {}
     // 先按生成时相同的业务/模板确定Provider，避免远端豆包沿用本地显示端的双槽位。
     // 本次只降低一个分句批次的并发；独立批次的同账号排队仍由用户另行选择。
     const resolved = ttsProviderService.resolve({ businessType: ttsOptions.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST,
-        templateTts: ttsOptions.templateTts });
+        templateTts: ttsOptions.templateTts }, ttsOptions.ttsConfiguration);
     if (resolved.selection.provider === 'doubao-chat') {
         return createOrderedTaskScheduler({ concurrency: 1 });
     }
@@ -6997,6 +7021,7 @@ function stopChatTtsPlayback({
     const targets = Array.isArray(displayIds) && displayIds.length > 0
         ? displayIds
         : (displayId ? [displayId] : []);
+    manualChatTts.stopTargets(targets, { conversationId, phase });
     for (const targetId of targets) sendToDisplay(targetId, message);
 }
 
@@ -7054,7 +7079,7 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
     if (options.systemRoute !== true) {
         return ttsProviderService.generate({ text: normalizeTtsPauseText(text), voice, speed, preferredDisplayId,
             businessType: options.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST, templateTts: options.templateTts,
-            userText: options.userText }, { configuration: options.ttsConfiguration });
+            userText: options.userText, signal: options.signal }, { configuration: options.ttsConfiguration });
     }
     const ttsText = normalizeTtsPauseText(text);
     const ttsDevice = config.get('tts.device', 'server');
@@ -7906,6 +7931,7 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
+        ws.send(JSON.stringify(ttsProviderWs.snapshot()));
         // 显示端连接时先收到服务器保存的 MMD 权威值，避免旧页面默认值覆盖持久化设置。
         ws.send(JSON.stringify({
             type: 'control',
@@ -8249,6 +8275,7 @@ wss.on('connection', (ws, req) => {
             clearVoicePlaybackTargetsForDisplay(displayId);
             clearLlmLogBuffersForDisplay(displayId);
             llmGatewayService.handleDisplayDisconnect(displayId);
+            manualChatTts.stop(ws);
             displayClients.delete(displayId);
             for (const [requestId, pending] of pendingDisplayTtsRequests) {
                 if (pending.displayId !== displayId) continue;
@@ -8567,6 +8594,7 @@ wss.on('connection', (ws, req) => {
         ws.on('close', () => {
             rejectDisplayRecordingSessionsForControl(ws, '控制端已断开');
             rejectDisplayCameraSessionsForControl(ws);
+            manualChatTts.stop(ws);
             controlClients.delete(ws);
             ws.removeAllListeners();
             if (wsServer) {
@@ -8691,6 +8719,10 @@ function formatVoiceprintScore(value) {
 }
 
 function handleDisplayMessageFallback(displayId, data, ws) {
+    if (['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices'].includes(data.type)) {
+        void ttsProviderWs.handle(ws, data);
+        return;
+    }
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;
     const displayData = displayClients.get(displayId);
 
@@ -8716,19 +8748,20 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         return;
     }
 
+    if (data.type === 'tts' && data.action === 'play') {
+        if (displayData?.ws !== ws) return;
+        void playManualChatTts(data, ws, { sourceDisplayId: displayId });
+        return;
+    }
     if (data.type === 'tts' && data.action === 'stop') {
-        if (data.chatOnly && data.chatTtsConversationId) {
-            stopChatTtsPlayback({
-                conversationId: data.chatTtsConversationId,
-                phase: data.chatTtsPhase || null,
-                displayId,
-                displayIds: data.displayIds || [],
-                playOnControl: data.playOnControl === true,
-                ws
-            });
-        } else {
-            sendToDisplay(displayId, data);
-        }
+        if (displayData?.ws !== ws) return;
+        manualChatTts.stop(ws);
+        // 显示端只停止自身队列，不取消共享会话在其它播放端的生成代次。
+        sendToDisplay(displayId, { type: 'tts', action: 'stop',
+            ...(data.chatOnly && typeof data.chatTtsConversationId === 'string' ? {
+                chatOnly: true, chatTtsConversationId: data.chatTtsConversationId,
+                ...(data.chatTtsPhase ? { chatTtsPhase: data.chatTtsPhase } : {})
+            } : {}) });
         return;
     }
 
@@ -9155,17 +9188,17 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
                 return;
             }
             const preferredDisplayId = targetDisplayIds[0] || targetDisplayId || null;
+            const agentTtsOptions = ttsProviderService.snapshot({ businessType: BUSINESS_TYPES.AGENT_REPLY,
+                templateTts: chat.getTemplateByName(data.templateTarget || data.role)?.tts,
+                userText: data.displayContent || data.content });
             const agentTtsStream = createAgentTtsStream({
                 playOnControl,
                 displayId: targetDisplayId,
                 displayIds: targetDisplayIds,
-                ttsScheduler: createTtsGenerationScheduler(preferredDisplayId,
-                    { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(data.templateTarget || data.role)?.tts }),
+                ttsScheduler: createTtsGenerationScheduler(preferredDisplayId, agentTtsOptions),
                 splitIntoSentences: chat.splitIntoSentences,
                 stripMarkdown,
-                generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId,
-                    { businessType: BUSINESS_TYPES.AGENT_REPLY, templateTts: chat.getTemplateByName(data.templateTarget || data.role)?.tts,
-                        userText: data.displayContent || data.content }),
+                generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId, agentTtsOptions),
                 sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
                 sendToDisplay,
                 chatTtsConversationId,
@@ -10816,71 +10849,11 @@ async function handleControlMessageFallback(data, ws) {
                                 ws
                             });
                         } else {
+                            manualChatTts.stopTargets();
                             sendToDisplaysWithCapability('voicePlayback', data);
                         }
                     } else if (data.action === 'play' && data.text) {
-                        if (isRepairModeTtsSuppressed()) return;
-                        (async () => {
-                            try {
-                                const cleanText = stripMarkdown(data.text);
-                                const sentences = chat.splitIntoSentences(cleanText)
-                                    .filter((sentence) => !isPunctuationOnly(sentence));
-                                const targetDisplayIds = data.displayIds || (displayId ? [displayId] : []);
-                                const preferredDisplayId = targetDisplayIds[0] || displayId || null;
-                                const replyTtsOptions = resolveChatReplyTtsOptions(data.chatReplyContext, { getTemplateByName: chat.getTemplateByName });
-                                const ttsScheduler = createTtsGenerationScheduler(preferredDisplayId, replyTtsOptions);
-
-                                const tasks = sentences.map((sentence) => ttsScheduler.enqueue(async () => {
-                                    const audioPath = await generateTtsWithFallback(sentence, undefined, undefined, preferredDisplayId, replyTtsOptions);
-                                    if (audioPath === null) return null;
-                                    return { sentence, audioPath };
-                                }).then((result) => {
-                                    if (!result || isRepairModeTtsSuppressed()) return;
-                                    const { sentence, audioPath } = result;
-                                    const fileName = path.basename(audioPath);
-                                    const audioUrl = `/uploads/tts/${fileName}`;
-
-                                    if (data.playOnControl) {
-                                        ws.send(JSON.stringify({
-                                            type: 'playOnControl',
-                                            audioUrl: audioUrl,
-                                            text: sentence
-                                        }));
-                                    } else if (data.broadcastAll) {
-                                        sendToDisplaysWithCapability('voicePlayback', {
-                                            type: 'tts',
-                                            action: 'playAudio',
-                                            audioUrl: audioUrl,
-                                            text: sentence
-                                        });
-                                    } else if (targetDisplayIds.length > 0) {
-                                        for (const targetId of targetDisplayIds) {
-                                            const caps = getDisplayCapabilities(targetId);
-                                            if (caps && caps.voicePlayback) {
-                                                sendToDisplay(targetId, {
-                                                    type: 'tts',
-                                                    action: 'playAudio',
-                                                    audioUrl: audioUrl,
-                                                    text: sentence
-                                                });
-                                            }
-                                        }
-                                    } else if (displayId) {
-                                        sendToDisplay(displayId, {
-                                            type: 'tts',
-                                            action: 'playAudio',
-                                            audioUrl: audioUrl,
-                                            text: sentence
-                                        });
-                                    }
-                                }).catch((err) => {
-                                    logError('TTS', `句子生成失败: ${err.message}`);
-                                }));
-                                await Promise.all(tasks);
-                            } catch (err) {
-                                logError('TTS', `播放失败: ${err.message}`);
-                            }
-                        })();
+                        void playManualChatTts(data, ws, { displayId });
                     } else if (data.action === 'setAutoTts') {
                         // 自动播报开关：既控制整点报时（time.announce 任务），也控制显示端媒体文件名播报。
                         // 持久化到 displayData.state.autoTts（显示端刷新/重启后 restoreState 恢复）+ 转发显示端
@@ -10911,8 +10884,9 @@ async function handleControlMessageFallback(data, ws) {
                 } else if (data.type === 'chat') {
                     (async () => {
                         try {
-                            const ttsScheduler = createTtsGenerationScheduler(displayId,
-                                { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts });
+                            const legacyTtsOptions = ttsProviderService.snapshot({ businessType: BUSINESS_TYPES.AI_REPLY,
+                                templateTts: chat.getTemplateByName(data.useTemplate)?.tts, userText: data.message });
+                            const ttsScheduler = createTtsGenerationScheduler(displayId, legacyTtsOptions);
                             await chat.chatStream(data.message, {
                                 useTemplate: data.useTemplate,
                                 displayId: displayId
@@ -10930,9 +10904,7 @@ async function handleControlMessageFallback(data, ws) {
                                     ttsScheduler.enqueue(async () => {
                                         return generateChatTtsActions({ sentence, stripMarkdown,
                                             conversationId: data.requestId || '', send: message => sendToDisplay(displayId, message),
-                                            generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, displayId,
-                                                { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: chat.getTemplateByName(data.useTemplate)?.tts,
-                                                    userText: data.message }) });
+                                            generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, displayId, legacyTtsOptions) });
                                     }).then((result) => {
                                         if (!result) return;
                                         const { audioPath, sentence } = result;
@@ -11184,8 +11156,9 @@ async function handleChatMessage(options) {
         });
     }
     const ttsToken = chatTtsToken || beginChatTtsGeneration(ttsConversationId);
-    const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId,
-        { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts }) : null;
+    const replyTtsOptions = ttsProviderService.snapshot({ businessType: BUSINESS_TYPES.AI_REPLY,
+        templateTts: replyTemplateTts, userText: displayContent || content });
+    const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId, replyTtsOptions) : null;
     const sendChatResponse = (payload) => {
         const responseLength = typeof payload.message === 'string' ? payload.message.length : 0;
         log('WS', `>> chatResponse requestId=${effectiveRequestId} success=${payload.success} messageLength=${responseLength}`, {
@@ -11253,9 +11226,7 @@ async function handleChatMessage(options) {
                 if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return null;
                 return generateChatTtsActions({ sentence, phase: ttsPhase, conversationId: ttsConversationId,
-                    stripMarkdown, generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId,
-                        { businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts,
-                            userText: displayContent || content }),
+                    stripMarkdown, generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId, replyTtsOptions),
                     send: message => {
                         if (playOnControl) sendToControl(message);
                         else {

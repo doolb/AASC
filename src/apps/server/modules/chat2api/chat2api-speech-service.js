@@ -1,4 +1,5 @@
 'use strict';
+const { listDoubaoVoices, validateDoubaoVoice } = require('./chat2api-doubao-voices');
 
 const { createChat2ApiDataStore } = require('./chat2api-data-store');
 const { createChat2ApiProviderRegistry } = require('./chat2api-provider-registry');
@@ -30,7 +31,8 @@ function normalizeSpeechRequest(request) {
     if (request.response_format !== undefined && request.response_format !== 'wav') throw speechError(400, 'invalid_speech_request', 'Chat2API 语音仅支持wav格式');
     const speed = request.speed ?? 1;
     const volume = request.volume ?? 100;
-    if (doubao && (voice !== DOUBAO_SPEECH_VOICE || speed !== 1 || volume !== 100)) throw speechError(400, 'invalid_speech_request', '豆包网页语音仅支持网页默认音色、1倍速与默认音量');
+    if (doubao) validateDoubaoVoice(voice);
+    if (doubao && (speed !== 1 || volume !== 100)) throw speechError(400, 'invalid_speech_request', '豆包网页语音仅支持1倍速与默认音量');
     if (typeof speed !== 'number' || !Number.isFinite(speed) || speed < 0.25 || speed > 4
         || typeof volume !== 'number' || !Number.isFinite(volume) || volume < 0 || volume > 100) throw speechError(400, 'invalid_speech_request', '语音速度或音量超出范围');
     return { text: request.input, model: model === 'qwen-chat' ? 'QUARK_VOICE' : model, voice, speed, volume };
@@ -202,7 +204,12 @@ function createChat2ApiSpeechService(options={}) {
         })]);}finally{clearTimeout(timer);signal?.removeEventListener('abort',onAbort);controller.abort();}
     };
     const voices=async(model)=>{
+        if (model === 'doubao-chat') return listDoubaoVoices();
+        if (typeof model !== 'string' || !model.trim() || model.length > 200
+            || (!getSpeechBinding(model) && typeof modelMapper.resolveModel !== 'function')) throw speechError(400, 'invalid_speech_request', '不支持的语音目录模型');
         const plan=await planner.plan({model,input:'音色查询'});
+        if (plan.application !== 'tts') throw speechError(400, 'invalid_speech_request', '模型没有语音目录');
+        if (plan.providerId === 'doubaochat') return listDoubaoVoices();
         if(apiAdapters[plan.providerId])return apiAdapters[plan.providerId].voices({model:plan.upstreamModel});
         return [{id:plan.parameters.voice,name:plan.parameters.voice,available:['qwen','doubaochat'].includes(plan.providerId)}];
     };

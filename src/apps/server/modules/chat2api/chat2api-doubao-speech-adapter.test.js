@@ -22,11 +22,22 @@ function setup(options = {}) {
         const socket = new EventEmitter(); socket.url=url;socket.config=config;socket.sent=[];socket.destroyed=false;
         socket.send=bytes=>socket.sent.push(bytes);socket.terminate=()=>{socket.destroyed=true}; sockets.push(socket); return socket;
     }, ...options });
-    const generate = (context = {}) => adapter.generate({ text:'本地模拟短文' }, cookie,
+    const generate = (context = {}) => adapter.generate({ text:'本地模拟短文', voice: context.voice }, cookie,
         { accountId:'demo', deadline:Date.now()+10000, ...context });
     return { sockets, generate };
 }
 function start(socket) { socket.emit('open');socket.emit('message',event('TaskStarted'),true);socket.emit('message',event('SessionStarted',{session:'session'}),true); }
+
+test('非默认目录音色经过适配器进入真实编码的StartSession', async () => {
+    const voice = 'zh_male_cixingjunyu_uranus_bigtts';
+    const { generate, sockets } = setup();
+    const pending = generate({ voice });
+    start(sockets[0]);
+    sentence(sockets[0]);
+    sockets[0].emit('message', event('TTSEnded'), true);
+    await pending;
+    assert.ok(sockets[0].sent.some(bytes => bytes.toString('utf8').includes(voice)));
+});
 function sentence(socket, audio = fixture()) { socket.emit('message',event('TTSSentenceStart'),true);socket.emit('message',event('TTSResponse',{data:audio.subarray(0,10)}),true);socket.emit('message',event('TTSResponse',{data:audio.subarray(10)}),true);socket.emit('message',event('TTSSentenceEnd'),true); }
 
 test('Frontier模拟分片/多句完整结束后真实解码为单一WAV，清理连接且不重试', async () => {

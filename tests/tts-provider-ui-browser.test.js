@@ -61,8 +61,8 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
             document.getElementById('templateTtsProvider').value='doubao-chat';
             document.getElementById('templateTtsProvider').dispatchEvent(new Event('change',{bubbles:true}));
         });
-        assert.equal(await page.$eval('#ttsProviderFields > div input',input=>input.readOnly),true);
-        assert.equal(await page.$eval('#templateTtsVoice',input=>input.readOnly),true);
+        assert.equal(await page.$eval('#ttsProviderFields > div input',input=>input.readOnly),false);
+        assert.equal(await page.$eval('#templateTtsVoice',input=>input.readOnly),false);
         assert.ok(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.textContent.includes('实验性')));
         assert.equal(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.querySelector('input[type="checkbox"]').checked),false);
         assert.equal(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.querySelectorAll('input[type="password"], input[type="number"]').length),0);

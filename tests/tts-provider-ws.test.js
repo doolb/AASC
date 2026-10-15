@@ -4,6 +4,39 @@ const assert = require('node:assert/strict');
 const { normalizeSettings, redactSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { createTtsProviderWs } = require('../src/apps/server/modules/tts/tts-provider-ws');
 
+test('显示端快选复用共享配置、各方式保留音色且只允许窄权限参数', async () => {
+    const { listDoubaoVoices } = require('../src/apps/server/modules/chat2api/chat2api-doubao-voices');
+    const male = listDoubaoVoices().find(v => v.gender === 'male').id;
+    let settings = normalizeSettings();
+    const replies = [], broadcasts = [];
+    const display = { send: raw => replies.push(JSON.parse(raw)) };
+    let fail = false;
+    const handler = createTtsProviderWs({ config: {
+        getPublicTtsProviderSettings: () => redactSettings(settings),
+        setTtsProviderSettings: patch => { if (fail) throw Error('保存失败'); settings = normalizeSettings(patch, settings); }
+    }, service: { voices: async () => listDoubaoVoices() }, isControl: () => false,
+    isDisplay: ws => ws === display, broadcast: message => broadcasts.push(message) });
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'doubao-chat', voice: male, requestId: 'male' });
+    assert.equal(settings.aiReplyDefault.voice, male);
+    assert.equal(settings.providers['doubao-chat'].defaultVoice, male);
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'qwen-api', voice: 'Cherry' });
+    assert.equal(settings.providers['doubao-chat'].defaultVoice, male);
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'doubao-chat' });
+    assert.equal(settings.aiReplyDefault.voice, male);
+    assert.equal(broadcasts.length, 3);
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'doubao-chat', voice: male, enabled: true });
+    assert.equal(replies.at(-1).success, false);
+    await handler.handle(display, { type: 'setTtsProviderConfig', config: { providers: { 'doubao-chat': { enabled: true } } } });
+    assert.equal(settings.providers['doubao-chat'].enabled, false);
+    await handler.handle({}, { type: 'setChatTtsSelection', provider: 'system' });
+    assert.equal(settings.aiReplyDefault.provider, 'doubao-chat');
+    fail = true;
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'system', requestId: 'failed' });
+    assert.equal(replies.at(-1).config.aiReplyDefault.voice, male);
+    await handler.handle(display, { type: 'getTtsProviderVoices', provider: 'doubao-chat' });
+    assert.equal(replies.at(-1).voices.length, 94);
+});
+
 test('控制端保存广播权威脱敏值，失败回旧值；声音查询和未授权消息隔离', async () => {
     let settings = normalizeSettings();
     let fail = false;

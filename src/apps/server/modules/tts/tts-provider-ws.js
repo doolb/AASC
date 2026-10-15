@@ -1,13 +1,19 @@
 'use strict';
+const { PROVIDERS } = require('./tts-provider-policy');
 
 // 与AASC控制端handler共用同一权威配置流程，禁止额外HTTP配置接口。
-function createTtsProviderWs({ config, service, isControl, broadcast }) {
+function createTtsProviderWs({ config, service, isControl, isDisplay = () => false, broadcast }) {
     const message = extra => ({ type: 'ttsProviderConfig', config: config.getPublicTtsProviderSettings(), ...extra });
     return {
         snapshot: message,
         async handle(ws, data) {
-            if (!['setTtsProviderConfig', 'getTtsProviderVoices'].includes(data.type)) return false;
-            if (!isControl(ws)) return true;
+            if (!['setTtsProviderConfig', 'getTtsProviderVoices', 'setChatTtsSelection', 'getChatTtsConfig'].includes(data.type)) return false;
+            const control = isControl(ws);
+            if (!control && (!isDisplay(ws) || data.type === 'setTtsProviderConfig')) return true;
+            if (data.type === 'getChatTtsConfig') {
+                ws.send(JSON.stringify(message()));
+                return true;
+            }
             if (data.type === 'getTtsProviderVoices') {
                 try {
                     const voices = await service.voices(data.provider);
@@ -20,7 +26,17 @@ function createTtsProviderWs({ config, service, isControl, broadcast }) {
                 return true;
             }
             try {
-                config.setTtsProviderSettings(data.config);
+                let patch = data.config;
+                if (data.type === 'setChatTtsSelection') {
+                    // 显示端只编辑与声纹页相同的AI默认及对应方式音色，不能借此改凭据或其它业务。
+                    const allowed = new Set(['type', 'provider', 'voice', 'requestId']);
+                    if (Object.keys(data).some(key => !allowed.has(key)) || !PROVIDERS.includes(data.provider)) throw new Error('TTS快选参数不合法');
+                    const current = config.getPublicTtsProviderSettings();
+                    const voice = data.provider === 'system' ? null : data.voice ?? current.providers[data.provider]?.defaultVoice;
+                    patch = { aiReplyDefault: { provider: data.provider, voice },
+                        ...(data.provider === 'system' ? {} : { providers: { [data.provider]: { defaultVoice: voice } } }) };
+                }
+                config.setTtsProviderSettings(patch);
                 broadcast(message({ requestId: data.requestId, success: true }));
             } catch (error) {
                 ws.send(JSON.stringify(message({ requestId: data.requestId, success: false, message: error.message })));

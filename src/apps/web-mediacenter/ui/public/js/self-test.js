@@ -167,6 +167,37 @@ const SelfTest = {
             }
         },
         {
+            id: 'doubao_voice_catalog',
+            name: '豆包Chat音色目录',
+            category: '语音',
+            run: async () => {
+                const ws = window.WebSocketManager?.ws;
+                if (!ws || ws.readyState !== WebSocket.OPEN) return { success: false, message: '请先连接服务器' };
+                const requestId = `self-test-doubao-voices-${Date.now()}`;
+                const result = await new Promise(resolve => {
+                    const finish = value => { clearTimeout(timer); ws.removeEventListener('message', handle); resolve(value); };
+                    const handle = event => {
+                        try {
+                            const message = JSON.parse(event.data);
+                            if (message.type === 'ttsProviderVoices' && message.requestId === requestId) finish(message);
+                        } catch (error) { /* 其它消息不影响当前只读查询。 */ }
+                    };
+                    const timer = setTimeout(() => finish({ success: false, message: '音色目录查询超时' }), 5000);
+                    ws.addEventListener('message', handle);
+                    try { ws.send(JSON.stringify({ type: 'getTtsProviderVoices', provider: 'doubao-chat', requestId })); }
+                    catch (error) { finish({ success: false, message: '连接已断开' }); }
+                });
+                const voices = result.voices || [];
+                const female = voices.filter(voice => voice.gender === 'female').length;
+                const male = voices.filter(voice => voice.gender === 'male').length;
+                const valid = result.success && voices.length === 94 && female === 32 && male === 62
+                    && new Set(voices.map(voice => voice.id)).size === 94
+                    && voices.every(voice => voice.id === voice.style_id && voice.name && Array.isArray(voice.tags));
+                return { success: Boolean(valid), message: valid ? '94项音色目录正常（女32/男62）' : result.message || '音色目录结构不匹配',
+                    details: '只查询本地静态目录，不修改配置、不合成；不表示所有音色已完成真实听感验收' };
+            }
+        },
+        {
             id: 'chat_reply_tts_context',
             name: '聊天回复语音来源',
             description: '只读检查AI/Agent模板与对应上一句输入，不发送语音',

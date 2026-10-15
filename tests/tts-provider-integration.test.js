@@ -282,8 +282,8 @@ test('system仍使用原引用、选择默认参数，禁用和600字边界明�
 test('实际装配连接AI/Agent/临时/文本/系统入口和控制端重连；播放协议保持', () => {
     const source = fs.readFileSync(path.join(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
     assert.match(source, /businessType: BUSINESS_TYPES.TEXT_MEDIA/u);
-    assert.equal((source.match(/businessType: BUSINESS_TYPES.AGENT_REPLY/gu) || []).length, 2);
-    assert.match(source, /businessType: BUSINESS_TYPES.AI_REPLY, templateTts: replyTemplateTts/u);
+    assert.match(source, /businessType: BUSINESS_TYPES.AGENT_REPLY,\s*templateTts: chat.getTemplateByName/u);
+    assert.match(source, /businessType: BUSINESS_TYPES.AI_REPLY,\s*templateTts: replyTemplateTts/u);
     assert.match(source, /isTemporaryConversation \? temporaryConversation.roleName : effectiveTemplateTarget/u);
     assert.match(source, /businessType: options.businessType \|\| BUSINESS_TYPES.SYSTEM_BROADCAST/u);
     assert.match(source, /ws.send\(JSON.stringify\(ttsProviderWs.snapshot\(\)\)\)/u);

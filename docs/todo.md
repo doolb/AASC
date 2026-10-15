@@ -1,4 +1,3 @@
-- ⏳待方案确认 [2026-10-15] 豆包Chat独立男女音色JSON、Provider动态speaker、Chat2API GET /v1/audio/voices目录接口、灯光上方TTS方式/对应音色快选及显示端AI/Agent回复重播。用户已明确复用当前声纹页全局TTS配置及原模板优先级，各方式音色沿用Provider配置，尚未改代码。任务：`docs/task/20261015_豆包Chat音色快选与显示端回复播放.md`。
 
 - ⏳待发布/补充验收 [2026-10-15] 独立任务ZIP的min58/code96/task1已签名出包，复用deps10；ADB完成既有设备迁移、任务专用下载/完整回滚、真实WebView20次重载与旧正式源兼容验证。仍待LAN/WAN正式发布、干净首装和任务专用受管重启/启动校验耗时；四项产物需求均false，表示已出包而非已发布。任务：`docs/task/20261015_任务代码随服务包同步机制设计.md`。
 
@@ -18,7 +17,7 @@
 
 - ⏳待真机验收 [2026-10-13] Offline APK WebView 文件选择器源码与回归已完成；min51已签名发布，待安装后确认控制端 Chat2API JSON 选择、取消和导入流程。任务：`docs/task/20261013_OfflineAPK_WebView文件选择器.md`。
 
-- ⏳待长期/模式/设备验收 [2026-10-13] 豆包普通LLM：think/expert、令牌过期维护、多账号及其它环境仍待验收；Android普通模式两轮纯Node Responses和TTS已于2026-10-15通过。网页朗读剩余设备播放/音色听感验收；可选的官网目录接入、style_id选择保存及多音色合成验收尚未实施，需后续需求确认（接口调研见`docs/design/chat2api-doubao-web.md`，获取步骤见`docs/ref/doubao-web-voice-fetch.md`，当前五分类实显目录见`docs/ref/doubao-web-ui-voices-20261015.json`（合并94项）；按男女整理版见`docs/ref/doubao-web-gender-voices-20261015.json`（女32/男62）；全部分页候选与当前实显范围不同）。旧Cookie-only网页桥已删除，不再保留待办。任务：`docs/task/20261013_豆包纯Node协议接入.md`、`docs/task/20261012_豆包普通LLM网页fetch实施.md`、`docs/task/20261012_豆包网页WAV解码实施计划.md`。
+- ⏳待长期/模式/设备验收 [2026-10-13] 豆包普通LLM：think/expert、令牌过期维护、多账号及其它环境仍待验收；Android普通模式两轮纯Node Responses和TTS已于2026-10-15通过。网页朗读剩余设备播放/音色听感验收；官网94项目录接入、style_id选择保存及显示端重播源码已完成；待加载新版服务并验收Android WebView、多端播放和多音色真实听感（接口调研见`docs/design/chat2api-doubao-web.md`，获取步骤见`docs/ref/doubao-web-voice-fetch.md`，当前五分类实显目录见`docs/ref/doubao-web-ui-voices-20261015.json`（合并94项）；按男女整理版见`docs/ref/doubao-web-gender-voices-20261015.json`（女32/男62）；全部分页候选与当前实显范围不同）。旧Cookie-only网页桥已删除，不再保留待办。任务：`docs/task/20261013_豆包纯Node协议接入.md`、`docs/task/20261012_豆包普通LLM网页fetch实施.md`、`docs/task/20261012_豆包网页WAV解码实施计划.md`。
 
 - ⏳待部署/现场验收 [2026-10-13] Chat2API四路统一首批已实现：运行实例加载新版后手动配置qwen-api/doubaapi账号，验收真实API、网页朗读完整业务及设备播放；未迁移真实凭据、未重启或出包。详见`docs/usage/chat2api-unified-applications.md`及`docs/task/20261013_Chat2API四路统一模型应用分流.md`。
 

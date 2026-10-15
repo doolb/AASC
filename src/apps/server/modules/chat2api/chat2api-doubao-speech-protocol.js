@@ -1,4 +1,5 @@
 'use strict';
+const { validateDoubaoVoice } = require('./chat2api-doubao-voices');
 const { TextDecoder } = require('node:util');
 
 // 业务标识和默认音色来自官网公开T57模块，并非用户的登录密钥；首版不自动切换飞书业务标识。
@@ -76,11 +77,11 @@ function decodeSpeechResponse(bytes) {
     return result;
 }
 
-function createTextTtsSession() {
+function createTextTtsSession({ voice = DOUBAO_SPEECH_VOICE } = {}) {
     const postProcess={pitch:0,speech_rate:1};const cache={text_type:1,use_cache:true};
     return {business:1,conversation_id:'',request_type:5,enable_text_reading:true,interrupt_type:0,query_mode:2,
         chat:{bot_id:'7338286299411103781',conversation_id:'',question_id:'0',message_id:'',new_conversation:true,extra:{}},
-        tts:{speaker:DOUBAO_SPEECH_VOICE,audio_config:{bit_rate:32000,format:'ogg_opus',sample_rate:24000},
+        tts:{speaker:validateDoubaoVoice(voice),audio_config:{bit_rate:32000,format:'ogg_opus',sample_rate:24000},
             extra:{cache_config:cache,network_level:7,post_process:postProcess,music_ext_for_tts:''}},
         extra:{enable_text_simple_report:true,enable_section_report:true,enable_card_simple_report:true,
             enable_image_asr_ctx:true,disable_markdown_filter:true,enable_asr_audio_context:false,is_server_error_retry:false,

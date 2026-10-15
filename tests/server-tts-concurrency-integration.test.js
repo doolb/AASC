@@ -17,6 +17,26 @@ const serverSource = fs.readFileSync(
     'utf8'
 );
 
+test('批次开始复制模板和配置，切换默认Provider不影响后续句', async () => {
+    let settings = normalizeSettings({ aiReplyDefault: { provider: 'system' } });
+    const seen = [];
+    const service = createTtsProviderService({ getSettings: () => settings, registry: {
+        system: { generate: async request => { seen.push(request.voice); return 'system.wav'; } }
+    } });
+    const template = { provider: 'system' };
+    const batch = service.snapshot({ businessType: 'ai_reply', templateTts: template, userText: '原问题' });
+    template.provider = 'doubao-chat';
+    settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' } });
+    await service.generate({ text: '第一句', ...batch }, { configuration: batch.ttsConfiguration });
+    await service.generate({ text: '第二句', ...batch }, { configuration: batch.ttsConfiguration });
+    assert.equal(seen.length, 2);
+    assert.equal(batch.templateTts.provider, 'system');
+    for (const marker of ['agentTtsOptions', 'legacyTtsOptions', 'replyTtsOptions']) {
+        assert.match(serverSource, new RegExp(`const ${marker} = ttsProviderService\\.snapshot\\(`));
+        assert.ok(serverSource.split(marker).length >= 4, marker + '须被调度及合成共同使用');
+    }
+});
+
 test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播放且保留真实失败', async t => {
     for (const mode of ['legacy', 'current']) await t.test(mode, async () => {
         const inputs = [];
@@ -36,6 +56,8 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
         const context = { path, ttsScheduler, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
             data: { message: '旧聊天问题' }, content: '本轮问题', displayContent: '本轮显示问题',
             displayId: 'display-a', preferredDisplayId: 'display-a', replyTemplateTts: null,
+            legacyTtsOptions: { businessType: 'ai_reply', userText: '旧聊天问题' },
+            replyTtsOptions: { businessType: 'ai_reply', userText: '本轮显示问题' },
             chat: { getTemplateByName: () => null }, stripMarkdown: text => text,
             isPunctuationOnly: () => false, isTemporaryConversation: false, tts: true,
             isRepairModeTtsSuppressed: () => false, allowRepairModeTts: false,
@@ -61,12 +83,12 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
 test('服务端普通 Chat 和手动 TTS 使用有序调度器', () => {
     assert.match(serverSource, /const \{ createOrderedTaskScheduler \} = require\('\.\.\/modules\/media\/ordered-task-scheduler'\)/u);
     assert.match(serverSource, /function createTtsGenerationScheduler\(preferredDisplayId = null, ttsOptions = \{\}\)/u);
-    assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(preferredDisplayId, replyTtsOptions\);/u);
-    assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(displayId,\s*\{ businessType: BUSINESS_TYPES.AI_REPLY/u);
+    assert.match(serverSource, /scheduler: createTtsGenerationScheduler/u);
+    assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(displayId, legacyTtsOptions\)/u);
     assert.match(serverSource, /await ttsScheduler\.waitForIdle\(\);/u);
-    assert.match(serverSource, /generateTtsWithFallback\(sentence, undefined, undefined, preferredDisplayId, replyTtsOptions\)/u);
-    assert.match(serverSource, /generateTtsWithFallback\(cleanText, undefined, undefined, preferredDisplayId,\s*\{ businessType: BUSINESS_TYPES.AI_REPLY/u);
-    assert.match(serverSource, /chat\.splitIntoSentences\(cleanText\)[\s\S]*?filter\(\(sentence\) => !isPunctuationOnly\(sentence\)\)/u);
+    assert.match(serverSource, /generateTtsWithFallback\(text, undefined, undefined, displayId, options\)/u);
+    assert.match(serverSource, /generateTtsWithFallback\(cleanText, undefined, undefined, preferredDisplayId, replyTtsOptions\)/u);
+    assert.match(serverSource, /split: text => chat\.splitIntoSentences\(text\)\.filter/u);
     assert.match(serverSource, /if \(!tts \|\| isPunctuationOnly\(sentence\)\) return;/u);
     assert.doesNotMatch(serverSource, /let ttsQueue = Promise\.resolve\(\)/u);
 });
@@ -105,6 +127,8 @@ test('普通AI真实句子回调和Agent生成回调向豆包传本轮原输入�
         const end = serverSource.indexOf('onComplete:', start);
         const context = { path, ttsScheduler, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
             data: { message: input }, content: input, displayContent: input, displayId: 'display-a', preferredDisplayId: 'display-a', replyTemplateTts: null,
+            legacyTtsOptions: { businessType: 'ai_reply', userText: input },
+            replyTtsOptions: { businessType: 'ai_reply', userText: input },
             chat: { getTemplateByName: () => null }, stripMarkdown: text => text, isPunctuationOnly: () => false,
             isTemporaryConversation: false, tts: true, isRepairModeTtsSuppressed: () => false, allowRepairModeTts: false,
             isCurrentChatTtsGeneration: () => true, ttsToken: null, ttsConversationId: null, playOnControl: false,
@@ -122,6 +146,7 @@ test('普通AI真实句子回调和Agent生成回调向豆包传本轮原输入�
     const callbackSource = serverSource.slice(start, end).trim().replace(/,$/u, '');
     const agentCallback = vm.runInNewContext(`({${callbackSource}}).generateTTS`, {
         preferredDisplayId: 'display-a', BUSINESS_TYPES: { AGENT_REPLY: 'agent_reply' },
+        agentTtsOptions: { businessType: 'agent_reply', userText: 'Agent原问题' },
         data: { content: 'Agent处理文本', displayContent: 'Agent原问题', role: 'Agent' }, chat: { getTemplateByName: () => null },
         generateTtsWithFallback: (text, voice, speed, displayId, options) => service.generate({ text, ...options })
     });

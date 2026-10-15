@@ -1,6 +1,6 @@
 # Web MediaCenter - 项目设计文档
 
-- [豆包Chat音色快选与显示端回复播放（方案待确认）](design/doubao-chat-voice-selection.md)
+- [豆包Chat音色快选与显示端回复播放](design/doubao-chat-voice-selection.md)
 
 - [独立任务代码 ZIP 同步机制（源码已实现，待出包迁移）](design/task-code-sync.md)
 

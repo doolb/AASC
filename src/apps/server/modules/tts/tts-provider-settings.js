@@ -3,6 +3,7 @@
 const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('./tts-provider-policy');
 const { resolveQwenEndpoint, isQwenAudioModel } = require('./qwen-api-contract');
 const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
+const { validateDoubaoVoice } = require('../chat2api/chat2api-doubao-voices');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_CAPABILITIES = Object.freeze({
@@ -53,12 +54,13 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         if (patch.enabled !== undefined && typeof patch.enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
         // 规范化后的配置会再次用于重载；固定实验性标识可原样读回，但不能由控制端取消。
         if (patch.experimental !== undefined && patch.experimental !== true) throw new Error('豆包网页朗读目前只能作为实验性来源');
-        for (const key of ['endpoint', 'model', 'defaultVoice', 'resourceId']) {
+        for (const key of ['endpoint', 'model', 'resourceId']) {
             if (patch[key] !== undefined && patch[key] !== fixed[key]) throw new Error('豆包网页朗读仅支持固定网页默认配置');
         }
         // 豆包网页上游固定语速，不提供Provider语速配置；兼容读取时丢弃历史字段。
         // 任何旧凭据/账号引用均不进入新配置或广播。
-        return { ...fixed, enabled: patch.enabled ?? (typeof previous.enabled === 'boolean' ? previous.enabled : false) };
+        return { ...fixed, defaultVoice: validateDoubaoVoice(patch.defaultVoice ?? previous.defaultVoice ?? fixed.defaultVoice),
+            enabled: patch.enabled ?? (typeof previous.enabled === 'boolean' ? previous.enabled : false) };
     }
     const base = { ...PROVIDER_DEFAULTS[provider], ...previous };
     if (provider !== 'system' && patch.enabled !== undefined && typeof patch.enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
@@ -130,7 +132,7 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
         const value = normalizeVoiceConfig({ ...previous[key], ...input });
         if (value.provider === 'doubao-chat') {
             if (input.provider === 'doubao-chat' && input.voice === undefined && previous[key]?.provider !== 'doubao-chat') value.voice = null;
-            if (value.voice && value.voice !== DOUBAO_SPEECH_VOICE) throw new Error('豆包网页朗读仅支持网页默认音色');
+            if (value.voice) validateDoubaoVoice(value.voice);
         }
         validateBusinessProvider(value.provider, business);
         return [key, value];

@@ -203,6 +203,17 @@ function serverHarness() {
         sendToDisplaysWithCapability: (capability, message) => sent.push({ broadcast: true, ...message }),
         getDisplayCapabilities: () => ({ voicePlayback: true })
     };
+    const manual = require('../src/apps/server/modules/chat/chat-manual-tts').createManualChatTtsService({
+        split: text => context.chat.splitIntoSentences(text), strip: context.stripMarkdown,
+        resolveOptions: value => resolveChatReplyTtsOptions(value, { getTemplateByName: context.chat.getTemplateByName }),
+        scheduler: context.createTtsGenerationScheduler,
+        generate: (text, displayId, options) => context.generateTtsWithFallback(text, undefined, undefined, displayId, options),
+        toAudioUrl: reference => '/uploads/tts/' + path.basename(reference),
+        send: context.sendToDisplay, capabilities: context.getDisplayCapabilities,
+        broadcast: message => context.sendToDisplaysWithCapability('voicePlayback', message),
+        suppressed: context.isRepairModeTtsSuppressed, onError: error => context.logError('TTS', error.message)
+    });
+    context.playManualChatTts = (data, ws, options) => manual.play(data, { ws, ...options });
     const start = serverSource.indexOf('async function handleControlMessageFallback(');
     const end = serverSource.indexOf('\nfunction getLocalIP()', start);
     assert.ok(start >= 0 && end > start);

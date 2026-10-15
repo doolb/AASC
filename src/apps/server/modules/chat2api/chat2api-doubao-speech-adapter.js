@@ -71,7 +71,7 @@ function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(ur
                     switch(event.event){
                         case 'TaskStarted':
                             if(phase!=='task'||!/^[\w-]{1,128}$/u.test(event.task_id||''))throw doubaoSpeechError('doubao_speech_protocol');
-                            taskId=event.task_id;phase='session';send('StartSession',createTextTtsSession());break;
+                            taskId=event.task_id;phase='session';send('StartSession',createTextTtsSession({ voice: request.voice }));break;
                         case 'SessionStarted':
                             if(phase!=='session')throw doubaoSpeechError('doubao_speech_protocol');
                             sessionId=event.session_id||'';phase='between';send('BidirectionalTTS',{text:request.text});send('EndTTS');break;

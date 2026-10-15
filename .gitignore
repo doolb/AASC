@@ -42,6 +42,7 @@ src/apps/android-display/.kotlin/
 /offline-build-tmp.*/
 
 # Android 本机编译缓存
+/.cache/voice-selection/
 /3rd/tts-server/android-asr/.kotlin/
 /3rd/tts-server/android-asr/web-dist/
 /src/apps/android-display/app/.cxx/

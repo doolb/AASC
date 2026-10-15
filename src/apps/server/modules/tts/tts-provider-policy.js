@@ -1,5 +1,5 @@
 'use strict';
-const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
+const { validateDoubaoVoice } = require('../chat2api/chat2api-doubao-voices');
 
 // 业务选择对应 .src/framework/tts-provider-configuration.md；模板空 Provider 表示继承。
 const PROVIDERS = Object.freeze(['system', 'qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat']);
@@ -35,8 +35,7 @@ function normalizeVoiceConfig(value = {}, fallback = {}) {
 function normalizeTemplateTts(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('模板 TTS 配置必须为对象');
     const provider = normalizeOptionalString(value.provider);
-    if (provider === 'doubao-chat' && normalizeOptionalString(value.voice)
-        && normalizeOptionalString(value.voice) !== DOUBAO_SPEECH_VOICE) throw new Error('豆包网页朗读仅支持网页默认音色');
+    if (provider === 'doubao-chat' && normalizeOptionalString(value.voice)) validateDoubaoVoice(normalizeOptionalString(value.voice));
     return {
         ...(provider ? { provider: normalizeProvider(provider) } : {}),
         voice: provider === 'system' ? null : normalizeOptionalString(value.voice)
@@ -63,7 +62,7 @@ function resolveProviderConfig({ templateTts = null, aiReplyDefault = null,
     // 只有同一 Provider 的音色 ID 才能继承，云端服务的音色名称并不通用。
     const voice = template.voice || (base.provider === provider ? base.voice : null)
         || normalizeOptionalString(providers[provider]?.defaultVoice);
-    if (provider === 'doubao-chat' && voice !== DOUBAO_SPEECH_VOICE) throw new Error('豆包网页朗读仅支持网页默认音色');
+    if (provider === 'doubao-chat') validateDoubaoVoice(voice);
     return { provider, voice };
 }
 

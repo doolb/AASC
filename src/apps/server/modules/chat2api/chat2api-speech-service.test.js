@@ -34,7 +34,7 @@ test('doubao-chat无手动映射自动选择同Provider可用账号并读取更�
         {accountId:'daily-limited',providerId:'doubaochat',todayUsed:2,dailyLimit:2,credentials:{cookie}},
         {accountId:'available',providerId:'doubaochat',credentials:{cookie}},
     ])await dataStore.saveAccount(account);
-    assert.equal((await service.voices('doubao-chat'))[0].available,true);
+    assert.equal((await service.voices('doubao-chat')).length,94);
     assert.deepEqual(await service.generate({input:'自动选择',model:'doubao-chat'}),{audio,contentType:'audio/wav'});
     assert.equal(calls[0][2].accountId,'available');assert.equal(calls[0][1],cookie);
     const next='sessionid=updated_session_123456789; passport_csrf_token=updated_csrf_123456789';

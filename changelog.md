@@ -1,3 +1,10 @@
+### 豆包Chat音色与显示端回复播放
+
+- ✅ [2026-10-15] 已先同步Git，再完成94项官网实显音色接入、方式/音色快选及显示端AI/Agent回复重播。
+  - 新增`doubao-chat-voices.json`（女32/男62、name/style_id/tags）及共享目录；`GET /v1/audio/voices?model=doubao-chat`复用代理Key鉴权，无账号亦可读；动态style_id贯通Frontier speaker。
+  - 新增`display-tts-voices.js`和共享`chat-manual-tts.js`；灯光上方快选复用声纹页全局设置、各方式音色记忆和模板优先级，显示端play/stop固定自身。普通AI/Agent/修复Agent及手动批次均捕获配置，speech/原输入及远程取消回归通过。
+  - 定向TTS/真实Chromium/协议201/201、手动/并发21/21通过；Chat2API259/262，3项既有Windows权限断言失败。旧MMD13项同HEAD基线失败见任务。同步design/spec/task/usage/self-test/todo；仅servicePackage=true，尚未重启实例、出包或逐一真实合成94项。
+
 ### 豆包官网声音列表接口调研
 
 - ✅ [2026-10-15] 根据“暂时就使用当前声纹设置的一样”收敛快选方案，复用声纹页现有语音服务与音色配置。

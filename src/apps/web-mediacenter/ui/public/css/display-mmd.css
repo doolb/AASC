@@ -15,6 +15,13 @@
 
 /* flex控件列会覆盖浏览器默认hidden样式，必须显式隐藏整个入口与面板。 */
 .display-stage-lighting-control[hidden], .display-mmd-fps[hidden] { display: none !important; }
+.display-tts-voice-panel { width: var(--display-stage-panel-width); max-height: var(--display-stage-panel-max-height); padding: 14px; overflow: auto; }
+.display-tts-voice-panel > label { display: block; margin-top: 10px; }
+.display-tts-voice-panel > select, .display-tts-voice-panel > input { width: 100%; box-sizing: border-box; padding: 8px; }
+.display-tts-voice-list { display: flex; flex-direction: column; gap: 6px; max-height: min(45vh, 360px); overflow-y: auto; }
+.display-tts-voice-option { padding: 9px; text-align: left; color: var(--text-primary); background: var(--card-background, var(--bg-secondary)); border: 1px solid var(--border-color); border-radius: 8px; }
+.display-tts-voice-option small { display: block; margin-top: 4px; opacity: .7; }
+.display-tts-voice-option[aria-selected="true"] { border-color: var(--primary-color, #6c8cff); background: var(--bg-secondary); }
 .display-mmd-render-time { margin: 8px 0; font-size: 12px; font-variant-numeric: tabular-nums; }
 
 .display-stage-layers {

@@ -84,6 +84,17 @@
         <section id="displayChatLayer" class="display-chat-layer" aria-hidden="true"></section>
         <div id="displayInteractionLayer" class="display-interaction-layer">
             <div class="display-stage-lighting-control" hidden>
+                <button id="displayTtsVoiceToggle" class="display-stage-button" type="button"
+                        aria-controls="displayTtsVoicePanel" aria-expanded="false">音色</button>
+                <section id="displayTtsVoicePanel" class="display-mmd-lighting-panel display-tts-voice-panel" hidden aria-label="语音方式与音色">
+                    <strong>语音方式与音色</strong>
+                    <label for="displayTtsProviderSelect">TTS 方式</label>
+                    <select id="displayTtsProviderSelect" disabled></select>
+                    <label for="displayTtsVoiceSearch">搜索音色</label>
+                    <input id="displayTtsVoiceSearch" type="search" placeholder="名称或标签" autocomplete="off">
+                    <p id="displayTtsVoiceStatus" role="status"></p>
+                    <div id="displayTtsVoiceList" class="display-tts-voice-list" role="listbox" aria-label="音色列表"></div>
+                </section>
                 <button id="displayMmdLightingToggle" class="display-stage-button" type="button"
                         aria-controls="displayMmdLightingPanel" aria-expanded="false">灯光</button>
                 <button id="displayMmdMotionToggle" class="display-stage-button" type="button"
@@ -635,6 +646,7 @@
     <script src="js/display-background-glow.js"></script>
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
+    <script src="js/display-tts-voices.js" defer></script>
     <script src="js/display-voice-controls.js" defer></script>
     <script src="js/display-mmd-settings.js" defer></script>
     <script src="js/display-mmd-human-bridge.js" defer></script>
@@ -3063,6 +3075,9 @@
             markTtsBatchItemFinished(finishedItem);
             sendVoiceTtsPlaybackFinished(playbackId);
             console.log('[显示端] TTS 当前句完成:', status || 'ended');
+            if (finishedItem.manualTtsRequestId) window.dispatchEvent(new CustomEvent('display-manual-tts-finished', {
+                detail: { requestId: finishedItem.manualTtsRequestId, status }
+            }));
             playNextTts();
             endTtsVideoCoordinationIfIdle();
             scheduleTtsRecordingResume();
@@ -3076,6 +3091,7 @@
                 currentTtsItem?.voiceTtsPlaybackId,
                 ...ttsQueue.map((item) => item.voiceTtsPlaybackId)
             ].filter(Boolean);
+            notifyStoppedManualTts([currentTtsItem, ...ttsQueue]);
             currentTtsItem = null;
             ttsPlaybackToken++;
             ttsQueue = [];
@@ -3094,10 +3110,19 @@
             return !phase || item.chatTtsPhase === phase;
         }
 
+        // 停止会丢弃整段队列，逐个通知对应重播按钮，避免继续停留在播放状态。
+        function notifyStoppedManualTts(items) {
+            const ids = new Set(items.map(item => item?.manualTtsRequestId).filter(Boolean));
+            for (const requestId of ids) window.dispatchEvent(new CustomEvent('display-manual-tts-finished', {
+                detail: { requestId, status: 'cancelled' }
+            }));
+        }
+
         function stopChatTtsPlayback(conversationId, phase = null) {
             if (!conversationId) return;
             window.DisplayMmdTtsActions?.cancel({ conversationId, phase });
             const matches = (item) => isChatTtsItemMatch(item, conversationId, phase);
+            notifyStoppedManualTts([currentTtsItem, ...ttsQueue].filter(matches));
             const removedBatchIds = new Set();
             const queuedItems = ttsQueue.filter((item) => {
                 if (!matches(item)) return true;
@@ -3270,6 +3295,7 @@
                 });
             } else if (data.action === 'playAudio') {
                 queueTts({
+                    manualTtsRequestId: data.manualTtsRequestId,
                     audioUrl: data.audioUrl,
                     text: data.text,
                     voiceTtsPlaybackId: data.voiceTtsPlaybackId,

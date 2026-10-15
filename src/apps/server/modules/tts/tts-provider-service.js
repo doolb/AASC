@@ -17,6 +17,11 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
     };
     return {
         resolve,
+        // 一次回复的模板及服务配置同时复制，调度和每个分句始终解析同一份权威值。
+        snapshot(options) {
+            return { ...options, templateTts: structuredClone(options.templateTts),
+                ttsConfiguration: structuredClone(resolve(options).configuration) };
+        },
         async generate(request, { configuration: configurationSnapshot } = {}) {
             if (typeof request.text !== 'string' || !request.text.trim()) throw new Error('TTS 文本不能为空');
             // 配置快照只来自内部批次的第二参数；公开请求不能改变权威Provider配置。

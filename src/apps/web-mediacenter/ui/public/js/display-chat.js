@@ -22,6 +22,7 @@
         history: [],
         privateSessions: [],
         streaming: new Map(),
+        manualPlayback: null,
         ignoredRequestIds: new Set(),
         requestSequence: 0,
         historyRequestSequence: 0,
@@ -229,6 +230,7 @@
     }
 
     function stopConversationTts({ phase = null, notify = false } = {}) {
+        clearManualPlayback();
         const conversationId = getChatTtsConversationId();
         if (root.DisplayTtsController?.stopChatTts) {
             root.DisplayTtsController.stopChatTts(conversationId, phase);
@@ -376,6 +378,57 @@
         return `${thinkHtml}<div class="display-chat-answer">${renderMarkdown(answer)}</div>`;
     }
 
+    function clearManualPlayback() {
+        const playback = state.manualPlayback;
+        if (!playback) return;
+        playback.button.textContent = '🔊';
+        playback.button.title = '播放语音';
+        playback.button.disabled = false;
+        state.manualPlayback = null;
+    }
+
+    function getReplyPlaybackContext(message = {}, history = [], index = -1) {
+        if (message.chatReplyContext) return message.chatReplyContext;
+        const mode = message.mode || state.session.mode;
+        const template = message.templateId && message.templateId !== 'default' ? message.templateId
+            : mode === 'role' ? message.target || state.session.roleTarget
+                : mode === 'private' ? message.target || state.session.privateTarget : null;
+        let userText = message.user;
+        if (!userText && message.replyToMessageId) {
+            const original = history.find(item => item.id === message.replyToMessageId || item.messageId === message.replyToMessageId);
+            userText = original?.content || original?.user;
+        } else if (!userText) {
+            for (let previous = index - 1; previous >= 0; previous--) {
+                const original = history[previous];
+                if (['user', 'control'].includes(original.role) || original.user) { userText = original.content || original.user; break; }
+            }
+        }
+        return { businessType: mode === 'role' || message.assistantType === 'agent' ? 'agent_reply' : 'ai_reply',
+            templateName: template || null,
+            ...(userText ? { userText: Array.from(String(userText)).slice(0, 2000).join('') } : {}) };
+    }
+
+    function addPlaybackButton(item, message, fallbackContext) {
+        const raw = String(message.speech || message.content || message.assistant || '');
+        const text = raw.replace(/<think>[\s\S]*?<\/think>/giu, '').trim();
+        if (!text || !item || item.querySelector('.display-chat-play-btn')) return;
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'display-chat-play-btn';
+        button.textContent = '🔊'; button.title = '播放语音'; button.setAttribute('aria-label', '播放这条回复的语音');
+        button.addEventListener('click', () => {
+            if (state.manualPlayback?.button === button) { stopConversationTts(); return; }
+            if (state.manualPlayback) stopConversationTts();
+            const requestId = `display-replay-${Date.now()}-${++state.requestSequence}`;
+            state.manualPlayback = { button, requestId, completed: 0, total: null };
+            button.textContent = '⏹'; button.title = '停止语音';
+            const sent = state.send({ type: 'tts', action: 'play', requestId, text, displayId: state.displayId,
+                chatTtsConversationId: getChatTtsConversationId(),
+                chatReplyContext: message.chatReplyContext || fallbackContext || getReplyPlaybackContext(message) });
+            if (sent === false) { clearManualPlayback(); setStatus('连接已断开，无法播放', true); }
+        });
+        item.querySelector('.display-chat-message-author')?.append(button);
+    }
+
     function appendMessage(role, content, options = {}) {
         if (!state.refs.messages) return null;
         const item = document.createElement('article');
@@ -391,6 +444,7 @@
             ? renderThinkAndAnswer(content, options.reasoning)
             : renderMarkdown(content);
         item.append(author, body);
+        if (role === 'assistant' && options.playback) addPlaybackButton(item, options.playback);
         state.refs.messages.appendChild(item);
         state.refs.messages.scrollTop = state.refs.messages.scrollHeight;
         return item;
@@ -411,19 +465,22 @@
         const liveMessages = [...state.refs.messages.children].filter((item) =>
             state.streaming.has(item.dataset.requestId));
         state.refs.messages.replaceChildren();
-        for (const item of filterHistoryForCurrentSession(state.history)) {
+        const history = filterHistoryForCurrentSession(state.history);
+        for (const [index, item] of history.entries()) {
             if (!item || typeof item !== 'object') continue;
             if (item.user !== undefined || item.assistant !== undefined) {
                 if (item.user) appendMessage('user', item.user);
                 if (item.assistant) {
-                    appendMessage('assistant', item.assistant, { reasoning: item.reasoning });
+                    appendMessage('assistant', item.assistant, { reasoning: item.reasoning,
+                        playback: { ...item, chatReplyContext: getReplyPlaybackContext(item, history, index) } });
                 }
                 continue;
             }
             if (item.role === 'user' || item.role === 'control') {
                 appendMessage('user', item.content || item.text || '');
             } else if (item.role === 'assistant') {
-                appendMessage('assistant', item.content || item.text || '', { reasoning: item.reasoning });
+                appendMessage('assistant', item.content || item.text || '', { reasoning: item.reasoning,
+                    playback: { ...item, content: item.content || item.text, chatReplyContext: getReplyPlaybackContext(item, history, index) } });
             }
         }
         for (const item of liveMessages) {
@@ -476,6 +533,7 @@
             requestId,
             author: state.session.roleTarget || state.session.privateTarget || state.assistantName
         });
+        streaming.ttsOrigin = getReplyPlaybackContext({ user: content });
         state.streaming.set(requestId, streaming);
         state.bus?.publish('chat.activity', { requestId, active: true });
         setStatus('');
@@ -640,6 +698,19 @@
 
     function handleServerMessage(message) {
         if (!message || typeof message !== 'object') return false;
+        if (message.type === 'chatTtsPlayback') {
+            const playback = state.manualPlayback;
+            if (playback?.requestId !== message.requestId) return true;
+            if (message.status === 'queued') {
+                playback.total = message.audioCount || 0;
+                if (playback.completed >= playback.total) clearManualPlayback();
+            }
+            if (['error', 'cancelled'].includes(message.status)) {
+                clearManualPlayback();
+                if (message.status === 'error') setStatus(message.message || '语音播放失败', true);
+            }
+            return true;
+        }
         if (message.type === 'displayId') {
             state.displayId = message.id || null;
             return true;
@@ -720,6 +791,7 @@
                 requestId,
                 author: state.session.roleTarget || state.session.privateTarget || state.assistantName
             });
+            streaming.ttsOrigin = getReplyPlaybackContext({ user: content });
             state.streaming.set(requestId, streaming);
             return true;
         }
@@ -761,10 +833,12 @@
             const content = typeof responseMessage === 'string'
                 ? responseMessage
                 : (responseMessage.content || responseMessage.assistant || message.content || '');
-            replaceStreamingMessage(requestId, content, {
+            const finished = replaceStreamingMessage(requestId, content, {
                 author: state.session.roleTarget || state.session.privateTarget || state.assistantName,
                 reasoning: responseMessage.reasoning || message.reasoning || ''
             });
+            addPlaybackButton(finished, { ...(typeof responseMessage === 'object' ? responseMessage : {}),
+                content, speech: responseMessage.speech || message.speech }, finished?.ttsOrigin);
             state.streaming.delete(requestId);
             if (Array.isArray(message.history)) {
                 state.history = filterHistoryForCurrentSession(message.history);
@@ -814,6 +888,7 @@
             state.bus.subscribe('transport.changed', ({ available }) => {
                 if (available) return;
                 state.sessionSnapshotReceived = false;
+                clearManualPlayback();
                 state.historyRequestId = null;
             });
             state.bus.subscribe('display.identity', ({ displayId }) => {
@@ -821,6 +896,13 @@
             });
         }
         renderShell();
+        root.addEventListener('display-manual-tts-finished', event => {
+            const playback = state.manualPlayback;
+            if (playback?.requestId !== event.detail?.requestId) return;
+            if (event.detail.status === 'cancelled') { clearManualPlayback(); return; }
+            playback.completed++;
+            if (playback.total !== null && playback.completed >= playback.total) clearManualPlayback();
+        });
         setVisible(false);
         state.initialized = true;
     }

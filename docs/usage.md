@@ -4,6 +4,8 @@
 
 # Web MediaCenter - 使用说明
 
+- [豆包Chat音色、显示端快选与回复播放](usage/doubao-chat-voices.md)（需加载本轮新版服务）
+
 ## 独立任务代码更新
 
 源码支持独立任务ZIP，首批render-display/win-monitor/test-echo/webgpu-render；正式支持版min与服务制品待出包。首次迁移和构建发布步骤见 [任务代码更新](usage/task-code-sync.md)。
