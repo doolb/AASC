@@ -1,3 +1,10 @@
+### Offline 服务代码 v93 双站点发布
+
+- ✅ [2026-10-15] 将显示端本机模型入口及 Chat2API 自测更新随 `code/code-v93.zip` 发布到 LAN 与 WAN；两端原子切换签名清单并精确清理旧 code 版本。
+  - code v93：17,776,594 bytes，SHA-256 `efa1c72c6214d0d623f47544786891208da43bf8a7f9bc2310e397dd09387d3c`；沿用 Node min seeds v86 和 dependencies v10，不重建依赖或首装种子。
+  - LAN 清单 SHA-256 `c4d08dca66c211ff5d8f74437e62a170488f455baddd10753042c0488cdb15bf`，保留 min v56；WAN 清单 SHA-256 `9228a5ce0579716e22ac2e1e79dca913a35c94f3df33a410bbf6ff92623ba8b9`，保留 min v57。两端均为 code v93/dependencies v10。
+  - 两端签名清单及 12 个组件的文件大小/SHA-256、HTTP Content-Length 全部通过；code v93 首 1 MiB Range 与本地产物一致，旧 code 数字版本清理成功。服务状态 `servicePackage=false`。
+
 ### Offline min APK v57 外网发布
 
 - ✅ [2026-10-15] 将本机模型入口边缘收起调整与 Chat2API 外部网页重复打开修复合入 Offline min v57，并仅发布到外网。
