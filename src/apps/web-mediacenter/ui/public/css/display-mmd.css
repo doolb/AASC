@@ -730,11 +730,60 @@ body.display-chat-open .display-interaction-layer {
     touch-action: manipulation;
 }
 
-/* Offline 本机模型为独立入口，固定在显示舞台左上并避让安全区/软键盘。 */
-#displayOfflineModels {
+/* Offline 模型入口避开 FPS 与左上角原生控制端把手；收起后保留贴边可点的竖向入口。 */
+#displayOfflineModelsEntry {
     position: absolute;
-    top: max(12px, calc(var(--display-safe-inset-top) + var(--display-keyboard-inset-top)));
+    top: max(84px, calc(var(--display-safe-inset-top) + var(--display-keyboard-inset-top) + 36px));
+    left: 0;
+    z-index: 20;
+    pointer-events: none;
+}
+
+#displayOfflineModelsEntry[hidden],
+#displayOfflineModelsExpand[hidden],
+#displayOfflineModelsActions[hidden] {
+    display: none !important;
+}
+
+#displayOfflineModelsExpand {
+    box-sizing: border-box;
+    width: 32px;
+    height: 72px;
+    min-height: 72px;
+    padding: 4px 6px;
+    border-radius: 0 10px 10px 0;
+    pointer-events: auto;
+}
+
+#displayOfflineModelsExpand span {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+}
+
+#displayOfflineModelsActions {
+    position: absolute;
+    top: 0;
     left: max(12px, calc(var(--display-safe-inset-left) + var(--display-keyboard-inset-left)));
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+}
+
+#displayOfflineModels,
+#displayOfflineModelsCollapse {
+    pointer-events: auto;
+}
+
+#displayOfflineModelsCollapse {
+    box-sizing: border-box;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    font-size: 22px;
+    line-height: 1;
 }
 
 .display-stage-button:active {

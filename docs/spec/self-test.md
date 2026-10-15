@@ -1755,12 +1755,14 @@ Offline := 仅配置8081核对，未安装/启动；公网HTTP := HEAD200 + 同E
 
 ```text
 render-display := DPR1/DPR2 × 0/90/180/270 → 覆盖层比例按 DPR 反向缩小、媒体名避让、包围盒保持在视口内
-Offline模型入口 := Offline 原生能力存在时显示在左上安全区；网页无原生桥时隐藏；旋转与软键盘内缩不遮挡
+Offline模型入口 := Offline原生能力存在时初始为左边缘把手；主按钮打开原模型列表，收起按钮恢复把手；无原生模型时隐藏
+入口避让 := FPS下方且纵向起点至少84 CSS px，按旋转映射安全区/键盘内缩布局，并避开左上72 dp原生控制端把手
+入口结构自测 := 控制端只读抓取display.html和display-mmd.css，校验入口控件ID与边缘/安全区布局声明
 MMD权威状态 := 隐藏请求 → config.set 成功后广播 false；模拟保存失败 → 不广播成功状态
 MMD初始化竞态 := 舞台模块注册前收到 false → 缓存待处理值 → 初始化后仍隐藏
 MMD重连 := displayId 保存 false → 新显示端连接接收 false → 角色层、按钮和指针交互保持隐藏
-自动验证 := render-display旋转/DPR浏览器2项、MMD/Offline入口定向4项、结构冒烟及JS语法通过
-设备边界 := Offline APK本机按钮安全区、高DPI实机比例与真实WebSocket断线重连等待发布后验收
+自动验证 := render-display旋转/DPR浏览器2项、MMD/Offline入口定向用例、结构自测及JS语法
+设备边界 := Offline APK入口与原生按钮现场避让、安全区/软键盘和MMD重连仍待服务包更新后设备验收
 ```
 
 

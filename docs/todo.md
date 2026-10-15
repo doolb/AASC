@@ -1,6 +1,6 @@
-- ⏳待新工程构建验收 [2026-10-15] Android MNN 固定 revision 的自包含预编译包和默认 APK 准备入口已入库；仍需在新 clone 环境执行 `npm run build:apk` 确认完整 APK 链路。本次未构建 APK，`minApk=false` 保持。任务：`docs/task/20261015_Android_MNN预编译运行包入库.md`。
+- ⏳待服务包与设备验收 [2026-10-15] 显示端高 DPI/MMD 重连修复及 Offline“本机模型”入口下移、左边缘收起已实现；当前网页服务资源待发布，入口修改不触发 min APK 重建。待在 Offline 设备确认 FPS/控制端把手避让、安全区、展开/收起和 MMD 重连状态。任务：`docs/task/20261014_显示端高DPI适配本机模型入口与MMD显隐恢复.md`、`docs/task/20261015_Offline本机模型入口边缘收起.md`。
 
-- ⏳待发布/设备验收 [2026-10-14] 显示端高 DPI 适配、本机模型入口左上定位及 MMD 显隐重连修复已实现；render-display浏览器2/2、MMD/按钮定向4/4、冒烟/语法/diff通过。待服务包与 Offline min APK按既定发布流程更新，并在高 DPI/Offline设备确认尺寸、入口安全区和隐藏状态重连恢复；当前不构建或发布。任务：`docs/task/20261014_显示端高DPI适配本机模型入口与MMD显隐恢复.md`。
+- ⏳待新工程构建验收 [2026-10-15] Android MNN 固定 revision 的自包含预编译包和默认 APK 准备入口已入库；仍需在新 clone 环境执行 `npm run build:apk` 确认完整 APK 链路。本次未构建 APK，`minApk=false` 保持。任务：`docs/task/20261015_Android_MNN预编译运行包入库.md`。
 
 - ⏳待真机验收 [2026-10-14] 数据修复与release基线3已完成并发布LAN/WAN code85/deps9/min51/repair3/seeds85；待已有0/1设备迁移、full/min干净首装与配置一致、覆盖保留和失败去重。当前旧min41须APK直链先覆盖安装51；默认映射、私人旧资料复用、登录提示源码和249项自测完成，真实账号与设备效果待验收。任务：`docs/task/20261014_数据修复同步Release基线与版本.md`。
 

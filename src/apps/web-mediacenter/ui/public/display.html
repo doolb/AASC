@@ -575,7 +575,17 @@
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
                     aria-controls="displayMmdLayer" aria-expanded="false">角色</button>
-            <button id="displayOfflineModels" class="display-stage-button" type="button" hidden>本机模型</button>
+            <div id="displayOfflineModelsEntry" hidden>
+                <button id="displayOfflineModelsExpand" class="display-stage-button" type="button"
+                        aria-label="展开本机模型入口" aria-controls="displayOfflineModelsActions" aria-expanded="false">
+                    <span aria-hidden="true">模型</span>
+                </button>
+                <div id="displayOfflineModelsActions" hidden>
+                    <button id="displayOfflineModels" class="display-stage-button" type="button">本机模型</button>
+                    <button id="displayOfflineModelsCollapse" class="display-stage-button" type="button"
+                            aria-label="收起本机模型入口" aria-controls="displayOfflineModelsActions" aria-expanded="true">‹</button>
+                </div>
+            </div>
             <button id="displayVoiceContinuous" class="display-stage-button display-voice-switch" type="button"
                     aria-pressed="true" disabled>实时监听</button>
             <div class="display-voice-action-group">
@@ -4344,13 +4354,28 @@
 
         // APK 原生桥探测（Android APK 显示端注入：真实像素截图 + 跨域输入注入）
         const nativeBridge = window.NativeDisplay || null;
-        // 本机模型入口只在 Offline APK 开放；读取列表不下载、不加载模型。
+        // 本机模型入口只在 Offline APK 开放；读取列表不下载、不加载模型，页面每次打开时默认收在左边缘。
+        const offlineModelsEntry = document.getElementById('displayOfflineModelsEntry');
+        const offlineModelsExpandButton = document.getElementById('displayOfflineModelsExpand');
+        const offlineModelsActions = document.getElementById('displayOfflineModelsActions');
         const offlineModelsButton = document.getElementById('displayOfflineModels');
+        const offlineModelsCollapseButton = document.getElementById('displayOfflineModelsCollapse');
+        const setOfflineModelsEntryExpanded = (expanded) => {
+            offlineModelsExpandButton.hidden = expanded;
+            offlineModelsActions.hidden = !expanded;
+            offlineModelsExpandButton.setAttribute('aria-expanded', String(expanded));
+            offlineModelsCollapseButton.setAttribute('aria-expanded', String(expanded));
+        };
         try {
-            if (nativeBridge && typeof nativeBridge.offlineModelsStatus === 'function'
-                && JSON.parse(nativeBridge.offlineModelsStatus()).length > 0) {
-                offlineModelsButton.hidden = false;
-                offlineModelsButton.addEventListener('click', () => nativeBridge.offlineShowModels());
+            if (nativeBridge && typeof nativeBridge.offlineModelsStatus === 'function') {
+                const models = JSON.parse(nativeBridge.offlineModelsStatus());
+                if (Array.isArray(models) && models.length > 0) {
+                    setOfflineModelsEntryExpanded(false);
+                    offlineModelsEntry.hidden = false;
+                    offlineModelsExpandButton.addEventListener('click', () => setOfflineModelsEntryExpanded(true));
+                    offlineModelsCollapseButton.addEventListener('click', () => setOfflineModelsEntryExpanded(false));
+                    offlineModelsButton.addEventListener('click', () => nativeBridge.offlineShowModels());
+                }
             }
         } catch (error) {
             console.warn('[Offline] 本机模型入口尚不可用:', error);

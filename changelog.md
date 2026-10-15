@@ -1,3 +1,9 @@
+### Offline 显示端本机模型入口
+
+- ✅ [2026-10-15] 将“本机模型”入口移到 FPS 下方，支持收起到屏幕左边缘。
+  - `display.html` 增加边缘把手、模型列表主按钮和单独的收起控件；`display-mmd.css` 将入口至少放在顶部 84 CSS px 之后，并按旋转映射、安全区和键盘内缩布局，避开 FPS 及原生控制端 72 dp 把手。
+  - `self-test.js` 增加只读显示页 HTML/CSS 入口结构检查；同步 `docs/design/android-display-offline-apk.md`、`docs/spec/android-display-offline-apk.md`、`docs/spec/self-test.md` 与任务文档。`servicePackage=true`、`minApk=false`、`dependenciesPackage=false`；未构建或发布服务包/APK，待 Offline 设备验收。
+
 ### Android MNNChat 本地推理
 
 - ✅ [2026-10-15] 入库 Android MNN-LLM 自包含预编译运行包，供新 clone 编译 APK。

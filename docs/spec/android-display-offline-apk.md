@@ -508,19 +508,36 @@ onBackPressed:
     否则：隐藏显示 WebView 和控制按钮，恢复配置栏
 ```
 
-## 本机模型入口位置（2026-10-14）
+## 本机模型入口位置与边缘收起（2026-10-15）
 
 ```text
 显示页初始化 Offline 原生模型入口
   如果 NativeDisplay/模型管理能力存在
-    显示 displayOfflineModels
+    显示本机模型入口容器
+    初始状态 = 收起
   否则
-    隐藏 displayOfflineModels
+    隐藏本机模型入口容器
+
+点击边缘把手
+  显示“本机模型”主按钮和收起按钮
+  把手不可见
+  aria-expanded = true
+
+点击“本机模型”主按钮
+  调用 NativeDisplay.offlineShowModels()
+  保持入口当前展开状态
+
+点击收起按钮
+  隐藏主按钮和收起按钮
+  显示贴左边缘的把手
+  aria-expanded = false
 
 显示交互舞台布局
   聊天/MMD/语音入口沿用左下角 flex 组
-  displayOfflineModels 独立绝对定位到舞台左上角
-  top/left 使用旋转映射后的安全区与键盘内缩值，并至少留 12px
+  本机模型入口独立绝对定位在 FPS 下方
+  top 至少为 84 CSS px，并叠加旋转映射后的安全区/键盘顶部内缩与间距
+  收起把手贴左边缘；展开按钮遵守安全区和键盘左侧内缩
+  入口与左上角原生控制端按钮（收起高度 72 dp）保持纵向分离
   不改变其他按钮位置和模型下载/加载确认流程
 ```
 

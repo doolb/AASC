@@ -63,7 +63,7 @@ const SelfTest = {
         {
             id: 'offline_native_models',
             name: 'Offline 本机模型状态',
-            description: '只读检查模型文件状态，不下载、加载或执行推理',
+            description: '只读检查模型文件状态和显示页入口结构，不下载、加载或执行推理',
             category: '系统功能',
             run: async () => {
                 const bridge = window.NativeOfflineModels;
@@ -73,13 +73,36 @@ const SelfTest = {
                 }
                 try {
                     const models = JSON.parse(bridge.status());
+                    if (!Array.isArray(models)) return { success: false, message: '本机模型状态格式异常' };
                     if (!models.length) return { success: true, message: '当前为在线 APK，跳过 Offline 模型检查' };
-                    const valid = Array.isArray(models) && new Set(models.map(model => model.modelId)).size === models.length
+                    const valid = new Set(models.map(model => model.modelId)).size === models.length
                         && models.every(model => typeof model.modelId === 'string' && model.modelId
                             && Number.isSafeInteger(model.totalBytes) && model.totalBytes > 0
                             && ['filesPresent', 'filesReady', 'downloading'].every(key => typeof model[key] === 'boolean'));
-                    return { success: valid, message: valid ? '本机模型目录与文件状态可查询' : '本机模型状态格式异常',
-                        details: 'filesReady 仅表示文件已验证，原生引擎是否就绪由 ASR/TTS/LLM 各自状态决定' };
+                    if (!valid) return { success: false, message: '本机模型状态格式异常' };
+                    const [displayResponse, styleResponse] = await Promise.all([
+                        fetch('/display.html', { cache: 'no-store' }),
+                        fetch('/css/display-mmd.css', { cache: 'no-store' })
+                    ]);
+                    if (!displayResponse.ok || !styleResponse.ok) {
+                        return { success: false, message: '显示页或本机模型入口样式不可读取' };
+                    }
+                    const [displayHtml, displayStyle] = await Promise.all([
+                        displayResponse.text(), styleResponse.text()
+                    ]);
+                    const expectedEntryIds = [
+                        'displayOfflineModelsEntry', 'displayOfflineModelsExpand', 'displayOfflineModelsActions',
+                        'displayOfflineModels', 'displayOfflineModelsCollapse'
+                    ];
+                    const hasEntryMarkup = expectedEntryIds.every(id => displayHtml.includes(`id="${id}"`));
+                    const avoidsOverlays = displayStyle.includes('原生控制端把手')
+                        && displayStyle.includes('top: max(84px, calc(var(--display-safe-inset-top)')
+                        && displayStyle.includes('height: 72px;')
+                        && displayStyle.includes('left: 0;');
+                    const entryValid = hasEntryMarkup && avoidsOverlays;
+                    return { success: valid && entryValid,
+                        message: entryValid ? '本机模型状态有效，显示页入口可展开/收起且避让 FPS 与控制端' : '本机模型入口结构或避让布局无效',
+                        details: 'filesReady 仅表示文件已验证，原生引擎是否就绪由 ASR/TTS/LLM 各自状态决定；入口检查只读取显示页 HTML/CSS' };
                 } catch (error) { return { success: false, message: `本机模型状态读取失败: ${error.message}` }; }
             }
         },
