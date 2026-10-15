@@ -536,3 +536,16 @@ Chat2API服务:
 前端 := 无启用checkbox，保存不携带enabled，快选无未启用提示，SelfTest只读检查权威true和DOM
 回归 := Chat2API266/266；Provider84/84；快选21/21；声纹浏览器1/1；手动/并发22/22（部分用例重叠）
 ```
+
+## v102设备Qwen旧配置核对（2026-10-15已执行）
+
+```text
+现状 := active-release与/api/status为102；页面新资源已加载，无启用checkbox
+配置 := qwen-api.model=qwen3-tts-flash，defaultVoice=Cherry，aiReplyDefault.voice=Cherry
+规则 := 归一化保留已保存模型，缺省才使用3.1，目录按实际模型返回
+设备修正 := 控制端setTtsProviderConfig仅提交Qwen模型3.1/默认乔小娇与AI显式乔小娇
+权威结果 := 保存success=true；双端列表68/女47/男21，当前乔小娇且aria-selected一致，大写ID保留
+持久化 := userconfig内Qwen模型/默认音色与config内AI选择均已写入
+兼容 := 其他Provider配置/独立语速/共享音量不变；原面板开关状态恢复；临时ADB转发移除
+范围 := 配置应用与只读验收，未改代码/迁移规则或构建发布
+```

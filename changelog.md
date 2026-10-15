@@ -1,3 +1,9 @@
+### v102设备Qwen旧配置修正
+
+- ✅ [2026-10-15] 按用户“已更新102仍显示旧内容”用ADB确认服务和页面均为新版，根因是设备保存qwen3-tts-flash/Cherry，默认值未覆盖已有配置。
+  - 使用现有控制端setTtsProviderConfig仅改该设备Qwen API模型qwen-audio-3.1-tts-flash、默认及AI显式音色qiaoxiaojiao_v3.1；服务器success回显，两端均68项/女47男21、当前乔小娇且选中标记一致，Emily_v3.1保留大小写。磁盘userconfig模型/默认及config的AI选择核对成功。
+  - 其他Provider/语速/共享音量保持，面板原状态恢复，临时ADB forward移除；不修改源码/迁移规则、不合成、不重启或出包，四项出包需求保持false。同步design/spec/task/todo/usage/self-test，证据仅.cache/adb-qwen102-20261015/，设备资料不入Git。
+
 ### 音色与豆包长句修复服务v102正式发布
 
 - ✅ [2026-10-15] 按用户确认将音色按钮状态、豆包emoji过滤及多Ogg流长句修复、Qwen Audio 3.1官方68音色和五方式常开一起发布LAN/WAN服务code v102。

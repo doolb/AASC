@@ -4,7 +4,7 @@
 
 五种方式均默认可用，语音设置不再提供Provider启用开关；旧关闭配置会规范化为可用。先选择方式、模型或音色，再等待服务器保存确认。Chat2API的账号/Provider管理仍决定账号是否可用于实际调用，缺账号或登录失效时会明确报错。
 
-Qwen API默认模型为`qwen-audio-3.1-tts-flash`，默认音色乔小娇`qiaoxiaojiao_v3.1`，提供[官方该模型音色表](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)的68个音色。两端快选和声纹页共用目录，可按官方名称/ID/标签搜索、按性别筛选；ID区分大小写，例如`Emily_v3.1`。目录只用于实际3.1模型，明确保存的其它模型保留其原目录，不跨模型混用。
+Qwen API默认模型为`qwen-audio-3.1-tts-flash`，默认音色乔小娇`qiaoxiaojiao_v3.1`，提供[官方该模型音色表](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)的68个音色。两端快选和声纹页共用目录，可按官方名称/ID/标签搜索、按性别筛选；ID区分大小写，例如`Emily_v3.1`。目录只用于实际3.1模型，明确保存的其它模型保留其原目录，不跨模型混用。升级服务包不会覆盖已经保存的模型与音色；旧设备若仍显示qwen3-tts-flash/Cherry，请在声纹页将Qwen API模型改为qwen-audio-3.1-tts-flash、默认音色改为qiaoxiaojiao_v3.1，并将AI/Agent回复中显式旧音色同步改为乔小娇后保存。收到服务器确认后，两端目录会自动刷新为68项。
 
 ## 四路统一与模型映射（2026-10-13）
 

@@ -167,3 +167,7 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 已修改tts-provider-settings.js、tts-provider-registry.js、qwen-chat-tts.js、doubao-chat-tts.js、Chat2API语音适配器、前端tts-provider-settings.js/tts-voice-picker.js与只读自测；补相关单元、目录查询、UI/多端回归。已完成实现与回归，合并此前两项修复待发布LAN/WAN服务包。当前候选101仅包含此前修改，尚未切换清单；不会覆盖已生成版本文件。任务：20261015_QwenAudio31音色与五方式常开.md。
 
 执行结果：新增qwen-audio-31-voices.json与chat2api-qwen-audio-voices.js（68项、女47/男21，四组4/22/15/27）；API目录按实际模型返回，查询副本隔离。Provider适配器启用门禁、声纹页复选框及快选禁用提示已移除，旧false读回/提交均广播true；账号启用与缺凭据仍由Chat2API处理。只读SelfTest检查常开配置及无开关DOM。Chat2API266/266、Provider定向84/84、双端快选21/21、声纹页浏览器1/1、手动/并发22/22通过；双端验证68项、女47项、大写Emily_v3.1保存与同步。服务包待本轮发布，min/依赖/任务不受影响。
+
+### v102设备保留旧模型的现场处理（2026-10-15）
+
+ADB确认SM-N9500活动清单/运行服务/页面均为v102，新页面无Provider启用开关；设备保存的qwen-api.model仍为qwen3-tts-flash、默认及AI显式音色仍为Cherry，所以实际模型目录继续显示旧候选。默认值只用于缺省配置，不自动覆盖已有显式设置。经现有控制端setTtsProviderConfig窄补丁，将该设备Qwen API模型设为3.1、默认及AI显式旧音色设为乔小娇；服务端权威回显、双端68项和选中标记、女47/男21及磁盘持久化核对通过。其他Provider、语速与音量不变。未改运行代码或迁移规则，无需出包；证据仅.cache/adb-qwen102-20261015/。
