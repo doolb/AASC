@@ -12845,3 +12845,13 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-15] 将显示端语音筛选与横屏选择面板等更新发布至 LAN/WAN Offline 服务，代码版本 v99，源提交 `03a479ea`。
   - 代码包 `code/code-v99.zip`：17,802,973 bytes，SHA-256 `28be85e4ed330f67ba1b392ac5d9f8fed3c7580eb2d1533631bd01e32015e610`。LAN/WAN 签名清单一致且签名有效；清单引用资源完整 SHA-256 回读通过，版本化文件精确清理无错误。
   - 保留 dependencies v10、min APK v58、完整 APK v50、Node min seeds v86、taskCode v1；未构建 APK。成功发布后 `servicePackage=false`。
+
+### Offline服务代码与 Node 子显示端 v103 发布
+
+- ✅ [2026-10-15] 服务 code-v103 与 voice-display-node-v103 独立包已发布至 LAN/WAN；Node 包不进入服务自动更新清单。
+  - 服务 ZIP：4,891,047 bytes，SHA-256 `9c72902cb103a5b4cff1e3eae68832c520a6fe502a96e7cf49094e4762c907aa`；Node ZIP：12,919,369 bytes，SHA-256 `423feac59fe43f3d539436cba80623ce2e6adb17c4ebe94221eaa03aaf2e5734`，sidecar RSA 验签通过。LAN 完整 HTTP 校验通过；WAN 源站 HTTP 完整校验 13 项、公网 HEAD 大小检查通过，远端旧版本精确清理无错误。未构建完整 APK。
+
+### Offline更新目录旧包清理
+
+- ✅ [2026-10-15] 清理本机 `release/offline-update/output` 中未被当前 v103 签名服务清单引用的旧版本包。
+  - 删除旧代码包 95 个、旧依赖包 11 个、旧 min APK 45 个，释放 6,594,556,115 bytes（6.14 GiB）。保留当前服务清单引用的资源、完整 APK v46、独立 Node 子显示端 v103 ZIP 与签名元数据；13 项清单引用存在性复核通过。未触碰历史清单、任务包、种子、修复数据、日志/模型及非版本文件。

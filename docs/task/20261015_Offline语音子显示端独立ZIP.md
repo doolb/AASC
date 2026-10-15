@@ -62,5 +62,6 @@
 - [x] 文档与待产物状态已先行更新。
 - [x] 实现成对构建、独立发布及定向测试；新增 `build:offline-update` 配套产物与 `publish:voice-display-node` 独立发布命令。
 - [x] code-v103：4,891,047 bytes，SHA-256 `9c72902cb103a5b4cff1e3eae68832c520a6fe502a96e7cf49094e4762c907aa`；voice-display-node-v103：12,919,369 bytes，SHA-256 `423feac59fe43f3d539436cba80623ce2e6adb17c4ebe94221eaa03aaf2e5734`。独立 sidecar RSA 验签、服务清单 v103 验签/组件校验、两 ZIP CRC 均通过；service manifest 未出现 Node 组件。
-- [ ] 发布 LAN/WAN，核对签名、HTTP、大小、SHA-256 和清理结果。
-- [ ] Git 提交并推送代码和状态。
+- [x] LAN/WAN 已发布 service code-v103 与 Node 子显示端 v103 ZIP/sidecar；服务清单签名有效且不含 Node 组件。LAN 全资源 HTTP 大小/SHA-256 校验通过；WAN 源站 loopback HTTP 对 13 项资源完整校验、公网 manifest 签名及 13 项 HEAD/Content-Length 校验通过，精确清理无错误。未构建完整 APK。
+- [x] 实现及本任务待产物状态文件提交并推送：`5941bc2a`、`87f39053`。
+- [ ] 待目标子显示端手工下载 ZIP、解压并按 `config.example.json` 配置后启动，验收连接与语音播放；该包不走自动更新。
