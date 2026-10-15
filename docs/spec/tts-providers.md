@@ -513,3 +513,18 @@ Chat2API服务:
   非法/空响应、过期、超时及错误脱敏；无Chrome/受限tmp不启动浏览器
   npm run check:chat2api及TTS/手动播放定向回归；真实WAV成功才确认可用
 ```
+
+## Qwen Audio 3.1音色与五方式常开草案（2026-10-15，待确认，尚未实现）
+
+```text
+已有声明 := PROVIDER_DEFAULTS、normalizeProviderSettings、createApiSpeechAdapters、getTtsProviderVoices、两端共享音色组件
+新增定义 := QwenAudio31Voice { id, name, gender, tags, category, languages }；listQwenAudio31Voices
+保持默认Qwen API模型3.1与乔小娇 → 导入官方该段68项 → 校验唯一ID/大小写/官方元数据
+实际模型3.1 → 返回专属目录副本 → 复用现有WS/Chat2API目录链路 → 两端及声纹页一致
+历史显式其它模型 → 保留原模型 → 不返回3.1专属音色；缺省值使用默认3.1
+读入历史enabled=false或旧控制端提交false → 规范化为true → 原保存广播回传权威值
+原生system无Provider启用字段；四个非原生Provider兼容enabled恒true
+删除Provider合成启用拦截、页面启用复选框和未启用提示 → 保留账号/凭据/取消/业务范围校验
+自测 := 缺省/旧false/旧控制端保存、多端广播和重连；68项目录、映射别名与模型隔离；无启用控件
+发布 := 新源码修改后servicePackage=true；重新构建新服务版本，LAN/WAN各自校验切清单；min/deps/task沿用
+```

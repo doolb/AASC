@@ -1,3 +1,14 @@
+### Qwen Audio 3.1音色与五方式常开方案
+
+- ✅ [2026-10-15] 核查用户指定官网3.1段68项音色和现有配置，记录模型专属目录与五种方式常开方案。
+  - 源码/本机默认模型已是qwen-audio-3.1-tts-flash，但目录仅乔小娇；规划68项官方ID/名称/元数据及模型隔离，兼容旧enabled=false为权威true，移除Provider启用控件与合成拦截。同步.src/design/spec/task/todo；尚未修改目标代码或运行新功能测试。
+
+### 音色按钮与豆包表情修复服务候选出包
+
+- ✅ [2026-10-15] 按用户发布指令生成code v101候选，LAN/WAN当前均为100；随后用户追加Qwen目录与常开需求，尚未切换正式清单。
+  - npm run build:offline-update -- --mode=code-only --code-version=101 --manifest-file=.cache/tts-emoji-publish-20261015/lan-before.json --reuse-node-min-seeds=true成功；code-v101.zip为17,809,355字节，SHA256 5bc00c90d6d007b85063f3f9dfb0892b8d8f203a3c46b4e4eb1f8eed769ff546。签名/schema、CRC、1097项当前源码逐字节匹配和全部保留组件相同；源e965a6ac、gitDirty=true如实记录。
+  - 仅服务包出包需求恢复false，其余三项保持false，表示当前已构建而非已发布；新需求确认并修改源码后再置true。沿用min58/deps10/task1/seeds86/repair3，未构建APK/依赖/任务包，未发布/清理正式根或操作设备。构建产物与官方原始页面只留本机缓存，不提交Git。
+
 ### 豆包Chat纯表情分句跳过
 
 - ✅ [2026-10-15] 按确认方案为豆包网页TTS补齐emoji过滤与无正文分句跳过，避免纯表情送上游后中断整段重播的路径。

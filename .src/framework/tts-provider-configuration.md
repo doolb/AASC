@@ -410,3 +410,28 @@
 - 原句分为正文与纯emoji → 假上游拒绝无正文输入 → 等待队列结束 → 断言三段正文按序下发且无失败 // 旧代码会在纯emoji处失败
 - 日志同款完整回复 → 跳过四段emoji → 八段正文按序下发 → 保持显示文本原样 // 覆盖用户实际失败路径
 - 真正上游incomplete/超时/取消 → 保持错误码与provider标记、无空缓存 // 不吞没正常故障
+
+## framework/Qwen Audio 3.1音色与五方式常开草案（2026-10-15，待用户确认）
+
+### 已有声明
+
+- PROVIDER_DEFAULTS.qwen-api、QWEN_API_RATE_MODELS、createQwenInput // 默认已是qwen-audio-3.1-tts-flash、乔小娇及官方Audio路径
+- createApiSpeechAdapters.qwenApi.voices、createChat2ApiSpeechService.voices、getTtsProviderVoices // 复用已有目录查询，不新增HTTP配置接口
+- normalizeProviderSettings、TtsProviderSettings.init/save、TtsVoicePicker // 现有enabled配置、四个启用复选框和未启用提示
+
+### 新增定义
+
+- QwenAudio31Voice { id, name, gender, tags, category, languages } // 仅整理官方3.1的68项，不导入其它模型音色
+- listQwenAudio31Voices // 返回隔离副本，保持官方大小写及元数据
+
+### 操作流程
+
+- 固定默认模型为qwen-audio-3.1-tts-flash，缺省音色沿用qiaoxiaojiao_v3.1 // 当前源码和本机配置已符合，不擅自覆盖用户明确保存的其它模型
+- 从官方3.1段的四个表分别整理4/22/15/27项并校验68个唯一ID // 试听列不当作全语言能力，语言只用官方明确说明
+- 将性别、声线、场景和明确语言纳入目录元数据，保留ID原始大小写 // 共用当前搜索/性别/标签筛选
+- 仅当实际解析模型为3.1时返回本目录，沿用映射规划与权限校验 // 不向其它模型错配3.1音色
+- 使四个云/网页Provider的兼容enabled权威值恒为true，system继续不提供此字段 // 旧false和旧控制端保存不会形成隐藏禁用
+- 去掉Provider适配器启用拦截、页面启用复选框及快选未启用提示 // 账号启用、凭据校验、播放开关仍由各自流程管理
+- 保存仍走setTtsProviderConfig、config.set、ttsProviderConfig广播与重连回填 // 沿用AASC权威配置
+- 补充默认模型、68项大小写/元数据/复制隔离、真实目录查询、五方式旧false兼容和无开关UI回归 // 待用户确认后执行
+- 合并此前音色按钮/豆包emoji修复，重新生成新服务版本并发布LAN/WAN // 已生成候选101不覆盖同名文件，依赖/min/任务沿用
