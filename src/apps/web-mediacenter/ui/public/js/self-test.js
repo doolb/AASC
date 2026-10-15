@@ -195,7 +195,7 @@ const SelfTest = {
         {
             id: 'android_external_login_entry',
             name: 'Android外部登录入口',
-            description: '只读检查原生登录入口和豆包未验证状态，不打开官网或添加账号',
+            description: '只读检查原生登录入口和豆包未验证状态；取消外部网页后再次打开由Android真机回归验收',
             category: '基础功能',
             run: async () => {
                 const native = window.NativeControl;
@@ -206,7 +206,7 @@ const SelfTest = {
                     && typeof chat?.completeNativeLogin === 'function'
                     && chat?.accountStatus?.({ providerId: 'doubaochat', status: 'active', accountInfo: { credentialVerification: 'format-only' } })?.includes('未远端验证');
                 return { success: Boolean(valid), message: valid ? '原生登录入口与未验证提示可用' : '原生登录入口或提示缺失',
-                    details: '本项不验证实际凭据捕获；顶部完成/取消、网页登录和账号保存需在真机确认，豆包会话列表验证尚未接入' };
+                    details: '本项不验证实际凭据捕获或重复打开流程；WebView目录只初始化一次由Android单测覆盖，取消后再次打开需真机确认；本检查不触发网页登录或账号保存' };
             }
         },
         {

@@ -197,11 +197,25 @@ control onNativeLoginResult(result):
 
 ```text
 Chat2ApiLoginActivity onCreate:
-    在独立进程首次创建 WebView 前设置专用数据目录
+    在独立进程首次创建 WebView 前调用进程级目录初始化器
+    如果 Android API >= 28 且本进程尚未设置目录：
+        WebView.setDataDirectorySuffix("aasc_chat2api_login")
+        只有设置成功后才标记本进程已初始化
+    如果本进程已经设置目录：跳过设置，继续创建 Activity/WebView
     顶部操作栏按顺序创建“完成”按钮和“取消”按钮
     创建 Chat2ApiAuthWebView
     设置 JavaScript、DOM storage 和安全导航策略
     加载 loginUrl
+
+Chat2ApiLoginActivity finish/onDestroy:
+    清理并销毁当前 Activity 的 WebView
+    不重置进程级目录初始化状态
+    同一独立进程再次打开登录页时复用已设置的数据目录
+
+Android regression test:
+    API >= 28 且同一初始化器调用两次 -> suffix setter 只调用一次
+    API < 28 -> 不调用 suffix setter
+    suffix setter 抛错 -> 不标记成功，后续调用仍可重试
 
 Chat2ApiAuthWebView onRequest(request):
     if request.url 不匹配 captureProfile.allowedOrigins:

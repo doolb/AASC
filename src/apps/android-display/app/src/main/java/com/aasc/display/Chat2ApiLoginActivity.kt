@@ -23,6 +23,9 @@ import java.net.URL
 class Chat2ApiLoginActivity : Activity() {
 
     companion object {
+        // 登录 Activity 运行于 :chat2api_login；静态状态在该进程内跨 Activity 实例保留。
+        private val webViewDataDirectoryInitializer = Chat2ApiWebViewDataDirectoryInitializer()
+
         const val EXTRA_SESSION_JSON = "chat2api_session_json"
         const val EXTRA_MODE = "chat2api_mode"
         const val MODE_ACCOUNT_WEB = "account-web"
@@ -46,7 +49,9 @@ class Chat2ApiLoginActivity : Activity() {
     private var finished = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) WebView.setDataDirectorySuffix("aasc_chat2api_login")
+        webViewDataDirectoryInitializer.initialize(Build.VERSION.SDK_INT) { suffix ->
+            WebView.setDataDirectorySuffix(suffix)
+        }
         super.onCreate(savedInstanceState)
 
         val sessionJson = intent?.getStringExtra(EXTRA_SESSION_JSON)

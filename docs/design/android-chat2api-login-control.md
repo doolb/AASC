@@ -42,6 +42,8 @@ MainActivity 原生“控制端”按钮
 
 登录 Activity 使用单独 Android 进程，使其可以在创建首个 WebView 前设置独立的 WebView 数据目录。登录完成、取消或超时后销毁 WebView 并删除临时 WebView 数据，不影响显示页和控制页的 Cookie。
 
+独立进程会在 Activity 关闭后继续存活，因此专用 WebView 数据目录必须按进程只设置一次。目录初始化状态由登录 Activity 所在进程持有；取消或完成只销毁当前 WebView，不清除该状态。Activity 再次创建时跳过已成功的目录设置，继续使用同一隔离目录。Android API 28 以下不调用目录后缀接口；设置失败时不记录成功状态，以便错误按原异常暴露且后续调用可重试。
+
 登录页面顶部原生操作栏固定显示“完成”和“取消”两个按钮，顺序为“完成”在前、“取消”在后。用户点击“完成”时，Activity 先读取当前允许域名的 localStorage/Cookie 并合并已捕获的 Authorization；必填字段齐全则立即返回候选凭据，字段不全则保留登录页面并提示继续登录。该按钮位于原生 WebView 之外，外部 Provider 页面覆盖控制端时仍可操作。
 
 ## 显示端开放协议
@@ -138,6 +140,12 @@ Android 登录 WebView：
 用户明确先记录“豆包请求会话列表验证”的方法，本轮不接入该远端校验；未验证账号仍可添加。具体会话列表来源、登录失败/响应契约在后续恢复实施时核对，不以首页HTTP成功认定身份有效。
 
 修改Chat2ApiLoginActivity/CredentialCapture/AuthWebView、login-profiles/oauth-service/credential-validators/account-web-session-service、chat2api控制页，按实际修改标记min APK和服务包；生产依赖保持。
+
+### 外部网页重复打开闪退修复（2026-10-15）
+
+`Chat2ApiLoginActivity` 在 `:chat2api_login` 进程内通过共享初始化器只设置一次 WebView 数据目录后缀。取消或完成只清理当前 Activity 的 WebView，不重置进程状态；同一进程后续打开直接复用隔离目录。设置器异常继续向上抛出，未成功前不锁定初始化状态。
+
+Android JVM 单测覆盖重复初始化、API 27 跳过和异常重试。SM-N9500/API 28 Offline min56 已覆盖安装，Qwen 外部网页取消后子进程仍存活，再次打开 Activity 成功恢复且无 AndroidRuntime 崩溃；测试不输入凭据、不发送聊天请求。
 
 补充同步：普通手动添加与OAuth均须显式保存嵌套accountInfo，避免丢失format-only标记；同步chat2api-manual-account-service.js。Provider字段提示同步“允许添加、未远端验证”。
 

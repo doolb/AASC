@@ -1,3 +1,9 @@
+### Android Chat2API 外部网页
+
+- ✅ [2026-10-15] 修复 Offline APK 中 Qwen 外部网页取消后再次打开导致的崩溃。
+  - `Chat2ApiLoginActivity` 改为在 `:chat2api_login` 进程内只设置一次 WebView 数据目录后缀；新增初始化器与三项 JVM 回归，更新自测说明及 design/spec/task。`:app:testDebugUnitTest` 成功，Chat2API 定向检查 254/254 通过。
+  - `npm run build:apk:offline:min` 生成 versionCode 56 min APK（87 MiB，SHA-256 `ee8808ef70d7175e4c87d163942e361ad0597837a27a28693fd9e7c581a28a5b`），已保留数据覆盖安装到 SM-N9500。API 28 真机按 Qwen 外部网页→取消→再次打开复验：同一登录子进程存活、第二次 Activity 正常前台，无 AndroidRuntime 崩溃；未输入凭据或发送请求。`minApk=false`，`servicePackage=true`、`dependenciesPackage=false`。
+
 ### Offline 显示端本机模型入口
 
 - ✅ [2026-10-15] 将“本机模型”入口移到 FPS 下方，支持收起到屏幕左边缘。
