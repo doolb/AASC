@@ -2,6 +2,23 @@
 
 当前约束以2026-10-15文首伪代码为准；注明历史的旧网页运行协议已删除，不属于当前实现。
 
+## 外部网页认证子域恢复草案（2026-10-15，待用户确认、未实现）
+
+```text
+已观测 := www有host-only sessionid；accounts无sessionid；IM读取0，认证心跳401/账号信息13
+临时对照 := 同账号现有白名单Cookie仅补到accounts -> 心跳0/信息success/toast消失
+豆包允许来源 := 固定HTTPS www.doubao.com、accounts.doubao.com
+豆包CookieBundle目标 := 显式origins为上述两项；六Cookie名称白名单保持
+集合恢复目标 := bundle.origins若存在则使用，否则使用loginUrl来源
+有效目标 := 去重目标与profile.allowedOrigins精确交集
+恢复映射 := 同账号已保存Cookie白名单项 × 有效目标 -> 原生既有host-only恢复数组
+其他Provider := 未声明origins仍单来源；Qwen原单Cookie多来源规则保持
+保持 := 账号库秘密、Node聊天协议、设备资料采集及WAV流程；不补未知Cookie或父域
+验收 := 定向映射与隔离边界 + npm check:chat2api + ADB正常恢复/旧会话/认证心跳/toast
+残余 := 安全SDK部分2035不在当前成功声明内，不将全部非零监控errno判作业务失败
+状态 := 方案待确认，不代表生产代码已更改；发布状态当前保持
+```
+
 ## 2026-10-15 重登后的纯Node真实验收
 
 ```text

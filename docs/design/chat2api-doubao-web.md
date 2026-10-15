@@ -4,6 +4,12 @@
 
 完成：最终code92/min56/deps10已发布，主服务器重启健康，手机通过原生热更新入口健康提交code92。豆包同账号跨批次FIFO已启用，完整上游音频到达即交接，WAV解码不占执行权；两端同时提交三批真实TTS均成功。Android账号重登后Node资料完整，两轮Responses流式原生续接和TTS已通过；主服务器仍为Cookie-only资料，须在其账号管理中另行登录，详见对应task。
 
+## 豆包外部网页恢复缺少认证子域（2026-10-15，已定位、待确认修复）
+
+用户指定ADB已有“千问的年龄与定位”会话。IM读取均status_code=0且4条消息显示，真正的“非法请求”toast来自恢复窗口初始化期间；认证调用发往accounts.doubao.com，但现有恢复只给www设置host-only sessionid，认证子域缺该Cookie，心跳401/账号信息13。隔离窗口临时把同账号白名单Cookie补到accounts后，心跳0、账号信息success、toast消失，消息保持；部分安全SDK2035仍存在，不承诺全部Passport能力。
+
+待确认仅修改login-profiles和account-web-session-service及测试：为豆包显式声明www/accounts两个固定官方恢复来源，Cookie集合映射遵守来源交集和既有六名称白名单，其它Provider默认单来源兼容。Android现有解析/恢复数组可直接处理，不改原生或Node对话；服务包更新即可。设备存储缺恢复是另一个观察，未证明是此提示根因，本次不混改。完整脱敏证据与验收见`docs/task/20261015_豆包外部网页非法请求定位.md`。
+
 ## 2026-10-15 Android重登后真实验收（已完成）
 
 Android min56/code92/deps10现有启用豆包账号的nodeProfile已存在，并通过Cookie/fp一致性等既有校验；主服务器账号库仍只有Cookie，未发起其文字测试，未复制账号资料。使用Android安装代码的正式Runtime/ResponsesService，模型doubao、stream=true，临时内存会话隔离已有Responses记录；首轮“好的。”6282ms，第二轮通过previous_response_id原生续接、准确回复“荔枝”4489ms，两轮均response.completed。HTTP观测确认Node直连且第二轮need_create_conversation=false，无浏览器或映射覆盖。

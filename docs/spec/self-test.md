@@ -1805,3 +1805,15 @@ min/普通profile → 不触发；当前APK8071配置契约仍通过
 正式TTS := 253112bytes/48kHz/非静音/2409ms，无播放或音频落盘
 范围 := 安装代码92/min56/deps10，账号映射不改、无浏览器、秘密不导出；无生产代码修改
 ```
+
+## 豆包外部网页非法请求只读定位（2026-10-15）
+
+```text
+设备 := 当前安装min56/code92，不把外网min57/code93当设备版本
+复现 := 正常外部网页入口打开指定旧会话，初始化出现semi-toast-error/alert精确非法请求
+IM := conversation/info与chain/single均HTTP200/status_code0，4消息文本块
+缺口 := www host-only sessionid存在，accounts不存在 -> 认证心跳401/账号信息13
+临时同账号补齐accounts := 心跳0、信息success、toast消失、消息4条保持
+边界 := 部分安全SDK2035仍在；设备存储缺恢复尚未归因为本提示，生产代码不改
+生产回归 := 待用户确认文件方案后增加；不是已修复/已发布声明
+```

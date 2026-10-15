@@ -652,3 +652,5 @@
 
 
 - ⏳待主服务器账号资料/真实验收 [2026-10-15] Android重登已补齐nodeProfile，code92上普通doubao两轮Responses流式原生续接与doubao-chat TTS通过；192.168.1.39:8081账号库仍Cookie-only，需在该服务器账号管理中正常重新登录后验收文字回复。没有跨端复制秘密。见`docs/task/20261014_Offline豆包网页LLM与TTS真实测试.md`。
+
+- ⏳待方案确认 [2026-10-15] 豆包外部网页恢复仅给www写Cookie，accounts认证子域缺sessionid，触发非法请求toast；指定会话IM读取正常，临时补齐accounts后心跳成功/提示消失。拟仅修服务端固定双来源Cookie映射及自测，不改APK/Node聊天协议；待确认后实施发布。任务：`docs/task/20261015_豆包外部网页非法请求定位.md`。

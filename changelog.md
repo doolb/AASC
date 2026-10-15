@@ -1,3 +1,9 @@
+### 豆包外部网页非法请求定位
+
+- ✅ [2026-10-15] 用ADB现有账号和指定旧会话复现，定位为认证子域的登录恢复缺口，已形成待确认方案。
+  - min56/code92上IM读取status_code0、4条消息显示；真实semi-toast-error提示出现时accounts.doubao.com无sessionid，心跳401/账号信息13。隔离窗口临时补齐同账号白名单Cookie后心跳0/信息success/提示消失，消息保持；部分安全SDK2035仍有，不混作全部Passport通过。
+  - 仅记录design/spec/task/todo/self-test；拟修login-profiles与account-web-session-service的固定www/accounts集合映射及自测，等待用户确认。未改生产代码、保存账号或出包状态，未发送新聊天/导出秘密，不提交其他工作区改动。
+
 ### Offline 服务代码 v93 双站点发布
 
 - ✅ [2026-10-15] 将显示端本机模型入口及 Chat2API 自测更新随 `code/code-v93.zip` 发布到 LAN 与 WAN；两端原子切换签名清单并精确清理旧 code 版本。
