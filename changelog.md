@@ -1,3 +1,24 @@
+### 显示端音色下拉筛选与选中定位
+
+- ✅ [2026-10-15] 独立终审发现并修复横屏列表零高度；新增740×390/390×400失败回归后保证列表最小120px及面板内定位，复核无重要遗留，定向19/19通过。
+  - 用户已明确选择横屏左设置/右音色列表，正式HTML分组和CSS两列布局已接入；竖屏保持单列，新增740×390几何断言先RED再GREEN，边界/定位通过。
+
+- ✅ [2026-10-15] 按已确认HTML接入性别/年龄/口音三个下拉框、当前项选中CSS及打开自动定位。
+  - 修改display.html、display-tts-voices.js和display-mmd.css；按真实标签组合搜索并显示计数，权威回显后才更新选中底色/边框/勾选。重开清条件，异步或缓存目录渲染后仅滚动列表定位，Provider/模型与代次校验隔离迟到结果。
+  - 修复点击卡片重绘移除旧节点导致面板误关闭，改用事件composedPath。新增只读display_voice_filters及真实Chrome回归，覆盖失败/成功回显、未标注/未知ID/原生、断线重连和390×740边界。
+  - 界面定向19/19、手动/并发21/21通过；3个JS及display.html内联脚本语法、git diff --check通过。同步design/spec/task/usage/self-test/todo，servicePackage=true，其余三项false；未重启、出包或验收Android实物。
+
+### 音色面板筛选与当前项定位方案
+
+- ✅ [2026-10-15] 按用户圈选反馈，将HTML预览的性别/年龄/口音改为同排三个下拉列表，替代Tab及标签按钮。
+  - 独立预览v2保留交集筛选、选中CSS和重开定位；真实Chromium桌面/390×740手机验证通过，3个select、94项及交集计数正确，异常0。同步design/spec/task/todo，未接入正式页面或更改发布状态。
+
+- ✅ [2026-10-15] 按用户要求先完成独立HTML交互预览，供确认最终面板效果。
+  - `.cache/voice-selection/voice-panel-preview.html`内嵌94项真实目录，支持三维度Tab/搜索交集、选中底色边框和勾选、关闭重开自动定位；真实Chromium桌面/390×740手机检查通过，页面异常0。预览仅改变内存，未接入正式页面、配置或TTS；同步design/spec/task/todo，Offline状态保持。
+
+- ✅ [2026-10-15] 完成性别/年龄/口音Tab、选中CSS及打开定位的代码和标签核查，形成待确认方案。
+  - 更新`docs/design/doubao-chat-voice-selection.md`、对应spec、task与todo；拟仅改display.html/display-tts-voices.js/display-mmd.css及浏览器测试，复用原目录/权威配置。年龄和口音按真实标签派生，打开清筛选后仅滚动列表，保存失败保留权威选中项。尚未修改生产代码、运行功能测试或改变Offline状态。
+
 ### 豆包Chat音色与显示端回复播放
 
 - ✅ [2026-10-15] 已先同步Git，再完成94项官网实显音色接入、方式/音色快选及显示端AI/Agent回复重播。

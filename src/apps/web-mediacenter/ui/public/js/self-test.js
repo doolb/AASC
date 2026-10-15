@@ -198,6 +198,24 @@ const SelfTest = {
             }
         },
         {
+            id: 'display_voice_filters',
+            name: '显示端音色筛选入口',
+            category: '语音',
+            run: async () => {
+                try {
+                    // 只检查服务实际提供的HTML结构，不初始化显示页或改变任何远端选择。
+                    const response = await fetch('/display.html', { cache: 'no-store' });
+                    const document = new DOMParser().parseFromString(await response.text(), 'text/html');
+                    const panel = document.querySelector('#displayTtsVoicePanel');
+                    const selectors = ['Gender', 'Age', 'Accent'].map(key => '#displayTtsFilter' + key);
+                    const valid = response.ok && panel && selectors.every(selector => panel.querySelector('.display-tts-voice-filters select' + selector))
+                        && ['#displayTtsCurrentVoiceName', '#displayTtsVoiceClear', '#displayTtsVoiceList'].every(selector => panel.querySelector(selector));
+                    return { success: Boolean(valid), message: valid ? '三下拉筛选及当前音色入口正常' : '显示页缺少新版音色筛选入口',
+                        details: '仅只读检查部署HTML；交集筛选、CSS和自动定位由真实浏览器回归覆盖' };
+                } catch (error) { return { success: false, message: '音色面板资源读取失败' }; }
+            }
+        },
+        {
             id: 'chat_reply_tts_context',
             name: '聊天回复语音来源',
             description: '只读检查AI/Agent模板与对应上一句输入，不发送语音',

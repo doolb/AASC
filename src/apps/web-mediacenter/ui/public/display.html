@@ -87,13 +87,27 @@
                 <button id="displayTtsVoiceToggle" class="display-stage-button" type="button"
                         aria-controls="displayTtsVoicePanel" aria-expanded="false">音色</button>
                 <section id="displayTtsVoicePanel" class="display-mmd-lighting-panel display-tts-voice-panel" hidden aria-label="语音方式与音色">
-                    <strong>语音方式与音色</strong>
+                    <div class="display-tts-voice-header"><strong>音色选择</strong><button id="displayTtsVoiceClose" type="button" aria-label="关闭音色面板">×</button></div>
+                    <div class="display-tts-voice-settings">
+                    <button id="displayTtsCurrentVoice" class="display-tts-current-voice" type="button" title="定位当前音色">
+                        <span><small>当前音色</small><strong id="displayTtsCurrentVoiceName">等待同步</strong></span><span aria-hidden="true">✓</span>
+                    </button>
                     <label for="displayTtsProviderSelect">TTS 方式</label>
-                    <select id="displayTtsProviderSelect" disabled></select>
+                    <select id="displayTtsProviderSelect" aria-label="TTS方式" disabled></select>
                     <label for="displayTtsVoiceSearch">搜索音色</label>
-                    <input id="displayTtsVoiceSearch" type="search" placeholder="名称或标签" autocomplete="off">
-                    <p id="displayTtsVoiceStatus" role="status"></p>
+                    <input id="displayTtsVoiceSearch" type="search" placeholder="名称或标签" aria-label="搜索音色" autocomplete="off">
+                    <div class="display-tts-voice-filters" aria-label="音色筛选">
+                        <label for="displayTtsFilterGender">性别<select id="displayTtsFilterGender" data-voice-filter="gender"></select></label>
+                        <label for="displayTtsFilterAge">年龄<select id="displayTtsFilterAge" data-voice-filter="age"></select></label>
+                        <label for="displayTtsFilterAccent">口音<select id="displayTtsFilterAccent" data-voice-filter="accent"></select></label>
+                    </div>
+                    <div class="display-tts-voice-summary"><span id="displayTtsVoiceSummary">全部音色</span><button id="displayTtsVoiceClear" type="button" hidden>清除筛选</button></div>
+                    </div>
+                    <div class="display-tts-voice-results">
+                    <div class="display-tts-voice-list-header"><span>音色列表</span><span id="displayTtsVoiceCount"></span></div>
                     <div id="displayTtsVoiceList" class="display-tts-voice-list" role="listbox" aria-label="音色列表"></div>
+                    </div>
+                    <p id="displayTtsVoiceStatus" class="display-tts-voice-status" role="status"></p>
                 </section>
                 <button id="displayMmdLightingToggle" class="display-stage-button" type="button"
                         aria-controls="displayMmdLightingPanel" aria-expanded="false">灯光</button>
