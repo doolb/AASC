@@ -97,6 +97,18 @@ class OfflineTaskCodeTest {
         reject { OfflineUpdateManager.planServiceUpdate(current, manifest()) }
         reject { OfflineUpdateManager.planServiceUpdate(current, manifest(2).copy(taskCode = OfflineTaskCode.parse(descriptor(2).put("sha256", "c".repeat(64))))) }
         reject { OfflineUpdateManager.planServiceUpdate(current, manifest().copy(taskCode = null)) }
+        reject { OfflineUpdateManager.planServiceUpdate(current, manifest().copy(code = manifest().code.copy(version = 97), taskCode = null)) }
+    }
+    @Test fun 已有任务组合面对旧服务清单缺少任务组件时忽略旧源() {
+        val current = InstalledServiceVersion(96, 10, lock, 1, sha)
+        val old = manifest().copy(code = manifest().code.copy(version = 95), taskCode = null)
+        assertEquals(OfflineUpdateManager.ServiceUpdatePlan.CURRENT, OfflineUpdateManager.planServiceUpdate(current, old))
+    }
+    @Test fun 已有任务组合面对旧依赖清单缺少任务组件时忽略旧源() {
+        val current = InstalledServiceVersion(96, 10, lock, 1, sha)
+        val old = manifest().copy(code = manifest().code.copy(requiredDependencyVersion = 9),
+            dependencies = manifest().dependencies.copy(version = 9), taskCode = null)
+        assertEquals(OfflineUpdateManager.ServiceUpdatePlan.CURRENT, OfflineUpdateManager.planServiceUpdate(current, old))
     }
     @Test fun 包内文件摘要revision聚合与额外文件校验() = fixture { _, directory, inner ->
         OfflineTaskCode.validateDirectory(directory, manifest().taskCode!!)

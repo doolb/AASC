@@ -1,5 +1,22 @@
 # 自测功能实现文档
 
+## 独立任务ZIP出包与ADB验证补充（2026-10-15）
+
+```text
+最终原生 := 同allserver-min/58 profile顺序执行testDebugUnitTest → 287项0失败/0错误/1既有环境跳过
+修复回归 := 旧code95或deps9且无taskCode → CURRENT；同版/新版移除taskCode仍拒绝
+产物 := min58/code96/task1签名/profile/大小/SHA/CRC通过；deps10复用；四项需求false但未发布
+实际迁移 := SM-N9500/Android9，min56/C95 → min58/C96/D10/T1，Node健康提交pending=false
+下载 := 联合只code96+task1共17799178bytes；设备隔离task1→测试2只task ZIP13149bytes
+数据 := 停服期间73文件摘要相同；隔离原生回滚96/10/1，测试结果文件摘要保持
+有效源码 := 实际HTTP render.js等于res/tasks发布源，no-store
+实际WebView := 同实例20次重载，旧800ms计时器下一回调退出，1.4秒后1计时器/1覆盖层/1回调
+旧正式源 := CURRENT/hasUpdate=false/failed=false/downloadBytes=0，截图无失败面板
+测试边界 := 隔离任务回滚未启动第二套Node；实际Node健康验证在T1；测试v2非正式产物
+仍待 := 干净首装、任务单更受管重启耗时、启动校验耗时、LAN/WAN正式发布
+```
+
+
 ## 独立任务代码ZIP验证（2026-10-15）
 
 ```text

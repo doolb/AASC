@@ -1,3 +1,12 @@
+### 独立任务ZIP出包与ADB验收
+
+- ✅ [2026-10-15] 完成min58/code96/task1签名候选与ADB验证，保持四独立任务范围，内置任务随服务包。
+  - 修复`OfflineUpdateManager.kt`面对旧服务/依赖源缺少任务组件时误报移除；先忽略过期源，同版/新版移除仍拒绝。`OfflineTaskCodeTest.kt`补回归；最终原生287项0失败/0错误/1既有环境跳过。
+  - `apk/aasc-display-offline-min-v58.apk`：90,451,629字节，SHA256 `116f1db61cc8151b59104c058b4860c53d446429a841681fbbf9fd1477a17117`；`code/code-v96.zip`：17,786,059字节，SHA256 `71ab860fed4498ab1fd860e53788c67f6bb4ca8840a8bca81fe16a78a390c76e`；`task-code/task-code-v1.zip`：13,119字节，SHA256 `d0433573218d05bc63d7c00b1b4936c633db7c41f4ebe99f43637de6fc608e16`。复用deps10，最终清单`release/offline-update/output/manifests/manifest-apk-min-v58.json`；RSA/APK签名、profile、大小/SHA与CRC通过，服务1088文件与源码匹配。
+  - SM-N9500 Android9从min56/code95迁移到min58/code96/deps10/task1，真实Node健康提交；只下载code和task共17,799,178字节，停服期间73个配置/任务数据文件摘要保持，HTTP render.js等于发布源。设备隔离副本任务单更仅下载13,149字节测试v2，原生回滚96/10/1且测试数据保持；测试v2不发布。
+  - 最终APK访问实际旧正式95源返回CURRENT/0字节/无失败；真实WebView20次重载等待1.4秒后保留1计时器/1覆盖层/1回调，截图无失败面板。早期默认profile Gradle资源目录冲突后改同min profile顺序测试通过。
+  - 同步design/spec/task/self-test/todo及.src；成功生成最新产物后minApk/servicePackage/taskCodePackage=false，dependenciesPackage=false。APK/ZIP不入Git，未发布LAN/WAN、未重启主服务；干净首装及受管重启/校验耗时仍待补充。
+
 ### 独立任务代码 ZIP 同步
 
 - ✅ [2026-10-15] 实现独立任务ZIP、服务/依赖兼容约束和Android完整组合更新回滚。

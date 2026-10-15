@@ -176,6 +176,15 @@ class OfflineUpdateManager(
                 "已安装 Offline 服务版本无效"
             }
             val code = manifest.code
+            val dependencies = manifest.dependencies
+            val requiredDependency = code.requiredDependencyVersion ?: -1
+            require(code.version > 0 && dependencies.version > 0 && requiredDependency > 0) {
+                "更新清单服务版本无效"
+            }
+            // 同一次迁移中本机可能领先正式源；旧清单不代表正在移除已启用任务。
+            if (code.version < installed.codeVersion || dependencies.version < installed.dependencyVersion) {
+                return ServiceUpdatePlan.CURRENT
+            }
             OfflineTaskCode.assertCombination(manifest.taskCode, code, manifest.dependencies)
             val targetTask = manifest.taskCode
             require(installed.taskCodeVersion == null || targetTask != null) { "候选清单不能移除已启用任务组件" }
@@ -184,18 +193,9 @@ class OfflineUpdateManager(
                 require(targetTask.version != installed.taskCodeVersion || targetTask.sha256 == installed.taskCodeSha256) { "任务组件同版本不能覆盖" }
             }
             val taskChanged = targetTask != null && targetTask.version != installed.taskCodeVersion
-            val dependencies = manifest.dependencies
             val currentHash = installed.lockSha256.lowercase()
             val targetLock = dependencies.lockSha256.orEmpty().lowercase()
             val codeLock = code.requiredLockSha256.orEmpty().lowercase()
-            val requiredDependency = code.requiredDependencyVersion ?: -1
-            require(code.version > 0 && dependencies.version > 0 && requiredDependency > 0) {
-                "更新清单服务版本无效"
-            }
-
-            if (code.version < installed.codeVersion || dependencies.version < installed.dependencyVersion) {
-                return ServiceUpdatePlan.CURRENT
-            }
             if (dependencies.version == installed.dependencyVersion) {
                 if (targetLock != currentHash || codeLock != currentHash ||
                     requiredDependency != installed.dependencyVersion) {

@@ -1,6 +1,6 @@
 # 独立任务代码 ZIP 同步伪代码
 
-> 2026-10-15 用户已确认“执行”，源码已接入独立任务 ZIP 与完整组合事务，尚未正式出包、发布或真机迁移。验证结果记录在末尾。
+> 2026-10-15 用户已确认“执行”，源码已接入独立任务 ZIP 与完整组合事务，已签名出包并完成既有设备迁移；尚未发布LAN/WAN。验证结果记录在末尾。
 
 ## 已有声明
 
@@ -129,6 +129,7 @@ taskCode 存在 → 校验 ZIP 元数据与兼容约束
 APK 不支持 → 提示先安装支持版，不切换任务指针
 无可兼容候选 → 明确报错，活动组合保持
 变化集合 := 候选组件与当前组件按版本/摘要比较的差异
+过期来源 := 服务版本或依赖版本低于已安装组合 → CURRENT，先于任务移除/降级校验；同版或新版清单仍不能移除受管任务组件
 原生候选提示 := 任务单独更新显示任务标题；其他服务更新附带任务版本，复用原确认/重启入口
 完整组合兼容且只有任务变化 → task-code-only，不下载服务包或依赖
 ```
@@ -252,7 +253,8 @@ taskCodePackage 状态:
   仅任务代码变更 → taskCodePackage=true
   首次原生/服务接入 → 同时记录实际受影响的 minApk/servicePackage
   任务包成功生成且包含最新代码 → taskCodePackage=false
-本轮源码接入 → minApk=true、servicePackage=true、taskCodePackage=true、dependenciesPackage维持false
+源码接入时 → minApk=true、servicePackage=true、taskCodePackage=true
+最新min58/code96/task1构建并校验后 → 三项false；dependenciesPackage维持false；不代表已发布
 ```
 
 ## 验收声明
@@ -306,7 +308,7 @@ HTTP受管代码 → no-store；缺失立即404，不回退旧种子
 ```
 
 
-## 定向验证结果（2026-10-15）
+## 源码阶段定向验证结果（2026-10-15，后续出包结果见下节）
 
 ```text
 test:task-code-sync → 66/66；包含TaskIO/TaskManager/NodeRunner既有自测入口
@@ -315,4 +317,25 @@ Android :app:testDebugUnitTest → 285项，0失败/0错误/1既有归档环境�
 JS入口语法与文档链接/代码围栏/git diff --check → 通过
 显示端20次重载与Puppeteer执行 → VM夹具；未替代真实浏览器与设备验收
 正式签名包/部署/真机迁移/网络字节和视觉 → 未执行，保留待办
+```
+
+
+## 正式候选与ADB验证补充（2026-10-15）
+
+```text
+范围 := 选择清单内四个受管用户任务/六个生产代码文件
+受管任务 → taskCode完整性/只读规则；未纳入任务 → 原流程；十个内置任务 → 服务包校验
+所有任务包候选 → 签名/版本/APK/code/API/依赖约束仍全部校验
+出包 := min58=90451629字节；code96=17786059字节；task1=13119字节；deps10复用
+最终清单 := output/manifests/manifest-apk-min-v58.json；签名/大小/SHA/profile/CRC通过
+SM-N9500 Android9 := min56/code95 → min58/code96/deps10/task1 → Node健康提交，pending=false
+联合网络 := manifest + code96 + task1；ZIP合计17799178字节，无deps/seeds/repair下载
+停服升级 := 73个配置/任务数据文件前后摘要相同；恢复运行后允许正常业务写入
+HTTP render.js := d8e5ed4df1ecd05bca0b62a80c976b3addbd4ef0edd15410bebaf2a2256473f9，no-store
+设备隔离事务 := task1→测试task2，只下载13149字节任务ZIP → 原生回滚96/10/1，测试数据摘要保持
+真实WebView20次重载 := 瞬时旧800ms定时器待退出 → 1.4秒后1计时器/1覆盖层/1回调
+旧正式源95无任务组件 := CURRENT/hasUpdate=false/failed=false/downloadBytes=0
+原生回归 := 287项，0失败/0错误/1既有环境跳过
+产物需求 := 四项false，含义为已完成所需构建；LAN/WAN未发布
+仍待 := 干净首装、任务专用受管重启耗时、启动校验耗时、正式发布
 ```

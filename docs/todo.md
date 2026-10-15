@@ -1,4 +1,4 @@
-- ⏳待签名出包/迁移验收 [2026-10-15] 独立任务ZIP源码已接入并通过定向验证；出包机需核对并构建支持版min58、服务最低96/API1和task-code-v1，发布后验证既有设备升级、首次安装、仅任务包网络请求/重启与实际render-display视觉。任务包要求deps10/当前锁指纹；版本占用或依赖基线变化时更新选择清单后构建。minApk/servicePackage/taskCodePackage=true，dependenciesPackage=false。任务：`docs/task/20261015_任务代码随服务包同步机制设计.md`。
+- ⏳待发布/补充验收 [2026-10-15] 独立任务ZIP的min58/code96/task1已签名出包，复用deps10；ADB完成既有设备迁移、任务专用下载/完整回滚、真实WebView20次重载与旧正式源兼容验证。仍待LAN/WAN正式发布、干净首装和任务专用受管重启/启动校验耗时；四项产物需求均false，表示已出包而非已发布。任务：`docs/task/20261015_任务代码随服务包同步机制设计.md`。
 
 - ⏳待 Offline 设备验收 [2026-10-15] 本机模型收起把手半宽露出和显示端聊天 Markdown 列表 24 CSS px 缩进已随 code v95 发布 LAN/WAN；min v57 已同步两端，本轮未重建 APK。待确认 FPS/控制端把手避让、安全区、展开/收起和列表气泡内缩观感。任务：`docs/task/20261015_Offline本机模型入口边缘收起.md`、`docs/task/20261015_Offline本机模型收起把手半宽露出.md`、`docs/task/20261015_显示端聊天Markdown列表缩进修复.md`。
 
