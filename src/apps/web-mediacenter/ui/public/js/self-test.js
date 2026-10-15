@@ -208,8 +208,22 @@ const SelfTest = {
                     && document.getElementById('controlTtsVoiceToggle') && panel
                     && ['controlTtsProviderSelect', 'controlTtsVoiceList', 'controlTtsCurrentVoiceName', 'controlTtsSpeed', 'controlTtsSpeedValue']
                         .every(id => panel.querySelector('#' + id)));
-                return { success: valid, message: valid ? '共享音色面板入口正常' : '控制端音色面板尚未初始化',
-                    details: '只读结构检查；保存、多端同步和布局由定向回归与ADB验证' };
+                // 复用当前已渲染项只读检查，不为自测打开面板、查询目录或改写选择。
+                // 对应.src/framework/tts-provider-configuration.md的音色列表按钮状态自测。
+                const buttons = panel ? [...panel.querySelectorAll('.display-tts-voice-option')] : [];
+                const stylesValid = buttons.every(button => {
+                    const selected = button.getAttribute('aria-selected') === 'true';
+                    const style = getComputedStyle(button);
+                    const detail = button.querySelector('small');
+                    const mark = button.querySelector('.display-tts-voice-mark');
+                    return (selected ? style.backgroundImage.includes('linear-gradient') : style.backgroundImage === 'none')
+                        && detail && getComputedStyle(detail).color === style.color
+                        && mark && getComputedStyle(mark).visibility === (selected ? 'visible' : 'hidden');
+                });
+                return { success: Boolean(valid && stylesValid),
+                    message: !valid ? '控制端音色面板尚未初始化' : stylesValid ? '共享音色面板入口及按钮状态正常' : '音色按钮状态样式异常',
+                    details: buttons.length ? '只读结构和现有音色按钮皮肤检查；保存、多端同步与明暗主题由定向回归验证'
+                        : '只读结构检查通过，列表尚无音色项，未检查按钮皮肤' };
             }
         },
         {

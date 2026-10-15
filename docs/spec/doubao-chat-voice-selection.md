@@ -186,3 +186,32 @@ ADB结束 := 恢复原选择/各方式音色/语速/启用/模型；正式99源C
 出包状态 := 生成最新源码候选后servicePackage=false；其它三项false；未发布LAN/WAN
 验证边界 := 配置及后续批次参数已验证；未向官方合成接口发送实网请求，不代表逐音色听感验收
 ```
+
+## 音色列表按钮状态（2026-10-15，已实现）
+
+```text
+已有声明：权威配置当前音色、列表项aria-selected、共享音色面板、主题按钮激活/普通皮肤
+新增定义：VoiceButtonState { selected, normal, hover, focus, disabled }
+从权威当前音色与列表项voiceId比较取得selected
+将selected映射到激活按钮皮肤；其余项映射到普通按钮皮肤
+选中项使用主题强调渐变、白字、强调边框和勾选；普通项使用中性背景、普通文字和边框
+为浅色主题声明足够优先级的局部状态规则，覆盖通用button的重要背景/文字/边框
+副标题与勾选颜色随按钮状态变化；焦点可见，禁用不改变权威选中关系
+保存等待或失败时沿用旧权威音色；成功广播后重绘两端相同状态
+验证 := 双端light/mint/深色，普通项悬停与键盘焦点，禁用保留权威状态；保存等待/失败/成功原回归保持
+自测 := control_tts_voice_picker只读扫描现有列表；空列表仅查结构，不为自测请求目录/改配置
+出包状态 := servicePackage=true；minApk/dependenciesPackage/taskCodePackage保持false；未出包发布
+```
+
+## 豆包Chat表情分句中断修复草案（2026-10-15，待确认，尚未实现）
+
+```text
+已有声明 := 千问字素过滤、豆包generate、公共Provider服务、手动重播split与有序队列
+新增定义 := filterSpeechText；保留filterQwenChatSpeechText旧名字的转发入口
+抽出既有字素过滤为公共模块 → 千问继续复用 → 豆包发送上游前清除emoji
+filteredText无可朗读文字/数字 → 返回null → 公共服务识别豆包null并跳过WAV校验/缓存
+手动队列收到null → 不发送无声音频 → 继续后续正文；真正上游失败仍走原错误路径
+用户原句预期 := 保留“喵呜～”“主人好呀！”及自我介绍文字；独立✨/🐱💻⚡不请求上游
+验证计划 := 原句手动重播、混合emoji、纯emoji、ZWJ/肤色/旗帜、后续句继续、真实失败不吞没
+当前证据 := 同文三次手动失败incomplete + 代码缺少过滤/跳过契约；纯emoji诱因尚待实测
+```

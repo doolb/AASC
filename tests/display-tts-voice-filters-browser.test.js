@@ -57,7 +57,7 @@ test('正式面板三下拉交集、权威选中与异步/缓存定位', { skip:
     assert.equal(await page.evaluate(() => window.scrollY), 0);
     assert.ok(await page.$eval('#displayTtsVoiceList', list => {
         const current = list.querySelector('[aria-selected="true"]'), other = list.querySelector('[aria-selected="false"]');
-        return getComputedStyle(current).backgroundColor !== getComputedStyle(other).backgroundColor
+        return getComputedStyle(current).backgroundImage !== getComputedStyle(other).backgroundImage
             && current.querySelector('.display-tts-voice-mark')?.textContent === '✓';
     }));
     const messagesBeforeFilter = await page.evaluate(() => window.sent.length);

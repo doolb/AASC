@@ -23,6 +23,78 @@ function markup(kind) {
     return $.html();
 }
 
+// 按实际主题规则计算双端样式，防止浅色通用button的重要声明抹平选中状态。
+async function assertVoiceButtonStates(page, prefix) {
+    await page.bringToFront();
+    const list = '#' + prefix + 'TtsVoiceList';
+    const selected = list + ' [aria-selected="true"]';
+    const normal = list + ' [aria-selected="false"]';
+    const originalTheme = await page.evaluate(() => ['data-theme', 'data-theme-mode'].map(name => document.documentElement.getAttribute(name)));
+    const snapshot = () => page.$eval(list, element => {
+        const read = selector => {
+            const button = element.querySelector(selector), style = getComputedStyle(button);
+            const mark = button.querySelector('.display-tts-voice-mark');
+            return { background: style.backgroundImage, color: style.color, border: style.borderTopColor,
+                shadow: style.boxShadow, detail: getComputedStyle(button.querySelector('small')).color,
+                mark: getComputedStyle(mark).visibility, markColor: getComputedStyle(mark).color,
+                disabled: button.disabled, selected: button.getAttribute('aria-selected') };
+        };
+        return { selected: read('[aria-selected="true"]'), normal: read('[aria-selected="false"]') };
+    });
+    const assertStates = (state, label) => {
+        assert.match(state.selected.background, /linear-gradient/, label);
+        assert.equal(state.normal.background, 'none', label + ' 普通项不可被全局渐变覆盖');
+        assert.equal(state.selected.color, 'rgb(255, 255, 255)', label);
+        assert.notEqual(state.selected.color, state.normal.color, label);
+        assert.notEqual(state.selected.border, state.normal.border, label);
+        assert.notEqual(state.selected.shadow, 'none', label);
+        assert.equal(state.normal.shadow, 'none', label);
+        for (const button of [state.selected, state.normal]) assert.equal(button.detail, button.color, label + ' 副标题继承按钮文字');
+        assert.equal(state.selected.mark, 'visible', label);
+        assert.equal(state.selected.markColor, state.selected.color, label);
+        assert.equal(state.normal.mark, 'hidden', label);
+        assert.equal(state.selected.selected, 'true');
+        assert.equal(state.normal.selected, 'false');
+    };
+    for (const [theme, mode] of [['light', 'light'], ['mint', 'light'], ['dark', 'dark']]) {
+        await page.evaluate(({ theme, mode }) => {
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.dataset.themeMode = mode;
+        }, { theme, mode });
+        await page.mouse.move(1, 1);
+        assertStates(await snapshot(), prefix + '/' + theme);
+        await page.hover(normal);
+        const hover = await snapshot();
+        assert.equal(hover.normal.background, 'none', '悬停普通项仍保持非选中皮肤');
+        assert.equal(hover.normal.selected, 'false');
+        assert.equal(hover.normal.mark, 'hidden');
+        await page.focus(normal);
+        await page.keyboard.press('Tab');
+        assert.ok(await page.evaluate(() => {
+            const button = document.activeElement, style = getComputedStyle(button);
+            return button.matches('.display-tts-voice-option:focus-visible') && style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
+        }), '键盘焦点可见');
+        await page.$eval(list, element => {
+            for (const button of element.querySelectorAll('button')) button.disabled = true;
+        });
+        await page.mouse.move(1, 1);
+        const disabled = await snapshot();
+        assertStates(disabled, prefix + '/' + theme + '/disabled');
+        assert.equal(disabled.selected.disabled, true);
+        assert.equal(disabled.normal.disabled, true);
+        await page.$eval(list, element => {
+            for (const button of element.querySelectorAll('button')) button.disabled = false;
+        });
+    }
+    await page.evaluate(values => {
+        ['data-theme', 'data-theme-mode'].forEach((name, index) => {
+            if (values[index] === null) document.documentElement.removeAttribute(name);
+            else document.documentElement.setAttribute(name, values[index]);
+        });
+        document.activeElement.blur();
+    }, originalTheme);
+}
+
 test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，权限/断线/手机布局保持', { skip: !chrome, timeout: 60000 }, async t => {
     let settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' },
         providers: { 'doubao-chat': { enabled: true }, 'qwen-chat': { enabled: true }, 'qwen-api': { model: 'qwen3-tts-flash' } } });
@@ -111,6 +183,24 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     await display.bringToFront();
     await display.click('#displayTtsVoiceToggle');
     await waitFor(display, () => document.querySelectorAll('#displayTtsVoiceList [data-voice-id]').length === 94);
+    await control.evaluate(() => document.querySelector('#controlTtsVoiceClear').click());
+    await assertVoiceButtonStates(control, 'control');
+    await assertVoiceButtonStates(display, 'display');
+    await control.addScriptTag({ path: path.join(root, 'js/self-test.js') });
+    const requestsBeforeCheck = requests.length;
+    const checks = await control.evaluate(async () => {
+        const check = SelfTest.tests.find(item => item.id === 'control_tts_voice_picker');
+        const valid = await check.run();
+        const override = document.createElement('style');
+        override.textContent = '#controlTtsVoiceList button[aria-selected="false"] { background: linear-gradient(red, blue) !important; }';
+        document.head.append(override);
+        const invalid = await check.run();
+        override.remove();
+        return { valid, invalid };
+    });
+    assert.equal(checks.valid.success, true);
+    assert.equal(checks.invalid.success, false, '只读自测应发现未选中项被覆盖成渐变按钮');
+    assert.equal(requests.length, requestsBeforeCheck, '只读自测不发送配置或目录请求');
     const other = listDoubaoVoices().find(voice => voice.id !== chosen.id);
     await display.bringToFront();
     await display.$eval('#displayTtsVoiceList [data-voice-id="' + other.id + '"]', button => button.click());

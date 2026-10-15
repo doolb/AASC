@@ -1,3 +1,19 @@
+### 豆包Chat表情分句中断调查
+
+- ✅ [2026-10-15] 对照用户原文找到三次手动重播doubao_speech_incomplete，确认手动链路不走自动表情解析，纯emoji会独立分句发送豆包。
+  - 记录Provider复用千问字素过滤与null跳过的修复草案，更新.src/design/spec/task/todo/usage；尚未修改豆包合成代码或对真实账号发合成请求，不将纯emoji与故障的相关性宣称为已证实根因。
+
+### 双端音色列表按钮状态
+
+- ✅ [2026-10-15] 按确认方案将选中音色改为强调渐变、白字和勾选，普通音色使用中性色按钮皮肤。
+  - tts-voice-picker.css局部覆盖浅色theme.css通用button的重要背景/文字/边框，直接使用aria-selected；副标题继承文字，普通项隐藏勾选，保留键盘焦点及保存等待状态。两端共用，无新增选择状态或配置消息。
+  - 扩展control_tts_voice_picker只读自测与双端浏览器回归：light/mint/深色、悬停/键盘焦点/禁用和错误渐变负例；旧样式2项失败，修改后npm run test:tts-voice-picker 20/20。同步.src/design/spec/task/todo/usage/self-test，servicePackage=true，其余三项false；尚未出包发布或ADB验收本次样式。
+
+### 音色列表按钮状态方案
+
+- ✅ [2026-10-15] 完成双端音色列表选中/普通按钮样式的代码核查与方案记录。
+  - 确认浅色主题通用button的!important覆盖共享列表选中背景/文字/边框；拟在tts-voice-picker.css按权威状态采用激活与普通按钮皮肤，并保留勾选和可读副标题。同步design/spec/task/todo，移除已发布code100的过期待发布条目；尚未改源码、运行测试或改变出包状态。
+
 ### 两端音色面板与语速服务正式发布
 
 - ✅ [2026-10-15] 按用户“发布”将音色/方式切换修复、控制端右下角音色浮钮及双端语速滑条随服务code v100同步发布LAN/WAN。

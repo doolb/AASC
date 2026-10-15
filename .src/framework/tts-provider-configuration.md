@@ -348,3 +348,55 @@
 - 经setTtsProviderSettings持久化并广播ttsProviderConfig // 保持声纹页及两端面板一致
 - 拖动显示数值，松手提交；pending期间禁止重复提交；失败/超时/断线恢复权威值 // 不在每个input事件刷远端配置
 - 下一次语音批次读取新偏好，已播放批次保持快照；豆包网页/Qwen3不支持原生语速时隐藏 // 不新增本地音频变速
+
+## framework/音色列表按钮状态（2026-10-15，用户已确认）
+
+### 已有声明
+
+- currentVoice、voice.id、aria-selected、renderVoices // 复用服务器权威选择，不维护第二份active状态
+- theme.css的普通/激活按钮颜色、tts-voice-picker.css // 控制端与显示端共用皮肤
+
+### 新增定义
+
+- VoiceButtonState { selected, normal, hover, focus, disabled } // 仅描述视觉状态，不增加配置或运行状态
+
+### 操作流程
+
+- 将aria-selected为真映射到强调渐变、白字、强调边框和勾选 // 与已有激活按钮语义一致
+- 将aria-selected为假映射到中性背景、普通文字和边框，隐藏勾选 // 避免普通项看似已选
+- 提高组件局部背景、文字、边框规则优先级并明确important // 浅色主题通用button规则原本覆盖选中差异
+- 让副标题继承按钮文字并保持可读透明度 // 避免白字按钮上仍显示低对比深色标签
+- 仅可用普通项悬停时轻微强调，键盘焦点保持可见，禁用时保留原选中皮肤 // 等待中不提前显示目标项已选
+- 保持保存失败不改权威状态，成功广播才重绘选中项 // 纯CSS调整不改变现有配置协议
+
+### 自测映射与流程
+
+- tests/display-tts-voice-filters-browser.test.js // 保留三下拉、定位、保存等待/失败/成功的权威选中断言
+- tests/control-tts-voices-browser.test.js // 在真实双端WS夹具中验证共享按钮皮肤及只读自测
+- 为双端设置深色、light、mint主题 → 读取选中与普通项计算样式 → 比对渐变、文字、边框、副标题与勾选 // 使用真实主题重要规则复现覆盖
+- 普通项悬停、键盘聚焦及两项禁用 → 确认权威属性与视觉差异保持 → 恢复临时测试属性 // 不提交额外配置
+- 在SelfTest现有控制端音色检查内只读扫描已渲染音色项 → 验证按钮状态差异及副标题颜色 // 空列表只检查结构，不为自测打开面板或修改音色
+- 执行npm run test:tts-voice-picker → 记录结果 // 用户已确认补充定向验证
+
+## framework/豆包Chat纯表情分句中断修复草案（2026-10-15，待确认，尚未实现）
+
+### 已有声明
+
+- filterQwenChatSpeechText、Intl.Segmenter、emojiPattern、readablePattern // 千问已按完整字素过滤emoji并判定可朗读正文
+- createDoubaoChatProvider.generate、createTtsProviderService.generate // 豆包当前直接传request.text，公共服务只允许千问返回null
+- createManualChatTtsService.play、splitIntoSentences、generateChatTtsActions // 手动与自动路径不同，Provider是共同边界
+
+### 新增定义
+
+- filterSpeechText // 从现有千问模块抽出公共实现，旧导出保留兼容
+- DoubaoSpeechSkip { filteredText, hasReadableText } // 仅描述过滤结果，不新增配置
+
+### 操作流程
+
+- 在公共过滤实现中按字素簇移除整组emoji，保留原有文字、数字和标点 // 不切碎ZWJ、肤色、国旗、键帽
+- 千问旧模块转发公共实现并保留旧导出，豆包Provider复用同一过滤 // 不修改原聊天文本或MMD动作来源
+- 过滤后无文字或数字则返回null，不请求上游 // 纯表情分句不应被当作合成故障
+- 公共Provider服务允许豆包和千问的null结果继续作为跳过信号，不做WAV校验或缓存 // 手动调度继续后续句子
+- 保持真实上游失败、超时、取消的错误语义，不把合成失败假报为已跳过 // 故障需继续可见
+- 先用用户原文验证文字保持、纯表情未调用上游、后续分句仍生成 // 当前日志只能确认incomplete，尚未实网对照确认诱因
+- 补充手动重播、自动播报及纯emoji/混合文本/失败边界回归 // 待用户确认后执行

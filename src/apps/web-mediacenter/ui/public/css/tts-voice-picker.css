@@ -20,12 +20,16 @@
 .display-tts-voice-list-header { border-top: 1px solid var(--border-color); padding-top: 8px; }
 .display-tts-voice-list { display: flex; flex-direction: column; gap: 6px; min-height: 120px; flex: 1; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .display-tts-voice-list > * { flex-shrink: 0; }
-.display-tts-voice-option { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; text-align: left; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
-.display-tts-voice-option small { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 11px; }
-.display-tts-voice-mark { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border: 1px solid var(--border-color); border-radius: 50%; color: transparent; }
-.display-tts-voice-option[aria-selected="true"] { border-color: var(--voice-accent); background: color-mix(in srgb, var(--voice-accent) 22%, var(--bg-secondary)); box-shadow: inset 3px 0 var(--voice-accent); }
-.display-tts-voice-option[aria-selected="true"] .display-tts-voice-mark { background: var(--voice-accent); color: #152743; border-color: var(--voice-accent); }
-.display-tts-voice-option:disabled { cursor: wait; }
+/* 对应.src/framework/tts-provider-configuration.md：直接按权威aria-selected映射按钮皮肤。 */
+.display-tts-voice-option { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; text-align: left; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+.display-tts-voice-option small { display: block; margin-top: 4px; color: inherit; opacity: .85; font-size: 11px; }
+.display-tts-voice-mark { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 50%; color: inherit; visibility: hidden; }
+/* 浅色主题给通用button添加了!important渐变；局部显式区分状态，避免所有音色看似已选。 */
+:root .tts-voice-picker button.display-tts-voice-option[aria-selected="false"] { background: var(--bg-secondary) !important; color: var(--text-secondary) !important; border-color: var(--border-color) !important; box-shadow: none !important; }
+:root .tts-voice-picker button.display-tts-voice-option[aria-selected="true"] { background: linear-gradient(135deg, var(--accent-secondary), var(--voice-accent)) !important; color: #fff !important; border-color: var(--voice-accent) !important; box-shadow: inset 0 0 0 1px var(--voice-accent) !important; }
+:root .tts-voice-picker button.display-tts-voice-option[aria-selected="false"]:hover:not(:disabled) { background: var(--bg-primary) !important; border-color: var(--voice-accent) !important; }
+.display-tts-voice-option[aria-selected="true"] .display-tts-voice-mark { visibility: visible; }
+.display-tts-voice-option:disabled { cursor: wait; opacity: .75; }
 .display-tts-voice-panel .display-tts-voice-status { font-size: 11px; color: var(--text-secondary); margin: 0; padding-top: 6px; border-top: 1px solid var(--border-color); }
 .display-tts-voice-panel :is(button, select, input):focus-visible { outline: 2px solid var(--voice-accent); outline-offset: 2px; }
 /* 横屏把设置和列表分列，让短屏也保留完整的音色选择区域。 */
