@@ -60,7 +60,7 @@
 
 - [x] 用户确认“不用自动更新，单独 ZIP”。
 - [x] 文档与待产物状态已先行更新。
-- [ ] 实现成对构建、独立发布及定向测试。
-- [ ] 构建 code-vN 与 voice-display-node-vN，确认服务清单不包含 Node 组件。
+- [x] 实现成对构建、独立发布及定向测试；新增 `build:offline-update` 配套产物与 `publish:voice-display-node` 独立发布命令。
+- [x] code-v103：4,891,047 bytes，SHA-256 `9c72902cb103a5b4cff1e3eae68832c520a6fe502a96e7cf49094e4762c907aa`；voice-display-node-v103：12,919,369 bytes，SHA-256 `423feac59fe43f3d539436cba80623ce2e6adb17c4ebe94221eaa03aaf2e5734`。独立 sidecar RSA 验签、服务清单 v103 验签/组件校验、两 ZIP CRC 均通过；service manifest 未出现 Node 组件。
 - [ ] 发布 LAN/WAN，核对签名、HTTP、大小、SHA-256 和清理结果。
 - [ ] Git 提交并推送代码和状态。
