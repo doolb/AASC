@@ -746,9 +746,15 @@ function getTtsProviderSettings() {
 
 function setTtsProviderSettings(patch) {
     const previous = getTtsProviderSettings();
-    const candidate = normalizeTtsProviderSettings(patch, previous);
     const previousTts = JSON.parse(JSON.stringify(config.get('tts', {})));
     const previousUserTts = JSON.parse(JSON.stringify(userConfig.get('tts', {})));
+    // 对应.src/framework/qwen-api-data-repair.md：旧Qwen模型隐藏调速字段，切换到可调速模型时仍保留已存偏好。
+    const savedQwenSpeed = previousUserTts.providers?.['qwen-api']?.defaultSpeed;
+    const previousQwen = previous.providers['qwen-api'];
+    const normalizationPrevious = previousQwen.defaultSpeed === undefined && savedQwenSpeed !== undefined
+        ? { ...previous, providers: { ...previous.providers, 'qwen-api': { ...previousQwen, defaultSpeed: savedQwenSpeed } } }
+        : previous;
+    const candidate = normalizeTtsProviderSettings(patch, normalizationPrevious);
     const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, candidate[key]]));
     const sharedParameters = { ...(previousTts.sharedParameters || {}) };
     delete sharedParameters.defaultSpeed;

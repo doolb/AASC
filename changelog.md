@@ -1,3 +1,10 @@
+### Qwen API旧默认配置数据修复v4
+
+- ✅ [2026-10-15] 按用户确认实现累计数据修复v4，已知旧模型/默认及三业务显式音色迁移到Qwen Audio3.1/乔小娇，保护有效3.1、自定义模型/未知音色及自定义映射，累计数据0～3到4。
+  - 新增qwen-api-defaults-v4/repair.js；runner只开放getPublicTtsProviderSettings/setTtsProviderSettings，seed-worker纳入userconfig回滚快照；config保存恢复旧模型隐藏的已存语速，显式新语速仍优先，凭证/独立速度/共享音量保留。
+  - npm数据修复71/71、迁移与配置36/36、双端快选22/22通过（部分重叠），包含真实隔离业务服务、数据0～3种子提交、双配置/内存/数据版本回滚与脱敏边界；首轮隐藏语速问题已修复，失败状态夹具同步现有rolled-back。未操作手机或运行实例配置。
+  - 当前正式服务103，配套服务104/修复4/新种子尚待构建，servicePackage=true，其余标记保留；LAN/WAN发布尚未授权。代码及状态上传Git，APK/ZIP/缓存不提交。
+
 ### v102设备Qwen旧配置修正
 
 - ✅ [2026-10-15] 按用户“已更新102仍显示旧内容”用ADB确认服务和页面均为新版，根因是设备保存qwen3-tts-flash/Cherry，默认值未覆盖已有配置。

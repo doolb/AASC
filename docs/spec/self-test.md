@@ -2022,3 +2022,15 @@ IM := conversation/info与chain/single均HTTP200/status_code0，4消息文本块
 刷新复测 := 心跳0、信息success、4消息保持，无非法toast
 发布 := code95双站点摘要/签名/CRC/src逐项一致、精确清理0错误；主服务器与手机健康，服务待出包false
 ```
+
+## Qwen API数据修复v4验证（2026-10-15）
+
+```text
+真实runner + 修复脚本 → 旧默认/三业务显式音色/空继承/有效英文ID大小写/未知自选/模型映射冲突 → 迁移或明确保留
+真实隔离业务种子 → 数据0至3 → 基线4 → 历史偏好与凭证/速度/共享音量保留
+业务保存 → 隐藏休眠速度恢复；显式新速度优先 → 双配置落盘一致
+失败保存/断言 → rolled-back → 双配置/内存/版本保持 → 不写成功记录
+未知数据/低服务 → 门控等待或拒绝；重复身份 → skipped；脱敏getter无凭证且原始getter不可用
+验证 := npm run test:offline-data-repair 71/71；迁移+配置36/36；npm run test:tts-voice-picker 22/22，部分重叠
+范围 := 真实隔离配置和浏览器，不等于手机已安装修复或实际合成验收
+```

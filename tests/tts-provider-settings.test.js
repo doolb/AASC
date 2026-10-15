@@ -88,6 +88,24 @@ function loadConfig(t) {
     return { config: context.module.exports, instances, directory };
 }
 
+test('迁移Qwen3到Audio3.1保留隐藏的已存语速，显式新语速优先', t => {
+    // 对应.src/framework/qwen-api-data-repair.md：模型能力变化不应丢失持久化的调速偏好。
+    for (const speedPatch of [undefined, -2]) {
+        const { config, instances, directory } = loadConfig(t);
+        instances[1]._data.tts = { providers: { 'qwen-api': {
+            model: 'qwen3-tts-flash', defaultVoice: 'Cherry', defaultSpeed: 4, credential: 'keep-secret'
+        } } };
+        assert.equal(config.getPublicTtsProviderSettings().providers['qwen-api'].defaultSpeed, undefined);
+        const patch = { model: 'qwen-audio-3.1-tts-flash', defaultVoice: 'qiaoxiaojiao_v3.1',
+            ...(speedPatch === undefined ? {} : { defaultSpeed: speedPatch }) };
+        const saved = config.setTtsProviderSettings({ providers: { 'qwen-api': patch } });
+        assert.equal(saved.providers['qwen-api'].defaultSpeed, speedPatch ?? 4);
+        const user = JSON.parse(fs.readFileSync(path.join(directory, 'user/userconfig.json')));
+        assert.equal(user.tts.providers['qwen-api'].defaultSpeed, speedPatch ?? 4);
+        assert.equal(user.tts.providers['qwen-api'].credential, 'keep-secret');
+    }
+});
+
 test('真实配置持久化、重载、旧system默认和保存失败内存/磁盘回滚', t => {
     const { config, instances, directory } = loadConfig(t);
     config.set('tts.defaultVoice', 'legacy-voice');

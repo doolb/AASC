@@ -1,5 +1,13 @@
 # Offline 通用数据修复包
 
+## Qwen API 旧默认配置迁移 v4（2026-10-15，源码完成待出包）
+
+服务v102升级保留已保存的qwen3-tts-flash/Cherry，导致旧安装仍显示旧模型的音色目录；ADB修正仅作用于测试设备。拟新增独立签名修复v4，把已知旧默认组合迁移到qwen-audio-3.1-tts-flash/qiaoxiaojiao_v3.1，并修正aiReplyDefault、textMedia、systemBroadcast中属于同一Provider的已知旧音色。已有效使用3.1音色或其他自定义模型的配置保留；无法判定的自定义音色组合整体跳过并记录结果，避免改模型后留下不兼容音色。
+
+现有修复config能力没有TTS Provider读写方法，不能仅发布repair.js完成迁移。拟在执行器白名单加入现有getPublicTtsProviderSettings/setTtsProviderSettings，复用业务校验及持久化，不向脚本提供凭证读取或文件访问。需要配套新服务包；沿用min58、依赖包及任务包。repair4兼容数据0/1/2/3，按历史阶段补齐v3既有迁移后执行新迁移，成功到基线4；不重复重置用户后来修改的旧阶段偏好。
+
+同脚本用于隔离首装种子，构建器生成修复ZIP、配对种子ZIP和签名清单。种子worker的回滚快照需涵盖userconfig，运行时继续使用已有完整快照。目标版本按出包时发布基线递增。用户已确认实施和出包验证。源码及定向测试完成，配套服务拟v104（当前两端正式v103）、修复v4、数据基线4；尚未构建或发布。原TTS保存方法补回旧模型隐藏的已存Qwen语速作为规范化输入，显式新语速仍优先，避免切换3.1丢失偏好。
+
 ## 累计基线3与默认模型映射（2026-10-14）
 
 现行release基线3由累计repair3真实执行后生成，新增公开chat2api/model-mappings.json十条，保留v1/v2配置效果及记录。历史同步v1/v2得到基线2的说明保留用于回溯；后续打包输入采用基线3。旧APK不会因release变化自动得到新状态。

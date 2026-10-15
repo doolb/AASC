@@ -25,6 +25,9 @@ const CAPABILITY_METHODS = Object.freeze({
         'set',
         'getTtsConfig',
         'setTtsConfig',
+        // 对应.src/framework/qwen-api-data-repair.md：只开放脱敏读取，写入仍走原业务校验。
+        'getPublicTtsProviderSettings',
+        'setTtsProviderSettings',
         'getCpuAffinityConfig',
         'applyCpuAffinityConfigUpdate',
         'normalizeControlTheme'
