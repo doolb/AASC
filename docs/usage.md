@@ -1,6 +1,6 @@
 ## 整包安装后的内置版本
 
-新版完整Offline APK每次安装后的首次启动会切回APK内置服务和依赖；同版本重装也会触发。通过实际版本、目录与API健康检查后，自动删除以前下载的代码/依赖版本目录。配置、账号、模型缓存、任务及数据修复记录保留；下载ZIP继续保留。此后确认的热更新照常使用，日常重启不会再次切回整包。失败保留旧目录并回退存在的旧版本指针，不误报切换成功。[整包v50](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v50.apk)已正式发布并包含分组校验修复；已有设备可用[min v51](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v51.apk)覆盖安装后重试更新。已装v51不能直接降装较低v50。旧full46不具备一次性切回行为。
+新版完整Offline APK每次安装后的首次启动会切回APK内置服务和依赖；同版本重装也会触发。通过实际版本、目录与API健康检查后，自动删除以前下载的代码/依赖版本目录。配置、账号、模型缓存、任务及数据修复记录保留；下载ZIP继续保留。此后确认的热更新照常使用，日常重启不会再次切回整包。失败保留旧目录并回退存在的旧版本指针，不误报切换成功。[整包v50](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v50.apk)已正式发布并包含分组校验修复；已有设备可用[min v51](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v56.apk)覆盖安装后重试更新。已装v51不能直接降装较低v50。旧full46不具备一次性切回行为。
 
 # Web MediaCenter - 使用说明
 
@@ -10,7 +10,7 @@
 
 ## Chat2API 默认模型与已有账号
 
-无需先添加映射即可使用预置DeepSeek模式别名、Qwen历史别名与豆包三种Chat模式；已保存账号自动参与调度，缺少登录资料时提示登录。自定义规则优先，release基线3保留公开映射。当前旧min41需先从[公网min51 APK](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v51.apk)覆盖安装，再更新服务并确认v3；旧版不能解析新的分组清单。豆包Node无需开启折叠的旧Chrome入口，语音模型默认与各业务音色区别见[统一账号与应用](usage/chat2api-unified-applications.md)及[豆包Node](usage/chat2api-doubao-node.md)。
+无需先添加映射即可使用预置DeepSeek模式别名、Qwen历史别名与豆包三种Chat模式；已保存账号自动参与调度，缺少登录资料时提示登录。自定义规则优先，release基线3保留公开映射。当前旧min41需先从[公网min56 APK](http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v56.apk)覆盖安装，再更新服务并确认v3；旧版不能解析新的分组清单。豆包Node无需开启折叠的旧Chrome入口，语音模型默认与各业务音色区别见[统一账号与应用](usage/chat2api-unified-applications.md)及[豆包Node](usage/chat2api-doubao-node.md)。
 
 ## 完整 Offline APK 镜像同步
 
@@ -49,9 +49,9 @@ MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件�
 
 普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。普通Node模式通过`/v1/responses`保存引用、复用同账号上游会话并仅发送新增输入；两轮纯Node协议记忆验证通过。选择已有`openai-responses`协议即可由普通LLM自动保存引用；无引用chat/completions仍重放历史。`doubao-think`/`doubao-expert`及Cookie-only网页原生复用待验，工具/多模态不承诺。profile导入只校验格式并重置验证；手动/Android添加尝试一次只读列表验证，失败仍保存未验证账号，已有账号可显式复验；会话列表访问验证不代表聊天/TTS通过；登录过期由用户更新，不自动处理验证码或重发。
 
-Cookie-only旧账号继续“豆包普通LLM · 网页模式”：默认关闭，通过现有权威配置显式选择账号、官方target/context并授权会话核对，保存不会连接Chrome。该项目bridge真实官网仍待单独验收；原标签UI成功不能替代它。早期缺完整profile的Node403/718013001失败已保留在设计历史，不能继续认定独立Node不可用。Android/Linux及长期令牌维持尚未真实验证，语音格式仍走Frontier/WAV。
+Cookie-only旧账号需要正常重新登录补齐同账号nodeProfile后才能文字聊天。旧Chrome网页兼容分支和开关已删除；TTS仍可仅用Cookie。当前主服务器账号的普通LLM真实验收待用户稍后补登录资料。
 
-`doubao-chat`已接入 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭，真实运行未重新验收。先在现有Chat2API模型映射中为doubao-chat指定preferredProviderId=doubaochat及preferredAccountId，所选账号和Provider须启用且可用；严格绑定，不自动换号。业务面板无Cookie/账号输入。固定音色zh_female_wenroutaozi_uranus_bigtts、speech speed=1/volume=100，业务语速0；input最多1000个UTF-16字符且UTF-8≤4000字节，只接受wav。Frontier收集完整Ogg、校验并解码为单声道PCM WAV，缓存及下载仍为.wav/audio/wav；错误不重试、不切换其它来源。公开协议已核对，本地模拟及WASM样本通过；新真实聊天/合成需独立明确授权，Android Node/WASM、音色听感与设备播放尚未验收。文字网页fetch已实现为默认关闭的实验功能，真实运行未验收。
+`doubao-chat`用于 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭。启用Chat2API中的doubaochat账号与Provider后自动选择可用账号，无须手动模型映射；显式账号映射仍优先且不退选。TTS只需Cookie，不要求文字Node资料。固定音色zh_female_wenroutaozi_uranus_bigtts、上游speed=1/volume=100，面板隐藏语速设置，后处理只调全局音量；input最多1000个UTF-16字符且UTF-8≤4000字节，仅WAV。code92起同一适配器内按账号跨批次排队，完整上游音频到达即交接，不等待WAV解码；每账号最多等待16项、实例256项，等待计入原60秒时限，取消移除等待项。错误不重试或切换来源，现有分句播放顺序保持。主服务器及Android各三批同时提交已合成非静音48kHz WAV；此次未验证实际播放听感。
 
 ## TTS 多 Provider 配置（已实现，账号/设备待验收）
 

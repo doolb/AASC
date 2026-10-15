@@ -2,7 +2,32 @@
 
 当前约束以2026-10-15文首伪代码为准；注明历史的旧网页运行协议已删除，不属于当前实现。
 
-## 2026-10-15 用户选择临时降低豆包分句并发
+## 豆包TTS跨批次账号队列（2026-10-15，已完成）
+
+```text
+已有声明：豆包适配器实例、generate输入、accountId、signal、原deadline、WS合成与WAV解码
+新增定义：实例账号槽Map、活动执行权、FIFO等待项、等待容量16/账号及256/实例
+入队前：校验账号、凭据、取消状态、原deadline
+账号空闲 -> 占用执行权；账号活动 -> 容量检查 -> 加入该账号FIFO
+等待项取消/截止 -> 移除等待项 -> 清理计时器与监听 -> 返回本地排队失败
+取得执行权 -> 再检查取消/截止 -> 原WS生成 -> 完整TTSEnded音频到达且WS清理 -> 立即归还执行权 -> 原解码与WAV校验
+生成失败/取消 -> 幂等归还执行权；解码结束/失败/取消 -> 再次归还无副作用
+归还执行权 -> 交给首个有效等待项 -> 空槽删除；解码可与下一项上游请求并行
+SpeechService错误分类 -> 排队本地失败不计账号上游失败；原上游失败规则保持
+不同accountId -> 独立执行权；同一实例跨批次 -> 共享账号FIFO
+现有批次内豆包并发1、有序交付、Qwen/API行为 -> 保持
+验收 -> FIFO/账号隔离/完整音频立即交接/解码成功失败取消不影响下一项/截止/容量/资源清理
+错误内部标记 := speechQueueFailure=true，仅服务内区分排队错误；对外仍固定错误码和文案
+首项执行权 := 同步归还释放函数；等待执行权 := Promise解析释放函数
+释放函数 := 每项独立、幂等；归还时跳过已取消/到期项，清理计时器与监听
+实现验证 -> Chat2API254/254、音频36/36、分句20/20
+发布验证 -> code92/min56/deps10，主服务健康重启；Android原生热更新code92，pendingHealth=false
+真实三批 -> 主服务器5272ms/Android2187ms；同账号最大上游连接1，均48kHz非静音WAV，无播放
+产物状态 -> code92已覆盖最新代码，servicePackage=false；APK/依赖未重建
+```
+
+
+## 2026-10-15 临时降低豆包分句并发（历史决策，账号边界已由上方队列替换）
 
 ```text
 证据 := 本地doubao适配器busy Set拒绝同账号重叠；不是本次官方返回的并发错误
@@ -263,7 +288,7 @@ TTS当前 := 官方WS open → TaskStarted/status=20000000 → 非零状态被�
   Chat2API模型映射中为doubao-chat显式指定doubaochat与preferredAccountId // 复用已有映射业务入口，TTS配置不保存账号
   LoadBalancer新增可选requiredAccountId，严格限制对应账号且检查健康/启停/额度/秘密 // 找不到不按偏好回退；旧调用保持
   normalizeSpeechRequest先按模型描述校验：豆包1–1000字符/UTF-8≤4000字节、固定voice/1倍/100音量、只wav // 无效请求不读账号
-  generate共享60秒deadline与当前HTTP的AbortSignal；同账号同时仅1个任务 // 忙时拒绝，不排无限队列
+  generate共享60秒deadline与当前HTTP的AbortSignal；同账号上游生成有界FIFO // 当前队列见文首，取代旧busy立即拒绝
   WS打开发送StartTask；TaskStarted核对taskId并发送StartSession；SessionStarted发送一次BidirectionalTTS与EndTTS
   按TTSSentenceStart→TTSResponse→TTSSentenceEnd收集每句Ogg；最多64句/10000事件，总压缩音频≤16MiB // WS帧不等于Ogg页
   TTSEnded要求处于句间且至少有完整句子，关闭当前WS后才逐句调用decodeOggOpusToWav // 不拼接多个Ogg逻辑流
@@ -571,26 +596,4 @@ min41/code76为历史发布；本次新增代码未出包。真实账号捕获�
   同根目录并发账号写入 -> 不丢账号；导入/换凭据/删除重建 -> 迟到结果409
   独立只读审查 -> 无Important/Critical问题；真实官网/用户Chrome/Android真机未访问
   发布状态 -> 仅servicePackage=true，minApk/dependenciesPackage保持false；未构建/发布/重启
-```
-
-
-## 豆包TTS跨批次账号队列（2026-10-15，用户已确认，实施中）
-
-```text
-已有声明：豆包适配器实例、generate输入、accountId、signal、原deadline、WS合成与WAV解码
-新增定义：实例账号槽Map、活动执行权、FIFO等待项、等待容量16/账号及256/实例
-入队前：校验账号、凭据、取消状态、原deadline
-账号空闲 -> 占用执行权；账号活动 -> 容量检查 -> 加入该账号FIFO
-等待项取消/截止 -> 移除等待项 -> 清理计时器与监听 -> 返回本地排队失败
-取得执行权 -> 再检查取消/截止 -> 原WS生成 -> 完整TTSEnded音频到达且WS清理 -> 立即归还执行权 -> 原解码与WAV校验
-生成失败/取消 -> 幂等归还执行权；解码结束/失败/取消 -> 再次归还无副作用
-归还执行权 -> 交给首个有效等待项 -> 空槽删除；解码可与下一项上游请求并行
-SpeechService错误分类 -> 排队本地失败不计账号上游失败；原上游失败规则保持
-不同accountId -> 独立执行权；同一实例跨批次 -> 共享账号FIFO
-现有批次内豆包并发1、有序交付、Qwen/API行为 -> 保持
-验收 -> FIFO/账号隔离/完整音频立即交接/解码成功失败取消不影响下一项/截止/容量/资源清理
-错误内部标记 := speechQueueFailure=true，仅服务内区分排队错误；对外仍固定错误码和文案
-首项执行权 := 同步归还释放函数；等待执行权 := Promise解析释放函数
-释放函数 := 每项独立、幂等；归还时跳过已取消/到期项，清理计时器与监听
-发布 -> 实施后仅servicePackage=true；尚未验证或发布
 ```

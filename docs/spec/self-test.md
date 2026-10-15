@@ -1785,5 +1785,7 @@ min/普通profile → 不触发；当前APK8071配置契约仍通过
 适配器 := 独立generate批次共享执行权，完整TTSEnded音频到达且WS清理后立即交接；解码成功/失败/取消不干扰下一条
 本地等待失败 := 不创建WS、不扣账号健康；对外固定错误不包含内部标记
 自动验证 := 最终释放边界回归check:chat2api 254/254；音频/Ogg/worker 36/36；分句20/20
-真实验证/发布 := 进行中，尚未声称完成
+真实验证/发布 := code92签名/大小/SHA/CRC/src逐项匹配；LAN全HTTP、WAN源站完整12项SHA+公网签名/HEAD通过
+主服务与Android := 各并发提交3批，同账号上游峰值1，非静音48kHz WAV均成功，5272ms/2187ms
+设备 := 原生入口code90→92/deps10，pendingHealth=false、api/status=ok；仅合成验证，不播放
 ```

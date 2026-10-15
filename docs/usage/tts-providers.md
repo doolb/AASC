@@ -14,7 +14,7 @@
 
 豆包普通文字doubaochat已于2026-10-13用正式Node适配器真实验证流式/非流式OK，现支持Responses同账号原生续接、仅发新增输入，两轮纯Node协议记忆验证通过；同账号nodeProfile初始化后不依赖Chrome或页面签名，详情见[纯Node普通LLM](chat2api-doubao-node.md)。这不代表网页朗读链路完成真实验收。
 
-`doubao-chat`已接入 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭，真实运行未重新验收。先在现有Chat2API模型映射中为doubao-chat指定preferredProviderId=doubaochat及preferredAccountId，所选账号和Provider须启用且可用；严格绑定，不自动换号。业务面板无Cookie/账号输入。固定音色zh_female_wenroutaozi_uranus_bigtts、上游speech speed=1/volume=100；上游不接受可配置语速，因此面板隐藏其语速输入，后处理只使用全局音量。input最多1000个UTF-16字符且UTF-8≤4000字节，只接受wav。Frontier收集完整Ogg、校验并解码为单声道PCM WAV，缓存及下载仍为.wav/audio/wav；错误不重试、不切换其它来源。公开协议已核对，本地模拟及WASM样本通过；新真实聊天/合成需独立明确授权，Android Node/WASM、音色听感与设备播放尚未验收。文字网页fetch已实现为默认关闭的实验功能，真实运行未验收。
+`doubao-chat`用于 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭。启用Chat2API中的doubaochat账号与Provider后自动选择可用账号，无须手动模型映射；显式账号映射仍优先且不退选。TTS只需Cookie，不要求文字Node资料。固定音色zh_female_wenroutaozi_uranus_bigtts、上游speed=1/volume=100，面板隐藏语速设置，后处理只调全局音量；input最多1000个UTF-16字符且UTF-8≤4000字节，仅WAV。code92起同一适配器内按账号跨批次排队，完整上游音频到达即交接，不等待WAV解码；每账号最多等待16项、实例256项，等待计入原60秒时限，取消移除等待项。错误不重试或切换来源，现有分句播放顺序保持。主服务器及Android各三批同时提交已合成非静音48kHz WAV；此次未验证实际播放听感。
 
 网页模型默认选择QUARK_VOICE，MINI_MAX需另有匹配的可用音色；目前预置的已验证音色是zh_female_quarkF531S0_ptts，完整国内音色目录尚未取得。qwen3-tts-flash应配置在Qwen API中并使用百炼API Key，不能保存为国内千问网页模型。历史错误模型读取时恢复QUARK_VOICE并保留其他参数，下一次合法保存会写回；服务端拒绝新提交的错误模型并保留原配置。
 
@@ -36,8 +36,8 @@ qwen-chat合成前自动去掉emoji，包含肤色、家庭组合、国旗和键
 
 语速−10至10按Provider分别配置，音量0至100全局共用。服务端原生与豆包API使用上游语速字段，国内千问网页使用原生speed字段，Qwen-Audio通过`input.rate`设置语速，Android Embedded Speech通过SSML `prosody rate`原生合成。所有WAV后处理只调整音量幅值，不重采样或变速；旧APK不支持非零原生语速时由服务端既有fallback处理。Qwen API单次最多600字符，较长回复沿用业务分句，单句超限报错。每段完整音频最多16MiB，默认总时限60秒，不保存临时音频文件。
 
-Chat2API代理另提供POST /v1/audio/speech，沿用既有Bearer API Key鉴权；input为文本，旧模型支持qwen-chat、QUARK_VOICE、MINI_MAX，voice为音色ID，speed为0.25–4倍，volume为0–100；新增实验性doubao-chat仅接受上述固定参数与显式账号映射。response_format仅wav，成功返回audio/wav二进制。
+Chat2API代理另提供POST /v1/audio/speech，沿用既有Bearer API Key鉴权；input为文本，旧模型支持qwen-chat、QUARK_VOICE、MINI_MAX，voice为音色ID，speed为0.25–4倍，volume为0–100；doubao-chat仅接受上述固定参数，账号自动选择或遵循显式映射。response_format仅wav，成功返回audio/wav二进制。
 
-国内千问默认音色已用真实账号验证连续生成和令牌刷新后的生成；其他音色权限及设备声音需现场验收。若提示校时、令牌注册或刷新失败，检查服务器网络及Chat2API账户登录状态。其他运行实例需加载最新后端；Offline服务代码包尚未构建发布。
+国内千问默认音色已用真实账号验证连续生成和令牌刷新后的生成；其他音色权限及设备声音需现场验收。若提示校时、令牌注册或刷新失败，检查服务器网络及Chat2API账户登录状态。其他运行实例需加载最新后端；本次Offline服务code92已发布。
 
-先前千问纯Node版本曾通过本机8081手动播放及音频HTTP200验证；该历史记录不代表本次豆包实验选项已加载或验收。本次未重启主服务器，运行实例需在用户自行安排加载后使用最新代码。
+当前192.168.1.39:8081主服务器已重启，ADB Offline已通过原生热更新加载code92；两端豆包真实跨批次合成通过，未改动业务启用和音色设置。
