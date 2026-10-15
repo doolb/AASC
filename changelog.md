@@ -1,3 +1,9 @@
+### Android豆包重登后LLM与TTS真实验收
+
+- ✅ [2026-10-15] Android当前账号重登补齐nodeProfile，普通doubao两轮Responses流式原生续接及doubao-chat TTS通过。
+  - 安装代码code92/min56/deps10；正式Runtime、临时内存会话、权威账号/映射，Node直连无网页。水果记忆两轮“好的。”6282ms/“荔枝”4489ms，均completed，第二轮真实上游续接；首组口令内容拒答如实记录，不混作协议失败。TTS253112bytes/48kHz/非静音/2409ms，无播放。
+  - 主服务器192.168.1.39:8081仍Cookie-only，未发其LLM、未跨端复制秘密，保留主服务器正常重登待办。同步design/spec/task/todo/self-test/usage；生产代码及发布状态不变，不构建新包，账号/原会话/配置不改。
+
 ### 豆包账号队列最终发布与真机验证
 
 - ✅ [2026-10-15] 跨批次同账号FIFO及“完整音频到达即释放，WAV解码并行”已随code92上线。

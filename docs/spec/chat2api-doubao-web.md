@@ -2,6 +2,21 @@
 
 当前约束以2026-10-15文首伪代码为准；注明历史的旧网页运行协议已删除，不属于当前实现。
 
+## 2026-10-15 重登后的纯Node真实验收
+
+```text
+手机现有账号 := 启用豆包1个，nodeProfile存在且既有凭据规范化校验通过
+主服务器现有账号 := 启用豆包1个，Cookie-only；未发LLM、未复制手机资料
+账号来源 := 各自原有账号库；不覆盖模型映射，不导出Cookie/设备标识
+会话隔离 := 正式ResponseSessionStore使用临时内存后端，只保存本次测试两轮
+第一轮 := 正式Runtime ResponsesService，doubao/stream=true，告知水果偏好 -> 好的。/completed
+第二轮 := previous_response_id续接 -> 荔枝/completed，同一会话，记忆断言通过
+上游观测 := 两次Node HTTP；首次创建、第二次conversation存在且need_create_conversation=false
+TTS := 正式SpeechService doubao-chat自动选同账号 -> 253112bytes/48kHz/非静音，2409ms
+验收边界 := 首组口令第二轮内容拒答，不是流式失败；普通水果场景上下文通过
+保持 := 生产代码、配置、发布状态和code92/min56/deps10；无播放，无think/expert或长期验收
+```
+
 ## 豆包TTS跨批次账号队列（2026-10-15，已完成）
 
 ```text

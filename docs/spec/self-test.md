@@ -1789,3 +1789,15 @@ min/普通profile → 不触发；当前APK8071配置契约仍通过
 主服务与Android := 各并发提交3批，同账号上游峰值1，非静音48kHz WAV均成功，5272ms/2187ms
 设备 := 原生入口code90→92/deps10，pendingHealth=false、api/status=ok；仅合成验证，不播放
 ```
+
+
+## Android豆包账号重登真实验收（2026-10-15）
+
+```text
+只读预检 := 手机profile完整合法；主服务器仍Cookie-only，未发送主服务缺资料LLM
+正式Responses流式 := 临时内存会话，首轮好的。6282ms -> previous_response_id -> 荔枝4489ms
+续接证据 := 两轮completed，第二轮上游conversation已存在且need_create_conversation=false
+内容断言 := 首组口令拒答不计记忆成功；普通水果场景匹配荔枝，通过
+正式TTS := 253112bytes/48kHz/非静音/2409ms，无播放或音频落盘
+范围 := 安装代码92/min56/deps10，账号映射不改、无浏览器、秘密不导出；无生产代码修改
+```

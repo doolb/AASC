@@ -2,7 +2,13 @@
 
 当前行为以2026-10-15完成段为准；下方注明日期的旧网页桥/候选方案只供历史对照，不属于当前运行实现。
 
-完成：最终code92/min56/deps10已发布，主服务器重启健康，手机通过原生热更新入口健康提交code92。豆包同账号跨批次FIFO已启用，完整上游音频到达即交接，WAV解码不占执行权；两端同时提交三批真实TTS均成功。当前账号普通LLM仍待用户稍后补Node登录资料，详见对应task。
+完成：最终code92/min56/deps10已发布，主服务器重启健康，手机通过原生热更新入口健康提交code92。豆包同账号跨批次FIFO已启用，完整上游音频到达即交接，WAV解码不占执行权；两端同时提交三批真实TTS均成功。Android账号重登后Node资料完整，两轮Responses流式原生续接和TTS已通过；主服务器仍为Cookie-only资料，须在其账号管理中另行登录，详见对应task。
+
+## 2026-10-15 Android重登后真实验收（已完成）
+
+Android min56/code92/deps10现有启用豆包账号的nodeProfile已存在，并通过Cookie/fp一致性等既有校验；主服务器账号库仍只有Cookie，未发起其文字测试，未复制账号资料。使用Android安装代码的正式Runtime/ResponsesService，模型doubao、stream=true，临时内存会话隔离已有Responses记录；首轮“好的。”6282ms，第二轮通过previous_response_id原生续接、准确回复“荔枝”4489ms，两轮均response.completed。HTTP观测确认Node直连且第二轮need_create_conversation=false，无浏览器或映射覆盖。
+
+同账号doubao-chat正式SpeechService返回253112bytes、48kHz非静音WAV，2409ms，无播放。首组“口令”记忆测试第二轮模型拒答，但流和原生续接均成功；改用普通水果偏好后记忆断言通过，未改代码或触发风控重试。此验收不覆盖think/expert、长期令牌维护、多账号或设备听感；生产代码及发布产物保持，无需重新出包。
 
 ## 豆包TTS跨批次账号队列（2026-10-15，已完成code92发布）
 
