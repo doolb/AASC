@@ -12742,3 +12742,9 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-15] 将 Doubao Chat 音色目录与显示端回复播放发布至 LAN/WAN Offline 服务，代码版本 v98，源提交 `ce273476`。
   - 代码包 `code/code-v98.zip`：17,799,780 bytes，SHA-256 `1454216c8804f0a721f7eaf3866af1d0484871c492fac6bbbf0042999e34f435`。两端签名清单及清单引用资源大小/SHA-256 回读校验通过，版本化文件精确清理无错误。
   - 保留 dependencies v10、min APK v58、Node min seeds v86、taskCode v1；未构建完整 APK。成功发布后 `servicePackage=false`。
+
+### Offline服务代码包发布
+
+- ✅ [2026-10-15] 将显示端语音筛选与横屏选择面板等更新发布至 LAN/WAN Offline 服务，代码版本 v99，源提交 `03a479ea`。
+  - 代码包 `code/code-v99.zip`：17,802,973 bytes，SHA-256 `28be85e4ed330f67ba1b392ac5d9f8fed3c7580eb2d1533631bd01e32015e610`。LAN/WAN 签名清单一致且签名有效；清单引用资源完整 SHA-256 回读通过，版本化文件精确清理无错误。
+  - 保留 dependencies v10、min APK v58、完整 APK v50、Node min seeds v86、taskCode v1；未构建 APK。成功发布后 `servicePackage=false`。
