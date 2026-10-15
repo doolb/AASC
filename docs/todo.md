@@ -1,5 +1,7 @@
 - ⏳待方案确认 [2026-10-15] 豆包Chat独立男女音色JSON、Provider动态speaker、Chat2API GET /v1/audio/voices目录接口、灯光上方TTS方式/对应音色快选及显示端AI/Agent回复重播。用户已明确复用当前声纹页全局TTS配置及原模板优先级，各方式音色沿用Provider配置，尚未改代码。任务：`docs/task/20261015_豆包Chat音色快选与显示端回复播放.md`。
 
+- ⏳待发布/补充验收 [2026-10-15] 独立任务ZIP的min58/code96/task1已签名出包，复用deps10；ADB完成既有设备迁移、任务专用下载/完整回滚、真实WebView20次重载与旧正式源兼容验证。仍待LAN/WAN正式发布、干净首装和任务专用受管重启/启动校验耗时；四项产物需求均false，表示已出包而非已发布。任务：`docs/task/20261015_任务代码随服务包同步机制设计.md`。
+
 - ⏳待 Offline 设备验收 [2026-10-15] 本机模型收起把手半宽露出和显示端聊天 Markdown 列表 24 CSS px 缩进已随 code v95 发布 LAN/WAN；min v57 已同步两端，本轮未重建 APK。待确认 FPS/控制端把手避让、安全区、展开/收起和列表气泡内缩观感。任务：`docs/task/20261015_Offline本机模型入口边缘收起.md`、`docs/task/20261015_Offline本机模型收起把手半宽露出.md`、`docs/task/20261015_显示端聊天Markdown列表缩进修复.md`。
 
 - ⏳待新工程构建验收 [2026-10-15] Android MNN 固定 revision 的自包含预编译包和默认 APK 准备入口已入库；仍需在新 clone 环境执行 `npm run build:apk` 确认完整 APK 链路。本次未构建 APK，`minApk=false` 保持。任务：`docs/task/20261015_Android_MNN预编译运行包入库.md`。

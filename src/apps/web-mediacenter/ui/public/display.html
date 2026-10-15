@@ -6374,13 +6374,7 @@
                         var stopInstanceId = data.instanceId;
                         console.log('[显示端] 停止任务:', stopInstanceId);
                         void stopDisplayTask(stopInstanceId);
-                        var overlayEl = document.getElementById('renderTask-' + stopInstanceId);
-                        if (overlayEl) overlayEl.remove();
-                        var styleEl = document.getElementById('renderTaskStyle-' + stopInstanceId);
-                        if (styleEl) styleEl.remove();
-                        if (window._renderTaskUpdates) {
-                            delete window._renderTaskUpdates[stopInstanceId];
-                        }
+                        disposeRenderTask(stopInstanceId);
                     } else if (data.type === 'task:renderUpdate') {
                         // 渲染任务实时数据更新。该消息是高频状态推送，只更新画面，不回传
                         // commandAck，避免服务端广播后在控制端反复生成 renderUpdate 提示。
@@ -9246,34 +9240,48 @@
             return false;
         }
 
+        function disposeRenderTask(instanceId) {
+            const update = window._renderTaskUpdates && window._renderTaskUpdates[instanceId];
+            if (update) {
+                try { update({ _stop: true }); } catch (error) { console.warn('[Render] 停止旧任务失败:', error.message); }
+                delete window._renderTaskUpdates[instanceId];
+            }
+            const cleanups = window._renderTaskCleanups && window._renderTaskCleanups[instanceId] || [];
+            for (const cleanup of cleanups.splice(0)) {
+                try { cleanup(); } catch (error) { console.warn('[Render] 释放旧任务失败:', error.message); }
+            }
+            if (window._renderTaskCleanups) delete window._renderTaskCleanups[instanceId];
+            for (const prefix of ['renderTask-', 'renderTaskStyle-']) {
+                const element = document.getElementById(prefix + instanceId);
+                if (element) element.remove();
+            }
+        }
+
         function executeRenderTask(payload) {
-            var files = payload.files || [];
-            var params = payload.params || {};
-            var taskName = payload.taskName;
-            var instanceId = payload.instanceId;
+            let files = payload.files || [];
+            let params = payload.params || {};
+            let taskName = payload.taskName;
+            let instanceId = payload.instanceId;
             console.log('[Render] 渲染任务:', taskName + '/' + instanceId);
 
             function getFile(name) {
-                for (var i = 0; i < files.length; i++) {
+                for (let i = 0; i < files.length; i++) {
                     if (files[i].name === name) return base64ToUtf8(files[i].data);
                 }
                 return null;
             }
 
-            // 移除旧覆盖层（避免重连时重复创建）
-            var existingDiv = document.getElementById('renderTask-' + instanceId);
-            if (existingDiv) existingDiv.remove();
-            var existingStyle = document.getElementById('renderTaskStyle-' + instanceId);
-            if (existingStyle) existingStyle.remove();
-            if (window._renderTaskUpdates) {
-                delete window._renderTaskUpdates[instanceId];
-            }
+            // 重连或新revision重载前，先停止旧回调、计时器和事件订阅。
+            disposeRenderTask(instanceId);
+            const cleanups = [];
+            if (!window._renderTaskCleanups) window._renderTaskCleanups = {};
+            window._renderTaskCleanups[instanceId] = cleanups;
 
             // 隐藏媒体，渲染覆盖层不隐藏，z-index 在媒体之上
             // 注入 HTML
-            var html = getFile('render.html');
+            let html = getFile('render.html');
             if (html) {
-                var div = document.createElement('div');
+                let div = document.createElement('div');
                 div.id = 'renderTask-' + instanceId;
                 div.className = 'render-task-overlay';
                 div.innerHTML = html;
@@ -9281,19 +9289,23 @@
             }
 
             // 注入 CSS
-            var css = getFile('render.css');
+            let css = getFile('render.css');
             if (css) {
-                var style = document.createElement('style');
+                let style = document.createElement('style');
                 style.id = 'renderTaskStyle-' + instanceId;
                 style.textContent = css;
                 document.head.appendChild(style);
             }
 
             // 执行 JS（主线程，可访问 Canvas/DOM）
-            var js = getFile('render.js');
+            let js = getFile('render.js');
             if (js) {
-                var container = document.getElementById('renderTask-' + instanceId);
-                var api = {
+                let container = document.getElementById('renderTask-' + instanceId);
+                let api = {
+                    // 新任务可登记事件解绑、计时器取消等释放函数。
+                    onCleanup: function(callback) {
+                        if (typeof callback === 'function') cleanups.push(callback);
+                    },
                     params: params,
                     taskName: taskName,
                     instanceId: instanceId,
@@ -9303,7 +9315,7 @@
                     }
                 };
                 try {
-                    var updateFn = new Function('api', js)(api);
+                    let updateFn = new Function('api', js)(api);
                     if (typeof updateFn === 'function') {
                         if (!window._renderTaskUpdates) window._renderTaskUpdates = {};
                         window._renderTaskUpdates[instanceId] = updateFn;

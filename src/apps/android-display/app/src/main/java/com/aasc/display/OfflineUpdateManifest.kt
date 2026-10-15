@@ -17,7 +17,8 @@ data class OfflineUpdateArtifact(
     val lockSha256: String? = null,
     val groups: Map<String, OfflineUpdateArtifact> = emptyMap(),
     val contentSha256: String? = null,
-    val target: JSONObject? = null
+    val target: JSONObject? = null,
+    val taskCodeApiVersion: Int? = null
 ) {
     fun androidLayers(): List<Pair<String, OfflineUpdateArtifact>> = if (groups.isEmpty()) listOf("dependencies" to this)
         else listOf("common" to groups.getValue("common"), "android" to groups.getValue("android"))
@@ -56,7 +57,8 @@ data class OfflineUpdateManifest(
     val apkMin: OfflineMinApkArtifact?,
     val dataRepair: OfflineDataRepairArtifact? = null,
     val nodeMinSeeds: OfflineUpdateArtifact? = null,
-    val runtimeCompatibility: JSONObject? = null
+    val runtimeCompatibility: JSONObject? = null,
+    val taskCode: OfflineTaskCodeArtifact? = null
 ) {
     companion object {
         private const val SIGNATURE_ALGORITHM = "SHA256withRSA"
@@ -120,16 +122,20 @@ data class OfflineUpdateManifest(
 
             val apkMin = components.optJSONObject("apkMin")?.let { parseMinApk(it) }
             val dataRepair = components.optJSONObject("dataRepair")?.let { parseDataRepair(it) }
+            val taskCode = if (components.has("taskCode")) OfflineTaskCode.parse(components.getJSONObject("taskCode")) else null
+            val selectedCode = code.copy(requiredDependencyVersion = requiredDependencyVersion,
+                requiredLockSha256 = requiredLockSha256,
+                taskCodeApiVersion = if (codeJson.has("taskCodeApiVersion")) readPositiveInt(codeJson, "taskCodeApiVersion") else null)
+            val selectedDependencies = dependencies.copy(lockSha256 = dependencyLockSha256)
+            OfflineTaskCode.assertCombination(taskCode, selectedCode, selectedDependencies)
             return OfflineUpdateManifest(
-                code.copy(
-                    requiredDependencyVersion = requiredDependencyVersion,
-                    requiredLockSha256 = requiredLockSha256
-                ),
-                dependencies.copy(lockSha256 = dependencyLockSha256),
+                selectedCode,
+                selectedDependencies,
                 apkMin,
                 dataRepair,
                 components.optJSONObject("nodeMinSeeds")?.let { parseArtifact(it, "nodeMinSeeds") },
-                codeJson.optJSONObject("runtimeCompatibility")
+                codeJson.optJSONObject("runtimeCompatibility"),
+                taskCode
             )
         }
 

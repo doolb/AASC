@@ -2,6 +2,8 @@
 
 - [豆包Chat音色快选与显示端回复播放（方案待确认）](design/doubao-chat-voice-selection.md)
 
+- [独立任务代码 ZIP 同步机制（源码已实现，待出包迁移）](design/task-code-sync.md)
+
 - [完整 Offline APK 同步与重建](design/offline-full-apk-sync.md)
 
 - [全量配置与聊天数据 ZIP 备份](design/full-config-backup.md)

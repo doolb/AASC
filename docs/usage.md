@@ -4,6 +4,10 @@
 
 # Web MediaCenter - 使用说明
 
+## 独立任务代码更新
+
+源码支持独立任务ZIP，首批render-display/win-monitor/test-echo/webgpu-render；正式支持版min与服务制品待出包。首次迁移和构建发布步骤见 [任务代码更新](usage/task-code-sync.md)。
+
 ## 模型推理按任务准备运行库
 
 源码已实现首次模型任务下载独立ORT运行库、后续和重启后复用缓存；正式新依赖与服务制品待发布，详见 [任务依赖使用说明](usage/task-dependencies.md)。

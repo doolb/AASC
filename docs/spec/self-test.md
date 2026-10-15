@@ -1,5 +1,40 @@
 # 自测功能实现文档
 
+## 独立任务ZIP出包与ADB验证补充（2026-10-15）
+
+```text
+最终原生 := 同allserver-min/58 profile顺序执行testDebugUnitTest → 287项0失败/0错误/1既有环境跳过
+修复回归 := 旧code95或deps9且无taskCode → CURRENT；同版/新版移除taskCode仍拒绝
+产物 := min58/code96/task1签名/profile/大小/SHA/CRC通过；deps10复用；四项需求false但未发布
+实际迁移 := SM-N9500/Android9，min56/C95 → min58/C96/D10/T1，Node健康提交pending=false
+下载 := 联合只code96+task1共17799178bytes；设备隔离task1→测试2只task ZIP13149bytes
+数据 := 停服期间73文件摘要相同；隔离原生回滚96/10/1，测试结果文件摘要保持
+有效源码 := 实际HTTP render.js等于res/tasks发布源，no-store
+实际WebView := 同实例20次重载，旧800ms计时器下一回调退出，1.4秒后1计时器/1覆盖层/1回调
+旧正式源 := CURRENT/hasUpdate=false/failed=false/downloadBytes=0，截图无失败面板
+测试边界 := 隔离任务回滚未启动第二套Node；实际Node健康验证在T1；测试v2非正式产物
+仍待 := 干净首装、任务单更受管重启耗时、启动校验耗时、LAN/WAN正式发布
+```
+
+
+## 独立任务代码ZIP验证（2026-10-15）
+
+```text
+命令 := npm run test:task-code-sync → 66/66
+关联 := npm run test:task-dependencies → 106/106
+原生 := JAVA_HOME=java-26-openjdk ./gradlew :app:testDebugUnitTest -PaascVersionCode=58 --offline → 285项0失败/1既有归档环境跳过；新任务11项全通过
+构建 := 隔离白名单暂存、签名任务ZIP、版本/API/锁冲突、配置/results排除
+发布 := 仅任务上传与清单最后切换、目标基线变化拒绝、分组联合发布、任务镜像选择、精确数字清理
+读取 := catalog逐文件摘要/链接/额外文件验证；元数据/HTTP/入口/重发同源；缺失404无旧种子回退
+执行 := Node相对require来自代码目录，cwd/workDir来自数据目录；Puppeteer evaluate VM夹具验证原始源码与数据workDir
+保护 := submit/update/delete前置拒绝官方代码操作，实例/config/results保持
+原生 := 可选签名组件、任务专用预算/代码与依赖联更、旧指针、固定快照、真实组合健康、pending完整回滚、健康后精确清理
+显示 := VM同实例连续恢复20次 → 1计时器/1监听/2DOM节点；停止 → 全部为0
+样包 := 4任务6源码31019字节，zip -X暂存样包13119字节，已清理；不是正式制品
+状态 := minApk/servicePackage/taskCodePackage=true，dependenciesPackage=false
+边界 := 未正式签名出包/发布/设备迁移；真实Chromium、真机首装/升级/流量/视觉/重连耗时待验收
+```
+
 ## MMD-AR 分部位阻尼（2026-10-15）
 
 ```text

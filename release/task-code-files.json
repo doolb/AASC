@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "requiredApkVersionCode": 58,
+  "retiredTaskNames": [],
+  "tasks": [
+    {"taskName":"render-display","files":["task.js","render.js","render.html"],"codeRequirement":{"minimumVersion":96,"taskCodeApiVersion":1},"dependencyRequirement":null},
+    {"taskName":"win-monitor","files":["task.js"],"codeRequirement":{"minimumVersion":96,"taskCodeApiVersion":1},"dependencyRequirement":{"version":10,"lockSha256":"77c314234de175b168b94517b1cde0e840d26d05f1ae1ad7bc5767102e84e16a"}},
+    {"taskName":"test-echo","files":["task.js"],"codeRequirement":{"minimumVersion":96,"taskCodeApiVersion":1},"dependencyRequirement":null},
+    {"taskName":"webgpu-render","files":["task.js"],"codeRequirement":{"minimumVersion":96,"taskCodeApiVersion":1},"dependencyRequirement":null}
+  ]
+}

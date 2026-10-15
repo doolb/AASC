@@ -114,6 +114,10 @@ function validateManifestComponents(manifest) {
         throw new Error('Offline 更新清单 schemaVersion/components 无效');
     }
     const { code, dependencies, apkMin } = manifest.payload.components;
+    if (manifest.payload.components.taskCode !== undefined) {
+        require('../../src/apps/server/modules/aasc/task-code-contract').validateArtifact(
+            manifest.payload.components.taskCode, manifest.payload.components);
+    }
     sharedUpdate.validateTaskDependencies(manifest.payload.components.taskDependencies);
     if (code?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(code.runtimeCompatibility);
     if (apkMin?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(apkMin.runtimeCompatibility);
@@ -572,8 +576,52 @@ async function createDataRepairArtifacts(options = {}) {
     }
 }
 
+/** 独立任务包与联合服务更新复用相同构建流程；签名之前校验完整候选组合。 */
+async function prepareTaskCode(options, projectRoot, workDirectory, outputDir, source) {
+    const contract = require('../../src/apps/server/modules/aasc/task-code-contract');
+    const version = Number(options.taskCodeVersion);
+    assertVersion(version, 'taskCodeVersion');
+    const root = path.join(workDirectory, 'task-code');
+    const inner = await require('./task-code-package').stageTaskCode(projectRoot, root, version, options);
+    const relativeUrl = `task-code/task-code-v${version}.zip`;
+    const destination = path.join(outputDir, relativeUrl);
+    if (fs.existsSync(destination)) throw new Error(`任务代码包版本已存在，拒绝覆盖: ${destination}`);
+    const archive = path.join(workDirectory, `task-code-v${version}.zip`);
+    await createZip(root, archive, options.zipRunner || execFileAsync);
+    return { archive, destination, component: { version, ...contract.compatibility(inner), source,
+        bundleSha256: inner.bundleSha256, ...(await describeArtifact(archive, relativeUrl)) } };
+}
+
+async function createTaskCodeArtifacts(options) {
+    const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
+    const outputDir = path.resolve(options.outputDir || path.join(projectRoot, 'release/offline-update/output'));
+    const keyPair = await loadOfflineUpdateKeyPair(options);
+    const current = await loadCurrentManifest(options, keyPair.publicKeyPem);
+    if (!current) throw new Error('独立任务更新必须基于现有签名清单');
+    validateManifestComponents(current);
+    assertNewVersion(Number(options.taskCodeVersion), current.payload.components.taskCode?.version, 'taskCodeVersion');
+    const work = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-task-code-'));
+    try {
+        const staged = await prepareTaskCode(options, projectRoot, work, outputDir, readGitSourceMetadata(projectRoot));
+        const payload = { ...current.payload, generatedAt: options.generatedAt || new Date().toISOString(),
+            components: { ...current.payload.components, taskCode: staged.component } };
+        const manifest = { payload, signature: signManifestPayload(payload, keyPair.privateKeyPem) };
+        verifySignedManifest(manifest, keyPair.publicKeyPem);
+        validateManifestComponents(manifest);
+        const manifestPath = path.join(outputDir, 'manifests', `manifest-task-code-v${staged.component.version}.json`);
+        if (fs.existsSync(manifestPath)) throw new Error('任务清单版本已存在');
+        await fs.promises.mkdir(path.dirname(staged.destination), { recursive: true });
+        await fs.promises.mkdir(path.dirname(manifestPath), { recursive: true });
+        await atomicallyCopyToOutput(staged.archive, staged.destination);
+        await atomicallyWriteOutput(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+        return { requestedMode: 'task-code-only', mode: 'task-code-only', manifest, manifestPath,
+            taskCodeArchivePath: staged.destination, publicKeyPem: keyPair.publicKeyPem, publicKeyPath: keyPair.publicKeyPath };
+    } finally { await fs.promises.rm(work, { recursive: true, force: true }); }
+}
+
 async function createOfflineUpdateArtifacts(options = {}) {
     const requestedMode = String(options.mode || '').trim();
+    if (requestedMode === 'task-code-only') return createTaskCodeArtifacts(options);
     if (requestedMode === 'data-repair') return createDataRepairArtifacts(options);
     if (!['code-only', 'all'].includes(requestedMode)) throw new Error('更新模式必须是 code-only 或 all');
     const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
@@ -590,6 +638,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
         throw new Error('当前 Offline 更新清单 schemaVersion 不支持');
     }
     assertNewVersion(codeVersion, currentComponents.code?.version, 'codeVersion');
+    if (options.taskCodeVersion !== undefined) assertNewVersion(Number(options.taskCodeVersion), currentComponents.taskCode?.version, 'taskCodeVersion');
 
     const packageLockPath = path.join(projectRoot, 'package-lock.json');
     const packageJsonPath = path.join(projectRoot, 'package.json');
@@ -669,6 +718,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
                 ...currentComponents,
                 code: {
                     version: codeVersion,
+                    taskCodeApiVersion: 1,
                     requiredDependencyVersion: dependencyVersion,
                     requiredLockSha256: lockSha256,
                     runtimeCompatibility: RUNTIME_COMPATIBILITY,
@@ -687,6 +737,10 @@ async function createOfflineUpdateArtifacts(options = {}) {
             payload.components.taskDependencies = stagedDependencies.taskDependencies;
         }
 
+        const stagedTaskCode = options.taskCodeVersion === undefined ? null
+            : await prepareTaskCode(options, projectRoot, workDirectory, outputDir, source);
+        if (stagedTaskCode) payload.components.taskCode = stagedTaskCode.component;
+
         const manifest = {
             payload,
             signature: signManifestPayload(payload, privateKeyPem)
@@ -698,6 +752,10 @@ async function createOfflineUpdateArtifacts(options = {}) {
         if (fs.existsSync(manifestPath)) throw new Error(`更新清单版本文件已存在，拒绝覆盖: ${manifestPath}`);
 
         await atomicallyCopyToOutput(stagedCodeArchive, codeDestination);
+        if (stagedTaskCode) {
+            await fs.promises.mkdir(path.dirname(stagedTaskCode.destination), { recursive: true });
+            await atomicallyCopyToOutput(stagedTaskCode.archive, stagedTaskCode.destination);
+        }
         codeArchivePath = codeDestination;
         if (!reuseNodeMinSeeds) {
             await fs.promises.mkdir(path.dirname(nodeMinSeedsArchivePath), { recursive: true });
@@ -720,6 +778,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
             manifest,
             manifestPath,
             codeArchivePath,
+            taskCodeArchivePath: stagedTaskCode?.destination || null,
             nodeMinSeedsArchivePath: finalNodeMinSeedsArchivePath,
             dependenciesArchivePath: null,
             dependencyArtifacts: stagedDependencies?.artifacts.map(artifact => path.join(outputDir, artifact.relativeUrl)) || [],
@@ -747,7 +806,7 @@ function parseCliArguments(argv) {
             continue;
         }
         const value = equalIndex >= 0 ? token.slice(equalIndex + 1) : argv[++index];
-        if (!['mode', 'code-version', 'dependency-version', 'output-dir', 'manifest-file',
+        if (!['mode', 'code-version', 'dependency-version', 'task-code-version', 'output-dir', 'manifest-file',
             'data-repair-file', 'repair-version', 'repair-id', 'required-code-version',
             'required-apk-version-code', 'required-data-version', 'target-data-version', 'compatible-data-versions',
             'repair-capabilities', 'release-notes', 'sensitive', 'reuse-node-min-seeds', 'dependency-roots', 'node-abi'].includes(key)) {
@@ -757,6 +816,7 @@ function parseCliArguments(argv) {
         const fieldName = key.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
         if (Object.prototype.hasOwnProperty.call(parsed, fieldName)) throw new Error(`参数 --${key} 不能重复`);
         const numericKeys = new Set([
+            'task-code-version',
             'code-version',
             'dependency-version',
             'repair-version',
@@ -793,7 +853,8 @@ async function runCli(argv = process.argv.slice(2)) {
         if (result.autoDependencyUpgrade) {
             console.log('检测到 package-lock.json 指纹变化，已自动生成新的 dependencies 包');
         }
-        console.log(`代码包: ${result.codeArchivePath}`);
+        if (result.codeArchivePath) console.log(`代码包: ${result.codeArchivePath}`);
+        if (result.taskCodeArchivePath) console.log(`任务代码包: ${result.taskCodeArchivePath}`);
         if (result.nodeMinSeedsArchivePath) console.log(`Node min 初始配置和任务包: ${result.nodeMinSeedsArchivePath}`);
         for (const file of result.dependencyArtifacts || []) console.log(`依赖组: ${file}`);
         if (result.dataRepairArchivePath) console.log(`数据修复包: ${result.dataRepairArchivePath}`);

@@ -2,6 +2,8 @@
 
 - [豆包Chat音色快选与显示端回复播放伪代码（尚未实现）](spec/doubao-chat-voice-selection.md)
 
+- [独立任务代码 ZIP 同步伪代码（源码已实现，待出包迁移）](spec/task-code-sync.md)
+
 - [完整 Offline APK 同步伪代码](spec/offline-full-apk-sync.md)
 
 - [全量配置与聊天数据 ZIP 备份伪代码](spec/full-config-backup.md)

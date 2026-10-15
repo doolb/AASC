@@ -52,6 +52,8 @@ function getRuntimeVersionInfo(options = {}) {
     const lastUpdate = readJsonObject(path.join(projectRoot, 'updates/subserver/update-result.json'));
 
     return {
+        ...(require('../task-engine/task-code-catalog').getTaskCodeCatalog()
+            ? { taskCode: require('../task-engine/task-code-catalog').getTaskCodeCatalog().status() } : {}),
         apk: serverVersion || packageVersion,
         code: formatVersion(serviceSource.codeVersion, packageVersion),
         dependencies: formatVersion(serviceSource.dependencyVersion),

@@ -24,6 +24,54 @@
   - `POST /alice/user_voice/recommend`返回`data.ugc_voice_list/has_more`，每项`id/name/style_id`；官网朗读使用`style_id`作为`speaker`，没有单独`ttsid`字段。IndexedDB `samantha-web/store/default-chat-voice-store`保存`state.currentVoice`。
   - 浏览器女声首批与当前会话Cookie的Node裸URL目录请求均HTTP200/code0、30项、has_more=true。分类参数和示例音色记录到`docs/design/chat2api-doubao-web.md`，对应spec补充调研伪代码，todo仅保留尚未实施的可选接入与验收。不保存凭据、不确认新音色、不发送聊天或合成，不修改生产代码或Offline产物状态。
 
+### 独立任务ZIP正式发布与ADB验收
+
+- ✅ [2026-10-15] 按用户“发布，用ADB测试”将LAN/WAN同步为服务v96、min v58、任务v1，复用deps10/seeds86/repair3及既有任务依赖。
+  - 发布输入为上一轮`manifest-code-v96.json`和最终`manifest-apk-min-v58.json`；版本化文件依次为`code/code-v96.zip`（17,786,059字节）、`task-code/task-code-v1.zip`（13,119字节）、`apk/aasc-display-offline-min-v58.apk`（90,451,629字节），摘要沿用上条出包记录。RSA清单与APK签名/profile、大小/SHA、ZIP CRC通过，再上传版本文件并原子切换清单。
+  - 优先执行`npm run publish:offline-update -- --mode=code-only ...`；WAN正式清单切换后，跨网重复下载复核改为同一发布模块在WAN本机执行，源站完整HTTP校验成功后才终止原重复下载并精确清理。min阶段复用`publishOfflineUpdate`分别发布两端，均先完整HTTP复核再清理；未改发布器源码或规则。最终LAN与WAN源站各13项共337,712,555字节完整摘要通过，LAN/WAN公网入口签名清单与最终候选完全相同，13项HTTP HEAD大小全部匹配；没有将源站摘要校验表述为全量跨公网下载。
+  - 精确清理旧code95/min57成功，WAN复核清理0错误/0剩余待删；保留code96/task1/min58、所有当前依赖与LAN完整APK v50及非版本文件，不清理数据或模型。四项出包状态继续false，未重建任何包。
+  - ADB SM-N9500/Android9：正式WAN源的设备隔离C96/D10目录识别TASK_CODE_ONLY、预算13,119字节并成功下载/验签/应用T1；render-display三个文件与仓库逐字节相同，隔离结果文件及实际应用活动指针保持。该隔离事务未启动第二套Node，不作为任务单更重启耗时验收。
+  - 实际应用冷启动检查服务CURRENT/0字节/无错误，原生提示无min更新；WebView内部健康接口HTTP200确认APK58/code96/deps10/task1 verified，pendingHealth=false、previous=null。已安装base.apk SHA256与正式min58相同；20次实际WebView重载等待1.4秒后1计时器/1覆盖层/1回调，截图无失败面板。
+  - 临时设备探针/隔离目录、独占ADB转发及WAN发布辅助目录已清理，原有19222转发保留；证据留于忽略目录`.cache/adb-task-publish-20261015/`。本轮仅发布与设备验证，按纯发布例外只更新changelog；干净首装和受管重启/校验耗时仍未验收。
+
+### 独立任务ZIP出包与ADB验收
+
+- ✅ [2026-10-15] 完成min58/code96/task1签名候选与ADB验证，保持四独立任务范围，内置任务随服务包。
+  - 修复`OfflineUpdateManager.kt`面对旧服务/依赖源缺少任务组件时误报移除；先忽略过期源，同版/新版移除仍拒绝。`OfflineTaskCodeTest.kt`补回归；最终原生287项0失败/0错误/1既有环境跳过。
+  - `apk/aasc-display-offline-min-v58.apk`：90,451,629字节，SHA256 `116f1db61cc8151b59104c058b4860c53d446429a841681fbbf9fd1477a17117`；`code/code-v96.zip`：17,786,059字节，SHA256 `71ab860fed4498ab1fd860e53788c67f6bb4ca8840a8bca81fe16a78a390c76e`；`task-code/task-code-v1.zip`：13,119字节，SHA256 `d0433573218d05bc63d7c00b1b4936c633db7c41f4ebe99f43637de6fc608e16`。复用deps10，最终清单`release/offline-update/output/manifests/manifest-apk-min-v58.json`；RSA/APK签名、profile、大小/SHA与CRC通过，服务1088文件与源码匹配。
+  - SM-N9500 Android9从min56/code95迁移到min58/code96/deps10/task1，真实Node健康提交；只下载code和task共17,799,178字节，停服期间73个配置/任务数据文件摘要保持，HTTP render.js等于发布源。设备隔离副本任务单更仅下载13,149字节测试v2，原生回滚96/10/1且测试数据保持；测试v2不发布。
+  - 最终APK访问实际旧正式95源返回CURRENT/0字节/无失败；真实WebView20次重载等待1.4秒后保留1计时器/1覆盖层/1回调，截图无失败面板。早期默认profile Gradle资源目录冲突后改同min profile顺序测试通过。
+  - 同步design/spec/task/self-test/todo及.src；成功生成最新产物后minApk/servicePackage/taskCodePackage=false，dependenciesPackage=false。APK/ZIP不入Git，未发布LAN/WAN、未重启主服务；干净首装及受管重启/校验耗时仍待补充。
+
+### 独立任务代码 ZIP 同步
+
+- ✅ [2026-10-15] 实现独立任务ZIP、服务/依赖兼容约束和Android完整组合更新回滚。
+  - 新增`release/task-code-files.json`、`task-code-contract.js`、`task-code-package.js`、`task-code-catalog.js`、`OfflineTaskCode.kt`、`OfflineReleaseState.kt`；扩展构建/发布/镜像、Android清单/首装/任务单独下载/固定启动上下文/健康、TaskIO/TaskManager/WS/HTTP/执行器及显示端释放。产物为`task-code/task-code-vN.zip`；不写入原任务数据目录。
+  - 官方代码写入与整任务删除在生命周期变化前拒绝；任务列表、元数据、执行和重发使用同一revision，缺失代码404不回退旧种子。Puppeteer验证中修复重复JSON编码源码造成run未定义，并保留数据workDir。原生更新提示包含任务版本。
+  - `npm run test:task-code-sync`66/66、`npm run test:task-dependencies`106/106通过；Gradle`:app:testDebugUnitTest`285项0失败/1既有归档环境跳过，新增11项任务原生用例全通过。覆盖签名/兼容冲突/ZIP和目录异常/任务下载预算/完整回滚/HTTP与有效读取/只读前置保护；VM中连续20次显示端重载无计时器、监听和DOM累积。入口语法、文档链接和git diff --check通过。
+  - 首批4任务6源码文件31,019字节；同构建器`zip -X`参数的隔离样包13,119字节（约12.8KiB），已清理，不是正式签名制品。min配置升58，首批任务服务下界96/API1，win-monitor固定deps10/当前锁摘要。正式出包前核对版本占用。
+  - 同步design/spec/task/todo/usage/self-test与AGENTS/rules；`minApk=true`、`servicePackage=true`、`taskCodePackage=true`、`dependenciesPackage=false`。未正式签名出包、发布LAN/WAN、重启主服务或迁移设备；todo仅保留出包与真机验收。
+
+### 独立任务代码 ZIP 同步机制设计修订
+
+- ✅ [2026-10-15] 明确任务包对服务代码包的必需依赖，补齐版本区间、任务 API 和实际代码包身份校验。
+  - 同步任务同步 design/spec/task、Offline/远程任务关联文档与 todo；逐任务 codeRequirement 聚合为包级兼容区间/API，区间无交集或 API 冲突构建拒绝。候选按 taskCode→code→dependencies 解析，再合并任务对生产依赖的要求；依赖已满足而代码版本不足时仍须联更代码。
+  - 仅代码包发布也要验证现有任务是否兼容；代码依赖声明变化进入任务 revision 和包身份。继续仅设计，未修改运行代码、设备、发布状态，未执行程序测试、构建或发布。
+
+- ✅ [2026-10-15] 补充任务代码对基础依赖包版本的约束设计。
+  - 同步任务同步 design/spec/task、Offline/远程任务关联文档与 todo；新增成对 requiredDependencyVersion/requiredLockSha256、逐任务声明聚合、与服务现有依赖锁定共同校验，明确匹配时单任务包下载、不匹配时必要的服务/依赖联合更新及完整回滚。
+  - 以实际共享清单和 Android 校验规则确认服务已精确绑定依赖组合版本与锁指纹，不把更高依赖版本视为自动兼容；多个任务要求冲突时构建拒绝，仅修改约束也更新任务包身份。仍仅设计，未改运行代码/设备/发布状态，未运行程序测试、构建或发布。
+
+- ✅ [2026-10-15] 按用户“单独的 zip 文件、先设计”修订任务同步方案为独立产物，替代上一版嵌入服务包建议。
+  - 更新 `docs/design/task-code-sync.md`、对应 spec/task、设计与规格索引、Offline/远程任务关联文档及 todo；定义 `task-code/task-code-vN.zip`、独立版本、签名 `components.taskCode`、按变化组件下载和 code/dependencies/taskCode 完整组合回滚。
+  - 设计补齐支持版 min/桥接服务迁移、任务包兼容约束、独立 taskCodePackage 状态与精确清理规范扩展；任务代码以外的数据仍由原任务目录维护。仅修订文档，未实现、运行程序测试、操作设备、修改实际发布状态、构建或发布。
+
+### 任务代码随服务包同步机制（初版设计，已由独立 ZIP 方案替代）
+
+- ✅ [2026-10-15] 完成“暂时只同步任务代码文件”的设计、L4 伪代码与后续实施计划。
+  - 新增 `docs/design/task-code-sync.md`、`docs/spec/task-code-sync.md`、`docs/task/20261015_任务代码随服务包同步机制设计.md`，同步索引与 todo；明确唯一代码源为 `res/tasks`、在服务包 `src/` 内生成任务代码清单/快照、版本代码与可变数据分离，复用既有签名切换、显示端派发及回滚。
+  - 只读确认 `release/task/render-display/render.js` 与设备同为旧副本，且 Android 服务 ZIP 白名单不接受顶层 `res/`；方案首批四任务六代码文件，共 31,019 字节源码，不包含 results/配置/参数/日志/模型。文档链接与格式校验通过；仅文档，未修改运行代码、设备或发布状态，未运行测试、构建或发布；受管只读策略及实施待评审。
+
 ### 豆包认证子域恢复正式发布与真机验证
 
 - ✅ [2026-10-15] 固定www/accounts双来源恢复随code95发布，ADB正常入口及刷新均不再出现非法请求。

@@ -252,7 +252,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
               let target = 'server';
               let entryFile = 'task.js';
               try {
-                const entryPath = path.join(taskManager.taskIO.tasksDir, t.taskName, 'task.js');
+                const entryPath = taskManager.taskIO.resolveCodePath(t.taskName, 'task.js');
                 const mod = require(entryPath);
                 if (mod.params && Array.isArray(mod.params)) params = mod.params;
                 if (mod.widget) widget = mod.widget;

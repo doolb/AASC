@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## 独立任务代码ZIP（2026-10-15）
+
+`npm run test:task-code-sync`66/66、`npm run test:task-dependencies`106/106通过；Android JVM `:app:testDebugUnitTest`285项0失败/1既有归档环境跳过，新任务原生11项全通过。定向夹具覆盖独立签名ZIP、任务与服务/依赖兼容性、白名单/链接/越界/额外文件、有效HTTP/入口/重发来源、Node和Puppeteer代码与数据目录分离、受管前置只读、任务单独下载预算、完整组合回滚和精确清理。VM中同实例恢复20次后仍只有一个计时器、一组监听和一份DOM，停止后为零；Puppeteer用例使用evaluate VM夹具，未启动真实Chromium。
+
+首批4任务6源码文件31,019字节，同构建参数样ZIP13,119字节；未生成正式签名资源、未发布或操作设备。真机min迁移、首装、实际网络流量/重连耗时、render-display视觉留待发布后验收。使用步骤见[独立任务代码更新](usage/task-code-sync.md)。
+
 ## MMD-AR VaM 分部位阻尼（2026-10-15）
 
 `tests/mmd-ar-human-damping.test.js`验证差异化默认、非法输入/副本隔离、真实Ammo调参耗散以及真实米娅10组逐部位牵引保持/Off释放。`mmd-ar-human-physics.test.js`补充连续局部合并与切换模式保留；既有重力/限位/多点/资源回归继续执行。`mmd-ar-human-physics-browser.test.js`新增面板十组默认展示、input立即生效、跨部位保留与恢复默认，再执行真实拖点、重力、模式和窄屏流程。

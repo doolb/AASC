@@ -264,6 +264,7 @@ class TaskManager extends EventEmitter {
 
   /** 执行 draft 实例（draft → pending → running → completed/failed） */
   async runInstance(taskName, instanceId) {
+    if (this.taskIO.taskCodeCatalog?.isManaged(taskName)) this.taskIO.taskCodeCatalog.task(taskName);
     const idx = await this.taskIO.getIndex(taskName).catch(() => []);
     const entry = idx.find(e => e.instanceId === instanceId);
     if (!entry) return { success: false, error: '实例不存在' };
@@ -508,7 +509,7 @@ class TaskManager extends EventEmitter {
   async _forwardToDisplay(task, instanceId, forwardParams) {
     const isRestoring = this._isRestoring;
     let forwardFiles = task.files || [];
-    if (forwardFiles.length === 0 && task.taskType === 'user' && task.entryFile) {
+    if (this.taskIO.taskCodeCatalog?.isManaged(task.taskName) || forwardFiles.length === 0 && task.taskType === 'user' && task.entryFile) {
       forwardFiles = await this.taskIO.readTaskFiles(task.taskName, null);
     }
 
@@ -520,6 +521,10 @@ class TaskManager extends EventEmitter {
         builtinId: task.builtinId || null,
         entryFile: task.entryFile,
         files: forwardFiles,
+        ...(this.taskIO.taskCodeCatalog?.isManaged(task.taskName) ? {
+          revision: this.taskIO.taskCodeCatalog.task(task.taskName).revision,
+          taskCodeVersion: this.taskIO.taskCodeCatalog.context.version
+        } : {}),
         params: forwardParams || task.params || {},
         env: task.env || 'auto',
         mode: task.mode || 'one-shot'
@@ -642,6 +647,7 @@ class TaskManager extends EventEmitter {
   }
 
   async submit(task, options = {}) {
+    this.taskIO.assertTaskWritable(task.taskName, task.files || []);
     if (this.instances.size >= this.maxInstances) {
       throw new Error('超出最大实例数 (' + this.maxInstances + ')');
     }
@@ -729,6 +735,8 @@ class TaskManager extends EventEmitter {
     try {
       const result = await runner.run({
         entryFile: task.entryFile,
+        codeDir: path.dirname(this.taskIO.resolveCodePath(task.taskName, task.entryFile)),
+        entryPath: this.taskIO.resolveCodePath(task.taskName, task.entryFile),
         workDir: this.taskIO._taskPath(task.taskName),
         context,
         instanceId,
@@ -858,7 +866,7 @@ class TaskManager extends EventEmitter {
       } else {
         // 用户上传服务：require() 加载，清理缓存支持重新上传
         const entryFile = task.entryFile || 'service.js';
-        const servicePath = path.resolve(this.taskIO._taskPath(task.taskName), entryFile);
+        const servicePath = this.taskIO.resolveCodePath(task.taskName, entryFile);
         if (!require('fs').existsSync(servicePath)) {
           throw new Error('服务入口文件不存在: ' + entryFile);
         }
@@ -1068,6 +1076,7 @@ class TaskManager extends EventEmitter {
   }
 
   async deleteTask(taskName) {
+    this.taskIO.assertTaskWritable(taskName);
     // 清除此任务在内存中的所有实例
     for (const [id, inst] of this.instances) {
       if (inst.taskName === taskName) {
@@ -1084,6 +1093,7 @@ class TaskManager extends EventEmitter {
   }
 
   async updateTask(taskName, updates = {}) {
+    this.taskIO.assertTaskWritable(taskName, updates.files || []);
     const toReplace = (updates.files || []).filter(f => f.action === 'replace' || !f.action);
     const toDelete = (updates.files || []).filter(f => f.action === 'delete').map(f => f.name);
 

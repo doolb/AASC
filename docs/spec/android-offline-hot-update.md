@@ -1,5 +1,21 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+## 任务代码同步设计入口（2026-10-15，源码已接入，待出包/真机验收）
+
+```text
+历史无任务指针兼容行为 := 服务包只携带 src 和 package 文件，任务目录代码保持原值
+扩展 := task-code-package → 独立 task-code-vN.zip → 签名 taskCode 组件 → 独立版本目录 catalog → 原任务消息派发
+任务代码包依赖 := requiredCodeVersion / maximumCodeVersion / taskCodeApiVersion，必需满足
+候选选择顺序 := taskCode→code→dependencies，合并 taskCode 对 dependencies 的额外要求
+任务依赖约束 := requiredDependencyVersion + requiredLockSha256，与服务锁定规则同时满足
+不满足 := 兼容联合更新；无兼容组合则拒绝；回滚包含依赖版本/锁指纹/组身份
+可变数据 := 原 tasksDir 的配置、参数、实例、results、日志和输入输出
+首次迁移 := 支持新组件的 min 原生更新器 + 支持启动任务上下文的桥接服务
+版本切换与回滚 := 扩展现有服务事务为 code/dependencies/taskCode 完整组合
+```
+
+完整伪代码见 [任务代码同步](task-code-sync.md)；该扩展源码已接入，待出包/真机验收，不作为当前服务包能力。
+
 ## Offline 热更旧版本目录回收（2026-10-13，已实现）
 
 ```text
