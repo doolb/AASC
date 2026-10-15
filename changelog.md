@@ -1,3 +1,13 @@
+### 独立任务ZIP正式发布与ADB验收
+
+- ✅ [2026-10-15] 按用户“发布，用ADB测试”将LAN/WAN同步为服务v96、min v58、任务v1，复用deps10/seeds86/repair3及既有任务依赖。
+  - 发布输入为上一轮`manifest-code-v96.json`和最终`manifest-apk-min-v58.json`；版本化文件依次为`code/code-v96.zip`（17,786,059字节）、`task-code/task-code-v1.zip`（13,119字节）、`apk/aasc-display-offline-min-v58.apk`（90,451,629字节），摘要沿用上条出包记录。RSA清单与APK签名/profile、大小/SHA、ZIP CRC通过，再上传版本文件并原子切换清单。
+  - 优先执行`npm run publish:offline-update -- --mode=code-only ...`；WAN正式清单切换后，跨网重复下载复核改为同一发布模块在WAN本机执行，源站完整HTTP校验成功后才终止原重复下载并精确清理。min阶段复用`publishOfflineUpdate`分别发布两端，均先完整HTTP复核再清理；未改发布器源码或规则。最终LAN与WAN源站各13项共337,712,555字节完整摘要通过，LAN/WAN公网入口签名清单与最终候选完全相同，13项HTTP HEAD大小全部匹配；没有将源站摘要校验表述为全量跨公网下载。
+  - 精确清理旧code95/min57成功，WAN复核清理0错误/0剩余待删；保留code96/task1/min58、所有当前依赖与LAN完整APK v50及非版本文件，不清理数据或模型。四项出包状态继续false，未重建任何包。
+  - ADB SM-N9500/Android9：正式WAN源的设备隔离C96/D10目录识别TASK_CODE_ONLY、预算13,119字节并成功下载/验签/应用T1；render-display三个文件与仓库逐字节相同，隔离结果文件及实际应用活动指针保持。该隔离事务未启动第二套Node，不作为任务单更重启耗时验收。
+  - 实际应用冷启动检查服务CURRENT/0字节/无错误，原生提示无min更新；WebView内部健康接口HTTP200确认APK58/code96/deps10/task1 verified，pendingHealth=false、previous=null。已安装base.apk SHA256与正式min58相同；20次实际WebView重载等待1.4秒后1计时器/1覆盖层/1回调，截图无失败面板。
+  - 临时设备探针/隔离目录、独占ADB转发及WAN发布辅助目录已清理，原有19222转发保留；证据留于忽略目录`.cache/adb-task-publish-20261015/`。本轮仅发布与设备验证，按纯发布例外只更新changelog；干净首装和受管重启/校验耗时仍未验收。
+
 ### 独立任务ZIP出包与ADB验收
 
 - ✅ [2026-10-15] 完成min58/code96/task1签名候选与ADB验证，保持四独立任务范围，内置任务随服务包。
