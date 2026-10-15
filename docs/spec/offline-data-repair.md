@@ -1,6 +1,6 @@
 # Offline 通用数据修复包实现规格（伪代码）
 
-## Qwen API 累计修复 v4（2026-10-15，源码完成待出包）
+## Qwen API 累计修复 v4（2026-10-15，已出包未发布）
 
 ```text
 已有声明 := 签名repair事务 + readVersion + config公开TTS读取/保存 + 官方3.1目录 + v3阶段迁移
@@ -19,6 +19,8 @@
 成功 → repairId及版本记录 → 再次执行跳过
 构建 := 配套新服务代码包 + data-repair-v4.zip + 新首装种子ZIP + 保留其他组件的签名清单
 实现验证 := npm数据修复71项通过；迁移与配置36项通过；双端快选22项通过（部分重叠）
+构建结果 := code104 + repair4 + seeds104数据4；13项本地完整大小/SHA与签名通过，584代码文件逐字节一致
+后续发布 := 先code-only使用manifest-code-v104，再data-repair使用manifest-data-repair-v4；当前未执行
 发布 := 本阶段未授权；不提前切换LAN/WAN清单
 ```
 

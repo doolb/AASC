@@ -1,9 +1,16 @@
+### Qwen修复v4出包校验
+
+- ✅ [2026-10-15] 用现有npm脚本构建配套code104、data-repair4与node-min-seeds104，release数据基线真实升至4，未发布LAN/WAN或安装设备。
+  - code/code-v104.zip：4,891,319字节，SHA256 e2eb500a78ece29b13d34973759f00ce200be9022882a386badfd745bd07779a；data/data-repair-v4.zip：2,520字节，SHA256 cfe687890f025f8375e4c844b5d7751ae9077579deefdd4c253c09d99acd7f89；node-min-seeds/node-min-seeds-v104.zip：37,176字节，SHA256 78860f56c7fb565d5fbbad017683970d62057ddd6d9c21c60b82498639a96240。最终manifest-data-repair-v4.json要求code104、修复前数据0～3、目标4，沿用min58/依赖10/任务1；另保留先行服务104候选清单供分步发布。
+  - 13项引用共324,819,329字节本地完整大小/SHA核验、RSA/schema/ZIP CRC及脚本摘要通过，584项服务文件逐字节一致；种子38文件、基线4与release一致且无账号，原发行种子无旧Qwen覆盖，业务配置不变。源码来源9fb6f035，gitDirty=true如实记录无关工作区改动。
+  - 构建器按既有规则同时生成Node子显示端独立104 ZIP/签名元数据；本次不发布任何归档，不重建APK/依赖/任务ZIP。servicePackage=false只表示已构建，其余状态保留；代码、状态与基线上传Git，产物/缓存不提交。
+
 ### Qwen API旧默认配置数据修复v4
 
 - ✅ [2026-10-15] 按用户确认实现累计数据修复v4，已知旧模型/默认及三业务显式音色迁移到Qwen Audio3.1/乔小娇，保护有效3.1、自定义模型/未知音色及自定义映射，累计数据0～3到4。
   - 新增qwen-api-defaults-v4/repair.js；runner只开放getPublicTtsProviderSettings/setTtsProviderSettings，seed-worker纳入userconfig回滚快照；config保存恢复旧模型隐藏的已存语速，显式新语速仍优先，凭证/独立速度/共享音量保留。
   - npm数据修复71/71、迁移与配置36/36、双端快选22/22通过（部分重叠），包含真实隔离业务服务、数据0～3种子提交、双配置/内存/数据版本回滚与脱敏边界；首轮隐藏语速问题已修复，失败状态夹具同步现有rolled-back。未操作手机或运行实例配置。
-  - 当前正式服务103，配套服务104/修复4/新种子尚待构建，servicePackage=true，其余标记保留；LAN/WAN发布尚未授权。代码及状态上传Git，APK/ZIP/缓存不提交。
+  - 配套服务104/修复4/种子104（基线4）已签名出包；servicePackage=false，其余标记保留；LAN/WAN仍103，发布尚未执行。代码及状态上传Git，APK/ZIP/缓存不提交。
 
 ### v102设备Qwen旧配置修正
 
