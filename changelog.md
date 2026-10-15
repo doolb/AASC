@@ -1,3 +1,10 @@
+### Offline min APK v57 外网发布
+
+- ✅ [2026-10-15] 将本机模型入口边缘收起调整与 Chat2API 外部网页重复打开修复合入 Offline min v57，并仅发布到外网。
+  - `release/apkbuild/allserver-min/app.json` 升至 versionCode 57 / `0.2.57-offline-min`。APK 为 89,931,433 bytes，SHA-256 `195cd6ac1bfb0fb3088582b6d9bc67f3c335b9214f8b3dc216bc359776c10bc4`；签名证书与外网 v56 一致。
+  - 外网签名清单现为 code v92、dependencies v10、min APK v57；清单 SHA-256 `ada88b932a7c672ae0f32e4483880389f9031cbc2059bb42f9b9e2c154fdd83d`。12 个组件的外网文件大小/SHA-256 与签名清单一致、HTTP Content-Length 全部通过，新 APK 首 1 MiB Range 与本地产物一致；旧 min 数字版本按规则清理，无错误。LAN 未修改。
+  - Offline 状态为 `minApk=false`、`servicePackage=true`、`dependenciesPackage=false`；未构建或发布完整 APK。
+
 ### Android Chat2API 外部网页
 
 - ✅ [2026-10-15] 修复 Offline APK 中 Qwen 外部网页取消后再次打开导致的崩溃。

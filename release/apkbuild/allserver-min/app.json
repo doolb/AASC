@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "embeddedNode": true,
   "updateOnly": true,
-  "versionCode": 56,
-  "versionName": "0.2.56-offline-min",
+  "versionCode": 57,
+  "versionName": "0.2.57-offline-min",
   "verifyRuntime": true,
   "features": [
     "display",
