@@ -6,6 +6,12 @@
 
 Qwen API默认模型为`qwen-audio-3.1-tts-flash`，默认音色乔小娇`qiaoxiaojiao_v3.1`，提供[官方该模型音色表](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)的68个音色。两端快选和声纹页共用目录，可按官方名称/ID/标签搜索、按性别筛选；ID区分大小写，例如`Emily_v3.1`。目录只用于实际3.1模型，明确保存的其它模型保留其原目录，不跨模型混用。升级服务包不会覆盖已经保存的模型与音色；旧设备若仍显示qwen3-tts-flash/Cherry，请在声纹页将Qwen API模型改为qwen-audio-3.1-tts-flash、默认音色改为qiaoxiaojiao_v3.1，并将AI/Agent回复中显式旧音色同步改为乔小娇后保存。收到服务器确认后，两端目录会自动刷新为68项。
 
+### 外网包升级与已有配置
+
+Offline APK与Node服务升级同一套服务代码时，均保留已有用户配置；只修改某台ADB设备的Qwen模型/音色，不会同步修改其它独立实例。已有qwen3-tts-flash/Cherry配置的实例升级v102后，仍会按旧模型查询音色，需要在语音设置中调整模型及对应默认/显式音色。已经配置3.1及兼容音色的实例可直接使用新目录。
+
+当前种子v86的config/config.json和userconfig/userconfig.json均没有写入Qwen API旧模型/音色；无既有配置的新安装在加载v102后使用源码默认qwen-audio-3.1-tts-flash/乔小娇。v102没有将旧Qwen模型/音色强制迁移至3.1的规则；若希望所有旧实例升级后自动切换，需要另行制定迁移范围与兼容策略。
+
 ## 四路统一与模型映射（2026-10-13）
 
 四路网页/API请求均由Chat2API生成，旧业务ID保持。模型映射可同时指定application=tts和parameters.voice，映射默认先于Provider默认；如qiaoxiaojiao映射Qwen31及乔小娇。旧speech现在也接受API限定模型和已登记TTS映射，WAV播放/缓存协议保持。完整配置示例见[统一应用](chat2api-unified-applications.md)。网页qwen新保存的合法映射别名重载保留；升级前旧错误模型仍恢复QUARK_VOICE。
@@ -28,7 +34,7 @@ Android账户管理“打开外部网页”会向现有允许的www/chat2/chat2-
 
 旧qwen-chat手动凭证及chat2apiAccountId不再使用，下次保存时移除，不会自动导入账户管理。账号凭证只由Chat2API管理。内部语音服务不要求代理HTTP任务持续运行；自定义rootDir独立库不会自动扫描。国内千问语音已由Chat2API直接调用接口生成，无需安装Chrome，也不查询浏览器账号。
 
-Qwen API默认qwen-audio-3.1-tts-flash与乔小娇qiaoxiaojiao_v3.1。两路API Key改在Chat2API账号管理中配置：qwen-api或doubaapi，端点和豆包资源ID为账号可选参数；保存只校验格式，不发送远端请求。旧TTS私有密钥保留但不再用于生成。TTS面板只保存业务选择、启用、模型、音色和参数，仍使用原WebSocket权威配置；原有开关保留。音色可查询或填写合法ID，真实权限需合成验收。
+Qwen API默认qwen-audio-3.1-tts-flash与乔小娇qiaoxiaojiao_v3.1。两路API Key改在Chat2API账号管理中配置：qwen-api或doubaapi，端点和豆包资源ID为账号可选参数；保存只校验格式，不发送远端请求。旧TTS私有密钥保留但不再用于生成。TTS面板只保存业务选择、启用、模型、音色和参数，仍使用原WebSocket权威配置；五种Provider默认可用，页面不再提供启用开关。音色可查询或填写合法ID，真实权限需合成验收。
 
 Qwen API根据模型选择官方语音接口：Qwen-Audio使用SpeechSynthesizer并请求WAV，旧Qwen-TTS模型使用原接口；官方标准路径自动适配，自定义代理地址保持。已有明确模型/音色不自动覆盖。
 
