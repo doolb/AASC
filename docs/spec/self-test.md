@@ -1815,5 +1815,6 @@ IM := conversation/info与chain/single均HTTP200/status_code0，4消息文本块
 缺口 := www host-only sessionid存在，accounts不存在 -> 认证心跳401/账号信息13
 临时同账号补齐accounts := 心跳0、信息success、toast消失、消息4条保持
 边界 := 部分安全SDK2035仍在；设备存储缺恢复尚未归因为本提示，生产代码不改
-生产回归 := 待用户确认文件方案后增加；不是已修复/已发布声明
+生产回归 := 双来源/白名单/来源拒绝/去重/默认值/秘密隔离等定向10/10；check:chat2api 257/257
+部署复测 := 进行中，尚未宣称正常入口已修复
 ```

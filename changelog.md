@@ -1,3 +1,9 @@
+### 豆包外部网页认证子域恢复修复
+
+- ✅ [2026-10-15] 按用户确认实现豆包www/accounts固定双来源Cookie恢复，解决认证子域缺sessionid的恢复缺口。
+  - 修改chat2api-login-profiles.js、chat2api-account-web-session-service.js及测试；仍六名称白名单、精确允许来源、host-only，集合映射支持声明origins并去重，未声明时保留旧登录来源默认值。未知Cookie/伪装子域/HTTP来源不恢复，不改账号或Node协议。
+  - 定向10/10、Chat2API257/257通过。spec先行，design/task/todo/self-test同步；servicePackage已有true保持，其余状态false。进入code95服务构建/发布及ADB正常入口验收，无需重建APK/依赖，尚不称已发布。
+
 ### 豆包外部网页非法请求定位
 
 - ✅ [2026-10-15] 用ADB现有账号和指定旧会话复现，定位为认证子域的登录恢复缺口，已形成待确认方案。

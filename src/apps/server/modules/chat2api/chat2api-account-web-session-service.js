@@ -61,10 +61,14 @@ const createChat2ApiAccountWebSessionService = ({ dataStore, providerRegistry, b
     // Cookie集合与Android登录捕获使用同一声明，恢复时只写入白名单名称和允许来源。
     const bundledCookies = (resolvedProfile.cookieBundles || []).flatMap((bundle) => {
       const value = credentials[bundle.field];
-      if (typeof value !== 'string' || !value.trim() || !allowedOrigins.includes(origin)) return [];
+      if (typeof value !== 'string' || !value.trim()) return [];
       const allowedNames = new Set(bundle.names || []);
+      // 集合Cookie沿用单Cookie的显式来源约束；未声明时保持旧的登录来源默认值。
+      // 只生成固定允许来源的host-only恢复项，不扩大到父域或账号自带的其他Cookie名称。
+      const targets = Array.isArray(bundle.origins) ? bundle.origins : [origin];
+      const validTargets = [...new Set(targets)].filter(target => allowedOrigins.includes(target));
       return parseCookies(value).filter(item => allowedNames.has(item.name))
-        .map(item => ({ origin, name: item.name, value: item.value }));
+        .flatMap(item => validTargets.map(target => ({ origin: target, name: item.name, value: item.value })));
     });
     const cookieMappings = [...mappedCookies, ...bundledCookies];
     const localStorageMappings = (resolvedProfile.localStorage || []).flatMap((mapping) => {

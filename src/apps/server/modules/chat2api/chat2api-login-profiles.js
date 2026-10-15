@@ -15,7 +15,7 @@ const freezeDeep = (value) => {
 const ANDROID_LOGIN_PROFILES = freezeDeep({
   doubaochat: {
     loginUrl: 'https://www.doubao.com',
-    allowedOrigins: ['https://www.doubao.com'],
+    allowedOrigins: ['https://www.doubao.com', 'https://accounts.doubao.com'],
     authorization: null,
     localStorage: [],
     // 只读官网既定设备资料；Android使用内置采集器，不接受远端脚本或任意设备ID。
@@ -24,6 +24,8 @@ const ANDROID_LOGIN_PROFILES = freezeDeep({
     // 豆包使用一组Cookie完成认证；只打包明确声明的名称，避免导出站点的其他Cookie。
     cookieBundles: [{
       field: 'cookie',
+      // 网页正文和Passport认证使用不同子域，分别恢复host-only Cookie，不能只恢复www。
+      origins: ['https://www.doubao.com', 'https://accounts.doubao.com'],
       names: ['sessionid', 'passport_csrf_token', 'passport_csrf_token_default', 'msToken', 'ttwid', 's_v_web_id'],
       requiredNames: ['sessionid'],
       requiredAnyNames: ['passport_csrf_token', 'passport_csrf_token_default'],

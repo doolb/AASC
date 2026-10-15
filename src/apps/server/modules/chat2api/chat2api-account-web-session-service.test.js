@@ -2,6 +2,83 @@ const assert = require('assert/strict');
 const test = require('node:test');
 
 const { createChat2ApiAccountWebSessionService } = require('./chat2api-account-web-session-service');
+const { getAndroidLoginProfile } = require('./chat2api-login-profiles');
+
+test('豆包同账号白名单Cookie恢复至www与accounts，来源不可被Provider或可变profile副本扩大', async () => {
+  const account = { accountId: 'doubao-test', providerId: 'doubaochat', credentials: {
+    cookie: 'sessionid=private-session; passport_csrf_token=private-csrf; passport_csrf_token_default=private-default; msToken=private-ms; ttwid=private-ttwid; s_v_web_id=private-fp; unknown=ignored; Domain=evil.example',
+    nodeProfile: { deviceId: '123', webId: '456', fp: 'private-fp' },
+  } };
+  const original = structuredClone(account);
+  const copy = getAndroidLoginProfile('doubaochat');
+  copy.allowedOrigins.push('https://evil.example');
+  copy.cookieBundles[0].origins.push('https://evil.example');
+  const service = createChat2ApiAccountWebSessionService({ baseUrl: 'http://127.0.0.1:8080',
+    dataStore: { getAccount: async () => account },
+    providerRegistry: { getProvider: async () => ({ id: 'doubaochat', loginUrl: 'https://evil.example' }) } });
+  const created = await service.createSession(account.accountId);
+  assert.equal(JSON.stringify(created).includes('private-'), false);
+  const restored = await service.consumeSession(created.sessionId);
+  assert.equal(restored.loginUrl, 'https://www.doubao.com');
+  const origins = ['https://www.doubao.com', 'https://accounts.doubao.com'];
+  assert.deepEqual(restored.allowedOrigins, origins);
+  const expected = { sessionid: 'private-session', passport_csrf_token: 'private-csrf', passport_csrf_token_default: 'private-default',
+    msToken: 'private-ms', ttwid: 'private-ttwid', s_v_web_id: 'private-fp' };
+  assert.equal(restored.cookieMappings.length, 12);
+  for (const origin of origins) {
+    const cookies = restored.cookieMappings.filter(item => item.origin === origin);
+    assert.deepEqual(Object.fromEntries(cookies.map(item => [item.name, item.value])), expected);
+    assert.ok(cookies.every(item => !Object.hasOwn(item, 'domain')));
+  }
+  assert.deepEqual(restored.localStorageMappings, []);
+  assert.deepEqual(account, original);
+  restored.credentials.nodeProfile.deviceId = 'changed';
+  assert.deepEqual(account, original);
+  await assert.rejects(service.consumeSession(created.sessionId), e => e.code === 'web_session_expired');
+});
+
+test('豆包缺失可选Cookie时不补造，也不将其他Provider凭据恢复到认证子域', async () => {
+  let account = { providerId: 'doubaochat', credentials: { cookie: 'sessionid=private-session; unknown=ignored' } };
+  const service = createChat2ApiAccountWebSessionService({ baseUrl: 'http://127.0.0.1:8080',
+    dataStore: { getAccount: async () => account }, providerRegistry: { getProvider: async providerId => ({ id: providerId }) } });
+  const consume = async () => service.consumeSession((await service.createSession('test')).sessionId);
+  assert.deepEqual((await consume()).cookieMappings, [
+    { origin: 'https://www.doubao.com', name: 'sessionid', value: 'private-session' },
+    { origin: 'https://accounts.doubao.com', name: 'sessionid', value: 'private-session' },
+  ]);
+  account = { providerId: 'doubaochat', credentials: { cookie: 'unknown=ignored' } };
+  assert.deepEqual((await consume()).cookieMappings, []);
+  account = { providerId: 'glm', credentials: { refresh_token: 'private-glm', cookie: 'sessionid=not-glm' } };
+  assert.deepEqual((await consume()).cookieMappings, [{ origin: 'https://chatglm.cn', name: 'chatglm_refresh_token', value: 'private-glm' }]);
+});
+
+test('集合来源去重并精确拒绝未允许/伪装子域，未声明来源保持登录来源默认值', async () => {
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const login = 'https://www.doubao.com';
+  const accounts = 'https://accounts.doubao.com';
+  for (const [origins, expected] of [
+    [undefined, [login]],
+    [[accounts, accounts, 'https://evil.example', 'https://accounts.doubao.com.evil.example', 'http://accounts.doubao.com'], [accounts]],
+    [[], []],
+  ]) {
+    // 在隔离模块中提供边界声明，验证真实映射逻辑，不修改冻结的生产profile或require缓存。
+    const profile = { loginUrl: login, allowedOrigins: [login, accounts], cookieBundles: [
+      { field: 'cookie', names: ['sessionid'], ...(origins ? { origins } : {}) },
+    ] };
+    const module = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(require.resolve('./chat2api-account-web-session-service'), 'utf8'), {
+      module, URL, Date,
+      require: name => name === './chat2api-login-profiles' ? { getAndroidLoginProfile: () => profile } : require(name),
+    });
+    const service = module.exports.createChat2ApiAccountWebSessionService({ baseUrl: 'http://127.0.0.1:8080',
+      dataStore: { getAccount: async () => ({ providerId: 'doubaochat', credentials: { cookie: 'sessionid=private-test; other=ignored' } }) },
+      providerRegistry: { getProvider: async () => ({ id: 'doubaochat' }) } });
+    const result = await service.consumeSession((await service.createSession('test')).sessionId);
+    assert.deepEqual(Array.from(result.cookieMappings, item => item.origin), expected);
+    assert.ok(result.cookieMappings.every(item => item.name === 'sessionid'));
+  }
+});
 
 test('网页会话只能成功消费一次并按账号 profile 返回恢复字段', async () => {
   const service = createChat2ApiAccountWebSessionService({
