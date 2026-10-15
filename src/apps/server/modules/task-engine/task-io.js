@@ -23,6 +23,7 @@ class TaskIO extends EventEmitter {
       || (process.env.AASC_TASK_DIR ? path.resolve(process.env.AASC_TASK_DIR) : null)
       || runtimeContext.taskDir;
     this._indexes = new Map();
+    this.taskCodeCatalog = options.taskCodeCatalog === undefined ? require('./task-code-catalog').getTaskCodeCatalog() : options.taskCodeCatalog;
   }
 
   _validateSafePath(base, target) {
@@ -35,6 +36,11 @@ class TaskIO extends EventEmitter {
   }
 
   _taskPath(taskName) { return path.join(this.tasksDir, taskName); }
+  resolveCodePath(taskName, entryFile) {
+    if (this.taskCodeCatalog?.isManaged(taskName)) return this.taskCodeCatalog.resolve(taskName, entryFile);
+    return this._validateSafePath(this._taskPath(taskName), entryFile);
+  }
+  assertTaskWritable(taskName, files = null) { this.taskCodeCatalog?.assertWritable(taskName, files); }
   _resultsPath(taskName) { return path.join(this._taskPath(taskName), 'results'); }
   _instancePath(taskName, instanceId) { return path.join(this._resultsPath(taskName), instanceId); }
   _latestLink(taskName) { return path.join(this._resultsPath(taskName), 'latest'); }
@@ -42,6 +48,7 @@ class TaskIO extends EventEmitter {
   _taskLinksPath() { return path.join(this.tasksDir, '.task-links.json'); }
 
   async readTaskFiles(taskName, entryFile) {
+    if (this.taskCodeCatalog?.isManaged(taskName)) return this.taskCodeCatalog.files(taskName, entryFile);
     const taskDir = this._taskPath(taskName);
     const files = [];
     try {
@@ -65,6 +72,7 @@ class TaskIO extends EventEmitter {
   }
 
   async saveTaskFiles(taskName, files) {
+    this.assertTaskWritable(taskName, files);
     const taskDir = await this.ensureTaskDir(taskName);
     for (const file of files) {
       const filePath = this._validateSafePath(taskDir, file.name);
@@ -73,7 +81,10 @@ class TaskIO extends EventEmitter {
       if (file.data) {
         await fs.promises.writeFile(filePath, Buffer.from(file.data, 'base64'));
       } else if (file.path) {
-        const srcPath = this._validateSafePath(this.tasksDir, file.path.replace(/^\/res\/tasks\//, ''));
+        const relative = file.path.replace(/^\/res\/tasks\//, '');
+        const [sourceTask, ...sourceFile] = relative.split('/');
+        const srcPath = this.taskCodeCatalog?.isManaged(sourceTask)
+          ? this.resolveCodePath(sourceTask, sourceFile.join('/')) : this._validateSafePath(this.tasksDir, relative);
         const srcExists = fs.existsSync(srcPath);
         if (srcExists) {
           await fs.promises.copyFile(srcPath, filePath);
@@ -231,10 +242,19 @@ class TaskIO extends EventEmitter {
         tasks.push({ taskName, files, instances: idx });
       }
     } catch (e) { console.warn('[TaskIO] 读取任务目录失败:', e.message); }
+    if (this.taskCodeCatalog) {
+      tasks = tasks.filter(task => !this.taskCodeCatalog.isManaged(task.taskName));
+      for (const task of this.taskCodeCatalog.tasks.values()) {
+        tasks.push({ taskName: task.taskName, files: task.files.map(file => ({ name: file.path, size: file.size })),
+          instances: await this.getIndex(task.taskName), managed: true, revision: task.revision,
+          taskCodeVersion: this.taskCodeCatalog.context.version });
+      }
+    }
     return tasks;
   }
 
   async deleteTask(taskName) {
+    this.assertTaskWritable(taskName);
     this._indexes.delete(taskName);
     const taskDir = this._validateSafePath(this.tasksDir, taskName);
     try {
@@ -281,6 +301,7 @@ class TaskIO extends EventEmitter {
   }
 
   async deleteTaskFiles(taskName, fileNames) {
+    this.assertTaskWritable(taskName, fileNames);
     const taskDir = this._validateSafePath(this.tasksDir, taskName);
     const results = [];
     for (const fileName of fileNames) {

@@ -30,7 +30,10 @@ class NodeServerService : Service() {
     data class ActiveRelease(
         val codeVersion: Int,
         val dependencyVersion: Int,
-        val legacyDependencies: Boolean = false
+        val legacyDependencies: Boolean = false,
+        val lockSha256: String = "",
+        val taskCodeVersion: Int? = null,
+        val taskCodeSha256: String? = null
     )
 
     companion object {
@@ -82,8 +85,23 @@ class NodeServerService : Service() {
             return ActiveRelease(
                 codeVersion,
                 dependencyVersion,
-                value.optBoolean("legacyDependencies", false)
+                value.optBoolean("legacyDependencies", false),
+                value.optString("lockSha256"),
+                OfflineUpdateManager.readTaskVersion(value),
+                value.optString("taskCodeSha256").takeIf(String::isNotEmpty)
             )
+        }
+
+        internal fun matchesTaskCodeHealth(root: File, active: ActiveRelease?, versions: JSONObject): Boolean {
+            val actual = versions.optJSONObject("taskCode")
+            if (active?.taskCodeVersion == null) return actual == null
+            return actual != null && actual.optInt("version") == active.taskCodeVersion &&
+                actual.optString("sha256") == active.taskCodeSha256 && actual.optBoolean("verified") &&
+                actual.optInt("codeVersion") == active.codeVersion && actual.optInt("dependencyVersion") == active.dependencyVersion &&
+                actual.optInt("taskCodeApiVersion") == 1 && actual.optString("lockSha256") == active.lockSha256 &&
+                versions.optString("dependencies") == "v${active.dependencyVersion}" &&
+                File(versions.optString("dependenciesPath")).canonicalFile == nodeModulesDirectory(root, active).canonicalFile &&
+                File(actual.optString("path")).canonicalFile == File(root, "updates/task-code/task-code-v${active.taskCodeVersion}").canonicalFile
         }
 
         /**
@@ -164,7 +182,8 @@ class NodeServerService : Service() {
             safToken: String? = null,
             androidMediaHome: String? = null,
             nodeModulesDirectory: File? = null,
-            apkVersionCode: Int? = null
+            apkVersionCode: Int? = null,
+            activeRelease: ActiveRelease? = null
         ): Map<String, String> {
             val runtimeLibraryPath = File(rootDir, "runtime/arm64-v8a/lib").absolutePath
             val inheritedLibraryPath = System.getenv("LD_LIBRARY_PATH")?.trim().orEmpty()
@@ -203,6 +222,25 @@ class NodeServerService : Service() {
             }
             if (apkVersionCode != null && apkVersionCode > 0) {
                 environment["AASC_APK_VERSION_CODE"] = apkVersionCode.toString()
+            }
+            activeRelease?.takeIf { it.taskCodeVersion != null }?.let { release ->
+                val taskRoot = File(rootDir, "updates/task-code/task-code-v${release.taskCodeVersion}")
+                val marker = JSONObject(File(taskRoot, ".offline-update-verified.json").readText())
+                require(marker.optString("kind") == "taskCode" && marker.optInt("version") == release.taskCodeVersion &&
+                    marker.optString("sha256") == release.taskCodeSha256) { "任务安装身份不匹配" }
+                val inner = JSONObject(File(taskRoot, "task-code-manifest.json").readText())
+                val descriptor = JSONObject(inner.toString()).put("relativeUrl", "task-code/task-code-v${release.taskCodeVersion}.zip")
+                    .put("size", 1).put("sha256", release.taskCodeSha256)
+                val metadata = OfflineTaskCode.parse(descriptor)
+                OfflineTaskCode.assertCombination(metadata,
+                    OfflineUpdateArtifact(release.codeVersion, "", 1, "", release.dependencyVersion, release.lockSha256, taskCodeApiVersion = 1),
+                    OfflineUpdateArtifact(release.dependencyVersion, "", 1, "", lockSha256 = release.lockSha256), apkVersionCode?.toLong())
+                OfflineTaskCode.validateDirectory(taskRoot, metadata)
+                // 一次启动固定版本快照；Node不会在运行中重新读取active-release指针。
+                environment["AASC_TASK_CODE_CONTEXT"] = JSONObject().put("version", release.taskCodeVersion)
+                    .put("sha256", release.taskCodeSha256).put("path", taskRoot.absolutePath)
+                    .put("codeVersion", release.codeVersion).put("dependencyVersion", release.dependencyVersion)
+                    .put("lockSha256", release.lockSha256).toString()
             }
             return environment
         }
@@ -396,7 +434,8 @@ class NodeServerService : Service() {
                     safConnection?.token,
                     androidMediaHome,
                     nodeModulesDirectory,
-                    readAppVersionCode()
+                    readAppVersionCode(),
+                    activeRelease
                 )
             )
             val process = processBuilder.start()
@@ -664,6 +703,7 @@ class NodeServerService : Service() {
                     versions.optString("code"), File(versions.optString("codePath")).canonicalPath,
                     expectedVersion, expectedRoot.canonicalPath)
                     && OfflineFullApkActivation.matchesPendingHealth(root, versions)
+                    && matchesTaskCodeHealth(root, active, versions)
             }.getOrDefault(false)
         } catch (_: Exception) {
             return false

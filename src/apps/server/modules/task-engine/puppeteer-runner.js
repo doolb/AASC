@@ -26,7 +26,11 @@ class PuppeteerRunner {
 
   async run(options) {
     const { entryFile, workDir, context = {}, timeout = 30000 } = options;
-    const entryPath = path.resolve(workDir, entryFile);
+    const codeDir = options.codeDir || workDir;
+    const entryPath = options.entryPath || path.resolve(codeDir, entryFile);
+    if (!entryPath.startsWith(path.resolve(codeDir) + path.sep)) {
+      return { success: false, error: '入口文件路径越界', logs: [] };
+    }
 
     if (!fs.existsSync(entryPath)) {
       return { success: false, error: '入口文件不存在: ' + entryFile, logs: [] };
@@ -79,9 +83,11 @@ class PuppeteerRunner {
       const filesJson = JSON.stringify(context.files || {});
       const paramsJson = JSON.stringify(context.params || {});
       const refsJson = JSON.stringify(context.refs || {});
-      const safeCode = JSON.stringify(code);
+      const workDirJson = JSON.stringify(context.workDir || workDir);
+      // evaluate实参由Puppeteer序列化；重复JSON编码会把整个函数变成字符串字面量。
+      const safeCode = code;
 
-      page.evaluate(new Function('filesJson', 'paramsJson', 'refsJson', 'safeCode', `
+      page.evaluate(new Function('filesJson', 'paramsJson', 'refsJson', 'workDirJson', 'safeCode', `
         (async () => {
           try {
             const capabilities = {
@@ -93,6 +99,7 @@ class PuppeteerRunner {
               webgpu: !!navigator.gpu
             };
             const context = {
+              workDir: JSON.parse(workDirJson),
               files: JSON.parse(filesJson),
               params: JSON.parse(paramsJson),
               refs: JSON.parse(refsJson),
@@ -105,7 +112,7 @@ class PuppeteerRunner {
             __taskError({ message: err.message, stack: err.stack });
           }
         })();
-      `), filesJson, paramsJson, refsJson, safeCode);
+      `), filesJson, paramsJson, refsJson, workDirJson, safeCode);
     });
   }
 

@@ -27,7 +27,7 @@ internal class OfflineBootstrapManager(private val context: Context) {
         val source = updater.fetchManifest(updater.readPublicKeyOrNull()
             ?: error("APK 缺少更新验证公钥")) ?: error("没有可用的服务安装清单")
         validateSnapshot(source.manifest)
-        val total = listOf(source.manifest.code, *source.manifest.dependencies.androidLayers().map { it.second }.toTypedArray(), source.manifest.nodeMinSeeds!!)
+        val total = listOfNotNull(source.manifest.code, *source.manifest.dependencies.androidLayers().map { it.second }.toTypedArray(), source.manifest.nodeMinSeeds!!, source.manifest.taskCode?.artifact)
             .fold(0L) { total, artifact -> Math.addExact(total, artifact.size) }
         return Preview(source.baseUrl, source.rawJson, total)
     }
@@ -54,7 +54,8 @@ internal class OfflineBootstrapManager(private val context: Context) {
                 checkCancelled(token)
                 if (OfflineRuntimeState.hasServiceEnvironment(root)) return root
                 recoverStages(root)
-                val artifacts = listOf("code" to manifest.code, "nodeMinSeeds" to manifest.nodeMinSeeds!!)
+                val artifacts = listOf("code" to manifest.code, "nodeMinSeeds" to manifest.nodeMinSeeds!!) +
+                    listOfNotNull(manifest.taskCode?.let { "taskCode" to it.artifact })
                 val pendingBytes = Math.addExact(artifacts.sumOf { (_, item) -> item.size }, manifest.dependencies.androidDownloadBytes())
                 require(OfflineUpdateManager.hasEnoughSpace(StatFs(root.path).availableBytes, pendingBytes, 0, RESERVE)) {
                     "空间不足，尚未下载本机服务"
@@ -88,6 +89,7 @@ internal class OfflineBootstrapManager(private val context: Context) {
                         OfflineUpdateManager.extractZipArchive(archive, File(stage, kind))
                     }
                     updater.validateCodePackage(File(stage, "code"), manifest.code)
+                    manifest.taskCode?.let { OfflineTaskCode.validateDirectory(File(stage, "taskCode"), it) }
                     OfflineDependencyGroups.prepare(root, source, stage, updater) { progress -> checkCancelled(token); onProgress(progress) }
                     OfflineDependencyGroups.validateLock(File(stage, "dependencies"), File(stage, "code/package-lock.json"))
                     restoreSeeds(File(stage, "nodeMinSeeds"), root)
@@ -96,8 +98,13 @@ internal class OfflineBootstrapManager(private val context: Context) {
                     checkCancelled(token)
                     updater.installVersionDirectory(File(stage, "code"), File(root, "updates/code/code-v${manifest.code.version}"), manifest.code, "code")
                     updater.installVersionDirectory(File(stage, "dependencies"), File(root, "updates/dependencies/dependencies-v${manifest.dependencies.version}"), manifest.dependencies, "dependencies")
+                    manifest.taskCode?.let {
+                        val directory = updater.installVersionDirectory(File(stage, "taskCode"), File(root, "updates/task-code/task-code-v${it.version}"), it.artifact, "taskCode")
+                        OfflineTaskCode.validateDirectory(directory, it)
+                    }
                     val versions = JSONObject().put("schemaVersion", 1).put("codeVersion", manifest.code.version)
                         .put("dependencyVersion", manifest.dependencies.version).put("lockSha256", manifest.dependencies.lockSha256)
+                        .put("taskCodeVersion", manifest.taskCode?.version).put("taskCodeSha256", manifest.taskCode?.sha256)
                     writeJson(File(root, "offline-update-client.json"), versions)
                     writeJson(File(root, "updates/active-release.json"), JSONObject(versions.toString())
                         .put("legacyDependencies", false).put("pendingHealth", true))
@@ -112,6 +119,11 @@ internal class OfflineBootstrapManager(private val context: Context) {
     }
 
     private fun validateSnapshot(manifest: OfflineUpdateManifest) {
+        @Suppress("DEPRECATION")
+        val installed = context.packageManager.getPackageInfo(context.packageName, 0)
+        @Suppress("DEPRECATION")
+        val apkVersion = if (android.os.Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
+        OfflineTaskCode.assertCombination(manifest.taskCode, manifest.code, manifest.dependencies, apkVersion)
         require(manifest.nodeMinSeeds != null) { "发布清单缺少 nodeMinSeeds 初始数据" }
         OfflineRuntimeState.requireCompatible(manifest.runtimeCompatibility
             ?: error("发布清单尚未提供独立首装运行契约，请更新服务包"))

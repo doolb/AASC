@@ -10,10 +10,11 @@ class NodeJsRunner {
 
   async run(options) {
     const { entryFile, workDir, context = {}, timeout = 30000 } = options;
-    const resolvedPath = path.resolve(workDir, entryFile);
+    const codeDir = options.codeDir || workDir;
+    const resolvedPath = options.entryPath || path.resolve(codeDir, entryFile);
 
     // 路径遍历防护
-    if (!resolvedPath.startsWith(path.resolve(workDir) + path.sep)) {
+    if (!resolvedPath.startsWith(path.resolve(codeDir) + path.sep)) {
       return { success: false, error: '入口文件路径越界', logs: [] };
     }
 

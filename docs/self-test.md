@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## 独立任务代码ZIP（2026-10-15）
+
+`npm run test:task-code-sync`66/66、`npm run test:task-dependencies`106/106通过；Android JVM `:app:testDebugUnitTest`285项0失败/1既有归档环境跳过，新任务原生11项全通过。定向夹具覆盖独立签名ZIP、任务与服务/依赖兼容性、白名单/链接/越界/额外文件、有效HTTP/入口/重发来源、Node和Puppeteer代码与数据目录分离、受管前置只读、任务单独下载预算、完整组合回滚和精确清理。VM中同实例恢复20次后仍只有一个计时器、一组监听和一份DOM，停止后为零；Puppeteer用例使用evaluate VM夹具，未启动真实Chromium。
+
+首批4任务6源码文件31,019字节，同构建参数样ZIP13,119字节；未生成正式签名资源、未发布或操作设备。真机min迁移、首装、实际网络流量/重连耗时、render-display视觉留待发布后验收。使用步骤见[独立任务代码更新](usage/task-code-sync.md)。
+
 ## 模型任务依赖首次下载与懒加载（2026-10-14）
 
 `npm run test:task-dependencies`106/106通过；新任务依赖用例覆盖真实签名ZIP、本机HTTP下载、并发去重、重启离线缓存、SHA/版本/签名/元数据篡改、链接/额外包拒绝、失败后重试、停止后不转发、common排除ORT与独立版本复用、发布/同步/HTTP验收与精确清理。完整Offline资产用例验证ORT未进入APK暂存资产且打包输入保留。

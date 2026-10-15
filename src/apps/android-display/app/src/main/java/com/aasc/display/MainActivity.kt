@@ -973,13 +973,14 @@ class MainActivity : AppCompatActivity() {
             )
             showMinApkReleaseNotes(repair.releaseNotes)
         } else {
-            offlineUpdateTitle.text = getString(R.string.offline_service_update_title)
+            offlineUpdateTitle.text = getString(if (result.plan == OfflineUpdateManager.ServiceUpdatePlan.TASK_CODE_ONLY)
+                R.string.offline_task_code_update_title else R.string.offline_service_update_title)
             offlineUpdateMessage.text = getString(
                 R.string.offline_service_update_available,
                 codeVersion,
                 dependencyVersion,
                 formatBytes(result.downloadBytes) + sensitiveNotice
-            )
+            ) + (result.targetTaskCodeVersion?.let { "\n" + getString(R.string.offline_task_code_update_version, it) } ?: "")
             showMinApkReleaseNotes(null)
         }
         offlineUpdateProgress.visibility = View.GONE

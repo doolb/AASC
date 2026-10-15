@@ -67,7 +67,7 @@ test('分组清理不跟随dependencies父目录链接', async t => {
 });
 test('Node min从Offline直接安装common+linux64，后续复用缓存，无目标机npm', async t => {
     const f = await fixture(t); const codeRoot = f.source;
-    for (const file of ['shared-update-manifest.js', 'dependency-tree.js']) write(codeRoot, `src/apps/server/modules/aasc/${file}`, fs.readFileSync(path.resolve(__dirname, '../src/apps/server/modules/aasc', file)));
+    for (const file of ['shared-update-manifest.js', 'task-code-contract.js', 'dependency-tree.js']) write(codeRoot, `src/apps/server/modules/aasc/${file}`, fs.readFileSync(path.resolve(__dirname, '../src/apps/server/modules/aasc', file)));
     const requests = []; const server = http.createServer((req, res) => {
         requests.push(req.url); const relative = new URL(req.url, 'http://localhost').pathname.slice(1);
         const entry = Object.values(f.manifest.payload.components.dependencies.groups).find(item => item.relativeUrl === relative);

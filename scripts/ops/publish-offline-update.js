@@ -22,6 +22,7 @@ const DEFAULT_LOCAL_VERIFY_URL = 'http://192.168.1.39/mnt/aasc-offline/';
 const DEFAULT_WAN_VERIFY_URL = 'http://120.79.245.103/mnt/aasc-offline/';
 const { GROUPS, TASK_DEPENDENCIES, dependencyArtifacts } = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 const CLEANUP_RULES = Object.freeze([
+    { componentName: 'taskCode', directory: 'task-code', prefix: 'task-code-v', suffix: '.zip' },
     { componentName: 'code', directory: 'code', prefix: 'code-v', suffix: '.zip' },
     { componentName: 'nodeMinSeeds', directory: 'node-min-seeds', prefix: 'node-min-seeds-v', suffix: '.zip' },
     { componentName: 'dependencies', directory: 'dependencies', prefix: 'dependencies-v', suffix: '.zip' },
@@ -40,8 +41,8 @@ async function sha256File(filePath) {
 }
 
 function validateMode(mode) {
-    if (!['code-only', 'all', 'data-repair', 'apk-min', 'apk-full'].includes(mode)) {
-        throw new Error('发布模式必须是 code-only、all、data-repair、apk-min 或 apk-full');
+    if (!['task-code-only', 'code-only', 'all', 'data-repair', 'apk-min', 'apk-full'].includes(mode)) {
+        throw new Error('发布模式必须是 task-code-only、code-only、all、data-repair、apk-min 或 apk-full');
     }
 }
 
@@ -55,6 +56,10 @@ function validateRelativePath(relativePath) {
 
 function getPublishComponents(manifest, mode) {
     const components = manifest.payload.components;
+    if (mode === 'task-code-only') {
+        if (!components.taskCode) throw new Error('task-code-only 发布缺少 taskCode 组件');
+        return [components.taskCode];
+    }
     if (mode === 'data-repair') {
         if (!components.dataRepair) throw new Error('data-repair 发布要求签名清单包含 dataRepair 组件');
         return [components.dataRepair, ...(components.nodeMinSeeds && components.dataRepair.releaseSeedVersion === components.nodeMinSeeds.version
@@ -65,6 +70,7 @@ function getPublishComponents(manifest, mode) {
         return [components.apkMin];
     }
     const selected = [components.code];
+    if (components.taskCode) selected.push(components.taskCode);
     if (components.nodeMinSeeds) selected.push(components.nodeMinSeeds);
     if (mode === 'all') selected.push(...dependencyArtifacts(components.dependencies), ...Object.values(components.taskDependencies || {}));
     return selected;
@@ -88,10 +94,10 @@ function parseVersionedFileName(fileName, rule) {
 function createCleanupSpecifications(manifest, options = {}) {
     const components = manifest?.payload?.components || {};
     const specifications = [];
-    // 项目发布清理白名单仅包含代码、依赖和 APK；修复与首装种子历史归档必须保留。
+    // 任务代码、服务代码、依赖和APK按精确版本清理；修复与首装种子归档保留。
     const componentNames = options.includeApkMin === false
-        ? ['code', 'dependencies']
-        : ['code', 'dependencies', 'apkMin'];
+        ? ['code', 'dependencies', 'taskCode']
+        : ['code', 'dependencies', 'taskCode', 'apkMin'];
     for (const componentName of componentNames) {
         const component = components[componentName];
         if (!component || typeof component.relativeUrl !== 'string') continue;
@@ -671,6 +677,22 @@ async function publishOfflineFullApk(options = {}) {
     };
 }
 
+/** 独立任务发布只允许推进任务组件，防止旧的构建基线覆盖已发布服务/依赖/APK。 */
+function assertTaskOnlyBaseline(candidate, current, publicKey, taskOnly = true) {
+    verifySignedManifest(current, publicKey);
+    validateManifestComponents(current);
+    const canonical = require('./offline-update-package').canonicalJson;
+    const withoutTasks = components => Object.fromEntries(Object.entries(components).filter(([key]) => key !== 'taskCode'));
+    if (taskOnly && canonical(withoutTasks(candidate.payload.components)) !== canonical(withoutTasks(current.payload.components))) {
+        throw new Error('任务更新基线已变化，请从目标最新清单重新构建');
+    }
+    const prior = current.payload.components.taskCode;
+    const next = candidate.payload.components.taskCode;
+    if (prior && (!next || next.version < prior.version || next.version === prior.version && canonical(next) !== canonical(prior))) {
+        throw new Error('任务组件不允许降级或同版本覆盖');
+    }
+}
+
 async function publishOfflineUpdate(options = {}) {
     const mode = String(options.mode || '').trim();
     validateMode(mode);
@@ -693,18 +715,11 @@ async function publishOfflineUpdate(options = {}) {
         uploads.push({ component, artifactPath: await validateLocalArtifact(artifactRoot, component.relativeUrl, component) });
     }
 
-    const preservedBase = mode === 'code-only'
-        ? [manifest.payload.components.dependencies]
-        : mode === 'data-repair'
-            ? Object.entries(manifest.payload.components)
-                .filter(([name, component]) => name !== 'dataRepair'
-                    && !(name === 'nodeMinSeeds' && manifest.payload.components.dataRepair.releaseSeedVersion === component?.version)
-                    && component && (component.relativeUrl || component.groups))
-                .map(([, component]) => component)
-        : mode === 'apk-min'
-            ? [manifest.payload.components.code, manifest.payload.components.nodeMinSeeds, manifest.payload.components.dependencies].filter(Boolean)
-            : [];
-    const preserved = preservedBase.flatMap(component => component.groups ? dependencyArtifacts(component) : [component]);
+    const selectedUrls = new Set(selected.map(component => component.relativeUrl));
+    const preserved = Object.values(manifest.payload.components)
+        .filter(component => component && (component.relativeUrl || component.groups))
+        .flatMap(component => component.groups ? dependencyArtifacts(component) : [component])
+        .filter(component => !selectedUrls.has(component.relativeUrl));
     // 非all发布也必须证明独立任务包已存在，避免切换签名清单后任务才发现缺包。
     if (mode !== 'all') preserved.push(...Object.values(manifest.payload.components.taskDependencies || {}));
     const publishId = `${Date.now()}-${process.pid}`;
@@ -717,6 +732,15 @@ async function publishOfflineUpdate(options = {}) {
     const cleanupErrors = [];
 
     if (localRoot) {
+        const checkLocalTaskBaseline = async () => {
+            if (!manifest.payload.components.taskCode && mode !== 'task-code-only') return;
+            const current = await fs.promises.readFile(path.join(localRoot, 'manifest.json'), 'utf8').catch(error => {
+                if (error.code === 'ENOENT' && mode !== 'task-code-only') return null;
+                throw error;
+            });
+            if (current) assertTaskOnlyBaseline(manifest, JSON.parse(current), publicKeyPem, mode === 'task-code-only');
+        };
+        await checkLocalTaskBaseline();
         for (const component of preserved) {
             const result = await inspectLocalTarget(localRoot, component.relativeUrl, component);
             if (!result.exists) throw new Error(`${mode} 发布要求目标已有匹配资源: ${component.relativeUrl}`);
@@ -728,6 +752,7 @@ async function publishOfflineUpdate(options = {}) {
             await installLocalArtifact(artifactPath, localRoot, component.relativeUrl, component, publishId);
             localPublishedPaths.push(component.relativeUrl);
         }
+        await checkLocalTaskBaseline();
         await writeLocalManifestLast(manifestBytes, localRoot, publishId);
         localPublishedPaths.push('manifest.json');
         if (options.localVerifyUrl) {
@@ -739,6 +764,15 @@ async function publishOfflineUpdate(options = {}) {
 
     if (remote) {
         const commandRunner = options.commandRunner || execFileAsync;
+        const checkTaskBaseline = async () => {
+            if (!manifest.payload.components.taskCode && mode !== 'task-code-only') return;
+            const command = `${remoteRootAssignment(remote.directory)}\nif [ -f "$root/manifest.json" ]; then cat "$root/manifest.json"; fi`;
+            const result = await commandRunner('ssh', [remote.host, ...buildRemoteShellArguments(command)], { encoding: 'utf8' });
+            const current = String(result.stdout || '').trim();
+            if (!current && mode === 'task-code-only') throw new Error('任务专用发布目标缺少现行签名清单');
+            if (current) assertTaskOnlyBaseline(manifest, JSON.parse(current), publicKeyPem, mode === 'task-code-only');
+        };
+        await checkTaskBaseline();
         for (const component of [...preserved, ...uploads.map(({ component }) => component)]) {
             const exists = await inspectRemoteTarget(commandRunner, remote, component.relativeUrl, component);
             if (preserved.includes(component) && !exists) {
@@ -749,6 +783,7 @@ async function publishOfflineUpdate(options = {}) {
             await installRemoteArtifact(commandRunner, remote, artifactPath, component.relativeUrl, component, publishId);
             remotePublishedPaths.push(component.relativeUrl);
         }
+        await checkTaskBaseline();
         await writeRemoteManifestLast(commandRunner, remote, manifestBytes, publishId);
         remotePublishedPaths.push('manifest.json');
         if (options.remoteVerifyUrl) {

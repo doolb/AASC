@@ -200,6 +200,8 @@ const tui = new ServerTUI({ enabled: useTUI });
 const CODE_ROOT = path.resolve(__dirname, '../../../..');
 const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || CODE_ROOT);
 const NODE_MODULES_ROOT = path.resolve(process.env.AASC_NODE_MODULES_DIR || path.join(PROJECT_ROOT, 'node_modules'));
+// 在监听端口和恢复任务之前校验固定任务组合，失败由Android健康检查回滚。
+const taskCodeCatalog = require('../modules/task-engine/task-code-catalog').getTaskCodeCatalog();
 
 config.loadConfig();
 const ANDROID_NODE_POLICY = getAndroidNodePolicy();
@@ -1461,6 +1463,7 @@ async function startServer() {
 
             // 初始化远程任务引擎
             taskManager = new TaskManager({
+                taskCodeCatalog,
                 maxInstances: 50,
                 ensureTaskDependencies: (ids, onProgress) => taskDependencyManager.ensure(ids, onProgress),
                 chatService: chat,
@@ -2928,6 +2931,7 @@ function staticWithMhtmlMime(dir) {
 
 app.use('/uploads/tts', serveTtsAudio);
 app.use('/uploads', staticWithMhtmlMime(UPLOADS_DIR));
+if (taskCodeCatalog) app.use('/res/tasks', taskCodeCatalog.middleware());
 app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
 app.use('/js/lib', (req, res, next) => {

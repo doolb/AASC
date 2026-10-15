@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const taskCodeContract = require('./task-code-contract');
 const GROUPS = Object.freeze(['common', 'android', 'linux64', 'win64']);
 // 任务只引用已注册的依赖ID，制品路径由签名清单确定，不接受任务传入任意URL。
 const TASK_DEPENDENCIES = Object.freeze({
@@ -97,6 +98,7 @@ function verifyManifest(manifest, publicKey = PUBLIC_KEY, options = {}) {
     const { schemaVersion, components } = manifest.payload;
     if (schemaVersion !== 1 || !components) throw new Error('共享更新清单schemaVersion/components无效');
     artifact(components.code, version => `code/code-v${version}.zip`);
+    if (components.taskCode !== undefined) taskCodeContract.validateArtifact(components.taskCode, components);
     validateTaskDependencies(components.taskDependencies);
     const dependencies = components.dependencies;
     // 已发布的单依赖包仍可供旧Offline读取；新版普通节点必须使用平台分组。

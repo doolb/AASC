@@ -35,7 +35,9 @@ import org.json.JSONObject
 data class InstalledServiceVersion(
     val codeVersion: Int,
     val dependencyVersion: Int,
-    val lockSha256: String
+    val lockSha256: String,
+    val taskCodeVersion: Int? = null,
+    val taskCodeSha256: String? = null
 )
 
 data class OfflineUpdateProgress(
@@ -61,7 +63,8 @@ data class ServiceUpdateResult(
     val targetDependencyVersion: Int? = null,
     val downloadBytes: Long = 0L,
     val dataRepair: OfflineDataRepairArtifact? = null,
-    val failed: Boolean = false
+    val failed: Boolean = false,
+    val targetTaskCodeVersion: Int? = null
 )
 
 data class ServiceUpdateApplyResult(
@@ -83,20 +86,11 @@ class OfflineUpdateManager(
         CODE_ONLY,
         ALL,
         NEEDS_ALL,
+        TASK_CODE_ONLY,
         DATA_REPAIR_ONLY
     }
 
     internal data class ManifestSource(val baseUrl: String, val manifest: OfflineUpdateManifest, val rawJson: String = "")
-
-    private data class ReleasePointer(
-        val codeVersion: Int,
-        val dependencyVersion: Int,
-        val lockSha256: String,
-        val legacyDependencies: Boolean,
-        val pendingHealth: Boolean,
-        val previous: InstalledServiceVersion?,
-        val previousLegacyDependencies: Boolean?
-    )
 
     internal data class DownloadedArtifact(val metadata: OfflineUpdateArtifact, val file: File)
 
@@ -182,6 +176,14 @@ class OfflineUpdateManager(
                 "已安装 Offline 服务版本无效"
             }
             val code = manifest.code
+            OfflineTaskCode.assertCombination(manifest.taskCode, code, manifest.dependencies)
+            val targetTask = manifest.taskCode
+            require(installed.taskCodeVersion == null || targetTask != null) { "候选清单不能移除已启用任务组件" }
+            if (installed.taskCodeVersion != null && targetTask != null) {
+                require(targetTask.version >= installed.taskCodeVersion) { "任务组件不能降级" }
+                require(targetTask.version != installed.taskCodeVersion || targetTask.sha256 == installed.taskCodeSha256) { "任务组件同版本不能覆盖" }
+            }
+            val taskChanged = targetTask != null && targetTask.version != installed.taskCodeVersion
             val dependencies = manifest.dependencies
             val currentHash = installed.lockSha256.lowercase()
             val targetLock = dependencies.lockSha256.orEmpty().lowercase()
@@ -202,7 +204,7 @@ class OfflineUpdateManager(
                 return if (code.version > installed.codeVersion) {
                     ServiceUpdatePlan.CODE_ONLY
                 } else {
-                    ServiceUpdatePlan.CURRENT
+                    if (taskChanged) ServiceUpdatePlan.TASK_CODE_ONLY else ServiceUpdatePlan.CURRENT
                 }
             }
             if (dependencies.version > installed.dependencyVersion &&
@@ -212,6 +214,16 @@ class OfflineUpdateManager(
                 return ServiceUpdatePlan.ALL
             }
             return ServiceUpdatePlan.NEEDS_ALL
+        }
+
+        internal fun taskDownloadBytes(installed: InstalledServiceVersion, manifest: OfflineUpdateManifest): Long =
+            manifest.taskCode?.takeIf { it.version != installed.taskCodeVersion }?.artifact?.size ?: 0L
+
+        internal fun readTaskVersion(json: JSONObject): Int? {
+            if (!json.has("taskCodeVersion") && !json.has("taskCodeSha256")) return null
+            val version = OfflineTaskCode.positive(json, "taskCodeVersion")
+            require(Regex("^[a-f0-9]{64}$").matches(json.getString("taskCodeSha256"))) { "任务指针缺少摘要" }
+            return version
         }
 
         @JvmStatic
@@ -478,6 +490,7 @@ class OfflineUpdateManager(
         fun isAllowedComponentEntry(component: String, normalizedEntryName: String): Boolean {
             if (normalizedEntryName.isBlank()) return false
             return when (component) {
+                "taskCode" -> normalizedEntryName == "task-code-manifest.json" || normalizedEntryName == "tasks" || normalizedEntryName.startsWith("tasks/")
                 "code" -> normalizedEntryName == "src" ||
                     normalizedEntryName == "package.json" ||
                     normalizedEntryName == "package-lock.json" ||
@@ -498,10 +511,12 @@ class OfflineUpdateManager(
 
         /** 分组只检查组契约；完整依赖在合并后再检查Express及全局清单，不能混用两个阶段。 */
         internal fun inspectComponentArchive(archiveFile: File, component: String): ZipInspection {
-            require(component in setOf("code", "dependencies", "dependencyGroup", "dataRepair")) {
+            require(component in setOf("code", "dependencies", "dependencyGroup", "dataRepair", "taskCode")) {
                 "未知更新包组件: $component"
             }
             val inspection = inspectZipArchive(archiveFile)
+            if (component == "taskCode") require(inspection.expandedBytes <= OfflineTaskCode.MAX_BYTES + 1024 * 1024 &&
+                inspection.entryNames.size <= 4096 && "task-code-manifest.json" in inspection.entryNames) { "任务ZIP超限或缺少清单" }
             for (entryName in inspection.entryNames) {
                 if (entryName.isEmpty()) continue
                 require(isAllowedComponentEntry(component, entryName)) {
@@ -615,6 +630,8 @@ class OfflineUpdateManager(
             val active = readHealthyReleaseVersions(root) ?: return false
             return hasObsoleteVersionDirectory(File(root, "updates/code"), "code-v", active.first)
                 || hasObsoleteVersionDirectory(File(root, "updates/dependencies"), "dependencies-v", active.second)
+                || hasObsoleteVersionDirectory(File(root, "updates/task-code"), "task-code-v",
+                    readTaskVersion(JSONObject(File(root, ACTIVE_RELEASE_FILE).readText())))
         }
 
         /** 仅清理健康 active-release 未引用的版本目录；符号链接及含链接目录树完整跳过。 */
@@ -624,7 +641,9 @@ class OfflineUpdateManager(
             var removedDirectories = 0
             listOf(
                 Triple(File(root, "updates/code"), "code-v", active.first),
-                Triple(File(root, "updates/dependencies"), "dependencies-v", active.second)
+                Triple(File(root, "updates/dependencies"), "dependencies-v", active.second),
+                Triple(File(root, "updates/task-code"), "task-code-v",
+                    readTaskVersion(JSONObject(File(root, ACTIVE_RELEASE_FILE).readText())))
             ).forEach parentLoop@{ (parent, prefix, activeVersion) ->
                 if (Files.isSymbolicLink(parent.toPath()) || !parent.isDirectory) return@parentLoop
                 val candidates = parent.listFiles().orEmpty().filter { child ->
@@ -666,6 +685,8 @@ class OfflineUpdateManager(
             if (!legacyDependencies && !isSafeVersionDirectory(root, "dependencies", "dependencies-v", dependencyVersion)) {
                 return@runCatching null
             }
+            val taskVersion = readTaskVersion(pointer)
+            if (taskVersion != null && !isSafeVersionDirectory(root, "task-code", "task-code-v", taskVersion)) return@runCatching null
             codeVersion to dependencyVersion.takeUnless { legacyDependencies }
         }.getOrNull()
 
@@ -750,6 +771,8 @@ class OfflineUpdateManager(
             val source = fetchManifest(publicKeyPem)
                 ?: return ServiceUpdateResult("局域网与外网均无可用更新清单")
             val current = readInstalledServiceVersion(root)
+            OfflineTaskCode.assertCombination(source.manifest.taskCode, source.manifest.code, source.manifest.dependencies,
+                packageVersionCode(getInstalledPackageInfo()))
             if (isRejectedRelease(root, source.manifest)) {
                 return ServiceUpdateResult(
                     "候选服务版本此前启动失败，已跳过自动重试",
@@ -801,15 +824,17 @@ class OfflineUpdateManager(
                 ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.androidDownloadBytes())
                     ?: throw IllegalArgumentException("更新下载总大小溢出")
                 else -> 0L
-            }?.let { base -> if (pendingRepair == null) base else safeAdd(base, pendingRepair.artifact.size) }
+            }.let { base -> Math.addExact(base, taskDownloadBytes(current, source.manifest)) }
+                .let { base -> if (pendingRepair == null) base else safeAdd(base, pendingRepair.artifact.size) }
                 ?: throw IllegalArgumentException("更新下载总大小溢出")
             ServiceUpdateResult(
-                status = "发现 Offline 服务更新",
+                status = if (plan == ServiceUpdatePlan.TASK_CODE_ONLY) "发现 Offline 任务代码更新 v${source.manifest.taskCode?.version}" else "发现 Offline 服务更新",
                 hasUpdate = true,
                 plan = plan,
                 installed = current,
                 targetCodeVersion = source.manifest.code.version,
                 targetDependencyVersion = source.manifest.dependencies.version,
+                targetTaskCodeVersion = source.manifest.taskCode?.version,
                 downloadBytes = downloadBytes,
                 dataRepair = pendingRepair
             )
@@ -876,6 +901,9 @@ class OfflineUpdateManager(
             return "候选服务版本此前启动失败，已跳过自动重试"
         }
         val current = readInstalledServiceVersion(root)
+        check(readReleasePointer(root)?.pendingHealth != true) { "当前候选组合尚未通过健康检查，请先完成启动或回滚" }
+        OfflineTaskCode.assertCombination(source.manifest.taskCode, source.manifest.code, source.manifest.dependencies,
+            packageVersionCode(getInstalledPackageInfo()))
         val plan = planServiceUpdate(current, source.manifest)
         val pendingRepair = source.manifest.dataRepair?.takeUnless { isDataRepairApplied(root, it) }
         if (plan == ServiceUpdatePlan.CURRENT && pendingRepair == null) return "服务已是当前版本"
@@ -890,7 +918,7 @@ class OfflineUpdateManager(
                 ?: throw IllegalArgumentException("更新下载总大小溢出")
             ServiceUpdatePlan.DATA_REPAIR_ONLY -> 0L
             else -> 0L
-        }.let { base ->
+        }.let { base -> Math.addExact(base, taskDownloadBytes(current, source.manifest)) }.let { base ->
             if (pendingRepair == null) base else safeAdd(base, pendingRepair.artifact.size)
         } ?: throw IllegalArgumentException("更新下载总大小溢出")
         onProgress?.invoke(OfflineUpdateProgress("checking", 0L, requiredDownloads, "正在检查服务更新空间"))
@@ -902,7 +930,7 @@ class OfflineUpdateManager(
         val stage = File(updatesDirectory, ".staging-${System.currentTimeMillis()}-${android.os.Process.myPid()}")
         check(stage.mkdir()) { "无法创建 Offline 更新暂存目录" }
         try {
-            val codeArchive = if (effectivePlan != ServiceUpdatePlan.DATA_REPAIR_ONLY) {
+            val codeArchive = if (effectivePlan in setOf(ServiceUpdatePlan.CODE_ONLY, ServiceUpdatePlan.ALL)) {
                 downloadArtifact(source, source.manifest.code, File(stage, "code.zip"), onProgress)
             } else {
                 null
@@ -910,11 +938,18 @@ class OfflineUpdateManager(
             val repairArchive = pendingRepair?.let {
                 downloadArtifact(source, it.artifact, File(stage, "data-repair.zip"), onProgress)
             }
+            val taskArchive = source.manifest.taskCode?.takeIf {
+                taskDownloadBytes(current, source.manifest) > 0 && !reuseTaskCodeDirectory(root, it)
+            }?.let {
+                downloadArtifact(source, it.artifact, File(stage, "task-code.zip"), onProgress)
+            }
             onProgress?.invoke(OfflineUpdateProgress("verifying", 0L, 1L, "正在校验服务更新包"))
             val codeInspection = codeArchive?.let { validateComponentArchive(it.file, "code") }
             val repairInspection = repairArchive?.let { validateComponentArchive(it.file, "dataRepair") }
+            val taskInspection = taskArchive?.let { validateComponentArchive(it.file, "taskCode") }
             val expandedBytes = safeAdd(codeInspection?.expandedBytes ?: 0L, 0L)
                 ?.let { safeAdd(it, repairInspection?.expandedBytes ?: 0L) }
+                ?.let { safeAdd(it, taskInspection?.expandedBytes ?: 0L) }
                 ?: throw IllegalArgumentException("更新展开大小溢出")
             val afterDownloadAvailable = StatFs(root.absolutePath).availableBytes
             check(hasEnoughSpace(afterDownloadAvailable, 0L, expandedBytes, ROLLBACK_RESERVE_BYTES)) {
@@ -944,6 +979,16 @@ class OfflineUpdateManager(
             } else null
 
             val oldPointer = readReleasePointer(root)
+            source.manifest.taskCode?.let { metadata ->
+                val destination = File(updatesDirectory, "task-code/task-code-v${metadata.version}")
+                if (taskArchive != null) {
+                    val taskStage = File(stage, "task-code")
+                    extractZipArchive(taskArchive.file, taskStage)
+                    OfflineTaskCode.validateDirectory(taskStage, metadata)
+                    installVersionDirectory(taskStage, destination, metadata.artifact, "taskCode")
+                }
+                OfflineTaskCode.validateDirectory(destination, metadata)
+            }
             val dependencyResolution = if (dependencyDirectory == null) {
                 resolveCodeOnlyDependencyDirectory(
                     root = root,
@@ -955,23 +1000,16 @@ class OfflineUpdateManager(
             } else {
                 DependencyDirectoryResolution(dependencyDirectory, legacyDependencies = false)
             }
-            if (codeDirectory != null) {
-                val installedDependencyDirectory = dependencyResolution.directory
-                check(installedDependencyDirectory.isDirectory) { "当前 Android production dependencies 目录不存在" }
-                val pointer = ReleasePointer(
-                    codeVersion = source.manifest.code.version,
-                    dependencyVersion = source.manifest.dependencies.version,
-                    lockSha256 = source.manifest.dependencies.lockSha256.orEmpty(),
-                    legacyDependencies = dependencyResolution.legacyDependencies,
-                    pendingHealth = true,
-                    previous = current,
-                    previousLegacyDependencies = oldPointer?.legacyDependencies ?: true
-                )
-                onProgress?.invoke(OfflineUpdateProgress("switching", 1L, 1L, "正在切换服务版本"))
-                writeReleasePointer(root, pointer)
-                Log.i(TAG, "已原子切换服务版本 code=${pointer.codeVersion}, dependencies=${pointer.dependencyVersion}")
+            if (source.manifest.taskCode != null) {
+                // 复用组件也必须来自这份签名清单，不能只凭同版本号接受未知内容。
+                val selectedCode = codeDirectory ?: File(root, "updates/code/code-v${source.manifest.code.version}")
+                requireVerifiedIdentity(selectedCode, source.manifest.code, "code")
+                val selectedDependencies = if (dependencyResolution.directory.name == "node_modules")
+                    dependencyResolution.directory.parentFile!! else dependencyResolution.directory
+                requireVerifiedIdentity(selectedDependencies, source.manifest.dependencies, "dependencies")
+                validateCodePackage(selectedCode, source.manifest.code)
+                OfflineDependencyGroups.validateLock(selectedDependencies, File(selectedCode, "package-lock.json"))
             }
-
             repairArchive?.let {
                 val repairMetadata = pendingRepair ?: throw IllegalStateException("数据修复包元数据缺失")
                 val repairStage = File(stage, "data-repair")
@@ -985,11 +1023,30 @@ class OfflineUpdateManager(
                 )
                 writePendingDataRepair(root, repairMetadata, repairDirectory)
             }
+            if (effectivePlan != ServiceUpdatePlan.DATA_REPAIR_ONLY) {
+                val installedDependencyDirectory = dependencyResolution.directory
+                check(installedDependencyDirectory.isDirectory) { "当前 Android production dependencies 目录不存在" }
+                val pointer = OfflineReleasePointer(
+                    codeVersion = source.manifest.code.version,
+                    dependencyVersion = source.manifest.dependencies.version,
+                    lockSha256 = source.manifest.dependencies.lockSha256.orEmpty(),
+                    legacyDependencies = dependencyResolution.legacyDependencies,
+                    pendingHealth = true,
+                    previous = current,
+                    previousLegacyDependencies = oldPointer?.legacyDependencies ?: true,
+                    taskCodeVersion = source.manifest.taskCode?.version,
+                    taskCodeSha256 = source.manifest.taskCode?.sha256
+                )
+                onProgress?.invoke(OfflineUpdateProgress("switching", 1L, 1L, "正在切换服务版本"))
+                writeReleasePointer(root, pointer)
+                Log.i(TAG, "已原子切换服务版本 code=${pointer.codeVersion}, dependencies=${pointer.dependencyVersion}")
+            }
+
             onProgress?.invoke(OfflineUpdateProgress("switching", 1L, 1L, "正在切换服务版本"))
-            return if (codeDirectory == null) {
+            return if (effectivePlan == ServiceUpdatePlan.DATA_REPAIR_ONLY) {
                 "已准备数据修复 ${pendingRepair?.repairId ?: "unknown"}"
             } else {
-                "已应用服务更新 ${source.manifest.code.version}/${source.manifest.dependencies.version}"
+                "已应用服务更新 ${source.manifest.code.version}/${source.manifest.dependencies.version} 任务${source.manifest.taskCode?.version ?: "内置"}"
             }
         } finally {
             stage.deleteRecursively()
@@ -1439,12 +1496,13 @@ class OfflineUpdateManager(
         kind: String
     ): File {
         val parent = destination.parentFile ?: throw IllegalArgumentException("更新版本目录缺少父目录")
+        require(!Files.isSymbolicLink(parent.toPath()) && !Files.isSymbolicLink(destination.toPath())) { "更新版本目录不能为链接" }
         check(parent.isDirectory || parent.mkdirs()) { "无法创建更新版本目录" }
         if (destination.exists()) {
             val marker = File(destination, ".offline-update-verified.json")
             val previous = runCatching { JSONObject(marker.readText()) }.getOrNull()
             require(previous?.optInt("version", -1) == component.version &&
-                previous.optString("sha256") == component.sha256) {
+                previous.optString("sha256") == component.sha256 && previous.optString("kind") == kind) {
                 "更新版本目录已存在但来源校验标记不匹配，拒绝覆盖: ${destination.absolutePath}"
             }
             return destination
@@ -1458,12 +1516,29 @@ class OfflineUpdateManager(
         return destination
     }
 
+    private fun reuseTaskCodeDirectory(root: File, metadata: OfflineTaskCodeArtifact): Boolean {
+        val directory = File(root, "updates/task-code/task-code-v${metadata.version}")
+        if (!directory.exists()) return false
+        requireVerifiedIdentity(directory, metadata.artifact, "taskCode")
+        OfflineTaskCode.validateDirectory(directory, metadata)
+        return true
+    }
+
+    private fun requireVerifiedIdentity(directory: File, component: OfflineUpdateArtifact, kind: String) {
+        require(!Files.isSymbolicLink(directory.toPath())) { "组件目录不能为链接" }
+        val marker = JSONObject(File(directory, ".offline-update-verified.json").readText())
+        require(marker.optString("kind") == kind && marker.optInt("version") == component.version &&
+            marker.optString("sha256") == component.sha256) { "复用组件身份与签名清单不一致: $kind" }
+    }
+
     private fun readInstalledServiceVersion(root: File): InstalledServiceVersion {
         val pointer = readReleasePointer(root)
         if (pointer != null) return InstalledServiceVersion(
             pointer.codeVersion,
             pointer.dependencyVersion,
-            pointer.lockSha256
+            pointer.lockSha256,
+            pointer.taskCodeVersion,
+            pointer.taskCodeSha256
         )
         val metadataFile = File(root, CLIENT_METADATA_FILE)
         if (metadataFile.isFile) {
@@ -1481,59 +1556,9 @@ class OfflineUpdateManager(
         return InstalledServiceVersion(1, 1, lockSha256)
     }
 
-    private fun readReleasePointer(root: File): ReleasePointer? {
-        val pointerFile = File(root, ACTIVE_RELEASE_FILE)
-        if (!pointerFile.isFile) return null
-        val json = JSONObject(pointerFile.readText())
-        val codeVersion = json.optInt("codeVersion", -1)
-        val dependencyVersion = json.optInt("dependencyVersion", -1)
-        val lockSha256 = json.optString("lockSha256").lowercase()
-        require(codeVersion > 0 && dependencyVersion > 0 && lockSha256.matches(Regex("^[a-f0-9]{64}$"))) {
-            "Offline active-release.json 无效"
-        }
-        val previousJson = json.optJSONObject("previous")
-        val previous = previousJson?.let {
-            InstalledServiceVersion(
-                it.optInt("codeVersion", -1),
-                it.optInt("dependencyVersion", -1),
-                it.optString("lockSha256").lowercase()
-            ).also { version ->
-                require(version.codeVersion > 0 && version.dependencyVersion > 0 &&
-                    version.lockSha256.matches(Regex("^[a-f0-9]{64}$"))) {
-                    "Offline active-release.json previous 版本无效"
-                }
-            }
-        }
-        return ReleasePointer(
-            codeVersion,
-            dependencyVersion,
-            lockSha256,
-            json.optBoolean("legacyDependencies", false),
-            json.optBoolean("pendingHealth", false),
-            previous,
-            json.optBoolean("previousLegacyDependencies", true)
-        )
-    }
+    private fun readReleasePointer(root: File): OfflineReleasePointer? = OfflineReleaseState.read(root)
 
-    private fun writeReleasePointer(root: File, pointer: ReleasePointer) {
-        val activeFile = File(root, ACTIVE_RELEASE_FILE)
-        val previousJson = pointer.previous?.let {
-            JSONObject()
-                .put("codeVersion", it.codeVersion)
-                .put("dependencyVersion", it.dependencyVersion)
-                .put("lockSha256", it.lockSha256)
-        }
-        val json = JSONObject()
-            .put("schemaVersion", 1)
-            .put("codeVersion", pointer.codeVersion)
-            .put("dependencyVersion", pointer.dependencyVersion)
-            .put("lockSha256", pointer.lockSha256)
-            .put("legacyDependencies", pointer.legacyDependencies)
-            .put("pendingHealth", pointer.pendingHealth)
-            .put("previousLegacyDependencies", pointer.previousLegacyDependencies)
-            .put("previous", previousJson ?: JSONObject.NULL)
-        writeJsonAtomically(activeFile, json)
-    }
+    private fun writeReleasePointer(root: File, pointer: OfflineReleasePointer) = OfflineReleaseState.write(root, pointer)
 
     private fun writeJsonAtomically(destination: File, json: JSONObject) {
         val parent = destination.parentFile ?: throw IllegalArgumentException("JSON 文件缺少父目录")
@@ -1553,34 +1578,9 @@ class OfflineUpdateManager(
 
     fun rollbackPendingRelease(root: File): Boolean {
         if (OfflineFullApkActivation.isPending(root)) return OfflineFullApkActivation.rollbackPending(root)
-        val pointer = readReleasePointer(root) ?: return false
-        if (!pointer.pendingHealth) return false
-        writeJsonAtomically(
-            File(root, "updates/failed-release.json"),
-            JSONObject()
-                .put("codeVersion", pointer.codeVersion)
-                .put("dependencyVersion", pointer.dependencyVersion)
-                .put("lockSha256", pointer.lockSha256)
-        )
-        val previous = pointer.previous
-        if (previous == null) {
-            val activeFile = File(root, ACTIVE_RELEASE_FILE)
-            val tombstone = File(activeFile.parentFile, "${activeFile.name}.rollback-${System.currentTimeMillis()}")
-            check(activeFile.renameTo(tombstone)) { "无法暂存失败的 Offline release 指针" }
-            check(tombstone.delete()) { "无法清理失败的 Offline release 指针" }
-        } else {
-            writeReleasePointer(root, ReleasePointer(
-                previous.codeVersion,
-                previous.dependencyVersion,
-                previous.lockSha256,
-                pointer.previousLegacyDependencies ?: true,
-                false,
-                null,
-                null
-            ))
-        }
-        Log.w(TAG, "候选服务启动失败，已回滚 active release")
-        return true
+        val changed = OfflineReleaseState.rollback(root)
+        if (changed) Log.w(TAG, "候选服务启动失败，已回滚完整code/dependencies/taskCode组合")
+        return changed
     }
 
     fun markCurrentReleaseHealthy(root: File): Boolean {
@@ -1604,6 +1604,8 @@ class OfflineUpdateManager(
         if (!failedFile.isFile) return false
         val failed = JSONObject(failedFile.readText())
         return failed.optInt("codeVersion", -1) == manifest.code.version &&
+            failed.optInt("taskCodeVersion", -1) == (manifest.taskCode?.version ?: -1) &&
+            failed.optString("taskCodeSha256") == (manifest.taskCode?.sha256 ?: "") &&
             failed.optInt("dependencyVersion", -1) == manifest.dependencies.version &&
             failed.optString("lockSha256").equals(manifest.dependencies.lockSha256, ignoreCase = true)
     }
