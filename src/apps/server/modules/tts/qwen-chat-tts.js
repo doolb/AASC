@@ -6,7 +6,6 @@ const { filterQwenChatSpeechText } = require('./qwen-chat-text-filter');
 function createQwenChatProvider({ speechService } = {}) {
     return {
         async generate(request, settings) {
-            if (!settings.enabled) throw new Error('TTS Provider 未启用，请先保存配置');
             const text = filterQwenChatSpeechText(request.text);
             if (!text) return null;
             if (!speechService) throw new Error('Chat2API 语音服务不可用');

@@ -4,6 +4,7 @@ const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('.
 const { resolveQwenEndpoint, isQwenAudioModel } = require('./qwen-api-contract');
 const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
 const { validateDoubaoVoice } = require('../chat2api/chat2api-doubao-voices');
+const { QWEN_AUDIO_31_MODEL } = require('../chat2api/chat2api-qwen-audio-voices');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_CAPABILITIES = Object.freeze({
@@ -16,10 +17,10 @@ const PROVIDER_CAPABILITIES = Object.freeze({
 const PROVIDER_DEFAULTS = Object.freeze({
     system: { endpoint: '', model: '', credential: '', resourceId: '' },
     'qwen-api': { enabled: true, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-        model: 'qwen-audio-3.1-tts-flash', credential: '', defaultVoice: 'qiaoxiaojiao_v3.1', resourceId: '' },
+        model: QWEN_AUDIO_31_MODEL, credential: '', defaultVoice: 'qiaoxiaojiao_v3.1', resourceId: '' },
     'doubao-api': { enabled: true, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
         model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', resourceId: 'seed-tts-2.0' },
-    'doubao-chat': { enabled: false, endpoint: 'https://www.doubao.com', model: 'doubao-chat',
+    'doubao-chat': { enabled: true, endpoint: 'https://www.doubao.com', model: 'doubao-chat',
         defaultVoice: DOUBAO_SPEECH_VOICE, resourceId: '', experimental: true },
     'qwen-chat': { enabled: true, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
         defaultVoice: 'zh_female_quarkF531S0_ptts', resourceId: '' }
@@ -60,7 +61,7 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         // 豆包网页上游固定语速，不提供Provider语速配置；兼容读取时丢弃历史字段。
         // 任何旧凭据/账号引用均不进入新配置或广播。
         return { ...fixed, defaultVoice: validateDoubaoVoice(patch.defaultVoice ?? previous.defaultVoice ?? fixed.defaultVoice),
-            enabled: patch.enabled ?? (typeof previous.enabled === 'boolean' ? previous.enabled : false) };
+            enabled: true };
     }
     const base = { ...PROVIDER_DEFAULTS[provider], ...previous };
     if (provider !== 'system' && patch.enabled !== undefined && typeof patch.enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
@@ -97,7 +98,8 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         ...(mappedModel?{mappedModel:true}:{}),
         ...auth,
         ...(defaultSpeed === undefined ? {} : { defaultSpeed }),
-        ...(provider === 'system' ? {} : { enabled: patch.enabled ?? base.enabled,
+        // Provider常开；保留enabled=true兼容旧控制端，历史false不再形成隐藏开关。
+        ...(provider === 'system' ? {} : { enabled: true,
             defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
         resourceId: boundedString(patch.resourceId, base.resourceId)
     };

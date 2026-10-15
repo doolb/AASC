@@ -144,3 +144,14 @@ test('真实非静音Opus包按signed Q8头部增益放大/衰减，再限幅转
     }
     assert.ok(max > 0); assert.ok(loudMax > max * 1.8); assert.ok(quietMax < max * 0.6);
 });
+
+test('完整两流分别经过真实WASM解码，各自pre-skip与EOS裁剪后PCM可按序合并', async () => {
+    const { splitOggOpusStreams } = require('../src/external/tts/tts-ogg');
+    const streams = splitOggOpusStreams(Buffer.concat([
+        fixture({ packets: 2, preSkip: 120, endTrim: 240 }), fixture({ packets: 3, preSkip: 80, endTrim: 160 })
+    ]));
+    const pcm = [];
+    for (const stream of streams) pcm.push(validateWav(await decodeOggOpusToWav(stream)).samples);
+    assert.deepEqual(pcm.map(bytes => bytes.length), [1560 * 2, 2640 * 2]);
+    assert.equal(validateWav(wrapPcm(Buffer.concat(pcm), 48000)).samples.length, 8400);
+});

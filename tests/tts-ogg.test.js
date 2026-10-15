@@ -63,3 +63,25 @@ test('精确魔数字节不得因ASCII清除高位而接受CRC合法的伪容器
         for (let byte = start; byte < start + length; byte++) invalid(editPage(fixture(), index, b => { b[byte] |= 0x80; }));
     }
 });
+
+// 对应.src/framework/tts-provider-configuration.md：顺序完整流与全局限额，保留原单流拒绝语义。
+test('完整Ogg串联按EOS分流，子流仍严格校验且不能绕过全局限额', () => {
+    const { splitOggOpusStreams } = require('../src/external/tts/tts-ogg');
+    const first = fixture({ packets: 2, preSkip: 120, endTrim: 240 });
+    const second = fixture({ packets: 3, preSkip: 80, endTrim: 160 });
+    const joined = Buffer.concat([first, second]);
+    assert.throws(() => validateOggOpus(joined), error => error.code === 'TTS_OGG_INVALID');
+    assert.deepEqual(splitOggOpusStreams(joined), [first, second]);
+    assert.deepEqual(splitOggOpusStreams(first), [first]);
+    for (const limits of [{ maxStreams: 1 }, { maxBytes: joined.length - 1 }, { maxPages: 8 }, { maxPackets: 8 }, { maxDurationMs: 40 }]) {
+        assert.throws(() => splitOggOpusStreams(joined, limits), error => error.code === 'TTS_OGG_LIMIT');
+    }
+    assert.throws(() => splitOggOpusStreams(Buffer.concat(Array(65).fill(first)), { maxStreams: 999 }), error => error.code === 'TTS_OGG_LIMIT');
+    const corrupt = Buffer.from(second); corrupt[corrupt.length - 1] ^= 1;
+    for (const invalid of [Buffer.alloc(0), joined.subarray(0, -1), Buffer.concat([joined, Buffer.from([0])]),
+        Buffer.concat([first, second.subarray(47)]), Buffer.concat([first.subarray(0, first.length - 1), second]),
+        Buffer.concat([first, corrupt]), Buffer.concat([first, editPage(second, 2, page => { page.writeUInt32LE(99, 14); })]),
+        Buffer.concat([first, editPage(second, 0, page => { page[5] = 0; })])]) {
+        assert.throws(() => splitOggOpusStreams(invalid), error => error.code === 'TTS_OGG_INVALID');
+    }
+});

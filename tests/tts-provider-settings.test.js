@@ -195,3 +195,19 @@ test('新保存的网页映射别名重载不恢复为QUARK，旧错误配置仍
  assert.equal(normalizeSettings(updated,{}, {recoverLegacyModel:true}).providers['qwen-chat'].model,'my-voice');
  assert.equal(normalizeSettings({providers:{'qwen-chat':{model:'unknown'}}},{},{recoverLegacyModel:true}).providers['qwen-chat'].model,'QUARK_VOICE');
 });
+
+// 对应.src/framework/tts-provider-configuration.md：五种方式常开，兼容旧false但不覆盖显式模型。
+test('五种TTS方式默认可用，旧false规范化为true且默认Qwen为3.1和乔小娇', () => {
+    const ids = ['qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat'];
+    const defaults = normalizeSettings();
+    assert.equal(defaults.providers['qwen-api'].model, 'qwen-audio-3.1-tts-flash');
+    assert.equal(defaults.providers['qwen-api'].defaultVoice, 'qiaoxiaojiao_v3.1');
+    assert.ok(!Object.hasOwn(defaults.providers.system, 'enabled'));
+    const old = { providers: Object.fromEntries(ids.map(id => [id, { enabled: false }])) };
+    for (const settings of [defaults, normalizeSettings({}, old), normalizeSettings(old, defaults),
+        normalizeSettings(old, old, { recoverLegacyModel: true })]) {
+        for (const id of ids) assert.equal(settings.providers[id].enabled, true, id);
+        assert.equal(normalizeSettings(settings).providers['doubao-chat'].enabled, true);
+    }
+    assert.equal(normalizeSettings({ providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultVoice: 'Cherry' } } }).providers['qwen-api'].model, 'qwen3-tts-flash');
+});

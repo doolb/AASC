@@ -411,7 +411,7 @@
 - 日志同款完整回复 → 跳过四段emoji → 八段正文按序下发 → 保持显示文本原样 // 覆盖用户实际失败路径
 - 真正上游incomplete/超时/取消 → 保持错误码与provider标记、无空缓存 // 不吞没正常故障
 
-## framework/Qwen Audio 3.1音色与五方式常开草案（2026-10-15，待用户确认）
+## framework/Qwen Audio 3.1音色与五方式常开（2026-10-15，用户已确认）
 
 ### 已有声明
 
@@ -433,5 +433,42 @@
 - 使四个云/网页Provider的兼容enabled权威值恒为true，system继续不提供此字段 // 旧false和旧控制端保存不会形成隐藏禁用
 - 去掉Provider适配器启用拦截、页面启用复选框及快选未启用提示 // 账号启用、凭据校验、播放开关仍由各自流程管理
 - 保存仍走setTtsProviderConfig、config.set、ttsProviderConfig广播与重连回填 // 沿用AASC权威配置
-- 补充默认模型、68项大小写/元数据/复制隔离、真实目录查询、五方式旧false兼容和无开关UI回归 // 待用户确认后执行
+- 补充默认模型、68项大小写/元数据/复制隔离、真实目录查询、五方式旧false兼容和无开关UI回归 // 用户已确认，相关回归已通过
 - 合并此前音色按钮/豆包emoji修复，重新生成新服务版本并发布LAN/WAN // 已生成候选101不覆盖同名文件，依赖/min/任务沿用
+
+### Qwen Audio 3.1与常开自测映射
+
+- src/apps/server/modules/chat2api/chat2api-qwen-audio-voices.test.js // 目录68项/四类/47女21男/大小写/深拷贝；API适配器、统一语音映射及WS实际目录一致
+- tests/tts-provider-settings.test.js、tests/tts-provider-ws.test.js // 缺省3.1/乔小娇；历史false和新提交false规范化true，快照与广播一致
+- tests/tts-provider-ui-browser.test.js // 无Provider启用checkbox，保存不携带enabled，68项候选名称与ID保持，旧配置回填/失败/重连保持
+- tests/control-tts-voices-browser.test.js // 共享组件加载真实3.1目录，双端回显、47项女声筛选和大写ID选择
+- tests/tts-provider-integration.test.js、tests/tts-provider-qwen-chat.test.js、tests/tts-provider-doubao-chat.test.js // 旧false不再拦截；缺语音服务/账号与真实错误仍报错，纯emoji跳过保持
+- self-test.js的tts_provider_config // 校验四个非原生Provider权威enabled=true以及页面无启用checkbox，不发合成
+- 验证通过并同步文档/出包状态后上传Git → 新服务ZIP逐字节匹配源码 → LAN/WAN版本化上传/原子清单/HTTP验证/精确清理 // 不覆盖候选101或重建未受影响资源
+
+## framework/豆包长句多Ogg流接收（2026-10-15，用户已确认）
+
+### 已有声明
+
+- validateOggOpus、OGG_LIMITS、decodeOggOpusToWav // 保留单流CRC/序列/BOS/EOS/声道/时长完整校验
+- createDoubaoSpeechAdapter的complete句缓冲、WAV/PCM合并及120秒/16MiB上限 // 不改外部WAV协议
+
+### 新增定义
+
+- splitOggOpusStreams // 只按完整Ogg页与EOS/BOS边界识别顺序流，不修复缺页或截断数据
+
+### 操作流程
+
+- 扫描单个上游分句缓冲的Ogg页长度 → 以完整EOS划分流 → 对每流执行现有validateOggOpus // 实测原句上游同句含两个独立有效流
+- 校验所有子流总页数/编码时长/压缩大小及最多64流 // 不以分流绕过安全上限
+- 在豆包适配器按原顺序逐流解码 → 校验采样率/单声道PCM16 → 沿用累计PCM/时长校验与合并 // 两段各自pre-skip/EOS独立生效
+- 对错CRC、错序、交错serial、缺BOS/EOS、尾部残余、超限继续报错 // 保持真正不完整音频可见
+- 补真实两流形状的本地夹具、损坏/截断/限额与单流兼容回归，使用用户原长句实网复验 // 用户已确认，35项回归及原文实网验证通过
+
+### 多流自测映射
+
+- tests/tts-ogg.test.js // 单/双完整流、64流上限、累计页数/字节/时长，CRC/尾部截断/交错serial/BOS或EOS缺失仍拒绝
+- src/apps/server/modules/chat2api/chat2api-doubao-speech-adapter.test.js // 同一TTSSentence包含两完整流，逐流解码顺序/PCM长度，坏第二流不输出部分WAV
+- tests/tts-opus-decoder.test.js // 分割后逐段真实WASM解码与PCM合并，各段pre-skip保留
+- 捕获原长句59027字节音频 → 新分割器识别两流 → 严格解码合并 → 与逐段PCM总长度一致 // 诊断音频仅.cache不提交
+- 原长句再做一次受控合成 → 完整WAV非静音且总时长约11秒；整段原文逐句受控验证 → 不写账号/配置 // 不把文件验证宣称为实机听感

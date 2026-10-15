@@ -182,7 +182,7 @@
                 if (ownReply) clearPending();
                 refs.provider.disabled = Boolean(pending);
                 refs.provider.value = provider;
-                status(message.success === false ? message.message || '保存失败，已恢复服务器设置' : config.providers[provider]?.enabled === false ? '该方式尚未启用，请在声纹页启用' : '已同步当前语音设置');
+                status(message.success === false ? message.message || '保存失败，已恢复服务器设置' : '已同步当前语音设置');
                 if (!refs.panel.hidden) loadVoices(provider);
                 else renderVoices();
                 return;

@@ -1,5 +1,11 @@
 # 语音服务与音色
 
+## 默认方式与Qwen Audio 3.1目录（2026-10-15）
+
+五种方式均默认可用，语音设置不再提供Provider启用开关；旧关闭配置会规范化为可用。先选择方式、模型或音色，再等待服务器保存确认。Chat2API的账号/Provider管理仍决定账号是否可用于实际调用，缺账号或登录失效时会明确报错。
+
+Qwen API默认模型为`qwen-audio-3.1-tts-flash`，默认音色乔小娇`qiaoxiaojiao_v3.1`，提供[官方该模型音色表](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)的68个音色。两端快选和声纹页共用目录，可按官方名称/ID/标签搜索、按性别筛选；ID区分大小写，例如`Emily_v3.1`。目录只用于实际3.1模型，明确保存的其它模型保留其原目录，不跨模型混用。
+
 ## 四路统一与模型映射（2026-10-13）
 
 四路网页/API请求均由Chat2API生成，旧业务ID保持。模型映射可同时指定application=tts和parameters.voice，映射默认先于Provider默认；如qiaoxiaojiao映射Qwen31及乔小娇。旧speech现在也接受API限定模型和已登记TTS映射，WAV播放/缓存协议保持。完整配置示例见[统一应用](chat2api-unified-applications.md)。网页qwen新保存的合法映射别名重载保留；升级前旧错误模型仍恢复QUARK_VOICE。
@@ -10,11 +16,11 @@
 
 系统原生沿用现有TTS生成设备、服务器开关和原生音色配置，此面板只提供语速、音量，不增加启用开关或音色ID。业务或模板选中系统原生时隐藏音色ID输入；旧Provider级开关和音色ID不会阻断或覆盖原有路径。
 
-国内千问网页可用于AI/Agent回复、文本阅读、报时/提醒、自定义文字和系统播报，由Chat2API提供语音合成。文本阅读、报时与系统播报的选择框均可选国内千问，保存后等待权威回填；已有默认选择保持。先在Chat2API账户管理中添加或登录国内千问（qwen）账号，并启用对应账号及Provider；在语音面板启用国内千问、设置模型/默认音色并保存。TTS不再查询或选择账号，Chat2API按已保存的调度策略自动使用可用国内账号，更新登录后下次合成读取最新值。国际qwen-ai不适用于该语音协议。未提供可用账号、登录失效或上游失败会明确报错，不切换到系统原生。
+国内千问网页可用于AI/Agent回复、文本阅读、报时/提醒、自定义文字和系统播报，由Chat2API提供语音合成。文本阅读、报时与系统播报的选择框均可选国内千问，保存后等待权威回填；已有默认选择保持。先在Chat2API账户管理中添加或登录国内千问（qwen）账号，并启用对应账号及Provider；在语音面板设置模型/默认音色并保存。TTS不再查询或选择账号，Chat2API按已保存的调度策略自动使用可用国内账号，更新登录后下次合成读取最新值。国际qwen-ai不适用于该语音协议。未提供可用账号、登录失效或上游失败会明确报错，不切换到系统原生。
 
 豆包普通文字doubaochat已于2026-10-13用正式Node适配器真实验证流式/非流式OK，现支持Responses同账号原生续接、仅发新增输入，两轮纯Node协议记忆验证通过；同账号nodeProfile初始化后不依赖Chrome或页面签名，详情见[纯Node普通LLM](chat2api-doubao-node.md)。这不代表网页朗读链路完成真实验收。
 
-`doubao-chat`用于 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭。启用Chat2API中的doubaochat账号与Provider后自动选择可用账号，无须手动模型映射；显式账号映射仍优先且不退选。TTS只需Cookie，不要求文字Node资料。固定音色zh_female_wenroutaozi_uranus_bigtts、上游speed=1/volume=100，面板隐藏语速设置，后处理只调全局音量；input最多1000个UTF-16字符且UTF-8≤4000字节，仅WAV。code92起同一适配器内按账号跨批次排队，完整上游音频到达即交接，不等待WAV解码；每账号最多等待16项、实例256项，等待计入原60秒时限，取消移除等待项。错误不重试或切换来源，现有分句播放顺序保持。主服务器及Android各三批同时提交已合成非静音48kHz WAV；此次未验证实际播放听感。
+`doubao-chat`用于 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，方式默认可用。启用Chat2API中的doubaochat账号与Provider后自动选择可用账号，无须手动模型映射；显式账号映射仍优先且不退选。TTS只需Cookie，不要求文字Node资料。默认音色zh_female_wenroutaozi_uranus_bigtts，可从官方94项目录选择、上游speed=1/volume=100，面板隐藏语速设置，后处理只调全局音量；input最多1000个UTF-16字符且UTF-8≤4000字节，仅WAV。code92起同一适配器内按账号跨批次排队，完整上游音频到达即交接，不等待WAV解码；每账号最多等待16项、实例256项，等待计入原60秒时限，取消移除等待项。错误不重试或切换来源，现有分句播放顺序保持。主服务器及Android各三批同时提交已合成非静音48kHz WAV；此次未验证实际播放听感。
 
 网页模型默认选择QUARK_VOICE，MINI_MAX需另有匹配的可用音色；目前预置的已验证音色是zh_female_quarkF531S0_ptts，完整国内音色目录尚未取得。qwen3-tts-flash应配置在Qwen API中并使用百炼API Key，不能保存为国内千问网页模型。历史错误模型读取时恢复QUARK_VOICE并保留其他参数，下一次合法保存会写回；服务端拒绝新提交的错误模型并保留原配置。
 

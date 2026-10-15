@@ -56,7 +56,7 @@ test('Qwen官方路径、600 Unicode边界、占位WAV头与原生语速/全局�
     await assert.rejects(api['qwen-api'].generate({ ...request, text: '好' + '😀'.repeat(600) }, 'fixture', {}), /600/u);
     await assert.rejects(api['qwen-api'].generate({ ...request, speed: 0.25 }, 'fixture', {}), /原生语速范围/u);
     assert.equal(calls.length, 1);
-    assert.equal((await api['qwen-api'].voices({ model: request.model }))[0].id, 'qiaoxiaojiao_v3.1');
+    assert.equal((await api['qwen-api'].voices({ model: request.model })).find(voice => voice.id === 'qiaoxiaojiao_v3.1').id, 'qiaoxiaojiao_v3.1');
 });
 
 test('Qwen3-TTS未声明原生rate时不发送速度字段且不在WAV本地变速', async () => {

@@ -156,12 +156,14 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 
 完成验证：新增qwen-api-contract.js和tts-reply-user-text.js，llm-service.js持久化replyToMessageId；新回复按引用取原输入，旧历史按相同mode/target/sessionId/profileName查找，Agent配对记录取user。浏览器只读自测覆盖原轮引用/缺失引用/配对输入。154项相关回归全部通过，20个生产JS语法检查通过。真实当前模型/乔小娇/speed=1生成115244字节上游WAV，生产归一化及速度处理后的WAV校验成功。本机npm重启后3个静态脚本HTTP200、/control初始化权威快照的新模型/音色/路径及三个enabled=true均通过，凭证脱敏。servicePackage=true，未构建或发布新包。
 
-## Qwen Audio 3.1音色与五方式常开（2026-10-15，待确认）
+## Qwen Audio 3.1音色与五方式常开（2026-10-15，源码与验证完成）
 
 用户要求Qwen API默认qwen-audio-3.1-tts-flash，仅接入[官方页面](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)该模型的音色；五种TTS方式默认可用，移除启用开关。代码与本机配置的默认模型/音色目前已是3.1/乔小娇，但API适配器该模型目录仅一项。官方3.1段四表分别4/22/15/27项，共68项，ID区分大小写，不能混入3.0/Qwen3音色。
 
-计划建立该模型专属JSON与只读目录模块，保留官方名称/性别/特质/场景/明确语言，复用原Chat2API模型规划及getTtsProviderVoices。所有控制端、显示端和原声纹页共享同一目录。其它模型显式配置保留，不能将3.1目录套用到旧模型；未提供的语言/年龄不猜测。
+已建立该模型专属JSON与只读目录模块，保留官方名称/性别/特质/场景/明确语言，复用原Chat2API模型规划及getTtsProviderVoices。所有控制端、显示端和原声纹页共享同一目录。其它模型显式配置保留，不能将3.1目录套用到旧模型；未提供的语言/年龄不猜测。
 
-四个云/网页Provider的enabled兼容字段规范化恒true，忽略历史false的禁用含义；system继续无Provider开关字段。移除适配器启用门禁、设置页复选框和快选未启用提示。账户启用/凭据/业务适用范围及播放控制仍使用既有职责；缺账号在调用时明确报错，不自动合成或切换Provider。原AASC保存/广播/重连流程复用，不新增配置接口。
+四个云/网页Provider的enabled兼容字段已规范化恒true，忽略历史false的禁用含义；system继续无Provider开关字段。移除适配器启用门禁、设置页复选框和快选未启用提示。账户启用/凭据/业务适用范围及播放控制仍使用既有职责；缺账号在调用时明确报错，不自动合成或切换Provider。原AASC保存/广播/重连流程复用，不新增配置接口。
 
-需修改tts-provider-settings.js、tts-provider-registry.js、qwen-chat-tts.js、doubao-chat-tts.js、Chat2API语音适配器、前端tts-provider-settings.js/tts-voice-picker.js与只读自测；补相关单元、目录查询、UI/多端回归。确认后实施并合并此前两项已完成修复发布LAN/WAN服务包。当前候选101仅包含此前修改，尚未切换清单；不会覆盖已生成版本文件。任务：20261015_QwenAudio31音色与五方式常开.md。
+已修改tts-provider-settings.js、tts-provider-registry.js、qwen-chat-tts.js、doubao-chat-tts.js、Chat2API语音适配器、前端tts-provider-settings.js/tts-voice-picker.js与只读自测；补相关单元、目录查询、UI/多端回归。已完成实现与回归，合并此前两项修复待发布LAN/WAN服务包。当前候选101仅包含此前修改，尚未切换清单；不会覆盖已生成版本文件。任务：20261015_QwenAudio31音色与五方式常开.md。
+
+执行结果：新增qwen-audio-31-voices.json与chat2api-qwen-audio-voices.js（68项、女47/男21，四组4/22/15/27）；API目录按实际模型返回，查询副本隔离。Provider适配器启用门禁、声纹页复选框及快选禁用提示已移除，旧false读回/提交均广播true；账号启用与缺凭据仍由Chat2API处理。只读SelfTest检查常开配置及无开关DOM。Chat2API266/266、Provider定向84/84、双端快选21/21、声纹页浏览器1/1、手动/并发22/22通过；双端验证68项、女47项、大写Emily_v3.1保存与同步。服务包待本轮发布，min/依赖/任务不受影响。

@@ -514,7 +514,7 @@ Chat2API服务:
   npm run check:chat2api及TTS/手动播放定向回归；真实WAV成功才确认可用
 ```
 
-## Qwen Audio 3.1音色与五方式常开草案（2026-10-15，待确认，尚未实现）
+## Qwen Audio 3.1音色与五方式常开（2026-10-15，已实现）
 
 ```text
 已有声明 := PROVIDER_DEFAULTS、normalizeProviderSettings、createApiSpeechAdapters、getTtsProviderVoices、两端共享音色组件
@@ -527,4 +527,12 @@ Chat2API服务:
 删除Provider合成启用拦截、页面启用复选框和未启用提示 → 保留账号/凭据/取消/业务范围校验
 自测 := 缺省/旧false/旧控制端保存、多端广播和重连；68项目录、映射别名与模型隔离；无启用控件
 发布 := 新源码修改后servicePackage=true；重新构建新服务版本，LAN/WAN各自校验切清单；min/deps/task沿用
+```
+
+```text
+已实现文件 := qwen-audio-31-voices.json、chat2api-qwen-audio-voices.js、chat2api-api-speech-adapters.js
+目录 := 68个唯一ID，female47/male21，四组4/22/15/27，语言仅按官网明确说明；查询返回独立tags/languages数组
+常开 := normalizeProviderSettings使四个非原生enabled恒true；原生无此字段；所有Provider移除启用门禁
+前端 := 无启用checkbox，保存不携带enabled，快选无未启用提示，SelfTest只读检查权威true和DOM
+回归 := Chat2API266/266；Provider84/84；快选21/21；声纹浏览器1/1；手动/并发22/22（部分用例重叠）
 ```

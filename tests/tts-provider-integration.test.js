@@ -265,7 +265,7 @@ test('HTTP总超时、容量限制与响应中断；成功后可继续生成', a
     assert.deepEqual((await requestLimited(url)).buffer, wav);
 });
 
-test('system仍使用原引用、选择默认参数，禁用和600字边界明确失败', async t => {
+test('system仍使用原引用和默认参数，旧关闭字段不拦截且600字边界仍拒绝', async t => {
     let request;
     const settings = normalizeSettings({ systemBroadcast: { voice: 'native' }, providers: { system: { defaultSpeed: 3 },
         'qwen-api': { credential: 'test', endpoint: 'http://127.0.0.1:1/unused' } } });
@@ -275,7 +275,7 @@ test('system仍使用原引用、选择默认参数，禁用和600字边界明�
     assert.equal(request.voice, null);
     assert.equal(request.speed, 3);
     assert.equal(request.preferredDisplayId, 'display-a');
-    await assert.rejects(registry['qwen-api'].generate({ text: 'test' }, { ...settings.providers['qwen-api'], enabled: false }), /未启用/u);
+    await assert.rejects(registry['qwen-api'].generate({ text: '好'.repeat(601) }, { ...settings.providers['qwen-api'], enabled: false }), /600/u);
     await assert.rejects(registry['qwen-api'].generate({ text: '好'.repeat(601) }, settings.providers['qwen-api']), /600/u);
 });
 

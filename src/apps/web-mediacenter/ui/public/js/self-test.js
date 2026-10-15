@@ -295,6 +295,8 @@ const SelfTest = {
                         ? Number.isInteger(config.providers[id].defaultSpeed) && config.providers[id].defaultSpeed >= -10 && config.providers[id].defaultSpeed <= 10
                         : !Object.hasOwn(config.providers[id], 'defaultSpeed'))
                     && providers.every(id => !Object.hasOwn(config.providers[id], 'defaultVolume'))
+                    && providers.filter(id => id !== 'system').every(id => config.providers[id].enabled === true)
+                    && !document.querySelector('#ttsProviderFields input[type="checkbox"]')
                     && !Object.hasOwn(config.providers.system, 'enabled')
                     && !Object.hasOwn(config.providers.system, 'defaultVoice')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'chat2apiAccountId')

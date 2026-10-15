@@ -703,3 +703,24 @@ min41/code76为历史发布；本次新增代码未出包。真实账号捕获�
   独立只读审查 -> 无Important/Critical问题；真实官网/用户Chrome/Android真机未访问
   发布状态 -> 仅servicePackage=true，minApk/dependenciesPackage保持false；未构建/发布/重启
 ```
+
+## 豆包长句多Ogg流接收（2026-10-15，已实现）
+
+```text
+已有声明 := validateOggOpus、OGG_LIMITS、decodeOggOpusToWav、豆包complete句缓冲与PCM合并
+新增定义 := splitOggOpusStreams
+按页长度扫描完整分句缓冲 → EOS边界划分 → 每段单流校验BOS/EOS/序号/CRC
+累计子流数<=64、页数<=原上限、编码时长<=120秒、总压缩字节<=16MiB
+按分句/子流顺序解码 → 各自应用pre-skip/EOS → 校验单声道PCM16与相同采样率 → 原累计限额/拼接WAV
+缺完整流、损坏CRC、交错serial、重复BOS、尾部截断或超限 → 原audio/limit错误，不补页或播放部分音频
+实测证据 := 同一句59027字节包含两个有效流，37100/21927字节；独立解码各成功，旧单流验证拒绝组合
+验证计划 := 单/双流、CRC/序号/截断/交错/限额与取消；原句实网合成及整段播放待确认后复验
+```
+
+```text
+已实现 := splitOggOpusStreams扫描页/EOS并逐流调用validateOggOpus；累加页数/packetCount/时长/压缩大小，最多64流
+豆包接收 := 收齐原分句 → 合并压缩缓冲 → 全部流先严格验证 → 每流真实解码 → 单声道/采样率/PCM累计校验 → WAV
+回归 := 音频35/35，Chat2API266/266；损坏第二流时解码次数为0，不返回部分音频
+实网 := 原长句两流合并1051832字节、48kHz、10956.125ms；原文8段非静音、queued=8、末句喵～、errors=[]
+边界 := 未推送设备播放；账号/配置不变，诊断原音频仅.cache，不提交Git
+```

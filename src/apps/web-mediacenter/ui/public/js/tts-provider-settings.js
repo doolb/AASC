@@ -166,12 +166,6 @@
             group.appendChild(create('summary', `${title} 设置`));
             group.style.marginTop = '16px';
             const inputs = {};
-            if (id !== 'system') {
-                const enabled = create('input');
-                enabled.type = 'checkbox';
-                inputs.enabled = enabled;
-                addField(group, '启用', enabled);
-            }
             if (PROVIDER_CAPABILITIES[id]?.supportsSpeed) {
                 const speed = create('input');
                 speed.dataset.ttsField = 'defaultSpeed';

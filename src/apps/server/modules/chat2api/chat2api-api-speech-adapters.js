@@ -1,6 +1,7 @@
 'use strict';
 
 const { randomUUID } = require('node:crypto');
+const { QWEN_AUDIO_31_MODEL, listQwenAudio31Voices } = require('./chat2api-qwen-audio-voices');
 const { StringDecoder } = require('node:string_decoder');
 const { requestLimited, requestJson } = require('../tts/tts-provider-http');
 const { createProviderError } = require('../tts/tts-provider-errors');
@@ -93,9 +94,9 @@ function createApiSpeechAdapters({ httpRequest = requestLimited, jsonRequest = r
             return adjustWavVolume(wav, request.volume);
         }),
         async voices(request = {}) {
-            const voices = request.model === 'qwen-audio-3.1-tts-flash' ? ['qiaoxiaojiao_v3.1']
-                : request.model?.startsWith('qwen-audio-') ? [] : VOICES['qwen-api'];
-            return voices.map(id => ({ id, name: id === 'qiaoxiaojiao_v3.1' ? '乔小娇' : id, available: true }));
+            if (request.model === QWEN_AUDIO_31_MODEL) return listQwenAudio31Voices();
+            const voices = request.model?.startsWith('qwen-audio-') ? [] : VOICES['qwen-api'];
+            return voices.map(id => ({ id, name: id, available: true }));
         }
     };
     const doubaoApi = {

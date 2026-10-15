@@ -1,3 +1,18 @@
+### Qwen Audio 3.1音色、五方式常开及豆包长句多流修复
+
+- ✅ [2026-10-15] 按确认方案接入Qwen Audio 3.1官方68音色，五种TTS方式常开并移除Provider启用开关。
+  - 新增qwen-audio-31-voices.json与chat2api-qwen-audio-voices.js，实际3.1模型目录68项/47女21男，ID大小写及官方元数据保留；tts-provider-settings默认3.1/乔小娇共用模型常量，旧false规范化true，去掉Registry/网页Provider门禁、声纹页复选框和快选禁用提示。账号/密钥、其它模型和业务范围沿用。
+  - Chat2API266/266、Provider定向84/84、双端快选21/21、声纹页浏览器1/1、手动/并发22/22通过（部分用例重叠）；覆盖目录/复制隔离/实际模型映射、旧false保存广播及重连、双端68项/女47项和Emily_v3.1选择、自测无开关及账号停用错误。
+- ✅ [2026-10-15] 修复真实长句同一上游分句含两个完整Ogg流时被单流校验拒绝，造成doubao_speech_audio中断。
+  - tts-ogg.js增加splitOggOpusStreams，逐流沿用严格CRC/BOS/EOS/序号校验，累计64流/页数/包数/字节/120秒；豆包speech adapter先验证所有流再逐流解码，原单流验证与PCM合并限额保持。音频35/35通过；CRC负例夹具初次误重算校验和，改直接破坏CRC后通过。
+  - 原长句实网复验两个完整流合并1,051,832字节48kHz WAV、10,956.125ms；用户整段原文经真实手动服务/分句/Registry/Provider与账号生成8段非静音，queued audioCount=8、末句喵～、errors=[]。不写账号或配置，未推送设备实际播放；原音频和证据仅.cache、不入Git。
+  - 同步.src/design/spec/task/todo/usage/self-test，servicePackage=true，其余三项false；连同此前音色按钮和emoji修复待本轮重新出包发布，候选101不覆盖。
+
+### 豆包长句中断实际音频调查
+
+- ✅ [2026-10-15] 针对正常正文后停止核查最新三次doubao_speech_audio，受控实网合成复现同句59,027字节双完整Ogg流。
+  - 37,100/21,927字节子流各自通过既有严格校验和WASM解码，时长约6.86/4.10秒；原单流校验拒绝EOS后数据。同步.src/design/spec/task/todo形成分流校验与句内PCM合并方案；尚未改音频接收实现。未改账号/配置，原音频只留本机.cache、不入Git。
+
 ### Qwen Audio 3.1音色与五方式常开方案
 
 - ✅ [2026-10-15] 核查用户指定官网3.1段68项音色和现有配置，记录模型专属目录与五种方式常开方案。

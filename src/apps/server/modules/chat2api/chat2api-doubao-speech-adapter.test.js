@@ -149,3 +149,20 @@ test('每句合规但累计超过120秒拒绝，恰好120秒允许', async () =>
         assert.equal(sockets[0].destroyed,true);
     }
 });
+
+test('同一上游分句的两个完整Ogg流均解码合并，坏第二流不返回部分音频', async () => {
+    const first = fixture({ packets: 2, preSkip: 120, endTrim: 240 });
+    const second = fixture({ packets: 3, preSkip: 80, endTrim: 160 });
+    const { generate, sockets } = setup();
+    const pending = generate(); start(sockets[0]);
+    sentence(sockets[0], Buffer.concat([first, second]));
+    sockets[0].emit('message', event('TTSEnded'), true);
+    assert.equal(validateWav(await pending).samples.length, 8400);
+    let decoded = 0;
+    const broken = setup({ decodeAudio: async () => { decoded++; return wrapPcm(Buffer.from([1, 0])); } });
+    const failed = broken.generate(); start(broken.sockets[0]);
+    sentence(broken.sockets[0], Buffer.concat([first, second.subarray(0, -1)]));
+    broken.sockets[0].emit('message', event('TTSEnded'), true);
+    await assert.rejects(failed, error => error.code === 'doubao_speech_audio');
+    assert.equal(decoded, 0, '所有容器先完整校验，不先解码或返回部分音频');
+});

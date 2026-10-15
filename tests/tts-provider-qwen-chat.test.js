@@ -51,7 +51,7 @@ test('qwen-chat纯emoji不调用Chat2API、不写缓存；正文筛选后继续�
     await assert.rejects(service.generate({ text: '继续❤️。', businessType: 'ai_reply' }), /实际上游失败/u);
     assert.equal(stores, 1);
     assert.equal(await createQwenChatProvider().generate({ text: '✨', speed: 0 }, { enabled: true }), null);
-    await assert.rejects(provider.generate({ text: '✨' }, { enabled: false }), /未启用/u);
+    assert.equal(await provider.generate({ text: '✨' }, { enabled: false }), null);
 });
 
 test('qwen-chat筛选不影响其他Provider文本，其他云Provider空结果仍拒绝', async () => {
@@ -168,5 +168,6 @@ test('TTS只转交Chat2API语音，不读取手动凭证或账号引用', async 
         { enabled: true, model: 'QUARK_VOICE', credential: 'legacy-secret', chat2apiAccountId: 'legacy-account' });
     assert.deepEqual(requests[0], [{ input: '测试', model: 'QUARK_VOICE', voice: 'voice', speed: 2, volume: 70 }, { timeoutMs: 500, signal:undefined, parameterDefaults:undefined, expectedProviderId:"qwen" }]);
     assert.ok(!JSON.stringify(requests).includes('legacy'));
-    await assert.rejects(provider.generate({ text: '测试' }, { enabled: false }), /未启用/u);
+    await provider.generate({ text: '测试', speed: 0, volume: 100 }, { enabled: false, model: 'QUARK_VOICE' });
+    assert.equal(requests.length, 2, '旧Provider关闭字段不拦截，账号仍由Chat2API校验');
 });

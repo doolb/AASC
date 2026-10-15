@@ -27,7 +27,7 @@ test('显示端快选复用共享配置、各方式保留音色且只允许窄�
     await handler.handle(display, { type: 'setChatTtsSelection', provider: 'doubao-chat', voice: male, enabled: true });
     assert.equal(replies.at(-1).success, false);
     await handler.handle(display, { type: 'setTtsProviderConfig', config: { providers: { 'doubao-chat': { enabled: true } } } });
-    assert.equal(settings.providers['doubao-chat'].enabled, false);
+    assert.equal(settings.providers['doubao-chat'].enabled, true);
     await handler.handle({}, { type: 'setChatTtsSelection', provider: 'system' });
     assert.equal(settings.aiReplyDefault.provider, 'doubao-chat');
     fail = true;

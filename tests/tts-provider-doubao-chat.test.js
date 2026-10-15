@@ -10,9 +10,9 @@ const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts
 const { wrapPcm } = require('../src/external/tts/tts-wav');
 const { DOUBAO_SPEECH_VOICE } = require('../src/apps/server/modules/chat2api/chat2api-doubao-speech-protocol');
 
-test('豆包网页TTS默认禁用且上游固定参数，无凭据/账号字段，仅AI/Agent可选',()=>{
+test('豆包网页TTS默认可用且上游固定参数，无凭据/账号字段，仅AI/Agent可选',()=>{
     const defaults=normalizeSettings();const value=defaults.providers['doubao-chat'];
-    assert.equal(value.enabled,false);assert.equal(value.defaultVoice,DOUBAO_SPEECH_VOICE);
+    assert.equal(value.enabled,true);assert.equal(value.defaultVoice,DOUBAO_SPEECH_VOICE);
     assert.ok(!Object.hasOwn(value,'credential'));assert.ok(!Object.hasOwn(value,'chat2apiAccountId'));
     assert.equal(validateBusinessProvider('doubao-chat','ai_reply'),'doubao-chat');
     assert.equal(validateBusinessProvider('doubao-chat','agent_reply'),'doubao-chat');
@@ -36,8 +36,8 @@ test('业务薄层接受共享参数但向上游发送固定WAV参数，不降�
     const settings=normalizeSettings({providers:{'doubao-chat':{enabled:true}}}).providers['doubao-chat'];
     assert.equal(await provider.generate({text:'测试',voice:DOUBAO_SPEECH_VOICE,speed:2,volume:50,timeoutMs:1000},settings),audio);
     assert.deepEqual(calls[0][0],{input:'测试',model:'doubao-chat',voice:DOUBAO_SPEECH_VOICE,speed:1,volume:100,response_format:'wav'});
-    await assert.rejects(provider.generate({text:'x',speed:2,volume:50},{...settings,enabled:false}));
-    assert.equal(await provider.generate({text:'x',speed:1,volume:80},settings),audio);assert.equal(calls.length,2);
+    assert.equal(await provider.generate({text:'x',speed:2,volume:50},{...settings,enabled:false}),audio);
+    assert.equal(await provider.generate({text:'x',speed:1,volume:80},settings),audio);assert.equal(calls.length,3);
     const failed=createDoubaoChatProvider({speechService:{generate:async()=>{throw new Error('固定上游错误')}}});
     await assert.rejects(failed.generate({text:'x',speed:0,volume:100},settings),/固定上游错误/u);
 });
@@ -84,7 +84,7 @@ test('豆包按完整字素过滤emoji，纯表情跳过且混合正文、数字
     }
     assert.equal(stores.length, 4);
     assert.equal(await createDoubaoChatProvider().generate({ text: '✨' }, { enabled: true }), null);
-    await assert.rejects(registry['doubao-chat'].generate({ text: '✨' }, { enabled: false }), /尚未启用/u);
+    assert.equal(await registry['doubao-chat'].generate({ text: '✨' }, { enabled: false }), null);
 });
 
 test('豆包过滤后真实上游incomplete、超时和取消仍报错，不以空结果吞没故障', async () => {

@@ -7,7 +7,6 @@ const { filterSpeechText } = require('./tts-speech-text-filter');
 function createDoubaoChatProvider({ speechService } = {}) {
     return {
         async generate(request, settings) {
-            if (!settings.enabled) throw new Error('豆包网页朗读尚未启用，请先保存配置');
             // 对应.src/framework/tts-provider-configuration.md：纯表情分句不请求上游，避免重播中途失败。
             const text = filterSpeechText(request.text);
             if (!text) return null;

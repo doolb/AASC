@@ -11,6 +11,7 @@ const puppeteer = require('puppeteer-core');
 const { normalizeSettings, redactSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { createTtsProviderWs } = require('../src/apps/server/modules/tts/tts-provider-ws');
 const { listDoubaoVoices } = require('../src/apps/server/modules/chat2api/chat2api-doubao-voices');
+const { createApiSpeechAdapters } = require('../src/apps/server/modules/chat2api/chat2api-api-speech-adapters');
 const root = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const chrome = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium'].find(p => p && fs.existsSync(p));
 
@@ -110,7 +111,7 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     const handler = createTtsProviderWs({
         config: { getPublicTtsProviderSettings: () => redactSettings(settings),
             setTtsProviderSettings: patch => { if (failSave) throw Error('测试保存失败'); settings = normalizeSettings(patch, settings); } },
-        service: { voices: async id => id === 'doubao-chat' ? listDoubaoVoices() : [{ id: 'fixture-qwen', name: '测试千问音色', gender: 'female' }] },
+        service: { voices: async id => id === 'doubao-chat' ? listDoubaoVoices() : id === 'qwen-api' ? createApiSpeechAdapters()['qwen-api'].voices({ model: settings.providers['qwen-api'].model }) : [{ id: 'fixture-qwen', name: '测试千问音色', gender: 'female' }] },
         isControl: ws => controls.has(ws), isDisplay: ws => displays.has(ws),
         broadcast: message => { for (const ws of sockets.clients) if (ws.readyState === 1) ws.send(JSON.stringify(message)); }
     });
@@ -231,6 +232,18 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     await control.select('#controlTtsProviderSelect', 'qwen-api');
     await waitFor(control, () => !document.querySelector('#controlTtsProviderSelect').disabled);
     assert.equal(await control.$eval('#controlTtsSpeedControl', node => node.hidden), true);
+    await control.evaluate(() => WebSocketManager.ws.send(JSON.stringify({ type: 'setTtsProviderConfig',
+        config: { providers: { 'qwen-api': { model: 'qwen-audio-3.1-tts-flash' } } } })));
+    await waitFor(control, () => !document.querySelector('#controlTtsSpeedControl').hidden);
+    await waitFor(control, () => document.querySelectorAll('#controlTtsVoiceList [data-voice-id]').length === 68);
+    await waitFor(display, () => document.querySelectorAll('#displayTtsVoiceList [data-voice-id]').length === 68);
+    await control.bringToFront();
+    await control.select('#controlTtsFilterGender', '女声');
+    assert.equal(await control.$$eval('#controlTtsVoiceList [data-voice-id]', nodes => nodes.length), 47);
+    await control.evaluate(() => document.querySelector('#controlTtsVoiceClear').click());
+    await control.$eval('#controlTtsVoiceList [data-voice-id="Emily_v3.1"]', button => button.click());
+    await waitFor(display, () => document.querySelector('#displayTtsCurrentVoiceName').textContent === 'Emily');
+    assert.equal(settings.aiReplyDefault.voice, 'Emily_v3.1');
     await control.bringToFront();
     await control.select('#controlTtsProviderSelect', 'doubao-chat');
     await waitFor(control, () => document.querySelector('#controlTtsProviderSelect').value === 'doubao-chat' && !document.querySelector('#controlTtsProviderSelect').disabled);
