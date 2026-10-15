@@ -1,3 +1,12 @@
+### 两端音色面板与语速服务正式发布
+
+- ✅ [2026-10-15] 按用户“发布”将音色/方式切换修复、控制端右下角音色浮钮及双端语速滑条随服务code v100同步发布LAN/WAN。
+  - 发布上一轮ADB验证的同一候选：`code/code-v100.zip`，17,808,097字节，SHA256 `cbd160f3dea59be7a00e13963de2a6e5063736a5bc23a4c92721a36d4c03db75`。签名、大小/SHA、ZIP CRC及1096项当前源码匹配；先确认两端正式99和保留组件一致，再将已校验候选同步到`release/offline-update/output/`标准输出位置，不重新打包。
+  - 使用`npm run publish:offline-update -- --mode=code-only --manifest-file release/offline-update/output/manifests/manifest-code-v100.json --remote-dir /home/as/a/aasc-offline`完成版本文件上传和签名清单原子切换；沿用task1/seeds86，min58、deps10、repair3及既有任务依赖的引用和摘要保持。未构建或发布新APK、任务ZIP或依赖包。
+  - LAN完整HTTP摘要通过；WAN复用同一发布模块在源站通过13项337,734,593字节完整HTTP摘要校验，LAN/WAN公网入口的签名清单均等于候选，13项HTTP HEAD状态与大小全部一致。上述验证完成后终止CLI剩余重复跨公网下载，再精确清理WAN；未把源站校验宣称为全量跨公网下载。
+  - 两端旧code99已精确清理，最终code目录仅code-v100.zip、task-code目录保留task-code-v1.zip；清理复核0错误。保留当前min58、LAN完整APK v50、其它非版本文件及配置/日志/模型/任务数据，未跟随链接或清理工作区。
+  - 保持四项出包需求false；本轮仅发布与资源验证，按纯发布例外只更新changelog，未重跑41项实施回归或更改设备语音设置。WAN临时发布辅助目录已清理，发布证据留本机`.cache/tts-voice-publish-20261015/`，APK/ZIP和设备资料不入Git。
+
 ### 两端音色快选修复、控制端浮钮与语速滑条
 
 - ✅ [2026-10-15] 修复显示端音色/方式保存失败，控制端右下角新增音色浮钮，两端共享筛选、选中定位、权威回显和每方式语速。
