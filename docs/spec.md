@@ -4,6 +4,8 @@
 
 - [独立任务代码 ZIP 同步伪代码（源码已实现，待出包迁移）](spec/task-code-sync.md)
 
+- [Offline Node 子显示端独立 ZIP 伪代码（手工分发，不接入自动更新）](spec/offline-voice-display-node-package.md)
+
 - [完整 Offline APK 同步伪代码](spec/offline-full-apk-sync.md)
 
 - [全量配置与聊天数据 ZIP 备份伪代码](spec/full-config-backup.md)

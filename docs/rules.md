@@ -90,8 +90,8 @@ PORT=3000 npm start
 
 ## Offline 发布待打包状态
 
-- 所有 Offline 产物的待打包状态只维护在 `release/offline-release-status.json`，四个字段分别表示是否需要 min APK、服务代码包、生产依赖包和独立任务代码包。
-- 修改服务端或网页热更新代码时将 `servicePackage` 设为 `true`；修改 Android 原生/min APK 内资源时将 `minApk` 设为 `true`；改变生产依赖集合时将 `dependenciesPackage` 设为 `true`。受管任务代码、选择清单或兼容声明变化时将 `taskCodePackage` 设为 `true`；任务包构建器/读取契约首次接入同时影响服务包和 min APK。未受影响的项保持原值。
+- 所有 Offline 产物的待打包状态只维护在 `release/offline-release-status.json`，五个字段分别表示是否需要 min APK、服务代码包、生产依赖包、独立任务代码包和 voice-display-node 独立包。
+- 修改服务端或网页热更新代码时将 `servicePackage` 设为 `true`；修改 Android 原生/min APK 内资源时将 `minApk` 设为 `true`；改变生产依赖集合时将 `dependenciesPackage` 设为 `true`。受管任务代码、选择清单或兼容声明变化时将 `taskCodePackage` 设为 `true`；Node 子显示端程序或其独立打包/发布契约变化时将 `voiceDisplayNodePackage` 设为 `true`。任务包构建器/读取契约首次接入同时影响服务包和 min APK。未受影响的项保持原值。
 - 代码修改和状态变化一起上传 Git。只有出包机具备离线签名密钥；对应产物成功生成后，出包机将相应字段设为 `false` 并上传 Git。失败或打包内容未覆盖最新代码时保持 `true`。
 - 该文件记录技术上的待打包状态，不代表已经构建或发布；本地无密钥时不运行 APK 打包命令。
 
@@ -101,6 +101,14 @@ PORT=3000 npm start
 - 独立任务包使用 `task-code/task-code-v<正整数>.zip`，签名 `manifest.components.taskCode` 同时绑定服务版本区间/API、APK最低版本和可选的依赖组合版本/锁指纹。
 - 只改任务时通过 `build:offline-update -- --mode=task-code-only --task-code-version N` 构建；现有服务不兼容时使用 code-only/all 联合任务版本构建，不能发布不兼容完整清单。
 - 任务专用发布只上传任务ZIP并最后切换清单；其他组件引用必须与目标现行签名清单一致。LAN/WAN独立执行，基线变化后重新构建。
+
+## Node 子显示端独立发布
+
+- 普通 Offline 服务 code ZIP 必须排除整个 `src/apps/voice-display-node/`；程序由独立 `voice-display-node/voice-display-node-v<正整数>.zip` 分发，压缩包保留原项目路径并配套 RSA 签名的 `voice-display-node-v<正整数>.json` 校验元数据。
+- 独立包排除本机 `config.json`、`run-task/`、根级 logs/models/results/temp/cache 数据目录和 `node_modules/.bin/`；不跟随符号链接。缺依赖、入口或 lockfile 时构建失败。
+- 独立 ZIP 不属于服务 `manifest.json` 的组件，不由服务端/Android 自动下载或安装。使用者手工核验 sidecar 后将 ZIP 解压到项目根目录。
+- 发布到 LAN/WAN 服务根的 `voice-display-node/` 子目录，ZIP 与 sidecar 先以版本化文件上传，再分别以 HTTP 核对状态、大小、RSA 签名和完整 SHA-256；不得替换服务 `manifest.json`。
+- 清理只允许删除该子目录直接包含、名称严格匹配 `voice-display-node-v<数字>.zip` 或 `voice-display-node-v<数字>.json` 的普通文件；保留当前版本，拒绝链接/目录，不触碰其他目录或文件。LAN/WAN独立发布和清理。
 - 发布清理只扫描当前根下 `task-code` 直属目录，严格匹配 `task-code-v<数字>.zip` 的普通文件；保留当前引用，不跟随或删除链接，不触碰任务数据、模型、日志和非版本文件。
 - 设备端pending健康检查期间不清理版本目录；健康提交后精确保留活动任务版本。官方受管代码只读，自定义任务应使用其他名称；数据仍在原TaskIO目录。
 
