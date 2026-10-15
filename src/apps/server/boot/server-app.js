@@ -8720,7 +8720,10 @@ function formatVoiceprintScore(value) {
 
 function handleDisplayMessageFallback(displayId, data, ws) {
     if (['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices'].includes(data.type)) {
-        void ttsProviderWs.handle(ws, data);
+        // 显示端入口已把 displayId 覆盖为登记身份；它属于传输上下文，不是快选业务字段。
+        // 只隔离这一字段，其它未知字段仍交给原白名单拒绝，避免放宽显示端写入权限。
+        const { displayId: transportDisplayId, ...selectionData } = data;
+        void ttsProviderWs.handle(ws, selectionData);
         return;
     }
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;

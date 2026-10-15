@@ -198,6 +198,21 @@ const SelfTest = {
             }
         },
         {
+            id: 'control_tts_voice_picker',
+            name: '控制端音色快捷面板',
+            category: '语音',
+            run: async () => {
+                // 只检查当前页面已初始化的共享入口，不发送选择或合成请求。
+                const panel = document.getElementById('controlTtsVoicePanel');
+                const valid = Boolean(window.TtsVoicePicker && window.ControlTtsVoices
+                    && document.getElementById('controlTtsVoiceToggle') && panel
+                    && ['controlTtsProviderSelect', 'controlTtsVoiceList', 'controlTtsCurrentVoiceName', 'controlTtsSpeed', 'controlTtsSpeedValue']
+                        .every(id => panel.querySelector('#' + id)));
+                return { success: valid, message: valid ? '共享音色面板入口正常' : '控制端音色面板尚未初始化',
+                    details: '只读结构检查；保存、多端同步和布局由定向回归与ADB验证' };
+            }
+        },
+        {
             id: 'display_voice_filters',
             name: '显示端音色筛选入口',
             category: '语音',

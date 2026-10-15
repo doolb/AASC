@@ -96,3 +96,111 @@ test('错误网页模型保存失败回传原权威值，支持的别名广播�
     await handler.handle(control, { type: 'setTtsProviderConfig', config: { providers: { 'qwen-chat': { model: 'qwen-chat' } } } });
     assert.equal(broadcasts[0].config.providers['qwen-chat'].model, 'QUARK_VOICE');
 });
+
+test('真实显示入口补入displayId后仍可快选，未知业务字段和显示端完整配置继续拒绝', async () => {
+    const fs = require('node:fs');
+    const vm = require('node:vm');
+    const WSViewBindServer = require('../src/core/viewbind/WSViewBindServer');
+    const { registerTextMediaDisplayHandlers } = require('../src/apps/server/modules/media/text-media-ws-integration');
+    const source = fs.readFileSync(require.resolve('../src/apps/server/boot/server-app'), 'utf8');
+    const start = source.indexOf('function handleDisplayMessageFallback(');
+    const end = source.indexOf('    if (displayVoiceListeningConfig.handle', start);
+    assert.ok(start > 0 && end > start);
+    let settings = normalizeSettings();
+    const replies = [], broadcasts = [];
+    const display = { send: raw => replies.push(JSON.parse(raw)) };
+    const ttsProviderWs = createTtsProviderWs({
+        config: { getPublicTtsProviderSettings: () => redactSettings(settings),
+            setTtsProviderSettings: patch => { settings = normalizeSettings(patch, settings); } },
+        service: { voices: async () => [] }, isControl: () => false,
+        isDisplay: ws => ws === display, broadcast: message => broadcasts.push(message)
+    });
+    // 执行生产转交分支及真实ViewBind注册，覆盖原组件单测缺少的传输字段。
+    const fallback = vm.runInNewContext('(' + source.slice(start, end) + '\n})', { ttsProviderWs });
+    const server = new WSViewBindServer();
+    registerTextMediaDisplayHandlers({ wsServer: server,
+        displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices'],
+        handleDisplayMessage: fallback }, {});
+    const ingressSource = source.match(/const data = JSON\.parse\(message\);\s*data\.displayId = displayId;/u)?.[0];
+    assert.ok(ingressSource, '使用生产显示端入口的身份覆盖代码');
+    const ingress = vm.runInNewContext('(function(message, displayId) {' + ingressSource + ' return data; })');
+    const send = async data => {
+        const message = ingress(JSON.stringify(data), 'registered-display');
+        await server.handleDisplayMessage('registered-display', message, display);
+    };
+    await send({ type: 'setChatTtsSelection', provider: 'doubao-chat', requestId: 'provider', displayId: 'spoof' });
+    assert.equal(broadcasts.at(-1).success, true);
+    assert.equal(settings.aiReplyDefault.provider, 'doubao-chat');
+    const { listDoubaoVoices } = require('../src/apps/server/modules/chat2api/chat2api-doubao-voices');
+    const voice = listDoubaoVoices()[1].id;
+    await send({ type: 'setChatTtsSelection', provider: 'doubao-chat', voice, requestId: 'voice' });
+    assert.equal(settings.aiReplyDefault.voice, voice);
+    const prior = JSON.stringify(settings);
+    for (const field of ['enabled', 'credential', 'unknownField']) {
+        await send({ type: 'setChatTtsSelection', provider: 'system', [field]: true });
+        assert.equal(replies.at(-1).success, false);
+        assert.equal(JSON.stringify(settings), prior);
+    }
+    await ttsProviderWs.handle(display, { type: 'setTtsProviderConfig', config: { aiReplyDefault: { provider: 'system' } } });
+    assert.equal(JSON.stringify(settings), prior);
+    await send({ type: 'getChatTtsConfig' });
+    assert.equal(replies.at(-1).config.aiReplyDefault.voice, voice);
+});
+
+test('快捷语速只写目标方式偏好，归一化范围并拒绝不支持或混合写入', async () => {
+    let settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat', voice: null }, providers: { 'qwen-api': { model: 'qwen3-tts-flash' } } });
+    const replies = [], broadcasts = [];
+    const display = { send: raw => replies.push(JSON.parse(raw)) };
+    const handler = createTtsProviderWs({ config: {
+        getPublicTtsProviderSettings: () => redactSettings(settings),
+        setTtsProviderSettings: patch => { settings = normalizeSettings(patch, settings); }
+    }, service: {}, isControl: () => false, isDisplay: ws => ws === display,
+    broadcast: message => broadcasts.push(message) });
+    const selection = { ...settings.aiReplyDefault };
+    const nativeSpeed = settings.providers.system.defaultSpeed;
+    for (const [input, expected] of [[3, 3], [100, 10], [-100, -10], [0, 0]]) {
+        await handler.handle(display, { type: 'setChatTtsSelection', provider: 'qwen-chat', speed: input, requestId: 'speed' });
+        assert.equal(settings.providers['qwen-chat'].defaultSpeed, expected);
+        assert.deepEqual(settings.aiReplyDefault, selection);
+        assert.equal(settings.providers.system.defaultSpeed, nativeSpeed);
+        assert.equal(broadcasts.at(-1).requestId, 'speed');
+    }
+    const prior = JSON.stringify(settings);
+    for (const request of [
+        { provider: 'doubao-chat', speed: 2 }, { provider: 'qwen-api', speed: 2 },
+        ...[null, '2', NaN, Infinity, {}].map(speed => ({ provider: 'qwen-chat', speed })),
+        { provider: 'qwen-chat', speed: 2, voice: 'voice' },
+        { provider: 'qwen-chat', speed: 2, enabled: true }
+    ]) {
+        await handler.handle(display, { type: 'setChatTtsSelection', ...request });
+        assert.equal(replies.at(-1).success, false);
+        assert.equal(JSON.stringify(settings), prior);
+    }
+    // 另一端切到system后，晚到的千问语速操作只改千问偏好，不能把全局方式切回去。
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'system' });
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'qwen-chat', speed: 4 });
+    assert.equal(settings.aiReplyDefault.provider, 'system');
+    assert.equal(settings.providers['qwen-chat'].defaultSpeed, 4);
+    settings = normalizeSettings({ providers: { 'qwen-api': { model: 'qwen-audio-3.1-tts-flash' } } }, settings);
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'qwen-api', speed: 2 });
+    assert.equal(broadcasts.at(-1).success, true);
+    assert.equal(settings.providers['qwen-api'].defaultSpeed, 2);
+});
+
+test('快捷语速保存后新批次使用新值，已开始的真实生成批次保持快照', async () => {
+    const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
+    const { wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');
+    let settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat', voice: null } });
+    const generated = [];
+    const service = createTtsProviderService({ getSettings: () => settings, storeAudio: () => 'fixture.wav',
+        registry: { 'qwen-chat': { async generate(request) { generated.push(request.speed); return wrapPcm(Buffer.from([1, 0, 2, 0])); } } } });
+    const handler = createTtsProviderWs({ config: {
+        getPublicTtsProviderSettings: () => redactSettings(settings),
+        setTtsProviderSettings: patch => { settings = normalizeSettings(patch, settings); }
+    }, service, isControl: () => true, broadcast() {} });
+    const prior = service.snapshot({ businessType: 'ai_reply' });
+    await handler.handle({}, { type: 'setChatTtsSelection', provider: 'qwen-chat', speed: 3 });
+    await service.generate({ businessType: 'ai_reply', text: '旧批次' }, { configuration: prior.ttsConfiguration });
+    await service.generate({ businessType: 'ai_reply', text: '新批次' });
+    assert.deepEqual(generated, [0, 3]);
+});

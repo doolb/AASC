@@ -1,0 +1,64 @@
+/* 正常高度只滚动列表；横屏/键盘短屏允许面板内滚动，保留至少两行音色的操作空间。 */
+.tts-voice-picker.display-tts-voice-panel { --voice-accent: var(--accent-color, #8aabff); display: flex; flex-direction: column; gap: 8px; width: var(--voice-panel-width, var(--display-stage-panel-width)); height: min(680px, var(--voice-panel-max-height, var(--display-stage-panel-max-height))); max-height: var(--voice-panel-max-height, var(--display-stage-panel-max-height)); padding: 14px; overflow-x: hidden; overflow-y: auto; background: var(--bg-secondary); }
+.display-tts-voice-panel > :not(.display-tts-voice-list) { flex-shrink: 0; }
+.display-tts-voice-settings, .display-tts-voice-results { display: contents; }
+.display-tts-voice-panel :is(.display-tts-voice-settings, .display-tts-voice-results) > :not(.display-tts-voice-list) { flex-shrink: 0; }
+.display-tts-voice-header, .display-tts-voice-summary, .display-tts-voice-list-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.display-tts-voice-header button { border: 0; background: transparent; color: var(--text-secondary); font-size: 22px; cursor: pointer; }
+.display-tts-current-voice { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px; border-radius: 10px; border: 1px solid var(--voice-accent); background: color-mix(in srgb, var(--voice-accent) 18%, var(--bg-secondary)); color: var(--text-primary); text-align: left; cursor: pointer; }
+.display-tts-current-voice small { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+.display-tts-current-voice > span:first-child, .display-tts-voice-option > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.display-tts-current-voice > span:last-child { border-radius: 50%; background: var(--voice-accent); color: #152743; width: 24px; height: 24px; display: grid; place-items: center; flex-shrink: 0; }
+.display-tts-voice-settings > label { color: var(--text-secondary); font-size: 11px; }
+.display-tts-voice-panel select, .display-tts-voice-settings > input { font: inherit; width: 100%; min-width: 0; box-sizing: border-box; padding: 8px; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; }
+.display-tts-voice-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 3px; }
+.display-tts-voice-filters label { min-width: 0; font-size: 11px; color: var(--text-secondary); }
+.display-tts-voice-filters select { display: block; margin-top: 5px; padding: 6px 4px; font-size: 11px; text-overflow: ellipsis; }
+.display-tts-voice-filters select.is-filtered { border-color: var(--voice-accent); background: color-mix(in srgb, var(--voice-accent) 15%, var(--bg-primary)); }
+.display-tts-voice-summary, .display-tts-voice-list-header { font-size: 11px; color: var(--text-secondary); }
+.display-tts-voice-summary button { border: 0; background: transparent; color: var(--voice-accent); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.display-tts-voice-list-header { border-top: 1px solid var(--border-color); padding-top: 8px; }
+.display-tts-voice-list { display: flex; flex-direction: column; gap: 6px; min-height: 120px; flex: 1; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.display-tts-voice-list > * { flex-shrink: 0; }
+.display-tts-voice-option { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; text-align: left; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+.display-tts-voice-option small { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 11px; }
+.display-tts-voice-mark { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border: 1px solid var(--border-color); border-radius: 50%; color: transparent; }
+.display-tts-voice-option[aria-selected="true"] { border-color: var(--voice-accent); background: color-mix(in srgb, var(--voice-accent) 22%, var(--bg-secondary)); box-shadow: inset 3px 0 var(--voice-accent); }
+.display-tts-voice-option[aria-selected="true"] .display-tts-voice-mark { background: var(--voice-accent); color: #152743; border-color: var(--voice-accent); }
+.display-tts-voice-option:disabled { cursor: wait; }
+.display-tts-voice-panel .display-tts-voice-status { font-size: 11px; color: var(--text-secondary); margin: 0; padding-top: 6px; border-top: 1px solid var(--border-color); }
+.display-tts-voice-panel :is(button, select, input):focus-visible { outline: 2px solid var(--voice-accent); outline-offset: 2px; }
+/* 横屏把设置和列表分列，让短屏也保留完整的音色选择区域。 */
+@media (orientation: landscape) and (min-width: 620px) {
+    .tts-voice-picker.display-tts-voice-panel { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); grid-template-rows: auto minmax(0, 1fr) auto; column-gap: 12px; width: var(--voice-panel-landscape-width, min(640px, max(1px, calc(var(--display-stage-width) - max(12px, var(--display-safe-inset-left)) - max(12px, var(--display-safe-inset-right)) - var(--display-keyboard-inset-left) - var(--display-keyboard-inset-right) - 84px)))); height: min(520px, var(--voice-panel-max-height, var(--display-stage-panel-max-height))); overflow: hidden; }
+    .display-tts-voice-header, .display-tts-voice-status { grid-column: 1 / -1; }
+    .display-tts-voice-settings { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+    .display-tts-voice-settings > label { display: none; }
+    .display-tts-voice-settings > :is(select, input) { padding: 6px 8px; font-size: 12px; }
+    .display-tts-voice-settings .display-tts-current-voice { padding: 8px 10px; }
+    .display-tts-voice-results { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; border-left: 1px solid var(--border-color); padding-left: 12px; }
+    .display-tts-voice-results .display-tts-voice-list { min-height: 0; }
+    .display-tts-voice-results .display-tts-voice-list-header { border-top: 0; padding-top: 0; }
+}
+
+/* 显式hidden优先于共享flex/grid；作用域只包含音色组件。 */
+.tts-voice-picker[hidden] { display: none !important; }
+.tts-voice-picker { box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 8px 32px #0005; }
+.tts-voice-picker .display-tts-voice-scope { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; grid-column: 1 / -1; }
+/* 控制端挂在既有工具组内，沿用父组底栏/安全区；面板在按钮左侧展开。 */
+.control-tts-voice-toggle { position: absolute; right: 0; bottom: 180px; border: 0; color: #fff; font: inherit; font-size: 14px; }
+.control-tts-voice-panel {
+    position: absolute; right: 60px; bottom: 0; z-index: 1;
+    --voice-panel-width: min(360px, max(1px, calc(100vw - 100px - env(safe-area-inset-right, 0px))));
+    --voice-panel-landscape-width: min(640px, max(1px, calc(100vw - 100px - env(safe-area-inset-right, 0px))));
+    --voice-panel-max-height: min(680px, max(120px, calc(100dvh - 128px - env(safe-area-inset-bottom, 0px))));
+}
+.control-tts-voice-panel .display-tts-voice-header > strong { font-size: 15px; }
+
+/* 滑条只在权威配置声明原生语速时可见，input仅预览、change才保存。 */
+.tts-voice-speed[hidden] { display: none !important; }
+.tts-voice-speed label, .tts-voice-speed small { display: flex; justify-content: space-between; align-items: center; }
+.tts-voice-speed label { color: var(--text-secondary); font-size: 12px; }
+.tts-voice-speed output { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.tts-voice-speed input[type="range"] { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; padding: 0; accent-color: var(--voice-accent); }
+.tts-voice-speed small { color: var(--text-secondary); font-size: 10px; }

@@ -1,3 +1,13 @@
+### 两端音色快选修复、控制端浮钮与语速滑条
+
+- ✅ [2026-10-15] 修复显示端音色/方式保存失败，控制端右下角新增音色浮钮，两端共享筛选、选中定位、权威回显和每方式语速。
+  - `server-app.js`在快选转交边界仅隔离服务端补入的displayId，保留未知字段和越权拒绝；`tts-provider-ws.js`增加窄权限speed（-10～10），只改目标Provider.defaultSpeed，拒绝非数值/不支持方式/混带voice。
+  - 提取`tts-voice-picker.js`和`tts-voice-picker.css`，`display-tts-voices.js`保留舞台适配，新增`control-tts-voices.js`；接入upload/display与原WebSocketManager，声纹页继续接收同一权威广播。浮钮避让录音暂停/自测/齿轮；语速input预览、change松手保存，无原生调速能力时隐藏。模板优先级及当前语音批次快照保持。
+  - 新增`npm run test:tts-voice-picker`与真实WS双页面回归，20/20；既有`npm run test:mmd-production:tts`21/21。覆盖真实入口displayId、保存/权限/语速边界、双端同步、失败/断线恢复、四尺寸布局及重复初始化；真实生成服务fixture确认旧批次speed0、新批次speed3。早期浏览器夹具后台动画帧等待超时，改显式页面激活/50ms状态轮询后通过。新增只读SelfTest控制端入口，实际Android运行成功。
+  - 正式源已由其它流程推进99，基于最新清单生成本地服务候选`code/code-v100.zip`：17,808,097字节，SHA256 `cbd160f3dea59be7a00e13963de2a6e5063736a5bc23a4c92721a36d4c03db75`。签名/大小/SHA/CRC及1096项当前源文件一致；输出`.cache/adb-tts-panel-20261015/service-output/`，复用min58/deps10/task1/seeds86/repair3，不覆盖已有版本或发布根。
+  - ADB SM-N9500 Android9原生99→100仅下载服务ZIP，Node健康pending=false/previous=null；显示端切豆包及94项改选成功并同步控制端，物理点击浮钮及拖动语速0→3通过，双端回显3，截图和边界确认无工具遮挡。原AI选择及各方式音色/语速/启用/模型已逐字段恢复；正式旧99源CURRENT/0字节/无失败。
+  - 同步.src/design/spec/task/todo/usage/self-test；构建确认覆盖全部最新源码后servicePackage=false，其余三项false。未重建APK/依赖/任务ZIP，未发布LAN/WAN；未发新聊天或官方合成请求，不以配置验证宣称逐音色听感通过。测试更新源/探针/ADB临时转发已清理，证据与截图保留忽略目录，Git不提交ZIP或设备资料。
+
 ### 显示端音色下拉筛选与选中定位
 
 - ✅ [2026-10-15] 独立终审发现并修复横屏列表零高度；新增740×390/390×400失败回归后保证列表最小120px及面板内定位，复核无重要遗留，定向19/19通过。

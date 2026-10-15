@@ -34,6 +34,7 @@
     "prebuild:offline-update": "npm run prepare:mmd-production",
     "download:llm-model": "node scripts/ops/download-llm-model.js",
     "test": "node --test tests/*.test.js",
+    "test:tts-voice-picker": "node --test --test-concurrency=1 tests/tts-provider-ws.test.js tests/tts-provider-settings.test.js tests/display-tts-voices-browser.test.js tests/display-tts-voice-filters-browser.test.js tests/control-tts-voices-browser.test.js",
     "test:task-code-sync": "node --test tests/task-code-sync.test.js tests/task-code-display-lifecycle.test.js tests/offline-update-package.test.js tests/offline-update-publish.test.js tests/offline-update-sync.test.js tests/runtime-version-info.test.js src/apps/server/modules/task-engine/task-io.test.js src/apps/server/modules/task-engine/task-manager.test.js src/apps/server/modules/task-engine/nodejs-runner.test.js",
     "check:chat2api": "node --test src/apps/server/modules/chat2api/*.test.js src/apps/server/modules/task-engine/builtin-tasks/chat2api-proxy.test.js src/apps/web-mediacenter/ui/public/js/chat2api.test.js",
     "test:log-brain": "node scripts/test-runners/run-log-brain-tests.js",

@@ -294,3 +294,57 @@
 - 执行真实服务端tts/play分支 -> 真实Provider解析及有序调度 -> 捕获AI/Agent音色和旧自定义播报 // 不只检查源码字面量
 - 覆盖当前模板更新、模板删除、继承/原生、qwen-chat、伪造密钥、非法业务/模板名 // 不依赖真实账号
 - 浏览器点击播放按钮与只读SelfTest -> 检查消息而不发送测试音频 // 自测不打断用户播放
+
+
+## framework/显示与控制端共享音色快选（2026-10-15，用户已确认实施）
+
+### 目标文件清单
+
+- src/apps/server/boot/server-app.js // 转交显示端快选前隔离权威传输字段
+- src/apps/web-mediacenter/ui/public/js/tts-voice-picker.js // 提取现有选择、目录、筛选与请求状态
+- src/apps/web-mediacenter/ui/public/js/display-tts-voices.js // 保留显示端旧入口和舞台总线适配
+- src/apps/web-mediacenter/ui/public/js/control-tts-voices.js // 接入控制端WebSocket和浮钮
+- src/apps/web-mediacenter/ui/public/css/tts-voice-picker.css // 共享面板内容样式，保留两端宿主定位
+- src/apps/web-mediacenter/ui/public/upload.html及display.html、display-mmd.css、websocket.js // 挂载共享资源并分发权威消息
+
+### 已有声明
+
+- handleDisplayMessageFallback、ttsProviderWs.handle、displayClients、data.displayId // 连接入口已覆盖权威身份
+- DisplayTtsVoices的refs/config/pending/catalogs/filters、DisplayStage.getBus // 复用真实状态，避免复制协议
+- WebSocketManager.ws/handleMessage、TtsProviderSettings、FloatingControl.isOpen/toggle // 共用原控制连接与工具入口
+
+### 新增定义
+
+- TtsVoicePicker.create { init } // 每宿主独立实例，共享原选择规则
+- ControlTtsVoices { init, handleMessage, handleConnected, handleDisconnected } // 转为共享组件总线，不新建连接
+
+### 操作流程
+
+- 接收显示连接消息并补入登记displayId → 转交快选时仅移除displayId → 原白名单校验 // 其它未知业务字段仍拒绝
+- 使用TtsVoicePicker.create建立宿主独立配置/请求ID/目录/筛选状态 // 前缀区分控制和显示回执
+- 显示适配器传入display前缀和原舞台总线，打开时收起灯光 // 保持旧DOM标识和安全区
+- 控制入口挂在floatingControl工具组，按钮在现有录音暂停上方、面板在工具组左侧 // 避让原齿轮/自测/录音按钮
+- 控制适配器通过WebSocketManager现有连接收发，断线失败返回false // 不新增HTTP配置接口或第二连接
+- 控制WS收到权威配置或目录 → 原声纹设置页与快选组件同时处理 // 一个回显不吞掉另一个入口
+- 两端改选 → setChatTtsSelection → 服务端持久化并广播 → 仅权威回显改变当前项 // 失败保留服务器原选择
+- 控制断线及重连转为transport.changed，失效配置/目录在重连时补发 // 不把旧本地值写回服务端
+- 面板保留全局AI/Agent范围说明及模板原优先级 // 已开始批次继续使用原快照
+- 新增真实入口带displayId、未知字段拒绝、多端回显/筛选/布局/生命周期回归，再用ADB验证 // 先覆盖本次夹具遗漏
+
+
+## 共享面板语速滑条（2026-10-15，用户已确认）
+
+已有声明
+- providers.defaultSpeed、supportsNativeSpeed、normalizeNumber、setChatTtsSelection // 复用既有每方式偏好与权威保存
+
+新增定义
+- setChatTtsSelection.speed // 可选数值，范围-10到10；仅更新当前Provider语速，不重选AI默认或音色
+- TtsSpeedControl { wrapper, slider, output } // 两端共享，input本地预览、change松手提交
+
+操作流程
+- 根据权威Provider.defaultSpeed是否为有限数值显示滑条，否则隐藏 // 规范化输出只给原生支持调速的方式该字段
+- 接收speed消息并校验有限数值、方式/模型原生能力、不得同时带voice // 保持窄权限，防止无效调速被假报成功
+- 规范化speed到-10到10并仅构造providers目标项defaultSpeed补丁 // 不覆盖其它方式、业务选择或凭据
+- 经setTtsProviderSettings持久化并广播ttsProviderConfig // 保持声纹页及两端面板一致
+- 拖动显示数值，松手提交；pending期间禁止重复提交；失败/超时/断线恢复权威值 // 不在每个input事件刷远端配置
+- 下一次语音批次读取新偏好，已播放批次保持快照；豆包网页/Qwen3不支持原生语速时隐藏 // 不新增本地音频变速

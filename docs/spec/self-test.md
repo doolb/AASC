@@ -1,5 +1,24 @@
 # 自测功能实现文档
 
+
+## 两端音色面板与语速验收（2026-10-15）
+
+```text
+新增入口 := npm run test:tts-voice-picker → 20/20；关联test:mmd-production:tts → 21/21
+传输回归 := 执行生产WS入口displayId覆盖及真实ViewBind转交分支，合法方式/音色成功、未知字段仍拒绝
+权限 := 非登记连接及显示端完整配置写入保持拒绝；speed有限数值/能力/范围/禁止混带voice
+偏好隔离 := speed只改目标Provider.defaultSpeed，不改变AI默认或其它方式；过期操作不重选方式
+批次 := 真实生成服务fixture保存3后，旧快照speed0、新批次speed3
+真实浏览器 := 生产WebSocketManager+共享组件+WS服务，双向方式/音色/滑条同步；input不发送/change保存；失败/断线恢复
+UI := 三下拉/搜索/定位/未知音色/目录记忆；四尺寸安全区、短屏滚动、工具组避让；重复init只有一面板
+只读SelfTest := control_tts_voice_picker已加入并在实际Android控制端运行成功，不写配置或合成
+ADB := min58/code99→本地100/deps10/task1健康；显示端切豆包并从94项改选成功
+ADB实体操作 := 点击控制端浮钮；滑条0→3，配置及两端DOM均为3；面板933x455 viewport内
+恢复 := 测试前后AI默认/全部方式voice/speed/enabled/model一致，pending=false/previous=null
+网络 := 仅code-v100.zip=17808097bytes，无APK/依赖/任务ZIP；正式99源CURRENT/0字节/无失败
+边界 := 未调用官方合成接口或验证逐音色听感；本地签名候选未发布LAN/WAN
+```
+
 ## 全身IK实际骨架与相机匹配（2026-10-15）
 
 ```text
@@ -11,6 +30,20 @@ UI := 原图片粘贴真实浏览器回归 + 无IK/ONNX显示实际骨架 + 固�
 完整链路 := 粘贴照片 → 真ONNX → PMX十一目标/270子步 → 实际叠加/相机估计 → 连续帧/手动接续/恢复且骨骼目标保持
 边界 := 桌面Edge验证；手机性能/触控与更多二次元图另验；视频动作和运镜未实现
 ```
+
+## 音色快选ADB缺陷复现（2026-10-15，修复前）
+
+```text
+设备 := SM-N9500 Android9/min58/code96/deps10/task1
+方式操作 := 显示端qwen-chat切doubao-chat → TTS快选参数不合法/success=false
+音色操作 := 控制连接预置doubao-chat → 真实94项目录改选其它音色 → 同错误
+对照 := 同设备控制连接同类型合法选择可成功；当前小爱模板无TTS覆盖
+原因 := 真实显示端入口补displayId，业务白名单不接受该传输字段；组件隔离夹具未覆盖
+恢复 := qwen-chat/voice=null、豆包原默认音色恢复成功；未生成聊天或调用合成
+证据 := .cache/adb-tts-panel-20261015/inspection.json + provider-and-voice.json
+结论 := 已复现缺陷；未修改生产代码，未运行修复回归
+```
+
 
 ## 显示端音色下拉筛选资源自测（2026-10-15）
 
