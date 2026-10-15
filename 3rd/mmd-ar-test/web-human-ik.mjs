@@ -408,7 +408,11 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         onChange(); return getState();
     }
     function setBodySettings(value) {
-        bodySettings = normalizeBodySettings({ ...bodySettings, ...value }); onChange(); return getState();
+        // 多次只更新一个部位时保留其他调整，随后归一化并复制，避免输入引用污染内部设置。
+        const incoming = value?.dampingMultipliers;
+        const dampingMultipliers = incoming && typeof incoming === 'object' && !Array.isArray(incoming)
+            ? { ...bodySettings.dampingMultipliers, ...incoming } : bodySettings.dampingMultipliers;
+        bodySettings = normalizeBodySettings({ ...bodySettings, ...value, dampingMultipliers }); onChange(); return getState();
     }
     function setTargetState(key, positionState, rotationState) {
         const handle = handles.find(handle => handle.key === key);
@@ -446,7 +450,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     }
     function getState() {
         const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();
-        return { ...state, mode, markerDiameter, settings: { ...bodySettings }, selected, enabled, targets: handles.length,
+        return { ...state, mode, markerDiameter, settings: { ...bodySettings, dampingMultipliers: { ...bodySettings.dampingMultipliers } }, selected, enabled, targets: handles.length,
             activeTargets: handles.filter(handle => handle.active).length, physics: bodyDrive?.getState() || null,
             controls: handles.map(handle => {
                 const achieved = handle.endpoint.bone.getWorldPosition(new Vector3());

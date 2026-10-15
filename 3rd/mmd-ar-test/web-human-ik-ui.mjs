@@ -1,4 +1,5 @@
 import { Euler, Quaternion } from 'three';
+import { BODY_DAMPING_PARTS, normalizeDampingMultipliers } from './web-human-body-damping.mjs';
 
 function initIKPanel() {
     const panel = document.getElementById('mmdArIKPanel'), toggle = document.getElementById('mmdArIKToggle');
@@ -23,7 +24,13 @@ function initIKPanel() {
     bodyPanel.innerHTML = `<label>求解模式 <select data-body="mode"><option value="pbd">PBD 姿态</option><option value="physics">身体物理（VaM式）</option></select></label>
         <div data-body="settings" hidden>
         <label>牵引强度 <input data-body="strength" type="range" min="0.05" max="1" step="0.05" value="0.85"></label>
-        <label>阻尼 <input data-body="damping" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
+        <label>全局阻尼 <input data-body="damping" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
+        <details data-body="damping-parts"><summary>分部位阻尼系数</summary>
+        <p>各部位系数叠加全局阻尼；数值越大，运动耗散越强。左右共用，设置保留至页面关闭。</p>
+        ${BODY_DAMPING_PARTS.map(part => `<label style="display:flex;align-items:center;gap:0.4em;flex-wrap:wrap">${part.label}
+            <input data-damping-part="${part.key}" aria-label="${part.label}阻尼系数" type="range" min="0.2" max="2.5" step="0.05" value="${part.factor}" style="flex:1;min-width:5em;width:8em">
+            <output data-damping-output="${part.key}">${part.factor.toFixed(2)}×</output></label>`).join('')}
+        <button type="button" class="display-mmd-ar-action" data-body="reset-damping">恢复部位默认</button></details>
         <label><input data-body="gravity" type="checkbox">重力</label>
         <label><input data-body="freePelvis" type="checkbox">骨盆自由（允许身体受力移动与转动）</label>
         <label>控制点 <select data-body="target"></select></label>
@@ -41,6 +48,14 @@ function initIKPanel() {
         bodyField('settings').hidden = ik.mode !== 'physics';
         if (!ik.settings) return;
         for (const key of ['strength', 'damping']) if (document.activeElement !== bodyField(key)) bodyField(key).value = ik.settings[key];
+        for (const { key, factor } of BODY_DAMPING_PARTS) {
+            const field = bodyPanel.querySelector('[data-damping-part="' + key + '"]');
+            const value = ik.settings.dampingMultipliers?.[key] ?? factor;
+            field.disabled = busy || !ready;
+            if (document.activeElement !== field) field.value = value;
+            bodyPanel.querySelector('[data-damping-output="' + key + '"]').textContent = Number(field.value).toFixed(2) + '×';
+        }
+        bodyField('reset-damping').disabled = busy || !ready;
         for (const key of ['gravity', 'freePelvis']) bodyField(key).checked = ik.settings[key];
         const controls = ik.controls || [];
         const select = bodyField('target'), keys = controls.map(item => item.key).join(',');
@@ -120,6 +135,17 @@ function initIKPanel() {
         try {
             human().setInteractiveBodySettings({ [key]: ['gravity', 'freePelvis'].includes(key) ? bodyField(key).checked : Number(bodyField(key).value) });
         } catch (error) { report(error.message); }
+    });
+    for (const field of bodyPanel.querySelectorAll('[data-damping-part]')) field.addEventListener('input', () => {
+        try {
+            const key = field.dataset.dampingPart;
+            human().setInteractiveBodySettings({ dampingMultipliers: { [key]: Number(field.value) } });
+            bodyPanel.querySelector('[data-damping-output="' + key + '"]').textContent = Number(field.value).toFixed(2) + '×';
+        } catch (error) { report(error.message); }
+    });
+    bodyField('reset-damping').addEventListener('click', () => {
+        try { human().setInteractiveBodySettings({ dampingMultipliers: normalizeDampingMultipliers() }); sync(); }
+        catch (error) { report(error.message); }
     });
     for (const key of ['target', 'positionState', 'rotationState']) bodyField(key).addEventListener('change', () => {
         try {

@@ -83,6 +83,25 @@ test('真实米娅默认关重力、实际拖点与Off释放稳定、多目标�
         const initial = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
         assert.equal(initial.available, true, initial.reason); assert.equal(initial.targets, 11); assert.ok(initial.physics.bodyCount >= 15);
         assert.equal(initial.settings.strength, 0.85); assert.equal(initial.markerDiameter, 32);
+        assert.equal(await page.$$eval('[data-damping-part]', fields => fields.length), 10);
+        const displayed = await page.$$eval('[data-damping-part]', fields => Object.fromEntries(fields.map(field => [field.dataset.dampingPart, Number(field.value)])));
+        assert.deepEqual(displayed, initial.settings.dampingMultipliers);
+        assert.ok(displayed.pelvis > displayed.wrist);
+        await page.$eval('[data-body="damping-parts"]', details => { details.open = true; });
+        await page.$eval('[data-damping-part="wrist"]', field => {
+            field.focus(); field.value = '0.6'; field.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await page.waitForFunction(() => document.querySelector('[data-damping-output="wrist"]').textContent === '0.60×'
+            && window.DisplayMmd.getHumanInterface().getInteractiveIKState().settings.dampingMultipliers.wrist === 0.6);
+        await page.$eval('[data-damping-part="head"]', field => {
+            field.focus(); field.value = '1.6'; field.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const changed = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().settings.dampingMultipliers);
+        assert.equal(changed.wrist, 0.6); assert.equal(changed.head, 1.6); assert.equal(changed.knee, displayed.knee);
+        await page.click('[data-body="reset-damping"]');
+        assert.deepEqual(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().settings.dampingMultipliers), displayed);
+        assert.deepEqual(await page.$$eval('[data-damping-part]', fields => Object.fromEntries(fields.map(field => [field.dataset.dampingPart, Number(field.value)]))), displayed);
+        await page.$eval('[data-body="damping-parts"]', details => { details.open = false; });
         assert.equal(initial.settings.gravity, false);
         assert.equal(await page.$eval('[data-body="gravity"]', element => element.checked), false);
         await page.$eval('[data-ik-size]', element => { element.value = '40'; element.dispatchEvent(new Event('input', { bubbles: true })); });

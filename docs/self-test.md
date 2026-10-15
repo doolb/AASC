@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## MMD-AR VaM 分部位阻尼（2026-10-15）
+
+`tests/mmd-ar-human-damping.test.js`验证差异化默认、非法输入/副本隔离、真实Ammo调参耗散以及真实米娅10组逐部位牵引保持/Off释放。`mmd-ar-human-physics.test.js`补充连续局部合并与切换模式保留；既有重力/限位/多点/资源回归继续执行。`mmd-ar-human-physics-browser.test.js`新增面板十组默认展示、input立即生效、跨部位保留与恢复默认，再执行真实拖点、重力、模式和窄屏流程。
+
+执行：`node --test tests/mmd-ar-human-damping.test.js tests/mmd-ar-human-physics.test.js tests/mmd-ar-human-ik-pbd.test.js tests/mmd-ar-ik-markers.test.js tests/mmd-ar-ik-camera-gestures.test.js tests/mmd-ar-human-actions.test.js`；45/45通过。范围端点另覆盖全局/部位均取0.2或2.5的四组合，真实PMX三目标牵引及释放保持有界。先`npm run build:web:mmd-ar-test`，再设置`PUPPETEER_EXECUTABLE_PATH`为本机Chrome/Edge路径并运行`node --test tests/mmd-ar-human-physics-browser.test.js`；真实浏览器1/1通过、无跳过。Windows夹具import通过pathToFileURL加载，兼容Linux。详细数值与边界见任务记录。
+
 ## 模型任务依赖首次下载与懒加载（2026-10-14）
 
 `npm run test:task-dependencies`106/106通过；新任务依赖用例覆盖真实签名ZIP、本机HTTP下载、并发去重、重启离线缓存、SHA/版本/签名/元数据篡改、链接/额外包拒绝、失败后重试、停止后不转发、common排除ORT与独立版本复用、发布/同步/HTTP验收与精确清理。完整Offline资产用例验证ORT未进入APK暂存资产且打包输入保留。

@@ -2,13 +2,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const root = path.resolve(__dirname, '../..');
 
 // 只读取本地已校验资源，复现MMDLoader的父空间pos和左手坐标限位契约。
 // 此夹具覆盖真实骨架与Ammo；完整蒙皮、grant、服饰和帧序由浏览器回归验证。
 async function makeModel(idle = true) {
     const T = await import('three');
-    const { Parser } = await import(root + '/src/apps/web-mediacenter/ui/public/js/vendor/three/libs/mmdparser.module.js');
+    const { Parser } = await import(pathToFileURL(path.join(root, 'src/apps/web-mediacenter/ui/public/js/vendor/three/libs/mmdparser.module.js')).href);
     const { STATIC_MMD_RELEASE } = require(root + '/src/apps/server/modules/mmd/mmd-resource-service');
     const read = file => {
         const buffer = fs.readFileSync(file);
@@ -47,7 +48,7 @@ async function makeModel(idle = true) {
         }
     }
     mesh.updateWorldMatrix(true, true);
-    const { createHumanModel } = await import(root + '/3rd/mmd-ar-test/web-human-model.mjs');
+    const { createHumanModel } = await import(pathToFileURL(path.join(root, '3rd/mmd-ar-test/web-human-model.mjs')).href);
     return { T, model: createHumanModel(mesh, { items: [] }) };
 }
 
