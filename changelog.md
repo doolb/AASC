@@ -1,3 +1,12 @@
+### 音色与豆包长句修复服务v102正式发布
+
+- ✅ [2026-10-15] 按用户确认将音色按钮状态、豆包emoji过滤及多Ogg流长句修复、Qwen Audio 3.1官方68音色和五方式常开一起发布LAN/WAN服务code v102。
+  - npm run build:offline-update -- --mode=code-only --code-version=102 --manifest-file=.cache/qwen-audio31-catalog-20261015/lan-before.json --reuse-node-min-seeds=true生成code/code-v102.zip：17,815,472字节，SHA256 4ab094d6796f684326f793506ba176de6c224c7af775f986ccdd4411438d401f；签名/schema/CRC与1100项当前源码逐字节校验通过，source=b8f42d08、gitDirty=true如实记录。沿用min58/deps10/task1/seeds86/repair3和任务依赖全部引用/摘要，未覆盖未发布候选101，未重建APK/依赖/任务ZIP。
+  - 使用npm run publish:offline-update -- --mode=code-only --manifest-file=release/offline-update/output/manifests/manifest-code-v102.json --remote-dir=/home/as/a/aasc-offline执行两端版本文件上传和签名清单原子切换；LAN完整HTTP摘要通过，WAN复用当前发布模块在源站验证13项337,741,968字节完整HTTP摘要。LAN/WAN公网入口签名清单均精确一致，13项HEAD状态/大小全部匹配；两端新代码包均额外完整HTTP下载验证SHA256通过。
+  - 源站全量与公网清单/HEAD验证通过后，仅终止本轮CLI剩余重复跨公网大依赖下载，独立公网新代码包摘要继续并通过；随后用同一发布模块精确清理WAN。两端旧code100已清理，code目录仅code-v102.zip、task-code保留v1，清理0错误；未触碰日志/模型/配置/任务结果、非版本文件或链接。临时WAN校验目录已清理。
+  - npm run restart:server重载当前本机主服务，HTTPS /api/status=200；实际WSS只读查询确认四个非原生兼容enabled=true、Qwen模型qwen-audio-3.1-tts-flash及68项/47女声、大写Emily_v3.1，未写语音配置。实现阶段原文8段真实非静音合成已通过，此轮不重跑全部回归、不将生成队列验证宣称为设备实际播放。ADB只读确认测试机仍服务100，需检查服务更新到102，无需重装min58。
+  - 当前源码服务包已成功构建并发布，servicePackage恢复false，其余三项保持false；代码与状态同步Git，APK/ZIP/原始音频/设备资料不提交。构建与发布、实网合成证据留本机.cache/qwen-audio31-catalog-20261015/。本轮发布收尾遵循纯构建/发布例外，仅更新changelog与产物状态，不更新design/spec/task/todo。
+
 ### Qwen Audio 3.1音色、五方式常开及豆包长句多流修复
 
 - ✅ [2026-10-15] 按确认方案接入Qwen Audio 3.1官方68音色，五种TTS方式常开并移除Provider启用开关。
