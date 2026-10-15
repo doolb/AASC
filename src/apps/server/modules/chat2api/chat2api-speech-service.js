@@ -122,7 +122,8 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
                     remaining();
                     validateWav(audio);
                 } catch (error) {
-                    if (!signal?.aborted && !['doubao_speech_cancelled', 'doubao_speech_busy'].includes(error.code)) loadBalancer.markAccountFailed?.(account.accountId);
+                    if (!signal?.aborted && error.speechQueueFailure !== true
+                        && !['doubao_speech_cancelled', 'doubao_speech_busy'].includes(error.code)) loadBalancer.markAccountFailed?.(account.accountId);
                     if (signal?.aborted) throw cancelError();
                     if (error.code === 'speech_timeout') throw error;
                     if (doubao) {

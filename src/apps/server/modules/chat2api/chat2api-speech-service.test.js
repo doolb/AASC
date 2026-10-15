@@ -9,7 +9,20 @@ const { createChat2ApiSpeechService, normalizeSpeechRequest, getQwenCredential }
 const { createChat2ApiRuntime } = require('./chat2api-runtime');
 const { wrapPcm } = require('../../../../external/tts/tts-wav');
 const audio = wrapPcm(Buffer.from([1, 0, 2, 0]));
-const { DOUBAO_SPEECH_VOICE } = require('./chat2api-doubao-speech-protocol');
+const { DOUBAO_SPEECH_VOICE, doubaoSpeechError } = require('./chat2api-doubao-speech-protocol');
+
+test('排队本地失败不扣账号健康，上游超时仍记录失败且外部错误不暴露内部标记', async t => {
+    const failed=[];let queueFailure=true;
+    const {dataStore,service}=await fixture(t,{
+        loadBalancer:{selectAccount:async()=>({account:{accountId:'bound'}}),markAccountFailed:id=>failed.push(id)},
+        doubaoAdapter:{generate:async()=>{throw Object.assign(doubaoSpeechError('doubao_speech_timeout'),{speechQueueFailure:queueFailure})}}
+    });
+    await dataStore.saveAccount({accountId:'bound',providerId:'doubaochat',credentials:{cookie:'sessionid=demo_session_12345678; passport_csrf_token=demo_csrf_12345678'}});
+    await assert.rejects(service.generate({input:'等待超时',model:'doubao-chat'}),e=>e.code==='doubao_speech_timeout'&&!Object.hasOwn(e,'speechQueueFailure'));
+    assert.deepEqual(failed,[]);queueFailure=false;
+    await assert.rejects(service.generate({input:'上游超时',model:'doubao-chat'}),e=>e.code==='doubao_speech_timeout');
+    assert.deepEqual(failed,['bound']);
+});
 
 test('doubao-chat无手动映射自动选择同Provider可用账号并读取更新凭据', async t => {
     const calls=[];const {dataStore,service}=await fixture(t,{doubaoAdapter:{generate:async(...args)=>{calls.push(args);return audio;}}});

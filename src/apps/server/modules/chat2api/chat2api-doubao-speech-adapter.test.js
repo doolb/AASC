@@ -83,11 +83,37 @@ test('握手401/403/429和原始异常只回固定代码，不输出凭据或重
         sockets[0].emit('unexpected-response',req,response);await rejection;assert.ok(req.destroyed&&response.destroyed);assert.equal(sockets.length,1);
     }
 });
-test('同账号单任务、取消后释放容量；预取消与坏Cookie不创建连接', async () => {
+test('不同批次同账号等待，活动取消释放执行权；预取消不创建连接', async () => {
     const {generate,sockets}=setup();const control=new AbortController();const first=generate({signal:control.signal});const rejected=assert.rejects(first);
-    await assert.rejects(generate(),e=>e.code==='doubao_speech_busy');control.abort();await rejected;
-    const second=generate();const rejected2=assert.rejects(second);sockets[1].emit('close');await rejected2;
+    const second=generate();const rejected2=assert.rejects(second);assert.equal(sockets.length,1);
+    control.abort();await rejected;assert.equal(sockets.length,2);sockets[1].emit('close');await rejected2;
     await assert.rejects(generate({signal:control.signal}),e=>e.code==='doubao_speech_cancelled');assert.equal(sockets.length,2);
+});
+test('同账号FIFO等待完整解码，不同账号同时创建连接，失败后继续交接', async () => {
+    let finishDecode;
+    const {generate,sockets}=setup({decodeAudio:()=>new Promise(resolve=>{finishDecode=()=>resolve(wrapPcm(Buffer.from([1,0]),24000))})});
+    const first=generate(); const second=generate(); const third=generate();
+    const rejectSecond=assert.rejects(second,e=>e.code==='doubao_speech_incomplete');
+    const rejectThird=assert.rejects(third,e=>e.code==='doubao_speech_incomplete');
+    const other=generate({accountId:'other'});const rejectOther=assert.rejects(other);
+    assert.equal(sockets.length,2);
+    start(sockets[0]);sentence(sockets[0]);sockets[0].emit('message',event('TTSEnded'),true);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof finishDecode,'function');assert.equal(sockets.length,2);
+    finishDecode();assert.ok(validateWav(await first).samples.length);
+    assert.equal(sockets.length,3);sockets[2].emit('close');await rejectSecond;
+    assert.equal(sockets.length,4);sockets[3].emit('close');await rejectThird;
+    sockets[1].emit('close');await rejectOther;
+});
+test('排队取消/到期没有连接，坏Cookie不占执行权', async () => {
+    const {generate,sockets}=setup();const first=generate();const rejectFirst=assert.rejects(first);
+    const controller=new AbortController();const waiting=generate({signal:controller.signal});
+    const rejected=assert.rejects(waiting,e=>e.code==='doubao_speech_cancelled'&&e.speechQueueFailure);controller.abort();await rejected;
+    await assert.rejects(generate({deadline:Date.now()+20}),e=>e.code==='doubao_speech_timeout'&&e.speechQueueFailure);
+    assert.equal(sockets.length,1);sockets[0].emit('close');await rejectFirst;
+    let calls=0;const adapter=createDoubaoSpeechAdapter({createSocket:()=>{calls++;throw Error('unexpected')}});
+    await assert.rejects(adapter.generate({text:'x'},'bad',{accountId:'one'}),e=>e.code==='doubao_speech_credentials');
+    assert.equal(calls,0);
 });
 module.exports = { event };
 

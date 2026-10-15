@@ -17,7 +17,7 @@ const SPEECH_ERRORS = Object.freeze({
     doubao_speech_limit: [502,'豆包网页语音超过安全容量上限'],
     doubao_speech_cancelled: [499,'豆包网页语音已取消'],
     doubao_speech_timeout: [504,'豆包网页语音生成超时'],
-    doubao_speech_busy: [503,'所选豆包语音账号正在生成，请稍后重试'],
+    doubao_speech_busy: [503,'豆包语音等待队列已满，请稍后重试'],
     doubao_speech_binding: [503,'豆包语音账号选择无效，请在Chat2API登录并启用豆包账号']
 });
 function doubaoSpeechError(code) {

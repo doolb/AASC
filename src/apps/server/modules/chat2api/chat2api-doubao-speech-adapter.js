@@ -1,5 +1,6 @@
 'use strict';
 const WebSocket = require('ws');
+const { createDoubaoSpeechQueue } = require('./chat2api-doubao-speech-queue');
 const { decodeOggOpusToWav } = require('../../../../external/tts/tts-opus-decoder');
 const { wrapPcm, validateWav, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
 const { encodeSpeechRequest,decodeSpeechResponse,createTextTtsSession,doubaoSpeechError,
@@ -22,16 +23,18 @@ function getDoubaoSpeechCredential(account) {
 }
 
 function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(url,options),decodeAudio=decodeOggOpusToWav}={}) {
-    const busy=new Set();
+    const queue=createDoubaoSpeechQueue();
     return { async generate(request,credential,{accountId,signal,deadline=Date.now()+60000}={}) {
         if(signal?.aborted)throw doubaoSpeechError('doubao_speech_cancelled');
         if(!Number.isFinite(deadline)||deadline<=Date.now())throw doubaoSpeechError('doubao_speech_timeout');
         if(typeof accountId!=='string'||!accountId)throw doubaoSpeechError('doubao_speech_binding');
-        if(busy.has(accountId))throw doubaoSpeechError('doubao_speech_busy');
-        const cookie=getDoubaoSpeechCredential(credential);busy.add(accountId);
+        const cookie=getDoubaoSpeechCredential(credential);
+        const pending=queue.acquire(accountId,{signal,deadline});
+        const release=typeof pending==='function'?pending:await pending;
         const check=()=>{if(signal?.aborted)throw doubaoSpeechError('doubao_speech_cancelled');
             if(Date.now()>=deadline)throw doubaoSpeechError('doubao_speech_timeout')};
         try {
+            check();
             const sentences=await new Promise((resolve,reject)=>{
                 let socket,timer,heartbeat,settled=false,phase='connecting',taskId='',sessionId='',events=0,total=0,lastPong=Date.now();
                 let chunks=[],sentenceBytes=0;const complete=[];
@@ -113,7 +116,7 @@ function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(ur
             }
             check();return wrapPcm(Buffer.concat(pcm,totalBytes),sampleRate);
         }catch(failure){if(failure.code?.startsWith('doubao_speech_'))throw failure;throw doubaoSpeechError('doubao_speech_audio')}
-        finally{busy.delete(accountId)}
+        finally{release()}
     }};
 }
 module.exports={createDoubaoSpeechAdapter,getDoubaoSpeechCredential};
