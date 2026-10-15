@@ -1,5 +1,10 @@
 # Web MediaCenter - 项目参考文档
 
+## 图片姿态与相机匹配依据（2026-10-15）
+
+- [OpenCV PnP姿态估计](https://docs.opencv.org/4.x/d5/d1f/calib3d_solvePnP.html)：已知3D/2D对应和相机内参下的旋转/平移、重投影误差、鲁棒估计及多解。用于拟定相机匹配方案，不代表项目已接入OpenCV JS或已经恢复真实拍摄机位。
+- [MediaPipe Pose说明](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker)：图像点与估计3D输出类别。本项目当前使用固定OpenCV Zoo ONNX及自有预后处理，不直接替换为最新Tasks API。
+
 ## 豆包官网音色列表（2026-10-15）
 
 - [获取方式与范围](ref/doubao-web-voice-fetch.md)：Chrome9222读取实际卡片、目录接口及五分类参数、第一页/BV过滤规则、style_id保存、去重及校验。当前五分类实显合并94项，推荐30项已包含在后四类中；[当前列表](ref/doubao-web-ui-voices-20261015.md)、[JSON](ref/doubao-web-ui-voices-20261015.json)。

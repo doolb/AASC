@@ -45,8 +45,17 @@ test('全身IK图片粘贴：真实DOM/解码、剪贴板、作用域、权限�
                     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard });
                     document.body.innerHTML = '<section id="panel"><p data-ik-message></p></section><input id="outside">';
                     this.effects = 0;
+                    this.reads = 0; this.token = 'model-a';
+                    this.points = [['head',[0,1.3,0]],['neck',[0,1,0]],['upperBody',[0,.7,0]],['hips',[0,0,0]],
+                        ['leftArm',[-.5,.8,0]],['rightArm',[.5,.8,0]],['leftElbow',[-.7,.4,0]],['leftWrist',[-.8,.1,0]],
+                        ['leftLeg',[-.2,0,0]],['rightLeg',[.2,0,0]],['leftKnee',[-.2,-.5,0]],['leftAnkle',[-.2,-1,0]]]
+                        .map(([key,world])=>({key,world}));
+                    this.view = { viewMatrix:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,-5,1],
+                        projectionMatrix:[2,0,0,0,0,2,0,0,0,0,-1,-1,0,0,-.02,0],aspect:1,rotation:0,fov:53,zoom:1 };
                     this.panel = document.getElementById('panel');
-                    this.ui = installImagePose(this.panel, { human: () => ({ getState: () => ({ ready: true, token: 'model-a' }),
+                    this.ui = installImagePose(this.panel, { human: () => ({ getState: () => ({ ready: true, token: this.token }),
+                        getImagePoseSnapshot: () => { this.reads++; return structuredClone({token:this.token,points:this.points,view:this.view}); },
+                        getImageCameraState: () => ({available:true,revision:'test-camera',canRestore:false}),
                         applyInteractiveImagePose: () => { this.effects++; return { activeTargets: 0 }; } }),
                         ensurePhysics: async () => { this.effects++; } });
                     this.root = this.panel.querySelector('[data-pose-panel]'); this.root.open = true; this.ui.sync(true);
@@ -190,6 +199,79 @@ test('全身IK图片粘贴：真实DOM/解码、剪贴板、作用域、权限�
             await page.evaluate(() => window.releasePoseBitmap());
             await page.waitForFunction(() => window.closedPoseBitmap === 1);
             assert.equal(await page.evaluate(() => window.poseFixture.snapshot()), previous);
+        });
+        await t.test('无IK/ONNX也可叠加实际骨架，真实姿态变化刷新，图片对齐不写目标', async () => {
+            await mount(); const original = await seed();
+            assert.equal(await page.$$eval('[data-pose-overlay="enabled"]',nodes=>nodes.length),1,'缺少实际骨架叠加入口');
+            await page.click('[data-pose-overlay="enabled"]');
+            await page.waitForFunction(()=>window.poseFixture.reads>0);
+            const before=await page.evaluate(()=>window.poseFixture.snapshot()); assert.notEqual(before,original);
+            await page.evaluate(()=>{window.poseFixture.points.find(p=>p.key==='leftWrist').world[0]+=.6;});
+            await page.waitForFunction(before=>window.poseFixture.snapshot()!==before,{},before);
+            const points=await page.evaluate(()=>JSON.stringify(window.poseFixture.points));
+            await page.$eval('[data-pose-overlay="x"]',node=>{node.value='20';node.dispatchEvent(new Event('input'));});
+            assert.equal(await page.evaluate(()=>JSON.stringify(window.poseFixture.points)),points);
+            assert.equal(await page.evaluate(()=>window.poseFixture.effects),0);
+        });
+        await t.test('叠加固定投影不跟主相机漂移，隐藏停止读取，重新展开恢复', async () => {
+            await mount(); await seed(); await page.click('[data-pose-overlay="enabled"]');
+            await page.waitForFunction(()=>window.poseFixture.reads>0);
+            const before=await page.evaluate(()=>window.poseFixture.snapshot());
+            const count=await page.evaluate(()=>{window.poseFixture.view.viewMatrix[12]=1;return window.poseFixture.reads;});
+            await page.waitForFunction(count=>window.poseFixture.reads>count,{},count);
+            assert.equal(await page.evaluate(()=>window.poseFixture.snapshot()),before);
+            await page.evaluate(()=>{window.poseFixture.ui.cancel();window.poseFixture.panel.hidden=true;});
+            await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,100)));
+            const paused=await page.evaluate(()=>window.poseFixture.reads);
+            await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,120)));
+            assert.equal(await page.evaluate(()=>window.poseFixture.reads),paused);
+            await page.evaluate(()=>{window.poseFixture.panel.hidden=false;window.poseFixture.ui.sync(true);});
+            await page.waitForFunction(paused=>window.poseFixture.reads>paused,{},paused);
+        });
+        async function mountCameraUI() {
+            await mount();
+            await page.evaluate(async()=>{
+                const f=window.poseFixture;f.ui.dispose();
+                document.body.innerHTML='<section id="panel"><details open><canvas width="400" height="300"></canvas></details></section>';
+                f.panel=document.getElementById('panel');f.root=f.panel.querySelector('details');
+                const {installPoseOverlay}=await import('/web-human-pose-overlay.mjs'),{projectPose}=await import('/web-human-pose-projection.mjs');
+                const keys=['leftArm','rightArm','leftElbow','rightElbow','leftWrist','rightWrist','leftLeg','rightLeg','leftKnee','rightKnee','leftAnkle','rightAnkle'];
+                const values=[[-.4,.8,.1],[.4,.8,0],[-.7,.4,.3],[.7,.3,-.2],[-.6,.1,.6],[.8,.1,.3],[-.2,0,0],[.2,0,.1],[-.25,-.5,.3],[.3,-.5,-.2],[-.25,-1,.1],[.35,-1,.2]];
+                const indices=[11,12,13,14,15,16,23,24,25,26,27,28];
+                f.points=values.map((world,i)=>({key:keys[i],world,landmark:indices[i]}));
+                f.view.aspect=4/3;f.view.projectionMatrix[0]=1.5;f.applies=[];f.restores=0;f.canRestore=false;
+                const reference=structuredClone(f.view);reference.viewMatrix[12]=-.2;reference.viewMatrix[13]=.1;reference.viewMatrix[14]=-4;
+                const landmarks=Array.from({length:33},()=>({x:.5,y:.5,world:[0,0,0],visibility:0,presence:0}));
+                for(const p of projectPose(f.points,reference))landmarks[p.landmark]={x:p.x/reference.aspect+.5,y:p.y+.5,world:[0,0,0],visibility:1,presence:1};
+                const human=()=>({getState:()=>({ready:true,token:f.token}),
+                    getImagePoseSnapshot:()=>structuredClone({token:f.token,points:f.points,view:f.view}),
+                    getImageCameraState:()=>({available:true,revision:'a',canRestore:f.canRestore}),
+                    applyImageCamera:view=>{f.applies.push(view);f.canRestore=true;},restoreImageCamera:()=>{f.restores++;f.canRestore=false;}});
+                f.ui=installPoseOverlay(f.panel,f.root,{preview:f.root.querySelector('canvas'),human,redraw(){}});
+                f.ui.setReference({width:400,height:300},{landmarks,confidence:1});f.ui.sync(true);
+            });
+        }
+        await t.test('相机按钮完成有界拟合和恢复，图片仍只读',async()=>{
+            await mountCameraUI();await page.click('[data-pose-overlay="match"]');
+            await page.waitForFunction(()=>document.querySelector('[data-pose-overlay="cancel"]').disabled);
+            const message=await page.$eval('[data-pose-overlay="status"]',node=>node.textContent);
+            assert.match(message,/已匹配/u,message);assert.equal(await page.evaluate(()=>window.poseFixture.applies.length),1);
+            await page.click('[data-pose-overlay="restore"]');
+            assert.equal(await page.evaluate(()=>window.poseFixture.restores),1);
+            assert.equal(await page.evaluate(()=>window.poseFixture.effects),0);
+        });
+        await t.test('取消匹配与实际骨架变化都不能写入迟到相机',async()=>{
+            await mountCameraUI();
+            await page.evaluate(()=>{document.querySelector('[data-pose-overlay="match"]').click();document.querySelector('[data-pose-overlay="cancel"]').click();});
+            await page.waitForFunction(()=>document.querySelector('[data-pose-overlay="cancel"]').disabled);
+            assert.equal(await page.evaluate(()=>window.poseFixture.applies.length),0);
+            await page.evaluate(()=>{
+                document.querySelector('[data-pose-overlay="match"]').click();
+                setTimeout(()=>{window.poseFixture.points[0].world[0]+=.1;},0);
+            });
+            await page.waitForFunction(()=>document.querySelector('[data-pose-overlay="cancel"]').disabled);
+            assert.equal(await page.evaluate(()=>window.poseFixture.applies.length),0);
+            assert.match(await page.$eval('[data-pose-overlay="status"]',node=>node.textContent),/姿态仍在变化/u);
         });
         assert.ok(!requests.some(url => url.includes('worker.mjs') || url.includes('/vendor/pose/')), '导入图片不应提前识别');
         assert.deepEqual(errors, []);

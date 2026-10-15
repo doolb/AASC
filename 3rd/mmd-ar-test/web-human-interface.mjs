@@ -12,6 +12,7 @@ import { createHighLevelMpl } from './web-reply-actions.mjs';
 import { serverActions } from './web-human-server-actions.mjs';
 import { createHumanArmAvoidance, readArmAvoidancePreference, ARM_AVOIDANCE_KEY } from './web-human-arm-avoidance.mjs';
 import { createHumanIK } from './web-human-ik.mjs';
+import { readActualPose } from './web-human-pose-projection.mjs';
 
 const number = (value, fallback, min, max, label) => {
     const result = value ?? fallback;
@@ -73,7 +74,7 @@ function validateSource(source) {
 }
 
 // 一个实例属于一个显示runtime。名称映射、异步令牌和动作所有权都绑定当前PMX。
-export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, getScene, canvas, manualExpressions, startRendering }) {
+export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, getScene, getImageCameraControl, canvas, manualExpressions, startRendering }) {
     const mixer = createHumanMixer(), physiology = createHumanPhysiology(), external = new Map();
     const gaze = createHumanGaze();
     const armAvoidance = createHumanArmAvoidance();
@@ -454,6 +455,23 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         },
         resetInteractiveIK() { requireModel(); armAvoidance.restore(); interactiveIK.resetTargets(); wake(); return interactiveIK.getState(); },
         getInteractiveIKState: () => interactiveIK.getState(),
+        getImagePoseSnapshot() {
+            const bound = requireModel();
+            // GPU直连模式沿用既有同步入口，避免把上一帧CPU骨架误画成当前实际姿态。
+            getHelper?.()?.objects?.get(bound.mesh)?.physics?.syncGpuPose?.();
+            return readActualPose(bound, getCamera?.(), window.DisplayStage?.getRotationGeometry?.());
+        },
+        getImageCameraState() { const bound = requireModel(); return getImageCameraControl?.()?.read(bound.token)
+            || { available: false, reason: '当前运行时不支持图片相机匹配', canRestore: false }; },
+        applyImageCamera(view, revision, expectedToken) {
+            const bound = requireModel(); if (bound.token !== expectedToken) throw new Error('模型已经切换，请重新匹配');
+            if (!getImageCameraControl?.()) throw new Error('当前运行时不支持图片相机匹配');
+            return getImageCameraControl().apply(view, revision, bound.token);
+        },
+        restoreImageCamera() {
+            const bound = requireModel(); if (!getImageCameraControl?.()) throw new Error('当前运行时不支持图片相机恢复');
+            return getImageCameraControl().restore(bound.token);
+        },
         setInteractiveMarkerDiameter(value) { const result = interactiveIK.setMarkerDiameter(value); wake(); return result; },
         async setInteractiveIKMode(value) {
             const bound = requireModel(); armAvoidance.restore();

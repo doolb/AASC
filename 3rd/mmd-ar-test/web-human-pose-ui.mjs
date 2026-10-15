@@ -1,5 +1,6 @@
 import { createImagePoseClient } from './web-human-pose-client.mjs';
 import { landmarkQuality, BODY_LANDMARKS } from './web-human-pose-core.mjs';
+import { installPoseOverlay } from './web-human-pose-overlay.mjs';
 
 const EDGES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [0, 7], [0, 8]];
 const BODY_NAMES = ['左肩', '右肩', '左肘', '右肘', '左腕', '右腕', '左髋', '右髋', '左膝', '右膝', '左踝', '右踝'];
@@ -20,6 +21,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
     panel.querySelector('[data-ik-message]').insertAdjacentElement('beforebegin', root);
     const field = key => root.querySelector('[data-pose="' + key + '"]');
     const client = createImagePoseClient(), preview = field('preview'), context = preview.getContext('2d');
+    const overlay = installPoseOverlay(panel, root, { preview, human, redraw: () => draw() });
     let image = null, result = null, candidates = [], inferenceMs = 0, busy = false, ready = false, serial = 0, token = null, disposed = false;
     let readSerial = 0, reading = false, importing = false;
     const status = text => { field('status').textContent = text; };
@@ -47,6 +49,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             + (low ? `低可信：${low}（红色空心点，可能遮挡或出画）。` : '') + '可信度不代表坐标准确。' + advice);
     }
     function cancel() {
+        overlay.cancel();
         const pending = busy || reading || importing;
         // 即使没有运行ONNX，也使尚未返回的剪贴板读取/图片解码失效；空闲时保留已加载Worker。
         serial++; readSerial++;
@@ -61,7 +64,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         preview.width = Math.min(400, image.width); preview.height = Math.round(image.height * preview.width / image.width);
         context.drawImage(scratch, 0, 0, preview.width, preview.height); preview.hidden = false;
         scratch.width = scratch.height = 0;
-        if (!result) return;
+        if (!result || !overlay.showReference()) { overlay.setReference(image, result); return; }
         const valid = index => landmarkQuality(result.landmarks[index]) >= 0.5;
         const at = index => [result.landmarks[index].x * preview.width, result.landmarks[index].y * preview.height];
         context.strokeStyle = '#35efbd'; context.fillStyle = '#ffcf52'; context.lineWidth = 2;
@@ -74,6 +77,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
                 context.beginPath(); context.arc(x, y, 4, 0, Math.PI * 2); context.stroke();
             }
         }
+        overlay.setReference(image, result);
     }
     async function importImage(file, fromPaste = false) {
         if (!file || disposed) return;
@@ -172,9 +176,11 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             ready = isReady;
             if (token && (!ready || human().getState().token !== token)) { cancel(); token = null; clearResult(); status('模型已切换，请重新识别图片'); draw(); }
             buttons();
+            overlay.sync(ready);
         },
         dispose() {
             disposed = true; serial++; readSerial++;
+            overlay.dispose();
             document.removeEventListener('paste', onPaste); root.removeEventListener('toggle', onToggle);
             client.dispose(); clearResult(); image = null; preview.width = preview.height = 0;
         }

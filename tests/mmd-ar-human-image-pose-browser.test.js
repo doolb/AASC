@@ -44,6 +44,7 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
         await page.waitForFunction(() => window.DisplayMmd?.getHumanInterface?.()?.getState().ready, { timeout: 180000 });
         await page.evaluate(async () => {
             window.DisplayMmd.setMotionPlaybackEnabled(false);
+            window.DisplayMmd.setCameraMotionPlaybackEnabled(false);
             const api = window.DisplayMmd.getHumanInterface();
             await api.physiology.set({ breathing: false, blinking: false }); await api.gaze.set({ head: false, eyes: false });
             const groups = window.MmdArLightingPresetGroups;
@@ -60,6 +61,12 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
         await page.$eval('[data-pose-panel]', element => { element.open = true; });
         await (await page.$('[data-pose="file"]')).uploadFile(IMAGE);
         await page.waitForFunction(() => document.querySelector('[data-pose="status"]').textContent.includes('图片已准备'));
+        const initialPose=await page.evaluate(()=>window.DisplayMmd.getHumanInterface().getImagePoseSnapshot());
+        assert.ok(initialPose.points.length>=16 && initialPose.points.every(p=>p.world.every(Number.isFinite)));
+        await page.click('[data-pose-overlay="enabled"]');
+        await page.waitForFunction(()=>document.querySelector('[data-pose-overlay="scale"]').disabled===false);
+        assert.equal(await page.evaluate(()=>window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled),false,'只看骨架不应自动启用IK');
+        await page.click('[data-pose-overlay="enabled"]');
         // 复用本机参考文件作为图片粘贴载荷，后续ONNX/骨骼应用均使用这次导入的像素。
         assert.equal(await page.evaluate(() => {
             const file = document.querySelector('[data-pose="file"]').files[0], data = new DataTransfer(); data.items.add(file);
@@ -94,6 +101,42 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
         });
         if (process.env.AASC_MMD_POSE_SCREENSHOT) await page.screenshot({ path: process.env.AASC_MMD_POSE_SCREENSHOT });
         const before = applied.controls.map(({ key, target, positionState }) => ({ key, target, positionState }));
+        await page.click('[data-pose-overlay="match"]');
+        await page.waitForFunction(()=>document.querySelector('[data-pose-overlay="cancel"]').disabled,{timeout:30000});
+        const cameraStatus=await page.$eval('[data-pose-overlay="status"]',element=>element.textContent);
+        t.diagnostic('真实参考图相机：'+cameraStatus);
+        if(cameraStatus.includes('已匹配')) {
+            await page.click('[data-pose-overlay="restore"]');
+            assert.match(await page.$eval('[data-pose-overlay="status"]',element=>element.textContent),/已恢复/u);
+        } else assert.match(cameraStatus,/误差|姿态|视角|相机/u);
+        // 使用真实PMX实际骨骼，Three构造可验证的参考相机，验证运行时不是只改一帧或卡住手动旋转。
+        const cameraRoundtrip=await page.evaluate(async()=>{
+            const api=window.DisplayMmd.getHumanInterface(), T=await import('three');
+            const {fitImageCamera}=await import('/js/web-human-pose-camera.mjs');
+            const snapshot=api.getImagePoseSnapshot(), state=api.getImageCameraState(), body=snapshot.points.filter(p=>Number.isInteger(p.landmark));
+            const center=new T.Vector3();for(const p of body)center.add(new T.Vector3().fromArray(p.world));center.divideScalar(body.length);
+            const extent=Math.max(...[0,1,2].map(i=>Math.max(...body.map(p=>p.world[i]))-Math.min(...body.map(p=>p.world[i]))));
+            const camera=new T.PerspectiveCamera(snapshot.view.fov,1.3,.001,100);
+            camera.position.copy(center).add(new T.Vector3(extent*.8,extent*.3,extent*2.5));camera.lookAt(center);camera.rotateZ(.08);camera.updateMatrixWorld(true);
+            const landmarks=Array.from({length:33},()=>({x:.5,y:.5,world:[0,0,0],visibility:0,presence:0}));
+            for(const p of body){const n=new T.Vector3().fromArray(p.world).project(camera);landmarks[p.landmark]={x:(n.x+1)/2,y:(1-n.y)/2,world:[0,0,0],visibility:1,presence:1};}
+            const fit=await fitImageCamera(snapshot,{landmarks,confidence:1},{aspect:1.3,maxPitch:state.maxPitch});
+            api.applyImageCamera(fit.view,state.revision,snapshot.token);
+            for(let i=0;i<10;i++)await new Promise(resolve=>requestAnimationFrame(resolve));
+            const matched=api.getImagePoseSnapshot().view.viewMatrix;
+            const error=Math.max(...matched.map((v,i)=>Math.abs(v-fit.referenceView.viewMatrix[i])));
+            window.DisplayMmd.setCameraViewRotation(fit.view.yaw+.1,fit.view.pitch);
+            for(let i=0;i<25;i++)await new Promise(resolve=>requestAnimationFrame(resolve));
+            const moved=api.getImagePoseSnapshot().view.viewMatrix;
+            api.restoreImageCamera();await new Promise(resolve=>requestAnimationFrame(resolve));
+            const restored=api.getImagePoseSnapshot().view.viewMatrix;
+            return {error,manualChanged:Math.max(...moved.map((v,i)=>Math.abs(v-matched[i]))),
+                restoreError:Math.max(...restored.map((v,i)=>Math.abs(v-snapshot.view.viewMatrix[i]))),fitError:fit.error};
+        });
+        assert.ok(cameraRoundtrip.error<.001,JSON.stringify(cameraRoundtrip));
+        assert.ok(cameraRoundtrip.manualChanged>.01,JSON.stringify(cameraRoundtrip));
+        assert.ok(cameraRoundtrip.restoreError<.001,JSON.stringify(cameraRoundtrip));
+        assert.deepEqual(await page.evaluate(()=>window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.map(({key,target,positionState})=>({key,target,positionState}))),before,'相机匹配/恢复改变了人体目标');
         // 同一浏览器任务内点击，避免快速推理已结束后才送达第二个自动化指针事件。
         await page.evaluate(() => {
             document.querySelector('[data-pose="recognize"]').click();
