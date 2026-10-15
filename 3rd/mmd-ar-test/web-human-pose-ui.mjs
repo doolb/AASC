@@ -3,11 +3,14 @@ import { landmarkQuality, BODY_LANDMARKS } from './web-human-pose-core.mjs';
 
 const EDGES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [0, 7], [0, 8]];
 const BODY_NAMES = ['左肩', '右肩', '左肘', '右肘', '左腕', '右腕', '左髋', '右髋', '左膝', '右膝', '左踝', '右踝'];
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 export function installImagePose(panel, { human, ensurePhysics }) {
     const root = document.createElement('details'); root.dataset.posePanel = '';
     root.innerHTML = `<summary>图片姿态</summary>
         <p>在本机识别单人全身图片，预览后应用到身体物理。图片不会上传，深度为估计，应用后可继续拖点微调。</p>
         <label>选择图片 <input data-pose="file" type="file" accept="image/jpeg,image/png,image/webp"></label>
+        <button type="button" class="display-mmd-ar-action" data-pose="paste">粘贴图片</button>
+        <p>展开此区域后可按 Ctrl+V（Mac 用 ⌘V）粘贴截图或复制的图片，再点击识别姿态。</p>
         <div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-pose="recognize">识别姿态</button>
         <button type="button" class="display-mmd-ar-action" data-pose="apply">应用姿态</button>
         <button type="button" class="display-mmd-ar-action" data-pose="cancel">取消识别</button></div>
@@ -18,12 +21,16 @@ export function installImagePose(panel, { human, ensurePhysics }) {
     const field = key => root.querySelector('[data-pose="' + key + '"]');
     const client = createImagePoseClient(), preview = field('preview'), context = preview.getContext('2d');
     let image = null, result = null, candidates = [], inferenceMs = 0, busy = false, ready = false, serial = 0, token = null, disposed = false;
+    let readSerial = 0, reading = false, importing = false;
     const status = text => { field('status').textContent = text; };
+    const acceptsPaste = () => !disposed && !panel.hidden && root.open;
     function buttons() {
-        field('recognize').disabled = !ready || !image || busy;
-        field('apply').disabled = !ready || !result?.quality.torsoReady || busy;
-        field('cancel').disabled = !busy;
-        field('candidate').disabled = busy || !ready;
+        const pending = busy || reading || importing;
+        field('recognize').disabled = !ready || !image || pending;
+        field('apply').disabled = !ready || !result?.quality.torsoReady || pending;
+        field('cancel').disabled = !pending;
+        field('paste').disabled = reading || disposed;
+        field('candidate').disabled = pending || !ready;
         field('candidate-row').hidden = candidates.length < 2;
     }
     function clearResult() {
@@ -40,8 +47,12 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             + (low ? `低可信：${low}（红色空心点，可能遮挡或出画）。` : '') + '可信度不代表坐标准确。' + advice);
     }
     function cancel() {
-        if (!busy) return;
-        serial++; busy = false; client.cancel(); buttons(); status('识别已取消，当前骨骼保持原姿态');
+        const pending = busy || reading || importing;
+        // 即使没有运行ONNX，也使尚未返回的剪贴板读取/图片解码失效；空闲时保留已加载Worker。
+        serial++; readSerial++;
+        if (busy) client.cancel();
+        busy = reading = importing = false; buttons();
+        if (pending) status('操作已取消，当前骨骼保持原姿态');
     }
     function draw() {
         if (!image) return;
@@ -64,26 +75,66 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             }
         }
     }
-    field('file').addEventListener('change', async () => {
-        cancel(); const id = ++serial; clearResult(); image = null; preview.hidden = true; buttons();
-        const file = field('file').files?.[0];
-        if (!file) return;
+    async function importImage(file, fromPaste = false) {
+        if (!file || disposed) return;
+        cancel(); const id = ++serial; clearResult(); importing = true; buttons(); draw();
+        status('正在准备图片…');
         let bitmap;
         try {
-            if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) throw new Error('请选择20MiB以内的JPG、PNG或WebP图片');
+            if (!IMAGE_TYPES.includes(file.type) || file.size > 20 * 1024 * 1024) throw new Error('请选择20MiB以内的JPG、PNG或WebP图片');
             bitmap = await createImageBitmap(file);
-            if (disposed || id !== serial) return;
+            if (disposed || id !== serial || (fromPaste && !acceptsPaste())) return;
             if (bitmap.width * bitmap.height > 4096 * 4096) throw new Error('图片超过1600万像素，请先缩小');
             const ratio = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height)), canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(bitmap.width * ratio)); canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
             const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
             image = ctx.getImageData(0, 0, canvas.width, canvas.height); canvas.width = canvas.height = 0;
+            // 清除旧文件名，保证粘贴后再次选择同一文件也会触发change。
+            if (fromPaste) field('file').value = '';
             draw(); status('图片已准备，点击“识别姿态”');
         } catch (error) { if (id === serial) status(error.message); }
-        finally { bitmap?.close(); buttons(); }
+        finally { bitmap?.close(); if (id === serial && !disposed) { importing = false; buttons(); } }
+    }
+    function onPaste(event) {
+        if (!acceptsPaste() || event.defaultPrevented || event.target?.isContentEditable
+            || event.target?.closest?.('input, textarea, select')) return;
+        const files = Array.from(event.clipboardData?.files || []);
+        const file = files.find(value => IMAGE_TYPES.includes(value.type));
+        if (!file) return;
+        event.preventDefault(); void importImage(file, true);
+    }
+    async function readClipboardImage() {
+        if (!acceptsPaste() || reading) return;
+        cancel(); const id = ++readSerial;
+        const isCurrent = () => id === readSerial && acceptsPaste();
+        reading = true; buttons(); status('正在读取剪贴板图片…');
+        try {
+            if (typeof navigator.clipboard?.read !== 'function') throw new Error('当前浏览器无法读取剪贴板，请按 Ctrl+V 或选择图片文件');
+            const items = await navigator.clipboard.read();
+            if (!isCurrent()) return;
+            for (const item of items) {
+                const type = IMAGE_TYPES.find(value => item.types.includes(value));
+                if (!type) continue;
+                const file = await item.getType(type);
+                if (!isCurrent()) return;
+                reading = false; await importImage(file, true); return;
+            }
+            throw new Error('剪贴板中没有支持的图片，请复制截图/图片后重试，或选择图片文件');
+        } catch (error) {
+            if (isCurrent()) status(error.name === 'NotAllowedError'
+                ? '浏览器未允许读取剪贴板，请按 Ctrl+V 或选择图片文件'
+                : (error.message || '剪贴板读取失败，请按 Ctrl+V 或选择图片文件'));
+        } finally { if (id === readSerial && !disposed) { reading = false; buttons(); } }
+    }
+    const onToggle = () => { if (!root.open) cancel(); };
+    document.addEventListener('paste', onPaste);
+    root.addEventListener('toggle', onToggle);
+    field('paste').addEventListener('click', readClipboardImage);
+    field('file').addEventListener('change', () => {
+        void importImage(field('file').files?.[0]);
     });
     field('recognize').addEventListener('click', async () => {
-        if (!image || busy) return;
+        if (!image || busy || reading || importing || disposed) return;
         const id = ++serial;
         try {
             token = human().getState().token; clearResult(); busy = true; buttons(); draw();
@@ -102,7 +153,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         finally { if (id === serial) { busy = false; buttons(); } }
     });
     field('apply').addEventListener('click', async () => {
-        if (!result?.quality.torsoReady || busy) return;
+        if (!result?.quality.torsoReady || busy || reading || importing || disposed) return;
         const id = ++serial, pose = result, expectedToken = token;
         try {
             busy = true; buttons(); await ensurePhysics({ isCurrent: () => id === serial && !disposed });
@@ -113,7 +164,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         finally { if (id === serial) { busy = false; buttons(); } }
     });
     field('cancel').addEventListener('click', cancel);
-    field('candidate').addEventListener('change', () => { if (!busy) showCandidate(Number(field('candidate').value)); });
+    field('candidate').addEventListener('change', () => { if (!busy && !reading && !importing && !disposed) showCandidate(Number(field('candidate').value)); });
     buttons();
     return {
         cancel,
@@ -122,6 +173,10 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             if (token && (!ready || human().getState().token !== token)) { cancel(); token = null; clearResult(); status('模型已切换，请重新识别图片'); draw(); }
             buttons();
         },
-        dispose() { disposed = true; serial++; client.dispose(); clearResult(); image = null; preview.width = preview.height = 0; }
+        dispose() {
+            disposed = true; serial++; readSerial++;
+            document.removeEventListener('paste', onPaste); root.removeEventListener('toggle', onToggle);
+            client.dispose(); clearResult(); image = null; preview.width = preview.height = 0;
+        }
     };
 }

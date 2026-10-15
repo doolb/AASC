@@ -60,6 +60,13 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
         await page.$eval('[data-pose-panel]', element => { element.open = true; });
         await (await page.$('[data-pose="file"]')).uploadFile(IMAGE);
         await page.waitForFunction(() => document.querySelector('[data-pose="status"]').textContent.includes('图片已准备'));
+        // 复用本机参考文件作为图片粘贴载荷，后续ONNX/骨骼应用均使用这次导入的像素。
+        assert.equal(await page.evaluate(() => {
+            const file = document.querySelector('[data-pose="file"]').files[0], data = new DataTransfer(); data.items.add(file);
+            const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+            document.body.dispatchEvent(event); return event.defaultPrevented;
+        }), true, '全身IK展开时没有导入粘贴图片');
+        await page.waitForFunction(() => document.querySelector('[data-pose="status"]').textContent.includes('图片已准备'));
         await page.click('[data-pose="recognize"]');
         await page.waitForFunction(() => !document.querySelector('[data-pose="apply"]').disabled || /失败|未识别|无效|不匹配/u.test(document.querySelector('[data-pose="status"]').textContent), { timeout: 120000 });
         const recognized = await page.$eval('[data-pose="status"]', element => element.textContent);

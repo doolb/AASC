@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## 全身IK图片粘贴（2026-10-15）
+
+`tests/mmd-ar-human-image-pose-clipboard-browser.test.js`使用真实DOM和图片解码，13个子场景/含父测试计14项：PNG像素预览、无头Edge真实ClipboardItem.write/原生Ctrl+V/按钮读取、面板/折叠/可编辑作用域、纯文字/多图首张、损坏/超限、拒权/无图片/API缺失、读取晚到后换图/关闭/折叠/销毁、旧Bitmap释放。只在无头测试浏览器中写入合成PNG再读回，不读取用户已有剪贴板；未将其称为系统Snipaste或手机手工验收。
+
+完整ONNX浏览器在原文件导入后再粘贴同一本机参考图片，后续识别/真实PMX应用使用粘贴像素，保留三图/取消/候选切换回归。本轮粘贴14项、图片模块10项、完整浏览器1项，共25/25通过、0失败/跳过。构建先完成再运行依赖web-dist的测试；独立粘贴测试直接加载源码UI，不需要启动整个人体渲染或ONNX。
+
 ## MMD-AR 全身IK图片姿态 ONNX（2026-10-15）
 
 新增`tests/mmd-ar-human-image-pose.test.js`，覆盖224/NCHW检测预处理、2254个锚点、人物选择、256/NHWC旋转ROI、33点/估计3D解码、坏输出、真实PMX骨长/左右/变换、Worker取消/晚到与传输失败、延迟Ammo初始化取消。`mmd-ar-human-physics.test.js`补充图片姿态原子应用，坏输入保持旧目标且后续仍可拖动。
