@@ -5,6 +5,14 @@
   - 主服务器重启健康；设备保持原min56，经原生入口code92→95、pendingHealth=false。正式打开外部网页、无临时Cookie注入，认证子域首次已有sessionid，心跳0/0、账号信息成功；指定原会话IM0/0、4条消息正常，未发新聊天。刷新后心跳0/信息成功且无错误toast；部分其它安全SDK2035仍不在全站成功声明内。
   - 定向10/10、Chat2API257/257通过。design/spec/task/self-test/usage完成同步，已完成任务从todo删除；servicePackage=false，其余状态保持。隔离窗口、临时XML和本次19223/19225转发已清理，原19222保留；账号、会话正文、发布二进制和无关工作区改动不提交。
 
+### Offline服务代码v95双站点发布
+
+- ✅ [2026-10-15] 本机模型收起把手半宽露出和显示端聊天 Markdown 列表缩进修复随服务代码 v95 发布到 LAN 与 WAN；min APK v57 同步至 LAN，WAN 保持 v57。
+  - `code/code-v95.zip`：17,778,717 bytes，SHA-256 `23ff6e0544bbbee22c263709bcbbaee7838b8c73f4a7b8ca882c0f3bd46cdc17`；ZIP CRC 检查通过，包内两份 CSS 与源码哈希相同。
+  - 两端签名清单逐字节一致，大小 64,241 bytes，SHA-256 `aa7ae6b8753b8d30d30251832de8508ec3e6878a646b4b4be56f6a0a8ae24f0c`；签名与组件结构验证通过，清单保留 min v57、dependencies v10、Node min seeds v86。
+  - LAN 12 个组件的 HTTP 大小/SHA-256 全量校验通过；WAN 清单签名与内容一致，code v95/min v57 HTTP 长度及远端文件 SHA-256 通过，未变更组件沿用此前已验证的版本文件。
+  - min APK v57：89,931,433 bytes，SHA-256 `195cd6ac1bfb0fb3088582b6d9bc67f3c335b9214f8b3dc216bc359776c10bc4`；LAN/WAN 文件一致，本轮未重建 APK。待 Offline 设备验收边缘把手、FPS/控制端避让和聊天列表观感；`servicePackage=false`、`minApk=false`、`dependenciesPackage=false`。
+
 ### 豆包外部网页认证子域恢复修复
 
 - ✅ [2026-10-15] 按用户确认实现豆包www/accounts固定双来源Cookie恢复，解决认证子域缺sessionid的恢复缺口。
