@@ -4,6 +4,8 @@
 
 新增`tests/mmd-ar-human-image-pose.test.js`，覆盖224/NCHW检测预处理、2254个锚点、人物选择、256/NHWC旋转ROI、33点/估计3D解码、坏输出、真实PMX骨长/左右/变换、Worker取消/晚到与传输失败、延迟Ammo初始化取消。`mmd-ar-human-physics.test.js`补充图片姿态原子应用，坏输入保持旧目标且后续仍可拖动。
 
+多候选修复补充低于0.5的独立候选、IoU重复锚点抑制、最多3次姿态预算、退化检测拒绝、身体完整性排序、出画/无效点质量和应用一致性。定向56项通过。浏览器环境变量`AASC_MMD_POSE_ANIME_IMAGE`指定本机用户图片时增加真实推理回归，不将图片加入仓库；验证3候选、默认鼻点[208.1,110.8]及上半身肩点、候选切换不改骨骼、低可信部位提示和应用10目标。未提供该变量时只运行原公开照片/无人/取消流程，不代表完成二次元图验收。
+
 `tests/mmd-ar-human-image-pose-browser.test.js`加载真实米娅和真实ONNX，通过全身IK唯一图片入口上传本地参考图，验证33点预览、真实左右腕/右膝方向、应用11个目标并持续270物理子步、取消和无人图不覆盖目标；观察真实Worker消息，不替换推理结果。原物理浏览器用例验证PBD选项已隐藏，内部API切换仍用于生命周期回归。
 
 执行前先完成`npm run build:web:mmd-ar-test`，再运行定向测试，不能让构建重建web-dist与依赖其待机夹具的测试重叠。浏览器建议`--test-concurrency=1`以免软件GPU互相争用。设置`PUPPETEER_EXECUTABLE_PATH`与`AASC_MMD_POSE_TEST_IMAGE`；默认参考图缓存为`3rd/mmd-ar-test/model-cache/pose-onnx/reference-person.jpg`，来源`https://storage.googleapis.com/mediapipe-assets/pose.jpg`，SHA-256 `c8a830ed683c0276d713dd5aeda28f415f10cd6291972084a40d0d8b934ed62b`。缺浏览器/图片会明确跳过，不把跳过当作真实验证成功。最终结果见任务记录。

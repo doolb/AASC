@@ -1,5 +1,5 @@
 // 预后处理参考OpenCV Zoo MediaPipe Pose（Apache-2.0），固定模型与许可证见pose-onnx-NOTICES.md。
-// 单人静态图片只选最高分人物，不依赖OpenCV JS，避免再引入整套图像运行时。
+// 静态图片保留有限数量的独立候选，不依赖OpenCV JS，避免再引入整套图像运行时。
 const sigmoid = value => 1 / (1 + Math.exp(-Math.max(-100, Math.min(100, value))));
 export function detectorAnchors() {
     const anchors = [];
@@ -35,17 +35,54 @@ export function prepareDetector(image) {
     }
     return { tensor, ratio, padX, padY, width: image.width, height: image.height };
 }
-export function decodePerson(boxes, scores, input) {
+function intersectionOverUnion(a, b) {
+    const intersection = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]))
+        * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    return intersection / ((a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - intersection);
+}
+export function decodePeople(boxes, scores, input) {
     if (boxes.length !== 2254 * 12 || scores.length !== 2254) throw new Error('人物检测模型输出不匹配');
-    let selected = -1, best = 0.5;
+    const candidates = [];
     for (let i = 0; i < scores.length; i++) {
-        const score = sigmoid(scores[i]); if (score > best) { best = score; selected = i; }
+        if (!Number.isFinite(scores[i])) continue;
+        const score = sigmoid(scores[i]);
+        if (score < 0.35) continue;
+        const base = i * 12, anchor = anchors[i];
+        const point = offset => [(boxes[base + offset] + anchor[0] * 224 - input.padX) / input.ratio,
+            (boxes[base + offset + 1] + anchor[1] * 224 - input.padY) / input.ratio];
+        const [cx, cy] = point(0), width = boxes[base + 2] / input.ratio, height = boxes[base + 3] / input.ratio;
+        const hip = point(4), full = point(6), radius = Math.hypot(full[0] - hip[0], full[1] - hip[1]);
+        if (![cx, cy, width, height, ...hip, ...full, radius].every(Number.isFinite)
+            || width <= 0 || height <= 0 || radius < 2 || radius > Math.max(input.width, input.height) * 4) continue;
+        candidates.push({ hip, full, score, box: [cx - width / 2, cy - height / 2, cx + width / 2, cy + height / 2] });
     }
-    if (selected < 0) return null;
-    const base = selected * 12, anchor = anchors[selected];
-    const point = offset => [(boxes[base + offset] + anchor[0] * 224 - input.padX) / input.ratio,
-        (boxes[base + offset + 1] + anchor[1] * 224 - input.padY) / input.ratio];
-    return { hip: point(4), full: point(6), score: best };
+    // 模型检测框覆盖头部附近，不能当作整个人体框；去掉同一区域的重复锚点后再限定手机推理预算。
+    const selected = [];
+    for (const candidate of candidates.sort((a, b) => b.score - a.score)) {
+        if (selected.some(person => intersectionOverUnion(person.box, candidate.box) > 0.3)) continue;
+        selected.push(candidate);
+        if (selected.length === 3) break;
+    }
+    return selected;
+}
+
+export const BODY_LANDMARKS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+export function landmarkQuality(point) {
+    if (!point || ![point.x, point.y, point.visibility, point.presence, ...(point.world || [])].every(Number.isFinite)
+        || point.world?.length !== 3 || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return 0;
+    return Math.max(0, Math.min(1, point.visibility, point.presence));
+}
+export function rankPoseCandidates(candidates) {
+    return candidates.map(candidate => {
+        const values = BODY_LANDMARKS.map(index => landmarkQuality(candidate.landmarks[index]));
+        const lowConfidence = BODY_LANDMARKS.filter((_, i) => values[i] < 0.5), visible = values.length - lowConfidence.length;
+        // 这是选人启发式，不是坐标正确率。忽略脸部点与Pose总分，防止动物脸误检支配结果。
+        const score = 0.7 * values.reduce((sum, value) => sum + value, 0) / values.length
+            + 0.2 * visible / values.length + 0.1 * candidate.detection.score;
+        const torsoReady = [11, 12, 23, 24].every(index => landmarkQuality(candidate.landmarks[index]) >= 0.5);
+        return { ...candidate, quality: { score, visible, total: values.length, lowConfidence, torsoReady } };
+    }).sort((a, b) => Number(b.quality.torsoReady) - Number(a.quality.torsoReady)
+        || b.quality.score - a.quality.score || b.detection.score - a.detection.score);
 }
 export function preparePose(image, person) {
     validateImage(image);

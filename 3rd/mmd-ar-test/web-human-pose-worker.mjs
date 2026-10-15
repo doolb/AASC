@@ -1,5 +1,5 @@
 import * as ort from './vendor/pose/ort.wasm.min.mjs';
-import { prepareDetector, decodePerson, preparePose, decodePose } from './web-human-pose-core.mjs';
+import { prepareDetector, decodePeople, preparePose, decodePose, rankPoseCandidates } from './web-human-pose-core.mjs';
 
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = new URL('./vendor/pose/', import.meta.url).href;
@@ -52,16 +52,27 @@ self.onmessage = async event => {
         const [detector, estimator] = await initialize(id), started = performance.now();
         progress(id, '本地识别人物…');
         const input = prepareDetector(image), detection = await run(detector, input.tensor, [1, 3, 224, 224]);
-        let person;
-        try { person = decodePerson(detection['Identity:0'].data, detection['Identity_1:0'].data, input); }
+        let people;
+        try { people = decodePeople(detection['Identity:0'].data, detection['Identity_1:0'].data, input); }
         finally { Object.values(detection).forEach(value => value.dispose()); }
-        if (!person) throw new Error('未识别到人物，请使用清晰的单人全身图片');
-        progress(id, '本地识别身体姿态…');
-        const roi = preparePose(image, person), outputs = await run(estimator, roi.tensor, [1, 256, 256, 3]);
-        let result;
-        try { result = decodePose(outputs.Identity.data, outputs.Identity_4.data, outputs.Identity_1.data[0], roi, image); }
-        finally { Object.values(outputs).forEach(value => value.dispose()); }
-        result.inferenceMs = performance.now() - started;
+        if (!people.length) throw new Error('未识别到人物，请使用清晰的单人全身图片');
+        const estimated = [];
+        for (const [index, person] of people.entries()) {
+            progress(id, `本地识别身体姿态：${index + 1}/${people.length}…`);
+            const roi = preparePose(image, person), outputs = await run(estimator, roi.tensor, [1, 256, 256, 3]);
+            try {
+                // 单个候选没有姿态时继续检查其他候选；推理/张量契约异常仍由外层明确报错。
+                const confidence = outputs.Identity_1.data[0];
+                if (Number.isFinite(confidence) && confidence >= 0.5) {
+                    const pose = decodePose(outputs.Identity.data, outputs.Identity_4.data, confidence, roi, image);
+                    estimated.push({ ...pose, detection: { score: person.score,
+                        box: person.box.map((value, i) => value / (i % 2 ? image.height : image.width)) } });
+                }
+            } finally { Object.values(outputs).forEach(value => value.dispose()); }
+        }
+        const candidates = rankPoseCandidates(estimated);
+        if (!candidates.length) throw new Error('未识别到可靠姿态，请使用清晰的全身图片');
+        const result = { ...candidates[0], candidates, inferenceMs: performance.now() - started };
         self.postMessage({ type: 'result', id, result });
     } catch (error) { self.postMessage({ type: 'error', id, message: error.message || String(error) }); }
 };

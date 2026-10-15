@@ -108,6 +108,37 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
         assert.match(await page.$eval('[data-pose="status"]', element => element.textContent), /未识别/u);
         const after = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.map(({ key, target, positionState }) => ({ key, target, positionState })));
         assert.deepEqual(after, before);
+        // 用户图片只从本机环境变量指定的位置读取，不放入仓库或发送到外部服务。
+        if (process.env.AASC_MMD_POSE_ANIME_IMAGE) {
+            assert.ok(fs.existsSync(process.env.AASC_MMD_POSE_ANIME_IMAGE));
+            await (await page.$('[data-pose="file"]')).uploadFile(process.env.AASC_MMD_POSE_ANIME_IMAGE);
+            await page.waitForFunction(() => document.querySelector('[data-pose="status"]').textContent.includes('图片已准备'));
+            await page.click('[data-pose="recognize"]');
+            await page.waitForFunction(() => !document.querySelector('[data-pose="recognize"]').disabled, { timeout: 90000 });
+            const anime = await page.evaluate(() => window.__observedImagePose);
+            assert.ok(anime.candidates.length >= 2 && anime.candidates.length <= 3, '女孩和小猪应成为独立候选且不超过预算');
+            assert.ok(anime.landmarks[0].x * 450 > 190 && anime.landmarks[0].x * 450 < 240
+                && anime.landmarks[0].y * 407 > 85 && anime.landmarks[0].y * 407 < 140, '默认鼻点未回到女孩脸上');
+            assert.ok(anime.landmarks[11].y < .5 && anime.landmarks[12].y < .5, '默认肩点仍在裙摆');
+            assert.equal(await page.$eval('[data-pose="candidate-row"]', element => element.hidden), false);
+            assert.equal(await page.$$eval('[data-pose="candidate"] option', elements => elements.length), anime.candidates.length);
+            const pig = anime.candidates.findIndex(candidate => candidate.landmarks[0].y > .6 && candidate.landmarks[0].x < .4);
+            assert.ok(pig > 0, '误检小猪候选应保留以便比较');
+            const preview = await page.$eval('[data-pose="preview"]', canvas => canvas.toDataURL());
+            await page.select('[data-pose="candidate"]', String(pig));
+            assert.match(await page.$eval('[data-pose="status"]', element => element.textContent), new RegExp(`候选${pig + 1}`));
+            assert.notEqual(await page.$eval('[data-pose="preview"]', canvas => canvas.toDataURL()), preview, '切换候选没有重画预览');
+            const switched = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.map(({ key, target, positionState }) => ({ key, target, positionState })));
+            assert.deepEqual(switched, before, '切换预览不应立即改变身体目标');
+            await page.select('[data-pose="candidate"]', '0');
+            assert.match(await page.$eval('[data-pose="status"]', element => element.textContent), /低可信/u);
+            await page.click('[data-pose="apply"]');
+            await page.waitForFunction(() => document.querySelector('[data-pose="status"]').textContent.includes('已应用'), { timeout: 20000 });
+            const animeApplied = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
+            assert.ok(animeApplied.activeTargets >= 6 && animeApplied.controls.every(control => control.target.every(Number.isFinite)));
+            if (process.env.AASC_MMD_POSE_ANIME_SCREENSHOT) await page.screenshot({ path: process.env.AASC_MMD_POSE_ANIME_SCREENSHOT });
+            t.diagnostic(`二次元图：${anime.candidates.length}候选，默认鼻点[${(anime.landmarks[0].x * 450).toFixed(1)},${(anime.landmarks[0].y * 407).toFixed(1)}]，身体${anime.quality.visible}/12；切换保持旧目标，应用${animeApplied.activeTargets}目标`);
+        }
         assert.ok(requests.filter(request => request.url.includes('/vendor/pose/')).length >= 5);
         assert.ok(requests.every(request => request.method === 'GET'), '图片不应以POST或其他写请求上传');
         assert.deepEqual(errors, []);

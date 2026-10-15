@@ -8,6 +8,9 @@ export function retargetImagePose(pose, rig) {
         const value = pose.landmarks[index];
         if (!Array.isArray(value?.world) || value.world.length !== 3 || !value.world.every(Number.isFinite)
             || !Number.isFinite(value.visibility) || !Number.isFinite(value.presence) || Math.min(value.visibility, value.presence) < 0.5) return null;
+        // 图片结果的出画点与预览保持一致，跳过对应目标；仅含世界点的既有调用仍保持兼容。
+        if (('x' in value || 'y' in value) && (![value.x, value.y].every(Number.isFinite)
+            || value.x < 0 || value.x > 1 || value.y < 0 || value.y > 1)) return null;
         const [x, y, z] = value.world; return new Vector3(x, -y, -z);
     };
     const node = semantic => rig.nodes.find(item => item.semantic === semantic);

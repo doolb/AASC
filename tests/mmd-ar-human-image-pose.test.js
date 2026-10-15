@@ -16,13 +16,14 @@ test('图片预处理保持长宽比，检测NCHW归一化与黑边契约正确'
     assert.deepEqual(anchors.at(-1), [13 / 14, 13 / 14]);
 });
 
-test('检测解码选最高可信人物，低分不生成假姿态，姿态ROI与世界点可逆旋转', async () => {
-    const { decodePerson, preparePose, decodePose } = await import('../3rd/mmd-ar-test/web-human-pose-core.mjs');
+test('检测低分不生成假姿态，姿态ROI与世界点可逆旋转', async () => {
+    const { decodePeople, preparePose, decodePose } = await import('../3rd/mmd-ar-test/web-human-pose-core.mjs');
     const scores = new Float32Array(2254).fill(-20), boxes = new Float32Array(2254 * 12);
-    assert.equal(decodePerson(boxes, scores, { width: 224, height: 224, ratio: 1, padX: 0, padY: 0 }), null);
+    assert.deepEqual(decodePeople(boxes, scores, { width: 224, height: 224, ratio: 1, padX: 0, padY: 0 }), []);
     scores[0] = 10;
+    boxes[2] = 40; boxes[3] = 40;
     boxes[4] = 108; boxes[5] = 108; boxes[6] = 108; boxes[7] = 12;
-    const person = decodePerson(boxes, scores, { width: 224, height: 224, ratio: 1, padX: 0, padY: 0 });
+    const [person] = decodePeople(boxes, scores, { width: 224, height: 224, ratio: 1, padX: 0, padY: 0 });
     assert.deepEqual(person.hip, [112, 112]); assert.deepEqual(person.full, [112, 16]);
     const image = { width: 224, height: 224, data: new Uint8ClampedArray(224 * 224 * 4).fill(255) };
     const roi = preparePose(image, person);
@@ -34,6 +35,55 @@ test('检测解码选最高可信人物，低分不生成假姿态，姿态ROI�
     assert.equal(result.landmarks[0].x, 0.5); assert.equal(result.landmarks[0].y, 0.5);
     assert.deepEqual(result.landmarks[0].world, [0, -1, 0]);
     assert.throws(() => decodePose(landmarks, world, 0.1, roi, image), /未识别/u);
+});
+
+test('多候选去重保留低于0.5的独立人物，限制三次姿态推理并跳过退化检测', async () => {
+    const { decodePeople, detectorAnchors } = await import('../3rd/mmd-ar-test/web-human-pose-core.mjs');
+    const scores = new Float32Array(2254).fill(-20), boxes = new Float32Array(2254 * 12), anchors = detectorAnchors();
+    const set = (i, score, x, y) => {
+        scores[i] = Math.log(score / (1 - score));
+        boxes.set([x - anchors[i][0] * 224, y - anchors[i][1] * 224, 30, 30,
+            x - anchors[i][0] * 224, y + 30 - anchors[i][1] * 224,
+            x - anchors[i][0] * 224, y - 40 - anchors[i][1] * 224, 0, 0, 0, 0], i * 12);
+    };
+    set(0, 0.622, 45, 170); set(1, 0.589, 46, 171); set(2, 0.479, 110, 60);
+    set(3, 0.40, 160, 80); set(4, 0.36, 200, 170); set(5, 0.34, 30, 40);
+    set(6, 0.99, 80, 80); boxes[6 * 12 + 4] = NaN;
+    set(7, 0.98, 80, 80); boxes[7 * 12 + 2] = 0;
+    const people = decodePeople(boxes, scores, { width: 224, height: 224, ratio: 1, padX: 0, padY: 0 });
+    assert.equal(people.length, 3);
+    assert.deepEqual(people.map(person => person.hip[0]), [45, 110, 160]);
+    assert.ok(people[1].score < 0.5 && people[1].score > 0.47, '女孩候选再次被0.5阈值排除');
+    assert.deepEqual(people[1].box, [95, 45, 125, 75]);
+});
+
+test('身体完整性选择女孩而非高分小猪，Pose总分接近1不能支配排序', async () => {
+    const { rankPoseCandidates } = await import('../3rd/mmd-ar-test/web-human-pose-core.mjs');
+    const body = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+    const pose = (values, score, confidence) => {
+        const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, world: [0, 0, 0], visibility: 1, presence: 1 }));
+        body.forEach((index, i) => { landmarks[index].visibility = values[i]; });
+        return { landmarks, confidence, detection: { score } };
+    };
+    const pig = pose([.999, .990, .604, .013, .545, .037, .999, .999, .960, .506, .941, .697], .622, .99999);
+    const girl = pose([.999, .999, .920, .526, .872, .743, .999, .999, .985, .657, .923, .450], .479, .994);
+    const ranked = rankPoseCandidates([pig, girl]);
+    assert.equal(ranked[0].detection.score, .479);
+    assert.equal(ranked[0].quality.visible, 11);
+    assert.deepEqual(ranked[0].quality.lowConfidence, [28]);
+    assert.equal(ranked[0].quality.torsoReady, true);
+    assert.ok(ranked[0].quality.score > ranked[1].quality.score);
+});
+
+test('出画面和无效世界点不算身体质量，躯干缺失不能应用', async () => {
+    const { rankPoseCandidates } = await import('../3rd/mmd-ar-test/web-human-pose-core.mjs');
+    const landmarks = Array.from({ length: 33 }, () => ({ x: .5, y: .5, world: [0, 0, 0], visibility: 1, presence: 1 }));
+    landmarks[11].x = -0.1; landmarks[23].world[0] = NaN;
+    const [result] = rankPoseCandidates([{ landmarks, confidence: 1, detection: { score: .9 } }]);
+    assert.equal(result.quality.visible, 10);
+    assert.equal(result.quality.torsoReady, false);
+    assert.deepEqual(result.quality.lowConfidence, [11, 23]);
+    assert.ok(Number.isFinite(result.quality.score));
 });
 
 test('姿态输入拒绝退化ROI与损坏输出，避免NaN进入骨骼', async () => {
@@ -67,6 +117,8 @@ test('真实PMX重定向按骨段长度构造目标，缺失手臂不生成零�
     assert.ok(Math.abs(converted('leftHand').distanceTo(converted('leftElbow')) - a.position.distanceTo(b.position)) < 1e-8, '模型缩放/旋转后骨长变更');
     landmarks[13].visibility = 0;
     assert.ok(!retargetImagePose({ landmarks, confidence: 1 }, rig).some(target => ['leftHand', 'leftElbow'].includes(target.key)));
+    landmarks[13].visibility = 1; landmarks[13].x = -0.1; landmarks[13].y = 0.5;
+    assert.ok(!retargetImagePose({ landmarks, confidence: 1 }, rig).some(target => ['leftHand', 'leftElbow'].includes(target.key)), '预览中出画面的点仍用于应用');
     landmarks[23].world[0] = NaN;
     assert.throws(() => retargetImagePose({ landmarks, confidence: 1 }, rig), /骨盆|关键点/u);
 });
