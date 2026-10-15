@@ -1,4 +1,4 @@
-- ⏳待服务包与设备验收 [2026-10-15] 显示端高 DPI/MMD 重连修复及 Offline“本机模型”入口下移、左边缘收起已实现；当前网页服务资源待发布，入口修改不触发 min APK 重建。待在 Offline 设备确认 FPS/控制端把手避让、安全区、展开/收起和 MMD 重连状态。任务：`docs/task/20261014_显示端高DPI适配本机模型入口与MMD显隐恢复.md`、`docs/task/20261015_Offline本机模型入口边缘收起.md`。
+- ⏳待服务包与设备验收 [2026-10-15] Offline“本机模型”收起把手左移半宽，仅露约半个字；显示端聊天 Markdown 列表恢复 24 CSS px 缩进，标记留在气泡背景内。两项网页资源合并同步发布 LAN/外网，不重建 min APK。待 Offline 设备确认 FPS/控制端把手避让、安全区、展开/收起及聊天列表观感。任务：`docs/task/20261015_Offline本机模型入口边缘收起.md`、`docs/task/20261015_Offline本机模型收起把手半宽露出.md`、`docs/task/20261015_显示端聊天Markdown列表缩进修复.md`。
 
 - ⏳待新工程构建验收 [2026-10-15] Android MNN 固定 revision 的自包含预编译包和默认 APK 准备入口已入库；仍需在新 clone 环境执行 `npm run build:apk` 确认完整 APK 链路。本次未构建 APK，`minApk=false` 保持。任务：`docs/task/20261015_Android_MNN预编译运行包入库.md`。
 

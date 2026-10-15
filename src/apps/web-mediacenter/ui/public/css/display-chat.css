@@ -293,6 +293,12 @@
     margin-bottom: 0;
 }
 
+.display-chat-message-body ul,
+.display-chat-message-body ol {
+    margin: 0 0 0.55em;
+    padding-inline-start: 24px;
+}
+
 .display-chat-think {
     margin-bottom: 7px;
     padding: 6px 8px;

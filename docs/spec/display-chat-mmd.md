@@ -1564,3 +1564,22 @@ TTS浅色样式 := 根data-theme-mode=light → 深色文字 + 白色边缘阴�
 用户进一步要求模糊强度减半，当前8px降至4px，与alpha0.2合并发布；此前8px描述保留为v73历史。
 
 最终服务75已发布LAN/WAN，17721484字节/SHA256 16ad6ebdbb949598f561e34b301b8222d060999fb3b09615920e8b269a915dd1；签名清单SHA256 111499d8855d1dabf6dbac6bc27fcdf284af434edad6712a02b8eeb5bb93a163。CRC/最新源码对应、完整HTTP组件验证和精确清理通过。最终0.2/4px继续包含在配套登录服务76中；本次没有新增或运行自动化测试。
+
+## 显示端聊天 Markdown 列表缩进（2026-10-15）
+
+```text
+ChatMarkdown.render
+  无序 Markdown 列表输出 ul/li；有序 Markdown 列表输出 ol/li
+  保持现有受控标签与文本转义
+
+显示端聊天气泡样式
+  display.css 全局重置已清除默认 margin/padding
+  仅选择 .display-chat-message-body 下的 ul 与 ol
+  设置 padding-inline-start = 24 CSS px，使正文缩进且标记位于气泡背景内
+  设置列表块间距；不影响控制端列表或媒体文本列表
+
+显示端只读自测
+  获取 /css/display-chat.css
+  检查气泡 ul/ol 规则包含 24 CSS px 起始缩进
+  不请求聊天接口，不创建消息，不改变会话
+```

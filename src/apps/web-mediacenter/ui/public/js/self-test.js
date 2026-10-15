@@ -95,15 +95,52 @@ const SelfTest = {
                         'displayOfflineModels', 'displayOfflineModelsCollapse'
                     ];
                     const hasEntryMarkup = expectedEntryIds.every(id => displayHtml.includes(`id="${id}"`));
+                    const expandButtonStyle = displayStyle.match(/#displayOfflineModelsExpand\s*\{([^}]*)\}/)?.[1] || '';
+                    const keepsHalfHandleVisible = expandButtonStyle.includes('width: 32px;')
+                        && expandButtonStyle.includes('left: -16px;');
                     const avoidsOverlays = displayStyle.includes('原生控制端把手')
                         && displayStyle.includes('top: max(84px, calc(var(--display-safe-inset-top)')
                         && displayStyle.includes('height: 72px;')
                         && displayStyle.includes('left: 0;');
-                    const entryValid = hasEntryMarkup && avoidsOverlays;
+                    const keepsExpandedSafeInset = displayStyle.includes('left: max(12px, calc(var(--display-safe-inset-left)');
+                    const entryValid = hasEntryMarkup && avoidsOverlays && keepsHalfHandleVisible && keepsExpandedSafeInset;
                     return { success: valid && entryValid,
-                        message: entryValid ? '本机模型状态有效，显示页入口可展开/收起且避让 FPS 与控制端' : '本机模型入口结构或避让布局无效',
+                        message: entryValid ? '本机模型状态有效，收起把手露出半字，展开入口避让 FPS 与控制端' : '本机模型入口结构或避让布局无效',
                         details: 'filesReady 仅表示文件已验证，原生引擎是否就绪由 ASR/TTS/LLM 各自状态决定；入口检查只读取显示页 HTML/CSS' };
                 } catch (error) { return { success: false, message: `本机模型状态读取失败: ${error.message}` }; }
+            }
+        },
+        {
+            id: 'display_chat_markdown_lists',
+            name: '显示端聊天 Markdown 列表缩进',
+            description: '只读检查聊天气泡中的有序/无序列表缩进样式，不创建消息或请求聊天接口',
+            category: '显示界面',
+            run: async () => {
+                try {
+                    const [displayResponse, styleResponse] = await Promise.all([
+                        fetch('/display.html', { cache: 'no-store' }),
+                        fetch('/css/display-chat.css', { cache: 'no-store' })
+                    ]);
+                    if (!displayResponse.ok || !styleResponse.ok) {
+                        return { success: false, message: '显示页或聊天样式不可读取' };
+                    }
+                    const [displayHtml, displayStyle] = await Promise.all([
+                        displayResponse.text(), styleResponse.text()
+                    ]);
+                    const rendererAvailable = displayHtml.includes('js/chat-markdown.js');
+                    const listStyle = displayStyle.match(
+                        /\.display-chat-message-body\s+ul\s*,\s*\.display-chat-message-body\s+ol\s*\{([^}]*)\}/s
+                    )?.[1] || '';
+                    const listIndentationValid = /padding-inline-start:\s*24px;/u.test(listStyle);
+                    const entryValid = rendererAvailable && listIndentationValid;
+                    return {
+                        success: entryValid,
+                        message: entryValid ? '有序/无序 Markdown 列表已在聊天气泡内缩进' : '聊天 Markdown 列表缩进样式无效',
+                        details: '只读检查显示页渲染器入口和气泡正文 24 CSS px 列表缩进，不发送聊天消息'
+                    };
+                } catch (error) {
+                    return { success: false, message: `检查聊天 Markdown 列表样式失败: ${error.message}` };
+                }
             }
         },
         {
