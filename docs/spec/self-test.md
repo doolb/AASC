@@ -1806,15 +1806,17 @@ min/普通profile → 不触发；当前APK8071配置契约仍通过
 范围 := 安装代码92/min56/deps10，账号映射不改、无浏览器、秘密不导出；无生产代码修改
 ```
 
-## 豆包外部网页非法请求只读定位（2026-10-15）
+## 豆包外部网页非法请求定位与修复验收（2026-10-15）
 
 ```text
-设备 := 当前安装min56/code92，不把外网min57/code93当设备版本
+定位基线 := min56/code92；修复验收 := 同一min56原生热更新code95/deps10，pendingHealth=false
 复现 := 正常外部网页入口打开指定旧会话，初始化出现semi-toast-error/alert精确非法请求
 IM := conversation/info与chain/single均HTTP200/status_code0，4消息文本块
 缺口 := www host-only sessionid存在，accounts不存在 -> 认证心跳401/账号信息13
 临时同账号补齐accounts := 心跳0、信息success、toast消失、消息4条保持
 边界 := 部分安全SDK2035仍在；设备存储缺恢复尚未归因为本提示，生产代码不改
 生产回归 := 双来源/白名单/来源拒绝/去重/默认值/秘密隔离等定向10/10；check:chat2api 257/257
-部署复测 := 进行中，尚未宣称正常入口已修复
+正式恢复 := 无临时注入，首次accounts sessionid存在；心跳0/0、信息success、IM0/0、4消息，无非法toast/新聊天
+刷新复测 := 心跳0、信息success、4消息保持，无非法toast
+发布 := code95双站点摘要/签名/CRC/src逐项一致、精确清理0错误；主服务器与手机健康，服务待出包false
 ```

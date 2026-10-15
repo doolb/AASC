@@ -2,10 +2,10 @@
 
 当前约束以2026-10-15文首伪代码为准；注明历史的旧网页运行协议已删除，不属于当前实现。
 
-## 外部网页认证子域恢复（2026-10-15，已确认、实施中）
+## 外部网页认证子域恢复（2026-10-15，已完成）
 
 ```text
-已观测 := www有host-only sessionid；accounts无sessionid；IM读取0，认证心跳401/账号信息13
+修复前证据 := www有host-only sessionid；accounts无sessionid；IM读取0，认证心跳401/账号信息13
 临时对照 := 同账号现有白名单Cookie仅补到accounts -> 心跳0/信息success/toast消失
 豆包允许来源 := 固定HTTPS www.doubao.com、accounts.doubao.com
 豆包CookieBundle目标 := 显式origins为上述两项；六Cookie名称白名单保持
@@ -16,7 +16,11 @@
 保持 := 账号库秘密、Node聊天协议、设备资料采集及WAV流程；不补未知Cookie或父域
 验收 := 定向映射与隔离边界 + npm check:chat2api + ADB正常恢复/旧会话/认证心跳/toast
 残余 := 安全SDK部分2035不在当前成功声明内，不将全部非零监控errno判作业务失败
-状态 := 用户确认固定双来源方案；先更新本伪代码再实施，servicePackage保持true，min/deps保持原值
+本地验证 := 来源/白名单/隔离等定向10/10，Chat2API257/257
+正式入口 := min56原生热更新code95/deps10，pendingHealth=false；未重建APK
+首次恢复 := accounts sessionid存在，心跳0/0、信息success，原会话IM0/0及4消息正常，无错误toast/新聊天/临时注入
+刷新 := 心跳0、信息success，4消息保持，无错误toast
+发布 := LAN/WAN code95，其他组件保持；完整摘要/签名通过，精确清理0错误，servicePackage=false
 ```
 
 ## 2026-10-15 重登后的纯Node真实验收

@@ -1,3 +1,10 @@
+### 豆包认证子域恢复正式发布与真机验证
+
+- ✅ [2026-10-15] 固定www/accounts双来源恢复随code95发布，ADB正常入口及刷新均不再出现非法请求。
+  - 源码78bacd14；服务包17778717bytes/SHA256 `23ff6e0544bbbee22c263709bcbbaee7838b8c73f4a7b8ca882c0f3bd46cdc17`，1084项src逐项匹配、签名/CRC通过。LAN完整HTTP摘要、WAN源站HTTP12项337171898bytes完整摘要及公网签名/HEAD通过；既有模块精确清理零错误，停止重复跨网传输不回滚。保留既有min57/deps10/seeds86，未重建APK/依赖，未覆盖本地94包。
+  - 主服务器重启健康；设备保持原min56，经原生入口code92→95、pendingHealth=false。正式打开外部网页、无临时Cookie注入，认证子域首次已有sessionid，心跳0/0、账号信息成功；指定原会话IM0/0、4条消息正常，未发新聊天。刷新后心跳0/信息成功且无错误toast；部分其它安全SDK2035仍不在全站成功声明内。
+  - 定向10/10、Chat2API257/257通过。design/spec/task/self-test/usage完成同步，已完成任务从todo删除；servicePackage=false，其余状态保持。隔离窗口、临时XML和本次19223/19225转发已清理，原19222保留；账号、会话正文、发布二进制和无关工作区改动不提交。
+
 ### 豆包外部网页认证子域恢复修复
 
 - ✅ [2026-10-15] 按用户确认实现豆包www/accounts固定双来源Cookie恢复，解决认证子域缺sessionid的恢复缺口。
