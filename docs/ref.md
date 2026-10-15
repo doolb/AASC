@@ -1,5 +1,10 @@
 # Web MediaCenter - 项目参考文档
 
+## 豆包官网音色列表（2026-10-15）
+
+- [获取方式与范围](ref/doubao-web-voice-fetch.md)：Chrome9222读取实际卡片、目录接口及五分类参数、第一页/BV过滤规则、style_id保存、去重及校验。当前五分类实显合并94项，推荐30项已包含在后四类中；[当前列表](ref/doubao-web-ui-voices-20261015.md)、[JSON](ref/doubao-web-ui-voices-20261015.json)。
+- [按男女合并整理](ref/doubao-web-gender-voices-20261015.md)、[JSON](ref/doubao-web-gender-voices-20261015.json)：按原始性别标签把角色/口音并入女声32项、男声62项，总94项不变；保留来源分类及推荐标记，原官网分类快照不变。
+
 ## VaM身体控制本地证据（2026-10-13）
 
 用户提供`/mnt/vam/Managed/Assembly-CSharp.dll`，SHA-256 `3c314d55ece06924064c9165f9124f1666f4d33967a02f78b97cf3a932d62f2f`。使用临时ILSpy CLI11.1只读分析：FreeControllerV3.Init/SetJointSprings/ApplyComply连接物理体并设置关节驱动/让步；FollowPhysicallySingle.FixedUpdate施加力与力矩；AllJointsController批量切换控制状态。主程序集类型索引未发现独立FullBodyIK/VRIK类。DLL未提供Unity预制体实际质量/关节/碰撞参数或原生PhysX求解器，因此本项目采用独立Ammo人体代理实现类似机制，不宣称参数或结果完全等价。原DLL/临时反编译源码不纳入仓库；实现与验证见`docs/task/20261013_MMDAR_VaM身体物理控制.md`。

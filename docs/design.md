@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [豆包Chat音色快选与显示端回复播放（方案待确认）](design/doubao-chat-voice-selection.md)
+
 - [完整 Offline APK 同步与重建](design/offline-full-apk-sync.md)
 
 - [全量配置与聊天数据 ZIP 备份](design/full-config-backup.md)

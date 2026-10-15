@@ -1,0 +1,306 @@
+{
+  "date": "2026-10-15",
+  "source": "Chrome 9222当前豆包声音选择/女声实际DOM及React字段",
+  "scope": "当前官网女声实际加载列表，保持网页顺序，27项，最后为桂乡甜妞；不含接口后续分页候选，未逐项验收合成。",
+  "count": 27,
+  "category": "女声",
+  "endpoint": "https://www.doubao.com/alice/user_voice/recommend",
+  "request": {
+    "page_index": 1,
+    "page_size": 30,
+    "recommend_type": 10,
+    "tab_key": "female"
+  },
+  "diagnosis": {
+    "summary": "首批30项过滤BV后27项；源码分页scroll监听绑定内部speaker-list，而该元素无滚动区；实际滚动在外层，当前DOM未加载第二页。",
+    "scroll": {
+      "outer": {
+        "height": 257,
+        "scrollHeight": 2047,
+        "top": 0,
+        "overflow": "auto"
+      },
+      "list": {
+        "height": 1971,
+        "scrollHeight": 1971,
+        "top": 0,
+        "overflow": "visible"
+      }
+    }
+  },
+  "voices": [
+    {
+      "id": "104",
+      "name": "温柔桃子（升级版）",
+      "style_id": "zh_female_wenroutaozi_uranus_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "温柔"
+      ]
+    },
+    {
+      "id": "5238154621186",
+      "name": "阳光甜妹（升级版）",
+      "style_id": "zh_female_yangguangtianmei_uranus_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "台湾口音",
+        "温柔"
+      ]
+    },
+    {
+      "id": "29798555618523394",
+      "name": "温柔桃子（经典版）",
+      "style_id": "zh_female_wenroutaozi_v2_mars_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "温柔"
+      ]
+    },
+    {
+      "id": "2",
+      "name": "邻家女孩",
+      "style_id": "zh_female_f261_conversation_wvae_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "耐心"
+      ]
+    },
+    {
+      "id": "28",
+      "name": "魅力苏菲",
+      "style_id": "zh_female_sophie_conversation_wvae_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "温柔"
+      ]
+    },
+    {
+      "id": "18770280826114",
+      "name": "撒娇学妹",
+      "style_id": "zh_female_yuanqinvyou_wvae_bigtts",
+      "tags": [
+        "女",
+        "少年",
+        "娇气"
+      ]
+    },
+    {
+      "id": "3092232558775554",
+      "name": "甜美小雪",
+      "style_id": "ICL_6acf86286e24",
+      "tags": [
+        "女",
+        "青年",
+        "可爱"
+      ]
+    },
+    {
+      "id": "3092321416028418",
+      "name": "清冷阿梦",
+      "style_id": "ICL_16cd9a58768e",
+      "tags": [
+        "女",
+        "青年",
+        "成熟"
+      ]
+    },
+    {
+      "id": "117",
+      "name": "文静毛毛",
+      "style_id": "zh_female_maomao_conversation_wvae_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "亲切"
+      ]
+    },
+    {
+      "id": "20556312119633410",
+      "name": "北京大妞",
+      "style_id": "zh_female_beijingdaniu_mars_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "北京口音",
+        "开朗"
+      ]
+    },
+    {
+      "id": "20557006477633026",
+      "name": "清甜瑶瑶",
+      "style_id": "zh_female_F466_mars_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "甜美"
+      ]
+    },
+    {
+      "id": "20568646547030530",
+      "name": "活泼可昕",
+      "style_id": "zh_female_F765_mars_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "活泼"
+      ]
+    },
+    {
+      "id": "2214023244143618",
+      "name": "灵兔少女",
+      "style_id": "ICL_eaf8dd4a3a0d",
+      "tags": [
+        "女",
+        "少年",
+        "可爱"
+      ]
+    },
+    {
+      "id": "2449989985516290",
+      "name": "顾姐",
+      "style_id": "zh_female_guli_stream_gpu",
+      "tags": [
+        "女",
+        "青年",
+        "倔强"
+      ]
+    },
+    {
+      "id": "2449901835794690",
+      "name": "雷霆女神",
+      "style_id": "zh_female_leidian",
+      "tags": [
+        "女",
+        "青年",
+        "成熟"
+      ]
+    },
+    {
+      "id": "2516455981560834",
+      "name": "绯樱神巫",
+      "style_id": "ICL_19abc3128fbb",
+      "tags": [
+        "女",
+        "青年",
+        "优雅"
+      ]
+    },
+    {
+      "id": "3091664424064770",
+      "name": "火舞魅娘",
+      "style_id": "ICL_be2856499af4",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ]
+    },
+    {
+      "id": "822277203826690",
+      "name": "沪上傲女",
+      "style_id": "ICL_7b76e4aafb6c",
+      "tags": [
+        "女",
+        "青年",
+        "倔强"
+      ]
+    },
+    {
+      "id": "34080658021028354",
+      "name": "高冷御姐",
+      "style_id": "zh_female_leidian_conversation_wvae_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "傲娇"
+      ]
+    },
+    {
+      "id": "18592347738370",
+      "name": "柔美女友",
+      "style_id": "zh_female_sajiaonvyou_wvae_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ]
+    },
+    {
+      "id": "118",
+      "name": "爽快思思",
+      "style_id": "zh_female_sinong_conversation_wvae_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "直率"
+      ]
+    },
+    {
+      "id": "18446559156482",
+      "name": "妩媚御姐",
+      "style_id": "ICL_da05661f8c64",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ]
+    },
+    {
+      "id": "18223469591298",
+      "name": "活泼女孩",
+      "style_id": "ICL_11c6b3f0bd6d",
+      "tags": [
+        "女",
+        "少年",
+        "阳光"
+      ]
+    },
+    {
+      "id": "18776824088322",
+      "name": "甜心小美",
+      "style_id": "ICL_bad46416a2b7",
+      "tags": [
+        "女",
+        "少年",
+        "温柔"
+      ]
+    },
+    {
+      "id": "15626754162946",
+      "name": "魅力女友",
+      "style_id": "zh_female_meilinvyou_wvae_bigtts",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ]
+    },
+    {
+      "id": "18592378481410",
+      "name": "可爱女生",
+      "style_id": "ICL_49240bb7f5ac",
+      "tags": [
+        "女",
+        "青年",
+        "天真"
+      ]
+    },
+    {
+      "id": "903897616355586",
+      "name": "桂乡甜妞",
+      "style_id": "zh_female_guangxiwrn",
+      "tags": [
+        "女",
+        "青年",
+        "广西口音",
+        "温柔"
+      ]
+    }
+  ]
+}

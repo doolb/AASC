@@ -2,6 +2,68 @@
 
 当前约束以2026-10-15文首伪代码为准；注明历史的旧网页运行协议已删除，不属于当前实现。
 
+## 官网声音目录核查伪代码（2026-10-15，调研结果，未接入项目）
+
+```text
+目录接口 := POST https://www.doubao.com/alice/user_voice/recommend
+推荐参数 := {page_index: 1, page_size: 30, recommend_type: 1}
+分类参数 := {page_index: 1, page_size: 30, recommend_type: 10,
+             tab_key: female | male | characters | accent}
+读取结果 := response.data.ugc_voice_list 与 response.data.has_more
+下一页规则 := has_more为真时递增page_index；追加调研已实测五分类全部分页
+列表映射 := 保留字符串id、name、style_id、icon、preview、tag_list
+官网显示过滤 := 排除style_id以BV开头的条目
+合成标识 := currentVoice.style_id -> speaker；未发现独立ttsid字段
+官网本地保存 := IndexedDB(samantha-web).store[default-chat-voice-store].state.currentVoice
+保存字段 := id、name、style_id、pitch、speechRate，另有头像与预览信息
+当前样本 := 可爱女生 / id=18592378481410 / style_id=ICL_49240bb7f5ac
+目录验证 := 浏览器分类请求200/code0/30项/has_more真
+独立验证 := 当前会话Cookie仅内存用于Node裸URL请求，不带签名查询参数
+独立结果 := 200/code0/30项/has_more真；不推断长期或无登录有效
+本轮边界 := 不点击音色确认，不保存凭据，不发聊天或合成请求
+项目当前行为 := 固定DOUBAO_SPEECH_VOICE；目录/动态选择尚未实现
+追加抓取 := 顺序遍历五分类，每页30项，直到每类has_more=false；遇HTTP或业务错误停止
+分页完整性 := 页码连续；非空重复页、空页却has_more真、同id异style_id视为异常
+合并规则 := 以字符串id为键，合并分类；不同id共用style_id仍保留原条目
+实际分页 := 推荐13/女声5/男声7/角色4/口音2，共31页均200/code0
+分类项数 := 推荐385/女声142/男声182/角色108/口音45，各类均取到末页
+合并结果 := 385个id，373个style_id；官网可见316项，BV隐藏69项
+导出字段 := id/name/style_id/tags/categories/visible_in_web_selector
+导出位置 := docs/ref/doubao-voice-catalog-20261015.md及同名json
+导出元数据 := 时间、接口、范围、分类统计、分页计数与has_more；不保留凭据或签名资源URL
+核验 := 重读JSON统计、分类页码/末页、字符串ID唯一性、style_id计数、Markdown行数
+上一轮候选导出 := 全部分页中只保留visible_in_web_selector真且style_id不以BV开头的条目；不等于当前DOM实显
+限定结果 := 316个id/304个style_id；推荐316/女声113/男声147/角色97/口音39
+限定文件 := docs/ref/doubao-web-visible-voices-20261015.md及同名json
+展示方式 := Markdown按五分类分别列出；JSON按id去重并保留categories；不发新请求
+限定核验 := 不含BV，id唯一，分类计数吻合，Markdown数据行数等于五分类条目数之和
+本轮实际需求 := 女声分类，和网页当前实际加载卡片相同，最后为桂乡甜妞
+根因证据 := 分页监听内部speaker-list，但其clientHeight=scrollHeight=1971且overflow=visible
+外层滚动 := overflow=auto，clientHeight=257、scrollHeight=2047；内层无滚动区
+相同范围请求 := {page_index:1,page_size:30,recommend_type:10,tab_key:female}，不追后续has_more
+实际数量 := 首批30减3项BV=27；此前113为全5页过滤后的候选，不是网页实际加载数
+实际列表来源 := 当前Chrome女声DOM卡片React speaker字段，保持顺序
+实际列表文件 := docs/ref/doubao-web-female-current-20261015.md及同名json
+实际核验 := 27项、ID唯一、无BV、最后桂乡甜妞、JSON往返一致、Markdown27行
+最终范围 := 五分类均按网页当前实际加载列表，不追加接口后续分页
+最终采集 := 逐一点击推荐/女声/男声/角色/口音，等待分类生效和卡片载入，读取DOM顺序及speaker字段
+五类数量 := 推荐30/女声27/男声29/角色26/口音25；合并94个id和94个style_id
+五类末项 := 青涩沐阳/桂乡甜妞/暖阳阿晨/清朗公子/虎子的声音
+最终文件 := docs/ref/doubao-web-ui-voices-20261015.md及同名json
+最终结构 := categories逐类保留原顺序voices；总voices按id合并所属categories
+最终核验 := 每类不超过30且ID唯一/无BV，女声逐字段等于已验27项，JSON往返和137条分类表格数据行一致
+页面收尾 := 恢复原分类，不确认音色、不试听、不发合成
+获取方式文档 := docs/ref/doubao-web-voice-fetch.md，入口docs/ref.md
+推荐覆盖核验 := 推荐30项按id与style_id均属于后四类并集，后四类合并仍94项
+文档要求 := 记录CDP卡片读取、接口正文/分类、只取第一页、BV过滤、字段保存及复核；不保存秘密
+用户整理要求 := 角色/口音按原始tags中唯一的男/女并入两个性别组，按id去重
+整理顺序 := 原女声/男声列表在前，随后角色、口音按原序追加；推荐不额外增加条目
+整理字段 := gender=female/male，保留id/name/style_id/tags/source_categories/recommended
+整理结果 := 女32（原27加5）、男62（原29加33），总94；无性别缺失或冲突
+整理校验 := 输出id集合等于原94项，id/style_id唯一；原男女列表顺序为输出前缀；JSON往返/表格94行一致
+整理文件 := docs/ref/doubao-web-gender-voices-20261015.md及同名json；不覆盖原五类快照
+```
+
 ## 外部网页认证子域恢复（2026-10-15，已完成）
 
 ```text

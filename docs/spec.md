@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [豆包Chat音色快选与显示端回复播放伪代码（尚未实现）](spec/doubao-chat-voice-selection.md)
+
 - [完整 Offline APK 同步伪代码](spec/offline-full-apk-sync.md)
 
 - [全量配置与聊天数据 ZIP 备份伪代码](spec/full-config-backup.md)

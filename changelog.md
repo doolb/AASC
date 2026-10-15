@@ -1,3 +1,29 @@
+### 豆包官网声音列表接口调研
+
+- ✅ [2026-10-15] 根据“暂时就使用当前声纹设置的一样”收敛快选方案，复用声纹页现有语音服务与音色配置。
+  - design/spec/task/todo已统一为共享AI/Agent默认和对应Provider.defaultVoice，控制端/显示端权威同步，模板保留原优先级；移除按端独立配置及额外多目标音色分组候选。音色目录HTTP方案保留，尚未修改生产代码或运行功能测试。
+- ✅ [2026-10-15] 补齐Chat2API对外音色目录HTTP契约，确认当前仅有内部voices方法、尚无对应路由。
+  - 方案新增`GET /v1/audio/voices?model=doubao-chat`，复用代理Key鉴权和Provider目录，返回id/style_id/name/gender/tags；静态目录不依赖账号或合成。显示端WS与HTTP共享目录，不暴露代理Key，选择配置仍走AASC。更新design/spec/task/todo，尚未实施接口或修改生产代码。
+- ✅ [2026-10-15] 根据补充需求将快选方案扩展为“TTS方式 → 对应音色”，各方式独立记忆并切回恢复。
+  - 已更新待确认design/spec/task/todo，明确Provider目录隔离、系统原生路径及迟到查询处理；建议当前显示端独立保存，尚未获完整方案确认、未修改功能代码。
+- ✅ [2026-10-15] 完成豆包Chat音色Provider接入、显示端快选及回复播放的代码现状核查与待确认方案。
+  - 新增`docs/design/doubao-chat-voice-selection.md`、对应伪代码spec和`docs/task/20261015_豆包Chat音色快选与显示端回复播放.md`，同步索引/todo。已列明精简94项目录、固定音色贯通、权威配置、显示端自身重播权限、文件清单及测试范围；作用范围与模板覆盖优先级待用户确认。尚未修改功能代码、运行功能测试或改变Offline产物状态。
+- ✅ [2026-10-15] 按用户要求将角色/口音合并进男女两组，基于原始性别标签整理为女声32项、男声62项。
+  - 新增`docs/ref/doubao-web-gender-voices-20261015.md`及同名JSON，总94项不变；按id去重，保留原男女顺序、来源分类和推荐标记。94项性别均明确，无缺失/冲突；集合无丢失、id/style_id唯一、原序前缀、JSON往返及94行表格校验通过。同步获取方法/ref/design/spec/todo，未发上游请求或修改功能代码。
+- ✅ [2026-10-15] 整理可复核的音色获取方式到`docs/ref/doubao-web-voice-fetch.md`，增加`docs/ref.md`与当前列表的入口。
+  - 记录Chrome9222实际卡片读取、接口/五分类参数、只取第一页及BV过滤、style_id保存、去重校验和历史候选范围差异；推荐30项按id/style_id均包含于后四类，后四类合并仍94项。同步design/spec/todo参考入口，仅修改文档，未发新增上游请求或修改功能。
+- ✅ [2026-10-15] 将其他分类同样限定为官网当前实际加载列表，完成五分类合并导出。
+  - 新增`docs/ref/doubao-web-ui-voices-20261015.md`及同名JSON：推荐30、女声27、男声29、角色26、口音25，按id合并94项、94个style_id。直接逐类读取网页卡片并保持顺序；女声与上一轮27项逐字段一致，分类唯一性/无BV/JSON往返及137行表格校验通过。同步design/spec/todo，恢复原分类；未修改功能代码、追加后续分页或试听合成。
+- ✅ [2026-10-15] 更正“全部分页候选”等同官网实显的范围误差，按用户指定女声分类导出当前网页实际27项。
+  - 网页第一页30项过滤3项BV后，最后为桂乡甜妞；之前113项来自全部5页。源码分页监听内部speaker-list，但当前内部不滚动、外层才是滚动容器，当前DOM停在第一页。新增`docs/ref/doubao-web-female-current-20261015.md`及同名JSON，保持实际卡片顺序；27项/ID唯一/无BV/末项/文件往返及表格行数校验通过。修正旧候选文件范围说明，同步design/spec/todo；未修改功能代码或试听合成。
+- ✅ [2026-10-15] 按用户范围限定导出官网界面可显示的五分类音色，排除全部BV隐藏条目。
+  - 新增`docs/ref/doubao-web-visible-voices-20261015.md`及同名JSON：316个音色id、304个style_id；推荐316、女声113、男声147、角色97、口音39（分类有重叠）。基于既有31页快照，不发新请求；JSON唯一性/过滤/分类计数及五分类表格行数校验通过，design/spec/todo同步。未改功能代码。
+- ✅ [2026-10-15] 获取当前账号五分类全部音色分页并导出可读列表与JSON。
+  - 31页均HTTP200/code0且各分类到达has_more=false；按字符串id去重385项、373个style_id，官网可见316项、隐藏BV音色69项。保留名称、id、style_id、标签、分类及显示标记，保存至`docs/ref/doubao-voice-catalog-20261015.md`与同名json；未保存凭据或签名资源地址，未发送合成请求。同步design/spec及todo参考路径，目录接入仍为可选未实现项。
+- ✅ [2026-10-15] 通过Chrome 9222确认声音分类列表接口与音色选择的本地存储位置。
+  - `POST /alice/user_voice/recommend`返回`data.ugc_voice_list/has_more`，每项`id/name/style_id`；官网朗读使用`style_id`作为`speaker`，没有单独`ttsid`字段。IndexedDB `samantha-web/store/default-chat-voice-store`保存`state.currentVoice`。
+  - 浏览器女声首批与当前会话Cookie的Node裸URL目录请求均HTTP200/code0、30项、has_more=true。分类参数和示例音色记录到`docs/design/chat2api-doubao-web.md`，对应spec补充调研伪代码，todo仅保留尚未实施的可选接入与验收。不保存凭据、不确认新音色、不发送聊天或合成，不修改生产代码或Offline产物状态。
+
 ### 豆包认证子域恢复正式发布与真机验证
 
 - ✅ [2026-10-15] 固定www/accounts双来源恢复随code95发布，ADB正常入口及刷新均不再出现非法请求。

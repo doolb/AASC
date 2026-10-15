@@ -1,0 +1,2982 @@
+{
+  "date": "2026-10-15",
+  "source_file": "doubao-web-ui-voices-20261015.json",
+  "scope": "将官网当前实显五分类中的94项按原始男/女性别标签重新整理为两个分组；不增加后续接口分页，不等同官网女声27/男声29的原始分类列表。",
+  "grouping_rule": "先保留原女声/男声顺序，再按角色、口音顺序追加；按字符串id去重，保留source_categories及recommended。",
+  "unique_voice_ids": 94,
+  "unique_style_ids": 94,
+  "categories": [
+    {
+      "name": "女声",
+      "gender": "female",
+      "count": 32,
+      "voices": [
+        {
+          "id": "104",
+          "name": "温柔桃子（升级版）",
+          "style_id": "zh_female_wenroutaozi_uranus_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "5238154621186",
+          "name": "阳光甜妹（升级版）",
+          "style_id": "zh_female_yangguangtianmei_uranus_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "台湾口音",
+            "温柔"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声",
+            "口音"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "29798555618523394",
+          "name": "温柔桃子（经典版）",
+          "style_id": "zh_female_wenroutaozi_v2_mars_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "2",
+          "name": "邻家女孩",
+          "style_id": "zh_female_f261_conversation_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "耐心"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "28",
+          "name": "魅力苏菲",
+          "style_id": "zh_female_sophie_conversation_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "18770280826114",
+          "name": "撒娇学妹",
+          "style_id": "zh_female_yuanqinvyou_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "少年",
+            "娇气"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "3092232558775554",
+          "name": "甜美小雪",
+          "style_id": "ICL_6acf86286e24",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "可爱"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "3092321416028418",
+          "name": "清冷阿梦",
+          "style_id": "ICL_16cd9a58768e",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "成熟"
+          ],
+          "source_categories": [
+            "推荐",
+            "女声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "117",
+          "name": "文静毛毛",
+          "style_id": "zh_female_maomao_conversation_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "亲切"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "20556312119633410",
+          "name": "北京大妞",
+          "style_id": "zh_female_beijingdaniu_mars_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "北京口音",
+            "开朗"
+          ],
+          "source_categories": [
+            "女声",
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "20557006477633026",
+          "name": "清甜瑶瑶",
+          "style_id": "zh_female_F466_mars_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "甜美"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "20568646547030530",
+          "name": "活泼可昕",
+          "style_id": "zh_female_F765_mars_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "活泼"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2214023244143618",
+          "name": "灵兔少女",
+          "style_id": "ICL_eaf8dd4a3a0d",
+          "gender": "female",
+          "tags": [
+            "女",
+            "少年",
+            "可爱"
+          ],
+          "source_categories": [
+            "女声",
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2449989985516290",
+          "name": "顾姐",
+          "style_id": "zh_female_guli_stream_gpu",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "倔强"
+          ],
+          "source_categories": [
+            "女声",
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2449901835794690",
+          "name": "雷霆女神",
+          "style_id": "zh_female_leidian",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "成熟"
+          ],
+          "source_categories": [
+            "女声",
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2516455981560834",
+          "name": "绯樱神巫",
+          "style_id": "ICL_19abc3128fbb",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "优雅"
+          ],
+          "source_categories": [
+            "女声",
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "3091664424064770",
+          "name": "火舞魅娘",
+          "style_id": "ICL_be2856499af4",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "妩媚"
+          ],
+          "source_categories": [
+            "女声",
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "822277203826690",
+          "name": "沪上傲女",
+          "style_id": "ICL_7b76e4aafb6c",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "倔强"
+          ],
+          "source_categories": [
+            "女声",
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "34080658021028354",
+          "name": "高冷御姐",
+          "style_id": "zh_female_leidian_conversation_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "傲娇"
+          ],
+          "source_categories": [
+            "女声",
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "18592347738370",
+          "name": "柔美女友",
+          "style_id": "zh_female_sajiaonvyou_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "妩媚"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "118",
+          "name": "爽快思思",
+          "style_id": "zh_female_sinong_conversation_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "直率"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "18446559156482",
+          "name": "妩媚御姐",
+          "style_id": "ICL_da05661f8c64",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "妩媚"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "18223469591298",
+          "name": "活泼女孩",
+          "style_id": "ICL_11c6b3f0bd6d",
+          "gender": "female",
+          "tags": [
+            "女",
+            "少年",
+            "阳光"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "18776824088322",
+          "name": "甜心小美",
+          "style_id": "ICL_bad46416a2b7",
+          "gender": "female",
+          "tags": [
+            "女",
+            "少年",
+            "温柔"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "15626754162946",
+          "name": "魅力女友",
+          "style_id": "zh_female_meilinvyou_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "妩媚"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "18592378481410",
+          "name": "可爱女生",
+          "style_id": "ICL_49240bb7f5ac",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "天真"
+          ],
+          "source_categories": [
+            "女声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "903897616355586",
+          "name": "桂乡甜妞",
+          "style_id": "zh_female_guangxiwrn",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "广西口音",
+            "温柔"
+          ],
+          "source_categories": [
+            "女声",
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "1551880520297218",
+          "name": "精灵向导",
+          "style_id": "ICL_1beb294a9e3e",
+          "gender": "female",
+          "tags": [
+            "女",
+            "少年",
+            "软糯"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "29448950684930",
+          "name": "妹坨洁儿",
+          "style_id": "zh_female_changsha_f01_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "长沙口音",
+            "活泼"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2278087401474",
+          "name": "宝宝冯",
+          "style_id": "zh_female_fengbaobao_wvae_bigtts",
+          "gender": "female",
+          "tags": [
+            "女",
+            "青年",
+            "四川口音",
+            "内敛"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "1514487092994",
+          "name": "陕西掌柜",
+          "style_id": "zh_female_bvtxyguanggao",
+          "gender": "female",
+          "tags": [
+            "女",
+            "中年",
+            "陕西口音",
+            "热情"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "10661220597250",
+          "name": "幼教姐姐",
+          "style_id": "zh_female_jiyejizi",
+          "gender": "female",
+          "tags": [
+            "女",
+            "中年",
+            "台湾口音",
+            "温柔"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        }
+      ]
+    },
+    {
+      "name": "男声",
+      "gender": "male",
+      "count": 62,
+      "voices": [
+        {
+          "id": "92865679864322",
+          "name": "磁性俊宇（升级版）",
+          "style_id": "zh_male_cixingjunyu_uranus_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "帅气"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "76",
+          "name": "邻家男孩",
+          "style_id": "zh_male_linjiananhai_moon_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "自信"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "31",
+          "name": "悠悠君子",
+          "style_id": "zh_male_M100_conversation_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "谦虚"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "2341563809026",
+          "name": "温暖阿虎",
+          "style_id": "zh_male_ahu_conversation_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "阳光"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "2339979394818",
+          "name": "少年梓辛",
+          "style_id": "zh_male_m286_conversation_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "92790090331138",
+          "name": "阳光阿辰",
+          "style_id": "zh_male_qingyiyuxuan_mars_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "阳光"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "3971344832695810",
+          "name": "腹黑霸总",
+          "style_id": "ICL_c021bc19bf92",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "磁性"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声",
+            "角色"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "3091791067128578",
+          "name": "冷酷霸总",
+          "style_id": "ICL_e0b9b93ee322",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "磁性"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "15811456332290",
+          "name": "傲娇霸总",
+          "style_id": "zh_male_aojiaobazong_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "深情"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "18633266128130",
+          "name": "霸道总裁",
+          "style_id": "ICL_d4d40acd33dd",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "霸道"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "20644528308581890",
+          "name": "温柔子言",
+          "style_id": "zh_male_cheng_mars_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "20633949137530626",
+          "name": "率性阿哲",
+          "style_id": "zh_male_litiebanzi_mars_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "直率"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "4305611392398338",
+          "name": "温柔陆辰",
+          "style_id": "ICL_df4fc4d1ce4b",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "奶狗"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "15998292245506",
+          "name": "深夜播客",
+          "style_id": "zh_male_shenyeboke_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "潇洒"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "1704007725058",
+          "name": "东方浩然",
+          "style_id": "zh_male_dongfanghaoran_moon_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "中年",
+            "坚定"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "3092232804622850",
+          "name": "病娇少爷",
+          "style_id": "ICL_72afa6c5dc07",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "疯批"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "92617757524738",
+          "name": "清爽男大",
+          "style_id": "zh_male_junlangxize_mars_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "1551728731854082",
+          "name": "清朗宇澄",
+          "style_id": "ICL_9b3bc6941076",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "帅气"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "1615285353850626",
+          "name": "奶音俊少",
+          "style_id": "ICL_932b3f52bf3d",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "奶声奶气"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "870127902216450",
+          "name": "沉稳皓轩",
+          "style_id": "ICL_5a413fbc14fc",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "磁性"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "1551957662395650",
+          "name": "温柔俊彦",
+          "style_id": "ICL_0ce6ef379e73",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "善良"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "1551876235983362",
+          "name": "青涩沐阳",
+          "style_id": "ICL_afedffe4586c",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "明亮"
+          ],
+          "source_categories": [
+            "推荐",
+            "男声"
+          ],
+          "recommended": true
+        },
+        {
+          "id": "1551960118620930",
+          "name": "睿语舟舟",
+          "style_id": "ICL_4ce34d3f60f4",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "成熟"
+          ],
+          "source_categories": [
+            "男声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "34092043859764994",
+          "name": "湾区大叔",
+          "style_id": "zh_male_gangpu_conversation_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "中年",
+            "香港口音",
+            "帅气"
+          ],
+          "source_categories": [
+            "男声",
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "1682276980395778",
+          "name": "随性先生",
+          "style_id": "ICL_b718c1050dd1",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "直率"
+          ],
+          "source_categories": [
+            "男声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "34072171082892802",
+          "name": "渊博小叔",
+          "style_id": "zh_male_m219_conversation_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "成熟"
+          ],
+          "source_categories": [
+            "男声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "18407391857154",
+          "name": "俊朗男友",
+          "style_id": "ICL_1eed9233299f",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "男声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "812558451257090",
+          "name": "奶酷小宇",
+          "style_id": "ICL_b22cd40ccd3e",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "开朗"
+          ],
+          "source_categories": [
+            "男声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "812557376620034",
+          "name": "暖阳阿晨",
+          "style_id": "ICL_7a33516fe388",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "温暖"
+          ],
+          "source_categories": [
+            "男声"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2094681566166274",
+          "name": "水刃公子",
+          "style_id": "ICL_da6a164900d4",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "明亮"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2216463290365442",
+          "name": "蓝曜修士",
+          "style_id": "ICL_4fba48c6d3cc",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "磁性"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2094687234531842",
+          "name": "咆哮小哥",
+          "style_id": "ICL_21c82f5cbb7b",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "冲动"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2231913314213378",
+          "name": "解家花少",
+          "style_id": "ICL_1289539b58cb",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "明亮"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2214687938636546",
+          "name": "闷油瓶小哥",
+          "style_id": "ICL_ffed9fc2fee7",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "理性"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2231908783024130",
+          "name": "墨镜黑哥",
+          "style_id": "ICL_ba24ccf23bc7",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "潇洒"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2216788167549698",
+          "name": "安全哥",
+          "style_id": "ICL_4b1feb0ced67",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "广西口音",
+            "喜感"
+          ],
+          "source_categories": [
+            "角色",
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "11586117259522",
+          "name": "藕霸小童",
+          "style_id": "zh_male_nezha",
+          "gender": "male",
+          "tags": [
+            "男",
+            "少年",
+            "倔强"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2449903586819586",
+          "name": "王小也",
+          "style_id": "zh_male_wangye",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "潇洒"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2449810528203778",
+          "name": "星鼠仔",
+          "style_id": "zh_male_milaoshu",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "尖细"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2449901144542210",
+          "name": "麦小鸭",
+          "style_id": "zh_male_tanglaoya",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "喜感"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2450340410534658",
+          "name": "黯刃秦主",
+          "style_id": "ICL_cd62e63dcdab",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "帅气"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "3092508568760322",
+          "name": "光头憨憨",
+          "style_id": "ICL_8d858c1560ed",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "幽默"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "3091896388796418",
+          "name": "智慧小羊",
+          "style_id": "ICL_f35ff006eb05",
+          "gender": "male",
+          "tags": [
+            "男",
+            "小孩",
+            "开朗"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "18592439927042",
+          "name": "冷酷哥哥",
+          "style_id": "ICL_3bb18f934f4e",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "冷酷"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "1551962899359490",
+          "name": "桃花庵主",
+          "style_id": "zh_male_renmao_mars_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "沙哑"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "1405226586027778",
+          "name": "清朗公子",
+          "style_id": "ICL_d8c94c04d627",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "温柔"
+          ],
+          "source_categories": [
+            "角色"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "900518482806530",
+          "name": "川渝小伙",
+          "style_id": "zh_male_sichuanskn",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "四川话",
+            "热情"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "900212727912450",
+          "name": "南音阳仔",
+          "style_id": "zh_male_nanchangygn",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "南昌口音",
+            "随和"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "900764542622466",
+          "name": "湘都朗少",
+          "style_id": "zh_male_changshakln",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "长沙口音",
+            "阳光"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "30",
+          "name": "京腔侃爷",
+          "style_id": "zh_male_M392_conversation_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "北京口音",
+            "潇洒"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "32096803418370",
+          "name": "浩宇小哥",
+          "style_id": "zh_male_qingdao_m01_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "山东口音",
+            "阳光"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "28470542033666",
+          "name": "广西远舟",
+          "style_id": "zh_male_guangxi_m179_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "广西口音",
+            "亲切"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "28470680208386",
+          "name": "豫州子轩",
+          "style_id": "zh_male_henan_m421_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "河南口音",
+            "直率"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "27933043915010",
+          "name": "上海阿宝",
+          "style_id": "zh_male_hupunan",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "上海口音",
+            "阳光"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "2278101118978",
+          "name": "北京小爷",
+          "style_id": "zh_male_wangye_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "北京口音",
+            "潇洒"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "5237658896130",
+          "name": "广州德哥",
+          "style_id": "zh_male_m710_conversation_wvae_bigtts",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "广东口音",
+            "自信"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "11860513693442",
+          "name": "憨憨熊仔",
+          "style_id": "zh_male_xionger_clone",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "河南口音",
+            "憨气"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "11490288794626",
+          "name": "霸音商主",
+          "style_id": "zh_male_shangyin",
+          "gender": "male",
+          "tags": [
+            "男",
+            "中年",
+            "广东口音",
+            "理性"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "340273888143874",
+          "name": "茶啊二中王强",
+          "style_id": "zh_male_chaawangqiang",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "东北话",
+            "憨气"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "11442574709506",
+          "name": "帅气港叔",
+          "style_id": "zh_male_liangjiahui",
+          "gender": "male",
+          "tags": [
+            "男",
+            "中年",
+            "广东口音",
+            "耐心"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "1516222121218",
+          "name": "好汉的声音",
+          "style_id": "zh_male_bvtianjin",
+          "gender": "male",
+          "tags": [
+            "男",
+            "中年",
+            "天津口音",
+            "亲切"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        },
+        {
+          "id": "1516751371778",
+          "name": "虎子的声音",
+          "style_id": "zh_male_bvdongbei",
+          "gender": "male",
+          "tags": [
+            "男",
+            "青年",
+            "东北口音",
+            "幽默"
+          ],
+          "source_categories": [
+            "口音"
+          ],
+          "recommended": false
+        }
+      ]
+    }
+  ],
+  "voices": [
+    {
+      "id": "104",
+      "name": "温柔桃子（升级版）",
+      "style_id": "zh_female_wenroutaozi_uranus_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "5238154621186",
+      "name": "阳光甜妹（升级版）",
+      "style_id": "zh_female_yangguangtianmei_uranus_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "台湾口音",
+        "温柔"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声",
+        "口音"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "29798555618523394",
+      "name": "温柔桃子（经典版）",
+      "style_id": "zh_female_wenroutaozi_v2_mars_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "2",
+      "name": "邻家女孩",
+      "style_id": "zh_female_f261_conversation_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "耐心"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "28",
+      "name": "魅力苏菲",
+      "style_id": "zh_female_sophie_conversation_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "18770280826114",
+      "name": "撒娇学妹",
+      "style_id": "zh_female_yuanqinvyou_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "少年",
+        "娇气"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "3092232558775554",
+      "name": "甜美小雪",
+      "style_id": "ICL_6acf86286e24",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "可爱"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "3092321416028418",
+      "name": "清冷阿梦",
+      "style_id": "ICL_16cd9a58768e",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "成熟"
+      ],
+      "source_categories": [
+        "推荐",
+        "女声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "117",
+      "name": "文静毛毛",
+      "style_id": "zh_female_maomao_conversation_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "亲切"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "20556312119633410",
+      "name": "北京大妞",
+      "style_id": "zh_female_beijingdaniu_mars_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "北京口音",
+        "开朗"
+      ],
+      "source_categories": [
+        "女声",
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "20557006477633026",
+      "name": "清甜瑶瑶",
+      "style_id": "zh_female_F466_mars_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "甜美"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "20568646547030530",
+      "name": "活泼可昕",
+      "style_id": "zh_female_F765_mars_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "活泼"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2214023244143618",
+      "name": "灵兔少女",
+      "style_id": "ICL_eaf8dd4a3a0d",
+      "gender": "female",
+      "tags": [
+        "女",
+        "少年",
+        "可爱"
+      ],
+      "source_categories": [
+        "女声",
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2449989985516290",
+      "name": "顾姐",
+      "style_id": "zh_female_guli_stream_gpu",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "倔强"
+      ],
+      "source_categories": [
+        "女声",
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2449901835794690",
+      "name": "雷霆女神",
+      "style_id": "zh_female_leidian",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "成熟"
+      ],
+      "source_categories": [
+        "女声",
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2516455981560834",
+      "name": "绯樱神巫",
+      "style_id": "ICL_19abc3128fbb",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "优雅"
+      ],
+      "source_categories": [
+        "女声",
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "3091664424064770",
+      "name": "火舞魅娘",
+      "style_id": "ICL_be2856499af4",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ],
+      "source_categories": [
+        "女声",
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "822277203826690",
+      "name": "沪上傲女",
+      "style_id": "ICL_7b76e4aafb6c",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "倔强"
+      ],
+      "source_categories": [
+        "女声",
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "34080658021028354",
+      "name": "高冷御姐",
+      "style_id": "zh_female_leidian_conversation_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "傲娇"
+      ],
+      "source_categories": [
+        "女声",
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "18592347738370",
+      "name": "柔美女友",
+      "style_id": "zh_female_sajiaonvyou_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "118",
+      "name": "爽快思思",
+      "style_id": "zh_female_sinong_conversation_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "直率"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "18446559156482",
+      "name": "妩媚御姐",
+      "style_id": "ICL_da05661f8c64",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "18223469591298",
+      "name": "活泼女孩",
+      "style_id": "ICL_11c6b3f0bd6d",
+      "gender": "female",
+      "tags": [
+        "女",
+        "少年",
+        "阳光"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "18776824088322",
+      "name": "甜心小美",
+      "style_id": "ICL_bad46416a2b7",
+      "gender": "female",
+      "tags": [
+        "女",
+        "少年",
+        "温柔"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "15626754162946",
+      "name": "魅力女友",
+      "style_id": "zh_female_meilinvyou_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "妩媚"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "18592378481410",
+      "name": "可爱女生",
+      "style_id": "ICL_49240bb7f5ac",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "天真"
+      ],
+      "source_categories": [
+        "女声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "903897616355586",
+      "name": "桂乡甜妞",
+      "style_id": "zh_female_guangxiwrn",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "广西口音",
+        "温柔"
+      ],
+      "source_categories": [
+        "女声",
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "1551880520297218",
+      "name": "精灵向导",
+      "style_id": "ICL_1beb294a9e3e",
+      "gender": "female",
+      "tags": [
+        "女",
+        "少年",
+        "软糯"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "29448950684930",
+      "name": "妹坨洁儿",
+      "style_id": "zh_female_changsha_f01_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "长沙口音",
+        "活泼"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2278087401474",
+      "name": "宝宝冯",
+      "style_id": "zh_female_fengbaobao_wvae_bigtts",
+      "gender": "female",
+      "tags": [
+        "女",
+        "青年",
+        "四川口音",
+        "内敛"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "1514487092994",
+      "name": "陕西掌柜",
+      "style_id": "zh_female_bvtxyguanggao",
+      "gender": "female",
+      "tags": [
+        "女",
+        "中年",
+        "陕西口音",
+        "热情"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "10661220597250",
+      "name": "幼教姐姐",
+      "style_id": "zh_female_jiyejizi",
+      "gender": "female",
+      "tags": [
+        "女",
+        "中年",
+        "台湾口音",
+        "温柔"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "92865679864322",
+      "name": "磁性俊宇（升级版）",
+      "style_id": "zh_male_cixingjunyu_uranus_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "帅气"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "76",
+      "name": "邻家男孩",
+      "style_id": "zh_male_linjiananhai_moon_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "自信"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "31",
+      "name": "悠悠君子",
+      "style_id": "zh_male_M100_conversation_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "谦虚"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "2341563809026",
+      "name": "温暖阿虎",
+      "style_id": "zh_male_ahu_conversation_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "阳光"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "2339979394818",
+      "name": "少年梓辛",
+      "style_id": "zh_male_m286_conversation_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "92790090331138",
+      "name": "阳光阿辰",
+      "style_id": "zh_male_qingyiyuxuan_mars_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "阳光"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "3971344832695810",
+      "name": "腹黑霸总",
+      "style_id": "ICL_c021bc19bf92",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "磁性"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声",
+        "角色"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "3091791067128578",
+      "name": "冷酷霸总",
+      "style_id": "ICL_e0b9b93ee322",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "磁性"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "15811456332290",
+      "name": "傲娇霸总",
+      "style_id": "zh_male_aojiaobazong_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "深情"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "18633266128130",
+      "name": "霸道总裁",
+      "style_id": "ICL_d4d40acd33dd",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "霸道"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "20644528308581890",
+      "name": "温柔子言",
+      "style_id": "zh_male_cheng_mars_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "20633949137530626",
+      "name": "率性阿哲",
+      "style_id": "zh_male_litiebanzi_mars_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "直率"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "4305611392398338",
+      "name": "温柔陆辰",
+      "style_id": "ICL_df4fc4d1ce4b",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "奶狗"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "15998292245506",
+      "name": "深夜播客",
+      "style_id": "zh_male_shenyeboke_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "潇洒"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "1704007725058",
+      "name": "东方浩然",
+      "style_id": "zh_male_dongfanghaoran_moon_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "中年",
+        "坚定"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "3092232804622850",
+      "name": "病娇少爷",
+      "style_id": "ICL_72afa6c5dc07",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "疯批"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "92617757524738",
+      "name": "清爽男大",
+      "style_id": "zh_male_junlangxize_mars_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "1551728731854082",
+      "name": "清朗宇澄",
+      "style_id": "ICL_9b3bc6941076",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "帅气"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "1615285353850626",
+      "name": "奶音俊少",
+      "style_id": "ICL_932b3f52bf3d",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "奶声奶气"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "870127902216450",
+      "name": "沉稳皓轩",
+      "style_id": "ICL_5a413fbc14fc",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "磁性"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "1551957662395650",
+      "name": "温柔俊彦",
+      "style_id": "ICL_0ce6ef379e73",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "善良"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "1551876235983362",
+      "name": "青涩沐阳",
+      "style_id": "ICL_afedffe4586c",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "明亮"
+      ],
+      "source_categories": [
+        "推荐",
+        "男声"
+      ],
+      "recommended": true
+    },
+    {
+      "id": "1551960118620930",
+      "name": "睿语舟舟",
+      "style_id": "ICL_4ce34d3f60f4",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "成熟"
+      ],
+      "source_categories": [
+        "男声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "34092043859764994",
+      "name": "湾区大叔",
+      "style_id": "zh_male_gangpu_conversation_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "中年",
+        "香港口音",
+        "帅气"
+      ],
+      "source_categories": [
+        "男声",
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "1682276980395778",
+      "name": "随性先生",
+      "style_id": "ICL_b718c1050dd1",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "直率"
+      ],
+      "source_categories": [
+        "男声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "34072171082892802",
+      "name": "渊博小叔",
+      "style_id": "zh_male_m219_conversation_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "成熟"
+      ],
+      "source_categories": [
+        "男声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "18407391857154",
+      "name": "俊朗男友",
+      "style_id": "ICL_1eed9233299f",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "男声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "812558451257090",
+      "name": "奶酷小宇",
+      "style_id": "ICL_b22cd40ccd3e",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "开朗"
+      ],
+      "source_categories": [
+        "男声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "812557376620034",
+      "name": "暖阳阿晨",
+      "style_id": "ICL_7a33516fe388",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "温暖"
+      ],
+      "source_categories": [
+        "男声"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2094681566166274",
+      "name": "水刃公子",
+      "style_id": "ICL_da6a164900d4",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "明亮"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2216463290365442",
+      "name": "蓝曜修士",
+      "style_id": "ICL_4fba48c6d3cc",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "磁性"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2094687234531842",
+      "name": "咆哮小哥",
+      "style_id": "ICL_21c82f5cbb7b",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "冲动"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2231913314213378",
+      "name": "解家花少",
+      "style_id": "ICL_1289539b58cb",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "明亮"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2214687938636546",
+      "name": "闷油瓶小哥",
+      "style_id": "ICL_ffed9fc2fee7",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "理性"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2231908783024130",
+      "name": "墨镜黑哥",
+      "style_id": "ICL_ba24ccf23bc7",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "潇洒"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2216788167549698",
+      "name": "安全哥",
+      "style_id": "ICL_4b1feb0ced67",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "广西口音",
+        "喜感"
+      ],
+      "source_categories": [
+        "角色",
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "11586117259522",
+      "name": "藕霸小童",
+      "style_id": "zh_male_nezha",
+      "gender": "male",
+      "tags": [
+        "男",
+        "少年",
+        "倔强"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2449903586819586",
+      "name": "王小也",
+      "style_id": "zh_male_wangye",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "潇洒"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2449810528203778",
+      "name": "星鼠仔",
+      "style_id": "zh_male_milaoshu",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "尖细"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2449901144542210",
+      "name": "麦小鸭",
+      "style_id": "zh_male_tanglaoya",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "喜感"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2450340410534658",
+      "name": "黯刃秦主",
+      "style_id": "ICL_cd62e63dcdab",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "帅气"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "3092508568760322",
+      "name": "光头憨憨",
+      "style_id": "ICL_8d858c1560ed",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "幽默"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "3091896388796418",
+      "name": "智慧小羊",
+      "style_id": "ICL_f35ff006eb05",
+      "gender": "male",
+      "tags": [
+        "男",
+        "小孩",
+        "开朗"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "18592439927042",
+      "name": "冷酷哥哥",
+      "style_id": "ICL_3bb18f934f4e",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "冷酷"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "1551962899359490",
+      "name": "桃花庵主",
+      "style_id": "zh_male_renmao_mars_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "沙哑"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "1405226586027778",
+      "name": "清朗公子",
+      "style_id": "ICL_d8c94c04d627",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "温柔"
+      ],
+      "source_categories": [
+        "角色"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "900518482806530",
+      "name": "川渝小伙",
+      "style_id": "zh_male_sichuanskn",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "四川话",
+        "热情"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "900212727912450",
+      "name": "南音阳仔",
+      "style_id": "zh_male_nanchangygn",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "南昌口音",
+        "随和"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "900764542622466",
+      "name": "湘都朗少",
+      "style_id": "zh_male_changshakln",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "长沙口音",
+        "阳光"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "30",
+      "name": "京腔侃爷",
+      "style_id": "zh_male_M392_conversation_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "北京口音",
+        "潇洒"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "32096803418370",
+      "name": "浩宇小哥",
+      "style_id": "zh_male_qingdao_m01_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "山东口音",
+        "阳光"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "28470542033666",
+      "name": "广西远舟",
+      "style_id": "zh_male_guangxi_m179_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "广西口音",
+        "亲切"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "28470680208386",
+      "name": "豫州子轩",
+      "style_id": "zh_male_henan_m421_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "河南口音",
+        "直率"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "27933043915010",
+      "name": "上海阿宝",
+      "style_id": "zh_male_hupunan",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "上海口音",
+        "阳光"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "2278101118978",
+      "name": "北京小爷",
+      "style_id": "zh_male_wangye_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "北京口音",
+        "潇洒"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "5237658896130",
+      "name": "广州德哥",
+      "style_id": "zh_male_m710_conversation_wvae_bigtts",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "广东口音",
+        "自信"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "11860513693442",
+      "name": "憨憨熊仔",
+      "style_id": "zh_male_xionger_clone",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "河南口音",
+        "憨气"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "11490288794626",
+      "name": "霸音商主",
+      "style_id": "zh_male_shangyin",
+      "gender": "male",
+      "tags": [
+        "男",
+        "中年",
+        "广东口音",
+        "理性"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "340273888143874",
+      "name": "茶啊二中王强",
+      "style_id": "zh_male_chaawangqiang",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "东北话",
+        "憨气"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "11442574709506",
+      "name": "帅气港叔",
+      "style_id": "zh_male_liangjiahui",
+      "gender": "male",
+      "tags": [
+        "男",
+        "中年",
+        "广东口音",
+        "耐心"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "1516222121218",
+      "name": "好汉的声音",
+      "style_id": "zh_male_bvtianjin",
+      "gender": "male",
+      "tags": [
+        "男",
+        "中年",
+        "天津口音",
+        "亲切"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    },
+    {
+      "id": "1516751371778",
+      "name": "虎子的声音",
+      "style_id": "zh_male_bvdongbei",
+      "gender": "male",
+      "tags": [
+        "男",
+        "青年",
+        "东北口音",
+        "幽默"
+      ],
+      "source_categories": [
+        "口音"
+      ],
+      "recommended": false
+    }
+  ]
+}

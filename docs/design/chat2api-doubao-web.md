@@ -2,6 +2,26 @@
 
 当前行为以2026-10-15完成段为准；下方注明日期的旧网页桥/候选方案只供历史对照，不属于当前运行实现。
 
+## 官网声音目录与选择存储核查（2026-10-15，仅调研）
+
+获取操作、接口参数、范围区分及保存校验统一记录在[豆包官网音色列表获取方式](../ref/doubao-web-voice-fetch.md)，通过`docs/ref.md`索引。当前以网页实际五分类94项为所需目录；推荐30项按id和style_id核对均属于后四类并集，没有推荐独有项。此文档整理不实现动态音色接入。
+
+按用户追加要求提供男女两组整理版：角色/口音按原始`tags`的唯一性别标签并入女声32项、男声62项，总94项不变；先保留原男女分类顺序再追加角色/口音，保留`source_categories`及`recommended`。全部94项性别无缺失或冲突，未猜测性别。结果为`docs/ref/doubao-web-gender-voices-20261015.md/json`，不改变官网原始分类快照或项目运行音色。
+
+- 通过用户指定的 Chrome 9222 连接现有豆包“声音选择”页面，切换分类捕获 `POST https://www.doubao.com/alice/user_voice/recommend`。女声首批请求为 `{"page_index":1,"page_size":30,"recommend_type":10,"tab_key":"female"}`；HTTP 200、`code=0`，`data.ugc_voice_list` 返回30项，`data.has_more=true`，不是完整目录总数。
+- 分类来自官网当前前端：推荐使用 `recommend_type=1`、省略 `tab_key`；女声、男声、角色、口音使用 `recommend_type=10`，`tab_key` 分别为 `female/male/characters/accent`。后续页递增 `page_index`；官网页面过滤 `style_id` 以 `BV` 开头的条目。
+- 列表项含 `id/name/style_id/icon/preview/tag_list`；没有名为 `ttsid` 的字段。官网朗读传入 `speaker=currentVoice.style_id`，因此项目如需保存合成音色标识，应保留 `style_id`，而不是只保存数字 `id`；数字ID按字符串处理。
+- 当前选中音色保存在浏览器 IndexedDB：数据库 `samantha-web`、对象仓库 `store`、键 `default-chat-voice-store`、值 `state.currentVoice`，含 `id/name/style_id/pitch/speechRate`。当前样本为可爱女生，`style_id=ICL_49240bb7f5ac`。官网确定回调更新该本地持久化store；本轮没有更换或确认音色，不据此承诺跨设备云同步。
+- 以当前会话Cookie在内存中执行一次纯Node只读目录请求，裸接口URL、不带签名查询参数，同样HTTP 200、`code=0`、30项。只证明当前会话该目录接口可用；不等于无登录可用、其他环境可用或全部音色合成通过。未保存Cookie、令牌、签名URL或账号资料。
+- 已核对音色：温柔桃子升级版 `zh_female_wenroutaozi_uranus_bigtts`、经典版 `zh_female_wenroutaozi_v2_mars_bigtts`、磁性俊宇升级版 `zh_male_cixingjunyu_uranus_bigtts`、阳光甜妹升级版 `zh_female_yangguangtianmei_uranus_bigtts`、可爱女生 `ICL_49240bb7f5ac`。
+- 同日按用户追加要求读取五分类全部分页，31次请求均HTTP200/code0，各分类最终`has_more=false`。推荐13页385项、女声5页142项、男声7页182项、角色4页108项、口音2页45项；分类间有重复，按字符串id合并后385项、373个独立style_id。官网可见316项，另69项BV前缀被前端过滤，导出仍保留并标注，避免丢失接口返回条目。
+- 完整结果保存为 `docs/ref/doubao-voice-catalog-20261015.md` 与同名 `.json`，包含名称、id、style_id、标签、所属分类及官网显示标记；JSON另保留分页计数与终止证据，不保存头像/预览的签名地址或登录资料。范围仅为当前账号可访问的这五分类目录，不承诺未公开/其他账号专属音色或全部音色可合成。
+- 上一轮按BV规则过滤全量分页候选，导出 `docs/ref/doubao-web-visible-voices-20261015.md` 与同名JSON：316项、304个style_id，推荐316/女声113/男声147/角色97/口音39。此数据仅为满足过滤规则的全部分页候选，不代表官网当前实际加载列表；文件名保留以兼容既有引用，范围说明已更正。
+- 用户指出女声界面止于桂乡甜妞后，直接核对当前Chrome实际27张卡片及前端源码：第一页30项过滤3项BV后为27项，最后为桂乡甜妞。分页scroll监听绑定`speaker-list`，但该元素`overflow=visible`、clientHeight=scrollHeight=1971；真正滚动的是外层`overflow=auto`容器（高257、scrollHeight=2047）。内层没有滚动区，解释了页面停在第一页，不能把接口后续分页称为界面实显。
+- 按本次限定仅导出女声实际27项，保持DOM顺序，保存 `docs/ref/doubao-web-female-current-20261015.md` 及同名JSON；含名称、id、style_id、标签，已核对数量、无BV、ID唯一、末项桂乡甜妞及文件往返一致。获取同范围时只取female第1页再过滤BV，不追has_more；没有修改官网或项目功能代码，没有确认/试听音色。
+- 按后续“其他分类也一样”要求，逐一切换官网五分类并直接读取当前实际DOM，按各分类原顺序导出 `docs/ref/doubao-web-ui-voices-20261015.md` 及同名JSON，作为当前所需目录。推荐30项末项青涩沐阳；女声27项末项桂乡甜妞；男声29项末项暖阳阿晨；角色26项末项清朗公子；口音25项末项虎子的声音。合并去重94个id、94个style_id；女声与上一轮27项逐字段一致。未滚动追加接口分页，未点击音色/确定或试听；完成后恢复原分类。
+- 项目生产实现仍固定 `DOUBAO_SPEECH_VOICE`；本轮只记录接口及存储证据，没有实现目录接入、动态音色配置或多音色合成自测，不改变Offline产物状态。
+
 完成：最终code92/min56/deps10已发布，主服务器重启健康，手机通过原生热更新入口健康提交code92。豆包同账号跨批次FIFO已启用，完整上游音频到达即交接，WAV解码不占执行权；两端同时提交三批真实TTS均成功。Android账号重登后Node资料完整，两轮Responses流式原生续接和TTS已通过；主服务器仍为Cookie-only资料，须在其账号管理中另行登录，详见对应task。
 
 ## 豆包外部网页恢复缺少认证子域（2026-10-15，已完成code95发布）
