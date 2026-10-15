@@ -1,8 +1,8 @@
 ### 豆包TTS跨批次账号排队
 
 - ✅ [2026-10-15] 用户确认后实现豆包适配器按账号有界FIFO，同账号跨批次串行、不同账号并行。
-  - 新增speech-queue及测试，修改speech-adapter/protocol/service及测试；等待共享原deadline，取消/到期清理，执行权覆盖解码结束，失败释放，队列满固定提示。本地排队失败不扣账号健康，Qwen及现有批次内单路保持。
-  - Chat2API254/254、音频36/36、分句20/20通过；真实短句与主服务器/ADB发布进行中，servicePackage=true，其余状态保持。design/spec/task/self-test/todo同步，未构建APK或依赖包。
+  - 新增speech-queue及测试，修改speech-adapter/protocol/service及测试；等待共享原deadline，取消/到期清理，按用户补充仅占用至完整上游TTSEnded音频并清理WS，WAV解码与下一条生成并行，失败幂等释放，队列满固定提示。本地排队失败不扣账号健康，Qwen及现有批次内单路保持。
+  - Chat2API254/254、音频36/36、分句20/20通过；首版真实跨批次三句非静音WAV通过；优化后254/36/20项再次通过，code91为中间版本，最终代码与主服务器/ADB发布进行中，servicePackage=true，其余状态保持。design/spec/task/self-test/todo同步，未构建APK或依赖包。
 
 ### 豆包跨批次TTS队列方案
 

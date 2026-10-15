@@ -104,6 +104,9 @@ function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(ur
                     if(signal?.aborted)abort();
                 }catch{finish(doubaoSpeechError('doubao_speech_upstream'))}
             });
+            // 完整上游音频已收齐且WS已清理，立即让下一条同账号任务生成。
+            // 本条WAV解码保留自己的取消/截止检查；finally重复释放不会干扰下一条。
+            release();
             const pcm=[];let sampleRate,totalBytes=0;
             for(const sentence of sentences){check();let audio;
                 try{audio=await decodeAudio(sentence,{signal,deadline})}catch{check();throw doubaoSpeechError('doubao_speech_audio')}

@@ -16,7 +16,7 @@ function createDoubaoSpeechQueue({ maxWaitingPerAccount = 16, maxWaitingTotal = 
         return () => {
             if (released) return;
             released = true;
-            // 清除无效等待项后才移交；执行权覆盖网络生成和音频解码完整生命周期。
+            // 清除无效等待项后才移交；调用方收齐上游音频便释放，不等待WAV解码。
             while (slot.waiting.length) {
                 const item = slot.waiting[0];
                 const error = invalid(item);

@@ -89,21 +89,31 @@ test('不同批次同账号等待，活动取消释放执行权；预取消不�
     control.abort();await rejected;assert.equal(sockets.length,2);sockets[1].emit('close');await rejected2;
     await assert.rejects(generate({signal:control.signal}),e=>e.code==='doubao_speech_cancelled');assert.equal(sockets.length,2);
 });
-test('同账号FIFO等待完整解码，不同账号同时创建连接，失败后继续交接', async () => {
+test('完整音频到达立即交接，解码成功/失败/取消均不释放下一条执行权，不同账号并行', async () => {
+  for(const scenario of ['success','failure','cancel']) {
     let finishDecode;
-    const {generate,sockets}=setup({decodeAudio:()=>new Promise(resolve=>{finishDecode=()=>resolve(wrapPcm(Buffer.from([1,0]),24000))})});
-    const first=generate(); const second=generate(); const third=generate();
+    const control=new AbortController();
+    const {generate,sockets}=setup({decodeAudio:()=>new Promise((resolve,reject)=>{finishDecode=()=>{
+        if(scenario==='failure')reject(Error('local decoder failure'));
+        else resolve(wrapPcm(Buffer.from([1,0]),24000));
+    }})});
+    const first=generate({signal:control.signal}); const second=generate(); const third=generate();
+    const firstResult=scenario==='success'?first:assert.rejects(first,e=>e.code===(scenario==='cancel'?'doubao_speech_cancelled':'doubao_speech_audio'));
     const rejectSecond=assert.rejects(second,e=>e.code==='doubao_speech_incomplete');
     const rejectThird=assert.rejects(third,e=>e.code==='doubao_speech_incomplete');
     const other=generate({accountId:'other'});const rejectOther=assert.rejects(other);
     assert.equal(sockets.length,2);
     start(sockets[0]);sentence(sockets[0]);sockets[0].emit('message',event('TTSEnded'),true);
     await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(typeof finishDecode,'function');assert.equal(sockets.length,2);
-    finishDecode();assert.ok(validateWav(await first).samples.length);
+    assert.equal(typeof finishDecode,'function');assert.equal(sockets.length,3);
+    assert.equal(sockets[0].destroyed,true);
+    if(scenario==='cancel')control.abort();
+    finishDecode();const audio=await firstResult;
+    if(scenario==='success')assert.ok(validateWav(audio).samples.length);
     assert.equal(sockets.length,3);sockets[2].emit('close');await rejectSecond;
     assert.equal(sockets.length,4);sockets[3].emit('close');await rejectThird;
     sockets[1].emit('close');await rejectOther;
+  }
 });
 test('排队取消/到期没有连接，坏Cookie不占执行权', async () => {
     const {generate,sockets}=setup();const first=generate();const rejectFirst=assert.rejects(first);
