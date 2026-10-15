@@ -203,7 +203,7 @@ ADB结束 := 恢复原选择/各方式音色/语速/启用/模型；正式99源C
 出包状态 := servicePackage=true；minApk/dependenciesPackage/taskCodePackage保持false；未出包发布
 ```
 
-## 豆包Chat表情分句中断修复草案（2026-10-15，待确认，尚未实现）
+## 豆包Chat表情分句中断修复（2026-10-15，已实现）
 
 ```text
 已有声明 := 千问字素过滤、豆包generate、公共Provider服务、手动重播split与有序队列
@@ -212,6 +212,10 @@ ADB结束 := 恢复原选择/各方式音色/语速/启用/模型；正式99源C
 filteredText无可朗读文字/数字 → 返回null → 公共服务识别豆包null并跳过WAV校验/缓存
 手动队列收到null → 不发送无声音频 → 继续后续正文；真正上游失败仍走原错误路径
 用户原句预期 := 保留“喵呜～”“主人好呀！”及自我介绍文字；独立✨/🐱💻⚡不请求上游
-验证计划 := 原句手动重播、混合emoji、纯emoji、ZWJ/肤色/旗帜、后续句继续、真实失败不吞没
+验证 := 原句手动重播3段正文、日志完整回复8段正文；纯emoji零请求/缓存，混合文本显示原样；自动动作源保留
+字素兼容 := ZWJ/肤色/旗帜/键帽完整移除，数字标点正文保持；千问旧导出继续复用
+错误 := incomplete/timeout/cancelled保持原错误对象和provider标记，非网页云Provider返回null仍拒绝
+回归 := npm run test:mmd-production:tts 22/22；Provider/动作/千问相关定向28/28
+出包 := servicePackage=true，其他三项false；尚未重启、出包发布或真实账号合成
 当前证据 := 同文三次手动失败incomplete + 代码缺少过滤/跳过契约；纯emoji诱因尚待实测
 ```

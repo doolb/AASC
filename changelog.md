@@ -1,3 +1,10 @@
+### 豆包Chat纯表情分句跳过
+
+- ✅ [2026-10-15] 按确认方案为豆包网页TTS补齐emoji过滤与无正文分句跳过，避免纯表情送上游后中断整段重播的路径。
+  - 新增tts-speech-text-filter.js复用既有完整字素过滤，qwen-chat-text-filter.js保留旧导出；doubao-chat-tts.js清洗合成输入并对纯表情返回null，tts-provider-service.js识别豆包null后不调音量/校验WAV/缓存。只改合成输入，原回复文字与MMD动作来源保持，真正上游错误仍报告。
+  - 旧实现4项新增回归失败；修改后Provider/动作/千问定向28/28，npm run test:mmd-production:tts 22/22，test:tts-voice-picker 20/20。真实清理/分句/手动服务/Registry/ProviderService搭配本地假上游：用户原句3段正文、日志整段8段正文按序下发、纯表情零请求/缓存，queued音频数量正确；混合正文显示文本保留，ZWJ/肤色/国旗/键帽及千问兼容通过。自动动作保留原回复与识别事件，incomplete/timeout/cancelled错误原样传播。
+  - 同步.src/design/spec/task/todo/usage/self-test；servicePackage保持true，其余三项false，尚未重启、出包发布或ADB验收本次修复。模拟纯emoji上游拒绝证明中断路径，不宣称原日志的真实上游诱因已实证；未调用真实账号合成。
+
 ### 豆包Chat表情分句中断调查
 
 - ✅ [2026-10-15] 对照用户原文找到三次手动重播doubao_speech_incomplete，确认手动链路不走自动表情解析，纯emoji会独立分句发送豆包。

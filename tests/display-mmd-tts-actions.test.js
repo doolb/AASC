@@ -7,6 +7,30 @@ const { createOrderedTaskScheduler } = require('../src/apps/server/modules/media
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const plain = value => value;
 
+// 对应.src/framework/tts-provider-configuration.md：最终过滤只改合成输入，不改回复或动作元数据。
+test('自动播报豆包过滤未知emoji，原回复和已识别表情动作仍保留', async () => {
+    const { createProviderRegistry } = require('../src/apps/server/modules/tts/tts-provider-registry');
+    const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
+    const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
+    const { wrapPcm } = require('../src/external/tts/tts-wav');
+    const inputs = [], messages = [];
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' }, providers: { 'doubao-chat': { enabled: true } } });
+    const registry = createProviderRegistry({ chat2ApiSpeechService: { generate: async request => {
+        inputs.push(request.input); return { audio: wrapPcm(Buffer.from([1, 0])) };
+    } } });
+    const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => 'auto.wav' });
+    const sentence = '喵呜～主人好呀！✨\n\n人家是妲己，一只拥有九条尾巴的电子猫娘哦！🐱💻⚡';
+    const generate = text => service.generate({ text, businessType: 'ai_reply' });
+    const result = await generateChatTtsActions({ sentence, stripMarkdown: plain, generate, send: value => messages.push(value) });
+    assert.deepEqual(inputs, ['喵呜～主人好呀！\n\n人家是妲己，一只拥有九条尾巴的电子猫娘哦！']);
+    assert.equal(result.sentence, sentence);
+    assert.equal(result.ttsAction.text, sentence);
+    assert.deepEqual(result.ttsAction.events.map(event => event.raw), ['✨', '🐱']);
+    assert.equal(messages[0].action, 'prepareActions');
+    assert.equal(await generateChatTtsActions({ sentence: '💻⚡', stripMarkdown: plain, generate, send: value => messages.push(value) }), null);
+    assert.equal(inputs.length, 1);
+});
+
 test('生成请求开始时发送准备消息，动作标记不朗读，结果保留同句标识', async () => {
     const gate = deferred(), started = deferred(), events = [];
     const job = generateChatTtsActions({ sentence: '[动作:点头]你好❤️', stripMarkdown: plain,

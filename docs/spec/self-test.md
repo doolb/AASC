@@ -1,5 +1,22 @@
 # 自测功能实现文档
 
+## 豆包Chat表情分句中断回归（2026-10-15）
+
+```text
+先失败 := Provider/动作新增3项断言在旧实现失败；手动原句新增1项失败，错误incomplete
+手动/并发 := npm run test:mmd-production:tts → 22/22
+面板回归 := npm run test:tts-voice-picker → 20/20
+Provider/动作 := 无独立npm定向入口，node --test tests/tts-provider-doubao-chat.test.js tests/tts-provider-qwen-chat.test.js tests/tts-provider-qwen-business.test.js tests/display-mmd-tts-actions.test.js → 28/28
+链路 := 正式Markdown清理 + 真实分句 + 手动服务 + Registry + ProviderService + 本地假WAV上游
+原文 := 两段示例生成3段正文；日志完整回复生成8段正文、跳过4段emoji，按序下发、queued带正确audioCount
+边界 := 混合正文合成输入过滤/播放文本保持；纯emoji零请求零缓存；ZWJ/肤色/国旗/键帽完整移除
+自动 := 公共动作解析仍保留原回复与✨/🐱事件，未知💻/⚡在最终Provider边界清除
+错误 := incomplete/timeout/cancelled原错误和provider标记保留；千问旧接口及原生/其它API不受影响
+边界说明 := 本地假上游模拟纯表情被拒；未对真实账号做前后对照，不宣称上游诱因已实证
+部署 := servicePackage=true，尚未出包发布/重启或ADB验收本次修复
+```
+
+
 ## 音色列表按钮状态验收（2026-10-15）
 
 ```text

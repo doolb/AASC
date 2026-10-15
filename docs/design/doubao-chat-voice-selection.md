@@ -167,8 +167,8 @@ ADB证据保留在忽略目录.cache/adb-tts-panel-20261015/；只记录脱敏�
 
 选中依据仍为服务端权威音色，保存失败或等待中保持原项；悬停、键盘焦点、禁用状态应可辨识。修改共享tts-voice-picker.css，直接使用aria-selected，无新增active变量；补充双端light/mint/深色主题、悬停/键盘焦点/禁用样式断言，扩展只读SelfTest识别普通项被渐变覆盖。定向20/20通过，仅servicePackage=true，尚未出包发布或ADB验收本次样式。详见任务20261015_音色列表按钮选中状态.md。
 
-## 豆包Chat表情分句中断（2026-10-15，待确认）
+## 豆包Chat表情分句中断（2026-10-15，已完成源码与定向验证）
 
-用户报告“喵呜～主人好呀！✨\n\n人家是妲己，一只拥有九条尾巴的电子猫娘哦！🐱💻⚡”中途停止。本机logs/server.jsonl在三次同一原文的手动重播后均记录doubao_speech_incomplete；手动链路只清Markdown再分句，没有自动播报的parseReply。按现有分句规则，✨及句末🐱💻⚡会成为独立分句，豆包Provider直接发送上游；Promise.all任一句失败便取消整批。自动解析能识别✨/🐱，但💻/⚡等未知emoji保留，豆包仍无最终过滤。尚未实网验证纯emoji是否直接导致上游incomplete，不能把相关性当成已证实根因。
+用户报告“喵呜～主人好呀！✨\n\n人家是妲己，一只拥有九条尾巴的电子猫娘哦！🐱💻⚡”中途停止。本机logs/server.jsonl在三次同一原文的手动重播后均记录doubao_speech_incomplete；修复前手动链路只清Markdown再分句，没有自动播报的parseReply。按现有分句规则，✨及句末🐱💻⚡会成为独立分句，豆包Provider直接发送上游；Promise.all任一句失败便取消整批。自动解析能识别✨/🐱，但💻/⚡等未知emoji保留，修复前豆包无最终过滤。尚未实网验证纯emoji是否直接导致上游incomplete，不能把相关性当成已证实根因。
 
-计划复用千问现有字素过滤，抽为公共tts-speech-text-filter.js，保留qwen-chat-text-filter.js旧导出；豆包Provider过滤emoji并在无正文时返回null；tts-provider-service.js允许豆包的null跳过结果，沿用播放调度继续正文。原回复、显示表情和MMD解析源保持，真正上游错误仍报错。拟补充用户原文、混合/纯emoji、ZWJ及后续句继续回归；待确认后实施。任务：20261015_豆包Chat纯表情分句中断修复.md。
+已复用千问现有字素过滤，抽为公共tts-speech-text-filter.js，保留qwen-chat-text-filter.js旧导出；豆包Provider过滤emoji并在无正文时返回null；tts-provider-service.js允许豆包的null跳过结果，沿用播放调度继续正文。原回复、显示表情和MMD解析源保持，真正上游错误仍报错。已补充用户原文、混合/纯emoji、ZWJ及后续句继续回归，Provider/动作28/28、手动/并发22/22通过。模拟纯表情上游失败的旧代码能复现中断，修改后原句3段正文、日志完整回复8段正文按序下发，纯表情不请求/不缓存；未据此宣称真实上游根因已证实。当前servicePackage=true，尚未重启、出包发布或用真实账号合成。任务：20261015_豆包Chat纯表情分句中断修复.md。

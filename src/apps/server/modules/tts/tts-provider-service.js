@@ -51,8 +51,8 @@ function createTtsProviderService({ getSettings, registry, storeAudio = audioCac
                     speed, volume, timeoutMs
                 }, settings);
                 if (selection.provider === 'system') return result;
-                // qwen-chat筛选后没有可朗读正文时返回null，播放层跳过该句；不缓存空WAV。
-                if (selection.provider === 'qwen-chat' && result === null) return null;
+                // 网页TTS过滤后无正文时返回null，播放层继续后续句；不校验、调音量或缓存空WAV。
+                if (['qwen-chat', 'doubao-chat'].includes(selection.provider) && result === null) return null;
                 const audio = selection.provider === 'doubao-chat' ? adjustWavVolume(result, volume) : result;
                 validateWav(audio);
                 return storeAudio(audio);
