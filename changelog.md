@@ -12616,3 +12616,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 豆包网页朗读仍以固定上游参数生成，收到 WAV 后应用共享速度/音量，再校验并缓存。更新 TTS design/spec/task，删除已完成 todo 项。
   - `node --test tests/tts-provider-settings.test.js tests/tts-provider-ui-browser.test.js tests/tts-provider-integration.test.js tests/tts-provider-doubao-chat.test.js tests/tts-provider-ws.test.js tests/tts-provider-system-route.test.js tests/tts-provider-qwen-chat.test.js` 81/81 通过；包含 Chromium 界面检查、迁移/持久化/回滚、广播/重连、跨 Provider 参数和单次覆盖。
   - `git diff --check` 通过；未构建或发布APK/服务包，已有 `servicePackage=true` 状态保持。
+
+### MMD-AR VaM 分部位阻尼
+
+- ✅ [2026-10-15] 全局阻尼叠加10组分部位系数，使用差异化默认值并验证真实米娅牵引/保持/Off释放。
+  - 新增`web-human-body-damping.mjs`共享预设；修改`web-human-physics-drive.mjs`、`web-human-ik.mjs`、`web-human-ik-ui.mjs`与`web-human-build.js`，覆盖自然姿态、骨盆导引、目标位置/旋转、释放耗散及指数原生阻尼。面板可调0.2～2.5并恢复默认，左右共用，局部更新/状态副本隔离，PBD设置保留。
+  - 默认骨盆1.40、躯干1.30、颈1.15、头1.10、肩1.05、肘0.95、腕0.85、髋1.20、膝1.10、踝1.15；既有质量/有效惯量换算保留。工程预设不宣称人体实测常数。真实十部位释放末秒最大漂移3.03mm、角速度0.0096rad/s，原生分配不增长；45项定向及浏览器1项通过，含四种范围端点真实关节链检查；网页构建成功。
+  - 补充`mmd-ar-human-damping`自测、既有physics/browser与Windows夹具文件URL兼容；同步design/spec/task/usage/self-test。独立`3rd/mmd-ar-test/web-dist`已生成，正式src/原生/生产依赖未变，Offline三状态保持false；未构建APK、服务包或对外发布。其他PMX/手机验收保留todo。

@@ -1,10 +1,12 @@
 import { Euler, Matrix3, Matrix4, Quaternion, Vector3 } from 'three';
 import { nodeOffset } from './web-human-physics-rig.mjs';
+import { bodyDamping, normalizeDampingMultipliers } from './web-human-body-damping.mjs';
 
 export const BODY_STATES = Object.freeze(['Off', 'On', 'Hold', 'Comply']);
 export function normalizeBodySettings(value = {}) {
     const number = (name, fallback, low, high) => Number.isFinite(value[name]) ? Math.max(low, Math.min(high, value[name])) : fallback;
     return { strength: number('strength', 0.85, 0.05, 1), damping: number('damping', 1, 0.2, 2.5),
+        dampingMultipliers: normalizeDampingMultipliers(value.dampingMultipliers),
         gravity: value.gravity === true, freePelvis: value.freePelvis === true };
 }
 
@@ -181,6 +183,13 @@ export function createHumanPhysicsDrive(Ammo, rig) {
         if (disposed) throw new Error('人体物理世界已释放');
         const started = performance.now(), settings = normalizeBodySettings(requestedSettings);
         scratchVector.setValue(0, settings.gravity ? -9.81 : 0, 0); world.setGravity(scratchVector);
+        for (const [node, record] of bodies) {
+            record.damping = bodyDamping(settings, node.semantic);
+            record.poseDamping = bodyDamping(settings, node.semantic, 1.3);
+            // Bullet按(1-d)^dt衰减速度；倍乘衰减率而非直接乘0～1值，避免高档被截成完全锁死。
+            const nativeDamping = 1 - Math.pow(1 - 0.65, record.damping);
+            record.body.setDamping(nativeDamping, nativeDamping);
+        }
         accumulator = Math.min(accumulator + Math.max(0, Math.min(0.1, Number.isFinite(seconds) ? seconds : 0)), h * 8);
         substeps = 0;
         while (accumulator + 1e-9 >= h && substeps < 8) {
@@ -204,9 +213,10 @@ export function createHumanPhysicsDrive(Ammo, rig) {
                 const goal = rig.targetToLocal(rootTarget.target), drive = targetDrive(rootTarget.positionState, settings);
                 if (rootTarget.positionState === 'Comply') rootTarget.target.lerp(rig.targetToWorld(rootRecord.position), 1 - Math.exp(-3 * h));
                 const frequency = drive.frequency * Math.PI * 2;
-                const denominator = 1 + 2 * Math.max(1, settings.damping) * frequency * h + frequency * frequency * h * h;
+                const damping = bodyDamping(settings, rig.pelvis.semantic, 1);
+                const denominator = 1 + 2 * damping * frequency * h + frequency * frequency * h * h;
                 const acceleration = goal.sub(rootRecord.position).multiplyScalar(frequency * frequency)
-                    .addScaledVector(rootRecord.guideVelocity, -2 * Math.max(1, settings.damping) * frequency).multiplyScalar(1 / denominator).clampLength(0, 30);
+                    .addScaledVector(rootRecord.guideVelocity, -2 * damping * frequency).multiplyScalar(1 / denominator).clampLength(0, 30);
                 rootRecord.guideVelocity.addScaledVector(acceleration, h).clampLength(0, 1.5);
                 rootGoal = rootRecord.position.clone().addScaledVector(rootRecord.guideVelocity, h);
             }
@@ -237,7 +247,7 @@ export function createHumanPhysicsDrive(Ammo, rig) {
                 const record = bodies.get(node), parent = node.parentNode && bodies.get(node.parentNode);
                 const desired = animated.get(node).quaternion.clone();
                 if (parent) desired.premultiply(animated.get(node.parentNode).quaternion.clone().invert()).premultiply(parent.quaternion);
-                applyTorque(record, desired, /^(upperBody|chest|neck|head)$/u.test(node.semantic) ? 4 : 3, Math.max(1.3, settings.damping), parent);
+                applyTorque(record, desired, /^(upperBody|chest|neck|head)$/u.test(node.semantic) ? 4 : 3, record.poseDamping, parent);
             }
             for (const drive of positionDrives.values()) for (let axis = 0; axis < 3; axis++) drive.joint.enableSpring(axis, false);
             for (const target of targets) {
@@ -271,17 +281,17 @@ export function createHumanPhysicsDrive(Ammo, rig) {
                             nativeDrive.joint.setStiffness(axis, stiffness);
                             // 此旧Bullet接口的damping参与目标速度换算，并非直接阻尼比。
                             // 将速度明确规范为 responseRate × 误差，避免近目标处仍请求极大速度。
-                            const responseRate = (3 + 9 * settings.strength) / Math.max(1, settings.damping);
+                            const responseRate = (3 + 9 * settings.strength) / Math.max(0.2, record.damping);
                             nativeDrive.joint.setDamping(axis, Math.min(1, responseRate * 40 * h / Math.max(1e-6, stiffness)));
                             nativeDrive.joint.enableSpring(axis, true);
                         }
-                        applyForce(record, origin, origin, drive.frequency, Math.max(1.3, settings.damping), drive.acceleration);
+                        applyForce(record, origin, origin, drive.frequency, record.poseDamping, drive.acceleration);
                     }
                 }
                 if (target.rotationState !== 'Off') {
                     if (target.rotationState === 'Comply') target.targetRotation.slerp(rig.targetRotationToWorld(record.quaternion), 1 - Math.exp(-3 * h));
                     const drive = targetDrive(target.rotationState, settings);
-                    applyTorque(record, rig.targetRotationToLocal(target.targetRotation), drive.frequency, settings.damping, null, drive.angularAcceleration);
+                    applyTorque(record, rig.targetRotationToLocal(target.targetRotation), drive.frequency, record.damping, null, drive.angularAcceleration);
                 }
             }
             world.stepSimulation(h, 0, h);
@@ -340,7 +350,7 @@ export function createHumanPhysicsDrive(Ammo, rig) {
             if (!node.parentNode) continue;
             const active = targets.some(target => target.node === node && (target.positionState !== 'Off' || target.rotationState !== 'Off'));
             const relative = record.omega.clone().sub(bodies.get(node.parentNode).omega);
-            correct(node, relative.multiplyScalar(Math.exp(-(active ? 2 : 12) * h) - 1));
+            correct(node, relative.multiplyScalar(Math.exp(-(active ? 2 : 12) * record.damping * h) - 1));
         }
         for (const record of bodies.values()) {
             record.omega.clampLength(0, 8);

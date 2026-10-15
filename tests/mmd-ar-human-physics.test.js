@@ -242,6 +242,28 @@ async function fixture(loadAmmo = realAmmo) {
     return { T, model, controller, bones, bindings, initial, point, run, enable, camera, pointerHandlers, canvas };
 }
 
+test('部位设置连续局部合并，状态快照与输入不能改写内部，切换模式保留设置', async () => {
+    const f = await fixture();
+    try {
+        await f.enable();
+        const defaults = f.controller.getState().settings.dampingMultipliers;
+        assert.ok(defaults, '缺少分部位设置');
+        const patch = { wrist: 0.6 };
+        f.controller.setBodySettings({ dampingMultipliers: patch }); patch.wrist = 2;
+        f.controller.setBodySettings({ dampingMultipliers: { head: 1.6 } });
+        f.controller.setBodySettings({ gravity: true });
+        const snapshot = f.controller.getState();
+        assert.equal(snapshot.settings.dampingMultipliers.wrist, 0.6);
+        assert.equal(snapshot.settings.dampingMultipliers.head, 1.6);
+        assert.equal(snapshot.settings.dampingMultipliers.knee, defaults.knee);
+        snapshot.settings.dampingMultipliers.wrist = 2;
+        assert.equal(f.controller.getState().settings.dampingMultipliers.wrist, 0.6);
+        await f.controller.setMode('pbd', f.model);
+        await f.controller.setMode('physics', f.model);
+        assert.equal(f.controller.getState().settings.dampingMultipliers.wrist, 0.6);
+    } finally { f.controller.dispose(); }
+});
+
 test('位置Off仍保留显式旋转驱动，标记立即跟随骨骼；放开取消残余拖动', async () => {
     const f = await fixture();
     try {

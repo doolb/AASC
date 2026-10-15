@@ -16,7 +16,24 @@ Off取消该点对应的牵引，标记跟随实际骨骼，身体关节阻尼�
 
 当前为独立本地网页的首阶段实现；人体碰撞是简化胶囊/球体，地面以启用时脚踝高度估计。衣服/头发接受身体姿态，暂没有衣物向身体反向施力、皮肤软体或精确皮肤网格碰撞。PMX角度限制优先，目标未到达时可能由骨长可达范围、限位、碰撞或牵引强度造成；过远目标不会持续拉伸骨段。设置仅保留在本次页面会话，不保证与VaM逐帧相同，手机观感/性能待验收。
 
-脚本可调用Human接口 `setInteractiveIKMode('physics'|'pbd')`（异步）、`setInteractiveMarkerDiameter(sizePx)`（20–48px）、`setInteractiveBodySettings({strength,damping,gravity,freePelvis})`、`setInteractiveTargetState(key,positionState,rotationState)` 与 `setInteractiveTarget(key,worldPosition,worldQuaternion)`；位置为3个有限数值，旋转为4个有效四元数分量，不填写的目标使用null。状态与控制点通过 `getInteractiveIKState()` 获取，PBD只支持位置目标。
+在「身体物理（VaM式）→ 分部位阻尼系数」中调节各部位，范围0.2～2.5，左右共用；全局阻尼默认1，和部位系数相乘。系数越大，运动耗散越强，同时目标响应更缓。默认根据身体支撑/活动分工设置差异，并通过真实米娅PMX逐部位牵引、保持和释放检查；这些是简化人体代理的工程预设，不是人体实测常数。
+
+| 部位 | 默认系数 | 设置键 |
+|------|----------|--------|
+| 骨盆 | 1.40 | pelvis |
+| 躯干（上半身、胸） | 1.30 | torso |
+| 颈 | 1.15 | neck |
+| 头 | 1.10 | head |
+| 肩带、上臂 | 1.05 | shoulder |
+| 肘、前臂 | 0.95 | elbow |
+| 腕、手 | 0.85 | wrist |
+| 髋、大腿 | 1.20 | hip |
+| 膝、小腿 | 1.10 | knee |
+| 踝、脚 | 1.15 | ankle |
+
+修改一个部位会保留其他部位的调整；「恢复部位默认」恢复上表全部值，保留全局阻尼和牵引/重力设置。部位系数同时影响目标牵引、自然姿态、放开后的关节耗散及刚体速度衰减；自然姿态先应用原有保护，再乘部位系数，因此小于1的值也生效。质量/有效惯量由现有物理驱动处理。切换PBD时设置保留但不参与PBD求解，刷新页面恢复默认。
+
+脚本可调用Human接口 `setInteractiveIKMode('physics'|'pbd')`（异步）、`setInteractiveMarkerDiameter(sizePx)`（20–48px）、`setInteractiveBodySettings({strength,damping,dampingMultipliers,gravity,freePelvis})`、`setInteractiveTargetState(key,positionState,rotationState)` 与 `setInteractiveTarget(key,worldPosition,worldQuaternion)`。例如 `setInteractiveBodySettings({dampingMultipliers:{wrist:0.7,torso:1.4}})` 只改腕与躯干；数值必须为有限数字，非法值回退对应部位默认值，未知键忽略。位置为3个有限数值，旋转为4个有效四元数分量，不填写的目标使用null。状态与控制点通过 `getInteractiveIKState()` 获取，PBD只支持位置目标。
 
 格式边界（2026-10-11核对）：VRM可定义Expression表情、人形骨骼及SpringBone摆动，但当前Human模型适配读取PMX的MMD骨骼/Morph元数据；不能将这里的VMD、MPL和刚体功能直接视为VRM支持。VRM动作可使用VRMA，VMD需要骨骼重定向、坐标/初始姿态和表情映射；SpringBone用于头发/衣物摆动及碰撞，不自动继承PMX刚体和关节。共享VRM运行时每帧调用VRM更新并支持简单happy表情，未接入PMX的VMD或Ammo/XPBD刚体链路。参见[VRMA规范](https://vrm.dev/en/vrma/)及[SpringBone规范](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_springBone-1.0/README.md)。
 
