@@ -70,11 +70,11 @@
 
 Android 工程集成阿里 MNN 官方 `apps/Android/MnnLlmChat` 使用的 MNN-LLM 引擎能力，在当前 APK 的 `arm64-v8a` 构建中启用 LLM native 库。构建配置必须启用 MNN LLM、Transformer 融合和 ARM 优化，并保留现有 APK 的 Android 8/API 26 最低版本与 16 KB page size 兼容约束。
 
-MNN 源码默认路径记录为 `build/third_party/MNN`，固定 revision 为 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，默认 NDK 为 `/opt/android-sdk/ndk/28.2.13676358`。维护者可直接运行 `npm run build:mnnllm-android` 编译；APK 构建仍通过 `npm run prepare:mnnllm-android` 自动复用同一准备脚本。`AASC_MNN_ROOT`、`AASC_MNN_REVISION` 和 `ANDROID_NDK_HOME` 可用于覆盖默认值。MNN root/revision 由共享构建配置解析，`build-apk.js` 会将解析结果显式传给 Gradle；直接运行 Gradle 时也回退到相同的仓库 checkout 和固定 revision，不要求当前 shell 预先 export 环境变量。
+MNN 源码构建缓存位于 `build/third_party/MNN`，默认 revision 为 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，默认 NDK 为 `/opt/android-sdk/ndk/28.2.13676358`。Git 维护版本化自包含包 `3rd/android-mnnllm-prebuilt/<revision>`，其中保存 arm64-v8a 的 `libMNN.so`、编译 AASC bridge 所需的 MNN 头文件、官方 LLM C++ 源码、第三方头文件、许可证和校验清单。新 clone 执行 APK 构建时校验 revision、ABI、文件大小和 SHA-256 后直接使用，不拉取或重新编译 MNN 上游源码。维护者仍可运行 `npm run build:mnnllm-android` 从源码构建，随后运行 `npm run package:mnnllm-android` 生成新的版本化包；`npm run prepare:mnnllm-android` 只准备和校验 Git 内置包。`AASC_MNN_ROOT`、`AASC_MNN_REVISION` 和 `ANDROID_NDK_HOME` 保留为源码构建或维护者覆盖入口。共享配置把 root/revision 传给 APK 编排、Gradle 和 CMake；包缺失、摘要错误、revision 或 ABI 不匹配时立即失败。
 
 2026-09-22 已使用上述默认 checkout/revision 重打包并发布 `allserver-min` update-only APK v33；构建命令自动将 MNN root/revision 注入 prepare 脚本和 Gradle，未要求手动设置 `AASC_MNN_ROOT`。同批服务代码发布为 code v29，沿用 dependencies v5。
 
-MNN 源码和生成的 native 库不直接提交大体积构建产物；通过可重复的准备脚本获取固定上游版本、构建 `arm64-v8a` 库并复制到 APK 构建输入。构建缺少 LLM native 库时必须明确失败，不能静默生成没有 LLM 能力的 APK。
+APK 构建使用 Git 中可审查的固定 revision 运行包，避免新 clone 重新编译 MNN；后续升级必须先从固定源码构建，再生成新 revision 目录和清单。构建缺少库、头文件或 bridge 源文件时必须明确失败，不能静默生成没有 LLM 能力的 APK。
 
 ### Kotlin/JNI 边界
 

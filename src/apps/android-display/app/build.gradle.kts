@@ -37,23 +37,23 @@ val nodeRuntimeJniLibsDirectory = project.findProperty("aascNodeRuntimeJniLibsDi
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?.let { file(it) }
-val defaultMnnRoot = rootProject.file("../../../build/third_party/MNN")
 val defaultMnnRevision = "d407447ed56c4121a11ccbd266dc184ca1ead0c2"
-val mnnRoot = project.findProperty("aascMnnRoot")
-    ?.toString()
-    ?.trim()
-    ?.takeIf { it.isNotEmpty() }
-    ?: System.getenv("AASC_MNN_ROOT")?.trim()?.takeIf { it.isNotEmpty() }
-    ?: defaultMnnRoot.absolutePath
 val mnnRevision = project.findProperty("aascMnnRevision")
     ?.toString()
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: System.getenv("AASC_MNN_REVISION")?.trim()?.takeIf { it.isNotEmpty() }
     ?: defaultMnnRevision
+val defaultMnnRoot = rootProject.file("../../../3rd/android-mnnllm-prebuilt/$mnnRevision")
+val mnnRoot = project.findProperty("aascMnnRoot")
+    ?.toString()
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("AASC_MNN_ROOT")?.trim()?.takeIf { it.isNotEmpty() }
+    ?: defaultMnnRoot.absolutePath
 val mnnRootDirectory = file(mnnRoot)
-check(mnnRootDirectory.resolve("CMakeLists.txt").isFile) {
-    "MNN checkout 不存在或不完整: ${mnnRootDirectory.absolutePath}（revision=$mnnRevision）"
+check(mnnRootDirectory.resolve("manifest.json").isFile || mnnRootDirectory.resolve("CMakeLists.txt").isFile) {
+    "MNN 预编译包或源码 checkout 不存在: ${mnnRootDirectory.absolutePath}（revision=$mnnRevision）"
 }
 
 // AGP 9.0+ 内置 Kotlin 支持，无需 org.jetbrains.kotlin.android 插件
@@ -148,7 +148,10 @@ android {
         // CMakeLists.txt 的 android.externalNativeBuild 配置块。
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DAASC_MNN_ROOT=$mnnRoot")
+                arguments += listOf(
+                    "-DAASC_MNN_ROOT=$mnnRoot",
+                    "-DAASC_MNN_REVISION=$mnnRevision"
+                )
             }
         }
    }

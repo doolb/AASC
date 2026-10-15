@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "engine": "mnn-llm",
+  "source": "https://github.com/alibaba/MNN",
+  "revision": "d407447ed56c4121a11ccbd266dc184ca1ead0c2",
+  "abi": "arm64-v8a",
+  "ndkVersion": "28.2.13676358",
+  "buildOptions": [
+    "-DMNN_LOW_MEMORY=true",
+    "-DMNN_CPU_WEIGHT_DEQUANT_GEMM=true",
+    "-DMNN_BUILD_LLM=true",
+    "-DMNN_SUPPORT_TRANSFORMER_FUSE=true",
+    "-DMNN_ARM82=true",
+    "-DMNN_USE_LOGCAT=true",
+    "-DMNN_OPENCL=true",
+    "-DLLM_SUPPORT_VISION=true",
+    "-DMNN_BUILD_OPENCV=true",
+    "-DMNN_IMGCODECS=true",
+    "-DLLM_SUPPORT_AUDIO=true",
+    "-DMNN_BUILD_AUDIO=true",
+    "-DMNN_SEP_BUILD=OFF",
+    "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384",
+    "-DCMAKE_INSTALL_PREFIX=."
+  ],
+  "library": {
+    "path": "project/android/build_64/lib/libMNN.so",
+    "size": 7686792,
+    "sha256": "5b3ad20b47211f59bccba9cceaae3aa998d65f33316e3e884b6125bce0f85dcd"
+  },
+  "license": "LICENSE.txt",
+  "generatedAt": "2026-10-15T02:21:11.127Z"
+}

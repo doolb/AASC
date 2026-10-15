@@ -289,28 +289,50 @@ switchModel(modelId):
 
 固定阿里官方 MNN 源码 revision，并记录 revision、编译参数、ABI、Android API 和 16 KB page-size 链接参数。目标 ABI 为 `arm64-v8a`，最低 API 保持现有 APK 约束。
 
-MNN 原生编译入口固定复用工作区内的 `build/third_party/MNN`。脚本提供稳定默认值，同时允许 CI 或维护者通过环境变量覆盖路径、revision 和 NDK；未显式传参时不再因为缺少环境变量而失败。
+APK 构建默认复用 Git 内置的自包含 MNN 包 `3rd/android-mnnllm-prebuilt/<revision>`。包包含 `arm64-v8a/libMNN.so`、编译 AASC bridge 所需的 MNN 头文件与官方 LLM C++ 源码、第三方头文件、许可证和摘要清单。新 clone 构建 APK 时不下载或重新编译 MNN 上游源码；Android Gradle 仍按项目自身配置解析依赖。
 
 ```text
-prepareMnnLlmNative():
-  root = env.AASC_MNN_ROOT or projectRoot/build/third_party/MNN
-  revision = env.AASC_MNN_REVISION or pinnedRevision
-  ndk = env.ANDROID_NDK_HOME or ANDROID_HOME/ndk/28.2.13676358
-  checkout pinned Alibaba MNN revision at root
-  configure MNN_BUILD_LLM=true
-  enable transformer fusion and ARM optimizations
-  build/install MNN LLM, transformer and ARM libraries
-  link with -Wl,-z,max-page-size=16384
-  copy only arm64-v8a .so and JNI headers into Android build inputs
-  emit native-artifact-manifest.json with revision and sha256
+prepareMnnLlmNative(environment):
+  revision = environment.AASC_MNN_REVISION or pinnedRevision
+  root = environment.AASC_MNN_ROOT or projectRoot/3rd/android-mnnllm-prebuilt/revision
+  manifest = read root/manifest.json
+  require manifest.revision == revision
+  require manifest.abi == arm64-v8a
+  require manifest.library.path exists
+  require size and sha256(manifest.library.path) match manifest
+  require all bridge source and include paths used by CMake exist
+  if any check fails: stop with a precise missing/mismatch error
+  return root
+
+buildMnnFromSource():
+  sourceRoot = environment.AASC_MNN_ROOT or projectRoot/build/third_party/MNN
+  revision = environment.AASC_MNN_REVISION or pinnedRevision
+  checkout pinned Alibaba MNN revision at sourceRoot
+  configure MNN_BUILD_LLM=true, transformer fusion and ARM optimizations
+  build/install for arm64-v8a with 16 KB page-size linker support
+  write libMNN.so and matching source tree under sourceRoot
+
+packageMnnForGit():
+  sourceRoot = projectRoot/build/third_party/MNN
+  revision = git revision at sourceRoot
+  destination = projectRoot/3rd/android-mnnllm-prebuilt/revision
+  require sourceRoot contains built libMNN.so and all required include/source paths
+  copy required include/source paths, license and libMNN.so
+  write manifest.json with revision, ABI, build options, size and sha256
+  refuse to overwrite an existing revision package
 ```
 
-构建脚本应复用仓库现有 `npm run` 入口：`npm run build:mnnllm-android` 是人工编译入口，`npm run prepare:mnnllm-android` 是 APK 构建流程复用的兼容入口，二者使用同一脚本和同一默认配置。不得让 APK 在运行时下载 native 库。
+构建脚本应复用仓库现有 `npm run` 入口：`npm run build:mnnllm-android` 显式从源码编译 MNN，`npm run package:mnnllm-android` 将匹配源码依赖和编译库生成新的版本化 Git 包；`npm run prepare:mnnllm-android` 只验证并准备仓库内的预编译包，供 APK 构建复用。APK 运行时不下载 native 库。
 
 ```text
-resolveMnnBuildConfig(projectRoot, environment):
-  root = environment.AASC_MNN_ROOT or projectRoot/build/third_party/MNN
+resolveMnnBuildConfig(projectRoot, environment, mode):
   revision = environment.AASC_MNN_REVISION or pinnedRevision
+  if environment.AASC_MNN_ROOT exists:
+    root = environment.AASC_MNN_ROOT
+  else if mode == sourceBuild:
+    root = projectRoot/build/third_party/MNN
+  else:
+    root = projectRoot/3rd/android-mnnllm-prebuilt/revision
   return absolute root and revision
 
 buildApk:
@@ -320,12 +342,22 @@ buildApk:
   invoke Gradle with -PaascMnnRevision=mnnConfig.revision
 
 direct Gradle:
-  root = Gradle property or AASC_MNN_ROOT or projectRoot/../../../build/third_party/MNN
   revision = Gradle property or AASC_MNN_REVISION or pinnedRevision
-  validate root contains official MNN checkout
+  root = Gradle property or AASC_MNN_ROOT or projectRoot/../../../3rd/android-mnnllm-prebuilt/revision
+  pass root and revision to CMake
+  CMake checks manifest revision, ABI library and bridge compile dependencies
+
+buildMnnFromSource:
+  resolve sourceBuild configuration
+  checkout and build the fixed MNN revision with the configured NDK
+
+packageMnnForGit:
+  copy the source-built library and compile-time dependency subset to a new revision directory
+  calculate library size and sha256
+  write manifest; never overwrite an existing revision directory
 ```
 
-`prepare-mnnllm-android.js`、`build-apk.js` 和 `app/build.gradle.kts` 不再各自维护互相冲突的默认路径；环境变量仍可覆盖默认配置。
+`prepare-mnnllm-android.js`、`package-mnnllm-android.js`、`mnn-build-config.js`、`build-apk.js` 和 `app/build.gradle.kts` 共用 revision 配置。环境变量仍可将 root/revision 指向自备的源码 checkout；默认 APK 构建不访问 MNN 上游，也不重编译 MNN 本体。
 
 ### 5.2 原生生命周期
 
@@ -635,7 +667,7 @@ integration/device:
 
 ## 12. 实施状态
 
-本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。模型二进制和官方 MNN checkout 不提交到仓库；构建默认复用固定 `build/third_party/MNN` checkout 和 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，也可通过 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 覆盖。`build-apk.js` 会把解析后的配置传给 `prepare:mnnllm-android` 和 Gradle，直接运行 Gradle 时也使用同一默认值；缺失依赖时 CMake 直接失败。Gradle 将根目录通过 `defaultConfig.externalNativeBuild.cmake.arguments` 传给 CMake，避免 AGP 9 模块级 DSL 不提供 `arguments` 属性。当前已使用 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 完成 `npm run build:apk`；native ELF 的 LOAD 对齐为 `0x4000`；APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动。Chat `image_url` 和 Responses `input_image` 已用 Qwen3.5 真机验证，图片进入 `MultimodalPrompt` 并清理临时文件。双 runtime 线程配置同步任务 `docs/task/2026-09-13_MNN双runtime线程配置同步.md` 已完成，真机同一 APK 进程 PID `27146` 的下一次推理日志同时显示顶层与 `mllm` `thread_num=2`。
+本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。MNN-LLM 的 arm64-v8a 编译库及 bridge 编译所需头文件、官方 LLM 源码和第三方依赖按固定 revision 自包含在 `3rd/android-mnnllm-prebuilt/<revision>`；包清单记录 ABI、构建参数、库大小和 SHA-256。默认 APK 构建只验证并使用该包，不访问 MNN 上游或重新编译 MNN；`npm run build:mnnllm-android` 保留显式源码构建入口，`npm run package:mnnllm-android` 生成新 revision 包。`AASC_MNN_ROOT`、`AASC_MNN_REVISION` 仍可覆盖配置。缺失、revision 不匹配或摘要错误时 native 构建直接失败。Gradle 将根目录与 revision 显式传给 CMake。此前 MNN 3.6.1 固定提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 已构建验证；本次仅转换构建依赖的获取方式，不重建 min APK，`minApk` 状态保持 `false`。
 本次任务已完成：默认模型映射配置由 `llm-server` 任务卡片入口维护，服务端使用 `llm.defaultModelMappings.set/get` WebSocket 消息完成规范化校验、持久化、重连补发和多控制端广播；配置字段缺失时保留内置 Qwen 映射，显式空数组仍可关闭；`LlmGatewayService` 在 manifest 内置模型名/alias 未命中时再查找动态映射。
 ## 11. 本地 LLM 网关任务实例
 

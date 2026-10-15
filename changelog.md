@@ -1,3 +1,9 @@
+### Android MNNChat 本地推理
+
+- ✅ [2026-10-15] 入库 Android MNN-LLM 自包含预编译运行包，供新 clone 编译 APK。
+  - 新增 `3rd/android-mnnllm-prebuilt/d407447ed56c4121a11ccbd266dc184ca1ead0c2/`，包含 `libMNN.so`、bridge 编译所需头文件/官方 C++ 源码/第三方头文件、上游许可证和校验清单；包约 26 MiB，库 7,686,792 bytes，SHA-256 `5b3ad20b47211f59bccba9cceaae3aa998d65f33316e3e884b6125bce0f85dcd`。
+  - APK 默认准备改为校验 Git 内置包，不拉取或重编译 MNN；保留显式源码构建，并新增版本包生成入口。更新 MNN build config、prepare/package 脚本、Gradle/CMake 校验、既有构建契约自测、design/spec/task/todo。未运行测试或 APK 构建；新 clone 完整 APK 验收留在 todo。`minApk=false`，未重建 min APK。
+
 ### Android豆包重登后LLM与TTS真实验收
 
 - ✅ [2026-10-15] Android当前账号重登补齐nodeProfile，普通doubao两轮Responses流式原生续接及doubao-chat TTS通过。
