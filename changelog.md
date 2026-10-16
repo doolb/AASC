@@ -1,3 +1,11 @@
+### Offline 服务包与 min APK v106/v60 发布
+
+- ✅ [2026-10-16] 将 Offline 服务代码包 v106 与 update-only min APK v60 发布到 LAN/WAN；未构建完整 APK。
+  - `code/code-v106.zip`：4,938,660 bytes，SHA-256 `61b77b3e6578b7ed44a3e2ea90ffdb3621742754ad3e99e520527462440a7228`；服务清单同时保留 dependencies v10、task-code v1、Node min seeds v86。
+  - `apk/aasc-display-offline-min-v60.apk`：90,035,336 bytes，SHA-256 `689e81cccf0fef82dcdd3fb9d7d5e4368f1244cf6ed70385e353bf377f3e9d9f`；profile 为 `allserver-min`/`updateOnly=true`，APK 签名证书与现行版本匹配。
+  - 两端签名清单一致并引用 code v106/min v60；LAN 完整 HTTP 摘要校验通过，公网源站回环 HTTP 的 13 项资源 SHA-256 和公网 13 项 HTTP 状态/长度校验通过。code v105/min v59 返回 HTTP 404，完整 APK v50 保留；旧版本精确清理无错误。
+  - Android 原生启动器改动由 min v60 覆盖，JS 启动器随服务包发布；未发布未变更的 Node 子显示端独立 ZIP。`servicePackage=false`、`minApk=false`，其它发布状态保持 false。
+
 ### Offline 可热更 JS 启动器与本地网页 UI
 
 - ✅ [2026-10-16] 按用户确认将首装、服务/依赖/任务/数据修复编排、模型下载与首次提示迁入JS，并将启动器UI改为可热更的本地网页。
