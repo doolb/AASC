@@ -163,8 +163,10 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         try {
             busy = true; buttons(); await ensurePhysics({ isCurrent: () => id === serial && !disposed });
             if (id !== serial || disposed) return;
-            const state = human().applyInteractiveImagePose(pose, expectedToken);
-            status(`已应用${state.activeTargets}个控制点，${pose.dimensions === 2 ? '已按二维投影初始化，深度为估计；' : ''}可继续在3D场景拖动微调；重置控制点可恢复原动作。`);
+            status('正在按实际骨骼和关节范围拟合姿态…');
+            const state = await human().applyInteractiveImagePose(pose, expectedToken, { isCurrent: () => id === serial && !disposed });
+            if (id !== serial || disposed) return;
+            status(`已应用${state.activeTargets}个控制点，${pose.dimensions === 2 ? '已按关节范围拟合，深度为估计；等待物理稳定并检查实际骨架，' : ''}可继续在3D场景拖动微调；重置控制点可恢复原动作。`);
         } catch (error) { if (id === serial) status(error.message); }
         finally { if (id === serial) { busy = false; buttons(); } }
     });

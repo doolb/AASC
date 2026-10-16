@@ -4,6 +4,7 @@ import { calculateInverseRotationalMass, calculateKneePoleTarget, calculatePbdAn
 import { createHumanPhysicsRig } from './web-human-physics-rig.mjs';
 import { BODY_STATES, createHumanPhysicsDrive, normalizeBodySettings } from './web-human-physics-drive.mjs';
 import { retargetImagePose } from './web-human-pose-retarget.mjs';
+import { fitImagePose2DAsync } from './web-human-pose-lift.mjs';
 
 import { normalizeMarkerDiameter, projectIKMarker, pickIKMarker } from './web-human-ik-markers.mjs';
 
@@ -62,6 +63,8 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     const worldChange = new Quaternion(), parentRotation = new Quaternion(), localChange = new Quaternion();
     const baseline = new Map(), linkLimits = new Map(), kneeIndices = new Set();
     let enabled = false, bound = null, helperRoot = null, handles = [], drag = null;
+    let imagePoseEpoch = 0;
+    const notifyChange = () => { imagePoseEpoch++; onChange(); };
     let mode = 'pbd', ammoModule = null, bodyRig = null, bodyDrive = null, loadEpoch = 0, selected = '';
     let bodySettings = normalizeBodySettings(), markerDiameter = normalizeMarkerDiameter();
     let state = { enabled: false, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '已关闭' };
@@ -95,7 +98,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         stopDrag(); restore(); bodyDrive?.reset();
         for (const handle of handles) { handle.active = false; handle.positionState = 'Off'; handle.rotationState = 'Off'; }
         state = { ...state, activeTargets: 0, unreachable: 0, reason: enabled ? (state.available ? '' : state.reason) : '已关闭' };
-        onChange();
+        notifyChange();
     }
     function reset() {
         loadEpoch++; restore(); bodyDrive?.dispose(); bodyDrive = null; bodyRig = null;
@@ -225,7 +228,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         if (!handle) return;
         event.stopImmediatePropagation(); event.preventDefault();
         selected = handle.key;
-        if (mode === 'physics' && handle.positionState === 'Hold') { onChange(); return; }
+        if (mode === 'physics' && handle.positionState === 'Hold') { notifyChange(); return; }
         handle.endpoint.bone.getWorldPosition(handle.target);
         if (mode === 'physics' && handle.positionState !== 'Comply') handle.positionState = 'On';
         handle.active = true;
@@ -244,7 +247,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         state.activeTargets = handles.filter(item => item.active).length;
         state.unreachable = 0;
         state.reason = '';
-        onChange();
+        notifyChange();
     }
     function pointerMove(event) {
         if (!drag || drag.pointerId !== event.pointerId) return;
@@ -258,12 +261,12 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         } else return;
         drag.handle.mesh.position.copy(drag.handle.target);
         state.activeTargets = handles.filter(item => item.active).length;
-        onChange();
+        notifyChange();
     }
     function pointerUp(event) {
         if (!drag || drag.pointerId !== event.pointerId) return;
         if (drag.fallback ? event.currentTarget !== window : event.currentTarget !== canvas) return;
-        event.stopImmediatePropagation(); event.preventDefault(); stopDrag(); onChange();
+        event.stopImmediatePropagation(); event.preventDefault(); stopDrag(); notifyChange();
     }
     function applyLimit(link, original) {
         const maximumCorrection = getJointCorrectionLimit(link.index, kneeIndices);
@@ -382,21 +385,21 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             bodyDrive?.dispose(); bodyDrive = null; bodyRig = null;
             disposeHelpers(); bound = null;
             state = { enabled: false, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '已关闭' };
-            onChange(); return getState();
+            notifyChange(); return getState();
         }
         bind(model || bound);
         state.enabled = true;
-        onChange(); return getState();
+        notifyChange(); return getState();
     }
     async function setMode(value, model = bound) {
         if (!['pbd', 'physics'].includes(value)) throw new Error('不支持的人体控制模式');
         const epoch = ++loadEpoch;
         if (value === 'physics' && !ammoModule) {
-            state.reason = '正在加载人体物理…'; onChange();
+            state.reason = '正在加载人体物理…'; notifyChange();
             let loaded;
             try { loaded = await loadAmmo(); }
             catch (error) {
-                if (epoch === loadEpoch) { state.reason = '人体物理加载失败：' + error.message; onChange(); }
+                if (epoch === loadEpoch) { state.reason = '人体物理加载失败：' + error.message; notifyChange(); }
                 throw error;
             }
             if (epoch !== loadEpoch) return getState();
@@ -406,14 +409,14 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         restore(); bodyDrive?.dispose(); bodyDrive = null; bodyRig = null; disposeHelpers(); bound = null;
         mode = value;
         if (enabled) bind(model);
-        onChange(); return getState();
+        notifyChange(); return getState();
     }
     function setBodySettings(value) {
         // 多次只更新一个部位时保留其他调整，随后归一化并复制，避免输入引用污染内部设置。
         const incoming = value?.dampingMultipliers;
         const dampingMultipliers = incoming && typeof incoming === 'object' && !Array.isArray(incoming)
             ? { ...bodySettings.dampingMultipliers, ...incoming } : bodySettings.dampingMultipliers;
-        bodySettings = normalizeBodySettings({ ...bodySettings, ...value, dampingMultipliers }); onChange(); return getState();
+        bodySettings = normalizeBodySettings({ ...bodySettings, ...value, dampingMultipliers }); notifyChange(); return getState();
     }
     function setTargetState(key, positionState, rotationState) {
         const handle = handles.find(handle => handle.key === key);
@@ -425,7 +428,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         handle.positionState = positionState; handle.rotationState = rotationState;
         handle.active = positionState !== 'Off' || rotationState !== 'Off'; selected = key;
         updateMarkers();
-        onChange(); return getState();
+        notifyChange(); return getState();
     }
     function setTarget(key, position, rotation) {
         const handle = handles.find(handle => handle.key === key);
@@ -444,16 +447,13 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             if (mode === 'physics' && handle.rotationState === 'Hold') throw new Error('请将旋转状态改为On后移动保持目标');
             handle.targetRotation.fromArray(values).normalize(); handle.rotationState = handle.rotationState === 'Comply' ? 'Comply' : 'On';
         }
-        handle.active = true; selected = key; onChange(); return getState();
+        handle.active = true; selected = key; notifyChange(); return getState();
     }
     function setMarkerDiameter(value) {
-        markerDiameter = normalizeMarkerDiameter(value); resizeMarkers(); onChange(); return getState();
+        markerDiameter = normalizeMarkerDiameter(value); resizeMarkers(); notifyChange(); return getState();
     }
-    function applyImagePose(pose) {
-        if (!enabled || mode !== 'physics' || !bodyRig || !bodyDrive) throw new Error('请先启用身体物理模式');
-        // 先构造全部目标再提交，坏点/退化姿态不能部分覆盖用户原有的控制目标。
-        const proposed = retargetImagePose(pose, bodyRig, { camera: getCamera() }).map(target => ({ ...target, handle: handles.find(handle => handle.key === target.key) }))
-            .filter(target => target.handle);
+    function submitImageTargets(targets) {
+        const proposed = targets.map(target => ({ ...target, handle: handles.find(handle => handle.key === target.key) })).filter(target => target.handle);
         if (proposed.length < 3) throw new Error('当前模型可用的图片姿态控制点不足');
         stopDrag();
         for (const handle of handles) { handle.positionState = 'Off'; handle.rotationState = 'Off'; handle.active = false; }
@@ -462,7 +462,29 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             handle.target.fromArray(target.position); handle.positionState = 'On'; handle.active = true;
             if (target.rotation) { handle.targetRotation.fromArray(target.rotation).normalize(); handle.rotationState = 'On'; }
         }
-        selected = proposed[0].key; updateMarkers(); onChange(); return getState();
+        state = { ...state, unreachable: 0, reason: '' };
+        selected = proposed[0].key; updateMarkers(); notifyChange(); return getState();
+    }
+    async function applyImagePose2D(pose, options) {
+        const epoch = ++imagePoseEpoch, rig = bodyRig, model = bound, camera = getCamera();
+        camera.updateWorldMatrix(true, false); model.mesh.updateWorldMatrix(true, false);
+        const matrixKey = () => [...camera.matrixWorld.elements, ...camera.projectionMatrix.elements, ...model.mesh.matrixWorld.elements].join(',');
+        const reference = matrixKey();
+        const isCurrent = () => {
+            camera.updateWorldMatrix(true, false); model.mesh.updateWorldMatrix(true, false);
+            return options.isCurrent?.() !== false && imagePoseEpoch === epoch && enabled && mode === 'physics'
+                && bound === model && bodyRig === rig && getCamera() === camera && reference === matrixKey();
+        };
+        const fitted = await fitImagePose2DAsync(pose, rig, camera, { isCurrent });
+        if (!isCurrent()) { const error = new Error('拟合期间模型、相机或控制已变化，请重试'); error.name = 'AbortError'; throw error; }
+        return { ...submitImageTargets(fitted.targets), imagePoseFit: { error: fitted.error, projection: fitted.projection,
+            depthSource: fitted.depthSource, iterations: fitted.iterations } };
+    }
+    function applyImagePose(pose, options = {}) {
+        if (!enabled || mode !== 'physics' || !bodyRig || !bodyDrive) throw new Error('请先启用身体物理模式');
+        if (pose?.source === 'rtmpose-m' && pose.dimensions === 2) return applyImagePose2D(pose, options);
+        // 旧world接口保留同步兼容；无论哪个来源，全部计算通过后才提交目标。
+        return submitImageTargets(retargetImagePose(pose, bodyRig, { camera: getCamera() }));
     }
     function getState() {
         const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();

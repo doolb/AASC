@@ -184,6 +184,28 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
             if (process.env.AASC_MMD_POSE_ANIME_SCREENSHOT) await page.screenshot({ path: process.env.AASC_MMD_POSE_ANIME_SCREENSHOT });
             t.diagnostic(`二次元图：${anime.candidates.length}候选，默认鼻点[${(anime.landmarks[0].x * 450).toFixed(1)},${(anime.landmarks[0].y * 407).toFixed(1)}]，身体${anime.quality.visible}/12；识别保持旧目标，应用${animeApplied.activeTargets}目标`);
         }
+        const captureViews = async index => {
+            const prefix = process.env.AASC_MMD_POSE_VIEWS_PREFIX;
+            if (!prefix) return;
+            const saved = await page.evaluate(() => {
+                const panel = document.querySelector('#mmdArIKPanel'), state = JSON.parse(window.DisplayMmd.getHumanInterface().getImageCameraState().revision).state;
+                const visibility = panel.style.visibility; panel.style.visibility = 'hidden'; return { state, visibility };
+            });
+            try {
+                await page.screenshot({ path: prefix + index + '-front.png' });
+                await page.evaluate(async state => {
+                    window.DisplayMmd.setCameraViewRotation(state.yaw + Math.PI / 2, state.pitch);
+                    for (let i = 0; i < 35; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+                }, saved.state);
+                await page.screenshot({ path: prefix + index + '-side.png' });
+            } finally {
+                await page.evaluate(async saved => {
+                    window.DisplayMmd.setCameraViewRotation(saved.state.yaw, saved.state.pitch);
+                    document.querySelector('#mmdArIKPanel').style.visibility = saved.visibility;
+                    for (let i = 0; i < 35; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+                }, saved);
+            }
+        };
         // 可选本机用户样本：检查真正应用后的骨架，不能只验证Worker预览或目标坐标。
         for (const [index, file] of JSON.parse(process.env.AASC_MMD_POSE_EXTRA_IMAGES || '[]').entries()) {
             assert.ok(fs.existsSync(file));
@@ -221,16 +243,22 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
                         / pairs.reduce((sum, p) => sum + (p.x - x) ** 2 + (p.y - y) ** 2, 0);
                     return Math.sqrt(pairs.reduce((sum, p) => sum + (scale * (p.x - x) + u - p.u) ** 2 + (scale * (p.y - y) + v - p.v) ** 2, 0) / pairs.length);
                 };
-                return { visible: pose.quality.visible, targets: api.getInteractiveIKState().activeTargets, boneError,
-                    finite: actual.points.every(p => p.world.every(Number.isFinite)), before: residual(original), after: residual(actual) };
+                const controls = api.getInteractiveIKState().controls;
+                const targetErrorsWorldUnits = controls.filter(c => c.positionState !== 'Off').map(c => ({ key: c.key,
+                    error: new T.Vector3().fromArray(c.target).distanceTo(new T.Vector3().fromArray(c.achieved)) }));
+                return { visible: pose.quality.visible, targets: api.getInteractiveIKState().activeTargets, boneError, targetErrorsWorldUnits,
+                    actual, finite: actual.points.every(p => p.world.every(Number.isFinite)), before: residual(original), after: residual(actual) };
             }, original);
             assert.ok(outcome.finite && outcome.boneError < 1e-5, JSON.stringify(outcome));
             assert.ok(outcome.after < outcome.before, '实际求解骨架未改善投影：' + JSON.stringify(outcome));
             if (process.env.AASC_MMD_POSE_EXTRA_SCREENSHOT_PREFIX) {
                 const data = await page.$eval('[data-pose="preview"]', canvas => canvas.toDataURL('image/png').split(',')[1]);
                 fs.writeFileSync(process.env.AASC_MMD_POSE_EXTRA_SCREENSHOT_PREFIX + index + '.png', Buffer.from(data, 'base64'));
+                fs.writeFileSync(process.env.AASC_MMD_POSE_EXTRA_SCREENSHOT_PREFIX + index + '.json', JSON.stringify(outcome, null, 2));
             }
-            t.diagnostic(`用户样本${index + 1}：${JSON.stringify(outcome)}`);
+            await captureViews(index);
+            const { actual, ...summary } = outcome;
+            t.diagnostic(`用户样本${index + 1}：${JSON.stringify(summary)}`);
         }
         assert.ok(requests.filter(request => request.url.includes('/vendor/pose/')).length >= 4);
         assert.ok(requests.every(request => request.method === 'GET'), '图片不应以POST或其他写请求上传');

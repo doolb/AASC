@@ -286,6 +286,41 @@ test('图片姿态批量应用生成可编辑物理目标，坏输入不部分�
     } finally { f.controller.dispose(); }
 });
 
+test('骨盆同时启用位置与旋转时仍向根位置目标牵引，不被零链长包络抹掉', async () => {
+    const f = await fixture();
+    try {
+        await f.enable();
+        const goal = f.point('hips').add(new f.T.Vector3(.2, .15, 0));
+        f.controller.setTarget('pelvis', goal, new f.T.Quaternion().setFromEuler(new f.T.Euler(0, .25, 0)));
+        f.run(600);
+        assert.ok(f.point('hips').distanceTo(goal) < .03, '骨盆位置/旋转一起开启后位置未达目标：' + f.point('hips').distanceTo(goal));
+    } finally { f.controller.dispose(); }
+});
+
+test('RTMPose异步拟合中取消、修改相机或用户目标，迟到结果不得提交', async () => {
+    for (const scenario of ['cancel', 'camera', 'control']) {
+        const f = await fixture(); let current = true;
+        try {
+            await f.enable();
+            const map = { leftArm: 11, rightArm: 12, leftElbow: 13, rightElbow: 14, leftWrist: 15, rightWrist: 16,
+                leftLeg: 23, rightLeg: 24, leftKnee: 25, rightKnee: 26, leftAnkle: 27, rightAnkle: 28 };
+            const landmarks = Array(33).fill(null);
+            for (const [semantic, i] of Object.entries(map)) {
+                const p = f.point(semantic); landmarks[i] = { x: .5 + p.x * .5, y: .9 - p.y * .5,
+                    visibility: 1, presence: 1, source: 'rtmpose-m', dimensions: 2 };
+            }
+            landmarks[15].y = .2; landmarks[25].x += .1;
+            const pending = f.controller.applyImagePose({ source: 'rtmpose-m', dimensions: 2, imageAspect: 1, landmarks }, { isCurrent: () => current });
+            if (scenario === 'cancel') current = false;
+            if (scenario === 'camera') { f.camera.position.x += 1; f.camera.updateMatrixWorld(true); }
+            if (scenario === 'control') f.controller.setTarget('leftHand', f.point('leftWrist').add(new f.T.Vector3(0, .1, 0)));
+            const expected = f.controller.getState().controls;
+            await assert.rejects(pending, { name: 'AbortError' }, scenario);
+            assert.deepEqual(f.controller.getState().controls, expected, scenario + '覆盖了旧目标');
+        } finally { f.controller.dispose(); }
+    }
+});
+
 test('RTMPose二维应用进入真实物理，坏输入保持全部旧目标，骨长和膝限位不变', async () => {
     const f = await fixture();
     try {
@@ -298,12 +333,12 @@ test('RTMPose二维应用进入真实物理，坏输入保持全部旧目标，�
             landmarks[index] = { x: .5 + p.x * .5, y: .9 - p.y * .5, visibility: 1, presence: 1, source: 'rtmpose-m', dimensions: 2 };
         }
         const pose = { source: 'rtmpose-m', dimensions: 2, imageAspect: 1, landmarks };
-        const initial = f.controller.applyImagePose(pose);
+        const initial = await f.controller.applyImagePose(pose);
         assert.equal(initial.activeTargets, 10);
         assert.equal(initial.controls.find(c => c.key === 'head').positionState, 'Off');
         const before = f.controller.getState();
         const bad = { ...pose, landmarks: [...landmarks] }; bad.landmarks[23] = null;
-        assert.throws(() => f.controller.applyImagePose(bad), /肩|骨盆/u);
+        await assert.rejects(async () => f.controller.applyImagePose(bad), /肩|骨盆/u);
         assert.deepEqual(f.controller.getState().controls, before.controls, '坏二维输入部分覆盖了旧目标');
         f.run(270);
         assert.ok(f.controller.getState().controls.every(c => c.achieved.every(Number.isFinite)));
