@@ -1,5 +1,7 @@
 # 自测功能文档
 
+测试方法归档：[不同姿态模型测试方法](usage/mmd-pose-model-testing.md)。包含原始推理/静态对照/真实IK三层、版本与哈希、色序/ROI/语义对应、失败与计时口径，以及当前RTMPose构建不能直接复跑旧MediaPipe Worker探针的限制。此次仅核查并记录方法，未重跑四模型。
+
 ## RTMPose-m默认识别与实际骨架回归（2026-10-16）
 
 新增`tests/mmd-ar-human-rtmpose.test.js`：5项先红后绿，实际384×288/RGB/NCHW/1.25取景、SimCC维度/正逆仿射、17语义/空槽/无world、低分/NaN/退化拒绝、固定模型SHA与真实PMX投影/非平面双腿/模型变换。physics测试新增二维批量应用/坏输入原子保留/270帧骨长与限位。与既有图片/阻尼/相机/实际投影共50项Node定向检查。

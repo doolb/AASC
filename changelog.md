@@ -1,3 +1,9 @@
+### MMD姿态模型测试方法归档
+
+- ✅ [2026-10-16] 记录MediaPipe、RTMPose-m、DWPose和传统OpenPose的真实测试方法。
+  - 新增docs/usage/mmd-pose-model-testing.md，包含权重大小/SHA、预后处理、人体语义映射、全图/同框/色序/尺度对照、临时脚本与历史Worker兼容限制、失败/计时口径和当前RTMPose集成测试命令；同步usage入口、自测、design/spec、原试验task与未验事项todo引用。
+  - 逐项核对本机探针/原始数据及资源配置，检查文档链接与git差异；未改运行代码或Offline状态，未重跑模型推理、下载模型或出包。
+
 ### 独立MMD-AR RTMPose-m图片姿态
 
 - ✅ [2026-10-16] 按用户选型，将全身IK图片姿态默认切为RTMPose-m Body7 m384，图片仅本机ONNX推理。
