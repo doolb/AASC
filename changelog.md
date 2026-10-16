@@ -1,3 +1,10 @@
+### Offline min APK v61 发布
+
+- ✅ [2026-10-16] 将已签名并通过 SM-N9500 冷启动验证的 min APK v61 发布到 LAN/WAN，修复模型状态未返回时崩溃及本地启动器网页加载失败。
+  - `apk/aasc-display-offline-min-v61.apk`：90,036,744 字节，SHA-256 `4eb5e8bcf01e78058139496c189fd87de215ba1799cbcfc34ef3ed5685ac9672`；profile 为 `allserver-min`/`updateOnly=true`，APK 签名证书与既有版本匹配，未构建完整 APK。
+  - 两端签名清单与本次候选一致，继续引用 code v106、dependencies v10、task-code v1、Node min seeds v86。LAN 完整 HTTP SHA-256 校验通过；公网逐字节验证因传输较慢主动停止后，改用 WAN 源站回环 HTTP 完整校验 13 项资源（324,450,271 字节），并确认公网 13 项 HTTP 状态/Content-Length 均匹配。
+  - 复用发布器严格版本规则完成两端旧 min v60 清理，无清理错误；旧 min v60 返回 HTTP 404，min v61 与完整 APK v50 返回 HTTP 200。五项发布状态保持 false；本轮仅打包、发布与记录，APK/ZIP 和验证临时文件不入 Git。
+
 ### MMD-AR人体三维辅助模型本机对照
 
 - ✅ [2026-10-16] 完成用户确认的RTMPose+RTMW3D/旧MediaPipe深度先验三图浏览器试验，生成可切换正侧面的实际PMX对照页。
