@@ -1,5 +1,9 @@
 # Web MediaCenter - 项目参考文档
 
+## 图像投影与刚体姿态方案（2026-10-16）
+
+- [Ceres重投影误差优化](https://ceres-solver.readthedocs.io/latest/nnls_tutorial.html#bundle-adjustment)说明用图像观测与相机投影误差求3D/相机参数；[MuJoCo约束动力学计算](https://mujoco.readthedocs.io/en/stable/computation/)作为约束动力学参考。新方案仍复用本地Ammo已有胶囊/球和6DoF关节，拟以投影误差/射线直接产生虚拟力并检查实际PMX；不是引入Ceres/MuJoCo或已有可运行实现。单图多解、真实支撑与原生到显示映射仍需核查，见[任务方案](task/20261016_MMDAR二维投影驱动刚体姿态评估.md)。
+
 ## 人体三维辅助模型可行性（2026-10-16）
 
 - 用户停止继续RTMW后，拟改RTMPose二维+像素深度：[Depth Anything V2官方项目](https://github.com/DepthAnything/Depth-Anything-V2)说明Small为24.8M参数、Apache-2.0及相对深度，并列出ONNX与Transformers.js浏览器路径；[ONNX Community模型卡](https://huggingface.co/onnx-community/depth-anything-v2-small)提供Web用法和导出权重。只核查资料，具体revision/预后处理/近远方向、Web算子与手机性能待固定和实测；表面像素深度不能直接替代隐藏关节z。新计划见[评估任务](task/20261016_MMDAR二维姿态与像素深度辅助评估.md)。
