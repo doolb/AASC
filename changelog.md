@@ -3,6 +3,14 @@
 - ✅ [2026-10-16] 核查RTMPose-m可叠加人体三维模型的路线，记录待确认的三图浏览器ONNX对照方案。
   - design/spec/task/todo/ref/self-test记录RTMW3D独立图像输出作为合法FK软先验、旧MediaPipe对照、坐标与语义核查及Web性能验证；区分像素表面深度与遮挡人体关节深度。尚未下载新模型、修改运行代码或验证手机；不将计划记为功能完成，未变更Offline状态。
 
+### Offline 服务包与 min APK v106/v60 发布
+
+- ✅ [2026-10-16] 将 Offline 服务代码包 v106 与 update-only min APK v60 发布到 LAN/WAN；未构建完整 APK。
+  - `code/code-v106.zip`：4,938,660 bytes，SHA-256 `61b77b3e6578b7ed44a3e2ea90ffdb3621742754ad3e99e520527462440a7228`；服务清单同时保留 dependencies v10、task-code v1、Node min seeds v86。
+  - `apk/aasc-display-offline-min-v60.apk`：90,035,336 bytes，SHA-256 `689e81cccf0fef82dcdd3fb9d7d5e4368f1244cf6ed70385e353bf377f3e9d9f`；profile 为 `allserver-min`/`updateOnly=true`，APK 签名证书与现行版本匹配。
+  - 两端签名清单一致并引用 code v106/min v60；LAN 完整 HTTP 摘要校验通过，公网源站回环 HTTP 的 13 项资源 SHA-256 和公网 13 项 HTTP 状态/长度校验通过。code v105/min v59 返回 HTTP 404，完整 APK v50 保留；旧版本精确清理无错误。
+  - Android 原生启动器改动由 min v60 覆盖，JS 启动器随服务包发布；未发布未变更的 Node 子显示端独立 ZIP。`servicePackage=false`、`minApk=false`，其它发布状态保持 false。
+
 ### MMD-AR图片二维到三维映射修正
 
 - ✅ [2026-10-16] 修复精确当前姿态回喂仍漂移、骨盆位置与旋转同时启用时位置目标被抵消的问题。

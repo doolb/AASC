@@ -1,6 +1,6 @@
 {
-  "minApk": true,
-  "servicePackage": true,
+  "minApk": false,
+  "servicePackage": false,
   "dependenciesPackage": false,
   "taskCodePackage": false,
   "voiceDisplayNodePackage": false
