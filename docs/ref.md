@@ -189,3 +189,7 @@ web-mediacenter/
 ## 肩髋深度原型证据（2026-10-16）
 
 复用既有固定Depth Anything V2 Small浮点图与RTMPose缓存，没有新增外部模型/依赖；肩髋独立取样/躯干成对力与三图同初值对照证据见[刚体任务肩髋执行记录](task/20261016_MMDAR二维投影驱动刚体姿态评估.md)及[模型测试方法](usage/mmd-pose-model-testing.md)。实际未解决真人前后腿翻转，不以表面相对深度当关节z或掌面方向。
+
+## 人物分割用于姿态前处理（2026-10-16，方案资料）
+
+[OpenCV Zoo PPHumanSeg](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/README.md)提供Apache-2.0 ONNX与示例，[官方预后处理](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/pphumanseg.py)规定RGB192×192归一化及原图输出映射；[MediaPipe Image Segmenter](https://developers.google.com/edge/mediapipe/solutions/vision/image_segmenter)与[ONNX Selfie模型卡](https://huggingface.co/onnx-community/mediapipe_selfie_segmentation)提供Web人物mask路径。仅资料核查，不当本机全身/动漫分割或手机通过，固定资源身份与三图对照待确认后实测。见[任务](task/20261016_MMDAR人物分割辅助姿态计算.md)。
