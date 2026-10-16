@@ -15,6 +15,7 @@ const { publishVoiceDisplayNodePackage } = require('./publish-voice-display-node
 const { readSignerSha256 } = require('./offline-min-apk-package');
 const { readGitSourceMetadata } = require('./git-source-metadata');
 const { collectFreshCleanup, cleanupFreshRelease, preparePendingRebuild } = require('./offline-release-cleanup');
+const { printVerificationProgress } = require('./offline-publish-verification');
 const { publishOfflineUpdate, publishOfflineFullApk, assertRemoteTarget, buildRemoteShellArguments,
     DEFAULT_LOCAL_ROOT, DEFAULT_LOCAL_VERIFY_URL, DEFAULT_WAN_VERIFY_URL } = require('./publish-offline-update');
 
@@ -50,6 +51,7 @@ npm run release:offline -- [参数]
 
 deps 会联动 code；code 检测到锁文件变化也会联动 deps。
 full 仅在 --only 显式指定时构建；不清除 min APK 待出包标记。
+服务发布后的 HTTP 校验仅回读本次发布包，逐秒显示 LAN/WAN 校验进度。
 退出码：0 成功/无需出包；1 失败（含发布或清理待重试）。报告位于输出目录 releases/。
 `;
 
@@ -583,7 +585,8 @@ async function publishRelease(report, reportPath, keyPair, runtime = {}) {
     if (names.length) {
         const result = await publishOfflineUpdate({ mode: 'selected', components: names, artifactRoot: plan.artifactRoot,
             manifestPath: report.manifestPath, expectedManifest: plan.baseline, publicKeyPem: keyPair.publicKeyPem,
-            commandRunner: runtime.commandRunner, fetchImpl: runtime.fetchImpl, ...plan.targets });
+            commandRunner: runtime.commandRunner, fetchImpl: runtime.fetchImpl, ...plan.targets,
+            onVerificationProgress: runtime.onVerificationProgress || printVerificationProgress });
         report.published.service = { local: result.localPublishedPaths, remote: result.remotePublishedPaths };
         report.cleanupErrors.push(...result.cleanupErrors);
         await saveReport(reportPath, report);

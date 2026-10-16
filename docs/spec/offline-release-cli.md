@@ -97,3 +97,27 @@ LAN任意同路径存在 → 保留；WAN SSH实际目录同路径存在/HTTP非
 dry-run → 只输出旧报告和关联归档候选；发布状态需正式执行时确认，不删除或保存高水位
 同号重建候选元数据 := 对应未发布code/min/task签名候选、Node sidecar、full构建元数据；只删本任务/步骤精确路径，保留已完成checkpoint
 ```
+
+## 发布后按本次资源校验与进度
+
+```text
+已有声明 := verifyHttpTarget；streamHash；release:offline 发布编排；getPublishComponents
+新增定义 := verificationProgress { target, stage, relativePath, fileIndex, fileCount, received, expectedSize, completedBytes, totalBytes, elapsedMs, bytesPerSecond }
+发布前 := 本地待发布包与未变更目标资源继续使用既有大小/SHA256及清单基线检查
+发布器本次selected → 作为HTTP校验artifacts范围；按签名清单relativeUrl精确匹配和去重，未知路径拒绝
+HTTP清单 := 始终验证签名及本次候选内容相等；不因包范围缩小而跳过
+HTTP归档 := 仅回读selected内本次发布资源；all仍回读全部选择资源
+旧四参数verifyHttpTarget调用 := 未传范围时保留全清单校验兼容性
+HTTP校验开始 → 输出LAN/WAN、基地址、文件总数与本次资源总字节
+逐个文件 → 输出文件路径、序号与待校验大小
+流式读取每个chunk → 同步更新SHA256与接收字节；每秒最多输出一次进度
+无chunk到达 → 定时器仍每秒更新当前进度与等待时长；结束/失败时释放定时器
+大小与SHA256均匹配 → 输出该文件通过；累加已校验总字节
+任一校验异常 → 输出文件与失败原因，沿用现有失败及恢复路径
+全部文件通过 → 输出目标校验完成、总大小与耗时
+独立offline-publish-verification模块 := 承载HTTP流式校验与进度格式化，保留发布器原导出以兼容旧调用
+release:offline和独立发布CLI → 接入进度回调，以中文显示阶段、百分比、文件和累计大小及速度
+校验规则、清单切换与清理顺序 → 保持既有流程
+日志观察者异常 := 停止观察输出，不改变大小/SHA256结论；计时器在finally释放
+当前状态 := 选择范围与进度已实现；静态语法及命令帮助通过，未新增或运行测试/真实发布
+```

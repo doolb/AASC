@@ -1,3 +1,14 @@
+### Offline 发布后仅校验本次包与进度显示
+
+- ✅ [2026-10-16] 按用户最终要求，将服务发布后的HTTP归档校验限定为本次发布列表，保留签名清单及发布前已有资源核对。
+  - `publish-offline-update.js`在LAN/WAN传入selected，`offline-publish-verification.js`流式校验签名/大小/SHA-256并显示逐秒文件/累计进度、速度与等待，`release-offline.js`及独立服务发布CLI均接入；旧四参数校验API保留全量兼容。
+  - 同步design/spec/task/usage/self-test，移除todo实施项。三个脚本静态语法、命令帮助和diff检查通过；未新增/运行测试、构建或发布，运行中旧进程未重启。仅运维脚本变化，不改变服务ZIP打包输入及APK/依赖/任务产物状态；保留其他工作区改动。
+
+### Offline 发布校验等待排查与进度方案
+
+- ✅ [2026-10-16] 只读确认min65/code115已完成构建、LAN/WAN清单均为115/65，现有进程处于发布HTTP完整校验，接收字节仍增长。
+  - 当前清单所有包约309.4MiB，code-only仅描述服务构建模式，发布仍回读未变更依赖；无进度输出导致看似停在出包日志。已记录进度方案、spec/task与todo，待确认后修改两个脚本；未停止当前进程、修改发布包或执行新构建/测试。
+
 ### Offline 自动升版与按种类出包入口
 
 - ✅ [2026-10-16] 增加 `npm run release:offline`，默认按五项状态出包，支持 `--only=min,code,deps,task,node,full`/`all`、`--publish` 和 `--dry-run`；完整APK仅显式选择。

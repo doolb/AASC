@@ -13,6 +13,7 @@ const {
 const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
 const { readSignerSha256 } = require('./offline-min-apk-package');
 const { FULL_APK_MANIFEST_FILE, createFullApkManifest, readFullApkManifest } = require('./offline-full-apk-manifest');
+const { verifyHttpTarget, printVerificationProgress } = require('./offline-publish-verification');
 
 const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(__dirname, '../..');
@@ -520,41 +521,6 @@ async function writeRemoteManifestLast(commandRunner, remote, manifestBytes, pub
     }
 }
 
-async function streamHash(response) {
-    if (!response.ok || !response.body) throw new Error(`HTTP 下载校验失败: ${response.status}`);
-    const hash = crypto.createHash('sha256');
-    let size = 0;
-    for await (const chunk of response.body) {
-        const buffer = Buffer.from(chunk);
-        size += buffer.length;
-        hash.update(buffer);
-    }
-    return { size, sha256: hash.digest('hex') };
-}
-
-async function verifyHttpTarget(baseUrl, manifest, publicKeyPem, fetchImpl = globalThis.fetch) {
-    const response = await fetchImpl(new URL('manifest.json', baseUrl));
-    if (!response.ok) throw new Error(`HTTP 无法读取已发布清单: ${response.status} ${baseUrl}`);
-    const publishedManifest = await response.json();
-    verifySignedManifest(publishedManifest, publicKeyPem);
-    if (JSON.stringify(publishedManifest) !== JSON.stringify(manifest)) {
-        throw new Error(`HTTP 返回的已发布清单与本次清单不一致: ${baseUrl}`);
-    }
-    for (const [name, component] of Object.entries(manifest.payload.components)) {
-        if (!component) continue;
-        // 分组依赖没有顶层下载地址，必须逐组校验，不能被单包路径条件略过。
-        const artifacts = name === 'taskDependencies' ? Object.values(component) :
-            component.groups ? dependencyArtifacts(component) : component.relativeUrl ? [component] : [];
-        for (const artifact of artifacts) {
-            const artifactResponse = await fetchImpl(new URL(artifact.relativeUrl, baseUrl));
-            const actual = await streamHash(artifactResponse);
-            if (actual.size !== artifact.size || actual.sha256 !== artifact.sha256) {
-                throw new Error(`HTTP 已发布 ${name} 包大小或 SHA-256 不匹配: ${baseUrl}`);
-            }
-        }
-    }
-}
-
 async function verifyHttpArtifactHead(baseUrl, relativePath, expected, fetchImpl = globalThis.fetch) {
     if (typeof fetchImpl !== 'function') throw new Error('当前 Node.js 不提供 HTTP fetch，无法校验完整 APK 发布目标');
     const response = await fetchImpl(new URL(relativePath, baseUrl), { method: 'HEAD' });
@@ -775,7 +741,8 @@ async function publishOfflineUpdate(options = {}) {
         await writeLocalManifestLast(manifestBytes, localRoot, publishId);
         localPublishedPaths.push('manifest.json');
         if (options.localVerifyUrl) {
-            await verifyHttpTarget(options.localVerifyUrl, manifest, publicKeyPem, options.fetchImpl);
+            await verifyHttpTarget(options.localVerifyUrl, manifest, publicKeyPem, options.fetchImpl,
+                { artifacts: selected, target: 'LAN', onProgress: options.onVerificationProgress });
         }
         const cleanupResult = await cleanupLocalPublishedArtifacts(localRoot, manifest);
         cleanupErrors.push(...cleanupResult.errors.map((error) => ({ target: 'local', ...error })));
@@ -811,7 +778,8 @@ async function publishOfflineUpdate(options = {}) {
         await writeRemoteManifestLast(commandRunner, remote, manifestBytes, publishId);
         remotePublishedPaths.push('manifest.json');
         if (options.remoteVerifyUrl) {
-            await verifyHttpTarget(options.remoteVerifyUrl, manifest, publicKeyPem, options.fetchImpl);
+            await verifyHttpTarget(options.remoteVerifyUrl, manifest, publicKeyPem, options.fetchImpl,
+                { artifacts: selected, target: 'WAN', onProgress: options.onVerificationProgress });
         }
         try {
             await cleanupRemotePublishedArtifacts(commandRunner, remote, manifest);
@@ -874,6 +842,7 @@ async function runCli(argv = process.argv.slice(2)) {
         const result = await publishOfflineUpdate({
             mode: options.mode,
             components: options.components?.split(','),
+            onVerificationProgress: printVerificationProgress,
             artifactRoot: outputDir,
             manifestPath: path.resolve(options.manifestFile),
             publicKeyPem: keyPair.publicKeyPem,
