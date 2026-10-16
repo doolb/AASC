@@ -2,6 +2,8 @@
 
 ## 人体三维辅助模型可行性（2026-10-16）
 
+- 用户停止继续RTMW后，拟改RTMPose二维+像素深度：[Depth Anything V2官方项目](https://github.com/DepthAnything/Depth-Anything-V2)说明Small为24.8M参数、Apache-2.0及相对深度，并列出ONNX与Transformers.js浏览器路径；[ONNX Community模型卡](https://huggingface.co/onnx-community/depth-anything-v2-small)提供Web用法和导出权重。只核查资料，具体revision/预后处理/近远方向、Web算子与手机性能待固定和实测；表面像素深度不能直接替代隐藏关节z。新计划见[评估任务](task/20261016_MMDAR二维姿态与像素深度辅助评估.md)。
+
 - [官方COCO-WholeBody点序](https://raw.githubusercontent.com/open-mmlab/mmpose/main/configs/_base_/datasets/coco_wholebody.py)明确髋11/12、膝13/14、踝15/16先左后右。原始XYZ腿部对应候选试验沿用此定义与来源索引，不改变官方映射或全局反转；只是单独验证局部预测歧义，三图结果与原始/候选报告见[评估任务](task/20261016_MMDAR人体三维深度辅助模型评估.md)，未自动纠正或正式接入。
 
 - 用户提供的[b-arac/rtmpose3d](https://github.com/b-arac/rtmpose3d)是RTMW3D的Python/PyTorch/MMPose封装，默认L、可选X；[配置](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/configs/__init__.py)列出官方系列检查点名，[三维后处理](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/models/pose_estimator.py)依赖内参与root_z回投影完整XYZ。仅核查源码，未运行封装或评估L；完整XYZ不是本轮已测试的Z软约束，也不表示镜头已准确恢复。
