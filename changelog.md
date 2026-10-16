@@ -1,3 +1,10 @@
+### Offline 服务包与 min APK v105/v59 发布
+
+- ✅ [2026-10-16] 将 Offline 服务代码包 v105 和 update-only min APK v59 发布至 LAN/WAN；未构建完整 APK。
+  - `code/code-v105.zip`：4,898,747 字节，SHA-256 `981d61945fe0fb46b3e1016b0d5234212ea5873c1a95f4b1b29c0a477753dbc7`；`apk/aasc-display-offline-min-v59.apk`：89,951,777 字节，SHA-256 `39a81020e4d90d723276bb7236787a41b95070aa42e1c23227c96befc6f4b341`。APK profile 为 `allserver-min`/`updateOnly=true`，签名指纹与既有 profile 匹配。
+  - LAN 的 13 项清单资源完整 HTTP SHA-256 校验通过；WAN 源站回环逐项 SHA-256 与公网 13 项 HTTP 200/Content-Length 校验通过，共 324,325,391 字节。两端签名清单均引用 code v105、min v59。
+  - 按严格版本文件规则清理过期 code/min APK；LAN/WAN 对应目录仅保留 code v105、min APK v59，task-code v1 与完整 APK 保持原状。`servicePackage`、`minApk` 状态恢复为 `false`。
+
 ### 豆包Chat上游生成并发与分句保序
 
 - ✅ [2026-10-16] 按用户确认实现“分句不限制，只在上游接口限制”：在线Chat/Agent/手动回复分句同时提交、按原顺序交付；豆包每账号上游默认3，可在控制端声纹页的豆包网页设置调整1～8。
