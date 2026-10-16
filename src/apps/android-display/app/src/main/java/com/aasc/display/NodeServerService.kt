@@ -269,6 +269,7 @@ class NodeServerService : Service() {
     private val serviceUpdateApplying = java.util.concurrent.atomic.AtomicBoolean(false)
     private val bootstrapManager by lazy { OfflineBootstrapManager(this) }
     @Volatile private var bootstrapPreview: OfflineBootstrapManager.Preview? = null
+    @Volatile private var jsLauncherSession: OfflineLauncherSession? = null
     private val startupStatus = NodeStartupStatus()
     private val statusRequestReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -296,6 +297,7 @@ class NodeServerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (OfflineLauncherSession.enabled(this)) return startJsLauncher(intent)
         if (intent?.getBooleanExtra(EXTRA_CANCEL_BOOTSTRAP, false) == true) {
             bootstrapManager.cancel()
             return START_NOT_STICKY
@@ -344,6 +346,7 @@ class NodeServerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        jsLauncherSession?.let { session -> Thread({ session.close() }, "aasc-js-stop").start() }
         unregisterReceiver(statusRequestReceiver)
         stopNodeProcess()
         safMediaServer?.stop()
@@ -364,6 +367,52 @@ class NodeServerService : Service() {
         totalBytes: Long? = null
     ) {
         startupStatus.publish(NodeStartupSnapshot(status, detail, phase, completedBytes, totalBytes), ::broadcastStatus)
+    }
+
+    /** 新Offline路径只管理进程和系统资源，首装/热更/模型事务全部交给JS。 */
+    private fun startJsLauncher(intent: Intent?): Int {
+        offlineMode = true
+        val preferences = getSharedPreferences("aasc_display", MODE_PRIVATE)
+        mainServerUrl = intent?.getStringExtra(EXTRA_MAIN_SERVER_URL)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: preferences.getString("server_url", ServerConfig.DEFAULT_OFFLINE_SERVER_URL).orEmpty()
+        preferences.edit().putString("server_url", mainServerUrl).putBoolean("offline_mode", true).apply()
+        if (intent?.getBooleanExtra(EXTRA_CANCEL_BOOTSTRAP, false) == true) {
+            OfflineLauncherClient.notify("bootstrap.cancel")
+            return START_STICKY
+        }
+        val manifest = intent?.getStringExtra(EXTRA_BOOTSTRAP_MANIFEST)
+        val source = intent?.getStringExtra(EXTRA_BOOTSTRAP_SOURCE)
+        val update = intent?.getBooleanExtra(EXTRA_APPLY_SERVER_UPDATE, false) == true
+        startExecutor.execute {
+            try {
+                if (jsLauncherSession?.alive != true) {
+                    sendStatus(STATUS_PREPARING)
+                    val connection = safMediaServer?.takeIf { SharedStorageAccess.hasPersistedTreeUri(this) }?.connectionInfo()
+                    val session = OfflineLauncherSession(this) { state, detail, phase, completed, total ->
+                        when (state) {
+                            STATUS_READY -> updateNotification("Offline 本机服务运行中")
+                            STATUS_FAILED -> updateNotification("Offline 本机服务需要恢复")
+                            STATUS_INSTALLING -> updateNotification("正在准备 Offline 本机服务")
+                        }
+                        sendStatus(state, detail, phase, completed, total)
+                    }
+                    jsLauncherSession = session
+                    session.start(mainServerUrl, readAppVersion(), readAppVersionCode() ?: 1, connection?.baseUrl, connection?.token)
+                }
+                when {
+                    manifest != null -> OfflineLauncherClient.objectCall("bootstrap.install", JSONObject().put("signedManifest", manifest).put("baseUrl", source), 600)
+                    update -> OfflineLauncherClient.objectCall("service.apply", timeoutSeconds = 600)
+                    else -> {
+                        val snapshot = OfflineLauncherClient.objectCall("state.get")
+                        sendStatus(snapshot.optString("status", STATUS_PREPARING), snapshot.optString("detail"), snapshot.optString("phase"))
+                    }
+                }
+            } catch (error: Exception) {
+                android.util.Log.e("AASC-JS-Launcher", "JS启动器操作失败", error)
+                sendStatus(if (update) STATUS_SERVICE_UPDATE_FAILED else STATUS_FAILED, error.message)
+            }
+        }
+        return START_STICKY
     }
 
     private fun broadcastStatus(snapshot: NodeStartupSnapshot) {

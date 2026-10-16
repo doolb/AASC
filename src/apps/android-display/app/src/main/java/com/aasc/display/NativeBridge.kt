@@ -705,6 +705,10 @@ class NativeBridge(
         val store = offlineModelStore ?: return false
         val activity = webView.context as? android.app.Activity ?: return false
         webView.post {
+            if (OfflineLauncherSession.enabled(activity)) {
+                activity.startActivity(android.content.Intent(activity, OfflineLauncherActivity::class.java))
+                return@post
+            }
             OfflineModelPreparationDialog.show(activity, store) { modelId ->
                 when (modelId) {
                     "sensevoice" -> asrEnsureModel()

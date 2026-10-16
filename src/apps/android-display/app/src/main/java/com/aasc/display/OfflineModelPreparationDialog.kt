@@ -14,7 +14,7 @@ internal object OfflineModelPreparationDialog {
 
     fun show(activity: Activity, store: OfflineModelStore, onPrepared: (String) -> Unit) {
         if (activity.isFinishing || activity.isDestroyed) return
-        val groups = OfflineModelPreparationPlan.groups(store.definitions)
+        val groups = store.groups()
         AlertDialog.Builder(activity).setTitle("本机模型")
             .setItems(groups.map { group ->
                 val plan = OfflineModelPreparationPlan(store.definitions, listOf(group))
@@ -26,7 +26,7 @@ internal object OfflineModelPreparationDialog {
     /** 首次提示本身就是下载确认，默认选择两组，稍后/取消都不会开始准备。 */
     fun showFirstRun(activity: Activity, store: OfflineModelStore, onPrepared: (String) -> Unit): Boolean {
         if (activity.isFinishing || activity.isDestroyed) return false
-        val groups = OfflineModelPreparationPlan.groups(store.definitions).filter { it.defaultSelected }
+        val groups = store.groups().filter { it.defaultSelected }
         val selected = BooleanArray(groups.size) { true }
         fun message(): String {
             val plan = OfflineModelPreparationPlan(store.definitions, groups.filterIndexed { index, _ -> selected[index] })
@@ -96,9 +96,7 @@ internal object OfflineModelPreparationDialog {
             .setOnCancelListener { cancel() }.show()
         worker.execute {
             try {
-                plan.prepare(cancelled::get, { model, update ->
-                    store.prepare(model.modelId, forceDownload || !store.hasLocalFiles(model.modelId), update)
-                }, { modelId, value ->
+                store.prepareGroups(groups, forceDownload, cancelled::get, { modelId, value ->
                     activity.runOnUiThread {
                         if (!cancelled.get() && !activity.isDestroyed && progress.isShowing)
                             progress.setMessage("$modelId\n整体下载/校验 $value%")

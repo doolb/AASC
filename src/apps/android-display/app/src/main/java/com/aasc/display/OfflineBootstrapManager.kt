@@ -24,6 +24,10 @@ internal class OfflineBootstrapManager(private val context: Context) {
     }
 
     fun preview(): Preview {
+        if (OfflineLauncherSession.enabled(context)) {
+            val result = OfflineLauncherClient.objectCall("bootstrap.preview")
+            return Preview(result.getString("baseUrl"), result.getString("signedManifest"), result.getLong("downloadBytes"))
+        }
         val source = updater.fetchManifest(updater.readPublicKeyOrNull()
             ?: error("APK 缺少更新验证公钥")) ?: error("没有可用的服务安装清单")
         validateSnapshot(source.manifest)
@@ -129,7 +133,7 @@ internal class OfflineBootstrapManager(private val context: Context) {
             ?: error("发布清单尚未提供独立首装运行契约，请更新服务包"))
     }
 
-    private fun installBootstrapAssets(root: File) {
+    internal fun installBootstrapAssets(root: File) {
         val metadata = JSONObject(context.assets.open("offline-bootstrap-manifest.json").bufferedReader().use { it.readText() })
         require(metadata.optInt("schemaVersion") == 1)
         OfflineRuntimeState.requireCompatible(metadata.getJSONObject("runtimeCompatibility"))

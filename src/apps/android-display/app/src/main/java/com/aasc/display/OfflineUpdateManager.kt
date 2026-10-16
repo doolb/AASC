@@ -765,6 +765,7 @@ class OfflineUpdateManager(
 
     /** 只读取并验签服务清单，供前台显示服务代码/依赖更新提示，不下载更新包。 */
     fun checkForServerUpdate(root: File, manualRetry: Boolean = false): ServiceUpdateResult {
+        if (OfflineLauncherSession.enabled(context)) return OfflineJsUpdateAdapter.serviceCheck(manualRetry)
         return try {
             val publicKeyPem = readPublicKeyOrNull()
                 ?: return ServiceUpdateResult("未配置 Offline 更新验证公钥", failed = true)
@@ -873,6 +874,7 @@ class OfflineUpdateManager(
         root: File,
         onProgress: ((OfflineUpdateProgress) -> Unit)? = null
     ): ServiceUpdateApplyResult {
+        if (OfflineLauncherSession.enabled(context)) return OfflineJsUpdateAdapter.serviceApply(onProgress)
         return try {
             File(root, "data-repair/notified-failure.json").delete()
             val status = checkAndApplyServerUpdateInternal(root, onProgress)
@@ -1055,6 +1057,7 @@ class OfflineUpdateManager(
 
     /** 只检查是否存在更高版本，不下载 APK，供前台显示手动下载提示。 */
     fun checkForMinApkUpdate(root: File): MinApkUpdateResult {
+        if (OfflineLauncherSession.enabled(context)) return OfflineJsUpdateAdapter.apk(false)
         return try {
             val candidate = resolveMinApkCandidate(root)
             if (candidate == null) {
@@ -1076,6 +1079,14 @@ class OfflineUpdateManager(
         root: File,
         onProgress: ((OfflineUpdateProgress) -> Unit)? = null
     ): MinApkUpdateResult {
+        if (OfflineLauncherSession.enabled(context)) {
+            val result = OfflineJsUpdateAdapter.apk(true, onProgress)
+            if (result.apkFile != null && result.metadata != null) {
+                try { validateMinApkArchive(result.apkFile, result.metadata) }
+                catch (error: Exception) { return MinApkUpdateResult("APK系统身份校验失败: ${error.message}", failed = true) }
+            }
+            return result
+        }
         return try {
             checkAndPrepareMinApkUpdateInternal(root, onProgress)
         } catch (error: Exception) {

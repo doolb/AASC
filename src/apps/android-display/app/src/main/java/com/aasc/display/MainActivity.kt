@@ -430,6 +430,7 @@ class MainActivity : AppCompatActivity() {
         serverInput.setOnEditorActionListener { _, _, _ -> connect(true); true }
         controlToggleButton.setOnClickListener { handleControlButtonClick() }
         offlineStartupRetry.setOnClickListener {
+            if (OfflineLauncherSession.enabled(this)) { startActivity(Intent(this, OfflineLauncherActivity::class.java)); return@setOnClickListener }
             if (bootstrapWorking) {
                 ContextCompat.startForegroundService(this, Intent(this, NodeServerService::class.java)
                     .putExtra(NodeServerService.EXTRA_CANCEL_BOOTSTRAP, true))
@@ -654,6 +655,7 @@ class MainActivity : AppCompatActivity() {
 
     /** 初始化页先读取小型签名清单；环境 ZIP 只在原生确认后开始下载。 */
     private fun requestBootstrap() {
+        if (OfflineLauncherSession.enabled(this)) { startActivity(Intent(this, OfflineLauncherActivity::class.java)); return }
         if (bootstrapChecking || bootstrapWorking) return
         bootstrapChecking = true
         showOfflineStartupMessage("正在检查首次安装所需资源", false)
@@ -845,7 +847,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** 首次语音提示晚于服务健康和页面成功，取消后保留手动入口，不在重连时反复打扰。 */
+    private var jsVoicePromptQuery = false
+
     private fun maybePromptOfflineVoiceModels() {
+        if (OfflineLauncherSession.enabled(this)) { maybePromptJsVoiceModels(); return }
         if (!offlineMode || !updateOnlyMode || !activityResumed || isFinishing || isDestroyed || nativeDisplayBridge == null ||
             !offlineVoiceFirstRun.nodeReady || !offlineVoiceFirstRun.displayReady || offlineVoiceFirstRun.prompted) return
         val groups = OfflineModelPreparationPlan.groups(offlineVoiceModels.definitions).filter { it.defaultSelected }
@@ -869,6 +874,35 @@ class MainActivity : AppCompatActivity() {
             // 窗口未能展示时保留首次机会，恢复前台或下一次就绪通知可以重试。
             android.util.Log.w("MainActivity", "首次语音模型提示未展示，保留重试机会", error)
         }
+    }
+
+    /** 决策与持久化归JS；UI再次检查前台，展示成功后才确认提示已消费。 */
+    private fun maybePromptJsVoiceModels() {
+        if (!offlineMode || !activityResumed || isFinishing || isDestroyed || nativeDisplayBridge == null ||
+            !offlineVoiceFirstRun.nodeReady || !offlineVoiceFirstRun.displayReady ||
+            jsVoicePromptQuery || !OfflineLauncherClient.available) return
+        jsVoicePromptQuery = true
+        Thread({
+            try {
+                val decision = OfflineLauncherClient.objectCall("ui.firstRun", org.json.JSONObject()
+                    .put("front", true).put("displayReady", true).put("handled", offlineVoiceFirstRun.prompted))
+                runOnUiThread {
+                    try {
+                        if (!activityResumed || isFinishing || isDestroyed) return@runOnUiThread
+                        if (decision.optBoolean("show")) startActivity(Intent(this, OfflineLauncherActivity::class.java)
+                            .putExtra(OfflineLauncherActivity.EXTRA_FIRST_RUN_TOKEN, decision.getString("token")))
+                        if (decision.optBoolean("handled")) {
+                            offlineVoiceFirstRun.prompted = true
+                            getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putBoolean(OFFLINE_VOICE_PROMPT_KEY, true).apply()
+                        }
+                    } catch (error: Exception) { android.util.Log.w("MainActivity", "JS首装提示展示失败，保留重试", error) }
+                    finally { jsVoicePromptQuery = false }
+                }
+            } catch (error: Exception) {
+                runOnUiThread { jsVoicePromptQuery = false }
+                android.util.Log.w("MainActivity", "JS首装提示查询失败，保留重试", error)
+            }
+        }, "aasc-js-first-run").start()
     }
 
     private fun startupPhaseMessage(phase: String?): String = when (phase) {
@@ -1042,6 +1076,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startAvailableOfflineUpdate() {
+        if (OfflineLauncherSession.enabled(this)) { startActivity(Intent(this, OfflineLauncherActivity::class.java)); return }
         if (offlineFailures.updateError != null) {
             // 失败后的点击只重新检查并显示确认卡片，不能复用尚未展示的另一类候选直接下载。
             serviceUpdateCandidate = null

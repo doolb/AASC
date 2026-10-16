@@ -115,6 +115,7 @@ async function prepareRuntimeForProfile(options = {}) {
         verifyRuntime: profile.verifyRuntime,
         profileMetadata,
         includeModelCatalog: profile.offline,
+        includeJsLauncher: profile.offline,
         offlineUpdatePublicKeyPem: options.offlineUpdatePublicKeyPem,
         offlineUpdatePublicKeyPath: options.offlineUpdatePublicKeyPath,
         outputDir: plan.runtimeAssetsDir,

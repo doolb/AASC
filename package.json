@@ -45,6 +45,7 @@
     "publish:ai-models": "node scripts/models/publish-ai-models.js",
     "sync:ai-models": "node scripts/models/sync-ai-models.js",
     "test:ai-models": "node --test tests/ai-model-sync.test.js tests/ai-model-publish.test.js tests/offline-model-catalog.test.js",
+    "test:offline-launcher": "node --test tests/offline-js-launcher*.test.js",
     "test:offline-bootstrap": "node --test tests/apk-build-profile.test.js tests/offline-apk-build-profile.test.js tests/offline-min-apk-package.test.js tests/android-node-runtime-package.test.js tests/offline-update-package.test.js",
     "test:task-dependencies": "node --test --test-concurrency=1 --test-reporter=tap tests/task-dependency-manager.test.js tests/dependency-groups.test.js tests/offline-update-package.test.js tests/offline-update-publish.test.js tests/offline-update-sync.test.js tests/server-release-service.test.js tests/android-node-runtime-package.test.js",
     "test:task-dependencies:browser": "node --test tests/task-onnx-runtime-browser.test.js",
