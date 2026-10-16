@@ -2,7 +2,7 @@
 
 ## 需求与当前状态
 
-2026-10-16 用户确认把首装、服务/依赖/任务/数据修复更新、模型下载及首次提示从 APK 业务层迁到 JS，启动器自身也支持热更；随后确认启动器 UI 一起改为网页。源码与定向自测已完成，待过渡 min APK、签名 code 包出包与设备验收。已发布的 min59/code105 不含本功能。
+2026-10-16 用户确认把首装、服务/依赖/任务/数据修复更新、模型下载及首次提示从 APK 业务层迁到 JS，启动器自身也支持热更；随后确认启动器 UI 一起改为网页。源码与定向自测已完成，min60/code106已发布。min60实机发现两处宿主缺陷，已修正并在签名机生成本地min61，通过保留数据覆盖升级/冷启动/本地网页/启动器自更新验证；min61尚未发布LAN/WAN。
 
 ## 分工
 
@@ -52,8 +52,15 @@ APK 固定基线不被 JS 覆盖；原生能力、Node 或宿主协议变化仍�
 - 新增 Android LauncherSession/Client/Protocol/Activity、更新门面；适配 NodeRuntimeInstaller、NodeServerService、OfflineBootstrapManager、OfflineUpdateManager、OfflineModelStore、MainActivity、NativeBridge 与原模型 Dialog 兼容路径。
 - `npm run test:offline-launcher`：26 项，含真实子进程候选切换/失败/超时/基线回退、本地 HTTP 下载与健康、平台依赖、task-only、种子/修复、模型、Chromium 页面交互。
 - `npm run test:offline-bootstrap`：63 项；`npm run test:offline-data-repair`：72 项；Android Offline/Node 定向 JVM：147 项，编译与测试通过。
-- 尚未验证过渡 APK 的真实 Android WebView/权限、min59 覆盖升级、旧 full 激活、后台/杀进程/模型推理与设备性能；未清空手机、未构建或发布 APK/ZIP。发布状态为 minApk/servicePackage=true，依赖/任务状态保持原值。
+- 后续已验证SM-N9500 min59→min60→min61保留数据覆盖升级、真实WebView页面/桥、冷启动、JS启动器与服务105→106健康提交及重复冷启动；尚未验证新宿主空首装、旧full、实际模型加载/推理及性能。min61仅本地构建/安装，未清空手机；最新出包需求各项false，min61发布待办单列。
 
 ## min60 实机缺陷与修正范围（2026-10-16）
 
 首次真实覆盖升级发现两处宿主缺陷：NativeBridge构造时JS模型快照未到导致崩溃；WebView统一403拦截误伤loadDataWithBaseURL的本地文档。用户已确认修复：目录查询使用可信APK目录占位、JS快照到达后动态切换；文档改为固定HTTPS顶层入口，由拦截器返回可信HTML。原生引擎加载前仍经JS校验，外部请求继续拒绝。min60不能视为已通过设备验收，需修正后的min包。
+
+
+## min61 修复验证结果
+
+min61（90,036,744字节/SHA256 `4eb5e8bcf01e78058139496c189fd87de215ba1799cbcfc34ef3ed5685ac9672`）通过CRC、签名、profile及真机两轮冷启动；本地页面实际截图/DOM与桥交互正常。网页确认服务更新后启动器active106/pending为空，code106/deps10/task1健康且pendingHealth=false，重启后仍用已验证JS106。主配置、用户配置、数据修复记录JSON与升级前相同，模型未自动下载。Android152、JS/网页26、首装打包63项通过。
+
+切换期间新页面的初始查询可能被握手门禁暂时拒绝，显示“启动器暂不可用”；点击重新连接恢复，后续检查显示当前版本。自动重连体验作为可选优化单列，不误报更新失败或模型下载完成。备份、日志和截图仅保存在本机缓存，未提交产物。
