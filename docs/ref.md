@@ -3,6 +3,7 @@
 ## 人体三维辅助模型可行性（2026-10-16）
 
 - 用户提供的[b-arac/rtmpose3d](https://github.com/b-arac/rtmpose3d)是RTMW3D的Python/PyTorch/MMPose封装，默认L、可选X；[配置](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/configs/__init__.py)列出官方系列检查点名，[三维后处理](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/models/pose_estimator.py)依赖内参与root_z回投影完整XYZ。仅核查源码，未运行封装或评估L；完整XYZ不是本轮已测试的Z软约束，也不表示镜头已准确恢复。
+  - 用户确认后已追加本机XYZ方向临时对照：复用X缓存、显式(width/2,height/2)主点和默认内参/root_z回投影，未运行此Python检测/裁剪。XYZ三图实际15.90%/1.84%/4.33%对齐RMS，仅二次元相机通过；真人软物理执行落差及预测冲突保留，完整数据见[评估任务](task/20261016_MMDAR人体三维深度辅助模型评估.md)，不把此版本当稳定接入或该仓库整体复现。
 
 - 本机已验证[RTMW3D-x ONNX](https://huggingface.co/Soykaf/RTMW3D-x/tree/a4f0d54c52ee44ee4e1dda1936d714490c6234d2/onnx)：369330857字节/SHA256 `4a289c0e99d47eb595e99679d9d4a2d1def1b4241f9adcbafba44b9ff585ebcd`，Apache-2.0。官方解码依据固定MMPose提交`759b39c13fea6ba094afc1fa932f51dc1b11cbf9`的projects/rtmpose3d/rtmpose3d/simcc_3d_label.py及config；z第三维288，以髋中点归零。rtmlib参考封装不能替代官方轴维度核查；本机Web两后端与实际FK试验记录见对应task，未正式分发新权重。
 
