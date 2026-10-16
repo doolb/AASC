@@ -387,7 +387,7 @@ class NodeServerService : Service() {
             try {
                 if (jsLauncherSession?.alive != true) {
                     sendStatus(STATUS_PREPARING)
-                    val connection = safMediaServer?.takeIf { SharedStorageAccess.hasPersistedTreeUri(this) }?.connectionInfo()
+                    val connection = safMediaServer?.takeIf { SharedStorageAccess.requiresTreeAccess(Build.VERSION.SDK_INT) }?.connectionInfo()
                     val session = OfflineLauncherSession(this) { state, detail, phase, completed, total ->
                         when (state) {
                             STATUS_READY -> updateNotification("Offline 本机服务运行中")
@@ -492,7 +492,7 @@ class NodeServerService : Service() {
                 directory.takeIf { it.isDirectory }?.absolutePath
             }
             val safConnection = safMediaServer
-                ?.takeIf { SharedStorageAccess.hasPersistedTreeUri(this) }
+                ?.takeIf { SharedStorageAccess.requiresTreeAccess(Build.VERSION.SDK_INT) }
                 ?.connectionInfo()
             processBuilder.environment().putAll(
                 buildNodeEnvironment(

@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [Android SAF目录重选伪代码](spec/android-saf-reselect.md)
+
 - [Offline自动升版、按需出包与发布命令伪代码](spec/offline-release-cli.md)
 
 - [Provider按应用统一模型与音色目录伪代码（待确认）](spec/chat2api-application-model-catalog.md)

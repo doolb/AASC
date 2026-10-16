@@ -7,7 +7,8 @@
     const CONTROL_PAGE_PATH = '/control';
     const state = {
         servers: [],
-        mediaIndex: null
+        mediaIndex: null,
+        safSelections: new Map()
     };
 
     function getElement(id) {
@@ -158,6 +159,10 @@
         const mediaLibraryAction = server.nodeId !== 'main-server' && server.healthy === true
             ? `<button class="server-media-add-btn" type="button" data-add-media-node="${formatValue(server.nodeId, '')}">添加媒体库</button>`
             : '';
+        const saf = state.safSelections.get(server.nodeId);
+        const safAction = server.healthy === true && server.capabilities?.androidSafDirectorySelection === true
+            ? `<button class="server-connect-btn" type="button" data-saf-node="${formatValue(server.nodeId, '')}" ${saf?.pending ? 'disabled' : ''}>${saf?.pending ? '等待目录选择…' : '重选 SAF 目录'}</button>`
+            : '';
         return `
             <article class="server-card">
                 <div class="server-card-header">
@@ -178,7 +183,8 @@
                     <div><dt>能力</dt><dd>${formatCapabilities(server.capabilities)}</dd></div>
                     <div><dt>最后心跳</dt><dd>${formatLastHealthCheck(server.lastHeartbeatAt || server.lastHealthCheck)}</dd></div>
                 </dl>
-                <div class="server-card-actions">${mediaLibraryAction}${connectionAction}</div>
+                <div class="server-card-actions">${mediaLibraryAction}${safAction}${connectionAction}</div>
+                ${saf?.message ? `<p role="status">${escapeHtml(saf.message)}</p>` : ''}
             </article>`;
     }
 
@@ -227,6 +233,85 @@
 
         connectToServer(server) {
             return this.connectToAddress(server?.url || '');
+        },
+
+        /** 请求只描述动作和会话，不在控制端接收Android URI或网关凭据。 */
+        async requestSafDirectory(nodeId, type, requestId) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 12000);
+            try {
+                const response = await fetch(`/api/aasc/servers/${encodeURIComponent(nodeId)}/request`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+                    body: JSON.stringify({ type, payload: requestId ? { requestId } : {} }),
+                    signal: controller.signal
+                });
+                const data = await response.json();
+                if (!response.ok || data.status !== 'success' || !data.result?.supported) {
+                    throw new Error(data.message || '目标设备不支持SAF目录重选，请先更新APK');
+                }
+                const result = data.result;
+                if (!['idle', 'pending', 'succeeded', 'cancelled', 'failed'].includes(result.state)) {
+                    throw new Error('目标设备返回的目录选择状态无效');
+                }
+                if ((result.state !== 'idle' && !/^[a-f0-9-]{36}$/u.test(result.requestId))
+                    || (result.requestId && !/^[a-f0-9-]{36}$/u.test(result.requestId))) {
+                    throw new Error('目标设备返回的目录选择会话无效');
+                }
+                return result;
+            } finally { clearTimeout(timer); }
+        },
+
+        /** 有限轮询不把等待超时伪装成系统取消；保留会话供下次点击继续查询。 */
+        async reselectSafDirectory(nodeId) {
+            const previous = state.safSelections.get(nodeId);
+            if (previous?.pending) return;
+            const operation = { requestId: previous?.requestId || null, pending: true,
+                message: '正在请求目标Android设备，请在设备上完成系统目录选择' };
+            state.safSelections.set(nodeId, operation);
+            this.render();
+            try {
+                let result = await this.requestSafDirectory(nodeId,
+                    operation.requestId ? 'android.saf.status' : 'android.saf.select', operation.requestId);
+                operation.requestId = result.requestId;
+                const deadline = Date.now() + 180000;
+                while (result.state === 'pending' && Date.now() < deadline) {
+                    const message = result.message || '请在目标Android设备选择媒体目录';
+                    if (operation.message !== message) { operation.message = message; this.render(); }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    result = await this.requestSafDirectory(nodeId, 'android.saf.status', operation.requestId);
+                }
+                const messages = {
+                    pending: '仍在等待设备选择；完成后可再次点击按钮查询结果',
+                    succeeded: 'SAF目录已更新，媒体库已刷新',
+                    cancelled: '已取消选择，原目录保持',
+                    idle: '选择会话已结束，请再次点击重选目录'
+                };
+                operation.message = result.message || messages[result.state] || '目录选择失败';
+                if (result.state === 'pending') operation.message = messages.pending;
+                if (result.state !== 'pending') operation.requestId = null;
+                if (result.state === 'failed') throw new Error(operation.message);
+                if (result.state === 'succeeded') {
+                    operation.message = messages.succeeded;
+                    // 原目录的子路径可能在新目录不存在，当前正在浏览同一SAF库时回到虚拟根。
+                    await this.loadMediaIndex();
+                    const media = window.MediaLibrary;
+                    if (media && state.mediaIndex && typeof media.flattenNetworkLibraries === 'function') {
+                        media.networkIndex = state.mediaIndex;
+                        media.libraries = media.flattenNetworkLibraries(state.mediaIndex);
+                        media.renderLibraryList?.();
+                    }
+                    if (media?.currentLibrary?.sourceLibraryId === 'android-saf'
+                        && media.currentLibrary.ownerNodeId === nodeId) await media.loadContent('/');
+                    await this.load();
+                }
+                window.showToast?.(operation.message, result.state === 'succeeded' ? 'success' : 'info');
+            } catch (error) {
+                operation.message = error.message;
+                window.showToast?.(operation.message, 'error');
+            } finally {
+                operation.pending = false;
+                this.render();
+            }
         },
 
         connectToAddress(address) {
@@ -326,6 +411,9 @@
                             window.MediaLibrary.showAddLibraryDialog(button.dataset.addMediaNode);
                         }
                     });
+                });
+                contentElement.querySelectorAll('[data-saf-node]').forEach(button => {
+                    button.addEventListener('click', () => { void this.reselectSafDirectory(button.dataset.safNode); });
                 });
             }
         }

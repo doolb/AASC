@@ -1,3 +1,10 @@
+### 控制端服务器面板重选 Android SAF 目录
+
+- ✅ [2026-10-16] 按用户确认增加在线且支持API29+原生能力的服务器卡片“重选 SAF 目录”，通过既有AASC请求在目标Android设备打开系统选择器。
+  - `server-list.js`增加状态/有限轮询/续查与媒体库刷新；新`android-saf-control.js`处理带type动作、回环网关探测、终态观察及受管媒体库补注册，`server-app.js`薄接线覆盖当前主节点和远程子节点。
+  - 原生新增`SafDirectorySelection.kt`/`SafDirectoryPickerActivity.kt`及不导出Manifest入口；MainActivity仅前台标记，SafMediaServer扩展已鉴权动作/状态，NodeServerService在API29+无旧目录时也传网关；SharedStorageAccess验证完整持久读写授权后才替换URI。取消/失败保留旧目录，Android9旧流程保持，不移动/删除用户文件。
+  - 同步design/spec/task/usage/self-test与索引，todo移除实施条目、保留待出包/设备验收。三个JS语法、Manifest XML解析与diff检查通过；未新增/运行测试、编译APK、出包发布或Android10+真机验收。仅servicePackage/minApk标true，依赖/任务/独立Node状态保持；运行配置和既有用户改动保留，产物未提交。
+
 ### Offline 发布后仅校验本次包与进度显示
 
 - ✅ [2026-10-16] 按用户最终要求，将服务发布后的HTTP归档校验限定为本次发布列表，保留签名清单及发布前已有资源核对。

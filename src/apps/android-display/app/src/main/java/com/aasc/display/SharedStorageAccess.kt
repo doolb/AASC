@@ -84,16 +84,22 @@ object SharedStorageAccess {
         val persistableFlags = grantedFlags and (
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
-        if (persistableFlags == 0) return false
+        val requiredFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        if (persistableFlags != requiredFlags) return false
         return try {
             context.contentResolver.takePersistableUriPermission(uri, persistableFlags)
+            // 新目录获得完整持久授权之前不能覆盖旧URI；取消/只读/授权失败都保留旧目录。
+            val granted = context.contentResolver.persistedUriPermissions.any { permission ->
+                permission.uri == uri && permission.isReadPermission && permission.isWritePermission
+            }
+            if (!granted) return false
             context
                 .getSharedPreferences(STORAGE_PREFERENCES, Context.MODE_PRIVATE)
                 .edit()
                 .putString(TREE_URI_KEY, uri.toString())
                 .apply()
             true
-        } catch (error: SecurityException) {
+        } catch (error: Exception) {
             false
         }
     }

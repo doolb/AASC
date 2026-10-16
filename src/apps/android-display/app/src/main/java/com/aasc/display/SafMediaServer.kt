@@ -139,6 +139,10 @@ class SafMediaServer(private val context: Context) {
     private fun routeRequest(request: HttpRequest, input: InputStream, output: BufferedOutputStream) {
         val target = Uri.parse(request.target)
         when {
+            request.method == "GET" && target.path == "/v1/directory-selection" ->
+                writeJson(output, 200, SafDirectorySelection.snapshot(context, target.getQueryParameter("requestId")))
+            request.method == "POST" && target.path == "/v1/directory-selection" ->
+                writeJson(output, 200, SafDirectorySelection.request(context))
             request.method == "GET" && target.path == "/v1/status" -> writeStatus(output)
             request.method == "GET" && target.path == "/v1/list" -> listDirectory(target, output)
             (request.method == "GET" || request.method == "HEAD") && target.path == "/v1/file" -> {

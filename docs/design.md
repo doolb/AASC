@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [控制端服务器面板重选Android SAF目录](design/android-saf-reselect.md)
+
 - [Offline自动升版、按需出包与发布命令](design/offline-release-cli.md)
 
 - [Offline首装、热更、模型与可热更JS启动器与网页UI](design/android-offline-js-launcher.md)

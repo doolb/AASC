@@ -117,6 +117,7 @@ const { ServerReleaseService } = require('../modules/aasc/server-release-service
 const { TaskDependencyManager } = require('../modules/aasc/task-dependency-manager');
 const { getRuntimeVersionInfo } = require('../modules/aasc/runtime-version-info');
 const { requestManagedUpdate } = require('../modules/aasc/subserver-update-request');
+const { createAndroidSafControl } = require('../modules/aasc/android-saf-control');
 const {
     createAndroidCapabilityUnavailableError,
     getAndroidNodePolicy
@@ -825,6 +826,8 @@ const mediaLibraryManager = new MediaLibraryManager({
         : null
 });
 
+const androidSafControl = createAndroidSafControl({ url: androidSafUrl, token: androidSafToken, mediaLibraryManager });
+
 // 动态添加媒体库时只注册一次静态路由，避免子服务器被主控端重复配置后
 // 在 Express 中不断叠加相同的路由处理器。
 const registeredMediaRoutePrefixes = new Set();
@@ -911,9 +914,10 @@ if (AASC_ROLE === 'main' && subServerConfig) {
 
 function getSubServerCapabilities() {
     if (ANDROID_NODE_POLICY.enabled) {
-        return { ...ANDROID_NODE_POLICY.capabilities };
+        return { ...ANDROID_NODE_POLICY.capabilities, ...androidSafControl.capabilities() };
     }
     return {
+        ...androidSafControl.capabilities(),
         mediaLibrary: true,
         displayGateway: true,
         taskRuntime: true,
@@ -946,6 +950,7 @@ function registerMainAascServer(localIP, protocol) {
         url: `${protocol}://${localIP}:${PORT}`,
         version: process.env.AASC_SERVER_VERSION || 'unknown',
         capabilities: {
+            ...androidSafControl.capabilities(),
             nodeRegistry: true,
             mediaLibrary: true,
             displayGateway: true
@@ -987,6 +992,7 @@ function ensureAascNodeId() {
 async function handleSubServerNodeRequest(request) {
     const handlers = new Map([
         ...aascRemoteMediaLibraryHandlers,
+        ...androidSafControl.handlers,
         ['media.index.local', async payload => aascMediaIndexService.buildLocalIndex(payload.path || '/')],
         ['task.execute', async payload => executeSubServerTask(payload)],
         ['server.update', async payload => requestManagedUpdate({
@@ -1198,6 +1204,7 @@ async function startServer() {
         await new Promise(r => setTimeout(r, reloadDelay));
     }
 
+    await androidSafControl.initialize();
     const localIP = getLocalIP();
     const protocol = useHttps ? 'https' : 'http';
 
@@ -4243,12 +4250,12 @@ app.post('/api/aasc/servers/:nodeId/request', async (req, res) => {
     }
 
     try {
-        const result = await aascServerRegistry.request(
-            req.params.nodeId,
-            requestType.trim(),
-            payload || {},
-            timeoutMs
-        );
+        // 当前主节点没有远程WebSocket句柄，只为SAF白名单动作复用同一处理器。
+        const localSafHandler = AASC_ROLE === 'main' && req.params.nodeId === AASC_MAIN_NODE_ID
+            ? androidSafControl.handlers.get(requestType.trim()) : null;
+        const result = localSafHandler
+            ? await localSafHandler(payload || {})
+            : await aascServerRegistry.request(req.params.nodeId, requestType.trim(), payload || {}, timeoutMs);
         res.json({ status: 'success', result });
     } catch (error) {
         res.status(502).json({ status: 'error', message: `AASC 节点请求失败: ${error.message}` });

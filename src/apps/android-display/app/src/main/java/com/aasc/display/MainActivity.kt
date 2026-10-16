@@ -474,6 +474,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        SafDirectorySelection.setForegroundHost(this, true)
         activityResumed = true
         if (embeddedNode && offlineMode) {
             // onStop 期间的广播可能已错过；请求仍在运行的服务补发，不重启服务。
@@ -490,6 +491,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        SafDirectorySelection.setForegroundHost(this, false)
         activityResumed = false
         // 后台期间服务可能失败或重启，恢复前台后必须等待新的健康快照。
         offlineVoiceFirstRun.nodeReady = false
