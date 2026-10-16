@@ -13079,3 +13079,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 已知Cherry/Ethan/Chelsie/Serena默认、业务和生成音色恢复乔小娇；有效3.1大小写与未知用户ID保持。68项音色独立保存在qwen-audio-31-voices.json，配置只保存选中ID；两端读取旧配置后直接显示新目录及原生语速。更新正式设置页、自测、设计/spec/任务与使用文档。
   - 验证通过：Chat2API279/279、双端音色26/26、Provider/业务/网页/浏览器98/98、修复72/72、聊天TTS22/22（部分重叠）；覆盖本地HTTP/WS、实际页面、多端广播/重连、旧修复幂等与真实种子worker。repair4脚本和已构建归档不改写。
   - 仅servicePackage=true，其余产物标记按当前值保留。本轮未重启、修改真实配置、真实上游合成、ADB播放、构建或发布；待办保留后续服务包与设备验收。
+
+### Offline服务代码与min APK发布
+
+- ✅ [2026-10-16] 发布 Offline 服务包 code-v112 与 min APK v62 至 LAN/WAN。
+  - 沿用已生成的 `code/code-v112.zip`：4,942,375 bytes，SHA-256 `e3b098861454d72016c005b48f120addf5c35af26324e8450f0c8996e7d568ba`；来源提交 `f3ef7582`，生成元数据标记工作区有改动。min APK `apk/aasc-display-offline-min-v62.apk`：90,575,075 bytes，SHA-256 `fa82b7ce61141a7b8e14f190b254589d92d35d245663d0c857df8761a5bda6a0`；allserver-min/update-only profile，签名证书 SHA-256 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
+  - 两端签名清单一致；清单13项资源的 LAN 文件 SHA、公网 HEAD 状态/大小与 WAN 源站返回体 SHA 全部通过。旧 code106/min61 清理后公网返回404，无清理错误。保留 dependencies v10、Node min seeds v86、taskCode v1 与完整 APK v46；未发布独立 Node 子显示端 ZIP。
+  - `release/offline-release-status.json` 中 `servicePackage=false`、`minApk=false`；其他产物状态保持不变。
