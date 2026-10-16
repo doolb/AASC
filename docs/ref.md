@@ -185,3 +185,7 @@ web-mediacenter/
 ## MMD-AR人体位置弹簧参考（2026-10-14）
 
 [Bullet btGeneric6DofSpringConstraint原始实现](https://raw.githubusercontent.com/bulletphysics/bullet3/master/src/BulletDynamics/ConstraintSolver/btGeneric6DofSpringConstraint.cpp)：internalUpdateSprings将误差×刚度，再经fps×damping/solverIterations转换目标速度。因此本项目按目标响应率归一化旧Ammo弹簧damping，并由实际WASM回归验证；它与普通PD阻尼比的语义不同。只参考原生接口语义，没有复制VaM反编译源码。
+
+## 肩髋深度原型证据（2026-10-16）
+
+复用既有固定Depth Anything V2 Small浮点图与RTMPose缓存，没有新增外部模型/依赖；肩髋独立取样/躯干成对力与三图同初值对照证据见[刚体任务肩髋执行记录](task/20261016_MMDAR二维投影驱动刚体姿态评估.md)及[模型测试方法](usage/mmd-pose-model-testing.md)。实际未解决真人前后腿翻转，不以表面相对深度当关节z或掌面方向。
