@@ -1,3 +1,12 @@
+### 豆包Chat上游生成并发与分句保序
+
+- ✅ [2026-10-16] 按用户确认实现“分句不限制，只在上游接口限制”：在线Chat/Agent/手动回复分句同时提交、按原顺序交付；豆包每账号上游默认3，可在控制端声纹页的豆包网页设置调整1～8。
+  - 新增tts-upstream-concurrency.js与chat2api-speech-upstream.js；共享controller按资料目录/accountId分槽，server-app默认语音及TaskManager注入的代理runtime factory共用额度；上游队列active/FIFO、取消超时、动态升高补位/降低等待与幂等释放。原生设备调度及千问鉴权互斥保持，未给千问新增生成限额。
+  - 复用setTtsProviderConfig/config.set保存tts.upstreamConcurrency.doubao-chat，ttsProviderConfig规范化广播/重连；前端增加数字输入，SelfTest只读检查1～8。非法值拒绝，主配置失败回滚。
+  - 发现旧Opus两Worker无等待会拒绝同时返回的第3条音频，保留两个Worker并为正式共享decoder增加256项/64MiB有界等待、输入副本与原截止/取消；工厂默认无等待兼容。解码等待满映射固定busy并保留speechQueueFailure，不误标账号失效、不重试上游。
+  - Chat2API277/277、音频/有序调度45/45、配置/Chromium/任务装配29/29、双端音色25/25、聊天22/22、数据修复兼容71/71通过（部分重叠）。包含两个真实适配器共享3槽、9句全提交但上游最多3、乱序完成保序，以及3个模拟VoiceGenie同时结束后真实WASM解码为完整WAV。早期夹具的stopInstance参数/账号默认值已按既有接口修正。
+  - 同步design/spec/task/todo/usage/.src；未改私人配置或账号，未重启服务、操作ADB、出包或发布。既有code104候选未覆盖本轮代码；servicePackage=true，其余出包状态保留（min待出包来自独立任务）；代码/状态上传Git，缓存不提交。实网上游3路及设备播放仍待验收。
+
 ### Qwen修复v4出包校验
 
 - ✅ [2026-10-15] 用现有npm脚本构建配套code104、data-repair4与node-min-seeds104，release数据基线真实升至4，未发布LAN/WAN或安装设备。

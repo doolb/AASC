@@ -28,6 +28,7 @@ const createChat2ApiRuntime = (options = {}) => {
   const rawTrafficLogger = options.rawTrafficLogger || createRawTrafficLogger();
   const getConfig = options.getChat2ApiConfig || (() => dataStore.readCollection('config', {}));
   const speechService = options.speechService || createChat2ApiSpeechService({ dataStore, providerRegistry, loadBalancer, getConfig, modelMapper,
+    doubaoSpeechQueue: options.doubaoSpeechQueue,
     ...(options.apiSpeechAdapters?{apiAdapters:options.apiSpeechAdapters}:{}),
     ...(options.doubaoSpeechAdapter ? { doubaoAdapter: options.doubaoSpeechAdapter } : {}),
     ...(options.qwenSpeechAdapter ? { qwenAdapter: options.qwenSpeechAdapter } : {}) });

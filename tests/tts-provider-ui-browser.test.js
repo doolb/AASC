@@ -66,7 +66,9 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         assert.equal(await page.$eval('#templateTtsVoice',input=>input.readOnly),false);
         assert.ok(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.textContent.includes('实验性')));
         assert.equal(await page.$$eval('#ttsProviderFields input[type="checkbox"]', nodes => nodes.length), 0);
-        assert.equal(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.querySelectorAll('input[type="password"], input[type="number"]').length),0);
+        assert.equal(await page.$eval('#ttsProviderFields details:last-of-type',node=>node.querySelectorAll('input[type="password"]').length),0);
+        assert.equal(await page.$eval('input[data-tts-upstream-concurrency="doubao-chat"]',node=>node.value),'3');
+        assert.equal(await page.$eval('input[data-tts-upstream-concurrency="doubao-chat"]',node=>node.min+':'+node.max+':'+node.step),'1:8:1');
         assert.equal(await page.$eval('#ttsProviderFields > div:nth-of-type(2) select',node=>[...node.options].some(o=>o.value==='doubao-chat')),false);
         assert.equal(await page.evaluate(()=>window.sent.length),0);
         // 权威广播从豆包切回其它来源时，保留服务端音色并原样保存。
@@ -100,6 +102,7 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         assert.equal((await state()).disabled, false);
         // 实际输入控件和按钮走正式模块；不重写保存/查询动作。
         await page.evaluate(() => {
+            document.querySelector('input[data-tts-upstream-concurrency="doubao-chat"]').value='5';
             const groups = document.querySelectorAll('#ttsProviderFields > div');
             groups[0].querySelector('select').value = 'qwen-api';
             const qwen = [...document.querySelectorAll('#ttsProviderFields details')].find(node => node.querySelector('summary').textContent.startsWith('Qwen API'));
@@ -118,6 +121,7 @@ test('真实控制端保存等待/失败/断线/重连、音色保留、模板�
         await page.click('#ttsProviderSaveBtn');
         assert.equal((await state()).disabled, true);
         const request = await page.evaluate(() => window.sent.at(-1));
+        assert.equal(request.config.upstreamConcurrency['doubao-chat'], '5');
         assert.equal(request.type, 'setTtsProviderConfig');
         assert.equal(request.config.providers['qwen-api'].model, 'qwen-audio-3.1-tts-flash');
         assert.ok(!Object.hasOwn(request.config, 'defaultSpeed'));

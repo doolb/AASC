@@ -15,8 +15,9 @@ function normalizeConcurrency(value) {
  * TTS 使用它只并行 WAV 生成，音频发送仍由前序句子依次触发，从而避免
  * 后生成的句子先抵达显示端而打乱播放顺序。
  */
-function createOrderedTaskScheduler({ concurrency = 1 } = {}) {
-    const maxConcurrency = normalizeConcurrency(concurrency);
+function createOrderedTaskScheduler({ concurrency = 1, orderOnly = false } = {}) {
+    // 对应.src/framework/tts-provider-configuration.md：在线生成只保序，实际额度统一由上游入口控制。
+    const maxConcurrency = orderOnly ? Infinity : normalizeConcurrency(concurrency);
     const pendingTasks = [];
     const completedTasks = new Map();
     const idleWaiters = [];

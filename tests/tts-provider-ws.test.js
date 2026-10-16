@@ -4,6 +4,31 @@ const assert = require('node:assert/strict');
 const { normalizeSettings, redactSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { createTtsProviderWs } = require('../src/apps/server/modules/tts/tts-provider-ws');
 
+test('控制端保存上游额度后刷新队列并广播，非法输入不保存，显示端无权改额度', async () => {
+    // 对应.src/framework/tts-provider-configuration.md：运行时通知必须发生在业务保存成功后。
+    let settings = normalizeSettings(), refreshes = 0;
+    const replies = [], broadcasts = [];
+    const control = { send: value => replies.push(JSON.parse(value)) };
+    const display = { send: value => replies.push(JSON.parse(value)) };
+    const handler = createTtsProviderWs({ config: {
+        getPublicTtsProviderSettings: () => redactSettings(settings),
+        setTtsProviderSettings: patch => { settings = normalizeSettings(patch, settings); }
+    }, service: {}, isControl: ws => ws === control, isDisplay: ws => ws === display,
+    broadcast: message => broadcasts.push(message), onConfigChanged: () => { refreshes++; } });
+    await handler.handle(control, { type: 'setTtsProviderConfig', requestId: 'limit', config: { upstreamConcurrency: { 'doubao-chat': '5' } } });
+    assert.equal(refreshes, 1);
+    assert.equal(broadcasts.at(-1).config.upstreamConcurrency['doubao-chat'], 5);
+    assert.equal(broadcasts.at(-1).success, true);
+    await handler.handle(control, { type: 'setTtsProviderConfig', config: { upstreamConcurrency: { 'doubao-chat': 0 } } });
+    assert.equal(replies.at(-1).success, false); assert.equal(refreshes, 1);
+    assert.equal(replies.at(-1).config.upstreamConcurrency['doubao-chat'], 5);
+    await handler.handle(display, { type: 'setChatTtsSelection', provider: 'doubao-chat', upstreamConcurrency: { 'doubao-chat': 8 } });
+    assert.equal(replies.at(-1).success, false);
+    await handler.handle(display, { type: 'setTtsProviderConfig', config: { upstreamConcurrency: { 'doubao-chat': 8 } } });
+    assert.equal(refreshes, 1);
+    assert.equal(handler.snapshot().config.upstreamConcurrency['doubao-chat'], 5);
+});
+
 test('显示端快选复用共享配置、各方式保留音色且只允许窄权限参数', async () => {
     const { listDoubaoVoices } = require('../src/apps/server/modules/chat2api/chat2api-doubao-voices');
     const male = listDoubaoVoices().find(v => v.gender === 'male').id;

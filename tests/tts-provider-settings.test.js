@@ -9,6 +9,17 @@ const { createRequire } = require('node:module');
 const { normalizeSettings, redactSettings, PROVIDER_CAPABILITIES, supportsNativeSpeed } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { normalizeTemplateTts, resolveProviderConfig, BUSINESS_TYPES } = require('../src/apps/server/modules/tts/tts-provider-policy');
 
+test('上游并发默认3，配置只接受豆包1至8整数，旧配置与普通音色更新保留额度', () => {
+    assert.deepEqual(normalizeSettings().upstreamConcurrency, { 'doubao-chat': 3 });
+    const configured = normalizeSettings({ upstreamConcurrency: { 'doubao-chat': '8' } });
+    assert.deepEqual(configured.upstreamConcurrency, { 'doubao-chat': 8 });
+    assert.deepEqual(normalizeSettings({ defaultVolume: 42 }, configured).upstreamConcurrency, configured.upstreamConcurrency);
+    for (const value of [0, 9, 1.5, '', 'bad', null, true, NaN, Infinity]) {
+        assert.throws(() => normalizeSettings({ upstreamConcurrency: { 'doubao-chat': value } }), /上游并发/u);
+    }
+    for (const value of [null, [], { 'qwen-chat': 3 }]) assert.throws(() => normalizeSettings({ upstreamConcurrency: value }), /上游并发/u);
+});
+
 test('qwen-chat模型保存校验、别名规范化与历史不兼容模型恢复，API模型规则保持', () => {
     for (const model of ['qwen3-tts-flash', 'QUARK_VOCIE', '']) {
         const patch = { providers: { 'qwen-chat': { model } } };
@@ -68,8 +79,7 @@ test('原生无新增开关或音色ID，千问不保存旧凭证或账号引用
     assert.deepEqual(normalizeSettings({ aiReplyDefault: { provider: 'system', voice: 'old-id' } }).aiReplyDefault, { provider: 'system', voice: null });
 });
 
-function loadConfig(t) {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-tts-config-test-'));
+function loadConfig(t, directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-tts-config-test-'))) {
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
     const filename = path.resolve(__dirname, '../src/apps/server/modules/config/config-app-service.js');
     const realRequire = createRequire(filename);
@@ -87,6 +97,23 @@ function loadConfig(t) {
     vm.runInNewContext(fs.readFileSync(filename, 'utf8'), context, { filename });
     return { config: context.module.exports, instances, directory };
 }
+
+test('上游并发通过主config持久化，重载与失败回滚均保留权威值', t => {
+    const { config, instances, directory } = loadConfig(t);
+    assert.equal(config.getPublicTtsProviderSettings().upstreamConcurrency['doubao-chat'], 3);
+    config.setTtsProviderSettings({ upstreamConcurrency: { 'doubao-chat': 5 } });
+    const file = path.join(directory, 'config/config.json');
+    assert.equal(JSON.parse(fs.readFileSync(file)).tts.upstreamConcurrency['doubao-chat'], 5);
+    assert.equal(instances[1]._data.tts.upstreamConcurrency, undefined);
+    // 重建配置服务模拟进程重启；不调用数据修复专用重载入口。
+    assert.equal(loadConfig(t, directory).config.getTtsProviderSettings().upstreamConcurrency['doubao-chat'], 5);
+    const save = instances[0]._save;
+    instances[0]._save = () => false;
+    assert.throws(() => config.setTtsProviderSettings({ upstreamConcurrency: { 'doubao-chat': 8 } }), /已恢复/u);
+    assert.equal(config.getTtsProviderSettings().upstreamConcurrency['doubao-chat'], 5);
+    assert.equal(JSON.parse(fs.readFileSync(file)).tts.upstreamConcurrency['doubao-chat'], 5);
+    instances[0]._save = save;
+});
 
 test('迁移Qwen3到Audio3.1保留隐藏的已存语速，显式新语速优先', t => {
     // 对应.src/framework/qwen-api-data-repair.md：模型能力变化不应丢失持久化的调速偏好。

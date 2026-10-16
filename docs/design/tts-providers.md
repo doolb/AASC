@@ -1,6 +1,8 @@
 # TTS Provider 与播报配置
 
-## 豆包网页账号TTS自动选择与临时并发（2026-10-15）
+## 豆包网页账号TTS自动选择与临时并发（2026-10-15，历史方案）
+
+本节临时单路策略已由2026-10-16“只在上游入口限制并发”取代，正式旧包仍按各自发布版本执行。
 
 用户确认doubao-chat像qwen-chat自动选择已登录doubaochat账号，不必手动映射；显式账号严格限定，只有Cookie也能合成。真实VoiceGenie状态20000000已支持，并修复Offline分目录Worker解码加载。用户面对多句busy选择临时降低分句并发，不实施账号队列；调度按权威业务/模板解析真实Provider，豆包网页TTS同批次单路，其余Provider保持已有规则及句序，多个请求批次同账号仍可能busy。对应chat2api-doubao-web spec及20261015_豆包分句临时串行任务，最终code90/min56/依赖10已发布，主服务器重启，正式两端三句合成通过；跨批次排队仍暂缓。
 
@@ -172,9 +174,9 @@ qwen-chat只调用Chat2API统一内部语音服务，不读账号库、不保存
 
 ADB确认SM-N9500活动清单/运行服务/页面均为v102，新页面无Provider启用开关；设备保存的qwen-api.model仍为qwen3-tts-flash、默认及AI显式音色仍为Cherry，所以实际模型目录继续显示旧候选。默认值只用于缺省配置，不自动覆盖已有显式设置。经现有控制端setTtsProviderConfig窄补丁，将该设备Qwen API模型设为3.1、默认及AI显式旧音色设为乔小娇；服务端权威回显、双端68项和选中标记、女47/男21及磁盘持久化核对通过。其他Provider、语速与音量不变。未改运行代码或迁移规则，无需出包；证据仅.cache/adb-qwen102-20261015/。
 
-## 在线TTS只在上游入口限制并发（2026-10-16，设计待实施确认）
+## 在线TTS只在上游入口限制并发（2026-10-16，源码完成待出包）
 
-用户要求将豆包Chat TTS生成并发改成配置，暂定3；随后明确聊天分句不限制并发，只在上游接口限制。当前存在三层限制：server-app对豆包分句固定1，有序调度器硬上限2，豆包适配器队列同账号单路。新方案撤销在线生成的分句并发闸门，分句调度只负责保持输出顺序；在线实际并发由上游Provider入口统一管理。系统原生/显示端本地TTS仍沿用既有设备资源调度，不受本次云端改动影响。
+用户要求将豆包Chat TTS生成并发改成配置，暂定3；随后明确聊天分句不限制并发，只在上游接口限制。当前存在三层限制：server-app对豆包分句固定1，有序调度器硬上限2，豆包适配器队列同账号单路。已撤销在线Chat/Agent/手动回复分句的生成并发闸门，分句调度只负责保持输出顺序；在线实际并发由上游Provider入口统一管理。系统原生/显示端本地TTS仍沿用既有设备资源调度，不受本次云端改动影响。
 
 豆包同一运行实例内按账号统一限制实际在途上游请求，默认3，建议配置范围1～8；聊天、Agent、手动朗读及直接语音接口都经相同上游准入策略，不能由单次请求提高额度。配置使用根服务权威tts.upstreamConcurrency.doubao-chat，通过既有setTtsProviderConfig消息、config.set持久化及ttsProviderConfig广播/重连快照，控制端现有语音配置区增加数字输入，不新增HTTP配置接口。所有运行入口读取同源配置，队列实例边界须显式注入，不引入无人管理的全局状态。
 
@@ -182,4 +184,10 @@ ADB确认SM-N9500活动清单/运行服务/页面均为v102，新页面无Provid
 
 只读核对：qwen-chat无生成并发配置；同凭证鉴权注册/刷新/令牌消费串行，签名后collectQwenAudio可以并发，鉴权最多缓存16个凭证会话且闲置30分钟清理。不能将该鉴权会话容量称为生成并发。本轮先做豆包上游并发配置，千问不自动新增生成限额，也不改变令牌互斥。
 
-拟改动：tts-provider-settings.js、config-app-service.js、tts-provider-settings前端；server-app.js和ordered-task-scheduler.js拆出只保序的在线调用方式；chat2api-doubao-speech-queue.js、speech-adapter/service、runtime及必要装配入口注入同源限制。补配置/WS、队列、真实调度/播放顺序和取消超时回归。源码尚未修改，测试/构建/发布尚未执行。
+已改动：tts-provider-settings.js、config-app-service.js、tts-provider-settings前端；server-app.js和ordered-task-scheduler.js拆出只保序的在线调用方式；chat2api-doubao-speech-queue.js、speech-adapter/service、runtime及必要装配入口注入同源限制。补配置/WS、队列、真实调度/播放顺序和取消超时回归。用户确认后源码与定向验证已完成，尚未构建发布或操作运行实例。
+
+应用装配实际持有createSpeechUpstreamController：默认语音服务与TaskManager注入runtime工厂共享队列，键为规范化资料目录和accountId；自定义资料根目录彼此独立。保存成功后WS通知controller刷新，准入/释放再读取当前限额。
+
+正式Opus共享解码池保持两个Worker，新增最多256等待项/64MiB输入排队，保留取消/原截止时间；工厂默认maxWaiting=0保持原拒绝语义。解决默认3路同时收齐音频时第3路被旧两Worker无等待池拒绝的问题，不把本地解码等待算为上游连接。真实3路WASM和三个模拟VoiceGenie任务同时结束均通过。
+
+验证收尾：配置/浏览器/装配29项、音色面板25项、聊天22项、数据修复兼容71项已通过；Chat2API与音频最终结果记录于对应task/changelog。仅本地模拟上游、真实WASM和Chromium，无私人账号/运行配置变更。

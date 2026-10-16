@@ -1,5 +1,16 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 当前TTS上游并发（2026-10-16，源码完成）
+
+```text
+在线聊天/Agent/手动回复 → 分句全部提交 → orderOnly保序交付
+应用controller → 默认语音与内置代理runtime factory → 资料根目录/账号共享上游槽位
+配置 := 主config.tts.upstreamConcurrency.doubao-chat → 默认3，范围1至8 → WS保存与广播/重连
+上游完成 → 幂等释放槽位；本地两个Worker加256项/64MiB有界等待 → 三路同时完成均可返回WAV
+解码等待容量满 → busy + speechQueueFailure → 不惩罚账号、不重试
+当前状态 := 已实现，未实网三路合成、未出包发布；历史单路章节不作为当前源码声明
+```
+
 ## 当前音色实现（2026-10-15）
 
 ```text

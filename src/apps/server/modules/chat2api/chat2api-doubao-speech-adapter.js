@@ -23,8 +23,8 @@ function getDoubaoSpeechCredential(account) {
     return [...values].map(([name,value])=>`${name}=${value}`).join('; ');
 }
 
-function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(url,options),decodeAudio=decodeOggOpusToWav}={}) {
-    const queue=createDoubaoSpeechQueue();
+function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(url,options),decodeAudio=decodeOggOpusToWav,
+    queue=createDoubaoSpeechQueue()}={}) {
     return { async generate(request,credential,{accountId,signal,deadline=Date.now()+60000}={}) {
         if(signal?.aborted)throw doubaoSpeechError('doubao_speech_cancelled');
         if(!Number.isFinite(deadline)||deadline<=Date.now())throw doubaoSpeechError('doubao_speech_timeout');
@@ -118,7 +118,12 @@ function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(ur
             }
             const pcm=[];let sampleRate,totalBytes=0;
             for(const sentence of streams){check();let audio;
-                try{audio=await decodeAudio(sentence,{signal,deadline})}catch{check();throw doubaoSpeechError('doubao_speech_audio')}
+                try{audio=await decodeAudio(sentence,{signal,deadline})}catch(error){
+                    check();
+                    // 本地解码排队满不是账号生成失败，不惩罚凭证或重发上游请求。
+                    if(error.code==='TTS_OPUS_CAPACITY')throw Object.assign(doubaoSpeechError('doubao_speech_busy'),{speechQueueFailure:true});
+                    throw doubaoSpeechError('doubao_speech_audio');
+                }
                 check();const {format,samples}=validateWav(audio);const rate=format.readUInt32LE(4);
                 if(format.readUInt16LE(0)!==1||format.readUInt16LE(2)!==1||format.readUInt16LE(14)!==16
                     ||(sampleRate!==undefined&&sampleRate!==rate))throw doubaoSpeechError('doubao_speech_audio');

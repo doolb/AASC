@@ -71,7 +71,8 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
     providerRegistry = createChat2ApiProviderRegistry({ dataStore }),
     loadBalancer = createChat2ApiLoadBalancer({ dataStore, providerRegistry }),
     getConfig = () => dataStore.readCollection('config', {}),
-    qwenAdapter = createChat2ApiQwenSpeechAdapter(), doubaoAdapter = createDoubaoSpeechAdapter() } = {}) {
+    qwenAdapter = createChat2ApiQwenSpeechAdapter(), doubaoSpeechQueue,
+    doubaoAdapter = createDoubaoSpeechAdapter({ queue: doubaoSpeechQueue }) } = {}) {
     return {
         async generate(request, { timeoutMs = 60000, signal, mappedBinding } = {}) {
             const normalized = normalizeSpeechRequest(request);

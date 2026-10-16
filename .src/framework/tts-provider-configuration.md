@@ -473,7 +473,7 @@
 - 捕获原长句59027字节音频 → 新分割器识别两流 → 严格解码合并 → 与逐段PCM总长度一致 // 诊断音频仅.cache不提交
 - 原长句再做一次受控合成 → 完整WAV非静音且总时长约11秒；整段原文逐句受控验证 → 不写账号/配置 // 不把文件验证宣称为实机听感
 
-## framework / 在线TTS上游并发（2026-10-16，待实施确认）
+## framework / 在线TTS上游并发（2026-10-16，已实现）
 
 已有声明
 - TTS权威配置、setTtsProviderConfig、config.set、ttsProviderConfig // 复用AASC保存与重连
@@ -485,15 +485,29 @@
 
 操作流程
 - 控制端提交豆包并发 → 校验1至8整数 → 持久化与广播 // 缺失默认3
-- 在线分句任务 → 立即提交生成 → 按索引保序交付 // 不再限制分句生成并发
+- 在线Chat/Agent/手动回复分句任务 → 立即提交生成 → 按索引保序交付 // 不再限制分句生成并发
 - 豆包请求选择账号 → 统一上游队列准入 → 在途不足限额则建连，否则FIFO等待 // 不让不同批次各自突破上游限额
 - 上游完成或失败 → 幂等释放 → 准入下一等待项 // 收齐音频即释放，不把本地解码算为上游连接
 - 配置升高 → 立即补位；配置降低 → 不取消在途并等待回落 // 保持热修改行为可预测
 - 取消/期限/队满 → 现有上游固定错误 // 不迟到建连，不把排队失败归为账号失败
 - 千问签名初始化、刷新、令牌消费 → 原互斥保持 // 当前无可调生成并发，本轮不自动新增
 - 原生与本地显示端 → 原设备资源调度 // 在线接口并发与本地算力分开
+- 应用持有上游controller → 资料根目录加账号作为队列键 → 默认语音和TaskManager runtime factory注入同一controller // 不同入口不能分别占3路
+- 配置保存成功 → 刷新controller；准入和释放 → 读取当前限额 // 动态升高立即补位
+- 有序调度器显式orderOnly → 不限生成数量，按索引交付；默认有限模式保持 // 不用Infinity配置绕过公共校验
+- 正式共享Opus解码池 → 两个Worker加最多256项/64MiB等待 → 取消/截止清理后再准入 // 防止上游3路成功而本地第3路立即报繁忙
+- 解码工厂默认不排队，正式导出的共享decoder显式启用等待 // 保留已有工厂调用契约和本地Worker资源上限
+- 解码等待容量拒绝 → 固定busy及speechQueueFailure → 不误标账号上游合成失败 // 不重试上游
 
 自测流程
 - 配置默认3、非法和边界、WS广播重连 → 同一权威值 // 对应配置与WS测试
 - 同账号多批次同时提交 → 上游最大3；多账号独立；动态升降、取消超时与幂等释放 → 正确active数 // 对应队列与adapter测试
 - 超过3句提交且乱序完成 → 原索引交付；旧本地资源并发 → 保持 // 对应有序调度与server集成测试
+- 根目录隔离、跨语音服务/代理共享队列、TaskManager factory传递 → 同账号总在途受限 // 对应新增上游controller与runtime/任务装配测试
+- chat2api-doubao-speech-queue.test.js与speech-adapter.test.js → 显式1路兼容和默认3路、动态配置、取消到期、释放不重入 // 使用模拟上游
+- chat2api-speech-upstream.test.js与runtime.test.js → 目录隔离和跨服务共享，注入队列在建连前生效 // 不调用真实上游
+- ordered-task-scheduler.test.js与server-tts-concurrency-integration.test.js → 在线orderOnly超过3句仍全部提交且按序发送，本地两槽保持 // 验证真实入口片段
+- tts-provider-settings.test.js、tts-provider-ws.test.js、tts-provider-ui-browser.test.js → 主配置持久化/失败回滚/权威消息/页面默认3与回显 // 测试文件与本段一一映射
+- task-manager-chat-service.test.js → 应用runtime factory传入内置一次及服务任务，停止后可重启 // 不创建真实代理或修改任务输入种子
+- self-test.js的tts_provider_config → 只读检查规范化上游并发1至8及页面回显，不触发合成或配置保存 // 由正式控制端浏览器用例验证
+- tests/tts-opus-decoder.test.js → 默认无等待兼容、显式有界等待、数量/字节限额、排队取消超时与真实3路WASM → 两Worker内完成 // 对应tts-opus-decoder.js

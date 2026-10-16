@@ -3,7 +3,7 @@ const { PROVIDERS } = require('./tts-provider-policy');
 const { supportsNativeSpeed, normalizeNumber } = require('./tts-provider-settings');
 
 // 与AASC控制端handler共用同一权威配置流程，禁止额外HTTP配置接口。
-function createTtsProviderWs({ config, service, isControl, isDisplay = () => false, broadcast }) {
+function createTtsProviderWs({ config, service, isControl, isDisplay = () => false, broadcast, onConfigChanged = () => {} }) {
     const message = extra => ({ type: 'ttsProviderConfig', config: config.getPublicTtsProviderSettings(), ...extra });
     return {
         snapshot: message,
@@ -46,6 +46,7 @@ function createTtsProviderWs({ config, service, isControl, isDisplay = () => fal
                     }
                 }
                 config.setTtsProviderSettings(patch);
+                onConfigChanged();
                 broadcast(message({ requestId: data.requestId, success: true }));
             } catch (error) {
                 ws.send(JSON.stringify(message({ requestId: data.requestId, success: false, message: error.message })));

@@ -16,6 +16,7 @@
     const fields = new Map();
     const selections = new Map();
     const sharedFields = {};
+    const upstreamFields = {};
     const element = id => document.getElementById(id);
     const status = message => { element('ttsProviderStatus').textContent = message; };
     const requestId = () => `tts-provider-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -208,7 +209,16 @@
                 group.appendChild(create('p', '网页模型默认 QUARK_VOICE；MINI_MAX 需匹配音色。可填写映射到该网页来源的 Chat2API 别名；qwen3-tts-flash 请使用 Qwen API。'));
             }
             if (id === 'doubao-chat') {
-                group.appendChild(create('p', '实验性网页朗读，默认关闭，尚未重新进行真实账号合成验收。'));
+                // 对应.src/framework/tts-provider-configuration.md：上游并发独立保存，不混入音色或语速字段。
+                const concurrency = create('input');
+                concurrency.type = 'number';
+                concurrency.min = '1';
+                concurrency.max = '8';
+                concurrency.step = '1';
+                concurrency.dataset.ttsUpstreamConcurrency = id;
+                upstreamFields[id] = concurrency;
+                addField(group, '每账号上游生成并发（1 至 8，默认 3）', concurrency);
+                group.appendChild(create('p', '实验性网页朗读；同账号的聊天和代理请求共享生成并发，分句按原顺序播放。'));
                 group.appendChild(create('p', '在Chat2API启用可用豆包网页账号，显式账号映射仍优先；音色由Chat2API官网目录提供，上游使用固定速度和音量，返回后只应用全局音量，失败不切换其它来源。'));
             }
             if (['qwen-api', 'doubao-api'].includes(id)) {
@@ -250,6 +260,7 @@
         if (!message.config?.providers) return;
         const isReply = pendingSave && message.requestId === pendingSave.id;
         config = message.config;
+        for (const [id, input] of Object.entries(upstreamFields)) input.value = config.upstreamConcurrency?.[id] ?? 3;
         for (const [name, input] of Object.entries(sharedFields)) input.value = config[name] ?? '';
         for (const [key, selection] of selections) {
             selection.provider.value = config[key]?.provider || 'system';
@@ -280,6 +291,7 @@
     function save() {
         if (!config || pendingSave) return;
         const patch = { providers: {} };
+        patch.upstreamConcurrency = Object.fromEntries(Object.entries(upstreamFields).map(([id, input]) => [id, input.value]));
         for (const [name, input] of Object.entries(sharedFields)) patch[name] = input.value;
         for (const [key, selection] of selections) patch[key] = { provider: selection.provider.value, voice: selection.provider.value === 'system' ? null : selection.voice.value.trim() || null };
         for (const [id, inputs] of fields) {

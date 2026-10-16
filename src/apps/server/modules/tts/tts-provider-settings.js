@@ -5,6 +5,7 @@ const { resolveQwenEndpoint, isQwenAudioModel } = require('./qwen-api-contract')
 const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
 const { validateDoubaoVoice } = require('../chat2api/chat2api-doubao-voices');
 const { QWEN_AUDIO_31_MODEL } = require('../chat2api/chat2api-qwen-audio-voices');
+const { normalizeUpstreamConcurrency } = require('./tts-upstream-concurrency');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
 const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_CAPABILITIES = Object.freeze({
@@ -140,7 +141,8 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
         return [key, value];
     }));
     const defaultVolume = normalizeNumber(patch.defaultVolume, migratedSharedParameter('defaultVolume', patch, previous), 0, 100);
-    return { ...selections, defaultVolume, providers };
+    const upstreamConcurrency = normalizeUpstreamConcurrency(patch.upstreamConcurrency, previous.upstreamConcurrency);
+    return { ...selections, defaultVolume, providers, upstreamConcurrency };
 }
 
 function redactSettings(settings) {

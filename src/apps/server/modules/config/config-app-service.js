@@ -740,6 +740,7 @@ function getTtsProviderSettings() {
         : legacyProvider.defaultSpeed ?? 0;
     const legacyVolume = legacyProvider.defaultVolume ?? 100;
     return normalizeTtsProviderSettings({ ...selections, providers,
+        upstreamConcurrency: config.get('tts.upstreamConcurrency', {}),
         defaultSpeed: sharedParameters.defaultSpeed ?? legacySpeed,
         defaultVolume: sharedParameters.defaultVolume ?? legacyVolume }, {}, { recoverLegacyModel: true });
 }
@@ -759,6 +760,7 @@ function setTtsProviderSettings(patch) {
     const sharedParameters = { ...(previousTts.sharedParameters || {}) };
     delete sharedParameters.defaultSpeed;
     const nextTts = { ...previousTts, ...selections, defaultSpeed: candidate.providers.system.defaultSpeed,
+        upstreamConcurrency: candidate.upstreamConcurrency,
         sharedParameters: { ...sharedParameters, defaultVolume: candidate.defaultVolume } };
     if (!userConfig.set('tts', { ...previousUserTts, providers: candidate.providers })) {
         userConfig._data.tts = previousUserTts;
