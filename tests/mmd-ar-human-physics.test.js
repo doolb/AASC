@@ -286,6 +286,37 @@ test('图片姿态批量应用生成可编辑物理目标，坏输入不部分�
     } finally { f.controller.dispose(); }
 });
 
+test('RTMPose二维应用进入真实物理，坏输入保持全部旧目标，骨长和膝限位不变', async () => {
+    const f = await fixture();
+    try {
+        await f.enable();
+        const map = { leftArm: 11, rightArm: 12, leftElbow: 13, rightElbow: 14, leftWrist: 15, rightWrist: 16,
+            leftLeg: 23, rightLeg: 24, leftKnee: 25, rightKnee: 26, leftAnkle: 27, rightAnkle: 28 };
+        const landmarks = Array(33).fill(null);
+        for (const [semantic, index] of Object.entries(map)) {
+            const p = f.point(semantic);
+            landmarks[index] = { x: .5 + p.x * .5, y: .9 - p.y * .5, visibility: 1, presence: 1, source: 'rtmpose-m', dimensions: 2 };
+        }
+        const pose = { source: 'rtmpose-m', dimensions: 2, imageAspect: 1, landmarks };
+        const initial = f.controller.applyImagePose(pose);
+        assert.equal(initial.activeTargets, 10);
+        assert.equal(initial.controls.find(c => c.key === 'head').positionState, 'Off');
+        const before = f.controller.getState();
+        const bad = { ...pose, landmarks: [...landmarks] }; bad.landmarks[23] = null;
+        assert.throws(() => f.controller.applyImagePose(bad), /肩|骨盆/u);
+        assert.deepEqual(f.controller.getState().controls, before.controls, '坏二维输入部分覆盖了旧目标');
+        f.run(270);
+        assert.ok(f.controller.getState().controls.every(c => c.achieved.every(Number.isFinite)));
+        for (const side of ['left', 'right']) {
+            const rotation = new f.T.Euler().setFromQuaternion(f.bindings['bones:' + side + 'Knee'].bone.quaternion);
+            assert.ok(rotation.x >= -2.600001 && rotation.x <= .000001);
+        }
+        f.bones.forEach((bone, index) => {
+            if (bone !== f.bindings['bones:center'].bone) assert.ok(bone.position.distanceTo(f.initial[index].position) < 1e-8);
+        });
+    } finally { f.controller.dispose(); }
+});
+
 test('位置Off仍保留显式旋转驱动，标记立即跟随骨骼；放开取消残余拖动', async () => {
     const f = await fixture();
     try {

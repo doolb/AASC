@@ -1,5 +1,25 @@
 # 自测功能文档
 
+## RTMPose-m默认识别与实际骨架回归（2026-10-16）
+
+新增`tests/mmd-ar-human-rtmpose.test.js`：5项先红后绿，实际384×288/RGB/NCHW/1.25取景、SimCC维度/正逆仿射、17语义/空槽/无world、低分/NaN/退化拒绝、固定模型SHA与真实PMX投影/非平面双腿/模型变换。physics测试新增二维批量应用/坏输入原子保留/270帧骨长与限位。与既有图片/阻尼/相机/实际投影共50项Node定向检查。
+
+真实Edge/ORT Web 1.26.0：全身IK唯一入口→参考图17点→10目标/270子步→相机匹配/恢复/手动接续→取消/空图保持旧目标；二次元图鼻点[223.0,114.6]、身体11/12、9目标，低分腕跳过。另通过本机环境变量追加真人坐姿与交叉腿示意图，两者身体12/12、10目标，实际骨长相对变化<1.1e-11；独立计算实际骨架弱透视对齐残差分别.18176→.01360、.12224→.05765。残差针对模型二维点，不是标注准确率/深度真值，后者仍须手调。
+
+剪贴板/叠加/相机DOM共18项与真实ONNX/PMX浏览器1项通过。旧断言修正：Off点本应跟随实际骨骼，只比较On/Hold/Comply的目标位置，同时仍校验全部控制状态。真实模型指纹、生成模块依赖指纹与WEB构建验证通过；手机WASM内存/耗时及系统剪贴板待实机验。
+
+命令：先`npm run build:web:mmd-ar-test`完成，再`node --test --test-concurrency=1 tests/mmd-ar-human-{rtmpose,image-pose,pose-camera,pose-projection,camera-ownership,damping,physics}.test.js`（按shell展开或逐文件列出）；浏览器设`PUPPETEER_EXECUTABLE_PATH`后运行image-pose-browser与image-pose-clipboard-browser。可选`AASC_MMD_POSE_ANIME_IMAGE`及`AASC_MMD_POSE_EXTRA_IMAGES`（本机路径JSON数组）追加用户图，不把用户图提交。
+
+## 坐姿四模型临时对照（2026-10-16）
+
+再追加236×314交叉腿人体示意图：MP真实client可靠姿态失败、OP184/368均无有效人物；YOLOX检出1人，RTM/DW同框/全图均实测。三图预览明确MP错误/热图禁用和空骨架，不强补。`verify-diagram-comparison.cjs`验证失败状态、两个有效模型12点、取景像素差异、腿臂裁剪、三图/同尺寸图不混用和390px通过，页面异常0；全身/手臂截图已查看。RTM腕误到颈部、DW交叉膝偏下，不能按12/12点宣称准确。
+
+追加450×407用户二次元图：真实当前client返回3候选且默认女孩，鼻点[208.10,110.78]；YOLOX0框，RTM/DW明确回退全图；OpenPose184无有效人物，368只得5/12身体点且无下肢。原型增加双图切换、手臂放大、低分红空心点和无骨架提示。`verify-dual-comparison.cjs`验证切换尺寸/数据、空框回退、档位/热图变化、腿臂裁剪及390px布局通过，页面异常0；全身/368档/腿部截图已查看。四者均未完整还原，未接入正式网页。
+
+完成同一236×314图片的MediaPipe、RTMPose-m、DWPose及传统OpenPose真实推理；前3类/YOLOX在Edge单线程WASM，OpenPose在临时PyTorch CPU环境。比较的是身体12点二维骨架，不比较手/脸准确率或3D深度。DWPose已核查同全图/同YOLOX框及RGB/BGR，OpenPose保留默认184与368档结果，没有人为补点。
+
+独立HTML预览及JSON位于忽略目录`tmp/mmd-pose/model-comparison/`。临时`verify-model-comparison.cjs`验证四画布、OpenPose两档/取景切换像素确实变化、腿部放大、热图/名称/显隐及390px不溢出，页面异常0；全身/腿部截图已目视检查。正式代码未变，不以该原型取代现有65项集成回归，也不声称手机推理通过。详见四模型任务。
+
 ## 全身IK实际骨架与图片相机（2026-10-15）
 
 新增`mmd-ar-human-pose-projection.test.js`、`mmd-ar-human-pose-camera.test.js`、`mmd-ar-human-camera-ownership.test.js`，分别验证真实PMX实际骨骼投影、已知相机前/背侧与竖图拟合、鲁棒/退化/取消、普通相机状态与恢复、零时长单帧VMD控制权。扩展粘贴浏览器至18项，覆盖实际骨架/固定参考视角/对齐/隐藏恢复，以及相机拟合按钮、取消和姿态变化拒绝应用。
