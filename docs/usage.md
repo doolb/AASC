@@ -76,7 +76,7 @@ Cookie-only旧账号需要正常重新登录补齐同账号nodeProfile后才能�
 
 ## 独立MMD-AR Human 生理与后天行为（本地构建，2026-10-10）
 
-姿态选型复测、人物分割对照各分支的实际深度约束，以及真人本图左右腿修正对照见[模型测试方法](usage/mmd-pose-model-testing.md)：MediaPipe、RTMPose-m、DWPose、OpenPose的固定权重、预处理、同框对照、临时工具和当前集成测试。当前RTMPose的3D应用使用真实PMX父链FK、共享关节限位及透视拟合；应用后等待物理稳定，再结合实际骨架和侧视图微调，单图深度仍是估计。
+姿态选型复测、人物分割/深度/左右腿历史对照与模型恢复测试见[模型测试方法](usage/mmd-pose-model-testing.md)。当前按用户选择切回MediaPipe Pose检测＋33点估计world，使用既有角色骨长重定向及VaM物理；保留图片粘贴、实际骨架叠图、相机匹配和3D微调。模型深度仍是估计，RTMPose等实验报告留作历史对照。
 
 打开「动作 → Human 生理与后天行为」，可配置呼吸/眨眼，登记VMD或MPL行为、组合表情及事件反射；MPL支持覆写/增量和行为新版本，原VMD持续运行。动作库按模型保存在浏览器，并支持导出/导入。操作与API见[Human使用说明](usage/mmd-human-interface.md)。当前已生成web-dist，尚未发布外网。
 

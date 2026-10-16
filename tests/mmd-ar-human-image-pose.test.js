@@ -2,6 +2,16 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
+test('默认图片识别分发MediaPipe检测和33点姿态模型，RTMPose不再默认加载', () => {
+    const { MODELS } = require('../3rd/mmd-ar-test/web-human-pose-assets');
+    assert.deepEqual(MODELS.map(model => model.name), ['person_detection_mediapipe_2023mar.onnx', 'pose_estimation_mediapipe_2023mar.onnx']);
+    assert.deepEqual(MODELS.map(model => model.size), [11990159, 5557238]);
+    assert.deepEqual(MODELS.map(model => model.sha256), [
+        '47fd5599d6fa17608f03e0eb0ae230baa6e597d7e8a2c8199fe00abea55a701f',
+        '9d89c599319a18fb7d2e28451a883476164543182bafca5f09eb2cf767ed2f3f'
+    ]);
+});
+
 test('图片预处理保持长宽比，检测NCHW归一化与黑边契约正确', async () => {
     const { prepareDetector, detectorAnchors } = await import('../3rd/mmd-ar-test/web-human-pose-core.mjs');
     const pixels = new Uint8ClampedArray(8 * 4 * 4).fill(255);

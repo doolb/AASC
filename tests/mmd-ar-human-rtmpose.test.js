@@ -51,14 +51,6 @@ test('RTMPose拒绝错误维度/NaN/低分/退化点，不能把空结果当人�
     assert.throws(() => decodeRTMPose(...output(coco.map(() => [144, 192])), roi, image), /未识别|退化/u);
 });
 
-test('RTMPose资源只分发选定m384模型，大小SHA与已实测官方权重一致', () => {
-    const { MODELS } = require('../3rd/mmd-ar-test/web-human-pose-assets');
-    assert.equal(MODELS.length, 1);
-    assert.equal(MODELS[0].name, 'rtmpose-m-body7-384x288.onnx');
-    assert.equal(MODELS[0].size, 54850856);
-    assert.equal(MODELS[0].sha256, 'a4c4f6fd983c0be353042a7a6b3845b0894ada22b8c02964373554afcdcd6e8e');
-});
-
 test('二维姿态按相机投影初始化真实PMX：固定骨长、左右语义、缺点不补、模型变换稳定', async () => {
     const { makeModel } = require('./helpers/mmd-human-real-pmx');
     const { createHumanPhysicsRig } = await import('../3rd/mmd-ar-test/web-human-physics-rig.mjs');

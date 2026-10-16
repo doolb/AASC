@@ -19,10 +19,10 @@
 - [MMPose PoseLifter接口](https://mmpose.readthedocs.io/en/dev-1.x/api.html)说明二维语义转换与二维序列到三维估计，单图应选择符合单帧契约的权重，不把时间序列模型直接当单图。
 - [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)默认提供像素相对深度，另有metric模型及ONNX/Web社区路径；表面深度不等于被遮挡关节深度。该模型本轮只核查资料，未推理或接入；人体RTMW试验另见对应评估task。
 
-## RTMPose-m默认权重（2026-10-16）
+## RTMPose-m历史默认权重（2026-10-16，默认已恢复MediaPipe Pose）
 
-- [MMPose RTMPose官方模型库](https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose)的Body7 m384；[固定ONNX SDK归档](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-384x288-65e718c4_20230504.zip)。实际输入384×288、两个17点SimCC输出、RGB均值方差与归档detail/pipeline和真推理核查。归档/模型本机固定摘要见assets.js，许可见pose-onnx-NOTICES.md。
-- 当前默认分发此二维模型；原MediaPipe接口作为兼容，不再默认加载其权重。三维来源是当前骨架深度先验与固定骨长拟合，非RTMPose世界点。
+- [MMPose RTMPose官方模型库](https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose)的Body7 m384；[固定ONNX SDK归档](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-384x288-65e718c4_20230504.zip)。实际输入384×288、两个17点SimCC输出、RGB均值方差与归档detail/pipeline和真推理核查。历史模型固定摘要/许可见pose-onnx-NOTICES.md与模型测试方法；assets.js现为MediaPipe默认清单。
+- 用户最终要求恢复最早MediaPipe Pose，默认分发OpenCV Zoo固定revision的检测11,990,159字节与姿态5,557,238字节两个ONNX（模型world是估计）。RTMPose兼容函数和历史二维/深度试验保留，默认不分发其权重。具体来源/预后处理见下节及[恢复任务](task/20261016_MMDAR图片识别切回MediaPipePose.md)。
 
 ## 图片姿态与相机匹配依据（2026-10-15）
 
