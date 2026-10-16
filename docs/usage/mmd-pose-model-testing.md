@@ -200,6 +200,25 @@ RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)�
 复测在原人物分割环境和缓存完整时，按[任务](../task/20261016_MMDAR真人坐姿左右腿归属修正.md)依序执行check-leg-unit、run-leg-correspondence、check-leg-results、build-leg-report、build-report、check-leg-report。六支同321骨/相机/720步，两个原始控制精确复现；新118项工具检查与旧135项回归通过，不当姿态质量通过。
 
 
+## NLF-L 独立骨骼试验（2026-10-16，已完成）
+
+本机报告：`http://127.0.0.1:56173/_depth/nlf-l/report.html?image=seated`；并排对照：`http://127.0.0.1:56173/_depth/nlf-l/compare.html`。浏览器可切三张原图，查看2D叠图与可旋转原始XYZ，并以WASM或WebGPU重新识别。蓝色为人物左侧，橙色为右侧；人物框为人工固定，55°相机为假设。与S均使用官方v0.2.0，同原图/框/相机；L输入384×384，S输入256×256，不能把模型大小差异当作同算力速度排名。
+
+官方`nlf_l_multi.torchscript`为495696900字节，SHA-256 `2090b041ccebbd395018033152628c4f24afe519aed3a299861621547582cdad`。固定SMPL24点`nlf-l-joints.onnx`为471422850字节，SHA-256 `8b49d420715668532dc6783425234dd1afbf7892f34bd1355ad91c9d7a269850`。原模型/ONNX/三张私有图片/报告脚本均在忽略目录`tmp/mmd-pose/depth-eval/nlf-l/`，不随Git分发。浏览器请求均为本机GET，没有上传图片。
+
+复现（无对应npm script；原模型和临时Python环境需已存在）：
+
+```powershell
+python tmp/mmd-pose/depth-eval/nlf-l/run-reference.py
+python tmp/mmd-pose/depth-eval/nlf-l/export-core.py
+python tmp/mmd-pose/depth-eval/nlf-l/verify-onnx.py
+node tmp/mmd-pose/depth-eval/nlf-l/check-math.mjs
+node tmp/mmd-pose/depth-eval/nlf-l/run-browser.cjs wasm
+node tmp/mmd-pose/depth-eval/nlf-l/run-browser.cjs webgpu
+```
+
+官方完整半精度封装在本机CPU过慢，参考仅调用其单人裁剪、特征、解码和重建函数的FP32路径。CPU ONNX对该FP32参考最大归一化差三图为1.37e-6、5.42e-6、7.15e-6；JS重建XYZ最大差低于0.001mm。浏览器本机WASM热推理三图约1705–1740ms，GTX1660 WebGPU首图969ms、其后128–140ms；390px无横向溢出。数值对齐不是姿态真值；真人抬高腿仍归右，动漫手臂与示意图交叉腿有偏差，未显示比S稳定改善。未接入VAM，MediaPipe默认保持，手机性能未测试。
+
 ## NLF-S 独立骨骼试验（2026-10-16，已完成）
 
 - 本地报告：http://127.0.0.1:56173/_depth/nlf-s/report.html?image=seated ，可切换 anime / diagram，原图叠加及可拖动XYZ。蓝=人物左侧，橙=右侧；首次显示已保存浏览器实测，按钮重新本机推理。

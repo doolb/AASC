@@ -1,3 +1,10 @@
+### MMD-AR NLF-L 三维骨骼独立试验
+
+- ✅ [2026-10-16] 完成官方NLF-L v0.2.0固定24点原生/ONNX/浏览器WASM与WebGPU三图对照，并与NLF-S并排评估。
+  - 临时模型、脚本和报告在忽略目录`tmp/mmd-pose/depth-eval/nlf-l/`；同步design/spec/task/usage，完成项从todo移除。权重495696900字节、ONNX471422850字节，SHA-256见使用说明；私有图片/模型不入Git。
+  - CPU ONNX对官方FP32参考归一化最大差7.15e-6，JS重建XYZ最大差低于0.001mm；浏览器两后端六例通过，390px无横向溢出，本机WASM约1.7秒、WebGPU后两图128–140ms。官方完整半精度封装未完成，手机未测。
+  - 真人抬腿仍归右，动漫手臂及示意图交叉腿偏离；不接入VAM，不替换MediaPipe。未修改生产代码/构建输入、未出APK或发布，Offline状态保持。
+
 ### MMD-AR NLF-S 三维骨骼独立试验
 
 - ✅ [2026-10-16] 验证官方NLF-S v0.2.0并导出固定SMPL24关节点ONNX（83725857字节），完成三张图WASM/WebGPU原图本地推理、叠图与可旋转XYZ报告。
