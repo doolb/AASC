@@ -72,9 +72,12 @@ internal class OfflineVoiceFirstRunState {
     var displayReady = false
     var prompted = false
 
-    fun claim(offline: Boolean, updateOnly: Boolean, needsPreparation: Boolean): Boolean {
-        if (!offline || !updateOnly || !nodeReady || !displayReady || prompted) return false
+    /** 只有前台实际展示成功，或完整缓存无需提示时，才消耗首次机会。 */
+    fun tryPrompt(offline: Boolean, updateOnly: Boolean, resumed: Boolean,
+        needsPreparation: Boolean, showPrompt: () -> Boolean): Boolean {
+        if (!offline || !updateOnly || !resumed || !nodeReady || !displayReady || prompted) return false
+        if (needsPreparation && !showPrompt()) return false
         prompted = true
-        return needsPreparation
+        return true
     }
 }

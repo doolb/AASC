@@ -2034,3 +2034,16 @@ IM := conversation/info与chain/single均HTTP200/status_code0，4消息文本块
 验证 := npm run test:offline-data-repair 71/71；迁移+配置36/36；npm run test:tts-voice-picker 22/22，部分重叠
 范围 := 真实隔离配置和浏览器，不等于手机已安装修复或实际合成验收
 ```
+
+## min 首装语音提示时序回归（2026-10-16）
+
+```text
+已有证据 := min55仅覆盖安装/部分缓存验收；未证明干净首装提示可靠
+当前只读 := SM-N9500 min58 + bootstrap ready/standalone + offline_voice_first_run_v1=true
+状态回归 := ready发生于接收器注销期间/重建后从运行中服务补发 + 空状态不虚构ready + 字节/阶段保留 + 更新事件隔离 + 停进程作废快照
+提示回归 := 前台/服务/页面不同先后 + 展示返回失败/异常不消耗标记 + 成功展示前标记仍false + 完整缓存跳过 + 首次标记恢复/去重/profile隔离
+Android命令 := ./gradlew :app:testDebugUnitTest --tests com.aasc.display.OfflineModelPreparationPlanTest --tests com.aasc.display.NodeStartupStatusTest --tests com.aasc.display.ServerConfigTest --tests com.aasc.display.NodeServerServiceTest --offline --no-daemon
+Android结果 := 48项/0失败/0错误/0跳过；模型准备12 + 启动状态6 + 地址配置14 + Node服务16；新增9项通过，生产/自测编译成功
+首装打包 := npm run test:offline-bootstrap → 63/63；不代表新APK已生成或实机首装提示已验收
+待现场 := 新签名min干净首装/下载期间退后台再返回/原生提示可见性；不清空现有设备应用/模型/首次标记
+```

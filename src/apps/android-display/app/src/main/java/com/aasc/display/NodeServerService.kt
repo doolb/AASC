@@ -4,13 +4,17 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
@@ -44,6 +48,7 @@ class NodeServerService : Service() {
         const val EXTRA_BOOTSTRAP_SOURCE = "bootstrap_source"
         const val EXTRA_CANCEL_BOOTSTRAP = "cancel_bootstrap"
         const val ACTION_STATUS = "com.aasc.display.action.NODE_STATUS"
+        const val ACTION_REQUEST_STATUS = "com.aasc.display.action.REQUEST_NODE_STATUS"
         const val EXTRA_STATUS = "status"
         const val EXTRA_DETAIL = "detail"
         const val EXTRA_PHASE = "phase"
@@ -264,11 +269,22 @@ class NodeServerService : Service() {
     private val serviceUpdateApplying = java.util.concurrent.atomic.AtomicBoolean(false)
     private val bootstrapManager by lazy { OfflineBootstrapManager(this) }
     @Volatile private var bootstrapPreview: OfflineBootstrapManager.Preview? = null
+    private val startupStatus = NodeStartupStatus()
+    private val statusRequestReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == ACTION_REQUEST_STATUS && offlineMode) {
+                startupStatus.replay(::broadcastStatus)
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("正在准备 Node.js 服务"))
+        // 仅现有服务回应前台状态请求；不导出接收器，也不因查询重新启动 Node。
+        ContextCompat.registerReceiver(this, statusRequestReceiver, IntentFilter(ACTION_REQUEST_STATUS),
+            ContextCompat.RECEIVER_NOT_EXPORTED)
         try {
             safMediaServer = SafMediaServer(this).also { gateway ->
                 val connection = gateway.start()
@@ -328,6 +344,7 @@ class NodeServerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        unregisterReceiver(statusRequestReceiver)
         stopNodeProcess()
         safMediaServer?.stop()
         safMediaServer = null
@@ -346,17 +363,21 @@ class NodeServerService : Service() {
         completedBytes: Long? = null,
         totalBytes: Long? = null
     ) {
+        startupStatus.publish(NodeStartupSnapshot(status, detail, phase, completedBytes, totalBytes), ::broadcastStatus)
+    }
+
+    private fun broadcastStatus(snapshot: NodeStartupSnapshot) {
         val intent = Intent(ACTION_STATUS)
             .setPackage(packageName)
-            .putExtra(EXTRA_STATUS, status)
-        if (!detail.isNullOrBlank()) {
-            intent.putExtra(EXTRA_DETAIL, detail)
+            .putExtra(EXTRA_STATUS, snapshot.status)
+        if (!snapshot.detail.isNullOrBlank()) {
+            intent.putExtra(EXTRA_DETAIL, snapshot.detail)
         }
-        if (!phase.isNullOrBlank()) {
-            intent.putExtra(EXTRA_PHASE, phase)
+        if (!snapshot.phase.isNullOrBlank()) {
+            intent.putExtra(EXTRA_PHASE, snapshot.phase)
         }
-        completedBytes?.let { intent.putExtra(EXTRA_COMPLETED_BYTES, it) }
-        totalBytes?.let { intent.putExtra(EXTRA_TOTAL_BYTES, it) }
+        snapshot.completedBytes?.let { intent.putExtra(EXTRA_COMPLETED_BYTES, it) }
+        snapshot.totalBytes?.let { intent.putExtra(EXTRA_TOTAL_BYTES, it) }
         sendBroadcast(intent)
     }
 
@@ -760,6 +781,8 @@ class NodeServerService : Service() {
     }
 
     private fun enqueueNodeProcessStart(serverUrl: String, offlineMode: Boolean) {
+        // 启动任务可能仍在排队，立即使上一轮 ready 失效。
+        if (offlineMode) sendStatus(STATUS_PREPARING)
         val requestedGeneration = restartGeneration.get()
         startExecutor.execute {
             if (requestedGeneration == restartGeneration.get()) startNodeProcess(serverUrl, offlineMode)
@@ -768,6 +791,7 @@ class NodeServerService : Service() {
 
     private fun stopNodeProcess() {
         restartGeneration.incrementAndGet()
+        startupStatus.invalidate()
         mainHandler.removeCallbacksAndMessages(null)
         nodeProcess?.let { process ->
             try {
