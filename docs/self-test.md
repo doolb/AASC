@@ -1695,3 +1695,9 @@ Android单元232/232（0失败/错误/跳过）、打包profile与端口契约16
 ## 整包首次启动与旧下载目录清理（2026-10-14）
 
 Android完整单元246/246（新增OfflineFullApkActivationTest14项），test:offline-bootstrap62/62。真实临时目录验证安装身份、full/min/普通分支、强制根服务入口、代码/依赖版本及路径、健康前不删/失败回退、同版本重装/日常热更、中断恢复/并发指针、冻结目录/active与previous保护、未知目录/链接/私人数据/ZIP、额外模型保留及备份不跟随链接。未覆盖安装当前ADB Offline，正式full构建/发布与手机真实健康仍未完成。
+
+## min61 完整卸载重装诊断（2026-10-16）
+
+SM-N9500经备份校验后真实uninstall/install min61，首启前files不存在；备份431,640,576字节/26,420项/23,605文件，SHA256 `cd88b4ab5ef4d66f1009cbe19786e900f98ff1c613618ed9ad43fe32d58ef087`，安装APK与已发布min61摘要一致。LAN预览50,949,299字节，网页操作完成启动器106和服务code106/deps10/task1安装，pendingHealth=false；约5分半，解压/校验/合并期间页面错误停留下载100%。
+
+安装页ready后无模型提示；返回显示端/授予摄像头权限后提示才创建，默认TTS+ASR/声纹342MiB。DOM实测first.top=545.92、viewport.height=388、scrollY=0，提示完全在视口外但JS已handled=true，手动滚动后实际可见。证据存`.cache/adb-min61-reinstall-20261016-131120/`，不入Git；未下载权重、未改生产代码、未重跑自动套件。待确认后补首装完成衔接、提示真实可见才确认、解压/校验/合并阶段的自动与设备回归，不能沿用“两帧即展示”的旧验收。
