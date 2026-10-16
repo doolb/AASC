@@ -176,3 +176,15 @@ node --test --test-concurrency=1 tests/mmd-ar-human-image-pose-browser.test.js t
 新临时工具在`tmp/mmd-pose/depth-eval/rigid-projection/torso-depth/`，保留父目录原二维/八段深度模型和报告不变。先运行check-unit.cjs、prepare.cjs、run-torso.cjs、check-results.cjs、build-report.cjs、check-report.cjs；完整命令/前提见[肩髋执行记录](../task/20261016_MMDAR二维投影驱动刚体姿态评估.md)。不重推理，只读固定Depth Anything浮点图与RTMPose点；原点和向内8%/16%局部统计/噪声/符号筛选，分数门槛0.65保持，肩髋独立、允许扭腰，不由躯干近侧硬指定手脚近。
 
 本机页`http://127.0.0.1:56173/_depth/rigid-projection/torso-depth/report.html?image=seated`比较原八段与新增肩髋的实际投影、胶囊/PMX正侧、肩髋膝腕深度、owner/施力次数和拒绝理由，并列9条历史二维。鲜跑旧9支实际坐标精确复现历史，同初值新9支比较，72新图；248项工具检查通过但27条姿态质量通过0。真人只接受肩线索，髋低分拒绝，默认前膝仍更远19.33cm；动漫无提示完全回退，示意基本不变。新约束已实现于临时原型，正式全身IK没有切换，手机仍未测。
+
+## 先分离人物再做姿态：三输入对照（2026-10-16）
+
+[人物分割任务](../task/20261016_MMDAR人物分割辅助姿态计算.md)记录PPHumanSeg原精度ONNX固定revision/6,163,938字节/SHA、RGB192×192/NCHW/负1到1、两类先逆映回原图再比较、Worker/取消及完整命令。工具在忽略目录rigid-projection/person-seg，依次check-unit、run-person、视觉复核并绑定本次inference SHA、run-physics、check-results、build-report、check-report；复测不能将旧视觉资格用于不同mask输出。
+
+本机报告`http://127.0.0.1:56173/_depth/rigid-projection/person-seg/report.html?image=seated`可切原图、人物裁剪、同框灰底人物图，显示原尺寸mask/透明人物、局部点及映回原图点、原图与新实际PMX/胶囊正侧、各自目标与共同原图参考RMS。深度仍使用原图上下文，新变体用概率≥0.8且完整内部邻域筛选取样，不加姿态分数或补隐藏z。真人/动漫留边后裁剪恰为整图，示意才有局部裁剪。
+
+三图结构筛查通过不代表语义正确：动漫猪剑被保留，两新三维分支拒绝，回退图明确标识；真人/示意仅本次观察允许实验。135项工具检查通过而7实际姿态质量0通过，真人前后腿没有改善，示意裁剪相对共同参考好于本次抠图。图片/模型/结果仅本机缓存，正式全身IK仍原流程，手机与正式取消集成未验。
+
+### 示意图当前分支实际使用的深度辅助（2026-10-16）
+
+分割对照页仍接入Depth Anything原图浮点深度，新变体用人物mask过滤；没有对去背景图重新推理深度。已核查physics.json：diagram原图保留1组左右肩近远约束（chest实际施力77/720步）；crop候选全部拒绝，实际0条深度约束，肩因mask边缘、髋因低分、肢体因低分或差值不足；cutout保留1条rightKnee→rightAnkle前后弱约束，双肩/双髋拒绝。cutout这一条表示被接受的软约束，不代表每子步一定施力或恢复每关节米制z。可在报告“原图深度＋人物掩码”查看各条接受/拒绝原因。此为现有行为核对，没有新推理、物理运行或算法变更。
