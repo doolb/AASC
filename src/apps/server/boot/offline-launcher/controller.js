@@ -14,7 +14,16 @@ class Controller {
         this.releases = new Releases(config, progress => this.progress(progress));
         this.models = new Models(config); this.groups = new Map(); this.apkBusy = null; this.promptToken = null;
         this.service = config.service || new ServiceProcess(config, status => this.status(status));
-        this.service.onHealthy = async () => { await this.releases.healthy(); this.status({ status: 'ready' }); };
+        this.service.onHealthy = async () => {
+            await this.releases.healthy();
+            // 只在本次干净首装真实健康后开放启动页提示；不能抢先覆盖旧安装的原生已提示记录。
+            if (this.freshInstall) {
+                const state = files.read(this.config.root, 'updates/js-ui-state.json', { handled: false });
+                await files.atomic(this.config.root, 'updates/js-ui-state.json', { ...state, launcherEligible: true });
+            }
+            this.lastProgress = null;
+            this.status({ status: 'ready' });
+        };
     }
     status(value) { this.snapshot = value; this.send({ type: 'startup.status', payload: value }); }
     progress(value) { this.lastProgress = { ...value, bootstrap: !this.releases.current() }; this.send({ type: 'update.progress', payload: this.lastProgress }); }
@@ -37,6 +46,18 @@ class Controller {
         }).finally(() => { this.busy = null; this.abort = null; });
         return this.busy;
     }
+    bootstrap(payload, request) {
+        const source = this.releases.source(payload);
+        const identity = JSON.stringify(source.manifest);
+        // 启动器热更重载后的自动请求与宿主重放归并，不能重复下载或把健康事务显示成并发失败。
+        if (this.bootstrapBusy) {
+            if (this.bootstrapIdentity !== identity) throw new Error('已有不同的首装事务正在执行');
+            return this.bootstrapBusy;
+        }
+        this.bootstrapIdentity = identity;
+        this.bootstrapBusy = this.apply(payload, request, true).finally(() => { this.bootstrapBusy = null; this.bootstrapIdentity = null; });
+        return this.bootstrapBusy;
+    }
     async apply(payload, request, fresh) {
         return this.transaction(async signal => {
             const source = fresh ? this.releases.source(payload) : await this.releases.manifest(signal);
@@ -51,6 +72,7 @@ class Controller {
                 }
             }
             await this.service.stop();
+            this.freshInstall = fresh && !plan.current;
             this.status({ status: 'installing', phase: 'downloading', detail: fresh ? '正在准备本机服务' : '正在更新服务' });
             try {
                 const result = await this.releases.prepare(source, fresh, signal);
@@ -66,10 +88,10 @@ class Controller {
                 const previous = this.releases.context();
                 if (previous) {
                     try { await this.service.start(previous); } catch (restartError) { this.status({ status: 'failed', detail: restartError.message }); }
-                } else this.status({ status: 'failed', detail: error.message });
+                } else this.status({ status: 'failed', phase: 'awaiting_confirmation', detail: error.message });
                 if (!fresh) this.send({ type: 'service.result', payload: { status: 'service_update_failed', detail: error.message } });
                 throw error;
-            }
+            } finally { this.freshInstall = false; }
         });
     }
     async apk(prepare, signal) {
@@ -83,12 +105,15 @@ class Controller {
     }
     async firstRun(payload) {
         const state = files.read(this.config.root, 'updates/js-ui-state.json', { handled: false });
+        const launcherReady = payload.launcherReady === true && state.launcherEligible === true;
+        // 旧安装的启动页查询不导入隐含false，等待显示端带来真正的原生历史标记。
+        if (payload.launcherReady && !launcherReady) return { show: false, handled: !!state.handled };
         if (!state.legacyImported) { state.handled = state.handled || payload.handled === true; state.legacyImported = true; await files.atomic(this.config.root, 'updates/js-ui-state.json', state); }
-        if (!this.config.updateOnly || !payload.front || !payload.displayReady || this.snapshot.status !== 'ready' || state.handled) return { show: false, handled: !!state.handled };
+        if (!this.config.updateOnly || !payload.front || (!payload.displayReady && !launcherReady) || this.snapshot.status !== 'ready' || state.handled) return { show: false, handled: !!state.handled };
         const ids = new Set(this.models.groups().filter(group => group.defaultSelected).flatMap(group => group.modelIds));
         const ready = this.models.status().filter(model => model.filesReady).map(model => model.modelId);
         if ([...ids].every(id => ready.includes(id))) { await files.atomic(this.config.root, 'updates/js-ui-state.json', { handled: true, legacyImported: true }); return { show: false, handled: true }; }
-        this.promptToken = require('node:crypto').randomUUID();
+        this.promptToken ||= require('node:crypto').randomUUID();
         return { show: true, handled: false, token: this.promptToken, groups: this.models.groups().filter(group => group.defaultSelected) };
     }
     async prepareGroup(payload, requestId) {
@@ -122,9 +147,9 @@ class Controller {
     async handle(request) {
         const p = request.payload || {};
         const routes = {
-            'state.get': () => ({ ...this.snapshot, progress: this.busy ? this.lastProgress : null, modelStates: this.models.status() }),
+            'state.get': () => ({ ...this.snapshot, progress: this.busy && this.snapshot.status !== 'ready' ? this.lastProgress : null, modelStates: this.models.status() }),
             'bootstrap.preview': () => this.releases.preview(),
-            'bootstrap.install': () => this.apply(p, request, true),
+            'bootstrap.install': () => this.bootstrap(p, request),
             'bootstrap.cancel': () => { this.abort?.abort(new Error('已取消本机服务准备')); return {}; },
             'service.check': () => this.releases.check(p.manualRetry === true),
             'service.apply': () => this.apply(p, request, false),
@@ -144,6 +169,7 @@ class Controller {
             'ui.firstRun': () => this.firstRun(p),
             'ui.firstRunShown': async () => {
                 if (!p.token || p.token !== this.promptToken) throw new Error('首装展示确认已过期');
+                if (p.visible !== true) throw new Error('首装提示尚未确认可见');
                 this.promptToken = null; await files.atomic(this.config.root, 'updates/js-ui-state.json', { handled: true, legacyImported: true }); return { handled: true, legacyImported: true }; }
         };
         if (!routes[request.type]) throw new Error('未知启动器命令');

@@ -1707,3 +1707,12 @@ Android完整单元246/246（新增OfflineFullApkActivationTest14项），test:o
 SM-N9500经备份校验后真实uninstall/install min61，首启前files不存在；备份431,640,576字节/26,420项/23,605文件，SHA256 `cd88b4ab5ef4d66f1009cbe19786e900f98ff1c613618ed9ad43fe32d58ef087`，安装APK与已发布min61摘要一致。LAN预览50,949,299字节，网页操作完成启动器106和服务code106/deps10/task1安装，pendingHealth=false；约5分半，解压/校验/合并期间页面错误停留下载100%。
 
 安装页ready后无模型提示；返回显示端/授予摄像头权限后提示才创建，默认TTS+ASR/声纹342MiB。DOM实测first.top=545.92、viewport.height=388、scrollY=0，提示完全在视口外但JS已handled=true，手动滚动后实际可见。证据存`.cache/adb-min61-reinstall-20261016-131120/`，不入Git；未下载权重、未改生产代码、未重跑自动套件。待确认后补首装完成衔接、提示真实可见才确认、解压/校验/合并阶段的自动与设备回归，不能沿用“两帧即展示”的旧验收。
+
+
+## 首包自动准备、更新确认与模型弹窗回归（2026-10-16）
+
+`npm run test:offline-launcher`36/36，`npm run test:offline-bootstrap`63/63通过；Android Offline/Node定向153项中152通过、1既有publishedV9Groups归档环境跳过。新增真实Chromium验证自动首包无需点击/无取消、返回键不终止首包、分阶段与重载恢复/只读握手重试、更新仍走确认入口、273px下载/稍后按钮完整可见、视口外/后台不消费首次令牌、恢复前台后消费、旧宿主能力兼容、模型进度/取消/完成收起；后端覆盖同快照首装归并、失败不授提示资格、旧原生标记迁移、阶段心跳和计时器清理。原CRC/签名/事务回退用例继续通过。
+
+SM-N9500完整备份后uninstall/install min62，启动前files不存在；隔离签名code110自动下载并完成解压/校验/合并，首包无取消/手动确认，健康后自动收起。模型弹窗默认TTS+ASR/声纹342MiB，273px实际视口提示top0.19，应用最终同源CSS后下载/稍后按钮bottom256.38；稍后收起，权重未下载。最终min62/code112内置18项与源码/ZIP逐文件匹配，CRC/profile/原签名通过；真实原更新提示确认前不下载、稍后可关闭；测试源退出一次连接拒绝后，旧110保持，恢复源/重新检查/确认完成112健康更新。冷启动HTTPS API ok/v112/deps10/task1 verified，launcher112/pending为空，模型提示不重复。
+
+证据在`.cache/adb-min62-first-20261016-134518/`不入Git。首包观测为110、最终112补布局并经真实更新/冷启动；测试源仅改本轮内存配置、未改产物/生产清单，冷启动已恢复默认源，调试/采集/临时HTTP源关闭。未验旧full/真实模型下载加载推理/基准性能，未发布。

@@ -35,12 +35,17 @@ class OfflineLauncherActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_FIRST_RUN_TOKEN = "launcher_first_run_token"
+        const val EXTRA_AUTOMATIC = "launcher_automatic"
+        const val EXTRA_DEFERRED = "launcher_deferred"
         private const val ORIGIN = OfflineLauncherProtocol.LOCAL_DOCUMENT_URL
 
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(state: Bundle?) {
+        // 自动首装和模型提示只借用浮动窗口承载可热更网页，手动管理入口仍使用完整页面。
+        val automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false) || intent.hasExtra(EXTRA_FIRST_RUN_TOKEN)
+        if (automatic) setTheme(androidx.appcompat.R.style.Theme_AppCompat_Dialog)
         super.onCreate(state)
         if (!OfflineLauncherSession.enabled(this)) { finish(); return }
         page = WebView(this)
@@ -64,10 +69,17 @@ class OfflineLauncherActivity : AppCompatActivity() {
             }
             override fun onPageFinished(view: WebView, url: String) {
                 if (url == ORIGIN) emit(JSONObject().put("type", "ui.init").put("payload", JSONObject()
+                    .put("automatic", automatic)
+                    .put("firstRunQuery", true)
                     .put("firstRunToken", intent.getStringExtra(EXTRA_FIRST_RUN_TOKEN))))
             }
         }
         setContentView(page)
+        if (automatic) {
+            val screen = resources.displayMetrics
+            window.setLayout(minOf((screen.widthPixels * .92).toInt(), (600 * screen.density).toInt()), (screen.heightPixels * .85).toInt())
+            setFinishOnTouchOutside(false)
+        }
         OfflineLauncherClient.subscribe(listener)
         loadPage()
         ensureService()
@@ -75,6 +87,15 @@ class OfflineLauncherActivity : AppCompatActivity() {
 
     override fun onResume() { super.onResume(); resumed = true }
     override fun onPause() { resumed = false; super.onPause() }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (intent.getBooleanExtra(EXTRA_AUTOMATIC, false) || intent.hasExtra(EXTRA_FIRST_RUN_TOKEN)) {
+            page.evaluateJavascript("window.dispatchEvent(new Event('launcher-back'));", null)
+            return
+        }
+        super.onBackPressed()
+    }
 
     /** 只读固定宿主已核验的UI目录；候选不含页面时使用APK基线。 */
     private fun loadPage() {
@@ -122,6 +143,7 @@ class OfflineLauncherActivity : AppCompatActivity() {
                             runOnUiThread {
                                 startActivity(Intent(this@OfflineLauncherActivity, MainActivity::class.java)
                                     .putExtra("server_url", ServerConfig.DEFAULT_OFFLINE_SERVER_URL)
+                                    .putExtra(EXTRA_DEFERRED, payload.optBoolean("deferred"))
                                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                                 finish()
                             }

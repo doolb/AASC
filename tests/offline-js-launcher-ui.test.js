@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const puppeteer = require('puppeteer');
 
-test('本地启动页首装/模型/进度/取消/错误恢复：所有下载等待点击', async t => {
+test('手动管理页首装/模型/进度/取消/错误恢复：手动下载等待点击', async t => {
     const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     t.after(() => browser.close()); const page = await browser.newPage();
     const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -70,4 +70,15 @@ test('启动页阻断网络资源/嵌入/导航，桥不暴露显示端NativeBri
     assert.match(native, /shouldOverrideUrlLoading[^\n]+true/); assert.match(native, /require\(type in OfflineLauncherProtocol.commands\)/);
     assert.match(native, /OfflineLauncherProtocol.isLocalDocument\(request.url.toString\(\), request.isForMainFrame\)/);
     assert.match(native, /page.loadUrl\(ORIGIN\)/); assert.doesNotMatch(native, /loadDataWithBaseURL/);
+});
+
+
+test('首包自动弹窗与现有更新确认入口分离，模型窗口和返回按原生契约', () => {
+    const main = fs.readFileSync(path.join(__dirname, '../src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'), 'utf8');
+    const update = main.slice(main.indexOf('private fun startAvailableOfflineUpdate()'), main.indexOf('private fun retryOfflineUpdateCheck()'));
+    assert.doesNotMatch(update, /OfflineLauncherActivity/);
+    assert.match(update, /startServiceUpdate\(\)/); assert.match(update, /startMinApkDownload\(\)/);
+    const activity = fs.readFileSync(path.join(__dirname, '../src/apps/android-display/app/src/main/java/com/aasc/display/OfflineLauncherActivity.kt'), 'utf8');
+    assert.match(activity, /Theme_AppCompat_Dialog/); assert.match(activity, /launcher-back/);
+    assert.match(main, /EXTRA_AUTOMATIC, true/);
 });
