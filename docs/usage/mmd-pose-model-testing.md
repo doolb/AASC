@@ -170,3 +170,9 @@ node --test --test-concurrency=1 tests/mmd-ar-human-image-pose-browser.test.js t
 本机报告`http://127.0.0.1:56173/_depth/rigid-projection/report.html?image=seated`可切三图/三初值及原生或实际PMX叠加，比较纯二维和实验性深度弱力、代理/实际人物正侧、收敛与原生锚点/共享角度/接触。报告显示实际回读而非3D目标；没有逐步缩放评分。射线横向力保留前后自由，固定28°与身体尺度，根深度弱支撑；没有联合恢复相机。
 
 102合成、145实际数据与22报告检查通过仅证明工具/数据链，18支姿态质量失败全部保留。当前初值真人8.29→8.42%、动漫7.36→7.36%、示意7.67→7.67%；深度没有稳定改善。3/1/0条表面候选仍未验证是否属于关节，不能因深度图平滑当有效隐藏关节z，尤其不能据此恢复脚掌/手掌和骨段绕轴。正式全身IK入口仍维持现有RTMPose流程，当前报告是独立临时评估。
+
+## 肩膀与骨盆两侧深度补充（2026-10-16）
+
+新临时工具在`tmp/mmd-pose/depth-eval/rigid-projection/torso-depth/`，保留父目录原二维/八段深度模型和报告不变。先运行check-unit.cjs、prepare.cjs、run-torso.cjs、check-results.cjs、build-report.cjs、check-report.cjs；完整命令/前提见[肩髋执行记录](../task/20261016_MMDAR二维投影驱动刚体姿态评估.md)。不重推理，只读固定Depth Anything浮点图与RTMPose点；原点和向内8%/16%局部统计/噪声/符号筛选，分数门槛0.65保持，肩髋独立、允许扭腰，不由躯干近侧硬指定手脚近。
+
+本机页`http://127.0.0.1:56173/_depth/rigid-projection/torso-depth/report.html?image=seated`比较原八段与新增肩髋的实际投影、胶囊/PMX正侧、肩髋膝腕深度、owner/施力次数和拒绝理由，并列9条历史二维。鲜跑旧9支实际坐标精确复现历史，同初值新9支比较，72新图；248项工具检查通过但27条姿态质量通过0。真人只接受肩线索，髋低分拒绝，默认前膝仍更远19.33cm；动漫无提示完全回退，示意基本不变。新约束已实现于临时原型，正式全身IK没有切换，手机仍未测。
