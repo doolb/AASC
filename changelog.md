@@ -1,3 +1,10 @@
+### MMD-AR NLF-S 三维骨骼独立试验
+
+- ✅ [2026-10-16] 验证官方NLF-S v0.2.0并导出固定SMPL24关节点ONNX（83725857字节），完成三张图WASM/WebGPU原图本地推理、叠图与可旋转XYZ报告。
+  - 临时脚本/模型/报告在`tmp/mmd-pose/depth-eval/nlf-s/`；同步design/spec/task/模型测试方法/self-test，完成项从todo移除。权重及私人图片不提交。
+  - 原模型、固定解码ONNX与浏览器数值验证通过；WASM约194–211ms，WebGPU后两图38–46ms（首图1035ms）；390px无横向溢出，手机速度未测试。
+  - 真人抬腿左右归属仍与用户标注冲突，动漫手脚有偏差；不接入VAM，不替换MediaPipe默认。未修改生产代码/构建输入，Offline状态保持，未构建APK或发布。
+
 ### 控制端服务器面板重选 Android SAF 目录
 
 - ✅ [2026-10-16] 按用户确认增加在线且支持API29+原生能力的服务器卡片“重选 SAF 目录”，通过既有AASC请求在目标Android设备打开系统选择器。

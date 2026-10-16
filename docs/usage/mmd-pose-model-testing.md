@@ -198,3 +198,30 @@ RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)�
 这是本图显式对应修正，不是换了RTMPose权重或通用自动识别左右；原26/28映到左25/27，原25/27映到右26/28，髋与上半身不变，坐标/分数整点转移。深度重新采样但腿部仍无合格提示，抠图抬高膝还比另一膝远169.37mm，整体投影8.132%，完整姿态未通过。正式全身IK未切换。
 
 复测在原人物分割环境和缓存完整时，按[任务](../task/20261016_MMDAR真人坐姿左右腿归属修正.md)依序执行check-leg-unit、run-leg-correspondence、check-leg-results、build-leg-report、build-report、check-leg-report。六支同321骨/相机/720步，两个原始控制精确复现；新118项工具检查与旧135项回归通过，不当姿态质量通过。
+
+
+## NLF-S 独立骨骼试验（2026-10-16，已完成）
+
+- 本地报告：http://127.0.0.1:56173/_depth/nlf-s/report.html?image=seated ，可切换 anime / diagram，原图叠加及可拖动XYZ。蓝=人物左侧，橙=右侧；首次显示已保存浏览器实测，按钮重新本机推理。
+- 官方 v0.2.0 `nlf_s_multi.torchscript`：300606810字节，SHA256 `d5ce59d2efcee5cd15a865a152739082abc2da5d596f8f1bc949a709b417b67d`。封装用来取得官方预处理、关节查询和参考结果，不作为网页下载模型。
+- 固定SMPL 24点：`cano_all.smpl`末24点及官方`smpl_24`名字/连线。解码网络提取为`nlf-s-joints.onnx`，83725857字节（83.7 MB / 79.8 MiB），SHA256 `100d29feb3d5b21972a655b6c6322d6a35212859d1300d14b7d2a96a80202a99`。保留脚踝和脚尖，无完整足底旋转、手指或面部。
+- 人物框为人工固定：seated=[10,15,226,299]，anime=[96,10,280,375]，diagram=[40,8,160,300]；不是自动检测测试。相机FOV55度是假设，报告使用官方导出的裁剪矩阵。
+- 浏览器从原图本地做gamma/透视双线性裁剪、ORT推理及JS三维重建。当前三图均为第0级金字塔，其他降采样级会明确拒绝；不是任意图片上传产品。JPEG浏览器解码及半精度取整产生少量输入差异。
+- 数值验证：官方完整流程与拆分裁剪输出最大差0.00049mm；JS重建对官方XYZ最大差0.00060mm；ONNX CPU对官方FP32头归一化输出最大误差3.1e-6；浏览器同输入FP32 XYZ差WASM<0.003mm、WebGPU<0.005mm。原图完整浏览器流程对官方半精度XYZ最大差3.82mm。以上仅证明移植一致，不是对真实人体的准确率。
+- 本机Edge无头：WASM三图约194–211ms；WebGPU首图约1035ms（首次编译包含在内），后两图约38–46ms；下载/初始化另计。390px布局无横向溢出；没有手机真机性能测试。
+- 已核查WASM网络请求全为本机GET，实际读取ONNX及原图，无上传/远端推理。WebGPU同一代码路径也执行三图数值验证。
+- 目视结果：真人抬高腿仍标为右腿，与用户先前确认的左腿归属冲突；动漫手脚与原图明显偏离；示意图腕部仍偏。原始识别不满足自动还原要求，所以本轮不进一步接入VAM，不改MediaPipe默认，不用交换左右掩盖失败。
+
+复现（没有对应npm script，使用直接命令）：
+```powershell
+python tmp/mmd-pose/depth-eval/nlf-s/run-reference.py
+python tmp/mmd-pose/depth-eval/nlf-s/export-core.py
+python tmp/mmd-pose/depth-eval/nlf-s/verify-onnx.py
+node tmp/mmd-pose/depth-eval/nlf-s/check-math.mjs
+node tmp/mmd-pose/depth-eval/nlf-s/run-browser.cjs wasm
+node tmp/mmd-pose/depth-eval/nlf-s/run-browser.cjs webgpu
+```
+
+脚本、权重、图片结果、reference.json、onnx-check.json、browser-*.json、manifest.json位于忽略目录`tmp/mmd-pose/depth-eval/nlf-s/`，不随Git分发；重建环境需先恢复该目录。依赖安装在既有`tmp/mmd-pose/python-env`目标目录，不改生产package.json/lock。模型按作者非商业研究使用范围进行本地实验。
+
+实现注意：当前GitHub main的重建公式与v0.2.0权重内序列化代码不同。使用权重内RMS归一化、无效点权重0.0001、正则0.01；固定解码替换动态轴列表，必须与官方头输出比较。实验未改变生产构建输入，不触发新的Offline出包项。

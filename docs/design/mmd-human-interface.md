@@ -1,5 +1,9 @@
 # MMD HumanInterfaceElement 通用角色控制
 
+## NLF-S 独立骨骼试验（2026-10-16，完成）
+
+用户确认独立测试NLF-S，优先浏览器本地骨骼推理；三张既有图片检查交叉腿、遮挡与足部。已校验原模型、83.7MB ONNX与浏览器WASM/WebGPU三图推理。原始坐姿左右腿仍不符合用户确认，动漫手脚有偏差；因此保留试验报告，未接入VAM，不替换MediaPipe默认。
+
 ## 图片识别切回MediaPipe Pose（2026-10-16，用户已确认）
 
 用户明确要求恢复最早的MediaPipe Pose，已确认修改worker/assets/ui/说明与测试、构建本地网页而不出APK。默认由RTMPose-m恢复为OpenCV Zoo固定MediaPipe人物检测及Pose ONNX，输出33点与模型估计world；保留此前身体完整度排序/候选选择修复，图片粘贴、参考图实际骨架、相机匹配与3D拖点继续使用。现有三维重定向已保留MediaPipe分支，沿用骨段方向及当前角色骨长的映射，不叠加近期临时深度、刚体投影或手工左右修正。
