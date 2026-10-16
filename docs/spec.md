@@ -296,3 +296,4 @@
 | Release 配置与 APK 构建 profile | [release-build-profiles.md](spec/release-build-profiles.md) | release 路径解析、任务 results 恢复、三种 APK profile、模型选择和构建产物忽略伪代码 |
 | Chat2API 四路统一模型与应用分流 | [chat2api-multimodal-routing.md](spec/chat2api-multimodal-routing.md) | 既有文字＋四路TTS、默认音色映射、受控系统指令及媒体拒绝；首批已实现 |
 | 模型推理任务与按需依赖 | [model-inference-task.md](spec/model-inference-task.md) | 任务声明依赖、独立签名包、首次执行准备和显示页懒加载 |
+- [Offline可热更JS启动器与本地网页UI](spec/android-offline-js-launcher.md)

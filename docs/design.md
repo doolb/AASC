@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [Offline首装、热更、模型与可热更JS启动器与网页UI](design/android-offline-js-launcher.md)
+
 - [Provider按应用统一模型与音色目录（设计待确认）](design/chat2api-application-model-catalog.md)
 
 - [豆包Chat音色快选与显示端回复播放](design/doubao-chat-voice-selection.md)

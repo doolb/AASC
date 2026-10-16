@@ -1062,3 +1062,10 @@ FSR2是WebGL2时域升采样近似，不使用物体运动矢量，动作较快�
 依赖目录为`dependencies/common|android|linux64|win64/dependencies-vN.zip`，每个客户端获取common加本平台；Android要求ARM64/Bionic/Node26，Linux64要求x64/glibc，Windows要求x64，原生ABI不符会拒绝。普通旧APK需要重装最新版withserver，Termux需更新受管启动器；旧Offline APK需要先手动安装新版min。
 
 `npm run build:offline-update -- --mode=all --code-version=<新版本> --dependency-version=<新组合版本> --manifest-file=<当前签名清单>`生成分组；内容不变复用原组，后续code-only可沿用签名组合。跨平台安装使用npm的os/cpu/libc覆写，安装脚本保持关闭；需要外部构建的依赖可通过`--dependency-roots=<JSON映射文件>`导入携带`dependency-target.json`和无链接生产node_modules的目标树。`npm run build:server-package`只验证共享根当前包，不再生成tar。构建后仍需既有签名发布流程才能替换LAN/WAN清单。
+
+
+## Offline 本地网页启动器（待过渡 APK 发布）
+
+新宿主版本将首装、更新与模型准备放在独立的“本机服务”本地网页中；服务未安装或启动失败时也能打开。首次点击“检查安装资源”，确认大小和来源后点击“下载并安装”。服务就绪后返回显示端；语音模型提示默认选择TTS、ASR/声纹，点击准备才下载，稍后保留手动模型入口。模型可单独选择、取消或重试，已有缓存先校验复用。
+
+启动器JS和页面随后随签名服务代码包更新；原生协议、运行时或引擎变化仍需APK。当前已发布min59/code105不含此功能，须等待一次过渡min和配套code包；本轮源码实现未发布新安装包。

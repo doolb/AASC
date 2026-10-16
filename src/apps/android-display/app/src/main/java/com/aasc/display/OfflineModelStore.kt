@@ -20,20 +20,63 @@ internal data class OfflineModelDefinition(val modelId: String, val revision: St
 
 /** Offline 的可信目录与网络缓存；状态读取只比较小元数据和属性，加载前才验证新缓存。 */
 class OfflineModelStore(private val context: Context) {
-    internal val definitions: List<OfflineModelDefinition> by lazy {
+    private val jsManaged get() = OfflineLauncherSession.enabled(context)
+    internal val definitions: List<OfflineModelDefinition> get() = if (jsManaged) {
+        parseCatalog((OfflineLauncherClient.catalog ?: error("JS模型目录尚未就绪")).toString())
+    } else legacyDefinitions
+    private val legacyDefinitions by lazy {
         parseCatalog(context.assets.open("offline-model-catalog.json").bufferedReader().use { it.readText() })
+    }
+
+    internal fun groups(): List<OfflineModelGroup> {
+        if (!jsManaged) return OfflineModelPreparationPlan.groups(definitions)
+        val rows = OfflineLauncherClient.catalog?.getJSONArray("groups") ?: error("JS模型分组尚未就绪")
+        return (0 until rows.length()).map { index ->
+            val row = rows.getJSONObject(index)
+            val ids = row.getJSONArray("modelIds")
+            OfflineModelGroup(row.getString("id"), row.getString("title"),
+                (0 until ids.length()).map { ids.getString(it) }, row.optBoolean("defaultSelected"))
+        }
+    }
+
+    internal fun prepareGroups(groups: List<OfflineModelGroup>, forceDownload: Boolean,
+        cancelled: () -> Boolean, progress: (String, Int) -> Unit, onPrepared: (String) -> Unit) {
+        if (!jsManaged) {
+            OfflineModelPreparationPlan(definitions, groups).prepare(cancelled, { model, update ->
+                prepare(model.modelId, forceDownload || !hasLocalFiles(model.modelId), update)
+            }, progress, onPrepared)
+            return
+        }
+        check(!cancelled()) { "已取消模型准备" }
+        OfflineLauncherClient.call("models.prepareGroup", JSONObject().put("modelIds", JSONArray(groups.flatMap { it.modelIds }.distinct()))
+            .put("allowDownload", forceDownload), 3600) { message ->
+            if (!cancelled()) {
+                val value = message.optJSONObject("payload") ?: JSONObject()
+                val id = value.optString("modelId")
+                when (message.optString("type")) {
+                    "model.progress" -> progress(id, value.optInt("progress"))
+                    "model.prepared" -> { progress(id, value.optInt("progress")); onPrepared(id) }
+                }
+            }
+        }
+    }
+
+    private fun state(modelId: String): JSONObject? {
+        val rows = OfflineLauncherClient.modelStates
+        return (0 until rows.length()).map { rows.getJSONObject(it) }.firstOrNull { it.optString("modelId") == modelId }
     }
 
     internal fun definition(modelId: String): OfflineModelDefinition = definitions.firstOrNull { it.modelId == modelId }
         ?: error("未声明的 Offline 模型: $modelId")
 
     fun directoryFor(modelId: String): File {
+        if (jsManaged) return File(state(modelId)?.getString("directory") ?: error("JS模型状态尚未就绪"))
         val definition = definition(modelId)
         return candidates(definition).firstOrNull { hasFiles(it, definition) && hasVerificationStamp(it, definition) }
             ?: candidates(definition).firstOrNull { hasFiles(it, definition) } ?: candidates(definition).last()
     }
 
-    fun hasLocalFiles(modelId: String): Boolean = candidates(definition(modelId)).any { hasFiles(it, definition(modelId)) }
+    fun hasLocalFiles(modelId: String): Boolean = if (jsManaged) state(modelId)?.optBoolean("filesPresent") == true else candidates(definition(modelId)).any { hasFiles(it, definition(modelId)) }
 
     private fun candidates(model: OfflineModelDefinition): List<File> {
         val voice = model.modelId in setOf("sensevoice", "tts", "voiceprint")
@@ -44,6 +87,7 @@ class OfflineModelStore(private val context: Context) {
     }
 
     fun requirePrepared(modelId: String): File {
+        if (jsManaged) return File(OfflineLauncherClient.objectCall("models.require", JSONObject().put("modelId", modelId)).getString("directory"))
         val model = definition(modelId)
         for (directory in candidates(model).filter { hasFiles(it, model) }
             .sortedByDescending { hasVerificationStamp(it, model) }) {
@@ -65,7 +109,7 @@ class OfflineModelStore(private val context: Context) {
         OfflineBootstrapManager.writeJson(marker, expected)
     }
 
-    fun statusJson(): String = JSONArray(definitions.map { model ->
+    fun statusJson(): String = if (jsManaged) OfflineLauncherClient.modelStates.toString() else JSONArray(definitions.map { model ->
         JSONObject().put("modelId", model.modelId).put("revision", model.revision).put("totalBytes", model.totalBytes)
             .put("filesPresent", hasLocalFiles(model.modelId))
             .put("filesReady", candidates(model).any { hasFiles(it, model) && hasVerificationStamp(it, model) })
@@ -74,6 +118,10 @@ class OfflineModelStore(private val context: Context) {
 
     /** 同模型下载全局归并；取消令牌覆盖所有等待者，文件集合完整后才切换目录。 */
     fun prepare(modelId: String, allowDownload: Boolean = true, progress: (Int) -> Unit): File {
+        if (jsManaged) return File(OfflineLauncherClient.objectCall("models.prepare", JSONObject().put("modelId", modelId)
+            .put("allowDownload", allowDownload), 3600) { message ->
+            if (message.optString("type") == "model.progress") progress(message.getJSONObject("payload").getInt("progress"))
+        }.getString("directory"))
         val model = definition(modelId)
         val key = jobKey(model)
         synchronized(modelLocks.getOrPut(model.modelId) { Any() }) {
@@ -125,6 +173,7 @@ class OfflineModelStore(private val context: Context) {
     }
 
     fun cancel(modelId: String) {
+        if (jsManaged) { OfflineLauncherClient.notify("models.cancel", JSONObject().put("modelId", modelId)); return }
         jobs.filterKeys { it.startsWith("${context.filesDir}:$modelId:") }.values.forEach { it.set(true) }
     }
 

@@ -274,6 +274,16 @@ class NodeRuntimeInstaller(
         }
     }
 
+    /** JS首装必须先拥有Node/HTTPS资源，不能反向要求服务代码和生产依赖已经存在。 */
+    internal fun ensureLauncherRuntime(): File {
+        if (!context.resources.getBoolean(R.bool.aasc_update_only_mode)) return ensureInstalled()
+        val root = File(context.filesDir, ROOT_NAME)
+        check(root.isDirectory || root.mkdirs())
+        installBootstrapLibraries(root)
+        OfflineBootstrapManager(context).installBootstrapAssets(root)
+        return root
+    }
+
     fun ensureInstalled(onProgress: ((RuntimeInstallProgress) -> Unit)? = null): File {
         val startedAt = SystemClock.elapsedRealtime()
         val root = File(context.filesDir, ROOT_NAME)

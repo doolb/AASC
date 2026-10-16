@@ -6,6 +6,15 @@
   - WEB构建、58项Node/19项真实浏览器（无跳过）、38源/生成语法、19内容/38依赖指纹与模型SHA通过。真人实际对齐残差.181751→.024585，骨盆目标偏差1.356→.078场景单位；三图骨长保持。二次元跪坐深度/躯干仍偏，未宣称完整还原或手机验收。
   - 同步Human design/spec/usage、模型测试方法、自测、task及todo，移除完成的系统性漂移待办。仅独立网页，二维模型未更换，未构建APK或发布外网。
 
+### Offline 可热更 JS 启动器与本地网页 UI
+
+- ✅ [2026-10-16] 按用户确认将首装、服务/依赖/任务/数据修复编排、模型下载与首次提示迁入JS，并将启动器UI改为可热更的本地网页。
+  - 新增 `src/apps/server/boot/offline-launcher/` builtin闭包及 `ui/index.html`，复用签名 `code/code-vN.zip`；APK内固定supervisor重新验签并比对候选字节，候选健康后提交启动器再重放原安装/更新，失败退回上一健康JS或APK基线。
+  - 新增Android LauncherSession/Client/Protocol/Activity与更新适配器；Offline profile携带独立资产清单，原生更新/模型门面转发JS。保留模型目录/标记、active-release、配置和results、种子/latest/基线、平台分组/生产锁/taskCode及数据修复契约；健康后精确清理同时保护启动器与服务引用。
+  - 网页覆盖首装确认、更新、模型分组/下载/取消、进度与错误恢复、返回显示端；仅本地来源与白名单桥，阻断外部导航/网络/文件访问。首次提示真实绘制后才确认；系统安装和推理引擎仍由原生负责。
+  - `npm run test:offline-launcher` 26/26（含Chromium、真实子进程自更新/失败/超时/双失败基线恢复、本地HTTP下载/健康）；首装打包63/63、数据修复72/72、Android Offline/Node JVM147项通过。未跑全仓测试，未构建/发布APK或ZIP，未清空或重装设备。
+  - 同步design/spec/task/self-test/usage及索引；todo仅保留出包与真机验收。`minApk=true`、`servicePackage=true`，生产依赖与任务代码集合未变。需一次过渡min；现行min59/code105尚不含此功能，待签名机出包及真实WebView/权限/升级/后台/推理/性能验收。
+
 ### MMD-AR图片二维到三维映射缺陷定位
 
 - ✅ [2026-10-16] 根据用户“每张图都有问题”完成转换层闭环诊断并记录修正方案，尚未修复运行代码。

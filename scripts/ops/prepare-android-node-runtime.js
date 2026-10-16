@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { prepareOfflineLauncher } = require('./prepare-offline-launcher');
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadOfflineUpdatePublicKey } = require('./offline-update-signing');
@@ -786,6 +787,7 @@ async function prepareUpdateOnlyRuntime(options = {}) {
                 JSON.stringify({ schemaVersion: 1, runtimeCompatibility: RUNTIME_COMPATIBILITY,
                     files: bootstrapFiles }, null, 2) + '\n');
         }
+        if (options.includeJsLauncher) await prepareOfflineLauncher(projectRoot, temporaryOutputDir);
         await fs.promises.rm(outputDir, { recursive: true, force: true });
         await fs.promises.rm(nativeOutputDir, { recursive: true, force: true });
         await fs.promises.rename(temporaryOutputDir, outputDir);
@@ -1012,6 +1014,7 @@ async function prepareAndroidNodeRuntime(options = {}) {
             'utf8'
         );
 
+        if (options.includeJsLauncher) await prepareOfflineLauncher(projectRoot, temporaryOutputDir);
         await fs.promises.rm(outputDir, { recursive: true, force: true });
         await fs.promises.rm(nativeOutputDir, { recursive: true, force: true });
         await fs.promises.rename(temporaryOutputDir, outputDir);
