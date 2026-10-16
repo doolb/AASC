@@ -1,5 +1,11 @@
 # Web MediaCenter - 项目参考文档
 
+## 人体三维辅助模型可行性（2026-10-16）
+
+- [RTMW论文](https://arxiv.org/abs/2407.08634)涵盖从单幅图像估计三维全身姿态；[rtmlib RTMPose3d实现](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/pose_estimation/rtmpose3d.py)读取三个SimCC输出，xy裁剪反变换与z范围解码不同；[Wholebody3d](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/solution/wholebody3d.py)提供现成ONNX权重接线。不能由原生xyz名称推断统一米制世界坐标；本机Web算子/性能尚未验证。
+- [MMPose PoseLifter接口](https://mmpose.readthedocs.io/en/dev-1.x/api.html)说明二维语义转换与二维序列到三维估计，单图应选择符合单帧契约的权重，不把时间序列模型直接当单图。
+- [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)默认提供像素相对深度，另有metric模型及ONNX/Web社区路径；表面深度不等于被遮挡关节深度。本轮只是资料核查，未接入任一辅助模型，详见对应评估task。
+
 ## RTMPose-m默认权重（2026-10-16）
 
 - [MMPose RTMPose官方模型库](https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose)的Body7 m384；[固定ONNX SDK归档](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-384x288-65e718c4_20230504.zip)。实际输入384×288、两个17点SimCC输出、RGB均值方差与归档detail/pipeline和真推理核查。归档/模型本机固定摘要见assets.js，许可见pose-onnx-NOTICES.md。
