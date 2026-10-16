@@ -1,3 +1,11 @@
+### MMD 本机姿态试验仅保留HMR与人物分割
+
+- ✅ [2026-10-16] 按用户确认精确清理其他本机姿态试验，人物分割暂时保留完整流程及共享依赖。
+  - 删除25,688文件/4,187,805,966字节（约4.19GB/3.90GiB）：四模型/OpenPose/DWPose/YOLOX、RTMW3D/XYZ、NLF-S/L及SAM 3D专用脚本、权重、结果、报告和独立环境。HMR源码/权重/archive/venv/七结果/自选图，以及人物分割111文件、RTMPose二维缓存和权重、共享深度/rig/321骨初值/肩髋模块与控制JSON保留；102项关键数据SHA不变，原图与正式MediaPipe/IK/生产缓存未动。
+  - `tmp/mmd-pose/depth-eval/server.cjs`锚定项目资源、复用HMR本机样本配置、添加RTMPose现有缓存专用路由并移除旧MP探针路由；`serve-report.cjs`默认启动HMR完整服务；分割现行/快照及生成脚本仅修复旧报告超链。新增`check-retained.cjs`：默认124/真实Worker138项通过；分割unit21/leg24/results89/leg-results58、浏览器25/leg36及HMR三图/四候选/自选UI＋真实Depth回归通过。
+  - 真实PPHumanSeg/RTMPose三图九输入、原图逐点差0、两session释放、取消、本机GET通过，原始JSON未改。HMR Python与Ammo求解本轮未重跑；完整姿态质量仍0通过，不掩盖坐姿左右/深度和动漫脚掌失败。同步design/spec/task/self-test/usage/todo，旧独立路线待办终止、历史文档保留；未重启用户服务、构建/发布或改Offline状态。
+  - 初始写入权限拒绝后用户切完全权限继续；权限诊断未改权限。glob漏掉SAM嵌套Git时另审29项专用元数据清单后清空，项目/HMR官方Git不动；未用git clean或盲目递归删除。
+
 ### MMD-AR HMR2.0b 报告整图相对深度
 
 - ✅ [2026-10-16] 在独立HMR2.0b三图报告同时显示既有Depth Anything V2 Small整图相对深度。

@@ -1,5 +1,21 @@
 # 自测功能实现文档
 
+## HMR与人物分割清理后自检（2026-10-16，已完成）
+
+```text
+清理前 := 精确文件清单与无链接校验 → 保存HMR模型/原始结果、分割模型/输入/物理结果、共享深度/控制数据和原图SHA
+清理后 := 所有计划删除文件不存在；保留摘要逐项不变；共享模块的相对import/require目标仍存在
+隔离服务 := 只在测试进程内启动并finally关闭自己的临时HTTP服务，不接管用户运行服务
+静态资源 := HMR页面/三图/人物分割现行与leg报告/Depth PNG/ONNX/ORT/Three返回200；被清理报告返回404
+RTMPose := 试验固定URL响应与既有model-cache权重SHA一致，正式MediaPipe构建保持原样
+可选--worker := 真实PPHumanSeg+RTMPose Worker重跑三图九输入，仅回传检查摘要不写原始结果；原图二维与缓存一致、两session释放及取消语义正确
+自选图 := 自选HMR接口保留，非法人物框400；既有check-custom-report使用注入测试结果验证交互并真实运行浏览器Depth
+回归 := 既有HMR报告三图/四候选与人物分割unit/leg-unit/results/leg-results/report/leg-report
+边界 := 不重写HMR和分割推理结果，不以静态完整性/模拟HMR接口宣称重新推理或姿态质量改善
+```
+
+执行结果：保留检查默认124项、真实`--worker`138项通过；分割unit21/leg24/results89/leg-results58、分割浏览器25/leg36项及HMR三图/四候选/自选UI＋真实Depth通过；102项保护摘要不变。HMR Python与Ammo物理本轮未重新运行，qualityPasses=0仍按原结果展示。旧试验移除与历史记录状态详见[本轮实际自测](../self-test.md)。
+
 ## HMR2.0b 整图相对深度显示（2026-10-16，已完成）
 
 ```text
