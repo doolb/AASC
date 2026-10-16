@@ -2333,3 +2333,25 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 ```
 
 复现路径与命令见docs/usage/mmd-pose-model-testing.md的NLF-S章节。
+
+## Android60FPS与系统栏检查边界（2026-10-16）
+
+```text
+实现 := Android显示文档RAF共享帧决定/60FPS相位/真实时间戳/原生取消与异常；Offline显示系统栏、普通APK沉浸；同分辨率60Hz窗口偏好
+已调用 := android-frame-scheduler.js的node --check；HTMLParser读取display.html第一个script；git diff --check
+静态观测 := 返回0；首个脚本为js/android-frame-scheduler.js
+待验 := 60/90/120/144Hz、同批取消/新增/异常/恢复、Offline首次与焦点恢复、普通沉浸、DeX及API28/API30+
+边界 := 未新增或运行测试，原生未编译、APK未出包发布、帧率与设备性能未验；不能声称系统必然采用60Hz
+```
+
+## Offline校验进度减少刷屏（2026-10-16）
+
+```text
+实现 := 打印工厂闭包隔离动态行/日志时间；旧printVerificationProgress导出兼容
+TTY := 每秒清行回首覆盖；columns-1以内，保守中文双列；大小/文件名逐级压缩
+日志 := 单调时钟每10秒记录周期进度，无ANSI；关键阶段立即完整记录
+边界 := 文件开始/通过/错误/结束前结束动态行；不改变签名/大小/SHA或归档选择
+静态 := node --check辅助模块、npm run release:offline -- --help、git diff --check通过
+待观察 := 普通/窄TTY、窗口缩放、管道/重定向、连续LAN/WAN与等待/失败后的显示
+限制 := 未新增或运行测试，未构建/发布或中断当前进程；静态检查不代表真实终端验收
+```
