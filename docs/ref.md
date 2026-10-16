@@ -2,6 +2,8 @@
 
 ## 人体三维辅助模型可行性（2026-10-16）
 
+- 用户提供的[b-arac/rtmpose3d](https://github.com/b-arac/rtmpose3d)是RTMW3D的Python/PyTorch/MMPose封装，默认L、可选X；[配置](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/configs/__init__.py)列出官方系列检查点名，[三维后处理](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/models/pose_estimator.py)依赖内参与root_z回投影完整XYZ。仅核查源码，未运行封装或评估L；完整XYZ不是本轮已测试的Z软约束，也不表示镜头已准确恢复。
+
 - 本机已验证[RTMW3D-x ONNX](https://huggingface.co/Soykaf/RTMW3D-x/tree/a4f0d54c52ee44ee4e1dda1936d714490c6234d2/onnx)：369330857字节/SHA256 `4a289c0e99d47eb595e99679d9d4a2d1def1b4241f9adcbafba44b9ff585ebcd`，Apache-2.0。官方解码依据固定MMPose提交`759b39c13fea6ba094afc1fa932f51dc1b11cbf9`的projects/rtmpose3d/rtmpose3d/simcc_3d_label.py及config；z第三维288，以髋中点归零。rtmlib参考封装不能替代官方轴维度核查；本机Web两后端与实际FK试验记录见对应task，未正式分发新权重。
 
 - [RTMW论文](https://arxiv.org/abs/2407.08634)涵盖从单幅图像估计三维全身姿态；[rtmlib RTMPose3d实现](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/pose_estimation/rtmpose3d.py)读取三个SimCC输出，xy裁剪反变换与z范围解码不同；[Wholebody3d](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/solution/wholebody3d.py)提供现成ONNX权重接线。不能由原生xyz名称推断统一米制世界坐标；本机Web试验结果见本节首条，手机算子/性能尚未验证。
