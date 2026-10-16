@@ -1,3 +1,11 @@
+### min59 空数据首启与语音模型提示真机验收
+
+- ✅ [2026-10-16] 按用户授权完整备份 SM-N9500 后安装 min59、清空应用数据，验证首次 TTS/ASR 提示及后台恢复通过。
+  - 两份 min59 APK 均89,951,777字节/SHA256 `39a81020e4d90d723276bb7236787a41b95070aa42e1c23227c96befc6f4b341`，签名/profile/ZIP及修复DEX核验通过。私有备份1,047,040,512字节/54,410项/48,859普通文件，数量与设备一致、完整读取及SHA256 `80daba3a8b70d08141b551a7da87af6d1cc53a84ee48c4832b79bc7f5c6270bf`通过；外部空目录和原min58 APK一并保存于`.cache/adb-min59-first-run-20261016-100056/`，不入Git。
+  - 安装59后pm clear成功/旧服务目录不存在，原生确认LAN约48MiB后立即退后台；后台完成code105/deps10/task1健康提交、pendingHealth=false且首次标记仍false。返回原Activity后正常弹“准备语音模型”，TTS约75MiB、ASR/声纹约268MiB默认勾选、总量约342MiB；截图/XML及断言留本机证据目录。
+  - 点击稍后无语音文件下载，冷启动不重复；重建Activity后无重复且Node PID保持。最终API正常，临时ADB forward与设备UI临时文件清理；当前设备保留干净min59，旧数据只留已校验备份，语音权重尚未下载。本轮为空应用数据首启，未卸载重装、未测本次权重下载/推理。
+  - 同步design/spec/task/self-test并删除本项todo，五项产物状态均false；未改生产代码、未重新构建或发布，记录上传Git，保留无关工作区改动。
+
 ### Offline 服务包与 min APK v105/v59 发布
 
 - ✅ [2026-10-16] 将 Offline 服务代码包 v105 和 update-only min APK v59 发布至 LAN/WAN；未构建完整 APK。

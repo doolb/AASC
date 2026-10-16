@@ -2045,7 +2045,14 @@ IM := conversation/info与chain/single均HTTP200/status_code0，4消息文本块
 Android命令 := ./gradlew :app:testDebugUnitTest --tests com.aasc.display.OfflineModelPreparationPlanTest --tests com.aasc.display.NodeStartupStatusTest --tests com.aasc.display.ServerConfigTest --tests com.aasc.display.NodeServerServiceTest --offline --no-daemon
 Android结果 := 48项/0失败/0错误/0跳过；模型准备12 + 启动状态6 + 地址配置14 + Node服务16；新增9项通过，生产/自测编译成功
 首装打包 := npm run test:offline-bootstrap → 63/63；不代表新APK已生成或实机首装提示已验收
-待现场 := 新签名min干净首装/下载期间退后台再返回/原生提示可见性；不清空现有设备应用/模型/首次标记
+产物补验 := min59的两份APK大小89951777/SHA39a81020…相同，ZIP完整性/apksigner签名a57fd4c3…与发行清单匹配，来源bb30fa05包含修复bb668d54，DEX含状态补发与tryPrompt
+现场授权 := 用户允许完整备份SM-N9500私有数据后安装min59并清空验证；备份归档可读性/摘要校验完成前不清空
+备份 := 私有1047040512bytes/54410项/48859普通文件，SHA80daba3a…/逐文件可读与设备数量一致；外部2空目录/原min58APK已备份；证据仅.cache/adb-min59-first-run-20261016-100056，不入Git
+空数据首启 := min58覆盖安装59后pm clear，旧服务目录不存在；未卸载APK/不恢复旧缓存 → 原生确认LAN约48MiB服务下载 → HOME退后台
+后台 := code105/deps10/task1/HTTPS status=ok/pendingHealth=false，首次标记false；返回原Activity才出现“准备语音模型”
+实测UI := TTS约75MiB/ASR声纹约268MiB均默认checked=true/所选合计342MiB；原生截图及XML留证，展示后持久化true
+稍后 := 六个语音模型候选路径无文件 → 冷启动无重复弹框 → NEW_TASK加CLEAR_TASK重建Activity无重复且Node15542保持
+最终 := min59/code105/deps10/task1/API正常；临时ADB forward已移除；当前设备干净数据/模型未下载，旧数据只保留备份；本轮不验证下载权重或推理
 ```
 
 ## 在线TTS上游并发验证（2026-10-16）

@@ -1,14 +1,16 @@
 # 正式 Android 显示端完整离线 APK
 
-## min 首装语音提示漏出修复（2026-10-16，源码已实现，待出包与首装验收）
+## min 首装语音提示漏出修复（2026-10-16，min59空数据首启验收通过）
 
 用户报告真机 min 首次安装未弹出 TTS/ASR 下载确认。现有实现要求服务健康和显示页成功，但服务状态是即时广播，Activity 在 onStop 注销接收器后没有状态补发；返回前台或 Activity 重建时，运行中的服务可能不再发送 ready。首次状态 claim 还会在原生弹窗真正展示前设置 prompted，展示失败会消耗本轮提示机会，且未限制 Activity 必须位于前台。
 
 用户回复“是”确认方案。服务保留可重放的启动状态，Activity 恢复时通过不导出的应用内广播请求当前状态；请求不启动或重启服务，更新进度不覆盖启动健康状态。快照更新与重放同步串行，避免补发旧状态覆盖新状态；暂停时关闭本轮健康门槛，恢复后等待新快照。停止进程时作废旧快照，排队启动立即发送 preparing，服务更新期间关闭健康门槛。弹窗只在前台、服务健康且有效显示页成功时展示，展示成功或完整模型缓存跳过后才持久化完成标记，失败保留重试机会。保留 TTS 和 ASR/声纹默认两组、稍后不下载和手动入口。
 
-新增 NodeStartupStatus.kt 与对应自测，更新 MainActivity/NodeServerService/OfflineModelPreparationPlan；Android 定向 48/48、npm 首装打包回归 63/63 通过。minApk=true，其余产物状态保持 false；尚未签名构建或发布，不代表当前已安装 min58 已包含此修复。签名新 min 和干净首装提示仍待验收。
+新增 NodeStartupStatus.kt 与对应自测，更新 MainActivity/NodeServerService/OfflineModelPreparationPlan；Android 定向 48/48、npm 首装打包回归 63/63 通过。后续出包提交21196d92已发布min59/code105，minApk恢复false。2026-10-16核验两份min59 APK均为89,951,777字节/SHA256 `39a81020e4d90d723276bb7236787a41b95070aa42e1c23227c96befc6f4b341`，签名匹配既有a57fd4c3…指纹，profile=allserver-min/updateOnly；构建来源bb30fa05包含修复bb668d54，DEX含NodeStartupStatus/状态请求/tryPrompt。
 
-当前 ADB SM-N9500 为 min58，首次安装时间 2026-10-14，最后升级时间 2026-10-15；bootstrap-state 为 ready/standalone，offline_voice_first_run_v1=true。该设备已有提示处理记录，不能据此断言用户本次首装漏提示的现场原因。待确认报告设备/版本；不清空现有模型、应用数据或首次标记。任务见 `docs/task/20261016_Min首装语音模型提示漏出.md`。
+验收前 ADB SM-N9500 为 min58，已有首次处理标记，不能据此断言用户本次报告现场原因。用户明确允许备份后清空验证；已停止应用、完整备份并校验私有/外部目录和原APK，私有归档1,047,040,512字节/54,410项/48,859普通文件，设备文件数一致。备份保存`.cache/adb-min59-first-run-20261016-100056/`，未提交Git。
+
+安装min59后执行pm clear，确认旧服务目录不存在；这是空应用数据首启，未卸载APK。原生确认LAN约48MiB服务下载后立即退后台；服务在后台完成code105/deps10/task1健康提交，首次标记仍false。返回原Activity后正常显示“准备语音模型”，TTS约75MiB和ASR/声纹约268MiB均默认勾选，合计约342MiB；展示后标记true。点击稍后，六个模型候选路径均无文件；冷启动及重建Activity均不重复提示，后者Node PID不变。最终本机API正常，pendingHealth=false；手机保持干净min59/code105，未恢复旧数据、未下载语音权重。任务见 `docs/task/20261016_Min首装语音模型提示漏出.md`。
 
 ## Offline 本机模型入口下移与边缘收起（2026-10-15）
 
