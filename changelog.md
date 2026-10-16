@@ -5,6 +5,13 @@
   - 原模型、固定解码ONNX与浏览器数值验证通过；WASM约194–211ms，WebGPU后两图38–46ms（首图1035ms）；390px无横向溢出，手机速度未测试。
   - 真人抬腿左右归属仍与用户标注冲突，动漫手脚有偏差；不接入VAM，不替换MediaPipe默认。未修改生产代码/构建输入，Offline状态保持，未构建APK或发布。
 
+### 网页启动器APK安装授权返回自动续装
+
+- ✅ [2026-10-16] 修复未开启安装来源开关时网页启动器缺少授权返回续装的问题，允许后继续同一个已校验APK，拒绝时保留手动重试且不循环跳设置。
+  - `OfflineLauncherActivity.kt`保存待办/设置返回/前台状态，提交前消费待办，配置重建共享在途任务、系统Bundle恢复授权待办；准备与安装前校验/会话写入后台执行。
+  - `offline-launcher/ui/index.html`接收安装状态，事件计数防止旧RPC应答覆盖新文案；同步design/spec/task/usage/self-test，todo移除实施条目并保留出包/真机验收。
+  - Gradle :app:compileDebugKotlin --offline --no-daemon通过（3分24秒），网页内联脚本node --check与diff检查通过；未新增或运行测试、APK构建、发布或真机验收。minApk/servicePackage均true，其余产物状态保持；保留原工作区改动与远端文档。
+
 ### Offline 发布校验进度减少刷屏
 
 - ✅ [2026-10-16] 按确认将交互终端校验进度改为每秒同一行覆盖，文件/管道日志每10秒追加一行；关键阶段和结果始终立即记录。

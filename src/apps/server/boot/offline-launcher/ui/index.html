@@ -47,6 +47,8 @@ body.model-dialog button{min-height:38px;padding:8px 12px;font-size:14px;margin:
     const pending = new Map(); let serial = 0; const pageToken = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); let catalog = null; let states = []; let preview = null; let selected = new Set(); let preparing = [];
     let firstToken = null; let promptQuery = null; let confirming = false; let visibilityFrame = false;
     let automatic = false; let installing = false; let returning = false; let previewQuery = null; let firstRunQuery = false;
+    // 原生安装的授权/提交状态独立于服务更新；计数避免RPC旧响应覆盖较新的异步状态。
+    let apkInstallEvents = 0;
     const el = id => document.getElementById(id);
     const mib = bytes => Math.ceil(bytes / 1048576) + ' MiB';
     const statusNames = { ready: '本机服务已就绪', preparing: '正在准备本机服务', starting: '正在启动服务', installing: '正在安装服务', failed: '服务需要恢复' };
@@ -219,6 +221,7 @@ body.model-dialog button{min-height:38px;padding:8px 12px;font-size:14px;margin:
             renderProgress(value.payload);
         }
         if (value.type === 'service.result') { el('message').textContent = value.payload.detail; if (value.payload.status === 'service_update_failed') error(value.payload.detail); }
+        if (value.type === 'apk.installStatus') { apkInstallEvents += 1; el('apkDetail').textContent = value.payload.status; }
         if (value.type === 'ui.init') action(el('refresh'), async () => {
             automatic = value.payload.automatic === true;
             firstRunQuery = value.payload.firstRunQuery === true;
@@ -242,7 +245,7 @@ body.model-dialog button{min-height:38px;padding:8px 12px;font-size:14px;margin:
     button('check', async () => { const result = await call('service.check', { manualRetry: true }); el('updateDetail').textContent = result.status + (result.hasUpdate ? ' · 约 ' + mib(result.downloadBytes) : '') + (result.dataRepair?.sensitive ? '\n包含账号或配置修复，请确认后更新。' : ''); el('apply').hidden = !result.hasUpdate; el('versions').textContent = result.installed ? '服务 v' + result.installed.codeVersion + ' · 依赖 v' + result.installed.dependencyVersion : '尚未安装'; });
     button('apply', async () => { const result = await call('service.apply'); el('updateDetail').textContent = result.status; el('apply').hidden = true; await refresh(); });
     button('checkApk', async () => { const result = await call('apk.check'); el('apkDetail').textContent = result.status + (result.metadata ? ' · ' + result.metadata.versionName + ' · ' + mib(result.metadata.size) : ''); el('installApk').hidden = !result.metadata; });
-    button('installApk', async () => { const result = await call('native.installApk'); el('apkDetail').textContent = result.status; });
+    button('installApk', async () => { const seen = apkInstallEvents; const result = await call('native.installApk'); if (seen === apkInstallEvents) el('apkDetail').textContent = result.status; });
     button('later', async () => { el('first').hidden = true; for (const group of catalog.groups) selected.delete(group.id); renderModels(); if (automatic) await openDisplay(); });
     button('downloadModels', async () => {
         preparing = chosen(); if (!preparing.length) return;

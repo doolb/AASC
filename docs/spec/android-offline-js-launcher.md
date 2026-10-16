@@ -201,3 +201,27 @@ min61设备结果 = 原生构造无快照不崩溃 → 显示页已连接 → �
 证明边界 := 空首包行为由110观测，112补布局后经真实更新/冷启动；273px布局在真实WebView应用同源最终CSS验证；不称默认生产源112空安装
 未验 := 旧full迁移/真实权重下载与加载推理/基准性能；不将准备提示等同权重或引擎ready
 ```
+
+## 安装来源授权返回续装（2026-10-16，源码完成）
+
+```text
+已有声明 := OfflineLauncherActivity.Bridge/native.installApk/onResume；OfflineUpdateManager.requiresUnknownSourcesApproval/installPreparedMinApk
+新增定义 := 待安装记录 { 已验证更新, 授权等待, 已提交 }；Activity重建恢复标记
+操作流程 := 用户点击安装 → 后台取得/验证缓存APK → 前台保存待安装记录
+已有授权 → 先消费待办以阻止重复提交 → 现有校验与PackageInstaller提交 → 网页反馈已请求系统安装
+没有授权 → 打开本应用安装来源设置 → 网页反馈等待授权，不长期挂起RPC
+设置返回且前台 → 重新查询真实权限，不依赖resultCode → 已允许则续装一次
+未允许/取消 → 提示未授权，保留手动重试，不自动循环弹设置
+Activity重建 → 恢复待办标记，后台重新验证受控缓存后续装，不接受网页任意路径
+异常 → 恢复可重试状态并明确显示原因；系统最终安装确认继续由用户操作
+边界 := 不改服务更新/模型下载；不以等待授权伪装已提交安装；min APK需重新出包
+实现细化 := 原生安装状态独立保留于配置重建；Bundle保存系统待办身份，不接受网页路径
+准备与安装 := 后台执行缓存准备/大小SHA与PackageInstaller写入；主线程仅调度、权限与状态
+网页RPC := 立即返回准备/授权等待等当前状态；apk.installStatus事件继续更新apkDetail；onPageFinished重放最新状态
+设置返回 := onActivityResult与onResume共用前台检查；onPause记录确实离开，避免刚打开设置即认作返回
+重复点击/恢复 := preparing/submitting/awaitingApproval阶段归并；提交前消费待办，配置重建共享在途状态
+进程重建 := 授权等待恢复同一元数据/缓存；保存时正在准备/提交则要求手动重试，不自动重复系统提交
+未授权/失败 := 保留已验证待办供手动重试，关闭自动续装闸门；没有权限不创建安装会话
+影响 := OfflineLauncherActivity.kt、启动页ui/index.html及minApk/servicePackage出包标记
+状态 := 源码完成；Kotlin compileDebugKotlin与网页内联脚本语法/diff检查通过；未新增/运行测试或出包/真机验收
+```

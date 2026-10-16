@@ -2,7 +2,12 @@ package com.aasc.display
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import android.widget.Toast
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -23,6 +28,12 @@ class OfflineLauncherActivity : AppCompatActivity() {
     private var loadedRoot: String? = null
     @Volatile private var documentHtml = ""
     private var resumed = false
+    private lateinit var apkInstall: ApkInstallState
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val installChanged: () -> Unit = {
+        renderApkInstallStatus()
+        continueApkInstall()
+    }
     private val pending = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val listener: (JSONObject) -> Unit = { message ->
         runOnUiThread {
@@ -38,7 +49,21 @@ class OfflineLauncherActivity : AppCompatActivity() {
         const val EXTRA_AUTOMATIC = "launcher_automatic"
         const val EXTRA_DEFERRED = "launcher_deferred"
         private const val ORIGIN = OfflineLauncherProtocol.LOCAL_DOCUMENT_URL
+        private const val REQ_INSTALL_UNKNOWN_SOURCES = 42
+        private const val APK_INSTALL_STATE = "launcher_apk_install"
 
+    }
+
+    /** 仅主线程修改；配置重建共享在途任务，防止旧任务完成后新页面再次提交安装。 */
+    private class ApkInstallState {
+        var update: MinApkUpdateResult? = null
+        var preparing = false
+        var submitting = false
+        var awaitingApproval = false
+        var approvalPaused = false
+        var resumePending = false
+        var status = ""
+        var changed: (() -> Unit)? = null
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -48,6 +73,9 @@ class OfflineLauncherActivity : AppCompatActivity() {
         if (automatic) setTheme(androidx.appcompat.R.style.Theme_AppCompat_Dialog)
         super.onCreate(state)
         if (!OfflineLauncherSession.enabled(this)) { finish(); return }
+        apkInstall = lastCustomNonConfigurationInstance as? ApkInstallState
+            ?: restoreApkInstall(state?.getBundle(APK_INSTALL_STATE))
+        apkInstall.changed = installChanged
         page = WebView(this)
         page.settings.apply {
             javaScriptEnabled = true
@@ -72,6 +100,7 @@ class OfflineLauncherActivity : AppCompatActivity() {
                     .put("automatic", automatic)
                     .put("firstRunQuery", true)
                     .put("firstRunToken", intent.getStringExtra(EXTRA_FIRST_RUN_TOKEN))))
+                if (url == ORIGIN) renderApkInstallStatus()
             }
         }
         setContentView(page)
@@ -85,8 +114,185 @@ class OfflineLauncherActivity : AppCompatActivity() {
         ensureService()
     }
 
-    override fun onResume() { super.onResume(); resumed = true }
-    override fun onPause() { resumed = false; super.onPause() }
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        if (::apkInstall.isInitialized) continueApkInstall()
+    }
+
+    override fun onPause() {
+        resumed = false
+        if (::apkInstall.isInitialized && apkInstall.awaitingApproval) apkInstall.approvalPaused = true
+        super.onPause()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_INSTALL_UNKNOWN_SOURCES || !::apkInstall.isInitialized) return
+        // 厂商设置页的resultCode不可靠，实际权限在恢复前台后重新查询。
+        apkInstall.approvalPaused = true
+        continueApkInstall()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRetainCustomNonConfigurationInstance(): Any? =
+        if (::apkInstall.isInitialized) apkInstall else null
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (::apkInstall.isInitialized) outState.putBundle(APK_INSTALL_STATE, saveApkInstall())
+        super.onSaveInstanceState(outState)
+    }
+
+    /** 网页请求立即取得当前阶段；用户在系统设置停留多久都不会挂住原RPC。 */
+    private fun beginApkInstall(): JSONObject {
+        check(resumed && !isDestroyed && !isFinishing) { "请返回本页再次点击安装" }
+        if (apkInstall.preparing || apkInstall.submitting || apkInstall.awaitingApproval)
+            return JSONObject().put("status", apkInstall.status)
+        apkInstall.resumePending = true
+        if (apkInstall.update != null) {
+            continueApkInstall()
+            return JSONObject().put("status", apkInstall.status)
+        }
+        val operation = apkInstall
+        operation.preparing = true
+        operation.status = "正在准备并校验安装包"
+        renderApkInstallStatus()
+        val manager = OfflineUpdateManager(applicationContext)
+        val root = File(filesDir, "aasc-server")
+        workers.execute {
+            val result = try {
+                manager.checkAndPrepareMinApkUpdate(root)
+            } catch (error: Exception) {
+                MinApkUpdateResult(error.message ?: "安装包准备失败", failed = true)
+            }
+            mainHandler.post {
+                operation.preparing = false
+                if (result.failed || result.apkFile == null || result.metadata == null) {
+                    operation.resumePending = false
+                    operation.status = result.status
+                } else {
+                    operation.update = result
+                    operation.status = "安装包已校验，等待前台继续安装"
+                }
+                // 完成回调交给当前Activity；旧Activity销毁后不再访问其WebView。
+                operation.changed?.invoke()
+            }
+        }
+        return JSONObject().put("status", apkInstall.status)
+    }
+
+    /** 前台统一消费待办；设置返回、重复resume和RPC点击都不会重复创建安装会话。 */
+    private fun continueApkInstall() {
+        if (!resumed || isDestroyed || isFinishing || !apkInstall.resumePending) return
+        if (apkInstall.preparing || apkInstall.submitting) return
+        val update = apkInstall.update ?: return
+        val manager = OfflineUpdateManager(applicationContext)
+        if (apkInstall.awaitingApproval) {
+            if (!apkInstall.approvalPaused) return
+            apkInstall.awaitingApproval = false
+            apkInstall.approvalPaused = false
+            if (manager.requiresUnknownSourcesApproval()) {
+                apkInstall.resumePending = false
+                apkInstall.status = "未允许此来源安装，请再次点击安装并开启系统开关"
+                renderApkInstallStatus()
+                Toast.makeText(this, apkInstall.status, Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+        if (manager.requiresUnknownSourcesApproval()) {
+            // 只有明确点击或刚完成的准备任务会到达这里；拒绝后已关闭resumePending。
+            requestApkInstallApproval()
+            return
+        }
+        submitApkInstall(manager, update)
+    }
+
+    private fun requestApkInstallApproval() {
+        apkInstall.awaitingApproval = true
+        apkInstall.approvalPaused = false
+        apkInstall.status = "请开启“允许此来源安装”，返回后将自动继续安装"
+        renderApkInstallStatus()
+        try {
+            startActivityForResult(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                .setData(Uri.parse("package:$packageName")), REQ_INSTALL_UNKNOWN_SOURCES)
+        } catch (error: Exception) {
+            apkInstall.awaitingApproval = false
+            apkInstall.resumePending = false
+            apkInstall.status = "无法打开安装权限设置：${error.message}，请稍后重试"
+            renderApkInstallStatus()
+            Toast.makeText(this, apkInstall.status, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** 哈希、包身份检查及会话写入留在后台；提交前消费待办，系统确认始终由用户操作。 */
+    private fun submitApkInstall(manager: OfflineUpdateManager, update: MinApkUpdateResult) {
+        val operation = apkInstall
+        operation.update = null
+        operation.resumePending = false
+        operation.submitting = true
+        operation.status = "正在提交系统安装"
+        renderApkInstallStatus()
+        workers.execute {
+            val failure = try {
+                if (manager.installPreparedMinApk(update)) null else "安装权限已关闭，请重试并允许此来源安装"
+            } catch (error: Exception) { error.message ?: "安装提交失败" }
+            mainHandler.post {
+                operation.submitting = false
+                operation.status = if (failure == null) "已请求系统安装，请在系统提示中确认"
+                    else "未能提交安装：$failure"
+                if (failure != null) operation.update = update
+                operation.changed?.invoke()
+            }
+        }
+    }
+
+    private fun renderApkInstallStatus() {
+        if (!::page.isInitialized || isDestroyed || !::apkInstall.isInitialized || apkInstall.status.isBlank()) return
+        emit(JSONObject().put("type", "apk.installStatus").put("payload", JSONObject().put("status", apkInstall.status)))
+    }
+
+    /** 系统Bundle只存本次用户已选择包的身份；恢复后仍走安装器的缓存路径、SHA和签名验证。 */
+    private fun saveApkInstall(): Bundle = Bundle().apply {
+        putString("status", apkInstall.status)
+        putBoolean("busy", apkInstall.preparing || apkInstall.submitting)
+        putBoolean("resumePending", apkInstall.resumePending)
+        putBoolean("awaitingApproval", apkInstall.awaitingApproval)
+        val update = apkInstall.update ?: return@apply
+        val metadata = update.metadata ?: return@apply
+        putString("path", update.apkFile?.absolutePath)
+        putInt("versionCode", metadata.versionCode)
+        putString("versionName", metadata.versionName)
+        putString("relativeUrl", metadata.artifact.relativeUrl)
+        putLong("size", metadata.artifact.size)
+        putString("sha256", metadata.artifact.sha256)
+        putString("packageName", metadata.packageName)
+        putString("signerSha256", metadata.signerSha256)
+        putString("modelCompatibilitySha256", metadata.modelCompatibilitySha256)
+    }
+
+    private fun restoreApkInstall(saved: Bundle?): ApkInstallState = ApkInstallState().apply {
+        if (saved == null) return@apply
+        status = saved.getString("status").orEmpty()
+        if (saved.getBoolean("busy")) {
+            status = "上次安装任务已中断，请点击安装重试"
+            return@apply
+        }
+        try {
+            val path = saved.getString("path") ?: return@apply
+            val version = saved.getInt("versionCode")
+            val metadata = OfflineMinApkArtifact(version, requireNotNull(saved.getString("versionName")),
+                OfflineUpdateArtifact(version, requireNotNull(saved.getString("relativeUrl")), saved.getLong("size"),
+                    requireNotNull(saved.getString("sha256"))), requireNotNull(saved.getString("packageName")),
+                requireNotNull(saved.getString("signerSha256")), requireNotNull(saved.getString("modelCompatibilitySha256")))
+            update = MinApkUpdateResult("恢复待安装APK", File(path), metadata)
+            resumePending = saved.getBoolean("resumePending")
+            awaitingApproval = saved.getBoolean("awaitingApproval")
+            approvalPaused = awaitingApproval
+        } catch (_: Exception) {
+            status = "无法恢复待安装任务，请点击安装重试"
+        }
+    }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
@@ -150,18 +356,13 @@ class OfflineLauncherActivity : AppCompatActivity() {
                             JSONObject()
                         }
                         "native.installApk" -> {
-                            val manager = OfflineUpdateManager(this@OfflineLauncherActivity)
-                            val update = manager.checkAndPrepareMinApkUpdate(File(filesDir, "aasc-server"))
-                            check(!update.failed && update.apkFile != null) { update.status }
-                            val installed = java.util.concurrent.CompletableFuture<Boolean>()
+                            val accepted = java.util.concurrent.CompletableFuture<JSONObject>()
                             runOnUiThread {
                                 try {
-                                    check(resumed && !isDestroyed && !isFinishing) { "下载已完成，请返回本页再次点击安装" }
-                                    installed.complete(manager.installPreparedMinApk(update))
-                                } catch (error: Exception) { installed.completeExceptionally(error) }
+                                    accepted.complete(beginApkInstall())
+                                } catch (error: Exception) { accepted.completeExceptionally(error) }
                             }
-                            JSONObject().put("status", if (installed.get(30, java.util.concurrent.TimeUnit.SECONDS))
-                                "已请求系统安装" else "请在系统页面允许安装后返回重试")
+                            accepted.get(30, java.util.concurrent.TimeUnit.SECONDS)
                         }
                         else -> {
                             require(type in OfflineLauncherProtocol.commands) { "不支持的启动器操作" }
@@ -181,6 +382,7 @@ class OfflineLauncherActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         OfflineLauncherClient.unsubscribe(listener)
+        if (::apkInstall.isInitialized && apkInstall.changed === installChanged) apkInstall.changed = null
         if (::page.isInitialized) { page.removeJavascriptInterface("OfflineLauncher"); page.destroy() }
         workers.shutdown()
         super.onDestroy()
