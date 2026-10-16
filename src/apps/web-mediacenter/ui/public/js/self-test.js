@@ -303,7 +303,9 @@ const SelfTest = {
                     && !Object.hasOwn(config.providers.system, 'defaultVoice')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'chat2apiAccountId')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'credentialSource')
-                    && typeof config.providers['qwen-chat'].model==='string' && Boolean(config.providers['qwen-chat'].model.trim())
+                    && config.providers['qwen-chat'].model === 'QUARK_VOICE'
+                    && config.providers['qwen-api'].model === 'qwen-audio-3.1-tts-flash'
+                    && ['qwen-chat', 'qwen-api'].every(id => !document.querySelector(`[data-tts-provider="${id}"] [data-tts-field="model"]`))
                     && !Object.hasOwn(config.providers['doubao-chat'], 'chat2apiAccountId')
                     && !Object.hasOwn(config.providers['doubao-chat'], 'credentialSource')
                     && config.providers['doubao-chat'].model === 'doubao-chat';

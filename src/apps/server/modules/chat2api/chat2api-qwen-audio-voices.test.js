@@ -59,8 +59,29 @@ test('Qwen 3.1目录经统一映射、业务Registry及WS查询一致，旧false
 test('3.1音色不混入其它Qwen模型目录，目录查询不发生成请求', async () => {
     const api = createApiSpeechAdapters({ httpRequest: () => assert.fail('查询不下载'), jsonRequest: () => assert.fail('查询不合成') });
     assert.equal((await api['qwen-api'].voices({ model: QWEN_AUDIO_31_MODEL })).length, 68);
-    for (const model of ['qwen-audio-3.0-tts-flash', 'qwen-audio-3.0-tts-plus']) assert.deepEqual(await api['qwen-api'].voices({ model }), []);
-    const legacy = await api['qwen-api'].voices({ model: 'qwen3-tts-flash' });
-    assert.ok(legacy.some(v => v.id === 'Cherry'));
-    assert.ok(legacy.every(v => !v.id.endsWith('_v3.1')));
+    assert.equal((await api['qwen-api'].voices()).length, 68);
+    for (const model of ['qwen-audio-3.0-tts-flash', 'qwen-audio-3.0-tts-plus', 'qwen3-tts-flash', 'custom']) {
+        await assert.rejects(api['qwen-api'].voices({ model }), error => error.code === 'unsupported_speech_model');
+    }
+});
+
+// 对应.src/framework/qwen-tts-fixed-models.md：目录不能宣传已被禁止的映射；内部计划同样受最终约束。
+test('目录过滤旧Qwen模型映射，内部伪造计划在账号读取前拒绝', async () => {
+    const mappings = [
+        { model: 'old-api', actualModel: 'qwen-api/qwen3-tts-flash' },
+        { model: 'old-web', actualModel: 'MINI_MAX' },
+        { model: 'valid-voice', actualModel: 'qwen-api/' + QWEN_AUDIO_31_MODEL, parameters: { voice: 'Emily_v3.1' } }
+    ];
+    const speech = createChat2ApiSpeechService({
+        dataStore: { listAccounts: async () => ['qwen-api', 'qwen'].map(providerId => ({ providerId, secretConfigured: true })), readCollection: async () => mappings },
+        providerRegistry: { listProviders: async () => [{ id: 'qwen-api' }, { id: 'qwen' }] },
+        modelMapper: { resolveModel: async model => ({ actualModel: model }) },
+        loadBalancer: { selectAccount: () => assert.fail('非法模型不读取账号') }
+    });
+    const models = await speech.listModels();
+    assert.ok(models.some(model => model.id === 'valid-voice'));
+    assert.ok(!models.some(model => ['old-api', 'old-web', 'MINI_MAX', 'qwen-api/qwen3-tts-flash'].includes(model.id)));
+    for (const [providerId, upstreamModel] of [['qwen-api', 'qwen3-tts-flash'], ['qwen', 'MINI_MAX']]) {
+        await assert.rejects(speech.generate({ input: '你好' }, { resolvedPlan: { providerId, upstreamModel, application: 'tts' } }), e => e.code === 'unsupported_speech_model');
+    }
 });

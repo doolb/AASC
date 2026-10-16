@@ -4,7 +4,7 @@
     const PROVIDERS = { system: '系统原生', 'qwen-chat': '国内千问网页', 'qwen-api': 'Qwen API', 'doubao-api': '豆包 API', 'doubao-chat': '豆包网页朗读（实验）' };
     const PROVIDER_CAPABILITIES = { system: { supportsSpeed: true }, 'qwen-chat': { supportsSpeed: true },
         'qwen-api': { supportsSpeed: true }, 'doubao-api': { supportsSpeed: true }, 'doubao-chat': { supportsSpeed: false } };
-    const QWEN_API_RATE_MODELS = new Set(['qwen-audio-3.1-tts-flash', 'qwen-audio-3.0-tts-flash', 'qwen-audio-3.0-tts-plus']);
+    const QWEN_API_RATE_MODELS = new Set(['qwen-audio-3.1-tts-flash']);
     const BUSINESSES = { aiReplyDefault: 'AI / Agent 回复', textMedia: '文本阅读', systemBroadcast: '报时与系统播报' };
     const NUMBER_FIELDS = { defaultSpeed: [-10, 10], defaultVolume: [0, 100] };
     // 此页仅编辑业务偏好；凭证、服务地址和资源 ID 统一交由 Chat2API 账户管理。
@@ -44,7 +44,7 @@
     function updateSpeedVisibility(provider) {
         const inputs = fields.get(provider);
         if (!inputs?.defaultSpeed) return;
-        const supported = supportsNativeSpeed(provider, inputs.model?.value);
+        const supported = supportsNativeSpeed(provider, config?.providers?.[provider]?.model);
         const wrapper = inputs.defaultSpeed.parentElement;
         inputs.defaultSpeed.disabled = !supported;
         wrapper.hidden = !supported;
@@ -178,27 +178,14 @@
                 inputs.defaultSpeed = speed;
                 addField(group, '语速（−10 至 10）', speed);
             }
-            const names = id === 'system' ? [] : id === 'doubao-chat' ? ['defaultVoice'] : Object.keys(FIELD_LABELS);
+            const names = id === 'system' ? [] : id === 'doubao-api' ? Object.keys(FIELD_LABELS) : ['defaultVoice'];
             for (const name of names) {
-                const restrictedModel = id === 'qwen-chat' && name === 'model';
                 const input = create('input');
                 input.dataset.ttsField = name;
                 input.type = NUMBER_FIELDS[name] ? 'number' : 'text';
                 input.autocomplete = 'off';
                 input.maxLength = 512;
                 if (NUMBER_FIELDS[name]) [input.min, input.max] = NUMBER_FIELDS[name];
-                if (restrictedModel) {
-                    // 保留网页支持模型候选，同时允许显式映射别名；实际目标能力由服务器校验。
-                    const models = create('datalist');
-                    models.id = 'ttsProviderModels-qwen-chat';
-                    for (const [model, title] of Object.entries({ QUARK_VOICE: 'QUARK_VOICE（默认）', MINI_MAX: 'MINI_MAX（需匹配音色）' })) {
-                        const option = create('option', title);
-                        option.value = model;
-                        models.appendChild(option);
-                    }
-                    group.appendChild(models);
-                    input.setAttribute('list', models.id);
-                }
                 if (id === 'doubao-chat') input.readOnly = false;
                 if (name === 'defaultVoice') input.setAttribute('list', `ttsProviderVoices-${id}`);
                 inputs[name] = input;
@@ -206,7 +193,7 @@
             }
             if (id === 'qwen-chat') {
                 group.appendChild(create('p', '由 Chat2API 提供语音合成，账号和登录状态请在 Chat2API 账户管理中维护。'));
-                group.appendChild(create('p', '网页模型默认 QUARK_VOICE；MINI_MAX 需匹配音色。可填写映射到该网页来源的 Chat2API 别名；qwen3-tts-flash 请使用 Qwen API。'));
+                group.appendChild(create('p', '底层模型固定为 QUARK_VOICE，可选择音色和设置语速。'));
             }
             if (id === 'doubao-chat') {
                 // 对应.src/framework/tts-provider-configuration.md：上游并发独立保存，不混入音色或语速字段。
@@ -223,8 +210,9 @@
             }
             if (['qwen-api', 'doubao-api'].includes(id)) {
                 group.appendChild(create('p', `由 Chat2API 的 ${id === 'qwen-api' ? 'qwen-api' : 'doubaapi'} 提供语音合成。请在 Chat2API 添加 API 账号时配置 API Key、可选服务端点${id === 'doubao-api' ? '与资源 ID' : ''}；留空使用官方默认。`));
-                group.appendChild(create('p', `可填写该来源的模型或映射别名${id === 'qwen-api' ? '，例如 qiaoxiaojiao' : ''}；这里只保存启用、模型、音色及本Provider语速；音量使用上方全局设置。账号保存仅校验格式，尚未远端验证。`));
-                if (id === 'qwen-api') group.appendChild(create('p', '语速只对原生支持 input.rate 的 Qwen-Audio 3.0/3.1 TTS 模型显示；Qwen3-TTS HTTP 接口未声明语速参数时隐藏。'));
+                group.appendChild(create('p', id === 'qwen-api'
+                    ? '底层模型固定为 qwen-audio-3.1-tts-flash，音色使用对应的 3.1 目录；可设置音色和原生语速，音量使用上方全局设置。'
+                    : '可填写该来源的模型或映射别名；这里只保存模型、音色及本 Provider 语速，音量使用上方全局设置。账号保存仅校验格式，尚未远端验证。'));
             }
             if (id === 'system') group.appendChild(create('p', '沿用现有 TTS 生成设备、服务器开关及原生音色配置。'));
             const query = create('button', '查询音色');

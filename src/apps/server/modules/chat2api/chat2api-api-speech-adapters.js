@@ -2,6 +2,7 @@
 
 const { randomUUID } = require('node:crypto');
 const { QWEN_AUDIO_31_MODEL, listQwenAudio31Voices } = require('./chat2api-qwen-audio-voices');
+const { assertFixedQwenTtsModel, normalizeQwenApiVoice } = require('./chat2api-qwen-tts-models');
 const { StringDecoder } = require('node:string_decoder');
 const { requestLimited, requestJson } = require('../tts/tts-provider-http');
 const { createProviderError } = require('../tts/tts-provider-errors');
@@ -13,7 +14,7 @@ const ENDPOINTS = Object.freeze({
     'qwen-api': 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
     doubaapi: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional'
 });
-const VOICES = Object.freeze({ 'qwen-api': ['Cherry', 'Ethan', 'Chelsie', 'Serena'], doubaapi: ['zh_female_vv_uranus_bigtts'] });
+const VOICES = Object.freeze({ doubaapi: ['zh_female_vv_uranus_bigtts'] });
 const abortError = () => Object.assign(new Error('TTS 上游请求已取消'), { name: 'AbortError', code: 'ABORT_ERR' });
 const timeoutError = () => Object.assign(new Error('TTS 上游请求超时'), { code: 'TTS_PROVIDER_TIMEOUT' });
 
@@ -75,7 +76,8 @@ function createApiSpeechAdapters({ httpRequest = requestLimited, jsonRequest = r
     const qwenApi = {
         generate: withBudget(async (request, credential, context, budget) => {
             if (Array.from(request.text).length > 600) throw new Error('Qwen TTS 单次文本不能超过600字符');
-            if (!request.model) throw new Error('Qwen TTS 模型不能为空');
+            assertFixedQwenTtsModel('qwen-api', request.model);
+            request = { ...request, model: QWEN_AUDIO_31_MODEL, voice: normalizeQwenApiVoice(request.voice) };
             const endpoint = resolveEndpoint('qwen-api', context, request.model);
             const result = await jsonRequest(endpoint, {
                 method: 'POST', timeoutMs: budget.remaining(), signal: budget.signal,
@@ -94,9 +96,8 @@ function createApiSpeechAdapters({ httpRequest = requestLimited, jsonRequest = r
             return adjustWavVolume(wav, request.volume);
         }),
         async voices(request = {}) {
-            if (request.model === QWEN_AUDIO_31_MODEL) return listQwenAudio31Voices();
-            const voices = request.model?.startsWith('qwen-audio-') ? [] : VOICES['qwen-api'];
-            return voices.map(id => ({ id, name: id, available: true }));
+            assertFixedQwenTtsModel('qwen-api', request.model ?? QWEN_AUDIO_31_MODEL);
+            return listQwenAudio31Voices();
         }
     };
     const doubaoApi = {

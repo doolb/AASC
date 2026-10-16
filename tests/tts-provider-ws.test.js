@@ -103,7 +103,7 @@ test('TTS不再处理或调用账号候选查询', async () => {
     assert.equal(accessed, false);
 });
 
-test('错误网页模型保存失败回传原权威值，支持的别名广播规范化后值', async () => {
+test('错误网页模型保存失败回传原权威值，同固定值兼容保存广播', async () => {
     let settings = normalizeSettings();
     const replies = [];
     const broadcasts = [];
@@ -115,10 +115,10 @@ test('错误网页模型保存失败回传原权威值，支持的别名广播�
     await handler.handle(control, { type: 'setTtsProviderConfig', requestId: 'bad-model', config: { providers: { 'qwen-chat': { model: 'qwen3-tts-flash' } } } });
     assert.equal(replies[0].success, false);
     assert.equal(replies[0].requestId, 'bad-model');
-    assert.match(replies[0].message, /Qwen API/u);
+    assert.match(replies[0].message, /固定为 QUARK_VOICE/u);
     assert.equal(replies[0].config.providers['qwen-chat'].model, 'QUARK_VOICE');
     assert.deepEqual(broadcasts, []);
-    await handler.handle(control, { type: 'setTtsProviderConfig', config: { providers: { 'qwen-chat': { model: 'qwen-chat' } } } });
+    await handler.handle(control, { type: 'setTtsProviderConfig', config: { providers: { 'qwen-chat': { model: 'QUARK_VOICE' } } } });
     assert.equal(broadcasts[0].config.providers['qwen-chat'].model, 'QUARK_VOICE');
 });
 
@@ -173,7 +173,7 @@ test('真实显示入口补入displayId后仍可快选，未知业务字段和�
 });
 
 test('快捷语速只写目标方式偏好，归一化范围并拒绝不支持或混合写入', async () => {
-    let settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat', voice: null }, providers: { 'qwen-api': { model: 'qwen3-tts-flash' } } });
+    let settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat', voice: null } });
     const replies = [], broadcasts = [];
     const display = { send: raw => replies.push(JSON.parse(raw)) };
     const handler = createTtsProviderWs({ config: {
@@ -192,7 +192,7 @@ test('快捷语速只写目标方式偏好，归一化范围并拒绝不支持�
     }
     const prior = JSON.stringify(settings);
     for (const request of [
-        { provider: 'doubao-chat', speed: 2 }, { provider: 'qwen-api', speed: 2 },
+        { provider: 'doubao-chat', speed: 2 },
         ...[null, '2', NaN, Infinity, {}].map(speed => ({ provider: 'qwen-chat', speed })),
         { provider: 'qwen-chat', speed: 2, voice: 'voice' },
         { provider: 'qwen-chat', speed: 2, enabled: true }

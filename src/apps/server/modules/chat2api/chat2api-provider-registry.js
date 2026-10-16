@@ -1,8 +1,9 @@
 const {canonicalProviderId}=require('./chat2api-model-capabilities');
+const {QWEN_AUDIO_31_MODEL}=require('./chat2api-qwen-tts-models');
 const BUILTIN_PROVIDERS = Object.freeze([
   {
     id:'qwen-api',publicId:'qwen-api',name:'Qwen API',authType:'apiKey',apiEndpoint:'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-    supportedModels:['qwen-api/qwen-audio-3.1-tts-flash','qwen-api/qwen-audio-3.0-tts-flash','qwen-api/qwen-audio-3.0-tts-plus','qwen-api/qwen3-tts-flash'],
+    supportedModels:[`qwen-api/${QWEN_AUDIO_31_MODEL}`],
     credentialFields:[{name:'apiKey',label:'API Key（保存仅验证格式）',type:'password',required:true},{name:'endpoint',label:'可选API端点',type:'text',required:false,helpText:'留空使用官方默认端点'}],authMethods:['manual'],capabilities:{applications:['tts'],text:false,audio:true},
   },
   {
@@ -95,6 +96,7 @@ const createChat2ApiProviderRegistry = ({ dataStore } = {}) => {
       ...storedById.get(builtin.id),
       id: builtin.id,
       providerId: builtin.id,
+      ...(builtin.id === 'qwen-api' ? { supportedModels: clone(builtin.supportedModels) } : {}),
       // 豆包网页是固定来源的独立协议，用户覆盖只保留启停/备注；禁止把它变成任意来源的凭据转发器。
       ...(builtin.id === 'doubaochat' ? {
         type: 'builtin', authType: builtin.authType, apiEndpoint: builtin.apiEndpoint, loginUrl: builtin.loginUrl,

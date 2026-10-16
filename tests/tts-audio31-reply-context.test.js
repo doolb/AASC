@@ -22,7 +22,7 @@ function placeholder() {
     return value;
 }
 
-test('三个Provider默认开启，Qwen31乔小娇默认，显式旧模型/音色/禁用/凭证保留', () => {
+test('三个Provider默认开启，Qwen31乔小娇默认，历史模型恢复固定值、未知音色和凭证保留', () => {
     const fresh = normalizeSettings();
     for (const id of ['qwen-chat', 'qwen-api', 'doubao-api']) assert.equal(fresh.providers[id].enabled, true);
     assert.equal(fresh.providers['qwen-api'].model, 'qwen-audio-3.1-tts-flash');
@@ -30,11 +30,11 @@ test('三个Provider默认开启，Qwen31乔小娇默认，显式旧模型/音�
     const old = { providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultVoice: 'Maia', credential: 'retained', enabled: false },
         'qwen-chat': { enabled: false }, 'doubao-api': { enabled: false } } };
     const result = normalizeSettings({}, old);
-    for (const id of ['qwen-chat', 'qwen-api', 'doubao-api']) assert.equal(result.providers[id].enabled, false);
-    assert.equal(result.providers['qwen-api'].model, 'qwen3-tts-flash');
+    for (const id of ['qwen-chat', 'qwen-api', 'doubao-api']) assert.equal(result.providers[id].enabled, true);
+    assert.equal(result.providers['qwen-api'].model, 'qwen-audio-3.1-tts-flash');
     assert.equal(result.providers['qwen-api'].defaultVoice, 'Maia');
     assert.equal(result.providers['qwen-api'].credential, 'retained');
-    assert.ok(result.providers['qwen-api'].endpoint.endsWith(legacyPath));
+    assert.ok(result.providers['qwen-api'].endpoint.endsWith(audioPath));
     assert.equal(redactSettings(result).providers['qwen-api'].credential, undefined);
 });
 
@@ -94,13 +94,12 @@ test('Qwen适配器新旧实际请求契约、占位修复、目录及非零速�
     assert.ok(seen[0].endpoint.endsWith(audioPath));
     assert.deepEqual(seen[0].body.input, { text: '你好', voice: 'qiaoxiaojiao_v3.1', format: 'wav', sample_rate: 24000, rate: 1 });
     const oldSettings = { ...newSettings, model: 'qwen3-tts-flash', defaultVoice: 'Maia' };
-    await generate(oldSettings, '旧模型', 1, 'Maia');
-    assert.ok(seen[1].endpoint.endsWith(legacyPath));
-    assert.deepEqual(seen[1].body.input, { text: '旧模型', voice: 'Maia', language_type: 'Auto' });
-    assert.deepEqual(await registry['qwen-api'].voices({ model: newSettings.model }), [{ id: 'qiaoxiaojiao_v3.1', name: '乔小娇', available: true }]);
-    assert.ok((await registry['qwen-api'].voices({ model: oldSettings.model })).some(voice => voice.id === 'Cherry'));
+    await assert.rejects(generate(oldSettings, '旧模型', 1, 'Maia'), /固定/u);
+    assert.equal(seen.length, 1);
+    assert.equal((await registry['qwen-api'].voices({ model: newSettings.model })).length, 68);
+    await assert.rejects(registry['qwen-api'].voices({ model: oldSettings.model }), /固定/u);
     audio = wav.subarray(0, wav.length - 2);
-    await assert.rejects(generate(oldSettings, '截断', 1, 'Maia'), /截断/u);
+    await assert.rejects(generate(newSettings, '截断', 1), /截断/u);
 });
 
 test('上一句输入有界Unicode快照、非法来源拒绝，模板仍由服务端权威读取', () => {

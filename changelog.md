@@ -12907,3 +12907,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 ### 千问TTS固定模型设计
 
 - ✅ [2026-10-16] 核对Qwen API及千问网页TTS仍读取可变settings.model，按用户要求形成固定底层模型方案：API拟qwen-audio-3.1-tts-flash、网页拟QUARK_VOICE，UI/配置/目录/映射/planner/最终适配器统一约束，处理已知旧音色并保护有效自选。同步design/spec/task/todo，实际模型值与实施待确认；未改源码、测试、构建或发布，状态不变。
+
+### 千问TTS固定底层模型实现
+
+- ✅ [2026-10-16] 按确认将Qwen API固定为qwen-audio-3.1-tts-flash、千问网页固定为QUARK_VOICE，移除两路模型配置入口。
+  - 新增chat2api-qwen-tts-models.js共享常量；配置读取忽略旧model/mappedModel，普通保存移除两路持久化模型字段，权威快照仍返回只读model。Registry、planner、目录及最终API/网页适配器统一约束，旧实际模型/绕过映射明确拒绝，普通LLM与有效音色别名保持。
+  - 已知Cherry/Ethan/Chelsie/Serena默认、业务和生成音色恢复乔小娇；有效3.1大小写与未知用户ID保持。68项音色独立保存在qwen-audio-31-voices.json，配置只保存选中ID；两端读取旧配置后直接显示新目录及原生语速。更新正式设置页、自测、设计/spec/任务与使用文档。
+  - 验证通过：Chat2API279/279、双端音色26/26、Provider/业务/网页/浏览器98/98、修复72/72、聊天TTS22/22（部分重叠）；覆盖本地HTTP/WS、实际页面、多端广播/重连、旧修复幂等与真实种子worker。repair4脚本和已构建归档不改写。
+  - 仅servicePackage=true，其余产物标记按当前值保留。本轮未重启、修改真实配置、真实上游合成、ADB播放、构建或发布；待办保留后续服务包与设备验收。

@@ -1,6 +1,6 @@
 'use strict';
 const catalog = require('./qwen-audio-31-voices.json');
-const QWEN_AUDIO_31_MODEL = 'qwen-audio-3.1-tts-flash';
+const { QWEN_AUDIO_31_MODEL } = require('./chat2api-qwen-tts-models');
 
 // 对应.src/framework/tts-provider-configuration.md：仅保存官方3.1段公开目录，ID大小写不可改写。
 const voices = catalog.voices;

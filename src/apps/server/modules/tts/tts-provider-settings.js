@@ -4,10 +4,9 @@ const { PROVIDERS, normalizeVoiceConfig, validateBusinessProvider } = require('.
 const { resolveQwenEndpoint, isQwenAudioModel } = require('./qwen-api-contract');
 const { DOUBAO_SPEECH_VOICE } = require('../chat2api/chat2api-doubao-speech-protocol');
 const { validateDoubaoVoice } = require('../chat2api/chat2api-doubao-voices');
-const { QWEN_AUDIO_31_MODEL } = require('../chat2api/chat2api-qwen-audio-voices');
+const { QWEN_AUDIO_31_MODEL, QWEN_WEB_TTS_MODEL, QWEN_API_DEFAULT_VOICE, FIXED_QWEN_TTS_MODELS, normalizeQwenApiVoice } = require('../chat2api/chat2api-qwen-tts-models');
 const { normalizeUpstreamConcurrency } = require('./tts-upstream-concurrency');
 const SELECTION_BUSINESSES = Object.freeze({ aiReplyDefault: 'ai_reply', textMedia: 'text_media', systemBroadcast: 'system_broadcast' });
-const QWEN_CHAT_MODELS = new Set(['QUARK_VOICE', 'MINI_MAX']);
 const PROVIDER_CAPABILITIES = Object.freeze({
     system: Object.freeze({ supportsSpeed: true }),
     'qwen-chat': Object.freeze({ supportsSpeed: true }),
@@ -18,12 +17,12 @@ const PROVIDER_CAPABILITIES = Object.freeze({
 const PROVIDER_DEFAULTS = Object.freeze({
     system: { endpoint: '', model: '', credential: '', resourceId: '' },
     'qwen-api': { enabled: true, endpoint: 'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-        model: QWEN_AUDIO_31_MODEL, credential: '', defaultVoice: 'qiaoxiaojiao_v3.1', resourceId: '' },
+        model: QWEN_AUDIO_31_MODEL, credential: '', defaultVoice: QWEN_API_DEFAULT_VOICE, resourceId: '' },
     'doubao-api': { enabled: true, endpoint: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional',
         model: '', credential: '', defaultVoice: 'zh_female_vv_uranus_bigtts', resourceId: 'seed-tts-2.0' },
     'doubao-chat': { enabled: true, endpoint: 'https://www.doubao.com', model: 'doubao-chat',
         defaultVoice: DOUBAO_SPEECH_VOICE, resourceId: '', experimental: true },
-    'qwen-chat': { enabled: true, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: 'QUARK_VOICE',
+    'qwen-chat': { enabled: true, endpoint: 'https://speech-tts.qianwen.com/api/v3/tts', model: QWEN_WEB_TTS_MODEL,
         defaultVoice: 'zh_female_quarkF531S0_ptts', resourceId: '' }
 });
 
@@ -79,29 +78,25 @@ function normalizeProviderSettings(provider, patch = {}, previous = {}, { recove
         ? {}
         : { credential: patch.clearCredential === true ? '' : incomingCredential || base.credential };
     if (provider !== 'qwen-chat' && patch.clearCredential !== undefined && typeof patch.clearCredential !== 'boolean') throw new Error('clearCredential 必须为布尔值');
-    let model = boundedString(patch.model, base.model);
-    let mappedModel=false;
-    if (provider === 'qwen-chat') {
-        if (model === 'qwen-chat') model = 'QUARK_VOICE';
-        const reserved=/^(?:qwen(?:\d|[-_])|QUARK_|MINI_)/iu.test(model);
-        const alias=/^[\w.\/-]{1,200}$/u.test(model)&&!reserved;
-        if (!QWEN_CHAT_MODELS.has(model) && (!alias || (recoverLegacyModel && patch.mappedModel!==true && base.mappedModel!==true))) {
-            // 对应.src/framework/qwen-chat-restore-and-model.md：历史错误配置可读，新提交必须明确拒绝。
-            if (!recoverLegacyModel) throw new Error('国内千问网页模型仅支持 QUARK_VOICE 或 MINI_MAX；qwen3-tts-flash 请使用 Qwen API');
-            model = PROVIDER_DEFAULTS['qwen-chat'].model;
-        }
-        mappedModel=!QWEN_CHAT_MODELS.has(model);
+    // 历史配置只提供音色和语速偏好；新补丁不能重新开放模型选择。
+    const fixedModel = FIXED_QWEN_TTS_MODELS[provider];
+    if (fixedModel && !recoverLegacyModel && patch.model !== undefined && patch.model !== fixedModel) {
+        throw new Error(`千问TTS底层模型固定为 ${fixedModel}`);
     }
+    if (fixedModel && !recoverLegacyModel && patch.mappedModel !== undefined && patch.mappedModel !== false) {
+        throw new Error('千问TTS底层模型不接受映射配置');
+    }
+    const model = fixedModel || boundedString(patch.model, base.model);
+    const voice = provider === 'system' ? null : boundedString(patch.defaultVoice, base.defaultVoice) || null;
     const defaultSpeed = supportsNativeSpeed(provider, model)
         ? normalizeNumber(patch.defaultSpeed, previous.defaultSpeed ?? 0, -10, 10) : undefined;
     return {
         endpoint: provider === 'qwen-api' && endpoint ? resolveQwenEndpoint(endpoint, model) : endpoint, model,
-        ...(mappedModel?{mappedModel:true}:{}),
         ...auth,
         ...(defaultSpeed === undefined ? {} : { defaultSpeed }),
         // Provider常开；保留enabled=true兼容旧控制端，历史false不再形成隐藏开关。
         ...(provider === 'system' ? {} : { enabled: true,
-            defaultVoice: boundedString(patch.defaultVoice, base.defaultVoice) || null }),
+            defaultVoice: provider === 'qwen-api' ? normalizeQwenApiVoice(voice) : voice }),
         resourceId: boundedString(patch.resourceId, base.resourceId)
     };
 }
@@ -125,7 +120,7 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
         const providerPatch = providersPatch[id] || {};
         const previousProvider = previous.providers?.[id] || {};
         const speed = providerPatch.defaultSpeed ?? previousProvider.defaultSpeed ?? migratedSpeed;
-        const model = providerPatch.model ?? previousProvider.model ?? PROVIDER_DEFAULTS[id].model;
+        const model = FIXED_QWEN_TTS_MODELS[id] ?? providerPatch.model ?? previousProvider.model ?? PROVIDER_DEFAULTS[id].model;
         const withMigratedSpeed = supportsNativeSpeed(id, model) ? { ...providerPatch, defaultSpeed: speed } : providerPatch;
         return [id, normalizeProviderSettings(id, withMigratedSpeed, previousProvider, options)];
     }));
@@ -137,6 +132,7 @@ function normalizeSettings(patch = {}, previous = {}, options = {}) {
             if (input.provider === 'doubao-chat' && input.voice === undefined && previous[key]?.provider !== 'doubao-chat') value.voice = null;
             if (value.voice) validateDoubaoVoice(value.voice);
         }
+        if (value.provider === 'qwen-api') value.voice = normalizeQwenApiVoice(value.voice);
         validateBusinessProvider(value.provider, business);
         return [key, value];
     }));

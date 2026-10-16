@@ -25,14 +25,21 @@ async function fixture(t, options = {}) {
     const userFile = path.join(root, 'userconfig.json');
     const mappingFile = path.join(root, 'mappings.json');
     const stateFile = path.join(root, 'data-repair/state.json');
-    const settings = normalizeSettings({
+    const sourceSettings = {
         providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultVoice: 'Cherry', credential: 'test-secret', defaultSpeed: 4 },
             'doubao-api': { defaultSpeed: -2, credential: 'other-secret' } },
         aiReplyDefault: { provider: 'qwen-api', voice: 'Cherry' },
         textMedia: { provider: 'qwen-api', voice: 'Serena' },
         systemBroadcast: { provider: 'system', voice: null }, defaultVolume: 63,
         ...options.settings
-    });
+    };
+    const settings = normalizeSettings(sourceSettings, {}, { recoverLegacyModel: true });
+    if (!options.currentRuntime) {
+        // 保留修复v4面对旧运行时快照的回归；不可变脚本仍须能处理历史数据。
+        // 新运行时兼容性由下方currentRuntime和真实种子worker覆盖。
+        Object.assign(settings.providers['qwen-api'], sourceSettings.providers['qwen-api']);
+        for (const key of ['aiReplyDefault', 'textMedia', 'systemBroadcast']) settings[key] = clone(sourceSettings[key]);
+    }
     let current = settings;
     let saveCount = 0;
     const logs = [];
@@ -108,8 +115,8 @@ test('修复迁移旧默认和三个业务旧音色，保留凭证/独立语速/
     const after = fx.current();
     const expected = clone(fx.settings);
     Object.assign(expected.providers['qwen-api'], { model: targetModel, defaultVoice: targetVoice });
-    // 此模拟服务没有休眠字段存储；原业务服务的已存语速保留由下方真实种子用例验证。
-    expected.providers['qwen-api'].defaultSpeed = 0;
+    // 固定3.1规范化会保留已存语速，真实种子worker也须保持该偏好。
+    expected.providers['qwen-api'].defaultSpeed = 4;
     // 模型切换会由原业务服务选择相应官方端点，不允许修复脚本直接改端点或凭证。
     expected.providers['qwen-api'].endpoint = after.providers['qwen-api'].endpoint;
     expected.aiReplyDefault.voice = targetVoice;
@@ -265,14 +272,16 @@ for (const version of [0, 1, 2, 3]) {
         await transaction.commit();
         const saved = JSON.parse(await fs.readFile(path.join(releaseRoot, 'userconfig/userconfig.json')));
         const savedConfig = JSON.parse(await fs.readFile(path.join(releaseRoot, 'config/config.json')));
-        assert.equal(saved.tts.providers['qwen-api'].model, targetModel);
-        assert.equal(saved.tts.providers['qwen-api'].defaultVoice, targetVoice);
+        // 新代码读取时已恢复为固定模型/音色；repair4不强制写盘，旧字段待普通保存时清除。
+        const effective = normalizeSettings({ ...savedConfig.tts, providers: saved.tts.providers }, {}, { recoverLegacyModel: true });
+        assert.equal(effective.providers['qwen-api'].model, targetModel);
+        assert.equal(effective.providers['qwen-api'].defaultVoice, targetVoice);
         assert.equal(saved.tts.providers['qwen-api'].credential, 'seed-test-secret');
         assert.equal(saved.tts.providers['qwen-api'].defaultSpeed, 4);
         assert.equal(saved.tts.providers['doubao-api'].credential, 'other-test-secret');
         assert.equal(saved.tts.providers['doubao-api'].defaultSpeed, -2);
-        assert.equal(savedConfig.tts.aiReplyDefault.voice, targetVoice);
-        assert.equal(savedConfig.tts.textMedia.voice, targetVoice);
+        assert.equal(effective.aiReplyDefault.voice, targetVoice);
+        assert.equal(effective.textMedia.voice, targetVoice);
         assert.equal(savedConfig.tts.sharedParameters.defaultVolume, 63);
         assert.equal(saved.displayStates['offline-display'].showStatusBar, version >= 2);
         assert.equal(savedConfig.voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint, true);
@@ -286,3 +295,14 @@ for (const version of [0, 1, 2, 3]) {
         await assert.rejects(fs.stat(path.join(releaseRoot, 'userconfig/chat2api/accounts.json')), { code: 'ENOENT' });
     });
 }
+
+// 对应.src/framework/qwen-tts-fixed-models.md：新有效快照使旧修复安全幂等，不为迁移强行写盘。
+test('固定模型新运行时执行repair4已是当前值，保留有效音色并零配置写入', async t => {
+    const fx = await fixture(t, { currentRuntime: true });
+    assert.equal(fx.settings.providers['qwen-api'].model, targetModel);
+    assert.equal(fx.settings.providers['qwen-api'].defaultVoice, targetVoice);
+    assert.equal((await fx.runner.applyPendingRepair()).status, 'applied');
+    assert.equal(fx.saveCount(), 0);
+    assert.deepEqual(fx.current(), fx.settings);
+    assert.ok(fx.logs.some(value => value.includes('already-current')));
+});

@@ -5,10 +5,13 @@ const WebSocket = require('ws');
 const { createQwenSigner, parseCookies } = require('./chat2api-qwen-speech-auth');
 const { decodeAudio, wrapPcm, adjustWavVolume, MAX_AUDIO_BYTES } = require('../../../../external/tts/tts-wav');
 
+const { QWEN_WEB_TTS_MODEL, assertFixedQwenTtsModel } = require('./chat2api-qwen-tts-models');
+
 const QWEN_TTS_ENDPOINT = 'https://speech-tts.qianwen.com/api/v3/tts';
 const QWEN_VOICE = 'zh_female_quarkF531S0_ptts';
 
 function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } = {}) {
+    assertFixedQwenTtsModel('qwen', settings.model);
     return new Promise((resolve, reject) => {
         const chunks = [];
         let bytes = 0;
@@ -30,8 +33,8 @@ function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } 
         socket.on('error', () => finish(new Error('国内千问朗读连接失败，请检查登录凭证')));
         socket.on('close', () => finish(new Error('国内千问朗读中断，未收到完成事件')));
         socket.on('open', () => {
-            const packet = { reqid, model: settings.model, vcn: request.voice, speed: request.speed,
-                type: 'stream', volume: 1, format: 'pcm', sample_rate: settings.model === 'MINI_MAX' ? 32000 : 24000 };
+            const packet = { reqid, model: QWEN_WEB_TTS_MODEL, vcn: request.voice, speed: request.speed,
+                type: 'stream', volume: 1, format: 'pcm', sample_rate: 24000 };
             socket.send(JSON.stringify({ ...packet, text: request.text, status: 1, ced: request.text.length }));
             socket.send(JSON.stringify({ ...packet, text: '', status: 2, ced: request.text.length }));
         });
@@ -53,7 +56,7 @@ function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } 
                     }
                 }
                 if (Number(data.status) === 2 || event.type === 'user.tts.ended') {
-                    const sampleRate = settings.model === 'MINI_MAX' ? 32000 : 24000;
+                    const sampleRate = 24000;
                     finish(null, adjustWavVolume(wrapPcm(Buffer.concat(chunks, bytes), sampleRate), request.volume));
                 }
             } catch (error) {
@@ -67,6 +70,7 @@ function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } 
 function createChat2ApiQwenSpeechAdapter({ sign = createQwenSigner(), Socket = WebSocket } = {}) {
     return {
         async generate(request, credential) {
+            assertFixedQwenTtsModel('qwen', request.model);
             const deadline = Date.now() + request.timeoutMs;
             const reqid = randomUUID();
             const signed = await sign({ credential, reqid, timeoutMs: request.timeoutMs });

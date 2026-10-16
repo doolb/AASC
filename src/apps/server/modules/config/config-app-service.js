@@ -762,7 +762,13 @@ function setTtsProviderSettings(patch) {
     const nextTts = { ...previousTts, ...selections, defaultSpeed: candidate.providers.system.defaultSpeed,
         upstreamConcurrency: candidate.upstreamConcurrency,
         sharedParameters: { ...sharedParameters, defaultVolume: candidate.defaultVolume } };
-    if (!userConfig.set('tts', { ...previousUserTts, providers: candidate.providers })) {
+    // 固定模型只作为公开元数据返回，不再作为用户可编辑配置落盘。
+    const providers = Object.fromEntries(Object.entries(candidate.providers).map(([id, settings]) => {
+        if (!['qwen-api', 'qwen-chat'].includes(id)) return [id, settings];
+        const { model, mappedModel, ...preferences } = settings;
+        return [id, preferences];
+    }));
+    if (!userConfig.set('tts', { ...previousUserTts, providers })) {
         userConfig._data.tts = previousUserTts;
         throw new Error('TTS Provider 用户配置保存失败');
     }

@@ -59,14 +59,13 @@ test('Qwen官方路径、600 Unicode边界、占位WAV头与原生语速/全局�
     assert.equal((await api['qwen-api'].voices({ model: request.model })).find(voice => voice.id === 'qiaoxiaojiao_v3.1').id, 'qiaoxiaojiao_v3.1');
 });
 
-test('Qwen3-TTS未声明原生rate时不发送速度字段且不在WAV本地变速', async () => {
-    const calls = [];
-    const api = adapters({ jsonRequest: async (url, options) => { calls.push({ url, body: options.body }); return { output: { audio: { url: 'https://audio.invalid/qwen3' } } }; },
-        httpRequest: async () => ({ buffer: wav }) });
-    const result = await api['qwen-api'].generate({ ...request, model: 'qwen3-tts-flash', speed: 2, volume: 100 }, 'fixture', {});
-    assert.equal(calls[0].body.model, 'qwen3-tts-flash');
-    assert.equal(Object.hasOwn(calls[0].body.input, 'rate'), false);
-    assert.equal(result.length, wav.length);
+test('Qwen旧模型和未知引擎在最终适配器拒绝，调用前不发网络请求', async () => {
+    let calls = 0;
+    const api = adapters({ jsonRequest: async () => { calls++; }, httpRequest: async () => { calls++; } });
+    for (const model of ['qwen3-tts-flash', 'qwen-audio-3.0-tts-flash', 'custom', undefined]) {
+        await assert.rejects(api['qwen-api'].generate({ ...request, model }, 'fixture', {}), e => e.code === 'unsupported_speech_model');
+    }
+    assert.equal(calls, 0);
 });
 
 test('豆包流的UTF8分片/完成事件输出WAV，资源与复刻model分开', async t => {

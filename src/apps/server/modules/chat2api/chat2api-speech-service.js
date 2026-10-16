@@ -12,10 +12,11 @@ const { createDoubaoSpeechAdapter, getDoubaoSpeechCredential } = require('./chat
 const { DOUBAO_SPEECH_VOICE, doubaoSpeechError, SPEECH_ERRORS } = require('./chat2api-doubao-speech-protocol');
 const {createChat2ApiApplicationService}=require('./chat2api-application-service');
 const {createApiSpeechAdapters}=require('./chat2api-api-speech-adapters');
-const {listSpeechModels,getSpeechBinding}=require('./chat2api-model-capabilities');
+const {listSpeechModels,getSpeechBinding,isSupportedSpeechBinding}=require('./chat2api-model-capabilities');
+const {QWEN_WEB_TTS_MODEL,assertFixedQwenTtsModel}=require('./chat2api-qwen-tts-models');
 const {isProviderError}=require('../tts/tts-provider-errors');
 
-const MODELS = new Set(['qwen-chat', 'QUARK_VOICE', 'MINI_MAX', 'doubao-chat']);
+const MODELS = new Set(['qwen-chat', QWEN_WEB_TTS_MODEL, 'doubao-chat']);
 const STRATEGIES = new Set(['round-robin', 'fill-first', 'failover']);
 const speechError = (statusCode, code, message) => Object.assign(new Error(message), { statusCode, code });
 
@@ -174,6 +175,7 @@ function createChat2ApiSpeechService(options={}) {
         const remaining=()=>{if(signal?.aborted)throw cancelled();if(expired||Date.now()>=deadline)throw speechError(504,'speech_timeout','Chat2API语音生成超时');return deadline-Date.now();};
         const work=async()=>{
             remaining();const plan=resolvedPlan||await planner.plan(request,{defaultModel:'qwen-chat',parameterDefaults});remaining();
+            assertFixedQwenTtsModel(plan.providerId,plan.upstreamModel);
             if(plan.application!=='tts')throw speechError(400,'invalid_speech_request','模型不是语音应用');
             if(expectedProviderId&&plan.providerId!==expectedProviderId)throw speechError(400,'model_provider_conflict','业务选择与模型映射Provider不一致');
             const normalized={input:plan.text,model:plan.speechModel,voice:plan.parameters.voice,speed:plan.parameters.speed,volume:plan.parameters.volume,response_format:'wav'};
@@ -218,7 +220,7 @@ function createChat2ApiSpeechService(options={}) {
         const [accounts,providers,mappings]=await Promise.all([dataStore.listAccounts(),providerRegistry.listProviders(),dataStore.readCollection('modelMappings',[])]);
         const available=id=>providers.some(p=>p.id===id&&p.enabled!==false)&&accounts.some(a=>a.providerId===id&&a.enabled!==false&&(!a.status||a.status==='active')&&a.secretConfigured);
         const models=listSpeechModels().filter(m=>available(m.providerId));
-        for(const mapping of mappings){const binding=getSpeechBinding(mapping.actualModel,mapping.preferredProviderId||mapping.providerId,mapping.application);if(binding&&available(binding.providerId))models.push({id:mapping.model,providerId:binding.providerId,application:'tts',input_modalities:['text'],output_modalities:['audio'],stream:false});}
+        for(const mapping of mappings){const binding=getSpeechBinding(mapping.actualModel,mapping.preferredProviderId||mapping.providerId,mapping.application);if(binding&&isSupportedSpeechBinding(binding)&&available(binding.providerId))models.push({id:mapping.model,providerId:binding.providerId,application:'tts',input_modalities:['text'],output_modalities:['audio'],stream:false});}
         return models.map(m=>({...m,object:'model',owned_by:m.providerId==='doubaochat'?'doubao':m.providerId}));
     };
     return {generate,voices,listModels,planner};

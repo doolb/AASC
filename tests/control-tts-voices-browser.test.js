@@ -98,7 +98,7 @@ async function assertVoiceButtonStates(page, prefix) {
 
 test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，权限/断线/手机布局保持', { skip: !chrome, timeout: 60000 }, async t => {
     let settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' },
-        providers: { 'doubao-chat': { enabled: true }, 'qwen-chat': { enabled: true }, 'qwen-api': { model: 'qwen3-tts-flash' } } });
+        providers: { 'doubao-chat': { enabled: true }, 'qwen-chat': { enabled: true }, 'qwen-api': { model: 'qwen3-tts-flash' } } }, {}, { recoverLegacyModel: true });
     let failSave = false;
     const requests = [], controls = new Set(), displays = new Set();
     const server = http.createServer((request, response) => {
@@ -231,9 +231,8 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     await control.bringToFront();
     await control.select('#controlTtsProviderSelect', 'qwen-api');
     await waitFor(control, () => !document.querySelector('#controlTtsProviderSelect').disabled);
-    assert.equal(await control.$eval('#controlTtsSpeedControl', node => node.hidden), true);
-    await control.evaluate(() => WebSocketManager.ws.send(JSON.stringify({ type: 'setTtsProviderConfig',
-        config: { providers: { 'qwen-api': { model: 'qwen-audio-3.1-tts-flash' } } } })));
+    // 旧模型读取即恢复3.1，无需用户再提交模型，语速与68项目录直接可用。
+    assert.equal(await control.$eval('#controlTtsSpeedControl', node => node.hidden), false);
     await waitFor(control, () => !document.querySelector('#controlTtsSpeedControl').hidden);
     await waitFor(control, () => document.querySelectorAll('#controlTtsVoiceList [data-voice-id]').length === 68);
     await waitFor(display, () => document.querySelectorAll('#displayTtsVoiceList [data-voice-id]').length === 68);

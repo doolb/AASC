@@ -2,41 +2,39 @@
 
 ## 默认方式与Qwen Audio 3.1目录（2026-10-15）
 
-五种方式均默认可用，语音设置不再提供Provider启用开关；旧关闭配置会规范化为可用。先选择方式、模型或音色，再等待服务器保存确认。Chat2API的账号/Provider管理仍决定账号是否可用于实际调用，缺账号或登录失效时会明确报错。
+五种方式均默认可用，语音设置不再提供Provider启用开关；旧关闭配置会规范化为可用。先选择方式和音色，再等待服务器保存确认。Chat2API的账号/Provider管理仍决定账号是否可用于实际调用，缺账号或登录失效时会明确报错。
 
-Qwen API默认模型为`qwen-audio-3.1-tts-flash`，默认音色乔小娇`qiaoxiaojiao_v3.1`，提供[官方该模型音色表](https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts)的68个音色。两端快选和声纹页共用目录，可按官方名称/ID/标签搜索、按性别筛选；ID区分大小写，例如`Emily_v3.1`。目录只用于实际3.1模型，明确保存的其它模型保留其原目录，不跨模型混用。升级服务包不会覆盖已经保存的模型与音色；旧设备若仍显示qwen3-tts-flash/Cherry，请在声纹页将Qwen API模型改为qwen-audio-3.1-tts-flash、默认音色改为qiaoxiaojiao_v3.1，并将AI/Agent回复中显式旧音色同步改为乔小娇后保存。收到服务器确认后，两端目录会自动刷新为68项。
+Qwen API底层模型固定为`qwen-audio-3.1-tts-flash`，默认音色乔小娇`qiaoxiaojiao_v3.1`，提供该模型的68个音色。两端快选和声纹页共用目录，可按名称/ID/标签搜索、按性别筛选；ID区分大小写，例如`Emily_v3.1`。目录单独保存在`src/apps/server/modules/chat2api/qwen-audio-31-voices.json`，配置只保存默认和业务选中的音色ID。
 
-### 外网包升级与已有配置
+### 固定模型与已有配置（2026-10-16，源码完成待新服务包）
 
-Offline APK与Node服务升级同一套服务代码时，均保留已有用户配置；只修改某台ADB设备的Qwen模型/音色，不会同步修改其它独立实例。已有qwen3-tts-flash/Cherry配置的实例升级v102后，仍会按旧模型查询音色，需要在语音设置中调整模型及对应默认/显式音色。已经配置3.1及兼容音色的实例可直接使用新目录。
-
-当前种子v86的config/config.json和userconfig/userconfig.json均没有写入Qwen API旧模型/音色；无既有配置的新安装在加载v102后使用源码默认qwen-audio-3.1-tts-flash/乔小娇。v102没有将旧Qwen模型/音色强制迁移至3.1的规则；若希望所有旧实例升级后自动切换，需要另行制定迁移范围与兼容策略。
+加载本次新服务代码后，Qwen API与千问网页分别固定使用3.1和`QUARK_VOICE`，两路不再显示模型输入。旧model/mappedModel不再影响实际合成；下一次合法保存会清除这些字段。已知旧Cherry/Ethan/Chelsie/Serena默认及业务音色恢复乔小娇，有效3.1及未知用户音色ID保持。更新前的旧服务仍沿用原模型规则，需实际升级服务后生效。
 
 ## 四路统一与模型映射（2026-10-13）
 
-四路网页/API请求均由Chat2API生成，旧业务ID保持。模型映射可同时指定application=tts和parameters.voice，映射默认先于Provider默认；如qiaoxiaojiao映射Qwen31及乔小娇。旧speech现在也接受API限定模型和已登记TTS映射，WAV播放/缓存协议保持。完整配置示例见[统一应用](chat2api-unified-applications.md)。网页qwen新保存的合法映射别名重载保留；升级前旧错误模型仍恢复QUARK_VOICE。
+四路网页/API请求均由Chat2API生成，旧业务ID保持。模型映射可同时指定application=tts和parameters.voice，映射默认先于Provider默认；如qiaoxiaojiao映射Qwen31及乔小娇。旧speech现在也接受API限定模型和已登记TTS映射，WAV播放/缓存协议保持。完整配置示例见[统一应用](chat2api-unified-applications.md)。千问两路的音色别名只允许映射固定底层模型，不能切换引擎；普通LLM模型映射不受影响。
 
 控制端「声纹」页面展开「语音服务与音色」，分别选择AI/Agent回复、文本阅读、报时与系统播报的服务，然后「保存语音配置」并等待服务器确认。其他控制端同步权威值，重连后重新获取。
 
-语速−10至10按Provider分别保存；仅上游原生接口明确接受语速参数的方式显示语速输入。Qwen API按模型判断：Qwen-Audio 3.0/3.1可传原生`input.rate`，Qwen3-TTS HTTP没有声明语速字段时隐藏。音量0至100只在面板保留一个全局入口，所有业务和Provider共用。豆包网页朗读的上游语速固定，因此不显示语速设置；WAV处理只调音量，不改变语速或时长。
+语速−10至10按Provider分别保存；仅上游原生接口明确接受语速参数的方式显示语速输入。Qwen API固定3.1，通过原生`input.rate`调速。音量0至100只在面板保留一个全局入口，所有业务和Provider共用。豆包网页朗读的上游语速固定，因此不显示语速设置；WAV处理只调音量，不改变语速或时长。
 
 系统原生沿用现有TTS生成设备、服务器开关和原生音色配置，此面板只提供语速、音量，不增加启用开关或音色ID。业务或模板选中系统原生时隐藏音色ID输入；旧Provider级开关和音色ID不会阻断或覆盖原有路径。
 
-国内千问网页可用于AI/Agent回复、文本阅读、报时/提醒、自定义文字和系统播报，由Chat2API提供语音合成。文本阅读、报时与系统播报的选择框均可选国内千问，保存后等待权威回填；已有默认选择保持。先在Chat2API账户管理中添加或登录国内千问（qwen）账号，并启用对应账号及Provider；在语音面板设置模型/默认音色并保存。TTS不再查询或选择账号，Chat2API按已保存的调度策略自动使用可用国内账号，更新登录后下次合成读取最新值。国际qwen-ai不适用于该语音协议。未提供可用账号、登录失效或上游失败会明确报错，不切换到系统原生。
+国内千问网页可用于AI/Agent回复、文本阅读、报时/提醒、自定义文字和系统播报，由Chat2API提供语音合成。文本阅读、报时与系统播报的选择框均可选国内千问，保存后等待权威回填；已有默认选择保持。先在Chat2API账户管理中添加或登录国内千问（qwen）账号，并启用对应账号及Provider；在语音面板设置默认音色并保存。TTS不再查询或选择账号，Chat2API按已保存的调度策略自动使用可用国内账号，更新登录后下次合成读取最新值。国际qwen-ai不适用于该语音协议。未提供可用账号、登录失效或上游失败会明确报错，不切换到系统原生。
 
 豆包普通文字doubaochat已于2026-10-13用正式Node适配器真实验证流式/非流式OK，现支持Responses同账号原生续接、仅发新增输入，两轮纯Node协议记忆验证通过；同账号nodeProfile初始化后不依赖Chrome或页面签名，详情见[纯Node普通LLM](chat2api-doubao-node.md)。这不代表网页朗读链路完成真实验收。
 
 `doubao-chat`用于 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，方式默认可用。启用Chat2API中的doubaochat账号与Provider后自动选择可用账号，无须手动模型映射；显式账号映射仍优先且不退选。TTS只需Cookie，不要求文字Node资料。默认音色zh_female_wenroutaozi_uranus_bigtts，可从官方94项目录选择、上游speed=1/volume=100，面板隐藏语速设置，后处理只调全局音量；input最多1000个UTF-16字符且UTF-8≤4000字节，仅WAV。code92起同一适配器内按账号跨批次排队，完整上游音频到达即交接，不等待WAV解码；每账号最多等待16项、实例256项，等待计入原60秒时限，取消移除等待项。错误不重试或切换来源，现有分句播放顺序保持。主服务器及Android各三批同时提交已合成非静音48kHz WAV；此次未验证实际播放听感。
 
-网页模型默认选择QUARK_VOICE，MINI_MAX需另有匹配的可用音色；目前预置的已验证音色是zh_female_quarkF531S0_ptts，完整国内音色目录尚未取得。qwen3-tts-flash应配置在Qwen API中并使用百炼API Key，不能保存为国内千问网页模型。历史错误模型读取时恢复QUARK_VOICE并保留其他参数，下一次合法保存会写回；服务端拒绝新提交的错误模型并保留原配置。
+千问网页底层模型固定为QUARK_VOICE，目前预置音色为zh_female_quarkF531S0_ptts，完整国内音色目录尚未取得。MINI_MAX及其他实际模型请求明确拒绝；音色仍可填写ID，真实兼容性由合成确认。
 
 Android账户管理“打开外部网页”会向现有允许的www/chat2/chat2-api.qianwen.com三个HTTPS来源恢复登录Cookie。新版APK的恢复提示会显示当前网页来源，便于核对跳转；提示不包含网址路径或查询参数。原生来源提示需更新APK，网页或服务代码热更新无法替换原生窗口。
 
 旧qwen-chat手动凭证及chat2apiAccountId不再使用，下次保存时移除，不会自动导入账户管理。账号凭证只由Chat2API管理。内部语音服务不要求代理HTTP任务持续运行；自定义rootDir独立库不会自动扫描。国内千问语音已由Chat2API直接调用接口生成，无需安装Chrome，也不查询浏览器账号。
 
-Qwen API默认qwen-audio-3.1-tts-flash与乔小娇qiaoxiaojiao_v3.1。两路API Key改在Chat2API账号管理中配置：qwen-api或doubaapi，端点和豆包资源ID为账号可选参数；保存只校验格式，不发送远端请求。旧TTS私有密钥保留但不再用于生成。TTS面板只保存业务选择、启用、模型、音色和参数，仍使用原WebSocket权威配置；五种Provider默认可用，页面不再提供启用开关。音色可查询或填写合法ID，真实权限需合成验收。
+Qwen API固定qwen-audio-3.1-tts-flash，默认乔小娇qiaoxiaojiao_v3.1。两路API Key改在Chat2API账号管理中配置：qwen-api或doubaapi，端点和豆包资源ID为账号可选参数；保存只校验格式，不发送远端请求。旧TTS私有密钥保留但不再用于生成。TTS面板保存业务选择、音色和参数，豆包API仍可保存模型，仍使用原WebSocket权威配置；五种Provider默认可用，页面不再提供启用开关。音色可查询或填写合法ID，真实权限需合成验收。
 
-Qwen API根据模型选择官方语音接口：Qwen-Audio使用SpeechSynthesizer并请求WAV，旧Qwen-TTS模型使用原接口；官方标准路径自动适配，自定义代理地址保持。已有明确模型/音色不自动覆盖。
+Qwen API固定使用3.1的SpeechSynthesizer接口并请求WAV；官方标准路径自动适配，自定义代理地址保持。旧实际模型调用会被拒绝，查询和合成统一使用3.1。
 
 豆包2.0的AI/Agent回复会自动把对应上一句用户原文写入context_texts（最多2000个Unicode字符），包含自动播报和历史手动播放；新历史保存用户消息引用，旧历史只查所属会话。没有原输入时省略，不会取最新其他轮输入。仅seed-tts-2.0且无复刻model时发送；文字阅读与系统播报不发送。情绪效果取决于模型及输入，不添加固定情绪指令。
 
@@ -48,7 +46,7 @@ qwen-chat合成前自动去掉emoji，包含肤色、家庭组合、国旗和键
 
 语速−10至10按Provider分别配置，音量0至100全局共用。服务端原生与豆包API使用上游语速字段，国内千问网页使用原生speed字段，Qwen-Audio通过`input.rate`设置语速，Android Embedded Speech通过SSML `prosody rate`原生合成。所有WAV后处理只调整音量幅值，不重采样或变速；旧APK不支持非零原生语速时由服务端既有fallback处理。Qwen API单次最多600字符，较长回复沿用业务分句，单句超限报错。每段完整音频最多16MiB，默认总时限60秒，不保存临时音频文件。
 
-Chat2API代理另提供POST /v1/audio/speech，沿用既有Bearer API Key鉴权；input为文本，旧模型支持qwen-chat、QUARK_VOICE、MINI_MAX，voice为音色ID，speed为0.25–4倍，volume为0–100；doubao-chat仅接受上述固定参数，账号自动选择或遵循显式映射。response_format仅wav，成功返回audio/wav二进制。
+Chat2API代理另提供POST /v1/audio/speech，沿用既有Bearer API Key鉴权；input为文本，千问网页支持qwen-chat（固定QUARK_VOICE的兼容名）和QUARK_VOICE；API支持qwen-api/qwen-audio-3.1-tts-flash，旧MINI_MAX与旧API模型拒绝，voice为音色ID，speed为0.25–4倍，volume为0–100；doubao-chat仅接受上述固定参数，账号自动选择或遵循显式映射。response_format仅wav，成功返回audio/wav二进制。
 
 国内千问默认音色已用真实账号验证连续生成和令牌刷新后的生成；其他音色权限及设备声音需现场验收。若提示校时、令牌注册或刷新失败，检查服务器网络及Chat2API账户登录状态。其他运行实例需加载最新后端；本次Offline服务code92已发布。
 
