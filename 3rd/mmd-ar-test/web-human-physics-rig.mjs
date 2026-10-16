@@ -1,4 +1,5 @@
-import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
+import { Matrix4, Quaternion, Vector3 } from 'three';
+import { limitJointRotation } from './web-human-joint-limits.mjs';
 
 // 人体代理只覆盖语义身体骨；原PMX的头发/服饰动态骨仍由原物理负责。
 const SEMANTICS = ['hips', 'upperBody', 'chest', 'neck', 'head',
@@ -137,18 +138,7 @@ export function createHumanPhysicsRig(model) {
             const basis = !node.hasModelLimits && node.parentNode
                 ? poses.get(node.parentNode).quaternion.clone().multiply(node.jointFrameRotation) : null;
             const constraintRotation = basis ? basis.clone().invert().multiply(pose.quaternion) : rotation;
-            let limited;
-            if (!node.hasModelLimits && node.hingeAxis !== null) {
-                // 单轴默认范围用twist角，不把超过90度的Y轴屈曲误折返成带180度X/Z的Euler角。
-                let angle = 2 * Math.atan2(constraintRotation[['x', 'y', 'z'][node.hingeAxis]], constraintRotation.w);
-                angle = Math.atan2(Math.sin(angle), Math.cos(angle));
-                angle = Math.max(node.limits.low[node.hingeAxis], Math.min(node.limits.high[node.hingeAxis], angle));
-                limited = new Quaternion().setFromAxisAngle(new Vector3().setComponent(node.hingeAxis, 1), angle);
-            } else {
-                const euler = new Euler().setFromQuaternion(constraintRotation, 'XYZ');
-                for (let axis = 0; axis < 3; axis++) euler[['x', 'y', 'z'][axis]] = Math.max(node.limits.low[axis], Math.min(node.limits.high[axis], euler[['x', 'y', 'z'][axis]]));
-                limited = new Quaternion().setFromEuler(euler);
-            }
+            const limited = limitJointRotation(node, constraintRotation);
             const unrestrictedRoot = node === pelvis && !node.hasModelLimits;
             const mapped = basis ? parentRotation.clone().invert().multiply(worldRotation).multiply(basis).multiply(limited) : limited;
             node.bone.quaternion.copy(unrestrictedRoot ? rotation : mapped);

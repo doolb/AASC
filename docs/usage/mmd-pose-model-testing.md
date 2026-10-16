@@ -8,7 +8,7 @@
 |---|---|---|
 | 模型推理 | 原图 → 预处理 → 原始输出 → 还原到原图的二维点 | 已正确驱动三维骨架 |
 | 四模型对照页 | 相同图片、人物范围和身体语义下，比较髋膝踝、肩肘腕及缺点 | 模型整体准确率、真实深度或公平速度排名 |
-| 当前全身 IK 集成 | 粘贴/文件 → RTMPose → 固定骨长初始化 → VaM 实际骨骼 → 相机匹配 | 所有遮挡姿态均已还原、手机性能已验收 |
+| 当前全身 IK 集成 | 粘贴/文件 → RTMPose → 真实关节FK/限位/透视拟合 → VaM 实际骨骼 → 相机匹配 | 所有遮挡姿态均已还原、手机性能已验收 |
 
 2026-10-16 起网页默认模型为 **RTMPose-m**。历史对照页的 MediaPipe“当前模型”标签指选型时的旧版，不是现版本默认值。OpenPose 在本轮使用 Python CPU，未移植浏览器 ONNX。
 
@@ -141,15 +141,18 @@ python tmp/mmd-pose/run-openpose.py
 这组脚本已入库，不依赖上述临时四模型工具。先完成 `npm run build:web:mmd-ar-test`，再执行：
 
 ```powershell
-node --test --test-concurrency=1 tests/mmd-ar-human-rtmpose.test.js tests/mmd-ar-human-image-pose.test.js tests/mmd-ar-human-physics.test.js tests/mmd-ar-human-pose-camera.test.js tests/mmd-ar-human-pose-projection.test.js tests/mmd-ar-human-camera-ownership.test.js tests/mmd-ar-human-damping.test.js
+node --test --test-concurrency=1 tests/mmd-ar-human-pose-fk.test.js tests/mmd-ar-human-rtmpose.test.js tests/mmd-ar-human-image-pose.test.js tests/mmd-ar-human-physics.test.js tests/mmd-ar-human-pose-camera.test.js tests/mmd-ar-human-pose-projection.test.js tests/mmd-ar-human-camera-ownership.test.js tests/mmd-ar-human-damping.test.js
 
 $env:PUPPETEER_EXECUTABLE_PATH = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 # 可选变量：本机二次元图；额外图片路径组成JSON数组。缺省只跑公开参考图/空图/取消等。
 # $env:AASC_MMD_POSE_ANIME_IMAGE = 'C:/path/to/anime.png'
 # $env:AASC_MMD_POSE_EXTRA_IMAGES = '["C:/path/to/seated.png","C:/path/to/diagram.jpg"]'
+# 可选诊断输出：父目录需已存在，图片及JSON不提交Git。targetErrorsWorldUnits为场景单位，不是米。
+# $env:AASC_MMD_POSE_EXTRA_SCREENSHOT_PREFIX = 'E:/path/to/results/applied-'
+# $env:AASC_MMD_POSE_VIEWS_PREFIX = 'E:/path/to/results/view-'
 node --test --test-concurrency=1 tests/mmd-ar-human-image-pose-browser.test.js tests/mmd-ar-human-image-pose-clipboard-browser.test.js
 ```
 
-真实浏览器用例要求 Edge/Chrome、完整 web-dist 及本机参考图片；缺环境会跳过，不算通过真实推理。检查 17 点无假 world、低分关节跳过、坏输入原子保留旧目标、取消/无人不改目标、270 子步实际骨架有限/骨长保持、相机拟合与恢复。额外用户图还比较实际骨架的弱透视对齐残差改善；这针对模型输出，不能当人工标注准确率或真实深度。
+真实浏览器用例要求 Edge/Chrome、完整 web-dist 及本机参考图片；缺环境会跳过，不算通过真实推理。构建会重建web-dist，必须完成后再运行包括Node真实PMX夹具在内的所有消费测试，不能并行构建和测试。检查17点无假world、低分跳过、坏输入原子保留、取消/无人不改目标、270子步实际骨架/骨长与相机恢复。额外图的弱透视对齐残差只是独立诊断（当前运行拟合为真实透视），不能当人工标注准确率或真实深度；同时检查实际目标差值和正侧面构型。
 
-本轮已执行的结果及局限见[接入验证记录](../task/20261016_MMDAR接入RTMPose-m.md)。本文为测试方法归档，未重新执行四模型推理，未新增运行代码或模型下载。
+首版结果见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)，当前三维验证见[FK修正记录](../task/20261016_MMDAR二维姿态三维映射修正.md)。更新集成方法时未重跑四模型比较或更换RTMPose权重。

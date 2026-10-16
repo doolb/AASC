@@ -262,7 +262,9 @@ export function createHumanPhysicsDrive(Ammo, rig) {
                     if (!(target.node === rig.pelvis && fullyPinned)) {
                         const nativeDrive = positionDrives.get(target.node);
                         const desired = rig.targetToLocal(target.target);
-                        if (!settings.freePelvis) {
+                        // 根目标负责整体平移，不能套用从自身到骨盆的零链长；
+                        // 仅给肢体目标限制相对支撑点的可达距离。
+                        if (!settings.freePelvis && target.node !== rig.pelvis) {
                             let reach = 0;
                             for (let node = target.node; node.parentNode; node = node.parentNode) reach += node.position.distanceTo(node.parentNode.position);
                             const support = rootRecord.position.clone().sub(nodeOffset(rig.pelvis, rootRecord.quaternion));
