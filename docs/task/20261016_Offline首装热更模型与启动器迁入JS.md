@@ -49,3 +49,8 @@
 - 新增tests/offline-js-launcher*.test.js、OfflineLauncherProtocolTest.kt和npm脚本。JS/Chromium26/26、原首装打包63/63、数据修复72/72、Android Offline/Node147项通过；未跑全仓测试。定向日志与截图保存在/tmp，不提交构建产物。
 - 本轮不修改独立Node入口release/allserver-min.js，不产生node-min上传需求；普通server-launcher仍走既有逻辑，新Offline ServiceProcess直接托管server-app。
 - 待过渡min与签名code出包、LAN/WAN发布和真实设备升级/首装/后台/模型加载推理/性能验收；手机数据与先前备份未改动。该剩余项保留todo，源码完成记录移入changelog。
+
+
+## 后续实机阶段
+
+min60/code106已由签名机发布，实机发现两处宿主启动缺陷后另见`20261016_min60真机冷启动与本地启动页修复.md`。现已构建本地min61并完成保留数据升级、冷启动、本地页面、JS启动器/服务105→106及重启健康验证；未清空设备或下载模型，min61未发布。原空首装/旧full/模型推理/性能验收继续待办，不重复保留已完成实现/出包条目。

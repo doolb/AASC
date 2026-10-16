@@ -22,4 +22,11 @@ class OfflineLauncherProtocolTest {
     @Test fun 页面消息按UTF8字节限制大小() {
         rejected("""{"type":"state.get","requestId":"ui-1","payload":{"x":"${"中".repeat(720000)}"}}""")
     }
+    @Test fun 固定本地顶层文档可以加载且其他来源与子框架仍拒绝() {
+        val url = OfflineLauncherProtocol.LOCAL_DOCUMENT_URL
+        assertTrue(OfflineLauncherProtocol.isLocalDocument(url, true))
+        assertFalse(OfflineLauncherProtocol.isLocalDocument(url, false))
+        for (other in listOf("data:text/html;base64,", "file:///tmp/page.html", "https://example.com/", url + "other", "https://offline-launcher.aasc.local.evil/"))
+            assertFalse(OfflineLauncherProtocol.isLocalDocument(other, true))
+    }
 }

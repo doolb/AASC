@@ -4,6 +4,8 @@ import org.json.JSONObject
 
 /** 页面只调用固定业务命令；协议约束可脱离WebView单独验证。 */
 internal object OfflineLauncherProtocol {
+    const val LOCAL_DOCUMENT_URL = "https://offline-launcher.aasc.local/"
+    fun isLocalDocument(url: String, mainFrame: Boolean): Boolean = mainFrame && url == LOCAL_DOCUMENT_URL
     val commands = setOf("state.get", "bootstrap.preview", "bootstrap.install", "bootstrap.cancel",
         "service.check", "service.apply", "service.restart", "apk.check", "models.catalog", "models.status",
         "models.prepareGroup", "models.cancel", "ui.firstRunShown", "native.ensureService", "native.openDisplay", "native.installApk")

@@ -75,7 +75,7 @@ UI重建/后台返回 → 按generation请求权威快照 → 最新阶段/确�
 Android目标 := common+android已构建依赖；禁止目标机npm安装，禁止依赖服务已启动或外部依赖可用
 源码定向验证 := 空首装/模型缓存与取消/热更组合/种子与修复门槛/自更新回退/网页交互
 待设备验收 := 新宿主WebView/权限/后台恢复/min59和旧full升级/原生模型加载与推理/低空间与性能
-产物状态 := minApk=true，servicePackage=true；未变化生产依赖/任务不额外标记；本轮未出包或发布
+产物状态 := code106/min60已发布；宿主修正min61已本地出包及真机验证，minApk=false；servicePackage/其它产物不额外标记；min61尚未发布
 ```
 
 ### 兼容与事务补充
@@ -114,4 +114,26 @@ UI请求 = {type, requestId, payload}，白名单RPC；结果/状态/下载进�
 ```text
 旧legacy-root指针修复 = 版本依赖目录marker或版本/锁/express元数据有效 → 仅改legacyDependencies为false → 保留pending/previous字段；不联网、不覆盖用户文件
 宿主会话替换 = 旧请求显式失败；状态/模型目录/页面根仅接收当前generation，避免跨重启迟到结果
+```
+
+## min60 真机启动时序与本地文档修正（2026-10-16，用户确认）
+
+```text
+NativeBridge构造时 = 不等待JS、不发RPC、不下载、不要求模型快照已存在
+目录查询 = 有当前JS快照 → 使用受管私有目录；无快照 → 从APK可信模型定义映射已有固定缓存候选路径
+临时路径 = 仅用于构造轻量原生管理器，不代表模型已就绪；加载前仍经JS requirePrepared校验
+JS状态到达后 = 各管理器原有directoryProvider重新读取当前权威路径，不能缓存构造时占位目录
+本地网页入口 = 固定HTTPS来源的顶层首页请求；WebView.loadUrl → 拦截器返回已核验HTML的200响应
+其他请求/子框架/外部导航 = 拒绝；不使用会被自身拦截器403拒绝的loadDataWithBaseURL文档
+文档响应 = text/html UTF-8 + no-store；页面切换读取supervisor最新uiRoot后重新请求首页
+验证 = 快照为空也可构造；JS新快照路径生效；未知ID/越界拒绝；顶层本地首页允许、其他请求拒绝；真机冷启动和启动页交互
+```
+
+
+```text
+min61设备结果 = 原生构造无快照不崩溃 → 显示页已连接 → 本地顶层文档200/标题与模型列表可读/桥可操作
+真实自更新 = 网页确认105→106 → launcher.active106且pending为空 → 服务106/deps10/task1健康提交 → 冷启动保持组合
+数据兼容 = 主配置/用户配置/数据修复记录JSON与备份一致；模型状态只读且不自动下载
+切换窗口查询拒绝 = 显示暂不可用 → 手动重新连接读取最新快照；自动重连列为可选优化
+发布边界 = 本地min61已构建/安装，LAN/WAN仍min60；不将本机验证等同生产发布
 ```

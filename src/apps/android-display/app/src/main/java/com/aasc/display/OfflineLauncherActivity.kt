@@ -21,6 +21,7 @@ class OfflineLauncherActivity : AppCompatActivity() {
     private lateinit var page: WebView
     private val workers = Executors.newCachedThreadPool()
     private var loadedRoot: String? = null
+    @Volatile private var documentHtml = ""
     private var resumed = false
     private val pending = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val listener: (JSONObject) -> Unit = { message ->
@@ -34,7 +35,7 @@ class OfflineLauncherActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_FIRST_RUN_TOKEN = "launcher_first_run_token"
-        private const val ORIGIN = "https://offline-launcher.aasc.local/"
+        private const val ORIGIN = OfflineLauncherProtocol.LOCAL_DOCUMENT_URL
 
     }
 
@@ -54,8 +55,13 @@ class OfflineLauncherActivity : AppCompatActivity() {
         page.addJavascriptInterface(Bridge(), "OfflineLauncher")
         page.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse =
-                WebResourceResponse("text/plain", "UTF-8", 403, "Local resources only", emptyMap(), ByteArrayInputStream(byteArrayOf()))
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
+                // 主文档也会经过此入口；仅固定顶层首页返回受信任HTML，其余资源一律拒绝。
+                if (OfflineLauncherProtocol.isLocalDocument(request.url.toString(), request.isForMainFrame))
+                    return WebResourceResponse("text/html", "UTF-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
+                        ByteArrayInputStream(documentHtml.toByteArray(Charsets.UTF_8)))
+                return WebResourceResponse("text/plain", "UTF-8", 403, "Local resources only", emptyMap(), ByteArrayInputStream(byteArrayOf()))
+            }
             override fun onPageFinished(view: WebView, url: String) {
                 if (url == ORIGIN) emit(JSONObject().put("type", "ui.init").put("payload", JSONObject()
                     .put("firstRunToken", intent.getStringExtra(EXTRA_FIRST_RUN_TOKEN))))
@@ -84,7 +90,8 @@ class OfflineLauncherActivity : AppCompatActivity() {
         val document = File(selected, "index.html")
         require(document.length() in 1..(2L * 1024 * 1024)) { "启动器页面大小无效" }
         loadedRoot = selected.absolutePath
-        page.loadDataWithBaseURL(ORIGIN, document.readText(), "text/html", "UTF-8", null)
+        documentHtml = document.readText()
+        page.loadUrl(ORIGIN)
     }
 
     private fun ensureService() {

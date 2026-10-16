@@ -68,4 +68,6 @@ test('启动页阻断网络资源/嵌入/导航，桥不暴露显示端NativeBri
     const native = fs.readFileSync(path.join(__dirname, '../src/apps/android-display/app/src/main/java/com/aasc/display/OfflineLauncherActivity.kt'), 'utf8');
     assert.match(native, /allowFileAccess = false/); assert.match(native, /allowContentAccess = false/);
     assert.match(native, /shouldOverrideUrlLoading[^\n]+true/); assert.match(native, /require\(type in OfflineLauncherProtocol.commands\)/);
+    assert.match(native, /OfflineLauncherProtocol.isLocalDocument\(request.url.toString\(\), request.isForMainFrame\)/);
+    assert.match(native, /page.loadUrl\(ORIGIN\)/); assert.doesNotMatch(native, /loadDataWithBaseURL/);
 });
