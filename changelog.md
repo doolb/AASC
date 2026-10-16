@@ -1,3 +1,9 @@
+### Offline 发布校验进度减少刷屏
+
+- ✅ [2026-10-16] 按确认将交互终端校验进度改为每秒同一行覆盖，文件/管道日志每10秒追加一行；关键阶段和结果始终立即记录。
+  - `scripts/ops/offline-publish-verification.js`新增打印工厂，按终端列宽压缩文件名/大小，保守计算中文宽度避免长进度折行；保持旧导出兼容。只改变显示，归档选择及签名/大小/SHA-256校验流程保持。
+  - 同步design/spec/task/usage/self-test，todo移除实施条目、保留实际终端观察。语法、npm命令帮助及diff检查通过；未新增或运行测试、构建、发布，不影响运行中的旧进程。运维显示脚本不属于Offline包输入，未修改产物待出包状态。
+
 ### Android 显示页60 FPS与Offline关闭沉浸
 
 - ✅ [2026-10-16] 按用户确认将Android显示文档JS RAF动画上限设为60 FPS，Offline min/full显示系统栏，普通APK保留沉浸。

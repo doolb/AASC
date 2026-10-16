@@ -1,3 +1,5 @@
+- 待实际发布观察 [2026-10-16] Offline校验进度单行/日志节流源码完成，静态检查通过；仍需普通与窄TTY、窗口缩放、管道/文件日志10秒间隔和错误/结束换行观察。见 `docs/task/20261016_Offline校验进度同一行刷新与日志节流.md`。
+
 - 待出包与设备验收 [2026-10-16] Android显示页60FPS与Offline关闭沉浸源码完成，service/min待出包；仍需60/90/120/144Hz真机、Offline首屏/焦点恢复系统栏、普通APK沉浸、DeX分辨率与性能验收。见 `docs/task/20261016_Android显示页60FPS与Offline关闭沉浸.md`。
 
 - 待出包与设备验收 [2026-10-16] 控制端服务器面板重选Android SAF目录源码完成；service/min需出包。仍待Android10+当前主节点/远程节点、成功/取消/后台/首次无授权与并发真机验收；Android9不显示SAF按钮。见 `docs/task/20261016_控制端服务器面板重选AndroidSAF目录.md`。

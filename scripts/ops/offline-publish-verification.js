@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { performance } = require('node:perf_hooks');
+const { cursorTo, clearLine } = require('node:readline');
 const { verifySignedManifest } = require('./offline-update-package');
 const { dependencyArtifacts } = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 
@@ -109,8 +110,8 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-/** 使用普通行输出，终端和自动调用日志都能保留文件边界与每秒进度。 */
-function printVerificationProgress(progress) {
+/** 阶段结果始终完整保留，周期进度交给打印器按输出环境刷新或节流。 */
+function formatVerificationProgress(progress) {
     const prefix = `[发布校验 ${progress.target}]`;
     const total = formatBytes(progress.totalBytes);
     const events = {
@@ -121,14 +122,84 @@ function printVerificationProgress(progress) {
         complete: () => `${prefix} 本次包校验完成：${total}，耗时 ${(progress.elapsedMs / 1000).toFixed(1)} 秒`,
         error: () => `${prefix} 失败 ${progress.relativePath}：${progress.message}`
     };
-    if (events[progress.event]) { console.log(events[progress.event]()); return; }
+    if (events[progress.event]) return { boundary: true, text: events[progress.event]() };
     const received = progress.completedBytes + progress.received;
     const percent = progress.totalBytes ? Math.min(100, received * 100 / progress.totalBytes).toFixed(1) : '0.0';
     const filePercent = progress.expectedSize ? Math.min(100, progress.received * 100 / progress.expectedSize).toFixed(1) : '0.0';
     const wait = progress.idleMs >= 2000 ? `，等待数据 ${(progress.idleMs / 1000).toFixed(0)} 秒` : '';
-    console.log(`${prefix} ${progress.fileIndex}/${progress.fileCount} ${progress.relativePath} ` +
+    return { boundary: false, prefix, percent, filePercent, received, total, wait,
+        text: `${prefix} ${progress.fileIndex}/${progress.fileCount} ${progress.relativePath} ` +
         `${filePercent}% ${formatBytes(progress.received)}/${formatBytes(progress.expectedSize)}；总计 ${percent}% ` +
-        `${formatBytes(received)}/${total}，平均 ${formatBytes(progress.bytesPerSecond)}/s${wait}`);
+        `${formatBytes(received)}/${total}，平均 ${formatBytes(progress.bytesPerSecond)}/s${wait}` };
 }
 
-module.exports = { verifyHttpTarget, printVerificationProgress };
+/** 中文及其他非ASCII字符保守按双列计算，宁可少放内容，也不触发终端自动折行。 */
+function terminalWidth(text) {
+    return Array.from(text).reduce((width, character) => width + (character.codePointAt(0) > 0x7f ? 2 : 1), 0);
+}
+
+function fitTerminalLine(text, columns) {
+    const clean = text.replace(/[\x00-\x1f\x7f-\x9f]/g, ' ');
+    if (terminalWidth(clean) <= columns) return clean;
+    let result = '';
+    let width = 0;
+    for (const character of clean) {
+        const size = character.codePointAt(0) > 0x7f ? 2 : 1;
+        if (width + size > Math.max(0, columns - 3)) break;
+        result += character;
+        width += size;
+    }
+    return result + '.'.repeat(Math.min(3, columns));
+}
+
+/** 按窗口宽度逐级减少大小和文件名字段，优先保留文件/总体百分比和下载速度。 */
+function formatTerminalProgress(progress, formatted, columns) {
+    const fileName = progress.relativePath.split('/').pop()
+        .replace(/^aasc-display-offline-min-/, 'min-')
+        .replace(/^aasc-display-offline-/, 'full-');
+    const count = `${progress.fileIndex}/${progress.fileCount}`;
+    const speed = `${formatBytes(progress.bytesPerSecond)}/s`;
+    const summary = `${count} 文件${formatted.filePercent}% 总计${formatted.percent}% ${speed}`;
+    const candidates = [
+        `${formatted.prefix} ${count} ${fileName} ${formatted.filePercent}% ` +
+            `${formatBytes(progress.received)}/${formatBytes(progress.expectedSize)}；总计 ${formatted.percent}% ` +
+            `${formatBytes(formatted.received)}/${formatted.total} ${speed}${formatted.wait}`,
+        `${formatted.prefix} ${fileName} ${summary}${formatted.wait}`,
+        `${formatted.prefix} ${summary}${formatted.wait}`,
+        `${progress.target} ${summary}`,
+        `${count} ${formatted.filePercent}%/${formatted.percent}% ${speed}`
+    ];
+    return fitTerminalLine(candidates.find(line => terminalWidth(line) <= columns) || candidates.at(-1), columns);
+}
+
+/** 每个打印器独立保存行与时间状态，不改变校验回调频率，也不注册进程级信号处理器。 */
+function createVerificationProgressPrinter({ stream = process.stdout } = {}) {
+    let lineVisible = false;
+    let lastPlainAt = null;
+    return progress => {
+        const formatted = formatVerificationProgress(progress);
+        const now = performance.now();
+        if (formatted.boundary) {
+            if (lineVisible) stream.write('\n');
+            lineVisible = false;
+            stream.write(`${formatted.text}\n`);
+            lastPlainAt = now;
+            return;
+        }
+        if (stream.isTTY) {
+            const columns = Number.isInteger(stream.columns) && stream.columns > 0 ? stream.columns : 80;
+            cursorTo(stream, 0);
+            clearLine(stream, 0);
+            stream.write(formatTerminalProgress(progress, formatted, columns - 1));
+            lineVisible = true;
+            return;
+        }
+        if (lastPlainAt !== null && now - lastPlainAt < 10000) return;
+        stream.write(`${formatted.text}\n`);
+        lastPlainAt = now;
+    };
+}
+
+const printVerificationProgress = createVerificationProgressPrinter();
+
+module.exports = { verifyHttpTarget, printVerificationProgress, createVerificationProgressPrinter };
