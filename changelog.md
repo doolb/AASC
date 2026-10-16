@@ -6,6 +6,13 @@
   - 真人XYZ目标RMS1.40%而实际15.90%，独立延长1080子步仍15.68%/最大控制偏差.626m，保留诊断待定位；原方案二次元胸肩实际限位失败未隐藏。三份无辅助与生产目标差0，骨长保持，真人初始头颈/双臂2.274mm微差不用于判优。
   - 65坐标/根/坏输入、94记录/有限性/骨长/基线/初值/相机边界、36报告切换/叠加/模型旋转/放大/移动宽度/异常检查通过；辅助检查不代替质量验收。xyz-report.html自包含20视图并保留原Z报告，手机未验；生产77项未重跑。
 
+### Offline min APK v61 发布
+
+- ✅ [2026-10-16] 将已签名并通过 SM-N9500 冷启动验证的 min APK v61 发布到 LAN/WAN，修复模型状态未返回时崩溃及本地启动器网页加载失败。
+  - `apk/aasc-display-offline-min-v61.apk`：90,036,744 字节，SHA-256 `4eb5e8bcf01e78058139496c189fd87de215ba1799cbcfc34ef3ed5685ac9672`；profile 为 `allserver-min`/`updateOnly=true`，APK 签名证书与既有版本匹配，未构建完整 APK。
+  - 两端签名清单与本次候选一致，继续引用 code v106、dependencies v10、task-code v1、Node min seeds v86。LAN 完整 HTTP SHA-256 校验通过；公网逐字节验证因传输较慢主动停止后，改用 WAN 源站回环 HTTP 完整校验 13 项资源（324,450,271 字节），并确认公网 13 项 HTTP 状态/Content-Length 均匹配。
+  - 复用发布器严格版本规则完成两端旧 min v60 清理，无清理错误；旧 min v60 返回 HTTP 404，min v61 与完整 APK v50 返回 HTTP 200。五项发布状态保持 false；本轮仅打包、发布与记录，APK/ZIP 和验证临时文件不入 Git。
+
 ### MMD-AR RTMPose3D仓库核查
 
 - ✅ [2026-10-16] 核查用户提供的b-arac/rtmpose3d，记录RTMW3D默认L/可选X、133点与完整XYZ回投影流程。
