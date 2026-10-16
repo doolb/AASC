@@ -54,7 +54,7 @@ async function stage(root, { webMode = false } = {}) {
     for (const file of ['web-reply-gestures.mjs', 'web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
         'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js', 'web-xpbd-collision.mjs',
         'web-rigid-body-debug.mjs', 'mmd-ammo-physics.mjs']) versions.set(file, await version(file));
-    const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'ik-pbd', 'ik-markers', 'physics-rig', 'body-damping', 'physics-drive', 'pose-core', 'pose-worker', 'pose-client', 'pose-retarget', 'pose-projection', 'pose-camera', 'camera-control', 'pose-overlay', 'ik', 'interface', 'pose-ui', 'ik-mode', 'ik-ui', 'ui'];
+    const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'ik-pbd', 'ik-markers', 'physics-rig', 'body-damping', 'physics-drive', 'pose-core', 'pose-rtmpose', 'pose-worker', 'pose-client', 'pose-lift', 'pose-retarget', 'pose-projection', 'pose-camera', 'camera-control', 'pose-overlay', 'ik', 'interface', 'pose-ui', 'ik-mode', 'ik-ui', 'ui'];
     for (const suffix of names) {
         const file = 'web-human-' + suffix + '.mjs';
         let source = await fs.readFile(path.join(__dirname, file), 'utf8');

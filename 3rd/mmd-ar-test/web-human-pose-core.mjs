@@ -67,22 +67,27 @@ export function decodePeople(boxes, scores, input) {
 }
 
 export const BODY_LANDMARKS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+export const poseLandmarkThreshold = pose => pose?.source === 'rtmpose-m' && pose.dimensions === 2 ? 0.3 : 0.5;
 export function landmarkQuality(point) {
     if (!point || ![point.x, point.y, point.visibility, point.presence, ...(point.world || [])].every(Number.isFinite)
-        || point.world?.length !== 3 || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return 0;
+        || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return 0;
+    // 显式二维来源才允许没有world；损坏的旧三维结果继续拒绝，避免默默降级掩盖数据错误。
+    const is2D = point.source === 'rtmpose-m' && point.dimensions === 2 && point.world === undefined;
+    if (!is2D && point.world?.length !== 3) return 0;
     return Math.max(0, Math.min(1, point.visibility, point.presence));
 }
 export function rankPoseCandidates(candidates) {
     return candidates.map(candidate => {
+        const threshold = poseLandmarkThreshold(candidate);
         const values = BODY_LANDMARKS.map(index => landmarkQuality(candidate.landmarks[index]));
-        const lowConfidence = BODY_LANDMARKS.filter((_, i) => values[i] < 0.5), visible = values.length - lowConfidence.length;
+        const lowConfidence = BODY_LANDMARKS.filter((_, i) => values[i] < threshold), visible = values.length - lowConfidence.length;
         // 这是选人启发式，不是坐标正确率。忽略脸部点与Pose总分，防止动物脸误检支配结果。
         const score = 0.7 * values.reduce((sum, value) => sum + value, 0) / values.length
-            + 0.2 * visible / values.length + 0.1 * candidate.detection.score;
-        const torsoReady = [11, 12, 23, 24].every(index => landmarkQuality(candidate.landmarks[index]) >= 0.5);
+            + 0.2 * visible / values.length + 0.1 * (candidate.detection?.score || 0);
+        const torsoReady = [11, 12, 23, 24].every(index => landmarkQuality(candidate.landmarks[index]) >= threshold);
         return { ...candidate, quality: { score, visible, total: values.length, lowConfidence, torsoReady } };
     }).sort((a, b) => Number(b.quality.torsoReady) - Number(a.quality.torsoReady)
-        || b.quality.score - a.quality.score || b.detection.score - a.detection.score);
+        || b.quality.score - a.quality.score || (b.detection?.score || 0) - (a.detection?.score || 0));
 }
 export function preparePose(image, person) {
     validateImage(image);

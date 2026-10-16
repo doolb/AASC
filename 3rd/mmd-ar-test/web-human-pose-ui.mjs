@@ -1,5 +1,5 @@
 import { createImagePoseClient } from './web-human-pose-client.mjs';
-import { landmarkQuality, BODY_LANDMARKS } from './web-human-pose-core.mjs';
+import { landmarkQuality, BODY_LANDMARKS, poseLandmarkThreshold } from './web-human-pose-core.mjs';
 import { installPoseOverlay } from './web-human-pose-overlay.mjs';
 
 const EDGES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [0, 7], [0, 8]];
@@ -8,7 +8,7 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 export function installImagePose(panel, { human, ensurePhysics }) {
     const root = document.createElement('details'); root.dataset.posePanel = '';
     root.innerHTML = `<summary>图片姿态</summary>
-        <p>在本机识别单人全身图片，预览后应用到身体物理。图片不会上传，深度为估计，应用后可继续拖点微调。</p>
+        <p>RTMPose-m 在本机识别单人全身图片（17点，首次加载约52.3MiB模型）。图片不会上传；三维深度按当前姿态估计，应用后可在3D场景拖点微调。</p>
         <label>选择图片 <input data-pose="file" type="file" accept="image/jpeg,image/png,image/webp"></label>
         <button type="button" class="display-mmd-ar-action" data-pose="paste">粘贴图片</button>
         <p>展开此区域后可按 Ctrl+V（Mac 用 ⌘V）粘贴截图或复制的图片，再点击识别姿态。</p>
@@ -42,10 +42,10 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         result = candidates[index];
         draw(); buttons();
         if (!result) return;
-        const count = result.landmarks.filter(point => landmarkQuality(point) >= 0.5).length;
+        const count = result.landmarks.filter(point => landmarkQuality(point) >= poseLandmarkThreshold(result)).length;
         const low = result.quality.lowConfidence.map(i => BODY_NAMES[BODY_LANDMARKS.indexOf(i)]).join('、');
         const advice = result.quality.torsoReady ? '确认预览后点击“应用姿态”。' : '躯干关键点不完整，暂不能应用，请切换候选或图片。';
-        status(`识别完成：候选${index + 1} · ${count}/33个可信关键点 · 身体${result.quality.visible}/12 · ${inferenceMs.toFixed(0)}ms。`
+        status(`识别完成：${result.source === 'rtmpose-m' ? 'RTMPose-m · 单人全图' : '候选' + (index + 1)} · ${count}/${result.landmarks.filter(Boolean).length}个可信关键点 · 身体${result.quality.visible}/12 · ${inferenceMs.toFixed(0)}ms。`
             + (low ? `低可信：${low}（红色空心点，可能遮挡或出画）。` : '') + '可信度不代表坐标准确。' + advice);
     }
     function cancel() {
@@ -65,13 +65,14 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         context.drawImage(scratch, 0, 0, preview.width, preview.height); preview.hidden = false;
         scratch.width = scratch.height = 0;
         if (!result || !overlay.showReference()) { overlay.setReference(image, result); return; }
-        const valid = index => landmarkQuality(result.landmarks[index]) >= 0.5;
+        const valid = index => landmarkQuality(result.landmarks[index]) >= poseLandmarkThreshold(result);
         const at = index => [result.landmarks[index].x * preview.width, result.landmarks[index].y * preview.height];
         context.strokeStyle = '#35efbd'; context.fillStyle = '#ffcf52'; context.lineWidth = 2;
         for (const [a, b] of EDGES) if (valid(a) && valid(b)) { context.beginPath(); context.moveTo(...at(a)); context.lineTo(...at(b)); context.stroke(); }
         result.landmarks.forEach((_, index) => { if (valid(index)) { context.beginPath(); context.arc(...at(index), 2.5, 0, Math.PI * 2); context.fill(); } });
         context.strokeStyle = '#ef5252';
         for (const index of result.quality.lowConfidence) {
+            if (!result.landmarks[index]) continue;
             const [x, y] = at(index);
             if (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= preview.width && y >= 0 && y <= preview.height) {
                 context.beginPath(); context.arc(x, y, 4, 0, Math.PI * 2); context.stroke();
@@ -163,7 +164,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             busy = true; buttons(); await ensurePhysics({ isCurrent: () => id === serial && !disposed });
             if (id !== serial || disposed) return;
             const state = human().applyInteractiveImagePose(pose, expectedToken);
-            status(`已应用${state.activeTargets}个控制点，可继续拖动微调；重置控制点可恢复原动作。`);
+            status(`已应用${state.activeTargets}个控制点，${pose.dimensions === 2 ? '已按二维投影初始化，深度为估计；' : ''}可继续在3D场景拖动微调；重置控制点可恢复原动作。`);
         } catch (error) { if (id === serial) status(error.message); }
         finally { if (id === serial) { busy = false; buttons(); } }
     });

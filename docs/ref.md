@@ -1,6 +1,15 @@
 # Web MediaCenter - 项目参考文档
 
+## RTMPose-m默认权重（2026-10-16）
+
+- [MMPose RTMPose官方模型库](https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose)的Body7 m384；[固定ONNX SDK归档](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-384x288-65e718c4_20230504.zip)。实际输入384×288、两个17点SimCC输出、RGB均值方差与归档detail/pipeline和真推理核查。归档/模型本机固定摘要见assets.js，许可见pose-onnx-NOTICES.md。
+- 当前默认分发此二维模型；原MediaPipe接口作为兼容，不再默认加载其权重。三维来源是当前骨架深度先验与固定骨长拟合，非RTMPose世界点。
+
 ## 图片姿态与相机匹配依据（2026-10-15）
+
+- [DWPose官方ONNX项目](https://github.com/IDEA-Research/DWPose)：ControlNet预处理器`dw_openpose_full`，官方示例为YOLOX-l检测和`dw-ll_ucoco_384.onnx`全身姿态；[具体模型加载源码](https://github.com/IDEA-Research/DWPose/blob/onnx/ControlNet-v1-1-nightly/annotator/dwpose/wholebody.py)。与本项目已试17点RTMPose-m Body7不是同一权重。
+- [ControlNet传统OpenPose参考实现](https://github.com/lllyasviel/ControlNet/tree/main/annotator/openpose)与[作者预处理权重](https://huggingface.co/lllyasviel/Annotators)：本机四模型对照使用其身体网络/PAF及`body_pose_model.pth`，临时CPU环境运行；[对照范围与结果](task/20261016_MMDAR四模型姿态效果对照.md)。
+- [ControlNet SD1.5 OpenPose模型卡](https://huggingface.co/lllyasviel/control_v11p_sd15_openpose)：该权重使用骨架图控制SD生成，图像关键点预处理另用OpenPose/DWPose；不能将生成控制权重当作姿态检测器。
 
 - [OpenCV PnP姿态估计](https://docs.opencv.org/4.x/d5/d1f/calib3d_solvePnP.html)：已知3D/2D对应和相机内参下的旋转/平移、重投影误差、鲁棒估计及多解。用于拟定相机匹配方案，不代表项目已接入OpenCV JS或已经恢复真实拍摄机位。
 - [MediaPipe Pose说明](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker)：图像点与估计3D输出类别。本项目当前使用固定OpenCV Zoo ONNX及自有预后处理，不直接替换为最新Tasks API。

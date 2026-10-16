@@ -452,7 +452,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     function applyImagePose(pose) {
         if (!enabled || mode !== 'physics' || !bodyRig || !bodyDrive) throw new Error('请先启用身体物理模式');
         // 先构造全部目标再提交，坏点/退化姿态不能部分覆盖用户原有的控制目标。
-        const proposed = retargetImagePose(pose, bodyRig).map(target => ({ ...target, handle: handles.find(handle => handle.key === target.key) }))
+        const proposed = retargetImagePose(pose, bodyRig, { camera: getCamera() }).map(target => ({ ...target, handle: handles.find(handle => handle.key === target.key) }))
             .filter(target => target.handle);
         if (proposed.length < 3) throw new Error('当前模型可用的图片姿态控制点不足');
         stopDrag();

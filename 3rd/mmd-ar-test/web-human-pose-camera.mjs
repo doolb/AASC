@@ -1,4 +1,4 @@
-import { landmarkQuality } from './web-human-pose-core.mjs';
+import { landmarkQuality, poseLandmarkThreshold } from './web-human-pose-core.mjs';
 import { poseScale } from './web-human-pose-projection.mjs';
 
 // 相机以图片高度为单位拟合，固定FOV；人体比例/姿态和未知焦距使结果只能视为近似匹配。
@@ -82,7 +82,7 @@ export async function fitImageCamera(snapshot,pose,{aspect,isCurrent=()=>true,ma
     const fov=snapshot.view.fov, zoom=snapshot.view.zoom || 1;
     if(!Number.isFinite(aspect)||aspect<=0||!Number.isFinite(fov)||fov<=1||fov>=150||!Number.isFinite(zoom)||zoom<=0) throw new Error('当前透视相机不支持匹配');
     const source=snapshot.points.filter(p=>Number.isInteger(p.landmark)&&p.world?.length===3&&p.world.every(Number.isFinite)
-        &&landmarkQuality(pose?.landmarks?.[p.landmark])>=.5);
+        &&landmarkQuality(pose?.landmarks?.[p.landmark])>=poseLandmarkThreshold(pose));
     if(source.length<6) throw new Error('可信且可对应的身体关键点不足6个');
     const scale=poseScale(source), center=[0,1,2].map(i=>source.reduce((s,p)=>s+p.world[i],0)/source.length);
     const pairs=source.map(p=>({point:p.world.map((v,i)=>(v-center[i])/scale),image:[(pose.landmarks[p.landmark].x-.5)*aspect,pose.landmarks[p.landmark].y-.5],

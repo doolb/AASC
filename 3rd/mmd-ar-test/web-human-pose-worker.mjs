@@ -1,5 +1,5 @@
 import * as ort from './vendor/pose/ort.wasm.min.mjs';
-import { prepareDetector, decodePeople, preparePose, decodePose, rankPoseCandidates } from './web-human-pose-core.mjs';
+import { prepareRTMPose, decodeRTMPose } from './web-human-pose-rtmpose.mjs';
 
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = new URL('./vendor/pose/', import.meta.url).href;
@@ -32,10 +32,10 @@ async function initialize(id) {
         try {
             for (const model of manifest.models) {
                 const bytes = await loadModel(model, id);
-                progress(id, '初始化本地推理：' + (created.length ? '姿态' : '人物检测'));
+                progress(id, '初始化本地推理：RTMPose-m（约52.3MiB）');
                 created.push(await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' }));
             }
-            if (created.length !== 2) throw new Error('姿态模型清单不匹配');
+            if (created.length !== 1 || manifest.models[0].name !== 'rtmpose-m-body7-384x288.onnx') throw new Error('姿态模型清单不匹配');
             sessions = created; return sessions;
         } catch (error) { for (const session of created) await session.release(); throw error; }
     })().catch(error => { loading = null; throw error; });
@@ -49,30 +49,15 @@ async function run(session, data, dims) {
 self.onmessage = async event => {
     const { id, image } = event.data;
     try {
-        const [detector, estimator] = await initialize(id), started = performance.now();
-        progress(id, '本地识别人物…');
-        const input = prepareDetector(image), detection = await run(detector, input.tensor, [1, 3, 224, 224]);
-        let people;
-        try { people = decodePeople(detection['Identity:0'].data, detection['Identity_1:0'].data, input); }
-        finally { Object.values(detection).forEach(value => value.dispose()); }
-        if (!people.length) throw new Error('未识别到人物，请使用清晰的单人全身图片');
-        const estimated = [];
-        for (const [index, person] of people.entries()) {
-            progress(id, `本地识别身体姿态：${index + 1}/${people.length}…`);
-            const roi = preparePose(image, person), outputs = await run(estimator, roi.tensor, [1, 256, 256, 3]);
-            try {
-                // 单个候选没有姿态时继续检查其他候选；推理/张量契约异常仍由外层明确报错。
-                const confidence = outputs.Identity_1.data[0];
-                if (Number.isFinite(confidence) && confidence >= 0.5) {
-                    const pose = decodePose(outputs.Identity.data, outputs.Identity_4.data, confidence, roi, image);
-                    estimated.push({ ...pose, detection: { score: person.score,
-                        box: person.box.map((value, i) => value / (i % 2 ? image.height : image.width)) } });
-                }
-            } finally { Object.values(outputs).forEach(value => value.dispose()); }
-        }
-        const candidates = rankPoseCandidates(estimated);
-        if (!candidates.length) throw new Error('未识别到可靠姿态，请使用清晰的全身图片');
-        const result = { ...candidates[0], candidates, inferenceMs: performance.now() - started };
+        const [estimator] = await initialize(id), started = performance.now();
+        progress(id, 'RTMPose-m本地识别单人全图…');
+        const roi = prepareRTMPose(image), outputs = await run(estimator, roi.tensor, [1, 3, 384, 288]);
+        let pose;
+        try {
+            // 同时核查真实输出名称与维度，不依赖对象枚举顺序猜测横纵坐标。
+            pose = decodeRTMPose(outputs.simcc_x, outputs.simcc_y, roi, image);
+        } finally { Object.values(outputs).forEach(value => value.dispose()); }
+        const result = { ...pose, candidates: [pose], inferenceMs: performance.now() - started };
         self.postMessage({ type: 'result', id, result });
     } catch (error) { self.postMessage({ type: 'error', id, message: error.message || String(error) }); }
 };
