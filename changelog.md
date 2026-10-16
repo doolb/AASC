@@ -12903,3 +12903,7 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 新增 `NodeStartupStatus.kt`：启动快照同步保存/重放、更新事件隔离、停进程作废；`NodeServerService.kt` 注册不导出的应用内状态请求，查询不重启 Node，排队启动使旧 ready 失效。`MainActivity.kt` 恢复前台重新取状态、限制前台提示，`OfflineModelPreparationPlan.kt` 改为展示成功或完整缓存跳过后才记录已处理，展示失败/异常保留重试机会。
   - Android 定向48/48（新增9项）、`npm run test:offline-bootstrap` 63/63通过，生产与测试源码编译成功；覆盖后台/重建补状态、展示失败重试、两种就绪顺序、更新进度隔离与旧快照失效。同步 design/spec/task/todo/self-test/usage；仅 minApk=true，其余产物保持false，代码与状态按规则上传Git。
   - 当前 SM-N9500 min58已有历史处理标记，不能据此断言用户报告现场原因；保留模型/配置/首次标记。尚未签名构建、发布或安装新APK，干净首装及后台返回原生提示仍待验收；待办只保留出包与现场验收。
+
+### 千问TTS固定模型设计
+
+- ✅ [2026-10-16] 核对Qwen API及千问网页TTS仍读取可变settings.model，按用户要求形成固定底层模型方案：API拟qwen-audio-3.1-tts-flash、网页拟QUARK_VOICE，UI/配置/目录/映射/planner/最终适配器统一约束，处理已知旧音色并保护有效自选。同步design/spec/task/todo，实际模型值与实施待确认；未改源码、测试、构建或发布，状态不变。

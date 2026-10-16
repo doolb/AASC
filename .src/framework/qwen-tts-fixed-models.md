@@ -1,0 +1,26 @@
+#skill: ai-code-translation
+
+## framework / 千问TTS固定底层模型（待确认）
+
+已有声明
+- TTS配置、业务生成、音色查询、Chat2API映射/应用planner与最终适配器 // 保持现有账号和消息流程
+- Qwen3.1官方目录、现有QUARK_VOICE及旧配置恢复 // 不混淆聊天LLM与TTS底层模型
+
+新增定义
+- QwenFixedTts { apiModel: qwen-audio-3.1-tts-flash, webModel: QUARK_VOICE }
+
+操作流程
+- 新增纯常量模块 → 两路TTS配置、目录、planner、适配器读取同一QwenFixedTts // 防止只改默认值仍被覆盖
+- 读取旧model与mappedModel → 规范化固定model → 后续业务保存移除两路model/mappedModel字段，权威快照仍显示常量实际模型 // 历史配置不再决定实际模型
+- 收到新model补丁 → 不同固定值拒绝，同值兼容 // 保留旧客户端可用回显
+- 已知API旧四音色 → 默认及同Provider业务显式音色恢复乔小娇 → 已有效3.1音色保持 // 避免固定模型后仍混用Cherry
+- 移除两路模型输入及别名提示 → 根据固定模型显示语速能力 → 音色选择保持 // UI删除模型输入不能误隐藏API调速
+- 生成和音色查询 → 直接使用固定模型 → 最终上游参数校验 // 不信任旧配置或前端伪造值
+- 映射到不同实际TTS模型 → 明确拒绝；音色别名映射固定模型 → 保留voice参数 // 不将旧TTS误判为LLM
+- 普通LLM模型与其它Provider → 原流程保持 // 限定变更范围
+
+自测流程
+- 旧配置/伪造补丁/映射覆盖 → 固定值或明确拒绝 → 上游只接收固定值 // 对应设置、planner与适配器测试
+- 同源音色目录与有效3.1/旧四音色/网页旧MINI_MAX → 正确恢复或拒绝 // 不假定未知音色兼容
+- 正式控制端页面无模型输入且API语速正常 → WS规范化广播和重连 // 对应UI/WS只读SelfTest
+- 已出包repair4脚本与豆包并发 → 兼容安全、无额外配置写入 // 不重写旧不可变归档

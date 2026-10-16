@@ -191,3 +191,15 @@ ADB确认SM-N9500活动清单/运行服务/页面均为v102，新页面无Provid
 正式Opus共享解码池保持两个Worker，新增最多256等待项/64MiB输入排队，保留取消/原截止时间；工厂默认maxWaiting=0保持原拒绝语义。解决默认3路同时收齐音频时第3路被旧两Worker无等待池拒绝的问题，不把本地解码等待算为上游连接。真实3路WASM和三个模拟VoiceGenie任务同时结束均通过。
 
 验证收尾：配置/浏览器/装配29项、音色面板25项、聊天22项、数据修复兼容71项已通过；Chat2API与音频最终结果记录于对应task/changelog。仅本地模拟上游、真实WASM和Chromium，无私人账号/运行配置变更。
+
+## Qwen两路TTS底层模型固定（2026-10-16，待确认未实施）
+
+用户指出Qwen API仍不正确，要求模型不能配置、代码固定，并包含千问网页。拟将Qwen API底层模型固定为qwen-audio-3.1-tts-flash，千问网页固定为QUARK_VOICE；上述值是当前默认值，实施确认时一并确认。音色仍可选择，模型/Chat2API别名输入从两路设置中移除；UI语速能力改由固定模型判断，不能因删除模型输入而隐藏Qwen API语速。
+
+现状：normalizeSettings允许qwen-api保存任意模型，qwen-chat允许QUARK_VOICE/MINI_MAX及映射别名；registry/qwen-chat-tts读取settings.model，Chat2API模型绑定和适配器也支持多底层模型。因此仅隐藏前端字段不足以固定，需要规范化、目录、规划和最终适配器一致约束。
+
+建议新增纯常量模块chat2api-qwen-tts-models.js集中定义两条实际模型，官方3.1目录模块引用并保留旧常量导出。旧保存model/mappedModel读取时按固定值归一化，后续保存移除这两路model/mappedModel持久化字段，权威快照的只读model仍由代码常量提供；新提交不同底层模型明确拒绝，旧客户端提交同固定值仍兼容。Provider业务生成和音色查询直接使用固定值，最终planner/adapter禁止映射或显式请求把两路TTS改为其他实际模型，不影响普通LLM模型选择。公开音色别名仍可映射到固定实际模型与voice参数。旧TTS实际模型请求需明确拒绝，不误路由LLM或悄悄改模型合成。
+
+旧Qwen API Cherry/Ethan/Chelsie/Serena与3.1不兼容，读取/生成时须修正已知旧默认及属于该Provider的显式业务音色到乔小娇；已有有效3.1音色保留，未知用户音色不得盲目覆盖。千问网页旧MINI_MAX及模型别名不能继续改变QUARK_VOICE，需检查音色兼容，不凭空扩充音色目录。凭证、独立语速、共享音量、豆包上游并发及其他Provider保持。
+
+拟更新tts-provider-settings、config-app-service、tts-provider-registry、qwen-chat-tts、前端tts-provider-settings/self-test，以及Chat2API model-capabilities/provider-registry/application-service/API与千问speech适配器的必要约束和测试。范围是两路TTS实际模型固定，不实现尚未确认的统一模型目录。已生成code104/repair4归档不可改写；新源码需要新服务包，旧修复及配置兼容回归以新约束的有效行为为准，不为通过测试强制覆盖未知用户字段。当前尚未改源码、测试、出包或发布。

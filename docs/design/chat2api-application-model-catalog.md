@@ -36,3 +36,7 @@
 ## 风险与验收
 
 重点覆盖必填Provider、application缺省llm及llm/chat边界转换、Provider与模型/映射冲突、同名隔离、voice大小写、重复/非法筛选、固定voice冲突、自定义映射冲突、账号失效、旧调用不变、目录查询无副作用、无循环依赖。查询有界且可缓存，禁止按每个音色查询或测试上游。当前仅设计，不修改代码或发布状态、不运行测试、不构建发布。
+
+## 千问底层模型固定的后续约束（2026-10-16，待实施确认）
+
+用户要求Qwen API及千问网页TTS不再可配置实际模型。拟固定API为qwen-audio-3.1-tts-flash、网页为QUARK_VOICE；本设计ModelEntry.baseModel来自代码常量，公开model/音色别名仅用于选择音色，不能被解释为任意底层引擎选择。provider仍必填、目录application默认llm的已确认原则保持。实现另见千问TTS底层模型固定任务，本目录仍未实施。

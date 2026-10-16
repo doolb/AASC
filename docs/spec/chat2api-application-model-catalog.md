@@ -33,3 +33,8 @@ VoiceBinding → 原application planner → 同一账号与能力校验 → 原�
 自测流程 := 未筛选models、旧model+voice、旧音色API与自定义默认参数映射 → 兼容行为保持
 当前状态 := 未修改源码、未执行测试、未出包发布
 ```
+
+```text
+后续约束 := Qwen API与千问网页TTS的baseModel取代码固定值；音色别名只绑定固定引擎与voice，不提供底层模型配置
+状态 := 上述固定方案与统一目录均未实施，实施确认分别处理
+```
