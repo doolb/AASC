@@ -18,6 +18,26 @@ internal data class OfflineModelDefinition(val modelId: String, val revision: St
     val totalBytes: Long get() = files.fold(0L) { total, file -> Math.addExact(total, file.size) }
 }
 
+/** 构造阶段只查询路径；JS尚未启动时用APK可信目录占位，不能把占位误标为模型就绪。 */
+internal object OfflineModelDirectorySnapshot {
+    fun resolve(filesRoot: File, modelId: String, states: JSONArray,
+        bundledDefinitions: List<OfflineModelDefinition>): File {
+        val state = (0 until states.length()).map { states.getJSONObject(it) }
+            .firstOrNull { it.optString("modelId") == modelId }
+        val reported = state?.optString("directory")?.takeIf { it.isNotBlank() }
+        if (reported != null) {
+            val directory = File(reported)
+            require(directory.isAbsolute && directory.canonicalFile.toPath().startsWith(filesRoot.canonicalFile.toPath())) {
+                "JS模型目录不在应用私有目录内"
+            }
+            return directory
+        }
+        require(bundledDefinitions.any { it.modelId == modelId }) { "未声明的Offline模型: $modelId" }
+        val relative = if (modelId in setOf("sensevoice", "tts", "voiceprint")) "models/$modelId" else "models/llm/$modelId"
+        return File(filesRoot, relative)
+    }
+}
+
 /** Offline 的可信目录与网络缓存；状态读取只比较小元数据和属性，加载前才验证新缓存。 */
 class OfflineModelStore(private val context: Context) {
     private val jsManaged get() = OfflineLauncherSession.enabled(context)
@@ -70,7 +90,7 @@ class OfflineModelStore(private val context: Context) {
         ?: error("未声明的 Offline 模型: $modelId")
 
     fun directoryFor(modelId: String): File {
-        if (jsManaged) return File(state(modelId)?.getString("directory") ?: error("JS模型状态尚未就绪"))
+        if (jsManaged) return OfflineModelDirectorySnapshot.resolve(context.filesDir, modelId, OfflineLauncherClient.modelStates, legacyDefinitions)
         val definition = definition(modelId)
         return candidates(definition).firstOrNull { hasFiles(it, definition) && hasVerificationStamp(it, definition) }
             ?: candidates(definition).firstOrNull { hasFiles(it, definition) } ?: candidates(definition).last()

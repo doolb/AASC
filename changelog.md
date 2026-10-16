@@ -1,3 +1,9 @@
+### min60 原生启动时序与本地启动页修复
+
+- ✅ [2026-10-16] 真机定位并按用户确认修复两处宿主问题：OfflineModelStore在JS快照未到时构造语音桥崩溃；OfflineLauncherActivity将本地HTML文档一并403拦截。
+  - 目录查询增加可信APK定义占位，状态到达后由原有provider读取JS权威路径，加载前仍经JS验证；本地页面使用固定HTTPS顶层入口与可信HTML200响应，外部/子框架/其他路径继续拒绝。修改三处Kotlin并增加纯规则/页面断言回归。
+  - JS/网页26项通过，Android与打包回归执行中；准备min61复测，`minApk=true`，code106及其它产物状态保持。升级前完整私有备份426,248,704字节/23,566文件已校验并保留原min59 APK，未清空数据。修正包尚未构建或发布；结果随后追加。
+
 ### Offline 服务包与 min APK v106/v60 发布
 
 - ✅ [2026-10-16] 将 Offline 服务代码包 v106 与 update-only min APK v60 发布到 LAN/WAN；未构建完整 APK。

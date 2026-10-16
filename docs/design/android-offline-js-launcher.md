@@ -53,3 +53,7 @@ APK 固定基线不被 JS 覆盖；原生能力、Node 或宿主协议变化仍�
 - `npm run test:offline-launcher`：26 项，含真实子进程候选切换/失败/超时/基线回退、本地 HTTP 下载与健康、平台依赖、task-only、种子/修复、模型、Chromium 页面交互。
 - `npm run test:offline-bootstrap`：63 项；`npm run test:offline-data-repair`：72 项；Android Offline/Node 定向 JVM：147 项，编译与测试通过。
 - 尚未验证过渡 APK 的真实 Android WebView/权限、min59 覆盖升级、旧 full 激活、后台/杀进程/模型推理与设备性能；未清空手机、未构建或发布 APK/ZIP。发布状态为 minApk/servicePackage=true，依赖/任务状态保持原值。
+
+## min60 实机缺陷与修正范围（2026-10-16）
+
+首次真实覆盖升级发现两处宿主缺陷：NativeBridge构造时JS模型快照未到导致崩溃；WebView统一403拦截误伤loadDataWithBaseURL的本地文档。用户已确认修复：目录查询使用可信APK目录占位、JS快照到达后动态切换；文档改为固定HTTPS顶层入口，由拦截器返回可信HTML。原生引擎加载前仍经JS校验，外部请求继续拒绝。min60不能视为已通过设备验收，需修正后的min包。

@@ -115,3 +115,16 @@ UI请求 = {type, requestId, payload}，白名单RPC；结果/状态/下载进�
 旧legacy-root指针修复 = 版本依赖目录marker或版本/锁/express元数据有效 → 仅改legacyDependencies为false → 保留pending/previous字段；不联网、不覆盖用户文件
 宿主会话替换 = 旧请求显式失败；状态/模型目录/页面根仅接收当前generation，避免跨重启迟到结果
 ```
+
+## min60 真机启动时序与本地文档修正（2026-10-16，用户确认）
+
+```text
+NativeBridge构造时 = 不等待JS、不发RPC、不下载、不要求模型快照已存在
+目录查询 = 有当前JS快照 → 使用受管私有目录；无快照 → 从APK可信模型定义映射已有固定缓存候选路径
+临时路径 = 仅用于构造轻量原生管理器，不代表模型已就绪；加载前仍经JS requirePrepared校验
+JS状态到达后 = 各管理器原有directoryProvider重新读取当前权威路径，不能缓存构造时占位目录
+本地网页入口 = 固定HTTPS来源的顶层首页请求；WebView.loadUrl → 拦截器返回已核验HTML的200响应
+其他请求/子框架/外部导航 = 拒绝；不使用会被自身拦截器403拒绝的loadDataWithBaseURL文档
+文档响应 = text/html UTF-8 + no-store；页面切换读取supervisor最新uiRoot后重新请求首页
+验证 = 快照为空也可构造；JS新快照路径生效；未知ID/越界拒绝；顶层本地首页允许、其他请求拒绝；真机冷启动和启动页交互
+```
