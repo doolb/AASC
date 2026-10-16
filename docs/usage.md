@@ -4,6 +4,8 @@
 
 # Web MediaCenter - 使用说明
 
+- [Offline自动升版、按种类出包、发布与中断恢复命令](usage/offline-release-cli.md)
+
 - [豆包Chat音色、显示端快选与回复播放](usage/doubao-chat-voices.md)（需加载本轮新版服务）
 
 ## 独立任务代码更新

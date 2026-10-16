@@ -688,7 +688,8 @@ async function createOfflineUpdateArtifacts(options = {}) {
         await fs.promises.mkdir(codeDirectory, { recursive: true });
         await copyCodeSnapshot(projectRoot, codeDirectory);
         await createZip(codeDirectory, stagedCodeArchive, zipRunner);
-        const stagedVoiceDisplayNode = await stageVoiceDisplayNodePackage({
+        // 统一出包入口可只构建服务代码；旧入口仍默认附带独立 Node ZIP。
+        const stagedVoiceDisplayNode = options.includeVoiceDisplayNode === false ? null : await stageVoiceDisplayNodePackage({
             projectRoot,
             workDirectory,
             outputDir,
@@ -769,11 +770,13 @@ async function createOfflineUpdateArtifacts(options = {}) {
         if (fs.existsSync(manifestPath)) throw new Error(`更新清单版本文件已存在，拒绝覆盖: ${manifestPath}`);
 
         await atomicallyCopyToOutput(stagedCodeArchive, codeDestination);
-        await fs.promises.mkdir(path.dirname(stagedVoiceDisplayNode.archiveDestination), { recursive: true });
-        await atomicallyCopyToOutput(stagedVoiceDisplayNode.archivePath, stagedVoiceDisplayNode.archiveDestination);
-        await atomicallyCopyToOutput(stagedVoiceDisplayNode.metadataPath, stagedVoiceDisplayNode.metadataDestination);
-        finalVoiceDisplayNodeArchivePath = stagedVoiceDisplayNode.archiveDestination;
-        finalVoiceDisplayNodeMetadataPath = stagedVoiceDisplayNode.metadataDestination;
+        if (stagedVoiceDisplayNode) {
+            await fs.promises.mkdir(path.dirname(stagedVoiceDisplayNode.archiveDestination), { recursive: true });
+            await atomicallyCopyToOutput(stagedVoiceDisplayNode.archivePath, stagedVoiceDisplayNode.archiveDestination);
+            await atomicallyCopyToOutput(stagedVoiceDisplayNode.metadataPath, stagedVoiceDisplayNode.metadataDestination);
+            finalVoiceDisplayNodeArchivePath = stagedVoiceDisplayNode.archiveDestination;
+            finalVoiceDisplayNodeMetadataPath = stagedVoiceDisplayNode.metadataDestination;
+        }
         if (stagedTaskCode) {
             await fs.promises.mkdir(path.dirname(stagedTaskCode.destination), { recursive: true });
             await atomicallyCopyToOutput(stagedTaskCode.archive, stagedTaskCode.destination);
@@ -833,7 +836,8 @@ function parseCliArguments(argv) {
         if (!['mode', 'code-version', 'dependency-version', 'task-code-version', 'output-dir', 'manifest-file',
             'data-repair-file', 'repair-version', 'repair-id', 'required-code-version',
             'required-apk-version-code', 'required-data-version', 'target-data-version', 'compatible-data-versions',
-            'repair-capabilities', 'release-notes', 'sensitive', 'reuse-node-min-seeds', 'dependency-roots', 'node-abi'].includes(key)) {
+            'repair-capabilities', 'release-notes', 'sensitive', 'reuse-node-min-seeds', 'include-voice-display-node',
+            'dependency-roots', 'current-artifact-root', 'node-abi'].includes(key)) {
             throw new Error(`未知构建参数: --${key}`);
         }
         if (typeof value !== 'string' || value.startsWith('--')) throw new Error(`参数 --${key} 缺少值`);
@@ -850,7 +854,7 @@ function parseCliArguments(argv) {
             'target-data-version'
         ]);
         parsed[fieldName] = numericKeys.has(key) ? Number(value) :
-            key === 'sensitive' || key === 'reuse-node-min-seeds' ? value === 'true' : value;
+            key === 'sensitive' || key === 'reuse-node-min-seeds' || key === 'include-voice-display-node' ? value === 'true' : value;
     }
     return parsed;
 }
