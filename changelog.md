@@ -1,3 +1,9 @@
+### MMD-AR HMR2.0b 报告整图相对深度
+
+- ✅ [2026-10-16] 在独立HMR2.0b三图报告同时显示既有Depth Anything V2 Small整图相对深度。
+  - `tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html`、`report.mjs`改为原图叠点/受光3D骨架/相对深度三列，窄屏折行；`check-report.cjs`覆盖三图、HMR候选同步、WebGL回退与深度404。同步design、spec、self-test、task、usage、todo；深度PNG、权重及私人原图仍只保留本机。
+  - Edge三图实际解码、候选不串图、SHA来源不符/404回退、390px无溢出、本机GET与无页面错误通过。深度仅为可见表面的相对远近，不是米制关节深度；未修改正式IK、Offline状态或构建APK。
+
 ### MMD-AR HMR2.0b 动漫脚掌重测
 
 - ✅ [2026-10-16] 确认动漫脚掌偏差来自模型原始BODY25输出，并用同一权重测试扩框、人物框左右平移及水平镜像。

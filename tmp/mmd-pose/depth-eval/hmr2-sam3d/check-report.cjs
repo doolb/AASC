@@ -33,6 +33,9 @@ const { start } = require('../server.cjs');
           status: document.querySelector('#hmr2 .status').textContent,
           details: document.querySelector('#hmr2 .details').textContent,
           photo: document.querySelector('#hmr2 .overlay').width,
+          depth: document.querySelector('#hmr2 img.depth')?.naturalWidth || 0,
+          depthSource: document.querySelector('#hmr2 img.depth')?.currentSrc || '',
+          depthStatus: document.querySelector('#hmr2 .depth-status')?.textContent || '',
           renderer: canvas.dataset.renderer,
           joints: Number(canvas.dataset.joints),
           bones: Number(canvas.dataset.bones),
@@ -43,7 +46,9 @@ const { start } = require('../server.cjs');
           cards: document.querySelectorAll('.card').length,
         };
       });
-      if (!result.label || result.photo <= 0 || result.cards !== 1 || !result.status.includes('推理完成')
+      if (!result.label || result.photo <= 0 || result.depth <= 0
+        || !result.depthSource.endsWith(`/${name}-depth.png`) || !result.depthStatus.includes('相对深度')
+        || result.cards !== 1 || !result.status.includes('推理完成')
         || !result.details.includes('embedded SMPL buffers') || !result.webgl || result.renderer !== 'three-webgl'
         || result.joints !== 25 || result.bones < 20 || result.lights !== 3
         || result.projectedShadows !== 'false' || !result.skeletonPixels) {
@@ -83,10 +88,12 @@ const { start } = require('../server.cjs');
         status: document.querySelector('#hmr2 .status').textContent,
         details: document.querySelector('#hmr2 .details').textContent,
         bones: Number(document.querySelector('#hmr2 canvas.xyz').dataset.bones),
+        depthSource: document.querySelector('#hmr2 img.depth').currentSrc,
       }));
       if (preview.controlHidden || !preview.common.includes(candidate.box.join(', '))
         || !preview.status.includes('脚掌未改善')
-        || !preview.details.includes(`"variant": "${variant}"`) || preview.bones !== 24) {
+        || !preview.details.includes(`"variant": "${variant}"`) || preview.bones !== 24
+        || !preview.depthSource.endsWith('/anime-depth.png')) {
         throw Error(`${variant} 候选报告未正确展示`);
       }
       if (variant === 'mirror') await page.screenshot({ path: path.join(__dirname, 'report-anime-mirror.png'), fullPage: true });
@@ -141,10 +148,40 @@ const { start } = require('../server.cjs');
         && document.querySelector('#hmr2 .status').textContent.includes('WebGL不可用')
         && pixels.some((value, index) => index % 4 === 3 && value !== 0);
     });
-    if (!fallbackRendered) throw Error('WebGL不可用时未回退到线条骨架');
+    const fallbackDepth = await fallbackPage.$eval('#hmr2 img.depth', (element) => element.naturalWidth > 0);
+    if (!fallbackRendered || !fallbackDepth) throw Error('WebGL不可用时未保留线条骨架和深度图');
+    const missingDepthPage = await browser.newPage();
+    await missingDepthPage.setRequestInterception(true);
+    missingDepthPage.on('request', (request) => {
+      if (request.url().endsWith('/seated-depth.png')) request.respond({ status: 404, body: '' });
+      else request.continue();
+    });
+    missingDepthPage.on('pageerror', (error) => errors.push(error.message));
+    await missingDepthPage.goto(`${url}/_depth/hmr2-sam3d/report.html?image=seated`);
+    await missingDepthPage.waitForFunction(() => globalThis.reportReady, { timeout: 30000 });
+    const missingDepthFallback = await missingDepthPage.evaluate(() =>
+      document.querySelector('#hmr2 .depth-status').textContent.includes('缺失')
+      && document.querySelector('#hmr2 .status').textContent.includes('推理完成')
+      && Number(document.querySelector('#hmr2 canvas.xyz').dataset.bones) === 24);
+    if (!missingDepthFallback) throw Error('深度文件缺失时未保留原始HMR结果');
+    const mismatchPage = await browser.newPage();
+    await mismatchPage.setRequestInterception(true);
+    mismatchPage.on('request', (request) => {
+      if (request.url().endsWith('/rigid-projection/manifest.json')) {
+        request.respond({ status: 200, contentType: 'application/json', body: '{"images":[]}' });
+      } else request.continue();
+    });
+    mismatchPage.on('pageerror', (error) => errors.push(error.message));
+    await mismatchPage.goto(`${url}/_depth/hmr2-sam3d/report.html?image=seated`);
+    await mismatchPage.waitForFunction(() => globalThis.reportReady, { timeout: 30000 });
+    const mismatchedDepthHidden = await mismatchPage.evaluate(() =>
+      document.querySelector('#hmr2 .depth-status').textContent.includes('来源未核对')
+      && !document.querySelector('#hmr2 img.depth').getAttribute('src')
+      && document.querySelector('#hmr2 .status').textContent.includes('推理完成'));
+    if (!mismatchedDepthHidden) throw Error('深度来源不匹配时仍展示旧图');
     if (errors.length) throw Error(`浏览器脚本错误：${errors.join('; ')}`);
     if (requests.some((request) => request.method !== 'GET' || !request.url.startsWith(`${url}/`))) throw Error('报告出现非本机GET请求');
-    console.log(JSON.stringify({ cases: results.length, footTrials, overflow, fallbackRendered, realSkeletonRender: results.every((item) => item.skeletonPixels), bones: results.map((item) => item.bones), errors, status: results[0].status }));
+    console.log(JSON.stringify({ cases: results.length, footTrials, overflow, fallbackRendered, missingDepthFallback, mismatchedDepthHidden, realSkeletonRender: results.every((item) => item.skeletonPixels), bones: results.map((item) => item.bones), errors, status: results[0].status }));
   } finally {
     await browser?.close();
     server.close();

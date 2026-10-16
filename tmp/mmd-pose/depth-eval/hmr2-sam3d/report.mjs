@@ -6,6 +6,8 @@ const common = document.querySelector('#common');
 const models = ['hmr2'];
 const viewState = new Map(models.map((key) => [key, { yaw: 0, pitch: 0, output: null, photo: null, viewer: null }]));
 let audit = null;
+let depthManifest = null;
+let sampleGeneration = 0;
 
 function pointColor(name) {
   if (name.startsWith('left_') || name.startsWith('left-')) return '#61c8ff';
@@ -190,6 +192,7 @@ async function loadJson(url) {
 }
 
 async function showSample(name) {
+  const generation = ++sampleGeneration;
   const sample = audit?.samples?.find((item) => item.name === name);
   footTrialControl.hidden = name !== 'anime';
   if (name !== 'anime') footTrialSelect.value = 'original';
@@ -201,12 +204,29 @@ async function showSample(name) {
   if (variantSuffix) common.textContent += '；当前为实验候选，脚掌未改善，原始输出未被覆盖。';
   const photo = new Image();
   photo.src = `/sample/${name}`;
-  try { await photo.decode(); } catch { /* 原图缺失由状态栏说明。 */ }
+  const card = document.getElementById('hmr2');
+  const depthImage = card.querySelector('img.depth');
+  const depthVerified = depthManifest?.images?.some((item) => item.sha256 === sample?.sha256) || false;
+  if (depthVerified) depthImage.src = `../rigid-projection/${name}-depth.png`;
+  else depthImage.removeAttribute('src');
+  const [, depthReady] = await Promise.all([
+    photo.decode().then(() => true).catch(() => false),
+    depthVerified ? depthImage.decode().then(() => true).catch(() => false) : Promise.resolve(false),
+  ]);
+  if (generation !== sampleGeneration) return;
+  card.querySelector('.depth-status').textContent = !depthVerified
+    ? '相对深度来源未核对，暂不显示；原图叠点与3D骨架仍可查看。'
+    : depthReady
+      ? '相对深度：黄色较近、蓝色较远；只比较当前图片的可见表面。'
+      : '相对深度图缺失；原图叠点与3D骨架仍可查看。';
+  if (!depthReady) depthImage.removeAttribute('src');
   await Promise.all(models.map(async (key) => {
     const card = document.getElementById(key);
     const state = viewState.get(key);
+    const output = await loadJson(`./results/${key}-${name}${variantSuffix}.json`);
+    if (generation !== sampleGeneration) return;
     state.photo = photo.naturalWidth ? photo : null;
-    state.output = await loadJson(`./results/${key}-${name}${variantSuffix}.json`);
+    state.output = output;
     if (variantSuffix && state.output) {
       common.textContent = `${sample.label} · ${sample.width}×${sample.height} · 候选人物框 ${state.output.box.join(', ')}；${state.output.mirroredInput ? '输入已镜像并映回原图' : '未镜像'}；原图SHA-256 ${sample.sha256}；脚掌未改善，原始输出未被覆盖。`;
     }
@@ -252,7 +272,10 @@ footTrialSelect.value = new URLSearchParams(location.search).get('variant') || '
 if (![...footTrialSelect.options].some((option) => option.value === footTrialSelect.value)) footTrialSelect.value = 'original';
 sampleSelect.addEventListener('change', () => showSample(sampleSelect.value));
 footTrialSelect.addEventListener('change', () => showSample(sampleSelect.value));
-audit = await loadJson('./status.json');
+[audit, depthManifest] = await Promise.all([
+  loadJson('./status.json'),
+  loadJson('../rigid-projection/manifest.json'),
+]);
 await showSample(sampleSelect.value);
 globalThis.showSample = showSample;
 globalThis.reportReady = true;
