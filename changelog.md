@@ -1,3 +1,8 @@
+### MMD-AR RTMPose3D仓库核查
+
+- ✅ [2026-10-16] 核查用户提供的b-arac/rtmpose3d，记录RTMW3D默认L/可选X、133点与完整XYZ回投影流程。
+  - 更新design/spec/task/todo/ref/self-test，区分完整XYZ与已试验Z软约束；默认焦距/root_z不能当真实镜头恢复。仅源码与文档核查，未安装/运行该Python封装、测试L或修改生产代码；后续融合仍为候选。
+
 ### MMD-AR人体三维辅助模型本机对照
 
 - ✅ [2026-10-16] 完成用户确认的RTMPose+RTMW3D/旧MediaPipe深度先验三图浏览器试验，生成可切换正侧面的实际PMX对照页。
