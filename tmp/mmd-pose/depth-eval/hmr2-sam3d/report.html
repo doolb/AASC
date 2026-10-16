@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HMR2.0b 三图骨骼对照</title>
+  <style>
+    *{box-sizing:border-box}body{margin:20px;background:#10151f;color:#e5ecfa;font:16px system-ui;line-height:1.55;overflow-wrap:anywhere}h1{font-size:1.65rem;margin:0 0 8px}p{max-width:1100px}a{color:#93caff}select{padding:9px;background:#26354b;border:1px solid #5b7391;border-radius:6px;color:white;font:inherit}.cards{max-width:1020px;margin-top:16px}.card{padding:14px;border:1px solid #45617d;border-radius:10px;background:#1b2534;min-width:0}.card h2{margin:0 0 8px;font-size:1.25rem}.status{min-height:34px;color:#ffca87}.plots{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}figure{margin:0;max-width:100%;min-width:0}figure:first-child{flex:0 1 auto}figure:nth-child(2){flex:0 1 420px}figcaption{font-size:.88rem;color:#afbdd3;margin:5px 0}canvas{max-width:100%;height:auto;background:#172130;border:1px solid #34475f;border-radius:5px;touch-action:none}details{margin-top:12px}summary{cursor:pointer;color:#93caff}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;color:#b5c7df}.note{color:#b6c3d6}@media(max-width:850px){body{margin:12px}}
+  </style>
+</head>
+<body>
+  <h1>HMR2.0b · 本机三图骨骼对照</h1>
+  <p>同一原图和人工人物框；蓝色为人物左侧，橙色为人物右侧。HMR2.0b官方checkpoint内的网络与SMPL张量生成BODY25骨架。3D骨段为受光圆柱、关节为球，可拖动旋转、双击复位。浏览器仅查看本机Python结果。</p>
+  <label>图片：<select id="sample"><option value="seated">真人坐姿</option><option value="anime">动漫</option><option value="diagram">交叉腿示意图</option></select></label>
+  <p id="common" class="note">正在读取资源状态…</p>
+  <div class="cards">
+    <section class="card" id="hmr2"><h2>HMR2.0b · SMPL BODY25</h2><p class="status"></p><div class="plots"><figure><figcaption>原图与预测关节</figcaption><canvas class="overlay"></canvas></figure><figure><figcaption>圆柱骨段与球形关节 · 拖动旋转</figcaption><canvas class="xyz" width="420" height="420"></canvas></figure></div><details><summary>来源与相机数据</summary><pre class="details"></pre></details></section>
+  </div>
+  <p class="note">真人图的抬高腿应属于人物左腿，但当前模型右膝更贴近该膝盖；立体显示没有修正识别坐标。左右归属、遮挡前后和脚掌朝向仍需逐图核对。尚未应用到VAM，正式MediaPipe默认保持。官方资源：<a href="https://github.com/shubham-goel/4D-Humans">4D-Humans</a>。</p>
+  <script type="module" src="./report.mjs"></script>
+</body>
+</html>

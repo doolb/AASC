@@ -202,9 +202,9 @@ RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)�
 
 ## HMR2.0b 本机三图对照（2026-10-16，已完成测试）
 
-本机报告：`http://127.0.0.1:56173/_depth/hmr2-sam3d/report.html?image=seated`。可切真人/动漫/示意图，浏览器只读取本机Python真实结果和原图；蓝色为人物左侧，橙色为人物右侧，可拖动3D骨架并展开相机/来源。正式全身IK仍使用MediaPipe，手机浏览器本地推理不在本轮范围。
+本机报告由临时服务启动后使用其实际端口打开`/_depth/hmr2-sam3d/report.html?image=seated`；旧`56173`端口可能已结束。可切真人/动漫/示意图，浏览器只读取本机Python真实结果和原图；蓝色为人物左侧，橙色为人物右侧。原图仍显示二维叠点，右侧3D视图用受光圆柱与球形关节表示原始XYZ，拖动旋转、双击复位，可展开相机/来源；用户选择不加投影阴影。WebGL不可用时显示旧线条骨架。该显示不会改正坐姿左右腿识别错误。正式全身IK仍使用MediaPipe，手机浏览器本地推理不在本轮范围。
 
-官方4D-Humans源码固定提交`efe18deff163b29dff87ddbd575fa29b716a356c`；HMR2.0b公开归档2710589440字节，SHA-256 `0fdf9e66ec97503fe1b995f4942e021a6df748f4ccbc5574718742d975a6e19b`，其中checkpoint 2709521501字节，SHA-256 `c9ea09c834161468638c9de7a782c614e300c622709bf52967274c543ec72fcf`。归档未单列SMPL中性模型文件，但checkpoint的`state_dict`已有完整SMPL层张量；脚本严格加载ViT/SMPL head全部权重并校验SMPL形状和BODY25映射，调用相同`smplx.lbs`/顶点选择路径重建关节，不额外下载人体模型。Windows本机源码仅加缓存目录HOME缺失回退及OpenGL平台win32两处适配，补丁`windows-compat.patch`与审计SHA在临时目录，模型计算不改。所有源码/权重/图片/脚本和报告结果在忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`，不随Git分发，不上传私有原图。
+官方4D-Humans源码固定提交`efe18deff163b29dff87ddbd575fa29b716a356c`；HMR2.0b公开归档2710589440字节，SHA-256 `0fdf9e66ec97503fe1b995f4942e021a6df748f4ccbc5574718742d975a6e19b`，其中checkpoint 2709521501字节，SHA-256 `c9ea09c834161468638c9de7a782c614e300c622709bf52967274c543ec72fcf`。归档未单列SMPL中性模型文件，但checkpoint的`state_dict`已有完整SMPL层张量；脚本严格加载ViT/SMPL head全部权重并校验SMPL形状和BODY25映射，调用相同`smplx.lbs`/顶点选择路径重建关节，不额外下载人体模型。Windows本机源码仅加缓存目录HOME缺失回退及OpenGL平台win32两处适配，补丁`windows-compat.patch`与审计SHA在临时目录，模型计算不改。官方源码、权重、原图、推理脚本及结果仍只在忽略目录；本轮仅选择性跟踪`report.html`、`report.mjs`和`check-report.cjs`三份报告源码，不上传私有原图或模型。
 
 固定三张原图与NLF对照一致，使用相同人工框seated=[10,15,226,299]、anime=[96,10,280,375]、diagram=[40,8,160,300]。HMR输出BODY25、相机和原图2D投影。真人坐姿的用户标注“抬高膝属于人物左腿”仍未被可靠识别：模型右膝投影(179.6,172.2)更接近可见抬高膝，左膝(209.8,191.2)偏右，左脚投影超出236px原图宽度。动漫手/脚和示意图交叉腿末端也有偏差；这仅是三图视觉观察，不能当成全数据集准确率。
 
@@ -213,6 +213,8 @@ RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)�
 & tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/Scripts/python.exe -X utf8 tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py
 node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-report.cjs
 ```
+
+需持续查看报告时，在另一个终端运行`node tmp/mmd-pose/depth-eval/serve-report.cjs`，用输出的本机端口打开`/_depth/hmr2-sam3d/report.html?image=seated`。立体网格读取现有`build:web:mmd-ar-test`产生的本地Three.js模块；报告浏览器不运行HMR2.0b推理，也不请求外网资源。
 
 无对应npm script，以上是临时测试命令。Windows Python3.10 CPU真实三图推理与Edge展示通过：模型加载约6.1秒，单图前向在两轮中约0.7–2.0秒，进程峰值工作集约5.9GiB；这不是手机浏览器性能。报告三图真实结果、390px布局及本机GET通过。左右腿质量未达标，故不接入VAM、不替换MediaPipe。完整数学路径可复核源码；未通过独立SMPL文件实例化官方`HMR2.load_hmr2`包装类，不宣称逐字原版包装调用。任务记录见[HMR2单模型测试](../task/20261016_HMR2单模型三图骨骼测试.md)。
 

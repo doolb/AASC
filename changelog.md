@@ -1,3 +1,9 @@
+### MMD-AR HMR2.0b 骨架立体显示
+
+- ✅ [2026-10-16] 按用户要求将独立报告的3D骨架改为圆柱骨段、球形关节和受光材质，不加投影阴影。
+  - `tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html`、`report.mjs`、`check-report.cjs`选择性加入Git；复用本地Three.js，保持三图原始BODY25、原图叠点、左右配色与拖动/双击交互，WebGL不可用时回退线条。模型、私人图片及推理结果仍不提交。
+  - Edge三图各24圆柱/25球、三盏灯、拖动复位、回退、本机GET、390px无溢出和无脚本错误通过。真人抬高膝仍被HMR2.0b错误归到右侧，立体显示不改变识别结论；未改正式IK或Offline状态，未构建APK。
+
 ### MMD-AR HMR2.0b 单模型三图实测
 
 - ✅ [2026-10-16] 按用户收窄范围，仅运行HMR2.0b三张图；官方checkpoint内的SMPL层张量经形状与BODY25顺序校验后，由同一`smplx.lbs`路径生成3D关节和原图投影。
