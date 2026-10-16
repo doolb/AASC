@@ -171,8 +171,43 @@ function validateOggOpus(buffer, customLimits = {}) {
     }
     if (!ended || pendingBytes || state !== 2) fail();
     return { channels: 1, preSkip, outputGain, sampleCount48k: lastGranule - preSkip,
-        durationMs: (lastGranule - preSkip) / 48, pageEnds,
+        durationMs: (lastGranule - preSkip) / 48, pageEnds, packetCount: packets,
         ...(customLimits.collectPackets === true ? { head, packetData } : {}) };
+}
+
+/**
+ * 对应.src/framework/tts-provider-configuration.md的豆包长句接收：上游同一句可能串联多个完整流。
+ * 仅以完整页的EOS划分，再交给原单流校验；不补结束页，也不接受交错serial或残缺尾部。
+ */
+function splitOggOpusStreams(buffer, customLimits = {}) {
+    const limits = Object.fromEntries(Object.entries(OGG_LIMITS).map(([name, maximum]) => [name,
+        Number.isSafeInteger(customLimits[name]) && customLimits[name] > 0 ? Math.min(maximum, customLimits[name]) : maximum]));
+    const maxStreams = Number.isSafeInteger(customLimits.maxStreams) && customLimits.maxStreams > 0
+        ? Math.min(64, customLimits.maxStreams) : 64;
+    if (!Buffer.isBuffer(buffer) || !buffer.length) fail();
+    if (buffer.length > limits.maxBytes) fail(true);
+    const streams = [];
+    let offset = 0, start = 0, pages = 0, packets = 0, durationMs = 0;
+    while (offset < buffer.length) {
+        if (offset + 27 > buffer.length || !matches(buffer, offset, MAGIC.ogg)) fail();
+        if (++pages > limits.maxPages) fail(true);
+        const flags = buffer[offset + 5], count = buffer[offset + 26];
+        if (!count || offset + 27 + count > buffer.length) fail();
+        const size = 27 + count + buffer.subarray(offset + 27, offset + 27 + count).reduce((sum, value) => sum + value, 0);
+        if (offset + size > buffer.length) fail();
+        offset += size;
+        if (!(flags & 4)) continue;
+        if (streams.length >= maxStreams) fail(true);
+        const stream = buffer.subarray(start, offset);
+        const metadata = validateOggOpus(stream, limits);
+        packets += metadata.packetCount;
+        durationMs += metadata.durationMs;
+        if (packets > limits.maxPackets || durationMs > limits.maxDurationMs) fail(true);
+        streams.push(stream);
+        start = offset;
+    }
+    if (!streams.length || start !== buffer.length) fail();
+    return streams;
 }
 
 function makeDecodePage(body, sequence, flags, granule) {
@@ -204,4 +239,4 @@ function* createOpusDecodePages(metadata) {
     }
 }
 
-module.exports = { validateOggOpus, createOpusDecodePages, OGG_LIMITS };
+module.exports = { validateOggOpus, splitOggOpusStreams, createOpusDecodePages, OGG_LIMITS };

@@ -9,15 +9,30 @@ const { createRequire } = require('node:module');
 const { normalizeSettings, redactSettings, PROVIDER_CAPABILITIES, supportsNativeSpeed } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { normalizeTemplateTts, resolveProviderConfig, BUSINESS_TYPES } = require('../src/apps/server/modules/tts/tts-provider-policy');
 
-test('qwen-chat模型保存校验、别名规范化与历史不兼容模型恢复，API模型规则保持', () => {
-    for (const model of ['qwen3-tts-flash', 'QUARK_VOCIE', '']) {
-        const patch = { providers: { 'qwen-chat': { model } } };
-        assert.throws(() => normalizeSettings(patch), /网页模型仅支持/u);
-        assert.equal(normalizeSettings(patch, {}, { recoverLegacyModel: true }).providers['qwen-chat'].model, 'QUARK_VOICE');
+test('上游并发默认3，配置只接受豆包1至8整数，旧配置与普通音色更新保留额度', () => {
+    assert.deepEqual(normalizeSettings().upstreamConcurrency, { 'doubao-chat': 3 });
+    const configured = normalizeSettings({ upstreamConcurrency: { 'doubao-chat': '8' } });
+    assert.deepEqual(configured.upstreamConcurrency, { 'doubao-chat': 8 });
+    assert.deepEqual(normalizeSettings({ defaultVolume: 42 }, configured).upstreamConcurrency, configured.upstreamConcurrency);
+    for (const value of [0, 9, 1.5, '', 'bad', null, true, NaN, Infinity]) {
+        assert.throws(() => normalizeSettings({ upstreamConcurrency: { 'doubao-chat': value } }), /上游并发/u);
     }
-    assert.equal(normalizeSettings({ providers: { 'qwen-chat': { model: 'qwen-chat' } } }).providers['qwen-chat'].model, 'QUARK_VOICE');
-    assert.equal(normalizeSettings({ providers: { 'qwen-chat': { model: 'MINI_MAX' } } }).providers['qwen-chat'].model, 'MINI_MAX');
-    assert.equal(normalizeSettings({ providers: { 'qwen-api': { model: 'qwen3-tts-flash' } } }).providers['qwen-api'].model, 'qwen3-tts-flash');
+    for (const value of [null, [], { 'qwen-chat': 3 }]) assert.throws(() => normalizeSettings({ upstreamConcurrency: value }), /上游并发/u);
+});
+
+// 对应.src/framework/qwen-tts-fixed-models.md：固定模型覆盖历史配置，禁止新补丁重新选择引擎。
+test('两路千问固定模型：错误补丁拒绝，历史模型和映射标记恢复', () => {
+    for (const [provider, fixed] of [['qwen-chat', 'QUARK_VOICE'], ['qwen-api', 'qwen-audio-3.1-tts-flash']]) {
+        for (const model of ['qwen3-tts-flash', 'MINI_MAX', 'my-voice', '', null, 123]) {
+            const patch = { providers: { [provider]: { model, mappedModel: true } } };
+            assert.throws(() => normalizeSettings(patch), /固定/u);
+            const recovered = normalizeSettings(patch, {}, { recoverLegacyModel: true }).providers[provider];
+            assert.equal(recovered.model, fixed);
+            assert.ok(!Object.hasOwn(recovered, 'mappedModel'));
+        }
+        assert.equal(normalizeSettings({ providers: { [provider]: { model: fixed } } }).providers[provider].model, fixed);
+        assert.throws(() => normalizeSettings({ providers: { [provider]: { mappedModel: true } } }), /映射/u);
+    }
 });
 
 test('旧模板继承、显式system、Agent与群聊、文本媒体业务隔离', () => {
@@ -68,8 +83,7 @@ test('原生无新增开关或音色ID，千问不保存旧凭证或账号引用
     assert.deepEqual(normalizeSettings({ aiReplyDefault: { provider: 'system', voice: 'old-id' } }).aiReplyDefault, { provider: 'system', voice: null });
 });
 
-function loadConfig(t) {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-tts-config-test-'));
+function loadConfig(t, directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-tts-config-test-'))) {
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
     const filename = path.resolve(__dirname, '../src/apps/server/modules/config/config-app-service.js');
     const realRequire = createRequire(filename);
@@ -87,6 +101,41 @@ function loadConfig(t) {
     vm.runInNewContext(fs.readFileSync(filename, 'utf8'), context, { filename });
     return { config: context.module.exports, instances, directory };
 }
+
+test('上游并发通过主config持久化，重载与失败回滚均保留权威值', t => {
+    const { config, instances, directory } = loadConfig(t);
+    assert.equal(config.getPublicTtsProviderSettings().upstreamConcurrency['doubao-chat'], 3);
+    config.setTtsProviderSettings({ upstreamConcurrency: { 'doubao-chat': 5 } });
+    const file = path.join(directory, 'config/config.json');
+    assert.equal(JSON.parse(fs.readFileSync(file)).tts.upstreamConcurrency['doubao-chat'], 5);
+    assert.equal(instances[1]._data.tts.upstreamConcurrency, undefined);
+    // 重建配置服务模拟进程重启；不调用数据修复专用重载入口。
+    assert.equal(loadConfig(t, directory).config.getTtsProviderSettings().upstreamConcurrency['doubao-chat'], 5);
+    const save = instances[0]._save;
+    instances[0]._save = () => false;
+    assert.throws(() => config.setTtsProviderSettings({ upstreamConcurrency: { 'doubao-chat': 8 } }), /已恢复/u);
+    assert.equal(config.getTtsProviderSettings().upstreamConcurrency['doubao-chat'], 5);
+    assert.equal(JSON.parse(fs.readFileSync(file)).tts.upstreamConcurrency['doubao-chat'], 5);
+    instances[0]._save = save;
+});
+
+test('迁移Qwen3到Audio3.1保留隐藏的已存语速，显式新语速优先', t => {
+    // 对应.src/framework/qwen-api-data-repair.md：模型能力变化不应丢失持久化的调速偏好。
+    for (const speedPatch of [undefined, -2]) {
+        const { config, instances, directory } = loadConfig(t);
+        instances[1]._data.tts = { providers: { 'qwen-api': {
+            model: 'qwen3-tts-flash', defaultVoice: 'Cherry', defaultSpeed: 4, credential: 'keep-secret'
+        } } };
+        assert.equal(config.getPublicTtsProviderSettings().providers['qwen-api'].defaultSpeed, 4);
+        const patch = { model: 'qwen-audio-3.1-tts-flash', defaultVoice: 'qiaoxiaojiao_v3.1',
+            ...(speedPatch === undefined ? {} : { defaultSpeed: speedPatch }) };
+        const saved = config.setTtsProviderSettings({ providers: { 'qwen-api': patch } });
+        assert.equal(saved.providers['qwen-api'].defaultSpeed, speedPatch ?? 4);
+        const user = JSON.parse(fs.readFileSync(path.join(directory, 'user/userconfig.json')));
+        assert.equal(user.tts.providers['qwen-api'].defaultSpeed, speedPatch ?? 4);
+        assert.equal(user.tts.providers['qwen-api'].credential, 'keep-secret');
+    }
+});
 
 test('真实配置持久化、重载、旧system默认和保存失败内存/磁盘回滚', t => {
     const { config, instances, directory } = loadConfig(t);
@@ -142,11 +191,11 @@ test('实际配置读取错误网页模型不崩溃；拒绝新错误模型不�
     instances[1]._data.tts = { providers: { 'qwen-chat': { enabled: true, model: 'qwen3-tts-flash', defaultVoice: 'saved-voice' } } };
     assert.equal(config.getTtsProviderSettings().providers['qwen-chat'].model, 'QUARK_VOICE');
     assert.equal(config.getTtsProviderSettings().providers['qwen-chat'].defaultVoice, 'saved-voice');
-    assert.throws(() => config.setTtsProviderSettings({ providers: { 'qwen-chat': { model: 'qwen3-tts-flash' } } }), /Qwen API/u);
+    assert.throws(() => config.setTtsProviderSettings({ providers: { 'qwen-chat': { model: 'qwen3-tts-flash' } } }), /固定为 QUARK_VOICE/u);
     assert.equal(instances[1]._data.tts.providers['qwen-chat'].model, 'qwen3-tts-flash');
     config.setTtsProviderSettings({ providers: { 'qwen-chat': { defaultSpeed: 2 } } });
     const saved = JSON.parse(fs.readFileSync(path.join(directory, 'user', 'userconfig.json')));
-    assert.equal(saved.tts.providers['qwen-chat'].model, 'QUARK_VOICE');
+    assert.equal(saved.tts.providers['qwen-chat'].model, undefined);
     assert.equal(saved.tts.providers['qwen-chat'].defaultVoice, 'saved-voice');
     assert.equal(saved.tts.providers['qwen-chat'].defaultSpeed, 2);
 });
@@ -183,15 +232,52 @@ test('Qwen API只对原生声明rate的Qwen-Audio模型保存语速', () => {
     assert.equal(supportsNativeSpeed('qwen-api', 'custom-qwen-alias'), false);
     const audioModel = normalizeSettings({ providers: { 'qwen-api': { defaultSpeed: 4 } } });
     assert.equal(audioModel.providers['qwen-api'].defaultSpeed, 4);
-    const unsupported = normalizeSettings({ providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultSpeed: 4 } } });
-    assert.ok(!Object.hasOwn(unsupported.providers['qwen-api'], 'defaultSpeed'));
+    assert.throws(() => normalizeSettings({ providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultSpeed: 4 } } }), /固定/u);
     const switched = normalizeSettings({}, { providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultSpeed: 7 } } });
-    assert.ok(!Object.hasOwn(switched.providers['qwen-api'], 'defaultSpeed'));
+    assert.equal(switched.providers['qwen-api'].defaultSpeed, 7);
 });
 
 
-test('新保存的网页映射别名重载不恢复为QUARK，旧错误配置仍恢复',()=>{
- const updated=normalizeSettings({providers:{'qwen-chat':{model:'my-voice'}}});
- assert.equal(normalizeSettings(updated,{}, {recoverLegacyModel:true}).providers['qwen-chat'].model,'my-voice');
- assert.equal(normalizeSettings({providers:{'qwen-chat':{model:'unknown'}}},{},{recoverLegacyModel:true}).providers['qwen-chat'].model,'QUARK_VOICE');
+test('API已知旧音色在默认和三个业务恢复，有效及未知用户音色保持', () => {
+    for (const voice of ['Cherry', 'Ethan', 'Chelsie', 'Serena', 'Emily_v3.1', 'my-voice']) {
+        const settings = normalizeSettings({ providers: { 'qwen-api': { defaultVoice: voice } },
+            ...Object.fromEntries(['aiReplyDefault', 'textMedia', 'systemBroadcast'].map(key => [key, { provider: 'qwen-api', voice }])) });
+        const expected = ['Cherry', 'Ethan', 'Chelsie', 'Serena'].includes(voice) ? 'qiaoxiaojiao_v3.1' : voice;
+        assert.equal(settings.providers['qwen-api'].defaultVoice, expected);
+        for (const key of ['aiReplyDefault', 'textMedia', 'systemBroadcast']) assert.equal(settings[key].voice, expected);
+    }
+});
+
+// 对应.src/framework/qwen-tts-fixed-models.md：五种方式常开，两路千问旧模型不再决定引擎。
+test('五种TTS方式默认可用，旧false规范化为true且默认Qwen为3.1和乔小娇', () => {
+    const ids = ['qwen-chat', 'qwen-api', 'doubao-api', 'doubao-chat'];
+    const defaults = normalizeSettings();
+    assert.equal(defaults.providers['qwen-api'].model, 'qwen-audio-3.1-tts-flash');
+    assert.equal(defaults.providers['qwen-api'].defaultVoice, 'qiaoxiaojiao_v3.1');
+    assert.ok(!Object.hasOwn(defaults.providers.system, 'enabled'));
+    const old = { providers: Object.fromEntries(ids.map(id => [id, { enabled: false }])) };
+    for (const settings of [defaults, normalizeSettings({}, old), normalizeSettings(old, defaults),
+        normalizeSettings(old, old, { recoverLegacyModel: true })]) {
+        for (const id of ids) assert.equal(settings.providers[id].enabled, true, id);
+        assert.equal(normalizeSettings(settings).providers['doubao-chat'].enabled, true);
+    }
+    assert.equal(normalizeSettings({}, { providers: { 'qwen-api': { model: 'qwen3-tts-flash', defaultVoice: 'Cherry' } } }).providers['qwen-api'].model, 'qwen-audio-3.1-tts-flash');
+});
+
+test('两路历史模型保存后不落盘，重启仍返回固定模型，凭据和速度保留', t => {
+    const { config, instances, directory } = loadConfig(t);
+    instances[1]._data.tts = { providers: {
+        'qwen-api': { model: 'custom-engine', mappedModel: true, defaultVoice: 'Emily_v3.1', defaultSpeed: 4, credential: 'keep' },
+        'qwen-chat': { model: 'MINI_MAX', mappedModel: true, defaultSpeed: -2 }
+    } };
+    config.setTtsProviderSettings({ defaultVolume: 70 });
+    const saved = JSON.parse(fs.readFileSync(path.join(directory, 'user/userconfig.json')));
+    for (const id of ['qwen-api', 'qwen-chat']) for (const key of ['model', 'mappedModel']) assert.ok(!Object.hasOwn(saved.tts.providers[id], key));
+    assert.equal(saved.tts.providers['qwen-api'].credential, 'keep');
+    const reopened = loadConfig(t, directory).config.getPublicTtsProviderSettings();
+    assert.equal(reopened.providers['qwen-api'].model, 'qwen-audio-3.1-tts-flash');
+    assert.equal(reopened.providers['qwen-api'].defaultVoice, 'Emily_v3.1');
+    assert.equal(reopened.providers['qwen-api'].defaultSpeed, 4);
+    assert.equal(reopened.providers['qwen-chat'].model, 'QUARK_VOICE');
+    assert.equal(reopened.providers['qwen-chat'].defaultSpeed, -2);
 });

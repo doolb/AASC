@@ -3,6 +3,7 @@ const {assertTextOnly,normalizeTtsInput}=require('./chat2api-content');
 const {applicationError,validateParameters,parseSystemControls}=require('./chat2api-system-controls');
 const {canonicalProviderId,getSpeechBinding}=require('./chat2api-model-capabilities');
 const {randomUUID}=require('node:crypto');
+const {assertFixedQwenTtsModel,normalizeQwenApiVoice}=require('./chat2api-qwen-tts-models');
 function createChat2ApiApplicationService({modelMapper,speechService}={}) {
   const plan=async(request,{defaultModel,parameterDefaults={}}={})=>{
     if(!request||typeof request!=='object'||Array.isArray(request))throw applicationError('invalid_request_error','请求必须是对象');
@@ -13,6 +14,7 @@ function createChat2ApiApplicationService({modelMapper,speechService}={}) {
     const parsed=parseSystemControls(request.instructions);
     const owner=canonicalProviderId(mapping.preferredProviderId);
     const binding=getSpeechBinding(mapping.actualModel,owner,mapping.application);
+    if(binding)assertFixedQwenTtsModel(binding.providerId,binding.upstreamModel);
     const application=parsed.controls.application||mapping.application||(binding?'tts':'chat');
     if(mapping.application&&mapping.application!==application)throw applicationError('unsupported_application','请求应用与模型映射不一致');
     const explicit=Object.fromEntries(['voice','speed','volume'].filter(k=>request[k]!==undefined).map(k=>[k,request[k]]));
@@ -33,8 +35,10 @@ function createChat2ApiApplicationService({modelMapper,speechService}={}) {
     if(request.output_modalities!==undefined&&(!Array.isArray(request.output_modalities)||request.output_modalities.length!==1||request.output_modalities[0]!=='audio'))throw applicationError('unsupported_modality','TTS输出仅音频');
     const text=normalizeTtsInput(request.input);
     if(binding.providerId==='qwen-api'&&Array.from(text).length>600)throw applicationError('invalid_speech_request','Qwen TTS单次文本不能超过600字符');
+    const speechParameters={voice:binding.voice,speed:1,volume:100,format:'wav',...validateParameters(parameterDefaults),...parameters};
+    if(binding.providerId==='qwen-api')speechParameters.voice=normalizeQwenApiVoice(speechParameters.voice);
     return {application,requestedModel,...binding,text,preferredProviderId:binding.providerId,preferredAccountId:mapping.preferredAccountId,
-      parameters:{voice:binding.voice,speed:1,volume:100,format:'wav',...validateParameters(parameterDefaults),...parameters},instructions:''};
+      parameters:speechParameters,instructions:''};
   };
   const createAudioResponse=async(request,planned,options={})=>{
     if(!speechService)throw Object.assign(new Error('语音服务不可用'),{statusCode:503,code:'speech_unavailable'});

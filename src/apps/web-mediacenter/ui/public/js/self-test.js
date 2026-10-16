@@ -198,6 +198,35 @@ const SelfTest = {
             }
         },
         {
+            id: 'control_tts_voice_picker',
+            name: '控制端音色快捷面板',
+            category: '语音',
+            run: async () => {
+                // 只检查当前页面已初始化的共享入口，不发送选择或合成请求。
+                const panel = document.getElementById('controlTtsVoicePanel');
+                const valid = Boolean(window.TtsVoicePicker && window.ControlTtsVoices
+                    && document.getElementById('controlTtsVoiceToggle') && panel
+                    && ['controlTtsProviderSelect', 'controlTtsVoiceList', 'controlTtsCurrentVoiceName', 'controlTtsSpeed', 'controlTtsSpeedValue']
+                        .every(id => panel.querySelector('#' + id)));
+                // 复用当前已渲染项只读检查，不为自测打开面板、查询目录或改写选择。
+                // 对应.src/framework/tts-provider-configuration.md的音色列表按钮状态自测。
+                const buttons = panel ? [...panel.querySelectorAll('.display-tts-voice-option')] : [];
+                const stylesValid = buttons.every(button => {
+                    const selected = button.getAttribute('aria-selected') === 'true';
+                    const style = getComputedStyle(button);
+                    const detail = button.querySelector('small');
+                    const mark = button.querySelector('.display-tts-voice-mark');
+                    return (selected ? style.backgroundImage.includes('linear-gradient') : style.backgroundImage === 'none')
+                        && detail && getComputedStyle(detail).color === style.color
+                        && mark && getComputedStyle(mark).visibility === (selected ? 'visible' : 'hidden');
+                });
+                return { success: Boolean(valid && stylesValid),
+                    message: !valid ? '控制端音色面板尚未初始化' : stylesValid ? '共享音色面板入口及按钮状态正常' : '音色按钮状态样式异常',
+                    details: buttons.length ? '只读结构和现有音色按钮皮肤检查；保存、多端同步与明暗主题由定向回归验证'
+                        : '只读结构检查通过，列表尚无音色项，未检查按钮皮肤' };
+            }
+        },
+        {
             id: 'display_voice_filters',
             name: '显示端音色筛选入口',
             category: '语音',
@@ -248,7 +277,7 @@ const SelfTest = {
         {
             id: 'tts_provider_config',
             name: '语音服务配置同步',
-            description: '检查原生语速能力、全局音量、服务器权威配置、Chat2API账号职责及凭证脱敏；qwen-chat合成前过滤emoji，纯表情跳过',
+            description: '检查语速、音量、豆包上游并发与服务器权威配置及凭证脱敏；qwen-chat合成前过滤emoji，纯表情跳过',
             category: '语音功能',
             run: async () => {
                 const config = window.TtsProviderSettings?.getConfig();
@@ -259,6 +288,8 @@ const SelfTest = {
                     || ((id) => capabilities[id]?.supportsSpeed === true);
                 const selections = ['aiReplyDefault', 'textMedia', 'systemBroadcast'];
                 const valid = selections.every(key => providers.includes(config[key]?.provider))
+                    && Number.isInteger(config.upstreamConcurrency?.['doubao-chat'])
+                    && config.upstreamConcurrency['doubao-chat'] >= 1 && config.upstreamConcurrency['doubao-chat'] <= 8
                     && Number.isInteger(config.defaultVolume) && config.defaultVolume >= 0 && config.defaultVolume <= 100
                     && !['textMedia', 'systemBroadcast'].some(key => config[key].provider === 'doubao-chat')
                     && providers.every(id => config.providers[id] && !Object.hasOwn(config.providers[id], 'credential'))
@@ -266,16 +297,20 @@ const SelfTest = {
                         ? Number.isInteger(config.providers[id].defaultSpeed) && config.providers[id].defaultSpeed >= -10 && config.providers[id].defaultSpeed <= 10
                         : !Object.hasOwn(config.providers[id], 'defaultSpeed'))
                     && providers.every(id => !Object.hasOwn(config.providers[id], 'defaultVolume'))
+                    && providers.filter(id => id !== 'system').every(id => config.providers[id].enabled === true)
+                    && !document.querySelector('#ttsProviderFields input[type="checkbox"]')
                     && !Object.hasOwn(config.providers.system, 'enabled')
                     && !Object.hasOwn(config.providers.system, 'defaultVoice')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'chat2apiAccountId')
                     && !Object.hasOwn(config.providers['qwen-chat'], 'credentialSource')
-                    && typeof config.providers['qwen-chat'].model==='string' && Boolean(config.providers['qwen-chat'].model.trim())
+                    && config.providers['qwen-chat'].model === 'QUARK_VOICE'
+                    && config.providers['qwen-api'].model === 'qwen-audio-3.1-tts-flash'
+                    && ['qwen-chat', 'qwen-api'].every(id => !document.querySelector(`[data-tts-provider="${id}"] [data-tts-field="model"]`))
                     && !Object.hasOwn(config.providers['doubao-chat'], 'chat2apiAccountId')
                     && !Object.hasOwn(config.providers['doubao-chat'], 'credentialSource')
                     && config.providers['doubao-chat'].model === 'doubao-chat';
                 return { success: valid, message: valid ? '业务配置已同步，原生语速/全局音量有效且凭证已脱敏' : '语音服务配置校验失败',
-                    details: '本项检查各Provider语速能力与范围、全局音量、配置同步及凭证脱敏；账号和语音调用由Chat2API处理，设备声音与API权限另行验收' };
+                    details: '本项只读检查各Provider语速、全局音量、豆包上游并发1至8、配置同步与脱敏；账号和语音调用由Chat2API处理，设备声音与API权限另行验收' };
             }
         },
         {

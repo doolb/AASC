@@ -1,8 +1,12 @@
 # Web MediaCenter - 项目设计文档
 
+- [Provider按应用统一模型与音色目录（设计待确认）](design/chat2api-application-model-catalog.md)
+
 - [豆包Chat音色快选与显示端回复播放](design/doubao-chat-voice-selection.md)
 
 - [独立任务代码 ZIP 同步机制（源码已实现，待出包迁移）](design/task-code-sync.md)
+
+- [Offline Node 子显示端独立 ZIP（手工分发，不接入自动更新）](design/offline-voice-display-node-package.md)
 
 - [完整 Offline APK 同步与重建](design/offline-full-apk-sync.md)
 

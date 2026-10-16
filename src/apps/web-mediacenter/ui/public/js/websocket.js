@@ -29,6 +29,7 @@ const WebSocketManager = {
         
         this.ws.onopen = () => {
             console.log('WebSocket 连接成功');
+            window.ControlTtsVoices?.handleConnected();
             if (window.Chat) {
                 window.Chat.onWebSocketOpen();
             }
@@ -53,6 +54,7 @@ const WebSocketManager = {
             window.Chat?.onProfileConnectionClosed();
             window.TtsAudioCacheSettings?.handleDisconnected();
             window.TtsProviderSettings?.handleDisconnected();
+            window.ControlTtsVoices?.handleDisconnected();
             window.DeviceList?.handleVoiceContinuousDisconnected?.();
             setTimeout(() => this.connect(), 3000);
         };
@@ -74,10 +76,12 @@ const WebSocketManager = {
     handleMessage(data) {
         if (data.type === 'ttsProviderConfig') {
             window.TtsProviderSettings?.handleConfig(data);
+            window.ControlTtsVoices?.handleMessage(data);
             return;
         }
         if (data.type === 'ttsProviderVoices') {
             window.TtsProviderSettings?.handleVoices(data);
+            window.ControlTtsVoices?.handleMessage(data);
             return;
         }
         if (data.type === 'ttsAudioCacheConfig') {

@@ -22,6 +22,8 @@ async function main() {
     const root = path.resolve(process.env.AASC_PROJECT_ROOT);
     const request = JSON.parse(await fs.readFile(process.argv[2], 'utf8'));
     const configFile = path.join(root, 'release/config/config.json');
+    // 对应.src/framework/qwen-api-data-repair.md：Provider保存在用户配置，必须与主配置一同回滚。
+    const userConfigFile = path.join(root, 'release/userconfig/userconfig.json');
     const original = JSON.parse(await fs.readFile(configFile, 'utf8'));
     const config = require('../../src/apps/server/modules/config/config-app-service');
     const before = JSON.parse(JSON.stringify(config._data));
@@ -43,7 +45,7 @@ async function main() {
             });
             const runner = createDataRepairRunner({ projectRoot: root, codeVersion: repair.metadata.requiredCodeVersion,
                 apkVersionCode: repair.metadata.requiredApkVersionCode || 1,
-                services: { config, chat2api: chat2api?.managementService }, managedFiles: [configFile],
+                services: { config, chat2api: chat2api?.managementService }, managedFiles: [configFile, userConfigFile],
                 logger: { info() {}, error() {} } });
             const result = await runner.applyPendingRepair();
             if (result.status !== 'applied' && result.status !== 'skipped') throw new Error(`release 修复未完成: ${result.status}`);

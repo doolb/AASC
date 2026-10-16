@@ -5,6 +5,127 @@
   - 二维结果以当前相机/实际姿态深度先验、有界搜索和固定PMX骨长初始化三维，坏输入/大误差不写旧目标，继续遵守VaM物理限位；UI明确三维估计和手调。真人/交叉腿图270子步实际骨架对齐残差.18176→.01360、.12224→.05765，骨长保持；不能当真实深度或人工标注准确率。
   - 50项Node及19项真实浏览器定向检查、WEB构建和模型/导入指纹通过；独立代码评审无确认缺陷。同步design/spec/task/usage/ref/self-test/todo；手机耗时/内存/系统剪贴板待设备验收。仅独立网页，未修改Offline状态、构建APK或发布外网。
 
+### min59 空数据首启与语音模型提示真机验收
+
+- ✅ [2026-10-16] 按用户授权完整备份 SM-N9500 后安装 min59、清空应用数据，验证首次 TTS/ASR 提示及后台恢复通过。
+  - 两份 min59 APK 均89,951,777字节/SHA256 `39a81020e4d90d723276bb7236787a41b95070aa42e1c23227c96befc6f4b341`，签名/profile/ZIP及修复DEX核验通过。私有备份1,047,040,512字节/54,410项/48,859普通文件，数量与设备一致、完整读取及SHA256 `80daba3a8b70d08141b551a7da87af6d1cc53a84ee48c4832b79bc7f5c6270bf`通过；外部空目录和原min58 APK一并保存于`.cache/adb-min59-first-run-20261016-100056/`，不入Git。
+  - 安装59后pm clear成功/旧服务目录不存在，原生确认LAN约48MiB后立即退后台；后台完成code105/deps10/task1健康提交、pendingHealth=false且首次标记仍false。返回原Activity后正常弹“准备语音模型”，TTS约75MiB、ASR/声纹约268MiB默认勾选、总量约342MiB；截图/XML及断言留本机证据目录。
+  - 点击稍后无语音文件下载，冷启动不重复；重建Activity后无重复且Node PID保持。最终API正常，临时ADB forward与设备UI临时文件清理；当前设备保留干净min59，旧数据只留已校验备份，语音权重尚未下载。本轮为空应用数据首启，未卸载重装、未测本次权重下载/推理。
+  - 同步design/spec/task/self-test并删除本项todo，五项产物状态均false；未改生产代码、未重新构建或发布，记录上传Git，保留无关工作区改动。
+
+### Offline 服务包与 min APK v105/v59 发布
+
+- ✅ [2026-10-16] 将 Offline 服务代码包 v105 和 update-only min APK v59 发布至 LAN/WAN；未构建完整 APK。
+  - `code/code-v105.zip`：4,898,747 字节，SHA-256 `981d61945fe0fb46b3e1016b0d5234212ea5873c1a95f4b1b29c0a477753dbc7`；`apk/aasc-display-offline-min-v59.apk`：89,951,777 字节，SHA-256 `39a81020e4d90d723276bb7236787a41b95070aa42e1c23227c96befc6f4b341`。APK profile 为 `allserver-min`/`updateOnly=true`，签名指纹与既有 profile 匹配。
+  - LAN 的 13 项清单资源完整 HTTP SHA-256 校验通过；WAN 源站回环逐项 SHA-256 与公网 13 项 HTTP 200/Content-Length 校验通过，共 324,325,391 字节。两端签名清单均引用 code v105、min v59。
+  - 按严格版本文件规则清理过期 code/min APK；LAN/WAN 对应目录仅保留 code v105、min APK v59，task-code v1 与完整 APK 保持原状。`servicePackage`、`minApk` 状态恢复为 `false`。
+
+### 豆包Chat上游生成并发与分句保序
+
+- ✅ [2026-10-16] 按用户确认实现“分句不限制，只在上游接口限制”：在线Chat/Agent/手动回复分句同时提交、按原顺序交付；豆包每账号上游默认3，可在控制端声纹页的豆包网页设置调整1～8。
+  - 新增tts-upstream-concurrency.js与chat2api-speech-upstream.js；共享controller按资料目录/accountId分槽，server-app默认语音及TaskManager注入的代理runtime factory共用额度；上游队列active/FIFO、取消超时、动态升高补位/降低等待与幂等释放。原生设备调度及千问鉴权互斥保持，未给千问新增生成限额。
+  - 复用setTtsProviderConfig/config.set保存tts.upstreamConcurrency.doubao-chat，ttsProviderConfig规范化广播/重连；前端增加数字输入，SelfTest只读检查1～8。非法值拒绝，主配置失败回滚。
+  - 发现旧Opus两Worker无等待会拒绝同时返回的第3条音频，保留两个Worker并为正式共享decoder增加256项/64MiB有界等待、输入副本与原截止/取消；工厂默认无等待兼容。解码等待满映射固定busy并保留speechQueueFailure，不误标账号失效、不重试上游。
+  - Chat2API277/277、音频/有序调度45/45、配置/Chromium/任务装配29/29、双端音色25/25、聊天22/22、数据修复兼容71/71通过（部分重叠）。包含两个真实适配器共享3槽、9句全提交但上游最多3、乱序完成保序，以及3个模拟VoiceGenie同时结束后真实WASM解码为完整WAV。早期夹具的stopInstance参数/账号默认值已按既有接口修正。
+  - 同步design/spec/task/todo/usage/.src；未改私人配置或账号，未重启服务、操作ADB、出包或发布。既有code104候选未覆盖本轮代码；servicePackage=true，其余出包状态保留（min待出包来自独立任务）；代码/状态上传Git，缓存不提交。实网上游3路及设备播放仍待验收。
+
+### Qwen修复v4出包校验
+
+- ✅ [2026-10-15] 用现有npm脚本构建配套code104、data-repair4与node-min-seeds104，release数据基线真实升至4，未发布LAN/WAN或安装设备。
+  - code/code-v104.zip：4,891,319字节，SHA256 e2eb500a78ece29b13d34973759f00ce200be9022882a386badfd745bd07779a；data/data-repair-v4.zip：2,520字节，SHA256 cfe687890f025f8375e4c844b5d7751ae9077579deefdd4c253c09d99acd7f89；node-min-seeds/node-min-seeds-v104.zip：37,176字节，SHA256 78860f56c7fb565d5fbbad017683970d62057ddd6d9c21c60b82498639a96240。最终manifest-data-repair-v4.json要求code104、修复前数据0～3、目标4，沿用min58/依赖10/任务1；另保留先行服务104候选清单供分步发布。
+  - 13项引用共324,819,329字节本地完整大小/SHA核验、RSA/schema/ZIP CRC及脚本摘要通过，584项服务文件逐字节一致；种子38文件、基线4与release一致且无账号，原发行种子无旧Qwen覆盖，业务配置不变。源码来源9fb6f035，gitDirty=true如实记录无关工作区改动。
+  - 构建器按既有规则同时生成Node子显示端独立104 ZIP/签名元数据；本次不发布任何归档，不重建APK/依赖/任务ZIP。servicePackage=false只表示已构建，其余状态保留；代码、状态与基线上传Git，产物/缓存不提交。
+
+### Qwen API旧默认配置数据修复v4
+
+- ✅ [2026-10-15] 按用户确认实现累计数据修复v4，已知旧模型/默认及三业务显式音色迁移到Qwen Audio3.1/乔小娇，保护有效3.1、自定义模型/未知音色及自定义映射，累计数据0～3到4。
+  - 新增qwen-api-defaults-v4/repair.js；runner只开放getPublicTtsProviderSettings/setTtsProviderSettings，seed-worker纳入userconfig回滚快照；config保存恢复旧模型隐藏的已存语速，显式新语速仍优先，凭证/独立速度/共享音量保留。
+  - npm数据修复71/71、迁移与配置36/36、双端快选22/22通过（部分重叠），包含真实隔离业务服务、数据0～3种子提交、双配置/内存/数据版本回滚与脱敏边界；首轮隐藏语速问题已修复，失败状态夹具同步现有rolled-back。未操作手机或运行实例配置。
+  - 配套服务104/修复4/种子104（基线4）已签名出包；servicePackage=false，其余标记保留；LAN/WAN仍103，发布尚未执行。代码及状态上传Git，APK/ZIP/缓存不提交。
+
+### v102设备Qwen旧配置修正
+
+- ✅ [2026-10-15] 按用户“已更新102仍显示旧内容”用ADB确认服务和页面均为新版，根因是设备保存qwen3-tts-flash/Cherry，默认值未覆盖已有配置。
+  - 使用现有控制端setTtsProviderConfig仅改该设备Qwen API模型qwen-audio-3.1-tts-flash、默认及AI显式音色qiaoxiaojiao_v3.1；服务器success回显，两端均68项/女47男21、当前乔小娇且选中标记一致，Emily_v3.1保留大小写。磁盘userconfig模型/默认及config的AI选择核对成功。
+  - 其他Provider/语速/共享音量保持，面板原状态恢复，临时ADB forward移除；不修改源码/迁移规则、不合成、不重启或出包，四项出包需求保持false。同步design/spec/task/todo/usage/self-test，证据仅.cache/adb-qwen102-20261015/，设备资料不入Git。
+
+### 音色与豆包长句修复服务v102正式发布
+
+- ✅ [2026-10-15] 按用户确认将音色按钮状态、豆包emoji过滤及多Ogg流长句修复、Qwen Audio 3.1官方68音色和五方式常开一起发布LAN/WAN服务code v102。
+  - npm run build:offline-update -- --mode=code-only --code-version=102 --manifest-file=.cache/qwen-audio31-catalog-20261015/lan-before.json --reuse-node-min-seeds=true生成code/code-v102.zip：17,815,472字节，SHA256 4ab094d6796f684326f793506ba176de6c224c7af775f986ccdd4411438d401f；签名/schema/CRC与1100项当前源码逐字节校验通过，source=b8f42d08、gitDirty=true如实记录。沿用min58/deps10/task1/seeds86/repair3和任务依赖全部引用/摘要，未覆盖未发布候选101，未重建APK/依赖/任务ZIP。
+  - 使用npm run publish:offline-update -- --mode=code-only --manifest-file=release/offline-update/output/manifests/manifest-code-v102.json --remote-dir=/home/as/a/aasc-offline执行两端版本文件上传和签名清单原子切换；LAN完整HTTP摘要通过，WAN复用当前发布模块在源站验证13项337,741,968字节完整HTTP摘要。LAN/WAN公网入口签名清单均精确一致，13项HEAD状态/大小全部匹配；两端新代码包均额外完整HTTP下载验证SHA256通过。
+  - 源站全量与公网清单/HEAD验证通过后，仅终止本轮CLI剩余重复跨公网大依赖下载，独立公网新代码包摘要继续并通过；随后用同一发布模块精确清理WAN。两端旧code100已清理，code目录仅code-v102.zip、task-code保留v1，清理0错误；未触碰日志/模型/配置/任务结果、非版本文件或链接。临时WAN校验目录已清理。
+  - npm run restart:server重载当前本机主服务，HTTPS /api/status=200；实际WSS只读查询确认四个非原生兼容enabled=true、Qwen模型qwen-audio-3.1-tts-flash及68项/47女声、大写Emily_v3.1，未写语音配置。实现阶段原文8段真实非静音合成已通过，此轮不重跑全部回归、不将生成队列验证宣称为设备实际播放。ADB只读确认测试机仍服务100，需检查服务更新到102，无需重装min58。
+  - 当前源码服务包已成功构建并发布，servicePackage恢复false，其余三项保持false；代码与状态同步Git，APK/ZIP/原始音频/设备资料不提交。构建与发布、实网合成证据留本机.cache/qwen-audio31-catalog-20261015/。本轮发布收尾遵循纯构建/发布例外，仅更新changelog与产物状态，不更新design/spec/task/todo。
+
+### Qwen Audio 3.1音色、五方式常开及豆包长句多流修复
+
+- ✅ [2026-10-15] 按确认方案接入Qwen Audio 3.1官方68音色，五种TTS方式常开并移除Provider启用开关。
+  - 新增qwen-audio-31-voices.json与chat2api-qwen-audio-voices.js，实际3.1模型目录68项/47女21男，ID大小写及官方元数据保留；tts-provider-settings默认3.1/乔小娇共用模型常量，旧false规范化true，去掉Registry/网页Provider门禁、声纹页复选框和快选禁用提示。账号/密钥、其它模型和业务范围沿用。
+  - Chat2API266/266、Provider定向84/84、双端快选21/21、声纹页浏览器1/1、手动/并发22/22通过（部分用例重叠）；覆盖目录/复制隔离/实际模型映射、旧false保存广播及重连、双端68项/女47项和Emily_v3.1选择、自测无开关及账号停用错误。
+- ✅ [2026-10-15] 修复真实长句同一上游分句含两个完整Ogg流时被单流校验拒绝，造成doubao_speech_audio中断。
+  - tts-ogg.js增加splitOggOpusStreams，逐流沿用严格CRC/BOS/EOS/序号校验，累计64流/页数/包数/字节/120秒；豆包speech adapter先验证所有流再逐流解码，原单流验证与PCM合并限额保持。音频35/35通过；CRC负例夹具初次误重算校验和，改直接破坏CRC后通过。
+  - 原长句实网复验两个完整流合并1,051,832字节48kHz WAV、10,956.125ms；用户整段原文经真实手动服务/分句/Registry/Provider与账号生成8段非静音，queued audioCount=8、末句喵～、errors=[]。不写账号或配置，未推送设备实际播放；原音频和证据仅.cache、不入Git。
+  - 同步.src/design/spec/task/todo/usage/self-test，servicePackage=true，其余三项false；连同此前音色按钮和emoji修复待本轮重新出包发布，候选101不覆盖。
+
+### 豆包长句中断实际音频调查
+
+- ✅ [2026-10-15] 针对正常正文后停止核查最新三次doubao_speech_audio，受控实网合成复现同句59,027字节双完整Ogg流。
+  - 37,100/21,927字节子流各自通过既有严格校验和WASM解码，时长约6.86/4.10秒；原单流校验拒绝EOS后数据。同步.src/design/spec/task/todo形成分流校验与句内PCM合并方案；尚未改音频接收实现。未改账号/配置，原音频只留本机.cache、不入Git。
+
+### Qwen Audio 3.1音色与五方式常开方案
+
+- ✅ [2026-10-15] 核查用户指定官网3.1段68项音色和现有配置，记录模型专属目录与五种方式常开方案。
+  - 源码/本机默认模型已是qwen-audio-3.1-tts-flash，但目录仅乔小娇；规划68项官方ID/名称/元数据及模型隔离，兼容旧enabled=false为权威true，移除Provider启用控件与合成拦截。同步.src/design/spec/task/todo；尚未修改目标代码或运行新功能测试。
+
+### 音色按钮与豆包表情修复服务候选出包
+
+- ✅ [2026-10-15] 按用户发布指令生成code v101候选，LAN/WAN当前均为100；随后用户追加Qwen目录与常开需求，尚未切换正式清单。
+  - npm run build:offline-update -- --mode=code-only --code-version=101 --manifest-file=.cache/tts-emoji-publish-20261015/lan-before.json --reuse-node-min-seeds=true成功；code-v101.zip为17,809,355字节，SHA256 5bc00c90d6d007b85063f3f9dfb0892b8d8f203a3c46b4e4eb1f8eed769ff546。签名/schema、CRC、1097项当前源码逐字节匹配和全部保留组件相同；源e965a6ac、gitDirty=true如实记录。
+  - 仅服务包出包需求恢复false，其余三项保持false，表示当前已构建而非已发布；新需求确认并修改源码后再置true。沿用min58/deps10/task1/seeds86/repair3，未构建APK/依赖/任务包，未发布/清理正式根或操作设备。构建产物与官方原始页面只留本机缓存，不提交Git。
+
+### 豆包Chat纯表情分句跳过
+
+- ✅ [2026-10-15] 按确认方案为豆包网页TTS补齐emoji过滤与无正文分句跳过，避免纯表情送上游后中断整段重播的路径。
+  - 新增tts-speech-text-filter.js复用既有完整字素过滤，qwen-chat-text-filter.js保留旧导出；doubao-chat-tts.js清洗合成输入并对纯表情返回null，tts-provider-service.js识别豆包null后不调音量/校验WAV/缓存。只改合成输入，原回复文字与MMD动作来源保持，真正上游错误仍报告。
+  - 旧实现4项新增回归失败；修改后Provider/动作/千问定向28/28，npm run test:mmd-production:tts 22/22，test:tts-voice-picker 20/20。真实清理/分句/手动服务/Registry/ProviderService搭配本地假上游：用户原句3段正文、日志整段8段正文按序下发、纯表情零请求/缓存，queued音频数量正确；混合正文显示文本保留，ZWJ/肤色/国旗/键帽及千问兼容通过。自动动作保留原回复与识别事件，incomplete/timeout/cancelled错误原样传播。
+  - 同步.src/design/spec/task/todo/usage/self-test；servicePackage保持true，其余三项false，尚未重启、出包发布或ADB验收本次修复。模拟纯emoji上游拒绝证明中断路径，不宣称原日志的真实上游诱因已实证；未调用真实账号合成。
+
+### 豆包Chat表情分句中断调查
+
+- ✅ [2026-10-15] 对照用户原文找到三次手动重播doubao_speech_incomplete，确认手动链路不走自动表情解析，纯emoji会独立分句发送豆包。
+  - 记录Provider复用千问字素过滤与null跳过的修复草案，更新.src/design/spec/task/todo/usage；尚未修改豆包合成代码或对真实账号发合成请求，不将纯emoji与故障的相关性宣称为已证实根因。
+
+### 双端音色列表按钮状态
+
+- ✅ [2026-10-15] 按确认方案将选中音色改为强调渐变、白字和勾选，普通音色使用中性色按钮皮肤。
+  - tts-voice-picker.css局部覆盖浅色theme.css通用button的重要背景/文字/边框，直接使用aria-selected；副标题继承文字，普通项隐藏勾选，保留键盘焦点及保存等待状态。两端共用，无新增选择状态或配置消息。
+  - 扩展control_tts_voice_picker只读自测与双端浏览器回归：light/mint/深色、悬停/键盘焦点/禁用和错误渐变负例；旧样式2项失败，修改后npm run test:tts-voice-picker 20/20。同步.src/design/spec/task/todo/usage/self-test，servicePackage=true，其余三项false；尚未出包发布或ADB验收本次样式。
+
+### 音色列表按钮状态方案
+
+- ✅ [2026-10-15] 完成双端音色列表选中/普通按钮样式的代码核查与方案记录。
+  - 确认浅色主题通用button的!important覆盖共享列表选中背景/文字/边框；拟在tts-voice-picker.css按权威状态采用激活与普通按钮皮肤，并保留勾选和可读副标题。同步design/spec/task/todo，移除已发布code100的过期待发布条目；尚未改源码、运行测试或改变出包状态。
+
+### 两端音色面板与语速服务正式发布
+
+- ✅ [2026-10-15] 按用户“发布”将音色/方式切换修复、控制端右下角音色浮钮及双端语速滑条随服务code v100同步发布LAN/WAN。
+  - 发布上一轮ADB验证的同一候选：`code/code-v100.zip`，17,808,097字节，SHA256 `cbd160f3dea59be7a00e13963de2a6e5063736a5bc23a4c92721a36d4c03db75`。签名、大小/SHA、ZIP CRC及1096项当前源码匹配；先确认两端正式99和保留组件一致，再将已校验候选同步到`release/offline-update/output/`标准输出位置，不重新打包。
+  - 使用`npm run publish:offline-update -- --mode=code-only --manifest-file release/offline-update/output/manifests/manifest-code-v100.json --remote-dir /home/as/a/aasc-offline`完成版本文件上传和签名清单原子切换；沿用task1/seeds86，min58、deps10、repair3及既有任务依赖的引用和摘要保持。未构建或发布新APK、任务ZIP或依赖包。
+  - LAN完整HTTP摘要通过；WAN复用同一发布模块在源站通过13项337,734,593字节完整HTTP摘要校验，LAN/WAN公网入口的签名清单均等于候选，13项HTTP HEAD状态与大小全部一致。上述验证完成后终止CLI剩余重复跨公网下载，再精确清理WAN；未把源站校验宣称为全量跨公网下载。
+  - 两端旧code99已精确清理，最终code目录仅code-v100.zip、task-code目录保留task-code-v1.zip；清理复核0错误。保留当前min58、LAN完整APK v50、其它非版本文件及配置/日志/模型/任务数据，未跟随链接或清理工作区。
+  - 保持四项出包需求false；本轮仅发布与资源验证，按纯发布例外只更新changelog，未重跑41项实施回归或更改设备语音设置。WAN临时发布辅助目录已清理，发布证据留本机`.cache/tts-voice-publish-20261015/`，APK/ZIP和设备资料不入Git。
+
+### 两端音色快选修复、控制端浮钮与语速滑条
+
+- ✅ [2026-10-15] 修复显示端音色/方式保存失败，控制端右下角新增音色浮钮，两端共享筛选、选中定位、权威回显和每方式语速。
+  - `server-app.js`在快选转交边界仅隔离服务端补入的displayId，保留未知字段和越权拒绝；`tts-provider-ws.js`增加窄权限speed（-10～10），只改目标Provider.defaultSpeed，拒绝非数值/不支持方式/混带voice。
+  - 提取`tts-voice-picker.js`和`tts-voice-picker.css`，`display-tts-voices.js`保留舞台适配，新增`control-tts-voices.js`；接入upload/display与原WebSocketManager，声纹页继续接收同一权威广播。浮钮避让录音暂停/自测/齿轮；语速input预览、change松手保存，无原生调速能力时隐藏。模板优先级及当前语音批次快照保持。
+  - 新增`npm run test:tts-voice-picker`与真实WS双页面回归，20/20；既有`npm run test:mmd-production:tts`21/21。覆盖真实入口displayId、保存/权限/语速边界、双端同步、失败/断线恢复、四尺寸布局及重复初始化；真实生成服务fixture确认旧批次speed0、新批次speed3。早期浏览器夹具后台动画帧等待超时，改显式页面激活/50ms状态轮询后通过。新增只读SelfTest控制端入口，实际Android运行成功。
+  - 正式源已由其它流程推进99，基于最新清单生成本地服务候选`code/code-v100.zip`：17,808,097字节，SHA256 `cbd160f3dea59be7a00e13963de2a6e5063736a5bc23a4c92721a36d4c03db75`。签名/大小/SHA/CRC及1096项当前源文件一致；输出`.cache/adb-tts-panel-20261015/service-output/`，复用min58/deps10/task1/seeds86/repair3，不覆盖已有版本或发布根。
+  - ADB SM-N9500 Android9原生99→100仅下载服务ZIP，Node健康pending=false/previous=null；显示端切豆包及94项改选成功并同步控制端，物理点击浮钮及拖动语速0→3通过，双端回显3，截图和边界确认无工具遮挡。原AI选择及各方式音色/语速/启用/模型已逐字段恢复；正式旧99源CURRENT/0字节/无失败。
+  - 同步.src/design/spec/task/todo/usage/self-test；构建确认覆盖全部最新源码后servicePackage=false，其余三项false。未重建APK/依赖/任务ZIP，未发布LAN/WAN；未发新聊天或官方合成请求，不以配置验证宣称逐音色听感通过。测试更新源/探针/ADB临时转发已清理，证据与截图保留忽略目录，Git不提交ZIP或设备资料。
+
 ### 显示端音色下拉筛选与选中定位
 
 - ✅ [2026-10-15] 独立终审发现并修复横屏列表零高度；新增740×390/390×400失败回归后保证列表最小120px及面板内定位，复核无重要遗留，定向19/19通过。
@@ -106,6 +227,12 @@
 - ✅ [2026-10-15] 完成“暂时只同步任务代码文件”的设计、L4 伪代码与后续实施计划。
   - 新增 `docs/design/task-code-sync.md`、`docs/spec/task-code-sync.md`、`docs/task/20261015_任务代码随服务包同步机制设计.md`，同步索引与 todo；明确唯一代码源为 `res/tasks`、在服务包 `src/` 内生成任务代码清单/快照、版本代码与可变数据分离，复用既有签名切换、显示端派发及回滚。
   - 只读确认 `release/task/render-display/render.js` 与设备同为旧副本，且 Android 服务 ZIP 白名单不接受顶层 `res/`；方案首批四任务六代码文件，共 31,019 字节源码，不包含 results/配置/参数/日志/模型。文档链接与格式校验通过；仅文档，未修改运行代码、设备或发布状态，未运行测试、构建或发布；受管只读策略及实施待评审。
+
+### QwenChat / 豆包角色会话生命周期设计留档
+
+- [2026-10-15] 按用户要求保存设计和交接线索，供另一会话继续；新增 `docs/design/chat2api-role-session-lifecycle.md` 与对应 spec 伪代码，并登记 todo。
+  - 记录普通 Responses 已有持久化、Pi 随机会话与内存 tracker、snapshot 清空 nativeState，以及 Qwen/豆包原生续接差异。保留“模型切换或重启先尝试删旧再新建”的原始目标，明确删除接口、失败策略及重启边界尚未确认。
+  - 仅文档草案，未改运行代码、删除真实会话、重启、构建或发布，未执行运行测试。
 
 ### 豆包认证子域恢复正式发布与真机验证
 
@@ -12782,3 +12909,43 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-15] 将显示端语音筛选与横屏选择面板等更新发布至 LAN/WAN Offline 服务，代码版本 v99，源提交 `03a479ea`。
   - 代码包 `code/code-v99.zip`：17,802,973 bytes，SHA-256 `28be85e4ed330f67ba1b392ac5d9f8fed3c7580eb2d1533631bd01e32015e610`。LAN/WAN 签名清单一致且签名有效；清单引用资源完整 SHA-256 回读通过，版本化文件精确清理无错误。
   - 保留 dependencies v10、min APK v58、完整 APK v50、Node min seeds v86、taskCode v1；未构建 APK。成功发布后 `servicePackage=false`。
+
+### Offline服务代码与 Node 子显示端 v103 发布
+
+- ✅ [2026-10-15] 服务 code-v103 与 voice-display-node-v103 独立包已发布至 LAN/WAN；Node 包不进入服务自动更新清单。
+  - 服务 ZIP：4,891,047 bytes，SHA-256 `9c72902cb103a5b4cff1e3eae68832c520a6fe502a96e7cf49094e4762c907aa`；Node ZIP：12,919,369 bytes，SHA-256 `423feac59fe43f3d539436cba80623ce2e6adb17c4ebe94221eaa03aaf2e5734`，sidecar RSA 验签通过。LAN 完整 HTTP 校验通过；WAN 源站 HTTP 完整校验 13 项、公网 HEAD 大小检查通过，远端旧版本精确清理无错误。未构建完整 APK。
+
+### Offline更新目录旧包清理
+
+- ✅ [2026-10-15] 清理本机 `release/offline-update/output` 中未被当前 v103 签名服务清单引用的旧版本包。
+  - 删除旧代码包 95 个、旧依赖包 11 个、旧 min APK 45 个，释放 6,594,556,115 bytes（6.14 GiB）。保留当前服务清单引用的资源、完整 APK v46、独立 Node 子显示端 v103 ZIP 与签名元数据；13 项清单引用存在性复核通过。未触碰历史清单、任务包、种子、修复数据、日志/模型及非版本文件。
+### Provider统一应用模型目录设计
+
+- ✅ [2026-10-16] 核对现有Provider字符串列表、聊天/语音目录拼接和音色别名映射，形成按chat/tts返回统一模型项的设计；TTS模型绑定Provider、底层模型与精确音色，保护旧请求与自定义映射。已登记design/spec/task/todo，范围与实施待确认；未改源码、运行测试、构建或发布，发布状态不变。
+
+### Provider显式来源契约补充
+
+- ✅ [2026-10-16] 按用户“先还是需要传provider”修订统一目录设计：新查询provider必填、application可省略且默认llm（音色显式tts），新音色模型调用必须provider/model/input，先定位Provider再解析模型，来源冲突拒绝且不跨Provider切换，公开llm在边界映射现有内部chat；保留旧接口兼容分支。同步design/spec/task/todo，尚未修改源码、测试、出包或发布。
+
+### 在线TTS上游并发设计
+
+- ✅ [2026-10-16] 核对豆包分句固定1、通用有序调度上限2及同账号上游单路，按用户“分句不限制、只在上游接口限制”形成默认3的可配上游准入方案，保留音频交付顺序与原生资源调度。千问无生成并发配置，签名注册/刷新/一次性令牌消费串行独立于生成。已同步design/spec/task/todo，尚未修改源码、测试、构建或发布。
+
+### min 首装语音模型提示修复
+
+- ✅ [2026-10-16] 按用户确认修复首次 TTS/ASR 提示的状态恢复与展示提交时序。
+  - 新增 `NodeStartupStatus.kt`：启动快照同步保存/重放、更新事件隔离、停进程作废；`NodeServerService.kt` 注册不导出的应用内状态请求，查询不重启 Node，排队启动使旧 ready 失效。`MainActivity.kt` 恢复前台重新取状态、限制前台提示，`OfflineModelPreparationPlan.kt` 改为展示成功或完整缓存跳过后才记录已处理，展示失败/异常保留重试机会。
+  - Android 定向48/48（新增9项）、`npm run test:offline-bootstrap` 63/63通过，生产与测试源码编译成功；覆盖后台/重建补状态、展示失败重试、两种就绪顺序、更新进度隔离与旧快照失效。同步 design/spec/task/todo/self-test/usage；仅 minApk=true，其余产物保持false，代码与状态按规则上传Git。
+  - 当前 SM-N9500 min58已有历史处理标记，不能据此断言用户报告现场原因；保留模型/配置/首次标记。尚未签名构建、发布或安装新APK，干净首装及后台返回原生提示仍待验收；待办只保留出包与现场验收。
+
+### 千问TTS固定模型设计
+
+- ✅ [2026-10-16] 核对Qwen API及千问网页TTS仍读取可变settings.model，按用户要求形成固定底层模型方案：API拟qwen-audio-3.1-tts-flash、网页拟QUARK_VOICE，UI/配置/目录/映射/planner/最终适配器统一约束，处理已知旧音色并保护有效自选。同步design/spec/task/todo，实际模型值与实施待确认；未改源码、测试、构建或发布，状态不变。
+
+### 千问TTS固定底层模型实现
+
+- ✅ [2026-10-16] 按确认将Qwen API固定为qwen-audio-3.1-tts-flash、千问网页固定为QUARK_VOICE，移除两路模型配置入口。
+  - 新增chat2api-qwen-tts-models.js共享常量；配置读取忽略旧model/mappedModel，普通保存移除两路持久化模型字段，权威快照仍返回只读model。Registry、planner、目录及最终API/网页适配器统一约束，旧实际模型/绕过映射明确拒绝，普通LLM与有效音色别名保持。
+  - 已知Cherry/Ethan/Chelsie/Serena默认、业务和生成音色恢复乔小娇；有效3.1大小写与未知用户ID保持。68项音色独立保存在qwen-audio-31-voices.json，配置只保存选中ID；两端读取旧配置后直接显示新目录及原生语速。更新正式设置页、自测、设计/spec/任务与使用文档。
+  - 验证通过：Chat2API279/279、双端音色26/26、Provider/业务/网页/浏览器98/98、修复72/72、聊天TTS22/22（部分重叠）；覆盖本地HTTP/WS、实际页面、多端广播/重连、旧修复幂等与真实种子worker。repair4脚本和已构建归档不改写。
+  - 仅servicePackage=true，其余产物标记按当前值保留。本轮未重启、修改真实配置、真实上游合成、ADB播放、构建或发布；待办保留后续服务包与设备验收。

@@ -83,6 +83,8 @@ watch := 每轮沿用开关；完成当前轮后等待；失败记录后下一�
     minApk = false
     servicePackage = false
     dependenciesPackage = false
+    taskCodePackage = false
+    voiceDisplayNodePackage = false
 
 代码变更后:
     changedFiles = 当前改动文件
@@ -94,6 +96,8 @@ watch := 每轮沿用开关；完成当前轮后等待；失败记录后下一�
         impactedArtifacts 加入 minApk
     if 生产依赖集合或依赖锁指纹变化:
         impactedArtifacts 加入 dependenciesPackage
+    if voice-display-node 程序或独立打包/发布契约变化:
+        impactedArtifacts 加入 voiceDisplayNodePackage
 
     对每个 artifact in impactedArtifacts:
         status[artifact] = true

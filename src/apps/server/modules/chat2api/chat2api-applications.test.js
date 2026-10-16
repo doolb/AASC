@@ -50,3 +50,24 @@ test('控制块拒绝秘密/端点、重复块和显式字段冲突，普通聊�
   await assert.rejects(service.plan({model:'qiaoxiaojiao',input:'x',voice:'a',instructions:'<chat2api>{"voice":"b"}</chat2api>'}),e=>e.code==='conflicting_parameters');
   assert.equal((await service.plan({model:'qwen3.6flash',input:'x',instructions:'请简短回答'})).instructions,'请简短回答');
 });
+
+// 对应.src/framework/qwen-tts-fixed-models.md：历史名称仅作识别；映射不能切换底层引擎。
+test('千问TTS固定模型：直接旧模型及自定义映射拒绝，音色别名和普通LLM保留', async () => {
+  const {listSpeechModels}=require('./chat2api-model-capabilities');
+  const rules=[
+    {model:'old-web',actualModel:'MINI_MAX',preferredProviderId:'qwen',application:'tts'},
+    {model:'old-api',actualModel:'qwen-api/qwen3-tts-flash',preferredProviderId:'qwen-api',application:'tts'},
+    {model:'custom-api',actualModel:'private-tts',preferredProviderId:'qwen-api',application:'tts'},
+    {model:'voice-alias',actualModel:'qwen-api/qwen-audio-3.1-tts-flash',preferredProviderId:'qwen-api',application:'tts',parameters:{voice:'Emily_v3.1'}},
+  ];
+  const service=createChat2ApiApplicationService({modelMapper:createChat2ApiModelMapper({dataStore:{readCollection:async()=>rules}})});
+  for(const model of ['MINI_MAX','qwen3-tts-flash','qwen-api/qwen3-tts-flash','qwen-audio-3.0-tts-flash','qwen-audio-3.0-tts-plus','old-web','old-api','custom-api']) {
+    await assert.rejects(service.plan({model,input:'你好'}),e=>e.code==='unsupported_speech_model');
+  }
+  const voice=await service.plan({model:'voice-alias',input:'你好'});
+  assert.equal(voice.upstreamModel,'qwen-audio-3.1-tts-flash');
+  assert.equal(voice.parameters.voice,'Emily_v3.1');
+  assert.equal((await service.plan({model:'Qwen3.5-Flash',input:'你好'})).application,'chat');
+  assert.equal((await service.plan({model:'QUARK_VOICE',input:'你好'})).upstreamModel,'QUARK_VOICE');
+  assert.deepEqual(listSpeechModels().filter(m=>['qwen','qwen-api'].includes(m.providerId)).map(m=>m.id),['QUARK_VOICE','qwen-api/qwen-audio-3.1-tts-flash']);
+});

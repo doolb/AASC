@@ -1,5 +1,29 @@
 # Offline 通用数据修复包实现规格（伪代码）
 
+## Qwen API 累计修复 v4（2026-10-15，已出包未发布）
+
+```text
+已有声明 := 签名repair事务 + readVersion + config公开TTS读取/保存 + 官方3.1目录 + v3阶段迁移
+新增定义 := repair4 { compatibleDataVersions: [0,1,2,3], targetDataVersion: 4 }
+新增定义 := legacyQwen { model: qwen3-tts-flash, voices: [Cherry, Serena, Ethan, Chelsie] }
+新增定义 := targetQwen { model: qwen-audio-3.1-tts-flash, voice: qiaoxiaojiao_v3.1 }
+操作流程 := 扩充config能力白名单 → 仅公开脱敏TTS读取与现有TTS保存
+实际数据版本 → 按缺失阶段执行既有v3累计规则 → 不重复应用已完成的偏好阶段
+公开TTS配置 → 判定旧模型或3.1残留旧音色 → 未知自定义组合整体跳过
+旧默认模型/音色 → 生成最小Provider补丁；3.1有效音色保持
+三个业务选择 → 仅qwen-api且已知旧显式音色替换为乔小娇 → 其他选择保持
+候选补丁非空 → 业务保存 → 重读校验；凭证/语速/音量/其他Provider保持
+业务保存读取用户配置已存Qwen语速 → 旧模型规范化结果隐藏语速时补回previous输入 → 新补丁显式语速仍优先
+种子worker → config与userconfig纳入快照 → 隔离运行同一repair → 配置与基线4一起提交
+失败 → 恢复快照和业务内存 → 不写成功状态
+成功 → repairId及版本记录 → 再次执行跳过
+构建 := 配套新服务代码包 + data-repair-v4.zip + 新首装种子ZIP + 保留其他组件的签名清单
+实现验证 := npm数据修复71项通过；迁移与配置36项通过；双端快选22项通过（部分重叠）
+构建结果 := code104 + repair4 + seeds104数据4；13项本地完整大小/SHA与签名通过，584代码文件逐字节一致
+后续发布 := 先code-only使用manifest-code-v104，再data-repair使用manifest-data-repair-v4；当前未执行
+发布 := 本阶段未授权；不提前切换LAN/WAN清单
+```
+
 ## 累计v3物理映射与发布组合（2026-10-14）
 
 ```text

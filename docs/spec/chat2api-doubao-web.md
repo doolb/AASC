@@ -1,5 +1,16 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 当前TTS上游并发（2026-10-16，源码完成）
+
+```text
+在线聊天/Agent/手动回复 → 分句全部提交 → orderOnly保序交付
+应用controller → 默认语音与内置代理runtime factory → 资料根目录/账号共享上游槽位
+配置 := 主config.tts.upstreamConcurrency.doubao-chat → 默认3，范围1至8 → WS保存与广播/重连
+上游完成 → 幂等释放槽位；本地两个Worker加256项/64MiB有界等待 → 三路同时完成均可返回WAV
+解码等待容量满 → busy + speechQueueFailure → 不惩罚账号、不重试
+当前状态 := 已实现，未实网三路合成、未出包发布；历史单路章节不作为当前源码声明
+```
+
 ## 当前音色实现（2026-10-15）
 
 ```text
@@ -702,4 +713,25 @@ min41/code76为历史发布；本次新增代码未出包。真实账号捕获�
   同根目录并发账号写入 -> 不丢账号；导入/换凭据/删除重建 -> 迟到结果409
   独立只读审查 -> 无Important/Critical问题；真实官网/用户Chrome/Android真机未访问
   发布状态 -> 仅servicePackage=true，minApk/dependenciesPackage保持false；未构建/发布/重启
+```
+
+## 豆包长句多Ogg流接收（2026-10-15，已实现）
+
+```text
+已有声明 := validateOggOpus、OGG_LIMITS、decodeOggOpusToWav、豆包complete句缓冲与PCM合并
+新增定义 := splitOggOpusStreams
+按页长度扫描完整分句缓冲 → EOS边界划分 → 每段单流校验BOS/EOS/序号/CRC
+累计子流数<=64、页数<=原上限、编码时长<=120秒、总压缩字节<=16MiB
+按分句/子流顺序解码 → 各自应用pre-skip/EOS → 校验单声道PCM16与相同采样率 → 原累计限额/拼接WAV
+缺完整流、损坏CRC、交错serial、重复BOS、尾部截断或超限 → 原audio/limit错误，不补页或播放部分音频
+实测证据 := 同一句59027字节包含两个有效流，37100/21927字节；独立解码各成功，旧单流验证拒绝组合
+验证计划 := 单/双流、CRC/序号/截断/交错/限额与取消；原句实网合成及整段播放待确认后复验
+```
+
+```text
+已实现 := splitOggOpusStreams扫描页/EOS并逐流调用validateOggOpus；累加页数/packetCount/时长/压缩大小，最多64流
+豆包接收 := 收齐原分句 → 合并压缩缓冲 → 全部流先严格验证 → 每流真实解码 → 单声道/采样率/PCM累计校验 → WAV
+回归 := 音频35/35，Chat2API266/266；损坏第二流时解码次数为0，不返回部分音频
+实网 := 原长句两流合并1051832字节、48kHz、10956.125ms；原文8段非静音、queued=8、末句喵～、errors=[]
+边界 := 未推送设备播放；账号/配置不变，诊断原音频仅.cache，不提交Git
 ```

@@ -17,9 +17,10 @@ test('正式面板三下拉交集、权威选中与异步/缓存定位', { skip:
     page.on('pageerror', error => errors.push(error.message));
     const $ = cheerio.load(fs.readFileSync(path.join(publicRoot, 'display.html'), 'utf8'));
     $('script,link').remove();
-    $('head').append('<style>' + ['theme.css', 'display.css', 'display-mmd.css'].map(file => fs.readFileSync(path.join(publicRoot, 'css', file), 'utf8')).join('\n') + '</style>');
+    $('head').append('<style>' + ['theme.css', 'display.css', 'display-mmd.css', 'tts-voice-picker.css'].map(file => fs.readFileSync(path.join(publicRoot, 'css', file), 'utf8')).join('\n') + '</style>');
     await page.setViewport({ width: 390, height: 740 });
     await page.setContent($.html());
+    await page.addScriptTag({ path: path.join(publicRoot, 'js/tts-voice-picker.js') });
     await page.addScriptTag({ path: path.join(publicRoot, 'js/display-tts-voices.js') });
     await page.evaluate(() => {
         const listeners = new Map(); window.sent = [];
@@ -56,7 +57,7 @@ test('正式面板三下拉交集、权威选中与异步/缓存定位', { skip:
     assert.equal(await page.evaluate(() => window.scrollY), 0);
     assert.ok(await page.$eval('#displayTtsVoiceList', list => {
         const current = list.querySelector('[aria-selected="true"]'), other = list.querySelector('[aria-selected="false"]');
-        return getComputedStyle(current).backgroundColor !== getComputedStyle(other).backgroundColor
+        return getComputedStyle(current).backgroundImage !== getComputedStyle(other).backgroundImage
             && current.querySelector('.display-tts-voice-mark')?.textContent === '✓';
     }));
     const messagesBeforeFilter = await page.evaluate(() => window.sent.length);

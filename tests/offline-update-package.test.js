@@ -25,6 +25,24 @@ function createFixture() {
     fs.mkdirSync(path.join(sourceRoot, 'apps/server/boot'), { recursive: true });
     fs.mkdirSync(path.join(sourceRoot, 'apps/web-mediacenter/ui'), { recursive: true });
     fs.mkdirSync(path.join(sourceRoot, 'apps/android-display'), { recursive: true });
+    const voiceDisplayNodeRoot = path.join(sourceRoot, 'apps/voice-display-node');
+    fs.mkdirSync(path.join(voiceDisplayNodeRoot, 'node_modules/express'), { recursive: true });
+    fs.mkdirSync(path.join(voiceDisplayNodeRoot, 'node_modules/.bin'), { recursive: true });
+    fs.mkdirSync(path.join(voiceDisplayNodeRoot, 'run-task/task-test'), { recursive: true });
+    fs.mkdirSync(path.join(sourceRoot, 'framework/observability'), { recursive: true });
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'main.js'), 'process.exit(0);\n');
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'README.md'), 'Standalone program fixture\n');
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'config.example.json'), '{}\n');
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'config.json'), '{"serverUrl":"private"}\n');
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'run-task/task-test/task.js'), 'private task output\n');
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'package.json'), JSON.stringify({
+        name: 'voice-display-node', version: '1.0.0', main: 'main.js', dependencies: { express: '4.18.2' }
+    }));
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'package-lock.json'), JSON.stringify({ name: 'voice-display-node', lockfileVersion: 3 }));
+    fs.writeFileSync(path.join(voiceDisplayNodeRoot, 'node_modules/express/package.json'), JSON.stringify({ name: 'express' }));
+    fs.symlinkSync('../express/package.json', path.join(voiceDisplayNodeRoot, 'node_modules/.bin/express'));
+    fs.writeFileSync(path.join(sourceRoot, 'framework/observability/system-monitor.js'), 'module.exports = class SystemMonitor {};\n');
+    fs.writeFileSync(path.join(sourceRoot, 'framework/observability/console-redirect.js'), 'module.exports = { installConsoleRedirect() {} };\n');
     fs.writeFileSync(path.join(sourceRoot, 'apps/server/boot/server-launcher.js'), 'process.exit(0);\n');
     fs.writeFileSync(path.join(sourceRoot, 'apps/web-mediacenter/ui/index.html'), '<main>fixture</main>\n');
     fs.writeFileSync(path.join(sourceRoot, 'apps/android-display/not-server.js'), 'excluded\n');
@@ -104,7 +122,7 @@ async function removeFixture(fixture) {
     await fs.promises.rm(fixture.projectRoot, { recursive: true, force: true });
 }
 
-test('code-only builds the complete server/UI source archive without invoking npm ci or changing dependencies', async (t) => {
+test('code-only builds service source without Node subdisplay and creates its signed standalone archive', async (t) => {
     const fixture = createFixture();
     t.after(() => removeFixture(fixture));
     let commandCount = 0;
@@ -123,12 +141,28 @@ test('code-only builds the complete server/UI source archive without invoking np
     assert.ok(entries.includes('package.json'));
     assert.ok(entries.includes('package-lock.json'));
     assert.ok(!entries.some((entry) => entry.startsWith('src/apps/android-display/')));
+    assert.ok(!entries.some((entry) => entry.startsWith('src/apps/voice-display-node/')));
     assert.ok(!entries.some((entry) => entry.startsWith('node_modules/')));
     assert.equal(result.dependenciesArchivePath, null);
     assert.equal(result.manifest.payload.components.dependencies.version, 1);
     assert.equal(result.manifest.payload.components.apkMin.versionCode, 3);
     assert.equal(result.manifest.payload.components.code.requiredDependencyVersion, 1);
     assert.equal(result.manifest.payload.components.code.requiredLockSha256, fixture.lockSha256);
+    assert.equal(result.manifest.payload.components.voiceDisplayNode, undefined);
+    const nodeEntries = archiveEntries(result.voiceDisplayNodeArchivePath);
+    assert.ok(nodeEntries.includes('src/apps/voice-display-node/main.js'));
+    assert.ok(nodeEntries.includes('src/apps/voice-display-node/config.example.json'));
+    assert.ok(nodeEntries.includes('src/apps/voice-display-node/node_modules/express/package.json'));
+    assert.ok(nodeEntries.includes('src/framework/observability/system-monitor.js'));
+    assert.ok(nodeEntries.includes('src/framework/observability/console-redirect.js'));
+    assert.ok(!nodeEntries.includes('src/apps/voice-display-node/config.json'));
+    assert.ok(!nodeEntries.some(entry => entry.startsWith('src/apps/voice-display-node/run-task/')));
+    assert.ok(!nodeEntries.some(entry => entry.includes('node_modules/.bin/')));
+    const nodeMetadata = JSON.parse(fs.readFileSync(result.voiceDisplayNodeMetadataPath, 'utf8'));
+    assert.equal(nodeMetadata.payload.relativeUrl, 'voice-display-node/voice-display-node-v2.zip');
+    assert.equal(nodeMetadata.payload.size, fs.statSync(result.voiceDisplayNodeArchivePath).size);
+    assert.equal(nodeMetadata.payload.sha256, sha256(fs.readFileSync(result.voiceDisplayNodeArchivePath)));
+    assert.equal(verifySignedManifest(nodeMetadata, fixture.publicKeyPem), true);
     // 独立 min 依赖签名 code 内的运行契约，不能只写到 components 的其他层级。
     assert.deepEqual(result.manifest.payload.components.code.runtimeCompatibility,
         { abi: 'arm64-v8a', nodeMajor: 26, contractVersion: 1 });

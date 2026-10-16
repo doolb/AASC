@@ -19,6 +19,7 @@ const { RUNTIME_COMPATIBILITY, validateRuntimeCompatibility } = require('./offli
 const execFileAsync = promisify(execFile);
 const sharedUpdate = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 const { buildDependencyGroups } = require('./dependency-groups');
+const { stageVoiceDisplayNodePackage } = require('./voice-display-node-package');
 const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
 const DATA_REPAIR_ENTRYPOINT = 'repair.js';
 const DATA_REPAIR_CAPABILITIES = Object.freeze([
@@ -346,14 +347,18 @@ async function copyCodeSnapshot(projectRoot, stagingDirectory) {
     if (sourceStat.isSymbolicLink()) throw new Error(`服务源码根目录不能是符号链接: ${sourceRoot}`);
 
     await fs.promises.mkdir(targetRoot, { recursive: true });
-    const excludedPath = path.resolve(sourceRoot, 'apps', 'android-display');
+    const excludedPaths = [
+        path.resolve(sourceRoot, 'apps', 'android-display'),
+        path.resolve(sourceRoot, 'apps', 'voice-display-node')
+    ];
     const copySelectedTree = async (relativePath = '') => {
         const sourceDirectory = path.join(sourceRoot, relativePath);
         const entries = await fs.promises.readdir(sourceDirectory, { withFileTypes: true });
         for (const entry of entries) {
             const childRelativePath = path.join(relativePath, entry.name);
             const sourcePath = path.join(sourceRoot, childRelativePath);
-            if (path.resolve(sourcePath) === excludedPath || path.resolve(sourcePath).startsWith(`${excludedPath}${path.sep}`)) {
+            if (excludedPaths.some(excludedPath => path.resolve(sourcePath) === excludedPath ||
+                path.resolve(sourcePath).startsWith(`${excludedPath}${path.sep}`))) {
                 continue;
             }
             const stat = await fs.promises.lstat(sourcePath);
@@ -676,11 +681,23 @@ async function createOfflineUpdateArtifacts(options = {}) {
     const nodeMinSeedsArchivePath = path.join(outputDir, 'node-min-seeds', path.basename(stagedNodeMinSeedsArchive));
     let codeArchivePath = null;
     let finalNodeMinSeedsArchivePath = null;
+    let finalVoiceDisplayNodeArchivePath = null;
+    let finalVoiceDisplayNodeMetadataPath = null;
     try {
         const codeDirectory = path.join(workDirectory, 'code');
         await fs.promises.mkdir(codeDirectory, { recursive: true });
         await copyCodeSnapshot(projectRoot, codeDirectory);
         await createZip(codeDirectory, stagedCodeArchive, zipRunner);
+        const stagedVoiceDisplayNode = await stageVoiceDisplayNodePackage({
+            projectRoot,
+            workDirectory,
+            outputDir,
+            version: codeVersion,
+            source,
+            privateKeyPem,
+            publicKeyPem,
+            zipRunner
+        });
 
         if (!reuseNodeMinSeeds) {
             if (fs.existsSync(nodeMinSeedsArchivePath)) {
@@ -752,6 +769,11 @@ async function createOfflineUpdateArtifacts(options = {}) {
         if (fs.existsSync(manifestPath)) throw new Error(`更新清单版本文件已存在，拒绝覆盖: ${manifestPath}`);
 
         await atomicallyCopyToOutput(stagedCodeArchive, codeDestination);
+        await fs.promises.mkdir(path.dirname(stagedVoiceDisplayNode.archiveDestination), { recursive: true });
+        await atomicallyCopyToOutput(stagedVoiceDisplayNode.archivePath, stagedVoiceDisplayNode.archiveDestination);
+        await atomicallyCopyToOutput(stagedVoiceDisplayNode.metadataPath, stagedVoiceDisplayNode.metadataDestination);
+        finalVoiceDisplayNodeArchivePath = stagedVoiceDisplayNode.archiveDestination;
+        finalVoiceDisplayNodeMetadataPath = stagedVoiceDisplayNode.metadataDestination;
         if (stagedTaskCode) {
             await fs.promises.mkdir(path.dirname(stagedTaskCode.destination), { recursive: true });
             await atomicallyCopyToOutput(stagedTaskCode.archive, stagedTaskCode.destination);
@@ -778,6 +800,8 @@ async function createOfflineUpdateArtifacts(options = {}) {
             manifest,
             manifestPath,
             codeArchivePath,
+            voiceDisplayNodeArchivePath: finalVoiceDisplayNodeArchivePath,
+            voiceDisplayNodeMetadataPath: finalVoiceDisplayNodeMetadataPath,
             taskCodeArchivePath: stagedTaskCode?.destination || null,
             nodeMinSeedsArchivePath: finalNodeMinSeedsArchivePath,
             dependenciesArchivePath: null,
@@ -854,6 +878,8 @@ async function runCli(argv = process.argv.slice(2)) {
             console.log('检测到 package-lock.json 指纹变化，已自动生成新的 dependencies 包');
         }
         if (result.codeArchivePath) console.log(`代码包: ${result.codeArchivePath}`);
+        if (result.voiceDisplayNodeArchivePath) console.log(`Node 子显示端独立 ZIP: ${result.voiceDisplayNodeArchivePath}`);
+        if (result.voiceDisplayNodeMetadataPath) console.log(`Node 子显示端签名元数据: ${result.voiceDisplayNodeMetadataPath}`);
         if (result.taskCodeArchivePath) console.log(`任务代码包: ${result.taskCodeArchivePath}`);
         if (result.nodeMinSeedsArchivePath) console.log(`Node min 初始配置和任务包: ${result.nodeMinSeedsArchivePath}`);
         for (const file of result.dependencyArtifacts || []) console.log(`依赖组: ${file}`);

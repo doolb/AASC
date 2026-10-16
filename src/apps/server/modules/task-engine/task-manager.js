@@ -35,6 +35,8 @@ class TaskManager extends EventEmitter {
     this._llmHttpHandlers = options.llmHttpHandlers || null;
     this._serverExecutionError = options.serverExecutionError || '当前节点不支持服务端任务执行';
     this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
+    // 应用持有的runtime工厂共享上游TTS队列，任务不能另建同账号的独立额度。
+    this._chat2apiRuntimeFactory = options.chat2apiRuntimeFactory || null;
     this._ensureTaskDependencies = options.ensureTaskDependencies || null;
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
     this._isRestoring = false;
@@ -106,6 +108,7 @@ class TaskManager extends EventEmitter {
       sendToDisplay: this._sendToDisplay,
       broadcastToDisplays: this._broadcastToDisplays,
       chatService: extraContext.chatService || this._chatService,
+      chat2apiRuntimeFactory: extraContext.chat2apiRuntimeFactory || this._chat2apiRuntimeFactory,
       getTtsServiceUrl: extraContext.getTtsServiceUrl || this._getTtsServiceUrl,
       setTtsServiceUrl: extraContext.setTtsServiceUrl || this._setTtsServiceUrl,
       llmGatewayService: extraContext.llmGatewayService || this._llmGatewayService,
@@ -332,7 +335,8 @@ class TaskManager extends EventEmitter {
       params: task.params,
       refs: resolvedRefs,
       workDir: this.taskIO._taskPath(task.taskName),
-      taskIO: this.taskIO
+      taskIO: this.taskIO,
+      chat2apiRuntimeFactory: this._chat2apiRuntimeFactory
     };
 
     // 内置一次性任务从任务目录读取上传文件，并以 Buffer 提供给任务模块；

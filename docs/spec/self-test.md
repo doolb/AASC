@@ -24,6 +24,81 @@
 第三图 := MP返回可靠姿态失败 → 保存失败记录/禁用热图/不画伪造点；OP两档无人物 → 明确缺失；RTM/DW同一有效人物框/全图 → 两者12点但仍按实际位置判断；三图与同尺寸图切换、裁剪、失败提示/390px/页面异常检查通过
 ```
 
+## ADB v102实际Qwen配置与目录（2026-10-15）
+
+```text
+设备 := SM-N9500，min58/code102/deps10/task1，pendingHealth=false
+根因 := 新页面已加载，但权威模型仍为旧qwen3-tts-flash、默认与AI显式voice为Cherry
+操作 := 既有WS窄补丁改模型3.1、默认与AI音色乔小娇；保存权威成功
+验收 := 控制端/显示端均68项、女47/男21、当前乔小娇且选中ID一致、保留大写Emily_v3.1
+持久化 := 设备userconfig模型/默认音色与config内AI选择匹配
+保留 := 其它Provider/语速/共享音量不变，面板原状态恢复，临时forward移除
+边界 := 无代码修改/新合成请求/出包发布，不作为设备实际合成或播放验收
+```
+
+
+## Qwen Audio 3.1、常开方式与豆包多流（2026-10-15）
+
+```text
+目录与常开 := Chat2API266/266、Provider定向84/84、双端快选21/21、声纹页浏览器1/1、手动/并发22/22（部分用例重叠）
+目录 := 68项/47女21男/四组4+22+15+27；ID大小写、元数据、复制隔离、实际模型/映射目录和WS接线
+界面 := 无Provider启用checkbox，保存不带enabled；旧false读入/提交变权威true，快照/广播相同；账号停用仍拒绝
+双端 := 68项与女47项筛选、Emily_v3.1保存和同步；既有按钮皮肤/语速/四尺寸布局保持
+音频 := tts-ogg + tts-opus-decoder + 豆包adapter定向35/35；单/双流、损坏/截断/交错/缺边界、总页/包/字节/时长/64流上限
+实网 := 单长句真实两流独立校验/解码成功，合并WAV1051832字节；整段真实手动服务8段非静音，queued=8、末句喵～、无错误
+SelfTest := tts_provider_config只读校验四个非原生enabled=true和页面无开关；不触发合成或配置保存
+边界 := 实网使用本机已有账号，只读凭据、不保存账号或配置；未把队列输出验证宣称为实机播放
+```
+
+
+## 豆包Chat表情分句中断回归（2026-10-15）
+
+```text
+先失败 := Provider/动作新增3项断言在旧实现失败；手动原句新增1项失败，错误incomplete
+手动/并发 := npm run test:mmd-production:tts → 22/22
+面板回归 := npm run test:tts-voice-picker → 20/20
+Provider/动作 := 无独立npm定向入口，node --test tests/tts-provider-doubao-chat.test.js tests/tts-provider-qwen-chat.test.js tests/tts-provider-qwen-business.test.js tests/display-mmd-tts-actions.test.js → 28/28
+链路 := 正式Markdown清理 + 真实分句 + 手动服务 + Registry + ProviderService + 本地假WAV上游
+原文 := 两段示例生成3段正文；日志完整回复生成8段正文、跳过4段emoji，按序下发、queued带正确audioCount
+边界 := 混合正文合成输入过滤/播放文本保持；纯emoji零请求零缓存；ZWJ/肤色/国旗/键帽完整移除
+自动 := 公共动作解析仍保留原回复与✨/🐱事件，未知💻/⚡在最终Provider边界清除
+错误 := incomplete/timeout/cancelled原错误和provider标记保留；千问旧接口及原生/其它API不受影响
+边界说明 := 本地假上游模拟纯表情被拒；未对真实账号做前后对照，不宣称上游诱因已实证
+部署 := servicePackage=true，尚未出包发布/重启或ADB验收本次修复
+```
+
+
+## 音色列表按钮状态验收（2026-10-15）
+
+```text
+入口 := npm run test:tts-voice-picker → 20/20；新增断言在旧样式上失败2项，实施后全部通过
+主题 := 控制端与显示端分别覆盖light、mint、深色，真实theme.css重要规则同时加载
+皮肤 := 选中项渐变/白字/强调边框/勾选；普通项无渐变/普通文字/中性边框/隐藏勾选；副标题继承文字
+交互 := 悬停不误选、键盘焦点可见、禁用保持选择关系；既有保存等待/失败/成功回显保持
+只读自测 := control_tts_voice_picker扫描现有列表皮肤；注入普通项错误渐变后能检出；不发送额外WS请求
+边界 := 当前仅浏览器验收，不代表本次样式已部署至ADB设备；servicePackage=true，尚未出包发布
+```
+
+
+
+## 两端音色面板与语速验收（2026-10-15）
+
+```text
+新增入口 := npm run test:tts-voice-picker → 20/20；关联test:mmd-production:tts → 21/21
+传输回归 := 执行生产WS入口displayId覆盖及真实ViewBind转交分支，合法方式/音色成功、未知字段仍拒绝
+权限 := 非登记连接及显示端完整配置写入保持拒绝；speed有限数值/能力/范围/禁止混带voice
+偏好隔离 := speed只改目标Provider.defaultSpeed，不改变AI默认或其它方式；过期操作不重选方式
+批次 := 真实生成服务fixture保存3后，旧快照speed0、新批次speed3
+真实浏览器 := 生产WebSocketManager+共享组件+WS服务，双向方式/音色/滑条同步；input不发送/change保存；失败/断线恢复
+UI := 三下拉/搜索/定位/未知音色/目录记忆；四尺寸安全区、短屏滚动、工具组避让；重复init只有一面板
+只读SelfTest := control_tts_voice_picker已加入并在实际Android控制端运行成功，不写配置或合成
+ADB := min58/code99→本地100/deps10/task1健康；显示端切豆包并从94项改选成功
+ADB实体操作 := 点击控制端浮钮；滑条0→3，配置及两端DOM均为3；面板933x455 viewport内
+恢复 := 测试前后AI默认/全部方式voice/speed/enabled/model一致，pending=false/previous=null
+网络 := 仅code-v100.zip=17808097bytes，无APK/依赖/任务ZIP；正式99源CURRENT/0字节/无失败
+边界 := 未调用官方合成接口或验证逐音色听感；本地签名候选未发布LAN/WAN
+```
+
 ## 全身IK实际骨架与相机匹配（2026-10-15）
 
 ```text
@@ -35,6 +110,20 @@ UI := 原图片粘贴真实浏览器回归 + 无IK/ONNX显示实际骨架 + 固�
 完整链路 := 粘贴照片 → 真ONNX → PMX十一目标/270子步 → 实际叠加/相机估计 → 连续帧/手动接续/恢复且骨骼目标保持
 边界 := 桌面Edge验证；手机性能/触控与更多二次元图另验；视频动作和运镜未实现
 ```
+
+## 音色快选ADB缺陷复现（2026-10-15，修复前）
+
+```text
+设备 := SM-N9500 Android9/min58/code96/deps10/task1
+方式操作 := 显示端qwen-chat切doubao-chat → TTS快选参数不合法/success=false
+音色操作 := 控制连接预置doubao-chat → 真实94项目录改选其它音色 → 同错误
+对照 := 同设备控制连接同类型合法选择可成功；当前小爱模板无TTS覆盖
+原因 := 真实显示端入口补displayId，业务白名单不接受该传输字段；组件隔离夹具未覆盖
+恢复 := qwen-chat/voice=null、豆包原默认音色恢复成功；未生成聊天或调用合成
+证据 := .cache/adb-tts-panel-20261015/inspection.json + provider-and-voice.json
+结论 := 已复现缺陷；未修改生产代码，未运行修复回归
+```
+
 
 ## 显示端音色下拉筛选资源自测（2026-10-15）
 
@@ -1956,4 +2045,65 @@ IM := conversation/info与chain/single均HTTP200/status_code0，4消息文本块
 正式恢复 := 无临时注入，首次accounts sessionid存在；心跳0/0、信息success、IM0/0、4消息，无非法toast/新聊天
 刷新复测 := 心跳0、信息success、4消息保持，无非法toast
 发布 := code95双站点摘要/签名/CRC/src逐项一致、精确清理0错误；主服务器与手机健康，服务待出包false
+```
+
+## Qwen API数据修复v4验证（2026-10-15）
+
+```text
+真实runner + 修复脚本 → 旧默认/三业务显式音色/空继承/有效英文ID大小写/未知自选/模型映射冲突 → 迁移或明确保留
+真实隔离业务种子 → 数据0至3 → 基线4 → 历史偏好与凭证/速度/共享音量保留
+业务保存 → 隐藏休眠速度恢复；显式新速度优先 → 双配置落盘一致
+失败保存/断言 → rolled-back → 双配置/内存/版本保持 → 不写成功记录
+未知数据/低服务 → 门控等待或拒绝；重复身份 → skipped；脱敏getter无凭证且原始getter不可用
+验证 := npm run test:offline-data-repair 71/71；迁移+配置36/36；npm run test:tts-voice-picker 22/22，部分重叠
+范围 := 真实隔离配置和浏览器，不等于手机已安装修复或实际合成验收
+```
+
+## min 首装语音提示时序回归（2026-10-16）
+
+```text
+已有证据 := min55仅覆盖安装/部分缓存验收；未证明干净首装提示可靠
+当前只读 := SM-N9500 min58 + bootstrap ready/standalone + offline_voice_first_run_v1=true
+状态回归 := ready发生于接收器注销期间/重建后从运行中服务补发 + 空状态不虚构ready + 字节/阶段保留 + 更新事件隔离 + 停进程作废快照
+提示回归 := 前台/服务/页面不同先后 + 展示返回失败/异常不消耗标记 + 成功展示前标记仍false + 完整缓存跳过 + 首次标记恢复/去重/profile隔离
+Android命令 := ./gradlew :app:testDebugUnitTest --tests com.aasc.display.OfflineModelPreparationPlanTest --tests com.aasc.display.NodeStartupStatusTest --tests com.aasc.display.ServerConfigTest --tests com.aasc.display.NodeServerServiceTest --offline --no-daemon
+Android结果 := 48项/0失败/0错误/0跳过；模型准备12 + 启动状态6 + 地址配置14 + Node服务16；新增9项通过，生产/自测编译成功
+首装打包 := npm run test:offline-bootstrap → 63/63；不代表新APK已生成或实机首装提示已验收
+产物补验 := min59的两份APK大小89951777/SHA39a81020…相同，ZIP完整性/apksigner签名a57fd4c3…与发行清单匹配，来源bb30fa05包含修复bb668d54，DEX含状态补发与tryPrompt
+现场授权 := 用户允许完整备份SM-N9500私有数据后安装min59并清空验证；备份归档可读性/摘要校验完成前不清空
+备份 := 私有1047040512bytes/54410项/48859普通文件，SHA80daba3a…/逐文件可读与设备数量一致；外部2空目录/原min58APK已备份；证据仅.cache/adb-min59-first-run-20261016-100056，不入Git
+空数据首启 := min58覆盖安装59后pm clear，旧服务目录不存在；未卸载APK/不恢复旧缓存 → 原生确认LAN约48MiB服务下载 → HOME退后台
+后台 := code105/deps10/task1/HTTPS status=ok/pendingHealth=false，首次标记false；返回原Activity才出现“准备语音模型”
+实测UI := TTS约75MiB/ASR声纹约268MiB均默认checked=true/所选合计342MiB；原生截图及XML留证，展示后持久化true
+稍后 := 六个语音模型候选路径无文件 → 冷启动无重复弹框 → NEW_TASK加CLEAR_TASK重建Activity无重复且Node15542保持
+最终 := min59/code105/deps10/task1/API正常；临时ADB forward已移除；当前设备干净数据/模型未下载，旧数据只保留备份；本轮不验证下载权重或推理
+```
+
+## 在线TTS上游并发验证（2026-10-16）
+
+```text
+控制端只读SelfTest.tts_provider_config → upstreamConcurrency.doubao-chat为1至8整数 → 不发送合成/配置请求
+配置normalize/真实持久化 → 默认3、范围/类型拒绝、失败回滚、进程重启读取；WS保存 → 刷新队列 → 权威广播/重连
+同根两个入口/两个适配器 → 同账号总在途3；其他根与账号独立；动态1→3补位、3→1等待在途回落
+在线有序调度 → 7/9句全部提交 → 不按分句限制生成 → 实际上游仍最多3 → 乱序完成保持句序，失败亦保序
+队列取消/期限/双重释放/容量 → 不迟到建连、不惩罚账号、不泄露凭证
+真实Opus共享池 → 三路输入与三个模拟VoiceGenie同时结束 → 两Worker加有界等待 → 三个完整WAV
+解码等待数量/字节限制、取消/超时释放、输入副本 → 内存有界且不启动过期Worker；原无等待工厂兼容
+范围 := 本地模拟WS、真实WASM、Chromium及隔离配置，未进行真实官网3路合成或设备播放
+```
+
+本轮结果：Chat2API277/277、音频/有序调度45/45、配置/浏览器/装配29/29、双端音色25/25、聊天22/22、数据修复兼容71/71，存在重叠；未运行全仓回归。
+
+## 千问两路固定模型自测（2026-10-16）
+
+```text
+配置 := 任意旧model/mappedModel → 读取固定3.1/QUARK；新错误model拒绝；同固定值兼容
+保存 := 两路model/mappedModel不写入用户配置 → 重启权威值仍为固定模型；失败回滚
+音色 := API旧四音色在默认/业务/生成恢复乔小娇；有效3.1大小写和未知用户ID保持
+目录 := 独立JSON的68项由查询返回副本；旧模型和无效映射不列出；查询不合成
+生成 := 旧底层模型/映射/伪造计划/直接适配器请求明确拒绝；参数model不能覆盖业务常量
+正式UI := 两路无模型控件，API语速及68项在读取旧配置后立即可用；WS广播/失败/断线/重连
+修复 := 旧快照、当前有效快照和真实种子worker均通过；原repair4脚本及归档不变
+结果 := Chat2API279/279、双端26/26、业务与浏览器98/98、修复72/72、聊天TTS22/22（有重叠）
+边界 := 本地HTTP/WS及浏览器验证；未真实上游合成/ADB播放、未重启或出包发布
 ```

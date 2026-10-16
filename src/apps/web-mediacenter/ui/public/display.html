@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="css/display.css">
     <link rel="stylesheet" href="css/display-chat.css">
     <link rel="stylesheet" href="css/display-mmd.css">
+    <link rel="stylesheet" href="css/tts-voice-picker.css">
     <link rel="stylesheet" href="css/display-voice-controls.css">
     <script type="importmap">
         {
@@ -86,14 +87,20 @@
             <div class="display-stage-lighting-control" hidden>
                 <button id="displayTtsVoiceToggle" class="display-stage-button" type="button"
                         aria-controls="displayTtsVoicePanel" aria-expanded="false">音色</button>
-                <section id="displayTtsVoicePanel" class="display-mmd-lighting-panel display-tts-voice-panel" hidden aria-label="语音方式与音色">
+                <section id="displayTtsVoicePanel" class="display-mmd-lighting-panel display-tts-voice-panel tts-voice-picker" hidden aria-label="语音方式与音色">
                     <div class="display-tts-voice-header"><strong>音色选择</strong><button id="displayTtsVoiceClose" type="button" aria-label="关闭音色面板">×</button></div>
                     <div class="display-tts-voice-settings">
+                    <p class="display-tts-voice-scope">全局 AI/Agent 默认语音；角色独立设置优先，对后续播放生效。</p>
                     <button id="displayTtsCurrentVoice" class="display-tts-current-voice" type="button" title="定位当前音色">
                         <span><small>当前音色</small><strong id="displayTtsCurrentVoiceName">等待同步</strong></span><span aria-hidden="true">✓</span>
                     </button>
                     <label for="displayTtsProviderSelect">TTS 方式</label>
                     <select id="displayTtsProviderSelect" aria-label="TTS方式" disabled></select>
+                    <div id="displayTtsSpeedControl" class="tts-voice-speed" hidden>
+                        <label for="displayTtsSpeed">语速 <output id="displayTtsSpeedValue" for="displayTtsSpeed">0</output></label>
+                        <input id="displayTtsSpeed" type="range" min="-10" max="10" step="1" value="0" aria-label="语速">
+                        <small>慢 <span>正常 0</span> 快</small>
+                    </div>
                     <label for="displayTtsVoiceSearch">搜索音色</label>
                     <input id="displayTtsVoiceSearch" type="search" placeholder="名称或标签" aria-label="搜索音色" autocomplete="off">
                     <div class="display-tts-voice-filters" aria-label="音色筛选">
@@ -660,6 +667,7 @@
     <script src="js/display-background-glow.js"></script>
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
+    <script src="js/tts-voice-picker.js" defer></script>
     <script src="js/display-tts-voices.js" defer></script>
     <script src="js/display-voice-controls.js" defer></script>
     <script src="js/display-mmd-settings.js" defer></script>

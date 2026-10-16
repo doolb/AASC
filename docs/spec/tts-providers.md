@@ -1,8 +1,9 @@
 # TTS Provider 与播报配置实现
 
-## 豆包网页账号自动识别与临时分句单路（2026-10-15）
+## 豆包网页账号自动识别与临时分句单路（2026-10-15，历史）
 
 ```text
+历史状态 := 本节单路策略由2026-10-16上游并发机制取代；旧包行为按其实际源码
 doubao-chat → 内置doubaochat → 当前有效账号；自定义映射优先、指定账号不能退选
 Cookie-only允许语音；文字仍需Node资料；真实成功码0/20000000允许，Offline Worker定位独立依赖
 createTtsGenerationScheduler(display,options) → 同生成businessType/templateTts → 权威Provider
@@ -512,4 +513,105 @@ Chat2API服务:
   校时Cookie、注册/刷新、签名顺序与HMAC向量、凭证更新、并发令牌分配
   非法/空响应、过期、超时及错误脱敏；无Chrome/受限tmp不启动浏览器
   npm run check:chat2api及TTS/手动播放定向回归；真实WAV成功才确认可用
+```
+
+## Qwen Audio 3.1音色与五方式常开（2026-10-15，已实现）
+
+```text
+已有声明 := PROVIDER_DEFAULTS、normalizeProviderSettings、createApiSpeechAdapters、getTtsProviderVoices、两端共享音色组件
+新增定义 := QwenAudio31Voice { id, name, gender, tags, category, languages }；listQwenAudio31Voices
+保持默认Qwen API模型3.1与乔小娇 → 导入官方该段68项 → 校验唯一ID/大小写/官方元数据
+实际模型3.1 → 返回专属目录副本 → 复用现有WS/Chat2API目录链路 → 两端及声纹页一致
+历史显式其它模型 → 保留原模型 → 不返回3.1专属音色；缺省值使用默认3.1
+读入历史enabled=false或旧控制端提交false → 规范化为true → 原保存广播回传权威值
+原生system无Provider启用字段；四个非原生Provider兼容enabled恒true
+删除Provider合成启用拦截、页面启用复选框和未启用提示 → 保留账号/凭据/取消/业务范围校验
+自测 := 缺省/旧false/旧控制端保存、多端广播和重连；68项目录、映射别名与模型隔离；无启用控件
+发布 := 新源码修改后servicePackage=true；重新构建新服务版本，LAN/WAN各自校验切清单；min/deps/task沿用
+```
+
+```text
+已实现文件 := qwen-audio-31-voices.json、chat2api-qwen-audio-voices.js、chat2api-api-speech-adapters.js
+目录 := 68个唯一ID，female47/male21，四组4/22/15/27，语言仅按官网明确说明；查询返回独立tags/languages数组
+常开 := normalizeProviderSettings使四个非原生enabled恒true；原生无此字段；所有Provider移除启用门禁
+前端 := 无启用checkbox，保存不携带enabled，快选无未启用提示，SelfTest只读检查权威true和DOM
+回归 := Chat2API266/266；Provider84/84；快选21/21；声纹浏览器1/1；手动/并发22/22（部分用例重叠）
+```
+
+## v102设备Qwen旧配置核对（2026-10-15已执行）
+
+```text
+现状 := active-release与/api/status为102；页面新资源已加载，无启用checkbox
+配置 := qwen-api.model=qwen3-tts-flash，defaultVoice=Cherry，aiReplyDefault.voice=Cherry
+规则 := 归一化保留已保存模型，缺省才使用3.1，目录按实际模型返回
+设备修正 := 控制端setTtsProviderConfig仅提交Qwen模型3.1/默认乔小娇与AI显式乔小娇
+权威结果 := 保存success=true；双端列表68/女47/男21，当前乔小娇且aria-selected一致，大写ID保留
+持久化 := userconfig内Qwen模型/默认音色与config内AI选择均已写入
+兼容 := 其他Provider配置/独立语速/共享音量不变；原面板开关状态恢复；临时ADB转发移除
+范围 := 配置应用与只读验收，未改代码/迁移规则或构建发布
+```
+
+## 在线TTS分句保序与上游并发（2026-10-16，源码完成待出包）
+
+```text
+已有声明 := setTtsProviderConfig + config.set + ttsProviderConfig + TTS配置快照 + 有序分句发送 + 上游账号队列
+新增定义 := UpstreamConcurrency { doubao-chat: 3 }
+新增定义 := AccountSlot { active, waiting, limit }
+操作流程 := 控制端数字输入 → 校验1至8整数 → config.set保存tts.upstreamConcurrency → 回传与广播权威值
+缺失配置或尚未初始化 → 明确默认3；重连 → 当前权威值
+在线Chat/Agent/手动回复分句 → 全部提交可生成任务 → 仅按索引保序交付，不设置分句生成并发闸门
+系统原生/本地显示端 → 原设备资源调度保持
+豆包请求 → 内部选择账号 → 同源上游准入队列 → active低于limit则领取，否则FIFO等待
+准入后 → 建立实际上游连接 → 收齐音频或失败/取消/超时 → 幂等释放active → 补充等待项
+音频已收齐 → 本地解码 → 原句子序号交付 → 原顺序播放，不把解码计为上游在途
+限额增加 → 立即补充准入；限额减少 → 保留在途并等待active降到新值
+队满/取消/期限 → 保留上游现有固定错误，不标为账号真实合成失败，不迟到建连
+同实例多入口 → 共用准入策略与队列；多个账号各自限额，不伪称跨进程全局限制
+应用装配持有单一上游controller → 账号键由资料根目录与accountId组成 → 默认聊天服务与TaskManager注入的Chat2API runtime factory共享队列
+配置成功保存后 → WS通知controller刷新等待项；每次准入/释放亦读取权威当前限额
+有序调度器orderOnly模式 → 并发不限但结果按原索引交付；原默认有限调度模式保持
+实际解码默认共享池 → 保持最多2个Worker → 增加等待至多256项/64MiB → 取消与原截止时间仍有效
+解码工厂默认maxWaiting为0保留既有立即拒绝契约；正式共享decoder启用有界等待 → 三路上游同时完成不因第三Worker被拒绝
+本地解码等待容量满 → 固定doubao_speech_busy并标记speechQueueFailure → 不惩罚真实账号，不重新请求上游
+千问鉴权队列 → 继续保护注册/刷新/一次性令牌；本轮不新增千问生成并发配置
+自测 := 默认3/边界/非法输入/WS保存和重连/同账号最大3/跨批次累计/多账号独立/动态升降/取消超时/重复释放
+自测 := 同批超过3句能提交，实际上游最多3；乱序完成仍按序发送，原生调度保持
+验证结果 := Chat2API277/277；音频/有序调度45/45；配置/浏览器/装配29/29；双端音色25/25；聊天22/22；修复兼容71/71（部分重叠）
+当前状态 := 用户已确认并完成源码和定向验证；servicePackage待出包；未发布或改运行配置
+```
+
+## 千问两路TTS固定实际模型（2026-10-16，已实现）
+
+```text
+已有声明 := TTS配置规范化 + Provider业务生成/音色目录 + Chat2API模型绑定/映射/planner + 最终合成适配器
+新增定义 := QwenFixedTts { apiModel: qwen-audio-3.1-tts-flash, webModel: QUARK_VOICE }
+操作流程 := 纯常量模块声明QwenFixedTts → 配置/目录/规划/适配器引用同源值
+旧配置读取 → 两路model按固定值返回，mappedModel不再表示可选实际模型
+新保存 → 不同实际模型明确拒绝，同固定值或未传model接受 → 权威只读model广播；下次保存移除两路model/mappedModel持久化字段
+已知API旧默认/显式业务音色 → 乔小娇；有效3.1音色保持，未知音色不盲目覆盖
+两路前端设置 → 移除model输入/候选/别名提示 → 保留音色和语速；API语速按固定3.1能力显示
+生成与目录查询 → 使用QwenFixedTts，不读取旧settings.model决定实际模型
+映射或旧实际模型请求 → 校验是否仍指向固定模型 → 不符合明确拒绝，不转为LLM
+音色模型别名 → 允许绑定固定实际模型与voice参数 → 不能借别名改变实际模型
+普通LLM应用 → 原模型选择保持；其它TTS来源/并发/音量/鉴权保持
+自测 := 旧/伪造model、新保存拒绝、目录与合成同模型、旧API音色恢复、有效3.1保留、旧MINI_MAX不生效
+自测 := UI无模型输入且Qwen API语速可调、WS回传/重连、映射不能绕过、最终上游只收到固定模型
+回归 := Chat2API + TTS配置/业务/WS/面板 + 既有修复v4幂等兼容 + 豆包并发
+状态 := 用户已确认并完成源码和定向验证；服务包待构建发布，本轮未修改真实运行配置或出包
+```
+
+### 千问固定模型实施补充（2026-10-16）
+
+```text
+读取共享固定模型常量 → 配置旧值恢复、两路调用固定 → 适配器再次拒绝不同实际模型
+保留历史TTS名称识别 → 明确拒绝旧引擎请求 → 公开目录过滤不再支持的模型与映射
+读取已知四个API旧音色 → 恢复乔小娇 → 保留有效3.1及未知用户ID
+保存配置 → 去掉两路model和mappedModel → 权威快照从常量补回只读model
+正式UI删除两路模型控件 → API语速按固定模型能力显示 → 原WS保存和广播
+```
+
+```text
+修复v4兼容 := 旧快照继续支持历史迁移；当前规范化快照已是固定模型 → already-current且不强制写盘
+独立音色文件 := qwen-audio-31-voices.json → 校验68个唯一ID → 返回副本 → 两端共用；用户配置仅保存选择ID
+验证 := Chat2API279/279；双端音色26/26；业务与浏览器98/98；修复72/72；聊天TTS22/22（部分重叠）
 ```

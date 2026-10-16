@@ -18,9 +18,10 @@ test('真实显示页快选对应目录、搜索、方式记忆、错误回显�
     page.on('pageerror', e => errors.push(e.message));
     const $ = cheerio.load(fs.readFileSync(path.join(root, 'display.html'), 'utf8'));
     $('script,link').remove();
-    $('head').append('<style>' + ['theme.css','display.css','display-mmd.css','display-chat.css'].map(file => fs.readFileSync(path.join(root,'css',file),'utf8')).join('\n') + '</style>');
+    $('head').append('<style>' + ['theme.css','display.css','display-mmd.css', 'tts-voice-picker.css','display-chat.css'].map(file => fs.readFileSync(path.join(root,'css',file),'utf8')).join('\n') + '</style>');
     await page.setViewport({ width: 390, height: 740 });
     await page.setContent($.html());
+    await page.addScriptTag({ path: path.join(root, 'js/tts-voice-picker.js') });
     await page.addScriptTag({ path: path.join(root, 'js/display-tts-voices.js') });
     await page.addScriptTag({ path: path.join(root, 'js/display-chat.js') });
     await page.evaluate(() => {

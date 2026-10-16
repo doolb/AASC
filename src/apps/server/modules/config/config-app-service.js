@@ -740,21 +740,35 @@ function getTtsProviderSettings() {
         : legacyProvider.defaultSpeed ?? 0;
     const legacyVolume = legacyProvider.defaultVolume ?? 100;
     return normalizeTtsProviderSettings({ ...selections, providers,
+        upstreamConcurrency: config.get('tts.upstreamConcurrency', {}),
         defaultSpeed: sharedParameters.defaultSpeed ?? legacySpeed,
         defaultVolume: sharedParameters.defaultVolume ?? legacyVolume }, {}, { recoverLegacyModel: true });
 }
 
 function setTtsProviderSettings(patch) {
     const previous = getTtsProviderSettings();
-    const candidate = normalizeTtsProviderSettings(patch, previous);
     const previousTts = JSON.parse(JSON.stringify(config.get('tts', {})));
     const previousUserTts = JSON.parse(JSON.stringify(userConfig.get('tts', {})));
+    // 对应.src/framework/qwen-api-data-repair.md：旧Qwen模型隐藏调速字段，切换到可调速模型时仍保留已存偏好。
+    const savedQwenSpeed = previousUserTts.providers?.['qwen-api']?.defaultSpeed;
+    const previousQwen = previous.providers['qwen-api'];
+    const normalizationPrevious = previousQwen.defaultSpeed === undefined && savedQwenSpeed !== undefined
+        ? { ...previous, providers: { ...previous.providers, 'qwen-api': { ...previousQwen, defaultSpeed: savedQwenSpeed } } }
+        : previous;
+    const candidate = normalizeTtsProviderSettings(patch, normalizationPrevious);
     const selections = Object.fromEntries(Object.keys(SELECTION_BUSINESSES).map(key => [key, candidate[key]]));
     const sharedParameters = { ...(previousTts.sharedParameters || {}) };
     delete sharedParameters.defaultSpeed;
     const nextTts = { ...previousTts, ...selections, defaultSpeed: candidate.providers.system.defaultSpeed,
+        upstreamConcurrency: candidate.upstreamConcurrency,
         sharedParameters: { ...sharedParameters, defaultVolume: candidate.defaultVolume } };
-    if (!userConfig.set('tts', { ...previousUserTts, providers: candidate.providers })) {
+    // 固定模型只作为公开元数据返回，不再作为用户可编辑配置落盘。
+    const providers = Object.fromEntries(Object.entries(candidate.providers).map(([id, settings]) => {
+        if (!['qwen-api', 'qwen-chat'].includes(id)) return [id, settings];
+        const { model, mappedModel, ...preferences } = settings;
+        return [id, preferences];
+    }));
+    if (!userConfig.set('tts', { ...previousUserTts, providers })) {
         userConfig._data.tts = previousUserTts;
         throw new Error('TTS Provider 用户配置保存失败');
     }

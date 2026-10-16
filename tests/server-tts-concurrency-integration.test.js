@@ -93,7 +93,7 @@ test('服务端普通 Chat 和手动 TTS 使用有序调度器', () => {
     assert.doesNotMatch(serverSource, /let ttsQueue = Promise\.resolve\(\)/u);
 });
 
-test('实际调度入口按权威模板让豆包分句单路_Qwen及原生显示槽位保持双路且发送有序', async () => {
+test('实际调度入口在线分句不限制生成并发且按序发送_原生显示槽位保持双路', async () => {
     const {BUSINESS_TYPES}=require('../src/apps/server/modules/tts/tts-provider-policy');
     const {getDisplayTtsConcurrency}=require('../src/apps/server/modules/media/display-cpu-status');
     const start=serverSource.indexOf('function createTtsGenerationScheduler(');
@@ -104,7 +104,7 @@ test('实际调度入口按权威模板让豆包分句单路_Qwen及原生显示
         BUSINESS_TYPES,ttsProviderService:providerService,createOrderedTaskScheduler,getDisplayTtsConcurrency,
         config:{get:()=> 'display'},findDisplayWithTts:()=>({id:'display'}),
         displayClients:new Map([['display',{state:{cpuStatus:{tts:{totalCoreCount:2}}}}]])});
-    for(const [templateProvider,expected] of [[undefined,1],['qwen-chat',2],['system',2]]) {
+    for(const [templateProvider,expected] of [[undefined,3],['qwen-chat',3],['qwen-api',3],['doubao-api',3],['system',2]]) {
         const scheduler=factory('display',{businessType:BUSINESS_TYPES.AI_REPLY,
             ...(templateProvider?{templateTts:{provider:templateProvider}}:{})});
         let active=0,max=0;const delivered=[];

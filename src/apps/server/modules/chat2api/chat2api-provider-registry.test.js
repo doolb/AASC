@@ -43,7 +43,7 @@ test('Provider 注册表支持自定义 Provider 和模型汇总', async () => {
   const provider = await registry.getProvider('local');
   assert.equal(provider.id, 'local');
   assert.equal(provider.modelMappings['local-chat'], 'model-v1');
-  assert.deepEqual(await registry.listModels(), ['qwen-api/qwen-audio-3.1-tts-flash','qwen-api/qwen-audio-3.0-tts-flash','qwen-api/qwen-audio-3.0-tts-plus','qwen-api/qwen3-tts-flash','doubaapi/tts','deepseek-v4-flash', 'deepseek-v4-pro', 'GLM-5.1', 'Kimi-K2.6', 'MiniMax-M2.7', 'MiMo-V2.5-Pro', 'MiMo-V2.5', 'MiMo-V2-Flash', 'Auto', 'Qwen3.6', 'Qwen3.7-Max', 'Qwen3.5-Flash', 'Qwen3-Max', 'Qwen3-Max-Thinking-Preview', 'Qwen3-Coder', 'Qwen3.6-Plus', 'Qwen3.6-35B-A3B', 'Qwen3.6-27B', 'GLM-5-Turbo', 'GLM-5V-Turbo', 'GLM-5', 'GLM-4.7', 'doubao', 'doubao-think', 'doubao-expert', 'local-chat']);
+  assert.deepEqual(await registry.listModels(), ['qwen-api/qwen-audio-3.1-tts-flash','doubaapi/tts','deepseek-v4-flash', 'deepseek-v4-pro', 'GLM-5.1', 'Kimi-K2.6', 'MiniMax-M2.7', 'MiMo-V2.5-Pro', 'MiMo-V2.5', 'MiMo-V2-Flash', 'Auto', 'Qwen3.6', 'Qwen3.7-Max', 'Qwen3.5-Flash', 'Qwen3-Max', 'Qwen3-Max-Thinking-Preview', 'Qwen3-Coder', 'Qwen3.6-Plus', 'Qwen3.6-35B-A3B', 'Qwen3.6-27B', 'GLM-5-Turbo', 'GLM-5V-Turbo', 'GLM-5', 'GLM-4.7', 'doubao', 'doubao-think', 'doubao-expert', 'local-chat']);
 });
 
 test('删除 Provider 前由注册表检查关联账号和模型映射', async () => {

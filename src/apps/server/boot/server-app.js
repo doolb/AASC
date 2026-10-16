@@ -140,6 +140,7 @@ const { createProviderRegistry } = require('../modules/tts/tts-provider-registry
 const { createTtsProviderService } = require('../modules/tts/tts-provider-service');
 const { createTtsProviderWs } = require('../modules/tts/tts-provider-ws');
 const { createChat2ApiSpeechService } = require('../modules/chat2api/chat2api-speech-service');
+const { createSpeechUpstreamController } = require('../modules/chat2api/chat2api-speech-upstream');
 const { BUSINESS_TYPES } = require('../modules/tts/tts-provider-policy');
 const { filterQwenChatSpeechText } = require('../modules/tts/qwen-chat-text-filter');
 const { createManualChatTtsService } = require('../modules/chat/chat-manual-tts');
@@ -681,7 +682,11 @@ const VISION_REQUEST_TIMEOUT_MS = 120000;
 
 // Android可禁用外部TTS服务，但显示端回传音频的共享缓存仍需恢复已保存容量。
 ttsAudioCache.configure(config.getTtsConfig().audioCacheMaxMiB);
-const chat2ApiSpeechService = createChat2ApiSpeechService();
+// 对应.src/framework/tts-provider-configuration.md：默认聊天与内置代理共享上游账号槽位，配置不由单次请求决定。
+const speechUpstream = createSpeechUpstreamController({
+    getDoubaoConcurrency: () => config.getTtsProviderSettings().upstreamConcurrency['doubao-chat']
+});
+const chat2ApiSpeechService = createChat2ApiSpeechService({ doubaoSpeechQueue: speechUpstream.forRoot() });
 const ttsProviderService = createTtsProviderService({
     getSettings: config.getTtsProviderSettings,
     registry: createProviderRegistry({
@@ -693,6 +698,7 @@ const ttsProviderService = createTtsProviderService({
     })
 });
 const ttsProviderWs = createTtsProviderWs({ config, service: ttsProviderService,
+    onConfigChanged: () => speechUpstream.refresh(),
     isControl: ws => controlClients.has(ws),
     isDisplay: ws => [...displayClients.values()].some(display => display.ws === ws),
     broadcast: message => {
@@ -1487,6 +1493,8 @@ async function startServer() {
 
             // 初始化远程任务引擎
             taskManager = new TaskManager({
+                chat2apiRuntimeFactory: options => createChat2ApiRuntime({ ...options,
+                    doubaoSpeechQueue: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir) }),
                 taskCodeCatalog,
                 maxInstances: 50,
                 ensureTaskDependencies: (ids, onProgress) => taskDependencyManager.ensure(ids, onProgress),
@@ -6922,15 +6930,13 @@ function findDisplayWithTts(preferredDisplayId = null) {
     return null;
 }
 
-// 普通 Chat/手动 TTS 只在显示端有明确的 TTS 槽位回报时启用双路生成，
-// 控制端播放、服务端生成、旧 APK 和无状态显示端都安全回退单路。
+// 在线Chat/手动TTS只保序，实际上游额度由Provider入口统一控制；原生仍按设备资源调度。
 function createTtsGenerationScheduler(preferredDisplayId = null, ttsOptions = {}) {
-    // 先按生成时相同的业务/模板确定Provider，避免远端豆包沿用本地显示端的双槽位。
-    // 本次只降低一个分句批次的并发；独立批次的同账号排队仍由用户另行选择。
+    // 对应.src/framework/tts-provider-configuration.md：业务与模板解析沿用同批配置，但不再给在线分句加并发闸门。
     const resolved = ttsProviderService.resolve({ businessType: ttsOptions.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST,
         templateTts: ttsOptions.templateTts }, ttsOptions.ttsConfiguration);
-    if (resolved.selection.provider === 'doubao-chat') {
-        return createOrderedTaskScheduler({ concurrency: 1 });
+    if (resolved.selection.provider !== 'system') {
+        return createOrderedTaskScheduler({ orderOnly: true });
     }
     if (config.get('tts.device', 'server') !== 'display') {
         return createOrderedTaskScheduler({ concurrency: 1 });
@@ -8720,7 +8726,10 @@ function formatVoiceprintScore(value) {
 
 function handleDisplayMessageFallback(displayId, data, ws) {
     if (['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices'].includes(data.type)) {
-        void ttsProviderWs.handle(ws, data);
+        // 显示端入口已把 displayId 覆盖为登记身份；它属于传输上下文，不是快选业务字段。
+        // 只隔离这一字段，其它未知字段仍交给原白名单拒绝，避免放宽显示端写入权限。
+        const { displayId: transportDisplayId, ...selectionData } = data;
+        void ttsProviderWs.handle(ws, selectionData);
         return;
     }
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;

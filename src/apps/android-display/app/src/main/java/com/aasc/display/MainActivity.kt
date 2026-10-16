@@ -471,6 +471,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        if (embeddedNode && offlineMode) {
+            // onStop 期间的广播可能已错过；请求仍在运行的服务补发，不重启服务。
+            offlineVoiceFirstRun.nodeReady = false
+            sendBroadcast(Intent(NodeServerService.ACTION_REQUEST_STATUS).setPackage(packageName))
+        }
+        maybePromptOfflineVoiceModels()
         runOfflineUpdateChecksIfReady()
         scheduleOfflineUpdateChecks()
         if (offlineUpdatePanel.visibility == View.VISIBLE) {
@@ -481,6 +487,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         activityResumed = false
+        // 后台期间服务可能失败或重启，恢复前台后必须等待新的健康快照。
+        offlineVoiceFirstRun.nodeReady = false
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         cancelOfflineUpdatePanelCollapse()
         super.onPause()
@@ -816,6 +824,7 @@ class MainActivity : AppCompatActivity() {
             }
             NodeServerService.STATUS_SERVICE_UPDATE_APPLYING,
             NodeServerService.STATUS_SERVICE_UPDATE_PROGRESS -> {
+                offlineVoiceFirstRun.nodeReady = false
                 updateServiceUpdateProgress(phase, detail, completedBytes, totalBytes)
             }
             NodeServerService.STATUS_SERVICE_UPDATE_APPLIED -> {
@@ -837,21 +846,29 @@ class MainActivity : AppCompatActivity() {
 
     /** 首次语音提示晚于服务健康和页面成功，取消后保留手动入口，不在重连时反复打扰。 */
     private fun maybePromptOfflineVoiceModels() {
-        if (!offlineMode || !updateOnlyMode || isFinishing || isDestroyed || nativeDisplayBridge == null ||
+        if (!offlineMode || !updateOnlyMode || !activityResumed || isFinishing || isDestroyed || nativeDisplayBridge == null ||
             !offlineVoiceFirstRun.nodeReady || !offlineVoiceFirstRun.displayReady || offlineVoiceFirstRun.prompted) return
         val groups = OfflineModelPreparationPlan.groups(offlineVoiceModels.definitions).filter { it.defaultSelected }
         val required = groups.flatMap { it.modelIds }.toSet()
         val states = org.json.JSONArray(offlineVoiceModels.statusJson())
         val verified = (0 until states.length()).map { states.getJSONObject(it) }
             .filter { it.optBoolean("filesReady") }.map { it.getString("modelId") }.toSet()
-        val show = offlineVoiceFirstRun.claim(offlineMode, updateOnlyMode, !verified.containsAll(required))
-        if (show && !OfflineModelPreparationDialog.showFirstRun(this, offlineVoiceModels) { modelId ->
-            when (modelId) {
-                "tts" -> nativeDisplayBridge?.ttsEnsureModel()
-                "sensevoice" -> nativeDisplayBridge?.asrEnsureModel()
+        try {
+            val handled = offlineVoiceFirstRun.tryPrompt(offlineMode, updateOnlyMode, activityResumed,
+                !verified.containsAll(required)) {
+                OfflineModelPreparationDialog.showFirstRun(this, offlineVoiceModels) { modelId ->
+                    when (modelId) {
+                        "tts" -> nativeDisplayBridge?.ttsEnsureModel()
+                        "sensevoice" -> nativeDisplayBridge?.asrEnsureModel()
+                    }
+                }
             }
-        }) return
-        getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putBoolean(OFFLINE_VOICE_PROMPT_KEY, true).apply()
+            if (handled) getSharedPreferences("aasc_display", MODE_PRIVATE).edit()
+                .putBoolean(OFFLINE_VOICE_PROMPT_KEY, true).apply()
+        } catch (error: Exception) {
+            // 窗口未能展示时保留首次机会，恢复前台或下一次就绪通知可以重试。
+            android.util.Log.w("MainActivity", "首次语音模型提示未展示，保留重试机会", error)
+        }
     }
 
     private fun startupPhaseMessage(phase: String?): String = when (phase) {

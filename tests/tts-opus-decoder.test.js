@@ -50,16 +50,57 @@ test('真实WASM只裁剪一次pre-skip与EOS末尾，实际样本数符合granu
     assert.equal(validateWav(audio).samples.length, 1560 * 2);
 });
 
-function workers() {
+function workers(options = {}) {
     const created = [];
-    const decode = createOpusWavDecoder({ createWorker: () => {
+    const decode = createOpusWavDecoder({ ...options, createWorker: () => {
         const worker = new EventEmitter(); worker.terminated = 0;
-        worker.postMessage = () => {};
+        worker.postMessage = value => { worker.input = value.audio; };
         worker.terminate = async () => { worker.terminated++; };
         created.push(worker); return worker;
     } });
     return { created, decode };
 }
+
+// 对应.src/framework/tts-provider-configuration.md：只给正式共享解码池启用有界等待，保持最多两个Worker。
+test('有界等待不创建第三Worker，FIFO准入且排队输入副本不被调用者改写', async () => {
+    const { decode, created } = workers({ maxWaiting: 1 });
+    const first = decode(fixture()), second = decode(fixture());
+    const input = fixture(); const original = Buffer.from(input);
+    const third = decode(input); input.fill(0);
+    await assert.rejects(decode(fixture()), e => e.code === 'TTS_OPUS_CAPACITY');
+    assert.equal(created.length, 2);
+    created[0].emit('message', { audio: wrapPcm(Buffer.alloc(1920), 48000) }); await first;
+    assert.equal(created.length, 3); assert.deepEqual(Buffer.from(created[2].input), original);
+    created[1].emit('message', { audio: wrapPcm(Buffer.alloc(1920), 48000) });
+    created[2].emit('message', { audio: wrapPcm(Buffer.alloc(1920), 48000) });
+    await Promise.all([second, third]);
+});
+
+test('排队取消与超时释放字节/数量额度，取消项不会迟到创建Worker', async () => {
+    const bytes = fixture().length;
+    const { decode, created } = workers({ maxWaiting: 2, maxWaitingBytes: bytes });
+    const active = new AbortController();
+    const first = decode(fixture(), { signal: active.signal }), second = decode(fixture(), { signal: active.signal });
+    const activeRejected = Promise.all([assert.rejects(first), assert.rejects(second)]);
+    const control = new AbortController();
+    const waiting = decode(fixture(), { signal: control.signal });
+    const rejected = assert.rejects(waiting, e => e.code === 'TTS_OPUS_CANCELLED');
+    await assert.rejects(decode(fixture()), e => e.code === 'TTS_OPUS_CAPACITY');
+    control.abort(); await rejected;
+    await assert.rejects(decode(fixture(), { deadline: Date.now() + 30 }), e => e.code === 'TTS_OPUS_TIMEOUT');
+    assert.equal(created.length, 2);
+    const next = decode(fixture());
+    active.abort(); await activeRejected;
+    assert.equal(created.length, 3);
+    created[2].emit('message', { audio: wrapPcm(Buffer.alloc(1920), 48000) }); await next;
+    assert.equal(require('node:events').getEventListeners(control.signal, 'abort').length, 0);
+});
+
+test('正式共享解码器承接同时三条真实WASM解码，不返回容量拒绝', async () => {
+    const results = await Promise.all([1, 2, 3].map(() => decodeOggOpusToWav(fixture(), { deadline: Date.now() + 15000 })));
+    assert.equal(results.length, 3);
+    for (const audio of results) assert.equal(validateWav(audio).samples.length, 1920);
+});
 
 test('取消及过期deadline在创建worker前拒绝；非法容器不启动解码', async () => {
     const { decode, created } = workers(); const control = new AbortController(); control.abort();
@@ -143,4 +184,15 @@ test('真实非静音Opus包按signed Q8头部增益放大/衰减，再限幅转
         quietMax = Math.max(quietMax, Math.abs(quiet.readInt16LE(index)));
     }
     assert.ok(max > 0); assert.ok(loudMax > max * 1.8); assert.ok(quietMax < max * 0.6);
+});
+
+test('完整两流分别经过真实WASM解码，各自pre-skip与EOS裁剪后PCM可按序合并', async () => {
+    const { splitOggOpusStreams } = require('../src/external/tts/tts-ogg');
+    const streams = splitOggOpusStreams(Buffer.concat([
+        fixture({ packets: 2, preSkip: 120, endTrim: 240 }), fixture({ packets: 3, preSkip: 80, endTrim: 160 })
+    ]));
+    const pcm = [];
+    for (const stream of streams) pcm.push(validateWav(await decodeOggOpusToWav(stream)).samples);
+    assert.deepEqual(pcm.map(bytes => bytes.length), [1560 * 2, 2640 * 2]);
+    assert.equal(validateWav(wrapPcm(Buffer.concat(pcm), 48000)).samples.length, 8400);
 });

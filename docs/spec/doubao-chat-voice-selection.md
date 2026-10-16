@@ -115,3 +115,107 @@ HTTP目录回归 := 鉴权/参数/字段/94项/无账号/其它方式兼容及�
 UI回归 := 灯光上方按钮/女男目录/搜索/权威回显/手机尺寸和安全区
 发布状态 := servicePackage=true；其它三项保持原值；尚未构建发布或重启运行实例
 ```
+
+
+## 方式/音色保存修复与控制端共享入口（2026-10-15，用户已确认实施）
+
+```text
+已有声明 := 显示端WS入口的权威displayId；ttsProviderWs.handle；DisplayTtsVoices；WebSocketManager；声纹页TtsProviderSettings
+新增定义 := TtsVoicePicker.create建立宿主实例，沿用refs/send/bus/config/pending/catalogs/filters
+新增入口 := 控制页右下角音色浮钮及可收起面板，沿用现有工具组间距/安全区
+显示端合法消息 → 入口覆盖displayId为登记连接身份 → 快选转交时移除传输displayId → 原业务白名单校验
+未知业务字段/未登记连接/完整配置越权 → 原拒绝流程，不通过挑选已知字段吞掉非法输入
+控制端连接 → 现有初始化权威快照 → 声纹页与共享面板同时接收
+两端选择方式/音色 → setChatTtsSelection{type,provider,voice?,requestId}
+服务端规范化 → config.set持久化 → ttsProviderConfig广播所有控制与显示连接
+回显成功 → 两端当前项/方式/状态更新；失败 → 恢复权威值并显示原因
+断线 → 默认system/无音色选择、控件等待同步；重连 → 补当前配置，不提交本地旧值
+目录查询 → 当前Provider与模型；迟到响应不覆盖已切换方式
+共享筛选 := 性别/年龄/口音/搜索交集；打开定位当前项；关闭失效迟到定位
+配置范围 := 全局AI/Agent默认；角色显式TTS仍按原优先级；当前语音批次不被中途切换
+控制端布局 := 右下浮钮避让齿轮/自测/录音暂停；短屏列表可滚动；主题与安全区沿用现有变量
+实施状态 := 用户确认代码与自测；源码/伪代码已同步；修改后servicePackage=true，成功构建匹配源码的候选100后false
+ADB复现 := 方式改豆包失败 + 豆包目录94项的其它音色点击失败，均为TTS快选参数不合法
+控制连接同选择 := 成功；恢复qwen-chat/null及豆包原默认成功；本次角色无模板TTS覆盖
+```
+
+
+```text
+共享实现 := tts-voice-picker.js的create实例；显示端旧init仅转接display前缀/原bus
+控制实现 := control-tts-voices.js通过现有WebSocketManager.ws发送；共享实例使用control前缀/宿主总线
+控制消息 := ttsProviderConfig/ttsProviderVoices同时分发原声纹页与快捷面板
+工具定位 := floatingControl内音色按钮bottom180px，面板right60px/bottom0，手机沿用父组底栏安全区
+共享样式 := tts-voice-picker.css；display-mmd保留舞台位置，控制宿主限定viewport内宽高
+未知字段 := 仅剔除入口覆盖的displayId；不挑选其余字段，继续原白名单拒绝
+```
+
+
+## 共享面板语速滑条（2026-10-15，用户已确认）
+
+已有声明
+- providers.defaultSpeed、supportsNativeSpeed、normalizeNumber、setChatTtsSelection // 复用既有每方式偏好与权威保存
+
+新增定义
+- setChatTtsSelection.speed // 可选数值，范围-10到10；仅更新当前Provider语速，不重选AI默认或音色
+- TtsSpeedControl { wrapper, slider, output } // 两端共享，input本地预览、change松手提交
+
+操作流程
+- 根据权威Provider.defaultSpeed是否为有限数值显示滑条，否则隐藏 // 规范化输出只给原生支持调速的方式该字段
+- 接收speed消息并校验有限数值、方式/模型原生能力、不得同时带voice // 保持窄权限，防止无效调速被假报成功
+- 规范化speed到-10到10并仅构造providers目标项defaultSpeed补丁 // 不覆盖其它方式、业务选择或凭据
+- 经setTtsProviderSettings持久化并广播ttsProviderConfig // 保持声纹页及两端面板一致
+- 拖动显示数值，松手提交；pending期间禁止重复提交；失败/超时/断线恢复权威值 // 不在每个input事件刷远端配置
+- 下一次语音批次读取新偏好，已播放批次保持快照；豆包网页/Qwen3不支持原生语速时隐藏 // 不新增本地音频变速
+
+
+## 共享面板交付验证（2026-10-15）
+
+```text
+映射 := TtsVoicePicker.create → 两端各一实例；display wrapper保留原舞台总线；control wrapper复用WebSocketManager
+样式 := tts-voice-picker.css负责内容/语速/控制宿主；display-mmd.css继续提供舞台位置与安全区
+只读自测 := control_tts_voice_picker检查当前控制DOM/共享入口，不发送选择或合成请求
+回归 := npm run test:tts-voice-picker → 20/20；npm run test:mmd-production:tts → 21/21
+真实生成服务fixture := 旧批次捕获0 → 快选保存3 → 旧批次生成speed0/新批次speed3
+浏览器 := 真实WS/生产快选handler/显示转交，双端方式音色/语速回显，断线/失败恢复，重复init无重复DOM
+布局 := 1280x800、390x740、740x390、390x400内完整可见，浮钮不遮挡齿轮/录音/自测
+候选 := code100基于正式99签名清单，17808097字节/1096源文件；APK58/deps10/task1保持
+ADB := 原生99→100，仅服务ZIP；健康pending=false/previous=null
+ADB方式与音色 := 显示端切doubao-chat → 94项 → 改选成功并同步控制端
+ADB语速 := 控制端实体点击浮钮、实体滑条0→3 → Provider持久化3/显示端回显3
+ADB结束 := 恢复原选择/各方式音色/语速/启用/模型；正式99源CURRENT/0字节/无失败
+出包状态 := 生成最新源码候选后servicePackage=false；其它三项false；未发布LAN/WAN
+验证边界 := 配置及后续批次参数已验证；未向官方合成接口发送实网请求，不代表逐音色听感验收
+```
+
+## 音色列表按钮状态（2026-10-15，已实现）
+
+```text
+已有声明：权威配置当前音色、列表项aria-selected、共享音色面板、主题按钮激活/普通皮肤
+新增定义：VoiceButtonState { selected, normal, hover, focus, disabled }
+从权威当前音色与列表项voiceId比较取得selected
+将selected映射到激活按钮皮肤；其余项映射到普通按钮皮肤
+选中项使用主题强调渐变、白字、强调边框和勾选；普通项使用中性背景、普通文字和边框
+为浅色主题声明足够优先级的局部状态规则，覆盖通用button的重要背景/文字/边框
+副标题与勾选颜色随按钮状态变化；焦点可见，禁用不改变权威选中关系
+保存等待或失败时沿用旧权威音色；成功广播后重绘两端相同状态
+验证 := 双端light/mint/深色，普通项悬停与键盘焦点，禁用保留权威状态；保存等待/失败/成功原回归保持
+自测 := control_tts_voice_picker只读扫描现有列表；空列表仅查结构，不为自测请求目录/改配置
+出包状态 := servicePackage=true；minApk/dependenciesPackage/taskCodePackage保持false；未出包发布
+```
+
+## 豆包Chat表情分句中断修复（2026-10-15，已实现）
+
+```text
+已有声明 := 千问字素过滤、豆包generate、公共Provider服务、手动重播split与有序队列
+新增定义 := filterSpeechText；保留filterQwenChatSpeechText旧名字的转发入口
+抽出既有字素过滤为公共模块 → 千问继续复用 → 豆包发送上游前清除emoji
+filteredText无可朗读文字/数字 → 返回null → 公共服务识别豆包null并跳过WAV校验/缓存
+手动队列收到null → 不发送无声音频 → 继续后续正文；真正上游失败仍走原错误路径
+用户原句预期 := 保留“喵呜～”“主人好呀！”及自我介绍文字；独立✨/🐱💻⚡不请求上游
+验证 := 原句手动重播3段正文、日志完整回复8段正文；纯emoji零请求/缓存，混合文本显示原样；自动动作源保留
+字素兼容 := ZWJ/肤色/旗帜/键帽完整移除，数字标点正文保持；千问旧导出继续复用
+错误 := incomplete/timeout/cancelled保持原错误对象和provider标记，非网页云Provider返回null仍拒绝
+回归 := npm run test:mmd-production:tts 22/22；Provider/动作/千问相关定向28/28
+出包 := servicePackage=true，其他三项false；尚未重启、出包发布或真实账号合成
+当前证据 := 同文三次手动失败incomplete + 代码缺少过滤/跳过契约；纯emoji诱因尚待实测
+```

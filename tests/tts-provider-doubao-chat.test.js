@@ -10,9 +10,9 @@ const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts
 const { wrapPcm } = require('../src/external/tts/tts-wav');
 const { DOUBAO_SPEECH_VOICE } = require('../src/apps/server/modules/chat2api/chat2api-doubao-speech-protocol');
 
-test('豆包网页TTS默认禁用且上游固定参数，无凭据/账号字段，仅AI/Agent可选',()=>{
+test('豆包网页TTS默认可用且上游固定参数，无凭据/账号字段，仅AI/Agent可选',()=>{
     const defaults=normalizeSettings();const value=defaults.providers['doubao-chat'];
-    assert.equal(value.enabled,false);assert.equal(value.defaultVoice,DOUBAO_SPEECH_VOICE);
+    assert.equal(value.enabled,true);assert.equal(value.defaultVoice,DOUBAO_SPEECH_VOICE);
     assert.ok(!Object.hasOwn(value,'credential'));assert.ok(!Object.hasOwn(value,'chat2apiAccountId'));
     assert.equal(validateBusinessProvider('doubao-chat','ai_reply'),'doubao-chat');
     assert.equal(validateBusinessProvider('doubao-chat','agent_reply'),'doubao-chat');
@@ -36,8 +36,8 @@ test('业务薄层接受共享参数但向上游发送固定WAV参数，不降�
     const settings=normalizeSettings({providers:{'doubao-chat':{enabled:true}}}).providers['doubao-chat'];
     assert.equal(await provider.generate({text:'测试',voice:DOUBAO_SPEECH_VOICE,speed:2,volume:50,timeoutMs:1000},settings),audio);
     assert.deepEqual(calls[0][0],{input:'测试',model:'doubao-chat',voice:DOUBAO_SPEECH_VOICE,speed:1,volume:100,response_format:'wav'});
-    await assert.rejects(provider.generate({text:'x',speed:2,volume:50},{...settings,enabled:false}));
-    assert.equal(await provider.generate({text:'x',speed:1,volume:80},settings),audio);assert.equal(calls.length,2);
+    assert.equal(await provider.generate({text:'x',speed:2,volume:50},{...settings,enabled:false}),audio);
+    assert.equal(await provider.generate({text:'x',speed:1,volume:80},settings),audio);assert.equal(calls.length,3);
     const failed=createDoubaoChatProvider({speechService:{generate:async()=>{throw new Error('固定上游错误')}}});
     await assert.rejects(failed.generate({text:'x',speed:0,volume:100},settings),/固定上游错误/u);
 });
@@ -56,4 +56,49 @@ test('豆包业务和模板不能保存其它音色，切换来源时不继承�
     assert.throws(()=>normalizeTemplateTts({provider:'doubao-chat',voice:'other'}));
     const previous=normalizeSettings({aiReplyDefault:{provider:'qwen-api',voice:'Cherry'}});
     assert.equal(normalizeSettings({aiReplyDefault:{provider:'doubao-chat'}},previous).aiReplyDefault.voice,null);
+});
+
+// 对应.src/framework/tts-provider-configuration.md：纯表情在Provider边界跳过，不请求上游或缓存空WAV。
+test('豆包按完整字素过滤emoji，纯表情跳过且混合正文、数字和标点保持', async () => {
+    const inputs = [], stores = [];
+    const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' }, providers: { 'doubao-chat': { enabled: true } } });
+    const registry = createProviderRegistry({ chat2ApiSpeechService: { generate: async request => {
+        inputs.push(request.input);
+        return { audio: wrapPcm(Buffer.from([1, 0])) };
+    } } });
+    const service = createTtsProviderService({ getSettings: () => settings, registry,
+        storeAudio: bytes => { stores.push(bytes); return 'filtered.wav'; } });
+    for (const text of ['✨', '🐱💻⚡', '📶🐾', '❤️', '👨‍👩‍👧‍👦！', '👍🏽🇨🇳1️⃣！？～']) {
+        assert.equal(await service.generate({ text, businessType: 'ai_reply' }), null, text);
+    }
+    assert.deepEqual(inputs, []);
+    assert.deepEqual(stores, []);
+    for (const [text, expected] of [
+        ['喵呜～主人好呀！✨', '喵呜～主人好呀！'],
+        ['人家是妲己，一只拥有九条尾巴的电子猫娘哦！🐱💻⚡', '人家是妲己，一只拥有九条尾巴的电子猫娘哦！'],
+        ['早上 👨‍👩‍👧‍👦 好👍🏽🇨🇳1️⃣', '早上  好'],
+        ['☀️天气☀︎不错；2026 # * + = 版本1.2', '天气不错；2026 # * + = 版本1.2']
+    ]) {
+        assert.equal(await service.generate({ text, businessType: 'agent_reply' }), 'filtered.wav');
+        assert.equal(inputs.at(-1), expected);
+    }
+    assert.equal(stores.length, 4);
+    assert.equal(await createDoubaoChatProvider().generate({ text: '✨' }, { enabled: true }), null);
+    assert.equal(await registry['doubao-chat'].generate({ text: '✨' }, { enabled: false }), null);
+});
+
+test('豆包过滤后真实上游incomplete、超时和取消仍报错，不以空结果吞没故障', async () => {
+    const inputs = [];
+    for (const code of ['doubao_speech_incomplete', 'doubao_speech_timeout', 'doubao_speech_cancelled']) {
+        const expected = Object.assign(new Error('受控上游错误'), { code });
+        const registry = createProviderRegistry({ chat2ApiSpeechService: { generate: async request => {
+            inputs.push(request.input); throw expected;
+        } } });
+        const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' }, providers: { 'doubao-chat': { enabled: true } } });
+        const service = createTtsProviderService({ getSettings: () => settings, registry,
+            storeAudio: () => assert.fail('失败时不得缓存') });
+        await assert.rejects(service.generate({ text: '继续❤️。', businessType: 'ai_reply' }), error =>
+            error === expected && error.code === code && error.provider === 'doubao-chat');
+    }
+    assert.deepEqual(inputs, ['继续。', '继续。', '继续。']);
 });

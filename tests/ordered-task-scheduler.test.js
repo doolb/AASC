@@ -12,6 +12,25 @@ function deferred() {
     return { promise, resolve };
 }
 
+test('在线orderOnly同时提交全部分句，乱序成功或失败仍按入队顺序交付', async () => {
+    // 对应.src/framework/tts-provider-configuration.md：此层仅排序，上游准入负责限制实际请求。
+    const scheduler = createOrderedTaskScheduler({ orderOnly: true });
+    const gates = Array.from({ length: 7 }, deferred);
+    const started = [], delivered = [];
+    const results = gates.map((gate, index) => scheduler.enqueue(async () => {
+        started.push(index); await gate.promise;
+        if (index === 2) throw Error('第三句失败');
+        return index;
+    }).then(value => delivered.push(value), () => delivered.push('failed-2')));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(started.length, 7); assert.deepEqual(delivered, []);
+    for (const index of [6, 5, 4, 3, 2, 1]) gates[index].resolve();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(delivered, []);
+    gates[0].resolve(); await Promise.all(results); await scheduler.waitForIdle();
+    assert.deepEqual(delivered, [0, 1, 'failed-2', 3, 4, 5, 6]);
+});
+
 test('有两个 TTS 槽位时生成可以并发但结果按入队顺序释放', async () => {
     const scheduler = createOrderedTaskScheduler({ concurrency: 2 });
     const first = deferred();
