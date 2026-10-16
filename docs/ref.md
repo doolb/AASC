@@ -2,9 +2,11 @@
 
 ## 人体三维辅助模型可行性（2026-10-16）
 
-- [RTMW论文](https://arxiv.org/abs/2407.08634)涵盖从单幅图像估计三维全身姿态；[rtmlib RTMPose3d实现](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/pose_estimation/rtmpose3d.py)读取三个SimCC输出，xy裁剪反变换与z范围解码不同；[Wholebody3d](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/solution/wholebody3d.py)提供现成ONNX权重接线。不能由原生xyz名称推断统一米制世界坐标；本机Web算子/性能尚未验证。
+- 本机已验证[RTMW3D-x ONNX](https://huggingface.co/Soykaf/RTMW3D-x/tree/a4f0d54c52ee44ee4e1dda1936d714490c6234d2/onnx)：369330857字节/SHA256 `4a289c0e99d47eb595e99679d9d4a2d1def1b4241f9adcbafba44b9ff585ebcd`，Apache-2.0。官方解码依据固定MMPose提交`759b39c13fea6ba094afc1fa932f51dc1b11cbf9`的projects/rtmpose3d/rtmpose3d/simcc_3d_label.py及config；z第三维288，以髋中点归零。rtmlib参考封装不能替代官方轴维度核查；本机Web两后端与实际FK试验记录见对应task，未正式分发新权重。
+
+- [RTMW论文](https://arxiv.org/abs/2407.08634)涵盖从单幅图像估计三维全身姿态；[rtmlib RTMPose3d实现](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/pose_estimation/rtmpose3d.py)读取三个SimCC输出，xy裁剪反变换与z范围解码不同；[Wholebody3d](https://github.com/Tau-J/rtmlib/blob/main/rtmlib/tools/solution/wholebody3d.py)提供现成ONNX权重接线。不能由原生xyz名称推断统一米制世界坐标；本机Web试验结果见本节首条，手机算子/性能尚未验证。
 - [MMPose PoseLifter接口](https://mmpose.readthedocs.io/en/dev-1.x/api.html)说明二维语义转换与二维序列到三维估计，单图应选择符合单帧契约的权重，不把时间序列模型直接当单图。
-- [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)默认提供像素相对深度，另有metric模型及ONNX/Web社区路径；表面深度不等于被遮挡关节深度。本轮只是资料核查，未接入任一辅助模型，详见对应评估task。
+- [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2)默认提供像素相对深度，另有metric模型及ONNX/Web社区路径；表面深度不等于被遮挡关节深度。该模型本轮只核查资料，未推理或接入；人体RTMW试验另见对应评估task。
 
 ## RTMPose-m默认权重（2026-10-16）
 
