@@ -8,7 +8,7 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 export function installImagePose(panel, { human, ensurePhysics }) {
     const root = document.createElement('details'); root.dataset.posePanel = '';
     root.innerHTML = `<summary>图片姿态</summary>
-        <p>RTMPose-m 在本机识别单人全身图片（17点，首次加载约52.3MiB模型）。图片不会上传；三维深度按当前姿态估计，应用后可在3D场景拖点微调。</p>
+        <p>MediaPipe Pose 在本机识别全身图片（33点，首次加载约16.7MiB检测与姿态模型）。图片不会上传；三维坐标为模型估计，应用后可在3D场景拖点微调。</p>
         <label>选择图片 <input data-pose="file" type="file" accept="image/jpeg,image/png,image/webp"></label>
         <button type="button" class="display-mmd-ar-action" data-pose="paste">粘贴图片</button>
         <p>展开此区域后可按 Ctrl+V（Mac 用 ⌘V）粘贴截图或复制的图片，再点击识别姿态。</p>
@@ -45,7 +45,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         const count = result.landmarks.filter(point => landmarkQuality(point) >= poseLandmarkThreshold(result)).length;
         const low = result.quality.lowConfidence.map(i => BODY_NAMES[BODY_LANDMARKS.indexOf(i)]).join('、');
         const advice = result.quality.torsoReady ? '确认预览后点击“应用姿态”。' : '躯干关键点不完整，暂不能应用，请切换候选或图片。';
-        status(`识别完成：${result.source === 'rtmpose-m' ? 'RTMPose-m · 单人全图' : '候选' + (index + 1)} · ${count}/${result.landmarks.filter(Boolean).length}个可信关键点 · 身体${result.quality.visible}/12 · ${inferenceMs.toFixed(0)}ms。`
+        status(`识别完成：${result.source === 'rtmpose-m' ? 'RTMPose-m · 单人全图' : 'MediaPipe Pose · 候选' + (index + 1)} · ${count}/${result.landmarks.filter(Boolean).length}个可信关键点 · 身体${result.quality.visible}/12 · ${inferenceMs.toFixed(0)}ms。`
             + (low ? `低可信：${low}（红色空心点，可能遮挡或出画）。` : '') + '可信度不代表坐标准确。' + advice);
     }
     function cancel() {

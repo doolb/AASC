@@ -1,6 +1,6 @@
 # MMD 图片姿态：不同模型的测试方法
 
-记录日期：2026-10-16。本说明记录本项目实际使用的 MediaPipe、RTMPose-m、DWPose、传统 OpenPose 四模型对照方法，以及 RTMPose 接入后的集成测试。观察结果见[四模型试验记录](../task/20261016_MMDAR四模型姿态效果对照.md)，当前应用流程见[Human 使用说明](mmd-human-interface.md)。
+记录日期：2026-10-16。本说明记录本项目实际使用的 MediaPipe、RTMPose-m、DWPose、传统 OpenPose 四模型对照方法，以及默认模型接入/恢复的集成测试。观察结果见[四模型试验记录](../task/20261016_MMDAR四模型姿态效果对照.md)，当前应用流程见[Human 使用说明](mmd-human-interface.md)。
 
 ## 测试分为三层
 
@@ -8,9 +8,9 @@
 |---|---|---|
 | 模型推理 | 原图 → 预处理 → 原始输出 → 还原到原图的二维点 | 已正确驱动三维骨架 |
 | 四模型对照页 | 相同图片、人物范围和身体语义下，比较髋膝踝、肩肘腕及缺点 | 模型整体准确率、真实深度或公平速度排名 |
-| 当前全身 IK 集成 | 粘贴/文件 → RTMPose → 真实关节FK/限位/透视拟合 → VaM 实际骨骼 → 相机匹配 | 所有遮挡姿态均已还原、手机性能已验收 |
+| 当前全身 IK 集成 | 粘贴/文件 → MediaPipe检测/33点估计world → 当前角色骨长重定向 → VaM实际骨骼 → 相机匹配 | 所有遮挡姿态均已还原、手机性能已验收 |
 
-2026-10-16 起网页默认模型为 **RTMPose-m**。历史对照页的 MediaPipe“当前模型”标签指选型时的旧版，不是现版本默认值。OpenPose 在本轮使用 Python CPU，未移植浏览器 ONNX。
+2026-10-16用户最终选择**恢复最早的MediaPipe Pose**；默认Worker与新构建清单为人物检测＋Pose两个ONNX，RTMPose兼容代码和历史临时报告仍保留。下文RTMPose/深度/刚体对照的“当前”指该次试验时间点，不表示本次恢复后仍为默认。OpenPose在对照中使用Python CPU，未移植浏览器ONNX。
 
 ## 固定样本、环境与权重
 
@@ -55,7 +55,7 @@ MediaPipe、RTMPose、DWPose、YOLOX 使用 Edge / ONNX Runtime Web 1.26.0，`ex
 
 17点包含鼻/双眼/双耳，但当前三维初始化未单独驱动头部；足部只有踝，没有脚跟/脚趾，也未生成足部旋转目标。复测应区分二维头部点、脚踝位置与尚未实现的头脚朝向，不能用前两者验收后者。
 
-当前默认入口采用全图单人，未接入 YOLOX 多人检测。人物框版本是选型对照变体，不能混为当前默认配置。
+RTMPose作为默认时采用全图单人，未接入YOLOX多人检测。人物框版本是选型对照变体，不能混为相同配置；恢复MediaPipe后的默认入口使用其原人物检测器。
 
 ### DWPose：YOLOX + 133 点，色序单独核查
 
@@ -136,7 +136,9 @@ python tmp/mmd-pose/run-openpose.py
 
 计时拆成下载、session 初始化、预处理、`session.run`、后处理、3D拟合/物理稳定。旧 RTM/DW 探针的 `ms` 只包围 `session.run`；旧 OpenPose 的 `ms` 包围整个 `Body(image)`，包含图像预后处理。当前 Worker 的 `inferenceMs` 又包含预后处理，不能直接和旧探针数值作等价比较；首次与后续各记、注明并行渲染负载。不要把 Python CPU4线程与 WASM单线程排速度名次，也不要用桌面结果推断手机。
 
-## 当前 RTMPose 集成复测
+## 默认集成复测（当前MediaPipe，保留RTMPose兼容测试）
+
+恢复MediaPipe后，下列真实浏览器用例已改验两个ONNX按需请求、33点有限world、MediaPipe来源/原图比例、身体质量候选和既有交互；RTMPose解码/FK纯函数测试继续保留。接下来的RTMW/XYZ文字是切回之前的临时试验历史，不会被恢复后的默认流程加载。
 
 2026-10-16追加腿部对应候选：`xyz-report.html`现为三图原始/换踝/换膝踝对照，默认保留原始，使用下拉切换候选可同时看原图与XYZ上的人物左右颜色、COCO号及“目标←来源”；三候选实际骨架可切正侧/参考与匹配相机/图上叠加。旧XYZ页另存`xyz-report-before-correspondence.html`，原始推理与历史xyz-results保持哈希不变。先运行同目录`make-xyz-eval.cjs`、`check-correspondence.cjs`、`run-correspondence.cjs`、`check-correspondence-results.cjs`、`build-xyz-report.cjs`、`check-correspondence-report.cjs`；完整命令见评估任务，期间不重建web-dist。最终统一321骨快照、395项辅助检查通过，但真人候选有实际肩臂限位失败而不自动采用；另两图无交换依据。历史两轮XYZ/深度方法见下文，不将新初值结果与旧轮直接判优。
 
@@ -159,9 +161,9 @@ $env:PUPPETEER_EXECUTABLE_PATH = 'C:/Program Files (x86)/Microsoft/Edge/Applicat
 node --test --test-concurrency=1 tests/mmd-ar-human-image-pose-browser.test.js tests/mmd-ar-human-image-pose-clipboard-browser.test.js
 ```
 
-真实浏览器用例要求 Edge/Chrome、完整 web-dist 及本机参考图片；缺环境会跳过，不算通过真实推理。构建会重建web-dist，必须完成后再运行包括Node真实PMX夹具在内的所有消费测试，不能并行构建和测试。检查17点无假world、低分跳过、坏输入原子保留、取消/无人不改目标、270子步实际骨架/骨长与相机恢复。额外图的弱透视对齐残差只是独立诊断（当前运行拟合为真实透视），不能当人工标注准确率或真实深度；同时检查实际目标差值和正侧面构型。
+真实浏览器用例要求Edge/Chrome、完整web-dist及本机参考图片；缺环境会跳过，不算通过真实推理。构建会重建web-dist，必须完成后再运行包括Node真实PMX夹具在内的所有消费测试，不能并行构建和测试。当前检查33点估计world、仅两MediaPipe模型请求、低分跳过、坏输入原子保留、取消/无人不改目标、270子步实际骨架与相机恢复。历史RTMPose二维分支仍要求17点不能伪造world。可选额外图若检测器不识别或实际投影不改善，须保留失败诊断；弱透视对齐残差不是标注准确率或真实深度，同时检查实际目标差值和正侧面构型。
 
-首版结果见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)，当前三维验证见[FK修正记录](../task/20261016_MMDAR二维姿态三维映射修正.md)。更新集成方法时未重跑四模型比较或更换RTMPose权重。
+RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)，其三维分支验证见[FK修正记录](../task/20261016_MMDAR二维姿态三维映射修正.md)。恢复默认模型的执行与实际验证见[MediaPipe恢复任务](../task/20261016_MMDAR图片识别切回MediaPipePose.md)；没有重跑四模型比较或修改各模型权重。
 
 ## RTMPose二维刚体与Depth Anything V2 Small（2026-10-16，本机临时评估）
 

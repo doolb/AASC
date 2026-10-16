@@ -1,3 +1,10 @@
+### MMD-AR图片姿态恢复MediaPipe Pose
+
+- ✅ [2026-10-16] 按用户明确选择恢复最早MediaPipe检测＋Pose ONNX，默认输出33点估计world，保留身体质量选人、图片粘贴、实际骨架叠图、相机估计和3D拖点。
+  - 修改web-human-pose-worker.mjs/assets.js/ui.mjs及pose-onnx-NOTICES.md，默认清单两模型共17,547,397字节，固定OpenCV Zoo revision/大小/SHA；新WEB不分发RTMPose权重，其兼容代码和临时报表保留。应用沿用现有world骨长重定向/VaM软牵引，没有加入试验深度/刚体/手工左右修正。
+  - 默认模型契约先红后绿，27项Node、19项真实浏览器检查及npm run build:web:mmd-ar-test通过。公开图33点/11控制目标/270子步有限、相机11点误差1.9%，动漫3候选默认女孩/10目标；无人/取消/剪贴板/叠图/相机回环保持，390px无横向溢出。两模型SHA、源/构建副本和56173服务清单一致。
+  - 更新design/spec/task/self-test/usage/ref和todo，移除完成回切任务，保留手机/遮挡质量验收；模型world仍估计，不宣称坐姿与深度已还原。servicePackage原true保持，其余产物需求原值保留；仅本地WEB，无APK/公网发布，模型/私图/输出不入Git。
+
 ### MMD-AR真人坐姿左右对应临时修正
 
 - ✅ [2026-10-16] 按用户确认完成本图左右腿对应对照，保留髋、交换双膝踝，实际左腿接到用户指定的原黄色抬高腿；蓝左/黄橙右配色保持，源索引和模型分数完整追踪。

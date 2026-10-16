@@ -78,13 +78,20 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
         await page.waitForFunction(() => !document.querySelector('[data-pose="apply"]').disabled || /失败|未识别|无效|不匹配/u.test(document.querySelector('[data-pose="status"]').textContent), { timeout: 120000 });
         const recognized = await page.$eval('[data-pose="status"]', element => element.textContent);
         assert.match(recognized, /识别完成/u, recognized);
-        assert.ok(Number(recognized.match(/(\d+)\/17/u)[1]) >= 12, recognized);
+        assert.match(recognized, /MediaPipe Pose/u);
+        assert.ok(Number(recognized.match(/(\d+)\/33/u)[1]) >= 12, recognized);
         const points = await page.evaluate(() => window.__observedImagePose.landmarks);
         // 固定公开参考图：面向镜头、双臂水平，人物左腕在画面右侧，右膝在画面左侧。
         assert.ok(points[15].x > 0.65 && points[16].x < 0.35, '真实图片左右腕映射不符');
         assert.ok(points[26].x < 0.45, '真实图片右膝映射不符');
-        assert.equal(points.filter(Boolean).length, 17);
-        assert.ok(points.filter(Boolean).every(p => p.world === undefined && p.source === 'rtmpose-m' && p.dimensions === 2), '二维结果伪造了world');
+        assert.equal(points.filter(Boolean).length, 33);
+        assert.ok(points.every(p => p.world?.length === 3 && p.world.every(Number.isFinite)), 'MediaPipe未提供33个估计world点');
+        assert.equal(await page.evaluate(() => window.__observedImagePose.source), 'mediapipe-pose');
+        assert.equal(await page.evaluate(() => window.__observedImagePose.dimensions), 3);
+        await page.setViewport({ width: 390, height: 844 });
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '390px识别说明或候选区域横向溢出');
+        if (process.env.AASC_MMD_POSE_MOBILE_SCREENSHOT) await page.screenshot({ path: process.env.AASC_MMD_POSE_MOBILE_SCREENSHOT });
+        await page.setViewport({ width: 540, height: 800 });
         await page.click('[data-pose="apply"]');
         await page.waitForFunction(() => document.querySelector('[data-pose="status"]').textContent.includes('已应用'), { timeout: 20000 });
         const applied = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState());
@@ -168,12 +175,12 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
             await page.click('[data-pose="recognize"]');
             await page.waitForFunction(() => !document.querySelector('[data-pose="recognize"]').disabled, { timeout: 90000 });
             const anime = await page.evaluate(() => window.__observedImagePose);
-            assert.equal(anime.candidates.length, 1, '默认取景应明确为单人全图');
-            assert.equal(anime.framing, 'full-image');
+            assert.ok(anime.candidates.length >= 2 && anime.candidates.length <= 3, '原图女孩与猪的独立候选应保留并限制上限');
+            assert.equal(anime.source, 'mediapipe-pose');
             assert.ok(anime.landmarks[0].x * 450 > 180 && anime.landmarks[0].x * 450 < 260
                 && anime.landmarks[0].y * 407 > 75 && anime.landmarks[0].y * 407 < 160, '鼻点未回到女孩脸上');
             assert.ok(anime.landmarks[11].y < .5 && anime.landmarks[12].y < .5, '肩点落在裙摆');
-            assert.equal(await page.$eval('[data-pose="candidate-row"]', element => element.hidden), true);
+            assert.equal(await page.$eval('[data-pose="candidate-row"]', element => element.hidden), false);
             const switched = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.map(({ key, target, positionState }) => ({ key, target: positionState === 'Off' ? null : target, positionState })));
             assert.deepEqual(switched, before, '仅识别预览不应立即改变身体目标');
             assert.match(await page.$eval('[data-pose="status"]', element => element.textContent), /低可信/u);
@@ -214,7 +221,7 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
             await page.waitForFunction(() => document.querySelector('[data-pose="status"]').textContent.includes('图片已准备'));
             await page.click('[data-pose="recognize"]');
             await page.waitForFunction(() => !document.querySelector('[data-pose="recognize"]').disabled, { timeout: 90000 });
-            assert.match(await page.$eval('[data-pose="status"]', el => el.textContent), /RTMPose-m/u);
+            assert.match(await page.$eval('[data-pose="status"]', el => el.textContent), /MediaPipe Pose/u);
             const original = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getImagePoseSnapshot());
             await page.click('[data-pose="apply"]');
             await page.waitForFunction(() => document.querySelector('[data-pose="cancel"]').disabled, { timeout: 20000 });
@@ -233,7 +240,7 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
                 // 独立计算实际骨架的弱透视对齐残差，仅作诊断，不将模型分数当精度。
                 const residual = snapshot => {
                     const view = new T.Matrix4().fromArray(snapshot.view.viewMatrix);
-                    const pairs = snapshot.points.filter(p => Number.isInteger(p.landmark) && pose.landmarks[p.landmark]?.visibility >= .3).map(p => {
+                    const pairs = snapshot.points.filter(p => Number.isInteger(p.landmark) && Math.min(pose.landmarks[p.landmark]?.visibility || 0, pose.landmarks[p.landmark]?.presence || 0) >= .5).map(p => {
                         const v = new T.Vector3().fromArray(p.world).applyMatrix4(view), q = pose.landmarks[p.landmark];
                         return { x: v.x, y: v.y, u: (q.x - .5) * pose.imageAspect, v: .5 - q.y };
                     });
@@ -260,7 +267,8 @@ test('全身IK唯一图片入口：真ONNX本地识别、预览、自动启用Va
             const { actual, ...summary } = outcome;
             t.diagnostic(`用户样本${index + 1}：${JSON.stringify(summary)}`);
         }
-        assert.ok(requests.filter(request => request.url.includes('/vendor/pose/')).length >= 4);
+        const weights = [...new Set(requests.filter(request => request.url.includes('/vendor/pose/') && new URL(request.url).pathname.endsWith('.onnx')).map(request => path.posix.basename(new URL(request.url).pathname)))].sort();
+        assert.deepEqual(weights, ['person_detection_mediapipe_2023mar.onnx', 'pose_estimation_mediapipe_2023mar.onnx']);
         assert.ok(requests.every(request => request.method === 'GET'), '图片不应以POST或其他写请求上传');
         assert.deepEqual(errors, []);
         t.diagnostic(recognized + `；应用${applied.activeTargets}个目标；取消与无人图保持旧目标`);
