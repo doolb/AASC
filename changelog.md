@@ -1,3 +1,10 @@
+### Android 显示页60 FPS与Offline关闭沉浸
+
+- ✅ [2026-10-16] 按用户确认将Android显示文档JS RAF动画上限设为60 FPS，Offline min/full显示系统栏，普通APK保留沉浸。
+  - 新增`android-frame-scheduler.js`并在`display.html`头部最先加载，同帧共享60FPS放行决定，逐回调保留原生句柄与微任务/异常边界、相位/取消/新增行为，保留浏览器真实时间戳；桌面不替换RAF，不声称限制CSS/视频/跨源iframe时钟。
+  - 新增`AndroidDisplayWindowPolicy.kt`，MainActivity启动/连接/焦点/配置恢复统一按资源判断Offline，Offline不注册自动隐藏监听；优先当前分辨率60Hz模式并提交偏好，不切换分辨率或承诺系统接受。
+  - 同步design/spec/task/usage/self-test与索引，todo移除实施条目保留待出包/设备验收；JS静态语法、HTML首脚本解析和diff检查通过。未新增/运行测试，未编译原生、构建发布或真机FPS验收。servicePackage/minApk保持true，其他产物状态与用户改动保留。
+
 ### 控制端服务器面板重选 Android SAF 目录
 
 - ✅ [2026-10-16] 按用户确认增加在线且支持API29+原生能力的服务器卡片“重选 SAF 目录”，通过既有AASC请求在目标Android设备打开系统选择器。

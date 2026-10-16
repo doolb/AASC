@@ -226,7 +226,7 @@ MainActivity.onCreate:
     继续调用 hideSystemUi() 隐藏状态栏和导航栏
 
 窗口启动:
-    普通 Android 窗口 → 由沉浸式系统栏标志铺满内容区域
+    普通 Android 窗口 → Offline按打包资源显示系统栏；普通APK维持沉浸式铺满内容；统一窗口策略在启动/连接/焦点/配置恢复时生效
     Samsung DeX freeform 窗口 → 由 launchwidth/launchheight=0 请求启动即全屏
 ```
 

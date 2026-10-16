@@ -200,7 +200,7 @@ android-display/
 - APK 部署脚本默认通过启动 Intent 注入 `https://192.168.1.39:8081`；MainActivity 接收后覆盖输入框、保存 `server_url` 并立即连接，解决卸载重装后配置丢失问题
 - 部署脚本可通过 `AASC_DISPLAY_SERVER_URL` 环境变量覆盖默认服务器地址；未注入地址时沿用手动输入和已保存地址逻辑
 - displayId 持久化复用 display.html 的 localStorage 机制
-- Samsung DeX 启动时通过 `com.samsung.android.dex.launchwidth=0` 和 `com.samsung.android.dex.launchheight=0` 请求全屏窗口；Android 原生系统栏隐藏仍由 MainActivity 的沉浸式标志负责
+- Samsung DeX 启动时通过 `com.samsung.android.dex.launchwidth=0` 和 `com.samsung.android.dex.launchheight=0` 请求全屏窗口；Android系统栏按打包profile处理：Offline显示状态栏/导航栏，普通APK由统一窗口策略保持沉浸；同分辨率请求60Hz，详见[帧与窗口策略](android-display-frame-policy.md)
 
 ### 全屏启动边界
 

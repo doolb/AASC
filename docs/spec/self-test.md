@@ -2318,3 +2318,13 @@ Android结果 := 48项/0失败/0错误/0跳过；模型准备12 + 启动状态6 
 构建 := npm WEB退出0 → 两文件SHA、worker/ui去指纹副本和56173实际清单一致；模型/私图/输出不入Git，不出APK
 界限 := 流程恢复验证，不把模型置信度、世界点或相机拟合误差当真实三维还原准确率；手机/WebGPU另验
 ```
+
+## Android60FPS与系统栏检查边界（2026-10-16）
+
+```text
+实现 := Android显示文档RAF共享帧决定/60FPS相位/真实时间戳/原生取消与异常；Offline显示系统栏、普通APK沉浸；同分辨率60Hz窗口偏好
+已调用 := android-frame-scheduler.js的node --check；HTMLParser读取display.html第一个script；git diff --check
+静态观测 := 返回0；首个脚本为js/android-frame-scheduler.js
+待验 := 60/90/120/144Hz、同批取消/新增/异常/恢复、Offline首次与焦点恢复、普通沉浸、DeX及API28/API30+
+边界 := 未新增或运行测试，原生未编译、APK未出包发布、帧率与设备性能未验；不能声称系统必然采用60Hz
+```

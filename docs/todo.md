@@ -1,3 +1,5 @@
+- 待出包与设备验收 [2026-10-16] Android显示页60FPS与Offline关闭沉浸源码完成，service/min待出包；仍需60/90/120/144Hz真机、Offline首屏/焦点恢复系统栏、普通APK沉浸、DeX分辨率与性能验收。见 `docs/task/20261016_Android显示页60FPS与Offline关闭沉浸.md`。
+
 - 待出包与设备验收 [2026-10-16] 控制端服务器面板重选Android SAF目录源码完成；service/min需出包。仍待Android10+当前主节点/远程节点、成功/取消/后台/首次无授权与并发真机验收；Android9不显示SAF按钮。见 `docs/task/20261016_控制端服务器面板重选AndroidSAF目录.md`。
 
 - 待设备实际播放验收 [2026-10-15] 音色按钮、豆包emoji/多Ogg流、Qwen3.1官方68音色及五方式常开已发布LAN/WAN v102；ADB确认测试机运行102，已修正其保存的旧Qwen模型/Cherry，双端68项和乔小娇选中及持久化通过。仍待设备实际合成/播放整段回放；四项出包需求false。任务：`docs/task/20261015_QwenAudio31音色与五方式常开.md`、`docs/task/20261015_豆包长句多Ogg流解码.md`。

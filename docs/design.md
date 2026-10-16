@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [Android显示页60FPS与APK系统栏策略](design/android-display-frame-policy.md)
+
 - [控制端服务器面板重选Android SAF目录](design/android-saf-reselect.md)
 
 - [Offline自动升版、按需出包与发布命令](design/offline-release-cli.md)

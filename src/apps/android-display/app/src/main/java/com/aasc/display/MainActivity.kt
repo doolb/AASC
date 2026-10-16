@@ -21,7 +21,6 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.view.Gravity
-import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
@@ -381,9 +380,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // 启动即全屏（不等连接）；系统栏弹出时自动收回
-        hideSystemUi()
-        window.decorView.setOnSystemUiVisibilityChangeListener { hideSystemUi() }
+        // 首帧即按打包profile应用窗口策略；Offline显示系统栏，普通APK保持沉浸。
+        applyDisplayWindowPolicy()
+        if (!resources.getBoolean(R.bool.aasc_offline_mode)) {
+            window.decorView.setOnSystemUiVisibilityChangeListener { applyDisplayWindowPolicy() }
+        }
 
         configBar = findViewById(R.id.configBar)
         serverInput = findViewById(R.id.serverInput)
@@ -463,6 +464,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        applyDisplayWindowPolicy()
         refreshOfflineDisplayInfo()
     }
 
@@ -645,13 +647,13 @@ class MainActivity : AppCompatActivity() {
         connect()
     }
 
-    // 焦点回归时重贴全屏（沉浸式在交互后系统栏可能重新出现）。
+    // 焦点回归时恢复当前APK的系统栏/刷新率策略。
     // 仅请求 WebView 非破坏性重绘，不切换可见性；避免外部应用抢占焦点后重建视频
     // Surface/SurfaceTexture，导致视频画面停止而音频仍继续播放。
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            hideSystemUi()
+            applyDisplayWindowPolicy()
             webView?.postInvalidate()
             controlWebView?.postInvalidate()
             if (offlineMode && webView?.visibility == View.VISIBLE) restoreControlPageButton()
@@ -735,7 +737,7 @@ class MainActivity : AppCompatActivity() {
         val url = timestampedUrl(displayPath)
         getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", mainServerUrl).apply()
 
-        hideSystemUi()
+        applyDisplayWindowPolicy()
         configBar.visibility = View.GONE
         offlineDisplayRetryCount = 0
         offlineDisplayLoadFailed = false
@@ -1855,18 +1857,8 @@ class MainActivity : AppCompatActivity() {
         return url + (if (url.contains("?")) "&" else "?") + "v=" + System.currentTimeMillis()
     }
 
-    private fun hideSystemUi() {
-        if (Build.VERSION.SDK_INT >= 30) {
-            window.insetsController?.hide(WindowInsets.Type.systemBars())
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    or View.SYSTEM_UI_FLAG_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
-        }
+    private fun applyDisplayWindowPolicy() {
+        AndroidDisplayWindowPolicy.apply(this, resources.getBoolean(R.bool.aasc_offline_mode))
     }
 
     private fun handleBackNavigation() {
