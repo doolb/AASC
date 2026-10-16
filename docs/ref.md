@@ -2,6 +2,8 @@
 
 ## 人体三维辅助模型可行性（2026-10-16）
 
+- [官方COCO-WholeBody点序](https://raw.githubusercontent.com/open-mmlab/mmpose/main/configs/_base_/datasets/coco_wholebody.py)明确髋11/12、膝13/14、踝15/16先左后右。原始XYZ腿部对应候选试验沿用此定义与来源索引，不改变官方映射或全局反转；只是单独验证局部预测歧义，三图结果与原始/候选报告见[评估任务](task/20261016_MMDAR人体三维深度辅助模型评估.md)，未自动纠正或正式接入。
+
 - 用户提供的[b-arac/rtmpose3d](https://github.com/b-arac/rtmpose3d)是RTMW3D的Python/PyTorch/MMPose封装，默认L、可选X；[配置](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/configs/__init__.py)列出官方系列检查点名，[三维后处理](https://github.com/b-arac/rtmpose3d/blob/master/rtmpose3d/models/pose_estimator.py)依赖内参与root_z回投影完整XYZ。仅核查源码，未运行封装或评估L；完整XYZ不是本轮已测试的Z软约束，也不表示镜头已准确恢复。
   - 用户确认后已追加本机XYZ方向临时对照：复用X缓存、显式(width/2,height/2)主点和默认内参/root_z回投影，未运行此Python检测/裁剪。XYZ三图实际15.90%/1.84%/4.33%对齐RMS，仅二次元相机通过；真人软物理执行落差及预测冲突保留，完整数据见[评估任务](task/20261016_MMDAR人体三维深度辅助模型评估.md)，不把此版本当稳定接入或该仓库整体复现。
 

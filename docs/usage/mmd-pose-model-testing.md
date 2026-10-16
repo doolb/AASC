@@ -138,6 +138,8 @@ python tmp/mmd-pose/run-openpose.py
 
 ## 当前 RTMPose 集成复测
 
+2026-10-16追加腿部对应候选：`xyz-report.html`现为三图原始/换踝/换膝踝对照，默认保留原始，使用下拉切换候选可同时看原图与XYZ上的人物左右颜色、COCO号及“目标←来源”；三候选实际骨架可切正侧/参考与匹配相机/图上叠加。旧XYZ页另存`xyz-report-before-correspondence.html`，原始推理与历史xyz-results保持哈希不变。先运行同目录`make-xyz-eval.cjs`、`check-correspondence.cjs`、`run-correspondence.cjs`、`check-correspondence-results.cjs`、`build-xyz-report.cjs`、`check-correspondence-report.cjs`；完整命令见评估任务，期间不重建web-dist。最终统一321骨快照、395项辅助检查通过，但真人候选有实际肩臂限位失败而不自动采用；另两图无交换依据。历史两轮XYZ/深度方法见下文，不将新初值结果与旧轮直接判优。
+
 2026-10-16追加完整XYZ临时试验：复用相同X输出，先用其自身像素xy/相对z共同回投影，不拼RTMPose的xy；方向初值与二维/方向软约束固定参数，保留原预测冲突。`xyz-report.html`与原`report.html`分别保留；新页可看原始XYZ旋转、实际正侧面、图上骨架等比对齐/直接相机投影。复测先依次`make-xyz.cjs`、`make-xyz-eval.cjs`、`check-xyz.cjs`，再`run-xyz.cjs`、`check-xyz-results.cjs`、可选延长诊断`diagnose-xyz.cjs`、`build-xyz-report.cjs`、`check-xyz-report.cjs`，路径均在`tmp/mmd-pose/depth-eval/`；详细命令/输入见同一评估任务。不要同时重建web-dist。65/94/36项辅助检查通过，真人XYZ实际变差、示意未改善、仅二次元相机通过；这些失败保留，不能当成Python仓库完整检测/裁剪流水线的复现，正式代码与下列集成测试保持原样。
 
 2026-10-16补充：[人体三维辅助模型试验](../task/20261016_MMDAR人体三维深度辅助模型评估.md)已在本机完成，比较当前FK、RTMPose+旧MP深度、RTMPose+RTMW3D深度。三图原二维点保持相同，单独融合髋中点相对深度，不拼异源world；三轴维度、单位、根定义、同初始误差及后端一致性均另核查。临时工具/模型不随Git分发，具体复测命令与输入准备见任务记录。9分支中1模型失败、2实际相对关节诊断失败均保留，不能因辅助检查通过称全部姿态还原。该试验尚未加入正式全身IK模式，以下是现有正式集成测试，不会加载RTMW3D。
