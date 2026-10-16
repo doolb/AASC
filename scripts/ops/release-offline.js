@@ -14,6 +14,7 @@ const { stageVoiceDisplayNodePackage } = require('./voice-display-node-package')
 const { publishVoiceDisplayNodePackage } = require('./publish-voice-display-node');
 const { readSignerSha256 } = require('./offline-min-apk-package');
 const { readGitSourceMetadata } = require('./git-source-metadata');
+const { collectFreshCleanup, cleanupFreshRelease, preparePendingRebuild } = require('./offline-release-cleanup');
 const { publishOfflineUpdate, publishOfflineFullApk, assertRemoteTarget, buildRemoteShellArguments,
     DEFAULT_LOCAL_ROOT, DEFAULT_LOCAL_VERIFY_URL, DEFAULT_WAN_VERIFY_URL } = require('./publish-offline-update');
 
@@ -34,8 +35,9 @@ npm run release:offline -- [参数]
   --dry-run                      仅输出计划，不升版、不写文件、不加载私钥
   --resume=报告路径               复用完成项，仅补建未完成项
   --resume                       自动识别最近可恢复报告，不需填写路径
-  --resume=报告路径 --publish     补完构建后发布；完整报告不再次升版
-  --fresh                        忽略自动恢复，开始新任务并分配新版本
+  --resume=报告路径 --publish     原号补完构建后发布，不递增版本
+  --fresh                        清理旧报告及未发布APK/ZIP，复用原号重建
+  --new                          跳过自动恢复，递增版本创建新任务
   --manifest-file=签名清单        指定构建基线（默认 LAN，并检查 WAN）
   --output-dir=目录              产物/报告目录，默认 release/offline-update/output
   --local-root=目录              LAN 发布根，默认 /mnt/aasc-offline
@@ -52,7 +54,7 @@ full 仅在 --only 显式指定时构建；不清除 min APK 待出包标记。
 `;
 
 function parseArguments(argv) {
-    const flags = new Set(['publish', 'dry-run', 'help', 'fresh']);
+    const flags = new Set(['publish', 'dry-run', 'help', 'fresh', 'new']);
     const values = new Set(['only', 'resume', 'manifest-file', 'output-dir', 'local-root', 'remote-dir',
         'local-verify-url', 'remote-verify-url', 'dependency-roots', 'node-abi']);
     const options = {};
@@ -84,9 +86,10 @@ function parseArguments(argv) {
             throw new Error('--only 只允许 min,code,deps,task,node,full 或单独 all，且不能重复');
         }
     }
-    if (options.resume && (options.only || options.manifestFile || options.fresh)) {
-        throw new Error('--resume 不能与 --only/--manifest-file/--fresh 混用');
+    if (options.resume && (options.only || options.manifestFile || options.fresh || options.new)) {
+        throw new Error('--resume 不能与 --only/--manifest-file/--fresh/--new 混用');
     }
+    if (options.fresh && options.new) throw new Error('--fresh 原号重建与 --new 递增版本不能同时使用');
     if (options.nodeAbi && !/^[1-9][0-9]{0,4}$/u.test(options.nodeAbi)) throw new Error('--node-abi 必须为有效的正整数 ABI');
     return options;
 }
@@ -171,7 +174,7 @@ async function scanVersions(root, versions) {
         if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`版本扫描目录不是普通目录: ${directory}`);
         for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
             if (entry.isFile()) {
-                if (path.basename(directory) === 'releases' && /^release-[0-9TZ]+-[0-9]+\.json$/u.test(entry.name)) {
+                if (path.basename(directory) === 'releases' && entry.name === entry.name.trim() && /^release-[0-9TZ]+-[0-9]+\.json$/u.test(entry.name)) {
                     const report = await readJson(path.join(directory, entry.name));
                     // 报告已分配的编号也算占用，避免归档尚未生成时中断后重用编号。
                     if (report.schemaVersion === 1 && report.plan?.versions) {
@@ -203,13 +206,14 @@ async function createPlan(options = {}) {
     const projectRoot = options.projectRoot || ROOT;
     const targets = targetOptions(options);
     const artifactRoot = path.resolve(options.outputDir || path.join(projectRoot, 'release/offline-update/output'));
+    if (artifactRoot === path.parse(artifactRoot).root) throw new Error('产物根目录不能是文件系统根目录');
     const statusPath = path.join(projectRoot, 'release/offline-release-status.json');
     const status = await readJson(statusPath);
     for (const field of Object.values(STATUS_FIELDS)) {
         if (typeof status[field] !== 'boolean') throw new Error(`待出包状态必须为布尔值: ${field}`);
     }
     const requested = options.only || Object.keys(STATUS_FIELDS).filter(kind => status[STATUS_FIELDS[kind]]);
-    if (!requested.length) return { requested, selected: [], reasons: [], artifactRoot, targets, projectRoot, statusPath };
+    if (!requested.length && !options.fresh) return { requested, selected: [], reasons: [], artifactRoot, targets, projectRoot, statusPath };
     const { publicKeyPem } = await loadOfflineUpdatePublicKey();
     const baselinePath = path.resolve(options.manifestFile || path.join(targets.localRoot, 'manifest.json'));
     const baseline = validateBaseline(options.baseline || await readJson(baselinePath), publicKeyPem);
@@ -235,9 +239,13 @@ async function createPlan(options = {}) {
     }
     const full = await optionalJson(path.join(targets.localRoot, 'full-apk-manifest.json'));
     if (full) versions.apk = Math.max(versions.apk, validateFullApkManifest(full, publicKeyPem).versionCode);
+    let publishedFullVersion = full?.payload.apkFull.versionCode || 0;
     if (!options.manifestFile) {
         const remoteFull = await readFullApkManifest(targets.remoteVerifyUrl, publicKeyPem);
-        if (remoteFull) versions.apk = Math.max(versions.apk, remoteFull.payload.apkFull.versionCode);
+        if (remoteFull) {
+            versions.apk = Math.max(versions.apk, remoteFull.payload.apkFull.versionCode);
+            publishedFullVersion = Math.max(publishedFullVersion, remoteFull.payload.apkFull.versionCode);
+        }
     }
     for (const profile of Object.values(PROFILE_NAMES)) {
         const configuration = await readJson(path.join(projectRoot, `release/apkbuild/${profile}/app.json`));
@@ -250,25 +258,50 @@ async function createPlan(options = {}) {
     if (selected.has('node') && !options.manifestFile) versions.node = Math.max(versions.node, await readRemoteNodeVersion(targets.remote));
     const next = {};
     for (const kind of ['code', 'deps', 'task', 'node']) {
-        if (selected.has(kind)) next[kind] = safeVersion(versions[kind] + 1);
+        if (selected.has(kind) && !options.fresh) next[kind] = safeVersion(versions[kind] + 1);
     }
     // 旧服务构建器为附带 Node 使用同一编号，联合选择时避免任一目录已有该版本。
-    if (selected.has('code') && selected.has('node')) next.code = next.node = Math.max(next.code, next.node);
+    if (!options.fresh && selected.has('code') && selected.has('node')) next.code = next.node = Math.max(next.code, next.node);
     let apkVersion = versions.apk;
     for (const kind of ['min', 'full']) {
-        if (selected.has(kind)) {
+        if (selected.has(kind) && !options.fresh) {
             next[kind] = safeVersion(++apkVersion);
             if (next[kind] > 2100000000) throw new Error('Android versionCode 超过允许上限');
         }
     }
+    let reusedReport;
+    if (options.fresh && selected.size) {
+        const previous = await latestMatchingTask({ artifactRoot, projectRoot, targets });
+        if (!previous) throw new Error('--fresh 不升号，需要旧任务的预留版本；请去掉 --fresh 或使用 --new 先创建新版本');
+        reusedReport = previous.file;
+        const published = { code: Math.max(...baselines.map(item => item.payload.components.code.version)),
+            deps: Math.max(...baselines.map(item => item.payload.components.dependencies.version)),
+            task: Math.max(...baselines.map(item => item.payload.components.taskCode?.version || 0)),
+            min: Math.max(...baselines.map(item => item.payload.components.apkMin?.versionCode || 0)), full: publishedFullVersion };
+        for (const kind of selected) {
+            const original = previous.report.plan.versions?.[kind];
+            if (!Number.isSafeInteger(original) || original < 1) throw new Error(`旧任务没有 ${kind} 的预留版本；请使用 --new 分配新版本`);
+            if (['min', 'full'].includes(kind) && original > 2100000000) throw new Error('原APK版本超过Android允许上限');
+            if (original <= (published[kind] || 0)) throw new Error(`${kind} 原版本 ${original} 已发布，不能同号重建；请使用 --new`);
+            next[kind] = original;
+        }
+        if (selected.has('code') && selected.has('node') && next.code !== next.node) throw new Error('原任务code/node联合编号不一致，请使用 --new');
+        reasons.push('fresh 原号重建：复用旧任务 versions，不递增；正式执行前还会核对两端实际文件');
+    }
     return { requested, selected: KINDS.filter(kind => selected.has(kind)), reasons, versions: next, baseline,
         artifactRoot, targets, projectRoot, statusPath, fullBaseline: full, lockSha256, baselinePath,
         dependencyRoots: options.dependencyRoots ? path.resolve(options.dependencyRoots) : undefined, nodeAbi: options.nodeAbi,
-        reservedMaximum: versions };
+        reservedMaximum: versions, reusedReport };
 }
 
 async function reserveVersions(plan) {
-    const maximum = { ...plan.reservedMaximum };
+    const maximum = { code: 0, deps: 0, task: 0, node: 0, apk: 0, ...plan.reservedMaximum };
+    await scanVersions(plan.artifactRoot, maximum);
+    await scanVersions(plan.targets.localRoot, maximum);
+    for (const profile of Object.values(PROFILE_NAMES)) {
+        const configuration = await readJson(path.join(plan.projectRoot, `release/apkbuild/${profile}/app.json`));
+        maximum.apk = Math.max(maximum.apk, safeVersion(configuration.versionCode));
+    }
     const existing = await optionalJson(path.join(plan.artifactRoot, VERSION_RESERVATIONS));
     for (const [kind, version] of Object.entries(existing?.maximum || {})) maximum[kind] = Math.max(maximum[kind] || 0, safeVersion(version));
     for (const [kind, version] of Object.entries(plan.versions)) {
@@ -361,6 +394,7 @@ async function sourceFingerprint(projectRoot) {
 }
 
 async function updateStatus(plan, kinds, pending) {
+    if (!kinds.some(kind => STATUS_FIELDS[kind])) return;
     const status = await readJson(plan.statusPath);
     for (const kind of kinds) {
         if (STATUS_FIELDS[kind]) status[STATUS_FIELDS[kind]] = pending;
@@ -436,6 +470,7 @@ async function buildRelease(plan, report, reportPath, keyPair, runtime = {}) {
         await writeJson(manifestPath, manifest);
     }
     const selected = new Set(plan.selected.filter(kind => !report.completed.includes(kind)));
+    if (runtime.resuming) await preparePendingRebuild(report, reportPath, saveReport, keyPair.publicKeyPem, runtime);
     const record = async (kinds, files) => {
         runtime.signal?.throwIfAborted();
         for (const file of [...files, manifestPath]) {
@@ -610,7 +645,7 @@ async function verifyReportFiles(report, markPending = false) {
             if (actual.size !== expected.size || actual.sha256 !== expected.sha256) throw new Error(`报告产物已改变: ${expected.path}`);
         }
         if (await sourceFingerprint(report.plan.projectRoot) !== report.sourceFingerprint) {
-            throw new Error('当前源码已不同于报告快照，不能继续旧构建；请用 --fresh 开始新任务');
+            throw new Error('当前源码已不同于报告快照；用 --fresh 原号重做未发布任务，或用 --new 创建递增版本');
         }
     } catch (error) {
         if (markPending) await updateStatus(report.plan, report.plan.selected, true);
@@ -620,17 +655,24 @@ async function verifyReportFiles(report, markPending = false) {
 
 async function resumePlan(report, markPending = false) {
     await verifyReportFiles(report, markPending);
-    const pending = report.plan.selected.filter(kind => !report.completed.includes(kind));
-    if (!pending.length) return report.plan;
-    const plan = report.plan;
-    const baselinePath = report.manifestPath || path.join(plan.artifactRoot, 'releases', `${report.id}-baseline.json`);
-    const next = await createPlan({ projectRoot: plan.projectRoot, only: pending, manifestFile: baselinePath,
-        baseline: report.manifestPath ? await readJson(report.manifestPath) : plan.baseline,
-        outputDir: plan.artifactRoot, localRoot: plan.targets.localRoot, remoteDir: plan.targets.remote.directory,
-        localVerifyUrl: plan.targets.localVerifyUrl, remoteVerifyUrl: plan.targets.remoteVerifyUrl,
-        dependencyRoots: plan.dependencyRoots, nodeAbi: plan.nodeAbi });
-    return { ...plan, versions: { ...plan.versions, ...next.versions }, reasons: [...plan.reasons, ...next.reasons],
-        selected: [...new Set([...plan.selected, ...next.selected])], reservedMaximum: next.reservedMaximum };
+    // 用户要求恢复不升号；未完成步骤只能使用原任务已预留的编号。
+    return report.plan;
+}
+
+async function latestMatchingTask(plan) {
+    const directory = path.join(plan.artifactRoot, 'releases');
+    const stat = await fs.lstat(directory).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    if (!stat) return null;
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('报告目录必须是普通目录');
+    const names = (await fs.readdir(directory, { withFileTypes: true })).filter(entry => entry.isFile()
+        && entry.name === entry.name.trim() && /^release-[0-9TZ]+-[0-9]+\.json$/u.test(entry.name)).map(entry => entry.name).sort().reverse();
+    for (const name of names) {
+        const file = path.join(directory, name);
+        const report = await readJson(file);
+        if (report.schemaVersion === 1 && report.plan?.projectRoot === plan.projectRoot && report.plan.artifactRoot === plan.artifactRoot
+            && canonicalJson(report.plan.targets) === canonicalJson(plan.targets)) return { file, report };
+    }
+    return null;
 }
 
 /** 最近的新任务取代更早任务；不因旧报告仍未完成而在新任务结束后再次接管旧报告。 */
@@ -641,7 +683,7 @@ async function findResumeReport(options) {
     if (!stat) return null;
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`报告目录必须是普通目录: ${directory}`);
     const names = (await fs.readdir(directory, { withFileTypes: true })).filter(entry => entry.isFile()
-        && /^release-[0-9TZ]+-[0-9]+\.json$/u.test(entry.name)).map(entry => entry.name).sort().reverse();
+        && entry.name === entry.name.trim() && /^release-[0-9TZ]+-[0-9]+\.json$/u.test(entry.name)).map(entry => entry.name).sort().reverse();
     const targets = targetOptions(options);
     for (const name of names) {
         const file = path.join(directory, name);
@@ -684,7 +726,7 @@ async function runCli(argv = process.argv.slice(2)) {
     try {
         const options = parseArguments(argv);
         if (options.help) { console.log(HELP); return; }
-        if (!options.fresh && (!options.resume || options.resume === 'auto')) {
+        if (!options.fresh && !options.new && (!options.resume || options.resume === 'auto')) {
             const automatic = await findResumeReport(options);
             if (automatic) {
                 console.log(JSON.stringify({ stage: 'auto-resume', report: automatic }));
@@ -713,12 +755,16 @@ async function runCli(argv = process.argv.slice(2)) {
             report.plan = await resumePlan(report, true);
             report.cleanupErrors = [];
             delete report.error;
-            const keyPair = report.phase === 'building' || options.publish ? await loadOfflineUpdateKeyPair() : null;
+            const needsKey = report.phase === 'building' || options.publish;
+            const keyPair = needsKey ? report.plan.selected.length ? await loadOfflineUpdateKeyPair() : await loadOfflineUpdatePublicKey() : null;
             if (report.phase === 'building') {
                 await reserveVersions(report.plan);
                 await saveReport(reportPath, report);
                 await updateStatus(report.plan, report.plan.selected.filter(kind => !report.completed.includes(kind)), true);
-                await buildRelease(report.plan, report, reportPath, keyPair, runtime);
+                if (report.freshRequested && !report.freshCleanup?.complete) {
+                    await cleanupFreshRelease(report, reportPath, saveReport, keyPair.publicKeyPem, runtime);
+                }
+                await buildRelease(report.plan, report, reportPath, keyPair, { ...runtime, resuming: true });
             }
             if (options.publish) await publishRelease(report, reportPath, keyPair, runtime);
             if (!options.publish && ['publishing', 'cleanup-pending'].includes(report.phase)) {
@@ -729,23 +775,26 @@ async function runCli(argv = process.argv.slice(2)) {
         }
         let plan = await createPlan(options);
         controller.signal.throwIfAborted();
-        if (!plan.selected.length) { console.log('无需出包：没有待处理产物；可用 --only 手动指定。'); return; }
+        if (!plan.selected.length && !options.fresh) { console.log('无需出包：没有待处理产物；可用 --only 手动指定。'); return; }
         console.log(JSON.stringify({ requested: plan.requested, selected: plan.selected, reasons: plan.reasons,
-            versions: plan.versions, steps: plannedSteps(plan), publish: !!options.publish, dryRun: !!options.dryRun, targets: plan.targets }, null, 2));
+            versions: plan.versions, steps: plannedSteps(plan), publish: !!options.publish, dryRun: !!options.dryRun, targets: plan.targets,
+            freshCleanup: options.fresh ? { ...(await collectFreshCleanup(plan)),
+                note: '仅候选；正式执行时核对LAN/WAN签名引用、实际目录与HTTP，已发布或无法确认的产物保留' } : undefined }, null, 2));
         if (options.dryRun) return;
         controller.signal.throwIfAborted();
         releaseLock = await acquireLock(plan.artifactRoot);
         plan = await createPlan(options);
-        if (!plan.selected.length) { console.log('无需出包：待处理状态已被其他任务完成。'); return; }
-        const keyPair = await loadOfflineUpdateKeyPair();
+        if (!plan.selected.length && !options.fresh) { console.log('无需出包：待处理状态已被其他任务完成。'); return; }
+        const keyPair = plan.selected.length ? await loadOfflineUpdateKeyPair() : await loadOfflineUpdatePublicKey();
         const id = `release-${new Date().toISOString().replace(/[-:.]/gu, '')}-${process.pid}`;
         reportPath = path.join(plan.artifactRoot, 'releases', `${id}.json`);
         report = { schemaVersion: 1, id, plan, phase: 'building', completed: [], files: [], published: {}, cleanupErrors: [],
-            sourceFingerprint: await sourceFingerprint(plan.projectRoot), createdAt: new Date().toISOString() };
+            freshRequested: !!options.fresh, sourceFingerprint: await sourceFingerprint(plan.projectRoot), createdAt: new Date().toISOString() };
         await reserveVersions(plan);
         await saveReport(reportPath, report);
         await updateStatus(plan, plan.selected, true);
-        console.log(JSON.stringify({ report: reportPath }));
+        console.log(JSON.stringify({ stage: 'reserved', report: reportPath, versions: plan.versions }));
+        if (report.freshRequested) await cleanupFreshRelease(report, reportPath, saveReport, keyPair.publicKeyPem, runtime);
         await buildRelease(plan, report, reportPath, keyPair, runtime);
         if (options.publish) await publishRelease(report, reportPath, keyPair, runtime);
         console.log(JSON.stringify({ phase: report.phase, report: reportPath,

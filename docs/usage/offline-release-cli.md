@@ -44,7 +44,7 @@ npm run release:offline -- --only=all --publish
 
 ## 版本号与状态
 
-版本取已发布清单、本地版本化产物/候选清单和 APK profile/构建元数据中的最大值加一。输出目录独立 `.release-offline-versions.json` 保存历史编号高水位，不随报告删除而回收编号。min/full 使用共同的 Android 最大 versionCode，避免相互覆盖安装时降级；versionName 保留现有主/次版本与后缀，递增编号段。联合 code/node 沿用原构建器的同版本编号。
+普通新任务（含 `--new`）的版本取已发布清单、本地版本化产物/候选清单和 APK profile/构建元数据中的最大值加一。输出目录独立 `.release-offline-versions.json` 保存历史编号高水位，不随报告删除而回收编号。min/full 使用共同的 Android 最大 versionCode，避免相互覆盖安装时降级；versionName 保留现有主/次版本与后缀，递增编号段。联合 code/node 沿用原构建器的同版本编号。
 
 显式 `--only` 会强制构建指定种类，即使对应状态是 false；默认不选择 full。构建成功且受管源码/种子指纹未改变，才清除对应标记；未选中或失败项保留待出包状态。false 表示已出包，不表示已发布。
 
@@ -64,7 +64,7 @@ npm run release:offline -- --publish
 # 也可明确要求自动识别
 npm run release:offline -- --resume --publish
 
-# 构建中断：校验并复用已完成项，只给未完成项重新分配版本并构建
+# 构建中断：校验并复用已完成项，未完成项仍按原版本号构建，不升号
 npm run release:offline -- --resume=/绝对路径/release-报告.json
 
 # 出包完成后发布，或发布中断后重试；完整出包报告不会重新升版/构建
@@ -73,11 +73,18 @@ npm run release:offline -- --resume=/绝对路径/release-报告.json --publish
 # 只看恢复计划
 npm run release:offline -- --resume=/绝对路径/release-报告.json --dry-run
 
-# 代码已经改变或希望放弃旧任务：显式开始新任务，保留旧报告/产物
+# 代码已经改变或希望放弃旧任务：清理旧报告及未发布包，沿用最近任务原版本号重新出包
 npm run release:offline -- --fresh --only=min,code --publish
+
+# 需要新版本：忽略自动恢复，按最大编号加一创建任务
+npm run release:offline -- --new --only=min,code --publish
 ```
 
-当前 `--fresh` 只跳过自动恢复并分配新版本。用户补充要求删除旧内容，具体删除范围仍待确认，删除逻辑尚未实现。
+`--fresh` 会删除同项目、输出目录和发布目标的旧任务报告，以及报告关联的未发布版本化 APK/ZIP。先保存独立版本高水位及新报告，重建沿用最近任务各包已分配的版本号；其他新任务仍避开历史编号。只清理产物输出根中的严格数字版本普通文件；不递归删除，也不清理 profile 原始输出、Node种子/修复ZIP、配置、模型、任务或结果。
+
+`--resume` 与 `--fresh` 都不升号。原号重建必须先证明版本在两端尚未发布；已经上传、已被清单引用或状态无法确认时会停止，请用 `--new` 创建新版本。`--fresh` 没有旧任务编号或新增种类在旧任务中无编号时，也会停止；不自动编造新编号。仅清理且无待出包项时不构建。
+
+已发布记录、LAN/WAN当前签名清单引用、LAN实际目录存在、WAN经SSH确认存在或公网HTTP非404，均保留；状态无法确认或摘要/文件改变也保留，原因记入新报告。旧报告及同ID基线/full构建元数据最后删除，清理中断时可自动补齐。`--fresh --dry-run` 只列候选，正式执行才核对发布状态并删除。
 
 Ctrl+C、SIGTERM 或终端正常关闭时，入口请求停止命令/网络，等待当前步骤退出，保存报告后释放锁。已完成产物保留；版本号不回退；尚未完成的操作保持待出包。发布前后可能只成功了一个目标，不回滚已经生效的发布，恢复时重新校验并补齐另一端。
 
