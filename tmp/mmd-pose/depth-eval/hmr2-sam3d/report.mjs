@@ -8,6 +8,10 @@ const viewState = new Map(models.map((key) => [key, { yaw: 0, pitch: 0, output: 
 let audit = null;
 let depthManifest = null;
 let sampleGeneration = 0;
+let customImage = null;
+const customFile = document.querySelector('#custom-file');
+const customBoxControls = document.querySelector('#custom-box-controls');
+const customInputs = ['x', 'y', 'w', 'h'].map((key) => document.querySelector(`#box-${key}`));
 
 function pointColor(name) {
   if (name.startsWith('left_') || name.startsWith('left-')) return '#61c8ff';
@@ -192,6 +196,7 @@ async function loadJson(url) {
 }
 
 async function showSample(name) {
+  if (name === 'custom') { showCustomPreview(); return; }
   const generation = ++sampleGeneration;
   const sample = audit?.samples?.find((item) => item.name === name);
   footTrialControl.hidden = name !== 'anime';
@@ -247,6 +252,104 @@ async function showSample(name) {
   }));
 }
 
+function selectedBox() {
+  const box = customInputs.map((input) => Number(input.value));
+  const [x, y, width, height] = box;
+  if (!customImage || customInputs.some((input) => !input.value.trim()) || !box.every(Number.isSafeInteger) || x < 0 || y < 0 || width < 1 || height < 1
+      || x + width > customImage.width || y + height > customImage.height) throw new Error('人物框必须是图片内部的整数矩形');
+  return box;
+}
+
+function showCustomPreview() {
+  ++sampleGeneration;
+  if (!customImage) return;
+  footTrialControl.hidden = true;
+  customBoxControls.hidden = false;
+  const card = document.querySelector('#hmr2');
+  const state = viewState.get('hmr2');
+  state.photo = customImage.photo;
+  state.output = null;
+  document.querySelector('#custom-run').disabled = false;
+  const overlay = card.querySelector('canvas.overlay');
+  overlay.width = customImage.width;
+  overlay.height = customImage.height;
+  drawModel('hmr2');
+  try {
+    const [x, y, width, height] = selectedBox();
+    const context = overlay.getContext('2d');
+    context.strokeStyle = '#ffe37e';
+    context.lineWidth = Math.max(2, customImage.width / 500);
+    context.strokeRect(x, y, width, height);
+    card.querySelector('.status').textContent = '图片已载入；确认人物框后点击识别。';
+  } catch (error) { card.querySelector('.status').textContent = error.message; }
+  card.querySelector('.depth').removeAttribute('src');
+  card.querySelector('.depth-status').textContent = '识别后在浏览器生成整图相对深度。';
+  card.querySelector('.details').textContent = '';
+  common.textContent = `自选图片 · ${customImage.width}×${customImage.height} · ${customImage.name}；仅在本机处理。`;
+}
+
+async function acceptCustomFile(file) {
+  if (!file || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('请选择PNG、JPEG或WebP图片');
+  if (file.size > 20 * 1024 * 1024) throw new Error('图片不能超过20 MiB');
+  const bitmap = await createImageBitmap(file);
+  try {
+    if (bitmap.width * bitmap.height > 4096 * 4096) throw new Error('图片解码像素过多');
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob || blob.size > 20 * 1024 * 1024) throw new Error('处理后PNG过大');
+    const url = URL.createObjectURL(blob);
+    const photo = new Image();
+    photo.src = url;
+    try { await photo.decode(); } catch (error) { URL.revokeObjectURL(url); throw error; }
+    if (customImage?.url) URL.revokeObjectURL(customImage.url);
+    customImage = { photo, blob, url, width: canvas.width, height: canvas.height, name: file.name || '剪贴板图片' };
+    customInputs.forEach((input, index) => { input.value = String([0, 0, canvas.width, canvas.height][index]); });
+    sampleSelect.querySelector('option[value="custom"]').disabled = false;
+    sampleSelect.value = 'custom';
+    showCustomPreview();
+  } finally { bitmap.close(); }
+}
+
+async function runCustom() {
+  const card = document.querySelector('#hmr2');
+  let box;
+  try { box = selectedBox(); } catch (error) { card.querySelector('.status').textContent = error.message; return; }
+  const generation = ++sampleGeneration;
+  const image = customImage;
+  const runButton = document.querySelector('#custom-run');
+  runButton.disabled = true;
+  card.querySelector('.status').textContent = '本机HMR推理和浏览器深度推理中…';
+  card.querySelector('.depth-status').textContent = '正在计算整图相对深度…';
+  try {
+    const [hmr, depth] = await Promise.allSettled([
+      (async () => {
+        const response = await fetch('/api/hmr2-custom', { method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Person-Box': JSON.stringify(box) }, body: image.blob });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || '本机HMR服务不可用');
+        return result;
+      })(),
+      import('./custom-depth.mjs').then(({ inferDepth }) => inferDepth(image.photo)),
+    ]);
+    if (generation !== sampleGeneration) return;
+    const state = viewState.get('hmr2');
+    state.photo = image.photo;
+    state.output = hmr.status === 'fulfilled' ? hmr.value : null;
+    drawModel('hmr2');
+    card.querySelector('.status').textContent = hmr.status === 'fulfilled'
+      ? `自选图推理完成 · ${Math.round(hmr.value.inferenceMs)} ms · ${hmr.value.device}`
+      : `HMR失败：${hmr.reason.message}`;
+    card.querySelector('.details').textContent = hmr.status === 'fulfilled' ? JSON.stringify({ source: hmr.value.source, provenance: hmr.value.provenance, camera: hmr.value.camera, box, modelLoadMs: hmr.value.modelLoadMs }, null, 2) : '';
+    if (depth.status === 'fulfilled') card.querySelector('.depth').src = depth.value.src;
+    card.querySelector('.depth-status').textContent = depth.status === 'fulfilled'
+      ? `整图相对深度完成 · ${Math.round(depth.value.ms)} ms；黄色较近、蓝色较远，仅可见表面。`
+      : `深度推理失败：${depth.reason.message}`;
+  } finally { if (generation === sampleGeneration) runButton.disabled = false; }
+}
+
 await Promise.all(models.map((key) => initializeViewer(key)));
 
 for (const key of models) {
@@ -270,8 +373,41 @@ sampleSelect.value = new URLSearchParams(location.search).get('image') || 'seate
 if (![...sampleSelect.options].some((option) => option.value === sampleSelect.value)) sampleSelect.value = 'seated';
 footTrialSelect.value = new URLSearchParams(location.search).get('variant') || 'original';
 if (![...footTrialSelect.options].some((option) => option.value === footTrialSelect.value)) footTrialSelect.value = 'original';
-sampleSelect.addEventListener('change', () => showSample(sampleSelect.value));
+sampleSelect.addEventListener('change', () => {
+  customBoxControls.hidden = sampleSelect.value !== 'custom';
+  showSample(sampleSelect.value);
+});
 footTrialSelect.addEventListener('change', () => showSample(sampleSelect.value));
+customFile.addEventListener('change', async () => {
+  try { await acceptCustomFile(customFile.files[0]); }
+  catch (error) { document.querySelector('#hmr2 .status').textContent = error.message; }
+  customFile.value = '';
+});
+customInputs.forEach((input) => input.addEventListener('input', () => {
+  if (sampleSelect.value === 'custom') showCustomPreview();
+}));
+document.querySelector('#custom-run').addEventListener('click', () => runCustom().catch((error) => {
+  document.querySelector('#hmr2 .status').textContent = error.message;
+  document.querySelector('#custom-run').disabled = false;
+}));
+document.querySelector('#custom-paste').addEventListener('click', async () => {
+  try {
+    if (!navigator.clipboard?.read) throw new Error('浏览器不支持读取剪贴板，请按Ctrl+V或选择文件');
+    const items = await navigator.clipboard.read();
+    const item = items.find((entry) => entry.types.some((type) => ['image/png', 'image/jpeg', 'image/webp'].includes(type)));
+    if (!item) throw new Error('剪贴板中没有图片');
+    const type = item.types.find((value) => ['image/png', 'image/jpeg', 'image/webp'].includes(value));
+    await acceptCustomFile(new File([await item.getType(type)], '剪贴板图片', { type }));
+  } catch (error) { document.querySelector('#hmr2 .status').textContent = error.message; }
+});
+document.addEventListener('paste', async (event) => {
+  if (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable="true"]')) return;
+  const file = [...(event.clipboardData?.files || [])].find((item) => ['image/png', 'image/jpeg', 'image/webp'].includes(item.type));
+  if (!file) return;
+  event.preventDefault();
+  try { await acceptCustomFile(file); }
+  catch (error) { document.querySelector('#hmr2 .status').textContent = error.message; }
+});
 [audit, depthManifest] = await Promise.all([
   loadJson('./status.json'),
   loadJson('../rigid-projection/manifest.json'),

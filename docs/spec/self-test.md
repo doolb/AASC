@@ -2420,3 +2420,6 @@ TTY := 每秒清行回首覆盖；columns-1以内，保守中文双列；大小/
 待验场景 := 已授权直装、开启后返回自动一次、拒绝不循环、重复resume、设置期间旋转/系统重建、提交异常与旧桥兼容
 验证 := 网页内联脚本node --check、Gradle :app:compileDebugKotlin --offline --no-daemon与git diff --check通过；未新增或运行测试，未出包/发布/真机验证
 ```
+## HMR2.0b 自选图片（2026-10-16）
+
+`node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-custom-report.cjs`以本机临时服务验证文件选择、页面粘贴、人物框非法值拒绝、HMR同源请求和真实浏览器WASM深度PNG；`--real`以官方模型跑动漫原图，回读25点。`check-report.cjs`继续验证固定三图、四种脚掌候选、深度缺失/摘要不匹配回退、WebGL回退与390px布局。该自测验证流程可用，不代表模型姿态准确；手机运行HMR服务、更多私人图片质量未验。

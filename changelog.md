@@ -13228,3 +13228,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 沿用已生成的 `code/code-v112.zip`：4,942,375 bytes，SHA-256 `e3b098861454d72016c005b48f120addf5c35af26324e8450f0c8996e7d568ba`；来源提交 `f3ef7582`，生成元数据标记工作区有改动。min APK `apk/aasc-display-offline-min-v62.apk`：90,575,075 bytes，SHA-256 `fa82b7ce61141a7b8e14f190b254589d92d35d245663d0c857df8761a5bda6a0`；allserver-min/update-only profile，签名证书 SHA-256 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
   - 两端签名清单一致；清单13项资源的 LAN 文件 SHA、公网 HEAD 状态/大小与 WAN 源站返回体 SHA 全部通过。旧 code106/min61 清理后公网返回404，无清理错误。保留 dependencies v10、Node min seeds v86、taskCode v1 与完整 APK v46；未发布独立 Node 子显示端 ZIP。
   - `release/offline-release-status.json` 中 `servicePackage=false`、`minApk=false`；其他产物状态保持不变。
+### MMD-AR HMR2.0b 自选图片与深度
+
+- ✅ [2026-10-16] 独立本机报告支持文件选择、按钮粘贴及页面Ctrl+V/⌘V，自选图可编辑人物框后生成HMR2.0b BODY25骨架与整图相对深度。
+  - 更新`tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html`、`report.mjs`、`run-hmr2.py`，新增`custom-report-server.cjs`、`custom-depth.mjs`与`check-custom-report.cjs`；同步design/spec/task/usage/self-test/todo。浏览器把同一限幅PNG用于本机HMR和本地Depth Anything V2 Small，临时输入/结果完成后删除；固定三图/脚掌候选不覆盖。
+  - Edge文件、粘贴、框非法值、真实WASM深度与接口测试通过；官方HMR动漫整图端到端回读25点，固定报告三图/四候选/WebGL回退/390px回归通过。模型对脚掌和左右腿的质量问题仍在；正式IK、Offline状态和APK不变。

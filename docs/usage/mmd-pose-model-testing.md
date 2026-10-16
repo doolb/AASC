@@ -217,7 +217,9 @@ RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)�
 node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-report.cjs
 ```
 
-需持续查看报告时，在另一个终端运行`node tmp/mmd-pose/depth-eval/serve-report.cjs`，用输出的本机端口打开`/_depth/hmr2-sam3d/report.html?image=seated`。立体网格读取现有`build:web:mmd-ar-test`产生的本地Three.js模块；报告浏览器不运行HMR2.0b推理，也不请求外网资源。
+需持续查看固定报告时，在另一个终端运行`node tmp/mmd-pose/depth-eval/serve-report.cjs`，用输出的本机端口打开`/_depth/hmr2-sam3d/report.html?image=seated`。要选择或粘贴自己的图并生成HMR骨架＋整图深度，请改为运行`node tmp/mmd-pose/depth-eval/hmr2-sam3d/custom-report-server.cjs`，打开它输出的新本机端口对应的`/_depth/hmr2-sam3d/report.html`；旧静态端口没有推理接口。选择PNG/JPEG/WebP或按Ctrl+V/⌘V，确认默认整图人物框，必要时输入处理后像素的X/Y/宽/高，点击「识别 HMR＋深度」。HMR在同机Python处理临时PNG；整图相对深度在当前浏览器本地ONNX/WASM推理。立体网格读取现有`build:web:mmd-ar-test`产生的本地Three.js模块，不请求外网资源。
+
+自选图源文件最多20MiB、解码像素最多4096²，处理后最长边1600像素；本机HMR任务串行。结果仅在当前页面及一次性临时文件中，固定三图的JSON不被覆盖。测试命令：`node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-custom-report.cjs`（快速UI/深度）和加`--real`（官方HMR端到端，需本机权重与Python环境）。深度黄色较近、蓝色较远，表示可见表面相对值，不能替代真实关节深度。真人左右腿及动漫脚掌的原始识别问题仍需人工判断。
 
 无对应npm script，以上是临时测试命令。Windows Python3.10 CPU真实三图推理与Edge展示通过：模型加载约6.1秒，单图前向在两轮中约0.7–2.0秒，进程峰值工作集约5.9GiB；这不是手机浏览器性能。报告三图真实结果、四个动漫候选、390px布局及本机GET通过。动漫原版左脚大/小趾约`(268,394)`/`(289,388)`；四候选脚趾Y仍在`389–404`，未落回右侧可见鞋面，未采纳。镜像候选交换BODY25左右语义后，XYZ/相机重投影与XY差小于`0.001px`。左右腿与脚掌质量未达标，故不接入VAM、不替换MediaPipe。完整数学路径可复核源码；未通过独立SMPL文件实例化官方`HMR2.load_hmr2`包装类，不宣称逐字原版包装调用。任务记录见[HMR2单模型测试](../task/20261016_HMR2单模型三图骨骼测试.md)与[动漫脚掌重测](../task/20261016_HMR2动漫脚掌重测.md)。
 

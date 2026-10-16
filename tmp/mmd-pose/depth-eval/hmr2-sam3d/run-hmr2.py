@@ -84,8 +84,17 @@ def check_smpl_state(state):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--anime-foot-trials", action="store_true")
+    parser.add_argument("--custom-image", type=Path)
+    parser.add_argument("--custom-box", nargs=4, type=int)
+    parser.add_argument("--custom-output", type=Path)
     args = parser.parse_args()
-    audit_resources()
+    if args.custom_image:
+        if args.anime_foot_trials or not args.custom_box or not args.custom_output:
+            parser.error("自选图片必须同时给出人物框和输出文件，不能与脚掌试验混用")
+    elif args.custom_box or args.custom_output:
+        parser.error("人物框和输出文件只能用于自选图片")
+    else:
+        audit_resources()
     require_resources()
     audit_status = json.loads((BASE / "status.json").read_text(encoding="utf-8"))
     sys.path.insert(0, str(REPO))
@@ -123,7 +132,8 @@ def main():
     head = head.eval().to(device)
     smpl = {key.removeprefix("smpl."): state[key].to(device) for key in SMPL_KEYS}
     load_ms = (time.perf_counter() - started) * 1000
-    samples = json.loads((BASE / "sample-config.json").read_text(encoding="utf-8"))["samples"]
+    samples = ([{"name": "custom", "image": str(args.custom_image), "box": args.custom_box}]
+               if args.custom_image else json.loads((BASE / "sample-config.json").read_text(encoding="utf-8"))["samples"])
     if args.anime_foot_trials:
         anime = next(sample for sample in samples if sample["name"] == "anime")
         samples = foot_trial_samples(anime)
@@ -135,6 +145,10 @@ def main():
             raise FileNotFoundError("原图无法解码：" + sample["name"])
         height, width = image.shape[:2]
         box_values = sample["box"]
+        if args.custom_image:
+            x, y, box_width, box_height = box_values
+            if x < 0 or y < 0 or box_width < 1 or box_height < 1 or x + box_width > width or y + box_height > height:
+                raise ValueError("人物框超出图片")
         if sample.get("flip"):
             image = cv2.flip(image, 1)
             box_values = [width - box_values[0] - box_values[2], box_values[1], box_values[2], box_values[3]]
@@ -191,7 +205,8 @@ def main():
             "peakGpuAllocatedMiB": torch.cuda.max_memory_allocated() / 1048576 if device.type == "cuda" else None,
         }
         suffix = f"-{sample['variant']}" if sample.get("variant") else ""
-        (results_dir / f"hmr2-{sample['name']}{suffix}.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        destination = args.custom_output if args.custom_image else results_dir / f"hmr2-{sample['name']}{suffix}.json"
+        destination.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         print(sample["name"] + suffix, "inference ms", round(infer_ms), flush=True)
 
 
