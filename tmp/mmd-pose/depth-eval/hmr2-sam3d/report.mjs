@@ -1,5 +1,7 @@
 // 独立报告仅展示确实保存的HMR2.0b模型输出；缺资源时保留阻塞状态。
 const sampleSelect = document.querySelector('#sample');
+const footTrialSelect = document.querySelector('#foot-trial');
+const footTrialControl = document.querySelector('#foot-trial-control');
 const common = document.querySelector('#common');
 const models = ['hmr2'];
 const viewState = new Map(models.map((key) => [key, { yaw: 0, pitch: 0, output: null, photo: null, viewer: null }]));
@@ -189,9 +191,14 @@ async function loadJson(url) {
 
 async function showSample(name) {
   const sample = audit?.samples?.find((item) => item.name === name);
+  footTrialControl.hidden = name !== 'anime';
+  if (name !== 'anime') footTrialSelect.value = 'original';
+  const variant = name === 'anime' ? footTrialSelect.value : 'original';
+  const variantSuffix = variant === 'original' ? '' : `-${variant}`;
   common.textContent = sample?.available
     ? `${sample.label} · ${sample.width}×${sample.height} · 人工框 ${sample.box.join(', ')}；原图SHA-256 ${sample.sha256}`
     : `${name} 原图缺失；当前不能比较姿态。`;
+  if (variantSuffix) common.textContent += '；当前为实验候选，脚掌未改善，原始输出未被覆盖。';
   const photo = new Image();
   photo.src = `/sample/${name}`;
   try { await photo.decode(); } catch { /* 原图缺失由状态栏说明。 */ }
@@ -199,18 +206,21 @@ async function showSample(name) {
     const card = document.getElementById(key);
     const state = viewState.get(key);
     state.photo = photo.naturalWidth ? photo : null;
-    state.output = await loadJson(`./results/${key}-${name}.json`);
+    state.output = await loadJson(`./results/${key}-${name}${variantSuffix}.json`);
+    if (variantSuffix && state.output) {
+      common.textContent = `${sample.label} · ${sample.width}×${sample.height} · 候选人物框 ${state.output.box.join(', ')}；${state.output.mirroredInput ? '输入已镜像并映回原图' : '未镜像'}；原图SHA-256 ${sample.sha256}；脚掌未改善，原始输出未被覆盖。`;
+    }
     const overlay = card.querySelector('.overlay');
     overlay.width = sample?.width || photo.naturalWidth || 236;
     overlay.height = sample?.height || photo.naturalHeight || 314;
     const result = state.output;
     const needed = '官方checkpoint、配置和均值参数';
     card.querySelector('.status').textContent = result
-      ? `${name} 原版推理完成 · ${Math.round(result.inferenceMs)} ms · ${result.device}`
+      ? `${name} ${variant === 'original' ? '原版推理完成' : `实验候选${variant}推理完成 · 脚掌未改善`} · ${Math.round(result.inferenceMs)} ms · ${result.device}`
       : audit?.ready?.[key] ? '资源已齐，尚无成功的原版推理结果。' : `暂无原版推理结果；需要${needed}。`;
     if (!state.viewer) card.querySelector('.status').textContent += ' · WebGL不可用，已回退线条预览';
     card.querySelector('.details').textContent = result
-      ? JSON.stringify({ source: result.source, provenance: result.provenance, camera: result.camera, joints: result.xyz.length, box: result.box, modelLoadMs: result.modelLoadMs, peakWorkingSetMiB: result.peakWorkingSetMiB, peakGpuAllocatedMiB: result.peakGpuAllocatedMiB }, null, 2)
+      ? JSON.stringify({ source: result.source, provenance: result.provenance, variant: result.variant || 'original', mirroredInput: result.mirroredInput || false, camera: result.camera, joints: result.xyz.length, box: result.box, modelLoadMs: result.modelLoadMs, peakWorkingSetMiB: result.peakWorkingSetMiB, peakGpuAllocatedMiB: result.peakGpuAllocatedMiB }, null, 2)
       : JSON.stringify({ sourceRevision: audit?.source?.[key], localPatch: audit?.sourcePatches?.[key], resources:
         { checkpoint: audit?.resources?.hmr2Checkpoint?.available, meanParams: audit?.resources?.hmr2MeanParams?.available, smpl: audit?.resources?.smplSource } }, null, 2);
     drawModel(key);
@@ -238,7 +248,10 @@ for (const key of models) {
 
 sampleSelect.value = new URLSearchParams(location.search).get('image') || 'seated';
 if (![...sampleSelect.options].some((option) => option.value === sampleSelect.value)) sampleSelect.value = 'seated';
+footTrialSelect.value = new URLSearchParams(location.search).get('variant') || 'original';
+if (![...footTrialSelect.options].some((option) => option.value === footTrialSelect.value)) footTrialSelect.value = 'original';
 sampleSelect.addEventListener('change', () => showSample(sampleSelect.value));
+footTrialSelect.addEventListener('change', () => showSample(sampleSelect.value));
 audit = await loadJson('./status.json');
 await showSample(sampleSelect.value);
 globalThis.showSample = showSample;

@@ -1,6 +1,7 @@
 // 真实Edge验证三张HMR2.0b结果、立体骨架、受光材质和手机布局。
 const puppeteer = require('puppeteer');
 const path = require('node:path');
+const fs = require('node:fs');
 const { start } = require('../server.cjs');
 
 (async () => {
@@ -51,8 +52,55 @@ const { start } = require('../server.cjs');
       await page.screenshot({ path: path.join(__dirname, `report-${name}.png`), fullPage: true });
       results.push({ name, ...result });
     }
+    const resultFolder = path.join(__dirname, 'results');
+    const originalAnime = fs.readFileSync(path.join(resultFolder, 'hmr2-anime.json'), 'utf8');
+    const originalPoints = JSON.parse(originalAnime);
+    const footTrials = [];
+    await page.select('#sample', 'anime');
+    for (const variant of ['wide', 'shift-left', 'shift-right', 'mirror']) {
+      const candidate = JSON.parse(fs.readFileSync(path.join(resultFolder, `hmr2-anime-${variant}.json`), 'utf8'));
+      if (candidate.variant !== variant || candidate.names.join() !== originalPoints.names.join()
+        || candidate.xyz.length !== 25 || candidate.xy.length !== 25 || candidate.mirroredInput !== (variant === 'mirror')) {
+        throw Error(`${variant} 候选模型结果或左右语义无效`);
+      }
+      const [cameraX, cameraY, cameraZ] = candidate.camera.translation;
+      const [centerX, centerY] = candidate.camera.principalPoint;
+      const focal = candidate.camera.focalLengthPx;
+      for (let index = 0; index < candidate.xyz.length; index += 1) {
+        const [x, y, z] = candidate.xyz[index];
+        const [u, v] = candidate.xy[index];
+        if (![x, y, z, u, v].every(Number.isFinite)
+          || Math.abs(focal * (x + cameraX) / (z + cameraZ) + centerX - u) > 0.001
+          || Math.abs(focal * (y + cameraY) / (z + cameraZ) + centerY - v) > 0.001) {
+          throw Error(`${variant} 候选3D与原图投影不一致`);
+        }
+      }
+      await page.select('#foot-trial', variant);
+      await page.evaluate(() => globalThis.showSample('anime'));
+      const preview = await page.evaluate(() => ({
+        controlHidden: document.querySelector('#foot-trial-control').hidden,
+        common: document.querySelector('#common').textContent,
+        status: document.querySelector('#hmr2 .status').textContent,
+        details: document.querySelector('#hmr2 .details').textContent,
+        bones: Number(document.querySelector('#hmr2 canvas.xyz').dataset.bones),
+      }));
+      if (preview.controlHidden || !preview.common.includes(candidate.box.join(', '))
+        || !preview.status.includes('脚掌未改善')
+        || !preview.details.includes(`"variant": "${variant}"`) || preview.bones !== 24) {
+        throw Error(`${variant} 候选报告未正确展示`);
+      }
+      if (variant === 'mirror') await page.screenshot({ path: path.join(__dirname, 'report-anime-mirror.png'), fullPage: true });
+      footTrials.push({ variant, leftToeY: candidate.xy.slice(19, 21).map((point) => Math.round(point[1])) });
+    }
+    await page.select('#foot-trial', 'original');
+    await page.evaluate(() => globalThis.showSample('anime'));
+    if (fs.readFileSync(path.join(resultFolder, 'hmr2-anime.json'), 'utf8') !== originalAnime
+      || !(await page.$eval('#hmr2 .status', (element) => element.textContent.includes('原版推理完成')))) {
+      throw Error('动漫原始HMR结果被候选覆盖');
+    }
     await page.select('#sample', 'seated');
     await page.evaluate(() => globalThis.showSample('seated'));
+    if (!(await page.$eval('#foot-trial-control', (element) => element.hidden))) throw Error('非动漫图仍展示脚掌重测选项');
     const beforeDrag = await page.$eval('#hmr2 canvas.xyz', (canvas) => canvas.toDataURL());
     const bounds = await page.$eval('#hmr2 canvas.xyz', (canvas) => {
       const box = canvas.getBoundingClientRect();
@@ -96,7 +144,7 @@ const { start } = require('../server.cjs');
     if (!fallbackRendered) throw Error('WebGL不可用时未回退到线条骨架');
     if (errors.length) throw Error(`浏览器脚本错误：${errors.join('; ')}`);
     if (requests.some((request) => request.method !== 'GET' || !request.url.startsWith(`${url}/`))) throw Error('报告出现非本机GET请求');
-    console.log(JSON.stringify({ cases: results.length, overflow, fallbackRendered, realSkeletonRender: results.every((item) => item.skeletonPixels), bones: results.map((item) => item.bones), errors, status: results[0].status }));
+    console.log(JSON.stringify({ cases: results.length, footTrials, overflow, fallbackRendered, realSkeletonRender: results.every((item) => item.skeletonPixels), bones: results.map((item) => item.bones), errors, status: results[0].status }));
   } finally {
     await browser?.close();
     server.close();

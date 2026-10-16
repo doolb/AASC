@@ -10,13 +10,14 @@
 </head>
 <body>
   <h1>HMR2.0b · 本机三图骨骼对照</h1>
-  <p>同一原图和人工人物框；蓝色为人物左侧，橙色为人物右侧。HMR2.0b官方checkpoint内的网络与SMPL张量生成BODY25骨架。3D骨段为受光圆柱、关节为球，可拖动旋转、双击复位。浏览器仅查看本机Python结果。</p>
+  <p>三图基线使用固定原图和人工人物框；动漫脚掌实验另比较裁剪框与镜像输入。蓝色为人物左侧，橙色为人物右侧。HMR2.0b官方checkpoint内的网络与SMPL张量生成BODY25骨架。3D骨段为受光圆柱、关节为球，可拖动旋转、双击复位。浏览器仅查看本机Python结果。</p>
   <label>图片：<select id="sample"><option value="seated">真人坐姿</option><option value="anime">动漫</option><option value="diagram">交叉腿示意图</option></select></label>
+  <label id="foot-trial-control" hidden>动漫脚掌重测：<select id="foot-trial"><option value="original">原版输出</option><option value="wide">扩框</option><option value="shift-left">人物框左移</option><option value="shift-right">人物框右移</option><option value="mirror">水平镜像输入</option></select></label>
   <p id="common" class="note">正在读取资源状态…</p>
   <div class="cards">
     <section class="card" id="hmr2"><h2>HMR2.0b · SMPL BODY25</h2><p class="status"></p><div class="plots"><figure><figcaption>原图与预测关节</figcaption><canvas class="overlay"></canvas></figure><figure><figcaption>圆柱骨段与球形关节 · 拖动旋转</figcaption><canvas class="xyz" width="420" height="420"></canvas></figure></div><details><summary>来源与相机数据</summary><pre class="details"></pre></details></section>
   </div>
-  <p class="note">真人图的抬高腿应属于人物左腿，但当前模型右膝更贴近该膝盖；立体显示没有修正识别坐标。左右归属、遮挡前后和脚掌朝向仍需逐图核对。尚未应用到VAM，正式MediaPipe默认保持。官方资源：<a href="https://github.com/shubham-goel/4D-Humans">4D-Humans</a>。</p>
+  <p class="note">动漫图脚掌实验：扩框、人物框左右平移和镜像输入均未把蓝色左脚趾点移回可见鞋面；原版输出保持默认，候选仅供对照，未被采纳。真人图的抬高腿应属于人物左腿，但当前模型右膝更贴近该膝盖。左右归属、遮挡前后和脚掌朝向仍需逐图核对。尚未应用到VAM，正式MediaPipe默认保持。官方资源：<a href="https://github.com/shubham-goel/4D-Humans">4D-Humans</a>。</p>
   <script type="module" src="./report.mjs"></script>
 </body>
 </html>

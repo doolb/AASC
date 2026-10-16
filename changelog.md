@@ -1,3 +1,9 @@
+### MMD-AR HMR2.0b 动漫脚掌重测
+
+- ✅ [2026-10-16] 确认动漫脚掌偏差来自模型原始BODY25输出，并用同一权重测试扩框、人物框左右平移及水平镜像。
+  - `tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py`增加四候选真实推理与镜像左右语义恢复；`report.html`、`report.mjs`、`check-report.cjs`增加原版/候选对照和自测。同步design、spec、self-test、task、usage、todo；原始三图JSON、模型与私人图片未覆盖或提交。
+  - 四候选蓝色左脚趾仍在原图`y=389–404`，未回到可见鞋面，全部不采纳；镜像XYZ重投影误差小于`0.001px`。Edge三图/四候选、WebGL回退、390px、本机GET及无脚本错误通过。正式MediaPipe全身IK与Offline状态不变，未构建APK。
+
 ### MMD-AR HMR2.0b 骨架立体显示
 
 - ✅ [2026-10-16] 按用户要求将独立报告的3D骨架改为圆柱骨段、球形关节和受光材质，不加投影阴影。
