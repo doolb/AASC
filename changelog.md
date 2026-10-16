@@ -1,3 +1,9 @@
+### MMD-AR HMR2.0b 单模型三图实测
+
+- ✅ [2026-10-16] 按用户收窄范围，仅运行HMR2.0b三张图；官方checkpoint内的SMPL层张量经形状与BODY25顺序校验后，由同一`smplx.lbs`路径生成3D关节和原图投影。
+  - 忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`的`audit.py`、`run-hmr2.py`、`report.html`、`report.mjs`、`check-report.cjs`更新为HMR单模型；私人图片、权重和JSON未入Git。三图CPU真实推理、Edge真实绘图、本机GET与390px布局通过；模型加载约6.1秒，单图约0.7–2.0秒，峰值工作集约5.9GiB。
+  - 真人坐姿抬高膝仍更贴近模型右膝，用户标注应为左腿；左脚投影超画幅，动漫和示意图末端仍有偏差。独立试验完成但质量未达标，不接入VAM，MediaPipe默认不变。同步design/spec/self-test/task/usage/todo并移除已完成待办；未构建APK或发布，Offline产物状态保持。
+
 ### MMD-AR HMR2.0b / SAM 3D Body 三图对照准备
 
 - ✅ [2026-10-16] 按用户确认准备官方Python三图模型对照及本机浏览器报告，不修改正式全身IK和MediaPipe默认。

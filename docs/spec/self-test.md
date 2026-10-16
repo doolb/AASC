@@ -1,16 +1,17 @@
 # 自测功能实现文档
 
-## HMR2.0b / SAM 3D Body 独立三图对照（2026-10-16，进行中）
+## HMR2.0b 独立三图对照（2026-10-16，工具通过、姿态质量未达标）
 
 ```text
-固定三张原图SHA/尺寸/人工框 → 资源审计核对官方源码commit、checkpoint、SMPL/MHR
-资源完整时才启动原版Python推理 → 原始关节与相机保存JSON → 原图叠点和3D报告
-资源不全时run-hmr2/run-sam3d必须失败，报告只显示原图和缺失项，不能产生伪造关节
-Edge检查三图切换、无脚本错误、本机GET、390px无横向溢出
-待资源准入后继续记录各模型三图左右腿、深度遮挡、脚朝向及耗时；自测通过不等于姿态准确
+固定三张原图SHA/尺寸/人工框 → 审计官方源码commit、checkpoint、配置和姿态均值
+严格加载backbone/SMPL head全部权重 → 校验checkpoint SMPL缓冲区形状和BODY25顺序
+官方裁剪/网络前向 → 官方smplx.lbs和BODY25 → 原始关节/相机/原图坐标保存JSON
+各关节有限、深度为正 → Edge真实三图切换/叠图/3D、无脚本错误、本机GET、390px无溢出
+记录模型加载/单图推理/峰值工作集；人工检查真人抬高左腿、动漫和示意图的遮挡/末端
+工具通过不等于姿态准确；真人膝左右对应错误则不接VAM
 ```
 
-当前本机`tmp/mmd-pose/depth-eval/hmr2-sam3d/`脚本语法通过，资源审计三张原图均在；HMR官方checkpoint已下载且SHA确认，Windows两处环境适配后独立CPU环境可导入HMR模块，但SMPL中性模型缺失；SAM官方权重匿名请求返回401 GatedRepo，MHR也未取得。Edge静态报告三图/390px/本机GET通过，显示缺失状态而无骨架；内存中临时JSON验证结果绘制链，通过后不保留伪造模型文件。完整推理和姿态质量尚未验收，详细复现见[模型测试方法](../usage/mmd-pose-model-testing.md)。
+本机`tmp/mmd-pose/depth-eval/hmr2-sam3d/`已用官方checkpoint内的SMPL层张量完成三图真实推理，无需单独SMPL文件。Python3.10 CPU严格权重加载、SMPL张量/BODY25顺序、有限坐标检查通过；Edge三图真实JSON与绘图、390px、本机GET检查通过。峰值工作集约5.9GiB；真人坐姿抬高膝更接近模型右膝而用户确认属于左腿，姿态质量未通过。详细复现见[模型测试方法](../usage/mmd-pose-model-testing.md)。
 
 ## 二维投影刚体与深度辅助（2026-10-16，本机评估完成，质量未达标）
 

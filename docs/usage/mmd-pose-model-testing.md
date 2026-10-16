@@ -200,21 +200,21 @@ RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)�
 复测在原人物分割环境和缓存完整时，按[任务](../task/20261016_MMDAR真人坐姿左右腿归属修正.md)依序执行check-leg-unit、run-leg-correspondence、check-leg-results、build-leg-report、build-report、check-leg-report。六支同321骨/相机/720步，两个原始控制精确复现；新118项工具检查与旧135项回归通过，不当姿态质量通过。
 
 
-## HMR2.0b / SAM 3D Body 官方本机三图对照（2026-10-16，进行中）
+## HMR2.0b 本机三图对照（2026-10-16，已完成测试）
 
-本机报告：`http://127.0.0.1:56173/_depth/hmr2-sam3d/report.html?image=seated`。可切真人/动漫/示意图，浏览器只读取本机Python结果和原图；没有模型结果时明确显示资源缺失，不显示任何猜测骨架。蓝色为人物左侧，橙色为人物右侧。正式全身IK仍使用MediaPipe，手机浏览器本地推理不在本轮范围。
+本机报告：`http://127.0.0.1:56173/_depth/hmr2-sam3d/report.html?image=seated`。可切真人/动漫/示意图，浏览器只读取本机Python真实结果和原图；蓝色为人物左侧，橙色为人物右侧，可拖动3D骨架并展开相机/来源。正式全身IK仍使用MediaPipe，手机浏览器本地推理不在本轮范围。
 
-官方4D-Humans源码固定提交`efe18deff163b29dff87ddbd575fa29b716a356c`；HMR2.0b公开归档2710589440字节，SHA-256 `0fdf9e66ec97503fe1b995f4942e021a6df748f4ccbc5574718742d975a6e19b`，其中checkpoint 2709521501字节，SHA-256 `c9ea09c834161468638c9de7a782c614e300c622709bf52967274c543ec72fcf`。归档内没有SMPL中性模型，必须通过官方SMPLify注册渠道取得。Windows本机源码只加缓存目录HOME缺失回退及OpenGL平台win32两处适配，补丁`windows-compat.patch`与审计SHA在临时目录，模型计算不改。官方SAM 3D Body源码固定提交`b5c765a0d89d789985e186d396315e7590887b94`；优先选择ViT-H和配套MHR模型，官方Hugging Face需申请准入，本机匿名请求为401 GatedRepo。所有源码/权重/图片/脚本和报告结果在忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`，不随Git分发，不上传私有原图。
+官方4D-Humans源码固定提交`efe18deff163b29dff87ddbd575fa29b716a356c`；HMR2.0b公开归档2710589440字节，SHA-256 `0fdf9e66ec97503fe1b995f4942e021a6df748f4ccbc5574718742d975a6e19b`，其中checkpoint 2709521501字节，SHA-256 `c9ea09c834161468638c9de7a782c614e300c622709bf52967274c543ec72fcf`。归档未单列SMPL中性模型文件，但checkpoint的`state_dict`已有完整SMPL层张量；脚本严格加载ViT/SMPL head全部权重并校验SMPL形状和BODY25映射，调用相同`smplx.lbs`/顶点选择路径重建关节，不额外下载人体模型。Windows本机源码仅加缓存目录HOME缺失回退及OpenGL平台win32两处适配，补丁`windows-compat.patch`与审计SHA在临时目录，模型计算不改。所有源码/权重/图片/脚本和报告结果在忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`，不随Git分发，不上传私有原图。
 
-固定三张原图与NLF对照一致，使用相同人工框seated=[10,15,226,299]、anime=[96,10,280,375]、diagram=[40,8,160,300]。HMR输出BODY25及官方相机、SAM输出MHR骨骼及原图2D点；只有拿到模型结果才能目视检查真人抬高左腿和其他遮挡姿态。复现前需要本机资源：设置`HMR2_SMPL_PATH`到合法取得的SMPL中性模型文件；SAM需本机完成Hugging Face授权后下载官方`facebook/sam-3d-body-vith`到`sam3d-assets/`，含`model.ckpt`和`assets/mhr_model.pt`。访问令牌不要写入项目、命令日志或聊天。
+固定三张原图与NLF对照一致，使用相同人工框seated=[10,15,226,299]、anime=[96,10,280,375]、diagram=[40,8,160,300]。HMR输出BODY25、相机和原图2D投影。真人坐姿的用户标注“抬高膝属于人物左腿”仍未被可靠识别：模型右膝投影(179.6,172.2)更接近可见抬高膝，左膝(209.8,191.2)偏右，左脚投影超出236px原图宽度。动漫手/脚和示意图交叉腿末端也有偏差；这仅是三图视觉观察，不能当成全数据集准确率。
 
 ```powershell
-python tmp/mmd-pose/depth-eval/hmr2-sam3d/audit.py
+& tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/Scripts/python.exe -X utf8 tmp/mmd-pose/depth-eval/hmr2-sam3d/audit.py
 & tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/Scripts/python.exe -X utf8 tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py
 node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-report.cjs
 ```
 
-SAM 3D Body官方安装说明要求Python3.11，本机目前只有Python3.10；需在独立3.11环境按官方`INSTALL.md`安装依赖，再运行`run-sam3d.py`，不能复用上面的HMR2环境。当前资源审计三图都在，静态报告三图/本机GET/390px布局通过；**HMR2.0b和SAM 3D Body都未完成推理，不能评价识别质量**。HMR2.0b待SMPL，SAM待HF访问及MHR。HMR独立Python3.10 CPU环境已安装并验证官方源码可导入，完整模型前向仍未运行。6GB显存可能需要CPU运行，记录实际耗时后再考虑浏览器本地模型移植。
+无对应npm script，以上是临时测试命令。Windows Python3.10 CPU真实三图推理与Edge展示通过：模型加载约6.1秒，单图前向在两轮中约0.7–2.0秒，进程峰值工作集约5.9GiB；这不是手机浏览器性能。报告三图真实结果、390px布局及本机GET通过。左右腿质量未达标，故不接入VAM、不替换MediaPipe。完整数学路径可复核源码；未通过独立SMPL文件实例化官方`HMR2.load_hmr2`包装类，不宣称逐字原版包装调用。任务记录见[HMR2单模型测试](../task/20261016_HMR2单模型三图骨骼测试.md)。
 
 ## NLF-L 独立骨骼试验（2026-10-16，已完成）
 
