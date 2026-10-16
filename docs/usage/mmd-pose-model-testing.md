@@ -200,6 +200,22 @@ RTMPose历史接入见[接入记录](../task/20261016_MMDAR接入RTMPose-m.md)�
 复测在原人物分割环境和缓存完整时，按[任务](../task/20261016_MMDAR真人坐姿左右腿归属修正.md)依序执行check-leg-unit、run-leg-correspondence、check-leg-results、build-leg-report、build-report、check-leg-report。六支同321骨/相机/720步，两个原始控制精确复现；新118项工具检查与旧135项回归通过，不当姿态质量通过。
 
 
+## HMR2.0b / SAM 3D Body 官方本机三图对照（2026-10-16，进行中）
+
+本机报告：`http://127.0.0.1:56173/_depth/hmr2-sam3d/report.html?image=seated`。可切真人/动漫/示意图，浏览器只读取本机Python结果和原图；没有模型结果时明确显示资源缺失，不显示任何猜测骨架。蓝色为人物左侧，橙色为人物右侧。正式全身IK仍使用MediaPipe，手机浏览器本地推理不在本轮范围。
+
+官方4D-Humans源码固定提交`efe18deff163b29dff87ddbd575fa29b716a356c`；HMR2.0b公开归档2710589440字节，SHA-256 `0fdf9e66ec97503fe1b995f4942e021a6df748f4ccbc5574718742d975a6e19b`，其中checkpoint 2709521501字节，SHA-256 `c9ea09c834161468638c9de7a782c614e300c622709bf52967274c543ec72fcf`。归档内没有SMPL中性模型，必须通过官方SMPLify注册渠道取得。Windows本机源码只加缓存目录HOME缺失回退及OpenGL平台win32两处适配，补丁`windows-compat.patch`与审计SHA在临时目录，模型计算不改。官方SAM 3D Body源码固定提交`b5c765a0d89d789985e186d396315e7590887b94`；优先选择ViT-H和配套MHR模型，官方Hugging Face需申请准入，本机匿名请求为401 GatedRepo。所有源码/权重/图片/脚本和报告结果在忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`，不随Git分发，不上传私有原图。
+
+固定三张原图与NLF对照一致，使用相同人工框seated=[10,15,226,299]、anime=[96,10,280,375]、diagram=[40,8,160,300]。HMR输出BODY25及官方相机、SAM输出MHR骨骼及原图2D点；只有拿到模型结果才能目视检查真人抬高左腿和其他遮挡姿态。复现前需要本机资源：设置`HMR2_SMPL_PATH`到合法取得的SMPL中性模型文件；SAM需本机完成Hugging Face授权后下载官方`facebook/sam-3d-body-vith`到`sam3d-assets/`，含`model.ckpt`和`assets/mhr_model.pt`。访问令牌不要写入项目、命令日志或聊天。
+
+```powershell
+python tmp/mmd-pose/depth-eval/hmr2-sam3d/audit.py
+& tmp/mmd-pose/depth-eval/hmr2-sam3d/venv/Scripts/python.exe -X utf8 tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py
+node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-report.cjs
+```
+
+SAM 3D Body官方安装说明要求Python3.11，本机目前只有Python3.10；需在独立3.11环境按官方`INSTALL.md`安装依赖，再运行`run-sam3d.py`，不能复用上面的HMR2环境。当前资源审计三图都在，静态报告三图/本机GET/390px布局通过；**HMR2.0b和SAM 3D Body都未完成推理，不能评价识别质量**。HMR2.0b待SMPL，SAM待HF访问及MHR。HMR独立Python3.10 CPU环境已安装并验证官方源码可导入，完整模型前向仍未运行。6GB显存可能需要CPU运行，记录实际耗时后再考虑浏览器本地模型移植。
+
 ## NLF-L 独立骨骼试验（2026-10-16，已完成）
 
 本机报告：`http://127.0.0.1:56173/_depth/nlf-l/report.html?image=seated`；并排对照：`http://127.0.0.1:56173/_depth/nlf-l/compare.html`。浏览器可切三张原图，查看2D叠图与可旋转原始XYZ，并以WASM或WebGPU重新识别。蓝色为人物左侧，橙色为右侧；人物框为人工固定，55°相机为假设。与S均使用官方v0.2.0，同原图/框/相机；L输入384×384，S输入256×256，不能把模型大小差异当作同算力速度排名。

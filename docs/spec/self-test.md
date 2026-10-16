@@ -1,5 +1,17 @@
 # 自测功能实现文档
 
+## HMR2.0b / SAM 3D Body 独立三图对照（2026-10-16，进行中）
+
+```text
+固定三张原图SHA/尺寸/人工框 → 资源审计核对官方源码commit、checkpoint、SMPL/MHR
+资源完整时才启动原版Python推理 → 原始关节与相机保存JSON → 原图叠点和3D报告
+资源不全时run-hmr2/run-sam3d必须失败，报告只显示原图和缺失项，不能产生伪造关节
+Edge检查三图切换、无脚本错误、本机GET、390px无横向溢出
+待资源准入后继续记录各模型三图左右腿、深度遮挡、脚朝向及耗时；自测通过不等于姿态准确
+```
+
+当前本机`tmp/mmd-pose/depth-eval/hmr2-sam3d/`脚本语法通过，资源审计三张原图均在；HMR官方checkpoint已下载且SHA确认，Windows两处环境适配后独立CPU环境可导入HMR模块，但SMPL中性模型缺失；SAM官方权重匿名请求返回401 GatedRepo，MHR也未取得。Edge静态报告三图/390px/本机GET通过，显示缺失状态而无骨架；内存中临时JSON验证结果绘制链，通过后不保留伪造模型文件。完整推理和姿态质量尚未验收，详细复现见[模型测试方法](../usage/mmd-pose-model-testing.md)。
+
 ## 二维投影刚体与深度辅助（2026-10-16，本机评估完成，质量未达标）
 
 ```text

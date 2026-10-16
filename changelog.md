@@ -1,3 +1,10 @@
+### MMD-AR HMR2.0b / SAM 3D Body 三图对照准备
+
+- ✅ [2026-10-16] 按用户确认准备官方Python三图模型对照及本机浏览器报告，不修改正式全身IK和MediaPipe默认。
+  - 固定官方4D-Humans/SAM 3D Body源码提交，下载并校验HMR2.0b公开归档与checkpoint；三张原图尺寸/SHA及人工框审计通过，权重/原图/临时脚本留在忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`。
+  - 增加原版模型输出脚本、资源审计和并排报告；脚本语法与缺资源失败路径通过，Edge三图、本机GET、内存中绘制链及390px无横向溢出。HMR仍缺SMPL中性模型；SAM官方权重匿名访问为401 GatedRepo、MHR缺失，因此尚无真实模型推理和姿态质量结论。
+  - 同步design/spec/task/usage/self-test/todo；HMR独立Python3.10 CPU依赖安装完成，两处Windows环境适配后官方模块导入通过，模型前向待SMPL。未构建APK或发布，Offline产物状态保持。
+
 ### MMD-AR NLF-L 三维骨骼独立试验
 
 - ✅ [2026-10-16] 完成官方NLF-L v0.2.0固定24点原生/ONNX/浏览器WASM与WebGPU三图对照，并与NLF-S并排评估。
