@@ -6,23 +6,56 @@
 <title>本机服务</title>
 <style>
 :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#10151d;color:#edf2f8}*{box-sizing:border-box}body{margin:0;padding:24px 18px 48px}main{max-width:800px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{font-size:27px;margin:8px 0}h2{font-size:19px;margin:0 0 14px}p{line-height:1.65}.muted,small{color:#a8b6c9}section{background:#1b2431;border:1px solid #334155;border-radius:16px;padding:20px;margin-top:18px}button{font:inherit;border:0;border-radius:9px;padding:12px 16px;min-height:46px;cursor:pointer;background:#39495f;color:#fff;margin:5px 5px 5px 0}button.primary{background:#84d2c3;color:#10241f;font-weight:600}button:disabled{opacity:.45;cursor:wait}button:focus-visible,input:focus-visible{outline:3px solid #9ee5ff;outline-offset:3px}label{display:flex;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid #334155}label input{width:22px;height:22px}label span{flex:1}small{display:block;margin-top:5px}progress{width:100%;height:12px;accent-color:#84d2c3}.error{color:#ffb4ab;white-space:pre-wrap}.notice{color:#a3eadb}#first{border-color:#84d2c3}#message{white-space:pre-wrap;overflow-wrap:anywhere}[hidden]{display:none!important}.row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}#source{overflow-wrap:anywhere}
+/* 自动首装和首次模型使用宿主弹窗，隐藏手动管理区，进度与错误仍保留。 */
+body.automatic{padding:12px}body.automatic header{display:none}body.automatic section{margin-top:10px;padding:14px}
+body.install-dialog main>section:not([aria-live]):not(#bootstrap){display:none!important}
+body.model-dialog:not(.model-preparing) main>section:not(#first):not(:last-child){display:none!important}
+body.model-dialog #first{margin-top:0}body.model-dialog #models{max-height:38vh;overflow:auto}
+body.install-dialog.service-preparing #preview,body.install-dialog #bootstrap>p,body.install-dialog #restart,body.install-dialog #refresh{display:none}
+body.model-dialog main>section:last-child>h2,body.model-dialog main>section:last-child>p,body.model-dialog #modelSize{display:none}
+body.model-dialog:not(.model-preparing) #cancelModels{display:none}
+body.model-preparing.model-dialog #first,body.model-preparing.model-dialog #models,body.model-preparing.model-dialog #downloadModels,body.model-preparing.model-dialog #later{display:none!important}
+body.model-preparing.model-dialog main>section:not([aria-live]):not(:last-child){display:none!important}
+body.install-dialog #install{display:none}
+body.install-dialog #preview{display:none}
+body.install-dialog.install-error:not(.service-preparing) #preview{display:inline-block}
+body.install-dialog #cancelInstall{display:none!important}
+/* 横屏与小窗口中固定操作区，内容不足时只滚动模型选择，不让确认按钮落到屏外。 */
+body.model-dialog{height:100vh;padding:8px;overflow:hidden;font-size:14px}
+body.model-dialog main{height:100%;display:flex;flex-direction:column;overflow:hidden}
+body.model-dialog #first{flex:0 0 auto;padding:8px;margin:0}
+body.model-dialog #first h2{font-size:20px;margin:0 0 6px}
+body.model-dialog #first p{margin:4px 0;line-height:1.4}
+body.model-dialog main>section:last-child{flex:1;min-height:0;display:flex;flex-direction:column;padding:8px;margin:4px 0 0}
+body.model-dialog #models{flex:1;min-height:0;max-height:none;overflow:auto}
+body.model-dialog label{padding:4px 0}body.model-dialog small{margin-top:2px;font-size:12px}
+body.model-dialog #modelActions{flex:0 0 auto;display:flex;flex-wrap:wrap;background:#1b2431}
+body.model-dialog button{min-height:38px;padding:8px 12px;font-size:14px;margin:4px 5px 0 0}
 </style>
 </head>
 <body><main>
 <header><div><h1>本机服务</h1><div class="muted">安装、更新与离线模型</div></div><button id="display">返回显示端</button></header>
-<section aria-live="polite"><h2 id="status">正在连接启动器</h2><p id="message" class="muted">首次启动可能需要片刻。</p><progress id="progress" hidden max="100"></progress><p id="error" class="error" role="alert"></p><button id="refresh">重新连接</button><button id="restart">重启服务</button></section>
-<section id="bootstrap" hidden><h2>准备本机服务</h2><p>首次安装需准备服务和初始数据，语音与聊天模型可稍后选择。</p><button id="preview" class="primary">检查安装资源</button><div id="previewResult" hidden><p id="source" class="muted"></p><button id="install" class="primary">下载并安装</button></div><button id="cancelInstall">取消下载</button></section>
-<section><h2>版本更新</h2><p id="versions" class="muted"></p><button id="check">检查服务更新</button><button id="apply" class="primary" hidden>确认更新</button><p id="updateDetail" class="muted"></p><button id="checkApk">检查应用更新</button><button id="installApk" hidden>下载并安装应用更新</button><p id="apkDetail" class="muted"></p></section>
 <section id="first" hidden><h2>准备语音模型</h2><p>本机服务已就绪，已为你选中 TTS 和 ASR/声纹模型。确认下载后，才会获取模型文件。</p><button id="later">稍后</button></section>
-<section><h2>离线模型</h2><p class="muted">选择需要的模型；已有文件会先校验并复用。</p><div id="models"></div><p id="modelSize" class="muted"></p><button id="downloadModels" class="primary">准备所选模型</button><button id="cancelModels">取消模型下载</button></section>
+<section aria-live="polite"><h2 id="status">正在连接启动器</h2><p id="message" class="muted">首次启动可能需要片刻。</p><progress id="progress" hidden max="100"></progress><p id="error" class="error" role="alert"></p><button id="refresh">重新连接</button><button id="restart">重启服务</button></section>
+<section id="bootstrap" hidden><h2>准备本机服务</h2><p>首次安装需准备服务和初始数据，语音与聊天模型可稍后选择。</p><button id="preview" class="primary">检查安装资源</button><div id="previewResult" hidden><p id="source" class="muted"></p><button id="install" class="primary">下载</button></div><button id="cancelInstall">取消下载</button></section>
+<section><h2>版本更新</h2><p id="versions" class="muted"></p><button id="check">检查服务更新</button><button id="apply" class="primary" hidden>确认更新</button><p id="updateDetail" class="muted"></p><button id="checkApk">检查应用更新</button><button id="installApk" hidden>下载并安装应用更新</button><p id="apkDetail" class="muted"></p></section>
+
+<section><h2>离线模型</h2><p class="muted">选择需要的模型；已有文件会先校验并复用。</p><div id="models"></div><p id="modelSize" class="muted"></p><div id="modelError" class="error" role="alert"></div><button id="downloadModels" class="primary">准备所选模型</button><button id="cancelModels">取消模型下载</button></section>
 </main><script>
 'use strict';
 (() => {
     const pending = new Map(); let serial = 0; const pageToken = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); let catalog = null; let states = []; let preview = null; let selected = new Set(); let preparing = [];
+    let firstToken = null; let promptQuery = null; let confirming = false; let visibilityFrame = false;
+    let automatic = false; let installing = false; let returning = false; let previewQuery = null; let firstRunQuery = false;
     const el = id => document.getElementById(id);
     const mib = bytes => Math.ceil(bytes / 1048576) + ' MiB';
     const statusNames = { ready: '本机服务已就绪', preparing: '正在准备本机服务', starting: '正在启动服务', installing: '正在安装服务', failed: '服务需要恢复' };
-    function error(value) { el('error').textContent = value ? String(value.message || value) : ''; }
+    function error(value) {
+        const message = value ? String(value.message || value) : '';
+        el('error').textContent = message; el('modelError').textContent = message;
+        if (message && automatic && document.body.classList.contains('install-dialog') && !installing) document.body.classList.add('install-error');
+        if (message && document.body.classList.contains('model-dialog')) el('downloadModels').textContent = '重新准备';
+    }
     function call(type, payload = {}) {
         return new Promise((resolve, reject) => {
             const requestId = 'ui-' + pageToken + '-' + (++serial);
@@ -38,18 +71,56 @@
         finally { button.disabled = false; }
     }
     function button(id, run) { el(id).addEventListener('click', () => action(el(id), run)); }
+    /** 自更新握手期间只重试只读查询，不重放下载或更新请求。 */
+    async function readyCall(type, payload = {}) {
+        const deadline = Date.now() + 30000;
+        for (;;) {
+            try { return await call(type, payload); }
+            catch (failure) {
+                if (Date.now() >= deadline || !/启动器暂不可用|会话已替换|启动器已停止|启动器尚未就绪/.test(failure.message)) throw failure;
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+    }
+    async function openDisplay(deferred = false) {
+        if (returning) return;
+        returning = true;
+        try { await call('native.openDisplay', { deferred }); } catch (failure) { returning = false; error(failure); }
+    }
+    function renderProgress(data) {
+        const names = { downloading: '正在下载', extracting: '正在解压', verifying: '正在校验文件', merging: '正在合并依赖', restoring: '正在恢复初始数据', downloading_apk: '正在下载应用更新' };
+        el('progress').hidden = false;
+        const ratio = data.totalFiles ? data.completedFiles * 100 / data.totalFiles : data.totalBytes ? data.completedBytes * 100 / data.totalBytes : data.progress;
+        const determinate = data.indeterminate !== true && Number.isFinite(ratio);
+        if (determinate) el('progress').value = ratio; else el('progress').removeAttribute('value');
+        const detail = data.modelId || data.detail || '';
+        const count = data.totalFiles ? ' · ' + data.completedFiles + '/' + data.totalFiles + ' 个文件' : '';
+        const elapsed = !determinate && data.elapsedSeconds ? ' · 已处理 ' + data.elapsedSeconds + ' 秒' : '';
+        el('message').textContent = (data.modelId ? '正在准备模型' : names[data.phase] || '正在处理') + ' ' + detail + count + (determinate ? ' · ' + ratio.toFixed(0) + '%' : elapsed);
+    }
     function renderState(value) {
         if (value.status === 'ready' && !value.modelStates?.some(row => row.downloading)) el('progress').hidden = true;
         el('status').textContent = statusNames[value.status] || '正在准备';
         el('message').textContent = value.detail || (value.status === 'ready' ? '可返回显示端，也可在下方准备离线模型。' : '操作期间可以留在此页查看进度。');
         el('bootstrap').hidden = value.phase !== 'awaiting_confirmation' && value.status !== 'installing';
-        if (value.progress?.totalBytes) { el('progress').hidden = false; el('progress').value = value.progress.completedBytes * 100 / value.progress.totalBytes; }
+        el('cancelInstall').textContent = value.status === 'installing' ? '取消下载' : '稍后';
+        if (value.status !== 'ready' && value.progress) renderProgress(value.progress);
         if (Array.isArray(value.modelStates)) { states = value.modelStates; renderModels(); }
+        if (value.phase === 'awaiting_confirmation') {
+            if (automatic) document.body.classList.add('install-dialog');
+            void checkPreview().catch(error);
+        }
+        if (value.status === 'installing' && (automatic || value.progress?.bootstrap)) {
+            installing = true;
+            if (automatic) document.body.classList.add('install-dialog', 'service-preparing');
+        }
+        if (value.status === 'ready' && installing) { installing = false; void openDisplay(); }
     }
     function renderModels() {
         if (!catalog) return;
         const fragment = document.createDocumentFragment();
-        for (const group of catalog.groups) {
+        const groups = automatic && document.body.classList.contains('model-dialog') ? catalog.groups.filter(group => group.defaultSelected) : catalog.groups;
+        for (const group of groups) {
             const label = document.createElement('label'); const check = document.createElement('input'); check.type = 'checkbox'; check.checked = selected.has(group.id);
             const text = document.createElement('span'); text.textContent = group.title;
             const detail = document.createElement('small');
@@ -66,12 +137,74 @@
         const bytes = ids.reduce((sum, id) => sum + (states.find(row => row.modelId === id)?.filesPresent ? 0 : catalog.models.find(row => row.modelId === id).totalBytes), 0);
         el('modelSize').textContent = ids.length ? '预计下载 ' + mib(bytes) + '；校验失败时可确认重新下载。' : '请选择模型';
         el('downloadModels').disabled = !ids.length || preparing.length > 0;
+        el('downloadModels').textContent = bytes ? '下载所选' : '准备所选';
+        if (automatic) el('first').querySelector('p').textContent = '本机环境已就绪，建议准备语音模型。所选模型需下载约 ' + mib(bytes) + '，已有文件会复用。来源：局域网镜像或公网；准备后可离线使用。';
     }
     async function refresh() {
         await call('native.ensureService');
-        catalog = await call('models.catalog');
-        renderState(await call('state.get'));
+        catalog = await readyCall('models.catalog');
+        renderState(await readyCall('state.get'));
+        await maybeFirstRun();
     }
+    async function checkPreview() {
+        if (preview || previewQuery) return previewQuery;
+        previewQuery = (async () => {
+            preview = await readyCall('bootstrap.preview');
+            el('source').textContent = '首次安装需下载服务和初始数据，约 ' + mib(preview.downloadBytes) + '。\n来源：' + preview.baseUrl + '\nASR/TTS/LLM 模型另外按需准备。';
+            el('previewResult').hidden = false;
+            if (automatic && !installing && !returning) el('install').click();
+        })().finally(() => { previewQuery = null; });
+        return previewQuery;
+    }
+    function showFirstRun(token) {
+        if (firstToken !== token) {
+            firstToken = token;
+            for (const group of catalog.groups) if (group.defaultSelected) selected.add(group.id);
+            document.body.classList.toggle('model-dialog', automatic);
+            renderModels(); el('first').hidden = false;
+            el('first').scrollIntoView({ block: 'start' });
+        }
+        checkVisibility();
+    }
+    /** 两帧只用于等布局稳定，真正消费仍需前台、非隐藏且标题和卡片进入视口。 */
+    function visiblePrompt() {
+        const card = el('first'); const rect = card.getBoundingClientRect(); const title = card.querySelector('h2').getBoundingClientRect();
+        const visibleHeight = Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0);
+        return document.visibilityState === 'visible' && !card.hidden && getComputedStyle(card).visibility !== 'hidden' &&
+            rect.width > 0 && title.top >= 0 && title.bottom <= innerHeight && visibleHeight >= Math.min(rect.height, 160, innerHeight * .6);
+    }
+    function checkVisibility() {
+        if (!firstToken || confirming || visibilityFrame) return;
+        visibilityFrame = true;
+        requestAnimationFrame(() => requestAnimationFrame(async () => {
+            visibilityFrame = false;
+            if (!firstToken || confirming || !visiblePrompt()) return;
+            confirming = true; const token = firstToken;
+            try { await call('ui.firstRunShown', { token, visible: true }); if (firstToken === token) firstToken = null; }
+            catch (failure) { error(failure); }
+            finally { confirming = false; }
+        }));
+    }
+    async function maybeFirstRun() {
+        if (!firstRunQuery || !catalog || document.visibilityState !== 'visible' || returning || installing || !el('first').hidden) return;
+        if (promptQuery) return promptQuery;
+        promptQuery = (async () => {
+            const result = await readyCall('ui.firstRun', { front: true, launcherReady: true });
+            if (result.show) showFirstRun(result.token);
+        })().finally(() => { promptQuery = null; });
+        return promptQuery;
+    }
+    for (const name of ['scroll', 'resize', 'focus']) window.addEventListener(name, checkVisibility, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+        checkVisibility();
+        if (document.visibilityState === 'visible') void refresh().catch(error);
+    });
+    window.addEventListener('launcher-back', () => {
+        if (!automatic) return;
+        if (!document.body.classList.contains('model-dialog')) return;
+        const button = preparing.length ? 'cancelModels' : 'later';
+        el(button).click();
+    });
     window.addEventListener('offline-launcher', event => {
         const value = event.detail;
         if (value.type === 'ui.result') {
@@ -79,39 +212,48 @@
             clearTimeout(request.timer); pending.delete(value.requestId);
             if (value.error) request.reject(new Error(value.error)); else request.resolve(value.result);
         }
-        if (value.type === 'startup.status') renderState(value.payload);
+        if (value.type === 'startup.status') { renderState(value.payload); if (value.payload.status === 'ready') void maybeFirstRun().catch(error); }
         if (value.type === 'models.state') { states = value.payload; renderModels(); }
         if (value.type === 'update.progress' || value.type === 'model.progress') {
-            const data = value.payload; el('progress').hidden = false;
-            el('progress').value = data.progress ?? (data.totalBytes ? data.completedBytes * 100 / data.totalBytes : 0);
-            el('message').textContent = data.modelId ? data.modelId + ' · ' + el('progress').value.toFixed(0) + '%' : '正在下载 / 校验 ' + (data.detail || '') + ' · ' + el('progress').value.toFixed(0) + '%';
+            error('');
+            renderProgress(value.payload);
         }
         if (value.type === 'service.result') { el('message').textContent = value.payload.detail; if (value.payload.status === 'service_update_failed') error(value.payload.detail); }
         if (value.type === 'ui.init') action(el('refresh'), async () => {
+            automatic = value.payload.automatic === true;
+            firstRunQuery = value.payload.firstRunQuery === true;
+            document.body.classList.toggle('automatic', automatic);
             await refresh();
-            if (value.payload.firstRunToken) {
-                for (const group of catalog.groups) if (group.defaultSelected) selected.add(group.id);
-                renderModels(); el('first').hidden = false;
-                // 只有前台真实绘制首装确认区后才消费提示；下载仍等待用户点击。
-                requestAnimationFrame(() => requestAnimationFrame(() => call('ui.firstRunShown', { token: value.payload.firstRunToken }).catch(error)));
-            }
+            if (value.payload.firstRunToken) showFirstRun(value.payload.firstRunToken);
         });
     });
+    const modelActions = document.createElement('div'); modelActions.id = 'modelActions';
+    el('downloadModels').before(modelActions); modelActions.append(el('downloadModels'), el('later'), el('cancelModels'));
     button('refresh', refresh); button('restart', async () => { await call('service.restart'); await refresh(); });
-    button('display', () => call('native.openDisplay'));
-    button('preview', async () => { preview = await call('bootstrap.preview'); el('source').textContent = '约 ' + mib(preview.downloadBytes) + ' · 来源：' + preview.baseUrl; el('previewResult').hidden = false; });
-    button('install', async () => { if (!preview) throw new Error('请先检查安装资源'); await call('bootstrap.install', preview); el('previewResult').hidden = true; await refresh(); });
-    button('cancelInstall', () => call('bootstrap.cancel'));
+    button('display', openDisplay);
+    button('preview', async () => { preview = null; await checkPreview(); });
+    button('install', async () => {
+        if (!preview) throw new Error('正在检查安装资源，请稍候');
+        installing = true; el('cancelInstall').textContent = '取消下载'; document.body.classList.add('service-preparing');
+        try { await call('bootstrap.install', preview); el('previewResult').hidden = true; await refresh(); }
+        catch (failure) { installing = false; document.body.classList.remove('service-preparing'); document.body.classList.add('install-error'); el('preview').textContent = '重试'; throw failure; }
+    });
+    button('cancelInstall', async () => { await call('bootstrap.cancel'); if (automatic) await openDisplay(true); });
     button('check', async () => { const result = await call('service.check', { manualRetry: true }); el('updateDetail').textContent = result.status + (result.hasUpdate ? ' · 约 ' + mib(result.downloadBytes) : '') + (result.dataRepair?.sensitive ? '\n包含账号或配置修复，请确认后更新。' : ''); el('apply').hidden = !result.hasUpdate; el('versions').textContent = result.installed ? '服务 v' + result.installed.codeVersion + ' · 依赖 v' + result.installed.dependencyVersion : '尚未安装'; });
     button('apply', async () => { const result = await call('service.apply'); el('updateDetail').textContent = result.status; el('apply').hidden = true; await refresh(); });
     button('checkApk', async () => { const result = await call('apk.check'); el('apkDetail').textContent = result.status + (result.metadata ? ' · ' + result.metadata.versionName + ' · ' + mib(result.metadata.size) : ''); el('installApk').hidden = !result.metadata; });
     button('installApk', async () => { const result = await call('native.installApk'); el('apkDetail').textContent = result.status; });
-    button('later', () => { el('first').hidden = true; for (const group of catalog.groups) selected.delete(group.id); renderModels(); });
+    button('later', async () => { el('first').hidden = true; for (const group of catalog.groups) selected.delete(group.id); renderModels(); if (automatic) await openDisplay(); });
     button('downloadModels', async () => {
         preparing = chosen(); if (!preparing.length) return;
-        try { await call('models.prepareGroup', { modelIds: preparing, allowDownload: true }); el('message').textContent = '所选模型已准备，返回显示端后可使用。'; }
-        finally { preparing = []; await refresh(); }
+        try {
+            document.body.classList.add('model-preparing');
+            await call('models.prepareGroup', { modelIds: preparing, allowDownload: true });
+            el('message').textContent = '所选模型已准备，返回显示端后可使用。';
+            if (automatic) await openDisplay();
+        }
+        finally { preparing = []; document.body.classList.remove('model-preparing'); await refresh(); }
     });
-    button('cancelModels', async () => { const ids = new Set([...preparing, ...states.filter(row => row.downloading).map(row => row.modelId)]); await Promise.all([...ids].map(modelId => call('models.cancel', { modelId }))); });
+    button('cancelModels', async () => { const ids = new Set([...preparing, ...states.filter(row => row.downloading).map(row => row.modelId)]); await Promise.all([...ids].map(modelId => call('models.cancel', { modelId }))); if (automatic) await openDisplay(); });
 })();
 </script></body></html>

@@ -171,7 +171,7 @@ function createZipEntryVerifier(entry) {
     });
 }
 
-async function extractZipSafely(archivePath, destinationRoot, kind, select = () => true) {
+async function extractZipSafely(archivePath, destinationRoot, kind, select = () => true, progress = () => {}) {
     const archiveStat = await fs.promises.stat(archivePath);
     if (!archiveStat.isFile() || archiveStat.size > MAX_ZIP_ARCHIVE_BYTES) {
         throw new Error(`代码 ZIP 文件类型或大小无效: ${archiveStat.size}`);
@@ -196,6 +196,16 @@ async function extractZipSafely(archivePath, destinationRoot, kind, select = () 
     require('./files').space(parent, entries.filter(entry => select(entry.relativePath)).reduce((sum, entry) => sum + entry.uncompressedSize, 0));
     await fs.promises.mkdir(destinationRoot, { recursive: false });
     const resolvedRoot = path.resolve(destinationRoot);
+    const selected = entries.filter(entry => !entry.isDirectory && select(entry.relativePath));
+    const totalBytes = selected.reduce((sum, entry) => sum + entry.uncompressedSize, 0);
+    let completedFiles = 0; let completedBytes = 0; let reportedAt = 0;
+    // 统计通过CRC校验并落盘的真实文件；大依赖包按时间节流，避免协议管道被逐文件事件淹没。
+    const report = force => {
+        if (!force && Date.now() - reportedAt < 150) return;
+        reportedAt = Date.now();
+        progress({ completedFiles, totalFiles: selected.length, completedBytes, totalBytes, indeterminate: false });
+    };
+    report(true);
 
     for (const entry of entries) {
         if (!select(entry.relativePath)) continue;
@@ -238,6 +248,8 @@ async function extractZipSafely(archivePath, destinationRoot, kind, select = () 
         } else {
             await pipeline(input, verifier, output);
         }
+        completedFiles++; completedBytes += entry.uncompressedSize;
+        report(completedFiles === selected.length);
     }
 }
 

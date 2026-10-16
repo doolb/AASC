@@ -147,7 +147,10 @@ test('Android仅下载common/android依赖，校验平台、内容与缓存元�
     }
     const deps = { version: 1, lockSha256: f.lockSha, groups, sha256: digest(shared.canonicalJson(groups)), size: shared.GROUPS.reduce((sum, name) => sum + groups[name].size, 0) };
     source = { ...source, components: { ...source.components, dependencies: deps } }; source.manifest = sign(source.components);
-    const releases = new Releases(f.config); await releases.prepare(source, true); await releases.healthy();
+    const phases = []; const releases = new Releases(f.config, value => phases.push(value)); await releases.prepare(source, true); await releases.healthy();
+    for (const phase of ['downloading', 'extracting', 'verifying', 'merging']) assert.ok(phases.some(row => row.phase === phase), phase);
+    assert.ok(phases.some(row => row.phase === 'extracting' && row.completedFiles === row.totalFiles && row.totalFiles > 0));
+    assert.ok(phases.some(row => row.phase === 'verifying' && row.indeterminate === true));
     assert.ok(f.requests.some(url => url.includes('/common/'))); assert.ok(f.requests.some(url => url.includes('/android/')));
     assert.equal(f.requests.some(url => /linux64|win64/.test(url)), false);
     const cache = path.join(f.root, `updates/dependency-groups/common/dependencies-v1-${groups.common.sha256.slice(0, 12)}`);
@@ -189,7 +192,7 @@ test('首装提示等待前台/健康/显示，实际展示令牌才消费', asy
     assert.equal((await controller.firstRun({ ...p, front: false })).show, false);
     const decision = await controller.firstRun(p); assert.equal(decision.show, true);
     await assert.rejects(controller.handle({ type: 'ui.firstRunShown', payload: { token: 'wrong' } }), /过期/);
-    await controller.handle({ type: 'ui.firstRunShown', payload: { token: decision.token } });
+    await controller.handle({ type: 'ui.firstRunShown', payload: { token: decision.token, visible: true } });
     assert.equal((await controller.firstRun(p)).handled, true);
 });
 
@@ -377,4 +380,46 @@ test('旧legacy-root指针只在已有版本依赖校验通过时修复，不联
     const pointer = files.read(f.root, 'updates/active-release.json'); await files.atomic(f.root, 'updates/active-release.json', { ...pointer, legacyDependencies: true, pendingHealth: true, previous: pointer });
     const count = f.requests.length; await releases.repairLegacy(); const current = files.read(f.root, 'updates/active-release.json');
     assert.equal(current.legacyDependencies, false); assert.equal(current.pendingHealth, true); assert.deepEqual(current.previous, pointer); assert.equal(f.requests.length, count);
+});
+
+
+test('健康首装开放启动页模型确认，旧安装不提前导入false或重复提示', async t => {
+    const f = await fixture(t); await f.release();
+    const service = { async start() { await this.onHealthy(); }, async stop() {} };
+    const events = []; const controller = new Controller({ ...f.config, service }, row => events.push(row));
+    const query = { front: true, launcherReady: true };
+    assert.equal((await controller.firstRun(query)).show, false);
+    assert.equal(files.read(f.root, 'updates/js-ui-state.json'), null);
+    const preview = await controller.releases.preview();
+    const installs = await Promise.all(['fresh', 'reloaded-page'].map(requestId => controller.handle({ type: 'bootstrap.install', requestId, payload: preview })));
+    assert.equal(installs.length, 2);
+    assert.equal(f.requests.filter(url => url === '/dependencies/dependencies-v1.zip').length, 1);
+    assert.equal(files.read(f.root, 'updates/js-ui-state.json').launcherEligible, true);
+    const decision = await controller.firstRun(query);
+    assert.equal(decision.show, true);
+    assert.equal((await controller.firstRun(query)).token, decision.token);
+    await assert.rejects(controller.handle({ type: 'ui.firstRunShown', payload: { token: decision.token } }), /可见/);
+    assert.equal(files.read(f.root, 'updates/js-ui-state.json').handled, false);
+    await controller.handle({ type: 'ui.firstRunShown', payload: { token: decision.token, visible: true } });
+    assert.equal((await controller.firstRun(query)).handled, true);
+    assert.equal((await controller.handle({ type: 'state.get' })).progress, null);
+    assert.equal(f.requests.some(url => url.includes('voice.bin')), false);
+    const old = new Controller({ ...f.config, root: path.join(f.temp, 'old'), service }, () => {});
+    old.snapshot = { status: 'ready' };
+    assert.equal((await old.firstRun(query)).show, false);
+    assert.equal((await old.firstRun({ front: true, displayReady: true, handled: true })).show, false);
+    assert.equal(files.read(old.config.root, 'updates/js-ui-state.json').handled, true);
+});
+
+test('首装健康失败不开放提示资格，文件阶段心跳与失败清理', async t => {
+    const f = await fixture(t); await f.release();
+    const controller = new Controller({ ...f.config, service: { async start() { throw new Error('健康失败'); }, async stop() {} } }, () => {});
+    await assert.rejects(controller.handle({ type: 'bootstrap.install', payload: await controller.releases.preview() }), /健康失败/);
+    assert.equal(files.read(f.root, 'updates/js-ui-state.json'), null);
+    assert.equal(controller.snapshot.phase, 'awaiting_confirmation');
+    const events = []; const releases = new Releases(f.config, row => events.push(row));
+    await assert.rejects(releases.operation('verifying', 'common', async () => { await new Promise(resolve => setTimeout(resolve, 1100)); throw new Error('校验失败'); }), /校验失败/);
+    assert.ok(events.some(row => row.elapsedSeconds >= 1 && row.indeterminate));
+    const count = events.length; await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.equal(events.length, count);
 });

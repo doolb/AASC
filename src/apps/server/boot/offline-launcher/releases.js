@@ -68,6 +68,22 @@ class Releases {
     constructor(config, emit = () => {}) {
         this.config = config; this.root = config.root; this.sources = config.updateSources || net.UPDATE_SOURCES; this.emit = emit;
     }
+    /** 文件系统阶段通常没有可靠总量，定期报告真实处理状态与耗时，不把下载100%沿用为整体完成。 */
+    async operation(phase, detail, run) {
+        const started = Date.now(); let latest = { indeterminate: true };
+        const report = value => {
+            latest = { ...latest, ...value };
+            this.emit({ phase, detail, ...latest, elapsedSeconds: Math.floor((Date.now() - started) / 1000) });
+        };
+        report({});
+        const timer = setInterval(() => report({}), 1000);
+        try { return await run(report); }
+        finally { clearInterval(timer); }
+    }
+    async extract(zip, destination, kind, detail = kind, signal) {
+        return this.operation('extracting', detail, report => archive.extractZipSafely(zip, destination, kind, () => true,
+            value => { signal?.throwIfAborted(); report(value); }));
+    }
     async manifest(signal) {
         let last;
         for (const baseUrl of this.sources) {
@@ -199,7 +215,7 @@ class Releases {
         const dep = source.components.dependencies; const destination = path.join(stage, 'dependencies');
         if (!dep.groups) {
             const zip = await this.fetch(source, 'dependencies', dep, signal);
-            await archive.extractZipSafely(zip, destination, 'dependencies');
+            await this.extract(zip, destination, 'dependencies', 'dependencies', signal);
         } else {
             for (const name of ['common', 'android']) {
                 const entry = dep.groups[name];
@@ -208,18 +224,18 @@ class Releases {
                 if (!fs.existsSync(cache)) {
                     const zip = await this.fetch(source, name, entry, signal);
                     const layer = path.join(stage, `group-${name}`);
-                    await archive.extractZipSafely(zip, layer, 'dependencies');
+                    await this.extract(zip, layer, 'dependencies', name, signal);
                     const metadata = files.read(layer, 'dependency-group.json');
-                    if (metadata?.group !== name || metadata.version !== entry.version || metadata.contentSha256 !== entry.contentSha256 || shared.canonicalJson(metadata.target) !== shared.canonicalJson(entry.target) || await tree.contentHash(path.join(layer, 'node_modules')) !== entry.contentSha256) throw new Error('依赖层内容指纹不符');
+                    if (metadata?.group !== name || metadata.version !== entry.version || metadata.contentSha256 !== entry.contentSha256 || shared.canonicalJson(metadata.target) !== shared.canonicalJson(entry.target) || await this.operation('verifying', name, () => tree.contentHash(path.join(layer, 'node_modules'))) !== entry.contentSha256) throw new Error('依赖层内容指纹不符');
                     await fs.promises.mkdir(path.dirname(cache), { recursive: true }); await fs.promises.rename(layer, cache);
                 }
                 const metadata = files.read(cache, 'dependency-group.json');
                 if (metadata?.group !== name || metadata.version !== entry.version || metadata.contentSha256 !== entry.contentSha256 ||
                     shared.canonicalJson(metadata.target) !== shared.canonicalJson(entry.target) ||
-                    await tree.contentHash(path.join(cache, 'node_modules')) !== entry.contentSha256) throw new Error('缓存依赖层已损坏');
-                files.space(this.root, (await files.walk(path.join(cache, 'node_modules'))).reduce((sum, file) => sum + file.size, 0));
+                    await this.operation('verifying', name, () => tree.contentHash(path.join(cache, 'node_modules'))) !== entry.contentSha256) throw new Error('缓存依赖层已损坏');
+                files.space(this.root, (await this.operation('verifying', name, () => files.walk(path.join(cache, 'node_modules')))).reduce((sum, file) => sum + file.size, 0));
                 await fs.promises.mkdir(path.join(destination, 'node_modules'), { recursive: true });
-                await tree.mergeTree(path.join(cache, 'node_modules'), path.join(destination, 'node_modules'));
+                await this.operation('merging', name, () => tree.mergeTree(path.join(cache, 'node_modules'), path.join(destination, 'node_modules')));
             }
             await files.atomic(destination, 'dependency-manifest.json', { version: dep.version, lockSha256: dep.lockSha256, sha256: dep.sha256 });
         }
@@ -234,8 +250,8 @@ class Releases {
         if (!fs.existsSync(destination)) {
             const stage = files.safe(this.root, path.join(this.root, `updates/.launcher-stage-${process.pid}-${Date.now()}`));
             try {
-                await archive.extractZipSafely(zip, stage, 'code');
-                await this.validateCode(stage, entry); await this.install(stage, 'code', entry, stage);
+                await this.extract(zip, stage, 'code', 'launcher', signal);
+                await this.operation('verifying', 'launcher', () => this.validateCode(stage, entry)); await this.install(stage, 'code', entry, stage);
             } finally { await fs.promises.rm(stage, { recursive: true, force: true }); }
         }
         const identity = files.read(destination, MARKER);
@@ -259,10 +275,10 @@ class Releases {
                 signal?.throwIfAborted();
                 const zip = await this.fetch(source, kind, entry, signal);
                 const directory = path.join(stage, kind);
-                await archive.extractZipSafely(zip, directory, kind);
-                if (kind === 'code') { await this.validateCode(directory, entry); await this.install(stage, kind, entry, directory); }
-                if (kind === 'seeds') await restoreSeeds(directory, this.root);
-                if (kind === 'taskCode') { await this.validateTask(directory, entry); await this.install(stage, kind, entry, directory); }
+                await this.extract(zip, directory, kind, kind, signal);
+                if (kind === 'code') { await this.operation('verifying', kind, () => this.validateCode(directory, entry)); await this.install(stage, kind, entry, directory); }
+                if (kind === 'seeds') await this.operation('restoring', kind, () => restoreSeeds(directory, this.root));
+                if (kind === 'taskCode') { await this.operation('verifying', kind, () => this.validateTask(directory, entry)); await this.install(stage, kind, entry, directory); }
                 if (kind === 'dataRepair') {
                     if (await files.hash(path.join(directory, 'repair.js')) !== entry.scriptSha256) throw new Error('修复脚本摘要不符');
                     await this.install(stage, kind, entry, directory);
@@ -274,13 +290,13 @@ class Releases {
             const legacy = current?.legacyDependencies === true && current.dependencyVersion === c.dependencies.version;
             const codeDirectory = plan === 'DATA_REPAIR_ONLY' && current?.bundled ? this.root : path.join(this.root, `updates/code/code-v${c.code.version}`);
             if (codeDirectory !== this.root) identity(codeDirectory, 'code', c.code);
-            await this.validateCode(codeDirectory, c.code);
+            await this.operation('verifying', 'code', () => this.validateCode(codeDirectory, c.code));
             const dependencyDirectory = legacy ? this.root : path.join(this.root, `updates/dependencies/dependencies-v${c.dependencies.version}`);
             if (!legacy) identity(dependencyDirectory, 'dependencies', c.dependencies);
-            await validateLock(dependencyDirectory, codeDirectory);
+            await this.operation('verifying', 'dependencies', () => validateLock(dependencyDirectory, codeDirectory));
             if (c.taskCode) {
                 const directory = path.join(this.root, `updates/task-code/task-code-v${c.taskCode.version}`);
-                identity(directory, 'taskCode', c.taskCode); await this.validateTask(directory, c.taskCode);
+                identity(directory, 'taskCode', c.taskCode); await this.operation('verifying', 'taskCode', () => this.validateTask(directory, c.taskCode));
             }
             signal?.throwIfAborted();
             const pointer = { schemaVersion: 1, codeVersion: c.code.version, dependencyVersion: c.dependencies.version, lockSha256: c.dependencies.lockSha256,

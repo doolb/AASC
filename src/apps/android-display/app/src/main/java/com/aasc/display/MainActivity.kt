@@ -430,7 +430,10 @@ class MainActivity : AppCompatActivity() {
         serverInput.setOnEditorActionListener { _, _, _ -> connect(true); true }
         controlToggleButton.setOnClickListener { handleControlButtonClick() }
         offlineStartupRetry.setOnClickListener {
-            if (OfflineLauncherSession.enabled(this)) { startActivity(Intent(this, OfflineLauncherActivity::class.java)); return@setOnClickListener }
+            if (OfflineLauncherSession.enabled(this)) {
+                startActivity(Intent(this, OfflineLauncherActivity::class.java).putExtra(OfflineLauncherActivity.EXTRA_AUTOMATIC, true))
+                return@setOnClickListener
+            }
             if (bootstrapWorking) {
                 ContextCompat.startForegroundService(this, Intent(this, NodeServerService::class.java)
                     .putExtra(NodeServerService.EXTRA_CANCEL_BOOTSTRAP, true))
@@ -630,6 +633,10 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent?.getBooleanExtra(OfflineLauncherActivity.EXTRA_DEFERRED, false) == true) {
+            showOfflineStartupMessage("本机服务尚未准备，点击重试开始安装", true)
+            return
+        }
         val injectedServerUrl = intent?.getStringExtra(EXTRA_SERVER_URL)?.trim().orEmpty()
         if (injectedServerUrl.isEmpty()) return
         serverInput.setText(injectedServerUrl)
@@ -655,7 +662,10 @@ class MainActivity : AppCompatActivity() {
 
     /** 初始化页先读取小型签名清单；环境 ZIP 只在原生确认后开始下载。 */
     private fun requestBootstrap() {
-        if (OfflineLauncherSession.enabled(this)) { startActivity(Intent(this, OfflineLauncherActivity::class.java)); return }
+        if (OfflineLauncherSession.enabled(this)) {
+            startActivity(Intent(this, OfflineLauncherActivity::class.java).putExtra(OfflineLauncherActivity.EXTRA_AUTOMATIC, true))
+            return
+        }
         if (bootstrapChecking || bootstrapWorking) return
         bootstrapChecking = true
         showOfflineStartupMessage("正在检查首次安装所需资源", false)
@@ -1076,7 +1086,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startAvailableOfflineUpdate() {
-        if (OfflineLauncherSession.enabled(this)) { startActivity(Intent(this, OfflineLauncherActivity::class.java)); return }
         if (offlineFailures.updateError != null) {
             // 失败后的点击只重新检查并显示确认卡片，不能复用尚未展示的另一类候选直接下载。
             serviceUpdateCandidate = null
@@ -1172,6 +1181,9 @@ class MainActivity : AppCompatActivity() {
                 formatBytes(totalBytes ?: 0L)
             )
             "verifying" -> getString(R.string.offline_service_update_verifying)
+            "extracting" -> "正在解压文件\n${detail.orEmpty()}"
+            "merging" -> "正在合并依赖\n${detail.orEmpty()}"
+            "restoring" -> "正在恢复初始数据"
             "switching" -> getString(R.string.offline_service_update_switching)
             else -> detail ?: getString(R.string.offline_service_update_downloading)
         }

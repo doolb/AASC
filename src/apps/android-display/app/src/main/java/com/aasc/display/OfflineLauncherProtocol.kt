@@ -8,7 +8,7 @@ internal object OfflineLauncherProtocol {
     fun isLocalDocument(url: String, mainFrame: Boolean): Boolean = mainFrame && url == LOCAL_DOCUMENT_URL
     val commands = setOf("state.get", "bootstrap.preview", "bootstrap.install", "bootstrap.cancel",
         "service.check", "service.apply", "service.restart", "apk.check", "models.catalog", "models.status",
-        "models.prepareGroup", "models.cancel", "ui.firstRunShown", "native.ensureService", "native.openDisplay", "native.installApk")
+        "models.prepareGroup", "models.cancel", "ui.firstRun", "ui.firstRunShown", "native.ensureService", "native.openDisplay", "native.installApk")
     fun parse(raw: String): JSONObject {
         require(raw.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) { "页面消息超限" }
         val request = JSONObject(raw)

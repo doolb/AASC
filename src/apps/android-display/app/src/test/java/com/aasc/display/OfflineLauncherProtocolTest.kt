@@ -4,6 +4,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OfflineLauncherProtocolTest {
+    @Test fun 启动页可查询首次提示且可见确认携带证明() {
+        assertEquals("ui.firstRun", OfflineLauncherProtocol.parse("""{"type":"ui.firstRun","requestId":"ui-query-1","payload":{"front":true,"launcherReady":true}}""").getString("type"))
+        assertTrue(OfflineLauncherProtocol.parse("""{"type":"ui.firstRunShown","requestId":"ui-show-2","payload":{"token":"proof","visible":true}}""").getJSONObject("payload").getBoolean("visible"))
+    }
     private fun rejected(raw: String) {
         try { OfflineLauncherProtocol.parse(raw); fail("必须拒绝无效页面消息") }
         catch (_: IllegalArgumentException) { }
