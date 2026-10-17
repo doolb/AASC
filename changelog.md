@@ -1,3 +1,8 @@
+### 豆包失效会话自动重建
+
+- ✅ [2026-10-17] 修复 Responses 续接豆包时 `doubao_session_uncertain` 直接报错：清除旧上游引用，尚未输出正文时用完整聊天上下文自动重试一次；已输出正文时只清除引用，下一轮重建，保留控制端会话与历史。
+  - 更新 `src/external/llm/llm-service.js`、`src/external/llm/llm-service-doubao-recovery.test.js`、聊天 design/spec/task/todo。目标测试 12/12、`npm run check:chat2api` 279/279 通过，覆盖非流式、流式、部分输出和首轮失败边界；真实豆包账号待现场验收。`release/offline-release-status.json` 的 `servicePackage` 已为 `true`，未构建或发布代码包。
+
 ### MMD-AR NLF-S 三维骨骼独立试验
 
 - ✅ [2026-10-16] 验证官方NLF-S v0.2.0并导出固定SMPL24关节点ONNX（83725857字节），完成三张图WASM/WebGPU原图本地推理、叠图与可旋转XYZ报告。

@@ -539,7 +539,8 @@ function clearResponseReference(sessionKeyValue) {
 }
 
 function canRebuildResponsesSession(error) {
-    return error?.statusCode === 404 || ['conversation_not_found', 'response_not_found'].includes(error?.code);
+    return error?.statusCode === 404
+        || ['conversation_not_found', 'response_not_found', 'doubao_session_uncertain'].includes(error?.code);
 }
 
 async function requestResponsesWithRecovery(context) {
@@ -548,7 +549,8 @@ async function requestResponsesWithRecovery(context) {
     try {
         return await client.request(request);
     } catch (error) {
-        if (!context.state || !canRebuildResponsesSession(error)) throw error;
+        // 只有确实携带旧上游引用的请求才需要重建；首轮失败不能重复发送。
+        if (!(request.previous_response_id || request.conversation) || !canRebuildResponsesSession(error)) throw error;
         clearResponseReference(context.sessionKey);
         return client.request(buildResponsesPayload({ ...context, state: null }));
     }
@@ -564,8 +566,11 @@ async function streamResponsesWithRecovery(context, onEvent) {
             onEvent(event);
         });
     } catch (error) {
-        if (!context.state || receivedText || !canRebuildResponsesSession(error)) throw error;
+        if (!(request.previous_response_id || request.conversation) || !canRebuildResponsesSession(error)) throw error;
+        // 失效引用必须立即移除；即使已有正文而不能重发，本地下一轮也应新建上游会话。
         clearResponseReference(context.sessionKey);
+        if (receivedText) throw error;
+        // 尚无正文时只重试一次，并把已构造的完整历史发送到新的上游会话。
         await client.stream(buildResponsesPayload({ ...context, state: null }), onEvent);
     }
 }
