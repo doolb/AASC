@@ -3,6 +3,51 @@
 - ✅ [2026-10-17] 修复 Responses 续接豆包时 `doubao_session_uncertain` 直接报错：清除旧上游引用，尚未输出正文时用完整聊天上下文自动重试一次；已输出正文时只清除引用，下一轮重建，保留控制端会话与历史。
   - 更新 `src/external/llm/llm-service.js`、`src/external/llm/llm-service-doubao-recovery.test.js`、聊天 design/spec/task/todo。目标测试 12/12、`npm run check:chat2api` 279/279 通过，覆盖非流式、流式、部分输出和首轮失败边界；真实豆包账号待现场验收。`release/offline-release-status.json` 的 `servicePackage` 已为 `true`，未构建或发布代码包。
 
+### MMD 本机姿态试验仅保留HMR与人物分割
+
+- ✅ [2026-10-16] 按用户确认精确清理其他本机姿态试验，人物分割暂时保留完整流程及共享依赖。
+  - 删除25,688文件/4,187,805,966字节（约4.19GB/3.90GiB）：四模型/OpenPose/DWPose/YOLOX、RTMW3D/XYZ、NLF-S/L及SAM 3D专用脚本、权重、结果、报告和独立环境。HMR源码/权重/archive/venv/七结果/自选图，以及人物分割111文件、RTMPose二维缓存和权重、共享深度/rig/321骨初值/肩髋模块与控制JSON保留；102项关键数据SHA不变，原图与正式MediaPipe/IK/生产缓存未动。
+  - `tmp/mmd-pose/depth-eval/server.cjs`锚定项目资源、复用HMR本机样本配置、添加RTMPose现有缓存专用路由并移除旧MP探针路由；`serve-report.cjs`默认启动HMR完整服务；分割现行/快照及生成脚本仅修复旧报告超链。新增`check-retained.cjs`：默认124/真实Worker138项通过；分割unit21/leg24/results89/leg-results58、浏览器25/leg36及HMR三图/四候选/自选UI＋真实Depth回归通过。
+  - 真实PPHumanSeg/RTMPose三图九输入、原图逐点差0、两session释放、取消、本机GET通过，原始JSON未改。HMR Python与Ammo求解本轮未重跑；完整姿态质量仍0通过，不掩盖坐姿左右/深度和动漫脚掌失败。同步design/spec/task/self-test/usage/todo，旧独立路线待办终止、历史文档保留；未重启用户服务、构建/发布或改Offline状态。
+  - 初始写入权限拒绝后用户切完全权限继续；权限诊断未改权限。glob漏掉SAM嵌套Git时另审29项专用元数据清单后清空，项目/HMR官方Git不动；未用git clean或盲目递归删除。
+
+### MMD-AR HMR2.0b 报告整图相对深度
+
+- ✅ [2026-10-16] 在独立HMR2.0b三图报告同时显示既有Depth Anything V2 Small整图相对深度。
+  - `tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html`、`report.mjs`改为原图叠点/受光3D骨架/相对深度三列，窄屏折行；`check-report.cjs`覆盖三图、HMR候选同步、WebGL回退与深度404。同步design、spec、self-test、task、usage、todo；深度PNG、权重及私人原图仍只保留本机。
+  - Edge三图实际解码、候选不串图、SHA来源不符/404回退、390px无溢出、本机GET与无页面错误通过。深度仅为可见表面的相对远近，不是米制关节深度；未修改正式IK、Offline状态或构建APK。
+
+### MMD-AR HMR2.0b 动漫脚掌重测
+
+- ✅ [2026-10-16] 确认动漫脚掌偏差来自模型原始BODY25输出，并用同一权重测试扩框、人物框左右平移及水平镜像。
+  - `tmp/mmd-pose/depth-eval/hmr2-sam3d/run-hmr2.py`增加四候选真实推理与镜像左右语义恢复；`report.html`、`report.mjs`、`check-report.cjs`增加原版/候选对照和自测。同步design、spec、self-test、task、usage、todo；原始三图JSON、模型与私人图片未覆盖或提交。
+  - 四候选蓝色左脚趾仍在原图`y=389–404`，未回到可见鞋面，全部不采纳；镜像XYZ重投影误差小于`0.001px`。Edge三图/四候选、WebGL回退、390px、本机GET及无脚本错误通过。正式MediaPipe全身IK与Offline状态不变，未构建APK。
+
+### MMD-AR HMR2.0b 骨架立体显示
+
+- ✅ [2026-10-16] 按用户要求将独立报告的3D骨架改为圆柱骨段、球形关节和受光材质，不加投影阴影。
+  - `tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html`、`report.mjs`、`check-report.cjs`选择性加入Git；复用本地Three.js，保持三图原始BODY25、原图叠点、左右配色与拖动/双击交互，WebGL不可用时回退线条。模型、私人图片及推理结果仍不提交。
+  - Edge三图各24圆柱/25球、三盏灯、拖动复位、回退、本机GET、390px无溢出和无脚本错误通过。真人抬高膝仍被HMR2.0b错误归到右侧，立体显示不改变识别结论；未改正式IK或Offline状态，未构建APK。
+
+### MMD-AR HMR2.0b 单模型三图实测
+
+- ✅ [2026-10-16] 按用户收窄范围，仅运行HMR2.0b三张图；官方checkpoint内的SMPL层张量经形状与BODY25顺序校验后，由同一`smplx.lbs`路径生成3D关节和原图投影。
+  - 忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`的`audit.py`、`run-hmr2.py`、`report.html`、`report.mjs`、`check-report.cjs`更新为HMR单模型；私人图片、权重和JSON未入Git。三图CPU真实推理、Edge真实绘图、本机GET与390px布局通过；模型加载约6.1秒，单图约0.7–2.0秒，峰值工作集约5.9GiB。
+  - 真人坐姿抬高膝仍更贴近模型右膝，用户标注应为左腿；左脚投影超画幅，动漫和示意图末端仍有偏差。独立试验完成但质量未达标，不接入VAM，MediaPipe默认不变。同步design/spec/self-test/task/usage/todo并移除已完成待办；未构建APK或发布，Offline产物状态保持。
+
+### MMD-AR HMR2.0b / SAM 3D Body 三图对照准备
+
+- ✅ [2026-10-16] 按用户确认准备官方Python三图模型对照及本机浏览器报告，不修改正式全身IK和MediaPipe默认。
+  - 固定官方4D-Humans/SAM 3D Body源码提交，下载并校验HMR2.0b公开归档与checkpoint；三张原图尺寸/SHA及人工框审计通过，权重/原图/临时脚本留在忽略目录`tmp/mmd-pose/depth-eval/hmr2-sam3d/`。
+  - 增加原版模型输出脚本、资源审计和并排报告；脚本语法与缺资源失败路径通过，Edge三图、本机GET、内存中绘制链及390px无横向溢出。HMR仍缺SMPL中性模型；SAM官方权重匿名访问为401 GatedRepo、MHR缺失，因此尚无真实模型推理和姿态质量结论。
+  - 同步design/spec/task/usage/self-test/todo；HMR独立Python3.10 CPU依赖安装完成，两处Windows环境适配后官方模块导入通过，模型前向待SMPL。未构建APK或发布，Offline产物状态保持。
+
+### MMD-AR NLF-L 三维骨骼独立试验
+
+- ✅ [2026-10-16] 完成官方NLF-L v0.2.0固定24点原生/ONNX/浏览器WASM与WebGPU三图对照，并与NLF-S并排评估。
+  - 临时模型、脚本和报告在忽略目录`tmp/mmd-pose/depth-eval/nlf-l/`；同步design/spec/task/usage，完成项从todo移除。权重495696900字节、ONNX471422850字节，SHA-256见使用说明；私有图片/模型不入Git。
+  - CPU ONNX对官方FP32参考归一化最大差7.15e-6，JS重建XYZ最大差低于0.001mm；浏览器两后端六例通过，390px无横向溢出，本机WASM约1.7秒、WebGPU后两图128–140ms。官方完整半精度封装未完成，手机未测。
+  - 真人抬腿仍归右，动漫手臂及示意图交叉腿偏离；不接入VAM，不替换MediaPipe。未修改生产代码/构建输入、未出APK或发布，Offline状态保持。
 ### MMD-AR NLF-S 三维骨骼独立试验
 
 - ✅ [2026-10-16] 验证官方NLF-S v0.2.0并导出固定SMPL24关节点ONNX（83725857字节），完成三张图WASM/WebGPU原图本地推理、叠图与可旋转XYZ报告。
@@ -13195,3 +13240,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 沿用已生成的 `code/code-v112.zip`：4,942,375 bytes，SHA-256 `e3b098861454d72016c005b48f120addf5c35af26324e8450f0c8996e7d568ba`；来源提交 `f3ef7582`，生成元数据标记工作区有改动。min APK `apk/aasc-display-offline-min-v62.apk`：90,575,075 bytes，SHA-256 `fa82b7ce61141a7b8e14f190b254589d92d35d245663d0c857df8761a5bda6a0`；allserver-min/update-only profile，签名证书 SHA-256 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
   - 两端签名清单一致；清单13项资源的 LAN 文件 SHA、公网 HEAD 状态/大小与 WAN 源站返回体 SHA 全部通过。旧 code106/min61 清理后公网返回404，无清理错误。保留 dependencies v10、Node min seeds v86、taskCode v1 与完整 APK v46；未发布独立 Node 子显示端 ZIP。
   - `release/offline-release-status.json` 中 `servicePackage=false`、`minApk=false`；其他产物状态保持不变。
+### MMD-AR HMR2.0b 自选图片与深度
+
+- ✅ [2026-10-16] 独立本机报告支持文件选择、按钮粘贴及页面Ctrl+V/⌘V，自选图可编辑人物框后生成HMR2.0b BODY25骨架与整图相对深度。
+  - 更新`tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html`、`report.mjs`、`run-hmr2.py`，新增`custom-report-server.cjs`、`custom-depth.mjs`与`check-custom-report.cjs`；同步design/spec/task/usage/self-test/todo。浏览器把同一限幅PNG用于本机HMR和本地Depth Anything V2 Small，临时输入/结果完成后删除；固定三图/脚掌候选不覆盖。
+  - Edge文件、粘贴、框非法值、真实WASM深度与接口测试通过；官方HMR动漫整图端到端回读25点，固定报告三图/四候选/WebGL回退/390px回归通过。模型对脚掌和左右腿的质量问题仍在；正式IK、Offline状态和APK不变。

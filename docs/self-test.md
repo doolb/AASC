@@ -1,5 +1,17 @@
 # 自测功能文档
 
+## 本机试验仅保留HMR与人物分割（2026-10-16，已完成）
+
+精确删除25,688个旧试验文件，合计4,187,805,966字节；七个专用目录不存在，旧RTMW/XYZ/NLF/rigid/肩髋/SAM/MP探针HTTP入口404。102项保护模型、原图、HMR七份结果、分割推理/物理和共享深度/控制SHA保持，观察清单内37,983保留文件仍在。仅清理本机试验，正式MediaPipe/IK、生产缓存、Offline状态不变。
+
+实际执行：
+- [保留自检](../tmp/mmd-pose/depth-eval/check-retained.cjs)默认124项、加`--worker`138项通过；真实PPHumanSeg/RTMPose Worker三图九输入完成，mask分别74104/183150/74104像素、原图逐点最大差0，两session释放及取消通过，本机GET无图片上传，无页面异常。结果只写独立检查摘要，不改原inference/physics/visual-review。
+- 人物分割unit21、leg-unit24、results89、leg-results58项通过；完整姿态qualityPasses仍为0。浏览器三图/三输入25项、leg36项通过，390px无溢出、旧分割快照可访问、整腿失败与动漫资格回退仍显式显示。
+- HMR三图、四动漫候选、24骨段/25点受光视图、拖动复位、WebGL/深度缺失/SHA不符回退、390px、本机GET/页面无错误通过；自选文件/粘贴/人物框接口使用HMR注入测试结果，浏览器Depth真实WASM推理通过。
+- 修改源码node --check通过。未重跑HMR Python或Ammo物理求解，不声称姿态质量改善；自选`--real`和手机/更多图质量仍待后续。
+
+所有HTTP/Edge回归只启动并关闭测试自己的临时服务；未接管/重启用户服务器，未重建web-dist或APK。完整执行、权限拒绝与SAM嵌套Git补清单见[任务](task/20261016_MMD姿态试验仅保留HMR与人物分割.md)。下文旧独立模型报告属于历史验证记录，路径已清理，不再是可运行入口。
+
 ## Android显示页60FPS与Offline系统栏（2026-10-16）
 
 已实现Android文档同帧60FPS放行与原生逐回调调度、真实时间戳与取消/新增/异常语义，以及按APK资源统一系统栏与同分辨率60Hz偏好。调度器node --check、HTML解析确认头部首个脚本、git diff空白检查通过；没有新增/运行测试，也未编译原生、出包发布或做设备帧率验收。60/90/120/144Hz、停止/恢复、Offline首屏与焦点/旋转、普通APK沉浸和DeX仍待验，不将静态检查当性能通过。见[任务](task/20261016_Android显示页60FPS与Offline关闭沉浸.md)。

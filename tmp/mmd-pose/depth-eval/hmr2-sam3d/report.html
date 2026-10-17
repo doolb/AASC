@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HMR2.0b 三图骨骼对照</title>
+  <style>
+    *{box-sizing:border-box}body{margin:20px;background:#10151f;color:#e5ecfa;font:16px system-ui;line-height:1.55;overflow-wrap:anywhere}h1{font-size:1.65rem;margin:0 0 8px}p{max-width:1100px}a{color:#93caff}select,input,button{padding:9px;background:#26354b;border:1px solid #5b7391;border-radius:6px;color:white;font:inherit}button{cursor:pointer}button:disabled{opacity:.55;cursor:default}.custom-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}.custom-controls input[type=number]{width:80px}.cards{max-width:1480px;margin-top:16px}.card{padding:14px;border:1px solid #45617d;border-radius:10px;background:#1b2534;min-width:0}.card h2{margin:0 0 8px;font-size:1.25rem}.status{min-height:34px;color:#ffca87}.plots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}figure{margin:0;min-width:0}figcaption{font-size:.88rem;color:#afbdd3;margin:5px 0}canvas,img.depth{display:block;width:100%;max-width:100%;height:auto;background:#172130;border:1px solid #34475f;border-radius:5px}canvas{touch-action:none}.depth-status{font-size:.82rem;color:#b6c3d6;margin:5px 0}details{margin-top:12px}summary{cursor:pointer;color:#93caff}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;color:#b5c7df}.note{color:#b6c3d6}@media(max-width:1050px){.plots{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){body{margin:12px}.plots{grid-template-columns:minmax(0,1fr)}}
+  </style>
+</head>
+<body>
+  <h1>HMR2.0b · 本机图片骨骼对照</h1>
+  <p>三图基线使用固定原图和人工人物框；动漫脚掌实验另比较裁剪框与镜像输入。蓝色为人物左侧，橙色为人物右侧。HMR2.0b官方checkpoint内的网络与SMPL张量生成BODY25骨架。3D骨段为受光圆柱、关节为球，可拖动旋转、双击复位。浏览器仅查看本机Python结果。</p>
+  <label>图片：<select id="sample"><option value="seated">真人坐姿</option><option value="anime">动漫</option><option value="diagram">交叉腿示意图</option><option value="custom" disabled>自选图片</option></select></label>
+  <label id="foot-trial-control" hidden>动漫脚掌重测：<select id="foot-trial"><option value="original">原版输出</option><option value="wide">扩框</option><option value="shift-left">人物框左移</option><option value="shift-right">人物框右移</option><option value="mirror">水平镜像输入</option></select></label>
+  <div class="custom-controls"><label>选择图片：<input id="custom-file" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="custom-paste" type="button">粘贴图片</button><span>也可 Ctrl+V / ⌘V</span></div>
+  <div id="custom-box-controls" class="custom-controls" hidden><span>人物框（处理后像素）：</span><label>X <input id="box-x" type="number" min="0" step="1"></label><label>Y <input id="box-y" type="number" min="0" step="1"></label><label>宽 <input id="box-w" type="number" min="1" step="1"></label><label>高 <input id="box-h" type="number" min="1" step="1"></label><button id="custom-run" type="button">识别 HMR＋深度</button><span>默认整图；单人图片可收紧人物框。</span></div>
+  <p id="common" class="note">正在读取资源状态…</p>
+  <div class="cards">
+    <section class="card" id="hmr2"><h2>HMR2.0b · SMPL BODY25</h2><p class="status"></p><div class="plots"><figure><figcaption>原图与预测关节</figcaption><canvas class="overlay"></canvas></figure><figure><figcaption>圆柱骨段与球形关节 · 拖动旋转</figcaption><canvas class="xyz" width="420" height="420"></canvas></figure><figure><figcaption>Depth Anything V2 Small · 整图相对深度</figcaption><img class="depth" alt="当前原图的整图相对深度"><p class="depth-status">正在读取相对深度图…</p></figure></div><details><summary>来源与相机数据</summary><pre class="details"></pre></details></section>
+  </div>
+  <p class="note">深度图复用同一原图的既有结果：黄色较近、蓝色较远，按每张图独立归一化；它只估计可见表面，不是米制距离或被遮挡关节的真实深度。动漫图脚掌实验：扩框、人物框左右平移和镜像输入均未把蓝色左脚趾点移回可见鞋面；原版输出保持默认，候选仅供对照，未被采纳。真人图的抬高腿应属于人物左腿，但当前模型右膝更贴近该膝盖。尚未应用到VAM，正式MediaPipe默认保持。官方资源：<a href="https://github.com/shubham-goel/4D-Humans">4D-Humans</a>。</p>
+  <script type="module" src="./report.mjs"></script>
+</body>
+</html>
