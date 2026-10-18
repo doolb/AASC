@@ -1,5 +1,18 @@
 # 聊天系统实现文档
 
+## Chat2API 错误显示端提示（2026-10-18，待确认伪代码）
+
+```text
+已有声明 := Chat2API response.failed → 聊天服务 onError → server-app chatResponse → 控制端；显示端聊天窗处理失败响应；显示端语音弹窗
+新增定义 := DisplayChatError { type, action, requestId, text }；本轮相关显示端集合
+操作流程 := 全新豆包会话实际请求 → response.created 后 response.failed/doubao_risk_control → 说明无需旧会话引用也可触发安全验证
+操作流程 := 普通聊天失败 → 保持控制端 chatResponse 错误 → 取语音来源或指定的在线显示端 → 仅向相关显示端送公开错误文字
+操作流程 := 显示端收到错误 → 以醒目弹窗显示，不隐藏于聊天窗；保持已有显示端聊天窗的 chatResponse 错误提示
+操作流程 := 旧请求错误晚于新回复 → 校验请求 ID 与当前轮次，不覆盖新回复
+验证 := 新会话真实风控、语音来源定向、控制端指定显示端、无目标、不相关显示端、迟到错误、显示端聊天窗已有错误
+状态 := 真实请求和代码链路已核对；运行逻辑待项目规则要求的方案确认
+```
+
 ## Responses 已开始的 SSE 流返回上游错误（2026-10-18）
 
 ```text
