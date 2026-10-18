@@ -6,6 +6,7 @@ const {createChat2ApiSpeechService}=require('./chat2api-speech-service');
 const {createChat2ApiRuntime}=require('./chat2api-runtime');
 const {createChat2ApiResponsesService}=require('./chat2api-responses-service');
 const {wrapPcm}=require('../../../../external/tts/tts-wav');
+const {createProviderError}=require('../tts/tts-provider-errors');
 const audio=wrapPcm(Buffer.from([1,0,2,0]));
 test('Responses规划与合成共享总预算，慢规划超时不会调用合成，挂起规划可以取消',async()=>{
  let generated=0;
@@ -44,6 +45,32 @@ async function fixture(t){
  await dataStore.saveModelMapping({model:'qiaoxiaojiao',actualModel:'qwen-api/qwen-audio-3.1-tts-flash',application:'tts',parameters:{voice:'qiaoxiaojiao_v3.1'},preferredAccountId:'one'});
  return {rootDir,dataStore};
 }
+test('Qwen API 连续频率限流保留同音色分句并最终合成，不因一次重试失败而丢句',async t=>{
+ const {dataStore}=await fixture(t);const seen=[];
+ const service=createChat2ApiSpeechService({dataStore,qwenApiRateGate:{waitForStart:async(accountId,model)=>{
+   assert.equal(accountId,'one');assert.equal(model,'qwen-audio-3.1-tts-flash');
+ }},apiAdapters:{'qwen-api':{generate:async request=>{
+   seen.push(request.voice);
+   if(seen.length<3)throw createProviderError('qwen-api',{code:'Throttling.RateQuota'},429);
+   return audio;
+ }}}});
+ assert.deepEqual(await service.generate({model:'qiaoxiaojiao',input:'持续播报'}),{audio,contentType:'audio/wav'});
+ assert.deepEqual(seen,['qiaoxiaojiao_v3.1','qiaoxiaojiao_v3.1','qiaoxiaojiao_v3.1']);
+});
+test('Qwen API 限流等待可取消，其他错误不反复发送',async t=>{
+ const {dataStore}=await fixture(t);let attempts=0;
+ const controller=new AbortController();
+ const rateLimited=createChat2ApiSpeechService({dataStore,qwenApiRateGate:{waitForStart:async()=>{}},apiAdapters:{'qwen-api':{
+   generate:async()=>{attempts++;controller.abort();throw createProviderError('qwen-api',{code:'Throttling.RateQuota'},429);}
+ }}});
+ await assert.rejects(rateLimited.generate({model:'qiaoxiaojiao',input:'会取消'},{signal:controller.signal}),error=>error.code==='speech_cancelled');
+ assert.equal(attempts,1);
+ const failed=createChat2ApiSpeechService({dataStore,qwenApiRateGate:{waitForStart:async()=>{}},apiAdapters:{'qwen-api':{
+   generate:async()=>{attempts++;throw createProviderError('qwen-api',{code:'InvalidParameter'},400);}
+ }}});
+ await assert.rejects(failed.generate({model:'qiaoxiaojiao',input:'其他错误'}),error=>error.httpStatus===400);
+ assert.equal(attempts,2);
+});
 test('统一speech使用映射模型音色和同Provider凭据，显式覆盖默认且格式真实',async t=>{
  const {dataStore}=await fixture(t);const calls=[];
  const service=createChat2ApiSpeechService({dataStore,apiAdapters:{'qwen-api':{generate:async(...args)=>{calls.push(args);return audio;}}}});

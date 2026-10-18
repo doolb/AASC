@@ -110,6 +110,22 @@ async function fixture(t, options = {}) {
     return { rootDir, dataStore, calls, service };
 }
 
+test('Qwen Chat 连续限流保留原音色重排直到成功，普通错误不无限重试', async t => {
+    let attempts = 0;
+    const rateGate = { waitForStart: async (accountId, model) => {
+        assert.equal(accountId, 'one'); assert.equal(model, 'QUARK_VOICE');
+    } };
+    const { dataStore, service } = await fixture(t, { qwenChatRateGate: rateGate, qwenAdapter: { generate: async request => {
+        attempts += 1;
+        assert.equal(request.voice, 'same-voice');
+        if (attempts < 3) throw Object.assign(new Error('国内千问朗读请求频率超限'), { code: 'speech_rate_limited' });
+        return audio;
+    } } });
+    await dataStore.saveAccount({ accountId: 'one', providerId: 'qwen', credentials: { ticket: 'fixture-ticket' } });
+    assert.deepEqual(await service.generate({ input: '不能丢失', model: 'qwen-chat', voice: 'same-voice' }), { audio, contentType: 'audio/wav' });
+    assert.equal(attempts, 3);
+});
+
 test('Chat2API自动调度国内有效账号，排除国际/停用/限额/无凭证账号并读取更新值', async t => {
     const { dataStore, calls, service } = await fixture(t);
     for (const account of [

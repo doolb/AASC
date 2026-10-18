@@ -87,10 +87,26 @@ test('服务端普通 Chat 和手动 TTS 使用有序调度器', () => {
     assert.match(serverSource, /const ttsScheduler = createTtsGenerationScheduler\(displayId, legacyTtsOptions\)/u);
     assert.match(serverSource, /await ttsScheduler\.waitForIdle\(\);/u);
     assert.match(serverSource, /generateTtsWithFallback\(text, undefined, undefined, displayId, options\)/u);
-    assert.match(serverSource, /generateTtsWithFallback\(cleanText, undefined, undefined, preferredDisplayId, replyTtsOptions\)/u);
+    assert.match(serverSource, /generateTtsWithFallback\(cleanText, undefined, undefined, preferredDisplayId,\s*\{ \.\.\.replyTtsOptions, signal: ttsToken\?\.signals\?\.\[ttsPhase\] \}\)/u);
     assert.match(serverSource, /split: text => chat\.splitIntoSentences\(text\)\.filter/u);
     assert.match(serverSource, /if \(!tts \|\| isPunctuationOnly\(sentence\)\) return;/u);
     assert.doesNotMatch(serverSource, /let ttsQueue = Promise\.resolve\(\)/u);
+});
+
+test('聊天代次切换与思考转回答会取消对应的在途 TTS', () => {
+    const start = serverSource.indexOf('const chatTtsGenerationStates = new Map();');
+    const end = serverSource.indexOf('function createChatTtsStopMessage(', start);
+    const lifecycle = vm.runInNewContext(`${serverSource.slice(start, end)};({beginChatTtsGeneration,cancelChatTtsGeneration})`,
+        { Map, AbortController });
+    const first = lifecycle.beginChatTtsGeneration('chat-a');
+    lifecycle.cancelChatTtsGeneration('chat-a', 'think');
+    assert.equal(first.signals.think.aborted, true);
+    assert.equal(first.signals.answer.aborted, false);
+    const second = lifecycle.beginChatTtsGeneration('chat-a');
+    assert.equal(first.signals.answer.aborted, true);
+    assert.equal(second.signals.answer.aborted, false);
+    lifecycle.cancelChatTtsGeneration('chat-a');
+    assert.equal(second.signals.answer.aborted, true);
 });
 
 test('实际调度入口在线分句不限制生成并发且按序发送_原生显示槽位保持双路', async () => {

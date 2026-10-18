@@ -687,7 +687,11 @@ ttsAudioCache.configure(config.getTtsConfig().audioCacheMaxMiB);
 const speechUpstream = createSpeechUpstreamController({
     getDoubaoConcurrency: () => config.getTtsProviderSettings().upstreamConcurrency['doubao-chat']
 });
-const chat2ApiSpeechService = createChat2ApiSpeechService({ doubaoSpeechQueue: speechUpstream.forRoot() });
+const chat2ApiSpeechService = createChat2ApiSpeechService({
+    doubaoSpeechQueue: speechUpstream.forRoot(),
+    qwenApiRateGate: speechUpstream.forRoot().qwenApiRateGate,
+    qwenChatRateGate: speechUpstream.forRoot().qwenChatRateGate
+});
 const ttsProviderService = createTtsProviderService({
     getSettings: config.getTtsProviderSettings,
     registry: createProviderRegistry({
@@ -1501,7 +1505,9 @@ async function startServer() {
             // 初始化远程任务引擎
             taskManager = new TaskManager({
                 chat2apiRuntimeFactory: options => createChat2ApiRuntime({ ...options,
-                    doubaoSpeechQueue: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir) }),
+                    doubaoSpeechQueue: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir),
+                    qwenApiRateGate: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir).qwenApiRateGate,
+                    qwenChatRateGate: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir).qwenChatRateGate }),
                 taskCodeCatalog,
                 maxInstances: 50,
                 ensureTaskDependencies: (ids, onProgress) => taskDependencyManager.ensure(ids, onProgress),
@@ -6970,12 +6976,17 @@ function buildChatTtsConversationId({ mode = 'group', target = null, sessionId =
 
 function beginChatTtsGeneration(conversationId) {
     const previous = chatTtsGenerationStates.get(conversationId);
+    previous?.controllers?.think.abort();
+    previous?.controllers?.answer.abort();
+    const controllers = { think: new AbortController(), answer: new AbortController() };
     const state = {
         generation: (previous?.generation || 0) + 1,
-        answerStarted: false
+        answerStarted: false,
+        controllers
     };
     chatTtsGenerationStates.set(conversationId, state);
-    return { conversationId, generation: state.generation };
+    return { conversationId, generation: state.generation,
+        signals: { think: controllers.think.signal, answer: controllers.answer.signal } };
 }
 
 function isCurrentChatTtsGeneration(token, phase = 'answer') {
@@ -6996,7 +7007,10 @@ function cancelChatTtsGeneration(conversationId, phase = null) {
     const state = chatTtsGenerationStates.get(conversationId) || { generation: 0, answerStarted: false };
     if (phase === 'think') {
         state.answerStarted = true;
+        state.controllers?.think.abort();
     } else {
+        state.controllers?.think.abort();
+        state.controllers?.answer.abort();
         state.generation += 1;
         state.answerStarted = false;
     }
@@ -11242,7 +11256,8 @@ async function handleChatMessage(options) {
                 if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return null;
                 return generateChatTtsActions({ sentence, phase: ttsPhase, conversationId: ttsConversationId,
-                    stripMarkdown, generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId, replyTtsOptions),
+                    stripMarkdown, generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId,
+                        { ...replyTtsOptions, signal: ttsToken?.signals?.[ttsPhase] }),
                     send: message => {
                         if (playOnControl) sendToControl(message);
                         else {
@@ -11305,6 +11320,7 @@ async function handleChatMessage(options) {
                     });
                 }
             }).catch(err => {
+                if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return;
                 logError('Chat', `TTS生成失败: ${err.message}`);
             });
         },

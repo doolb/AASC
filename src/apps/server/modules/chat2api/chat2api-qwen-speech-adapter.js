@@ -9,6 +9,9 @@ const { QWEN_WEB_TTS_MODEL, assertFixedQwenTtsModel } = require('./chat2api-qwen
 
 const QWEN_TTS_ENDPOINT = 'https://speech-tts.qianwen.com/api/v3/tts';
 const QWEN_VOICE = 'zh_female_quarkF531S0_ptts';
+const rateLimitError = () => Object.assign(new Error('国内千问朗读请求频率超限'),
+    { code: 'speech_rate_limited', statusCode: 429 });
+const abortError = () => Object.assign(new Error('国内千问朗读已取消'), { name: 'AbortError', code: 'ABORT_ERR' });
 
 function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } = {}) {
     assertFixedQwenTtsModel('qwen', settings.model);
@@ -22,14 +25,22 @@ function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } 
                 ...(request.userAgent ? { 'User-Agent': request.userAgent } : {}) },
             handshakeTimeout: request.timeoutMs });
         const timer = setTimeout(() => finish(new Error('国内千问朗读超时')), request.timeoutMs);
+        const onAbort = () => finish(abortError());
         const finish = (error, audio) => {
             if (finished) return;
             finished = true;
             clearTimeout(timer);
+            request.signal?.removeEventListener('abort', onAbort);
             socket.terminate();
             if (error) reject(error);
             else resolve(audio);
         };
+        request.signal?.addEventListener('abort', onAbort, { once: true });
+        if (request.signal?.aborted) { onAbort(); return; }
+        socket.on('unexpected-response', (upgradeRequest, response) => {
+            response.resume();
+            finish(response.statusCode === 429 ? rateLimitError() : new Error('国内千问朗读连接失败，请检查登录凭证'));
+        });
         socket.on('error', () => finish(new Error('国内千问朗读连接失败，请检查登录凭证')));
         socket.on('close', () => finish(new Error('国内千问朗读中断，未收到完成事件')));
         socket.on('open', () => {
@@ -42,6 +53,7 @@ function collectQwenAudio(url, request, settings, reqid, { Socket = WebSocket } 
             if (finished) return;
             try {
                 const event = JSON.parse(String(raw));
+                if ([429, '429', 'Throttling.RateQuota'].includes(event.code)) throw rateLimitError();
                 if (event.code && Number(event.code) !== 2000000) throw new Error('国内千问朗读失败，请检查音色与登录凭证');
                 const data = event.data || {};
                 if (data.audio) {
@@ -73,7 +85,8 @@ function createChat2ApiQwenSpeechAdapter({ sign = createQwenSigner(), Socket = W
             assertFixedQwenTtsModel('qwen', request.model);
             const deadline = Date.now() + request.timeoutMs;
             const reqid = randomUUID();
-            const signed = await sign({ credential, reqid, timeoutMs: request.timeoutMs });
+            const signed = await sign({ credential, reqid, timeoutMs: request.timeoutMs, signal: request.signal });
+            if (request.signal?.aborted) throw abortError();
             const remaining = deadline - Date.now();
             if (remaining <= 0) throw new Error('国内千问朗读超时');
             return collectQwenAudio(typeof signed === 'string' ? signed : signed.url,

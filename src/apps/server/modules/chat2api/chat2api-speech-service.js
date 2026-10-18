@@ -15,10 +15,59 @@ const {createApiSpeechAdapters}=require('./chat2api-api-speech-adapters');
 const {listSpeechModels,getSpeechBinding,isSupportedSpeechBinding}=require('./chat2api-model-capabilities');
 const {QWEN_WEB_TTS_MODEL,assertFixedQwenTtsModel}=require('./chat2api-qwen-tts-models');
 const {isProviderError}=require('../tts/tts-provider-errors');
+const {createSpeechUpstreamController}=require('./chat2api-speech-upstream');
 
 const MODELS = new Set(['qwen-chat', QWEN_WEB_TTS_MODEL, 'doubao-chat']);
 const STRATEGIES = new Set(['round-robin', 'fill-first', 'failover']);
 const speechError = (statusCode, code, message) => Object.assign(new Error(message), { statusCode, code });
+const isQwenRateQuota = error => isProviderError(error) && error.httpStatus === 429
+    && error.upstreamCode === 'Throttling.RateQuota';
+
+// 仅频率限流进入持续退避；监听取消，避免用户结束本轮后仍留下等待的合成请求。
+function waitForQwenRetry(delayMs, signal) {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) { reject(speechError(499, 'speech_cancelled', '语音生成已取消')); return; }
+        const onAbort = () => finish(speechError(499, 'speech_cancelled', '语音生成已取消'));
+        const timer = setTimeout(() => finish(), delayMs);
+        function finish(error) {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            if (error) reject(error);
+            else resolve();
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
+        if (signal?.aborted) onAbort();
+    });
+}
+
+// 排队可以跨越原请求预算，但每次真实上游合成仍有独立上限；挂起的适配器也不能卡住整句。
+async function runQwenAttempt(task, timeoutMs, signal) {
+    const controller = new AbortController();
+    let timer;
+    let rejectInterrupted;
+    const onAbort = () => {
+        rejectInterrupted?.(speechError(499, 'speech_cancelled', '语音生成已取消'));
+        controller.abort();
+    };
+    if (signal?.aborted) throw speechError(499, 'speech_cancelled', '语音生成已取消');
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const interrupted = new Promise((resolve, reject) => {
+        rejectInterrupted = reject;
+        timer = setTimeout(() => {
+            reject(speechError(504, 'speech_timeout', 'Chat2API 语音生成超时'));
+            controller.abort();
+        }, timeoutMs);
+    });
+    try {
+        if (signal?.aborted) onAbort();
+        return await Promise.race([Promise.resolve().then(() => task(controller.signal)), interrupted]);
+    } finally {
+        clearTimeout(timer);
+        rejectInterrupted = null;
+        signal?.removeEventListener('abort', onAbort);
+        controller.abort();
+    }
+}
 
 function normalizeSpeechRequest(request) {
     if (!request || typeof request !== 'object' || Array.isArray(request)) throw speechError(400, 'invalid_speech_request', '语音请求必须为对象');
@@ -72,8 +121,9 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
     providerRegistry = createChat2ApiProviderRegistry({ dataStore }),
     loadBalancer = createChat2ApiLoadBalancer({ dataStore, providerRegistry }),
     getConfig = () => dataStore.readCollection('config', {}),
-    qwenAdapter = createChat2ApiQwenSpeechAdapter(), doubaoSpeechQueue,
+    qwenAdapter = createChat2ApiQwenSpeechAdapter(), doubaoSpeechQueue, qwenChatRateGate,
     doubaoAdapter = createDoubaoSpeechAdapter({ queue: doubaoSpeechQueue }) } = {}) {
+    const rateGate = qwenChatRateGate || createSpeechUpstreamController().forRoot(dataStore.rootDir).qwenChatRateGate;
     return {
         async generate(request, { timeoutMs = 60000, signal, mappedBinding } = {}) {
             const normalized = normalizeSpeechRequest(request);
@@ -121,9 +171,31 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
                 const credential = doubao ? getDoubaoSpeechCredential(account) : getQwenCredential(account);
                 let audio;
                 try {
-                    audio = await adapter.generate({ ...normalized, timeoutMs: remaining(), signal: controller.signal }, credential,
-                        { accountId: account.accountId, signal: controller.signal, deadline });
-                    remaining();
+                    if (doubao) {
+                        audio = await adapter.generate({ ...normalized, timeoutMs: remaining(), signal: controller.signal }, credential,
+                            { accountId: account.accountId, signal: controller.signal, deadline });
+                        remaining();
+                    } else {
+                        // 账号/配置读取继续受原预算约束；已接收的朗读分句在本实例内保序等待，不因429丢弃。
+                        remaining(); clearTimeout(timer);
+                        let rateRetries = 0;
+                        while (true) {
+                            await rateGate.waitForStart(account.accountId, normalized.model, { signal: controller.signal });
+                            if (controller.signal.aborted) throw cancelError();
+                            try {
+                                audio = await runQwenAttempt(attemptSignal => adapter.generate(
+                                    { ...normalized, timeoutMs, signal: attemptSignal }, credential,
+                                    { accountId: account.accountId, signal: attemptSignal, deadline: Date.now() + timeoutMs }),
+                                timeoutMs, controller.signal);
+                                break;
+                            } catch (error) {
+                                if (error.code !== 'speech_rate_limited') throw error;
+                                rateRetries++;
+                                await waitForQwenRetry(Math.min(30000, 1000 * 2 ** Math.min(rateRetries - 1, 5)), controller.signal);
+                            }
+                        }
+                    }
+                    if (controller.signal.aborted) throw cancelError();
                     validateWav(audio);
                 } catch (error) {
                     if (!signal?.aborted && error.speechQueueFailure !== true
@@ -161,6 +233,7 @@ function createWebSpeechService({ dataStore = createChat2ApiDataStore(),
 // HTTP代理与业务薄层共享这一入口。先解析映射/应用/参数，再由Provider策略选择账号和协议。
 function createChat2ApiSpeechService(options={}) {
     const dataStore=options.dataStore||createChat2ApiDataStore();
+    const qwenApiRateGate=options.qwenApiRateGate||createSpeechUpstreamController().forRoot(dataStore.rootDir).qwenApiRateGate;
     const providerRegistry=options.providerRegistry||createChat2ApiProviderRegistry({dataStore});
     const modelMapper=options.modelMapper||createChat2ApiModelMapper({dataStore});
     const loadBalancer=options.loadBalancer||createChat2ApiLoadBalancer({dataStore,providerRegistry,modelMapper});
@@ -179,7 +252,11 @@ function createChat2ApiSpeechService(options={}) {
             if(plan.application!=='tts')throw speechError(400,'invalid_speech_request','模型不是语音应用');
             if(expectedProviderId&&plan.providerId!==expectedProviderId)throw speechError(400,'model_provider_conflict','业务选择与模型映射Provider不一致');
             const normalized={input:plan.text,model:plan.speechModel,voice:plan.parameters.voice,speed:plan.parameters.speed,volume:plan.parameters.volume,response_format:'wav'};
-            if(['qwen','doubaochat'].includes(plan.providerId))return web.generate(normalized,{timeoutMs:remaining(),signal:controller.signal,mappedBinding:plan});
+            if(['qwen','doubaochat'].includes(plan.providerId)){
+                const webTimeoutMs=plan.providerId==='qwen'?timeoutMs:remaining();
+                if(plan.providerId==='qwen'){remaining();clearTimeout(timer);}
+                return web.generate(normalized,{timeoutMs:webTimeoutMs,signal:controller.signal,mappedBinding:plan});
+            }
             const config=await getConfig();remaining();
             const selected=await loadBalancer.selectAccount(plan.speechModel,STRATEGIES.has(config?.loadBalanceStrategy)?config.loadBalanceStrategy:'round-robin',plan.providerId,plan.preferredAccountId,
                 {requireSecret:true,...(plan.preferredAccountId?{requiredAccountId:plan.preferredAccountId}:{})});remaining();
@@ -189,12 +266,38 @@ function createChat2ApiSpeechService(options={}) {
             const adapter=apiAdapters[plan.providerId];
             if(!adapter)throw speechError(501,'unsupported_application','语音适配器未接入');
             try {
-                const audio=await adapter.generate({text:plan.text,model:plan.upstreamModel,...plan.parameters,timeoutMs:remaining(),signal:controller.signal},account.credentials?.apiKey,
-                    {provider:{...provider,...(account.accountInfo?.endpoint?{apiEndpoint:account.accountInfo.endpoint}:{}),...(account.accountInfo?.resourceId?{resourceId:account.accountInfo.resourceId}:{})},account,signal:controller.signal,deadline,...(legacyReplyContext?{legacyReplyContext}:{})});
-                remaining();validateWav(audio);loadBalancer.clearAccountFailure?.(account.accountId);return {audio,contentType:'audio/wav'};
+                const qwenApi=plan.providerId==='qwen-api';
+                const providerContext={provider:{...provider,...(account.accountInfo?.endpoint?{apiEndpoint:account.accountInfo.endpoint}:{}),...(account.accountInfo?.resourceId?{resourceId:account.accountInfo.resourceId}:{})},account,signal:controller.signal,...(legacyReplyContext?{legacyReplyContext}:{})};
+                const generateOnce=(attemptDeadline,attemptSignal=controller.signal)=>adapter.generate({text:plan.text,model:plan.upstreamModel,...plan.parameters,
+                    timeoutMs:Math.min(timeoutMs,attemptDeadline-Date.now()),signal:attemptSignal},account.credentials?.apiKey,
+                {...providerContext,signal:attemptSignal,deadline:attemptDeadline});
+                let audio;
+                if(qwenApi){
+                    // 规划与选账号仍受原60秒约束；排队和限流重试按每次请求单独计时，不丢已提交分句。
+                    remaining();clearTimeout(timer);
+                    let rateRetries=0;
+                    while(true){
+                        await qwenApiRateGate.waitForStart(account.accountId,plan.upstreamModel,{signal:controller.signal});
+                        if(controller.signal.aborted)throw cancelled();
+                        try{audio=await runQwenAttempt(attemptSignal=>generateOnce(Date.now()+timeoutMs,attemptSignal),
+                            timeoutMs,controller.signal);break;}
+                        catch(error){
+                            if(!isQwenRateQuota(error))throw error;
+                            rateRetries++;
+                            const delayMs=Math.min(30000,1000*2**Math.min(rateRetries-1,5));
+                            await waitForQwenRetry(delayMs,controller.signal);
+                        }
+                    }
+                }else{
+                    audio=await generateOnce(deadline);
+                    remaining();
+                }
+                if(controller.signal.aborted)throw cancelled();
+                validateWav(audio);loadBalancer.clearAccountFailure?.(account.accountId);return {audio,contentType:'audio/wav'};
             }catch(error){
-                remaining();
+                if(plan.providerId!=='qwen-api')remaining();
                 if(error.code==='ABORT_ERR'||controller.signal.aborted)throw cancelled();
+                if(error.code==='speech_timeout')throw error;
                 loadBalancer.markAccountFailed?.(account.accountId);
                 if(isProviderError(error)){error.statusCode=502;throw error;}
                 throw speechError(error.code==='TTS_PROVIDER_TIMEOUT'?504:502,error.code==='TTS_PROVIDER_TIMEOUT'?'speech_timeout':'speech_upstream_error','Chat2API API语音生成失败，请检查账号、模型和音色');

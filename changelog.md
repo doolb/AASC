@@ -1,3 +1,8 @@
+### Qwen API 与千问网页朗读频率控制
+
+- ✅ [2026-10-18] Qwen API 与千问网页朗读按同账号每 500 毫秒启动请求；明确限流保留原音色持续退避重排，进程内已提交分句不因队列容量或固定重试次数丢失。聊天切换/停止中断旧分句，思考转回答只取消思考语音。
+  - 更新 `chat2api-speech-upstream.js`、`chat2api-speech-service.js`、Qwen 网页签名与 WebSocket 适配器、Chat2API runtime 和 `server-app.js`；同步 design/spec/task/usage/todo 及定向测试。`npm run check:chat2api` 284/284、`npm run test:mmd-production:tts` 23/23 通过，`git diff --check` 通过。真实账号待现场验收；未构建或发布服务包，`servicePackage=true`。
+
 ### 豆包失效会话自动重建
 
 - ✅ [2026-10-17] 修复 Responses 续接豆包时 `doubao_session_uncertain` 直接报错：清除旧上游引用，尚未输出正文时用完整聊天上下文自动重试一次；已输出正文时只清除引用，下一轮重建，保留控制端会话与历史。

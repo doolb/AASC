@@ -27,6 +27,8 @@ function authError(stage) {
         code, statusCode: stage === 'timeout' ? 504 : stage === 'capacity' ? 503 : 502
     });
 }
+const rateLimitError = () => Object.assign(new Error('国内千问朗读请求频率超限'),
+    { code: 'speech_rate_limited', statusCode: 429 });
 
 function parseCookies(credential) {
     if (typeof credential !== 'string' || !credential.trim() || credential.length > 16384
@@ -99,6 +101,7 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
                 throw authError(stage);
             if (!response.ok || Number(response.headers.get('content-length')) > MAX_RESPONSE_BYTES) {
                 await response.body?.cancel().catch(() => {});
+                if (response.status === 429) throw rateLimitError();
                 throw authError(stage);
             }
             const chunks = [];
@@ -119,6 +122,7 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
             return result.data;
         } catch (error) {
             // 网络错误、JSON原文或签名URL可能带凭证，业务层仅接收预定义错误。
+            if (error.code === 'speech_rate_limited' && !signal.aborted) throw error;
             throw authError(signal.aborted ? 'timeout' : stage);
         }
     };
@@ -163,7 +167,7 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
         updateTokens(session, data, 'refresh');
     };
 
-    return async ({ credential, reqid, timeoutMs }) => {
+    return async ({ credential, reqid, timeoutMs, signal }) => {
         const cookies = parseCookies(credential);
         if (typeof reqid !== 'string' || !reqid || reqid.length > 128 || /[\x00-\x1f\x7f]/u.test(reqid)) throw authError('credentials');
         if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60000) throw authError('timeout');
@@ -183,6 +187,10 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
             sessions.set(key, session);
         }
         const controller = new AbortController();
+        if (signal?.aborted) throw authError('timeout');
+        let rejectAbort;
+        const onAbort = () => { controller.abort(); rejectAbort?.(authError('timeout')); };
+        signal?.addEventListener('abort', onAbort, { once: true });
         const deadline = now() + timeoutMs;
         const checkDeadline = () => {
             if (controller.signal.aborted || now() >= deadline) throw authError('timeout');
@@ -210,8 +218,10 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
         try {
             return await Promise.race([pending, new Promise((resolve, reject) => {
                 timer = setTimeout(() => { controller.abort(); reject(authError('timeout')); }, timeoutMs);
+                rejectAbort = reject;
+                if (signal?.aborted) onAbort();
             })]);
-        } finally { clearTimeout(timer); }
+        } finally { clearTimeout(timer); rejectAbort = null; signal?.removeEventListener('abort', onAbort); }
     };
 }
 

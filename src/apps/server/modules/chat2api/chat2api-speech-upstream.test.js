@@ -3,12 +3,50 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { createSpeechUpstreamController } = require('./chat2api-speech-upstream');
+const { createSpeechUpstreamController, createQwenApiRateGate } = require('./chat2api-speech-upstream');
 const { DEFAULT_ROOT_DIR } = require('./chat2api-data-store');
 const { createOrderedTaskScheduler } = require('../media/ordered-task-scheduler');
 const { createDoubaoSpeechAdapter } = require('./chat2api-doubao-speech-adapter');
 const { EventEmitter } = require('node:events');
 const context = () => ({ deadline: Date.now() + 10000 });
+
+test('Qwen API 同账号按启动间隔排队，跨入口共享且不因等待数量丢句', async () => {
+    const gate = createQwenApiRateGate({ intervalMs: 5 });
+    const started = [];
+    const jobs = Array.from({ length: 20 }, (_, index) => gate.waitForStart('same').then(() => {
+        started.push({ index, at: Date.now() });
+    }));
+    await Promise.all(jobs);
+    assert.deepEqual(started.map(item => item.index), Array.from({ length: 20 }, (_, index) => index));
+    for (let index = 1; index < started.length; index++) assert.ok(started[index].at - started[index - 1].at >= 4);
+    const owner = createSpeechUpstreamController();
+    const first = owner.forRoot().qwenApiRateGate;
+    const second = owner.forRoot(path.join(DEFAULT_ROOT_DIR, '.')).qwenApiRateGate;
+    const begun = Date.now();
+    await first.waitForStart('one', 'fixed');
+    await second.waitForStart('one', 'fixed');
+    assert.ok(Date.now() - begun >= 450);
+    const web = owner.forRoot().qwenChatRateGate;
+    const webProxy = owner.forRoot(path.join(DEFAULT_ROOT_DIR, '.')).qwenChatRateGate;
+    const webStarted = Date.now();
+    await web.waitForStart('one', 'QUARK_VOICE');
+    await webProxy.waitForStart('one', 'QUARK_VOICE');
+    assert.ok(Date.now() - webStarted >= 450);
+});
+
+test('Qwen API 等待取消和截止后不迟到启动，其他账号独立', async () => {
+    const gate = createQwenApiRateGate({ intervalMs: 40 });
+    await gate.waitForStart('one');
+    const controller = new AbortController();
+    const cancelled = gate.waitForStart('one', { signal: controller.signal });
+    const expired = gate.waitForStart('one', { deadline: Date.now() + 10 });
+    await gate.waitForStart('two');
+    controller.abort();
+    await assert.rejects(cancelled, error => error.code === 'ABORT_ERR');
+    await assert.rejects(expired, error => error.code === 'TTS_PROVIDER_TIMEOUT');
+    await new Promise(resolve => setTimeout(resolve, 45));
+    await gate.waitForStart('one');
+});
 
 test('两个真实适配器共享controller，同账号总连接最多3而非各3', async () => {
     const owner = createSpeechUpstreamController();

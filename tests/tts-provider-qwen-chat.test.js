@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { WebSocketServer } = require('ws');
+const http = require('node:http');
 const { createQwenChatProvider } = require('../src/apps/server/modules/tts/qwen-chat-tts');
 const { createChat2ApiQwenSpeechAdapter, parseCookies } = require('../src/apps/server/modules/chat2api/chat2api-qwen-speech-adapter');
 const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
@@ -14,6 +15,7 @@ const { createChat2ApiDataStore } = require('../src/apps/server/modules/chat2api
 const { createChat2ApiSpeechService } = require('../src/apps/server/modules/chat2api/chat2api-speech-service');
 const { filterQwenChatSpeechText } = require('../src/apps/server/modules/tts/qwen-chat-text-filter');
 const { wrapPcm } = require('../src/external/tts/tts-wav');
+const { createQwenSigner } = require('../src/apps/server/modules/chat2api/chat2api-qwen-speech-auth');
 
 test('qwen-chat按字素簇移除emoji组合，普通数字、标点和正文空格保留', () => {
     for (const [input, expected] of [
@@ -80,6 +82,41 @@ async function socketFixture(t, onPacket) {
     t.after(() => { for (const socket of server.clients) socket.terminate(); server.close(); });
     return `ws://127.0.0.1:${server.address().port}/tts`;
 }
+
+test('千问网页签名429与朗读握手/事件429仅转换为固定限流码', async t => {
+    const signer = createQwenSigner({ fetchImpl: async () => new Response('{}', { status: 429 }) });
+    await assert.rejects(signer({ credential: 'tongyi_sso_ticket=fixture', reqid: 'test', timeoutMs: 1000 }),
+        error => error.code === 'speech_rate_limited' && error.statusCode === 429);
+
+    const eventUrl = await socketFixture(t, (socket, packet) => {
+        if (packet.status === 2) socket.send(JSON.stringify({ code: 429, message: 'private-cookie' }));
+    });
+    const eventAdapter = createChat2ApiQwenSpeechAdapter({ sign: async () => eventUrl });
+    await assert.rejects(eventAdapter.generate({ text: '测试', model: 'QUARK_VOICE', voice: 'same-voice', speed: 1,
+        volume: 100, timeoutMs: 1000 }, 'tongyi_sso_ticket=fixture'),
+    error => error.code === 'speech_rate_limited' && !error.message.includes('private'));
+
+    const server = http.createServer();
+    server.on('upgrade', (request, socket) => socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'));
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => server.close());
+    const url = `ws://127.0.0.1:${server.address().port}/tts`;
+    const handshakeAdapter = createChat2ApiQwenSpeechAdapter({ sign: async () => url });
+    await assert.rejects(handshakeAdapter.generate({ text: '测试', model: 'QUARK_VOICE', voice: 'same-voice', speed: 1,
+        volume: 100, timeoutMs: 1000 }, 'tongyi_sso_ticket=fixture'),
+    error => error.code === 'speech_rate_limited' && error.statusCode === 429);
+});
+
+test('千问网页朗读取消会终止在途WebSocket，不等待原合成超时', async t => {
+    const controller = new AbortController();
+    const url = await socketFixture(t, (socket, packet) => {
+        if (packet.status === 2) controller.abort();
+    });
+    const adapter = createChat2ApiQwenSpeechAdapter({ sign: async () => url });
+    await assert.rejects(adapter.generate({ text: '取消测试', model: 'QUARK_VOICE', voice: 'same-voice', speed: 1,
+        volume: 100, timeoutMs: 1000, signal: controller.signal }, 'tongyi_sso_ticket=fixture'),
+    error => error.code === 'ABORT_ERR');
+});
 
 test('国内千问WebSocket真实文本/结束包、同reqid、分片去重、最后包音频后完成', async t => {
     const packets = [];

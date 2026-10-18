@@ -29,6 +29,8 @@ const createChat2ApiRuntime = (options = {}) => {
   const getConfig = options.getChat2ApiConfig || (() => dataStore.readCollection('config', {}));
   const speechService = options.speechService || createChat2ApiSpeechService({ dataStore, providerRegistry, loadBalancer, getConfig, modelMapper,
     doubaoSpeechQueue: options.doubaoSpeechQueue,
+    qwenApiRateGate: options.qwenApiRateGate,
+    qwenChatRateGate: options.qwenChatRateGate,
     ...(options.apiSpeechAdapters?{apiAdapters:options.apiSpeechAdapters}:{}),
     ...(options.doubaoSpeechAdapter ? { doubaoAdapter: options.doubaoSpeechAdapter } : {}),
     ...(options.qwenSpeechAdapter ? { qwenAdapter: options.qwenSpeechAdapter } : {}) });
