@@ -1,3 +1,5 @@
+### 天气播报长详情误送离线 TTS
+
 ### Responses 流错误透传
 
 - 📝 [2026-10-18] 核对豆包手动账号字段：应填完整网页 Cookie，文字聊天还需同账号 `nodeProfile`；安全验证码只填官网验证页，Chat2API 不存在供本次验证使用的豆包 Token 栏。同步 chat-system design/spec/task/usage/todo；无代码、配置或真实账号操作。
