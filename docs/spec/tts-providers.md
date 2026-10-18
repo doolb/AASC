@@ -1,5 +1,18 @@
 # TTS Provider 与播报配置实现
 
+## 双端音色面板全局音量滑条（2026-10-18）
+
+```text
+已有配置 := tts.sharedParameters.defaultVolume，权威快照 ttsProviderConfig.defaultVolume，默认 100，范围 0..100
+已有入口 := 控制端与显示端共用 TtsVoicePicker；声纹页 setTtsProviderConfig 继续编辑同一字段
+界面 := 两端音色选择面板在语速旁显示“总音量”滑条及百分比；未同步或断线时禁用并显示默认 100
+拖动 := input 只预览百分比；change 且值不同于权威配置时提交 setChatTtsSelection { provider, volume, requestId }
+保存 := 服务端仅接受有限数值且 0..100 的 volume，不与 voice/speed 混写；只更新根级 defaultVolume，不重选 AI 默认 Provider/音色
+同步 := 保存成功广播 ttsProviderConfig；两个面板及声纹页采用权威值；失败恢复原值，超时重新请求配置
+生成 := 沿用既有全局默认音量及单次合成覆盖语义，已生成音频不追溯调整
+自测 := 两端预览不提前保存、松手保存和互相同步；边界与非法值拒绝；失败/断线恢复；切换 Provider 后音量仍共用
+```
+
 ## Qwen API TTS 频率超限处理（2026-10-18，源码完成）
 
 ```text

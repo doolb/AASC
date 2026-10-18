@@ -102,6 +102,11 @@
                         <input id="displayTtsSpeed" type="range" min="-10" max="10" step="1" value="0" aria-label="语速">
                         <small>慢 <span>正常 0</span> 快</small>
                     </div>
+                    <div class="tts-voice-volume">
+                        <label for="displayTtsVolume">总音量 <output id="displayTtsVolumeValue" for="displayTtsVolume">100%</output></label>
+                        <input id="displayTtsVolume" type="range" min="0" max="100" step="1" value="100" aria-label="总音量" disabled>
+                        <small>静音 <span>所有后续 TTS 播报</span> 最大</small>
+                    </div>
                     <label for="displayTtsVoiceSearch">搜索音色</label>
                     <input id="displayTtsVoiceSearch" type="search" placeholder="名称或标签" aria-label="搜索音色" autocomplete="off">
                     <div class="display-tts-voice-filters" aria-label="音色筛选">

@@ -206,7 +206,7 @@ const SelfTest = {
                 const panel = document.getElementById('controlTtsVoicePanel');
                 const valid = Boolean(window.TtsVoicePicker && window.ControlTtsVoices
                     && document.getElementById('controlTtsVoiceToggle') && panel
-                    && ['controlTtsProviderSelect', 'controlTtsVoiceList', 'controlTtsCurrentVoiceName', 'controlTtsSpeed', 'controlTtsSpeedValue']
+                    && ['controlTtsProviderSelect', 'controlTtsVoiceList', 'controlTtsCurrentVoiceName', 'controlTtsSpeed', 'controlTtsSpeedValue', 'controlTtsVolume', 'controlTtsVolumeValue']
                         .every(id => panel.querySelector('#' + id)));
                 // 复用当前已渲染项只读检查，不为自测打开面板、查询目录或改写选择。
                 // 对应.src/framework/tts-provider-configuration.md的音色列表按钮状态自测。

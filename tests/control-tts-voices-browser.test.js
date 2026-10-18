@@ -221,6 +221,24 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     await waitFor(display, () => document.querySelector('#displayTtsSpeed').value === '3');
     assert.equal(settings.providers['qwen-chat'].defaultSpeed, 3);
     assert.equal(settings.providers.system.defaultSpeed, 0);
+    assert.equal(await control.$eval('#controlTtsVolume', node => node.value), '100');
+    assert.equal(await display.$eval('#displayTtsVolume', node => node.value), '100');
+    const beforeVolume = requests.filter(request => Object.hasOwn(request, 'volume')).length;
+    await control.$eval('#controlTtsVolume', slider => { slider.value = '35'; slider.dispatchEvent(new Event('input', { bubbles: true })); });
+    assert.equal(await control.$eval('#controlTtsVolumeValue', node => node.textContent), '35%');
+    assert.equal(requests.filter(request => Object.hasOwn(request, 'volume')).length, beforeVolume, '拖动只预览');
+    await control.$eval('#controlTtsVolume', slider => slider.dispatchEvent(new Event('change', { bubbles: true })));
+    await waitFor(display, () => document.querySelector('#displayTtsVolume').value === '35');
+    assert.equal(settings.defaultVolume, 35);
+    assert.equal(settings.aiReplyDefault.provider, 'qwen-chat');
+    await display.$eval('#displayTtsVolume', slider => { slider.value = '0'; slider.dispatchEvent(new Event('input')); slider.dispatchEvent(new Event('change')); });
+    await waitFor(control, () => document.querySelector('#controlTtsVolume').value === '0');
+    assert.equal(settings.defaultVolume, 0);
+    failSave = true;
+    await display.$eval('#displayTtsVolume', slider => { slider.value = '33'; slider.dispatchEvent(new Event('input')); slider.dispatchEvent(new Event('change')); });
+    await waitFor(display, () => document.querySelector('#displayTtsVoiceStatus').textContent.includes('测试保存失败'));
+    assert.equal(await display.$eval('#displayTtsVolume', node => node.value), '0', '失败时恢复权威值');
+    failSave = false;
     // 错误回显恢复滑条与选择，不因input预览提前修改权威值。
     failSave = true;
     await display.bringToFront();
@@ -268,8 +286,10 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     await control.evaluate(() => { ControlTtsVoices.init(); ControlTtsVoices.init(); WebSocketManager.ws.close(); });
     await waitFor(control, () => document.querySelector('#controlTtsProviderSelect').disabled);
     assert.equal(await control.$eval('#controlTtsCurrentVoiceName', node => node.textContent), '等待同步');
+    assert.deepEqual(await control.$eval('#controlTtsVolume', node => ({ value: node.value, disabled: node.disabled })), { value: '100', disabled: true });
     await control.evaluate(() => WebSocketManager.connect());
     await waitFor(control, () => !document.querySelector('#controlTtsProviderSelect').disabled);
+    assert.deepEqual(await control.$eval('#controlTtsVolume', node => ({ value: node.value, disabled: node.disabled })), { value: '0', disabled: false });
     assert.equal(await control.$$eval('#controlTtsVoicePanel', nodes => nodes.length), 1);
     assert.ok(await control.evaluate(() => originalPageCalls > 2), '声纹页回显不能被快捷面板吞掉');
     assert.deepEqual(errors, []);

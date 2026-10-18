@@ -212,6 +212,37 @@ test('快捷语速只写目标方式偏好，归一化范围并拒绝不支持�
     assert.equal(settings.providers['qwen-api'].defaultSpeed, 2);
 });
 
+test('快捷总音量只写共享默认值，拒绝非法值与混合写入', async () => {
+    let settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat' } });
+    const replies = [], broadcasts = [];
+    const display = { send: raw => replies.push(JSON.parse(raw)) };
+    const handler = createTtsProviderWs({ config: {
+        getPublicTtsProviderSettings: () => redactSettings(settings),
+        setTtsProviderSettings: patch => { settings = normalizeSettings(patch, settings); }
+    }, service: {}, isControl: () => false, isDisplay: ws => ws === display,
+    broadcast: message => broadcasts.push(message) });
+    const selection = JSON.stringify(settings.aiReplyDefault);
+    const speed = settings.providers['qwen-chat'].defaultSpeed;
+    for (const volume of [0, 42, 100]) {
+        await handler.handle(display, { type: 'setChatTtsSelection', provider: 'system', volume, requestId: `volume-${volume}` });
+        assert.equal(settings.defaultVolume, volume);
+        assert.equal(broadcasts.at(-1).config.defaultVolume, volume);
+        assert.equal(broadcasts.at(-1).requestId, `volume-${volume}`);
+        assert.equal(JSON.stringify(settings.aiReplyDefault), selection);
+        assert.equal(settings.providers['qwen-chat'].defaultSpeed, speed);
+    }
+    const prior = JSON.stringify(settings);
+    for (const request of [
+        ...[-1, 101, 1.5, NaN, Infinity, null, '20'].map(volume => ({ volume })),
+        { volume: 20, voice: 'x' }, { volume: 20, speed: 2 }, { volume: 20, credential: 'x' }
+    ]) {
+        await handler.handle(display, { type: 'setChatTtsSelection', provider: 'system', ...request });
+        assert.equal(replies.at(-1).success, false);
+        assert.equal(JSON.stringify(settings), prior);
+    }
+    assert.equal(broadcasts.length, 3);
+});
+
 test('快捷语速保存后新批次使用新值，已开始的真实生成批次保持快照', async () => {
     const { createTtsProviderService } = require('../src/apps/server/modules/tts/tts-provider-service');
     const { wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');

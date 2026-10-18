@@ -59,10 +59,10 @@
 }
 .control-tts-voice-panel .display-tts-voice-header > strong { font-size: 15px; }
 
-/* 滑条只在权威配置声明原生语速时可见，input仅预览、change才保存。 */
+/* 语速按原生能力显示；总音量始终显示。两种滑条在松手时才保存。 */
 .tts-voice-speed[hidden] { display: none !important; }
-.tts-voice-speed label, .tts-voice-speed small { display: flex; justify-content: space-between; align-items: center; }
-.tts-voice-speed label { color: var(--text-secondary); font-size: 12px; }
-.tts-voice-speed output { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.tts-voice-speed input[type="range"] { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; padding: 0; accent-color: var(--voice-accent); }
-.tts-voice-speed small { color: var(--text-secondary); font-size: 10px; }
+:is(.tts-voice-speed, .tts-voice-volume) label, :is(.tts-voice-speed, .tts-voice-volume) small { display: flex; justify-content: space-between; align-items: center; }
+:is(.tts-voice-speed, .tts-voice-volume) label { color: var(--text-secondary); font-size: 12px; }
+:is(.tts-voice-speed, .tts-voice-volume) output { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+:is(.tts-voice-speed, .tts-voice-volume) input[type="range"] { display: block; box-sizing: border-box; width: 100%; margin: 8px 0; padding: 0; accent-color: var(--voice-accent); }
+:is(.tts-voice-speed, .tts-voice-volume) small { color: var(--text-secondary); font-size: 10px; }

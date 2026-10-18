@@ -1,3 +1,8 @@
+### 双端音色面板总音量
+
+- ✅ [2026-10-18] 控制端与显示端“音色选择”新增 0–100 总音量滑条，默认 100，松手后保存并同步权威值。
+  - `display.html`、`control-tts-voices.js`、`tts-voice-picker.js/css` 增加百分比预览、断线禁用与失败回滚；`tts-provider-ws.js` 仅接受独立合法音量并更新原 `defaultVolume`，不重选 Provider/音色。`self-test.js`、WebSocket 与真实双端浏览器测试同步，`npm run test:tts-voice-picker` 27/27 通过；`servicePackage=true`，待服务包构建和设备听感验收。
+
 ### 显示端单次录音注册声纹
 
 - ✅ [2026-10-18] 控制端选中显示端的单次录音收到 WAV 后，可在“已收到录音”后输入名字并注册为声纹。

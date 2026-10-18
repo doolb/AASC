@@ -91,12 +91,20 @@
             refs.speedValue.textContent = supported ? String(value) : '0';
         }
 
+        function renderVolume() {
+            const value = Number.isInteger(config?.defaultVolume) ? config.defaultVolume : 100;
+            refs.volume.disabled = !config || Boolean(pending);
+            refs.volume.value = value;
+            refs.volumeValue.textContent = `${value}%`;
+        }
+
         function renderVoices() {
             const current = currentVoice();
             const fragment = document.createDocumentFragment();
             const values = config && provider !== 'system' ? catalogs.get(catalogKey(provider)) || [] : [];
             renderCurrent(values);
             renderSpeed();
+            renderVolume();
             renderFilters(values);
             const matching = values.filter(voice => matches(voice));
             refs.count.textContent = `${matching.length} / ${values.length}`;
@@ -152,14 +160,15 @@
             refs.provider.disabled = !config;
         }
 
-        function save(id, voice, speed) {
+        function save(id, voice, speed, volume) {
             if (!config || pending) return;
             const idValue = requestId();
             pending = idValue;
             refs.provider.disabled = true;
             status('正在保存…');
             renderVoices();
-            const sent = send({ type: 'setChatTtsSelection', provider: id, ...(voice === undefined ? {} : { voice }), ...(speed === undefined ? {} : { speed }), requestId: idValue });
+            const sent = send({ type: 'setChatTtsSelection', provider: id, ...(voice === undefined ? {} : { voice }),
+                ...(speed === undefined ? {} : { speed }), ...(volume === undefined ? {} : { volume }), requestId: idValue });
             if (sent === false) { clearPending(); provider = config.aiReplyDefault.provider; refs.provider.value = provider;
                 resetFilters(); loadVoices(provider); status('连接已断开，尚未保存'); return; }
             timer = root.setTimeout(() => {
@@ -204,6 +213,7 @@
             refs = { toggle: document.getElementById(prefix + 'TtsVoiceToggle'), panel: document.getElementById(prefix + 'TtsVoicePanel'),
                 speedControl: document.getElementById(prefix + 'TtsSpeedControl'),
                 speed: document.getElementById(prefix + 'TtsSpeed'), speedValue: document.getElementById(prefix + 'TtsSpeedValue'),
+                volume: document.getElementById(prefix + 'TtsVolume'), volumeValue: document.getElementById(prefix + 'TtsVolumeValue'),
                 provider: document.getElementById(prefix + 'TtsProviderSelect'), search: document.getElementById(prefix + 'TtsVoiceSearch'),
                 list: document.getElementById(prefix + 'TtsVoiceList'), status: document.getElementById(prefix + 'TtsVoiceStatus'),
                 current: document.getElementById(prefix + 'TtsCurrentVoice'), currentName: document.getElementById(prefix + 'TtsCurrentVoiceName'),
@@ -238,6 +248,12 @@
                 const speed = Number(refs.speed.value);
                 if (speed === config?.providers[provider]?.defaultSpeed) return;
                 save(provider, undefined, speed);
+            });
+            refs.volume.addEventListener('input', () => { refs.volumeValue.textContent = `${refs.volume.value}%`; });
+            refs.volume.addEventListener('change', () => {
+                const volume = Number(refs.volume.value);
+                if (volume === config?.defaultVolume) return;
+                save(provider, undefined, undefined, volume);
             });
             const filterChanged = () => { cancelLocate(); renderVoices(); refs.list.scrollTop = 0; };
             for (const key of dimensions) refs.filters[key].addEventListener('change', () => { filters[key] = refs.filters[key].value; filterChanged(); });

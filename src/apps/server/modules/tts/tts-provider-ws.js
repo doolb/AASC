@@ -30,10 +30,15 @@ function createTtsProviderWs({ config, service, isControl, isDisplay = () => fal
                 let patch = data.config;
                 if (data.type === 'setChatTtsSelection') {
                     // 显示端只编辑与声纹页相同的AI默认及对应方式音色，不能借此改凭据或其它业务。
-                    const allowed = new Set(['type', 'provider', 'voice', 'speed', 'requestId']);
+                    const allowed = new Set(['type', 'provider', 'voice', 'speed', 'volume', 'requestId']);
                     if (Object.keys(data).some(key => !allowed.has(key)) || !PROVIDERS.includes(data.provider)) throw new Error('TTS快选参数不合法');
                     const current = config.getPublicTtsProviderSettings();
-                    if (Object.hasOwn(data, 'speed')) {
+                    if (Object.hasOwn(data, 'volume')) {
+                        // 总音量是根级共享偏好；迟到的滑条消息不得重选语音方式或音色。
+                        if (Object.hasOwn(data, 'speed') || Object.hasOwn(data, 'voice')) throw new Error('总音量请单独调整');
+                        if (!Number.isInteger(data.volume) || data.volume < 0 || data.volume > 100) throw new Error('总音量必须是 0 至 100 的整数');
+                        patch = { defaultVolume: data.volume };
+                    } else if (Object.hasOwn(data, 'speed')) {
                         // 快捷调速只写该方式偏好，不让另一端晚到的滑条操作重选AI默认或音色。
                         if (typeof data.speed !== 'number' || !Number.isFinite(data.speed)) throw new Error('语速必须是有限数值');
                         if (Object.hasOwn(data, 'voice')) throw new Error('语速与音色请分别调整');
