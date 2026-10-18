@@ -780,6 +780,14 @@ function hasValidContent(text) {
         return false;
     }
 
+    // 连续的短字母数字组合可能是用户口述的编号，例如“C3。”。
+    // 仅去掉句末标点用于判断，后续语音路由仍使用 ASR 原文；纯英文或纯数字继续按原规则过滤。
+    const spokenCode = text.trim().replace(/[.!?。！？]+$/u, '');
+    const isCompactSpokenCode = spokenCode.length >= 2 && spokenCode.length <= 12
+        && /^[A-Za-z0-9]+$/u.test(spokenCode)
+        && /[A-Za-z]/u.test(spokenCode) && /[0-9]/u.test(spokenCode);
+    if (isCompactSpokenCode) return true;
+
     if (config.get('asr.requireChinese', false) && !hasChinese) {
         log('\u8bed\u97f3', `\u5ffd\u7565\u975e\u4e2d\u6587\u8f93\u5165: "${text}"`);
         return false;

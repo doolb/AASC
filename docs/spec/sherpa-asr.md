@@ -456,7 +456,11 @@ C++ N-API addon:
     如果 not hasChinese and not hasEnglish and not hasNumber:
         返回 false
 
-    // requireChinese 配置：强制要求包含中文
+    spokenCode = 去掉 text 首尾空白和末尾中英文句末标点
+    如果 spokenCode 长度为 2..12 且只含 ASCII 字母/数字且两类字符都存在:
+        返回 true  // 保留原始识别文本，如 C3。；短代码进入原语音路由
+
+    // requireChinese 配置：普通文本仍要求中文，短字母数字代码已在上方单独处理
     如果 config.get('asr.requireChinese', false) 且 not hasChinese:
         记录日志 "忽略非中文输入"
         返回 false
