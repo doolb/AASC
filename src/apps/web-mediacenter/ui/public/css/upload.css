@@ -687,7 +687,9 @@ input[type="file"] {
 
 .display-recording-mode select,
 .display-recording-btn,
-.display-recording-replay {
+.display-recording-replay,
+.display-recording-voiceprint-name input,
+.display-recording-voiceprint-register {
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 4px;
     padding: 3px 6px;
@@ -701,7 +703,21 @@ input[type="file"] {
     color: #222;
 }
 
-.display-recording-btn:disabled {
+.display-recording-voiceprint-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.display-recording-voiceprint-name input {
+    width: 110px;
+    min-width: 80px;
+    cursor: text;
+}
+
+.display-recording-btn:disabled,
+.display-recording-voiceprint-register:disabled {
     cursor: not-allowed;
     opacity: 0.45;
 }

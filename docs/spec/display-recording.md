@@ -129,7 +129,14 @@ single VAD 完成:
 
 single 开始/停止:
     button -> request/stopDisplayRecording
-    result.audioData -> Blob(audio/wav) -> Audio.play()
+    result.audioData -> Blob(audio/wav) -> 保存本次 Blob 与播放 URL -> Audio.play()
+    已收到录音 -> 显示当前显示端的姓名输入框和注册为声纹按钮
+    输入姓名 -> 保存当前显示端的草稿，界面重绘后恢复
+    点击注册 -> 校验姓名和当前单次录音 Blob -> 锁定按钮
+             -> VoiceprintPanel.submitRegistration(name, Blob)
+             -> POST /api/voiceprint/register，使用现有声纹提取配置
+             -> 显示注册成功或错误，并刷新声纹列表
+             -> 解除按钮锁定；新录音替换旧 Blob 后只提交新录音
     播放结束或替换录音 -> revokeObjectURL
 
 realtime:
@@ -159,6 +166,8 @@ display.html:
 
 device-list.js + websocket.js:
     处理 mode/status/chunk/result
-    录音模式、录音按钮和重播按钮只由 VAD 卡片渲染
+    录音模式、录音按钮、重播按钮及声纹注册表单只由 VAD 卡片渲染
     single 使用可撤销 object URL 播放，realtime 使用单个 AudioContext 排队播放
+voiceprint-panel.js:
+    submitRegistration 复用已有 multipart 注册接口，普通录音和显示端录音共享同一个请求流程
 ```

@@ -476,16 +476,25 @@
             if (wav) void this.register(name, wav);
         },
 
+        // 控制端麦克风和显示端单次录音共用同一个声纹注册请求，提交后刷新权威列表。
+        async submitRegistration(name, audioBlob) {
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('audio', audioBlob, 'voiceprint.wav');
+            const response = await fetch('/api/voiceprint/register', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (!response.ok || data.status !== 'success') {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            }
+            await this.refreshList();
+            return data;
+        },
+
         async register(name, audioBlob) {
             document.getElementById('vpRecordStatus').textContent = '正在注册...';
             try {
-                const formData = new FormData();
-                formData.append('name', name);
-                formData.append('audio', audioBlob, 'voiceprint.wav');
-                const r = await fetch('/api/voiceprint/register', { method: 'POST', body: formData });
-                const data = await r.json();
-                document.getElementById('vpRecordStatus').textContent = data.message || (data.status === 'success' ? '注册成功' : '注册失败');
-                if (data.status === 'success') this.refreshList();
+                const data = await this.submitRegistration(name, audioBlob);
+                document.getElementById('vpRecordStatus').textContent = data.message || '注册成功';
             } catch (e) {
                 document.getElementById('vpRecordStatus').textContent = '注册失败: ' + e.message;
             }

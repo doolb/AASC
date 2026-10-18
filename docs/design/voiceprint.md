@@ -23,6 +23,8 @@ Offline APK 在显示页初始化阶段与原生 ASR 一起预热声纹模型，
 
 ## 外部模型加载
 
+控制端的声纹注册可以使用本机麦克风录音，也可以从当前选中显示端的“单次录音”结果卡片提交已回传的 WAV。两种来源共用 `/api/voiceprint/register`、当前声纹提取位置和服务端权威库；显示端单次录音不触发第二次采集。
+
 APK 下载的声纹模型保存在应用私有目录，并通过绝对路径传给 sherpa-onnx。`SpeakerEmbeddingExtractor` 和 `OfflineSpeakerDiarization` 构造时必须传入空 `AssetManager`，使 AAR 走文件系统加载分支；非空 `AssetManager` 只适用于 APK assets 中的资源。
 
 ## 验证目标

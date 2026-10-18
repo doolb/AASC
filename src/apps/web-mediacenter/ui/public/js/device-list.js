@@ -1021,6 +1021,40 @@ const DeviceList = {
         return true;
     },
 
+    // 复用当前显示端最近一次单次录音的 WAV；注册请求只提交给现有声纹接口。
+    async registerSingleRecordingVoiceprint(displayId) {
+        const playback = this.displayRecordingPlaybackByDisplay.get(displayId);
+        if (!playback?.blob || playback.registering) return false;
+        const name = String(playback.voiceprintName || '').trim();
+        if (!name) {
+            playback.voiceprintStatus = '请先输入声纹名字';
+            this.renderVoiceVadPanel();
+            return false;
+        }
+        playback.registering = true;
+        playback.voiceprintStatus = '正在注册声纹...';
+        this.renderVoiceVadPanel();
+        try {
+            const service = window.VoiceprintPanel;
+            if (!service?.submitRegistration) throw new Error('声纹注册服务尚未就绪');
+            const result = await service.submitRegistration(name, playback.blob);
+            if (this.displayRecordingPlaybackByDisplay.get(displayId) === playback) {
+                playback.voiceprintStatus = result.message || '声纹注册成功';
+            }
+            return true;
+        } catch (error) {
+            if (this.displayRecordingPlaybackByDisplay.get(displayId) === playback) {
+                playback.voiceprintStatus = `注册失败：${error.message}`;
+            }
+            return false;
+        } finally {
+            playback.registering = false;
+            if (this.displayRecordingPlaybackByDisplay.get(displayId) === playback) {
+                this.renderVoiceVadPanel();
+            }
+        }
+    },
+
     handleDisplayRecordingStatus(data) {
         const displayId = String(data?.displayId || '');
         const requestId = String(data?.requestId || '');
@@ -1092,8 +1126,16 @@ const DeviceList = {
             const oldPlayback = this.displayRecordingPlaybackByDisplay.get(displayId);
             if (oldPlayback?.url) URL.revokeObjectURL(oldPlayback.url);
             const bytes = this.decodeBase64Bytes(data.audioData);
-            const url = URL.createObjectURL(new Blob([bytes], { type: data.mimeType || 'audio/wav' }));
-            this.displayRecordingPlaybackByDisplay.set(displayId, { url, audio: null });
+            const blob = new Blob([bytes], { type: data.mimeType || 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            this.displayRecordingPlaybackByDisplay.set(displayId, {
+                url,
+                audio: null,
+                blob,
+                voiceprintName: oldPlayback?.voiceprintName || '',
+                voiceprintStatus: '',
+                registering: false
+            });
             this.playSingleRecording(displayId);
         }
         if (data.mode === 'realtime') {
@@ -1182,6 +1224,16 @@ const DeviceList = {
         const recordingMode = this.getVoiceRecordingMode(display);
         const recordingSession = this.getDisplayRecordingSession(display.id);
         const recordingLabel = this.getDisplayRecordingLabel(display.id);
+        const recordingPlayback = this.displayRecordingPlaybackByDisplay.get(display.id);
+        const voiceprintRegistration = recordingMode === 'single' && !recordingSession && recordingPlayback?.blob
+            ? `<label class="display-recording-voiceprint-name">声纹名字
+                    <input type="text" data-display-recording-voiceprint-name data-display-id="${displayId}"
+                        value="${this.escapeHtml(recordingPlayback.voiceprintName || '')}" placeholder="输入名字">
+                </label>
+                <button type="button" class="display-recording-voiceprint-register" data-display-recording-voiceprint-register
+                    data-display-id="${displayId}" ${recordingPlayback.registering ? 'disabled' : ''}>${recordingPlayback.registering ? '注册中…' : '注册为声纹'}</button>
+                ${recordingPlayback.voiceprintStatus ? `<span class="display-recording-state">${this.escapeHtml(recordingPlayback.voiceprintStatus)}</span>` : ''}`
+            : '';
         const captureMode = this.getVoiceCaptureMode(display);
         const captureDeviceKey = this.getVoiceCaptureDeviceKeyForMode(display, captureMode);
         const captureDevices = this.getVoiceInputDevices(display, captureMode);
@@ -1275,6 +1327,7 @@ const DeviceList = {
                     ${recordingMode === 'asr' ? '' : `<button type="button" class="display-recording-btn" data-display-recording-action data-display-id="${displayId}" ${capabilities.voiceRecording !== true ? 'disabled' : ''}>${recordingButtonText}</button>`}
                     ${replayButton}
                     ${recordingLabel ? `<span class="display-recording-state">${recordingLabel}</span>` : ''}
+                    ${voiceprintRegistration}
                 </div>
                 <div class="display-vad-hint">请保持安静约 3 秒；检测只采样 RMS，不会触发识别。</div>
             </div>
@@ -1335,7 +1388,7 @@ const DeviceList = {
             && typeof panel.contains === 'function'
             && panel.contains(activeElement)
             && typeof activeElement.matches === 'function'
-            && activeElement.matches('[data-vad-threshold]')
+            && activeElement.matches('[data-vad-threshold], [data-display-recording-voiceprint-name]')
             && activeElement.dataset?.displayId === displayId
         );
     },
@@ -1479,7 +1532,19 @@ const DeviceList = {
             if (replayButton) {
                 event.stopPropagation();
                 this.playSingleRecording(replayButton.dataset.displayId);
+                return;
             }
+            const registerButton = event.target.closest('[data-display-recording-voiceprint-register]');
+            if (registerButton && !registerButton.disabled) {
+                event.stopPropagation();
+                void this.registerSingleRecordingVoiceprint(registerButton.dataset.displayId);
+            }
+        });
+        container.addEventListener('input', (event) => {
+            const input = event.target.closest('[data-display-recording-voiceprint-name]');
+            if (!input) return;
+            const playback = this.displayRecordingPlaybackByDisplay.get(input.dataset.displayId);
+            if (playback) playback.voiceprintName = input.value;
         });
         container.addEventListener('change', (event) => {
             const statusBarInput = event.target.closest('[data-display-status-bar-toggle]');

@@ -163,6 +163,9 @@ voiceprintDiarize:
 
 ```
 输入名字 + getUserMedia 录音(3-10s) → POST /api/voiceprint/register → 列表刷新
+当前显示端单次录音结果 -> 控制端保存 WAV Blob -> 在“已收到录音”后输入名字并点击注册
+    -> 复用 VoiceprintPanel.submitRegistration(name, Blob) -> POST /api/voiceprint/register -> 列表刷新
+    -> 原录音卡片显示成功或错误；重录后只使用最新 Blob，不要求显示端再次录音
 GET /api/voiceprint/db → 列表显示 + 删除
 GET/POST /api/voiceprint/config → enabled/multiSpeaker/extraction/threshold 切换；threshold 默认 0.3
 chat.js: sendAudioForRecognition → data.segments 逐段 / data.speaker 归属
