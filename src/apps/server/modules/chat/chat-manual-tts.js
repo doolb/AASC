@@ -46,7 +46,13 @@ function createManualChatTtsService({ split, strip, resolveOptions, scheduler, g
             notify(ws, requestId, 'generating');
             await Promise.all(sentences.map((sentence, index) => queue.enqueue(async () => {
                 if (!current()) return null;
-                const reference = await generate(sentence, preferred, options);
+                let reference;
+                try { reference = await generate(sentence, preferred, options); }
+                catch (error) {
+                    // 只附加批内序号供脱敏诊断，正文仍由原播放消息携带，不进入错误日志。
+                    if (error && typeof error === 'object' && Object.isExtensible(error)) error.manualTtsSegmentIndex = index;
+                    throw error;
+                }
                 return reference === null ? null : { sentence, reference };
             }).then(result => {
                 if (!result || !current()) return;

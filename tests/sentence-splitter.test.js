@@ -37,8 +37,14 @@ test('splitIntoSentences treats an ellipsis run as a sentence boundary', () => {
 test('splitIntoSentences drops later punctuation-only segments in a consecutive run', () => {
     assert.deepEqual(
         splitIntoSentences('喵呜……？！ （耳朵瞬间变得通红'),
-        ['喵呜……', '？', '（耳朵瞬间变得通红']
+        ['喵呜……', '？', '耳朵瞬间变得通红']
     );
+});
+
+test('全角括号在当前分句器形成边界，内部正文保留而括号字形不进入TTS', () => {
+    assert.deepEqual(splitIntoSentences('喵呜（耳朵通红）真的吗？'), ['喵呜', '耳朵通红', '真的吗？']);
+    assert.deepEqual(splitIntoSentences('（独立内容）'), ['独立内容']);
+    assert.deepEqual(splitIntoSentences('（）'), []);
 });
 
 test('长句有界分段，保留中文、英文和 emoji 的原有顺序', () => {

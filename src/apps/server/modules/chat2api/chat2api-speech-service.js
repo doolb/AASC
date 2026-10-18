@@ -76,6 +76,9 @@ function normalizeSpeechRequest(request) {
     if (!MODELS.has(model)) throw speechError(400, 'invalid_speech_request', '不支持的 Chat2API 语音模型');
     const doubao = model === 'doubao-chat';
     if (doubao && (request.input.length > 1000 || Buffer.byteLength(request.input, 'utf8') > 4000)) throw speechError(400, 'invalid_speech_request', '豆包网页语音文本超过1000字符或4000字节');
+    // HTTP直调可绕过应用分句器；仅移除全角括号字形，保留括号内文字及其他标点。
+    const speechText = doubao ? request.input.replace(/[（）]/gu, '').trim() : request.input;
+    if (!speechText.trim()) throw speechError(400, 'invalid_speech_request', '语音文本不能为空');
     const voice = request.voice ?? (doubao ? DOUBAO_SPEECH_VOICE : QWEN_VOICE);
     if (typeof voice !== 'string' || !voice.trim() || voice.length > 512 || /[\r\n]/u.test(voice)) throw speechError(400, 'invalid_speech_request', '语音音色参数不合法');
     if (request.response_format !== undefined && request.response_format !== 'wav') throw speechError(400, 'invalid_speech_request', 'Chat2API 语音仅支持wav格式');
@@ -85,7 +88,7 @@ function normalizeSpeechRequest(request) {
     if (doubao && (speed !== 1 || volume !== 100)) throw speechError(400, 'invalid_speech_request', '豆包网页语音仅支持1倍速与默认音量');
     if (typeof speed !== 'number' || !Number.isFinite(speed) || speed < 0.25 || speed > 4
         || typeof volume !== 'number' || !Number.isFinite(volume) || volume < 0 || volume > 100) throw speechError(400, 'invalid_speech_request', '语音速度或音量超出范围');
-    return { text: request.input, model: model === 'qwen-chat' ? 'QUARK_VOICE' : model, voice, speed, volume };
+    return { text: speechText, model: model === 'qwen-chat' ? 'QUARK_VOICE' : model, voice, speed, volume };
 }
 
 // 凭证只在Chat2API内部解析；统一兼容其既有Cookie和ticket字段，不进入TTS配置。

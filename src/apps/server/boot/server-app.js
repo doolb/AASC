@@ -739,7 +739,8 @@ const manualChatTts = createManualChatTtsService({
     send: sendToDisplay, capabilities: getDisplayCapabilities,
     broadcast: message => sendToDisplaysWithCapability('voicePlayback', message),
     suppressed: isRepairModeTtsSuppressed,
-    onError: error => logError('TTS', '手动播放失败: ' + (error.code || 'tts_failed'))
+    onError: error => logError('TTS', '手动播放失败: ' + (error.code || 'tts_failed')
+        + (Number.isInteger(error.manualTtsSegmentIndex) ? ` segment=${error.manualTtsSegmentIndex + 1}` : ''))
 });
 function playManualChatTts(data, ws, options) { return manualChatTts.play(data, { ws, ...options }); }
 

@@ -1,3 +1,8 @@
+### 豆包语音全角括号协议错误
+
+- ✅ [2026-10-19] 按用户确认让全角 `（`、`）` 在当前分句器形成边界，括号内文字保留；豆包直连请求也移除括号字形，协议失败增加脱敏阶段/事件日志和手动朗读失败分句序号。
+  - 更新 `sentence-splitter.js`、`chat2api-speech-service.js`、`chat2api-doubao-speech-adapter.js`、`chat-manual-tts.js`、`server-app.js` 及对应测试；补齐手动朗读测试桩。同步 chat-system design/spec/task/todo，分句 8/8、手动 TTS 24/24、Chat2API 286/286 通过；`servicePackage=true`，实际豆包账号待验收。旧日志没有逐句证据，仍需用新日志确认现场根因。
+
 ### Chat2API 错误显示端提示
 
 - 📝 [2026-10-18] 对照当前豆包适配器与官网网页调用方式：文字请求在 Node Axios 内发送，虽使用同一官网接口和网页式参数，但 Cookie/CSRF/nodeProfile 来自已保存快照，并非当前浏览器标签页的实时请求环境。

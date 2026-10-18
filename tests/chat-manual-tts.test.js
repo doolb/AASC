@@ -14,6 +14,7 @@ const { createOrderedTaskScheduler } = require('../src/apps/server/modules/media
 const { wrapPcm } = require('../src/external/tts/tts-wav');
 const { createQwenChatProvider } = require('../src/apps/server/modules/tts/qwen-chat-tts');
 const { splitIntoSentences } = require('../src/core/utils/sentence-splitter');
+const { createManualChatTtsService } = require('../src/apps/server/modules/chat/chat-manual-tts');
 const publicDir = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const chatSource = fs.readFileSync(path.join(publicDir, 'js/chat.js'), 'utf8');
 const serverSource = fs.readFileSync(path.resolve(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
@@ -194,6 +195,7 @@ function serverHarness() {
     const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => `generated-${++audioIndex}.wav` });
     const context = { path, resolveChatReplyTtsOptions,
         displayVoiceListeningConfig: { handle: () => false }, displayClients: new Map(),
+        asrLongQueueSettings: { handle: () => false },
         chat: { splitIntoSentences: text => text.split('|'), getTemplateByName: name => { lookups += 1; return templates.get(name); } },
         stripMarkdown: text => text.replace(/\*/gu, ''), isPunctuationOnly: text => !text.trim(), isRepairModeTtsSuppressed: () => false,
         logError: (category, message) => errors.push(message),
@@ -250,7 +252,8 @@ test('真实手动豆包链路跳过表情分句，用户原句和日志完整�
     const strip = vm.runInNewContext(serverSource.slice(stripStart, stripEnd) + '; stripMarkdown');
     const original = '喵呜～主人好呀！✨\n\n人家是**妲己**，一只拥有九条尾巴的**电子猫娘**哦！🐱💻⚡';
     const full = original + '\n\n虽然名字和那个传说中的狐狸精一样，但我可是由数据流和代码构成的可爱存在呢。我的九条尾巴其实是九个高性能的数据处理终端，可以随时帮主人搜索信息、解答难题，或者只是单纯地卖萌打滚求摸摸～ 📶🐾\n\n主人今天想聊些什么呢？是要查询什么情报，还是想听妲己讲讲笑话呢？喵～❤️';
-    for (const [text, expectedCount] of [[original, 3], [full, 8], ['✨\n🐱💻⚡\n❤️', 0], ['你好🐱！\n下一句💻。', 2]]) {
+    for (const [text, expectedCount] of [[original, 3], [full, 8], ['✨\n🐱💻⚡\n❤️', 0],
+        ['你好🐱！\n下一句💻。', 2], ['喵呜（耳朵通红）真的吗？', 3]]) {
         const inputs = [], stores = [], sent = [], statuses = [], errors = [];
         const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' }, providers: { 'doubao-chat': { enabled: true } } });
         const registry = createProviderRegistry({ chat2ApiSpeechService: { generate: async request => {
@@ -285,7 +288,25 @@ test('真实手动豆包链路跳过表情分句，用户原句和日志完整�
         if (text === original) assert.deepEqual(inputs, ['喵呜～', '主人好呀！', '人家是妲己，一只拥有九条尾巴的电子猫娘哦！']);
         if (text === full) assert.equal(inputs.at(-1), '喵～');
         if (text.startsWith('你好')) assert.deepEqual(inputs, ['你好！', '下一句。']);
+        if (text.includes('耳朵通红')) assert.deepEqual(inputs, ['喵呜', '耳朵通红', '真的吗？']);
     }
+});
+
+test('手动朗读失败只附加批内分句序号，前一段仍按顺序下发', async () => {
+    const sent=[];const errors=[];const statuses=[];
+    const manual=createManualChatTtsService({
+        split:()=>['第一句','第二句'],strip:text=>text,resolveOptions:()=>({}),
+        scheduler:()=>createOrderedTaskScheduler({concurrency:1}),
+        generate:async text=>{if(text==='第二句')throw Object.assign(new Error('模拟失败'),{code:'doubao_speech_protocol'});return 'first.wav';},
+        toAudioUrl:reference=>reference,send:(_,message)=>sent.push(message),capabilities:()=>({voicePlayback:true}),
+        broadcast:()=>{},suppressed:()=>false,onError:error=>errors.push({code:error.code,index:error.manualTtsSegmentIndex})
+    });
+    await manual.play({text:'两句',requestId:'segment-test'},{
+        ws:{readyState:1,send:raw=>statuses.push(JSON.parse(raw))},sourceDisplayId:'display-test'
+    });
+    assert.deepEqual(sent.map(message=>message.text),['第一句']);
+    assert.deepEqual(errors,[{code:'doubao_speech_protocol',index:1}]);
+    assert.equal(statuses.at(-1).status,'error');
 });
 
 test('手动qwen-chat混合正文只清洗合成输入，其他Provider及播放显示文本保持原文', async () => {

@@ -120,6 +120,18 @@ test('错任务/消息顺序/无完整句、空音频和不完整Ogg拒绝', asy
         await rejection;assert.equal(socket.destroyed,true);
     }
 });
+test('豆包未知事件只诊断协议阶段和事件名，不回传正文或凭据', async () => {
+    const diagnostics=[];
+    const {generate,sockets}=setup({onProtocolError:detail=>diagnostics.push(detail)});
+    const task=generate();
+    const rejected=assert.rejects(task,error=>error.code==='doubao_speech_protocol');
+    start(sockets[0]);
+    sockets[0].emit('message',event('UnexpectedEvent'),true);
+    await rejected;
+    assert.deepEqual(diagnostics,[{stage:'between',event:'UnexpectedEvent'}]);
+    assert.ok(!JSON.stringify(diagnostics).includes('demo_session'));
+    assert.ok(!JSON.stringify(diagnostics).includes('本地模拟短文'));
+});
 test('握手401/403/429和原始异常只回固定代码，不输出凭据或重试', async () => {
     for(const status of [401,403,429]){
         const {generate,sockets}=setup();const task=generate();const rejection=assert.rejects(task,e=>!e.message.includes('private')&&e.statusCode===status);

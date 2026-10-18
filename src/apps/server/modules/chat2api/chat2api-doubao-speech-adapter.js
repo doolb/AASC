@@ -24,7 +24,7 @@ function getDoubaoSpeechCredential(account) {
 }
 
 function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(url,options),decodeAudio=decodeOggOpusToWav,
-    queue=createDoubaoSpeechQueue()}={}) {
+    queue=createDoubaoSpeechQueue(),onProtocolError=detail=>console.warn(`[Chat2API] 豆包语音协议异常: stage=${detail.stage} event=${detail.event}`)}={}) {
     return { async generate(request,credential,{accountId,signal,deadline=Date.now()+60000}={}) {
         if(signal?.aborted)throw doubaoSpeechError('doubao_speech_cancelled');
         if(!Number.isFinite(deadline)||deadline<=Date.now())throw doubaoSpeechError('doubao_speech_timeout');
@@ -59,9 +59,10 @@ function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(ur
                 const open=()=>{if(settled)return;try{check();phase='task';send('StartTask');
                     heartbeat=setInterval(()=>{if(settled)return;try{check();if(Date.now()-lastPong>12000)throw doubaoSpeechError('doubao_speech_timeout');send('Ping')}catch(failure){finish(failure)}},8000);
                 }catch(failure){finish(failure)}};
-                const message=(bytes,isBinary)=>{if(settled)return;try{
+                const message=(bytes,isBinary)=>{if(settled)return;let eventName='unparsed';try{
                     check();if(isBinary===false||++events>10000)throw doubaoSpeechError('doubao_speech_protocol');
                     const event=decodeSpeechResponse(bytes);
+                    eventName=event.event;
                     // 官网VoiceGenie实际成功帧使用20000000；兼容旧帧省略状态字段时decoder提供的0。
                     // 只接受这两个明确成功值，未知非零值仍拒绝，避免误把上游失败推进到下一阶段。
                     if(event.status_code !== 0 && event.status_code !== 20000000)throw doubaoSpeechError(({401:'doubao_speech_auth',403:'doubao_speech_risk',429:'doubao_speech_rate'})[event.status_code]);
@@ -93,7 +94,14 @@ function createDoubaoSpeechAdapter({createSocket=(url,options)=>new WebSocket(ur
                         case 'SessionFailed':case 'TaskFailed':throw doubaoSpeechError('doubao_speech_upstream');
                         default:throw doubaoSpeechError('doubao_speech_protocol');
                     }
-                }catch(failure){finish(failure.code?.startsWith('doubao_speech_')?failure:doubaoSpeechError('doubao_speech_protocol'))}};
+                }catch(failure){
+                    const resolved=failure.code?.startsWith('doubao_speech_')?failure:doubaoSpeechError('doubao_speech_protocol');
+                    if(resolved.code==='doubao_speech_protocol'){
+                        // 只记录本地状态和已通过协议解码校验的事件名，不写入音频、正文或凭据。
+                        try{onProtocolError({stage:phase,event:eventName})}catch{}
+                    }
+                    finish(resolved);
+                }};
                 try {
                     const url=new URL(DOUBAO_SPEECH_ENDPOINT);
                     for(const [key,value] of Object.entries({api_app_key:DOUBAO_SPEECH_APPKEY,namespace:'VoiceGenie',version_code:'20800',language:'zh',
