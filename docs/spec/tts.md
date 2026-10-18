@@ -183,6 +183,16 @@ TTS 生成:
 
 省略号会改变 TTS 句子数量，但不会修改界面展示文本。
 
+### 待实施的应用层长文本分段伪代码
+
+```text
+当前 splitIntoSentences(text): 按句末和逗号次数分段，不保证单段长度上限
+当前天气控制端/提醒等单段入口: 直接把完整文本交给 generateTtsWithFallback
+拟实施 boundedSentences = splitIntoSentences(原文, 单段上限)
+拟实施 对每个 segment 按原文顺序生成 WAV 引用，再送到对应控制端或显示端播放队列
+拟实施 显示文字仍使用完整原文；停止时取消尚未提交的 segment
+```
+
 ### 所有服务端 TTS 统一路由
 
 ```text

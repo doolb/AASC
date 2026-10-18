@@ -459,6 +459,8 @@ C++ N-API addon:
     spokenCode = 去掉 text 首尾空白和末尾中英文句末标点
     如果 spokenCode 长度为 2..12 且只含 ASCII 字母/数字且两类字符都存在:
         返回 true  // 保留原始识别文本，如 C3。；短代码进入原语音路由
+    当前 A一。 含一个汉字且不满足 ASCII 代码规则 → 后续短中文规则返回 false
+    待实施：紧凑 ASCII 字母 + 中文数字短代码（如 A一。）→ 保留原始识别文本并返回 true
 
     // requireChinese 配置：普通文本仍要求中文，短字母数字代码已在上方单独处理
     如果 config.get('asr.requireChinese', false) 且 not hasChinese:

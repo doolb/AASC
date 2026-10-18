@@ -303,7 +303,7 @@ TTS 批次完成和中断:
         旧显示端只读取 text 时保持兼容
     当前控制端 onResult 分支实际收到 detailText → 长天气详情被整体提交到 TTS（待修复）
     当前 system.defaultSpeed == 0 → Android TtsEnginePool 调用 SpeakText(detailText)；SDK 返回 80048028 时不能据“check your SSML”反推自定义 SSML 错误
-    待确认修复：控制端 onResult 改为接收 text；detailText 仍只用于详情展示
+    用户更新的待实施目标：onResult 与 onTts 都接收完整 detailText → 应用层拆成有界分段 → 逐段生成并按序播放；原短摘要方案不再实施
     显示端收到 action == 'weatherResult':
         如果存在 audioUrl: 将 text 放入 TTS 队列
         使用 detailText || text 调用 showVoiceResponsePopup
