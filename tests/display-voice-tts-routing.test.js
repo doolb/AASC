@@ -21,7 +21,7 @@ assert.match(
 );
 assert.match(
     server,
-    /onTts: isDisplayVoiceInput[\s\S]*?sendVoiceInputTts\(text,\s*\{[\s\S]*?preferredDisplayId:\s*targetDisplayId/,
+    /onTts: isDisplayVoiceInput[\s\S]*?sendVoiceInputTtsSentences\(text, targetDisplayId, playbackOptions\)/,
     '显示端语音输入应注入来源端优先的单目标 TTS 回调，控制端播放回调保持独立'
 );
 assert.match(

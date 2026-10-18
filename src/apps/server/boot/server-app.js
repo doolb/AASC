@@ -500,6 +500,7 @@ const PLAYBACK_PROGRESS_PERSIST_INTERVAL_MS = 1000;
 const displayProgressPersistAt = new Map();
 const displayConversationTimers = new Map();
 const displayConversationTtsPlaybackKeys = new Map();
+const displayConversationTtsGenerationTokens = new Map();
 // 临时模式是服务端唯一的全局会话实例，所有显示端和控制端共享这份快照。
 let temporaryConversation = {
     id: null,
@@ -2449,6 +2450,45 @@ function resumeDisplayConversationTimer(displayId, options = {}) {
     return true;
 }
 
+// 生成中的语音回复也属于当前播报批次；队列在两句之间暂时为空时仍保持倒计时暂停。
+function beginDisplayConversationTtsGeneration(displayId) {
+    const displayData = displayClients.get(displayId);
+    if (!displayData || !['activeGroup', 'activePrivate'].includes(displayData.state.voiceConversation?.state)) {
+        return null;
+    }
+    const token = Symbol('voice-tts-generation');
+    const tokens = displayConversationTtsGenerationTokens.get(displayId) || new Set();
+    tokens.add(token);
+    displayConversationTtsGenerationTokens.set(displayId, tokens);
+    pauseDisplayConversationTimer(displayId, 'ttsGenerationStarted');
+    return token;
+}
+
+function endDisplayConversationTtsGeneration(displayId, token) {
+    if (!token) return;
+    const tokens = displayConversationTtsGenerationTokens.get(displayId);
+    if (!tokens?.delete(token)) return;
+    if (tokens.size > 0) return;
+    displayConversationTtsGenerationTokens.delete(displayId);
+    if (displayConversationTtsPlaybackKeys.get(displayId)?.size) return;
+    resumeDisplayConversationTimer(displayId, { reason: 'ttsPlaybackFinished' });
+}
+
+function handleVoiceConversationTtsFinished(displayId, displayData) {
+    if (!isDisplayVoiceListeningEnabled(displayData)
+        || !['activeGroup', 'activePrivate'].includes(displayData.state.voiceConversation?.state)
+        || displayConversationTtsGenerationTokens.get(displayId)?.size
+        || displayConversationTtsPlaybackKeys.get(displayId)?.size
+        || (displayConversationTimers.has(displayId)
+            && displayData.state.voiceConversation.timerPaused !== true)) return false;
+    armDisplayConversationTimer(displayId);
+    const windowSeconds = Math.round(
+        getVoiceConversationWindowMs(displayData.state.voiceConversation.windowType) / 1000
+    );
+    log('语音', `显示端 ${displayId} TTS 播放完成，重新计时${windowSeconds}秒`);
+    return true;
+}
+
 function normalizeDisplayChatVoiceContext(data) {
     const mode = data?.mode === 'private' ? 'private' : 'group';
     const target = mode === 'private' ? String(data?.target || '').trim() : null;
@@ -2509,6 +2549,7 @@ function clearDisplayConversationTtsPlaybackKey(displayId, playbackKey) {
     keys.delete(playbackKey);
     if (keys.size === 0) {
         displayConversationTtsPlaybackKeys.delete(displayId);
+        if (displayConversationTtsGenerationTokens.get(displayId)?.size) return;
         const displayData = displayClients.get(displayId);
         if (displayData?.state?.chatLayerVisible === true) return;
         resumeDisplayConversationTimer(displayId, {
@@ -7245,7 +7286,7 @@ async function sendMediaNameTts(displayId, text) {
         let sent = false;
         await sendVoiceTtsSentences(normalizedText, async (sentence, options) => {
             sent = await sendVoiceCommandTts(sentence, displayId, options) || sent;
-        });
+        }, { conversationDisplayId: displayId });
         return sent;
     } catch (error) {
         logError('TTS', `媒体文件名播报失败: ${error.message}`);
@@ -7256,35 +7297,41 @@ async function sendMediaNameTts(displayId, text) {
 // 帮助文本等较长语音内容按句串行处理，避免一次 TTS 请求携带整段长文本。
 // 回调内部仍负责选择通用或控制端定向播放目标，本函数只负责分句和顺序。
 async function sendVoiceTtsSentences(text, sendSentence, options = {}) {
-    const sentences = chat.splitIntoSentences(text);
-    const candidates = sentences.length > 0 ? sentences : [text];
-    const snapshot = ttsProviderService.resolve({ businessType: BUSINESS_TYPES.SYSTEM_BROADCAST });
-    const provider = snapshot.selection.provider;
-    // 仅千问会跳过表情句，先排除这些句子再确定批次尾标记；原显示文字保持，
-    // 避免最后一段没有音频时丢失结束标记。其它Provider沿用原文和原分句。
-    const orderedSentences = provider === 'qwen-chat'
-        ? candidates.filter(sentence => Boolean(filterQwenChatSpeechText(sentence))) : candidates;
-    if (orderedSentences.length === 0) return 0;
-    const batchId = generateCorrelationId('voice-tts-batch');
-    let sentCount = 0;
-    for (let index = 0; index < orderedSentences.length; index++) {
-        if (options.shouldContinue && !options.shouldContinue()) break;
-        const sent = await sendSentence(orderedSentences[index], {
-            batchId,
-            batchEnd: index === orderedSentences.length - 1,
-            ttsConfiguration: snapshot.configuration,
-            ...options
-        });
-        if (sent) sentCount++;
+    const conversationDisplayId = options.conversationDisplayId || null;
+    const generationToken = beginDisplayConversationTtsGeneration(conversationDisplayId);
+    try {
+        const sentences = chat.splitIntoSentences(text);
+        const candidates = sentences.length > 0 ? sentences : [text];
+        const snapshot = ttsProviderService.resolve({ businessType: BUSINESS_TYPES.SYSTEM_BROADCAST });
+        const provider = snapshot.selection.provider;
+        // 仅千问会跳过表情句，先排除这些句子再确定批次尾标记；原显示文字保持，
+        // 避免最后一段没有音频时丢失结束标记。其它Provider沿用原文和原分句。
+        const orderedSentences = provider === 'qwen-chat'
+            ? candidates.filter(sentence => Boolean(filterQwenChatSpeechText(sentence))) : candidates;
+        if (orderedSentences.length === 0) return 0;
+        const batchId = generateCorrelationId('voice-tts-batch');
+        let sentCount = 0;
+        for (let index = 0; index < orderedSentences.length; index++) {
+            if (options.shouldContinue && !options.shouldContinue()) break;
+            const sent = await sendSentence(orderedSentences[index], {
+                batchId,
+                batchEnd: index === orderedSentences.length - 1,
+                ttsConfiguration: snapshot.configuration,
+                ...options
+            });
+            if (sent) sentCount++;
+        }
+        return sentCount;
+    } finally {
+        endDisplayConversationTtsGeneration(conversationDisplayId, generationToken);
     }
-    return sentCount;
 }
 
 async function sendVoiceInputTtsSentences(text, preferredDisplayId = null, options = {}) {
     return sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceInputTts(sentence, {
         ...playbackOptions,
         preferredDisplayId
-    }), options);
+    }), { conversationDisplayId: preferredDisplayId, ...options });
 }
 
 async function sendVoiceCommandTtsSentences(text, targetDisplayId, options = {}) {
@@ -7292,7 +7339,7 @@ async function sendVoiceCommandTtsSentences(text, targetDisplayId, options = {})
         sentence,
         targetDisplayId,
         playbackOptions
-    ), options);
+    ), { conversationDisplayId: targetDisplayId, ...options });
 }
 
 // 控制端语音播放沿用前端队列；逐段生成并发送，保持天气和搜索长播报的顺序。
@@ -8317,6 +8364,7 @@ wss.on('connection', (ws, req) => {
 
             muteState.previousVolumes.delete(displayId);
             clearDisplayConversationTimer(displayId);
+            displayConversationTtsGenerationTokens.delete(displayId);
             clearPendingConversationConfirmation(displayId, 'displayDisconnected');
             clearRepairMode(displayId, 'displayDisconnected');
             finishVoiceTtsPlaybacksForDisplay(displayId);
@@ -8983,14 +9031,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         void sendTextInputAnnouncement(displayId, data);
     } else if (data.type === 'voiceConversationTtsFinished' && displayData) {
         // 该事件负责兼容旧显示端；确认提示使用带 playbackId 的完成回执计时。
-        if (isDisplayVoiceListeningEnabled(displayData)
-            && ['activeGroup', 'activePrivate'].includes(displayData.state.voiceConversation?.state)) {
-            armDisplayConversationTimer(displayId);
-            const windowSeconds = Math.round(
-                getVoiceConversationWindowMs(displayData.state.voiceConversation.windowType) / 1000
-            );
-            log('语音', `显示端 ${displayId} TTS 播放完成，重新计时${windowSeconds}秒`);
-        }
+        handleVoiceConversationTtsFinished(displayId, displayData);
     } else if (data.type === 'voiceTtsPlaybackFinished' && displayData) {
         completeVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId, data.completedCount);
     } else if (data.type === 'voiceVadNoiseResult' && displayData) {
@@ -11185,6 +11226,7 @@ async function handleChatMessage(options) {
     const replyTtsOptions = ttsProviderService.snapshot({ businessType: BUSINESS_TYPES.AI_REPLY,
         templateTts: replyTemplateTts, userText: displayContent || content });
     const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId, replyTtsOptions) : null;
+    const pendingTtsDeliveryPromises = [];
     const sendChatResponse = (payload) => {
         const responseLength = typeof payload.message === 'string' ? payload.message.length : 0;
         log('WS', `>> chatResponse requestId=${effectiveRequestId} success=${payload.success} messageLength=${responseLength}`, {
@@ -11208,7 +11250,8 @@ async function handleChatMessage(options) {
             temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
         });
     }
-    await chat.chatStream(content, {
+    const voiceGenerationToken = beginDisplayConversationTtsGeneration(voiceOriginDisplayId);
+    const streamReply = () => chat.chatStream(content, {
         useTemplate: null,
         displayId: displayId,
         systemPrompt: systemPrompt,
@@ -11247,7 +11290,7 @@ async function handleChatMessage(options) {
                 }
             }
             const ttsPhase = speechPhase === 'think' ? 'think' : 'answer';
-            ttsScheduler.enqueue(async () => {
+            const deliveryPromise = ttsScheduler.enqueue(async () => {
                 if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return null;
                 if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return null;
@@ -11319,6 +11362,8 @@ async function handleChatMessage(options) {
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return;
                 logError('Chat', `TTS生成失败: ${err.message}`);
             });
+            // 调度器空闲可能先于 enqueue 的 then 回调；保留回调 Promise，确保音频已下发后才释放会话计时暂停。
+            pendingTtsDeliveryPromises.push(deliveryPromise);
         },
         onComplete: (fullMessage, history, reasoning, speech) => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
@@ -11375,7 +11420,16 @@ async function handleChatMessage(options) {
             });
         }
     });
-    if (ttsScheduler) await ttsScheduler.waitForIdle();
+    try {
+        await streamReply();
+    } finally {
+        try {
+            if (ttsScheduler) await ttsScheduler.waitForIdle();
+            await Promise.allSettled(pendingTtsDeliveryPromises);
+        } finally {
+            endDisplayConversationTtsGeneration(voiceOriginDisplayId, voiceGenerationToken);
+        }
+    }
 }
 
 async function sendSearchTts(text, options = {}) {

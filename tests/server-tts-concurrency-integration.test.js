@@ -42,6 +42,7 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
         const inputs = [];
         const sent = [];
         const errors = [];
+        const pendingTtsDeliveryPromises = [];
         const ttsScheduler = createOrderedTaskScheduler({ concurrency: 2 });
         const settings = normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat' }, providers: { 'qwen-chat': { enabled: true } } });
         const service = createTtsProviderService({ getSettings: () => settings, storeAudio: () => 'reply.wav',
@@ -53,7 +54,7 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
         const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence) => {' : 'onSentence: (sentence, _fullMessage');
         const end = serverSource.indexOf('onComplete:', start);
         assert.ok(start > 0 && end > start);
-        const context = { path, ttsScheduler, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
+        const context = { path, ttsScheduler, pendingTtsDeliveryPromises, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
             data: { message: '旧聊天问题' }, content: '本轮问题', displayContent: '本轮显示问题',
             displayId: 'display-a', preferredDisplayId: 'display-a', replyTemplateTts: null,
             legacyTtsOptions: { businessType: 'ai_reply', userText: '旧聊天问题' },
@@ -69,7 +70,7 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
         const onSentence = vm.runInNewContext(`({${serverSource.slice(start, end)}}).onSentence`, context);
         for (const text of ['✨', '你好🐱！', '❤️', '真实失败', '后续正文']) onSentence(text);
         await ttsScheduler.waitForIdle();
-        await new Promise(resolve => setImmediate(resolve));
+        await Promise.allSettled(pendingTtsDeliveryPromises);
         assert.deepEqual(inputs, ['你好！', '真实失败', '后续正文']);
         const played = sent.filter(message => message.action === 'playAudio');
         assert.deepEqual(played.map(message => message.text), ['你好🐱！', '后续正文']);
@@ -137,11 +138,14 @@ test('普通AI真实句子回调和Agent生成回调向豆包传本轮原输入�
     const service = createTtsProviderService({ getSettings: () => settings, storeAudio: () => 'reply.wav',
         registry: { 'doubao-api': { generate: async request => { seen.push(request); return wrapPcm(Buffer.from([1, 0])); } } } });
     const schedulers = [];
+    const deliveryPromises = [];
     for (const [mode, input] of [['legacy', '旧入口问题'], ['current', '当前第一轮'], ['current', '当前第二轮']]) {
         const ttsScheduler = createOrderedTaskScheduler({ concurrency: 2 }); schedulers.push(ttsScheduler);
+        const pendingTtsDeliveryPromises = [];
+        deliveryPromises.push(pendingTtsDeliveryPromises);
         const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence) => {' : 'onSentence: (sentence, _fullMessage');
         const end = serverSource.indexOf('onComplete:', start);
-        const context = { path, ttsScheduler, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
+        const context = { path, ttsScheduler, pendingTtsDeliveryPromises, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
             data: { message: input }, content: input, displayContent: input, displayId: 'display-a', preferredDisplayId: 'display-a', replyTemplateTts: null,
             legacyTtsOptions: { businessType: 'ai_reply', userText: input },
             replyTtsOptions: { businessType: 'ai_reply', userText: input },
@@ -155,6 +159,7 @@ test('普通AI真实句子回调和Agent生成回调向豆包传本轮原输入�
         callback(`${input}句一`); callback(`${input}句二`);
     }
     await Promise.all(schedulers.map(scheduler => scheduler.waitForIdle()));
+    await Promise.all(deliveryPromises.flat().map(promise => promise.catch(() => {})));
     assert.deepEqual(seen.map(request => request.userText), ['旧入口问题', '旧入口问题', '当前第一轮', '当前第一轮', '当前第二轮', '当前第二轮']);
     const start = serverSource.indexOf('generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId');
     assert.ok(start >= 0);

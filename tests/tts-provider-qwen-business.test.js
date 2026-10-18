@@ -31,6 +31,7 @@ function harness(service) {
     const sent = [], errors = [];
     const context = { path, BUSINESS_TYPES, filterQwenChatSpeechText, ttsProviderService: service,
         normalizeTtsPauseText: text => text, chat: { splitIntoSentences }, generateCorrelationId: () => 'batch',
+        beginDisplayConversationTtsGeneration: () => null, endDisplayConversationTtsGeneration() {},
         isRepairModeTtsSuppressed: () => false, resolveCurrentVoicePlaybackTarget: () => 'speaker',
         rememberVoicePlaybackTarget() {}, sendToDisplay: (_, value) => { sent.push(value); return true; },
         log() {}, logError: (...args) => errors.push(args), app: { post: (_, fn) => { context.generateHandler = fn; } } };

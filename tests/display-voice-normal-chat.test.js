@@ -139,7 +139,7 @@ assert.match(
 );
 assert.match(
     server,
-    /onTts: isDisplayVoiceInput[\s\S]{0,220}sendVoiceInputTts\(text,\s*\{[\s\S]{0,120}preferredDisplayId:\s*targetDisplayId/,
+    /onTts: isDisplayVoiceInput[\s\S]{0,220}sendVoiceInputTtsSentences\(text, targetDisplayId, playbackOptions\)/,
     '显示端语音命令 TTS 应使用来源端优先的单目标路由'
 );
 assert.match(websocket, /data\.type === 'chatInput'[\s\S]{0,180}handleDisplayChatInput/);

@@ -1168,6 +1168,16 @@ armConversationTimer(displayId):
     expiresAt = 当前时间 + 对应窗口
     清除旧服务端 timer，广播 expiresAt 和 timerPaused=false
 
+beginVoiceReplyGeneration(displayId, replyToken):
+    如果来源显示端处于 active 会话：
+        将 replyToken 加入该显示端的生成中集合
+        清除服务端到期 timer，广播 timerPaused=true
+
+endVoiceReplyGeneration(displayId, replyToken):
+    从生成中集合移除 replyToken
+    只有生成中集合为空且该会话的实际音频播放集合也为空时：
+        按当前 windowType 重新 arm 完整窗口
+
 onVoiceTtsPlaybackStarted(displayId):
     如果 displayId 有 active 会话：
         记录 expiresAt - 当前时间为 remainingMs
@@ -1175,9 +1185,21 @@ onVoiceTtsPlaybackStarted(displayId):
         广播 timerPaused=true 和 remainingMs
 
 onAllVoiceTtsPlaybackFinished(displayId):
-    如果 displayId 的会话 timerPaused=true：
+    如果 displayId 无生成中回复且无其它正在播放的句子，并且会话仍 active：
         清除暂停标记
         按当前 windowType 重新 arm 完整窗口
+
+onLegacyVoiceConversationTtsFinished(displayId):
+    如果存在生成中回复或实际播放集合不为空：忽略旧完成事件
+    如果 active 会话已经有运行中的 timer：忽略重复完成事件
+    否则对 active 会话重新 arm 完整窗口
+
+语音命令分段与普通聊天流:
+    从首段生成前持有 replyToken
+    普通聊天流结束后等待 TTS 调度器空闲，再等待每段音频的下发回调完成，最后在 finally 释放 replyToken
+    语音命令逐段等待生成与下发完成，再在 finally 释放 replyToken
+    每段音频原有 playbackId 在播放结束或超时时从实际播放集合移除
+    新一轮输入、旧播报停止或某句之间队列暂时为空时，不提前消耗窗口
 
 显示端倒计时：
     timerPaused=true 时固定显示 remainingMs，不减少
