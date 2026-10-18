@@ -77,6 +77,38 @@ test('Responses 客户端解析流式事件并忽略 DONE', async () => {
   }
 });
 
+test('Responses 流在完成标记前结束时报告中断，完成事件后关闭仍成功', async () => {
+  let attempts = 0;
+  const server = await startServer((_incoming, response) => {
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    response.write('data: {"type":"response.created"}\n\n');
+    if (++attempts === 2) response.write('data: {"type":"response.completed","response":{"id":"resp_ok"}}\n\n');
+    response.end();
+  });
+
+  try {
+    const client = createResponsesClient({ baseUrl: `http://127.0.0.1:${server.address().port}/v1` });
+    await assert.rejects(() => client.stream({ model: 'qwen', input: '第一轮' }, () => {}),
+      error => error.code === 'responses_stream_interrupted');
+    const events = [];
+    await client.stream({ model: 'qwen', input: '第二轮' }, event => events.push(event.type));
+    assert.deepEqual(events, ['response.created', 'response.completed']);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('Responses 建连前 socket hang up 保留可判定的网络错误码', async () => {
+  const server = await startServer(incoming => incoming.socket.destroy());
+  try {
+    const client = createResponsesClient({ baseUrl: `http://127.0.0.1:${server.address().port}/v1` });
+    await assert.rejects(() => client.stream({ model: 'qwen', input: '断线' }, () => {}),
+      error => error.code === 'ECONNRESET');
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('Responses 客户端将 HTTP 错误转换为可识别错误', async () => {
   const server = await startServer((_incoming, response) => {
     response.writeHead(401, { 'Content-Type': 'application/json' });

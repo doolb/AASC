@@ -543,6 +543,11 @@ function canRebuildResponsesSession(error) {
         || ['conversation_not_found', 'response_not_found', 'doubao_session_uncertain'].includes(error?.code);
 }
 
+function isResponsesTransportInterrupted(error) {
+    return ['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'responses_stream_interrupted'].includes(error?.code)
+        || error?.message === 'socket hang up';
+}
+
 async function requestResponsesWithRecovery(context) {
     const client = getResponsesClient(context.profile);
     const request = buildResponsesPayload(context);
@@ -566,11 +571,15 @@ async function streamResponsesWithRecovery(context, onEvent) {
             onEvent(event);
         });
     } catch (error) {
-        if (!(request.previous_response_id || request.conversation) || !canRebuildResponsesSession(error)) throw error;
-        // 失效引用必须立即移除；即使已有正文而不能重发，本地下一轮也应新建上游会话。
-        clearResponseReference(context.sessionKey);
+        const hasReference = Boolean(request.previous_response_id || request.conversation);
+        const invalidReference = hasReference && canRebuildResponsesSession(error);
+        const interrupted = isResponsesTransportInterrupted(error);
+        if (!invalidReference && !interrupted) throw error;
+        // 断连时上游是否接收并完成本轮无法确定；清除旧引用，下轮使用完整本地历史。
+        if (hasReference) clearResponseReference(context.sessionKey);
         if (receivedText) throw error;
-        // 尚无正文时只重试一次，并把已构造的完整历史发送到新的上游会话。
+        // 尚无正文时最多重试一次；新会话使用已构造的完整历史，避免依赖可能失效的引用。
+        if (interrupted) await new Promise(resolve => setTimeout(resolve, 300));
         await client.stream(buildResponsesPayload({ ...context, state: null }), onEvent);
     }
 }

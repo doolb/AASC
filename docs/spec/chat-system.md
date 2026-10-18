@@ -1,5 +1,19 @@
 # 聊天系统实现文档
 
+## Responses 流式连接中断恢复（2026-10-18）
+
+```text
+已有声明 := ResponsesClient.stream 的 SSE 事件回调；streamResponsesWithRecovery 的旧引用重建；本地会话历史
+新增定义 := 连接中断错误集合 { ECONNRESET, EPIPE, ETIMEDOUT, responses_stream_interrupted }
+新增定义 := Responses 完成标记 { response.completed, [DONE] }
+操作流程 := HTTP 2xx 流接收完成标记 → 结束本轮；无完成标记即关闭 → 报连接提前结束
+操作流程 := 流请求断连或旧引用失效 → 如果携带旧引用，清除该上游引用并保留本地历史
+操作流程 := 尚未向客户端输出正文 → 基于本地完整历史建立新上游会话，短暂退避后最多重试一次
+操作流程 := 已经输出正文 → 不重发本轮，报告错误；下一轮以完整本地历史新建上游会话
+操作流程 := 鉴权、参数、业务错误 → 原样返回；重试再次失败 → 返回错误，不循环重试
+验证 := 建连前 socket hang up、SSE 无终止标记、已有部分正文、无引用首轮、旧引用续接和完成后关闭
+```
+
 ## 豆包失效会话自动恢复（2026-10-17）
 
 已有声明：Responses会话引用；Responses请求；Responses流式请求；聊天历史；豆包错误码。

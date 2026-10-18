@@ -1,3 +1,8 @@
+### Responses 流式连接中断恢复
+
+- ✅ [2026-10-18] 修复临时语音会话的 Responses 流式请求遇 `socket hang up` 后直接失败：无正文时从本地完整历史新建上游会话并重试一次，已有正文时清除旧引用且不重发本轮。
+  - 更新 `llm-responses-client.js` 的 SSE 完成判定及 `llm-service.js` 的断连恢复，补客户端和临时会话测试；同步 chat-system design/spec/task/usage/todo。定向与聊天回归测试 16/16、`npm run check:chat2api` 284/284、语法和差异检查通过；真实网络待验收，未构建或发布服务包，`servicePackage=true`。
+
 ### 语音短字母数字代码输入
 
 - ✅ [2026-10-18] 修复口述“C3”被识别为“C3。”后仍遭中文要求与短英文过滤拦截的问题。

@@ -63,6 +63,8 @@ MMD左上角FPS、灯光渲染耗时、正式物理耗时与隐藏角色控件�
 
 普通LLM使用已部署Chat2API的`/v1/chat/completions`地址、代理API Key和模型`doubao`。缺省优先启用的Node账号池；明确账号映射不可用就报错，不换号。普通Node模式通过`/v1/responses`保存引用、复用同账号上游会话并仅发送新增输入；两轮纯Node协议记忆验证通过。选择已有`openai-responses`协议即可由普通LLM自动保存引用；无引用chat/completions仍重放历史。`doubao-think`/`doubao-expert`及Cookie-only网页原生复用待验，工具/多模态不承诺。profile导入只校验格式并重置验证；手动/Android添加尝试一次只读列表验证，失败仍保存未验证账号，已有账号可显式复验；会话列表访问验证不代表聊天/TTS通过；登录过期由用户更新，不自动处理验证码或重发。
 
+Responses 流式聊天遇可识别的连接中断时，尚未输出正文会用本地历史新建上游会话并重试一次；已有正文会结束本轮并在下一轮新建，避免重复显示或播报。此行为需新版服务代码加载后生效，真实网络验收待做。
+
 Cookie-only旧账号需要正常重新登录补齐同账号nodeProfile后才能文字聊天。旧Chrome网页兼容分支和开关已删除；TTS仍可仅用Cookie。当前主服务器账号的普通LLM真实验收待用户稍后补登录资料。
 
 `doubao-chat`用于 `/v1/audio/speech` 和AI/Agent语音设置，名称“豆包网页朗读（实验）”，默认关闭。启用Chat2API中的doubaochat账号与Provider后自动选择可用账号，无须手动模型映射；显式账号映射仍优先且不退选。TTS只需Cookie，不要求文字Node资料。固定音色zh_female_wenroutaozi_uranus_bigtts、上游speed=1/volume=100，面板隐藏语速设置，后处理只调全局音量；input最多1000个UTF-16字符且UTF-8≤4000字节，仅WAV。code92起同一适配器内按账号跨批次排队，完整上游音频到达即交接，不等待WAV解码；每账号最多等待16项、实例256项，等待计入原60秒时限，取消移除等待项。错误不重试或切换来源，现有分句播放顺序保持。主服务器及Android各三批同时提交已合成非静音48kHz WAV；此次未验证实际播放听感。

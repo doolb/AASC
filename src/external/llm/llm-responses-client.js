@@ -92,6 +92,12 @@ const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) =>
       settled = true;
       reject(error);
     };
+    const complete = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const interrupted = () => createResponsesError(502, 'responses_stream_interrupted', 'Responses 流式连接提前结束');
 
     if (statusCode < 200 || statusCode >= 300) {
       // HTTP 错误不是 Responses 事件流：先完整读取 Chat2API JSON 错误，
@@ -126,8 +132,7 @@ const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) =>
       const data = dataLines.join('\n');
       dataLines = [];
       if (data === '[DONE]') {
-        settled = true;
-        resolve();
+        complete();
         return;
       }
       try {
@@ -136,6 +141,7 @@ const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) =>
         if (event.type === 'response.failed') {
           fail(getRemoteError(event, response.statusCode || 500));
         }
+        if (event.type === 'response.completed') complete();
       } catch (error) {
         fail(error.code ? error : createResponsesError(response.statusCode || 200, 'invalid_response', 'Responses SSE 事件不是有效 JSON'));
       }
@@ -165,15 +171,10 @@ const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) =>
     response.on('end', () => {
       if (buffer.trim()) consumeLines('\n');
       emitData();
-      if (!settled) {
-        if ((response.statusCode || 0) < 200 || (response.statusCode || 0) >= 300) {
-          fail(createResponsesError(response.statusCode, 'responses_request_failed', 'Responses 流式请求失败'));
-          return;
-        }
-        settled = true;
-        resolve();
-      }
+      if (!settled) fail(interrupted());
     });
+    response.on('aborted', () => fail(interrupted()));
+    response.on('close', () => fail(interrupted()));
     response.on('error', fail);
   });
   request.once('error', reject);
