@@ -1,5 +1,7 @@
 ### Responses 流错误透传
 
+- 📝 [2026-10-18] 本机重启后的真实聊天日志已显示豆包安全验证固定错误 `doubao_risk_control`（403），原始错误类别不再被 `socket hang up` 掩盖；同步 chat-system design/spec、task、usage、todo。当前账号官网验证及验证后的聊天恢复待用户现场完成，本轮无代码或配置变更。
+
 - ✅ [2026-10-18] 修复 Chat2API Responses 流已开始后上游错误被连接销毁掩盖为 `socket hang up`：发送包含原错误码和状态的 `response.failed`，让现有会话恢复规则能识别真实错误。
   - 更新 `chat2api-proxy-service.js`、`llm-responses-client.js` 与代理集成测试；同步 chat-system design/spec/task/usage/todo。定向测试 18/18、`npm run check:chat2api` 285/285、语法检查通过；本机服务已重启，8083 健康检查 HTTP 200、显示端入口 HTTP 302，真实账号仍待验收。未出包或发布，`servicePackage=true`。
 
