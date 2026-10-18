@@ -51,7 +51,10 @@ test('四种业务共用qwen薄层生成，非AI音色按各自业务选择，�
     assert.equal(stores.length, 4);
 });
 test('实际系统播报入口遇到null不构造URL或报失败，自定义API返回明确跳过', async () => {
-    const { context, sent, errors } = harness({ generate: async () => null });
+    const { context, sent, errors } = harness({
+        resolve: () => ({ selection: { provider: 'system' }, configuration: {} }),
+        generate: async () => null
+    });
     assert.equal(await context.sendVoiceInputTts('✨'), 0);
     assert.equal(await context.sendVoiceCommandTts('✨', 'speaker'), false);
     assert.equal(await context.sendMediaNameTts('speaker', '✨'), false);
@@ -102,6 +105,29 @@ test('语音批次中切换配置不改变当前Provider或丢失尾标记，下
     await context.sendVoiceCommandTtsSentences('下一批。', 'speaker');
     assert.equal(qwenCalls, 1);
     assert.equal(sent.at(-1).voiceTtsBatchEnd, true);
+});
+
+test('长播报在合成期间被取消后不下发当前和后续分段', async () => {
+    let releaseGeneration;
+    let generateCount = 0;
+    let active = true;
+    const pending = new Promise(resolve => { releaseGeneration = resolve; });
+    const { context, sent } = harness({
+        resolve: () => ({ selection: { provider: 'system' }, configuration: {} }),
+        generate: async () => {
+            generateCount++;
+            await pending;
+            return '/tmp/native.wav';
+        }
+    });
+    const task = context.sendVoiceInputTtsSentences('第一句。第二句。', 'speaker', {
+        shouldContinue: () => active
+    });
+    active = false;
+    releaseGeneration();
+    await task;
+    assert.equal(generateCount, 1);
+    assert.deepEqual(sent, []);
 });
 
 test('生成API跳过响应兼容正式显示端队列，继续下一句并收尾批次', async () => {

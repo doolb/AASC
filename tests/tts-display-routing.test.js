@@ -19,8 +19,8 @@ test('服务端普通 TTS 入口统一经过显示端 fallback 路由', () => {
     assert.equal(directCalls.length, 1);
     assert.match(server, /const helpTTS = voiceCommand\.getVoiceCommandHelpText\(\s*chat\.getCommands\(\),\s*result\.topic\s*\)/s);
     assert.match(server, /sendVoiceCommandTtsSentences\(helpTTS, targetDisplayId\)/);
-    assert.match(server, /sendVoiceCommandTts\(modeText, targetDisplayId\)/);
-    assert.match(server, /今日提醒：\$\{text\}.*generateTtsWithFallback/s);
+    assert.match(server, /sendVoiceCommandTtsSentences\(modeText, targetDisplayId\)/);
+    assert.match(server, /sendVoiceCommandTtsSentences\(`今日提醒：\$\{text\}`, displayId\)/);
 });
 
 test('显示端 TTS 必须先回报开始生成，服务端 3 秒未收到即失败', () => {

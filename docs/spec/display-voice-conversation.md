@@ -297,13 +297,11 @@ TTS 批次完成和中断:
     speakVoiceResponse 不直接导入或调用底层 tts.generateTTS
     需要弹窗/选择数据时，仍向 sourceDisplayId 发送不带 audioUrl 的 voiceCommand 消息
     天气响应发送:
-        text = 天气短摘要，用于 TTS
+        text = 完整天气详情，按有界分段用于 TTS
         detailText = 完整天气详情，用于显示端弹窗
         weather = 本地归一化后的结构化天气对象
         旧显示端只读取 text 时保持兼容
-    当前控制端 onResult 分支实际收到 detailText → 长天气详情被整体提交到 TTS（待修复）
-    当前 system.defaultSpeed == 0 → Android TtsEnginePool 调用 SpeakText(detailText)；SDK 返回 80048028 时不能据“check your SSML”反推自定义 SSML 错误
-    用户更新的待实施目标：onResult 与 onTts 都接收完整 detailText → 应用层拆成有界分段 → 逐段生成并按序播放；原短摘要方案不再实施
+    onResult 与 onTts 都接收完整 detailText → 应用层拆成有界分段 → 逐段生成并按序播放
     显示端收到 action == 'weatherResult':
         如果存在 audioUrl: 将 text 放入 TTS 队列
         使用 detailText || text 调用 showVoiceResponsePopup

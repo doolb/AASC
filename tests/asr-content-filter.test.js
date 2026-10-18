@@ -28,6 +28,16 @@ test('要求中文时保留短字母数字语音代码，句末标点不改变�
     assert.equal(logs.length, 0);
 });
 
+test('紧凑字母与中文数字编号原样通过，普通短中文继续过滤', () => {
+    const { hasValidContent } = createFilter(true);
+    for (const input of ['A一。', 'H八。', 'H8。', 'B十二。']) {
+        assert.equal(hasValidContent(input), true, input);
+    }
+    for (const input of ['A中。', '一。', 'A 一。', 'A-一。']) {
+        assert.equal(hasValidContent(input), false, input);
+    }
+});
+
 test('普通噪声和非连续代码仍沿用原过滤规则', () => {
     const { hasValidContent } = createFilter(true);
     for (const input of ['ABC。', '3。', 'C 3。', 'C-3。', 'C3中', 'C3 C4', 'A123456789012', '。']) {
@@ -43,7 +53,7 @@ test('关闭中文要求后，短代码通过且既有英文短噪声继续过�
     assert.equal(hasValidContent('ABC。'), false);
 });
 
-test('连续语音识别结果 C3。进入既有显示端语音输入入口', () => {
+test('连续语音识别结果 C3。与 A一。原样进入显示端入口', () => {
     const { hasValidContent } = createFilter(true);
     const routeStart = source.indexOf('function processRecognizedAsrResultForDisplay(');
     const routeEnd = source.indexOf("app.post('/api/asr/recognize'", routeStart);
@@ -60,7 +70,9 @@ test('连续语音识别结果 C3。进入既有显示端语音输入入口', ()
             processDisplayVoiceInput: (displayId, data) => submitted.push({ displayId, ...data })
         });
     processRecognizedAsrResultForDisplay('display-a', { text: 'C3。' }, {});
-    assert.equal(submitted.length, 1);
+    processRecognizedAsrResultForDisplay('display-a', { text: 'A一。' }, {});
+    assert.equal(submitted.length, 2);
     assert.equal(submitted[0].displayId, 'display-a');
     assert.equal(submitted[0].text, 'C3。');
+    assert.equal(submitted[1].text, 'A一。');
 });

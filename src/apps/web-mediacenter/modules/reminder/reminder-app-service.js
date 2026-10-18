@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const timeListener = require('../time/time-listener-app-service');
+const { splitIntoSentences } = require('../../../../core/utils/sentence-splitter');
 
 const { USER_CONFIG_DIR } = require('../../../server/modules/config/user-config-paths');
 
@@ -14,6 +15,15 @@ let sendToDisplay = null;
 let generateTTS = async () => {
     throw new Error('提醒模块尚未配置统一 TTS 生成器');
 };
+
+// 每段生成成功后立即进入显示端队列，原提醒正文仍只用于弹窗和保存。
+async function sendReminderVoice(text, sendSegment) {
+    for (const segment of splitIntoSentences(text)) {
+        const audioPath = await generateTTS(segment);
+        if (audioPath === null) break;
+        sendSegment(segment, `/uploads/tts/${path.basename(audioPath)}`);
+    }
+}
 
 function init(options = {}) {
     if (typeof options.generateTTS === 'function') {
@@ -223,17 +233,12 @@ async function triggerReminder(reminder, repeatIndex = 0) {
             
             if (reminder.methods.includes('voice')) {
                 try {
-                    const audioPath = await generateTTS(fullContent);
-                    const fileName = path.basename(audioPath);
-                    
-                    displayClients.forEach((displayData, displayId) => {
-                        sendToDisplay(displayId, {
-                            type: 'reminder',
-                            action: 'voice',
-                            audioUrl: `/uploads/tts/${fileName}`,
-                            text: fullContent,
-                            repeatIndex: i + 1,
-                            totalRepeat: repeatCount
+                    await sendReminderVoice(fullContent, (segment, audioUrl) => {
+                        displayClients.forEach((displayData, displayId) => {
+                            sendToDisplay(displayId, {
+                                type: 'reminder', action: 'voice', audioUrl, text: segment,
+                                repeatIndex: i + 1, totalRepeat: repeatCount
+                            });
                         });
                     });
                     
@@ -303,18 +308,6 @@ async function testReminder(reminderData, targetDisplayId = null, sendFunc = nul
     const clients = targetDisplayId ? null : displayClients;
     
     for (let i = 0; i < repeatCount; i++) {
-        let audioFileName = null;
-        
-        if (reminderData.methods && reminderData.methods.includes('voice')) {
-            try {
-                const audioPath = await generateTTS(fullContent);
-                audioFileName = path.basename(audioPath);
-            } catch (err) {
-                console.error('[提醒] 测试语音生成失败:', err.message);
-                throw err;
-            }
-        }
-        
         const sendReminder = (displayId) => {
             if (reminderData.methods && reminderData.methods.includes('popup')) {
                 sendTo(displayId, {
@@ -327,17 +320,6 @@ async function testReminder(reminderData, targetDisplayId = null, sendFunc = nul
                     totalRepeat: repeatCount
                 });
             }
-            
-            if (audioFileName) {
-                sendTo(displayId, {
-                    type: 'reminder',
-                    action: 'voice',
-                    audioUrl: `/uploads/tts/${audioFileName}`,
-                    text: fullContent,
-                    repeatIndex: i + 1,
-                    totalRepeat: repeatCount
-                });
-            }
         };
         
         if (targetDisplayId && sendTo) {
@@ -346,6 +328,22 @@ async function testReminder(reminderData, targetDisplayId = null, sendFunc = nul
             clients.forEach((displayData, displayId) => {
                 sendReminder(displayId);
             });
+        }
+
+        if (reminderData.methods && reminderData.methods.includes('voice')) {
+            try {
+                await sendReminderVoice(fullContent, (segment, audioUrl) => {
+                    const sendVoice = (displayId) => sendTo(displayId, {
+                        type: 'reminder', action: 'voice', audioUrl, text: segment,
+                        repeatIndex: i + 1, totalRepeat: repeatCount
+                    });
+                    if (targetDisplayId && sendTo) sendVoice(targetDisplayId);
+                    else if (clients && sendTo) clients.forEach((displayData, displayId) => sendVoice(displayId));
+                });
+            } catch (err) {
+                console.error('[提醒] 测试语音生成失败:', err.message);
+                throw err;
+            }
         }
         
         if (i < repeatCount - 1) {

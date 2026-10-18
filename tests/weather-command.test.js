@@ -10,7 +10,8 @@ const {
     selectWeatherForecastDay,
     formatWeatherDateDetail,
     formatWeatherDateSpeech,
-    resolveWeatherCity
+    resolveWeatherCity,
+    handleWeatherCommand
 } = require('../src/apps/web-mediacenter/modules/voice/voice-command-app-service');
 
 const formatTestDate = (date) => [
@@ -266,4 +267,25 @@ test('目标日期没有对应预报时返回固定提示', () => {
     assert.equal(selectWeatherForecastDay(weather, request), null);
     assert.equal(formatWeatherDateDetail(weather, request), '暂无该日期天气预报');
     assert.equal(formatWeatherDateSpeech(weather, request), '暂无该日期天气预报');
+});
+
+test('控制端与显示端天气都播报完整详情，包含逐时内容', async () => {
+    const axios = require('axios');
+    const originalGet = axios.get;
+    const payload = createWeatherPayload();
+    const expected = formatWeatherDetail(normalizeWeatherData(payload, 'Chengdu'));
+    const spoken = [];
+    try {
+        axios.get = async () => ({ data: payload });
+        await handleWeatherCommand('成都天气', 'display-1', {
+            onResult: async text => spoken.push(text)
+        });
+        await handleWeatherCommand('成都天气', 'display-1', {
+            onTts: async text => spoken.push(text)
+        });
+    } finally {
+        axios.get = originalGet;
+    }
+    assert.deepEqual(spoken, [expected, expected]);
+    assert.match(expected, /逐时/u);
 });

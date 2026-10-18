@@ -11,6 +11,7 @@
 }(typeof globalThis === 'undefined' ? this : globalThis, () => {
     // 只把 Unicode 标点和兼容的波浪号视为标点，避免把表情或普通符号误当成标点分句。
     const punctuationOnlyPattern = /^[\p{P}~]+$/u;
+    const MAX_TTS_SEGMENT_CHARS = 120;
 
     // 判断已累积文本的最后一个字符是否是句末标点。
     function isSentenceEnd(text) {
@@ -44,11 +45,29 @@
         if (isPunctuationOnly(previous) && isPunctuationOnly(trimmed)) {
             return;
         }
-        sentences.push(trimmed);
+        // 长句可能没有任何句末标点，继续按 Unicode 字符数切开，避免把代理对拆坏。
+        const remaining = Array.from(trimmed);
+        while (remaining.length > MAX_TTS_SEGMENT_CHARS) {
+            let boundary = MAX_TTS_SEGMENT_CHARS;
+            // 尽量在后半段的停顿或空白处切，保留该边界字符给前一段播报。
+            for (let index = MAX_TTS_SEGMENT_CHARS - 1; index >= MAX_TTS_SEGMENT_CHARS / 2; index--) {
+                if (/[，,；;、：:\s]/u.test(remaining[index])) {
+                    boundary = index + 1;
+                    break;
+                }
+            }
+            // 避免 121 字长句被切成 120 字加单字尾段。
+            if (remaining.length - boundary < 20) {
+                boundary = Math.ceil(remaining.length / 2);
+            }
+            sentences.push(remaining.splice(0, boundary).join('').trim());
+            while (remaining[0] && /\s/u.test(remaining[0])) remaining.shift();
+        }
+        if (remaining.length > 0) sentences.push(remaining.join('').trim());
     }
 
     // 按句末标点分句；英文句点仅在后接空白、换行或文本结尾时分割，避免切开小数和缩写。
-    // 已累积四个中英文逗号后，在下一个逗号处强制输出当前片段，防止流式文本长期不播放。
+    // 累积到第四个中英文逗号时输出当前片段，防止流式文本长期不播放。
     function splitIntoSentences(text) {
         if (!text || typeof text !== 'string') {
             return [];
@@ -78,7 +97,7 @@
                 appendSentence(sentences, current);
                 current = '';
                 commaCount = 0;
-            } else if (commaCount > 4) {
+            } else if (commaCount >= 4) {
                 appendSentence(sentences, current);
                 current = '';
                 commaCount = 0;
@@ -90,5 +109,5 @@
         return sentences;
     }
 
-    return { isPunctuationOnly, isSentenceEnd, splitIntoSentences };
+    return { MAX_TTS_SEGMENT_CHARS, isPunctuationOnly, isSentenceEnd, splitIntoSentences };
 }));

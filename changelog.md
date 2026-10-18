@@ -1,5 +1,8 @@
 ### 天气播报长详情误送离线 TTS
 
+- ✅ [2026-10-18] 完成应用层长播报分段及 `A一。` 混合代码放行：完整天气详情在控制端和显示端逐段朗读，提醒、语音命令和媒体名称按序入队，聊天和手动朗读复用共享分句器；第 4 个逗号成句，超长自然句以 120 Unicode 字符兜底且不丢后文。
+  - 修改 `sentence-splitter.js`、`server-app.js`、`voice-command-app-service.js`、`reminder-app-service.js` 及定向测试；同连接新语音命令使旧批次停止下发，ASR `A一。` 保留原文，`A中。` 继续过滤。定向测试 39/39、`npm run test:mmd-production:tts` 23/23 通过；同步 design/spec/task/todo，服务包待构建，Android 真机 `80048028` 待复测。
+
 - 📝 [2026-10-18] 用户改定完整天气详情分段播报，并要求天气、提醒、聊天、手动朗读等应用层统一设置单段上限；另确认 `A一。` 应原样进入语音输入。已更新 TTS/ASR/天气 design、spec、task 和 todo，运行代码待方案确认。
 
 - 📝 [2026-10-18] 复核 Android `80048028`：当前系统语音默认语速 0，原生代码走 `SpeakText`，并未提交自定义 SSML；SDK 的“check your SSML”不能作为实际根因。已同步 design/spec/task/todo；长输入的具体引擎失败边界待设备复测，无运行代码变更。

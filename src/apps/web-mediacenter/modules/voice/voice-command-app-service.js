@@ -1543,19 +1543,16 @@ async function handleWeatherCommand(text, displayId, callbacks) {
         const detailText = weatherDateRequest.offset === null
             ? `${fallbackText}${formatWeatherDetail(normalizedWeather)}`
             : `${fallbackText}${formatWeatherDateDetail(normalizedWeather, weatherDateRequest)}`;
-        const speechText = weatherDateRequest.offset === null
-            ? `${fallbackText}${formatWeatherSpeech(normalizedWeather)}`
-            : `${fallbackText}${formatWeatherDateSpeech(normalizedWeather, weatherDateRequest)}`;
-        
+
         if (callbacks && callbacks.onResult) {
             await callbacks.onResult(detailText);
         } else if (callbacks && callbacks.onTts) {
-            await speakVoiceResponse(displayId, speechText, 'weatherResult', {
+            await speakVoiceResponse(displayId, detailText, 'weatherResult', {
                 detailText,
                 weather: normalizedWeather
             }, callbacks);
         } else if (displayId && sendToDisplay) {
-            await speakVoiceResponse(displayId, speechText, 'weatherResult', {
+            await speakVoiceResponse(displayId, detailText, 'weatherResult', {
                 detailText,
                 weather: normalizedWeather
             }, callbacks);

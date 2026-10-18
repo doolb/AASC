@@ -675,6 +675,8 @@ const codexRuntimeManager = new CodexRuntimeManager({
 });
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
+// 同一控制/显示连接的新语音命令会取代旧命令，防止旧长播报在停止后继续下发。
+const activeVoiceCommandTtsByClient = new WeakMap();
 let pendingAsrRequestId = 0;
 // 视觉请求只在服务端排队并转发，实际模型推理由显示端 NativeDisplay 完成。
 const pendingDisplayVisionRequests = new Map();
@@ -787,6 +789,11 @@ function hasValidContent(text) {
         && /^[A-Za-z0-9]+$/u.test(spokenCode)
         && /[A-Za-z]/u.test(spokenCode) && /[0-9]/u.test(spokenCode);
     if (isCompactSpokenCode) return true;
+    // ASR 会把口述编号中的数字识别为中文数字；只放行紧凑编号，不放宽普通短中文噪声。
+    const isChineseNumeralCode = Array.from(spokenCode).length >= 2 && Array.from(spokenCode).length <= 12
+        && /^[A-Za-z0-9零〇一二三四五六七八九十两]+$/u.test(spokenCode)
+        && /[A-Za-z]/u.test(spokenCode) && /[零〇一二三四五六七八九十两]/u.test(spokenCode);
+    if (isChineseNumeralCode) return true;
 
     if (config.get('asr.requireChinese', false) && !hasChinese) {
         log('\u8bed\u97f3', `\u5ffd\u7565\u975e\u4e2d\u6587\u8f93\u5165: "${text}"`);
@@ -1254,15 +1261,8 @@ async function startServer() {
         voiceCommand.setClients(displayClients, sendToDisplay, broadcastToControls);
         voiceCommand.setTtsRouter({
             speak: async ({ displayId, text, action, extra }) => {
-                const audioPath = await generateTtsWithFallback(text, undefined, undefined, displayId);
-                if (audioPath === null) return true;
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action,
-                    text,
-                    audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
-                    ...extra
-                });
+                sendToDisplay(displayId, { type: 'voiceCommand', action, text, ...extra });
+                await sendVoiceCommandTtsSentences(text, displayId);
                 return true;
             }
         });
@@ -2175,10 +2175,7 @@ async function sendRepairModeResponse(displayId, text) {
         text
     });
     try {
-        await sendVoiceInputTts(text, {
-            preferredDisplayId: displayId,
-            allowRepairModeTts: true
-        });
+        await sendVoiceInputTtsSentences(text, displayId, { allowRepairModeTts: true });
     } catch (error) {
         logError('修复模式', `响应 TTS 失败: ${error.message}`);
     }
@@ -2567,7 +2564,7 @@ function sendConversationPrompt(displayId, text) {
     if (!displayId || !text) return;
     (async () => {
         try {
-            await sendVoiceInputTts(text, { preferredDisplayId: displayId });
+            await sendVoiceInputTtsSentences(text, displayId);
             // 唤醒状态提示仍只在触发显示端展示文字，不再携带会导致该端独占播放的 audioUrl。
             sendToDisplay(displayId, {
                 type: 'voiceCommand',
@@ -2683,7 +2680,7 @@ async function sendConversationConfirmationResult(displayId, text) {
         text
     });
     try {
-        await sendVoiceInputTts(text, { preferredDisplayId: displayId });
+        await sendVoiceInputTtsSentences(text, displayId);
     } catch (error) {
         logError('语音', `对话确认结果 TTS 失败: ${error.message}`);
     }
@@ -2760,8 +2757,7 @@ function requestConversationConfirmation(displayId, text, options = {}) {
     }
     (async () => {
         try {
-            const targetCount = await sendVoiceInputTts(promptText, {
-                preferredDisplayId: displayId,
+            const targetCount = await sendVoiceInputTtsSentences(promptText, displayId, {
                 onPlaybackStarted: ({ displayId: playbackDisplayId, playbackId }) => {
                     record.playbackKeys.add(getVoiceTtsPlaybackKey(playbackDisplayId, playbackId));
                 }
@@ -7176,6 +7172,7 @@ async function sendVoiceInputTts(text, playbackOptions = {}) {
         { ttsConfiguration: playbackOptions.ttsConfiguration }
     );
     if (audioPath === null) return 0;
+    if (playbackOptions.shouldContinue && !playbackOptions.shouldContinue()) return 0;
     const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
     const targetDisplayId = resolveCurrentVoicePlaybackTarget(preferredDisplayId);
     if (!targetDisplayId) {
@@ -7245,14 +7242,11 @@ async function sendMediaNameTts(displayId, text) {
     if (!displayId || !normalizedText) return false;
 
     try {
-        const audioPath = await generateTtsWithFallback(normalizedText, undefined, undefined, displayId);
-        if (audioPath === null) return false;
-        return sendToDisplay(displayId, {
-            type: 'tts',
-            action: 'playAudio',
-            audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
-            text: normalizedText
+        let sent = false;
+        await sendVoiceTtsSentences(normalizedText, async (sentence, options) => {
+            sent = await sendVoiceCommandTts(sentence, displayId, options) || sent;
         });
+        return sent;
     } catch (error) {
         logError('TTS', `媒体文件名播报失败: ${error.message}`);
         return false;
@@ -7261,7 +7255,7 @@ async function sendMediaNameTts(displayId, text) {
 
 // 帮助文本等较长语音内容按句串行处理，避免一次 TTS 请求携带整段长文本。
 // 回调内部仍负责选择通用或控制端定向播放目标，本函数只负责分句和顺序。
-async function sendVoiceTtsSentences(text, sendSentence) {
+async function sendVoiceTtsSentences(text, sendSentence, options = {}) {
     const sentences = chat.splitIntoSentences(text);
     const candidates = sentences.length > 0 ? sentences : [text];
     const snapshot = ttsProviderService.resolve({ businessType: BUSINESS_TYPES.SYSTEM_BROADCAST });
@@ -7270,30 +7264,50 @@ async function sendVoiceTtsSentences(text, sendSentence) {
     // 避免最后一段没有音频时丢失结束标记。其它Provider沿用原文和原分句。
     const orderedSentences = provider === 'qwen-chat'
         ? candidates.filter(sentence => Boolean(filterQwenChatSpeechText(sentence))) : candidates;
-    if (orderedSentences.length === 0) return;
+    if (orderedSentences.length === 0) return 0;
     const batchId = generateCorrelationId('voice-tts-batch');
+    let sentCount = 0;
     for (let index = 0; index < orderedSentences.length; index++) {
-        await sendSentence(orderedSentences[index], {
+        if (options.shouldContinue && !options.shouldContinue()) break;
+        const sent = await sendSentence(orderedSentences[index], {
             batchId,
             batchEnd: index === orderedSentences.length - 1,
-            ttsConfiguration: snapshot.configuration
+            ttsConfiguration: snapshot.configuration,
+            ...options
         });
+        if (sent) sentCount++;
     }
+    return sentCount;
 }
 
-async function sendVoiceInputTtsSentences(text, preferredDisplayId = null) {
-    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceInputTts(sentence, {
+async function sendVoiceInputTtsSentences(text, preferredDisplayId = null, options = {}) {
+    return sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceInputTts(sentence, {
         ...playbackOptions,
         preferredDisplayId
-    }));
+    }), options);
 }
 
-async function sendVoiceCommandTtsSentences(text, targetDisplayId) {
-    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceCommandTts(
+async function sendVoiceCommandTtsSentences(text, targetDisplayId, options = {}) {
+    return sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceCommandTts(
         sentence,
         targetDisplayId,
         playbackOptions
-    ));
+    ), options);
+}
+
+// 控制端语音播放沿用前端队列；逐段生成并发送，保持天气和搜索长播报的顺序。
+async function sendControlVoiceTtsSentences(text, sendToControl, options = {}) {
+    for (const sentence of chat.splitIntoSentences(text)) {
+        if (options.shouldContinue && !options.shouldContinue()) break;
+        const audioPath = await generateTtsWithFallback(sentence);
+        if (audioPath === null) break;
+        if (options.shouldContinue && !options.shouldContinue()) break;
+        sendToControl({
+            type: 'playOnControl',
+            audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
+            text: sentence
+        });
+    }
 }
 
 // 控制端语音命令优先按指定显示端播放，指定端不可用时沿用在线语音设备兜底规则。
@@ -7313,6 +7327,7 @@ async function sendVoiceCommandTts(text, targetDisplayId, playbackOptions = {}) 
         { ttsConfiguration: playbackOptions.ttsConfiguration }
     );
     if (audioPath === null) return false;
+    if (playbackOptions.shouldContinue && !playbackOptions.shouldContinue()) return false;
     const actualTargetDisplayId = resolveCurrentVoicePlaybackTarget(targetDisplayId);
     if (!actualTargetDisplayId) {
         log('TTS', 'TTS 生成完成但没有可用语音播放显示端，跳过控制端语音下发');
@@ -10041,19 +10056,19 @@ async function handleControlMessageFallback(data, ws) {
                                     sendToDisplay(targetDisplayId, msg);
                                 }
                             };
+                            const voiceCommandTtsSession = { cancelled: false };
+                            activeVoiceCommandTtsByClient.set(ws, voiceCommandTtsSession);
+                            const playbackOptions = {
+                                onPlaybackStarted: rememberCurrentPlaybackTarget,
+                                shouldContinue: () => !voiceCommandTtsSession.cancelled
+                                    && activeVoiceCommandTtsByClient.get(ws) === voiceCommandTtsSession
+                            };
                             
                             const callbacks = playOnControl ? {
                                 onResult: async (text) => {
                                     if (isRepairModeTtsSuppressed()) return;
                                     try {
-                                        const audioPath = await generateTtsWithFallback(text);
-                                        if (audioPath === null) return;
-                                        const fileName = path.basename(audioPath);
-                                        sendToControl({
-                                            type: 'playOnControl',
-                                            audioUrl: `/uploads/tts/${fileName}`,
-                                            text: text
-                                        });
+                                        await sendControlVoiceTtsSentences(text, sendToControl, playbackOptions);
                                     } catch (err) {
                                         logError('VoiceCommand', `TTS生成失败: ${err.message}`);
                                     }
@@ -10061,28 +10076,17 @@ async function handleControlMessageFallback(data, ws) {
                                 onError: async (text) => {
                                     if (isRepairModeTtsSuppressed()) return;
                                     try {
-                                        const audioPath = await generateTtsWithFallback(text);
-                                        if (audioPath === null) return;
-                                        const fileName = path.basename(audioPath);
-                                        sendToControl({
-                                            type: 'playOnControl',
-                                            audioUrl: `/uploads/tts/${fileName}`,
-                                            text: text
-                                        });
+                                        await sendControlVoiceTtsSentences(text, sendToControl, playbackOptions);
                                     } catch (err) {
                                         logError('VoiceCommand', `TTS生成失败: ${err.message}`);
                                     }
                                 }
                             } : {
                                 onTts: isDisplayVoiceInput
-                                    ? async (text) => sendVoiceInputTts(text, {
-                                        preferredDisplayId: targetDisplayId,
-                                        onPlaybackStarted: rememberCurrentPlaybackTarget
-                                    })
-                                    : async (text) => sendVoiceCommandTts(text, targetDisplayId, {
-                                        onPlaybackStarted: rememberCurrentPlaybackTarget
-                                    }),
+                                    ? async (text) => sendVoiceInputTtsSentences(text, targetDisplayId, playbackOptions)
+                                    : async (text) => sendVoiceCommandTtsSentences(text, targetDisplayId, playbackOptions),
                                 onStop: async () => {
+                                    voiceCommandTtsSession.cancelled = true;
                                     const stopTargetDisplayId = voicePlaybackTargetId
                                         || getVoicePlaybackStopTarget(targetDisplayId);
                                     if (stopTargetDisplayId) {
@@ -10120,7 +10124,7 @@ async function handleControlMessageFallback(data, ws) {
                                             action: 'response',
                                             text: message
                                         });
-                                        void sendVoiceCommandTts(message, targetDisplayId);
+                                        void sendVoiceCommandTtsSentences(message, targetDisplayId);
                                     }
                                     return;
                                 }
@@ -10176,8 +10180,8 @@ async function handleControlMessageFallback(data, ws) {
                                         text: modeText
                                     });
                                     void (isDisplayVoiceInput
-                                        ? sendVoiceInputTts(modeText, { preferredDisplayId: targetDisplayId })
-                                        : sendVoiceCommandTts(modeText, targetDisplayId));
+                                        ? sendVoiceInputTtsSentences(modeText, targetDisplayId)
+                                        : sendVoiceCommandTtsSentences(modeText, targetDisplayId));
                                 }
                             } else if (result.type === 'commandMode') {
                                 const modeText = result.enabled ? '已开启指令模式' : '已关闭指令模式';
@@ -10194,9 +10198,9 @@ async function handleControlMessageFallback(data, ws) {
                                     (async () => {
                                         try {
                                             if (isDisplayVoiceInput) {
-                                                await sendVoiceInputTts(modeText, { preferredDisplayId: targetDisplayId });
+                                                await sendVoiceInputTtsSentences(modeText, targetDisplayId);
                                             } else {
-                                                await sendVoiceCommandTts(modeText, targetDisplayId);
+                                                await sendVoiceCommandTtsSentences(modeText, targetDisplayId);
                                             }
                                             sendToDisplay(targetDisplayId, {
                                                 type: 'voiceCommand',
@@ -10347,29 +10351,13 @@ async function handleControlMessageFallback(data, ws) {
                         if (todayReminders.length > 0 && displayId) {
                             const text = todayReminders.map(r => `${r.time} ${r.content}`).join('，');
                             try {
-                                const audioPath = await generateTtsWithFallback(`今日提醒：${text}`);
-                                if (audioPath === null) return;
-                                const fileName = path.basename(audioPath);
-                                sendToDisplay(displayId, {
-                                    type: 'tts',
-                                    action: 'playAudio',
-                                    audioUrl: `/uploads/tts/${fileName}`,
-                                    text: `今日提醒：${text}`
-                                });
+                                await sendVoiceCommandTtsSentences(`今日提醒：${text}`, displayId);
                             } catch (err) {
                                 logError('语音命令', `今日提醒语音生成失败: ${err.message}`);
                             }
                         } else if (displayId) {
                             try {
-                                const audioPath = await generateTtsWithFallback('今天没有提醒');
-                                if (audioPath === null) return;
-                                const fileName = path.basename(audioPath);
-                                sendToDisplay(displayId, {
-                                    type: 'tts',
-                                    action: 'playAudio',
-                                    audioUrl: `/uploads/tts/${fileName}`,
-                                    text: '今天没有提醒'
-                                });
+                                await sendVoiceCommandTtsSentences('今天没有提醒', displayId);
                             } catch (err) {
                                 logError('语音命令', `今日提醒语音生成失败: ${err.message}`);
                             }
@@ -11401,13 +11389,7 @@ async function sendSearchTts(text, options = {}) {
     if (isRepairModeTtsSuppressed()) return;
 
     if (playOnControl) {
-        const audioPath = await generateTtsWithFallback(text);
-        if (audioPath === null) return;
-        sendToControl({
-            type: 'playOnControl',
-            audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
-            text
-        });
+        await sendControlVoiceTtsSentences(text, sendToControl);
         return;
     }
 
