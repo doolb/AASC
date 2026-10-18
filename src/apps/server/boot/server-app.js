@@ -95,6 +95,12 @@ const {
     formatAsrResultLog,
     normalizeElapsedMs
 } = require('../modules/asr/asr-result-log-formatter');
+const {
+    normalizeConfig: normalizeAsrLongQueueConfig,
+    audioDurationMs,
+    createDisplayAsrLongQueue,
+    createDisplayAsrLongQueueSettings
+} = require('../modules/asr/display-asr-long-queue');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
@@ -676,6 +682,12 @@ const codexRuntimeManager = new CodexRuntimeManager({
 });
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
+const displayAsrLongQueue = createDisplayAsrLongQueue(config.get('asr.displayLongQueue'));
+const asrLongQueueSettings = createDisplayAsrLongQueueSettings({ config, queue: displayAsrLongQueue,
+    broadcast: broadcastToControls });
+function getAsrLongQueueConfig() {
+    return normalizeAsrLongQueueConfig(config.get('asr.displayLongQueue'));
+}
 // 同一控制/显示连接的新语音命令会取代旧命令，防止旧长播报在停止后继续下发。
 const activeVoiceCommandTtsByClient = new WeakMap();
 let pendingAsrRequestId = 0;
@@ -1397,6 +1409,7 @@ async function startServer() {
                 'setDisplayTtsBackgroundOpacityConfig', 'setServerPortConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
+                'getAsrLongQueueConfig', 'setAsrLongQueueConfig',
                 'getTemporaryConversation', 'clearTemporaryConversation',
                 'startTemporaryConversation',
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'setVoiceCaptureConfig', 'requestAudioInputDevices', 'setAudioOutputConfig', 'requestAudioOutputDevices', 'requestDisplayRecording', 'stopDisplayRecording',
@@ -5132,7 +5145,25 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
             try {
                 const audioBase64 = req.file.buffer.toString('base64');
                 const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
-                const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId, requestContext);
+                const durationMs = audioDurationMs(req.file.buffer, requestContext);
+                const isLongAudio = durationMs !== null
+                    && durationMs >= getAsrLongQueueConfig().thresholdSeconds * 1000;
+                const waitingAbort = new AbortController();
+                const onResponseClosed = () => {
+                    // 仅移除尚未下发的长录音；在途任务仍等回执后释放额度，避免过早并发另一个长任务。
+                    if (!res.writableEnded) waitingAbort.abort();
+                };
+                res.once('close', onResponseClosed);
+                let result;
+                try {
+                    const recognize = () => sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId, requestContext);
+                    result = isLongAudio
+                        ? await displayAsrLongQueue.enqueue(displayWithAsr.id, recognize, waitingAbort.signal)
+                        : await recognize();
+                } finally {
+                    res.off('close', onResponseClosed);
+                }
+                if (res.destroyed) return;
                 if (globalRecordingPaused || result?.ignored) {
                     return res.json({ status: 'ignored', reason: 'global-recording-paused', text: '' });
                 }
@@ -5208,6 +5239,10 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
                     ...getAsrTimingPayload(result)
                 });
             } catch (err) {
+                if (err.code === 'asr_queue_cancelled' || res.destroyed) return;
+                if (err.code === 'asr_queue_full') {
+                    return res.status(503).json({ status: 'error', message: err.message });
+                }
                 logError('语音', `显示端 ASR 失败: ${err.message}`);
                 return res.status(500).json({ status: 'error', message: '显示端 ASR 失败: ' + err.message });
             }
@@ -6860,8 +6895,11 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId, requestContext =
             reject(new Error('显示端 ASR 响应超时'));
         }, timeoutMs);
 
-        pendingDisplayAsrRequests.set(requestId, { resolve, reject, timer });
+        pendingDisplayAsrRequests.set(requestId, { resolve, reject, timer, targetSocket: display.ws });
         try {
+            if (displayClients.get(display.id)?.ws !== display.ws) {
+                throw new Error('ASR 提供端连接已更换');
+            }
             const message = {
                 type: 'asrAudio',
                 audioData: audioBase64,
@@ -6883,6 +6921,16 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId, requestContext =
             reject(new Error('发送音频到显示端失败: ' + err.message));
         }
     });
+}
+
+function rejectPendingDisplayAsrForSocket(socket) {
+    // 重连后旧连接的 close 也可能晚到，按发送时的 socket 精确释放，避免误伤新连接。
+    for (const [requestId, pending] of pendingDisplayAsrRequests) {
+        if (pending.targetSocket !== socket) continue;
+        pendingDisplayAsrRequests.delete(requestId);
+        clearTimeout(pending.timer);
+        pending.reject(new Error('显示端已离线，ASR 识别中断'));
+    }
 }
 
 // 按显示端能力查找视觉推理目标；指定 displayId 时只允许选择该显示端，避免结果回错设备。
@@ -8227,7 +8275,7 @@ wss.on('connection', (ws, req) => {
 
                 if (data.type === 'asrResult') {
                     const pending = pendingDisplayAsrRequests.get(data.requestId);
-                    if (pending) {
+                    if (pending && pending.targetSocket === ws) {
                         pendingDisplayAsrRequests.delete(data.requestId);
                         clearTimeout(pending.timer);
                         if (globalRecordingPaused) {
@@ -8351,6 +8399,7 @@ wss.on('connection', (ws, req) => {
         ws.on('close', () => {
             const disconnectedIP = clientIP;
             const currentDisplay = displayClients.get(displayId);
+            rejectPendingDisplayAsrForSocket(ws);
 
             // 旧连接的 close 事件可能晚于新连接到达，不能误删当前连接。
             if (!currentDisplay || currentDisplay.ws !== ws) {
@@ -8408,6 +8457,7 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify(piProfileConfig.snapshot()));
         ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
+        ws.send(JSON.stringify(asrLongQueueSettings.snapshot()));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         ws.send(JSON.stringify({
@@ -10001,6 +10051,8 @@ async function handleControlMessageFallback(data, ws) {
         }));
         return;
     }
+
+    if (asrLongQueueSettings.handle(ws, data)) return;
 
     if (data.type === 'getTemporaryConversation') {
         ws.send(JSON.stringify({

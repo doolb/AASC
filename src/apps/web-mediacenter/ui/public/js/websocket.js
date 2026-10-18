@@ -55,6 +55,7 @@ const WebSocketManager = {
             window.TtsAudioCacheSettings?.handleDisconnected();
             window.TtsProviderSettings?.handleDisconnected();
             window.ControlTtsVoices?.handleDisconnected();
+            window.AsrDevice?.handleLongQueueDisconnected?.();
             window.DeviceList?.handleVoiceContinuousDisconnected?.();
             setTimeout(() => this.connect(), 3000);
         };
@@ -285,6 +286,8 @@ const WebSocketManager = {
             if (window.AsrDevice) {
                 window.AsrDevice.handleDeviceChanged(data.device);
             }
+        } else if (data.type === 'asrLongQueueConfig') {
+            window.AsrDevice?.handleLongQueueConfig(data);
         } else if (data.type === 'ttsDeviceChanged') {
             if (window.TtsDevice) {
                 window.TtsDevice.handleDeviceChanged(data.device);

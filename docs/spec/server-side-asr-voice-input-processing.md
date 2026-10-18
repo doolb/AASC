@@ -1,17 +1,21 @@
 # 服务端统一处理显示端 ASR 与声纹结果实现伪代码
 
-## 显示端 ASR 长语音分流（待确认草案）
+## 显示端 ASR 长语音分流与远端配置（2026-10-18，已确认）
 
 ```text
 已有声明 := /api/asr/recognize、sendAudioToDisplayAsr、asrAudio/asrResult、Android AsrEnginePool
-新增定义 := DisplayAsrLongQueue { 按目标 displayId 隔离, 每目标在途长任务 1, FIFO 等待列表 }
-候选边界 := 长语音实际时长 >= 10 秒；每目标最多等待 8 条，具体值待用户确认
-操作流程 := 从 WAV 容器验证并计算音频时长；其它输入仅在可信时间区间可用时按区间分类
-操作流程 := 短语音 → 直接调用现有 sendAudioToDisplayAsr；长语音 → 目标显示端队列等待准入 → 下发 asrAudio
-操作流程 := 客户端在等待期间断开 → 清除排队任务；长任务完成/失败 → 释放额度并启动下一项
-操作流程 := 等待上限溢出 → 明确返回繁忙；显示端超时从真正下发时开始，保留原 requestId 与结果处理契约
-自测 := 长任务同目标串行、不同目标独立、短任务可越过长队列、WAV 时长边界、断线/失败释放与队列满回错
-状态 := 需求方案待确认，运行代码未实现
+新增定义 := DisplayAsrLongQueueConfig { thresholdSeconds: 10, concurrency: 1 }；整数范围 1..120 秒、1..8 条
+新增定义 := DisplayAsrLongQueue { 按目标 displayId 隔离, 每目标在途长任务 <= concurrency, FIFO 等待列表 <= 8 }
+控制端 := 语音识别设备面板读取权威 asrLongQueueConfig；修改阈值和并发后发送 setAsrLongQueueConfig { type, thresholdSeconds, concurrency, requestId }
+服务端 := 严格校验类型和范围 → config.set('asr.displayLongQueue', 规范化值) → 广播 asrLongQueueConfig；失败回传原权威值
+初始化 := 控制端连接/重连收到当前 asrLongQueueConfig；断线显示默认值并禁用保存；无新 HTTP 配置接口
+操作流程 := 从有效 WAV 容器计算实际音频时长；无法解析时使用合法录音起止时间，仍未知则按旧直通路径处理
+操作流程 := 时长 < thresholdSeconds → 直接调用现有 sendAudioToDisplayAsr；其余 → 目标显示端长队列等待准入 → 下发 asrAudio
+操作流程 := 长队列运行时改并发 → 升高立即启动等待项，降低只约束后续准入、不取消在途识别
+操作流程 := HTTP 客户端在等待期间断开 → 清除排队任务；长任务完成/失败 → 释放额度并启动下一项
+操作流程 := 等待上限溢出 → 明确返回繁忙；显示端 60 秒超时从真正下发时开始，保留原 requestId 与结果处理契约
+自测 := 配置校验/持久化/广播/重连、多控制端同步；同目标并发上限与运行时变更、不同目标独立、短任务直通、时长边界、断线/失败释放与队列满回错
+状态 := 已实现服务端按目标显示端排队、控制端远端配置和离线定向测试；待真机验收
 ```
 
 ## 请求与响应契约

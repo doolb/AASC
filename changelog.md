@@ -1,7 +1,7 @@
-### 显示端 ASR 长语音队列设计
+### 显示端 ASR 长语音队列
 
-- 📝 [2026-10-18] 记录按录音时长分流、同一 ASR 显示端长任务逐条下发的方案；10/15 秒阈值和等待容量待确认，暂未修改运行代码。
-  - 更新 `server-side-asr-voice-input-processing` design/spec、任务和 todo；当前 Android ASR 池有并发槽位，候选方案在服务端转发前建立独立长队列，短录音继续直通。
+- ✅ [2026-10-18] 按实际录音时长将长任务送入每台 ASR 显示端的独立队列；控制端可设置阈值 1–120 秒（默认 10）和并发 1–8（默认 1），短录音直通。
+  - 新增 `display-asr-long-queue.js`，更新 `server-app.js`、`upload.html`、`tts.js`、`websocket.js`，补队列及控制端浏览器测试；连接断开可移除等待项，队列满返回 503，设置经原 WebSocket 流程持久化并同步。同步 design/spec/task/todo/usage，定向及关联 ASR 回归 20/21 通过；唯一失败是 `node-display-asr-source-binding.test.js` 既有断言仍要求 Node 子显示端反写本地 ID，当前源码在本次修改前已不反写。`servicePackage=true`，待服务包构建和设备验收。
 
 ### 双端音色面板总音量
 

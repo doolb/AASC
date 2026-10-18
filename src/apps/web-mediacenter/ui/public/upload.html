@@ -944,6 +944,18 @@
                 <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
                     <span id="asrDeviceStatus">加载中...</span>
                 </div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                    <label for="asrLongThresholdSeconds" style="font-size:13px;">长语音阈值</label>
+                    <input type="number" id="asrLongThresholdSeconds" min="1" max="120" step="1" value="10" disabled
+                        style="width:66px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;"> 秒
+                    <label for="asrLongConcurrency" style="font-size:13px;">长语音并发上限</label>
+                    <input type="number" id="asrLongConcurrency" min="1" max="8" step="1" value="1" disabled
+                        style="width:62px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;"> 条
+                    <button class="control-btn" id="asrLongQueueSaveBtn" type="button" disabled>保存</button>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.55);">
+                    <span id="asrLongQueueStatus">等待服务器配置</span>；短语音直通，长语音每台显示端最多等待 8 条。
+                </div>
             </div>
             <div class="control-item voiceprint-card">
                 <label>语音生成设备</label>

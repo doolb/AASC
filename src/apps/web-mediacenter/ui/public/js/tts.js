@@ -164,8 +164,18 @@ window.TtsAudioCacheSettings = TtsAudioCacheSettings;
 const AsrDevice = {
     currentDevice: 'server',
     serverEnabled: true,
+    longQueueConfig: { thresholdSeconds: 10, concurrency: 1 },
+    longQueueReady: false,
+    longQueuePendingId: null,
+    longQueueTimer: null,
 
     async init() {
+        const saveButton = document.getElementById('asrLongQueueSaveBtn');
+        if (saveButton && !saveButton.dataset.bound) {
+            saveButton.dataset.bound = '1';
+            saveButton.addEventListener('click', () => this.saveLongQueueConfig());
+        }
+        this.updateLongQueueUI();
         try {
             const res = await fetch('/api/config/asrDevice');
             const data = await res.json();
@@ -239,6 +249,80 @@ const AsrDevice = {
     handleServerEnabledChanged(enabled) {
         this.serverEnabled = enabled === true;
         this.updateUI();
+    },
+
+    updateLongQueueUI(message) {
+        const threshold = document.getElementById('asrLongThresholdSeconds');
+        const concurrency = document.getElementById('asrLongConcurrency');
+        const saveButton = document.getElementById('asrLongQueueSaveBtn');
+        const status = document.getElementById('asrLongQueueStatus');
+        if (threshold) {
+            threshold.value = String(this.longQueueConfig.thresholdSeconds);
+            threshold.disabled = !this.longQueueReady || Boolean(this.longQueuePendingId);
+        }
+        if (concurrency) {
+            concurrency.value = String(this.longQueueConfig.concurrency);
+            concurrency.disabled = !this.longQueueReady || Boolean(this.longQueuePendingId);
+        }
+        if (saveButton) saveButton.disabled = !this.longQueueReady || Boolean(this.longQueuePendingId);
+        if (status) status.textContent = message || (this.longQueueReady ? '已同步服务器配置' : '等待服务器配置');
+    },
+
+    handleLongQueueConfig(data) {
+        if (!Number.isInteger(data?.thresholdSeconds) || data.thresholdSeconds < 1 || data.thresholdSeconds > 120
+            || !Number.isInteger(data?.concurrency) || data.concurrency < 1 || data.concurrency > 8) return;
+        const ownReply = Boolean(this.longQueuePendingId && data.requestId === this.longQueuePendingId);
+        if (ownReply || !data.requestId) {
+            if (this.longQueueTimer) clearTimeout(this.longQueueTimer);
+            this.longQueueTimer = null;
+            this.longQueuePendingId = null;
+        }
+        this.longQueueConfig = { thresholdSeconds: data.thresholdSeconds, concurrency: data.concurrency };
+        this.longQueueReady = true;
+        const message = this.longQueuePendingId ? '正在保存…'
+            : ownReply && data.success === false ? data.message || '保存失败，已恢复服务器设置'
+                : ownReply ? '已保存服务器配置' : '已同步服务器配置';
+        this.updateLongQueueUI(message);
+    },
+
+    handleLongQueueDisconnected() {
+        if (this.longQueueTimer) clearTimeout(this.longQueueTimer);
+        this.longQueueTimer = null;
+        this.longQueuePendingId = null;
+        this.longQueueReady = false;
+        this.longQueueConfig = { thresholdSeconds: 10, concurrency: 1 };
+        this.updateLongQueueUI('连接已断开，等待同步');
+    },
+
+    saveLongQueueConfig() {
+        if (!this.longQueueReady || this.longQueuePendingId) return;
+        const thresholdSeconds = Number(document.getElementById('asrLongThresholdSeconds')?.value);
+        const concurrency = Number(document.getElementById('asrLongConcurrency')?.value);
+        if (!Number.isInteger(thresholdSeconds) || thresholdSeconds < 1 || thresholdSeconds > 120
+            || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) {
+            this.updateLongQueueUI('阈值须为 1–120 秒，并发须为 1–8 条整数');
+            return;
+        }
+        if (window.WebSocketManager?.ws?.readyState !== WebSocket.OPEN) {
+            this.handleLongQueueDisconnected();
+            return;
+        }
+        const requestId = `asr-long-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        this.longQueuePendingId = requestId;
+        this.updateLongQueueUI('正在保存…');
+        try {
+            window.WebSocketManager.send({ type: 'setAsrLongQueueConfig', thresholdSeconds, concurrency, requestId });
+        } catch (error) {
+            this.longQueuePendingId = null;
+            this.updateLongQueueUI('发送失败：' + error.message);
+            return;
+        }
+        this.longQueueTimer = setTimeout(() => {
+            this.longQueuePendingId = null;
+            this.longQueueTimer = null;
+            this.updateLongQueueUI('保存未收到确认，正在重新同步');
+            window.WebSocketManager.send({ type: 'getAsrLongQueueConfig' });
+        }, 12000);
     }
 };
 
