@@ -1,5 +1,7 @@
 ### 天气播报长详情误送离线 TTS
 
+- 📝 [2026-10-18] 复核 Android `80048028`：当前系统语音默认语速 0，原生代码走 `SpeakText`，并未提交自定义 SSML；SDK 的“check your SSML”不能作为实际根因。已同步 design/spec/task/todo；长输入的具体引擎失败边界待设备复测，无运行代码变更。
+
 ### Responses 流错误透传
 
 - 📝 [2026-10-18] 核对豆包手动账号字段：应填完整网页 Cookie，文字聊天还需同账号 `nodeProfile`；安全验证码只填官网验证页，Chat2API 不存在供本次验证使用的豆包 Token 栏。同步 chat-system design/spec/task/usage/todo；无代码、配置或真实账号操作。
