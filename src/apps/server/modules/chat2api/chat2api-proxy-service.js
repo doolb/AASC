@@ -42,11 +42,16 @@ const createChat2ApiProxyService = (options = {}) => {
     response.end(body);
   };
 
-  const sendError = (response, error) => {
+  const normalizePublicError = (error) => {
     const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
     const code = error.code || 'internal_error';
     const message = statusCode >= 500 && !error.code ? 'Chat2API 代理内部错误' : error.message;
-    sendJson(response, statusCode, { error: { message, type: statusCode >= 500 ? 'api_error' : 'invalid_request_error', code } });
+    return { statusCode, error: { message, type: statusCode >= 500 ? 'api_error' : 'invalid_request_error', code } };
+  };
+
+  const sendError = (response, error) => {
+    const normalized = normalizePublicError(error);
+    sendJson(response, normalized.statusCode, { error: normalized.error });
   };
 
   const readJson = async (request) => {
@@ -142,11 +147,20 @@ const createChat2ApiProxyService = (options = {}) => {
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-cache');
     response.setHeader('Connection', 'keep-alive');
-    for await (const event of stream) {
-      if (response.destroyed || response.writableEnded) break;
-      response.write(`data: ${JSON.stringify(event)}\n\n`);
+    try {
+      for await (const event of stream) {
+        if (response.destroyed || response.writableEnded) break;
+        response.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+      if (!response.destroyed && !response.writableEnded) response.end('data: [DONE]\n\n');
+    } catch (error) {
+      // 首个事件写出后 HTTP 状态已固定；用 SSE 失败事件交还真实错误，避免销毁连接只剩 socket hang up。
+      if (response.destroyed || response.writableEnded) return;
+      if (!response.headersSent) throw error;
+      const normalized = normalizePublicError(error);
+      console.warn(`[Chat2API] Responses 流失败: stage=after_headers code=${normalized.error.code} status=${normalized.statusCode}`);
+      response.end(`data: ${JSON.stringify({ type: 'response.failed', error: { ...normalized.error, statusCode: normalized.statusCode } })}\n\n`);
     }
-    if (!response.destroyed && !response.writableEnded) response.end('data: [DONE]\n\n');
   };
 
   const handleRequest = async (request, response) => {

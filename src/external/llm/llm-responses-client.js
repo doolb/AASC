@@ -139,7 +139,8 @@ const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) =>
         const event = JSON.parse(data);
         onEvent(event);
         if (event.type === 'response.failed') {
-          fail(getRemoteError(event, response.statusCode || 500));
+          const remoteStatusCode = Number.isInteger(event.error?.statusCode) ? event.error.statusCode : response.statusCode || 500;
+          fail(getRemoteError(event, remoteStatusCode));
         }
         if (event.type === 'response.completed') complete();
       } catch (error) {

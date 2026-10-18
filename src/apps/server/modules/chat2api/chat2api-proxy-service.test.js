@@ -6,6 +6,7 @@ const { createChat2ApiProxyService } = require('./chat2api-proxy-service');
 const { createChat2ApiCoreAdapter } = require('./chat2api-core-adapter');
 const { createChat2ApiResponsesService } = require('./chat2api-responses-service');
 const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
+const { createResponsesClient } = require('../../../../external/llm/llm-responses-client');
 const { PassThrough } = require('stream');
 
 test('账号复验沿用非本机管理API鉴权，不信任请求体传入凭据或账号', async t => {
@@ -93,6 +94,40 @@ test('代理服务把流式结果转换为 SSE，并在停止时释放端口', a
   assert.match(response.text, /data: \[DONE\]/);
   await service.stop();
   await assert.rejects(() => request(port, { path: '/health', method: 'GET' }));
+});
+
+test('Responses 流开始后上游报错应发送失败事件并保留错误码与状态', async (t) => {
+  const service = createChat2ApiProxyService({
+    host: '127.0.0.1', port: 0, config: { enableApiKey: false },
+    responsesService: {
+      createResponse: async () => ({
+        stream: (async function* failedStream() {
+          yield { type: 'response.created', response: { id: 'resp_started' } };
+          const error = new Error('豆包上游会话位置已不确定，请新建会话');
+          error.code = 'doubao_session_uncertain';
+          error.statusCode = 409;
+          throw error;
+        }()),
+      }),
+    },
+  });
+  await service.start();
+  t.after(() => service.stop());
+  const port = service.address().port;
+  const payload = JSON.stringify({ model: 'doubao', input: '继续', stream: true });
+  const raw = await request(port, { path: '/v1/responses', method: 'POST', headers: { 'Content-Type': 'application/json' } }, payload);
+  assert.equal(raw.statusCode, 200);
+  assert.match(raw.text, /"type":"response.failed"/u);
+  assert.match(raw.text, /"code":"doubao_session_uncertain"/u);
+  assert.doesNotMatch(raw.text, /\[DONE\]/u);
+
+  const client = createResponsesClient({ baseUrl: `http://127.0.0.1:${port}/v1` });
+  const events = [];
+  await assert.rejects(
+    () => client.stream({ model: 'doubao', input: '继续', stream: true }, (event) => events.push(event.type)),
+    (error) => error.code === 'doubao_session_uncertain' && error.statusCode === 409,
+  );
+  assert.deepEqual(events, ['response.created', 'response.failed']);
 });
 
 test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {

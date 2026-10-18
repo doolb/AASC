@@ -1,3 +1,8 @@
+### Responses 流错误透传
+
+- ✅ [2026-10-18] 修复 Chat2API Responses 流已开始后上游错误被连接销毁掩盖为 `socket hang up`：发送包含原错误码和状态的 `response.failed`，让现有会话恢复规则能识别真实错误。
+  - 更新 `chat2api-proxy-service.js`、`llm-responses-client.js` 与代理集成测试；同步 chat-system design/spec/task/usage/todo。定向测试 18/18、`npm run check:chat2api` 285/285、语法检查通过；真实账号待更新服务后验收，未出包或发布，`servicePackage=true`。
+
 ### Responses 流式连接中断恢复
 
 - ✅ [2026-10-18] 修复临时语音会话的 Responses 流式请求遇 `socket hang up` 后直接失败：无正文时从本地完整历史新建上游会话并重试一次，已有正文时清除旧引用且不重发本轮。
