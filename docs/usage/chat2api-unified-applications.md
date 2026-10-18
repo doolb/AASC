@@ -1,5 +1,9 @@
 # Chat2API 统一文字与四路语音（2026-10-13）
 
+## 豆包网页安全验证
+
+当前账号通过 Chat2API 请求豆包时，既有会话的原生续接和全新会话都可能返回 `doubao_risk_control`（403）。这表示网页接口要求安全验证，不能通过改会话 ID 解决。请用同一账号在[豆包官网](https://www.doubao.com/)或 App 登录并发一条消息；若出现滑块或短信验证，只在豆包页面完成。验证码不是 Chat2API 的 Token，也不要写入账号配置。若官网完全没有验证提示但代理仍为 403，可重新登录并按现有登录流程更新同账号网页 Cookie 与 Node 登录资料；持续被拒时通过豆包“帮助与反馈”联系官方。官方账号服务说明见[豆包账号服务须知](https://www.doubao.com/legal/doubao_account_service_terms)。
+
 当前首批支持既有文字聊天和TTS。四个对外来源名为qwen、qwen-api、doubao、doubaapi；旧qwen-chat/doubao-api/doubao-chat业务选择及内部doubaochat账户ID保持兼容。图片/音频/视频输入与图像/视频输出未接入，明确报错，不静默转成文字。
 
 ## 未配置映射或账号选择
