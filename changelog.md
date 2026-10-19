@@ -8,6 +8,8 @@
 
 ### 五子棋游戏协议与本地显示
 
+- 📝 [2026-10-20] 核对 Note8 启动时棋盘自动打开的原因：持久化五子棋仍为进行中、四枚棋子且 `visible=true`，显示端连接和初始化会接收/补拉权威快照；演示结束恢复该真实棋局。同步五子棋 design/spec/todo；未修改运行代码或当前棋局状态。
+
 - ✅ [2026-10-20] 五子棋演示扩为连续用户胜、AI 胜两局，并修复游戏提示过长、成功叙述丢失及棋盘黑色遮罩。
   - `gomoku-display-demo-service.js` 和 `gomoku-ui-demo.js` 支持每步延迟、胜局停留及单独胜方；Note8 当前显示端实测两局胜负、透明背景和结束恢复，截图 `/tmp/aasc-gomoku-demo-transparent-ai-win.png`。演示只发临时棋盘事件，不写聊天或真实棋局。
   - `display.html` 声明游戏能力；`game-chat-bridge.js` 改为 AI 查询目录和按需读取五子棋规则，成功标签后的自然语言保留，必要续接只给简短 GM 回执；GM 可见编号缩为四位。`llm-service.js`、`server-app.js`、双端聊天 JS/CSS 将调用和回执作为独立 `gameTrace` 元数据保存、实时显示灰色小字摘要，不进入模型正文或 TTS；`display-game.css` 取消全屏黑色背景。更新设计、伪代码、任务、使用说明和定向测试；服务包状态 `servicePackage=true`，真实模型对话待现场验收。
