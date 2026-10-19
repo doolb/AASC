@@ -42,7 +42,7 @@
 
 - ⏳待新工程构建验收 [2026-10-15] Android MNN 固定 revision 的自包含预编译包和默认 APK 准备入口已入库；仍需在新 clone 环境执行 `npm run build:apk` 确认完整 APK 链路。本次未构建 APK，`minApk=false` 保持。任务：`docs/task/20261015_Android_MNN预编译运行包入库.md`。
 
-- 待真实账号与设备验收 [2026-10-19] 聊天三档快选已回写当前普通 LLM 配置的模型名，并按名称反显 Provider/档位；选中和未选中按钮已复用当前主题状态。豆包轻量/普通共用 `doubao` 思考0，专业为思考3；Node 旧 think/专业档短句已取得正文。待运行实例加载新服务后核对两端完整聊天、豆包更长对话、Qwen 三个目标、手工改名/切换配置/重连/遮挡及 Offline APK/ADB 主题观感；“外部登录”入口待后续接通。见 `docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/20261019_聊天模型三档双端快选.md`、`docs/task/20261019_聊天快选回写当前LLM模型名.md`、`docs/task/20261019_模型档位按钮主题状态.md`、`docs/task/20261019_豆包普通专业档回复解析.md`、`docs/task/20261019_豆包普通轻量共用模型.md`。
+- 待真实账号与设备验收 [2026-10-19] 聊天三档快选已回写当前普通 LLM 配置的模型名，并按名称反显 Provider/档位；选中和未选中按钮已复用当前主题状态。豆包轻量/普通共用 `doubao` 思考0，专业为思考3；Node 旧 think/专业档短句已取得正文，本机服务已重启并恢复 HTTP 响应。待核对两端完整聊天、豆包更长对话、Qwen 三个目标、手工改名/切换配置/重连/遮挡及 Offline APK/ADB 主题观感；“外部登录”入口待后续接通。见 `docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/20261019_聊天模型三档双端快选.md`、`docs/task/20261019_聊天快选回写当前LLM模型名.md`、`docs/task/20261019_模型档位按钮主题状态.md`、`docs/task/20261019_豆包普通专业档回复解析.md`、`docs/task/20261019_豆包普通轻量共用模型.md`。
 
 - ⏳待真机验收 [2026-10-14] 数据修复与release基线3已完成并发布LAN/WAN code85/deps9/min51/repair3/seeds85；待已有0/1设备迁移、full/min干净首装与配置一致、覆盖保留和失败去重。当前旧min41须APK直链先覆盖安装51；默认映射、私人旧资料复用、登录提示源码和249项自测完成，真实账号与设备效果待验收。任务：`docs/task/20261014_数据修复同步Release基线与版本.md`。
 
