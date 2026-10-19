@@ -8,9 +8,9 @@
 
 ```text
 Qwen档位目标 := mini → Qwen3.6-Flash；flash → Qwen3.7；pro → Qwen3.7-Max
-豆包档位 := mini → doubao/思考0；flash → doubao-think/思考1；pro → doubao-expert/思考3
+豆包档位 := mini → doubao/思考0；flash → doubao/思考0；pro → doubao-expert/思考3
 各Provider初始档位 := qwen → flash（普通/快速）；doubaochat → mini（轻量）
-当前 profile.model 保存 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max 或豆包现有名称；Qwen 请求使用内部专用别名，mini 须与现有 Qwen3.6-Flash → Qwen3.7 兼容映射隔离
+当前 profile.model 保存 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max 或豆包现有名称；豆包 mini/flash 同名时优先读取 tiersByProvider.doubaochat 回显，缺省为 mini；Qwen 请求使用内部专用别名，mini 须与现有 Qwen3.6-Flash → Qwen3.7 兼容映射隔离
 
 服务端读取当前运行的 Chat2API 账号与 Provider 公开目录 → 只发布已启用、有凭据账号且有开发映射的 Provider 标识和名称
 控制端或显示端连接 → 从当前普通 LLM profile.model 按开发维护的名称表反查 Provider 与档位 → 补发权威模型名、档位及可选 Provider；断线时界面禁止提交
@@ -23,6 +23,7 @@ Qwen档位目标 := mini → Qwen3.6-Flash；flash → Qwen3.7；pro → Qwen3.7
 旧版 chat 消息入口 → 与普通 chatMessage 共用当前三档解析；角色 Agent 保持自己的配置
 Chat2API 任务启动或停止后 → 尝试广播可选 Provider 快照；快照读取失败只记录诊断，不改变任务启停结果
 Qwen 三档 → 使用 aasc-qwen-mini/flash/pro 专用请求别名；面板识别不依赖 Chat2API 映射配置
+豆包快选 mini/flash 共用思考0请求，pro 沿用思考3；手工配置旧 doubao-think 时不由快选接管，继续以原模型名调用
 当前运行的 Chat2API Responses 服务 → 直接建立响应流；response.failed 或缺少 response.completed 时作为失败回报
 Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不复用不兼容上游会话
 两端快选面板展示当前模型名、Provider 与档位；档位按钮按 aria-pressed 应用现有主题预览按钮状态：选中使用 accent-secondary 到 accent-color 渐变、白字与 accent-color 外圈，未选中使用 bg-secondary、text-secondary、border-color 且无阴影；浅色主题仍保持中性未选中样式；外部登录保留入口与接口接线，本次不启动登录
@@ -30,7 +31,7 @@ Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不�
 
 源码已按以上流程完成；Qwen 网页目标模型的实际可调用性仍待真实账号核实。Chat2API 代理未运行、账号被禁用或 Provider 被删除时，选择保留但发送聊天时明确失败。
 
-验收计划 := 两端档位一致表达及重连补发 → 账号过滤与服务端越权拒绝 → Provider独立映射 → 豆包0/1/3模式 → Qwen旧别名隔离 → 续接隔离 → 旧配置兼容 → Offline APK/ADB实际验证。
+验收计划 := 两端档位一致表达及重连补发 → 账号过滤与服务端越权拒绝 → Provider独立映射 → 豆包0/0/3模式 → Qwen旧别名隔离 → 续接隔离 → 旧配置兼容 → Offline APK/ADB实际验证。
 
 ## 豆包语音括号与协议错误（2026-10-19，源码完成并通过 Node 实网验收）
 

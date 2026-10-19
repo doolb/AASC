@@ -72,16 +72,19 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     for (const [name, providerId, tier] of [
         ['Qwen3.6-Flash', 'qwen', 'mini'], ['Qwen3.7', 'qwen', 'flash'],
         ['Qwen3.7-Max', 'qwen', 'pro'], ['doubao', 'doubaochat', 'mini'],
-        ['doubao-think', 'doubaochat', 'flash'], ['doubao-expert', 'doubaochat', 'pro'],
+        ['doubao-expert', 'doubaochat', 'pro'],
         ['aasc-qwen-mini', 'qwen', 'mini']
     ]) assert.deepEqual(identifyModel(name), { providerId, tier });
+    assert.deepEqual(identifyModel('doubao', { doubaochat: 'flash' }), { providerId: 'doubaochat', tier: 'flash' });
+    assert.equal(identifyModel('doubao-think'), null);
     assert.equal(service.selection().providerId, 'qwen');
     assert.equal(service.selection().tiersByProvider.qwen, 'mini');
     assert.equal((await service.resolveForChat()).model, 'aasc-qwen-mini');
     await service.update({ providerId: 'doubaochat' });
     assert.equal(saves.at(-1).preference.tiersByProvider.qwen, 'mini');
     profile.model = 'doubao-think';
-    assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
+    assert.equal(service.selection().providerId, null);
+    assert.equal(await service.resolveForChat(), null);
     profile.model = 'unknown-model';
     assert.equal(service.selection().providerId, null);
     assert.equal(await service.resolveForChat(), null);
@@ -89,6 +92,23 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     profile.model = 'doubao';
     assert.equal(service.selection().providerId, null);
     await assert.rejects(service.update({ providerId: 'qwen', tier: 'flash' }), /不是普通 LLM/);
+});
+
+test('豆包轻量和普通共用模型名与思考0请求，已保存档位决定同名回显', async () => {
+    const { service, profile, saves, requests } = setup();
+    await service.update({ providerId: 'doubaochat', tier: 'flash' });
+    assert.equal(profile.model, 'doubao');
+    assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
+    assert.equal((await service.resolveForChat()).model, 'doubao');
+    await (await service.resolveForChat()).client.request({ input: '早' });
+    assert.equal(requests.at(-1).model, 'doubao');
+    await service.update({ providerId: 'doubaochat', tier: 'mini' });
+    assert.equal(profile.model, 'doubao');
+    assert.equal(service.selection().tiersByProvider.doubaochat, 'mini');
+    assert.equal(saves.at(-1).preference.tiersByProvider.doubaochat, 'mini');
+    await service.update({ providerId: 'doubaochat', tier: 'flash' });
+    assert.equal(profile.model, 'doubao');
+    assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
 });
 
 test('停用账号不能选用，旧选择也不会回退到其它 Provider', async () => {

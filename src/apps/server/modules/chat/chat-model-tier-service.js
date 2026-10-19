@@ -8,22 +8,24 @@ const PROVIDER_TIERS = Object.freeze({
         mini: 'Qwen3.6-Flash', flash: 'Qwen3.7', pro: 'Qwen3.7-Max'
     }) }),
     doubaochat: Object.freeze({ label: '豆包', defaultTier: 'mini', models: Object.freeze({
-        mini: 'doubao', flash: 'doubao-think', pro: 'doubao-expert'
+        mini: 'doubao', flash: 'doubao', pro: 'doubao-expert'
     }), actualModels: Object.freeze({
-        mini: 'doubao', flash: 'doubao-think', pro: 'doubao-expert'
+        mini: 'doubao', flash: 'doubao', pro: 'doubao-expert'
     }) })
 });
 const TIERS = Object.freeze(['mini', 'flash', 'pro']);
 const CONFIG_KEY = 'chat.modelTierSelection';
 
-function identifyModel(modelName) {
+function identifyModel(modelName, tiersByProvider = {}) {
     const name = String(modelName || '').trim().toLowerCase();
     if (!name) return null;
     for (const [providerId, mapping] of Object.entries(PROVIDER_TIERS)) {
-        for (const tier of TIERS) {
+        const matches = TIERS.filter(tier => {
             const aliases = [mapping.models[tier], mapping.actualModels[tier]];
-            if (aliases.some(alias => alias.toLowerCase() === name)) return { providerId, tier };
-        }
+            return aliases.some(alias => alias.toLowerCase() === name);
+        });
+        if (matches.length) return { providerId,
+            tier: matches.includes(tiersByProvider[providerId]) ? tiersByProvider[providerId] : matches[0] };
     }
     return null;
 }
@@ -45,7 +47,7 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
     const selection = () => {
         const active = getActiveProfile() || {};
         const preference = normalizeSelection(config.get(CONFIG_KEY));
-        const identified = active.mode === 'agent' ? null : identifyModel(active.model);
+        const identified = active.mode === 'agent' ? null : identifyModel(active.model, preference.tiersByProvider);
         if (identified) preference.tiersByProvider[identified.providerId] = identified.tier;
         return { ...preference, providerId: identified?.providerId || null,
             modelName: active.model || '', profileName: active.name || '', profileMode: active.mode || 'llm' };
