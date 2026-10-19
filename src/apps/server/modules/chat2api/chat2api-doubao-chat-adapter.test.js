@@ -125,6 +125,35 @@ test('非流式等待明确结束、正文与思考隔离，用户回显及其�
   assert.equal(result.nativeState.accountId,'node-mock');assert.match(result.nativeState.identityFingerprint,/^[a-f0-9]{64}$/u);
 });
 
+test('普通和专业模式以同一个思考块的完成标记切换到正文', async () => {
+  const liveBlockEvent = blocks => event('STREAM_CHUNK', {
+    patch_op: [{ patch_object: 1, patch_value: { content_block: blocks } }],
+  });
+  const parts = [
+    event('STREAM_MSG_NOTIFY', { content: { content_block: [
+      { block_type: 10040, block_id: 'thinking_1', is_finish: false, content: { thinking_block: {} } },
+    ] } }),
+    liveBlockEvent([textBlock('内部思考', 'reasoning_1')]),
+    event('CHUNK_DELTA', { text: '过程' }),
+    liveBlockEvent([{ block_type: 10040, block_id: 'thinking_1', is_finish: true, content: { thinking_block: {} } }]),
+    liveBlockEvent([textBlock('你好', 'answer_1')]),
+    event('CHUNK_DELTA', { text: '。' }),
+    event('SSE_REPLY_END'),
+  ];
+  const adapter = createDoubaoChatAdapter({ httpClient: { request: async () => response(parts) } });
+  for (const model of ['doubao-think', 'doubao-expert']) {
+    const args = input({ actualModel: model, request: { ...input().request, model } });
+    const result = await adapter(args);
+    assert.equal(result.body.choices[0].message.content, '你好。');
+    assert.equal(result.body.choices[0].message.reasoning_content, '内部思考过程');
+    const streamed = await adapter({ ...args, request: { ...args.request, stream: true } });
+    const chunks = await collect(streamed.stream);
+    assert.equal(chunks.map(chunk => chunk.choices[0].delta.content || '').join(''), '你好。');
+    assert.equal(chunks.map(chunk => chunk.choices[0].delta.reasoning_content || '').join(''), '内部思考过程');
+    assert.equal(chunks.at(-1).choices[0].finish_reason, 'stop');
+  }
+});
+
 test('流式中文逐字节 UTF-8 分片安全，CRLF、多行 data、心跳与最后无空行结束均正确', async () => {
   const raw = ': keepalive\r\n\r\n' + 'event: CHUNK_DELTA\r\ndata: {\r\ndata: "text":"你好😀"}\r\n\r\n'
     + 'event: SSE_REPLY_END\r\ndata: {}';

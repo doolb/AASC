@@ -339,12 +339,16 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
     const type = Number(block.block_type);
     const previous = key && blocks.get(key);
     if (type === 10040) {
-      // 同一个参考边界的重复快照不应再次翻转思考状态；边界语义仍需独立真实验收。
+      // 官网思考流会先发送未完成的 10040，再以同一 block_id 的 is_finish=true 关闭思考。
+      // 旧版两个不同边界块的流仍按成对边界处理；重复快照不能再次翻转状态。
       if (!previous) {
         thinkingBoundaries += 1;
-        inThinking = thinkingBoundaries === 1;
+        inThinking = thinkingBoundaries % 2 === 1;
       }
-      // is_finish 的含义尚未现场确认，不能用它猜测思考结束并把后续思考泄露成正文。
+      if (block.is_finish === true) {
+        inThinking = false;
+        thinkingBoundaries = 0;
+      }
       activeBlock = null;
       textChannelAllowed = true;
       if (key) blocks.set(key, { channel: 'reasoning_content', type });

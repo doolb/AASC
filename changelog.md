@@ -1,5 +1,8 @@
 ### LLM 三档模型设计记录
 
+- ✅ [2026-10-19] 修复豆包普通和专业档只有思考、没有正文的解析错误。
+  - `chat2api-doubao-chat-adapter.js` 根据同一 `10040` 思考块的 `is_finish=true` 结束思考，保留旧双边界兼容；补充双档流式/非流式回归。修复前当前账号两档均为 `doubao_empty_response/502`，修复后分别取得 4 字与 23 字正文，专业档思考内容独立保留。`npm run check:chat2api` 287/287 通过；同步豆包 design/spec、任务与待办，`servicePackage=true` 待出包。
+
 - ✅ [2026-10-19] 两端模型档位按钮复用当前主题的选中和未选中状态。
   - `chat-model-tier-picker.css` 改用主题强调色渐变、白字、外圈和中性按钮配色，移除独立字重及勾号；`chat-model-tier-browser.test.js` 在深色和浅色主题下与主题预览按钮比较，两端 2/2 测试通过。同步 chat-system design/spec、使用说明、任务及待办；`servicePackage=true`，待服务包构建和设备观感验收。
 
