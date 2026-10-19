@@ -286,13 +286,35 @@ test('code 更新而 launcher 内容相同只重启服务，活动 launcher 不�
     const service = { async start(context) { starts.push(context.codeVersion); await this.onHealthy(); },
         async stop() { stops++; } };
     const controller = new Controller({ ...f.config, launcherVersion: 1, launcherRoot, service }, () => {}, () => { switches++; });
+    const extractions = [];
+    const extract = controller.releases.extract.bind(controller.releases);
+    controller.releases.extract = async (...args) => {
+        extractions.push(args[3]);
+        return extract(...args);
+    };
     const result = await controller.handle({ type: 'service.apply', requestId: 'service-only', payload: {} });
     assert.equal(result.applied, true);
     assert.equal(switches, 0);
     assert.equal(stops, 1);
     assert.deepEqual(starts, [2]);
+    assert.deepEqual(extractions, ['code'], '相同启动器只应解压服务代码，不能先按 launcher 重复解压');
     assert.equal(releases.current().codeVersion, 2);
     assert.equal(files.read(f.root, 'updates/launcher-state.json'), null);
+});
+
+test('跳过 launcher 预解压后仍校验目标代码中的启动器指纹', async t => {
+    const f = await fixture(t);
+    const { source, entries } = await signedLauncherSource(f, 2);
+    const launcherRoot = path.join(f.temp, 'active-launcher');
+    for (const [relative, value] of Object.entries(entries)) await write(launcherRoot, relative, value);
+    await write(launcherRoot, PREFIX + 'entry.js', '正在运行的旧启动器');
+    const bad = structuredClone(source);
+    bad.components.code.launcherSha256 = await launcherIdentity(launcherRoot);
+    bad.manifest = sign(bad.components);
+    const releases = new Releases({ ...f.config, launcherRoot });
+    assert.equal(await releases.stageLauncher(bad), null, '已验签指纹与运行文件相同，应跳过预解压');
+    await assert.rejects(releases.prepare(bad, true), /签名清单与启动器内容指纹不符/u);
+    assert.equal(releases.current(), null, '内容不符时不能提交服务组合');
 });
 
 test('launcher 内容变化仍交给原切换流程，签名指纹错误拒绝', async t => {

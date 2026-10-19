@@ -207,6 +207,10 @@ class Releases {
             if (!fs.statSync(file).isFile()) throw new Error('代码入口缺失');
         }
         if (await files.hash(path.join(directory, 'package-lock.json')) !== entry.requiredLockSha256) throw new Error('代码锁指纹不符');
+        // 相同启动器会跳过预解压；服务代码正常解压后仍必须核对签名的启动器内容。
+        if (entry.launcherSha256 && await launcherIdentity(directory) !== entry.launcherSha256) {
+            throw new Error('签名清单与启动器内容指纹不符');
+        }
     }
     async validateTask(directory, entry) {
         const value = files.read(directory, 'task-code-manifest.json', null, 1024 ** 2);
@@ -252,6 +256,10 @@ class Releases {
     }
     async stageLauncher(source, signal) {
         const entry = source.components.code;
+        // 已验签清单的启动器指纹与当前实际文件相同，直接进入服务准备，避免额外解压一次代码包。
+        const activeRoot = this.config.launcherRoot || path.resolve(__dirname, '../../../../..');
+        const activeIdentity = await launcherIdentity(activeRoot).catch(() => null);
+        if (entry.launcherSha256 && activeIdentity === entry.launcherSha256) return null;
         const destination = files.safe(this.root, path.join(this.root, `updates/code/code-v${entry.version}`));
         const zip = await this.fetch(source, 'code', entry, signal);
         const existed = fs.existsSync(destination);
@@ -278,8 +286,6 @@ class Releases {
             } finally { await fs.promises.rm(verify, { recursive: true, force: true }); }
         }
         // 当前执行文件所在的根目录可能是APK基线或旧code版本；缺少新文件时应升级，而不是阻断服务更新。
-        const activeRoot = this.config.launcherRoot || path.resolve(__dirname, '../../../../..');
-        const activeIdentity = await launcherIdentity(activeRoot).catch(() => null);
         if (activeIdentity === targetIdentity) return null;
         return { version: entry.version, manifest: source.manifest };
     }

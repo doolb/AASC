@@ -1,5 +1,21 @@
 # Offline 可热更 JS 启动器规格（源码已实现，待过渡APK验收）
 
+## 服务更新跳过重复 launcher 解压（2026-10-19）
+
+```text
+已有声明 := 已验签的清单code.launcherSha256；当前运行launcher文件集合；目标code ZIP的大小与SHA-256校验；服务代码解压与健康提交
+更新请求且目标codeVersion不同:
+    从当前运行launcherRoot计算实际launcherIdentity
+    若签名清单含launcherSha256且与实际身份相同:
+        stageLauncher直接返回“无需切换”，不预下载/预解压目标code到launcher阶段
+        继续服务准备流程，下载并解压目标code一次
+        服务代码验证阶段计算解压后launcherIdentity，必须等于清单launcherSha256才允许安装/健康提交
+    否则沿用stageLauncher原有目标目录验证、必要时解压、差异切换与回退流程
+旧清单没有独立launcherSha256:
+    保留原始ZIP逐字节追溯与内容比较，不凭版本号跳过
+验证 := 相同指纹时无extracting/launcher事件且只解压一次code；不同指纹仍切换；伪造指纹或ZIP内容不符仍拒绝
+```
+
 ## launcher 131 重复切换排查伪代码（2026-10-19，待目标设备）
 
 ```text

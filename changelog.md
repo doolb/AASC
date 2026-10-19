@@ -13396,3 +13396,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 
 - ✅ [2026-10-19] Android 控制端与显示端全部颜色入口采用参照 PC 的色域、色相条和 HEX 选色面板，PC 原生选色器保持现状。
   - 新增 `android-color-picker.js`、`android-color-picker.css` 与浏览器定向测试；`display.html`、`upload.html` 加载共享组件。保留原颜色控件 ID、实时 `input` 预览、确认 `change` 保存和取消回退。同步 design/spec/task/todo/usage；相关浏览器、背景光晕和主题定向测试 13/13 通过，JavaScript 语法与差异检查通过。服务网页代码修改标记 `servicePackage=true`，设备验收待更新服务代码包。
+
+### Offline 服务更新跳过重复 launcher 解压
+
+- ✅ [2026-10-19] 修复启动器内容未变化时仍预解压目标 code 并显示“解压 launcher”。
+  - `releases.js` 先比较当前实际启动器指纹与已验签清单，相同则直接进入服务更新；服务代码正常解压后再次校验签名启动器指纹。`offline-js-launcher.test.js` 覆盖只解压一次 code、伪造指纹拒绝、不同指纹切换和旧清单兼容；`npm run test:offline-launcher` 42/42、代码包定向测试 17/17 通过。同步 design/spec/task/todo；`servicePackage=true`、`minApk=true` 待出包。Note8 已观察到此前 code v138 服务健康而 launcher 仍为 v131；修复版首次升级及后续纯服务更新待现场验收。
