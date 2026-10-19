@@ -40,6 +40,12 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: true
         }));
         assert.equal(await page.$$eval('.display-game-point', list => list.length), 81);
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true,
+            '等待唤醒时应保留棋盘数据但隐藏棋盘');
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'voiceConversationState', state: 'activeGroup'
+        }));
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false);
         assert.equal(await page.$eval('#displayGameShell', shell => getComputedStyle(shell).backgroundColor),
             'rgba(0, 0, 0, 0)');
         await page.addStyleTag({ path: path.join(PUBLIC, 'css/theme.css') });
@@ -61,6 +67,25 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             turn: 'User', result: '进行中'
         }));
         assert.equal(await page.evaluate(() => window.__sent.at(-1).type), 'gameRecover');
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'voiceConversationState', state: 'waitingWake'
+        }));
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'voiceConversationState', state: 'activePrivate'
+        }));
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'gameSnapshot', gameId: 'g1', revision: 2, size: 9,
+            board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: false
+        }));
+        assert.equal(await page.$eval('#displayGameShell', shell => shell.hidden), true);
+        assert.equal(await page.$eval('#displayGameReopen', button => button.hidden), false);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'voiceConversationState', state: 'disabled'
+        }));
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true);
+        assert.equal(await page.$eval('#displayGameReopen', button => button.hidden), true);
         await page.evaluate(() => window.__emit('stage.resize', {
             width: 740, height: 390, rotation: 90
         }));
@@ -71,6 +96,8 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             visible: true, demo: true
         }));
         assert.equal(await page.$eval('[data-coordinate="C3"]', button => button.disabled), true);
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false,
+            '演示棋盘在对话未激活时仍可显示');
         assert.match(await page.$eval('#displayGameStatus', node => node.textContent), /演示/);
         const sentBeforeClose = await page.evaluate(() => window.__sent.length);
         await page.click('#displayGameClose');

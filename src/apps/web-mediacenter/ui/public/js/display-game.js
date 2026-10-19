@@ -3,6 +3,11 @@
     let game = null;
     let send = () => false;
     let pending = false;
+    let conversationState = 'waitingWake';
+
+    function isConversationActive() {
+        return conversationState === 'activeGroup' || conversationState === 'activePrivate';
+    }
 
     function resize({ width, height, rotation }) {
         const layer = refs.layer;
@@ -31,13 +36,16 @@
 
     function refreshView() {
         if (!game || !refs.layer) return;
-        refs.layer.hidden = false;
-        refs.shell.hidden = game.visible === false;
-        refs.reopen.hidden = game.visible !== false;
-        refs.layer.setAttribute('aria-hidden', String(game.visible === false));
+        // 演示独立展示；真实棋盘只在当前 AI 对话活动时可见，隐藏不会改写棋局。
+        const available = game.demo === true || isConversationActive();
+        refs.layer.hidden = !available;
+        refs.shell.hidden = !available || game.visible === false;
+        refs.reopen.hidden = !available || game.demo === true || game.visible !== false;
+        refs.layer.setAttribute('aria-hidden', String(!available));
         setStatus(turnLabel());
         refs.board.querySelectorAll('.display-game-point').forEach(button => {
-            const playable = game.demo !== true && game.result === '进行中' && game.turn === 'User'
+            const playable = available && game.visible !== false && game.demo !== true
+                && game.result === '进行中' && game.turn === 'User'
                 && !pending && button.dataset.stone === '.';
             button.disabled = !playable;
         });
@@ -81,6 +89,12 @@
     }
 
     function handleMessage(message) {
+        if (message?.type === 'voiceConversationState') {
+            conversationState = message.state || 'waitingWake';
+            if (game) refreshView();
+            // 语音模块还需要处理该事件，不能由游戏层独占。
+            return false;
+        }
         if (!message || !['gameSnapshot', 'gameDelta', 'gameVisibility', 'gameProposal', 'gameError',
             'gameDemoEnd'].includes(message.type)) return false;
         if (message.type === 'gameDemoEnd') {
@@ -169,6 +183,7 @@
             if (game && game.demo !== true) send({ type: 'gameView', visible: true, revision: game.revision });
         });
         const state = stage.getState();
+        conversationState = state.voiceConversationState || 'waitingWake';
         if (state.rotationGeometry) resize({ width: state.rotationGeometry.logicalWidth,
             height: state.rotationGeometry.logicalHeight, rotation: state.rotationGeometry.rotation });
         // 页面脚本可能在舞台订阅前已收到首连快照，因此主动补拉一次权威状态。

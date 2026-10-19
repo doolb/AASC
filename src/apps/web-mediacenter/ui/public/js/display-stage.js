@@ -37,6 +37,7 @@
         rotation: 0,
         rotationGeometry: null,
         displayId: null,
+        voiceConversationState: 'waitingWake',
         transport: null,
         snapshotRequested: false
     };
@@ -399,6 +400,10 @@
             state.displayId = message.id;
             publish('display.identity', { displayId: state.displayId });
             return true;
+        }
+        // 保留服务端最新对话状态；游戏层即使晚于 WebSocket 消息初始化，也能读取权威值。
+        if (message.type === 'voiceConversationState') {
+            state.voiceConversationState = message.state || 'waitingWake';
         }
         const consumed = publish('server.message', message);
         if (CHAT_MESSAGE_TYPES.has(message.type)) return consumed;

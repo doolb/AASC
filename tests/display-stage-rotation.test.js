@@ -22,6 +22,19 @@ function loadDisplayStageApi() {
     return window.DisplayStage;
 }
 
+test('显示端舞台缓存服务端对话状态并继续分发事件', () => {
+    const stage = loadDisplayStageApi();
+    assert.equal(stage.getState().voiceConversationState, 'waitingWake');
+    const received = [];
+    stage.getBus().subscribe('server.message', message => {
+        received.push(message);
+        return false;
+    });
+    assert.equal(stage.handleServerMessage({ type: 'voiceConversationState', state: 'activePrivate' }), false);
+    assert.equal(stage.getState().voiceConversationState, 'activePrivate');
+    assert.equal(received.length, 1);
+});
+
 test('交互舞台按四个直角旋转角度交换逻辑尺寸并映射安全区和键盘边缘', () => {
     const stage = loadDisplayStageApi();
     const expected = {
