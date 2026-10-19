@@ -29,6 +29,9 @@
 
 ### Offline 启动器独立版本与服务单独更新
 
+- ✅ [2026-10-19] 控制端服务器面板的“当前运行版本”和节点卡片显示活动启动器版本。
+  - `runtime-version-info.js` 从 `updates/launcher-state.json.active` 读取独立 `launcherVersion`，旧清单回退到活动 code 版本；`server-list.js` 显示“启动器: vN”，`self-test.js` 校验可选版本字段。同步 sub-server design/spec、self-test spec、task/todo；定向测试 10/10、`npm run test:subserver-update` 64/64、JavaScript 语法及差异检查通过。`servicePackage=true` 待出包，外网设备显示待上线验收。
+
 - 📝 [2026-10-19] 核对 launcher 版本查看位置：发布目标在签名清单 `payload.components.code.launcherVersion`，设备活动版本在 `updates/launcher-state.json` 的 `active.manifest.payload.components.code.launcherVersion`；旧清单回退到 `active.version`。
   - `launcher.ready.launcherReleaseVersion` 已发送独立版本，当前启动器网页未显示；发布清单目标 code 136、launcher 131。仅源码和清单只读核对，未修改运行代码。
 

@@ -98,6 +98,7 @@
         const updateStates = { completed: '已完成', failed: '失败', preparing: '准备中', applying: '应用中' };
         const fields = [
             ['APK', versions.apk],
+            ['启动器', versions.launcher],
             ['服务代码', versions.code],
             ['依赖', versions.dependencies],
             ['显示端', versions.display],

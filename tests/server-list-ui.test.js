@@ -14,6 +14,7 @@ const scriptPath = path.join(root, 'src/apps/web-mediacenter/ui/public/js/server
 function createServerListContext(fetchImpl) {
     const elements = {
         serverListContent: { innerHTML: '' },
+        serverVersionSummary: { innerHTML: '', textContent: '' },
         serverListStatus: { textContent: '' },
         serverListRefreshBtn: { disabled: false, addEventListener() {} },
         serverAddressInput: { value: '' },
@@ -71,6 +72,7 @@ test('服务器列表加载 AASC 节点目录接口并渲染节点信息', async
                         metadata: {
                             versions: {
                                 apk: 'apk-0.2.24-offline-min',
+                                launcher: 'v131',
                                 code: 'v17',
                                 dependencies: 'v4',
                                 display: '1789980000000',
@@ -97,6 +99,9 @@ test('服务器列表加载 AASC 节点目录接口并渲染节点信息', async
     assert.match(elements.serverListContent.innerHTML, /控制端<\/dt><dd>1/);
     assert.match(elements.serverListContent.innerHTML, /媒体库<\/dt><dd>3/);
     assert.match(elements.serverListContent.innerHTML, /服务代码: v17/);
+    assert.match(elements.serverListContent.innerHTML, /启动器: v131/);
+    assert.match(elements.serverVersionSummary.innerHTML, /启动器: v131/);
+    assert.match(elements.serverVersionSummary.innerHTML, /服务代码: v17/);
     assert.match(elements.serverListContent.innerHTML, /服务代码路径: \/data\/data\/com\.aasc\.display\.offline\/files\/aasc-server\/updates\/code\/code-v17/);
     assert.match(elements.serverListContent.innerHTML, /依赖路径: \/data\/data\/com\.aasc\.display\.offline\/files\/aasc-server\/updates\/dependencies\/dependencies-v4\/node_modules/);
     assert.match(elements.serverListContent.innerHTML, /依赖来源: active-release/);

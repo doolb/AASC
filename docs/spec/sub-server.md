@@ -1,5 +1,16 @@
 # 子服务器管理 实现文档
 
+## 服务器面板启动器版本（2026-10-19）
+
+```text
+已有声明 := runtime-version-info读取当前服务版本；服务器快照与/api/status复用versions；server-list格式化版本
+新增定义 := versions.launcher为可选字符串，表示设备当前活动launcher独立版本
+操作流程 := 读取数据根updates/launcher-state.json → 取active.manifest.payload.components.code.launcherVersion → 有效正整数则格式化为vN
+操作流程 := 旧清单没有独立版本 → 使用active.version格式化；没有有效active → 不返回launcher字段
+操作流程 := 控制端服务器页面读取原有servers快照 → 当前运行版本与节点卡片均显示“启动器: vN” → 字段缺失时保持原有布局
+验证 := 新清单、旧清单、无状态、损坏状态及HTML转义；原有代码/依赖版本与页面操作正常
+```
+
 ## 模块结构
 
 ```

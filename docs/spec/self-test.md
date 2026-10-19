@@ -2098,7 +2098,7 @@ npm test:subserver-update → 62项；offline-bootstrap → 60项；offline-sync
 Node min → Offline common+本平台 → 无npm → 后续复用缓存
 坏签名/锁/ZIP/冲突/ABI/缓存 → 准备失败不停车；健康失败 → 恢复上一代码+完整依赖
 2MiB随机数据ZIP → Node26builtin范围读取背压完成且全部字节一致
-控制端server_runtime_version → 查询实际目录/来源；最近更新failed则返回失败详情
+控制端server_runtime_version → 查询实际目录/来源；可选launcher版本存在时验证vN并显示；最近更新failed则返回失败详情
 Android全部223项 → 分组签名/选择/指纹/ABI/冲突/链接，兼容旧单包读取及bootstrap
 生产四组v9 → ZIP展开与实际内容指纹核对；目标组合版本匹配锁；Linux原生模块加载
 设备/Windows运行及发布结果 := 单独记录，不由单测推断

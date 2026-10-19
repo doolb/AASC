@@ -25,6 +25,19 @@ function formatVersion(value, fallback = '未提供') {
 }
 
 /**
+ * 读取已健康提交的活动启动器版本，不把待切换候选或发布目标当成当前运行版本。
+ * 旧清单没有独立版本字段时，活动 code 版本就是旧启动器的版本身份。
+ */
+function readActiveLauncherVersion(projectRoot) {
+    const active = readJsonObject(path.join(projectRoot, 'updates', 'launcher-state.json'))?.active;
+    if (!active || typeof active !== 'object' || Array.isArray(active)) return null;
+    const code = active.manifest?.payload?.components?.code;
+    if (code?.version !== active.version) return null;
+    const version = code.launcherVersion === undefined ? active.version : code.launcherVersion;
+    return Number.isSafeInteger(version) && version > 0 ? `v${version}` : null;
+}
+
+/**
  * 读取当前 Node 服务实际运行的版本来源。
  *
  * Offline 热更新版本以 updates/active-release.json 为准；没有热更新指针时，
@@ -50,11 +63,13 @@ function getRuntimeVersionInfo(options = {}) {
         ? activeRelease.legacyDependencies === true ? 'legacy-root' : 'active-release'
         : subserverRelease ? 'target-node' : nodeMinRelease ? 'offline-node' : bundledBaseline ? 'bundled-baseline' : 'package-root';
     const lastUpdate = readJsonObject(path.join(projectRoot, 'updates/subserver/update-result.json'));
+    const launcherVersion = readActiveLauncherVersion(projectRoot);
 
     return {
         ...(require('../task-engine/task-code-catalog').getTaskCodeCatalog()
             ? { taskCode: require('../task-engine/task-code-catalog').getTaskCodeCatalog().status() } : {}),
         apk: serverVersion || packageVersion,
+        ...(launcherVersion ? { launcher: launcherVersion } : {}),
         code: formatVersion(serviceSource.codeVersion, packageVersion),
         dependencies: formatVersion(serviceSource.dependencyVersion),
         display: options.displayVersion === undefined || options.displayVersion === null

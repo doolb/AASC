@@ -879,7 +879,7 @@ const SelfTest = {
         {
             id: 'server_runtime_version',
             name: '服务更新版本来源测试',
-            description: '检查实际代码、依赖目录和最近受管更新结果',
+            description: '检查活动启动器版本、实际代码、依赖目录和最近受管更新结果',
             category: 'AASC系统',
             run: async () => {
                 try {
@@ -890,10 +890,14 @@ const SelfTest = {
                     if (!response.ok || !versions || required.some(key => typeof versions[key] !== 'string' || !versions[key])) {
                         return { success: false, message: '实际运行版本或依赖路径缺失', details: JSON.stringify(versions || {}) };
                     }
+                    // 普通 Node 服务器不运行 Offline 启动器；只校验实际报出的版本，不伪造默认版本。
+                    if (versions.launcher !== undefined && !/^v[1-9][0-9]*$/u.test(versions.launcher)) {
+                        return { success: false, message: '活动启动器版本无效', details: String(versions.launcher) };
+                    }
                     if (versions.update?.status === 'failed') {
                         return { success: false, message: '最近一次服务更新失败', details: versions.update.message || JSON.stringify(versions.update) };
                     }
-                    return { success: true, message: `代码 ${versions.code} / 依赖 ${versions.dependencies}`,
+                    return { success: true, message: `${versions.launcher ? `启动器 ${versions.launcher} / ` : ''}代码 ${versions.code} / 依赖 ${versions.dependencies}`,
                         details: `${versions.dependencySource}；代码：${versions.codePath}；依赖：${versions.dependenciesPath}` };
                 } catch (error) {
                     return { success: false, message: '无法读取服务运行版本', details: error.message };
