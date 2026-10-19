@@ -1,5 +1,8 @@
 ### 双端音色列表试听
 
+- ✅ [2026-10-20] 固定试听文案按原文增加“喵，轮到你落子啦😺”与“喵，轮到你落子咯😺”，保留原六句，随机池扩为八句。
+  - 更新 `tts-provider-ws.js`、协议测试及 TTS design/spec/task/todo；`npm run test:tts-voice-picker` 29/29 通过，沿用现有 WAV 缓存和 `servicePackage=true` 待出包状态。
+
 - ✅ [2026-10-20] 固定试听文案新增“喵，轮到你落子咯。”与“喵，轮到你落子啦。”，随机池由四句扩为六句。
   - 更新 `tts-provider-ws.js`、协议测试及 TTS design/spec/task/todo；`npm run test:tts-voice-picker` 29/29 通过，沿用面板 WAV 缓存与 `servicePackage=true` 待出包状态。
 

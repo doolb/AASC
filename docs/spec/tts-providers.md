@@ -8,7 +8,7 @@
 试听请求 := previewTtsVoice {type, provider, voice, requestId}；不接受客户端文本或业务配置覆盖
 来源校验 := 服务端仅接受已登记控制端或显示端；显示端沿既有入口移除已登记 displayId 传输字段
 生成 := 从服务端固定短句中随机取一句；用 ai_reply 业务和显式 Provider/voice 调用现有 TTS Provider 服务
-固定短句 := 原四句 + “喵，轮到你落子咯。” + “喵，轮到你落子啦。”；随机选择范围为六句
+固定短句 := 原四句 + “喵，轮到你落子咯。” + “喵，轮到你落子啦。” + “喵，轮到你落子啦😺” + “喵，轮到你落子咯😺”；随机选择范围为八句，新增两句原文不补句号
 回包 := ttsVoicePreview {requestId, success, audioUrl?, message?}；只回复发起端，不广播或保存音色配置
 缓存键 := Provider + 模型 + voice.id + 当前 Provider 语速 + 全局音量
 面板缓存 := 当前页面 fetch 音频 URL 获取 WAV Blob，createObjectURL 保存至 Map；命中直接本地重播
