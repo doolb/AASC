@@ -15,10 +15,12 @@ const PROVIDER_TIERS = Object.freeze({
 });
 const TIERS = Object.freeze(['mini', 'flash', 'pro']);
 const CONFIG_KEY = 'chat.modelTierSelection';
+const LEGACY_MODEL_TIERS = Object.freeze({ 'doubao-think': Object.freeze({ providerId: 'doubaochat', tier: 'flash' }) });
 
 function identifyModel(modelName, tiersByProvider = {}) {
     const name = String(modelName || '').trim().toLowerCase();
     if (!name) return null;
+    if (Object.hasOwn(LEGACY_MODEL_TIERS, name)) return LEGACY_MODEL_TIERS[name];
     for (const [providerId, mapping] of Object.entries(PROVIDER_TIERS)) {
         const matches = TIERS.filter(tier => {
             const aliases = [mapping.models[tier], mapping.actualModels[tier]];
@@ -124,7 +126,10 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
             throw new Error('当前模型 Provider 未登录或不可用');
         }
         const tier = current.tiersByProvider[current.providerId];
-        const model = PROVIDER_TIERS[current.providerId].models[tier];
+        // 手工保留的旧模型名继续按原模式请求；面板重新选档时才写入新的开发映射。
+        const legacyModel = String(current.modelName || '').trim().toLowerCase();
+        const model = Object.hasOwn(LEGACY_MODEL_TIERS, legacyModel)
+            ? legacyModel : PROVIDER_TIERS[current.providerId].models[tier];
         if (!model) throw new Error('当前 Provider 没有此档位映射');
         return {
             providerId: current.providerId, tier, model,

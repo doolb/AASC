@@ -23,7 +23,7 @@ Qwen档位目标 := mini → Qwen3.6-Flash；flash → Qwen3.7；pro → Qwen3.7
 旧版 chat 消息入口 → 与普通 chatMessage 共用当前三档解析；角色 Agent 保持自己的配置
 Chat2API 任务启动或停止后 → 尝试广播可选 Provider 快照；快照读取失败只记录诊断，不改变任务启停结果
 Qwen 三档 → 使用 aasc-qwen-mini/flash/pro 专用请求别名；面板识别不依赖 Chat2API 映射配置
-豆包快选 mini/flash 共用思考0请求，pro 沿用思考3；手工配置旧 doubao-think 时不由快选接管，继续以原模型名调用
+豆包快选 mini/flash 共用思考0请求，pro 沿用思考3；手工配置旧 doubao-think 时识别为豆包普通档，但请求沿用该当前模型名；只有重新选择快选普通才写入 doubao
 当前运行的 Chat2API Responses 服务 → 直接建立响应流；response.failed 或缺少 response.completed 时作为失败回报
 Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不复用不兼容上游会话
 两端快选面板展示当前模型名、Provider 与档位；档位按钮按 aria-pressed 应用现有主题预览按钮状态：选中使用 accent-secondary 到 accent-color 渐变、白字与 accent-color 外圈，未选中使用 bg-secondary、text-secondary、border-color 且无阴影；浅色主题仍保持中性未选中样式；外部登录保留入口与接口接线，本次不启动登录
