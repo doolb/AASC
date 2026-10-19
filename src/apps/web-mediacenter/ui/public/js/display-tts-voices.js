@@ -6,6 +6,7 @@
         init(options) {
             picker ||= root.TtsVoicePicker.create();
             picker.init({ ...options, prefix: 'display', onOpen: () => root.DisplayMmdLighting?.close() });
-        }
+        },
+        close() { picker?.close(); }
     });
 }(window));

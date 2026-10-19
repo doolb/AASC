@@ -95,7 +95,11 @@
     background: linear-gradient(to right, red, #ff0, #0f0, #0ff, #00f, #f0f, red);
 }
 
-.android-color-hue::-webkit-slider-runnable-track { height: 16px; background: transparent; }
+.android-color-hue::-webkit-slider-runnable-track {
+    height: 16px;
+    border-radius: 8px;
+    background: linear-gradient(to right, red, #ff0, #0f0, #0ff, #00f, #f0f, red);
+}
 .android-color-hue::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 20px;

@@ -261,6 +261,7 @@
         }, { once: true });
     }
 
+    root.DisplayMmdPanelGroups = Object.freeze({ closeMotion: () => setMotionOpen(false) });
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, { once: true });
     else initialize();
 }(window));

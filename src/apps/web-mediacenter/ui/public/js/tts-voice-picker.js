@@ -19,7 +19,12 @@
         const requestId = () => `${prefix}-tts-${Date.now()}-${++sequence}`;
         const status = text => { refs.status.textContent = text || ''; };
         const cancelLocate = () => { locatePending = false; locateEpoch++; };
-        const close = () => { cancelLocate(); refs.panel.hidden = true; refs.toggle.setAttribute('aria-expanded', 'false'); };
+        const close = () => {
+            cancelLocate();
+            if (!refs?.panel || !refs?.toggle) return;
+            refs.panel.hidden = true;
+            refs.toggle.setAttribute('aria-expanded', 'false');
+        };
         const catalogKey = id => `${id}|${config?.providers[id]?.model || ''}`;
         const currentVoice = () => (config?.aiReplyDefault?.provider === provider ? config.aiReplyDefault.voice : null)
             || config?.providers[provider]?.defaultVoice;
@@ -281,7 +286,7 @@
             renderVoices();
             send({ type: 'getChatTtsConfig' });
         }
-        return Object.freeze({ init });
+        return Object.freeze({ init, close });
     }
     root.TtsVoicePicker = Object.freeze({ create });
 }(window));

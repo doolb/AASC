@@ -76,11 +76,15 @@ test('Android 色域、色相、HEX、确认与取消维持光晕事件契约', 
         await page.click(trigger);
         const initial = await page.evaluate(() => ({ type: document.getElementById('displayAppearanceGlowColor').type,
             color: document.querySelector('.android-color-hex').value,
+            hueTrack: getComputedStyle(document.querySelector('.android-color-hue'), '::-webkit-slider-runnable-track').backgroundImage,
             bounds: (() => {
                 const rect = document.querySelector('.android-color-dialog').getBoundingClientRect();
                 return rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight;
             })() }));
-        assert.deepEqual(initial, { type: 'hidden', color: '#8FA8D5', bounds: true });
+        assert.equal(initial.type, 'hidden');
+        assert.equal(initial.color, '#8FA8D5');
+        assert.equal(initial.bounds, true);
+        assert.match(initial.hueTrack, /linear-gradient/u);
 
         await page.$eval('.android-color-hue', input => {
             input.value = '120';

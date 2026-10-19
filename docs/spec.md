@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [显示端右侧设置面板互斥伪代码](spec/display-stage-panel-coordination.md)
+
 - [Android 颜色选择器伪代码](spec/android-color-picker.md)
 
 - [Android帧调度与窗口策略伪代码](spec/android-display-frame-policy.md)

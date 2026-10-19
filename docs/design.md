@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [显示端右侧设置面板互斥](design/display-stage-panel-coordination.md)
+
 - [Android 颜色选择器对齐 PC](design/android-color-picker.md)
 
 - [Android显示页60FPS与APK系统栏策略](design/android-display-frame-policy.md)

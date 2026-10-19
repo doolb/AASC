@@ -1,5 +1,14 @@
 # Android 颜色选择器实现文档
 
+## Android 色相滑条彩虹轨道（2026-10-19）
+
+```text
+已有声明 := 页面内 HSV 色域、色相 range 输入和 HEX 输入；颜色选择仍通过原控件 input/change 事件同步
+绘制 := 在 range 元素上保留彩虹渐变作为回退；在 ::-webkit-slider-runnable-track 上重复绘制同一渐变
+原因 := Android WebView 可能用原生轨道覆盖 range 元素背景；轨道本身必须携带渐变
+验证 := WebKit 轨道计算样式是彩虹渐变；Android 实机拖动能看到彩色轨道且颜色值持续更新
+```
+
 ## 双端颜色入口（2026-10-19）
 
 ```text
