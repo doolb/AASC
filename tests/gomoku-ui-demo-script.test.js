@@ -22,7 +22,8 @@ test('演示脚本只向当前显示端发送演示控制消息，不发送聊�
         });
     });
     const script = path.resolve(__dirname, '../scripts/demo/gomoku-ui-demo.js');
-    const child = spawn(process.execPath, [script, '--duration=100'], {
+    const child = spawn(process.execPath, [script, '--duration=100', '--delay-ms=350',
+        '--result-pause-ms=1200', '--winner=ai'], {
         env: { ...process.env, AASC_GOMOKU_SERVER_URL: `ws://127.0.0.1:${server.address().port}/control` }
     });
     let output = '';
@@ -34,5 +35,8 @@ test('演示脚本只向当前显示端发送演示控制消息，不发送聊�
     assert.equal(code, 0, output);
     assert.deepEqual(received.map(message => message.type), ['gameDemoStart', 'gameDemoStop']);
     assert.deepEqual(received.map(message => message.displayId), ['display-current', 'display-current']);
+    assert.equal(received[0].delayMs, 350);
+    assert.equal(received[0].resultPauseMs, 1200);
+    assert.equal(received[0].winner, 'ai');
     assert.match(output, /已恢复原棋盘/);
 });

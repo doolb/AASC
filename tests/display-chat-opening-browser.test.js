@@ -185,6 +185,27 @@ test('首次展开、会话恢复和迟到历史使用真实聊天与舞台模�
         assert.match(await text(), /完整答案/u);
     });
 
+    await context.test('游戏协议以灰色小字显示，历史恢复后仍可见且不会进入朗读正文', async () => {
+        await reset();
+        await deliver({ type: 'chatSession', session: { mode: 'group' } });
+        await page.click('#displayChatToggle');
+        await deliver({ type: 'chatInput', requestId: 'game-live', content: '下在 H8' });
+        const protocol = { type: 'chatGameProtocol', requestId: 'game-live', displayId: null,
+            sequence: 1, kind: 'GM', text: '<Game:五子棋,GM,落子,1234,2,User,H8,AI,进行中>',
+            summary: 'GM · #1234 第2手 User H8' };
+        await deliver(protocol);
+        await deliver(protocol);
+        assert.equal(await page.$$eval('.display-chat-game-protocol-tip', nodes => nodes.length), 1);
+        await deliver({ type: 'chatResponse', requestId: 'game-live', success: true,
+            message: { content: '轮到我了', speech: '轮到我了' } });
+        const request = await latestHistory();
+        await deliver({ type: 'chatHistory', requestId: request.requestId,
+            history: [{ mode: 'group', role: 'assistant', content: '轮到我了', speech: '轮到我了',
+                gameTrace: [{ kind: 'GM', sequence: 1, text: protocol.text, summary: protocol.summary }] }] });
+        assert.equal(await page.$$eval('.display-chat-game-protocol-tip', nodes => nodes.length), 1);
+        assert.match(await text(), /GM · #1234 第2手/);
+    });
+
     await context.test('断线重连重新读取权威会话，保持面板关闭', async () => {
         await reset();
         await deliver({ type: 'chatSession', session: { mode: 'group' } });

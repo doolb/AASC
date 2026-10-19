@@ -207,6 +207,19 @@
     white-space: pre-wrap;
 }
 
+.chat-game-protocol-tip {
+    margin: 2px 0 5px;
+    padding: 3px 6px;
+    border-left: 2px solid color-mix(in srgb, var(--text-muted, #999) 55%, transparent);
+    color: var(--text-muted, #999);
+    background: color-mix(in srgb, var(--bg-surface-strong, #222) 38%, transparent);
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
 /* Markdown 消息内容样式：限制块级元素间距，避免标题和表格撑破聊天气泡。 */
 .chat-message-content p {
     margin: 0 0 8px;

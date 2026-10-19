@@ -443,11 +443,26 @@
         body.innerHTML = role === 'assistant'
             ? renderThinkAndAnswer(content, options.reasoning)
             : renderMarkdown(content);
-        item.append(author, body);
+        item.appendChild(author);
+        for (const entry of Array.isArray(options.gameTrace) ? options.gameTrace : []) {
+            item.appendChild(createGameProtocolTip(entry));
+        }
+        item.appendChild(body);
         if (role === 'assistant' && options.playback) addPlaybackButton(item, options.playback);
         state.refs.messages.appendChild(item);
         state.refs.messages.scrollTop = state.refs.messages.scrollHeight;
         return item;
+    }
+
+    function createGameProtocolTip(entry) {
+        const tip = document.createElement('div');
+        tip.className = 'display-chat-game-protocol-tip';
+        tip.dataset.gameSequence = String(entry.sequence || '');
+        const full = String(entry.text || '');
+        tip.title = full;
+        tip.textContent = entry.summary || (full.startsWith('<Game:五子棋,GM,快照,')
+            ? `${full.slice(0, full.lastIndexOf(',') + 1)}棋盘已同步>` : full);
+        return tip;
     }
 
     function replaceStreamingMessage(requestId, content, options = {}) {
@@ -480,6 +495,7 @@
                 appendMessage('user', item.content || item.text || '');
             } else if (item.role === 'assistant') {
                 appendMessage('assistant', item.content || item.text || '', { reasoning: item.reasoning,
+                    gameTrace: item.gameTrace,
                     playback: { ...item, content: item.content || item.text, chatReplyContext: getReplyPlaybackContext(item, history, index) } });
             }
         }
@@ -793,6 +809,27 @@
             });
             streaming.ttsOrigin = getReplyPlaybackContext({ user: content });
             state.streaming.set(requestId, streaming);
+            return true;
+        }
+        if (message.type === 'chatGameProtocol') {
+            if (message.displayId && state.displayId && message.displayId !== state.displayId) return true;
+            const requestId = String(message.requestId || '');
+            if (!requestId || typeof message.text !== 'string') return true;
+            const item = state.streaming.get(requestId);
+            const duplicate = [...state.refs.messages.querySelectorAll('.display-chat-game-protocol-tip')]
+                .some(tip => tip.parentElement?.dataset.requestId === requestId
+                    && tip.dataset.gameSequence === String(message.sequence));
+            if (duplicate) return true;
+            const tip = createGameProtocolTip(message);
+            if (item) item.insertBefore(tip, item.querySelector('.display-chat-message-body'));
+            else {
+                const standalone = document.createElement('article');
+                standalone.className = 'display-chat-game-protocol-only';
+                standalone.dataset.requestId = requestId;
+                standalone.appendChild(tip);
+                state.refs.messages.appendChild(standalone);
+            }
+            state.refs.messages.scrollTop = state.refs.messages.scrollHeight;
             return true;
         }
         if (message.type === 'chatChunk') {

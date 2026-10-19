@@ -1709,6 +1709,7 @@ function generateId() {
 
 const DEFAULT_CAPABILITIES = {
     mediaRendering: true,
+    games: [],
     voicePlayback: true,
     voiceRecording: true,
     voiceRecognition: false,
@@ -1929,6 +1930,7 @@ function normalizeDisplayUserCapabilities(capabilities) {
     }
     // Android 控制端是显示端原生能力声明，不能由控制端伪造或关闭。
     delete normalized.androidControlPage;
+    delete normalized.games;
     if (Object.prototype.hasOwnProperty.call(source, 'llm')) {
         normalized.llm = source.llm
             && typeof source.llm === 'object'
@@ -9423,6 +9425,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         const incomingCapabilities = data.capabilities && typeof data.capabilities === 'object'
             ? { ...data.capabilities }
             : {};
+        incomingCapabilities.games = Array.isArray(incomingCapabilities.games)
+            ? incomingCapabilities.games.filter(name => name === '五子棋').slice(0, 1) : [];
         if (Object.prototype.hasOwnProperty.call(incomingCapabilities, 'audioInputDevices')) {
             incomingCapabilities.audioInputDevices = normalizeAudioInputDevices(incomingCapabilities.audioInputDevices);
         }
@@ -9631,6 +9635,7 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
             images: data.images,
             displayContent: data.displayContent || data.content,
             displayId: targetDisplayId,
+            sourceDisplayId: isDisplayChatSource ? displayId : null,
             displayIds: targetDisplayIds,
             playOnControl,
             templateTarget: data.templateTarget || data.target,
@@ -9662,7 +9667,11 @@ async function handleControlMessageFallback(data, ws) {
         const displayId = typeof data.displayId === 'string' ? data.displayId : '';
         const result = isLoopbackAddress(ws?._socket?.remoteAddress)
             ? data.type === 'gameDemoStart'
-                ? gomokuDisplayDemo.start(ws, displayId, data.size === undefined ? 15 : Number(data.size))
+                ? gomokuDisplayDemo.start(ws, displayId, data.size === undefined ? 15 : data.size, {
+                    delayMs: data.delayMs,
+                    resultPauseMs: data.resultPauseMs,
+                    winner: data.winner
+                })
                 : gomokuDisplayDemo.stop(displayId, ws)
             : { ok: false, code: '演示仅允许本机控制连接' };
         ws.send(JSON.stringify({ type: 'gameDemoResult', action: data.type, ...result }));
@@ -11514,7 +11523,9 @@ async function handleChatMessage(options) {
         });
     }
     const voiceGenerationToken = beginDisplayConversationTtsGeneration(voiceOriginDisplayId);
+    const gameTrace = [];
     const streamReply = () => runGameAwareChat({ chat, gameService: gomokuGame,
+        getAvailableGames: id => getDisplayCapabilities(id)?.games || [],
         displayId: displayId || voiceOriginDisplayId, content,
         userText: internalGameUpdate ? '' : content,
         internalSignal: internalGameUpdate,
@@ -11534,6 +11545,15 @@ async function handleChatMessage(options) {
             : null,
         images
     }, callbacks: {
+        onGameProtocol: entry => {
+            gameTrace.push(entry);
+            const payload = { type: 'chatGameProtocol', requestId: effectiveRequestId,
+                displayId: preferredDisplayId, ...entry };
+            sendToControl(payload);
+            if (preferredDisplayId && preferredDisplayId !== options.sourceDisplayId) {
+                sendToDisplay(preferredDisplayId, payload);
+            }
+        },
         onChunk: (chunk, fullMessage, reasoning) => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage, reasoning });
@@ -11642,6 +11662,7 @@ async function handleChatMessage(options) {
                     content: fullMessage,
                     reasoning,
                     speech,
+                    gameTrace,
                     mode: messageMode,
                     // 将本轮输入绑定到回复，历史回放不会借用另一轮或另一会话的最新输入。
                     replyToMessageId: userMessageRecord?.id || null,

@@ -44,6 +44,7 @@ const Chat = {
     isLoading: false,
     currentStreamingMessage: '',
     currentStreamingReasoning: '',
+    currentGameTrace: [],
     currentReplyTtsContext: null,
     activeRequestId: null,
     requestCounter: 0,
@@ -1302,6 +1303,7 @@ const Chat = {
                 content = item.assistant;
             }
 
+            const gameTrace = roleClass === 'assistant' ? this.renderGameTrace(item.gameTrace) : '';
             const thinkButton = roleClass === 'assistant' && item.reasoning
                 ? "<button type=\"button\" class=\"chat-think-btn\" data-reasoning=\"" + this.escapeHtml(item.reasoning) + "\" onclick=\"Chat.showThinkModal(this)\" title=\"查看思考内容\">Think</button>"
                 : '';
@@ -1315,7 +1317,7 @@ const Chat = {
             return `
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
-                    <div class="chat-message-content">${this.renderMessageImages(item.images)}${ChatMarkdown.render(content)}</div>
+                    <div class="chat-message-content">${this.renderMessageImages(item.images)}${gameTrace}${ChatMarkdown.render(content)}</div>
                     ${thinkButton}
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                     ${deleteButton}
@@ -1324,6 +1326,17 @@ const Chat = {
         }).join('');
         
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    },
+
+    renderGameTrace(entries) {
+        if (!Array.isArray(entries)) return '';
+        return entries.slice(0, 20).filter(entry => entry && typeof entry.text === 'string')
+            .map(entry => {
+                const full = entry.text;
+                const text = entry.summary || (full.startsWith('<Game:五子棋,GM,快照,')
+                    ? `${full.slice(0, full.lastIndexOf(',') + 1)}棋盘已同步>` : full);
+                return `<div class="chat-game-protocol-tip" title="${this.escapeHtml(full)}">${this.escapeHtml(text)}</div>`;
+            }).join('');
     },
     
     handleKeyPress(event) {
@@ -1811,6 +1824,7 @@ const Chat = {
         
         messagesContainer.appendChild(assistantMsg);
         this.currentStreamingReasoning = '';
+        this.currentGameTrace = [];
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
     
@@ -1822,12 +1836,25 @@ const Chat = {
         
         const streamingContent = document.getElementById('streamingContent');
         if (streamingContent) {
-            streamingContent.innerHTML = ChatMarkdown.render(data.message) + '<span class="chat-cursor">|</span>';
+            streamingContent.innerHTML = this.renderGameTrace(this.currentGameTrace)
+                + ChatMarkdown.render(data.message) + '<span class="chat-cursor">|</span>';
             
             const messagesContainer = document.getElementById('chatMessages');
             if (messagesContainer) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
+        }
+    },
+
+    handleGameProtocol(data) {
+        if (data.requestId !== this.activeRequestId || typeof data.text !== 'string') return;
+        if (this.currentGameTrace.some(entry => entry.sequence === data.sequence)) return;
+        this.currentGameTrace.push({ kind: data.kind, text: data.text,
+            summary: data.summary, sequence: data.sequence });
+        const streamingContent = document.getElementById('streamingContent');
+        if (streamingContent) {
+            streamingContent.innerHTML = this.renderGameTrace(this.currentGameTrace)
+                + ChatMarkdown.render(this.currentStreamingMessage || '') + '<span class="chat-cursor">|</span>';
         }
     },
     

@@ -1213,6 +1213,14 @@ function addMessage(message) {
     const speech = typeof message.speech === 'string'
         ? message.speech.substring(0, MAX_MESSAGE_LENGTH)
         : undefined;
+    // 游戏协议只供聊天界面展示；与正文分开保存，避免进入后续模型上下文和朗读。
+    const gameTrace = Array.isArray(message.gameTrace)
+        ? message.gameTrace.slice(0, 20).filter(item => item && typeof item.text === 'string')
+            .map(item => ({ kind: ['User', 'AI', 'GM'].includes(item.kind) ? item.kind : 'GM',
+                text: item.text.slice(0, 512), summary: typeof item.summary === 'string'
+                    ? item.summary.slice(0, 160) : '',
+                sequence: Number.isSafeInteger(item.sequence) ? item.sequence : 0 }))
+        : [];
     const msg = {
         id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
         timestamp: Date.now(),
@@ -1222,6 +1230,7 @@ function addMessage(message) {
         content: content,
         ...(reasoning ? { reasoning } : {}),
         ...(speech ? { speech } : {}),
+        ...(gameTrace.length ? { gameTrace } : {}),
         // 保存本轮用户消息引用，历史语音播放不会误取其他并发回复的提问。
         ...(typeof message.replyToMessageId === 'string'
             ? { replyToMessageId: message.replyToMessageId.slice(0, 128) } : {}),

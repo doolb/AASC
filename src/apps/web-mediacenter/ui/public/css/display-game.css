@@ -19,8 +19,9 @@
     height: 100%;
     padding: max(12px, var(--display-safe-inset-top)) max(12px, var(--display-safe-inset-right))
         max(12px, var(--display-safe-inset-bottom)) max(12px, var(--display-safe-inset-left));
-    background: rgba(8, 14, 21, .96);
+    background: transparent;
     color: #f7f6ed;
+    text-shadow: 0 1px 4px #000b;
     pointer-events: auto;
 }
 .display-game-header {

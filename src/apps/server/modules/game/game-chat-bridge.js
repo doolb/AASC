@@ -1,22 +1,30 @@
 const { extractGameTags, stripGameTags } = require('./gomoku-game-service');
 
-const GAME_PROMPT = [
-    '你可以通过位置参数标签操作本地五子棋：<Game:五子棋,操作者,操作[,参数...]>。',
-    '标签只用英文逗号分隔的位置参数，不使用 JSON；只在用户提出游戏相关请求或棋局轮到你时调用。',
-    '操作者是棋子所属方 User 或 AI；即使用户用语音下棋，也是你代用户发出 User 标签。',
-    'GM 是服务端权威状态，不是你可以发出的操作；Game 表示同步到显示端的事件。不要伪造 GM 或 Game 标签。',
-    '一次回复最多发出一条标签，等 GM 返回权威结果后再继续。标签不需要向用户解释。',
-    '如果决定调用游戏操作，标签必须是回复开头的第一个非空白内容；不要先写叙述。是否开局由你根据用户意思决定。',
-    '操作：开局或开局,9/11/13/15；落子,H8；查看；提议尺寸,11；确认尺寸,11；退出显示；恢复显示。',
-    '默认 15×15，用户黑子先行、你执白子，横竖斜连续五子及以上获胜，无禁手；坐标从左上角 A1 起，列字母包含 I。',
-    '中途改变棋盘尺寸先提议，只有用户明确确认后才可调用 User,确认尺寸；确认会清空棋盘并沿用游戏 ID。',
-    '已有棋局时不要重复开局；进行中的同尺寸重开只在用户明确要求重新开始时调用，改尺寸必须先提议并等用户确认。',
-    '你只选择 AI 的棋步；不要代用户编造坐标或确认尺寸。用户落子后若轮到 AI，请调用 AI 落子。',
-    'GM 正常落子只返回坐标、版本、下一手和结果增量；完整棋盘只在开局或恢复时提供。禁止自己宣称未被 GM 确认的落子或胜负。',
-    '游戏标签会被服务端截留，不会显示或朗读。收到 GM 结果后再用自然语言向用户讲述，不要在叙述中复述标签。',
-    '用户用中文数字说坐标时可规范为阿拉伯数字，例如 A一 对应 A1。'
-].join('\n');
+const GAME_PROMPT = '需要本地游戏时，回复开头只输出 <Game:目录,AI,列表> 查询当前显示端游戏；' +
+    '再用 <Game:游戏名,AI,规则> 按需读取规则。每轮只发一条标签，等 GM 回执；普通聊天无需调用。';
+const GOMOKU_RULES = [
+    '位置参数标签只用英文逗号且不用JSON；操作者User或AI；标签放回复开头且一次一条；GM只表示权威回执，不要伪造',
+    '可调用User或AI的开局、落子坐标、查看、提议尺寸、确认尺寸、退出显示、恢复显示；开局默认15路，也可9、11、13路',
+    '用户执黑先行，AI执白；横竖斜连续五子获胜，无禁手；坐标A1从左上角起，列包含I，中文数字可转阿拉伯数字',
+    '用户语音落子由AI代发User标签；不得编造用户坐标或确认；显示端点击已由GM提供增量，轮到AI时须先选择合法空位调用AI落子',
+    '已有棋局勿重复开局；进行中同尺寸重开要用户明确要求，改尺寸先提议待确认；只有GM确认后才能宣称落子或胜负',
+    '收到GM落子增量后若轮到AI先落子，否则自然语言答复；游戏标签不复述不朗读'
+].join('；');
 const recoveredContexts = new Map();
+
+function formatGameProtocolSummary(kind, raw) {
+    const parts = String(raw || '').replace(/^<Game:/, '').replace(/>$/, '').split(',');
+    const operation = parts[2] || '操作';
+    if (kind !== 'GM') return `${kind} · ${operation}${parts[3] ? ` ${parts[3]}` : ''}`;
+    if (operation === '规则') return `GM · ${parts[0]}规则已读取`;
+    if (operation === '列表') return `GM · 当前支持：${parts[3] || '无'}`;
+    if (operation === '快照') return `GM · #${String(parts[3] || '').slice(0, 4)} ${parts[5]}路棋盘已同步`;
+    if (operation === '落子') {
+        const result = parts[8] && parts[8] !== '进行中' ? ` · ${parts[8]}` : '';
+        return `GM · #${String(parts[3] || '').slice(0, 4)} 第${parts[4]}手 ${parts[5]} ${parts[6]}${result}`;
+    }
+    return `GM · ${operation}${parts[3] ? ` ${parts[3]}` : ''}`;
+}
 
 /** 普通流式回复只过滤游戏标签；对尚未收齐的标签前缀先保留在缓冲区。 */
 function filterGameProtocolText(value, complete = false) {
@@ -41,7 +49,7 @@ function filterGameProtocolText(value, complete = false) {
     return output;
 }
 
-function emitFinal(text, reasoning, speech, callbacks, history, splitIntoSentences) {
+function emitFinal(text, reasoning, speech, callbacks, history, splitIntoSentences, gameTrace = []) {
     const message = stripGameTags(text) || '游戏操作已处理。';
     const safeReasoning = stripGameTags(reasoning);
     const safeSpeech = stripGameTags(speech) || message;
@@ -49,13 +57,13 @@ function emitFinal(text, reasoning, speech, callbacks, history, splitIntoSentenc
     for (const sentence of splitIntoSentences(safeSpeech)) {
         if (sentence.trim()) callbacks.onSentence?.(sentence, message, safeReasoning, safeSpeech, 'answer');
     }
-    callbacks.onComplete?.(message, history, safeReasoning, safeSpeech);
+    callbacks.onComplete?.(message, history, safeReasoning, safeSpeech, gameTrace);
     return { success: true, message, reasoning: safeReasoning, speech: safeSpeech, history };
 }
 
 /** 游戏回合缓冲模型输出，避免标签的半截流进入聊天或 TTS。 */
 async function runGameAwareChat({ chat, gameService, displayId, content, userText = content,
-    options, callbacks, internalSignal = false }) {
+    options, callbacks, internalSignal = false, getAvailableGames = () => ['五子棋'] }) {
     if (!displayId) {
         return chat.chatStream(content, options, callbacks);
     }
@@ -65,14 +73,25 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     let invalidAiMoves = 0;
     let missingAiMoves = 0;
     let lastHistory = [];
+    const narratives = [];
+    const gameTrace = [];
+    const recordProtocol = (kind, text) => {
+        const entry = { kind, text, summary: formatGameProtocolSummary(kind, text),
+            sequence: gameTrace.length + 1 };
+        gameTrace.push(entry);
+        callbacks.onGameProtocol?.(entry);
+    };
     const contextKey = [displayId, chat.getActiveProfile?.() || '', options.mode || '',
         options.target || '', options.sessionId || ''].join('|');
     const initialState = gameService.snapshot(displayId);
     const needsRecovery = initialState && recoveredContexts.get(contextKey) !== initialState.gameId;
     if (needsRecovery) {
         // 服务器重启或聊天上下文切换后只补一次权威棋盘；常规回合继续传增量。
-        input = `${gameService.gmSnapshot(displayId)}\n${content}`;
+        const snapshot = gameService.gmSnapshot(displayId);
+        input = `${snapshot}\n${content}`;
+        recordProtocol('GM', snapshot);
     }
+    if (internalSignal && /^<Game:五子棋,GM,/.test(content)) recordProtocol('GM', content);
     for (let turn = 0; turn < 7; turn += 1) {
         const mayStreamPlain = turn === 0 && !internalSignal
             && !(initialState?.turn === 'AI' && initialState.result === '进行中');
@@ -123,28 +142,46 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
             if (message.startsWith(deliveredText) && message.length > deliveredText.length) {
                 callbacks.onChunk?.(message.slice(deliveredText.length), message, reasoning);
             }
-            callbacks.onComplete?.(message, lastHistory, reasoning, speech);
+            callbacks.onComplete?.(message, lastHistory, reasoning, speech, gameTrace);
             return { ...response, message, reasoning, speech };
         }
         if (tags.length === 0) {
             const state = gameService.snapshot(displayId);
             if (state?.turn === 'AI' && state.result === '进行中' && missingAiMoves < 2) {
+                const pendingText = stripGameTags(response.message);
+                if (pendingText) narratives.push(pendingText);
                 missingAiMoves += 1;
-                input = '<Game:五子棋,GM,错误,轮到AI落子>\n请先调用一条 AI 落子标签，不要只叙述。';
+                input = '<Game:五子棋,GM,错误,轮到AI落子>';
                 continue;
             }
             const finalText = state?.turn === 'AI' && state.result === '进行中'
                 ? `${stripGameTags(response.message)}\n当前轮到 AI，落子暂未完成。`
                 : response.message;
-            return emitFinal(finalText, response.reasoning, response.speech, callbacks, lastHistory,
-                chat.splitIntoSentences);
+            const combined = [...narratives, stripGameTags(finalText)].filter(Boolean).join('\n');
+            const combinedSpeech = [...narratives, stripGameTags(response.speech) || stripGameTags(finalText)]
+                .filter(Boolean).join('\n');
+            return emitFinal(combined, response.reasoning, combinedSpeech, callbacks, lastHistory,
+                chat.splitIntoSentences, gameTrace);
         }
         if (tags.length !== 1 || !tags[0].call) {
-            input = '<Game:五子棋,GM,错误,标签格式无效>\n请只生成一条合法标签，然后等待 GM。';
+            input = '<Game:五子棋,GM,错误,标签格式无效>';
             continue;
         }
         const call = tags[0].call;
-        const result = gameService.apply(displayId, call, { expectedVersion: version, userText });
+        recordProtocol(call.actor, tags[0].raw);
+        const games = getAvailableGames(displayId);
+        const available = Array.isArray(games) && games.includes('五子棋');
+        const result = call.game === '目录'
+            ? { ok: true, gm: `<Game:目录,GM,列表,${available ? '五子棋' : '无'}>` }
+            : call.operation === '规则'
+                ? available
+                    ? { ok: true, gm: `<Game:五子棋,GM,规则,${GOMOKU_RULES}>` }
+                    : { ok: false, code: '当前显示端不支持五子棋',
+                        gm: '<Game:五子棋,GM,错误,当前显示端不支持五子棋>' }
+                : gameService.apply(displayId, call, { expectedVersion: version, userText });
+        recordProtocol('GM', result.gm);
+        const narrative = stripGameTags(response.message);
+        if (result.ok && narrative) narratives.push(narrative);
         version = gameService.snapshot(displayId)?.revision;
         if (result.ok && call.operation === '开局') {
             recoveredContexts.set(contextKey, gameService.snapshot(displayId)?.gameId);
@@ -153,14 +190,21 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
             invalidAiMoves += 1;
             if (invalidAiMoves > 2) {
                 return emitFinal('AI 落子未成功，棋局仍停留在 AI 回合，请稍后重试。', '', '', callbacks,
-                    lastHistory, chat.splitIntoSentences);
+                    lastHistory, chat.splitIntoSentences, gameTrace);
             }
         }
-        input = `${result.code === '版本过期' ? gameService.gmSnapshot(displayId) : result.gm}\n${result.ok ? '根据权威结果继续：若轮到 AI，请先选择合法空位并调用一条 AI 落子标签；否则直接用自然语言回复用户。'
-            : '操作失败，请核对用户原话与当前轮次。不要编造用户操作；可重新选择 AI 棋步，或向用户说明错误。'}`;
+        const nextState = gameService.snapshot(displayId);
+        if (result.ok && call.game === '五子棋' && call.operation !== '规则'
+            && nextState && (nextState.turn !== 'AI' || nextState.result !== '进行中')
+            && narrative) {
+            const combined = narratives.join('\n');
+            return emitFinal(combined, response.reasoning, combined, callbacks, lastHistory,
+                chat.splitIntoSentences, gameTrace);
+        }
+        input = result.code === '版本过期' ? gameService.gmSnapshot(displayId) : result.gm;
     }
     return emitFinal('游戏操作次数达到上限，请查看棋盘后重试。', '', '', callbacks, lastHistory,
-        chat.splitIntoSentences);
+        chat.splitIntoSentences, gameTrace);
 }
 
-module.exports = { runGameAwareChat, GAME_PROMPT, filterGameProtocolText };
+module.exports = { runGameAwareChat, GAME_PROMPT, filterGameProtocolText, formatGameProtocolSummary };

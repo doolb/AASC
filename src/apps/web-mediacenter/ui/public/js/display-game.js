@@ -22,10 +22,10 @@
 
     function turnLabel() {
         if (!game) return '';
-        if (game.result === 'User胜') return '你赢了';
-        if (game.result === 'AI胜') return 'AI 赢了';
-        if (game.result === '平局') return '平局';
-        const label = game.turn === 'User' ? '轮到你（黑子）' : 'AI 思考中（白子）';
+        const label = game.result === 'User胜' ? '你赢了'
+            : game.result === 'AI胜' ? 'AI 赢了'
+                : game.result === '平局' ? '平局'
+                    : game.turn === 'User' ? '轮到你（黑子）' : 'AI 思考中（白子）';
         return game.demo === true ? `演示 · ${label}` : label;
     }
 

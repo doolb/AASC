@@ -557,6 +557,8 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleChunk(data);
             }
+        } else if (data.type === 'chatGameProtocol') {
+            if (window.Chat) window.Chat.handleGameProtocol(data);
         } else if (data.type === 'chatResponse') {
             if (window.Chat) {
                 window.Chat.handleResponse(data);

@@ -8,6 +8,9 @@
 
 ### 五子棋游戏协议与本地显示
 
+- ✅ [2026-10-20] 五子棋演示扩为连续用户胜、AI 胜两局，并修复游戏提示过长、成功叙述丢失及棋盘黑色遮罩。
+  - `gomoku-display-demo-service.js` 和 `gomoku-ui-demo.js` 支持每步延迟、胜局停留及单独胜方；Note8 当前显示端实测两局胜负、透明背景和结束恢复，截图 `/tmp/aasc-gomoku-demo-transparent-ai-win.png`。演示只发临时棋盘事件，不写聊天或真实棋局。
+  - `display.html` 声明游戏能力；`game-chat-bridge.js` 改为 AI 查询目录和按需读取五子棋规则，成功标签后的自然语言保留，必要续接只给简短 GM 回执；GM 可见编号缩为四位。`llm-service.js`、`server-app.js`、双端聊天 JS/CSS 将调用和回执作为独立 `gameTrace` 元数据保存、实时显示灰色小字摘要，不进入模型正文或 TTS；`display-game.css` 取消全屏黑色背景。更新设计、伪代码、任务、使用说明和定向测试；服务包状态 `servicePackage=true`，真实模型对话待现场验收。
 - ✅ [2026-10-20] 修复浅色主题覆盖棋盘交点背景，并在当前 Note8 显示端验收一轮演示。
   - `theme.css` 让五子棋交点避开通用按钮渐变色，`display-game-browser.test.js` 补浅色主题断言；Note8 `display-umwo5k6l` 已显示木色 15 路棋盘和黑白两子，ADB 截图 `/tmp/aasc-gomoku-note8-wood.png`，20 秒演示结束恢复原棋盘。更新 design/spec/task/todo；真实语音与 AI 回合仍待验收，`servicePackage=true` 待出包。
 - ✅ [2026-10-19] 增加向当前显示端发送一轮五子棋画面的演示脚本。

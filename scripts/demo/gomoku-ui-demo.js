@@ -12,12 +12,22 @@ function option(name) {
 const requestedDisplayId = option('display-id');
 const size = Number(option('size') || 15);
 const duration = Number(option('duration') || 0);
+const delayMs = Number(option('delay-ms') || 900);
+const resultPauseMs = Number(option('result-pause-ms') || 2000);
+const winner = option('winner') || 'both';
 const localCert = path.resolve(__dirname, '../../res/certs/cert.pem');
 const defaultScheme = fs.existsSync(localCert) ? 'wss' : 'ws';
 const url = process.env.AASC_GOMOKU_SERVER_URL || `${defaultScheme}://127.0.0.1:8081/control`;
 const parsedUrl = new URL(url);
 if (![9, 15].includes(size)) throw new Error('演示仅支持 9 或 15 路棋盘');
 if (!Number.isSafeInteger(duration) || duration < 0) throw new Error('--duration 必须是非负毫秒数');
+if (!Number.isSafeInteger(delayMs) || delayMs < 100 || delayMs > 10000) {
+    throw new Error('--delay-ms 必须是 100～10000 毫秒');
+}
+if (!Number.isSafeInteger(resultPauseMs) || resultPauseMs < 500 || resultPauseMs > 30000) {
+    throw new Error('--result-pause-ms 必须是 500～30000 毫秒');
+}
+if (!['both', 'user', 'ai'].includes(winner)) throw new Error('--winner 必须是 both、user 或 ai');
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(parsedUrl.hostname)) {
     throw new Error('演示仅允许连接本机服务');
 }
@@ -65,7 +75,8 @@ socket.on('message', raw => {
                 : '没有在线主显示端');
             return;
         }
-        socket.send(JSON.stringify({ type: 'gameDemoStart', displayId, size }));
+        socket.send(JSON.stringify({ type: 'gameDemoStart', displayId, size,
+            delayMs, resultPauseMs, winner }));
         return;
     }
     if (message.type !== 'gameDemoResult' || message.displayId !== displayId) return;
@@ -73,7 +84,7 @@ socket.on('message', raw => {
         if (!message.ok) { fail(message.code || '启动演示失败'); return; }
         started = true;
         clearTimeout(timeout);
-        process.stdout.write(`已在当前显示端 ${displayId} 演示 ${size} 路五子棋：黑子落下后白子回手。\n按 Ctrl+C 结束并恢复原棋盘。\n`);
+        process.stdout.write(`已在当前显示端 ${displayId} 演示 ${size} 路五子棋：${winner === 'both' ? '用户胜、AI 胜各一局' : winner === 'user' ? '用户胜' : 'AI 胜'}；每步间隔 ${delayMs} 毫秒。\n按 Ctrl+C 结束并恢复原棋盘。\n`);
         if (duration) timeout = setTimeout(stop, duration);
     }
     if (message.action === 'gameDemoStop') {

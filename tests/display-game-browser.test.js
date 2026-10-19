@@ -40,6 +40,8 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: true
         }));
         assert.equal(await page.$$eval('.display-game-point', list => list.length), 81);
+        assert.equal(await page.$eval('#displayGameShell', shell => getComputedStyle(shell).backgroundColor),
+            'rgba(0, 0, 0, 0)');
         await page.addStyleTag({ path: path.join(PUBLIC, 'css/theme.css') });
         await page.evaluate(() => { document.documentElement.dataset.themeMode = 'light'; });
         assert.equal(await page.$eval('.display-game-point', point => getComputedStyle(point).backgroundImage), 'none');
