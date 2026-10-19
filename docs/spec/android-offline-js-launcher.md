@@ -1,5 +1,15 @@
 # Offline 可热更 JS 启动器规格（源码已实现，待过渡APK验收）
 
+## launcher 131 重复切换排查伪代码（2026-10-19，待目标设备）
+
+```text
+已有声明 := 签名清单code.launcherVersion/launcherSha256；launcher-state.active；Releases.stageLauncher内容比较；supervisor切换事件
+新增定义 := 设备观察{活动code身份,独立launcher版本,运行入口,运行文件指纹,目标指纹,切换事件}
+操作流程 := ADB连接实际外网设备 → 读取活动状态与运行入口 → 计算运行launcher文件集合指纹 → 对照目标code 137的launcherSha256
+操作流程 := 记录更新前后launcher进程与launcher.switch事件 → 指纹相同却切换则定位比较路径；指纹不同则定位版本元数据或旧代码首次升级
+验证 := 不修改设备数据的只读核对优先；确认原因后再设计最小回归与实机更新验收
+```
+
 ## 实施协议与文件契约（先于代码）
 
 ```text

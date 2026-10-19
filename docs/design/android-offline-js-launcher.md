@@ -1,5 +1,9 @@
 # Offline 可热更 JS 启动器与本地网页 UI
 
+## code 137 仍提示切换 launcher 的现场排查（2026-10-19，待设备证据）
+
+用户确认目标设备显示的 launcher 独立版本为 131，但更新服务时仍提示切换。当前 LAN 清单为 code 137 / launcher 131，签名 `launcherSha256` 与本地源码一致；现有自动回归 41/41 通过，包含内容相同只更新服务的路径。这些结果不能代替目标设备的运行文件指纹。当前本机 ADB 只连接 Note8，其活动 launcher code 110、服务 code 112，不是此前说明的外网设备；外网发布机没有 ADB。取得目标设备连接后，应核对活动清单、实际 launcher 入口目录和文件指纹、更新前后进程与 `launcher.switch` 事件，区分真实切换与页面文案。
+
 ## 需求与当前状态
 
 2026-10-19 已按用户修正完成：原 JS 热更 WAN 域名 URL 返回 HTTP 403，而该域名解析得到的 `120.79.245.103` 的同路径返回 HTTP 200，签名清单验签通过，清单所列代码包路径也返回 200；同一 IP 附加 `Host: c.aasc.us` 仍返回 403。WAN 来源配置继续保留域名 `c.aasc.us`，每次请求前解析为 IPv4，再用 IP 替换实际请求 URL 的主机；HTTP Host 随实际 URL 使用 IP。只对 `/mnt/aasc-offline/` 热更路径生效，保持两个 LAN 优先、签名清单及文件摘要校验；模型来源 `https://c.aasc.us/mnt/aimodel/` 继续使用原域名 URL。DNS 解析失败交给现有来源故障处理，不硬编码 `120.79.245.103`。新增定向 HTTP Host 测试，`npm run test:offline-launcher` 37/37 通过；真实 WAN 经修改后获取清单并验签，下载 code128 ZIP 共 4,966,585 字节且 SHA-256 校验通过，临时文件已清理。断 LAN 真机验收仍待执行。

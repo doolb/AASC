@@ -29,6 +29,9 @@
 
 ### Offline 启动器独立版本与服务单独更新
 
+- 📝 [2026-10-19] 排查“launcher 131 仍提示切换”和豆包第三档现场错误，待目标证据。
+  - 当前 LAN 清单 code 137 / launcher 131，签名指纹与源码一致，启动器回归 41/41 通过；ADB 只连到旧版 Note8（launcher code 110、服务 code 112），外网发布机无 ADB。本机豆包第三档新会话、续接及常规 LLM 轻量切专业的非流式/流式均成功；直接强制复用轻量 Responses ID 切专业返回 409，不能据此认定现场原因。同步 launcher 与豆包 design/spec、task/todo；无运行代码或设备数据修改。
+
 - ✅ [2026-10-19] 控制端服务器面板的“当前运行版本”和节点卡片显示活动启动器版本。
   - `runtime-version-info.js` 从 `updates/launcher-state.json.active` 读取独立 `launcherVersion`，旧清单回退到活动 code 版本；`server-list.js` 显示“启动器: vN”，`self-test.js` 校验可选版本字段。同步 sub-server design/spec、self-test spec、task/todo；定向测试 10/10、`npm run test:subserver-update` 64/64、JavaScript 语法及差异检查通过。`servicePackage=true` 待出包，外网设备显示待上线验收。
 
