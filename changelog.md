@@ -1,5 +1,7 @@
 ### 五子棋游戏协议与本地显示
 
+- ✅ [2026-10-19] 游戏相关聊天自动加入五子棋专用系统指令，并封住已有棋局重新开局时的尺寸确认绕过。
+  - `game-chat-bridge.js` 明确位置参数、User/AI/GM/Game 身份及重开限制；`gomoku-game-service.js` 在进行中的棋局要求用户明确重开，改尺寸仍须提议与确认，省略尺寸沿用原尺寸。更新 design/spec/task/todo 和回归用例；四组定向测试 12/12 通过。`servicePackage=true` 待出包。
 - ✅ [2026-10-19] 实现位置参数 Game 标签、服务端权威五子棋与显示端全屏棋盘。
   - 新增 `gomoku-game-service.js`、`game-chat-bridge.js`、`display-game.js`/CSS，接入 `server-app.js` 和 `display.html`；语音用户落子由 AI 调用协议，点击直接落子后向 AI 提供 GM 增量。常规回合不重复传完整棋盘，首次或版本缺口恢复发送快照；支持尺寸确认、胜负、按显示端 ID 原子保存及关闭后恢复。
   - 更新 design/spec/task/usage 与定向测试；五子棋服务及浏览器测试 7/7，聊天 requestId 与普通语音合同测试通过，语法与差异检查通过。旧 `chat-tts-interruption.test.js` 有一条 HEAD 已存在的静态断言失败，未修改其所要求的 TTS 节点。`servicePackage=true` 待出包及 Android 真机验收。

@@ -75,6 +75,20 @@ test('横向五子获胜且中途尺寸变更必须确认', t => {
     assert.equal(game.snapshot('d').result, '进行中');
 });
 
+test('已有棋局不能用开局绕过尺寸确认或擅自重置', t => {
+    const { game } = fixture(t);
+    game.apply('d', call('User', '开局', '9'));
+    const gameId = game.snapshot('d').gameId;
+    assert.equal(game.apply('d', call('User', '开局', '11'), { userText: '重新开始11路' }).code,
+        '请先提议尺寸并等待用户确认');
+    assert.equal(game.apply('d', call('User', '开局', '9'), { userText: '继续玩' }).code,
+        '棋局进行中，需要用户明确要求重新开局');
+    assert.equal(game.snapshot('d').gameId, gameId);
+    assert.equal(game.apply('d', call('User', '开局'), { userText: '重新开始' }).ok, true);
+    assert.equal(game.snapshot('d').size, 9);
+    assert.notEqual(game.snapshot('d').gameId, gameId);
+});
+
 test('语音用户落子由 AI 标签调用，GM 增量之后 AI 自己落子', async t => {
     const { game, events } = fixture(t);
     game.apply('d', call('User', '开局'));

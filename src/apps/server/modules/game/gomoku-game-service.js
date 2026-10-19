@@ -135,8 +135,13 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
         const [argument] = call.args;
         switch (call.operation) {
             case '开局': {
-                const size = argument === undefined ? 15 : parseSize(argument);
+                const size = argument === undefined ? state?.size || 15 : parseSize(argument);
                 if (!size) return fail('棋盘尺寸无效');
+                if (state && size !== state.size) return fail('请先提议尺寸并等待用户确认');
+                if (state?.result === '进行中' && source === 'model'
+                    && !/重新开始|重开|新开|再来一局|再开一局|开始新局/.test(userText)) {
+                    return fail('棋局进行中，需要用户明确要求重新开局');
+                }
                 const next = { id: randomUUID(), revision: 1, size, board: Array(size * size).fill('.'),
                     turn: 'User', result: '进行中', visible: true, pendingSize: null };
                 const message = { ...snapshotFromState(next), type: 'gameSnapshot' };
