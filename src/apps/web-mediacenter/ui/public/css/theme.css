@@ -372,7 +372,8 @@
     color: var(--text-muted) !important;
 }
 
-:root[data-theme-mode="light"] button:not(.file-label),
+/* 棋盘交点是透明网格，不使用全局按钮渐变色。 */
+:root[data-theme-mode="light"] button:not(.file-label):not(.display-game-point),
 :root[data-theme-mode="light"] .control-btn,
 :root[data-theme-mode="light"] .floating-btn,
 :root[data-theme-mode="light"] .chat-add-btn,

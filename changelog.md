@@ -1,5 +1,7 @@
 ### 五子棋游戏协议与本地显示
 
+- ✅ [2026-10-20] 修复浅色主题覆盖棋盘交点背景，并在当前 Note8 显示端验收一轮演示。
+  - `theme.css` 让五子棋交点避开通用按钮渐变色，`display-game-browser.test.js` 补浅色主题断言；Note8 `display-umwo5k6l` 已显示木色 15 路棋盘和黑白两子，ADB 截图 `/tmp/aasc-gomoku-note8-wood.png`，20 秒演示结束恢复原棋盘。更新 design/spec/task/todo；真实语音与 AI 回合仍待验收，`servicePackage=true` 待出包。
 - ✅ [2026-10-19] 增加向当前显示端发送一轮五子棋画面的演示脚本。
   - `scripts/demo/gomoku-ui-demo.js` 通过本机控制 WebSocket 选定在线显示端；`gomoku-display-demo-service.js` 发送临时快照和黑白增量，结束、断线或真实棋局更新时恢复权威画面。`display-game.js` 禁止演示点按。更新 spec/design/task/usage/todo 和定向测试，18/18 通过；测试确认不发送聊天消息、不调用 AI、不改棋局文件。服务与显示端需加载新版代码后现场验收。
 - ✅ [2026-10-19] 五子棋开局改为完全由 AI 指令触发，不再按用户文本关键词判断。
