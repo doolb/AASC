@@ -14,6 +14,7 @@ const base = '../src/apps/server/boot/offline-launcher/';
 const { Releases, validateLock } = require(base + 'releases');
 const { Models, validateCatalog } = require(base + 'models');
 const { Controller } = require(base + 'controller');
+const { launcherReleaseVersion } = require(base + 'entry');
 const { Supervisor, verifyCandidate, PREFIX } = require(base + 'supervisor');
 const { restoreSeeds } = require(base + 'seeds');
 const { extractZipSafely } = require(base + 'archive');
@@ -22,6 +23,7 @@ const network = require(base + 'network');
 const shared = require('../src/apps/server/modules/aasc/shared-update-manifest');
 const tree = require('../src/apps/server/modules/aasc/dependency-tree');
 const { prepareOfflineLauncher } = require('../scripts/ops/prepare-offline-launcher');
+const { launcherIdentity, SHARED } = require(base + 'launcher-identity');
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const keys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
 const runtime = { abi: 'arm64-v8a', nodeMajor: 26, contractVersion: 1 };
@@ -244,6 +246,7 @@ test('ZIP禁止跨组件/链接/损坏CRC，不允许覆盖已有目标', async 
 test('APK基线独立收集builtin闭包和HTML，源码无node_modules依赖', async t => {
     const f = await fixture(t); const result = await prepareOfflineLauncher(path.resolve(__dirname, '..'), path.join(f.temp, 'assets'));
     assert.ok(result.files.some(file => file.path === PREFIX + 'ui/index.html')); assert.ok(result.files.some(file => file.path.endsWith('shared-update-manifest.js')));
+    assert.equal(await launcherIdentity(path.resolve(__dirname, '..')), result.id);
     for (const file of result.files.filter(file => file.path.startsWith(PREFIX) && file.path.endsWith('.js'))) {
         const code = fs.readFileSync(path.join(f.temp, 'assets/offline-launcher', file.path), 'utf8');
         for (const match of code.matchAll(/require\(['"]([^'"]+)['"]\)/g)) assert.ok(match[1].startsWith('.') || match[1].startsWith('node:'), match[1]);
@@ -251,11 +254,83 @@ test('APK基线独立收集builtin闭包和HTML，源码无node_modules依赖', 
 });
 
 async function candidate(f, version, entry) {
-    const source = await f.release(version, {}, { [PREFIX + 'entry.js']: entry, [PREFIX + 'host-api.json']: { hostApi: 1, stateApi: 1 }, [PREFIX + 'ui/index.html']: '<!doctype html><title>test</title>' });
+    const sharedFiles = Object.fromEntries(SHARED.map(name => [name, 'module.exports = {};']));
+    const source = await f.release(version, {}, { [PREFIX + 'entry.js']: entry, [PREFIX + 'host-api.json']: { hostApi: 1, stateApi: 1 },
+        [PREFIX + 'ui/index.html']: '<!doctype html><title>test</title>', ...sharedFiles });
     const releases = new Releases(f.config); return releases.stageLauncher(source);
 }
 async function until(check, timeout = 5000) { const end = Date.now() + timeout; while (Date.now() < end) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 20)); } throw new Error('等待条件超时'); }
 const mockEntry = `process.send({type:'launcher.ready',payload:{hostApi:1,stateApi:1}}); process.send({type:'launcher.healthy'}); process.on('message',m=>{if(m.type==='host.stop')process.exit(0);else process.send({type:'rpc.result',requestId:m.requestId,result:{version:JSON.parse(process.env.AASC_LAUNCH_CONTEXT).launcherVersion}});});`;
+
+async function signedLauncherSource(f, version, entry = mockEntry) {
+    const entries = { [PREFIX + 'entry.js']: entry, [PREFIX + 'host-api.json']: { hostApi: 1, stateApi: 1 },
+        [PREFIX + 'ui/index.html']: '<!doctype html><title>test</title>',
+        ...Object.fromEntries(SHARED.map(name => [name, 'module.exports = {};'])) };
+    const source = await f.release(version, {}, entries);
+    const signedRoot = path.join(f.temp, `signed-launcher-${version}`);
+    for (const [relative, value] of Object.entries(entries)) await write(signedRoot, relative, value);
+    source.components.code.launcherVersion = version;
+    source.components.code.launcherSha256 = await launcherIdentity(signedRoot);
+    source.manifest = sign(source.components);
+    await write(f.remote, 'manifest.json', source.manifest);
+    return { source, entries };
+}
+
+test('code 更新而 launcher 内容相同只重启服务，活动 launcher 不切换', async t => {
+    const f = await fixture(t); const releases = new Releases(f.config);
+    await releases.prepare(await f.release(1), true); await releases.healthy();
+    const { entries } = await signedLauncherSource(f, 2);
+    const launcherRoot = path.join(f.temp, 'active-launcher');
+    for (const [relative, value] of Object.entries(entries)) await write(launcherRoot, relative, value);
+    const starts = []; let stops = 0; let switches = 0;
+    const service = { async start(context) { starts.push(context.codeVersion); await this.onHealthy(); },
+        async stop() { stops++; } };
+    const controller = new Controller({ ...f.config, launcherVersion: 1, launcherRoot, service }, () => {}, () => { switches++; });
+    const result = await controller.handle({ type: 'service.apply', requestId: 'service-only', payload: {} });
+    assert.equal(result.applied, true);
+    assert.equal(switches, 0);
+    assert.equal(stops, 1);
+    assert.deepEqual(starts, [2]);
+    assert.equal(releases.current().codeVersion, 2);
+    assert.equal(files.read(f.root, 'updates/launcher-state.json'), null);
+});
+
+test('launcher 内容变化仍交给原切换流程，签名指纹错误拒绝', async t => {
+    const f = await fixture(t);
+    const { source, entries } = await signedLauncherSource(f, 2);
+    const launcherRoot = path.join(f.temp, 'active-launcher');
+    for (const [relative, value] of Object.entries(entries)) await write(launcherRoot, relative, value);
+    await write(launcherRoot, PREFIX + 'entry.js', '旧启动器');
+    const releases = new Releases({ ...f.config, launcherRoot });
+    const candidate = await releases.stageLauncher(source);
+    assert.equal(candidate.version, 2);
+    const bad = structuredClone(source);
+    bad.components.code.launcherSha256 = 'f'.repeat(64);
+    await assert.rejects(releases.stageLauncher(bad), /内容指纹不符/);
+});
+
+test('旧清单无独立指纹时仍比对签名ZIP，已安装启动器遭改动不跳过', async t => {
+    const f = await fixture(t);
+    const { source, entries } = await signedLauncherSource(f, 2);
+    delete source.components.code.launcherVersion;
+    delete source.components.code.launcherSha256;
+    source.manifest = sign(source.components);
+    const launcherRoot = path.join(f.temp, 'active-launcher');
+    for (const [relative, value] of Object.entries(entries)) await write(launcherRoot, relative, value);
+    const releases = new Releases({ ...f.config, launcherRoot });
+    assert.equal(await releases.stageLauncher(source), null);
+    await write(f.root, `updates/code/code-v2/${PREFIX}/entry.js`, '受损');
+    await assert.rejects(releases.stageLauncher(source), /与签名代码包不一致/);
+});
+
+test('启动器就绪信息保留代码身份并单独报告签名的 launcher 版本', async t => {
+    const f = await fixture(t);
+    assert.equal(launcherReleaseVersion({ root: f.root, launcherVersion: 0 }), 0);
+    await files.atomic(f.root, 'updates/launcher-state.json', { active: { version: 5,
+        manifest: { payload: { components: { code: { launcherVersion: 2 } } } } } });
+    assert.equal(launcherReleaseVersion({ root: f.root, launcherVersion: 5 }), 2);
+    assert.equal(launcherReleaseVersion({ root: f.root, launcherVersion: 4 }), 4);
+});
 
 test('固定supervisor重新核验签名ZIP/文件字节，拒绝候选篡改', async t => {
     const f = await fixture(t); const value = await candidate(f, 2, mockEntry); const root = await verifyCandidate(f.config, value);

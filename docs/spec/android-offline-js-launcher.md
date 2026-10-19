@@ -55,6 +55,14 @@ APK安装/验证随包Node及配套库 → 选择可校验活动JS入口；不�
 
 ```text
 更新检查/下载选择/重试/源切换/版本组合 → JS协调；APK不再编写这些业务规则
+打包代码快照 → 按启动器目录及四个启动器共享文件的路径/长度/SHA-256计算launcherSha256
+当前签名清单的launcherSha256相同 → 沿用launcherVersion；否则launcherVersion := 本次递增的codeVersion
+新签名code组件同时记录launcherVersion与launcherSha256；旧清单没有这两个字段时仍可读取
+launcher.ready保留既有launcherVersion代码包身份，另报launcherReleaseVersion为当前活动/待提交签名启动器版本
+服务更新时codeVersion不同 → 下载并验证目标code ZIP、解压到受管版本目录、核对签名的launcherSha256
+目标启动器文件集合与当前运行启动器文件集合逐字节指纹相同 → 不切换启动器进程，继续现有服务停止/准备/启动/健康回滚流程
+目标启动器文件不同 → 按原launcher.switch、自更新健康提交及请求重放流程处理
+首次引入独立版本的更新仍可能按旧控制器规则切换一次；旧设备保持旧签名清单兼容
 代码ZIP内固定offline-launcher目录 → 经签名和完整包摘要验证后准备启动器候选 → 记录来源与宿主兼容声明
 候选启动器先支持现行服务状态/宿主API → 无在途事务或已安全取消 → 持久化切换恢复点 → 请求宿主launcher.switch
 宿主重新校验签名来源/固定受管入口/候选字节 → 停旧服务与启动器 → 新Node进程运行候选JS

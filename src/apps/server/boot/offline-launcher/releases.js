@@ -8,6 +8,7 @@ const tree = require('../../modules/aasc/dependency-tree');
 const files = require('./files');
 const net = require('./network');
 const archive = require('./archive');
+const { launcherIdentity } = require('./launcher-identity');
 const { restoreSeeds } = require('./seeds');
 
 const POINTER = 'updates/active-release.json';
@@ -33,6 +34,12 @@ function artifact(entry, expectedPath) {
 function verifyManifest(manifest, config) {
     shared.verifyManifest(manifest, config.publicKey);
     const c = manifest.payload.components;
+    if (c.code.launcherVersion !== undefined || c.code.launcherSha256 !== undefined) {
+        if (!Number.isSafeInteger(c.code.launcherVersion) || c.code.launcherVersion < 1 ||
+            c.code.launcherVersion > c.code.version || !/^[a-f0-9]{64}$/.test(c.code.launcherSha256)) {
+            throw new Error('签名清单的启动器版本或内容指纹无效');
+        }
+    }
     for (const entry of [c.code, c.dependencies]) {
         const runtime = entry.runtimeCompatibility || c.code.runtimeCompatibility;
         if (runtime && Object.entries(RUNTIME).some(([key, value]) => runtime[key] !== value)) throw new Error('服务运行契约不兼容');
@@ -247,7 +254,8 @@ class Releases {
         const entry = source.components.code;
         const destination = files.safe(this.root, path.join(this.root, `updates/code/code-v${entry.version}`));
         const zip = await this.fetch(source, 'code', entry, signal);
-        if (!fs.existsSync(destination)) {
+        const existed = fs.existsSync(destination);
+        if (!existed) {
             const stage = files.safe(this.root, path.join(this.root, `updates/.launcher-stage-${process.pid}-${Date.now()}`));
             try {
                 await this.extract(zip, stage, 'code', 'launcher', signal);
@@ -259,6 +267,20 @@ class Releases {
         const metadata = files.read(destination, 'src/apps/server/boot/offline-launcher/host-api.json');
         if (!metadata) return null; // 旧正式code包仍可由APK内置启动器托管。
         if (metadata.hostApi !== 1 || metadata.stateApi !== 1) throw new Error('请先更新支持此启动器协议的min APK');
+        const targetIdentity = await launcherIdentity(destination);
+        if (entry.launcherSha256 && targetIdentity !== entry.launcherSha256) throw new Error('签名清单与启动器内容指纹不符');
+        if (!entry.launcherSha256 && existed) {
+            // 旧清单没有独立指纹，已存在的版本目录仍须逐字节追溯到本次下载且已验摘要的ZIP。
+            const verify = files.safe(this.root, path.join(this.root, `updates/.launcher-compare-${process.pid}-${Date.now()}`));
+            try {
+                await this.extract(zip, verify, 'code', 'launcher', signal);
+                if (await launcherIdentity(verify) !== targetIdentity) throw new Error('启动器目录与签名代码包不一致');
+            } finally { await fs.promises.rm(verify, { recursive: true, force: true }); }
+        }
+        // 当前执行文件所在的根目录可能是APK基线或旧code版本；缺少新文件时应升级，而不是阻断服务更新。
+        const activeRoot = this.config.launcherRoot || path.resolve(__dirname, '../../../../..');
+        const activeIdentity = await launcherIdentity(activeRoot).catch(() => null);
+        if (activeIdentity === targetIdentity) return null;
         return { version: entry.version, manifest: source.manifest };
     }
     async prepare(source, fresh, signal) {

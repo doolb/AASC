@@ -20,6 +20,7 @@ const execFileAsync = promisify(execFile);
 const sharedUpdate = require('../../src/apps/server/modules/aasc/shared-update-manifest');
 const { buildDependencyGroups } = require('./dependency-groups');
 const { stageVoiceDisplayNodePackage } = require('./voice-display-node-package');
+const { launcherIdentity } = require('../../src/apps/server/boot/offline-launcher/launcher-identity');
 const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
 const DATA_REPAIR_ENTRYPOINT = 'repair.js';
 const DATA_REPAIR_CAPABILITIES = Object.freeze([
@@ -123,6 +124,12 @@ function validateManifestComponents(manifest) {
     if (code?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(code.runtimeCompatibility);
     if (apkMin?.runtimeCompatibility !== undefined) validateRuntimeCompatibility(apkMin.runtimeCompatibility);
     validateArtifactEntry(code, 'code');
+    if (code.launcherVersion !== undefined || code.launcherSha256 !== undefined) {
+        assertVersion(code.launcherVersion, 'code.launcherVersion');
+        if (code.launcherVersion > code.version || !isSha256(code.launcherSha256)) {
+            throw new Error('Offline 清单 launcher 版本或内容指纹无效');
+        }
+    }
     if (dependencies?.groups) sharedUpdate.validateDependencies(dependencies);
     else validateArtifactEntry(dependencies, 'dependencies');
     if (manifest.payload.components.nodeMinSeeds !== undefined) {
@@ -687,6 +694,11 @@ async function createOfflineUpdateArtifacts(options = {}) {
         const codeDirectory = path.join(workDirectory, 'code');
         await fs.promises.mkdir(codeDirectory, { recursive: true });
         await copyCodeSnapshot(projectRoot, codeDirectory);
+        const launcherSha256 = await launcherIdentity(codeDirectory);
+        const previousLauncher = currentComponents.code;
+        const launcherVersion = previousLauncher?.launcherSha256 === launcherSha256 &&
+            Number.isSafeInteger(previousLauncher.launcherVersion) && previousLauncher.launcherVersion > 0
+            ? previousLauncher.launcherVersion : codeVersion;
         await createZip(codeDirectory, stagedCodeArchive, zipRunner);
         // 统一出包入口可只构建服务代码；旧入口仍默认附带独立 Node ZIP。
         const stagedVoiceDisplayNode = options.includeVoiceDisplayNode === false ? null : await stageVoiceDisplayNodePackage({
@@ -736,6 +748,8 @@ async function createOfflineUpdateArtifacts(options = {}) {
                 ...currentComponents,
                 code: {
                     version: codeVersion,
+                    launcherVersion,
+                    launcherSha256,
                     taskCodeApiVersion: 1,
                     requiredDependencyVersion: dependencyVersion,
                     requiredLockSha256: lockSha256,

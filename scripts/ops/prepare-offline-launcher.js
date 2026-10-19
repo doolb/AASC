@@ -3,9 +3,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const PREFIX = 'src/apps/server/boot/offline-launcher';
-const SHARED = ['src/apps/server/modules/aasc/shared-update-manifest.js', 'src/apps/server/modules/aasc/task-code-contract.js',
-    'src/apps/server/modules/aasc/dependency-tree.js', 'src/apps/server/modules/model-distribution/offline-model-catalog.json'];
+const { PREFIX, SHARED } = require('../../src/apps/server/boot/offline-launcher/launcher-identity');
 
 /** 内置基线独立于服务Runtime manifest，min空安装也能执行；不把它加入动态库允许列表。 */
 async function prepareOfflineLauncher(projectRoot, outputDir) {

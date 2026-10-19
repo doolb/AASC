@@ -44,6 +44,14 @@ function createFixture() {
     fs.writeFileSync(path.join(sourceRoot, 'framework/observability/system-monitor.js'), 'module.exports = class SystemMonitor {};\n');
     fs.writeFileSync(path.join(sourceRoot, 'framework/observability/console-redirect.js'), 'module.exports = { installConsoleRedirect() {} };\n');
     fs.writeFileSync(path.join(sourceRoot, 'apps/server/boot/server-launcher.js'), 'process.exit(0);\n');
+    const { PREFIX, SHARED } = require('../src/apps/server/boot/offline-launcher/launcher-identity');
+    for (const relative of [
+        `${PREFIX}/entry.js`, `${PREFIX}/host-api.json`, ...SHARED
+    ]) {
+        const file = path.join(projectRoot, relative);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, relative.endsWith('.json') ? '{}\n' : 'module.exports = {};\n');
+    }
     fs.writeFileSync(path.join(sourceRoot, 'apps/web-mediacenter/ui/index.html'), '<main>fixture</main>\n');
     fs.writeFileSync(path.join(sourceRoot, 'apps/android-display/not-server.js'), 'excluded\n');
     // 首装种子已经是服务发行组成部分，夹具也提供完整目录，不依赖开发机真实配置。
@@ -121,6 +129,29 @@ function archiveEntries(archivePath) {
 async function removeFixture(fixture) {
     await fs.promises.rm(fixture.projectRoot, { recursive: true, force: true });
 }
+
+test('launcher 独立版本仅在启动器内容变化时递增', async t => {
+    const fixture = createFixture();
+    t.after(() => removeFixture(fixture));
+    const build = (codeVersion, currentManifest) => createOfflineUpdateArtifacts({ ...fixture, mode: 'code-only',
+        codeVersion, currentManifest, includeVoiceDisplayNode: false });
+    const first = await build(2, fixture.currentManifest);
+    const firstCode = first.manifest.payload.components.code;
+    assert.equal(firstCode.launcherVersion, 2);
+    assert.match(firstCode.launcherSha256, /^[a-f0-9]{64}$/);
+    fs.writeFileSync(path.join(fixture.projectRoot, 'src/apps/server/boot/server-launcher.js'), 'process.exit(1);\n');
+    const serviceOnly = await build(3, first.manifest);
+    assert.equal(serviceOnly.manifest.payload.components.code.launcherVersion, 2);
+    assert.equal(serviceOnly.manifest.payload.components.code.launcherSha256, firstCode.launcherSha256);
+    fs.writeFileSync(path.join(fixture.projectRoot, 'src/apps/server/boot/offline-launcher/entry.js'), 'module.exports = { updated: true };\n');
+    const launcherChanged = await build(4, serviceOnly.manifest);
+    assert.equal(launcherChanged.manifest.payload.components.code.launcherVersion, 4);
+    assert.notEqual(launcherChanged.manifest.payload.components.code.launcherSha256, firstCode.launcherSha256);
+    fs.writeFileSync(path.join(fixture.projectRoot, 'src/apps/server/modules/aasc/shared-update-manifest.js'), 'module.exports = { updated: true };\n');
+    const sharedChanged = await build(5, launcherChanged.manifest);
+    assert.equal(sharedChanged.manifest.payload.components.code.launcherVersion, 5);
+    assert.notEqual(sharedChanged.manifest.payload.components.code.launcherSha256, launcherChanged.manifest.payload.components.code.launcherSha256);
+});
 
 test('code-only builds service source without Node subdisplay and creates its signed standalone archive', async (t) => {
     const fixture = createFixture();

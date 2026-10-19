@@ -1,3 +1,8 @@
+### Offline 启动器独立版本与服务单独更新
+
+- ✅ [2026-10-19] 签名 code 清单新增独立 `launcherVersion` 和 `launcherSha256`；launcher 内容未变时保留原启动器进程，只安装、重启并健康验证新服务。
+  - 修改 `offline-update-package.js`、`prepare-offline-launcher.js`、`offline-launcher/launcher-identity.js`、`releases.js`、`controller.js`、`entry.js`，保留旧清单兼容和启动器变更时的原切换/回退；就绪事件新增独立版本字段。同步 design/spec/task/todo/usage。`npm run test:offline-launcher` 41/41、代码包测试 17/17 通过；服务包及 min 基线待构建，真机验收待进行。
+
 ### 显示端外观设置
 
 - ✅ [2026-10-19] 显示端“音色”按钮上方新增“主题”面板，可选择全局 15 套主题并调整 TTS 字幕背景透明度；按用户纠正从左下角移至音色上方。

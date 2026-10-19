@@ -22,6 +22,14 @@
 
 ## 自更新和信任链
 
+### 独立 launcher 版本与服务代码更新（2026-10-19）
+
+`code-vN.zip` 继续包含 launcher 和服务，签名清单的 code 组件新增 `launcherVersion` 与 `launcherSha256`。打包时按 launcher 目录及四个启动器共享文件的路径、大小和 SHA-256 计算内容指纹；与当前签名清单相同就沿用 launcher 版本，内容变化则用本次递增的 code 版本作为新 launcher 版本。启动器就绪事件另报 `launcherReleaseVersion`，既有 `launcherVersion` 字段仍表示其代码包身份。这样服务代码版本可以增加而 launcher 版本保持不变，无需增加独立发布包。
+
+设备仍完整下载、验签、解压并校验目标 code。目标 launcher 内容与当前正在运行的 launcher 内容一致时，不切换 launcher 进程，直接走已有服务更新及健康回滚；内容不同时沿用自更新握手和回退。内容比对是实际决策依据，避免版本元数据误标造成漏更新。旧包缺少独立版本元数据时继续用内容比对；承载此逻辑的首次代码包仍按旧 launcher 规则升级一次。APK 内置固定 supervisor 不变。
+
+源码实现与定向测试已完成；新的 code 包及包含最新启动器基线的 min APK 尚待构建，实际设备上“launcher 保持运行、服务版本前进”的观察仍待验收。
+
 启动器和网页复用已有签名 `code/code-vN.zip`，没有新增发布产物。APK 的 `offline-launcher-manifest.json` 描述内置基线资产，固定 supervisor 始终从该基线运行；业务入口 `entry.js`、各业务模块和 `ui/index.html` 可从已验证代码版本运行。宿主/状态 API 均为 1，不兼容候选要求先更新 APK。
 
 旧 JS 先准备目标代码，不更改活动服务指针。固定 supervisor 重新验证清单签名、ZIP 大小/SHA-256、候选启动器文件与 ZIP 字节及 API 声明；停止旧启动器和服务，再启动候选。候选以当前已提交服务验证真实版本/目录健康，空环境则握手后等待安装确认；健康后提交 `updates/launcher-state.json`，向新 JS 重放原安装/更新请求。失败恢复原健康启动器，继续失败则用 APK 基线；原请求明确失败，可重试。未提交 pending 在进程重启时丢弃。

@@ -64,6 +64,7 @@ class Controller {
             const plan = this.releases.plan(source, fresh);
             if (plan.plan === 'CURRENT') return { applied: false, status: '服务已是当前版本' };
             if (source.components.code.version !== this.config.launcherVersion) {
+                // launcherVersion 是宿主既有的代码版本身份；目标实际启动器内容不变时stageLauncher返回null。
                 const candidate = await this.releases.stageLauncher(source, signal);
                 if (candidate) {
                     if (this.models.jobs.size || this.groups.size || this.apkBusy) throw new Error('模型任务完成或取消后再更新启动器');

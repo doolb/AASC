@@ -1,6 +1,16 @@
 'use strict';
 
 const { Controller } = require('./controller');
+const files = require('./files');
+
+/** 宿主原有launcherVersion是代码包身份；新增字段读取签名清单中的独立启动器版本。 */
+function launcherReleaseVersion(config) {
+    const codeVersion = config.launcherVersion || 0;
+    const state = files.read(config.root, 'updates/launcher-state.json', {});
+    const selected = [state.pending, state.active].find(value => value?.version === codeVersion);
+    const releaseVersion = selected?.manifest?.payload?.components?.code?.launcherVersion;
+    return Number.isSafeInteger(releaseVersion) && releaseVersion > 0 ? releaseVersion : codeVersion;
+}
 
 function main(config = JSON.parse(process.env.AASC_LAUNCH_CONTEXT || '{}')) {
     if (!process.send || config.hostApi !== 1 || config.stateApi !== 1) throw new Error('JS启动器必须由兼容宿主启动');
@@ -21,6 +31,7 @@ function main(config = JSON.parse(process.env.AASC_LAUNCH_CONTEXT || '{}')) {
     });
     process.once('disconnect', async () => { await controller.close(); process.exit(0); });
     send({ type: 'launcher.ready', payload: { hostApi: 1, stateApi: 1, launcherVersion: config.launcherVersion || 0,
+        launcherReleaseVersion: launcherReleaseVersion(config),
         catalog: { ...controller.models.catalog, groups: controller.models.groups() } } });
     send({ type: 'models.state', payload: controller.models.status() });
     controller.initializing = controller.boot().catch(error => { console.error('[JS启动器]', error.message); throw error; });
@@ -28,4 +39,4 @@ function main(config = JSON.parse(process.env.AASC_LAUNCH_CONTEXT || '{}')) {
     return controller;
 }
 if (require.main === module) main();
-module.exports = { main };
+module.exports = { main, launcherReleaseVersion };
