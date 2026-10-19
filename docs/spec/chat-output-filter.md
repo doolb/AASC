@@ -21,6 +21,10 @@ AASC 聊天消费:
     收到 response.reasoning_text.delta 时累加独立思考，通知控制端刷新 Think 按钮
     依当前播报顺序将思考文字归入 think 分段，正文归入 answer 分段
     非流式调用将 response.reasoning_text 与回答解析结果合并，写入本地历史 reasoning
+    流式完成时 server-app 将 reasoning 交给 chat.addMessage，历史快照保留该字段
+    chat.addMessage 将 reasoning 限制为前 51200 字符；每会话历史限制最近 100 条
+    saveHistory 合并约 2 秒后写入本地历史文件；控制端重载历史时继续显示 Think
+    临时会话显式清空时按会话 ID 删除相应历史
     若上游没有思考字段，保留旧 answer/think 标签解析和无 Think 按钮行为
 
 验证 := 提供 reasoning_content 的 Provider 在流式、非流式和历史中保留思考；
