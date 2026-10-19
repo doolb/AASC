@@ -1,3 +1,17 @@
+### Offline APK 热更来源故障转移
+
+- ✅ [2026-10-19] 修复 JS 启动器 WAN 热更请求使用域名 Host 导致清单 403：保留 `c.aasc.us` 来源配置，请求前动态解析 IPv4 并以 IP URL 连接。
+  - 修改 `network.js` 和启动器定向测试，模型来源保持域名；`npm run test:offline-launcher` 37/37、语法与差异检查通过，真实 WAN 清单验签及 code128 ZIP（4,966,585 字节）下载大小/SHA-256 校验通过。同步 design/spec/task/todo，`servicePackage=true`、`minApk=true` 保持待出包；断 LAN 真机热更未实测。
+
+- 📝 [2026-10-19] 现场比较 WAN 域名与公网 IP：域名清单 HTTP 403，`120.79.245.103` 清单 HTTP 200 且签名有效，代码包 HTTP 200；同 IP 携带域名 Host 头仍为 403。
+  - 用户明确要求每次 DNS 解析域名后改用解析所得 IP URL，保持来源配置为域名；已同步启动器 design/spec、task/todo。修改前 `npm run test:offline-launcher` 36/36 通过。
+
+- 📝 [2026-10-19] 澄清当前 JS 热更 WAN 使用 `http://c.aasc.us/mnt/aasc-offline/` 域名 URL，由 Node 请求时解析 DNS；旧原生更新器才先解析域名并将请求 URL 改为 IP。
+  - 同步 `android-offline-js-launcher` design/spec 与可选设备验收 todo；仅源码核对，无运行代码修改。
+
+- 📝 [2026-10-19] 核对当前 JS 启动器的 LAN/WAN 来源顺序与故障回退：两个 LAN 源失败后尝试 WAN，下载文件按同一签名清单大小和 SHA-256 校验；有效但旧版 LAN 清单不会再与 WAN 比较版本。
+  - 同步 `android-offline-js-launcher` design/spec 与可选设备验收 todo；仅源码核对，未断网实测或修改运行代码。
+
 ### 豆包语音全角括号协议错误
 
 - ✅ [2026-10-19] Node 实网确认现场故障来自末尾半角括号句后，按用户确认扩展共享分句器和豆包直连清理，半角 `( )` 与全角 `（ ）` 均切段或移除字形、保留内部正文。

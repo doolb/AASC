@@ -3,6 +3,18 @@
 ## 实施协议与文件契约（先于代码）
 
 ```text
+当前实现·已有声明 := network.UPDATE_SOURCES按两LAN再域名WAN排列；manifest和download复用来源列表
+当前实现·新增定义 := WAN热更请求URL由c.aasc.us/mnt/aasc-offline/解析所得IPv4替换主机；配置来源仍为域名
+当前实现·操作流程 := response请求前识别固定WAN热更来源 → dns.lookup解析IPv4 → 重建实际IP URL → 发送且Host为IP → 保留LAN优先、逐源回退、签名/SHA-256校验
+当前实现·边界 := DNS失败按现有源失败处理；不固定IP，不改模型来源或旧原生更新器
+当前验证 := 本地HTTP断言Host为解析所得IP；模型来源不解析；启动器37/37；真实WAN清单验签及code128 ZIP大小/SHA-256下载通过
+更新源顺序 := 家庭LAN → 公司LAN → WAN；清单请求逐源尝试，首个验签成功来源即为本轮清单
+JS WAN来源配置 := http://c.aasc.us/mnt/aasc-offline/；response先解析IPv4并改写实际请求URL主机，http.get使用IP URL
+旧原生路径 := 缺少JS资产的历史APK先DNS解析WAN域名，再把请求URL主机替换为解析得到的IP
+清单源失败 := 网络/HTTP/解析/验签失败 → 下一来源；全部失败 → 更新源不可用
+下载源顺序 := 清单来源优先 → 其余固定来源；每源下载均要求清单声明大小与SHA-256一致
+min APK := 使用同一清单来源和备用源顺序；LAN关闭但WAN可用且文件匹配时继续下载
+版本边界 := 有效但旧版LAN清单会被首选，不主动查询WAN比较版本
 宿主API := 1；APK资产offline-launcher-manifest.json存在才启用新路径，旧profile仍走原路径
 根宿主组成 := Kotlin管道桥 + APK固定builtin supervisor.js；supervisor不被热更覆盖，entry/controller及全部业务模块可热更
 启动器切换 := 旧JS先暂存并验证目标code而不改活动服务指针 → 根宿主切到候选启动器 → 启动现行服务健康后提交启动器 → 向新JS重放原安装/更新请求

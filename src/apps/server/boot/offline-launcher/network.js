@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
+const dns = require('node:dns/promises');
+const net = require('node:net');
 const crypto = require('node:crypto');
 const { Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
@@ -11,10 +13,25 @@ const files = require('./files');
 
 const UPDATE_SOURCES = Object.freeze(['http://192.168.1.39/mnt/aasc-offline/', 'http://10.221.70.87/mnt/aasc-offline/', 'http://c.aasc.us/mnt/aasc-offline/']);
 const MODEL_SOURCES = Object.freeze(['http://192.168.1.39/mnt/aimodel/', 'http://10.221.70.87/mnt/aimodel/', 'https://c.aasc.us/mnt/aimodel/']);
-function response(url, signal, timeout = 12000) {
+/**
+ * 仅热更公网目录把域名解析结果写入实际请求 URL。公网入口对域名 Host 返回 403，
+ * 因此不能只给 http.get 指定连接 IP 而保留域名 Host；模型来源维持原来的 HTTPS 域名。
+ * 每次请求重新解析，避免把公网 IP 固定在 APK 或热更代码中。
+ */
+async function resolveRequestUrl(url, lookup = dns.lookup) {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error('下载地址无效');
+    if (parsed.protocol !== 'http:' || parsed.hostname !== 'c.aasc.us' || !parsed.pathname.startsWith('/mnt/aasc-offline/')) return parsed;
+    const resolved = await lookup(parsed.hostname, { family: 4 });
+    if (net.isIP(resolved?.address) !== 4) throw new Error('WAN热更域名未解析到IPv4地址');
+    parsed.hostname = resolved.address;
+    return parsed;
+}
+async function response(url, signal, timeout = 12000, lookup = dns.lookup) {
+    signal?.throwIfAborted();
+    const parsed = await resolveRequestUrl(url, lookup);
+    signal?.throwIfAborted();
     return new Promise((resolve, reject) => {
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return reject(new Error('下载地址无效'));
         const request = (parsed.protocol === 'https:' ? https : http).get(parsed, { signal }, result => {
             if (result.statusCode !== 200) { result.resume(); reject(new Error(`下载HTTP ${result.statusCode}`)); }
             else resolve(result);
@@ -67,4 +84,4 @@ async function download(root, sources, entry, destination, signal, progress = ()
     }
     throw new Error(`下载源均不可用: ${last?.message}`);
 }
-module.exports = { UPDATE_SOURCES, MODEL_SOURCES, response, json, download };
+module.exports = { UPDATE_SOURCES, MODEL_SOURCES, resolveRequestUrl, response, json, download };

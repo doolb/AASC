@@ -79,6 +79,35 @@ async function fixture(t) {
     return { cleanup, temp, root, remote, config, catalog, source, requests, release, lockSha, lockBytes };
 }
 
+test('WAN热更先解析域名再以IP URL请求，模型来源保留域名', async t => {
+    let actualHost = '';
+    const server = http.createServer((request, response) => {
+        actualHost = request.headers.host;
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{"ok":true}');
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    t.after(() => new Promise(resolve => server.close(resolve)));
+    const port = server.address().port;
+    let lookups = 0;
+    const lookup = async (host, options) => {
+        lookups++;
+        assert.equal(host, 'c.aasc.us');
+        assert.deepEqual(options, { family: 4 });
+        return { address: '127.0.0.1', family: 4 };
+    };
+    const stream = await network.response(`http://c.aasc.us:${port}/mnt/aasc-offline/manifest.json`, undefined, 1000, lookup);
+    let body = '';
+    for await (const chunk of stream) body += chunk;
+    assert.equal(body, '{"ok":true}');
+    assert.equal(actualHost, `127.0.0.1:${port}`);
+    assert.equal(lookups, 1);
+    const modelUrl = await network.resolveRequestUrl('https://c.aasc.us/mnt/aimodel/manifest.json', lookup);
+    assert.equal(modelUrl.hostname, 'c.aasc.us');
+    assert.equal(lookups, 1);
+});
+
 test('空min仅靠内置模块预览/首装，恢复种子、空目录与latest，健康后提交', async t => {
     const f = await fixture(t); const source = await f.release(); const releases = new Releases(f.config);
     const preview = await releases.preview(); assert.equal(preview.baseUrl, f.source); assert.ok(preview.downloadBytes > 0); assert.equal(releases.current(), null);
