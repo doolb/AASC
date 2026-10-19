@@ -1,3 +1,8 @@
+### 显示端主题面板光晕设置
+
+- ✅ [2026-10-19] 显示端右下角“主题”面板开放全局光晕的中心颜色、中心亮度范围和扩散范围。
+  - 更新 `display.html`、`display-mmd.css`、`display-background-glow.js`、`display-appearance-controls.js` 与 `server-app.js`：两端共用现有 WebSocket 配置、服务端校验和广播；显示端实时预览，失败或断线恢复权威值。同步自测、design/spec/task/todo；四组相关测试 14/14、JavaScript 语法与差异检查通过。`servicePackage=true` 待出包，真机观感与跨端同步待现场验收。
+
 ### LLM 三档模型设计记录
 
 - ✅ [2026-10-19] 精简三档定义，移除 `targetModels` 和 `actualModels` 两套重复字段。

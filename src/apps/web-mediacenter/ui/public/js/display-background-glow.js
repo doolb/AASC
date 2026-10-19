@@ -1,6 +1,6 @@
 'use strict';
 
-// 控制端和显示端共用背景光晕参数应用逻辑；只有控制端创建的控件会提交配置。
+// 控制端和显示端共用背景光晕的预览、权威回显及保存流程。
 (function createDisplayBackgroundGlow(windowObject, documentObject) {
     const DEFAULT_CONFIG = Object.freeze({ color: '#8FA8D5', centerRange: 10, spread: 58 });
     const MIDDLE_BASE_COLOR = '#20232E';
@@ -45,17 +45,27 @@
         centerRangeOutput: null,
         spreadInput: null,
         spreadOutput: null,
+        statusOutput: null,
+        isDisplayControl: false,
+        initialized: false,
+        pending: false,
 
         init() {
-            this.colorInput = documentObject.getElementById('displayBackgroundGlowColor');
-            this.colorOutput = documentObject.getElementById('displayBackgroundGlowColorValue');
-            this.centerRangeInput = documentObject.getElementById('displayBackgroundGlowCenterRange');
-            this.centerRangeOutput = documentObject.getElementById('displayBackgroundGlowCenterRangeValue');
-            this.spreadInput = documentObject.getElementById('displayBackgroundGlowSpread');
-            this.spreadOutput = documentObject.getElementById('displayBackgroundGlowSpreadValue');
+            if (this.initialized) return this;
+            this.isDisplayControl = Boolean(documentObject.getElementById('displayAppearanceGlowColor'));
+            const prefix = this.isDisplayControl ? 'displayAppearanceGlow' : 'displayBackgroundGlow';
+            this.colorInput = documentObject.getElementById(`${prefix}Color`);
+            this.colorOutput = documentObject.getElementById(`${prefix}ColorValue`);
+            this.centerRangeInput = documentObject.getElementById(`${prefix}CenterRange`);
+            this.centerRangeOutput = documentObject.getElementById(`${prefix}CenterRangeValue`);
+            this.spreadInput = documentObject.getElementById(`${prefix}Spread`);
+            this.spreadOutput = documentObject.getElementById(`${prefix}SpreadValue`);
+            this.statusOutput = this.isDisplayControl
+                ? documentObject.getElementById('displayAppearanceGlowStatus') : null;
             this.render(this.currentConfig);
 
             if (this.colorInput && this.centerRangeInput && this.spreadInput) {
+                this.initialized = true;
                 [this.colorInput, this.centerRangeInput, this.spreadInput].forEach((input) => {
                     input.addEventListener('input', () => this.previewFromInputs());
                     input.addEventListener('change', () => {
@@ -65,6 +75,10 @@
                 });
             }
             return this;
+        },
+
+        setStatus(message) {
+            if (this.statusOutput) this.statusOutput.textContent = message || '';
         },
 
         render(config) {
@@ -99,18 +113,40 @@
         handleConfig(data) {
             const config = data?.config || data;
             this.authoritativeConfig = normalizeConfig(config, DEFAULT_CONFIG);
+            this.pending = false;
+            this.setStatus('');
             this.render(this.authoritativeConfig);
         },
 
         handleConfigError(data) {
             this.authoritativeConfig = normalizeConfig(data?.config, this.authoritativeConfig);
+            this.pending = false;
             this.render(this.authoritativeConfig);
-            if (windowObject.showToast) {
+            this.setStatus(data?.message || '背景光晕保存失败');
+            if (!this.isDisplayControl && windowObject.showToast) {
                 windowObject.showToast(data?.message || '显示端背景设置失败', 'error');
             }
         },
 
+        handleDisconnected() {
+            const wasPending = this.pending;
+            this.pending = false;
+            this.render(this.authoritativeConfig);
+            if (wasPending) this.setStatus('连接已断开，光晕设置未保存');
+        },
+
         sendUpdate() {
+            const message = { type: 'setDisplayBackgroundGlowConfig', config: this.currentConfig };
+            if (this.isDisplayControl) {
+                if (windowObject.DisplayStage?.send(message) !== true) {
+                    this.render(this.authoritativeConfig);
+                    this.setStatus('背景光晕保存失败，请检查连接');
+                    return false;
+                }
+                this.pending = true;
+                this.setStatus('正在保存光晕…');
+                return true;
+            }
             const socket = windowObject.WebSocketManager?.ws;
             if (!socket || socket.readyState !== 1) {
                 this.render(this.authoritativeConfig);
@@ -118,10 +154,7 @@
                 return false;
             }
             try {
-                socket.send(JSON.stringify({
-                    type: 'setDisplayBackgroundGlowConfig',
-                    config: this.currentConfig
-                }));
+                socket.send(JSON.stringify(message));
                 return true;
             } catch (error) {
                 this.render(this.authoritativeConfig);

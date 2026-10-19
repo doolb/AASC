@@ -1338,7 +1338,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -4000,6 +4000,41 @@ function broadcastDisplayBackgroundGlowConfig(displayBackgroundGlow = getDisplay
     const message = { type: 'displayBackgroundGlowConfig', config: displayBackgroundGlow };
     broadcastToControls(message);
     displayClients.forEach((_, displayId) => sendToDisplay(displayId, message));
+}
+
+// 两端共用同一配置入口；服务端规范化后持久化，并广播最终权威值。
+function saveDisplayBackgroundGlowConfig(data, ws) {
+    const currentConfig = getDisplayBackgroundGlowConfig();
+    const validation = config.validateDisplayBackgroundGlowPayload(data.config, currentConfig);
+    if (!validation.ok) {
+        ws.send(JSON.stringify({
+            type: 'displayBackgroundGlowConfigError',
+            config: currentConfig,
+            message: validation.message
+        }));
+        return;
+    }
+
+    try {
+        if (!config.set('ui.displayBackgroundGlow', validation.config)) {
+            logError('配置', '保存显示端背景光晕失败');
+            ws.send(JSON.stringify({
+                type: 'displayBackgroundGlowConfigError',
+                config: getDisplayBackgroundGlowConfig(),
+                message: '背景光晕配置保存失败'
+            }));
+            return;
+        }
+        broadcastDisplayBackgroundGlowConfig(validation.config);
+        log('配置', `显示端背景光晕已更新：中心范围 ${validation.config.centerRange}%，扩散 ${validation.config.spread}%`);
+    } catch (error) {
+        logError('配置', `保存显示端背景光晕失败: ${error.message}`);
+        ws.send(JSON.stringify({
+            type: 'displayBackgroundGlowConfigError',
+            config: getDisplayBackgroundGlowConfig(),
+            message: '背景光晕配置保存失败'
+        }));
+    }
 }
 
 function getDisplayTtsBackgroundOpacity() {
@@ -8983,11 +9018,15 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         void handleChatModelTierMessage(ws, data);
         return;
     }
-    if (['setControlThemeConfig', 'setDisplayTtsBackgroundOpacityConfig'].includes(data.type)) {
+    if (['setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig'].includes(data.type)) {
         // 连接身份由服务端登记；旧 WebSocket 不得更改全局显示参数。
         if (displayClients.get(displayId)?.ws !== ws) return;
-        if (data.type === 'setControlThemeConfig') handleDisplayThemeConfig(data, ws);
-        else saveDisplayTtsBackgroundOpacity(data, ws);
+        const handlers = {
+            setControlThemeConfig: handleDisplayThemeConfig,
+            setDisplayBackgroundGlowConfig: saveDisplayBackgroundGlowConfig,
+            setDisplayTtsBackgroundOpacityConfig: saveDisplayTtsBackgroundOpacity
+        };
+        handlers[data.type](data, ws);
         return;
     }
     if (['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices'].includes(data.type)) {
@@ -9669,38 +9708,8 @@ async function handleControlMessageFallback(data, ws) {
     }
 
     if (data.type === 'setDisplayBackgroundGlowConfig') {
-        const currentConfig = getDisplayBackgroundGlowConfig();
-        const validation = config.validateDisplayBackgroundGlowPayload(data.config, currentConfig);
-        if (!validation.ok) {
-            ws.send(JSON.stringify({
-                type: 'displayBackgroundGlowConfigError',
-                config: currentConfig,
-                message: validation.message
-            }));
-            return;
-        }
-
-        try {
-            if (!config.set('ui.displayBackgroundGlow', validation.config)) {
-                const authoritativeConfig = getDisplayBackgroundGlowConfig();
-                logError('配置', '保存显示端背景光晕失败');
-                ws.send(JSON.stringify({
-                    type: 'displayBackgroundGlowConfigError',
-                    config: authoritativeConfig,
-                    message: '背景光晕配置保存失败'
-                }));
-                return;
-            }
-            broadcastDisplayBackgroundGlowConfig(validation.config);
-            log('配置', `显示端背景光晕已更新：亮度 ${validation.config.brightness}%，扩散 ${validation.config.spread}%`);
-        } catch (error) {
-            logError('配置', `保存显示端背景光晕失败: ${error.message}`);
-            ws.send(JSON.stringify({
-                type: 'displayBackgroundGlowConfigError',
-                config: getDisplayBackgroundGlowConfig(),
-                message: '背景光晕配置保存失败'
-            }));
-        }
+        if (!controlClients.has(ws)) return;
+        saveDisplayBackgroundGlowConfig(data, ws);
         return;
     }
 

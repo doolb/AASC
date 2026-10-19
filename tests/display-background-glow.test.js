@@ -17,7 +17,7 @@ const display = read('src/apps/web-mediacenter/ui/public/display.html');
 const displayCss = read('src/apps/web-mediacenter/ui/public/css/display.css');
 const glowScript = read('src/apps/web-mediacenter/ui/public/js/display-background-glow.js');
 
-function createGlowControlHarness() {
+function createGlowControlHarness(surface = 'control') {
     const inputs = {
         color: { value: '#B4C8EF', handlers: {} },
         centerRange: { value: '14', handlers: {} },
@@ -33,13 +33,16 @@ function createGlowControlHarness() {
     };
     const cssVariables = new Map();
     const sentMessages = [];
+    const prefix = surface === 'display' ? 'displayAppearanceGlow' : 'displayBackgroundGlow';
+    const status = { textContent: '' };
     const ids = {
-        displayBackgroundGlowColor: inputs.color,
-        displayBackgroundGlowCenterRange: inputs.centerRange,
-        displayBackgroundGlowSpread: inputs.spread,
-        displayBackgroundGlowColorValue: outputs.color,
-        displayBackgroundGlowCenterRangeValue: outputs.centerRange,
-        displayBackgroundGlowSpreadValue: outputs.spread
+        [`${prefix}Color`]: inputs.color,
+        [`${prefix}CenterRange`]: inputs.centerRange,
+        [`${prefix}Spread`]: inputs.spread,
+        [`${prefix}ColorValue`]: outputs.color,
+        [`${prefix}CenterRangeValue`]: outputs.centerRange,
+        [`${prefix}SpreadValue`]: outputs.spread,
+        ...(surface === 'display' ? { displayAppearanceGlowStatus: status } : {})
     };
     const documentObject = {
         documentElement: { style: { setProperty: (name, value) => cssVariables.set(name, value) } },
@@ -48,11 +51,12 @@ function createGlowControlHarness() {
     };
     const windowObject = {
         WebSocketManager: { ws: { readyState: 1, send: message => sentMessages.push(JSON.parse(message)) } },
+        DisplayStage: { send: message => { sentMessages.push(JSON.parse(JSON.stringify(message))); return true; } },
         showToast() {}
     };
     vm.runInNewContext(glowScript, { window: windowObject, document: documentObject });
     windowObject.DisplayBackgroundGlow.init();
-    return { windowObject, inputs, outputs, cssVariables, sentMessages };
+    return { windowObject, inputs, outputs, status, cssVariables, sentMessages };
 }
 
 test('显示端背景光晕配置使用安全默认值并规范化范围', () => {
@@ -111,6 +115,39 @@ test('中心范围驱动纯色中心范围而非 alpha，颜色和新配置同�
     });
 });
 
+test('显示端主题面板光晕实时预览、保存及断线回退', () => {
+    const { windowObject, inputs, outputs, status, cssVariables, sentMessages } = createGlowControlHarness('display');
+    const glow = windowObject.DisplayBackgroundGlow;
+    glow.handleConfig({ config: { color: '#123456', centerRange: 8, spread: 61 } });
+    assert.equal(inputs.color.value, '#123456');
+    inputs.color.value = '#B4C8EF';
+    inputs.centerRange.value = '14';
+    inputs.spread.value = '66';
+    inputs.centerRange.handlers.input();
+    assert.equal(cssVariables.get('--display-background-glow-center-range'), '14%');
+    assert.equal(outputs.color.textContent, '#B4C8EF');
+    inputs.spread.handlers.change();
+    assert.deepEqual(sentMessages.at(-1), {
+        type: 'setDisplayBackgroundGlowConfig',
+        config: { color: '#B4C8EF', centerRange: 14, spread: 66 }
+    });
+    assert.equal(status.textContent, '正在保存光晕…');
+    glow.handleDisconnected();
+    assert.equal(inputs.color.value, '#123456');
+    assert.equal(inputs.centerRange.value, '8');
+    assert.equal(status.textContent, '连接已断开，光晕设置未保存');
+    inputs.color.value = '#ABCDEF';
+    inputs.color.handlers.change();
+    glow.handleConfigError({ config: { color: '#123456', centerRange: 8, spread: 61 }, message: '光晕参数不合法' });
+    assert.equal(inputs.color.value, '#123456');
+    assert.equal(status.textContent, '光晕参数不合法');
+    windowObject.DisplayStage.send = () => false;
+    inputs.color.value = '#AABBCC';
+    inputs.color.handlers.change();
+    assert.equal(inputs.color.value, '#123456');
+    assert.equal(status.textContent, '背景光晕保存失败，请检查连接');
+});
+
 test('光晕经 WebSocket 持久化广播并在两端连接初始化时下发', () => {
     assert.match(server, /'setDisplayBackgroundGlowConfig'/, '控制端消息应注册光晕配置类型');
     assert.match(server, /config\.set\(['"]ui\.displayBackgroundGlow['"]/, '服务端应持久化全局光晕参数');
@@ -127,5 +164,6 @@ test('光晕经 WebSocket 持久化广播并在两端连接初始化时下发', 
     assert.match(selfTest, /id:\s*'control_sidebar_orientation'/, '自测模块应检查导航方向布局');
     assert.match(controlScript, /displayBackgroundGlowConfig/, '控制端应接收服务端光晕配置');
     assert.match(display, /displayBackgroundGlowConfig/, '显示端应接收服务端光晕配置');
+    assert.match(display, /displayBackgroundGlowConfigError/, '显示端应处理光晕保存失败回包');
     assert.match(displayCss, /radial-gradient/, '显示端媒体画布应使用中心渐变底色');
 });

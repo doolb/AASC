@@ -89,6 +89,8 @@ Server controlTheme update:
 
 ## 显示端音色按钮上方的主题面板（2026-10-19）
 
+显示端主题面板增设背景光晕三个控件，复用 `display-background-glow.js` 的预览和权威回显；保存沿用全局 `ui.displayBackgroundGlow` 的 WebSocket 流程，面板在小屏继续使用现有高度限制与滚动。
+
 ```text
 已有声明 := 右侧音色/灯光按钮列 + UiTheme 的 15 个主题与 applyRemoteTheme + ui.controlTheme 权威配置
 新增定义 := 主题按钮控制向按钮列左侧展开的外观面板；主题下拉框显示 15 个主题；字幕背景滑块显示 0..100 百分比

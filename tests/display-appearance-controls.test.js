@@ -12,6 +12,7 @@ const display = read('src/apps/web-mediacenter/ui/public/display.html');
 const server = read('src/apps/server/boot/server-app.js');
 const controlSocket = read('src/apps/web-mediacenter/ui/public/js/websocket.js');
 const appearanceScript = read('src/apps/web-mediacenter/ui/public/js/display-appearance-controls.js');
+const glowScript = read('src/apps/web-mediacenter/ui/public/js/display-background-glow.js');
 const displayMmdCss = read('src/apps/web-mediacenter/ui/public/css/display-mmd.css');
 const panel = display.match(/<button id="displayAppearanceToggle"[\s\S]*?<\/section>\s*(?=<button id="displayTtsVoiceToggle")/u)?.[0];
 const voiceButton = display.match(/<button id="displayTtsVoiceToggle"[\s\S]*?<\/button>/u)?.[0];
@@ -35,12 +36,57 @@ test('主题按钮位于音色上方且面板使用现有主题列表，服务�
     assert.ok(display.indexOf('displayAppearanceToggle') < display.indexOf('displayTtsVoiceToggle'));
     const optionCount = (panel.match(/<option value=/gu) || []).length;
     assert.equal(optionCount, 15);
+    for (const id of ['displayAppearanceGlowColor', 'displayAppearanceGlowCenterRange', 'displayAppearanceGlowSpread']) {
+        assert.match(panel, new RegExp(`id="${id}"`, 'u'));
+    }
+    assert.match(server, /displayTypes:[^\n]*'setDisplayBackgroundGlowConfig'/u);
+    assert.match(server, /displayClients\.get\(displayId\)\?\.ws !== ws[\s\S]*?setDisplayBackgroundGlowConfig: saveDisplayBackgroundGlowConfig/u);
     assert.match(server, /displayTypes:[^\n]*'setControlThemeConfig'[^\n]*'setDisplayTtsBackgroundOpacityConfig'/u);
     assert.match(server, /displayClients\.get\(displayId\)\?\.ws !== ws/u);
     assert.match(server, /function broadcastControlTheme\(theme\)[\s\S]*broadcastToControls\(\{ type: 'controlThemeChanged', theme \}\)/u);
     assert.match(controlSocket, /controlThemeChanged: data => window\.UiTheme\?\.applyRemoteTheme\(data\.theme\)/u);
     assert.match(display, /socket\.onclose = function\(\)[\s\S]*DisplayAppearanceControls\?\.handleDisconnected\(\)/u);
     assert.match(appearanceScript, /addEventListener\('DOMContentLoaded', init/u);
+});
+
+test('窄屏主题面板可编辑光晕并向服务器提交共享配置', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.setViewport({ width: 390, height: 320 });
+        await page.setContent(`<div id="displayStageLayers" class="display-stage-layers"><div class="display-interaction-layer"><div class="display-stage-lighting-control">${panel}${voiceButton}</div></div></div>`);
+        await page.addStyleTag({ content: displayMmdCss });
+        await page.evaluate(() => {
+            window.__sent = [];
+            window.DisplayStage = { send: message => { window.__sent.push(message); return true; } };
+        });
+        await page.addScriptTag({ content: glowScript });
+        const result = await page.evaluate(() => {
+            window.DisplayBackgroundGlow.init();
+            const panelNode = document.getElementById('displayAppearancePanel');
+            panelNode.hidden = false;
+            const color = document.getElementById('displayAppearanceGlowColor');
+            const range = document.getElementById('displayAppearanceGlowCenterRange');
+            const spread = document.getElementById('displayAppearanceGlowSpread');
+            color.value = '#B4C8EF';
+            range.value = '14';
+            spread.value = '66';
+            range.dispatchEvent(new Event('input', { bubbles: true }));
+            const preview = document.documentElement.style.getPropertyValue('--display-background-glow-center-range');
+            spread.dispatchEvent(new Event('change', { bubbles: true }));
+            const rect = panelNode.getBoundingClientRect();
+            return { preview, sent: window.__sent, status: document.getElementById('displayAppearanceGlowStatus').textContent,
+                inViewport: rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
+                scrollable: panelNode.scrollHeight > panelNode.clientHeight };
+        });
+        assert.equal(result.preview, '14%');
+        assert.deepEqual(result.sent, [{ type: 'setDisplayBackgroundGlowConfig',
+            config: { color: '#B4C8EF', centerRange: 14, spread: 66 } }]);
+        assert.equal(result.status, '正在保存光晕…');
+        assert.equal(result.inViewport, true);
+        assert.equal(result.scrollable, true);
+    } finally {
+        await page.close();
+    }
 });
 
 test('显示端面板展开、保存、预览、权威回显及断线恢复', async () => {

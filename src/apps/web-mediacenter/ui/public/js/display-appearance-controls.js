@@ -123,6 +123,7 @@
     }
 
     function handleDisconnected() {
+        root.DisplayBackgroundGlow?.handleDisconnected();
         const hadPendingSave = state.themePending || state.opacityPending;
         state.themePending = false;
         state.opacityPending = false;

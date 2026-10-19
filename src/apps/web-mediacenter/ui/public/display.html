@@ -89,7 +89,7 @@
             <div class="display-stage-lighting-control" hidden>
                 <button id="displayAppearanceToggle" class="display-stage-button" type="button"
                         aria-controls="displayAppearancePanel" aria-expanded="false">主题</button>
-                <section id="displayAppearancePanel" class="display-mmd-lighting-panel display-appearance-panel" hidden aria-label="主题与 TTS 字幕背景">
+                <section id="displayAppearancePanel" class="display-mmd-lighting-panel display-appearance-panel" hidden aria-label="主题、背景光晕与 TTS 字幕背景">
                     <strong>外观设置</strong>
                     <label for="displayAppearanceTheme">主题</label>
                     <select id="displayAppearanceTheme" aria-label="显示端主题">
@@ -102,6 +102,16 @@
                         <option value="girl-pink">少女粉</option><option value="rose-gold">玫瑰金</option>
                         <option value="new-year-red">新年红</option>
                     </select>
+                    <div class="display-appearance-glow">
+                        <strong>背景光晕</strong>
+                        <label for="displayAppearanceGlowColor">中心颜色 <output id="displayAppearanceGlowColorValue" for="displayAppearanceGlowColor">#8FA8D5</output></label>
+                        <input id="displayAppearanceGlowColor" type="color" value="#8FA8D5" aria-label="光晕中心颜色">
+                        <label for="displayAppearanceGlowCenterRange">中心亮度范围 <output id="displayAppearanceGlowCenterRangeValue" for="displayAppearanceGlowCenterRange">10%</output></label>
+                        <input id="displayAppearanceGlowCenterRange" type="range" min="0" max="20" step="1" value="10" aria-label="光晕中心亮度范围">
+                        <label for="displayAppearanceGlowSpread">扩散范围 <output id="displayAppearanceGlowSpreadValue" for="displayAppearanceGlowSpread">58%</output></label>
+                        <input id="displayAppearanceGlowSpread" type="range" min="25" max="90" step="1" value="58" aria-label="光晕扩散范围">
+                        <p id="displayAppearanceGlowStatus" role="status" aria-live="polite"></p>
+                    </div>
                     <label for="displayAppearanceTtsOpacity">TTS 字幕背景 <output id="displayAppearanceTtsOpacityValue" for="displayAppearanceTtsOpacity">20%</output></label>
                     <input id="displayAppearanceTtsOpacity" type="range" min="0" max="100" step="1" value="20" aria-label="TTS 字幕背景透明度">
                     <p id="displayAppearanceStatus" role="status" aria-live="polite"></p>
@@ -6120,6 +6130,11 @@
                         if (window.DisplayBackgroundGlow) {
                             window.DisplayBackgroundGlow.handleConfig(data);
                         }
+                        return;
+                    }
+
+                    if (data.type === 'displayBackgroundGlowConfigError') {
+                        window.DisplayBackgroundGlow?.handleConfigError(data);
                         return;
                     }
 

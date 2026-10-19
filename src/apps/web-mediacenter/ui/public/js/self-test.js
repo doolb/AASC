@@ -386,16 +386,19 @@ const SelfTest = {
         {
             id: 'display_background_glow_settings',
             name: '显示端背景光晕设置',
-            description: '检查全局中心颜色、完整中心范围、扩散范围与实时预览',
+            description: '检查全局光晕参数、控制端预览和双端共用的错误及断线回退接口',
             category: '界面布局',
             run: async () => {
                 const color = document.getElementById('displayBackgroundGlowColor');
                 const centerRange = document.getElementById('displayBackgroundGlowCenterRange');
                 const spread = document.getElementById('displayBackgroundGlowSpread');
                 const preview = document.getElementById('displayBackgroundGlowPreview');
-                const config = window.DisplayBackgroundGlow?.currentConfig;
-                if (!color || !centerRange || !spread || !preview || !config) {
-                    return { success: false, message: '背景光晕设置控件不完整', details: '缺少滑块、预览或配置管理器' };
+                const manager = window.DisplayBackgroundGlow;
+                const config = manager?.currentConfig;
+                const canRecover = typeof manager?.handleConfigError === 'function'
+                    && typeof manager?.handleDisconnected === 'function';
+                if (!color || !centerRange || !spread || !preview || !config || !canRecover) {
+                    return { success: false, message: '背景光晕设置控件不完整', details: '缺少输入、预览或共享管理器回退接口' };
                 }
                 const valid = /^#[0-9A-F]{6}$/u.test(config.color)
                     && Number.isFinite(config.centerRange)
