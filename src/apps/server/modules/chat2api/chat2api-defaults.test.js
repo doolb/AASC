@@ -31,6 +31,29 @@ test('空映射使用含三档专用别名的内置规则，未知模型保持�
   assert.equal((await mapper.resolveModel('custom-unknown')).actualModel, 'custom-unknown');
   assert.equal((await mapper.resolveModel('aasc-qwen-mini')).actualModel, 'Qwen3.6-Flash');
   assert.equal((await mapper.resolveModel('Qwen3.6-Flash')).actualModel, 'Qwen3.7');
+  assert.equal((await mapper.resolveModel('doubao-think')).actualModel, 'doubao');
+});
+
+test('豆包普通别名经过内置Provider调度后仍发送思考0目标', async () => {
+  const account = { accountId: 'synthetic-doubao', providerId: 'doubaochat', enabled: true,
+    secretConfigured: true, status: 'active', credentials: { nodeProfile: {} } };
+  const store = { readCollection: async () => [], writeCollection: async () => {}, listAccounts: async () => [account],
+    getAccount: async () => account };
+  const providerRegistry = createChat2ApiProviderRegistry({ dataStore: store });
+  const provider = (await providerRegistry.listProviders()).find(row => row.id === 'doubaochat');
+  const modelMapper = createChat2ApiModelMapper({ dataStore: store });
+  assert.equal(provider.modelMappings['doubao-think'], 'doubao');
+  assert.equal((await modelMapper.resolveModel('doubao-think', provider)).actualModel, 'doubao');
+  const loadBalancer = createChat2ApiLoadBalancer({ dataStore: store, providerRegistry, modelMapper });
+  const actualModels = [];
+  const core = createChat2ApiCoreAdapter({ dataStore: store, providerRegistry, modelMapper, loadBalancer,
+    providerAdapters: { doubaochat: async ({ request, actualModel }) => {
+      actualModels.push(actualModel);
+      assert.equal(request.model, 'doubao');
+      return { body: { choices: [{ message: { role: 'assistant', content: 'OK' } }] } };
+    } } });
+  await core.forwardChatCompletion({ model: 'doubao-think', messages: [{ role: 'user', content: '测试' }] });
+  assert.deepEqual(actualModels, ['doubao']);
 });
 
 test('自定义精确与通配规则覆盖内置及Provider规则，保留账号偏好', async () => {
@@ -39,6 +62,7 @@ test('自定义精确与通配规则覆盖内置及Provider规则，保留账号
     { model: 'Qwen3.6', actualModel: 'custom-upstream', providerId: 'qwen' }
   ] } });
   assert.equal((await mapper.resolveModel('doubao-expert')).preferredAccountId, 'chosen');
+  assert.equal((await mapper.resolveModel('doubao-think', { id: 'doubaochat', modelMappings: { 'doubao-think': 'doubao' } })).actualModel, 'doubao-think');
   assert.equal((await mapper.resolveModel('Qwen3.6', { id: 'qwen', modelMappings: { 'Qwen3.6': 'Qwen' } })).actualModel, 'custom-upstream');
 });
 

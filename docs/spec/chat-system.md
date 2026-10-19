@@ -4,13 +4,14 @@
 
 已有声明：当前普通 LLM profile.model；PiProfileConfig.snapshot/update；账号选择.selectAccount；豆包请求.buildDoubaoRequest；Responses 原生续接状态。
 
-新增定义：ModelTier { mini 轻量, flash 普通, pro 专业 }；ProviderTierMapping { providerId, tier, requestModel }；ChatModelTierPreference { tiersByProvider }。当前普通 LLM profile.model 是模型选择的权威来源；偏好配置只记住各 Provider 上次使用的档位。
+新增定义：ModelTier { mini 轻量, flash 普通, pro 专业 }；ProviderTierMapping { providerId, tier, profileModel, requestModel, targetModel }；ChatModelTierPreference { tiersByProvider }。三档定义与 Chat2API 默认目标集中在 chat2api-default-model-mappings.js；当前普通 LLM profile.model 是模型选择的权威来源；偏好配置只记住各 Provider 上次使用的档位。
 
 ```text
 Qwen档位目标 := mini → Qwen3.6-Flash；flash → Qwen3.7；pro → Qwen3.7-Max
-豆包档位 := mini → doubao/思考0；flash → doubao/思考0；pro → doubao-expert/思考3
+豆包档位名称 := mini → doubao；flash → doubao-think；pro → doubao-expert
+Chat2API默认目标 := doubao → doubao/思考0；doubao-think → doubao/思考0；doubao-expert → doubao-expert/思考3
 各Provider初始档位 := qwen → flash（普通/快速）；doubaochat → mini（轻量）
-当前 profile.model 保存 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max 或豆包现有名称；豆包 mini/flash 同名时优先读取 tiersByProvider.doubaochat 回显，缺省为 mini；Qwen 请求使用内部专用别名，mini 须与现有 Qwen3.6-Flash → Qwen3.7 兼容映射隔离
+当前 profile.model 保存 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max 或豆包三个不同的档位名称；按名称直接识别档位；Qwen 请求使用内部专用别名，mini 须与现有 Qwen3.6-Flash → Qwen3.7 兼容映射隔离
 
 服务端读取当前运行的 Chat2API 账号与 Provider 公开目录 → 只发布已启用、有凭据账号且有开发映射的 Provider 标识和名称
 控制端或显示端连接 → 从当前普通 LLM profile.model 按开发维护的名称表反查 Provider 与档位 → 补发权威模型名、档位及可选 Provider；断线时界面禁止提交
@@ -23,7 +24,7 @@ Qwen档位目标 := mini → Qwen3.6-Flash；flash → Qwen3.7；pro → Qwen3.7
 旧版 chat 消息入口 → 与普通 chatMessage 共用当前三档解析；角色 Agent 保持自己的配置
 Chat2API 任务启动或停止后 → 尝试广播可选 Provider 快照；快照读取失败只记录诊断，不改变任务启停结果
 Qwen 三档 → 使用 aasc-qwen-mini/flash/pro 专用请求别名；面板识别不依赖 Chat2API 映射配置
-豆包快选 mini/flash 共用思考0请求，pro 沿用思考3；手工配置旧 doubao-think 时识别为豆包普通档，但请求沿用该当前模型名；只有重新选择快选普通才写入 doubao
+豆包快选 mini 写入 doubao，flash 写入 doubao-think，pro 写入 doubao-expert；Chat2API默认映射将前两档指向 doubao/思考0，保留名称反查；自定义映射优先于默认映射
 当前运行的 Chat2API Responses 服务 → 直接建立响应流；response.failed 或缺少 response.completed 时作为失败回报
 Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不复用不兼容上游会话
 两端快选面板展示当前模型名、Provider 与档位；档位按钮按 aria-pressed 应用现有主题预览按钮状态：选中使用 accent-secondary 到 accent-color 渐变、白字与 accent-color 外圈，未选中使用 bg-secondary、text-secondary、border-color 且无阴影；浅色主题仍保持中性未选中样式；外部登录保留入口与接口接线，本次不启动登录

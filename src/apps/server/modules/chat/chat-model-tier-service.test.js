@@ -72,10 +72,10 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     for (const [name, providerId, tier] of [
         ['Qwen3.6-Flash', 'qwen', 'mini'], ['Qwen3.7', 'qwen', 'flash'],
         ['Qwen3.7-Max', 'qwen', 'pro'], ['doubao', 'doubaochat', 'mini'],
-        ['doubao-expert', 'doubaochat', 'pro'],
+        ['doubao-think', 'doubaochat', 'flash'], ['doubao-expert', 'doubaochat', 'pro'],
         ['aasc-qwen-mini', 'qwen', 'mini']
     ]) assert.deepEqual(identifyModel(name), { providerId, tier });
-    assert.deepEqual(identifyModel('doubao', { doubaochat: 'flash' }), { providerId: 'doubaochat', tier: 'flash' });
+    assert.deepEqual(identifyModel('doubao', { doubaochat: 'flash' }), { providerId: 'doubaochat', tier: 'mini' });
     assert.deepEqual(identifyModel('doubao-think'), { providerId: 'doubaochat', tier: 'flash' });
     assert.equal(service.selection().providerId, 'qwen');
     assert.equal(service.selection().tiersByProvider.qwen, 'mini');
@@ -86,7 +86,7 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
     assert.equal((await service.resolveForChat()).model, 'doubao-think');
     await service.update({ providerId: 'doubaochat', tier: 'flash' });
-    assert.equal(profile.model, 'doubao');
+    assert.equal(profile.model, 'doubao-think');
     profile.model = 'unknown-model';
     assert.equal(service.selection().providerId, null);
     assert.equal(await service.resolveForChat(), null);
@@ -96,20 +96,20 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     await assert.rejects(service.update({ providerId: 'qwen', tier: 'flash' }), /不是普通 LLM/);
 });
 
-test('豆包轻量和普通共用模型名与思考0请求，已保存档位决定同名回显', async () => {
+test('豆包轻量和普通保留不同名称，按当前名称回显档位', async () => {
     const { service, profile, saves, requests } = setup();
     await service.update({ providerId: 'doubaochat', tier: 'flash' });
-    assert.equal(profile.model, 'doubao');
+    assert.equal(profile.model, 'doubao-think');
     assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
-    assert.equal((await service.resolveForChat()).model, 'doubao');
+    assert.equal((await service.resolveForChat()).model, 'doubao-think');
     await (await service.resolveForChat()).client.request({ input: '早' });
-    assert.equal(requests.at(-1).model, 'doubao');
+    assert.equal(requests.at(-1).model, 'doubao-think');
     await service.update({ providerId: 'doubaochat', tier: 'mini' });
     assert.equal(profile.model, 'doubao');
     assert.equal(service.selection().tiersByProvider.doubaochat, 'mini');
     assert.equal(saves.at(-1).preference.tiersByProvider.doubaochat, 'mini');
     await service.update({ providerId: 'doubaochat', tier: 'flash' });
-    assert.equal(profile.model, 'doubao');
+    assert.equal(profile.model, 'doubao-think');
     assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
 });
 

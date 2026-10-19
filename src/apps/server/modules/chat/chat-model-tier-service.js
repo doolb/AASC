@@ -1,33 +1,18 @@
 'use strict';
 
-// 三档映射由开发维护；当前普通 LLM profile.model 是权威模型名，偏好只记忆各 Provider 档位。
-const PROVIDER_TIERS = Object.freeze({
-    qwen: Object.freeze({ label: 'Qwen', defaultTier: 'flash', models: Object.freeze({
-        mini: 'aasc-qwen-mini', flash: 'aasc-qwen-flash', pro: 'aasc-qwen-pro'
-    }), actualModels: Object.freeze({
-        mini: 'Qwen3.6-Flash', flash: 'Qwen3.7', pro: 'Qwen3.7-Max'
-    }) }),
-    doubaochat: Object.freeze({ label: '豆包', defaultTier: 'mini', models: Object.freeze({
-        mini: 'doubao', flash: 'doubao', pro: 'doubao-expert'
-    }), actualModels: Object.freeze({
-        mini: 'doubao', flash: 'doubao', pro: 'doubao-expert'
-    }) })
-});
+// 从同一份开发映射读取档位；当前普通 LLM profile.model 是权威模型名。
+const { PROVIDER_TIERS } = require('../chat2api/chat2api-default-model-mappings');
 const TIERS = Object.freeze(['mini', 'flash', 'pro']);
 const CONFIG_KEY = 'chat.modelTierSelection';
-const LEGACY_MODEL_TIERS = Object.freeze({ 'doubao-think': Object.freeze({ providerId: 'doubaochat', tier: 'flash' }) });
-
-function identifyModel(modelName, tiersByProvider = {}) {
+function identifyModel(modelName) {
     const name = String(modelName || '').trim().toLowerCase();
     if (!name) return null;
-    if (Object.hasOwn(LEGACY_MODEL_TIERS, name)) return LEGACY_MODEL_TIERS[name];
     for (const [providerId, mapping] of Object.entries(PROVIDER_TIERS)) {
-        const matches = TIERS.filter(tier => {
+        const tier = TIERS.find(tier => {
             const aliases = [mapping.models[tier], mapping.actualModels[tier]];
             return aliases.some(alias => alias.toLowerCase() === name);
         });
-        if (matches.length) return { providerId,
-            tier: matches.includes(tiersByProvider[providerId]) ? tiersByProvider[providerId] : matches[0] };
+        if (tier) return { providerId, tier };
     }
     return null;
 }
@@ -49,7 +34,7 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
     const selection = () => {
         const active = getActiveProfile() || {};
         const preference = normalizeSelection(config.get(CONFIG_KEY));
-        const identified = active.mode === 'agent' ? null : identifyModel(active.model, preference.tiersByProvider);
+        const identified = active.mode === 'agent' ? null : identifyModel(active.model);
         if (identified) preference.tiersByProvider[identified.providerId] = identified.tier;
         return { ...preference, providerId: identified?.providerId || null,
             modelName: active.model || '', profileName: active.name || '', profileMode: active.mode || 'llm' };
@@ -126,10 +111,7 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
             throw new Error('当前模型 Provider 未登录或不可用');
         }
         const tier = current.tiersByProvider[current.providerId];
-        // 手工保留的旧模型名继续按原模式请求；面板重新选档时才写入新的开发映射。
-        const legacyModel = String(current.modelName || '').trim().toLowerCase();
-        const model = Object.hasOwn(LEGACY_MODEL_TIERS, legacyModel)
-            ? legacyModel : PROVIDER_TIERS[current.providerId].models[tier];
+        const model = PROVIDER_TIERS[current.providerId].models[tier];
         if (!model) throw new Error('当前 Provider 没有此档位映射');
         return {
             providerId: current.providerId, tier, model,

@@ -1,7 +1,7 @@
 ### LLM 三档模型设计记录
 
-- ✅ [2026-10-19] 豆包普通档改为与轻量档共用 `doubao` 模型和思考 0。
-  - `chat-model-tier-service.js` 同步请求与当前 LLM 模型名映射；同名时用已保存档位偏好回显，缺省轻量。手工旧 `doubao-think` 仍回显普通并按原模型名调用，重新快选普通才写 `doubao`；专业档仍为 `doubao-expert`。服务与双端浏览器定向测试 8/8 通过，本机服务重启后 HTTP 返回 302；更新 chat-system design/spec、使用说明、任务与待办，`servicePackage=true` 待出包。
+- ✅ [2026-10-19] 豆包普通档与轻量档保留不同名称，共用思考 0 实际目标。
+  - `chat2api-default-model-mappings.js` 统一维护三档名称与实际目标：轻量 `doubao → doubao`，普通 `doubao-think → doubao`，专业 `doubao-expert → doubao-expert`；`chat-model-tier-service.js` 读取该定义，`chat2api-provider-registry.js` 从默认映射生成豆包内置映射。修正此前两档同名导致当前 LLM 模型字段无法独立反查的问题。服务、双端浏览器及调度定向测试 15/15 通过；更新 design/spec、使用说明、任务与待办，`servicePackage=true` 待出包。
 
 - ✅ [2026-10-19] 修复豆包普通和专业档只有思考、没有正文的解析错误。
   - `chat2api-doubao-chat-adapter.js` 根据同一 `10040` 思考块的 `is_finish=true` 结束思考，保留旧双边界兼容；补充双档流式/非流式回归。修复前当前账号两档均为 `doubao_empty_response/502`，修复后分别取得 4 字与 23 字正文，专业档思考内容独立保留。`npm run check:chat2api` 287/287 通过；同步豆包 design/spec、任务与待办，`servicePackage=true` 待出包。

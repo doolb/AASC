@@ -81,13 +81,13 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
     await page.evaluate(() => {
         const message = { type: 'chatModelTierConfig', selection: {
             providerId: 'doubaochat', tiersByProvider: { qwen: 'flash', doubaochat: 'flash' },
-            modelName: 'doubao', profileMode: 'llm'
+            modelName: 'doubao-think', profileMode: 'llm'
         }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
         for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
     });
     for (const side of ['control', 'display']) {
         assert.equal(await page.$eval(`#${side}ChatModelTierPanel .chat-model-tier-levels .is-selected`, node => node.textContent), '普通');
-        assert.equal(await page.$eval(`#${side}ChatModelTierPanel [data-current-model]`, node => node.textContent), '当前模型名：doubao');
+        assert.equal(await page.$eval(`#${side}ChatModelTierPanel [data-current-model]`, node => node.textContent), '当前模型名：doubao-think');
     }
     await page.evaluate(() => {
         const message = { type: 'chatModelTierConfig', selection: {

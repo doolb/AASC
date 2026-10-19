@@ -1,5 +1,8 @@
 const {canonicalProviderId}=require('./chat2api-model-capabilities');
 const {QWEN_AUDIO_31_MODEL}=require('./chat2api-qwen-tts-models');
+const { DEFAULT_MODEL_MAPPINGS } = require('./chat2api-default-model-mappings');
+const DOUBAO_MODEL_MAPPINGS = Object.freeze(Object.fromEntries(DEFAULT_MODEL_MAPPINGS
+  .filter(rule => rule.providerId === 'doubaochat').map(rule => [rule.model, rule.actualModel])));
 const BUILTIN_PROVIDERS = Object.freeze([
   {
     id:'qwen-api',publicId:'qwen-api',name:'Qwen API',authType:'apiKey',apiEndpoint:'https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
@@ -52,7 +55,7 @@ const BUILTIN_PROVIDERS = Object.freeze([
   {
     // 公开名称只表示网页思考模式，不能宣传为三个独立权重或原生多模态/工具模型。
     id: 'doubaochat', publicId:'doubao', name: '豆包网页（doubao）', authType: 'cookie', apiEndpoint: 'https://www.doubao.com', loginUrl: 'https://www.doubao.com', chatPath: '/chat/completion',
-    supportedModels: ['doubao', 'doubao-think', 'doubao-expert'], modelMappings: { doubao: 'doubao', 'doubao-think': 'doubao-think', 'doubao-expert': 'doubao-expert' },
+    supportedModels: Object.keys(DOUBAO_MODEL_MAPPINGS), modelMappings: DOUBAO_MODEL_MAPPINGS,
     credentialFields: [{ name: 'cookie', label: '豆包网页 Cookie', type: 'textarea', required: true, helpText: '仅接收已确认的登录/CSRF Cookie；添加后显示已配置、未远端验证' }], authMethods: ['manual', 'cookie'],
     // 只有已验证的普通Node模式可原生续接；网页传输及think/expert不能由布尔能力自动推定。
     capabilities: { text: true, nativeTools: false, multimodal: false, nativeContinuation: true,
