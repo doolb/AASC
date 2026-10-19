@@ -8,6 +8,8 @@
 
 # Web MediaCenter - 使用说明
 
+- [五子棋语音与本地棋盘](usage/game-gomoku.md)（源码已完成，服务包待出包）
+
 - [Offline自动升版、按种类出包、发布与中断恢复命令（终端单行校验进度/日志10秒节流）](usage/offline-release-cli.md)
 
 - [豆包Chat音色、显示端快选与回复播放](usage/doubao-chat-voices.md)（需加载本轮新版服务）

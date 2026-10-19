@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="css/theme.css">
     <link rel="stylesheet" href="css/display.css">
     <link rel="stylesheet" href="css/display-chat.css">
+    <link rel="stylesheet" href="css/display-game.css">
     <link rel="stylesheet" href="css/display-mmd.css">
     <link rel="stylesheet" href="css/tts-voice-picker.css">
     <link rel="stylesheet" href="css/chat-model-tier-picker.css">
@@ -86,6 +87,18 @@
             <div id="voiceTextDisplay" class="voice-text-hidden"></div>
         </div>
         <section id="displayChatLayer" class="display-chat-layer" aria-hidden="true"></section>
+        <section id="displayGameLayer" class="display-game-layer" aria-label="五子棋" aria-hidden="true" hidden>
+            <div id="displayGameShell" class="display-game-shell" hidden>
+                <header class="display-game-header">
+                    <strong>五子棋</strong>
+                    <span id="displayGameStatus" role="status" aria-live="polite"></span>
+                    <button id="displayGameClose" type="button" aria-label="隐藏棋盘">关闭</button>
+                </header>
+                <div id="displayGameBoard" class="display-game-board" role="grid" aria-label="五子棋棋盘"></div>
+                <p class="display-game-hint">点击交点落黑子，也可以说出坐标</p>
+            </div>
+            <button id="displayGameReopen" class="display-game-reopen" type="button" hidden>五子棋</button>
+        </section>
         <div id="displayInteractionLayer" class="display-interaction-layer">
             <div class="display-stage-lighting-control" hidden>
                 <button id="displayAppearanceToggle" class="display-stage-button" type="button"
@@ -706,6 +719,7 @@
     <script src="js/display-background-glow.js"></script>
     <script src="js/android-color-picker.js" defer></script>
     <script src="js/display-stage.js" defer></script>
+    <script src="js/display-game.js" defer></script>
     <script src="js/display-chat.js" defer></script>
     <script src="js/tts-voice-picker.js" defer></script>
     <script src="js/display-tts-voices.js" defer></script>

@@ -1,3 +1,9 @@
+### 五子棋游戏协议与本地显示
+
+- ✅ [2026-10-19] 实现位置参数 Game 标签、服务端权威五子棋与显示端全屏棋盘。
+  - 新增 `gomoku-game-service.js`、`game-chat-bridge.js`、`display-game.js`/CSS，接入 `server-app.js` 和 `display.html`；语音用户落子由 AI 调用协议，点击直接落子后向 AI 提供 GM 增量。常规回合不重复传完整棋盘，首次或版本缺口恢复发送快照；支持尺寸确认、胜负、按显示端 ID 原子保存及关闭后恢复。
+  - 更新 design/spec/task/usage 与定向测试；五子棋服务及浏览器测试 7/7，聊天 requestId 与普通语音合同测试通过，语法与差异检查通过。旧 `chat-tts-interruption.test.js` 有一条 HEAD 已存在的静态断言失败，未修改其所要求的 TTS 节点。`servicePackage=true` 待出包及 Android 真机验收。
+
 ### 控制端聊天思考内容持久化核对
 
 - 📝 [2026-10-19] 核对思考内容的保存路径：普通聊天将 `reasoning` 写入 AASC 本地助手消息历史，约 2 秒合并写盘，页面重载后仍可通过 Think 查看；单条上限 51,200 字符，每会话保留最近 100 条，临时会话显式清空时同步删除其历史。

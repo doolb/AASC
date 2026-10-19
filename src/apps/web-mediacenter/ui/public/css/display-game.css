@@ -1,0 +1,94 @@
+/* 五子棋使用显示端同页舞台和原 WebSocket，不创建独立窗口。 */
+.display-game-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+}
+.display-game-layer[hidden], .display-game-shell[hidden], .display-game-reopen[hidden] {
+    display: none !important;
+}
+.display-game-shell {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    height: 100%;
+    padding: max(12px, var(--display-safe-inset-top)) max(12px, var(--display-safe-inset-right))
+        max(12px, var(--display-safe-inset-bottom)) max(12px, var(--display-safe-inset-left));
+    background: rgba(8, 14, 21, .96);
+    color: #f7f6ed;
+    pointer-events: auto;
+}
+.display-game-header {
+    width: min(calc(var(--display-stage-width) - 32px), 680px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: clamp(14px, 2.6vmin, 22px);
+}
+.display-game-header span { flex: 1; text-align: center; }
+.display-game-header button, .display-game-reopen {
+    border: 1px solid #b89b63;
+    border-radius: 9px;
+    background: #2f3a38;
+    color: #fff;
+    padding: 8px 14px;
+    font: inherit;
+    cursor: pointer;
+}
+.display-game-board {
+    display: grid;
+    grid-template-columns: repeat(var(--game-size), 1fr);
+    grid-template-rows: repeat(var(--game-size), 1fr);
+    width: min(calc(var(--display-stage-width) - 32px), calc(var(--display-stage-height) - 105px), 680px);
+    aspect-ratio: 1;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 4px solid #75522f;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #e2bd74, #c99654);
+    box-shadow: 0 12px 32px #0008;
+    touch-action: manipulation;
+}
+.display-game-point {
+    position: relative;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    min-width: 0;
+    min-height: 0;
+}
+.display-game-point::before, .display-game-point::after {
+    content: '';
+    position: absolute;
+    background: #6c4b2e;
+    pointer-events: none;
+}
+.display-game-point::before { width: 1px; height: 100%; left: 50%; top: 0; }
+.display-game-point::after { width: 100%; height: 1px; top: 50%; left: 0; }
+.display-game-point[data-star="true"] { background: radial-gradient(circle at center, #634525 0 10%, transparent 12%); }
+.display-game-stone {
+    position: absolute;
+    z-index: 1;
+    inset: 10%;
+    border-radius: 50%;
+    pointer-events: none;
+}
+.display-game-point[data-stone="X"] .display-game-stone {
+    background: radial-gradient(circle at 32% 28%, #5d5d5d, #090909 75%);
+    box-shadow: 1px 2px 4px #0008;
+}
+.display-game-point[data-stone="O"] .display-game-stone {
+    background: radial-gradient(circle at 32% 28%, #fff, #d6d1c3 80%);
+    box-shadow: 1px 2px 4px #0008;
+}
+.display-game-point:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.display-game-point:disabled { cursor: default; }
+.display-game-hint { margin: 0; font-size: 13px; opacity: .8; }
+.display-game-reopen { position: absolute; left: 16px; bottom: 16px; pointer-events: auto; }

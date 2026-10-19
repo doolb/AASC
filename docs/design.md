@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [五子棋游戏协议与本地显示](design/game-gomoku.md)
+
 - [显示端右侧设置面板互斥](design/display-stage-panel-coordination.md)
 
 - [Android 颜色选择器对齐 PC](design/android-color-picker.md)

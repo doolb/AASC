@@ -18,6 +18,8 @@ if (configImportResult) {
 const config = require('../modules/config/config-app-service');
 const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
+const { createGomokuGameService } = require('../modules/game/gomoku-game-service');
+const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createDataRepairRunner } = require('../modules/data-repair/data-repair-js-runner');
 const { createChat2ApiRuntime } = require('../modules/chat2api/chat2api-runtime');
 const LogFileWriter = require('../../../framework/observability/log-file-writer');
@@ -401,6 +403,10 @@ if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
 }
 
 const wss = new WebSocket.Server({ server, maxPayload: 500 * 1024 * 1024 });
+const gomokuGame = createGomokuGameService({
+    filePath: path.join(USER_CONFIG_DIR, 'games', 'gomoku.json'),
+    onUpdate: (displayId, message) => sendToDisplay(displayId, message)
+});
 
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -1338,7 +1344,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -8206,6 +8212,8 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
+        const savedGame = gomokuGame.snapshot(displayId);
+        if (savedGame) ws.send(JSON.stringify(savedGame));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
         void chatModelTierService.sendSnapshot(ws);
         // 显示端连接时先收到服务器保存的 MMD 权威值，避免旧页面默认值覆盖持久化设置。
@@ -9053,6 +9061,64 @@ function handleDisplayMessageFallback(displayId, data, ws) {
 
     if (data.type === 'displayChatVisibility') {
         handleDisplayChatVisibility(displayId, data);
+        return;
+    }
+
+    if (data.type === 'gameRecover') {
+        const game = gomokuGame.snapshot(displayId);
+        if (game) ws.send(JSON.stringify(game));
+        return;
+    }
+
+    if (data.type === 'gameView') {
+        if (displayData?.ws !== ws) return;
+        const visible = data.visible === true;
+        const operation = visible ? '恢复显示' : '退出显示';
+        const result = gomokuGame.apply(displayId,
+            { game: '五子棋', actor: 'User', operation, args: [] },
+            { expectedVersion: Number(data.revision) });
+        if (!result.ok) {
+            ws.send(JSON.stringify({ type: 'gameError', code: result.code,
+                revision: gomokuGame.snapshot(displayId)?.revision || null }));
+        }
+        return;
+    }
+
+    if (data.type === 'gameMove') {
+        // 点击只代表当前显示端的 User 操作，绝不信任客户端传入的操作者或目标显示端。
+        if (displayData?.ws !== ws) return;
+        const requestId = typeof data.requestId === 'string' ? data.requestId.slice(0, 80) : null;
+        const expectedVersion = Number(data.revision);
+        const result = Number.isSafeInteger(expectedVersion)
+            ? gomokuGame.apply(displayId, { game: '五子棋', actor: 'User', operation: '落子',
+                args: [data.coordinate] }, { expectedVersion, source: 'displayClick' })
+            : { ok: false, code: '版本无效' };
+        if (!result.ok) {
+            ws.send(JSON.stringify({ type: 'gameError', requestId, code: result.code,
+                revision: gomokuGame.snapshot(displayId)?.revision || null }));
+            if (result.code === '版本过期') {
+                const current = gomokuGame.snapshot(displayId);
+                if (current) ws.send(JSON.stringify(current));
+            }
+            return;
+        }
+        if (result.message?.result === '进行中' && result.message.turn !== 'AI') return;
+        const session = chat.getSession();
+        void handleChatMessage({
+            content: result.gm,
+            displayContent: `棋盘点击 ${result.message.coordinate}`,
+            displayId,
+            voiceOriginDisplayId: displayId,
+            routeVoiceToPreferredDisplay: true,
+            mode: session.mode || 'group',
+            target: session.privateTarget || null,
+            sessionId: session.privateSessionId || 'default',
+            internalGameUpdate: true,
+            sendToControl: message => {
+                broadcastToControls(message);
+                sendToDisplay(displayId, message);
+            }
+        }).catch(error => logError('Game', `点击落子后 AI 处理失败: ${error.message}`));
         return;
     }
 
@@ -11288,6 +11354,7 @@ async function handleChatMessage(options) {
         chatTtsToken = null,
         temporaryConversation: temporaryConversationRequested = false,
         temporaryConversationId = null,
+        internalGameUpdate = false,
         sendToControl
     } = options;
     const images = normalizeChatImages(rawImages);
@@ -11329,7 +11396,7 @@ async function handleChatMessage(options) {
     const userMessageRecord = chat.addMessage({
         role: 'control',
         name: '控制端',
-        content: displayContent || content,
+        content: internalGameUpdate ? (displayContent || '棋盘落子') : (displayContent || content),
         images: images.map(({ mimeType }) => ({ mimeType })),
         mode: messageMode,
         target: messageTarget,
@@ -11422,7 +11489,11 @@ async function handleChatMessage(options) {
         });
     }
     const voiceGenerationToken = beginDisplayConversationTtsGeneration(voiceOriginDisplayId);
-    const streamReply = () => chat.chatStream(content, {
+    const streamReply = () => runGameAwareChat({ chat, gameService: gomokuGame,
+        displayId: displayId || voiceOriginDisplayId, content,
+        userText: internalGameUpdate ? '' : content,
+        internalSignal: internalGameUpdate,
+        options: {
         tierOverride,
         useTemplate: null,
         displayId: displayId,
@@ -11437,7 +11508,7 @@ async function handleChatMessage(options) {
             ? getTemporaryConversationHistoryContext(effectiveTemporaryConversationId)
             : null,
         images
-    }, {
+    }, callbacks: {
         onChunk: (chunk, fullMessage, reasoning) => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage, reasoning });
@@ -11548,7 +11619,7 @@ async function handleChatMessage(options) {
                     speech,
                     mode: messageMode,
                     // 将本轮输入绑定到回复，历史回放不会借用另一轮或另一会话的最新输入。
-                    replyToMessageId: userMessageRecord.id,
+                    replyToMessageId: userMessageRecord?.id || null,
                     target: messageTarget,
                     sessionId: effectiveSessionId,
                     templateId: effectiveTemplateTarget || 'default'
@@ -11591,7 +11662,7 @@ async function handleChatMessage(options) {
                 temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
             });
         }
-    });
+    } });
     try {
         await streamReply();
     } finally {
