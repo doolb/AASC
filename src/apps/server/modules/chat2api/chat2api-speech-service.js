@@ -76,8 +76,8 @@ function normalizeSpeechRequest(request) {
     if (!MODELS.has(model)) throw speechError(400, 'invalid_speech_request', '不支持的 Chat2API 语音模型');
     const doubao = model === 'doubao-chat';
     if (doubao && (request.input.length > 1000 || Buffer.byteLength(request.input, 'utf8') > 4000)) throw speechError(400, 'invalid_speech_request', '豆包网页语音文本超过1000字符或4000字节');
-    // HTTP直调可绕过应用分句器；仅移除全角括号字形，保留括号内文字及其他标点。
-    const speechText = doubao ? request.input.replace(/[（）]/gu, '').trim() : request.input;
+    // HTTP直调可绕过应用分句器；移除两种括号字形，保留括号内文字及其他标点。
+    const speechText = doubao ? request.input.replace(/[（）()]/gu, '').trim() : request.input;
     if (!speechText.trim()) throw speechError(400, 'invalid_speech_request', '语音文本不能为空');
     const voice = request.voice ?? (doubao ? DOUBAO_SPEECH_VOICE : QWEN_VOICE);
     if (typeof voice !== 'string' || !voice.trim() || voice.length > 512 || /[\r\n]/u.test(voice)) throw speechError(400, 'invalid_speech_request', '语音音色参数不合法');

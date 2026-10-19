@@ -253,7 +253,8 @@ test('真实手动豆包链路跳过表情分句，用户原句和日志完整�
     const original = '喵呜～主人好呀！✨\n\n人家是**妲己**，一只拥有九条尾巴的**电子猫娘**哦！🐱💻⚡';
     const full = original + '\n\n虽然名字和那个传说中的狐狸精一样，但我可是由数据流和代码构成的可爱存在呢。我的九条尾巴其实是九个高性能的数据处理终端，可以随时帮主人搜索信息、解答难题，或者只是单纯地卖萌打滚求摸摸～ 📶🐾\n\n主人今天想聊些什么呢？是要查询什么情报，还是想听妲己讲讲笑话呢？喵～❤️';
     for (const [text, expectedCount] of [[original, 3], [full, 8], ['✨\n🐱💻⚡\n❤️', 0],
-        ['你好🐱！\n下一句💻。', 2], ['喵呜（耳朵通红）真的吗？', 3]]) {
+        ['你好🐱！\n下一句💻。', 2], ['喵呜（耳朵通红）真的吗？', 3],
+        ['好不好？( 轻轻蹭了蹭你的脸颊) ❤️', 2]]) {
         const inputs = [], stores = [], sent = [], statuses = [], errors = [];
         const settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' }, providers: { 'doubao-chat': { enabled: true } } });
         const registry = createProviderRegistry({ chat2ApiSpeechService: { generate: async request => {
@@ -289,6 +290,7 @@ test('真实手动豆包链路跳过表情分句，用户原句和日志完整�
         if (text === full) assert.equal(inputs.at(-1), '喵～');
         if (text.startsWith('你好')) assert.deepEqual(inputs, ['你好！', '下一句。']);
         if (text.includes('耳朵通红')) assert.deepEqual(inputs, ['喵呜', '耳朵通红', '真的吗？']);
+        if (text.includes('轻轻蹭')) assert.deepEqual(inputs, ['好不好？', '轻轻蹭了蹭你的脸颊']);
     }
 });
 

@@ -1,5 +1,10 @@
 ### 豆包语音全角括号协议错误
 
+- ✅ [2026-10-19] Node 实网确认现场故障来自末尾半角括号句后，按用户确认扩展共享分句器和豆包直连清理，半角 `( )` 与全角 `（ ）` 均切段或移除字形、保留内部正文。
+  - 更新 `sentence-splitter.js`、`chat2api-speech-service.js` 及分句/手动朗读/Chat2API 测试；现场原文 3 并发再发送 11/11 成功，Chat2API 直接输入带半角括号的末句返回 200100 字节 WAV；分句 8/8、手动 TTS 24/24、Chat2API 286/286 通过。同步 chat-system design/spec/task/todo，`servicePackage=true`，待服务包构建发布。
+
+- 📝 [2026-10-19] 使用本机保存账号从 Node 真实发送豆包语音：带全角括号短句和去括号短句均成功；现场原文按当前分句和表情过滤并发发送，11 条中 10 条成功，末尾半角 `( 轻轻蹭了蹭你的脸颊)` 复现 `doubao_speech_protocol`，阶段为 `sentence/TTSSentenceEnd` 且无音频。该末句去半角括号后生成 200100 字节 WAV，保留半角括号则复现；已同步 design/spec/task/todo，半角括号处理代码待方案确认。
+
 - ✅ [2026-10-19] 按用户确认让全角 `（`、`）` 在当前分句器形成边界，括号内文字保留；豆包直连请求也移除括号字形，协议失败增加脱敏阶段/事件日志和手动朗读失败分句序号。
   - 更新 `sentence-splitter.js`、`chat2api-speech-service.js`、`chat2api-doubao-speech-adapter.js`、`chat-manual-tts.js`、`server-app.js` 及对应测试；补齐手动朗读测试桩。同步 chat-system design/spec/task/todo，分句 8/8、手动 TTS 24/24、Chat2API 286/286 通过；`servicePackage=true`，实际豆包账号待验收。旧日志没有逐句证据，仍需用新日志确认现场根因。
 

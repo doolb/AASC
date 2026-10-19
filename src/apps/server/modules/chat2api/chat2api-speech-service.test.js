@@ -75,8 +75,11 @@ test('豆包固定参数、文本字节/字符及格式先校验，不能使用�
     }
     assert.equal(normalizeSpeechRequest({input:'x',model:'doubao-chat'}).voice,DOUBAO_SPEECH_VOICE);
     assert.equal(normalizeSpeechRequest({input:'你好（耳朵通红）呀',model:'doubao-chat'}).text,'你好耳朵通红呀');
+    assert.equal(normalizeSpeechRequest({input:'( 轻轻蹭了蹭你的脸颊)',model:'doubao-chat'}).text,'轻轻蹭了蹭你的脸颊');
     assert.equal(normalizeSpeechRequest({input:'你好（耳朵通红）呀',model:'qwen-chat'}).text,'你好（耳朵通红）呀');
+    assert.equal(normalizeSpeechRequest({input:'(plain)',model:'qwen-chat'}).text,'(plain)');
     assert.throws(()=>normalizeSpeechRequest({input:'（）',model:'doubao-chat'}),e=>e.code==='invalid_speech_request');
+    assert.throws(()=>normalizeSpeechRequest({input:'()',model:'doubao-chat'}),e=>e.code==='invalid_speech_request');
 });
 test('豆包请求取消/超时透传signal，坏上游错误固定脱敏', async t => {
     const controller=new AbortController();controller.abort();let calls=0;

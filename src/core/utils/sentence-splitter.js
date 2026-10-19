@@ -80,8 +80,8 @@
         for (let i = 0; i < text.length; i++) {
             const ch = text[i];
 
-            // 全角括号只表示朗读停顿与括号内段落边界；正文保留，括号符号不送给合成引擎。
-            if (ch === '（' || ch === '）') {
+            // 全角和半角括号都只表示朗读停顿与括号内段落边界；正文保留，括号字形不送给合成引擎。
+            if (ch === '（' || ch === '）' || ch === '(' || ch === ')') {
                 appendSentence(sentences, current);
                 current = '';
                 commaCount = 0;

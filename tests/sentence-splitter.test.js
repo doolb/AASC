@@ -45,6 +45,9 @@ test('全角括号在当前分句器形成边界，内部正文保留而括号�
     assert.deepEqual(splitIntoSentences('喵呜（耳朵通红）真的吗？'), ['喵呜', '耳朵通红', '真的吗？']);
     assert.deepEqual(splitIntoSentences('（独立内容）'), ['独立内容']);
     assert.deepEqual(splitIntoSentences('（）'), []);
+    assert.deepEqual(splitIntoSentences('喵呜( 轻轻蹭了蹭你的脸颊) 好吗？'), ['喵呜', '轻轻蹭了蹭你的脸颊', '好吗？']);
+    assert.deepEqual(splitIntoSentences('(轻轻蹭了蹭你的脸颊)'), ['轻轻蹭了蹭你的脸颊']);
+    assert.deepEqual(splitIntoSentences('()'), []);
 });
 
 test('长句有界分段，保留中文、英文和 emoji 的原有顺序', () => {
