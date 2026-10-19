@@ -30,6 +30,8 @@
 
 源码实现与定向测试已完成；新的 code 包及包含最新启动器基线的 min APK 尚待构建，实际设备上“launcher 保持运行、服务版本前进”的观察仍待验收。
 
+2026-10-19 现场核对：当前 LAN/WAN 签名清单的 code 为 136，launcher 独立版本为 131；已连接 Note8 的活动 launcher 仍为 code 110，活动服务为 code 112。设备运行的旧 `releases.js` 在目标 code 版本变化且候选含 host API 时直接返回切换候选，因此首次升到含内容比较逻辑的新启动器仍需切换一次；之后仅服务内容变化、launcher 指纹一致时才保持 launcher 进程。该设备尚未完成 code 136 更新，后续服务单独更新的真机行为仍待验收。
+
 启动器和网页复用已有签名 `code/code-vN.zip`，没有新增发布产物。APK 的 `offline-launcher-manifest.json` 描述内置基线资产，固定 supervisor 始终从该基线运行；业务入口 `entry.js`、各业务模块和 `ui/index.html` 可从已验证代码版本运行。宿主/状态 API 均为 1，不兼容候选要求先更新 APK。
 
 旧 JS 先准备目标代码，不更改活动服务指针。固定 supervisor 重新验证清单签名、ZIP 大小/SHA-256、候选启动器文件与 ZIP 字节及 API 声明；停止旧启动器和服务，再启动候选。候选以当前已提交服务验证真实版本/目录健康，空环境则握手后等待安装确认；健康后提交 `updates/launcher-state.json`，向新 JS 重放原安装/更新请求。失败恢复原健康启动器，继续失败则用 APK 基线；原请求明确失败，可重试。未提交 pending 在进程重启时丢弃。
