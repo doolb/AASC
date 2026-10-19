@@ -29,6 +29,9 @@
 
 ### Offline 启动器独立版本与服务单独更新
 
+- 📝 [2026-10-19] 核对 launcher 版本查看位置：发布目标在签名清单 `payload.components.code.launcherVersion`，设备活动版本在 `updates/launcher-state.json` 的 `active.manifest.payload.components.code.launcherVersion`；旧清单回退到 `active.version`。
+  - `launcher.ready.launcherReleaseVersion` 已发送独立版本，当前启动器网页未显示；发布清单目标 code 136、launcher 131。仅源码和清单只读核对，未修改运行代码。
+
 - 📝 [2026-10-19] 更正设备对象：用户反馈的是外网设备，前次读取的 Note8 状态不能用于判断其 launcher 切换原因。
   - 外网发布机 `120.79.245.103` 只有 code 136 清单和资源，无 AASC launcher 进程；目标 `launcherVersion=131`、指纹与当前源码一致。外网设备状态与日志待取得，未修改运行代码或触发更新。
 

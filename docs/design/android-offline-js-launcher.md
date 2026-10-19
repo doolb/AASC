@@ -32,6 +32,8 @@
 
 2026-10-19 核对：当前 LAN/WAN 签名清单的 code 为 136，launcher 独立版本为 131；其 `launcherSha256` 与当前源码一致。已连接 Note8 的活动 launcher 为 code 110、服务为 code 112，但用户反馈的对象是另一台外网设备，因此 Note8 的旧版本不能解释外网设备的实际切换。外网发布机 `120.79.245.103` 只保存签名清单和资源，没有运行 AASC launcher。待取得外网设备的活动 launcher 版本、指纹及更新状态后，再区分首次升级与重复切换。
 
+版本查看位置：发布目标在签名 `manifest.json` 的 `payload.components.code.launcherVersion`；设备当前活动版本在其数据根 `updates/launcher-state.json` 的 `active.manifest.payload.components.code.launcherVersion`，旧清单无该字段时按 `active.version` 解释。启动器就绪事件的 `launcherReleaseVersion` 表示独立启动器版本，旧 `launcherVersion` 字段仍是承载它的 code 包版本；当前启动器网页没有单独显示这些数值。
+
 启动器和网页复用已有签名 `code/code-vN.zip`，没有新增发布产物。APK 的 `offline-launcher-manifest.json` 描述内置基线资产，固定 supervisor 始终从该基线运行；业务入口 `entry.js`、各业务模块和 `ui/index.html` 可从已验证代码版本运行。宿主/状态 API 均为 1，不兼容候选要求先更新 APK。
 
 旧 JS 先准备目标代码，不更改活动服务指针。固定 supervisor 重新验证清单签名、ZIP 大小/SHA-256、候选启动器文件与 ZIP 字节及 API 声明；停止旧启动器和服务，再启动候选。候选以当前已提交服务验证真实版本/目录健康，空环境则握手后等待安装确认；健康后提交 `updates/launcher-state.json`，向新 JS 重放原安装/更新请求。失败恢复原健康启动器，继续失败则用 APK 基线；原请求明确失败，可重试。未提交 pending 在进程重启时丢弃。

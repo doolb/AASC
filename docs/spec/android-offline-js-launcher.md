@@ -59,6 +59,8 @@ APK安装/验证随包Node及配套库 → 选择可校验活动JS入口；不�
 当前签名清单的launcherSha256相同 → 沿用launcherVersion；否则launcherVersion := 本次递增的codeVersion
 新签名code组件同时记录launcherVersion与launcherSha256；旧清单没有这两个字段时仍可读取
 launcher.ready保留既有launcherVersion代码包身份，另报launcherReleaseVersion为当前活动/待提交签名启动器版本
+版本查询 := 发布目标取manifest.payload.components.code.launcherVersion；当前设备取launcher-state.active.manifest.payload.components.code.launcherVersion，缺失则回退active.version
+页面现状 := launcher.ready已发送launcherReleaseVersion，但启动器网页尚未渲染单独的版本标签
 服务更新时codeVersion不同 → 下载并验证目标code ZIP、解压到受管版本目录、核对签名的launcherSha256
 目标启动器文件集合与当前运行启动器文件集合逐字节指纹相同 → 不切换启动器进程，继续现有服务停止/准备/启动/健康回滚流程
 目标启动器文件不同 → 按原launcher.switch、自更新健康提交及请求重放流程处理
