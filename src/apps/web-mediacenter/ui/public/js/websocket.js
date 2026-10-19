@@ -92,6 +92,10 @@ const WebSocketManager = {
             window.ControlTtsVoices?.handleMessage(data);
             return;
         }
+        if (data.type === 'ttsVoicePreview') {
+            window.ControlTtsVoices?.handleMessage(data);
+            return;
+        }
         if (data.type === 'ttsAudioCacheConfig') {
             window.TtsAudioCacheSettings?.handleConfig(data);
             return;

@@ -6,6 +6,8 @@
             'doubao-api': '豆包 API', 'doubao-chat': '豆包网页朗读' };
         const catalogs = new Map();
         const queries = new Map();
+        const previewCache = new Map();
+        const previewCacheLimit = 30;
         const dimensions = ['gender', 'age', 'accent'];
         const ages = ['小孩', '少年', '青年', '中年'];
         const facets = {
@@ -16,11 +18,61 @@
         let filters = { gender: 'all', age: 'all', accent: 'all' }, locatePending = false, locateEpoch = 0;
         let prefix = 'display';
         let initialized = false, config = null, provider = 'system', sequence = 0, send, refs, pending = null, timer = null;
+        let previewPending = null, previewAudio = null;
         const requestId = () => `${prefix}-tts-${Date.now()}-${++sequence}`;
         const status = text => { refs.status.textContent = text || ''; };
         const cancelLocate = () => { locatePending = false; locateEpoch++; };
+        const previewKey = (id, voice) => JSON.stringify([id, config?.providers[id]?.model || '', voice,
+            config?.providers[id]?.defaultSpeed ?? 0, config?.defaultVolume ?? 100]);
+        function stopPreviewAudio() {
+            if (!previewAudio) return;
+            previewAudio.pause();
+            previewAudio.onended = null;
+            previewAudio.onerror = null;
+            previewAudio = null;
+        }
+        function discardPreview(key) {
+            const entry = previewCache.get(key);
+            if (!entry) return;
+            previewCache.delete(key);
+            root.URL.revokeObjectURL(entry.url);
+        }
+        function rememberPreview(key, wav) {
+            discardPreview(key);
+            const entry = { wav, url: root.URL.createObjectURL(wav) };
+            previewCache.set(key, entry);
+            while (previewCache.size > previewCacheLimit) discardPreview(previewCache.keys().next().value);
+            return entry;
+        }
+        async function playPreview(key, voiceName) {
+            const entry = previewCache.get(key);
+            if (!entry) return;
+            // 使用顺序同时表示最近播放顺序；重播不能触发服务端再合成。
+            previewCache.delete(key);
+            previewCache.set(key, entry);
+            stopPreviewAudio();
+            const audio = new root.Audio(entry.url);
+            previewAudio = audio;
+            audio.onended = () => { if (previewAudio === audio) { previewAudio = null; status('试听结束'); } };
+            audio.onerror = () => {
+                if (previewAudio !== audio) return;
+                previewAudio = null;
+                discardPreview(key);
+                renderVoices();
+                status('试听播放失败，请重试');
+            };
+            status(`正在试听：${voiceName}`);
+            try { await audio.play(); }
+            catch (error) { audio.onerror?.(); }
+        }
+        function cancelPreview() {
+            if (previewPending?.timer) root.clearTimeout(previewPending.timer);
+            previewPending = null;
+            stopPreviewAudio();
+        }
         const close = () => {
             cancelLocate();
+            cancelPreview();
             if (!refs?.panel || !refs?.toggle) return;
             refs.panel.hidden = true;
             refs.toggle.setAttribute('aria-expanded', 'false');
@@ -120,6 +172,8 @@
                 heading.textContent = ({ female: '女声', male: '男声', other: '音色' })[gender];
                 fragment.append(heading);
                 for (const voice of entries) {
+                    const row = document.createElement('div');
+                    row.className = 'display-tts-voice-row';
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.className = 'display-tts-voice-option';
@@ -134,7 +188,16 @@
                     const mark = document.createElement('span'); mark.className = 'display-tts-voice-mark';
                     mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true'); button.append(content, mark);
                     button.addEventListener('click', () => save(provider, voice.id));
-                    fragment.append(button);
+                    const preview = document.createElement('button');
+                    preview.type = 'button';
+                    preview.className = 'display-tts-voice-preview';
+                    const key = previewKey(provider, voice.id);
+                    preview.textContent = previewCache.has(key) ? '重播' : '试听';
+                    preview.setAttribute('aria-label', `${preview.textContent}：${voice.name || voice.id}`);
+                    preview.disabled = Boolean(pending || previewPending);
+                    preview.addEventListener('click', () => previewVoice(provider, voice));
+                    row.append(button, preview);
+                    fragment.append(row);
                 }
             }
             if (!fragment.childNodes.length) {
@@ -145,6 +208,65 @@
             }
             refs.list.replaceChildren(fragment);
             locateCurrent();
+        }
+
+        function previewVoice(id, voice) {
+            if (!config || pending || previewPending || id !== provider) return;
+            const key = previewKey(id, voice.id);
+            if (previewCache.has(key)) { playPreview(key, voice.name || voice.id); return; }
+            stopPreviewAudio();
+            const idValue = requestId();
+            previewPending = { requestId: idValue, key, voiceId: voice.id, voiceName: voice.name || voice.id };
+            const request = previewPending;
+            request.timer = root.setTimeout(() => {
+                if (previewPending !== request) return;
+                previewPending = null;
+                renderVoices();
+                status('试听等待超时，请重试');
+            }, 90000);
+            renderVoices();
+            status(`正在合成：${previewPending.voiceName}`);
+            if (send({ type: 'previewTtsVoice', provider: id, voice: voice.id, requestId: idValue }) === false) {
+                root.clearTimeout(request.timer);
+                previewPending = null;
+                renderVoices();
+                status('连接已断开，无法试听');
+            }
+        }
+
+        async function receivePreview(message) {
+            const request = previewPending;
+            if (!request || request.requestId !== message.requestId) return;
+            if (!message.success) {
+                root.clearTimeout(request.timer);
+                previewPending = null;
+                renderVoices();
+                status(message.message || '试听合成失败');
+                return;
+            }
+            try {
+                // 只下载本站 TTS 内存音频，WAV 文件本身由当前面板缓存，不依赖服务端 URL 续期。
+                if (!/^\/uploads\/tts\/tts_mem_[0-9a-f-]{36}\.wav$/u.test(message.audioUrl || '')) throw new Error('试听音频地址不合法');
+                const response = await root.fetch(message.audioUrl, { cache: 'no-store' });
+                if (!response.ok) throw new Error('试听音频下载失败');
+                const wav = await response.blob();
+                const header = new Uint8Array(await wav.slice(0, 12).arrayBuffer());
+                if (wav.size < 12 || wav.size > 16 * 1024 * 1024
+                    || String.fromCharCode(...header.slice(0, 4)) !== 'RIFF'
+                    || String.fromCharCode(...header.slice(8, 12)) !== 'WAVE') throw new Error('试听音频格式不正确');
+                if (previewPending !== request || previewKey(provider, request.voiceId) !== request.key) return;
+                rememberPreview(request.key, wav);
+                root.clearTimeout(request.timer);
+                previewPending = null;
+                renderVoices();
+                playPreview(request.key, request.voiceName);
+            } catch (error) {
+                if (previewPending !== request) return;
+                root.clearTimeout(request.timer);
+                previewPending = null;
+                renderVoices();
+                status(error.message || '试听失败，请重试');
+            }
         }
 
         function loadVoices(id) {
@@ -167,6 +289,7 @@
 
         function save(id, voice, speed, volume) {
             if (!config || pending) return;
+            cancelPreview();
             const idValue = requestId();
             pending = idValue;
             refs.provider.disabled = true;
@@ -192,6 +315,7 @@
                 const ownReply = pending && pending === message.requestId;
                 config = message.config;
                 provider = config.aiReplyDefault?.provider || 'system';
+                if (previewPending && previewKey(provider, previewPending.voiceId) !== previewPending.key) cancelPreview();
                 if (!wasSynced || previousKey !== catalogKey(provider)) resetFilters();
                 if (ownReply) clearPending();
                 refs.provider.disabled = Boolean(pending);
@@ -210,6 +334,7 @@
                 if (message.success === false) status(message.message || '音色查询失败');
                 renderVoices();
             }
+            if (message.type === 'ttsVoicePreview') void receivePreview(message);
         }
 
         function init(options) {
@@ -243,6 +368,7 @@
                 else cancelLocate();
             });
             refs.provider.addEventListener('change', () => {
+                cancelPreview();
                 provider = refs.provider.value;
                 resetFilters();
                 loadVoices(provider);
@@ -274,6 +400,7 @@
             options.bus.subscribe('server.message', handleServerMessage);
             options.bus.subscribe('transport.changed', ({ available }) => {
                 if (available) { send({ type: 'getChatTtsConfig' }); return; }
+                cancelPreview();
                 config = null;
                 provider = 'system';
                 refs.provider.value = provider;

@@ -1,3 +1,8 @@
+### 双端音色列表试听
+
+- ✅ [2026-10-20] 控制端与显示端每条音色增加独立试听按钮；服务端随机选固定短句，按该 Provider 与音色合成，不修改当前选择。
+  - `tts-provider-ws.js`、`server-app.js`、`websocket.js` 接通试听消息与临时音频；`tts-voice-picker.js/css` 下载 WAV 到各页面的最多 30 条 LRU 内存缓存，重复点击直接重播，淘汰时释放对象 URL。更新只读自测及 design/spec/task/usage/todo；`npm run test:tts-voice-picker` 29/29 通过，`servicePackage=true` 待出包，真实账号和 Android 听感待现场验收。
+
 ### 五子棋游戏协议与本地显示
 
 - ✅ [2026-10-20] 修复浅色主题覆盖棋盘交点背景，并在当前 Note8 显示端验收一轮演示。

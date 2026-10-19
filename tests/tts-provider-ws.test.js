@@ -103,6 +103,41 @@ test('TTS不再处理或调用账号候选查询', async () => {
     assert.equal(accessed, false);
 });
 
+test('试听仅合成服务端固定短句和显式音色，不保存配置或广播', async () => {
+    const requests = [], replies = [], broadcasts = [];
+    const control = { send: raw => replies.push(JSON.parse(raw)) };
+    const display = { send: raw => replies.push(JSON.parse(raw)) };
+    let saved = false;
+    const handler = createTtsProviderWs({
+        config: { getPublicTtsProviderSettings: () => redactSettings(normalizeSettings()),
+            setTtsProviderSettings: () => { saved = true; } },
+        service: { generate: async request => { requests.push(request); return 'tts_mem_12345678-1234-1234-1234-123456789abc.wav'; } },
+        isControl: ws => ws === control, isDisplay: ws => ws === display,
+        broadcast: message => broadcasts.push(message)
+    });
+    await handler.handle(control, { type: 'previewTtsVoice', provider: 'qwen-api', voice: 'Cherry', requestId: 'preview-1' });
+    assert.equal(replies.at(-1).audioUrl, '/uploads/tts/tts_mem_12345678-1234-1234-1234-123456789abc.wav');
+    assert.equal(requests[0].templateTts.provider, 'qwen-api');
+    assert.equal(requests[0].templateTts.voice, 'Cherry');
+    assert.equal(requests[0].voice, 'Cherry');
+    assert.equal(requests[0].businessType, 'ai_reply');
+    assert.ok(['你好，很高兴认识你。', '今天的天气真不错。', '愿你拥有愉快的一天。', '请听听这个声音是否合适。'].includes(requests[0].text));
+    await handler.handle(display, { type: 'previewTtsVoice', provider: 'doubao-chat', voice: 'speaker', requestId: 'preview-2' });
+    assert.equal(requests.length, 2);
+    for (const bad of [
+        { provider: 'system', voice: 'speaker' }, { provider: 'qwen-api', voice: '' },
+        { provider: 'qwen-api', voice: 'Cherry', text: '任意正文' },
+        { provider: 'qwen-api', voice: 'Cherry', volume: 0 }
+    ]) {
+        await handler.handle(display, { type: 'previewTtsVoice', requestId: 'bad', ...bad });
+        assert.equal(replies.at(-1).success, false);
+    }
+    await handler.handle({}, { type: 'previewTtsVoice', provider: 'qwen-api', voice: 'Cherry', requestId: 'unauthorized' });
+    assert.equal(requests.length, 2);
+    assert.equal(saved, false);
+    assert.deepEqual(broadcasts, []);
+});
+
 test('错误网页模型保存失败回传原权威值，同固定值兼容保存广播', async () => {
     let settings = normalizeSettings();
     const replies = [];
@@ -132,19 +167,22 @@ test('真实显示入口补入displayId后仍可快选，未知业务字段和�
     const end = source.indexOf('    if (displayVoiceListeningConfig.handle', start);
     assert.ok(start > 0 && end > start);
     let settings = normalizeSettings();
-    const replies = [], broadcasts = [];
+    const replies = [], broadcasts = [], previews = [];
     const display = { send: raw => replies.push(JSON.parse(raw)) };
     const ttsProviderWs = createTtsProviderWs({
         config: { getPublicTtsProviderSettings: () => redactSettings(settings),
             setTtsProviderSettings: patch => { settings = normalizeSettings(patch, settings); } },
-        service: { voices: async () => [] }, isControl: () => false,
+        service: { voices: async () => [], generate: async request => {
+            previews.push(request);
+            return 'tts_mem_12345678-1234-1234-1234-123456789abc.wav';
+        } }, isControl: () => false,
         isDisplay: ws => ws === display, broadcast: message => broadcasts.push(message)
     });
     // 执行生产转交分支及真实ViewBind注册，覆盖原组件单测缺少的传输字段。
     const fallback = vm.runInNewContext('(' + source.slice(start, end) + '\n})', { ttsProviderWs });
     const server = new WSViewBindServer();
     registerTextMediaDisplayHandlers({ wsServer: server,
-        displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices'],
+        displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice'],
         handleDisplayMessage: fallback }, {});
     const ingressSource = source.match(/const data = JSON\.parse\(message\);\s*data\.displayId = displayId;/u)?.[0];
     assert.ok(ingressSource, '使用生产显示端入口的身份覆盖代码');
@@ -170,6 +208,12 @@ test('真实显示入口补入displayId后仍可快选，未知业务字段和�
     assert.equal(JSON.stringify(settings), prior);
     await send({ type: 'getChatTtsConfig' });
     assert.equal(replies.at(-1).config.aiReplyDefault.voice, voice);
+    await send({ type: 'previewTtsVoice', provider: 'doubao-chat', voice, requestId: 'preview', displayId: 'spoof' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(replies.at(-1).type, 'ttsVoicePreview');
+    assert.equal(replies.at(-1).success, true);
+    assert.equal(previews[0].voice, voice);
+    assert.equal(JSON.stringify(settings), prior, '试听不改权威选择');
 });
 
 test('快捷语速只写目标方式偏好，归一化范围并拒绝不支持或混合写入', async () => {

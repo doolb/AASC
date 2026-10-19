@@ -216,13 +216,15 @@ const SelfTest = {
                     const style = getComputedStyle(button);
                     const detail = button.querySelector('small');
                     const mark = button.querySelector('.display-tts-voice-mark');
+                    const preview = button.parentElement?.querySelector('.display-tts-voice-preview');
                     return (selected ? style.backgroundImage.includes('linear-gradient') : style.backgroundImage === 'none')
                         && detail && getComputedStyle(detail).color === style.color
-                        && mark && getComputedStyle(mark).visibility === (selected ? 'visible' : 'hidden');
+                        && mark && getComputedStyle(mark).visibility === (selected ? 'visible' : 'hidden')
+                        && preview?.tagName === 'BUTTON' && preview !== button;
                 });
                 return { success: Boolean(valid && stylesValid),
-                    message: !valid ? '控制端音色面板尚未初始化' : stylesValid ? '共享音色面板入口及按钮状态正常' : '音色按钮状态样式异常',
-                    details: buttons.length ? '只读结构和现有音色按钮皮肤检查；保存、多端同步与明暗主题由定向回归验证'
+                    message: !valid ? '控制端音色面板尚未初始化' : stylesValid ? '共享音色面板入口、试听按钮及选中状态正常' : '音色按钮结构或状态样式异常',
+                    details: buttons.length ? '只读结构、试听入口和现有音色按钮皮肤检查；保存、试听播放和多端同步由定向回归验证'
                         : '只读结构检查通过，列表尚无音色项，未检查按钮皮肤' };
             }
         },

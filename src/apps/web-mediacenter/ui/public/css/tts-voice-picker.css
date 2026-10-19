@@ -21,7 +21,11 @@
 .display-tts-voice-list { display: flex; flex-direction: column; gap: 6px; min-height: 120px; flex: 1; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .display-tts-voice-list > * { flex-shrink: 0; }
 /* 对应.src/framework/tts-provider-configuration.md：直接按权威aria-selected映射按钮皮肤。 */
-.display-tts-voice-option { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; text-align: left; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+.display-tts-voice-row { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.display-tts-voice-option { display: flex; flex: 1; min-width: 0; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; text-align: left; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+.display-tts-voice-preview { flex: 0 0 auto; min-width: 52px; padding: 7px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 12px; cursor: pointer; }
+.display-tts-voice-preview:hover:not(:disabled) { border-color: var(--voice-accent); color: var(--voice-accent); }
+.display-tts-voice-preview:disabled { opacity: .6; cursor: wait; }
 .display-tts-voice-option small { display: block; margin-top: 4px; color: inherit; opacity: .85; font-size: 11px; }
 .display-tts-voice-mark { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 50%; color: inherit; visibility: hidden; }
 /* 浅色主题给通用button添加了!important渐变；局部显式区分状态，避免所有音色看似已选。 */

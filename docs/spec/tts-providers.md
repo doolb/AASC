@@ -1,5 +1,24 @@
 # TTS Provider 与播报配置实现
 
+## 双端音色列表试听与面板 WAV 缓存（2026-10-20）
+
+```text
+已有入口 := TtsVoicePicker.create；控制端和显示端各有一个面板实例；目录项包含 Provider 和 voice.id
+列表渲染 := 每项建立同级的“选择”和“试听”按钮；选择按钮维持 role=option、aria-selected 与权威保存流程
+试听请求 := previewTtsVoice {type, provider, voice, requestId}；不接受客户端文本或业务配置覆盖
+来源校验 := 服务端仅接受已登记控制端或显示端；显示端沿既有入口移除已登记 displayId 传输字段
+生成 := 从服务端固定短句中随机取一句；用 ai_reply 业务和显式 Provider/voice 调用现有 TTS Provider 服务
+回包 := ttsVoicePreview {requestId, success, audioUrl?, message?}；只回复发起端，不广播或保存音色配置
+缓存键 := Provider + 模型 + voice.id + 当前 Provider 语速 + 全局音量
+面板缓存 := 当前页面 fetch 音频 URL 获取 WAV Blob，createObjectURL 保存至 Map；命中直接本地重播
+缓存上限 := 每个面板最多 30 份 WAV；最近使用的移到末尾，超限移除最旧项并 revokeObjectURL
+竞态 := 一次只合成一个试听；请求 ID 匹配，切换 Provider、关闭面板或断线使迟到结果失效；90秒无回包则解除等待；播放新的试听停止旧试听
+失败 := 合成、下载或播放错误时提示并移除该项缓存；下一次点击重新生成
+配置影响 := 试听不发送 setChatTtsSelection，不改变当前选中音色；语速/音量/模型变化通过缓存键隔离
+自测 := 服务端身份/字段校验、显式音色与短句、无保存；双端试听和原选择独立、WAV重播无请求、30项淘汰与释放、错误恢复、主题与键盘焦点
+发布 := 网页和服务端代码需 servicePackage=true；无 Android 原生或依赖变更
+```
+
 ## 双端音色面板全局音量滑条（2026-10-18）
 
 ```text

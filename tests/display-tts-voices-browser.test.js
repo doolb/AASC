@@ -116,3 +116,81 @@ test('真实显示页快选对应目录、搜索、方式记忆、错误回显�
     assert.equal(selfTest.success, true);
     assert.deepEqual(errors, []);
 });
+
+test('音色试听把 WAV 缓存在面板内，重播不请求服务端且最多保留30项', { skip: !chrome, timeout: 45000 }, async t => {
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const $ = cheerio.load(fs.readFileSync(path.join(root, 'display.html'), 'utf8'));
+    $('script,link').remove();
+    $('head').append('<style>' + ['theme.css', 'display.css', 'display-mmd.css', 'tts-voice-picker.css'].map(file =>
+        fs.readFileSync(path.join(root, 'css', file), 'utf8')).join('\n') + '</style>');
+    await page.setContent($.html());
+    await page.addScriptTag({ path: path.join(root, 'js/tts-voice-picker.js') });
+    await page.addScriptTag({ path: path.join(root, 'js/display-tts-voices.js') });
+    await page.evaluate(() => {
+        window.sent = [];
+        window.downloads = 0;
+        window.plays = 0;
+        window.revoked = [];
+        const realRevoke = URL.revokeObjectURL.bind(URL);
+        URL.revokeObjectURL = url => { window.revoked.push(url); realRevoke(url); };
+        window.Audio = class {
+            constructor(url) { this.src = url; }
+            play() { window.plays++; return Promise.resolve(); }
+            pause() {}
+        };
+        window.fetch = async () => {
+            window.downloads++;
+            const wav = new Uint8Array([82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69]);
+            return new Response(new Blob([wav], { type: 'audio/wav' }), { status: 200 });
+        };
+        const listeners = new Map();
+        window.bus = { subscribe(name, fn) { if (!listeners.has(name)) listeners.set(name, []); listeners.get(name).push(fn); },
+            publish(name, value) { for (const fn of listeners.get(name) || []) fn(value); } };
+        window.DisplayTtsVoices.init({ bus: window.bus, send(message) {
+            window.sent.push(message);
+            if (message.type === 'previewTtsVoice') queueMicrotask(() => window.bus.publish('server.message', {
+                type: 'ttsVoicePreview', requestId: message.requestId, success: true,
+                audioUrl: '/uploads/tts/tts_mem_12345678-1234-1234-1234-123456789abc.wav'
+            }));
+            return true;
+        } });
+        document.querySelector('.display-stage-lighting-control').hidden = false;
+    });
+    const config = redactSettings(normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat', voice: 'voice-0' } }));
+    await page.evaluate(value => window.bus.publish('server.message', { type: 'ttsProviderConfig', config: value }), config);
+    await page.click('#displayTtsVoiceToggle');
+    const query = await page.evaluate(() => window.sent.findLast(value => value.type === 'getTtsProviderVoices'));
+    const voices = Array.from({ length: 31 }, (_, index) => ({ id: 'voice-' + index,
+        name: '测试音色' + index, gender: 'female', tags: [] }));
+    await page.evaluate(({ requestId, values }) => window.bus.publish('server.message', {
+        type: 'ttsProviderVoices', provider: 'qwen-chat', requestId, success: true, voices: values
+    }), { requestId: query.requestId, values: voices });
+    const preview = index => '#displayTtsVoiceList [data-voice-id="voice-' + index + '"] + .display-tts-voice-preview';
+    await page.$eval(preview(0), button => button.click());
+    await page.waitForFunction(() => document.querySelector('[data-voice-id="voice-0"] + .display-tts-voice-preview').textContent === '重播');
+    await page.$eval(preview(0), button => button.click());
+    let state = await page.evaluate(() => ({ requests: sent.filter(value => value.type === 'previewTtsVoice').length,
+        downloads, plays, selected: document.querySelector('[data-voice-id="voice-0"]').getAttribute('aria-selected') }));
+    assert.deepEqual(state, { requests: 1, downloads: 1, plays: 2, selected: 'true' });
+    for (let index = 1; index < 31; index++) {
+        await page.$eval(preview(index), button => button.click());
+        await page.waitForFunction(id => document.querySelector('[data-voice-id="voice-' + id + '"] + .display-tts-voice-preview').textContent === '重播', {}, index);
+    }
+    state = await page.evaluate(() => ({ requests: sent.filter(value => value.type === 'previewTtsVoice').length,
+        downloads, revoked: revoked.length, first: document.querySelector('[data-voice-id="voice-0"] + .display-tts-voice-preview').textContent,
+        saves: sent.filter(value => value.type === 'setChatTtsSelection').length }));
+    assert.deepEqual(state, { requests: 31, downloads: 31, revoked: 1, first: '试听', saves: 0 });
+    await page.$eval(preview(0), button => button.click());
+    await page.waitForFunction(() => document.querySelector('[data-voice-id="voice-0"] + .display-tts-voice-preview').textContent === '重播');
+    assert.equal(await page.evaluate(() => sent.filter(value => value.type === 'previewTtsVoice').length), 32);
+    const quieter = redactSettings(normalizeSettings({ aiReplyDefault: { provider: 'qwen-chat', voice: 'voice-0' }, defaultVolume: 35 }));
+    await page.evaluate(value => window.bus.publish('server.message', { type: 'ttsProviderConfig', config: value }), quieter);
+    await page.$eval(preview(0), button => button.click());
+    await page.waitForFunction(() => sent.filter(value => value.type === 'previewTtsVoice').length === 33
+        && document.querySelector('[data-voice-id="voice-0"] + .display-tts-voice-preview').textContent === '重播');
+    assert.deepEqual(errors, []);
+});

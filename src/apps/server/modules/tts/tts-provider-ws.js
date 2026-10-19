@@ -1,6 +1,15 @@
 'use strict';
-const { PROVIDERS } = require('./tts-provider-policy');
+const path = require('node:path');
+const { randomInt } = require('node:crypto');
+const { BUSINESS_TYPES, PROVIDERS } = require('./tts-provider-policy');
 const { supportsNativeSpeed, normalizeNumber } = require('./tts-provider-settings');
+
+const PREVIEW_SENTENCES = Object.freeze([
+    '你好，很高兴认识你。',
+    '今天的天气真不错。',
+    '愿你拥有愉快的一天。',
+    '请听听这个声音是否合适。'
+]);
 
 // 与AASC控制端handler共用同一权威配置流程，禁止额外HTTP配置接口。
 function createTtsProviderWs({ config, service, isControl, isDisplay = () => false, broadcast, onConfigChanged = () => {} }) {
@@ -8,9 +17,31 @@ function createTtsProviderWs({ config, service, isControl, isDisplay = () => fal
     return {
         snapshot: message,
         async handle(ws, data) {
-            if (!['setTtsProviderConfig', 'getTtsProviderVoices', 'setChatTtsSelection', 'getChatTtsConfig'].includes(data.type)) return false;
+            if (!['setTtsProviderConfig', 'getTtsProviderVoices', 'setChatTtsSelection', 'getChatTtsConfig', 'previewTtsVoice'].includes(data.type)) return false;
             const control = isControl(ws);
             if (!control && (!isDisplay(ws) || data.type === 'setTtsProviderConfig')) return true;
+            if (data.type === 'previewTtsVoice') {
+                const requestId = typeof data.requestId === 'string' && data.requestId.length <= 128 ? data.requestId : null;
+                try {
+                    // 试听只接受目录项身份；正文由服务端挑选，不能借此提交任意文本或更改配置。
+                    const allowed = new Set(['type', 'provider', 'voice', 'requestId']);
+                    if (Object.keys(data).some(key => !allowed.has(key)) || !requestId
+                        || !PROVIDERS.includes(data.provider) || data.provider === 'system'
+                        || typeof data.voice !== 'string' || !data.voice.trim() || data.voice.length > 512) {
+                        throw new Error('试听参数不合法');
+                    }
+                    const text = PREVIEW_SENTENCES[randomInt(PREVIEW_SENTENCES.length)];
+                    const audio = await service.generate({ text, businessType: BUSINESS_TYPES.AI_REPLY,
+                        templateTts: { provider: data.provider, voice: data.voice }, voice: data.voice });
+                    if (!audio) throw new Error('此音色没有可播放的音频');
+                    ws.send(JSON.stringify({ type: 'ttsVoicePreview', requestId, success: true,
+                        audioUrl: `/uploads/tts/${path.basename(audio)}` }));
+                } catch (error) {
+                    ws.send(JSON.stringify({ type: 'ttsVoicePreview', requestId, success: false,
+                        message: error.message }));
+                }
+                return true;
+            }
             if (data.type === 'getChatTtsConfig') {
                 ws.send(JSON.stringify(message()));
                 return true;

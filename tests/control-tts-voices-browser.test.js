@@ -73,8 +73,13 @@ async function assertVoiceButtonStates(page, prefix) {
         await page.keyboard.press('Tab');
         assert.ok(await page.evaluate(() => {
             const button = document.activeElement, style = getComputedStyle(button);
+            return button.matches('.display-tts-voice-preview:focus-visible') && style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
+        }), '试听按钮的键盘焦点可见');
+        await page.keyboard.press('Tab');
+        assert.ok(await page.evaluate(() => {
+            const button = document.activeElement, style = getComputedStyle(button);
             return button.matches('.display-tts-voice-option:focus-visible') && style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
-        }), '键盘焦点可见');
+        }), '下一音色的键盘焦点可见');
         await page.$eval(list, element => {
             for (const button of element.querySelectorAll('button')) button.disabled = true;
         });
@@ -99,9 +104,15 @@ async function assertVoiceButtonStates(page, prefix) {
 test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，权限/断线/手机布局保持', { skip: !chrome, timeout: 60000 }, async t => {
     let settings = normalizeSettings({ aiReplyDefault: { provider: 'doubao-chat' },
         providers: { 'doubao-chat': { enabled: true }, 'qwen-chat': { enabled: true }, 'qwen-api': { model: 'qwen3-tts-flash' } } }, {}, { recoverLegacyModel: true });
-    let failSave = false;
+    let failSave = false, previewGenerations = 0, previewDownloads = 0;
     const requests = [], controls = new Set(), displays = new Set();
     const server = http.createServer((request, response) => {
+        if (request.url === '/uploads/tts/tts_mem_12345678-1234-1234-1234-123456789abc.wav') {
+            previewDownloads++;
+            response.setHeader('Content-Type', 'audio/wav');
+            response.end(Buffer.from([82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69]));
+            return;
+        }
         if (!['/control-fixture', '/display-fixture'].includes(request.url)) { response.writeHead(404); response.end(); return; }
         response.setHeader('Content-Type', 'text/html; charset=utf-8');
         response.end(markup(request.url.includes('control') ? 'control' : 'display'));
@@ -111,7 +122,8 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     const handler = createTtsProviderWs({
         config: { getPublicTtsProviderSettings: () => redactSettings(settings),
             setTtsProviderSettings: patch => { if (failSave) throw Error('测试保存失败'); settings = normalizeSettings(patch, settings); } },
-        service: { voices: async id => id === 'doubao-chat' ? listDoubaoVoices() : id === 'qwen-api' ? createApiSpeechAdapters()['qwen-api'].voices({ model: settings.providers['qwen-api'].model }) : [{ id: 'fixture-qwen', name: '测试千问音色', gender: 'female' }] },
+        service: { voices: async id => id === 'doubao-chat' ? listDoubaoVoices() : id === 'qwen-api' ? createApiSpeechAdapters()['qwen-api'].voices({ model: settings.providers['qwen-api'].model }) : [{ id: 'fixture-qwen', name: '测试千问音色', gender: 'female' }],
+            generate: async () => { previewGenerations++; return 'tts_mem_12345678-1234-1234-1234-123456789abc.wav'; } },
         isControl: ws => controls.has(ws), isDisplay: ws => displays.has(ws),
         broadcast: message => { for (const ws of sockets.clients) if (ws.readyState === 1) ws.send(JSON.stringify(message)); }
     });
@@ -177,6 +189,24 @@ test('控制端真实WS快选与显示端双向同步，滑条仅松手保存，
     const chosen = listDoubaoVoices().find(voice => voice.name === '桂乡甜妞');
     await control.bringToFront();
     await control.type('#controlTtsVoiceSearch', '桂乡');
+    await control.evaluate(() => {
+        window.previewPlays = 0;
+        window.Audio = class {
+            constructor(url) { this.src = url; }
+            play() { window.previewPlays++; return Promise.resolve(); }
+            pause() {}
+        };
+    });
+    const originalVoice = settings.aiReplyDefault.voice;
+    await control.click('#controlTtsVoiceList .display-tts-voice-preview');
+    await waitFor(control, () => document.querySelector('#controlTtsVoiceList .display-tts-voice-preview').textContent === '重播');
+    assert.equal(previewGenerations, 1);
+    assert.equal(previewDownloads, 1);
+    assert.equal(settings.aiReplyDefault.voice, originalVoice, '试听不保存所点音色');
+    await control.click('#controlTtsVoiceList .display-tts-voice-preview');
+    assert.equal(previewGenerations, 1, '重播使用控制页面的WAV缓存');
+    assert.equal(previewDownloads, 1);
+    assert.equal(await control.evaluate(() => window.previewPlays), 2);
     await control.bringToFront();
     await control.click('#controlTtsVoiceList [data-voice-id]');
     await waitFor(display, voice => document.querySelector('#displayTtsCurrentVoiceName').textContent === voice, chosen.id);
