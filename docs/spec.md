@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [Android 颜色选择器伪代码](spec/android-color-picker.md)
+
 - [Android帧调度与窗口策略伪代码](spec/android-display-frame-policy.md)
 
 - [Android SAF目录重选伪代码](spec/android-saf-reselect.md)

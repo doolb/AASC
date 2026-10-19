@@ -13391,3 +13391,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-16] 独立本机报告支持文件选择、按钮粘贴及页面Ctrl+V/⌘V，自选图可编辑人物框后生成HMR2.0b BODY25骨架与整图相对深度。
   - 更新`tmp/mmd-pose/depth-eval/hmr2-sam3d/report.html`、`report.mjs`、`run-hmr2.py`，新增`custom-report-server.cjs`、`custom-depth.mjs`与`check-custom-report.cjs`；同步design/spec/task/usage/self-test/todo。浏览器把同一限幅PNG用于本机HMR和本地Depth Anything V2 Small，临时输入/结果完成后删除；固定三图/脚掌候选不覆盖。
   - Edge文件、粘贴、框非法值、真实WASM深度与接口测试通过；官方HMR动漫整图端到端回读25点，固定报告三图/四候选/WebGL回退/390px回归通过。模型对脚掌和左右腿的质量问题仍在；正式IK、Offline状态和APK不变。
+
+### Android 颜色选择器
+
+- ✅ [2026-10-19] Android 控制端与显示端全部颜色入口采用参照 PC 的色域、色相条和 HEX 选色面板，PC 原生选色器保持现状。
+  - 新增 `android-color-picker.js`、`android-color-picker.css` 与浏览器定向测试；`display.html`、`upload.html` 加载共享组件。保留原颜色控件 ID、实时 `input` 预览、确认 `change` 保存和取消回退。同步 design/spec/task/todo/usage；相关浏览器、背景光晕和主题定向测试 13/13 通过，JavaScript 语法与差异检查通过。服务网页代码修改标记 `servicePackage=true`，设备验收待更新服务代码包。
