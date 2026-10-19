@@ -37,6 +37,7 @@ test('显示端主题面板用现有主题列表，服务端为控制端和显�
     assert.match(server, /function broadcastControlTheme\(theme\)[\s\S]*broadcastToControls\(\{ type: 'controlThemeChanged', theme \}\)/u);
     assert.match(controlSocket, /controlThemeChanged: data => window\.UiTheme\?\.applyRemoteTheme\(data\.theme\)/u);
     assert.match(display, /socket\.onclose = function\(\)[\s\S]*DisplayAppearanceControls\?\.handleDisconnected\(\)/u);
+    assert.match(appearanceScript, /addEventListener\('DOMContentLoaded', init/u);
 });
 
 test('显示端面板展开、保存、预览、权威回显及断线恢复', async () => {
@@ -62,7 +63,6 @@ test('显示端面板展开、保存、预览、权威回显及断线恢复', as
         await page.addScriptTag({ content: appearanceScript });
         const result = await page.evaluate(() => {
             const controls = window.DisplayAppearanceControls;
-            controls.init();
             document.getElementById('displayAppearanceToggle').click();
             const opened = !document.getElementById('displayAppearancePanel').hidden;
             const theme = document.getElementById('displayAppearanceTheme');

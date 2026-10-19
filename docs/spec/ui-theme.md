@@ -92,6 +92,7 @@ Server controlTheme update:
 ```text
 已有声明 := 左下角交互层按钮组 + UiTheme 的 15 个主题与 applyRemoteTheme + ui.controlTheme 权威配置
 新增定义 := 主题按钮控制向上展开的外观面板；主题下拉框显示 15 个主题；字幕背景滑块显示 0..100 百分比
+初始化 := 面板脚本在 DOMContentLoaded 后自行绑定；显示页内联脚本先运行不影响入口
 操作流程 := 点击主题按钮 → 展开/收起面板并更新 aria-expanded
 选择主题 → 显示端 WebSocket 发送 {type:setControlThemeConfig, theme} → 服务端校验主题白名单并持久化
 保存成功 → 服务端向全部控制端及显示端广播 {type:controlThemeChanged, theme} → 双端调用 applyRemoteTheme

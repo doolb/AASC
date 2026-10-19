@@ -124,4 +124,10 @@
     root.DisplayAppearanceControls = {
         init, handleTheme, handleThemeError, handleOpacity, handleOpacityError, handleDisconnected
     };
+    // 显示页内联脚本先于 defer 模块运行；等全部 DOM 就绪再绑定左下角面板。
+    if (root.document.readyState === 'loading' || root.document.readyState === 'interactive') {
+        root.document.addEventListener('DOMContentLoaded', init, { once: true });
+    } else {
+        init();
+    }
 }(window));
