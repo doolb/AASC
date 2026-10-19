@@ -549,7 +549,7 @@ function isResponsesTransportInterrupted(error) {
 }
 
 async function requestResponsesWithRecovery(context) {
-    const client = getResponsesClient(context.profile);
+    const client = context.client || getResponsesClient(context.profile);
     const request = buildResponsesPayload(context);
     try {
         return await client.request(request);
@@ -562,7 +562,7 @@ async function requestResponsesWithRecovery(context) {
 }
 
 async function streamResponsesWithRecovery(context, onEvent) {
-    const client = getResponsesClient(context.profile);
+    const client = context.client || getResponsesClient(context.profile);
     const request = buildResponsesPayload(context);
     let receivedText = false;
     try {
@@ -1510,7 +1510,10 @@ async function chat(userMessage, options = {}) {
     const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, historyMessages = null, images = [] } = options;
 
     try {
-        const profile = activeProfileConfig || getActiveProfileConfig();
+        const baseProfile = activeProfileConfig || getActiveProfileConfig();
+        const tierOverride = options.tierOverride;
+        const profile = tierOverride ? { ...baseProfile, model: tierOverride.model,
+            protocol: 'openai-responses', apiUrl: `http://aasc-chat2api/${tierOverride.providerId}` } : baseProfile;
         const transport = normalizeChatTransport(profile);
         const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name });
         let assistantMessage = '';
@@ -1526,6 +1529,7 @@ async function chat(userMessage, options = {}) {
                 sessionKey: responseSessionKey,
                 fingerprint,
                 profile,
+                client: tierOverride?.client,
                 model: profile.model || chatConfig.model,
                 maxTokens: profile.maxTokens || chatConfig.maxTokens,
                 temperature: profile.temperature ?? chatConfig.temperature,
@@ -1735,7 +1739,10 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
         }, callbacks, activeProfileConfig);
     }
 
-    const profile = activeProfileConfig || getActiveProfileConfig();
+    const baseProfile = activeProfileConfig || getActiveProfileConfig();
+    const tierOverride = options.tierOverride;
+    const profile = tierOverride ? { ...baseProfile, model: tierOverride.model,
+        protocol: 'openai-responses', apiUrl: `http://aasc-chat2api/${tierOverride.providerId}` } : baseProfile;
     const transport = normalizeChatTransport(profile);
     if (transport.protocol === 'openai-responses') {
         const output = createChatStreamOutput({ onChunk, onSentence });
@@ -1750,6 +1757,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 sessionKey: responseSessionKey,
                 fingerprint,
                 profile,
+                client: tierOverride?.client,
                 model: profile.model || chatConfig.model,
                 maxTokens: profile.maxTokens || chatConfig.maxTokens,
                 temperature: profile.temperature ?? chatConfig.temperature,

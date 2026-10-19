@@ -6,6 +6,10 @@ const DEFAULT_MODEL_MAPPINGS = Object.freeze([
     model: `deepseek-v4-${mode}-${feature}`, actualModel: `deepseek-v4-${mode}`, providerId: 'deepseek'
   }))),
   Object.freeze({ model: 'Qwen3.6-Flash', actualModel: 'Qwen3.7', providerId: 'qwen' }),
+  // 三档专用请求别名避开旧调用方的 Qwen3.6-Flash 兼容映射。
+  Object.freeze({ model: 'aasc-qwen-mini', actualModel: 'Qwen3.6-Flash', providerId: 'qwen' }),
+  Object.freeze({ model: 'aasc-qwen-flash', actualModel: 'Qwen3.7', providerId: 'qwen' }),
+  Object.freeze({ model: 'aasc-qwen-pro', actualModel: 'Qwen3.7-Max', providerId: 'qwen' }),
   ...['doubao', 'doubao-think', 'doubao-expert'].map(model => Object.freeze({ model, actualModel: model, providerId: 'doubaochat' }))
 ]);
 

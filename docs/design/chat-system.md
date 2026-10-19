@@ -1,5 +1,23 @@
 # 聊天系统重构设计文档
 
+## LLM 三档与双端快选（2026-10-19，源码完成）
+
+控制端和显示端右下角均提供“模型”快选，当前 Provider 与三档选择由服务端共享。档位是调用偏好，不暗示三套独立模型权重。映射只在 `src/apps/server/modules/chat/chat-model-tier-service.js` 和 Chat2API 内置别名代码中由开发维护，用户界面不编辑映射。
+
+| 档位 | 中文名 | Qwen 网页目标模型 | 豆包现有模型别名 |
+|------|--------|-------------------|------------------|
+| mini | 轻量 | Qwen3.6-Flash | doubao（思考0） |
+| flash | 普通 | Qwen3.7 | doubao-think（思考1） |
+| pro | 专业 | Qwen3.7-Max | doubao-expert（思考3） |
+
+Qwen 初始档位为 flash，豆包初始档位为 mini。切换 Provider 时恢复它自己的上次档位；未选择 Provider 时继续现有 LLM profile。控制端与显示端通过 `getChatModelTierConfig`、`setChatModelTierSelection` 和 `chatModelTierConfig` 共用服务端权威选择，写入 `chat.modelTierSelection`；断线期间不可提交，重连补发。Provider 候选来自当前运行的 Chat2API 代理中已启用且有凭据的账号，并要求 Provider 自身启用且开发映射存在；账号已配置不代表远端仍有效。
+
+选择只覆盖后续普通 LLM 聊天。角色 Agent 保持角色配置，普通聊天的 Agent profile 也保持其独立执行路径。服务端在发起请求时再次检查代理、账号和映射；失败返回具体错误，不切换到别的 Provider 或档位。Qwen 三档走专用内部别名，避免旧 `Qwen3.6-Flash → Qwen3.7` 兼容映射改写轻量档；服务端同时核对别名解析后的 Provider 与实际模型，发现管理员自定义映射冲突则拒绝。豆包沿用已经实现的 0/1/3 模式请求，不添加未经验证的 Lite 选择键或 model_config 参数。
+
+普通聊天把本次目标交给同一运行中的 Chat2API Responses 服务，复用既有账号调度与会话持久化。AASC 续接指纹包含请求别名及 Provider 地址，切换档位后旧上游引用不会被当作兼容状态复用。面板预留禁用的“外部登录（后续开放）”按钮和接线方法，本次不启动外部登录。
+
+当前只完成代码与定向测试。Qwen 三个目标是否被真实账号接受、豆包文字是否解除现有上游风控、Offline APK/ADB 两端界面仍需设备和账号验收；上游返回的内部编号不用于推断模型版本。
+
 ## 豆包语音括号与协议错误（2026-10-19，源码完成并通过 Node 实网验收）
 
 手动朗读包含全角 `（`、`）` 的回复时，现场连续三次记录 `doubao_speech_protocol`。应用分句器保留括号，Chat2API 豆包语音入口把分句原样传给 VoiceGenie；本次文本也产生独立表情符号分句。在线分句并发生成，现有日志只有整批错误码，无法确定失败分句或上游事件，因此括号是待验证诱因，尚不能归为已证实根因。

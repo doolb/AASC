@@ -121,3 +121,30 @@ test('外部保存全局字段不会改动 profile 协议', () => {
         chat.setConfig({ ...originalConfig, llmProfiles: originalProfiles, activeProfile: originalActiveProfile });
     }
 });
+
+test('三档普通聊天使用内部 Responses 客户端并覆盖旧 profile 模型', async () => {
+    const originalConfig = chat.getConfig();
+    const originalProfiles = chat.getProfiles();
+    const originalActiveProfile = chat.getActiveProfile();
+    const calls = [];
+    try {
+        chat.setProfiles([{ name: 'tier-test', mode: 'llm', protocol: 'openai-completions',
+            apiUrl: 'http://127.0.0.1:1/v1/chat/completions', model: 'legacy-model' }]);
+        chat.switchProfile('tier-test');
+        const result = await chat.chatStream('测试', { tierOverride: {
+            providerId: 'doubaochat', model: 'doubao-think', client: {
+                async stream(payload, onEvent) {
+                    calls.push(payload);
+                    onEvent({ type: 'response.output_text.delta', delta: '已切换' });
+                }
+            }
+        } });
+        assert.equal(result.success, true);
+        assert.equal(result.message, '已切换');
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].model, 'doubao-think');
+    } finally {
+        chat.setConfig({ ...originalConfig, llmProfiles: originalProfiles,
+            activeProfile: originalActiveProfile });
+    }
+});

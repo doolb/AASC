@@ -227,6 +227,30 @@ const SelfTest = {
             }
         },
         {
+            id: 'chat_model_tier_picker',
+            name: '聊天模型三档入口',
+            category: '聊天',
+            run: async () => {
+                // 自测只读检查两端入口与按钮，不保存档位或触发 Chat2API 请求。
+                const panel = document.getElementById('controlChatModelTierPanel');
+                const controlValid = Boolean(window.ChatModelTierPicker && window.ControlChatModelTier
+                    && document.getElementById('controlChatModelTierToggle')
+                    && panel?.querySelector('[data-provider]')
+                    && panel?.querySelectorAll('.chat-model-tier-levels button').length === 3);
+                try {
+                    const response = await fetch('/display.html', { cache: 'no-store' });
+                    const html = await response.text();
+                    const displayValid = response.ok && html.includes('js/display-chat-model-tier.js')
+                        && html.includes('css/chat-model-tier-picker.css');
+                    return { success: controlValid && displayValid,
+                        message: controlValid && displayValid ? '两端三档入口资源正常' : '聊天模型快选入口缺失',
+                        details: '只读检查；权威配置、账号过滤和会话隔离由定向测试验证' };
+                } catch (error) {
+                    return { success: false, message: '显示端模型入口资源读取失败' };
+                }
+            }
+        },
+        {
             id: 'display_voice_filters',
             name: '显示端音色筛选入口',
             category: '语音',

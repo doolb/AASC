@@ -431,6 +431,7 @@
             root.DisplayChat.init({ root: refs.chatLayer, bus, send, getState: () => ({ ...state }) });
         }
         root.DisplayTtsVoices?.init({ bus, send });
+        root.DisplayChatModelTier?.init({ bus, send, getState: () => ({ ...state }) });
         root.DisplayVoiceControls?.init({
             runtime: root.DisplayVoiceRuntime, bus, send, getState: () => ({ ...state })
         });

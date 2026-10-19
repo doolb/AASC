@@ -1,3 +1,10 @@
+### LLM 三档模型设计记录
+
+- ✅ [2026-10-19] 完成控制端与显示端右下角聊天模型三档快选源码及定向回归。
+  - `chat-model-tier-service.js` 由开发维护 Provider 映射；Qwen 初始普通、豆包初始轻量，每个 Provider 独立记忆档位，权威选择经 WebSocket 保存和广播。Qwen 三档使用专用内部别名，保留旧 `Qwen3.6-Flash → Qwen3.7` 兼容规则；豆包沿用 `doubao/doubao-think/doubao-expert` 的 0/1/3 模式，不接 Lite。
+  - 更新 `server-app.js`、`llm-service.js`、`chat2api-default-model-mappings.js`、两端页面/脚本/样式和控制端自测；外部登录按钮预留且禁用。同步 `docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/20261019_聊天模型三档双端快选.md`、`docs/usage/chat-model-tiers.md`、`docs/todo.md`；`release/offline-release-status.json` 标记 `servicePackage=true`。
+  - `npm run check:chat2api` 286/286、`npm run test:tts-voice-picker` 27/27、三档服务/聊天/浏览器定向 15/15 通过；实际显示页 390px 视口面板完整可见。Qwen 真实上游目标、豆包文字风控恢复和 Offline APK/ADB 仍待现场验收，源码完成不代表产物已出包。
+
 ### Offline 启动器独立版本与服务单独更新
 
 - ✅ [2026-10-19] 签名 code 清单新增独立 `launcherVersion` 和 `launcherSha256`；launcher 内容未变时保留原启动器进程，只安装、重启并健康验证新服务。

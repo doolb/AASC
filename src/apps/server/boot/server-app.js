@@ -141,6 +141,7 @@ const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
 const { CodexRuntimeManager } = require('../modules/chat/codex-runtime-manager');
 const { PiRuntimeManager } = require('../modules/chat/pi-runtime-manager');
 const { PiProfileConfig } = require('../modules/chat/pi-profile-config');
+const { createChatModelTierService } = require('../modules/chat/chat-model-tier-service');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const { createTextMediaTtsService } = require('../modules/media/text-media-tts-service');
 const { createProviderRegistry } = require('../modules/tts/tts-provider-registry');
@@ -653,6 +654,24 @@ let globalRecordingPaused = false;
 
 let wsServer = null;
 let taskManager = null;
+const runningChat2ApiRuntimes = new Set();
+const chatModelTierService = createChatModelTierService({
+    config,
+    getRuntime: () => [...runningChat2ApiRuntimes].reverse().find(runtime => runtime.getStatus().running) || null,
+    broadcast: message => {
+        broadcastToControls(message);
+        for (const [displayId] of displayClients) sendToDisplay(displayId, message);
+    }
+});
+async function broadcastChatModelTierAvailability() {
+    try {
+        const message = await chatModelTierService.snapshot();
+        broadcastToControls(message);
+        for (const [displayId] of displayClients) sendToDisplay(displayId, message);
+    } catch (error) {
+        logError('Chat', `模型档位可选 Provider 刷新失败: ${error.message}`);
+    }
+}
 let aascNodeConnector = null;
 // AI 角色面板：服务器只持有共享 IPC 客户端，实际 Claude/Codex Agent 由独立后端宿主进程管理。
 // 声明在模块级——handleControlMessageFallback 在模块作用域引用 aiRoles，若只声明在 server.listen 回调里会出作用域。
@@ -1314,7 +1333,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1402,6 +1421,7 @@ async function startServer() {
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getChatProfilesConfig', 'chatProfilesSave', 'chatProfileSwitch',
+                'getChatModelTierConfig', 'setChatModelTierSelection',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
                 'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
@@ -1527,10 +1547,28 @@ async function startServer() {
 
             // 初始化远程任务引擎
             taskManager = new TaskManager({
-                chat2apiRuntimeFactory: options => createChat2ApiRuntime({ ...options,
-                    doubaoSpeechQueue: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir),
-                    qwenApiRateGate: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir).qwenApiRateGate,
-                    qwenChatRateGate: speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir).qwenChatRateGate }),
+                chat2apiRuntimeFactory: options => {
+                    const upstream = speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir);
+                    const runtime = createChat2ApiRuntime({ ...options,
+                        doubaoSpeechQueue: upstream,
+                        qwenApiRateGate: upstream.qwenApiRateGate,
+                        qwenChatRateGate: upstream.qwenChatRateGate });
+                    const start = runtime.start.bind(runtime);
+                    const stop = runtime.stop.bind(runtime);
+                    runtime.start = async () => {
+                        await start();
+                        await broadcastChatModelTierAvailability();
+                    };
+                    runtime.stop = async () => {
+                        try { await stop(); }
+                        finally {
+                            runningChat2ApiRuntimes.delete(runtime);
+                            await broadcastChatModelTierAvailability();
+                        }
+                    };
+                    runningChat2ApiRuntimes.add(runtime);
+                    return runtime;
+                },
                 taskCodeCatalog,
                 maxInstances: 50,
                 ensureTaskDependencies: (ids, onProgress) => taskDependencyManager.ensure(ids, onProgress),
@@ -8129,6 +8167,7 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
+        void chatModelTierService.sendSnapshot(ws);
         // 显示端连接时先收到服务器保存的 MMD 权威值，避免旧页面默认值覆盖持久化设置。
         ws.send(JSON.stringify({
             type: 'control',
@@ -8508,6 +8547,7 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify(piProfileConfig.snapshot()));
+        void chatModelTierService.sendSnapshot(ws);
         ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
         ws.send(JSON.stringify(asrLongQueueSettings.snapshot()));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
@@ -8918,7 +8958,26 @@ function formatVoiceprintScore(value) {
     return Number.isFinite(score) ? score.toFixed(3) : 'null';
 }
 
+async function handleChatModelTierMessage(ws, data) {
+    if (data.type === 'getChatModelTierConfig') {
+        await chatModelTierService.sendSnapshot(ws, { requestId: data.requestId });
+        return;
+    }
+    try {
+        await chatModelTierService.update(data);
+    } catch (error) {
+        await chatModelTierService.sendSnapshot(ws, {
+            requestId: data.requestId, success: false, message: error.message
+        });
+    }
+}
+
 function handleDisplayMessageFallback(displayId, data, ws) {
+    if (['getChatModelTierConfig', 'setChatModelTierSelection'].includes(data.type)) {
+        if (displayClients.get(displayId)?.ws !== ws) return;
+        void handleChatModelTierMessage(ws, data);
+        return;
+    }
     if (['setControlThemeConfig', 'setDisplayTtsBackgroundOpacityConfig'].includes(data.type)) {
         // 连接身份由服务端登记；旧 WebSocket 不得更改全局显示参数。
         if (displayClients.get(displayId)?.ws !== ws) return;
@@ -9474,6 +9533,10 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
+    if (['getChatModelTierConfig', 'setChatModelTierSelection'].includes(data.type)) {
+        await handleChatModelTierMessage(ws, data);
+        return;
+    }
     if (['getChatProfilesConfig', 'chatProfilesSave', 'chatProfileSwitch', 'switchProfile'].includes(data.type)) {
         await piProfileConfig.handle(ws, data);
         return;
@@ -11036,7 +11099,10 @@ async function handleControlMessageFallback(data, ws) {
                             const legacyTtsOptions = ttsProviderService.snapshot({ businessType: BUSINESS_TYPES.AI_REPLY,
                                 templateTts: chat.getTemplateByName(data.useTemplate)?.tts, userText: data.message });
                             const ttsScheduler = createTtsGenerationScheduler(displayId, legacyTtsOptions);
+                            const active = chat.getProfiles().find(profile => profile.name === chat.getActiveProfile());
+                            const tierOverride = active?.mode === 'agent' ? null : await chatModelTierService.resolveForChat();
                             await chat.chatStream(data.message, {
+                                tierOverride,
                                 useTemplate: data.useTemplate,
                                 displayId: displayId
                             }, {
@@ -11213,6 +11279,15 @@ async function handleChatMessage(options) {
     const images = normalizeChatImages(rawImages);
     
     const effectiveRequestId = requestId || generateCorrelationId('chat');
+    let tierOverride = null;
+    try {
+        const active = chat.getProfiles().find(profile => profile.name === chat.getActiveProfile());
+        if (active?.mode !== 'agent') tierOverride = await chatModelTierService.resolveForChat();
+    } catch (error) {
+        sendToControl?.({ type: 'chatResponse', requestId: effectiveRequestId,
+            success: false, error: error.message });
+        return;
+    }
     if (temporaryConversationRequested === true
         && temporaryConversationId
         && temporaryConversation.id
@@ -11334,6 +11409,7 @@ async function handleChatMessage(options) {
     }
     const voiceGenerationToken = beginDisplayConversationTtsGeneration(voiceOriginDisplayId);
     const streamReply = () => chat.chatStream(content, {
+        tierOverride,
         useTemplate: null,
         displayId: displayId,
         systemPrompt: systemPrompt,
