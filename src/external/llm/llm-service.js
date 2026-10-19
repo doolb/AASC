@@ -1421,6 +1421,9 @@ function createChatStreamOutput(callbacks = {}) {
     let fullMessage = '';
     let fullReasoning = '';
     let fullSpeech = '';
+    let structuredReasoning = '';
+    let filteredReasoning = '';
+    let filteredSpeech = '';
     let pendingSpeech = { text: '', phase: 'answer' };
 
     const emitPendingSentence = () => {
@@ -1455,8 +1458,10 @@ function createChatStreamOutput(callbacks = {}) {
         const previousMessage = fullMessage;
         const previousReasoning = fullReasoning;
         fullMessage = result.message;
-        fullReasoning = result.reasoning;
-        fullSpeech = result.speech;
+        filteredReasoning = result.reasoning;
+        filteredSpeech = result.speech;
+        fullReasoning = structuredReasoning + filteredReasoning;
+        fullSpeech = structuredReasoning + filteredSpeech;
         // 孤立结束标签可能回收暂存前缀；answer 或 reasoning 改变时都通知界面重绘。
         if (fullMessage !== previousMessage || fullReasoning !== previousReasoning) {
             onChunk?.(
@@ -1476,6 +1481,14 @@ function createChatStreamOutput(callbacks = {}) {
     };
 
     return {
+        pushReasoning(chunk) {
+            if (typeof chunk !== 'string' || !chunk) return;
+            structuredReasoning += chunk;
+            fullReasoning = structuredReasoning + filteredReasoning;
+            fullSpeech = structuredReasoning + filteredSpeech;
+            onChunk?.('', fullMessage, fullReasoning, chunk, chunk, fullSpeech);
+            appendSpeechSegments([{ text: chunk, phase: 'think' }]);
+        },
         push(chunk) {
             publish(filter.push(chunk));
         },
@@ -1537,8 +1550,8 @@ async function chat(userMessage, options = {}) {
             });
             const parsedOutput = parseThinkOutput(extractResponsesText(response));
             assistantMessage = parsedOutput.answer;
-            assistantReasoning = parsedOutput.reasoning;
-            assistantSpeech = parsedOutput.speech;
+            assistantReasoning = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.reasoning;
+            assistantSpeech = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.speech;
             saveResponseReference(responseSessionKey, response, fingerprint);
         } else {
             const requestBody = {
@@ -1763,6 +1776,9 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 temperature: profile.temperature ?? chatConfig.temperature,
                 stream: true
             }, (event) => {
+                if (event?.type === 'response.reasoning_text.delta' && typeof event.delta === 'string') {
+                    output.pushReasoning(event.delta);
+                }
                 if (event?.type === 'response.output_text.delta' && typeof event.delta === 'string') {
                     output.push(event.delta);
                 }

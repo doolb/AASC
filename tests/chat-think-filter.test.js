@@ -168,6 +168,63 @@ test('chatStream Responses 分流 think、控制端正文和按顺序播报的�
     }
 });
 
+test('chatStream Responses 独立 reasoning 进入 Think 和分段播报', async () => {
+    const server = http.createServer((_request, response) => {
+        response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        response.write('data: {"type":"response.reasoning_text.delta","delta":"先检查。"}\n\n');
+        response.write('data: {"type":"response.output_text.delta","delta":"答案是四。"}\n\n');
+        response.end('data: [DONE]\n\n');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+        llmService.init({ activeProfile: 'structured-think-test', llmProfiles: [{
+            name: 'structured-think-test', mode: 'llm', protocol: 'openai-responses',
+            apiUrl: `http://127.0.0.1:${server.address().port}/v1/responses`, model: 'test-model'
+        }] });
+        const chunks = [];
+        const sentences = [];
+        const result = await llmService.chatStream('问题', {}, {
+            onChunk: (_delta, message, reasoning) => chunks.push({ message, reasoning }),
+            onSentence: (sentence, _message, _reasoning, _speech, phase) => sentences.push({ sentence, phase })
+        });
+        assert.equal(result.success, true);
+        assert.equal(result.message, '答案是四。');
+        assert.equal(result.reasoning, '先检查。');
+        assert.equal(result.speech, '先检查。答案是四。');
+        assert.deepEqual(sentences, [{ sentence: '先检查。', phase: 'think' }, { sentence: '答案是四。', phase: 'answer' }]);
+        assert.ok(chunks.some(chunk => chunk.reasoning === '先检查。'));
+    } finally {
+        await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        llmService.init(originalConfig);
+        llmService.setSession(originalSession, { source: 'testRestore', persist: false });
+    }
+});
+
+test('chat 非流式 Responses 独立 reasoning 写入历史', async () => {
+    const server = http.createServer((_request, response) => {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ id: 'resp_reasoning_test', conversation: { id: 'conv_reasoning_test' },
+            output_text: '答案。', reasoning_text: '分析。' }));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+        llmService.init({ activeProfile: 'nonstream-think-test', llmProfiles: [{
+            name: 'nonstream-think-test', mode: 'llm', protocol: 'openai-responses',
+            apiUrl: `http://127.0.0.1:${server.address().port}/v1/responses`, model: 'test-model'
+        }] });
+        const result = await llmService.chat('问题');
+        assert.equal(result.success, true);
+        assert.equal(result.message, '答案。');
+        assert.equal(result.reasoning, '分析。');
+        assert.equal(result.speech, '分析。答案。');
+        assert.equal(result.history.at(-1).reasoning, '分析。');
+    } finally {
+        await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        llmService.init(originalConfig);
+        llmService.setSession(originalSession, { source: 'testRestore', persist: false });
+    }
+});
+
 test('chatStream Chat Completions 保留独立 think 字段且不把它混入回答', async () => {
     const server = http.createServer((_request, response) => {
         response.writeHead(200, { 'Content-Type': 'text/event-stream' });

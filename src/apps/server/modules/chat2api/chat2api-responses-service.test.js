@@ -21,6 +21,45 @@ const createFakeSessionStore = () => {
   };
 };
 
+test('Responses 非流式保留独立思考，回答与续接历史不混入思考', async () => {
+  const sessionStore = createFakeSessionStore();
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: { forwardChatCompletion: async () => ({
+      body: { choices: [{ message: { role: 'assistant', content: '答案。', reasoning_content: '先分析。' } }] },
+      providerId: 'qwen', accountId: 'qwen-main', actualModel: 'Qwen3.7', nativeState: {},
+    }) },
+  });
+  const result = await service.createResponse({ model: 'Qwen3.7', input: '问题' });
+  assert.equal(result.body.output_text, '答案。');
+  assert.equal(result.body.reasoning_text, '先分析。');
+  assert.equal(result.body.output[0].content[0].text, '答案。');
+  assert.equal(sessionStore.sessions.get(result.body.conversation.id).history.at(-1).content, '答案。');
+});
+
+test('Responses 流式逐块转发思考，完成态保留思考且输出正文独立', async () => {
+  const sessionStore = createFakeSessionStore();
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: { forwardChatCompletion: async () => ({
+      stream: (async function* chunks() {
+        yield { choices: [{ delta: { reasoning_content: '先分' } }] };
+        yield { choices: [{ delta: { reasoning_content: '析。' } }] };
+        yield { choices: [{ delta: { content: '答案。' } }] };
+      }()),
+      providerId: 'qwen', accountId: 'qwen-main', actualModel: 'Qwen3.7', nativeState: {},
+    }) },
+  });
+  const result = await service.createResponse({ model: 'Qwen3.7', input: '问题', stream: true });
+  const events = [];
+  for await (const event of result.stream) events.push(event);
+  assert.deepEqual(events.filter(event => event.type === 'response.reasoning_text.delta').map(event => event.delta), ['先分', '析。']);
+  assert.deepEqual(events.filter(event => event.type === 'response.output_text.delta').map(event => event.delta), ['答案。']);
+  assert.equal(events.at(-1).response.reasoning_text, '先分析。');
+  assert.equal(events.at(-1).response.output_text, '答案。');
+  assert.equal(sessionStore.sessions.get(events.at(-1).response.conversation.id).history.at(-1).content, '答案。');
+});
+
 test('Responses 服务创建会话并让原生 Provider 续接第二轮增量', async () => {
   const sessionStore = createFakeSessionStore();
   const requests = [];

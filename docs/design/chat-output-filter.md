@@ -1,5 +1,9 @@
 # 聊天输出过滤与私聊清空交互设计
 
+## Chat2API Responses 独立思考内容
+
+Chat2API 上游可把思考与回答分别放在 `reasoning_content` 和 `content`。Responses 转换层应保持回答在 `output_text`，将思考作为独立的 `reasoning_text` 及流式 `response.reasoning_text.delta` 传递给 AASC 聊天服务。聊天服务把两者写入已有的 `reasoning`/回答字段，控制端用现有 Think 弹窗展示；没有思考内容时不显示按钮。历史上下文仍只回传回答正文，避免把思考内容当作用户可见回答再送给上游。
+
 ## 需求
 
 1. 控制端聊天气泡只显示最终回答；有 think 内容时显示 Think 按钮，点击后在弹窗中查看思考内容。

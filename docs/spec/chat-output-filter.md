@@ -1,5 +1,32 @@
 # 聊天 think 分流与私聊清空实现规范
 
+## Chat2API Responses 独立思考字段传递（2026-10-19）
+
+```text
+已有声明 := Chat2API 上游 Chat Completions 的 delta.reasoning_content、message.reasoning_content
+已有声明 := Responses 的 output_text 仅代表最终回答；控制端历史的 reasoning 决定 Think 按钮是否显示
+新增定义 := response.reasoning_text.delta 表示本轮新增思考文字；response.reasoning_text 表示非流式或完成态思考文字
+
+非流式转换:
+    从上游消息读取 reasoning_content，非空时写入 Responses.reasoning_text
+    output_text 与 output message 仍只包含回答正文
+
+流式转换:
+    收到 delta.reasoning_content 时累加并发出 response.reasoning_text.delta
+    收到 delta.content 时仍发 response.output_text.delta
+    完成态 response.reasoning_text 使用累加的思考文字
+    持久化的上游续接历史仅使用 assistant 回答正文
+
+AASC 聊天消费:
+    收到 response.reasoning_text.delta 时累加独立思考，通知控制端刷新 Think 按钮
+    依当前播报顺序将思考文字归入 think 分段，正文归入 answer 分段
+    非流式调用将 response.reasoning_text 与回答解析结果合并，写入本地历史 reasoning
+    若上游没有思考字段，保留旧 answer/think 标签解析和无 Think 按钮行为
+
+验证 := 提供 reasoning_content 的 Provider 在流式、非流式和历史中保留思考；
+        回答正文不混入思考，控制端 Think 可展开，旧 Provider 不受影响
+```
+
 ## 思考输出分流伪代码
 
 ```text

@@ -148,9 +148,10 @@ const createOutput = (message) => {
   }];
 };
 
-const createResponseBody = ({ responseId, conversationId, previousResponseId, request, chatBody, textOverride, messageId }) => {
+const createResponseBody = ({ responseId, conversationId, previousResponseId, request, chatBody, textOverride, reasoningTextOverride, messageId }) => {
   const message = getAssistantMessage(chatBody);
   const outputText = textOverride === undefined ? getAssistantText(message) : textOverride;
+  const reasoningText = reasoningTextOverride === undefined ? message.reasoning_content : reasoningTextOverride;
   const body = {
     id: responseId,
     object: 'response',
@@ -164,6 +165,7 @@ const createResponseBody = ({ responseId, conversationId, previousResponseId, re
       content: [{ type: 'output_text', text: outputText, annotations: [] }],
     }],
     output_text: outputText,
+    ...(typeof reasoningText === 'string' && reasoningText ? { reasoning_text: reasoningText } : {}),
     previous_response_id: previousResponseId || null,
     conversation: { id: conversationId },
     store: request.store !== false,
@@ -404,6 +406,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
     const created = createResponseBody({ responseId, conversationId, previousResponseId, request, chatBody: { choices: [{ message: { role: 'assistant', content: '' } }] }, textOverride: '' });
     yield { type: 'response.created', response: { ...created, status: 'in_progress', output: [], output_text: '' } };
     let text = '';
+    let reasoningText = '';
     const toolCalls = new Map();
     let textItemCreated = false;
     const ensureTextItem = () => {
@@ -476,6 +479,11 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
         }
       }
       const content = delta && typeof delta.content === 'string' ? delta.content : '';
+      const reasoning = delta && typeof delta.reasoning_content === 'string' ? delta.reasoning_content : '';
+      if (reasoning) {
+        reasoningText += reasoning;
+        yield { type: 'response.reasoning_text.delta', delta: reasoning };
+      }
       if (content) {
         const itemAdded = ensureTextItem();
         if (itemAdded) yield itemAdded;
@@ -484,7 +492,9 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
       }
     }
     const assistantMessage = toolCalls.size > 0 ? createToolCallMessage() : { role: 'assistant', content: text };
-    const finalBody = createResponseBody({ responseId, conversationId, previousResponseId, request, chatBody: { choices: [{ message: assistantMessage }] }, ...(toolCalls.size > 0 ? {} : { textOverride: text, messageId: outputItemId }) });
+    const finalBody = createResponseBody({ responseId, conversationId, previousResponseId, request,
+      chatBody: { choices: [{ message: assistantMessage }] }, reasoningTextOverride: reasoningText,
+      ...(toolCalls.size > 0 ? {} : { textOverride: text, messageId: outputItemId }) });
     if (toolCalls.size > 0) {
       for (const toolCall of toolCalls.values()) {
         yield {

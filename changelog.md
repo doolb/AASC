@@ -1,3 +1,8 @@
+### 控制端聊天思考内容
+
+- ✅ [2026-10-19] 修复 Chat2API Responses 丢失上游独立思考内容，导致控制端 Think 按钮不显示。
+  - `chat2api-responses-service.js` 在非流式响应和流式增量中分别传递 `reasoning_text`；`llm-service.js` 合并到既有 reasoning、播报和历史路径，保持回答正文与续接上下文独立。更新定向测试和 design/spec/task/todo；34/34 与 `npm run check:chat2api` 290/290 通过。`servicePackage=true` 待出包，真实账号和控制端待验收。
+
 ### 显示端设置面板与颜色选择器
 
 - ✅ [2026-10-19] 修复显示端右侧五个设置面板切换时重叠，以及 Android 颜色选择器色相轨道呈白色。
