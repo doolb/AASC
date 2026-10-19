@@ -1,5 +1,10 @@
 ### LLM 三档模型设计记录
 
+- ✅ [2026-10-19] 模型快选回写当前普通 LLM 配置的模型名，并按当前名称反显 Provider 和档位。
+  - `chat-model-tier-service.js` 按开发名称表识别当前模型；`Qwen3.6-Flash` 显示 Qwen 轻量，不读取 Chat2API 映射配置。`pi-profile-config.js` 一次保存当前 profile.model、兼容 model 和各 Provider 档位偏好；`server-app.js` 在手工编辑或切换 profile 后向两端补发权威快选状态。
+  - `chat-model-tier-picker.js` 和样式增加当前模型名显示、明显的选中/未选中差异与 `aria-pressed`。同步 `docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/usage/chat-model-tiers.md`、`docs/task/20261019_聊天快选回写当前LLM模型名.md`、`docs/todo.md`；`release/offline-release-status.json` 的 `servicePackage=true`，待出包。
+  - 服务/聊天/Profile/浏览器定向测试 25/25、`npm run check:chat2api` 286/286、差异检查通过；真实上游账号和 Offline APK/ADB 仍待验收。
+
 - ✅ [2026-10-19] 完成控制端与显示端右下角聊天模型三档快选源码及定向回归。
   - `chat-model-tier-service.js` 由开发维护 Provider 映射；Qwen 初始普通、豆包初始轻量，每个 Provider 独立记忆档位，权威选择经 WebSocket 保存和广播。Qwen 三档使用专用内部别名，保留旧 `Qwen3.6-Flash → Qwen3.7` 兼容规则；豆包沿用 `doubao/doubao-think/doubao-expert` 的 0/1/3 模式，不接 Lite。
   - 更新 `server-app.js`、`llm-service.js`、`chat2api-default-model-mappings.js`、两端页面/脚本/样式和控制端自测；外部登录按钮预留且禁用。同步 `docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/20261019_聊天模型三档双端快选.md`、`docs/usage/chat-model-tiers.md`、`docs/todo.md`；`release/offline-release-status.json` 标记 `servicePackage=true`。

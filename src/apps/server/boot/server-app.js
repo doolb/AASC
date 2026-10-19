@@ -658,6 +658,8 @@ const runningChat2ApiRuntimes = new Set();
 const chatModelTierService = createChatModelTierService({
     config,
     getRuntime: () => [...runningChat2ApiRuntimes].reverse().find(runtime => runtime.getStatus().running) || null,
+    getActiveProfile: () => chat.getProfileByName(chat.getActiveProfile()),
+    saveActiveModel: (model, preference) => piProfileConfig.updateActiveModel(model, preference),
     broadcast: message => {
         broadcastToControls(message);
         for (const [displayId] of displayClients) sendToDisplay(displayId, message);
@@ -688,7 +690,10 @@ const aiRoles = new AiRolesService({
 });
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
 const piProfileConfig = new PiProfileConfig({ chat, config, dependencies: taskDependencyManager,
-    broadcast: broadcastToControls, isControl: ws => controlClients.has(ws) });
+    broadcast: message => {
+        broadcastToControls(message);
+        if (message.type === 'chatProfilesConfig') void broadcastChatModelTierAvailability();
+    }, isControl: ws => controlClients.has(ws) });
 const piRuntimeManager = new PiRuntimeManager({
     projectRoot: PROJECT_ROOT,
     ensureDependency: () => piProfileConfig.prepare()

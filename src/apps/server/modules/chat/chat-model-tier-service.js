@@ -1,6 +1,6 @@
 'use strict';
 
-// 三档映射由开发维护；UI 只保存当前 Provider 和各 Provider 的偏好档位。
+// 三档映射由开发维护；当前普通 LLM profile.model 是权威模型名，偏好只记忆各 Provider 档位。
 const PROVIDER_TIERS = Object.freeze({
     qwen: Object.freeze({ label: 'Qwen', defaultTier: 'flash', models: Object.freeze({
         mini: 'aasc-qwen-mini', flash: 'aasc-qwen-flash', pro: 'aasc-qwen-pro'
@@ -16,6 +16,18 @@ const PROVIDER_TIERS = Object.freeze({
 const TIERS = Object.freeze(['mini', 'flash', 'pro']);
 const CONFIG_KEY = 'chat.modelTierSelection';
 
+function identifyModel(modelName) {
+    const name = String(modelName || '').trim().toLowerCase();
+    if (!name) return null;
+    for (const [providerId, mapping] of Object.entries(PROVIDER_TIERS)) {
+        for (const tier of TIERS) {
+            const aliases = [mapping.models[tier], mapping.actualModels[tier]];
+            if (aliases.some(alias => alias.toLowerCase() === name)) return { providerId, tier };
+        }
+    }
+    return null;
+}
+
 function normalizeSelection(raw) {
     const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     const tiersByProvider = {};
@@ -29,8 +41,15 @@ function normalizeSelection(raw) {
     };
 }
 
-function createChatModelTierService({ config, getRuntime, broadcast }) {
-    const selection = () => normalizeSelection(config.get(CONFIG_KEY));
+function createChatModelTierService({ config, getRuntime, getActiveProfile, saveActiveModel, broadcast }) {
+    const selection = () => {
+        const active = getActiveProfile() || {};
+        const preference = normalizeSelection(config.get(CONFIG_KEY));
+        const identified = active.mode === 'agent' ? null : identifyModel(active.model);
+        if (identified) preference.tiersByProvider[identified.providerId] = identified.tier;
+        return { ...preference, providerId: identified?.providerId || null,
+            modelName: active.model || '', profileName: active.name || '', profileMode: active.mode || 'llm' };
+    };
     let updating = Promise.resolve();
 
     async function availableProviders() {
@@ -66,20 +85,25 @@ function createChatModelTierService({ config, getRuntime, broadcast }) {
                 throw new Error('缺少 Provider 选择');
             }
             const providerId = data.providerId;
-            if (providerId !== null && !Object.hasOwn(PROVIDER_TIERS, providerId)) {
+            if (!Object.hasOwn(PROVIDER_TIERS, providerId)) {
                 throw new Error('Provider 没有三档映射');
             }
             if (Object.hasOwn(data, 'tier') && !TIERS.includes(data.tier)) {
                 throw new Error('模型档位不合法');
             }
-            if (providerId && !(await availableProviders()).some(provider => provider.id === providerId)) {
+            const providers = await availableProviders();
+            if (!providers.some(provider => provider.id === providerId)) {
                 throw new Error('Provider 未登录或不可用');
             }
-            const next = selection();
-            next.providerId = providerId;
-            if (providerId && data.tier) next.tiersByProvider[providerId] = data.tier;
-            if (config.set(CONFIG_KEY, next) === false) throw new Error('模型档位保存失败');
-            const message = await snapshot({ success: true, requestId: data.requestId });
+            const active = getActiveProfile();
+            if (!active || active.mode === 'agent') throw new Error('当前配置不是普通 LLM');
+            const current = selection();
+            const next = { providerId, tiersByProvider: { ...current.tiersByProvider } };
+            const tier = data.tier || current.tiersByProvider[providerId];
+            next.tiersByProvider[providerId] = tier;
+            await saveActiveModel(PROVIDER_TIERS[providerId].actualModels[tier], next);
+            const message = { type: 'chatModelTierConfig', selection: selection(), providers,
+                success: true, requestId: data.requestId };
             broadcast(message);
             return message;
         };
@@ -90,6 +114,7 @@ function createChatModelTierService({ config, getRuntime, broadcast }) {
 
     async function resolveForChat() {
         const current = selection();
+        if (current.profileMode === 'agent') return null;
         if (!current.providerId) return null;
         const runtime = getRuntime();
         if (!runtime?.getStatus?.().running) throw new Error('Chat2API 代理尚未运行');
@@ -99,11 +124,6 @@ function createChatModelTierService({ config, getRuntime, broadcast }) {
         const tier = current.tiersByProvider[current.providerId];
         const model = PROVIDER_TIERS[current.providerId].models[tier];
         if (!model) throw new Error('当前 Provider 没有此档位映射');
-        const binding = await runtime.modelMapper.resolveModel(model);
-        if (binding.preferredProviderId !== current.providerId
-            || binding.actualModel !== PROVIDER_TIERS[current.providerId].actualModels[tier]) {
-            throw new Error('模型档位映射与 Provider 不一致');
-        }
         return {
             providerId: current.providerId, tier, model,
             client: {
@@ -137,4 +157,4 @@ function createChatModelTierService({ config, getRuntime, broadcast }) {
     return { snapshot, sendSnapshot, update, resolveForChat, selection, availableProviders };
 }
 
-module.exports = { PROVIDER_TIERS, TIERS, normalizeSelection, createChatModelTierService };
+module.exports = { PROVIDER_TIERS, TIERS, identifyModel, normalizeSelection, createChatModelTierService };

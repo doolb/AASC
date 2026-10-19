@@ -2,28 +2,30 @@
 
 ## LLM 三档与两端快选伪代码（2026-10-19）
 
-已有声明：聊天配置.model；模型映射.resolveModel；账号选择.selectAccount；豆包请求.buildDoubaoRequest；Responses 原生续接状态。
+已有声明：当前普通 LLM profile.model；PiProfileConfig.snapshot/update；账号选择.selectAccount；豆包请求.buildDoubaoRequest；Responses 原生续接状态。
 
-新增定义：ModelTier { mini 轻量, flash 普通, pro 专业 }；ProviderTierMapping { providerId, tier, requestModel }；ChatModelTierSelection { providerId, tiersByProvider }。映射由开发维护在服务端代码，两端只编辑共享选择。
+新增定义：ModelTier { mini 轻量, flash 普通, pro 专业 }；ProviderTierMapping { providerId, tier, requestModel }；ChatModelTierPreference { tiersByProvider }。当前普通 LLM profile.model 是模型选择的权威来源；偏好配置只记住各 Provider 上次使用的档位。
 
 ```text
 Qwen档位目标 := mini → Qwen3.6-Flash；flash → Qwen3.7；pro → Qwen3.7-Max
 豆包档位 := mini → doubao/思考0；flash → doubao-think/思考1；pro → doubao-expert/思考3
 各Provider初始档位 := qwen → flash（普通/快速）；doubaochat → mini（轻量）
-Qwen 三档使用内部专用请求别名；mini 须与现有 Qwen3.6-Flash → Qwen3.7 兼容映射隔离
+当前 profile.model 保存 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max 或豆包现有名称；Qwen 请求使用内部专用别名，mini 须与现有 Qwen3.6-Flash → Qwen3.7 兼容映射隔离
 
 服务端读取当前运行的 Chat2API 账号与 Provider 公开目录 → 只发布已启用、有凭据账号且有开发映射的 Provider 标识和名称
-控制端或显示端连接 → 服务端补发当前权威选择及可选 Provider；断线时界面禁止提交
+控制端或显示端连接 → 从当前普通 LLM profile.model 按开发维护的名称表反查 Provider 与档位 → 补发权威模型名、档位及可选 Provider；断线时界面禁止提交
+旧模型名 Qwen3.6-Flash → 按配置名称识别为 Qwen 轻量，不读取 Chat2API 映射配置；请求时改用内部轻量别名，避免旧兼容映射改写实际目标
 控制端或显示端切Provider → 读取 tiersByProvider[providerId]，缺省用该Provider开发默认档位
-控制端或显示端提交 providerId + tier → 服务端校验枚举与当前账号 → 只更新该Provider的档位和当前Provider → config.set 持久化 → 两端广播规范化权威选择
-未设置共享选择 → 普通聊天继续现有 LLM profile；已设置 → 只覆盖普通 LLM 的 Chat2API 调用目标，角色 Agent 沿用其配置
-发送普通聊天 → 服务端按权威选择解析请求模型与 Provider；不可用则明确失败，不回退到其它 Provider 或档位
+控制端或显示端提交 providerId + tier → 服务端校验当前普通 LLM profile、枚举与账号 → 在同一次 chat 配置写入中更新当前 profile.model、兼容 model 字段及该 Provider 档位偏好 → 广播 profile 和快选权威快照
+手动修改模型名或切换 LLM profile → 重新按当前 profile.model 反查并广播快选状态；未知名称不选中档位，显示原模型名
+当前 profile 为 Agent → 不改 Agent 模型；快选显示不可编辑，角色 Agent 沿用角色配置
+发送普通聊天 → 服务端按当前 profile.model 识别请求模型与 Provider；不可用则明确失败，不回退到其它 Provider 或档位；未知名称继续原 profile 调用
 旧版 chat 消息入口 → 与普通 chatMessage 共用当前三档解析；角色 Agent 保持自己的配置
 Chat2API 任务启动或停止后 → 尝试广播可选 Provider 快照；快照读取失败只记录诊断，不改变任务启停结果
-Qwen 三档 → 使用 aasc-qwen-mini/flash/pro 专用请求别名并校验解析后的 Provider 与实际目标模型，避免旧兼容映射或自定义规则改写
+Qwen 三档 → 使用 aasc-qwen-mini/flash/pro 专用请求别名；面板识别不依赖 Chat2API 映射配置
 当前运行的 Chat2API Responses 服务 → 直接建立响应流；response.failed 或缺少 response.completed 时作为失败回报
 Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不复用不兼容上游会话
-两端快选面板展示当前 Provider 与档位；外部登录保留入口与接口接线，本次不启动登录
+两端快选面板展示当前模型名、Provider 与档位；选中按钮使用明显强调样式与 aria-pressed，未选中按钮使用中性样式；外部登录保留入口与接口接线，本次不启动登录
 ```
 
 源码已按以上流程完成；Qwen 网页目标模型的实际可调用性仍待真实账号核实。Chat2API 代理未运行、账号被禁用或 Provider 被删除时，选择保留但发送聊天时明确失败。

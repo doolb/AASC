@@ -23,6 +23,7 @@
         panel.innerHTML = `<div class="chat-model-tier-header"><strong>聊天模型</strong><button type="button" data-close aria-label="关闭模型面板">×</button></div>
             <p class="chat-model-tier-scope">两端共享；只影响后续普通 LLM 聊天。</p>
             <label>当前 Provider<select data-provider disabled></select></label>
+            <p class="chat-model-tier-current" data-current-model></p>
             <div class="chat-model-tier-levels" role="group" aria-label="模型档位"></div>
             <button type="button" class="chat-model-tier-login" data-login disabled title="后续版本开放">外部登录（后续开放）</button>
             <p class="chat-model-tier-status" data-status role="status"></p>`;
@@ -30,6 +31,7 @@
 
         const providerSelect = panel.querySelector('[data-provider]');
         const levels = panel.querySelector('.chat-model-tier-levels');
+        const currentModel = panel.querySelector('[data-current-model]');
         const status = panel.querySelector('[data-status]');
         let connected = false;
         let snapshot = null;
@@ -43,7 +45,8 @@
             const selection = snapshot?.selection || {};
             const providers = Array.isArray(snapshot?.providers) ? snapshot.providers : [];
             const providerId = selection.providerId || '';
-            const options = [{ id: '', name: '现有 LLM 配置' }, ...providers];
+            const isAgent = selection.profileMode === 'agent';
+            const options = [{ id: '', name: isAgent ? 'Agent 配置' : '请选择 Provider' }, ...providers];
             if (providerId && !providers.some(provider => provider.id === providerId)) {
                 options.push({ id: providerId, name: `${providerId}（当前不可用）` });
             }
@@ -55,28 +58,34 @@
                 providerSelect.append(option);
             }
             providerSelect.value = providerId;
-            providerSelect.disabled = !connected || !snapshot;
+            providerSelect.disabled = !connected || !snapshot || isAgent;
+            currentModel.textContent = `当前模型名：${selection.modelName || '未配置'}`;
             levels.replaceChildren();
             const tier = selection.tiersByProvider?.[providerId];
             for (const [value, label] of Object.entries(LABELS)) {
                 const level = document.createElement('button');
                 level.type = 'button';
                 level.textContent = label;
-                level.className = value === tier && providerId ? 'is-selected' : '';
-                level.setAttribute('aria-pressed', String(value === tier && Boolean(providerId)));
-                level.disabled = !connected || !providerId || !providers.some(provider => provider.id === providerId);
+                const selected = value === tier && Boolean(providerId);
+                level.className = selected ? 'is-selected' : 'is-unselected';
+                level.setAttribute('aria-pressed', String(selected));
+                level.disabled = !connected || isAgent || !providerId || !providers.some(provider => provider.id === providerId);
                 level.addEventListener('click', () => choose(providerId, value));
                 levels.append(level);
             }
             if (!connected) status.textContent = '等待连接服务器';
             else if (!snapshot) status.textContent = '等待同步模型设置';
+            else if (isAgent) status.textContent = '当前为 Agent 配置，请先切换到普通 LLM 配置';
             else if (providers.length === 0) status.textContent = '暂无已配置账号且支持三档的 Provider';
             else if (providerId && !providers.some(provider => provider.id === providerId)) status.textContent = '当前 Provider 不可用，请重新选择';
-            else status.textContent = providerId ? `当前：${tier ? LABELS[tier] : '未设置档位'}` : '当前沿用现有 LLM 配置';
+            else status.textContent = providerId
+                ? `当前：${options.find(provider => provider.id === providerId)?.name || providerId} · ${tier ? LABELS[tier] : '未设置档位'}`
+                : '当前模型名未匹配三档，仍沿用 LLM 配置';
         }
 
         function choose(providerId, tier) {
-            const message = { type: 'setChatModelTierSelection', providerId: providerId || null,
+            if (!providerId) return;
+            const message = { type: 'setChatModelTierSelection', providerId,
                 ...(tier ? { tier } : {}) };
             if (!send(message)) {
                 render();

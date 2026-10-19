@@ -17,6 +17,8 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.setContent('<!doctype html><html><body><div id="control"></div><div id="display"></div></body></html>');
+    await page.addStyleTag({ content: ':root { --bg-primary: #161b2a; --bg-secondary: #22283a; --border-color: #566076; --text-primary: #fff; --text-secondary: #bac4d8; --accent-color: #7da8ff; }' });
+    await page.addStyleTag({ path: path.join(root, 'css/chat-model-tier-picker.css') });
     await page.addScriptTag({ path: path.join(root, 'js/chat-model-tier-picker.js') });
     await page.evaluate(() => {
         window.sent = [];
@@ -25,7 +27,8 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
         window.displayPicker = window.ChatModelTierPicker.create({ host: document.getElementById('display'), prefix: 'display', send });
         for (const picker of [window.controlPicker, window.displayPicker]) picker.setConnected(true);
         const message = { type: 'chatModelTierConfig', selection: {
-            providerId: 'qwen', tiersByProvider: { qwen: 'flash', doubaochat: 'mini' }
+            providerId: 'qwen', tiersByProvider: { qwen: 'flash', doubaochat: 'mini' },
+            modelName: 'Qwen3.7', profileMode: 'llm'
         }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
         for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
     });
@@ -33,6 +36,14 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
     await page.click('#displayChatModelTierToggle');
     assert.equal(await page.$eval('#controlChatModelTierPanel [data-provider]', node => node.value), 'qwen');
     assert.equal(await page.$eval('#displayChatModelTierPanel .chat-model-tier-levels .is-selected', node => node.textContent), '普通');
+    assert.equal(await page.$eval('#displayChatModelTierPanel [data-current-model]', node => node.textContent), '当前模型名：Qwen3.7');
+    const buttonStyles = await page.$$eval('#displayChatModelTierPanel .chat-model-tier-levels button', buttons => buttons.map(button => ({
+        pressed: button.getAttribute('aria-pressed'), border: getComputedStyle(button).borderWidth,
+        weight: getComputedStyle(button).fontWeight, background: getComputedStyle(button).backgroundColor
+    })));
+    assert.equal(buttonStyles.filter(style => style.pressed === 'true').length, 1);
+    assert.notEqual(buttonStyles[1].background, buttonStyles[0].background);
+    assert.notEqual(buttonStyles[1].weight, buttonStyles[0].weight);
     await page.select('#controlChatModelTierPanel [data-provider]', 'doubaochat');
     assert.deepEqual(await page.evaluate(() => window.sent.at(-1)), {
         type: 'setChatModelTierSelection', providerId: 'doubaochat', tier: 'mini'
@@ -40,12 +51,28 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
     assert.equal(await page.$eval('#controlChatModelTierPanel [data-provider]', node => node.value), 'qwen');
     await page.evaluate(() => {
         const message = { type: 'chatModelTierConfig', selection: {
-            providerId: 'doubaochat', tiersByProvider: { qwen: 'flash', doubaochat: 'mini' }
+            providerId: 'doubaochat', tiersByProvider: { qwen: 'flash', doubaochat: 'mini' },
+            modelName: 'doubao', profileMode: 'llm'
         }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
         for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
     });
     assert.equal(await page.$eval('#displayChatModelTierPanel [data-provider]', node => node.value), 'doubaochat');
     assert.equal(await page.$eval('#controlChatModelTierPanel .chat-model-tier-levels .is-selected', node => node.textContent), '轻量');
+    await page.evaluate(() => {
+        const message = { type: 'chatModelTierConfig', selection: {
+            providerId: 'qwen', tiersByProvider: { qwen: 'mini', doubaochat: 'mini' },
+            modelName: 'Qwen3.6-Flash', profileMode: 'llm'
+        }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
+        for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
+    });
+    assert.equal(await page.$eval('#controlChatModelTierPanel .chat-model-tier-levels .is-selected', node => node.textContent), '轻量');
+    assert.equal(await page.$eval('#displayChatModelTierPanel [data-current-model]', node => node.textContent), '当前模型名：Qwen3.6-Flash');
+    await page.evaluate(() => window.controlPicker.handleMessage({ type: 'chatModelTierConfig', selection: {
+        providerId: null, tiersByProvider: { qwen: 'mini', doubaochat: 'mini' },
+        modelName: 'agent-model', profileMode: 'agent'
+    }, providers: [{ id: 'qwen', name: 'Qwen' }] }));
+    assert.equal(await page.$eval('#controlChatModelTierPanel [data-provider]', node => node.disabled), true);
+    assert.equal(await page.$$eval('#controlChatModelTierPanel .chat-model-tier-levels button', buttons => buttons.every(button => button.disabled)), true);
     assert.equal(await page.$eval('#controlChatModelTierPanel [data-login]', node => node.disabled), true);
     assert.deepEqual(errors, []);
 });

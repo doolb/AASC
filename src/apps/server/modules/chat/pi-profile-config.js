@@ -50,7 +50,7 @@ class PiProfileConfig {
         await this.prepare();
     }
 
-    async update(data) {
+    async update(data, internal = {}) {
         const before = this.snapshot();
         const expected = data.revision || before.revision;
         try {
@@ -77,7 +77,8 @@ class PiProfileConfig {
             const stored = { ...this.config.get('chat', {}), ...this.chat.pickGlobalChatConfig(this.chat.getConfig()),
                 llmProfiles: profiles, activeProfile,
                 ...Object.fromEntries(['apiUrl', 'model', 'apiKey', 'maxTokens', 'temperature', 'contextCount', 'promptFormat', 'mode', 'backend']
-                    .filter(key => selected[key] !== undefined).map(key => [key, selected[key]])) };
+                    .filter(key => selected[key] !== undefined).map(key => [key, selected[key]])),
+                ...internal.chatOverrides };
             if (this.config.set('chat', stored) === false) throw new Error('配置持久化失败');
             this.chat.setProfiles(profiles);
             this.chat.switchProfile(activeProfile);
@@ -86,6 +87,20 @@ class PiProfileConfig {
             this.broadcast({ type: 'profileSwitched', activeProfile, config: { apiUrl: selected.apiUrl, model: selected.model } });
             return { ...authoritative, status: 'success', config: { apiUrl: selected.apiUrl, model: selected.model } };
         } catch (error) { return { ...this.snapshot(), status: 'error', message: error.message }; }
+    }
+
+    /** 模型快选只改当前普通 LLM 的模型名，复用配置修订检查和一次持久化写入。 */
+    async updateActiveModel(model, modelTierSelection) {
+        const before = this.snapshot();
+        const active = before.profiles.find(profile => profile.name === before.activeProfile);
+        if (!active || active.mode === 'agent') throw new Error('当前配置不是普通 LLM');
+        const profiles = before.profiles.map(profile => profile.name === active.name
+            ? { ...profile, model } : profile);
+        const result = await this.update({ type: 'chatProfilesSave', profiles,
+            profileName: active.name, revision: before.revision },
+        { chatOverrides: { modelTierSelection } });
+        if (result.status !== 'success') throw new Error(result.message || '模型配置保存失败');
+        return result;
     }
 
     async handle(ws, data) {

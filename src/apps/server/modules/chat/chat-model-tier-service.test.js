@@ -2,11 +2,13 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createChatModelTierService } = require('./chat-model-tier-service');
+const { createChatModelTierService, identifyModel } = require('./chat-model-tier-service');
 
-function setup() {
+function setup(initialModel = 'gpt-3.5-turbo') {
     let saved = null;
+    const profile = { name: 'direct', mode: 'llm', model: initialModel };
     const broadcasts = [];
+    const saves = [];
     const requests = [];
     const runtime = {
         getStatus: () => ({ running: true }),
@@ -19,12 +21,6 @@ function setup() {
             { id: 'qwen', enabled: true }, { id: 'doubaochat', enabled: true },
             { id: 'deepseek', enabled: true }
         ] },
-        modelMapper: { async resolveModel(model) {
-            const qwenModels = { 'aasc-qwen-mini': 'Qwen3.6-Flash',
-                'aasc-qwen-flash': 'Qwen3.7', 'aasc-qwen-pro': 'Qwen3.7-Max' };
-            return { preferredProviderId: model.startsWith('aasc-qwen-') ? 'qwen' : 'doubaochat',
-                actualModel: qwenModels[model] || model };
-        } },
         responsesService: { async createResponse(payload) {
             requests.push(payload);
             if (payload.stream) return { stream: (async function* () {
@@ -35,28 +31,64 @@ function setup() {
         } }
     };
     const config = {
-        get: () => saved,
+        get: key => key === 'chat.modelTierSelection' ? saved : null,
         set(_key, value) { saved = value; return true; }
     };
     return {
-        runtime, requests, broadcasts,
+        runtime, requests, broadcasts, profile, saves,
         service: createChatModelTierService({ config, getRuntime: () => runtime,
+            getActiveProfile: () => profile,
+            saveActiveModel: async (model, preference) => {
+                profile.model = model;
+                saved = preference;
+                saves.push({ model, preference });
+            },
             broadcast: message => broadcasts.push(message) })
     };
 }
 
 test('每个 Provider 记住自己的档位，Qwen 默认普通、豆包默认轻量', async () => {
-    const { service, broadcasts } = setup();
+    const { service, broadcasts, profile, saves } = setup();
     assert.deepEqual(service.selection(), {
-        providerId: null, tiersByProvider: { qwen: 'flash', doubaochat: 'mini' }
+        providerId: null, tiersByProvider: { qwen: 'flash', doubaochat: 'mini' },
+        modelName: 'gpt-3.5-turbo', profileName: 'direct', profileMode: 'llm'
     });
     assert.deepEqual((await service.availableProviders()).map(item => item.id), ['qwen', 'doubaochat']);
     await service.update({ providerId: 'qwen', tier: 'pro' });
+    assert.equal(profile.model, 'Qwen3.7-Max');
     await service.update({ providerId: 'doubaochat' });
+    assert.equal(profile.model, 'doubao');
     assert.deepEqual(service.selection(), {
-        providerId: 'doubaochat', tiersByProvider: { qwen: 'pro', doubaochat: 'mini' }
+        providerId: 'doubaochat', tiersByProvider: { qwen: 'pro', doubaochat: 'mini' },
+        modelName: 'doubao', profileName: 'direct', profileMode: 'llm'
     });
+    assert.equal(saves.length, 2);
     assert.equal(broadcasts.at(-1).selection.providerId, 'doubaochat');
+});
+
+test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映射', async () => {
+    const { service, profile, runtime, saves } = setup('Qwen3.6-Flash');
+    runtime.modelMapper = { resolveModel: () => { throw new Error('不应读取模型映射'); } };
+    for (const [name, providerId, tier] of [
+        ['Qwen3.6-Flash', 'qwen', 'mini'], ['Qwen3.7', 'qwen', 'flash'],
+        ['Qwen3.7-Max', 'qwen', 'pro'], ['doubao', 'doubaochat', 'mini'],
+        ['doubao-think', 'doubaochat', 'flash'], ['doubao-expert', 'doubaochat', 'pro'],
+        ['aasc-qwen-mini', 'qwen', 'mini']
+    ]) assert.deepEqual(identifyModel(name), { providerId, tier });
+    assert.equal(service.selection().providerId, 'qwen');
+    assert.equal(service.selection().tiersByProvider.qwen, 'mini');
+    assert.equal((await service.resolveForChat()).model, 'aasc-qwen-mini');
+    await service.update({ providerId: 'doubaochat' });
+    assert.equal(saves.at(-1).preference.tiersByProvider.qwen, 'mini');
+    profile.model = 'doubao-think';
+    assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
+    profile.model = 'unknown-model';
+    assert.equal(service.selection().providerId, null);
+    assert.equal(await service.resolveForChat(), null);
+    profile.mode = 'agent';
+    profile.model = 'doubao';
+    assert.equal(service.selection().providerId, null);
+    await assert.rejects(service.update({ providerId: 'qwen', tier: 'flash' }), /不是普通 LLM/);
 });
 
 test('停用账号不能选用，旧选择也不会回退到其它 Provider', async () => {

@@ -172,6 +172,25 @@ test('启动和保存普通LLM不因未使用Pi配置下载；主动保存或切
     assert.equal(f.chat.getActiveProfile(), 'direct');
 });
 
+test('模型快选把当前 LLM 模型名和 Provider 档位偏好一次写入同一配置', async () => {
+    const f = configFixture([{ name: 'direct', mode: 'llm', model: 'old' }, pi]);
+    const preference = { providerId: 'qwen', tiersByProvider: { qwen: 'mini', doubaochat: 'mini' } };
+    await f.coordinator.updateActiveModel('Qwen3.6-Flash', preference);
+    assert.deepEqual(f.counts(), { writes: 1, prepares: 0 });
+    assert.equal(f.persisted().llmProfiles[0].model, 'Qwen3.6-Flash');
+    assert.equal(f.persisted().model, 'Qwen3.6-Flash');
+    assert.deepEqual(f.persisted().modelTierSelection, preference);
+    assert.equal(f.chat.getProfiles()[0].model, 'Qwen3.6-Flash');
+    assert.ok(f.broadcasts.some(message => message.type === 'chatProfilesConfig'
+        && message.profiles[0].model === 'Qwen3.6-Flash'));
+    const failure = configFixture([{ name: 'direct', mode: 'llm', model: 'old' }]);
+    failure.config.set = () => false;
+    await assert.rejects(failure.coordinator.updateActiveModel('doubao', preference), /持久化失败/);
+    assert.equal(failure.chat.getProfiles()[0].model, 'old');
+    await f.coordinator.update({ type: 'chatProfileSwitch', name: 'agent', downloadConfirmed: true });
+    await assert.rejects(f.coordinator.updateActiveModel('doubao', preference), /不是普通 LLM/);
+});
+
 function browserFixture(confirmDownload, errorAfterConfirm = false) {
     const fields = new Map();
     const document = { getElementById: id => {
