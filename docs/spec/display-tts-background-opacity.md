@@ -17,7 +17,7 @@ normalizeOpacity(value, fallback):
   change -> send({ type: 'setDisplayTtsBackgroundOpacityConfig', opacity: 百分比 / 100 })
 
 服务端收到 setDisplayTtsBackgroundOpacityConfig:
-  确认消息来自控制端
+  确认消息来自控制端或当前在线显示端连接
   validation = validateOpacity(message.opacity, 当前权威值)
   validation 失败 -> 回送错误和当前权威值并结束
   config.set('ui.displayTtsBackgroundOpacity', validation.opacity)
@@ -35,6 +35,15 @@ normalizeOpacity(value, fallback):
 显示端收到 displayTtsBackgroundOpacityConfig:
   opacity = normalizeOpacity(message.opacity, 0.2)
   documentElement.style.setProperty('--tts-subtitle-background-opacity', opacity)
+  左下角主题面板滑块和百分比标签回显权威值
+
+显示端左下角主题面板:
+  点击主题按钮 -> 在左下角按钮组上方向上展开/收起面板
+  字幕背景滑块 min=0, max=100, step=1, 默认=20
+  input -> 更新百分比标签并预览字幕背景 alpha，保留字幕文字样式
+  change -> 通过当前显示端 WebSocket 发送 { type: 'setDisplayTtsBackgroundOpacityConfig', opacity: 百分比 / 100 }
+  服务端错误或断线 -> 回显当前权威值；重连时接受服务端补发值
+  连接在保存回包前关闭 -> 回到最近一次权威值并显示未保存提示
 
 TTS字幕CSS:
   渐变色阶 = alpha0 -> alpha变量 -> alpha变量 -> alpha0

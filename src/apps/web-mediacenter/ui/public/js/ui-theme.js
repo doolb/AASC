@@ -66,6 +66,7 @@
         previewOriginalThemeMode: undefined,
         previewEscapeHandler: null,
         ready: Promise.resolve(),
+        revision: 0,
 
         init() {
             this.selector = documentObject.getElementById('themeSelect');
@@ -92,11 +93,14 @@
 
         async loadServerTheme() {
             if (typeof windowObject.fetch !== 'function') return;
+            const requestRevision = this.revision;
             try {
                 const response = await windowObject.fetch(serverEndpoint);
                 if (!response || response.ok === false) return;
                 const payload = await response.json();
-                if (payload && payload.status === 'success' && themes.includes(payload.theme)) {
+                // 迟到的初始读取不能覆盖页面启动后收到的权威广播或用户刚选择的主题。
+                if (payload && payload.status === 'success' && themes.includes(payload.theme)
+                    && this.revision === requestRevision) {
                     this.apply(payload.theme, false);
                 }
             } catch (error) {
@@ -106,6 +110,7 @@
 
         apply(theme, persistServer = true) {
             const normalizedTheme = this.normalize(theme);
+            this.revision += 1;
             documentObject.documentElement.dataset.theme = normalizedTheme;
             documentObject.documentElement.dataset.themeMode = normalizedTheme === 'dark' ? 'dark' : 'light';
             if (this.selector) this.selector.value = normalizedTheme;

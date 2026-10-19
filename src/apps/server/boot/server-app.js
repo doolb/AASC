@@ -1314,7 +1314,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'setDisplayVoiceListeningConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -3973,6 +3973,40 @@ function broadcastDisplayTtsBackgroundOpacity(opacity = getDisplayTtsBackgroundO
     displayClients.forEach((_, displayId) => sendToDisplay(displayId, message));
 }
 
+// 控制端和显示端写入同一权威值；校验、持久化与失败回包只维护这一份流程。
+function saveDisplayTtsBackgroundOpacity(data, ws) {
+    const currentOpacity = getDisplayTtsBackgroundOpacity();
+    const validation = config.validateTtsBackgroundOpacity(data.opacity);
+    if (!validation.ok) {
+        ws.send(JSON.stringify({
+            type: 'displayTtsBackgroundOpacityConfigError',
+            opacity: currentOpacity,
+            message: validation.message
+        }));
+        return;
+    }
+
+    try {
+        if (!config.set('ui.displayTtsBackgroundOpacity', validation.opacity)) {
+            ws.send(JSON.stringify({
+                type: 'displayTtsBackgroundOpacityConfigError',
+                opacity: getDisplayTtsBackgroundOpacity(),
+                message: 'TTS 背景透明度保存失败'
+            }));
+            return;
+        }
+        broadcastDisplayTtsBackgroundOpacity(validation.opacity);
+        log('配置', `TTS 字幕背景透明度已更新为 ${Math.round(validation.opacity * 100)}%`);
+    } catch (error) {
+        logError('配置', `保存 TTS 字幕背景透明度失败: ${error.message}`);
+        ws.send(JSON.stringify({
+            type: 'displayTtsBackgroundOpacityConfigError',
+            opacity: getDisplayTtsBackgroundOpacity(),
+            message: 'TTS 背景透明度保存失败'
+        }));
+    }
+}
+
 function getServerPortConfig() {
     return config.normalizeServerPort(
         config.get('server.port', config.getDefaultServerPort()),
@@ -3987,32 +4021,49 @@ function broadcastServerPortConfig(message) {
 }
 
 function broadcastControlTheme(theme) {
+    broadcastToControls({ type: 'controlThemeChanged', theme });
     displayClients.forEach((_, displayId) => {
         sendToDisplay(displayId, { type: 'controlThemeChanged', theme });
     });
 }
 
-// 控制端主题是服务端全局配置，控制端更新后同步通知已连接的显示端。
+// 主题只有服务端一份权威值；HTTP 控制端和显示端 WebSocket 共用校验与持久化入口。
+function saveControlTheme(theme) {
+    if (!isControlTheme(theme)) {
+        return { ok: false, status: 400, message: 'theme 必须是已注册的控制端主题' };
+    }
+    try {
+        if (!config.set('ui.controlTheme', theme)) {
+            return { ok: false, status: 500, message: '主题配置保存失败' };
+        }
+        broadcastControlTheme(theme);
+        return { ok: true, theme };
+    } catch (error) {
+        logError('配置', `保存主题失败: ${error.message}`);
+        return { ok: false, status: 500, message: '主题配置保存失败' };
+    }
+}
+
+function handleDisplayThemeConfig(data, ws) {
+    const result = saveControlTheme(data.theme);
+    if (result.ok) return;
+    ws.send(JSON.stringify({
+        type: 'controlThemeConfigError',
+        theme: getControlTheme(),
+        message: result.message
+    }));
+}
+
+// 主题是服务端全局配置，控制端更新后同步通知全部在线控制端和显示端。
 app.get('/api/config/controlTheme', (req, res) => {
     const theme = getControlTheme();
     res.json({ status: 'success', theme });
 });
 
 app.post('/api/config/controlTheme', (req, res) => {
-    try {
-        const theme = req.body?.theme;
-        if (!isControlTheme(theme)) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'theme 必须是已注册的控制端主题'
-            });
-        }
-        config.set('ui.controlTheme', theme);
-        broadcastControlTheme(theme);
-        res.json({ status: 'success', theme });
-    } catch (error) {
-        res.status(500).json({ status: 'error', message: '主题配置保存失败' });
-    }
+    const result = saveControlTheme(req.body?.theme);
+    if (!result.ok) return res.status(result.status).json({ status: 'error', message: result.message });
+    return res.json({ status: 'success', theme: result.theme });
 });
 
 function isServerAsrEnabled() {
@@ -8868,6 +8919,13 @@ function formatVoiceprintScore(value) {
 }
 
 function handleDisplayMessageFallback(displayId, data, ws) {
+    if (['setControlThemeConfig', 'setDisplayTtsBackgroundOpacityConfig'].includes(data.type)) {
+        // 连接身份由服务端登记；旧 WebSocket 不得更改全局显示参数。
+        if (displayClients.get(displayId)?.ws !== ws) return;
+        if (data.type === 'setControlThemeConfig') handleDisplayThemeConfig(data, ws);
+        else saveDisplayTtsBackgroundOpacity(data, ws);
+        return;
+    }
     if (['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices'].includes(data.type)) {
         // 显示端入口已把 displayId 覆盖为登记身份；它属于传输上下文，不是快选业务字段。
         // 只隔离这一字段，其它未知字段仍交给原白名单拒绝，避免放宽显示端写入权限。
@@ -9580,36 +9638,7 @@ async function handleControlMessageFallback(data, ws) {
 
     if (data.type === 'setDisplayTtsBackgroundOpacityConfig') {
         if (!controlClients.has(ws)) return;
-        const currentOpacity = getDisplayTtsBackgroundOpacity();
-        const validation = config.validateTtsBackgroundOpacity(data.opacity);
-        if (!validation.ok) {
-            ws.send(JSON.stringify({
-                type: 'displayTtsBackgroundOpacityConfigError',
-                opacity: currentOpacity,
-                message: validation.message
-            }));
-            return;
-        }
-
-        try {
-            if (!config.set('ui.displayTtsBackgroundOpacity', validation.opacity)) {
-                ws.send(JSON.stringify({
-                    type: 'displayTtsBackgroundOpacityConfigError',
-                    opacity: getDisplayTtsBackgroundOpacity(),
-                    message: 'TTS 背景透明度保存失败'
-                }));
-                return;
-            }
-            broadcastDisplayTtsBackgroundOpacity(validation.opacity);
-            log('配置', `TTS 字幕背景透明度已更新为 ${Math.round(validation.opacity * 100)}%`);
-        } catch (error) {
-            logError('配置', `保存 TTS 字幕背景透明度失败: ${error.message}`);
-            ws.send(JSON.stringify({
-                type: 'displayTtsBackgroundOpacityConfigError',
-                opacity: getDisplayTtsBackgroundOpacity(),
-                message: 'TTS 背景透明度保存失败'
-            }));
-        }
+        saveDisplayTtsBackgroundOpacity(data, ws);
         return;
     }
 

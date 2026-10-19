@@ -5,6 +5,7 @@ const CONTROL_REMOTE_CONFIG_HANDLERS = Object.freeze({
     piDependencyStatus: data => window.Chat?.handlePiDependencyStatus(data),
     displayTtsBackgroundOpacityConfig: data => window.Settings?.handleTtsBackgroundOpacityConfig(data),
     displayTtsBackgroundOpacityConfigError: data => window.Settings?.handleTtsBackgroundOpacityConfigError(data),
+    controlThemeChanged: data => window.UiTheme?.applyRemoteTheme(data.theme),
     serverPortConfig: data => window.Settings?.handleServerPortConfig(data),
     serverPortConfigError: data => window.Settings?.handleServerPortConfigError(data)
 });

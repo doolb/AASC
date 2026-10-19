@@ -118,6 +118,18 @@ test('主题管理器应支持显示端应用远程主题而不再次保存服�
     assert.equal(storage.get('controlTheme'), 'mint');
 });
 
+test('迟到的初始主题读取不能覆盖后到的服务端广播', async () => {
+    let finishRead;
+    const { manager, document } = loadThemeManager([], {
+        fetch: () => new Promise(resolve => { finishRead = resolve; })
+    });
+    const ready = manager.init();
+    manager.applyRemoteTheme('mint');
+    finishRead({ ok: true, json: async () => ({ status: 'success', theme: 'warm' }) });
+    await ready;
+    assert.equal(document.documentElement.dataset.theme, 'mint');
+});
+
 test('服务端主题读取失败时应保留本地主题', async () => {
     const { manager, document, storage } = loadThemeManager([], {
         fetch: async () => {

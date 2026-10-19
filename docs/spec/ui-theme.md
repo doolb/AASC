@@ -8,6 +8,7 @@ UiTheme:
     storageKey = controlTheme
     serverEndpoint = /api/config/controlTheme
     ready = Promise.resolve()
+    revision = 0
 
     init():
         theme = readTheme()
@@ -28,15 +29,17 @@ UiTheme:
         return dark
 
     loadServerTheme():
+        requestRevision = revision
         try:
             response = await fetch(serverEndpoint)
             payload = await response.json()
-            if response.ok 且 payload.status == success 且 payload.theme 在 themes 中:
+            if response.ok 且 payload.status == success 且 payload.theme 在 themes 中 且 revision == requestRevision:
                 apply(payload.theme, persistServer = false)
         catch:
             保留本地已应用主题，不阻断控制端初始化
 
     apply(theme, persistServer = true):
+        revision += 1
         normalized = theme 在 themes 中 ? theme : dark
         document.documentElement.dataset.theme = normalized
         document.documentElement.dataset.themeMode = normalized == dark ? dark : light
@@ -80,8 +83,22 @@ DisplayTheme:
 Server controlTheme update:
     validate theme in CONTROL_THEMES
     persist ui.controlTheme
-    broadcast { type: controlThemeChanged, theme } to display clients
+    broadcast { type: controlThemeChanged, theme } to control and display clients
     display connection -> send current { type: controlThemeChanged, theme }
+```
+
+## 显示端左下角主题面板（2026-10-19）
+
+```text
+已有声明 := 左下角交互层按钮组 + UiTheme 的 15 个主题与 applyRemoteTheme + ui.controlTheme 权威配置
+新增定义 := 主题按钮控制向上展开的外观面板；主题下拉框显示 15 个主题；字幕背景滑块显示 0..100 百分比
+操作流程 := 点击主题按钮 → 展开/收起面板并更新 aria-expanded
+选择主题 → 显示端 WebSocket 发送 {type:setControlThemeConfig, theme} → 服务端校验主题白名单并持久化
+保存成功 → 服务端向全部控制端及显示端广播 {type:controlThemeChanged, theme} → 双端调用 applyRemoteTheme
+保存失败 → 服务端向来源连接回传当前权威主题与错误 → 面板回显权威主题并提示失败
+连接在保存回包前关闭 → 面板回显最近一次权威主题并显示未保存提示
+连接初始化 → 服务端补发当前主题；显示端未收到时使用 UiTheme 本地缓存或 dark
+显示端面板收到主题广播 → 下拉框更新到权威主题；媒体画布与当前播放不变
 ```
 
 ## 控件分类伪代码

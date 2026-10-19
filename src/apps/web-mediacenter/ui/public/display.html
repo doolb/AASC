@@ -609,6 +609,27 @@
         <p class="mind-basic-note" data-taa-status=""></p></div></section>
 </section>
             </div>
+            <div class="display-appearance-control">
+                <button id="displayAppearanceToggle" class="display-stage-button" type="button"
+                        aria-controls="displayAppearancePanel" aria-expanded="false">主题</button>
+                <section id="displayAppearancePanel" class="display-appearance-panel" hidden aria-label="主题与 TTS 字幕背景">
+                    <strong>外观设置</strong>
+                    <label for="displayAppearanceTheme">主题</label>
+                    <select id="displayAppearanceTheme" aria-label="显示端主题">
+                        <option value="dark">深色</option><option value="light">浅色</option>
+                        <option value="warm">暖黄</option><option value="pink">淡粉</option>
+                        <option value="lavender-yellow">淡紫黄</option><option value="red-blue">红蓝</option>
+                        <option value="gold">尊贵金</option><option value="mint">薄荷青</option>
+                        <option value="ocean">海洋蓝</option><option value="forest">森林绿</option>
+                        <option value="slate">极简灰</option><option value="algae-salt">藻盐</option>
+                        <option value="girl-pink">少女粉</option><option value="rose-gold">玫瑰金</option>
+                        <option value="new-year-red">新年红</option>
+                    </select>
+                    <label for="displayAppearanceTtsOpacity">TTS 字幕背景 <output id="displayAppearanceTtsOpacityValue" for="displayAppearanceTtsOpacity">20%</output></label>
+                    <input id="displayAppearanceTtsOpacity" type="range" min="0" max="100" step="1" value="20" aria-label="TTS 字幕背景透明度">
+                    <p id="displayAppearanceStatus" role="status" aria-live="polite"></p>
+                </section>
+            </div>
             <button id="displayChatToggle" class="display-stage-button" type="button"
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
@@ -670,6 +691,7 @@
     <script src="js/display-tts-subtitles.js"></script>
     <script src="js/text-media-player.js"></script>
     <script src="js/ui-theme.js"></script>
+    <script src="js/display-appearance-controls.js" defer></script>
     <script src="js/display-background-glow.js"></script>
     <script src="js/display-stage.js" defer></script>
     <script src="js/display-chat.js" defer></script>
@@ -738,6 +760,7 @@
         if (window.UiTheme) {
             window.UiTheme.init();
         }
+        window.DisplayAppearanceControls?.init();
 
         let currentRotation = 0;
         window.currentRotation = 0;
@@ -6107,7 +6130,13 @@
                                 '--tts-subtitle-background-opacity',
                                 String(Math.round(opacity * 100) / 100)
                             );
+                            window.DisplayAppearanceControls?.handleOpacity(opacity);
                         }
+                        return;
+                    }
+
+                    if (data.type === 'displayTtsBackgroundOpacityConfigError') {
+                        window.DisplayAppearanceControls?.handleOpacityError(data);
                         return;
                     }
 
@@ -6115,6 +6144,12 @@
                         if (window.UiTheme) {
                             window.UiTheme.applyRemoteTheme(data.theme);
                         }
+                        window.DisplayAppearanceControls?.handleTheme(data.theme);
+                        return;
+                    }
+
+                    if (data.type === 'controlThemeConfigError') {
+                        window.DisplayAppearanceControls?.handleThemeError(data);
                         return;
                     }
 
@@ -6481,6 +6516,7 @@
 
             socket.onclose = function() {
                 if (!isCurrentDisplaySocket(socket)) return;
+                window.DisplayAppearanceControls?.handleDisconnected();
                 if (displayRecordingSession) {
                     void finalizeDisplayRecording(false, '显示端连接已断开');
                 }
@@ -6498,6 +6534,7 @@
             socket.onerror = function(error) {
                 if (!isCurrentDisplaySocket(socket)) return;
                 console.error('WebSocket错误:', error);
+                window.DisplayAppearanceControls?.handleDisconnected();
                 // 部分 Android WebView 在服务端重启时可能只触发 error，不保证随后触发 close。
                 // 先释放当前连接引用，确保 scheduleDisplayReconnect 不被 OPEN/CLOSING 状态拦截。
                 cancelVoiceInteraction();

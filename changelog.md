@@ -1,3 +1,8 @@
+### 显示端外观设置
+
+- ✅ [2026-10-19] 显示端左下角新增“主题”面板，可选择全局 15 套主题并调整 TTS 字幕背景透明度。
+  - 更新 `display.html`、`display-mmd.css`、`display-appearance-controls.js`、`ui-theme.js`、`websocket.js`、`server-app.js`、`upload.html`，复用服务端权威配置并向控制端和显示端广播；迟到的初次主题读取不覆盖新广播。同步 design/spec/task/todo/usage，`servicePackage=true`。主题、透明度及旋转定向测试 37/37 通过；扩展的 `display-chat-mmd` 39/52，13 项 AR/MMD 断言失败。服务包待构建，设备界面待验收。
+
 ### Offline APK 热更来源故障转移
 
 - ✅ [2026-10-19] 修复 JS 启动器 WAN 热更请求使用域名 Host 导致清单 403：保留 `c.aasc.us` 来源配置，请求前动态解析 IPv4 并以 IP URL 连接。
