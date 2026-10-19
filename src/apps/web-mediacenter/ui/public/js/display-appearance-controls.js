@@ -31,6 +31,15 @@
 
     function setOpen(open) {
         if (!refs.panel || !refs.toggle) return;
+        if (open) {
+            const group = refs.toggle.parentElement;
+            group?.querySelectorAll(':scope > section:not([hidden])').forEach((panel) => {
+                if (panel !== refs.panel) panel.hidden = true;
+            });
+            group?.querySelectorAll(':scope > button[aria-expanded="true"]').forEach((button) => {
+                if (button !== refs.toggle) button.setAttribute('aria-expanded', 'false');
+            });
+        }
         refs.panel.hidden = !open;
         refs.toggle.setAttribute('aria-expanded', String(open));
     }
@@ -84,7 +93,8 @@
             if (event.key === 'Escape') setOpen(false);
         });
         root.document.addEventListener('pointerdown', (event) => {
-            if (!refs.panel.hidden && !event.target.closest('.display-appearance-control')) setOpen(false);
+            if (!refs.panel.hidden && !refs.panel.contains(event.target)
+                && !refs.toggle.contains(event.target)) setOpen(false);
         });
     }
 

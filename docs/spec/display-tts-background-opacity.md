@@ -35,10 +35,10 @@ normalizeOpacity(value, fallback):
 显示端收到 displayTtsBackgroundOpacityConfig:
   opacity = normalizeOpacity(message.opacity, 0.2)
   documentElement.style.setProperty('--tts-subtitle-background-opacity', opacity)
-  左下角主题面板滑块和百分比标签回显权威值
+  音色按钮上方主题面板的滑块和百分比标签回显权威值
 
-显示端左下角主题面板:
-  点击主题按钮 -> 在左下角按钮组上方向上展开/收起面板
+显示端主题面板:
+  主题按钮位于右侧音色按钮上方；点击后面板在按钮列左侧展开/收起
   字幕背景滑块 min=0, max=100, step=1, 默认=20
   input -> 更新百分比标签并预览字幕背景 alpha，保留字幕文字样式
   change -> 通过当前显示端 WebSocket 发送 { type: 'setDisplayTtsBackgroundOpacityConfig', opacity: 百分比 / 100 }

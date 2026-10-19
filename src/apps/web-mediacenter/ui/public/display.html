@@ -86,6 +86,25 @@
         <section id="displayChatLayer" class="display-chat-layer" aria-hidden="true"></section>
         <div id="displayInteractionLayer" class="display-interaction-layer">
             <div class="display-stage-lighting-control" hidden>
+                <button id="displayAppearanceToggle" class="display-stage-button" type="button"
+                        aria-controls="displayAppearancePanel" aria-expanded="false">主题</button>
+                <section id="displayAppearancePanel" class="display-mmd-lighting-panel display-appearance-panel" hidden aria-label="主题与 TTS 字幕背景">
+                    <strong>外观设置</strong>
+                    <label for="displayAppearanceTheme">主题</label>
+                    <select id="displayAppearanceTheme" aria-label="显示端主题">
+                        <option value="dark">深色</option><option value="light">浅色</option>
+                        <option value="warm">暖黄</option><option value="pink">淡粉</option>
+                        <option value="lavender-yellow">淡紫黄</option><option value="red-blue">红蓝</option>
+                        <option value="gold">尊贵金</option><option value="mint">薄荷青</option>
+                        <option value="ocean">海洋蓝</option><option value="forest">森林绿</option>
+                        <option value="slate">极简灰</option><option value="algae-salt">藻盐</option>
+                        <option value="girl-pink">少女粉</option><option value="rose-gold">玫瑰金</option>
+                        <option value="new-year-red">新年红</option>
+                    </select>
+                    <label for="displayAppearanceTtsOpacity">TTS 字幕背景 <output id="displayAppearanceTtsOpacityValue" for="displayAppearanceTtsOpacity">20%</output></label>
+                    <input id="displayAppearanceTtsOpacity" type="range" min="0" max="100" step="1" value="20" aria-label="TTS 字幕背景透明度">
+                    <p id="displayAppearanceStatus" role="status" aria-live="polite"></p>
+                </section>
                 <button id="displayTtsVoiceToggle" class="display-stage-button" type="button"
                         aria-controls="displayTtsVoicePanel" aria-expanded="false">音色</button>
                 <section id="displayTtsVoicePanel" class="display-mmd-lighting-panel display-tts-voice-panel tts-voice-picker" hidden aria-label="语音方式与音色">
@@ -608,27 +627,6 @@
         <p class="mind-basic-note">TAA强度0取消偏移但保留历史混合；较大抖动可能使画面变软。</p>
         <p class="mind-basic-note" data-taa-status=""></p></div></section>
 </section>
-            </div>
-            <div class="display-appearance-control">
-                <button id="displayAppearanceToggle" class="display-stage-button" type="button"
-                        aria-controls="displayAppearancePanel" aria-expanded="false">主题</button>
-                <section id="displayAppearancePanel" class="display-appearance-panel" hidden aria-label="主题与 TTS 字幕背景">
-                    <strong>外观设置</strong>
-                    <label for="displayAppearanceTheme">主题</label>
-                    <select id="displayAppearanceTheme" aria-label="显示端主题">
-                        <option value="dark">深色</option><option value="light">浅色</option>
-                        <option value="warm">暖黄</option><option value="pink">淡粉</option>
-                        <option value="lavender-yellow">淡紫黄</option><option value="red-blue">红蓝</option>
-                        <option value="gold">尊贵金</option><option value="mint">薄荷青</option>
-                        <option value="ocean">海洋蓝</option><option value="forest">森林绿</option>
-                        <option value="slate">极简灰</option><option value="algae-salt">藻盐</option>
-                        <option value="girl-pink">少女粉</option><option value="rose-gold">玫瑰金</option>
-                        <option value="new-year-red">新年红</option>
-                    </select>
-                    <label for="displayAppearanceTtsOpacity">TTS 字幕背景 <output id="displayAppearanceTtsOpacityValue" for="displayAppearanceTtsOpacity">20%</output></label>
-                    <input id="displayAppearanceTtsOpacity" type="range" min="0" max="100" step="1" value="20" aria-label="TTS 字幕背景透明度">
-                    <p id="displayAppearanceStatus" role="status" aria-live="polite"></p>
-                </section>
             </div>
             <button id="displayChatToggle" class="display-stage-button" type="button"
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>

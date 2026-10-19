@@ -12,7 +12,9 @@ const display = read('src/apps/web-mediacenter/ui/public/display.html');
 const server = read('src/apps/server/boot/server-app.js');
 const controlSocket = read('src/apps/web-mediacenter/ui/public/js/websocket.js');
 const appearanceScript = read('src/apps/web-mediacenter/ui/public/js/display-appearance-controls.js');
-const panel = display.match(/<div class="display-appearance-control">[\s\S]*?<\/div>\s*(?=<button id="displayChatToggle")/u)?.[0];
+const displayMmdCss = read('src/apps/web-mediacenter/ui/public/css/display-mmd.css');
+const panel = display.match(/<button id="displayAppearanceToggle"[\s\S]*?<\/section>\s*(?=<button id="displayTtsVoiceToggle")/u)?.[0];
+const voiceButton = display.match(/<button id="displayTtsVoiceToggle"[\s\S]*?<\/button>/u)?.[0];
 let browser;
 
 before(async () => {
@@ -27,9 +29,10 @@ after(async () => {
     if (browser) await browser.close();
 });
 
-test('显示端主题面板用现有主题列表，服务端为控制端和显示端广播权威值', () => {
-    assert.ok(panel, '显示端左下角应有外观面板');
-    assert.ok(display.indexOf('displayAppearanceToggle') < display.indexOf('displayChatToggle'));
+test('主题按钮位于音色上方且面板使用现有主题列表，服务端广播权威值', () => {
+    assert.ok(panel, '音色按钮上方应有外观面板');
+    assert.match(display, /<div class="display-stage-lighting-control" hidden>\s*<button id="displayAppearanceToggle"/u);
+    assert.ok(display.indexOf('displayAppearanceToggle') < display.indexOf('displayTtsVoiceToggle'));
     const optionCount = (panel.match(/<option value=/gu) || []).length;
     assert.equal(optionCount, 15);
     assert.match(server, /displayTypes:[^\n]*'setControlThemeConfig'[^\n]*'setDisplayTtsBackgroundOpacityConfig'/u);
@@ -43,7 +46,8 @@ test('显示端主题面板用现有主题列表，服务端为控制端和显�
 test('显示端面板展开、保存、预览、权威回显及断线恢复', async () => {
     const page = await browser.newPage();
     try {
-        await page.setContent(panel);
+        await page.setContent(`<div id="displayStageLayers" class="display-stage-layers"><div class="display-interaction-layer"><div class="display-stage-lighting-control">${panel}${voiceButton}</div></div></div>`);
+        await page.addStyleTag({ content: displayMmdCss });
         await page.evaluate(() => {
             window.__sent = [];
             window.__connected = true;
@@ -65,6 +69,11 @@ test('显示端面板展开、保存、预览、权威回显及断线恢复', as
             const controls = window.DisplayAppearanceControls;
             document.getElementById('displayAppearanceToggle').click();
             const opened = !document.getElementById('displayAppearancePanel').hidden;
+            const themeRect = document.getElementById('displayAppearanceToggle').getBoundingClientRect();
+            const voiceRect = document.getElementById('displayTtsVoiceToggle').getBoundingClientRect();
+            const panelRect = document.getElementById('displayAppearancePanel').getBoundingClientRect();
+            const placement = { themeAboveVoice: themeRect.bottom < voiceRect.top,
+                panelLeftOfButtons: panelRect.right < themeRect.left };
             const theme = document.getElementById('displayAppearanceTheme');
             theme.value = 'mint';
             theme.dispatchEvent(new Event('change', { bubbles: true }));
@@ -91,6 +100,7 @@ test('显示端面板展开、保存、预览、权威回显及断线恢复', as
             opacity.dispatchEvent(new Event('change', { bubbles: true }));
             return {
                 opened,
+                placement,
                 expanded: document.getElementById('displayAppearanceToggle').getAttribute('aria-expanded'),
                 sent: window.__sent,
                 preview,
@@ -101,6 +111,7 @@ test('显示端面板展开、保存、预览、权威回显及断线恢复', as
             };
         });
         assert.equal(result.opened, true);
+        assert.deepEqual(result.placement, { themeAboveVoice: true, panelLeftOfButtons: true });
         assert.equal(result.expanded, 'true');
         assert.deepEqual(result.sent, [
             { type: 'setControlThemeConfig', theme: 'mint' },
