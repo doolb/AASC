@@ -121,7 +121,8 @@ test('试听仅合成服务端固定短句和显式音色，不保存配置或�
     assert.equal(requests[0].templateTts.voice, 'Cherry');
     assert.equal(requests[0].voice, 'Cherry');
     assert.equal(requests[0].businessType, 'ai_reply');
-    assert.ok(['你好，很高兴认识你。', '今天的天气真不错。', '愿你拥有愉快的一天。', '请听听这个声音是否合适。'].includes(requests[0].text));
+    assert.ok(['你好，很高兴认识你。', '今天的天气真不错。', '愿你拥有愉快的一天。',
+        '请听听这个声音是否合适。', '喵，轮到你落子咯。', '喵，轮到你落子啦。'].includes(requests[0].text));
     await handler.handle(display, { type: 'previewTtsVoice', provider: 'doubao-chat', voice: 'speaker', requestId: 'preview-2' });
     assert.equal(requests.length, 2);
     for (const bad of [

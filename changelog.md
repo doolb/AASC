@@ -1,5 +1,8 @@
 ### 双端音色列表试听
 
+- ✅ [2026-10-20] 固定试听文案新增“喵，轮到你落子咯。”与“喵，轮到你落子啦。”，随机池由四句扩为六句。
+  - 更新 `tts-provider-ws.js`、协议测试及 TTS design/spec/task/todo；`npm run test:tts-voice-picker` 29/29 通过，沿用面板 WAV 缓存与 `servicePackage=true` 待出包状态。
+
 - ✅ [2026-10-20] 控制端与显示端每条音色增加独立试听按钮；服务端随机选固定短句，按该 Provider 与音色合成，不修改当前选择。
   - `tts-provider-ws.js`、`server-app.js`、`websocket.js` 接通试听消息与临时音频；`tts-voice-picker.js/css` 下载 WAV 到各页面的最多 30 条 LRU 内存缓存，重复点击直接重播，淘汰时释放对象 URL。更新只读自测及 design/spec/task/usage/todo；`npm run test:tts-voice-picker` 29/29 通过，`servicePackage=true` 待出包，真实账号和 Android 听感待现场验收。
 
