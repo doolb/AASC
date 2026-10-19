@@ -60,6 +60,18 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             width: 740, height: 390, rotation: 90
         }));
         assert.match(await page.$eval('#displayGameLayer', layer => layer.style.transform), /rotate\(90deg\)/);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'gameSnapshot', gameId: 'demo-1', revision: 1, size: 9,
+            board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中',
+            visible: true, demo: true
+        }));
+        assert.equal(await page.$eval('[data-coordinate="C3"]', button => button.disabled), true);
+        assert.match(await page.$eval('#displayGameStatus', node => node.textContent), /演示/);
+        const sentBeforeClose = await page.evaluate(() => window.__sent.length);
+        await page.click('#displayGameClose');
+        assert.equal(await page.evaluate(() => window.__sent.length), sentBeforeClose);
+        await page.evaluate(() => window.__emit('server.message', { type: 'gameDemoEnd', gameId: 'demo-1' }));
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true);
     } finally {
         await browser.close();
     }

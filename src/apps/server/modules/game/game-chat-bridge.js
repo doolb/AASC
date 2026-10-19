@@ -6,6 +6,7 @@ const GAME_PROMPT = [
     '操作者是棋子所属方 User 或 AI；即使用户用语音下棋，也是你代用户发出 User 标签。',
     'GM 是服务端权威状态，不是你可以发出的操作；Game 表示同步到显示端的事件。不要伪造 GM 或 Game 标签。',
     '一次回复最多发出一条标签，等 GM 返回权威结果后再继续。标签不需要向用户解释。',
+    '如果决定调用游戏操作，标签必须是回复开头的第一个非空白内容；不要先写叙述。是否开局由你根据用户意思决定。',
     '操作：开局或开局,9/11/13/15；落子,H8；查看；提议尺寸,11；确认尺寸,11；退出显示；恢复显示。',
     '默认 15×15，用户黑子先行、你执白子，横竖斜连续五子及以上获胜，无禁手；坐标从左上角 A1 起，列字母包含 I。',
     '中途改变棋盘尺寸先提议，只有用户明确确认后才可调用 User,确认尺寸；确认会清空棋盘并沿用游戏 ID。',
@@ -17,9 +18,27 @@ const GAME_PROMPT = [
 ].join('\n');
 const recoveredContexts = new Map();
 
-function shouldUseGameBridge(displayId, content, gameService, internalSignal = false) {
-    return Boolean(displayId && (internalSignal || gameService.has(displayId)
-        || /五子棋|五字棋|<Game:五子棋/.test(String(content || ''))));
+/** 普通流式回复只过滤游戏标签；对尚未收齐的标签前缀先保留在缓冲区。 */
+function filterGameProtocolText(value, complete = false) {
+    const input = String(value || '');
+    let output = '';
+    let cursor = 0;
+    while (cursor < input.length) {
+        const opening = input.indexOf('<', cursor);
+        if (opening < 0) return output + input.slice(cursor);
+        output += input.slice(cursor, opening);
+        const remaining = input.slice(opening);
+        if ('<Game:'.startsWith(remaining)) return complete ? output + remaining : output;
+        if (remaining.startsWith('<Game:')) {
+            const closing = remaining.indexOf('>');
+            if (closing < 0) return output;
+            cursor = opening + closing + 1;
+            continue;
+        }
+        output += '<';
+        cursor = opening + 1;
+    }
+    return output;
 }
 
 function emitFinal(text, reasoning, speech, callbacks, history, splitIntoSentences) {
@@ -37,7 +56,7 @@ function emitFinal(text, reasoning, speech, callbacks, history, splitIntoSentenc
 /** 游戏回合缓冲模型输出，避免标签的半截流进入聊天或 TTS。 */
 async function runGameAwareChat({ chat, gameService, displayId, content, userText = content,
     options, callbacks, internalSignal = false }) {
-    if (!shouldUseGameBridge(displayId, content, gameService, internalSignal)) {
+    if (!displayId) {
         return chat.chatStream(content, options, callbacks);
     }
     const systemPrompt = [options.systemPrompt, GAME_PROMPT].filter(Boolean).join('\n\n');
@@ -45,7 +64,6 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     let version = gameService.snapshot(displayId)?.revision;
     let invalidAiMoves = 0;
     let missingAiMoves = 0;
-    let missingStart = 0;
     let lastHistory = [];
     const contextKey = [displayId, chat.getActiveProfile?.() || '', options.mode || '',
         options.target || '', options.sessionId || ''].join('|');
@@ -56,7 +74,41 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         input = `${gameService.gmSnapshot(displayId)}\n${content}`;
     }
     for (let turn = 0; turn < 7; turn += 1) {
-        const response = await chat.chatStream(input, { ...options, systemPrompt }, {});
+        const mayStreamPlain = turn === 0 && !internalSignal
+            && !(initialState?.turn === 'AI' && initialState.result === '进行中');
+        let streamedPlain = false;
+        let deliveredText = '';
+        const pendingSentences = [];
+        const forwardSentence = ([sentence, fullMessage, reasoning, speech, phase]) => {
+            const safeSentence = filterGameProtocolText(sentence, true);
+            if (!safeSentence) return;
+            callbacks.onSentence?.(safeSentence, filterGameProtocolText(fullMessage, true),
+                stripGameTags(reasoning), filterGameProtocolText(speech, true), phase);
+        };
+        const streamCallbacks = mayStreamPlain ? {
+            onChunk: (_chunk, fullMessage, reasoning) => {
+                const candidate = String(fullMessage || '').trimStart();
+                if (!streamedPlain) {
+                    if (!candidate || '<Game:'.startsWith(candidate) || candidate.startsWith('<Game:')) return;
+                    streamedPlain = true;
+                    for (const args of pendingSentences) forwardSentence(args);
+                    pendingSentences.length = 0;
+                }
+                const safeFull = filterGameProtocolText(fullMessage);
+                if (!safeFull.startsWith(deliveredText)) return;
+                const safeChunk = safeFull.slice(deliveredText.length);
+                if (safeChunk) callbacks.onChunk?.(safeChunk, safeFull, stripGameTags(reasoning));
+                deliveredText = safeFull;
+            },
+            onSentence: (...args) => {
+                if (!streamedPlain) {
+                    pendingSentences.push(args);
+                    return;
+                }
+                forwardSentence(args);
+            }
+        } : {};
+        const response = await chat.chatStream(input, { ...options, systemPrompt }, streamCallbacks);
         if (!response?.success) {
             callbacks.onError?.(response?.error || '游戏聊天失败');
             return response;
@@ -64,20 +116,24 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         if (needsRecovery) recoveredContexts.set(contextKey, initialState.gameId);
         lastHistory = response.history || lastHistory;
         const tags = extractGameTags(response.message);
+        if (streamedPlain) {
+            const message = filterGameProtocolText(response.message, true).trim();
+            const reasoning = stripGameTags(response.reasoning);
+            const speech = stripGameTags(response.speech) || message;
+            if (message.startsWith(deliveredText) && message.length > deliveredText.length) {
+                callbacks.onChunk?.(message.slice(deliveredText.length), message, reasoning);
+            }
+            callbacks.onComplete?.(message, lastHistory, reasoning, speech);
+            return { ...response, message, reasoning, speech };
+        }
         if (tags.length === 0) {
             const state = gameService.snapshot(displayId);
-            if (!state && /五子棋|五字棋/.test(String(userText)) && missingStart < 2) {
-                missingStart += 1;
-                input = '<Game:五子棋,GM,错误,尚未开局>\n用户要玩五子棋，请先调用一条开局标签。';
-                continue;
-            }
             if (state?.turn === 'AI' && state.result === '进行中' && missingAiMoves < 2) {
                 missingAiMoves += 1;
                 input = '<Game:五子棋,GM,错误,轮到AI落子>\n请先调用一条 AI 落子标签，不要只叙述。';
                 continue;
             }
-            const finalText = !state ? '五子棋尚未开局，请重试。'
-                : state.turn === 'AI' && state.result === '进行中'
+            const finalText = state?.turn === 'AI' && state.result === '进行中'
                 ? `${stripGameTags(response.message)}\n当前轮到 AI，落子暂未完成。`
                 : response.message;
             return emitFinal(finalText, response.reasoning, response.speech, callbacks, lastHistory,
@@ -107,4 +163,4 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         chat.splitIntoSentences);
 }
 
-module.exports = { runGameAwareChat, shouldUseGameBridge, GAME_PROMPT };
+module.exports = { runGameAwareChat, GAME_PROMPT, filterGameProtocolText };

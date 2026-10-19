@@ -19,6 +19,8 @@ const config = require('../modules/config/config-app-service');
 const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
 const { createGomokuGameService } = require('../modules/game/gomoku-game-service');
+const { createGomokuDisplayDemoService, isLoopbackAddress } =
+    require('../modules/game/gomoku-display-demo-service');
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createDataRepairRunner } = require('../modules/data-repair/data-repair-js-runner');
 const { createChat2ApiRuntime } = require('../modules/chat2api/chat2api-runtime');
@@ -403,9 +405,19 @@ if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
 }
 
 const wss = new WebSocket.Server({ server, maxPayload: 500 * 1024 * 1024 });
+let gomokuDisplayDemo = null;
 const gomokuGame = createGomokuGameService({
     filePath: path.join(USER_CONFIG_DIR, 'games', 'gomoku.json'),
-    onUpdate: (displayId, message) => sendToDisplay(displayId, message)
+    onUpdate: (displayId, message) => {
+        // 真实棋局更新优先于临时演示；直接恢复最新快照，避免与演示版本混用。
+        const interruptedDemo = gomokuDisplayDemo?.cancelForRealUpdate(displayId);
+        sendToDisplay(displayId, interruptedDemo ? gomokuGame.snapshot(displayId) : message);
+    }
+});
+gomokuDisplayDemo = createGomokuDisplayDemoService({
+    getSnapshot: displayId => gomokuGame.snapshot(displayId),
+    sendToDisplay: (displayId, message) => sendToDisplay(displayId, message),
+    isOnline: displayId => displayClients.get(displayId)?.ws?.readyState === WebSocket.OPEN
 });
 
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -1447,7 +1459,7 @@ async function startServer() {
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'setVoiceCaptureConfig', 'requestAudioInputDevices', 'setAudioOutputConfig', 'requestAudioOutputDevices', 'requestDisplayRecording', 'stopDisplayRecording',
                 'listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera',
                 'setGlobalRecordingPause',
-                'playlistRequest', 'playlistControl'
+                'playlistRequest', 'playlistControl', 'gameDemoStart', 'gameDemoStop'
             ];
             for (const type of controlTypes) {
                 wsServer.registerHandler(type, async (data, ctx) => {
@@ -8152,6 +8164,7 @@ wss.on('connection', (ws, req) => {
             (previousState === WebSocket.OPEN || previousState === WebSocket.CONNECTING)) {
             previousDisplay.ws.close(4001, 'replaced by newer display connection');
         }
+        gomokuDisplayDemo.stopForDisplay(displayId);
 
         displayClients.set(displayId, {
             ws: ws,
@@ -8560,6 +8573,7 @@ wss.on('connection', (ws, req) => {
             rejectDisplayCameraSessionsForDisplay(displayId, '显示端已断开');
             clearVoicePlaybackTargetsForDisplay(displayId);
             clearLlmLogBuffersForDisplay(displayId);
+            gomokuDisplayDemo.stopForDisplay(displayId);
             llmGatewayService.handleDisplayDisconnect(displayId);
             manualChatTts.stop(ws);
             displayClients.delete(displayId);
@@ -8883,6 +8897,7 @@ wss.on('connection', (ws, req) => {
             rejectDisplayRecordingSessionsForControl(ws, '控制端已断开');
             rejectDisplayCameraSessionsForControl(ws);
             manualChatTts.stop(ws);
+            gomokuDisplayDemo.stopForControl(ws);
             controlClients.delete(ws);
             ws.removeAllListeners();
             if (wsServer) {
@@ -9643,6 +9658,16 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
+    if (data.type === 'gameDemoStart' || data.type === 'gameDemoStop') {
+        const displayId = typeof data.displayId === 'string' ? data.displayId : '';
+        const result = isLoopbackAddress(ws?._socket?.remoteAddress)
+            ? data.type === 'gameDemoStart'
+                ? gomokuDisplayDemo.start(ws, displayId, data.size === undefined ? 15 : Number(data.size))
+                : gomokuDisplayDemo.stop(displayId, ws)
+            : { ok: false, code: '演示仅允许本机控制连接' };
+        ws.send(JSON.stringify({ type: 'gameDemoResult', action: data.type, ...result }));
+        return;
+    }
     if (['getChatModelTierConfig', 'setChatModelTierSelection'].includes(data.type)) {
         await handleChatModelTierMessage(ws, data);
         return;

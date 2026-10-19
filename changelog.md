@@ -1,5 +1,9 @@
 ### 五子棋游戏协议与本地显示
 
+- ✅ [2026-10-19] 增加向当前显示端发送一轮五子棋画面的演示脚本。
+  - `scripts/demo/gomoku-ui-demo.js` 通过本机控制 WebSocket 选定在线显示端；`gomoku-display-demo-service.js` 发送临时快照和黑白增量，结束、断线或真实棋局更新时恢复权威画面。`display-game.js` 禁止演示点按。更新 spec/design/task/usage/todo 和定向测试，18/18 通过；测试确认不发送聊天消息、不调用 AI、不改棋局文件。服务与显示端需加载新版代码后现场验收。
+- ✅ [2026-10-19] 五子棋开局改为完全由 AI 指令触发，不再按用户文本关键词判断。
+  - `game-chat-bridge.js` 对有目标显示端的聊天提供游戏工具规则；AI 输出游戏标签才调用游戏服务。移除“五子棋”关键词触发和未发标签时的强制催发；普通回复继续流式输出，标签片段先缓冲并过滤。更新 design/spec/task/usage/todo 与定向测试，四组测试 16/16 通过。`servicePackage=true` 待出包。
 - ✅ [2026-10-19] 游戏相关聊天自动加入五子棋专用系统指令，并封住已有棋局重新开局时的尺寸确认绕过。
   - `game-chat-bridge.js` 明确位置参数、User/AI/GM/Game 身份及重开限制；`gomoku-game-service.js` 在进行中的棋局要求用户明确重开，改尺寸仍须提议与确认，省略尺寸沿用原尺寸。更新 design/spec/task/todo 和回归用例；四组定向测试 12/12 通过。`servicePackage=true` 待出包。
 - ✅ [2026-10-19] 实现位置参数 Game 标签、服务端权威五子棋与显示端全屏棋盘。

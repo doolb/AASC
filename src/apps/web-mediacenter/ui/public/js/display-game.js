@@ -25,7 +25,8 @@
         if (game.result === 'User胜') return '你赢了';
         if (game.result === 'AI胜') return 'AI 赢了';
         if (game.result === '平局') return '平局';
-        return game.turn === 'User' ? '轮到你（黑子）' : 'AI 思考中（白子）';
+        const label = game.turn === 'User' ? '轮到你（黑子）' : 'AI 思考中（白子）';
+        return game.demo === true ? `演示 · ${label}` : label;
     }
 
     function refreshView() {
@@ -36,7 +37,7 @@
         refs.layer.setAttribute('aria-hidden', String(game.visible === false));
         setStatus(turnLabel());
         refs.board.querySelectorAll('.display-game-point').forEach(button => {
-            const playable = game.result === '进行中' && game.turn === 'User'
+            const playable = game.demo !== true && game.result === '进行中' && game.turn === 'User'
                 && !pending && button.dataset.stone === '.';
             button.disabled = !playable;
         });
@@ -80,7 +81,19 @@
     }
 
     function handleMessage(message) {
-        if (!message || !['gameSnapshot', 'gameDelta', 'gameVisibility', 'gameProposal', 'gameError'].includes(message.type)) return false;
+        if (!message || !['gameSnapshot', 'gameDelta', 'gameVisibility', 'gameProposal', 'gameError',
+            'gameDemoEnd'].includes(message.type)) return false;
+        if (message.type === 'gameDemoEnd') {
+            if (game?.demo === true && game.gameId === message.gameId) {
+                game = null;
+                pending = false;
+                refs.layer.hidden = true;
+                refs.shell.hidden = true;
+                refs.reopen.hidden = true;
+                refs.layer.setAttribute('aria-hidden', 'true');
+            }
+            return true;
+        }
         if (message.type === 'gameError') {
             pending = false;
             if (message.code === '版本过期') requestRecovery();
@@ -141,7 +154,8 @@
         bus.subscribe('transport.changed', ({ available }) => { if (available && game) requestRecovery(); });
         refs.board.addEventListener('click', event => {
             const point = event.target.closest('.display-game-point');
-            if (!point || !game || pending || game.turn !== 'User' || game.result !== '进行中') return;
+            if (!point || !game || game.demo === true || pending || game.turn !== 'User'
+                || game.result !== '进行中') return;
             pending = true;
             refreshView();
             const sent = send({ type: 'gameMove', coordinate: point.dataset.coordinate,
@@ -149,10 +163,10 @@
             if (!sent) { pending = false; setStatus('连接中断，请重试'); refreshView(); }
         });
         document.getElementById('displayGameClose')?.addEventListener('click', () => {
-            if (game) send({ type: 'gameView', visible: false, revision: game.revision });
+            if (game && game.demo !== true) send({ type: 'gameView', visible: false, revision: game.revision });
         });
         refs.reopen.addEventListener('click', () => {
-            if (game) send({ type: 'gameView', visible: true, revision: game.revision });
+            if (game && game.demo !== true) send({ type: 'gameView', visible: true, revision: game.revision });
         });
         const state = stage.getState();
         if (state.rotationGeometry) resize({ width: state.rotationGeometry.logicalWidth,
