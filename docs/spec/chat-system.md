@@ -4,7 +4,7 @@
 
 已有声明：当前普通 LLM profile.model；PiProfileConfig.snapshot/update；账号选择.selectAccount；豆包请求.buildDoubaoRequest；Responses 原生续接状态。
 
-新增定义：ModelTier { mini 轻量, flash 普通, pro 专业 }；ProviderTierMapping { providerId, tier, profileModel, requestModel, targetModel }；ChatModelTierPreference { tiersByProvider }。三档定义与 Chat2API 默认目标集中在 chat2api-default-model-mappings.js；当前普通 LLM profile.model 是模型选择的权威来源；偏好配置只记住各 Provider 上次使用的档位。
+新增定义：ModelTier { mini 轻量, flash 普通, pro 专业 }；ProviderTierMapping { providerId, tier, model }；ChatModelTierPreference { tiersByProvider }。三档定义仅保存当前 LLM 配置中的模型名；Chat2API 映射层生成 Qwen 专用请求别名并决定实际目标；偏好配置只记住各 Provider 上次使用的档位。
 
 ```text
 Qwen档位目标 := mini → Qwen3.6-Flash；flash → Qwen3.7；pro → Qwen3.7-Max
@@ -23,7 +23,7 @@ Chat2API默认目标 := doubao → doubao/思考0；doubao-think → doubao/思�
 发送普通聊天 → 服务端按当前 profile.model 识别请求模型与 Provider；不可用则明确失败，不回退到其它 Provider 或档位；未知名称继续原 profile 调用
 旧版 chat 消息入口 → 与普通 chatMessage 共用当前三档解析；角色 Agent 保持自己的配置
 Chat2API 任务启动或停止后 → 尝试广播可选 Provider 快照；快照读取失败只记录诊断，不改变任务启停结果
-Qwen 三档 → 使用 aasc-qwen-mini/flash/pro 专用请求别名；面板识别不依赖 Chat2API 映射配置
+Qwen 三档 → 当前 LLM 配置写入 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max；聊天发送前由 Chat2API 映射层生成 aasc-qwen-mini/flash/pro 专用请求别名；面板识别不依赖运行时 Chat2API 映射配置
 豆包快选 mini 写入 doubao，flash 写入 doubao-think，pro 写入 doubao-expert；Chat2API默认映射将前两档指向 doubao/思考0，保留名称反查；自定义映射优先于默认映射
 当前运行的 Chat2API Responses 服务 → 直接建立响应流；response.failed 或缺少 response.completed 时作为失败回报
 Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不复用不兼容上游会话

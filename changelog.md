@@ -1,5 +1,8 @@
 ### LLM 三档模型设计记录
 
+- ✅ [2026-10-19] 精简三档定义，移除 `targetModels` 和 `actualModels` 两套重复字段。
+  - `chat2api-default-model-mappings.js` 的 `models` 只保存当前 LLM 配置模型名；Chat2API 默认映射独立处理 Qwen 请求别名和实际目标，豆包普通仍映射 `doubao` 思考 0。`chat-model-tier-service.js` 直接保存 `models` 名称；三档服务、Chat2API 默认映射与双端浏览器定向测试 15/15 通过。同步 design/spec/task/todo，`servicePackage=true` 待出包。
+
 - ✅ [2026-10-19] 豆包普通档与轻量档保留不同名称，共用思考 0 实际目标。
   - `chat2api-default-model-mappings.js` 统一维护三档名称与实际目标：轻量 `doubao → doubao`，普通 `doubao-think → doubao`，专业 `doubao-expert → doubao-expert`；`chat-model-tier-service.js` 读取该定义，`chat2api-provider-registry.js` 从默认映射生成豆包内置映射。修正此前两档同名导致当前 LLM 模型字段无法独立反查的问题。服务、双端浏览器及调度定向测试 15/15 通过；更新 design/spec、使用说明、任务与待办，`servicePackage=true` 待出包。
 

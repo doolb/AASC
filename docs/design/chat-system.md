@@ -2,7 +2,7 @@
 
 ## LLM 三档与双端快选（2026-10-19，源码完成）
 
-控制端和显示端右下角均提供“模型”快选，当前 Provider 与三档选择由服务端共享。档位是调用偏好，不暗示三套独立模型权重。档位名称、当前 LLM 模型名与实际目标统一在 `src/apps/server/modules/chat2api/chat2api-default-model-mappings.js` 由开发维护；快选服务与 Provider 注册表从这里读取，用户界面不编辑映射。
+控制端和显示端右下角均提供“模型”快选，当前 Provider 与三档选择由服务端共享。档位是调用偏好，不暗示三套独立模型权重。`src/apps/server/modules/chat2api/chat2api-default-model-mappings.js` 中的三档定义每档只保存当前 LLM 模型名；Chat2API 默认映射负责请求别名与实际目标。快选服务与 Provider 注册表从这里读取，用户界面不编辑映射。
 
 | 档位 | 中文名 | Qwen 网页目标模型 | 豆包现有模型别名 |
 |------|--------|-------------------|------------------|

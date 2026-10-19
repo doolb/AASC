@@ -1,6 +1,6 @@
 # 豆包网页账号Node文字与朗读 TTS 设计
 
-豆包三档名称和实际请求目标统一由 `chat2api-default-model-mappings.js` 维护。轻量 `doubao`、普通 `doubao-think` 分别保留在当前 LLM 配置中，便于两端按名称回显；默认目标均为 `doubao`，使用已验证的思考 0。Provider 注册表的豆包内置映射由该默认表生成，避免同名内置规则覆盖默认目标；用户显式自定义映射仍优先。
+豆包三档名称和实际请求目标由 `chat2api-default-model-mappings.js` 中各自的声明处理：档位定义只保存当前 LLM 模型名，Chat2API 默认映射决定实际目标。轻量 `doubao`、普通 `doubao-think` 分别保留在当前 LLM 配置中，便于两端按名称回显；默认目标均为 `doubao`，使用已验证的思考 0。Provider 注册表的豆包内置映射由该默认表生成，避免同名内置规则覆盖默认目标；用户显式自定义映射仍优先。
 
 ## 普通与专业档回复解析修复（2026-10-19，源码完成）
 

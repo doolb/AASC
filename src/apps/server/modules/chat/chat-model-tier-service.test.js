@@ -124,8 +124,9 @@ test('停用账号不能选用，旧选择也不会回退到其它 Provider', as
 });
 
 test('三档请求使用对应模型并保留服务端 Responses 续接参数', async () => {
-    const { service, requests } = setup();
+    const { service, profile, requests } = setup();
     await service.update({ providerId: 'qwen', tier: 'mini' });
+    assert.equal(profile.model, 'Qwen3.6-Flash');
     const mini = await service.resolveForChat();
     assert.equal(mini.model, 'aasc-qwen-mini');
     assert.deepEqual(await mini.client.request({ input: '你好', previous_response_id: 'resp_a' }), { output_text: 'ok' });

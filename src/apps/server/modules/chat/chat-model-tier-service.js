@@ -1,7 +1,7 @@
 'use strict';
 
 // 从同一份开发映射读取档位；当前普通 LLM profile.model 是权威模型名。
-const { PROVIDER_TIERS } = require('../chat2api/chat2api-default-model-mappings');
+const { PROVIDER_TIERS, tierRequestModel } = require('../chat2api/chat2api-default-model-mappings');
 const TIERS = Object.freeze(['mini', 'flash', 'pro']);
 const CONFIG_KEY = 'chat.modelTierSelection';
 function identifyModel(modelName) {
@@ -9,7 +9,7 @@ function identifyModel(modelName) {
     if (!name) return null;
     for (const [providerId, mapping] of Object.entries(PROVIDER_TIERS)) {
         const tier = TIERS.find(tier => {
-            const aliases = [mapping.models[tier], mapping.actualModels[tier]];
+            const aliases = [mapping.models[tier], tierRequestModel(providerId, tier)];
             return aliases.some(alias => alias.toLowerCase() === name);
         });
         if (tier) return { providerId, tier };
@@ -90,7 +90,7 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
             const next = { providerId, tiersByProvider: { ...current.tiersByProvider } };
             const tier = data.tier || current.tiersByProvider[providerId];
             next.tiersByProvider[providerId] = tier;
-            await saveActiveModel(PROVIDER_TIERS[providerId].actualModels[tier], next);
+            await saveActiveModel(PROVIDER_TIERS[providerId].models[tier], next);
             const message = { type: 'chatModelTierConfig', selection: selection(), providers,
                 success: true, requestId: data.requestId };
             broadcast(message);
@@ -111,7 +111,7 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
             throw new Error('当前模型 Provider 未登录或不可用');
         }
         const tier = current.tiersByProvider[current.providerId];
-        const model = PROVIDER_TIERS[current.providerId].models[tier];
+        const model = tierRequestModel(current.providerId, tier);
         if (!model) throw new Error('当前 Provider 没有此档位映射');
         return {
             providerId: current.providerId, tier, model,
