@@ -29,8 +29,11 @@
 
 ### Offline 启动器独立版本与服务单独更新
 
-- 📝 [2026-10-19] 核对服务包更新仍提示更换 launcher 的原因：已连接 Note8 运行 launcher code 110、服务 code 112，当前 LAN/WAN 签名清单为 code 136、launcher 独立版本 131。
-  - 设备旧 `stageLauncher` 对新 code 候选无内容相同比较，首次升级会切换一次；后续才由新逻辑按指纹跳过相同 launcher。只读核对设备与清单，未修改运行代码或触发更新；后续服务单独更新的设备验收仍待进行。
+- 📝 [2026-10-19] 更正设备对象：用户反馈的是外网设备，前次读取的 Note8 状态不能用于判断其 launcher 切换原因。
+  - 外网发布机 `120.79.245.103` 只有 code 136 清单和资源，无 AASC launcher 进程；目标 `launcherVersion=131`、指纹与当前源码一致。外网设备状态与日志待取得，未修改运行代码或触发更新。
+
+- 📝 [2026-10-19] 最初误将用户反馈归因于已连接 Note8：该设备运行 launcher code 110、服务 code 112，当前 LAN/WAN 签名清单为 code 136、launcher 独立版本 131。
+  - Note8 的旧 `stageLauncher` 对新 code 候选无内容相同比较，首次升级会切换一次；此结论只适用于 Note8，不能说明用户外网设备的状态。只读核对设备与清单，未修改运行代码或触发更新。
 
 - ✅ [2026-10-19] 签名 code 清单新增独立 `launcherVersion` 和 `launcherSha256`；launcher 内容未变时保留原启动器进程，只安装、重启并健康验证新服务。
   - 修改 `offline-update-package.js`、`prepare-offline-launcher.js`、`offline-launcher/launcher-identity.js`、`releases.js`、`controller.js`、`entry.js`，保留旧清单兼容和启动器变更时的原切换/回退；就绪事件新增独立版本字段。同步 design/spec/task/todo/usage。`npm run test:offline-launcher` 41/41、代码包测试 17/17 通过；服务包及 min 基线待构建，真机验收待进行。

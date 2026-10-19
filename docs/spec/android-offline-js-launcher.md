@@ -63,8 +63,9 @@ launcher.ready保留既有launcherVersion代码包身份，另报launcherRelease
 目标启动器文件集合与当前运行启动器文件集合逐字节指纹相同 → 不切换启动器进程，继续现有服务停止/准备/启动/健康回滚流程
 目标启动器文件不同 → 按原launcher.switch、自更新健康提交及请求重放流程处理
 首次引入独立版本的更新仍可能按旧控制器规则切换一次；旧设备保持旧签名清单兼容
-现场判定 := 已连接Note8活动launcher code 110/服务code 112，目标清单code 136/launcher 131；旧stageLauncher无内容相同比较，因此本次会切换一次
-后续验收 := 成功运行含内容比较的新launcher后，再发布launcherSha256不变的新code；确认launcher进程不切换、服务版本前进
+现场判定 := 目标清单code 136/launcher 131且指纹与源码一致；已连接Note8的110/112状态不是用户所指外网设备状态
+外网设备待核 := 读取其launcher-state、active-release及运行日志，再比较目标launcherSha256；旧launcher首次升级可切换，同指纹重复切换需另行定位
+后续验收 := 外网设备成功运行含内容比较的新launcher后，再发布launcherSha256不变的新code；确认launcher进程不切换、服务版本前进
 代码ZIP内固定offline-launcher目录 → 经签名和完整包摘要验证后准备启动器候选 → 记录来源与宿主兼容声明
 候选启动器先支持现行服务状态/宿主API → 无在途事务或已安全取消 → 持久化切换恢复点 → 请求宿主launcher.switch
 宿主重新校验签名来源/固定受管入口/候选字节 → 停旧服务与启动器 → 新Node进程运行候选JS
