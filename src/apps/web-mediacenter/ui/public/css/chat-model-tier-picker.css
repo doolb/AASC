@@ -26,13 +26,18 @@
 .chat-model-tier-panel select { width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 7px; color: var(--text-primary); background: var(--bg-primary); }
 .chat-model-tier-levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .chat-model-tier-levels button, .chat-model-tier-login { padding: 8px 4px; border: 1px solid var(--border-color); border-radius: 7px; color: var(--text-primary); background: var(--bg-primary); font: inherit; cursor: pointer; }
-.chat-model-tier-levels button.is-unselected { border-color: var(--border-color); background: var(--bg-primary); font-weight: 400; }
-.chat-model-tier-levels button.is-selected {
-    border: 2px solid var(--accent-color, #8aabff);
-    color: var(--text-primary); background: color-mix(in srgb, var(--accent-color, #8aabff) 45%, var(--bg-primary));
-    box-shadow: inset 0 0 0 1px var(--accent-color, #8aabff), 0 0 0 1px color-mix(in srgb, var(--accent-color, #8aabff) 35%, transparent);
-    font-weight: 700;
+/* 档位按钮直接沿用主题预览的选中/未选中配色；浅色模式的全局按钮规则使用 !important，故这里显式覆盖。 */
+:root .chat-model-tier-panel .chat-model-tier-levels button.is-unselected {
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-secondary) !important;
+    background: var(--bg-secondary) !important;
+    box-shadow: none !important;
 }
-.chat-model-tier-levels button.is-selected::after { content: ' ✓'; font-weight: 700; }
+:root .chat-model-tier-panel .chat-model-tier-levels button.is-selected {
+    border-color: transparent !important;
+    color: #fff !important;
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
 .chat-model-tier-panel button:disabled { opacity: .55; cursor: default; }
 .chat-model-tier-panel :is(button, select):focus-visible { outline: 2px solid var(--accent-color, #8aabff); outline-offset: 2px; }

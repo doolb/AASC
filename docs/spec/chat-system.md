@@ -25,7 +25,7 @@ Chat2API 任务启动或停止后 → 尝试广播可选 Provider 快照；快�
 Qwen 三档 → 使用 aasc-qwen-mini/flash/pro 专用请求别名；面板识别不依赖 Chat2API 映射配置
 当前运行的 Chat2API Responses 服务 → 直接建立响应流；response.failed 或缺少 response.completed 时作为失败回报
 Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不复用不兼容上游会话
-两端快选面板展示当前模型名、Provider 与档位；选中按钮使用明显强调样式与 aria-pressed，未选中按钮使用中性样式；外部登录保留入口与接口接线，本次不启动登录
+两端快选面板展示当前模型名、Provider 与档位；档位按钮按 aria-pressed 应用现有主题预览按钮状态：选中使用 accent-secondary 到 accent-color 渐变、白字与 accent-color 外圈，未选中使用 bg-secondary、text-secondary、border-color 且无阴影；浅色主题仍保持中性未选中样式；外部登录保留入口与接口接线，本次不启动登录
 ```
 
 源码已按以上流程完成；Qwen 网页目标模型的实际可调用性仍待真实账号核实。Chat2API 代理未运行、账号被禁用或 Provider 被删除时，选择保留但发送聊天时明确失败。

@@ -1,5 +1,8 @@
 ### LLM 三档模型设计记录
 
+- ✅ [2026-10-19] 两端模型档位按钮复用当前主题的选中和未选中状态。
+  - `chat-model-tier-picker.css` 改用主题强调色渐变、白字、外圈和中性按钮配色，移除独立字重及勾号；`chat-model-tier-browser.test.js` 在深色和浅色主题下与主题预览按钮比较，两端 2/2 测试通过。同步 chat-system design/spec、使用说明、任务及待办；`servicePackage=true`，待服务包构建和设备观感验收。
+
 - ✅ [2026-10-19] 模型快选回写当前普通 LLM 配置的模型名，并按当前名称反显 Provider 和档位。
   - `chat-model-tier-service.js` 按开发名称表识别当前模型；`Qwen3.6-Flash` 显示 Qwen 轻量，不读取 Chat2API 映射配置。`pi-profile-config.js` 一次保存当前 profile.model、兼容 model 和各 Provider 档位偏好；`server-app.js` 在手工编辑或切换 profile 后向两端补发权威快选状态。
   - `chat-model-tier-picker.js` 和样式增加当前模型名显示、明显的选中/未选中差异与 `aria-pressed`。同步 `docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/usage/chat-model-tiers.md`、`docs/task/20261019_聊天快选回写当前LLM模型名.md`、`docs/todo.md`；`release/offline-release-status.json` 的 `servicePackage=true`，待出包。
