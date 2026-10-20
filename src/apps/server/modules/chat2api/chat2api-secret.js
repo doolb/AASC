@@ -11,6 +11,7 @@ const SECRET_FIELDS = new Set([
   'clientSecret',
   'ticket',
   'cookies',
+  'cookieSnapshot',
   'serviceToken',
   'service_token',
   'phToken',

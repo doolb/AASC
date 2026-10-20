@@ -18,7 +18,7 @@ import java.net.URL
 
 /**
  * Chat2API 登录页运行在独立进程，避免 Provider Cookie/LocalStorage 与显示页或控制页共享。
- * capture 模式只返回一次性凭据；account-web 模式只在原生内存恢复账号网页状态，不提交或更新账号。
+ * capture 模式只返回一次性凭据；account-web 模式恢复网页登录，豆包在用户完成后刷新原账号Cookie快照。
  */
 class Chat2ApiLoginActivity : Activity() {
 
@@ -40,13 +40,17 @@ class Chat2ApiLoginActivity : Activity() {
         val loginUrl: String,
         val profile: Chat2ApiCaptureProfile,
         val cookies: List<Chat2ApiRestoreCookie>,
-        val localStorage: List<Chat2ApiRestoreLocalStorage>
+        val localStorage: List<Chat2ApiRestoreLocalStorage>,
+        val refreshUrl: String,
+        val refreshToken: String
     )
 
     private var authWebView: Chat2ApiAuthWebView? = null
     private var session: JSONObject? = null
     private var statusText: TextView? = null
     private var finished = false
+    private var refreshing = false
+    private var accountWebState: AccountWebState? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         webViewDataDirectoryInitializer.initialize(Build.VERSION.SDK_INT) { suffix ->
@@ -101,14 +105,11 @@ class Chat2ApiLoginActivity : Activity() {
     private fun setupAccountWebShell(parsed: JSONObject) {
         val root = createRootLayout()
         val header = createHeader("${parsed.optString("providerName", parsed.optString("providerId"))} 外部网页")
-        // 已保存账号的网页只供浏览，完成/取消均结束本窗口，不调用登录凭据保存流程。
+        // 豆包完成时使用消费会话下发的一次性令牌刷新原账号；其他网页沿用仅浏览行为。
         addHeaderActions(header,
             onComplete = {
-                if (!finished) {
-                    finished = true
-                    setResult(RESULT_OK)
-                    finish()
-                }
+                if (parsed.optString("providerId") == "doubaochat") completeDoubaoAccountWeb()
+                else if (!finished) finishAccountWeb()
             },
             onCancel = { finishWithError("用户取消外部网页") }
         )
@@ -128,6 +129,7 @@ class Chat2ApiLoginActivity : Activity() {
                 val state = consumeAccountWebSession(parsed)
                 runOnUiThread {
                     if (finished || isFinishing) return@runOnUiThread
+                    accountWebState = state
                     val webView = Chat2ApiAuthWebView(this, state.profile) { }
                     authWebView = webView
                     webContainer.addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -139,6 +141,53 @@ class Chat2ApiLoginActivity : Activity() {
                 runOnUiThread { finishWithError("打开外部网页失败：${error.message ?: "会话不可用"}") }
             }
         }.start()
+    }
+
+    private fun finishAccountWeb() {
+        finished = true
+        setResult(RESULT_OK)
+        finish()
+    }
+
+    private fun completeDoubaoAccountWeb() {
+        if (finished || refreshing) return
+        val state = accountWebState
+        val snapshot = authWebView?.captureDoubaoCookieSnapshot()
+        if (state == null || state.refreshUrl.isBlank() || state.refreshToken.isBlank() || snapshot == null) {
+            Toast.makeText(this, "豆包网页资料尚未就绪，请完成登录后重试", Toast.LENGTH_SHORT).show()
+            return
+        }
+        refreshing = true
+        statusText?.text = "正在保存当前豆包网页登录资料…"
+        Thread {
+            val error = try { refreshDoubaoAccountWeb(state, snapshot); null }
+            catch (_: Exception) { "豆包网页资料保存失败，请重试" }
+            runOnUiThread {
+                refreshing = false
+                if (finished || isFinishing) return@runOnUiThread
+                if (error == null) finishAccountWeb()
+                else {
+                    statusText?.text = error
+                    Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun refreshDoubaoAccountWeb(state: AccountWebState, snapshot: JSONObject) {
+        val connection = (URL(state.refreshUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15_000
+            readTimeout = 20_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Cache-Control", "no-store")
+        }
+        try {
+            val body = JSONObject().put("refreshToken", state.refreshToken).put("cookieSnapshot", snapshot)
+            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            if (connection.responseCode !in 200..299) throw IllegalStateException("豆包网页资料保存失败")
+        } finally { connection.disconnect() }
     }
 
     private fun createRootLayout(): LinearLayout = LinearLayout(this).apply {
@@ -208,7 +257,8 @@ class Chat2ApiLoginActivity : Activity() {
         val profile = Chat2ApiCaptureProfile(allowedOrigins = origins)
         val cookies = response.optJSONArray("cookieMappings").toRestoreCookies()
         val localStorage = response.optJSONArray("localStorageMappings").toRestoreLocalStorage()
-        return AccountWebState(loginUrl, profile, cookies, localStorage)
+        return AccountWebState(loginUrl, profile, cookies, localStorage,
+            response.optString("refreshUrl"), response.optString("refreshToken"))
     }
 
     private fun JSONArray?.toStringList(): List<String> {

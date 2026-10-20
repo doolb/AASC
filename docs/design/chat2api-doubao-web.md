@@ -1,5 +1,13 @@
 # 豆包网页账号Node文字与朗读 TTS 设计
 
+## 新会话首轮协议与 Cookie 快照（2026-10-20）
+
+当前官网 Vivaldi 首轮请求与 Node 构造曾在同账号“早”上分别取得回复和 403。按用户确认，普通豆包模型的新会话首轮采用官网当次请求可稳定表达的正文结构：单条用户文字直接发送原文，`client_meta.local_permissions`、`option` 的模型/聚合/恢复字段、`ext` 和空 `user_context` 按现场结构构造，创建时间使用当前时间。Node 查询增加运行时区；真实 `msToken` 只从当前 Cookie 或同账号 profile 读取。逐次生成的 `a_bogus` 和浏览器追踪头不保存旧值。
+
+账号新增固定 `www.doubao.com` 与 `accounts.doubao.com` 的 Cookie 快照，限制来源、名称、值、数量和容量。Android 新登录随规范六项 Cookie 保存两个来源快照；已存账号外部网页点击“完成”时用消费后一次性令牌和账号凭据版本更新原账号，失败不覆盖原资料。Node 聊天只使用 `www` 快照；没有快照的旧账号继续使用原规范 Cookie。网页恢复按来源映射；Android CookieManager 不提供原 Path/Domain 属性，同名 Cookie 仅恢复首项，完整请求头顺序仍保存在 Node 快照。不向公开账号列表、日志或错误文本暴露秘密。
+
+隔离 Responses 实测新代码收到官网 HTTP 200，但 SSE 报业务码 `710020202`，被代理按既有规则映射为 `doubao_upstream_failed`/502；官网 Vivaldi 同账号首轮正常回复。此结果说明静态字段与完整 Cookie 对齐仍不足以保证纯 Node 首轮可用，后续需继续核对动态浏览器生成字段或官网协议变化。续聊构造保持原已验证分支。
+
 ## 第三档现场错误排查（2026-10-19，待错误样本）
 
 用户报告第三档仍报错。本机当前 Chat2API 代理上，`doubao-expert` 新会话的 Chat Completions 非流式/流式、Responses 新会话及两轮续接均取得正文；隔离用户数据的常规 LLM 服务链路中，轻量切第三档的非流式和流式请求也成功。直接对 Responses 强制沿用轻量档 `previous_response_id` 切第三档会返回 `doubao_session_conflict`（409），但常规 LLM 链路以模型名为会话指纹，切档后重建上游引用，故不能将该 409 直接认定为用户看到的错误。待取得用户实际错误码、请求文本和是否为旧会话，再决定是否修改协议或解析器。

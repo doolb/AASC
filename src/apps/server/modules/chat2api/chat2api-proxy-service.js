@@ -213,6 +213,7 @@ const createChat2ApiProxyService = (options = {}) => {
         if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/import/preview') return managementService.previewAccountImport(body);
         if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/import/merge') return managementService.mergeAccountImport(body && body.data, body && body.confirmation, body && body.confirmed);
         if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/web-session/consume') return managementService.consumeAccountWebSession(body && body.sessionId);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/web-session/refresh') return managementService.refreshAccountWebSession(body && body.refreshToken, body && body.cookieSnapshot);
         if (request.method === 'POST' && url.pathname.endsWith('/web-session') && url.pathname.startsWith('/api/chat2api/accounts/')) {
           const prefix = '/api/chat2api/accounts/';
           const suffix = '/web-session';
@@ -247,7 +248,7 @@ const createChat2ApiProxyService = (options = {}) => {
         throw error;
       })();
       sendJson(response, 200, await managementResult, {
-        noStore: url.pathname === '/api/chat2api/accounts/web-session/consume' || url.pathname.endsWith('/verify'),
+        noStore: ['/api/chat2api/accounts/web-session/consume', '/api/chat2api/accounts/web-session/refresh'].includes(url.pathname) || url.pathname.endsWith('/verify'),
       });
       return;
     }

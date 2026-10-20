@@ -1,5 +1,24 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 新会话首轮协议对齐（2026-10-20）
+
+```text
+输入 := 当前账号规范Cookie、同设备nodeProfile、可选按www/accounts来源保存的Cookie快照
+登录捕获 := Android隔离WebView从固定两个HTTPS来源读取当前Cookie；规范Cookie仍保留六类字段，快照分别保存完整适用Cookie，不把accounts快照送到www聊天请求
+网页恢复 := 按来源写回CookieManager；原Path/Domain不可由getCookie读出，同源同名项取首项写回，Node快照仍保留原完整Cookie头顺序
+已存账号外部网页完成 := 用一次性消费后刷新令牌提交两个来源快照；服务端在账号锁内核对凭据版本并原子写入；失败保持原凭据，令牌过期或重复提交失败
+快照校验 := 仅固定来源，限制数量、名称、值、单项和总字节；拒绝控制字符与畸形片段；不在公开账号、日志或错误中返回值
+首轮构造 := Node固定官网/chat/completion；优先当前www快照作为Cookie头，旧账号回退原规范Cookie；msToken只从该次Cookie或真实nodeProfile读取
+请求参数 := 保留同账号设备ID、webId、fp及动态web_tab_id；加入浏览器实际时区；不复用历史a_bogus或伪造逐次追踪头
+首轮正文 := 普通doubao且新会话时，单条User输入发送原文；client_meta.last_message_index=null且附三项local_permissions；content_block.extra_info={}，不设is_finish/patch_type
+首轮正文 := option含现场model_config/aggregate_params/conversation_init_ext/recovery_option/general_task_param等结构；create_time_ms用发送时刻；ext含agent_mode/is_finish/conversation_init_option；user_context=[]，不设chat_ability
+结果 := 一次请求，一次完整SSE校验；限流/风控沿既有脱敏错误返回，不自动更换账号、重试或借浏览器绕过
+范围 := 只修改need_create_conversation=true的新会话首轮；续聊待单独对照
+验证 := 脱敏结构测试、旧账号回退、刷新令牌/版本冲突、Android采集与完成、Responses实账号新会话一次
+现场结果 := 隔离Responses新会话上游HTTP200但STREAM_ERROR业务码710020202 → 代理doubao_upstream_failed/502；官网同账号首轮有正文；不能宣称Node首轮通过
+```
+
+
 ## 第三档报错定位伪代码（2026-10-19，待错误样本）
 
 ```text

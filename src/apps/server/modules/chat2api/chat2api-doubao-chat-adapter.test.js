@@ -47,7 +47,7 @@ test('豆包三个公开模型按 0/1/3 请求固定官方来源，无音频、B
     assert.equal(call.data.option.support_lazy_fetch_stream, true);
     assert.equal(call.data.option.sse_recv_event_options.support_chunk_delta, true);
     assert.equal(call.headers.Cookie, COOKIE);
-    assert.equal(call.headers['x-tt-passport-csrf-token'], 'mock_csrf_123456789');
+    assert.equal(call.headers['x-tt-passport-csrf-token'], mode === 0 ? undefined : 'mock_csrf_123456789');
     assert.equal(call.headers.Authorization, undefined);
     assert.equal(call.headers.Host, undefined);
     assert.equal(call.headers.Origin, 'https://www.doubao.com');

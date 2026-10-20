@@ -104,7 +104,9 @@ object Chat2ApiCredentialCapture {
             val value = part.substring(separator + 1).trim()
             if (name.isEmpty() || value.isEmpty()) null else name to value
         }
-        val cookies = parsed.toMap()
+        // 同名Cookie可能来自不同Path/Domain；保留Cookie头中的首项供既有规范字段，完整顺序另存快照。
+        val cookies = linkedMapOf<String, String>()
+        parsed.forEach { (name, value) -> if (name !in cookies) cookies[name] = value }
         val credentials = linkedMapOf<String, String>()
         cookies.forEach { (name, value) ->
             profile.cookieFields[name]?.let { credentials[it] = value }
@@ -115,7 +117,7 @@ object Chat2ApiCredentialCapture {
             if (bundle.requiredAnyNames.isNotEmpty() && bundle.requiredAnyNames.none { it in cookies }) return@forEach
             val selected = bundle.names.mapNotNull { name -> cookies[name]?.let { name to it } }
             if (selected.any { (name, value) ->
-                    parsed.count { it.first == name } != 1 || value.length > 4096 ||
+                    value.length > 4096 ||
                         !Regex("^[\\x21\\x23-\\x2B\\x2D-\\x3A\\x3C-\\x5B\\x5D-\\x7E]+$").matches(value)
                 }) return@forEach
             val packed = selected.joinToString("; ") { (name, value) -> "$name=$value" }
@@ -154,6 +156,7 @@ object Chat2ApiCredentialCapture {
     fun credentialsJson(credentials: Map<String, String>): JSONObject {
         val result = JSONObject(credentials)
         credentials["nodeProfile"]?.let { result.put("nodeProfile", JSONObject(it)) }
+        credentials["cookieSnapshot"]?.let { result.put("cookieSnapshot", JSONObject(it)) }
         return result
     }
 

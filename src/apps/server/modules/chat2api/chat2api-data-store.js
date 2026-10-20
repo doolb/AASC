@@ -14,6 +14,7 @@ const {
 } = require('./chat2api-secret');
 const { selectAccountId } = require('./chat2api-account-identity');
 const { normalizeDoubaoCredentials } = require('./chat2api-doubao-chat-adapter');
+const { normalizeDoubaoCookieSnapshot, canonicalDoubaoCookieFromSnapshot } = require('./chat2api-doubao-cookie-snapshot');
 const {canonicalProviderId}=require('./chat2api-model-capabilities');
 const {validateMappingExtension}=require('./chat2api-system-controls');
 const {normalizeApiAccount}=require('./chat2api-api-account');
@@ -199,7 +200,7 @@ const createChat2ApiDataStore = (options = {}) => {
       // 账号导入只表示用户恢复凭据，不表示已验证登录；秘密不得散落在顶层或其他 secret 字段。
       const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'dailyLimit', 'lastUsed', 'credentials', 'accountInfo', 'credentialRevision']);
       if (Object.keys(account).some((key) => !accountFields.has(key))) {
-        throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie 及 credentials.nodeProfile'), { statusCode: 422, code: 'doubao_invalid_credentials' });
+        throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie、credentials.nodeProfile 和 credentials.cookieSnapshot'), { statusCode: 422, code: 'doubao_invalid_credentials' });
       }
       normalized.credentials = normalizeDoubaoCredentials(account.credentials);
       normalized.accountInfo = selectAccountInfo(account.accountInfo);
@@ -262,6 +263,25 @@ const createChat2ApiDataStore = (options = {}) => {
     const next = mergeByKey(current, [normalized], (item) => item.accountId);
     await writeCollectionUnlocked('accounts', next);
     return publicAccount(normalized);
+  });
+
+  /** 外部网页只允许以会话创建时的凭据版本原子刷新原豆包账号，避免覆盖同期重新登录。 */
+  const refreshDoubaoCookieSnapshot = (accountId, expectedRevision, inputSnapshot) => withAccountLock(async () => {
+    const snapshot = normalizeDoubaoCookieSnapshot(inputSnapshot);
+    const accounts = await readCollection('accounts', []);
+    const index = accounts.findIndex(item => item.accountId === accountId && item.providerId === 'doubaochat');
+    const current = accounts[index];
+    if (!current || current.credentialRevision !== expectedRevision) {
+      throw Object.assign(new Error('豆包账号已变化，请重新打开外部网页'), { statusCode: 409, code: 'account_credential_changed' });
+    }
+    const cookie = canonicalDoubaoCookieFromSnapshot(snapshot);
+    const credentials = normalizeDoubaoCredentials({ cookie,
+      ...(current.credentials?.nodeProfile ? { nodeProfile: current.credentials.nodeProfile } : {}),
+      cookieSnapshot: snapshot });
+    const updated = resetDoubaoVerification({ ...current, credentials, updatedAt: Date.now() });
+    accounts[index] = updated;
+    await writeCollectionUnlocked('accounts', accounts);
+    return { refreshed: true };
   });
 
   const listAccounts = async () => {
@@ -861,6 +881,7 @@ const createChat2ApiDataStore = (options = {}) => {
     previewAccountImport,
     mergeAccountImport,
     saveAccount,
+    refreshDoubaoCookieSnapshot,
     listAccounts,
     listDoubaoNodeAccountIds,
     getAccount,

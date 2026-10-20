@@ -119,6 +119,20 @@ class Chat2ApiAuthWebView(
         }
     }
 
+    /** 仅在用户点击已存豆包账号的“完成”时读取两个官网来源当前适用的 Cookie。 */
+    fun captureDoubaoCookieSnapshot(): JSONObject? {
+        if (stopped.get()) return null
+        val origins = listOf("https://www.doubao.com", "https://accounts.doubao.com")
+        if (origins.any { !Chat2ApiCredentialCapture.isAllowed(profile, it) }) return null
+        val snapshot = JSONObject()
+        val manager = CookieManager.getInstance()
+        for (origin in origins) {
+            val value = manager.getCookie("$origin/")?.trim().orEmpty()
+            if (value.isNotEmpty() && value.length <= 32 * 1024) snapshot.put(origin, value)
+        }
+        return snapshot.takeIf { it.has(origins.first()) }
+    }
+
     fun stopCapture() {
         if (stopped.compareAndSet(false, true)) {
             mainHandler.removeCallbacksAndMessages(null)
@@ -239,14 +253,19 @@ class Chat2ApiAuthWebView(
             }
             val page = parsePageCredentials(raw, keys)
             val cookies = CookieManager.getInstance().getCookie(pageUrl)
-            callback(Chat2ApiCredentialCapture.merge(profile, pageUrl, cookies = cookies, localStorage = page.first, userAgent = page.second))
+            val merged = Chat2ApiCredentialCapture.merge(profile, pageUrl, cookies = cookies, localStorage = page.first, userAgent = page.second)
+            val snapshot = if (profile.captureDoubaoNodeProfile) captureDoubaoCookieSnapshot() else null
+            callback(if (snapshot == null) merged else merged + ("cookieSnapshot" to snapshot.toString()))
         }
     }
 
     /** 更新Cookie的同批结果没有有效profile时删除旧资料，避免一次登录中身份切换后拼出混合快照。 */
     private fun mergeCaptured(merged: Map<String, String>) {
         synchronized(captured) {
-            if (profile.captureDoubaoNodeProfile && merged.containsKey("cookie")) captured.remove("nodeProfile")
+            if (profile.captureDoubaoNodeProfile && merged.containsKey("cookie")) {
+                captured.remove("nodeProfile")
+                captured.remove("cookieSnapshot")
+            }
             captured.putAll(merged)
         }
     }

@@ -2,6 +2,7 @@ const axios = require('axios');
 const { randomUUID } = require('crypto');
 const { TextDecoder } = require('util');
 const { normalizeDoubaoNodeProfile, applyDoubaoNodeProtocol } = require('./chat2api-doubao-node-protocol');
+const { normalizeDoubaoCookieSnapshot, parseDoubaoCookieHeader } = require('./chat2api-doubao-cookie-snapshot');
 const { createDoubaoSessionFlow } = require('./chat2api-doubao-session');
 
 // 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
@@ -54,7 +55,7 @@ const doubaoError = (code) => {
  */
 const normalizeDoubaoCredentials = (credentials) => {
   if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)
-    || Object.keys(credentials).some((key) => !['cookie', 'nodeProfile'].includes(key))) throw doubaoError('doubao_invalid_credentials');
+    || Object.keys(credentials).some((key) => !['cookie', 'nodeProfile', 'cookieSnapshot'].includes(key))) throw doubaoError('doubao_invalid_credentials');
   const source = credentials.cookie;
   if (typeof source !== 'string' || source.length === 0 || source.length > 16 * 1024
     || /[^\x20-\x7E]/u.test(source)) throw doubaoError('doubao_invalid_credentials');
@@ -81,7 +82,18 @@ const normalizeDoubaoCredentials = (credentials) => {
   const nodeProfile = Object.hasOwn(credentials, 'nodeProfile') ? normalizeDoubaoNodeProfile(credentials.nodeProfile) : undefined;
   // fp 与 Cookie 必须来自同一账号的同一设备，不能把另一个登录上下文的资料拼入当前账号。
   if (nodeProfile && nodeProfile.fp !== cookies.get('s_v_web_id')) throw doubaoError('doubao_invalid_credentials');
-  return { cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; '), ...(nodeProfile ? { nodeProfile } : {}) };
+  const cookieSnapshot = Object.hasOwn(credentials, 'cookieSnapshot')
+    ? normalizeDoubaoCookieSnapshot(credentials.cookieSnapshot) : undefined;
+  if (cookieSnapshot) {
+    const webCookies = parseDoubaoCookieHeader(cookieSnapshot[DOUBAO_ORIGIN]);
+    // 快照与规范身份资料必须属于同一登录，否则拒绝拼接跨账号 Cookie。
+    for (const name of ['sessionid', 's_v_web_id']) {
+      const expected = cookies.get(name);
+      if (expected && !webCookies.some(item => item.name === name && item.value === expected)) throw doubaoError('doubao_invalid_credentials');
+    }
+  }
+  return { cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; '),
+    ...(nodeProfile ? { nodeProfile } : {}), ...(cookieSnapshot ? { cookieSnapshot } : {}) };
 };
 
 const assertDoubaoProvider = (provider) => {
@@ -91,7 +103,7 @@ const assertDoubaoProvider = (provider) => {
 };
 
 /** 保留角色边界并明确拒绝非文字部件；共享工具层已转换的文字标签仍只是文字，不代表网页原生工具。 */
-const getRequestText = (request, limits) => {
+const getRequestText = (request, limits, rawSingleUser = false) => {
   if (!request || !Array.isArray(request.messages) || request.messages.length === 0 || request.messages.length > 1024) {
     throw doubaoError('doubao_invalid_request');
   }
@@ -121,7 +133,10 @@ const getRequestText = (request, limits) => {
     return `${role}: ${text}`;
   });
   if (!hasUserText) throw doubaoError('doubao_invalid_request');
-  return parts.join('\n\n');
+  // 官网单条用户首轮直接发送原文；多角色历史仍保留明确边界。
+  return rawSingleUser && request.messages.length === 1 && request.messages[0].role === 'user'
+    ? (typeof request.messages[0].content === 'string' ? request.messages[0].content : request.messages[0].content.map(part => part.text).join('\n'))
+    : parts.join('\n\n');
 };
 
 /**
@@ -134,8 +149,9 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
   if (!credentials.nodeProfile) throw doubaoError('doubao_node_profile_required');
   const model = actualModel || request.model;
   if (!Object.hasOwn(DOUBAO_MODEL_MODES, model)) throw doubaoError('doubao_unsupported_model');
-  const text = getRequestText(request, limits);
-  const cookieMap = new Map(credentials.cookie.split('; ').map((part) => [part.slice(0, part.indexOf('=')), part.slice(part.indexOf('=') + 1)]));
+  const text = getRequestText(request, limits, !nativeSession && model === 'doubao');
+  const requestCookie = credentials.cookieSnapshot?.[DOUBAO_ORIGIN] || credentials.cookie;
+  const cookieMap = new Map(parseDoubaoCookieHeader(requestCookie).map(({ name, value }) => [name, value]));
   const mode = DOUBAO_MODEL_MODES[model];
   const data = {
     client_meta: {
@@ -170,13 +186,16 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
     data.ext.sub_conv_firstmet_type = '0';
   }
   const nodeProtocol = applyDoubaoNodeProtocol({ data, profile: credentials.nodeProfile, cookieMap });
+  const browserFirstTurn = data.option.need_create_conversation && mode === 0;
   if (Buffer.byteLength(JSON.stringify(data), 'utf8') > limits.requestBytes) throw doubaoError('doubao_request_too_large');
   return {
     method: 'POST', url: nodeProtocol.url, data,
     headers: {
-      Cookie: credentials.cookie, 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default'),
+      Cookie: requestCookie,
+      ...(!browserFirstTurn ? { 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default') } : {}),
       Accept: 'text/event-stream', 'Content-Type': 'application/json', Origin: DOUBAO_ORIGIN, Referer: `${DOUBAO_ORIGIN}/`, 'agw-js-conv': 'str',
       ...nodeProtocol.headers,
+      ...(browserFirstTurn ? { Referer: `${DOUBAO_ORIGIN}/chat/` } : {}),
     },
     // 禁止重定向和环境代理；显式 Node profile 已验证无需网页签名，不连接 Chrome 或换传输。
     responseType: 'stream', maxRedirects: 0, proxy: false, timeout: limits.timeoutMs,

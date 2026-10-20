@@ -89,6 +89,12 @@ const createChat2ApiManagementService = (runtime) => {
     }
     return accountWebSession.consumeSession(sessionId);
   };
+  const refreshAccountWebSession = (refreshToken, cookieSnapshot) => {
+    if (!accountWebSession || typeof accountWebSession.refreshCredentials !== 'function') {
+      throw new Error('Chat2API 外部网页刷新服务不可用');
+    }
+    return accountWebSession.refreshCredentials(refreshToken, cookieSnapshot);
+  };
   const deleteProvider = async (providerId) => providerRegistry.deleteProvider(providerId, {
     accounts: await dataStore.listAccounts(),
     mappings: await dataStore.listModelMappings(),
@@ -132,6 +138,7 @@ const createChat2ApiManagementService = (runtime) => {
     mergeAccountImport,
     createAccountWebSession,
     consumeAccountWebSession,
+    refreshAccountWebSession,
     previewImport,
     mergeImport,
     previewLegacyImport,

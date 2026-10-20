@@ -1,3 +1,9 @@
+### Chat2API 豆包网页首轮协议
+
+- ✅ [2026-10-20] 对齐普通豆包新会话首轮的官网静态请求结构，并实现按来源保存及刷新 Cookie 快照。
+  - `chat2api-doubao-node-protocol.js`、`chat2api-doubao-chat-adapter.js` 采用当前时间、时区、首轮模型/恢复参数及单条用户原文；`chat2api-doubao-cookie-snapshot.js`、账号存储和外部网页会话服务限制固定来源、大小与一次性刷新令牌。Android 登录捕获和已存账号“完成”可提交快照；公开账号摘要脱敏。`npm run check:chat2api` 293/293、Android 定向 JVM 单测与复编译通过；更新豆包 design/spec/task/todo；`servicePackage=true`、`minApk=true` 继续待出包。
+  - 当前同账号 Vivaldi 新会话“早”正常回复；隔离 Chat2API Responses 实测新代码上游 HTTP 200，但 SSE 业务码 `710020202`，代理返回 502，纯 Node 首轮仍需现场排查；没有把动态 `a_bogus` 或浏览器追踪头作为固定凭据保存。
+
 ### 双端音色列表试听
 
 - ✅ [2026-10-20] 固定试听文案按原文增加“喵，轮到你落子啦😺”与“喵，轮到你落子咯😺”，保留原六句，随机池扩为八句。

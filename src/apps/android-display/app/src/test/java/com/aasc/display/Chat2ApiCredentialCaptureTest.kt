@@ -8,6 +8,18 @@ import org.junit.Test
 class Chat2ApiCredentialCaptureTest {
 
     @Test
+    fun `豆包Cookie快照和Node资料作为对象提交而不是字符串`() {
+        val credentials = mapOf(
+            "cookie" to "sessionid=sample_session_123456789; passport_csrf_token=sample_csrf_123456789",
+            "nodeProfile" to "{\"deviceId\":\"123\"}",
+            "cookieSnapshot" to "{\"https://www.doubao.com\":\"sessionid=sample_session_123456789\"}"
+        )
+        val json = Chat2ApiCredentialCapture.credentialsJson(credentials)
+        assertEquals("123", json.getJSONObject("nodeProfile").getString("deviceId"))
+        assertTrue(json.getJSONObject("cookieSnapshot").has("https://www.doubao.com"))
+    }
+
+    @Test
     fun `默认端口和大小写是等效来源_恶意来源不能恢复`() {
         val profile = Chat2ApiCaptureProfile(allowedOrigins = listOf("https://www.qianwen.com", "http://local.example"))
         assertTrue(Chat2ApiCredentialCapture.isAllowed(profile, "HTTPS://WWW.QIANWEN.COM:443/chat/test?ticket=hidden"))

@@ -38,16 +38,41 @@ const applyDoubaoNodeProtocol = ({ data, profile, cookieMap }) => {
     region: 'CN', sys_region: 'CN', pc_version: profile.pcVersion, doubao_pc_version: profile.pcVersion,
     pkg_type: 'release_version', version_code: '20800', samantha_web: '1',
     'use-olympus-account': '1', fp: profile.fp, web_tab_id: randomUUID(),
+    tz_name: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
   });
   const msToken = cookieMap.get('msToken') || profile.msToken;
   if (msToken) params.set('msToken', msToken);
   // 首轮为0；续接已由会话模块设置为真实验证的null，不得在此覆盖为旧索引。
-  if (data.option.need_create_conversation !== false) data.client_meta.last_message_index = 0;
-  Object.assign(data.messages[0].content_block[0], { is_finish: true, patch_type: 2 });
-  Object.assign(data.option, { create_time_ms: 0, answer_with_suggest: true, action_bar_skill_id: 0,
-    sse_recv_event_options: { support_chunk_delta: true } });
-  data.chat_ability = {};
-  Object.assign(data.ext, { fp: profile.fp, use_submit_pipeline: '1' });
+  if (data.option.need_create_conversation && data.option.need_deep_think === 0) {
+    const now = Date.now();
+    data.client_meta.last_message_index = null;
+    data.client_meta.local_permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION']
+      .map(permission_name => ({ permission_name, status: 3 }));
+    data.messages[0].content_block[0].extra_info = {};
+    const option = data.option;
+    Object.assign(option, {
+      create_time_ms: now, answer_with_suggest: false, agent_mode: 2,
+      is_from_click_option: false, is_from_click_softlink: false, is_select_text: false,
+      conversation_init_ext: { model_item_key: '0', reasoning_effort: '3', mode_id: '1' },
+      is_old_user: true, general_task_param: { server_do_compare: true },
+      recovery_option: { is_recovery: false, req_create_time_sec: Math.floor(now / 1000), append_sse_event_scene: 0 },
+      message_storage_type: 0, related_deleted_message_ids: [], connector_info_list: [],
+      model_config: { model_item_key: '0', model_extra_params: {}, reasoning_effort: 3 },
+      aggregate_params: { mention_skill_list: '[]', mention_plugin_list: '[]', mention_ext: '[{}]',
+        conversation_mode: '1', mode_id: '1', model_item_key: '0', agent_mode: '2', reasoning_effort: '3', provider_id: '' },
+      conversation_mode: 1, sse_recv_event_options: { support_chunk_delta: true },
+    });
+    data.user_context = [];
+    Object.assign(data.ext, { agent_mode: '2', general_task_param: '{"server_do_compare":true}',
+      is_finish: '1', conversation_init_option: '{"need_ack_conversation":true}' });
+  } else {
+    if (data.option.need_create_conversation !== false) data.client_meta.last_message_index = 0;
+    Object.assign(data.messages[0].content_block[0], { is_finish: true, patch_type: 2 });
+    Object.assign(data.option, { create_time_ms: 0, answer_with_suggest: true, action_bar_skill_id: 0,
+      sse_recv_event_options: { support_chunk_delta: true } });
+    data.chat_ability = {};
+    Object.assign(data.ext, { fp: profile.fp, use_submit_pipeline: '1' });
+  }
   return { url: `https://www.doubao.com/chat/completion?${params.toString()}`,
     headers: { 'User-Agent': profile.userAgent, Referer: 'https://www.doubao.com/chat' } };
 };

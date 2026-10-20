@@ -38,13 +38,64 @@ test('Node构造完整同源query/body，三个别名保留模式、禁TTS且不
     assert.equal(call.data.option.need_deep_think, mode);
     assert.equal(call.data.option.tts_switch, false);
     assert.equal(call.data.option.sse_recv_event_options.support_chunk_delta, true);
-    assert.equal(call.data.client_meta.last_message_index, 0);
-    assert.equal(call.data.messages[0].content_block[0].is_finish, true);
-    assert.equal(call.data.ext.fp, profile.fp);
-    assert.equal(call.data.ext.use_submit_pipeline, '1');
+    assert.ok(url.searchParams.has('tz_name'));
+    if (mode === 0) {
+      assert.equal(call.data.messages[0].content_block[0].content.text_block.text, 'Hi');
+      assert.equal(call.data.client_meta.last_message_index, null);
+      assert.deepEqual(call.data.client_meta.local_permissions.map(item => item.permission_name),
+        ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION']);
+      assert.equal(call.data.messages[0].content_block[0].is_finish, undefined);
+      assert.deepEqual(call.data.messages[0].content_block[0].extra_info, {});
+      assert.equal(call.data.option.answer_with_suggest, false);
+      assert.ok(call.data.option.create_time_ms > 0);
+      assert.equal(call.data.option.model_config.model_item_key, '0');
+      assert.deepEqual(call.data.user_context, []);
+      assert.equal(call.data.chat_ability, undefined);
+      assert.equal(call.headers['x-tt-passport-csrf-token'], undefined);
+    } else {
+      assert.equal(call.data.client_meta.last_message_index, 0);
+      assert.equal(call.data.messages[0].content_block[0].is_finish, true);
+      assert.equal(call.data.ext.fp, profile.fp);
+      assert.equal(call.data.ext.use_submit_pipeline, '1');
+    }
     assert.equal(call.maxRedirects, 0);
     assert.equal(call.proxy, false);
   }
+});
+test('Node首轮优先使用www来源完整Cookie快照，公开账号不泄露快照', () => {
+  const cookieSnapshot = {
+    'https://www.doubao.com': `${cookie}; extra_browser_cookie=browser-only; msToken=current_web_token`,
+    'https://accounts.doubao.com': 'passport_csrf_token=other_origin_token',
+  };
+  const credentials = { cookie, nodeProfile: profile, cookieSnapshot };
+  const call = buildDoubaoRequest({ ...input, account: { ...account, credentials } });
+  assert.equal(call.headers.Cookie, cookieSnapshot['https://www.doubao.com']);
+  assert.equal(new URL(call.url).searchParams.get('msToken'), 'current_web_token');
+  assert.equal(call.headers.Cookie.includes('other_origin_token'), false);
+  assert.throws(() => normalizeDoubaoCredentials({ ...credentials, cookieSnapshot: {
+    ...cookieSnapshot, 'https://evil.example': 'sessionid=other',
+  } }), error => error.code === 'doubao_invalid_credentials');
+  assert.throws(() => normalizeDoubaoCredentials({ ...credentials, cookieSnapshot: {
+    ...cookieSnapshot, 'https://www.doubao.com': 'sessionid=another_account; passport_csrf_token=mock_csrf_123456789',
+  } }), error => error.code === 'doubao_invalid_credentials');
+});
+test('豆包Cookie快照按版本原子刷新，公开列表不泄露且并发旧版本拒绝', async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-doubao-cookie-refresh-'));
+  try {
+    const store = createChat2ApiDataStore({ rootDir });
+    await store.saveAccount(account);
+    const original = await store.getAccount(account.accountId);
+    const snapshot = { 'https://www.doubao.com': `${cookie}; www_extra=secret_value`,
+      'https://accounts.doubao.com': 'accounts_extra=private_value' };
+    assert.deepEqual(await store.refreshDoubaoCookieSnapshot(account.accountId, original.credentialRevision, snapshot), { refreshed: true });
+    const current = await store.getAccount(account.accountId);
+    assert.equal(current.credentials.cookieSnapshot['https://www.doubao.com'], snapshot['https://www.doubao.com']);
+    assert.equal(JSON.stringify(await store.listAccounts()).includes('secret_value'), false);
+    await assert.rejects(store.refreshDoubaoCookieSnapshot(account.accountId, original.credentialRevision, snapshot),
+      error => error.code === 'account_credential_changed');
+    await assert.rejects(store.refreshDoubaoCookieSnapshot(account.accountId, current.credentialRevision,
+      { ...snapshot, 'https://evil.example': 'bad=secret' }), error => error.code === 'doubao_invalid_credentials');
+  } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
 });
 test('显式Node账号不调用网页transport，最终URL匹配query且流式正常结束', async () => {
   let calls = 0;

@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { getAndroidLoginProfile } = require('./chat2api-login-profiles');
 const { getQwenCredential } = require('./chat2api-speech-service');
 const { parseCookies } = require('./chat2api-qwen-speech-auth');
+const { DOUBAO_COOKIE_ORIGINS, parseDoubaoCookieHeader } = require('./chat2api-doubao-cookie-snapshot');
 
 const DEFAULT_TTL_MS = 2 * 60 * 1000;
 
@@ -26,11 +27,15 @@ const createChat2ApiAccountWebSessionService = ({ dataStore, providerRegistry, b
     throw new Error('Chat2API 外部网页会话缺少服务地址');
   }
   const sessions = new Map();
+  const refreshSessions = new Map();
 
   const removeExpired = () => {
     const now = Date.now();
     for (const [sessionId, session] of sessions.entries()) {
       if (session.expiresAt <= now) sessions.delete(sessionId);
+    }
+    for (const [token, session] of refreshSessions.entries()) {
+      if (session.expiresAt <= now) refreshSessions.delete(token);
     }
   };
 
@@ -70,7 +75,17 @@ const createChat2ApiAccountWebSessionService = ({ dataStore, providerRegistry, b
       return parseCookies(value).filter(item => allowedNames.has(item.name))
         .flatMap(item => validTargets.map(target => ({ origin: target, name: item.name, value: item.value })));
     });
-    const cookieMappings = [...mappedCookies, ...bundledCookies];
+    const snapshot = (provider.id || provider.providerId) === 'doubaochat' ? credentials.cookieSnapshot : null;
+    const snapshotCookies = DOUBAO_COOKIE_ORIGINS.flatMap(target => {
+      if (!snapshot?.[target]) return [];
+      const selected = new Map();
+      // Android CookieManager 只能按URL写入，不能重建同名Cookie原有的Path/Domain；首项用于网页恢复。
+      for (const { name, value } of parseDoubaoCookieHeader(snapshot[target])) {
+        if (!selected.has(name)) selected.set(name, value);
+      }
+      return [...selected].map(([name, value]) => ({ origin: target, name, value }));
+    });
+    const cookieMappings = [...mappedCookies, ...bundledCookies].filter(item => !snapshot?.[item.origin]).concat(snapshotCookies);
     const localStorageMappings = (resolvedProfile.localStorage || []).flatMap((mapping) => {
       const value = credentials[mapping.field];
       if (typeof value !== 'string' || !value.trim()) return [];
@@ -129,12 +144,32 @@ const createChat2ApiAccountWebSessionService = ({ dataStore, providerRegistry, b
     if (!account || account.enabled === false) throw createServiceError('Chat2API 账号不可用', 409, 'account_unavailable');
     const provider = await providerRegistry.getProvider(session.providerId);
     if (!provider || provider.enabled === false) throw createServiceError('Chat2API Provider 不可用', 409, 'provider_unavailable');
-    return toRestorePayload(account, provider, session.profile);
+    const payload = toRestorePayload(account, provider, session.profile);
+    if (session.providerId === 'doubaochat') {
+      const refreshToken = crypto.randomBytes(24).toString('hex');
+      refreshSessions.set(refreshToken, { accountId: session.accountId,
+        credentialRevision: account.credentialRevision, expiresAt: Date.now() + Math.max(60_000, ttlMs) });
+      payload.refreshUrl = `${normalizedBaseUrl}/api/chat2api/accounts/web-session/refresh`;
+      payload.refreshToken = refreshToken;
+    }
+    return payload;
   };
 
-  const clear = () => sessions.clear();
+  const refreshCredentials = async (refreshToken, cookieSnapshot) => {
+    removeExpired();
+    const session = refreshSessions.get(refreshToken);
+    if (!session) throw createServiceError('豆包外部网页刷新会话已过期', 410, 'web_session_expired');
+    if (typeof dataStore.refreshDoubaoCookieSnapshot !== 'function') {
+      throw createServiceError('豆包账号刷新不可用', 503, 'web_session_unavailable');
+    }
+    const result = await dataStore.refreshDoubaoCookieSnapshot(session.accountId, session.credentialRevision, cookieSnapshot);
+    refreshSessions.delete(refreshToken);
+    return result;
+  };
 
-  return { createSession, consumeSession, clear };
+  const clear = () => { sessions.clear(); refreshSessions.clear(); };
+
+  return { createSession, consumeSession, refreshCredentials, clear };
 };
 
 module.exports = {

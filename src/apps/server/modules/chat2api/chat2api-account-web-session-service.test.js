@@ -37,6 +37,29 @@ test('豆包同账号白名单Cookie恢复至www与accounts，来源不可被Pro
   await assert.rejects(service.consumeSession(created.sessionId), e => e.code === 'web_session_expired');
 });
 
+test('豆包网页完成只用一次性令牌刷新原账号快照，恢复时按来源分开', async () => {
+  const account = { accountId: 'doubao-test', providerId: 'doubaochat', credentialRevision: 'old-revision', credentials: {
+    cookie: 'sessionid=private-session; passport_csrf_token=private-csrf',
+    cookieSnapshot: { 'https://www.doubao.com': 'sessionid=private-session; passport_csrf_token=private-csrf; www_only=old; sessionid=path-specific',
+      'https://accounts.doubao.com': 'accounts_only=old' },
+  } };
+  const updates = [];
+  const service = createChat2ApiAccountWebSessionService({ baseUrl: 'http://127.0.0.1:8080',
+    dataStore: { getAccount: async () => account, refreshDoubaoCookieSnapshot: async (...args) => { updates.push(args); return { refreshed: true }; } },
+    providerRegistry: { getProvider: async () => ({ id: 'doubaochat' }) } });
+  const restored = await service.consumeSession((await service.createSession(account.accountId)).sessionId);
+  assert.equal(restored.cookieMappings.find(item => item.name === 'www_only')?.origin, 'https://www.doubao.com');
+  assert.equal(restored.cookieMappings.filter(item => item.origin === 'https://www.doubao.com' && item.name === 'sessionid').length, 1);
+  assert.equal(restored.cookieMappings.find(item => item.origin === 'https://www.doubao.com' && item.name === 'sessionid').value, 'private-session');
+  assert.equal(restored.cookieMappings.find(item => item.name === 'accounts_only')?.origin, 'https://accounts.doubao.com');
+  assert.equal(restored.refreshUrl, 'http://127.0.0.1:8080/api/chat2api/accounts/web-session/refresh');
+  assert.equal(typeof restored.refreshToken, 'string');
+  const snapshot = { 'https://www.doubao.com': 'sessionid=private-session; passport_csrf_token=private-csrf; www_only=new' };
+  assert.deepEqual(await service.refreshCredentials(restored.refreshToken, snapshot), { refreshed: true });
+  assert.deepEqual(updates[0], [account.accountId, 'old-revision', snapshot]);
+  await assert.rejects(service.refreshCredentials(restored.refreshToken, snapshot), error => error.code === 'web_session_expired');
+});
+
 test('豆包缺失可选Cookie时不补造，也不将其他Provider凭据恢复到认证子域', async () => {
   let account = { providerId: 'doubaochat', credentials: { cookie: 'sessionid=private-session; unknown=ignored' } };
   const service = createChat2ApiAccountWebSessionService({ baseUrl: 'http://127.0.0.1:8080',
