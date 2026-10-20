@@ -1,3 +1,8 @@
+### 五子棋显示端首连游戏能力
+
+- ✅ [2026-10-20] 修复显示端首次能力上报缺少五子棋，导致游戏目录返回“无”。
+  - `display.html` 在 WebSocket 内联脚本前同步加载 `display-game.js`，基础能力首次即上报 `games`；`display-game-browser.test.js` 增加加载顺序回归。ADB 现场重发能力后服务端已看到五子棋；浏览器测试 2/2、游戏聊天 41/41 与 `git diff --check` 通过。同步五子棋 design/spec/task/todo，`servicePackage=true` 待构建，页面刷新与重连待部署后复测。
+
 ### 五子棋 GameUser / GameAI 角色与当前游戏简写
 
 - ✅ [2026-10-20] 当前游戏简写改为仅解析兼容，模型提示只引导完整 `Game:` 调用。

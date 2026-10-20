@@ -727,7 +727,8 @@
     <script src="js/display-background-glow.js"></script>
     <script src="js/android-color-picker.js" defer></script>
     <script src="js/display-stage.js" defer></script>
-    <script src="js/display-game.js" defer></script>
+    <!-- 游戏能力必须先于下面启动 WebSocket 的内联脚本注册，首连才能上报五子棋。 -->
+    <script src="js/display-game.js"></script>
     <script src="js/display-chat.js" defer></script>
     <script src="js/tts-voice-picker.js" defer></script>
     <script src="js/display-tts-voices.js" defer></script>
@@ -7632,6 +7633,8 @@
                 // 确保原生桥能力（crossOriginControl）第一时间生效
                 const baseCaps = {
                     mediaRendering: true,
+                    // 首次基础能力上报也须包含游戏目录，不能只等后续异步检测完成。
+                    games: window.DisplayGame?.supportedGames || [],
                     voicePlayback: true,
                     displayText: true,
                     webgl: (function() {

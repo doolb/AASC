@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const puppeteer = require('puppeteer-core');
 const cheerio = require('cheerio');
@@ -8,6 +9,32 @@ const cheerio = require('cheerio');
 const PUBLIC = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const CHROME = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium',
     '/usr/bin/google-chrome'].find(candidate => candidate && fs.existsSync(candidate));
+
+test('连接脚本运行前游戏模块已注册五子棋', { skip: !CHROME }, async () => {
+    const html = fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8');
+    const $ = cheerio.load(html);
+    const gameScript = $('script[src="js/display-game.js"]').toString();
+    const server = http.createServer((request, response) => {
+        if (request.url === '/js/display-game.js') {
+            response.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+            response.end(fs.readFileSync(path.join(PUBLIC, 'js/display-game.js')));
+            return;
+        }
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end(`<html><body>${gameScript}<script>window.gamesAtConnection = window.DisplayGame?.supportedGames || [];<\/script></body></html>`);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+        browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
+        const page = await browser.newPage();
+        await page.goto(`http://127.0.0.1:${server.address().port}/`);
+        assert.deepEqual(await page.evaluate(() => window.gamesAtConnection), ['五子棋']);
+    } finally {
+        await browser?.close();
+        await new Promise(resolve => server.close(resolve));
+    }
+});
 
 test('显示端五子棋首连快照、点击增量和版本缺口恢复', { skip: !CHROME }, async () => {
     const $ = cheerio.load(fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8'));
