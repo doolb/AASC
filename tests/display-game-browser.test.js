@@ -40,6 +40,8 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: true
         }));
         assert.equal(await page.$$eval('.display-game-point', list => list.length), 81);
+        assert.equal(await page.$$eval('.display-game-point.is-placing', list => list.length), 0,
+            '恢复快照不应重新播放旧棋子');
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true,
             '等待唤醒时应保留棋盘数据但隐藏棋盘');
         await page.evaluate(() => window.__emit('server.message', {
@@ -62,8 +64,19 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             turn: 'AI', result: '进行中'
         }));
         assert.equal(await page.$eval('[data-coordinate="C3"]', button => button.dataset.stone), 'X');
+        assert.equal(await page.$eval('[data-coordinate="C3"] .display-game-stone', stone =>
+            getComputedStyle(stone).animationName), 'display-game-stone-place');
+        await page.waitForFunction(() => !document.querySelector('[data-coordinate="C3"]').classList.contains('is-placing'));
+        await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
         await page.evaluate(() => window.__emit('server.message', {
-            type: 'gameDelta', gameId: 'g1', revision: 4, actor: 'AI', coordinate: 'D3',
+            type: 'gameDelta', gameId: 'g1', revision: 3, actor: 'AI', coordinate: 'D3',
+            turn: 'User', result: '进行中'
+        }));
+        assert.equal(await page.$eval('[data-coordinate="D3"]', button => button.dataset.stone), 'O');
+        assert.equal(await page.$eval('[data-coordinate="D3"]', button => button.classList.contains('is-placing')), false);
+        await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'gameDelta', gameId: 'g1', revision: 5, actor: 'AI', coordinate: 'E3',
             turn: 'User', result: '进行中'
         }));
         assert.equal(await page.evaluate(() => window.__sent.at(-1).type), 'gameRecover');
@@ -76,7 +89,7 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         }));
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false);
         await page.evaluate(() => window.__emit('server.message', {
-            type: 'gameSnapshot', gameId: 'g1', revision: 2, size: 9,
+            type: 'gameSnapshot', gameId: 'g1', revision: 3, size: 9,
             board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: false
         }));
         assert.equal(await page.$eval('#displayGameShell', shell => shell.hidden), true);
@@ -96,9 +109,15 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             visible: true, demo: true
         }));
         assert.equal(await page.$eval('[data-coordinate="C3"]', button => button.disabled), true);
+        assert.equal(await page.$$eval('.display-game-point.is-placing', list => list.length), 0);
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false,
             '演示棋盘在对话未激活时仍可显示');
         assert.match(await page.$eval('#displayGameStatus', node => node.textContent), /演示/);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'gameDelta', gameId: 'demo-1', revision: 2, actor: 'User', coordinate: 'C3',
+            turn: 'AI', result: '进行中'
+        }));
+        assert.equal(await page.$eval('[data-coordinate="C3"]', button => button.classList.contains('is-placing')), true);
         const sentBeforeClose = await page.evaluate(() => window.__sent.length);
         await page.click('#displayGameClose');
         assert.equal(await page.evaluate(() => window.__sent.length), sentBeforeClose);

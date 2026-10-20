@@ -81,6 +81,18 @@
     border-radius: 50%;
     pointer-events: none;
 }
+/* 只让权威增量中新落下的棋子轻微回弹；快照中的旧棋子保持静止。 */
+.display-game-point.is-placing .display-game-stone {
+    animation: display-game-stone-place 320ms cubic-bezier(.2, .7, .25, 1) both;
+}
+@keyframes display-game-stone-place {
+    0% { opacity: .2; transform: translateY(-38%) scale(.68); }
+    68% { opacity: 1; transform: translateY(5%) scale(1.12); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .display-game-point.is-placing .display-game-stone { animation: none; }
+}
 .display-game-point[data-stone="X"] .display-game-stone {
     background: radial-gradient(circle at 32% 28%, #5d5d5d, #090909 75%);
     box-shadow: 1px 2px 4px #0008;

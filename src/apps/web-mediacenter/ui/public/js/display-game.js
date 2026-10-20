@@ -140,6 +140,15 @@
             }
             point.dataset.stone = message.actor === 'User' ? 'X' : 'O';
             point.setAttribute('aria-label', `${message.coordinate} ${message.actor === 'User' ? '黑子' : '白子'}`);
+            // 演示和真实棋局共用权威增量；减少动态效果时直接显示最终棋子。
+            if (!root.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+                const stone = point.querySelector('.display-game-stone');
+                if (stone) {
+                    point.classList.add('is-placing');
+                    stone.addEventListener('animationend', () => point.classList.remove('is-placing'),
+                        { once: true });
+                }
+            }
             game.turn = message.turn;
             game.result = message.result;
         } else if (message.type === 'gameVisibility') {
