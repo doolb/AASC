@@ -222,7 +222,8 @@
         }
         bus.subscribe('server.message', handleMessage);
         bus.subscribe('stage.resize', resize);
-        bus.subscribe('transport.changed', ({ available }) => { if (available && game) requestRecovery(); });
+        // 首次初始化可能早于 WebSocket OPEN；本地无棋盘时重连也必须补拉服务端旧棋局。
+        bus.subscribe('transport.changed', ({ available }) => { if (available) requestRecovery(); });
         bus.subscribe('chat.visibility', ({ visible }) => { if (visible) setMenuOpen(false); });
         refs.toggle?.addEventListener('click', () => setMenuOpen(refs.menu.hidden));
         refs.list?.addEventListener('click', event => {

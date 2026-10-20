@@ -49,6 +49,7 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         await page.evaluate(() => {
             const subscriptions = new Map();
             window.__sent = [];
+            window.__transportAvailable = false;
             window.__emit = (type, data) => (subscriptions.get(type) || []).forEach(handler => handler(data));
             window.DisplayStage = {
                 getBus: () => ({ subscribe(type, handler) {
@@ -56,12 +57,22 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
                     list.push(handler);
                     subscriptions.set(type, list);
                 } }),
-                send(message) { window.__sent.push(message); return true; },
+                send(message) {
+                    if (!window.__transportAvailable) return false;
+                    window.__sent.push(message);
+                    return true;
+                },
                 getState: () => ({ rotationGeometry: { logicalWidth: 390, logicalHeight: 740, rotation: 0 } })
             };
         });
         await page.addScriptTag({ path: path.join(PUBLIC, 'js/display-game.js') });
         await page.evaluate(() => window.dispatchEvent(new Event('display-stage-ready')));
+        assert.equal(await page.evaluate(() => window.__sent.length), 0,
+            '舞台初始化早于 WebSocket 建立时，首次恢复请求无法发送');
+        await page.evaluate(() => {
+            window.__transportAvailable = true;
+            window.__emit('transport.changed', { available: true });
+        });
         assert.equal(await page.evaluate(() => window.__sent[0].type), 'gameRecover');
         assert.deepEqual(await page.$$eval('[data-game-name]', buttons => buttons.map(button => button.dataset.gameName)),
             ['五子棋']);

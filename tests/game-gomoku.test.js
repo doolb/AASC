@@ -110,6 +110,44 @@ test('落子只发送增量，按显示端保存与恢复快照', t => {
     assert.equal(restored.board.split('/')[7][7], 'X');
 });
 
+test('查看会补发棋盘，除退出显示外的棋盘操作恢复隐藏状态', t => {
+    const { game, events, options } = fixture(t);
+    game.apply('display-a', call('GameAI', '开局', '9'));
+    const revision = game.snapshot('display-a').revision;
+    const viewed = game.apply('display-a', call('GameAI', '查看'));
+    assert.equal(viewed.ok, true);
+    assert.equal(game.snapshot('display-a').revision, revision, '可见棋盘的查看不应修改版本');
+    assert.equal(events.at(-1).type, 'gameSnapshot', '查看必须补发完整棋盘');
+
+    game.apply('display-a', call('GameAI', '退出显示'));
+    assert.equal(game.snapshot('display-a').visible, false);
+    const hiddenRevision = game.snapshot('display-a').revision;
+    const reopened = game.apply('display-a', call('GameAI', '查看'));
+    assert.equal(reopened.ok, true);
+    assert.equal(game.snapshot('display-a').revision, hiddenRevision + 1);
+    assert.equal(game.snapshot('display-a').visible, true);
+    assert.equal(events.at(-1).type, 'gameSnapshot');
+    assert.equal(events.at(-1).visible, true);
+
+    game.apply('display-a', call('GameAI', '退出显示'));
+    const userMove = game.apply('display-a', call('GameUser', '落子', 'A1'), { userText: '我下 A1' });
+    assert.equal(userMove.ok, true);
+    assert.equal(game.snapshot('display-a').visible, true);
+    assert.equal(events.at(-1).type, 'gameSnapshot', '隐藏棋盘落子后发送完整快照');
+    game.apply('display-a', call('GameAI', '退出显示'));
+    const aiMove = game.apply('display-a', call('GameAI', '落子', 'B1'));
+    assert.equal(aiMove.ok, true);
+    assert.equal(events.at(-1).type, 'gameSnapshot');
+
+    game.apply('display-a', call('GameAI', '退出显示'));
+    const proposal = game.apply('display-a', call('GameAI', '提议尺寸', '11'));
+    assert.equal(proposal.ok, true);
+    assert.equal(events.at(-1).type, 'gameSnapshot');
+    assert.equal(game.snapshot('display-a').visible, true);
+    assert.equal(createGomokuGameService(options).snapshot('display-a').visible, true,
+        '恢复后的可见状态必须持久化');
+});
+
 test('AI 不能替用户编造坐标，中文数字坐标可通过', t => {
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));

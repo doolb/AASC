@@ -190,9 +190,18 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 return commit(displayId, next, message,
                     gmSnapshotFromState(next));
             }
-            case '查看':
-                return state ? { ok: true, gm: gmStatusFromState(state) }
-                    : fail('未开局');
+            case '查看': {
+                if (!state) return fail('未开局');
+                // 查看也要把权威棋盘送到显示端；原先隐藏时先恢复持久化可见状态。
+                const next = state.visible === false
+                    ? { ...state, revision: state.revision + 1, visible: true } : state;
+                const gm = gmStatusFromState(next);
+                const message = { ...snapshotFromState(next), type: 'gameSnapshot',
+                    tag: gm.replace(',GM,', ',Game,') };
+                if (next !== state) return commit(displayId, next, message, gm);
+                onUpdate(displayId, message);
+                return { ok: true, gm, message };
+            }
             case '落子': {
                 if (!state) return fail('未开局');
                 if (state.result !== '进行中') return fail('棋局已结束');
@@ -222,9 +231,12 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 });
                 const result = won ? `${call.actor}胜` : board.includes('.') ? '进行中' : '平局';
                 const turn = result === '进行中' ? call.actor === 'User' ? 'AI' : 'User' : call.actor;
-                const next = { ...state, board, revision: state.revision + 1, turn, result };
-                const message = { type: 'gameDelta', game: GAME_NAME, gameId: next.id,
-                    revision: next.revision, actor: call.actor, coordinate: coordinate.text, turn, result };
+                const next = { ...state, board, revision: state.revision + 1, turn, result, visible: true };
+                // 隐藏期间没有可靠的本地棋盘，恢复时直接发完整快照；可见时仍只发增量。
+                const message = state.visible === false
+                    ? { ...snapshotFromState(next), type: 'gameSnapshot' }
+                    : { type: 'gameDelta', game: GAME_NAME, gameId: next.id,
+                        revision: next.revision, actor: call.actor, coordinate: coordinate.text, turn, result };
                 // 终局落子回执到坐标即止；下一手不存在，最终结果由随后 GM 状态行说明。
                 const gmEnding = result === '进行中' ? `,${protocolActor(turn)},${result}` : '';
                 return commit(displayId, next, message,
@@ -234,9 +246,12 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 if (!state) return fail('未开局');
                 const size = parseSize(argument);
                 if (!size) return fail('棋盘尺寸无效');
-                const next = { ...state, revision: state.revision + 1, pendingSize: size };
-                return commit(displayId, next, { type: 'gameProposal', game: GAME_NAME, gameId: next.id,
-                    revision: next.revision, pendingSize: size }, `Game:五子棋,GM,待确认尺寸,${size}`);
+                const next = { ...state, revision: state.revision + 1, pendingSize: size, visible: true };
+                const message = state.visible === false
+                    ? { ...snapshotFromState(next), type: 'gameSnapshot' }
+                    : { type: 'gameProposal', game: GAME_NAME, gameId: next.id,
+                        revision: next.revision, pendingSize: size };
+                return commit(displayId, next, message, `Game:五子棋,GM,待确认尺寸,${size}`);
             }
             case '确认尺寸': {
                 if (!state) return fail('未开局');
