@@ -1343,8 +1343,10 @@ function buildMessages(userMessage, options = {}) {
     const format = promptFormat || 'openai';
     const sysPrompt = systemPrompt || chatConfig.systemPrompt;
     const selectedTemplate = findTemplate(templateId);
-    // 服务器聊天路由可能已经把模板内容作为 systemPrompt 传入，避免 Agent/LLM 收到重复模板。
-    const template = selectedTemplate && selectedTemplate.content !== sysPrompt ? selectedTemplate : null;
+    // 游戏桥会把角色设定接在协议提示末尾；完整末尾块已在 System 中时不再作为 User 重复发送。
+    const templateAlreadyInSystem = selectedTemplate && (sysPrompt === selectedTemplate.content
+        || sysPrompt.endsWith(`\n\n${selectedTemplate.content}`));
+    const template = selectedTemplate && !templateAlreadyInSystem ? selectedTemplate : null;
     const inputBudget = chatConfig.maxTokens || 4096;
     const sessionHistory = Array.isArray(historyMessages)
         ? historyMessages

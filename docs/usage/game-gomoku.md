@@ -4,7 +4,17 @@
 
 AI 会按需查询当前显示端的游戏目录和五子棋规则。聊天中的灰色小字会显示查询、落子和 GM 确认的简短提示；完整协议可悬停查看，游戏编号显示四位。提示不会朗读。棋盘外层透明，木色棋盘保留。
 
-当前游戏调用首选独立的纯文本行，例如 `Game:五子棋,AI,落子,G3`，不带尖括号；目录查询与 GM 回执也采用相同格式。旧的 `<Game:...>` 调用仍可识别。普通聊天不需要输入协议行。
+当前游戏调用首选独立的纯文本行，例如 `Game:五子棋,AI,落子,G3`，不带尖括号；目录查询与 GM 回执也采用相同格式。独立 `Game:` 行即使出现在自然语言之间也可识别，普通句子里的 `Game:` 示例不会触发操作。旧的 `<Game:...>` 调用仍可识别。普通聊天不需要输入协议行。
+
+模型首次需要游戏时先发 `Game:目录,AI,列表`，收到 GM 的列表后才按需发 `Game:五子棋,AI,规则`。需要 GM 确认或数据的调用会等回执后再决定下一条；每次回复另起行附自然语言，确认前不会宣称操作成功。
+
+需要状态确认的 User 或 AI 游戏操作按原子步骤处理：用户报坐标后先等 GM 确认该棋步；若结果仍在进行且轮到 AI，AI 再决定自己的落点。模型若在同条回复抢先写出双方落子，服务端只执行 User 棋步，并把 GM 回执交回模型重新决定 AI 棋步。
+
+GM 快照末尾是棋盘编码，`/` 把棋盘从上到下分成各行，每行从左到右对应 A、B、C 等列，第一行是数字 1；`.` 为空位，`X` 为用户黑棋，`O` 为 AI 白棋（字母 O）。例如第 5 行的 `....O....` 表示 E5 已被 AI 占用。AI 会收到这段规则，仍以 GM 的落子校验为准。
+
+胜负或平局落子确认后，系统会把 GM 的落子回执和最终状态再交给 AI，等它补充一条终局答复。落子回复中原有的话会保留并排在补充答复前；灰色 GM 提示不会朗读。
+
+终局的落子回执到坐标结束，例如 `Game:五子棋,GM,落子,344a,10,User,E2`；下一行状态给出最终胜负，例如 `Game:五子棋,GM,状态,344a,10,9,User胜`。终局已没有下一手；进行中的回执仍会写明下一手。
 
 说“下在 H8”或“我下 A一”，AI 会代用户调用游戏协议。也可以直接点击棋盘交点：棋盘确认后，AI 会收到这步并选择白子的下一手。坐标从左上角 A1 开始，列字母包含 I。
 
@@ -20,6 +30,6 @@ AI 会按需查询当前显示端的游戏目录和五子棋规则。聊天中�
 
 运行 `npm run demo:game-chat` 后，命令行按一行一个 JSON 对象交互。先输入 `{"type":"user","content":"我们来玩五子棋，开一盘 9 路的"}`；每收到 `modelRequest`，把其中 `input` 和 `systemPrompt` 交给目标 AI，再输入 `{"type":"modelReply","sequence":1,"message":"Game:目录,AI,列表"}`，其中 `sequence` 必须对应当前请求。入口会逐次输出 `gameProtocol`、`gameUpdate`、`chatComplete` 和 `chatResult`；若 AI 需要等 GM 回执，会再次输出 `modelRequest`。同一进程可继续输入下一条 `user`。默认棋局仅保存在进程使用的临时目录；需要跨进程复用演练状态时可加 `-- --state-file=/tmp/aasc-gomoku-demo.json`。
 
-JS 调用方可从 `src/apps/server/modules/game/game-chat-session.js` 引入 `createGameChatSession({ filePath, displayId, onModelRequest, onEvent })`；`onModelRequest({ input, systemPrompt, sequence })` 可异步返回 AI 回复字符串，`await session.sendUser(用户文本)` 返回最终 `result`、本轮 `events` 和权威 `snapshot`。这个入口接收完整 AI 回复并复用正式游戏桥接逻辑，不连接真实显示端或模型账号。
+JS 调用方可从 `src/apps/server/modules/game/game-chat-session.js` 引入 `createGameChatSession({ filePath, displayId, onModelRequest, onEvent })`；`onModelRequest({ input, systemPrompt, sequence })` 可异步返回 AI 回复字符串，`await session.sendUser(用户文本)` 返回最终 `result`、本轮 `events` 和权威 `snapshot`。这个回调模式接收完整 AI 回复并复用正式游戏桥接逻辑，不连接真实显示端或模型账号。
 
-调用真实聊天模型时，传入现有 `chat` 服务和 `roleName`，例如 `createGameChatSession({ filePath, displayId, chat, roleName: '小爱' })`。角色名必须能从当前聊天模板找到；入口按正式 private 会话传入角色与会话选项，模型请求由 `chat.chatStream` 生成和发送，不需要调用方自己拼接 `System:`。棋局文件仍应指定隔离路径，避免测试影响真实显示端。
+调用真实聊天模型时，传入现有 `chat` 服务和 `roleName`，例如 `createGameChatSession({ filePath, displayId, chat, roleName: '小爱' })`。角色名必须能从当前聊天模板找到；入口按正式 private 会话保存两轮间的用户与助手历史，模型请求由 `chat.chatStream` 生成和发送，不需要调用方自己拼接 `System:`。这个模式会写入传入聊天服务配置的私聊历史；隔离测试需同时使用临时聊天运行目录和临时棋局文件。带目标显示端的聊天会等本次模型回复完成并校验游戏调用后展示叙述。

@@ -45,6 +45,12 @@ function stripGameTags(text) {
 // 完整 ID 仅用于服务端状态和显示端版本匹配；模型回执展示四位短编号。
 function shortGameId(id) { return String(id || '').slice(0, 4); }
 
+function gmStatusFromState(state) {
+    // 终局已经没有下一手，胜负只在状态回执中给出；进行中继续沿用原有字段顺序。
+    const ending = state.result === '进行中' ? `${state.turn},${state.result}` : state.result;
+    return `Game:五子棋,GM,状态,${shortGameId(state.id)},${state.revision},${state.size},${ending}`;
+}
+
 function parseSize(value) {
     const size = Number(value);
     return SIZES.has(size) && String(size) === String(value) ? size : null;
@@ -166,7 +172,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                     `Game:五子棋,GM,快照,${shortGameId(next.id)},1,${size},User,进行中,${encodeBoard(next.board, size)}`);
             }
             case '查看':
-                return state ? { ok: true, gm: `Game:五子棋,GM,状态,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result}` }
+                return state ? { ok: true, gm: gmStatusFromState(state) }
                     : fail('未开局');
             case '落子': {
                 if (!state) return fail('未开局');
@@ -200,8 +206,10 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 const next = { ...state, board, revision: state.revision + 1, turn, result };
                 const message = { type: 'gameDelta', game: GAME_NAME, gameId: next.id,
                     revision: next.revision, actor: call.actor, coordinate: coordinate.text, turn, result };
+                // 终局落子回执到坐标即止；下一手不存在，最终结果由随后 GM 状态行说明。
+                const gmEnding = result === '进行中' ? `,${turn},${result}` : '';
                 return commit(displayId, next, message,
-                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${call.actor},${coordinate.text},${turn},${result}`);
+                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${call.actor},${coordinate.text}${gmEnding}`);
             }
             case '提议尺寸': {
                 if (!state) return fail('未开局');

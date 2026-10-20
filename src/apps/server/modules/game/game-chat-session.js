@@ -22,6 +22,9 @@ function createGameChatSession({ filePath, displayId, chat: chatService = null, 
     if (typeof onEvent !== 'function') throw new TypeError('onEvent 必须是函数');
     if (typeof getAvailableGames !== 'function') throw new TypeError('getAvailableGames 必须是函数');
     if (roleName && !chatService) throw new TypeError('选择角色需要传入真实聊天服务');
+    if (roleName && typeof chatService.addMessage !== 'function') {
+        throw new TypeError('选择角色的真实聊天服务必须提供 addMessage 保存会话历史');
+    }
 
     let active = false;
     let currentEvents = [];
@@ -82,12 +85,17 @@ function createGameChatSession({ filePath, displayId, chat: chatService = null, 
             if (roleName) {
                 const template = chatService.getTemplateByName?.(roleName);
                 if (!template?.content) throw new Error(`聊天角色不存在或没有设定：${roleName}`);
-                // 沿用正式 private 角色会话的选项；System 文本由原聊天服务统一构建。
+                // 沿用正式 private 角色会话的选项；System 文本与历史由原聊天服务统一构建。
                 chatOptions = { ...options, mode: 'private', target: roleName,
                     templateTarget: roleName, sessionId: options.sessionId || roleSessionId,
                     systemPrompt: template.content,
                     includeHistory: options.includeHistory ?? true,
                     contextCount: options.contextCount ?? 100 };
+                // 正式 WebSocket 聊天同样先保存用户消息，供当前及下一轮读取历史。
+                chatService.addMessage({ role: 'control', name: '控制端', content,
+                    mode: chatOptions.mode, target: chatOptions.target,
+                    sessionId: chatOptions.sessionId, templateId: chatOptions.templateTarget,
+                    profileName: chatService.getActiveProfile?.() });
             }
             const result = await runGameAwareChat({ chat, gameService, displayId, content,
                 userText: content, options: chatOptions, getAvailableGames, callbacks: {
@@ -97,6 +105,14 @@ function createGameChatSession({ filePath, displayId, chat: chatService = null, 
                         emit('chatSentence', { sentence, message, reasoning, speech, phase });
                     },
                     onComplete: (message, history, reasoning, speech, gameTrace) => {
+                        if (roleName) {
+                            // 仅将 GM 校验后的最终回复写入会话，协议回执保持独立元数据。
+                            chatService.addMessage({ role: 'assistant', name: roleName, content: message,
+                                reasoning, speech, gameTrace, mode: chatOptions.mode,
+                                target: chatOptions.target, sessionId: chatOptions.sessionId,
+                                templateId: chatOptions.templateTarget,
+                                profileName: chatService.getActiveProfile?.() });
+                        }
                         emit('chatComplete', { message, reasoning, speech, gameTrace });
                     },
                     onError: error => emit('chatError', { error })

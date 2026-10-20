@@ -1,3 +1,29 @@
+### 五子棋快照编码规则
+
+- ✅ [2026-10-20] 五子棋专属规则新增 GM 快照字段及棋盘编码说明，提示 AI 按行列确认目标格为空后再落子。
+  - `game-chat-bridge.js` 增加 `/`、`.`、`X`、`O` 与坐标对应规则；`game-gomoku.test.js` 覆盖规则查询、`NowGame` 共用及 E5 已占示例，同步五子棋 design/spec/task/usage/todo。`npm run test:game-chat` 38/38 通过；隔离“小爱”Qwen 同一句 A9 复测按 User A9→GM→AI F5→GM 完成，没有重试已占 E5，最终叙述与回执一致。`servicePackage=true` 待构建，真实显示端待验收。
+
+### 五子棋终局 GM 回执字段
+
+- ✅ [2026-10-20] 按用户指定格式精简终局 GM 落子与状态：落子行到坐标为止，状态行只写尺寸和胜负，去掉终局无意义的“下一手”。
+  - 更新 `gomoku-game-service.js`、`game-chat-bridge.js`、`game-gomoku.test.js` 及五子棋 design/spec/task/usage/todo；进行中协议和内部显示端增量保持原格式。`npm run test:game-chat` 37/37 通过；隔离真实 Qwen 的用户 E2 与 AI E9 终局分别收到指定短回执和胜负状态，两盘续答均识别胜方。`servicePackage=true` 待构建，真实显示端与 TTS 待验收。
+
+### 五子棋原子调用提示
+
+- ✅ [2026-10-20] 按用户提供的完整 `System:` 正文补入“需要等待状态确认的 User/AI 游戏操作是原子操作”，减少模型在 User 落子未确认时预写 AI 落子。
+  - 更新 `game-chat-bridge.js`、`game-gomoku.test.js`、五子棋 design/spec/task/usage/todo；`npm run test:game-chat` 37/37 通过，A9/E7 回归确认桥接层只先执行 User A9。隔离“小爱”真实 Qwen 单次同原话复测按 User A9→GM→AI E5→GM 占用错误→AI H8→GM 顺序调用，没有同回复抢跑；最终文字仍未说明 H8。服务包保持 `servicePackage=true` 待构建，真实两端待验收。
+
+### 五子棋终局 GM 状态续答
+
+- ✅ [2026-10-20] User 胜、AI 胜或平局落子后，再把 GM 落子回执和权威 `GM,状态` 回送模型；保留落子回复里已有的自然语言，并追加模型的终局答复。
+  - 更新 `game-chat-bridge.js`、`game-gomoku.test.js`、五子棋 design/spec/task/usage/todo；`npm run test:game-chat` 36/36 通过，覆盖双方胜局和第七次模型回复的终局边界。隔离“小爱”真实 Qwen 复测得到用户 E2 `User胜` 版本 10、AI E9 `AI胜` 版本 11，两次都收到 GM 落子与状态并追加终局答复；AI 胜补充文字仍有“四子连珠”的用词错误。`servicePackage=true` 待构建，真实显示端终局播报待验收。
+
+### 五子棋游戏提示、中间调用与会话上下文
+
+- ✅ [2026-10-20] 按用户指定文本替换游戏 `System:` 正文，允许模型回复中间出现独立 `Game:` 调用行，并补齐独立真实聊天入口的跨轮历史。
+  - `game-chat-bridge.js` 引导目录→规则及依赖 GM 回执后续调用；完整缓冲有目标显示端的模型回复，校验中间行后再展示叙述。`game-chat-session.js` 通过正式 `addMessage` 保存同一“小爱”私聊会话的用户与最终助手消息；`llm-service.js` 避免角色设定已在 `System:` 时再次作为 `User:` 插入。旧尖括号和最多八条调用继续可解析。五子棋 design/spec/task/usage/todo 与定向测试同步，`npm run test:game-chat` 33/33 通过，服务包仍待构建。
+  - 隔离的真实 Qwen `aasc-qwen-flash` 经正式 `chatStream` 完成 9 路开局及 User C3→AI E5；再分别模拟用户胜与 AI 胜两盘：C5–G5 横向连五为 `User胜`、版本 10，E5–E9 纵向连五为 `AI胜`、版本 11。临时棋局和聊天运行目录均已清理。AI 胜盘模型终局文字仍误称轮到用户，终局播报及旧空回复兜底待后续处理，真实显示端尚未验收。
+
 ### Chat2API 豆包网页内置任务
 
 - ✅ [2026-10-20] 新增 `doubao.web` 常驻任务和网页内请求桥，参考 doubao2api 固定提交实现浏览器 profile、Android 隔离 WebView、聊天/Responses、媒体和文件兼容 API。

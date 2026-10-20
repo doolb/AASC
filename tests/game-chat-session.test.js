@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const http = require('node:http');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const { createGameChatSession } = require('../src/apps/server/modules/game/game-chat-session');
@@ -65,10 +66,12 @@ test('真实聊天模式把会话选项交给原有 chatStream', async t => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-game-chat-real-'));
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
     const requests = [];
+    const messages = [];
     const chat = { splitIntoSentences: value => [value], getActiveProfile: () => 'qwen',
         getTemplateByName: name => name === '小爱' ? { name, content: '小爱的现有设定' } : null,
+        addMessage(message) { messages.push(message); return message; },
         async chatStream(input, options) {
-            requests.push({ input, options });
+            requests.push({ input, options, savedMessages: messages.slice() });
             return { success: true, message: '你好。', history: [] };
         } };
     const session = createGameChatSession({ filePath: path.join(directory, 'gomoku.json'),
@@ -85,6 +88,50 @@ test('真实聊天模式把会话选项交给原有 chatStream', async t => {
     assert.match(requests[0].options.systemPrompt, /NowGame:无/);
     assert.match(requests[0].options.systemPrompt, /小爱的现有设定/);
     assert.equal(result.events[0].type, 'modelRequest');
+    await session.sendUser('继续聊', { sessionId: 'same-session' });
+    assert.equal(requests[1].options.sessionId, 'same-session');
+    assert.deepEqual(requests[1].savedMessages.map(message => message.content),
+        ['你好', '你好。', '继续聊']);
+    assert.deepEqual(messages.map(message => [message.role, message.content]), [
+        ['control', '你好'], ['assistant', '你好。'], ['control', '继续聊'], ['assistant', '你好。']
+    ]);
+    assert.ok(messages.every(message => message.sessionId === 'same-session'));
+    assert.ok(messages.every(message => message.templateId === '小爱' && message.profileName === 'qwen'));
+});
+
+test('raw 真实聊天携带前轮历史且不重复插入已在 System 中的角色设定', async () => {
+    const chat = require('../src/external/llm/llm-service');
+    const originalConfig = chat.getConfig();
+    const originalTemplates = chat.getTemplates();
+    let requestInput = '';
+    const server = http.createServer(async (request, response) => {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        requestInput = JSON.parse(Buffer.concat(chunks).toString('utf8')).input[0].content;
+        response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        response.end('data: {"type":"response.output_text.delta","delta":"好的"}\n\ndata: [DONE]\n\n');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+        chat.setProfiles([{ name: 'game-raw-test', mode: 'llm', protocol: 'openai-responses',
+            apiUrl: `http://127.0.0.1:${server.address().port}/v1/responses`,
+            model: 'test-model', maxTokens: 4000, promptFormat: 'raw' }]);
+        chat.setTemplates([{ id: '测试角色', name: '测试角色', content: '你是测试角色。' }],
+            { persist: false });
+        const result = await chat.chatStream('我下 C3', { mode: 'private', target: '测试角色',
+            templateTarget: '测试角色', sessionId: 'raw-context-test', includeHistory: true,
+            contextCount: 100, systemPrompt: '协议提示\n\n你是测试角色。',
+            historyMessages: [{ role: 'control', content: '开局' },
+                { role: 'assistant', content: '已开局' }] });
+        assert.equal(result.success, true);
+        assert.match(requestInput, /System:协议提示\n\n你是测试角色。/);
+        assert.match(requestInput, /User:开局\nAI:已开局\nUser:我下 C3$/);
+        assert.equal(requestInput.split('你是测试角色。').length - 1, 1);
+    } finally {
+        chat.setTemplates(originalTemplates, { persist: false });
+        chat.setConfig(originalConfig);
+        await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
 });
 
 test('非法游戏调用回送错误且不写入棋盘', async t => {
