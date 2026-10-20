@@ -53,6 +53,15 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         await page.addStyleTag({ path: path.join(PUBLIC, 'css/theme.css') });
         await page.evaluate(() => { document.documentElement.dataset.themeMode = 'light'; });
         assert.equal(await page.$eval('.display-game-point', point => getComputedStyle(point).backgroundImage), 'none');
+        const headerStyle = await page.$eval('.display-game-header', header => {
+            const style = getComputedStyle(header);
+            return { background: style.backgroundImage, blur: style.backdropFilter,
+                radius: style.borderRadius, padding: style.paddingTop };
+        });
+        assert.match(headerStyle.background, /linear-gradient/);
+        assert.match(headerStyle.blur, /blur\(4px\)/);
+        assert.notEqual(headerStyle.radius, '0px');
+        assert.notEqual(headerStyle.padding, '0px');
         await page.click('[data-coordinate="C3"]');
         const move = await page.evaluate(() => window.__sent.at(-1));
         assert.equal(move.type, 'gameMove');

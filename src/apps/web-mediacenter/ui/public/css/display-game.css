@@ -25,11 +25,19 @@
     pointer-events: auto;
 }
 .display-game-header {
+    box-sizing: border-box;
     width: min(calc(var(--display-stage-width) - 32px), 680px);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    /* 与 TTS 字幕一样用渐变和模糊托住文字，模糊不可用时仍保留深色底。 */
+    background: linear-gradient(to bottom, rgba(0, 0, 0, .38), rgba(0, 0, 0, .58) 50%, rgba(0, 0, 0, .38));
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .95);
     font-size: clamp(14px, 2.6vmin, 22px);
 }
 .display-game-header span { flex: 1; text-align: center; }

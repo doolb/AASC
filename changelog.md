@@ -11,6 +11,9 @@
 
 ### 五子棋游戏协议与本地显示
 
+- ✅ [2026-10-20] 为五子棋标题和回合状态加半透明深色渐变背景、4px 背景模糊及文字阴影，提升复杂媒体画面上的可读性，棋盘外层仍透明。
+  - 更新 `display-game.css`、显示端浏览器测试及五子棋 design/spec/task/todo；16/16 测试通过，Note8 演示截图 `/tmp/aasc-gomoku-header-bg-note8.png` 核对后恢复原棋盘；服务包状态 `servicePackage=true` 待出包。
+
 - ✅ [2026-10-20] 为用户、AI 和演示的权威落子增量增加约 320 毫秒的落下回弹动画；快照静态恢复，遵从系统“减少动态效果”设置。
   - 更新 `display-game.js`、`display-game.css`、浏览器定向测试及五子棋 design/spec/task/usage/todo；17/17 测试通过。Note8 当前显示端本机演示实测新棋子 `I5` 播放 `display-game-stone-place`，结束后恢复原棋局隐藏状态；服务代码包待出包。
 
