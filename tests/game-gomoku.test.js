@@ -267,6 +267,8 @@ test('已有棋局漏发标签时由模型补判用户坐标，不播出错误�
     assert.match(inputs[0].systemPrompt, /语音坐标也由你代发/);
     assert.match(inputs[0].systemPrompt, /NowGame:五子棋/);
     assert.match(inputs[1].input, /原话：H3。/);
+    assert.match(inputs[1].input, /合法 Game 调用行，等待 GM 回执/);
+    assert.equal(inputs[1].input.includes('当前游戏简写'), false);
     assert.equal(result.message, '你下 H3。\n我下 H4。');
     assert.deepEqual(chunks, [result.message]);
     assert.equal(game.snapshot('d').revision, 3);
@@ -339,6 +341,9 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     options: { systemPrompt: '原角色设定' }, callbacks: {} });
     assert.match(followupPrompts[0], /NowGame:五子棋\n五子棋规则:/);
     assert.ok(followupPrompts[0].includes(`五子棋规则:${rules}`));
+    assert.equal(followupPrompts[0].includes('当前游戏调用可省略'), false);
+    assert.equal(followupPrompts[0].includes('GameUser:落子,A9'), false);
+    assert.equal(followupPrompts[0].includes('GameAI:落子,F5'), false);
     assert.equal(followupPrompts[0].includes('位置参数标签只用英文逗号'), false);
 });
 

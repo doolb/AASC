@@ -122,8 +122,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     // raw 格式会把 systemPrompt 放进同一条 user 消息的 System: 后，游戏提示位于角色设定之前。
     const nowGame = initialState?.result === '进行中' ? initialState.game : '无';
     const nowGamePrompt = [`NowGame:${nowGame}`,
-        nowGame !== '无' && GAME_RULES[nowGame] ? `${nowGame}规则:${GAME_RULES[nowGame]}` : '',
-        nowGame !== '无' ? '当前游戏调用可省略 Game:游戏名, 前缀，独立一行写 GameUser:落子,A9 或 GameAI:落子,F5；每条操作仍须等待 GM 回执。' : '']
+        nowGame !== '无' && GAME_RULES[nowGame] ? `${nowGame}规则:${GAME_RULES[nowGame]}` : '']
         .filter(Boolean).join('\n');
     const systemPrompt = [GAME_PROMPT, nowGamePrompt, options.systemPrompt]
         .filter(Boolean).join('\n\n');
@@ -189,7 +188,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
                 retriedUserTurn = true;
                 firstPlainReply = response;
                 input = `你刚才对用户原话只给出自然语言答复，棋局并未变化。请重新判断原话是否要求本地游戏操作；` +
-                    `若要求操作，回复开头先发一条合法 Game 调用行或当前游戏简写，等待 GM 回执；若是普通聊天，直接回答。` +
+                    `若要求操作，回复开头先发一条合法 Game 调用行，等待 GM 回执；若是普通聊天，直接回答。` +
                     `原话：${userText}`;
                 continue;
             }

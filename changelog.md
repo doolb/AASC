@@ -1,5 +1,7 @@
 ### 五子棋 GameUser / GameAI 角色与当前游戏简写
 
+- ✅ [2026-10-20] 当前游戏简写改为仅解析兼容，模型提示只引导完整 `Game:` 调用。
+  - `game-chat-bridge.js` 移除活动棋局 `System:` 的简写示例，并将漏发调用补判改为完整调用行；`gomoku-game-service.js` 的简写解析继续有效。同步五子棋 spec/design/task/usage/todo；`npm run test:game-chat` 41/41、`git diff --check` 通过，`servicePackage=true` 待构建。
 - ✅ [2026-10-20] 游戏调用和 GM 回执统一使用 `GameUser`、`GameAI`，活动棋局支持行首 `GameUser:`/`GameAI:` 省略游戏名。
   - 更新 `gomoku-game-service.js`、`game-chat-bridge.js`、游戏聊天与协议提示测试，以及五子棋 design/spec/task/usage/todo；旧 `User`/`AI` 游戏调用不再解析，尖括号外形需使用新角色。棋盘内部和显示端增量保持现有字段。隔离 A9→GM→F5 与抢跑用例通过；`npm run test:game-chat` 41/41、相关浏览器测试 12/12 通过，服务包 `servicePackage=true` 待构建，真实两端待验收。
 - ✅ [2026-10-20] 隔离真实 QwenChat “小爱”会话复测新游戏角色协议。
