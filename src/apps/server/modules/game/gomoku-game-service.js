@@ -30,7 +30,8 @@ function parseGameTag(raw, currentGame = null) {
         : (legacy ? raw.slice(6, -1) : raw.slice(5)).split(',').map(value => value.trim());
     const [game, protocolRole, operation, ...args] = fields;
     const actor = INTERNAL_ACTORS[protocolRole];
-    if (game === '目录' && actor === 'AI' && operation === '列表' && args.length === 0) {
+    if (game === '目录' && ['User', 'AI'].includes(actor)
+        && operation === '列表' && args.length === 0) {
         return { game, actor, operation, args, raw };
     }
     if (game === GAME_NAME && actor === 'AI' && operation === '规则' && args.length === 0) {
@@ -139,6 +140,12 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
         return gmSnapshotFromState(state);
     }
 
+    function gmStatus(displayId) {
+        const state = games.get(displayId);
+        if (!state) return 'Game:五子棋,GM,错误,未开局';
+        return gmStatusFromState(state);
+    }
+
     function fail(code) {
         return { ok: false, code, gm: `Game:五子棋,GM,错误,${code}` };
     }
@@ -184,7 +191,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 // 查看也要把权威棋盘送到显示端；原先隐藏时先恢复持久化可见状态。
                 const next = state.visible === false
                     ? { ...state, revision: state.revision + 1, visible: true } : state;
-                const gm = gmStatusFromState(next);
+                const gm = gmSnapshotFromState(next);
                 const message = { ...snapshotFromState(next), type: 'gameSnapshot',
                     tag: gm.replace(',GM,', ',Game,') };
                 if (next !== state) return commit(displayId, next, message, gm);
@@ -267,7 +274,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
         }
     }
 
-    return { apply, snapshot, gmSnapshot, has: displayId => games.has(displayId) };
+    return { apply, snapshot, gmSnapshot, gmStatus, has: displayId => games.has(displayId) };
 }
 
 function snapshotFromState(state) {

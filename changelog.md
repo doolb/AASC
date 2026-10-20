@@ -1,3 +1,13 @@
+### 五子棋 System 与普通聊天
+
+- ✅ [2026-10-20] 按指定 System 文本提供 GameUser 和 GameAI 目录查询，移除已有棋局无调用行时的游戏补判。
+  - `game-chat-bridge.js` 更新提示和“第三行第三列→C3”规则，无调用行正常返回自然语言并保留会话；`gomoku-game-service.js` 接受 `GameUser,列表`，仍拒绝伪造 GM。更新 `game-gomoku.test.js` 与五子棋 design/spec/task/usage/todo；游戏聊天测试 47/47 通过。服务包待构建，真实妲己聊天待验收。
+
+### 五子棋查看返回权威快照
+
+- ✅ [2026-10-20] 修复“查看”只给 AI 状态行、无法读取当前棋盘的问题。
+  - `gomoku-game-service.js` 给 AI 返回完整 GM 快照并继续向显示端下发权威棋盘；`game-chat-bridge.js` 独立生成终局 GM 状态，保留胜负续答。更新 `game-gomoku.test.js`、五子棋 design/spec/task/usage/todo；`npm run test:game-chat` 45/45 通过。服务包待构建，真实模型与显示端待验收。
+
 ### 显示端聊天超时隐藏棋盘
 
 - ✅ [2026-10-20] 修复显示端本地语音聊天倒计时到期后棋盘可能继续显示的问题。

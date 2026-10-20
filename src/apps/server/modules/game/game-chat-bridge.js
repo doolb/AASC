@@ -4,7 +4,14 @@ const MAX_TAGS_PER_REPLY = 8;
 const STATE_CHANGING_OPERATIONS = new Set(['开局', '落子', '提议尺寸', '确认尺寸', '退出显示', '恢复显示']);
 const GAME_PROMPT = [
     '本地游戏调用行：Game:游戏名,GameUser或GameAI,操作[,参数...]；不用尖括号，字段只用英文逗号，不用 JSON。回复开头最多 8 条调用行，每条独占一行；如果该调用行需要等待确认或者数据,以及GameUser或者GameAI操作游戏需要等待状态确认时,是原子操作,等待调行回复,不能再发其他调用行；自然语言另起行,每次回复都带上自然语言。',
-    'GameUser 代表用户，语音坐标也由你代发；GameAI 代表你。不得伪造 GM/Game，只有 GM 确认后才说操作成功。用户报坐标时先发 GameUser 落子行，等 GM 确认且轮到 GameAI，再决定并发 GameAI 落子行；普通聊天直接回答。',
+    'GameUser 代表用户，语音坐标也由你代发；GameAI 代表你。不得伪造 GM/Game，只有 GM 确认后才说操作成功。',
+    '用户报坐标时先发 GameUser 落子行，等 GM 确认且轮到 GameAI，再决定并发 GameAI 落子行；普通聊天直接回答。',
+    '',
+    '帮玩家操作，',
+    'Game:目录,GameUser,列表',
+    '',
+    '你的操作，',
+    'Game:目录,GameAI,列表',
     '',
     '首次需要本地游戏时先发下面的, 调用目录查询，',
     'Game:目录,GameAI,列表',
@@ -14,9 +21,9 @@ const GAME_PROMPT = [
 ].join('\n');
 const GOMOKU_RULES = [
     '操作：开局[,尺寸]、落子,坐标、查看、提议尺寸,尺寸、确认尺寸,尺寸、退出显示、恢复显示',
-    '尺寸9/11/13/15，默认15；用户黑先、AI白后；A1在左上角，列包含I；横竖斜五连胜，无禁手',
+    '尺寸9/11/13/15，默认15；用户黑先、AI白后；A1在左上角，列包含I；口语位置先行后列，例如第3行第3列是C3，用户落子发Game:五子棋,GameUser,落子,C3；横竖斜五连胜，无禁手',
     'GM快照字段：短编号,版本,尺寸,下一手,结果,棋盘编码；下一手用GameUser或GameAI，胜方用GameUser胜或GameAI胜；棋盘用/从上到下分行，每行从左到右对应A至末列，第一行是第1行；.为空位，X是用户黑棋，O是AI白棋（字母O）；落子前按行列检查目标格为.，已占用须另选空格',
-    '改尺寸先提议并待用户明确确认；进行中同尺寸重开须用户明确要求'
+    '查看返回完整GM快照；GM只发回执，不能用GM角色调用；改尺寸先提议并待用户明确确认；进行中同尺寸重开须用户明确要求'
 ].join('；');
 // 游戏目录可以扩展；规则查询和正在进行的棋局共用同一份游戏专属规则。
 const GAME_RULES = Object.freeze({ 五子棋: GOMOKU_RULES });
@@ -135,10 +142,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     let input = content;
     let version = initialState?.revision;
     let invalidAiMoves = 0;
-    let missingAiMoves = 0;
-    let retriedUserTurn = false;
     const unconfirmedOperations = new Set();
-    let firstPlainReply = null;
     let lastHistory = [];
     let maxTurns = 7;
     const narratives = [];
@@ -193,38 +197,14 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
                     speech && !claimsUnconfirmedMove(speech) ? speech : correction,
                     callbacks, lastHistory, chat.splitIntoSentences, gameTrace, replyGame);
             }
-            const state = gameService.snapshot(displayId);
-            if (turn === 0 && !internalSignal && initialState?.result === '进行中'
-                && state?.turn === 'User' && state.result === '进行中'
-                && !retriedUserTurn) {
-                // 只让模型重新判断是否该发送协议行，不由服务端识别游戏关键词或代用户落子。
-                retriedUserTurn = true;
-                firstPlainReply = response;
-                input = `你刚才对用户原话只给出自然语言答复，棋局并未变化。请重新判断原话是否要求本地游戏操作；` +
-                    `若要求操作，回复开头先发一条合法 Game 调用行，等待 GM 回执；若是普通聊天，直接回答。` +
-                    `原话：${userText}`;
-                continue;
-            }
-            if (state?.turn === 'AI' && state.result === '进行中' && missingAiMoves < 2) {
-                // 未落子的自然语言可能声称了不存在的棋步，不进入最终播报。
-                missingAiMoves += 1;
-                input = 'Game:五子棋,GM,错误,轮到GameAI落子';
-                continue;
-            }
-            const plainResponse = firstPlainReply && state?.turn === 'User'
-                ? firstPlainReply : response;
-            const finalText = state?.turn === 'AI' && state.result === '进行中'
-                ? 'AI 落子尚未得到 GM 确认，请稍后重试。'
-                : plainResponse.message;
-            const combined = [...narratives, stripGameTags(finalText, replyGame)].filter(Boolean).join('\n');
-            const combinedSpeech = state?.turn === 'AI' && state.result === '进行中'
-                ? combined : [...narratives, stripGameTags(plainResponse.speech, replyGame)
-                    || stripGameTags(finalText, replyGame)]
-                    .filter(Boolean).join('\n');
-            return emitFinal(combined, plainResponse.reasoning, combinedSpeech, callbacks, lastHistory,
+            // 没有调用行就是普通聊天；现有棋局和当前轮次都不触发游戏补判或伪造 GM 回执。
+            const plainText = stripGameTags(response.message, replyGame);
+            const combined = [...narratives, plainText].filter(Boolean).join('\n');
+            const combinedSpeech = [...narratives,
+                stripGameTags(response.speech, replyGame) || plainText].filter(Boolean).join('\n');
+            return emitFinal(combined, response.reasoning, combinedSpeech, callbacks, lastHistory,
                 chat.splitIntoSentences, gameTrace, replyGame);
         }
-        firstPlainReply = null;
         if (!replyBlock.valid || tags.some(tag => !tag.call)) {
             const rejectedOperations = attemptedStateChanges(tags);
             if (rejectedOperations.length) {
@@ -304,16 +284,12 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         if (narrative) narratives.push(narrative);
         const nextState = gameService.snapshot(displayId);
         if (terminalMove && nextState) {
-            // 终局落子已获 GM 确认；保留模型原叙述，再给模型落子与最终状态作一次续答。
-            const status = gameService.apply(displayId,
-                { game: '五子棋', actor: 'AI', operation: '查看', args: [] },
-                { expectedVersion: version });
-            if (status.ok) {
-                recordProtocol('GM', status.gm);
-                input = [...gmResults, status.gm].join('\n');
-                maxTurns = Math.max(maxTurns, turn + 2);
-                continue;
-            }
+            // 终局落子保留原叙述；状态回执独立生成，查看指令则始终提供完整棋盘。
+            const status = gameService.gmStatus(displayId);
+            recordProtocol('GM', status);
+            input = [...gmResults, status].join('\n');
+            maxTurns = Math.max(maxTurns, turn + 2);
+            continue;
         }
         if (lastCall.game === '五子棋' && lastCall.operation !== '规则'
             && nextState && (nextState.turn !== 'AI' || nextState.result !== '进行中')
