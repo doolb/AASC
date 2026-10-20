@@ -1,5 +1,8 @@
 ### Chat2API 浏览器凭据保存
 
+- 📝 [2026-10-20] 按要求删除正式豆包账号并从当前已登录浏览器重新导入，随后用 Responses 复测。
+  - 删除前核对浏览器与原账号指纹一致，OAuth 重新导入沿用原账号 ID；豆包账号从 1→0→1，其他 3 个 Provider 账号 ID 不变，Node 资料及双来源 Cookie 快照保留（30/24 项）。新会话“早”HTTP 200 后最终 `response.failed`/`doubao_upstream_failed`，无正文；账号重导没有解决上游请求失败。仅账号数据与文档变化，无代码或发布产物变更。
+
 - ✅ [2026-10-20] 增加按 Provider 从本机调试浏览器保存豆包或国内千问凭据的命令，默认端口 9222，自动选择唯一账号。
   - `scripts/ops/save-chat2api-browser-credentials.js`、`package.json`、定向测试及 design/spec/task/usage/todo；豆包复用原账号外部网页一次性刷新，千问复用 OAuth 保存，多个账号拒绝自动覆盖。定向 5/5、`npm run check:chat2api` 293/293 通过。正式服务重启后用当前 Vivaldi 9223 将 54 项 Cookie 保存到原豆包账号；正式 Responses 再发“早”返回 `response.failed`/`doubao_upstream_failed`，后续上游动态协议仍待排查。服务包状态维持 `servicePackage=true`。
 

@@ -1,5 +1,16 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 正式账号删除重导复测（2026-10-20）
+
+```text
+预检 := 正式doubaochat账号恰好一个；浏览器www官网页恰好一个；当前快照与Node资料校验通过；浏览器fp等于旧账号fp
+保护 := 原账号完整资料留在本次进程内存；先申请OAuth状态；重导失败则将原账号恢复
+操作 := DELETE原账号 → 确认豆包账号数为0、其他Provider账号未变 → OAuth.complete用本次浏览器凭据和原accountId导入
+核对 := 豆包账号数为1、总数恢复4、其他3个账号ID不变、原accountId和Node指纹不变、www快照30项、accounts快照24项
+验收 := 正式Responses新会话流式发送“早”一次 → HTTP200但终态response.failed/doubao_upstream_failed、无正文
+结论 := 凭据和账号重导成功；上游Node文字失败仍待协议差异排查
+```
+
 ## 调试端口保存浏览器凭据（2026-10-20）
 
 ```text
