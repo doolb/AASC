@@ -1,3 +1,8 @@
+### 五子棋操作时机与终局重开
+
+- ✅ [2026-10-20] 五子棋规则逐项补充操作时机和参数，并在终局后的下一轮继续提供重开规则。
+  - `game-chat-bridge.js` 说明开局、落子、查看、尺寸确认与显隐，终局保持 `NowGame:无` 并附上一局信息与相同规则。`game-gomoku.test.js` 覆盖终局普通聊天不重置及再开沿用尺寸、用户黑先；`npm run test:game-chat` 48/48 通过。同步五子棋 design/spec/task/usage/todo；`servicePackage=true` 待构建，真实模型与显示端待验收。
+
 ### 模型字段保存请求别名与 Qwen 旧映射清理
 
 - ✅ [2026-10-20] Qwen 选档把 `aasc-qwen-mini/flash/pro` 请求名直接保存到当前 LLM profile 的模型字段，并移除 `Qwen3.6-Flash → Qwen3.7` 内置默认映射及发行种子行。

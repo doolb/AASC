@@ -20,12 +20,19 @@ const GAME_PROMPT = [
     'Game:游戏名,GameAI,规则'
 ].join('\n');
 const GOMOKU_RULES = [
-    '操作：开局[,尺寸]、落子,坐标、查看、提议尺寸,尺寸、确认尺寸,尺寸、退出显示、恢复显示',
-    '尺寸9/11/13/15，默认15；用户黑先、AI白后；A1在左上角，列包含I；口语位置先行后列，例如第3行第3列是C3，用户落子发Game:五子棋,GameUser,落子,C3；横竖斜五连胜，无禁手',
+    '可用操作：',
+    '开局[,尺寸]：用户要求开始或终局后“再来一局”时调用；首次不填尺寸默认15，重开不填则沿用上局尺寸。进行中重开须用户明确要求；换尺寸不能直接开局。',
+    '落子,坐标：仅在棋局进行中且轮到对应一方时调用；坐标为列字母加行号，如C3。用户报位置由AI代发GameUser落子，等GM确认且轮到GameAI后，AI才决定自己的落子。',
+    '查看：需要确认当前棋盘、空位或胜负时调用；查看返回完整GM快照。',
+    '提议尺寸,尺寸：已有棋局需要更换尺寸时先调用，等待GM回执和用户确认；未开局可直接使用开局,尺寸。',
+    '确认尺寸,尺寸：仅在已有待确认的相同尺寸，且用户明确同意后，由GameUser调用；确认后重新开局。',
+    '退出显示：用户明确要求隐藏棋盘时调用；棋局仍保留。',
+    '恢复显示：只需重新显示已隐藏棋盘时调用；查看和其他棋盘操作也会显示棋盘。',
+    '尺寸9/11/13/15，默认15；用户黑先、AI白后，不能选择先后手；A1在左上角，列包含I；口语位置先行后列，例如第3行第3列是C3，用户落子发Game:五子棋,GameUser,落子,C3；横竖斜五连胜，无禁手',
     'GM快照字段：短编号,版本,尺寸,下一手,结果,棋盘编码；下一手用GameUser或GameAI，胜方用GameUser胜或GameAI胜；棋盘用/从上到下分行，每行从左到右对应A至末列，第一行是第1行；.为空位，X是用户黑棋，O是AI白棋（字母O）；落子前按行列检查目标格为.，已占用须另选空格',
-    '查看返回完整GM快照；GM只发回执，不能用GM角色调用；改尺寸先提议并待用户明确确认；进行中同尺寸重开须用户明确要求'
-].join('；');
-// 游戏目录可以扩展；规则查询和正在进行的棋局共用同一份游戏专属规则。
+    'GM只发回执，不能用GM角色调用；改尺寸先提议并待用户明确确认；进行中同尺寸重开须用户明确要求'
+].join('\n');
+// 游戏目录可以扩展；规则查询、进行中与已结束的棋局共用同一份游戏专属规则。
 const GAME_RULES = Object.freeze({ 五子棋: GOMOKU_RULES });
 const recoveredContexts = new Map();
 
@@ -131,11 +138,14 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     }
     const initialState = gameService.snapshot(displayId);
     // 当前游戏名来自服务端权威快照；已结束的棋局不再作为正在进行的游戏提示给模型。
-    // 查询规则本身不改变 NowGame；只在权威棋局进行中的下一轮附该游戏规则。
+    // 终局保留上一局和规则，供模型判断“再来一局”；查询规则本身不改变 NowGame。
     // raw 格式会把 systemPrompt 放进同一条 user 消息的 System: 后，游戏提示位于角色设定之前。
     const nowGame = initialState?.result === '进行中' ? initialState.game : '无';
+    const ruleGame = initialState?.game;
     const nowGamePrompt = [`NowGame:${nowGame}`,
-        nowGame !== '无' && GAME_RULES[nowGame] ? `${nowGame}规则:${GAME_RULES[nowGame]}` : '']
+        initialState && nowGame === '无'
+            ? `LastGame:${initialState.game},已结束,尺寸${initialState.size}` : '',
+        GAME_RULES[ruleGame] ? `${ruleGame}规则:${GAME_RULES[ruleGame]}` : '']
         .filter(Boolean).join('\n');
     const systemPrompt = [GAME_PROMPT, nowGamePrompt, options.systemPrompt]
         .filter(Boolean).join('\n\n');

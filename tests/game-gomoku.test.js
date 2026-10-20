@@ -404,7 +404,7 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     assert.match(inputs[0].systemPrompt, /NowGame:无/);
     assert.equal(inputs[0].systemPrompt.includes('五子棋规则:'), false);
     assert.equal(inputs[2].systemPrompt.includes('五子棋规则:'), false);
-    assert.match(inputs[2].input, /Game:五子棋,GM,规则,操作：开局/);
+    assert.match(inputs[2].input, /Game:五子棋,GM,规则,可用操作：\n开局\[,尺寸\]/);
     assert.equal(inputs[2].input.includes('位置参数标签只用英文逗号'), false);
     assert.ok(inputs[0].systemPrompt.indexOf('目录,AI,列表')
         < inputs[0].systemPrompt.indexOf('NowGame:无'));
@@ -414,12 +414,19 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     assert.deepEqual(trace.map(entry => entry.kind), ['GameAI', 'GM', 'GameAI', 'GM', 'GameUser', 'GM']);
     assert.deepEqual(trace.slice(0, 3).map(entry => entry.summary),
         ['GameAI · 列表', 'GM · 当前支持：五子棋', 'GameAI · 规则']);
-    const rules = inputs[2].input.match(/Game:五子棋,GM,规则,([^\n]+)/)?.[1];
+    const rules = inputs[2].input.slice('Game:五子棋,GM,规则,'.length);
     assert.ok(rules);
     assert.match(rules, /GM快照字段：短编号,版本,尺寸,下一手,结果,棋盘编码/);
     assert.match(rules, /棋盘用\/从上到下分行，每行从左到右对应A至末列，第一行是第1行/);
     assert.match(rules, /第3行第3列是C3/);
     assert.match(rules, /查看返回完整GM快照/);
+    assert.match(rules, /终局后“再来一局”时调用/);
+    assert.match(rules, /重开不填则沿用上局尺寸/);
+    assert.match(rules, /不能选择先后手/);
+    assert.match(rules, /提议尺寸,尺寸：已有棋局需要更换尺寸/);
+    assert.match(rules, /确认尺寸,尺寸：仅在已有待确认的相同尺寸/);
+    assert.match(rules, /退出显示：用户明确要求隐藏棋盘/);
+    assert.match(rules, /恢复显示：只需重新显示已隐藏棋盘/);
     assert.match(rules, /\.为空位，X是用户黑棋，O是AI白棋（字母O）/);
     assert.match(rules, /落子前按行列检查目标格为\./);
     const followupPrompts = [];
@@ -435,6 +442,40 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     assert.equal(followupPrompts[0].includes('GameUser:落子,A9'), false);
     assert.equal(followupPrompts[0].includes('GameAI:落子,F5'), false);
     assert.equal(followupPrompts[0].includes('位置参数标签只用英文逗号'), false);
+});
+
+test('终局后仍提供操作规则，普通聊天保留终局，再来一局沿用尺寸并重置棋盘', async t => {
+    const { game } = fixture(t);
+    game.apply('d', call('User', '开局', '9'));
+    for (let x = 0; x < 5; x += 1) {
+        game.apply('d', call('User', '落子', `${String.fromCharCode(65 + x)}2`));
+        if (x < 4) game.apply('d', call('AI', '落子', `${String.fromCharCode(65 + x)}1`));
+    }
+    const terminal = game.snapshot('d');
+    assert.equal(terminal.result, 'User胜');
+    const prompts = [];
+    const answers = ['下得不错。', 'Game:五子棋,GameUser,开局\n再来一局，你执黑先下。'];
+    const chat = { splitIntoSentences: text => [text], async chatStream(_input, options) {
+        prompts.push(options.systemPrompt);
+        return { success: true, message: answers.shift(), history: [] };
+    } };
+    await runGameAwareChat({ chat, gameService: game, displayId: 'd', content: '刚才下得怎么样',
+        options: {}, callbacks: {} });
+    assert.deepEqual(game.snapshot('d'), terminal);
+    const result = await runGameAwareChat({ chat, gameService: game, displayId: 'd', content: '再来一局',
+        options: {}, callbacks: {} });
+    for (const prompt of prompts) {
+        assert.match(prompt, /NowGame:无\nLastGame:五子棋,已结束,尺寸9\n五子棋规则:可用操作：/);
+        assert.match(prompt, /终局后“再来一局”时调用/);
+    }
+    const restarted = game.snapshot('d');
+    assert.notEqual(restarted.gameId, terminal.gameId);
+    assert.equal(restarted.size, 9);
+    assert.equal(restarted.revision, 1);
+    assert.equal(restarted.turn, 'User');
+    assert.equal(restarted.result, '进行中');
+    assert.equal(restarted.board.replace(/[./]/g, ''), '');
+    assert.equal(result.message, '再来一局，你执黑先下。');
 });
 
 test('GameUser 帮玩家查询目录时返回同一权威游戏列表', async t => {
