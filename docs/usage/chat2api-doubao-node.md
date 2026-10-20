@@ -1,5 +1,16 @@
 # 豆包纯 Node 普通 LLM
 
+## 从本机调试浏览器保存登录资料
+
+在启用远程调试端口的本机浏览器中登录官网后运行：
+
+```bash
+npm run save:chat2api-browser -- doubao
+npm run save:chat2api-browser -- qwen
+```
+
+默认连接 `127.0.0.1:9222` 和本机 Chat2API `8083`。脚本会打开缺失的官网页；网页登录完成后在终端按 Enter 保存。已经登录且无需等待时可加 `--now`；使用其他本机调试端口可加 `--debug-port=9223`。脚本按 Provider 查找账号：没有则新建，恰好一个则更新，多个则停止并提示账号不唯一。`doubao` 对应 `doubaochat`，`qwen` 对应国内千问；千问国际站 `qwen-ai` 不在此命令范围。终端只显示保存结果和 Cookie 数量，不显示票据、Cookie 或 Node 设备资料。此命令保存凭据，不保证豆包 Node 聊天能通过官网风控。
+
 2026-10-13已用当前授权账号验证：在取得一次账号资料并断开Chrome调试连接后，正式Chat2API Provider工厂和CoreAdapter完全通过Node发起新会话，流式与非流式均实际回复`OK`并正常结束。不使用页面fetch、浏览器签名或`a_bogus`。这次没有保存真实凭据或修改正在运行的主服务。
 
 豆包文字统一使用Node直连，网页兼容分支及“旧版Chrome兼容模式”设置已删除。有完整nodeProfile即可请求；旧Cookie-only账号会明确提示重新登录补全资料，不连接Chrome或回退页面。

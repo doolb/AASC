@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node --openssl-legacy-provider --expose-gc src/apps/server/boot/server-launcher.js",
     "restart:server": "node scripts/ops/restart-server.js",
+    "save:chat2api-browser": "node scripts/ops/save-chat2api-browser-credentials.js",
     "build:server-package": "node scripts/ops/build-server-package.js",
     "build:offline-update": "node scripts/ops/offline-update-package.js",
     "release:offline": "node scripts/ops/release-offline.js",

@@ -1,5 +1,22 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 调试端口保存浏览器凭据（2026-10-20）
+
+```text
+输入 := Provider别名 doubao 或 qwen；可选本机调试端口，默认9222；Chat2API本机地址默认8083
+Provider映射 := doubao → doubaochat、www.doubao.com与accounts.doubao.com；qwen → qwen、www.qianwen.com
+连接 := 只连127.0.0.1的CDP端口；查找对应官网页面，没有则打开登录页；用户完成网页登录后触发采集
+账号选择 := 读取正式Chat2API公开账号列表 → 同Provider无账号则新建，恰好一个则更新，多个则拒绝以免覆盖错号
+豆包采集 := CDP按固定两个来源读取适用Cookie → 保留同名不同路径的顺序 → 限定快照格式；从同一www页面读取两项既定localStorage、userAgent和指纹，构造Node资料
+豆包已有账号 := 创建并消费原账号外部网页会话 → 用一次性刷新令牌提交Cookie快照；服务端校验原账号凭据版本和原Node指纹，原子更新
+豆包新账号 := OAuth开始 → 用本次规范Cookie、完整快照与Node资料完成登录；服务端校验身份和格式
+千问采集 := 只从允许来源读取tongyi_sso_ticket → OAuth开始 → 服务端校验ticket → 完成登录；恰好一个原账号时复用其ID
+输出 := 只打印Provider、账号ID、采集项数量和成功/脱敏错误；不打印Cookie、ticket、令牌、profile或网页正文
+失败 := 浏览器未登录、来源不符、多个账号、格式错误、版本冲突或服务端拒绝时停止，不重试和不删除原账号
+验证 := 模拟CDP与管理接口覆盖Provider映射、默认端口、同名Cookie、单账号复用、多账号拒绝、秘密不出日志；现场Responses单次短句仅报告真实结果
+现场结果 := 已登录Vivaldi端口9223保存原doubaochat账号；www快照30项、accounts快照24项、Node资料保留；正式Responses流式“早”HTTP200后response.failed/doubao_upstream_failed
+```
+
 ## 新会话首轮协议对齐（2026-10-20）
 
 ```text

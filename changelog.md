@@ -1,3 +1,8 @@
+### Chat2API 浏览器凭据保存
+
+- ✅ [2026-10-20] 增加按 Provider 从本机调试浏览器保存豆包或国内千问凭据的命令，默认端口 9222，自动选择唯一账号。
+  - `scripts/ops/save-chat2api-browser-credentials.js`、`package.json`、定向测试及 design/spec/task/usage/todo；豆包复用原账号外部网页一次性刷新，千问复用 OAuth 保存，多个账号拒绝自动覆盖。定向 5/5、`npm run check:chat2api` 293/293 通过。正式服务重启后用当前 Vivaldi 9223 将 54 项 Cookie 保存到原豆包账号；正式 Responses 再发“早”返回 `response.failed`/`doubao_upstream_failed`，后续上游动态协议仍待排查。服务包状态维持 `servicePackage=true`。
+
 ### Chat2API 豆包网页首轮协议
 
 - ✅ [2026-10-20] 对齐普通豆包新会话首轮的官网静态请求结构，并实现按来源保存及刷新 Cookie 快照。

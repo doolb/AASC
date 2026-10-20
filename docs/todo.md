@@ -1,4 +1,4 @@
-- 待现场排查 [2026-10-20] 豆包 Node 普通模型新会话首轮已按 Vivaldi 对齐静态正文/时区并实现按来源 Cookie 快照、Android 外部网页完成后刷新原账号；隔离 Responses 实测官网 HTTP 200 但 SSE 业务码 `710020202`，代理返回 `doubao_upstream_failed`/502，而同账号浏览器回复正常。需继续核对逐次生成字段与官网环境，不能把静态对齐当作实网成功；Android 真机完成按钮和更新后播放待验收，续聊协议按用户要求后续再看。见 `docs/task/20261020_豆包首轮请求协议与Cookie快照.md`。
+- 待现场排查 [2026-10-20] 豆包 Node 普通模型新会话首轮已按 Vivaldi 对齐静态正文/时区并实现按来源 Cookie 快照、Android 外部网页完成后刷新原账号；正式账号又通过调试端口脚本保存 `www` 30 项和 `accounts` 24 项 Cookie，正式 Responses 单次“早”仍返回 `response.failed`/`doubao_upstream_failed`。需继续核对逐次生成字段与官网环境，不能把静态对齐或保存凭据当作实网成功；Android 真机完成按钮和更新后播放待验收，续聊协议按用户要求后续再看。见 `docs/task/20261020_豆包首轮请求协议与Cookie快照.md`、`docs/task/20261020_调试端口保存Chat2API浏览器凭据.md`。
 
 - 待真实账号与设备验收 [2026-10-20] 两端音色列表试听已实现面板内最多 30 份 WAV 缓存及重复点击本地重播，固定短句现为八句；服务包更新后，现场检查各 Provider 真实合成、Android WebView 播放授权、缓存重播和不同音量/语速的听感。见 `docs/task/20261020_双端音色列表试听与WAV缓存.md`。
 
