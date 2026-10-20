@@ -157,7 +157,7 @@
 | Android Chat2API 登录与控制端开放 | [android-chat2api-login-control.md](spec/android-chat2api-login-control.md) | Android WebView 登录捕获、Provider 验证和显示端控制端开放协议伪代码 |
 | Chat2API 账号凭证导入导出与 Android 外部网页恢复 | [android-chat2api-credential-transfer.md](spec/android-chat2api-credential-transfer.md) | 账号凭证包、按 ID 预览合并、一次性网页会话和 WebView 恢复伪代码 |
 | Offline Pi SDK 与 Chat2API Responses 修复 | [android-offline-pi-sdk-and-chat2api-responses.md](spec/android-offline-pi-sdk-and-chat2api-responses.md) | Pi SDK hidden manifest 打包恢复、Runtime 健康检查和 Responses 回归伪代码 |
-| 豆包网页文字 Chat2API 与朗读 TTS 伪代码 | [chat2api-doubao-web.md](spec/chat2api-doubao-web.md) | 豆包网页文本请求、账号隔离、流解析及网页朗读验证前置条件 |
+| 豆包网页内置任务与 Chat2API 伪代码 | [chat2api-doubao-web.md](spec/chat2api-doubao-web.md) | 浏览器内请求、流解析、媒体、文件、Android 隔离 WebView 及账号边界 |
 | Chat2API 普通网页手动外部认证 | [chat2api-manual-external-auth.md](spec/chat2api-manual-external-auth.md) | 普通网页粘贴 Cookie、Provider 专属字段提取、校验和账号保存伪代码 |
 | Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](spec/chat2api-global-responses.md) | 全局 Responses transport、聊天会话映射、Pi Provider 和外部实例停用伪代码 |
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](spec/chat2api-raw-traffic-log-modes.md) | 原始流量日志模式、摘要字段和控制端配置伪代码 |

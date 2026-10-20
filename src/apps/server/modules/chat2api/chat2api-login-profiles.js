@@ -30,7 +30,7 @@ const ANDROID_LOGIN_PROFILES = freezeDeep({
       requiredNames: ['sessionid'],
       requiredAnyNames: ['passport_csrf_token', 'passport_csrf_token_default'],
     }],
-    requiredFields: ['cookie', 'nodeProfile'],
+    requiredFields: ['cookie', 'nodeProfile', 'requestProfile'],
   },
   deepseek: {
     loginUrl: 'https://chat.deepseek.com',

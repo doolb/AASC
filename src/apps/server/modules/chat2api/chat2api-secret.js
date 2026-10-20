@@ -20,6 +20,7 @@ const SECRET_FIELDS = new Set([
   'refresh_token',
   // Node profile 内含账号设备标识及可选动态令牌；公共账号摘要必须整块剔除。
   'nodeProfile',
+  'requestProfile',
   'msToken',
 ]);
 

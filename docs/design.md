@@ -167,7 +167,7 @@
 | 工作 AI 角色 | [ai-roles.md](design/ai-roles.md) | 控制端 AI 角色、角色定义自管理与任务历史 |
 | LLM 配置 Agent 模式 | [llm-agent-mode.md](design/llm-agent-mode.md) | 普通 LLM profile 的 Pi Agent 模式、只读工具与服务器进程管理 |
 | 私聊聊天 Agent 系统工具 | [private-chat-agent-tools.md](design/private-chat-agent-tools.md) | 私聊 Agent 调用受限系统工具、修复模式安全边界与 Pi/Codex 统一适配 |
-| 豆包网页文字 Chat2API 与朗读 TTS（按实测能力实施） | [chat2api-doubao-web.md](design/chat2api-doubao-web.md) | 豆包网页文字模型、账号边界及需验证的网页朗读能力 |
+| 豆包网页内置任务与 Chat2API | [chat2api-doubao-web.md](design/chat2api-doubao-web.md) | 浏览器内聊天、媒体、文件、Android WebView 与账号边界；朗读 TTS 沿用现有实现 |
 | Chat2API 核心内置任务 | [chat2api-builtin-task.md](design/chat2api-builtin-task.md) | Provider、OAuth、账号、API Key 和 OpenAI 兼容代理内置为常驻任务 |
 | Android Chat2API 登录与控制端开放 | [android-chat2api-login-control.md](design/android-chat2api-login-control.md) | Android APK 隔离 WebView 登录捕获、Provider 验证和按显示端开放控制端 |
 | Chat2API 账号凭证导入导出与 Android 外部网页恢复 | [android-chat2api-credential-transfer.md](design/android-chat2api-credential-transfer.md) | 账号凭证明文 JSON 导入导出、按账号 ID 合并和 Android 隔离 WebView 登录状态恢复 |

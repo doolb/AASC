@@ -230,7 +230,8 @@ const manageDoubaoStream = ({ stream, cancel, signal, timeoutMs, onIncomplete, h
   };
 };
 
-const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, applicationService, speechTimeoutMs = 60000, doubaoSessionTimeoutMs = 120000 } = {}) => {
+const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, applicationService,
+  getDoubaoTransport = () => 'node-http', speechTimeoutMs = 60000, doubaoSessionTimeoutMs = 120000 } = {}) => {
   if (!sessionStore || typeof sessionStore.get !== 'function' || typeof sessionStore.save !== 'function' || typeof sessionStore.withLock !== 'function') {
     throw new Error('Responses 服务需要会话存储');
   }
@@ -317,19 +318,23 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
     const operation = async (releaseLease = () => {}) => {
       // 在锁内重新读取，避免并发请求在锁外取得同一份旧历史后互相覆盖。
       const session = await sessionStore.get(conversationId) || initialSession || { conversationId, history: [], nativeState: {} };
-      if (piContext?.mode !== 'snapshot' && (uncertainConversations.has(conversationId)
+      // 传输切换时旧原生位置不能复用，改用已持久化的 AASC 历史建立新上游会话。
+      const transportChanged = session.providerId === 'doubaochat' && isDoubaoSession(session.nativeState)
+        && session.nativeState.transport !== getDoubaoTransport();
+      if (piContext?.mode !== 'snapshot' && !transportChanged && (uncertainConversations.has(conversationId)
         || (session.providerId === 'doubaochat' && isDoubaoSession(session.nativeState) && session.nativeState.status === 'uncertain'))) throw sessionError('doubao_session_uncertain');
-      const canUseNativeContinuation = hasNativeContinuation(session);
+      const canUseNativeContinuation = !transportChanged && hasNativeContinuation(session);
       const messages = piContext?.mode === 'snapshot' || canUseNativeContinuation
         ? inputMessages
         : [...(session.history || []), ...inputMessages];
       const responseSession = {
-        nativeState: piContext?.mode === 'snapshot'
+        nativeState: piContext?.mode === 'snapshot' || transportChanged
           ? {}
           : { ...(session.nativeState || {}) },
       };
       // 私有非枚举属性保持既有Provider参数契约，不持久化，也不接受客户端metadata指定。
       Object.defineProperty(responseSession,'doubaoDeadlineAt',{value:startedAt+duration});
+      Object.defineProperty(responseSession,'aascConversationId',{value:conversationId});
       // 原生会话的上游模型不可被后续映射编辑悄悄替换；私有元数据不写入Provider消息体。
       if(canUseNativeContinuation&&piContext?.mode!=='snapshot')Object.defineProperty(responseSession,'boundModel',{value:{model:session.actualModel,providerId:session.providerId,accountId:session.accountId}});
       let persisted = false, markingUncertain;

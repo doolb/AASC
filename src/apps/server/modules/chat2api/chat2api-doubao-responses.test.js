@@ -41,6 +41,26 @@ test('Responses纯Node持久化后重建Store，第二轮仅发送新增input且
   assert.equal(f.calls[1].data.messages[0].content_block[0].content.text_block.text,'User: 第二轮');
   assert.equal((await restored.get(stored.conversationId)).history.length,4);
 });
+test('豆包网页任务接管旧Node对话时重放AASC历史并切换原生传输', async () => {
+  const f = setup();
+  const first = await f.service.createResponse({ model: 'doubao', input: '第一轮' });
+  const old = await f.store.get(first.body.conversation.id);
+  let sent;
+  const service = createChat2ApiResponsesService({ sessionStore: f.store,
+    getDoubaoTransport: () => 'browser-fetch',
+    coreAdapter: { forwardChatCompletion: async (request, context) => {
+      sent = { request, nativeState: context.responseSession.nativeState };
+      return { providerId: 'doubaochat', accountId: old.accountId, actualModel: 'doubao',
+        nativeState: { ...old.nativeState, transport: 'browser-fetch', conversationId: 'web-conversation' },
+        body: { choices: [{ message: { role: 'assistant', content: '网页续答' } }] } };
+    } } });
+  const next = await service.createResponse({ model: 'doubao', previous_response_id: first.body.id,
+    input: '第二轮' });
+  assert.equal(next.body.conversation.id, first.body.conversation.id);
+  assert.deepEqual(sent.nativeState, {});
+  assert.equal(sent.request.messages.length, 3);
+  assert.equal((await f.store.get(first.body.conversation.id)).nativeState.transport, 'browser-fetch');
+});
 test('豆包流式锁覆盖消费与保存，旧response引用排队后重新读最新状态，不阻塞其它会话',async()=>{
   const pending=new PassThrough();
   const f=setup({source:(_call,index)=>index===2?pending:null});

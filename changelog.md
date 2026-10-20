@@ -1,3 +1,10 @@
+### Chat2API 豆包网页内置任务
+
+- ✅ [2026-10-20] 新增 `doubao.web` 常驻任务和网页内请求桥，参考 doubao2api 固定提交实现浏览器 profile、Android 隔离 WebView、聊天/Responses、媒体和文件兼容 API。
+  - `chat2api-doubao-browser-*`、`chat2api-doubao-android-bridge.js`、`chat2api-doubao-web-media.js`、`chat2api-doubao-web-file.js`、`builtin-tasks/doubao-web.js` 接通官网同源 `fetch()`、SSE、图片生成/编辑、视频、音乐、图片及文件上传、下载地址和文件问答；`chat2api-proxy-service.js` 提供受原 API Key 保护的独立入口。文件 AWS V4 固定向量、CRC32 和上传顺序已测试；聊天传输切换时从 AASC 已保存历史建立新上游会话。媒体/文件临时页完成后关闭，桌面账号 profile 保留。
+  - Android 新增 `DoubaoWebViewService.kt`，与外部登录页共享隔离进程 Cookie 目录，经固定本机端口与随机令牌向 Node 回传流；`NodeServerService.kt` 在启动子进程前绑定服务，`AndroidManifest.xml` 注册不导出服务。桌面浏览器默认在当前 Linux `DISPLAY=:1` 环境显示；人工处理登录及验证码，不自动删官网会话或切换账号。
+  - 同步 `.src`、design/spec/task/todo/usage/ref 与 Apache 2.0 许可记录；`npm run check:chat2api` 314/314、`doubao.web` 任务定向 1/1、Android `:app:compileDebugKotlin --offline` 通过。真实官网账号、专用浏览器 profile 和 Android 真机仍待验收；`servicePackage=true`、`minApk=true` 保持待构建，未发布制品。
+
 ### 聊天游戏独立调用入口
 
 - ✅ [2026-10-20] 新增可调用的聊天游戏 JS 会话入口和 JSON 行演练脚本，复用正式游戏桥接与权威棋局。

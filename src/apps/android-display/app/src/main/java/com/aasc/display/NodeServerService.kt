@@ -6,8 +6,10 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -20,12 +22,14 @@ import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
+import java.security.SecureRandom
 import java.security.cert.CertificateFactory
 import org.json.JSONObject
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
 
@@ -266,6 +270,32 @@ class NodeServerService : Service() {
     private var mainServerUrl = ""
     private var offlineMode = false
     private var safMediaServer: SafMediaServer? = null
+    private var doubaoWebViewConnection: ServiceConnection? = null
+    private var doubaoWebViewEndpoint: Pair<Int, String>? = null
+
+    /** Node 启动前绑定隔离进程，由 Binder 返回随机本机端口；密钥只进入当前子进程环境。 */
+    private fun ensureDoubaoWebViewEndpoint(): Pair<Int, String>? {
+        doubaoWebViewEndpoint?.let { return it }
+        val secretBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val secret = secretBytes.joinToString("") { "%02x".format(it) }
+        val latch = CountDownLatch(1)
+        var port = 0
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                port = DoubaoWebViewService.PORT
+                latch.countDown()
+            }
+            override fun onServiceDisconnected(name: ComponentName?) {
+                doubaoWebViewEndpoint = null
+            }
+        }
+        val intent = Intent(this, DoubaoWebViewService::class.java)
+            .putExtra(DoubaoWebViewService.EXTRA_TOKEN, secret)
+        if (!bindService(intent, connection, Context.BIND_AUTO_CREATE)) return null
+        doubaoWebViewConnection = connection
+        if (!latch.await(10, TimeUnit.SECONDS) || port <= 0) return null
+        return (port to secret).also { doubaoWebViewEndpoint = it }
+    }
     private val serviceUpdateApplying = java.util.concurrent.atomic.AtomicBoolean(false)
     private val bootstrapManager by lazy { OfflineBootstrapManager(this) }
     @Volatile private var bootstrapPreview: OfflineBootstrapManager.Preview? = null
@@ -351,6 +381,9 @@ class NodeServerService : Service() {
         stopNodeProcess()
         safMediaServer?.stop()
         safMediaServer = null
+        doubaoWebViewConnection?.let { runCatching { unbindService(it) } }
+        doubaoWebViewConnection = null
+        doubaoWebViewEndpoint = null
         startExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -508,6 +541,10 @@ class NodeServerService : Service() {
                     activeRelease
                 )
             )
+            ensureDoubaoWebViewEndpoint()?.let { (port, secret) ->
+                processBuilder.environment()["AASC_DOUBAO_WEBVIEW_PORT"] = port.toString()
+                processBuilder.environment()["AASC_DOUBAO_WEBVIEW_TOKEN"] = secret
+            }
             val process = processBuilder.start()
             val diagnostics = NodeStartupDiagnostics()
             val releaseResolved = java.util.concurrent.atomic.AtomicBoolean(false)

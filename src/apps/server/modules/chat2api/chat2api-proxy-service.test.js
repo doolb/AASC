@@ -78,6 +78,85 @@ test('代理服务提供 models、Bearer 鉴权和非流式 chat completions', a
   }
 });
 
+test('豆包网页任务的独立兼容 API 路由媒体请求并沿用 Bearer 鉴权', async t => {
+  const calls = [];
+  const service = createChat2ApiProxyService({ host: '127.0.0.1', port: 0,
+    config: { enableApiKey: true }, dataStore: { validateApiKey: async key => key === 'test-key' },
+    coreAdapter: {}, doubaoMediaService: { generate: async (kind, input) => {
+      calls.push({ kind, input });
+      return kind === 'image' ? { images: [{ url: 'https://example.test/image.png' }] }
+        : kind === 'music' ? { tracks: [{ audio_url: 'https://example.test/song.mp3' }] }
+          : { videos: [{ video_url: 'https://example.test/video.mp4' }] };
+    } } });
+  await service.start();
+  t.after(() => service.stop());
+  const payload = JSON.stringify({ prompt: '海边' });
+  const unauthorized = await request(service.address().port, { path: '/v1/video/generations',
+    method: 'POST', headers: { 'Content-Type': 'application/json' } }, payload);
+  assert.equal(unauthorized.statusCode, 401);
+  for (const [path, kind] of [['/v1/images/generations', 'image'],
+    ['/v1/audio/generations', 'music'], ['/v1/video/generations', 'video']]) {
+    const result = await request(service.address().port, { path, method: 'POST',
+      headers: { Authorization: 'Bearer test-key', 'Content-Type': 'application/json' } }, payload);
+    assert.equal(result.statusCode, 200);
+    assert.equal(JSON.parse(result.text).data.length, 1);
+    assert.equal(calls.at(-1).kind, kind);
+  }
+});
+
+test('图片编辑 multipart 先上传参考图，再将 URI 交给生成任务', async t => {
+  const calls = [];
+  const service = createChat2ApiProxyService({ host: '127.0.0.1', port: 0,
+    config: { enableApiKey: false }, coreAdapter: {}, doubaoMediaService: {
+      uploadImage: async file => { calls.push({ upload: file }); return { uri: 'image/key1' }; },
+      generate: async (kind, input) => { calls.push({ kind, input }); return { images: [{ url: 'https://example.test/edited.png' }] }; },
+    } });
+  await service.start();
+  t.after(() => service.stop());
+  const form = new FormData();
+  form.append('prompt', '把背景改成蓝色');
+  form.append('memory_type', '2');
+  form.append('image', new Blob(['fakepng'], { type: 'image/png' }), 'cat.png');
+  const response = await fetch(`http://127.0.0.1:${service.address().port}/v1/images/edits`, {
+    method: 'POST', body: form });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.length, 1);
+  assert.equal(calls[0].upload.filename, 'cat.png');
+  assert.equal(calls[1].input.refImageKeys[0], 'image/key1');
+  assert.equal(calls[1].input.memoryType, 2);
+});
+
+test('豆包网页文件兼容 API 接受 multipart 上传并将文件问答交给同一服务', async t => {
+  const calls = [];
+  const service = createChat2ApiProxyService({ host: '127.0.0.1', port: 0,
+    config: { enableApiKey: true }, dataStore: { validateApiKey: async key => key === 'test-key' },
+    coreAdapter: {}, doubaoFileService: {
+      upload: async file => { calls.push(file); return { uri: 'bucket/note.txt', name: file.filename,
+        size: file.data.length, file_type: 'txt' }; },
+      downloadUrl: async uri => ({ uri, url: 'https://example.test/file', expires_in: 3600 }),
+      chatWithFile: async input => ({ id: 'chatcmpl-file', text: `摘要:${input.prompt}`,
+        conversationId: 'conv-file' }),
+    } });
+  await service.start();
+  t.after(() => service.stop());
+  const base = `http://127.0.0.1:${service.address().port}`;
+  const form = new FormData();
+  form.append('file', new Blob(['hello'], { type: 'text/plain' }), 'note.txt');
+  const unauthorized = await fetch(`${base}/v1/files`, { method: 'POST', body: form });
+  assert.equal(unauthorized.status, 401);
+  const uploaded = await fetch(`${base}/v1/files`, { method: 'POST', body: form,
+    headers: { Authorization: 'Bearer test-key' } });
+  assert.equal(uploaded.status, 200);
+  assert.equal((await uploaded.json()).id, 'bucket/note.txt');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].data.toString(), 'hello');
+  const asked = await request(service.address().port, { path: '/v1/chat/completions/with-file',
+    method: 'POST', headers: { Authorization: 'Bearer test-key', 'Content-Type': 'application/json' } },
+  JSON.stringify({ file_id: 'bucket/note.txt', prompt: '内容是什么？' }));
+  assert.equal(asked.statusCode, 200);
+  assert.equal(JSON.parse(asked.text).choices[0].message.content, '摘要:内容是什么？');
+});
+
 test('代理服务把流式结果转换为 SSE，并在停止时释放端口', async () => {
   const service = createService(false, { forwardChatCompletion: async () => ({
     stream: (async function* streamChunks() {

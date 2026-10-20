@@ -3,6 +3,8 @@ const { randomUUID } = require('crypto');
 const { TextDecoder } = require('util');
 const { normalizeDoubaoNodeProfile, applyDoubaoNodeProtocol } = require('./chat2api-doubao-node-protocol');
 const { normalizeDoubaoCookieSnapshot, parseDoubaoCookieHeader } = require('./chat2api-doubao-cookie-snapshot');
+const { normalizeDoubaoRequestProfile } = require('./chat2api-doubao-request-profile');
+const { createDoubaoHttp2Client } = require('./chat2api-doubao-http2-client');
 const { createDoubaoSessionFlow } = require('./chat2api-doubao-session');
 
 // 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
@@ -41,6 +43,7 @@ const ERROR_DEFINITIONS = Object.freeze({
   doubao_upstream_failed: [502, '豆包网页请求失败，请稍后重试'],
   doubao_session_conflict: [409, '豆包会话的账号、登录身份或模式不匹配，请新建会话'],
   doubao_session_uncertain: [409, '豆包上游会话位置已不确定，请新建会话'],
+  doubao_browser_disabled: [503, '豆包网页任务尚未启动，请启动 doubao.web 后重试'],
 });
 
 /** 所有异常都来自固定白名单；绝不把 Axios 对象、上游错误正文或签名 URL 放进 message/cause。 */
@@ -55,7 +58,7 @@ const doubaoError = (code) => {
  */
 const normalizeDoubaoCredentials = (credentials) => {
   if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)
-    || Object.keys(credentials).some((key) => !['cookie', 'nodeProfile', 'cookieSnapshot'].includes(key))) throw doubaoError('doubao_invalid_credentials');
+    || Object.keys(credentials).some((key) => !['cookie', 'nodeProfile', 'cookieSnapshot', 'requestProfile'].includes(key))) throw doubaoError('doubao_invalid_credentials');
   const source = credentials.cookie;
   if (typeof source !== 'string' || source.length === 0 || source.length > 16 * 1024
     || /[^\x20-\x7E]/u.test(source)) throw doubaoError('doubao_invalid_credentials');
@@ -92,8 +95,20 @@ const normalizeDoubaoCredentials = (credentials) => {
       if (expected && !webCookies.some(item => item.name === name && item.value === expected)) throw doubaoError('doubao_invalid_credentials');
     }
   }
+  const requestProfile = Object.hasOwn(credentials, 'requestProfile')
+    ? normalizeDoubaoRequestProfile(credentials.requestProfile) : undefined;
+  if (requestProfile) {
+    if (!nodeProfile) throw doubaoError('doubao_invalid_credentials');
+    const query = new Map(requestProfile.query);
+    if (query.get('device_id') !== nodeProfile.deviceId || query.get('web_id') !== nodeProfile.webId
+      || query.get('fp') !== nodeProfile.fp
+      || (requestProfile.headers['user-agent'] && requestProfile.headers['user-agent'] !== nodeProfile.userAgent)) {
+      throw doubaoError('doubao_invalid_credentials');
+    }
+  }
   return { cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; '),
-    ...(nodeProfile ? { nodeProfile } : {}), ...(cookieSnapshot ? { cookieSnapshot } : {}) };
+    ...(nodeProfile ? { nodeProfile } : {}), ...(cookieSnapshot ? { cookieSnapshot } : {}),
+    ...(requestProfile ? { requestProfile } : {}) };
 };
 
 const assertDoubaoProvider = (provider) => {
@@ -187,18 +202,45 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
   }
   const nodeProtocol = applyDoubaoNodeProtocol({ data, profile: credentials.nodeProfile, cookieMap });
   const browserFirstTurn = data.option.need_create_conversation && mode === 0;
+  const requestProfile = browserFirstTurn ? credentials.requestProfile : null;
+  if (requestProfile) {
+    // 从官网样本复制不含消息的首轮结构；会话和消息标识始终由本次请求生成。
+    const template = JSON.parse(JSON.stringify(requestProfile.body));
+    const currentMeta = data.client_meta;
+    const currentMessage = data.messages;
+    const currentOption = data.option;
+    for (const key of Object.keys(data)) delete data[key];
+    Object.assign(data, template);
+    data.client_meta = { ...template.client_meta, conversation_id: '',
+      local_conversation_id: currentMeta.local_conversation_id, last_section_id: '', last_message_index: null };
+    data.messages = currentMessage;
+    data.option = { ...template.option, create_time_ms: currentOption.create_time_ms,
+      unique_key: currentOption.unique_key, need_create_conversation: true,
+      recovery_option: { ...(template.option.recovery_option || {}),
+        req_create_time_sec: Math.floor(currentOption.create_time_ms / 1000) } };
+  }
   if (Buffer.byteLength(JSON.stringify(data), 'utf8') > limits.requestBytes) throw doubaoError('doubao_request_too_large');
+  const profileUrl = requestProfile && (() => {
+    const params = new URLSearchParams(requestProfile.query);
+    const msToken = cookieMap.get('msToken') || credentials.nodeProfile.msToken;
+    if (msToken) params.set('msToken', msToken);
+    return `${DOUBAO_COMPLETION_URL}?${params.toString()}`;
+  })();
   return {
-    method: 'POST', url: nodeProtocol.url, data,
+    method: 'POST', url: profileUrl || nodeProtocol.url, data,
     headers: {
       Cookie: requestCookie,
       ...(!browserFirstTurn ? { 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default') } : {}),
       Accept: 'text/event-stream', 'Content-Type': 'application/json', Origin: DOUBAO_ORIGIN, Referer: `${DOUBAO_ORIGIN}/`, 'agw-js-conv': 'str',
       ...nodeProtocol.headers,
       ...(browserFirstTurn ? { Referer: `${DOUBAO_ORIGIN}/chat/` } : {}),
+      ...(requestProfile ? requestProfile.headers : {}),
+      ...(requestProfile && Object.hasOwn(requestProfile.headers, 'x-tt-passport-csrf-token')
+        ? { 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default') } : {}),
     },
     // 禁止重定向和环境代理；显式 Node profile 已验证无需网页签名，不连接 Chrome 或换传输。
     responseType: 'stream', maxRedirects: 0, proxy: false, timeout: limits.timeoutMs,
+    ...(requestProfile ? { doubaoHttp2: true } : {}),
     maxBodyLength: limits.requestBytes, maxContentLength: limits.streamBytes, validateStatus: () => true,
   };
 };
@@ -330,7 +372,7 @@ const createChunk = (id, model, delta, finishReason = null) => ({
  * 正文、思考和状态各走独立通道。10040 是参考协议的思考边界块；只按白名单文字块解析，
  * FULL_MSG_NOTIFY 可能是用户回显，永不当回答。累计快照只补未输出后缀，不重发 CHUNK_DELTA。
  */
-const consumeDoubaoStream = async function* ({ source, model, mode, nativeState, limits, control, sessionFlow }) {
+const consumeDoubaoStream = async function* ({ source, model, mode, nativeState, limits, control, sessionFlow, onComplete }) {
   const id = `chatcmpl-${randomUUID().replaceAll('-', '')}`;
   const blocks = new Map();
   let activeBlock = null;
@@ -470,6 +512,7 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
           if (observedConversationId) nativeState.observedConversationId = observedConversationId;
           if (observedSectionId) nativeState.observedSectionId = observedSectionId;
           if (completedSession) Object.assign(nativeState, completedSession);
+          try { await onComplete?.(); } catch { /* 验证状态写入失败不改变已经成功的聊天结果。 */ }
           yield createChunk(id, model, {}, 'stop');
           return;
         }
@@ -487,17 +530,22 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
 };
 
 /** 未走通用 rawTrafficLogger：原始网页错误可在任意字符串携带凭据，不能仅依靠键名脱敏。 */
-const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {} } = {}) => {
+const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDoubaoHttp2Client(), browserBridge,
+  getTransport = () => 'node-http', onChatVerified, onBrowserChatVerified,
+  limits: customLimits = {} } = {}) => {
   // 测试可收紧容量/超时，但调用方不能放宽生产安全上限。
   const limits = Object.fromEntries(Object.entries(DOUBAO_LIMITS).map(([key, maximum]) => [key,
     Number.isSafeInteger(customLimits[key]) && customLimits[key] > 0 ? Math.min(customLimits[key], maximum) : maximum,
   ]));
   return async ({ request, account, provider, actualModel, responseSession, context = {} }) => {
-    // 所有文字请求只走Node；缺失/非法资料在构造请求时拒绝，不创建网页传输。
+    // 传输由任务的权威配置决定；网页路径只使用当前官网页面的同源请求。
     const accountCredentials = Object.getOwnPropertyDescriptor(account || {}, 'credentials')?.value;
     const nativeState = responseSession?.nativeState && isRecord(responseSession.nativeState) ? responseSession.nativeState : {};
     const mode = DOUBAO_MODEL_MODES[actualModel || request.model];
-    const sessionFlow = createDoubaoSessionFlow({ account, mode, state: nativeState, nodeMode: Boolean(accountCredentials?.nodeProfile) });
+    const transportMode = getTransport() === 'browser-fetch' ? 'browser-fetch' : 'node-http';
+    if (transportMode === 'browser-fetch' && typeof browserBridge?.request !== 'function') throw doubaoError('doubao_browser_disabled');
+    const sessionFlow = createDoubaoSessionFlow({ account, mode, state: nativeState,
+      nodeMode: Boolean(accountCredentials?.nodeProfile), transport: transportMode });
     const prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits,
       ...(sessionFlow.continuing ? { nativeSession: nativeState } : {}) });
     // Responses内部截止时间不可由请求JSON覆盖；排队已经消耗的时间不能重新赋给执行阶段。
@@ -517,7 +565,10 @@ const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}
         responseSession.doubaoContinuationStarted = sessionFlow.continuing;
       }
       // 若客户端忽略取消后才交回流，也必须立即关闭，避免后台请求成为泄漏的资源。
-      const pending = Promise.resolve(httpClient.request({ ...prepared, signal: control.signal })).then((value) => {
+      const pending = Promise.resolve(transportMode === 'browser-fetch'
+        ? browserBridge?.request({ account, sessionKey: responseSession?.aascConversationId || nativeState.conversationId,
+          prepared, signal: control.signal, limits: { ...limits, timeoutMs } })
+        : (prepared.doubaoHttp2 ? http2Client : httpClient).request({ ...prepared, signal: control.signal })).then((value) => {
         control.attach(value?.data);
         return value;
       });
@@ -531,7 +582,9 @@ const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}
       }
       // 自动重定向由 maxRedirects=0 关闭；仍核对客户端给出的最终 URL，禁止不受控实现悄悄换来源。
       const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL;
-      if (finalUrl && finalUrl !== prepared.url) throw doubaoError('doubao_invalid_provider');
+      if (finalUrl && (transportMode === 'browser-fetch'
+        ? new URL(finalUrl).origin !== DOUBAO_ORIGIN || new URL(finalUrl).pathname !== '/chat/completion'
+        : finalUrl !== prepared.url)) throw doubaoError('doubao_invalid_provider');
       if (!response.data || typeof response.data[Symbol.asyncIterator] !== 'function') throw doubaoError('doubao_protocol_error');
       const contentType = getHeader(response.headers, 'content-type').toLowerCase();
       if (!/^text\/event-stream(?:\s*;|$)/u.test(contentType)) {
@@ -554,7 +607,9 @@ const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}
         throw doubaoError('doubao_protocol_error');
       }
       const events = consumeDoubaoStream({ source: response.data, model: request.originalModel || request.model,
-        mode, nativeState, limits, control, sessionFlow });
+        mode, nativeState, limits, control, sessionFlow,
+        onComplete: () => transportMode === 'browser-fetch'
+          ? onBrowserChatVerified?.(account) : onChatVerified?.(account) });
       const stream = {
         [Symbol.asyncIterator]() { return this; },
         next: () => events.next(),
@@ -589,4 +644,5 @@ const createDoubaoChatAdapter = ({ httpClient = axios, limits: customLimits = {}
 module.exports = {
   DOUBAO_ORIGIN, DOUBAO_COMPLETION_URL, DOUBAO_MODEL_MODES, DOUBAO_LIMITS,
   normalizeDoubaoCredentials, assertDoubaoProvider, buildDoubaoRequest, createDoubaoChatAdapter, doubaoError,
+  createRequestControl, consumeDoubaoStream,
 };

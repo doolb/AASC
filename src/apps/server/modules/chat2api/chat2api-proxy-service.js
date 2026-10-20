@@ -1,4 +1,5 @@
 const http = require('http');
+const multer = require('multer');
 const { validateWav } = require('../../../../external/tts/tts-wav');
 
 const DEFAULT_CONFIG = Object.freeze({
@@ -15,6 +16,8 @@ const createChat2ApiProxyService = (options = {}) => {
   const managementService = options.managementService;
   const responsesService = options.responsesService;
   const speechService = options.speechService;
+  const doubaoMediaService = options.doubaoMediaService;
+  const doubaoFileService = options.doubaoFileService;
   let server = null;
   const sockets = new Set();
   const statistics = {
@@ -75,6 +78,38 @@ const createChat2ApiProxyService = (options = {}) => {
       error.message = '请求体不是有效 JSON';
       throw error;
     }
+  };
+
+  /** 兼容参考接口的 multipart 上传；文件只驻留本次请求内存并受独立体积上限约束。 */
+  const readMultipartFile = async (request, response, maxBytes) => {
+    const parser = multer({ storage: multer.memoryStorage(), limits: {
+      fileSize: maxBytes, files: 1, fields: 8, parts: 9,
+    } }).fields([{ name: 'file', maxCount: 1 }, { name: 'image', maxCount: 1 }]);
+    await new Promise((resolve, reject) => parser(request, response, error => error ? reject(error) : resolve()));
+    const file = request.files?.file?.[0] || request.files?.image?.[0];
+    if (!file?.buffer?.length || !file.originalname) throw Object.assign(new Error('缺少上传文件'),
+      { statusCode: 400, code: 'missing_file' });
+    return { filename: file.originalname, data: file.buffer, fields: request.body || {} };
+  };
+
+  const readUploadFile = async (request, response, { maxBytes, kind }) => {
+    if (/^multipart\/form-data(?:;|$)/iu.test(request.headers['content-type'] || '')) {
+      try { return await readMultipartFile(request, response, maxBytes); }
+      catch (error) {
+        if (error?.code === 'LIMIT_FILE_SIZE') throw Object.assign(new Error('上传文件过大'),
+          { statusCode: 413, code: `${kind}_limit` });
+        throw error;
+      }
+    }
+    const payload = await readJson(request);
+    if (typeof payload.data_base64 !== 'string' || payload.data_base64.length > Math.ceil(maxBytes * 4 / 3) + 4
+      || !/^[A-Za-z0-9+/]+={0,2}$/u.test(payload.data_base64)) {
+      throw Object.assign(new Error('上传数据不是有效 Base64'), { statusCode: 400, code: `${kind}_input` });
+    }
+    const data = Buffer.from(payload.data_base64, 'base64');
+    if (data.length === 0 || data.length > maxBytes) throw Object.assign(new Error('上传文件过大'),
+      { statusCode: 413, code: `${kind}_limit` });
+    return { filename: payload.filename, data };
   };
 
   const authorize = async (request, pathname) => {
@@ -175,7 +210,10 @@ const createChat2ApiProxyService = (options = {}) => {
     const url = new URL(request.url || '/', `http://${config.host}`);
     await authorize(request, url.pathname);
     if (request.method === 'GET' && url.pathname === '/') {
-      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models', '/v1/audio/speech', '/v1/audio/voices'] });
+      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models', '/v1/audio/speech', '/v1/audio/voices',
+        ...(doubaoMediaService ? ['/v1/images/generations', '/v1/images/edits', '/v1/images/upload',
+          '/v1/audio/generations', '/v1/video/generations'] : []),
+        ...(doubaoFileService ? ['/v1/files', '/v1/files/download', '/v1/chat/completions/with-file'] : [])] });
       return;
     }
     if (request.method === 'GET' && url.pathname === '/health') {
@@ -213,7 +251,7 @@ const createChat2ApiProxyService = (options = {}) => {
         if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/import/preview') return managementService.previewAccountImport(body);
         if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/import/merge') return managementService.mergeAccountImport(body && body.data, body && body.confirmation, body && body.confirmed);
         if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/web-session/consume') return managementService.consumeAccountWebSession(body && body.sessionId);
-        if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/web-session/refresh') return managementService.refreshAccountWebSession(body && body.refreshToken, body && body.cookieSnapshot);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/web-session/refresh') return managementService.refreshAccountWebSession(body && body.refreshToken, body && body.cookieSnapshot, body && body.requestProfile);
         if (request.method === 'POST' && url.pathname.endsWith('/web-session') && url.pathname.startsWith('/api/chat2api/accounts/')) {
           const prefix = '/api/chat2api/accounts/';
           const suffix = '/web-session';
@@ -263,6 +301,96 @@ const createChat2ApiProxyService = (options = {}) => {
       const models = url.searchParams.getAll('model');
       if (models.length !== 1 || !models[0].trim()) throw Object.assign(new Error('必须提供唯一的语音model'), { statusCode: 400, code: 'invalid_speech_request' });
       sendJson(response, 200, { object: 'list', model: models[0], data: await speechService.voices(models[0]) });
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/files/download') {
+      if (!doubaoFileService) throw Object.assign(new Error('豆包网页文件任务未启动'),
+        { statusCode: 503, code: 'doubao_file_unavailable' });
+      const uri = url.searchParams.get('uri');
+      const expire = Number(url.searchParams.get('expire') || 3600);
+      await withResponseCancellation(response, async signal => {
+        const result = await doubaoFileService.downloadUrl(uri, expire, { signal });
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result, { noStore: true });
+      });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/files') {
+      if (!doubaoFileService) throw Object.assign(new Error('豆包网页文件任务未启动'),
+        { statusCode: 503, code: 'doubao_file_unavailable' });
+      const file = await readUploadFile(request, response, { maxBytes: 20 * 1024 * 1024, kind: 'doubao_file' });
+      await withResponseCancellation(response, async signal => {
+        const result = await doubaoFileService.upload(file, { signal });
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, {
+          id: result.uri, object: 'file', filename: result.name, bytes: result.size,
+          uri: result.uri, file_type: result.file_type, purpose: 'assistants',
+        }, { noStore: true });
+      });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/chat/completions/with-file') {
+      if (!doubaoFileService?.chatWithFile) throw Object.assign(new Error('豆包网页文件问答不可用'),
+        { statusCode: 503, code: 'doubao_file_unavailable' });
+      const payload = await readJson(request);
+      await withResponseCancellation(response, async signal => {
+        const result = await doubaoFileService.chatWithFile({ fileId: payload.file_id,
+          prompt: payload.prompt, fileName: payload.file_name, fileSize: payload.file_size,
+          model: payload.model }, { signal });
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, {
+          id: result.id, object: 'chat.completion', created: Math.floor(Date.now() / 1000),
+          model: payload.model || 'doubao', choices: [{ index: 0, message: { role: 'assistant',
+            content: result.text }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          conversation_id: result.conversationId,
+        });
+      });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/images/upload') {
+      if (!doubaoMediaService?.uploadImage) throw Object.assign(new Error('豆包网页图片上传不可用'),
+        { statusCode: 503, code: 'doubao_image_unavailable' });
+      const file = await readUploadFile(request, response, { maxBytes: 10 * 1024 * 1024, kind: 'doubao_image' });
+      await withResponseCancellation(response, async signal => {
+        const result = await doubaoMediaService.uploadImage(file, { signal });
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result);
+      });
+      return;
+    }
+    const mediaKind = {
+      '/v1/images/generations': 'image', '/v1/images/edits': 'image',
+      '/v1/audio/generations': 'music', '/v1/video/generations': 'video',
+    }[url.pathname];
+    if (request.method === 'POST' && mediaKind) {
+      if (!doubaoMediaService) throw Object.assign(new Error('豆包网页媒体任务未启动'),
+        { statusCode: 503, code: 'doubao_media_unavailable' });
+      const multipart = /^multipart\/form-data(?:;|$)/iu.test(request.headers['content-type'] || '');
+      const mediaPayload = multipart ? await readMultipartFile(request, response, 10 * 1024 * 1024)
+        .then(file => ({ ...file.fields, image_data_base64: file.data.toString('base64'),
+          image_filename: file.filename,
+          ...(file.fields.memory_type !== undefined ? { memory_type: Number(file.fields.memory_type) } : {}),
+          ...(file.fields.save_history !== undefined ? { save_history: String(file.fields.save_history).toLowerCase() === 'true' } : {}),
+        })) : await readJson(request);
+      await withResponseCancellation(response, async signal => {
+        const referenceKeys = mediaPayload.ref_image_keys || mediaPayload.ref_image_key || [];
+        const uploaded = [];
+        if (mediaPayload.image_data_base64 && ['image', 'video'].includes(mediaKind)) {
+          if (typeof mediaPayload.image_data_base64 !== 'string'
+            || mediaPayload.image_data_base64.length > 15 * 1024 * 1024
+            || !/^[A-Za-z0-9+/]+={0,2}$/u.test(mediaPayload.image_data_base64)) {
+            throw Object.assign(new Error('参考图片数据无效'), { statusCode: 400, code: 'doubao_image_input' });
+          }
+          uploaded.push((await doubaoMediaService.uploadImage({ filename: mediaPayload.image_filename || 'image.png',
+            data: Buffer.from(mediaPayload.image_data_base64, 'base64') }, { signal })).uri);
+        }
+        const result = await doubaoMediaService.generate(mediaKind, {
+          prompt: mediaPayload.prompt, ratio: mediaPayload.ratio, lyric: mediaPayload.lyric, genre: mediaPayload.genre,
+          memoryType: mediaPayload.memory_type, saveHistory: mediaPayload.save_history,
+          refImageKeys: [...(Array.isArray(referenceKeys) ? referenceKeys : [referenceKeys]), ...uploaded] }, { signal });
+        const data = mediaKind === 'image' ? result.images : mediaKind === 'music' ? result.tracks : result.videos;
+        if (!data?.length) throw Object.assign(new Error('豆包网页未返回有效媒体'),
+          { statusCode: 502, code: 'doubao_media_empty' });
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200,
+          { created: Math.floor(Date.now() / 1000), data });
+      });
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v1/audio/speech') {

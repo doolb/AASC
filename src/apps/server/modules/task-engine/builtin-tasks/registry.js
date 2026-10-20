@@ -8,7 +8,8 @@ const tasks = {
   'llm.chat': require('./llm-chat'),
   'llm-server': require('./llm-server'),
   'search.web': require('./search'),
-  'chat2api.proxy': require('./chat2api-proxy')
+  'chat2api.proxy': require('./chat2api-proxy'),
+  'doubao.web': require('./doubao-web')
 };
 
 module.exports = {

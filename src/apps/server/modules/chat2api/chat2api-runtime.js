@@ -1,4 +1,4 @@
-const { createChat2ApiDataStore } = require('./chat2api-data-store');
+const { createChat2ApiDataStore, accountCredentialVersion } = require('./chat2api-data-store');
 const { createChat2ApiProviderRegistry } = require('./chat2api-provider-registry');
 const { createChat2ApiModelMapper } = require('./chat2api-model-mapper');
 const { createChat2ApiLoadBalancer } = require('./chat2api-load-balancer');
@@ -18,6 +18,7 @@ const { createChat2ApiSpeechService } = require('./chat2api-speech-service');
 const {createChat2ApiApplicationService}=require('./chat2api-application-service');
 const { createDoubaoAccountVerifier } = require('./chat2api-doubao-account-verifier');
 const { createChat2ApiAccountVerificationService } = require('./chat2api-account-verification-service');
+const { doubaoWebTaskBridge, getDoubaoWebTaskStatus } = require('./chat2api-doubao-web-task-registry');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir, legacyDataPath: options.legacyDataPath,
@@ -27,6 +28,8 @@ const createChat2ApiRuntime = (options = {}) => {
   const loadBalancer = options.loadBalancer || createChat2ApiLoadBalancer({ providerRegistry, dataStore, modelMapper });
   const rawTrafficLogger = options.rawTrafficLogger || createRawTrafficLogger();
   const getConfig = options.getChat2ApiConfig || (() => dataStore.readCollection('config', {}));
+  const getDoubaoTransport = options.getDoubaoTransport
+    || (() => getDoubaoWebTaskStatus().running ? 'browser-fetch' : 'node-http');
   const speechService = options.speechService || createChat2ApiSpeechService({ dataStore, providerRegistry, loadBalancer, getConfig, modelMapper,
     doubaoSpeechQueue: options.doubaoSpeechQueue,
     qwenApiRateGate: options.qwenApiRateGate,
@@ -39,11 +42,16 @@ const createChat2ApiRuntime = (options = {}) => {
     providerRegistry,
     modelMapper,
     loadBalancer,
-    providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig }),
+    providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig,
+      doubaoBrowserBridge: options.doubaoBrowserBridge || doubaoWebTaskBridge,
+      getDoubaoTransport,
+      onDoubaoChatVerified: account => dataStore.markDoubaoNodeChatVerified?.(account.accountId, accountCredentialVersion(account)),
+      onDoubaoBrowserChatVerified: account => dataStore.markDoubaoBrowserChatVerified?.(account.accountId, accountCredentialVersion(account)) }),
   });
   const responseSessionStore = options.responseSessionStore || createChat2ApiResponseSessionStore({ dataStore });
   const applicationService=createChat2ApiApplicationService({modelMapper,speechService});
-  const responsesService = options.responsesService || createChat2ApiResponsesService({ sessionStore: responseSessionStore, coreAdapter, applicationService });
+  const responsesService = options.responsesService || createChat2ApiResponsesService({
+    sessionStore: responseSessionStore, coreAdapter, applicationService, getDoubaoTransport });
   const qwenHistoryService = options.qwenHistoryService || createChat2ApiQwenHistoryService({
     dataStore,
     providerRegistry,
@@ -74,6 +82,8 @@ const createChat2ApiRuntime = (options = {}) => {
     responsesService,
     managementService,
     speechService,
+    doubaoMediaService: options.doubaoMediaService,
+    doubaoFileService: options.doubaoFileService,
   });
 
   const start = async () => proxy.start();

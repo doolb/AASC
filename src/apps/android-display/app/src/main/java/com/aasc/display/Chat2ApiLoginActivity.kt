@@ -24,7 +24,7 @@ class Chat2ApiLoginActivity : Activity() {
 
     companion object {
         // 登录 Activity 运行于 :chat2api_login；静态状态在该进程内跨 Activity 实例保留。
-        private val webViewDataDirectoryInitializer = Chat2ApiWebViewDataDirectoryInitializer()
+        private val webViewDataDirectoryInitializer = Chat2ApiWebViewDataDirectory.initializer
 
         const val EXTRA_SESSION_JSON = "chat2api_session_json"
         const val EXTRA_MODE = "chat2api_mode"

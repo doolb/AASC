@@ -215,7 +215,11 @@ const validateDoubao = async (credentials, verifier, provider) => {
     assertDoubaoProvider(provider);
     const normalized = normalizeDoubaoCredentials(credentials);
     const verification = await verifier.verify(normalized, provider);
-    return { valid: true, credentials: normalized, accountInfo: verificationAccountInfo(verification) };
+    return { valid: true, credentials: normalized, accountInfo: {
+      ...verificationAccountInfo(verification),
+      ...(normalized.requestProfile?.browserVerifiedAt
+        ? { browserChatVerifiedAt: normalized.requestProfile.browserVerifiedAt } : {}),
+    } };
   } catch (error) {
     return failure(error.message);
   }

@@ -33,8 +33,8 @@ test('豆包新登录要求Cookie和Node资料，固定采集器不接任意脚�
   const profile=getAndroidLoginProfile('doubaochat');
   assert.deepEqual(profile.allowedOrigins,['https://www.doubao.com','https://accounts.doubao.com']);
   assert.deepEqual(profile.cookieBundles[0].origins,profile.allowedOrigins);
-  assert.deepEqual(profile.requiredFields,['cookie','nodeProfile']);
+  assert.deepEqual(profile.requiredFields,['cookie','nodeProfile','requestProfile']);
   assert.equal(profile.nodeProfile,'doubao');assert.deepEqual(profile.localStorage,[]);
   assert.equal(profile.script,undefined);
-  profile.requiredFields.pop();assert.equal(getAndroidLoginProfile('doubaochat').requiredFields.length,2);
+  profile.requiredFields.pop();assert.equal(getAndroidLoginProfile('doubaochat').requiredFields.length,3);
 });

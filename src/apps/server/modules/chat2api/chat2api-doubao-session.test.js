@@ -76,3 +76,35 @@ test('原生续接缺ACK或返回另一会话都失败且保留原ready状态', 
     assert.equal(session.doubaoRequestStarted,true);
   }
 });
+
+test('网页任务的思考模式通过浏览器桥发送并复用权威会话，不标记 Node 成功', async () => {
+  const calls = [];
+  const thoughtEvents = () => [event('SSE_ACK', { ack_client_meta: { conversation_id: 'browser-conversation' } }),
+    event('STREAM_CHUNK', { patch_op: [{ patch_object: 100, patch_value: { content_block: [
+      { block_type: 10040, block_id: 'thinking-open', content: {} } ] } }] }),
+    event('CHUNK_DELTA', { text: '思考' }),
+    event('STREAM_CHUNK', { patch_op: [{ patch_object: 100, patch_value: { content_block: [
+      { block_type: 10040, block_id: 'thinking-close', content: {} },
+      { block_type: 10000, block_id: 'answer', content: { text_block: { text: 'OK' } } } ] } }] }),
+    event('SSE_REPLY_END')];
+  let browserVerified = 0;
+  let nodeVerified = 0;
+  const adapter = createDoubaoChatAdapter({ getTransport: () => 'browser-fetch',
+    browserBridge: { request: async options => { calls.push(options); return response(thoughtEvents()); } },
+    httpClient: { request: () => { throw new Error('不应使用 Node HTTP'); } },
+    onBrowserChatVerified: () => { browserVerified += 1; },
+    onChatVerified: () => { nodeVerified += 1; } });
+  const model = { actualModel: 'doubao-think', request: { model: 'doubao-think',
+    messages: [{ role: 'user', content: '本轮' }] } };
+  const first = await adapter(input({ ...model, responseSession: { nativeState: {}, aascConversationId: 'local-one' } }));
+  assert.equal(first.nativeState.transport, 'browser-fetch');
+  assert.equal(first.nativeState.mode, 1);
+  assert.equal(isReadyDoubaoSession(first.nativeState), true);
+  const second = await adapter(input({ ...model, responseSession: {
+    nativeState: { ...first.nativeState }, aascConversationId: 'local-one' } }));
+  assert.equal(second.body.choices[0].message.content, 'OK');
+  assert.equal(calls[0].sessionKey, 'local-one');
+  assert.equal(calls[1].prepared.data.client_meta.conversation_id, 'browser-conversation');
+  assert.equal(browserVerified, 2);
+  assert.equal(nodeVerified, 0);
+});

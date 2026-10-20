@@ -28,7 +28,8 @@ const accountCredentialVersion = account => hashSecret(JSON.stringify({
   revision: account.credentialRevision || '',
   credentials: normalizeDoubaoCredentials(account.credentials),
 }));
-const VERIFICATION_FIELDS = ['credentialVerification', 'credentialVerificationStatus', 'credentialVerificationCheckedAt', 'credentialVerificationError'];
+const VERIFICATION_FIELDS = ['credentialVerification', 'credentialVerificationStatus', 'credentialVerificationCheckedAt',
+  'credentialVerificationError', 'browserChatVerifiedAt', 'nodeChatVerifiedAt'];
 const resetDoubaoVerification = account => {
   if (account.providerId !== 'doubaochat') return account;
   const accountInfo = { ...(account.accountInfo || {}) };
@@ -200,7 +201,7 @@ const createChat2ApiDataStore = (options = {}) => {
       // 账号导入只表示用户恢复凭据，不表示已验证登录；秘密不得散落在顶层或其他 secret 字段。
       const accountFields = new Set(['accountId', 'providerId', 'label', 'email', 'phone', 'authMethod', 'enabled', 'status', 'createdAt', 'updatedAt', 'todayUsed', 'todayLimit', 'dailyLimit', 'lastUsed', 'credentials', 'accountInfo', 'credentialRevision']);
       if (Object.keys(account).some((key) => !accountFields.has(key))) {
-        throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie、credentials.nodeProfile 和 credentials.cookieSnapshot'), { statusCode: 422, code: 'doubao_invalid_credentials' });
+        throw Object.assign(new Error('豆包账号秘密只允许 credentials.cookie、credentials.nodeProfile、credentials.cookieSnapshot 和 credentials.requestProfile'), { statusCode: 422, code: 'doubao_invalid_credentials' });
       }
       normalized.credentials = normalizeDoubaoCredentials(account.credentials);
       normalized.accountInfo = selectAccountInfo(account.accountInfo);
@@ -218,6 +219,9 @@ const createChat2ApiDataStore = (options = {}) => {
     if (!['verified', 'failed'].includes(selected.credentialVerificationStatus)) delete selected.credentialVerificationStatus;
     if (selected.credentialVerificationError !== '' && !ERROR_CODES.has(selected.credentialVerificationError)) delete selected.credentialVerificationError;
     if (typeof selected.credentialVerificationCheckedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(selected.credentialVerificationCheckedAt)) delete selected.credentialVerificationCheckedAt;
+    for (const field of ['browserChatVerifiedAt', 'nodeChatVerifiedAt']) {
+      if (typeof selected[field] !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(selected[field])) delete selected[field];
+    }
     return selected;
   };
 
@@ -266,7 +270,7 @@ const createChat2ApiDataStore = (options = {}) => {
   });
 
   /** 外部网页只允许以会话创建时的凭据版本原子刷新原豆包账号，避免覆盖同期重新登录。 */
-  const refreshDoubaoCookieSnapshot = (accountId, expectedRevision, inputSnapshot) => withAccountLock(async () => {
+  const refreshDoubaoCookieSnapshot = (accountId, expectedRevision, inputSnapshot, inputProfile) => withAccountLock(async () => {
     const snapshot = normalizeDoubaoCookieSnapshot(inputSnapshot);
     const accounts = await readCollection('accounts', []);
     const index = accounts.findIndex(item => item.accountId === accountId && item.providerId === 'doubaochat');
@@ -277,8 +281,10 @@ const createChat2ApiDataStore = (options = {}) => {
     const cookie = canonicalDoubaoCookieFromSnapshot(snapshot);
     const credentials = normalizeDoubaoCredentials({ cookie,
       ...(current.credentials?.nodeProfile ? { nodeProfile: current.credentials.nodeProfile } : {}),
-      cookieSnapshot: snapshot });
+      cookieSnapshot: snapshot,
+      ...(inputProfile ? { requestProfile: inputProfile } : {}) });
     const updated = resetDoubaoVerification({ ...current, credentials, updatedAt: Date.now() });
+    if (credentials.requestProfile?.browserVerifiedAt) updated.accountInfo.browserChatVerifiedAt = credentials.requestProfile.browserVerifiedAt;
     accounts[index] = updated;
     await writeCollectionUnlocked('accounts', accounts);
     return { refreshed: true };
@@ -332,6 +338,28 @@ const createChat2ApiDataStore = (options = {}) => {
     const next = validateAccount({ ...current, accountInfo: { ...current.accountInfo, ...selectAccountInfo(metadata) } });
     await writeCollectionUnlocked('accounts', accounts.map(account => account.accountId === accountId ? next : account));
     return publicAccount(next);
+  });
+
+  /** 仅在本服务的实际 Node 聊天完整结束后记录能力；账号在请求期间变化则不写入旧结果。 */
+  const markDoubaoNodeChatVerified = (accountId, expectedVersion) => withAccountLock(async () => {
+    const accounts = await readCollection('accounts', []);
+    const index = accounts.findIndex(account => account.accountId === accountId && account.providerId === 'doubaochat');
+    if (index < 0 || accountCredentialVersion(accounts[index]) !== expectedVersion) return false;
+    accounts[index] = { ...accounts[index], accountInfo: { ...accounts[index].accountInfo,
+      nodeChatVerifiedAt: new Date().toISOString() } };
+    await writeCollectionUnlocked('accounts', accounts);
+    return true;
+  });
+
+  /** 浏览器任务的完成结果单独标记，不能冒充 Node HTTP 直连成功。 */
+  const markDoubaoBrowserChatVerified = (accountId, expectedVersion) => withAccountLock(async () => {
+    const accounts = await readCollection('accounts', []);
+    const index = accounts.findIndex(account => account.accountId === accountId && account.providerId === 'doubaochat');
+    if (index < 0 || accountCredentialVersion(accounts[index]) !== expectedVersion) return false;
+    accounts[index] = { ...accounts[index], accountInfo: { ...accounts[index].accountInfo,
+      browserChatVerifiedAt: new Date().toISOString() } };
+    await writeCollectionUnlocked('accounts', accounts);
+    return true;
   });
 
   const deleteAccount = async accountId => {
@@ -887,6 +915,8 @@ const createChat2ApiDataStore = (options = {}) => {
     getAccount,
     updateAccount,
     updateAccountVerification,
+    markDoubaoNodeChatVerified,
+    markDoubaoBrowserChatVerified,
     deleteAccount,
     listModelMappings,
     listEffectiveModelMappings,

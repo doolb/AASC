@@ -14,7 +14,6 @@ internal class Chat2ApiWebViewDataDirectoryInitializer {
     @Synchronized
     fun initialize(sdkInt: Int, setDataDirectorySuffix: (String) -> Unit) {
         if (sdkInt < ANDROID_P_API_LEVEL || initialized) return
-
         setDataDirectorySuffix(DATA_DIRECTORY_SUFFIX)
         initialized = true
     }
@@ -23,4 +22,9 @@ internal class Chat2ApiWebViewDataDirectoryInitializer {
         const val ANDROID_P_API_LEVEL = 28
         const val DATA_DIRECTORY_SUFFIX = "aasc_chat2api_login"
     }
+}
+
+/** 登录 Activity 与网页任务服务在同一隔离进程中共享一次性初始化状态。 */
+internal object Chat2ApiWebViewDataDirectory {
+    val initializer = Chat2ApiWebViewDataDirectoryInitializer()
 }

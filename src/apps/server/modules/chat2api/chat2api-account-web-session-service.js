@@ -155,14 +155,16 @@ const createChat2ApiAccountWebSessionService = ({ dataStore, providerRegistry, b
     return payload;
   };
 
-  const refreshCredentials = async (refreshToken, cookieSnapshot) => {
+  const refreshCredentials = async (refreshToken, cookieSnapshot, requestProfile) => {
     removeExpired();
     const session = refreshSessions.get(refreshToken);
     if (!session) throw createServiceError('豆包外部网页刷新会话已过期', 410, 'web_session_expired');
     if (typeof dataStore.refreshDoubaoCookieSnapshot !== 'function') {
       throw createServiceError('豆包账号刷新不可用', 503, 'web_session_unavailable');
     }
-    const result = await dataStore.refreshDoubaoCookieSnapshot(session.accountId, session.credentialRevision, cookieSnapshot);
+    const result = requestProfile === undefined
+      ? await dataStore.refreshDoubaoCookieSnapshot(session.accountId, session.credentialRevision, cookieSnapshot)
+      : await dataStore.refreshDoubaoCookieSnapshot(session.accountId, session.credentialRevision, cookieSnapshot, requestProfile);
     refreshSessions.delete(refreshToken);
     return result;
   };

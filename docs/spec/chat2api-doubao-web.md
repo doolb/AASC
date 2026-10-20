@@ -1,5 +1,89 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 豆包网页内置任务与浏览器内请求（2026-10-20，源码已实现，待登录验收）
+
+```text
+已有声明 := AASC内置任务注册表、Chat2API账号/Responses/SSE、豆包官网浏览器运行时
+新增定义 := doubao.web常驻任务{监听地址,专用profile,浏览器路径,调试端口,账号绑定,任务状态}
+任务启动 := 注册server/service任务 → 读取规范化配置 → 建立专用浏览器profile或Android隔离WebView → 检查官网登录态
+网页请求 := 核对账号与会话 → 逐轮生成消息、ID、模型参数 → 在当前官网页调用签名能力 → 执行同源fetch → 按请求ID回传SSE或媒体结果
+聊天结果 := 只有非空正文且SSE完整结束才提交权威会话；取消或结果不确定不自动重发
+传输切换 := 旧Node或网页nativeState与当前任务传输不一致时，从AASC已保存历史构造新上游会话，保留控制端对话ID和历史；新回执成功后提交新传输状态
+其他能力 := 图片生成/编辑、视频、音乐、文件上传分别映射官网操作，并暴露独立兼容API及Chat2API接入
+媒体选项 := 默认保存官网历史；显式 memory_type=0/2 或 save_history 布尔值覆盖默认；请求版本优先采用当前账号网页资料
+文件上传 := 接受受限 JSON/Base64 或 multipart 文件 → 限制字段、体积与文件名 → PrepareUpload → ApplyImageUpload 签名 → TOS 上传 → CommitImageUpload → 返回文件URI
+文件问答 := 校验已上传 URI 与提问 → 在官网消息块加入附件和文本 → 走浏览器同源聊天请求 → 仅在完整SSE结束后返回正文
+接口入口 := 兼容任务对上传和文件问答同时验证API Key、体积与来源；官网签名和TOS凭证不出服务端
+媒体编辑 := 图片编辑及视频参考图既可传已上传图片URI，也可用有界multipart图片上传后引用
+异常 := 登录失效或验证码提示用户在专用页面处理；不自动求解、删除官网历史或切换账号
+退出 := 释放请求监听、计时器和本任务浏览器；保留专用profile与用户历史
+验证 := 任务启动停止、普通/思考/专家聊天、流式/非流式、媒体、文件、账号隔离、Android WebView与回归
+```
+
+## LLM 网页兼容模式（2026-10-20，先于代码更新）
+
+```text
+配置 := doubao.web任务默认browser-fetch；浏览器名/路径、调试端口、账号和兼容API端口通过现有任务参数链路下发；任务未运行时现有Chat2API继续Node传输
+桌面准备 := 检查本机专用profile目录 → 若专用浏览器未运行则spawn受支持可执行文件及remote-debugging-port → 仅连127.0.0.1 → 核对专用进程和官网来源
+桌面显示 := 优先继承服务器DISPLAY；本机Linux无DISPLAY时尝试当前设备的:1桌面，窗口供用户手动登录与安全验证
+Android准备 := 在:chat2api_login进程维持官网WebView和独立Cookie目录 → 通过同设备受限IPC接收LLM任务 → 主线程操作页面
+Android IPC := NodeServerService绑定同应用不导出的WebView服务 → 分配随机令牌与127.0.0.1监听端口给Node子进程 → 只接受固定官网路径/账号Cookie身份/有界JSON → 回传带请求ID的响应分块
+Android会话 := WebView服务与现有外部登录页共用独立数据目录；首次请求懒加载官网页；页面来源或登录态不符则返回明确错误，由用户在现有外部登录页人工验证
+会话页 := 桌面按AASC会话ID查找已绑定官网页；没有则创建专用新页；Android固定隔离WebView以请求ID区分；续聊仍按权威上游会话ID发送
+短任务页 := 媒体/文件操作使用临时官网页；结果流结束、失败或取消时关闭该页，避免请求次数增加时累积空标签页
+发送前 := 校验账号Cookie身份、页面来源、签名能力、模型模式与任务仍有效；每个页面同一时刻只处理一轮
+发送 := 用当前消息构造正文 → 在官网页生成当次签名 → 在页面内调用同源fetch → 关联请求ID
+回执 := 页面桥逐块回传同次官网SSE并使用现有豆包事件解析 → 收到非空正文与SSE_REPLY_END后完成 → 记录权威会话ID → 回送Chat2API Responses
+失败 := 登录失效、验证码、导航、连接断开、超时或取消时停止本轮并返回固定公开错误；已发送的未知结果标记会话不确定，不自动重发
+退出 := 释放任务监听和请求缓存；不关闭用户登录页或删除专用profile目录
+显式Node模式 := 沿用现有Node构造与账号模板；浏览器不可用时网页模式返回明确错误，不自动换传输或账号
+TTS := 沿用现有语音适配器
+```
+
+## 完整请求参数导入与聊天验证（2026-10-20，基础链路已实现）
+
+用户确认将 Android 外部登录页面请求观察与网页聊天完成结果纳入导入和验证；手动发送官网消息形成样本，不由导入工具自动发消息。
+
+```text
+导入输入 := 同账号官网登录上下文 + 经确认的真实/chat/completion请求样本
+样本校验 := 固定HTTPS来源和路径 → 校验账号Cookie/设备指纹一致 → 只提取受限查询、请求头和非消息正文参数
+账号资料 := 现有Cookie、cookieSnapshot、nodeProfile + 经校验的请求模板；不保存样本消息或旧会话ID
+新会话 := 生成新的local_conversation_id、local_message_id、block_id、unique_key、创建时间；发送新用户文字
+权威会话 := 只在完整SSE结束后接受SSE_ACK中的conversation_id；续聊按现有nativeState发送
+逐次字段 := 按官网来源与有效期策略更新，失效时返回明确错误；不把旧抓包值认作长期有效
+捕获范围 := 调试端口浏览器和Android外部登录均等待用户手动发送官网聊天样本
+Android捕获 := 同源文档起始脚本观察fetch的/chat/completion参数及完成事件 → 专用桥接送原生 → 合并当前Cookie/UA并校验；XHR与浏览器追加头待真机核对
+网页验证 := 同账号请求+非空内容分块+SSE_REPLY_END且无业务错误 → 保存凭据版本绑定的“网页聊天已验证”观察状态
+Node验证 := 后续真实Chat2API请求由Node获得非空正文和完整结束 → 保存“Node聊天已验证”；无需导入时自动发测试消息
+失败处理 := HTTP200或仅ACK不升级状态；凭据更新时清除旧验证；会话列表验证与聊天能力状态分别记录
+服务校验 := 固定官方路径、同账号身份与容量边界 → 拒绝任意URL/头注入 → 样本消息和旧会话ID不得持久化
+发送 := 读取账号请求模板 → 复制静态参数 → Cookie、msToken、CSRF从当前快照更新 → 新用户文字与本地会话/消息ID覆盖 → HTTP/2发出 → 解析SSE终态
+当前边界 := a_bogus及其余逐次字段仅保存样本值；尚未证明长期复用，故真实账号首轮及续聊需另行验收
+```
+
+## 网页请求原样由 Node 发送的隔离验证（2026-10-20）
+
+```text
+样本 := 当前已登录Vivaldi网页发送“早”时，CDP仅在内存收集同次/chat/completion的URL、实际请求头和正文
+网页结果 := HTTP200/h2；SSE包含ACK、内容分块和REPLY_END；无非零业务错误码
+Node验证 := 用Node HTTP/2把同一URL、头和正文立即原样发送；只重算相同正文的Content-Length
+Node结果 := HTTP200；SSE包含ACK、内容分块和REPLY_END；无非零业务错误码
+替换消息对照 := 网页另发“晚上好”并正常结束 → Node沿用当次URL和头，将正文消息改为“你好”、重新生成local_message_id/block_id/unique_key并更新Content-Length
+替换消息结果 := Node HTTP200；SSE包含ACK、内容分块和REPLY_END；无非零业务错误码
+边界 := 原样重放及替换消息均证明Node可以发送这两组有效请求；未验证独立生成逐次URL/头参数或长期复用
+保密 := Cookie、令牌、签名URL及原始响应只保留在测试进程内，不写文件或日志
+```
+
+## 当前 Node Responses 发送复测（2026-10-20）
+
+```text
+输入 := 正式Chat2API豆包账号 + Responses流式新会话 + 用户文字“早”
+调用 := Node通过现有适配器发送一次，不修改账号、请求构造或会话
+判定 := HTTP状态不能代替SSE终态；继续读取data事件直到response.completed或response.failed
+结果 := HTTP200，终态response.failed，公开错误码doubao_upstream_failed，无有效回复
+后续 := 保留现有失败状态；待用户确认协议对齐范围后再修改请求
+```
+
 ## 请求头差异现场核对（2026-10-20）
 
 ```text
@@ -41,25 +125,6 @@ Provider映射 := doubao → doubaochat、www.doubao.com与accounts.doubao.com�
 现场结果 := 已登录Vivaldi端口9223保存原doubaochat账号；www快照30项、accounts快照24项、Node资料保留；正式Responses流式“早”HTTP200后response.failed/doubao_upstream_failed
 ```
 
-## 新会话首轮协议对齐（2026-10-20）
-
-```text
-输入 := 当前账号规范Cookie、同设备nodeProfile、可选按www/accounts来源保存的Cookie快照
-登录捕获 := Android隔离WebView从固定两个HTTPS来源读取当前Cookie；规范Cookie仍保留六类字段，快照分别保存完整适用Cookie，不把accounts快照送到www聊天请求
-网页恢复 := 按来源写回CookieManager；原Path/Domain不可由getCookie读出，同源同名项取首项写回，Node快照仍保留原完整Cookie头顺序
-已存账号外部网页完成 := 用一次性消费后刷新令牌提交两个来源快照；服务端在账号锁内核对凭据版本并原子写入；失败保持原凭据，令牌过期或重复提交失败
-快照校验 := 仅固定来源，限制数量、名称、值、单项和总字节；拒绝控制字符与畸形片段；不在公开账号、日志或错误中返回值
-首轮构造 := Node固定官网/chat/completion；优先当前www快照作为Cookie头，旧账号回退原规范Cookie；msToken只从该次Cookie或真实nodeProfile读取
-请求参数 := 保留同账号设备ID、webId、fp及动态web_tab_id；加入浏览器实际时区；不复用历史a_bogus或伪造逐次追踪头
-首轮正文 := 普通doubao且新会话时，单条User输入发送原文；client_meta.last_message_index=null且附三项local_permissions；content_block.extra_info={}，不设is_finish/patch_type
-首轮正文 := option含现场model_config/aggregate_params/conversation_init_ext/recovery_option/general_task_param等结构；create_time_ms用发送时刻；ext含agent_mode/is_finish/conversation_init_option；user_context=[]，不设chat_ability
-结果 := 一次请求，一次完整SSE校验；限流/风控沿既有脱敏错误返回，不自动更换账号、重试或借浏览器绕过
-范围 := 只修改need_create_conversation=true的新会话首轮；续聊待单独对照
-验证 := 脱敏结构测试、旧账号回退、刷新令牌/版本冲突、Android采集与完成、Responses实账号新会话一次
-现场结果 := 隔离Responses新会话上游HTTP200但STREAM_ERROR业务码710020202 → 代理doubao_upstream_failed/502；官网同账号首轮有正文；不能宣称Node首轮通过
-```
-
-
 ## 第三档报错定位伪代码（2026-10-19，待错误样本）
 
 ```text
@@ -90,6 +155,63 @@ Provider映射 := doubao → doubaochat、www.doubao.com与accounts.doubao.com�
 文字归属 := 每个 10000 块首次出现时固定所属通道；后续快照与增量沿用该块通道；结束前只有正文非空才作为成功
 安全边界 := 思考文字仍只进入 reasoning_content；没有可识别结束边界且没有正文时继续明确失败，不将思考冒充回复
 验证 := 相同 block_id 的 10040 开始/结束、旧两个不同边界、流式与非流式、正文为空、实际账号普通/专业档短句
+```
+
+## 外部网页完成后保存当前豆包 Cookie（2026-10-20，首轮实现）
+
+### 新会话首轮协议对齐（2026-10-20，实现顺序）
+
+```text
+输入 := 当前账号规范Cookie、同设备nodeProfile、可选按www/accounts来源保存的Cookie快照
+登录捕获 := Android隔离WebView从固定两个HTTPS来源读取当前Cookie；规范Cookie仍保留六类字段，快照分别保存完整适用Cookie，不把accounts快照送到www聊天请求
+网页恢复 := 按来源写回CookieManager；原Path/Domain不可由getCookie读出，同源同名项取首项写回，Node快照仍保留原完整Cookie头顺序
+已存账号外部网页完成 := 用一次性消费后刷新令牌提交两个来源快照；服务端在账号锁内核对凭据版本并原子写入；失败保持原凭据，令牌过期或重复提交失败
+快照校验 := 仅固定来源，限制数量、名称、值、单项和总字节；拒绝控制字符与畸形片段；不在公开账号、日志或错误中返回值
+首轮构造 := Node固定官网/chat/completion；优先当前www快照作为Cookie头，旧账号回退原规范Cookie；msToken只从该次Cookie或真实nodeProfile读取
+请求参数 := 保留同账号设备ID、webId、fp及动态web_tab_id；加入浏览器实际时区；不复用历史a_bogus或伪造逐次追踪头
+首轮正文 := 普通doubao且新会话时，单条User输入发送原文；client_meta.last_message_index=null且附三项local_permissions；content_block.extra_info={}，不设is_finish/patch_type
+首轮正文 := option含现场model_config/aggregate_params/conversation_init_ext/recovery_option/general_task_param等结构；create_time_ms用发送时刻；ext含agent_mode/is_finish/conversation_init_option；user_context=[]，不设chat_ability
+结果 := 一次请求，一次完整SSE校验；限流/风控沿既有脱敏错误返回，不自动更换账号、重试或借浏览器绕过
+范围 := 只修改need_create_conversation=true的新会话首轮；续聊待单独对照
+验证 := 脱敏结构测试、旧账号回退、刷新令牌/版本冲突、Android采集与完成、Responses实账号新会话一次
+现场结果 := 隔离Responses新会话上游HTTP200但STREAM_ERROR业务码710020202 → 代理doubao_upstream_failed/502；官网同账号首轮有正文；不能宣称Node首轮通过
+```
+
+```text
+2026-10-20现场恢复 := Chat2API已有账号 → 创建并消费外部网页会话 → 将www/accounts固定来源的10项Cookie映射写入DISPLAY=:1 Vivaldi → 逐项验证10/10
+网页验证 := 官网进入已登录聊天页 → 新对话发送“早” → 收到正常回复；保存账号无回写
+回复后对照 := 已恢复10项仍与保存值相同；两来源浏览器Cookie总数33
+紧接Node复测 := 同一保存账号经本机Chat2API Responses单次发送“早” → doubao_risk_control/403且无正文；不能仅凭网页成功推断Node动态环境哪项导致403
+同首轮协议对照 := 官网新对话“早”与Node构造“早”均POST /chat/completion且need_create_conversation=true；官网HTTP200，Node HTTP403
+查询参数差异 := 官网比Node多a_bogus/msToken/tz_name；不读取或持久化这些动态值
+请求头与Cookie差异 := 官网约29条Cookie及x-flow-trace/sec-*等浏览器头；Node保存账号发送5项Cookie及独立CSRF头
+正文差异 := 官网含user_context/model_config、实际create_time_ms；Node含chat_ability、create_time_ms=0、answer_with_suggest=true、块is_finish/patch_type
+结论边界 := 只记录字段差异和状态码，尚未确定触发403的单一条件；不自动复制浏览器请求或绕过上游验证
+待验证线索 := 固定“请只回复测试”指令可能影响上游风控；现有样本混有时间与会话状态差异，不视为已确认规则
+后续实测 := 优先使用自然对话；同时记录新会话或续接、请求时间、成功或错误码
+同会话实测 := 从recent_conv确认最新“早”会话及15分钟内创建 → 构造同账号ready Node状态 → 仅发送“早”
+续接结果 := SSE ACK与原conversationId一致 → 4个流分块 → “早安～今天也要顺顺利利✨” → finish=stop
+追加Node实测 := 同账号全新会话输入“早” → 4个流分块 → 正文“早呀☀️” → finish=stop
+结果边界 := 前次测试指令短句403、此次单字问候成功；不据此确定具体风控触发条件
+本机删除重导 := 预检浏览器Cookie和原nodeProfile → OAuth开始 → DELETE原豆包账号 → 确认豆包账号数0 → OAuth完成时复用原accountId
+重导结果 := 豆包账号数恢复为1，其他账号总数不变；浏览器Cookie已保存，nodeProfile保留，只读验证verified
+重导复测 := Node全新短句 → doubao_risk_control/403，正文分块0；控制端历史未删除
+本机操作验证 := Vivaldi读取受支持Cookie → 保留原账号nodeProfile → POST /oauth/start(doubaochat) → POST /oauth/complete(原accountId)
+保存结果 := 原账号ID和数量不变；Cookie与保存前相同；只读登录验证为verified
+Node复测 := 新会话短句 → doubao_risk_control/403；正文分块0
+实现边界 := 上述操作走既有OAuth账号保存路径；Android已保存账号的外部网页“完成”仍未回存Cookie
+已有声明 := 账号外部网页恢复会话 → Android隔离WebView；完成按钮只关闭窗口；新增登录捕获只保存六项Cookie与nodeProfile
+现场证据 := Vivaldi移入旧凭据 → 图片拖动验证；人工完成后同一网页会话收到回复分块与结束事件
+现场证据 := Node用旧六项、刷新后的六项、当前浏览器完整Cookie分别请求 → 均为doubao_risk_control/403
+现场证据 := 浏览器实际/chat/completion请求含额外Cookie、a_bogus、user_context与浏览器请求头；一次后续网页请求仍出现STREAM_ERROR，稳定性待验收
+新增定义 := DoubaoWebCookies { wwwCookie, accountsCookie, capturedAt }；只接受固定官方来源和受限长度、数量的Cookie字段
+操作流程 := 已保存账号打开外部网页 → 人工完成登录/安全验证 → 点击完成 → 从固定www及accounts URL读取当前适用Cookie → 与同批nodeProfile绑定
+操作流程 := 原生结果携带原账号和一次性外部网页会话标识 → 控制端调用受限账号凭据刷新 → 服务端校验身份、来源、Cookie格式、大小及账号版本 → 原子更新原账号
+操作流程 := 保留既有六项规范Cookie供身份校验；另保存原来源的完整请求Cookie快照 → 网页恢复按来源设置，Node文字发送可使用www请求Cookie
+操作流程 := 捕获或保存失败 → 保留旧账号与外部网页，不用不完整快照覆盖；日志、错误和页面不显示Cookie值
+验证 := Android捕获/完成/取消与重复提交、双来源Cookie、同名不同作用域、大小上限、账号冲突、网页恢复、Node请求头、历史账号兼容
+验收边界 := Cookie快照只解决资料保留；动态a_bogus/浏览器环境等差异仍可能导致Node 403，需单独现场验收
+状态 := 上方首轮实现已落地；本段为实施前调查记录，续聊和动态请求字段仍待后续核对
 ```
 
 ## 当前TTS上游并发（2026-10-16，源码完成）
@@ -234,7 +356,6 @@ SpeechService错误分类 -> 排队本地失败不计账号上游失败；原上
 真实三批 -> 主服务器5272ms/Android2187ms；同账号最大上游连接1，均48kHz非静音WAV，无播放
 产物状态 -> code92已覆盖最新代码，servicePackage=false；APK/依赖未重建
 ```
-
 
 ## 2026-10-15 临时降低豆包分句并发（历史决策，账号边界已由上方队列替换）
 

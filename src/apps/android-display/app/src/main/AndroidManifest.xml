@@ -57,6 +57,12 @@
             android:process=":chat2api_login"
             android:screenOrientation="portrait" />
 
+        <!-- 与外部登录页共用隔离 WebView 数据目录；只接受同应用绑定。 -->
+        <service
+            android:name=".DoubaoWebViewService"
+            android:exported="false"
+            android:process=":chat2api_login" />
+
         <service
             android:name=".DisplayAccessibilityService"
             android:exported="false"

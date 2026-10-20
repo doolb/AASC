@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目参考文档
 
+- [豆包网页任务参考项目与 Apache 2.0 许可](ref/doubao2api.md)。
+
 ## 图像投影与刚体姿态方案（2026-10-16）
 
 - [Ceres重投影误差优化](https://ceres-solver.readthedocs.io/latest/nnls_tutorial.html#bundle-adjustment)说明用图像观测与相机投影误差求3D/相机参数；[MuJoCo约束动力学计算](https://mujoco.readthedocs.io/en/stable/computation/)作为约束动力学参考。新方案仍复用本地Ammo已有胶囊/球和6DoF关节，已在临时副本以点到相机射线横向弹簧产生虚拟力并检查实际PMX；不是引入Ceres/MuJoCo，三图未达到自动还原。单图多解、真实支撑与原生到显示映射仍需核查，见[任务方案](task/20261016_MMDAR二维投影驱动刚体姿态评估.md)。
