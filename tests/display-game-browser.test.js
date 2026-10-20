@@ -37,7 +37,10 @@ test('连接脚本运行前游戏模块已注册五子棋', { skip: !CHROME }, a
 });
 
 test('显示端五子棋首连快照、点击增量和版本缺口恢复', { skip: !CHROME }, async () => {
-    const $ = cheerio.load(fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8'));
+    const displayHtml = fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8');
+    const $ = cheerio.load(displayHtml);
+    const timerSource = displayHtml.match(/function scheduleVoiceConversationTimer\(\) \{[\s\S]*?\n        \}/)?.[0];
+    assert.ok(timerSource, '应能读取显示端实际使用的本地对话超时函数');
     const markup = `${$('#displayGameLayer').toString()}<div class="display-interaction-layer">${$('#displayGameChatActions').toString()}</div>`;
     const style = fs.readFileSync(path.join(PUBLIC, 'css/display-game.css'), 'utf8')
         + fs.readFileSync(path.join(PUBLIC, 'css/display-mmd.css'), 'utf8');
@@ -49,6 +52,7 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         await page.evaluate(() => {
             const subscriptions = new Map();
             window.__sent = [];
+            window.__stageMessages = [];
             window.__transportAvailable = false;
             window.__emit = (type, data) => (subscriptions.get(type) || []).forEach(handler => handler(data));
             window.DisplayStage = {
@@ -61,6 +65,11 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
                     if (!window.__transportAvailable) return false;
                     window.__sent.push(message);
                     return true;
+                },
+                handleServerMessage(message) {
+                    window.__stageMessages.push(message);
+                    window.__emit('server.message', message);
+                    return false;
                 },
                 getState: () => ({ rotationGeometry: { logicalWidth: 390, logicalHeight: 740, rotation: 0 } })
             };
@@ -149,6 +158,34 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             turn: 'User', result: '进行中'
         }));
         assert.equal(await page.evaluate(() => window.__sent.at(-1).type), 'gameRecover');
+        await page.evaluate(() => document.getElementById('displayGameToggle').click());
+        assert.equal(await page.$eval('#displayGameMenu', menu => menu.hidden), false);
+        await page.evaluate(source => {
+            const runTimer = new Function('window', `
+                let voiceConversationTimer = null;
+                let voiceListeningEnabled = true;
+                let voiceConversationTimerPaused = false;
+                let voiceConversationState = 'activeGroup';
+                let voiceConversationExpiresAt = Date.now() - 1;
+                let voiceConversationRemainingMs = null;
+                function clearVoiceConversationTimer() { clearTimeout(voiceConversationTimer); }
+                function clearVoiceConversationCountdown() {}
+                function updateVoiceStatusDisplay() {}
+                ${source}
+                scheduleVoiceConversationTimer();
+            `);
+            runTimer(window);
+        }, timerSource);
+        await page.waitForFunction(() => document.getElementById('displayGameLayer').hidden);
+        assert.deepEqual(await page.evaluate(() => window.__stageMessages.at(-1)), {
+            type: 'voiceConversationState', state: 'waitingWake', reason: 'localTimeout'
+        });
+        assert.equal(await page.$eval('#displayGameMenu', menu => menu.hidden), true);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'voiceConversationState', state: 'activeGroup'
+        }));
+        assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false,
+            '服务端恢复活动对话后应重新显示棋盘');
         await page.evaluate(() => window.__emit('server.message', {
             type: 'voiceConversationState', state: 'waitingWake'
         }));

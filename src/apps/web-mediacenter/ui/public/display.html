@@ -7295,6 +7295,12 @@
                 voiceConversationExpiresAt = null;
                 voiceConversationTimerPaused = false;
                 voiceConversationRemainingMs = null;
+                // 本地倒计时先于服务端状态到达时，立即通知舞台和游戏层隐藏棋盘。
+                window.DisplayStage?.handleServerMessage?.({
+                    type: 'voiceConversationState',
+                    state: 'waitingWake',
+                    reason: 'localTimeout'
+                });
                 clearVoiceConversationCountdown();
                 updateVoiceStatusDisplay();
             }, delay);

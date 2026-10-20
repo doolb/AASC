@@ -90,6 +90,7 @@ AI 首次接入某显示端棋局、服务器重启或聊天上下文改变 → 
 显示端启动或重连 → 服务端按 displayId 读取持久化棋局并发送 gameSnapshot，同时发送 voiceConversationState；页面初始化发送 gameRecover 补拉权威快照 → 显示端舞台缓存最新对话状态供游戏层初始化读取
 真实棋盘展示条件 := 棋局 visible=true 且对话状态为 activeGroup 或 activePrivate；等待唤醒、监听关闭、未知状态时棋盘和恢复入口均隐藏，棋局数据仍保留
 收到 voiceConversationState → 更新棋盘展示条件，但继续将事件交给语音模块处理；退出/道别/超时/监听关闭时立即隐藏；重新进入活动对话时按原棋局 visible 值恢复
+显示端本地语音倒计时到期 → 本地语音状态改为 waitingWake → 经 DisplayStage.handleServerMessage 发布同一 voiceConversationState 给游戏层 → 立即隐藏真实棋盘与游戏菜单；之后服务端权威状态消息仍可再次覆盖本地状态并恢复棋盘
 演示棋盘不受对话状态门控；演示结束 → 恢复当前真实棋局快照，并按当前对话状态决定是否显示；点击“关闭” → gameView(false) 持久化 visible=false，新对话也不会自动展开该棋局
 AI 代 GameUser 落子 → 模型依据用户自然语言填写坐标，用户原话不必逐字包含坐标；GM 仍校验棋局存在、当前回合、坐标范围、空位和版本，不因模型推断坐标而跳过权威规则；显示端点击通过受信任连接身份直达服务端，不接受客户端自行指定操作者
 当前显示端演示脚本 → 连接本机控制 WebSocket → 读取在线 displayList → 唯一主显示端自动选中，多个显示端时要求显式 displayId → 发送本机专用 gameDemoStart
