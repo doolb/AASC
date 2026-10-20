@@ -1,4 +1,5 @@
 (function exposeDisplayGame(root) {
+    const SUPPORTED_GAMES = Object.freeze(['五子棋']);
     const refs = {};
     let game = null;
     let send = () => false;
@@ -34,13 +35,39 @@
         return game.demo === true ? `演示 · ${label}` : label;
     }
 
+    function activeGame() {
+        return game?.demo !== true && game?.result === '进行中' && isConversationActive();
+    }
+
+    function refreshMenu() {
+        if (!refs.toggle || !refs.list) return;
+        refs.toggle.textContent = activeGame() ? '五子棋' : '游戏';
+        for (const button of refs.list.querySelectorAll('[data-game-name]')) {
+            const name = button.dataset.gameName;
+            let status = '未开局';
+            if (name === '五子棋' && game?.demo !== true && game) {
+                status = !isConversationActive() ? '等待对话'
+                    : game.result !== '进行中' ? '已结束'
+                        : game.visible === false ? '已隐藏' : '进行中';
+            }
+            button.querySelector('.display-game-list-status').textContent = status;
+        }
+    }
+
+    function setMenuOpen(open) {
+        if (!refs.menu || !refs.toggle) return;
+        refs.menu.hidden = !open;
+        refs.toggle.setAttribute('aria-expanded', String(open));
+        if (open) refreshMenu();
+    }
+
     function refreshView() {
+        refreshMenu();
         if (!game || !refs.layer) return;
         // 演示独立展示；真实棋盘只在当前 AI 对话活动时可见，隐藏不会改写棋局。
         const available = game.demo === true || isConversationActive();
         refs.layer.hidden = !available;
         refs.shell.hidden = !available || game.visible === false;
-        refs.reopen.hidden = !available || game.demo === true || game.visible !== false;
         refs.layer.setAttribute('aria-hidden', String(!available));
         setStatus(turnLabel());
         refs.board.querySelectorAll('.display-game-point').forEach(button => {
@@ -91,7 +118,8 @@
     function handleMessage(message) {
         if (message?.type === 'voiceConversationState') {
             conversationState = message.state || 'waitingWake';
-            if (game) refreshView();
+            refreshView();
+            if (!isConversationActive()) setMenuOpen(false);
             // 语音模块还需要处理该事件，不能由游戏层独占。
             return false;
         }
@@ -103,8 +131,8 @@
                 pending = false;
                 refs.layer.hidden = true;
                 refs.shell.hidden = true;
-                refs.reopen.hidden = true;
                 refs.layer.setAttribute('aria-hidden', 'true');
+                refreshMenu();
             }
             return true;
         }
@@ -170,11 +198,58 @@
         refs.shell = document.getElementById('displayGameShell');
         refs.board = document.getElementById('displayGameBoard');
         refs.status = document.getElementById('displayGameStatus');
-        refs.reopen = document.getElementById('displayGameReopen');
+        refs.toggle = document.getElementById('displayGameToggle');
+        refs.menu = document.getElementById('displayGameMenu');
+        refs.list = document.getElementById('displayGameList');
+        refs.hint = document.getElementById('displayGameMenuHint');
+        refs.actions = document.getElementById('displayGameChatActions');
         if (!refs.layer || !refs.board) return;
+        if (refs.list) {
+            // 游戏目录与本显示端向服务端声明的能力共用同一列表。
+            const fragment = document.createDocumentFragment();
+            for (const name of SUPPORTED_GAMES) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.dataset.gameName = name;
+                const title = document.createElement('span');
+                title.textContent = name;
+                const status = document.createElement('small');
+                status.className = 'display-game-list-status';
+                button.append(title, status);
+                fragment.appendChild(button);
+            }
+            refs.list.replaceChildren(fragment);
+        }
         bus.subscribe('server.message', handleMessage);
         bus.subscribe('stage.resize', resize);
         bus.subscribe('transport.changed', ({ available }) => { if (available && game) requestRecovery(); });
+        bus.subscribe('chat.visibility', ({ visible }) => { if (visible) setMenuOpen(false); });
+        refs.toggle?.addEventListener('click', () => setMenuOpen(refs.menu.hidden));
+        refs.list?.addEventListener('click', event => {
+            const entry = event.target.closest('[data-game-name]');
+            if (!entry || entry.dataset.gameName !== '五子棋') return;
+            if (!game || game.demo === true) {
+                refs.hint.textContent = '请在聊天中告诉 AI 开始五子棋';
+                return;
+            }
+            if (!isConversationActive()) {
+                refs.hint.textContent = '进入 AI 对话后可查看棋盘';
+                return;
+            }
+            if (game.visible === false) {
+                if (!send({ type: 'gameView', visible: true, revision: game.revision })) {
+                    refs.hint.textContent = '连接中断，请重试';
+                    return;
+                }
+            }
+            setMenuOpen(false);
+        });
+        document.addEventListener('pointerdown', event => {
+            if (!refs.menu?.hidden && !refs.actions?.contains(event.target)) setMenuOpen(false);
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') setMenuOpen(false);
+        });
         refs.board.addEventListener('click', event => {
             const point = event.target.closest('.display-game-point');
             if (!point || !game || game.demo === true || pending || game.turn !== 'User'
@@ -188,17 +263,15 @@
         document.getElementById('displayGameClose')?.addEventListener('click', () => {
             if (game && game.demo !== true) send({ type: 'gameView', visible: false, revision: game.revision });
         });
-        refs.reopen.addEventListener('click', () => {
-            if (game && game.demo !== true) send({ type: 'gameView', visible: true, revision: game.revision });
-        });
         const state = stage.getState();
         conversationState = state.voiceConversationState || 'waitingWake';
+        refreshMenu();
         if (state.rotationGeometry) resize({ width: state.rotationGeometry.logicalWidth,
             height: state.rotationGeometry.logicalHeight, rotation: state.rotationGeometry.rotation });
         // 页面脚本可能在舞台订阅前已收到首连快照，因此主动补拉一次权威状态。
         send({ type: 'gameRecover' });
     }
 
-    root.DisplayGame = Object.freeze({ init, handleMessage });
+    root.DisplayGame = Object.freeze({ init, handleMessage, supportedGames: SUPPORTED_GAMES });
     root.addEventListener('display-stage-ready', init, { once: true });
 })(window);

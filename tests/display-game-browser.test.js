@@ -11,8 +11,9 @@ const CHROME = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium',
 
 test('显示端五子棋首连快照、点击增量和版本缺口恢复', { skip: !CHROME }, async () => {
     const $ = cheerio.load(fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8'));
-    const markup = $('#displayGameLayer').toString();
-    const style = fs.readFileSync(path.join(PUBLIC, 'css/display-game.css'), 'utf8');
+    const markup = `${$('#displayGameLayer').toString()}<div class="display-interaction-layer">${$('#displayGameChatActions').toString()}</div>`;
+    const style = fs.readFileSync(path.join(PUBLIC, 'css/display-game.css'), 'utf8')
+        + fs.readFileSync(path.join(PUBLIC, 'css/display-mmd.css'), 'utf8');
     const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
     try {
         const page = await browser.newPage();
@@ -35,6 +36,26 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         await page.addScriptTag({ path: path.join(PUBLIC, 'js/display-game.js') });
         await page.evaluate(() => window.dispatchEvent(new Event('display-stage-ready')));
         assert.equal(await page.evaluate(() => window.__sent[0].type), 'gameRecover');
+        assert.deepEqual(await page.$$eval('[data-game-name]', buttons => buttons.map(button => button.dataset.gameName)),
+            ['五子棋']);
+        assert.equal(await page.$eval('#displayGameToggle', button => button.textContent), '游戏');
+        const entryLayout = await page.evaluate(() => {
+            const gameButton = document.getElementById('displayGameToggle');
+            const chatButton = document.getElementById('displayChatToggle');
+            const gameRect = gameButton.getBoundingClientRect();
+            const chatRect = chatButton.getBoundingClientRect();
+            const hit = document.elementFromPoint(chatRect.left + chatRect.width / 2,
+                chatRect.top + chatRect.height / 2);
+            return { above: gameRect.bottom <= chatRect.top, chatClickable: hit === chatButton };
+        });
+        assert.deepEqual(entryLayout, { above: true, chatClickable: true });
+        await page.click('#displayGameToggle');
+        assert.equal(await page.$eval('#displayGameMenu', menu => menu.hidden), false);
+        await page.click('[data-game-name="五子棋"]');
+        assert.match(await page.$eval('#displayGameMenuHint', hint => hint.textContent), /聊天中告诉 AI/);
+        assert.equal(await page.evaluate(() => window.__sent.length), 1, '列表不能自行创建棋局');
+        await page.keyboard.press('Escape');
+        assert.equal(await page.$eval('#displayGameMenu', menu => menu.hidden), true);
         await page.evaluate(() => window.__emit('server.message', {
             type: 'gameSnapshot', gameId: 'g1', revision: 1, size: 9,
             board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: true
@@ -48,6 +69,7 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             type: 'voiceConversationState', state: 'activeGroup'
         }));
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false);
+        assert.equal(await page.$eval('#displayGameToggle', button => button.textContent), '五子棋');
         assert.equal(await page.$eval('#displayGameShell', shell => getComputedStyle(shell).backgroundColor),
             'rgba(0, 0, 0, 0)');
         await page.addStyleTag({ path: path.join(PUBLIC, 'css/theme.css') });
@@ -102,12 +124,22 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
             board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: false
         }));
         assert.equal(await page.$eval('#displayGameShell', shell => shell.hidden), true);
-        assert.equal(await page.$eval('#displayGameReopen', button => button.hidden), false);
+        assert.equal(await page.$eval('#displayGameToggle', button => button.textContent), '五子棋');
+        await page.click('#displayGameToggle');
+        assert.match(await page.$eval('.display-game-list-status', status => status.textContent), /已隐藏/);
+        await page.click('[data-game-name="五子棋"]');
+        assert.deepEqual(await page.evaluate(() => window.__sent.at(-1)),
+            { type: 'gameView', visible: true, revision: 3 });
+        assert.equal(await page.$eval('#displayGameMenu', menu => menu.hidden), true);
+        await page.evaluate(() => window.__emit('server.message', {
+            type: 'gameVisibility', gameId: 'g1', revision: 4, visible: true
+        }));
+        assert.equal(await page.$eval('#displayGameShell', shell => shell.hidden), false);
         await page.evaluate(() => window.__emit('server.message', {
             type: 'voiceConversationState', state: 'disabled'
         }));
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true);
-        assert.equal(await page.$eval('#displayGameReopen', button => button.hidden), true);
+        assert.equal(await page.$eval('#displayGameToggle', button => button.textContent), '游戏');
         await page.evaluate(() => window.__emit('stage.resize', {
             width: 740, height: 390, rotation: 90
         }));
@@ -132,6 +164,7 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         assert.equal(await page.evaluate(() => window.__sent.length), sentBeforeClose);
         await page.evaluate(() => window.__emit('server.message', { type: 'gameDemoEnd', gameId: 'demo-1' }));
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true);
+        assert.equal(await page.$eval('#displayGameToggle', button => button.textContent), '游戏');
     } finally {
         await browser.close();
     }

@@ -97,7 +97,6 @@
                 <div id="displayGameBoard" class="display-game-board" role="grid" aria-label="五子棋棋盘"></div>
                 <p class="display-game-hint">点击交点落黑子，也可以说出坐标</p>
             </div>
-            <button id="displayGameReopen" class="display-game-reopen" type="button" hidden>五子棋</button>
         </section>
         <div id="displayInteractionLayer" class="display-interaction-layer">
             <div class="display-stage-lighting-control" hidden>
@@ -653,8 +652,17 @@
         <p class="mind-basic-note" data-taa-status=""></p></div></section>
 </section>
             </div>
-            <button id="displayChatToggle" class="display-stage-button" type="button"
-                    aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
+            <div id="displayGameChatActions" class="display-game-chat-actions">
+                <button id="displayGameToggle" class="display-stage-button" type="button"
+                        aria-controls="displayGameMenu" aria-expanded="false">游戏</button>
+                <section id="displayGameMenu" class="display-game-menu" aria-label="游戏列表" hidden>
+                    <strong>游戏列表</strong>
+                    <div id="displayGameList" class="display-game-list"></div>
+                    <p id="displayGameMenuHint" class="display-game-menu-hint" role="status">请选择游戏</p>
+                </section>
+                <button id="displayChatToggle" class="display-stage-button" type="button"
+                        aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
+            </div>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
                     aria-controls="displayMmdLayer" aria-expanded="false">角色</button>
             <div id="displayOfflineModelsEntry" hidden>
@@ -7434,7 +7442,7 @@
             let webgpuDiag = '';
             const capabilities = {
                 mediaRendering: true,
-                games: ['五子棋'],
+                games: window.DisplayGame?.supportedGames || [],
                 voicePlayback: true,
                 voiceRecording: false,
                 voiceRecognition: false,
