@@ -37,7 +37,9 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
         const identified = active.mode === 'agent' ? null : identifyModel(active.model);
         if (identified) preference.tiersByProvider[identified.providerId] = identified.tier;
         return { ...preference, providerId: identified?.providerId || null,
-            modelName: active.model || '', profileName: active.name || '', profileMode: active.mode || 'llm' };
+            modelName: active.model || '',
+            requestModelName: identified ? tierRequestModel(identified.providerId, identified.tier) : null,
+            profileName: active.name || '', profileMode: active.mode || 'llm' };
     };
     let updating = Promise.resolve();
 

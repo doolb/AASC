@@ -51,16 +51,19 @@ test('每个 Provider 记住自己的档位，Qwen 默认普通、豆包默认�
     const { service, broadcasts, profile, saves } = setup();
     assert.deepEqual(service.selection(), {
         providerId: null, tiersByProvider: { qwen: 'flash', doubaochat: 'mini' },
-        modelName: 'gpt-3.5-turbo', profileName: 'direct', profileMode: 'llm'
+        modelName: 'gpt-3.5-turbo', requestModelName: null,
+        profileName: 'direct', profileMode: 'llm'
     });
     assert.deepEqual((await service.availableProviders()).map(item => item.id), ['qwen', 'doubaochat']);
     await service.update({ providerId: 'qwen', tier: 'pro' });
     assert.equal(profile.model, 'Qwen3.7-Max');
+    assert.equal(service.selection().requestModelName, 'aasc-qwen-pro');
     await service.update({ providerId: 'doubaochat' });
     assert.equal(profile.model, 'doubao');
     assert.deepEqual(service.selection(), {
         providerId: 'doubaochat', tiersByProvider: { qwen: 'pro', doubaochat: 'mini' },
-        modelName: 'doubao', profileName: 'direct', profileMode: 'llm'
+        modelName: 'doubao', requestModelName: 'doubao',
+        profileName: 'direct', profileMode: 'llm'
     });
     assert.equal(saves.length, 2);
     assert.equal(broadcasts.at(-1).selection.providerId, 'doubaochat');
@@ -79,6 +82,7 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     assert.deepEqual(identifyModel('doubao-think'), { providerId: 'doubaochat', tier: 'flash' });
     assert.equal(service.selection().providerId, 'qwen');
     assert.equal(service.selection().tiersByProvider.qwen, 'mini');
+    assert.equal(service.selection().requestModelName, 'aasc-qwen-mini');
     assert.equal((await service.resolveForChat()).model, 'aasc-qwen-mini');
     await service.update({ providerId: 'doubaochat' });
     assert.equal(saves.at(-1).preference.tiersByProvider.qwen, 'mini');
@@ -89,10 +93,12 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     assert.equal(profile.model, 'doubao-think');
     profile.model = 'unknown-model';
     assert.equal(service.selection().providerId, null);
+    assert.equal(service.selection().requestModelName, null);
     assert.equal(await service.resolveForChat(), null);
     profile.mode = 'agent';
     profile.model = 'doubao';
     assert.equal(service.selection().providerId, null);
+    assert.equal(service.selection().requestModelName, null);
     await assert.rejects(service.update({ providerId: 'qwen', tier: 'flash' }), /不是普通 LLM/);
 });
 
@@ -101,6 +107,7 @@ test('豆包轻量和普通保留不同名称，按当前名称回显档位', as
     await service.update({ providerId: 'doubaochat', tier: 'flash' });
     assert.equal(profile.model, 'doubao-think');
     assert.equal(service.selection().tiersByProvider.doubaochat, 'flash');
+    assert.equal(service.selection().requestModelName, 'doubao-think');
     assert.equal((await service.resolveForChat()).model, 'doubao-think');
     await (await service.resolveForChat()).client.request({ input: '早' });
     assert.equal(requests.at(-1).model, 'doubao-think');
@@ -129,6 +136,7 @@ test('三档请求使用对应模型并保留服务端 Responses 续接参数', 
     assert.equal(profile.model, 'Qwen3.6-Flash');
     const mini = await service.resolveForChat();
     assert.equal(mini.model, 'aasc-qwen-mini');
+    assert.equal(service.selection().requestModelName, mini.model);
     assert.deepEqual(await mini.client.request({ input: '你好', previous_response_id: 'resp_a' }), { output_text: 'ok' });
     assert.equal(requests[0].previous_response_id, 'resp_a');
     assert.equal(requests[0].model, 'aasc-qwen-mini');

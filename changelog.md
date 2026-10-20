@@ -1,3 +1,8 @@
+### 聊天模型请求名展示
+
+- ✅ [2026-10-20] 两端模型快选面板显示实际提交给 Chat2API 的请求模型名。
+  - `chat-model-tier-service.js` 的权威快照增加 `requestModelName`；`chat-model-tier-picker.js` 显示 Qwen `aasc-qwen-mini/flash/pro` 等请求名，Agent 与未知模型分别显示不适用和配置名回退。更新服务与浏览器测试、chat-system design/spec、使用说明、任务与 todo；定向测试 8/8 通过。LLM 配置名和 Chat2API 映射不变，Offline 服务包待构建，真实设备待验收。
+
 ### 五子棋 System 与普通聊天
 
 - ✅ [2026-10-20] 按指定 System 文本提供 GameUser 和 GameAI 目录查询，移除已有棋局无调用行时的游戏补判。

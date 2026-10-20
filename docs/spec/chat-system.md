@@ -14,11 +14,11 @@ Chat2API默认目标 := doubao → doubao/思考0；doubao-think → doubao/思�
 当前 profile.model 保存 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max 或豆包三个不同的档位名称；按名称直接识别档位；Qwen 请求使用内部专用别名，mini 须与现有 Qwen3.6-Flash → Qwen3.7 兼容映射隔离
 
 服务端读取当前运行的 Chat2API 账号与 Provider 公开目录 → 只发布已启用、有凭据账号且有开发映射的 Provider 标识和名称
-控制端或显示端连接 → 从当前普通 LLM profile.model 按开发维护的名称表反查 Provider 与档位 → 补发权威模型名、档位及可选 Provider；断线时界面禁止提交
+控制端或显示端连接 → 从当前普通 LLM profile.model 按开发维护的名称表反查 Provider 与档位 → 由 Provider 与档位生成实际提交给 Chat2API 的请求模型名 → 补发权威配置模型名、请求模型名、档位及可选 Provider；断线时界面禁止提交
 旧模型名 Qwen3.6-Flash → 按配置名称识别为 Qwen 轻量，不读取 Chat2API 映射配置；请求时改用内部轻量别名，避免旧兼容映射改写实际目标
 控制端或显示端切Provider → 读取 tiersByProvider[providerId]，缺省用该Provider开发默认档位
 控制端或显示端提交 providerId + tier → 服务端校验当前普通 LLM profile、枚举与账号 → 在同一次 chat 配置写入中更新当前 profile.model、兼容 model 字段及该 Provider 档位偏好 → 广播 profile 和快选权威快照
-手动修改模型名或切换 LLM profile → 重新按当前 profile.model 反查并广播快选状态；未知名称不选中档位，显示原模型名
+手动修改模型名或切换 LLM profile → 重新按当前 profile.model 反查并广播快选状态；识别到三档时显示请求模型名，未知名称不选中档位且显示原配置模型名
 当前 profile 为 Agent → 不改 Agent 模型；快选显示不可编辑，角色 Agent 沿用角色配置
 发送普通聊天 → 服务端按当前 profile.model 识别请求模型与 Provider；不可用则明确失败，不回退到其它 Provider 或档位；未知名称继续原 profile 调用
 旧版 chat 消息入口 → 与普通 chatMessage 共用当前三档解析；角色 Agent 保持自己的配置
@@ -27,7 +27,7 @@ Qwen 三档 → 当前 LLM 配置写入 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max；聊�
 豆包快选 mini 写入 doubao，flash 写入 doubao-think，pro 写入 doubao-expert；Chat2API默认映射将前两档指向 doubao/思考0，保留名称反查；自定义映射优先于默认映射
 当前运行的 Chat2API Responses 服务 → 直接建立响应流；response.failed 或缺少 response.completed 时作为失败回报
 Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不复用不兼容上游会话
-两端快选面板展示当前模型名、Provider 与档位；档位按钮按 aria-pressed 应用现有主题预览按钮状态：选中使用 accent-secondary 到 accent-color 渐变、白字与 accent-color 外圈，未选中使用 bg-secondary、text-secondary、border-color 且无阴影；浅色主题仍保持中性未选中样式；外部登录保留入口与接口接线，本次不启动登录
+两端快选面板识别到三档时展示实际提交给 Chat2API 的请求模型名、Provider 与档位；Agent 配置显示不适用，未知配置保留原模型名并标注未匹配；档位按钮按 aria-pressed 应用现有主题预览按钮状态：选中使用 accent-secondary 到 accent-color 渐变、白字与 accent-color 外圈，未选中使用 bg-secondary、text-secondary、border-color 且无阴影；浅色主题仍保持中性未选中样式；外部登录保留入口与接口接线，本次不启动登录
 ```
 
 源码已按以上流程完成；Qwen 网页目标模型的实际可调用性仍待真实账号核实。Chat2API 代理未运行、账号被禁用或 Provider 被删除时，选择保留但发送聊天时明确失败。

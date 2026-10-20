@@ -28,7 +28,7 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
         for (const picker of [window.controlPicker, window.displayPicker]) picker.setConnected(true);
         const message = { type: 'chatModelTierConfig', selection: {
             providerId: 'qwen', tiersByProvider: { qwen: 'flash', doubaochat: 'mini' },
-            modelName: 'Qwen3.7', profileMode: 'llm'
+            modelName: 'Qwen3.7', requestModelName: 'aasc-qwen-flash', profileMode: 'llm'
         }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
         for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
     });
@@ -36,7 +36,7 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
     await page.click('#displayChatModelTierToggle');
     assert.equal(await page.$eval('#controlChatModelTierPanel [data-provider]', node => node.value), 'qwen');
     assert.equal(await page.$eval('#displayChatModelTierPanel .chat-model-tier-levels .is-selected', node => node.textContent), '普通');
-    assert.equal(await page.$eval('#displayChatModelTierPanel [data-current-model]', node => node.textContent), '当前模型名：Qwen3.7');
+    assert.equal(await page.$eval('#displayChatModelTierPanel [data-current-model]', node => node.textContent), 'Chat2API 请求模型名：aasc-qwen-flash');
     for (const theme of ['dark', 'light']) {
         await page.evaluate(value => {
             document.documentElement.dataset.theme = value;
@@ -72,7 +72,7 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
     await page.evaluate(() => {
         const message = { type: 'chatModelTierConfig', selection: {
             providerId: 'doubaochat', tiersByProvider: { qwen: 'flash', doubaochat: 'mini' },
-            modelName: 'doubao', profileMode: 'llm'
+            modelName: 'doubao', requestModelName: 'doubao', profileMode: 'llm'
         }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
         for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
     });
@@ -81,27 +81,33 @@ test('两端模型快选按 Provider 回显独立档位并只发送选择消息'
     await page.evaluate(() => {
         const message = { type: 'chatModelTierConfig', selection: {
             providerId: 'doubaochat', tiersByProvider: { qwen: 'flash', doubaochat: 'flash' },
-            modelName: 'doubao-think', profileMode: 'llm'
+            modelName: 'doubao-think', requestModelName: 'doubao-think', profileMode: 'llm'
         }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
         for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
     });
     for (const side of ['control', 'display']) {
         assert.equal(await page.$eval(`#${side}ChatModelTierPanel .chat-model-tier-levels .is-selected`, node => node.textContent), '普通');
-        assert.equal(await page.$eval(`#${side}ChatModelTierPanel [data-current-model]`, node => node.textContent), '当前模型名：doubao-think');
+        assert.equal(await page.$eval(`#${side}ChatModelTierPanel [data-current-model]`, node => node.textContent), 'Chat2API 请求模型名：doubao-think');
     }
     await page.evaluate(() => {
         const message = { type: 'chatModelTierConfig', selection: {
             providerId: 'qwen', tiersByProvider: { qwen: 'mini', doubaochat: 'mini' },
-            modelName: 'Qwen3.6-Flash', profileMode: 'llm'
+            modelName: 'Qwen3.6-Flash', requestModelName: 'aasc-qwen-mini', profileMode: 'llm'
         }, providers: [{ id: 'qwen', name: 'Qwen' }, { id: 'doubaochat', name: '豆包' }] };
         for (const picker of [window.controlPicker, window.displayPicker]) picker.handleMessage(message);
     });
     assert.equal(await page.$eval('#controlChatModelTierPanel .chat-model-tier-levels .is-selected', node => node.textContent), '轻量');
-    assert.equal(await page.$eval('#displayChatModelTierPanel [data-current-model]', node => node.textContent), '当前模型名：Qwen3.6-Flash');
+    assert.equal(await page.$eval('#displayChatModelTierPanel [data-current-model]', node => node.textContent), 'Chat2API 请求模型名：aasc-qwen-mini');
+    await page.evaluate(() => window.displayPicker.handleMessage({ type: 'chatModelTierConfig', selection: {
+        providerId: null, tiersByProvider: { qwen: 'mini', doubaochat: 'mini' },
+        modelName: 'custom-model', profileMode: 'llm'
+    }, providers: [{ id: 'qwen', name: 'Qwen' }] }));
+    assert.equal(await page.$eval('#displayChatModelTierPanel [data-current-model]', node => node.textContent), '当前配置模型名（未匹配三档）：custom-model');
     await page.evaluate(() => window.controlPicker.handleMessage({ type: 'chatModelTierConfig', selection: {
         providerId: null, tiersByProvider: { qwen: 'mini', doubaochat: 'mini' },
         modelName: 'agent-model', profileMode: 'agent'
     }, providers: [{ id: 'qwen', name: 'Qwen' }] }));
+    assert.equal(await page.$eval('#controlChatModelTierPanel [data-current-model]', node => node.textContent), 'Chat2API 请求模型名：不适用（Agent 配置）');
     assert.equal(await page.$eval('#controlChatModelTierPanel [data-provider]', node => node.disabled), true);
     assert.equal(await page.$$eval('#controlChatModelTierPanel .chat-model-tier-levels button', buttons => buttons.every(button => button.disabled)), true);
     assert.equal(await page.$eval('#controlChatModelTierPanel [data-login]', node => node.disabled), true);

@@ -59,7 +59,11 @@
             }
             providerSelect.value = providerId;
             providerSelect.disabled = !connected || !snapshot || isAgent;
-            currentModel.textContent = `当前模型名：${selection.modelName || '未配置'}`;
+            currentModel.textContent = isAgent
+                ? 'Chat2API 请求模型名：不适用（Agent 配置）'
+                : selection.requestModelName
+                    ? `Chat2API 请求模型名：${selection.requestModelName}`
+                    : `当前配置模型名（未匹配三档）：${selection.modelName || '未配置'}`;
             levels.replaceChildren();
             const tier = selection.tiersByProvider?.[providerId];
             for (const [value, label] of Object.entries(LABELS)) {
