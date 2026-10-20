@@ -1,5 +1,9 @@
 # 豆包网页账号Node文字与朗读 TTS 设计
 
+## 当前网页与 Node 请求头现场对照（2026-10-20）
+
+在现有已登录 Vivaldi 页面实发“早”，被动读取 `/chat/completion` 的请求头名称和查询参数名称，未记录值；该请求 HTTP 200，未以此判断最终 SSE 成功。当前 Node 构造器用同一正式账号在内存构造首轮请求，未实际重发。共同显式头为 `accept`、`agw-js-conv`、`content-type`、`cookie`、`origin`、`referer`、`user-agent`。网页额外有 `last-event-id`、`x-flow-trace`、`accept-language`、`sec-ch-ua`、`sec-ch-ua-mobile`、`sec-ch-ua-platform`、`sec-fetch-dest`、`sec-fetch-mode`、`sec-fetch-site`；还有浏览器/HTTP2层的 `:authority`、`:method`、`:path`、`:scheme`、`priority`、`content-length`、`accept-encoding`。Node Axios/HTTP栈也可能自行加长度或编码头，本次仅比较应用显式构造，不能把传输层差异都归因为缺字段。当前普通首轮 Node 不发送独立 `x-tt-passport-csrf-token`；该头只在非普通首轮分支显式添加。网页查询参数比 Node 多 `a_bogus`，两者均包含当次 `msToken` 与 `tz_name`。上述差异尚未证明单一故障原因。
+
 ## 正式账号删除重导复测（2026-10-20）
 
 按用户要求，使用当前已登录 Vivaldi 官网页重新采集两个来源的完整 Cookie 和同页 Node 资料；在核对其指纹与原正式账号一致后，删除原豆包账号，再通过现有 OAuth 登录保存接口指定原账号 ID 导入。删除时豆包账号数为 0，重导后为 1；另外三个 Provider 的账号 ID 均未变化。新凭据包含 `www` 30 项和 `accounts` 24 项 Cookie，Node 资料保留。正式 Responses 新会话“早”最终仍返回 `response.failed`/`doubao_upstream_failed`，因此账号记录重建本身没有解决 Node 请求失败。

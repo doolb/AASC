@@ -1,4 +1,4 @@
-- 待现场排查 [2026-10-20] 豆包 Node 普通模型新会话首轮已按 Vivaldi 对齐静态正文/时区并实现按来源 Cookie 快照；正式账号经调试端口保存，再删除并用当前浏览器资料重导，原 ID、Node 指纹和其他 3 个账号未变，`www` 30 项与 `accounts` 24 项 Cookie 已保存。重导后正式 Responses 单次“早”仍返回 `response.failed`/`doubao_upstream_failed`。需继续核对逐次生成字段与官网环境；Android 真机外部网页完成按钮和更新后播放待验收，续聊协议后续再看。见 `docs/task/20261020_豆包首轮请求协议与Cookie快照.md`、`docs/task/20261020_调试端口保存Chat2API浏览器凭据.md`。
+- 待现场排查 [2026-10-20] 豆包 Node 普通模型新会话首轮已对齐部分静态字段并保存双来源 Cookie；正式账号删除重导后 Responses 单次“早”仍返回 `response.failed`/`doubao_upstream_failed`。当前网页“早”抓包显示 Node 仍缺当次 `a_bogus` 查询参数和 `x-flow-trace`、`last-event-id`、浏览器 `sec-*` 等头；这些差异尚未证明单一故障原因，需确认是否允许网页参与每次发送，再实施。Android 真机外部网页完成按钮和更新后播放待验收，续聊协议后续再看。见 `docs/task/20261020_豆包首轮请求协议与Cookie快照.md`、`docs/task/20261020_调试端口保存Chat2API浏览器凭据.md`。
 
 - 待真实账号与设备验收 [2026-10-20] 两端音色列表试听已实现面板内最多 30 份 WAV 缓存及重复点击本地重播，固定短句现为八句；服务包更新后，现场检查各 Provider 真实合成、Android WebView 播放授权、缓存重播和不同音量/语速的听感。见 `docs/task/20261020_双端音色列表试听与WAV缓存.md`。
 

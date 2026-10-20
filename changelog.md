@@ -1,5 +1,8 @@
 ### Chat2API 浏览器凭据保存
 
+- 📝 [2026-10-20] 被动核对当前 Vivaldi 网页实发“早”的请求头名称与正式账号的 Node 首轮显式构造。
+  - 共同七类显式头；网页额外包含 `x-flow-trace`、`last-event-id`、语言、`sec-ch-ua*`、`sec-fetch-*` 等，查询参数还多 `a_bogus`。纠正旧记录：当前普通首轮 Node 不显式发送独立 CSRF 头。网页请求 HTTP 200，未据此判断 SSE 终态或故障因果；只同步豆包 design/spec/todo，未改代码和账号凭据。
+
 - 📝 [2026-10-20] 按要求删除正式豆包账号并从当前已登录浏览器重新导入，随后用 Responses 复测。
   - 删除前核对浏览器与原账号指纹一致，OAuth 重新导入沿用原账号 ID；豆包账号从 1→0→1，其他 3 个 Provider 账号 ID 不变，Node 资料及双来源 Cookie 快照保留（30/24 项）。新会话“早”HTTP 200 后最终 `response.failed`/`doubao_upstream_failed`，无正文；账号重导没有解决上游请求失败。仅账号数据与文档变化，无代码或发布产物变更。
 

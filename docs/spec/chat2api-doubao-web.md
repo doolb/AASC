@@ -1,5 +1,18 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 请求头差异现场核对（2026-10-20）
+
+```text
+网页样本 := 当前已登录Vivaldi页面实发“早” → 被动采集/chat/completion头名和查询参数名 → HTTP200，未判定SSE终态
+Node样本 := 同一正式账号调用buildDoubaoRequest在内存构造普通首轮 → 只取显式头名和查询参数名，不发网络请求
+共同显式头 := accept、agw-js-conv、content-type、cookie、origin、referer、user-agent
+网页新增应用/浏览器头 := last-event-id、x-flow-trace、accept-language、sec-ch-ua、sec-ch-ua-mobile、sec-ch-ua-platform、sec-fetch-dest、sec-fetch-mode、sec-fetch-site
+网页传输层头 := :authority、:method、:path、:scheme、priority、content-length、accept-encoding；Node HTTP栈可能自行生成部分对应项
+首轮CSRF := 当前普通首轮Node不显式发送x-tt-passport-csrf-token；旧版抓包差异描述不能直接沿用
+查询差异 := 网页有a_bogus；Node缺此逐次字段；msToken与tz_name两边均存在
+结论 := 只有头名差异证据，没有单变量因果证明；后续方案仍需用户确认
+```
+
 ## 正式账号删除重导复测（2026-10-20）
 
 ```text
