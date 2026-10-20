@@ -1330,7 +1330,7 @@ const Chat = {
 
     renderGameTrace(entries) {
         if (!Array.isArray(entries)) return '';
-        return entries.slice(0, 20).filter(entry => entry && typeof entry.text === 'string')
+        return entries.slice(0, 128).filter(entry => entry && typeof entry.text === 'string')
             .map(entry => {
                 const full = entry.text;
                 const text = entry.summary || (full.startsWith('<Game:五子棋,GM,快照,')

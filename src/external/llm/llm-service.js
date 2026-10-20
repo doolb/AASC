@@ -1215,7 +1215,7 @@ function addMessage(message) {
         : undefined;
     // 游戏协议只供聊天界面展示；与正文分开保存，避免进入后续模型上下文和朗读。
     const gameTrace = Array.isArray(message.gameTrace)
-        ? message.gameTrace.slice(0, 20).filter(item => item && typeof item.text === 'string')
+        ? message.gameTrace.slice(0, 128).filter(item => item && typeof item.text === 'string')
             .map(item => ({ kind: ['User', 'AI', 'GM'].includes(item.kind) ? item.kind : 'GM',
                 text: item.text.slice(0, 512), summary: typeof item.summary === 'string'
                     ? item.summary.slice(0, 160) : '',
