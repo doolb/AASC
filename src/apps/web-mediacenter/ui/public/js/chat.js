@@ -1333,8 +1333,9 @@ const Chat = {
         return entries.slice(0, 128).filter(entry => entry && typeof entry.text === 'string')
             .map(entry => {
                 const full = entry.text;
-                const text = entry.summary || (full.startsWith('<Game:五子棋,GM,快照,')
-                    ? `${full.slice(0, full.lastIndexOf(',') + 1)}棋盘已同步>` : full);
+                const text = entry.summary || (full.startsWith('Game:五子棋,GM,快照,')
+                    || full.startsWith('<Game:五子棋,GM,快照,')
+                    ? `${full.slice(0, full.lastIndexOf(',') + 1)}棋盘已同步${full.startsWith('<') ? '>' : ''}` : full);
                 return `<div class="chat-game-protocol-tip" title="${this.escapeHtml(full)}">${this.escapeHtml(text)}</div>`;
             }).join('');
     },

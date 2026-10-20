@@ -460,8 +460,9 @@
         tip.dataset.gameSequence = String(entry.sequence || '');
         const full = String(entry.text || '');
         tip.title = full;
-        tip.textContent = entry.summary || (full.startsWith('<Game:五子棋,GM,快照,')
-            ? `${full.slice(0, full.lastIndexOf(',') + 1)}棋盘已同步>` : full);
+        tip.textContent = entry.summary || (full.startsWith('Game:五子棋,GM,快照,')
+            || full.startsWith('<Game:五子棋,GM,快照,')
+            ? `${full.slice(0, full.lastIndexOf(',') + 1)}棋盘已同步${full.startsWith('<') ? '>' : ''}` : full);
         return tip;
     }
 

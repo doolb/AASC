@@ -7,11 +7,14 @@ const SIZES = new Set([9, 11, 13, 15]);
 const OPERATIONS = Object.freeze({
     开局: [0, 1], 落子: [1], 查看: [0], 提议尺寸: [1], 确认尺寸: [1], 退出显示: [0], 恢复显示: [0]
 });
-const GAME_TAG = /<Game:([^<>]{1,160})>/g;
+const GAME_LINE = /^Game:[^\r\n]*/gm;
+const LEGACY_GAME_TAG = /<Game:([^<>]{1,160})>/g;
 
 function parseGameTag(raw) {
-    if (typeof raw !== 'string' || !/^<Game:[^<>]{1,160}>$/.test(raw)) return null;
-    const fields = raw.slice(6, -1).split(',').map(value => value.trim());
+    if (typeof raw !== 'string') return null;
+    const legacy = /^<Game:[^<>]{1,160}>$/.test(raw);
+    if (!legacy && !/^Game:[^<>\r\n]{1,160}$/.test(raw)) return null;
+    const fields = (legacy ? raw.slice(6, -1) : raw.slice(5)).split(',').map(value => value.trim());
     const [game, actor, operation, ...args] = fields;
     if (game === '目录' && actor === 'AI' && operation === '列表' && args.length === 0) {
         return { game, actor, operation, args, raw };
@@ -27,11 +30,16 @@ function parseGameTag(raw) {
 
 function extractGameTags(text) {
     if (typeof text !== 'string') return [];
-    return Array.from(text.matchAll(GAME_TAG), match => ({ raw: match[0], call: parseGameTag(match[0]) }));
+    // 同一轮允许新旧格式并存，按原文出现位置交给权威棋局依次校验。
+    return [...text.matchAll(GAME_LINE), ...text.matchAll(LEGACY_GAME_TAG)]
+        .sort((left, right) => left.index - right.index)
+        .map(match => ({ raw: match[0], call: parseGameTag(match[0]) }));
 }
 
 function stripGameTags(text) {
-    return String(text || '').replace(/<Game:[^>\n]*(?:>|$)/g, '').trim();
+    // 两种调用格式都只进入权威校验流程，不进入用户可见正文和语音。
+    return String(text || '').replace(/^Game:[^\r\n]*(?:\r?\n|$)/gm, '')
+        .replace(/<Game:[^>\r\n]*(?:>|$)/g, '').trim();
 }
 
 // 完整 ID 仅用于服务端状态和显示端版本匹配；模型回执展示四位短编号。
@@ -113,12 +121,12 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
 
     function gmSnapshot(displayId) {
         const state = games.get(displayId);
-        if (!state) return '<Game:五子棋,GM,错误,未开局>';
-        return `<Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result},${encodeBoard(state.board, state.size)}>`;
+        if (!state) return 'Game:五子棋,GM,错误,未开局';
+        return `Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result},${encodeBoard(state.board, state.size)}`;
     }
 
     function fail(code) {
-        return { ok: false, code, gm: `<Game:五子棋,GM,错误,${code}>` };
+        return { ok: false, code, gm: `Game:五子棋,GM,错误,${code}` };
     }
 
     function commit(displayId, next, message, gm) {
@@ -155,10 +163,10 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                     turn: 'User', result: '进行中', visible: true, pendingSize: null };
                 const message = { ...snapshotFromState(next), type: 'gameSnapshot' };
                 return commit(displayId, next, message,
-                    `<Game:五子棋,GM,快照,${shortGameId(next.id)},1,${size},User,进行中,${encodeBoard(next.board, size)}>`);
+                    `Game:五子棋,GM,快照,${shortGameId(next.id)},1,${size},User,进行中,${encodeBoard(next.board, size)}`);
             }
             case '查看':
-                return state ? { ok: true, gm: `<Game:五子棋,GM,状态,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result}>` }
+                return state ? { ok: true, gm: `Game:五子棋,GM,状态,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result}` }
                     : fail('未开局');
             case '落子': {
                 if (!state) return fail('未开局');
@@ -193,7 +201,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 const message = { type: 'gameDelta', game: GAME_NAME, gameId: next.id,
                     revision: next.revision, actor: call.actor, coordinate: coordinate.text, turn, result };
                 return commit(displayId, next, message,
-                    `<Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${call.actor},${coordinate.text},${turn},${result}>`);
+                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${call.actor},${coordinate.text},${turn},${result}`);
             }
             case '提议尺寸': {
                 if (!state) return fail('未开局');
@@ -201,7 +209,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 if (!size) return fail('棋盘尺寸无效');
                 const next = { ...state, revision: state.revision + 1, pendingSize: size };
                 return commit(displayId, next, { type: 'gameProposal', game: GAME_NAME, gameId: next.id,
-                    revision: next.revision, pendingSize: size }, `<Game:五子棋,GM,待确认尺寸,${size}>`);
+                    revision: next.revision, pendingSize: size }, `Game:五子棋,GM,待确认尺寸,${size}`);
             }
             case '确认尺寸': {
                 if (!state) return fail('未开局');
@@ -211,7 +219,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 const next = { ...state, revision: state.revision + 1, size, board: Array(size * size).fill('.'),
                     turn: 'User', result: '进行中', visible: true, pendingSize: null };
                 return commit(displayId, next, { ...snapshotFromState(next), type: 'gameSnapshot' },
-                    `<Game:五子棋,GM,快照,${shortGameId(next.id)},${next.revision},${size},User,进行中,${encodeBoard(next.board, size)}>`);
+                    `Game:五子棋,GM,快照,${shortGameId(next.id)},${next.revision},${size},User,进行中,${encodeBoard(next.board, size)}`);
             }
             case '退出显示':
             case '恢复显示': {
@@ -222,7 +230,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                     : { type: 'gameVisibility', game: GAME_NAME, gameId: next.id,
                         revision: next.revision, visible: false };
                 return commit(displayId, next, message, visible ? gmSnapshotFromState(next)
-                    : `<Game:五子棋,GM,已隐藏,${shortGameId(next.id)},${next.revision}>`);
+                    : `Game:五子棋,GM,已隐藏,${shortGameId(next.id)},${next.revision}`);
             }
             default:
                 return fail('无效操作');
@@ -239,7 +247,7 @@ function snapshotFromState(state) {
 }
 
 function gmSnapshotFromState(state) {
-    return `<Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result},${encodeBoard(state.board, state.size)}>`;
+    return `Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result},${encodeBoard(state.board, state.size)}`;
 }
 
 module.exports = { createGomokuGameService, parseGameTag, extractGameTags, stripGameTags,

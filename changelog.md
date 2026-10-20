@@ -1,3 +1,8 @@
+### 五子棋纯文本协议行
+
+- ✅ [2026-10-20] AI 游戏调用与 GM 回执统一改为无尖括号的独立 `Game:` 行，目录、规则、落子及显示端增量提示使用同一格式。
+  - `game-chat-bridge.js`、`gomoku-game-service.js` 调整解析、流式过滤和回执；旧尖括号单条与多条调用仍按原规则执行，两端聊天兼容旧历史提示。同步 game-gomoku design/spec/task/usage/todo；五子棋及双端聊天定向测试 38/38 通过，`servicePackage=true` 待出包，真实模型和 Android 现场待验收。
+
 ### Chat2API 浏览器凭据保存
 
 - 📝 [2026-10-20] 被动核对当前 Vivaldi 网页实发“早”的请求头名称与正式账号的 Node 首轮显式构造。
