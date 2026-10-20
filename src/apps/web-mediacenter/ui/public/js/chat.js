@@ -1910,7 +1910,8 @@ const Chat = {
         }
         
         if (streamingContent) {
-            streamingContent.innerHTML = ChatMarkdown.render(data.message || '');
+            streamingContent.innerHTML = this.renderGameTrace(this.currentGameTrace)
+                + ChatMarkdown.render(data.message || '');
             streamingContent.removeAttribute('id');
         }
         

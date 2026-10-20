@@ -43,6 +43,32 @@ test('控制端游戏协议提示实时显示并从历史恢复', { skip: !fs.ex
         assert.equal(await page.$$eval('.chat-game-protocol-tip', nodes => nodes.length), 25);
         assert.equal(await page.$eval('.chat-game-protocol-tip:last-of-type', node => node.textContent), '提示 25');
         assert.match(await page.$eval('#chatMessages', node => node.textContent), /我下 H4/);
+        await page.evaluate(() => {
+            Chat.session.mode = 'temporary';
+            Chat.activeRequestId = 'temporary-game';
+            document.getElementById('chatMessages').innerHTML = '<div id="streamingAssistant"><div id="streamingContent"></div></div>';
+            Chat.handleGameProtocol({ requestId: 'temporary-game', sequence: 1, kind: 'GameAI',
+                text: 'Game:五子棋,GameAI,落子,F5', summary: 'GameAI · 落子 F5' });
+            Chat.handleResponse({ requestId: 'temporary-game', success: true, message: '我下 F5。',
+                temporaryConversation: true, conversation: { id: 'game-session', roleName: '小爱',
+                    historyGroups: [], messages: [{ role: 'assistant', mode: 'temporary', content: '我下 F5。',
+                        gameTrace: [{ sequence: 1, kind: 'GameAI', text: 'Game:五子棋,GameAI,落子,F5',
+                            summary: 'GameAI · 落子 F5' }] }] } });
+        });
+        assert.deepEqual(await page.$$eval('.chat-game-protocol-tip', nodes => nodes.map(node => node.textContent)),
+            ['GameAI · 落子 F5']);
+        await page.evaluate(() => {
+            Chat.session.mode = 'group';
+            Chat.activeRequestId = 'fallback-game';
+            Chat.currentGameTrace = [];
+            document.getElementById('chatMessages').innerHTML = '<div id="streamingAssistant"><div id="streamingContent"></div></div>';
+            Chat.handleGameProtocol({ requestId: 'fallback-game', sequence: 1, kind: 'GM',
+                text: 'Game:五子棋,GM,状态,abcd,3,9,GameUser,进行中', summary: 'GM · 状态 进行中' });
+            Chat.handleResponse({ requestId: 'fallback-game', success: true, message: '轮到你了。' });
+        });
+        assert.deepEqual(await page.$$eval('.chat-game-protocol-tip', nodes => nodes.map(node => node.textContent)),
+            ['GM · 状态 进行中']);
+        assert.match(await page.$eval('#chatMessages', node => node.textContent), /轮到你了/);
     } finally {
         await browser.close();
     }

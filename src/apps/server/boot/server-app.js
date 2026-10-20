@@ -2164,6 +2164,9 @@ function appendTemporaryConversationMessage(message, conversationId) {
         content: message.content,
         ...(message.reasoning ? { reasoning: message.reasoning } : {}),
         ...(message.speech ? { speech: message.speech } : {}),
+        // 临时会话完成后会用本快照重绘控制端聊天，须保留已由 GM 校验的协议提示。
+        ...(Array.isArray(message.gameTrace) && message.gameTrace.length
+            ? { gameTrace: message.gameTrace.slice(0, 128).map(entry => ({ ...entry })) } : {}),
         mode: 'temporary',
         sessionId: conversationId
     });
