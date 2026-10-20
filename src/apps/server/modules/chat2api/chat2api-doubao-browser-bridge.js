@@ -82,7 +82,10 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
         const cookieResult = await cdp.send('Network.getCookies', { urls: [`${ORIGIN}/chat/`] });
         const sessions = (cookieResult.cookies || []).filter(cookie => cookie.name === 'sessionid'
           && ['doubao.com', '.doubao.com', 'www.doubao.com'].includes(cookie.domain));
-        if (sessions.length !== 1 || !sameSession(accountSession(account), sessions[0].value)) throw browserError('auth');
+        // 官网可同时设置www专属与父域同名Cookie；以发送到聊天页时优先的专属项核对账号。
+        const preferred = sessions.filter(cookie => cookie.domain === 'www.doubao.com');
+        const candidates = preferred.length ? preferred : sessions.filter(cookie => cookie.domain !== 'www.doubao.com');
+        if (candidates.length !== 1 || !sameSession(accountSession(account), candidates[0].value)) throw browserError('auth');
       } finally { await cdp.detach().catch(() => {}); }
       const signing = await page.waitForFunction(() => typeof window.bdms?.frontierSign === 'function',
         { timeout: 30_000 }).catch(() => null);

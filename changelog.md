@@ -13512,3 +13512,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 
 - ✅ [2026-10-19] 修复启动器内容未变化时仍预解压目标 code 并显示“解压 launcher”。
   - `releases.js` 先比较当前实际启动器指纹与已验签清单，相同则直接进入服务更新；服务代码正常解压后再次校验签名启动器指纹。`offline-js-launcher.test.js` 覆盖只解压一次 code、伪造指纹拒绝、不同指纹切换和旧清单兼容；`npm run test:offline-launcher` 42/42、代码包定向测试 17/17 通过。同步 design/spec/task/todo；`servicePackage=true`、`minApk=true` 待出包。Note8 已观察到此前 code v138 服务健康而 launcher 仍为 v131；修复版首次升级及后续纯服务更新待现场验收。
+
+### 豆包网页任务现场验收与双 Cookie 身份核对
+
+- ✅ [2026-10-20] 修复桌面浏览器桥接层将官网 `www.doubao.com` 与父域双 `sessionid` 误判为未登录的问题，优先核对 www 专属 Cookie，并拒绝仅父域项匹配的账号；同步 spec/design/task/todo 和定向测试。
+  - 使用当前 `192.168.1.39` 已登录 Vivaldi 会话做隔离验收：原页面签名可用，同源首轮“早”收到 HTTP 200、`STREAM_ERROR/710020202`，无模型正文；新标签页与官网“新对话”页出现超时。现场设备资料与已存账号不同，未修改正式账号、控制端对话或用户旧官网聊天。`npm run check:chat2api` 315/315 通过；专用 profile 登录、完整聊天、媒体/文件和 Android 真机仍待验收。

@@ -40,3 +40,30 @@ test('媒体临时官网页在流结束后关闭，聊天页可按会话复用',
   assert.equal(pages[1].closed, false);
   await bridge.stop();
 });
+
+test('官网同时有www与父域sessionid时，以www账号身份核对', async () => {
+  const browser = { newPage: async () => ({
+    isClosed: () => false, goto: async () => {}, url: () => 'https://www.doubao.com/chat/',
+    createCDPSession: async () => ({ send: async () => ({ cookies: [
+      { name: 'sessionid', domain: 'www.doubao.com', value: 'www-session-1234567890123456' },
+      { name: 'sessionid', domain: '.doubao.com', value: 'domain-session-1234567890123456' },
+    ] }), detach: async () => {} }),
+    waitForFunction: async () => true,
+  }) };
+  const bridge = createDoubaoBrowserBridge({ getConfig: () => ({ mode: 'browser-fetch' }),
+    launcher: { open: async () => browser, close: async () => {} },
+    fetchPage: async () => {
+      const data = new PassThrough();
+      queueMicrotask(() => data.end('done'));
+      return { status: 200, data };
+    } });
+  const prepared = { url: 'https://www.doubao.com/chat/completion', data: {} };
+  const account = { providerId: 'doubaochat', accountId: 'one',
+    credentials: { cookie: 'sessionid=www-session-1234567890123456' } };
+  const response = await bridge.request({ account, prepared });
+  for await (const _ of response.data) { /* 消费测试流。 */ }
+  await assert.rejects(bridge.request({ account: { ...account,
+    credentials: { cookie: 'sessionid=domain-session-1234567890123456' } }, prepared }),
+  { code: 'doubao_browser_auth' });
+  await bridge.stop();
+});
