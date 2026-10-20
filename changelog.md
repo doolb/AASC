@@ -2,6 +2,8 @@
 
 - ✅ [2026-10-20] 游戏调用和 GM 回执统一使用 `GameUser`、`GameAI`，活动棋局支持行首 `GameUser:`/`GameAI:` 省略游戏名。
   - 更新 `gomoku-game-service.js`、`game-chat-bridge.js`、游戏聊天与协议提示测试，以及五子棋 design/spec/task/usage/todo；旧 `User`/`AI` 游戏调用不再解析，尖括号外形需使用新角色。棋盘内部和显示端增量保持现有字段。隔离 A9→GM→F5 与抢跑用例通过；`npm run test:game-chat` 41/41、相关浏览器测试 12/12 通过，服务包 `servicePackage=true` 待构建，真实两端待验收。
+- ✅ [2026-10-20] 隔离真实 QwenChat “小爱”会话复测新游戏角色协议。
+  - `aasc-qwen-flash` 经正式 `chatStream` 完成目录→规则→9 路开局，再以 `GameUser:落子,A9` 等待 GM 后发 `GameAI:落子,D5`；GM 确认第 2、3 手，棋盘版本 3、轮到用户。临时配置与棋局已清理，正式显示端与 TTS 待验收；同步五子棋 design/spec/task/todo，未修改运行代码。
 
 ### 五子棋快照编码规则
 
