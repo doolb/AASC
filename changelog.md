@@ -11,6 +11,9 @@
 
 ### 五子棋游戏协议与本地显示
 
+- ✅ [2026-10-20] AASC 聊天每轮在现有 raw `System:` 正文目录提示后加入权威 `NowGame:五子棋` 或 `NowGame:无`；进行中棋局即使隐藏仍显示游戏名，已结束棋局显示“无”。
+  - 更新 `game-chat-bridge.js`、五子棋 design/spec/task/todo 与定向测试，20/20 通过；确认目录标签后接自然语言时，GM 列表和规则仍依次进入模型下一次调用。核对 Chat2API 09:56 会话原文含合法 `<Game:目录,AI,列表>`，该直连入口没有目标显示端，故保留现有游戏桥接边界；`servicePackage=true` 待出包及真实 AASC 聊天验收。
+
 - ✅ [2026-10-20] 将显示端五子棋恢复入口改为“聊天”上方的“游戏”按钮与游戏列表；活动棋局时按钮显示“五子棋”，列表可恢复手动隐藏的棋盘，不会自行开局。
   - 更新 `display.html`、`display-game.js/css`、五子棋 design/spec/task/usage/todo 与浏览器定向测试；游戏与聊天测试 12/12 通过，确认聊天入口不再被遮挡、退出对话后按钮恢复“游戏”。`servicePackage=true` 待出包，Android 实际安全区待设备验收。
 

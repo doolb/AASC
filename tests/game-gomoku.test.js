@@ -203,6 +203,7 @@ test('已有棋局漏发标签时由模型补判用户坐标，不播出错误�
         content: 'H3。', options: {}, callbacks: { onChunk: chunk => chunks.push(chunk) } });
     assert.equal(inputs.length, 5);
     assert.match(inputs[0].systemPrompt, /语音坐标也由你代发/);
+    assert.match(inputs[0].systemPrompt, /NowGame:五子棋/);
     assert.match(inputs[1].input, /原话：H3。/);
     assert.equal(result.message, '你下 H3。\n我下 H4。');
     assert.deepEqual(chunks, [result.message]);
@@ -230,7 +231,7 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     const { game } = fixture(t);
     const inputs = [];
     const answers = [
-        '<Game:目录,AI,列表>',
+        '<Game:目录,AI,列表>\n我先看看可用游戏。',
         '<Game:五子棋,AI,规则>',
         '<Game:五子棋,User,开局>\n来玩吧，你先落黑子。'
     ];
@@ -240,13 +241,19 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     } };
     const trace = [];
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
-        content: '我们来玩五子棋', options: {}, callbacks: { onGameProtocol: entry => trace.push(entry) },
+        content: '我们来玩五子棋', options: { systemPrompt: '原角色设定' },
+        callbacks: { onGameProtocol: entry => trace.push(entry) },
         getAvailableGames: () => ['五子棋'] });
-    assert.equal(result.message, '来玩吧，你先落黑子。');
+    assert.equal(result.message, '我先看看可用游戏。\n来玩吧，你先落黑子。');
     assert.equal(inputs.length, 3);
     assert.match(inputs[1].input, /目录,GM,列表,五子棋/);
     assert.match(inputs[2].input, /五子棋,GM,规则/);
     assert.equal(inputs[0].systemPrompt.includes('横竖斜连续五子'), false);
+    assert.match(inputs[0].systemPrompt, /NowGame:无/);
+    assert.ok(inputs[0].systemPrompt.indexOf('目录,AI,列表')
+        < inputs[0].systemPrompt.indexOf('NowGame:无'));
+    assert.ok(inputs[0].systemPrompt.indexOf('NowGame:无')
+        < inputs[0].systemPrompt.indexOf('原角色设定'));
     assert.equal(game.snapshot('d').revision, 1);
     assert.deepEqual(trace.map(entry => entry.kind), ['AI', 'GM', 'AI', 'GM', 'User', 'GM']);
     assert.deepEqual(trace.slice(0, 3).map(entry => entry.summary),

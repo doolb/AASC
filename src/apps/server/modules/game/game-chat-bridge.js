@@ -89,10 +89,14 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     if (!displayId) {
         return chat.chatStream(content, options, callbacks);
     }
-    // raw 格式会把 systemPrompt 放进同一条 user 消息的 System: 后；游戏协议先于角色设定。
-    const systemPrompt = [GAME_PROMPT, options.systemPrompt].filter(Boolean).join('\n\n');
+    const initialState = gameService.snapshot(displayId);
+    // 当前游戏名来自服务端权威快照；已结束的棋局不再作为正在进行的游戏提示给模型。
+    // raw 格式会把 systemPrompt 放进同一条 user 消息的 System: 后，目录规则与状态位于角色设定之前。
+    const nowGame = initialState?.result === '进行中' ? initialState.game : '无';
+    const systemPrompt = [`${GAME_PROMPT}\nNowGame:${nowGame}`, options.systemPrompt]
+        .filter(Boolean).join('\n\n');
     let input = content;
-    let version = gameService.snapshot(displayId)?.revision;
+    let version = initialState?.revision;
     let invalidAiMoves = 0;
     let missingAiMoves = 0;
     let retriedUserTurn = false;
@@ -108,7 +112,6 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     };
     const contextKey = [displayId, chat.getActiveProfile?.() || '', options.mode || '',
         options.target || '', options.sessionId || ''].join('|');
-    const initialState = gameService.snapshot(displayId);
     const needsRecovery = initialState && recoveredContexts.get(contextKey) !== initialState.gameId;
     if (needsRecovery) {
         // 服务器重启或聊天上下文切换后只补一次权威棋盘；常规回合继续传增量。
