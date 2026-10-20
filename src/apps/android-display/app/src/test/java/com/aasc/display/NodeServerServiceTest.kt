@@ -148,6 +148,33 @@ class NodeServerServiceTest {
     }
 
     @Test
+    fun 豆包端点成对传入启动器与Node共用的环境() {
+        val root = File("/data/user/0/com.aasc.display.offline/files/aasc-server")
+        val secret = "a".repeat(64)
+        val environment = NodeServerService.buildNodeEnvironment(root, "https://127.0.0.1:8081", "apk-test",
+            offlineMode = true, doubaoWebViewEndpoint = 19092 to secret)
+
+        assertEquals("19092", environment["AASC_DOUBAO_WEBVIEW_PORT"])
+        assertEquals(secret, environment["AASC_DOUBAO_WEBVIEW_TOKEN"])
+        val withoutEndpoint = NodeServerService.buildNodeEnvironment(root, "https://127.0.0.1:8081", "apk-test")
+        assertEquals(false, withoutEndpoint.containsKey("AASC_DOUBAO_WEBVIEW_PORT"))
+        assertEquals(false, withoutEndpoint.containsKey("AASC_DOUBAO_WEBVIEW_TOKEN"))
+    }
+
+    @Test
+    fun 豆包端点端口或令牌损坏时拒绝构造运行环境() {
+        val root = File("/data/user/0/com.aasc.display.offline/files/aasc-server")
+        val invalidEndpoints = listOf(0 to "a".repeat(64), 65536 to "a".repeat(64), 19092 to "short")
+        invalidEndpoints.forEach { endpoint ->
+            val failure = runCatching {
+                NodeServerService.buildNodeEnvironment(root, "https://127.0.0.1:8081", "apk-test",
+                    doubaoWebViewEndpoint = endpoint)
+            }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+        }
+    }
+
+    @Test
     fun Node运行环境使用APK私有目录和Runtime动态库() {
         val root = File("/data/user/0/com.aasc.display/files/aasc-server")
         val environment = NodeServerService.buildNodeEnvironment(

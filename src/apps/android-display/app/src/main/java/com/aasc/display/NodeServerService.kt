@@ -192,7 +192,8 @@ class NodeServerService : Service() {
             androidMediaHome: String? = null,
             nodeModulesDirectory: File? = null,
             apkVersionCode: Int? = null,
-            activeRelease: ActiveRelease? = null
+            activeRelease: ActiveRelease? = null,
+            doubaoWebViewEndpoint: Pair<Int, String>? = null
         ): Map<String, String> {
             val runtimeLibraryPath = File(rootDir, "runtime/arm64-v8a/lib").absolutePath
             val inheritedLibraryPath = System.getenv("LD_LIBRARY_PATH")?.trim().orEmpty()
@@ -212,6 +213,12 @@ class NodeServerService : Service() {
                 "AASC_MAIN_SERVER_URL" to serverUrl,
                 "AASC_PROJECT_ROOT" to rootDir.absolutePath
             )
+            // 两条启动路径共用端点契约；只向当前启动器及其子进程成对传递绑定结果。
+            doubaoWebViewEndpoint?.let { (port, secret) ->
+                require(port in 1024..65535 && secret.length >= 32) { "豆包网页服务端点无效" }
+                environment["AASC_DOUBAO_WEBVIEW_PORT"] = port.toString()
+                environment["AASC_DOUBAO_WEBVIEW_TOKEN"] = secret
+            }
             nodeModulesDirectory?.let {
                 environment["NODE_PATH"] = it.absolutePath
                 environment["AASC_NODE_MODULES_DIR"] = it.absolutePath
@@ -430,7 +437,9 @@ class NodeServerService : Service() {
                         sendStatus(state, detail, phase, completed, total)
                     }
                     jsLauncherSession = session
-                    session.start(mainServerUrl, readAppVersion(), readAppVersionCode() ?: 1, connection?.baseUrl, connection?.token)
+                    // JS启动器也必须先取得同应用WebView服务的绑定结果，随后由宿主环境传到服务Node。
+                    session.start(mainServerUrl, readAppVersion(), readAppVersionCode() ?: 1,
+                        connection?.baseUrl, connection?.token, ensureDoubaoWebViewEndpoint())
                 }
                 when {
                     manifest != null -> OfflineLauncherClient.objectCall("bootstrap.install", JSONObject().put("signedManifest", manifest).put("baseUrl", source), 600)
@@ -538,13 +547,10 @@ class NodeServerService : Service() {
                     androidMediaHome,
                     nodeModulesDirectory,
                     readAppVersionCode(),
-                    activeRelease
+                    activeRelease,
+                    doubaoWebViewEndpoint = ensureDoubaoWebViewEndpoint()
                 )
             )
-            ensureDoubaoWebViewEndpoint()?.let { (port, secret) ->
-                processBuilder.environment()["AASC_DOUBAO_WEBVIEW_PORT"] = port.toString()
-                processBuilder.environment()["AASC_DOUBAO_WEBVIEW_TOKEN"] = secret
-            }
             val process = processBuilder.start()
             val diagnostics = NodeStartupDiagnostics()
             val releaseResolved = java.util.concurrent.atomic.AtomicBoolean(false)

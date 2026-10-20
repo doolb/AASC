@@ -1,5 +1,26 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## Android JS 启动器豆包服务接线（2026-10-21，已实现）
+
+```text
+已有声明 := NodeServerService.ensureDoubaoWebViewEndpoint、buildNodeEnvironment、OfflineLauncherSession.start
+新增定义 := 可选豆包端点{本机端口,随机令牌}
+JS启动 := 在后台启动线程绑定同应用隔离WebView服务 → 获取可选豆包端点 → 传入OfflineLauncherSession
+统一环境 := JS与旧启动路径均将可选豆包端点交给buildNodeEnvironment；有效端点同时输出AASC_DOUBAO_WEBVIEW_PORT与AASC_DOUBAO_WEBVIEW_TOKEN
+端点校验 := 端口在1024至65535且令牌长度至少32；损坏端点拒绝构造；服务未绑定时不生成或伪造变量
+进程传递 := 相同环境同时交给JS宿主配置和ProcessBuilder → 启动器按既有环境继承传到服务Node → doubao.web实例使用Android桥
+生命周期 := 服务绑定由NodeServerService持有与释放；不为每次聊天重复绑定；令牌只存应用私有启动资料与当前子进程环境
+验收 := 有效与缺失/非法端点环境定向测试 → Kotlin编译 → min APK覆盖安装 → 创建并运行doubao.web实例 → 官网UI完成登录验证 → Responses首轮和续聊
+```
+
+```text
+现场结果 := min69/code148创建并运行实例失败 → 修复后min70/code148端口令牌同时存在且实例running、9091健康、无授权IPC返回401
+验证分层 := 官网UI两轮非空SSE完成与会话列表校验通过；登录样本保存未通过；Responses首轮502，未进入续聊，不宣称完整兼容链路成功
+观察器缺口 := 当前实现派发fetch后才克隆Request、异步body处理后才克隆Response；立即消费请求/响应的真实对象模拟均未捕获成功样本，待确认修复
+登录态缺口 := 外部登录Activity销毁删除共享Cookie及WebStorage；网页任务同目录依赖登录态因而失效；保持登录页打开的对照仍报doubao_upstream_failed，待恢复策略及完整模板验收
+产物 := min70已在出包机生成并覆盖安装Note8，未发布；原生接线变化无需改服务代码，保留既有servicePackage状态
+```
+
 ## 豆包网页内置任务与浏览器内请求（2026-10-20，源码已实现，待登录验收）
 
 ```text

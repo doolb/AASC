@@ -61,7 +61,8 @@ internal class OfflineLauncherSession(private val context: Context,
         return root
     }
 
-    fun start(serverUrl: String, versionName: String, versionCode: Int, safUrl: String?, safToken: String?) {
+    fun start(serverUrl: String, versionName: String, versionCode: Int, safUrl: String?, safToken: String?,
+        doubaoWebViewEndpoint: Pair<Int, String>? = null) {
         val bundle = installBaseline()
         val root = NodeRuntimeInstaller(context).ensureLauncherRuntime()
         val fullPending = OfflineFullApkActivation.isPending(root)
@@ -71,7 +72,8 @@ internal class OfflineLauncherSession(private val context: Context,
             require(launcherPointer.renameTo(previousLauncher)) { "无法暂存整包切换前的JS启动器状态" }
         }
         val environment = NodeServerService.buildNodeEnvironment(root, serverUrl, "apk-$versionName", true,
-            safUrl, safToken, context.getExternalFilesDir(null)?.absolutePath, null, versionCode, null)
+            safUrl, safToken, context.getExternalFilesDir(null)?.absolutePath, null, versionCode, null,
+            doubaoWebViewEndpoint = doubaoWebViewEndpoint)
         val config = JSONObject().put("hostApi", 1).put("stateApi", 1).put("root", root.absolutePath)
             .put("bundleRoot", bundle.absolutePath).put("generation", generation).put("apkVersion", versionCode)
             .put("updateOnly", context.resources.getBoolean(R.bool.aasc_update_only_mode))

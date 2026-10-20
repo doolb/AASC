@@ -1,5 +1,16 @@
 # 自测功能实现文档
 
+## Android豆包JS启动端点自测（2026-10-21）
+
+```text
+Kotlin定向 := NodeServerServiceTest验证正常端点成对传递、缺失端点省略、非法端口/令牌拒绝；18/18通过
+启动器回归 := npm run test:offline-launcher → 41/42；候选目录清理ENOTEMPTY失败项单独重跑1/1通过
+真机 := Note8/API28/WebView132，min70/code148；端点环境、运行实例、9091健康与未授权IPC401通过
+官网 := 两个新会话UI请求完整非空SSE与会话列表验证通过；完整登录样本保存未通过
+Responses := 独立临时API Key发流式首轮，502/doubao_upstream_failed，无正文/完成事件；不继续续聊；结束删除API Key并停止测试实例
+待修复 := 登录样本观察器克隆时序、外部登录销毁清理共享登录态，以及完整Responses链路
+```
+
 ## 控制端音色试听入口只读自检（2026-10-20）
 
 ```text

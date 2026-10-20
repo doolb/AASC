@@ -13609,3 +13609,15 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 使用当前 `192.168.1.39` 已登录 Vivaldi 会话做隔离验收：原页面签名可用，不带官网首轮模板的同源“早”收到 HTTP 200、`STREAM_ERROR/710020202`，无模型正文；新标签页与官网“新对话”页初次出现超时。现场设备资料与已存账号不同，未修改正式账号、控制端对话或用户旧官网聊天。`npm run check:chat2api` 315/315 通过；专用 profile 登录、完整聊天、媒体/文件和 Android 真机仍待验收。
   - 页面恢复后，官网 UI 新会话“早”正常显示回复；被动读取该次首轮请求，在内存中规范化去除原消息与旧会话 ID，再由同一页面发送新请求，得到 HTTP 200、内容分块与 `SSE_REPLY_END`，无非零业务码。未将现场模板写入设备资料不同的正式账号。完整 SSE 导入观察器此前对成功 UI 回复超时；另一轮 UI 回复的 `loadingFinished`、完整响应体和同一终态判定均通过，未稳定复现。专用 profile 与真机仍待验收。
   - 当前浏览器临时账号的正式文字适配器首轮和续聊均有非空正文，沿用同一上游会话；3 字节文本上传和下载地址、图片 1 张、音乐 1 条均通过。真实 Vivaldi 新标签页通过桌面桥接的来源、双 Cookie 账号和签名检查。视频现场只得到空结果，修复 `chat2api-doubao-web-media.js` 不再把无任务 ID 或轮询无视频当成功，增加定向回归；`npm run check:chat2api` 316/316 通过。成功视频生成仍待验收；未改正式账号或控制端聊天历史。
+
+### 豆包专用浏览器登录资料导入
+
+- ✅ [2026-10-20] 将当前 Vivaldi 的豆包登录资料导入 `doubao.web` 专用 profile。
+  - 从当前浏览器资料中复制豆包域名的 35 条持久 Cookie 和站点存储到账号 `doubaochat-d56259056231` 的独立 profile；没有写入仓库或打印凭据。专用 Vivaldi 重启后读到有效会话、设备标识，页面无登录按钮，关键会话 Cookie 与 AASC 已保存账号一致；`doubao.web` 浏览器启动器实测可打开该 profile。导入用临时窗口已关闭，调试端口 9224 空闲；当前 Vivaldi 会话保持打开。
+
+### Android豆包验证与JS启动器端点接线
+
+- ✅ [2026-10-21] 修复新Offline JS启动路径未绑定豆包WebView服务，导致创建并运行实例后报“Android豆包网页服务未就绪”。
+  - `NodeServerService.kt`、`OfflineLauncherSession.kt`统一传递经校验的端口与随机令牌；`NodeServerServiceTest.kt`定向18/18通过。JS启动器回归41/42，候选目录清理ENOTEMPTY失败项单独重跑1/1通过。同步design/spec/task/todo/usage及自测文档。
+  - 在出包机生成min70并覆盖安装Note8，SHA-256 `e496385dee68e8ec7fd2f86b540bb3292461bcfb023f22e79ba74f79264336da`；code148保持，宿主端口/令牌、同一测试实例运行、9091健康和未授权IPC401通过。`minApk=false`表示最新原生代码已构建，APK未发布，既有`servicePackage=true`保持。
+  - 官网UI两个新会话均HTTP200、非空SSE完整结束，会话列表“验证登录”通过；完成保存仍被样本缺失拦截。已复现观察器克隆时序丢样本；另发现登录页销毁清空与兼容任务共享的Cookie/WebStorage。保持登录页打开对照时Responses首轮仍502/doubao_upstream_failed，未执行续聊；剩余修复等待确认，不能宣称完整兼容模式通过。测试实例已停止、临时API Key已删除，未写入当前AASC聊天。
