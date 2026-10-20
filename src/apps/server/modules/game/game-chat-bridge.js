@@ -33,6 +33,12 @@ function attemptedStateChanges(tags) {
         .filter(operation => STATE_CHANGING_OPERATIONS.has(operation));
 }
 
+/** GM 已拒绝本轮操作时，只拦截明显宣称棋步已经完成的续答。 */
+function claimsUnconfirmedMove(text) {
+    const value = String(text || '');
+    return /已(?:经)?[^。！？\n]{0,8}(?:下好|落好|下了|落了|走了|落在|下在|成功|完成)|(?:下|落)(?:好|成|完|在|了)|(?:落子|棋步)[^。！？\n]{0,8}(?:成功|完成)|(?:我|你|用户|玩家|AI|黑棋|白棋)[^。！？\n]{0,10}(?:下|落|走)\s*[A-O](?:1[0-5]|[1-9])/i.test(value);
+}
+
 /** 只识别独立协议行；自然语言可位于第一条调用之前或多条调用之间。 */
 function parseGameReplyBlock(value, currentGame = null) {
     const text = String(value || '');
@@ -178,8 +184,15 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         const replyBlock = parseGameReplyBlock(response.message, replyGame);
         const tags = replyBlock.tags;
         if (tags.length === 0) {
-            // 前一次非法批次可能写了虚假的落子叙述；只有 GM 确认后才可转述模型的完成宣称。
-            if (unconfirmedOperations.size) return emitUnconfirmedOperation();
+            if (unconfirmedOperations.size) {
+                // 只展示 GM 错误之后新生成的纠错叙述；被拒绝调用旁的预写文字已清空。
+                const correction = stripGameTags(response.message, replyGame);
+                if (!correction || claimsUnconfirmedMove(correction)) return emitUnconfirmedOperation();
+                const speech = stripGameTags(response.speech, replyGame);
+                return emitFinal(correction, response.reasoning,
+                    speech && !claimsUnconfirmedMove(speech) ? speech : correction,
+                    callbacks, lastHistory, chat.splitIntoSentences, gameTrace, replyGame);
+            }
             const state = gameService.snapshot(displayId);
             if (turn === 0 && !internalSignal && initialState?.result === '进行中'
                 && state?.turn === 'User' && state.result === '进行中'

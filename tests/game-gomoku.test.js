@@ -148,12 +148,35 @@ test('查看会补发棋盘，除退出显示外的棋盘操作恢复隐藏状�
         '恢复后的可见状态必须持久化');
 });
 
-test('AI 不能替用户编造坐标，中文数字坐标可通过', t => {
+test('GameUser 坐标由 AI 按自然语言代填，GM 仍校验范围与回合', t => {
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));
-    assert.equal(game.apply('d', call('User', '落子', 'H8'), { userText: '我想下 C3' }).code,
-        '用户未指定该坐标');
-    assert.equal(game.apply('d', call('User', '落子', 'A1'), { userText: 'A一。' }).ok, true);
+    assert.equal(game.apply('d', call('User', '落子', 'H8'),
+        { userText: '我下最中间的那个位置。' }).ok, true);
+    assert.equal(game.snapshot('d').board.split('/')[7][7], 'X');
+    assert.equal(game.apply('d', call('User', '落子', 'A1'), { userText: '我再下一步' }).code,
+        '未轮到该方');
+    assert.equal(game.apply('d', call('AI', '落子', 'P8')).code, '坐标无效');
+});
+
+test('用户说最中间时 AI 代填 H8 经 GM 确认并完成本轮', async t => {
+    const { game } = fixture(t);
+    game.apply('d', call('User', '开局'));
+    const answers = [
+        'Game:五子棋,GameUser,落子,H8\n收到啦，等 GM 确认中心位置。',
+        'Game:五子棋,GameAI,落子,H9\n妲己下 H9，请继续。'
+    ];
+    const inputs = [];
+    const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
+        inputs.push(input);
+        return { success: true, message: answers.shift(), history: [] };
+    } };
+    const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
+        content: '我下最中间的那个位置。', options: {}, callbacks: {} });
+    assert.match(inputs[1], /GM,落子,.*GameUser,H8,GameAI,进行中/);
+    assert.equal(game.snapshot('d').board.split('/')[7][7], 'X');
+    assert.equal(game.snapshot('d').board.split('/')[8][7], 'O');
+    assert.match(result.message, /妲己下 H9/);
 });
 
 test('横向五子获胜且中途尺寸变更必须确认', t => {
@@ -672,7 +695,7 @@ test('GM 拒绝落子后只查看不能宣称棋步成功，未获确认时返�
     game.apply('d', call('User', '开局'));
     const inputs = [];
     const answers = [
-        'Game:五子棋,GameUser,落子,H4\n收到 H4。',
+        'Game:五子棋,GameUser,落子,P4\n收到 P4。',
         'Game:五子棋,GameAI,查看\n你下 H3，我下 H4。',
         'H3 和 H4 已经下好了。'
     ];
@@ -683,7 +706,7 @@ test('GM 拒绝落子后只查看不能宣称棋步成功，未获确认时返�
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: 'H3。', options: {}, callbacks: {} });
     assert.equal(inputs.length, 3);
-    assert.match(inputs[1], /GM,错误,用户未指定该坐标/);
+    assert.match(inputs[1], /GM,错误,坐标无效/);
     assert.match(inputs[2], /GM,状态,.*1,15,GameUser,进行中/);
     assert.match(result.message, /棋盘未变化/);
     assert.equal(result.message.includes('H4 已经下好'), false);
@@ -694,7 +717,7 @@ test('GM 拒绝落子后模型改发合法标签，按确认的棋步继续', as
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));
     const answers = [
-        'Game:五子棋,GameUser,落子,H4\n收到 H4。',
+        'Game:五子棋,GameUser,落子,P4\n收到 P4。',
         'Game:五子棋,GameUser,落子,H3',
         'Game:五子棋,GameAI,落子,H4\n我下 H4，该你啦。'
     ];
@@ -713,7 +736,7 @@ test('其他成功命令不能代替 GM 确认被拒绝的落子', async t => {
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));
     const answers = [
-        'Game:五子棋,GameUser,落子,H4\n收到 H4。',
+        'Game:五子棋,GameUser,落子,P4\n收到 P4。',
         'Game:五子棋,GameAI,提议尺寸,11\nH3 已落子。',
         '我已经下好 H4。'
     ];
@@ -725,6 +748,24 @@ test('其他成功命令不能代替 GM 确认被拒绝的落子', async t => {
     assert.match(result.message, /未全部完成/);
     assert.equal(result.message.includes('H4'), false);
     assert.equal(game.snapshot('d').board.split('/')[2][7], '.');
+});
+
+test('GM 拒绝后展示模型依据错误新生成的自然语言，不显示固定兜底', async t => {
+    const { game } = fixture(t);
+    game.apply('d', call('User', '开局'));
+    const answers = [
+        'Game:五子棋,GameUser,落子,P8\n已经替你下好啦。',
+        '呜...对不起主人，刚才的坐标无效。请主人再指定一个位置吧。'
+    ];
+    const spoken = [];
+    const fakeChat = { splitIntoSentences: text => [text], async chatStream() {
+        return { success: true, message: answers.shift(), history: [] };
+    } };
+    const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
+        content: '请帮我落子', options: {}, callbacks: { onSentence: text => spoken.push(text) } });
+    assert.equal(result.message, '呜...对不起主人，刚才的坐标无效。请主人再指定一个位置吧。');
+    assert.equal(spoken.join(''), result.message);
+    assert.equal(game.snapshot('d').revision, 1);
 });
 
 test('轮到 AI 时自然语言自称落子不进入聊天或 TTS', async t => {

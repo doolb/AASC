@@ -84,17 +84,6 @@ function parseCoordinate(value, size) {
     return x < size && y < size ? { x, y, text: `${match[1]}${y + 1}` } : null;
 }
 
-function userNamedCoordinate(text, coordinate) {
-    const named = String(coordinate || '').toUpperCase();
-    const value = String(text || '').toUpperCase().replace(/\s+/g, '');
-    if (value.includes(named)) return true;
-    const match = /^([A-O])(1[0-5]|[1-9])$/.exec(named);
-    if (!match) return false;
-    const chinese = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一',
-        '十二', '十三', '十四', '十五'][Number(match[2])];
-    return value.includes(`${match[1]}${chinese}`);
-}
-
 function encodeBoard(board, size) {
     const rows = [];
     for (let y = 0; y < size; y += 1) rows.push(board.slice(y * size, (y + 1) * size).join(''));
@@ -208,8 +197,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 if (call.actor !== state.turn) return fail('未轮到该方');
                 const coordinate = parseCoordinate(argument, state.size);
                 if (!coordinate) return fail('坐标无效');
-                if (call.actor === 'User' && source === 'model'
-                    && !userNamedCoordinate(userText, coordinate.text)) return fail('用户未指定该坐标');
+                // GameUser 的位置参数由 AI 按用户自然语言代填；GM 仍校验轮次、范围与空位。
                 const index = coordinate.y * state.size + coordinate.x;
                 if (state.board[index] !== '.') return fail('位置已占用');
                 const board = state.board.slice();
@@ -293,4 +281,4 @@ function gmSnapshotFromState(state) {
 }
 
 module.exports = { createGomokuGameService, parseGameTag, extractGameTags, stripGameTags,
-    parseCoordinate, encodeBoard, userNamedCoordinate };
+    parseCoordinate, encodeBoard };

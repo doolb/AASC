@@ -144,7 +144,7 @@ test('非法游戏调用回送错误且不写入棋盘', async t => {
     const result = await session.sendUser('开局');
     assert.equal(result.snapshot, null);
     assert.match(requests[1].input, /Game:五子棋,GM,错误,调用行格式无效/);
-    assert.match(result.result.message, /棋盘未变化/);
+    assert.equal(result.result.message, '收到。');
 });
 
 test('交互式 JSON 行脚本可按 GM 回执逐次接收目标 AI 回复', async t => {
