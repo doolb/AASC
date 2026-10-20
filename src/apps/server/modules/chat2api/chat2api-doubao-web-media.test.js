@@ -71,3 +71,16 @@ test('图片上传在官网页完成上传和临时 URL 查询，数据不进入
   await assert.rejects(() => service.uploadImage({ filename: 'bad.exe', data: Buffer.from('x') }),
     { code: 'doubao_image_input' });
 });
+
+test('视频没有任务标识或轮询后没有视频时返回明确错误', async () => {
+  const responses = [wrap(2001, { text: '处理中' }),
+    wrap(2001, { text: '处理中' }, { fin_reason: { reason: 1, async_task: { id: 'task-2' } } }),
+    wrap(2001, { text: '仍在处理' })];
+  const service = createDoubaoWebMediaService({ accountId: account.accountId,
+    dataStore: { readCollection: async () => [account] },
+    bridge: { request: async () => ({ status: 200, data: Readable.from([responses.shift()]) }) } });
+  await assert.rejects(() => service.generate('video', { prompt: '小猫挥手' }),
+    { code: 'doubao_media_protocol' });
+  await assert.rejects(() => service.generate('video', { prompt: '小猫挥手' }),
+    { code: 'doubao_media_protocol' });
+});

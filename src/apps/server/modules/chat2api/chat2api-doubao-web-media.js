@@ -228,10 +228,16 @@ const createDoubaoWebMediaService = ({ bridge, dataStore, accountId = '' }) => {
     if (kind === 'image') return { images: extractImage(messages), prompt };
     if (kind === 'music') return { tracks: extractMusic(messages), prompt };
     const taskId = messages.find(({ detail }) => detail.fin_reason?.reason === 1)?.detail.fin_reason?.async_task?.id;
-    if (!taskId) return { videos: extractVideo(messages), prompt };
+    if (!taskId) {
+      const videos = extractVideo(messages);
+      if (!videos.length) throw publicError('doubao_media_protocol', '豆包视频未返回任务或结果');
+      return { videos, prompt };
+    }
     if (typeof taskId !== 'string' || taskId.length > 256) throw publicError('doubao_media_protocol', '豆包视频任务标识无效');
     const polled = eventMessages(await send(account, { task_id: taskId, event_id: 0 }, signal, 300_000));
-    return { videos: extractVideo(polled), prompt };
+    const videos = extractVideo(polled);
+    if (!videos.length) throw publicError('doubao_media_protocol', '豆包视频未返回任务结果');
+    return { videos, prompt };
   };
   return { generate, uploadImage };
 };
