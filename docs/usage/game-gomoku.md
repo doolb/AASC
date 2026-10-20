@@ -15,3 +15,11 @@ AI 会按需查询当前显示端的游戏目录和五子棋规则。聊天中�
 当前是项目内的位置参数游戏协议，不是独立的标准 MCP 服务。服务代码包待构建，Android 真机体验待验收。
 
 在当前在线显示端看连续演示：先确认显示端已加载包含五子棋 UI 的新版服务代码，再在服务端机器运行 `npm run demo:gomoku-ui`。只有一个在线主显示端时自动选择；多个显示端时运行 `npm run demo:gomoku-ui -- --display-id=显示端ID`。默认 15 路，逐步间隔 900 毫秒，用户胜后停留 2 秒，再开始 AI 胜的一局；最终棋盘保留到按 Ctrl+C，退出时恢复原棋盘。可加 `--size=9`、`--delay-ms=350`、`--result-pause-ms=1200`、`--winner=user` 或 `--winner=ai`；自动退出可加 `--duration=12000`。脚本按本机证书自动选择 `ws` 或 `wss`，默认端口 8081；端口不同可设置 `AASC_GOMOKU_SERVER_URL`。演示不发送测试聊天消息，不调用 AI，也不修改实际棋局。
+
+## 独立 JS 演练入口
+
+运行 `npm run demo:game-chat` 后，命令行按一行一个 JSON 对象交互。先输入 `{"type":"user","content":"我们来玩五子棋，开一盘 9 路的"}`；每收到 `modelRequest`，把其中 `input` 和 `systemPrompt` 交给目标 AI，再输入 `{"type":"modelReply","sequence":1,"message":"Game:目录,AI,列表"}`，其中 `sequence` 必须对应当前请求。入口会逐次输出 `gameProtocol`、`gameUpdate`、`chatComplete` 和 `chatResult`；若 AI 需要等 GM 回执，会再次输出 `modelRequest`。同一进程可继续输入下一条 `user`。默认棋局仅保存在进程使用的临时目录；需要跨进程复用演练状态时可加 `-- --state-file=/tmp/aasc-gomoku-demo.json`。
+
+JS 调用方可从 `src/apps/server/modules/game/game-chat-session.js` 引入 `createGameChatSession({ filePath, displayId, onModelRequest, onEvent })`；`onModelRequest({ input, systemPrompt, sequence })` 可异步返回 AI 回复字符串，`await session.sendUser(用户文本)` 返回最终 `result`、本轮 `events` 和权威 `snapshot`。这个入口接收完整 AI 回复并复用正式游戏桥接逻辑，不连接真实显示端或模型账号。
+
+调用真实聊天模型时，传入现有 `chat` 服务和 `roleName`，例如 `createGameChatSession({ filePath, displayId, chat, roleName: '小爱' })`。角色名必须能从当前聊天模板找到；入口按正式 private 会话传入角色与会话选项，模型请求由 `chat.chatStream` 生成和发送，不需要调用方自己拼接 `System:`。棋局文件仍应指定隔离路径，避免测试影响真实显示端。

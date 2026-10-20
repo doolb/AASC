@@ -1,3 +1,9 @@
+### 聊天游戏独立调用入口
+
+- ✅ [2026-10-20] 新增可调用的聊天游戏 JS 会话入口和 JSON 行演练脚本，复用正式游戏桥接与权威棋局。
+  - `game-chat-session.js`、`scripts/demo/game-chat-session.js`、`package.json` 和 `tests/game-chat-session.test.js` 接通目标 AI 请求、GM 回执、聊天与棋盘快照；真实模式可选现有角色并直接调用 `chat.chatStream`，由原聊天服务生成 `System:`。子代理按实际 GM 往返完成 9 路开局、User C3、AI E5，最终快照版本 3 且轮到 User。`npm run test:game-chat` 31/31 通过；同步五子棋 design/spec/task/usage/todo，`servicePackage=true` 待服务包构建。
+  - `192.168.1.39` 的 qwenchat 已用“小爱”角色按正式 private 聊天路径测试：模型输出无效目录调用和叙述后的协议行，权威棋盘未开局；另一次空回复触发“游戏操作已处理”的误导性兜底。先前手工拼提示的试验仅为非正式诊断，曾收到上游 HTTP 403 `RGV587_ERROR::SM`。真实 Qwen 完整回合与空回复语义待修正验收。
+
 ### 五子棋纯文本协议行
 
 - ✅ [2026-10-20] AI 游戏调用与 GM 回执统一改为无尖括号的独立 `Game:` 行，目录、规则、落子及显示端增量提示使用同一格式。

@@ -1,6 +1,12 @@
 # 五子棋游戏协议实现伪代码
 
 ```text
+独立会话入口 → 接收临时棋局文件路径、显示端 ID、真实聊天服务或目标 AI 回调及事件回调 → 创建权威五子棋服务；真实聊天服务直接复用其 chatStream 与会话配置，回调模式只用于离线模拟 → 调用现有 runGameAwareChat，不另写协议解析或棋局规则
+入口收到用户文本 → 读取该显示端权威快照 → 向目标 AI 回调传入本次模型输入与完整系统提示 → 把 AI 原文交给现有游戏桥 → 按原有校验流程产生目录/规则/棋局 GM 回执、聊天输出和棋盘快照
+真实聊天模式选定角色名 → 从已有聊天服务的角色模板读取角色设定，按正式 private 会话填入 templateTarget、target、sessionId、历史选项；桥接层叠加游戏提示后，将原始 input 与 options 原样交给已有 chat.chatStream；入口不自行拼接 System:、角色消息或历史；模型流式回调由正式聊天服务产生
+目标 AI 回调模式 → 每次续接只收到游戏桥实际发出的输入并返回完整回复；入口不伪造流式片段；两种模式都按发生顺序输出 modelRequest、gameProtocol、gameUpdate、chatChunk、chatSentence、chatComplete 或 chatError；一轮返回最终聊天、事件列表和权威快照
+交互式 JSON 行脚本 → 用户发送带 type 的 user 消息 → 脚本发出 modelRequest 并等待带 type 的 modelReply → 可能反复往返 GM 直到本轮 chatResult → 使用临时文件隔离默认演练棋局；显式 state-file 可复用演练棋局
+演练入口不连接生产聊天账号、WebSocket 或真实显示端，不修改实际用户棋局；应用聊天入口继续沿用同一个 runGameAwareChat
 首选协议行 := Game:游戏名,操作者,操作[,操作参数...]；不用尖括号，仅把回复开头独占一行的 Game: 文本视为新格式调用
 兼容旧调用 := <Game:游戏名,操作者,操作[,操作参数...]>；沿用旧解析和批量执行规则，旧单条调用仍可出现在正文中
 解析调用 → 两种格式均只接受五子棋、User/AI、已定义操作和对应数量的位置参数；拒绝中文逗号、多余字段和未知值；普通正文中的无尖括号 Game: 不触发操作
