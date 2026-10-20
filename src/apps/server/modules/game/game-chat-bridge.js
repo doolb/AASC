@@ -3,8 +3,8 @@ const { extractGameTags, stripGameTags } = require('./gomoku-game-service');
 const MAX_TAGS_PER_REPLY = 8;
 const STATE_CHANGING_OPERATIONS = new Set(['开局', '落子', '提议尺寸', '确认尺寸', '退出显示', '恢复显示']);
 const GAME_PROMPT = [
-    '本地游戏标签：<Game:游戏名,User或AI,操作[,参数...]>；英文逗号位置参数，不用 JSON。回复开头可连续写最多 8 行标签，每行一条，标签之间不得插入叙述，最后再接自然语言；需要新 GM 结果时先等回执。',
-    'User 代表用户，语音坐标也由你代发；AI 代表你。不得伪造 GM/Game，只有 GM 确认后才说操作成功。已有棋局收到坐标先调用标签，轮到 AI 时由你落子；普通聊天直接回答。',
+    '本地游戏标签：<Game:游戏名,User或AI,操作[,参数...]>；字段只用英文逗号，不用 JSON。回复开头最多 8 条标签，每条独占一行，标签之间和末尾可写自然语言。',
+    'User 代表用户，语音坐标也由你代发；AI 代表你。不得伪造 GM/Game，只有 GM 确认后才说操作成功。用户报坐标时先发 User 落子标签，等 GM 确认且轮到 AI，再决定并发 AI 落子标签；普通聊天直接回答。',
     '首次需要本地游戏时先发 <Game:目录,AI,列表> 查询当前显示端，再用 <Game:游戏名,AI,规则> 按需读取规则；已有规则时按规则操作。'
 ].join('\n');
 const GOMOKU_RULES = [
@@ -22,22 +22,15 @@ function attemptedStateChanges(tags) {
         .filter(operation => STATE_CHANGING_OPERATIONS.has(operation));
 }
 
-/** 多标签必须组成回复开头的连续整行；单标签保留旧版同一行叙述兼容。 */
+/** 多标签只要求首个标签位于回复开头；标签之间的自然语言不是格式错误。 */
 function parseGameReplyBlock(value) {
     const text = String(value || '');
     const tags = extractGameTags(text);
     if (tags.length <= 1) return { tags, narrative: stripGameTags(text), valid: true };
     if (tags.length > MAX_TAGS_PER_REPLY) return { tags, narrative: '', valid: false };
-    const lines = text.trimStart().replace(/\r\n?/g, '\n').split('\n');
-    let tagLines = 0;
-    for (const line of lines) {
-        const content = line.trim();
-        const lineTags = extractGameTags(content);
-        if (lineTags.length !== 1 || lineTags[0].raw !== content) break;
-        tagLines += 1;
-    }
-    const narrative = lines.slice(tagLines).join('\n').trim();
-    return { tags, narrative, valid: tagLines === tags.length && !narrative.includes('<Game:') };
+    const unparsed = tags.reduce((remaining, tag) => remaining.replace(tag.raw, ''), text);
+    return { tags, narrative: stripGameTags(text),
+        valid: text.trimStart().startsWith(tags[0].raw) && !unparsed.includes('<Game:') };
 }
 
 function formatGameProtocolSummary(kind, raw) {
@@ -240,7 +233,8 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         }
         const gmResults = [];
         let failedResult = null;
-        for (const { call, raw } of tags) {
+        let deferredAiMove = false;
+        for (const [index, { call, raw }] of tags.entries()) {
             recordProtocol(call.actor, raw);
             const games = getAvailableGames(displayId);
             const available = Array.isArray(games) && games.includes('五子棋');
@@ -261,7 +255,16 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
             if (result.ok && STATE_CHANGING_OPERATIONS.has(call.operation)) {
                 unconfirmedOperations.delete(call.operation);
             }
-            if (result.ok) continue;
+            if (result.ok) {
+                // 用户棋步确认后才让模型选择 AI 棋步；本回复预写的 AI 落子及叙述均不采信。
+                if (call.actor === 'User' && call.operation === '落子'
+                    && tags.slice(index + 1).some(tag => tag.call.actor === 'AI'
+                        && tag.call.operation === '落子')) {
+                    deferredAiMove = true;
+                    break;
+                }
+                continue;
+            }
             failedResult = result;
             if (STATE_CHANGING_OPERATIONS.has(call.operation)) {
                 unconfirmedOperations.add(call.operation);
@@ -280,12 +283,16 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
                 ? gameService.gmSnapshot(displayId) : gmResults.join('\n');
             continue;
         }
+        if (deferredAiMove) {
+            input = gmResults.join('\n');
+            continue;
+        }
         const lastCall = tags.at(-1).call;
         const narrative = replyBlock.narrative;
         if (unconfirmedOperations.size) {
             if (lastCall.operation === '开局') return emitUnconfirmedOperation();
             // 查询只能读取权威状态，不能补确认之前被拒绝的开局或落子。
-            input = gmResults.at(-1);
+            input = gmResults.join('\n');
             continue;
         }
         if (narrative) narratives.push(narrative);
@@ -297,7 +304,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
             return emitFinal(combined, response.reasoning, combined, callbacks, lastHistory,
                 chat.splitIntoSentences, gameTrace);
         }
-        input = gmResults.at(-1);
+        input = gmResults.join('\n');
     }
     if (unconfirmedOperations.size) return emitUnconfirmedOperation();
     return emitFinal('游戏操作次数达到上限，请查看棋盘后重试。', '', '', callbacks, lastHistory,

@@ -11,6 +11,9 @@
 
 ### 五子棋游戏协议与本地显示
 
+- ✅ [2026-10-20] 修复合法多标签间插入自然语言时被整批判为“标签格式无效”；逐条 GM 校验并回送本批全部回执。User 落子与预写 AI 落子同回复时，先确认用户棋步，再让模型选择 AI 棋步，丢弃预写叙述。
+  - 更新 `game-chat-bridge.js`、`game-gomoku.test.js`、五子棋 design/spec/task/todo；25/25 定向测试通过。隔离的真实 Responses 请求返回豆包安全验证 `doubao_risk_control`（403），需恢复后再验收；`servicePackage=true` 保持待出包。
+
 - ✅ [2026-10-20] 五子棋规则改为仅含游戏专属操作和棋规；查询规则不改变 `NowGame`，权威开局后的下一轮才在 `NowGame` 下附同一份短规则。
   - `game-chat-bridge.js` 继续由 AI 代语音玩家发命令，并在非法状态变更或 AI 回合只输出叙述时阻止未获 GM 确认的模型落子宣称进入聊天和 TTS；其他命令不能代替被拒落子的确认，部分开局只报权威结果。更新五子棋 design/spec/task/todo 和定向测试，24/24 通过。隔离 Responses 测试按目录→规则→开局成功，H3 交错标签被拒绝，随后豆包安全验证阻断续接；真实落子待验收。沿用 `servicePackage=true` 待出包状态。
 
