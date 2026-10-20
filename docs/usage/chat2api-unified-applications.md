@@ -10,7 +10,7 @@ Chat2API 文字聊天通过 Node Axios 请求同一官网接口，使用此前�
 
 ## 未配置映射或账号选择
 
-设置页显示内置默认映射：DeepSeek六条模式别名、历史Qwen3.6-Flash→Qwen3.7、豆包doubao/doubao-think/doubao-expert。自定义精确/通配规则优先；可编辑默认行保存覆盖，删除自定义覆盖会恢复默认。无需先手动添加映射才能调用这些名字；Qwen历史别名仅沿用本项目设置，不代表上游模型发布承诺。
+设置页显示内置默认映射：DeepSeek 六条模式别名、Qwen 三条 `aasc-qwen-mini/flash/pro` 请求别名、豆包 `doubao/doubao-think/doubao-expert`。旧 `Qwen3.6-Flash→Qwen3.7` 不再是内置默认项。自定义精确/通配规则优先；可编辑默认行保存覆盖，删除自定义覆盖会恢复默认。已有私人自定义映射不会因内置规则删除而被移除。
 
 没有指定账号时使用当前启用、有凭据的已保存账号，默认私人目录可一次性复用原~/.chat2api/data.json中的缺失Provider资料；不覆盖已有账号或复活已删除账号。登录资料缺失或失效时仍需要登录，release和数据修复包不包含账号凭据。现有导入账号流程继续支持手动预览与确认。
 

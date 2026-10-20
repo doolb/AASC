@@ -2,7 +2,7 @@
 
 ## LLM 三档与双端快选（2026-10-19，源码完成）
 
-控制端和显示端右下角均提供“模型”快选，当前 Provider 与三档选择由服务端共享。档位是调用偏好，不暗示三套独立模型权重。`src/apps/server/modules/chat2api/chat2api-default-model-mappings.js` 中的三档定义每档只保存当前 LLM 模型名；Chat2API 默认映射负责请求别名与实际目标。快选服务与 Provider 注册表从这里读取，用户界面不编辑映射。
+控制端和显示端右下角均提供“模型”快选，当前 Provider 与三档选择由服务端共享。档位是调用偏好，不暗示三套独立模型权重。`src/apps/server/modules/chat2api/chat2api-default-model-mappings.js` 中的三档定义兼容旧 LLM 模型名；现在选档将提交给 Chat2API 的请求别名直接写入当前 LLM profile 的模型字段，Chat2API 默认映射负责实际目标。快选服务与 Provider 注册表从这里读取，用户界面不编辑映射。
 
 | 档位 | 中文名 | Qwen 网页目标模型 | 豆包现有模型别名 |
 |------|--------|-------------------|------------------|
@@ -10,9 +10,9 @@
 | flash | 普通 | Qwen3.7 | doubao-think → doubao（思考0） |
 | pro | 专业 | Qwen3.7-Max | doubao-expert（思考3） |
 
-Qwen 初始档位为 flash，豆包初始档位为 mini。切换 Provider 时恢复它自己的上次档位。当前普通 LLM profile 的 `model` 是模型选择的权威来源，快选时更新控制端“LLM 服务器配置”里当前 profile 的模型名；`chat.modelTierSelection` 记忆各 Provider 的档位偏好。豆包轻量写入 `doubao`，普通写入 `doubao-think`；两者的 Chat2API 默认实际目标都是 `doubao`，因此两端按当前模型名即可区分按钮。控制端与显示端通过 `getChatModelTierConfig`、`setChatModelTierSelection` 和 `chatModelTierConfig` 同步权威状态；断线期间不可提交，重连补发。Provider 候选来自当前运行的 Chat2API 代理中已启用且有凭据的账号，并要求 Provider 自身启用且开发映射存在；账号已配置不代表远端仍有效。
+Qwen 初始档位为 flash，豆包初始档位为 mini。切换 Provider 时恢复它自己的上次档位。当前普通 LLM profile 的 `model` 是模型选择的权威来源，快选时更新控制端“LLM 服务器配置”里当前 profile 的模型名：Qwen 分别写入 `aasc-qwen-mini/flash/pro`，豆包分别写入 `doubao/doubao-think/doubao-expert`。`chat.modelTierSelection` 记忆各 Provider 的档位偏好。豆包轻量和普通的 Chat2API 默认实际目标都是 `doubao`，因此两端按当前模型名即可区分按钮。控制端与显示端通过 `getChatModelTierConfig`、`setChatModelTierSelection` 和 `chatModelTierConfig` 同步权威状态；断线期间不可提交，重连补发。Provider 候选来自当前运行的 Chat2API 代理中已启用且有凭据的账号，并要求 Provider 自身启用且开发映射存在；账号已配置不代表远端仍有效。
 
-模型名按开发维护的名称表直接反查 Provider 和档位，不读取 Chat2API 的映射配置；手工修改模型名或切换 profile 后，两端依当前模型名重算。现有 `Qwen3.6-Flash` 名称归 Qwen 轻量档，未知名称显示原值但不选中档位。手工配置 `doubao-think` 时识别为豆包普通，Chat2API 默认映射实际调用 `doubao`。选择只影响后续普通 LLM 聊天，当前为 Agent profile 时快选不可编辑，角色 Agent 保持角色配置。服务端发起三档请求时再次检查代理和账号；失败返回具体错误，不切换到别的 Provider 或档位。Qwen 三档请求仍走专用内部别名，避免旧 `Qwen3.6-Flash → Qwen3.7` 兼容映射改写轻量目标。豆包快选使用现有的 0/0/3 模式请求，不添加未经验证的 Lite 选择键或 model_config 参数。
+模型名按开发维护的名称表直接反查 Provider 和档位，不读取 Chat2API 的映射配置；手工修改模型名或切换 profile 后，两端依当前模型名重算。旧 `Qwen3.6-Flash` 名称仍识别为 Qwen 轻量档，再次选档会把配置字段写成请求别名；未知名称显示原值但不选中档位。手工配置 `doubao-think` 时识别为豆包普通，Chat2API 默认映射实际调用 `doubao`。选择只影响后续普通 LLM 聊天，当前为 Agent profile 时快选不可编辑，角色 Agent 保持角色配置。服务端发起三档请求时再次检查代理和账号；失败返回具体错误，不切换到别的 Provider 或档位。旧 `Qwen3.6-Flash → Qwen3.7` 内置兼容映射已移除，Qwen 三档仍使用各自的专用别名。豆包快选使用现有的 0/0/3 模式请求，不添加未经验证的 Lite 选择键或 model_config 参数。
 
 普通聊天把本次目标交给同一运行中的 Chat2API Responses 服务，复用既有账号调度与会话持久化。AASC 续接指纹包含请求别名及 Provider 地址，切换档位后旧上游引用不会被当作兼容状态复用。面板展示实际提交给 Chat2API 的请求模型名、Provider 与档位；例如 Qwen 轻量显示 `aasc-qwen-mini`，普通显示 `aasc-qwen-flash`。请求名由服务端从已识别的 Provider 和档位计算并随权威快照下发，LLM 配置里保存的模型名仍用于识别档位。Agent 配置显示不适用；未知配置保留原模型名并标记未匹配三档。档位按钮使用当前主题预览的选中和未选中状态：选中为主题强调色渐变、白字和强调色外圈，未选中为中性背景、次要文字和边框，浅色主题同样保持区分。面板预留禁用的“外部登录（后续开放）”按钮和接线方法，本次不启动外部登录。
 

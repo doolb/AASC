@@ -111,7 +111,10 @@ test('累计脚本在旧0/1环境补修，在版本2保留用户后续状态栏�
         assert.equal(JSON.parse(await fs.readFile(path.join(releaseRoot, 'config/config.json'))).voiceprint.acceptVoiceInputDuringTtsWithoutVoiceprint, true);
         assert.equal((await readBaseline(releaseRoot)).dataVersion, 3);
         const mappings = JSON.parse(await fs.readFile(path.join(releaseRoot, 'userconfig/chat2api/model-mappings.json')));
-        assert.deepEqual(mappings, require('../src/apps/server/modules/chat2api/chat2api-default-model-mappings').DEFAULT_MODEL_MAPPINGS);
+        // 历史签名修复脚本固定旧版映射，当前内置默认变化不应改写旧迁移的预期结果。
+        const frozenDefaults = (await fs.readFile(script, 'utf8')).match(/const defaults = (\[[\s\S]*?\]);/u);
+        assert.ok(frozenDefaults);
+        assert.deepEqual(mappings, JSON.parse(frozenDefaults[1]));
         await assert.rejects(fs.stat(path.join(releaseRoot, 'userconfig/chat2api/accounts.json')), { code: 'ENOENT' });
     }
 });

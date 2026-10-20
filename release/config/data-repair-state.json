@@ -57,8 +57,8 @@
     },
     {
       "path": "userconfig/chat2api/model-mappings.json",
-      "size": 1111,
-      "sha256": "c49ee3484a640d8c03f9eadc4894c1537449d5e26f4022a56a82cba63727a12c"
+      "size": 1017,
+      "sha256": "ac8706f521cbd714c4f37801f7a71a3638fd25fec0906d318419171b2d26be72"
     },
     {
       "path": "userconfig/userconfig.json",

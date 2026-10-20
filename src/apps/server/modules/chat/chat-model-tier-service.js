@@ -92,7 +92,9 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
             const next = { providerId, tiersByProvider: { ...current.tiersByProvider } };
             const tier = data.tier || current.tiersByProvider[providerId];
             next.tiersByProvider[providerId] = tier;
-            await saveActiveModel(PROVIDER_TIERS[providerId].models[tier], next);
+            // 当前 LLM 配置保存真实提交给 Chat2API 的请求名；旧配置名称继续用于档位识别。
+            const requestModel = tierRequestModel(providerId, tier);
+            await saveActiveModel(requestModel, next);
             const message = { type: 'chatModelTierConfig', selection: selection(), providers,
                 success: true, requestId: data.requestId };
             broadcast(message);

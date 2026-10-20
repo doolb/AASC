@@ -30,11 +30,6 @@
     "providerId": "deepseek"
   },
   {
-    "model": "Qwen3.6-Flash",
-    "actualModel": "Qwen3.7",
-    "providerId": "qwen"
-  },
-  {
     "model": "doubao",
     "actualModel": "doubao",
     "providerId": "doubaochat"

@@ -8,6 +8,6 @@
 | 普通 | Qwen3.7 | doubao-think → doubao（思考0） |
 | 专业 | Qwen3.7-Max | doubao-expert（思考3） |
 
-选档会修改控制端“LLM 服务器配置”中当前普通 LLM profile 的“模型”字段，控制端手工修改该字段或切换 profile 后，两端也会按当前模型名重新识别并显示请求名。豆包轻量写入并请求 `doubao`，普通写入并请求 `doubao-think`；两者默认映射到 `doubao` 思考 0。`Qwen3.6-Flash` 按配置名称识别为 Qwen 轻量，请求时使用 `aasc-qwen-mini`；面板不读取 Chat2API 的自定义映射。未知模型名原样显示并标注未匹配三档。当前 profile 为 Agent 时显示不适用且不可快选，角色 Agent 使用自己的配置。列表按 Chat2API 当前运行实例中已启用、有凭据的账号筛选，账号出现在列表不代表远端登录仍有效。代理未运行或账号失效时，聊天会返回错误，不自动换 Provider 或档位。两端断线时不能提交，重连后以服务器保存的模型名和档位偏好为准。
+选档会修改控制端“LLM 服务器配置”中当前普通 LLM profile 的“模型”字段，保存的值与提交给 Chat2API 的请求名相同：Qwen 为 `aasc-qwen-mini/flash/pro`，豆包为 `doubao/doubao-think/doubao-expert`。控制端手工修改该字段或切换 profile 后，两端也会按当前模型名重新识别并显示请求名。豆包轻量和普通默认映射到 `doubao` 思考 0。旧 `Qwen3.6-Flash` 配置名仍识别为 Qwen 轻量，再次选档会写成 `aasc-qwen-mini`；面板不读取 Chat2API 的自定义映射。未知模型名原样显示并标注未匹配三档。当前 profile 为 Agent 时显示不适用且不可快选，角色 Agent 使用自己的配置。列表按 Chat2API 当前运行实例中已启用、有凭据的账号筛选，账号出现在列表不代表远端登录仍有效。代理未运行或账号失效时，聊天会返回错误，不自动换 Provider 或档位。两端断线时不能提交，重连后以服务器保存的模型名和档位偏好为准。
 
 三档映射由开发统一在 `src/apps/server/modules/chat2api/chat2api-default-model-mappings.js` 维护，界面不编辑映射。面板中的“外部登录（后续开放）”暂不可点；当前仍从控制端 Chat2API 任务卡片进入账户管理和外部认证。Qwen 目标的真实上游可调用性及 Offline APK/ADB 页面还需现场验收。

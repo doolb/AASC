@@ -1,3 +1,8 @@
+### 模型字段保存请求别名与 Qwen 旧映射清理
+
+- ✅ [2026-10-20] Qwen 选档把 `aasc-qwen-mini/flash/pro` 请求名直接保存到当前 LLM profile 的模型字段，并移除 `Qwen3.6-Flash → Qwen3.7` 内置默认映射及发行种子行。
+  - `chat-model-tier-service.js`、`chat2api-default-model-mappings.js`、`release/userconfig/chat2api/model-mappings.json` 与发行基线摘要更新；旧配置名仍可识别档位，私人自定义映射保持。历史签名修复脚本不改，其测试改为对照脚本内固定映射。同步 chat-system/chat2api design/spec、usage、task、todo；`npm run check:chat2api` 316/316、三档与浏览器 9/9、离线数据修复 73/73 及发行基线校验通过。运行中 `qwen3.5` 已由用户切到 `Qwen3.7-Max`，未覆盖这项新选择；Offline 产物待构建。
+
 ### 聊天模型请求名展示
 
 - ✅ [2026-10-20] 两端模型快选面板显示实际提交给 Chat2API 的请求模型名。

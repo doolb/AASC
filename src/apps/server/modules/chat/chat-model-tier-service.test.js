@@ -56,7 +56,7 @@ test('每个 Provider 记住自己的档位，Qwen 默认普通、豆包默认�
     });
     assert.deepEqual((await service.availableProviders()).map(item => item.id), ['qwen', 'doubaochat']);
     await service.update({ providerId: 'qwen', tier: 'pro' });
-    assert.equal(profile.model, 'Qwen3.7-Max');
+    assert.equal(profile.model, 'aasc-qwen-pro');
     assert.equal(service.selection().requestModelName, 'aasc-qwen-pro');
     await service.update({ providerId: 'doubaochat' });
     assert.equal(profile.model, 'doubao');
@@ -102,6 +102,16 @@ test('直接按当前模型名识别 Provider 和档位，不读取 Chat2API 映
     await assert.rejects(service.update({ providerId: 'qwen', tier: 'flash' }), /不是普通 LLM/);
 });
 
+test('Qwen 普通选档把请求别名写入当前 LLM 模型字段', async () => {
+    const { service, profile, saves } = setup('Qwen3.7');
+    assert.equal(service.selection().requestModelName, 'aasc-qwen-flash');
+    await service.update({ providerId: 'qwen', tier: 'flash' });
+    assert.equal(profile.model, 'aasc-qwen-flash');
+    assert.equal(saves.at(-1).model, 'aasc-qwen-flash');
+    assert.equal(service.selection().tiersByProvider.qwen, 'flash');
+    assert.equal((await service.resolveForChat()).model, profile.model);
+});
+
 test('豆包轻量和普通保留不同名称，按当前名称回显档位', async () => {
     const { service, profile, saves, requests } = setup();
     await service.update({ providerId: 'doubaochat', tier: 'flash' });
@@ -133,7 +143,7 @@ test('停用账号不能选用，旧选择也不会回退到其它 Provider', as
 test('三档请求使用对应模型并保留服务端 Responses 续接参数', async () => {
     const { service, profile, requests } = setup();
     await service.update({ providerId: 'qwen', tier: 'mini' });
-    assert.equal(profile.model, 'Qwen3.6-Flash');
+    assert.equal(profile.model, 'aasc-qwen-mini');
     const mini = await service.resolveForChat();
     assert.equal(mini.model, 'aasc-qwen-mini');
     assert.equal(service.selection().requestModelName, mini.model);

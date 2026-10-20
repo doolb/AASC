@@ -22,7 +22,7 @@ const legacyQwen = { id: 'legacy-qwen', name: '虚构测试账号', providerId: 
 
 test('空映射使用含三档专用别名的内置规则，未知模型保持原值', async () => {
   const mapper = createChat2ApiModelMapper({ dataStore: { readCollection: async () => [] } });
-  assert.equal(DEFAULT_MODEL_MAPPINGS.length, 13);
+  assert.equal(DEFAULT_MODEL_MAPPINGS.length, 12);
   for (const rule of DEFAULT_MODEL_MAPPINGS) {
     const resolved = await mapper.resolveModel(rule.model.toUpperCase());
     assert.equal(resolved.actualModel, rule.actualModel);
@@ -30,7 +30,8 @@ test('空映射使用含三档专用别名的内置规则，未知模型保持�
   }
   assert.equal((await mapper.resolveModel('custom-unknown')).actualModel, 'custom-unknown');
   assert.equal((await mapper.resolveModel('aasc-qwen-mini')).actualModel, 'Qwen3.6-Flash');
-  assert.equal((await mapper.resolveModel('Qwen3.6-Flash')).actualModel, 'Qwen3.7');
+  assert.equal((await mapper.resolveModel('Qwen3.6-Flash')).actualModel, 'Qwen3.6-Flash');
+  assert.equal((await mapper.resolveModel('aasc-qwen-flash')).actualModel, 'Qwen3.7');
   assert.equal((await mapper.resolveModel('doubao-think')).actualModel, 'doubao');
 });
 
@@ -68,15 +69,16 @@ test('自定义精确与通配规则覆盖内置及Provider规则，保留账号
 
 test('有效默认列表只读，保存覆盖大小写去重，删除后恢复默认', async t => {
   const { store, options } = await fixture(t);
-  assert.equal((await store.listEffectiveModelMappings()).length, 13);
+  assert.equal((await store.listEffectiveModelMappings()).length, 12);
   assert.deepEqual(await store.listModelMappings(), []);
   await assert.rejects(fs.stat(path.join(options.rootDir, 'model-mappings.json')), { code: 'ENOENT' });
-  await store.saveModelMapping({ model: 'Qwen3.6-Flash', actualModel: 'first', providerId: 'qwen', builtinDefault: true });
-  await store.saveModelMapping({ model: 'qwen3.6-flash', actualModel: 'custom', providerId: 'qwen' });
+  await store.saveModelMapping({ model: 'aasc-qwen-mini', actualModel: 'first', providerId: 'qwen', builtinDefault: true });
+  await store.saveModelMapping({ model: 'AASC-QWEN-MINI', actualModel: 'custom', providerId: 'qwen' });
   assert.equal((await store.listModelMappings()).length, 1);
   assert.equal((await store.listModelMappings())[0].builtinDefault, undefined);
-  await store.deleteModelMapping('QWEN3.6-FLASH');
-  assert.equal((await store.listEffectiveModelMappings()).find(row => row.model === 'Qwen3.6-Flash').actualModel, 'Qwen3.7');
+  await store.deleteModelMapping('AASC-QWEN-MINI');
+  assert.equal((await store.listEffectiveModelMappings()).find(row => row.model === 'aasc-qwen-mini').actualModel, 'Qwen3.6-Flash');
+  assert.equal((await store.listEffectiveModelMappings()).some(row => row.model === 'Qwen3.6-Flash'), false);
 });
 
 test('旧资料并发恢复一次，删除后重新创建存储也不复活', async t => {
@@ -109,9 +111,9 @@ test('虚构旧账号无需映射和账号指定即可完成真实调度，无�
       calls += 1; assert.equal(actualModel, 'Qwen3.7'); assert.equal(account.accountId, 'legacy-qwen');
       return { body: { choices: [{ message: { role: 'assistant', content: 'OK' } }] } };
     } } });
-  assert.ok((await core.listModels()).data.some(row => row.id === 'Qwen3.6-Flash'));
-  const result = await core.forwardChatCompletion({ model: 'Qwen3.6-Flash', messages: [{ role: 'user', content: '虚构测试' }] });
+  assert.ok((await core.listModels()).data.some(row => row.id === 'aasc-qwen-flash'));
+  const result = await core.forwardChatCompletion({ model: 'aasc-qwen-flash', messages: [{ role: 'user', content: '虚构测试' }] });
   assert.equal(result.body.choices[0].message.content, 'OK'); assert.equal(calls, 1);
   await store.deleteAccount('legacy-qwen');
-  await assert.rejects(core.forwardChatCompletion({ model: 'Qwen3.6-Flash', messages: [{ role: 'user', content: '虚构测试' }] }), /请先.*登录/);
+  await assert.rejects(core.forwardChatCompletion({ model: 'aasc-qwen-flash', messages: [{ role: 'user', content: '虚构测试' }] }), /请先.*登录/);
 });

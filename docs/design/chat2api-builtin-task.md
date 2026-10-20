@@ -2,7 +2,7 @@
 
 ## 默认映射、已有账号复用与 release 修复（2026-10-14，已完成并发布）
 
-内置默认规则与release种子使用同一套公开模型名称：DeepSeek v4 Flash/Pro各自think、search、think-search映射至基础模型，共6条；Qwen3.6-Flash→Qwen3.7保持用户历史映射；豆包doubao/doubao-think/doubao-expert归doubaochat并映射至同名模式。自定义精确或通配规则、Provider与账号偏好优先。设置页展示有效默认项，编辑后保存覆盖，删除覆盖后恢复默认；默认项不隐式写入私人映射文件。
+当前内置默认规则使用 DeepSeek v4 Flash/Pro各自think、search、think-search映射至基础模型，共6条；Qwen 使用 `aasc-qwen-mini/flash/pro` 三条请求别名；豆包使用 `doubao/doubao-think/doubao-expert` 三条模式规则。旧 `Qwen3.6-Flash→Qwen3.7` 内置兼容规则已删除，发行种子也不再包含该行；既有私人自定义映射不因此删除。自定义精确或通配规则、Provider与账号偏好优先。设置页展示有效默认项，编辑后保存覆盖，删除覆盖后恢复默认；默认项不隐式写入私人映射文件。
 
 账号直接使用各设备已保存资料。默认私人根目录首次列出账号时，按同根写队列从项目旧~/.chat2api/data.json补齐缺失Provider资料；有界、非链接JSON校验、身份去重及一次性记录保护已有账号、禁用与删除决定。自定义根目录必须显式开启恢复，隔离seed-worker明确关闭。未找到可用资料返回登录/恢复提示，不创建假账号，不扫描浏览器或向官网自动发请求。豆包账号带nodeProfile时直连；Cookie-only仍使用原Chrome绑定，设置入口改为默认收起的“旧版Chrome兼容模式”。
 

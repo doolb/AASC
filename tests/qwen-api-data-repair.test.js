@@ -10,7 +10,6 @@ const { createDataRepairRunner, sha256Buffer } = require('../src/apps/server/mod
 const { normalizeSettings, redactSettings } = require('../src/apps/server/modules/tts/tts-provider-settings');
 const { prepareReleaseRepairs } = require('../scripts/ops/offline-data-repair-seeds');
 const { readBaseline, verifyBaselineFiles } = require('../src/apps/server/modules/data-repair/data-repair-baseline');
-const { DEFAULT_MODEL_MAPPINGS } = require('../src/apps/server/modules/chat2api/chat2api-default-model-mappings');
 const catalog = require('../src/apps/server/modules/chat2api/qwen-audio-31-voices.json');
 
 const script = path.resolve(__dirname, '../release/offline-update/repair-sources/qwen-api-defaults-v4/repair.js');
@@ -290,7 +289,12 @@ for (const version of [0, 1, 2, 3]) {
         assert.equal(baseline.dataVersion, 4);
         await verifyBaselineFiles(releaseRoot, baseline);
         if (version < 3) {
-            assert.deepEqual(JSON.parse(await fs.readFile(path.join(releaseRoot, 'userconfig/chat2api/model-mappings.json'))), DEFAULT_MODEL_MAPPINGS);
+            // 历史签名修复脚本的映射快照不可随当前内置默认规则变化；只对照脚本自身固定的数据。
+            const source = await fs.readFile(script, 'utf8');
+            const frozenDefaults = source.match(/const defaults = (\[[\s\S]*?\]);/u);
+            assert.ok(frozenDefaults);
+            assert.deepEqual(JSON.parse(await fs.readFile(path.join(releaseRoot, 'userconfig/chat2api/model-mappings.json'))),
+                JSON.parse(frozenDefaults[1]));
         }
         await assert.rejects(fs.stat(path.join(releaseRoot, 'userconfig/chat2api/accounts.json')), { code: 'ENOENT' });
     });
