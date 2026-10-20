@@ -8,14 +8,28 @@ const OPERATIONS = Object.freeze({
     开局: [0, 1], 落子: [1], 查看: [0], 提议尺寸: [1], 确认尺寸: [1], 退出显示: [0], 恢复显示: [0]
 });
 const GAME_LINE = /^Game:[^\r\n]*/gm;
+const SHORT_GAME_LINE = /^(?:GameUser|GameAI):[^\r\n]*/gm;
 const LEGACY_GAME_TAG = /<Game:([^<>]{1,160})>/g;
+const INTERNAL_ACTORS = Object.freeze({ GameUser: 'User', GameAI: 'AI' });
 
-function parseGameTag(raw) {
+// 对模型展示的游戏角色与棋盘内部角色分开，避免改变已保存棋局和显示端增量格式。
+function protocolActor(actor) { return actor === 'User' ? 'GameUser' : actor === 'AI' ? 'GameAI' : actor; }
+function protocolResult(result) {
+    return result === 'User胜' ? 'GameUser胜' : result === 'AI胜' ? 'GameAI胜' : result;
+}
+
+function parseGameTag(raw, currentGame = null) {
     if (typeof raw !== 'string') return null;
     const legacy = /^<Game:[^<>]{1,160}>$/.test(raw);
-    if (!legacy && !/^Game:[^<>\r\n]{1,160}$/.test(raw)) return null;
-    const fields = (legacy ? raw.slice(6, -1) : raw.slice(5)).split(',').map(value => value.trim());
-    const [game, actor, operation, ...args] = fields;
+    // 简写只能由目标显示端正在进行的权威棋局补全，不从模型文本猜游戏名。
+    const shorthand = Boolean(currentGame) && /^(?:GameUser|GameAI):[^<>\r\n]{1,160}$/.test(raw);
+    if (!legacy && !shorthand && !/^Game:[^<>\r\n]{1,160}$/.test(raw)) return null;
+    const fields = shorthand
+        ? [currentGame, raw.slice(0, raw.indexOf(':')),
+            ...raw.slice(raw.indexOf(':') + 1).split(',').map(value => value.trim())]
+        : (legacy ? raw.slice(6, -1) : raw.slice(5)).split(',').map(value => value.trim());
+    const [game, protocolRole, operation, ...args] = fields;
+    const actor = INTERNAL_ACTORS[protocolRole];
     if (game === '目录' && actor === 'AI' && operation === '列表' && args.length === 0) {
         return { game, actor, operation, args, raw };
     }
@@ -28,18 +42,22 @@ function parseGameTag(raw) {
     return { game, actor, operation, args, raw };
 }
 
-function extractGameTags(text) {
+function extractGameTags(text, currentGame = null) {
     if (typeof text !== 'string') return [];
-    // 同一轮允许新旧格式并存，按原文出现位置交给权威棋局依次校验。
-    return [...text.matchAll(GAME_LINE), ...text.matchAll(LEGACY_GAME_TAG)]
+    // 同一轮允许完整、简写与旧格式并存，按原文出现位置交给权威棋局依次校验。
+    const shorthand = currentGame ? [...text.matchAll(SHORT_GAME_LINE)] : [];
+    return [...text.matchAll(GAME_LINE), ...text.matchAll(LEGACY_GAME_TAG), ...shorthand]
         .sort((left, right) => left.index - right.index)
-        .map(match => ({ raw: match[0], call: parseGameTag(match[0]) }));
+        .map(match => ({ raw: match[0], call: parseGameTag(match[0], currentGame) }));
 }
 
-function stripGameTags(text) {
-    // 两种调用格式都只进入权威校验流程，不进入用户可见正文和语音。
-    return String(text || '').replace(/^Game:[^\r\n]*(?:\r?\n|$)/gm, '')
-        .replace(/<Game:[^>\r\n]*(?:>|$)/g, '').trim();
+function stripGameTags(text, currentGame = null) {
+    // 有活动棋局才移除简写；无棋局时 GameUser:/GameAI: 仍可作为普通聊天文字。
+    const withoutFullTags = String(text || '').replace(/^Game:[^\r\n]*(?:\r?\n|$)/gm, '')
+        .replace(/<Game:[^>\r\n]*(?:>|$)/g, '');
+    return (currentGame
+        ? withoutFullTags.replace(/^(?:GameUser|GameAI):[^\r\n]*(?:\r?\n|$)/gm, '')
+        : withoutFullTags).trim();
 }
 
 // 完整 ID 仅用于服务端状态和显示端版本匹配；模型回执展示四位短编号。
@@ -47,7 +65,8 @@ function shortGameId(id) { return String(id || '').slice(0, 4); }
 
 function gmStatusFromState(state) {
     // 终局已经没有下一手，胜负只在状态回执中给出；进行中继续沿用原有字段顺序。
-    const ending = state.result === '进行中' ? `${state.turn},${state.result}` : state.result;
+    const ending = state.result === '进行中'
+        ? `${protocolActor(state.turn)},${state.result}` : protocolResult(state.result);
     return `Game:五子棋,GM,状态,${shortGameId(state.id)},${state.revision},${state.size},${ending}`;
 }
 
@@ -128,7 +147,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
     function gmSnapshot(displayId) {
         const state = games.get(displayId);
         if (!state) return 'Game:五子棋,GM,错误,未开局';
-        return `Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result},${encodeBoard(state.board, state.size)}`;
+        return gmSnapshotFromState(state);
     }
 
     function fail(code) {
@@ -169,7 +188,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                     turn: 'User', result: '进行中', visible: true, pendingSize: null };
                 const message = { ...snapshotFromState(next), type: 'gameSnapshot' };
                 return commit(displayId, next, message,
-                    `Game:五子棋,GM,快照,${shortGameId(next.id)},1,${size},User,进行中,${encodeBoard(next.board, size)}`);
+                    gmSnapshotFromState(next));
             }
             case '查看':
                 return state ? { ok: true, gm: gmStatusFromState(state) }
@@ -207,9 +226,9 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 const message = { type: 'gameDelta', game: GAME_NAME, gameId: next.id,
                     revision: next.revision, actor: call.actor, coordinate: coordinate.text, turn, result };
                 // 终局落子回执到坐标即止；下一手不存在，最终结果由随后 GM 状态行说明。
-                const gmEnding = result === '进行中' ? `,${turn},${result}` : '';
+                const gmEnding = result === '进行中' ? `,${protocolActor(turn)},${result}` : '';
                 return commit(displayId, next, message,
-                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${call.actor},${coordinate.text}${gmEnding}`);
+                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${protocolActor(call.actor)},${coordinate.text}${gmEnding}`);
             }
             case '提议尺寸': {
                 if (!state) return fail('未开局');
@@ -227,7 +246,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 const next = { ...state, revision: state.revision + 1, size, board: Array(size * size).fill('.'),
                     turn: 'User', result: '进行中', visible: true, pendingSize: null };
                 return commit(displayId, next, { ...snapshotFromState(next), type: 'gameSnapshot' },
-                    `Game:五子棋,GM,快照,${shortGameId(next.id)},${next.revision},${size},User,进行中,${encodeBoard(next.board, size)}`);
+                    gmSnapshotFromState(next));
             }
             case '退出显示':
             case '恢复显示': {
@@ -255,7 +274,7 @@ function snapshotFromState(state) {
 }
 
 function gmSnapshotFromState(state) {
-    return `Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${state.turn},${state.result},${encodeBoard(state.board, state.size)}`;
+    return `Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${protocolActor(state.turn)},${protocolResult(state.result)},${encodeBoard(state.board, state.size)}`;
 }
 
 module.exports = { createGomokuGameService, parseGameTag, extractGameTags, stripGameTags,

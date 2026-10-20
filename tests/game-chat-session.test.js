@@ -20,11 +20,11 @@ function fixture(t, onModelRequest) {
 test('独立 JS 入口完成目录、规则、开局及一轮双方落子', async t => {
     const requests = [];
     const replies = [
-        'Game:目录,AI,列表',
-        'Game:五子棋,AI,规则',
-        'Game:五子棋,User,开局,9\n9 路棋盘已打开。',
-        'Game:五子棋,User,落子,C3',
-        'Game:五子棋,AI,落子,D3\n我下 D3，轮到你了。'
+        'Game:目录,GameAI,列表',
+        'Game:五子棋,GameAI,规则',
+        'Game:五子棋,GameUser,开局,9\n9 路棋盘已打开。',
+        'Game:五子棋,GameUser,落子,C3',
+        'Game:五子棋,GameAI,落子,D3\n我下 D3，轮到你了。'
     ];
     const { session, events } = fixture(t, async request => {
         requests.push(request);
@@ -38,7 +38,7 @@ test('独立 JS 入口完成目录、规则、开局及一轮双方落子', asyn
     assert.match(requests[2].input, /Game:五子棋,GM,规则,/);
     assert.match(requests[0].systemPrompt, /NowGame:无/);
     assert.deepEqual(opening.events.filter(event => event.type === 'gameProtocol').map(event => event.kind),
-        ['AI', 'GM', 'AI', 'GM', 'User', 'GM']);
+        ['GameAI', 'GM', 'GameAI', 'GM', 'GameUser', 'GM']);
     const move = await session.sendUser('我下在 C3');
     assert.equal(move.result.message, '我下 D3，轮到你了。');
     assert.equal(move.snapshot.revision, 3);
@@ -46,16 +46,16 @@ test('独立 JS 入口完成目录、规则、开局及一轮双方落子', asyn
     assert.match(requests[3].systemPrompt, /NowGame:五子棋/);
     assert.match(requests[4].input, /Game:五子棋,GM,落子,/);
     assert.deepEqual(move.events.filter(event => event.type === 'gameProtocol').map(event => event.kind),
-        ['User', 'GM', 'AI', 'GM']);
+        ['GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(events.filter(event => event.type === 'gameUpdate').length, 3);
 });
 
 test('普通聊天不改棋局，旧调用仍由同一入口执行', async t => {
-    const replies = ['这里的 Game:五子棋,AI,落子,C3 只是示例。',
-        '请看 <Game:五子棋,User,开局,9>棋盘。'];
+    const replies = ['这里的 Game:五子棋,GameAI,落子,C3 只是示例。',
+        '请看 <Game:五子棋,GameUser,开局,9>棋盘。'];
     const { session } = fixture(t, async () => replies.shift());
     const plain = await session.sendUser('解释一下协议');
-    assert.equal(plain.result.message, '这里的 Game:五子棋,AI,落子,C3 只是示例。');
+    assert.equal(plain.result.message, '这里的 Game:五子棋,GameAI,落子,C3 只是示例。');
     assert.equal(plain.snapshot, null);
     const legacy = await session.sendUser('开始 9 路五子棋');
     assert.equal(legacy.result.message, '请看 棋盘。');
@@ -181,7 +181,7 @@ test('交互式 JSON 行脚本可按 GM 回执逐次接收目标 AI 回复', asy
     const request = await next(event => event.type === 'modelRequest');
     assert.match(request.systemPrompt, /NowGame:无/);
     send({ type: 'modelReply', sequence: request.sequence,
-        message: 'Game:五子棋,User,开局,9\n棋盘已经打开。' });
+        message: 'Game:五子棋,GameUser,开局,9\n棋盘已经打开。' });
     const result = await next(event => event.type === 'chatResult');
     assert.equal(result.result.message, '棋盘已经打开。');
     assert.equal(result.snapshot.size, 9);

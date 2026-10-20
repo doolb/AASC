@@ -19,38 +19,62 @@ function fixture(t) {
 }
 
 function call(actor, operation, ...args) {
-    return parseGameTag(`Game:五子棋,${actor},${operation}${args.length ? ',' + args.join(',') : ''}`);
+    const protocolActor = actor === 'User' ? 'GameUser' : actor === 'AI' ? 'GameAI' : actor;
+    return parseGameTag(`Game:五子棋,${protocolActor},${operation}${args.length ? ',' + args.join(',') : ''}`);
 }
 
 test('独立协议行严格解析且可从正文移除', () => {
     assert.deepEqual(call('User', '落子', 'H8').args, ['H8']);
-    assert.equal(parseGameTag('Game:目录,AI,列表').operation, '列表');
-    assert.equal(parseGameTag('Game:五子棋,AI,规则').operation, '规则');
+    assert.equal(parseGameTag('Game:目录,GameAI,列表').operation, '列表');
+    assert.equal(parseGameTag('Game:五子棋,GameAI,规则').operation, '规则');
     assert.equal(call('GM', '落子', 'H8'), null);
     assert.deepEqual(call('AI', '开局', '12').args, ['12']);
-    assert.equal(parseGameTag('Game:五子棋,AI,落子,H8,多余'), null);
-    assert.equal(extractGameTags('请看 Game:五子棋,AI,落子,G8').length, 0);
-    assert.equal(stripGameTags('请看 Game:五子棋,AI,落子,G8'), '请看 Game:五子棋,AI,落子,G8');
-    assert.equal(extractGameTags('Game:五子棋,AI,落子,G8\n请看')[0].call.actor, 'AI');
-    assert.equal(stripGameTags('Game:五子棋,AI,落子,G8\n请看'), '请看');
-    assert.equal(parseGameTag('<Game:五子棋,AI,落子,G8>').operation, '落子');
-    assert.equal(extractGameTags('请看 <Game:五子棋,AI,落子,G8>')[0].call.actor, 'AI');
-    assert.equal(stripGameTags('请看 <Game:五子棋,AI,落子,G8>'), '请看');
+    assert.equal(parseGameTag('Game:五子棋,GameAI,落子,H8,多余'), null);
+    assert.equal(extractGameTags('请看 Game:五子棋,GameAI,落子,G8').length, 0);
+    assert.equal(stripGameTags('请看 Game:五子棋,GameAI,落子,G8'), '请看 Game:五子棋,GameAI,落子,G8');
+    assert.equal(extractGameTags('Game:五子棋,GameAI,落子,G8\n请看')[0].call.actor, 'AI');
+    assert.equal(stripGameTags('Game:五子棋,GameAI,落子,G8\n请看'), '请看');
+    assert.equal(parseGameTag('<Game:五子棋,GameAI,落子,G8>').operation, '落子');
+    assert.equal(extractGameTags('请看 <Game:五子棋,GameAI,落子,G8>')[0].call.actor, 'AI');
+    assert.equal(stripGameTags('请看 <Game:五子棋,GameAI,落子,G8>'), '请看');
     assert.equal(parseGameTag('Game:五子棋，AI，落子，G8'), null);
-    assert.equal(parseGameTag('Game:五子棋,User,开局来玩吧。'), null);
-    assert.equal(formatGameProtocolSummary('AI', 'Game:五子棋,AI,落子,H4'), 'AI · 落子 H4');
-    assert.equal(formatGameProtocolSummary('AI', '<Game:五子棋,AI,落子,H4>'), 'AI · 落子 H4');
-    assert.equal(formatGameProtocolSummary('GM', 'Game:五子棋,GM,落子,1234,3,AI,H4,User,进行中'),
-        'GM · #1234 第3手 AI H4');
-    assert.equal(formatGameProtocolSummary('GM', 'Game:五子棋,GM,状态,1234,10,9,User胜'),
-        'GM · #1234 状态 User胜');
+    assert.equal(parseGameTag('Game:五子棋,GameUser,开局来玩吧。'), null);
+    assert.equal(formatGameProtocolSummary('GameAI', 'Game:五子棋,GameAI,落子,H4'), 'GameAI · 落子 H4');
+    assert.equal(formatGameProtocolSummary('GameAI', '<Game:五子棋,GameAI,落子,H4>'), 'GameAI · 落子 H4');
+    assert.equal(formatGameProtocolSummary('GM', 'Game:五子棋,GM,落子,1234,3,GameAI,H4,GameUser,进行中'),
+        'GM · #1234 第3手 GameAI H4');
+    assert.equal(formatGameProtocolSummary('GM', 'Game:五子棋,GM,状态,1234,10,9,GameUser胜'),
+        'GM · #1234 状态 GameUser胜');
+});
+
+test('活动棋局才接受 GameUser/GameAI 行首简写，旧角色与行内文字不触发操作', () => {
+    assert.equal(parseGameTag('Game:五子棋,User,落子,A9'), null);
+    assert.equal(parseGameTag('Game:五子棋,AI,落子,F5'), null);
+    assert.equal(parseGameTag('<Game:五子棋,User,落子,A9>'), null);
+    assert.equal(parseGameTag('GameUser:落子,A9'), null);
+    assert.deepEqual(parseGameTag('GameUser:落子,A9', '五子棋'),
+        { game: '五子棋', actor: 'User', operation: '落子', args: ['A9'], raw: 'GameUser:落子,A9' });
+    assert.equal(parseGameTag('GameAI:落子,F5', '五子棋').actor, 'AI');
+    assert.equal(parseGameTag('GameUser:落子,A9,多余', '五子棋'), null);
+    assert.equal(extractGameTags('GameUser:落子,A9').length, 0);
+    assert.equal(stripGameTags('GameUser:落子,A9'), 'GameUser:落子,A9');
+    assert.equal(extractGameTags('请看 GameUser:落子,A9', '五子棋').length, 0);
+    assert.equal(extractGameTags('User:落子,A9\nAI:落子,F5', '五子棋').length, 0);
+    assert.deepEqual(extractGameTags('GameUser:落子,A9\nGameAI:落子,F5', '五子棋')
+        .map(tag => tag.call.actor), ['User', 'AI']);
+    assert.equal(stripGameTags('收到啦。\nGameUser:落子,A9\nGameAI:落子,F5\n等 GM。', '五子棋'),
+        '收到啦。\n等 GM。');
+    assert.equal(formatGameProtocolSummary('GameAI', 'GameAI:落子,F5'), 'GameAI · 落子 F5');
+    assert.equal(filterGameProtocolText('GameU', false, '五子棋'), '');
+    assert.equal(filterGameProtocolText('GameUser:落子,A9\n收到', false, '五子棋'), '收到');
+    assert.equal(filterGameProtocolText('GameUser:落子,A9', true), 'GameUser:落子,A9');
 });
 
 test('旧尖括号的多条查询和正文内单条调用仍可执行', async t => {
     const { game } = fixture(t);
     const inputs = [];
-    const answers = ['<Game:目录,AI,列表>\n<Game:五子棋,AI,规则>',
-        '请看 <Game:五子棋,User,开局>棋盘已打开。'];
+    const answers = ['<Game:目录,GameAI,列表>\n<Game:五子棋,GameAI,规则>',
+        '请看 <Game:五子棋,GameUser,开局>棋盘已打开。'];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
         inputs.push(input);
         return { success: true, message: answers.shift(), history: [] };
@@ -106,9 +130,9 @@ test('横向五子获胜且中途尺寸变更必须确认', t => {
         if (x < 4) assert.equal(game.apply('d', call('AI', '落子', `${String.fromCharCode(65 + x)}1`)).ok, true);
     }
     assert.equal(game.snapshot('d').result, 'User胜');
-    assert.match(terminalGm, /^Game:五子棋,GM,落子,[a-f\d]{4},10,User,E2$/);
+    assert.match(terminalGm, /^Game:五子棋,GM,落子,[a-f\d]{4},10,GameUser,E2$/);
     assert.match(game.apply('d', call('AI', '查看')).gm,
-        /^Game:五子棋,GM,状态,[a-f\d]{4},10,9,User胜$/);
+        /^Game:五子棋,GM,状态,[a-f\d]{4},10,9,GameUser胜$/);
     assert.equal(game.apply('d', call('AI', '落子', 'F1')).code, '棋局已结束');
     assert.equal(game.apply('d', call('AI', '提议尺寸', '11')).ok, true);
     assert.equal(game.apply('d', call('User', '确认尺寸', '11'), { userText: '改成11' }).code, '需要用户确认');
@@ -137,8 +161,8 @@ test('语音用户落子由 AI 标签调用，GM 增量之后 AI 自己落子', 
     game.apply('d', call('User', '开局'));
     const prompts = [];
     const answers = [
-        'Game:五子棋,User,落子,H8',
-        'Game:五子棋,AI,落子,G8',
+        'Game:五子棋,GameUser,落子,H8',
+        'Game:五子棋,GameAI,落子,G8',
         '我下在 G8，轮到你了。'
     ];
     const systemPrompts = [];
@@ -163,14 +187,14 @@ test('语音用户落子由 AI 标签调用，GM 增量之后 AI 自己落子', 
     assert.match(prompts[0], /GM,快照/);
     assert.match(prompts[1], /GM,落子/);
     assert.equal(prompts.some(prompt => prompt.includes('根据权威结果继续')), false);
-    assert.deepEqual(gameTrace.map(entry => entry.kind), ['GM', 'User', 'GM', 'AI', 'GM']);
+    assert.deepEqual(gameTrace.map(entry => entry.kind), ['GM', 'GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(gameTrace.some(entry => entry.text.includes('根据权威结果继续')), false);
-    assert.match(systemPrompts[0], /Game:目录,AI,列表/);
+    assert.match(systemPrompts[0], /Game:目录,GameAI,列表/);
     assert.match(systemPrompts[0], /回复开头最多 8 条调用行，每条独占一行/);
-    assert.match(systemPrompts[0], /如果该调用行需要等待确认或者数据,以及User或者AI操作游戏需要等待状态确认时,是原子操作,等待调行回复,不能再发其他调用行/);
-    assert.match(systemPrompts[0], /用户报坐标时先发 User 落子行，等 GM 确认且轮到 AI，再决定并发 AI 落子行/);
+    assert.match(systemPrompts[0], /如果该调用行需要等待确认或者数据,以及GameUser或者GameAI操作游戏需要等待状态确认时,是原子操作,等待调行回复,不能再发其他调用行/);
+    assert.match(systemPrompts[0], /用户报坐标时先发 GameUser 落子行，等 GM 确认且轮到 GameAI，再决定并发 GameAI 落子行/);
     assert.match(systemPrompts[0], /自然语言另起行,每次回复都带上自然语言/);
-    assert.match(systemPrompts[0], /首次需要本地游戏时先发下面的, 调用目录查询，\nGame:目录,AI,列表\n\n然后再发下面的按需读取规则；已有规则时按规则操作。\nGame:游戏名,AI,规则/);
+    assert.match(systemPrompts[0], /首次需要本地游戏时先发下面的, 调用目录查询，\nGame:目录,GameAI,列表\n\n然后再发下面的按需读取规则；已有规则时按规则操作。\nGame:游戏名,GameAI,规则/);
     assert.equal(systemPrompts[0].includes('默认 15×15'), false);
     assert.deepEqual(chunks, ['我下在 G8，轮到你了。']);
     assert.deepEqual(sentences, ['我下在 G8，轮到你了。']);
@@ -190,7 +214,7 @@ test('点击先直接提交，再把 GM 增量交给 AI', async t => {
     const prompts = [];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(prompt) {
         prompts.push(prompt);
-        return { success: true, message: prompts.length === 1 ? 'Game:五子棋,AI,落子,D3' : '已落子。', history: [] };
+        return { success: true, message: prompts.length === 1 ? 'Game:五子棋,GameAI,落子,D3' : '已落子。', history: [] };
     } };
     await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd', content: click.gm,
         internalSignal: true, options: {}, callbacks: {} });
@@ -205,14 +229,14 @@ test('是否开局只由 AI 标签决定，不按用户关键词补发指令', a
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(prompt, options) {
         prompts.push({ prompt, systemPrompt: options.systemPrompt });
         return { success: true, message: prompts.length === 1 ? '我们可以聊聊规则。'
-            : prompts.length === 2 ? 'Game:五子棋,User,开局' : '棋盘已经打开。', history: [] };
+            : prompts.length === 2 ? 'Game:五子棋,GameUser,开局' : '棋盘已经打开。', history: [] };
     } };
     const first = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '我们来玩五子棋', options: {}, callbacks: {} });
     assert.equal(first.message, '我们可以聊聊规则。');
     assert.equal(game.snapshot('d'), null);
     assert.equal(prompts.length, 1);
-    assert.match(prompts[0].systemPrompt, /Game:目录,AI,列表/);
+    assert.match(prompts[0].systemPrompt, /Game:目录,GameAI,列表/);
     const second = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '开始吧', options: {}, callbacks: {} });
     assert.equal(second.message, '棋盘已经打开。');
@@ -224,10 +248,10 @@ test('已有棋局漏发标签时由模型补判用户坐标，不播出错误�
     game.apply('d', call('User', '开局'));
     const answers = [
         '喵，轮到你落子。',
-        'Game:目录,AI,列表',
-        'Game:五子棋,AI,规则',
-        'Game:五子棋,User,落子,H3\n你下 H3。',
-        'Game:五子棋,AI,落子,H4\n我下 H4。'
+        'Game:目录,GameAI,列表',
+        'Game:五子棋,GameAI,规则',
+        'Game:五子棋,GameUser,落子,H3\n你下 H3。',
+        'Game:五子棋,GameAI,落子,H4\n我下 H4。'
     ];
     const inputs = [];
     const chunks = [];
@@ -269,9 +293,9 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     const { game } = fixture(t);
     const inputs = [];
     const answers = [
-        'Game:目录,AI,列表\n我先看看可用游戏。',
-        'Game:五子棋,AI,规则',
-        'Game:五子棋,User,开局\n来玩吧，你先落黑子。'
+        'Game:目录,GameAI,列表\n我先看看可用游戏。',
+        'Game:五子棋,GameAI,规则',
+        'Game:五子棋,GameUser,开局\n来玩吧，你先落黑子。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input, options) {
         inputs.push({ input, systemPrompt: options.systemPrompt });
@@ -297,9 +321,9 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     assert.ok(inputs[0].systemPrompt.indexOf('NowGame:无')
         < inputs[0].systemPrompt.indexOf('原角色设定'));
     assert.equal(game.snapshot('d').revision, 1);
-    assert.deepEqual(trace.map(entry => entry.kind), ['AI', 'GM', 'AI', 'GM', 'User', 'GM']);
+    assert.deepEqual(trace.map(entry => entry.kind), ['GameAI', 'GM', 'GameAI', 'GM', 'GameUser', 'GM']);
     assert.deepEqual(trace.slice(0, 3).map(entry => entry.summary),
-        ['AI · 列表', 'GM · 当前支持：五子棋', 'AI · 规则']);
+        ['GameAI · 列表', 'GM · 当前支持：五子棋', 'GameAI · 规则']);
     const rules = inputs[2].input.match(/Game:五子棋,GM,规则,([^\n]+)/)?.[1];
     assert.ok(rules);
     assert.match(rules, /GM快照字段：短编号,版本,尺寸,下一手,结果,棋盘编码/);
@@ -328,7 +352,7 @@ test('五子棋快照的第五行 E 格能按规则识别为 AI 已占用', t =>
     const fields = game.gmSnapshot('d').split(',');
     assert.deepEqual(fields.slice(0, 3), ['Game:五子棋', 'GM', '快照']);
     assert.match(fields[3], /^[a-f\d]{4}$/);
-    assert.deepEqual(fields.slice(4, 8), ['5', '9', 'User', '进行中']);
+    assert.deepEqual(fields.slice(4, 8), ['5', '9', 'GameUser', '进行中']);
     const rows = fields[8].split('/');
     assert.equal(rows.length, 9);
     assert.equal(rows[4][4], 'O');
@@ -339,7 +363,7 @@ test('五子棋快照的第五行 E 格能按规则识别为 AI 已占用', t =>
 test('未声明游戏能力的显示端目录为空，不能读取五子棋规则', async t => {
     const { game } = fixture(t);
     const prompts = [];
-    const answers = ['Game:目录,AI,列表', 'Game:五子棋,AI,规则', '这个显示端暂不支持五子棋。'];
+    const answers = ['Game:目录,GameAI,列表', 'Game:五子棋,GameAI,规则', '这个显示端暂不支持五子棋。'];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
         prompts.push(input);
         return { success: true, message: answers.shift(), history: [] };
@@ -356,7 +380,7 @@ test('成功的连续用户和 AI 落子保留两次模型叙述且不添加冗�
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));
     const prompts = [];
-    const answers = ['Game:五子棋,User,落子,H8\n收到 H8。', 'Game:五子棋,AI,落子,G8\n我下 G8。'];
+    const answers = ['Game:五子棋,GameUser,落子,H8\n收到 H8。', 'Game:五子棋,GameAI,落子,G8\n我下 G8。'];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
         prompts.push(input);
         return { success: true, message: answers.shift(), history: [] };
@@ -366,6 +390,59 @@ test('成功的连续用户和 AI 落子保留两次模型叙述且不添加冗�
     assert.equal(result.message, '收到 H8。\n我下 G8。');
     assert.equal(prompts.length, 2);
     assert.equal(prompts.some(input => input.includes('根据权威结果继续')), false);
+});
+
+test('GameUser 与 GameAI 简写经 GM 确认后执行一轮 A9、F5', async t => {
+    const { game } = fixture(t);
+    assert.equal(game.apply('d', call('User', '开局', '9')).ok, true);
+    const prompts = [];
+    const trace = [];
+    const spoken = [];
+    const answers = [
+        '好嘞，收到你的 A9。\nGameUser:落子,A9\n等 GM 确认。',
+        'GameAI:落子,F5\n我下 F5，轮到你啦。'
+    ];
+    const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
+        prompts.push(input);
+        return { success: true, message: answers.shift(), history: [] };
+    } };
+    const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
+        content: '我下 A9。我继续下散子，你尽量连五获胜。', options: {},
+        callbacks: { onGameProtocol: entry => trace.push(entry), onSentence: sentence => spoken.push(sentence) } });
+    assert.equal(game.snapshot('d').revision, 3);
+    assert.equal(game.snapshot('d').board.split('/')[8][0], 'X');
+    assert.equal(game.snapshot('d').board.split('/')[4][5], 'O');
+    assert.match(prompts[1], /GM,落子,[^\n]*,GameUser,A9,GameAI,进行中/);
+    assert.equal(result.message, '好嘞，收到你的 A9。\n等 GM 确认。\n我下 F5，轮到你啦。');
+    assert.deepEqual(spoken, [result.message]);
+    assert.deepEqual(trace.map(entry => entry.kind), ['GM', 'GameUser', 'GM', 'GameAI', 'GM']);
+    assert.equal(trace[1].text, 'GameUser:落子,A9');
+    assert.equal(trace[1].summary, 'GameUser · 落子 A9');
+    assert.equal(trace[3].summary, 'GameAI · 落子 F5');
+});
+
+test('同一回复中的 GameUser 与 GameAI 简写不抢跑', async t => {
+    const { game } = fixture(t);
+    game.apply('d', call('User', '开局', '9'));
+    const trace = [];
+    const inputs = [];
+    const answers = [
+        'GameUser:落子,A9\nGameAI:落子,E7\n两颗都下好了。',
+        'GameAI:落子,F5\n我下 F5。'
+    ];
+    const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
+        inputs.push(input);
+        return { success: true, message: answers.shift(), history: [] };
+    } };
+    const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
+        content: '我下 A9。', options: {}, callbacks: { onGameProtocol: entry => trace.push(entry) } });
+    assert.match(inputs[1], /GM,落子,[^\n]*,GameUser,A9,GameAI,进行中/);
+    assert.equal(game.snapshot('d').revision, 3);
+    assert.equal(game.snapshot('d').board.split('/')[6][4], '.');
+    assert.equal(game.snapshot('d').board.split('/')[4][5], 'O');
+    assert.equal(result.message, '我下 F5。');
+    assert.deepEqual(trace.filter(entry => entry.kind !== 'GM').map(entry => entry.text),
+        ['GameUser:落子,A9', 'GameAI:落子,F5']);
 });
 
 for (const terminal of [
@@ -391,7 +468,7 @@ for (const terminal of [
         const chunks = [];
         const spoken = [];
         const answers = [
-            `Game:五子棋,${terminal.actor},落子,${terminal.coordinate}\n${terminal.first}`,
+            `Game:五子棋,Game${terminal.actor},落子,${terminal.coordinate}\n${terminal.first}`,
             terminal.final
         ];
         const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
@@ -403,8 +480,8 @@ for (const terminal of [
             callbacks: { onGameProtocol: entry => trace.push(entry), onChunk: chunk => chunks.push(chunk),
                 onSentence: text => spoken.push(text) } });
         assert.equal(inputs.length, 2);
-        assert.match(inputs[1], new RegExp(`GM,落子,[^\\n]*,${terminal.actor},${terminal.coordinate}\\nGame:五子棋,GM,状态,`));
-        assert.match(inputs[1], new RegExp(`GM,状态,[^\\n]*,9,${terminal.result}$`));
+        assert.match(inputs[1], new RegExp(`GM,落子,[^\\n]*,Game${terminal.actor},${terminal.coordinate}\\nGame:五子棋,GM,状态,`));
+        assert.match(inputs[1], new RegExp(`GM,状态,[^\\n]*,9,Game${terminal.result}$`));
         assert.equal(game.snapshot('d').result, terminal.result);
         assert.equal(result.message, `${terminal.first}\n${terminal.final}`);
         assert.deepEqual(chunks, [result.message]);
@@ -423,8 +500,8 @@ test('第七次模型回复产生终局时仍可再读取一次 GM 最终状态'
     }
     const inputs = [];
     const answers = [
-        ...Array(6).fill('Game:目录,AI,列表\n我先看一下。'),
-        'Game:五子棋,User,落子,E2\n第五颗已下。',
+        ...Array(6).fill('Game:目录,GameAI,列表\n我先看一下。'),
+        'Game:五子棋,GameUser,落子,E2\n第五颗已下。',
         'GM 确认你赢了。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
@@ -434,7 +511,7 @@ test('第七次模型回复产生终局时仍可再读取一次 GM 最终状态'
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '我下 E2', options: {}, callbacks: {} });
     assert.equal(inputs.length, 8);
-    assert.match(inputs[7], /GM,状态,.*User胜/);
+    assert.match(inputs[7], /GM,状态,.*GameUser胜/);
     assert.match(result.message, /第五颗已下。\nGM 确认你赢了。$/);
 });
 
@@ -446,8 +523,8 @@ test('同一回复预写 User 与 AI 落子时，先等 User 的 GM 回执再让
     const sentences = [];
     const prompts = [];
     const answers = [
-        'Game:五子棋,User,落子,H3\n收到 H3，我下 H4。\nGame:五子棋,AI,落子,H4\n轮到你啦。',
-        'Game:五子棋,AI,落子,H4\n我下 H4，轮到你啦。'
+        'Game:五子棋,GameUser,落子,H3\n收到 H3，我下 H4。\nGame:五子棋,GameAI,落子,H4\n轮到你啦。',
+        'Game:五子棋,GameAI,落子,H4\n我下 H4，轮到你啦。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input, options, callbacks) {
         prompts.push({ input, systemPrompt: options.systemPrompt });
@@ -463,11 +540,11 @@ test('同一回复预写 User 与 AI 落子时，先等 User 的 GM 回执再让
     assert.equal(prompts.length, 2);
     assert.match(prompts[0].systemPrompt, /^本地游戏调用行：/);
     assert.ok(prompts[0].systemPrompt.indexOf('目录,AI,列表') < prompts[0].systemPrompt.indexOf('原角色设定'));
-    assert.match(prompts[1].input, /GM,落子,.*User,H3,AI,进行中/);
+    assert.match(prompts[1].input, /GM,落子,.*GameUser,H3,GameAI,进行中/);
     assert.equal(result.message, '我下 H4，轮到你啦。');
     assert.deepEqual(chunks, [result.message]);
     assert.deepEqual(sentences, [result.message]);
-    assert.deepEqual(trace.slice(1).map(entry => entry.kind), ['User', 'GM', 'AI', 'GM']);
+    assert.deepEqual(trace.slice(1).map(entry => entry.kind), ['GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(game.snapshot('d').revision, 3);
     assert.equal(game.snapshot('d').board.split('/')[2][7], 'X');
     assert.equal(game.snapshot('d').board.split('/')[3][7], 'O');
@@ -483,9 +560,9 @@ test('A9 与 E7 抢跑时只确认 User 棋步，AI 漏调用后要求其重新�
     const inputs = [];
     const revisions = [];
     const answers = [
-        'Game:五子棋,User,落子,A9\nGame:五子棋,AI,落子,E7\nA9 和 E7 都下好了。',
+        'Game:五子棋,GameUser,落子,A9\nGame:五子棋,GameAI,落子,E7\nA9 和 E7 都下好了。',
         'GM 确认啦，A9 和 E7 都成功落下，现在轮到你。',
-        'Game:五子棋,AI,落子,E7\n我下 E7，轮到你了。'
+        'Game:五子棋,GameAI,落子,E7\n我下 E7，轮到你了。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
         inputs.push(input);
@@ -495,8 +572,8 @@ test('A9 与 E7 抢跑时只确认 User 棋步，AI 漏调用后要求其重新�
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '我下 A9。我继续下散子，你尽量连五获胜。', options: {}, callbacks: {} });
     assert.deepEqual(revisions, [5, 6, 6]);
-    assert.match(inputs[1], /GM,落子,.*User,A9,AI,进行中/);
-    assert.match(inputs[2], /GM,错误,轮到AI落子/);
+    assert.match(inputs[1], /GM,落子,.*GameUser,A9,GameAI,进行中/);
+    assert.match(inputs[2], /GM,错误,轮到GameAI落子/);
     assert.equal(result.message, '我下 E7，轮到你了。');
     assert.equal(game.snapshot('d').board.split('/')[6][4], 'O');
 });
@@ -506,7 +583,7 @@ test('叙述隔开的多条查询标签都执行，下一次模型输入收到�
     const inputs = [];
     const trace = [];
     const answers = [
-        'Game:目录,AI,列表\n先查看游戏。\nGame:五子棋,AI,规则\n再看玩法。',
+        'Game:目录,GameAI,列表\n先查看游戏。\nGame:五子棋,GameAI,规则\n再看玩法。',
         '可以开始五子棋。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
@@ -518,7 +595,7 @@ test('叙述隔开的多条查询标签都执行，下一次模型输入收到�
     assert.equal(inputs.length, 2);
     assert.match(inputs[1], /Game:目录,GM,列表,五子棋/);
     assert.match(inputs[1], /Game:五子棋,GM,规则,/);
-    assert.deepEqual(trace.map(entry => entry.kind), ['AI', 'GM', 'AI', 'GM']);
+    assert.deepEqual(trace.map(entry => entry.kind), ['GameAI', 'GM', 'GameAI', 'GM']);
     assert.equal(result.message.replace(/\n{2,}/g, '\n'), '先查看游戏。\n再看玩法。\n可以开始五子棋。');
 });
 
@@ -527,8 +604,8 @@ test('批次第二条失败时停止后续标签，回送已有 GM 并丢弃预�
     game.apply('d', call('User', '开局'));
     const inputs = [];
     const answers = [
-        'Game:五子棋,AI,查看\n棋局还在。\nGame:五子棋,User,落子,H3\n收到 H3。\nGame:五子棋,User,落子,H2\n你又下 H2。',
-        'Game:五子棋,AI,落子,H4\n我改下 H4。'
+        'Game:五子棋,GameAI,查看\n棋局还在。\nGame:五子棋,GameUser,落子,H3\n收到 H3。\nGame:五子棋,GameUser,落子,H2\n你又下 H2。',
+        'Game:五子棋,GameAI,落子,H4\n我改下 H4。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
         inputs.push(input);
@@ -538,11 +615,11 @@ test('批次第二条失败时停止后续标签，回送已有 GM 并丢弃预�
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: 'H3。', options: {}, callbacks: { onGameProtocol: entry => trace.push(entry) } });
     assert.equal(inputs.length, 2);
-    assert.match(inputs[1], /GM,落子,.*User,H3,AI,进行中/);
+    assert.match(inputs[1], /GM,落子,.*GameUser,H3,GameAI,进行中/);
     assert.match(inputs[1], /GM,错误,未轮到该方/);
     assert.equal(result.message, '我改下 H4。');
     assert.deepEqual(trace.slice(1).map(entry => entry.kind),
-        ['AI', 'GM', 'User', 'GM', 'User', 'GM', 'AI', 'GM']);
+        ['GameAI', 'GM', 'GameUser', 'GM', 'GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(game.snapshot('d').revision, 3);
     assert.equal(game.snapshot('d').board.split('/')[1][7], '.');
 });
@@ -552,8 +629,8 @@ test('GM 拒绝落子后只查看不能宣称棋步成功，未获确认时返�
     game.apply('d', call('User', '开局'));
     const inputs = [];
     const answers = [
-        'Game:五子棋,User,落子,H4\n收到 H4。',
-        'Game:五子棋,AI,查看\n你下 H3，我下 H4。',
+        'Game:五子棋,GameUser,落子,H4\n收到 H4。',
+        'Game:五子棋,GameAI,查看\n你下 H3，我下 H4。',
         'H3 和 H4 已经下好了。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
@@ -564,7 +641,7 @@ test('GM 拒绝落子后只查看不能宣称棋步成功，未获确认时返�
         content: 'H3。', options: {}, callbacks: {} });
     assert.equal(inputs.length, 3);
     assert.match(inputs[1], /GM,错误,用户未指定该坐标/);
-    assert.match(inputs[2], /GM,状态,.*1,15,User,进行中/);
+    assert.match(inputs[2], /GM,状态,.*1,15,GameUser,进行中/);
     assert.match(result.message, /棋盘未变化/);
     assert.equal(result.message.includes('H4 已经下好'), false);
     assert.equal(game.snapshot('d').revision, 1);
@@ -574,9 +651,9 @@ test('GM 拒绝落子后模型改发合法标签，按确认的棋步继续', as
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));
     const answers = [
-        'Game:五子棋,User,落子,H4\n收到 H4。',
-        'Game:五子棋,User,落子,H3',
-        'Game:五子棋,AI,落子,H4\n我下 H4，该你啦。'
+        'Game:五子棋,GameUser,落子,H4\n收到 H4。',
+        'Game:五子棋,GameUser,落子,H3',
+        'Game:五子棋,GameAI,落子,H4\n我下 H4，该你啦。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream() {
         return { success: true, message: answers.shift(), history: [] };
@@ -593,8 +670,8 @@ test('其他成功命令不能代替 GM 确认被拒绝的落子', async t => {
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));
     const answers = [
-        'Game:五子棋,User,落子,H4\n收到 H4。',
-        'Game:五子棋,AI,提议尺寸,11\nH3 已落子。',
+        'Game:五子棋,GameUser,落子,H4\n收到 H4。',
+        'Game:五子棋,GameAI,提议尺寸,11\nH3 已落子。',
         '我已经下好 H4。'
     ];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream() {
@@ -611,7 +688,7 @@ test('轮到 AI 时自然语言自称落子不进入聊天或 TTS', async t => {
     const { game } = fixture(t);
     game.apply('d', call('User', '开局'));
     const answers = [
-        'Game:五子棋,User,落子,H3\n你下 H3。',
+        'Game:五子棋,GameUser,落子,H3\n你下 H3。',
         '我下 H4 啦。',
         '白子已经落在 H4。',
         '轮到你下啦，我走 H4。'
@@ -633,10 +710,10 @@ test('协议行数量或语法错误仍拒绝，修正后可完成', async t => 
     const { game } = fixture(t);
     const inputs = [];
     const answers = [
-        'Game:五子棋,GM,开局\nGame:五子棋,User,落子,H3\n先开局再落子。',
-        Array(9).fill('Game:目录,AI,列表').join('\n'),
-        'Game:五子棋,User,开局\nGame:五子棋,AI,落子,H8,多余',
-        'Game:五子棋,User,开局\n来玩吧。'
+        'Game:五子棋,GM,开局\nGame:五子棋,GameUser,落子,H3\n先开局再落子。',
+        Array(9).fill('Game:目录,GameAI,列表').join('\n'),
+        'Game:五子棋,GameUser,开局\nGame:五子棋,GameAI,落子,H8,多余',
+        'Game:五子棋,GameUser,开局\n来玩吧。'
     ];
     const observedRevisions = [];
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
@@ -676,9 +753,9 @@ test('有显示端的普通回复等完整结果后展示，行内 Game 文字�
     assert.equal(game.snapshot('d'), null);
     assert.equal(filterGameProtocolText('Ga'), '');
     assert.equal(filterGameProtocolText('Ga', true), 'Ga');
-    assert.equal(filterGameProtocolText('你好 Game:五子棋,AI,落子,H8。'), '你好 Game:五子棋,AI,落子,H8。');
-    assert.equal(filterGameProtocolText('Game:五子棋,AI,落子,H8\n你好'), '你好');
-    assert.equal(filterGameProtocolText('你好 <Game:五子棋,AI,落子,H8>。'), '你好 。');
+    assert.equal(filterGameProtocolText('你好 Game:五子棋,GameAI,落子,H8。'), '你好 Game:五子棋,GameAI,落子,H8。');
+    assert.equal(filterGameProtocolText('Game:五子棋,GameAI,落子,H8\n你好'), '你好');
+    assert.equal(filterGameProtocolText('你好 <Game:五子棋,GameAI,落子,H8>。'), '你好 。');
 });
 
 test('流式游戏标签先缓冲，执行后只显示 AI 的最终叙述', async t => {
@@ -688,10 +765,10 @@ test('流式游戏标签先缓冲，执行后只显示 AI 的最终叙述', asyn
     const fakeChat = { splitIntoSentences: text => [text], async chatStream(_prompt, _options, callbacks) {
         round += 1;
         if (round === 1) {
-            for (const message of ['G', 'Game:', 'Game:五子棋,User,开局']) {
+            for (const message of ['G', 'Game:', 'Game:五子棋,GameUser,开局']) {
                 callbacks.onChunk?.(message.at(-1), message, '');
             }
-            return { success: true, message: 'Game:五子棋,User,开局', history: [] };
+            return { success: true, message: 'Game:五子棋,GameUser,开局', history: [] };
         }
         return { success: true, message: '开始下棋吧。', history: [] };
     } };
@@ -706,7 +783,7 @@ test('叙述后的独立 Game 行照常执行，协议不传给字幕和语音',
     const { game } = fixture(t);
     const chunks = [];
     const sentences = [];
-    const raw = '你好\nGame:五子棋,User,开局';
+    const raw = '你好\nGame:五子棋,GameUser,开局';
     const fakeChat = { splitIntoSentences: value => [value], async chatStream(_prompt, _options, callbacks) {
         callbacks.onChunk?.('你好', '你好', '');
         callbacks.onChunk?.('Game:', '你好\nGame:', '');
@@ -730,7 +807,7 @@ test('自然语言前后包围的独立 AI 落子行等完整回复与 GM 确认
     const chunks = [];
     const sentences = [];
     const raw = '哎呀，又报错了！看来我的指令还是有问题。让我换个方式试试～\n'
-        + 'Game:五子棋,AI,落子,H8\n这次我仔细检查过了，应该没问题了吧？等 GM 确认～';
+        + 'Game:五子棋,GameAI,落子,H8\n这次我仔细检查过了，应该没问题了吧？等 GM 确认～';
     const fakeChat = { splitIntoSentences: value => [value], async chatStream(_input, _options, callbacks) {
         callbacks.onChunk?.('哎呀', '哎呀', '');
         callbacks.onChunk?.('Game:', raw, '');

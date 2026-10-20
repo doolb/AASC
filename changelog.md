@@ -1,3 +1,8 @@
+### 五子棋 GameUser / GameAI 角色与当前游戏简写
+
+- ✅ [2026-10-20] 游戏调用和 GM 回执统一使用 `GameUser`、`GameAI`，活动棋局支持行首 `GameUser:`/`GameAI:` 省略游戏名。
+  - 更新 `gomoku-game-service.js`、`game-chat-bridge.js`、游戏聊天与协议提示测试，以及五子棋 design/spec/task/usage/todo；旧 `User`/`AI` 游戏调用不再解析，尖括号外形需使用新角色。棋盘内部和显示端增量保持现有字段。隔离 A9→GM→F5 与抢跑用例通过；`npm run test:game-chat` 41/41、相关浏览器测试 12/12 通过，服务包 `servicePackage=true` 待构建，真实两端待验收。
+
 ### 五子棋快照编码规则
 
 - ✅ [2026-10-20] 五子棋专属规则新增 GM 快照字段及棋盘编码说明，提示 AI 按行列确认目标格为空后再落子。
