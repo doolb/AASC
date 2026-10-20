@@ -181,6 +181,51 @@ test('是否开局只由 AI 标签决定，不按用户关键词补发指令', a
     assert.equal(game.snapshot('d').size, 15);
 });
 
+test('已有棋局漏发标签时由模型补判用户坐标，不播出错误首答', async t => {
+    const { game } = fixture(t);
+    game.apply('d', call('User', '开局'));
+    const answers = [
+        '喵，轮到你落子。',
+        '<Game:目录,AI,列表>',
+        '<Game:五子棋,AI,规则>',
+        '<Game:五子棋,User,落子,H3>\n你下 H3。',
+        '<Game:五子棋,AI,落子,H4>\n我下 H4。'
+    ];
+    const inputs = [];
+    const chunks = [];
+    const fakeChat = { splitIntoSentences: text => [text], async chatStream(input, options, callbacks) {
+        inputs.push({ input, systemPrompt: options.systemPrompt });
+        const message = answers.shift();
+        callbacks.onChunk?.(message, message, '');
+        return { success: true, message, history: [] };
+    } };
+    const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
+        content: 'H3。', options: {}, callbacks: { onChunk: chunk => chunks.push(chunk) } });
+    assert.equal(inputs.length, 5);
+    assert.match(inputs[0].systemPrompt, /语音中的用户落子也由你代发 User 标签/);
+    assert.match(inputs[1].input, /原话：H3。/);
+    assert.equal(result.message, '你下 H3。\n我下 H4。');
+    assert.deepEqual(chunks, [result.message]);
+    assert.equal(game.snapshot('d').revision, 3);
+    assert.equal(game.snapshot('d').board.split('/')[2][7], 'X');
+    assert.equal(game.snapshot('d').board.split('/')[3][7], 'O');
+});
+
+test('已有棋局中的普通聊天重判后仍保留原回复且不改变棋盘', async t => {
+    const { game } = fixture(t);
+    game.apply('d', call('User', '开局'));
+    const inputs = [];
+    const fakeChat = { splitIntoSentences: text => [text], async chatStream(input) {
+        inputs.push(input);
+        return { success: true, message: inputs.length === 1 ? '今天晴朗。' : '天气不错。', history: [] };
+    } };
+    const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
+        content: '今天天气怎么样？', options: {}, callbacks: {} });
+    assert.equal(inputs.length, 2);
+    assert.equal(result.message, '今天晴朗。');
+    assert.equal(game.snapshot('d').revision, 1);
+});
+
 test('AI 按需读取当前显示端目录和五子棋规则，成功标签后的叙述不丢失', async t => {
     const { game } = fixture(t);
     const inputs = [];
@@ -280,6 +325,7 @@ test('流式游戏标签先缓冲，执行后只显示 AI 的最终叙述', asyn
     await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '开始', options: {}, callbacks: { onChunk: chunk => chunks.push(chunk) } });
     assert.deepEqual(chunks, ['开始下棋吧。']);
+    assert.equal(round, 2);
     assert.equal(game.snapshot('d').size, 15);
 });
 

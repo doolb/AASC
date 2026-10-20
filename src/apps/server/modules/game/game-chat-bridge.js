@@ -1,7 +1,12 @@
 const { extractGameTags, stripGameTags } = require('./gomoku-game-service');
 
-const GAME_PROMPT = '需要本地游戏时，回复开头只输出 <Game:目录,AI,列表> 查询当前显示端游戏；' +
-    '再用 <Game:游戏名,AI,规则> 按需读取规则。每轮只发一条标签，等 GM 回执；普通聊天无需调用。';
+const GAME_PROMPT = [
+    '本地游戏调用格式为 <Game:游戏名,User或AI,操作[,参数...]>，只用英文逗号分隔位置参数，不用 JSON。',
+    '用户要玩本地游戏，或在已有棋局中说出落子坐标时，必须先调用游戏标签，不能只说轮到谁；是否属于游戏请求由你判断。',
+    '首次需要游戏时先发 <Game:目录,AI,列表> 查询当前显示端，再发 <Game:游戏名,AI,规则> 按需读取该游戏规则；已在本轮上下文取得规则时按规则直接操作。',
+    'User 是用户操作，语音中的用户落子也由你代发 User 标签；AI 是你的操作。GM 和 Game 是服务端消息，不得伪造。',
+    '一次回复只发一条标签，放在回复开头，等 GM 回执后再继续；只有 GM 确认成功才可宣称落子或胜负。GM 表明轮到 AI 时先发 AI 落子标签。普通聊天直接回答。'
+].join('\n');
 const GOMOKU_RULES = [
     '位置参数标签只用英文逗号且不用JSON；操作者User或AI；标签放回复开头且一次一条；GM只表示权威回执，不要伪造',
     '可调用User或AI的开局、落子坐标、查看、提议尺寸、确认尺寸、退出显示、恢复显示；开局默认15路，也可9、11、13路',
@@ -72,6 +77,8 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     let version = gameService.snapshot(displayId)?.revision;
     let invalidAiMoves = 0;
     let missingAiMoves = 0;
+    let retriedUserTurn = false;
+    let firstPlainReply = null;
     let lastHistory = [];
     const narratives = [];
     const gameTrace = [];
@@ -93,8 +100,9 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     }
     if (internalSignal && /^<Game:五子棋,GM,/.test(content)) recordProtocol('GM', content);
     for (let turn = 0; turn < 7; turn += 1) {
+        // 活动棋局先等完整首答，避免模型漏发标签时把错误叙述提前播出。
         const mayStreamPlain = turn === 0 && !internalSignal
-            && !(initialState?.turn === 'AI' && initialState.result === '进行中');
+            && initialState?.result !== '进行中';
         let streamedPlain = false;
         let deliveredText = '';
         const pendingSentences = [];
@@ -147,6 +155,17 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         }
         if (tags.length === 0) {
             const state = gameService.snapshot(displayId);
+            if (turn === 0 && !internalSignal && initialState?.result === '进行中'
+                && state?.turn === 'User' && state.result === '进行中'
+                && !retriedUserTurn) {
+                // 只让模型重新判断是否该调用标签，不由服务端识别游戏关键词或代用户落子。
+                retriedUserTurn = true;
+                firstPlainReply = response;
+                input = `你刚才对用户原话只给出自然语言答复，棋局并未变化。请重新判断原话是否要求本地游戏操作；` +
+                    `若要求操作，回复开头先发一条合法 Game 标签，等待 GM 回执；若是普通聊天，直接回答。` +
+                    `原话：${userText}`;
+                continue;
+            }
             if (state?.turn === 'AI' && state.result === '进行中' && missingAiMoves < 2) {
                 const pendingText = stripGameTags(response.message);
                 if (pendingText) narratives.push(pendingText);
@@ -154,15 +173,18 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
                 input = '<Game:五子棋,GM,错误,轮到AI落子>';
                 continue;
             }
+            const plainResponse = firstPlainReply && state?.turn === 'User'
+                ? firstPlainReply : response;
             const finalText = state?.turn === 'AI' && state.result === '进行中'
                 ? `${stripGameTags(response.message)}\n当前轮到 AI，落子暂未完成。`
-                : response.message;
+                : plainResponse.message;
             const combined = [...narratives, stripGameTags(finalText)].filter(Boolean).join('\n');
-            const combinedSpeech = [...narratives, stripGameTags(response.speech) || stripGameTags(finalText)]
+            const combinedSpeech = [...narratives, stripGameTags(plainResponse.speech) || stripGameTags(finalText)]
                 .filter(Boolean).join('\n');
-            return emitFinal(combined, response.reasoning, combinedSpeech, callbacks, lastHistory,
+            return emitFinal(combined, plainResponse.reasoning, combinedSpeech, callbacks, lastHistory,
                 chat.splitIntoSentences, gameTrace);
         }
+        firstPlainReply = null;
         if (tags.length !== 1 || !tags[0].call) {
             input = '<Game:五子棋,GM,错误,标签格式无效>';
             continue;
