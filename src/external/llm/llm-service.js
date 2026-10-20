@@ -538,6 +538,17 @@ function clearResponseReference(sessionKeyValue) {
     saveResponsesSessionState();
 }
 
+function clearResponseReferencesForScope(scope) {
+    // 会话键的各字段已编码，按完整尾段匹配可跨 profile/template 清理且不误伤同名会话。
+    const parts = scope.mode === 'private'
+        ? [scope.mode, scope.target, scope.sessionId] : [scope.mode];
+    const suffix = `:${parts.map(value => encodeURIComponent(value).replace(/%/gu, '~')).join(':')}`;
+    const matchingKeys = Object.keys(responsesSessionStates).filter(key => key.endsWith(suffix));
+    if (!matchingKeys.length) return;
+    for (const key of matchingKeys) delete responsesSessionStates[key];
+    saveResponsesSessionState();
+}
+
 function canRebuildResponsesSession(error) {
     return error?.statusCode === 404
         || ['conversation_not_found', 'response_not_found', 'doubao_session_uncertain'].includes(error?.code);
@@ -998,6 +1009,7 @@ function clearHistory(options = {}) {
         if (chatHistories[key].length === 0) delete chatHistories[key];
     }
     saveHistory([affectedFile]);
+    clearResponseReferencesForScope(scope);
     resetPiSessionForScope(scope);
     console.log(`[Chat] 清空历史 scope=${scope.mode} target=${scope.target || '-'} sessionId=${scope.sessionId || '-'}`);
     return getHistory();

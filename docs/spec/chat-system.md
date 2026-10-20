@@ -430,6 +430,9 @@ clearHistory(options):
     群聊只删除群聊范围的历史
     清空前创建历史备份
     标记受影响历史文件并调用 saveHistory()
+    在 Responses 续接引用中匹配同一 mode、target、sessionId 的所有 profile/template 键
+    删除匹配引用并保存引用文件；其他会话的续接引用保持可用
+    后续模型请求使用清空后的本地历史创建新上游会话，不携带旧 previous_response_id 或 conversation
     返回 getHistory()
 
 deleteConversationRound(messageId, options):

@@ -1,3 +1,8 @@
+### 私聊清空与模型续接状态
+
+- ✅ [2026-10-20] 修复私聊清空后模型仍可能带入旧上下文。
+  - `llm-service.js` 清空指定角色和会话的历史时，同时删除其跨 profile/模板的 Responses 续接引用；其他会话保留。新增隔离 HTTP 回归测试，同步 chat-system design/spec/task/usage/todo 与服务包状态；Responses/清空历史测试 12/12、`npm run test:game-chat` 44/44 通过。服务包待构建，真实私聊待验收。
+
 ### 五子棋自然语言代填坐标与 GM 纠错回复
 
 - ✅ [2026-10-20] AI 可按用户自然语言代填 `GameUser` 坐标，GM 拒绝后展示模型依据错误新写出的安全解释。
