@@ -1,5 +1,17 @@
 # 自测功能实现文档
 
+## 192.168.1.39当前豆包双传输复测（2026-10-21）
+
+```text
+方式 := 现有8083 Responses流式接口，正式已保存账号；自然输入早，无system提示；临时API Key及临时WS任务实例
+直连 := 首轮HTTP200、0字、response.failed/doubao_upstream_failed，848毫秒
+兼容 := 主8083入口在doubao.web运行后首轮HTTP200、0字、同错误，19532毫秒
+网页诊断 := 追加一次只读CDP观测，上游HTTP200、SSE_HEARTBEAT → STREAM_ERROR/error_code710020202，无会话创建ACK，5720毫秒
+判定 := 首轮均未通过；不发送previous_response_id续聊，不能将HTTP200记为成功
+恢复断言 := 临时Key0、临时实例已删除、9091/9224关闭、8083保留、Responses会话前后176
+局限 := 未确定业务码具体原因；账号缺requestProfile但有30/24项快照；不把早前Note8隔离实验当当前桌面部署验收
+```
+
 ## 豆包账号签名跨会话复用自测（2026-10-21）
 
 ```text

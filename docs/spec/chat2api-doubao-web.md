@@ -1,5 +1,20 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 当前192.168.1.39服务复测流程（2026-10-21）
+
+```text
+目标 := 本机192.168.1.39现有进程、Chat2API 8083；不重启、不更新、不换正式账号
+输入 := Responses流式请求model=doubao、input=早，无system消息
+续聊前提 := 首轮有非空正文、response.completed及response ID；满足后才发今天过得怎么样？并带previous_response_id
+直连观测 := HTTP200、0字、response.failed/doubao_upstream_failed，848毫秒；不执行续聊
+网页准备 := 现有AASC WS提交并运行临时doubao.web实例，专用profile/CDP9224/API9091，主入口8083沿任务注册表切网页传输
+网页观测 := HTTP200、0字、失败，19532毫秒；追加一次CDP只读观测为HTTP200、心跳后STREAM_ERROR/error_code710020202、无ACK，5720毫秒
+凭据核查 := requestProfile不存在；cookie摘要6项、主站/账号站快照30/24项；请求优先快照，不能认定缺Cookie
+结果约束 := 两模式首轮失败，续聊未验证；不推断签名永久失效或上游错误业务含义
+恢复 := 各请求finally删除临时Key → 停止/删除仅本轮实例 → 9091/9224释放、8083继续；持久化会话仍176，无新增会话ID可删除
+边界 := 不写入当前AASC聊天、不删除用户旧官网会话、不输出Cookie/Token/签名URL；不修改生产逻辑或发布状态
+```
+
 ## 跨新会话复用签名（2026-10-21，已实现）
 
 ```text
