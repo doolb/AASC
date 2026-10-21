@@ -406,6 +406,8 @@ if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
 
 const wss = new WebSocket.Server({ server, maxPayload: 500 * 1024 * 1024 });
 let gomokuDisplayDemo = null;
+// 按显示端串行处理点击棋步，锁覆盖用户落子及其触发的整轮 AI 聊天。
+const pendingGameMoves = new Map();
 const gomokuGame = createGomokuGameService({
     filePath: path.join(USER_CONFIG_DIR, 'games', 'gomoku.json'),
     onUpdate: (displayId, message) => {
@@ -9080,8 +9082,12 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     }
 
     if (data.type === 'gameRecover') {
+        if (displayData?.ws !== ws) return;
         const game = gomokuGame.snapshot(displayId);
-        if (game) ws.send(JSON.stringify(game));
+        if (data.requestId) {
+            ws.send(JSON.stringify({ type: 'gameRecoverResult', requestId: data.requestId,
+                snapshot: game, pendingRequestId: pendingGameMoves.get(displayId)?.requestId || null }));
+        } else if (game) ws.send(JSON.stringify(game));
         return;
     }
 
@@ -9103,6 +9109,23 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         // 点击只代表当前显示端的 User 操作，绝不信任客户端传入的操作者或目标显示端。
         if (displayData?.ws !== ws) return;
         const requestId = typeof data.requestId === 'string' ? data.requestId.slice(0, 80) : null;
+        if (!requestId) {
+            ws.send(JSON.stringify({ type: 'gameError', code: '请求编号无效' }));
+            return;
+        }
+        const processing = pendingGameMoves.get(displayId);
+        if (processing) {
+            const message = processing.requestId === requestId
+                ? { type: 'gameMoveResult', requestId, status: 'processing' }
+                : { type: 'gameError', requestId, code: '棋步处理中' };
+            ws.send(JSON.stringify(message));
+            return;
+        }
+        const currentGame = gomokuGame.snapshot(displayId);
+        if (data.gameId && data.gameId !== currentGame?.gameId) {
+            ws.send(JSON.stringify({ type: 'gameError', requestId, code: '棋局已变化' }));
+            return;
+        }
         const expectedVersion = Number(data.revision);
         const result = Number.isSafeInteger(expectedVersion)
             ? gomokuGame.apply(displayId, { game: '五子棋', actor: 'User', operation: '落子',
@@ -9117,23 +9140,37 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             }
             return;
         }
-        if (result.message?.result === '进行中' && result.message.turn !== 'AI') return;
-        const session = chat.getSession();
-        void handleChatMessage({
-            content: result.gm,
-            displayContent: `棋盘点击 ${result.message.coordinate}`,
-            displayId,
-            voiceOriginDisplayId: displayId,
-            routeVoiceToPreferredDisplay: true,
-            mode: session.mode || 'group',
-            target: session.privateTarget || null,
-            sessionId: session.privateSessionId || 'default',
-            internalGameUpdate: true,
-            sendToControl: message => {
-                broadcastToControls(message);
-                sendToDisplay(displayId, message);
+        const move = { requestId };
+        pendingGameMoves.set(displayId, move);
+        ws.send(JSON.stringify({ type: 'gameMoveResult', requestId, status: 'processing' }));
+        void (async () => {
+            try {
+                const session = chat.getSession();
+                await handleChatMessage({
+                    content: result.gm,
+                    displayContent: `棋盘点击 ${result.message.coordinate}`,
+                    displayId,
+                    voiceOriginDisplayId: displayId,
+                    routeVoiceToPreferredDisplay: true,
+                    mode: session.mode || 'group',
+                    target: session.privateTarget || null,
+                    sessionId: session.privateSessionId || 'default',
+                    internalGameUpdate: true,
+                    sendToControl: message => {
+                        broadcastToControls(message);
+                        sendToDisplay(displayId, message);
+                    }
+                });
+            } catch (error) {
+                logError('Game', `点击落子后 AI 处理失败: ${error.message}`);
+            } finally {
+                // 发给当前连接，保证断线重连的页面也能结束对应的请求锁。
+                if (pendingGameMoves.get(displayId) === move) pendingGameMoves.delete(displayId);
+                const snapshot = gomokuGame.snapshot(displayId);
+                sendToDisplay(displayId, { type: 'gameMoveResult', requestId, status: 'complete',
+                    gameId: snapshot?.gameId || null, revision: snapshot?.revision || null });
             }
-        }).catch(error => logError('Game', `点击落子后 AI 处理失败: ${error.message}`));
+        })();
         return;
     }
 

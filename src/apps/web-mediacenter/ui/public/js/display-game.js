@@ -3,7 +3,11 @@
     const refs = {};
     let game = null;
     let send = () => false;
-    let pending = false;
+    // 棋步锁直到服务端完成本次 AI 处理才释放，棋盘广播不能提前释放它。
+    let pending = null;
+    let recoveryRequestId = null;
+    let requestSequence = 0;
+    let connected = false;
     let conversationState = 'waitingWake';
 
     function isConversationActive() {
@@ -39,6 +43,17 @@
         return game?.demo !== true && game?.result === '进行中' && isConversationActive();
     }
 
+    function nextRequestId(kind) {
+        requestSequence += 1;
+        return `${kind}-${Date.now()}-${requestSequence}`;
+    }
+
+    function canPlay(point) {
+        return connected && isConversationActive() && game && game.demo !== true
+            && game.visible !== false && game.result === '进行中' && game.turn === 'User'
+            && !pending && !recoveryRequestId && point?.dataset.stone === '.';
+    }
+
     function refreshMenu() {
         if (!refs.toggle || !refs.list) return;
         refs.toggle.textContent = activeGame() ? '五子棋' : '游戏';
@@ -69,19 +84,21 @@
         refs.layer.hidden = !available;
         refs.shell.hidden = !available || game.visible === false;
         refs.layer.setAttribute('aria-hidden', String(!available));
-        setStatus(turnLabel());
+        setStatus(recoveryRequestId ? '正在同步棋盘…' : pending ? '正在处理棋步…' : turnLabel());
         refs.board.querySelectorAll('.display-game-point').forEach(button => {
-            const playable = available && game.visible !== false && game.demo !== true
-                && game.result === '进行中' && game.turn === 'User'
-                && !pending && button.dataset.stone === '.';
-            button.disabled = !playable;
+            button.disabled = !canPlay(button);
         });
     }
 
     function requestRecovery() {
-        pending = false;
-        setStatus('正在同步棋盘…');
-        send({ type: 'gameRecover' });
+        if (recoveryRequestId) return;
+        recoveryRequestId = nextRequestId('game-recover');
+        refreshView();
+        if (!send({ type: 'gameRecover', requestId: recoveryRequestId })) {
+            recoveryRequestId = null;
+            connected = false;
+            refreshView();
+        }
     }
 
     function isStar(x, y, size) {
@@ -124,11 +141,36 @@
             return false;
         }
         if (!message || !['gameSnapshot', 'gameDelta', 'gameVisibility', 'gameProposal', 'gameError',
-            'gameDemoEnd'].includes(message.type)) return false;
+            'gameDemoEnd', 'gameMoveResult', 'gameRecoverResult'].includes(message.type)) return false;
+        if (message.type === 'gameRecoverResult') {
+            if (!recoveryRequestId || message.requestId !== recoveryRequestId) return true;
+            if (message.snapshot) handleMessage(message.snapshot);
+            else {
+                game = null;
+                refs.layer.hidden = true;
+                refs.shell.hidden = true;
+                refs.layer.setAttribute('aria-hidden', 'true');
+            }
+            pending = message.pendingRequestId ? { requestId: message.pendingRequestId,
+                gameId: message.snapshot?.gameId, revision: message.snapshot?.revision } : null;
+            recoveryRequestId = null;
+            refreshView();
+            return true;
+        }
+        if (message.type === 'gameMoveResult') {
+            if (!pending || message.requestId !== pending.requestId) return true;
+            if (message.status === 'complete') {
+                pending = null;
+                if (!game || message.gameId !== game.gameId || message.revision > game.revision) {
+                    requestRecovery();
+                }
+            }
+            refreshView();
+            return true;
+        }
         if (message.type === 'gameDemoEnd') {
             if (game?.demo === true && game.gameId === message.gameId) {
                 game = null;
-                pending = false;
                 refs.layer.hidden = true;
                 refs.shell.hidden = true;
                 refs.layer.setAttribute('aria-hidden', 'true');
@@ -137,8 +179,11 @@
             return true;
         }
         if (message.type === 'gameError') {
-            pending = false;
-            if (message.code === '版本过期') requestRecovery();
+            // 显隐失败或旧请求的错误与当前棋步无关，不能解除当前棋步锁。
+            if (message.requestId && message.requestId !== pending?.requestId) return true;
+            if (pending && !message.requestId) return true;
+            pending = null;
+            if (['版本过期', '棋局已变化', '棋步处理中'].includes(message.code)) requestRecovery();
             else {
                 refreshView();
                 setStatus(`操作失败：${message.code || '未知错误'}`);
@@ -149,17 +194,17 @@
             const rows = String(message.board || '').split('/');
             if (!Number.isInteger(message.size) || rows.length !== message.size
                 || rows.some(row => row.length !== message.size || /[^.XO]/.test(row))) return true;
+            if (game?.gameId === message.gameId && message.revision < game.revision) return true;
             game = { ...message };
-            pending = false;
             buildBoard();
             refreshView();
             return true;
         }
+        if (game?.gameId === message.gameId && message.revision <= game.revision) return true;
         if (!game || message.gameId !== game.gameId || message.revision !== game.revision + 1) {
             requestRecovery();
             return true;
         }
-        game.revision = message.revision;
         if (message.type === 'gameDelta') {
             const point = refs.board.querySelector(`[data-coordinate="${message.coordinate}"]`);
             if (!point || point.dataset.stone !== '.') {
@@ -184,7 +229,7 @@
         } else if (message.type === 'gameProposal') {
             game.pendingSize = message.pendingSize;
         }
-        pending = false;
+        game.revision = message.revision;
         refreshView();
         return true;
     }
@@ -223,7 +268,12 @@
         bus.subscribe('server.message', handleMessage);
         bus.subscribe('stage.resize', resize);
         // 首次初始化可能早于 WebSocket OPEN；本地无棋盘时重连也必须补拉服务端旧棋局。
-        bus.subscribe('transport.changed', ({ available }) => { if (available) requestRecovery(); });
+        bus.subscribe('transport.changed', ({ available }) => {
+            connected = available === true;
+            recoveryRequestId = null;
+            if (connected) requestRecovery();
+            refreshView();
+        });
         bus.subscribe('chat.visibility', ({ visible }) => { if (visible) setMenuOpen(false); });
         refs.toggle?.addEventListener('click', () => setMenuOpen(refs.menu.hidden));
         refs.list?.addEventListener('click', event => {
@@ -253,24 +303,24 @@
         });
         refs.board.addEventListener('click', event => {
             const point = event.target.closest('.display-game-point');
-            if (!point || !game || game.demo === true || pending || game.turn !== 'User'
-                || game.result !== '进行中') return;
-            pending = true;
+            if (!canPlay(point)) return;
+            pending = { requestId: nextRequestId('game'), gameId: game.gameId, revision: game.revision };
             refreshView();
             const sent = send({ type: 'gameMove', coordinate: point.dataset.coordinate,
-                revision: game.revision, requestId: `game-${Date.now()}` });
-            if (!sent) { pending = false; setStatus('连接中断，请重试'); refreshView(); }
+                ...pending });
+            if (!sent) { pending = null; refreshView(); setStatus('连接中断，请重试'); }
         });
         document.getElementById('displayGameClose')?.addEventListener('click', () => {
             if (game && game.demo !== true) send({ type: 'gameView', visible: false, revision: game.revision });
         });
         const state = stage.getState();
+        connected = typeof state.transport === 'function';
         conversationState = state.voiceConversationState || 'waitingWake';
         refreshMenu();
         if (state.rotationGeometry) resize({ width: state.rotationGeometry.logicalWidth,
             height: state.rotationGeometry.logicalHeight, rotation: state.rotationGeometry.rotation });
         // 页面脚本可能在舞台订阅前已收到首连快照，因此主动补拉一次权威状态。
-        send({ type: 'gameRecover' });
+        requestRecovery();
     }
 
     root.DisplayGame = Object.freeze({ init, handleMessage, supportedGames: SUPPORTED_GAMES });

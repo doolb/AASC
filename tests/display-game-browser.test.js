@@ -104,8 +104,11 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         await page.keyboard.press('Escape');
         assert.equal(await page.$eval('#displayGameMenu', menu => menu.hidden), true);
         await page.evaluate(() => window.__emit('server.message', {
-            type: 'gameSnapshot', gameId: 'g1', revision: 1, size: 9,
-            board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: true
+            type: 'gameRecoverResult', requestId: window.__sent.at(-1).requestId,
+            pendingRequestId: null, snapshot: {
+                type: 'gameSnapshot', gameId: 'g1', revision: 1, size: 9,
+                board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: true
+            }
         }));
         assert.equal(await page.$$eval('.display-game-point', list => list.length), 81);
         assert.equal(await page.$$eval('.display-game-point.is-placing', list => list.length), 0,
@@ -136,12 +139,30 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         assert.equal(move.type, 'gameMove');
         assert.equal(move.coordinate, 'C3');
         assert.equal(move.revision, 1);
-        assert.match(move.requestId, /^game-\d+$/);
+        assert.equal(move.gameId, 'g1');
+        assert.match(move.requestId, /^game-\d+-\d+$/);
+        await page.evaluate(() => {
+            const click = () => document.querySelector('[data-coordinate="E3"]')
+                .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            for (let index = 0; index < 20; index += 1) click();
+            window.__emit('server.message', { type: 'gameSnapshot', gameId: 'g1', revision: 1,
+                size: 9, board: Array(9).fill('.........').join('/'),
+                turn: 'User', result: '进行中', visible: true });
+            window.__emit('server.message', { type: 'gameError', requestId: 'old-move', code: '版本过期' });
+            window.__emit('server.message', { type: 'gameError', code: '无关显隐错误' });
+            click();
+        });
+        assert.equal(await page.evaluate(() => window.__sent.filter(item => item.type === 'gameMove').length), 1,
+            '快速连点、同版本快照和无关错误都不能释放在途棋步');
         await page.evaluate(() => window.__emit('server.message', {
             type: 'gameDelta', gameId: 'g1', revision: 2, actor: 'User', coordinate: 'C3',
             turn: 'AI', result: '进行中'
         }));
         assert.equal(await page.$eval('[data-coordinate="C3"]', button => button.dataset.stone), 'X');
+        const beforeAiTurnClick = await page.evaluate(() => window.__sent.length);
+        await page.evaluate(() => document.querySelector('[data-coordinate="E3"]')
+            .dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        assert.equal(await page.evaluate(() => window.__sent.length), beforeAiTurnClick);
         assert.equal(await page.$eval('[data-coordinate="C3"] .display-game-stone', stone =>
             getComputedStyle(stone).animationName), 'display-game-stone-place');
         await page.waitForFunction(() => !document.querySelector('[data-coordinate="C3"]').classList.contains('is-placing'));
@@ -152,12 +173,63 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         }));
         assert.equal(await page.$eval('[data-coordinate="D3"]', button => button.dataset.stone), 'O');
         assert.equal(await page.$eval('[data-coordinate="D3"]', button => button.classList.contains('is-placing')), false);
+        assert.equal(await page.$eval('[data-coordinate="E3"]', button => button.disabled), true,
+            'AI 棋子出现后仍需等该轮聊天处理完成');
+        await page.evaluate(() => {
+            window.__emit('server.message', { type: 'gameSnapshot', gameId: 'g1', revision: 1,
+                size: 9, board: Array(9).fill('.........').join('/'),
+                turn: 'User', result: '进行中', visible: true });
+            window.__emit('transport.changed', { available: false });
+            window.__emit('transport.changed', { available: true });
+            const recovery = window.__sent.at(-1);
+            window.__emit('server.message', { type: 'gameRecoverResult', requestId: 'old-recovery',
+                snapshot: null, pendingRequestId: null });
+            window.__emit('server.message', { type: 'gameRecoverResult', requestId: recovery.requestId,
+                pendingRequestId: window.__sent.find(item => item.type === 'gameMove').requestId,
+                snapshot: { type: 'gameSnapshot', gameId: 'g1', revision: 3, size: 9,
+                    board: ['.........', '.........', '..XO.....', ...Array(6).fill('.........')].join('/'),
+                    turn: 'User', result: '进行中', visible: true } });
+        });
+        assert.equal(await page.$eval('[data-coordinate="C3"]', button => button.dataset.stone), 'X',
+            '迟到快照不能回滚棋子');
+        assert.equal(await page.$eval('[data-coordinate="E3"]', button => button.disabled), true,
+            '重连应恢复服务端仍在处理的请求锁');
+        await page.evaluate(requestId => window.__emit('server.message', {
+            type: 'gameMoveResult', requestId, status: 'complete', gameId: 'g1', revision: 3
+        }), move.requestId);
+        assert.equal(await page.$eval('[data-coordinate="E3"]', button => button.disabled), false);
+        const movesBeforeGuards = await page.evaluate(() => window.__sent.length);
+        await page.evaluate(() => {
+            document.querySelector('[data-coordinate="C3"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            window.__transportAvailable = false;
+            document.querySelector('[data-coordinate="E3"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            window.__transportAvailable = true;
+        });
+        assert.equal(await page.evaluate(() => window.__sent.length), movesBeforeGuards,
+            '占用格不发送，连接发送失败不追加消息');
+        assert.equal(await page.$eval('[data-coordinate="E3"]', button => button.disabled), false,
+            '发送失败后释放本次锁');
+        await page.click('[data-coordinate="E3"]');
+        const secondMove = await page.evaluate(() => window.__sent.at(-1));
+        assert.notEqual(secondMove.requestId, move.requestId);
+        await page.evaluate(requestId => window.__emit('server.message', {
+            type: 'gameMoveResult', requestId, status: 'complete', gameId: 'g1', revision: 3
+        }), move.requestId);
+        assert.equal(await page.$eval('[data-coordinate="F3"]', button => button.disabled), true,
+            '上一棋步迟到的完成回包不能解除下一棋步锁');
+        await page.evaluate(requestId => window.__emit('server.message', {
+            type: 'gameError', requestId, code: '位置已占用'
+        }), secondMove.requestId);
+        assert.equal(await page.$eval('[data-coordinate="F3"]', button => button.disabled), false,
+            '当前请求的拒绝回包应释放本次锁');
         await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
         await page.evaluate(() => window.__emit('server.message', {
             type: 'gameDelta', gameId: 'g1', revision: 5, actor: 'AI', coordinate: 'E3',
             turn: 'User', result: '进行中'
         }));
         assert.equal(await page.evaluate(() => window.__sent.at(-1).type), 'gameRecover');
+        assert.equal(await page.$eval('[data-coordinate="E3"]', button => button.disabled), true,
+            '同步缺口时禁止点击');
         await page.evaluate(() => document.getElementById('displayGameToggle').click());
         assert.equal(await page.$eval('#displayGameMenu', menu => menu.hidden), false);
         await page.evaluate(source => {
@@ -195,10 +267,18 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         }));
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), false);
         await page.evaluate(() => window.__emit('server.message', {
-            type: 'gameSnapshot', gameId: 'g1', revision: 3, size: 9,
-            board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: false
+            type: 'gameRecoverResult', requestId: window.__sent.at(-1).requestId,
+            pendingRequestId: null, snapshot: {
+                type: 'gameSnapshot', gameId: 'g1', revision: 3, size: 9,
+                board: Array(9).fill('.........').join('/'), turn: 'User', result: '进行中', visible: false
+            }
         }));
         assert.equal(await page.$eval('#displayGameShell', shell => shell.hidden), true);
+        const movesBeforeHidden = await page.evaluate(() => window.__sent.length);
+        await page.evaluate(() => document.querySelector('[data-coordinate="E3"]')
+            .dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        assert.equal(await page.evaluate(() => window.__sent.length), movesBeforeHidden,
+            '隐藏棋盘即使收到合成点击也不发送');
         assert.equal(await page.$eval('#displayGameToggle', button => button.textContent), '五子棋');
         await page.click('#displayGameToggle');
         assert.match(await page.$eval('.display-game-list-status', status => status.textContent), /已隐藏/);
@@ -215,6 +295,11 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         }));
         assert.equal(await page.$eval('#displayGameLayer', layer => layer.hidden), true);
         assert.equal(await page.$eval('#displayGameToggle', button => button.textContent), '游戏');
+        const beforeInactiveClick = await page.evaluate(() => window.__sent.length);
+        await page.evaluate(() => document.querySelector('[data-coordinate="E3"]')
+            .dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        assert.equal(await page.evaluate(() => window.__sent.length), beforeInactiveClick,
+            '非活动对话不发送棋步');
         await page.evaluate(() => window.__emit('stage.resize', {
             width: 740, height: 390, rotation: 90
         }));
