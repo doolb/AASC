@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { randomUUID } = require('crypto');
+const { randomUUID, createHash } = require('crypto');
 const { TextDecoder } = require('util');
 const { normalizeDoubaoNodeProfile, applyDoubaoNodeProtocol } = require('./chat2api-doubao-node-protocol');
 const { normalizeDoubaoCookieSnapshot, parseDoubaoCookieHeader } = require('./chat2api-doubao-cookie-snapshot');
@@ -243,7 +243,7 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
       ...(requestProfile && Object.hasOwn(requestProfile.headers, 'x-tt-passport-csrf-token')
         ? { 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default') } : {}),
     },
-    // 禁止重定向和环境代理；Android在发送前补当次官网签名，实际网络仍由Node执行。
+    // 禁止重定向和环境代理；Android在发送前取得本会话官网签名，实际网络仍由Node执行。
     responseType: 'stream', maxRedirects: 0, proxy: false, timeout: limits.timeoutMs,
     ...(requestProfile ? { doubaoHttp2: true } : {}),
     maxBodyLength: limits.requestBytes, maxContentLength: limits.streamBytes, validateStatus: () => true,
@@ -534,6 +534,54 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
   }
 };
 
+/**
+ * 签名只属于当前适配器实例，不进入会话持久化；只有成功确认的普通原生会话才可复用。
+ * 有效期没有可靠的官网契约，不猜测永久有效，也不在失败后自动重发可能已被受理的消息。
+ */
+const createDoubaoNodeSignatureCache = () => {
+  const entries = new Map();
+  const invalidCodes = new Set(['doubao_auth_expired', 'doubao_risk_control',
+    'doubao_session_conflict', 'doubao_session_uncertain']);
+  return ({ account, responseSession, mode, sessionFlow }) => {
+    const conversation = responseSession?.aascConversationId;
+    const key = sessionFlow.enabled && typeof conversation === 'string' && conversation.length > 0
+      && conversation.length <= 256 ? JSON.stringify([account.accountId, conversation]) : '';
+    const fingerprint = key ? createHash('sha256').update(JSON.stringify([
+      account.credentialRevision || '', normalizeDoubaoCredentials(account.credentials),
+    ])).digest('hex') : '';
+    let entry = key ? entries.get(key) : null;
+    if (entry && (!sessionFlow.continuing || entry.fingerprint !== fingerprint || entry.mode !== mode
+      || entry.upstreamId !== responseSession.nativeState?.conversationId)) {
+      entries.delete(key);
+      entry = null;
+    }
+    if (entry) {
+      entries.delete(key);
+      entries.set(key, entry);
+    }
+    return {
+      // 每轮的正文、时间、消息标识与Cookie仍使用本轮构造结果，只复用已签名URL和SDK头。
+      apply: prepared => entry ? { ...prepared, url: entry.url,
+        headers: { ...entry.headers, Cookie: prepared.headers.Cookie }, doubaoHttp2: true } : null,
+      complete: (prepared, state) => {
+        if (!key || state.status !== 'ready' || !state.conversationId) return;
+        const headers = { ...prepared.headers };
+        delete headers.Cookie;
+        delete headers.cookie;
+        entry = { fingerprint, mode, upstreamId: state.conversationId, url: prepared.url, headers };
+        entries.delete(key);
+        entries.set(key, entry);
+        // 固定容量的LRU避免已结束的AASC会话长期积累签名；淘汰后下次续聊重新生成。
+        while (entries.size > 128) entries.delete(entries.keys().next().value);
+      },
+      invalidate: error => {
+        // 旧请求的迟到错误不得清除同键后来成功提交的另一条记录。
+        if (entry && invalidCodes.has(error?.code) && entries.get(key) === entry) entries.delete(key);
+      },
+    };
+  };
+};
+
 /** 未走通用 rawTrafficLogger：原始网页错误可在任意字符串携带凭据，不能仅依靠键名脱敏。 */
 const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDoubaoHttp2Client(), browserBridge,
   getTransport = () => 'node-http', onChatVerified, onBrowserChatVerified, prepareNodeRequest,
@@ -542,6 +590,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
   const limits = Object.fromEntries(Object.entries(DOUBAO_LIMITS).map(([key, maximum]) => [key,
     Number.isSafeInteger(customLimits[key]) && customLimits[key] > 0 ? Math.min(customLimits[key], maximum) : maximum,
   ]));
+  const signatureCache = createDoubaoNodeSignatureCache();
   return async ({ request, account, provider, actualModel, responseSession, context = {} }) => {
     // 传输由任务的权威配置决定；网页路径只使用当前官网页面的同源请求。
     const accountCredentials = Object.getOwnPropertyDescriptor(account || {}, 'credentials')?.value;
@@ -561,12 +610,15 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     prepared.timeout = timeoutMs;
     const control = createRequestControl(context.signal || request.signal, timeoutMs);
     let response;
+    let signatureScope;
     try {
       control.check();
-      // Android官网SDK负责当次签名；实际LLM联网仍由下方Node HTTP/2执行，不切换网页传输。
+      // Android首轮由官网SDK签名，同一权威会话续聊复用内存签名；实际联网仍由Node HTTP/2执行。
       if (transportMode === 'node-http' && (prepareNodeRequest || process.env.AASC_ANDROID_NODE === '1')) {
+        signatureScope = signatureCache({ account, responseSession, mode, sessionFlow });
         const prepare = prepareNodeRequest || (options => createDoubaoAndroidBridge().prepare(options));
-        prepared = await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs } }));
+        prepared = signatureScope.apply(prepared)
+          || await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs } }));
         control.check();
       }
       // 仅内部Responses生命周期读取这些标记；不属于nativeState，不会持久化到会话历史。
@@ -619,11 +671,16 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
       }
       const events = consumeDoubaoStream({ source: response.data, model: request.originalModel || request.model,
         mode, nativeState, limits, control, sessionFlow,
-        onComplete: () => transportMode === 'browser-fetch'
-          ? onBrowserChatVerified?.(account) : onChatVerified?.(account) });
+        onComplete: () => {
+          signatureScope?.complete(prepared, nativeState);
+          return transportMode === 'browser-fetch' ? onBrowserChatVerified?.(account) : onChatVerified?.(account);
+        } });
       const stream = {
         [Symbol.asyncIterator]() { return this; },
-        next: () => events.next(),
+        next: async () => {
+          try { return await events.next(); }
+          catch (error) { signatureScope?.invalidate(error); throw error; }
+        },
         return: async () => {
           control.cancel();
           try { return await events.return(); } finally { control.cleanup(); }
@@ -646,6 +703,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
         nativeState,
       };
     } catch (error) {
+      signatureScope?.invalidate(error);
       control.cleanup();
       throw control.normalizeError(error);
     }

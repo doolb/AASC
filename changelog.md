@@ -1,3 +1,10 @@
+### Android豆包按会话复用直连签名
+
+- ✅ [2026-10-21] 普通Node原生会话首轮生成签名，同账号、同凭据及同权威会话续聊复用内存签名。
+  - `chat2api-doubao-chat-adapter.js` 增加128项LRU，成功完成后提交，Cookie/正文/本轮标识仍从新请求取得；新会话/快照重建/凭据变化/重启或淘汰后重新生成，HTTP和SSE明确认证失效或风控清缓存，失败不自动重发。无会话身份及非原生模式逐次签名，兼容/桌面保持既有流程。
+  - Responses真实服务栈及缓存边界定向23/23，`npm run check:chat2api` 331/331、零跳过；Note8隔离Responses策略实测1次签名3轮14/26/10字均HTTP200完成，末轮签名年龄83843毫秒，不推定长期有效。测试官网会话单ID清理status_code0、临时Key为0、隔离目录/新增ADB转发清理；正式账号及AASC聊天未写入测试数据。
+  - 同步design/spec/task/self-test/usage/todo；`servicePackage=true`保持，代码包待构建部署，本次不改Android原生、不需要新APK。
+
 ### 游戏期间打开上层聊天
 
 - ✅ [2026-10-21] 修复游戏全屏外壳遮挡聊天入口和聊天面板。

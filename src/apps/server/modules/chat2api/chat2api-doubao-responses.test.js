@@ -19,12 +19,14 @@ const setup = (options={}) => {
   const provider={id:'doubaochat',enabled:true,apiEndpoint:'https://www.doubao.com',chatPath:'/chat/completion'};
   const dataStore={readCollection:async(name,fallback)=>clone(collections[name]||fallback),writeCollection:async(name,value)=>{if(options.beforeSave)await options.beforeSave(name,value);collections[name]=clone(value)},getAccount:async()=>clone(account),listAccounts:async()=>[{accountId:account.accountId,providerId:'doubaochat',secretConfigured:true}],listDoubaoNodeAccountIds:async()=>[account.accountId]};
   const store=createChat2ApiResponseSessionStore({dataStore});
-  const adapter=createDoubaoChatAdapter({limits:{timeoutMs:options.timeoutMs||1000},httpClient:{request:async call=>{
+  const transport={request:async call=>{
     calls.push(call);
     const id=call.data.client_meta.conversation_id||`mock-upstream-${calls.length}`;
     const source=options.source?.(call,calls.length,id)||Readable.from(parts(id));
     return {status:200,headers:{'content-type':'text/event-stream'},data:source};
-  }}});
+  }};
+  const adapter=createDoubaoChatAdapter({limits:{timeoutMs:options.timeoutMs||1000},httpClient:transport,
+    http2Client:transport,prepareNodeRequest:options.prepareNodeRequest});
   const core=createChat2ApiCoreAdapter({dataStore,providerRegistry:{listProviders:async()=>[provider]},modelMapper:{resolveModel:async model=>({actualModel:model})},loadBalancer:{selectAccount:async()=>({provider,account:{accountId:account.accountId}}),markAccountFailed(){}},getDoubaoWebConfig:()=>{throw Error('no_browser')},providerAdapters:{doubaochat:adapter}});
   const service=createChat2ApiResponsesService({sessionStore:store,coreAdapter:core,doubaoSessionTimeoutMs:options.timeoutMs||1000});
   return {service,store,dataStore,collections,calls,core};
@@ -40,6 +42,51 @@ test('Responses纯Node持久化后重建Store，第二轮仅发送新增input且
   assert.equal(f.calls[1].data.client_meta.conversation_id,stored.nativeState.conversationId);
   assert.equal(f.calls[1].data.messages[0].content_block[0].content.text_block.text,'第二轮');
   assert.equal((await restored.get(stored.conversationId)).history.length,4);
+});
+test('Responses三轮复用一次SDK签名，本轮正文及消息ID仍更新，签名不进入持久化',async()=>{
+  let prepared=0;
+  const f=setup({prepareNodeRequest:async({prepared:call})=>{
+    prepared++;
+    return {...call,url:call.url+'&a_bogus=mock_signed_once',doubaoHttp2:true};
+  }});
+  let previous;
+  for(const input of ['早','今天过得怎么样？','晚上好']){
+    const result=await f.service.createResponse({model:'doubao',input,stream:true,
+      ...(previous?{previous_response_id:previous}:{})});
+    const events=[];for await(const event of result.stream)events.push(event);
+    assert.equal(events.at(-1).type,'response.completed');
+    previous=events.at(-1).response.id;
+  }
+  assert.equal(prepared,1);
+  assert.equal(new Set(f.calls.map(call=>call.url)).size,1);
+  assert.equal(new Set(f.calls.map(call=>call.data.option.unique_key)).size,3);
+  assert.equal(new Set(f.calls.map(call=>call.data.messages[0].local_message_id)).size,3);
+  assert.deepEqual(f.calls.map(call=>call.data.messages[0].content_block[0].content.text_block.text),
+    ['早','今天过得怎么样？','晚上好']);
+  assert.equal(f.calls[1].data.client_meta.conversation_id,'mock-upstream-1');
+  assert.doesNotMatch(JSON.stringify(f.collections),/mock_signed_once|a_bogus|mock_session/u);
+  await f.service.createResponse({model:'doubao',input:'另一局聊天'});
+  assert.equal(prepared,2);
+});
+test('Responses同AASC会话snapshot重建重新签名，取消及风控不自动重发',async()=>{
+  let prepared=0,failed=false;
+  const f=setup({prepareNodeRequest:async({prepared:call})=>{
+    prepared++;return {...call,url:call.url+'&a_bogus=mock_'+prepared,doubaoHttp2:true};
+  },source:()=>failed?Readable.from([event('STREAM_ERROR',{error_code:710022004})]):null});
+  const metadata={aasc_context_owner:'pi',aasc_pi_session_id:'pi_signature',aasc_pi_context_mode:'snapshot'};
+  const first=await f.service.createResponse({model:'doubao',conversation:'pi_signature',metadata,input:'早'});
+  await f.service.createResponse({model:'doubao',conversation:first.body.conversation.id,metadata,input:'重新建立上下文'});
+  assert.equal(prepared,2);
+  const abort=new AbortController();abort.abort();
+  await assert.rejects(()=>f.service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'取消'},
+    {signal:abort.signal}));
+  assert.equal(f.calls.length,2);
+  failed=true;
+  await assert.rejects(()=>f.service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'新消息'}),
+    error=>error.code==='doubao_risk_control');
+  assert.equal(prepared,2);
+  assert.equal(f.calls.length,3);
+  assert.equal((await f.store.get(first.body.conversation.id)).nativeState.status,'uncertain');
 });
 test('豆包网页任务接管旧Node对话时重放AASC历史并切换原生传输', async () => {
   const f = setup();

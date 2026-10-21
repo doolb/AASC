@@ -1,5 +1,16 @@
 # 自测功能实现文档
 
+## Android豆包按会话签名自测（2026-10-21）
+
+```text
+真实短时实验 := Note8/min72 + 隔离Node源码/账号 + Responses流三轮 → prepare调用1次、复用2次 → 正文14/26/10字，HTTP200且完成；第三轮签名年龄83843毫秒，权威上游ready/3轮
+协议测试 := chat2api-doubao-responses.test.js真实Responses service/core/store/适配器，三轮prepare仅一次；正文、unique_key及消息ID更新；同AASC snapshot新签名；取消不发网；风控不重发且uncertain
+缓存边界 := chat2api-doubao-android-prepare.test.js验证账号/凭据修订及原值/AASC/上游/重建/新实例隔离，HTTP401/403和SSE风控清缓存，429/取消保留，失败首轮不提交、无内部身份/非原生模式逐次签名，128项LRU
+回归 := 定向23/23；npm run check:chat2api 331/331，零跳过；git diff --check通过
+清理 := 登录样本自动删除；仅删除隔离Responses确认的一个三轮测试官网会话，status_code0；测试Key剩余0；隔离目录及新增ADB转发已删除，原9222保留
+部署 := 新正式缓存逻辑已通过协议/边界回归；上述真机实验为缓存策略验证，未宣称正式服务已更新；servicePackage=true，minApk=false，本次无需构建APK；更长有效期仍待观察
+```
+
 ## Android豆包直连与兼容联合自测（2026-10-21）
 
 ```text

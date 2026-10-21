@@ -1,5 +1,20 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## Android Node按会话复用签名（2026-10-21，已实现）
+
+```text
+已有声明 := 当次/prepare IPC、Node HTTP2、普通模式原生会话、内部aascConversationId、取消与Responses会话锁
+新增定义 := 适配器私有有界LRU缓存(容量128)；条目{账号+内部AASC键,凭据摘要,模式,权威上游ID,签名URL,非Cookie请求头}
+隔离实验 := 首轮prepare一次 → 新消息与权威会话续聊 → 等60秒再续聊；三轮均HTTP200且完成，最后签名年龄83843毫秒；不将结果解释为永久有效
+缓存范围 := Android Node签名路径 且 普通模式原生会话启用 且 有内部AASC会话ID；无身份或非原生模式仍逐请求签名
+查找 := 根据当前账号和内部AASC ID定位；凭据版本+规范化凭据摘要、模式、已确认上游ID全部一致且正在续聊才命中；不匹配或首轮删除旧条目
+命中 := 提升LRU顺序；复用签名URL和非Cookie头；保留本轮prepared.data、超时和其它参数；Cookie取本轮prepared.headers.Cookie
+未命中 := 官网SDK/prepare生成签名但不发送消息 → Node HTTP2发送 → 只有非空SSE正常完成且取得ready原生状态后缓存；淘汰最久未使用条目
+失效 := HTTP或SSE明确auth_expired/risk_control/session_conflict/session_uncertain时仅清理本次对应条目；同时覆盖流式next异常和非流式异常；不重放请求
+隔离 := 缓存不写nativeState/磁盘/响应/日志，不跨账号/凭据/AASC/上游/模式复用；新适配器实例没有缓存；取消/网络失败/429不冒充签名失效
+测试 := Responses首轮与续聊调用prepare一次，正文/ID仍更新；新会话/同ID重建/凭据/上游变化重签；失败流/HTTP不重试且下次重新准备；取消和LRU边界；兼容/桌面既有回归
+```
+
 ## Android直连与网页兼容联合修复（2026-10-21，已实现）
 
 ```text
@@ -12,8 +27,8 @@
 运行请求 := 保留prepared中的受限JSON Content-Type → 使用当前网页生成签名并同源fetch → 分块回传 → 等流结束后释放账号租约
 失败策略 := 捕获/清理失败不伪成功；身份错配不发送；页面/签名/网络错误按白名单阶段回传，不打印凭据或URL；取消中止对应网页fetch
 直连续聊 := 普通模式沿用成功模板的JSON编码头、HTTP/2与参数结构；只替换新消息/权威会话/本轮ID和时间，单条用户原文不另加角色前缀
-Android当次签名 := 真机证明旧样本直连风控，而当前网页完整参数经同设备Node HTTP/2成功；Node调用受限/prepare IPC → 官网文档开始保留底层fetch拦截点 → 调用官网SDK签名 → 以本轮unique_key匹配并截留最终请求，禁止实际联网 → 回传固定官网URL和受限请求头 → Node自身HTTP/2发送消息
-签名边界 := WebView不发送LLM消息；只准本轮payload原文完全匹配、同源同路径和设备字段一致；不持久化当次签名、不回退网页传输、不自动重发风控请求；取消/超时清理待签名项
+Android当次签名 := 旧样本直连风控，但当前网页完整参数经同设备Node HTTP/2成功；仅本会话签名缓存未命中时，Node调用受限/prepare IPC → 官网文档开始保留底层fetch拦截点 → 调用官网SDK签名 → 以本轮unique_key匹配并截留最终请求，禁止实际联网 → 回传固定官网URL和受限请求头 → Node自身HTTP/2发送消息
+签名准备边界 := WebView不发送LLM消息；准备时只准本轮payload原文完全匹配、同源同路径和设备字段一致；不持久化当次签名、不回退网页传输、不自动重发风控请求；取消/超时清理待签名项
 直连验证 := 使用Android Node自身进程调用Responses，关闭doubao.web → 首轮非空完成 → 同一Responses引用续聊 → 验证同一上游会话
 兼容验证 := 创建并运行doubao.web实例 → 关闭登录页后Responses首轮和同会话续聊；测试会话独立于当前AASC对话
 ```
