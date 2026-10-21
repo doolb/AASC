@@ -51,6 +51,8 @@ class Chat2ApiLoginActivity : Activity() {
     private var finished = false
     private var refreshing = false
     private var accountWebState: AccountWebState? = null
+    private val loginLease = "login-${java.util.UUID.randomUUID()}"
+    private var ownsLoginLease = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         webViewDataDirectoryInitializer.initialize(Build.VERSION.SDK_INT) { suffix ->
@@ -65,6 +67,11 @@ class Chat2ApiLoginActivity : Activity() {
             return
         }
         session = parsed
+        ownsLoginLease = Chat2ApiWebViewLease.acquire(loginLease)
+        if (!ownsLoginLease) {
+            finishWithError("豆包网页正在处理请求，请完成后再打开登录页")
+            return
+        }
         if (parsed.optString(EXTRA_MODE).trim() == MODE_ACCOUNT_WEB || parsed.optString("mode").trim() == MODE_ACCOUNT_WEB) {
             setupAccountWebShell(parsed)
         } else {
@@ -151,16 +158,25 @@ class Chat2ApiLoginActivity : Activity() {
 
     private fun completeDoubaoAccountWeb() {
         if (finished || refreshing) return
+        val view = authWebView ?: return
+        if (view.captureDoubaoRequestProfile() == null) {
+            view.prepareDoubaoCompletion({}, { message ->
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            })
+            return
+        }
         val state = accountWebState
         val snapshot = authWebView?.captureDoubaoCookieSnapshot()
-        if (state == null || state.refreshUrl.isBlank() || state.refreshToken.isBlank() || snapshot == null) {
-            Toast.makeText(this, "豆包网页资料尚未就绪，请完成登录后重试", Toast.LENGTH_SHORT).show()
+        val requestProfile = authWebView?.captureDoubaoRequestProfile()
+        if (state == null || state.refreshUrl.isBlank() || state.refreshToken.isBlank()
+            || snapshot == null || requestProfile == null) {
+            Toast.makeText(this, "请在豆包官网新会话手动发送一条消息，等回复完成后再保存", Toast.LENGTH_LONG).show()
             return
         }
         refreshing = true
         statusText?.text = "正在保存当前豆包网页登录资料…"
         Thread {
-            val error = try { refreshDoubaoAccountWeb(state, snapshot); null }
+            val error = try { refreshDoubaoAccountWeb(state, snapshot, requestProfile); null }
             catch (_: Exception) { "豆包网页资料保存失败，请重试" }
             runOnUiThread {
                 refreshing = false
@@ -174,7 +190,7 @@ class Chat2ApiLoginActivity : Activity() {
         }.start()
     }
 
-    private fun refreshDoubaoAccountWeb(state: AccountWebState, snapshot: JSONObject) {
+    private fun refreshDoubaoAccountWeb(state: AccountWebState, snapshot: JSONObject, requestProfile: JSONObject) {
         val connection = (URL(state.refreshUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 15_000
@@ -184,7 +200,8 @@ class Chat2ApiLoginActivity : Activity() {
             setRequestProperty("Cache-Control", "no-store")
         }
         try {
-            val body = JSONObject().put("refreshToken", state.refreshToken).put("cookieSnapshot", snapshot)
+            val body = JSONObject().put("refreshToken", state.refreshToken)
+                .put("cookieSnapshot", snapshot).put("requestProfile", requestProfile)
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             if (connection.responseCode !in 200..299) throw IllegalStateException("豆包网页资料保存失败")
         } finally { connection.disconnect() }
@@ -254,7 +271,8 @@ class Chat2ApiLoginActivity : Activity() {
         val loginUrl = response.optString("loginUrl").trim()
         if (loginUrl.isEmpty()) throw IllegalStateException("网页会话缺少登录地址")
         val origins = response.optJSONArray("allowedOrigins").toStringList()
-        val profile = Chat2ApiCaptureProfile(allowedOrigins = origins)
+        val profile = Chat2ApiCaptureProfile(allowedOrigins = origins,
+            captureDoubaoNodeProfile = origins.contains("https://www.doubao.com"))
         val cookies = response.optJSONArray("cookieMappings").toRestoreCookies()
         val localStorage = response.optJSONArray("localStorageMappings").toRestoreLocalStorage()
         return AccountWebState(loginUrl, profile, cookies, localStorage,
@@ -322,6 +340,7 @@ class Chat2ApiLoginActivity : Activity() {
         authWebView?.destroy()
         authWebView = null
         statusText = null
+        if (ownsLoginLease) Chat2ApiWebViewLease.release(loginLease)
         super.onDestroy()
     }
 }

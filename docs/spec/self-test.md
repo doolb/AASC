@@ -1,5 +1,19 @@
 # 自测功能实现文档
 
+## Android豆包直连与兼容联合自测（2026-10-21）
+
+```text
+实际APK脚本 := Node VM执行Chat2ApiDoubaoRequestCapture.script及DoubaoWebViewNodePrepare.script；真实Request/Response立即消费、单ID清理、业务失败重试、授权/账号边界、SDK参数匹配与准备不联网
+JVM := Chat2ApiDoubaoRequestCaptureTest + DoubaoWebViewAccountTest → 4/4；来源/身份/设备字段及登录运行互斥
+Node回归 := npm run check:chat2api → 325/325；补充签名脚本与签名后Node HTTP2顺序定向 → 2/2
+产物 := min72成功构建并覆盖安装Note8，SHA256 ecbefb237eb4a79ced3c79b733d5aac6cf628cfbbb6bb9d13b882a4dba0d789c；尚未发布
+官网捕获 := min71本次成功SSE样本经原生规范化后自动删除，HTTP200/status_code0 → 完成按钮成功保存 → UA改为Note8/WebView132
+直连 := min72 + 隔离最新Node源码 → WebView仅生成当次签名 → Node HTTP2联网 → Responses流首轮14字、同会话续聊20字，均HTTP200并完成；nativeState=node-http/ready/2轮
+兼容 := 真实TaskManager创建并运行doubao.web/ad183ee1 → 关闭登录页后Responses首轮5字、续聊135字，均HTTP200并完成；nativeState=browser-fetch/ready/2轮
+清理 := 停止测试实例；临时API Key剩余0；仅删除隔离Responses记录确认的4个测试官网会话，逐个单ID且status_code0；当前AASC聊天与正式账号未写入测试数据
+部署边界 := 手机正常服务仍code148；上述Node修复在独立临时源码/账号/任务目录验收，需构建并更新服务代码包后在正式入口使用
+```
+
 ## Android豆包JS启动端点自测（2026-10-21）
 
 ```text
@@ -2471,3 +2485,5 @@ TTY := 每秒清行回首覆盖；columns-1以内，保守中文双列；大小/
 ## HMR2.0b 自选图片（2026-10-16）
 
 `node tmp/mmd-pose/depth-eval/hmr2-sam3d/check-custom-report.cjs`以本机临时服务验证文件选择、页面粘贴、人物框非法值拒绝、HMR同源请求和真实浏览器WASM深度PNG；`--real`以官方模型跑动漫原图，回读25点。`check-report.cjs`继续验证固定三图、四种脚掌候选、深度缺失/摘要不匹配回退、WebGL回退与390px布局。该自测验证流程可用，不代表模型姿态准确；手机运行HMR服务、更多私人图片质量未验。
+
+隔离测试的私有源码、凭据和任务目录，以及本轮创建的ADB转发均已清理；用户原有9222转发保留。

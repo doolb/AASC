@@ -1,5 +1,40 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## Android直连与网页兼容联合修复（2026-10-21，已实现）
+
+```text
+已有声明 := 官网成功首轮捕获、账号刷新原子校验、Node HTTP/2适配器、Android受限网页IPC
+新增定义 := 登录/运行互斥租约、运行时账号恢复资料{固定来源Cookie快照,Node设备资料}、样本清理状态
+捕获时序 := 原始fetch前克隆Request → 返回给调用方的then内先克隆Response → 立即返回原Response供官网读取 → 后台有界读取副本
+捕获提交 := 完整非空SSE和唯一ACK → 原生规范化模板成功 → 回授同次单ID清理许可 → 官网同源精确删除 → 原生收到成功结果后允许完成保存
+设备一致性 := 当前样本带有效navigator.userAgent → 账号刷新从已规范化请求query及UA重建Node设备资料 → Cookie/设备/模板同批验证并原子写入
+运行准备 := Node仅向带随机令牌的本机IPC传固定来源Cookie与设备资料 → 原生再次校验边界和session身份 → 互斥租约排除登录与其它账号 → 恢复Cookie和受限localStorage → 等官网页面与签名器就绪 → 再核对身份
+运行请求 := 保留prepared中的受限JSON Content-Type → 使用当前网页生成签名并同源fetch → 分块回传 → 等流结束后释放账号租约
+失败策略 := 捕获/清理失败不伪成功；身份错配不发送；页面/签名/网络错误按白名单阶段回传，不打印凭据或URL；取消中止对应网页fetch
+直连续聊 := 普通模式沿用成功模板的JSON编码头、HTTP/2与参数结构；只替换新消息/权威会话/本轮ID和时间，单条用户原文不另加角色前缀
+Android当次签名 := 真机证明旧样本直连风控，而当前网页完整参数经同设备Node HTTP/2成功；Node调用受限/prepare IPC → 官网文档开始保留底层fetch拦截点 → 调用官网SDK签名 → 以本轮unique_key匹配并截留最终请求，禁止实际联网 → 回传固定官网URL和受限请求头 → Node自身HTTP/2发送消息
+签名边界 := WebView不发送LLM消息；只准本轮payload原文完全匹配、同源同路径和设备字段一致；不持久化当次签名、不回退网页传输、不自动重发风控请求；取消/超时清理待签名项
+直连验证 := 使用Android Node自身进程调用Responses，关闭doubao.web → 首轮非空完成 → 同一Responses引用续聊 → 验证同一上游会话
+兼容验证 := 创建并运行doubao.web实例 → 关闭登录页后Responses首轮和同会话续聊；测试会话独立于当前AASC对话
+```
+
+## 验证样本克隆后精确删除（2026-10-21，已实现）
+
+```text
+已有声明 := Android官网样本观察器、请求模板规范化、完成按钮、官网同源fetch
+新增定义 := 当前捕获尝试{是否已选样本,已克隆资料,同次SSE确认的新ID,清理状态}
+捕获前提 := 请求明确新建且原conversation_id为空；先保留Request与Response副本，再交给官网消费
+成功样本 := 副本具非空回复与完整SSE结束 → ACK提供合法新ID → 模板规范化成功 → 固定本次样本并停止选择其它聊天
+精确清理 := 当前官网来源及当前捕获尝试仍有效 → 只将本次新ID放入单元素conversation_id列表 → POST官网已核验删除路径
+删除报文 := cmd4171 + uplink_body.batch_delete_user_conversation_uplink_body{conversation_id:单项新ID,delete_all:假,conversation_type:3} + 独立sequence_id + channel2 + version1
+删除请求 := 当前官网同源fetch；固定路径/im/conversation/batch_del_user_conv；Content-Type为application/json; encoding=utf-8；agw-js-conv为str；不复用聊天路径的动态签名
+成功判定 := HTTP成功且status_code为0；只有满足后标记样本已清理，不将HTTP200本身当删除成功
+失败重试 := 保留已克隆资料和本次新ID → 显示清理失败 → 用户重试只发送同一个单ID；不删除其它会话、不重复创建样本
+拒绝清理 := 旧会话续聊、流失败/取消、缺失或冲突ACK ID、资料克隆失败、捕获尝试失效；禁止delete_all为真或多ID删除
+数据边界 := 样本ID只在当前捕获尝试内存保留，不进入账号级请求模板；凭据、完整签名URL不写日志
+现场证据 := 当前官网新样本完整SSE后删除HTTP200/status_code0；已删除ID重复请求同样0；错误Content-Type实际712012002
+```
+
 ## Android JS 启动器豆包服务接线（2026-10-21，已实现）
 
 ```text

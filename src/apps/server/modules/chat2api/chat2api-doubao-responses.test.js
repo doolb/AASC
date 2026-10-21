@@ -38,7 +38,7 @@ test('Responses纯Node持久化后重建Store，第二轮仅发送新增input且
   const service=createChat2ApiResponsesService({sessionStore:restored,coreAdapter:f.core});
   await service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'第二轮'});
   assert.equal(f.calls[1].data.client_meta.conversation_id,stored.nativeState.conversationId);
-  assert.equal(f.calls[1].data.messages[0].content_block[0].content.text_block.text,'User: 第二轮');
+  assert.equal(f.calls[1].data.messages[0].content_block[0].content.text_block.text,'第二轮');
   assert.equal((await restored.get(stored.conversationId)).history.length,4);
 });
 test('豆包网页任务接管旧Node对话时重放AASC历史并切换原生传输', async () => {
@@ -79,7 +79,7 @@ test('豆包流式锁覆盖消费与保存，旧response引用排队后重新读
   assert.equal(events.at(-1).type,'response.completed');
   await third;
   assert.equal((await f.store.get(first.body.conversation.id)).history.length,6);
-  assert.equal(f.calls.at(-1).data.messages[0].content_block[0].content.text_block.text,'User: third');
+  assert.equal(f.calls.at(-1).data.messages[0].content_block[0].content.text_block.text,'third');
 });
 test('续接流提前return仅标记uncertain并释放锁，不提交半轮历史或自动重发',async()=>{
   const pending=new PassThrough();

@@ -6,6 +6,7 @@ const { normalizeDoubaoCookieSnapshot, parseDoubaoCookieHeader } = require('./ch
 const { normalizeDoubaoRequestProfile } = require('./chat2api-doubao-request-profile');
 const { createDoubaoHttp2Client } = require('./chat2api-doubao-http2-client');
 const { createDoubaoSessionFlow } = require('./chat2api-doubao-session');
+const { createDoubaoAndroidBridge } = require('./chat2api-doubao-android-bridge');
 
 // 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
 const DOUBAO_ORIGIN = 'https://www.doubao.com';
@@ -44,6 +45,9 @@ const ERROR_DEFINITIONS = Object.freeze({
   doubao_session_conflict: [409, '豆包会话的账号、登录身份或模式不匹配，请新建会话'],
   doubao_session_uncertain: [409, '豆包上游会话位置已不确定，请新建会话'],
   doubao_browser_disabled: [503, '豆包网页任务尚未启动，请启动 doubao.web 后重试'],
+  doubao_android_prepare: [502, 'Android豆包当次签名生成失败，请更新APK或重新登录后重试'],
+  doubao_android_unavailable: [503, 'Android豆包签名服务未就绪，请安装最新min APK'],
+  doubao_android_webview: [503, 'Android豆包网页未登录或签名接口不可用，请更新APK或重新登录'],
 });
 
 /** 所有异常都来自固定白名单；绝不把 Axios 对象、上游错误正文或签名 URL 放进 message/cause。 */
@@ -164,7 +168,7 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
   if (!credentials.nodeProfile) throw doubaoError('doubao_node_profile_required');
   const model = actualModel || request.model;
   if (!Object.hasOwn(DOUBAO_MODEL_MODES, model)) throw doubaoError('doubao_unsupported_model');
-  const text = getRequestText(request, limits, !nativeSession && model === 'doubao');
+  const text = getRequestText(request, limits, model === 'doubao');
   const requestCookie = credentials.cookieSnapshot?.[DOUBAO_ORIGIN] || credentials.cookie;
   const cookieMap = new Map(parseDoubaoCookieHeader(requestCookie).map(({ name, value }) => [name, value]));
   const mode = DOUBAO_MODEL_MODES[model];
@@ -202,22 +206,23 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
   }
   const nodeProtocol = applyDoubaoNodeProtocol({ data, profile: credentials.nodeProfile, cookieMap });
   const browserFirstTurn = data.option.need_create_conversation && mode === 0;
-  const requestProfile = browserFirstTurn ? credentials.requestProfile : null;
+  const requestProfile = mode === 0 ? credentials.requestProfile : null;
   if (requestProfile) {
-    // 从官网样本复制不含消息的首轮结构；会话和消息标识始终由本次请求生成。
+    // 从官网样本复制不含消息的结构；首轮新建、续聊使用权威会话，消息标识均由本轮生成。
     const template = JSON.parse(JSON.stringify(requestProfile.body));
     const currentMeta = data.client_meta;
     const currentMessage = data.messages;
     const currentOption = data.option;
     for (const key of Object.keys(data)) delete data[key];
     Object.assign(data, template);
-    data.client_meta = { ...template.client_meta, conversation_id: '',
+    data.client_meta = { ...template.client_meta, conversation_id: nativeSession?.conversationId || '',
       local_conversation_id: currentMeta.local_conversation_id, last_section_id: '', last_message_index: null };
     data.messages = currentMessage;
     data.option = { ...template.option, create_time_ms: currentOption.create_time_ms,
-      unique_key: currentOption.unique_key, need_create_conversation: true,
+      unique_key: currentOption.unique_key, need_create_conversation: !nativeSession,
       recovery_option: { ...(template.option.recovery_option || {}),
         req_create_time_sec: Math.floor(currentOption.create_time_ms / 1000) } };
+    if (nativeSession) data.ext.sub_conv_firstmet_type = '0';
   }
   if (Buffer.byteLength(JSON.stringify(data), 'utf8') > limits.requestBytes) throw doubaoError('doubao_request_too_large');
   const profileUrl = requestProfile && (() => {
@@ -238,7 +243,7 @@ const buildDoubaoRequest = ({ request, account, provider, actualModel, limits = 
       ...(requestProfile && Object.hasOwn(requestProfile.headers, 'x-tt-passport-csrf-token')
         ? { 'x-tt-passport-csrf-token': cookieMap.get('passport_csrf_token') || cookieMap.get('passport_csrf_token_default') } : {}),
     },
-    // 禁止重定向和环境代理；显式 Node profile 已验证无需网页签名，不连接 Chrome 或换传输。
+    // 禁止重定向和环境代理；Android在发送前补当次官网签名，实际网络仍由Node执行。
     responseType: 'stream', maxRedirects: 0, proxy: false, timeout: limits.timeoutMs,
     ...(requestProfile ? { doubaoHttp2: true } : {}),
     maxBodyLength: limits.requestBytes, maxContentLength: limits.streamBytes, validateStatus: () => true,
@@ -531,7 +536,7 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
 
 /** 未走通用 rawTrafficLogger：原始网页错误可在任意字符串携带凭据，不能仅依靠键名脱敏。 */
 const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDoubaoHttp2Client(), browserBridge,
-  getTransport = () => 'node-http', onChatVerified, onBrowserChatVerified,
+  getTransport = () => 'node-http', onChatVerified, onBrowserChatVerified, prepareNodeRequest,
   limits: customLimits = {} } = {}) => {
   // 测试可收紧容量/超时，但调用方不能放宽生产安全上限。
   const limits = Object.fromEntries(Object.entries(DOUBAO_LIMITS).map(([key, maximum]) => [key,
@@ -546,7 +551,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     if (transportMode === 'browser-fetch' && typeof browserBridge?.request !== 'function') throw doubaoError('doubao_browser_disabled');
     const sessionFlow = createDoubaoSessionFlow({ account, mode, state: nativeState,
       nodeMode: Boolean(accountCredentials?.nodeProfile), transport: transportMode });
-    const prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits,
+    let prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits,
       ...(sessionFlow.continuing ? { nativeSession: nativeState } : {}) });
     // Responses内部截止时间不可由请求JSON覆盖；排队已经消耗的时间不能重新赋给执行阶段。
     const remaining = sessionFlow.enabled && Number.isFinite(responseSession?.doubaoDeadlineAt)
@@ -558,6 +563,12 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     let response;
     try {
       control.check();
+      // Android官网SDK负责当次签名；实际LLM联网仍由下方Node HTTP/2执行，不切换网页传输。
+      if (transportMode === 'node-http' && (prepareNodeRequest || process.env.AASC_ANDROID_NODE === '1')) {
+        const prepare = prepareNodeRequest || (options => createDoubaoAndroidBridge().prepare(options));
+        prepared = await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs } }));
+        control.check();
+      }
       // 仅内部Responses生命周期读取这些标记；不属于nativeState，不会持久化到会话历史。
       if (responseSession && sessionFlow.enabled) {
         responseSession.doubaoNodeMode = true;

@@ -157,6 +157,7 @@ object Chat2ApiCredentialCapture {
         val result = JSONObject(credentials)
         credentials["nodeProfile"]?.let { result.put("nodeProfile", JSONObject(it)) }
         credentials["cookieSnapshot"]?.let { result.put("cookieSnapshot", JSONObject(it)) }
+        credentials["requestProfile"]?.let { result.put("requestProfile", JSONObject(it)) }
         return result
     }
 

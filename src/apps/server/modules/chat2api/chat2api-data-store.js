@@ -14,6 +14,7 @@ const {
 } = require('./chat2api-secret');
 const { selectAccountId } = require('./chat2api-account-identity');
 const { normalizeDoubaoCredentials } = require('./chat2api-doubao-chat-adapter');
+const { normalizeDoubaoRequestProfile } = require('./chat2api-doubao-request-profile');
 const { normalizeDoubaoCookieSnapshot, canonicalDoubaoCookieFromSnapshot } = require('./chat2api-doubao-cookie-snapshot');
 const {canonicalProviderId}=require('./chat2api-model-capabilities');
 const {validateMappingExtension}=require('./chat2api-system-controls');
@@ -279,10 +280,17 @@ const createChat2ApiDataStore = (options = {}) => {
       throw Object.assign(new Error('豆包账号已变化，请重新打开外部网页'), { statusCode: 409, code: 'account_credential_changed' });
     }
     const cookie = canonicalDoubaoCookieFromSnapshot(snapshot);
+    // 手机外部网页可能使用与电脑不同的UA和设备资料；只接受同次成功样本中的成组字段。
+    const requestProfile = inputProfile ? normalizeDoubaoRequestProfile(inputProfile) : null;
+    const sampleQuery = requestProfile && new Map(requestProfile.query);
+    const nodeProfile = requestProfile?.headers['user-agent'] ? {
+      deviceId: sampleQuery.get('device_id'), webId: sampleQuery.get('web_id'), fp: sampleQuery.get('fp'),
+      userAgent: requestProfile.headers['user-agent'], pcVersion: sampleQuery.get('pc_version') || '3.41.0',
+    } : current.credentials?.nodeProfile;
     const credentials = normalizeDoubaoCredentials({ cookie,
-      ...(current.credentials?.nodeProfile ? { nodeProfile: current.credentials.nodeProfile } : {}),
+      ...(nodeProfile ? { nodeProfile } : {}),
       cookieSnapshot: snapshot,
-      ...(inputProfile ? { requestProfile: inputProfile } : {}) });
+      ...(requestProfile ? { requestProfile } : {}) });
     const updated = resetDoubaoVerification({ ...current, credentials, updatedAt: Date.now() });
     if (credentials.requestProfile?.browserVerifiedAt) updated.accountInfo.browserChatVerifiedAt = credentials.requestProfile.browserVerifiedAt;
     accounts[index] = updated;

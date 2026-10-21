@@ -13741,3 +13741,19 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - `NodeServerService.kt`、`OfflineLauncherSession.kt`统一传递经校验的端口与随机令牌；`NodeServerServiceTest.kt`定向18/18通过。JS启动器回归41/42，候选目录清理ENOTEMPTY失败项单独重跑1/1通过。同步design/spec/task/todo/usage及自测文档。
   - 在出包机生成min70并覆盖安装Note8，SHA-256 `e496385dee68e8ec7fd2f86b540bb3292461bcfb023f22e79ba74f79264336da`；code148保持，宿主端口/令牌、同一测试实例运行、9091健康和未授权IPC401通过。`minApk=false`表示最新原生代码已构建，APK未发布，既有`servicePackage=true`保持。
   - 官网UI两个新会话均HTTP200、非空SSE完整结束，会话列表“验证登录”通过；完成保存仍被样本缺失拦截。已复现观察器克隆时序丢样本；另发现登录页销毁清空与兼容任务共享的Cookie/WebStorage。保持登录页打开对照时Responses首轮仍502/doubao_upstream_failed，未执行续聊；剩余修复等待确认，不能宣称完整兼容模式通过。测试实例已停止、临时API Key已删除，未写入当前AASC聊天。
+
+### 豆包验证样本克隆后清理方案
+
+- ✅ [2026-10-21] 记录克隆后删除本次临时聊天的需求，并用当前Android官网核验精确删除协议。
+  - 新会话样本先确认非空完整SSE和同次ACK ID，再由官网删除；单ID、delete_all=false返回HTTP200/status_code0/OK，对同一已删除ID重试也成功。实际接口为`/im/conversation/batch_del_user_conv`，需`application/json; encoding=utf-8`及`agw-js-conv: str`；普通JSON头会返回业务错误712012002。仅使用当前浏览器测试，未查询网上资料或输出凭据。
+  - 更新豆包网页design/spec、两份task与todo，自动捕获及清理仍待方案确认和实现；不改变正常业务聊天或先前仅记录的旧会话清理范围。本轮没有修改运行代码、构建APK或更改发布状态。
+
+### Android豆包直连与网页兼容联合修复
+
+- ✅ [2026-10-21] 修复官网请求捕获克隆时序、验证样本清理、账号资料同步及关闭登录页后的运行时恢复。
+  - `Chat2ApiAuthWebView.kt`、`Chat2ApiDoubaoRequestCapture.kt`在官网消费前保留副本，完整非空SSE及唯一ACK经原生规范化后才允许单ID清理；`Chat2ApiLoginActivity.kt`完成保存。`chat2api-data-store.js`同步样本设备资料/UA；`DoubaoWebViewAccount.kt`与`DoubaoWebViewService.kt`恢复固定来源Cookie/设备存储并互斥登录和运行。
+- ✅ [2026-10-21] 补齐Android Node每轮官网SDK签名，实际消息继续由Node HTTP/2发送；兼容模式仍由网页发送。
+  - `DoubaoWebViewNodePrepare.kt`与受限`/prepare` IPC按本轮unique_key及原文截留SDK最终参数，签名准备不发送消息；`chat2api-doubao-android-bridge.js`校验动态来源/身份/头并保留账号Cookie。`chat2api-doubao-chat-adapter.js`在Node发送前取得当次签名，普通模式续聊沿用模板编码及HTTP2。未回退传输或重发风控请求。
+  - `npm run check:chat2api` 325/325、补充实际APK签名脚本与发送顺序定向2/2、Kotlin定向4/4通过。新增脚本VM测试覆盖立即消费、未授权不删除、单ID重试、SDK准备不联网及取消；同步design/spec/task/todo/usage/self-test。
+  - min72构建并覆盖安装Note8，SHA-256 `ecbefb237eb4a79ced3c79b733d5aac6cf628cfbbb6bb9d13b882a4dba0d789c`，尚未发布。隔离最新Node源码的Responses直连首轮14字/续聊20字，兼容首轮5字/续聊135字，均HTTP200完整完成且保持各自权威会话ready。兼容测试实际创建并运行任务实例；测试实例停止、API Key剩余0，4个隔离测试官网会话逐个精确删除成功。当前AASC聊天及正式账号未写入测试数据。
+  - `minApk=false`表示已构建最新原生代码；正常服务仍code148，`servicePackage=true`待服务包构建部署。新接口及NativeAPK须配套更新，正式账号应重新完成一次官网登录验证；成功视频/轮询另待验收。

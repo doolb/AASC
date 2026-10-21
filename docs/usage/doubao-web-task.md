@@ -2,7 +2,11 @@
 
 在任务面板启动“豆包网页” (`doubao.web`)。任务默认使用网页内 `fetch()`，桌面默认启动 `vivaldi`、本机调试端口 `9224`，兼容 API 默认监听 `127.0.0.1:9091`。可在任务参数中指定浏览器可执行文件、调试端口和唯一豆包账号 ID。桌面使用每个账号独立的 Chat2API profile；首次使用需在弹出的专用浏览器窗口登录豆包，验证码由用户在该窗口手动处理。任务不会自动删除官网会话或更换账号。
 
-Android Offline 在隔离进程 WebView 中发送官网请求。Note8 的 min70/code148 已验证实例能运行、官网登录恢复及官网UI回复正常，但登录样本保存和 Responses 首轮尚未通过；当前不应将任务运行状态视为完整兼容模式已可用。登录页关闭会清空与任务共享的登录数据，关闭后的恢复仍待修复。
+Android Offline 需配套包含本次修复的服务代码包与 min72 或更新的APK。外部网页登录后，在官网新会话发送一条自然消息并等待完整回复；采集成功会自动删除这次验证用临时会话，然后点“完成”保存。删除失败可点“完成”重试同一会话。已保存账号的Cookie、设备资料和当前网页UA会同步更新。
+
+任务停止时走Node直连：隔离WebView只生成当次官网签名，消息由Node HTTP/2实际发送；任务运行时走网页兼容模式，由WebView发送并回传流。登录页关闭后，运行时会从已保存账号恢复Cookie和设备存储。登录与网页请求互斥，处理中重新打开登录页会提示稍后再试。
+
+Note8已安装min72，使用隔离的最新Node源码、账号及任务目录验证了直连和兼容的Responses首轮与同会话续聊；正常服务仍为code148，本次服务代码包尚未构建发布。更新服务后请在正式账号入口重新完成一次登录验证。
 
 独立 API 复用 Chat2API API Key（`Authorization: Bearer <key>`）。支持 `/v1/chat/completions`、`/v1/responses`、`/v1/images/generations`、`/v1/images/edits`、`/v1/images/upload`、`/v1/audio/generations`（音乐）、`/v1/video/generations`、`/v1/files`、`/v1/files/download?uri=...`、`/v1/chat/completions/with-file`。图片编辑和文件上传支持 `multipart/form-data`；上传也支持 JSON `data_base64`。图片/视频参考图可传 `ref_image_key`/`ref_image_keys`，媒体请求可用 `memory_type: 0/2` 或 `save_history: true/false` 控制是否留在官网历史。文件问答先上传文件，随后把响应 `uri` 作为 `file_id`，另传 `prompt`；不自动复用文件问答的官网会话。现有网页 TTS 走原语音服务。
 

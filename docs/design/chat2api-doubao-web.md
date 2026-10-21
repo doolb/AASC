@@ -1,5 +1,19 @@
 # 豆包网页账号Node文字与朗读 TTS 设计
 
+## Android直连与网页兼容联合修复（2026-10-21，已实现并真机验证）
+
+用户明确要求两条链路都修复，继续此前已列出的捕获、临时样本清理及运行时恢复方案。共用同一次官网登录成功样本：先保留流副本，规范化后仅清理对应新会话，再提交账号；当前网页UA与设备参数同步进入原子账号刷新，避免沿用电脑UA。网页运行时从账号恢复固定来源Cookie和受限设备存储，登录与运行使用互斥租约，排除Cookie清空和账号切换期间发送。保留官网JSON编码头，提供脱敏阶段错误与取消收敛。分别通过Android Node的Responses首轮/续聊验收直连与兼容，不把官网UI成功当两条链路已成功。
+
+min71真机已通过官网样本克隆/删除/保存与关闭登录页后兼容Responses两轮。直接重用样本签名的Node首轮风控；通过CDP只截留当前WebView完整发送参数、交同设备Node HTTP/2实际联网并把结果交回Responses，HTTP200、10381字节完整SSE、14字正文完成，证明Node可发送而旧签名不可可靠重用。增补Android受限签名准备：文档开始保留fetch拦截点，官网SDK生成新签名后按当次unique_key截留参数并返回，不让WebView发送消息；随后由Node发出HTTP/2。原有兼容模式维持网页联网；桌面直连行为保持。已构建并安装min72，两种模式均通过真实Responses首轮和同会话续聊；使用隔离的最新Node源码和账号目录，正常服务仍code148，服务包待构建发布。
+
+## 验证样本克隆后精确删除（2026-10-21，已实现并真机验证）
+
+用户补充要求：克隆成功后删除本次创建的临时聊天。清理绑定当前登录捕获尝试，从成功的新会话请求及同次完整SSE的ACK取得唯一官网ID；原请求必须明确新建且旧会话ID为空。每次只传这个ID，禁止按标题、列表顺序或宽泛历史匹配清理。克隆资料保留内存，清理失败提示并允许重试同一ID，不创建更多聊天来重试；重试删除已不存在的本次ID实测可成功。正常业务聊天不纳入验证样本清理。
+
+通过当前Android官网界面已核验删除协议：`POST /im/conversation/batch_del_user_conv`，`cmd=4171`、单项`conversation_id`、`delete_all=false`、`conversation_type=3`、`channel=2`、`version=1`，每次生成独立`sequence_id`。请求头必须使用实测的`Content-Type: application/json; encoding=utf-8`与`agw-js-conv: str`；普通`application/json`实际收到712012002“不支持编码类型”。官网UI删除与同源fetch重复删除均HTTP200、status_code=0/OK；新样本先验证非空完整SSE，再精确删除并返回空白聊天页。Cookie和签名未输出或保存。
+
+`Chat2ApiAuthWebView.kt`、`Chat2ApiLoginActivity.kt`已接通提前克隆、单次样本ID及清理/失败重试，与运行时恢复联合验收通过；不扩展先前仅记录的uncertain旧会话删除任务。
+
 ## Android JS 启动路径豆包端点补齐（2026-10-21，已修复，完整链路未通过）
 
 Note8 真机从 min66 覆盖安装 min69，并经现有更新入口切到 code148；创建 `doubao-adb-v69` 实例后再运行，实际报“Android 豆包网页服务未就绪”。JS 宿主环境只有 Android 标记，没有豆包端口/令牌；`startJsLauncher` 未调用旧原生启动路径已有的绑定逻辑。用户已确认修复：JS 启动前复用同一绑定方法，将端点通过 `OfflineLauncherSession` 交给统一环境构造，保持旧路径兼容和原有绑定生命周期。只影响 Android 原生宿主，需要新 min APK。

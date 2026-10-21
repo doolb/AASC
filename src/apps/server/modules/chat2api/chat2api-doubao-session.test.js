@@ -38,7 +38,7 @@ test('完整Node首轮提交ready，下一轮只续接同会话且使用已验�
   assert.equal(calls[1].data.client_meta.last_message_index,null);
   assert.equal(calls[1].data.option.need_create_conversation,false);
   assert.equal(calls[1].data.ext.sub_conv_firstmet_type,'0');
-  assert.equal(calls[1].data.messages[0].content_block[0].content.text_block.text,'User: 本轮');
+  assert.equal(calls[1].data.messages[0].content_block[0].content.text_block.text,'本轮');
 });
 test('ACK及中间结束不能提交；缺最终结束、ACK冲突和空正文都拒绝', async () => {
   for(const parts of [events().slice(0,-1),[event('SSE_ACK',{ack_client_meta:{conversation_id:'one'}}),event('SSE_ACK',{ack_client_meta:{conversation_id:'two'}}),event('CHUNK_DELTA',{text:'OK'}),event('SSE_REPLY_END')],[event('SSE_ACK',{ack_client_meta:{conversation_id:'one'}}),event('SSE_REPLY_END')]]) {

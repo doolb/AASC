@@ -208,6 +208,7 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.webkit:webkit:1.11.0")
     // SAF 文档树遍历与 DocumentFile 封装，避免把 content:// URI 当作普通文件路径处理。
     implementation("androidx.documentfile:documentfile:1.1.0")
     // sherpa-onnx Android AAR：官方不上传 Maven Central，改用 GitHub release 产物 vendored 到 libs/

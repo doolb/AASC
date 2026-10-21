@@ -10,6 +10,11 @@ import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.WebMessageCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import androidx.webkit.JavaScriptReplyProxy
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
@@ -35,6 +40,30 @@ class Chat2ApiAuthWebView(
     private var restoreReloaded = false
     private var lastUrl: String = ""
     private var pollCount = 0
+    private var doubaoRequestProfile: JSONObject? = null
+
+    private var doubaoSampleId = ""
+    private var doubaoSampleSession = ""
+    private var doubaoCleanupState = "waiting"
+
+    private fun currentDoubaoSession(): String = CookieManager.getInstance()
+        .getCookie("https://www.doubao.com/chat/").orEmpty().split(';').map { it.trim() }
+        .firstOrNull { it.startsWith("sessionid=") }?.substringAfter('=').orEmpty()
+
+    /** 未清理成功时保留已克隆资料，完成按钮只重试同一次样本。 */
+    fun prepareDoubaoCompletion(onReady: () -> Unit, onIncomplete: (String) -> Unit) {
+        if (doubaoSampleId.isNotEmpty() && currentDoubaoSession() != doubaoSampleSession) {
+            onIncomplete("豆包登录账号已变化，请重新打开登录页采集")
+            return
+        }
+        if (doubaoCleanupState == "done" && doubaoRequestProfile != null) { onReady(); return }
+        if (doubaoCleanupState == "failed") {
+            doubaoCleanupState = "cleaning"
+            evaluateJavascript("window.__aascDoubaoRetryCleanup?.()", null)
+        }
+        onIncomplete(if (doubaoSampleId.isEmpty()) "请在官网新会话发送一条消息并等回复完成"
+            else "已克隆登录资料，正在清理验证用临时聊天；若失败请点完成重试")
+    }
 
     init {
         settings.javaScriptEnabled = true
@@ -43,6 +72,41 @@ class Chat2ApiAuthWebView(
         settings.javaScriptCanOpenWindowsAutomatically = false
         settings.setSupportMultipleWindows(false)
         CookieManager.getInstance().setAcceptCookie(true)
+        if (profile.captureDoubaoNodeProfile
+            && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
+            && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addWebMessageListener(this, "AASCDoubaoCapture", setOf("https://www.doubao.com"),
+                object : WebViewCompat.WebMessageListener {
+                    override fun onPostMessage(view: WebView, message: WebMessageCompat, sourceOrigin: Uri,
+                        isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
+                        if (!isMainFrame || sourceOrigin.toString() != "https://www.doubao.com") return
+                        if (stopped.get()) return
+                        val input = try { JSONObject(message.data.orEmpty()) } catch (_: Exception) { return }
+                        val sampleId = input.optString("sampleId")
+                        if (!Regex("^[0-9]{1,32}$").matches(sampleId) || sampleId == "0") return
+                        if (input.optString("type") == "cleanup") {
+                            if (sampleId != doubaoSampleId || doubaoRequestProfile == null) return
+                            if (currentDoubaoSession() != doubaoSampleSession) { doubaoCleanupState = "failed"; return }
+                            doubaoCleanupState = if (input.optBoolean("success")) "done" else "failed"
+                            if (doubaoCleanupState == "done") {
+                                synchronized(captured) { captured["requestProfile"] = doubaoRequestProfile.toString() }
+                                if (restoreStatus == null) pollCapture()
+                            }
+                            return
+                        }
+                        if (doubaoSampleId.isNotEmpty()) return
+                        val normalized = Chat2ApiDoubaoRequestCapture.normalize(message.data) ?: return
+                        val sampleSession = currentDoubaoSession()
+                        if (sampleSession.length !in 16..512) return
+                        doubaoSampleId = sampleId
+                        doubaoSampleSession = sampleSession
+                        doubaoRequestProfile = normalized
+                        doubaoCleanupState = "cleaning"
+                        replyProxy.postMessage(JSONObject().put("type", "cleanup").put("sampleId", sampleId).toString())
+                    }
+                })
+            WebViewCompat.addDocumentStartJavaScript(this, Chat2ApiDoubaoRequestCapture.script, setOf("https://www.doubao.com"))
+        }
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? {
                 captureRequest(request.url.toString(), request.requestHeaders)
@@ -100,6 +164,10 @@ class Chat2ApiAuthWebView(
             onIncomplete("登录捕获已结束")
             return
         }
+        if (profile.captureDoubaoNodeProfile && doubaoCleanupState != "done") {
+            prepareDoubaoCompletion({}, onIncomplete)
+            return
+        }
         // 页面可能已经跳转离开允许域名；只要此前已从允许请求捕获完整字段，仍可安全完成登录。
         val existing = synchronized(captured) { captured.toMap() }
         if (Chat2ApiCredentialCapture.hasRequiredFields(profile, existing)) {
@@ -133,6 +201,11 @@ class Chat2ApiAuthWebView(
         return snapshot.takeIf { it.has(origins.first()) }
     }
 
+    /** 已由官网完整聊天事件确认的首轮模板；返回副本，避免Activity持有可变WebView状态。 */
+    fun captureDoubaoRequestProfile(): JSONObject? =
+        if (doubaoCleanupState == "done" && currentDoubaoSession() == doubaoSampleSession)
+            doubaoRequestProfile?.let { JSONObject(it.toString()) } else null
+
     fun stopCapture() {
         if (stopped.compareAndSet(false, true)) {
             mainHandler.removeCallbacksAndMessages(null)
@@ -148,6 +221,10 @@ class Chat2ApiAuthWebView(
         restoreCookies = emptyList()
         restoreLocalStorage = emptyList()
         restoreStatus = null
+        doubaoRequestProfile = null
+        doubaoSampleId = ""
+        doubaoSampleSession = ""
+        doubaoCleanupState = "waiting"
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
         WebStorage.getInstance().deleteAllData()
@@ -271,6 +348,8 @@ class Chat2ApiAuthWebView(
     }
 
     private fun emitIfComplete(): Boolean {
+        if (profile.captureDoubaoNodeProfile && (doubaoCleanupState != "done"
+            || currentDoubaoSession() != doubaoSampleSession)) return false
         val snapshot = synchronized(captured) { captured.toMap() }
         if (Chat2ApiCredentialCapture.hasRequiredFields(profile, snapshot)
             && stopped.compareAndSet(false, true)) {
