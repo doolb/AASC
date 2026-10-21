@@ -41,6 +41,71 @@ test('首次展开、会话恢复和迟到历史使用真实聊天与舞台模�
         ['chatHistory', 'roleHistory'].includes(message.type)));
     const text = () => page.$eval('[data-role="messages"]', (element) => element.textContent);
 
+    await context.test('游戏期间可打开上层聊天并发送，关闭后原棋盘继续落子', async () => {
+        const sessions = [
+            { session: { mode: 'group' }, voice: 'activeGroup', order: 'under-chat' },
+            { session: { mode: 'private', privateTarget: '小爱', privateSessionId: 'game-chat' },
+                voice: 'activePrivate', order: 'over-chat' }
+        ];
+        for (const setting of sessions) {
+            for (const rotation of [0, 90, 180, 270]) {
+                await reset();
+                await page.addStyleTag({ path: path.join(publicDir, 'css/display-game.css') });
+                await page.addScriptTag({ path: path.join(publicDir, 'js/display-game.js') });
+                await page.evaluate(({ order, angle }) => {
+                    // 游戏模块晚于已初始化舞台加载，显式初始化以使用真实总线和发送入口。
+                    window.DisplayGame.init();
+                    window.DisplayStage.setMmdOrder(order);
+                    window.DisplayStage.setRotation(angle);
+                }, { order: setting.order, angle: rotation });
+                await deliver({ type: 'chatSession', session: setting.session });
+                await deliver({ type: 'voiceConversationState', state: setting.voice });
+                const recovery = await page.evaluate(() => window.sent.findLast(item => item.type === 'gameRecover'));
+                await deliver({ type: 'gameRecoverResult', requestId: recovery.requestId, pendingRequestId: null,
+                    snapshot: { type: 'gameSnapshot', gameId: 'chat-game', revision: 3, size: 9,
+                        board: ['XO.......', ...Array(8).fill('.........')].join('/'),
+                        turn: 'User', result: '进行中', visible: true } });
+                const label = `${setting.session.mode}/${setting.order}/${rotation}°`;
+                // 真实点击同时验证入口未被棋盘全屏外壳截获。
+                await page.click('#displayChatToggle');
+                assert.equal(await page.evaluate(() => window.DisplayStage.getState().chatVisible), true, label);
+                const overlay = await page.evaluate(() => {
+                    const game = document.getElementById('displayGameLayer');
+                    const chat = document.getElementById('displayChatLayer');
+                    const input = chat.querySelector('[data-role="input"]');
+                    const rect = input.getBoundingClientRect();
+                    const point = document.querySelector('[data-coordinate="C3"]');
+                    const pointRect = point.getBoundingClientRect();
+                    return {
+                        chatAboveGame: Number(getComputedStyle(chat).zIndex) > Number(getComputedStyle(game).zIndex),
+                        inputHit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === input,
+                        boardCovered: document.elementFromPoint(pointRect.x + pointRect.width / 2,
+                            pointRect.y + pointRect.height / 2) !== point
+                    };
+                });
+                assert.deepEqual(overlay, { chatAboveGame: true, inputHit: true, boardCovered: true }, label);
+                await page.type('[data-role="input"]', '看看棋盘');
+                await page.click('.display-chat-send');
+                const chatRequest = await page.evaluate(() => window.sent.findLast(item => item.type === 'chatMessage'));
+                assert.equal(chatRequest.content, '看看棋盘', label);
+                assert.equal(chatRequest.mode, setting.session.mode, label);
+                assert.equal(await page.evaluate(() => window.sent.filter(item => item.type === 'gameMove').length), 0, label);
+                await page.click('[data-action="hide"]');
+                assert.equal(await page.evaluate(() => window.DisplayStage.getState().chatVisible), false, label);
+                assert.equal(await page.$eval('[data-coordinate="A1"]', point => point.dataset.stone), 'X', label);
+                assert.equal(await page.$eval('[data-coordinate="B1"]', point => point.dataset.stone), 'O', label);
+                assert.equal(await page.$eval('#displayGameShell', shell => shell.hidden), false, label);
+                await page.click('[data-coordinate="C3"]');
+                const moves = await page.evaluate(() => window.sent.filter(item => item.type === 'gameMove'));
+                assert.equal(moves.length, 1, label);
+                assert.equal(moves[0].coordinate, 'C3', label);
+                assert.equal(moves[0].gameId, 'chat-game', label);
+                assert.equal(moves[0].revision, 3, label);
+                assert.equal(await page.evaluate(() => window.sent.some(item => item.type === 'gameView')), false, label);
+            }
+        }
+    });
+
     await context.test('聊天打开时右侧设置入口位于聊天下方，关闭后恢复', async () => {
         await reset();
         await page.evaluate(() => {

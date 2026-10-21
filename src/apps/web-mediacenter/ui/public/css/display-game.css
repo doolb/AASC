@@ -2,8 +2,13 @@
 .display-game-layer {
     position: absolute;
     inset: 0;
-    z-index: 60;
+    /* 棋盘高于角色及加载提示，低于交互入口层50，让聊天入口始终可以打开。 */
+    z-index: 49;
     pointer-events: none;
+}
+/* 聊天打开后让棋盘低于聊天层15/20；关闭聊天即恢复原层级，不改变棋局。 */
+body.display-chat-open .display-game-layer {
+    z-index: 14;
 }
 .display-game-layer[hidden], .display-game-shell[hidden], .display-game-menu[hidden] {
     display: none !important;
