@@ -46,8 +46,8 @@ test('独立 JS 入口完成目录、规则、开局及一轮双方落子', asyn
     assert.equal(move.snapshot.board.split('/')[2].slice(2, 4), 'XO');
     assert.match(requests[3].systemPrompt, /NowGame:五子棋/);
     assert.match(requests[4].input, /Game:五子棋,GM,落子,/);
-    assert.match(requests[5].input, /GameAI,D3,GameUser,进行中,[.XO/]+$/);
-    assert.equal(requests[5].input.split(',').at(-1), move.snapshot.board);
+    assert.match(requests[5].input, /GameAI,D3,GameUser,进行中\nGameMap:\n[.XO/\n]+$/);
+    assert.equal(requests[5].input.split('\nGameMap:\n')[1].replaceAll('\n', ''), move.snapshot.board);
     assert.deepEqual(move.events.filter(event => event.type === 'gameProtocol').map(event => event.kind),
         ['GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(events.filter(event => event.type === 'gameUpdate').length, 3);

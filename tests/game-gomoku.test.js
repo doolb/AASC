@@ -23,6 +23,13 @@ function call(actor, operation, ...args) {
     return parseGameTag(`Game:五子棋,${protocolActor},${operation}${args.length ? ',' + args.join(',') : ''}`);
 }
 
+/** 从 GM 文本中读取完整地图，终局地图后面的状态行不属于棋盘。 */
+function readGameMap(text) {
+    const match = String(text).match(/\nGameMap:\n([.XO]+(?:\/\n[.XO]+)*)(?=\n|$)/);
+    assert.ok(match, 'GM 回执应包含完整的多行 GameMap');
+    return match[1].replaceAll('\n', '');
+}
+
 test('独立协议行严格解析且可从正文移除', () => {
     assert.deepEqual(call('User', '落子', 'H8').args, ['H8']);
     assert.equal(parseGameTag('Game:目录,GameAI,列表').operation, '列表');
@@ -104,7 +111,7 @@ test('落子只发送增量，按显示端保存与恢复快照', t => {
     assert.match(moved.gm, /^Game:五子棋,GM,落子,/);
     assert.match(moved.gm, /^Game:五子棋,GM,落子,[a-f\d]{4},2,/);
     assert.equal(moved.gm.includes(opened.message.gameId), false);
-    assert.equal(moved.gm.split(',').at(-1), game.snapshot('display-a').board);
+    assert.equal(readGameMap(moved.gm), game.snapshot('display-a').board);
     assert.equal(game.apply('display-a', call('AI', '落子', 'H8')).code, '位置已占用');
     assert.equal(game.apply('display-a', call('AI', '落子', 'G8'), { expectedVersion: 1 }).code, '版本过期');
     assert.equal(game.snapshot('display-b'), null);
@@ -119,8 +126,8 @@ test('查看会补发棋盘，除退出显示外的棋盘操作恢复隐藏状�
     const revision = game.snapshot('display-a').revision;
     const viewed = game.apply('display-a', call('GameAI', '查看'));
     assert.equal(viewed.ok, true);
-    assert.match(viewed.gm, /^Game:五子棋,GM,快照,[a-f\d]{4},1,9,GameUser,进行中,/);
-    assert.equal(viewed.gm.split(',').at(-1).split('/').length, 9,
+    assert.match(viewed.gm, /^Game:五子棋,GM,快照,[a-f\d]{4},1,9,GameUser,进行中\nGameMap:/);
+    assert.equal(readGameMap(viewed.gm).split('/').length, 9,
         '查看回执必须包含完整棋盘编码');
     assert.equal(game.snapshot('display-a').revision, revision, '可见棋盘的查看不应修改版本');
     assert.equal(events.at(-1).type, 'gameSnapshot', '查看必须补发完整棋盘');
@@ -130,7 +137,7 @@ test('查看会补发棋盘，除退出显示外的棋盘操作恢复隐藏状�
     const hiddenRevision = game.snapshot('display-a').revision;
     const reopened = game.apply('display-a', call('GameAI', '查看'));
     assert.equal(reopened.ok, true);
-    assert.match(reopened.gm, new RegExp(`,${hiddenRevision + 1},9,GameUser,进行中,`));
+    assert.match(reopened.gm, new RegExp(`,${hiddenRevision + 1},9,GameUser,进行中\nGameMap:`));
     assert.equal(game.snapshot('display-a').revision, hiddenRevision + 1);
     assert.equal(game.snapshot('display-a').visible, true);
     assert.equal(events.at(-1).type, 'gameSnapshot');
@@ -198,10 +205,10 @@ test('横向五子获胜且中途尺寸变更必须确认', t => {
         if (x < 4) assert.equal(game.apply('d', call('AI', '落子', `${String.fromCharCode(65 + x)}1`)).ok, true);
     }
     assert.equal(game.snapshot('d').result, 'User胜');
-    assert.match(terminalGm, /^Game:五子棋,GM,落子,[a-f\d]{4},10,GameUser,E2,[.XO/]+$/);
-    assert.equal(terminalGm.split(',').at(-1), game.snapshot('d').board);
+    assert.match(terminalGm, /^Game:五子棋,GM,落子,[a-f\d]{4},10,GameUser,E2\nGameMap:\n[.XO/\n]+$/);
+    assert.equal(readGameMap(terminalGm), game.snapshot('d').board);
     assert.match(game.apply('d', call('AI', '查看')).gm,
-        /^Game:五子棋,GM,快照,[a-f\d]{4},10,9,GameUser,GameUser胜,/);
+        /^Game:五子棋,GM,快照,[a-f\d]{4},10,9,GameUser,GameUser胜\nGameMap:/);
     assert.match(game.gmStatus('d'),
         /^Game:五子棋,GM,状态,[a-f\d]{4},10,9,GameUser胜$/);
     assert.equal(game.apply('d', call('AI', '落子', 'F1')).code, '棋局已结束');
@@ -246,7 +253,8 @@ test('进行中开局被拒绝后查看向模型返回原棋盘快照', async t 
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '继续原来的棋局', options: {}, callbacks: {} });
     assert.match(inputs[1], /GM,错误,棋局进行中，需要用户明确要求重新开局/);
-    assert.match(inputs[2], /GM,快照,[^\n]*,9,GameUser,进行中,[^\n]*XO/);
+    assert.match(inputs[2], /GM,快照,[^\n]*,9,GameUser,进行中\nGameMap:/);
+    assert.equal(readGameMap(inputs[2]), before.board);
     assert.equal(game.snapshot('d').gameId, before.gameId);
     assert.equal(game.snapshot('d').revision, before.revision);
     assert.equal(events.at(-1).type, 'gameSnapshot');
@@ -426,8 +434,9 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     assert.match(rules, /专业：在普通基础上，优先制造和化解活四、冲四、活三/);
     assert.match(rules, /资深：在专业基础上，比较多个候选点，推演双方后续应手/);
     assert.match(rules, /信息不足时先查看棋盘，不凭历史叙述猜测位置/);
-    assert.match(rules, /GM快照字段：短编号,版本,尺寸,下一手,结果,棋盘编码/);
-    assert.match(rules, /棋盘用\/从上到下分行，每行从左到右对应A至末列，第一行是第1行/);
+    assert.match(rules, /GM快照首行字段：短编号,版本,尺寸,下一手,结果/);
+    assert.match(rules, /随后独立一行GameMap:，其后每行是棋盘的一行，从上到下排列，除末行外行尾保留\//);
+    assert.match(rules, /每行从左到右对应A至末列，第一行是第1行/);
     assert.match(rules, /第3行第3列是C3/);
     assert.match(rules, /查看返回完整GM快照/);
     assert.match(rules, /终局后“再来一局”时调用/);
@@ -439,7 +448,7 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     assert.match(rules, /恢复显示：只需重新显示已隐藏棋盘/);
     assert.match(rules, /\.为空位，X是用户黑棋，O是AI白棋（字母O）/);
     assert.match(rules, /落子前按行列检查目标格为\./);
-    assert.match(rules, /GM落子回执末尾也附完整棋盘编码/);
+    assert.match(rules, /GM落子回执也在首行之后附完整GameMap棋盘/);
     const followupPrompts = [];
     await runGameAwareChat({ chat: { splitIntoSentences: text => [text],
         async chatStream(_input, nextOptions) {
@@ -513,11 +522,12 @@ test('五子棋快照的第五行 E 格能按规则识别为 AI 已占用', t =>
     game.apply('d', call('AI', '落子', 'E5'));
     game.apply('d', call('User', '落子', 'I9'), { source: 'displayClick' });
     game.apply('d', call('AI', '落子', 'E6'));
-    const fields = game.gmSnapshot('d').split(',');
+    const snapshot = game.gmSnapshot('d');
+    const fields = snapshot.split('\n')[0].split(',');
     assert.deepEqual(fields.slice(0, 3), ['Game:五子棋', 'GM', '快照']);
     assert.match(fields[3], /^[a-f\d]{4}$/);
     assert.deepEqual(fields.slice(4, 8), ['5', '9', 'GameUser', '进行中']);
-    const rows = fields[8].split('/');
+    const rows = readGameMap(snapshot).split('/');
     assert.equal(rows.length, 9);
     assert.equal(rows[4][4], 'O');
     assert.equal(rows[5][4], 'O');
@@ -553,7 +563,7 @@ test('成功的连续用户和 AI 落子保留叙述并把 AI 回执续送模型
         content: 'H8', options: {}, callbacks: {} });
     assert.equal(result.message, '收到 H8。\n我下 G8。');
     assert.equal(prompts.length, 3);
-    assert.match(prompts[2], /GM,落子,[^\n]*,GameAI,G8,GameUser,进行中,[.XO/]+$/);
+    assert.match(prompts[2], /GM,落子,[^\n]*,GameAI,G8,GameUser,进行中\nGameMap:\n[.XO/\n]+$/);
     assert.equal(prompts.some(input => input.includes('根据权威结果继续')), false);
 });
 
@@ -577,19 +587,19 @@ test('E6 成功回执携带最新棋盘并交回模型，下一轮 F2 继续正�
     const first = await runGameAwareChat({ chat, gameService: game, displayId: 'd',
         content: '轮到你下了', options: {}, callbacks: {} });
     const afterE6 = game.snapshot('d');
-    assert.match(inputs[1], /GM,落子,[^\n]*,3,GameAI,E6,GameUser,进行中,/);
-    assert.equal(inputs[1].split(',').at(-1), afterE6.board);
+    assert.match(inputs[1], /GM,落子,[^\n]*,3,GameAI,E6,GameUser,进行中\nGameMap:/);
+    assert.equal(readGameMap(inputs[1]), afterE6.board);
     assert.equal(afterE6.board.split('/')[5][4], 'O');
     assert.equal(first.message, '我选 E6。\nE6 落好了，轮到你。');
     const second = await runGameAwareChat({ chat, gameService: game, displayId: 'd',
         content: '我下F2。', options: {}, callbacks: {} });
     assert.equal(inputs[2], '我下F2。');
-    assert.match(inputs[3], /GM,落子,[^\n]*,4,GameUser,F2,GameAI,进行中,/);
-    const userBoard = inputs[3].split(',').at(-1).split('/');
+    assert.match(inputs[3], /GM,落子,[^\n]*,4,GameUser,F2,GameAI,进行中\nGameMap:/);
+    const userBoard = readGameMap(inputs[3]).split('/');
     assert.equal(userBoard[1][5], 'X');
     assert.equal(userBoard[5][4], 'O');
-    assert.match(inputs[4], /GM,落子,[^\n]*,5,GameAI,F6,GameUser,进行中,/);
-    assert.equal(inputs[4].split(',').at(-1), game.snapshot('d').board);
+    assert.match(inputs[4], /GM,落子,[^\n]*,5,GameAI,F6,GameUser,进行中\nGameMap:/);
+    assert.equal(readGameMap(inputs[4]), game.snapshot('d').board);
     assert.equal(second.message, '收到 F2。\n我选 F6。\n轮到你啦。');
     assert.equal(game.snapshot('d').turn, 'User');
     assert.equal(replies.length, 0);
@@ -683,9 +693,9 @@ for (const terminal of [
             callbacks: { onGameProtocol: entry => trace.push(entry), onChunk: chunk => chunks.push(chunk),
                 onSentence: text => spoken.push(text) } });
         assert.equal(inputs.length, 2);
-        assert.match(inputs[1], new RegExp(`GM,落子,[^\\n]*,Game${terminal.actor},${terminal.coordinate},[.XO/]+\\nGame:五子棋,GM,状态,`));
+        assert.match(inputs[1], new RegExp(`GM,落子,[^\\n]*,Game${terminal.actor},${terminal.coordinate}\\nGameMap:\\n[.XO/\\n]+\\nGame:五子棋,GM,状态,`));
         assert.match(inputs[1], new RegExp(`GM,状态,[^\\n]*,9,Game${terminal.result}$`));
-        assert.equal(inputs[1].split('\n')[0].split(',').at(-1), game.snapshot('d').board);
+        assert.equal(readGameMap(inputs[1]), game.snapshot('d').board);
         assert.equal(game.snapshot('d').result, terminal.result);
         assert.equal(result.message, `${terminal.first}\n${terminal.final}`);
         assert.deepEqual(chunks, [result.message]);
@@ -737,8 +747,8 @@ test('第七次模型回复成功落 AI 子时仍预留一次确认答复', asyn
     const result = await runGameAwareChat({ chat, gameService: game, displayId: 'd',
         content: '轮到你了', options: {}, callbacks: {} });
     assert.equal(inputs.length, 8);
-    assert.match(inputs[7], /GameAI,E6,GameUser,进行中,[.XO/]+$/);
-    assert.equal(inputs[7].split(',').at(-1), game.snapshot('d').board);
+    assert.match(inputs[7], /GameAI,E6,GameUser,进行中\nGameMap:\n[.XO/\n]+$/);
+    assert.equal(readGameMap(inputs[7]), game.snapshot('d').board);
     assert.match(result.message, /我选 E6。\n轮到你啦。$/);
 });
 
@@ -869,7 +879,7 @@ test('GM 拒绝落子后只查看不能宣称棋步成功，未获确认时返�
         content: 'H3。', options: {}, callbacks: {} });
     assert.equal(inputs.length, 3);
     assert.match(inputs[1], /GM,错误,坐标无效/);
-    assert.match(inputs[2], /GM,快照,.*1,15,GameUser,进行中,/);
+    assert.match(inputs[2], /GM,快照,.*1,15,GameUser,进行中\nGameMap:/);
     assert.match(result.message, /棋盘未变化/);
     assert.equal(result.message.includes('H4 已经下好'), false);
     assert.equal(game.snapshot('d').revision, 1);
@@ -1085,7 +1095,7 @@ test('自然语言前后包围的独立 AI 落子行等完整回复与 GM 确认
     const fakeChat = { splitIntoSentences: value => [value], async chatStream(input, _options, callbacks) {
         requests += 1;
         if (requests === 2) {
-            assert.match(input, /GameAI,H8,GameUser,进行中,[.XO/]+$/);
+            assert.match(input, /GameAI,H8,GameUser,进行中\nGameMap:\n[.XO/\n]+$/);
             return { success: true, message: '落好了，轮到你。', history: [] };
         }
         callbacks.onChunk?.('哎呀', '哎呀', '');

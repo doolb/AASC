@@ -91,6 +91,11 @@ function encodeBoard(board, size) {
     return rows.join('/');
 }
 
+/** GM 文本每行对应棋盘一行，保留行间斜杠；显示端仍使用原 encodeBoard 编码。 */
+function formatGameMap(board, size) {
+    return `GameMap:\n${encodeBoard(board, size).split('/').join('/\n')}`;
+}
+
 function isValidState(state) {
     return state && typeof state === 'object' && typeof state.id === 'string'
         && Number.isSafeInteger(state.revision) && state.revision >= 1 && SIZES.has(state.size)
@@ -235,7 +240,7 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 // 每步回执附落子后的权威棋盘；终局不写下一手，最终结果由随后 GM 状态说明。
                 const gmEnding = result === '进行中' ? `,${protocolActor(turn)},${result}` : '';
                 return commit(displayId, next, message,
-                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${protocolActor(call.actor)},${coordinate.text}${gmEnding},${encodeBoard(next.board, next.size)}`);
+                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${protocolActor(call.actor)},${coordinate.text}${gmEnding}\n${formatGameMap(next.board, next.size)}`);
             }
             case '提议尺寸': {
                 if (!state) return fail('未开局');
@@ -284,7 +289,7 @@ function snapshotFromState(state) {
 }
 
 function gmSnapshotFromState(state) {
-    return `Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${protocolActor(state.turn)},${protocolResult(state.result)},${encodeBoard(state.board, state.size)}`;
+    return `Game:五子棋,GM,快照,${shortGameId(state.id)},${state.revision},${state.size},${protocolActor(state.turn)},${protocolResult(state.result)}\n${formatGameMap(state.board, state.size)}`;
 }
 
 module.exports = { createGomokuGameService, parseGameTag, extractGameTags, stripGameTags,
