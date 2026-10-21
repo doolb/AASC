@@ -1,5 +1,15 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 兼容模式入口伪代码（2026-10-22）
+
+```text
+入口 := 控制端任务 → 豆包网页 → 创建实例 → 通用参数表单
+参数 := browserExecutable=vivaldi、debugPort=9224、port=9091、accountId可选；Android使用WebView，不启动桌面浏览器
+路由 := doubao.web正在运行 ? browser-fetch : node-http
+界面 := Chat2API面板没有独立兼容开关；签名后关闭WebView只控制Android直连页面生命周期
+```
+
+
 ## 双平台共享JS浏览器业务伪代码（2026-10-22，已实现并隔离验收）
 
 ```text

@@ -1,5 +1,10 @@
 # 豆包网页账号Node文字与朗读 TTS 设计
 
+## 兼容模式入口核对（2026-10-22）
+
+控制端“任务”面板找到“豆包网页”（doubao.web），创建实例时设置浏览器名称/绝对路径、调试端口（默认9224）、豆包账号ID和兼容API端口（默认9091）。启动实例即启用网页兼容，停止即恢复Node直连；当前Chat2API面板没有独立兼容模式开关。
+
+
 ## 双平台共享JS浏览器业务（2026-10-22，已实现并隔离验收）
 
 桌面与Android共用 `chat2api-doubao-page-runtime.js` 的官网SDK准备、页内fetch、流事件及取消业务。`chat2api-doubao-browser-port.js` 按用户目录协调主代理与网页任务的桥接租约；桌面通过CDP/Puppeteer执行，Android通过受令牌保护的 `/execute` 让WebView执行同一脚本。原生仅保留生命周期、Cookie系统API、来源/容量约束和事件传递，删除内嵌 `DoubaoWebViewNodePrepare.kt`。消息、权威会话、账号签名缓存/私有持久化、原总预算一次无输出失败补发仍由现有Node适配器处理。
