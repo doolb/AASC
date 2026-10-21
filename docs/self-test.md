@@ -1,5 +1,16 @@
 # 自测功能文档
 
+## MMD-AR HMR2 GPU API 与当前整图深度（2026-10-21，完成）
+
+定向数值/协议/真实PMX/Ammo测试152/152，浏览器28/28（原MediaPipe实际页面1、Clipboard18、新HMR HTTP mock/真实DA集成9），合计180项通过、零跳过。新[HTTP客户端](<../tests/mmd-ar-hmr2-client.test.js>)63项、[深度](<../tests/mmd-ar-human-depth.test.js>)19项、[真实PMX回环与提交](<../tests/mmd-ar-hmr2-retarget.test.js>)9项；原FK/相机/投影/RTMPose等27项及物理/阻尼/IK-PBD/相机所有者34项保留。使用已有 `npm run build:web:mmd-ar-test` 构建，无独立针对性npm script时使用 `node --test --test-isolation=none`。
+
+- 新浏览器测试真实Canvas编码PNG、实际 `/health`/`/infer` 字段/xyxy/25点、503和八种取消变体；取消必须看到原生fetch `AbortError`及HTTP真实关闭，再放行迟到回复。HMR服务器是同源HTTP mock、Human提交记录是UI stub，**不代表真实GPU联网或生产CORS，也不代表PMX识图精度**。
+- 深度是实际Worker/ORT/WASM/固定量化ONNX，不是固定PNG或替身输出：1600×900→924×518，478632个有限Float32，P5/P95=0.497973/3.339385，低蓝高黄；当前图热图400×225。一次桌面推理 `session.run` 约10.38秒，不含加载/预处理，不承诺手机性能；真实Worker计算阶段取消、终止、换图清热图及迟到结果隔离通过。进度消息不是细粒度WASM栈观测。
+- 真实PMX合成BODY25不改原数据/骨长，当前模型旋转/缩放及屈膝、原生冲突、八段白名单/正权重、DA惩罚scale与单位不变通过。真实Ammo入口验证MP空/全拒绝辅助同步且head保持；HMR合成姿态另走真实异步FK/提交/物理推进与取消，不由UI stub冒充。原实际MediaPipe浏览器仍应用11目标、相机11对应约1.9%图片高度误差，取消/无人保持旧目标。
+- 曾修复：退化门限不一致、空辅助切换MP及丢head、场景/米单位混用、压缩传输长度误拒绝、纯UI额外Three依赖；取消首跑是fixture释放回复过早的观测竞态，严格断言保留后复测。一次数值失败因与构建清理并行读VMD；构建结束后完整152项重跑通过，不算未执行用例为通过。
+
+证据：[最终浏览器报告](<../tmp/mmd-pose/hmr2-depth-integration/2026-10-21T09-58-31-016Z-58548/evidence.json>)、[390px动态深度](<../tmp/mmd-pose/hmr2-depth-integration/2026-10-21T09-58-31-016Z-58548/real-da-depth-hmr-mock-390px.png>)、[接入任务](<task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。真实HMR跨域/LAN、用户系统剪贴板/手机权限、移动内存和复杂姿态质量留待实机；不启动用户服务、不修改外部Python、不出APK/发布包。
+
 ## 棋盘无效点击飘字与Qwen默认普通（2026-10-21）
 
 `npm run test:game-chat`64/64通过、零跳过。新增真实浏览器鼠标/触屏点击disabled交点，验证占用、AI回合、处理中、断线、同步及终局提示；8次快速点击只显示一个节点和一个动画，1.5秒后自动隐藏。按下无效而松手前解锁的手势不落子；完成当前棋步后旧点击不补发、E3保持空位，前端和真实服务端分支均验证。两种视口和四向旋转共8种组合核对飘字不越界、触控透传及减少动态效果；隐藏对话清除提示，旧请求错误不污染当前提示。模型选择测试9/9通过，发行JSON及Qwen普通请求别名校验通过。Android不同WebView触屏和更新后的种子恢复待设备验收。

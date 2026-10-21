@@ -487,10 +487,11 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                 try { return requireModel().token === expectedToken && options.isCurrent?.() !== false; }
                 catch (error) { return false; }
             };
-            if (pose?.source === 'rtmpose-m' && pose.dimensions === 2) return (async () => {
-                const result = await interactiveIK.applyImagePose(pose, { isCurrent }); wake(); return result;
+            const result = interactiveIK.applyImagePose(pose, { ...options, isCurrent });
+            if (typeof result?.then === 'function') return (async () => {
+                const completed = await result; wake(); return completed;
             })();
-            const result = interactiveIK.applyImagePose(pose, { isCurrent }); wake(); return result;
+            wake(); return result;
         },
         face: { set: (...args) => manualExpressions.set(...args), clear: (...args) => manualExpressions.clear(...args), resolve: resolveExpression },
         mouth: {

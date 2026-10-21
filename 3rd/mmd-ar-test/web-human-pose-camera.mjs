@@ -1,4 +1,4 @@
-import { landmarkQuality, poseLandmarkThreshold } from './web-human-pose-core.mjs';
+import { POSE_BODY_KEYS, getPosePoint } from './web-human-pose-semantic.mjs';
 import { poseScale } from './web-human-pose-projection.mjs';
 
 // 相机以图片高度为单位拟合，固定FOV；人体比例/姿态和未知焦距使结果只能视为近似匹配。
@@ -81,12 +81,12 @@ export async function fitImageCamera(snapshot,pose,{aspect,isCurrent=()=>true,ma
     const check=()=>{if(!isCurrent()) throw new DOMException('相机匹配已取消','AbortError');}; check();
     const fov=snapshot.view.fov, zoom=snapshot.view.zoom || 1;
     if(!Number.isFinite(aspect)||aspect<=0||!Number.isFinite(fov)||fov<=1||fov>=150||!Number.isFinite(zoom)||zoom<=0) throw new Error('当前透视相机不支持匹配');
-    const source=snapshot.points.filter(p=>Number.isInteger(p.landmark)&&p.world?.length===3&&p.world.every(Number.isFinite)
-        &&landmarkQuality(pose?.landmarks?.[p.landmark])>=poseLandmarkThreshold(pose));
+    const observation = p => getPosePoint(pose, p.key);
+    const source=snapshot.points.filter(p=>POSE_BODY_KEYS.includes(p.key)&&p.world?.length===3&&p.world.every(Number.isFinite)&&observation(p)?.usable);
     if(source.length<6) throw new Error('可信且可对应的身体关键点不足6个');
     const scale=poseScale(source), center=[0,1,2].map(i=>source.reduce((s,p)=>s+p.world[i],0)/source.length);
-    const pairs=source.map(p=>({point:p.world.map((v,i)=>(v-center[i])/scale),image:[(pose.landmarks[p.landmark].x-.5)*aspect,pose.landmarks[p.landmark].y-.5],
-        weight:landmarkQuality(pose.landmarks[p.landmark]),landmark:p.landmark}));
+    const pairs=source.map(p=>({point:p.world.map((v,i)=>(v-center[i])/scale),image:[(observation(p).x-.5)*aspect,observation(p).y-.5],
+        weight:observation(p).weight,key:p.key}));
     const spans=[0,1,2].map(i=>Math.max(...pairs.map(p=>p.point[i]))-Math.min(...pairs.map(p=>p.point[i]))).sort((a,b)=>b-a);
     let area=0;
     for(const a of pairs)for(const b of pairs) {
@@ -106,7 +106,7 @@ export async function fitImageCamera(snapshot,pose,{aspect,isCurrent=()=>true,ma
     const inliers=best.distances.map((d,i)=>d<=.08?i:-1).filter(i=>i>=0);
     const error=Math.sqrt(inliers.reduce((s,i)=>s+best.distances[i]**2,0)/Math.max(1,inliers.length));
     const totalError=Math.sqrt(best.distances.reduce((s,d,i)=>s+d*d*pairs[i].weight,0)/pairs.reduce((s,p)=>s+p.weight,0));
-    const upper=inliers.filter(i=>pairs[i].landmark<23).length, lower=inliers.length-upper;
+    const upper=inliers.filter(i=>/Arm$|Elbow$|Wrist$/u.test(pairs[i].key)).length, lower=inliers.length-upper;
     if(inliers.length<Math.max(6,Math.ceil(pairs.length*.7))||upper<2||lower<2||error>.035||totalError>.08) throw new Error('匹配误差较大，请先微调角色姿态或检查参考点');
     const bestAxes=axes(best.p);
     const ambiguous=solutions.some(other=>other.loss<=best.loss+Math.max(1e-7,best.loss*.01)
@@ -115,7 +115,7 @@ export async function fitImageCamera(snapshot,pose,{aspect,isCurrent=()=>true,ma
     const output=makeView(best.p,center,scale,fov,zoom,aspect), matrix=snapshot.view.viewMatrix;
     const baselineError=matrix?.length===16?Math.sqrt(source.reduce((sum,p)=>{
         const w=p.world, x=matrix[0]*w[0]+matrix[4]*w[1]+matrix[8]*w[2]+matrix[12], y=matrix[1]*w[0]+matrix[5]*w[1]+matrix[9]*w[2]+matrix[13], z=-(matrix[2]*w[0]+matrix[6]*w[1]+matrix[10]*w[2]+matrix[14]);
-        const point=pose.landmarks[p.landmark]; return sum+(focal*x/z-(point.x-.5)*aspect)**2+(-focal*y/z-(point.y-.5))**2;
+        const point=observation(p); return sum+(focal*x/z-(point.x-.5)*aspect)**2+(-focal*y/z-(point.y-.5))**2;
     },0)/source.length):Infinity;
     return {...output,error,totalError,baselineError,inliers:inliers.length};
 }
