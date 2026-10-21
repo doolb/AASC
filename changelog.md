@@ -1,6 +1,7 @@
 ### 豆包与Qwen聊天流式路径说明
 
 - ✅ [2026-10-22] 核对豆包HTTP/2可迭代流、CHUNK_DELTA/STREAM_CHUNK及国内Qwen的SSE累计文本差分，两者stream=true均逐块转发Responses output_text.delta；仅非流式请求汇总完整回答。
+  - 继续核对当前AASC入口：普通聊天和语音/游戏桥均进入chatStream，Responses/OpenAI路径显式stream=true；对外API和普通非流式方法仍按自身参数，不概括为所有系统调用一律true。
   - 同步全局Responses design/spec、豆包usage和正式部署验收待办；只读核对，无业务代码、发布状态变化或新增联网测试。
 
 ### 豆包兼容模式设置入口说明

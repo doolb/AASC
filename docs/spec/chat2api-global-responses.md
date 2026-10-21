@@ -3,6 +3,8 @@
 ## 豆包与Qwen流式路径伪代码（2026-10-22）
 
 ```text
+当前聊天入口 := server-app普通聊天及game-chat-session/game-chat-bridge → llm-service.chatStream → Responses/OpenAI请求显式stream=true；tierOverride客户端stream同样强制true
+其它入口 := 公共API按调用者参数；普通chat方法保留stream=false；llm.chat任务按postStream能力选择
 豆包 := Node HTTP2收到响应头 → 返回原始/解压数据流 → 逐SSE事件解析 → CHUNK_DELTA或STREAM_CHUNK产出新增正文
 国内Qwen := 逐SSE事件读取messages中的最长文本 → 比较已输出长度 → 立即yield新增后缀
 流式 := request.stream=true → 消费适配器迭代器 → 逐块response.output_text.delta → 最终response.completed
