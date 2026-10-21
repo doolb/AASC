@@ -8,7 +8,7 @@ const MAX_ENTRIES = 128;
 const MAX_BYTES = 4 * 1024 * 1024;
 const queues = new Map();
 const allowedHeaders = new Set(['accept', 'content-type', 'agw-js-conv', 'user-agent', 'origin', 'referer',
-  'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform', 'x-tt-passport-csrf-token']);
+  'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform', 'x-tt-passport-csrf-token', 'x-flow-trace', 'last-event-id']);
 const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\r\n]/u.test(value);
 
 /** 私有缓存仍严格限制固定官网和非Cookie头，损坏/被替换的文件不能改变消息的发送目标。 */

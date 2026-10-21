@@ -1,6 +1,8 @@
 'use strict';
 
 const { PassThrough } = require('node:stream');
+const { randomUUID } = require('node:crypto');
+const { PAGE_RUNTIME_VERSION, PAGE_BOOTSTRAP_SOURCE, createPageExecutionScript, acceptPreparedRequest, withBrowserCookie } = require('./chat2api-doubao-page-runtime');
 const { validateCompletionUrl } = require('./chat2api-doubao-browser-fetch');
 const { normalizeDoubaoCookieSnapshot } = require('./chat2api-doubao-cookie-snapshot');
 const { normalizeDoubaoNodeProfile } = require('./chat2api-doubao-node-protocol');
@@ -51,14 +53,25 @@ const createDoubaoAndroidBridge = ({ port = Number(process.env.AASC_DOUBAO_WEBVI
     };
     const timeout = setTimeout(() => controller.abort(), Math.min(limits.timeoutMs || 120_000, 180_000));
     try {
-      const response = await fetchClient(`http://127.0.0.1:${port}/${prepareOnly ? 'prepare' : 'fetch'}`, {
+      const requestId = randomUUID();
+      const execution = { requestId, inputUrl: url.href, body: prepared.data, bodyType: prepared.bodyType || 'json',
+        method, customHeaders: prepared.customHeaders || {}, prepareOnly, contentType,
+        maxBytes: Math.min(limits.streamBytes || 8 * 1024 * 1024, 32 * 1024 * 1024) };
+      const response = await fetchClient(`http://127.0.0.1:${port}/execute`, {
         method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.href, payload: prepared.data, bodyType: prepared.bodyType || 'json',
+        body: JSON.stringify({ url: url.href, requestId, runtimeVersion: PAGE_RUNTIME_VERSION,
+          bootstrapScript: PAGE_BOOTSTRAP_SOURCE, executeScript: createPageExecutionScript(execution), prepareOnly,
           ...(prepareOnly ? { closeAfterPrepare: closeAfterPrepare === true } : {}),
           method, customHeaders: prepared.customHeaders || {}, sessionId: expectedSession, restore, contentType,
           maxBytes: Math.min(limits.streamBytes || 8 * 1024 * 1024, 32 * 1024 * 1024) }),
       });
+      if ([404, 409].includes(response.status)) {
+        const code = await response.json().then(body => body.error).catch(() => '');
+        if (response.status === 404 || code === 'doubao_webview_runtime_version') {
+          throw bridgeError('doubao_android_upgrade_required', '当前APK不支持共享JS浏览器运行时，请更新min APK', 503);
+        }
+      }
       if (!response.ok || !response.body) throw bridgeError('doubao_android_webview',
         'Android 豆包网页未登录或页面不可用', response.status);
       if (prepareOnly) {
@@ -72,7 +85,12 @@ const createDoubaoAndroidBridge = ({ port = Number(process.env.AASC_DOUBAO_WEBVI
           raw += decoder.decode();
           for (const line of raw.split('\n').filter(Boolean)) {
             const value = JSON.parse(line);
-            if (value.type === 'error') throw bridgeError('doubao_android_prepare', '豆包当次签名生成失败，请更新APK或重试');
+            if (value.type === 'error') {
+              console.warn('[Chat2API] 豆包共享JS准备失败 stage=' +
+                (['input_unavailable', 'composer_missing', 'send_unavailable', 'prepared_mismatch', 'prepare_timeout',
+                  'signature_unavailable', 'cancelled'].includes(value.code) ? value.code : 'unknown'));
+              throw bridgeError('doubao_android_prepare', '豆包当次签名生成失败，请更新APK或重试');
+            }
             if (value.type === 'prepared') {
               if (packet) throw bridgeError('doubao_android_prepare', '豆包当次签名重复');
               packet = value;
@@ -85,30 +103,8 @@ const createDoubaoAndroidBridge = ({ port = Number(process.env.AASC_DOUBAO_WEBVI
           if (closeAfterPrepare === true && !pageClosed) {
             throw bridgeError('doubao_android_upgrade_required', '当前APK不支持签名后关闭页面，请更新min APK或关闭此开关', 503);
           }
-          const signed = validateCompletionUrl(packet.url);
-          if (signed.pathname !== url.pathname || !signed.searchParams.get('a_bogus')
-            || ['aid', 'device_id', 'web_id', 'fp'].some(key => signed.searchParams.get(key) !== url.searchParams.get(key))) {
-            throw bridgeError('doubao_android_prepare', '豆包当次签名身份不匹配');
-          }
-          const allowed = new Set(['accept', 'content-type', 'agw-js-conv', 'user-agent', 'origin', 'referer',
-            'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform', 'x-tt-passport-csrf-token']);
-          if (!packet.headers || typeof packet.headers !== 'object' || Object.keys(packet.headers).length > 40) {
-            throw bridgeError('doubao_android_prepare', '豆包当次签名请求头无效');
-          }
-          const signedHeaders = {};
-          for (const [name, value] of Object.entries(packet.headers)) {
-            const lower = name.toLowerCase();
-            if (!allowed.has(lower) || typeof value !== 'string' || value.length > 4096 || /[\r\n]/u.test(value)) {
-              throw bridgeError('doubao_android_prepare', '豆包当次签名请求头无效');
-            }
-            signedHeaders[lower] = value;
-          }
-          if (signedHeaders.origin !== 'https://www.doubao.com'
-            || signedHeaders['user-agent'] !== restore.nodeProfile.userAgent) {
-            throw bridgeError('doubao_android_prepare', '豆包当次签名身份不匹配');
-          }
-          // SDK只提供动态参数；账号Cookie始终由原来的Node构造器提供，不从网页脚本接收。
-          return { ...prepared, url: signed.href, headers: { Cookie: prepared.headers.Cookie, ...signedHeaders }, doubaoHttp2: true };
+          const result = acceptPreparedRequest(prepared, packet, restore.nodeProfile.userAgent, 'doubao_android_prepare');
+          return packet.platformCookie ? withBrowserCookie(result, packet.platformCookie, account.credentials) : result;
         } finally { release(); clearTimeout(timeout); }
       }
       const stream = new PassThrough();

@@ -2,6 +2,7 @@
 
 const { PassThrough } = require('node:stream');
 const { randomUUID } = require('node:crypto');
+const { executeDoubaoPageRequest } = require('./chat2api-doubao-page-runtime');
 
 const ORIGIN = 'https://www.doubao.com';
 const ALLOWED_PATHS = new Set(['/chat/completion', '/samantha/chat/completion',
@@ -35,7 +36,7 @@ const getPageChannel = async page => {
 
 /** 官网页内生成当次签名并发送同源请求，SSE 分块由 Node 流交给现有解析器。 */
 const fetchInDoubaoPage = async ({ page, url: inputUrl, payload, bodyType = 'json',
-  method = 'POST', customHeaders = {}, signal,
+  method = 'POST', customHeaders = {}, signal, prepareOnly = false, contentType = 'application/json',
   timeoutMs = 120_000, maxBytes = 8 * 1024 * 1024 }) => {
   if (signal?.aborted) throw fetchError('doubao_browser_cancelled', '豆包网页聊天已取消', 499);
   const url = validateCompletionUrl(inputUrl);
@@ -54,6 +55,7 @@ const fetchInDoubaoPage = async ({ page, url: inputUrl, payload, bodyType = 'jso
   let resolveResponse;
   let rejectResponse;
   let responseStarted = false;
+  let preparedPacket;
   let timer;
   const result = new Promise((resolve, reject) => { resolveResponse = resolve; rejectResponse = reject; });
   const cleanup = () => {
@@ -72,6 +74,7 @@ const fetchInDoubaoPage = async ({ page, url: inputUrl, payload, bodyType = 'jso
   const onAbort = () => {
     fail(fetchError('doubao_browser_cancelled', '豆包网页聊天已取消', 499));
   };
+  stream.once('close', () => { if (!done) onAbort(); });
   timer = setTimeout(() => {
     fail(fetchError('doubao_browser_timeout', '豆包网页聊天超时', 504));
   }, Math.min(timeoutMs, url.pathname === '/samantha/chat/completion' ? 300_000 : 120_000));
@@ -81,7 +84,12 @@ const fetchInDoubaoPage = async ({ page, url: inputUrl, payload, bodyType = 'jso
   channel.handlers.set(requestId, async packet => {
     if (done) return;
     switch (packet.type) {
+      case 'prepared':
+        if (!prepareOnly || preparedPacket) { fail(fetchError('doubao_browser_prepare', '豆包签名回执无效')); return; }
+        preparedPacket = packet;
+        break;
       case 'response': {
+        if (prepareOnly) { fail(fetchError('doubao_browser_prepare', '签名准备不能返回已发送的响应')); return; }
         if (responseStarted) return;
         responseStarted = true;
         resolveResponse({ status: packet.status, headers: packet.headers || {}, data: stream,
@@ -102,94 +110,28 @@ const fetchInDoubaoPage = async ({ page, url: inputUrl, payload, bodyType = 'jso
       case 'end': {
         done = true;
         cleanup();
-        if (responseStarted) stream.end();
+        if (prepareOnly && preparedPacket) resolveResponse(preparedPacket);
+        else if (responseStarted) stream.end();
         else rejectResponse(fetchError('doubao_browser_response', '豆包网页未返回聊天响应'));
         break;
       }
       case 'error':
-        fail(fetchError('doubao_browser_upstream', '豆包专用浏览器请求失败'));
+        if (prepareOnly) console.warn('[Chat2API] 豆包共享JS准备失败 stage=' +
+          (['input_unavailable', 'composer_missing', 'send_unavailable', 'prepared_mismatch', 'prepare_timeout',
+            'signature_unavailable', 'cancelled'].includes(packet.code) ? packet.code : 'unknown'));
+        fail(fetchError(prepareOnly ? 'doubao_browser_prepare' : 'doubao_browser_upstream', '豆包专用浏览器请求失败'));
         break;
       default:
         break;
     }
   });
   // 参数和凭据只交给固定的官网页面；不得让页面返回任意 URL 或读取浏览器外的凭据。
-  const evaluation = page.evaluate(async ({ requestId: id, inputUrl: rawUrl, body, bodyType: kind,
-    method: verb, customHeaders: extraHeaders, bridgeName: callbackName }) => {
-    const report = async packet => window[callbackName]({ requestId: id, ...packet });
-    window.__aascDoubaoAborts ||= {};
-    const abort = new AbortController();
-    window.__aascDoubaoAborts[id] = abort;
-    try {
-      if (location.origin !== 'https://www.doubao.com') throw new Error('invalid_origin');
-      const requestUrl = new URL(rawUrl, location.origin);
-      if (requestUrl.origin !== location.origin
-        || !['/chat/completion', '/samantha/chat/completion', '/samantha/pages/upload_image',
-          '/alice/message/get_file_url', '/alice/resource/prepare_upload', '/top/v1'].includes(requestUrl.pathname)) throw new Error('invalid_url');
-      requestUrl.searchParams.delete('a_bogus');
-      requestUrl.searchParams.delete('X-Bogus');
-      requestUrl.searchParams.sort();
-      const query = requestUrl.searchParams.toString();
-      if (!['/samantha/chat/completion', '/top/v1'].includes(requestUrl.pathname)) {
-        const signature = await window.bdms?.frontierSign?.(query);
-        if (!signature) throw new Error('signature_unavailable');
-        const signatureValue = typeof signature === 'string' ? { 'X-Bogus': signature } : signature;
-        for (const [key, value] of Object.entries(signatureValue)) {
-          if (!['a_bogus', 'X-Bogus'].includes(key) || typeof value !== 'string' || !value) continue;
-          requestUrl.searchParams.set(key, value);
-        }
-        if (!requestUrl.searchParams.has('a_bogus') && !requestUrl.searchParams.has('X-Bogus')) {
-          throw new Error('signature_invalid');
-        }
-      }
-      const csrf = document.cookie.match(/(?:^|;\s*)passport_csrf_token=([^;]+)/)?.[1] || '';
-      const headers = { 'agw-js-conv': 'str', ...extraHeaders };
-      if (csrf) headers['x-tt-passport-csrf-token'] = csrf;
-      let requestBody;
-      if (kind === 'image-upload' && requestUrl.pathname === '/samantha/pages/upload_image') {
-        if (!body || !/^[\w.-]{1,128}$/u.test(body.filename) || !/^[a-z0-9]{1,8}$/u.test(body.extension)
-          || typeof body.base64 !== 'string' || body.base64.length > 15 * 1024 * 1024) throw new Error('invalid_upload');
-        const raw = atob(body.base64);
-        const bytes = new Uint8Array(raw.length);
-        for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
-        const form = new FormData();
-        form.append('data', new Blob([bytes], { type: `image/${body.extension}` }), body.filename);
-        form.append('file_type', body.extension);
-        requestBody = form;
-      } else if (kind === 'json') {
-        headers['Content-Type'] = 'application/json';
-        requestBody = JSON.stringify(body);
-      } else if (kind === 'none' && verb === 'GET') {
-        requestBody = undefined;
-      } else throw new Error('invalid_body_type');
-      const response = await fetch(requestUrl.pathname + requestUrl.search, {
-        method: verb, headers, body: requestBody, credentials: 'include', signal: abort.signal,
-      });
-      await report({ type: 'response', status: response.status, headers: Object.fromEntries(response.headers.entries()) });
-      const reader = response.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        while (true) {
-          const next = await reader.read();
-          if (next.done) break;
-          const chunk = decoder.decode(next.value, { stream: true });
-          if (chunk) await report({ type: 'chunk', chunk });
-        }
-        const rest = decoder.decode();
-        if (rest) await report({ type: 'chunk', chunk: rest });
-      } else {
-        await report({ type: 'chunk', chunk: await response.text() });
-      }
-      await report({ type: 'end' });
-    } catch {
-      await report({ type: 'error' });
-    } finally {
-      delete window.__aascDoubaoAborts[id];
-    }
-  }, { requestId, inputUrl: url.href, body: payload, bodyType, method,
-    customHeaders, bridgeName: channel.bridgeName });
+  const evaluation = page.evaluate(executeDoubaoPageRequest, {
+    requestId, inputUrl: url.href, body: payload, bodyType, method, customHeaders,
+    bridgeName: channel.bridgeName, prepareOnly, contentType, maxBytes });
   void evaluation.catch(() => fail(fetchError('doubao_browser_upstream', '豆包专用浏览器连接失败')));
   return result;
 };
 
-module.exports = { fetchInDoubaoPage, validateCompletionUrl };
+const prepareInDoubaoPage = options => fetchInDoubaoPage({ ...options, prepareOnly: true });
+module.exports = { fetchInDoubaoPage, prepareInDoubaoPage, validateCompletionUrl };

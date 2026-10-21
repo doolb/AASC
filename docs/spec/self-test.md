@@ -1,11 +1,27 @@
 # 自测功能实现文档
 
+## 豆包共享JS、单页签与请求类型自测（2026-10-22）
+
+```text
+共享运行时 := 桌面直接执行函数与Android序列化执行同一JS；SDK准备不联网、签名身份/来源验证、UTF8流容量/事件、取消及旧APK升级错误均覆盖
+平台资源 := rootDir端口租约/末租约关闭、关闭中再次借用、开页中停止不迟到创建、同账号页复用；专用Vivaldi现场确认1个受管页
+协议修复 := JSON.parse后的related_deleted_message_ids必须非Array且深等于{}；原先比较空数组/空对象未区分导致漏报，旧“正文一致”结论已修正
+缓存 := 内存携带当前平台Cookie，私有文件不存Cookie；Referer不分大小写替换，避免重复头破坏持久化恢复；恢复/失败单次补发定向26/26
+回归 := npm run check:chat2api最终358/358、零失败零跳过；Kotlin compileDebugKotlin/testDebugUnitTest账号2+页缓存1全部通过
+桌面Responses := 直连首轮14字/23994ms、续聊27字/4675ms；网页首轮14字/7234ms、续聊90字/5356ms；两轮直连只prepare一次
+AndroidResponses := 直连首轮13字/7311ms、续聊25字/3755ms；网页首轮5字/4244ms、续聊136字/5397ms；min73隔离最新版JS，各模式权威ready/2轮
+断言 := 所有8次均HTTP200+非空正文+response.completed，不用仅HTTP200判断成功；无system测试提示、不向当前AASC对话写入
+产物 := npm run build:apk:offline:min成功，73/0.2.73-offline-min，v2签名通过，SHA256=83f20e35cc47ec0d5936efe9c96512a3bb67e59fe38d9abb6ccbd4f77714aa3d；未发布
+清理 := 8个仅测试上游会话单独删除均status_code0；隔离运行时/新增转发/设备测试目录/原始敏感抓取清理；手机恢复原min72，正式code148与39进程未更新
+后续 := 新min73与服务包配套部署后验证正式入口；签名长期有效性、手机重启及关闭页面观感继续设备验收
+```
+
 ## 专用profile官网UI对照自测（2026-10-21）
 
 ```text
 用户动作模拟 := 当前独立profile、DISPLAY=:1 Vivaldi/CDP9224、新官网页、输入早、点击发送；不以fetch模拟点击
 结果 := HTTP200、SSE_ACK/CHUNK_DELTA/SSE_REPLY_END、无非零业务错误，10831字节；DOM显示早呀☀️，今天打算做点什么？
-差分 := 正文除ID/随机键/时间戳一致；网页版本3.42.1对保存3.41.0，签名/tab/token及请求头不同；Cookie名称集合相同但6值更新
+差分修正 := 2026-10-22发现旧比较忽略空[]/{}类型，related_deleted_message_ids默认类型错误已修复；网页版本3.42.1对保存3.41.0，签名/tab/token及请求头不同；Cookie名称集合相同但6值更新
 边界 := 不把UI成功外推成现有Chat2API兼容成功，不把某字段差异直接判为根因，不以当前源码推断旧进程全部实参
 清理断言 := 仅本轮1个官网会话删除HTTP200/status_code0；私有临时抓取文件删除；本轮9224关闭，原9223/8083保留
 ```

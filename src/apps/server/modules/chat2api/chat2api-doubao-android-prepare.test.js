@@ -3,13 +3,11 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
-const source = fs.readFileSync(path.resolve(__dirname,
-  '../../../android-display/app/src/main/java/com/aasc/display/DoubaoWebViewNodePrepare.kt'),'utf8');
-const script = source.match(/val script = """([\s\S]*?)"""\.trimIndent\(\)/u)[1];
+const { PAGE_BOOTSTRAP_SOURCE: script } = require('./chat2api-doubao-page-runtime');
 const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
 const { Readable } = require('node:stream');
 
-test('实际APK签名脚本通过SDK取得新参数，准备消息不访问网络',async()=>{
+test('共享JS签名脚本通过SDK取得新参数，准备消息不访问网络',async()=>{
   let network=0;
   const context={Request,Response,Headers,URL,setTimeout,clearTimeout,
     location:{href:'https://www.doubao.com/chat/',origin:'https://www.doubao.com'},
@@ -266,4 +264,18 @@ test('并发从文件读出的同签名副本一起失效，补发失败后不�
   assert.equal(await store.get(JSON.stringify([f.account.accountId,'mode:0'])),null);
   await f.run({id:'c',state:{}},{text:'after'});
   assert.equal(f.prepares.length,2);
+});
+
+test('浏览器新Cookie跟随内存签名复用，但私有签名文件不携带Cookie', async () => {
+  const saved = [];
+  const currentCookie = 'sessionid=mock_session_123456789; s_v_web_id=verify_mock_123456; ttwid=fresh_browser_value';
+  const fixture = signatureFixture({ signatureStore: { get: async () => null,
+    put: async (_key, entry) => { saved.push(JSON.parse(JSON.stringify(entry))); }, delete: async () => {} },
+    beforePrepare: async args => { args.prepared.headers.Cookie = currentCookie; } });
+  await fixture.run({ id: 'cookie-a', state: {} });
+  await fixture.run({ id: 'cookie-b', state: {} });
+  assert.equal(fixture.prepares.length, 1);
+  assert.equal(fixture.calls[1].headers.Cookie, currentCookie);
+  assert.equal(JSON.stringify(saved).includes('fresh_browser_value'), false);
+  assert.equal(saved.some(entry => Object.hasOwn(entry, 'cookie')), false);
 });

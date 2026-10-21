@@ -27,7 +27,7 @@ test('Android 网页桥按账号身份发送固定官网请求并逐块返回 SS
   for await (const chunk of response.data) body += chunk.toString();
   assert.equal(response.status, 200);
   assert.match(body, /SSE_ACK/u);
-  assert.equal(request.url, 'http://127.0.0.1:19092/fetch');
+  assert.equal(request.url, 'http://127.0.0.1:19092/execute');
   assert.equal(JSON.parse(request.options.body).sessionId, 's'.repeat(32));
   assert.equal(JSON.parse(request.options.body).maxBytes, 8 * 1024 * 1024);
   assert.equal(JSON.parse(request.options.body).contentType, 'application/json; encoding=utf-8');
@@ -64,7 +64,7 @@ test('Android Node签名准备只接收同身份动态参数，Cookie和消息�
   const prepared={url,data:{messages:['只在Node发送']},headers:{Cookie:credentials.cookie,'x-flow-trace':'stale'}};
   const args={account:{accountId:'one',providerId:'doubaochat',credentials},prepared};
   const result=await bridge.prepare(args);
-  assert.equal(requested.address,'http://127.0.0.1:19092/prepare');
+  assert.equal(requested.address,'http://127.0.0.1:19092/execute');
   assert.equal(result.headers.Cookie,credentials.cookie);
   assert.equal(result.headers['x-flow-trace'],undefined);
   assert.equal(result.data,prepared.data);
@@ -81,7 +81,7 @@ test('关闭开关只进入prepare；收到原生关闭确认才成功，旧APK�
   let acknowledged=true,lastBody;
   const bridge=createDoubaoAndroidBridge({port:19092,token:'f'.repeat(64),fetchClient:async(address,options)=>{
     lastBody=JSON.parse(options.body);
-    const values=address.endsWith('/prepare')?[{type:'prepared',url:url+'&a_bogus=current',headers:{
+    const values=lastBody.prepareOnly?[{type:'prepared',url:url+'&a_bogus=current',headers:{
       origin:'https://www.doubao.com','user-agent':credentials.nodeProfile.userAgent}},
       {type:'end',...(acknowledged?{webViewClosed:true}:{})}]
       :[{type:'response',status:200,headers:{}},{type:'end'}];
@@ -95,4 +95,22 @@ test('关闭开关只进入prepare；收到原生关闭确认才成功，旧APK�
   await bridge.prepare(args);assert.equal(lastBody.closeAfterPrepare,false);
   const response=await bridge.request({...args,closeAfterPrepare:true});for await(const value of response.data)void value;
   assert.equal(Object.hasOwn(lastBody,'closeAfterPrepare'),false);
+});
+
+test('Android执行契约注入共享JS版本与脚本；旧APK明确升级而不静默调用旧业务', async () => {
+  const { PAGE_BOOTSTRAP_SOURCE } = require('./chat2api-doubao-page-runtime');
+  let captured;
+  const bridge = createDoubaoAndroidBridge({ port: 19092, token: 'f'.repeat(64), fetchClient: async (_url, options) => {
+    captured = JSON.parse(options.body);
+    return { status: 404, ok: false, json: async () => ({ error: 'not_found' }) };
+  } });
+  await assert.rejects(() => bridge.prepare({ account: { accountId: 'one', providerId: 'doubaochat', credentials },
+    prepared: { url: 'https://www.doubao.com/chat/completion', data: { messages: ['早'] }, headers: {} } }),
+  { code: 'doubao_android_upgrade_required' });
+  assert.equal(captured.runtimeVersion, 3);
+  assert.equal(captured.bootstrapScript, PAGE_BOOTSTRAP_SOURCE);
+  assert.match(captured.executeScript, /executeDoubaoPageRequest/u);
+  assert.ok(!captured.executeScript.includes('sessionid='));
+  assert.ok(!captured.executeScript.includes('cookieSnapshot'));
+  await bridge.stop();
 });

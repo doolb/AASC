@@ -21,6 +21,8 @@ const { createDoubaoAccountVerifier } = require('./chat2api-doubao-account-verif
 const { createChat2ApiAccountVerificationService } = require('./chat2api-account-verification-service');
 const { doubaoWebTaskBridge, getDoubaoWebTaskStatus } = require('./chat2api-doubao-web-task-registry');
 
+const { acquireDoubaoBrowserPort } = require('./chat2api-doubao-browser-port');
+
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir, legacyDataPath: options.legacyDataPath,
     restoreLegacyAccounts: options.restoreLegacyAccounts });
@@ -38,13 +40,19 @@ const createChat2ApiRuntime = (options = {}) => {
     ...(options.apiSpeechAdapters?{apiAdapters:options.apiSpeechAdapters}:{}),
     ...(options.doubaoSpeechAdapter ? { doubaoAdapter: options.doubaoSpeechAdapter } : {}),
     ...(options.qwenSpeechAdapter ? { qwenAdapter: options.qwenSpeechAdapter } : {}) });
+  const browserPort = !options.coreAdapter && !options.providerAdapters && !options.doubaoBrowserBridge
+    ? acquireDoubaoBrowserPort({ rootDir: dataStore.rootDir }) : null;
+  const browserBridge = options.doubaoBrowserBridge || {
+    request: args => doubaoWebTaskBridge.request(args),
+    prepare: args => browserPort.prepare(args),
+  };
   const coreAdapter = options.coreAdapter || createChat2ApiCoreAdapter({
     dataStore,
     providerRegistry,
     modelMapper,
     loadBalancer,
     providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig,
-      doubaoBrowserBridge: options.doubaoBrowserBridge || doubaoWebTaskBridge,
+      doubaoBrowserBridge: browserBridge,
       getDoubaoTransport, getDoubaoWebViewSettings: options.getDoubaoWebViewSettings,
       doubaoSignatureStore: options.doubaoSignatureStore || (dataStore.rootDir
         ? createDoubaoSignatureStore({ rootDir: dataStore.rootDir }) : undefined),
@@ -93,7 +101,8 @@ const createChat2ApiRuntime = (options = {}) => {
   const stop = async () => {
     await oauth.stop();
     accountWebSession.clear();
-    await proxy.stop();
+    try { await proxy.stop(); }
+    finally { await browserPort?.stop(); }
   };
   const getStatus = () => ({
     running: proxy.isRunning(),

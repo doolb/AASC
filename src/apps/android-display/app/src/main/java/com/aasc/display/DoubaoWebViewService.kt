@@ -22,7 +22,6 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.MessageDigest
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -51,6 +50,7 @@ class DoubaoWebViewService : Service() {
     private var pageLoaded = CountDownLatch(1)
     private val accountLock = ReentrantLock()
     private var accountFingerprint = ""
+    private var pageScriptFingerprint = ""
 
     override fun onCreate() {
         Chat2ApiWebViewDataDirectory.initializer.initialize(Build.VERSION.SDK_INT) { suffix ->
@@ -119,35 +119,41 @@ class DoubaoWebViewService : Service() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun ensurePage(profile: JSONObject): WebView = pages.getOrCreate {
-        val view = WebView(this)
-        view.settings.javaScriptEnabled = true
-        view.settings.domStorageEnabled = true
-        view.settings.userAgentString = profile.getString("userAgent")
-        require(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
-        WebViewCompat.addDocumentStartJavaScript(view, DoubaoWebViewAccount.storageScript(profile),
-            setOf(DoubaoWebViewAccount.ORIGIN))
-        WebViewCompat.addDocumentStartJavaScript(view, DoubaoWebViewNodePrepare.script,
-            setOf(DoubaoWebViewAccount.ORIGIN))
-        view.addJavascriptInterface(object {
-            @JavascriptInterface fun onPacket(raw: String) {
-                try {
-                    val packet = JSONObject(raw)
-                    pending[packet.optString("requestId")]?.offer(packet)
-                } catch (_: Exception) { /* 网页发来的损坏包只影响该次请求超时。 */ }
-            }
-        }, "AASCDoubaoRuntime")
-        view.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                request.url.scheme != "https" || request.url.host != "www.doubao.com"
+    private fun ensurePage(profile: JSONObject, bootstrapScript: String): WebView {
+        val fingerprint = MessageDigest.getInstance("SHA-256").digest(bootstrapScript.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        // 服务JS升级时重建页面，确保文档开始注入点与本次调用使用同一个运行时。
+        if (fingerprint != pageScriptFingerprint) { pages.clear(); pageScriptFingerprint = fingerprint }
+        return pages.getOrCreate {
+            val view = WebView(this)
+            view.settings.javaScriptEnabled = true
+            view.settings.domStorageEnabled = true
+            view.settings.userAgentString = profile.getString("userAgent")
+            require(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+            WebViewCompat.addDocumentStartJavaScript(view, DoubaoWebViewAccount.storageScript(profile),
+                setOf(DoubaoWebViewAccount.ORIGIN))
+            WebViewCompat.addDocumentStartJavaScript(view, bootstrapScript,
+                setOf(DoubaoWebViewAccount.ORIGIN))
+            view.addJavascriptInterface(object {
+                @JavascriptInterface fun onPacket(raw: String) {
+                    try {
+                        val packet = JSONObject(raw)
+                        pending[packet.optString("requestId")]?.offer(packet)
+                    } catch (_: Exception) { /* 网页发来的损坏包只影响该次请求超时。 */ }
+                }
+            }, "AASCDoubaoRuntime")
+            view.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                    request.url.scheme != "https" || request.url.host != "www.doubao.com"
 
-            override fun onPageFinished(view: WebView, url: String) {
-                if (url.startsWith("https://www.doubao.com/chat")) pageLoaded.countDown()
+                override fun onPageFinished(view: WebView, url: String) {
+                    if (url.startsWith("https://www.doubao.com/chat")) pageLoaded.countDown()
+                }
             }
+            pageLoaded = CountDownLatch(1)
+            view.loadUrl("https://www.doubao.com/chat/")
+            view
         }
-        pageLoaded = CountDownLatch(1)
-        view.loadUrl("https://www.doubao.com/chat/")
-        view
     }
 
     /** 工作者等待Cookie回调，主线程只执行WebView操作，避免阻塞CookieManager和网页加载。 */
@@ -208,8 +214,7 @@ class DoubaoWebViewService : Service() {
                 error(socket, 401, "unauthorized")
                 return
             }
-            val prepareOnly = requestLine == "POST /prepare HTTP/1.1"
-            if (requestLine != "POST /fetch HTTP/1.1" && !prepareOnly) {
+            if (requestLine != "POST /execute HTTP/1.1") {
                 error(socket, 404, "not_found")
                 return
             }
@@ -226,6 +231,18 @@ class DoubaoWebViewService : Service() {
                 offset += count
             }
             val request = JSONObject(String(body, Charsets.UTF_8))
+            // 原生仅提供版本化的受信JS执行通道，豆包签名和请求流程由服务JS维护。
+            if (request.optInt("runtimeVersion", 0) != 3) {
+                error(socket, 409, "doubao_webview_runtime_version"); return
+            }
+            val bootstrapScript = request.optString("bootstrapScript")
+            val executeScript = request.optString("executeScript")
+            val requestId = request.optString("requestId")
+            if (bootstrapScript.length !in 1..131072 || executeScript.length !in 1..(25 * 1024 * 1024)
+                || !Regex("^[a-f0-9-]{36}$").matches(requestId) || request.opt("prepareOnly") !is Boolean) {
+                error(socket, 400, "doubao_webview_runtime_script"); return
+            }
+            val prepareOnly = request.getBoolean("prepareOnly")
             val url = java.net.URI(request.optString("url"))
             val allowed = setOf("/chat/completion", "/samantha/chat/completion",
                 "/samantha/pages/upload_image", "/alice/message/get_file_url",
@@ -243,7 +260,6 @@ class DoubaoWebViewService : Service() {
             val restore = try { DoubaoWebViewAccount.validate(request.getJSONObject("restore"), request.optString("sessionId")) }
             catch (_: Exception) { error(socket, 403, "doubao_webview_identity"); return }
             if (!accountLock.tryLock(30, TimeUnit.SECONDS)) { error(socket, 409, "doubao_webview_busy"); return }
-            val requestId = UUID.randomUUID().toString()
             val queue = LinkedBlockingQueue<JSONObject>()
             var leased = false
             try {
@@ -256,7 +272,7 @@ class DoubaoWebViewService : Service() {
                 val latch = CountDownLatch(1)
                 var prepared = false
                 mainHandler.post {
-                    try { ensurePage(restore.getJSONObject("nodeProfile")); prepared = true }
+                    try { ensurePage(restore.getJSONObject("nodeProfile"), bootstrapScript); prepared = true }
                     catch (_: Exception) { /* 能力不支持时向调用方返回错误，不崩溃隔离进程。 */ }
                     finally { latch.countDown() }
                 }
@@ -264,12 +280,8 @@ class DoubaoWebViewService : Service() {
                     error(socket, 503, "doubao_webview_page")
                     return
                 }
-                // Cookie快照只交给原生CookieManager，不能随业务参数再次暴露给网页脚本。
-                val pageRequest = JSONObject(request.toString()).put("requestId", requestId).put("prepareOnly", prepareOnly)
-                pageRequest.remove("restore")
-                pageRequest.remove("sessionId")
-                pageRequest.remove("closeAfterPrepare")
-                val script = PAGE_FETCH_SCRIPT.replace("__INPUT__", JSONObject.quote(pageRequest.toString()))
+                // Cookie只交给系统API；页面业务脚本由已鉴权的Node生成，不再在Kotlin拼接另一套逻辑。
+                val script = executeScript
                 mainHandler.post { webView?.evaluateJavascript(script, null) }
                 val output = socket.getOutputStream()
                 output.write("HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
@@ -278,7 +290,11 @@ class DoubaoWebViewService : Service() {
                 val deadline = System.currentTimeMillis() + 180_000
                 while (System.currentTimeMillis() < deadline) {
                     val packet = queue.poll(500, TimeUnit.MILLISECONDS) ?: continue
-                    if (packet.optString("type") == "prepared") signaturePrepared = true
+                    if (packet.optString("type") == "prepared") {
+                        signaturePrepared = true
+                        // 平台API的结果覆盖网页同名字段，不向页面暴露HttpOnly Cookie。
+                        packet.put("platformCookie", CookieManager.getInstance().getCookie("https://www.doubao.com/chat/").orEmpty())
+                    }
                     if (packet.optString("type") == "end" && closeAfterPrepare) {
                         if (!signaturePrepared || !closePreparedPage()) {
                             output.write((JSONObject().put("type", "error").put("code", "page_close_failed").toString() + "\n")
@@ -305,74 +321,4 @@ class DoubaoWebViewService : Service() {
         } catch (_: Exception) { /* 本机请求断开或网页失败时，由 Node 的截止时间收敛。 */ }
     }
 
-    private val PAGE_FETCH_SCRIPT = """
-        (async input => {
-          const arg = JSON.parse(input);
-          const report = packet => AASCDoubaoRuntime.onPacket(JSON.stringify({requestId: arg.requestId, ...packet}));
-          const abort = new AbortController();
-          window.__aascDoubaoAborts ||= {};
-          window.__aascDoubaoAborts[arg.requestId] = abort;
-          let stage = 'invalid_request';
-          try {
-            if (location.origin !== 'https://www.doubao.com') throw Error('invalid_origin');
-            const url = new URL(arg.url);
-            const allowed = ['/chat/completion','/samantha/chat/completion','/samantha/pages/upload_image',
-              '/alice/message/get_file_url','/alice/resource/prepare_upload','/top/v1'];
-            if (url.origin !== location.origin || !allowed.includes(url.pathname)) throw Error('invalid_url');
-            url.searchParams.delete('a_bogus'); url.searchParams.delete('X-Bogus'); url.searchParams.sort();
-            if (!['/samantha/chat/completion','/top/v1'].includes(url.pathname)) {
-              stage = 'signature_unavailable';
-              for (let attempt=0; attempt<100 && typeof window.bdms?.frontierSign !== 'function'; attempt++) {
-                await new Promise(resolve => setTimeout(resolve,100));
-              }
-              const signed = await window.bdms?.frontierSign?.(url.searchParams.toString());
-              const fields = typeof signed === 'string' ? {'X-Bogus': signed} : signed;
-              if (!fields || typeof fields !== 'object') throw Error('signature_unavailable');
-              for (const [key,value] of Object.entries(fields)) {
-                if (['X-Bogus','a_bogus'].includes(key) && typeof value === 'string') url.searchParams.set(key,value);
-              }
-            }
-            const headers = {'agw-js-conv':'str', ...(arg.customHeaders || {})};
-            const csrf = document.cookie.match(/(?:^|;\s*)passport_csrf_token=([^;]+)/)?.[1];
-            if (csrf) headers['x-tt-passport-csrf-token'] = csrf;
-            let body;
-            if (arg.bodyType === 'image-upload') {
-              const raw = atob(arg.payload.base64), bytes = new Uint8Array(raw.length);
-              for (let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
-              body = new FormData();
-              body.append('data',new Blob([bytes],{type:'image/'+arg.payload.extension}),arg.payload.filename);
-              body.append('file_type',arg.payload.extension);
-            } else if (arg.bodyType === 'json') {
-              if (!/^application\/json(?:;\s*(?:charset|encoding)=utf-8)?$/i.test(arg.contentType)) throw Error('encoding');
-              headers['Content-Type']=arg.contentType; body=JSON.stringify(arg.payload);
-            } else if (arg.bodyType !== 'none') throw Error('body_type');
-            stage = 'fetch_failed';
-            if (arg.prepareOnly) {
-              stage = 'signature_unavailable';
-              const prepared = await window.__aascDoubaoPrepareRequest(url.pathname+url.search,
-                {method:'POST',headers,body,credentials:'include',redirect:'error',signal:abort.signal});
-              report({type:'prepared',...prepared}); report({type:'end'}); return;
-            }
-            const response = await fetch(url.pathname+url.search, {method:arg.method || 'POST',
-              headers,body,credentials:'include',redirect:'error',signal:abort.signal});
-            report({type:'response',status:response.status,headers:Object.fromEntries(response.headers.entries())});
-            const maxBytes = Math.min(Math.max(Number(arg.maxBytes) || 8388608, 1), 33554432);
-            let received = 0;
-            const sendChunk = chunk => {
-              received += chunk.length;
-              if (received > maxBytes) throw Error('response_too_large');
-              report({type:'chunk',chunk});
-            };
-            const reader = response.body?.getReader();
-            if (reader) {
-              const decoder = new TextDecoder();
-              while (true) { const next=await reader.read(); if(next.done) break;
-                const chunk=decoder.decode(next.value,{stream:true}); if(chunk) sendChunk(chunk); }
-              const rest=decoder.decode(); if(rest) sendChunk(rest);
-            } else sendChunk(await response.text());
-            report({type:'end'});
-          } catch (_) { report({type:'error',code:abort.signal.aborted ? 'cancelled' : stage}); }
-          finally { delete window.__aascDoubaoAborts[arg.requestId]; }
-        })(__INPUT__)
-    """.trimIndent()
 }

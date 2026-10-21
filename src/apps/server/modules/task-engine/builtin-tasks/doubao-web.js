@@ -5,8 +5,7 @@ const { createChat2ApiRuntime } = require('../../chat2api/chat2api-runtime');
 const { createChat2ApiDataStore } = require('../../chat2api/chat2api-data-store');
 const { createDoubaoWebMediaService } = require('../../chat2api/chat2api-doubao-web-media');
 const { createDoubaoWebFileService } = require('../../chat2api/chat2api-doubao-web-file');
-const { createDoubaoBrowserBridge } = require('../../chat2api/chat2api-doubao-browser-bridge');
-const { createDoubaoAndroidBridge } = require('../../chat2api/chat2api-doubao-android-bridge');
+const { acquireDoubaoBrowserPort } = require('../../chat2api/chat2api-doubao-browser-port');
 const { normalizeDoubaoWebConfig } = require('../../chat2api/chat2api-doubao-web-config');
 const { activateDoubaoWebTask } = require('../../chat2api/chat2api-doubao-web-task-registry');
 
@@ -34,12 +33,11 @@ module.exports = {
       browserExecutable: context.params?.browserExecutable || 'vivaldi',
       debugPort: Number(context.params?.debugPort ?? 9224),
       accountId: context.params?.accountId || '' });
-    const bridge = context.doubaoBrowserBridge || (process.env.AASC_ANDROID_NODE === '1'
-      ? createDoubaoAndroidBridge({ accountId: config.accountId })
-      : createDoubaoBrowserBridge({
-        rootDir: context.chat2apiRootDir || DEFAULT_ROOT_DIR, getConfig: () => config,
-      }));
-    const deactivate = activateDoubaoWebTask(bridge, config);
+    const bridge = context.doubaoBrowserBridge || acquireDoubaoBrowserPort({
+      rootDir: context.chat2apiRootDir || DEFAULT_ROOT_DIR, config });
+    let deactivate;
+    try { deactivate = activateDoubaoWebTask(bridge, config); }
+    catch (error) { await bridge.stop().catch(() => {}); throw error; }
     const port = Number(context.params?.port ?? 9091);
     if (!Number.isInteger(port) || port < 1024 || port > 65535) {
       deactivate();

@@ -1,7 +1,16 @@
+### 豆包双平台共享JS与专用浏览器页签
+
+- ✅ [2026-10-22] 桌面CDP和Android WebView共用JS官网SDK准备、页内请求、流与取消；原生改为协议3受限执行桥，直连与网页任务复用浏览器端口租约。
+  - 新增page-runtime/browser-port，更新browser/Android桥、runtime、doubao.web任务及Kotlin服务，删除DoubaoWebViewNodePrepare.kt；保留签名私有持久化和原预算一次失败补发，当前Cookie只存内存，Referer统一替换。
+  - 修复普通请求related_deleted_message_ids误用[]，应为{}；补空容器类型断言。纠正上次“正文一致”比较遗漏，不将710020202泛化为所有场景相同根因。专用Vivaldi每账号复用一页，清理恢复/迟到冗余官网与空白页。
+  - npm run check:chat2api最终358/358、零跳过；Kotlin编译及账号/页缓存3/3。桌面及Note8隔离最新源码分别直连/网页首轮+同会话续聊，共8次Responses有正文且completed；桌面直连只prepare一次，专用浏览器现场1页。
+  - 精确清理8个测试官网会话全部status_code0，隔离运行时/设备测试目录/新增ADB转发/敏感抓取已清理，未写入当前AASC聊天。
+  - 最终min73已构建、v2签名验证成功，SHA-256为83f20e35cc47ec0d5936efe9c96512a3bb67e59fe38d9abb6ccbd4f77714aa3d，minApk=false/servicePackage=true。未发布，39正式进程未重启；手机验收后恢复min72以配合原code148，新服务与min73需配套部署。同步design/spec/task/usage/self-test/todo。
+
 ### 专用Vivaldi官网发送对照
 
 - ✅ [2026-10-21] 直接在DISPLAY=:1专用profile官网输入“早”并点击发送，收到ACK、正文及SSE_REPLY_END，页面回复“早呀☀️，今天打算做点什么？”，证明同profile官网UI当前可用。
-  - 当前源码构造正文除ID/随机键/时间戳一致；官网版本3.42.1对保存3.41.0，动态签名/tab/token、请求头和6项Cookie值不同，Cookie名称集合一致。Android先前成功实验具新模板及WebView SDK准备后Node HTTP2；桌面直连/页内fetch路径有差异，未证明某一字段为根因，未修改生产逻辑或账号。
+  - 早前正文比较遗漏空数组/空对象类型，2026-10-22已纠正related_deleted_message_ids默认值；官网版本3.42.1对保存3.41.0，动态签名/tab/token、请求头和6项Cookie值不同，Cookie名称集合一致。Android先前成功实验具新模板及WebView SDK准备后Node HTTP2；桌面直连/页内fetch路径有差异，未证明某一字段为根因，未修改生产逻辑或账号。
   - 仅本轮1个官网会话删除HTTP200/status_code0，临时私有抓取已删除，本轮浏览器关闭，原服务/浏览器保留。同步design/spec/task/self-test/todo；当前8083两传输修复仍待定位，无发布状态变更。
 
 ### 当前服务器豆包直连与网页复测

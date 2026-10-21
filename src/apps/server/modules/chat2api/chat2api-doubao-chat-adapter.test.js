@@ -346,3 +346,10 @@ test('三个模式都可mock聚合，思考/专家缺明确边界时不把未知
     }
   }
 });
+
+test('普通模式删除消息字段是JSON对象映射，不能以空数组替代空对象', () => {
+  const prepared = buildDoubaoRequest(input());
+  const wire = JSON.parse(JSON.stringify(prepared.data));
+  assert.equal(Array.isArray(wire.option.related_deleted_message_ids), false);
+  assert.deepEqual(wire.option.related_deleted_message_ids, {});
+});

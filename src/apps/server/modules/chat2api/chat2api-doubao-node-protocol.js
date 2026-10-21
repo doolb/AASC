@@ -56,7 +56,7 @@ const applyDoubaoNodeProtocol = ({ data, profile, cookieMap }) => {
       conversation_init_ext: { model_item_key: '0', reasoning_effort: '3', mode_id: '1' },
       is_old_user: true, general_task_param: { server_do_compare: true },
       recovery_option: { is_recovery: false, req_create_time_sec: Math.floor(now / 1000), append_sse_event_scene: 0 },
-      message_storage_type: 0, related_deleted_message_ids: [], connector_info_list: [],
+      message_storage_type: 0, related_deleted_message_ids: {}, connector_info_list: [],
       model_config: { model_item_key: '0', model_extra_params: {}, reasoning_effort: 3 },
       aggregate_params: { mention_skill_list: '[]', mention_plugin_list: '[]', mention_ext: '[{}]',
         conversation_mode: '1', mode_id: '1', model_item_key: '0', agent_mode: '2', reasoning_effort: '3', provider_id: '' },

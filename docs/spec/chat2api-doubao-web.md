@@ -1,12 +1,39 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 双平台共享JS浏览器业务伪代码（2026-10-22，已实现并隔离验收）
+
+```text
+已有声明 := Node消息构造/权威会话/签名私有存储/有限补发、桌面CDP、Android令牌IPC及WebView、内置网页任务参数
+新增定义 := 共享页面JS运行时、浏览器端口能力{初始化注入,执行JS,接收事件,Cookie存取,页面关闭}、同账号受管实例所有者
+桥接契约 := runtimeVersion=3；Node生成requestId、bootstrapScript及executeScript；Android POST /execute只验证授权/来源/脚本容量并执行，不再内嵌请求或签名JS；不支持版本的APK返回可识别升级错误
+桌面注入 := newPage → evaluateOnNewDocument共享bootstrap → goto官网 → exposeFunction事件通道 → 执行同一页面请求函数
+共享准备 := 文档开始保存底层fetch，按unique_key截留SDK处理后的本轮URL/非Cookie头，返回空Response，禁止准备操作真正发送消息；验证身份/路径/头后回到Node
+上下文刷新 := 只在固定官网资源中观察pc_version/doubao_pc_version/web_tab_id，发送前更新这三项，不覆盖device_id/web_id/fp身份；排除本模块自己的completion资源，避免旧请求污染最新官网上下文；保留本轮msToken，不从资源URL覆盖它；删除旧a_bogus/X-Bogus后由官网SDK处理签名
+官网LLM结构 := 普通模式related_deleted_message_ids为对象映射{}，不能用数组[]；捕获模板与静态构造均保留此类型，测试必须区分空数组和空对象
+共享SDK流程 := Node构造当前消息/权威会话 → 共享JS清除旧签名并调用官网SDK → 直连截留处理后的URL/头而不联网，网页模式实际fetch；不通过UI输入创建示例会话
+Cookie契约 := SDK准备后从平台Cookie API读取当前主站Cookie并再次校验sessionid；仅在内存签名条目携带同凭据的当前Cookie，不进入签名私有文件；重启仍从账号凭据开始，失效按既有一次重签恢复
+边界 := 保留账号级签名及原总时限一次补发；本轮每条消息和当前会话ID独立；避免为错误请求结构引入额外网页动作
+平台装配 := 桌面端口经CDP驱动独立profile；Android端口经本机IPC让WebView执行同一份页面JS；业务代码调用统一能力，不依赖具体平台调用方式
+页面业务 := 共享JS等待官网就绪 → SDK处理请求 → 选择只准备URL/头或网页实际发送 → 回传统一事件；共享取消、流容量与错误契约
+直连 := Node构造本轮消息/会话 → 查询既有账号级签名缓存 → 未命中时统一浏览器prepare → Node HTTP2发送 → 完整成功后提交缓存/权威状态
+网页 := Node构造本轮消息/会话 → 同一JS运行时在网页fetch → 统一流事件 → 既有Responses转换
+原生职责 := WebView主线程生命周期、Cookie系统API、固定来源约束、令牌IPC和JS事件桥；豆包SDK调用/请求脚本移至服务JS
+实例职责 := 协调直连与网页任务对同账号profile/端口/页面的占用；配置沿现有任务及AASC流程，不新增重复HTTP配置
+兼容约束 := 保留账号/凭据/模式隔离、签名持久化、关闭开关、原总时限内一次无输出失败补发及取消；旧APK能力不足须可识别，不能伪造执行成功
+验证 := 共享JS/两端口契约测试 → Node与网页Responses首轮/续聊 → 凭据变化/失败补发/取消/页面关闭 → 真Vivaldi及Android验收并清理仅测试数据
+页面数 := 桌面独立profile无启动窗口；同账号复用1个受管页，串行开页，连接/就绪后清理官网及空白冗余页，迟到恢复页同样收敛；停止等待开页收敛再关闭
+验收 := npm run check:chat2api 358/358；Kotlin编译+账号/缓存单测3/3；桌面及Android分别直连/网页首轮+续聊，共8次Responses正文非空且completed，桌面直连两轮prepare=1
+发布 := min73最终APK构建并验v2签名，minApk=false；servicePackage=true待构建部署；设备恢复min72以配合现有code148，正式39服务未重启；新协议服务与min73配套升级
+清理 := 精确确认8个测试官网会话删除status_code0 → 关闭隔离运行时/专用浏览器 → 删除测试代码数据/原始凭据抓取 → 去除新增ADB转发；不污染正式聊天
+```
+
 ## 专用Vivaldi官网UI对照伪代码（2026-10-21）
 
 ```text
 已有声明 := 正式豆包账号的独立profile、现有浏览器启动器、CDP只读观测、当前Node请求构造器
 流程 := DISPLAY=:1启动专用profile/CDP9224 → 新建官网页 → 等输入框可见 → 输入早 → 点击官网发送按钮 → 观察SSE及DOM
 成功断言 := 官网HTTP200、SSE_ACK/CHUNK_DELTA/SSE_REPLY_END、无非零业务码；DOM为早呀☀️，今天打算做点什么？
-正文差分 := 当前源码构造与成功官网请求的键和值一致，排除会话/消息/块ID、unique_key与时间戳
+正文差分修正 := 早前递归比较忽略空数组/空对象类型；related_deleted_message_ids静态[]与官网{}不同，2026-10-22已修复并补JSON类型断言；其余ID/unique_key/时间戳本就独立
 URL差分 := 官网新增a_bogus；两个网页版本3.42.1对保存3.41.0；web_tab_id/msToken不同
 头差分 := 官网Accept=*/*、Referer当前local会话页、agw-js-conv=str, str及浏览器附加头；构造为text/event-stream、/chat/、str；UA/Content-Type一致
 Cookie差分 := 名称集合相同，去重28项，6项值更新；sessionid未变化；不输出值

@@ -9,7 +9,7 @@ test('媒体临时官网页在流结束后关闭，聊天页可按会话复用',
   const pages = [];
   const browser = { newPage: async () => {
     const page = { closed: false, isClosed() { return this.closed; },
-      goto: async () => {}, url: () => 'https://www.doubao.com/chat/',
+      goto: async () => {}, evaluateOnNewDocument: async () => {}, url: () => 'https://www.doubao.com/chat/',
       createCDPSession: async () => ({ send: async () => ({ cookies: [
         { name: 'sessionid', domain: '.doubao.com', value: 'session-1234567890123456' },
       ] }), detach: async () => {} }),
@@ -43,7 +43,7 @@ test('媒体临时官网页在流结束后关闭，聊天页可按会话复用',
 
 test('官网同时有www与父域sessionid时，以www账号身份核对', async () => {
   const browser = { newPage: async () => ({
-    isClosed: () => false, goto: async () => {}, url: () => 'https://www.doubao.com/chat/',
+    isClosed: () => false, goto: async () => {}, evaluateOnNewDocument: async () => {}, url: () => 'https://www.doubao.com/chat/',
     createCDPSession: async () => ({ send: async () => ({ cookies: [
       { name: 'sessionid', domain: 'www.doubao.com', value: 'www-session-1234567890123456' },
       { name: 'sessionid', domain: '.doubao.com', value: 'domain-session-1234567890123456' },
@@ -66,4 +66,22 @@ test('官网同时有www与父域sessionid时，以www账号身份核对', async
     credentials: { cookie: 'sessionid=domain-session-1234567890123456' } }, prepared }),
   { code: 'doubao_browser_auth' });
   await bridge.stop();
+});
+
+test('停止期间等待中的浏览器启动不能迟到创建页面，停止后拒绝继续操作', async () => {
+  let release, entered, pages = 0, closes = 0;
+  const starting = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const bridge = createDoubaoBrowserBridge({ getConfig: () => ({ mode: 'browser-fetch' }),
+    launcher: { open: async () => { entered(); await gate; return { newPage: async () => { pages += 1; } }; },
+      close: async () => { closes += 1; } } });
+  const options = { account: { accountId: 'one', providerId: 'doubaochat', credentials: {} },
+    prepared: { url: 'https://www.doubao.com/chat/completion', data: {} } };
+  const pending = bridge.request(options);
+  const rejected = assert.rejects(pending, { code: 'doubao_browser_disabled' });
+  await starting;
+  const stopped = bridge.stop();
+  release(); await stopped; await rejected;
+  assert.equal(pages, 0); assert.equal(closes, 1);
+  await assert.rejects(bridge.request(options), { code: 'doubao_browser_disabled' });
 });

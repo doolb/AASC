@@ -1,10 +1,24 @@
 # 豆包网页账号Node文字与朗读 TTS 设计
 
+## 双平台共享JS浏览器业务（2026-10-22，已实现并隔离验收）
+
+桌面与Android共用 `chat2api-doubao-page-runtime.js` 的官网SDK准备、页内fetch、流事件及取消业务。`chat2api-doubao-browser-port.js` 按用户目录协调主代理与网页任务的桥接租约；桌面通过CDP/Puppeteer执行，Android通过受令牌保护的 `/execute` 让WebView执行同一脚本。原生仅保留生命周期、Cookie系统API、来源/容量约束和事件传递，删除内嵌 `DoubaoWebViewNodePrepare.kt`。消息、权威会话、账号签名缓存/私有持久化、原总预算一次无输出失败补发仍由现有Node适配器处理。
+
+普通直连缓存未命中时先经官网SDK准备URL与非Cookie头，平台读取并核对当前账号Cookie，再由Node HTTP/2实际发送；网页模式由共享JS实际fetch。Cookie只进入内存请求，不进入私有签名文件。页面观察到的版本/tab参数可刷新，不改设备身份；保留本轮msToken，由SDK处理签名。准备操作按unique_key截留SDK底层fetch并返回空响应，不创建示例聊天。
+
+本次找到桌面 `710020202` 的具体请求结构差异：普通模式 `related_deleted_message_ids` 应为对象 `{}`，静态默认误用了数组 `[]`。此前差分把空数组和空对象都视为无键对象，错误判断正文一致；Android旧实验的新采集模板包含正确类型，覆盖默认值。修正默认结构并补类型回归后，两端首轮及续聊均成功。此结论覆盖本次样本，不将该上游业务码泛化为所有场景同一原因。
+
+用户反馈Vivaldi页签太多：独立profile启动不自动打开官网页，每账号只复用一个受管页签；连接和官网就绪后收敛恢复页，监听迟到恢复页。只处理专用profile里的官网/空白冗余页，不操作普通浏览器profile或用户其它网站。
+
+验证：完整Chat2API 358/358；Kotlin编译与账号/页缓存单测3/3。192.168.1.39当前源码隔离运行时及Note8/min73各验证直连/网页首轮+同会话续聊，共8次Responses有正文且completed，桌面直连两轮只准备一次签名。测试会话逐个精确清理8个，全部status_code0；隔离进程、设备测试目录和新增转发清理，正式账号/AASC对话未写入测试消息。
+
+最终min73 APK已构建并通过v2签名校验，SHA-256 `83f20e35cc47ec0d5936efe9c96512a3bb67e59fe38d9abb6ccbd4f77714aa3d`；服务包尚未构建发布。新 `/execute` 协议需服务与min73配套；为保留手机当前code148服务可用性，验收后恢复原min72。正式192.168.1.39进程未重启；部署、正式入口及更长时间签名复用仍待验收，不能把隔离成功记为已上线。
+
 ## 专用profile官网按钮对照（2026-10-21）
 
 按用户要求，在DISPLAY=:1重新打开同账号独立profile的Vivaldi/CDP9224；新建官网页，通过可见输入框键入“早”并点击官网发送按钮。官网HTTP200，收到SSE_ACK、FULL_MSG_NOTIFY、STREAM_MSG_NOTIFY、STREAM_CHUNK、CHUNK_DELTA和SSE_REPLY_END，无非零业务码；页面实际显示“早呀☀️，今天打算做点什么？”。这说明该profile当前能通过官网UI聊天，不能将前次兼容请求失败当作登录失效或整个浏览器不能发送。
 
-对照当前源码buildDoubaoRequest：正文全部键和值一致，除独立会话/消息/块ID、unique_key及两个时间戳；缺requestProfile并不等同于正文缺字段。URL存在新a_bogus，官网pc_version/doubao_pc_version=3.42.1、保存资料3.41.0，web_tab_id/msToken不同；官网Referer是本次local会话页、Accept=*/*、agw-js-conv=str, str，构造值为/chat/、text/event-stream、str；官网还带浏览器client hints、fetch metadata、x-flow-trace等。UA与Content-Type一致。浏览器与保存主站快照Cookie名称集合一致（去重28个，原快照30项），但6个值变化；sessionid不在变化集合。没有进行单变量试验，不能将某一字段定为根因。
+对照当前源码buildDoubaoRequest：当时比较报告为正文除ID/unique_key/时间戳一致；2026-10-22已纠正该结论：比较漏掉空数组与空对象的类型，related_deleted_message_ids默认[]应为{}。缺requestProfile使错误静态类型暴露。URL存在新a_bogus，官网pc_version/doubao_pc_version=3.42.1、保存资料3.41.0，web_tab_id/msToken不同；官网Referer是本次local会话页、Accept=*/*、agw-js-conv=str, str，构造值为/chat/、text/event-stream、str；官网还带浏览器client hints、fetch metadata、x-flow-trace等。UA与Content-Type一致。浏览器与保存主站快照Cookie名称集合一致（去重28个，原快照30项），但6个值变化；sessionid不在变化集合。没有进行单变量试验，不能将某一字段定为根因。
 
 平台区别：此前Android成功是隔离的新源码/账号/Responses实验，具有重新采集的requestProfile；Android普通Node先让WebView官网SDK处理URL/头，再Node HTTP2发送。桌面签名准备仅在注入prepareNodeRequest或Android环境时启用，当前账号没有requestProfile时直连走普通HTTP客户端；桌面兼容则在网页内fetch发送Node构造请求，并非本轮点击官网按钮的完整官网UI流程。旧运行进程和当前源码必须分开判断，不能把本轮源码字段比较冒充旧进程所有实际请求。
 

@@ -38,7 +38,7 @@ const createDoubaoBrowserLauncher = ({ rootDir, spawnBrowser = spawn, connect,
     if (occupied) throw new Error('doubao_browser_port_busy');
     child = spawnBrowser(config.browserExecutable, [
       `--user-data-dir=${directory}`, `--remote-debugging-port=${config.debugPort}`,
-      '--remote-debugging-address=127.0.0.1', '--no-first-run', 'https://www.doubao.com/chat/',
+      '--remote-debugging-address=127.0.0.1', '--no-first-run', '--no-startup-window',
     ], { shell: false, stdio: 'ignore', env: {
       ...process.env,
       ...(process.platform === 'linux' && !process.env.DISPLAY ? { DISPLAY: ':1' } : {}),

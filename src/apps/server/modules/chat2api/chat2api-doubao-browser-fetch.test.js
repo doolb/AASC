@@ -8,7 +8,7 @@ const mockPage = packets => {
   let callback;
   let aborted = false;
   return {
-    exposeFunction: async (name, handler) => { callback = handler; },
+    exposeFunction: async (name, handler) => { if (name !== '__aascDoubaoInsertText') callback = handler; },
     evaluate: async (fn, input) => {
       if (typeof input === 'string') { aborted = true; return; }
       for (const packet of packets) await callback({ requestId: input.requestId, ...packet });

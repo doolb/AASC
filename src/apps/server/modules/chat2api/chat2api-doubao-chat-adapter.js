@@ -45,9 +45,15 @@ const ERROR_DEFINITIONS = Object.freeze({
   doubao_session_conflict: [409, '豆包会话的账号、登录身份或模式不匹配，请新建会话'],
   doubao_session_uncertain: [409, '豆包上游会话位置已不确定，请新建会话'],
   doubao_browser_disabled: [503, '豆包网页任务尚未启动，请启动 doubao.web 后重试'],
+  doubao_browser_prepare: [502, '豆包浏览器签名准备失败，请重新登录后重试'],
+  doubao_browser_auth: [401, '豆包专用浏览器未登录当前账号，请重新登录'],
+  doubao_browser_account: [409, '豆包专用浏览器与所选账号不一致'],
+  doubao_browser_busy: [409, '豆包专用浏览器正在处理另一请求，请稍后重试'],
+  doubao_browser_page: [502, '豆包专用浏览器页面尚未就绪，请稍后重试'],
+  doubao_browser_upstream: [502, '豆包专用浏览器连接失败，请稍后重试'],
   doubao_android_prepare: [502, 'Android豆包当次签名生成失败，请更新APK或重新登录后重试'],
   doubao_android_unavailable: [503, 'Android豆包签名服务未就绪，请安装最新min APK'],
-  doubao_android_upgrade_required: [503, '当前APK不支持签名后关闭页面，请更新min APK或关闭此开关'],
+  doubao_android_upgrade_required: [503, '当前APK不支持所需的豆包浏览器能力，请更新min APK'],
   doubao_android_webview: [503, 'Android豆包网页未登录或签名接口不可用，请更新APK或重新登录'],
 });
 
@@ -576,19 +582,28 @@ const createDoubaoNodeSignatureCache = (storage) => {
       .every(field => entries.get(key)?.[field] === entry[field]);
     return {
       // 每轮的正文、时间、消息标识与Cookie仍使用本轮构造结果，只复用已签名URL和SDK头。
-      apply: prepared => entry ? { ...prepared, url: entry.url,
-        headers: { ...entry.headers, Cookie: prepared.headers.Cookie }, doubaoHttp2: true } : null,
+      apply: prepared => {
+        if (!entry) return null;
+        // 兼容旧缓存中的Referer大小写，不能同时写入Referer和referer而使私有条目失效。
+        const headers = Object.fromEntries(Object.entries(entry.headers).filter(([name]) => name.toLowerCase() !== 'referer'));
+        return { ...prepared, url: entry.url,
+          headers: { ...headers, Cookie: entry.cookie || prepared.headers.Cookie,
+            referer: DOUBAO_ORIGIN + '/chat/' + encodeURIComponent(prepared.data?.client_meta?.conversation_id
+              || prepared.data?.client_meta?.local_conversation_id || '') }, doubaoHttp2: true };
+      },
       complete: async (prepared, state) => {
         if (!key || state.status !== 'ready' || !state.conversationId) return;
         const headers = { ...prepared.headers };
         delete headers.Cookie;
         delete headers.cookie;
-        entry = { fingerprint, mode, upstreamId: state.conversationId, url: prepared.url, headers };
+        entry = { fingerprint, mode, upstreamId: state.conversationId, url: prepared.url, headers,
+          cookie: prepared.headers.Cookie };
         entries.delete(key);
         entries.set(key, entry);
         // 固定容量的LRU按账号/模式限制内存；旧私有会话条目在成功保存时归并。
         while (entries.size > 128) entries.delete(entries.keys().next().value);
-        try { await storage?.put(key, entry); } catch { /* 已成功的回复不因缓存写盘失败而失败。 */ }
+        const { cookie, ...persisted } = entry;
+        try { await storage?.put(key, persisted); } catch { /* 已成功的回复不因缓存写盘失败而失败。 */ }
       },
       invalidate: async error => {
         // 旧请求的迟到错误不得清除同键后来更新的新签名URL。
@@ -645,12 +660,13 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     let signatureScope;
     try {
       control.check();
-      // Android普通模式复用同账号/凭据/模式签名，正文仍由本次请求独立构建并交Node发送。
-      if (transportMode === 'node-http' && (prepareNodeRequest || process.env.AASC_ANDROID_NODE === '1')) {
+      // 两个平台共用浏览器SDK准备及账号签名缓存，正文仍由本轮独立构建并交Node发送。
+      if (transportMode === 'node-http' && (prepareNodeRequest || browserBridge?.prepare || process.env.AASC_ANDROID_NODE === '1')) {
         execution.nodeSigning = true;
         signatureScope = await control.wait(signatureCache({ account, mode, sessionFlow, forceFresh: execution.retried }));
         execution.signatureScope = signatureScope;
-        const prepare = prepareNodeRequest || (options => createDoubaoAndroidBridge().prepare(options));
+        const prepare = prepareNodeRequest || (browserBridge?.prepare
+          ? options => browserBridge.prepare(options) : options => createDoubaoAndroidBridge().prepare(options));
         prepared = signatureScope.apply(prepared)
           || await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs },
             closeAfterPrepare: getDoubaoWebViewSettings()?.closeAfterSign === true }));
@@ -750,7 +766,8 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
   };
   const retryCodes = new Set(['doubao_auth_expired', 'doubao_risk_control', 'doubao_rate_limited',
     'doubao_upstream_failed', 'doubao_protocol_error', 'doubao_incomplete_response', 'doubao_empty_response',
-    'doubao_android_prepare', 'doubao_android_unavailable', 'doubao_android_webview']);
+    'doubao_android_prepare', 'doubao_android_unavailable', 'doubao_android_webview',
+    'doubao_browser_prepare', 'doubao_browser_page', 'doubao_browser_upstream']);
   return async input => {
     const execution = { deadlineAt: Date.now() + limits.timeoutMs, retried: false, receivedOutput: false, stopped: false };
     const refreshForRetry = async error => {
