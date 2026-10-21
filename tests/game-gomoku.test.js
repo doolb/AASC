@@ -419,6 +419,13 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
         ['GameAI · 列表', 'GM · 当前支持：五子棋', 'GameAI · 规则']);
     const rules = inputs[2].input.slice('Game:五子棋,GM,规则,'.length);
     assert.ok(rules);
+    assert.match(rules, /棋力：普通、专业、资深，默认普通/);
+    assert.match(rules, /用户要求切换档位时按新档执行，未要求时沿用当前档/);
+    assert.match(rules, /所有档位落子前都先读最新棋盘，确认轮次、坐标和空位/);
+    assert.match(rules, /普通：优先自己连五，其次阻止对方下一手连五/);
+    assert.match(rules, /专业：在普通基础上，优先制造和化解活四、冲四、活三/);
+    assert.match(rules, /资深：在专业基础上，比较多个候选点，推演双方后续应手/);
+    assert.match(rules, /信息不足时先查看棋盘，不凭历史叙述猜测位置/);
     assert.match(rules, /GM快照字段：短编号,版本,尺寸,下一手,结果,棋盘编码/);
     assert.match(rules, /棋盘用\/从上到下分行，每行从左到右对应A至末列，第一行是第1行/);
     assert.match(rules, /第3行第3列是C3/);
