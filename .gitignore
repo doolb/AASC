@@ -67,3 +67,7 @@ src/apps/android-display/.kotlin/
 /src/apps/web-mediacenter/ui/public/mmd/
 /src/apps/web-mediacenter/ui/public/mmd-actions.json
 /src/apps/web-mediacenter/ui/public/js/vendor/mmd-mpl/
+
+# 豆包会话签名仅保存于本机私有配置，不得提交认证参数。
+doubao-signatures.json
+doubao-signatures.json.*.tmp

@@ -1,3 +1,10 @@
+### 豆包签名持久化与签名后关闭页面
+
+- ✅ [2026-10-21] 成功签名保存到Chat2API私有文件，APK/Node重启后只对相同账号、凭据及权威会话复用；新增默认关闭的“签名成功后关闭WebView”开关。
+  - 新增 `chat2api-doubao-signature-store.js`，0600原子文件、128项/4MiB限制、同目录写队列、固定官网及非Cookie头校验；runtime/provider/adapter接入成功后保存、匹配恢复及失效删除，失败仍只重签补发一次。签名不进入普通配置、导出、nativeState或Git，写盘失败不改变成功回复。
+  - 新增 `chat2api-doubao-webview-settings.js`，控制端通过WS→config.set→权威广播保存开关，断线默认与重连/晚加载补拉；Android bridge只向prepare传关闭标记并校验原生确认。`DoubaoWebViewService.kt`等待主线程销毁对应页面后结束，保留Cookie且可重建，新增页面缓存避免迟到关闭误伤新页；兼容和登录页不关闭。
+  - 定向40/40、完整Chat2API 345/345、Kotlin页面与账号3/3通过，零跳过；UI晚加载修正2/2，语法与差异检查通过。同步design/spec/task/self-test/usage/todo；`servicePackage=true`、`minApk=true`，尚未构建或安装新APK，原生关闭/官方重签与正式重启待真机验收。
+
 ### 豆包签名后WebView生命周期说明
 
 - ✅ [2026-10-21] 核对Android现有实现：签名结束仅清理请求和租约，后台WebView继续保留；账号恢复资料/登录态变化时重建，服务销毁时关闭。

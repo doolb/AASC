@@ -11,11 +11,12 @@ const event = (type,data={}) => `event: ${type}\ndata: ${JSON.stringify(data)}\n
 const parts = (id,text='OK') => [event('SSE_ACK',{ack_client_meta:{conversation_id:id}}),event('CHUNK_DELTA',{text}),event('SSE_REPLY_END')];
 const clone = value => JSON.parse(JSON.stringify(value));
 const setup = (options={}) => {
-  const collections={responsesSessions:[]}, calls=[];
+  const collections=options.collections||{responsesSessions:[]}, calls=[];
   const account={accountId:'mock-account',providerId:'doubaochat',enabled:true,status:'active',credentials:{
     cookie:'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789; s_v_web_id=verify_mock_123456789',
     nodeProfile:{deviceId:'1234567890123456789',webId:'9876543210123456789',fp:'verify_mock_123456789',userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/148.0.0.0'},
   }};
+  if(options.credentialRevision)account.credentialRevision=options.credentialRevision;
   const provider={id:'doubaochat',enabled:true,apiEndpoint:'https://www.doubao.com',chatPath:'/chat/completion'};
   const dataStore={readCollection:async(name,fallback)=>clone(collections[name]||fallback),writeCollection:async(name,value)=>{if(options.beforeSave)await options.beforeSave(name,value);collections[name]=clone(value)},getAccount:async()=>clone(account),listAccounts:async()=>[{accountId:account.accountId,providerId:'doubaochat',secretConfigured:true}],listDoubaoNodeAccountIds:async()=>[account.accountId]};
   const store=createChat2ApiResponseSessionStore({dataStore});
@@ -26,7 +27,8 @@ const setup = (options={}) => {
     return {status:options.status?.(calls.length)||200,headers:{'content-type':'text/event-stream'},data:source};
   }};
   const adapter=createDoubaoChatAdapter({limits:{timeoutMs:options.timeoutMs||1000},httpClient:transport,
-    http2Client:transport,prepareNodeRequest:options.prepareNodeRequest});
+    http2Client:transport,prepareNodeRequest:options.prepareNodeRequest,signatureStore:options.signatureStore,
+    getDoubaoWebViewSettings:options.getDoubaoWebViewSettings});
   const core=createChat2ApiCoreAdapter({dataStore,providerRegistry:{listProviders:async()=>[provider]},modelMapper:{resolveModel:async model=>({actualModel:model})},loadBalancer:{selectAccount:async()=>({provider,account:{accountId:account.accountId}}),markAccountFailed(){}},getDoubaoWebConfig:()=>{throw Error('no_browser')},providerAdapters:{doubaochat:adapter}});
   const service=createChat2ApiResponsesService({sessionStore:store,coreAdapter:core,doubaoSessionTimeoutMs:options.timeoutMs||1000});
   return {service,store,dataStore,collections,calls,core};
@@ -341,4 +343,50 @@ test('Responses已输出正文或思考后失败不重放，即使非流式也�
     }else await assert.rejects(()=>f.service.createResponse(request),error=>error.code==='doubao_risk_control');
     assert.equal(prepared,1);assert.equal(f.calls.length,2);
   }
+});
+
+test('Responses重建服务后从私有文件复用原会话签名，失效刷新并覆盖；新会话/凭据重签',async t=>{
+  const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
+  const {createDoubaoSignatureStore}=require('./chat2api-doubao-signature-store');
+  const rootDir=await fs.mkdtemp(path.join(os.tmpdir(),'aasc-response-signature-'));
+  t.after(()=>fs.rm(rootDir,{recursive:true,force:true}));
+  let signatures=0,closeAfterSign=true;
+  const prepare=async({prepared,closeAfterPrepare})=>{
+    assert.equal(closeAfterPrepare,closeAfterSign);signatures++;
+    return {...prepared,url:prepared.url+'&a_bogus=persisted_'+signatures,doubaoHttp2:true};
+  };
+  const fresh=extra=>setup({signatureStore:createDoubaoSignatureStore({rootDir}),prepareNodeRequest:prepare,
+    getDoubaoWebViewSettings:()=>({closeAfterSign}),...extra});
+  const firstRuntime=fresh();
+  const first=await firstRuntime.service.createResponse({model:'doubao',input:'早',stream:true});
+  const events=[];for await(const event of first.stream)events.push(event);
+  const firstId=events.at(-1).response.id;
+  const conversationId=events.at(-1).response.conversation.id;
+  const reboot=fresh({collections:firstRuntime.collections});
+  const second=await reboot.service.createResponse({model:'doubao',previous_response_id:firstId,input:'晚上好'});
+  assert.equal(signatures,1);assert.equal(reboot.calls[0].url,firstRuntime.calls[0].url);
+  const retry=fresh({collections:reboot.collections,status:index=>index===1?403:200});
+  await retry.service.createResponse({model:'doubao',previous_response_id:second.body.id,input:'今天怎么样？'});
+  assert.equal(signatures,2);assert.equal(retry.calls.length,2);
+  assert.deepEqual(retry.calls[0].data,retry.calls[1].data);
+  const saved=await createDoubaoSignatureStore({rootDir}).get(JSON.stringify(['mock-account',conversationId]));
+  assert.equal(saved.url,retry.calls[1].url);
+  closeAfterSign=false;
+  const changed=fresh({collections:retry.collections,credentialRevision:'after-refresh'});
+  await changed.service.createResponse({model:'doubao',previous_response_id:second.body.id,input:'凭据更新后'});
+  assert.equal(signatures,3);
+  await changed.service.createResponse({model:'doubao',input:'新的聊天'});assert.equal(signatures,4);
+  assert.doesNotMatch(JSON.stringify(changed.collections),/persisted_|a_bogus/u);
+});
+
+test('Responses签名写盘失败不改变已成功聊天，失败流不提交签名',async()=>{
+  let saves=0;
+  const signatureStore={get:async()=>null,put:async()=>{saves++;throw Error('mock private write failed');},delete:async()=>true};
+  const prepareNodeRequest=async({prepared})=>({...prepared,url:prepared.url+'&a_bogus=private',doubaoHttp2:true});
+  const success=setup({signatureStore,prepareNodeRequest});
+  const result=await success.service.createResponse({model:'doubao',input:'早'});
+  assert.equal(result.body.status,'completed');assert.equal(saves,1);
+  const failed=setup({signatureStore,prepareNodeRequest,source:()=>Readable.from([event('STREAM_ERROR',{error_code:710022004})])});
+  await assert.rejects(()=>failed.service.createResponse({model:'doubao',input:'早'}),error=>error.code==='doubao_risk_control');
+  assert.equal(saves,1);assert.equal(failed.calls.length,2);
 });

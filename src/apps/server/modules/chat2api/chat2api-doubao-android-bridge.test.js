@@ -75,3 +75,24 @@ test('Android Node签名准备只接收同身份动态参数，Cookie和消息�
     await assert.rejects(()=>bridge.prepare(args),error=>error.code==='doubao_android_prepare');packet=saved;
   }
 });
+
+test('关闭开关只进入prepare；收到原生关闭确认才成功，旧APK明确提示更新',async()=>{
+  const url='https://www.doubao.com/chat/completion?aid=497858&device_id=123&web_id=456&fp=verify_mock_123456';
+  let acknowledged=true,lastBody;
+  const bridge=createDoubaoAndroidBridge({port:19092,token:'f'.repeat(64),fetchClient:async(address,options)=>{
+    lastBody=JSON.parse(options.body);
+    const values=address.endsWith('/prepare')?[{type:'prepared',url:url+'&a_bogus=current',headers:{
+      origin:'https://www.doubao.com','user-agent':credentials.nodeProfile.userAgent}},
+      {type:'end',...(acknowledged?{webViewClosed:true}:{})}]
+      :[{type:'response',status:200,headers:{}},{type:'end'}];
+    return {ok:true,body:Readable.from(values.map(item=>Buffer.from(JSON.stringify(item)+'\n')))};
+  }});
+  const args={account:{accountId:'one',providerId:'doubaochat',credentials},
+    prepared:{url,data:{messages:[]},headers:{Cookie:credentials.cookie}}};
+  await bridge.prepare({...args,closeAfterPrepare:true});assert.equal(lastBody.closeAfterPrepare,true);
+  acknowledged=false;
+  await assert.rejects(()=>bridge.prepare({...args,closeAfterPrepare:true}),error=>error.code==='doubao_android_upgrade_required');
+  await bridge.prepare(args);assert.equal(lastBody.closeAfterPrepare,false);
+  const response=await bridge.request({...args,closeAfterPrepare:true});for await(const value of response.data)void value;
+  assert.equal(Object.hasOwn(lastBody,'closeAfterPrepare'),false);
+});

@@ -936,9 +936,9 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
 };
 
 const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig, onDoubaoChatVerified,
-  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
+  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport, getDoubaoWebViewSettings, doubaoSignatureStore } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
   providerId === 'doubaochat' ? createDoubaoChatAdapter({ httpClient, browserBridge: doubaoBrowserBridge,
-    getTransport: getDoubaoTransport, onChatVerified: onDoubaoChatVerified,
+    getTransport: getDoubaoTransport, getDoubaoWebViewSettings, signatureStore: doubaoSignatureStore, onChatVerified: onDoubaoChatVerified,
     onBrowserChatVerified: onDoubaoBrowserChatVerified }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig }),
 ]));
 

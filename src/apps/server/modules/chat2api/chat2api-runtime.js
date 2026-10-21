@@ -9,6 +9,7 @@ const { createChat2ApiManagementService } = require('./chat2api-management-servi
 const { createChat2ApiProviderAdapters } = require('./chat2api-provider-adapters');
 const { createRawTrafficLogger } = require('./chat2api-raw-traffic-logger');
 const { createChat2ApiResponseSessionStore } = require('./chat2api-response-session-store');
+const { createDoubaoSignatureStore } = require('./chat2api-doubao-signature-store');
 const { createChat2ApiResponsesService } = require('./chat2api-responses-service');
 const { createChat2ApiQwenHistoryService } = require('./chat2api-qwen-history-service');
 const { createChat2ApiCredentialValidators } = require('./chat2api-credential-validators');
@@ -44,7 +45,9 @@ const createChat2ApiRuntime = (options = {}) => {
     loadBalancer,
     providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig,
       doubaoBrowserBridge: options.doubaoBrowserBridge || doubaoWebTaskBridge,
-      getDoubaoTransport,
+      getDoubaoTransport, getDoubaoWebViewSettings: options.getDoubaoWebViewSettings,
+      doubaoSignatureStore: options.doubaoSignatureStore || (dataStore.rootDir
+        ? createDoubaoSignatureStore({ rootDir: dataStore.rootDir }) : undefined),
       onDoubaoChatVerified: account => dataStore.markDoubaoNodeChatVerified?.(account.accountId, accountCredentialVersion(account)),
       onDoubaoBrowserChatVerified: account => dataStore.markDoubaoBrowserChatVerified?.(account.accountId, accountCredentialVersion(account)) }),
   });

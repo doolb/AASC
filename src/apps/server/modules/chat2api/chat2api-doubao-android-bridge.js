@@ -16,7 +16,7 @@ const createDoubaoAndroidBridge = ({ port = Number(process.env.AASC_DOUBAO_WEBVI
     throw bridgeError('doubao_android_unavailable', 'Android 豆包网页服务未就绪', 503);
   }
   const active = new Set();
-  const request = async ({ account, prepared, signal, limits = {}, prepareOnly = false }) => {
+  const request = async ({ account, prepared, signal, limits = {}, prepareOnly = false, closeAfterPrepare = false }) => {
     if (!account || account.providerId !== 'doubaochat' || (accountId && account.accountId !== accountId)) {
       throw bridgeError('doubao_android_account', '豆包网页账号不匹配', 409);
     }
@@ -55,6 +55,7 @@ const createDoubaoAndroidBridge = ({ port = Number(process.env.AASC_DOUBAO_WEBVI
         method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url.href, payload: prepared.data, bodyType: prepared.bodyType || 'json',
+          ...(prepareOnly ? { closeAfterPrepare: closeAfterPrepare === true } : {}),
           method, customHeaders: prepared.customHeaders || {}, sessionId: expectedSession, restore, contentType,
           maxBytes: Math.min(limits.streamBytes || 8 * 1024 * 1024, 32 * 1024 * 1024) }),
       });
@@ -62,7 +63,7 @@ const createDoubaoAndroidBridge = ({ port = Number(process.env.AASC_DOUBAO_WEBVI
         'Android 豆包网页未登录或页面不可用', response.status);
       if (prepareOnly) {
         try {
-          let raw = '', packet, ended = false;
+          let raw = '', packet, ended = false, pageClosed = false;
           const decoder = new TextDecoder();
           for await (const chunk of response.body) {
             raw += decoder.decode(chunk, { stream: true });
@@ -76,10 +77,13 @@ const createDoubaoAndroidBridge = ({ port = Number(process.env.AASC_DOUBAO_WEBVI
               if (packet) throw bridgeError('doubao_android_prepare', '豆包当次签名重复');
               packet = value;
             }
-            if (value.type === 'end') ended = true;
+            if (value.type === 'end') { ended = true; pageClosed = value.webViewClosed === true; }
           }
           if (!ended || !packet || typeof packet.url !== 'string' || packet.url.length > 16384) {
             throw bridgeError('doubao_android_prepare', '豆包当次签名未完整返回');
+          }
+          if (closeAfterPrepare === true && !pageClosed) {
+            throw bridgeError('doubao_android_upgrade_required', '当前APK不支持签名后关闭页面，请更新min APK或关闭此开关', 503);
           }
           const signed = validateCompletionUrl(packet.url);
           if (signed.pathname !== url.pathname || !signed.searchParams.get('a_bogus')

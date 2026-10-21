@@ -4,6 +4,62 @@
   const Chat2APIControl = {
     baseUrl: 'http://127.0.0.1:8080',
     loginSession: null,
+    doubaoWebViewConfig: { closeAfterSign: false },
+    doubaoWebViewReady: false,
+    doubaoWebViewPending: null,
+
+    renderDoubaoWebViewConfig() {
+      const input = document.getElementById('chat2apiCloseWebViewAfterSign');
+      if (!input) return;
+      input.checked = this.doubaoWebViewConfig.closeAfterSign;
+      input.disabled = !this.doubaoWebViewReady || !!this.doubaoWebViewPending;
+    },
+
+    handleDoubaoWebViewConfig(data) {
+      if (typeof data.closeAfterSign !== 'boolean') return;
+      this.doubaoWebViewConfig = { closeAfterSign: data.closeAfterSign };
+      this.doubaoWebViewReady = true;
+      if (this.doubaoWebViewPending && this.doubaoWebViewPending.requestId === data.requestId) {
+        clearTimeout(this.doubaoWebViewPending.timer);
+        this.doubaoWebViewPending = null;
+        this.message(data.success === false ? (data.message || '保存失败') : '签名页面开关已保存，下次获取签名时生效。', data.success === false);
+      }
+      this.renderDoubaoWebViewConfig();
+    },
+
+    handleDoubaoWebViewDisconnected() {
+      if (this.doubaoWebViewPending) clearTimeout(this.doubaoWebViewPending.timer);
+      this.doubaoWebViewPending = null;
+      this.doubaoWebViewReady = false;
+      this.doubaoWebViewConfig = { closeAfterSign: false };
+      this.renderDoubaoWebViewConfig();
+    },
+
+    handleDoubaoWebViewConnected() {
+      this.handleDoubaoWebViewDisconnected();
+      window.WebSocketManager?.ws?.send(JSON.stringify({ type: 'getDoubaoWebViewConfig' }));
+    },
+
+    saveDoubaoWebViewConfig(value) {
+      const ws = window.WebSocketManager?.ws;
+      if (!this.doubaoWebViewReady || this.doubaoWebViewPending || !ws || ws.readyState !== WebSocket.OPEN) {
+        this.renderDoubaoWebViewConfig();
+        this.message('连接未就绪，请等待配置同步。', true);
+        return;
+      }
+      const requestId = 'doubao-webview-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const timer = setTimeout(() => {
+        this.doubaoWebViewPending = null;
+        this.doubaoWebViewReady = false;
+        this.renderDoubaoWebViewConfig();
+        this.message('配置保存等待超时，正在重新同步。', true);
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'getDoubaoWebViewConfig' }));
+      }, 8000);
+      this.doubaoWebViewPending = { requestId, timer };
+      this.renderDoubaoWebViewConfig();
+      try { ws.send(JSON.stringify({ type: 'setDoubaoWebViewConfig', requestId, closeAfterSign: value === true })); }
+      catch (error) { this.handleDoubaoWebViewDisconnected(); this.message('配置发送失败，请等待重连。', true); }
+    },
 
     escapeHtml(value) {
       return String(value == null ? '' : value)
@@ -36,6 +92,11 @@
     async open(addressText, instanceId) {
       this.setProxyAddress(addressText, instanceId);
       this.ensureModal();
+      // 面板脚本若晚于首次WS快照加载，打开时补拉权威值，避免一直停留在禁用默认态。
+      const ws = window.WebSocketManager?.ws;
+      if (!this.doubaoWebViewReady && ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'getDoubaoWebViewConfig' }));
+      }
       document.getElementById('chat2apiModal').style.display = 'flex';
       await this.refresh();
     },
@@ -137,9 +198,10 @@
       const mappingRows = mappings.length ? mappings.map((mapping) => `<div class="chat2api-mapping-row"><span class="chat2api-mapping-values"><code class="chat2api-code">${this.escapeHtml(mapping.model)}</code><span class="chat2api-secondary-text">→</span><code class="chat2api-code">${this.escapeHtml(mapping.actualModel)}</code><small class="chat2api-secondary-text">${mapping.builtinDefault ? '内置默认 · ' : ''}${this.escapeHtml(this.providerLabel(mapping.preferredProviderId || mapping.providerId, providers) || '自动 Provider')}${mapping.application ? ` · 应用 ${this.escapeHtml(mapping.application)}` : ''}${mapping.parameters?.voice ? ` · 默认音色 ${this.escapeHtml(mapping.parameters.voice)}` : ''}</small></span><span class="chat2api-row-actions"><button class="task-card-btn" data-chat2api-mapping-edit="${this.escapeHtml(mapping.model)}">编辑</button>${mapping.builtinDefault ? '' : `<button class="task-card-btn danger" data-chat2api-mapping-delete="${this.escapeHtml(mapping.model)}">删除</button>`}</span></div>`).join('') : '<div class="chat2api-empty">未配置自定义映射，使用内置模型规则</div>';
       const mappingEditor = `<div id="chat2apiMappingEditor" class="chat2api-mapping-editor" hidden><div class="chat2api-section-heading"><h5 id="chat2apiMappingEditorTitle" class="chat2api-editor-title">新增模型映射</h5><button class="task-card-btn" id="chat2apiMappingCancel" hidden>取消编辑</button></div><div class="chat2api-mapping-form"><label class="chat2api-field">请求模型<input id="chat2apiMappingModel" placeholder="例如 qiaoxiaojiao"></label><label class="chat2api-field">实际模型<input id="chat2apiMappingActualModel" placeholder="例如 qwen-api/qwen-audio-3.1-tts-flash"></label><label class="chat2api-field">优先 Provider<select id="chat2apiMappingProvider">${mappingProviderOptions}</select></label><label class="chat2api-field">优先账号<select id="chat2apiMappingAccount">${mappingAccountOptions}</select></label><label class="chat2api-field">应用<select id="chat2apiMappingApplication"><option value="">使用模型默认应用</option><option value="chat">chat（文字聊天）</option><option value="tts">tts（语音合成）</option></select></label><label class="chat2api-field">默认音色 ID<input id="chat2apiMappingVoice" maxlength="512" placeholder="例如 qiaoxiaojiao_v3.1"></label><label class="chat2api-field">默认语速倍率<input id="chat2apiMappingSpeed" type="number" min="0.25" max="4" step="0.01" placeholder="留空使用模型默认"></label><label class="chat2api-field">默认音量<input id="chat2apiMappingVolume" type="number" min="0" max="100" step="1" placeholder="留空使用模型默认"></label><label class="chat2api-field">音频格式<select id="chat2apiMappingFormat"><option value="">使用模型默认格式</option><option value="wav">wav</option></select></label></div><p class="chat2api-secondary-text">应用和参数留空时保留原文字映射行为；请求中的显式合成参数优先于映射默认值。</p><button class="task-card-btn primary chat2api-save-button" id="chat2apiMappingSave">保存映射</button></div>`;
       const config = data.config || {};
+      const doubaoWebViewSection = '<section class="chat2api-section"><h4 class="chat2api-section-title">豆包签名页面</h4><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiCloseWebViewAfterSign" disabled> 签名成功后关闭 WebView（Android 直连）</label><p class="chat2api-secondary-text">默认关闭。开启后在下次成功获取签名时释放后台页面，保留登录态；需要重新签名时会重新加载官网。网页兼容模式不关闭，需要新版 min APK。</p></section>';
       const configSection = `<section class="chat2api-section chat2api-section-wide"><h4 class="chat2api-section-title">代理配置</h4><div class="chat2api-config-grid"><label class="chat2api-field">监听地址<input id="chat2apiConfigHost" value="${this.escapeHtml(config.host || '127.0.0.1')}"></label><label class="chat2api-field">端口<input id="chat2apiConfigPort" type="number" value="${this.escapeHtml(config.port || 8080)}"></label><label class="chat2api-field">负载均衡<select id="chat2apiConfigStrategy"><option value="round-robin" ${config.loadBalanceStrategy === 'round-robin' ? 'selected' : ''}>轮询</option><option value="fill-first" ${config.loadBalanceStrategy === 'fill-first' ? 'selected' : ''}>最低用量</option><option value="failover" ${config.loadBalanceStrategy === 'failover' ? 'selected' : ''}>故障转移</option></select></label><label class="chat2api-field">原始日志最大字节数<input id="chat2apiConfigRawTrafficMaxBytes" type="number" min="1024" max="2097152" step="1" value="${this.escapeHtml(config.rawTrafficMaxBytes || 262144)}"></label><label class="chat2api-field">原始日志模式<select id="chat2apiConfigRawTrafficMode"><option value="full" ${config.rawTrafficMode !== 'compact' ? 'selected' : ''}>完整（含 URL、请求头和原始数据）</option><option value="compact" ${config.rawTrafficMode === 'compact' ? 'selected' : ''}>简洁（模型、文本和输出）</option></select></label></div><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiConfigApiKey" ${config.enableApiKey !== false ? 'checked' : ''}> 启用 API Key 鉴权</label><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiConfigDebugRawTraffic" ${config.debugRawTraffic === true ? 'checked' : ''}> 记录发给 AI 的原始请求和返回结果</label><div class="chat2api-secondary-text">调试日志默认关闭；简洁模式只记录模型、用户文本和最终输出，不记录原始 URL、请求头或流式分块。</div><button class="task-card-btn primary chat2api-save-button" id="chat2apiSaveConfig">保存配置</button></section>`;
       content.innerHTML = '<div class="chat2api-grid">' +
-        configSection +
+        configSection + doubaoWebViewSection +
         '<section class="chat2api-section"><h4 class="chat2api-section-title">外部认证</h4>' +
           `<select id="chat2apiProvider" class="chat2api-select">${providerOptions}</select>` +
           '<div id="chat2apiCredentialFields" class="chat2api-credential-fields"></div>' +
@@ -164,6 +226,8 @@
       if (completeButton) completeButton.addEventListener('click', () => this.completeLogin());
       const keyButton = document.getElementById('chat2apiCreateKey');
       if (keyButton) keyButton.addEventListener('click', () => this.createKey());
+      this.renderDoubaoWebViewConfig();
+      document.getElementById('chat2apiCloseWebViewAfterSign')?.addEventListener('change', event => this.saveDoubaoWebViewConfig(event.target.checked));
       const saveConfigButton = document.getElementById('chat2apiSaveConfig');
       if (saveConfigButton) saveConfigButton.addEventListener('click', () => this.saveConfig());
       const exportConfigButton = document.getElementById('chat2apiExportConfig');

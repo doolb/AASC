@@ -46,7 +46,8 @@ class DoubaoWebViewService : Service() {
     private val pending = ConcurrentHashMap<String, LinkedBlockingQueue<JSONObject>>()
     private var listener: ServerSocket? = null
     private var token = ""
-    private var webView: WebView? = null
+    private val pages = DoubaoWebViewPageCache<WebView> { it.destroy() }
+    private val webView: WebView? get() = pages.current
     private var pageLoaded = CountDownLatch(1)
     private val accountLock = ReentrantLock()
     private var accountFingerprint = ""
@@ -79,8 +80,7 @@ class DoubaoWebViewService : Service() {
         listener = null
         workers.shutdownNow()
         pending.clear()
-        webView?.destroy()
-        webView = null
+        pages.clear()
         super.onDestroy()
     }
 
@@ -119,8 +119,7 @@ class DoubaoWebViewService : Service() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun ensurePage(profile: JSONObject): WebView {
-        webView?.let { return it }
+    private fun ensurePage(profile: JSONObject): WebView = pages.getOrCreate {
         val view = WebView(this)
         view.settings.javaScriptEnabled = true
         view.settings.domStorageEnabled = true
@@ -146,21 +145,19 @@ class DoubaoWebViewService : Service() {
                 if (url.startsWith("https://www.doubao.com/chat")) pageLoaded.countDown()
             }
         }
-        webView = view
         pageLoaded = CountDownLatch(1)
         view.loadUrl("https://www.doubao.com/chat/")
-        return view
+        view
     }
 
     /** 工作者等待Cookie回调，主线程只执行WebView操作，避免阻塞CookieManager和网页加载。 */
     private fun restoreAccount(input: JSONObject, session: String): Boolean {
         val fingerprint = MessageDigest.getInstance("SHA-256").digest(input.toString().toByteArray())
             .joinToString("") { "%02x".format(it) }
-        if (fingerprint == accountFingerprint && validSession(session) && webView != null) return true
+        if (fingerprint == accountFingerprint && validSession(session)) return true
         val ready = CountDownLatch(1)
         mainHandler.post {
-            webView?.destroy()
-            webView = null
+            pages.clear()
             WebStorage.getInstance().deleteAllData()
             val manager = CookieManager.getInstance()
             manager.setAcceptCookie(true)
@@ -184,6 +181,21 @@ class DoubaoWebViewService : Service() {
         if (!ready.await(15, TimeUnit.SECONDS) || !validSession(session)) return false
         accountFingerprint = fingerprint
         return true
+    }
+
+    /** 在账号锁和租约内等待主线程销毁完成；不删除Cookie或设备存储。 */
+    private fun closePreparedPage(): Boolean {
+        val expectedPage = webView ?: return false
+        val latch = CountDownLatch(1)
+        var closed = false
+        mainHandler.post {
+            try {
+                closed = pages.clear(expectedPage)
+                if (closed) pageLoaded = CountDownLatch(1)
+            } catch (_: Exception) { /* 关闭失败必须回报调用方，不能伪造释放成功。 */ }
+            finally { latch.countDown() }
+        }
+        return latch.await(15, TimeUnit.SECONDS) && closed
     }
 
     private fun handleSocket(socket: Socket) {
@@ -224,6 +236,10 @@ class DoubaoWebViewService : Service() {
                 return
             }
             if (prepareOnly && url.path != "/chat/completion") { error(socket, 403, "doubao_webview_prepare"); return }
+            if (request.has("closeAfterPrepare") && request.opt("closeAfterPrepare") !is Boolean) {
+                error(socket, 400, "doubao_webview_close_config"); return
+            }
+            val closeAfterPrepare = prepareOnly && request.optBoolean("closeAfterPrepare", false)
             val restore = try { DoubaoWebViewAccount.validate(request.getJSONObject("restore"), request.optString("sessionId")) }
             catch (_: Exception) { error(socket, 403, "doubao_webview_identity"); return }
             if (!accountLock.tryLock(30, TimeUnit.SECONDS)) { error(socket, 409, "doubao_webview_busy"); return }
@@ -252,14 +268,26 @@ class DoubaoWebViewService : Service() {
                 val pageRequest = JSONObject(request.toString()).put("requestId", requestId).put("prepareOnly", prepareOnly)
                 pageRequest.remove("restore")
                 pageRequest.remove("sessionId")
+                pageRequest.remove("closeAfterPrepare")
                 val script = PAGE_FETCH_SCRIPT.replace("__INPUT__", JSONObject.quote(pageRequest.toString()))
                 mainHandler.post { webView?.evaluateJavascript(script, null) }
                 val output = socket.getOutputStream()
                 output.write("HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nConnection: close\r\n\r\n".toByteArray(Charsets.US_ASCII))
                 output.flush()
+                var signaturePrepared = false
                 val deadline = System.currentTimeMillis() + 180_000
                 while (System.currentTimeMillis() < deadline) {
                     val packet = queue.poll(500, TimeUnit.MILLISECONDS) ?: continue
+                    if (packet.optString("type") == "prepared") signaturePrepared = true
+                    if (packet.optString("type") == "end" && closeAfterPrepare) {
+                        if (!signaturePrepared || !closePreparedPage()) {
+                            output.write((JSONObject().put("type", "error").put("code", "page_close_failed").toString() + "\n")
+                                .toByteArray(Charsets.UTF_8))
+                            output.flush()
+                            return
+                        }
+                        packet.put("webViewClosed", true)
+                    }
                     output.write((packet.toString() + "\n").toByteArray(Charsets.UTF_8))
                     output.flush()
                     if (packet.optString("type") in setOf("end", "error")) return

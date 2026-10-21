@@ -32,6 +32,7 @@ const WebSocketManager = {
             console.log('WebSocket 连接成功');
             window.ControlTtsVoices?.handleConnected();
             window.ControlChatModelTier?.handleConnected();
+            window.Chat2APIControl?.handleDoubaoWebViewConnected();
             if (window.Chat) {
                 window.Chat.onWebSocketOpen();
             }
@@ -58,6 +59,7 @@ const WebSocketManager = {
             window.TtsProviderSettings?.handleDisconnected();
             window.ControlTtsVoices?.handleDisconnected();
             window.ControlChatModelTier?.handleDisconnected();
+            window.Chat2APIControl?.handleDoubaoWebViewDisconnected();
             window.AsrDevice?.handleLongQueueDisconnected?.();
             window.DeviceList?.handleVoiceContinuousDisconnected?.();
             setTimeout(() => this.connect(), 3000);
@@ -297,6 +299,8 @@ const WebSocketManager = {
             if (window.AsrDevice) {
                 window.AsrDevice.handleDeviceChanged(data.device);
             }
+        } else if (data.type === 'doubaoWebViewConfig') {
+            window.Chat2APIControl?.handleDoubaoWebViewConfig(data);
         } else if (data.type === 'asrLongQueueConfig') {
             window.AsrDevice?.handleLongQueueConfig(data);
         } else if (data.type === 'ttsDeviceChanged') {

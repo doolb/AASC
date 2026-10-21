@@ -1,5 +1,17 @@
 # 自测功能实现文档
 
+## 豆包签名持久化与成功后关闭自测（2026-10-21）
+
+```text
+配置 := settings测试验证WS布尔校验、config.set成功后广播、保存失败权威回退、非控制端拒绝；实际UI脚本验证等待权威回执、失败回显、断线默认false及重连/晚加载面板补拉
+私有文件 := 0600、固定官网和头白名单、禁止Cookie/消息、损坏/超大/符号链接不加载、原子替换不修改链接目标、同目录多实例写入无丢失、128项淘汰、带旧版本条件删除不误删新签名
+Responses := 首轮签名落盘 → 重建服务/适配器/存储后同一previous_response_id续聊不再准备 → 拒绝旧签名后重签补发一次并覆盖文件 → 新会话和凭据版本变化重新签名；写盘失败不改变成功回复，失败流不保存
+原生桥 := closeAfterPrepare只发送至prepare；开启时要求end.webViewClosed=true，旧APK报明确更新错误；fetch忽略关闭标记
+Kotlin := DoubaoWebViewPageCacheTest + DoubaoWebViewAccountTest共3/3；同页复用、关闭后按需重建、迟到旧实例关闭不伤新页、账号资料及登录租约；compileDebugKotlin通过
+验证结果 := 五文件定向40/40，npm run check:chat2api 345/345，零跳过；UI晚加载修正定向2/2；服务/网页语法及差异检查通过
+产物 := servicePackage=true/minApk=true，尚未构建或安装新版APK，本轮未对真实账号制造风控；原生销毁后的官网重签和正式APK重启待真机验收
+```
+
 ## Android豆包失败重签补发自测（2026-10-21）
 
 ```text

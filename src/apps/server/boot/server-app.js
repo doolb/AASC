@@ -24,6 +24,7 @@ const { createGomokuDisplayDemoService, isLoopbackAddress } =
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createDataRepairRunner } = require('../modules/data-repair/data-repair-js-runner');
 const { createChat2ApiRuntime } = require('../modules/chat2api/chat2api-runtime');
+const { createDoubaoWebViewSettings } = require('../modules/chat2api/chat2api-doubao-webview-settings');
 const LogFileWriter = require('../../../framework/observability/log-file-writer');
 const voiceprintStore = require('../modules/voiceprint/voiceprint-store');
 // 声纹权威库变更时广播：让所有显示端重拉权威库重建本地 SpeakerEmbeddingManager
@@ -726,6 +727,8 @@ const codexRuntimeManager = new CodexRuntimeManager({
 });
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
+const doubaoWebViewSettings = createDoubaoWebViewSettings({ config, broadcast: broadcastToControls,
+    isControl: ws => controlClients.has(ws) });
 const displayAsrLongQueue = createDisplayAsrLongQueue(config.get('asr.displayLongQueue'));
 const asrLongQueueSettings = createDisplayAsrLongQueueSettings({ config, queue: displayAsrLongQueue,
     broadcast: broadcastToControls });
@@ -1572,7 +1575,8 @@ async function startServer() {
                     const runtime = createChat2ApiRuntime({ ...options,
                         doubaoSpeechQueue: upstream,
                         qwenApiRateGate: upstream.qwenApiRateGate,
-                        qwenChatRateGate: upstream.qwenChatRateGate });
+                        qwenChatRateGate: upstream.qwenChatRateGate,
+                        getDoubaoWebViewSettings: doubaoWebViewSettings.get });
                     const start = runtime.start.bind(runtime);
                     const stop = runtime.stop.bind(runtime);
                     runtime.start = async () => {
@@ -8614,6 +8618,7 @@ wss.on('connection', (ws, req) => {
         void chatModelTierService.sendSnapshot(ws);
         ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
         ws.send(JSON.stringify(asrLongQueueSettings.snapshot()));
+        ws.send(JSON.stringify(doubaoWebViewSettings.snapshot()));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         ws.send(JSON.stringify({
@@ -10295,6 +10300,7 @@ async function handleControlMessageFallback(data, ws) {
     }
 
     if (asrLongQueueSettings.handle(ws, data)) return;
+    if (doubaoWebViewSettings.handle(ws, data)) return;
 
     if (data.type === 'getTemporaryConversation') {
         ws.send(JSON.stringify({
