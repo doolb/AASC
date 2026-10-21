@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## Node子显示端常驻mpv与保留系统TTS（2026-10-22）
+
+`npm run test:node-display-mpv`15/15、`npm run test:node-display-mpv:real`1/1通过，零跳过。专项通过真实socket/独立子进程验证Linux/Windows配置、认证探测、单实例、媒体/临时文件、控制回执/超时、崩溃重建、清空/退出、恢复竞态及VoiceDisplay真实消息分支；96组几何和网页真实applyCrop对照。TTS验证Windows PowerShell/Linux aplay实际分支，TTS开始/停止不调用mpv，媒体清空不停止TTS。
+
+真实mpv使用null音视频输出，验证生成的视频/音频/图片、暂停断点、旋转属性、切换/清空PID保持与目录回收；不打开桌面或发声。语音/重连回归28/28、独立包回归22/22通过；语法/差异检查通过。Linux真实屏幕/X11认证、Windows实机和共享音频混音未验收，不以模拟或null输出替代；本轮未构建/发布产物。见[任务](task/20261021_Node子显示端常驻mpv跨平台播放.md)和[使用说明](usage/node-display-mpv.md)。
+
 ## MMD-AR HMR2 GPU API 与当前整图深度（2026-10-21，完成）
 
 定向数值/协议/真实PMX/Ammo测试152/152，浏览器28/28（原MediaPipe实际页面1、Clipboard18、新HMR HTTP mock/真实DA集成9），合计180项通过、零跳过。新[HTTP客户端](<../tests/mmd-ar-hmr2-client.test.js>)63项、[深度](<../tests/mmd-ar-human-depth.test.js>)19项、[真实PMX回环与提交](<../tests/mmd-ar-hmr2-retarget.test.js>)9项；原FK/相机/投影/RTMPose等27项及物理/阻尼/IK-PBD/相机所有者34项保留。使用已有 `npm run build:web:mmd-ar-test` 构建，无独立针对性npm script时使用 `node --test --test-isolation=none`。

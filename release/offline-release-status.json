@@ -3,5 +3,5 @@
   "servicePackage": true,
   "dependenciesPackage": false,
   "taskCodePackage": false,
-  "voiceDisplayNodePackage": false
+  "voiceDisplayNodePackage": true
 }

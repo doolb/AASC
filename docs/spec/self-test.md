@@ -1,5 +1,18 @@
 # 自测功能实现文档
 
+## Node常驻mpv与系统TTS自测（2026-10-22）
+
+```text
+自动入口 := npm run test:node-display-mpv → 15/15，零跳过
+IPC夹具 := 独立Node子进程和真实socket，Linux/Windows命令/管道参数、回执/超时/失败、快速切换/清空取消、崩溃重建、初始化退出和临时资源回收
+几何对照 := 从现有display.html提取真实applyCrop → 两种媒体尺寸×两种窗口尺寸×四方向×六模式=96组 → 矩形尺寸和裁剪偏移数值一致
+AASC接入 := 提取真实VoiceDisplay类，执行url/base64/control/restoreState/capabilitiesUpdated分支 → 状态/暂停断点/回执/权威能力；新媒体和清空不被旧恢复覆盖
+TTS兼容 := 原AudioPlayer实际分支 → Windows PowerShell SoundPlayer/Linux aplay；TTS开始/停止不调用mpv，清空媒体不停止TTS，mpv关闭独占音频
+实机入口 := npm run test:node-display-mpv:real → 1/1，真实mpv+ffmpeg生成媒体+本机HTTP，以null输出验证三类媒体、PID保持、暂停断点、旋转和清理
+既有回归 := 语音/重连28/28、独立包22/22，零跳过；语法与差异检查通过
+边界 := 未打开真实屏幕/发声，Windows实机与X11现场权限、实际混音仍待验收；未构建/发布本轮包
+```
+
 ## 豆包共享JS、单页签与请求类型自测（2026-10-22）
 
 ```text

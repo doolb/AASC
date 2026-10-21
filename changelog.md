@@ -13,6 +13,18 @@
   - 精确清理8个测试官网会话全部status_code0，隔离运行时/设备测试目录/新增ADB转发/敏感抓取已清理，未写入当前AASC聊天。
   - 最终min73已构建、v2签名验证成功，SHA-256为83f20e35cc47ec0d5936efe9c96512a3bb67e59fe38d9abb6ccbd4f77714aa3d，minApk=false/servicePackage=true。未发布，39正式进程未重启；手机验收后恢复min72以配合原code148，新服务与min73需配套部署。同步design/spec/task/usage/self-test/todo。
 
+### Node子显示端常驻mpv播放
+
+- ✅ [2026-10-22] 实现Linux/Windows分平台mpv命令配置、Linux DISPLAY/XAUTHORITY、常驻媒体进程、四方向旋转与六种填充；TTS保留原PowerShell SoundPlayer/Linux aplay队列。
+  - 新增 `src/apps/voice-display-node/{mpv-player,mpv-platform,mpv-geometry,media-controller}.js`，接入main的url/base64/control/restoreState与权威能力；IPC切换/暂停/seek/音量、代理回退、临时文件回收、崩溃重建与退出清理，mpv非独占输出，媒体清空与TTS停止互不影响。`server-app.js`保留本机配置，坏JSON不覆盖；更新配置示例、README与使用文档。
+  - `npm run test:node-display-mpv`15/15、`npm run test:node-display-mpv:real`1/1通过，含96组网页几何对照；语音/重连28/28与`npm run test:offline-voice-display-node`22/22通过，均零跳过，语法/差异检查通过。真实mpv使用null输出验证视频/音频/图片及PID保持，不代表屏幕画面验收。
+  - 同步design/spec/task/usage/self-test并移除todo中的本轮任务；`voiceDisplayNodePackage=true`、`servicePackage=true`，其他发布状态保留，未构建或发布本轮包。Linux真实屏幕/X11认证、Windows实机及双路声音实际混音仍待设备验收；本轮不接入批量列表与HTML/文本。
+
+- ✅ [2026-10-21] 将用户追加的旋转和画面填充纳入待确认方案：四方向旋转、既有六种填充，复用控制端消息及服务器权威恢复，通过IPC实时应用，保持mpv常驻。
+  - 更新 `docs/design/node-display-mpv.md`、`docs/spec/node-display-mpv.md`、task/todo；核对网页选项、本机mpv属性与官方手册，补充旋转几何、文件方向元数据、动态调度回收和跨媒体状态继承验收。未修改生产代码、运行画面测试或改变发布状态。
+- ✅ [2026-10-21] 完成需求澄清与方案记录：现有控制端触发，Linux/Windows分别配置mpv命令，Linux指定DISPLAY/XAUTHORITY，常驻进程通过IPC切换视频、音频和图片。
+  - 新增 `docs/design/node-display-mpv.md`、`docs/spec/node-display-mpv.md`、对应task及索引/todo；发现服务端启动会重写子显示端配置，拟保留mediaPlayer字段。具体改动方案待用户确认；尚未修改生产代码、启动播放器、执行功能测试或更改发布状态。
+
 ### 专用Vivaldi官网发送对照
 
 - ✅ [2026-10-21] 直接在DISPLAY=:1专用profile官网输入“早”并点击发送，收到ACK、正文及SSE_REPLY_END，页面回复“早呀☀️，今天打算做点什么？”，证明同profile官网UI当前可用。

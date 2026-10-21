@@ -1,5 +1,7 @@
 # 纯语音输入输出显示端 实现文档
 
+Node实现现已可选接入常驻mpv媒体播放，支持Linux/Windows命令配置、Linux图形认证、旋转和六种填充。详见[mpv伪代码](node-display-mpv.md)；TTS仍由原AudioPlayer负责（Windows PowerShell/Linux aplay），媒体清空与TTS停止相互独立。以下通用/Go语音流程不替代Node扩展。
+
 ## 概述
 
 独立的客户端程序，作为纯语音交互的显示端，通过 WebSocket 连接到主服务器，接收 TTS 音频播放，并通过服务器端 ASR 发送语音输入。本地只负责录音和 VAD 检测，识别由服务器完成。
@@ -91,7 +93,8 @@ handleMessage(msgType, data):
             enabled == true -> 恢复录音
             enabled == false -> 暂停录音
         其余情况记录控制指令
-    "media": 记录媒体指令（子显示端不支持媒体显示）
+    Node实现的 "url" / "base64" / "media": 转交NodeMediaController，由常驻mpv处理媒体
+    Go实现的 "media": 记录媒体指令（Go子显示端不支持媒体显示）
 ```
 
 ### 重连机制

@@ -12031,10 +12031,18 @@ async function executeDeviceEvent(ip, eventType, displayId) {
 function updateVoiceDisplayConfig(localIP, port, protocol) {
     const configPath = path.join(PROJECT_ROOT, 'src', 'apps', 'voice-display-node', 'config.json');
     try {
+        // 本机播放器路径、图形会话认证与语音设置属于设备，服务端只更新连接地址和缺失默认值。
+        let existingConfig = {};
+        if (fs.existsSync(configPath)) {
+            const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('子显示端配置必须为对象');
+            existingConfig = parsed;
+        }
         const config = {
-            serverUrl: `${protocol}://${localIP}:${port}`,
             displayId: 'voice-display-node-1',
-            vadThreshold: 0.01
+            vadThreshold: 0.01,
+            ...existingConfig,
+            serverUrl: `${protocol}://${localIP}:${port}`
         };
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
         log('子显示端', `配置已更新: ${protocol}://${localIP}:${port}`);

@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [Node子显示端常驻mpv跨平台播放伪代码](spec/node-display-mpv.md)
+
 - [ASR 内容过滤伪代码](spec/asr-content-filter.md)
 
 - [五子棋游戏协议与本地显示伪代码](spec/game-gomoku.md)

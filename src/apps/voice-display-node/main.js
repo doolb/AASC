@@ -19,6 +19,7 @@ const URL = require('url');
 const os = require('os');
 const { exec } = require('child_process');
 const AudioPlayer = require('./audio-player');
+const { NodeMediaController, MEDIA_CONTROLS } = require('./media-controller');
 const ServerASR = require('./asr-client');
 const { formatAsrDisplayText } = require('./asr-display');
 const SubDisplayTUI = require('./tui');
@@ -150,6 +151,10 @@ class VoiceDisplay {
         this.ws = null;
         this.asr = null;
         this.audio = null;
+        this.media = new NodeMediaController(config, {
+            send: data => this.sendJSON(data),
+            onError: error => logError('媒体', error.message)
+        });
         this.recorder = null;
         this.connected = false;
         // 本地候选 ID 在进程内固定；服务器确认 ID 单独保存，不能反写覆盖重连身份。
@@ -321,6 +326,7 @@ class VoiceDisplay {
         this.ws = null;
         this.connected = false;
         this.serverDisplayId = null;
+        this.media.disconnected();
         // 断线期间服务端可能已修改能力；释放设备并等待重连后的权威配置。
         this.voiceRecordingCapabilityKnown = false;
         this.recordingEnabled = false;
@@ -403,7 +409,7 @@ class VoiceDisplay {
         this.sendJSON({
             type: 'capabilities',
             capabilities: {
-                mediaRendering: false,
+                mediaRendering: this.media.available,
                 voicePlayback: true,
                 voiceRecording: true,
                 voiceRecognition: true,
@@ -467,7 +473,7 @@ class VoiceDisplay {
                 this.handleVoiceprintConfig(data);
                 break;
             case 'restoreState':
-                log('系统', '收到恢复状态');
+                void this.media.restore(data.state);
                 break;
             case 'tts':
                 this.handleTTS(data);
@@ -488,7 +494,9 @@ class VoiceDisplay {
                 this.handleControl(data);
                 break;
             case 'media':
-                log('系统', `收到媒体指令（子显示端不支持媒体显示）: ${data.type}`);
+            case 'url':
+            case 'base64':
+                void this.media.handleMedia(data);
                 break;
             case 'reminder':
                 this.handleReminder(data);
@@ -528,22 +536,27 @@ class VoiceDisplay {
     handleControl(data) {
         log('系统', `收到控制指令: ${JSON.stringify(data)}`);
 
+        if (MEDIA_CONTROLS.has(data.action)) {
+            if (data.action === 'volume' && Number.isFinite(Number(data.value))) {
+                this._volume = Math.max(0, Math.min(100, Number(data.value)));
+            }
+            void this.media.handleControl(data);
+            return;
+        }
+
         if (data.action === 'setRecording') {
             if (data.enabled) {
                 this.enableRecording();
             } else {
                 this.disableRecording();
             }
-        } else if (data.action === 'volume') {
-            var vol = parseInt(data.value, 10);
-            this._volume = isNaN(vol) ? 100 : vol;
-            log('系统', '音量已设置为: ' + this._volume);
         }
     }
 
     handleCapabilitiesUpdated(data) {
         if (!data.capabilities) return;
         this._capabilities = data.capabilities;
+        void this.media.setCapabilities(data.capabilities).catch(error => logError('媒体', error.message));
         this.voiceRecordingCapabilityKnown = true;
         log('能力', '能力已更新: ' + JSON.stringify(data.capabilities));
 
@@ -1856,6 +1869,7 @@ class VoiceDisplay {
      */
     async start() {
         activeDisplayInstance = this;
+        await this.media.initialize();
         this.audio = new AudioPlayer();
         // 无论录音模式是否提供普通 TTS 回调，状态提示都必须等待整个音频队列结束后恢复录音。
         this.audio.onQueueIdle = () => this.finishTextInputAnnouncement();
@@ -2177,7 +2191,7 @@ class VoiceDisplay {
     /**
      * 停止语音显示端
      */
-    stop() {
+    async stop() {
         this.recordingEnabled = false;
         this.voiceRecognitionRestartPending = false;
         this.stopController.abort();
@@ -2210,6 +2224,8 @@ class VoiceDisplay {
         this.textInputHotkey.close();
         this.textInputVoiceprintHotkey.close();
         this.textInputInjector.close();
+
+        await this.media.close();
 
         log('停止', '语音显示端已停止');
     }
@@ -2294,16 +2310,16 @@ async function main() {
         tui.updateSystemStats(systemMonitor.getStats());
     }
 
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
         log('系统', '\n收到退出信号，正在关闭...');
         if (systemMonitor) systemMonitor.stop();
-        voiceDisplay.stop();
+        await voiceDisplay.stop();
         process.exit(0);
     });
 
-    process.on('SIGTERM', () => {
+    process.on('SIGTERM', async () => {
         if (systemMonitor) systemMonitor.stop();
-        voiceDisplay.stop();
+        await voiceDisplay.stop();
         process.exit(0);
     });
 
@@ -2323,6 +2339,7 @@ async function main() {
     } catch (error) {
         logError('系统', `启动失败: ${error.message}`);
         if (systemMonitor) systemMonitor.stop();
+        await voiceDisplay.stop();
         process.exit(1);
     }
 }

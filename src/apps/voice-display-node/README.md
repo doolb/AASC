@@ -1,6 +1,8 @@
 # Node 语音子显示端
 
-本程序通过 WebSocket 连接 AASC 服务端，独立提供语音输入与 TTS 播放。Offline 发布时使用单独的 `voice-display-node-vN.zip`；它不会随服务热更新自动下载或安装。
+本程序通过 WebSocket 连接 AASC 服务端，独立提供语音输入与 TTS 播放，也可启用常驻 mpv 播放控制端媒体。支持Linux/Windows独立命令配置、Linux DISPLAY/XAUTHORITY、旋转及六种画面填充；TTS继续使用原Windows PowerShell/Linux aplay播放器。配置和使用见[常驻mpv播放说明](../../../docs/usage/node-display-mpv.md)。
+
+Offline 发布时使用单独的 `voice-display-node-vN.zip`；它不会随服务热更新自动下载或安装。
 
 ## 解压与启动
 

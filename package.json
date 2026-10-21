@@ -16,6 +16,8 @@
     "sync:offline-data-repair-seeds": "node scripts/ops/sync-offline-data-repair-seeds.js",
     "test:offline-data-repair": "node --test tests/qwen-api-data-repair.test.js tests/offline-data-repair-seeds.test.js src/apps/server/modules/data-repair/data-repair-js-runner.test.js tests/offline-update-package.test.js tests/offline-update-publish.test.js",
     "test:offline-voice-display-node": "node --test tests/voice-display-node-package.test.js tests/offline-update-package.test.js",
+    "test:node-display-mpv": "node --test tests/node-display-mpv*.test.js",
+    "test:node-display-mpv:real": "node --test tests/node-display-mpv.integration.js",
     "publish:offline-update": "node scripts/ops/publish-offline-update.js",
     "publish:offline-data-repair": "node scripts/ops/publish-offline-update.js --mode=data-repair",
     "publish:offline-apk:full": "node scripts/ops/publish-offline-update.js --mode apk-full",

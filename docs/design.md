@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [Node子显示端常驻mpv跨平台播放（源码完成，待设备验收）](design/node-display-mpv.md)
+
 - [ASR 内容过滤](design/asr-content-filter.md)
 
 - [五子棋游戏协议与本地显示](design/game-gomoku.md)
