@@ -57,8 +57,9 @@ body.display-chat-open .display-game-layer {
 }
 .display-game-board {
     display: grid;
-    grid-template-columns: repeat(var(--game-size), 1fr);
-    grid-template-rows: repeat(var(--game-size), 1fr);
+    /* 顶部与左侧使用等宽标尺轨道，剩余区域仍是正方形交点网格。 */
+    grid-template-columns: 20px repeat(var(--game-size), minmax(0, 1fr));
+    grid-template-rows: 20px repeat(var(--game-size), minmax(0, 1fr));
     width: min(calc(var(--display-stage-width) - 32px), calc(var(--display-stage-height) - 105px), 680px);
     aspect-ratio: 1;
     padding: 10px;
@@ -68,6 +69,17 @@ body.display-chat-open .display-game-layer {
     background: linear-gradient(135deg, #e2bd74, #c99654);
     box-shadow: 0 12px 32px #0008;
     touch-action: manipulation;
+}
+.display-game-axis {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4b321d;
+    font: 600 clamp(10px, 1.9vmin, 13px) / 1 monospace;
+    font-variant-numeric: tabular-nums;
+    text-shadow: none;
+    user-select: none;
+    pointer-events: none;
 }
 .display-game-point {
     position: relative;

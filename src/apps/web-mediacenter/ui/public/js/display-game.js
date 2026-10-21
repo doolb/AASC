@@ -107,10 +107,26 @@
         return points.includes(x) && points.includes(y);
     }
 
+    /** 标尺占独立网格轨道，不进入落子按钮，也不重复读出交点的坐标名称。 */
+    function createAxisLabel(axis, index) {
+        const label = document.createElement('span');
+        const column = axis === 'column';
+        label.className = 'display-game-axis';
+        label.dataset.axis = axis;
+        label.setAttribute('aria-hidden', 'true');
+        label.textContent = column ? String.fromCharCode(65 + index) : String(index + 1);
+        label.style.gridColumn = String(column ? index + 2 : 1);
+        label.style.gridRow = String(column ? 1 : index + 2);
+        return label;
+    }
+
     function buildBoard() {
         refs.board.style.setProperty('--game-size', String(game.size));
         const fragment = document.createDocumentFragment();
         const rows = game.board.split('/');
+        for (let index = 0; index < game.size; index += 1) {
+            fragment.append(createAxisLabel('column', index), createAxisLabel('row', index));
+        }
         for (let y = 0; y < game.size; y += 1) {
             for (let x = 0; x < game.size; x += 1) {
                 const button = document.createElement('button');
@@ -121,6 +137,9 @@
                 button.dataset.coordinate = coordinate;
                 button.dataset.stone = stone;
                 button.dataset.star = String(isStar(x, y, game.size));
+                // 第一行和第一列留给标尺；落子坐标仍从原来的零基行列计算。
+                button.style.gridColumn = String(x + 2);
+                button.style.gridRow = String(y + 2);
                 button.setAttribute('role', 'gridcell');
                 button.setAttribute('aria-label', `${coordinate} ${stone === 'X' ? '黑子' : stone === 'O' ? '白子' : '空位'}`);
                 const disk = document.createElement('span');

@@ -10,6 +10,121 @@ const PUBLIC = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const CHROME = [process.env.PUPPETEER_EXECUTABLE_PATH, '/usr/bin/chromium',
     '/usr/bin/google-chrome'].find(candidate => candidate && fs.existsSync(candidate));
 
+test('四种尺寸和真实四向旋转下标尺对齐、点击坐标准确', { skip: !CHROME, timeout: 60000 }, async () => {
+    const $ = cheerio.load(fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8'));
+    // 复用页面实际样式清单，避免缺少面板样式导致隐藏的设置区域盖住棋盘。
+    const styles = $('link[rel="stylesheet"]').toArray()
+        .map(node => fs.readFileSync(path.join(PUBLIC, $(node).attr('href')), 'utf8')).join('\n');
+    $('script, link[rel="stylesheet"]').remove();
+    $('head').append(`<style>${styles}</style>`);
+    const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
+        args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    try {
+        const page = await browser.newPage();
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await page.setViewport({ width: 320, height: 640 });
+        await page.setContent($.html());
+        for (const name of ['display-chat', 'display-stage', 'display-game']) {
+            await page.addScriptTag({ path: path.join(PUBLIC, `js/${name}.js`) });
+        }
+        await page.evaluate(() => {
+            window.sent = [];
+            window.DisplayStage.setTransport(message => { window.sent.push(message); return true; });
+            window.DisplayGame.init();
+            const recovery = window.sent.findLast(message => message.type === 'gameRecover');
+            window.DisplayStage.handleServerMessage({ type: 'gameRecoverResult', requestId: recovery.requestId,
+                snapshot: null, pendingRequestId: null });
+            window.DisplayStage.handleServerMessage({ type: 'voiceConversationState', state: 'activePrivate' });
+        });
+        for (const viewport of [{ width: 320, height: 640 }, { width: 740, height: 390 }]) {
+            await page.setViewport(viewport);
+            for (const size of [9, 11, 13, 15]) {
+                for (const angle of [0, 90, 180, 270]) {
+                    const label = `${viewport.width}×${viewport.height}/${size}路/${angle}°`;
+                    const gameId = `axes-${viewport.width}-${size}-${angle}`;
+                    const layout = await page.evaluate(({ size, angle, gameId }) => {
+                        // 正式舞台从页面当前旋转值计算几何，必须同时设置它才能测试实际角度。
+                        window.currentRotation = angle;
+                        window.DisplayStage.setRotation(angle);
+                        window.DisplayStage.handleServerMessage({ type: 'gameSnapshot', gameId, revision: 3, size,
+                            board: ['XO' + '.'.repeat(size - 2), ...Array(size - 1).fill('.'.repeat(size))].join('/'),
+                            turn: 'User', result: '进行中', visible: true });
+                        const board = document.getElementById('displayGameBoard');
+                        const bounds = board.getBoundingClientRect();
+                        const center = node => {
+                            const rect = node.getBoundingClientRect();
+                            return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+                        };
+                        const cosine = Math.cos(angle * Math.PI / 180);
+                        const sine = Math.sin(angle * Math.PI / 180);
+                        const violations = [];
+                        for (const axis of ['column', 'row']) {
+                            [...board.querySelectorAll(`[data-axis="${axis}"]`)].forEach((node, index) => {
+                                const coordinate = axis === 'column' ? `${String.fromCharCode(65 + index)}1` : `A${index + 1}`;
+                                const point = board.querySelector(`[data-coordinate="${coordinate}"]`);
+                                const a = center(node);
+                                const p = center(point);
+                                // 将屏幕差向量转回棋盘逻辑方向，逐个检查标签对齐且位于对应上侧/左侧。
+                                const dx = cosine * (a.x - p.x) + sine * (a.y - p.y);
+                                const dy = -sine * (a.x - p.x) + cosine * (a.y - p.y);
+                                const aligned = axis === 'column' ? Math.abs(dx) < 0.6 && dy < 0 : Math.abs(dy) < 0.6 && dx < 0;
+                                const rect = node.getBoundingClientRect();
+                                const contained = rect.left >= bounds.left && rect.right <= bounds.right + 0.6
+                                    && rect.top >= bounds.top && rect.bottom <= bounds.bottom + 0.6;
+                                if (!aligned || !contained) violations.push({ axis, index, dx, dy, contained });
+                            });
+                        }
+                        return {
+                            rotation: window.DisplayStage.getState().rotation,
+                            columns: [...board.querySelectorAll('[data-axis="column"]')].map(node => node.textContent),
+                            rows: [...board.querySelectorAll('[data-axis="row"]')].map(node => node.textContent),
+                            points: board.querySelectorAll('.display-game-point').length,
+                            labelsInert: [...board.querySelectorAll('.display-game-axis')].every(node =>
+                                node.getAttribute('aria-hidden') === 'true' && getComputedStyle(node).pointerEvents === 'none'),
+                            firstLabel: center(board.querySelector('[data-axis="column"]')), violations
+                        };
+                    }, { size, angle, gameId });
+                    assert.equal(layout.rotation, angle, label);
+                    assert.deepEqual(layout.columns, Array.from({ length: size }, (_, index) => String.fromCharCode(65 + index)), label);
+                    assert.deepEqual(layout.rows, Array.from({ length: size }, (_, index) => String(index + 1)), label);
+                    assert.equal(layout.columns[8], 'I', label);
+                    assert.equal(layout.points, size * size, label);
+                    assert.equal(layout.labelsInert, true, label);
+                    assert.deepEqual(layout.violations, [], label);
+                    const before = await page.evaluate(() => window.sent.filter(message => message.type === 'gameMove').length);
+                    await page.mouse.click(layout.firstLabel.x, layout.firstLabel.y);
+                    assert.equal(await page.evaluate(() => window.sent.filter(message => message.type === 'gameMove').length), before, label);
+                    // 底部语音控件保有原交互优先级，选取未被工具栏覆盖的空位核对旋转后的落子坐标。
+                    const coordinate = 'C3';
+                    await page.click(`[data-coordinate="${coordinate}"]`);
+                    const move = await page.evaluate(() => window.sent.findLast(message => message.type === 'gameMove'));
+                    const after = await page.evaluate(() => window.sent.filter(message => message.type === 'gameMove').length);
+                    assert.equal(after, before + 1, `${label} 应发送落子；${JSON.stringify(await page.$eval(`[data-coordinate="${coordinate}"]`, point => {
+                        const rect = point.getBoundingClientRect();
+                        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+                        return { disabled: point.disabled, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+                            hit: hit?.id || hit?.className, status: document.getElementById('displayGameStatus').textContent };
+                    }))}`);
+                    assert.equal(move.coordinate, coordinate, label);
+                    assert.equal(move.gameId, gameId, label);
+                    assert.equal(move.revision, 3, label);
+                    await page.evaluate(({ move, coordinate, gameId }) => {
+                        window.DisplayStage.handleServerMessage({ type: 'gameDelta', gameId, revision: 4,
+                            actor: 'User', coordinate, turn: 'AI', result: '进行中' });
+                        window.DisplayStage.handleServerMessage({ type: 'gameMoveResult', requestId: move.requestId,
+                            status: 'complete', gameId, revision: 4 });
+                    }, { move, coordinate, gameId });
+                    assert.equal(await page.$$eval('.display-game-axis', nodes => nodes.length), size * 2, label);
+                }
+            }
+        }
+        assert.deepEqual(errors, []);
+    } finally {
+        await browser.close();
+    }
+});
+
 test('连接脚本运行前游戏模块已注册五子棋', { skip: !CHROME }, async () => {
     const html = fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8');
     const $ = cheerio.load(html);

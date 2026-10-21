@@ -427,7 +427,7 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
         ['GameAI · 列表', 'GM · 当前支持：五子棋', 'GameAI · 规则']);
     const rules = inputs[2].input.slice('Game:五子棋,GM,规则,'.length);
     assert.ok(rules);
-    assert.match(rules, /棋力：普通、专业、资深，默认普通/);
+    assert.match(rules, /棋力：普通、专业、资深，默认专业/);
     assert.match(rules, /用户要求切换档位时按新档执行，未要求时沿用当前档/);
     assert.match(rules, /所有档位落子前都先读最新棋盘，确认轮次、坐标和空位/);
     assert.match(rules, /普通：优先自己连五，其次阻止对方下一手连五/);
