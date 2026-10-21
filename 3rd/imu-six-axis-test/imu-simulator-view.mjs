@@ -6,7 +6,7 @@ import { ImuScene, makeDevice, followTranslation } from './imu-scene.mjs';
 export class SimulatorView extends ImuScene {
     constructor(container, simulator) {
         super(container); this.simulator = simulator; this.previous = simulator.p.clone();
-        this.device = makeDevice('#ffba70'); this.device.quaternion.copy(simulator.q); this.scene.add(this.device);
+        this.device = makeDevice('#ea580c'); this.device.quaternion.copy(simulator.q); this.scene.add(this.device);
         this.target = new THREE.Object3D(); this.target.quaternion.copy(simulator.q); this.scene.add(this.target);
         this.transform = new TransformControls(this.camera, this.renderer.domElement); this.transform.attach(this.target);
         this.transform.setSize(0.85); this.scene.add(this.transform);

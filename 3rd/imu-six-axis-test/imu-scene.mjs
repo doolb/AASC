@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-export function makeDevice(color = '#65d8c8', wireframe = false) {
+export function makeDevice(color = '#0f766e', wireframe = false) {
     const group = new THREE.Group();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.58, 0.055),
         new THREE.MeshStandardMaterial({ color, metalness: 0.15, roughness: 0.4, wireframe }));
     group.add(body, new THREE.AxesHelper(0.42));
-    const face = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.42, 0.008), new THREE.MeshStandardMaterial({ color: '#142739', wireframe }));
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.42, 0.008), new THREE.MeshStandardMaterial({ color: '#263445', wireframe }));
     face.position.set(0, 0.025, 0.031); group.add(face);
     return group;
 }
@@ -20,21 +20,21 @@ export function followTranslation(camera, controls, current, previous) {
 export class ImuScene {
     constructor(container) {
         this.container = container; this.devices = new Map(); this.followId = null; this.followPrevious = null;
-        this.scene = new THREE.Scene(); this.scene.background = new THREE.Color('#101c2a');
+        this.scene = new THREE.Scene(); this.scene.background = new THREE.Color('#edf2f7');
         this.renderer = new THREE.WebGLRenderer({ antialias: true }); this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-        this.renderer.setClearColor('#101c2a'); container.append(this.renderer.domElement);
+        this.renderer.setClearColor('#edf2f7'); container.append(this.renderer.domElement);
         this.camera = new THREE.PerspectiveCamera(48, 1, 0.01, 10000); this.camera.position.set(2.4, 2, 3.3);
         this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.enableDamping = true;
-        this.scene.add(new THREE.HemisphereLight('#d8edff', '#344a56', 2.5));
+        this.scene.add(new THREE.HemisphereLight('#ffffff', '#91a3b5', 2.5));
         const light = new THREE.DirectionalLight('#ffffff', 2); light.position.set(3, 5, 4); this.scene.add(light);
-        const grid = new THREE.GridHelper(12, 24, '#487a90', '#223e51'); grid.position.y = -0.36; this.scene.add(grid);
+        const grid = new THREE.GridHelper(12, 24, '#91a4b8', '#cbd5df'); grid.position.y = -0.36; this.scene.add(grid);
         this.scene.add(new THREE.AxesHelper(1));
         this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(container); this.resize();
     }
     resize() { const { clientWidth: width, clientHeight: height } = this.container;
         if (!width || !height) return; this.renderer.setSize(width, height); this.camera.aspect = width / height; this.camera.updateProjectionMatrix(); }
     update(id, pose, color, online = true) {
-        if (!pose) return;
+        if (!pose) return null;
         let entry = this.devices.get(id);
         if (!entry) {
             const object = makeDevice(color); this.scene.add(object);
@@ -47,9 +47,11 @@ export class ImuScene {
         entry.object.position.fromArray(pose.position); entry.object.quaternion.fromArray(pose.quaternion);
         entry.object.traverse(node => { if (node.material?.color && node.type === 'Mesh') node.material.opacity = online ? 1 : 0.35;
             if (node.material) node.material.transparent = !online; });
+        let addedPoint = null;
         if (!entry.last || entry.last.distanceToSquared(entry.object.position) > 0.0001) {
             if (entry.count >= 600) { entry.points.copyWithin(0, 3); entry.count = 599; }
-            entry.object.position.toArray(entry.points, entry.count * 3); entry.count += 1;
+            entry.points.set(entry.object.position.toArray(), entry.count * 3);
+            addedPoint = Array.from(entry.points.subarray(entry.count * 3, entry.count * 3 + 3)); entry.count += 1;
             entry.trail.geometry.attributes.position.needsUpdate = true; entry.trail.geometry.setDrawRange(0, entry.count);
             entry.last = entry.object.position.clone();
         }
@@ -57,6 +59,14 @@ export class ImuScene {
             this.followPrevious ??= entry.object.position.clone();
             followTranslation(this.camera, this.controls, entry.object.position, this.followPrevious);
         }
+        return addedPoint;
+    }
+    /** 返回网页当前绘制的轨迹点，供服务端诊断缓存同步；不暴露Three几何对象。 */
+    getTrailSnapshot(id) {
+        const entry = this.devices.get(id);
+        if (!entry) return [];
+        return Array.from({ length: entry.count }, (_, index) =>
+            Array.from(entry.points.subarray(index * 3, index * 3 + 3)));
     }
     follow(id) { this.followId = id; this.followPrevious = null;
         const entry = this.devices.get(id); if (!entry) return;

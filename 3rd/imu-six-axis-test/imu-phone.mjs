@@ -6,8 +6,9 @@ export function motionSample(event, time) {
     const gravity = valid(event.accelerationIncludingGravity);
     const acceleration = gravity ? event.accelerationIncludingGravity : event.acceleration;
     if (!valid(acceleration)) return null;
-    return { time, gyro: [gyro.beta, gyro.gamma, gyro.alpha].map(value => value * Math.PI / 180),
+    const sample = { time, gyro: [gyro.beta, gyro.gamma, gyro.alpha].map(value => value * Math.PI / 180),
         accel: [acceleration.x, acceleration.y, acceleration.z], kind: gravity ? 'gravity' : 'linear' };
+    return sample;
 }
 
 export class PhoneInput {

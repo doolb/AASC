@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>AASC 六轴传感器</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #182435; background: #f3f6fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 22px 18px; }
+    main { max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 24px; margin: 2px 0 8px; }
+    p { color: #526276; line-height: 1.6; }
+    .card { background: white; border: 1px solid #d9e1eb; border-radius: 12px; padding: 16px; margin: 14px 0; }
+    label { display: block; font-size: 13px; color: #45566b; margin-bottom: 12px; }
+    input { display: block; width: 100%; margin-top: 6px; padding: 11px; border: 1px solid #bdc9d7; border-radius: 7px; background: #fff; color: #182435; font: 16px ui-monospace, monospace; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button { width: 100%; border: 0; border-radius: 8px; background: #087f73; color: white; padding: 13px 9px; font-size: 15px; font-weight: 600; }
+    button.secondary { background: #e8eef5; color: #24364b; }
+    button:disabled { opacity: .48; }
+    #status { min-height: 42px; color: #087064; font-weight: 600; }
+    .room { font: 700 19px ui-monospace, monospace; letter-spacing: 1px; }
+    output { display: block; font: 13px ui-monospace, monospace; line-height: 1.8; overflow-wrap: anywhere; }
+    .hint { font-size: 12px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>AASC 六轴传感器</h1>
+  <p>原生读取陀螺仪与加速度计，并发送到电脑的六轴运动实验室。样本按时间配对并分批发送；队列满时丢弃最旧样本。</p>
+  <section class="card">
+    <label>电脑服务器地址<input id="host" value="192.168.1.39" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label>端口<input id="port" value="8769" inputmode="numeric"></label>
+    <label>固定房间<div class="room">AASCIMU1</div></label>
+    <div class="row"><button id="connect">连接电脑</button><button id="disconnect" class="secondary" disabled>断开</button></div>
+  </section>
+  <section class="card">
+    <div class="row"><button id="start" disabled>开始采集</button><button id="stop" class="secondary" disabled>停止采集</button></div>
+    <p id="status">尚未连接</p>
+    <output id="count">已发送 0 个样本</output>
+    <output id="gyro">角速度 / rad·s⁻¹：—</output>
+    <output id="accel">加速度 / m·s⁻²：—</output>
+  </section>
+  <p class="hint">请确认手机与电脑连接同一局域网。采集仅在本应用前台运行；返回桌面或断开后会停止传感器。</p>
+</main>
+<script src="sender.js"></script>
+</body>
+</html>

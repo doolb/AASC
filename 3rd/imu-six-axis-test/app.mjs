@@ -8,18 +8,25 @@ import { RoomClient } from './imu-room.mjs';
 
 const element = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-let source = params.get('role') === 'phone' ? 'phone' : 'simulator';
-let engine = new ImuEngine(); const simulator = new ImuSimulator();
+let source = params.get('source') === 'remote' || params.get('role') === 'remote' ? 'remote'
+    : params.get('role') === 'phone' ? 'phone' : 'simulator';
+const DEFAULT_ROOM = 'AASCIMU1';
+let engine = new ImuEngine({ simulatorAutoRest: source === 'simulator', remoteAutoRest: source === 'remote' });
+const simulator = new ImuSimulator();
 const left = new ImuScene(element('leftViewport'));
 const right = new SimulatorView(element('rightViewport'), simulator);
-const devices = new Map(); let currentRoom = params.get('room') || '';
-let lastPaint = 0, lastPublish = 0, previousFrame = performance.now(), accumulator = 0, nextInterval = 0.01;
+const devices = new Map(); let currentRoom = params.get('room')?.trim().toUpperCase() || DEFAULT_ROOM;
+let lastPaint = 0, previousFrame = performance.now(), accumulator = 0, nextInterval = 0.01;
 let stream = true, disposed = false, autoFaces = null, latestSample = null, truthOrigin = new Vector3();
 let activeFrames = 0, sourceStart = null, animation = null;
+let remoteDeviceId = null, remoteLastReceive = 0;
+const pendingEstimatedTrail = []; const pendingReferenceTrail = [];
 const format = values => values.map(value => (Math.abs(value) < 0.00005 ? 0 : value).toFixed(3)).join(' / ');
 const setStatus = message => { element('phoneStatus').textContent = message; };
 const receive = sample => {
+    const revision = engine.deadzoneRevision;
     if (engine.push(sample)) { latestSample = sample; activeFrames += 1; sourceStart ??= sample.time; }
+    if (engine.deadzoneRevision !== revision) syncDeadzoneInputs();
 };
 const phone = new PhoneInput(receive, message => {
     setStatus(message);
@@ -35,16 +42,58 @@ const room = new RoomClient(incoming => {
     if (joined) {
         currentRoom = joined.room; element('roomCode').value = currentRoom;
         const url = new URL(location.href); url.searchParams.set('room', currentRoom); history.replaceState(null, '', url);
-        const link = new URL(location.href); link.searchParams.set('role', 'phone'); element('phoneLink').value = link.href;
+        if (source !== 'remote') {
+            const link = new URL(location.href); link.searchParams.delete('source'); link.searchParams.set('role', 'phone'); element('phoneLink').value = link.href;
+        }
+        syncVisibleTrailSnapshot();
     }
+}, payload => {
+    if (source !== 'remote') return;
+    if (payload.device.id !== remoteDeviceId) {
+        remoteDeviceId = payload.device.id; remoteLastReceive = 0;
+        engine = new ImuEngine(engine.profile); latestSample = null; sourceStart = null; activeFrames = 0;
+        autoFaces = null; clearDisplayedTrails();
+    }
+    for (const sample of payload.samples) receive(sample);
+    remoteLastReceive = performance.now();
 });
 
+/** 服务端重启或重新连接后，用页面内存中的两条可见轨迹恢复诊断缓存。 */
+function syncVisibleTrailSnapshot(clearHistory = false) {
+    const referenceTrail = source === 'simulator' ? left.getTrailSnapshot('truth') : [];
+    const sent = room.publishTrajectorySnapshot(left.getTrailSnapshot('local'), referenceTrail, clearHistory);
+    if (sent) { pendingEstimatedTrail.length = 0; pendingReferenceTrail.length = 0; }
+    return sent;
+}
+function clearDisplayedTrails() {
+    left.clearTrails(); pendingEstimatedTrail.length = 0; pendingReferenceTrail.length = 0;
+    syncVisibleTrailSnapshot(true);
+}
+function queueTrailPoint(queue, point) {
+    if (!point) return;
+    queue.push(point);
+    if (queue.length > 600) queue.shift();
+}
+
 function applySource() {
-    document.body.classList.toggle('phone', source === 'phone'); element('source').value = source;
+    document.body.classList.toggle('phone', source !== 'simulator');
+    document.body.classList.toggle('remote', source === 'remote'); element('source').value = source;
     element('phoneStart').disabled = source !== 'phone'; element('phoneStop').disabled = source !== 'phone';
+    engine.profile.simulatorAutoRest = source === 'simulator';
+    engine.profile.remoteAutoRest = source === 'remote';
+    element('roomCode').disabled = false;
+    if (source === 'remote') {
+        element('phoneStatus').textContent = `接收房间 ${currentRoom} 的Android原生六轴数据`;
+    }
+    else if (source === 'phone') element('phoneStatus').textContent = '手机通过浏览器运动接口接入';
+    else element('phoneStatus').textContent = '电脑模拟六轴输入';
     right.resize(); left.resize();
 }
-function connect() { room.connect(element('roomCode').value.trim() || currentRoom, source === 'phone' ? '手机六轴' : '电脑模拟器'); }
+function connect() {
+    const role = 'source';
+    const code = element('roomCode').value.trim().toUpperCase() || currentRoom || DEFAULT_ROOM;
+    room.connect(code, source === 'phone' ? '手机浏览器六轴' : source === 'remote' ? '电脑观察端' : '电脑模拟器', role);
+}
 element('roomCode').value = currentRoom; applySource(); connect(); left.followId = 'local';
 element('reconnect').addEventListener('click', connect);
 element('copyLink').addEventListener('click', async () => {
@@ -53,17 +102,28 @@ element('copyLink').addEventListener('click', async () => {
 });
 element('source').addEventListener('change', event => {
     phone.stop(); source = event.target.value; engine = new ImuEngine(engine.profile); sourceStart = null;
-    activeFrames = 0; latestSample = null; autoFaces = null; applySource(); connect();
+    activeFrames = 0; latestSample = null; autoFaces = null; remoteDeviceId = null;
+    const url = new URL(location.href);
+    if (source === 'remote') { url.searchParams.delete('role'); url.searchParams.set('source', 'remote'); }
+    else {
+        url.searchParams.delete('source');
+        if (source === 'phone') url.searchParams.set('role', 'phone'); else url.searchParams.delete('role');
+    }
+    const selectedRoom = element('roomCode').value.trim().toUpperCase() || currentRoom || DEFAULT_ROOM;
+    currentRoom = selectedRoom; element('roomCode').value = selectedRoom; url.searchParams.set('room', selectedRoom);
+    history.replaceState(null, '', url); applySource(); connect();
 });
 element('phoneStart').addEventListener('click', async () => {
     try { await phone.start(); } catch (error) { setStatus(error.message); }
 });
 element('phoneStop').addEventListener('click', () => phone.stop());
 element('calibrate').addEventListener('click', () => { autoFaces = null; engine.beginCalibration(); });
+element('calibrateDeadzone').addEventListener('click', () => { autoFaces = null; engine.beginDeadzoneCalibration(); });
+element('cancelDeadzone').addEventListener('click', () => engine.cancelDeadzoneCalibration());
 element('stopVelocity').addEventListener('click', () => engine.stopVelocity());
-element('resetOrigin').addEventListener('click', () => { engine.resetOrigin(); truthOrigin.copy(simulator.p); left.clearTrails(); });
+element('resetOrigin').addEventListener('click', () => { engine.resetOrigin(); truthOrigin.copy(simulator.p); clearDisplayedTrails(); });
 element('resetHeading').addEventListener('click', () => engine.resetHeading());
-element('clearTrails').addEventListener('click', () => left.clearTrails());
+element('clearTrails').addEventListener('click', clearDisplayedTrails);
 element('assumedRest').addEventListener('change', event => { engine.profile.assumedRest = event.target.checked; });
 element('followLeft').addEventListener('change', event => left.follow(event.target.checked ? element('deviceSelect').value : null));
 element('deviceSelect').addEventListener('change', event => { if (element('followLeft').checked) left.follow(event.target.value); });
@@ -74,7 +134,7 @@ for (const mode of ['translate', 'rotate']) element(mode).addEventListener('clic
 });
 element('resetExperiment').addEventListener('click', () => {
     simulator.reset(); truthOrigin.set(0, 0, 0); engine.resetOrigin(); engine.q.copy(REST_ORIENTATION);
-    engine.lastTime = null; engine.filteredAcceleration = null; engine.filteredGyro = null; left.clearTrails(); autoFaces = null;
+    engine.lastTime = null; engine.filteredAcceleration = null; engine.filteredGyro = null; clearDisplayedTrails(); autoFaces = null;
     right.syncTarget();
 });
 element('holdTarget').addEventListener('click', () => { simulator.trajectory = null; simulator.setTarget(simulator.p, simulator.q); });
@@ -110,12 +170,23 @@ function advanceFaces() {
 const profileInputs = { gyroZone: value => { engine.profile.gyroDeadZone = value * Math.PI / 180; },
     accelZone: value => { engine.profile.accelDeadZone = value; }, filterHz: value => { engine.profile.filterHz = value; },
     tiltGain: value => { engine.profile.tiltGain = value; } };
+/** 校准成功后同步显示值，不触发手动输入事件导致取消或重复设置。 */
+function syncDeadzoneInputs() {
+    const values = { gyroZone: engine.profile.gyroDeadZone * 180 / Math.PI, accelZone: engine.profile.accelDeadZone };
+    for (const [id, value] of Object.entries(values)) {
+        const input = element(id); input.value = value.toFixed(2); input.nextElementSibling.value = input.value;
+    }
+}
 const noiseInputs = { gyroNoise: ['gyro', Math.PI / 180], gyroBias: ['gyroBias', Math.PI / 180],
     accelNoise: ['accel', 1], accelBias: ['accelBias', 1], walk: ['walk', 1], drop: ['drop', 1], jitter: ['jitter', 1] };
 for (const id of [...Object.keys(profileInputs), ...Object.keys(noiseInputs)]) {
     const input = element(id);
     const change = () => {
-        const value = Number(input.value); input.nextElementSibling.value = input.value;
+        const value = Number(input.value);
+        if (input.value === '' || !Number.isFinite(value) || value < 0) {
+            input.nextElementSibling.value = '请输入非负有限值'; return;
+        }
+        engine.cancelDeadzoneCalibration(); input.nextElementSibling.value = input.value;
         if (profileInputs[id]) profileInputs[id](value);
         else { const [key, scale] = noiseInputs[id]; simulator.noise[key] = value * scale; }
     };
@@ -135,24 +206,40 @@ element('cleanInput').addEventListener('click', () => cleanExperiment(false));
 element('ideal').addEventListener('click', () => cleanExperiment(true));
 
 function diagnostics(now) {
+    element('cancelDeadzone').hidden = !engine.deadzoneCalibration;
+    element('calibrateDeadzone').disabled = Boolean(engine.deadzoneCalibration);
+    element('deadzoneStatus').textContent = engine.deadzoneMessage || '保持一个朝向静置，自动设置两个死区并对齐重力方向；不修改零偏。高死区可能忽略真实慢动作。';
     const own = engine.snapshot(); const selectedId = element('deviceSelect').value;
     const selected = selectedId === 'local' ? own : devices.get(selectedId)?.frame || own;
     element('position').value = format(selected.position); element('velocity').value = format(selected.velocity);
     element('rawRate').value = format(selected.rawGyro.map(value => value * 180 / Math.PI));
     element('cleanRate').value = format(selected.gyro.map(value => value * 180 / Math.PI));
-    element('rawForce').value = format(selected.rawAccel); element('cleanForce').value = format(selected.linear);
+    element('rawForce').value = format(selected.rawAccel);
+    element('cleanForce').value = format(selected.linear);
     element('calibratedBias').value = format(selected.gyroBias.map(value => value * 180 / Math.PI));
-    element('accelKind').textContent = `${selected.kind === 'gravity' ? '含重力' : '平台线性'}加速度 / m/s²`;
+    element('accelKind').textContent = `${selected.kind === 'gravity' ? '原始含重力' : '原始平台线性'}加速度 / m/s²`;
     element('gyro').value = format((latestSample?.gyro || [0, 0, 0]).map(value => value * 180 / Math.PI));
     element('acceleration').value = format(latestSample?.accel || [0, 0, 0]);
     const age = sourceStart === null ? 0 : Math.max(0, (latestSample?.time || 0) - sourceStart);
     element('sampleStatus').textContent = `${age > 0 ? (activeFrames / age).toFixed(1) : '—'} Hz · 缺口 ${own.gaps} · 拒绝 ${own.rejected} · 零速修正 ${own.zeroCorrections}`;
-    element('engineStatus').textContent = `${selected.message} · 陀螺仪${selected.gyroCalibrated ? '已校准' : '未校准'} · 加速度${selected.accelCalibrated ? '六面已校准' : '六面未完成'}`;
+    element('engineStatus').textContent = `${selected.message} · 陀螺仪${selected.gyroCalibrated ? '已校准' : '使用死区，未校准'} · 加速度${selected.accelCalibrated ? '六面已校准' : '使用死区，六面校准可选'}`;
     element('faceCount').textContent = `${own.faces}/6`;
     if (source === 'simulator' && selectedId === 'local') {
-        element('positionError').value = engine.p.distanceTo(simulator.p.clone().sub(truthOrigin)).toFixed(4);
+        const referencePosition = simulator.p.clone().sub(truthOrigin);
+        const rawError = engine.p.clone().sub(referencePosition).toArray();
+        const error = rawError
+            .map(value => Math.abs(value) < 0.00005 ? 0 : value);
+        element('positionErrorX').value = error[0].toFixed(4);
+        element('positionErrorY').value = error[1].toFixed(4);
+        element('positionErrorZ').value = error[2].toFixed(4);
+        element('positionErrorTotal').value = Math.hypot(...rawError).toFixed(4);
         element('rotationError').value = (engine.q.angleTo(simulator.q) * 180 / Math.PI).toFixed(3);
-    } else { element('positionError').value = '无外部真值'; element('rotationError').value = '无外部真值'; }
+    } else {
+        for (const id of ['positionErrorX', 'positionErrorY', 'positionErrorZ', 'positionErrorTotal']) {
+            element(id).value = '无外部真值';
+        }
+        element('rotationError').value = '无外部真值';
+    }
     const known = new Set([...element('deviceSelect').options].map(option => option.value));
     const badges = [];
     for (const device of devices.values()) {
@@ -163,7 +250,9 @@ function diagnostics(now) {
         badge.textContent = `${device.label} · ${device.online ? '在线' : '已断线'}`; badges.push(badge);
     }
     element('devices').replaceChildren(...badges);
-    if (source === 'phone' && phone.running && now - phone.lastReceive > 700 && engine.status !== 'paused') engine.pause();
+    if ((source === 'phone' && phone.running && now - phone.lastReceive > 700
+        || source === 'remote' && remoteLastReceive > 0 && now - remoteLastReceive > 700)
+        && engine.status !== 'paused') engine.pause();
 }
 function tick(now) {
     if (disposed) return;
@@ -176,22 +265,36 @@ function tick(now) {
             advanceFaces(); nextInterval = simulator.nextInterval();
         }
     }
-    left.update('local', engine.snapshot(), '#65d8c8');
+    queueTrailPoint(pendingEstimatedTrail, left.update('local', engine.snapshot(), '#0f766e'));
     const truthEntry = left.devices.get('truth');
-    if (element('showTruth').checked && source === 'simulator') {
+    if (source === 'simulator') {
         const truth = simulator.truth(); truth.position = simulator.p.clone().sub(truthOrigin).toArray();
-        left.update('truth', truth, '#ffba70'); left.devices.get('truth').object.visible = true;
-        left.devices.get('truth').trail.visible = true;
+        queueTrailPoint(pendingReferenceTrail, left.update('truth', truth, '#ea580c'));
+        const showTruth = element('showTruth').checked;
+        left.devices.get('truth').object.visible = showTruth;
+        left.devices.get('truth').trail.visible = showTruth;
     } else if (truthEntry) { truthEntry.object.visible = false; truthEntry.trail.visible = false; }
     left.render(); if (source === 'simulator') right.render();
-    if (now - lastPublish >= 40) { room.publish(engine.snapshot()); lastPublish = now; }
     if (now - lastPaint >= 150) { diagnostics(now); lastPaint = now; }
     animation = requestAnimationFrame(tick);
 }
 animation = requestAnimationFrame(tick);
-document.addEventListener('visibilitychange', () => { if (document.hidden) { engine.pause(); room.publish(engine.snapshot()); }
+/** 房间消息按20毫秒独立发送，避免60Hz屏幕刷新回调把实际发布频率压低。 */
+const publishTimer = window.setInterval(() => {
+    if (disposed || source === 'remote' && !latestSample) return;
+    const referencePosition = source === 'simulator' ? simulator.p.clone().sub(truthOrigin).toArray() : null;
+    const sent = room.publish(engine.snapshot(), referencePosition,
+        { estimated: pendingEstimatedTrail, reference: pendingReferenceTrail });
+    if (sent) { pendingEstimatedTrail.length = 0; pendingReferenceTrail.length = 0; }
+}, 20);
+document.addEventListener('visibilitychange', () => { if (document.hidden) {
+    engine.pause();
+    const referencePosition = source === 'simulator' ? simulator.p.clone().sub(truthOrigin).toArray() : null;
+    room.publish(engine.snapshot(), referencePosition);
+    syncVisibleTrailSnapshot();
+}
     previousFrame = performance.now(); accumulator = 0; });
-const dispose = () => { if (disposed) return; disposed = true; cancelAnimationFrame(animation);
+const dispose = () => { if (disposed) return; disposed = true; cancelAnimationFrame(animation); window.clearInterval(publishTimer);
     phone.stop(); room.close(); left.dispose(); right.dispose(); };
 window.addEventListener('pagehide', dispose, { once: true });
 

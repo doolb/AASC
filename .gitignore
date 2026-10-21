@@ -45,6 +45,12 @@ src/apps/android-display/.kotlin/
 /.cache/voice-selection/
 /3rd/tts-server/android-asr/.kotlin/
 /3rd/tts-server/android-asr/web-dist/
+/3rd/imu-six-axis-test/android-sender/.gradle/
+/3rd/imu-six-axis-test/android-sender/.kotlin/
+/3rd/imu-six-axis-test/android-sender/build/
+/3rd/imu-six-axis-test/android-sender/app/build/
+/3rd/imu-six-axis-test/android-sender/output/
+/3rd/imu-six-axis-test/android-sender/local.properties
 /src/apps/android-display/app/.cxx/
 
 # APK profile 的构建中间目录；保留同级 app.json 配置

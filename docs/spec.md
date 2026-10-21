@@ -58,7 +58,7 @@
 | 显示端监听开关与语音状态按钮 | [display-voice-controls.md](spec/display-voice-controls.md) | 模式权威同步、单次识别与六状态归约 |
 | MMD-AR PMX文件导出 | [mmd-ar-pmx-export.md](spec/mmd-ar-pmx-export.md) | 原文件扫描、来源基线、物理段写入及冲量/软体引用重排伪代码 |
 | MMD刚体XPBD WebGL2 | [mmd-xpbd-webgl.md](spec/mmd-xpbd-webgl.md) | 测试版WebGL2 ping-pong刚体后端、碰撞/约束并行、骨骼读回与CPU回退 |
-| 六轴IMU共享3D测试网页 | [imu-six-axis-test.md](spec/imu-six-axis-test.md) | 六轴统一测量、校准/惯性积分、模拟真值及房间共享伪代码（已实现，13项自测通过） |
+| 六轴IMU共享3D测试网页 | [imu-six-axis-test.md](spec/imu-six-axis-test.md) | 六轴统一测量、分轴位置误差、实时帧与浏览器显示轨迹双轨缓存及本机只读查询伪代码 |
 | HTTP API | [api.md](spec/api.md) | 文件上传、媒体管理、TTS、提醒、聊天、整点报时等 API |
 | 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](spec/display-camera-chat.md) | 摄像头能力远端配置、请求转发、单次拍照、实时预览和多模态聊天伪代码 |
 | API 使用与命令行工具 | [api-usage.md](spec/api-usage.md) | 服务器 HTTP API 目录、Bash 调用器和安全测试伪代码 |
