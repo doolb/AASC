@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [ASR 内容过滤](design/asr-content-filter.md)
+
 - [五子棋游戏协议与本地显示](design/game-gomoku.md)
 
 - [显示端右侧设置面板互斥](design/display-stage-panel-coordination.md)

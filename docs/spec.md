@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [ASR 内容过滤伪代码](spec/asr-content-filter.md)
+
 - [五子棋游戏协议与本地显示伪代码](spec/game-gomoku.md)
 
 - [显示端右侧设置面板互斥伪代码](spec/display-stage-panel-coordination.md)

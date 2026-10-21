@@ -838,18 +838,13 @@ function hasValidContent(text) {
         return false;
     }
 
-    // 连续的短字母数字组合可能是用户口述的编号，例如“C3。”。
-    // 仅去掉句末标点用于判断，后续语音路由仍使用 ASR 原文；纯英文或纯数字继续按原规则过滤。
-    const spokenCode = text.trim().replace(/[.!?。！？]+$/u, '');
-    const isCompactSpokenCode = spokenCode.length >= 2 && spokenCode.length <= 12
-        && /^[A-Za-z0-9]+$/u.test(spokenCode)
-        && /[A-Za-z]/u.test(spokenCode) && /[0-9]/u.test(spokenCode);
-    if (isCompactSpokenCode) return true;
-    // ASR 会把口述编号中的数字识别为中文数字；只放行紧凑编号，不放宽普通短中文噪声。
-    const isChineseNumeralCode = Array.from(spokenCode).length >= 2 && Array.from(spokenCode).length <= 12
-        && /^[A-Za-z0-9零〇一二三四五六七八九十两]+$/u.test(spokenCode)
-        && /[A-Za-z]/u.test(spokenCode) && /[零〇一二三四五六七八九十两]/u.test(spokenCode);
-    if (isChineseNumeralCode) return true;
+    // 文本中的连续字母数字组合可能是口述编号，例如“下H4。”或“选A12”。
+    // ASR 也可能把数字写成中文；按完整连续片段检查长度，不从超长编号中截取短编号放行。
+    // 此处只放行内容，后续语音路由仍接收原文；纯英文、纯数字和被空格分隔的编号沿用原过滤。
+    const spokenCodes = text.match(/[A-Za-z0-9零〇一二三四五六七八九十两]+/gu) || [];
+    const hasSpokenCode = spokenCodes.some(code => code.length >= 2 && code.length <= 12
+        && /[A-Za-z]/u.test(code) && /[0-9零〇一二三四五六七八九十两]/u.test(code));
+    if (hasSpokenCode) return true;
 
     if (config.get('asr.requireChinese', false) && !hasChinese) {
         log('\u8bed\u97f3', `\u5ffd\u7565\u975e\u4e2d\u6587\u8f93\u5165: "${text}"`);

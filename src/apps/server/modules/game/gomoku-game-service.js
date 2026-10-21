@@ -232,10 +232,10 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                     ? { ...snapshotFromState(next), type: 'gameSnapshot' }
                     : { type: 'gameDelta', game: GAME_NAME, gameId: next.id,
                         revision: next.revision, actor: call.actor, coordinate: coordinate.text, turn, result };
-                // 终局落子回执到坐标即止；下一手不存在，最终结果由随后 GM 状态行说明。
+                // 每步回执附落子后的权威棋盘；终局不写下一手，最终结果由随后 GM 状态说明。
                 const gmEnding = result === '进行中' ? `,${protocolActor(turn)},${result}` : '';
                 return commit(displayId, next, message,
-                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${protocolActor(call.actor)},${coordinate.text}${gmEnding}`);
+                    `Game:五子棋,GM,落子,${shortGameId(next.id)},${next.revision},${protocolActor(call.actor)},${coordinate.text}${gmEnding},${encodeBoard(next.board, next.size)}`);
             }
             case '提议尺寸': {
                 if (!state) return fail('未开局');

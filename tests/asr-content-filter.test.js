@@ -38,9 +38,18 @@ test('紧凑字母与中文数字编号原样通过，普通短中文继续过�
     }
 });
 
+test('文本中包含连续字母数字编号即可放行，不要求整段都是编号', () => {
+    for (const requireChinese of [true, false]) {
+        const { hasValidContent } = createFilter(requireChinese);
+        for (const input of ['下H4。', '下h4！', '选A12', '下H四。', 'C3中', 'C3 C4']) {
+            assert.equal(hasValidContent(input), true, `${requireChinese}: ${input}`);
+        }
+    }
+});
+
 test('普通噪声和非连续代码仍沿用原过滤规则', () => {
     const { hasValidContent } = createFilter(true);
-    for (const input of ['ABC。', '3。', 'C 3。', 'C-3。', 'C3中', 'C3 C4', 'A123456789012', '。']) {
+    for (const input of ['ABC。', '3。', 'C 3。', 'C-3。', 'A123456789012', '。']) {
         assert.equal(hasValidContent(input), false, input);
     }
     assert.equal(hasValidContent('你好'), true);
@@ -53,7 +62,7 @@ test('关闭中文要求后，短代码通过且既有英文短噪声继续过�
     assert.equal(hasValidContent('ABC。'), false);
 });
 
-test('连续语音识别结果 C3。与 A一。原样进入显示端入口', () => {
+test('连续语音识别结果和带前缀的坐标原样进入显示端入口', () => {
     const { hasValidContent } = createFilter(true);
     const routeStart = source.indexOf('function processRecognizedAsrResultForDisplay(');
     const routeEnd = source.indexOf("app.post('/api/asr/recognize'", routeStart);
@@ -71,8 +80,10 @@ test('连续语音识别结果 C3。与 A一。原样进入显示端入口', () 
         });
     processRecognizedAsrResultForDisplay('display-a', { text: 'C3。' }, {});
     processRecognizedAsrResultForDisplay('display-a', { text: 'A一。' }, {});
-    assert.equal(submitted.length, 2);
+    processRecognizedAsrResultForDisplay('display-a', { text: '下H4。' }, {});
+    assert.equal(submitted.length, 3);
     assert.equal(submitted[0].displayId, 'display-a');
     assert.equal(submitted[0].text, 'C3。');
     assert.equal(submitted[1].text, 'A一。');
+    assert.equal(submitted[2].text, '下H4。');
 });

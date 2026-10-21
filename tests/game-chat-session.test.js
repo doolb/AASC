@@ -24,7 +24,8 @@ test('独立 JS 入口完成目录、规则、开局及一轮双方落子', asyn
         'Game:五子棋,GameAI,规则',
         'Game:五子棋,GameUser,开局,9\n9 路棋盘已打开。',
         'Game:五子棋,GameUser,落子,C3',
-        'Game:五子棋,GameAI,落子,D3\n我下 D3，轮到你了。'
+        'Game:五子棋,GameAI,落子,D3\n我下 D3。',
+        '轮到你了。'
     ];
     const { session, events } = fixture(t, async request => {
         requests.push(request);
@@ -40,11 +41,13 @@ test('独立 JS 入口完成目录、规则、开局及一轮双方落子', asyn
     assert.deepEqual(opening.events.filter(event => event.type === 'gameProtocol').map(event => event.kind),
         ['GameAI', 'GM', 'GameAI', 'GM', 'GameUser', 'GM']);
     const move = await session.sendUser('我下在 C3');
-    assert.equal(move.result.message, '我下 D3，轮到你了。');
+    assert.equal(move.result.message, '我下 D3。\n轮到你了。');
     assert.equal(move.snapshot.revision, 3);
     assert.equal(move.snapshot.board.split('/')[2].slice(2, 4), 'XO');
     assert.match(requests[3].systemPrompt, /NowGame:五子棋/);
     assert.match(requests[4].input, /Game:五子棋,GM,落子,/);
+    assert.match(requests[5].input, /GameAI,D3,GameUser,进行中,[.XO/]+$/);
+    assert.equal(requests[5].input.split(',').at(-1), move.snapshot.board);
     assert.deepEqual(move.events.filter(event => event.type === 'gameProtocol').map(event => event.kind),
         ['GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(events.filter(event => event.type === 'gameUpdate').length, 3);

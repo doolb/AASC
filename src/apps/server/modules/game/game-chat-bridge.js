@@ -31,6 +31,7 @@ const GOMOKU_RULES = [
     '恢复显示：只需重新显示已隐藏棋盘时调用；查看和其他棋盘操作也会显示棋盘。',
     '尺寸9/11/13/15，默认15；用户黑先、AI白后，不能选择先后手；A1在左上角，列包含I；口语位置先行后列，例如第3行第3列是C3，用户落子发Game:五子棋,GameUser,落子,C3；横竖斜五连胜，无禁手',
     'GM快照字段：短编号,版本,尺寸,下一手,结果,棋盘编码；下一手用GameUser或GameAI，胜方用GameUser胜或GameAI胜；棋盘用/从上到下分行，每行从左到右对应A至末列，第一行是第1行；.为空位，X是用户黑棋，O是AI白棋（字母O）；落子前按行列检查目标格为.，已占用须另选空格',
+    'GM落子回执末尾也附完整棋盘编码；进行中字段为短编号,版本,落子方,坐标,下一手,进行中,棋盘编码；终局字段为短编号,版本,落子方,坐标,棋盘编码，胜负看随后GM状态；以后续回执中的最新棋盘为准',
     'GM只发回执，不能用GM角色调用；改尺寸先提议并待用户明确确认；进行中同尺寸重开须用户明确要求'
 ].join('\n');
 // 游戏目录可以扩展；规则查询、进行中与已结束的棋局共用同一份游戏专属规则。
@@ -178,7 +179,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         options.target || '', options.sessionId || ''].join('|');
     const needsRecovery = initialState && recoveredContexts.get(contextKey) !== initialState.gameId;
     if (needsRecovery) {
-        // 服务器重启或聊天上下文切换后只补一次权威棋盘；常规回合继续传增量。
+        // 服务器重启或上下文切换后补一次权威快照；常规落子回执也会附最新棋盘编码。
         const snapshot = gameService.gmSnapshot(displayId);
         input = `${snapshot}\n${content}`;
         recordProtocol('GM', snapshot);
@@ -229,6 +230,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         let failedResult = null;
         let deferredAiMove = false;
         let terminalMove = false;
+        let confirmedAiMove = false;
         for (const [index, { call, raw }] of tags.entries()) {
             recordProtocol(call.actor === 'User' ? 'GameUser' : 'GameAI', raw);
             const games = getAvailableGames(displayId);
@@ -252,6 +254,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
             }
             if (result.ok && call.operation === '落子'
                 && gameService.snapshot(displayId)?.result !== '进行中') terminalMove = true;
+            if (result.ok && call.operation === '落子' && call.actor === 'AI') confirmedAiMove = true;
             if (result.ok) {
                 // 用户棋步确认后才让模型选择 AI 棋步；本回复预写的 AI 落子及叙述均不采信。
                 if (call.actor === 'User' && call.operation === '落子'
@@ -299,7 +302,14 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
             const status = gameService.gmStatus(displayId);
             recordProtocol('GM', status);
             input = [...gmResults, status].join('\n');
-            maxTurns = Math.max(maxTurns, turn + 2);
+            maxTurns = Math.min(8, Math.max(maxTurns, turn + 2));
+            continue;
+        }
+        if (confirmedAiMove) {
+            // AI 必须读到自己的成功回执和最新棋盘，避免下一轮仍误以为该棋步尚未确认。
+            // 保留原叙述，确认后的自然语言由后续模型回复追加；确认预留一次，整体不超过八次。
+            input = gmResults.join('\n');
+            maxTurns = Math.min(8, Math.max(maxTurns, turn + 2));
             continue;
         }
         if (lastCall.game === '五子棋' && lastCall.operation !== '规则'
