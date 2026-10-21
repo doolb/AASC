@@ -59,6 +59,10 @@ test('同一显示端快速重发只执行一次，AI 落子后仍保持锁直�
     assert.equal(f.pendingGameMoves.size, 0);
     assert.equal(f.messages.at(-1).status, 'complete');
     assert.equal(f.messages.at(-1).revision, f.game.snapshot('screen').revision);
+    await new Promise(setImmediate);
+    assert.equal(f.requests.length, 1, '解除锁后，不得补执行处理中被拒绝的其它落点');
+    assert.equal(f.game.snapshot('screen').board.split('/')[2][4], '.', '被拒绝的E3仍应为空');
+    assert.equal(f.messages.filter(item => item.type === 'gameDelta').length, 2, '只能保留双方已确认的两手');
     f.move('next', 'E3');
     assert.equal(f.requests.length, 2);
     f.requests[1].resolve();

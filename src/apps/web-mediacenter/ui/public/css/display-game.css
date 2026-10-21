@@ -128,6 +128,34 @@ body.display-chat-open .display-game-layer {
 }
 .display-game-point:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 .display-game-point:disabled { cursor: default; }
+.display-game-move-hint {
+    position: absolute;
+    z-index: 2;
+    left: 50%;
+    top: 50%;
+    box-sizing: border-box;
+    max-width: calc(100% - 32px);
+    padding: 10px 18px;
+    border: 1px solid var(--border-color, #657078);
+    border-radius: 12px;
+    background: var(--bg-secondary, #202731);
+    color: var(--text-primary, #fff);
+    box-shadow: 0 4px 16px #0005;
+    font-size: clamp(14px, 2.6vmin, 20px);
+    text-align: center;
+    text-shadow: none;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    animation: display-game-move-hint 1500ms ease-out both;
+}
+.display-game-move-hint[hidden] { display: none !important; }
+@keyframes display-game-move-hint {
+    0%, 65% { opacity: 1; transform: translate(-50%, -50%); }
+    100% { opacity: 0; transform: translate(-50%, calc(-50% - 18px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .display-game-move-hint { animation: none; }
+}
 .display-game-hint { margin: 0; font-size: 13px; opacity: .8; }
 /* 游戏与聊天共用左下角按钮列，列表只向上展开，不盖住聊天入口。 */
 .display-game-chat-actions {

@@ -1,5 +1,15 @@
 # 聊天系统实现文档
 
+## Qwen发行默认普通档（2026-10-21）
+
+```text
+已有声明 := 开发映射qwen.defaultTier=flash、tierRequestModel(qwen,flash)=aasc-qwen-flash
+发行种子chat.model及Qwen预置profile.model旧值Qwen3.6-Flash → 统一为aasc-qwen-flash → 普通档请求
+已有运行配置 → 仍以当前profile.model和Provider记忆为权威，不以出厂默认覆盖用户选择
+校验 := JSON可解析、Qwen种子名称识别为flash、Provider默认普通的既有测试通过
+```
+
+
 ## LLM 三档与两端快选伪代码（2026-10-19）
 
 已有声明：当前普通 LLM profile.model；PiProfileConfig.snapshot/update；账号选择.selectAccount；豆包请求.buildDoubaoRequest；Responses 原生续接状态。

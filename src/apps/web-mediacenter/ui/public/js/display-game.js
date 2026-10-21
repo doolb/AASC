@@ -9,6 +9,9 @@
     let requestSequence = 0;
     let connected = false;
     let conversationState = 'waitingWake';
+    // 只维护一条提示及其计时器；指针编号用于阻止同一次无效按下稍后变成落子。
+    let moveHintTimer = null;
+    let blockedPointerId = null;
 
     function isConversationActive() {
         return conversationState === 'activeGroup' || conversationState === 'activePrivate';
@@ -48,10 +51,41 @@
         return `${kind}-${Date.now()}-${requestSequence}`;
     }
 
+    function moveBlockReason(point) {
+        // 按优先级返回当前阻止原因，按钮状态和点击提示必须复用同一判断。
+        const reasons = [
+            [!connected, '连接已断开'],
+            [!isConversationActive(), '请先进入对话'],
+            [!game, '请先开始棋局'],
+            [game?.demo === true, '演示棋盘不能落子'],
+            [game?.visible === false, '棋盘已隐藏'],
+            [game?.result !== '进行中', '棋局已结束'],
+            [Boolean(recoveryRequestId), '正在同步棋盘'],
+            [Boolean(pending), '正在处理上一手'],
+            [game?.turn !== 'User', 'AI正在落子'],
+            [point?.dataset.stone !== '.', '这里已有棋子']
+        ];
+        return reasons.find(([blocked]) => blocked)?.[1] || null;
+    }
+
     function canPlay(point) {
-        return connected && isConversationActive() && game && game.demo !== true
-            && game.visible !== false && game.result === '进行中' && game.turn === 'User'
-            && !pending && !recoveryRequestId && point?.dataset.stone === '.';
+        return moveBlockReason(point) === null;
+    }
+
+    function hideMoveHint() {
+        if (moveHintTimer !== null) clearTimeout(moveHintTimer);
+        moveHintTimer = null;
+        if (refs.moveHint) refs.moveHint.hidden = true;
+    }
+
+    function showMoveHint(text) {
+        if (!refs.moveHint) return;
+        hideMoveHint();
+        refs.moveHint.textContent = text;
+        refs.moveHint.hidden = false;
+        // 重置同一个CSS动画，连点不会累积DOM、动画或延迟执行任务。
+        for (const animation of refs.moveHint.getAnimations?.() || []) animation.currentTime = 0;
+        moveHintTimer = setTimeout(hideMoveHint, 1500);
     }
 
     function refreshMenu() {
@@ -84,6 +118,8 @@
         refs.layer.hidden = !available;
         refs.shell.hidden = !available || game.visible === false;
         refs.layer.setAttribute('aria-hidden', String(!available));
+        const emptyPoint = refs.board.querySelector('[data-stone="."]');
+        if (!available || game.visible === false || (emptyPoint && canPlay(emptyPoint))) hideMoveHint();
         setStatus(recoveryRequestId ? '正在同步棋盘…' : pending ? '正在处理棋步…' : turnLabel());
         refs.board.querySelectorAll('.display-game-point').forEach(button => {
             button.disabled = !canPlay(button);
@@ -166,6 +202,7 @@
             if (message.snapshot) handleMessage(message.snapshot);
             else {
                 game = null;
+                hideMoveHint();
                 refs.layer.hidden = true;
                 refs.shell.hidden = true;
                 refs.layer.setAttribute('aria-hidden', 'true');
@@ -190,6 +227,7 @@
         if (message.type === 'gameDemoEnd') {
             if (game?.demo === true && game.gameId === message.gameId) {
                 game = null;
+                hideMoveHint();
                 refs.layer.hidden = true;
                 refs.shell.hidden = true;
                 refs.layer.setAttribute('aria-hidden', 'true');
@@ -207,6 +245,7 @@
                 refreshView();
                 setStatus(`操作失败：${message.code || '未知错误'}`);
             }
+            showMoveHint(message.code || '落子失败');
             return true;
         }
         if (message.type === 'gameSnapshot') {
@@ -268,6 +307,12 @@
         refs.hint = document.getElementById('displayGameMenuHint');
         refs.actions = document.getElementById('displayGameChatActions');
         if (!refs.layer || !refs.board) return;
+        refs.moveHint = document.createElement('div');
+        refs.moveHint.className = 'display-game-move-hint';
+        refs.moveHint.setAttribute('role', 'status');
+        refs.moveHint.setAttribute('aria-live', 'polite');
+        refs.moveHint.hidden = true;
+        refs.shell.appendChild(refs.moveHint);
         if (refs.list) {
             // 游戏目录与本显示端向服务端声明的能力共用同一列表。
             const fragment = document.createDocumentFragment();
@@ -320,14 +365,37 @@
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') setMenuOpen(false);
         });
+        // disabled按钮仍可在捕获阶段收到pointerdown，让不能落子的点击也有反馈。
+        refs.board.addEventListener('pointerdown', event => {
+            blockedPointerId = null;
+            const point = event.target.closest('.display-game-point');
+            if (!point) return;
+            const reason = moveBlockReason(point);
+            if (!reason) return;
+            blockedPointerId = event.pointerId;
+            showMoveHint(reason);
+        }, true);
         refs.board.addEventListener('click', event => {
             const point = event.target.closest('.display-game-point');
-            if (!canPlay(point)) return;
+            if (!point) return;
+            if (blockedPointerId !== null && (event.pointerId === blockedPointerId
+                || (event.pointerId === undefined && event.detail > 0))) {
+                blockedPointerId = null;
+                return;
+            }
+            const reason = moveBlockReason(point);
+            if (reason) { showMoveHint(reason); return; }
+            hideMoveHint();
             pending = { requestId: nextRequestId('game'), gameId: game.gameId, revision: game.revision };
             refreshView();
             const sent = send({ type: 'gameMove', coordinate: point.dataset.coordinate,
                 ...pending });
-            if (!sent) { pending = null; refreshView(); setStatus('连接中断，请重试'); }
+            if (!sent) {
+                pending = null;
+                refreshView();
+                setStatus('连接中断，请重试');
+                showMoveHint('连接已断开');
+            }
         });
         document.getElementById('displayGameClose')?.addEventListener('click', () => {
             if (game && game.demo !== true) send({ type: 'gameView', visible: false, revision: game.revision });

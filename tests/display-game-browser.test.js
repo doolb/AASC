@@ -125,6 +125,122 @@ test('四种尺寸和真实四向旋转下标尺对齐、点击坐标准确', { 
     }
 });
 
+test('无效真实点击显示单条飘字，松手或解锁后不补执行，触屏与旋转保持可见', {
+    skip: !CHROME, timeout: 30000
+}, async () => {
+    const $ = cheerio.load(fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8'));
+    const styles = $('link[rel="stylesheet"]').toArray()
+        .map(node => fs.readFileSync(path.join(PUBLIC, $(node).attr('href')), 'utf8')).join('\n');
+    $('script, link[rel="stylesheet"]').remove();
+    $('head').append(`<style>${styles}</style>`);
+    const browser = await puppeteer.launch({ executablePath: CHROME, headless: true,
+        args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    try {
+        const page = await browser.newPage();
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await page.setViewport({ width: 390, height: 740, hasTouch: true });
+        await page.setContent($.html());
+        for (const name of ['display-chat', 'display-stage', 'display-game']) {
+            await page.addScriptTag({ path: path.join(PUBLIC, `js/${name}.js`) });
+        }
+        await page.evaluate(() => {
+            window.sent = [];
+            DisplayStage.setTransport(message => { sent.push(message); return true; });
+            DisplayGame.init();
+            const recovery = sent.findLast(message => message.type === 'gameRecover');
+            DisplayStage.handleServerMessage({ type: 'gameRecoverResult', requestId: recovery.requestId,
+                pendingRequestId: null, snapshot: null });
+            DisplayStage.handleServerMessage({ type: 'voiceConversationState', state: 'activePrivate' });
+        });
+        const board = ['X........', ...Array(8).fill('.........')].join('/');
+        const snapshot = (turn = 'User', revision = 1, extra = {}) => ({ type: 'gameSnapshot',
+            gameId: 'hint', size: 9, board, revision, turn, result: '进行中', visible: true, ...extra });
+        const deliver = message => page.evaluate(message => DisplayStage.handleServerMessage(message), message);
+        const moves = () => page.evaluate(() => sent.filter(message => message.type === 'gameMove'));
+        const hint = () => page.$eval('.display-game-move-hint', node => ({ text: node.textContent, hidden: node.hidden }));
+        await deliver(snapshot());
+        // 真触屏会点击disabled按钮；不能仅用dispatchEvent模拟普通click验证。
+        await page.tap('[data-coordinate="A1"]');
+        assert.deepEqual(await hint(), { text: '这里已有棋子', hidden: false });
+        for (let index = 0; index < 8; index += 1) await page.tap('[data-coordinate="A1"]');
+        assert.equal(await page.$$eval('.display-game-move-hint', nodes => nodes.length), 1);
+        assert.equal(await page.$eval('.display-game-move-hint', node => node.getAnimations().length), 1);
+        assert.equal((await moves()).length, 0);
+        await page.waitForFunction(() => document.querySelector('.display-game-move-hint').hidden, { timeout: 3000 });
+
+        await deliver(snapshot('AI'));
+        await page.click('[data-coordinate="C3"]');
+        assert.deepEqual(await hint(), { text: 'AI正在落子', hidden: false });
+        const center = await page.$eval('[data-coordinate="C3"]', node => {
+            const rect = node.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+        });
+        await page.mouse.move(center.x, center.y);
+        await page.mouse.down();
+        // 增量不重建交点：按下无效，松手前刚好轮到玩家，也不能把原手势当新落子。
+        await deliver({ type: 'gameDelta', gameId: 'hint', revision: 2, actor: 'AI', coordinate: 'D3',
+            turn: 'User', result: '进行中' });
+        await page.mouse.up();
+        assert.equal((await moves()).length, 0);
+        assert.equal((await hint()).hidden, true);
+        await page.click('[data-coordinate="C3"]');
+        const move = (await moves())[0];
+        assert.equal(move.coordinate, 'C3');
+        for (let index = 0; index < 8; index += 1) await page.click('[data-coordinate="E3"]');
+        assert.deepEqual(await hint(), { text: '正在处理上一手', hidden: false });
+        assert.equal((await moves()).length, 1);
+        await deliver({ type: 'gameDelta', gameId: 'hint', revision: 3, actor: 'User', coordinate: 'C3',
+            turn: 'AI', result: '进行中' });
+        await deliver({ type: 'gameDelta', gameId: 'hint', revision: 4, actor: 'AI', coordinate: 'F3',
+            turn: 'User', result: '进行中' });
+        await deliver({ type: 'gameMoveResult', requestId: move.requestId, status: 'complete', gameId: 'hint', revision: 4 });
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal((await moves()).length, 1, '解锁不得补发之前点过的E3');
+        assert.equal(await page.$eval('[data-coordinate="E3"]', node => node.dataset.stone), '.');
+        assert.equal((await hint()).hidden, true);
+        await page.click('[data-coordinate="E3"]');
+        const second = (await moves())[1];
+        await deliver({ type: 'gameError', requestId: move.requestId, code: '旧错误' });
+        assert.equal((await hint()).hidden, true, '旧请求不能污染当前提示');
+        await deliver({ type: 'gameError', requestId: second.requestId, code: '位置已占用' });
+        assert.deepEqual(await hint(), { text: '位置已占用', hidden: false });
+
+        await page.evaluate(() => DisplayStage.setTransport(null));
+        await page.click('[data-coordinate="E3"]');
+        assert.deepEqual(await hint(), { text: '连接已断开', hidden: false });
+        await page.evaluate(() => DisplayStage.setTransport(message => { sent.push(message); return true; }));
+        await page.click('[data-coordinate="E3"]');
+        assert.deepEqual(await hint(), { text: '正在同步棋盘', hidden: false });
+        const recovery = await page.evaluate(() => sent.findLast(message => message.type === 'gameRecover'));
+        await deliver({ type: 'gameRecoverResult', requestId: recovery.requestId, pendingRequestId: null, snapshot: snapshot('User', 4) });
+        await deliver(snapshot('User', 5, { result: 'User胜' }));
+        await page.click('[data-coordinate="C3"]');
+        assert.deepEqual(await hint(), { text: '棋局已结束', hidden: false });
+
+        await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+        for (const viewport of [{ width: 320, height: 640 }, { width: 740, height: 390 }]) {
+            await page.setViewport({ ...viewport, hasTouch: true });
+            for (const angle of [0, 90, 180, 270]) {
+                await page.evaluate(angle => { window.currentRotation = angle; DisplayStage.setRotation(angle); }, angle);
+                await deliver(snapshot('AI', 6));
+                await page.tap('[data-coordinate="C3"]');
+                const layout = await page.$eval('.display-game-move-hint', node => {
+                    const rect = node.getBoundingClientRect();
+                    return { hidden: node.hidden, text: node.textContent, animation: getComputedStyle(node).animationName,
+                        transparent: getComputedStyle(node).pointerEvents === 'none',
+                        fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight };
+                });
+                assert.deepEqual(layout, { hidden: false, text: 'AI正在落子', animation: 'none', transparent: true, fits: true },
+                    `${viewport.width}×${viewport.height}/${angle}°`);
+            }
+        }
+        assert.equal((await moves()).length, 2);
+        await deliver({ type: 'voiceConversationState', state: 'waitingWake' });
+        assert.equal((await hint()).hidden, true);
+        assert.deepEqual(errors, []);
+    } finally { await browser.close(); }
+});
+
 test('连接脚本运行前游戏模块已注册五子棋', { skip: !CHROME }, async () => {
     const html = fs.readFileSync(path.join(PUBLIC, 'display.html'), 'utf8');
     const $ = cheerio.load(html);

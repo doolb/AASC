@@ -141,7 +141,7 @@
   "chat": {
     "agentBackend": "codex",
     "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
-    "model": "Qwen3.6-Flash",
+    "model": "aasc-qwen-flash",
     "maxTokens": 65536,
     "temperature": 0.7,
     "apiKey": "",
@@ -162,7 +162,7 @@
       {
         "name": "qwen3.5",
         "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
-        "model": "Qwen3.6-Flash",
+        "model": "aasc-qwen-flash",
         "maxTokens": 65536,
         "temperature": 0.7,
         "contextCount": 10,
