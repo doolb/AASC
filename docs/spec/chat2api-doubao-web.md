@@ -6,6 +6,8 @@
 入口 := 控制端任务 → 豆包网页 → 创建实例 → 通用参数表单
 参数 := browserExecutable=vivaldi、debugPort=9224、port=9091、accountId可选；Android使用WebView，不启动桌面浏览器
 路由 := doubao.web正在运行 ? browser-fetch : node-http
+未启动任务 := 已保存网页账号仍可聊天；Node签名缓存未命中自动获取浏览器端口 → SDK prepareOnly截留参数不发消息 → Node HTTP2实际发送；命中缓存则不创建页面
+判别 := 账号/模型网页名称或浏览器打开均不能证明browser-fetch；以当前请求的权威transport为准
 界面 := Chat2API面板没有独立兼容开关；签名后关闭WebView只控制Android直连页面生命周期
 ```
 
