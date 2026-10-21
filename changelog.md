@@ -1,3 +1,8 @@
+### 豆包签名后WebView生命周期说明
+
+- ✅ [2026-10-21] 核对Android现有实现：签名结束仅清理请求和租约，后台WebView继续保留；账号恢复资料/登录态变化时重建，服务销毁时关闭。
+  - 对照 `DoubaoWebViewService.kt` 的ensurePage、restoreAccount、handleSocket/finally及onDestroy，补充design/spec和部署观察项；未修改代码、配置、APK或出包状态。
+
 ### Android豆包失败刷新签名补发一次
 
 - ✅ [2026-10-21] 按用户确认，将Android Node直连失败且无正文/思考输出时改为重新签名补发一次。

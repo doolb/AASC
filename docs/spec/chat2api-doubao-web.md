@@ -1,5 +1,15 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 签名后页面生命周期（2026-10-21，代码核对）
+
+```text
+prepare结束 := pending删除该请求 → 中止该请求对应网页任务 → 释放账号租约/锁；不调用WebView.destroy
+页面复用 := ensurePage已有实例直接返回；恢复资料摘要相同且登录态有效时不重建
+页面重建 := 恢复资料变化或登录态失配 → destroy旧实例 → 恢复Cookie/存储 → 下次ensurePage创建
+服务结束 := DoubaoWebViewService.onDestroy销毁实例；系统回收进程也会失去页面
+内存含义 := Node按会话缓存签名仅减少prepare调用，未新增签名后关闭或空闲回收
+```
+
 ## Android直连失败刷新签名补发一次（2026-10-21，已实现）
 
 ```text
