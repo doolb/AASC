@@ -1,5 +1,20 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## Android直连失败刷新签名补发一次（2026-10-21，已实现）
+
+```text
+已有声明 := 单次Node请求控制器、Responses总截止时间、会话签名缓存、SSE迭代器及原生状态完成提交
+新增定义 := 本次执行{原始prepared,共享nativeState,首次deadline,已补发次数=0,已输出内容=假,已取消=假,当前签名scope}
+首次尝试 := 按既有缓存/签名流程发送；HTTP握手失败和stream.next失败统一进入失败判断
+可补发 := Android Node签名路径已进入 且 已补发次数为0 且 无正文/思考delta 且 未取消 且 原截止时间未到 且 错误属于上游/网络/签名失败白名单
+排除 := 本地参数/账号或会话冲突/容量限制、用户取消、已有正文或思考输出不补发
+补发 := 清理本次对应缓存及失败流 → 次数置1 → 保留原prepared正文/消息标识/会话参数 → 新控制器使用原deadline剩余预算 → 强制调用WebView准备新签名 → Node发送一次
+流透明 := 握手与SSE失败均可补发；没有输出内容才更换迭代器；共享nativeState仅在成功完整SSE后提交；上层Responses只收到最终完成或最终错误
+取消 := return/cancel/AbortSignal停止当前尝试并阻止再次准备/发送；过期不补发，不重置超时
+再次失败 := 直接返回白名单错误，无第三次网络调用；Responses沿用原uncertain保护，不在适配器内新建会话
+测试 := Responses流式/非流式刷新后成功、二次仍失败、HTTP/SSE/断连、消息ID保持、更新后缓存复用、已输出正文/思考不补发、取消/总时限/非Android路径
+```
+
 ## Android Node按会话复用签名（2026-10-21，已实现）
 
 ```text
@@ -10,8 +25,8 @@
 查找 := 根据当前账号和内部AASC ID定位；凭据版本+规范化凭据摘要、模式、已确认上游ID全部一致且正在续聊才命中；不匹配或首轮删除旧条目
 命中 := 提升LRU顺序；复用签名URL和非Cookie头；保留本轮prepared.data、超时和其它参数；Cookie取本轮prepared.headers.Cookie
 未命中 := 官网SDK/prepare生成签名但不发送消息 → Node HTTP2发送 → 只有非空SSE正常完成且取得ready原生状态后缓存；淘汰最久未使用条目
-失效 := HTTP或SSE明确auth_expired/risk_control/session_conflict/session_uncertain时仅清理本次对应条目；同时覆盖流式next异常和非流式异常；不重放请求
-隔离 := 缓存不写nativeState/磁盘/响应/日志，不跨账号/凭据/AASC/上游/模式复用；新适配器实例没有缓存；取消/网络失败/429不冒充签名失效
+失效 := HTTP或SSE明确auth_expired/risk_control/session_conflict/session_uncertain时仅清理本次对应条目；同时覆盖流式next异常和非流式异常；是否补发由上节同请求单次恢复流程决定
+隔离 := 缓存不写nativeState/磁盘/响应/日志，不跨账号/凭据/AASC/上游/模式复用；新适配器实例没有缓存；取消不清缓存；网络失败/429不冒充已确认过期，但可按上节用户确认策略主动刷新补发一次
 测试 := Responses首轮与续聊调用prepare一次，正文/ID仍更新；新会话/同ID重建/凭据/上游变化重签；失败流/HTTP不重试且下次重新准备；取消和LRU边界；兼容/桌面既有回归
 ```
 

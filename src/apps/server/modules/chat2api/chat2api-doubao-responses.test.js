@@ -23,7 +23,7 @@ const setup = (options={}) => {
     calls.push(call);
     const id=call.data.client_meta.conversation_id||`mock-upstream-${calls.length}`;
     const source=options.source?.(call,calls.length,id)||Readable.from(parts(id));
-    return {status:200,headers:{'content-type':'text/event-stream'},data:source};
+    return {status:options.status?.(calls.length)||200,headers:{'content-type':'text/event-stream'},data:source};
   }};
   const adapter=createDoubaoChatAdapter({limits:{timeoutMs:options.timeoutMs||1000},httpClient:transport,
     http2Client:transport,prepareNodeRequest:options.prepareNodeRequest});
@@ -68,7 +68,7 @@ test('Responses三轮复用一次SDK签名，本轮正文及消息ID仍更新，
   await f.service.createResponse({model:'doubao',input:'另一局聊天'});
   assert.equal(prepared,2);
 });
-test('Responses同AASC会话snapshot重建重新签名，取消及风控不自动重发',async()=>{
+test('Responses同AASC会话snapshot重建重新签名，取消不发送且风控仅补发一次',async()=>{
   let prepared=0,failed=false;
   const f=setup({prepareNodeRequest:async({prepared:call})=>{
     prepared++;return {...call,url:call.url+'&a_bogus=mock_'+prepared,doubaoHttp2:true};
@@ -84,8 +84,8 @@ test('Responses同AASC会话snapshot重建重新签名，取消及风控不自�
   failed=true;
   await assert.rejects(()=>f.service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'新消息'}),
     error=>error.code==='doubao_risk_control');
-  assert.equal(prepared,2);
-  assert.equal(f.calls.length,3);
+  assert.equal(prepared,3);
+  assert.equal(f.calls.length,4);
   assert.equal((await f.store.get(first.body.conversation.id)).nativeState.status,'uncertain');
 });
 test('豆包网页任务接管旧Node对话时重放AASC历史并切换原生传输', async () => {
@@ -271,4 +271,74 @@ test('租约总容量达到256时拒绝新增任务，释放后恢复',async()=>
   } finally {leases.forEach(lease=>lease.release())}
   await tick();
   const next=await f.store.acquireLock('mock_capacity_after_release');next.release();
+});
+
+test('Responses流式和非流式的HTTP/SSE/断连失败重新签名一次，成功后缓存新签名',async()=>{
+  for(const stream of [false,true])for(const failure of ['http','sse','disconnect']){
+    let prepared=0;
+    const f=setup({prepareNodeRequest:async({prepared:call})=>{
+      prepared++;return {...call,url:call.url+'&a_bogus=refreshed_'+prepared,doubaoHttp2:true};
+    },status:index=>failure==='http'&&index===2?403:200,
+    source:(_call,index)=>{
+      if(index!==2)return null;
+      if(failure==='sse')return Readable.from([event('STREAM_ERROR',{error_code:710022004})]);
+      if(failure==='disconnect')return Readable.from((async function*(){throw Error('socket hang up');})());
+      return null;
+    }});
+    const first=await f.service.createResponse({model:'doubao',input:'早'});
+    const second=await f.service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'今天怎么样？',stream});
+    let secondId=second.body?.id;
+    if(stream){
+      const events=[];for await(const e of second.stream)events.push(e);
+      assert.equal(events.at(-1).type,'response.completed');
+      assert.equal(events.some(e=>e.type==='response.failed'),false);
+      secondId=events.at(-1).response.id;
+    }else assert.equal(second.body.status,'completed');
+    assert.equal(prepared,2);assert.equal(f.calls.length,3);
+    assert.equal(f.calls[0].url,f.calls[1].url);
+    assert.notEqual(f.calls[1].url,f.calls[2].url);
+    assert.deepEqual(f.calls[1].data,f.calls[2].data);
+    assert.equal(f.calls[2].data.client_meta.conversation_id,'mock-upstream-1');
+    const stored=await f.store.get(first.body.conversation.id);
+    assert.equal(stored.nativeState.status,'ready');assert.equal(stored.history.length,4);
+    await f.service.createResponse({model:'doubao',previous_response_id:secondId,input:'晚上好'});
+    assert.equal(prepared,2);assert.equal(f.calls[2].url,f.calls[3].url);
+    assert.doesNotMatch(JSON.stringify(f.collections),/refreshed_|a_bogus/u);
+  }
+});
+
+test('HTTP失败再SSE失败共用一个补发额度，Responses只抛最终错误',async()=>{
+  let prepared=0;
+  const f=setup({prepareNodeRequest:async({prepared:call})=>{
+    prepared++;return {...call,url:call.url+'&a_bogus=retry_'+prepared,doubaoHttp2:true};
+  },status:index=>index===2?403:200,
+  source:(_call,index)=>index===3?Readable.from([event('STREAM_ERROR',{error_code:710022004})]):null});
+  const first=await f.service.createResponse({model:'doubao',input:'早'});
+  const second=await f.service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'晚上好',stream:true});
+  const events=[];await assert.rejects(async()=>{for await(const e of second.stream)events.push(e);},
+    error=>error.code==='doubao_risk_control');
+  assert.equal(events.some(e=>e.type==='response.completed'),false);
+  assert.equal(prepared,2);assert.equal(f.calls.length,3);
+  const stored=await f.store.get(first.body.conversation.id);
+  assert.equal(stored.nativeState.status,'uncertain');assert.equal(stored.history.length,2);
+});
+
+test('Responses已输出正文或思考后失败不重放，即使非流式也不重新发送',async()=>{
+  for(const stream of [false,true])for(const thinking of [false,true]){
+    let prepared=0;
+    const output=thinking
+      ? [event('STREAM_MSG_NOTIFY',{content:{content_block:[{block_type:10040,block_id:'thinking-start'}]}}),event('CHUNK_DELTA',{text:'想一下'})]
+      : [event('CHUNK_DELTA',{text:'早上好'})];
+    const f=setup({prepareNodeRequest:async({prepared:call})=>{
+      prepared++;return {...call,url:call.url+'&a_bogus=partial_'+prepared,doubaoHttp2:true};
+    },source:(_call,index)=>index===2?Readable.from([...output,event('STREAM_ERROR',{error_code:710022004})]):null});
+    const first=await f.service.createResponse({model:'doubao',input:'早'});
+    const request={model:'doubao',previous_response_id:first.body.id,input:'晚上好',stream};
+    if(stream){
+      const result=await f.service.createResponse(request);const events=[];
+      await assert.rejects(async()=>{for await(const e of result.stream)events.push(e);},error=>error.code==='doubao_risk_control');
+      assert.equal(events.some(e=>e.type===(thinking?'response.reasoning_text.delta':'response.output_text.delta')),true);
+    }else await assert.rejects(()=>f.service.createResponse(request),error=>error.code==='doubao_risk_control');
+    assert.equal(prepared,1);assert.equal(f.calls.length,2);
+  }
 });

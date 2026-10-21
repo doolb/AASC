@@ -536,7 +536,7 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
 
 /**
  * 签名只属于当前适配器实例，不进入会话持久化；只有成功确认的普通原生会话才可复用。
- * 有效期没有可靠的官网契约，不猜测永久有效，也不在失败后自动重发可能已被受理的消息。
+ * 有效期没有可靠的官网契约，不猜测永久有效；补发由外层统一限制次数、输出和截止时间。
  */
 const createDoubaoNodeSignatureCache = () => {
   const entries = new Map();
@@ -578,6 +578,10 @@ const createDoubaoNodeSignatureCache = () => {
         // 旧请求的迟到错误不得清除同键后来成功提交的另一条记录。
         if (entry && invalidCodes.has(error?.code) && entries.get(key) === entry) entries.delete(key);
       },
+      clear: () => {
+        if (entry && entries.get(key) === entry) entries.delete(key);
+        entry = null;
+      },
     };
   };
 };
@@ -591,31 +595,40 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     Number.isSafeInteger(customLimits[key]) && customLimits[key] > 0 ? Math.min(customLimits[key], maximum) : maximum,
   ]));
   const signatureCache = createDoubaoNodeSignatureCache();
-  return async ({ request, account, provider, actualModel, responseSession, context = {} }) => {
+  const runAttempt = async ({ request, account, provider, actualModel, responseSession, context = {} }, execution) => {
     // 传输由任务的权威配置决定；网页路径只使用当前官网页面的同源请求。
     const accountCredentials = Object.getOwnPropertyDescriptor(account || {}, 'credentials')?.value;
-    const nativeState = responseSession?.nativeState && isRecord(responseSession.nativeState) ? responseSession.nativeState : {};
+    // 两次尝试共用完成态容器；ACK仍由每次尝试的临时sessionFlow验证，未完成不提交。
+    const nativeState = execution.nativeState ||= responseSession?.nativeState && isRecord(responseSession.nativeState)
+      ? responseSession.nativeState : {};
     const mode = DOUBAO_MODEL_MODES[actualModel || request.model];
-    const transportMode = getTransport() === 'browser-fetch' ? 'browser-fetch' : 'node-http';
+    const transportMode = execution.transportMode ||= getTransport() === 'browser-fetch' ? 'browser-fetch' : 'node-http';
     if (transportMode === 'browser-fetch' && typeof browserBridge?.request !== 'function') throw doubaoError('doubao_browser_disabled');
     const sessionFlow = createDoubaoSessionFlow({ account, mode, state: nativeState,
       nodeMode: Boolean(accountCredentials?.nodeProfile), transport: transportMode });
-    let prepared = buildDoubaoRequest({ request, account, provider, actualModel, limits,
+    // 补发沿用同一条消息和唯一标识，不把一次恢复变成另一条新的用户消息。
+    const basePrepared = execution.prepared ||= buildDoubaoRequest({ request, account, provider, actualModel, limits,
       ...(sessionFlow.continuing ? { nativeSession: nativeState } : {}) });
+    let prepared = { ...basePrepared, headers: { ...basePrepared.headers } };
     // Responses内部截止时间不可由请求JSON覆盖；排队已经消耗的时间不能重新赋给执行阶段。
-    const remaining = sessionFlow.enabled && Number.isFinite(responseSession?.doubaoDeadlineAt)
-      ? responseSession.doubaoDeadlineAt - Date.now() : limits.timeoutMs;
+    const remaining = Math.min(execution.deadlineAt,
+      sessionFlow.enabled && Number.isFinite(responseSession?.doubaoDeadlineAt)
+        ? responseSession.doubaoDeadlineAt : execution.deadlineAt) - Date.now();
     if (remaining <= 0) throw doubaoError('doubao_timeout');
     const timeoutMs = Math.min(limits.timeoutMs,remaining);
     prepared.timeout = timeoutMs;
     const control = createRequestControl(context.signal || request.signal, timeoutMs);
+    execution.control = control;
     let response;
     let signatureScope;
     try {
       control.check();
       // Android首轮由官网SDK签名，同一权威会话续聊复用内存签名；实际联网仍由Node HTTP/2执行。
       if (transportMode === 'node-http' && (prepareNodeRequest || process.env.AASC_ANDROID_NODE === '1')) {
+        execution.nodeSigning = true;
         signatureScope = signatureCache({ account, responseSession, mode, sessionFlow });
+        execution.signatureScope = signatureScope;
+        if (execution.retried) signatureScope.clear();
         const prepare = prepareNodeRequest || (options => createDoubaoAndroidBridge().prepare(options));
         prepared = signatureScope.apply(prepared)
           || await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs } }));
@@ -678,7 +691,12 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
       const stream = {
         [Symbol.asyncIterator]() { return this; },
         next: async () => {
-          try { return await events.next(); }
+          try {
+            const next = await events.next();
+            const delta = next.value?.choices?.[0]?.delta;
+            if (delta?.content || delta?.reasoning_content) execution.receivedOutput = true;
+            return next;
+          }
           catch (error) { signatureScope?.invalidate(error); throw error; }
         },
         return: async () => {
@@ -707,6 +725,53 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
       control.cleanup();
       throw control.normalizeError(error);
     }
+  };
+  const retryCodes = new Set(['doubao_auth_expired', 'doubao_risk_control', 'doubao_rate_limited',
+    'doubao_upstream_failed', 'doubao_protocol_error', 'doubao_incomplete_response', 'doubao_empty_response',
+    'doubao_android_prepare', 'doubao_android_unavailable', 'doubao_android_webview']);
+  return async input => {
+    const execution = { deadlineAt: Date.now() + limits.timeoutMs, retried: false, receivedOutput: false, stopped: false };
+    const refreshForRetry = error => {
+      // 单个额度同时覆盖握手和流读取失败；已经输出任何正文/思考后禁止换流重放。
+      if (!execution.nodeSigning || execution.retried || execution.receivedOutput || execution.stopped
+        || input.context?.signal?.aborted || input.request.signal?.aborted
+        || Date.now() >= execution.deadlineAt
+        || (Number.isFinite(input.responseSession?.doubaoDeadlineAt) && Date.now() >= input.responseSession.doubaoDeadlineAt)
+        || !retryCodes.has(error?.code)) return false;
+      execution.signatureScope?.clear();
+      execution.retried = true;
+      return true;
+    };
+    const start = async () => {
+      try { return await runAttempt(input, execution); }
+      catch (error) {
+        if (!refreshForRetry(error)) throw error;
+        return runAttempt(input, execution);
+      }
+    };
+    let active = await start();
+    if (!active.stream) return active;
+    const stream = {
+      [Symbol.asyncIterator]() { return this; },
+      next: async () => {
+        try { return await active.stream.next(); }
+        catch (error) {
+          if (!refreshForRetry(error)) throw error;
+          active = await start();
+          return active.stream.next();
+        }
+      },
+      return: async () => {
+        execution.stopped = true;
+        execution.control?.cancel();
+        return active.stream.return();
+      },
+    };
+    return { ...active, stream, cancel: () => {
+      execution.stopped = true;
+      execution.control?.cancel();
+      active.cancel?.();
+    } };
   };
 };
 

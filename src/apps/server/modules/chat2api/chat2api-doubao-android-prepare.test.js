@@ -62,18 +62,20 @@ test('直连先取得当次签名，再由Node HTTP2发消息；准备失败不�
 });
 
 // 这里直接验证缓存边界；上层Responses协议、持久化及取消语义由doubao-responses测试覆盖。
-const signatureFixture = () => {
+const signatureFixture = (hooks = {}) => {
   const account={accountId:'signature-account',providerId:'doubaochat',credentialRevision:'revision-1',credentials:{
     cookie:'sessionid=mock_session_123456789; passport_csrf_token=mock_csrf_123456789; s_v_web_id=verify_mock_123456',
     nodeProfile:{deviceId:'123',webId:'456',fp:'verify_mock_123456',userAgent:'Mozilla/5.0 Android WebView test'},
   }};
   const calls=[],prepares=[];
   let fail=null;
-  const adapter=createDoubaoChatAdapter({prepareNodeRequest:async options=>{
+  const adapter=createDoubaoChatAdapter({limits:hooks.limits,prepareNodeRequest:async options=>{
     prepares.push(options.prepared);
+    await hooks.beforePrepare?.(options,prepares.length);
     return {...options.prepared,url:options.prepared.url+'&a_bogus=signature_'+prepares.length,doubaoHttp2:true};
   },http2Client:{request:async call=>{
     calls.push(call);
+    await hooks.beforeSend?.(call,calls.length);
     if(fail?.code)throw Object.assign(Error('mock transport'),{code:fail.code});
     if(fail?.status)return {status:fail.status};
     const id=call.data.client_meta.conversation_id||'upstream_'+calls.length;
@@ -121,37 +123,37 @@ test('签名按账号、凭据、AASC和权威上游隔离；同ID重建及重�
   assert.equal(restarted.prepares.length,1);
 });
 
-test('HTTP与SSE明确失效清除签名，不重发；429和取消保留已确认缓存',async()=>{
-  for(const failure of [{status:401},{status:403},{sse:true}]){
+test('HTTP与SSE失败最多补发一次；取消不补发且保留已确认签名',async()=>{
+  for(const failure of [{status:401},{status:403},{status:429},{sse:true}]){
     const f=signatureFixture(),session={id:'aasc-failure',state:{}};
     await f.run(session);f.setFailure(failure);
     if(failure.sse){
       const result=await f.run(session,{stream:true});
       await assert.rejects(async()=>{for await(const chunk of result.stream)void chunk;},error=>error.code==='doubao_risk_control');
-    }else await assert.rejects(()=>f.run(session),error=>['doubao_auth_expired','doubao_risk_control'].includes(error.code));
-    assert.equal(f.calls.length,2);assert.equal(f.prepares.length,1);
+    }else await assert.rejects(()=>f.run(session));
+    assert.equal(f.calls.length,3);assert.equal(f.prepares.length,2);
+    assert.deepEqual(f.calls[1].data,f.calls[2].data);
+    assert.notEqual(f.calls[1].url,f.calls[2].url);
     f.setFailure(null);await f.run(session);
-    assert.equal(f.prepares.length,2);
+    assert.equal(f.prepares.length,3);
   }
   const f=signatureFixture(),session={id:'aasc-retain',state:{}};
-  await f.run(session);
-  for(const failure of [{status:429},{code:'doubao_cancelled'}]){
-    f.setFailure(failure);await assert.rejects(()=>f.run(session));
-    f.setFailure(null);await f.run(session);
-  }
-  assert.equal(f.prepares.length,1);assert.equal(f.calls.length,5);
+  await f.run(session);f.setFailure({code:'doubao_cancelled'});
+  await assert.rejects(()=>f.run(session),error=>error.code==='doubao_cancelled');
+  f.setFailure(null);await f.run(session);
+  assert.equal(f.prepares.length,1);assert.equal(f.calls.length,3);
 });
 
 test('失败首轮、无内部会话以及非原生模式不会提交可复用签名',async()=>{
   const f=signatureFixture(),session={id:'aasc-initial',state:{}};
   f.setFailure({status:403});await assert.rejects(()=>f.run(session));
   f.setFailure(null);await f.run(session);
-  assert.equal(f.prepares.length,2);
-  await f.run();await f.run();assert.equal(f.prepares.length,4);
+  assert.equal(f.prepares.length,3);
+  await f.run();await f.run();assert.equal(f.prepares.length,5);
   for(const model of ['doubao-think','doubao-expert']){
     const other={id:model,state:{}};await f.run(other,{model});await f.run(other,{model});
   }
-  assert.equal(f.prepares.length,8);
+  assert.equal(f.prepares.length,9);
 });
 
 test('签名LRU固定128个会话，近期续聊保留，淘汰后重新生成',async()=>{
@@ -163,4 +165,49 @@ test('签名LRU固定128个会话，近期续聊保留，淘汰后重新生成',
   await f.run({id:'bounded-new',state:{}});
   await f.run(sessions[0]);assert.equal(f.prepares.length,129);
   await f.run(sessions[1]);assert.equal(f.prepares.length,130);
+});
+
+test('刷新签名仍受首次总时限约束，超时后不发送第二次网络请求',async()=>{
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const budgets=[];
+  const f=signatureFixture({limits:{timeoutMs:120},
+    beforePrepare:async(options,index)=>{budgets.push(options.limits.timeoutMs);if(index===2)await gate;},
+    beforeSend:async()=>{await new Promise(resolve=>setTimeout(resolve,50));}});
+  f.setFailure({status:403});
+  try{await assert.rejects(()=>f.run({id:'shared-deadline',state:{}}),error=>error.code==='doubao_timeout');}
+  finally{release();}
+  assert.equal(f.prepares.length,2);assert.equal(f.calls.length,1);
+  assert.ok(budgets[1]<budgets[0]-30);
+});
+
+test('刷新签名等待期间cancel或return能够取消第二次发送',async()=>{
+  for(const action of ['cancel','return']){
+    let entered,release;
+    const preparing=new Promise(resolve=>{entered=resolve;});
+    const gate=new Promise(resolve=>{release=resolve;});
+    const f=signatureFixture({beforePrepare:async(_options,index)=>{if(index===2){entered();await gate;}}});
+    f.setFailure({sse:true});
+    const result=await f.run({id:'cancel-retry',state:{}},{stream:true});
+    const pending=result.stream.next();
+    const rejected=assert.rejects(()=>pending,error=>error.code==='doubao_cancelled');
+    await preparing;
+    if(action==='cancel')result.cancel();else await result.stream.return();
+    await rejected;release();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(f.prepares.length,2);assert.equal(f.calls.length,1);
+  }
+});
+
+test('本地参数校验失败以及网页兼容失败不触发重新签名补发',async()=>{
+  const f=signatureFixture();
+  await assert.rejects(()=>f.run({id:'bad-input',state:{}},{model:'invalid'}),error=>error.code==='doubao_unsupported_model');
+  assert.equal(f.prepares.length,0);assert.equal(f.calls.length,0);
+  let browserCalls=0;
+  const adapter=createDoubaoChatAdapter({getTransport:()=> 'browser-fetch',
+    prepareNodeRequest:()=>{throw Error('兼容模式不得调用直连签名');},
+    browserBridge:{request:async()=>{browserCalls++;return {status:403};}}});
+  await assert.rejects(()=>adapter({account:f.account,provider:{id:'doubaochat'},actualModel:'doubao',
+    request:{model:'doubao',messages:[{role:'user',content:'早'}]}}),error=>error.code==='doubao_risk_control');
+  assert.equal(browserCalls,1);
 });
