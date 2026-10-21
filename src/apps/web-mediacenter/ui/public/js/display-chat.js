@@ -27,6 +27,7 @@
         requestSequence: 0,
         historyRequestSequence: 0,
         historyRequestId: null,
+        pendingHistoryClear: null,
         sessionSnapshotReceived: false,
         hiddenSelection: null,
         send: null,
@@ -130,6 +131,45 @@
         return history.length === 0 || history.some(isHistoryItemInCurrentSession);
     }
 
+    function clearCurrentHistory() {
+        const requestId = `display-clear-${Date.now()}-${++state.historyRequestSequence}`;
+        const previousHistoryRequestId = state.historyRequestId;
+        state.pendingHistoryClear = { requestId, scope: getHistoryScopeKey() };
+        // 清空前的历史查询即使稍后返回，也不能再恢复已删除的消息。
+        state.historyRequestId = requestId;
+        try {
+            const sent = state.send({ type: 'clearChatHistory', source: 'displayChat', requestId,
+                mode: state.session.mode,
+                target: state.session.mode === 'role' ? state.session.roleTarget : state.session.privateTarget,
+                sessionId: state.session.mode === 'private' ? state.session.privateSessionId : null,
+                displayId: state.displayId });
+            if (sent === false) throw new Error('连接已断开，聊天记录未清空');
+            setStatus('正在清空…');
+        } catch (error) {
+            state.pendingHistoryClear = null;
+            state.historyRequestId = previousHistoryRequestId;
+            setStatus(error.message || '清空聊天记录失败', true);
+        }
+    }
+
+    function applyHistoryClearResult(message, failed = false) {
+        const pending = state.pendingHistoryClear;
+        if (!pending || message.requestId !== pending.requestId) return false;
+        state.pendingHistoryClear = null;
+        // 用户可能已经切到另一个私聊；迟到的清空结果只属于原来的范围。
+        if (pending.scope !== getHistoryScopeKey()) return true;
+        state.historyRequestId = null;
+        if (failed) {
+            setStatus(message.message || '清空聊天记录失败', true);
+            return true;
+        }
+        abandonStreamingMessages();
+        state.history = filterHistoryForCurrentSession(message.history);
+        renderHistory();
+        setStatus('已清空当前聊天记录');
+        return true;
+    }
+
     function getHistoryScopeKey(session = state.session) {
         const mode = session.mode || 'group';
         const target = mode === 'private'
@@ -162,11 +202,19 @@
     }
 
     function abandonStreamingMessages() {
+        // 已完成消息也可能再收到迟到的协议提示；连同其请求编号一起作废。
+        for (const item of state.refs.messages?.children || []) {
+            if (item.dataset.requestId) state.ignoredRequestIds.add(item.dataset.requestId);
+        }
         for (const requestId of state.streaming.keys()) {
             state.ignoredRequestIds.add(requestId);
             state.bus?.publish('chat.activity', { requestId, active: false });
         }
         state.streaming.clear();
+        // 请求编号只用于拦截迟到消息，保留有界窗口避免长期会话无限增长。
+        while (state.ignoredRequestIds.size > 256) {
+            state.ignoredRequestIds.delete(state.ignoredRequestIds.values().next().value);
+        }
     }
 
     function updateAssistantConfig(config = {}) {
@@ -700,13 +748,7 @@
         });
         state.root.querySelector('[data-action="clear"]').addEventListener('click', () => {
             if (!root.confirm || root.confirm('清空当前聊天记录？')) {
-                state.send({
-                    type: 'clearChatHistory',
-                    mode: state.session.mode,
-                    target: state.session.privateTarget,
-                    sessionId: state.session.privateSessionId,
-                    displayId: state.displayId
-                });
+                clearCurrentHistory();
             }
         });
         buildTargets();
@@ -764,6 +806,7 @@
             return true;
         }
         if (message.type === 'chatHistory') {
+            if (message.cleared === true && applyHistoryClearResult(message)) return true;
             if (!isCurrentHistoryResponse(message)) return true;
             state.history = filterHistoryForCurrentSession(message.history);
             renderHistory();
@@ -778,6 +821,7 @@
             return true;
         }
         if (message.type === 'chatHistoryError') {
+            if (applyHistoryClearResult(message, true)) return true;
             if (typeof message.requestId === 'string' && !isCurrentHistoryResponse(message)) return true;
             setStatus(message.message || '读取聊天记录失败', true);
             return true;
@@ -801,7 +845,8 @@
             if (message.displayId && state.displayId && message.displayId !== state.displayId) return true;
             const requestId = String(message.requestId || '');
             const content = String(message.content || '').trim();
-            if (!requestId || !content || state.streaming.has(requestId)) return true;
+            if (!requestId || !content || state.streaming.has(requestId)
+                || state.ignoredRequestIds.has(requestId)) return true;
             state.bus?.publish('chat.activity', { requestId, active: true });
             appendMessage('user', content, { requestId });
             const streaming = appendMessage('assistant', '正在思考…', {
@@ -815,7 +860,7 @@
         if (message.type === 'chatGameProtocol') {
             if (message.displayId && state.displayId && message.displayId !== state.displayId) return true;
             const requestId = String(message.requestId || '');
-            if (!requestId || typeof message.text !== 'string') return true;
+            if (!requestId || typeof message.text !== 'string' || state.ignoredRequestIds.has(requestId)) return true;
             const item = state.streaming.get(requestId);
             const duplicate = [...state.refs.messages.querySelectorAll('.display-chat-game-protocol-tip')]
                 .some(tip => tip.parentElement?.dataset.requestId === requestId
@@ -854,7 +899,6 @@
             const requestId = String(message.requestId || '');
             state.bus?.publish('chat.activity', { requestId, active: false });
             if (state.ignoredRequestIds.has(requestId)) {
-                state.ignoredRequestIds.delete(requestId);
                 return true;
             }
             // 完成回复已比此前请求的历史快照更新，迟到的旧快照不能擦除这条回复。

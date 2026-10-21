@@ -10689,17 +10689,25 @@ async function handleControlMessageFallback(data, ws) {
                     }
                     return;
                 } else if (data.type === 'clearChatHistory') {
+                    const isDisplayChatSource = data.source === 'displayChat';
+                    const correlation = isDisplayChatSource && typeof data.requestId === 'string'
+                        ? { requestId: data.requestId } : {};
                     try {
-                        const history = chat.clearHistory({
+                        const scope = {
                             mode: data.mode,
                             target: data.target,
                             sessionId: data.sessionId
-                        });
+                        };
+                        const remainingHistory = chat.clearHistory(scope);
+                        // 显示端只接收被清空范围的快照，其他私聊历史不能阻止当前面板刷新。
+                        const history = isDisplayChatSource
+                            ? chat.getHistory({ ...scope, preserveThink: true }) : remainingHistory;
                         log('Chat', `清空聊天历史 source=websocket mode=${data.mode || '-'} target=${data.target || '-'} sessionId=${data.sessionId || '-'}`);
-                        ws.send(JSON.stringify({ type: 'chatHistory', history }));
+                        ws.send(JSON.stringify({ type: 'chatHistory', history, ...correlation,
+                            ...(isDisplayChatSource ? { cleared: true } : {}) }));
                     } catch (error) {
                         logError('Chat', `拒绝 WebSocket 清空聊天历史: ${error.message}`);
-                        ws.send(JSON.stringify({ type: 'chatHistoryError', message: error.message }));
+                        ws.send(JSON.stringify({ type: 'chatHistoryError', message: error.message, ...correlation }));
                     }
                     return;
                 } else if (data.type === 'getChatSession') {

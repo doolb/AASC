@@ -185,6 +185,65 @@ test('首次展开、会话恢复和迟到历史使用真实聊天与舞台模�
         assert.match(await text(), /完整答案/u);
     });
 
+    await context.test('清空私聊后移除消息和流式节点，旧历史及迟到回复不能恢复内容', async () => {
+        await reset();
+        await deliver({ type: 'chatSession', session: { mode: 'private', privateTarget: '小爱', privateSessionId: 'saved' } });
+        await page.click('#displayChatToggle');
+        const previousHistory = await latestHistory();
+        const history = [{ mode: 'private', target: '小爱', sessionId: 'saved', role: 'assistant', content: '准备清空的历史' }];
+        await deliver({ type: 'chatHistory', requestId: previousHistory.requestId, history });
+        await deliver({ type: 'chatInput', requestId: 'clear-live', content: '旧提问' });
+        await deliver({ type: 'chatChunk', requestId: 'clear-live', chunk: '旧分片' });
+        await page.evaluate(() => { window.confirm = () => true; });
+        await page.click('[data-action="clear"]');
+        const clear = await page.evaluate(() => window.sent.findLast(message => message.type === 'clearChatHistory'));
+        assert.equal(clear.source, 'displayChat');
+        assert.equal(clear.mode, 'private');
+        assert.equal(clear.target, '小爱');
+        assert.equal(clear.sessionId, 'saved');
+        assert.ok(clear.requestId);
+        assert.match(await text(), /准备清空的历史/);
+        await deliver({ type: 'chatHistory', requestId: clear.requestId, cleared: true, history: [] });
+        assert.equal(await text(), '');
+        await deliver({ type: 'chatHistory', requestId: previousHistory.requestId, history });
+        await deliver({ type: 'chatInput', requestId: 'clear-live', content: '旧提问' });
+        await deliver({ type: 'chatChunk', requestId: 'clear-live', chunk: '迟到分片' });
+        await deliver({ type: 'chatResponse', requestId: 'clear-live', success: true, message: '迟到答案', history });
+        await deliver({ type: 'chatGameProtocol', requestId: 'clear-live', sequence: 1, text: 'Game:五子棋,GM,已隐藏' });
+        assert.equal(await text(), '');
+        assert.equal(await page.$$eval('[data-role="messages"] > *', items => items.length), 0);
+        assert.match(await page.$eval('[data-role="status"]', element => element.textContent), /已清空/);
+    });
+
+    await context.test('清空失败保留内容，旧会话清空回包不影响新会话', async () => {
+        await reset();
+        await deliver({ type: 'chatSession', session: { mode: 'private', privateTarget: '小爱', privateSessionId: 'saved' } });
+        await page.click('#displayChatToggle');
+        await deliver({ type: 'chatHistory', requestId: (await latestHistory()).requestId,
+            history: [{ mode: 'private', target: '小爱', sessionId: 'saved', role: 'assistant', content: '保留原记录' }] });
+        await page.evaluate(() => { window.confirm = () => true; });
+        await page.click('[data-action="clear"]');
+        let clear = await page.evaluate(() => window.sent.findLast(message => message.type === 'clearChatHistory'));
+        await deliver({ type: 'chatHistoryError', requestId: clear.requestId, message: '写入失败' });
+        assert.match(await text(), /保留原记录/);
+        assert.match(await page.$eval('[data-role="status"]', element => element.textContent), /写入失败/);
+        await page.evaluate(() => window.DisplayStage.setTransport(() => false));
+        await page.click('[data-action="clear"]');
+        assert.match(await text(), /保留原记录/);
+        assert.match(await page.$eval('[data-role="status"]', element => element.textContent), /连接已断开/);
+        await page.evaluate(() => window.DisplayStage.setTransport(message => { window.sent.push(message); return true; }));
+        await page.click('[data-action="clear"]');
+        clear = await page.evaluate(() => window.sent.findLast(message => message.type === 'clearChatHistory'));
+        await deliver({ type: 'chatSession', session: { mode: 'private', privateTarget: '小爱', privateSessionId: 'another' } });
+        const current = await latestHistory();
+        const newHistory = [{ mode: 'private', target: '小爱', sessionId: 'another', role: 'assistant', content: '新会话内容' }];
+        await deliver({ type: 'chatHistory', requestId: current.requestId, history: newHistory });
+        await deliver({ type: 'chatHistory', requestId: clear.requestId, cleared: true, history: [] });
+        assert.match(await text(), /新会话内容/);
+        await deliver({ type: 'chatHistory', requestId: current.requestId, history: newHistory });
+        assert.match(await text(), /新会话内容/);
+    });
+
     await context.test('游戏协议以灰色小字显示，历史恢复后仍可见且不会进入朗读正文', async () => {
         await reset();
         await deliver({ type: 'chatSession', session: { mode: 'group' } });
@@ -365,6 +424,51 @@ test('正式 chatHistory WebSocket 分支回传显示端历史请求标识，控
     context.chat.getHistory = () => [];
     vm.runInNewContext(`(function () { ${branch} })()`, context);
     assert.equal(calls[1].requestId, undefined);
+});
+
+test('清空分支回传显示端编号和范围历史，失败保留关联，其他会话不受影响', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
+    const marker = "} else if (data.type === 'clearChatHistory') {";
+    const start = source.indexOf(marker);
+    const end = source.indexOf("} else if (data.type === 'getChatSession') {", start);
+    assert.ok(start >= 0 && end > start);
+    const branch = source.slice(start + marker.length, end);
+    const { filterHistoryByScope } = require('../src/external/llm/llm-service');
+    let history = [
+        { mode: 'private', target: '小爱', sessionId: 'saved', content: '当前私聊' },
+        { mode: 'private', target: '小爱', sessionId: 'other', content: '另一会话' },
+        { mode: 'group', content: '群聊' }
+    ];
+    const responses = [];
+    const context = {
+        data: { source: 'displayChat', requestId: 'clear-1', mode: 'private', target: '小爱', sessionId: 'saved' },
+        ws: { send: value => responses.push(JSON.parse(value)) }, log() {}, logError() {},
+        chat: {
+            clearHistory(scope) {
+                assert.equal(scope.target, '小爱');
+                assert.equal(scope.sessionId, 'saved');
+                history = history.filter(item => item.sessionId !== scope.sessionId);
+                return history;
+            },
+            getHistory(scope) {
+                assert.equal(scope.preserveThink, true);
+                return filterHistoryByScope(history, scope);
+            }
+        }
+    };
+    const run = () => vm.runInNewContext(`(function () { ${branch} })()`, context);
+    run();
+    assert.deepEqual(responses[0], { type: 'chatHistory', history: [], requestId: 'clear-1', cleared: true });
+    assert.deepEqual(history.map(item => item.content), ['另一会话', '群聊']);
+    context.data.requestId = 'clear-failed';
+    context.chat.clearHistory = () => { throw new Error('写入失败'); };
+    run();
+    assert.deepEqual(responses[1], { type: 'chatHistoryError', requestId: 'clear-failed', message: '写入失败' });
+    context.data = { mode: 'group' };
+    context.chat.clearHistory = () => history;
+    context.chat.getHistory = () => { throw new Error('控制端回包应保持原语义'); };
+    run();
+    assert.deepEqual(responses[2], { type: 'chatHistory', history });
 });
 
 test('角色注册适配层回传显示端历史请求标识', async () => {
