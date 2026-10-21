@@ -14,6 +14,10 @@
     timers: {},
     _timerInterval: null,
     _initDone: false,
+    _taskPickerOpen: false,
+    _taskPickerQuery: '',
+    _taskPickerScrollTop: 0,
+    _taskPickerEventsBound: false,
 
     init: function() {
       if (this._initDone) return;
@@ -93,6 +97,11 @@
         }
       }
       this.taskList = Object.values(merged);
+      // 仅权威列表确认任务消失时清理选择，避免新建任务等待回包期间提前丢失选择。
+      if (this._selectedTaskName && !this._getTask(this._selectedTaskName)) {
+        this._selectedTaskName = null;
+        this._selectedInstanceId = null;
+      }
       // 从任务列表同步 running 实例到 this.instances（用于运行中页签）
       for (var t = 0; t < this.taskList.length; t++) {
         var instances = this.taskList[t].instances || [];
@@ -148,12 +157,27 @@
       const container = document.getElementById('taskTabList');
       if (!container) return;
 
+      // 列表轮询会重建 DOM，先保存搜索焦点、光标和滚动位置，避免展开时被刷新打断。
+      const oldSearch = container.querySelector('#taskSearch');
+      const searchFocused = oldSearch && document.activeElement === oldSearch;
+      const selectionStart = searchFocused ? oldSearch.selectionStart : null;
+      const selectionEnd = searchFocused ? oldSearch.selectionEnd : null;
+      const toggleFocused = document.activeElement === container.querySelector('#taskPickerToggle');
+      const oldRail = container.querySelector('.task-list-rail');
+      if (oldRail && oldRail.closest('.task-picker') && this._taskPickerOpen &&
+          oldRail.clientHeight > 0 && !oldRail.closest('[hidden]')) {
+        this._taskPickerScrollTop = oldRail.scrollTop;
+      }
+      const selectedTask = this._getTask(this._selectedTaskName);
+      const portrait = window.matchMedia('(orientation: portrait)').matches;
+
       const builtin = this.taskList.filter(function(t) { return t.taskType === 'builtin'; });
       const user = this.taskList.filter(function(t) { return t.taskType !== 'builtin'; });
 
-      // 左列：任务列表
+      // 下拉中保留原卡片和按钮；搜索框随展开显示，新建入口始终可用。
       const headerHtml = '<div class="task-list-col-header">' +
-        '<input class="task-search" id="taskSearch" placeholder="搜索任务..." oninput="TaskPanel._filterTasks()">' +
+        (portrait ? '<span class="task-picker-label">选择任务</span>' :
+          '<input class="task-search" id="taskSearch" placeholder="搜索任务..." oninput="TaskPanel._filterTasks()">') +
         '<button class="task-card-btn" onclick="TaskPanel._switchToNew()" style="flex-shrink:0;white-space:nowrap">+ 新建</button>' +
       '</div>';
       const taskGroups = [];
@@ -162,7 +186,7 @@
         taskGroups.push('<div class="task-list-group">' +
           '<div class="task-group-title">内置任务（只读）</div>' +
           '<div class="task-group-cards">' +
-            builtin.map(function(t) { return this._taskCardHTML(t); }, this).join('') +
+            builtin.map(function(t) { return this._taskCardHTML(t, portrait); }, this).join('') +
           '</div>' +
         '</div>');
       }
@@ -174,13 +198,32 @@
           '<div class="task-empty-state-text">还没有用户任务</div>' +
         '</div>';
       } else {
-        userTasksHtml = user.map(function(t) { return this._taskCardHTML(t); }, this).join('');
+        userTasksHtml = user.map(function(t) { return this._taskCardHTML(t, portrait); }, this).join('');
       }
       taskGroups.push('<div class="task-list-group">' +
         '<div class="task-group-title">用户任务</div>' +
         '<div class="task-group-cards">' + userTasksHtml + '</div>' +
       '</div>');
-      const leftHtml = headerHtml + '<div class="task-list-rail">' + taskGroups.join('') + '</div>';
+      const currentCard = selectedTask ? this._taskCardHTML(selectedTask, true) :
+        '<div class="task-card task-picker-placeholder">请选择任务</div>';
+      const pickerHtml = '<div class="task-picker">' +
+        '<div class="task-picker-current">' + currentCard +
+          '<button type="button" class="task-card-btn task-picker-toggle" id="taskPickerToggle"' +
+            ' aria-controls="taskPickerContent" aria-expanded="' + this._taskPickerOpen + '"' +
+            ' aria-label="' + (this._taskPickerOpen ? '收起任务列表' : '展开任务列表') + '"' +
+            ' onclick="TaskPanel._setTaskPickerOpen(!TaskPanel._taskPickerOpen, true)">' +
+            '<span aria-hidden="true">' + (this._taskPickerOpen ? '▴' : '▾') + '</span>' +
+          '</button>' +
+        '</div>' +
+        '<div class="task-picker-content" id="taskPickerContent"' + (this._taskPickerOpen ? '' : ' hidden') + '>' +
+          '<input class="task-search" id="taskSearch" aria-label="搜索任务" placeholder="搜索任务..." oninput="TaskPanel._filterTasks()">' +
+          '<div class="task-list-rail">' + taskGroups.join('') +
+            '<div class="task-picker-empty" role="status" hidden>没有匹配的任务</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+      const leftHtml = headerHtml + (portrait ? pickerHtml :
+        '<div class="task-list-rail">' + taskGroups.join('') + '</div>');
 
       const middleHtml = this._selectedTaskName
         ? this._renderInstancesCol(this._selectedTaskName)
@@ -196,9 +239,59 @@
           '<div class="task-instances-col" id="taskInstancesCol">' + middleHtml + '</div>' +
           '<div class="task-result-col" id="taskResultCol">' + rightHtml + '</div>' +
         '</div>';
+      this._bindTaskPickerEvents();
+      const search = container.querySelector('#taskSearch');
+      search.value = this._taskPickerQuery;
+      this._filterTasks();
+      if (searchFocused && (!portrait || this._taskPickerOpen)) {
+        search.focus({ preventScroll: true });
+        search.setSelectionRange(selectionStart, selectionEnd);
+      }
+      if (toggleFocused && portrait) container.querySelector('#taskPickerToggle').focus({ preventScroll: true });
+      if (portrait) container.querySelector('.task-list-rail').scrollTop = this._taskPickerScrollTop;
     },
 
-    _taskCardHTML: function(task) {
+    // 全局监听只注册一次；卡片内部操作仍由原按钮处理，不参与展开或任务选择。
+    _bindTaskPickerEvents: function() {
+      if (this._taskPickerEventsBound) return;
+      this._taskPickerEventsBound = true;
+      // 方向变化时重绘对应视图，横屏继续使用原常驻卡片列表。
+      window.matchMedia('(orientation: portrait)').addEventListener('change', () => {
+        if (this.currentTab === 'list') this._renderTaskList();
+      });
+      document.addEventListener('pointerdown', (event) => {
+        if (!this._taskPickerOpen) return;
+        const picker = document.querySelector('#taskTabList .task-picker');
+        if (picker && !picker.contains(event.target)) this._setTaskPickerOpen(false);
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || !this._taskPickerOpen) return;
+        const picker = document.querySelector('#taskTabList .task-picker');
+        if (!picker || !picker.contains(event.target)) return;
+        event.preventDefault();
+        this._setTaskPickerOpen(false, true);
+      });
+    },
+
+    _setTaskPickerOpen: function(open, moveFocus) {
+      const content = document.getElementById('taskPickerContent');
+      const toggle = document.getElementById('taskPickerToggle');
+      if (!content || !toggle) return;
+      const rail = content.querySelector('.task-list-rail');
+      if (this._taskPickerOpen && !content.hidden) this._taskPickerScrollTop = rail.scrollTop;
+      this._taskPickerOpen = Boolean(open);
+      content.hidden = !this._taskPickerOpen;
+      toggle.setAttribute('aria-expanded', String(this._taskPickerOpen));
+      toggle.setAttribute('aria-label', this._taskPickerOpen ? '收起任务列表' : '展开任务列表');
+      toggle.firstElementChild.textContent = this._taskPickerOpen ? '▴' : '▾';
+      if (moveFocus) {
+        const target = open ? content.querySelector('#taskSearch') : toggle;
+        target.focus({ preventScroll: true });
+      }
+      if (open) rail.scrollTop = this._taskPickerScrollTop;
+    },
+
+    _taskCardHTML: function(task, keyboardSelect) {
       var icon = '📄';
       var statusClass = '';
       var statusText = '就绪';
@@ -251,10 +344,15 @@
         actionsHtml += '<button class="task-card-btn danger" onclick="event.stopPropagation();TaskPanel._confirmDelete(\'' + safeTaskName + '\')">删除</button>';
       }
       actionsHtml += this._renderTaskControlButtons(task.taskName, null, 'task');
+      const taskTitle = this._escapeHtml(task.name || task.taskName);
+      const titleHtml = keyboardSelect
+        ? '<button type="button" class="task-card-select" onclick="event.stopPropagation();TaskPanel._selectTask(\'' + safeTaskName + '\')">' + taskTitle + '</button>'
+        : taskTitle;
 
       return '<div class="' + cardClass + (isSelected ? ' selected' : '') + '" onclick="TaskPanel._selectTask(\'' + safeTaskName + '\')">' +
         '<div class="task-card-header">' +
-          '<div class="task-card-title"><span class="task-card-icon">' + icon + '</span>' + this._escapeHtml(task.name || task.taskName) + '</div>' +
+          '<div class="task-card-title"><span class="task-card-icon">' + icon + '</span>' +
+            titleHtml + '</div>' +
           '<span class="task-card-status ' + statusClass + '">' + statusText + '</span>' +
         '</div>' +
         '<div class="task-card-meta">' + metaHtml + '</div>' +
@@ -429,16 +527,21 @@
 
 
     _selectTask: function(taskName) {
-      if (this._selectedTaskName === taskName) return;
+      const pickerActive = Boolean(document.getElementById('taskPickerToggle'));
+      const wasOpen = pickerActive && this._taskPickerOpen;
+      if (pickerActive) this._setTaskPickerOpen(false);
+      if (this._selectedTaskName === taskName) {
+        if (wasOpen) document.getElementById('taskPickerToggle')?.focus({ preventScroll: true });
+        return;
+      }
       this._selectedTaskName = taskName;
       // 默认选中最近的一条执行记录
-      var task = null;
-      for (var i = 0; i < this.taskList.length; i++) {
-        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
-      }
-      var instances = task ? (task.instances || []).slice() : [];
+      const task = this._getTask(taskName);
+      const instances = task ? (task.instances || []).slice() : [];
       instances.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
       this._selectedInstanceId = instances.length > 0 ? instances[0].instanceId : null;
+      if (pickerActive) this._renderTaskList();
+      if (wasOpen) document.getElementById('taskPickerToggle')?.focus({ preventScroll: true });
       this._requestTaskList();
     },
 
@@ -542,18 +645,27 @@
     },
 
     _filterTasks: function() {
-      var q = document.getElementById('taskSearch');
+      const q = document.getElementById('taskSearch');
       if (!q) return;
-      var query = q.value.toLowerCase();
-      var listCol = document.querySelector('.task-list-col');
-      if (!listCol) return;
-      var cards = listCol.querySelectorAll('.task-card');
-      cards.forEach(function(c) {
-        var nameEl = c.querySelector('.task-card-title');
-        if (!nameEl) return;
-        var name = nameEl.textContent.toLowerCase();
-        c.style.display = name.indexOf(query) >= 0 ? '' : 'none';
+      this._taskPickerQuery = q.value;
+      const query = q.value.trim().toLowerCase();
+      const rail = document.querySelector('#taskTabList .task-list-rail');
+      if (!rail) return;
+      const isPicker = Boolean(rail.closest('.task-picker'));
+      let visibleCount = 0;
+      rail.querySelectorAll('.task-list-group').forEach((group) => {
+        let groupCount = 0;
+        group.querySelectorAll('.task-card').forEach((card) => {
+          const title = card.querySelector('.task-card-title');
+          const matches = Boolean(title && title.textContent.toLowerCase().includes(query));
+          card.hidden = !matches;
+          if (matches) groupCount++;
+        });
+        group.hidden = isPicker && Boolean(query) && groupCount === 0;
+        visibleCount += groupCount;
       });
+      const empty = rail.querySelector('.task-picker-empty');
+      if (empty) empty.hidden = !query || visibleCount > 0;
     },
 
     _formatTime: function(ts) {

@@ -452,7 +452,7 @@ const SelfTest = {
         {
             id: 'task_panel_portrait_layout',
             name: '任务面板竖屏布局',
-            description: '检查竖屏任务条横向滚动及实例/结果列全宽堆叠',
+            description: '检查任务卡片下拉选择、纵向滚动及实例/结果列布局',
             category: '界面布局',
             run: async () => {
                 const panel = document.getElementById('panel-task');
@@ -463,6 +463,9 @@ const SelfTest = {
                 const portrait = window.matchMedia('(orientation: portrait)').matches;
                 const direction = getComputedStyle(layout).flexDirection;
                 const rail = layout.querySelector('.task-list-rail');
+                const toggle = layout.querySelector('#taskPickerToggle');
+                const content = layout.querySelector('#taskPickerContent');
+                const currentCard = layout.querySelector('.task-picker-current > .task-card');
                 const instances = layout.querySelector('.task-instances-col');
                 const result = layout.querySelector('.task-result-col');
                 const inBounds = [instances, result].every(column => {
@@ -470,13 +473,19 @@ const SelfTest = {
                     const rect = column.getBoundingClientRect();
                     return rect.left >= -1 && rect.right <= window.innerWidth + 1;
                 });
-                const valid = portrait
-                    ? direction === 'column' && getComputedStyle(rail).overflowX === 'auto' && inBounds
-                    : direction === 'row';
+                const pickerValid = Boolean(rail && toggle && content && currentCard) &&
+                    getComputedStyle(rail).overflowY === 'auto' &&
+                    getComputedStyle(rail).overflowX === 'hidden' &&
+                    toggle.getAttribute('aria-expanded') === String(!content.hidden) &&
+                    (content.hidden || rail.scrollWidth <= rail.clientWidth + 1);
+                const landscapeValid = !toggle && !content && rail &&
+                    getComputedStyle(rail).display === 'contents' && layout.querySelector('#taskSearch');
+                const valid = (portrait ? pickerValid : landscapeValid) && inBounds &&
+                    direction === (portrait ? 'column' : 'row');
                 return {
                     success: valid,
                     message: valid ? '任务面板方向布局正常' : '任务面板布局或列边界异常',
-                    details: portrait ? '竖屏横向任务条与全宽实例/结果列' : '横屏三列布局'
+                    details: portrait ? '完整卡片下拉选择与全宽实例/结果列' : '原搜索栏、常驻任务卡片列表与横屏三列布局'
                 };
             }
         },

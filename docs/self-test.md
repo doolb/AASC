@@ -1854,3 +1854,12 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 ```
 
 复现路径与命令见docs/usage/mmd-pose-model-testing.md的NLF-S章节。
+
+
+## 控制端竖屏任务卡片下拉选择（2026-10-22）
+
+`node --test --test-concurrency=1 --test-reporter=tap tests/task-panel-portrait-layout.test.js tests/task-panel-llm-server.test.js tests/task-link-panel.test.js tests/task-common-capabilities.test.js tests/task-widget-log-noise.test.js`：27/27 通过，零跳过，其中完整卡片下拉浏览器专项 8/8。
+
+专项使用真实卡片及实例/结果渲染，验证竖屏展开后纵向滚动、选中后收起为相同完整卡片、状态/进度及全部操作按钮、独立卡片动作、搜索与无匹配提示、刷新保留焦点/光标/滚动位置、任务删除、键盘及手机触控模拟。横屏断言无下拉入口，保留原搜索栏、常驻卡片列表、240/200 像素任务/实例列和三列布局；方向往返及 320 像素浅色主题均通过。页面自测覆盖展开、收起及横屏；展开/收起截图已检查，JavaScript 语法及 git diff --check 通过。
+
+本轮未执行真实任务、Android 实机触控或出包发布；浏览器中拦截创建/配置等动作以验证参数与冒泡，服务代码包待构建，正式设备需部署后检查观感。
