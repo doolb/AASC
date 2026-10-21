@@ -2065,3 +2065,17 @@ handleChatMessage(options):
     普通发送只发送 { mode: temporary, temporaryConversationId: id }
     id 或 roleName 缺失时禁用发送按钮并提示先选择角色
 ```
+
+## 聊天输入区上下文统计补充（2026-10-21）
+
+```text
+已有声明 := 聊天管理buildMessages、实际历史筛选/预算裁剪、现有WebSocket与会话范围
+新增定义 := contextUsage { estimated, inputTokens, budgetTokens, percent, historyCount, historyLimit, imageCount }；独立统计请求编号与范围
+组装实际模型请求 → 使用相同的最终消息文本和裁剪后历史 → 计算本地估算token/当前输入预算百分比及有效历史条目数/当前contextCount → 向调用方回传统计
+私聊、群聊与临时聊天 → 共用实际聊天选项解析；私聊当前有效上限100，其他模式读取其实际配置；不修改历史容量、不换算成Chat2API会话轮数
+查询统计 → 当前权威profile、对象、会话、模板、游戏提示及临时历史 → 调用同一组装入口，不请求模型 → 现有WebSocket回传匹配requestId与范围的chatContextUsage
+实际聊天/游戏GM往返 → 每次请求组装后推送对应聊天requestId的统计；只发送数字和范围，不发送提示词正文
+两端输入框上方 → 上下文≈百分比、对话历史计数/上限；无可用数据为—；独立Agent上下文不可由LLM聊天预算代算
+加载历史、完成回复、清空、切换对象/会话/profile、重连 → 刷新统计；只应用当前请求及范围的快照；清空后的旧聊天推送不复活
+验证 := raw/OpenAI同一请求组装、裁剪和上限、清空与跨会话隔离、GM往返、两端显示与迟到回包
+```

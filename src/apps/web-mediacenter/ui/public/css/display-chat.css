@@ -368,6 +368,15 @@
     color: var(--text-primary);
 }
 
+.display-chat-context-usage {
+    grid-column: 1 / -1;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
 .display-chat-compose textarea:focus {
     border-color: var(--accent-color);
 }

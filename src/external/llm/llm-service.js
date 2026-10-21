@@ -1371,6 +1371,17 @@ function buildMessages(userMessage, options = {}) {
         });
     let recentHistory = sessionHistory.slice(-contextCount);
 
+    // 统计与实际请求共用本次筛选结果，不从界面气泡数量推测。这里只估算文本token。
+    const reportUsage = (inputTokens) => {
+        const usage = { estimated: true, inputTokens, budgetTokens: inputBudget,
+            percent: Math.round(inputTokens * 100 / inputBudget),
+            historyCount: recentHistory.filter(item => item.content || (item.user && item.assistant)).length,
+            historyLimit: includeHistory ? Math.max(0, Number(contextCount) || 0) : 0,
+            imageCount: images.length };
+        try { options.onContextUsage?.(usage); }
+        catch (error) { console.warn(`[Chat] 上下文统计回传失败: ${error.message}`); }
+    };
+
     if (recentHistory.length > 0) {
         const last = recentHistory[recentHistory.length - 1];
         if (last.role === 'user' || last.role === 'control') {
@@ -1391,6 +1402,7 @@ function buildMessages(userMessage, options = {}) {
         }
         if (template) raw += `User:${template.content}\n`;
         raw += `User:${userMessage}`;
+        reportUsage(estimateTokens(raw));
         return [{ role: 'user', content: buildImageMessageContent(raw, images, profile) }];
     }
 
@@ -1399,6 +1411,7 @@ function buildMessages(userMessage, options = {}) {
     if (template) fixedTokens += tokenCount({ content: template.content }) + 10;
     fixedTokens += tokenCount({ content: userMessage }) + 10;
     const historyBudget = inputBudget - fixedTokens;
+    if (!includeHistory || contextCount <= 0 || historyBudget <= 0) recentHistory = [];
     if (includeHistory && contextCount > 0 && historyBudget > 0) {
         recentHistory = trimHistoryToBudget(recentHistory, historyBudget);
         for (const item of recentHistory) {
@@ -1416,7 +1429,15 @@ function buildMessages(userMessage, options = {}) {
     }
     if (template) messages.push({ role: 'user', content: template.content });
     messages.push({ role: 'user', content: buildImageMessageContent(userMessage, images, profile) });
+    reportUsage(fixedTokens + recentHistory.reduce((total, item) => total + tokenCount(item), 0));
     return messages;
+}
+
+/** 查询只组装消息并读取相同统计，不发送网络请求或写入历史。 */
+function getContextUsage(userMessage = '', options = {}) {
+    let usage = null;
+    buildMessages(userMessage, { ...options, onContextUsage: value => { usage = value; } });
+    return usage;
 }
 
 // 在 pendingText 中从右向左扫描最后一个完整句子边界
@@ -1551,7 +1572,7 @@ async function chat(userMessage, options = {}) {
         const profile = tierOverride ? { ...baseProfile, model: tierOverride.model,
             protocol: 'openai-responses', apiUrl: `http://aasc-chat2api/${tierOverride.providerId}` } : baseProfile;
         const transport = normalizeChatTransport(profile);
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name, onContextUsage: options.onContextUsage });
         let assistantMessage = '';
         let assistantReasoning = '';
         let assistantSpeech = '';
@@ -1702,7 +1723,8 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
             sessionId,
             historyMessages,
             profileName: profile.name,
-            promptFormat: 'openai'
+            promptFormat: 'openai',
+            onContextUsage: options.onContextUsage
         });
         const prompt = profile.backend === 'codex'
             ? buildCodexConversationPrompt(messages)
@@ -1783,7 +1805,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     if (transport.protocol === 'openai-responses') {
         const output = createChatStreamOutput({ onChunk, onSentence });
         try {
-            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name });
+            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name, onContextUsage: options.onContextUsage });
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
             const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
             await streamResponsesWithRecovery({
@@ -1834,7 +1856,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     const output = createChatStreamOutput({ onChunk, onSentence });
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name, onContextUsage: options.onContextUsage });
         
         const requestBody = {
             model: profile.model || chatConfig.model,
@@ -2174,6 +2196,7 @@ module.exports = {
     init,
     shutdown,
     getConfig,
+    getContextUsage,
     setConfig,
     pickGlobalChatConfig,
     getProfiles,

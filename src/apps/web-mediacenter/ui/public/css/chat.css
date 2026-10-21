@@ -417,6 +417,14 @@
     gap: 10px;
 }
 
+.chat-context-usage {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
 .chat-template-select {
     padding: 8px 12px;
     border: none;

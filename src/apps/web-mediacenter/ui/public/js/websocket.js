@@ -82,6 +82,7 @@ const WebSocketManager = {
     handleMessage(data) {
         if (data.type === 'chatModelTierConfig') {
             window.ControlChatModelTier?.handleMessage(data);
+            window.Chat?.requestContextUsage();
             return;
         }
         if (data.type === 'ttsProviderConfig') {
@@ -563,6 +564,8 @@ const WebSocketManager = {
             }
         } else if (data.type === 'chatGameProtocol') {
             if (window.Chat) window.Chat.handleGameProtocol(data);
+        } else if (data.type === 'chatContextUsage') {
+            window.Chat?.handleContextUsage(data);
         } else if (data.type === 'chatResponse') {
             if (window.Chat) {
                 window.Chat.handleResponse(data);
@@ -677,6 +680,7 @@ const WebSocketManager = {
             if (window.Chat && data.config) {
                 window.Chat.config.agentBackend = data.config.agentBackend || 'codex';
                 window.Chat.renderModeIndicator();
+                window.Chat.requestContextUsage();
             }
         } else if (data.type === 'commandRouting') {
             if (window.Settings) {

@@ -75,6 +75,54 @@ const Chat = {
     editingTemplateName: null,
     // 图片只保留在当前待发送消息中，实时预览帧不会进入这里。
     pendingImages: [],
+    contextUsage: null,
+    contextRequestId: null,
+    contextScopeKey: null,
+    contextSequence: 0,
+    contextIgnoredRequestIds: new Set(),
+
+    getContextScope() {
+        const mode = this.session.mode;
+        return { mode, target: mode === 'private' ? this.session.privateTarget : mode === 'role' ? this.session.roleTarget : null,
+            sessionId: mode === 'private' ? this.session.privateSessionId || 'default'
+                : mode === 'temporary' ? this.temporaryConversation.id || 'default' : 'default' };
+    },
+
+    renderContextUsage() {
+        const node = document.getElementById('chatContextUsage');
+        if (!node) return;
+        const usage = this.contextUsage;
+        const valid = usage && ['percent', 'inputTokens', 'budgetTokens', 'historyCount', 'historyLimit']
+            .every(key => Number.isFinite(usage[key]) && usage[key] >= 0);
+        node.textContent = valid ? `上下文 ≈${usage.percent}% · 对话 ${usage.historyCount}/${usage.historyLimit}` : '上下文 — · 对话 —';
+        node.title = valid ? `本地文本估算 ${usage.inputTokens}/${usage.budgetTokens} token；聊天管理实际携带历史 ${usage.historyCount}/${usage.historyLimit} 条`
+            + (usage.imageCount ? '；图片token未计入估算' : '') : '当前会话暂无可用统计';
+    },
+
+    requestContextUsage() {
+        const scope = this.getContextScope();
+        const key = JSON.stringify(scope);
+        if (key !== this.contextScopeKey) this.contextUsage = null;
+        this.contextScopeKey = key;
+        this.renderContextUsage();
+        this.contextRequestId = `control-context-${Date.now()}-${++this.contextSequence}`;
+        if (window.WebSocketManager?.send({ type: 'getChatContextUsage', requestId: this.contextRequestId,
+            ...scope, displayId: window.currentDisplayId || null }) === false) {
+            this.contextRequestId = null;
+            this.contextUsage = null;
+            this.renderContextUsage();
+        }
+    },
+
+    handleContextUsage(data) {
+        if (JSON.stringify(data.scope) !== JSON.stringify(this.getContextScope())) return;
+        if (data.live) {
+            if (!this.isLoading || data.requestId !== this.activeRequestId || this.contextIgnoredRequestIds.has(data.requestId)) return;
+            this.contextRequestId = null;
+        } else if (!this.contextRequestId || data.requestId !== this.contextRequestId) return;
+        this.contextUsage = data.usage;
+        this.renderContextUsage();
+    },
 
     init() {
         this.loadHistory();
@@ -475,6 +523,9 @@ const Chat = {
     },
 
     onProfileConnectionClosed() {
+        this.contextRequestId = null;
+        this.contextUsage = null;
+        this.renderContextUsage();
         for (const pending of this.profileRequests.values()) {
             clearTimeout(pending.timer);
             pending.reject(new Error('控制连接已断开，重连后核对权威配置'));
@@ -500,6 +551,8 @@ const Chat = {
                 this.config.model = data.config.model;
             }
             this.renderProfileSelector();
+            this.contextUsage = null;
+            this.requestContextUsage();
             window.showToast(`LLM配置已切换为: ${data.activeProfile}`, 'info');
         }
     },
@@ -943,6 +996,7 @@ const Chat = {
                 </div>
                 <div class="chat-messages" id="chatMessages"></div>
                 <div class="chat-input-area">
+                    <div id="chatContextUsage" class="chat-context-usage" aria-live="polite">上下文 — · 对话 —</div>
                     <div class="chat-input-row">
                         <button id="voiceInputBtn" class="voice-input-btn" onclick="Chat.toggleVoice()" title="开始语音输入">🎤</button>
                         <button type="button" class="chat-image-btn" onclick="Chat.selectImageFile()" title="添加图片">🖼️</button>
@@ -1245,6 +1299,7 @@ const Chat = {
     renderHistory() {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
+        this.requestContextUsage();
         
         let indexedHistory = [];
         if (this.session.mode === 'temporary') {
@@ -1861,6 +1916,7 @@ const Chat = {
     
     handleResponse(data) {
         if (data.requestId !== this.activeRequestId) return;
+        this.requestContextUsage();
         this.isLoading = false;
         this.updateSendButton();
         
@@ -2229,6 +2285,10 @@ const Chat = {
                 throw new Error(data.message || data.error || `清空失败（HTTP ${response.status}）`);
             }
             this.history = Array.isArray(data.history) ? data.history : [];
+            if (this.activeRequestId) this.contextIgnoredRequestIds.add(this.activeRequestId);
+            if (this.contextIgnoredRequestIds.size > 256) this.contextIgnoredRequestIds.delete(this.contextIgnoredRequestIds.values().next().value);
+            this.contextUsage = null;
+            this.contextRequestId = null;
             this.renderHistory();
             window.showToast('聊天记录已清空', 'success');
         } catch (error) {

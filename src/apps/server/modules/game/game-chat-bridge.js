@@ -139,13 +139,8 @@ function emitFinal(text, reasoning, speech, callbacks, history, splitIntoSentenc
     return { success: true, message, reasoning: safeReasoning, speech: safeSpeech, history };
 }
 
-/** 游戏回合缓冲模型输出，避免协议行的半截流进入聊天或 TTS。 */
-async function runGameAwareChat({ chat, gameService, displayId, content, userText = content,
-    options, callbacks, internalSignal = false, getAvailableGames = () => ['五子棋'] }) {
-    if (!displayId) {
-        return chat.chatStream(content, options, callbacks);
-    }
-    const initialState = gameService.snapshot(displayId);
+/** 查询统计与实际聊天共用游戏提示拼接，避免漏算规则和地图前的系统说明。 */
+function buildGameSystemPrompt(initialState, originalPrompt) {
     // 当前游戏名来自服务端权威快照；已结束的棋局不再作为正在进行的游戏提示给模型。
     // 终局保留上一局和规则，供模型判断“再来一局”；查询规则本身不改变 NowGame。
     // raw 格式会把 systemPrompt 放进同一条 user 消息的 System: 后，游戏提示位于角色设定之前。
@@ -156,8 +151,18 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
             ? `LastGame:${initialState.game},已结束,尺寸${initialState.size}` : '',
         GAME_RULES[ruleGame] ? `${ruleGame}规则:${GAME_RULES[ruleGame]}` : '']
         .filter(Boolean).join('\n');
-    const systemPrompt = [GAME_PROMPT, nowGamePrompt, options.systemPrompt]
+    return [GAME_PROMPT, nowGamePrompt, originalPrompt]
         .filter(Boolean).join('\n\n');
+}
+
+/** 游戏回合缓冲模型输出，避免协议行的半截流进入聊天或 TTS。 */
+async function runGameAwareChat({ chat, gameService, displayId, content, userText = content,
+    options, callbacks, internalSignal = false, getAvailableGames = () => ['五子棋'] }) {
+    if (!displayId) {
+        return chat.chatStream(content, options, callbacks);
+    }
+    const initialState = gameService.snapshot(displayId);
+    const systemPrompt = buildGameSystemPrompt(initialState, options.systemPrompt);
     let input = content;
     let version = initialState?.revision;
     let invalidAiMoves = 0;
@@ -166,7 +171,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     let maxTurns = 7;
     const narratives = [];
     const gameTrace = [];
-    let replyGame = nowGame === '无' ? null : nowGame;
+    let replyGame = initialState?.result === '进行中' ? initialState.game : null;
     const recordProtocol = (kind, text) => {
         const entry = { kind, text, summary: formatGameProtocolSummary(kind, text),
             sequence: gameTrace.length + 1 };
@@ -333,4 +338,4 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         chat.splitIntoSentences, gameTrace, replyGame);
 }
 
-module.exports = { runGameAwareChat, GAME_PROMPT, filterGameProtocolText, formatGameProtocolSummary };
+module.exports = { runGameAwareChat, buildGameSystemPrompt, GAME_PROMPT, filterGameProtocolText, formatGameProtocolSummary };

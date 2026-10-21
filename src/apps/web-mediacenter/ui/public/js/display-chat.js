@@ -27,6 +27,9 @@
         requestSequence: 0,
         historyRequestSequence: 0,
         historyRequestId: null,
+        contextRequestId: null,
+        contextScopeKey: null,
+        temporaryConversationId: null,
         pendingHistoryClear: null,
         sessionSnapshotReceived: false,
         hiddenSelection: null,
@@ -98,6 +101,7 @@
     }
 
     function requestSessionHistory() {
+        requestContextUsage();
         const isPrivate = state.session.mode === 'private';
         const isRole = state.session.mode === 'role';
         // 同范围也可能有多次展开或恢复查询，只允许最新一次快照更新界面。
@@ -525,6 +529,7 @@
 
     function renderHistory() {
         if (!state.refs.messages) return;
+        requestContextUsage();
         // 历史可能在回复生成中返回。保留原节点以维持 streaming Map 的引用和后续分片更新。
         const liveMessages = [...state.refs.messages.children].filter((item) =>
             state.streaming.has(item.dataset.requestId));
@@ -562,6 +567,38 @@
         if (!state.refs.status) return;
         state.refs.status.textContent = message || '';
         state.refs.status.classList.toggle('is-error', isError);
+    }
+
+    function contextScope() {
+        const mode = state.session.mode;
+        return { mode, target: mode === 'private' ? state.session.privateTarget
+            : mode === 'role' ? state.session.roleTarget : null,
+            sessionId: mode === 'private' ? state.session.privateSessionId || 'default'
+                : mode === 'temporary' ? state.temporaryConversationId || 'default' : 'default' };
+    }
+
+    function renderContextUsage(usage = null) {
+        const node = state.root?.querySelector('[data-role="context-usage"]');
+        if (!node) return;
+        const valid = usage && ['percent', 'inputTokens', 'budgetTokens', 'historyCount', 'historyLimit']
+            .every(key => Number.isFinite(usage[key]) && usage[key] >= 0);
+        node.textContent = valid ? `上下文 ≈${usage.percent}% · 对话 ${usage.historyCount}/${usage.historyLimit}` : '上下文 — · 对话 —';
+        node.title = valid ? `本地文本估算 ${usage.inputTokens}/${usage.budgetTokens} token；聊天管理实际携带历史 ${usage.historyCount}/${usage.historyLimit} 条`
+            + (usage.imageCount ? '；图片token未计入估算' : '') : '当前会话暂无可用统计';
+    }
+
+    function requestContextUsage() {
+        if (!state.send || !state.sessionSnapshotReceived) return;
+        const scope = contextScope();
+        const key = JSON.stringify(scope);
+        if (state.contextScopeKey !== key) renderContextUsage();
+        state.contextScopeKey = key;
+        state.contextRequestId = `display-context-${Date.now()}-${++state.requestSequence}`;
+        if (state.send({ type: 'getChatContextUsage', requestId: state.contextRequestId,
+            ...scope, displayId: state.displayId }) === false) {
+            state.contextRequestId = null;
+            renderContextUsage();
+        }
     }
 
     function sendMessage(voiceText = null) {
@@ -702,6 +739,7 @@
                     <div class="display-chat-messages" data-role="messages" aria-live="polite"></div>
                     <div class="display-chat-status" data-role="status" aria-live="polite"></div>
                     <form class="display-chat-compose" data-role="compose">
+                        <div class="display-chat-context-usage" data-role="context-usage" aria-live="polite">上下文 — · 对话 —</div>
                         <textarea data-role="input" rows="2" maxlength="51200" placeholder="输入消息…" aria-label="聊天输入"></textarea>
                         <div class="display-chat-compose-actions">
                             <button type="submit" class="display-chat-send">发送</button>
@@ -756,6 +794,16 @@
     }
 
     function handleServerMessage(message) {
+        if (message?.type === 'chatContextUsage') {
+            if (JSON.stringify(message.scope) !== JSON.stringify(contextScope())) return true;
+            if (message.live) {
+                if (!state.streaming.has(String(message.requestId || '')) || state.ignoredRequestIds.has(String(message.requestId))) return true;
+                state.contextRequestId = null;
+            } else if (!state.contextRequestId || message.requestId !== state.contextRequestId) return true;
+            renderContextUsage(message.usage);
+            return true;
+        }
+        if (message?.type === 'chatModelTierConfig') requestContextUsage();
         if (!message || typeof message !== 'object') return false;
         if (message.type === 'chatTtsPlayback') {
             const playback = state.manualPlayback;
@@ -901,6 +949,8 @@
             if (state.ignoredRequestIds.has(requestId)) {
                 return true;
             }
+            if (message.temporaryConversationId) state.temporaryConversationId = message.temporaryConversationId;
+            requestContextUsage();
             // 完成回复已比此前请求的历史快照更新，迟到的旧快照不能擦除这条回复。
             state.historyRequestId = null;
             if (!message.success) {
@@ -968,7 +1018,9 @@
         if (state.bus) {
             state.bus.subscribe('server.message', handleServerMessage);
             state.bus.subscribe('transport.changed', ({ available }) => {
-                if (available) return;
+                if (available) { requestContextUsage(); return; }
+                state.contextRequestId = null;
+                renderContextUsage();
                 state.sessionSnapshotReceived = false;
                 clearManualPlayback();
                 state.historyRequestId = null;

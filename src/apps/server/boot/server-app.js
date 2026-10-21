@@ -22,6 +22,7 @@ const { createGomokuGameService } = require('../modules/game/gomoku-game-service
 const { createGomokuDisplayDemoService, isLoopbackAddress } =
     require('../modules/game/gomoku-display-demo-service');
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
+const { createChatContextUsageService, resolveChatContextOptions, normalizeContextScope } = require('../modules/chat/chat-context-usage');
 const { createDataRepairRunner } = require('../modules/data-repair/data-repair-js-runner');
 const { createChat2ApiRuntime } = require('../modules/chat2api/chat2api-runtime');
 const { createDoubaoWebViewSettings } = require('../modules/chat2api/chat2api-doubao-webview-settings');
@@ -416,6 +417,11 @@ const gomokuGame = createGomokuGameService({
         const interruptedDemo = gomokuDisplayDemo?.cancelForRealUpdate(displayId);
         sendToDisplay(displayId, interruptedDemo ? gomokuGame.snapshot(displayId) : message);
     }
+});
+const chatContextUsage = createChatContextUsageService({ chat,
+    getGameSnapshot: displayId => gomokuGame.snapshot(displayId),
+    getTemporaryConversation: () => ({ ...temporaryConversation,
+        history: getTemporaryConversationHistoryContext(temporaryConversation.id) })
 });
 gomokuDisplayDemo = createGomokuDisplayDemoService({
     getSnapshot: displayId => gomokuGame.snapshot(displayId),
@@ -1356,7 +1362,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1439,7 +1445,7 @@ async function startServer() {
             const controlTypes = [
                 'voiceCommand', 'confirmVoiceCommand', 'getSearchHistory', 'clearSearchHistory',
                 'deleteSearchHistory', 'getAssistantConfig', 'setAssistantConfig', 'timeAnnounce',
-                'getReminders', 'chatHistory', 'clearChatHistory', 'getChatSession', 'setChatSession',
+                'getReminders', 'getChatContextUsage', 'chatHistory', 'clearChatHistory', 'getChatSession', 'setChatSession',
                 'getChatCommands', 'setChatCommands', 'mute', 'unmute', 'todayReminders',
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
@@ -9068,6 +9074,10 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     }
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;
     const displayData = displayClients.get(displayId);
+    if (data.type === 'getChatContextUsage') {
+        if (displayData?.ws === ws) chatContextUsage.handle(ws, data, displayId);
+        return;
+    }
 
     // 清空后在途的旧进度不能重新写入空状态，也不能令控制端恢复已停止的列表。
     const mediaReportTypes = ['videoProgress', 'audioProgress', 'htmlProgress', 'playlistProgress',
@@ -9703,6 +9713,7 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 async function handleControlMessageFallback(data, ws) {
+    if (chatContextUsage.handle(ws, data)) return;
     if (data.type === 'gameDemoStart' || data.type === 'gameDemoStop') {
         const displayId = typeof data.displayId === 'string' ? data.displayId : '';
         const result = isLoopbackAddress(ws?._socket?.remoteAddress)
@@ -11491,39 +11502,11 @@ async function handleChatMessage(options) {
         pruneTemporaryConversationHistory(effectiveTemporaryConversationId);
     }
     
-    let systemPrompt = null;
-    let includeHistory = false;
-    let contextCount = 0;
-    if (['group', 'temporary'].includes(messageMode)) {
-        systemPrompt = isTemporaryConversation
-            ? chat.getTemplateSystemPrompt(temporaryConversation.roleName)
-            : chat.getGroupSystemPrompt();
-        // 临时模式的会话组数量由 temporaryContextGroups 控制；这里给足消息条数上限，最终仍由模型 token 预算裁剪。
-        contextCount = isTemporaryConversation ? 10000 : (chat.getConfig().contextCount || 0);
-        if (contextCount > 0) includeHistory = true;
-    } else if (effectiveTemplateTarget) {
-        const template = chat.getTemplateByName(effectiveTemplateTarget);
-        if (template) {
-            systemPrompt = template.content;
-            if (messageMode === 'private') {
-                includeHistory = true;
-                contextCount = 100;
-            } else {
-                contextCount = chat.getConfig().contextCount || 0;
-                if (contextCount > 0) includeHistory = true;
-            }
-        }
-    } else {
-        contextCount = chat.getConfig().contextCount || 0;
-        if (contextCount > 0) includeHistory = true;
-    }
-    if (customSystemPrompt && !effectiveTemplateTarget && messageMode !== 'group') {
-        systemPrompt = customSystemPrompt;
-    }
-    if (skipHistory) {
-        includeHistory = false;
-        contextCount = 0;
-    }
+    const { systemPrompt, includeHistory, contextCount } = resolveChatContextOptions(chat, {
+        mode: messageMode, templateTarget: effectiveTemplateTarget,
+        temporaryRoleName: temporaryConversation.roleName,
+        systemPrompt: customSystemPrompt, skipHistory
+    });
 
     const preferredDisplayId = displayIds[0]
         || (routeVoiceToPreferredDisplay ? voiceOriginDisplayId || displayId : displayId)
@@ -11580,6 +11563,12 @@ async function handleChatMessage(options) {
         internalSignal: internalGameUpdate,
         options: {
         tierOverride,
+        onContextUsage: usage => {
+            const payload = { type: 'chatContextUsage', requestId: effectiveRequestId, live: true,
+                scope: normalizeContextScope({ mode: messageMode, target: messageTarget, sessionId: effectiveSessionId }), usage };
+            sendToControl(payload);
+            if (preferredDisplayId && preferredDisplayId !== options.sourceDisplayId) sendToDisplay(preferredDisplayId, payload);
+        },
         useTemplate: null,
         displayId: displayId,
         systemPrompt: systemPrompt,

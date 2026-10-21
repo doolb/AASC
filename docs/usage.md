@@ -1,3 +1,5 @@
+- [聊天上下文占用与历史计数](usage/chat-context-usage.md)（控制端、显示端输入框上方；服务代码包更新后生效）
+
 ## 整包安装后的内置版本
 
 - [Android显示页60FPS与APK系统栏](usage/android-display-frame-policy.md)
