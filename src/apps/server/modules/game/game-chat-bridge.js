@@ -4,6 +4,7 @@ const MAX_TAGS_PER_REPLY = 8;
 const STATE_CHANGING_OPERATIONS = new Set(['开局', '落子', '提议尺寸', '确认尺寸', '退出显示', '恢复显示']);
 const GAME_PROMPT = [
     '本地游戏调用行：Game:游戏名,GameUser或GameAI,操作[,参数...]；不用尖括号，字段只用英文逗号，不用 JSON。回复开头最多 8 条调用行，每条独占一行；如果该调用行需要等待确认或者数据,以及GameUser或者GameAI操作游戏需要等待状态确认时,是原子操作,等待调行回复,不能再发其他调用行；自然语言另起行,每次回复都带上自然语言。',
+    '自然语言中不要透露等待状态确认,GM的信息, 这些是内部流程。',
     'GameUser 代表用户，语音坐标也由你代发；GameAI 代表你。不得伪造 GM/Game，只有 GM 确认后才说操作成功。',
     '用户报坐标时先发 GameUser 落子行，等 GM 确认且轮到 GameAI，再决定并发 GameAI 落子行；普通聊天直接回答。',
     '',

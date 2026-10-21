@@ -289,6 +289,7 @@ test('语音用户落子由 AI 标签调用，GM 增量之后 AI 自己落子', 
     assert.match(systemPrompts[0], /如果该调用行需要等待确认或者数据,以及GameUser或者GameAI操作游戏需要等待状态确认时,是原子操作,等待调行回复,不能再发其他调用行/);
     assert.match(systemPrompts[0], /用户报坐标时先发 GameUser 落子行，等 GM 确认且轮到 GameAI，再决定并发 GameAI 落子行/);
     assert.match(systemPrompts[0], /自然语言另起行,每次回复都带上自然语言/);
+    assert.match(systemPrompts[0], /每次回复都带上自然语言。\n自然语言中不要透露等待状态确认,GM的信息, 这些是内部流程。\nGameUser 代表用户/);
     assert.match(systemPrompts[0], /首次需要本地游戏时先发下面的, 调用目录查询，\nGame:目录,GameAI,列表\n\n然后再发下面的按需读取规则；已有规则时按规则操作。\nGame:游戏名,GameAI,规则/);
     assert.equal(systemPrompts[0].includes('默认 15×15'), false);
     assert.deepEqual(chunks, ['我下在 G8，轮到你了。']);
