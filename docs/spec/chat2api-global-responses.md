@@ -1,5 +1,16 @@
 # Chat2API 全局 Responses 协议实现规范（历史实现记录）
 
+## 豆包与Qwen流式路径伪代码（2026-10-22）
+
+```text
+豆包 := Node HTTP2收到响应头 → 返回原始/解压数据流 → 逐SSE事件解析 → CHUNK_DELTA或STREAM_CHUNK产出新增正文
+国内Qwen := 逐SSE事件读取messages中的最长文本 → 比较已输出长度 → 立即yield新增后缀
+流式 := request.stream=true → 消费适配器迭代器 → 逐块response.output_text.delta → 最终response.completed
+非流式 := 消费完适配器数据流并累计正文 → 完整body返回
+证据边界 := 本轮只读代码核对，不声称测量真实网络每块时间；分块粒度和首字延迟由上游及传输影响
+```
+
+
 > 本文保留 2026-08-31 全局 Responses 迁移的过程伪代码。当前 profile 级配置和请求归属以 `docs/spec/chat-system.md` 为准。
 
 ## 配置伪代码

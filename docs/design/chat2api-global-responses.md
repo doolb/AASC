@@ -1,5 +1,10 @@
 # Chat2API 全局 Responses 协议设计（历史设计记录）
 
+## 豆包与国内Qwen聊天流式核对（2026-10-22）
+
+两者在请求stream=true时均逐块转发：豆包Node HTTP/2响应作为可迭代流，解析CHUNK_DELTA/STREAM_CHUNK后立即交给Responses；国内Qwen按SSE累计文本计算新增后缀再转发。客户端收到response.output_text.delta即可显示，不以response.completed作为正文首次显示条件。显式非流式请求才在适配器汇总后返回完整结果；签名等待、上游首字延迟或上游少量大块仍可能影响观感。本轮为代码核对，没有新增联网时序测试。
+
+
 > 本文记录 2026-08-31 的全局 Responses 切换过程。当前实现已将调用协议、Responses 服务基址和 API Key 收敛到 `chat.llmProfiles[]`，请以 `docs/design/chat-system.md` 和 `docs/spec/chat-system.md` 的 profile 配置规则为准。
 
 ## 需求概述

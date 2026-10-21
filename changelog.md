@@ -1,3 +1,8 @@
+### 豆包与Qwen聊天流式路径说明
+
+- ✅ [2026-10-22] 核对豆包HTTP/2可迭代流、CHUNK_DELTA/STREAM_CHUNK及国内Qwen的SSE累计文本差分，两者stream=true均逐块转发Responses output_text.delta；仅非流式请求汇总完整回答。
+  - 同步全局Responses design/spec、豆包usage和正式部署验收待办；只读核对，无业务代码、发布状态变化或新增联网测试。
+
 ### 豆包兼容模式设置入口说明
 
 - ✅ [2026-10-22] 核对任务元数据、控制端通用参数表单和Chat2API传输选择：通过“任务→豆包网页→创建实例”配置并启动；任务运行即网页兼容，停止即Node直连，Chat2API暂无独立模式开关。
