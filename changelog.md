@@ -1,3 +1,19 @@
+### MMD-AR HMR2 GPU 与当前整图深度接入
+
+- ✅ [2026-10-21] 按用户选择“完整接入”，独立MMD-AR“全身IK→图片姿态”新增HMR2 GPU API方式，保留MediaPipe本地默认；接入当前图片Depth Anything V2 Small真实浏览器计算及默认关闭的实验性弱排序。
+  - 新[HTTP/PNG客户端](<3rd/mmd-ar-test/web-human-hmr2-client.mjs>)、[纯语义](<3rd/mmd-ar-test/web-human-pose-semantic.mjs>)、[深度Worker](<3rd/mmd-ar-test/web-human-depth-worker.mjs>)与资源/预后处理/客户端/UI，修改[图片入口](<3rd/mmd-ar-test/web-human-pose-ui.mjs>)/[FK](<3rd/mmd-ar-test/web-human-pose-lift.mjs>)/IK/接口/相机/构建。实际 `/health` 和 `/infer`、可选xyxy、原生BODY25/XYZ/24rot/相机字段保持；地址可保存、token仅会话，图片明确上传到选定API；无检测或虚构置信度，不直接写SMPL旋转。
+  - DA按需WASM单线程、RGB/ImageNet/minimal/14倍数、保留有限Float32/P5/P95黄近蓝远；固定27,258,801字节模型/revision/SHA/Apache-2.0许可，预算支持1600×900→924×518，超预算明确拒绝。弱线索只限八段正权重、局部稳定/差异/出画/原生冲突过滤；空辅助MP保持原同步及head，有效目标来自同一合法FK；同view跨度避免场景/米单位漂移，纯UI不引入Three。取消与旧结果隔离、压缩传输长度及退化门限修复。
+  - 定向数值/协议/真实PMX/Ammo152项、浏览器28项合计180通过，零跳过；包括HMR真实异步提交/物理推进和取消、MP默认11目标及相机恢复、Clipboard作用域、8种HTTP取消；[新浏览器证据](<tmp/mmd-pose/hmr2-depth-integration/2026-10-21T09-58-31-016Z-58548/evidence.json>)深度478632个有限Float32/动态黄蓝，单次桌面run约10.38秒不含加载/预处理。HMR是HTTP mock、UI提交是stub；真实PMX另有合成回环/实际Ammo，不冒称真实GPU联网或图片姿态准确，LAN/CORS/手机性能仍待用户环境验收。
+  - 原项目独立网页构建通过；不修改外部Python、不操作用户服务器、不出APK/发布包，不额外改变Offline状态。同步Human design/spec、[任务结果](<docs/task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)、self-test与[使用说明](<docs/usage/mmd-pose-model-testing.md>)；从todo删除已完成实现，仅保留实机部署验收。
+  - 用户另批准安全Git同步：44文件永久SHA备份、5处文档三方合并保留双方、stash留存，master从0d8d7249快进468b57df共14提交；收尾又按相同保护流程快进1c56e205两提交，累计16。随后仅选择性提交本任务源码/测试/文档节；无关用户文档/伪代码及模型/产物不纳入。备份及流程见任务Git章节。
+
+### MMD-AR 接入 HMR2 GPU 与整图相对深度方案
+
+- ✅ [2026-10-21，规划阶段] 完成现成 HMR2 服务与独立 MMD-AR 图片骨骼、深度原型的只读接入核对；当时运行代码尚未修改，随后用户已确认完整接入并完成实现，结果见本日志最新接入条目。
+  - 冻结实际 `GET /health`、`POST /infer` 的 base64/xyxy/BODY25/CUDA FP32 契约，不沿用旧版本化路由或虚构置信度；确认自选图深度已有真实浏览器 ONNX 推理，但仍在忽略目录原型中，不能直接复用三张 PNG 冒充任意图片计算。
+  - 同步[Human design](docs/design/mmd-human-interface.md)、[Human spec](docs/spec/mmd-human-interface.md)、[任务](docs/task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md)及[todo](docs/todo.md)，建议 HMR2 独立骨骼方式、动态整图深度预览与默认关闭的实验性弱排序；明确表面相对深度不是米制关节 z，不保证修复遮挡腿/左右/脚掌。保留所有已有用户改动。
+  - 当时规划阶段未运行模型、测试、构建、发布或 HTTP 探测，未启动/重启/接管用户服务器，外部 Python 服务、依赖与 Offline 状态不变。
+
 ### 当前服务器豆包直连与网页复测
 
 - ✅ [2026-10-21] 完成192.168.1.39现有8083服务的Responses现场复测，记录实际失败结果；未修改生产代码、账号或重启服务。

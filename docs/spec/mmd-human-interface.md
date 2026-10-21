@@ -1,5 +1,54 @@
 # 独立 MMD-AR HumanInterfaceElement 实现
 
+## HMR2 GPU API 与整图相对深度（2026-10-21，完成）
+
+本节以现成[Python GPU 服务](<E:/ai/ai-depthmap/hmr2_gpu_service.py>)为契约，独立网页接入已经实现；相关旧候选只作历史，不作为运行协议。任务见[接入结果](<../task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。
+
+```text
+范围 := 独立 MMD-AR 全身 IK 的图片区域；MediaPipe 默认保持；HMR2 API 为独立选择
+已确认 := HMR2 接入 + 动态整图深度预览 + 默认关闭的实验性弱排序
+FK实现 := getPosePoint读取算法独立的12身体语义点；原RTMPose二维分支保持，HMR使用同一真实FK
+  HMR主先验 := 将原生XYZ骨段/肩轴/髋轴翻Y/Z为相机空间方向，与FK相机空间方向作软匹配；躯干上轴仅参与身体框架初值
+  初始化 := 参考FK肩髋身体框架 → HMR身体框架，换算根增量为有界Euler；保留当前/参考/屈膝/转身候选
+  打分 := 原二维取景拟合 + 有限三维方向先验 + 当前姿态/关节先验；最终目标全部来自同一FK解
+  深度辅助 := 同语义有效点的弱排序惩罚，幅度上限远小于主体几何；与HMR3D方向冲突则拒绝
+  安全回退 := 加辅助候选投影明显退化 → 保留无辅助解并提示；关闭时不增加深度loss或加载模型
+  MediaPipe无辅助 := 保持原同步world重定向；只有显式开启且存在有效线索时转通用FK、自有MP方向先验
+  深度过滤 := 纯语义模块统一实现八个相邻肢段白名单/正有限权重上限0.25/可用原生端点/去重/原生三维冲突拒绝；UI不依赖Three，三维prior仅复用/重导出过滤
+  空辅助 := 退化/全部拒绝时MP保留原同步主路径及head目标；HMR继续自有方向主解
+  MP有效辅助 := 自有脸参考可用时保留head目标；位置仅来自合法FK，不将nose当PMX头中心或相机对应
+  排序尺度 := 相机空间b-a深度差 / 同一view中的固定参考身体最大跨度，不混用场景单位与局部米
+  退化阈值 := <=1e-5，UI提示/灰图/线索拒绝共用常量
+API配置 := 规范 HTTP(S) 服务根地址；本浏览器保存地址；Bearer token 只在会话内
+连接测试 := GET 根地址/health；校验 type=hmr2.health、ready、model、precision；不上传图片
+实际 wire := POST 根地址/infer，JSON 仅 image_base64 和可选 bbox_xyxy
+图片 := 共用已定向/最长边限制的像素；编码 PNG 上传；人物框按同一上传图片像素 xyxy 校验
+响应 := type=hmr2.result、schemaVersion=1、imageSize、names/edges、xyz(25x3)、xy(25x2)、cameraDepth
+  检查尺寸/数组形状/有限性/BODY25语义/正相机深度/来源；不要求不存在的 apiVersion/limits/confidence
+  保留原始 rotations24/betas10/cameraTranslation/projection；错误读取 error.code/message
+原生几何 := cameraPoint = xyz + cameraTranslation；xy = f*cameraPoint.xy/cameraPoint.z + 主点
+语义适配 := MediaPipe33 与 BODY25 各自取肩肘腕髋膝踝；不补33点、不伪造visibility
+三维映射 := 原生XYZ保留；方向diag(1,-1,-1) → 通过当前rig/camera框架 → 真实PMX固定骨长/FK共享限位；根位置保持当前骨盆锚点
+  直接写 SMPL quaternion 或把 cameraTranslation 当骨架形变 → 禁止
+  所有目标有限且模型/控制/相机快照仍有效 → 由既有 submitImageTargets 一次提交
+整图深度资源 := 固定 Depth Anything V2 Small 量化 ONNX + 预处理配置 + SHA/许可；复用匹配版本 ORT
+深度预算 := 原图最长边1600；minimal/14倍数后的输入最长边1024、最多518*1024像素；支持1600x900→924x518，不静默裁切，minimal结果超预算时明确拒绝
+缩放实现 := 独立分离式抗混叠双三次；保持RGB整图，不宣称与Pillow/旧Canvas逐位相同
+深度任务 := 独立按需 Worker + 可取消客户端；同一整图 RGB、minimal 缩放、14倍数、ImageNet NCHW
+  输出 [1,H,W] 浮点值 → 验证形状与有限性 → 独立拷贝原始数值 → 释放ORT输入/输出
+  资源读取 := 无编码/identity时预检Content-Length；gzip/br按解码后有界流精确大小判断；构建必检SHA，运行时有SubtleCrypto再检SHA，LAN明文缺Crypto只信任已校验部署且不保证传输完整性
+热图 := 每图 P5/P95 归一化，数值大显示黄/近、小显示蓝/远；退化图提示不提供排序
+弱排序 := 默认关闭；启用时身体语义点映射浮点图、稳健局部采样、边界/离散/小差异拒绝
+  仅小权重前后顺序惩罚，不把相对数值转为米制关节z、不改原生HMR数据或左右标签
+  与主体几何/二维投影/关节约束冲突或无可用线索 → 跳过并说明；不承诺人体表面归属已验证
+隔离 := 图片/算法/API/框/PMX/关闭/取消改变代次；AbortController停止HTTP等待；Worker取消释放
+  深度失败 → 保留HMR参考并说明，不静默启用其它骨架；HMR失败 → 不允许深度独立冒充人体姿态
+相机 := 统一身体语义对应；实际PMX点用于拟合；所有者/revision/token/恢复规则保持
+构建 := 扩展 Human 模块及深度资产清单 → npm run build:web:mmd-ar-test；不手改生成副本
+验证 := wire/坐标/根中心/左右/EXIF/骨长/限位/实际回读/相机恢复/换图竞态/关闭深度等价
+执行门禁 := 已由用户确认完整接入；定向测试/真实DA与默认MP浏览器/独立网页构建通过；未操作用户服务、修改外部Python或出APK/发布包
+```
+
 ## 本机试验收敛：保留 HMR2.0b 与人物分割（2026-10-16，已完成）
 
 ```text

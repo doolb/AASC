@@ -4,7 +4,7 @@ import { calculateInverseRotationalMass, calculateKneePoleTarget, calculatePbdAn
 import { createHumanPhysicsRig } from './web-human-physics-rig.mjs';
 import { BODY_STATES, createHumanPhysicsDrive, normalizeBodySettings } from './web-human-physics-drive.mjs';
 import { retargetImagePose } from './web-human-pose-retarget.mjs';
-import { fitImagePose2DAsync } from './web-human-pose-lift.mjs';
+import { fitImagePose2DAsync, needsImagePoseFit } from './web-human-pose-lift.mjs';
 
 import { normalizeMarkerDiameter, projectIKMarker, pickIKMarker } from './web-human-ik-markers.mjs';
 
@@ -475,14 +475,14 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
             return options.isCurrent?.() !== false && imagePoseEpoch === epoch && enabled && mode === 'physics'
                 && bound === model && bodyRig === rig && getCamera() === camera && reference === matrixKey();
         };
-        const fitted = await fitImagePose2DAsync(pose, rig, camera, { isCurrent });
+        const fitted = await fitImagePose2DAsync(pose, rig, camera, { ...options, isCurrent });
         if (!isCurrent()) { const error = new Error('拟合期间模型、相机或控制已变化，请重试'); error.name = 'AbortError'; throw error; }
-        return { ...submitImageTargets(fitted.targets), imagePoseFit: { error: fitted.error, projection: fitted.projection,
-            depthSource: fitted.depthSource, iterations: fitted.iterations } };
+        const { targets, ...imagePoseFit } = fitted;
+        return { ...submitImageTargets(targets), imagePoseFit };
     }
     function applyImagePose(pose, options = {}) {
         if (!enabled || mode !== 'physics' || !bodyRig || !bodyDrive) throw new Error('请先启用身体物理模式');
-        if (pose?.source === 'rtmpose-m' && pose.dimensions === 2) return applyImagePose2D(pose, options);
+        if (needsImagePoseFit(pose, options, bodyRig)) return applyImagePose2D(pose, options);
         // 旧world接口保留同步兼容；无论哪个来源，全部计算通过后才提交目标。
         return submitImageTargets(retargetImagePose(pose, bodyRig, { camera: getCamera() }));
     }

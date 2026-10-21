@@ -1,5 +1,29 @@
 # 自测功能实现文档
 
+## MMD-AR HMR2 API 与整图深度集成（2026-10-21，完成）
+
+```text
+调度 := npm run build:web:mmd-ar-test结束并确认真实PMX/VMD存在 → 再运行读产物的数值/浏览器测试；不与构建清理并行
+协议 := 独立实际wire fixture + 注入fetch，不开GPU服务 → health不编码/不POST、PNG/xyxy/16MiB、实际BODY25/相机/24旋转校验
+隔离 := 编码/fetch/JSON/进度/超时/取消/新请求单飞/dispose → 迟到不上传、不提交；token不保存
+纯UI := 无Three importmap的旧图片/Clipboard壳仍可导入；共享肢段/过滤只依赖纯语义模块
+深度纯函数 := 固定预处理/SHA + RGBminimal抗混叠双三次/14倍数 + 有限[1,H,W]/P5P95/黄近蓝远/共享1e-5退化灰
+预算 := 1600x900→924x518、1000x600→868x518；最长1024且最多518*1024像素，minimal超预算提前拒绝
+资源 := 构建必检真实SHA与许可；有SubtleCrypto时Worker检SHA；gzip/br不把传输长度误当解码长度，仍有界读取；LAN缺Crypto不承诺传输完整性
+弱线索 := 5x5稳健采样 + 八段白名单/正权重0.25上限/端点可用/去重/原生冲突；只提供可见表面符号，不当人体归属或米制z
+真实PMX合成回环 := 从真实骨架投影构造BODY25（非HMR识图真值）→ 同一FK固定骨长/限位/变换/原数据保持
+真实提交 := BODY25合成姿态 → createHumanIK异步真实FK/Ammo提交十个身体目标 → 物理推进有限；isCurrent=false不改已有控制目标
+关闭/空辅助等价 := depthEnabled=false逐值相同；MP零线索/全冲突沿原同步入口且head保持；有效MP辅助head仍来自合法FK
+尺度 := 固定同view身体跨度归一化；模型均匀scale1/2/10及等价PMX单位变换下非零排序loss不漂移
+相机 := 只匹配十二实际身体语义，不把nose当头骨；恢复/所有者/PMXtoken保留
+浏览器 := 专用UI壳/Human提交记录 + 同源HTTP mock（不是GPU）→ API配置/PNG/预览/503/Token会话；八类取消都观测原生AbortError及HTTP关闭
+真实DA := 专用Worker实际加载ONNX+ORT，不替换输出 → 当前图浮点/热图/计算阶段取消/终止/迟到隔离
+原入口回归 := 原真实MediaPipe图片及实际PMX/物理 + 剪贴板浏览器 + 原真实FK/相机/物理自测
+边界 := HTTP mock不等于真实GPU联网，UI stub不等于VaM实际效果，合成PMX回环不等于识图精度；深度计算进度不是细粒度WASM栈观测
+```
+
+参见[接入结果](<../task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。
+
 ## 192.168.1.39当前豆包双传输复测（2026-10-21）
 
 ```text

@@ -1,14 +1,28 @@
 import { createImagePoseClient } from './web-human-pose-client.mjs';
-import { landmarkQuality, BODY_LANDMARKS, poseLandmarkThreshold } from './web-human-pose-core.mjs';
+import { createHmr2PoseClient, normalizeHmr2BaseUrl } from './web-human-hmr2-client.mjs';
+import { POSE_BODY_KEYS, getPoseQuality, getPoseReference } from './web-human-pose-semantic.mjs';
+import { installImageDepth } from './web-human-depth-ui.mjs';
 import { installPoseOverlay } from './web-human-pose-overlay.mjs';
 
-const EDGES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [0, 7], [0, 8]];
 const BODY_NAMES = ['左肩', '右肩', '左肘', '右肘', '左腕', '右腕', '左髋', '右髋', '左膝', '右膝', '左踝', '右踝'];
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-export function installImagePose(panel, { human, ensurePhysics }) {
+export function installImagePose(panel, { human, ensurePhysics, poseClient = createImagePoseClient(), hmrClient = createHmr2PoseClient(), depthClient } = {}) {
     const root = document.createElement('details'); root.dataset.posePanel = '';
     root.innerHTML = `<summary>图片姿态</summary>
-        <p>MediaPipe Pose 在本机识别全身图片（33点，首次加载约16.7MiB检测与姿态模型）。图片不会上传；三维坐标为模型估计，应用后可在3D场景拖点微调。</p>
+        <label>骨骼计算方式 <select data-pose="source"><option value="mediapipe-pose">MediaPipe Pose · 本地</option><option value="hmr2-api">HMR2.0b · GPU API</option></select></label>
+        <p data-pose="privacy">MediaPipe Pose 在本机识别全身图片（33点，首次加载约16.7MiB检测与姿态模型）。图片不会上传；三维坐标为模型估计，应用后可在3D场景拖点微调。</p>
+        <div data-pose="api-controls" hidden>
+        <label>API 服务根地址 <input data-pose="api-url" type="url" placeholder="http://127.0.0.1:8768" style="width:100%;box-sizing:border-box"></label>
+        <label>Bearer Token（只在本次会话使用）<input data-pose="api-token" type="password" autocomplete="off" style="width:100%;box-sizing:border-box"></label>
+        <button type="button" class="display-mmd-ar-action" data-pose="test-api">测试连接（不上传图片）</button>
+        <p>电脑服务供手机调用时填电脑局域网地址；服务必须允许当前网页 Origin。HTTPS 页面不能绕过远端 HTTP 限制，请使用合适的 HTTPS 部署。</p>
+        <label><input data-pose="bbox-enabled" type="checkbox">指定人物框（已缩放/定向图片的像素 xyxy）</label>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px">
+        <label>左 x1 <input data-pose="bbox-x1" type="number" min="0" step="any" style="width:100%;box-sizing:border-box"></label>
+        <label>上 y1 <input data-pose="bbox-y1" type="number" min="0" step="any" style="width:100%;box-sizing:border-box"></label>
+        <label>右 x2 <input data-pose="bbox-x2" type="number" min="0" step="any" style="width:100%;box-sizing:border-box"></label>
+        <label>下 y2 <input data-pose="bbox-y2" type="number" min="0" step="any" style="width:100%;box-sizing:border-box"></label></div>
+        <p data-pose="image-size">不指定框时使用整图单人假设，不是自动人物检测。HMR 原始结果仍可能存在左右腿/脚掌误判。</p></div>
         <label>选择图片 <input data-pose="file" type="file" accept="image/jpeg,image/png,image/webp"></label>
         <button type="button" class="display-mmd-ar-action" data-pose="paste">粘贴图片</button>
         <p>展开此区域后可按 Ctrl+V（Mac 用 ⌘V）粘贴截图或复制的图片，再点击识别姿态。</p>
@@ -20,20 +34,38 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         <p data-pose="status" role="status">首次识别按需加载模型；请先加载PMX模型。</p>`;
     panel.querySelector('[data-ik-message]').insertAdjacentElement('beforebegin', root);
     const field = key => root.querySelector('[data-pose="' + key + '"]');
-    const client = createImagePoseClient(), preview = field('preview'), context = preview.getContext('2d');
+    const client = poseClient, preview = field('preview'), context = preview.getContext('2d');
     const overlay = installPoseOverlay(panel, root, { preview, human, redraw: () => draw() });
     let image = null, result = null, candidates = [], inferenceMs = 0, busy = false, ready = false, serial = 0, token = null, disposed = false;
-    let readSerial = 0, reading = false, importing = false;
+    let readSerial = 0, reading = false, importing = false, depth = null, observedToken = null;
+    depth = installImageDepth(root, { getImage: () => image,
+        canCompute: () => ready && !busy && !reading && !importing && !disposed && !panel.hidden && root.open,
+        onChanged: () => buttons(), cancelPose: () => cancel(), ...(depthClient ? { client: depthClient } : {}) });
+    const engines = { 'mediapipe-pose': (picture, progress) => client.infer(picture, progress),
+        'hmr2-api': (picture, progress) => hmrClient.infer(picture, apiConfig(), progress) };
+    const preferencesKey = 'mmdAr.hmr2ApiBaseUrl';
+    try { field('api-url').value = localStorage.getItem(preferencesKey) || 'http://127.0.0.1:8768'; }
+    catch (error) { field('api-url').value = 'http://127.0.0.1:8768'; }
+    function apiConfig() {
+        const baseUrl = normalizeHmr2BaseUrl(field('api-url').value);
+        try { localStorage.setItem(preferencesKey, baseUrl); } catch (error) { /* 私密模式不影响本次使用，密钥从不持久化。 */ }
+        const bbox = field('bbox-enabled').checked ? ['x1', 'y1', 'x2', 'y2'].map(key => {
+            const value = field('bbox-' + key).value.trim(); return value ? Number(value) : NaN;
+        }) : undefined;
+        return { baseUrl, token: field('api-token').value, bbox };
+    }
     const status = text => { field('status').textContent = text; };
     const acceptsPaste = () => !disposed && !panel.hidden && root.open;
     function buttons() {
-        const pending = busy || reading || importing;
+        const pending = busy || reading || importing || depth?.busy();
         field('recognize').disabled = !ready || !image || pending;
-        field('apply').disabled = !ready || !result?.quality.torsoReady || pending;
+        field('apply').disabled = !ready || !getPoseQuality(result).torsoReady || pending || !depth?.readyToApply();
         field('cancel').disabled = !pending;
         field('paste').disabled = reading || disposed;
         field('candidate').disabled = pending || !ready;
         field('candidate-row').hidden = candidates.length < 2;
+        field('test-api').disabled = pending || disposed || field('source').value !== 'hmr2-api';
+        depth?.sync();
     }
     function clearResult() {
         result = null; candidates = []; field('candidate').replaceChildren();
@@ -42,18 +74,23 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         result = candidates[index];
         draw(); buttons();
         if (!result) return;
-        const count = result.landmarks.filter(point => landmarkQuality(point) >= poseLandmarkThreshold(result)).length;
-        const low = result.quality.lowConfidence.map(i => BODY_NAMES[BODY_LANDMARKS.indexOf(i)]).join('、');
-        const advice = result.quality.torsoReady ? '确认预览后点击“应用姿态”。' : '躯干关键点不完整，暂不能应用，请切换候选或图片。';
-        status(`识别完成：${result.source === 'rtmpose-m' ? 'RTMPose-m · 单人全图' : 'MediaPipe Pose · 候选' + (index + 1)} · ${count}/${result.landmarks.filter(Boolean).length}个可信关键点 · 身体${result.quality.visible}/12 · ${inferenceMs.toFixed(0)}ms。`
-            + (low ? `低可信：${low}（红色空心点，可能遮挡或出画）。` : '') + '可信度不代表坐标准确。' + advice);
+        const reference = getPoseReference(result), quality = getPoseQuality(result);
+        const count = reference.points.filter(point => point.usable).length;
+        const low = quality.lowConfidence.map(key => BODY_NAMES[POSE_BODY_KEYS.indexOf(key)] || key).join('、');
+        const advice = quality.torsoReady ? '确认预览后点击“应用姿态”。' : '躯干关键点不完整，暂不能应用，请切换候选或图片。';
+        const hmr = result.source === 'hmr2-api';
+        const label = hmr ? 'HMR2.0b · GPU FP32 · BODY25' : result.source === 'rtmpose-m' ? 'RTMPose-m · 单人全图' : 'MediaPipe Pose · 候选' + (index + 1);
+        status(`识别完成：${label} · ${count}/${reference.points.length}个${hmr ? '几何可用' : '可信'}关键点 · 身体${quality.visible}/12 · ${inferenceMs.toFixed(0)}ms。`
+            + (low ? `${hmr ? '不可用' : '低可信'}：${low}（可能遮挡、出画或退化）。` : '')
+            + (hmr ? 'HMR不提供逐点置信度，几何可用不代表识别正确。' : '可信度不代表坐标准确。') + advice);
     }
     function cancel() {
         overlay.cancel();
-        const pending = busy || reading || importing;
+        const pending = busy || reading || importing || depth?.busy();
         // 即使没有运行ONNX，也使尚未返回的剪贴板读取/图片解码失效；空闲时保留已加载Worker。
         serial++; readSerial++;
-        if (busy) client.cancel();
+        if (busy) { client.cancel(); hmrClient.cancel(); }
+        depth?.cancel();
         busy = reading = importing = false; buttons();
         if (pending) status('操作已取消，当前骨骼保持原姿态');
     }
@@ -65,14 +102,15 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         context.drawImage(scratch, 0, 0, preview.width, preview.height); preview.hidden = false;
         scratch.width = scratch.height = 0;
         if (!result || !overlay.showReference()) { overlay.setReference(image, result); return; }
-        const valid = index => landmarkQuality(result.landmarks[index]) >= poseLandmarkThreshold(result);
-        const at = index => [result.landmarks[index].x * preview.width, result.landmarks[index].y * preview.height];
+        const reference = getPoseReference(result), points = reference.points;
+        const valid = index => points[index]?.usable === true;
+        const at = index => [points[index].x * preview.width, points[index].y * preview.height];
         context.strokeStyle = '#35efbd'; context.fillStyle = '#ffcf52'; context.lineWidth = 2;
-        for (const [a, b] of EDGES) if (valid(a) && valid(b)) { context.beginPath(); context.moveTo(...at(a)); context.lineTo(...at(b)); context.stroke(); }
-        result.landmarks.forEach((_, index) => { if (valid(index)) { context.beginPath(); context.arc(...at(index), 2.5, 0, Math.PI * 2); context.fill(); } });
+        for (const [a, b] of reference.edges) if (valid(a) && valid(b)) { context.beginPath(); context.moveTo(...at(a)); context.lineTo(...at(b)); context.stroke(); }
+        points.forEach((_, index) => { if (valid(index)) { context.beginPath(); context.arc(...at(index), 2.5, 0, Math.PI * 2); context.fill(); } });
         context.strokeStyle = '#ef5252';
-        for (const index of result.quality.lowConfidence) {
-            if (!result.landmarks[index]) continue;
+        for (const key of getPoseQuality(result).lowConfidence) {
+            const index = points.findIndex(point => point.key === key); if (index < 0) continue;
             const [x, y] = at(index);
             if (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= preview.width && y >= 0 && y <= preview.height) {
                 context.beginPath(); context.arc(x, y, 4, 0, Math.PI * 2); context.stroke();
@@ -82,7 +120,7 @@ export function installImagePose(panel, { human, ensurePhysics }) {
     }
     async function importImage(file, fromPaste = false) {
         if (!file || disposed) return;
-        cancel(); const id = ++serial; clearResult(); importing = true; buttons(); draw();
+        cancel(); const id = ++serial; clearResult(); depth.reset(); importing = true; buttons(); draw();
         status('正在准备图片…');
         let bitmap;
         try {
@@ -94,6 +132,8 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             canvas.width = Math.max(1, Math.round(bitmap.width * ratio)); canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
             const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
             image = ctx.getImageData(0, 0, canvas.width, canvas.height); canvas.width = canvas.height = 0;
+            ['x1', 'y1', 'x2', 'y2'].forEach((key, index) => { field('bbox-' + key).value = String([0, 0, image.width, image.height][index]); });
+            field('image-size').textContent = `当前处理图片：${image.width}×${image.height}；人物框以此像素尺寸为准。不指定框是整图单人假设，不是人物检测。`;
             // 清除旧文件名，保证粘贴后再次选择同一文件也会触发change。
             if (fromPaste) field('file').value = '';
             draw(); status('图片已准备，点击“识别姿态”');
@@ -131,7 +171,30 @@ export function installImagePose(panel, { human, ensurePhysics }) {
                 : (error.message || '剪贴板读取失败，请按 Ctrl+V 或选择图片文件'));
         } finally { if (id === readSerial && !disposed) { reading = false; buttons(); } }
     }
-    const onToggle = () => { if (!root.open) cancel(); };
+    function invalidateReference() {
+        cancel(); clearResult(); draw(); buttons(); status('计算方式、API 或人物框已变化，请重新识别图片。');
+    }
+    field('source').addEventListener('change', () => {
+        invalidateReference(); depth.reset(); depth.setMode(field('source').value);
+        const hmr = field('source').value === 'hmr2-api'; field('api-controls').hidden = !hmr;
+        field('privacy').textContent = hmr
+            ? 'HMR2 将当前处理图片上传到填写的 API 地址，由 CUDA FP32 计算 BODY25。深度仍在浏览器本地计算。请确认服务和图片隐私；算法不会自动修复左右腿或脚掌。'
+            : 'MediaPipe Pose 在本机识别全身图片（33点，首次加载约16.7MiB模型）。图片不会上传；三维坐标是估计，可在3D场景微调。';
+        buttons();
+    });
+    for (const name of ['api-url', 'api-token', 'bbox-x1', 'bbox-y1', 'bbox-x2', 'bbox-y2']) field(name).addEventListener('input', invalidateReference);
+    field('bbox-enabled').addEventListener('change', invalidateReference);
+    field('test-api').addEventListener('click', async () => {
+        if (busy || disposed || field('source').value !== 'hmr2-api') return;
+        const id = ++serial; busy = true; buttons(); status('正在测试 HMR2 连接（不上传图片）…');
+        try {
+            const health = await hmrClient.testConnection(apiConfig());
+            if (id !== serial || disposed) return;
+            status(`HMR2 服务连接成功 · ${health.device} · ${health.precision} · ${health.ready ? '模型已就绪' : '模型未就绪'}${health.busy ? '；GPU忙，请稍后识别' : ''}。`);
+        } catch (error) { if (id === serial && error.name !== 'AbortError') status('HMR2 连接失败：' + error.message); }
+        finally { if (id === serial) { busy = false; buttons(); } }
+    });
+    const onToggle = () => { if (!root.open) cancel(); else buttons(); };
     document.addEventListener('paste', onPaste);
     root.addEventListener('toggle', onToggle);
     field('paste').addEventListener('click', readClipboardImage);
@@ -143,8 +206,10 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         const id = ++serial;
         try {
             token = human().getState().token; clearResult(); busy = true; buttons(); draw();
-            status('准备浏览器本地推理…');
-            const inferred = await client.infer(image, message => { if (id === serial) status(message); });
+            status(field('source').value === 'hmr2-api' ? '准备上传图片到填写的 HMR2 服务…' : '准备浏览器本地推理…');
+            const depthTask = depth.withRecognition() ? depth.compute({ automatic: true }) : null;
+            const inferred = await engines[field('source').value](image, message => { if (id === serial) status(message); });
+            if (depthTask) await depthTask;
             if (id !== serial || disposed) return;
             if (human().getState().token !== token) throw new Error('模型已切换，识别结果已丢弃');
             candidates = inferred.candidates; inferenceMs = inferred.inferenceMs;
@@ -158,15 +223,19 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         finally { if (id === serial) { busy = false; buttons(); } }
     });
     field('apply').addEventListener('click', async () => {
-        if (!result?.quality.torsoReady || busy || reading || importing || disposed) return;
+        if (!getPoseQuality(result).torsoReady || busy || reading || importing || depth.busy() || !depth.readyToApply() || disposed) return;
         const id = ++serial, pose = result, expectedToken = token;
         try {
+            const fitOptions = depth.getOptions(pose);
             busy = true; buttons(); await ensurePhysics({ isCurrent: () => id === serial && !disposed });
             if (id !== serial || disposed) return;
             status('正在按实际骨骼和关节范围拟合姿态…');
-            const state = await human().applyInteractiveImagePose(pose, expectedToken, { isCurrent: () => id === serial && !disposed });
+            const state = await human().applyInteractiveImagePose(pose, expectedToken, { ...fitOptions, isCurrent: () => id === serial && !disposed });
             if (id !== serial || disposed) return;
-            status(`已应用${state.activeTargets}个控制点，${pose.dimensions === 2 ? '已按关节范围拟合，深度为估计；等待物理稳定并检查实际骨架，' : ''}可继续在3D场景拖动微调；重置控制点可恢复原动作。`);
+            const fit = state.imagePoseFit;
+            const detail = fit && Number.isFinite(fit.error) ? `FK二维误差 ${(fit.error * 100).toFixed(2)}%（图片高度）；${fit.depthSource}。` : '';
+            const depthDetail = fitOptions.depthRequested ? `深度线索：采用${fit?.depthAccepted || 0}条，拒绝${(fitOptions.depthSampleRejected?.length || 0) + (fit?.depthRejected?.length || 0)}条${fit?.depthFallback ? '，退化时已回退主解' : ''}${!fitOptions.depthEnabled ? '，无可用线索，保留原来源主路径' : ''}；表面归属未验证。` : '';
+            status(`已应用${state.activeTargets}个控制点，${detail}${depthDetail}等待物理稳定并检查实际骨架，可继续在3D场景拖动微调；重置控制点可恢复原动作。`);
         } catch (error) { if (id === serial) status(error.message); }
         finally { if (id === serial) { busy = false; buttons(); } }
     });
@@ -177,7 +246,11 @@ export function installImagePose(panel, { human, ensurePhysics }) {
         cancel,
         sync(isReady) {
             ready = isReady;
-            if (token && (!ready || human().getState().token !== token)) { cancel(); token = null; clearResult(); status('模型已切换，请重新识别图片'); draw(); }
+            const currentToken = ready ? human().getState().token : null;
+            if ((observedToken && observedToken !== currentToken) || (token && token !== currentToken)) {
+                cancel(); depth.reset(); token = null; clearResult(); status('模型已切换，请重新识别图片'); draw();
+            }
+            observedToken = currentToken;
             buttons();
             overlay.sync(ready);
         },
@@ -185,7 +258,8 @@ export function installImagePose(panel, { human, ensurePhysics }) {
             disposed = true; serial++; readSerial++;
             overlay.dispose();
             document.removeEventListener('paste', onPaste); root.removeEventListener('toggle', onToggle);
-            client.dispose(); clearResult(); image = null; preview.width = preview.height = 0;
+            client.dispose(); hmrClient.dispose(); depth.dispose(); field('api-token').value = '';
+            clearResult(); image = null; preview.width = preview.height = 0;
         }
     };
 }
