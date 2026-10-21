@@ -537,36 +537,43 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
 };
 
 /**
- * 成功签名进入有界内存和可选私有文件，不进入聊天nativeState；只有普通权威会话可复用。
+ * 普通模式成功签名按账号/凭据/模式共享，消息及权威会话仍独立，不进入聊天nativeState。
  * 有效期没有可靠的官网契约，不猜测永久有效；补发由外层统一限制次数、输出和截止时间。
  */
 const createDoubaoNodeSignatureCache = (storage) => {
   const entries = new Map();
   const invalidCodes = new Set(['doubao_auth_expired', 'doubao_risk_control',
     'doubao_session_conflict', 'doubao_session_uncertain']);
-  return async ({ account, responseSession, mode, sessionFlow }) => {
-    const conversation = responseSession?.aascConversationId;
-    const key = sessionFlow.enabled && typeof conversation === 'string' && conversation.length > 0
-      && conversation.length <= 256 ? JSON.stringify([account.accountId, conversation]) : '';
+  return async ({ account, mode, sessionFlow, forceFresh = false }) => {
+    const accountId = account?.accountId;
+    const key = sessionFlow.enabled && mode === 0 && typeof accountId === 'string' && accountId.length > 0
+      && accountId.length <= 256 && !/[\r\n]/u.test(accountId) ? JSON.stringify([accountId, `mode:${mode}`]) : '';
     const fingerprint = key ? createHash('sha256').update(JSON.stringify([
       account.credentialRevision || '', normalizeDoubaoCredentials(account.credentials),
     ])).digest('hex') : '';
-    let entry = key ? entries.get(key) : null;
-    if (key && !entry && storage) {
+    // 补发必须重新准备，但不能借此删除其它并发请求刚更新的有效签名。
+    let entry = key && !forceFresh ? entries.get(key) : null;
+    if (key && !entry && storage && !forceFresh) {
       try { entry = await storage.get(key); } catch { /* 私有缓存不可读时重新签名，不影响聊天入口。 */ }
       if (entry) entries.set(key, entry);
     }
-    if (entry && (!sessionFlow.continuing || entry.fingerprint !== fingerprint || entry.mode !== mode
-      || entry.upstreamId !== responseSession.nativeState?.conversationId)) {
+    if (entry && (entry.fingerprint !== fingerprint || entry.mode !== mode)) {
       entries.delete(key);
       try { await storage?.delete(key, entry); } catch { /* 不输出可能含签名的文件错误。 */ }
       entry = null;
+    }
+    if (key && !entry && storage && !forceFresh) {
+      // 兼容旧文件中的按会话条目，成功后再迁移为账号规范键；不把旧会话ID带进正文。
+      try { entry = await storage.getLatest?.({ accountId, fingerprint, mode }); } catch { /* 未命中则重新准备。 */ }
     }
     if (entry) {
       entries.delete(key);
       entries.set(key, entry);
       while (entries.size > 128) entries.delete(entries.keys().next().value);
     }
+    // 并发从文件读出的同一签名可能是不同对象，按签名值识别，仍保护新URL。
+    const isCurrentSignature = () => entry && ['fingerprint', 'mode', 'url']
+      .every(field => entries.get(key)?.[field] === entry[field]);
     return {
       // 每轮的正文、时间、消息标识与Cookie仍使用本轮构造结果，只复用已签名URL和SDK头。
       apply: prepared => entry ? { ...prepared, url: entry.url,
@@ -579,19 +586,19 @@ const createDoubaoNodeSignatureCache = (storage) => {
         entry = { fingerprint, mode, upstreamId: state.conversationId, url: prepared.url, headers };
         entries.delete(key);
         entries.set(key, entry);
-        // 固定容量的LRU避免已结束的AASC会话长期积累签名；淘汰后下次续聊重新生成。
+        // 固定容量的LRU按账号/模式限制内存；旧私有会话条目在成功保存时归并。
         while (entries.size > 128) entries.delete(entries.keys().next().value);
         try { await storage?.put(key, entry); } catch { /* 已成功的回复不因缓存写盘失败而失败。 */ }
       },
       invalidate: async error => {
-        // 旧请求的迟到错误不得清除同键后来成功提交的另一条记录。
-        if (entry && invalidCodes.has(error?.code) && entries.get(key) === entry) {
+        // 旧请求的迟到错误不得清除同键后来更新的新签名URL。
+        if (invalidCodes.has(error?.code) && isCurrentSignature()) {
           entries.delete(key);
           try { await storage?.delete(key, entry); } catch { /* 失效清理不暴露签名资料。 */ }
         }
       },
       clear: async () => {
-        if (entry && entries.get(key) === entry) {
+        if (isCurrentSignature()) {
           entries.delete(key);
           try { await storage?.delete(key, entry); } catch { /* 失效后仍强制重新准备。 */ }
         }
@@ -638,12 +645,11 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     let signatureScope;
     try {
       control.check();
-      // Android首轮由官网SDK签名，同一权威会话续聊复用内存签名；实际联网仍由Node HTTP/2执行。
+      // Android普通模式复用同账号/凭据/模式签名，正文仍由本次请求独立构建并交Node发送。
       if (transportMode === 'node-http' && (prepareNodeRequest || process.env.AASC_ANDROID_NODE === '1')) {
         execution.nodeSigning = true;
-        signatureScope = await control.wait(signatureCache({ account, responseSession, mode, sessionFlow }));
+        signatureScope = await control.wait(signatureCache({ account, mode, sessionFlow, forceFresh: execution.retried }));
         execution.signatureScope = signatureScope;
-        if (execution.retried) await control.wait(signatureScope.clear());
         const prepare = prepareNodeRequest || (options => createDoubaoAndroidBridge().prepare(options));
         prepared = signatureScope.apply(prepared)
           || await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs },

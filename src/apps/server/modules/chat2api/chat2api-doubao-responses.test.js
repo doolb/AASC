@@ -45,7 +45,7 @@ test('Responses纯Node持久化后重建Store，第二轮仅发送新增input且
   assert.equal(f.calls[1].data.messages[0].content_block[0].content.text_block.text,'第二轮');
   assert.equal((await restored.get(stored.conversationId)).history.length,4);
 });
-test('Responses三轮复用一次SDK签名，本轮正文及消息ID仍更新，签名不进入持久化',async()=>{
+test('Responses三轮复用一次SDK签名，本轮正文及消息ID仍更新，签名不进入聊天记录',async()=>{
   let prepared=0;
   const f=setup({prepareNodeRequest:async({prepared:call})=>{
     prepared++;
@@ -68,9 +68,11 @@ test('Responses三轮复用一次SDK签名，本轮正文及消息ID仍更新，
   assert.equal(f.calls[1].data.client_meta.conversation_id,'mock-upstream-1');
   assert.doesNotMatch(JSON.stringify(f.collections),/mock_signed_once|a_bogus|mock_session/u);
   await f.service.createResponse({model:'doubao',input:'另一局聊天'});
-  assert.equal(prepared,2);
+  assert.equal(prepared,1);
+  assert.equal(f.calls[3].data.client_meta.conversation_id,'');
+  assert.notEqual(f.calls[0].data.client_meta.local_conversation_id,f.calls[3].data.client_meta.local_conversation_id);
 });
-test('Responses同AASC会话snapshot重建重新签名，取消不发送且风控仅补发一次',async()=>{
+test('Responses同AASC快照重建复用账号签名，取消不发送且风控仅补发一次',async()=>{
   let prepared=0,failed=false;
   const f=setup({prepareNodeRequest:async({prepared:call})=>{
     prepared++;return {...call,url:call.url+'&a_bogus=mock_'+prepared,doubaoHttp2:true};
@@ -78,7 +80,7 @@ test('Responses同AASC会话snapshot重建重新签名，取消不发送且风�
   const metadata={aasc_context_owner:'pi',aasc_pi_session_id:'pi_signature',aasc_pi_context_mode:'snapshot'};
   const first=await f.service.createResponse({model:'doubao',conversation:'pi_signature',metadata,input:'早'});
   await f.service.createResponse({model:'doubao',conversation:first.body.conversation.id,metadata,input:'重新建立上下文'});
-  assert.equal(prepared,2);
+  assert.equal(prepared,1);
   const abort=new AbortController();abort.abort();
   await assert.rejects(()=>f.service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'取消'},
     {signal:abort.signal}));
@@ -86,7 +88,7 @@ test('Responses同AASC会话snapshot重建重新签名，取消不发送且风�
   failed=true;
   await assert.rejects(()=>f.service.createResponse({model:'doubao',previous_response_id:first.body.id,input:'新消息'}),
     error=>error.code==='doubao_risk_control');
-  assert.equal(prepared,3);
+  assert.equal(prepared,2);
   assert.equal(f.calls.length,4);
   assert.equal((await f.store.get(first.body.conversation.id)).nativeState.status,'uncertain');
 });
@@ -345,7 +347,7 @@ test('Responses已输出正文或思考后失败不重放，即使非流式也�
   }
 });
 
-test('Responses重建服务后从私有文件复用原会话签名，失效刷新并覆盖；新会话/凭据重签',async t=>{
+test('Responses重启后新会话读取旧格式签名并归并；失效刷新、凭据变化重签',async t=>{
   const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
   const {createDoubaoSignatureStore}=require('./chat2api-doubao-signature-store');
   const rootDir=await fs.mkdtemp(path.join(os.tmpdir(),'aasc-response-signature-'));
@@ -360,22 +362,29 @@ test('Responses重建服务后从私有文件复用原会话签名，失效刷�
   const firstRuntime=fresh();
   const first=await firstRuntime.service.createResponse({model:'doubao',input:'早',stream:true});
   const events=[];for await(const event of first.stream)events.push(event);
-  const firstId=events.at(-1).response.id;
   const conversationId=events.at(-1).response.conversation.id;
-  const reboot=fresh({collections:firstRuntime.collections});
-  const second=await reboot.service.createResponse({model:'doubao',previous_response_id:firstId,input:'晚上好'});
+  const canonical=JSON.stringify(['mock-account','mode:0']);
+  const legacyKey=JSON.stringify(['mock-account',conversationId]);
+  const disk=createDoubaoSignatureStore({rootDir});
+  const original=await disk.get(canonical);await disk.delete(canonical,original);await disk.put(legacyKey,original);
+  const reboot=fresh({collections:firstRuntime.collections,
+    source:call=>Readable.from(parts(call.data.client_meta.conversation_id||'reboot-upstream'))});
+  const second=await reboot.service.createResponse({model:'doubao',input:'晚上好'});
   assert.equal(signatures,1);assert.equal(reboot.calls[0].url,firstRuntime.calls[0].url);
+  assert.equal(reboot.calls[0].data.client_meta.conversation_id,'');
+  assert.notEqual(reboot.calls[0].data.client_meta.local_conversation_id,firstRuntime.calls[0].data.client_meta.local_conversation_id);
+  assert.equal(await disk.get(legacyKey),null);assert.equal((await disk.get(canonical)).upstreamId,'reboot-upstream');
   const retry=fresh({collections:reboot.collections,status:index=>index===1?403:200});
   await retry.service.createResponse({model:'doubao',previous_response_id:second.body.id,input:'今天怎么样？'});
   assert.equal(signatures,2);assert.equal(retry.calls.length,2);
   assert.deepEqual(retry.calls[0].data,retry.calls[1].data);
-  const saved=await createDoubaoSignatureStore({rootDir}).get(JSON.stringify(['mock-account',conversationId]));
+  const saved=await createDoubaoSignatureStore({rootDir}).get(canonical);
   assert.equal(saved.url,retry.calls[1].url);
   closeAfterSign=false;
   const changed=fresh({collections:retry.collections,credentialRevision:'after-refresh'});
   await changed.service.createResponse({model:'doubao',previous_response_id:second.body.id,input:'凭据更新后'});
   assert.equal(signatures,3);
-  await changed.service.createResponse({model:'doubao',input:'新的聊天'});assert.equal(signatures,4);
+  await changed.service.createResponse({model:'doubao',input:'新的聊天'});assert.equal(signatures,3);
   assert.doesNotMatch(JSON.stringify(changed.collections),/persisted_|a_bogus/u);
 });
 

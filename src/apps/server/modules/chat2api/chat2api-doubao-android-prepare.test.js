@@ -69,13 +69,14 @@ const signatureFixture = (hooks = {}) => {
   }};
   const calls=[],prepares=[];
   let fail=null;
-  const adapter=createDoubaoChatAdapter({limits:hooks.limits,prepareNodeRequest:async options=>{
+  const adapter=createDoubaoChatAdapter({limits:hooks.limits,signatureStore:hooks.signatureStore,prepareNodeRequest:async options=>{
     prepares.push(options.prepared);
     await hooks.beforePrepare?.(options,prepares.length);
     return {...options.prepared,url:options.prepared.url+'&a_bogus=signature_'+prepares.length,doubaoHttp2:true};
   },http2Client:{request:async call=>{
     calls.push(call);
     await hooks.beforeSend?.(call,calls.length);
+    const custom=await hooks.response?.(call,calls.length);if(custom)return custom;
     if(fail?.code)throw Object.assign(Error('mock transport'),{code:fail.code});
     if(fail?.status)return {status:fail.status};
     const id=call.data.client_meta.conversation_id||'upstream_'+calls.length;
@@ -96,29 +97,24 @@ const signatureFixture = (hooks = {}) => {
   return {account,calls,prepares,run,setFailure:value=>{fail=value;}};
 };
 
-test('签名按账号、凭据、AASC和权威上游隔离；同ID重建及重启必须重新生成',async()=>{
+test('同账号签名跨新会话及上游复用，凭据与账号变化重新准备',async()=>{
   const f=signatureFixture(),session={id:'aasc-a',state:{}};
   await f.run(session);await f.run(session,{text:'晚上好'});
+  await f.run({id:'aasc-b',state:{}});
   assert.equal(f.prepares.length,1);
-  assert.equal(f.calls[1].headers.Cookie,f.account.credentials.cookie);
-  await f.run({id:'aasc-b',state:{...session.state}});
-  assert.equal(f.prepares.length,2);
+  assert.equal(f.calls[2].data.client_meta.conversation_id,'');
+  assert.notEqual(f.calls[0].data.client_meta.local_conversation_id,f.calls[2].data.client_meta.local_conversation_id);
   const revised={...f.account,credentialRevision:'revision-2'};
-  await f.run(session,{account:revised});
-  assert.equal(f.prepares.length,3);
+  await f.run(session,{account:revised});assert.equal(f.prepares.length,2);
   const updated={...revised,credentials:{...revised.credentials,
     cookie:revised.credentials.cookie.replace('mock_csrf_123456789','mock_csrf_987654321')}};
-  await f.run(session,{account:updated});
-  assert.equal(f.prepares.length,4);
+  await f.run(session,{account:updated});assert.equal(f.prepares.length,3);
   assert.equal(f.calls.at(-1).headers.Cookie,updated.credentials.cookie);
-  // 更换账号新建，不能借用原账号的签名。
   await f.run({id:session.id,state:{}},{account:{...f.account,accountId:'another-account'}});
-  assert.equal(f.prepares.length,5);
+  assert.equal(f.prepares.length,4);
   session.state={...session.state,conversationId:'new-upstream'};
-  await f.run(session,{account:updated});
-  assert.equal(f.prepares.length,6);
-  session.state={};await f.run(session,{account:updated});
-  assert.equal(f.prepares.length,7);
+  await f.run(session,{account:updated});assert.equal(f.prepares.length,4);
+  session.state={};await f.run(session,{account:updated});assert.equal(f.prepares.length,4);
   const restarted=signatureFixture();await restarted.run(session,{account:updated});
   assert.equal(restarted.prepares.length,1);
 });
@@ -144,27 +140,28 @@ test('HTTP与SSE失败最多补发一次；取消不补发且保留已确认签�
   assert.equal(f.prepares.length,1);assert.equal(f.calls.length,3);
 });
 
-test('失败首轮、无内部会话以及非原生模式不会提交可复用签名',async()=>{
+test('失败首轮不保存，普通无内部会话仍共享账号签名，非原生模式逐次准备',async()=>{
   const f=signatureFixture(),session={id:'aasc-initial',state:{}};
   f.setFailure({status:403});await assert.rejects(()=>f.run(session));
   f.setFailure(null);await f.run(session);
   assert.equal(f.prepares.length,3);
-  await f.run();await f.run();assert.equal(f.prepares.length,5);
+  await f.run();await f.run();assert.equal(f.prepares.length,3);
   for(const model of ['doubao-think','doubao-expert']){
     const other={id:model,state:{}};await f.run(other,{model});await f.run(other,{model});
   }
-  assert.equal(f.prepares.length,9);
+  assert.equal(f.prepares.length,7);
 });
 
-test('签名LRU固定128个会话，近期续聊保留，淘汰后重新生成',async()=>{
+test('签名LRU固定128个账号，近期使用保留，淘汰后重新生成',async()=>{
   const f=signatureFixture(),sessions=[];
   for(let i=0;i<128;i++){
-    const session={id:'bounded-'+i,state:{}};sessions.push(session);await f.run(session);
+    const session={id:'bounded-'+i,state:{},account:{...f.account,accountId:'account-'+i}};
+    sessions.push(session);await f.run(session,{account:session.account});
   }
-  await f.run(sessions[0]);assert.equal(f.prepares.length,128);
-  await f.run({id:'bounded-new',state:{}});
-  await f.run(sessions[0]);assert.equal(f.prepares.length,129);
-  await f.run(sessions[1]);assert.equal(f.prepares.length,130);
+  await f.run(sessions[0],{account:sessions[0].account});assert.equal(f.prepares.length,128);
+  await f.run({id:'bounded-new',state:{}},{account:{...f.account,accountId:'new-account'}});
+  await f.run(sessions[0],{account:sessions[0].account});assert.equal(f.prepares.length,129);
+  await f.run(sessions[1],{account:sessions[1].account});assert.equal(f.prepares.length,130);
 });
 
 test('刷新签名仍受首次总时限约束，超时后不发送第二次网络请求',async()=>{
@@ -210,4 +207,63 @@ test('本地参数校验失败以及网页兼容失败不触发重新签名补�
   await assert.rejects(()=>adapter({account:f.account,provider:{id:'doubaochat'},actualModel:'doubao',
     request:{model:'doubao',messages:[{role:'user',content:'早'}]}}),error=>error.code==='doubao_risk_control');
   assert.equal(browserCalls,1);
+});
+
+test('并发旧签名迟到失败及其补发失败，不删除另一会话更新的有效签名',async t=>{
+  const fs=require('node:fs/promises'),os=require('node:os');
+  const {createDoubaoSignatureStore}=require('./chat2api-doubao-signature-store');
+  const rootDir=await fs.mkdtemp(path.join(os.tmpdir(),'aasc-account-signature-race-'));
+  t.after(()=>fs.rm(rootDir,{recursive:true,force:true}));
+  const disk=createDoubaoSignatureStore({rootDir});
+  let entered,release;
+  const waiting=new Promise(resolve=>{entered=resolve;});
+  const gate=new Promise(resolve=>{release=resolve;});
+  const f=signatureFixture({signatureStore:disk,response:async call=>{
+    const text=call.data.messages[0].content_block[0].content.text_block.text;
+    if(text==='slow'){
+      if(call.url.endsWith('signature_1')){entered();await gate;}
+      return {status:403};
+    }
+    if(text==='fast'&&call.url.endsWith('signature_1'))return {status:403};
+    return null;
+  }});
+  await f.run({id:'seed',state:{}});
+  const slow=f.run({id:'slow',state:{}},{text:'slow'});
+  const rejected=assert.rejects(()=>slow,error=>error.code==='doubao_risk_control');
+  await waiting;
+  try{await f.run({id:'fast',state:{}},{text:'fast'});}
+  finally{release();}
+  await rejected;
+  assert.equal(f.prepares.length,3);
+  await f.run({id:'after',state:{}},{text:'after'});
+  assert.equal(f.prepares.length,3);assert.match(f.calls.at(-1).url,/signature_2$/u);
+  assert.match((await disk.get(JSON.stringify([f.account.accountId,'mode:0']))).url,/signature_2$/u);
+});
+
+test('并发从文件读出的同签名副本一起失效，补发失败后不重新载入旧签名',async t=>{
+  const fs=require('node:fs/promises'),os=require('node:os');
+  const {createDoubaoSignatureStore}=require('./chat2api-doubao-signature-store');
+  const rootDir=await fs.mkdtemp(path.join(os.tmpdir(),'aasc-signature-copy-race-'));
+  t.after(()=>fs.rm(rootDir,{recursive:true,force:true}));
+  const store=createDoubaoSignatureStore({rootDir});
+  await signatureFixture({signatureStore:store}).run({id:'seed',state:{}});
+  let entered,release;
+  const bEntered=new Promise(resolve=>{entered=resolve;});
+  const held=new Promise(resolve=>{release=resolve;});
+  const f=signatureFixture({signatureStore:createDoubaoSignatureStore({rootDir}),response:async call=>{
+    const text=call.data.messages[0].content_block[0].content.text_block.text;
+    if(text==='fail'){await bEntered;return {status:403};}
+    if(text==='hold'){entered();await held;throw Object.assign(Error('cancelled'),{code:'doubao_cancelled'});}
+    return null;
+  }});
+  const a=f.run({id:'a',state:{}},{text:'fail'});
+  const b=f.run({id:'b',state:{}},{text:'hold'});
+  const bRejected=assert.rejects(()=>b,error=>error.code==='doubao_cancelled');
+  try{await assert.rejects(()=>a,error=>error.code==='doubao_risk_control');}
+  finally{release();}
+  await bRejected;
+  assert.equal(f.prepares.length,1);
+  assert.equal(await store.get(JSON.stringify([f.account.accountId,'mode:0'])),null);
+  await f.run({id:'c',state:{}},{text:'after'});
+  assert.equal(f.prepares.length,2);
 });

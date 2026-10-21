@@ -74,16 +74,27 @@ const createDoubaoSignatureStore = ({ rootDir }) => {
   };
   return {
     get: key => locked(async () => (await read()).find(entry => entry.key === key) || null),
+    getLatest: ({ accountId, fingerprint, mode }) => locked(async () => (await read()).reverse().find(entry =>
+      JSON.parse(entry.key)[0] === accountId && entry.fingerprint === fingerprint && entry.mode === mode) || null),
     put: (key, entry) => locked(async () => {
       const record = { ...entry, key };
       if (!validEntry(record)) return false;
-      const entries = (await read()).filter(item => item.key !== key);
+      const [accountId, scope] = JSON.parse(key);
+      // 账号规范键成功提交后归并该账号/模式旧条目，保留其它账号和其它模式。
+      const entries = (await read()).filter(item => item.key !== key
+        && !(scope === `mode:${record.mode}` && JSON.parse(item.key)[0] === accountId && item.mode === record.mode));
       return write([...entries, record]);
     }),
     delete: (key, expected) => locked(async () => {
       const entries = await read();
-      const retained = entries.filter(entry => entry.key !== key || (expected
-        && ['fingerprint', 'mode', 'upstreamId', 'url'].some(field => entry[field] !== expected[field])));
+      const [accountId, scope] = JSON.parse(key);
+      const retained = entries.filter(entry => {
+        // 失效时清除同一签名的所有旧会话别名；迟到删除不得碰后来更新的新URL。
+        if (expected && scope === `mode:${expected.mode}`) return JSON.parse(entry.key)[0] !== accountId
+          || ['fingerprint', 'mode', 'url'].some(field => entry[field] !== expected[field]);
+        return entry.key !== key || (expected
+          && ['fingerprint', 'mode', 'upstreamId', 'url'].some(field => entry[field] !== expected[field]));
+      });
       return retained.length === entries.length || write(retained);
     }),
   };

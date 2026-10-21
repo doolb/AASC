@@ -52,3 +52,20 @@ test('同目录多实例串行写入不丢记录，128项淘汰及有条件删�
   const badRoot=path.join(rootDir,'not-a-directory');await fs.writeFile(badRoot,'x');
   assert.equal(await createDoubaoSignatureStore({rootDir:badRoot}).put(key('x'),record('x')),false);
 });
+
+test('旧会话签名按账号摘要和模式读取，归并后失效清除全部别名且不误删新签名',async t=>{
+  const rootDir=await directory(t),store=createDoubaoSignatureStore({rootDir});
+  const canonical=key('mode:0'),old=record('shared');
+  await store.put(key('old-a'),old);await store.put(key('old-b'),{...old,upstreamId:'another-upstream'});
+  assert.equal((await store.getLatest({accountId:'account',fingerprint:old.fingerprint,mode:0})).upstreamId,'another-upstream');
+  for(const mismatch of [{accountId:'other'}, {fingerprint:'b'.repeat(64)}, {mode:3}]){
+    assert.equal(await store.getLatest({accountId:'account',fingerprint:old.fingerprint,mode:0,...mismatch}),null);
+  }
+  await store.put(canonical,old);
+  assert.equal(await store.get(key('old-a')),null);assert.equal(await store.get(key('old-b')),null);
+  await store.put(key('old-alias'),{...old,upstreamId:'alias-upstream'});
+  await store.delete(canonical,old);
+  assert.equal(await store.getLatest({accountId:'account',fingerprint:old.fingerprint,mode:0}),null);
+  const latest={...old,url:old.url+'-new'};await store.put(canonical,latest);
+  await store.delete(canonical,old);assert.equal((await store.get(canonical)).url,latest.url);
+});
