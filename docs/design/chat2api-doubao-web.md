@@ -1,5 +1,15 @@
 # 豆包网页账号Node文字与朗读 TTS 设计
 
+## 专用profile官网按钮对照（2026-10-21）
+
+按用户要求，在DISPLAY=:1重新打开同账号独立profile的Vivaldi/CDP9224；新建官网页，通过可见输入框键入“早”并点击官网发送按钮。官网HTTP200，收到SSE_ACK、FULL_MSG_NOTIFY、STREAM_MSG_NOTIFY、STREAM_CHUNK、CHUNK_DELTA和SSE_REPLY_END，无非零业务码；页面实际显示“早呀☀️，今天打算做点什么？”。这说明该profile当前能通过官网UI聊天，不能将前次兼容请求失败当作登录失效或整个浏览器不能发送。
+
+对照当前源码buildDoubaoRequest：正文全部键和值一致，除独立会话/消息/块ID、unique_key及两个时间戳；缺requestProfile并不等同于正文缺字段。URL存在新a_bogus，官网pc_version/doubao_pc_version=3.42.1、保存资料3.41.0，web_tab_id/msToken不同；官网Referer是本次local会话页、Accept=*/*、agw-js-conv=str, str，构造值为/chat/、text/event-stream、str；官网还带浏览器client hints、fetch metadata、x-flow-trace等。UA与Content-Type一致。浏览器与保存主站快照Cookie名称集合一致（去重28个，原快照30项），但6个值变化；sessionid不在变化集合。没有进行单变量试验，不能将某一字段定为根因。
+
+平台区别：此前Android成功是隔离的新源码/账号/Responses实验，具有重新采集的requestProfile；Android普通Node先让WebView官网SDK处理URL/头，再Node HTTP2发送。桌面签名准备仅在注入prepareNodeRequest或Android环境时启用，当前账号没有requestProfile时直连走普通HTTP客户端；桌面兼容则在网页内fetch发送Node构造请求，并非本轮点击官网按钮的完整官网UI流程。旧运行进程和当前源码必须分开判断，不能把本轮源码字段比较冒充旧进程所有实际请求。
+
+本轮只检查和测试，未改生产代码、未覆盖正式账号。只删除本轮新建的一个官网会话，HTTP200/status_code0确认；测试页关闭，释放本轮启动的浏览器，保留原9223和8083。抓取文件仅临时0600保存用于比较，结束后删除，不输出凭据/签名URL。下一步若修复需先确认具体生产改动方案，定位动态参数与SDK处理差异。
+
 ## 当前桌面服务复测（2026-10-21，未通过）
 
 用户要求验证192.168.1.39当前服务，直接使用该机现有进程（2026-10-20 23:47启动）、8083 Chat2API及正式已保存账号；没有重启、更新服务或替换凭据。通过Responses发送自然消息“早”，未提供system消息；仅首轮完整成功后才发送“今天过得怎么样？”并携带previous_response_id。

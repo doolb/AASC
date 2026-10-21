@@ -1,5 +1,20 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## 专用Vivaldi官网UI对照伪代码（2026-10-21）
+
+```text
+已有声明 := 正式豆包账号的独立profile、现有浏览器启动器、CDP只读观测、当前Node请求构造器
+流程 := DISPLAY=:1启动专用profile/CDP9224 → 新建官网页 → 等输入框可见 → 输入早 → 点击官网发送按钮 → 观察SSE及DOM
+成功断言 := 官网HTTP200、SSE_ACK/CHUNK_DELTA/SSE_REPLY_END、无非零业务码；DOM为早呀☀️，今天打算做点什么？
+正文差分 := 当前源码构造与成功官网请求的键和值一致，排除会话/消息/块ID、unique_key与时间戳
+URL差分 := 官网新增a_bogus；两个网页版本3.42.1对保存3.41.0；web_tab_id/msToken不同
+头差分 := 官网Accept=*/*、Referer当前local会话页、agw-js-conv=str, str及浏览器附加头；构造为text/event-stream、/chat/、str；UA/Content-Type一致
+Cookie差分 := 名称集合相同，去重28项，6项值更新；sessionid未变化；不输出值
+平台差分 := Android先WebView SDK准备URL/头再Node HTTP2，先前实验有完整模板；桌面当前无模板/无Android准备条件；网页兼容为页内fetch并沿用Node构造参数，不等于官网UI
+结论限制 := UI可发送；前次兼容/直连仍失败，未证明单一字段因果，当前源码比较不代表旧运行进程全部实参
+清理 := 仅对抓到的本轮一个ACK会话ID调用单会话删除 → HTTP200/status_code0 → 关闭测试页/本轮浏览器 → 删除私有临时抓取文件；不修改正式账号和生产逻辑
+```
+
 ## 当前192.168.1.39服务复测流程（2026-10-21）
 
 ```text
