@@ -29,6 +29,7 @@ try {
 
 const WebSocket = require('ws');
 const URL = require('url');
+const { URL: NodeURL } = require('node:url');
 const { exec } = require('child_process');
 const AudioPlayer = require('./audio-player');
 const { NodeMediaController, MEDIA_CONTROLS } = require('./media-controller');
@@ -1356,7 +1357,7 @@ class VoiceDisplay {
         }
 
         try {
-            const fullURL = new URL(audioUrl, this.config.serverUrl).href;
+            const fullURL = new NodeURL(audioUrl, this.config.serverUrl).href;
             if (!/^https?:/.test(fullURL)) throw new Error('音频仅支持HTTP/HTTPS地址');
             this.audio.queueURL(fullURL, queueOptions);
         } catch (error) {

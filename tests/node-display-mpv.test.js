@@ -18,6 +18,9 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
 const root = path.resolve(__dirname, '..');
 const media = (url = 'http://localhost/image.png', mediaType = 'image') => ({ type: 'url', url, mediaType });
 
+// 与运行入口使用相同的导入声明，不能注入全局URL掩盖url模块与构造器的区别。
+const mainUrlImports = source => source.split('\n').filter(line => /^const .*require\(['"](?:node:)?url['"]\);$/.test(line)).join('\n');
+
 async function createPlayer(t, platform = process.platform, extra = {}) {
     const errors = [];
     const starts = [];
@@ -569,12 +572,12 @@ test('VoiceDisplay真实消息分支连接媒体控制器，能力声明/旋转/
     const sandbox = {
         module: { exports: {} }, NodeMediaController, MEDIA_CONTROLS: require('../src/apps/voice-display-node/media-controller').MEDIA_CONTROLS,
         WindowsTextInputInjector: class { close() {} isAvailable() { return false; } }, WindowsGlobalHotkey: class { close() {} },
-        normalizeTextInputVoiceprintPolicy: () => false, path, __dirname: '/test', AbortController, URL,
+        normalizeTextInputVoiceprintPolicy: () => false, path, __dirname: '/test', AbortController, require,
         WINDOWS_VOICEPRINT_HOTKEY_LABEL: 'Alt+C', log() {}, logError: (...args) => mainErrors.push(args),
         AudioRecorder: class {}, formatAsrDisplayText: require('../src/apps/voice-display-node/asr-display').formatAsrDisplayText,
         useTUI: false, WebSocket: { OPEN: 1 }, clearTimeout, clearInterval
     };
-    vm.runInNewContext(`${source.slice(start, end)}; module.exports = VoiceDisplay;`, sandbox);
+    vm.runInNewContext(`${mainUrlImports(source)}\n${source.slice(start, end)}; module.exports = VoiceDisplay;`, sandbox);
     const instance = new sandbox.module.exports({ displayId: 'node-test', serverUrl: 'http://localhost' });
     const player = new StubPlayer();
     const overlayUpdates = [];
@@ -647,6 +650,54 @@ test('VoiceDisplay真实消息分支连接媒体控制器，能力声明/旋转/
     assert.equal(ttsStops, 1);
     await instance.stop();
     assert.equal(closed, true);
+});
+
+test('真实URL导入支持TTS相对/绝对地址及一次失败回调，保留WebSocket地址解析', async () => {
+    const source = fs.readFileSync(path.join(root, 'src/apps/voice-display-node/main.js'), 'utf8');
+    const start = source.indexOf('class VoiceDisplay {');
+    const end = source.indexOf('\nfunction loadConfig(', start);
+    const errors = [], queued = [], connections = [];
+    const sandbox = { require, module: { exports: {} }, log() {}, logError: (_, message) => errors.push(message),
+        WebSocket: class {
+            constructor(address, options) { connections.push({ address, options }); throw new Error('连接夹具停止，不实际联网'); }
+        }
+    };
+    vm.runInNewContext(`${mainUrlImports(source)}\n${source.slice(start, end)}; module.exports = VoiceDisplay;`, sandbox);
+    // 只验证真实业务方法，不初始化TUI、录音或设备连接。
+    const instance = Object.create(sandbox.module.exports.prototype);
+    instance.config = { serverUrl: 'https://voice.example.invalid:8081' };
+    instance.audio = { queueURL: (address, options) => queued.push({ address, options }) };
+    const options = { owner: 'text:fixture', text: '现在时间是深夜10点整', onComplete() {} };
+    for (const [address, expected] of [
+        ['/uploads/tts/time.wav?q=%E4%BD%A0', 'https://voice.example.invalid:8081/uploads/tts/time.wav?q=%E4%BD%A0'],
+        ['uploads/tts/time.wav', 'https://voice.example.invalid:8081/uploads/tts/time.wav'],
+        ['http://cdn.example.invalid:8080/time.wav', 'http://cdn.example.invalid:8080/time.wav'],
+        ['https://cdn.example.invalid/time.wav', 'https://cdn.example.invalid/time.wav']
+    ]) {
+        await instance.playAudioFromURL(address, options);
+        assert.equal(queued.at(-1)?.address, expected);
+        assert.equal(queued.at(-1).options, options);
+    }
+    assert.deepEqual(errors, []);
+    for (const address of ['https://[bad', 'file:///tmp/time.wav', 'data:audio/wav;base64,YQ==']) {
+        const completed = [];
+        await instance.playAudioFromURL(address, { onComplete: (error, idle) => completed.push({ message: error.message, idle }) });
+        assert.equal(completed.length, 1); assert.ok(completed[0].message); assert.equal(completed[0].idle, true);
+        assert.equal(queued.length, 4, '非法地址不得加入音频队列');
+    }
+    assert.equal(errors.length, 3);
+    instance.updateTUIConnectionState = () => {};
+    instance.clientDisplayId = 'node-test';
+    for (const [address, expected] of [
+        ['https://voice.example.invalid:8081', 'wss://voice.example.invalid:8081/display?subDisplay=true&clientType=node&displayId=node-test'],
+        ['http://voice.example.invalid:3000', 'ws://voice.example.invalid:3000/display?subDisplay=true&clientType=node&displayId=node-test']
+    ]) {
+        instance.config.serverUrl = address;
+        await assert.rejects(instance.connect(), /连接夹具停止/);
+        assert.equal(connections.at(-1).address, expected);
+    }
+    assert.equal(connections[0].options.rejectUnauthorized, false);
+    assert.equal(connections[1].options, undefined);
 });
 
 test('TTS继续使用Windows PowerShell和Linux aplay内存输入，不调用mpv', async () => {

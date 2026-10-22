@@ -1,3 +1,9 @@
+### Node TTS音频URL构造器修复
+
+- ✅ [2026-10-22] 修复报时等TTS加入队列失败的URL is not a constructor：main.js显式使用node:url.URL别名，保留原url模块解析WebSocket连接。
+  - tests/node-display-mpv.test.js执行真实导入，移除掩盖冲突的全局URL注入；新增相对/绝对HTTP(S)、非法地址/协议、options与一次错误回调、ws/wss连接参数回归。新回归在旧代码失败，修复后mpv43/43与语音/重连/Windows22/22，共65项通过。
+  - 更新Node design/spec/task/usage/self-test/todo；voiceDisplayNodePackage原已true，继续待构建，其他发布状态保留。本轮未构建发布包或修改本机配置，实际设备更新重启后的播报待验。
+
 ### Chat2API服务端远程登录
 
 - ✅ [2026-10-22] 普通控制端支持服务器网页登录画面和交互，复用10种Provider声明及OAuth保存。

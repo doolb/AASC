@@ -1,5 +1,21 @@
 # Node 子显示端常驻 mpv 伪代码
 
+## TTS URL构造器冲突修复（已实现）
+
+```text
+已有声明 := main模块URL=require(url)、connect使用URL.parse、playAudioFromURL拼接并排队、原onComplete错误回调
+已复现 := 真实URL模块导入 + new URL → URL is not a constructor → 未进入音频队列
+新增定义 := NodeURL明确指向node:url导出的URL构造器，模块URL保留原有parse用途
+音频地址 + serverUrl → NodeURL解析相对/绝对地址 → HTTP/HTTPS协议检查 → 原audio.queueURL及options
+错误 → 原logError与一次onComplete(error,true)，不执行系统音频播放器
+回归夹具 → 从真实main源读取URL模块/构造器导入，再执行真实VoiceDisplay；不注入全局URL掩盖同名冲突
+验证 := 相对与绝对HTTP/HTTPS地址、非法地址/协议、队列options和一次错误回调、原消息/ASR/停止分支
+范围 := Node URL适配修复，不改PowerShell/aplay、服务器或本机配置；独立Node包待更新
+连接回归 := 执行真实connect直到捕获WebSocket构造参数，禁止真实联网；HTTP/HTTPS分别生成ws/wss
+当前 := 用户确认后修复；回归先在旧代码失败，修复后mpv43与语音/重连22全部通过
+产物 := voiceDisplayNodePackage保持true，其他发布状态保留；不构建发布包
+```
+
 ## 完整配置示例与中文注释（2026-10-22）
 
 ```text

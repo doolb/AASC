@@ -87,6 +87,8 @@ ASS通过分层绘制近似网页效果，CSS毛玻璃背景模糊不会原样�
 
 ## TTS 与媒体音频
 
+2026-10-22已修复TTS入队时报 `URL is not a constructor` 的问题。遇到该错误时更新Node子显示端源码或包含修复的独立包，并重启Node进程后再试报时播报。
+
 TTS继续使用原 `audio-player.js` 播放队列：Windows调用 PowerShell `SoundPlayer`，Linux调用 `aplay`。TTS不加入常驻mpv；停止TTS不会停止媒体，清空媒体也不会清空TTS队列。TTS沿用原队列串行播放行为。
 
 mpv通过 `--audio-exclusive=no` 使用非独占模式。媒体音频与TTS能否同时发声依赖系统共享音频输出：Windows系统混音、Linux PulseAudio/PipeWire或ALSA混音配置；如果本机把输出设备配置成独占硬件设备，仍需调整本机音频配置。项目不自动改系统音频设置。mpv自身可用lavfi/amix混合音轨，本次不将临时TTS接入该时间轴。

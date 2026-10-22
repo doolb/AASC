@@ -1,5 +1,17 @@
 # 自测功能实现文档
 
+## Node TTS真实URL导入回归（2026-10-22）
+
+```text
+夹具 := 从真实main读取url导入声明和VoiceDisplay类，不注入全局URL；只执行业务方法，不启动TUI/录音或实际连接
+失败重现 := 旧代码音频地址未入队，新增回归失败；NodeURL别名修复后通过
+音频 := 相对路径/查询参数/绝对HTTP及HTTPS → 正确入队且options原样传递
+错误 := 非法URL/file/data协议 → 不入队，onComplete(error,true)仅一次
+连接 := 真实connect执行到假WebSocket构造器 → 验证HTTP对应ws、HTTPS对应wss与原TLS参数，无实际联网
+结果 := mpv43/43 + 语音重连及Windows输入22/22 = 65项通过，零跳过
+边界 := 只验证入队与原连接解析，目标设备更新重启后的实际播报另验；未构建发布包
+```
+
 
 ## HMR普通CPU/WASM（2026-10-22）
 
