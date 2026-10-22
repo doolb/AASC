@@ -21,9 +21,10 @@ net.createServer(socket => {
             const { command, request_id: requestId } = JSON.parse(buffer.slice(0, newline));
             buffer = buffer.slice(newline + 1);
             commands.push(command);
-            const [name, key, value] = command;
+            const [name, key, value] = Array.isArray(command) ? command : [command.name, command.id, command.data];
             if (name === 'ignore') continue;
             const reply = data => send({ request_id: requestId, error: 'success', data });
+            if (name === 'osd-overlay') { properties['test-overlay'] = command; reply({}); continue; }
             if (name === 'fail') { send({ request_id: requestId, error: 'property unavailable' }); continue; }
             if (name === 'observe_property') {
                 reply(null);

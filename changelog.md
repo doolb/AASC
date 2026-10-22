@@ -1,3 +1,15 @@
+### Node子显示端ASS信息叠加
+
+- ✅ [2026-10-22] 完成常驻mpv的ASS时钟、连接状态、TTS当前条目与ASR回显，位置按网页版最终布局对齐，支持四方向/自适应字号，裁剪填充不影响信息层。
+  - 新增mpv-overlay.js，接入main/media-controller/mpv-player，audio-player增加独立逐条播放通知及文字元数据，不覆盖原录音/AEC/完成回调或PowerShell/aplay命令；媒体能力开启后空闲黑底也显示，暂停/音频/清空/断网继续刷新，状态栏复用现有AASC配置。
+  - 专项27/27、网页布局1/1（8组横竖窗口/旋转）、Linux实屏3/3、真实mpv IPC 1/1、独立包22/22、语音/重连/Windows输入22/22，合计76项、零跳过。TTS盒边/时间连接锚点小于2px、ASR底部中心小于3px；视频暂停时钟418处像素变化，中文文本区域移除对照、清空/音频/能力关闭和PID保持通过。
+  - 按浏览器实际结果修正180度TTS原点偏移；移除ASS补齐data空字符串，消除残影；补初始化等待中新媒体/能力关闭的代次保护。同步design/spec/task/usage/README/self-test，新增npm布局入口，移除实现todo并保留Windows现场布局/字体验收。
+  - voiceDisplayNodePackage保持true，其他产物状态不变；没有新增生产依赖、网页/服务端生产代码或本机配置变更，未构建发布独立包。
+
+
+- ✅ [2026-10-22] 核对网页时钟/连接状态/TTS字幕/ASR30秒回显、Node识别格式与系统音频队列，记录ASS OSD叠加方案。
+  - 拟新增mpv-overlay并接入main/media-controller/mpv-player/audio-player，逐条显示TTS、独立于媒体时间轴更新、适配旋转与裁剪，复用状态栏配置；更新design/spec/task/todo。尚未修改程序、执行叠加测试或变更发布状态，具体方案待确认。
+
 ### Node子显示端裁剪移动
 
 - ✅ [2026-10-22] 完成控制端裁剪框拖动/缩放及位置输入的mpv实际显示：使用video-zoom与video-pan-x/y，四方向旋转与常驻PID保持，兼容缺少scale属性的旧mpv。

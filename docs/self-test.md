@@ -1,5 +1,15 @@
 # 自测功能文档
 
+## Node ASS信息与网页版位置对齐（2026-10-22）
+
+专项27/27（`npm run test:node-display-mpv`）、真实网页布局1/1（`npm run test:node-display-mpv:layout`）、隔离实屏3/3（render）、真实mpv IPC 1/1、独立包22/22、语音/重连/Windows输入22/22，共76项通过、零跳过。无新增生产依赖；代码语法与差异检查通过。
+
+网页布局测试用临时静态服务器打开真实display.html/CSS/JS，800×600与600×800各四方向共8组，比较TTS最终盒边、时间/连接锚点和ASR底部中心，不用生产函数互相自证。TTS及两角锚点误差小于2px、ASR小于3px；包含实际180度bottom-center偏移与窄屏32/12px时钟/连接字号。测试不连接用户服务、不改网页生产布局。
+
+真实Xvnc检查空闲信息、四方向中文TTS/ASR及移除前后亮像素差，媒体裁剪不改变位置；真实视频暂停时1Hz时钟418处像素变化，纯音频/清空继续显示，关闭信息层无残影、常驻PID保持。ASS转义与mpv官方escape-ass输出一致。首次180度位置及format=none缺data问题均在真实测试中发现并修正；未将失败算作通过。
+
+系统音频测试保留原队列回调/AEC数据，逐条文字只在子进程spawn后显示，下载中与后续队列不抢占，停止后的旧通知作废；真实main成功/ignored ASR回调进入信息层，状态栏目标过滤与TTS文字透传通过。初始化过程中媒体/能力变更不被旧恢复覆盖，崩溃后时钟不重复重启；退出无刷新/隐藏计时器。Windows实际屏幕、中文字体与DPI效果待现场，未构建发布本轮独立包。见[任务](task/20261022_Node子显示端ASS信息叠加.md)。
+
 ## Node子显示端裁剪移动（2026-10-22）
 
 `npm run test:node-display-mpv`21/21、`npm run test:node-display-mpv:real`1/1、`npm run test:node-display-mpv:render`2/2、`npm run test:offline-voice-display-node`22/22，共46项、零跳过。专项补充Linux/Windows无scale属性的四方向缩放/横纵移动、200次在途输入合并（少于20次属性写入，无zoom/pan归零中间值）、尺寸延迟、音频阶段记忆、媒体/清空取消旧更新及权威恢复的真实IPC回执。

@@ -1,5 +1,18 @@
 # 自测功能实现文档
 
+## Node ASS信息与网页版位置对齐（2026-10-22）
+
+```text
+专项 := test:node-display-mpv → 27/27；信息隐藏代次/1Hz、TTS条目/下载/停止、AEC/完成回调、真实main ASR/配置消息、IPC及初始化竞态
+网页 := test:node-display-mpv:layout → 1/1；本机静态真实display.html，横竖窗口各四旋转，共8组；TTS盒边/时钟连接锚点误差小于2px，ASR底部中心小于3px
+位置判据 := 实际applyRotation最终调用、applyVoiceTopCenterLayout/applyVoiceCenteredAnchor与CSS；180度按bottom-center最终盒子展开，窄屏32/12px
+实屏 := test:node-display-mpv:render → 3/3；独立Xvnc、无用户桌面/外部端口，原生填充/裁剪保持，中文ASS区域显示与移除基线差
+独立于媒体 := 空闲/图像/视频暂停/纯音频/清空，暂停时钟418处像素变化，PID保持；关闭OSD格式none包含空data，无残影
+转义 := 真实mpv escape-ass对照通过；2048字符及TTS三行限制
+其他 := 真实mpv IPC 1/1、独立包22/22、语音/重连/Windows输入22/22；共76项，零跳过
+边界 := 本轮未构建发布，Windows实际布局/字体/DPI待现场；不承诺网页字幕历史/逐字精确同步
+```
+
 ## Node子显示端裁剪移动（2026-10-22）
 
 ```text

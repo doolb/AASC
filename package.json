@@ -20,6 +20,7 @@
     "test:node-display-config": "node --test tests/node-display-config.test.js",
     "test:node-display-mpv:real": "node --test tests/node-display-mpv.integration.js",
     "test:node-display-mpv:render": "node --test tests/node-display-mpv-render.integration.js",
+    "test:node-display-mpv:layout": "node --test tests/node-display-mpv-overlay-layout.integration.js",
     "publish:offline-update": "node scripts/ops/publish-offline-update.js",
     "publish:offline-data-repair": "node scripts/ops/publish-offline-update.js --mode=data-repair",
     "publish:offline-apk:full": "node scripts/ops/publish-offline-update.js --mode apk-full",

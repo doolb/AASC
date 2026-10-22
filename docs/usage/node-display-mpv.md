@@ -1,6 +1,6 @@
 # Node 子显示端：常驻 mpv 媒体播放
 
-Node 子显示端可接收现有控制端发送的图片、视频和音频；首次播放启动一个 mpv 进程，此后通过 IPC 切换媒体。清空媒体保留进程与空窗口，退出子显示端时关闭自己的 mpv。此功能需要部署本轮新版 Node 子显示端；独立发布包仍待构建。
+Node 子显示端可接收现有控制端发送的图片、视频和音频；媒体能力获服务端确认开启后启动一个 mpv 进程并显示ASS信息层，此后通过 IPC 切换媒体。清空媒体保留进程与空窗口，退出子显示端时关闭自己的 mpv。此功能需要部署本轮新版 Node 子显示端；独立发布包仍待构建。
 
 ## 配置和启动
 
@@ -57,6 +57,16 @@ npm --prefix src/apps/voice-display-node run start -- config.json
 
 裁剪使用mpv的 `video-zoom` 和 `video-pan-x/y`，无需额外配置，不重新开启播放器。连续拖动会合并中间请求并应用最后位置；切回适应或铺满会清除缩放、偏移。重连继续沿用服务端已有fit/crop状态。Linux实际画面已验证，Windows协议兼容测试通过，实际画面仍需现场核对。
 
+## ASS信息显示
+
+开启本机mediaPlayer并由控制端启用该显示端的媒体能力后，信息层自动显示，无需新增配置。没有媒体时使用黑底窗口；视频暂停、纯音频、清空媒体或断网时继续显示本机时钟和状态。退出Node时关闭自己的播放器。
+
+位置按网页版最终布局：正常方向时间在右上、连接提示在左上，TTS在顶部居中，ASR在底部居中并保留网页语音按钮上方的位置；旋转时沿用网页四方向锚点和边距。裁剪/填充不移动或放大信息层。控制端既有“状态栏”开关只隐藏连接提示，时间与文字继续显示。
+
+TTS文字随本机PowerShell/aplay实际开始播放的队列条目切换，不在收到下一条音频时提前显示；最后一条播放完成保留30秒，停止/失败清除。ASR成功与有文字的忽略结果按原声纹格式回显，30秒隐藏，新结果重置计时。正文最多2048字符，TTS最多三行；本版按条目显示，不提供网页字幕历史或精确逐字进度。系统需有可显示中文的字体，ASS会使用系统字体回退。
+
+布局已对照普通桌面网页、相同窗口尺寸和100%缩放，并完成Linux实际画面验证；Windows设备的实际字体及DPI效果仍需现场核对。mpv不支持ASS OSD时记录错误，媒体和系统TTS仍按原链路工作。
+
 ## TTS 与媒体音频
 
 TTS继续使用原 `audio-player.js` 播放队列：Windows调用 PowerShell `SoundPlayer`，Linux调用 `aplay`。TTS不加入常驻mpv；停止TTS不会停止媒体，清空媒体也不会清空TTS队列。TTS沿用原队列串行播放行为。
@@ -70,8 +80,11 @@ npm run test:node-display-mpv
 npm run test:node-display-mpv:real
 npm run test:node-display-config
 npm run test:node-display-mpv:render
+npm run test:node-display-mpv:layout
 ```
 
 第一项验证跨平台配置与 IPC 协议、生命周期、AASC接入和96组网页几何对照，不要求安装mpv。第二项要求安装mpv和ffmpeg，真实播放生成的视频/音频/图片，使用null输出，不打开桌面或发声；不能替代Linux真实画面、Windows实机或双路声音混音验收。
 
 配置测试验证真实失败进程的ERROR与退出码，以及启动前零业务依赖加载。render测试另外需要Linux Xvnc/xdpyinfo/ffmpeg/mpv，在隔离显示屏中检查四方向适应黑边、铺满及裁剪横纵移动像素，并检查真实视频的两个裁剪位置；不访问现有桌面，该测试不替代Windows实机验收。
+
+layout测试另外需要Chromium/puppeteer，在临时本机静态网页中对照两个窗口与四个旋转方向，不连接用户服务。render覆盖ASS空闲/视频暂停/纯音频/清空/移除、中文回显及原填充裁剪；不替代Windows实机验收。

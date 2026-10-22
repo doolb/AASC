@@ -19,6 +19,7 @@ class NodeMediaController {
         this.lastPlayState = null;
         this.sequence = 0;
         this.restoring = null;
+        this.capabilityEpoch = 0;
         this.player.on('progress', progress => {
             if (!this.capabilityKnown) return;
             // 播放状态只在变化时上报，进度走已有节流消息，避免每秒触发状态持久化。
@@ -40,7 +41,10 @@ class NodeMediaController {
         return this.available;
     }
 
+    updateOverlay(data) { this.player.updateOverlay?.(data); }
+
     disconnected() {
+        this.capabilityEpoch += 1;
         this.sequence += 1;
         this.capabilityKnown = false;
         this.enabled = false;
@@ -50,15 +54,22 @@ class NodeMediaController {
     }
 
     async setCapabilities(capabilities) {
+        const epoch = ++this.capabilityEpoch;
+        const sequence = this.sequence;
         this.capabilityKnown = true;
         this.enabled = this.available && capabilities.mediaRendering === true;
         if (!this.enabled) {
             this.sequence += 1;
             this.pendingRestore = null;
             this.pendingMedia = null;
-            await this.player.clear();
+            // 立即使在途加载失效，不能等待OSD回执才清空；两条链路仍各自串行。
+            await Promise.all([this.player.clear(), this.player.setOverlayEnabled?.(false)]);
             return;
         }
+        try { await this.player.setOverlayEnabled?.(true); }
+        catch (error) { this.onError(error); }
+        // 启动空闲窗口期间可能已收到新媒体或断线，旧恢复不得覆盖最新状态。
+        if (epoch !== this.capabilityEpoch || sequence !== this.sequence || !this.enabled) return;
         const restore = this.pendingRestore;
         const media = this.pendingMedia;
         this.pendingRestore = null;

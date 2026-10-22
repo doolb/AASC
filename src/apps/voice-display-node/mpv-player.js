@@ -9,6 +9,7 @@ const { spawn } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 const { platformOptions, resolveXauthority, ipcAddress, executeFile } = require('./mpv-platform');
 const { FIT_MODES, normalizeRotation, normalizeCrop, normalizeDynamic, calculateGeometry } = require('./mpv-geometry');
+const { MpvOverlay, assDocument } = require('./mpv-overlay');
 
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const MEDIA_TYPES = new Set(['image', 'gif', 'video', 'audio']);
@@ -45,6 +46,9 @@ class MpvPlayer extends EventEmitter {
         this.lastProgressAt = 0;
         this.disposals = new Set();
         this.unsupportedResetProperties = new Set();
+        this.overlayVersion = 0;
+        this.overlayWrite = null;
+        this.overlay = new MpvOverlay(() => { void this.queueOverlay(); }, dependencies.overlayClock);
     }
 
     async checkAvailable() {
@@ -92,8 +96,9 @@ class MpvPlayer extends EventEmitter {
             if (this.closed) throw new Error('mpv播放器已关闭');
             session.address = ipcAddress(this.options.platform, directory);
             const args = [...this.options.args, '--no-config', '--idle=yes', '--keep-open=yes',
-                '--force-window=yes', '--fullscreen', '--no-terminal', '--input-terminal=no',
+                `--force-window=${this.overlay.active ? 'immediate' : 'yes'}`, '--fullscreen', '--no-terminal', '--input-terminal=no',
                 '--audio-exclusive=no',
+                ...(this.overlay.active ? ['--osc=no', '--osd-level=0', '--osd-bar=no'] : []),
                 '--image-display-duration=inf', '--loop-file=inf', `--input-ipc-server=${session.address}`];
             const child = (this.dependencies.spawn || spawn)(this.options.command, args, {
                 env, shell: false, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe']
@@ -117,6 +122,7 @@ class MpvPlayer extends EventEmitter {
             const observed = ['time-pos', 'duration', 'pause', 'video-dec-params', 'osd-dimensions', 'idle-active'];
             for (const [index, name] of observed.entries()) await this.command(['observe_property', index + 1, name]);
             await this.command(['set_property', 'volume', this.volume]);
+            if (this.overlay.active) await this.queueOverlay();
         } catch (error) {
             await this.disposeSession(session);
             throw error;
@@ -145,7 +151,7 @@ class MpvPlayer extends EventEmitter {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pending.delete(requestId);
-                reject(new Error(`mpv命令超时：${command[0]}`));
+                reject(new Error(`mpv命令超时：${command[0] || command.name}`));
             }, this.dependencies.commandTimeoutMs || 3000);
             this.pending.set(requestId, { resolve, reject, timer, session });
             session.socket.write(`${JSON.stringify({ command, request_id: requestId })}\n`, error => {
@@ -200,6 +206,7 @@ class MpvPlayer extends EventEmitter {
                 ? previous?.w !== message.data?.w || previous?.h !== message.data?.h
                 : JSON.stringify(previous) !== JSON.stringify(message.data);
             if (changed) this.scheduleGeometry();
+            if (changed && message.name === 'osd-dimensions' && this.overlay.active) void this.queueOverlay();
             if (message.name === 'osd-dimensions' && changed && message.data?.w > 0 && message.data?.h > 0) {
                 this.emit('dimensions', { width: message.data.w, height: message.data.h });
             }
@@ -330,7 +337,56 @@ class MpvPlayer extends EventEmitter {
         setters[action]();
         this.geometryVersion += 1;
         this.stopDynamic();
+        if (this.overlay.active) void this.queueOverlay();
         return true;
+    }
+
+    updateOverlay(data) { if (this.available && !this.closed) this.overlay.update(data); }
+
+    async setOverlayEnabled(enabled) {
+        enabled = enabled === true && this.available && !this.closed;
+        this.overlay.setActive(enabled);
+        if (!enabled) { await this.queueOverlay(); return; }
+        await this.enqueue(async () => {
+            if (this.closed || !this.overlay.active) return;
+            await this.ensureStarted();
+            await this.command(['set_property', 'force-window', 'immediate']);
+            await this.queueOverlay();
+        });
+    }
+
+    /** OSD有独立的单任务写入，不等待媒体加载，也不由时钟启动/重启进程。 */
+    queueOverlay() {
+        const session = this.session;
+        this.overlayVersion += 1;
+        if (this.closed || !session?.socket || session.disposed || session.overlayFailed) return Promise.resolve();
+        if (this.overlayWrite?.session === session) return this.overlayWrite.promise;
+        const update = { session, promise: null };
+        this.overlayWrite = update;
+        update.promise = (async () => {
+            let version;
+            do {
+                version = this.overlayVersion;
+                if (this.closed || this.session !== session || session.disposed) return;
+                const dimensions = this.properties['osd-dimensions'];
+                const command = this.overlay.active ? assDocument(this.overlay.state, {
+                    width: dimensions?.w > 0 ? dimensions.w : 1280,
+                    height: dimensions?.h > 0 ? dimensions.h : 720
+                }, this.visual.rotation, this.overlay.now()) : { name: 'osd-overlay', id: 40, format: 'none', data: '' };
+                const key = JSON.stringify(command);
+                if (key !== session.lastOverlay) {
+                    await this.command(command);
+                    session.lastOverlay = key;
+                }
+            } while (version !== this.overlayVersion);
+        })().catch(error => {
+            // 字幕不可用只报一次，不中断媒体/TTS，也不让1Hz时钟反复尝试错误会话。
+            if (!this.closed && this.session === session && !session.disposed) {
+                session.overlayFailed = true;
+                this.onError(new Error(`mpv ASS信息层失败：${error.message}`));
+            }
+        }).finally(() => { if (this.overlayWrite === update) this.overlayWrite = null; });
+        return update.promise;
     }
 
     control(action, value) {
@@ -567,6 +623,7 @@ class MpvPlayer extends EventEmitter {
     async close() {
         if (this.closing) return this.closing;
         this.closed = true;
+        this.overlay.close();
         ++this.revision;
         this.cancelLoad();
         this.stopDynamic();
@@ -582,6 +639,7 @@ class MpvPlayer extends EventEmitter {
             }
             this.pending.clear();
             await this.tail;
+            await this.overlayWrite?.promise;
         })();
         return this.closing;
     }

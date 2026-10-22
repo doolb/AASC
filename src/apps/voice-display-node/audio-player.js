@@ -31,6 +31,10 @@ class AudioPlayer {
         this.onPlayEnd = null;
         // 队列完全空闲时通知需要等待整段播报结束的业务，例如 Windows 语音输入提示。
         this.onQueueIdle = null;
+        // 独立条目通知供ASS字幕使用，不覆盖录音模式的整队列onPlayStart/onPlayEnd。
+        this.onItemPlayback = null;
+        this.itemSequence = 0;
+        this.currentQueueItem = null;
         /** @type {Function|null} 播放PCM数据回调，用于SpeexDSP AEC参考信号 */
         this.onPlayData = null;
     }
@@ -47,6 +51,8 @@ class AudioPlayer {
         this.playQueue.push({
             type: 'url',
             url,
+            id: ++this.itemSequence,
+            text: typeof options.text === 'string' ? Array.from(options.text).slice(0, 2048).join('') : '',
             onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
         });
         console.log(`[音频队列] 加入队列，当前队列长度: ${this.playQueue.length}`);
@@ -62,6 +68,8 @@ class AudioPlayer {
         this.playQueue.push({
             type: 'buffer',
             buffer: wavBuffer,
+            id: ++this.itemSequence,
+            text: typeof options.text === 'string' ? Array.from(options.text).slice(0, 2048).join('') : '',
             onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
         });
         console.log(`[音频队列] 加入队列，当前队列长度: ${this.playQueue.length}`);
@@ -89,6 +97,7 @@ class AudioPlayer {
             }
 
             const item = this.playQueue.shift();
+            this.currentQueueItem = item;
             let playbackError = null;
 
             try {
@@ -104,6 +113,8 @@ class AudioPlayer {
 
             // 停止后旧下载/子进程的回调不再通知新播报，也不抢占新队列。
             if (generation !== this.queueGeneration) return;
+            this.currentQueueItem = null;
+            this.notifyItemPlayback({ phase: 'end', id: item.id, failed: !!playbackError, queueIdle: this.playQueue.length === 0 });
             if (item.onComplete) {
                 try {
                     item.onComplete(playbackError, this.playQueue.length === 0);
@@ -122,6 +133,18 @@ class AudioPlayer {
         if (generation === this.queueGeneration && !this.isProcessingQueue && this.playQueue.length === 0 && this.onQueueIdle) {
             this.onQueueIdle();
         }
+    }
+
+    notifyItemPlayback(event) {
+        try { this.onItemPlayback?.(event); }
+        catch (error) { console.error('[音频队列] 条目通知失败:', error.message); }
+    }
+
+    notifyItemStarted(generation) {
+        const item = this.currentQueueItem;
+        if (!item || item.started || this.stopRequested || generation !== this.playbackGeneration) return;
+        item.started = true;
+        this.notifyItemPlayback({ phase: 'start', id: item.id, text: item.text });
     }
 
     /**
@@ -221,6 +244,7 @@ class AudioPlayer {
             let inputError = null;
             const child = spawn(command, args, { windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
             this.currentProcess = child;
+            child.once('spawn', () => this.notifyItemStarted(generation));
             const done = (error) => {
                 if (settled) return;
                 settled = true;
@@ -288,6 +312,8 @@ class AudioPlayer {
         this.stopRequested = true;
         this.playbackGeneration += 1;
         this.queueGeneration += 1;
+        this.currentQueueItem = null;
+        this.notifyItemPlayback({ phase: 'stop' });
         this.downloadController?.abort();
         this.downloadController = null;
 

@@ -83,6 +83,10 @@ test('缺省关闭与缺少mpv时不声明可用，不阻断语音客户端初�
     let calls = 0;
     const disabled = new MpvPlayer({}, { executeFile: async () => { calls += 1; } });
     assert.equal(await disabled.checkAvailable(), false);
+    disabled.updateOverlay({ asrText: '不应创建字幕计时器' });
+    await disabled.setOverlayEnabled(true);
+    assert.equal(disabled.overlay.timer, null);
+    assert.equal(disabled.overlay.hideTimers.size, 0);
     assert.equal(calls, 0);
     const errors = [];
     const missing = new MpvPlayer({ enabled: true }, { executeFile: async () => { throw new Error('ENOENT'); }, onError: error => errors.push(error) });
@@ -324,6 +328,43 @@ test('裁剪等待尺寸后应用，音频阶段记忆，媒体切换/清空取�
     assert.deepEqual(errors, []);
 });
 
+test('ASS信息层沿用同一IPC，能力未知不启动、空闲显示、旋转与状态栏开关、崩溃不由时钟重启', async t => {
+    const { player, starts } = await createPlayer(t, 'win32');
+    const controller = new NodeMediaController({}, { player });
+    await controller.initialize();
+    controller.updateOverlay({ connection: '已连接', ttsEvent: { phase: 'start', id: 1, text: '本机正在播放' }, asrText: '[小爱] 识别回显' });
+    assert.equal(starts.length, 0);
+    await controller.setCapabilities({ mediaRendering: true });
+    assert.equal(starts.length, 1);
+    assert.ok(starts[0].args.includes('--force-window=immediate'));
+    const pid = player.process.pid;
+    let rendered = await player.command(['get_property', 'test-overlay']);
+    assert.match(rendered.data, /本机正在播放/);
+    assert.match(rendered.data, /识别回显/);
+    await player.control('rotate', 90);
+    controller.updateOverlay({ connection: '已断开', showStatusBar: false });
+    await player.queueOverlay();
+    rendered = await player.command(['get_property', 'test-overlay']);
+    assert.match(rendered.data, /\\frz-90/);
+    assert.doesNotMatch(rendered.data, /已断开/);
+    assert.match(rendered.data, /本机正在播放/);
+    assert.equal(player.process.pid, pid);
+    player.process.kill('SIGKILL');
+    for (let attempt = 0; player.session && attempt < 100; attempt += 1) await delay(10);
+    await delay(1100);
+    assert.equal(starts.length, 1, '1Hz时钟不得自动启动崩溃播放器');
+    await player.load(media());
+    assert.equal(starts.length, 2);
+    rendered = await player.command(['get_property', 'test-overlay']);
+    assert.match(rendered.data, /识别回显/);
+    await controller.setCapabilities({ mediaRendering: false });
+    assert.equal((await player.command(['get_property', 'test-overlay'])).format, 'none');
+    assert.equal(player.overlay.timer, null);
+    assert.equal(player.overlay.hideTimers.size, 0);
+    await player.close();
+    assert.equal(player.overlayWrite, null);
+});
+
 test('几何与网页真实applyCrop一致：横竖媒体、窗口、四方向和六模式组合', () => {
     const source = fs.readFileSync(path.join(root, 'src/apps/web-mediacenter/ui/public/display.html'), 'utf8');
     const start = source.indexOf('function applyCrop(options = {})');
@@ -483,16 +524,20 @@ test('VoiceDisplay真实消息分支连接媒体控制器，能力声明/旋转/
     const source = fs.readFileSync(path.join(root, 'src/apps/voice-display-node/main.js'), 'utf8');
     const start = source.indexOf('class VoiceDisplay {');
     const end = source.indexOf('\nfunction loadConfig(', start);
+    const mainErrors = [];
     const sandbox = {
         module: { exports: {} }, NodeMediaController, MEDIA_CONTROLS: require('../src/apps/voice-display-node/media-controller').MEDIA_CONTROLS,
-        WindowsTextInputInjector: class { close() {} }, WindowsGlobalHotkey: class { close() {} },
+        WindowsTextInputInjector: class { close() {} isAvailable() { return false; } }, WindowsGlobalHotkey: class { close() {} },
         normalizeTextInputVoiceprintPolicy: () => false, path, __dirname: '/test', AbortController,
-        WINDOWS_VOICEPRINT_HOTKEY_LABEL: 'Alt+C', log() {}, logError() {},
+        WINDOWS_VOICEPRINT_HOTKEY_LABEL: 'Alt+C', log() {}, logError: (...args) => mainErrors.push(args),
+        AudioRecorder: class {}, formatAsrDisplayText: require('../src/apps/voice-display-node/asr-display').formatAsrDisplayText,
         useTUI: false, WebSocket: { OPEN: 1 }, clearTimeout, clearInterval
     };
     vm.runInNewContext(`${source.slice(start, end)}; module.exports = VoiceDisplay;`, sandbox);
     const instance = new sandbox.module.exports({ displayId: 'node-test', serverUrl: 'http://localhost' });
     const player = new StubPlayer();
+    const overlayUpdates = [];
+    player.updateOverlay = data => overlayUpdates.push(data);
     let closed = false;
     player.close = async () => { closed = true; };
     const sent = [];
@@ -521,10 +566,35 @@ test('VoiceDisplay真实消息分支连接媒体控制器，能力声明/旋转/
     // 媒体与TTS使用各自播放器：播报、停止播报、清空媒体不能互相调用停止接口。
     const ttsUrls = [];
     let ttsStops = 0;
-    instance.audio = { queueURL: url => ttsUrls.push(url), stop: () => { ttsStops += 1; }, clearQueue() {} };
+    const queueOptions = [];
+    instance.audio = { queueURL: (url, options) => { ttsUrls.push(url); queueOptions.push(options); }, stop: () => { ttsStops += 1; }, clearQueue() {} };
     const mediaCalls = player.calls.length;
-    await instance.handleTTS({ action: 'playAudio', audioUrl: '/uploads/tts/speech.wav' });
+    await instance.handleTTS({ action: 'playAudio', audioUrl: '/uploads/tts/speech.wav', text: '正在播放的字幕' });
     assert.deepEqual(ttsUrls, ['http://localhost/uploads/tts/speech.wav']);
+    assert.equal(queueOptions[0].text, '正在播放的字幕');
+    instance.connectionLabel = '已连接';
+    instance.updateTUIConnectionState();
+    assert.equal(overlayUpdates.at(-1).connection, '已连接');
+    const overlays = overlayUpdates.length;
+    instance.handleMessage('displayStatusBarConfig', { displayId: 'other-node', showStatusBar: false });
+    assert.equal(overlayUpdates.length, overlays);
+    instance.handleMessage('displayStatusBarConfig', { displayId: 'node-test', showStatusBar: false });
+    assert.equal(overlayUpdates.at(-1).showStatusBar, false);
+    let recognize;
+    let finishRecording;
+    const results = [ { status: 'success', text: '你好', speaker: '小爱' }, { status: 'ignored', text: '没有声纹也回显' } ];
+    instance.asr = { isReady: () => true, recognize: async () => results.shift(), close() {} };
+    instance.recorder = { isRecording: () => false, isPaused: () => false,
+        start: callback => { recognize = callback; return new Promise(resolve => { finishRecording = resolve; }); },
+        stop: () => finishRecording?.() };
+    instance.handleTextInputResult = async () => {};
+    instance.recordingEnabled = true;
+    await instance.startVoiceRecognition();
+    await recognize(Buffer.from('wav'));
+    assert.deepEqual(mainErrors, []);
+    assert.equal(overlayUpdates.at(-1).asrText, '你好');
+    await recognize(Buffer.from('wav'));
+    assert.equal(overlayUpdates.at(-1).asrText, '没有声纹也回显');
     await instance.handleTTS({ action: 'stop' });
     assert.equal(ttsStops, 1);
     assert.equal(player.calls.length, mediaCalls);
@@ -574,5 +644,28 @@ test('重连恢复尚未完成时，新媒体/清空优先，旧恢复不得覆�
     release();
     await clear;
     await anotherRestore;
+    assert.equal(player.calls.filter(call => call[0] === 'load').length, 0);
+});
+
+test('启动ASS空闲窗口期间的新媒体优先，能力关闭立即取消加载，旧初始化不恢复旧媒体', async () => {
+    const player = new StubPlayer();
+    let release;
+    player.setOverlayEnabled = enabled => enabled ? new Promise(resolve => { release = resolve; }) : Promise.resolve();
+    const controller = new NodeMediaController({}, { player });
+    await controller.initialize();
+    await controller.restore({ fit: 'crop', currentMedia: media('http://localhost/old') });
+    const activating = controller.setCapabilities({ mediaRendering: true });
+    await controller.handleMedia(media('http://localhost/new'));
+    release();
+    await activating;
+    assert.deepEqual(player.calls.filter(call => call[0] === 'load').map(call => call[1].url), ['http://localhost/new']);
+    controller.disconnected();
+    player.calls = [];
+    await controller.restore({ currentMedia: media('http://localhost/old-again') });
+    const reactivating = controller.setCapabilities({ mediaRendering: true });
+    await controller.setCapabilities({ mediaRendering: false });
+    assert.equal(player.calls.at(-1)[0], 'clear');
+    release();
+    await reactivating;
     assert.equal(player.calls.filter(call => call[0] === 'load').length, 0);
 });

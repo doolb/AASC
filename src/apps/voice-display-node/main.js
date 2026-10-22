@@ -169,6 +169,7 @@ class VoiceDisplay {
         });
         this.recorder = null;
         this.connected = false;
+        this.connectionLabel = '连接中...';
         // 本地候选 ID 在进程内固定；服务器确认 ID 单独保存，不能反写覆盖重连身份。
         this.clientDisplayId = config.displayId;
         // 服务器通过 WebSocket 确认的身份才是 ASR 请求的权威来源，不能只依赖本地候选 ID。
@@ -234,6 +235,7 @@ class VoiceDisplay {
     }
 
     updateTUIConnectionState() {
+        this.media.updateOverlay({ connection: this.connectionLabel });
         if (!useTUI) return;
         tui.updateConnectionState({
             connected: this.connected,
@@ -264,6 +266,8 @@ class VoiceDisplay {
     async connect() {
         // 每次连接都重新等待服务器确认，避免重连后继续使用上一次连接的显示端 ID。
         this.serverDisplayId = null;
+        this.connectionLabel = '连接中...';
+        this.updateTUIConnectionState();
         const parsedUrl = URL.parse(this.config.serverUrl);
         const wsProtocol = parsedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${parsedUrl.host}/display?subDisplay=true&clientType=node&displayId=${encodeURIComponent(this.clientDisplayId)}`;
@@ -283,6 +287,7 @@ class VoiceDisplay {
                 if (this.ws !== ws) return;
                 opened = true;
                 this.connected = true;
+                this.connectionLabel = '已连接';
                 this.clearReconnectTimer();
 
                 log('连接', `已连接，等待服务器确认显示端ID（本地候选: ${this.clientDisplayId}）`);
@@ -315,7 +320,7 @@ class VoiceDisplay {
             ws.on('error', (error) => {
                 if (this.ws !== ws) return;
                 logError('连接', `WebSocket错误: ${error.message}`);
-                this.handleSocketDisconnect(ws, error.message);
+                this.handleSocketDisconnect(ws, error.message, '连接错误');
                 if (!opened) {
                     reject(error);
                 }
@@ -333,10 +338,11 @@ class VoiceDisplay {
         await this.waitForServerDisplayId();
     }
 
-    handleSocketDisconnect(ws, reason) {
+    handleSocketDisconnect(ws, reason, label = '已断开') {
         if (this.ws !== ws) return;
         this.ws = null;
         this.connected = false;
+        this.connectionLabel = label;
         this.serverDisplayId = null;
         this.media.disconnected();
         // 断线期间服务端可能已修改能力；释放设备并等待重连后的权威配置。
@@ -539,6 +545,11 @@ class VoiceDisplay {
                 break;
             case 'asrConfig':
                 this.handleAsrConfig(data);
+                break;
+            case 'displayStatusBarConfig':
+                if (!data.displayId || [this.clientDisplayId, this.serverDisplayId].includes(data.displayId)) {
+                    this.media.updateOverlay({ showStatusBar: typeof data.showStatusBar === 'boolean' ? data.showStatusBar : true });
+                }
                 break;
             default:
                 log('系统', `未知消息类型: ${msgType}`);
@@ -783,7 +794,7 @@ class VoiceDisplay {
                     log('TTS', `播报: ${text}`);
                 }
                 if (audioUrl) {
-                    await this.playAudioFromURL(audioUrl);
+                    await this.playAudioFromURL(audioUrl, { text });
                 }
                 break;
             case 'play':
@@ -820,6 +831,7 @@ class VoiceDisplay {
         log('语音输入', `收到状态提示音频: ${announcement.text}`);
         try {
             this.playAudioFromURL(data.audioUrl, {
+                text: data.text || announcement.text,
                 onComplete: (error, queueIdle) => {
                     if (error) {
                         logError('语音输入', `状态提示播放失败: ${error.message}`);
@@ -1697,12 +1709,14 @@ class VoiceDisplay {
                 if (result.status === 'success' && displayText) {
                     log('语音', `识别结果: ${displayText}`);
                     this.lastRecognition = displayText;
+                    this.media.updateOverlay({ asrText: displayText });
                     this.updateTUIRecordingState();
                     await this.handleTextInputResult(result, requestTextInputMode);
                 } else if (result.status === 'ignored') {
                     if (displayText) {
                         log('语音', `服务器忽略该段音频，识别文本: ${displayText}`);
                         this.lastRecognition = displayText;
+                        this.media.updateOverlay({ asrText: displayText });
                         this.updateTUIRecordingState();
                     } else {
                         const reason = result.reason || result.message || '未返回识别文本';
@@ -1883,6 +1897,7 @@ class VoiceDisplay {
         activeDisplayInstance = this;
         await this.media.initialize();
         this.audio = new AudioPlayer();
+        this.audio.onItemPlayback = event => this.media.updateOverlay({ ttsEvent: event });
         // 无论录音模式是否提供普通 TTS 回调，状态提示都必须等待整个音频队列结束后恢复录音。
         this.audio.onQueueIdle = () => this.finishTextInputAnnouncement();
 

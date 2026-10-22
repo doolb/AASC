@@ -9,6 +9,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { MpvPlayer } = require('../src/apps/voice-display-node/mpv-player');
+const { overlayLayout, physicalPoint, escapeAss } = require('../src/apps/voice-display-node/mpv-overlay');
 const run = promisify(execFile);
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -55,6 +56,22 @@ async function capture(display) {
 function pixel(bytes, x, y) {
     const offset = (y * 800 + x) * 3;
     return [...bytes.subarray(offset, offset + 3)];
+}
+
+function brightPixels(bytes, rect) {
+    let count = 0;
+    for (let y = Math.max(0, Math.ceil(rect.top)); y < Math.min(600, rect.bottom); y += 1) {
+        for (let x = Math.max(0, Math.ceil(rect.left)); x < Math.min(800, rect.right); x += 1) {
+            if (pixel(bytes, x, y).every(value => value > 140)) count += 1;
+        }
+    }
+    return count;
+}
+
+function boxRect(layout, box) {
+    const corners = [[box.x, box.y], [box.x + box.width, box.y + box.height]].map(([x, y]) => physicalPoint(layout, x, y));
+    return { left: Math.min(...corners.map(value => value[0])), right: Math.max(...corners.map(value => value[0])),
+        top: Math.min(...corners.map(value => value[1])), bottom: Math.max(...corners.map(value => value[1])) };
 }
 
 test('真实渲染：四方向contain有黑边、cover填满并裁切，常驻PID不变', { timeout: 45000 }, async t => {
@@ -173,4 +190,90 @@ test('真实渲染：四方向裁剪横纵移动与缩放、连续拖动及填�
     await player.close();
     assert.deepEqual(errors, []);
     t.diagnostic(JSON.stringify({ display, samples }));
+});
+
+test('真实ASS：空闲时钟、四方向网页位置、裁剪不移动信息层、暂停/音频/清空继续显示及退出回收', { timeout: 45000 }, async t => {
+    const display = await virtualDisplay(t);
+    const errors = [];
+    let time = new Date(2026, 9, 22, 12, 34, 56);
+    const player = new MpvPlayer({ enabled: true, linux: { display, command: 'mpv', args: [
+        '--vo=x11', '--ao=null', '--osc=no', '--osd-level=0', '--geometry=800x600', '--cursor-autohide=always'
+    ] } }, { overlayClock: { now: () => time }, onError: error => errors.push(error.message) });
+    t.after(() => player.close());
+    assert.equal(await player.checkAvailable(), true);
+    await player.setOverlayEnabled(true);
+    const pid = player.process.pid;
+    await delay(200);
+    const clockRect = { left: 500, top: 10, right: 795, bottom: 110 };
+    assert.ok(brightPixels(await capture(display), clockRect) > 50, '没有媒体也应显示时钟');
+    const literal = '中文{\\pos(0,0)}\\N字面\n换行';
+    assert.equal(await player.command(['escape-ass', literal]), escapeAss(literal), '转义与mpv官方命令一致');
+    const ppm = Buffer.concat([Buffer.from('P6\n16 16\n255\n'), Buffer.alloc(16 * 16 * 3)]);
+    await player.load({ type: 'base64', mediaType: 'image', data: ppm.toString('base64') });
+    player.updateOverlay({ connection: '已连接', ttsEvent: { phase: 'start', id: 1, text: '播放第一句中文' }, asrText: '[小爱]语音识别' });
+    const samples = [];
+    for (const rotation of [0, 90, 180, 270]) {
+        await player.control('rotate', rotation);
+        await player.control('crop', { x: 50, y: 50, width: 25, height: 25 });
+        await player.queueOverlay();
+        await delay(150);
+        const image = await capture(display);
+        const layout = overlayLayout({ width: 800, height: 600, rotation, ...player.overlay.state });
+        const ttsCount = brightPixels(image, boxRect(layout, layout.tts));
+        const asrCount = brightPixels(image, boxRect(layout, layout.asr));
+        assert.ok(ttsCount > 50, `${rotation}度TTS应在网页同位置绘制中文，实际亮像素${ttsCount}`);
+        assert.ok(asrCount > 50, `${rotation}度ASR应在网页同位置绘制中文，实际亮像素${asrCount}`);
+        player.updateOverlay({ ttsEvent: { phase: 'stop' }, asrText: '' });
+        await player.queueOverlay();
+        await delay(100);
+        const baseline = await capture(display);
+        assert.ok(ttsCount - brightPixels(baseline, boxRect(layout, layout.tts)) > 50, 'TTS区域亮像素必须来自字幕本身');
+        assert.ok(asrCount - brightPixels(baseline, boxRect(layout, layout.asr)) > 50, 'ASR区域亮像素必须来自回显本身');
+        player.updateOverlay({ ttsEvent: { phase: 'start', id: rotation + 2, text: '播放第一句中文' }, asrText: '[小爱]语音识别' });
+        await player.queueOverlay();
+        assert.equal(player.process.pid, pid);
+        samples.push({ rotation, ttsCount, asrCount });
+    }
+    await player.control('rotate', 0);
+    const imageFile = path.join(player.session.directory, 'overlay.ppm');
+    const videoFile = path.join(player.session.directory, 'overlay.mp4');
+    await fs.writeFile(imageFile, ppm);
+    await run('ffmpeg', ['-loglevel', 'error', '-loop', '1', '-i', imageFile, '-t', '1',
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', videoFile], { timeout: 10000 });
+    await player.load({ type: 'base64', mediaType: 'video', data: (await fs.readFile(videoFile)).toString('base64') });
+    await player.control('play', false);
+    await delay(100);
+    const previous = await capture(display);
+    time = new Date(2026, 9, 22, 12, 34, 57);
+    await delay(1100);
+    const paused = await capture(display);
+    let changes = 0;
+    for (let y = 20; y < 100; y += 1) {
+        for (let x = 500; x < 790; x += 1) {
+            if (pixel(previous, x, y).some((value, index) => value !== pixel(paused, x, y)[index])) changes += 1;
+        }
+    }
+    assert.ok(changes > 20, '媒体暂停时1Hz时钟仍应变化');
+    await player.clear();
+    await delay(100);
+    assert.ok(brightPixels(await capture(display), clockRect) > 50, '清空媒体不得移除信息层');
+    const wav = Buffer.alloc(44 + 32000);
+    wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+    wav.write('data', 36); wav.writeUInt32LE(32000, 40);
+    await player.load({ type: 'base64', mediaType: 'audio', data: wav.toString('base64') });
+    await delay(100);
+    assert.ok(brightPixels(await capture(display), clockRect) > 50, '纯音频也应显示信息层');
+    assert.equal(player.process.pid, pid);
+    await player.setOverlayEnabled(false);
+    await delay(100);
+    assert.deepEqual(errors, []);
+    t.diagnostic(JSON.stringify({ removal: player.session.lastOverlay, active: player.overlay.active }));
+    assert.equal(brightPixels(await capture(display), clockRect), 0, '关闭能力后移除信息层');
+    await player.close();
+    assert.equal(player.overlay.timer, null);
+    assert.equal(player.overlay.hideTimers.size, 0);
+    assert.deepEqual(errors, []);
+    t.diagnostic(JSON.stringify({ display, samples, pausedClockPixelChanges: changes }));
 });
