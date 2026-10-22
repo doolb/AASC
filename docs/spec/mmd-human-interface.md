@@ -1275,3 +1275,26 @@ HMR := 同源回环本机服务限流并接收PNG和人物框 → 临时文件 �
 验证 := 文件与粘贴路径、整图及编辑人物框、超限/非法图片和矩形、真实单图HMR+深度、固定样本回归、窄屏与WebGL回退
 边界 := 仅忽略目录的本机试验报告，不改正式全身IK、VAM、Offline发布状态；HMR对遮挡脚掌和左右腿错误仍需人工判断
 ```
+
+
+## 普通WebONNX实现（2026-10-22，完成）
+
+```text
+已有 := ONNX Runtime Web + FP32模型 + WebGPU Worker + BODY25语义
+新增 := backend枚举webgpu/wasm；按后端选择运行时、能力检查和结果device
+先验 := 完整模型WASM真实浏览器加载/同图对照通过 → 已开放CPU选项；峰值内存尚未测量
+门禁 := 缺模型禁用两后端；无WebGPU仅禁用GPU；CPU失败明确显示，不冒充成功
+流程 := 用户选CPU → 专用Worker按需加载 → wasm推理 → 共用语义预览及PMX应用
+验证 := 缺GPU的CPU选择、资源缺失、取消隔离、CPU与参考数值、WebGPU回归
+```
+
+WASM验证执行（用户已确认）：独立localhost → ort.wasm.min.mjs + executionProviders=[wasm] → 完整模型externalData → 四输入九输出；先单线程排除跨源隔离依赖，若初始化内存失败则定位阶段与优化设置，不直接开放不可运行选项。
+
+```text
+后端配置 := webgpu{入口ort.webgpu.min.mjs,Asyncify,device=webgpu} / wasm{入口ort.wasm.min.mjs,普通SIMD,device=cpu}
+资源 := 清单扩展含两套运行时；probe仅检查选中后端的必要文件；旧GPU清单继续兼容GPU，缺CPU文件仅禁用CPU
+客户端 := infer(image,{bbox,backend=webgpu})；worker与backend绑定，切后端先终止旧worker；结果device必须匹配任务
+Worker := 按backend取配置并验证；单线程WASM无需SharedArrayBuffer/跨源隔离或WebGPU；source仍为hmr2-web
+UI := hmr2-web为GPU；hmr2-web-cpu为CPU；各自探测可用性，两者共享HMR人物框、深度与应用
+实测 := 新增test:mmd-hmr-web:wasm显式完整模型命令；CPU页和Worker屏蔽navigator.gpu，验证完整推理、Node同像素、热次复用
+```

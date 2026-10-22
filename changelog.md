@@ -15,6 +15,13 @@
 - ✅ [2026-10-22] 核对Android隔离WebView、桌面专用浏览器与账号保存链路，记录远程页面画面/输入/完成保存方案。
   - 新增design/spec/task并更新索引和todo；用户随后收窄首版为服务器现有豆包网页流程；已核对共享browser-port、页面登录门控与关闭策略，Android暂不接入。具体接入方案待确认，未修改生产代码、操作账号或变更出包状态。
 
+### HMR网页CPU/WASM
+
+- ✅ [2026-10-22] 新增普通ONNX Runtime Web CPU/WASM选项，无WebGPU时仍可使用；缺模型禁用，复用可选获取命令，原GPU/API/MediaPipe保留。
+  - 修改hmr2-web-assets/resources/worker/client/core及pose-ui：普通SIMD运行时、分后端能力与资源检查、Worker后端绑定/切换释放、device=cpu校验及共用BODY25/人物框/深度。旧GPU清单兼容，CPU需重建部署；新增test:mmd-hmr-web:wasm。
+  - 85项专项、9项API/深度浏览器回归、完整CPU无WebGPU验收、完整WebGPU回归与网页构建通过。同合成RGBA对Node最大投影差0.000153px；含校验加载39.63秒、首推理8.70秒、热次10.23秒。不把链路一致性当人物精度/手机/峰值内存验收。
+  - design/spec/task/todo/usage/self-test同步；独立网页未改变Offline发布状态、生产依赖或模型，生成文件不入Git。本轮未重跑上轮待归因的仓库全量测试。
+
 ### MMD-AR纯网页HMR
 
 - ✅ [2026-10-22] 增加可选HMR2.0b网页WebGPU模式，复用现有模型获取命令，缺模型/运行环境时禁用；默认MediaPipe和GPU API继续独立使用。

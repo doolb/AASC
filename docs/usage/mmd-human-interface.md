@@ -6,13 +6,13 @@
 
 ### HMR纯网页可选模式
 
-「全身 IK → 图片姿态 → 计算方式」新增“HMR2.0b · 网页 WebGPU”。图片在浏览器Worker本地处理，不需要HMR API服务。默认仍为MediaPipe；无完整模型、运行时或WebGPU时，第三选项置灰，旁边显示原因和刷新入口。
+「全身 IK → 图片姿态 → 计算方式」提供“HMR2.0b · 纯网页 WebGPU”和“HMR2.0b · 纯网页 CPU/WASM”。图片在浏览器Worker本地处理，不需要HMR API服务。默认仍为MediaPipe；无完整模型时两个网页选项均置灰。无WebGPU仅禁用GPU选项，CPU选项检查普通WASM运行时；各自显示原因和刷新入口。旧构建仅有GPU运行时时，需要重建网页才能使用CPU。
 
 先按[模型准备说明](hmr2-node-onnx-service.md)显式运行已有`npm run download:hmr2-model`（支持本机导入及指定来源），再运行`npm run build:web:mmd-ar-test`。默认复用`res/models/hmr2-node-onnx/fp32-op18-dml-static`，可通过`HMR2_MODEL_DIR`指定目录。构建不自动下载，缺模型仍可生成其余网页功能；准备后必须重建并部署完整`web-dist`，只刷新旧网页不会复制模型。
 
-使用桌面支持WebGPU的浏览器，以HTTPS或localhost访问。初始页面只读取小清单和HEAD，点击识别才加载并完整校验约2.7GB权重，首次需要更多时间和内存。同一图片继续识别复用Worker；换图、切换方式、取消或关闭会释放。人物框可选，未填写按整图单人处理；结果为BODY25，确认预览后手动应用到PMX。自动整图深度沿用HMR设置，可取消勾选；实验性深度辅助仍默认关闭。
+推荐桌面浏览器，以HTTPS或localhost访问。WebGPU方式需要浏览器支持WebGPU；CPU/WASM使用普通ONNX Runtime Web单线程运行，不需要WebGPU或跨源隔离，但仍需要足够内存。初始页面只读取小清单和HEAD，点击识别才加载并完整校验约2.7GB权重，首次需要更多时间和内存。同一图片继续识别复用Worker；换图、切换方式、取消或关闭会释放。人物框可选，未填写按整图单人处理；结果为BODY25，确认预览后手动应用到PMX。自动整图深度沿用HMR设置，可取消勾选；实验性深度辅助仍默认关闭。
 
-定向自测：`npm run test:mmd-hmr-web`；完整本机模型验收：构建完成后顺序执行`npm run test:mmd-hmr-web:real`。后者需要完整模型、足够内存和WebGPU，会运行真实Worker及Node参考；不代表人物识别准确率、手机性能或真实PMX视觉已经验收。
+定向自测：`npm run test:mmd-hmr-web`；完整本机模型验收：构建完成后顺序执行`npm run test:mmd-hmr-web:real`（GPU）与`npm run test:mmd-hmr-web:wasm`（CPU）。CPU验收会屏蔽页面和Worker的WebGPU能力；两者均需要完整模型和足够内存，运行真实Worker及Node参考；不代表人物识别准确率、手机性能或真实PMX视觉已经验收。
 
 ### PMX 身体物理与 PBD 姿态
 

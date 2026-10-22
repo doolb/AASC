@@ -88,7 +88,8 @@ export async function prepareHmrWebInput(image, bbox, cv) {
     } finally { for (const mat of mats.reverse()) mat.delete(); }
 }
 
-export function decodeHmrWebOutputs(outputs, metadata) {
+export function decodeHmrWebOutputs(outputs, metadata, backend = 'webgpu') {
+    requireValue(['webgpu', 'wasm'].includes(backend), 'HMR网页后端无效');
     const values = {};
     requireValue(outputs && Object.keys(outputs).length === Object.keys(HMR_OUTPUT_SHAPES).length, 'HMR九输出数量无效');
     for (const [name, shape] of Object.entries(HMR_OUTPUT_SHAPES)) {
@@ -101,7 +102,7 @@ export function decodeHmrWebOutputs(outputs, metadata) {
     requireValue(values.cameraDepth.every(v => v > 0) && values.cameraTranslation[2] > 0, 'HMR输出深度无效');
     requireValue(values.focalLengthPx[0] > 0 && values.principalPointPx.every((v, i) => v === metadata.imageSize[i] / 2), 'HMR输出主点/焦距无效');
     const rows = (data, count, stride) => Array.from({ length: count }, (_, i) => data.slice(i * stride, (i + 1) * stride));
-    return { type: 'hmr2.result', schemaVersion: 1, model: 'HMR2.0b', source: 'hmr2-web', precision: 'fp32', device: 'webgpu',
+    return { type: 'hmr2.result', schemaVersion: 1, model: 'HMR2.0b', source: 'hmr2-web', precision: 'fp32', device: backend === 'wasm' ? 'cpu' : 'webgpu',
         ...metadata, names: [...HMR2_BODY25_NAMES], edges: HMR2_BODY25_EDGES.map(edge => [...edge]),
         xyz: rows(values.xyz, 25, 3), xy: rows(values.xy, 25, 2), rotations24: rows(values.rotations24, 24, 9).map(row => rows(row, 3, 3)),
         betas10: values.betas10, predCam: values.predCam, cameraDepth: values.cameraDepth, cameraTranslation: values.cameraTranslation,
