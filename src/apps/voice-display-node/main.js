@@ -556,6 +556,12 @@ class VoiceDisplay {
                     this.media.updateOverlay({ showStatusBar: typeof data.showStatusBar === 'boolean' ? data.showStatusBar : true });
                 }
                 break;
+            case 'controlThemeChanged':
+                this.media.updateOverlay({ theme: data.theme });
+                break;
+            case 'displayTtsBackgroundOpacityConfig':
+                this.media.updateOverlay({ ttsOpacity: data.opacity });
+                break;
             default:
                 log('系统', `未知消息类型: ${msgType}`);
         }

@@ -9,6 +9,7 @@ const os = require('node:os');
 const express = require('express');
 const puppeteer = require('puppeteer');
 const { overlayLayout, physicalPoint } = require('../src/apps/voice-display-node/mpv-overlay');
+const { THEMES, paletteFor, colorValue } = require('../src/apps/voice-display-node/mpv-appearance');
 
 function physicalRect(layout, box) {
     const points = [[box.x, box.y], [box.x + box.width, box.y + box.height]].map(([x, y]) => physicalPoint(layout, x, y));
@@ -84,5 +85,51 @@ test('ASS位置对照真实网页：时间/连接四角，TTS最终顶部锚点�
             samples.push({ width, height, rotation, tts, asrAnchor: anchor, clockAnchor: corner });
         }
     }
+    // 直接读取浏览器最终计算样式，验证独立包内调色板没有偏离网页主题定义。
+    const cssColor = color => {
+        const value = colorValue(color);
+        const rgb = value.color.slice(1).match(/../g).map(channel => Number.parseInt(channel, 16)).join(', ');
+        return value.opacity === 1 ? `rgb(${rgb})` : `rgba(${rgb}, ${value.opacity})`;
+    };
+    for (const theme of THEMES) {
+        const actual = await page.evaluate(themeName => {
+            window.UiTheme.applyRemoteTheme(themeName);
+            const element = document.getElementById('voiceTextDisplay');
+            const connection = document.getElementById('connectionStatus');
+            connection.style.transition = 'none';
+            const read = node => {
+                const style = getComputedStyle(node);
+                return { color: style.color, background: style.backgroundColor, shadow: style.textShadow,
+                    stroke: style.webkitTextStrokeColor, strokeWidth: style.webkitTextStrokeWidth,
+                    borderRadius: style.borderRadius, backgroundImage: style.backgroundImage };
+            };
+            element.dataset.voiceTextMode = 'tts'; const tts = read(element);
+            element.dataset.voiceTextMode = 'asr'; const asr = read(element);
+            const states = {};
+            for (const state of ['connected', 'disconnected', 'connecting']) { connection.className = state; states[state] = read(connection); }
+            const root = getComputedStyle(document.documentElement);
+            return { tts, asr, states, clock: read(document.getElementById('timeDisplay')),
+                footer: read(document.getElementById('mediaTextStatus')),
+                shadowColor: root.getPropertyValue('--shadow-color').trim() };
+        }, theme);
+        const palette = paletteFor(theme);
+        assert.equal(actual.asr.color, cssColor(palette.primary.color), theme);
+        assert.equal(actual.asr.background, cssColor(palette.background.color), theme);
+        assert.deepEqual(colorValue(actual.shadowColor), palette.shadow, theme);
+        assert.equal(actual.footer.color, cssColor(palette.secondary.color), theme);
+        assert.equal(actual.states.connected.color, cssColor(palette.success.color), theme);
+        assert.equal(actual.states.disconnected.color, cssColor(palette.danger.color), theme);
+        assert.equal(actual.states.connecting.color, cssColor(palette.accent.color), theme);
+        assert.equal(actual.clock.color, 'rgba(255, 255, 255, 0.9)', theme);
+        assert.equal(actual.tts.color, actual.clock.color, theme);
+        assert.equal(actual.tts.stroke, cssColor(palette.accent.color), theme);
+        assert.equal(actual.tts.strokeWidth, '0.5px', theme);
+        assert.equal(actual.tts.shadow, actual.clock.shadow, theme);
+        assert.match(actual.clock.shadow, /0px 2px 0px/); assert.match(actual.clock.shadow, /2px 2px 8px/);
+        assert.match(actual.asr.shadow, /1px 1px 4px/);
+        assert.match(actual.tts.backgroundImage, /18%/); assert.match(actual.tts.backgroundImage, /82%/);
+        assert.equal(actual.asr.borderRadius, '12px'); assert.equal(actual.states.connected.borderRadius, '20px');
+    }
+    t.diagnostic(`已对照${THEMES.length}套主题的实际文字/背景/状态/描边/阴影样式`);
     t.diagnostic(JSON.stringify(samples));
 });

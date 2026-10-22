@@ -1,6 +1,7 @@
 'use strict';
 
 const { normalizeRotation } = require('./mpv-geometry');
+const { DEFAULT_APPEARANCE, normalizeAppearance, paletteFor, assColor, assAlpha, textPaint, roundedPath, gradientBands } = require('./mpv-appearance');
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const cleanText = value => Array.from(String(value ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')).slice(0, 2048).join('');
 
@@ -71,29 +72,47 @@ function assDocument(state, dimensions, rotation, now = new Date()) {
     const events = [];
     const point = (x, y) => physicalPoint(layout, x, y).map(value => Math.round(value * 100) / 100).join(',');
     const tags = (x, y, align = 7) => `\\an${align}\\pos(${point(x, y)})\\org(${point(x, y)})\\frz${-layout.rotation}`;
-    const text = (value, x, y, size, align = 7, color = 'FFFFFF') => {
-        events.push(`{\\rDefault${tags(x, y, align)}\\fnArial\\fs${size}\\bord1\\shad1\\1c&H${color}&}${escapeAss(value)}`);
+    const appearance = normalizeAppearance(state.appearance);
+    const palette = paletteFor(appearance.theme);
+    const clipBox = box => {
+        const [a, b] = [physicalPoint(layout, box.x, box.y), physicalPoint(layout, box.x + box.width, box.y + box.height)];
+        return `\\clip(${Math.min(a[0], b[0])},${Math.min(a[1], b[1])},${Math.max(a[0], b[0])},${Math.max(a[1], b[1])})`;
     };
-    const background = (box, opacity) => events.push(`{\\rDefault${tags(box.x, box.y)}\\bord0\\shad0\\1c&H000000&\\1a&H${opacity}&\\p1}m 0 0 l ${box.width} 0 ${box.width} ${box.height} 0 ${box.height}{\\p0}`);
+    const text = (value, x, y, size, align, paint, clip = '') => {
+        const draw = (dx, dy, color, opacity, blur, border = 0) => {
+            events.push(`{\\rDefault${tags(x + dx, y + dy, align)}\\fnArial\\fs${size}\\bord${border}\\shad0\\blur${blur}\\1c&H${assColor(color)}&\\1a&H${assAlpha(opacity)}&\\3c&H${assColor(paint.borderColor || color)}&\\3a&H00&${clip}}${escapeAss(value)}`);
+        };
+        for (const shadow of paint.shadows) draw(shadow.x, shadow.y, shadow.color, shadow.opacity, shadow.blur);
+        draw(0, 0, paint.color, paint.opacity, 0, paint.border);
+    };
+    const background = (box, color, opacity, radius, clip = '') => {
+        if (opacity <= 0) return;
+        events.push(`{\\rDefault${tags(box.x, box.y)}\\bord0\\shad0\\blur0\\1c&H${assColor(color)}&\\1a&H${assAlpha(opacity)}&${clip}\\p1}${roundedPath(box.width, box.height, radius)}{\\p0}`);
+    };
     const clock = [now.getHours(), now.getMinutes(), now.getSeconds()].map(value => String(value).padStart(2, '0')).join(':');
-    text(clock, layout.clock.x, layout.clock.y, layout.clock.fontSize, 9);
+    text(clock, layout.clock.x, layout.clock.y, layout.clock.fontSize, 9, textPaint('clock', palette));
     if (state.showStatusBar) {
         background({ x: 20, y: 20, width: textWidth(state.connection, layout.connection.fontSize) + 32,
-            height: layout.connection.fontSize + 18 }, '66');
-        text(state.connection, 36, 28, layout.connection.fontSize, 7, state.connection === '已连接' ? '80E090' : 'FFFFFF');
+            height: layout.connection.fontSize + 18 }, palette.background.color, palette.background.opacity, 20);
+        const color = state.connection === '已连接' ? palette.success : state.connection === '连接中...' ? palette.accent : palette.danger;
+        text(state.connection, 36, 28, layout.connection.fontSize, 7, { ...textPaint('connection', palette), ...color });
     }
     if (state.tts) {
         const box = layout.tts;
-        background(box, 'CC');
+        // 渐变只影响黑色背景，不把文字或主题描边一起变透明。
+        for (const band of gradientBands(box.height, appearance.ttsOpacity)) {
+            background(box, '#000000', band.opacity, 12,
+                clipBox({ x: box.x, y: box.y + band.start, width: box.width, height: band.end - band.start }));
+        }
         const lines = wrapText(state.tts, Math.max(1, box.width - box.paddingX * 2), box.fontSize, 3, true);
         lines.forEach((line, index) => text(line, box.x + box.paddingX,
-            box.y + box.paddingY + (3 - lines.length + index) * box.fontSize * 1.4, box.fontSize));
+            box.y + box.paddingY + (3 - lines.length + index) * box.fontSize * 1.4, box.fontSize, 7, textPaint('tts', palette), clipBox(box)));
     }
     if (state.asr) {
         const box = layout.asr;
-        background(box, '33');
+        background(box, palette.background.color, palette.background.opacity, 12);
         box.lines.forEach((line, index) => text(line, box.x + box.width / 2,
-            box.y + box.paddingY + index * box.fontSize * 1.45, box.fontSize, 8));
+            box.y + box.paddingY + index * box.fontSize * 1.45, box.fontSize, 8, textPaint('asr', palette)));
     }
     return { name: 'osd-overlay', id: 40, format: 'ass-events', data: events.join('\n'),
         res_x: dimensions.width, res_y: dimensions.height, z: 10 };
@@ -106,7 +125,7 @@ class MpvOverlay {
         this.now = now;
         this.setTimer = setTimer;
         this.clearTimer = clearTimer;
-        this.state = { connection: '连接中...', showStatusBar: true, tts: '', asr: '' };
+        this.state = { connection: '连接中...', showStatusBar: true, tts: '', asr: '', appearance: { ...DEFAULT_APPEARANCE } };
         this.active = false;
         this.closed = false;
         this.timer = null;
@@ -139,6 +158,7 @@ class MpvOverlay {
 
     update(data) {
         if (this.closed) return;
+        this.state.appearance = normalizeAppearance(data, this.state.appearance);
         if (typeof data.connection === 'string') this.state.connection = cleanText(data.connection).slice(0, 80);
         if (typeof data.showStatusBar === 'boolean') this.state.showStatusBar = data.showStatusBar;
         if (typeof data.asrText === 'string') { this.setText('asr', data.asrText); if (this.state.asr) this.hideLater('asr'); }

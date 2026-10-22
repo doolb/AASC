@@ -2,6 +2,7 @@
 
 const { physicalPoint, escapeAss } = require('./mpv-overlay');
 const { normalizeRotation } = require('./mpv-geometry');
+const { assColor, paletteFor } = require('./mpv-appearance');
 const DEFAULT_STYLE = Object.freeze({ background: '#FFF4B8', color: '#333333', fontSize: 'auto', lineHeight: 'normal', pageMargin: 'normal' });
 const FONTS = { auto: 32, small: 24, medium: 32, large: 40 };
 const HEIGHTS = { compact: 1.35, normal: 1.6, loose: 1.9 };
@@ -83,22 +84,20 @@ function paginate(text, dimensions = {}, inputStyle = DEFAULT_STYLE) {
     return { pages, style, width, height, rotation, logicalWidth, logicalHeight, margin, fontSize, lineHeight };
 }
 
-const assColor = color => color.slice(1).match(/../g).reverse().join('');
-
 /** 正文使用独立低层OSD；旋转在窗口坐标完成，不受视频裁剪/平移影响。 */
-function textAss(snapshot) {
+function textAss(snapshot, appearance) {
     if (!snapshot) return { name: 'osd-overlay', id: 41, format: 'none', data: '' };
     const { layout, pageIndex } = snapshot;
     const { width, height, rotation, margin, fontSize, lineHeight, logicalWidth, logicalHeight, style } = layout;
-    const textAt = (text, x, y, size, align = 7) => {
+    const textAt = (text, x, y, size, align = 7, color = style.color) => {
         const [px, py] = physicalPoint(layout, x, y);
-        return `{\\rDefault\\an${align}\\pos(${px},${py})\\org(${px},${py})\\frz${-rotation}\\fnArial\\fs${size}\\bord0\\shad0\\1c&H${assColor(style.color)}&\\1a&H00&\\q2}${escapeAss(text.replace(/\t/g, '    '))}`;
+        return `{\\rDefault\\an${align}\\pos(${px},${py})\\org(${px},${py})\\frz${-rotation}\\fnArial\\fs${size}\\bord0\\shad0\\1c&H${assColor(color)}&\\1a&H00&\\q2}${escapeAss(text.replace(/\t/g, '    '))}`;
     };
     const background = `{\\rDefault\\an7\\pos(0,0)\\bord0\\shad0\\1c&H${assColor(style.background)}&\\1a&H00&\\p1}m 0 0 l ${width} 0 ${width} ${height} 0 ${height}{\\p0}`;
     const page = layout.pages[pageIndex];
     return { name: 'osd-overlay', id: 41, format: 'ass-events', res_x: width, res_y: height, z: 0,
         data: [background, ...page.lines.map((line, index) => textAt(line, margin, margin + index * lineHeight, fontSize)),
-            textAt(`${pageIndex + 1} / ${layout.pages.length}`, logicalWidth / 2, logicalHeight - margin, 20, 2)].join('\n') };
+            textAt(`${pageIndex + 1} / ${layout.pages.length}`, logicalWidth / 2, logicalHeight - margin, 20, 2, paletteFor(appearance?.theme).secondary.color)].join('\n') };
 }
 
 module.exports = { DEFAULT_STYLE, normalizeStyle, readableText, paginate, textAss };

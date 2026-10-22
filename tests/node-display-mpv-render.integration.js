@@ -11,6 +11,7 @@ const path = require('node:path');
 const { MpvPlayer } = require('../src/apps/voice-display-node/mpv-player');
 const { overlayLayout, physicalPoint, escapeAss } = require('../src/apps/voice-display-node/mpv-overlay');
 const { paginate } = require('../src/apps/voice-display-node/mpv-text-renderer');
+const { paletteFor } = require('../src/apps/voice-display-node/mpv-appearance');
 const run = promisify(execFile);
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -96,18 +97,18 @@ test('真实ASS文本：黄底深灰正文/页码、四方向重排、信息层�
         const frame = await capture(display);
         const background = pixel(frame, 400, 590);
         assert.ok(background[0] > 240 && background[1] > 225 && background[2] > 165 && background[2] < 200, `背景颜色: ${background}`);
-        const countDark = (x, y, width, height) => {
+        const countDark = (x, y, width, height, threshold = 130) => {
             const rect = boxRect(layout, { x, y, width, height });
             let count = 0;
             for (let py = Math.max(0, Math.ceil(rect.top)); py < Math.min(600, rect.bottom); py++) {
                 for (let px = Math.max(0, Math.ceil(rect.left)); px < Math.min(800, rect.right); px++) {
-                    if (pixel(frame, px, py).every(value => value < 130)) count++;
+                    if (pixel(frame, px, py).every(value => value < threshold)) count++;
                 }
             }
             return count;
         };
         const bodyInk = countDark(layout.margin, layout.margin, 300, layout.lineHeight);
-        const footerInk = countDark(layout.logicalWidth / 2 - 60, layout.logicalHeight - layout.margin - 28, 120, 32);
+        const footerInk = countDark(layout.logicalWidth / 2 - 60, layout.logicalHeight - layout.margin - 28, 120, 32, 210);
         assert.ok(bodyInk > 200, `正文旋转${rotation}可见: ${bodyInk}`);
         assert.ok(footerInk > 20, `页码旋转${rotation}可见: ${footerInk}`);
         assert.match(player.session.lastOverlay, /12:34:56/);
@@ -121,6 +122,64 @@ test('真实ASS文本：黄底深灰正文/页码、四方向重排、信息层�
     assert.ok(pixel(await capture(display), 400, 590).every(value => value < 10), '清空移除正文背景');
     assert.equal(player.process.pid, pid); assert.deepEqual(errors, []);
     t.diagnostic(JSON.stringify(samples));
+});
+
+test('真实主题画面：白字/主题描边与下影/黑软影、ASR背景及TTS渐变透明度，四方向常驻', { timeout: 30000 }, async t => {
+    const display = await virtualDisplay(t), errors = [];
+    const player = new MpvPlayer({ enabled: true, linux: { display, command: 'mpv', args: [
+        '--vo=x11', '--ao=null', '--geometry=800x600', '--cursor-autohide=always'
+    ] } }, { onError: error => errors.push(error.message), overlayClock: { now: () => new Date(2026, 9, 22, 12, 34, 56) } });
+    t.after(() => player.close());
+    assert.equal(await player.checkAvailable(), true); await player.setOverlayEnabled(true);
+    await player.load({ type: 'base64', mediaType: 'image', data: Buffer.concat([
+        Buffer.from('P6\n16 16\n255\n'), Buffer.alloc(16 * 16 * 3, 180)
+    ]).toString('base64') });
+    await player.control('fit', 'cover');
+    const pid = player.process.pid, samples = [];
+    const countPixels = (frame, rect, predicate) => {
+        let count = 0;
+        for (let y = Math.max(0, Math.ceil(rect.top)); y < Math.min(600, rect.bottom); y++) {
+            for (let x = Math.max(0, Math.ceil(rect.left)); x < Math.min(800, rect.right); x++) {
+                if (predicate(pixel(frame, x, y))) count++;
+            }
+        }
+        return count;
+    };
+    for (const theme of ['light', 'new-year-red']) {
+        player.updateOverlay({ theme, ttsOpacity: 0.6, connection: '已连接', asrText: 'ASR识别文字',
+            ttsEvent: { phase: 'start', id: 4, text: 'MMMM中文字幕' } });
+        const background = paletteFor(theme).background.color.slice(1).match(/../g).map(value => Number.parseInt(value, 16));
+        for (const rotation of [0, 90, 180, 270]) {
+            await player.control('rotate', rotation); await player.queueOverlay(); await delay(100);
+            const layout = overlayLayout({ width: 800, height: 600, rotation, ...player.overlay.state });
+            const frame = await capture(display);
+            const sample = (x, y) => {
+                const [px, py] = physicalPoint(layout, x, y);
+                return pixel(frame, Math.max(0, Math.min(799, Math.floor(px))), Math.max(0, Math.min(599, Math.floor(py))));
+            };
+            const asrBackground = sample(layout.asr.x + layout.asr.width / 2, layout.asr.y + 3);
+            assert.ok(asrBackground.every((value, index) => Math.abs(value - background[index]) < 5), `${theme}/${rotation} ASR背景: ${asrBackground}`);
+            const peak = sample(layout.tts.x + layout.tts.width - 40, layout.tts.y + layout.tts.height / 2);
+            const edge = sample(layout.tts.x + layout.tts.width - 40, layout.tts.y + 1);
+            assert.ok(peak.every(value => Math.abs(value - 72) < 6), `渐变峰值应为180×0.4: ${peak}`);
+            assert.ok(edge[0] > peak[0] + 60, `渐变边缘应更透明: ${edge}/${peak}`);
+            const ttsRect = boxRect(layout, layout.tts);
+            const tinted = countPixels(frame, ttsRect, channels => Math.max(...channels) - Math.min(...channels) > 25);
+            const white = countPixels(frame, ttsRect, channels => channels.every(value => value > 210));
+            assert.ok(tinted > 50, `主题细描边和下影可见: ${theme}/${rotation}/${tinted}`);
+            assert.ok(white > 50, `白色字面可见: ${theme}/${rotation}/${white}`);
+            const clockRect = boxRect(layout, { x: layout.clock.x - 240, y: 20, width: 240, height: 80 });
+            const softShadow = countPixels(frame, clockRect, channels => Math.max(...channels) - Math.min(...channels) < 3 && channels[0] < 174 && channels[0] > 100);
+            assert.ok(softShadow > 50, `时间黑色软阴影可见: ${softShadow}`);
+            assert.equal(player.process.pid, pid); samples.push({ theme, rotation, peak, edge, tinted, white, softShadow });
+        }
+    }
+    player.updateOverlay({ ttsOpacity: 0 }); await player.queueOverlay(); await delay(100);
+    const layout = overlayLayout({ width: 800, height: 600, rotation: 270, ...player.overlay.state });
+    const [x, y] = physicalPoint(layout, layout.tts.x + layout.tts.width - 40, layout.tts.y + layout.tts.height / 2);
+    const cleared = pixel(await capture(display), Math.floor(x), Math.floor(y));
+    assert.ok(cleared.every(value => Math.abs(value - 180) < 5), `透明度0清除背景: ${cleared}`);
+    assert.deepEqual(errors, []); t.diagnostic(JSON.stringify(samples));
 });
 
 test('真实渲染：四方向contain有黑边、cover填满并裁切，常驻PID不变', { timeout: 45000 }, async t => {

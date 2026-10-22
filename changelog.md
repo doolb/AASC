@@ -1,3 +1,9 @@
+### Node ASS网页主题样式对齐
+
+- ✅ [2026-10-22] Node ASS跟随网页版15套主题和字幕背景透明度，补时间/TTS白字、主题下影/细描边、黑色软阴影及ASR/连接主题圆角背景，文档页码同步主题色。
+  - 新增mpv-appearance.js，更新main/mpv-overlay/mpv-player/mpv-text-renderer；复用既有WebSocket初始化/广播，无新增配置接口或依赖。主题切换保留页/句和朗读上下文；TTS上下渐变共13段，背景与文字透明度独立。
+  - 自测71项通过：mpv42、网页计算样式/布局1（15主题与8组位置）、Linux真实画面5、真实IPC1、独立包22。灰底180上60%黑背景峰值72、渐变边缘170，四方向白字/边影/黑软影和零透明度通过。同步design/spec/task/todo/usage/self-test；voiceDisplayNodePackage标为true，未构建或发布包，Windows字体/DPI另验。
+
 ### 聊天流式显示、分段TTS与Markdown字幕
 
 - ✅ [2026-10-22] 普通聊天逐块更新两端，完整自然分句在模型完成前进入原TTS队列；保留GM确认、原音色、限流保序、取消和全播放结束后计时。

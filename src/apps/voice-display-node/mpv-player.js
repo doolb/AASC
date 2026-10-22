@@ -392,7 +392,7 @@ class MpvPlayer extends EventEmitter {
                     await this.command(command);
                     session.lastOverlay = key;
                 }
-                const body = textAss(this.overlay.active ? this.textPage : null);
+                const body = textAss(this.overlay.active ? this.textPage : null, this.overlay.state.appearance);
                 const bodyKey = JSON.stringify(body);
                 if (bodyKey !== session.lastTextOverlay) {
                     await this.command(body);

@@ -59,6 +59,18 @@ test('文本媒体通过真实IPC加载正文层、翻页与旋转，切换视�
     let body = await player.command(['get_property', 'test-text-overlay']);
     assert.equal(body.id, 41); assert.match(body.data, /文档内容/); assert.ok(body.data.includes('2 /'));
     await controller.handleControl({ action: 'textPlayback', value: { action: 'next' } });
+    const documentLayout = controller.text.layout;
+    const playbackId = controller.text.playbackId;
+    const requests = sent.filter(message => message.type === 'textSentenceTts').length;
+    for (let index = 0; index < 20; index++) controller.updateOverlay({ theme: index % 2 ? 'gold' : 'light', ttsOpacity: index / 20 });
+    await player.queueOverlay();
+    assert.equal(controller.text.layout, documentLayout);
+    assert.equal(controller.text.playbackId, playbackId);
+    assert.equal(controller.text.state, 'playing');
+    assert.equal(sent.filter(message => message.type === 'textSentenceTts').length, requests);
+    assert.equal(player.overlay.state.appearance.theme, 'gold');
+    assert.equal(player.overlay.state.appearance.ttsOpacity, 0.95);
+    assert.ok(player.session.lastTextOverlay.includes('396079'), '页码使用gold主题次级文字色');
     await controller.handleControl({ action: 'play', value: false });
     body = await player.command(['get_property', 'test-text-overlay']);
     assert.ok(body.data.includes('3 /'));
@@ -355,7 +367,8 @@ test('ASS信息层沿用同一IPC，能力未知不启动、空闲显示、旋�
     const { player, starts } = await createPlayer(t, 'win32');
     const controller = new NodeMediaController({}, { player });
     await controller.initialize();
-    controller.updateOverlay({ connection: '已连接', ttsEvent: { phase: 'start', id: 1, text: '本机正在播放' }, asrText: '[小爱] 识别回显' });
+    controller.updateOverlay({ theme: 'gold', ttsOpacity: 0.6, connection: '已连接',
+        ttsEvent: { phase: 'start', id: 1, text: '本机正在播放' }, asrText: '[小爱] 识别回显' });
     assert.equal(starts.length, 0);
     await controller.setCapabilities({ mediaRendering: true });
     assert.equal(starts.length, 1);
@@ -364,6 +377,8 @@ test('ASS信息层沿用同一IPC，能力未知不启动、空闲显示、旋�
     let rendered = await player.command(['get_property', 'test-overlay']);
     assert.match(rendered.data, /本机正在播放/);
     assert.match(rendered.data, /识别回显/);
+    assert.deepEqual(player.overlay.state.appearance, { theme: 'gold', ttsOpacity: 0.6 });
+    assert.ok(rendered.data.includes('0B86B8'), '能力确认前到达的主题在首次启动生效');
     await player.control('rotate', 90);
     controller.updateOverlay({ connection: '已断开', showStatusBar: false });
     await player.queueOverlay();
@@ -378,6 +393,9 @@ test('ASS信息层沿用同一IPC，能力未知不启动、空闲显示、旋�
     assert.equal(starts.length, 1, '1Hz时钟不得自动启动崩溃播放器');
     await player.load(media());
     assert.equal(starts.length, 2);
+    controller.updateOverlay({ theme: 'light', ttsOpacity: 0.1 });
+    await player.queueOverlay();
+    assert.deepEqual(player.overlay.state.appearance, { theme: 'light', ttsOpacity: 0.1 });
     rendered = await player.command(['get_property', 'test-overlay']);
     assert.match(rendered.data, /识别回显/);
     await controller.setCapabilities({ mediaRendering: false });
@@ -603,6 +621,10 @@ test('VoiceDisplay真实消息分支连接媒体控制器，能力声明/旋转/
     assert.equal(overlayUpdates.length, overlays);
     instance.handleMessage('displayStatusBarConfig', { displayId: 'node-test', showStatusBar: false });
     assert.equal(overlayUpdates.at(-1).showStatusBar, false);
+    instance.handleMessage('controlThemeChanged', { theme: 'gold' });
+    assert.equal(overlayUpdates.at(-1).theme, 'gold');
+    instance.handleMessage('displayTtsBackgroundOpacityConfig', { opacity: 0.6 });
+    assert.equal(overlayUpdates.at(-1).ttsOpacity, 0.6);
     let recognize;
     let finishRecording;
     const results = [ { status: 'success', text: '你好', speaker: '小爱' }, { status: 'ignored', text: '没有声纹也回显' } ];
