@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="data:,">
+  <title>HMR2.0b Node ONNX 同源推理测试</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a2b3c; background: #f3f6fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: clamp(12px, 3vw, 28px); }
+    main { max-width: 1100px; margin: auto; }
+    h1 { font-size: clamp(1.4rem, 3vw, 1.9rem); }
+    h2 { font-size: 1.15rem; }
+    p { line-height: 1.55; }
+    .muted { color: #486078; }
+    .panel { background: white; border: 1px solid #d9e2ec; border-radius: 12px; padding: clamp(14px, 3vw, 22px); margin: 14px 0; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    #image-name, #bbox-info { overflow-wrap: anywhere; }
+    /* 原生input只显示可交互的选择按钮；真实选中文件名由下面的文本统一显示。 */
+    #file-input { width: 110px; max-width: 100%; overflow: hidden; white-space: nowrap; color: transparent; }
+    #file-input::file-selector-button { color: #1a2b3c; font: inherit; cursor: pointer; }
+    button, input { font: inherit; }
+    button { padding: 9px 14px; min-height: 42px; border: 1px solid #085e95; border-radius: 8px; color: white; background: #085e95; cursor: pointer; }
+    button.secondary { background: white; color: #085e95; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    :focus-visible { outline: 3px solid #e6a835; outline-offset: 3px; }
+    #token-input { min-height: 42px; padding: 8px; border: 1px solid #9caebe; border-radius: 8px; }
+    #status { padding: 10px; background: #e9f1fb; border-radius: 8px; overflow-wrap: anywhere; }
+    #status[data-kind="error"] { background: #ffede9; color: #8b2717; }
+    #status[data-kind="warning"] { background: #fff5da; color: #684912; }
+    #status[data-kind="success"] { background: #e9f6ee; color: #205b36; }
+    .preview { text-align: center; background: #e9eff5; border: 1px dashed #a5b8c7; border-radius: 8px; padding: 10px; overflow: auto; }
+    /* 两栏都允许缩到容器以内；窄屏改为上下排列，避免图片、文件名或画布撑出页面。 */
+    .preview-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .preview-column, .skeleton-column { min-width: 0; }
+    .preview-column h2, .skeleton-column h2 { margin-top: 0; }
+    .skeleton-frame { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; border: 1px solid #34475f; border-radius: 8px; background: #172130; }
+    #skeleton-canvas { display: block; width: 100%; height: 100%; max-width: 100%; background: #172130; touch-action: none; cursor: grab; }
+    #skeleton-canvas[data-dragging="true"] { cursor: grabbing; }
+    #skeleton-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #b6c3d6; line-height: 1.65; pointer-events: none; }
+    #skeleton-status { margin: 10px 0; min-height: 1.55em; color: #486078; overflow-wrap: anywhere; }
+    #skeleton-status[data-state="invalid"], #skeleton-status[data-state="error"] { color: #8b2717; }
+    [hidden] { display: none !important; }
+    #preview-stage { position: relative; display: inline-block; max-width: 100%; line-height: 0; vertical-align: middle; }
+    #preview-image { display: block; max-width: 100%; max-height: min(68vh, 720px); width: auto; height: auto; }
+    #preview-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    .summary div { background: #f2f5f9; border-radius: 8px; padding: 10px; overflow-wrap: anywhere; }
+    .summary dt { font-size: .85rem; color: #53697e; }
+    .summary dd { margin: 4px 0 0; font-weight: 600; }
+    #result-json { min-height: 90px; max-height: 540px; overflow: auto; padding: 14px; color: #f1f7ff; background: #132537; border-radius: 8px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    @media (max-width: 700px) { .preview-layout { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 600px) { .row { align-items: stretch; flex-direction: column; } .row button, #token-input { width: 100%; } .preview { padding: 5px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>HMR2.0b Node ONNX 推理 · 同源测试</h1>
+    <p class="muted">独立Node服务：完整ONNX图含SMPL LBS；默认Windows DirectML。FP32输入/输出与权重，DML内部精度/TF32和GPU allocator未知；非CUDA，不自动检测人物。原Python服务未替换。</p>
+    <p class="muted">本地预览不上传图片；只有点击“运行推理”后才会向当前网站的 /infer 发送图片。不选择人物框时使用整张图，不自动检测人物。</p>
+    <section class="panel" aria-labelledby="input-title">
+      <h2 id="input-title">选择与粘贴图片</h2>
+      <div class="row">
+        <label for="file-input"><strong>上传选择图片：</strong></label>
+        <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,.bmp" aria-describedby="image-name">
+        <span id="image-name">未选择任何文件</span>
+        <button id="paste-button" class="secondary" type="button">粘贴图片</button>
+      </div>
+      <p class="muted">也可 Ctrl+V / ⌘V 粘贴图片。剪贴板按钮需要浏览器许可，通常要求 localhost 或 HTTPS。支持 PNG/JPEG/WebP/BMP；限 16 MiB、4000 万像素。</p>
+      <div class="row">
+        <label for="token-input">Bearer token（可选，仅本页内存）</label>
+        <input id="token-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Bearer token，不保存">
+        <button id="infer-button" type="button" disabled>运行推理</button>
+      </div>
+      <p id="status" role="status" aria-live="polite" data-kind="info">请选择或粘贴图片；不会自动上传。</p>
+    </section>
+    <section class="panel" aria-labelledby="preview-title">
+      <div class="preview-layout">
+        <div class="preview-column">
+          <h2 id="preview-title">本地预览与人物框</h2>
+          <p class="muted">在预览图上按住拖动选择人物范围（原图像素坐标）；清除或重新选择后需要再次运行推理。</p>
+          <div class="preview">
+            <div id="preview-stage" hidden><img id="preview-image" alt="本地选择的图片预览"><canvas id="preview-canvas" aria-hidden="true"></canvas></div>
+            <span id="preview-placeholder">尚无图片预览</span>
+          </div>
+          <p id="bbox-info">未选择人物框：推理时省略 bbox_xyxy，整图回退（full_image_fallback；不自动检测人物）。</p>
+          <button id="clear-bbox-button" class="secondary" type="button" disabled>清除人物框，使用整图</button>
+        </div>
+        <div class="skeleton-column" aria-labelledby="skeleton-title">
+          <h2 id="skeleton-title">圆柱骨段与球形关节 · 拖动旋转</h2>
+          <p id="skeleton-help" class="muted">蓝色为人物左侧，橙色为右侧，浅色为中心；按住拖动旋转，双击复位。旋转仅在本地进行，不会发送推理请求。</p>
+          <div id="skeleton-frame" class="skeleton-frame">
+            <canvas id="skeleton-canvas" width="420" height="420" role="img" aria-label="三维人物骨骼预览，可拖动旋转、双击复位" aria-describedby="skeleton-help skeleton-status" data-renderer="pending" data-joints="0" data-bones="0" data-yaw="0" data-pitch="0" data-state="empty" data-status="empty" data-dragging="false"></canvas>
+            <span id="skeleton-placeholder">尚无 3D 骨骼<br>请选择图片并运行 Node ONNX 推理</span>
+          </div>
+          <p id="skeleton-status" role="status" aria-live="polite" data-state="empty">等待本次 Node ONNX 推理的有效 xyz 结果；图片或人物框改变后，旧骨骼会立即清除。</p>
+        </div>
+      </div>
+    </section>
+    <section class="panel" aria-labelledby="result-title">
+      <h2 id="result-title">结果与骨架</h2>
+      <dl class="summary">
+        <div><dt>执行设备</dt><dd id="gpu-info">—</dd></div>
+        <div><dt>device</dt><dd id="device-info">—</dd></div>
+        <div><dt>precision</dt><dd id="precision-info">—</dd></div>
+        <div><dt>timingMs.total</dt><dd id="timing-info">—</dd></div>
+      </dl>
+      <p class="muted">青色连线、橙色关节及名称对应返回的 edges、xy、names。尺寸不匹配时不叠加骨架，以免错位。</p>
+      <pre id="result-json">暂无结果</pre>
+    </section>
+  </main>
+  <script nonce="__HMR_NONCE__">
+    (() => {
+      'use strict';
+      const byId = (id) => document.getElementById(id);
+      const fileInput = byId('file-input');
+      const imageName = byId('image-name');
+      const pasteButton = byId('paste-button');
+      const tokenInput = byId('token-input');
+      const inferButton = byId('infer-button');
+      const status = byId('status');
+      const stage = byId('preview-stage');
+      const placeholder = byId('preview-placeholder');
+      const image = byId('preview-image');
+      const canvas = byId('preview-canvas');
+      const bboxInfo = byId('bbox-info');
+      const clearButton = byId('clear-bbox-button');
+      const resultJson = byId('result-json');
+      const ctx = canvas.getContext('2d');
+      let current = null;
+      let objectUrl = null;
+      let generation = 0;
+      let controller = null;
+      let busy = false;
+      let box = null;
+      let drag = null;
+      let pose = null;
+      const skeletonFrame = byId('skeleton-frame');
+      const skeletonPlaceholder = byId('skeleton-placeholder');
+      const skeletonStatus = byId('skeleton-status');
+      let skeletonCanvas = byId('skeleton-canvas');
+      let skeletonViewer = null;
+      let skeletonModule = null;
+      let skeletonUnavailable = false;
+      let skeletonDisposed = false;
+      let skeletonFallbackNote = '';
+      let skeletonPose = null;
+      let skeletonPoints = null;
+      let skeletonRevision = 0;
+      let skeletonYaw = 0;
+      let skeletonPitch = 0;
+      let skeletonDrag = null;
+      let skeletonJointCount = 0;
+      let skeletonBoneCount = 0;
+      let skeletonState = 'empty';
+      let skeletonNote = '';
+      let skeletonContext = null;
+
+      // 右侧视图使用独立状态与事件，不调用上传按钮或修改左侧 xyxy 坐标。
+      function skeletonMetadata() {
+        Object.assign(skeletonCanvas.dataset, {
+          joints: String(skeletonJointCount), bones: String(skeletonBoneCount),
+          yaw: String(skeletonYaw), pitch: String(skeletonPitch), state: skeletonState,
+          status: skeletonState, dragging: String(Boolean(skeletonDrag)),
+        });
+      }
+      function skeletonMessage(text, state) {
+        skeletonNote = text;
+        skeletonState = state;
+        skeletonStatus.textContent = `${text}${skeletonFallbackNote ? ` ${skeletonFallbackNote}` : ''}`;
+        skeletonStatus.dataset.state = state;
+        skeletonPlaceholder.hidden = state === 'ready' && skeletonJointCount > 0;
+        skeletonPlaceholder.textContent = state === 'loading' ? '正在准备本地骨骼视图…'
+          : '尚无 3D 骨骼；请选择图片并运行有效的 Node ONNX 推理。';
+        skeletonMetadata();
+      }
+      function skeletonSide(name) {
+        if (name.startsWith('left_') || name.startsWith('left-')) return 'left';
+        if (name.startsWith('right_') || name.startsWith('right-')) return 'right';
+        return 'center';
+      }
+      const skeletonColors = { left: '#61c8ff', right: '#ffad73', center: '#eef3fb' };
+      // Three 与降级视图都只居中、等比缩放，不更改左右标签或人体比例。
+      function normalizeSkeleton(result) {
+        const points = result.xyz.map(([x, y, z]) => [x, -y, -z]);
+        const low = [0, 1, 2].map((axis) => Math.min(...points.map((point) => point[axis])));
+        const high = [0, 1, 2].map((axis) => Math.max(...points.map((point) => point[axis])));
+        const center = low.map((value, axis) => value / 2 + high[axis] / 2);
+        const extent = Math.max(...low.map((value, axis) => high[axis] - value), 1e-6);
+        if (!Number.isFinite(extent)) throw new Error('xyz 坐标范围过大，不能安全归一化。');
+        const normalized = points.map((point) => point.map((value, axis) => (value - center[axis]) * (2.75 / extent)));
+        if (!normalized.every((point) => point.every(Number.isFinite))) throw new Error('xyz 归一化后出现无效坐标。');
+        return normalized;
+      }
+      function replaceSkeletonCanvas(next) {
+        // WebGL 画布不能再取得 2D 上下文；保留 id、ARIA 和检测数据，换用全新的画布。
+        for (const attribute of Array.from(skeletonCanvas.attributes)) next.setAttribute(attribute.name, attribute.value);
+        skeletonCanvas.replaceWith(next);
+        skeletonCanvas = next;
+        skeletonContext = null;
+        skeletonMetadata();
+      }
+      function disposeSkeletonViewer(viewer) {
+        if (!viewer) return;
+        // 所有骨段/关节共享几何与材质，只在视图销毁时释放一次，不在每次拖动时重建。
+        try {
+          if (viewer.contextLost) viewer.renderer?.domElement.removeEventListener('webglcontextlost', viewer.contextLost);
+          viewer.skeleton?.clear();
+          viewer.cylinder?.dispose();
+          viewer.sphere?.dispose();
+          for (const material of Object.values(viewer.materials || {})) material.dispose();
+          viewer.renderer?.renderLists.dispose();
+          viewer.renderer?.dispose();
+          viewer.renderer?.forceContextLoss();
+          viewer.scene?.clear();
+        } catch (error) {
+          // 离开页面或上下文已丢失时不阻止其余页面清理，也不输出敏感结果。
+        }
+      }
+      function useSkeletonFallback() {
+        const previous = skeletonViewer;
+        skeletonViewer = null;
+        disposeSkeletonViewer(previous);
+        if (previous) replaceSkeletonCanvas(document.createElement('canvas'));
+        skeletonUnavailable = true;
+        skeletonFallbackNote = '本地 Three.js 模块或 WebGL 不可用，已降级为 Canvas2D 线条/圆点示意（无曲面灯光）；仍可拖动与双击复位。';
+        skeletonCanvas.dataset.renderer = 'canvas-2d-fallback';
+        skeletonCanvas.dataset.lights = '0';
+        skeletonCanvas.dataset.projectedShadows = 'false';
+        skeletonMessage(skeletonNote, skeletonState);
+      }
+      function drawSkeletonFallback() {
+        try {
+          if (!skeletonContext) skeletonContext = skeletonCanvas.getContext('2d');
+          if (!skeletonContext) throw new Error('Canvas2D 不可用');
+          const context = skeletonContext;
+          const rect = skeletonCanvas.getBoundingClientRect();
+          const width = Math.max(1, rect.width);
+          const height = Math.max(1, rect.height);
+          context.setTransform(skeletonCanvas.width / width, 0, 0, skeletonCanvas.height / height, 0, 0);
+          context.fillStyle = '#172130';
+          context.fillRect(0, 0, width, height);
+          if (!skeletonPose || !skeletonPoints) return;
+          const scale = Math.min(width, height) / 3.7;
+          const cosY = Math.cos(skeletonYaw);
+          const sinY = Math.sin(skeletonYaw);
+          const cosP = Math.cos(skeletonPitch);
+          const sinP = Math.sin(skeletonPitch);
+          // Three 的 YXZ 矩阵作用在点上时先 pitch、再 yaw（roll 为零）。
+          const projected = skeletonPoints.map(([x, y, z]) => {
+            const py = y * cosP - z * sinP;
+            const pz = y * sinP + z * cosP;
+            const rx = x * cosY + pz * sinY;
+            const rz = -x * sinY + pz * cosY;
+            return [width / 2 + rx * scale, height / 2 - py * scale, rz];
+          });
+          const primitives = [];
+          skeletonBoneCount = 0;
+          for (const [source, target] of skeletonPose.edges) {
+            const a = skeletonPoints[source];
+            const b = skeletonPoints[target];
+            if (Math.hypot(...a.map((value, axis) => b[axis] - value)) < 1e-6) continue;
+            primitives.push({ a: projected[source], b: projected[target], depth: (projected[source][2] + projected[target][2]) / 2,
+              color: skeletonColors[skeletonSide(skeletonPose.names[target])] });
+            skeletonBoneCount += 1;
+          }
+          projected.forEach((point, index) => primitives.push({ point, depth: point[2], color: skeletonColors[skeletonSide(skeletonPose.names[index])] }));
+          // 简单深度排序仅供无 WebGL 时观察；不声称是具有灯光的圆柱/球体渲染。
+          primitives.sort((a, b) => a.depth - b.depth);
+          context.lineWidth = 0.072 * scale;
+          context.lineCap = 'round';
+          for (const primitive of primitives) {
+            context.beginPath();
+            if (primitive.point) {
+              context.arc(primitive.point[0], primitive.point[1], 0.057 * scale, 0, Math.PI * 2);
+              context.fillStyle = primitive.color;
+              context.fill();
+            } else {
+              context.moveTo(primitive.a[0], primitive.a[1]);
+              context.lineTo(primitive.b[0], primitive.b[1]);
+              context.strokeStyle = primitive.color;
+              context.stroke();
+            }
+          }
+          skeletonJointCount = projected.length;
+          skeletonMetadata();
+        } catch (error) {
+          skeletonJointCount = 0;
+          skeletonBoneCount = 0;
+          skeletonCanvas.dataset.renderer = 'unavailable';
+          skeletonFallbackNote = 'Three.js / WebGL 与 Canvas2D 均不可用，请更换支持画布的浏览器；二维原图预览与请求逻辑不受影响。';
+          skeletonMessage('无法绘制骨骼视图。', 'error');
+        }
+      }
+      function renderSkeleton() {
+        skeletonMetadata();
+        if (skeletonViewer) {
+          try {
+            skeletonViewer.skeleton.rotation.set(skeletonPitch, skeletonYaw, 0, 'YXZ');
+            skeletonViewer.renderer.render(skeletonViewer.scene, skeletonViewer.camera);
+            return;
+          } catch (error) { useSkeletonFallback(); }
+        }
+        drawSkeletonFallback();
+      }
+      function resizeSkeleton() {
+        const rect = skeletonCanvas.getBoundingClientRect();
+        const width = Math.max(1, Math.round(rect.width));
+        const height = Math.max(1, Math.round(rect.height));
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+        if (skeletonViewer) {
+          try {
+            const { renderer, camera } = skeletonViewer;
+            renderer.setPixelRatio(ratio);
+            renderer.setSize(width, height, false);
+            const aspect = width / height;
+            camera.left = -1.85 * aspect;
+            camera.right = 1.85 * aspect;
+            camera.top = 1.85;
+            camera.bottom = -1.85;
+            camera.updateProjectionMatrix();
+          } catch (error) { useSkeletonFallback(); }
+        }
+        if (!skeletonViewer) {
+          const pixelWidth = Math.max(1, Math.round(width * ratio));
+          const pixelHeight = Math.max(1, Math.round(height * ratio));
+          if (skeletonCanvas.width !== pixelWidth) skeletonCanvas.width = pixelWidth;
+          if (skeletonCanvas.height !== pixelHeight) skeletonCanvas.height = pixelHeight;
+        }
+        renderSkeleton();
+      }
+      function clearSkeleton(text = '尚无 3D 结果；请对当前图片与人物框运行 Node ONNX 推理。', state = 'empty') {
+        // revision 阻止旧结果的异步 import 完成后重新显示已失效的骨骼。
+        skeletonRevision += 1;
+        if (skeletonDrag && skeletonCanvas.hasPointerCapture(skeletonDrag.pointerId)) skeletonCanvas.releasePointerCapture(skeletonDrag.pointerId);
+        skeletonDrag = null;
+        skeletonPose = null;
+        skeletonPoints = null;
+        skeletonYaw = 0;
+        skeletonPitch = 0;
+        skeletonJointCount = 0;
+        skeletonBoneCount = 0;
+        skeletonViewer?.skeleton.clear();
+        skeletonMessage(text, state);
+        renderSkeleton();
+      }
+      async function initializeSkeletonViewer(revision) {
+        if (skeletonViewer) return true;
+        if (skeletonUnavailable || skeletonDisposed) return false;
+        let candidate = null;
+        try {
+          // 唯一本地模块路由由服务端固定提供；不新增 script 标签、不请求 CDN。
+          if (!skeletonModule) skeletonModule = import('/hmr2-three.js');
+          const three = await skeletonModule;
+          if (skeletonDisposed || revision !== skeletonRevision || !skeletonPose) return false;
+          candidate = { three };
+          candidate.renderer = new three.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+          const renderer = candidate.renderer;
+          renderer.outputColorSpace = three.SRGBColorSpace;
+          renderer.toneMapping = three.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 1.25;
+          renderer.shadowMap.enabled = false;
+          candidate.scene = new three.Scene();
+          candidate.scene.background = new three.Color('#172130');
+          candidate.camera = new three.OrthographicCamera(-1.85, 1.85, 1.85, -1.85, 0.1, 20);
+          candidate.camera.position.set(0, 0, 6);
+          candidate.camera.lookAt(0, 0, 0);
+          candidate.skeleton = new three.Group();
+          candidate.scene.add(candidate.skeleton);
+          // 与旧版一致的三盏灯，不投射阴影，避免暗示真实地面或遮挡接触。
+          candidate.scene.add(new three.HemisphereLight(0xf2f7ff, 0x344158, 1.55));
+          const keyLight = new three.DirectionalLight(0xffffff, 2.15);
+          keyLight.position.set(-3, 4, 5);
+          candidate.scene.add(keyLight);
+          const fillLight = new three.DirectionalLight(0x8bb9ff, 0.85);
+          fillLight.position.set(3, -2, -4);
+          candidate.scene.add(fillLight);
+          candidate.materials = {};
+          for (const [side, color] of Object.entries(skeletonColors)) {
+            candidate.materials[side] = new three.MeshStandardMaterial({ color, roughness: 0.52, metalness: 0.06 });
+          }
+          candidate.cylinder = new three.CylinderGeometry(1, 1, 1, 12);
+          candidate.sphere = new three.SphereGeometry(1, 16, 12);
+          replaceSkeletonCanvas(renderer.domElement);
+          skeletonViewer = candidate;
+          skeletonCanvas.dataset.renderer = 'three-webgl';
+          skeletonCanvas.dataset.lights = '3';
+          skeletonCanvas.dataset.projectedShadows = 'false';
+          candidate.contextLost = (event) => {
+            event.preventDefault();
+            if (skeletonDisposed || skeletonViewer !== candidate) return;
+            useSkeletonFallback();
+            resizeSkeleton();
+          };
+          skeletonCanvas.addEventListener('webglcontextlost', candidate.contextLost);
+          resizeSkeleton();
+          return Boolean(skeletonViewer);
+        } catch (error) {
+          if (skeletonViewer === candidate) skeletonViewer = null;
+          disposeSkeletonViewer(candidate);
+          if (skeletonDisposed || revision !== skeletonRevision) return false;
+          // 初始化失败时原画布仍可使用 2D；若已替换 WebGL 画布，则必须再次替换。
+          if (candidate?.renderer?.domElement === skeletonCanvas) replaceSkeletonCanvas(document.createElement('canvas'));
+          useSkeletonFallback();
+          resizeSkeleton();
+          return false;
+        }
+      }
+      function validSkeletonPose(value) {
+        return validPose(value)
+          && Array.isArray(value.xyz) && value.xyz.length === BODY25_NAMES.length
+          && Array.from(value.xyz).every((point) => Array.isArray(point) && point.length === 3
+            && Array.from(point).every((number) => typeof number === 'number' && Number.isFinite(number)))
+          && Array.isArray(value.imageSize) && value.imageSize.length === 2 && current
+          && value.imageSize[0] === image.naturalWidth && value.imageSize[1] === image.naturalHeight
+          && value.imageSize[0] === current.width && value.imageSize[1] === current.height;
+      }
+      function buildSkeletonMeshes() {
+        const viewer = skeletonViewer;
+        const { three } = viewer;
+        viewer.skeleton.clear();
+        const points = skeletonPose.xyz.map(([x, y, z]) => new three.Vector3(x, -y, -z));
+        const bounds = new three.Box3().setFromPoints(points);
+        const center = bounds.getCenter(new three.Vector3());
+        const size = bounds.getSize(new three.Vector3());
+        const scale = 2.75 / Math.max(size.x, size.y, size.z, 1e-6);
+        points.forEach((point) => point.sub(center).multiplyScalar(scale));
+        if (!points.every((point) => [point.x, point.y, point.z].every(Number.isFinite))) throw new Error('xyz 无法安全转换为 Three 坐标。');
+        const up = new three.Vector3(0, 1, 0);
+        skeletonBoneCount = 0;
+        for (const [source, target] of skeletonPose.edges) {
+          const direction = new three.Vector3().subVectors(points[target], points[source]);
+          const length = direction.length();
+          if (length < 1e-6) continue;
+          const bone = new three.Mesh(viewer.cylinder, viewer.materials[skeletonSide(skeletonPose.names[target])]);
+          bone.position.copy(points[source]).add(points[target]).multiplyScalar(0.5);
+          bone.quaternion.setFromUnitVectors(up, direction.normalize());
+          bone.scale.set(0.036, length, 0.036);
+          viewer.skeleton.add(bone);
+          skeletonBoneCount += 1;
+        }
+        points.forEach((point, index) => {
+          const joint = new three.Mesh(viewer.sphere, viewer.materials[skeletonSide(skeletonPose.names[index])]);
+          joint.position.copy(point);
+          joint.scale.setScalar(0.057);
+          viewer.skeleton.add(joint);
+        });
+        skeletonJointCount = points.length;
+      }
+      async function showSkeleton(result) {
+        if (!validSkeletonPose(result)) {
+          clearSkeleton('本次结果不是有效 ONNX / DML或CPU / fp32 I/O 的 xyz 25×3 骨骼，或尺寸/xy/edges/names 无效；不显示旧 3D 数据。', 'invalid');
+          return;
+        }
+        const revision = ++skeletonRevision;
+        try {
+          skeletonPose = result;
+          skeletonPoints = normalizeSkeleton(result);
+          skeletonYaw = 0;
+          skeletonPitch = 0;
+          skeletonMessage('正在准备本次 ONNX 结果的本地骨骼视图；不会再次上传。', 'loading');
+          const initialized = await initializeSkeletonViewer(revision);
+          if (skeletonDisposed || revision !== skeletonRevision || skeletonPose !== result) return;
+          if (initialized) buildSkeletonMeshes();
+          renderSkeleton();
+          if (skeletonJointCount > 0) {
+            skeletonMessage(`${skeletonJointCount} 个关节 · ${skeletonBoneCount} 个${skeletonViewer ? '圆柱骨段' : '骨段'}；拖动旋转，双击复位。`, 'ready');
+          }
+        } catch (error) {
+          if (skeletonDisposed || revision !== skeletonRevision) return;
+          clearSkeleton(`无法显示本次 3D 骨骼：${error instanceof Error ? error.message : '坐标或渲染错误。'}`, 'error');
+        }
+      }
+      skeletonFrame.addEventListener('pointerdown', (event) => {
+        if (event.target !== skeletonCanvas || !skeletonPose || skeletonState !== 'ready' || event.button !== 0 || skeletonDrag) return;
+        event.preventDefault();
+        skeletonCanvas.setPointerCapture(event.pointerId);
+        skeletonDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+        skeletonMetadata();
+      });
+      skeletonFrame.addEventListener('pointermove', (event) => {
+        if (!skeletonDrag || skeletonDrag.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        skeletonYaw += (event.clientX - skeletonDrag.x) * 0.01;
+        skeletonPitch = Math.max(-1.45, Math.min(1.45, skeletonPitch + (event.clientY - skeletonDrag.y) * 0.01));
+        skeletonDrag.x = event.clientX;
+        skeletonDrag.y = event.clientY;
+        renderSkeleton();
+      });
+      function stopSkeletonDrag(event) {
+        if (skeletonDrag?.pointerId !== event.pointerId) return;
+        skeletonDrag = null;
+        if (skeletonCanvas.hasPointerCapture(event.pointerId)) skeletonCanvas.releasePointerCapture(event.pointerId);
+        skeletonMetadata();
+      }
+      skeletonFrame.addEventListener('pointerup', stopSkeletonDrag);
+      skeletonFrame.addEventListener('pointercancel', stopSkeletonDrag);
+      skeletonFrame.addEventListener('lostpointercapture', stopSkeletonDrag);
+      skeletonFrame.addEventListener('dblclick', (event) => {
+        if (event.target !== skeletonCanvas || !skeletonPose) return;
+        event.preventDefault();
+        skeletonYaw = 0;
+        skeletonPitch = 0;
+        renderSkeleton();
+      });
+
+      // 所有文件名、服务结果和报错都经 textContent 写入页面，不解析为 HTML。
+      function message(text, kind = 'info') { status.textContent = text; status.dataset.kind = kind; }
+      function setBusy(value) {
+        busy = value;
+        pasteButton.disabled = value;
+        inferButton.disabled = value || !current;
+        clearButton.disabled = value || !box;
+        inferButton.setAttribute('aria-busy', String(value));
+      }
+      function showBox() {
+        bboxInfo.textContent = box
+          ? `人物框 bbox_xyxy（原图像素）= [${box.join(', ')}]；将只对框选区域推理。`
+          : '未选择人物框：推理时省略 bbox_xyxy，整图回退（full_image_fallback；不自动检测人物）。';
+        clearButton.disabled = busy || !box;
+      }
+      function resetResult() {
+        pose = null;
+        clearSkeleton();
+        resultJson.textContent = '暂无结果';
+        for (const id of ['gpu-info', 'device-info', 'precision-info', 'timing-info']) byId(id).textContent = '—';
+        draw();
+      }
+      function releaseImage() {
+        image.removeAttribute('src');
+        stage.hidden = true;
+        placeholder.hidden = false;
+        current = null;
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+        canvas.width = 1;
+        canvas.height = 1;
+      }
+      function magic(bytes, pattern, offset = 0) {
+        return pattern.every((value, index) => bytes[offset + index] === value);
+      }
+      // 文件头校验与 MIME/扩展名无关，避免误将 SVG/HTML 作为位图预览。
+      async function imageFormat(blob) {
+        const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+        if (magic(head, [137, 80, 78, 71, 13, 10, 26, 10])) return 'PNG';
+        if (magic(head, [255, 216, 255])) return 'JPEG';
+        if (magic(head, [82, 73, 70, 70]) && magic(head, [87, 69, 66, 80], 8)) return 'WebP';
+        if (magic(head, [66, 77])) return 'BMP';
+        throw new Error('仅支持 PNG、JPEG、WebP、BMP 图片。');
+      }
+      async function selectImage(blob, name) {
+        const id = ++generation;
+        if (controller) controller.abort();
+        controller = null;
+        box = null;
+        drag = null;
+        resetResult();
+        releaseImage();
+        showBox();
+        imageName.textContent = '未选择任何文件';
+        setBusy(true);
+        message('正在本地检查并预览图片；不会自动上传。');
+        let candidate = null;
+        try {
+          if (!blob || !blob.size) throw new Error('图片不能为空。');
+          if (blob.size > 16 * 1024 * 1024) throw new Error('图片超过 16 MiB，未加载或上传。');
+          const format = await imageFormat(blob);
+          if (id !== generation) return;
+          candidate = URL.createObjectURL(blob);
+          const probe = new Image();
+          probe.src = candidate;
+          await probe.decode();
+          if (id !== generation) return;
+          const width = probe.naturalWidth;
+          const height = probe.naturalHeight;
+          if (!width || !height || width * height > 40_000_000) throw new Error('图片尺寸无效或超过 4000 万像素。');
+          image.src = candidate;
+          await image.decode();
+          if (id !== generation) return;
+          if (image.naturalWidth !== width || image.naturalHeight !== height) throw new Error('预览图片尺寸发生变化，请重新选择。');
+          current = { blob, width, height };
+          objectUrl = candidate;
+          candidate = null;
+          stage.hidden = false;
+          placeholder.hidden = true;
+          imageName.textContent = `${name}（${format}，${width} × ${height}，${(blob.size / 1048576).toFixed(2)} MiB）`;
+          message('图片已本地预览；拖框后运行推理，或直接使用整图回退。', 'success');
+        } catch (error) {
+          if (id === generation) {
+            releaseImage();
+            message(`图片加载失败：${error instanceof Error ? error.message : '无法解码图片。'}`, 'error');
+          }
+        } finally {
+          if (candidate) URL.revokeObjectURL(candidate);
+          if (id === generation) { setBusy(false); draw(); }
+        }
+      }
+      function pointAt(event) {
+        const rect = image.getBoundingClientRect();
+        if (!current || !rect.width || !rect.height) return null;
+        return [Math.max(0, Math.min(current.width, (event.clientX - rect.left) * current.width / rect.width)),
+          Math.max(0, Math.min(current.height, (event.clientY - rect.top) * current.height / rect.height))];
+      }
+      // NODE_POSE_CONTRACT_BEGIN
+      // 固定原 BODY25 标签与24条连线；内联副本由纯builtin测试对照core/body25，避免新增远程模块路由。
+      const NODE_SOURCE = 'official 4D-Humans checkpoint; complete ONNX graph with embedded SMPL LBS';
+      const BODY25_NAMES = Object.freeze([
+        'nose', 'neck', 'right_shoulder', 'right_elbow', 'right_wrist',
+        'left_shoulder', 'left_elbow', 'left_wrist', 'mid_hip', 'right_hip',
+        'right_knee', 'right_ankle', 'left_hip', 'left_knee', 'left_ankle',
+        'right_eye', 'left_eye', 'right_ear', 'left_ear', 'left_big_toe',
+        'left_small_toe', 'left_heel', 'right_big_toe', 'right_small_toe', 'right_heel',
+      ]);
+      const BODY25_EDGES = Object.freeze([
+        [1, 2], [2, 3], [3, 4], [1, 5], [5, 6], [6, 7],
+        [1, 8], [8, 9], [9, 10], [10, 11], [8, 12], [12, 13], [13, 14],
+        [0, 1], [0, 15], [0, 16], [15, 17], [16, 18],
+        [11, 22], [22, 23], [11, 24], [14, 19], [19, 20], [14, 21],
+      ].map((edge) => Object.freeze(edge)));
+      function validPose(value) {
+        if (!value || typeof value !== 'object') return false;
+        const requestedEp = value.runtime?.requestedEp;
+        // device只描述明确请求的DML或CPU；actualAssignment可诚实为unknown，不能假装CUDA或已证实所有节点在GPU。
+        const deviceMatchesEp = (requestedEp === 'cpu' && value.device === 'cpu')
+          || (requestedEp === 'dml' && typeof value.device === 'string'
+            && /^dml:[0-9]+$/.test(value.device) && !/\s/.test(value.device));
+        return value.type === 'hmr2.result' && value.schemaVersion === 1 && value.model === 'HMR2.0b'
+          && value.precision === 'fp32' && value.runtime?.inputOutputPrecision === 'fp32'
+          && value.source === NODE_SOURCE && deviceMatchesEp
+          && Array.isArray(value.imageSize) && value.imageSize.length === 2
+          && Array.from(value.imageSize).every((size) => Number.isSafeInteger(size) && size > 0)
+          && Array.isArray(value.xy) && value.xy.length === BODY25_NAMES.length
+          && Array.from(value.xy).every((point) => Array.isArray(point) && point.length === 2
+            && Array.from(point).every((number) => typeof number === 'number' && Number.isFinite(number)))
+          && Array.isArray(value.edges) && value.edges.length === BODY25_EDGES.length
+          && BODY25_EDGES.every((expected, index) => {
+            const edge = value.edges[index];
+            return Array.isArray(edge) && edge.length === 2
+              && expected.every((joint, axis) => Number.isInteger(edge[axis]) && edge[axis] >= 0
+                && edge[axis] < BODY25_NAMES.length && edge[axis] === joint);
+          })
+          && Array.isArray(value.names) && value.names.length === BODY25_NAMES.length
+          && BODY25_NAMES.every((name, index) => value.names[index] === name);
+      }
+      // NODE_POSE_CONTRACT_END
+      function draw() {
+        if (!ctx || !current || stage.hidden) return;
+        const rect = image.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        // 图片因 max-height 缩小后，容器可能比图片宽；Canvas 必须贴合图片实际可见矩形。
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `${rect.height}px`;
+        // Canvas backing store 控制显存，缩放变换把 API 原图坐标映射到屏幕。
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        const limit = Math.min(1, Math.sqrt(4_000_000 / (rect.width * rect.height * pixelRatio ** 2)));
+        const width = Math.max(1, Math.round(rect.width * pixelRatio * limit));
+        const height = Math.max(1, Math.round(rect.height * pixelRatio * limit));
+        if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+        ctx.setTransform(canvas.width / current.width, 0, 0, canvas.height / current.height, 0, 0);
+        ctx.clearRect(0, 0, current.width, current.height);
+        const unit = current.width / rect.width;
+        if (pose) {
+          const visible = (p) => p[0] >= 0 && p[0] <= current.width && p[1] >= 0 && p[1] <= current.height;
+          ctx.lineWidth = 2.8 * unit;
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = '#23d9d0';
+          for (const [a, b] of pose.edges) {
+            if (!visible(pose.xy[a]) || !visible(pose.xy[b])) continue;
+            ctx.beginPath();
+            ctx.moveTo(...pose.xy[a]);
+            ctx.lineTo(...pose.xy[b]);
+            ctx.stroke();
+          }
+          pose.xy.forEach((p, i) => {
+            if (!visible(p)) return;
+            ctx.beginPath();
+            ctx.arc(p[0], p[1], 3.5 * unit, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ffb34e';
+            ctx.fill();
+            // 25点都显示圆点；仅标七处关键点，缩略图不会被标签遮住。
+            if (![0, 1, 4, 7, 8, 11, 14].includes(i)) return;
+            ctx.font = `${11 * unit}px system-ui, sans-serif`;
+            ctx.lineWidth = 3 * unit;
+            ctx.strokeStyle = '#132537';
+            const label = pose.names[i].slice(0, 28);
+            ctx.strokeText(label, p[0] + 6 * unit, p[1] - 5 * unit);
+            ctx.fillStyle = 'white';
+            ctx.fillText(label, p[0] + 6 * unit, p[1] - 5 * unit);
+          });
+        }
+        const selection = drag ? [...drag.start, ...drag.end] : box;
+        if (selection) {
+          const x = Math.min(selection[0], selection[2]);
+          const y = Math.min(selection[1], selection[3]);
+          const w = Math.abs(selection[2] - selection[0]);
+          const h = Math.abs(selection[3] - selection[1]);
+          ctx.lineWidth = 2 * unit;
+          ctx.fillStyle = '#ffb40030';
+          ctx.strokeStyle = '#ffb400';
+          ctx.fillRect(x, y, w, h);
+          ctx.strokeRect(x, y, w, h);
+        }
+      }
+      canvas.addEventListener('pointerdown', (event) => {
+        if (!current || busy || event.button !== 0) return;
+        const start = pointAt(event);
+        if (!start) return;
+        event.preventDefault();
+        canvas.setPointerCapture(event.pointerId);
+        drag = { pointerId: event.pointerId, start, end: start };
+        clearSkeleton('正在重新选择人物框；旧 3D 骨骼已清除，请完成框选后再次推理。');
+        draw();
+      });
+      canvas.addEventListener('pointermove', (event) => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        drag.end = pointAt(event) || drag.end;
+        draw();
+      });
+      canvas.addEventListener('pointerup', (event) => {
+        if (!drag || drag.pointerId !== event.pointerId || !current) return;
+        const start = drag.start;
+        const end = pointAt(event) || drag.end;
+        drag = null;
+        const rect = image.getBoundingClientRect();
+        if (Math.abs(end[0] - start[0]) * rect.width / current.width < 4
+          || Math.abs(end[1] - start[1]) * rect.height / current.height < 4) {
+          message('人物框太小，请在图片上拖出明显范围。', 'warning');
+          draw();
+          return;
+        }
+        box = [Math.floor(Math.min(start[0], end[0])), Math.floor(Math.min(start[1], end[1])),
+          Math.ceil(Math.max(start[0], end[0])), Math.ceil(Math.max(start[1], end[1]))];
+        showBox();
+        resetResult();
+        message('人物框已选择；尚未上传，请点击“运行推理”。', 'success');
+      });
+      canvas.addEventListener('pointercancel', (event) => {
+        if (drag?.pointerId !== event.pointerId) return;
+        drag = null;
+        draw();
+      });
+      clearButton.addEventListener('click', () => {
+        if (!box || busy) return;
+        box = null;
+        showBox();
+        resetResult();
+        message('已清除人物框；下次推理省略 bbox_xyxy，使用整图回退。');
+      });
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files?.[0];
+        fileInput.value = '';
+        if (file) void selectImage(file, file.name);
+      });
+      document.addEventListener('paste', (event) => {
+        if (event.target === tokenInput) return;
+        const item = Array.from(event.clipboardData?.items || []).find((entry) => entry.kind === 'file'
+          && (entry.type === '' || entry.type.toLowerCase().startsWith('image/')));
+        const blob = item?.getAsFile();
+        if (!blob) return;
+        event.preventDefault();
+        void selectImage(blob, '剪贴板图片');
+      });
+      pasteButton.addEventListener('click', async () => {
+        if (busy) return;
+        const previous = generation;
+        setBusy(true);
+        try {
+          if (typeof navigator.clipboard?.read !== 'function') throw new Error('不支持剪贴板读取');
+          const items = await navigator.clipboard.read();
+          if (previous !== generation) return;
+          const types = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/x-bmp', 'image/x-ms-bmp'];
+          for (const item of items) {
+            const type = item.types.find((value) => types.includes(value.toLowerCase()));
+            if (!type) continue;
+            const blob = await item.getType(type);
+            if (previous === generation) await selectImage(blob, '剪贴板图片');
+            return;
+          }
+          message('剪贴板没有受支持的图片；也可 Ctrl+V / ⌘V 粘贴。', 'warning');
+        } catch (error) {
+          if (previous === generation) message('无法读取剪贴板：可能未授权或非安全上下文。请改用 Ctrl+V / ⌘V 或上传选择图片。', 'error');
+        } finally {
+          if (previous === generation) setBusy(false);
+        }
+      });
+      // 在切换图片时通过 AbortSignal 中止正在进行的本地 base64 编码。
+      function encodeBase64(blob, signal) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          const abort = () => reader.abort();
+          const done = () => signal.removeEventListener('abort', abort);
+          reader.addEventListener('load', () => {
+            done();
+            const data = typeof reader.result === 'string' ? reader.result : '';
+            const comma = data.indexOf(',');
+            if (comma < 0 || !/^data:[^,]*;base64$/i.test(data.slice(0, comma))) reject(new Error('浏览器无法编码图片。'));
+            else resolve(data.slice(comma + 1));
+          }, { once: true });
+          reader.addEventListener('error', () => { done(); reject(new Error('浏览器读取图片失败。')); }, { once: true });
+          reader.addEventListener('abort', () => { done(); reject(new DOMException('已取消', 'AbortError')); }, { once: true });
+          signal.addEventListener('abort', abort, { once: true });
+          if (signal.aborted) abort();
+          else reader.readAsDataURL(blob);
+        });
+      }
+      inferButton.addEventListener('click', async () => {
+        if (!current || busy) return;
+        const id = generation;
+        const blob = current.blob;
+        const selectedBox = box ? [...box] : null;
+        const request = new AbortController();
+        controller = request;
+        setBusy(true);
+        resetResult();
+        clearSkeleton('正在等待本次 Node ONNX 推理；旧 3D 数据已清除。', 'loading');
+        message('正在编码并向同源 /infer 发送图片；请稍候。');
+        try {
+          const base64 = await encodeBase64(blob, request.signal);
+          if (request.signal.aborted || id !== generation) return;
+          const payload = { image_base64: base64 };
+          if (selectedBox) payload.bbox_xyxy = selectedBox;
+          const headers = { 'Content-Type': 'application/json' };
+          const token = tokenInput.value.trim();
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const response = await fetch('/infer', { method: 'POST', headers, body: JSON.stringify(payload),
+            signal: request.signal, mode: 'same-origin', credentials: 'omit', cache: 'no-store',
+            redirect: 'error', referrerPolicy: 'no-referrer' });
+          const result = await response.json();
+          if (request.signal.aborted || id !== generation) return;
+          resultJson.textContent = JSON.stringify(result, null, 2);
+          if (!response.ok || result?.error) {
+            const code = typeof result?.error?.code === 'string' ? result.error.code : 'http_error';
+            const detail = typeof result?.error?.message === 'string' ? result.error.message : '请求失败';
+            throw new Error(`HTTP ${response.status} · ${code}：${detail}`);
+          }
+          if (result?.type !== 'hmr2.result') throw new Error('服务返回的不是 hmr2.result。');
+          const gpu = result.gpu;
+          byId('gpu-info').textContent = result.device === 'cpu' ? 'CPU（显式配置）'
+            : gpu && typeof gpu === 'object'
+              ? `${Number.isInteger(gpu.index) ? `#${gpu.index} ` : ''}${typeof gpu.name === 'string' ? gpu.name : '适配器名称 unknown'}` : '未提供';
+          byId('device-info').textContent = typeof result.device === 'string' ? result.device : '未提供';
+          byId('precision-info').textContent = result.precision === 'fp32' ? 'FP32 I/O · 内部精度 unknown' : '未提供';
+          byId('timing-info').textContent = typeof result.timingMs?.total === 'number' && Number.isFinite(result.timingMs.total)
+            ? `${result.timingMs.total.toFixed(2)} ms` : '未提供';
+          if (!Array.isArray(result.imageSize) || result.imageSize.length !== 2 || result.imageSize[0] !== image.naturalWidth
+            || result.imageSize[1] !== image.naturalHeight) {
+            clearSkeleton('浏览器自然尺寸与服务 imageSize 不一致（可能是 EXIF 定向差异）；已清除 3D，禁止错位展示。', 'invalid');
+            message(`警告：浏览器预览为 ${image.naturalWidth} × ${image.naturalHeight}，服务 imageSize 为 ${JSON.stringify(result.imageSize)}；尺寸不一致，禁止骨架错位叠加。请检查图片定向。`, 'warning');
+            return;
+          }
+          if (!validPose(result)) {
+            clearSkeleton('本次结果不符合 Node ONNX / EP-device / FP32 I/O / 原 BODY25 合同；不显示 3D。', 'invalid');
+            message('Node 来源、模型协议、执行设备或原 BODY25 名字/连线/坐标不符合合同，未绘制骨架；已保留原始 JSON。', 'warning');
+            return;
+          }
+          pose = result;
+          draw();
+          void showSkeleton(result);
+          message('推理成功：二维骨架已叠加，3D 预览状态见右侧；完整原始 JSON 见下方。', 'success');
+        } catch (error) {
+          if (id !== generation || request.signal.aborted || error?.name === 'AbortError') return;
+          clearSkeleton('本次推理失败；没有可显示的 3D 骨骼，请重新运行。', 'error');
+          message(`推理失败：${error instanceof Error ? error.message : '网络或响应错误。'}`, 'error');
+        } finally {
+          if (controller === request) { controller = null; if (id === generation) setBusy(false); }
+        }
+      });
+      if (typeof ResizeObserver === 'function') new ResizeObserver(draw).observe(image);
+      else window.addEventListener('resize', draw);
+      const skeletonResizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(resizeSkeleton) : null;
+      skeletonResizeObserver?.observe(skeletonFrame);
+      window.addEventListener('resize', resizeSkeleton);
+      resizeSkeleton();
+      // 返回 bfcache 页面时保持空态；只有用户再次推理才重新申请 WebGL 资源。
+      window.addEventListener('pageshow', () => {
+        if (!skeletonDisposed) return;
+        skeletonDisposed = false;
+        skeletonUnavailable = false;
+        skeletonModule = null;
+        skeletonFallbackNote = '';
+        skeletonCanvas.dataset.renderer = 'pending';
+        skeletonResizeObserver?.observe(skeletonFrame);
+        clearSkeleton();
+        resizeSkeleton();
+      });
+      // 离开页面即撤销 Blob URL 与请求，清空令牌；不使用持久化存储或敏感日志。
+      window.addEventListener('pagehide', () => {
+        generation += 1;
+        skeletonDisposed = true;
+        if (controller) controller.abort();
+        controller = null;
+        tokenInput.value = '';
+        fileInput.value = '';
+        box = null;
+        drag = null;
+        resetResult();
+        releaseImage();
+        imageName.textContent = '未选择任何文件';
+        showBox();
+        setBusy(false);
+        const previousViewer = skeletonViewer;
+        skeletonViewer = null;
+        disposeSkeletonViewer(previousViewer);
+        if (previousViewer) replaceSkeletonCanvas(document.createElement('canvas'));
+        skeletonFallbackNote = '';
+        clearSkeleton('页面已离开，3D 数据与 GPU 资源已释放。', 'disposed');
+        skeletonCanvas.dataset.renderer = 'disposed';
+        skeletonResizeObserver?.disconnect();
+        resizeSkeleton();
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "hmr2-node-onnx",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "独立HMR2完整ONNX原图服务与冻结Tensor基准；模型外置，保留Python参考",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node app/server.mjs",
+    "download:model": "node app/download-model.mjs",
+    "bench:node": "node framework/benchmark.mjs",
+    "compare": "node framework/compare-results.mjs",
+    "check": "node app/check.mjs",
+    "test": "node --test --test-concurrency=1 core/*.test.mjs framework/*.test.mjs"
+  },
+  "dependencies": {
+    "onnxruntime-node": "1.26.0",
+    "sharp": "0.35.5",
+    "@techstark/opencv-js": "4.12.0-release.1",
+    "bmp-js": "0.1.0"
+  }
+}

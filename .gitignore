@@ -71,3 +71,10 @@ src/apps/android-display/.kotlin/
 # 豆包会话签名仅保存于本机私有配置，不得提交认证参数。
 doubao-signatures.json
 doubao-signatures.json.*.tmp
+
+# HMR2固定完整ONNX权重由模型命令校验准备，不提交多GB模型或自有安装缓存。
+/res/models/hmr2-node-onnx/fp32-op18-dml-static/model.onnx
+/res/models/hmr2-node-onnx/fp32-op18-dml-static/model.onnx.data
+/res/models/hmr2-node-onnx/fp32-op18-dml-static/installed.json
+/res/models/hmr2-node-onnx/fp32-op18-dml-static/.install.lock
+/res/models/hmr2-node-onnx/fp32-op18-dml-static/.install-*/

@@ -1,5 +1,13 @@
 # Web MediaCenter - 项目参考文档
 
+## HMR2 Node原图服务（2026-10-22）
+
+- [Sharp0.35.5](https://www.npmjs.com/package/sharp/v/0.35.5)、[OpenCV.js4.12固定包](https://www.npmjs.com/package/@techstark/opencv-js/v/4.12.0-release.1)、[bmp-js0.1.0](https://www.npmjs.com/package/bmp-js/v/0.1.0)：独立lock锁定；Sharp仅decode/orient，OpenCV双dtype仿射，不以resize冒充原预处理。
+- [原Python准备函数](<E:/ai/ai-depthmap/hmr2_gpu_service.py#L358-L414>)与[29图CPU证据说明](<usage/hmr2-node-onnx-service.md>)：NumPy2/SciPy/skimage原dtype/累加/归一化链。CMYK未保留内部色彩空间会实差134，修正整数256移位换色后四输入全SHA一致。
+- BMP依赖不按bfOffBits跳像素，接纳收紧40-byte DIB/标准palette/start/stride，V4/V5/gap/巨palette不静默误读。此为本机源码审阅＋CPU实測，不称全部BMP兼容。
+- [自定义候选清单](<../3rd/hmr2-node-onnx/core/model-catalog.json>)含完整模型来源/SHA与许可提示；没有可验证公共URL，不自行托管上传SMPL权重。Node模型EP与未知allocator边界另见[DirectML EP官网](https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html)及[既有阶段A本机报告](<E:/ai/ai-depthmap/hmr2_node_onnx/results/phase-a-report.md>)。
+
+
 - [豆包网页任务参考项目与 Apache 2.0 许可](ref/doubao2api.md)。
 
 ## 图像投影与刚体姿态方案（2026-10-16）

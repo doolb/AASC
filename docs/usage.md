@@ -1,3 +1,5 @@
+- [HMR2 Node独立原图服务与模型准备](<usage/hmr2-node-onnx-service.md>)：项目根 `npm run download:hmr2-model` / `npm run start:hmr2`，默认独立8769/WindowsDML；当前本机校验导入，原Python/8768不替换。
+
 - 棋盘点击无法生效时显示短暂原因提示，连续无效点击不会在下一轮补执行；详见[五子棋](usage/game-gomoku.md#点击无效时的飘字提示)。
 
 - [聊天上下文占用与历史计数](usage/chat-context-usage.md)（控制端、显示端输入框上方；服务代码包更新后生效）

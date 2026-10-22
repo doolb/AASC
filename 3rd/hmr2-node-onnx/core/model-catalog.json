@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "hmr2.0b-fp32-op18-dml-static",
+  "version": "1",
+  "files": [
+    {
+      "path": "model.onnx",
+      "bytes": 2468364,
+      "sha256": "18ac7cbffe910bb3226f5033001b539aaf95b8457eff048a914811aafe2cc6b0"
+    },
+    {
+      "path": "model.onnx.data",
+      "bytes": 2701262848,
+      "sha256": "8965dc3efed8456681816f590b51d0e93c7907e77606a22ffe53082070415065"
+    }
+  ],
+  "provenance": {
+    "model": "HMR2.0b",
+    "opset": 18,
+    "irVersion": 10,
+    "staticReshapes": 39,
+    "sourceGraphSha256": "1aaed445b9fa8c5a97d9c5181a08037e32021d80bb42f4cd230a5448cac7025a",
+    "floatingOperationsChanged": false,
+    "weightsChanged": false
+  },
+  "licenseNote": "HMR2/SMPL权重按原模型许可获取与使用；本项目不另授再分发权限，不自动上传或发布权重。"
+}

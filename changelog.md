@@ -1,3 +1,12 @@
+### HMR2 Node独立原图服务与模型准备
+
+- ✅ [2026-10-22] Node代码入项目3rd，新增根 `download:hmr2-model` / `start:hmr2` 及 `test:hmr2`，完整原图health/infer和同源2D/Three页；原Python/8768/MMD默认保留。
+  - 独立[子包](<3rd/hmr2-node-onnx/package.json>)固定ORT/Sharp/OpenCV.js/bmp-js及lock，core/framework/app职责划分，完整ONNX含SMPL LBS四输入九输出；严格JSON/base64/传输/Bearer/CORS/finite、单忙锁503、canonical BODY25和Node来源全绘制门禁。根生产依赖/原start不变。
+  - 模型双文件2.7GB完整SHA本机导入/cache复用、无覆盖stream/锁/自有temp/hardlink安装；无已核验公共URL不伪造下载或上传SMPL权重。默认资源不在Git/source。
+  - 回归89项：87通过、0失败、2Windows file-symlink明确skip；junction拒绝实测。29同bytes/框当前原Python prepare_image CPU对照四输入SHA一致/maxAbs0；CMYK首次输入max2.10893/decoded134实差修正为保留工作色彩空间与OpenCV整数256换色，BMP扩展/gap/palette/stride强拒避免静默错误。
+  - 真完整CPU ONNX＋自有port0四次HTTP（原3＋Gaussian）、actualHTML/Three/nonce、cold/ready/final/loadCount1通过并释放自身资源。CPU/VM/fake不冒充DML速度或浏览器视觉；新增DML原图与实屏需用户窗口，旧阶段A冻结Tensor结果不变。FP32 I/O/权重，内部precision/TF32/allocator/无profile actualAssignment未知，RSS非显存。
+  - [使用与限制](<docs/usage/hmr2-node-onnx-service.md>)、设计/实现/任务/自测索引同步，只保留可选DML/真实视觉待办。servicePackage原已true，其余flags不扩大；未出包、发布APK/模型或控制用户正式进程。
+
 ### Node ASS网页主题样式对齐
 
 - ✅ [2026-10-22] Node ASS跟随网页版15套主题和字幕背景透明度，补时间/TTS白字、主题下影/细描边、黑色软阴影及ASR/连接主题圆角背景，文档页码同步主题色。

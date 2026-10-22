@@ -1,5 +1,20 @@
 # 自测功能实现文档
 
+## HMR2 Node独立原图服务（2026-10-22）
+
+```text
+入口 := npm run test:hmr2 → child check静态全部mjs/串行node:test；89/87 pass/0 fail/2 file symlink skip，junction真拒
+协议 := fake engine/port0/raw socket，构造不load/listen；UTF8/JSON重复key/base64/CLTE/Bearer/CORS/busy/nonce/finite错误，不作GPU证据
+模型 := tiny streamed local/HTTP/cache/lock/race/SHA/size/truncated/junction/rollback；真实双2.7GB import+cache与CLIcheck另证，无公共源不冒充下载
+图片 := 原NumPy2float32/nearest double/r0/CV32点M64/双dtypewarp/meanstd；BMP40byte/palette/offset/stride边界，CMYK保留工作空间256移位
+参考 := 原Python只覆盖load为CPU依赖+runtime路径，-B禁pyc/CUDA模型；当前29同bytes/box四输入SHA/maxRMS全0，非所有编码通用保证
+引擎 := fake有效camz1/主点中心，positive z/depth与local batch bbox/source/fallback/pixels先拒、单飞释放、help早退/IPv6规范化
+页面 := VM无DOM/ORT/WASM执行，canonical BODY25/schema/model/Node来源/requestedEP-device/fp32IO/稀疏/尺寸/绘制前门禁；不说实际3D渲染验收
+完整图 := CPU-only真session，自有port0，cold/ready/final/loadCount1与四次完整HTTP＋实际HTML/Three/nonce，finally关闭自有资源
+剩余 := 用户显存窗口DML HTTP/原Python顺序与浏览器实屏；旧阶段A冻结Tensor不能变新增端到端速度/GT准度
+```
+
+
 ## Node ASS网页主题样式（2026-10-22）
 
 ```text

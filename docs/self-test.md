@@ -1,5 +1,14 @@
 # 自测功能文档
 
+## HMR2 Node独立原图服务与模型准备（2026-10-22）
+
+`npm run test:hmr2`全部MJS静态检查和89 tests：87 pass/0 fail/2 file-symlink明确skip，directory junction拒绝已实测。原8合同/稳定角/真实CPU Add、流式模型tiny/cache/竞争/路径、严格raw协议/CORS/Bearer/nonce/finite、WASM双dtype/BMP20新增、fake相机/单飞/批次/CLI及页面VM9项。skip不申请提权，不冒称GPU/DOM真实通过。
+
+真实2.7GB本机导入双SHA、cache复用、启动--check modelVerified=true且无监听/模型加载。29同bytes/框继承当前原Python prepare_image CPU参考，四输入SHA全一致/maxAbs0；原3/大框Gaussian/r0/r1/threshold/fraction/border/EXIF1–8/gray/palette/RGBA/CMYK/变K/BMP/WebP/JPEG/gray16/ICC。首轮CMYK inputmax2.10893/decoded134实差修正为保留CMYK pipeline与原256移位整数换色，旧错误报告保留；BMP扩展/gap/过量palette/行padding强拒，接纳范围收紧并说明。
+
+真完整CPU ONNX session和自有port0四图HTTP（原3＋Gaussian）、cold不load/ready/final、一次load、实际HTML/Three/nonce/CSP通过，关闭自身资源；这不是fake，但不是新增DML端到端/识别GT准度。Node页面2D/3D共同canonical BODY25/来源/schema/EP/FP32门禁由纯builtin VM验证，不称实际浏览器render通过。原Python/8768/MMD和E权重/runtime/75包保留，当前AI没启动正式8769。见[完整使用与证据](<usage/hmr2-node-onnx-service.md>)。
+
+
 ## Node ASS信息与网页版位置对齐（2026-10-22）
 
 专项27/27（`npm run test:node-display-mpv`）、真实网页布局1/1（`npm run test:node-display-mpv:layout`）、隔离实屏3/3（render）、真实mpv IPC 1/1、独立包22/22、语音/重连/Windows输入22/22，共76项通过、零跳过。无新增生产依赖；代码语法与差异检查通过。
