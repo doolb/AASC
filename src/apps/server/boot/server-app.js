@@ -666,6 +666,23 @@ let globalRecordingPaused = false;
 let wsServer = null;
 let taskManager = null;
 const runningChat2ApiRuntimes = new Set();
+// 远程登录只有一个服务级槽位，单独管理浏览器，避免干扰豆包运行页面。
+const { createRemoteBrowserSessions } = require('../modules/chat2api/chat2api-remote-browser-session');
+const { getDoubaoWebTaskConfig } = require('../modules/chat2api/chat2api-doubao-web-task-registry');
+const remoteLoginSessions = createRemoteBrowserSessions({
+    getExecutable: () => getDoubaoWebTaskConfig()?.browserExecutable || 'vivaldi',
+    getRuntime: async instanceId => {
+        if (typeof instanceId !== 'string' || !instanceId || instanceId.length > 256) return null;
+        const instance = await taskManager?.getInstanceStatus('chat2api.proxy', instanceId);
+        if (instance?.status !== 'running') return null;
+        const port = Number(instance.params?.port);
+        return [...runningChat2ApiRuntimes].find(runtime => {
+            const status = runtime.getStatus();
+            return status.running && status.address?.port === port;
+        }) || null;
+    }
+});
+
 const chatModelTierService = createChatModelTierService({
     config,
     getRuntime: () => [...runningChat2ApiRuntimes].reverse().find(runtime => runtime.getStatus().running) || null,
@@ -8695,6 +8712,12 @@ wss.on('connection', (ws, req) => {
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
+                // 登录输入可能含密码，必须先分流，不能进入通用消息日志。
+                if (data.type === 'chat2apiRemoteLogin') {
+                    await remoteLoginSessions.handle(ws, data);
+                    return;
+                }
+
 
                 if (data.type !== 'clientLog' && data.type !== 'setLogReport' && data.type !== 'setLogBlocklist') {
                     if (!data.correlationId && (data.displayId || data.type === 'mediaBatch' || data.type === 'tts')) {
@@ -8898,6 +8921,7 @@ wss.on('connection', (ws, req) => {
         });
         
         ws.on('close', () => {
+            remoteLoginSessions.disconnect(ws);
             rejectDisplayRecordingSessionsForControl(ws, '控制端已断开');
             rejectDisplayCameraSessionsForControl(ws);
             manualChatTts.stop(ws);

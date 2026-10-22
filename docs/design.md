@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [Chat2API远程交互登录（方案待确认）](design/chat2api-remote-login.md)
+
 - [Node子显示端常驻mpv跨平台播放（源码完成，待设备验收）](design/node-display-mpv.md)
 
 - [HMR2 Node代码入3rd与模型获取/服务启动（代码与CPU自测完成，DML实屏待窗口）](<design/hmr2-node-onnx-project-service.md>)

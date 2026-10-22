@@ -1912,3 +1912,9 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 本轮未执行真实任务、Android 实机触控或出包发布；浏览器中拦截创建/配置等动作以验证参数与冒泡，服务代码包待构建，正式设备需部署后检查观感。
 
 - 额外仓库全量 npm test -- --test-concurrency=2 未完成：日志已出现107条失败，涉及符号链接、正式显示端及浏览器模块；多个浏览器测试长时间运行后停止本轮测试进程树。未完成逐项基线归因，不记全量通过；日志保留tmp/hmr2-web-proof/full.log，需独立低并发复测。自动审批拒绝临时目录清理，.tmp-tts-browser-bsCFV1保留且不入Git。
+
+## Chat2API远程登录
+
+- `npm run test:chat2api-remote-login`：12项通过；覆盖独占会话、输入顺序/边界、账号更新冲突、过期/断线及启动中断线清理，复用CLI捕获测试。
+- 真实Vivaldi本地夹具覆盖中文输入、拖动、JPEG画面、字段采集和临时profile清理；需要本机Vivaldi，使用headless测试不碰当前登录。
+- `npm run check:chat2api`：362项通过；真实官网10种Provider需分别人工验收，本地通过不代表官网登录成功。

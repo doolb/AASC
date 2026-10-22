@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [Chat2API远程登录伪代码（待确认）](spec/chat2api-remote-login.md)
+
 - [Node子显示端常驻mpv跨平台播放伪代码](spec/node-display-mpv.md)
 
 - [HMR2 Node项目服务/模型获取实现（原图代码、模型准备与CPU验收完成）](<spec/hmr2-node-onnx-project-service.md>)

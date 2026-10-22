@@ -1,3 +1,20 @@
+### Chat2API服务端远程登录
+
+- ✅ [2026-10-22] 普通控制端支持服务器网页登录画面和交互，复用10种Provider声明及OAuth保存。
+  - 新增remote-browser-session、login-browser、browser-capture及控制端remote-login JS/CSS；全服务单登录页，独立profile，与豆包运行页面分离。
+  - 加入会话所有权、输入顺序/边界、帧限频、断线回收和账号保存并发保护；输入不进入通用WS日志。
+  - Chat2API回归362项通过；定向测试12项通过（含新增启动中断线及真实Vivaldi中文输入/拖动/截图/凭据采集）；真实官网待人工验收。仅servicePackage待出包，无Android改动。
+
+### 多Provider远程登录页面隔离方案
+
+- ✅ [2026-10-22] 根据用户补充将服务端登录扩展到现有Provider声明，全服务只保留一个登录页，并与豆包运行页隔离。
+  - 核对10种登录声明及浏览器换账号/旧标签清理行为，更新远程登录design/spec/task/todo；具体实施待确认，未修改运行代码或出包状态。
+
+### Chat2API远程登录方案
+
+- ✅ [2026-10-22] 核对Android隔离WebView、桌面专用浏览器与账号保存链路，记录远程页面画面/输入/完成保存方案。
+  - 新增design/spec/task并更新索引和todo；用户随后收窄首版为服务器现有豆包网页流程；已核对共享browser-port、页面登录门控与关闭策略，Android暂不接入。具体接入方案待确认，未修改生产代码、操作账号或变更出包状态。
+
 ### MMD-AR纯网页HMR
 
 - ✅ [2026-10-22] 增加可选HMR2.0b网页WebGPU模式，复用现有模型获取命令，缺模型/运行环境时禁用；默认MediaPipe和GPU API继续独立使用。

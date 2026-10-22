@@ -68,6 +68,7 @@
     },
 
     setProxyAddress(addressText, instanceId) {
+      this.instanceId = instanceId || null;
       if (instanceId && typeof window !== 'undefined' && window.location && window.location.origin) {
         this.baseUrl = `${window.location.origin}/api/chat2api-gateway/${encodeURIComponent(instanceId)}`;
         return;
@@ -211,8 +212,8 @@
         '<section class="chat2api-section"><h4 class="chat2api-section-title">外部认证</h4>' +
           `<select id="chat2apiProvider" class="chat2api-select">${providerOptions}</select>` +
           '<div id="chat2apiCredentialFields" class="chat2api-credential-fields"></div>' +
-          '<div id="chat2apiManualHint" class="chat2api-secondary-text">选择 Provider 后，当前 Provider 可填写对应字段或粘贴完整 Cookie；普通网页不打开登录页。</div>' +
-          '<div class="chat2api-actions"><button class="task-card-btn primary" id="chat2apiManualAdd">添加外部认证</button><button class="task-card-btn" id="chat2apiOpenLogin" hidden>Android 外部登录</button><button class="task-card-btn primary" id="chat2apiCompleteLogin" hidden>完成登录</button></div>' +
+          '<div id="chat2apiManualHint" class="chat2api-secondary-text">选择 Provider 后，当前 Provider 可填写对应字段或粘贴完整 Cookie；也可点击外部登录，通过服务器网页登录。</div>' +
+          '<div class="chat2api-actions"><button class="task-card-btn primary" id="chat2apiManualAdd">添加外部认证</button><button class="task-card-btn" id="chat2apiOpenLogin" hidden>外部登录</button><button class="task-card-btn primary" id="chat2apiCompleteLogin" hidden>完成登录</button></div>' +
         '</section>' +
         '<section class="chat2api-section"><h4 class="chat2api-section-title">已配置账号</h4><p class="chat2api-secondary-text">已有账号会自动选择；可复用项目旧登录资料。没有可用资料时请先登录，模型映射可省略。</p><div id="chat2apiAccounts">' + accountRows + '</div></section>' +
         '<section class="chat2api-section chat2api-section-wide"><div class="chat2api-section-heading"><h4 class="chat2api-section-title">代理 API Key</h4><button class="task-card-btn" id="chat2apiCreateKey">新建 Key</button></div><div>' + keyRows + '</div></section>' +
@@ -387,13 +388,13 @@
       const hint = document.getElementById('chat2apiManualHint');
       const isApi = ['qwen-api', 'doubaapi', 'doubao-api'].includes(providerId);
       if (hint) hint.textContent = supportsCookie
-        ? `当前 Provider 按 Chat2API 规则填写字段，或粘贴完整 Cookie（支持提取：${cookieNames}）；普通网页不打开登录页。`
-        : '按 Chat2API 的 Provider 字段填写 Token、Ticket 等凭据；普通网页不打开登录页。';
+        ? `当前 Provider 按 Chat2API 规则填写字段，或粘贴完整 Cookie（支持提取：${cookieNames}）；也可点击外部登录，通过服务器网页登录。`
+        : '按 Chat2API 的 Provider 字段填写 Token、Ticket 等凭据；也可点击外部登录，通过服务器网页登录。';
       if (hint && isApi) hint.textContent = '填写 API Key，可在添加 API 账号时填写可选端点与资源 ID；留空使用官方默认。保存只校验格式，不发送远端合成或登录请求，账号显示未远端验证。';
       const openButton = document.getElementById('chat2apiOpenLogin');
       const completeButton = document.getElementById('chat2apiCompleteLogin');
       const hasNativeLogin = typeof window !== 'undefined' && window.NativeControl && typeof window.NativeControl.openChat2ApiLogin === 'function';
-      if (openButton) openButton.hidden = !hasNativeLogin || isApi;
+      if (openButton) openButton.hidden = isApi || (!hasNativeLogin && !window.Chat2APIRemoteLogin);
       if (completeButton) completeButton.hidden = !this.loginSession;
     },
 
@@ -422,6 +423,10 @@
 
     async startLogin(providerId) {
       try {
+        if (!window.NativeControl?.openChat2ApiLogin && window.Chat2APIRemoteLogin) {
+          await window.Chat2APIRemoteLogin.open({ providerId, instanceId: this.instanceId });
+          return;
+        }
         this.loginSession = await this.request('/api/chat2api/oauth/start', { method: 'POST', body: JSON.stringify({ providerId }) });
         const completeButton = document.getElementById('chat2apiCompleteLogin');
         if (completeButton) completeButton.hidden = false;
@@ -623,6 +628,13 @@
 
     async openExternalAccountWeb(accountId) {
       try {
+        if (!window.NativeControl?.openChat2ApiAccountWeb && window.Chat2APIRemoteLogin) {
+          const accounts = await this.request('/api/chat2api/accounts');
+          const account = accounts.find(item => item.accountId === accountId);
+          if (!account) throw new Error('账号不存在');
+          await window.Chat2APIRemoteLogin.open({ providerId: account.providerId, accountId, instanceId: this.instanceId });
+          return;
+        }
         const session = await this.request(`/api/chat2api/accounts/${encodeURIComponent(accountId)}/web-session`, { method: 'POST', body: '{}' });
         const nativeSession = {
           ...session,

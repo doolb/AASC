@@ -19,4 +19,6 @@ const doubaoWebTaskBridge = {
   request: options => active?.bridge?.request(options) || Promise.reject(browserError('disabled')),
 };
 
-module.exports = { activateDoubaoWebTask, getDoubaoWebTaskStatus, doubaoWebTaskBridge };
+const getDoubaoWebTaskConfig = () => active?.config ? { ...active.config } : null;
+
+module.exports = { activateDoubaoWebTask, getDoubaoWebTaskStatus, getDoubaoWebTaskConfig, doubaoWebTaskBridge };

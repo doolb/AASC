@@ -33,7 +33,7 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
     };
   };
 
-  const completeLogin = async ({ state, providerId, credentials, accountId, label, email, phone, accountInfo = {} } = {}) => {
+  const completeLogin = async ({ state, providerId, credentials, accountId, label, email, phone, accountInfo = {}, expectedCredentialVersion } = {}) => {
     if (!state || !providerId || !credentials || typeof credentials !== 'object') {
       throw new Error('Chat2API 登录参数不完整');
     }
@@ -93,7 +93,7 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
         status: 'active',
         createdAt: now,
         updatedAt: now,
-      });
+      }, { expectedCredentialVersion });
       if (!consumedBeforeValidation && !(await dataStore.consumeOAuthSession(state, providerId))) {
         throw new Error('登录状态无效、已过期或 Provider 不匹配');
       }

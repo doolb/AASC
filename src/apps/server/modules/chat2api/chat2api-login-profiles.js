@@ -119,7 +119,7 @@ const ANDROID_LOGIN_PROFILES = freezeDeep({
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const getAndroidLoginProfile = (providerId) => {
-  const profile = ANDROID_LOGIN_PROFILES[providerId];
+  const profile = Object.hasOwn(ANDROID_LOGIN_PROFILES, providerId) ? ANDROID_LOGIN_PROFILES[providerId] : null;
   return profile ? clone(profile) : null;
 };
 

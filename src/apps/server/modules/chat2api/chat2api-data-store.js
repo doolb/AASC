@@ -29,6 +29,8 @@ const accountCredentialVersion = account => hashSecret(JSON.stringify({
   revision: account.credentialRevision || '',
   credentials: normalizeDoubaoCredentials(account.credentials),
 }));
+// 登录保存使用通用账号快照，避免豆包专用版本归一化遗漏其他Provider字段。
+const accountLoginVersion = account => hashSecret(JSON.stringify(account));
 const VERIFICATION_FIELDS = ['credentialVerification', 'credentialVerificationStatus', 'credentialVerificationCheckedAt',
   'credentialVerificationError', 'browserChatVerifiedAt', 'nodeChatVerifiedAt'];
 const resetDoubaoVerification = account => {
@@ -258,13 +260,20 @@ const createChat2ApiDataStore = (options = {}) => {
     return { ...sanitizeSecrets(publicFields), secretConfigured: hasConfiguredSecret(account) };
   };
 
-  const saveAccount = account => withAccountLock(async () => {
+  const saveAccount = (account, { expectedCredentialVersion } = {}) => withAccountLock(async () => {
     const normalized = validateAccount(account);
     if (normalized.providerId === 'doubaochat') {
       normalized.credentialRevision = crypto.randomUUID();
       normalized.accountInfo.credentialVerification ||= 'format-only';
     }
     const current = await readCollection('accounts', []);
+    // 远程登录保存时在同一账号锁内检查版本，避免旧登录页覆盖更新后的凭据。
+    if (expectedCredentialVersion !== undefined) {
+      const existing = current.find(item => item.accountId === normalized.accountId);
+      if (!existing || accountLoginVersion(existing) !== expectedCredentialVersion) {
+        throw new Error('账号凭据已变化，请重新打开登录页面');
+      }
+    }
     const next = mergeByKey(current, [normalized], (item) => item.accountId);
     await writeCollectionUnlocked('accounts', next);
     return publicAccount(normalized);
@@ -953,5 +962,6 @@ module.exports = {
   DEFAULT_LEGACY_DATA_PATH,
   ACCOUNT_EXPORT_FORMAT,
   accountCredentialVersion,
+  accountLoginVersion,
   createChat2ApiDataStore,
 };
