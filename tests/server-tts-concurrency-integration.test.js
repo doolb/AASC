@@ -51,7 +51,7 @@ test('普通AI两条真实句子回调跳过qwen-chat纯emoji，正文继续播�
                 if (request.input === '真实失败') throw new Error('真实失败');
                 return { audio: wrapPcm(Buffer.from([1, 0])) };
             } } }) } });
-        const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence) => {' : 'onSentence: (sentence, _fullMessage');
+        const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence, _message' : 'onSentence: (sentence, _fullMessage');
         const end = serverSource.indexOf('onComplete:', start);
         assert.ok(start > 0 && end > start);
         const context = { path, ttsScheduler, pendingTtsDeliveryPromises, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
@@ -143,7 +143,7 @@ test('普通AI真实句子回调和Agent生成回调向豆包传本轮原输入�
         const ttsScheduler = createOrderedTaskScheduler({ concurrency: 2 }); schedulers.push(ttsScheduler);
         const pendingTtsDeliveryPromises = [];
         deliveryPromises.push(pendingTtsDeliveryPromises);
-        const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence) => {' : 'onSentence: (sentence, _fullMessage');
+        const start = serverSource.indexOf(mode === 'legacy' ? 'onSentence: (sentence, _message' : 'onSentence: (sentence, _fullMessage');
         const end = serverSource.indexOf('onComplete:', start);
         const context = { path, ttsScheduler, pendingTtsDeliveryPromises, generateChatTtsActions, BUSINESS_TYPES: { AI_REPLY: 'ai_reply' },
             data: { message: input }, content: input, displayContent: input, displayId: 'display-a', preferredDisplayId: 'display-a', replyTemplateTts: null,

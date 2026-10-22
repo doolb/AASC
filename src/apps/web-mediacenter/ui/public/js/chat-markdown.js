@@ -54,6 +54,14 @@
                 continue;
             }
 
+            // 图片在聊天/字幕中显示alt正文，不触发外部图片请求。
+            const imageMatch = remaining.match(/^!\[([^\]\n]*)\]\(([^)]+)\)/u);
+            if (imageMatch) {
+                html += `<span class="markdown-image-alt">${escapeHtml(imageMatch[1])}</span>`;
+                index += imageMatch[0].length;
+                continue;
+            }
+
             const linkMatch = remaining.match(/^\[([^\]\n]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/u);
             if (linkMatch) {
                 const [, label, url, title] = linkMatch;

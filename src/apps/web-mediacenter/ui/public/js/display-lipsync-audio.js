@@ -10,9 +10,13 @@
         changed(audio);
     };
     root.DisplayLipSyncAudio = Object.freeze({
-        prepare(audio, text, src, ttsAction = null) {
+        prepare(audio, text, src, ttsAction = null, subtitle = null) {
             if (!audio) return null;
-            const entry = Object.freeze({ sequence: ++sequence, text: String(text || ''), src: String(src || ''), ttsAction });
+            const raw = String(text || '');
+            const caption = subtitle || (root.AASCMarkdownSpeech
+                ? { markdown: raw, speech: root.AASCMarkdownSpeech.toSpeechText(raw), offset: 0 } : null);
+            const entry = Object.freeze({ sequence: ++sequence, text: caption?.speech ?? raw,
+                src: String(src || ''), ttsAction, subtitle: caption });
             entries.set(audio, entry);
             if (!watched.has(audio)) {
                 watched.add(audio);

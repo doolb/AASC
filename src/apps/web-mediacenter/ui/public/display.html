@@ -718,6 +718,7 @@
     <script src="js/native-compute.js"></script>
     <script src="/js/sentence-splitter.js"></script>
     <script src="js/chat-markdown.js"></script>
+    <script src="/js/markdown-speech.js"></script>
     <script src="js/display-lipsync-audio.js"></script>
     <script src="js/display-tts-subtitles.js"></script>
     <script src="js/text-media-player.js"></script>
@@ -3254,7 +3255,7 @@
             catch (error) { console.warn('[MMD] 动作准备失败，语音继续:', error); }
             if (currentTtsItem !== item || !isPlayingTts) return;
             item.audioUrl = audioUrl;
-            item.lipSyncEntry = window.DisplayLipSyncAudio?.prepare(ttsAudio, item.ttsAction?.speech ?? item.text, audioUrl, item.ttsAction);
+            item.lipSyncEntry = window.DisplayLipSyncAudio?.prepare(ttsAudio, item.speech ?? item.ttsAction?.speech ?? item.text, audioUrl, item.ttsAction, item.subtitle);
             ttsAudio.src = audioUrl;
             recoverTtsPlayback('start');
         }
@@ -3378,7 +3379,9 @@
                     voiceTtsBatchEnd: data.voiceTtsBatchEnd === true,
                     chatTtsConversationId: data.chatTtsConversationId,
                     chatTtsPhase: data.chatTtsPhase,
-                    ttsAction: data.ttsAction
+                    ttsAction: data.ttsAction,
+                    subtitle: data.subtitle,
+                    speech: data.speech
                 });
             } else if (data.action === 'playAudio') {
                 queueTts({
@@ -3390,7 +3393,9 @@
                     voiceTtsBatchEnd: data.voiceTtsBatchEnd === true,
                     chatTtsConversationId: data.chatTtsConversationId,
                     chatTtsPhase: data.chatTtsPhase,
-                    ttsAction: data.ttsAction
+                    ttsAction: data.ttsAction,
+                    subtitle: data.subtitle,
+                    speech: data.speech
                 });
             } else if (data.action === 'stop') {
                 if (data.chatOnly && data.chatTtsConversationId) {
@@ -3626,7 +3631,7 @@
             if (data.action === 'popup') {
                 showReminderPopup(data.time, data.content);
             } else if (data.action === 'voice') {
-                queueTts({ audioUrl: data.audioUrl, text: data.text });
+                queueTts({ audioUrl: data.audioUrl, text: data.text, subtitle: data.subtitle, speech: data.speech });
             }
         }
 
@@ -3646,7 +3651,7 @@
                 clearVoiceConversationConfirmation(data.confirmationId);
             } else if (data.action === 'response') {
                 if (data.audioUrl) {
-                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                    queueTts({ audioUrl: data.audioUrl, text: data.text, subtitle: data.subtitle, speech: data.speech });
                 }
                 const detailText = data.detailText || data.text;
                 showVoiceResponsePopup(
@@ -3656,12 +3661,12 @@
                 );
             } else if (data.action === 'searchResult') {
                 if (data.audioUrl) {
-                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                    queueTts({ audioUrl: data.audioUrl, text: data.text, subtitle: data.subtitle, speech: data.speech });
                 }
                 showSearchResultPopup(data.query, data.results);
             } else if (data.action === 'weatherResult') {
                 if (data.audioUrl) {
-                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                    queueTts({ audioUrl: data.audioUrl, text: data.text, subtitle: data.subtitle, speech: data.speech });
                 }
                 const detailText = data.detailText || data.text;
                 showVoiceResponsePopup(
@@ -3671,7 +3676,7 @@
                 );
             } else if (data.action === 'playChoices') {
                 if (data.audioUrl) {
-                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                    queueTts({ audioUrl: data.audioUrl, text: data.text, subtitle: data.subtitle, speech: data.speech });
                 }
                 showPlayChoicesPopup(data.confirmationId, data.matches, data.text);
             }

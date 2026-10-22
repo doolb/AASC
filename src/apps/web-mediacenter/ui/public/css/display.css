@@ -967,3 +967,14 @@ body.display-chat-open .display-chat-suppressible {
     border-left: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
     background: linear-gradient(to top, var(--bg-surface, rgba(0, 242, 255, 0.05)), transparent);
 }
+
+/* 字幕格式沿用正文尺寸，保持旋转布局和三视觉行视口；强调、列表与表格仍保留语义。 */
+.tts-subtitle-line { overflow-wrap: anywhere; }
+.tts-subtitle-line :is(h1,h2,h3,h4,h5,h6,p,blockquote,ul,ol) { margin: 0; font-size: 1em; line-height: inherit; }
+.tts-subtitle-line :is(h1,h2,h3,h4,h5,h6,strong) { font-weight: 700; }
+.tts-subtitle-line :is(ul,ol) { padding-inline-start: 1.4em; }
+.tts-subtitle-line blockquote { border-inline-start: 2px solid currentColor; padding-inline-start: .4em; }
+.tts-subtitle-line table { border-collapse: collapse; font-size: 1em; max-width: 100%; }
+.tts-subtitle-line :is(th,td) { padding-inline: .2em; border: 1px solid currentColor; }
+.tts-subtitle-line code { font-size: 1em; white-space: pre-wrap; }
+.tts-subtitle-line a { color: inherit; text-decoration: underline; }

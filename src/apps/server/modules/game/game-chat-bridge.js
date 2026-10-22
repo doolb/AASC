@@ -1,4 +1,5 @@
 const { extractGameTags, stripGameTags } = require('./gomoku-game-service');
+const { createGameChatStream } = require('./game-chat-stream');
 
 const MAX_TAGS_PER_REPLY = 8;
 const STATE_CHANGING_OPERATIONS = new Set(['开局', '落子', '提议尺寸', '确认尺寸', '退出显示', '恢复显示']);
@@ -58,6 +59,7 @@ function attemptedStateChanges(tags) {
 /** GM 已拒绝本轮操作时，只拦截明显宣称棋步已经完成的续答。 */
 function claimsUnconfirmedMove(text) {
     const value = String(text || '');
+    if (/(?:棋盘|棋局)[^。！？\n]{0,10}(?:打开|开好|准备好|重置)|(?:我|你|用户|玩家|AI|黑棋|白棋)[^。！？\n]{0,6}(?:赢了|获胜|胜利)|五连|轮到|该你|该我/u.test(value)) return true;
     return /已(?:经)?[^。！？\n]{0,8}(?:下好|落好|下了|落了|走了|落在|下在|成功|完成)|(?:下|落)(?:好|成|完|在|了)|(?:落子|棋步)[^。！？\n]{0,8}(?:成功|完成)|(?:我|你|用户|玩家|AI|黑棋|白棋)[^。！？\n]{0,10}(?:下|落|走)\s*[A-O](?:1[0-5]|[1-9])/i.test(value);
 }
 
@@ -131,6 +133,7 @@ function emitFinal(text, reasoning, speech, callbacks, history, splitIntoSentenc
     const message = stripGameTags(text, currentGame) || '游戏操作已处理。';
     const safeReasoning = stripGameTags(reasoning, currentGame);
     const safeSpeech = stripGameTags(speech, currentGame) || message;
+    if (callbacks.streamOutput) return callbacks.streamOutput.finish(message, safeReasoning, safeSpeech, history, gameTrace);
     callbacks.onChunk?.(message, message, safeReasoning);
     for (const sentence of splitIntoSentences(safeSpeech)) {
         if (sentence.trim()) callbacks.onSentence?.(sentence, message, safeReasoning, safeSpeech, 'answer');
@@ -172,6 +175,9 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     const narratives = [];
     const gameTrace = [];
     let replyGame = initialState?.result === '进行中' ? initialState.game : null;
+    const streamOutput = createGameChatStream({ callbacks, filterText: filterGameProtocolText,
+        isUnsafe: claimsUnconfirmedMove, currentGame: () => replyGame, signal: options.signal });
+    callbacks = { ...callbacks, streamOutput };
     const recordProtocol = (kind, text) => {
         const entry = { kind, text, summary: formatGameProtocolSummary(kind, text),
             sequence: gameTrace.length + 1 };
@@ -198,8 +204,9 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     }
     if (internalSignal && /^Game:五子棋,GM,/.test(content)) recordProtocol('GM', content);
     for (let turn = 0; turn < maxTurns; turn += 1) {
-        // 调用行可能出现在任意独立行，须等整次回复结束后再决定哪些叙述可展示。
-        const response = await chat.chatStream(input, { ...options, systemPrompt }, {});
+        // 普通正文逐块转发；调用行及依赖结果的叙述由请求级模块局部暂存，交原GM循环确认。
+        const response = await chat.chatStream(input, { ...options, systemPrompt },
+            streamOutput.beginTurn({ blocked: unconfirmedOperations.size > 0 }));
         if (!response?.success) {
             callbacks.onError?.(response?.error || '游戏聊天失败');
             return response;
@@ -309,6 +316,13 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         }
         if (narrative) narratives.push(narrative);
         const nextState = gameService.snapshot(displayId);
+        const endsNow = !terminalMove && !confirmedAiMove && lastCall.game === '五子棋'
+            && lastCall.operation !== '规则' && nextState
+            && (nextState.turn !== 'AI' || nextState.result !== '进行中') && narrative;
+        if (narrative && !endsNow) {
+            // 此批已通过GM，先释放已确认叙述，下一模型轮仍可增量续写，不再被历史narratives整体锁住。
+            streamOutput.confirm(narratives.join('\n') + '\n', response.reasoning);
+        }
         if (terminalMove && nextState) {
             // 终局落子保留原叙述；状态回执独立生成，查看指令则始终提供完整棋盘。
             const status = gameService.gmStatus(displayId);

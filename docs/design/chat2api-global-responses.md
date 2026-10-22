@@ -1,5 +1,10 @@
 # Chat2API 全局 Responses 协议设计（历史设计记录）
 
+## API与显示端流式交付（2026-10-22，已实现）
+
+此前API能流式、显示端游戏桥却完整缓冲的问题已在chat-system/game模块修复。普通正文经GM兼容门控后逐块发往两端，TTS完整自然分句即时入原队列，Markdown显示与朗读正文分离。API首字与设备出字仍是两个测量边界；本轮隔离Responses夹具验证交付时序，不复用此前豆包/Qwen实测数字宣称实际设备速度。详见chat-system设计及流式实施任务。
+
+
 ## 豆包与Qwen当前服务速度实测（2026-10-22）
 
 豆包普通doubao确认node-http；国内Qwen请求aasc-qwen-flash，实际Qwen3.7。新会话一轮加同会话续聊两轮，交替发送相同自然消息早/今天过得怎么样/有什么适合放松的小事，无system提示，全部stream=true。六次均有正文与response.completed，未通过游戏或当前AASC聊天发送。

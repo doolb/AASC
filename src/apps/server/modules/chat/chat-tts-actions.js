@@ -10,7 +10,7 @@ const parser = import('../../../web-mediacenter/ui/public/js/mmd-reply-parser.mj
 const catalog = fs.readFile(path.join(publicRoot, 'mmd-actions.json'), 'utf8')
     .then(bytes => JSON.parse(bytes).actions?.map(item => item.name) || []).catch(() => []);
 
-async function generateChatTtsActions({ sentence, phase = 'answer', conversationId = '', stripMarkdown, generate, send }) {
+async function generateChatTtsActions({ sentence, phase = 'answer', conversationId = '', subtitle = null, stripMarkdown, generate, send }) {
     let ttsAction = null;
     let speech = stripMarkdown(sentence);
     if (phase === 'answer') {
@@ -32,7 +32,8 @@ async function generateChatTtsActions({ sentence, phase = 'answer', conversation
             if (ttsAction) send({ type: 'tts', action: 'cancelActions', ttsAction });
             return null;
         }
-        return { audioPath, sentence, ...(ttsAction ? { ttsAction } : {}) };
+        return { audioPath, sentence, speech, subtitle: { markdown: subtitle?.markdown || sentence, speech, offset: subtitle?.offset || 0 },
+            ...(ttsAction ? { ttsAction } : {}) };
     } catch (error) {
         if (ttsAction) send({ type: 'tts', action: 'cancelActions', ttsAction });
         throw error;

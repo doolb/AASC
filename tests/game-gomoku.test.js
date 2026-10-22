@@ -367,7 +367,7 @@ test('已有棋局中没有调用行时按普通聊天回复，不重问原话�
     assert.match(inputs[0].systemPrompt, /语音坐标也由你代发/);
     assert.match(inputs[0].systemPrompt, /NowGame:五子棋/);
     assert.equal(result.message, '妲己没听懂喵，请告诉我具体的坐标，比如 A1、B2 之类的哦~');
-    assert.deepEqual(chunks, [result.message]);
+    assert.equal(chunks.join(''), result.message);
     assert.deepEqual(result.history, [{ role: 'assistant', content: result.message }]);
     assert.equal(game.snapshot('d').revision, 1);
 });
@@ -627,7 +627,7 @@ test('GameUser 与 GameAI 简写经 GM 确认后执行一轮 A9、F5', async t =
     assert.equal(game.snapshot('d').board.split('/')[4][5], 'O');
     assert.match(prompts[1], /GM,落子,[^\n]*,GameUser,A9,GameAI,进行中/);
     assert.equal(result.message, '好嘞，收到你的 A9。\n等 GM 确认。\n我下 F5，轮到你啦。');
-    assert.deepEqual(spoken, [result.message]);
+    assert.equal(spoken.join(''), result.message.replace(/\n/gu, ''));
     assert.deepEqual(trace.map(entry => entry.kind), ['GM', 'GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(trace[1].text, 'GameUser:落子,A9');
     assert.equal(trace[1].summary, 'GameUser · 落子 A9');
@@ -698,8 +698,8 @@ for (const terminal of [
         assert.equal(readGameMap(inputs[1]), game.snapshot('d').board);
         assert.equal(game.snapshot('d').result, terminal.result);
         assert.equal(result.message, `${terminal.first}\n${terminal.final}`);
-        assert.deepEqual(chunks, [result.message]);
-        assert.deepEqual(spoken, [result.message]);
+        assert.equal(chunks.join(''), result.message);
+        assert.equal(spoken.join(''), result.message.replace(/\n/gu, ''));
         assert.equal(trace.filter(entry => entry.text.includes(',GM,状态,')).length, 1);
     });
 }
@@ -780,8 +780,8 @@ test('同一回复预写 User 与 AI 落子时，先等 User 的 GM 回执再让
     assert.ok(prompts[0].systemPrompt.indexOf('目录,AI,列表') < prompts[0].systemPrompt.indexOf('原角色设定'));
     assert.match(prompts[1].input, /GM,落子,.*GameUser,H3,GameAI,进行中/);
     assert.equal(result.message, '我下 H4，轮到你啦。\n该你下了。');
-    assert.deepEqual(chunks, [result.message]);
-    assert.deepEqual(sentences, [result.message]);
+    assert.equal(chunks.join(''), result.message);
+    assert.equal(sentences.join(''), result.message.replace(/\n/gu, ''));
     assert.deepEqual(trace.slice(1).map(entry => entry.kind), ['GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(game.snapshot('d').revision, 3);
     assert.equal(game.snapshot('d').board.split('/')[2][7], 'X');
@@ -962,7 +962,7 @@ test('GM 拒绝后展示模型依据错误新生成的自然语言，不显示�
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '请帮我落子', options: {}, callbacks: { onSentence: text => spoken.push(text) } });
     assert.equal(result.message, '呜...对不起主人，刚才的坐标无效。请主人再指定一个位置吧。');
-    assert.equal(spoken.join(''), result.message);
+    assert.equal(spoken.join(''), result.message.replace(/\n/gu, ''));
     assert.equal(game.snapshot('d').revision, 1);
 });
 
@@ -984,7 +984,7 @@ test('轮到 AI 时没有调用行也只作普通对话，不合成 GM 错误', 
     assert.equal(inputs.length, 2);
     assert.equal(inputs[1].includes('GM,错误,轮到GameAI落子'), false);
     assert.equal(result.message, '你下 H3。\n我再想想这一步。');
-    assert.equal(spoken.join(''), result.message);
+    assert.equal(spoken.join(''), result.message.replace(/\n/gu, ''));
     assert.equal(game.snapshot('d').revision, 2);
     assert.equal(game.snapshot('d').turn, 'AI');
 });
@@ -1016,7 +1016,7 @@ test('协议行数量或语法错误仍拒绝，修正后可完成', async t => 
     assert.equal(game.snapshot('d').revision, 1);
 });
 
-test('有显示端的普通回复等完整结果后展示，行内 Game 文字不触发操作', async t => {
+test('有显示端的普通回复逐块展示，行内 Game 文字不触发操作', async t => {
     const { game } = fixture(t);
     const chunks = [];
     const sentences = [];
@@ -1030,7 +1030,7 @@ test('有显示端的普通回复等完整结果后展示，行内 Game 文字�
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '天气', options: {}, callbacks: { onChunk: chunk => chunks.push(chunk),
             onSentence: sentence => sentences.push(sentence) } });
-    assert.deepEqual(chunks, ['今天好']);
+    assert.deepEqual(chunks, ['今', '天', '好']);
     assert.deepEqual(sentences, ['今天好']);
     assert.equal(result.message, '今天好');
     assert.equal(game.snapshot('d'), null);
@@ -1100,7 +1100,7 @@ test('自然语言前后包围的独立 AI 落子行等完整回复与 GM 确认
         }
         callbacks.onChunk?.('哎呀', '哎呀', '');
         callbacks.onChunk?.('Game:', raw, '');
-        assert.deepEqual(chunks, []);
+        assert.deepEqual(chunks, ['哎呀'], '仅无操作声明的前导正文可流式发布，指令和结果仍暂存');
         return { success: true, message: raw, speech: raw, history: [] };
     } };
     const result = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
@@ -1111,8 +1111,8 @@ test('自然语言前后包围的独立 AI 落子行等完整回复与 GM 确认
     assert.equal(result.message, '哎呀，又报错了！看来我的指令还是有问题。让我换个方式试试～\n'
         + '这次我仔细检查过了，应该没问题了吧？等 GM 确认～\n落好了，轮到你。');
     assert.equal(requests, 2);
-    assert.deepEqual(chunks, [result.message]);
-    assert.deepEqual(sentences, [result.message]);
+    assert.equal(chunks.join(''), result.message);
+    assert.equal(sentences.join(''), result.message.replace(/\n/gu, ''));
     assert.equal(result.speech.includes('Game:'), false);
 });
 

@@ -101,8 +101,8 @@ function createGameChatSession({ filePath, displayId, chat: chatService = null, 
                 userText: content, options: chatOptions, getAvailableGames, callbacks: {
                     onGameProtocol: entry => emit('gameProtocol', entry),
                     onChunk: (chunk, message, reasoning) => emit('chatChunk', { chunk, message, reasoning }),
-                    onSentence: (sentence, message, reasoning, speech, phase) => {
-                        emit('chatSentence', { sentence, message, reasoning, speech, phase });
+                    onSentence: (sentence, message, reasoning, speech, phase, subtitle) => {
+                        emit('chatSentence', { sentence, message, reasoning, speech, phase, ...(subtitle ? { subtitle } : {}) });
                     },
                     onComplete: (message, history, reasoning, speech, gameTrace) => {
                         if (roleName) {

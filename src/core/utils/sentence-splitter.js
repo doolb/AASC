@@ -11,7 +11,7 @@
 }(typeof globalThis === 'undefined' ? this : globalThis, () => {
     // 只把 Unicode 标点和兼容的波浪号视为标点，避免把表情或普通符号误当成标点分句。
     const punctuationOnlyPattern = /^[\p{P}~]+$/u;
-    const MAX_TTS_SEGMENT_CHARS = 120;
+    // 自然分句不设字符硬上限，避免在句中截断。
 
     // 判断已累积文本的最后一个字符是否是句末标点。
     function isSentenceEnd(text) {
@@ -45,25 +45,7 @@
         if (isPunctuationOnly(previous) && isPunctuationOnly(trimmed)) {
             return;
         }
-        // 长句可能没有任何句末标点，继续按 Unicode 字符数切开，避免把代理对拆坏。
-        const remaining = Array.from(trimmed);
-        while (remaining.length > MAX_TTS_SEGMENT_CHARS) {
-            let boundary = MAX_TTS_SEGMENT_CHARS;
-            // 尽量在后半段的停顿或空白处切，保留该边界字符给前一段播报。
-            for (let index = MAX_TTS_SEGMENT_CHARS - 1; index >= MAX_TTS_SEGMENT_CHARS / 2; index--) {
-                if (/[，,；;、：:\s]/u.test(remaining[index])) {
-                    boundary = index + 1;
-                    break;
-                }
-            }
-            // 避免 121 字长句被切成 120 字加单字尾段。
-            if (remaining.length - boundary < 20) {
-                boundary = Math.ceil(remaining.length / 2);
-            }
-            sentences.push(remaining.splice(0, boundary).join('').trim());
-            while (remaining[0] && /\s/u.test(remaining[0])) remaining.shift();
-        }
-        if (remaining.length > 0) sentences.push(remaining.join('').trim());
+        sentences.push(trimmed);
     }
 
     // 按句末标点分句；英文句点仅在后接空白、换行或文本结尾时分割，避免切开小数和缩写。
@@ -117,5 +99,53 @@
         return sentences;
     }
 
-    return { MAX_TTS_SEGMENT_CHARS, isPunctuationOnly, isSentenceEnd, splitIntoSentences };
+    /** 增量消费完整分句，尾段只在结束时冲刷；保留英文点号的一个字符前瞻。 */
+    function createSentenceStream() {
+        let pending = '';
+        let finished = false;
+        const consume = complete => {
+            const output = [];
+            let start = 0;
+            let commas = 0;
+            for (let index = 0; index < pending.length; index += 1) {
+                const ch = pending[index];
+                if ('（）()'.includes(ch)) {
+                    appendSentence(output, pending.slice(start, index));
+                    start = index + 1;
+                    commas = 0;
+                    continue;
+                }
+                if (ch === ',' || ch === '，') commas += 1;
+                let boundary = isSentenceEnd(ch) || commas >= 4;
+                if (ch === '.' || ch === '…') {
+                    // 点号需要前瞻来区别小数/缩写与句末，不能在块尾抢先读出“1.”。
+                    if (!complete && index === pending.length - 1) boundary = false;
+                    else boundary = isEllipsisRunEnd(pending, index)
+                        || index === pending.length - 1 || /\s/u.test(pending[index + 1]);
+                }
+                if (!boundary) continue;
+                appendSentence(output, pending.slice(start, index + 1));
+                start = index + 1;
+                commas = 0;
+            }
+            pending = pending.slice(start);
+            if (complete) { appendSentence(output, pending); pending = ''; }
+            return output;
+        };
+        return {
+            push(text) {
+                if (finished || typeof text !== 'string') return [];
+                pending += text;
+                return consume(false);
+            },
+            finish() {
+                if (finished) return [];
+                finished = true;
+                return consume(true);
+            },
+            getPending: () => pending,
+        };
+    }
+
+    return { isPunctuationOnly, isSentenceEnd, splitIntoSentences, createSentenceStream };
 }));

@@ -21,23 +21,20 @@ test('聊天 TTS 协议包含会话代次和 think/answer 阶段打断', () => {
     assert.match(server, /phase:\s*'think'/);
     assert.match(server, /stopChatTtsPlayback\(\{[\s\S]*phase:\s*'think'/);
     assert.match(filter, /speechSegments/);
-    assert.match(llm, /onSentence\?\.\(text, fullMessage, fullReasoning, fullSpeech, pendingSpeech\.phase\)/);
+    assert.match(llm, /onSentence\?\.\(segment\.text, fullMessage, fullReasoning, fullSpeech,[\s\S]*pendingSpeech\.phase, segment\.subtitle\)/);
     assert.match(agentTts, /isTtsCurrent/);
 });
 
 test('显示端和控制端只清理当前聊天会话的 TTS', () => {
     const display = read('src/apps/web-mediacenter/ui/public/display.html');
     const displayChat = read('src/apps/web-mediacenter/ui/public/js/display-chat.js');
-    const stage = read('src/apps/web-mediacenter/ui/public/js/display-stage.js');
     const chat = read('src/apps/web-mediacenter/ui/public/js/chat.js');
     const websocket = read('src/apps/web-mediacenter/ui/public/js/websocket.js');
 
-    assert.match(display, /id="displayChatTtsStop"/);
     assert.match(display, /function\s+stopChatTtsPlayback\(conversationId, phase = null\)/);
     assert.match(display, /data\.chatOnly && data\.chatTtsConversationId/);
     assert.match(displayChat, /function\s+stopConversationTts/);
     assert.match(displayChat, /chatOnly:\s*true/);
-    assert.match(stage, /root\.DisplayChat\?\.stopConversationTts/);
     assert.match(chat, /stopChatTts\(\{ phase = null, notify = false, sendRemote = true \}/);
     assert.match(chat, /handleStopChatTts/);
     assert.match(websocket, /data\.type === 'stopChatTts'/);

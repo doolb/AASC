@@ -10,6 +10,7 @@ const { normalizeSettings } = require('../src/apps/server/modules/tts/tts-provid
 const { normalizeTtsPauseText } = require('../src/apps/server/modules/media/tts-text-normalizer');
 const { adjustWavVolume, decodeAudio, wrapPcm } = require('../src/apps/server/modules/tts/tts-provider-http');
 const cache = require('../src/external/tts/tts-audio-cache');
+const { toSpeechText: stripMarkdown, splitSpeechSegments } = require('../src/core/utils/markdown-speech');
 const source = fs.readFileSync(path.resolve(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
 const start = source.indexOf('async function generateTtsWithFallback(');
 const end = source.indexOf('// 显示端语音输入的播报', start);
@@ -20,7 +21,7 @@ function fixture({ device = 'server', serverEnabled = true, generationError = nu
     for (let i = 0; i < 8; i++) pcm.writeInt16LE(1000, i * 2);
     const audio = wrapPcm(pcm);
     const calls = [];
-    const context = { normalizeTtsPauseText, adjustWavVolume, decodeAudio, BUSINESS_TYPES: { SYSTEM_BROADCAST: 'system_broadcast' },
+    const context = { stripMarkdown, normalizeTtsPauseText, adjustWavVolume, decodeAudio, BUSINESS_TYPES: { SYSTEM_BROADCAST: 'system_broadcast' },
         pendingDisplayTtsRequestId: 0, log() {},
         config: { get: () => device }, isServerTtsEnabled: () => serverEnabled,
         findDisplayWithTts: id => noDisplay ? null : { id },
@@ -66,4 +67,12 @@ test('显示端失败/不可用仅按旧服务器开关回退；缓存满不会�
     const full = fixture({ device: 'display', store: () => { throw Object.assign(new Error('cache full'), { code: 'TTS_AUDIO_CACHE_FULL' }); } });
     await assert.rejects(full.generate('测试'), error => error.code === 'TTS_AUDIO_CACHE_FULL');
     assert.equal(full.calls.length, 1);
+});
+
+test('原生合成同样只接收Markdown正文，空代码块不会请求引擎', async () => {
+    const native = fixture();
+    await native.generate('**你好** [帮助](https://example.com)');
+    assert.equal(native.calls[0].args[0], '你好 帮助');
+    assert.equal(await native.generate('```js\n不应合成\n```'), null);
+    assert.equal(native.calls.length, 1);
 });

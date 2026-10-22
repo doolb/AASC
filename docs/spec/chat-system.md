@@ -1,5 +1,29 @@
 # 聊天系统实现文档
 
+## 流式聊天与Markdown播报实现伪代码（2026-10-22）
+
+```text
+已有声明 := LLM增量回调、原GM循环、AASC WebSocket、音色/账号限流、保序调度器、取消代次和临时对话计时
+新纯模块 := game-chat-stream + markdown-speech；新增浏览器脚本路由/js/markdown-speech.js
+模型chunk → 协议门控{行首前缀,旧尖括号,待GM结果声明} → 可确认普通正文onChunk → 原WS → 两端Markdown DOM
+完整调用所在模型轮结束 → 原GM顺序执行多标签 → 成功释放已确认叙述/失败丢弃未发布叙述 → 原续接；不伪造用户坐标/GM结果
+无棋局或已有棋局的普通聊天 → 均可逐块转发；疑似操作声明只局部保留
+speech原文 → Markdown增量状态{强调,链接,围栏,短动作标记} → 稳定正文后缀 → createSentenceStream → 完整句即时onSentence
+自然边界 := 句末/换行/第四逗号/括号；英文点号前瞻；取消120字硬切，未完成尾段等待finish
+onSentence → 原MMD有限字典解析/Markdown清洗 → 原TTS队列 → 按音色/账号限制合成 → 原顺序投递；不新增重试或并发层
+音频消息 := 保留text和现有字段，追加speech与subtitle{markdown,speech,offset}；offset为规范化朗读前缀字符数
+完整文本入口 := splitSpeechSegments先清理Markdown再分句；链接URL不能因括号切分变成第二段朗读
+字幕 := lipSync来源身份携带subtitle → 时长比例决定speech字符进度 → 安全渲染Markdown/克隆对应DOM → 匹配失败只显示当前speech
+暂停/缓冲/旧音源 := 不前进；ended补尾行；原历史上限/闲置隐藏/旋转/CSS透明度保留
+结束 := 最终权威message覆盖；按think/answer已投递句游标仅补尾段，不重放已发片段，不误删连续重复句
+取消 := 请求信号/原生成代次挡住迟到正文与音频；原队列停止规则和临时窗口全播放完成后计时保持
+自测 := npm run test:chat-streaming 63/63；test:game-chat 70/70；test:mmd-production:tts 24/24；语音兼容19/19、MMD组合33/33
+浏览器证据 := 上游Responses仍阻塞完成 → 两端实际DOM已有第一句 → 首段generate已发生 → 放行完成 → 无重复尾句
+证据边界 := 本机SSE夹具/音频时钟代理/合成返回stub；未复测生产模型或真机扬声器，不报告新的实体设备延迟
+发布 := servicePackage=true，其它状态按现值保留；无Android原生/依赖/任务代码变化，无构建发布
+```
+
+
 ## Qwen发行默认普通档（2026-10-21）
 
 ```text

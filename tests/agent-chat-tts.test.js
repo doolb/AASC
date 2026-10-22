@@ -54,7 +54,7 @@ test('Agent收到无可朗读音频的跳过结果时继续下一句，不下发
         onError: error => errors.push(error) });
     await playAgentTts(harness.options);
     assert.deepEqual(harness.controlMessages.filter(message => message.type === 'playOnControl')
-        .map(({ ttsAction, action, ...message }) => message), [{ type: 'playOnControl', audioUrl: '/uploads/tts/reply.wav', text: '正常回答。' }]);
+        .map(({ ttsAction, action, subtitle, speech, ...message }) => message), [{ type: 'playOnControl', audioUrl: '/uploads/tts/reply.wav', text: '正常回答。' }]);
     assert.deepEqual(errors, []);
 });
 
@@ -65,8 +65,8 @@ test('Agent 回复启用控制端播放时逐句发送 playOnControl', async () 
 
     assert.deepStrictEqual(harness.generatedTexts, ['第一句。', '第二句。']);
     assert.deepStrictEqual(harness.controlMessages, [
-        { type: 'playOnControl', audioUrl: '/uploads/tts/第一句。.wav', text: '**第一句**。' },
-        { type: 'playOnControl', audioUrl: '/uploads/tts/第二句。.wav', text: '第二句。' }
+        { type: 'playOnControl', audioUrl: '/uploads/tts/第一句。.wav', text: '第一句。', speech: '第一句。', subtitle: { markdown: '**第一句**。第二句。', speech: '第一句。', offset: 0 } },
+        { type: 'playOnControl', audioUrl: '/uploads/tts/第二句。.wav', text: '第二句。', speech: '第二句。', subtitle: { markdown: '**第一句**。第二句。', speech: '第二句。', offset: 4 } }
     ]);
     assert.deepStrictEqual(harness.displayMessages, []);
 });
@@ -80,7 +80,7 @@ test('Agent 流式完整句子应立即进入 TTS，完成时只冲刷尾句', a
 
     stream.onChunk('第一句。');
     await new Promise((resolve) => setImmediate(resolve));
-    assert.deepStrictEqual(harness.generatedTexts, [], '单个完整句子暂存到下一段或完成事件前不应阻塞流式回调');
+    assert.deepStrictEqual(harness.generatedTexts, ['第一句。'], '完整首句必须在模型完成或第二段到达前开始合成');
 
     stream.onChunk('第二句。第三');
     await new Promise((resolve) => setImmediate(resolve));
@@ -137,7 +137,8 @@ test('Agent 回复按单显示端和多显示端选择下发 tts/playAudio', asy
             type: 'tts',
             action: 'playAudio',
             audioUrl: '/uploads/tts/单显示端。.wav',
-            text: '单显示端。'
+            text: '单显示端。', speech: '单显示端。',
+            subtitle: { markdown: '单显示端。', speech: '单显示端。', offset: 0 }
         }
     }]);
 

@@ -1,5 +1,16 @@
 # Chat2API 全局 Responses 协议实现规范（历史实现记录）
 
+## API到显示端增量交付伪代码（2026-10-22）
+
+```text
+Responses output_text.delta → 原LLM输出 → game-chat-stream局部门控 → WS累计message/增量chunk → 双端DOM
+确认speech → Markdown正文规范化 → 完整自然句即时onSentence → 原TTS队列
+Game协议和未确认结果 := 原GM流程确认后再释放，不混入普通正文与朗读
+完成 := 仅尾段/权威快照收尾，不重复发布；取消按原代次隔离
+测试边界 := 本机SSE夹具尚未completed时DOM与首段合成已出现；非真机扬声器性能测量
+```
+
+
 ## Responses真实分块计时伪代码（2026-10-22）
 
 ```text

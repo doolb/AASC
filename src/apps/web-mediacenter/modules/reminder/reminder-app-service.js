@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const timeListener = require('../time/time-listener-app-service');
-const { splitIntoSentences } = require('../../../../core/utils/sentence-splitter');
+const { splitSpeechSegments, toSpeechText } = require('../../../../core/utils/markdown-speech');
 
 const { USER_CONFIG_DIR } = require('../../../server/modules/config/user-config-paths');
 
@@ -18,10 +18,12 @@ let generateTTS = async () => {
 
 // 每段生成成功后立即进入显示端队列，原提醒正文仍只用于弹窗和保存。
 async function sendReminderVoice(text, sendSegment) {
-    for (const segment of splitIntoSentences(text)) {
+    const hasMarkdown = toSpeechText(text) !== text.trim();
+    for (const { text: segment, subtitle } of splitSpeechSegments(text)) {
         const audioPath = await generateTTS(segment);
         if (audioPath === null) break;
-        sendSegment(segment, `/uploads/tts/${path.basename(audioPath)}`);
+        sendSegment(segment, `/uploads/tts/${path.basename(audioPath)}`,
+            hasMarkdown ? { subtitle, speech: segment } : {});
     }
 }
 
@@ -233,10 +235,10 @@ async function triggerReminder(reminder, repeatIndex = 0) {
             
             if (reminder.methods.includes('voice')) {
                 try {
-                    await sendReminderVoice(fullContent, (segment, audioUrl) => {
+                    await sendReminderVoice(fullContent, (segment, audioUrl, caption) => {
                         displayClients.forEach((displayData, displayId) => {
                             sendToDisplay(displayId, {
-                                type: 'reminder', action: 'voice', audioUrl, text: segment,
+                                type: 'reminder', action: 'voice', audioUrl, text: segment, ...caption,
                                 repeatIndex: i + 1, totalRepeat: repeatCount
                             });
                         });
@@ -332,9 +334,9 @@ async function testReminder(reminderData, targetDisplayId = null, sendFunc = nul
 
         if (reminderData.methods && reminderData.methods.includes('voice')) {
             try {
-                await sendReminderVoice(fullContent, (segment, audioUrl) => {
+                await sendReminderVoice(fullContent, (segment, audioUrl, caption) => {
                     const sendVoice = (displayId) => sendTo(displayId, {
-                        type: 'reminder', action: 'voice', audioUrl, text: segment,
+                        type: 'reminder', action: 'voice', audioUrl, text: segment, ...caption,
                         repeatIndex: i + 1, totalRepeat: repeatCount
                     });
                     if (targetDisplayId && sendTo) sendVoice(targetDisplayId);

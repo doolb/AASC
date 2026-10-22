@@ -271,6 +271,29 @@ const SelfTest = {
             }
         },
         {
+            id: 'chat_streaming_markdown_speech',
+            name: '流式分句与Markdown朗读',
+            description: '只读检查首句即时产出、Markdown正文与字幕格式、长句不硬切和尾段去重，不发送语音',
+            category: '语音功能',
+            run: async () => {
+                const speech = window.AASCMarkdownSpeech;
+                const splitter = window.AASCSentenceSplitter;
+                if (!speech || !splitter || !window.ChatMarkdown) return { success: false, message: '流式朗读模块尚未加载' };
+                const stream = speech.createMarkdownSentenceStream();
+                const first = stream.push('**第一句。');
+                const second = stream.push('第二句**。尾段');
+                const tail = stream.finish();
+                const valid = first.length === 1 && first[0].text === '第一句。'
+                    && /<strong>第一句。<\/strong>/u.test(window.ChatMarkdown.render(first[0].subtitle.markdown))
+                    && second.length === 1 && second[0].text === '第二句。'
+                    && tail.length === 1 && tail[0].text === '尾段' && stream.finish().length === 0
+                    && speech.toSpeechText('[帮助](https://example.com)') === '帮助'
+                    && splitter.splitIntoSentences('长'.repeat(121)).length === 1;
+                return { success: valid, message: valid ? '首句、Markdown与尾段边界正常' : '流式朗读边界异常',
+                    details: '纯文本/渲染模块检查；实际音频时钟、GM校验和双端增量另由浏览器联测验证' };
+            }
+        },
+        {
             id: 'chat_reply_tts_context',
             name: '聊天回复语音来源',
             description: '只读检查AI/Agent模板与对应上一句输入，不发送语音',

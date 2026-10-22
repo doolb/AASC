@@ -5,6 +5,66 @@
     const MAX_LINES = 100;
     const IDLE_MS = 30000;
 
+    /** 从受限渲染结果克隆对应朗读文字，格式标记不计入音频字符进度。 */
+    function clipCaption(container, speech, offset = 0) {
+        const keyOf = root.AASCMarkdownSpeech?.speechKey;
+        if (!keyOf || !speech) return null;
+        const documentObject = container.ownerDocument;
+        const clone = container.cloneNode(true);
+        for (const code of clone.querySelectorAll('pre')) code.remove();
+        const walker = documentObject.createTreeWalker(clone, 4);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        const points = [];
+        for (const [nodeIndex, node] of nodes.entries()) {
+            let position = 0;
+            for (const character of node.textContent) {
+                const key = keyOf(character);
+                const end = position + character.length;
+                if (key) {
+                    const previous = points.at(-1);
+                    if (key === '.' && previous?.key === '.') {
+                        previous.endNode = nodeIndex; previous.end = end;
+                    } else points.push({ key, node: nodeIndex, start: position, endNode: nodeIndex, end });
+                }
+                position = end;
+            }
+        }
+        const keys = points.map(point => point.key).join('');
+        const needle = keyOf(speech);
+        if (!needle) return null;
+        const fromOffset = Array.from(keys).slice(0, offset).join('').length;
+        let match = keys.indexOf(needle, fromOffset);
+        if (match < 0) match = keys.lastIndexOf(needle);
+        if (match < 0) return null;
+        const startIndex = Array.from(keys.slice(0, match)).length;
+        const first = points[startIndex];
+        const last = points[startIndex + Array.from(needle).length - 1];
+        if (!first || !last) return null;
+        for (const [index, node] of nodes.entries()) {
+            if (index < first.node || index > last.endNode) node.remove();
+            else node.textContent = node.textContent.slice(index === first.node ? first.start : 0,
+                index === last.endNode ? last.end : undefined);
+        }
+        for (const element of [...clone.querySelectorAll('*')].reverse()) {
+            if (!element.textContent.trim() && element.tagName !== 'BR') element.remove();
+        }
+        const fragment = documentObject.createDocumentFragment();
+        fragment.append(...clone.childNodes);
+        return fragment;
+    }
+
+    function captionTemplate(documentObject, subtitle) {
+        if (!subtitle?.markdown || !root.ChatMarkdown || !root.AASCMarkdownSpeech) return null;
+        const container = documentObject.createElement('div');
+        // 仅使用已有转义/链接校验渲染器，绝不把模型原HTML直接插入字幕。
+        container.innerHTML = root.ChatMarkdown.render(root.AASCMarkdownSpeech.sealMarkdown(subtitle.markdown));
+        const fragment = clipCaption(container, subtitle.speech, Number(subtitle.offset) || 0);
+        if (!fragment) return null;
+        container.replaceChildren(fragment);
+        return container;
+    }
+
     function create({ element, audio, onChange }) {
         const documentObject = element.ownerDocument;
         const viewport = documentObject.createElement('div');
@@ -49,17 +109,18 @@
             });
         }
 
-        function renderLine(text) {
+        function renderLine(text, formatted = null) {
             cancelIdle();
             source = 'tts';
             element.dataset.voiceTextMode = 'tts';
-            history.push(text);
+            history.push({ text, formatted });
             history.splice(0, Math.max(history.length - MAX_LINES, 0));
             const fragment = documentObject.createDocumentFragment();
             for (const line of history) {
                 const row = documentObject.createElement('div');
                 row.className = 'tts-subtitle-line';
-                row.textContent = line;
+                if (line.formatted) row.appendChild(line.formatted.cloneNode(true));
+                else row.textContent = line.text;
                 fragment.appendChild(row);
             }
             content.replaceChildren(fragment);
@@ -110,8 +171,9 @@
         }
 
         function prepare(text, entry = null) {
-            const normalized = String(text || '').replace(/\r\n?/gu, '\n').trim();
-            pending = normalized ? { text: normalized, entry, segments: null, shownEnd: 0 } : null;
+            const normalized = String(entry?.subtitle?.speech || text || '').replace(/\r\n?/gu, '\n').trim();
+            pending = normalized ? { text: normalized, entry, segments: null, shownEnd: 0,
+                template: captionTemplate(documentObject, entry?.subtitle || { markdown: text, speech: normalized }) } : null;
         }
 
         // 没有逐字时间戳时，以真实音频时长分配每行字符占比；暂停、缓冲时不向前显示。
@@ -140,7 +202,11 @@
             pending.shownEnd = segment.end;
             const line = shownEnd > segment.start
                 ? Array.from(pending.text).slice(shownEnd, segment.end).join('') : segment.text;
-            if (line.trim()) renderLine(line);
+            if (line.trim()) {
+                const start = shownEnd > segment.start ? shownEnd : segment.start;
+                const offset = root.AASCMarkdownSpeech?.speechKey(Array.from(pending.text).slice(0, start).join('')) || '';
+                renderLine(line, pending.template ? clipCaption(pending.template, line, Array.from(offset).length) : null);
+            }
         }
 
         function showStatus(text, isFinal) {

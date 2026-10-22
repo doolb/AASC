@@ -4,6 +4,7 @@ const path = require('node:path');
 const { createOrderedTaskScheduler } = require('../media/ordered-task-scheduler');
 const { isPunctuationOnly } = require('../../../../core/utils/sentence-splitter');
 const { generateChatTtsActions } = require('./chat-tts-actions');
+const { createMarkdownSentenceStream, splitSpeechSegments, toSpeechText } = require('../../../../core/utils/markdown-speech');
 
 /**
  * 为工作 AI 角色的完整回复生成 TTS，并沿用普通 LLM 的播放目标优先级。
@@ -11,6 +12,7 @@ const { generateChatTtsActions } = require('./chat-tts-actions');
  */
 async function playAgentTts({
     message,
+    subtitle = null,
     playOnControl = false,
     displayId,
     displayIds = [],
@@ -30,8 +32,8 @@ async function playAgentTts({
     chatTtsPhase = 'answer',
     isTtsCurrent = () => true
 }) {
-    let sentences = splitIntoSentences(message).filter((sentence) => !isPunctuationOnly(sentence));
-    if (sentences.length === 0 && message && !isPunctuationOnly(message)) sentences = [message];
+    const segments = splitSpeechSegments(message, { strip: text => toSpeechText(text, { preserveActions: true }), split: splitIntoSentences })
+        .filter(segment => !isPunctuationOnly(segment.text));
     const scheduler = ttsScheduler || createOrderedTaskScheduler({ concurrency: ttsConcurrency });
     // 准备和播放共用既有动态路由；目标改变时最终音频仍携带完整同句元数据。
     const deliver = audioMessage => {
@@ -48,9 +50,9 @@ async function playAgentTts({
         else if (!single && displayId) sendToDisplay(displayId, audioMessage, { allowRepairModeTts });
     };
 
-    const tasks = sentences.map((sentence) => scheduler.enqueue(async () => {
+    const tasks = segments.map(({ text: sentence, subtitle: caption }) => scheduler.enqueue(async () => {
             if (!isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return null;
-            return generateChatTtsActions({ sentence, phase: chatTtsPhase, conversationId: chatTtsConversationId,
+            return generateChatTtsActions({ sentence, subtitle: subtitle || caption, phase: chatTtsPhase, conversationId: chatTtsConversationId,
                 stripMarkdown, generate: generateTTS, send: deliver });
         }).then((result) => {
             if (!result || !isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return;
@@ -62,6 +64,7 @@ async function playAgentTts({
                 audioUrl,
                 text: sentence,
                 ...(result.ttsAction ? { ttsAction: result.ttsAction } : {}),
+                ...(result.subtitle ? { subtitle: result.subtitle, speech: result.speech } : {}),
                 ...(chatTtsConversationId ? { chatTtsConversationId, chatTtsPhase } : {})
             };
             deliver(audioMessage);
@@ -79,37 +82,28 @@ async function playAgentTts({
  */
 function createAgentTtsStream(options) {
     const { splitIntoSentences, onError } = options;
-    let pendingText = '';
+    const stream = createMarkdownSentenceStream();
+    let sawChunks = false;
+    let finished = false;
     const ttsScheduler = options.ttsScheduler || createOrderedTaskScheduler({ concurrency: options.ttsConcurrency || 1 });
-
-    const enqueueSentence = (sentence) => {
-        if (!sentence || !sentence.trim()) return;
-        void playAgentTts({
-            ...options,
-            message: sentence,
-            ttsScheduler
-        }).catch((error) => {
-            if (onError) onError(error, sentence);
-        });
+    const enqueue = segments => {
+        for (const segment of segments) {
+            if (!segment.text.trim()) continue;
+            void playAgentTts({ ...options, message: segment.text, subtitle: segment.subtitle, ttsScheduler })
+                .catch(error => onError?.(error, segment.text));
+        }
     };
-
     return {
         onChunk(chunk) {
-            if (!chunk) return;
-            pendingText += chunk;
-            const sentences = splitIntoSentences(pendingText);
-            if (sentences.length < 2) return;
-
-            for (const sentence of sentences.slice(0, -1)) {
-                enqueueSentence(sentence);
-            }
-            pendingText = sentences[sentences.length - 1];
+            if (finished || !chunk) return;
+            sawChunks = true;
+            enqueue(stream.push(chunk));
         },
-
         async onComplete(message) {
-            const tail = pendingText.trim() || (typeof message === 'string' ? message.trim() : '');
-            pendingText = '';
-            enqueueSentence(tail);
+            if (finished) return;
+            finished = true;
+            if (!sawChunks && typeof message === 'string') enqueue(stream.push(message));
+            enqueue(stream.finish());
             await ttsScheduler.waitForIdle();
         }
     };

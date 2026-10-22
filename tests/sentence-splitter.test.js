@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { MAX_TTS_SEGMENT_CHARS, isPunctuationOnly, splitIntoSentences } = require('../src/core/utils/sentence-splitter');
+const { createSentenceStream, isPunctuationOnly, splitIntoSentences } = require('../src/core/utils/sentence-splitter');
 
 test('isPunctuationOnly identifies standalone punctuation without treating text as punctuation', () => {
     assert.equal(isPunctuationOnly('？！……'), true);
@@ -50,17 +50,19 @@ test('全角括号在当前分句器形成边界，内部正文保留而括号�
     assert.deepEqual(splitIntoSentences('()'), []);
 });
 
-test('长句有界分段，保留中文、英文和 emoji 的原有顺序', () => {
+test('长句仅按自然边界分段，不以120字截断并保留全部原文', () => {
     const source = `天气${'晴'.repeat(125)}，${'cloudy'.repeat(30)}🙂${'雨'.repeat(140)}。`;
-    const sentences = splitIntoSentences(source);
-    assert.ok(sentences.length > 3);
-    assert.ok(sentences.every(sentence => Array.from(sentence).length <= MAX_TTS_SEGMENT_CHARS));
-    assert.equal(sentences.join(''), source);
+    assert.deepEqual(splitIntoSentences(source), [source]);
+    assert.deepEqual(splitIntoSentences('天'.repeat(121)), ['天'.repeat(121)]);
 });
 
-test('略超上限的长句不会留下单字尾段', () => {
-    const sentences = splitIntoSentences('天'.repeat(MAX_TTS_SEGMENT_CHARS + 1));
-    assert.equal(sentences.length, 2);
-    assert.ok(sentences.every(sentence => Array.from(sentence).length > 20));
-    assert.equal(sentences.join(''), '天'.repeat(MAX_TTS_SEGMENT_CHARS + 1));
+test('流式句末立即产出，跨块逗号计数、英文小数与尾段只冲刷一次', () => {
+    const stream = createSentenceStream();
+    assert.deepEqual(stream.push('第一句。'), ['第一句。']);
+    assert.deepEqual(stream.push('版本1.'), []);
+    assert.deepEqual(stream.push('2，甲，乙，丙，'), ['版本1.2，甲，乙，丙，']);
+    assert.deepEqual(stream.push('尾段'), []);
+    assert.deepEqual(stream.finish(), ['尾段']);
+    assert.deepEqual(stream.finish(), []);
+    assert.deepEqual(stream.push('迟到。'), []);
 });

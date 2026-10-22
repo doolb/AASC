@@ -27,7 +27,7 @@ function chatHarness() {
     const context = { console, setTimeout, clearTimeout, WebSocket: { OPEN: 1 },
         ChatMarkdown: { render: text => text },
         document: { getElementById: id => elements.get(id) || null, createElement: () => ({}) },
-        window: { currentDisplayId: 'display-a', WebSocketManager: { ws: { readyState: 1, send: raw => sent.push(JSON.parse(raw)) } },
+        window: { currentDisplayId: 'display-a', WebSocketManager: { send: data => { if (data.type !== 'getChatContextUsage') sent.push(data); }, ws: { readyState: 1, send: raw => sent.push(JSON.parse(raw)) } },
             DisplayList: { selectionMode: 'single' }, showToast() {} } };
     vm.runInNewContext(chatSource, context, { filename: 'chat.js' });
     const chat = context.window.Chat;
@@ -195,7 +195,9 @@ function serverHarness() {
     const service = createTtsProviderService({ getSettings: () => settings, registry, storeAudio: () => `generated-${++audioIndex}.wav` });
     const context = { path, resolveChatReplyTtsOptions,
         displayVoiceListeningConfig: { handle: () => false }, displayClients: new Map(),
+        chatContextUsage: { handle: () => false },
         asrLongQueueSettings: { handle: () => false },
+        doubaoWebViewSettings: { handle: () => false },
         chat: { splitIntoSentences: text => text.split('|'), getTemplateByName: name => { lookups += 1; return templates.get(name); } },
         stripMarkdown: text => text.replace(/\*/gu, ''), isPunctuationOnly: text => !text.trim(), isRepairModeTtsSuppressed: () => false,
         logError: (category, message) => errors.push(message),
@@ -246,10 +248,7 @@ test('真实手动qwen-chat链路跳过4段emoji，8段正文按顺序下发且�
 // 复用实际Markdown清理、分句和手动服务；上游仅注入本地WAV，不发真实账号请求。
 // 对应.src/framework/tts-provider-configuration.md的豆包表情过滤自测。
 test('真实手动豆包链路跳过表情分句，用户原句和日志完整回复继续正文且正常收尾', async () => {
-    const stripStart = serverSource.indexOf('function stripMarkdown(text) {');
-    const stripEnd = serverSource.indexOf("\nconst tts = require(", stripStart);
-    assert.ok(stripStart >= 0 && stripEnd > stripStart);
-    const strip = vm.runInNewContext(serverSource.slice(stripStart, stripEnd) + '; stripMarkdown');
+    const strip = require('../src/core/utils/markdown-speech').toSpeechText;
     const original = '喵呜～主人好呀！✨\n\n人家是**妲己**，一只拥有九条尾巴的**电子猫娘**哦！🐱💻⚡';
     const full = original + '\n\n虽然名字和那个传说中的狐狸精一样，但我可是由数据流和代码构成的可爱存在呢。我的九条尾巴其实是九个高性能的数据处理终端，可以随时帮主人搜索信息、解答难题，或者只是单纯地卖萌打滚求摸摸～ 📶🐾\n\n主人今天想聊些什么呢？是要查询什么情报，还是想听妲己讲讲笑话呢？喵～❤️';
     for (const [text, expectedCount] of [[original, 3], [full, 8], ['✨\n🐱💻⚡\n❤️', 0],
@@ -399,7 +398,7 @@ test('真实浏览器点击AI/Agent/临时历史播放按钮并执行只读语�
             window.sent = [];
             window.currentDisplayId = 'display-a';
             window.DisplayList = { selectionMode: 'single' };
-            window.WebSocketManager = { ws: { readyState: 1, send: raw => sent.push(JSON.parse(raw)) } };
+            window.WebSocketManager = { send: data => { if (data.type !== 'getChatContextUsage') sent.push(data); }, ws: { readyState: 1, send: raw => sent.push(JSON.parse(raw)) } };
         });
         await page.addScriptTag({ path: path.join(publicDir, 'js/chat-markdown.js') });
         await page.addScriptTag({ path: path.join(publicDir, 'js/chat.js') });

@@ -935,11 +935,12 @@
             const chunk = typeof message.chunk === 'string'
                 ? message.chunk
                 : (typeof message.message?.content === 'string' ? message.message.content : '');
-            const content = current + chunk;
+            // 服务端携带完整快照时以快照为准；仅旧消息缺快照时才累加增量。
+            const content = typeof message.message === 'string' ? message.message : current + chunk;
             if (previous) previous.dataset.content = content;
             replaceStreamingMessage(requestId, content, {
                 author: state.session.roleTarget || state.session.privateTarget || state.assistantName,
-                reasoning: message.message?.reasoning || ''
+                reasoning: message.reasoning || message.message?.reasoning || ''
             });
             return true;
         }

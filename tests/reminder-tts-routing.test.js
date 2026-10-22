@@ -13,7 +13,6 @@ const serverSource = fs.readFileSync(
     require.resolve('../src/apps/server/boot/server-app'),
     'utf8'
 );
-const { MAX_TTS_SEGMENT_CHARS } = require('../src/core/utils/sentence-splitter');
 
 test('单条提醒测试使用注入的统一 TTS 生成器', async () => {
     const generatedTexts = [];
@@ -60,17 +59,26 @@ test('长提醒逐段生成并按顺序进入显示端队列', async () => {
         generated.push(text);
         return `/tmp/segment-${generated.length}.wav`;
     } });
-    const content = '甲'.repeat(MAX_TTS_SEGMENT_CHARS * 2 + 10);
+    const content = '甲'.repeat(150) + '。' + '乙'.repeat(150) + '。';
     await reminder.testReminder({ content, methods: ['voice', 'popup'] }, 'display-1',
         (displayId, message) => delivered.push(message));
-    assert.equal(generated.length, 3);
-    assert.ok(generated.every(text => Array.from(text).length <= MAX_TTS_SEGMENT_CHARS));
-    assert.equal(generated.join(''), `${delivered[1].text}${delivered[2].text}${delivered[3].text}`);
+    assert.equal(generated.length, 2);
+    assert.equal(generated.join(''), `${delivered[1].text}${delivered[2].text}`);
     assert.match(generated.join(''), new RegExp(content));
-    assert.deepEqual(delivered.map(message => message.action), ['popup', 'voice', 'voice', 'voice']);
+    assert.deepEqual(delivered.map(message => message.action), ['popup', 'voice', 'voice']);
     assert.deepEqual(delivered.slice(1).map(message => message.audioUrl), [
-        '/uploads/tts/segment-1.wav', '/uploads/tts/segment-2.wav', '/uploads/tts/segment-3.wav'
+        '/uploads/tts/segment-1.wav', '/uploads/tts/segment-2.wav'
     ]);
 });
 
 console.log('reminder-tts-routing.test.js: reminder TTS routing contracts passed');
+
+test('Markdown提醒先变为可朗读正文，字幕仍保留格式且不读链接地址', async () => {
+    const generated = [], delivered = [];
+    reminder.init({ generateTTS: async text => { generated.push(text); return '/tmp/markdown-reminder.wav'; } });
+    await reminder.testReminder({ content: '**喝水。**[帮助](https://example.com)', methods: ['voice'] }, 'display',
+        (_display, message) => delivered.push(message));
+    assert.ok(generated.every(text => !text.includes('https://') && !text.includes('**')));
+    assert.ok(delivered.every(message => message.subtitle.markdown.includes('**喝水。**')));
+    assert.equal(delivered.at(-1).text, '帮助');
+});

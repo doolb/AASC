@@ -1,4 +1,5 @@
 'use strict';
+const { splitSpeechSegments } = require('../../../../core/utils/markdown-speech');
 
 // 控制端和显示端共享手动重播；显示端目标只取服务器登记身份，生成取消后丢弃迟到结果。
 function createManualChatTtsService({ split, strip, resolveOptions, scheduler, generate, toAudioUrl,
@@ -37,7 +38,9 @@ function createManualChatTtsService({ split, strip, resolveOptions, scheduler, g
         try {
             if (!current()) { notify(ws, requestId, 'cancelled'); return; }
             if (typeof data.text !== 'string' || !data.text.trim() || data.text.length > 100000) throw new Error('语音正文无效');
-            const sentences = split(strip(data.text)).filter(text => text.trim());
+            const segments = splitSpeechSegments(data.text, { strip, split });
+            const sentences = segments.map(segment => segment.text);
+            const subtitles = segments.map(segment => segment.subtitle);
             const targets = sourceDisplayId ? [sourceDisplayId] : data.displayIds || (displayId ? [displayId] : []);
             const preferred = targets[0] || displayId;
             const options = { ...resolveOptions(data.chatReplyContext), signal: token.controller.signal };
@@ -58,6 +61,7 @@ function createManualChatTtsService({ split, strip, resolveOptions, scheduler, g
                 if (!result || !current()) return;
                 audioCount++;
                 const message = { type: 'tts', action: 'playAudio', text: result.sentence, audioUrl: toAudioUrl(result.reference),
+                    subtitle: subtitles[index], speech: result.sentence,
                     ...(requestId ? { manualTtsRequestId: requestId, manualTtsLast: index === sentences.length - 1 } : {}),
                     ...(data.chatTtsConversationId ? { chatTtsConversationId: data.chatTtsConversationId, chatTtsPhase: 'answer' } : {}) };
                 if (!sourceDisplayId && data.playOnControl) {

@@ -11,6 +11,7 @@ const { createQwenChatProvider } = require('../src/apps/server/modules/tts/qwen-
 const { filterQwenChatSpeechText } = require('../src/apps/server/modules/tts/qwen-chat-text-filter');
 const { splitIntoSentences } = require('../src/core/utils/sentence-splitter');
 const { wrapPcm } = require('../src/external/tts/tts-wav');
+const { toSpeechText: stripMarkdown, splitSpeechSegments } = require('../src/core/utils/markdown-speech');
 const source = fs.readFileSync(path.resolve(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
 const wav = wrapPcm(Buffer.from([1, 0, 2, 0]));
 function fixture() {
@@ -29,7 +30,7 @@ function section(start, end) {
 }
 function harness(service) {
     const sent = [], errors = [];
-    const context = { path, BUSINESS_TYPES, filterQwenChatSpeechText, ttsProviderService: service,
+    const context = { stripMarkdown, splitSpeechSegments, path, BUSINESS_TYPES, filterQwenChatSpeechText, ttsProviderService: service,
         normalizeTtsPauseText: text => text, chat: { splitIntoSentences }, generateCorrelationId: () => 'batch',
         beginDisplayConversationTtsGeneration: () => null, endDisplayConversationTtsGeneration() {},
         isRepairModeTtsSuppressed: () => false, resolveCurrentVoicePlaybackTarget: () => 'speaker',
@@ -166,4 +167,15 @@ test('生成API跳过响应兼容正式显示端队列，继续下一句并收�
     assert.equal(context.ttsBatchPlaybackStates.size, 0);
     assert.deepEqual(finished, ['empty', 'next']);
     assert.deepEqual(errors, []);
+});
+
+test('完整播报先清理Markdown再分句，链接地址不进入语音且字幕原文与批次尾保留', async () => {
+    const { service, calls } = fixture();
+    const h = harness(service);
+    const source = '# 标题\n**你好。**\n[帮助](https://example.com)';
+    await h.context.sendVoiceCommandTtsSentences(source, 'speaker');
+    assert.deepEqual(calls.map(call => call.input), ['标题', '你好。', '帮助']);
+    assert.ok(h.sent.every(message => message.subtitle?.markdown === source));
+    assert.equal(h.sent.at(-1).voiceTtsBatchEnd, true);
+    assert.ok(h.sent.slice(0, -1).every(message => message.voiceTtsBatchEnd === false));
 });

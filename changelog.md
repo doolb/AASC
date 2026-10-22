@@ -1,3 +1,10 @@
+### 聊天流式显示、分段TTS与Markdown字幕
+
+- ✅ [2026-10-22] 普通聊天逐块更新两端，完整自然分句在模型完成前进入原TTS队列；保留GM确认、原音色、限流保序、取消和全播放结束后计时。
+  - 新增game-chat-stream、markdown-speech，更新游戏桥/LLM/Agent/手动/语音命令/提醒、共享分句器和字幕来源/DOM克隆；移除120字硬切，保留四逗号/标点/括号边界、跨块Markdown与有限字典动作。正文与speech/字幕格式元数据分离，累计快照和阶段句游标防止重复。
+  - 新增test:chat-streaming及只读前端自测：专项63/63、五子棋70/70、聊天TTS24/24、语音/原生兼容19/19、MMD组合33/33，零失败零跳过。真实双端DOM联测证明SSE夹具尚未completed时已出字且首段已合成，音频时钟代理验证格式/旧源/暂停和尾行；不冒称当前生产模型或真机声音测速。
+  - 同步chat-system/game/Responses design/spec、task/usage/self-test/todo；只保留服务部署及Android实体声音/字幕验收待办。servicePackage=true，其余产物状态保持，无原生/依赖/任务代码修改，未出包发布或重启生产服务。
+
 ### Node子显示端ASS文本媒体
 
 - ✅ [2026-10-22] 使用常驻mpv的独立ASS层显示单篇txt/md可读正文，支持分页、页码、textStyle、翻页/启停、旋转重排和页/句暂停恢复；时钟/连接/TTS/ASR保留网页位置。

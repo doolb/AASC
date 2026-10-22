@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { isSentenceEnd, splitIntoSentences } = require('../../core/utils/sentence-splitter');
+const { createMarkdownSentenceStream } = require('../../core/utils/markdown-speech');
 
 const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
 const {
@@ -1468,33 +1469,26 @@ function createChatStreamOutput(callbacks = {}) {
     let structuredReasoning = '';
     let filteredReasoning = '';
     let filteredSpeech = '';
-    let pendingSpeech = { text: '', phase: 'answer' };
+    let pendingSpeech = { stream: createMarkdownSentenceStream(), phase: 'answer' };
 
-    const emitPendingSentence = () => {
-        const text = pendingSpeech.text.trim();
-        if (!text) return;
-        onSentence?.(text, fullMessage, fullReasoning, fullSpeech, pendingSpeech.phase);
-        pendingSpeech = { text: '', phase: pendingSpeech.phase };
+    const emitSegments = segments => {
+        for (const segment of segments) {
+            onSentence?.(segment.text, fullMessage, fullReasoning, fullSpeech,
+                pendingSpeech.phase, segment.subtitle);
+        }
     };
-
-    const appendSpeechSegments = (segments) => {
+    const emitPendingSentence = () => emitSegments(pendingSpeech.stream.finish());
+    const appendSpeechSegments = segments => {
         for (const segment of segments) {
             const text = typeof segment?.text === 'string' ? segment.text : '';
             if (!text) continue;
             const phase = segment.phase === 'think' ? 'think' : 'answer';
-            if (pendingSpeech.text && pendingSpeech.phase !== phase) {
-                // think 结束而 answer 开始时，即使 think 没有句末标点，也要先播完
-                // 已确认的思维链，再让答案接管播放器。
+            if (pendingSpeech.phase !== phase) {
                 emitPendingSentence();
+                pendingSpeech = { stream: createMarkdownSentenceStream(), phase };
             }
-            pendingSpeech.phase = phase;
-            pendingSpeech.text += text;
-            const sentences = splitIntoSentences(pendingSpeech.text);
-            if (sentences.length < 2) continue;
-            for (const sentence of sentences.slice(0, -1)) {
-                onSentence?.(sentence, fullMessage, fullReasoning, fullSpeech, phase);
-            }
-            pendingSpeech.text = sentences[sentences.length - 1];
+            // 完整句在本块就入队，不再等待下一个分句；Markdown状态保留到本阶段结束。
+            emitSegments(pendingSpeech.stream.push(text));
         }
     };
 
@@ -1538,6 +1532,7 @@ function createChatStreamOutput(callbacks = {}) {
         },
         finish(finalText = null) {
             publish(filter.finish(finalText));
+            emitPendingSentence();
         },
         getMessage() {
             return fullMessage;
@@ -1549,12 +1544,11 @@ function createChatStreamOutput(callbacks = {}) {
             return fullSpeech;
         },
         getPendingText() {
-            return pendingSpeech.text;
+            return pendingSpeech.stream.getPending();
         },
         getPendingSpeechSegments() {
-            return pendingSpeech.text
-                ? [{ text: pendingSpeech.text, phase: pendingSpeech.phase }]
-                : [];
+            // finish已原子冲刷尾段；旧调用方仍可查询，不能再次投递同一段。
+            return [];
         }
     };
 }

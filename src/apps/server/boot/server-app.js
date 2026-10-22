@@ -31,25 +31,9 @@ const voiceprintStore = require('../modules/voiceprint/voiceprint-store');
 // 声纹权威库变更时广播：让所有显示端重拉权威库重建本地 SpeakerEmbeddingManager
 voiceprintStore.onChange(() => broadcastVoiceprintDbUpdated());
 
-// 移除 Markdown 标记，用于 TTS 播报前的文本清洗
-function stripMarkdown(text) {
-    return text
-        .replace(/```[\s\S]*?```/g, '')           // 代码块
-        .replace(/`([^`]+)`/g, '$1')                // 行内代码
-        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')   // 图片 ![alt](url)
-        .replace(/\[([^\]]*)\]\([^)]+\)/g, '$1')    // 链接 [text](url)
-        .replace(/\[source_group_web_\d+\]/g, '')   // LLM 联网搜索引用标记
-        .replace(/\[\([^)]*\)\]/g, '')              // 内部标记标签 [(video_note_list_1)]
-        .replace(/#{1,6}\s+/g, '')                  // 标题标记
-        .replace(/(\*{1,3}|_{1,3}|~~)(.*?)\1/g, '$2') // 粗体/斜体/删除线
-        .replace(/^[>\s]*>/gm, '')                  // 引用标记
-        .replace(/^[-*+]\s+/gm, '')                 // 无序列表标记
-        .replace(/^\d+[.)]\s+/gm, '')               // 有序列表标记
-        .replace(/^---+\s*$/gm, '')                 // 分隔线
-        .replace(/^\|.+\|$/gm, (m) => m.replace(/\|/g, ' ').replace(/:\s*[-]+\s*/g, '')) // 表格行 → 纯文本
-        .replace(/\n{3,}/g, '\n\n')                 // 过多空行压缩
-        .trim();
-}
+// 统一保留显示原文，只把Markdown正文送入语音引擎。
+const { toSpeechText, splitSpeechSegments } = require('../../../core/utils/markdown-speech');
+const stripMarkdown = toSpeechText;
 const tts = require('../../../external/tts/tts-service');
 const ttsAudioCache = require('../../../external/tts/tts-audio-cache');
 const { normalizeAudioCacheMaxMiB } = require('../../../external/tts/tts-audio-cache-config');
@@ -3082,6 +3066,10 @@ app.get('/js/sentence-splitter.js', (req, res) => {
     res.type('application/javascript').sendFile(
         path.join(CODE_ROOT, 'src', 'core', 'utils', 'sentence-splitter.js')
     );
+});
+
+app.get('/js/markdown-speech.js', (req, res) => {
+    res.type('application/javascript').sendFile(path.join(CODE_ROOT, 'src', 'core', 'utils', 'markdown-speech.js'));
 });
 
 app.use(express.static(path.join(CODE_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public'), {
@@ -7356,6 +7344,8 @@ function sendTtsGenerateToDisplay(display, text, requestId, speed = 0) {
 // 带 fallback 的 TTS 生成：tts.device='display' 时优先用显示端离线合成，
 // 显示端离线/错误/超时则回退服务端 tts.generateTTS；server 模式直接走服务端
 async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = null, options = {}) {
+    text = typeof text === 'string' ? stripMarkdown(text) : text;
+    if (text === '') return null;
     if (options.systemRoute !== true) {
         return ttsProviderService.generate({ text: normalizeTtsPauseText(text), voice, speed, preferredDisplayId,
             businessType: options.businessType || BUSINESS_TYPES.SYSTEM_BROADCAST, templateTts: options.templateTts,
@@ -7397,10 +7387,10 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
 // 没有语音播放能力时切换到稳定顺序中的第一个可用显示端。
 // TTS 生成设备和音频播放目标分离：生成仍遵循 tts.device 配置，播放目标由通用能力路由决定。
 function getVoiceTtsBatchPayload(playbackOptions = {}) {
-    if (!playbackOptions.batchId) return {};
     return {
-        voiceTtsBatchId: playbackOptions.batchId,
-        voiceTtsBatchEnd: playbackOptions.batchEnd === true
+        ...(playbackOptions.batchId ? { voiceTtsBatchId: playbackOptions.batchId,
+            voiceTtsBatchEnd: playbackOptions.batchEnd === true } : {}),
+        ...(playbackOptions.subtitle ? { subtitle: playbackOptions.subtitle, speech: playbackOptions.subtitle.speech } : {})
     };
 }
 
@@ -7508,14 +7498,13 @@ async function sendVoiceTtsSentences(text, sendSentence, options = {}) {
     const conversationDisplayId = options.conversationDisplayId || null;
     const generationToken = beginDisplayConversationTtsGeneration(conversationDisplayId);
     try {
-        const sentences = chat.splitIntoSentences(text);
-        const candidates = sentences.length > 0 ? sentences : [text];
+        const segments = splitSpeechSegments(text);
         const snapshot = ttsProviderService.resolve({ businessType: BUSINESS_TYPES.SYSTEM_BROADCAST });
         const provider = snapshot.selection.provider;
-        // 仅千问会跳过表情句，先排除这些句子再确定批次尾标记；原显示文字保持，
-        // 避免最后一段没有音频时丢失结束标记。其它Provider沿用原文和原分句。
-        const orderedSentences = provider === 'qwen-chat'
-            ? candidates.filter(sentence => Boolean(filterQwenChatSpeechText(sentence))) : candidates;
+        // 先规范Markdown，再按供应商过滤无声片段，最后确定真实批次尾；字幕仍保留Markdown原文。
+        const orderedSegments = provider === 'qwen-chat'
+            ? segments.filter(segment => Boolean(filterQwenChatSpeechText(segment.text))) : segments;
+        const orderedSentences = orderedSegments.map(segment => segment.text);
         if (orderedSentences.length === 0) return 0;
         const batchId = generateCorrelationId('voice-tts-batch');
         let sentCount = 0;
@@ -7525,7 +7514,8 @@ async function sendVoiceTtsSentences(text, sendSentence, options = {}) {
                 batchId,
                 batchEnd: index === orderedSentences.length - 1,
                 ttsConfiguration: snapshot.configuration,
-                ...options
+                ...options,
+                subtitle: orderedSegments[index].subtitle
             });
             if (sent) sentCount++;
         }
@@ -7552,7 +7542,7 @@ async function sendVoiceCommandTtsSentences(text, targetDisplayId, options = {})
 
 // 控制端语音播放沿用前端队列；逐段生成并发送，保持天气和搜索长播报的顺序。
 async function sendControlVoiceTtsSentences(text, sendToControl, options = {}) {
-    for (const sentence of chat.splitIntoSentences(text)) {
+    for (const { text: sentence, subtitle } of splitSpeechSegments(text)) {
         if (options.shouldContinue && !options.shouldContinue()) break;
         const audioPath = await generateTtsWithFallback(sentence);
         if (audioPath === null) break;
@@ -7560,7 +7550,8 @@ async function sendControlVoiceTtsSentences(text, sendToControl, options = {}) {
         sendToControl({
             type: 'playOnControl',
             audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
-            text: sentence
+            text: sentence,
+            subtitle, speech: sentence
         });
     }
 }
@@ -11288,10 +11279,10 @@ async function handleControlMessageFallback(data, ws) {
                                         reasoning
                                     }));
                                 },
-                                onSentence: (sentence) => {
+                                onSentence: (sentence, _message, _reasoning, _speech, _phase, subtitle) => {
                                     if (isPunctuationOnly(sentence)) return;
                                     ttsScheduler.enqueue(async () => {
-                                        return generateChatTtsActions({ sentence, stripMarkdown,
+                                        return generateChatTtsActions({ sentence, subtitle, stripMarkdown,
                                             conversationId: data.requestId || '', send: message => sendToDisplay(displayId, message),
                                             generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, displayId, legacyTtsOptions) });
                                     }).then((result) => {
@@ -11303,7 +11294,8 @@ async function handleControlMessageFallback(data, ws) {
                                             action: 'playAudio',
                                             audioUrl: `/uploads/tts/${fileName}`,
                                             text: sentence,
-                                            ...(result.ttsAction ? { ttsAction: result.ttsAction } : {})
+                                            ...(result.ttsAction ? { ttsAction: result.ttsAction } : {}),
+                                            ...(result.subtitle ? { subtitle: result.subtitle, speech: result.speech } : {})
                                         });
                                     }).catch(err => {
                                         logError('Chat', `TTS生成失败: ${err.message}`);
@@ -11596,7 +11588,7 @@ async function handleChatMessage(options) {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage, reasoning });
         },
-        onSentence: (sentence, _fullMessage, _fullReasoning, _fullSpeech, speechPhase = 'answer') => {
+        onSentence: (sentence, _fullMessage, _fullReasoning, _fullSpeech, speechPhase = 'answer', subtitle = null) => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             if (!tts || isPunctuationOnly(sentence)) return;
             if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return;
@@ -11620,7 +11612,7 @@ async function handleChatMessage(options) {
                 if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return null;
                 if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
                 if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return null;
-                return generateChatTtsActions({ sentence, phase: ttsPhase, conversationId: ttsConversationId,
+                return generateChatTtsActions({ sentence, subtitle, phase: ttsPhase, conversationId: ttsConversationId,
                     stripMarkdown, generate: cleanText => generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId,
                         { ...replyTtsOptions, signal: ttsToken?.signals?.[ttsPhase] }),
                     send: message => {
@@ -11639,7 +11631,8 @@ async function handleChatMessage(options) {
                 const audioUrl = `/uploads/tts/${fileName}`;
                 const ttsMetadata = { ...(ttsConversationId
                     ? { chatTtsConversationId: ttsConversationId, chatTtsPhase: ttsPhase } : {}),
-                    ...(result.ttsAction ? { ttsAction: result.ttsAction } : {}) };
+                    ...(result.ttsAction ? { ttsAction: result.ttsAction } : {}),
+                    ...(result.subtitle ? { subtitle: result.subtitle, speech: result.speech } : {}) };
 
                 if (playOnControl) {
                     sendToControl({ type: 'playOnControl', audioUrl, text: sentence, ...ttsMetadata });
