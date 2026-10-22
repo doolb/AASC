@@ -43,6 +43,7 @@ class MpvPlayer extends EventEmitter {
         this.dynamicEpoch = 0;
         this.lastProgressAt = 0;
         this.disposals = new Set();
+        this.unsupportedResetProperties = new Set();
     }
 
     async checkAvailable() {
@@ -176,7 +177,7 @@ class MpvPlayer extends EventEmitter {
                     clearTimeout(pending.timer);
                     this.pending.delete(message.request_id);
                     if (message.error === 'success') pending.resolve(message.data);
-                    else pending.reject(new Error(`mpv命令失败：${message.error}`));
+                    else pending.reject(Object.assign(new Error(`mpv命令失败：${message.error}`), { mpvError: message.error }));
                 }
                 this.receiveEvent(message);
             } catch (error) { this.onError(error); }
@@ -381,17 +382,42 @@ class MpvPlayer extends EventEmitter {
         }
     }
 
+    async resetProperty(name, value) {
+        if (this.unsupportedResetProperties.has(name)) return;
+        try {
+            await this.command(['set_property', name, value]);
+        } catch (error) {
+            // 老版mpv没有scale属性时也能使用原生panscan；仅忽略明确的可选属性缺失。
+            if (!['property not found', 'property unavailable'].includes(error.mpvError)) throw error;
+            if (error.mpvError === 'property not found') this.unsupportedResetProperties.add(name);
+        }
+    }
+
+    nativePanscan() {
+        const values = { contain: 0, cover: 1, dynamic: 0, crop: 0 };
+        if (Object.hasOwn(values, this.visual.fit)) return values[this.visual.fit];
+        // height/width在任意比例下均等价于contain或cover，沿用网页旋转后的指定轴语义。
+        const geometry = this.geometry();
+        return geometry && Math.max(geometry.scaleX, geometry.scaleY) > 1 + 1e-8 ? 1 : 0;
+    }
+
     async applyGeometry() {
         if (!this.current || this.current.mediaType === 'audio' || !this.session?.socket || this.session.disposed) return;
         const revision = this.revision;
         const epoch = this.dynamicEpoch;
         const valid = () => revision === this.revision && epoch === this.dynamicEpoch && !this.closed && !!this.current;
         for (const [name, value] of [['video-rotate', this.visual.rotation], ['keepaspect', true],
-            ['video-unscaled', 'no'], ['panscan', 0], ['video-zoom', 0]]) {
+            ['video-unscaled', 'no'], ['video-zoom', 0], ['video-pan-x', 0], ['video-pan-y', 0]]) {
             if (!valid()) return;
             await this.command(['set_property', name, value]);
         }
-        await this.writeGeometry(this.geometry(), valid);
+        for (const name of ['video-scale-x', 'video-scale-y']) {
+            if (!valid()) return;
+            await this.resetProperty(name, 1);
+        }
+        if (!valid()) return;
+        await this.command(['set_property', 'panscan', this.nativePanscan()]);
+        if (this.visual.fit === 'crop') await this.writeGeometry(this.geometry(), valid);
     }
 
     scheduleGeometry() {
@@ -421,16 +447,14 @@ class MpvPlayer extends EventEmitter {
         this.stopDynamic();
         const epoch = this.dynamicEpoch;
         const { holdSeconds, transitionSeconds } = this.visual.dynamicFitConfig;
-        let from = this.geometry('contain');
-        let to = this.geometry('cover');
-        if (!from || !to) return;
+        let from = 0;
+        let to = 1;
         let transitionStart = Date.now() + holdSeconds * 1000;
         const tick = async () => {
             if (epoch !== this.dynamicEpoch || this.closed || !this.current) return;
             const fraction = Math.max(0, Math.min(1, (Date.now() - transitionStart) / (transitionSeconds * 1000)));
-            const interpolated = {};
-            for (const key of ['scaleX', 'scaleY', 'panX', 'panY']) interpolated[key] = from[key] + (to[key] - from[key]) * fraction;
-            try { await this.writeGeometry(interpolated, () => epoch === this.dynamicEpoch && !this.closed); }
+            const panscan = from + (to - from) * fraction;
+            try { await this.command(['set_property', 'panscan', panscan]); }
             catch (error) { if (epoch === this.dynamicEpoch) this.onError(error); return; }
             if (epoch !== this.dynamicEpoch) return;
             if (fraction === 1) {

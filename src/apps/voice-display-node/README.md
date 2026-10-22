@@ -16,4 +16,6 @@ node src/apps/voice-display-node/main.js src/apps/voice-display-node/config.json
 
 发布 ZIP 不含本机 `config.json`。手工独立运行前，将 `config.example.json` 复制为 `config.json`，再把 `serverUrl` 改为 AASC 服务地址；服务端自身启动时仍会按现有路径生成并维护该配置。
 
+配置错误会在初始化界面和网络前直接输出 `[ERROR][配置]`、文件路径及原因，并以退出码1停止；Windows `start.bat` 失败时会暂停显示错误。配置必须包含明确的HTTP/HTTPS服务器地址，不再回退localhost。适应/铺满/动态填充现使用mpv原生panscan。
+
 Node 原生依赖与生成 ZIP 的出包平台一致；当前发布目录面向 Windows x64 子显示设备。

@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## Node配置ERROR与原生panscan（2026-10-22）
+
+配置测试4/4、mpv专项17/17、真实mpv null输出1/1、隔离Xvnc真实画面1/1、语音/重连28/28、独立包22/22，合计73项通过、零跳过。配置测试通过真实启动进程验证ERROR/绝对路径/原因、退出码1且不加载TUI/网络/录音/播放器模块；Windows失败暂停和退出码保留作契约检查。
+
+原生测试覆盖panscan=0/1及动态中间值、无尺寸/旧mpv无scale、裁剪切换复位及四方向高度/宽度语义。Xvnc使用自动分配隔离显示和私有Unix接入，不开放VNC/TCP监听；四方向同一边缘采样contain=[0,0,0]、cover=[0,255,0]，常驻PID不变。首轮虚拟显示夹具因无接入端点启动失败，修正为私有Unix socket后通过，未将失败记为通过。Windows实机及双击错误提示可见性仍待现场验收，本轮未构建发布。
+
 ## Node子显示端常驻mpv与保留系统TTS（2026-10-22）
 
 `npm run test:node-display-mpv`15/15、`npm run test:node-display-mpv:real`1/1通过，零跳过。专项通过真实socket/独立子进程验证Linux/Windows配置、认证探测、单实例、媒体/临时文件、控制回执/超时、崩溃重建、清空/退出、恢复竞态及VoiceDisplay真实消息分支；96组几何和网页真实applyCrop对照。TTS验证Windows PowerShell/Linux aplay实际分支，TTS开始/停止不调用mpv，媒体清空不停止TTS。

@@ -36,7 +36,8 @@ async function createPlayer(t, platform = process.platform, extra = {}) {
             actualAddress = process.platform === 'win32' ? ipcAddress('win32')
                 : (platform === 'win32' ? path.join(player.session.directory, 'fixture.sock') : address);
             return spawn(process.execPath, [path.join(__dirname, 'fixtures/fake-mpv.js'),
-                ...args.filter(value => !value.startsWith('--input-ipc-server=')), `--input-ipc-server=${actualAddress}`], options);
+                ...args.filter(value => !value.startsWith('--input-ipc-server=')),
+                ...(extra.fixtureNoScale ? ['--fixture-no-scale'] : []), `--input-ipc-server=${actualAddress}`], options);
         },
         connect: address => { connections.push(address); return net.createConnection(actualAddress); },
         onError: error => errors.push(error), ...extra
@@ -168,15 +169,62 @@ test('旋转、六种模式与动态调度均复用进程，清空后无调度�
     assert.ok(player.dynamicTimer);
     await delay(250);
     const log = await player.command(['get_property', 'test-command-log']);
-    assert.ok(log.some(command => command[1] === 'video-scale-x' && command[2] > 1));
+    assert.ok(log.some(command => command[1] === 'panscan' && command[2] > 0 && command[2] < 1));
+    assert.ok(log.some(command => command[1] === 'panscan' && command[2] === 1));
     await player.control('fit', 'contain');
     await delay(100);
     assert.equal(player.dynamicTimer, null);
     assert.equal(await player.command(['get_property', 'video-scale-x']), 1);
+    assert.equal(await player.command(['get_property', 'panscan']), 0);
     assert.equal(starts.length, 1);
     await player.clear();
     assert.equal(player.dynamicTimer, null);
     assert.equal(player.geometryTimer, null);
+});
+
+test('原生panscan不依赖尺寸，旧mpv无scale属性仍可适应/铺满/动态', async t => {
+    const { player, errors } = await createPlayer(t, process.platform, { fixtureNoScale: true });
+    await player.load(media());
+    player.properties = {};
+    await player.control('fit', 'cover');
+    assert.equal(await player.command(['get_property', 'panscan']), 1);
+    await player.control('fit', 'contain');
+    assert.equal(await player.command(['get_property', 'panscan']), 0);
+    await player.control('dynamicFitConfig', { holdSeconds: 0.1, transitionSeconds: 0.1 });
+    await player.control('fit', 'dynamic');
+    await delay(350);
+    const log = await player.command(['get_property', 'test-command-log']);
+    assert.ok(log.some(command => command[1] === 'panscan' && command[2] > 0 && command[2] < 1));
+    assert.equal(player.unsupportedResetProperties.size, 2);
+    assert.deepEqual(errors, []);
+    await player.control('fit', 'contain');
+    assert.equal(player.dynamicTimer, null);
+});
+
+test('原生panscan模式切换清除裁剪缩放和平移，高度/宽度保留四方向语义', async t => {
+    const { player } = await createPlayer(t);
+    await player.load(media());
+    await player.control('crop', { x: 20, y: 10, width: 50, height: 60 });
+    assert.ok(await player.command(['get_property', 'video-scale-x']) > 1);
+    await player.control('fit', 'cover');
+    for (const [name, value] of [['video-scale-x', 1], ['video-scale-y', 1], ['video-pan-x', 0], ['video-pan-y', 0], ['video-zoom', 0], ['panscan', 1]]) {
+        assert.equal(await player.command(['get_property', name]), value, name);
+    }
+    for (const [dw, dh] of [[1280, 720], [720, 1280]]) {
+        for (const [w, h] of [[800, 600], [600, 800]]) {
+            for (const rotation of [0, 90, 180, 270]) {
+                player.properties['video-dec-params'] = { dw, dh, rotate: 0 };
+                player.properties['osd-dimensions'] = { w, h };
+                await player.control('rotate', rotation);
+                for (const fit of ['height', 'width']) {
+                    await player.control('fit', fit);
+                    const expected = calculateGeometry({ width: dw, height: dh, windowWidth: w, windowHeight: h, rotation, fit });
+                    const expectedPanscan = Math.max(expected.scaleX, expected.scaleY) > 1 + 1e-8 ? 1 : 0;
+                    assert.equal(await player.command(['get_property', 'panscan']), expectedPanscan);
+                }
+            }
+        }
+    }
 });
 
 test('几何与网页真实applyCrop一致：横竖媒体、窗口、四方向和六模式组合', () => {

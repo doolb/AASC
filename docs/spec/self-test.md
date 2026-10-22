@@ -1,5 +1,16 @@
 # 自测功能实现文档
 
+## 配置ERROR与panscan自测（2026-10-22）
+
+```text
+配置 := test:node-display-config 4/4；真实子进程坏JSON/缺文件/非法地址，stderr含ERROR/路径/阶段/原因，退出1，preload标记证明无业务模块加载
+原生 := test:node-display-mpv 17/17；panscan端点/中间值、缺尺寸、旧mpv无scale、裁剪复位和height/width四方向比例
+真实IPC := test:node-display-mpv:real 1/1；真实mpv属性读回与三媒体、常驻PID及资源回收
+真实画面 := test:node-display-mpv:render 1/1；私有Xvnc屏幕、Unix接入、零TCP/VNC端口；四方向黑边[0,0,0]→铺满[0,255,0]，PID保持
+回归 := 语音/重连28/28、独立包22/22，总73项、零跳过
+边界 := Xvnc初次夹具因未配接入端点失败，改私有Unix socket后复测成功；不代表Windows实机和双路声音混音验收
+```
+
 ## Node常驻mpv与系统TTS自测（2026-10-22）
 
 ```text

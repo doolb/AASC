@@ -1,3 +1,20 @@
+### Node子显示端配置ERROR与原生panscan
+
+- ✅ [2026-10-22] 配置读取/JSON/根对象或服务器地址错误改为启动前终端ERROR、绝对路径与原因，退出1，不再回退localhost；Windows启动器失败暂停并保留退出码。
+  - `main.js`前移配置校验，`start.bat`从自身目录调用npm并转发参数；原可选字段默认和TTS链路保持。新增配置自测与npm入口。
+- ✅ [2026-10-22] 修复画面填充路径：`mpv-player.js`以原生panscan=0/1实现适应/铺满，动态渐变；清除旧缩放/平移，高度/宽度按比例选原生值，自定义裁剪保留几何。旧mpv缺少可选scale属性不阻断原生模式。
+  - 配置4/4、mpv专项17/17、真实mpv null输出1/1、隔离Xvnc真实画面1/1、语音/重连28/28、独立包22/22，合计73项、零跳过。四方向实际边缘像素由适应黑色变为铺满绿色，PID保持；首轮Xvnc夹具无接入端点失败，改私有Unix socket后通过。语法/差异检查通过。
+  - 同步design/spec/task/usage/self-test，移除两项完成todo，保留Windows现场验收。`voiceDisplayNodePackage=true`保持，其他产物状态不变；本轮未构建发布或访问用户桌面，Windows实机/双击提示仍待验收。
+
+### Node子显示端本机配置修复
+
+- ✅ [2026-10-22] 记录画面填充无效反馈与panscan修改方案：当前panscan固定0，拟将适应/铺满/动态改为原生属性并清除残留缩放平移，高度/宽度按比例选择，crop保留几何。
+  - 更新design/spec/task/todo并核对mpv官方约束；现场根因未确定，未将此前null输出或几何测试当真实画面验收。本轮尚未修改代码或发布状态；配置错误显式ERROR方案仍保留待确认。
+- ✅ [2026-10-22] 完成配置错误提示链路排查并记录待确认方案：当前错误仅进入TUI日志后回退localhost，拟改为终端ERROR、路径/原因和非零退出，Windows失败暂停。
+  - 更新design/spec及新增task/todo；尚未修改程序、启动器或发布状态，未将方案记为修复完成。
+- ✅ [2026-10-22] 修复本机 `src/apps/voice-display-node/config.json` 缺失最外层闭合括号导致解析失败、回退localhost的问题，并按用户要求开启mpv。
+  - 保留服务器 `https://192.168.1.39:8081` 与已有平台路径；补充design/spec/task/todo。仅调整本机配置，无业务代码/依赖/发布状态变化；JSON解析与真实loadConfig读取验证通过，未重启Windows客户端或验收连接/播放。
+
 ### 豆包与Qwen聊天流式路径说明
 
 - ✅ [2026-10-22] 核对豆包HTTP/2可迭代流、CHUNK_DELTA/STREAM_CHUNK及国内Qwen的SSE累计文本差分，两者stream=true均逐块转发Responses output_text.delta；仅非流式请求汇总完整回答。

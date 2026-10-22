@@ -2,6 +2,43 @@
 
 已实现于mpv-player/mpv-platform/mpv-geometry/media-controller及VoiceDisplay接入。
 
+## 配置错误启动流程（已实现）
+
+```text
+已有声明 := loadConfig、main、start.bat
+新增定义 := 配置错误 { 绝对路径, 读取或解析或字段原因, 非零退出码 }
+配置路径 → 读取文件 → JSON解析 → 校验根对象及显式HTTP/HTTPS服务器地址
+配置校验前移到TUI/WS/录音模块加载之前；启动参数中的--no-tui不当作配置路径
+任一步失败 → 同步写stderr的ERROR及绝对路径/阶段/原因 → 非零退出；不创建TUI或启动业务、不回退localhost
+成功 → 合并可选字段默认值 → 原连接和播放流程
+Windows启动器 → 切换自身目录 → 调用已有npm start → 保存退出码
+退出码非零 → 暂停显示错误 → 返回原失败码
+自测 → 缺文件/坏JSON/非法根/非法地址、有效配置、stderr可见、零连接及失败码
+```
+
+## 原生panscan填充流程（已实现）
+
+```text
+已有声明 := MpvPlayer.applyGeometry / startDynamic / writeGeometry / geometry
+新增定义 := 原生填充映射 { contain: 0, cover: 1 }、动态panscan当前值与阶段
+填充控制 → 取消旧动态调度 → keepaspect开启、video-unscaled关闭
+非crop模式 → 复位zoom/scale/pan → 设置旋转 → 下发原生panscan
+旧mpv缺少可选scale属性 → 跳过不存在的复位属性，不阻断原生panscan；必要属性失败仍返回错误
+contain → panscan=0；cover → panscan=1；均不依赖decoder或窗口尺寸才可执行
+height/width → 已处理文件方向的媒体比例与用户旋转与窗口比例 → 选择适应0或铺满1
+尺寸暂不可用 → height/width先用适应，属性就绪后重放；contain/cover/dynamic不等待尺寸
+dynamic → 从0开始 → 按现有停留/过渡参数在0与1间插值 → 单调度器、有界IPC、旧代次退出
+crop → panscan=0 → 保留既有百分比几何及缩放/平移
+裁剪切回原生模式 → 完整复位旧缩放和平移，避免叠加放大
+状态恢复/媒体切换/崩溃重建 → 重放当前原生填充属性，保持常驻进程
+自测 → 核对panscan实际回执与读值、中间渐变、旋转/比例/切换、PID及TTS隔离
+设备验收 → Windows实际画面可见结果，不以null输出或IPC成功替代
+```
+
+## 当前媒体播放流程
+
+配置失败与原生panscan行为见上方已实现流程，下方描述媒体全链路。
+
 ```text
 已有声明 := VoiceDisplay.handleMessage / handleControl / declareCapabilities / stop、原AudioPlayer
 已有输入 := url/base64/media、control、restoreState.state、capabilitiesUpdated、平台、本机配置
@@ -9,7 +46,8 @@
 新增状态 := 可用性、常驻进程、唯一初始化、IPC连接、命令回执、加载队列、请求代次、恢复代次
 新增画面 := 旋转0、填充contain、百分比裁剪、动态参数、单个动态调度器
 
-配置缺省或关闭 → 不探测/启动mpv，继续原语音功能
+mediaPlayer配置缺省或关闭 → 不探测/启动mpv，继续原语音功能
+本机配置修复（2026-10-22） := 补齐最外层对象闭合并开启mediaPlayer；解析成功 → 使用已配置serverUrl，不触发localhost默认回退
 开启配置 → 当前平台选择命令和参数数组 → 有界mpv版本探测 → 声明实际可用性
 首次有效媒体 → 等待权威媒体能力 → 选择Linux socket或Windows独立命名管道
 Linux DISPLAY/认证 → xdpyinfo验证；显式认证失败直接报错，继承失败再搜索参考脚本候选
@@ -30,8 +68,8 @@ crop → 规范化百分比 → 进入crop模式；dynamicFitConfig → 规范�
 decoder尺寸和文件方向 → 浏览器同义固有尺寸 → 叠加用户旋转 → 与窗口尺寸计算矩形
 contain/cover → 等比完整/等比覆盖居中裁切
 height/width → 沿用网页旋转轴语义；crop → 按网页百分比规则换算视觉矩形
-视觉矩形 → mpv缩放和平移 → 每个命令回执校验，旧代次不继续写入
-动态模式 → contain/cover间插值与停留 → 至多20Hz且逐次等待IPC、一个调度器
+非crop → 复位旧缩放平移并下发原生panscan；crop矩形 → mpv缩放和平移；回执校验，旧代次不继续写入
+动态模式 → panscan在0与1间插值与停留 → 至多20Hz且逐次等待IPC、一个调度器
 无视觉媒体 → 保存参数；窗口尺寸变化/切换媒体/恢复/重建 → 重算并重放
 
 播放/暂停/音量/百分比seek → 映射已有control值到IPC

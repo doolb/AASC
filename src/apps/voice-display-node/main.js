@@ -12,11 +12,23 @@
  * - 回退到 naudiodon (需要 Python 编译)
  */
 
-const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
-const URL = require('url');
 const os = require('os');
+
+// 配置校验必须早于TUI、录音和网络模块初始化，错误才能直接留在终端且不会误连默认服务器。
+const startupConfigPath = path.resolve(process.argv.slice(2).find(argument => !argument.startsWith('-'))
+    || path.join(__dirname, 'config.json'));
+let startupConfig;
+try {
+    startupConfig = loadConfig(startupConfigPath);
+} catch (error) {
+    fs.writeSync(2, `[ERROR][配置] ${error.message}\n请修正配置文件后重新启动。\n`);
+    process.exit(1);
+}
+
+const WebSocket = require('ws');
+const URL = require('url');
 const { exec } = require('child_process');
 const AudioPlayer = require('./audio-player');
 const { NodeMediaController, MEDIA_CONTROLS } = require('./media-controller');
@@ -2256,25 +2268,41 @@ class VoiceDisplay {
  * @returns {Object}
  */
 function loadConfig(configPath) {
+    const absolutePath = path.resolve(configPath);
     const defaultConfig = {
-        serverUrl: 'http://localhost:3000',
         displayId: 'voice-display-node-' + os.hostname(),
         vadThreshold: 0.01,
         recordingMode: 'mute',
         textInput: {
-            requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_DISABLED
+            requireVoiceprint: false
         }
     };
 
+    let phase = '读取';
     try {
-        const configData = fs.readFileSync(configPath, 'utf8');
+        const configData = fs.readFileSync(absolutePath, 'utf8');
+        phase = 'JSON解析';
         const config = JSON.parse(configData);
+        phase = '字段校验';
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+            throw new Error('配置根节点必须为JSON对象');
+        }
+        if (typeof config.serverUrl !== 'string' || !config.serverUrl.trim()) {
+            throw new Error('serverUrl必须填写HTTP/HTTPS服务器地址');
+        }
+        const serverUrl = config.serverUrl.trim();
+        if (!/^https?:\/\//i.test(serverUrl)) {
+            throw new Error('serverUrl必须填写完整的HTTP/HTTPS地址（http://或https://）');
+        }
+        const address = new (require('node:url').URL)(serverUrl);
+        if (!['http:', 'https:'].includes(address.protocol)) {
+            throw new Error('serverUrl只支持HTTP/HTTPS服务器地址');
+        }
         // displayId 始终用 hostname 自动生成，不使用配置文件中的值
         delete config.displayId;
-        return { ...defaultConfig, ...config };
+        return { ...defaultConfig, ...config, serverUrl };
     } catch (error) {
-        logError('配置', `加载配置文件失败，使用默认配置: ${error.message}`);
-        return defaultConfig;
+        throw new Error(`配置文件：${absolutePath}\n${phase}失败：${error.message}`, { cause: error });
     }
 }
 
@@ -2282,9 +2310,8 @@ function loadConfig(configPath) {
  * 主函数
  */
 async function main() {
-    const configPath = process.argv[2] || path.join(__dirname, 'config.json');
-    const config = loadConfig(configPath);
-    config.configPath = configPath;
+    const config = startupConfig;
+    config.configPath = startupConfigPath;
 
     const voiceDisplay = new VoiceDisplay(config);
 

@@ -36,6 +36,10 @@ net.createServer(socket => {
                 continue;
             }
             if (name === 'set_property') {
+                if (process.argv.includes('--fixture-no-scale') && key.startsWith('video-scale-')) {
+                    send({ request_id: requestId, error: 'property not found' });
+                    continue;
+                }
                 properties[key] = value;
                 reply(null);
                 send({ event: 'property-change', name: key, data: value });

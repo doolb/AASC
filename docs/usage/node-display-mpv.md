@@ -39,11 +39,15 @@ npm --prefix src/apps/voice-display-node run start -- config.json
 
 该命令中的相对配置路径以子显示端目录为基准，也可传入配置文件绝对路径。需要完整默认示例时先复制同目录 `config.example.json`。默认 `mediaPlayer.enabled=false`；不开启或 mpv 不可用时保留语音功能，不声明可用媒体能力。服务端更新连接地址时保留本机播放器与录音设置。
 
+配置文件必须存在、JSON合法且包含明确的HTTP/HTTPS `serverUrl`。配置错误时，程序会在终端直接输出 `[ERROR][配置]`、绝对文件路径、失败阶段和具体原因，退出码为1；此时不会初始化TUI、录音或服务器连接，也不回退到localhost。Windows运行 `start.bat` 会在失败时暂停窗口以保留错误；修正配置后重新启动。
+
 ## 控制端操作
 
 在控制端选中该 Node 显示端，按既有方式发送单个 URL 媒体或临时上传文件。视频、音频循环播放，图片持续展示；支持播放/暂停、进度、音量及清空。临时文件写入本实例临时目录，上限64MiB，替换/清空/退出时回收；媒体 URL 支持 HTTP/HTTPS及相对服务地址，直连失败时尝试已有代理回退地址。
 
 图片与视频支持0°、90°、180°、270°旋转，以及适应、铺满、高度铺满、宽度铺满、动态和裁剪。沿用既有控制端按钮、裁剪百分比、动态过渡与停留时间；高度/宽度模式与网页显示端保持相同旋转语义。旋转或填充不会重启 mpv；媒体切换继续使用当前画面设置。重连后恢复服务器保存的媒体、暂停状态、播放位置和画面设置。
+
+适应使用原生 `panscan=0`，铺满使用 `panscan=1`，动态在0与1之间渐变。高度/宽度按比例和旋转选择原生适应或铺满；自定义裁剪继续按百分比设置。切换模式会清除旧缩放和平移，避免叠加；原生适应/铺满/动态不必等待媒体或窗口尺寸就绪。程序保持keepaspect开启、video-unscaled关闭，旧mpv缺少可选scale复位属性时也可使用原生模式。
 
 当前支持单媒体；批量播放列表、HTML、文本与网页专用画面功能尚未接入 mpv。纯音频只记忆画面参数，下一张图片或视频加载时应用。
 
@@ -58,6 +62,10 @@ mpv通过 `--audio-exclusive=no` 使用非独占模式。媒体音频与TTS能�
 ```bash
 npm run test:node-display-mpv
 npm run test:node-display-mpv:real
+npm run test:node-display-config
+npm run test:node-display-mpv:render
 ```
 
 第一项验证跨平台配置与 IPC 协议、生命周期、AASC接入和96组网页几何对照，不要求安装mpv。第二项要求安装mpv和ffmpeg，真实播放生成的视频/音频/图片，使用null输出，不打开桌面或发声；不能替代Linux真实画面、Windows实机或双路声音混音验收。
+
+配置测试验证真实失败进程的ERROR与退出码，以及启动前零业务依赖加载。render测试另外需要Linux Xvnc/xdpyinfo/ffmpeg/mpv，在隔离显示屏中检查四方向适应黑边与铺满像素，不访问现有桌面；该测试不替代Windows实机验收。

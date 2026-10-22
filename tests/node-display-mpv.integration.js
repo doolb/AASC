@@ -45,6 +45,10 @@ test('真实mpv常驻播放视频/音频/图片，恢复暂停断点、旋转、
     const pid = player.process.pid;
     const runtimeDirectory = player.session.directory;
     assert.equal(await player.command(['get_property', 'pause']), true);
+    await player.control('fit', 'cover');
+    assert.equal(await player.command(['get_property', 'panscan']), 1);
+    await player.control('fit', 'contain');
+    assert.equal(await player.command(['get_property', 'panscan']), 0);
     await player.control('rotate', 90);
     await delay(150);
     assert.equal(await player.command(['get_property', 'video-rotate']), 90);
