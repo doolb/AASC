@@ -1,4 +1,4 @@
-- [MMD-AR可选HMR纯网页模式](usage/mmd-human-interface.md#hmr纯网页可选模式)：可选准备模型后重建，缺模型禁用，桌面WebGPU本地推理。
+- [MMD-AR可选HMR纯网页模式](usage/mmd-human-interface.md#hmr纯网页可选模式)：可选准备模型后重建，缺模型禁用，桌面WebGPU或普通CPU/WASM本地推理。
 - [HMR2 Node独立原图服务与模型准备](<usage/hmr2-node-onnx-service.md>)：项目根 `npm run download:hmr2-model` / `npm run start:hmr2`，默认独立8769/WindowsDML；当前本机校验导入，原Python/8768不替换。
 
 - 棋盘点击无法生效时显示短暂原因提示，连续无效点击不会在下一轮补执行；详见[五子棋](usage/game-gomoku.md#点击无效时的飘字提示)。

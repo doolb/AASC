@@ -47,6 +47,7 @@
     "test:hmr2": "npm --prefix 3rd/hmr2-node-onnx run check",
     "test:mmd-hmr-web": "node --test tests/mmd-ar-hmr2-web*.test.js tests/mmd-ar-hmr2-client.test.js tests/mmd-ar-hmr2-retarget.test.js",
     "test:mmd-hmr-web:real": "node --test tests/mmd-ar-hmr2-web.integration.js",
+    "test:mmd-hmr-web:wasm": "node --test tests/mmd-ar-hmr2-web-wasm.integration.js",
     "test": "node --test tests/*.test.js",
     "demo:gomoku-ui": "node scripts/demo/gomoku-ui-demo.js",
     "demo:game-chat": "node scripts/demo/game-chat-session.js",

@@ -33,9 +33,10 @@ test('真实浏览器HMR网页选项缺模型禁用，普通页面不加载模�
             window.poseUi = installImagePose(document.querySelector('#panel'), { human: () => human, ensurePhysics: async () => {} });
         });
         const values = await page.$$eval('[data-pose="source"] option', nodes => nodes.map(node => node.value));
-        assert.deepEqual(values, ['mediapipe-pose', 'hmr2-api', 'hmr2-web']);
+        assert.deepEqual(values, ['mediapipe-pose', 'hmr2-api', 'hmr2-web', 'hmr2-web-cpu']);
         await page.waitForFunction(() => document.querySelector('[data-pose="web-status"]')?.textContent.includes('模型未准备'));
         assert.equal(await page.$eval('option[value="hmr2-web"]', node => node.disabled), true);
+        assert.equal(await page.$eval('option[value="hmr2-web-cpu"]', node => node.disabled), true);
         assert.equal(await page.$eval('[data-pose="source"]', node => node.value), 'mediapipe-pose');
         assert.equal(await page.evaluate(() => window.workerCount), 0);
         assert.equal(calls.some(url => /model\.onnx|ort\.|opencv/.test(url)), false);

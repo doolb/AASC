@@ -6,7 +6,8 @@ const { hashFile } = require('./apk-artifact');
 const project = path.resolve(__dirname, '../..');
 const catalog = require('../hmr2-node-onnx/core/model-catalog.json');
 const MODEL_DIR = path.join(project, 'res/models/hmr2-node-onnx/fp32-op18-dml-static');
-const ORT_FILES = ['ort.webgpu.min.mjs', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm'];
+const ORT_FILES = ['ort.webgpu.min.mjs', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm',
+    'ort.wasm.min.mjs', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm'];
 
 // 只复制显式准备好的本机模型；普通构建缺模型仍成功，清单先置不可用以免中途失败留下旧ready。
 async function stageHmrWebAssets(root, { modelDir = process.env.HMR2_MODEL_DIR || MODEL_DIR } = {}) {

@@ -10,7 +10,7 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 export function installImagePose(panel, { human, ensurePhysics, poseClient = createImagePoseClient(), hmrClient = createHmr2PoseClient(), hmrWebClient = createHmrWebClient(), depthClient } = {}) {
     const root = document.createElement('details'); root.dataset.posePanel = '';
     root.innerHTML = `<summary>图片姿态</summary>
-        <label>骨骼计算方式 <select data-pose="source"><option value="mediapipe-pose">MediaPipe Pose · 本地</option><option value="hmr2-api">HMR2.0b · GPU API</option><option value="hmr2-web" disabled>HMR2.0b · 纯网页 WebGPU</option></select></label>
+        <label>骨骼计算方式 <select data-pose="source"><option value="mediapipe-pose">MediaPipe Pose · 本地</option><option value="hmr2-api">HMR2.0b · GPU API</option><option value="hmr2-web" disabled>HMR2.0b · 纯网页 WebGPU</option><option value="hmr2-web-cpu" disabled>HMR2.0b · 纯网页 CPU/WASM</option></select></label>
         <p data-pose="web-status" role="status">正在检查可选HMR网页模型…</p>
         <button type="button" class="display-mmd-ar-action" data-pose="web-refresh">重新检查网页模型</button>
         <p data-pose="privacy">MediaPipe Pose 在本机识别全身图片（33点，首次加载约16.7MiB检测与姿态模型）。图片不会上传；三维坐标为模型估计，应用后可在3D场景拖点微调。</p>
@@ -47,8 +47,12 @@ export function installImagePose(panel, { human, ensurePhysics, poseClient = cre
         onChanged: () => buttons(), cancelPose: () => cancel(), ...(depthClient ? { client: depthClient } : {}) });
     const engines = { 'mediapipe-pose': (picture, progress) => client.infer(picture, progress),
         'hmr2-api': (picture, progress) => hmrClient.infer(picture, apiConfig(), progress),
-        'hmr2-web': (picture, progress) => hmrWebClient.infer(picture, { bbox: selectedBox() }, progress) };
-    let webAvailable = false, probeController = null;
+        'hmr2-web': (picture, progress) => hmrWebClient.infer(picture, { bbox: selectedBox(), backend: 'webgpu' }, progress),
+        'hmr2-web-cpu': (picture, progress) => hmrWebClient.infer(picture, { bbox: selectedBox(), backend: 'wasm' }, progress) };
+    const webModes = { 'hmr2-web': { backend: 'webgpu', label: 'WebGPU' }, 'hmr2-web-cpu': { backend: 'wasm', label: 'CPU/WASM' } };
+    const webAvailable = { 'hmr2-web': false, 'hmr2-web-cpu': false };
+    let probeController = null;
+    const webUnavailable = () => Object.hasOwn(webModes, field('source').value) && !webAvailable[field('source').value];
     const preferencesKey = 'mmdAr.hmr2ApiBaseUrl';
     try { field('api-url').value = localStorage.getItem(preferencesKey) || 'http://127.0.0.1:8768'; }
     catch (error) { field('api-url').value = 'http://127.0.0.1:8768'; }
@@ -66,7 +70,7 @@ export function installImagePose(panel, { human, ensurePhysics, poseClient = cre
     const acceptsPaste = () => !disposed && !panel.hidden && root.open;
     function buttons() {
         const pending = busy || reading || importing || depth?.busy();
-        field('recognize').disabled = !ready || !image || pending || (field('source').value === 'hmr2-web' && !webAvailable);
+        field('recognize').disabled = !ready || !image || pending || webUnavailable();
         field('web-refresh').disabled = pending || disposed;
         field('apply').disabled = !ready || !getPoseQuality(result).torsoReady || pending || !depth?.readyToApply();
         field('cancel').disabled = !pending;
@@ -88,7 +92,7 @@ export function installImagePose(panel, { human, ensurePhysics, poseClient = cre
         const low = quality.lowConfidence.map(key => BODY_NAMES[POSE_BODY_KEYS.indexOf(key)] || key).join('、');
         const advice = quality.torsoReady ? '确认预览后点击“应用姿态”。' : '躯干关键点不完整，暂不能应用，请切换候选或图片。';
         const hmr = isHmrPose(result);
-        const hmrLabel = result.source === 'hmr2-web' ? 'HMR2.0b · 网页 WebGPU · BODY25' : 'HMR2.0b · GPU API FP32 · BODY25';
+        const hmrLabel = result.source === 'hmr2-web' ? `HMR2.0b · 网页 ${result.raw.device === 'cpu' ? 'CPU/WASM' : 'WebGPU'} · BODY25` : 'HMR2.0b · GPU API FP32 · BODY25';
         const label = hmr ? hmrLabel : result.source === 'rtmpose-m' ? 'RTMPose-m · 单人全图' : 'MediaPipe Pose · 候选' + (index + 1);
         status(`识别完成：${label} · ${count}/${reference.points.length}个${hmr ? '几何可用' : '可信'}关键点 · 身体${quality.visible}/12 · ${inferenceMs.toFixed(0)}ms。`
             + (low ? `${hmr ? '不可用' : '低可信'}：${low}（可能遮挡、出画或退化）。` : '')
@@ -187,12 +191,15 @@ export function installImagePose(panel, { human, ensurePhysics, poseClient = cre
         cancel(); clearResult(); draw(); buttons(); status('计算方式、API 或人物框已变化，请重新识别图片。');
     }
     field('source').addEventListener('change', () => {
-        invalidateReference(); depth.reset(); depth.setMode(field('source').value);
+        invalidateReference(); depth.reset();
+        const semanticSource = Object.hasOwn(webModes, field('source').value) ? 'hmr2-web' : field('source').value;
+        depth.setMode(semanticSource);
         const hmr = field('source').value === 'hmr2-api'; field('api-controls').hidden = !hmr;
-        field('bbox-controls').hidden = !isHmrPose({ source: field('source').value });
+        field('bbox-controls').hidden = !isHmrPose({ source: semanticSource });
         const privacy = {
             'hmr2-api': 'HMR2 将当前处理图片上传到填写的 API 地址，由 CUDA FP32 计算 BODY25。深度仍在浏览器本地计算。请确认服务和图片隐私；算法不会自动修复左右腿或脚掌。',
             'hmr2-web': 'HMR2在当前浏览器WebGPU计算，图片不会上传。首次识别加载约2.7GB模型并校验，适合桌面设备；初始化与计算可能需要等待。HMR仍可能误判左右腿或脚掌。',
+            'hmr2-web-cpu': 'HMR2使用普通ONNX Runtime Web在浏览器CPU/WASM计算，无需WebGPU，图片不会上传。首次识别加载约2.7GB模型并校验，需要较多内存；CPU计算可能较慢，建议桌面设备。HMR仍可能误判左右腿或脚掌。',
             'mediapipe-pose': 'MediaPipe Pose 在本机识别全身图片（33点，首次加载约16.7MiB模型）。图片不会上传；三维坐标是估计，可在3D场景微调。'
         };
         field('privacy').textContent = privacy[field('source').value] || '请选择可用的骨骼计算方式';
@@ -219,7 +226,7 @@ export function installImagePose(panel, { human, ensurePhysics, poseClient = cre
     });
     field('recognize').addEventListener('click', async () => {
         if (!image || busy || reading || importing || disposed) return;
-        if (!engines[field('source').value] || (field('source').value === 'hmr2-web' && !webAvailable)) { status('当前计算方式不可用，请先准备网页模型'); return; }
+        if (!engines[field('source').value] || webUnavailable()) { status('当前计算方式不可用，请先准备网页模型'); return; }
         const id = ++serial;
         try {
             token = human().getState().token; clearResult(); busy = true; buttons(); draw();
@@ -260,14 +267,19 @@ export function installImagePose(panel, { human, ensurePhysics, poseClient = cre
     field('candidate').addEventListener('change', () => { if (!busy && !reading && !importing && !disposed) showCandidate(Number(field('candidate').value)); });
     async function refreshWeb() {
         probeController?.abort(); const controller = new AbortController(); probeController = controller;
-        webAvailable = false; root.querySelector('option[value="hmr2-web"]').disabled = true;
+        for (const mode of Object.keys(webModes)) {
+            webAvailable[mode] = false; root.querySelector(`option[value="${mode}"]`).disabled = true;
+        }
         field('web-status').textContent = '正在检查可选HMR网页模型…'; buttons();
         const timer = setTimeout(() => controller.abort(), 15000);
         try {
-            const state = await hmrWebClient.probe({ signal: controller.signal });
+            const states = await Promise.all(Object.entries(webModes).map(async ([mode, config]) =>
+                [mode, await hmrWebClient.probe({ signal: controller.signal, backend: config.backend })]));
             if (disposed || probeController !== controller) return;
-            webAvailable = state.available === true; root.querySelector('option[value="hmr2-web"]').disabled = !webAvailable;
-            field('web-status').textContent = webAvailable ? 'HMR网页模型已准备，点击识别时按需加载。' : state.reason;
+            field('web-status').textContent = states.map(([mode, state]) => {
+                webAvailable[mode] = state.available === true; root.querySelector(`option[value="${mode}"]`).disabled = !webAvailable[mode];
+                return `${webModes[mode].label}：${webAvailable[mode] ? '模型已准备，识别时按需加载' : state.reason}`;
+            }).join('；');
         } catch (error) {
             if (!disposed && probeController === controller) field('web-status').textContent = 'HMR网页模型检查失败或超时，请重新检查';
         } finally { clearTimeout(timer); if (!disposed) buttons(); }
