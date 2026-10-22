@@ -1,5 +1,17 @@
 # Chat2API 全局 Responses 协议实现规范（历史实现记录）
 
+## Responses真实分块计时伪代码（2026-10-22）
+
+```text
+目标 := 当前192.168.1.39:8083/v1/responses，不重启/切换传输/修改账号
+输入 := doubao与aasc-qwen-flash交替；每个模型独立新会话，后两轮携带各自previous_response_id
+计时 := performance.now请求前起点 → 首个非空output_text.delta首字 → 最后非空delta正文结束 → response.completed请求完成
+成功 := 六次有正文+completed；豆包ready/node-http三轮、Qwen实际Qwen3.7三轮
+结果 := 豆包平均2077/3233/5245ms，Qwen1281/2186/2352ms；32与11个实际正文分块
+隔离 := 仅两个独立API测试会话，不写入当前AASC聊天或游戏；不恢复整个会话JSON集合，不删除用户历史
+边界 := 服务当前缓存状态的小样本端到端时间；非冷启动/模型推理单独耗时，不断言上游固定速度
+```
+
 ## 豆包与Qwen流式路径伪代码（2026-10-22）
 
 ```text
