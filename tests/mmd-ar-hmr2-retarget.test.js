@@ -13,7 +13,7 @@ async function fixture() {
     const rig = createHumanPhysicsRig(f.model), node = name => rig.nodes.find(value => value.semantic === name);
     for (const value of rig.nodes) if (value.hasModelLimits) value.bone.quaternion.copy(limitJointRotation(value, value.bone.quaternion));
     const { T, model } = f, camera = new T.PerspectiveCamera(40, 1, .01, 1000);
-    const makePose = () => {
+    const makePose = (source = 'hmr2-api') => {
         model.mesh.updateWorldMatrix(true, true);
         const anchor = node('hips').bone.getWorldPosition(new T.Vector3());
         camera.position.copy(anchor).add(new T.Vector3(4, 1, 35).multiplyScalar(model.mesh.getWorldScale(new T.Vector3()).x));
@@ -30,7 +30,7 @@ async function fixture() {
             raw.xy[index] = [(ndc.x + 1) * 500, (1 - ndc.y) * 500];
             raw.xyz[index] = [local.x, -local.y, -local.z];
         }
-        return semantic.createHmr2SemanticPose(raw);
+        return semantic.createHmr2SemanticPose(raw, source);
     };
     return { ...f, rig, node, camera, makePose, semantic };
 }
@@ -49,6 +49,13 @@ test('BODY25原生XYZ→真实PMX FK合成回环：不改骨架、不改原始�
     }
     assert.equal(JSON.stringify(pose.raw), original);
     assert.deepEqual(f.model.bones.map(b => b.bone.quaternion.toArray()), rotations);
+});
+
+test('网页HMR与API对同一真实PMX生成一致FK目标', async () => {
+    const { fitImagePose2D, needsImagePoseFit } = await import('../3rd/mmd-ar-test/web-human-pose-lift.mjs');
+    const f = await fixture(), web = f.makePose('hmr2-web'), api = f.makePose();
+    assert.equal(needsImagePoseFit(web), true);
+    assert.deepEqual(fitImagePose2D(web, f.rig, f.camera), fitImagePose2D(api, f.rig, f.camera));
 });
 
 test('HMR三维回环保持模型旋转/缩放与屈膝；关闭辅助时额外线索完全不参与', async () => {

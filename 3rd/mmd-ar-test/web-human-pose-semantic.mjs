@@ -43,6 +43,8 @@ const MP_KEY = { ...Object.fromEntries(Object.entries(MP_INDEX).map(([key, index
 const inImage = point => !!point && [point.x, point.y].every(Number.isFinite)
     && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1;
 const finiteWorld = world => Array.isArray(world) && world.length === 3 && world.every(Number.isFinite);
+// 来源只说明执行位置；两条HMR链共享原生BODY25语义，不能补成MediaPipe点集。
+export const isHmrPose = pose => ['hmr2-api', 'hmr2-web'].includes(pose?.source);
 
 function mpPoint(pose, point) {
     if (!point) return null;
@@ -55,7 +57,7 @@ function mpPoint(pose, point) {
 
 /** 按PMX身体语义读取；weight是拟合权重，不等于关节置信度或坐标正确率。 */
 export function getPosePoint(pose, key) {
-    if (pose?.source === 'hmr2-api') {
+    if (isHmrPose(pose)) {
         const joint = Object.hasOwn(HMR_INDEX, key) ? pose.joints?.[key] : null;
         if (!joint) return null;
         return { ...joint, weight: 1, usable: joint.usable === true && inImage(joint) && finiteWorld(joint.world) };
@@ -79,8 +81,9 @@ export function getPoseQuality(pose) {
     return { ...previous, total: POSE_BODY_KEYS.length, visible, lowConfidence, torsoReady };
 }
 
-/** 只做原生数据到语义数据的映射；调用方须先严格校验HTTP结果，不能在这里修正原始姿态。 */
-export function createHmr2SemanticPose(nativeResult) {
+/** 只做原生数据到语义数据的映射；调用方须先严格校验API或网页Worker结果，不能在这里修正原始姿态。 */
+export function createHmr2SemanticPose(nativeResult, source = 'hmr2-api') {
+    if (!isHmrPose({ source })) throw new Error('HMR语义来源无效');
     const [width, height] = nativeResult.imageSize;
     const joints = Object.fromEntries(Object.entries(HMR_INDEX).map(([key, index]) => {
         const point = { x: nativeResult.xy[index][0] / width, y: nativeResult.xy[index][1] / height,
@@ -88,7 +91,7 @@ export function createHmr2SemanticPose(nativeResult) {
         return [key, { ...point, usable: inImage(point) && finiteWorld(point.world)
             && Number.isFinite(nativeResult.cameraDepth[index]) && nativeResult.cameraDepth[index] > 0 }];
     }));
-    const pose = { source: 'hmr2-api', dimensions: 3, imageAspect: width / height, raw: nativeResult, joints };
+    const pose = { source, dimensions: 3, imageAspect: width / height, raw: nativeResult, joints };
     const quality = getPoseQuality(pose);
     pose.quality = { torsoReady: quality.torsoReady, visible: quality.visible, lowConfidence: quality.lowConfidence };
     return pose;
@@ -128,7 +131,7 @@ function legalEdges(edges, count) {
 
 /** 预览始终使用来源的原始点数/连线；不补33点，也不将nose参考作为PMX相机对应。 */
 export function getPoseReference(pose) {
-    if (pose?.source === 'hmr2-api') {
+    if (isHmrPose(pose)) {
         const raw = pose.raw;
         if (!Array.isArray(raw?.xy) || raw.xy.length !== 25 || !Array.isArray(raw.imageSize)
             || raw.imageSize.length !== 2 || !raw.imageSize.every(value => Number.isFinite(value) && value > 0)) {

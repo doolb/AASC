@@ -1,3 +1,12 @@
+### MMD-AR纯网页HMR
+
+- ✅ [2026-10-22] 增加可选HMR2.0b网页WebGPU模式，复用现有模型获取命令，缺模型/运行环境时禁用；默认MediaPipe和GPU API继续独立使用。
+  - 新增web-human-hmr2-web-{assets,resources,core,worker,client}、带许可的增量SHA；构建复制完整校验模型及ORT1.26 Asyncify/OpenCV运行时，页面初始不加载GB权重，取消释放Worker，同图热次复用。修正SHA消息长度高位字节序，512MiB+1回归通过。
+  - pose-ui/semantic/lift/retarget/depth-ui共用BODY25与PMX目标；更新design/spec/task/usage/self-test与npm专项测试，完成项移出todo。独立网页不影响Offline产物，保留原发布状态；模型和web-dist不入Git。
+  - 验证：83项专项、9项既有API/深度浏览器、完整真实WebGPU与默认整图深度通过，网页构建成功。合成RGBA对Node CPU最大投影差0.000397px，加载含校验39.94秒/首推理3.06秒/热次0.376秒；不宣称人物精度、手机或PMX视觉通过。
+
+  - 额外仓库全量测试未完成，已出现107条失败且浏览器测试长时间运行，停止本轮测试树；未逐项归因，不记全量通过，日志和待办已保留。
+
 ### Git同步与合并校验
 
 - ✅ [2026-10-22] 合并本地HMR2原图服务与远端Node配置、Chat2API变更，保留双方changelog及自测记录，清除两处文档冲突状态；未跟踪文档保留本地。

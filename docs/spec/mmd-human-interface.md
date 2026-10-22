@@ -1,5 +1,37 @@
 # 独立 MMD-AR HumanInterfaceElement 实现
 
+## HMR纯网页可选模式（2026-10-22，已实现）
+
+```text
+已有声明 := download:hmr2-model + 固定模型清单/大小/SHA校验 + BODY25语义/PMX FK + 网页构建阶段
+新增定义 := HmrWebAssets { modelId, files, runtimeVersion, available, reason }
+新增定义 := HmrWebState { capability, phase, epoch, source, worker, result }
+可选准备 := 用户显式运行已有模型获取命令 → 本机导入或指定URL下载 → 完整校验模型
+网页构建 := 探测固定模型目录 → 缺失则输出不可用清单并继续 → 完整且校验通过则部署同源模型及匹配WebGPU运行时
+页面探测 := 小清单 + 文件元数据 + 安全上下文/WebGPU能力 → 生成选项可用状态；不预加载GB权重
+选择门禁 := 缺失/损坏/不支持 → 显示禁用原因；资源满足 → 允许选择hmr2-web，尚不宣称模型初始化成功
+识别 := 用户图片/人物框快照 → Worker按需初始化 → 与参考一致的预处理 → 完整ONNX → 校验BODY25/深度/旋转 → 原生HMR结果
+结果桥接 := 经校验的原生结果 → source=hmr2-web的HMR语义 → 共享预览/真实PMX FK/相机匹配
+来源派发 := 引擎注册表 + HMR语义能力判断；API保持独立传输校验，不给网页输出伪造CUDA标签
+取消 := 换图/切模式/关闭 → epoch失效并释放Worker及session → 迟到结果不应用
+失败 := 明确报模型/运行时/推理错误 → 保留现有PMX姿态；不自动切换到API或MediaPipe冒充本次结果
+验收门禁 := 真浏览器完整模型成功 + 同图同框数值对照 + 缺模型可构建且禁用 + 旧两方式回归
+```
+
+用户确认后已实现。真实Chrome/GTX1660完整Worker、默认同时深度和Node同像素参考通过；完整模型测试使用合成RGBA及UI壳，人物精度/手机/PMX视觉另行验收。定向83项、既有API/深度浏览器9项通过；首次加载含SHA约39.94秒，首次推理3.06秒，热次0.376秒。
+
+```text
+资源接口 := stageHmrWebAssets(root, {modelDir}) → js/vendor/hmr2/models.json
+清单 := schemaVersion=1, source=hmr2-web, available, reason, modelId, runtimeVersion=1.26.0, files
+资源目录 := 固定model.onnx/model.onnx.data + 匹配ort.webgpu.min.mjs/Asyncify + OpenCV4.12单文件；只校验和复制本机资源
+预处理接口 := prepareHmrWebInput(image, bbox, cv) → 四输入Float32Array + imageSize/boxXYXY/bboxSource
+预处理规则 := UI定向缩放后的RGBA → BGR → 原Node的float32框几何、nearest Gaussian、OpenCV仿射及CHW归一化
+解码接口 := decodeHmrWebOutputs(outputs, metadata) → 校验形状/有限/正深度/主点后的原生结果
+大文件读取 := 预知固定字节预算、单个目标buffer流式填充、增量SHA256 → externalData；禁止chunk数组再拼接造成多份GB副本
+SHA长度 := 低32位与高32位均按大端写入；使用512MiB+1流式输入对照Node crypto，覆盖外置大权重长度边界
+来源接口 := isHmrPose(pose)识别api/web；createHmr2SemanticPose(raw, source)保留真实来源
+```
+
 ## HMR2 GPU API 与整图相对深度（2026-10-21，完成）
 
 本节以现成[Python GPU 服务](<E:/ai/ai-depthmap/hmr2_gpu_service.py>)为契约，独立网页接入已经实现；相关旧候选只作历史，不作为运行协议。任务见[接入结果](<../task/20261021_1536_MMDAR接入HMR2GPU与整图相对深度.md>)。

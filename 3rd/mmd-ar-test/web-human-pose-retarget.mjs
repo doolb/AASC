@@ -1,10 +1,11 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { fitImagePose2D } from './web-human-pose-lift.mjs';
+import { isHmrPose } from './web-human-pose-semantic.mjs';
 
 // MediaPipe世界点以髋中心为原点；翻转Y/Z适配MMD局部坐标，左右仍使用人体语义。
 // 图片只能估计深度和骨段方向，实际长度始终取当前模型绑定骨架，不把像素距离当作骨长。
 export function retargetImagePose(pose, rig, { camera } = {}) {
-    if (pose?.source === 'hmr2-api' || (pose?.source === 'rtmpose-m' && pose.dimensions === 2)) return fitImagePose2D(pose, rig, camera).targets;
+    if (isHmrPose(pose) || (pose?.source === 'rtmpose-m' && pose.dimensions === 2)) return fitImagePose2D(pose, rig, camera).targets;
     if (!Array.isArray(pose?.landmarks) || pose.landmarks.length !== 33 || !Number.isFinite(pose.confidence) || pose.confidence < 0.5) throw new Error('姿态关键点无效');
     const point = index => {
         const value = pose.landmarks[index];

@@ -1,6 +1,6 @@
 import { createDepthClient } from './web-human-depth-client.mjs';
 import { buildDepthHints, depthHeatmap, DEPTH_DEGENERATE_RANGE } from './web-human-depth-core.mjs';
-import { POSE_BODY_KEYS, getPosePoint, filterImageDepthHints } from './web-human-pose-semantic.mjs';
+import { POSE_BODY_KEYS, getPosePoint, filterImageDepthHints, isHmrPose } from './web-human-pose-semantic.mjs';
 
 // 深度是独立任务，失败不删除骨骼结果；浮点值与图片对象绑定，不允许跨图片复用。
 export function installImageDepth(root, { getImage, canCompute, onChanged = () => {}, cancelPose = () => {}, client = createDepthClient() }) {
@@ -70,7 +70,7 @@ export function installImageDepth(root, { getImage, canCompute, onChanged = () =
     return { cancel, reset, compute, getOptions, busy: () => busy,
         readyToApply: () => !field('assist').checked || (!busy && !!depth && image === getImage()),
         withRecognition: () => field('with-recognition').checked,
-        setMode(source) { field('with-recognition').checked = source === 'hmr2-api'; },
+        setMode(source) { field('with-recognition').checked = isHmrPose({ source }); },
         sync() { buttons(); },
         dispose() { disposed = true; cancel(); client.dispose(); depth = image = null; field('preview').width = field('preview').height = 0; }
     };

@@ -1,5 +1,21 @@
 # 自测功能文档
 
+## HMR纯网页可选模式（2026-10-22）
+
+```text
+可选资源 := 缺目录/损坏 → unavailable；probe只取清单/HEAD；缺文件或WebGPU → 选项禁用
+预处理 := 同RGBA/框对Node四张量逐值一致；输出形状/finite/正深度严格拒错
+大文件SHA := 512MiB+1流式数据对Node crypto，修正长度高32位大端编码
+生命周期 := 取消/超时终止Worker，旧消息隔离；真实UI缺模型不创建Worker/加载权重
+语义 := hmr2-web保留来源，同一真实PMX的FK目标与API来源一致
+专项 := npm run test:mmd-hmr-web → 83通过；既有depth-ui-browser → 9通过
+真实模型 := npm run test:mmd-hmr-web:real → 1通过；默认整图深度并行完成，热次不重读权重
+数值 := 同合成RGBA对Node CPU；xyz差4.36e-7，xy差0.000397px；不是识别精度GT
+性能 := 加载含SHA39.94秒；首推理3.06秒；热次0.376秒；未确认峰值显存/内部精度
+构建 := npm run build:web:mmd-ar-test成功；ORT1.26 WebGPU配套Asyncify
+边界 := 桌面Chrome/GTX1660，Human UI壳；人物/手机/实际PMX画面仍需实机验收
+```
+
 ## HMR2 Node独立原图服务与模型准备（2026-10-22）
 
 `npm run test:hmr2`全部MJS静态检查和89 tests：87 pass/0 fail/2 file-symlink明确skip，directory junction拒绝已实测。原8合同/稳定角/真实CPU Add、流式模型tiny/cache/竞争/路径、严格raw协议/CORS/Bearer/nonce/finite、WASM双dtype/BMP20新增、fake相机/单飞/批次/CLI及页面VM9项。skip不申请提权，不冒称GPU/DOM真实通过。
@@ -1894,3 +1910,5 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 专项使用真实卡片及实例/结果渲染，验证竖屏展开后纵向滚动、选中后收起为相同完整卡片、状态/进度及全部操作按钮、独立卡片动作、搜索与无匹配提示、刷新保留焦点/光标/滚动位置、任务删除、键盘及手机触控模拟。横屏断言无下拉入口，保留原搜索栏、常驻卡片列表、240/200 像素任务/实例列和三列布局；方向往返及 320 像素浅色主题均通过。页面自测覆盖展开、收起及横屏；展开/收起截图已检查，JavaScript 语法及 git diff --check 通过。
 
 本轮未执行真实任务、Android 实机触控或出包发布；浏览器中拦截创建/配置等动作以验证参数与冒泡，服务代码包待构建，正式设备需部署后检查观感。
+
+- 额外仓库全量 npm test -- --test-concurrency=2 未完成：日志已出现107条失败，涉及符号链接、正式显示端及浏览器模块；多个浏览器测试长时间运行后停止本轮测试进程树。未完成逐项基线归因，不记全量通过；日志保留tmp/hmr2-web-proof/full.log，需独立低并发复测。自动审批拒绝临时目录清理，.tmp-tts-browser-bsCFV1保留且不入Git。

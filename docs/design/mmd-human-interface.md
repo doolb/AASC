@@ -1,5 +1,13 @@
 # MMD HumanInterfaceElement 通用角色控制
 
+## HMR纯网页可选模式（2026-10-22，完成）
+
+第三种“HMR2.0b · 网页 WebGPU”已接入图片姿态，引擎来源为hmr2-web，默认仍为MediaPipe。复用可选npm模型获取器及固定FP32模型，无完整模型/运行时或不支持安全上下文与WebGPU时置灰并显示原因。初始只读小清单与HEAD，点击识别才在专用Worker加载、校验并推理，图片不上传。完整结果共享BODY25语义、预览、真实PMX FK及相机匹配，保留API独立协议。
+
+构建仅部署已准备并通过SHA校验的模型；缺失/损坏生成不可用清单，不自动下载。模型获取后重建网页；约2.7GB权重通过单目标buffer流式填充和增量SHA校验。固定ORT1.26.0的WebGPU入口配套Asyncify运行时，OpenCV4.12保持与Node同像素预处理。取消、换图、切换方式和关闭面板终止Worker；同一图片重复识别复用session，不重复读取模型。
+
+真实Chrome/GTX1660完整Worker和默认同时整图深度通过；同一合成RGBA图片对Node CPU参考，xyz最大差4.36e-7、原图投影差0.000397px。首次加载含校验39.94秒，首次推理3.06秒，热次0.376秒。这证明实际模型链路与数值一致性，不代表真实人物准确率、手机或实际PMX视觉验收。83项定向回归及9项既有API/深度浏览器回归通过；网页/API在同一真实PMX上生成一致FK目标。详见[执行记录](../task/20261022_MMDAR纯网页HMR可选模式.md)。仅独立网页，正式显示端/Offline资源链不引用这些模块，发布状态保持原值，模型与生成目录不提交Git。
+
 ## HMR2 GPU API 与整图相对深度接入（2026-10-21，完成）
 
 用户已选择完整接入：在独立 MMD-AR 图片骨骼中增加现成[HMR2 CUDA FP32 服务](<E:/ai/ai-depthmap/hmr2_gpu_service.py>)，并接入“Depth Anything V2 Small · 整图相对深度”。协议/语义/深度模块及 UI 已实施，HMR 自有 XYZ 只作为三维方向先验，目标始终来自同一真实 PMX FK；原 MediaPipe 同步 world 路径不变，显式开启辅助时才采用通用 FK。原默认链、相机、HMR/真实 PMX 合成回环与纯函数自测已通过；真实 Chrome 的 HTTP mock/独立 UI 壳及实际 DA Worker/ORT/ONNX 验收通过。HMR mock 不代表真实 GPU 联网或生产 CORS，UI 壳不代表 PMX 识图精度。

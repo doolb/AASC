@@ -1,10 +1,10 @@
 import { Matrix4 } from 'three';
-import { POSE_BODY_KEYS, getPosePoint, getPoseReference } from './web-human-pose-semantic.mjs';
+import { POSE_BODY_KEYS, getPosePoint, getPoseReference, isHmrPose } from './web-human-pose-semantic.mjs';
 import { createImagePosePrior, filterImageDepthHints } from './web-human-pose-prior.mjs';
 import { createPoseFK } from './web-human-pose-fk.mjs';
 
 export function needsImagePoseFit(pose, options = {}, rig = null) {
-    return pose?.source === 'hmr2-api' || (pose?.source === 'rtmpose-m' && pose.dimensions === 2)
+    return isHmrPose(pose) || (pose?.source === 'rtmpose-m' && pose.dimensions === 2)
         || (options.depthEnabled === true && pose?.source === 'mediapipe-pose'
             && filterImageDepthHints(pose, options.depthHints, rig).hints.length > 0);
 }
@@ -152,7 +152,7 @@ function* fit(pose, rig, camera, options) {
     // MP原同步入口包含可用脸参考的head控制；辅助也保留它，但不把nose直接当PMX头中心。
     if (pose.source === 'mediapipe-pose' && getPoseReference(pose).points.some(p => p.usable && ['head', 'left_ear', 'right_ear'].includes(p.key))) target('head', 'head');
     if (targets.length < 3) throw new Error('可见身体关键点不足，未修改姿态');
-    return { targets, error: best.error, projection, depthSource: pose.source === 'hmr2-api' ? 'hmr2-native-directions' : 'current-pose-joint-prior',
+    return { targets, error: best.error, projection, depthSource: isHmrPose(pose) ? 'hmr2-native-directions' : 'current-pose-joint-prior',
         directionError: best.directionLoss || 0, depthAccepted: prior?.depthAccepted || 0,
         depthRejected: prior?.depthRejected || [], depthFallback, iterations, evaluations };
 }

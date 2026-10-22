@@ -265,7 +265,7 @@ test('HMR2图片UI真实Chrome/HTTP mock边界与DA真实Worker-ORT-ONNX整图�
         });
 
         await check('真实浏览器模块导入、方式/地址/会话token与health不上传', async () => {
-            assert.deepEqual(await page.$$eval('[data-pose="source"] option', elements => elements.map(element => element.value)), ['mediapipe-pose', 'hmr2-api']);
+            assert.deepEqual(await page.$$eval('[data-pose="source"] option', elements => elements.map(element => element.value)), ['mediapipe-pose', 'hmr2-api', 'hmr2-web']);
             assert.equal(await page.$eval('[data-pose="api-controls"]', element => element.hidden), true);
             assert.equal(await page.$eval('[data-depth="assist"]', element => element.checked), false);
             assert.ok(!fixture.staticRequests.some(request => request.pathname.includes('/vendor/depth/')), '默认不应加载深度模型');

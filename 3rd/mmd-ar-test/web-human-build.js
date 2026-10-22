@@ -51,11 +51,17 @@ async function stage(root, { webMode = false } = {}) {
     const folder = path.join(root, 'js'), version = async file => (await hashFile(path.join(folder, file))).sha256.slice(0, 12);
     await require('./web-human-pose-assets').stagePoseAssets(root);
     await require('./web-human-depth-assets').stageDepthAssets(root);
+    await require('./web-human-hmr2-web-assets').stageHmrWebAssets(root);
+    await fs.mkdir(path.join(folder, 'hmr2-vendor'), { recursive: true });
+    for (const name of ['RawSha256.mjs', 'constants.mjs', 'LICENSE', 'README.md']) {
+        await fs.copyFile(path.join(__dirname, 'hmr2-vendor', name), path.join(folder, 'hmr2-vendor', name));
+    }
     const versions = new Map();
     for (const file of ['web-reply-gestures.mjs', 'web-reply-actions.mjs', 'web-reply-expressions.mjs', 'web-local-assets.mjs',
         'mmd-mpl-worker.mjs', 'vendor/three/libs/mmdparser.module.js', 'web-xpbd-collision.mjs',
         'web-rigid-body-debug.mjs', 'mmd-ammo-physics.mjs']) versions.set(file, await version(file));
     const names = ['server-actions', 'rigid-snapshot', 'arm-avoidance', 'model', 'compiler', 'vmd', 'mixer', 'storage', 'physiology', 'reflex', 'gaze', 'ik-pbd', 'ik-markers', 'joint-limits', 'physics-rig', 'body-damping', 'physics-drive', 'pose-core', 'pose-rtmpose', 'pose-semantic', 'hmr2-client', 'pose-fk', 'pose-prior', 'depth-core', 'depth-worker', 'depth-client', 'depth-ui', 'pose-worker', 'pose-client', 'pose-lift', 'pose-retarget', 'pose-projection', 'pose-camera', 'camera-control', 'pose-overlay', 'ik', 'interface', 'pose-ui', 'ik-mode', 'ik-ui', 'ui'];
+    names.splice(names.indexOf('hmr2-client') + 1, 0, 'hmr2-web-resources', 'hmr2-web-core', 'hmr2-web-worker', 'hmr2-web-client');
     for (const suffix of names) {
         const file = 'web-human-' + suffix + '.mjs';
         let source = await fs.readFile(path.join(__dirname, file), 'utf8');
