@@ -205,7 +205,7 @@ test('原生panscan模式切换清除裁剪缩放和平移，高度/宽度保留
     const { player } = await createPlayer(t);
     await player.load(media());
     await player.control('crop', { x: 20, y: 10, width: 50, height: 60 });
-    assert.ok(await player.command(['get_property', 'video-scale-x']) > 1);
+    assert.ok(await player.command(['get_property', 'video-zoom']) > 0);
     await player.control('fit', 'cover');
     for (const [name, value] of [['video-scale-x', 1], ['video-scale-y', 1], ['video-pan-x', 0], ['video-pan-y', 0], ['video-zoom', 0], ['panscan', 1]]) {
         assert.equal(await player.command(['get_property', name]), value, name);
@@ -225,6 +225,103 @@ test('原生panscan模式切换清除裁剪缩放和平移，高度/宽度保留
             }
         }
     }
+});
+
+test('Linux/Windows无scale属性时裁剪仍能缩放及横纵移动，四方向保持同一进程', async t => {
+    for (const platform of ['linux', 'win32']) {
+        const { player, errors } = await createPlayer(t, platform, { fixtureNoScale: true });
+        await player.load(media());
+        const pid = player.process.pid;
+        for (const rotation of [0, 90, 180, 270]) {
+            await player.control('rotate', rotation);
+            await player.control('crop', { x: 0, y: 0, width: 25, height: 25 });
+            const zoom = await player.command(['get_property', 'video-zoom']);
+            const startX = await player.command(['get_property', 'video-pan-x']);
+            const startY = await player.command(['get_property', 'video-pan-y']);
+            assert.ok(zoom >= 2);
+            await player.control('crop', { x: 60, y: 50, width: 25, height: 25 });
+            assert.ok(Math.abs(await player.command(['get_property', 'video-pan-x']) - startX + 0.6) < 1e-8);
+            assert.ok(Math.abs(await player.command(['get_property', 'video-pan-y']) - startY + 0.5) < 1e-8);
+            assert.equal(await player.command(['get_property', 'video-zoom']), zoom);
+            assert.equal(await player.command(['get_property', 'panscan']), 0);
+            assert.equal(player.process.pid, pid);
+        }
+        assert.deepEqual(errors, []);
+    }
+});
+
+test('连续拖动合并在途与排队输入，只应用最新值，不先归零zoom/pan', async t => {
+    const { player } = await createPlayer(t);
+    await player.load(media());
+    await delay(80);
+    const command = player.command.bind(player);
+    const before = (await command(['get_property', 'test-command-log'])).length;
+    let release;
+    let entered;
+    const blocked = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { entered = resolve; });
+    let gate = true;
+    player.command = async request => {
+        if (gate && request[0] === 'set_property' && request[1] === 'video-rotate') {
+            gate = false;
+            entered();
+            await blocked;
+        }
+        return command(request);
+    };
+    const first = player.control('crop', { x: 1, y: 1, width: 20, height: 20 });
+    await started;
+    const pending = [];
+    for (let index = 0; index < 200; index += 1) {
+        const next = player.control('crop', { x: index / 4, y: index / 5, width: 20, height: 20 });
+        assert.equal(next, first, '同一代次的连续输入共用完成回执');
+        pending.push(next);
+    }
+    release();
+    await Promise.all(pending);
+    const log = (await command(['get_property', 'test-command-log'])).slice(before);
+    const writes = log.filter(request => request[0] === 'set_property');
+    assert.ok(writes.length < 20, `200次移动的IPC写入应合并，实际${writes.length}`);
+    const zooms = writes.filter(request => request[1] === 'video-zoom');
+    assert.equal(zooms.length, 1);
+    assert.ok(zooms[0][2] > 0);
+    assert.ok(!writes.some(request => ['video-pan-x', 'video-pan-y'].includes(request[1]) && request[2] === 0));
+    const last = { x: 199 / 4, y: 199 / 5, width: 20, height: 20 };
+    assert.deepEqual(player.visual.crop, last);
+    assert.ok(Math.abs(await command(['get_property', 'video-pan-x']) + 0.0725) < 1e-8);
+    assert.ok(Math.abs(await command(['get_property', 'video-pan-y']) - 0.002) < 1e-8);
+    assert.equal(player.geometryUpdate, null);
+});
+
+test('裁剪等待尺寸后应用，音频阶段记忆，媒体切换/清空取消旧几何', async t => {
+    const { player, errors } = await createPlayer(t, process.platform, { fixtureNoScale: true });
+    await player.load(media('http://localhost/audio.wav', 'audio'));
+    await player.control('crop', { x: 50, y: 50, width: 25, height: 25 });
+    await player.load(media());
+    const zoom = await player.command(['get_property', 'video-zoom']);
+    assert.ok(zoom > 0);
+    await delay(80);
+    player.properties = {};
+    await player.control('crop', { x: 20, y: 10, width: 50, height: 50 });
+    assert.equal(await player.command(['get_property', 'video-zoom']), zoom, '无尺寸时保留画面，待就绪后应用');
+    player.receiveEvent({ event: 'property-change', name: 'video-dec-params', data: { dw: 1280, dh: 720 } });
+    player.receiveEvent({ event: 'property-change', name: 'osd-dimensions', data: { w: 800, h: 600 } });
+    await delay(100);
+    assert.ok(await player.command(['get_property', 'video-zoom']) < zoom);
+    const stale = player.control('crop', { x: 60, y: 60, width: 20, height: 20 });
+    const cleared = player.clear();
+    assert.equal(await stale, false);
+    await cleared;
+    assert.equal(player.current, null);
+    const old = player.control('crop', { x: 0, y: 0, width: 10, height: 10 });
+    const loaded = player.load(media());
+    const fit = player.control('fit', 'cover');
+    assert.equal(await old, false);
+    await Promise.all([loaded, fit]);
+    assert.equal(await player.command(['get_property', 'video-zoom']), 0);
+    assert.equal(await player.command(['get_property', 'video-pan-x']), 0);
+    assert.equal(await player.command(['get_property', 'panscan']), 1);
+    assert.deepEqual(errors, []);
 });
 
 test('几何与网页真实applyCrop一致：横竖媒体、窗口、四方向和六模式组合', () => {
@@ -277,6 +374,27 @@ class StubPlayer extends EventEmitter {
     async control(...args) { this.calls.push(['control', ...args]); }
     async close() {}
 }
+
+test('权威恢复的裁剪位置与离线期间新位置进入真实mpv，回执保留关联ID', async t => {
+    const { player, errors } = await createPlayer(t, process.platform, { fixtureNoScale: true });
+    const sent = [];
+    const controller = new NodeMediaController({}, { player, send: message => sent.push(message) });
+    await controller.initialize();
+    await controller.restore({ rotation: 270, fit: 'crop', crop: { x: 0, y: 0, width: 20, height: 20 }, currentMedia: media() });
+    await controller.handleControl({ action: 'crop', value: { x: 60, y: 40, width: 20, height: 20 }, correlationId: 'crop-move' });
+    await controller.setCapabilities({ mediaRendering: true });
+    assert.equal(await player.command(['get_property', 'video-rotate']), 270);
+    assert.ok(await player.command(['get_property', 'video-zoom']) > 0);
+    assert.deepEqual(player.visual.crop, { x: 60, y: 40, width: 20, height: 20 });
+    assert.ok(sent.some(message => message.correlationId === 'crop-move' && message.success));
+    const pid = player.process.pid;
+    await player.clear();
+    await player.load(media('http://localhost/next.mp4', 'video'));
+    assert.equal(player.process.pid, pid);
+    assert.equal(await player.command(['get_property', 'video-rotate']), 270);
+    assert.ok(await player.command(['get_property', 'video-zoom']) > 0);
+    assert.deepEqual(errors, []);
+});
 
 test('媒体控制器等待权威能力、恢复暂停与断点、转发进度、关闭能力及重连隔离', async () => {
     const player = new StubPlayer();

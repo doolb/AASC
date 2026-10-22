@@ -1,5 +1,19 @@
 # 自测功能实现文档
 
+## Node子显示端裁剪移动（2026-10-22）
+
+```text
+专项入口 := npm run test:node-display-mpv → 21/21，零跳过
+兼容 := Linux/Windows真实socket夹具，无scale属性时四方向裁剪zoom/pan仍生效，PID不变
+合并 := 阻塞在途命令 → 连续200次crop → 共用完成回执 → 最后位置生效、少于20次属性写入、无归零中间值
+生命周期 := 尺寸延迟事件重算、音频时记忆、媒体切换与清空取消旧几何、能力恢复及correlationId回执
+真实画面入口 := npm run test:node-display-mpv:render → 2/2
+真实画面 := 隔离Xvnc、红绿通道编码原图坐标 → 四方向各四个位置的中心像素 → 独立逆旋转推导期望，16组误差小于8
+真实视频 := 同图编码H264并加载 → 两个裁剪位置像素误差小于10、PID保持；缩放减半、contain复位和原panscan回归通过
+其他回归 := test:node-display-mpv:real 1/1、test:offline-voice-display-node 22/22；合计46项、零跳过
+边界 := 不访问用户桌面、不监听VNC/TCP；Windows实屏仍待现场，未构建发布独立包
+```
+
 ## 豆包与Qwen真实回复速度（2026-10-22）
 
 ```text

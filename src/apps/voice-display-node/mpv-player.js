@@ -39,7 +39,8 @@ class MpvPlayer extends EventEmitter {
         this.visual = { rotation: 0, fit: 'contain', crop: normalizeCrop(), dynamicFitConfig: normalizeDynamic() };
         this.dynamicTimer = null;
         this.geometryTimer = null;
-        this.geometryBusy = false;
+        this.geometryVersion = 0;
+        this.geometryUpdate = null;
         this.dynamicEpoch = 0;
         this.lastProgressAt = 0;
         this.disposals = new Set();
@@ -327,16 +328,13 @@ class MpvPlayer extends EventEmitter {
         };
         if (!setters[action]) return false;
         setters[action]();
+        this.geometryVersion += 1;
         this.stopDynamic();
         return true;
     }
 
     control(action, value) {
-        if (this.updateVisual(action, value)) return this.enqueue(async () => {
-            await this.applyGeometry();
-            this.startDynamic();
-            return true;
-        });
+        if (this.updateVisual(action, value)) return this.queueGeometry();
         if (action === 'clearMedia') return this.clear();
         const commands = {
             play: () => { this.paused = value !== true; return ['set_property', 'pause', this.paused]; },
@@ -375,8 +373,10 @@ class MpvPlayer extends EventEmitter {
 
     async writeGeometry(geometry, valid = () => true) {
         if (!geometry) return;
-        for (const [name, value] of Object.entries({ 'video-scale-x': geometry.scaleX,
-            'video-scale-y': geometry.scaleY, 'video-pan-x': geometry.panX, 'video-pan-y': geometry.panY })) {
+        // 裁剪保持等比缩放；zoom按2的指数放大，pan按完整缩放后矩形的尺寸计算。
+        // 不依赖较新版本才提供的scale属性，也不在每次移动前将zoom/pan归零。
+        for (const [name, value] of Object.entries({ 'video-zoom': Math.log2(geometry.scaleX),
+            'video-pan-x': geometry.panX, 'video-pan-y': geometry.panY })) {
             if (!valid()) return;
             await this.command(['set_property', name, value]);
         }
@@ -407,7 +407,7 @@ class MpvPlayer extends EventEmitter {
         const epoch = this.dynamicEpoch;
         const valid = () => revision === this.revision && epoch === this.dynamicEpoch && !this.closed && !!this.current;
         for (const [name, value] of [['video-rotate', this.visual.rotation], ['keepaspect', true],
-            ['video-unscaled', 'no'], ['video-zoom', 0], ['video-pan-x', 0], ['video-pan-y', 0]]) {
+            ['video-unscaled', 'no'], ['video-align-x', 0], ['video-align-y', 0]]) {
             if (!valid()) return;
             await this.command(['set_property', name, value]);
         }
@@ -417,7 +417,30 @@ class MpvPlayer extends EventEmitter {
         }
         if (!valid()) return;
         await this.command(['set_property', 'panscan', this.nativePanscan()]);
-        if (this.visual.fit === 'crop') await this.writeGeometry(this.geometry(), valid);
+        const geometry = this.visual.fit === 'crop' ? this.geometry() : { scaleX: 1, panX: 0, panY: 0 };
+        await this.writeGeometry(geometry, valid);
+    }
+
+    /** 高频裁剪和尺寸变化共用一个串行任务，丢弃过期中间状态，最后一次输入一定应用。 */
+    queueGeometry() {
+        if (this.geometryUpdate?.revision === this.revision) return this.geometryUpdate.promise;
+        const update = { revision: this.revision, promise: null };
+        this.geometryUpdate = update;
+        update.promise = this.enqueue(async () => {
+            let version;
+            do {
+                version = this.geometryVersion;
+                if (this.closed || update.revision !== this.revision) return false;
+                await this.applyGeometry();
+            } while (version !== this.geometryVersion);
+            if (this.closed || update.revision !== this.revision) return false;
+            this.startDynamic();
+            return true;
+        }).finally(() => {
+            // 新媒体可能已经创建下一代任务，旧任务不能清空新代次的引用。
+            if (this.geometryUpdate === update) this.geometryUpdate = null;
+        });
+        return update.promise;
     }
 
     scheduleGeometry() {
@@ -425,14 +448,11 @@ class MpvPlayer extends EventEmitter {
         this.geometryTimer = setTimeout(async () => {
             this.geometryTimer = null;
             if (this.closed) return;
-            if (this.geometryBusy) { this.scheduleGeometry(); return; }
-            this.geometryBusy = true;
+            this.geometryVersion += 1;
             this.stopDynamic();
             try {
-                await this.applyGeometry();
-                this.startDynamic();
+                await this.queueGeometry();
             } catch (error) { this.onError(error); }
-            finally { this.geometryBusy = false; }
         }, 50);
     }
 

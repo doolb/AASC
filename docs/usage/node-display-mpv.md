@@ -51,6 +51,12 @@ npm --prefix src/apps/voice-display-node run start -- config.json
 
 当前支持单媒体；批量播放列表、HTML、文本与网页专用画面功能尚未接入 mpv。纯音频只记忆画面参数，下一张图片或视频加载时应用。
 
+### 裁剪与移动
+
+在控制端选择目标Node显示端，播放图片或视频后切换“裁剪”模式。拖动预览中的裁剪框可移动可见区域，拖动边缘手柄可缩放；也可输入X/Y/宽度/高度百分比后应用。四方向旋转均支持，裁剪框所在区域会放大显示。
+
+裁剪使用mpv的 `video-zoom` 和 `video-pan-x/y`，无需额外配置，不重新开启播放器。连续拖动会合并中间请求并应用最后位置；切回适应或铺满会清除缩放、偏移。重连继续沿用服务端已有fit/crop状态。Linux实际画面已验证，Windows协议兼容测试通过，实际画面仍需现场核对。
+
 ## TTS 与媒体音频
 
 TTS继续使用原 `audio-player.js` 播放队列：Windows调用 PowerShell `SoundPlayer`，Linux调用 `aplay`。TTS不加入常驻mpv；停止TTS不会停止媒体，清空媒体也不会清空TTS队列。TTS沿用原队列串行播放行为。
@@ -68,4 +74,4 @@ npm run test:node-display-mpv:render
 
 第一项验证跨平台配置与 IPC 协议、生命周期、AASC接入和96组网页几何对照，不要求安装mpv。第二项要求安装mpv和ffmpeg，真实播放生成的视频/音频/图片，使用null输出，不打开桌面或发声；不能替代Linux真实画面、Windows实机或双路声音混音验收。
 
-配置测试验证真实失败进程的ERROR与退出码，以及启动前零业务依赖加载。render测试另外需要Linux Xvnc/xdpyinfo/ffmpeg/mpv，在隔离显示屏中检查四方向适应黑边与铺满像素，不访问现有桌面；该测试不替代Windows实机验收。
+配置测试验证真实失败进程的ERROR与退出码，以及启动前零业务依赖加载。render测试另外需要Linux Xvnc/xdpyinfo/ffmpeg/mpv，在隔离显示屏中检查四方向适应黑边、铺满及裁剪横纵移动像素，并检查真实视频的两个裁剪位置；不访问现有桌面，该测试不替代Windows实机验收。

@@ -1,5 +1,11 @@
 # 自测功能文档
 
+## Node子显示端裁剪移动（2026-10-22）
+
+`npm run test:node-display-mpv`21/21、`npm run test:node-display-mpv:real`1/1、`npm run test:node-display-mpv:render`2/2、`npm run test:offline-voice-display-node`22/22，共46项、零跳过。专项补充Linux/Windows无scale属性的四方向缩放/横纵移动、200次在途输入合并（少于20次属性写入，无zoom/pan归零中间值）、尺寸延迟、音频阶段记忆、媒体/清空取消旧更新及权威恢复的真实IPC回执。
+
+隔离Xvnc实际渲染：红色编码原图横轴、绿色编码纵轴，独立坐标逆变换推导预期；四方向各四个位置共16组图片像素匹配（误差小于8），真实编码视频2组位置误差小于10。缩放减半、contain复位与常驻PID通过，既有四方向contain/cover黑边测试保持。未访问用户桌面或开放VNC/TCP监听；Windows实际画面仍待验收，未构建发布独立包。见[任务](task/20261022_Node子显示端裁剪移动.md)。
+
 ## Node配置ERROR与原生panscan（2026-10-22）
 
 配置测试4/4、mpv专项17/17、真实mpv null输出1/1、隔离Xvnc真实画面1/1、语音/重连28/28、独立包22/22，合计73项通过、零跳过。配置测试通过真实启动进程验证ERROR/绝对路径/原因、退出码1且不加载TUI/网络/录音/播放器模块；Windows失败暂停和退出码保留作契约检查。

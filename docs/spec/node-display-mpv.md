@@ -1,5 +1,27 @@
 # Node 子显示端常驻 mpv 伪代码
 
+## 裁剪移动（已实现）
+
+```text
+已有声明 := crop百分比消息、calculateGeometry、MpvPlayer.control/applyGeometry/writeGeometry、restoreState
+确认输入 := 控制端裁剪框拖动或缩放、X/Y/宽高输入
+已有服务链 := control{type,displayId,action:crop,value} → 服务端保存crop并转发 → Node媒体控制器
+新增定义 := 视觉版本、单个同媒体代次的合并任务 { 媒体代次, 共享完成回执 }
+crop输入 → 规范化矩形 → 更新最新视觉版本/fit → 合并连续请求
+媒体/窗口尺寸未就绪 → 记忆矩形 → 尺寸就绪后应用最新状态
+裁剪几何 → 按现有预览坐标求目标视觉矩形 → 等比缩放换算log2至video-zoom
+目标矩形与窗口中心差 → 换算video-pan-x/y → IPC应用；四方向均以实际像素检验
+连续移动 → 更新最终zoom/pan，避免每次归零再偏移；至多一个应用任务
+新输入到达 → 旧版本停止继续写属性 → 单任务继续应用最新值 → 共享完成回执，不为每次拖动增加串行任务
+尺寸变化 → 原50毫秒节流 → 增加视觉版本 → 复用合并任务，不与控制输入并发写几何
+应用裁剪 → 固定居中对齐、保留比例、panscan=0、可选scale复位1 → 直接写最终zoom/pan，不先归零
+切换媒体/填充/清空/退出 → 作废旧更新；原生填充复位zoom/pan，保持panscan逻辑
+恢复连接或重建进程 → 沿用既有fit/crop状态重放 → 保持TTS独立
+自测 := 旧mpv无scale属性、横纵移动/四旋转、连续拖动最终值、恢复及模式切换、PID不变
+实屏验收 := 隔离Xvnc红绿渐变图的四方向横纵四角共16组、真实视频2组 → 中心像素匹配原图坐标逆变换；PID保持、缩放减半及contain复位通过；Windows另行验收
+验证结果 := 专项21/21、真实mpv IPC 1/1、真实画面2/2、独立包22/22，共46项，零跳过
+```
+
 已实现于mpv-player/mpv-platform/mpv-geometry/media-controller及VoiceDisplay接入。
 
 ## 配置错误启动流程（已实现）
