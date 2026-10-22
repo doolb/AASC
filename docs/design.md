@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [SubAI专用工作AI与对话动作接入（设计草案，待开发确认）](design/sub-ai-actions.md)
+
 - [Chat2API远程交互登录](design/chat2api-remote-login.md)
 
 - [Node子显示端常驻mpv跨平台播放（源码完成，待设备验收）](design/node-display-mpv.md)

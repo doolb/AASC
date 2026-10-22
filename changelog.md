@@ -1,3 +1,9 @@
+### SubAI专用工作AI与对话动作设计
+
+- ✅ [2026-10-23] 完成SubAI与对话动作接入设计：主AI提交动作意图，当前显示端先查动作库，缺库后专用AI生成MPL，经编译后统一Human播放；模型面板独立选择Provider/具体模型。
+  - 用户确认完整播放成功后自动保存候选。核实register/revise会切active及schema1必须有默认版本，拟增加schema2候选区；明确实际完成回执、候选幂等、停止不入库及旧库/导入导出兼容。
+  - 新增design/sub-ai-actions.md、spec/sub-ai-actions.md与task/20261023_SubAI动作生成与对话接入设计.md，更新索引、todo及self-test计划。仅真实源码/文档核查与设计，运行代码未改，未调用模型/播放生成动作/执行功能测试或构建，发布状态保持原值。
+
 ### Node Linux TTS共享输出
 
 - ✅ [2026-10-22] 修复Linux TTS固定使用ALSA默认设备、容易与音频服务争抢硬件的问题：保留aplay，自动优先选择可达的pulse/pipewire共享入口，无可用入口沿用default；audioPlayer.linux.device支持显式PCM且失败不改投。

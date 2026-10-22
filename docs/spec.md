@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [SubAI与对话动作伪代码（草案，未实现）](spec/sub-ai-actions.md)
+
 - [Chat2API远程登录伪代码](spec/chat2api-remote-login.md)
 
 - [Node子显示端常驻mpv跨平台播放伪代码](spec/node-display-mpv.md)

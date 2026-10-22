@@ -1,5 +1,23 @@
 # 自测功能实现文档
 
+## SubAI动作接入验收计划（2026-10-23，尚未实现）
+
+```text
+设计依据 := sub-ai-actions.md；下述为待开发验收，不是已存在测试或通过结果
+配置 := 主AI与动作SubAI各选Provider/具体模型；权威revision/重连/错误回包/并发保存互不覆盖
+调用 := 本地库命中零SubAI；未知明确意图调用配置模型；普通引用/否定/半截协议不执行，重复事件只一次
+隔离 := 主profile/历史/Responses会话不变；SubAI无递归/任意工具权限；配置缺失默认生成关闭
+编译 := schema/实际输出/能力/时长/帧数校验；同一总预算最多修复一次；root/动态骨骼/非法轨道拒绝
+时钟 := direct无音频仍执行；withSpeech复用音频currentTime，迟到跳过且不阻塞原TTS
+取消 := 新轮次/停止/换模型/相同mesh重绑定/映射或库变更/断线/后台 → 旧source/ready/start零播放
+候选 := 真正completed后只保存一次，active不变；中断/抢占/失败/过期零保存；保存失败单独提示不重播
+迁移 := schema1→2原子保存；旧记录失败保持；配额/最新库追加/导入导出/预览/明确采用均验收
+入口 := 优先npm run test:mmd-production及test:chat-streaming，新增SubAI专项后补npm script
+补充 := node --test src/apps/server/modules/chat/chat-model-tier-service.test.js及现有模型面板/Human专项
+实机 := 两个不同能力PMX、桌面/手机、多端独立编译；生成动作画面与延迟另测，不能用语法成功替代
+本轮 := 仅源码核对/文档链接和差异检查；未新增运行测试代码、执行功能测试或调用真实模型
+```
+
 ## Node Linux TTS共享输出回归（2026-10-22）
 
 ```text
