@@ -14121,3 +14121,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 
 - ✅ [2026-10-22] 根据当前Vivaldi官网脚本，修复Node认证时间戳校验位与nonce格式；登录校验、刷新令牌和聊天发送共用chat2api-glm-auth。
   - 定向验证器/Provider/签名测试21/21通过；服务已请求重启。补齐官网PC应用认证头后，现场Node校验HTTP200/status0，正式验证器valid=true；控制端保存待用户回执。servicePackage保持true。
+
+### GLM远程登录现场验收
+
+- ✅ [2026-10-22] 使用用户当前已登录统一profile，通过正式控制端WS执行open/frame/complete，官网校验及账号保存均成功；管理接口回读确认GLM账号存在、总数1。
+  - 未发送聊天消息、未输出凭据；更新GLM design/spec/task及自测记录，从todo移除GLM待保存验收项。仅记录验收，无业务代码或发布状态变更。

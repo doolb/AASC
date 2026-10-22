@@ -13,4 +13,9 @@
 ```
 证据：2026-10-22当前Vivaldi官网main.0e91501b.js认证函数；不是网上第三方实现。
 
-现场补充：仅修正签名仍40001；补齐官网PC应用标识/平台/版本等认证头后Node返回HTTP200/status0，最终正式验证器直接调用也valid=true。未发送聊天消息；实际控制端保存待用户回执。
+现场补充：仅修正签名仍40001；补齐官网PC应用标识/平台/版本等认证头后Node返回HTTP200/status0，最终正式验证器直接调用也valid=true。未发送聊天消息；实际控制端WS保存已验证成功。
+
+```text
+现场验收 := 正式/control WS open(glm) → frame有画面 → complete(success=true,saved=true)
+回读账号列表 := 保存账号存在且providerId=glm，账号数1；全流程不发送聊天
+```
