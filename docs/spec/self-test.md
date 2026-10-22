@@ -2868,3 +2868,11 @@ GLM快速/GLM Image := Node SSE finish + 4个最终URL + 下载MIME=image/jpeg �
 Qwen := AI生图提交触发扫码 → 标记待登录，不能计作成功
 Chat2API现有images := 返回503媒体任务未启动 → 标记待实现统一路由
 ```
+
+```text
+Qwen浏览器凭证恢复现场 := Chat2API已保存票据 → 三个host-only来源仍缺完整网页登录
+  同一票据导入.qianwen.com → api.qianwen.com会员接口success=true → 登录提示消失
+Qwen生图现场 := ai_tool_scene=zaodian_generate_image + biz_data.features=qwen_image_2
+  返回FAIL_SYS_USER_VALIDATE → 页面验证iframe出现 → 停止请求，待人工验证；未宣称图片成功
+豆包候选验收约束 := 仅5.0Flash/4.5/4.0；5.0Pro不得进入选择或回退目标
+```

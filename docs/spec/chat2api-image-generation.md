@@ -18,6 +18,11 @@ GLM生图 := refresh_token换access_token → assistant/stream
   chat_ability.ability_param := JSON字符串{ability_type:1,ability_param:{model,ratio,input_box_content}}
   SSE patch_op.patch_value.content_block.content.creation_block.creations[].image.image_ori.url → 最终图片
   排除ack_client_meta里的头像，不把占位图片算成功
-Qwen := 等用户完成官网登录 → 采集生图请求与最终图片结构 → 再确定可注册模型
+豆包允许模型 := Seedream 5.0 Flash、Seedream 4.5、Seedream 4.0；排除5.0 Pro，不自动升级
+Qwen已观察请求 := /api/v2/chat，model=Qwen，ai_tool_scene=zaodian_generate_image，chat_mode=quick
+  biz_data := {req:{rootModel:qwen2,prompt,originPrompt,params:{size,features:[qwen_image_2]}},bizScene:genImage}
+Qwen验证 := Chat2API保存ticket → 仅千问父域Cookie → 浏览器会员接口成功 → 提交生图
+  FAIL_SYS_USER_VALIDATE := 安全验证未完成，禁止标记图片成功；等待用户手动验证后再测
+Qwen图片解析 := 尚未拿到最终图片响应，保持待实现，不猜字段
 ```
 仅为计划及已观察协议，当前代码尚未实现统一路由和UI选择。
