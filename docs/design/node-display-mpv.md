@@ -86,7 +86,7 @@ enterprise评审结论可开发，主L6播放器输入/输出契约、次L5连�
 
 已核实网页ASR默认30秒隐藏、TTS有播放进度及字幕历史，Node已有formatAsrDisplayText和识别成功/ignored两路回显，但AudioPlayer队列只保留URL/Buffer与完成回调，且onPlayStart/onPlayEnd是录音模式使用的整队列回调。已添加独立逐条播放通知与文字元数据，不覆盖原录音回调；当前条目开始时显示文字，下一条替换，停止/失败清除，播完最后一条暂留30秒。ASR新文本重置30秒计时，不将忽略结果转发为新的用户输入。本期按条目显示，精确逐字对齐或复制网页历史滚动不作为本次承诺。
 
-已新增mpv-overlay.js管理信息状态、ASS文本、布局和隐藏计时；在mpv-player.js通过同一常驻IPC的osd-overlay/ass-events叠加。main.js与media-controller.js接入时钟/连接事件、TTS/ASR和已有displayStatusBarConfig开关（只隐藏连接提示，不隐藏时钟/正文）。默认媒体能力获服务端确认开启后启动黑底空闲窗口，即使没有视频/图片也可显示这些信息；暂停、纯音频、清空媒体、断网和切换媒体时保持信息层，能力关闭或退出时回收。崩溃不以1Hz时钟无限重启，后续有效启动重放最新快照。
+已新增mpv-overlay.js管理信息状态、ASS文本、布局和隐藏计时；在mpv-player.js通过同一常驻IPC的osd-overlay/ass-events叠加。main.js与media-controller.js接入时钟/连接事件、TTS/ASR和已有displayStatusBarConfig开关（只隐藏连接提示，不隐藏时钟/正文）。默认媒体能力获服务端确认开启后启动黑底空闲窗口，即使没有视频/图片也可显示这些信息；暂停、纯音频、清空媒体、断网和切换媒体时保持信息层；能力关闭移除信息层并停止刷新，退出时回收自有播放器。崩溃不以1Hz时钟无限重启，后续有效启动重放最新快照。
 
 只使用现有AASC/WebSocket数据及状态栏配置，不增加HTTP配置接口、独立字幕服务或通用文本媒体能力声明。TTS声音仍走PowerShell/aplay，mpv只显示文字。已修改main.js、media-controller.js、mpv-player.js、audio-player.js，新增overlay模块与专项/真实画面用例、网页浏览器位置对照入口，更新使用/自测文档。
 

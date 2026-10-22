@@ -103,7 +103,7 @@ crop → panscan=0 → 保留既有百分比几何及缩放/平移
 mediaPlayer配置缺省或关闭 → 不探测/启动mpv，继续原语音功能
 本机配置修复（2026-10-22） := 补齐最外层对象闭合并开启mediaPlayer；解析成功 → 使用已配置serverUrl，不触发localhost默认回退
 开启配置 → 当前平台选择命令和参数数组 → 有界mpv版本探测 → 声明实际可用性
-媒体能力获权威开启 → 为信息层启动空闲窗口；首次有效媒体复用该进程 → 选择Linux socket或Windows独立命名管道
+媒体能力获权威开启且mpv可用 → 选择Linux socket或Windows独立命名管道 → 启动空闲信息窗口；首次有效媒体复用该进程
 Linux DISPLAY/认证 → xdpyinfo验证；显式认证失败直接报错，继承失败再搜索参考脚本候选
 可执行文件与参数数组 → shell关闭 → 追加idle/keep-open/fullscreen/专属IPC/audio-exclusive=no → 启动自有进程
 初始化去重 → 有界连接IPC → 订阅播放属性、媒体尺寸、窗口尺寸
