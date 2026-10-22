@@ -43,6 +43,24 @@ npm --prefix src/apps/voice-display-node run start -- config.json
 
 配置文件必须存在、JSON合法且包含明确的HTTP/HTTPS `serverUrl`。配置错误时，程序会在终端直接输出 `[ERROR][配置]`、绝对文件路径、失败阶段和具体原因，退出码为1；此时不会初始化TUI、录音或服务器连接，也不回退到localhost。Windows运行 `start.bat` 会在失败时暂停窗口以保留错误；修正配置后重新启动。
 
+## Linux TTS输出设备
+
+TTS继续使用系统 `aplay`，独立于mpv。默认自动探测当前用户可达的共享音频服务：ALSA包含对应PCM且服务可达时，优先 `pulse`、其次 `pipewire`，没有可用共享入口时使用 `default`。旧配置不需要补字段。
+
+需要手动指定时，在本机 `config.json` 顶层加入：
+
+```json
+"audioPlayer": {
+  "linux": {
+    "device": "pulse"
+  }
+}
+```
+
+`device` 可填 `auto`、`pulse`、`pipewire`、`default` 或 `aplay -L` 中的其他PCM名称。显式设备失败会报告播放器错误，不会切换设备重复播报；非法空值、类型或控制字符会报配置错误。选择结果按实例缓存，修改配置或修复音频会话后需重启Node。
+
+启动首次播报时日志会显示 `[音频] Linux输出设备: ...`。mpv与TTS应访问同一可用共享音频会话；`DISPLAY`/`XAUTHORITY` 只配置图形访问，不会自动配置音频服务认证。本选项不修改mpv音频输出或系统ALSA配置；回退 `default` 仍可能遇到硬件占用，需按目标机器的实际PCM及音频会话排查。
+
 ## 控制端操作
 
 在控制端选中该 Node 显示端，按既有方式发送单个 URL 媒体或临时上传文件。视频、音频循环播放，图片持续展示；支持播放/暂停、进度、音量及清空。临时文件写入本实例临时目录，上限64MiB，替换/清空/退出时回收；媒体 URL 支持 HTTP/HTTPS及相对服务地址，直连失败时尝试已有代理回退地址。

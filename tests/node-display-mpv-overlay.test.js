@@ -91,6 +91,7 @@ test('系统音频逐条通知在子进程启动后发出，保持原队列/AEC/
     let download;
     const sandbox = { module: { exports: {} }, Buffer, AbortController, console: { log() {}, error() {} },
         require(name) {
+            if (name === './linux-audio-output') return { LinuxAudioOutput: class { async resolve() { return 'default'; } } };
             if (name === 'node-fetch') return () => new Promise(resolve => { download = resolve; });
             if (name === 'child_process') return { spawn() {
                 const child = new EventEmitter();

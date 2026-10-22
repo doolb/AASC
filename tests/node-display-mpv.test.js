@@ -511,7 +511,8 @@ test('服务端配置更新保留跨平台播放器与录音设置，损坏配�
     const source = fs.readFileSync(path.join(root, 'src/apps/server/boot/server-app.js'), 'utf8');
     const start = source.indexOf('function updateVoiceDisplayConfig(');
     const end = source.indexOf('\nsetInterval(', start);
-    let stored = JSON.stringify({ mediaPlayer: { enabled: true, linux: { display: ':7' } }, recordingMode: 'cut', vadThreshold: 0.02 });
+    let stored = JSON.stringify({ mediaPlayer: { enabled: true, linux: { display: ':7' } },
+        audioPlayer: { linux: { device: 'pipewire' } }, recordingMode: 'cut', vadThreshold: 0.02 });
     const sandbox = {
         PROJECT_ROOT: '/test', path, log() {}, logError() {},
         fs: { existsSync: () => true, readFileSync: () => stored, writeFileSync: (file, data) => { stored = data; } }
@@ -520,6 +521,7 @@ test('服务端配置更新保留跨平台播放器与录音设置，损坏配�
     const saved = JSON.parse(stored);
     assert.equal(saved.serverUrl, 'https://10.0.0.9:8081');
     assert.equal(saved.mediaPlayer.linux.display, ':7');
+    assert.equal(saved.audioPlayer.linux.device, 'pipewire');
     assert.equal(saved.recordingMode, 'cut');
     assert.equal(saved.vadThreshold, 0.02);
     stored = '{broken';
@@ -705,6 +707,7 @@ test('TTS继续使用Windows PowerShell和Linux aplay内存输入，不调用mpv
     for (const platform of ['win32', 'linux']) {
         const sandbox = { module: { exports: {} }, Buffer, console,
             require: name => {
+                if (name === './linux-audio-output') return { LinuxAudioOutput: class { async resolve() { return 'default'; } } };
                 if (name === 'os') return { platform: () => platform };
                 if (name === 'node-fetch') return () => { throw new Error('本测试不得下载'); };
                 return require(name);

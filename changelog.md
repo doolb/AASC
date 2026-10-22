@@ -1,3 +1,10 @@
+### Node Linux TTS共享输出
+
+- ✅ [2026-10-22] 修复Linux TTS固定使用ALSA默认设备、容易与音频服务争抢硬件的问题：保留aplay，自动优先选择可达的pulse/pipewire共享入口，无可用入口沿用default；audioPlayer.linux.device支持显式PCM且失败不改投。
+  - 新增linux-audio-output.js，更新audio-player.js/main.js/config.example.json；并行有界探测、实例缓存及播放代次保护，保留队列、owner取消、AEC、录音恢复、字幕和Windows PowerShell。
+  - 新增设备与取消回归并扩展原配置保留测试；mpv50/50、配置4/4、独立包22/22、语音/重连/Windows输入22/22，共98项通过。工作机静音验证aplay经pulse共享输出播放完成；未确认mpv与TTS同时输出，原报错设备部署验收另验。
+  - 同步Node design/spec/task/usage/README/self-test/todo；voiceDisplayNodePackage原已true，保持待构建，其他状态保留；未改系统音频配置或构建发布包。
+
 ### Node TTS音频URL构造器修复
 
 - ✅ [2026-10-22] 修复报时等TTS加入队列失败的URL is not a constructor：main.js显式使用node:url.URL别名，保留原url模块解析WebSocket连接。

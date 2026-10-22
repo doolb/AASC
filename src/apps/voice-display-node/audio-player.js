@@ -12,13 +12,15 @@ const fetch = require('node-fetch');
 const https = require('https');
 const fs = require('fs');
 const os = require('os');
+const { LinuxAudioOutput } = require('./linux-audio-output');
 
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false
 });
 
 class AudioPlayer {
-    constructor() {
+    constructor(config = {}, { linuxOutput } = {}) {
+        this.linuxOutput = os.platform() === 'linux' ? linuxOutput || new LinuxAudioOutput(config?.linux) : null;
         this.isPlaying = false;
         this.stopRequested = false;
         this.currentProcess = null;
@@ -294,13 +296,16 @@ class AudioPlayer {
         if (!Buffer.isBuffer(wavBuffer) || !wavBuffer.length || wavBuffer.length > 16 * 1024 * 1024) {
             throw new Error('播放音频为空或超过16MiB上限');
         }
+        const platform = os.platform();
+        const device = platform === 'linux' ? await this.linuxOutput.resolve() : null;
+        // 探测期间可能停止、翻页或切换owner；旧句不能送AEC或再次启动系统播放器。
+        if (this.stopRequested || generation !== this.playbackGeneration) return;
         if (this.onPlayData) {
             const pcm = this.extractPCMFromWav(wavBuffer);
             if (pcm) this.onPlayData(pcm.samples, pcm.sampleRate);
         }
         if (this.stopRequested || generation !== this.playbackGeneration) return;
         this.isPlaying = true;
-        const platform = os.platform();
         if (platform === 'win32') {
             // stdin 传base64避开命令行长度限制；SoundPlayer只读取MemoryStream。
             const script = [
@@ -317,7 +322,7 @@ class AudioPlayer {
         if (platform === 'darwin') {
             return this.runPlayer('ffplay', ['-nodisp', '-autoexit', '-loglevel', 'error', '-i', 'pipe:0'], wavBuffer, generation);
         }
-        return this.runPlayer('aplay', ['-q', '-t', 'wav'], wavBuffer, generation);
+        return this.runPlayer('aplay', ['-q', '-D', device || 'default', '-t', 'wav'], wavBuffer, generation);
     }
 
     /**

@@ -1914,7 +1914,7 @@ class VoiceDisplay {
     async start() {
         activeDisplayInstance = this;
         await this.media.initialize();
-        this.audio = new AudioPlayer();
+        this.audio = new AudioPlayer(this.config.audioPlayer);
         this.media.configureAudio?.({ play: (url, options) => this.playAudioFromURL(url, options),
             cancel: owner => this.audio.cancelOwner(owner),
             getDisplayId: () => this.serverDisplayId || this.clientDisplayId,

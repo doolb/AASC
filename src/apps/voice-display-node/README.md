@@ -16,8 +16,10 @@ node src/apps/voice-display-node/main.js src/apps/voice-display-node/config.json
 
 发布 ZIP 不含本机 `config.json`。手工独立运行前，将 `config.example.json` 复制为 `config.json`，再把 `serverUrl` 改为 AASC 服务地址；服务端自身启动时仍会按现有路径生成并维护该配置。
 
-`config.example.json` 包含当前支持的全部本机配置项。中文注释集中在 `_comments` 字段，文件保持标准 JSON，可直接复制使用；不要添加 `//` 或块注释。示例涵盖 VAD、录音模式、播放期间录音策略、系统文字输入声纹和 Linux/Windows mpv 参数。显示端 ID 自动取 hostname；主题、能力、旋转等继续通过控制端配置。媒体默认关闭，Linux 默认继承 DISPLAY/XAUTHORITY，Windows 默认从 PATH 查找 mpv.exe。
+`config.example.json` 包含当前支持的全部本机配置项。中文注释集中在 `_comments` 字段，文件保持标准 JSON，可直接复制使用；不要添加 `//` 或块注释。示例涵盖 VAD、录音模式、播放期间录音策略、系统文字输入声纹、Linux TTS输出设备和 Linux/Windows mpv 参数。显示端 ID 自动取 hostname；主题、能力、旋转等继续通过控制端配置。媒体默认关闭，Linux 默认继承 DISPLAY/XAUTHORITY，Windows 默认从 PATH 查找 mpv.exe。
 
 配置错误会在初始化界面和网络前直接输出 `[ERROR][配置]`、文件路径及原因，并以退出码1停止；Windows `start.bat` 失败时会暂停显示错误。配置必须包含明确的HTTP/HTTPS服务器地址，不再回退localhost。适应/铺满/动态填充现使用mpv原生panscan。
 
 Node 原生依赖与生成 ZIP 的出包平台一致；当前发布目录面向 Windows x64 子显示设备。
+
+Linux TTS默认自动选择可达的pulse/pipewire共享PCM，无可用入口时沿用default；可通过本机 `audioPlayer.linux.device` 显式指定ALSA设备。设备选择按实例缓存，修改后重启；mpv与TTS的音频会话要求见上方播放说明。

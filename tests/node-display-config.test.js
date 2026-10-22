@@ -43,12 +43,14 @@ test('配置文件读取/JSON/对象/服务器地址错误都携带路径和阶�
 
 test('有效配置保留显式地址和mpv，缺省声纹关闭与稳定hostname身份继续生效', () => {
     const config = loadWithReader(() => JSON.stringify({ serverUrl: '  https://10.0.0.8:8081  ',
-        displayId: 'old-ignored', mediaPlayer: { enabled: true, windows: { command: 'B:\\mpv.exe' } } }));
+        displayId: 'old-ignored', mediaPlayer: { enabled: true, windows: { command: 'B:\\mpv.exe' } },
+        audioPlayer: { linux: { device: 'pulse' } } }));
     assert.equal(config.serverUrl, 'https://10.0.0.8:8081');
     assert.equal(config.displayId, `voice-display-node-${os.hostname()}`);
     assert.equal(config.textInput.requireVoiceprint, false);
     assert.equal(config.mediaPlayer.windows.command, 'B:\\mpv.exe');
     assert.equal(config.mediaPlayer.enabled, true);
+    assert.equal(config.audioPlayer.linux.device, 'pulse');
 });
 
 test('真实启动时配置错误在TUI前写ERROR并退出1，不加载网络/录音/播放器依赖', async t => {

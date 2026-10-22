@@ -168,3 +168,19 @@ ASS文本实施补充：新增textSentenceTtsCancel仅取消可信源显示端�
 验证：新增真实导入回归在原生产代码上失败，修复后mpv专项43/43、语音/重连/Windows输入22/22，共65项通过；未向真实音频源联网或执行设备播报。voiceDisplayNodePackage原已为true，保持待构建，其他发布状态保留；未构建发布包。
 
 enterprise评审：主L5音频入队前解析流程，次L4导入与调用声明；真实日志、实际导入重现、内存候选与新测试先失败后通过构成证据。置信度6/8×0.90=0.675；评分24/25、20/20、19/20、19/20、15/15，共97/100，可开发、风险低，已按L4伪代码实施。
+
+## Linux TTS ALSA设备占用（2026-10-22，已实现）
+
+用户日志显示TTS下载118846字节成功，aplay打开ALSA dmix从设备时报告Device or resource busy。修复前audio-player.js固定使用aplay -q -t wav，没有-D设备选择；mpv的audio-exclusive=no不等同于所有ALSA客户端自动进入同一共享混音链路。仅凭日志不能确认具体占用者，更不能保证由mpv独占导致。
+
+当前工作环境arch0只读检查：pactl info为PulseAudio兼容服务运行于PipeWire 1.6.8；aplay -L同时包含pulse/pipewire；fuser显示播放PCM设备由pipewire进程占用。因此该环境应让TTS通过共享音频服务播放，而非默认dmix争抢已经由服务管理的硬件。尚未确认用户报错设备就是arch0，不把本机检查冒充目标设备验收。
+
+已保留aplay并新增linux-audio-output.js负责输出选择：本机audioPlayer.linux.device默认auto，有界探测aplay PCM列表与可达Pulse/PipeWire服务，优先pulse、再pipewire，没有可用共享入口则沿用default；显式device直接使用，不偷偷切换其他设备。只通过独立参数传-D，不执行shell命令串、不修改系统ALSA配置、不关闭其他应用或音频服务。Windows PowerShell播放保持原有路径。
+
+修改audio-player.js/main.js传递本机配置并在播放前选择设备，更新config.example.json及使用文档，补探测缓存/超时/无服务/显式设备、播放取消/owner隔离与原队列/AEC回归。探测应在PCM参考信号通知前完成，旧下载/取消代次不得在探测返回后重新播放；已经开始的音频不自动换后端重播，避免重复播报。配置只属于本机物理输出，不新增控制端或HTTP配置接口。
+
+需求技能步骤0：错误阶段明确，目标设备具体服务状态仍需核对；修复方案是在现有TTS保留系统命令前提下接共享入口。主L6本机Linux输出适配与配置契约，次L5探测/缓存/取消生命周期，风险中；用户确认后先更新伪代码，再实施适配及回归。
+
+用户已确认自动/显式共享输出方案。enterprise评审：主L6 Linux输出适配，次L5探测/缓存/取消；证据为下载成功后的aplay错误、固定default代码、工作机服务/PCM/占用查询及已确认方案；主证据6/8×0.90=0.675，评分24/25、20/20、18/20、18/20、15/15，95/100，可开发、风险中。下放到设备规范化、并行有界探测、代次保护与独立参数播放伪代码实施。
+
+实现与验证：linux-audio-output.js并行探测三条命令，每条最多2秒，超时强制终止且限制输出；实例内缓存选择结果，显式PCM跳过探测。mpv专项50/50、配置4/4、独立包22/22、语音/重连/Windows输入22/22，共98项自动测试通过。工作机静音验证aplay通过pulse成功播放完成；mpv与TTS联测未完成有效的同时输出确认，不作为目标设备混音验收。未改系统音频配置或停止其他应用；voiceDisplayNodePackage保持true，未构建发布包，目标部署后实际混音另验。

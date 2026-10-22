@@ -1,5 +1,18 @@
 # 自测功能实现文档
 
+## Node Linux TTS共享输出回归（2026-10-22）
+
+```text
+设备 := PCM插件与服务须同时可用；pulse优先/pipewire其次/无入口default；显式PCM跳过探测且不改投
+探测 := 缓存同一Promise；命令缺失/不可达回退；真实挂起子进程按时SIGKILL且不留探测进程
+播放 := 真实AudioPlayer业务+假系统子进程；aplay独立-D参数、完整stdin WAV、PCM/AEC与字幕/录音回调一次
+取消 := 探测期间owner取消/停止+新队列 → 旧音频不复活、不送AEC，普通TTS继续；失败不重复播放
+兼容 := Windows仍PowerShell；本机配置读取与服务端更新保留audioPlayer；独立包契约回归
+结果 := npm run test:node-display-mpv 50 + test:node-display-config 4 + test:offline-voice-display-node 22 + 语音/重连/Windows输入22 = 98通过
+实机 := 工作机全静音WAV经aplay的pulse共享输出成功播放完成；mpv与TTS同时输出未确认；不冒充目标设备验收
+范围 := 不改系统ALSA/音频服务、不停止其他应用、不构建发布包；目标设备更新后的混音另验
+```
+
 ## Node TTS真实URL导入回归（2026-10-22）
 
 ```text

@@ -1,5 +1,26 @@
 # Node 子显示端常驻 mpv 伪代码
 
+## Linux TTS共享输出（已实现）
+
+```text
+已有声明 := AudioPlayer系统aplay/队列/owner取消/PCM回调、main启动配置、常驻mpv独立媒体播放
+错误证据 := 音频已下载 → aplay默认ALSA dmix打开从设备失败Device or resource busy
+新增定义 := 本机audioPlayer.linux.device、共享PCM/服务探测快照、缓存Promise与有界超时
+默认auto → 探测aplay -L及当前用户可达Pulse/PipeWire → pulse优先、pipewire其次、无可用项则default
+显式device → 校验长度/控制字符 → 按指定设备使用，不静默改投其他设备
+WAV就绪 → 等待设备选择 → 校验播放代次/停止状态 → 原一次PCM/AEC回调 → aplay独立-D参数/原stdin WAV
+已播放音频失败 → 保留错误，不在其他后端重播；停止/owner取消后探测迟到不能启动旧音频
+探测结果 → 按播放器实例缓存，避免逐句重复启动探测命令；显式设备跳过探测
+Windows → 原PowerShell MemoryStream路径；TTS队列/完成回调/录音恢复/字幕条目通知保持
+配置 := 本机物理输出配置，修改示例说明，不改系统ALSA或服务配置、不新增HTTP入口
+验证 := 可达共享设备/插件缺失/命令缺失/探测超时/显式设备、取消代次/AEC一次/普通TTS隔离及原Windows路径
+探测 := aplay -L、pactl info、pw-cli info 0独立并行，每项最多2秒并限制输出，异常视为不可达；成功选择只缓存一次
+配置校验 := device缺省auto，显式值须为去首尾空白后非空字符串，最长256字符且不含控制字符
+当前 := 用户确认后按先行伪代码实施；自动测试50+4+22+22=98通过
+实机边界 := 工作机静音aplay经pulse播放完成；未确认mpv与TTS同时输出，目标设备混音另验
+产物 := voiceDisplayNodePackage保持true，其他发布状态保留；未构建发布包
+```
+
 ## TTS URL构造器冲突修复（已实现）
 
 ```text
