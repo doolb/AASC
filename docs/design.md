@@ -1,6 +1,6 @@
 # Web MediaCenter - 项目设计文档
 
-- [Chat2API远程交互登录（方案待确认）](design/chat2api-remote-login.md)
+- [Chat2API远程交互登录](design/chat2api-remote-login.md)
 
 - [Node子显示端常驻mpv跨平台播放（源码完成，待设备验收）](design/node-display-mpv.md)
 
@@ -189,3 +189,5 @@
 | Node Offline min 跨平台热更新入口 | [offline-node-min-runtime.md](design/offline-node-min-runtime.md) | Windows/Linux 单文件入口、签名下载 release 种子与 code 更新、失败回滚 |
 | Release 配置与 APK 构建 profile | [release-build-profiles.md](design/release-build-profiles.md) | release 服务器配置、任务结果恢复、三种 APK profile、模型选择与构建产物忽略边界 |
 | Chat2API 四路统一模型与应用分流 | [chat2api-multimodal-routing.md](design/chat2api-multimodal-routing.md) | 既有文字＋四路TTS、默认音色映射、受控系统指令及媒体拒绝；首批已实现 |
+
+- [GLM认证兼容](design/chat2api-glm-auth.md)

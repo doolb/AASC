@@ -1,3 +1,4 @@
+const { createGlmAuthHeaders } = require('./chat2api-glm-auth');
 const axios = require('axios');
 const crypto = require('crypto');
 const { normalizeDoubaoCredentials, assertDoubaoProvider } = require('./chat2api-doubao-chat-adapter');
@@ -78,9 +79,6 @@ const validateDeepSeek = async (credentials, httpClient) => {
 
 const validateGlm = async (credentials, httpClient) => {
   if (!hasValue(credentials.refresh_token)) return failure('缺少必填凭据字段: refresh_token');
-  const timestamp = String(Date.now());
-  const nonce = crypto.randomUUID().replaceAll('-', '');
-  const sign = crypto.createHash('md5').update(`${timestamp}-${nonce}-8a1317a7468aa3ad86e997d08f3f31cb`).digest('hex');
   const response = await request(httpClient, {
     method: 'POST',
     url: 'https://chatglm.cn/chatglm/user-api/user/refresh',
@@ -89,10 +87,8 @@ const validateGlm = async (credentials, httpClient) => {
       Authorization: `Bearer ${credentials.refresh_token}`,
       'Content-Type': 'application/json',
       'X-Device-Id': crypto.randomUUID().replaceAll('-', ''),
-      'X-Nonce': nonce,
       'X-Request-Id': crypto.randomUUID(),
-      'X-Sign': sign,
-      'X-Timestamp': timestamp,
+      ...createGlmAuthHeaders(),
       Origin: 'https://chatglm.cn',
     },
   });

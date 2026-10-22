@@ -297,7 +297,12 @@ test('各内置 Provider 使用原版专用请求协议并归一化流式文本'
   const adapters = createChat2ApiProviderAdapters({
     httpClient: {
       request: async (config) => {
-        if (config.url.includes('/user-api/user/refresh')) return { status: 200, data: { result: { access_token: 'glm-access' } } };
+        if (config.url.includes('/user-api/user/refresh')) {
+          const digits = [...config.headers['X-Timestamp']].map(Number);
+          assert.equal(digits.at(-2), (digits.reduce((a, b) => a + b, 0) - digits.at(-2)) % 10);
+          assert.match(config.headers['X-Nonce'], /^[0-9a-f]{32}$/);
+          return { status: 200, data: { result: { access_token: 'glm-access' } } };
+        }
         if (config.url.includes('/device/register')) return { status: 200, data: { statusInfo: { code: 0 }, data: { deviceIDStr: 'device-1', realUserID: 'user' } } };
         if (config.url.includes('/chat_session/create')) return { status: 200, data: { data: { biz_data: { chat_session: { id: 'deepseek-session' } } } } };
         if (config.url.includes('/create_pow_challenge')) return { status: 200, data: { data: { biz_data: { challenge: { algorithm: 'DeepSeekHashV1', challenge: 'x', salt: 's', difficulty: 0, expire_at: 1, signature: 'sig' } } } } };

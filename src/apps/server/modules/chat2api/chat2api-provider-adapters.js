@@ -1,3 +1,4 @@
+const { createGlmAuthHeaders } = require('./chat2api-glm-auth');
 const axios = require('axios');
 const fs = require('fs/promises');
 const path = require('path');
@@ -153,9 +154,6 @@ const createRequestId = () => randomUUID();
 
 const createGlmRequest = (request, actualModel, provider, headers, account, responseSession) => {
   const nativeState = getNativeState(responseSession);
-  const timestamp = String(Date.now());
-  const nonce = createRequestId();
-  const sign = createHash('md5').update(`${timestamp}-${nonce}-8a1317a7468aa3ad86e997d08f3f31cb`).digest('hex');
   const origin = getProviderOrigin(provider, 'https://chatglm.cn');
   const prepared = [{ role: 'user', content: [{ type: 'text', text: `${getMessagesText(request.messages)}\nAssistant: ` }] }];
   return {
@@ -184,9 +182,7 @@ const createGlmRequest = (request, actualModel, provider, headers, account, resp
       Authorization: `Bearer ${getProviderToken(account)}`,
       'X-Device-Id': createRequestId(),
       'X-Request-Id': createRequestId(),
-      'X-Sign': sign,
-      'X-Timestamp': timestamp,
-      'X-Nonce': nonce,
+      ...createGlmAuthHeaders(),
     },
   };
 };
@@ -715,14 +711,11 @@ const createZaiChat = async (httpClient, provider, headers, account, actualModel
 const refreshGlmToken = async (httpClient, provider, headers, account) => {
   const refreshToken = getCredentials(account).refresh_token || getCredentials(account).refreshToken || getCredentials(account).token || '';
   if (!refreshToken) return account;
-  const timestamp = String(Date.now());
-  const nonce = createRequestId();
-  const sign = createHash('md5').update(`${timestamp}-${nonce}-8a1317a7468aa3ad86e997d08f3f31cb`).digest('hex');
   const response = await httpClient.request({
     method: 'POST',
     url: `${getProviderOrigin(provider, 'https://chatglm.cn')}/chatglm/user-api/user/refresh`,
     data: {},
-    headers: { ...headers, Authorization: `Bearer ${refreshToken}`, 'X-Device-Id': createRequestId(), 'X-Nonce': nonce, 'X-Request-Id': createRequestId(), 'X-Sign': sign, 'X-Timestamp': timestamp },
+    headers: { ...headers, Authorization: `Bearer ${refreshToken}`, 'X-Device-Id': createRequestId(), 'X-Request-Id': createRequestId(), ...createGlmAuthHeaders() },
     responseType: 'json',
     timeout: 15_000,
     validateStatus: () => true,

@@ -14116,3 +14116,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-22] 增加默认适应/铺满选择，限制画面视口并修正留白和裁剪点击坐标。
   - 修改remote-login UI/session/settings、browser launcher/bridge/login及server-app；定向17/17通过。全Chat2API回归仍有既有speech-upstream启动间隔计时断言失败，不属于本次改动。servicePackage保持true，未构建APK。
   - GLM现场核查：已采集刷新令牌，Node校验返回HTTP400/40001；官网验证后发现签名时间戳算法与Node不一致，待确认修复，未绕过校验或保存失败凭据。
+
+### GLM认证签名同步
+
+- ✅ [2026-10-22] 根据当前Vivaldi官网脚本，修复Node认证时间戳校验位与nonce格式；登录校验、刷新令牌和聊天发送共用chat2api-glm-auth。
+  - 定向验证器/Provider/签名测试21/21通过；服务已请求重启。补齐官网PC应用认证头后，现场Node校验HTTP200/status0，正式验证器valid=true；控制端保存待用户回执。servicePackage保持true。

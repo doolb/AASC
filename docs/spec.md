@@ -1,6 +1,6 @@
 # Web MediaCenter - 项目实现文档
 
-- [Chat2API远程登录伪代码（待确认）](spec/chat2api-remote-login.md)
+- [Chat2API远程登录伪代码](spec/chat2api-remote-login.md)
 
 - [Node子显示端常驻mpv跨平台播放伪代码](spec/node-display-mpv.md)
 
@@ -317,3 +317,5 @@
 | Chat2API 四路统一模型与应用分流 | [chat2api-multimodal-routing.md](spec/chat2api-multimodal-routing.md) | 既有文字＋四路TTS、默认音色映射、受控系统指令及媒体拒绝；首批已实现 |
 | 模型推理任务与按需依赖 | [model-inference-task.md](spec/model-inference-task.md) | 任务声明依赖、独立签名包、首次执行准备和显示页懒加载 |
 - [Offline可热更JS启动器与本地网页UI](spec/android-offline-js-launcher.md)
+
+- [GLM认证签名伪代码](spec/chat2api-glm-auth.md)
