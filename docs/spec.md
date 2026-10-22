@@ -319,3 +319,5 @@
 - [Offline可热更JS启动器与本地网页UI](spec/android-offline-js-launcher.md)
 
 - [GLM认证签名伪代码](spec/chat2api-glm-auth.md)
+
+- [多Provider生图协议伪代码（待确认）](spec/chat2api-image-generation.md)

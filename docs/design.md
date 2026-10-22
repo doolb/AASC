@@ -191,3 +191,5 @@
 | Chat2API 四路统一模型与应用分流 | [chat2api-multimodal-routing.md](design/chat2api-multimodal-routing.md) | 既有文字＋四路TTS、默认音色映射、受控系统指令及媒体拒绝；首批已实现 |
 
 - [GLM认证兼容](design/chat2api-glm-auth.md)
+
+- [多Provider生图与模型选择（待确认）](design/chat2api-image-generation.md)

@@ -2860,3 +2860,11 @@ GLM认证 := 固定时间戳1700000000000 → 1700000000080 → 固定MD5向量
 GLM正式WS验收结果 := 当前已登录profile → open成功 → frame有图 → complete保存成功 → 管理接口回读存在
 隔离边界 := 不发送聊天，不输出Cookie/Token，不新增测试对话；仅保存用户已授权的GLM账号
 ```
+
+```text
+多Provider生图现场调查 := 当前profile登录 → GLM官网模型枚举 → Node两种聊天finish
+GLM快速/GLM Image := Node SSE finish + 4个最终URL + 下载MIME=image/jpeg → 两者成功
+豆包 := 官网四模型菜单 → 默认5.0Flash新会话生成 → SSE最终creation图片 → 网页成功
+Qwen := AI生图提交触发扫码 → 标记待登录，不能计作成功
+Chat2API现有images := 返回503媒体任务未启动 → 标记待实现统一路由
+```
