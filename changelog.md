@@ -14150,3 +14150,13 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-22] 按用户要求将Chat2API保存的Qwen票据导入统一profile，补齐千问父域后官网会员接口及登录状态正常；实际生图返回FAIL_SYS_USER_VALIDATE并弹验证框，未获得图片，等待人工验证。
   - 记录已观察的zaodian_generate_image/qwen_image_2参数，不输出或提交凭证，未绕过验证或反复提交。生产恢复流程尚未修改。
 - ✅ [2026-10-22] 按用户要求限定豆包生图候选为Seedream5.0Flash、4.5、4.0，排除会员5.0Pro；更新多Provider生图design/spec/task/todo。接口及面板代码仍待原方案确认。
+
+### Chat2API 与 SubAI 生图
+
+- ✅ [2026-10-23] 两端独立生图选择、SubAI调用与多图历史
+  - 新增image-catalog/service/upload、qwen-images/image-browser和sub-ai模块；更新模型服务、共享picker、server-app、llm-service、两端聊天与WS路由。
+  - GLM三档Flash/Flash/5.3；图片模型GLM快速/GLM Image、Seedream 5.0 Flash/4.5/4.0、Qwen；排除5.0 Pro。
+  - `SubAI,生图,"提示词",参考图ID...`分流执行，标签不朗读；同一持久消息从占位更新为全部图片，支持取消/失败/重启中断，已删除消息不复活。
+  - `/v1/images/generations`统一路由，图片存为`res/uploads/chat-images/<UUID>.<ext>`；Qwen轮询最终作品，不重复统计缩略图。
+  - GLM、豆包5.0 Flash、Qwen文字与桌面参考图实测成功；Android Qwen参考图暂不支持。test:chat-images 21项、流式回归63项、runtime/proxy/provider回归31项通过；servicePackage保持true，未出包。
+  - 联调修复GLM增量流截断标签、豆包上传后关页竞态；独立Responses模型调用通过，正式images参考图接口HTTP200、图片落盘通过，不写入当前AASC聊天。

@@ -41,3 +41,13 @@
 }
 .chat-model-tier-panel button:disabled { opacity: .55; cursor: default; }
 .chat-model-tier-panel :is(button, select):focus-visible { outline: 2px solid var(--accent-color, #8aabff); outline-offset: 2px; }
+
+/* 图片组从占位更新为真实图片，失败状态保留在原消息。 */
+.chat-image-job[data-image-status="pending"] {
+    min-height: 110px; min-width: 180px; padding: 16px;
+    border: 1px dashed currentColor; border-radius: 10px;
+    background: rgba(128, 128, 128, .12);
+}
+.chat-image-job[data-image-status="pending"]::before { content: '▧'; display: block; font-size: 30px; opacity: .55; }
+.chat-image-job button { margin: 8px; }
+.chat-image-job img { max-width: 100%; object-fit: contain; }

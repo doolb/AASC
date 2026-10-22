@@ -14,6 +14,7 @@
         'chatHistoryError',
         'chatInput',
         'chatResponse',
+        'chatImageMessage',
         'chatSession',
         'privateSessionCreated',
         'privateSessionDeleted',

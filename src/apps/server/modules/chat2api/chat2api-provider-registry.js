@@ -19,7 +19,7 @@ const BUILTIN_PROVIDERS = Object.freeze([
   },
   {
     id: 'glm', name: 'GLM', authType: 'refresh_token', apiEndpoint: 'https://chatglm.cn/api', loginUrl: 'https://chatglm.cn', chatPath: '/chatglm/backend-api/assistant/stream',
-    supportedModels: ['GLM-5.1'], modelMappings: { 'GLM-5.1': 'glm-5.1' }, credentialFields: [{ name: 'refresh_token', label: 'Refresh Token', type: 'password', required: true }], authMethods: ['manual'],
+    supportedModels: ['GLM-5.3', 'GLM-Flash', 'GLM-5.1'], modelMappings: { 'GLM-5.3': 'glm-5.3', 'GLM-Flash': 'glm-5.3-flash', 'GLM-5.1': 'glm-5.1' }, credentialFields: [{ name: 'refresh_token', label: 'Refresh Token', type: 'password', required: true }], authMethods: ['manual'],
   },
   {
     id: 'kimi', name: 'Kimi', authType: 'jwt', apiEndpoint: 'https://www.kimi.com', loginUrl: 'https://www.kimi.com', chatPath: '/apiv2/kimi.gateway.chat.v1.ChatService/Chat',

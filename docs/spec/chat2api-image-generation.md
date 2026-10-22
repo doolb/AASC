@@ -1,4 +1,4 @@
-# Chat2API生图伪代码（待确认实现）
+# Chat2API生图伪代码
 
 ```text
 模型目录 := 区分text/image能力，记录Provider、公开请求名、上游模型参数、实测状态
@@ -23,6 +23,52 @@ Qwen已观察请求 := /api/v2/chat，model=Qwen，ai_tool_scene=zaodian_generat
   biz_data := {req:{rootModel:qwen2,prompt,originPrompt,params:{size,features:[qwen_image_2]}},bizScene:genImage}
 Qwen验证 := Chat2API保存ticket → 仅千问父域Cookie → 浏览器会员接口成功 → 提交生图
   FAIL_SYS_USER_VALIDATE := 安全验证未完成，禁止标记图片成功；等待用户手动验证后再测
-Qwen图片解析 := 尚未拿到最终图片响应，保持待实现，不猜字段
+Qwen早期图片解析 := 当时尚未拿到最终响应；当前实现见下方补充
 ```
-仅为计划及已观察协议，当前代码尚未实现统一路由和UI选择。
+以上保留初期协议调查；统一路由和UI已在2026-10-23实现，当前补充如下。
+
+## 2026-10-23 已确认：SubAI 生图与多图聊天持久化
+
+```text
+已有声明 := 模型档位服务、共享picker、Game聊天桥、chat.addMessage、historyStore、两端images展示
+新增定义 := 图像模型目录、SubAI任务注册表、CSV调用解析、图片组任务、图片资产存储
+生图选择 := 同一chatModelTierConfig增加imageSelection/imageProviders；set消息携带purpose=image
+配置更新 := 校验已登录Provider与目录模型 → config.set(chat.imageSelection) → 广播权威快照
+主AI提示 := raw System正文加入SubAI,生图,"提示词",参考图ID...，不用额外system角色
+参考图片 := 当前聊天已保存图片分配稳定ID → 提示给模型 → 只解析当前会话可访问ID
+调用行 := 按完整独立行解析CSV，支持引号内英文逗号与双引号转义；不解析代码块
+分流 := 任务名查注册表；生图绑定image.generate；动作保持既有链路，不混用模型
+流式输出 := 隐藏完整及未完成SubAI前缀；正文照常流式展示/朗读
+执行 := 本次回复调用行去重 → 保存pending图片组 → 广播消息 → 当前配置图像服务
+结果 := 全部有效图片去重并下载到本地持久目录 → 同一消息更新images数组与completed
+错误 := 同一消息更新failed并保留原因；取消终止请求；不自动重复提交
+重连/重启 := 从历史恢复图片组与本地图片；未完成记录标为interrupted，不自动再生成
+会话隔离 := 更新按稳定messageId，广播携带mode/target/sessionId；晚到结果不写入其他会话
+多图 := 一次任务一个图片组，实际返回几张保存几张，不截取第一张
+兼容 := GLM三档轻量/普通使用Flash，专业使用5.3；旧媒体路由保留
+测试 := CSV/流式半截/代码块/多图/错误/隔离/持久恢复/WS配置/两端界面/Provider路由
+```
+
+## 当前实现补充（2026-10-23）
+
+```text
+接口约束 := response_format默认url；其他格式拒绝；n拒绝（数量由官网实际结果决定）
+参考图输入 := reference_images(data URL数组) 或内部references(Buffer+mimeType)
+参考图上限 := GLM快速1；GLM Image0；豆包8（现有上传单图10MiB）；Qwen2
+GLM参考图 := chat_upload → drawing-api/v1/image/reference(Intelligent Editing) → image_url
+豆包参考图 := upload_image → get_file_url → 独立10052附件消息 + 10000文字消息
+豆包完成 := 收集creation图片且end_type=3，否则报流中断
+Qwen完成 := 首轮api/v2/chat → 处理中则同一请求api/v1/chat/snap递增snap_index
+  multi_load.ai_generate_image_list.content.display_list每个作品取watermark_image或image
+  忽略resource_infos内同一作品的缩略图/变体；失败不重新提交生成
+Qwen参考图 := 桌面共享profile新建临时页 → 官方requestPromise签名OSS授权/回调 → attachments
+  Android无桌面浏览器环境 := 明确返回暂不支持参考图；文字生图仍走Node
+资产 := 单图20MiB限制、60秒下载时限 → UUID文件持久保存
+失败中已有图片 := 保留已保存图片并标记failed/cancelled，不清空已完成部分
+API总时限 := 180秒；失败/取消明确回执，不重发生成
+```
+
+```text
+GLM文字SSE := meta_data.if_increase_push=true时拼接增量；false时按累计快照取后缀，避免截断SubAI调用
+豆包参考图管线 := 上传/地址解析复用同一执行页，不在两个相邻步骤间关闭；最终生成完成才释放临时页
+```

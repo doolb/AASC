@@ -138,3 +138,29 @@ test('实际显示页 390px 视口内模型面板完整可见', { skip: !chrome 
     assert.ok(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= 390 && bounds.bottom <= 740,
         JSON.stringify(bounds));
 });
+
+test('两端生图选择等待权威回执，不覆盖聊天档位', { skip: !chrome }, async t => {
+    const browser = await puppeteer.launch({executablePath:chrome,headless:true,args:['--no-sandbox']});
+    t.after(()=>browser.close());const page=await browser.newPage();
+    await page.setContent('<div id="control"></div><div id="display"></div>');
+    await page.addScriptTag({path:path.join(root,'js/chat-model-tier-picker.js')});
+    await page.evaluate(()=>{
+        window.sent=[];window.pickers=[];
+        window.snapshot={type:'chatModelTierConfig',selection:{providerId:'glm',tiersByProvider:{glm:'pro'},profileMode:'llm'},
+            providers:[{id:'glm',name:'GLM'}],imageSelection:{providerId:'glm',model:'glm-image-fast'},
+            imageProviders:[{id:'glm',name:'GLM',models:[{id:'glm-image-fast',name:'快速',referenceLimit:1},{id:'glm-image',name:'GLM Image',referenceLimit:0}]},
+                {id:'qwen',name:'千问',models:[{id:'qwen-image',name:'创意生图',referenceLimit:2}]}]};
+        for(const prefix of ['control','display']) {
+            const picker=ChatModelTierPicker.create({host:document.getElementById(prefix),prefix,send:m=>{sent.push(m);return true}});
+            picker.setConnected(true);picker.handleMessage(snapshot);pickers.push(picker);
+        }
+    });
+    await page.select('#controlChatModelTierPanel [data-image-provider]','qwen');
+    assert.deepEqual(await page.evaluate(()=>sent.at(-1)),{type:'setChatModelTierSelection',purpose:'image',providerId:'qwen',model:'qwen-image'});
+    assert.equal(await page.$eval('#controlChatModelTierPanel [data-image-provider]',n=>n.value),'glm');
+    await page.evaluate(()=>{snapshot.imageSelection={providerId:'qwen',model:'qwen-image'};pickers.forEach(p=>p.handleMessage(snapshot))});
+    for(const side of ['control','display']) {
+        assert.equal(await page.$eval(`#${side}ChatModelTierPanel [data-image-model]`,n=>n.value),'qwen-image');
+        assert.equal(await page.$eval(`#${side}ChatModelTierPanel .is-selected`,n=>n.textContent),'专业');
+    }
+});

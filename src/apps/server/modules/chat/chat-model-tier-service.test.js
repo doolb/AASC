@@ -50,7 +50,7 @@ function setup(initialModel = 'gpt-3.5-turbo') {
 test('每个 Provider 记住自己的档位，Qwen 默认普通、豆包默认轻量', async () => {
     const { service, broadcasts, profile, saves } = setup();
     assert.deepEqual(service.selection(), {
-        providerId: null, tiersByProvider: { qwen: 'flash', doubaochat: 'mini' },
+        providerId: null, tiersByProvider: { glm: 'flash', qwen: 'flash', doubaochat: 'mini' },
         modelName: 'gpt-3.5-turbo', requestModelName: null,
         profileName: 'direct', profileMode: 'llm'
     });
@@ -61,7 +61,7 @@ test('每个 Provider 记住自己的档位，Qwen 默认普通、豆包默认�
     await service.update({ providerId: 'doubaochat' });
     assert.equal(profile.model, 'doubao');
     assert.deepEqual(service.selection(), {
-        providerId: 'doubaochat', tiersByProvider: { qwen: 'pro', doubaochat: 'mini' },
+        providerId: 'doubaochat', tiersByProvider: { glm: 'flash', qwen: 'pro', doubaochat: 'mini' },
         modelName: 'doubao', requestModelName: 'doubao',
         profileName: 'direct', profileMode: 'llm'
     });
@@ -171,4 +171,18 @@ test('流式上游失败与提前结束不能被当成成功回复', async () =>
         yield { type: 'response.output_text.delta', delta: '半轮' };
     }()) });
     await assert.rejects(client.stream({ input: '你好' }, () => {}), error => error.code === 'responses_stream_interrupted');
+});
+
+test('生图选择通过权威快照保存且不修改主聊天模型', async () => {
+    const values = new Map(); const broadcasts = [];
+    const runtime = setup().runtime;
+    const service = createChatModelTierService({ config: { get: key => values.get(key), set: (key, value) => { values.set(key, value); return true; } },
+        getRuntime: () => runtime, getActiveProfile: () => ({ model: 'aasc-qwen-pro' }),
+        saveActiveModel: () => { throw new Error('生图不能覆盖主模型'); }, broadcast: message => broadcasts.push(message) });
+    await service.update({ type: 'setChatModelTierSelection', purpose: 'image', providerId: 'qwen', model: 'qwen-image' });
+    assert.deepEqual((await service.snapshot()).imageSelection, { providerId: 'qwen', model: 'qwen-image' });
+    assert.equal(broadcasts[0].selection.modelName, 'aasc-qwen-pro');
+    await assert.rejects(service.update({ purpose: 'image', providerId: 'qwen', model: 'seedream-4.5' }), /不匹配/);
+    assert.equal(values.get('chat.imageSelection').model, 'qwen-image');
+    assert.equal(identifyModel('aasc-glm-flash').tier, 'flash');
 });

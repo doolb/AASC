@@ -293,7 +293,8 @@ const createChat2ApiProxyService = (options = {}) => {
     if (request.method === 'GET' && url.pathname === '/v1/models') {
       const result=await coreAdapter.listModels();
       const speechModels=await speechService?.listModels?.()||[];
-      sendJson(response,200,{...result,data:[...new Map([...result.data,...speechModels].map(model=>[model.id,model])).values()]});
+      const imageModels = await options.imageService?.listModels?.() || [];
+      sendJson(response,200,{...result,data:[...new Map([...result.data,...speechModels,...imageModels].map(model=>[model.id,model])).values()]});
       return;
     }
     if (request.method === 'GET' && url.pathname === '/v1/audio/voices') {
@@ -352,6 +353,14 @@ const createChat2ApiProxyService = (options = {}) => {
       await withResponseCancellation(response, async signal => {
         const result = await doubaoMediaService.uploadImage(file, { signal });
         if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result);
+      });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/images/generations' && options.imageService) {
+      const payload = await readJson(request);
+      await withResponseCancellation(response, async signal => {
+        const result = await options.imageService.generate(payload, { signal });
+        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result, { noStore: true });
       });
       return;
     }

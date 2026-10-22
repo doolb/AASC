@@ -2,6 +2,9 @@
 
 // 三档名称兼容旧 LLM 配置；选档保存请求别名，实际目标由下方 Chat2API 映射处理。
 const PROVIDER_TIERS = Object.freeze({
+  glm: Object.freeze({ label: 'GLM', defaultTier: 'flash', models: Object.freeze({
+    mini: 'GLM-Flash', flash: 'GLM-Flash', pro: 'GLM-5.3'
+  }) }),
   qwen: Object.freeze({ label: 'Qwen', defaultTier: 'flash', models: Object.freeze({
     mini: 'Qwen3.6-Flash', flash: 'Qwen3.7', pro: 'Qwen3.7-Max'
   }) }),
@@ -14,11 +17,15 @@ function tierRequestModel(providerId, tier) {
   const profileModel = PROVIDER_TIERS[providerId]?.models[tier];
   if (!profileModel) return null;
   // Qwen 三档使用稳定的请求别名，兼容旧配置名称但不受旧名称映射影响。
-  return providerId === 'qwen' ? `aasc-qwen-${tier}` : profileModel;
+  return ['qwen', 'glm'].includes(providerId) ? `aasc-${providerId}-${tier}` : profileModel;
 }
 
 // 运行时内置规则只保存模型名称；发行种子单独用于首装数据，不保存账号或登录资料。
 const DEFAULT_MODEL_MAPPINGS = Object.freeze([
+  ...['mini', 'flash', 'pro'].map(tier => Object.freeze({ model: tierRequestModel('glm', tier),
+    actualModel: tier === 'pro' ? 'glm-5.3' : 'glm-5.3-flash', providerId: 'glm' })),
+  Object.freeze({ model: 'GLM-Flash', actualModel: 'glm-5.3-flash', providerId: 'glm' }),
+  Object.freeze({ model: 'GLM-5.3', actualModel: 'glm-5.3', providerId: 'glm' }),
   ...['flash', 'pro'].flatMap(mode => ['think', 'search', 'think-search'].map(feature => Object.freeze({
     model: `deepseek-v4-${mode}-${feature}`, actualModel: `deepseek-v4-${mode}`, providerId: 'deepseek'
   }))),

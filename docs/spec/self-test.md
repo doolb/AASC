@@ -2894,3 +2894,14 @@ Qwen生图现场 := ai_tool_scene=zaodian_generate_image + biz_data.features=qwe
   返回FAIL_SYS_USER_VALIDATE → 页面验证iframe出现 → 停止请求，待人工验证；未宣称图片成功
 豆包候选验收约束 := 仅5.0Flash/4.5/4.0；5.0Pro不得进入选择或回退目标
 ```
+
+
+## SubAI 生图（2026-10-23）
+
+```text
+npm run test:chat-images := CSV引号/流式隐藏/调用去重 → Provider鉴权与HTTP多图 → 资产落盘/历史恢复
+  → 取消与已删除消息晚到结果 → 两端占位原位替换/聊天隔离 → 共享picker权威回执与主模型隔离
+npm run test:chat-streaming := 原有聊天/游戏桥/TTS/Markdown兼容回归
+现场验证 := 独立Responses请求检查模型调用SubAI；GLM/豆包/Qwen文字与参考图接口收集真实图片
+禁止 := 将测试轮次写入用户当前AASC聊天；输出凭据或上游私有签名URL
+```

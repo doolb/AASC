@@ -367,3 +367,16 @@ test('native Provider 的非流式请求聚合上游流并保留会话状态', a
   assert.equal(result.nativeState.sessionId, 'deepseek-session');
   assert.equal(result.nativeState.parentMessageId, 'message-2');
 });
+
+test('GLM增量短块与末尾全量帧保留完整SubAI标签且不重复', async () => {
+  const text='SubAI,生图,"浅绿色小猫"';
+  const event=(text,incremental)=>({meta_data:{if_increase_push:incremental},parts:[{content:[{type:'text',text}]}]});
+  const events=[...text].map(c=>event(c,true));events.push(event(text,false));
+  const adapters=createChat2ApiProviderAdapters({httpClient:{request:async config=>config.url.includes('/user/refresh')
+    ? {status:200,data:{result:{access_token:'access'}}}
+    : {status:200,data:Readable.from(events.map(e=>'data: '+JSON.stringify(e)+'\n\n'))}}});
+  const result=await adapters.glm({provider:{baseUrl:'https://chatglm.cn'},account:{credentials:{refresh_token:'refresh'}},
+    request:{model:'glm-5.3-flash',messages:[{role:'user',content:'画猫'}],stream:true}});
+  let output='';for await(const chunk of result.stream)output+=chunk.choices[0].delta.content||'';
+  assert.equal(output,text);
+});

@@ -174,6 +174,7 @@ const createGlmRequest = (request, actualModel, provider, headers, account, resp
         is_test: false,
         platform: 'pc',
         quote_log_id: '',
+        selected_model: ['glm-5.3', 'glm-5.3-flash'].includes(actualModel) ? actualModel : undefined,
         cogview: { rm_label_watermark: false },
       },
     },
@@ -519,9 +520,12 @@ const parseSseStream = async function* (source, model, providerId, headers, resp
     }
     if (NATIVE_REQUEST_BUILDERS[providerId]) {
       const currentContent = extractNativeProviderContent(data, providerId);
-      if (currentContent === null || currentContent.length <= providerContent.length) continue;
-      const delta = currentContent.slice(providerContent.length);
-      providerContent = currentContent;
+      if (currentContent === null) continue;
+      // GLM新模型显式标记增量推送；最后一帧仍为全量，不能按长度丢掉短增量。
+      const incremental = providerId === 'glm' && data.meta_data?.if_increase_push === true;
+      const delta = incremental ? currentContent : currentContent.slice(providerContent.length);
+      if (!delta) continue;
+      providerContent = incremental ? providerContent + currentContent : currentContent;
       yield {
         id: extractNativeProviderId(data, providerId) || `chatcmpl-${Date.now()}`,
         object: 'chat.completion.chunk',

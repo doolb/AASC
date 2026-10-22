@@ -26,10 +26,14 @@
             <p class="chat-model-tier-current" data-current-model></p>
             <div class="chat-model-tier-levels" role="group" aria-label="模型档位"></div>
             <button type="button" class="chat-model-tier-login" data-login disabled title="后续版本开放">外部登录（后续开放）</button>
+            <hr><strong>生图模型</strong><label>Provider<select data-image-provider></select></label>
+            <label>模型<select data-image-model></select></label><p data-image-note class="chat-model-tier-scope"></p>
             <p class="chat-model-tier-status" data-status role="status"></p>`;
         host.append(button, panel);
 
         const providerSelect = panel.querySelector('[data-provider]');
+        const imageProvider = panel.querySelector('[data-image-provider]');
+        const imageModel = panel.querySelector('[data-image-model]');
         const levels = panel.querySelector('.chat-model-tier-levels');
         const currentModel = panel.querySelector('[data-current-model]');
         const status = panel.querySelector('[data-status]');
@@ -42,6 +46,22 @@
         }
 
         function render() {
+            const imageProviders = snapshot?.imageProviders || [];
+            const imageSelection = snapshot?.imageSelection || {};
+            const fill = (select, items, value) => {
+                select.replaceChildren();
+                for (const item of [{ id: '', name: '请选择' }, ...items]) {
+                    const option = document.createElement('option');
+                    option.value = item.id; option.textContent = item.name; select.append(option);
+                }
+                select.value = value || ''; select.disabled = !connected || !snapshot;
+            };
+            fill(imageProvider, imageProviders, imageSelection.providerId);
+            fill(imageModel, imageProviders.find(p => p.id === imageSelection.providerId)?.models || [], imageSelection.model);
+            const selectedImage = imageProviders.find(p => p.id === imageSelection.providerId)?.models.find(m => m.id === imageSelection.model);
+            panel.querySelector('[data-image-note]').textContent = selectedImage
+                ? selectedImage.referenceLimit ? `支持最多 ${selectedImage.referenceLimit} 张参考图` : '当前模型支持文字生图'
+                : '请选择生图 Provider 和模型';
             const selection = snapshot?.selection || {};
             const providers = Array.isArray(snapshot?.providers) ? snapshot.providers : [];
             const providerId = selection.providerId || '';
@@ -112,6 +132,14 @@
         panel.querySelector('[data-close]').addEventListener('click', close);
         providerSelect.addEventListener('change', () => choose(providerSelect.value,
             snapshot?.selection?.tiersByProvider?.[providerSelect.value]));
+        const chooseImage = (providerId, model) => {
+            if (!providerId || !model) return;
+            const sent = send({ type: 'setChatModelTierSelection', purpose: 'image', providerId, model });
+            render(); status.textContent = sent ? '正在保存生图设置…' : '连接中断，选择未保存';
+        };
+        imageProvider.addEventListener('change', () => chooseImage(imageProvider.value,
+            snapshot?.imageProviders?.find(p => p.id === imageProvider.value)?.models[0]?.id));
+        imageModel.addEventListener('change', () => chooseImage(imageProvider.value, imageModel.value));
         render();
 
         return Object.freeze({

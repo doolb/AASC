@@ -21,6 +21,9 @@ const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
 const { createGomokuGameService } = require('../modules/game/gomoku-game-service');
 const { createGomokuDisplayDemoService, isLoopbackAddress } =
     require('../modules/game/gomoku-display-demo-service');
+const { createSubAiChatBridge } = require('../modules/sub-ai/sub-ai-chat-bridge');
+const { createSubAiTaskService } = require('../modules/sub-ai/sub-ai-task-service');
+const { createChatImageAssets } = require('../modules/sub-ai/chat-image-assets');
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createChatContextUsageService, resolveChatContextOptions, normalizeContextScope } = require('../modules/chat/chat-context-usage');
 const { createDataRepairRunner } = require('../modules/data-repair/data-repair-js-runner');
@@ -368,6 +371,8 @@ const modelManifestService = new ModelManifestService({
     modelRoot: path.join(RES_DIR, 'models')
 });
 const UPLOADS_DIR = path.join(RES_DIR, 'uploads');
+const chatImageControllers = new Map();
+const chatImageAssets = createChatImageAssets({ directory: path.join(UPLOADS_DIR, 'chat-images') });
 const ASR_TEMP_DIR = path.join(RES_DIR, 'temp', 'asr');
 const HTTP_UPLOAD_TEMP_DIR = path.join(RES_DIR, 'temp', 'uploads');
 const VOICEPRINT_TEMP_DIR = path.join(RES_DIR, 'temp', 'voiceprint');
@@ -1366,7 +1371,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1454,7 +1459,7 @@ async function startServer() {
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getChatProfilesConfig', 'chatProfilesSave', 'chatProfileSwitch',
-                'getChatModelTierConfig', 'setChatModelTierSelection',
+                'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
                 'setDisplayVoiceListeningConfig', 'setDisplayStatusBarConfig', 'setTtsAudioCacheConfig',
@@ -2174,6 +2179,8 @@ function appendTemporaryConversationMessage(message, conversationId) {
         name: message.name || (message.role === 'assistant' ? '助手' : '用户'),
         roleName: message.roleName || temporaryConversation.roleName || null,
         content: message.content,
+        ...(message.images ? { images: message.images } : {}),
+        ...(message.imageGeneration ? { imageGeneration: message.imageGeneration } : {}),
         ...(message.reasoning ? { reasoning: message.reasoning } : {}),
         ...(message.speech ? { speech: message.speech } : {}),
         // 临时会话完成后会用本快照重绘控制端聊天，须保留已由 GM 校验的协议提示。
@@ -9057,6 +9064,10 @@ function formatVoiceprintScore(value) {
 }
 
 async function handleChatModelTierMessage(ws, data) {
+    if (data.type === 'cancelChatImage') {
+        chatImageControllers.get(data.messageId)?.abort();
+        return;
+    }
     if (data.type === 'getChatModelTierConfig') {
         await chatModelTierService.sendSnapshot(ws, { requestId: data.requestId });
         return;
@@ -9071,7 +9082,7 @@ async function handleChatModelTierMessage(ws, data) {
 }
 
 function handleDisplayMessageFallback(displayId, data, ws) {
-    if (['getChatModelTierConfig', 'setChatModelTierSelection'].includes(data.type)) {
+    if (['getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage'].includes(data.type)) {
         if (displayClients.get(displayId)?.ws !== ws) return;
         void handleChatModelTierMessage(ws, data);
         return;
@@ -9750,7 +9761,7 @@ async function handleControlMessageFallback(data, ws) {
         ws.send(JSON.stringify({ type: 'gameDemoResult', action: data.type, ...result }));
         return;
     }
-    if (['getChatModelTierConfig', 'setChatModelTierSelection'].includes(data.type)) {
+    if (['getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage'].includes(data.type)) {
         await handleChatModelTierMessage(ws, data);
         return;
     }
@@ -11511,11 +11522,12 @@ async function handleChatMessage(options) {
     const replyTemplateTts = chat.getTemplateByName(isTemporaryConversation ? temporaryConversation.roleName : effectiveTemplateTarget)?.tts;
     const effectiveSessionId = isTemporaryConversation ? effectiveTemporaryConversationId : sessionId;
     
+    const savedInputImages = await Promise.all(images.map(image => chatImageAssets.save(image)));
     const userMessageRecord = chat.addMessage({
         role: 'control',
         name: '控制端',
         content: internalGameUpdate ? (displayContent || '棋盘落子') : (displayContent || content),
-        images: images.map(({ mimeType }) => ({ mimeType })),
+        images: savedInputImages,
         mode: messageMode,
         target: messageTarget,
         sessionId: effectiveSessionId,
@@ -11580,7 +11592,29 @@ async function handleChatMessage(options) {
     }
     const voiceGenerationToken = beginDisplayConversationTtsGeneration(voiceOriginDisplayId);
     const gameTrace = [];
-    const streamReply = () => runGameAwareChat({ chat, gameService: gomokuGame,
+    const imageScope = { mode: messageMode, target: messageTarget, sessionId: effectiveSessionId,
+        templateId: effectiveTemplateTarget || 'default', profileName: userMessageRecord.profileName, replyToMessageId: userMessageRecord.id };
+    const imageTasks = createSubAiTaskService({ chat, assets: chatImageAssets, scope: imageScope, controllers: chatImageControllers,
+        generate: (input, options) => chatModelTierService.generateImage(input, options),
+        publish: message => {
+            if (isTemporaryConversation && effectiveTemporaryConversationId === temporaryConversation.id) {
+                const index = temporaryConversation.messages.findIndex(item => item.id === message.id);
+                if (index < 0) appendTemporaryConversationMessage(message, effectiveTemporaryConversationId);
+                else { temporaryConversation.messages[index] = { ...message }; broadcastTemporaryConversation('update'); }
+            }
+            const payload = { type: 'chatImageMessage', message };
+            broadcastToControls(payload);
+            if (preferredDisplayId) sendToDisplay(preferredDisplayId, payload);
+        }
+    });
+    const referenceImages = chat.getHistory().filter(item => item.mode === messageMode
+        && (item.templateId || 'default') === (effectiveTemplateTarget || 'default')
+        && (item.target || null) === (messageTarget || null)
+        && (item.sessionId || 'default') === (effectiveSessionId || 'default'))
+        .flatMap(item => item.images || []).filter(image => image.id).slice(-32);
+    const subAiChat = createSubAiChatBridge(chat, { references: referenceImages,
+        dispatch: (call, context) => imageTasks.dispatch(call, context) });
+    const streamReply = () => runGameAwareChat({ chat: subAiChat, gameService: gomokuGame,
         getAvailableGames: id => getDisplayCapabilities(id)?.games || [],
         displayId: displayId || voiceOriginDisplayId, content,
         userText: internalGameUpdate ? '' : content,

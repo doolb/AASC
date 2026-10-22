@@ -1372,7 +1372,7 @@ const Chat = {
             return `
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
-                    <div class="chat-message-content">${this.renderMessageImages(item.images)}${gameTrace}${ChatMarkdown.render(content)}</div>
+                    <div class="chat-message-content ${item.imageGeneration ? 'chat-image-job' : ''}" data-image-status="${this.escapeHtml(item.imageGeneration?.status || '')}">${this.renderMessageImages(item.images)}${item.imageGeneration?.status === 'pending' ? `<button type="button" data-cancel-image="${this.escapeHtml(item.id)}">取消生成</button>` : ''}${gameTrace}${ChatMarkdown.render(content)}</div>
                     ${thinkButton}
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                     ${deleteButton}
@@ -1380,6 +1380,9 @@ const Chat = {
             `;
         }).join('');
         
+        for (const button of messagesContainer.querySelectorAll('[data-cancel-image]')) {
+            button.addEventListener('click', () => this.cancelImage(button.dataset.cancelImage));
+        }
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
 
@@ -1528,6 +1531,31 @@ const Chat = {
             wrapper.append(preview, remove);
             container.appendChild(wrapper);
         });
+    },
+
+    cancelImage(messageId) {
+        if (window.WebSocketManager?.ws?.readyState === WebSocket.OPEN) window.WebSocketManager.ws.send(JSON.stringify({ type: 'cancelChatImage', messageId }));
+    },
+
+    handleImageMessage(data) {
+        const message = data.message;
+        if (!message?.id) return;
+        const upsert = list => {
+            const index = list.findIndex(item => item.id === message.id);
+            if (index >= 0) list[index] = message; else list.push(message);
+        };
+        if (message.mode === 'temporary') {
+            if (this.temporaryConversation.id !== message.sessionId) return;
+            upsert(this.temporaryConversation.messages);
+        } else if (message.mode === 'role') {
+            const role = message.templateId;
+            this.roleHistories[role] ||= [];
+            upsert(this.roleHistories[role]);
+        } else upsert(this.history);
+        const live = [...document.querySelectorAll('#chatMessages .streaming')];
+        this.renderHistory();
+        const container = document.getElementById('chatMessages');
+        for (const node of live) container?.appendChild(node);
     },
 
     renderMessageImages(images) {

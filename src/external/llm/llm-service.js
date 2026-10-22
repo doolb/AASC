@@ -124,6 +124,11 @@ function loadHistory() {
         for (const sourceMessage of historyStore.load()) {
             if (!sourceMessage || typeof sourceMessage !== 'object') continue;
             const msg = sourceMessage;
+            if (msg.imageGeneration?.status === 'pending') {
+                msg.imageGeneration = { ...msg.imageGeneration, status: 'interrupted' };
+                msg.content = '图片生成被服务重启中断，请重新发起。';
+                pendingChangedHistoryFiles.add(historyStore.getHistoryFileName(msg));
+            }
             // 旧消息没有 profile/template 时归入启动时的当前 profile/default 模板。
             if (!msg.sessionId) msg.sessionId = 'default';
             if (!msg.profileName) msg.profileName = activeProfile;
@@ -139,6 +144,7 @@ function loadHistory() {
             chatHistories[key].push(msg);
         }
 
+        if (pendingChangedHistoryFiles.size) flushHistorySave();
         const total = Object.values(chatHistories).reduce((s, a) => s + a.length, 0);
         console.log(`[Chat] 已加载 ${total} 条历史记录 (${Object.keys(chatHistories).length} 个会话)`);
     } catch (err) {
@@ -1244,6 +1250,8 @@ function addMessage(message) {
         ...(reasoning ? { reasoning } : {}),
         ...(speech ? { speech } : {}),
         ...(gameTrace.length ? { gameTrace } : {}),
+        ...(Array.isArray(message.images) ? { images: message.images.map(image => ({ ...image })) } : {}),
+        ...(message.imageGeneration ? { imageGeneration: { ...message.imageGeneration } } : {}),
         // 保存本轮用户消息引用，历史语音播放不会误取其他并发回复的提问。
         ...(typeof message.replyToMessageId === 'string'
             ? { replyToMessageId: message.replyToMessageId.slice(0, 128) } : {}),
@@ -1265,6 +1273,7 @@ function addMessage(message) {
     chatHistories[key].push(msg);
     trimHistory();
     saveHistory([historyStore.getHistoryFileName(msg)]);
+    if (msg.imageGeneration || msg.images?.length) flushHistorySave();
     
     if (content && content.startsWith('系统记录')) {
         const importantContent = content.replace('系统记录', '').trim();
@@ -1274,6 +1283,18 @@ function addMessage(message) {
     }
     
     return msg;
+}
+
+/** 按消息ID更新原会话，生成结果不依赖当前选中聊天；已删除的消息不复活。 */
+function updateMessage(id, patch) {
+    const message = getAllHistoryMessages().find(item => item.id === id);
+    if (!message) return null;
+    for (const key of ['content', 'images', 'imageGeneration']) {
+        if (Object.hasOwn(patch, key)) message[key] = patch[key];
+    }
+    saveHistory([historyStore.getHistoryFileName(message)]);
+    flushHistorySave();
+    return message;
 }
 
 function estimateTokens(text) {
@@ -2224,6 +2245,7 @@ module.exports = {
     getImportantRecords,
     addImportantRecord,
     addMessage,
+    updateMessage,
     mergeSessionEntries,
     recoverSessionsFromHistory,
     flattenSessionEntries,

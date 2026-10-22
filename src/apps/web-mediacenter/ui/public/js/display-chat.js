@@ -491,13 +491,27 @@
         author.className = 'display-chat-message-author';
         author.textContent = role === 'user' ? '我' : (options.author || '助手');
         const body = document.createElement('div');
-        body.className = 'display-chat-message-body';
+        body.className = 'display-chat-message-body' + (options.imageGeneration ? ' chat-image-job' : '');
+        body.dataset.imageStatus = options.imageGeneration?.status || '';
         body.innerHTML = role === 'assistant'
             ? renderThinkAndAnswer(content, options.reasoning)
             : renderMarkdown(content);
         item.appendChild(author);
         for (const entry of Array.isArray(options.gameTrace) ? options.gameTrace : []) {
             item.appendChild(createGameProtocolTip(entry));
+        }
+        for (const image of options.images || []) {
+            if (!/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(image.url || '')) continue;
+            const img = document.createElement('img');
+            img.src = image.url; img.alt = '聊天图片'; img.loading = 'lazy';
+            img.style.cssText = 'max-width:100%;max-height:420px;object-fit:contain;border-radius:8px';
+            body.appendChild(img);
+        }
+        if (options.imageGeneration?.status === 'pending') {
+            const cancel = document.createElement('button');
+            cancel.type = 'button'; cancel.textContent = '取消生成';
+            cancel.addEventListener('click', () => state.send?.({ type: 'cancelChatImage', messageId: options.id }));
+            body.appendChild(cancel);
         }
         item.appendChild(body);
         if (role === 'assistant' && options.playback) addPlaybackButton(item, options.playback);
@@ -546,10 +560,10 @@
                 continue;
             }
             if (item.role === 'user' || item.role === 'control') {
-                appendMessage('user', item.content || item.text || '');
+                appendMessage('user', item.content || item.text || '', { images: item.images });
             } else if (item.role === 'assistant') {
                 appendMessage('assistant', item.content || item.text || '', { reasoning: item.reasoning,
-                    gameTrace: item.gameTrace,
+                    gameTrace: item.gameTrace, images: item.images, imageGeneration: item.imageGeneration, id: item.id,
                     playback: { ...item, content: item.content || item.text, chatReplyContext: getReplyPlaybackContext(item, history, index) } });
             }
         }
@@ -851,6 +865,14 @@
             if (firstSnapshot || previousScopeKey !== nextScopeKey) requestSessionHistory();
             renderHeader();
             if (state.visible) notifyVoiceConversationContext();
+            return true;
+        }
+        if (message.type === 'chatImageMessage') {
+            const record = message.message;
+            if (!record?.id || !filterHistoryForCurrentSession([record]).length) return true;
+            const index = state.history.findIndex(item => item.id === record.id);
+            if (index >= 0) state.history[index] = record; else state.history.push(record);
+            renderHistory();
             return true;
         }
         if (message.type === 'chatHistory') {
