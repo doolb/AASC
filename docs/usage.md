@@ -12,7 +12,7 @@
 
 # Web MediaCenter - 使用说明
 
-- [Node子显示端常驻mpv播放、跨平台命令、旋转与画面填充](usage/node-display-mpv.md)（源码已实现，独立包待构建）
+- [Node子显示端常驻mpv播放、ASS文本、跨平台命令与画面设置](usage/node-display-mpv.md)（源码已实现，独立包待构建）
 
 - [MMD-AR图片姿态：HMR2 GPU API、当前整图深度与默认关闭弱辅助](<usage/mmd-pose-model-testing.md>)（独立网页；实际GPU/LAN/手机性能待用户环境验收）
 

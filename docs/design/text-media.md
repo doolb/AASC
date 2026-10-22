@@ -127,3 +127,8 @@
 - 主控制面板和浮动控制面板均复用 `Controls.showTextModePanel()`；最终主题固定为背景 `#FFF4B8`、文字 `#333333`，并完整发送 `fontSize`、`lineHeight`、`pageMargin`。
 - Task 7 新增跨端静态协议回归，覆盖显示端、服务器和控制端的连接点。逐页行为、TTS 服务、混合播放列表和控制面板行为继续由各自的 focused 测试覆盖。
 - 本次完整相关回归有两项环境阻塞：Puppeteer 浏览器进程无法启动，以及系统临时目录写入返回 `Unknown system error -122`；两者均在最小复现中重现，未发现文本协议断言或功能代码缺口。
+
+
+## Node子显示端ASS适配（2026-10-22，已实现）
+
+已在现有单文档协议上增加Node接收端，以ASS显示背景/正文/页码，复用服务端单句TTS、权威语音路由及textProgress，不改变网页当前实现。首版Markdown按可读文本分页，不承诺网页富文本排版；系统声音暂停后恢复时重播当前句。范围、文件清单与风险见[Node设计](node-display-mpv.md)及[任务](../task/20261022_Node子显示端ASS文本媒体.md)。已通过Node分页/控制/恢复/声音隔离、服务端路由、独立包及Linux真实ASS画面回归；Windows现场待验。

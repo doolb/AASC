@@ -10,6 +10,7 @@ const { EventEmitter } = require('node:events');
 const { platformOptions, resolveXauthority, ipcAddress, executeFile } = require('./mpv-platform');
 const { FIT_MODES, normalizeRotation, normalizeCrop, normalizeDynamic, calculateGeometry } = require('./mpv-geometry');
 const { MpvOverlay, assDocument } = require('./mpv-overlay');
+const { textAss } = require('./mpv-text-renderer');
 
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const MEDIA_TYPES = new Set(['image', 'gif', 'video', 'audio']);
@@ -48,6 +49,7 @@ class MpvPlayer extends EventEmitter {
         this.unsupportedResetProperties = new Set();
         this.overlayVersion = 0;
         this.overlayWrite = null;
+        this.textPage = null;
         this.overlay = new MpvOverlay(() => { void this.queueOverlay(); }, dependencies.overlayClock);
     }
 
@@ -343,6 +345,18 @@ class MpvPlayer extends EventEmitter {
 
     updateOverlay(data) { if (this.available && !this.closed) this.overlay.update(data); }
 
+    async setTextPage(snapshot) {
+        this.textPage = snapshot;
+        if (snapshot && (this.closed || !this.session?.socket || this.session.disposed)) throw new Error('mpv正文会话已断开');
+        await this.queueOverlay();
+        if (snapshot && this.session?.overlayFailed) throw new Error('mpv ASS正文绘制失败');
+    }
+
+    textDimensions() {
+        const dimensions = this.properties['osd-dimensions'];
+        return { width: dimensions?.w || 1280, height: dimensions?.h || 720, rotation: this.visual.rotation };
+    }
+
     async setOverlayEnabled(enabled) {
         enabled = enabled === true && this.available && !this.closed;
         this.overlay.setActive(enabled);
@@ -360,8 +374,8 @@ class MpvPlayer extends EventEmitter {
         const session = this.session;
         this.overlayVersion += 1;
         if (this.closed || !session?.socket || session.disposed || session.overlayFailed) return Promise.resolve();
-        if (this.overlayWrite?.session === session) return this.overlayWrite.promise;
-        const update = { session, promise: null };
+        if (this.overlayWrite?.session === session && this.overlayWrite.draining) return this.overlayWrite.promise;
+        const update = { session, promise: null, draining: true };
         this.overlayWrite = update;
         update.promise = (async () => {
             let version;
@@ -378,7 +392,15 @@ class MpvPlayer extends EventEmitter {
                     await this.command(command);
                     session.lastOverlay = key;
                 }
+                const body = textAss(this.overlay.active ? this.textPage : null);
+                const bodyKey = JSON.stringify(body);
+                if (bodyKey !== session.lastTextOverlay) {
+                    await this.command(body);
+                    session.lastTextOverlay = bodyKey;
+                }
             } while (version !== this.overlayVersion);
+            // 同步标记排空；Promise的finally尚未运行时，新输入仍须创建新一轮刷新。
+            update.draining = false;
         })().catch(error => {
             // 字幕不可用只报一次，不中断媒体/TTS，也不让1Hz时钟反复尝试错误会话。
             if (!this.closed && this.session === session && !session.disposed) {

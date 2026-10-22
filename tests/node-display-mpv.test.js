@@ -47,6 +47,29 @@ async function createPlayer(t, platform = process.platform, extra = {}) {
     return { player, starts, errors, connections };
 }
 
+test('文本媒体通过真实IPC加载正文层、翻页与旋转，切换视频移除正文且不重启mpv', async t => {
+    const { player, starts } = await createPlayer(t);
+    const sent = [];
+    const controller = new NodeMediaController({ serverUrl: 'http://localhost' }, { player, send: data => sent.push(data) });
+    t.after(() => controller.close());
+    await controller.initialize();
+    await controller.setCapabilities({ mediaRendering: true, displayText: true });
+    const text = { type: 'base64', mediaType: 'text', data: Buffer.from('文档内容。'.repeat(1000)).toString('base64') };
+    await controller.restore({ currentMedia: text, isPlaying: false, currentTextProgress: { pageIndex: 1 } });
+    let body = await player.command(['get_property', 'test-text-overlay']);
+    assert.equal(body.id, 41); assert.match(body.data, /文档内容/); assert.ok(body.data.includes('2 /'));
+    await controller.handleControl({ action: 'textPlayback', value: { action: 'next' } });
+    await controller.handleControl({ action: 'play', value: false });
+    body = await player.command(['get_property', 'test-text-overlay']);
+    assert.ok(body.data.includes('3 /'));
+    await controller.handleControl({ action: 'rotate', value: 90 });
+    assert.equal(controller.text.layout.rotation, 90);
+    await controller.handleMedia(media('http://localhost/video.mp4', 'video'));
+    body = await player.command(['get_property', 'test-text-overlay']);
+    assert.equal(body.format, 'none'); assert.equal(starts.length, 1);
+    assert.ok(sent.some(message => message.type === 'textProgress' && message.state === 'paused'));
+});
+
 test('Linux与Windows分别选择命令/环境，命名管道隔离且不执行shell', async t => {
     const linux = platformOptions({ linux: { command: '/some path/mpv', display: ':9', xauthority: '/tmp/auth file' } }, 'linux', { WAYLAND_DISPLAY: 'wayland-0' });
     assert.equal(linux.env.DISPLAY, ':9');
@@ -528,7 +551,7 @@ test('VoiceDisplay真实消息分支连接媒体控制器，能力声明/旋转/
     const sandbox = {
         module: { exports: {} }, NodeMediaController, MEDIA_CONTROLS: require('../src/apps/voice-display-node/media-controller').MEDIA_CONTROLS,
         WindowsTextInputInjector: class { close() {} isAvailable() { return false; } }, WindowsGlobalHotkey: class { close() {} },
-        normalizeTextInputVoiceprintPolicy: () => false, path, __dirname: '/test', AbortController,
+        normalizeTextInputVoiceprintPolicy: () => false, path, __dirname: '/test', AbortController, URL,
         WINDOWS_VOICEPRINT_HOTKEY_LABEL: 'Alt+C', log() {}, logError: (...args) => mainErrors.push(args),
         AudioRecorder: class {}, formatAsrDisplayText: require('../src/apps/voice-display-node/asr-display').formatAsrDisplayText,
         useTUI: false, WebSocket: { OPEN: 1 }, clearTimeout, clearInterval

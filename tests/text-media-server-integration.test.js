@@ -15,6 +15,15 @@ const serverAppSource = fs.readFileSync(
     'utf8'
 );
 
+test('分句取消只使用已认证连接的来源身份，空播放ID不触发取消', () => {
+    const handlers = new Map(), cancelled = [];
+    registerTextMediaDisplayHandlers({ wsServer: { registerHandler: (type, handler) => handlers.set(type, handler) },
+        displayTypes: [], handleDisplayMessage() {} }, { cancel: (...args) => cancelled.push(args) });
+    handlers.get('textSentenceTtsCancel')({ playbackId: 'p', originDisplayId: 'victim' }, { displayId: 'source' });
+    handlers.get('textSentenceTtsCancel')({ playbackId: '' }, { displayId: 'source' });
+    assert.deepEqual(cancelled, [['source', 'p']]);
+});
+
 test('服务器为分句 TTS 注册专用路由并调用服务', async () => {
     const handlers = new Map();
     const routed = [];

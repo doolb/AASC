@@ -52,6 +52,7 @@ class AudioPlayer {
             type: 'url',
             url,
             id: ++this.itemSequence,
+            owner: options.owner,
             text: typeof options.text === 'string' ? Array.from(options.text).slice(0, 2048).join('') : '',
             onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
         });
@@ -69,6 +70,7 @@ class AudioPlayer {
             type: 'buffer',
             buffer: wavBuffer,
             id: ++this.itemSequence,
+            owner: options.owner,
             text: typeof options.text === 'string' ? Array.from(options.text).slice(0, 2048).join('') : '',
             onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
         });
@@ -114,8 +116,8 @@ class AudioPlayer {
             // 停止后旧下载/子进程的回调不再通知新播报，也不抢占新队列。
             if (generation !== this.queueGeneration) return;
             this.currentQueueItem = null;
-            this.notifyItemPlayback({ phase: 'end', id: item.id, failed: !!playbackError, queueIdle: this.playQueue.length === 0 });
-            if (item.onComplete) {
+            this.notifyItemPlayback({ phase: 'end', id: item.id, failed: !!playbackError || item.cancelled === true, queueIdle: this.playQueue.length === 0 });
+            if (item.onComplete && !item.cancelled) {
                 try {
                     item.onComplete(playbackError, this.playQueue.length === 0);
                 } catch (error) {
@@ -153,6 +155,20 @@ class AudioPlayer {
     clearQueue() {
         this.playQueue = [];
         console.log('[音频队列] 已清空');
+    }
+
+    /** 仅取消指定业务的音频，保留其他TTS与整队列录音回调。 */
+    cancelOwner(owner) {
+        if (!owner) return;
+        this.playQueue = this.playQueue.filter(item => item.owner !== owner);
+        if (this.currentQueueItem?.owner !== owner) return;
+        this.currentQueueItem.cancelled = true;
+        this.playbackGeneration += 1;
+        this.downloadController?.abort();
+        this.downloadController = null;
+        this.currentProcess?.kill();
+        this.currentProcess = null;
+        this.isPlaying = false;
     }
 
     /**

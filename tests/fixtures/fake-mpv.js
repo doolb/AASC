@@ -24,7 +24,7 @@ net.createServer(socket => {
             const [name, key, value] = Array.isArray(command) ? command : [command.name, command.id, command.data];
             if (name === 'ignore') continue;
             const reply = data => send({ request_id: requestId, error: 'success', data });
-            if (name === 'osd-overlay') { properties['test-overlay'] = command; reply({}); continue; }
+            if (name === 'osd-overlay') { properties[key === 41 ? 'test-text-overlay' : 'test-overlay'] = command; reply({}); continue; }
             if (name === 'fail') { send({ request_id: requestId, error: 'property unavailable' }); continue; }
             if (name === 'observe_property') {
                 reply(null);

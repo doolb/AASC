@@ -55,6 +55,8 @@ function createProjectFixture() {
     fs.symlinkSync('../ws/package.json', path.join(appRoot, 'node_modules/.bin/ws'));
     fs.writeFileSync(path.join(frameworkRoot, 'system-monitor.js'), 'module.exports = class SystemMonitor {};\n');
     fs.writeFileSync(path.join(frameworkRoot, 'console-redirect.js'), 'module.exports = { installConsoleRedirect() {} };\n');
+    fs.mkdirSync(path.join(projectRoot, 'src/core/utils'), { recursive: true });
+    fs.writeFileSync(path.join(path.join(projectRoot, 'src/core/utils'), 'sentence-splitter.js'), 'module.exports = { splitIntoSentences() { return []; } };\n');
     return { projectRoot, appRoot };
 }
 
@@ -87,6 +89,7 @@ test('standalone ZIP keeps runtime paths, dependencies and signed content identi
     assert.ok(entries.includes('src/apps/voice-display-node/config.example.json'));
     assert.ok(entries.includes('src/framework/observability/system-monitor.js'));
     assert.ok(entries.includes('src/framework/observability/console-redirect.js'));
+    assert.ok(entries.includes('src/core/utils/sentence-splitter.js'));
     assert.ok(!entries.includes('src/apps/voice-display-node/config.json'));
     assert.ok(!entries.some(entry => entry.startsWith('src/apps/voice-display-node/run-task/')));
     assert.ok(!entries.some(entry => entry.startsWith('src/apps/voice-display-node/models/')));

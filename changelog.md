@@ -1,3 +1,10 @@
+### Node子显示端ASS文本媒体
+
+- ✅ [2026-10-22] 使用常驻mpv的独立ASS层显示单篇txt/md可读正文，支持分页、页码、textStyle、翻页/启停、旋转重排和页/句暂停恢复；时钟/连接/TTS/ASR保留网页位置。
+  - 新增mpv-text-player.js、mpv-text-renderer.js；更新main/media-controller/mpv-player/audio-player；按owner取消文本音频，保留普通TTS及录音回调；远端朗读回执与textSentenceTtsCancel复用现有WebSocket路由，独立包附带共享分句器。
+  - 补断线/延迟下载/旧TTS隔离、清空与新媒体竞态、OSD排空刷新修复；文本上限8MiB、每页2048字符、最多100000行/20000页，Markdown不承诺完整富文本。
+  - 自测141项通过：mpv38、文本服务/路由53、语音/重连22、独立包22、Linux真实画面4、真实IPC1、网页布局1。Windows字体/DPI/声音现场另验；servicePackage/voiceDisplayNodePackage保持true，未构建发布包。同步design/spec/task/todo/usage/self-test。
+
 ### Node子显示端ASS信息叠加
 
 - ✅ [2026-10-22] 完成常驻mpv的ASS时钟、连接状态、TTS当前条目与ASR回显，位置按网页版最终布局对齐，支持四方向/自适应字号，裁剪填充不影响信息层。

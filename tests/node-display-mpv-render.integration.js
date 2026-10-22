@@ -10,6 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { MpvPlayer } = require('../src/apps/voice-display-node/mpv-player');
 const { overlayLayout, physicalPoint, escapeAss } = require('../src/apps/voice-display-node/mpv-overlay');
+const { paginate } = require('../src/apps/voice-display-node/mpv-text-renderer');
 const run = promisify(execFile);
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -73,6 +74,54 @@ function boxRect(layout, box) {
     return { left: Math.min(...corners.map(value => value[0])), right: Math.max(...corners.map(value => value[0])),
         top: Math.min(...corners.map(value => value[1])), bottom: Math.max(...corners.map(value => value[1])) };
 }
+
+test('真实ASS文本：黄底深灰正文/页码、四方向重排、信息层共存和清空，同一PID', { timeout: 25000 }, async t => {
+    const display = await virtualDisplay(t);
+    const errors = [];
+    const player = new MpvPlayer({ enabled: true, linux: { display, command: 'mpv', args: [
+        '--vo=x11', '--ao=null', '--geometry=800x600', '--cursor-autohide=always'
+    ] } }, { onError: error => errors.push(error.message), overlayClock: { now: () => new Date(2026, 9, 22, 12, 34, 56) } });
+    t.after(() => player.close());
+    assert.equal(await player.checkAvailable(), true);
+    player.updateOverlay({ connection: '已连接', asrText: '识别回显', ttsEvent: { phase: 'start', id: 1, text: '当前朗读' } });
+    await player.setOverlayEnabled(true);
+    const pid = player.process.pid;
+    const source = ('正文中文 ABC123 {\\pos(0,0)}。\n' + '长文内容'.repeat(40) + '\n').repeat(15);
+    const samples = [];
+    for (const rotation of [0, 90, 180, 270]) {
+        await player.control('rotate', rotation);
+        const layout = paginate(source, { width: 800, height: 600, rotation });
+        await player.setTextPage({ layout, pageIndex: 0 });
+        await delay(120);
+        const frame = await capture(display);
+        const background = pixel(frame, 400, 590);
+        assert.ok(background[0] > 240 && background[1] > 225 && background[2] > 165 && background[2] < 200, `背景颜色: ${background}`);
+        const countDark = (x, y, width, height) => {
+            const rect = boxRect(layout, { x, y, width, height });
+            let count = 0;
+            for (let py = Math.max(0, Math.ceil(rect.top)); py < Math.min(600, rect.bottom); py++) {
+                for (let px = Math.max(0, Math.ceil(rect.left)); px < Math.min(800, rect.right); px++) {
+                    if (pixel(frame, px, py).every(value => value < 130)) count++;
+                }
+            }
+            return count;
+        };
+        const bodyInk = countDark(layout.margin, layout.margin, 300, layout.lineHeight);
+        const footerInk = countDark(layout.logicalWidth / 2 - 60, layout.logicalHeight - layout.margin - 28, 120, 32);
+        assert.ok(bodyInk > 200, `正文旋转${rotation}可见: ${bodyInk}`);
+        assert.ok(footerInk > 20, `页码旋转${rotation}可见: ${footerInk}`);
+        assert.match(player.session.lastOverlay, /12:34:56/);
+        assert.match(player.session.lastOverlay, /当前朗读/);
+        await player.setTextPage({ layout, pageIndex: 1 });
+        assert.ok(player.session.lastTextOverlay.includes(`2 / ${layout.pages.length}`));
+        samples.push({ rotation, pages: layout.pages.length, bodyInk, footerInk });
+    }
+    await player.setTextPage(null);
+    await delay(120);
+    assert.ok(pixel(await capture(display), 400, 590).every(value => value < 10), '清空移除正文背景');
+    assert.equal(player.process.pid, pid); assert.deepEqual(errors, []);
+    t.diagnostic(JSON.stringify(samples));
+});
 
 test('真实渲染：四方向contain有黑边、cover填满并裁切，常驻PID不变', { timeout: 45000 }, async t => {
     const display = await virtualDisplay(t);

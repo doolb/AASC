@@ -356,3 +356,15 @@ TTS 单句失败:
 ```
 
 该约束由 `tests/text-media-integration.test.js` 对显示端、服务端与控制端入口做最终静态回归；功能行为仍分别由文本播放器、TTS 服务、播放列表和控制端测试覆盖。
+
+
+## Node ASS接收端（已实现）
+
+```text
+既有网页播放器/服务端分句协议 → 保持当前实现
+Node适配 → 单文档加载与分页/ASS正文 → textPlayback/textStyle控制 → 原单句TTS与进度恢复
+Markdown → 提取安全可读正文；暂停 → 取消本句owner，恢复重播当前句；流程见node-display-mpv伪代码
+textSentenceTtsCancel → 只使用连接displayId与有效playbackId取消；不新增HTTP配置
+独立包 → 附带共享sentence-splitter，保持模块相对路径
+验证 → Node/服务端路由/包与Linux真实画面通过，Windows现场另验
+```

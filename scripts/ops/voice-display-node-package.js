@@ -12,6 +12,7 @@ const OBSERVABILITY_FILES = Object.freeze([
     'src/framework/observability/system-monitor.js',
     'src/framework/observability/console-redirect.js'
 ]);
+const RUNTIME_SUPPORT_FILES = Object.freeze([...OBSERVABILITY_FILES, 'src/core/utils/sentence-splitter.js']);
 const SIGNATURE_ALGORITHM = 'SHA256withRSA';
 
 function assertVersion(version) {
@@ -152,7 +153,7 @@ async function validateProgramRoot(programRoot) {
 }
 
 async function validateObservabilityFiles(projectRoot) {
-    for (const relativePath of OBSERVABILITY_FILES) {
+    for (const relativePath of RUNTIME_SUPPORT_FILES) {
         const fullPath = path.join(projectRoot, ...relativePath.split('/'));
         await requireRegularFile(fullPath, `Node 子显示端共享模块 ${relativePath}`);
     }
@@ -198,7 +199,7 @@ async function stageVoiceDisplayNodePackage(options = {}) {
     const targetAppRoot = path.join(snapshotRoot, ...APP_RELATIVE_PATH.split('/'));
     await fs.promises.mkdir(targetAppRoot, { recursive: true });
     await copyProgramTree(appRoot, targetAppRoot);
-    for (const relativePath of OBSERVABILITY_FILES) {
+    for (const relativePath of RUNTIME_SUPPORT_FILES) {
         const sourcePath = path.join(projectRoot, ...relativePath.split('/'));
         const targetPath = path.join(snapshotRoot, ...relativePath.split('/'));
         await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });

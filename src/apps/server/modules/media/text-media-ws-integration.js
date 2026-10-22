@@ -25,6 +25,13 @@ function registerTextMediaDisplayHandlers({ wsServer, displayTypes, handleDispla
         textMediaTtsService.handleSentenceFinished(ctx.displayId, data);
     });
 
+    // 来源身份只取已认证连接，不能让消息字段取消其他显示端的朗读。
+    wsServer.registerHandler('textSentenceTtsCancel', (data, ctx) => {
+        if (ctx.displayId && typeof data.playbackId === 'string' && data.playbackId.trim()) {
+            textMediaTtsService.cancel(ctx.displayId, data.playbackId);
+        }
+    });
+
     wsServer.registerHandler('textSentenceTtsReady', (data, ctx) => {
         if (typeof textMediaTtsService.handleSentenceReady === 'function') {
             textMediaTtsService.handleSentenceReady(ctx.displayId, data);

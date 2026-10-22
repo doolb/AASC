@@ -432,7 +432,7 @@ class VoiceDisplay {
                 voiceRecording: true,
                 voiceRecognition: true,
                 cameraCapture: false,
-                displayText: false
+                displayText: this.media.available
             }
         });
         log('能力', '已声明子显示端能力');
@@ -495,6 +495,11 @@ class VoiceDisplay {
                 break;
             case 'tts':
                 this.handleTTS(data);
+                break;
+            case 'textSentenceTtsReady':
+            case 'textSentenceTtsFinished':
+            case 'textSentenceTtsError':
+                this.media.handleTextMessage(data);
                 break;
             case 'textInputAnnouncementError':
                 this.handleTextInputAnnouncementError(data);
@@ -776,6 +781,7 @@ class VoiceDisplay {
      * @param {Object} data - TTS 数据
      */
     async handleTTS(data) {
+        if (this.media.handleTextMessage?.(data)) return;
         const action = data.action;
 
         switch (action) {
@@ -804,9 +810,14 @@ class VoiceDisplay {
                 }
                 break;
             case 'stop':
+                this.media.text?.voice.stop();
                 if (this.audio) {
                     this.audio.stop();
                     this.audio.clearQueue();
+                }
+                if (this.media.text?.active) {
+                    try { await this.media.text.control('pause'); }
+                    catch (error) { logError('媒体', error.message); }
                 }
                 this.notifyVoiceTtsPlaybackFinished();
                 this.finishTextInputAnnouncement(new Error('状态提示播报被停止'));
@@ -1338,9 +1349,9 @@ class VoiceDisplay {
             return;
         }
 
-        const fullURL = `${this.config.serverUrl}${audioUrl}`;
-
         try {
+            const fullURL = new URL(audioUrl, this.config.serverUrl).href;
+            if (!/^https?:/.test(fullURL)) throw new Error('音频仅支持HTTP/HTTPS地址');
             this.audio.queueURL(fullURL, queueOptions);
         } catch (error) {
             logError('TTS', `加入播放队列失败: ${error.message}`);
@@ -1897,6 +1908,10 @@ class VoiceDisplay {
         activeDisplayInstance = this;
         await this.media.initialize();
         this.audio = new AudioPlayer();
+        this.media.configureAudio?.({ play: (url, options) => this.playAudioFromURL(url, options),
+            cancel: owner => this.audio.cancelOwner(owner),
+            getDisplayId: () => this.serverDisplayId || this.clientDisplayId,
+            voiceEnabled: () => this._capabilities?.voicePlayback === true });
         this.audio.onItemPlayback = event => this.media.updateOverlay({ ttsEvent: event });
         // 无论录音模式是否提供普通 TTS 回调，状态提示都必须等待整个音频队列结束后恢复录音。
         this.audio.onQueueIdle = () => this.finishTextInputAnnouncement();
