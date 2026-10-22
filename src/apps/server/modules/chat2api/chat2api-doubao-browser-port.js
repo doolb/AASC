@@ -38,6 +38,7 @@ const acquireDoubaoBrowserPort = ({ rootDir, config, factory,
     return bridge[method](options);
   };
   return {
+    openLogin: async options => (await getBridge()).openLogin(options),
     request: options => invoke('request', options),
     prepare: options => invoke('prepare', options),
     stop: async () => {
@@ -57,4 +58,9 @@ const acquireDoubaoBrowserPort = ({ rootDir, config, factory,
   };
 };
 
-module.exports = { acquireDoubaoBrowserPort };
+// 仅服务器整体退出使用；普通登录关闭只释放自己的租约。
+const stopDoubaoBrowserPorts = async () => {
+  await Promise.allSettled([...ports.values()].map(entry => entry.bridge?.stop()));
+  ports.clear();
+};
+module.exports = { acquireDoubaoBrowserPort, stopDoubaoBrowserPorts };

@@ -14096,3 +14096,9 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-22] 按用户要求，关闭外部登录只回收登录tab和独立上下文，保留浏览器进程及其他标签。
   - login-browser复用宿主，remote-browser-session管理上下文生命周期，server-app退出清理宿主；弹窗限制登录页opener。
   - 定向12项、Chat2API回归363项通过，真实Vivaldi验证标签关闭/其他页保留/PID复用/凭据隔离；servicePackage保持待构建，无APK改动。
+
+### Chat2API登录复用豆包浏览器
+
+- ✅ [2026-10-22] 登录页复用豆包browser-port与固定profile/本机debugPort，取消独立登录进程和空白保活页。
+  - launcher校验实际profile后重连，原子保存active-browser.json并关闭专用Vivaldi退出确认；bridge用登录pin和Context限定保护运行页；server-app正常退出关闭共享桥。
+  - 定向13项及有窗口Vivaldi13项通过，覆盖本地交互、共享租约、连接丢失后重连和错误profile拒绝；真实Provider登录待人工验收。Chat2API整套363通过/1语音计时断言失败，该文件单独6项通过；不记整套全通过。servicePackage保持true，无APK变更。

@@ -470,3 +470,7 @@ server-app复用控制消息白名单、连接初始化和广播；config.set持
 确认后已实施splitOggOpusStreams，聚合原TTSSentence缓冲先验证所有流再解码；每流原CRC/序号/声道校验保持，额外累计64流/页数/包数/字节/120秒，PCM仍按原16MiB/120秒检查。单流校验仍拒绝链式输入，只有豆包接收层显式分流。音频35/35、Chat2API266/266通过；负例测试初次使用会自动重算CRC的夹具造成一项未失败，改直接破坏CRC后全部通过。
 
 原长句实网复验两段6855.08ms/4101.04ms合并为1,051,832字节48kHz WAV、总10,956.125ms；原文整段经过真实手动服务/分句/Provider/账号合成，8段均非静音，queued audioCount=8、最后“喵～”、errors=[]。未写账号/配置、未推送设备播放，证据仅.cache。
+
+## 2026-10-22 共享远程登录浏览器
+
+外部登录通过browser-port租约复用现有launcher固定profile/debugPort，在独立Context中打开登录页。运行页整理限定默认Context；登录pin期间禁止切换宿主账号。launcher验证CDP实际profile后重连残留实例，私有active-browser.json用于恢复宿主选择；专用Vivaldi关闭退出/关窗确认，不创建空白保活页。完整协议及伪代码见chat2api-remote-login设计/spec。

@@ -85,3 +85,24 @@ test('停止期间等待中的浏览器启动不能迟到创建页面，停止�
   assert.equal(pages, 0); assert.equal(closes, 1);
   await assert.rejects(bridge.request(options), { code: 'doubao_browser_disabled' });
 });
+
+test('共享浏览器运行页清理保留登录Context，登录期间拒绝切换宿主账号', async () => {
+  const main = {}, login = {};
+  const page = context => ({ closed: false, browserContext: () => context, isClosed() { return this.closed; },
+    url: () => 'https://www.doubao.com/chat/', close: async function () { this.closed = true; },
+    goto: async () => {}, evaluateOnNewDocument: async () => {}, waitForFunction: async () => true,
+    createCDPSession: async () => ({ send: async () => ({ cookies: [{ name: 'sessionid', domain: 'www.doubao.com', value: 'session' }] }), detach: async () => {} }) });
+  const runtimePage = page(main), loginPage = page(login);
+  const browser = { defaultBrowserContext: () => main, pages: async () => [loginPage, runtimePage] };
+  const bridge = createDoubaoBrowserBridge({ getConfig: () => ({}), launcher: { open: async () => browser, close: async () => {} },
+    fetchPage: async () => { const data = new PassThrough(); queueMicrotask(() => data.end('ok')); return { data }; } });
+  const lease = await bridge.openLogin({ accountId: 'one' });
+  const options = { account: { accountId: 'one', providerId: 'doubaochat', credentials: { cookie: 'sessionid=session' } }, prepared: { url: 'https://www.doubao.com/chat/completion', data: {} } };
+  const response = await bridge.request(options);
+  for await (const _ of response.data) { /* 同账号正常完成运行请求。 */ }
+  assert.equal(loginPage.closed, false);
+  await assert.rejects(bridge.request({ ...options, account: { ...options.account, accountId: 'two' } }), { code: 'doubao_browser_busy' });
+  await lease.release(); assert.equal(bridge.isBusy(), false);
+  await bridge.stop();
+  assert.equal(loginPage.closed, false);
+});

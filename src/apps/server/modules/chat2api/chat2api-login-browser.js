@@ -1,66 +1,39 @@
 'use strict';
 
 const fs = require('node:fs/promises');
-const os = require('node:os');
 const path = require('node:path');
+const { writePrivateJSON } = require('./chat2api-doubao-browser-launcher');
+
 const { captureDoubao, captureQwen, readCookies, observeDoubaoCompletion } = require('./chat2api-browser-capture');
+const { acquireDoubaoBrowserPort } = require('./chat2api-doubao-browser-port');
+const { DEFAULT_ROOT_DIR } = require('./chat2api-data-store');
 const publicError = message => Object.assign(new Error(message), { publicMessage: message });
-const { normalizeDoubaoWebConfig } = require('./chat2api-doubao-web-config');
 
-/** 只解析已有浏览器白名单中的程序，保持参数独立传递；不执行shell。 */
-async function executablePath(command) {
-  normalizeDoubaoWebConfig({ browserExecutable: command });
-  const suffixes = process.platform === 'win32' ? ['', '.exe', '.EXE'] : [''];
-  const directories = path.isAbsolute(command) ? [''] : (process.env.PATH || '').split(path.delimiter);
-  for (const directory of directories) {
-    for (const suffix of suffixes) {
-      const candidate = directory ? path.join(directory, command + suffix) : command + suffix;
-      try { await fs.access(candidate, fs.constants.X_OK); return candidate; } catch { /* 继续查找PATH中的候选。 */ }
-    }
-  }
-  throw publicError('服务器未找到配置的浏览器，请检查豆包网页任务的浏览器路径');
-}
-
-/** 宿主跨登录会话复用；只有服务停止才退出进程，关闭登录不能误关其他标签。 */
-function createLoginBrowserHost() {
-  let browser;
-  let directory;
-  let command;
-  const stop = async () => {
-    const current = browser;
-    browser = null;
-    try { await current?.close(); }
-    finally {
-      if (directory) await fs.rm(directory, { recursive: true, force: true });
-      directory = null;
-    }
+/** 登录和运行借用同一平台桥；关闭登录tab不结束运行租约。 */
+function createLoginBrowserHost({ acquirePort = acquireDoubaoBrowserPort } = {}) {
+  const leases = new Map();
+  return {
+    async acquire({ rootDir = DEFAULT_ROOT_DIR, config, accountId, accountIds } = {}) {
+      let port = leases.get(rootDir);
+      if (!port) {
+        port = acquirePort({ rootDir, config });
+        leases.set(rootDir, port);
+      }
+      return port.openLogin({ accountId, accountIds });
+    },
+    async stop() {
+      const pending = [...leases.values()]; leases.clear();
+      await Promise.allSettled(pending.map(port => port.stop()));
+    },
   };
-  const acquire = async (executable, launch) => {
-    if (browser?.connected) {
-      if (command !== executable) throw publicError('登录浏览器路径已变化，请重启服务后使用新路径');
-      return browser;
-    }
-    await stop();
-    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-login-'));
-    try {
-      const start = launch || require('puppeteer-core').launch;
-      browser = await start({ executablePath: await executablePath(executable), userDataDir: directory,
-        headless: false, pipe: true, timeout: 30000, defaultViewport: { width: 1024, height: 720, deviceScaleFactor: 1 },
-        args: ['--no-first-run', '--no-default-browser-check'],
-        env: { ...process.env, ...(process.platform === 'linux' && !process.env.DISPLAY ? { DISPLAY: ':1' } : {}) } });
-      command = executable;
-      // 保留宿主空白页，避免最后一个登录tab关闭时桌面浏览器自行退出。
-      if (!(await browser.pages()).length) await browser.newPage();
-      return browser;
-    } catch (error) { await stop(); throw error; }
-  };
-  return { acquire, stop };
 }
 
 /** 每次登录使用独立上下文；关闭仅回收本次页面与凭据，宿主由服务管理器持有。 */
-async function openLoginBrowser({ profile, providerId, restore, executable = 'vivaldi', launch, host } = {}) {
+async function openLoginBrowser({ profile, providerId, restore, host, browserOptions } = {}) {
   if (!host) throw new Error('登录浏览器需要服务级宿主');
+  const contextFile = path.join(browserOptions?.rootDir || DEFAULT_ROOT_DIR, 'browser-profiles', 'remote-login-context.json');
   let browser;
+  let lease;
   let context;
   let popupHandler;
   let page;
@@ -78,11 +51,26 @@ async function openLoginBrowser({ profile, providerId, restore, executable = 'vi
     await observer?.close().catch(() => {});
     await cdp?.detach().catch(() => {});
     if (popupHandler) browser?.off('targetcreated', popupHandler);
-    await context?.close();
+    try {
+      if (browser?.connected && context && browser.browserContexts().includes(context)) await context.close();
+      if (context) {
+        const stored = JSON.parse(await fs.readFile(contextFile, 'utf8').catch(() => 'null'));
+        if (stored?.contextId === context.id && stored?.endpoint === browser.wsEndpoint()) await fs.unlink(contextFile).catch(() => {});
+      }
+    } finally { await lease?.release(); }
   };
   try {
-    browser = await host.acquire(executable, launch);
+    lease = await host.acquire(browserOptions);
+    browser = lease.browser;
+    // 服务器强制结束后只回收先前明确登记的登录Context，不扫描删除其他用途页面。
+    const previous = JSON.parse(await fs.readFile(contextFile, 'utf8').catch(() => 'null'));
+    if (previous?.endpoint === browser.wsEndpoint()) {
+      const orphan = browser.browserContexts().find(item => item.id && item.id === previous.contextId);
+      if (orphan) await orphan.close();
+    }
     context = await browser.createBrowserContext();
+    await fs.mkdir(path.dirname(contextFile), { recursive: true, mode: 0o700 });
+    await writePrivateJSON(contextFile, { endpoint: browser.wsEndpoint(), contextId: context.id });
     page = await context.newPage();
     await page.setViewport({ width: 1024, height: 720, deviceScaleFactor: 1 });
     // 仅接管登录页直接打开的弹窗，不触碰宿主或其他页面。
@@ -138,6 +126,7 @@ async function openLoginBrowser({ profile, providerId, restore, executable = 'vi
         return { image, width: 1024, height: 720, notice: blocked };
       },
       async input(input) {
+        await page.bringToFront();
         const actions = {
           move: () => page.mouse.move(input.x, input.y),
           down: async () => { await page.mouse.move(input.x, input.y); await page.mouse.down({ button: 'left' }); },
@@ -176,4 +165,4 @@ async function openLoginBrowser({ profile, providerId, restore, executable = 'vi
   } catch (error) { await close(); throw error; }
 }
 
-module.exports = { openLoginBrowser, executablePath, createLoginBrowserHost };
+module.exports = { openLoginBrowser, createLoginBrowserHost };

@@ -2805,3 +2805,16 @@ TTY := 每秒清行回首覆盖；columns-1以内，保守中文双列；大小/
 登录关闭回归 := 打开登录与其他tab → 关闭登录 → 登录tab已关闭且其他tab/PID存活
 再次登录 := 同PID新Context → 未保存凭据为空 → stop宿主 → 临时目录消失
 ```
+
+
+## 共享浏览器与重连自测
+
+```text
+本地HTTP夹具 + 临时rootDir + 空闲本机端口 → 启动同一launcher/bridge
+运行租约先建立 → 登录租约复用 → 输入/截图/采集 → 关闭登录 → 运行租约和其他页仍存活
+断开CDP → 新launcher同profile/端口连接 → WS端点相同且页面保留
+错误账号profile → 拒绝连接，不关闭原实例
+有窗口Vivaldi → 调用内置prefs.set固定两项退出确认 → 确认API成功
+关闭全部租约 → browser.close → 固定profile保留 → 测试主动清理临时rootDir
+运行bridge假对象 → 登录Context为非default → 运行整理保留登录页，pin期间异账号请求busy
+```

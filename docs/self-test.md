@@ -1938,3 +1938,11 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 `npm run test:chat2api-remote-login` 12项通过；真实Vivaldi新增其他标签不被接管/关闭、关闭登录后进程不退出、再次登录PID相同且凭据环境为空、服务stop后目录清理的断言。
 
 本轮`npm run check:chat2api`：363项通过，0失败。
+
+### 外部登录共享豆包浏览器（2026-10-22）
+
+- `npm run test:chat2api-remote-login`：13项通过；真实浏览器共用port租约、关闭登录保留运行页、固定profile重连同WS端点、错误profile拒绝及持久化退出确认。
+- `AASC_LOGIN_HEADFUL=1 npm run test:chat2api-remote-login`：13项通过，验证Vivaldi有窗口模式下内置prefs API能修改退出确认；临时profile与正式账号隔离。
+- 重连通过主动断开CDP连接模拟服务连接丢失；未强杀正式服务。官网真实账号、验证码和跨平台行为仍待现场验收。
+
+- 最新共享浏览器回归`check:chat2api`为364项：363通过、1失败（speech-upstream.test.js第21行要求相邻启动间隔>=4ms）；重复整套仍出现，单独运行该文件6项通过。本轮未改语音调度代码，不声明整套通过，计时稳定性留待归因。最终有窗口13项含旧登录Context定向回收及旧会话迟到清理保护通过。

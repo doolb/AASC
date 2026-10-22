@@ -670,7 +670,7 @@ const runningChat2ApiRuntimes = new Set();
 const { createRemoteBrowserSessions } = require('../modules/chat2api/chat2api-remote-browser-session');
 const { getDoubaoWebTaskConfig } = require('../modules/chat2api/chat2api-doubao-web-task-registry');
 const remoteLoginSessions = createRemoteBrowserSessions({
-    getExecutable: () => getDoubaoWebTaskConfig()?.browserExecutable || 'vivaldi',
+    getBrowserConfig: () => getDoubaoWebTaskConfig() || undefined,
     getRuntime: async instanceId => {
         if (typeof instanceId !== 'string' || !instanceId || instanceId.length > 256) return null;
         const instance = await taskManager?.getInstanceStatus('chat2api.proxy', instanceId);
@@ -6622,6 +6622,7 @@ async function shutdownManagedRuntimes(exitCode) {
         // 无论是控制端重启还是外部 SIGINT/SIGTERM，都要先释放 blessed 的 raw mode 和刷新定时器。
         tui.destroy();
         await remoteLoginSessions.stop();
+        await require('../modules/chat2api/chat2api-doubao-browser-port').stopDoubaoBrowserPorts();
         await chat.shutdown();
     } catch (error) {
         logError('Chat', `Pi Runtime关闭失败: ${error.message}`);

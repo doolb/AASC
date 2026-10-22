@@ -36,6 +36,10 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
   const running = new Set();
   const observers = new Map();
   let ownerAccount = '';
+  let loginPins = 0;
+  let loginOpening = 0;
+  const runtimePage = (browser, candidate) => !candidate.browserContext
+    || candidate.browserContext() === browser.defaultBrowserContext();
   let opening = Promise.resolve();
   let stopped = false;
   const stop = async () => {
@@ -52,13 +56,14 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
   const request = async ({ account, sessionKey, prepared, signal, limits = {}, ephemeral = false,
     prepareOnly = false, closeAfterPrepare = false }) => {
     if (stopped) throw browserError('disabled');
+    if (loginOpening) throw browserError('busy');
     const config = normalizeDoubaoWebConfig(getConfig());
     if (config.mode !== 'browser-fetch') throw browserError('disabled');
     if (!account || account.providerId !== 'doubaochat'
       || (config.accountId && config.accountId !== account.accountId)) throw browserError('account');
     if (!prepared || typeof prepared.url !== 'string'
       || (!Object.hasOwn(prepared, 'data') && prepared.method !== 'GET')) throw browserError('upstream');
-    if (busy.size && ownerAccount !== account.accountId) throw browserError('busy');
+    if ((busy.size || loginPins) && ownerAccount !== account.accountId) throw browserError('busy');
     ownerAccount = account.accountId;
     // 聊天状态由Node权威conversationId隔离，浏览器无需为每段聊天保留一个页签。
     const key = account.accountId;
@@ -100,7 +105,7 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
           try {
             const candidate = await target.page();
             const current = pages.get(ownerAccount);
-            if (candidate && current && candidate !== current && !candidate.isClosed()
+            if (candidate && runtimePage(browser, candidate) && current && candidate !== current && !candidate.isClosed()
               && (candidate.url().startsWith(`${ORIGIN}/`) || candidate.url() === 'about:blank')) await candidate.close();
           } catch { /* 目标可能已被浏览器关闭，无需重试整理。 */ }
         };
@@ -110,10 +115,10 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
       page = pages.get(key);
       if (!page || page.isClosed()) {
         const existing = browser.pages ? await browser.pages() : [];
-        const official = existing.filter(candidate => candidate.url().startsWith(`${ORIGIN}/`));
+        const official = existing.filter(candidate => runtimePage(browser, candidate) && candidate.url().startsWith(`${ORIGIN}/`));
         page = official[0] || await browser.newPage();
         // 只整理专用profile中的官网旧页和空白页，先复用一页再安装共享文档脚本。
-        await Promise.allSettled(existing.filter(candidate => candidate !== page
+        await Promise.allSettled(existing.filter(candidate => runtimePage(browser, candidate) && candidate !== page
           && (candidate.url().startsWith(`${ORIGIN}/`) || candidate.url() === 'about:blank'))
           .map(candidate => candidate.close()));
         await page.evaluateOnNewDocument(PAGE_BOOTSTRAP_SOURCE);
@@ -136,7 +141,7 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
         { timeout: 30_000 }).catch(() => null);
       if (!signing) throw browserError('page');
       if (browser.pages) {
-        await Promise.allSettled((await browser.pages()).filter(candidate => candidate !== page
+        await Promise.allSettled((await browser.pages()).filter(candidate => runtimePage(browser, candidate) && candidate !== page
           && (candidate.url().startsWith(`${ORIGIN}/`) || candidate.url() === 'about:blank'))
           .map(candidate => candidate.close()));
       }
@@ -174,8 +179,26 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
       if (!responseOwned) release();
     }
   };
-  return { request, prepare: options => request({ ...options, prepareOnly: true }), stop,
-    isBusy: () => busy.size > 0,
+  // 登录租约固定当前宿主账号；独立Context不会改变运行页登录态。
+  const openLogin = async ({ accountId = '', accountIds = [] } = {}) => {
+    loginOpening++;
+    const next = opening.catch(() => {}).then(async () => {
+      if (stopped) throw browserError('disabled');
+      const config = normalizeDoubaoWebConfig(getConfig());
+      const selected = ownerAccount || await launcher.lastAccount?.(config, [...accountIds, accountId])
+        || config.accountId || accountId || 'external-login';
+      const browser = await launcher.open({ ...config, mode: 'browser-fetch', accountId: '' }, selected);
+      if (stopped) throw browserError('disabled');
+      ownerAccount = selected;
+      loginPins++;
+      let released = false;
+      return { browser, release: async () => { if (!released) { released = true; loginPins--; } } };
+    });
+    opening = next;
+    try { return await next; } finally { loginOpening--; }
+  };
+  return { openLogin, request, prepare: options => request({ ...options, prepareOnly: true }), stop,
+    isBusy: () => busy.size > 0 || loginPins > 0 || loginOpening > 0,
     cancel: () => { for (const controller of running) controller.abort(); } };
 };
 

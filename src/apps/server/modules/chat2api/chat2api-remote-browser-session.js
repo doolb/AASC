@@ -22,7 +22,7 @@ function validateInput(value) {
 }
 
 /** 全服务只装配一个管理器；所有控制端共享槽位，浏览器属于登录角色而非豆包运行任务。 */
-function createRemoteBrowserSessions({ getRuntime, getExecutable = () => 'vivaldi', openBrowser = openLoginBrowser,
+function createRemoteBrowserSessions({ getRuntime, getBrowserConfig = () => undefined, openBrowser = openLoginBrowser,
   now = Date.now, ttlMs = 15 * 60 * 1000 } = {}) {
   const browserHost = createLoginBrowserHost();
   let active = null;
@@ -72,7 +72,9 @@ function createRemoteBrowserSessions({ getRuntime, getExecutable = () => 'vivald
           const token = await runtime.accountWebSession.createSession(account.accountId);
           restore = await runtime.accountWebSession.consumeSession(token.sessionId);
         }
-        session.browser = await openBrowser({ profile, providerId: data.providerId, restore, host: browserHost, executable: getExecutable() });
+        session.browser = await openBrowser({ profile, providerId: data.providerId, restore, host: browserHost, browserOptions: { rootDir: runtime.dataStore?.rootDir,
+          config: getBrowserConfig(), accountIds: (await runtime.dataStore?.listAccounts?.() || [])
+            .filter(item => item.providerId === 'doubaochat').map(item => item.accountId), accountId: data.providerId === 'doubaochat' ? data.accountId : undefined } });
         if (!live(session)) throw fail('登录页面打开期间连接已结束');
         return publicSession(session);
       } catch (error) { await dispose(session); throw error; }
