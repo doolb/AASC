@@ -6621,6 +6621,7 @@ async function shutdownManagedRuntimes(exitCode) {
         }
         // 无论是控制端重启还是外部 SIGINT/SIGTERM，都要先释放 blessed 的 raw mode 和刷新定时器。
         tui.destroy();
+        await remoteLoginSessions.stop();
         await chat.shutdown();
     } catch (error) {
         logError('Chat', `Pi Runtime关闭失败: ${error.message}`);

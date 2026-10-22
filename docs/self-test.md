@@ -1932,3 +1932,9 @@ WASM请求审计 → 仅本机GET、实际加载原图与ONNX
 - `npm run test:chat2api-remote-login`：12项通过；覆盖独占会话、输入顺序/边界、账号更新冲突、过期/断线及启动中断线清理，复用CLI捕获测试。
 - 真实Vivaldi本地夹具覆盖中文输入、拖动、JPEG画面、字段采集和临时profile清理；需要本机Vivaldi，使用headless测试不碰当前登录。
 - `npm run check:chat2api`：362项通过；真实官网10种Provider需分别人工验收，本地通过不代表官网登录成功。
+
+### 登录tab关闭回归（2026-10-22）
+
+`npm run test:chat2api-remote-login` 12项通过；真实Vivaldi新增其他标签不被接管/关闭、关闭登录后进程不退出、再次登录PID相同且凭据环境为空、服务stop后目录清理的断言。
+
+本轮`npm run check:chat2api`：363项通过，0失败。

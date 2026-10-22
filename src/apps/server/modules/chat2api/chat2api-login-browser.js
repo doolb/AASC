@@ -21,10 +21,48 @@ async function executablePath(command) {
   throw publicError('服务器未找到配置的浏览器，请检查豆包网页任务的浏览器路径');
 }
 
-/** 登录角色拥有自己的临时profile与管道，运行中的豆包浏览器不在此模块的清理范围。 */
-async function openLoginBrowser({ profile, providerId, restore, executable = 'vivaldi', launch } = {}) {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-login-'));
+/** 宿主跨登录会话复用；只有服务停止才退出进程，关闭登录不能误关其他标签。 */
+function createLoginBrowserHost() {
   let browser;
+  let directory;
+  let command;
+  const stop = async () => {
+    const current = browser;
+    browser = null;
+    try { await current?.close(); }
+    finally {
+      if (directory) await fs.rm(directory, { recursive: true, force: true });
+      directory = null;
+    }
+  };
+  const acquire = async (executable, launch) => {
+    if (browser?.connected) {
+      if (command !== executable) throw publicError('登录浏览器路径已变化，请重启服务后使用新路径');
+      return browser;
+    }
+    await stop();
+    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-login-'));
+    try {
+      const start = launch || require('puppeteer-core').launch;
+      browser = await start({ executablePath: await executablePath(executable), userDataDir: directory,
+        headless: false, pipe: true, timeout: 30000, defaultViewport: { width: 1024, height: 720, deviceScaleFactor: 1 },
+        args: ['--no-first-run', '--no-default-browser-check'],
+        env: { ...process.env, ...(process.platform === 'linux' && !process.env.DISPLAY ? { DISPLAY: ':1' } : {}) } });
+      command = executable;
+      // 保留宿主空白页，避免最后一个登录tab关闭时桌面浏览器自行退出。
+      if (!(await browser.pages()).length) await browser.newPage();
+      return browser;
+    } catch (error) { await stop(); throw error; }
+  };
+  return { acquire, stop };
+}
+
+/** 每次登录使用独立上下文；关闭仅回收本次页面与凭据，宿主由服务管理器持有。 */
+async function openLoginBrowser({ profile, providerId, restore, executable = 'vivaldi', launch, host } = {}) {
+  if (!host) throw new Error('登录浏览器需要服务级宿主');
+  let browser;
+  let context;
+  let popupHandler;
   let page;
   let cdp;
   let observer;
@@ -39,29 +77,26 @@ async function openLoginBrowser({ profile, providerId, restore, executable = 'vi
     closed = true;
     await observer?.close().catch(() => {});
     await cdp?.detach().catch(() => {});
-    await browser?.close().catch(() => {});
-    await fs.rm(directory, { recursive: true, force: true });
+    if (popupHandler) browser?.off('targetcreated', popupHandler);
+    await context?.close();
   };
   try {
-    const start = launch || require('puppeteer-core').launch;
-    browser = await start({ executablePath: await executablePath(executable), userDataDir: directory,
-      headless: false, pipe: true, timeout: 30000, defaultViewport: { width: 1024, height: 720, deviceScaleFactor: 1 },
-      args: ['--no-first-run', '--no-default-browser-check'],
-      env: { ...process.env, ...(process.platform === 'linux' && !process.env.DISPLAY ? { DISPLAY: ':1' } : {}) } });
-    const pages = await browser.pages();
-    page = pages[0] || await browser.newPage();
-    await Promise.all(pages.slice(1).map(extra => extra.close()));
+    browser = await host.acquire(executable, launch);
+    context = await browser.createBrowserContext();
+    page = await context.newPage();
     await page.setViewport({ width: 1024, height: 720, deviceScaleFactor: 1 });
-    // 官网弹出登录页时收回到唯一页面，不让弹窗随切换积累。
-    browser.on('targetcreated', async target => {
+    // 仅接管登录页直接打开的弹窗，不触碰宿主或其他页面。
+    popupHandler = async target => {
       try {
+        if (closed || target.opener() !== page.target()) return;
         const popup = await target.page();
         if (!popup || popup === page) return;
         const url = popup.url();
         await popup.close();
         if (!closed && allowed(url)) await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       } catch { /* 页面关闭或导航竞争由下一帧状态处理。 */ }
-    });
+    };
+    browser.on('targetcreated', popupHandler);
     await page.setRequestInterception(true);
     page.on('request', request => {
       try {
@@ -141,4 +176,4 @@ async function openLoginBrowser({ profile, providerId, restore, executable = 'vi
   } catch (error) { await close(); throw error; }
 }
 
-module.exports = { openLoginBrowser, executablePath };
+module.exports = { openLoginBrowser, executablePath, createLoginBrowserHost };

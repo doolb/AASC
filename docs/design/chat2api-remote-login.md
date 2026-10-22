@@ -29,3 +29,9 @@
 新增chat2api-remote-browser-session.js、chat2api-login-browser.js、chat2api-browser-capture.js及控制端remote-login JS/CSS。浏览器使用临时独立profile和pipe；复用运行任务的浏览器路径（无运行任务配置时默认vivaldi）。截图1024×720、JPEG65、最大2MiB，客户端解码后约300ms请求下一帧，服务端250ms缓存，命令队列最多64项。会话不超过OAuth有效期；保存锁内比较通用账号快照，避免其他Provider更新被覆盖。
 
 验证包括Chat2API回归、CLI捕获回归、会话隔离和真实Vivaldi本地夹具。真实官网各Provider登录、弹出式第三方认证及验证码仍需人工验收，不把声明覆盖视为官网成功。
+
+## 关闭范围修正（2026-10-22）
+
+用户确认关闭仅针对登录tab。服务级登录浏览器宿主保留进程和初始空白页，每轮登录在独立BrowserContext创建标签；完成、关闭、断线和切换只回收该Context及监听，不退出宿主、不影响其他Context的标签或豆包运行页。下次登录复用同一宿主，新Context隔离前次未保存的Cookie/storage。服务停止时才退出自有宿主并清理profile；浏览器路径变更需重启服务。弹窗仅匹配登录页opener，避免误关手动标签。
+
+12项定向测试通过；真实Vivaldi断言登录tab关闭、其他tab存活、进程PID保持、再次登录未继承凭据、stop后临时目录删除。

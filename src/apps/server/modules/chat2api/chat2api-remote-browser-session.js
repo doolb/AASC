@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { getAndroidLoginProfile } = require('./chat2api-login-profiles');
 const { accountLoginVersion } = require('./chat2api-data-store');
-const { openLoginBrowser } = require('./chat2api-login-browser');
+const { openLoginBrowser, createLoginBrowserHost } = require('./chat2api-login-browser');
 const fail = message => Object.assign(new Error(message), { publicMessage: message });
 
 /** 固定视口与有界输入；不得把控制端任意CDP命令直接交给浏览器。 */
@@ -24,6 +24,7 @@ function validateInput(value) {
 /** 全服务只装配一个管理器；所有控制端共享槽位，浏览器属于登录角色而非豆包运行任务。 */
 function createRemoteBrowserSessions({ getRuntime, getExecutable = () => 'vivaldi', openBrowser = openLoginBrowser,
   now = Date.now, ttlMs = 15 * 60 * 1000 } = {}) {
+  const browserHost = createLoginBrowserHost();
   let active = null;
   let tail = Promise.resolve();
   let queued = 0;
@@ -71,7 +72,7 @@ function createRemoteBrowserSessions({ getRuntime, getExecutable = () => 'vivald
           const token = await runtime.accountWebSession.createSession(account.accountId);
           restore = await runtime.accountWebSession.consumeSession(token.sessionId);
         }
-        session.browser = await openBrowser({ profile, providerId: data.providerId, restore, executable: getExecutable() });
+        session.browser = await openBrowser({ profile, providerId: data.providerId, restore, host: browserHost, executable: getExecutable() });
         if (!live(session)) throw fail('登录页面打开期间连接已结束');
         return publicSession(session);
       } catch (error) { await dispose(session); throw error; }
@@ -140,7 +141,7 @@ function createRemoteBrowserSessions({ getRuntime, getExecutable = () => 'vivald
     tail = tail.catch(() => {}).then(() => dispose(session));
   }, 5000);
   timer.unref?.();
-  return { handle, disconnect, async stop() { clearInterval(timer); if (active) active.closed = true; await tail; await dispose(active); } };
+  return { handle, disconnect, async stop() { clearInterval(timer); if (active) active.closed = true; await tail; try { await dispose(active); } finally { await browserHost.stop(); } } };
 }
 
 module.exports = { createRemoteBrowserSessions, validateInput };

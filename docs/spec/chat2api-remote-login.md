@@ -28,9 +28,21 @@
 action := open / frame / input / complete / close；回包带requestId、success、sessionId，不含凭据
 main控制端入口 := 在通用日志记录前截获此协议，避免输入文字进入日志；连接关闭释放拥有者会话
 runtime选择 := 控制端现有Chat2API任务instanceId → 任务端口 → 当前运行runtime；会话固定该runtime
-独立登录浏览器 := 复用既有浏览器可执行文件配置与CDP技术，临时私有profile/动态本机调试通道，始终最多一页
+独立登录浏览器 := 复用既有浏览器可执行文件配置与CDP技术，临时私有profile/动态本机调试通道，始终最多一个受管登录页；宿主空白页保留
 帧 := 客户端完成上帧解码后请求下一帧，服务端限频/限制消息队列，JPEG有界大小；关闭后作废代次
 账号保存 := 已有OAuth校验 + saveAccount锁内比较打开时的通用账号版本（全部Provider原始账号字段）；冲突不覆盖
 会话有效期 := 取本地上限和OAuth过期时间的较小值
 凭据捕获 := 提取既有CLI浏览器捕获为共享模块，多Provider按声明捕获；豆包必须观察完整成功聊天样本
+```
+
+## 登录标签关闭与浏览器复用（2026-10-22）
+
+```text
+登录浏览器宿主 := 服务级独立进程 + 临时profile + 初始空白页
+打开登录 := 复用存活宿主 → 新建隔离BrowserContext → 创建唯一登录tab
+关闭/完成/断线/切换 := 解除本次监听 → 关闭本次隔离Context及登录tab → 释放OAuth/槽位
+关闭登录不调用browser.close，不删除正在使用的宿主profile；初始空白页及其他Context标签保留
+再次打开 := 同一宿主PID + 新隔离Context，不继承前次未保存Cookie/storage
+服务管理器stop := 释放会话 → 关闭其拥有的宿主 → 清理临时profile
+弹窗处理 := 仅接管登录tab直接打开的popup，不处理其他标签
 ```
