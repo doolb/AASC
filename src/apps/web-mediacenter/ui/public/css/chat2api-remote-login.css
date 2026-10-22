@@ -1,9 +1,14 @@
 .chat2api-remote-login[hidden] { display: none; }
 .chat2api-remote-login { position: fixed; inset: 0; z-index: 100100; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; padding: 12px; }
-.chat2api-remote-panel { display: flex; flex-direction: column; width: min(1100px,100%); max-height: 96dvh; background: var(--bg-primary,#20232a); color: var(--text-primary,#eee); border-radius: 10px; padding: 12px; gap: 8px; }
+.chat2api-remote-panel { display: flex; flex-direction: column; width: min(1100px,100%); height: min(900px,96dvh); max-height: 96dvh; box-sizing: border-box; background: var(--bg-primary,#20232a); color: var(--text-primary,#eee); border-radius: 10px; padding: 12px; gap: 8px; }
 .chat2api-remote-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .chat2api-remote-toolbar strong,.chat2api-remote-toolbar input { flex: 1; min-width: 180px; }
 .chat2api-remote-toolbar button,.chat2api-remote-toolbar input { padding: 8px; border-radius: 5px; }
 .chat2api-remote-notice { margin: 0; font-size: 13px; }
-.chat2api-remote-viewport { min-height: 0; overflow: auto; background: #fff; }
-.chat2api-remote-viewport img { width: 100%; height: auto; display: block; aspect-ratio: 1024/720; touch-action: none; user-select: none; }
+.chat2api-remote-viewport { flex: 1; min-height: 0; overflow: hidden; background: #fff; }
+.chat2api-remote-viewport img { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; touch-action: none; user-select: none; }
+
+.chat2api-remote-toolbar input[data-fps] { width: 64px; min-width: 0; flex: none; }
+
+.chat2api-remote-login { box-sizing: border-box; }
+.chat2api-remote-toolbar select { padding: 8px; border-radius: 5px; }

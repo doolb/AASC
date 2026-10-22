@@ -473,4 +473,6 @@ server-app复用控制消息白名单、连接初始化和广播；config.set持
 
 ## 2026-10-22 共享远程登录浏览器
 
-外部登录通过browser-port租约复用现有launcher固定profile/debugPort，在独立Context中打开登录页。运行页整理限定默认Context；登录pin期间禁止切换宿主账号。launcher验证CDP实际profile后重连残留实例，私有active-browser.json用于恢复宿主选择；专用Vivaldi关闭退出/关窗确认，不创建空白保活页。完整协议及伪代码见chat2api-remote-login设计/spec。
+外部登录通过browser-port租约复用现有launcher固定profile/debugPort，在同一默认Context中打开登记登录tab。运行页整理跳过登记登录tab；登录pin期间禁止切换宿主账号。launcher验证CDP实际profile后重连残留实例，私有active-browser.json用于恢复宿主选择；专用Vivaldi关闭退出/关窗确认，不创建空白保活页。完整协议及伪代码见chat2api-remote-login设计/spec。
+
+统一profile及默认Context、持久登录环境、动态帧率和适应/铺满详见[远程登录设计](chat2api-remote-login.md)。账号切换不切换profile，豆包登录期间与运行请求互斥。

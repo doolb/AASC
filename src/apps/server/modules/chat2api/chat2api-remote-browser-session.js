@@ -1,5 +1,6 @@
 'use strict';
 
+const { normalizeRemoteLoginSettings } = require('./chat2api-remote-login-settings');
 const crypto = require('node:crypto');
 const { getAndroidLoginProfile } = require('./chat2api-login-profiles');
 const { accountLoginVersion } = require('./chat2api-data-store');
@@ -23,7 +24,7 @@ function validateInput(value) {
 
 /** 全服务只装配一个管理器；所有控制端共享槽位，浏览器属于登录角色而非豆包运行任务。 */
 function createRemoteBrowserSessions({ getRuntime, getBrowserConfig = () => undefined, openBrowser = openLoginBrowser,
-  now = Date.now, ttlMs = 15 * 60 * 1000 } = {}) {
+  getFrameSettings = () => ({}), now = Date.now, ttlMs = 15 * 60 * 1000 } = {}) {
   const browserHost = createLoginBrowserHost();
   let active = null;
   let tail = Promise.resolve();
@@ -73,7 +74,7 @@ function createRemoteBrowserSessions({ getRuntime, getBrowserConfig = () => unde
           restore = await runtime.accountWebSession.consumeSession(token.sessionId);
         }
         session.browser = await openBrowser({ profile, providerId: data.providerId, restore, host: browserHost, browserOptions: { rootDir: runtime.dataStore?.rootDir,
-          config: getBrowserConfig(), accountIds: (await runtime.dataStore?.listAccounts?.() || [])
+          config: getBrowserConfig(), providerId: data.providerId, accountIds: (await runtime.dataStore?.listAccounts?.() || [])
             .filter(item => item.providerId === 'doubaochat').map(item => item.accountId), accountId: data.providerId === 'doubaochat' ? data.accountId : undefined } });
         if (!live(session)) throw fail('登录页面打开期间连接已结束');
         return publicSession(session);
@@ -81,11 +82,12 @@ function createRemoteBrowserSessions({ getRuntime, getBrowserConfig = () => unde
     },
     async frame(owner, data) {
       const session = check(owner, data);
-      if (session.frame && now() - session.frameAt < 250) return session.frame;
+      if (session.frame && now() - session.frameAt < 1000 / normalizeRemoteLoginSettings(getFrameSettings()).fps) return session.frame;
+      const startedAt = now();
       const frame = await session.browser.frame();
       if (!live(session)) throw fail('登录会话已结束');
       session.frame = { ...publicSession(session), ...frame };
-      session.frameAt = now();
+      session.frameAt = startedAt;
       return session.frame;
     },
     async input(owner, data) {

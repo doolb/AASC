@@ -75,15 +75,17 @@ test('真实浏览器：独立资料、中文输入、拖动、画面和凭据�
   const reopened = await openLoginBrowser(options);
   t.after(() => reopened.close());
   assert.equal(child.pid, pid);
-  await assert.rejects(reopened.capture(), /尚未捕获完整凭据/);
+  assert.equal((await reopened.capture()).token, '中文登录测试'); // 同一profile保留网站状态。
+  assert.equal((await actualBrowser.pages()).find(item => item.url() === origin + '/').browserContext(), actualBrowser.defaultBrowserContext());
   const abandonedPage = (await actualBrowser.pages()).find(item => item.url() === origin + '/');
   const recovered = await openLoginBrowser(options);
   t.after(() => recovered.close());
   assert.equal(abandonedPage.isClosed(), true);
   assert.equal(other.isClosed(), false);
   await reopened.close(); // 迟到的旧会话清理不应删除新会话记录。
-  const record = JSON.parse(await fs.readFile(path.join(rootDir, 'browser-profiles', 'remote-login-context.json'), 'utf8'));
-  assert.ok(actualBrowser.browserContexts().some(item => item.id === record.contextId));
+  const record = JSON.parse(await fs.readFile(path.join(rootDir, 'browser-profiles', 'remote-login-page.json'), 'utf8'));
+  assert.equal(record.endpoint, actualBrowser.wsEndpoint());
+  assert.ok(record.targetId);
   await recovered.close();
   assert.equal(other.isClosed(), false);
   await host.stop();
@@ -93,7 +95,7 @@ test('真实浏览器：独立资料、中文输入、拖动、画面和凭据�
 });
 
 
-test('固定profile重连已有进程，拒绝其他profile占用端口', async t => {
+test('统一profile跨账号复用，重连已有进程，拒绝其他profile占用端口', async t => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-reconnect-'));
   t.after(async () => { await first.close(); await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
   const config = { browserExecutable: 'vivaldi', debugPort: await freePort(), mode: 'browser-fetch', accountId: '' };
@@ -104,9 +106,11 @@ test('固定profile重连已有进程，拒绝其他profile占用端口', async 
   t.after(() => first.close());
   const browser = await first.open(config, 'account');
   const page = await browser.newPage(); await page.goto('data:text/html,kept');
-  const ws = browser.wsEndpoint(); browser.disconnect();
+  const ws = browser.wsEndpoint();
+  assert.equal((await first.open(config, 'another-account')).wsEndpoint(), ws);
+  browser.disconnect();
   assert.equal(await first.lastAccount(config), 'account');
-  const wrong = createDoubaoBrowserLauncher({ rootDir });
+  const wrong = createDoubaoBrowserLauncher({ rootDir: path.join(rootDir, 'other-root') });
   await assert.rejects(wrong.open(config, 'different-account'), /port_busy/);
   assert.equal(child.exitCode, null);
   const second = createDoubaoBrowserLauncher({ rootDir, spawnBrowser: () => { throw new Error('不应重新启动'); } });

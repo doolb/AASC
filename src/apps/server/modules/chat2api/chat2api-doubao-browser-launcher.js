@@ -2,12 +2,11 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { createHash, randomUUID } = require('node:crypto');
+const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { normalizeDoubaoWebConfig } = require('./chat2api-doubao-web-config');
 
-const profilePath = (rootDir, accountId) => path.join(rootDir, 'browser-profiles', 'doubao',
-  createHash('sha256').update(accountId).digest('hex').slice(0, 24));
+const profilePath = rootDir => path.join(rootDir, 'browser-profiles', 'shared');
 
 // 原子替换配置，避免进程被强制结束时留下半份JSON而阻塞下次重连。
 const writePrivateJSON = async (target, value) => {
@@ -75,20 +74,43 @@ const createDoubaoBrowserLauncher = ({ rootDir, spawnBrowser = spawn, connect,
     await writePrivateJSON(activeFile, { accountId, debugPort: config.debugPort,
       browserExecutable: config.browserExecutable });
   };
-  const lastAccount = async (rawConfig, candidates = []) => {
-    const config = normalizeDoubaoWebConfig(rawConfig);
-    let previous;
-    try { previous = JSON.parse(await fs.readFile(activeFile, 'utf8')); }
+  let activeDirectory = '';
+  const profileRecord = path.join(rootDir, 'browser-profiles', 'shared-browser-profile.json');
+  const managedDirectory = directory => {
+    if (typeof directory !== 'string' || !directory) return false;
+    const absolute = path.resolve(directory);
+    return absolute === path.resolve(profilePath(rootDir))
+      || (path.dirname(absolute) === path.resolve(rootDir, 'browser-profiles', 'doubao')
+        && /^[a-f0-9]{24}$/.test(path.basename(absolute)));
+  };
+  const resolveDirectory = async config => {
+    let saved;
+    try { saved = JSON.parse(await fs.readFile(profileRecord, 'utf8')); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (saved) {
+      if (!managedDirectory(saved.directory)) throw new Error('doubao_browser_profile_invalid');
+      return saved.directory;
+    }
+    let directory = profilePath(rootDir);
     const endpoint = `http://127.0.0.1:${config.debugPort}`;
     const occupied = await probe(`${endpoint}/json/version`, { signal: AbortSignal.timeout(1000) }).then(() => true, () => false);
-    if (!occupied) return previous?.debugPort === config.debugPort ? previous.accountId : '';
-    const connection = await (connect || (options => require('puppeteer-core').connect(options)))({ browserURL: endpoint, defaultViewport: null });
+    if (occupied) {
+      const connection = await (connect || (options => require('puppeteer-core').connect(options)))({ browserURL: endpoint, defaultViewport: null });
+      try {
+        directory = await browserProfile(connection);
+        if (!managedDirectory(directory)) throw new Error('doubao_browser_port_busy');
+      } finally { connection.disconnect(); }
+    }
+    await fs.mkdir(path.dirname(profileRecord), { recursive: true, mode: 0o700 });
+    await writePrivateJSON(profileRecord, { directory });
+    return directory;
+  };
+  const lastAccount = async rawConfig => {
+    const config = normalizeDoubaoWebConfig(rawConfig);
     try {
-      const actual = await browserProfile(connection);
-      const choices = [previous?.accountId, config.accountId, ...candidates, 'external-login'].filter(value => typeof value === 'string' && value);
-      return choices.find(id => path.resolve(profilePath(rootDir, id)) === path.resolve(actual)) || '';
-    } finally { connection.disconnect(); }
+      const previous = JSON.parse(await fs.readFile(activeFile, 'utf8'));
+      return previous.debugPort === config.debugPort ? previous.accountId : '';
+    } catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
   };
   const close = async () => {
     try { if (browser?.connected) await browser.close(); } catch { /* 进程可能已经随最后页签退出。 */ }
@@ -109,10 +131,11 @@ const createDoubaoBrowserLauncher = ({ rootDir, spawnBrowser = spawn, connect,
     const config = normalizeDoubaoWebConfig(rawConfig);
     if (config.mode !== 'browser-fetch') throw new Error('doubao_browser_disabled');
     if (config.accountId && config.accountId !== accountId) throw new Error('doubao_browser_account_mismatch');
-    const key = `${config.browserExecutable}\0${config.debugPort}\0${accountId}`;
+    const key = `${config.browserExecutable}\0${config.debugPort}`;
     if (browser?.connected && key === activeKey) return browser;
     await close();
-    const directory = profilePath(rootDir, accountId);
+    const directory = await resolveDirectory(config);
+    activeDirectory = directory;
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
     await fs.chmod(directory, 0o700);
     const endpoint = `http://127.0.0.1:${config.debugPort}`;
@@ -151,7 +174,7 @@ const createDoubaoBrowserLauncher = ({ rootDir, spawnBrowser = spawn, connect,
       throw new Error('doubao_browser_start_timeout');
     } catch (error) { await close(); throw error; }
   };
-  return { open, close, lastAccount, profilePath: accountId => profilePath(rootDir, accountId) };
+  return { open, close, lastAccount, profilePath: () => activeDirectory || profilePath(rootDir) };
 };
 
 module.exports = { createDoubaoBrowserLauncher, profilePath, configurePreferences, verifyProfile, configureRunningPreferences, writePrivateJSON };

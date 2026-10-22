@@ -86,15 +86,23 @@ test('停止期间等待中的浏览器启动不能迟到创建页面，停止�
   await assert.rejects(bridge.request(options), { code: 'doubao_browser_disabled' });
 });
 
-test('共享浏览器运行页清理保留登录Context，登录期间拒绝切换宿主账号', async () => {
-  const main = {}, login = {};
-  const page = context => ({ closed: false, browserContext: () => context, isClosed() { return this.closed; },
+test('共享默认profile运行页清理保留登记登录tab，登录期间拒绝切换宿主账号', async t => {
+  const fs = require('node:fs/promises');
+  const path = require('node:path');
+  const { registerLoginPage } = require('./chat2api-login-page-role');
+  const rootDir = await fs.mkdtemp(path.join(require('node:os').tmpdir(), 'aasc-page-role-'));
+  t.after(() => fs.rm(rootDir, { recursive: true, force: true }));
+  const main = {};
+  const page = id => ({ closed: false, browserContext: () => main, isClosed() { return this.closed; },
     url: () => 'https://www.doubao.com/chat/', close: async function () { this.closed = true; },
     goto: async () => {}, evaluateOnNewDocument: async () => {}, waitForFunction: async () => true,
-    createCDPSession: async () => ({ send: async () => ({ cookies: [{ name: 'sessionid', domain: 'www.doubao.com', value: 'session' }] }), detach: async () => {} }) });
-  const runtimePage = page(main), loginPage = page(login);
-  const browser = { defaultBrowserContext: () => main, pages: async () => [loginPage, runtimePage] };
-  const bridge = createDoubaoBrowserBridge({ getConfig: () => ({}), launcher: { open: async () => browser, close: async () => {} },
+    createCDPSession: async () => ({ send: async method => method === 'Target.getTargetInfo' ? { targetInfo: { targetId: id } }
+      : { cookies: [{ name: 'sessionid', domain: 'www.doubao.com', value: 'session' }] }, detach: async () => {} }) });
+  const runtimePage = page('runtime'), loginPage = page('login');
+  const browser = { wsEndpoint: () => 'ws://127.0.0.1/fixture', defaultBrowserContext: () => main, pages: async () => [loginPage, runtimePage] };
+  const unregister = await registerLoginPage(browser, loginPage, rootDir);
+  t.after(unregister);
+  const bridge = createDoubaoBrowserBridge({ rootDir, getConfig: () => ({}), launcher: { open: async () => browser, close: async () => {} },
     fetchPage: async () => { const data = new PassThrough(); queueMicrotask(() => data.end('ok')); return { data }; } });
   const lease = await bridge.openLogin({ accountId: 'one' });
   const options = { account: { accountId: 'one', providerId: 'doubaochat', credentials: { cookie: 'sessionid=session' } }, prepared: { url: 'https://www.doubao.com/chat/completion', data: {} } };
@@ -105,4 +113,15 @@ test('共享浏览器运行页清理保留登录Context，登录期间拒绝切�
   await lease.release(); assert.equal(bridge.isBusy(), false);
   await bridge.stop();
   assert.equal(loginPage.closed, false);
+});
+
+test('豆包共享环境登录pin暂停运行请求，关闭登录后释放', async () => {
+  const bridge = createDoubaoBrowserBridge({ getConfig: () => ({}), launcher: {
+    open: async () => ({}), close: async () => {} } });
+  const lease = await bridge.openLogin({ accountId: 'one', providerId: 'doubaochat' });
+  await assert.rejects(bridge.request({ account: { accountId: 'one', providerId: 'doubaochat' },
+    prepared: { url: 'https://www.doubao.com/chat/completion', data: {} } }), { code: 'doubao_browser_busy' });
+  assert.equal(bridge.isBusy(), true);
+  await lease.release(); assert.equal(bridge.isBusy(), false);
+  await bridge.stop();
 });

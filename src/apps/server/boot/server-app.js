@@ -669,7 +669,10 @@ const runningChat2ApiRuntimes = new Set();
 // 远程登录只有一个服务级槽位，单独管理浏览器，避免干扰豆包运行页面。
 const { createRemoteBrowserSessions } = require('../modules/chat2api/chat2api-remote-browser-session');
 const { getDoubaoWebTaskConfig } = require('../modules/chat2api/chat2api-doubao-web-task-registry');
+const { createRemoteLoginSettings } = require('../modules/chat2api/chat2api-remote-login-settings');
+const remoteLoginSettings = createRemoteLoginSettings({ config, broadcast: broadcastToControls, isControl: ws => controlClients.has(ws) });
 const remoteLoginSessions = createRemoteBrowserSessions({
+    getFrameSettings: remoteLoginSettings.get,
     getBrowserConfig: () => getDoubaoWebTaskConfig() || undefined,
     getRuntime: async instanceId => {
         if (typeof instanceId !== 'string' || !instanceId || instanceId.length > 256) return null;
@@ -1461,6 +1464,7 @@ async function startServer() {
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
                 'getAsrLongQueueConfig', 'setAsrLongQueueConfig',
+                'getChat2ApiRemoteLoginConfig', 'setChat2ApiRemoteLoginConfig',
                 'getTemporaryConversation', 'clearTemporaryConversation',
                 'startTemporaryConversation',
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'setVoiceCaptureConfig', 'requestAudioInputDevices', 'setAudioOutputConfig', 'requestAudioOutputDevices', 'requestDisplayRecording', 'stopDisplayRecording',
@@ -8635,6 +8639,7 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'ttsAudioCacheConfig', maxMiB: ttsAudioCache.limits.maxMiB }));
         ws.send(JSON.stringify(asrLongQueueSettings.snapshot()));
         ws.send(JSON.stringify(doubaoWebViewSettings.snapshot()));
+        ws.send(JSON.stringify(remoteLoginSettings.snapshot()));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         ws.send(JSON.stringify({
@@ -10329,6 +10334,7 @@ async function handleControlMessageFallback(data, ws) {
 
     if (asrLongQueueSettings.handle(ws, data)) return;
     if (doubaoWebViewSettings.handle(ws, data)) return;
+    if (remoteLoginSettings.handle(ws, data)) return;
 
     if (data.type === 'getTemporaryConversation') {
         ws.send(JSON.stringify({

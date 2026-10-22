@@ -14108,3 +14108,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-22] 登录页复用豆包browser-port与固定profile/本机debugPort，取消独立登录进程和空白保活页。
   - launcher校验实际profile后重连，原子保存active-browser.json并关闭专用Vivaldi退出确认；bridge用登录pin和Context限定保护运行页；server-app正常退出关闭共享桥。
   - 定向13项及有窗口Vivaldi13项通过，覆盖本地交互、共享租约、连接丢失后重连和错误profile拒绝；真实Provider登录待人工验收。Chat2API整套363通过/1语音计时断言失败，该文件单独6项通过；不记整套全通过。servicePackage保持true，无APK变更。
+
+### Chat2API登录画面与共享环境
+
+- ✅ [2026-10-22] 统一持久profile及默认Context，关闭仅回收登记登录tab；跨账号不切换profile，豆包登录期间暂停运行请求。
+- ✅ [2026-10-22] 增加1～30 FPS权威配置，修复AASC消息漏注册导致保存回到10；补保存回执、超时反馈与单帧背压。
+- ✅ [2026-10-22] 增加默认适应/铺满选择，限制画面视口并修正留白和裁剪点击坐标。
+  - 修改remote-login UI/session/settings、browser launcher/bridge/login及server-app；定向17/17通过。全Chat2API回归仍有既有speech-upstream启动间隔计时断言失败，不属于本次改动。servicePackage保持true，未构建APK。
+  - GLM现场核查：已采集刷新令牌，Node校验返回HTTP400/40001；官网验证后发现签名时间戳算法与Node不一致，待确认修复，未绕过校验或保存失败凭据。

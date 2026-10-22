@@ -92,7 +92,7 @@
     "test:mmd-performance": "node --test tests/display-mmd-performance.test.js tests/mmd-gpu-timer.test.js",
     "test:config-backup": "node --test tests/full-config-backup.test.js tests/full-config-backup-browser.test.js",
     "test:subserver-update": "node --test tests/subserver-main-update.test.js tests/dependency-groups.test.js tests/termux-server-bootstrap.test.js tests/server-release-service.test.js tests/server-launcher.test.js tests/runtime-version-info.test.js tests/aasc-node-connector.test.js tests/server-list-ui.test.js",
-    "test:chat2api-remote-login": "node --test src/apps/server/modules/chat2api/chat2api-remote-login.test.js tests/chat2api-browser-credentials.test.js tests/chat2api-remote-login-browser.test.js"
+    "test:chat2api-remote-login": "node --test src/apps/server/modules/chat2api/chat2api-remote-login.test.js src/apps/server/modules/chat2api/chat2api-remote-login-settings.test.js tests/chat2api-browser-credentials.test.js tests/chat2api-remote-login-fps-ui.test.js tests/chat2api-remote-login-browser.test.js"
   },
   "dependencies": {
     "@marsaud/smb2": "^0.18.0",

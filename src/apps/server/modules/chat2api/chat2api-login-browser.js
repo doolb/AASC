@@ -1,9 +1,6 @@
 'use strict';
 
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { writePrivateJSON } = require('./chat2api-doubao-browser-launcher');
-
+const { registerLoginPage, restoreLoginPage } = require('./chat2api-login-page-role');
 const { captureDoubao, captureQwen, readCookies, observeDoubaoCompletion } = require('./chat2api-browser-capture');
 const { acquireDoubaoBrowserPort } = require('./chat2api-doubao-browser-port');
 const { DEFAULT_ROOT_DIR } = require('./chat2api-data-store');
@@ -13,13 +10,13 @@ const publicError = message => Object.assign(new Error(message), { publicMessage
 function createLoginBrowserHost({ acquirePort = acquireDoubaoBrowserPort } = {}) {
   const leases = new Map();
   return {
-    async acquire({ rootDir = DEFAULT_ROOT_DIR, config, accountId, accountIds } = {}) {
+    async acquire({ rootDir = DEFAULT_ROOT_DIR, config, accountId, accountIds, providerId } = {}) {
       let port = leases.get(rootDir);
       if (!port) {
         port = acquirePort({ rootDir, config });
         leases.set(rootDir, port);
       }
-      return port.openLogin({ accountId, accountIds });
+      return port.openLogin({ accountId, accountIds, providerId });
     },
     async stop() {
       const pending = [...leases.values()]; leases.clear();
@@ -28,13 +25,13 @@ function createLoginBrowserHost({ acquirePort = acquireDoubaoBrowserPort } = {})
   };
 }
 
-/** 每次登录使用独立上下文；关闭仅回收本次页面与凭据，宿主由服务管理器持有。 */
+/** 登录与运行使用同一网站环境，关闭只回收本次标签，保留浏览器凭据。 */
 async function openLoginBrowser({ profile, providerId, restore, host, browserOptions } = {}) {
   if (!host) throw new Error('登录浏览器需要服务级宿主');
-  const contextFile = path.join(browserOptions?.rootDir || DEFAULT_ROOT_DIR, 'browser-profiles', 'remote-login-context.json');
+  const rootDir = browserOptions?.rootDir || DEFAULT_ROOT_DIR;
   let browser;
   let lease;
-  let context;
+  let unregister;
   let popupHandler;
   let page;
   let cdp;
@@ -52,26 +49,17 @@ async function openLoginBrowser({ profile, providerId, restore, host, browserOpt
     await cdp?.detach().catch(() => {});
     if (popupHandler) browser?.off('targetcreated', popupHandler);
     try {
-      if (browser?.connected && context && browser.browserContexts().includes(context)) await context.close();
-      if (context) {
-        const stored = JSON.parse(await fs.readFile(contextFile, 'utf8').catch(() => 'null'));
-        if (stored?.contextId === context.id && stored?.endpoint === browser.wsEndpoint()) await fs.unlink(contextFile).catch(() => {});
-      }
-    } finally { await lease?.release(); }
+      if (page && !page.isClosed()) await page.close();
+    } finally { try { await unregister?.(); } finally { await lease?.release(); } }
   };
   try {
     lease = await host.acquire(browserOptions);
     browser = lease.browser;
-    // 服务器强制结束后只回收先前明确登记的登录Context，不扫描删除其他用途页面。
-    const previous = JSON.parse(await fs.readFile(contextFile, 'utf8').catch(() => 'null'));
-    if (previous?.endpoint === browser.wsEndpoint()) {
-      const orphan = browser.browserContexts().find(item => item.id && item.id === previous.contextId);
-      if (orphan) await orphan.close();
-    }
-    context = await browser.createBrowserContext();
-    await fs.mkdir(path.dirname(contextFile), { recursive: true, mode: 0o700 });
-    await writePrivateJSON(contextFile, { endpoint: browser.wsEndpoint(), contextId: context.id });
-    page = await context.newPage();
+    // 同一默认Context共享网页登录态；仅替换先前明确登记的登录tab。
+    const previous = await restoreLoginPage(browser, rootDir);
+    if (previous && !previous.isClosed()) await previous.close();
+    page = await browser.newPage();
+    unregister = await registerLoginPage(browser, page, rootDir);
     await page.setViewport({ width: 1024, height: 720, deviceScaleFactor: 1 });
     // 仅接管登录页直接打开的弹窗，不触碰宿主或其他页面。
     popupHandler = async target => {

@@ -2815,7 +2815,7 @@ TTY := 每秒清行回首覆盖；columns-1以内，保守中文双列；大小/
 
 ```text
 登录关闭回归 := 打开登录与其他tab → 关闭登录 → 登录tab已关闭且其他tab/PID存活
-再次登录 := 同PID新Context → 未保存凭据为空 → stop宿主 → 临时目录消失
+再次登录 := 同PID默认Context新tab → 未保存网页登录资料仍保留 → stop宿主 → 临时目录消失
 ```
 
 
@@ -2828,5 +2828,11 @@ TTY := 每秒清行回首覆盖；columns-1以内，保守中文双列；大小/
 错误账号profile → 拒绝连接，不关闭原实例
 有窗口Vivaldi → 调用内置prefs.set固定两项退出确认 → 确认API成功
 关闭全部租约 → browser.close → 固定profile保留 → 测试主动清理临时rootDir
-运行bridge假对象 → 登录Context为非default → 运行整理保留登录页，pin期间异账号请求busy
+运行bridge假对象 → 登录与运行使用默认Context，登记登录target → 运行整理保留登录页，pin期间异账号请求busy
+```
+
+```text
+远程登录帧率回归 := 默认/边界/持久化/身份/广播/保存失败 → 验证AASC controlTypes已注册
+UI回归 := 迟到初始化不覆盖待保存输入 → 匹配回执解除保存 → 慢截图扣除耗时且一帧在途
+显示回归 := 适应留白按下忽略 → 中心映射正确 → 移出释放限幅 → 铺满裁剪偏移正确
 ```

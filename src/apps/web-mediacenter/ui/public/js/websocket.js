@@ -1,6 +1,7 @@
 // 临时 render 刷新诊断默认关闭，保留埋点便于后续现场需要时重新开启。
 const WEBSOCKET_RENDER_REFRESH_DIAGNOSTICS_ENABLED = false;
 const CONTROL_REMOTE_CONFIG_HANDLERS = Object.freeze({
+    chat2apiRemoteLoginConfig: data => window.Chat2APIRemoteLogin?.handleConfig(data),
     chatProfilesConfig: data => window.Chat?.handleProfilesConfig(data),
     piDependencyStatus: data => window.Chat?.handlePiDependencyStatus(data),
     displayTtsBackgroundOpacityConfig: data => window.Settings?.handleTtsBackgroundOpacityConfig(data),

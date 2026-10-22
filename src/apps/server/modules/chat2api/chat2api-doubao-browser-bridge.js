@@ -1,5 +1,6 @@
 'use strict';
 
+const { isLoginPage, restoreLoginPage } = require('./chat2api-login-page-role');
 const { timingSafeEqual } = require('node:crypto');
 const { normalizeDoubaoWebConfig } = require('./chat2api-doubao-web-config');
 const { createDoubaoBrowserLauncher } = require('./chat2api-doubao-browser-launcher');
@@ -38,8 +39,9 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
   let ownerAccount = '';
   let loginPins = 0;
   let loginOpening = 0;
-  const runtimePage = (browser, candidate) => !candidate.browserContext
-    || candidate.browserContext() === browser.defaultBrowserContext();
+  let loginMutatesDoubao = 0;
+  const runtimePage = (browser, candidate) => !isLoginPage(candidate) && (!candidate.browserContext
+    || candidate.browserContext() === browser.defaultBrowserContext());
   let opening = Promise.resolve();
   let stopped = false;
   const stop = async () => {
@@ -56,7 +58,7 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
   const request = async ({ account, sessionKey, prepared, signal, limits = {}, ephemeral = false,
     prepareOnly = false, closeAfterPrepare = false }) => {
     if (stopped) throw browserError('disabled');
-    if (loginOpening) throw browserError('busy');
+    if (loginOpening || loginMutatesDoubao) throw browserError('busy');
     const config = normalizeDoubaoWebConfig(getConfig());
     if (config.mode !== 'browser-fetch') throw browserError('disabled');
     if (!account || account.providerId !== 'doubaochat'
@@ -96,6 +98,7 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
       });
       opening = next;
       const browser = await next;
+      await restoreLoginPage(browser, rootDir);
       if (stopped || controller.signal.aborted) throw browserError('disabled');
       if (browser.on && !observers.has(browser)) {
         const closeRestoredPage = async target => {
@@ -179,8 +182,9 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
       if (!responseOwned) release();
     }
   };
-  // 登录租约固定当前宿主账号；独立Context不会改变运行页登录态。
-  const openLogin = async ({ accountId = '', accountIds = [] } = {}) => {
+  // 登录固定宿主；豆包登录期间共享认证可能变化，因此暂停新运行请求。
+  const openLogin = async ({ accountId = '', accountIds = [], providerId } = {}) => {
+    if (providerId === 'doubaochat' && busy.size) throw browserError('busy');
     loginOpening++;
     const next = opening.catch(() => {}).then(async () => {
       if (stopped) throw browserError('disabled');
@@ -191,8 +195,9 @@ const createDoubaoBrowserBridge = ({ getConfig = () => ({}), rootDir,
       if (stopped) throw browserError('disabled');
       ownerAccount = selected;
       loginPins++;
+      if (providerId === 'doubaochat') loginMutatesDoubao++;
       let released = false;
-      return { browser, release: async () => { if (!released) { released = true; loginPins--; } } };
+      return { browser, release: async () => { if (!released) { released = true; loginPins--; if (providerId === 'doubaochat') loginMutatesDoubao--; } } };
     });
     opening = next;
     try { return await next; } finally { loginOpening--; }
