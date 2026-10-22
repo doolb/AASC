@@ -1,5 +1,16 @@
 # 自测功能实现文档
 
+## Node完整配置示例与剩余改动提交核对（2026-10-22）
+
+```text
+示例 := 读取实际config.example.json → JSON.parse → main.loadConfig → 检查_comments保留、hostname身份与媒体关闭默认值
+平台 := 同一示例经platformOptions读取linux/win32 → 命令独立传参、空DISPLAY继承环境
+配置回归 := npm run test:node-display-config，4/4通过；含真实失败启动、退出码与TUI前校验
+账号回归 := npm run check:chat2api，358/358通过；浏览器凭据与独立包组合11/11通过
+提交边界 := 日志/模型与声纹向量/采集缓存/生成APK和ZIP排除；含非空API密钥的历史任务结果保留本地
+发布 := 只因新配置示例把voiceDisplayNodePackage置true；不构建、不发布、不重启服务，原Windows实机验收待办保留
+```
+
 ## Node ASS网页主题样式（2026-10-22）
 
 ```text

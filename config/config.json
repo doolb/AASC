@@ -23,8 +23,8 @@
     "device": "display",
     "serverEnabled": false,
     "aiReplyDefault": {
-      "provider": "qwen-api",
-      "voice": null
+      "provider": "doubao-chat",
+      "voice": "ICL_eaf8dd4a3a0d"
     },
     "textMedia": {
       "provider": "system",
@@ -33,6 +33,12 @@
     "systemBroadcast": {
       "provider": "system",
       "voice": null
+    },
+    "sharedParameters": {
+      "defaultVolume": 100
+    },
+    "upstreamConcurrency": {
+      "doubao-chat": 3
     }
   },
   "asr": {
@@ -61,7 +67,13 @@
     ]
   },
   "ui": {
-    "controlTheme": "girl-pink"
+    "controlTheme": "girl-pink",
+    "displayTtsBackgroundOpacity": 0.24,
+    "displayBackgroundGlow": {
+      "color": "#5C5F66",
+      "centerRange": 10,
+      "spread": 58
+    }
   },
   "display": {
     "versionCheckIntervalMs": 300000
@@ -86,7 +98,7 @@
   "voiceprint": {
     "enabled": true,
     "extraction": "display",
-    "threshold": 0.23,
+    "threshold": 0.3,
     "multiSpeaker": true,
     "multiMode": "fast",
     "speakerCount": "AUTO",
@@ -99,7 +111,7 @@
   "voiceCommand": {
     "conversationConfirmationMode": "off",
     "addressedGroupMode": "temporary",
-    "temporaryConversationWindowMs": 30000,
+    "temporaryConversationWindowMs": 90000,
     "conversationWindowMs": 180000,
     "temporaryHistoryGroups": 10,
     "temporaryContextGroups": 3,
@@ -156,7 +168,7 @@
   "chat": {
     "agentBackend": "codex",
     "apiUrl": "http://127.0.0.1:8083/v1/chat/completions",
-    "model": "Qwen3.6-Flash",
+    "model": "doubao",
     "maxTokens": 65536,
     "temperature": 0.7,
     "apiKey": "",
@@ -179,7 +191,7 @@
         "name": "qwen3.5",
         "protocol": "openai-responses",
         "apiUrl": "http://127.0.0.1:8083/v1/chat/completions",
-        "model": "Qwen3.6-Flash",
+        "model": "doubao",
         "maxTokens": 65536,
         "temperature": 0.7,
         "contextCount": 10,
@@ -191,7 +203,14 @@
     "codexProxy": "http://127.0.0.1:7899",
     "promptFormat": "raw",
     "mode": "llm",
-    "backend": null
+    "backend": null,
+    "modelTierSelection": {
+      "providerId": "doubaochat",
+      "tiersByProvider": {
+        "qwen": "flash",
+        "doubaochat": "mini"
+      }
+    }
   },
   "logCategoryFilter": null,
   "timeAnnounce": {

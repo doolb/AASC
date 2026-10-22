@@ -119,6 +119,10 @@ SM-N9500完整备份468,464,640字节/23,592文件并逐项完整读取、集合
 
 隔离源借Node inspector仅修改本轮内存源配置并重启JS/重载页面，未改签名APK/ZIP或生产清单；冷启动恢复默认源。测试源曾退出导致一次连接拒绝，旧服务保持，恢复后手动重新检查并确认更新成功；不是生产源故障。实际273px布局证明来自真实WebView应用同源最终CSS，完整首包行为在code110观测，最终112继续经真实更新/冷启动验证；不混写为112在默认生产源空安装。自动36/63通过、Android152通过/1既有归档环境跳过。原备份及截图/日志不入Git，临时源/ADB转发/采集均已关闭。旧full迁移、真实模型下载/加载推理和性能仍另行验收。
 
+## min 首装最初画面层次（2026-10-16，只读代码确认）
+
+Android清单仍以MainActivity为桌面入口，onCreate先设置原生activity_main布局并显示“本机服务准备”占位；首次系统权限流程仍由Android承载。随后connect发现min无服务环境，requestBootstrap打开OfflineLauncherActivity，以WebView加载APK随包可信基线ui/index.html，首包准备交互与编排由网页/JS负责，不依赖先下载服务包。健康后自动收起启动器并进入显示网页。故宿主最先是Android，下载服务包的交互页面是APK内置JS网页；过渡首帧/权限停留时长需设备观察，不凭代码断言每帧可见时间。此次未修改运行代码或重新真机验收。
+
 ## APK安装来源授权返回续装（2026-10-16，源码完成）
 
 用户报告提交系统安装时未打开“允许此来源安装”开关，授权返回后没有再次发起安装。只读确认：MainActivity已有待安装结果、设置Activity返回与onResume续装；OfflineLauncherActivity的native.installApk直接调用installPreparedMinApk，返回false时只显示“返回重试”，没有待安装状态和权限设置返回处理；OfflineUpdateManager无权限会直接返回false。

@@ -1,5 +1,39 @@
 # Node 子显示端常驻 mpv 伪代码
 
+## 完整配置示例与中文注释（2026-10-22）
+
+```text
+已有声明 := main.loadConfig、VoiceDisplay.start/applyVadConfig、platformOptions、现有configUpdate保留本机配置
+新增定义 := config.example.json的_comments说明映射；不增加运行参数或配置解析器
+字段来源 := 实际读取的serverUrl、VAD三项、recordingMode、pauseRecordingDuringPlayback、textInput.requireVoiceprint、mediaPlayer与平台选项
+恢复示例 → 每项使用当前默认值 → _comments注明单位/范围/可选值/本机与远端权威关系 → 标准JSON保存
+displayId := hostname自动生成，配置文件同名字段被忽略；configPath/采样率/重连参数等运行时固定值不伪装为可配置项
+复制示例为config.json → 按环境修改serverUrl与mpv路径 → 原JSON.parse/loadConfig读取；注释作为无业务语义的元数据保留
+示例默认 := mute、VAD 0.01/500ms/300ms、播放时暂停录音、文字输入声纹关闭、媒体关闭、Linux继承DISPLAY/XAUTHORITY
+远端 := 原WebSocket权威VAD与播放录音策略继续覆盖启动值；媒体显示能力/主题/透明度等继续走原远端配置
+验证 := JSON解析与实际loadConfig读取、原配置失败进程测试、跨平台选项解析、独立包包含示例且排除本机config.json
+产物 := 示例进入Node独立包，voiceDisplayNodePackage置true；其余已有状态保留，不执行构建发布
+```
+
+## 鼠标事件桥接（待确认，未实现）
+
+```text
+已有声明 := 常驻mpv会话/JSON IPC、MpvPlayer.receiveEvent、ASS窗口尺寸与旋转、NodeMediaController能力开关
+新增定义 := Lua点击桥接、握手/会话代次、鼠标键与阶段、有效按下记录、窗口及逻辑坐标、本地pointer事件
+首版范围 := 左/中/右键、左键双击、按下/松开/有效click；只采集，不自动绑定业务动作
+会话就绪 → 显式加载自己的Lua脚本 → 有界握手 → 按能力启用鼠标绑定
+Lua鼠标键回调 → mouse-pos与OSD尺寸 → 命名空间script-message → 现有IPC client-message
+回包 → 校验来源会话/消息名/长度/按钮/阶段/有限坐标/hover/宽高 → 生成窗口坐标
+窗口坐标与当前旋转 → 逆ASS physicalPoint映射 → 逻辑坐标，原始视频像素需另行结合裁剪/缩放换算
+有效按下后松开 → click；双击 → 独立double事件，保留原生单击/双击顺序供消费侧选择
+标准事件 → NodeMediaController本地pointer分发；不新增服务端消息或配置HTTP
+尺寸/会话变化、窗口外松开、能力关闭/退出 → 取消未完成点击，丢弃旧上下文事件
+重建 → 重新握手/绑定一份；Lua不可用/握手超时 → 明确报错，不停止原媒体播放
+自测 := 键/阶段/坐标与非法事件、四方向逆映射、尺寸/旧会话隔离、重复初始化、关闭与可选Lua失败
+实屏 := 隔离Xvnc内真实鼠标注入与IPC回包验证；不操作当前用户桌面，Windows现场另验
+状态 := 等待用户确认采集范围；没有鼠标业务代码或功能测试结果
+```
+
 ## ASS主题与文字外观（已实现）
 
 ```text

@@ -253,6 +253,17 @@ min61设备结果 = 原生构造无快照不崩溃 → 显示页已连接 → �
 未验 := 旧full迁移/真实权重下载与加载推理/基准性能；不将准备提示等同权重或引擎ready
 ```
 
+## min 首装画面入口顺序（2026-10-16）
+
+```text
+桌面MAIN/LAUNCHER := MainActivity
+MainActivity.onCreate → 设置原生activity_main → 显示原生准备占位 → Android首次权限流程
+connect发现updateOnly且无服务环境 → requestBootstrap → OfflineLauncherActivity automatic
+启动页宿主 := Android WebView；初始内容 := APK可信基线ui/index.html；不依赖已下载服务
+内置网页/JS → 自动下载首包并展示进度 → 服务真实健康 → 收起启动页并进入显示网页
+观察边界 := 仅代码链路确认；原生首帧/权限窗口实际停留时长仍需设备观察
+```
+
 ## 安装来源授权返回续装（2026-10-16，源码完成）
 
 ```text

@@ -39,6 +39,8 @@ npm --prefix src/apps/voice-display-node run start -- config.json
 
 该命令中的相对配置路径以子显示端目录为基准，也可传入配置文件绝对路径。需要完整默认示例时先复制同目录 `config.example.json`。默认 `mediaPlayer.enabled=false`；不开启或 mpv 不可用时保留语音功能，不声明可用媒体能力。服务端更新连接地址时保留本机播放器与录音设置。
 
+完整示例还包括 VAD 阈值/静音时长/最短语音时长、录音模式、播放时暂停录音和 Windows 系统文字输入声纹策略。逐项中文说明在 `_comments` 中，保留标准 JSON 格式，可直接复制为 `config.json`；不要使用 `//` 或块注释。Linux 的 `display`/`xauthority` 默认为空以继承环境，Windows 默认使用 `mpv.exe`，也可填完整路径。显示端 ID 根据 hostname 自动生成；主题、透明度、显示能力与画面参数通过控制端已有入口设置。
+
 配置文件必须存在、JSON合法且包含明确的HTTP/HTTPS `serverUrl`。配置错误时，程序会在终端直接输出 `[ERROR][配置]`、绝对文件路径、失败阶段和具体原因，退出码为1；此时不会初始化TUI、录音或服务器连接，也不回退到localhost。Windows运行 `start.bat` 会在失败时暂停窗口以保留错误；修正配置后重新启动。
 
 ## 控制端操作

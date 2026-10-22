@@ -1,16 +1,41 @@
 {
+  "_comments": {
+    "说明": "复制本文件为同目录config.json后修改配置。此文件是标准JSON，中文注释保存在_comments中；不要使用//或块注释。",
+    "serverUrl": "必填：AASC服务的完整HTTP/HTTPS地址，可包含端口。以下localhost地址仅为示例，连接其他主机时请替换。配置错误会报错退出，不会自动回退到其他服务器。",
+    "vadThreshold": "VAD音量阈值，默认0.01，有效范围0.001～0.2；越小越容易触发语音。服务端VAD配置到达后以其权威值为准。",
+    "vadSilenceDurationMs": "一句话结束前持续静音的毫秒数，默认500，范围100～5000；服务端配置可以覆盖。",
+    "vadMinSpeechDurationMs": "有效语音片段的最短毫秒数，默认300，范围100～5000；服务端配置可以覆盖。",
+    "recordingMode": "本机回声处理模式：mute播放时静音录音（默认）、cut语音打断、hard系统AEC、soft软件AEC。hard/soft需要相应系统或可选组件支持，不保证所有平台可用。",
+    "pauseRecordingDuringPlayback": "TTS播放期间暂停录音，默认true；此值用于服务端配置到达前，连接后跟随服务端权威策略。",
+    "textInput.requireVoiceprint": "Windows系统语音文字输入的声纹策略：false默认不要求声纹；填写inherit跟随服务端声纹开关。仅影响系统文字输入模式。",
+    "mediaPlayer.enabled": "是否启用本机常驻mpv媒体播放，默认false；开启前请安装mpv。还需要在控制端启用此显示端相应媒体能力。",
+    "mediaPlayer.linux.command": "Linux的mpv可执行文件名或绝对路径，默认mpv；包含空格的路径直接填写，不额外加引号。",
+    "mediaPlayer.linux.args": "Linux额外启动参数，默认空数组，每个参数独立为一个字符串；不填写整段shell命令。",
+    "mediaPlayer.linux.display": "Linux的X11 DISPLAY，如:0或:1；默认空字符串表示继承启动环境。显式填写时需要xdpyinfo用于认证检查。",
+    "mediaPlayer.linux.xauthority": "Linux的XAUTHORITY文件路径；默认空字符串表示先使用继承环境，必要时查找可访问所选DISPLAY的认证文件。",
+    "mediaPlayer.windows.command": "Windows的mpv可执行文件名或完整路径，默认mpv.exe；不在PATH中时可填写C:\\Program Files\\mpv\\mpv.exe等实际路径。",
+    "mediaPlayer.windows.args": "Windows额外启动参数，默认空数组；参数逐项填写，程序会单独传参，不经过shell。",
+    "自动与远端配置": "displayId自动使用voice-display-node-加hostname，文件里的displayId会被忽略；configPath、采样率与重连间隔为内部值。主题、字幕透明度、显示能力及显示旋转等继续在控制端调整，经现有WebSocket同步，不在这里重复配置。"
+  },
   "serverUrl": "http://127.0.0.1:3000",
   "vadThreshold": 0.01,
+  "vadSilenceDurationMs": 500,
+  "vadMinSpeechDurationMs": 300,
+  "recordingMode": "mute",
+  "pauseRecordingDuringPlayback": true,
+  "textInput": {
+    "requireVoiceprint": false
+  },
   "mediaPlayer": {
     "enabled": false,
     "linux": {
       "command": "mpv",
       "args": [],
-      "display": ":0",
+      "display": "",
       "xauthority": ""
     },
     "windows": {
-      "command": "C:\\Program Files\\mpv\\mpv.exe",
+      "command": "mpv.exe",
       "args": []
     }
   }
