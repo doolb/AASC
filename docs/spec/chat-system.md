@@ -101,6 +101,15 @@ Responses 续接指纹包含实际 Provider、模型及模式 → 切换后不�
 
 ```text
 已有声明 := Chat2API response.failed → 聊天服务 onError → server-app chatResponse → 控制端；显示端聊天窗处理失败响应；显示端语音弹窗
+复测 := 当前保存的Node账号 → 核心适配器发送新流式豆包请求 → doubao_risk_control/403，无完整回复
+复测 := 克隆最近ready旧会话nativeState → 核心适配器按绑定账号原生续接 → doubao_risk_control/403，无完整回复；不保存测试状态
+复测 := 独立Vivaldi调试实例载入保存的Cookie及User-Agent → 官网输入框发送新会话短消息 → /chat/completion返回HTTP200但SSE含STREAM_ERROR、无正文块；关闭实例并清理临时资料
+现场窗口 := DISPLAY=:1可连接 → 有界面Vivaldi使用独立运行时资料载入保存凭据 → 打开官网/chat/且主页面HTTP200 → 保持窗口供现场操作；浏览器退出后清理资料
+复测 := 人工完成网页图片拖动验证 → 同一浏览器续接请求收到回复分块及结束事件 → 网页单次聊天成功
+复测 := 保存Cookie、刷新六项Cookie、当前浏览器完整Cookie分别从Node发送 → 三次均返回doubao_risk_control/403；不保存测试凭据
+诊断边界 := 浏览器实际请求另含动态a_bogus和更多字段；一次后续网页请求仍报STREAM_ERROR；不能由Cookie对照推定唯一风控原因或长期恢复
+诊断结论 := 当前Node文字Chat仍被拒绝；语音端点成功不推导文字端点成功；具体风控条件未知
+诊断边界 := 移植凭据的隔离Vivaldi实例不等同于用户日常浏览器中的实时登录会话；HTTP200不等同于聊天成功
 新增定义 := DisplayChatError { type, action, requestId, text }；本轮相关显示端集合
 操作流程 := 全新豆包会话实际请求 → response.created 后 response.failed/doubao_risk_control → 说明无需旧会话引用也可触发安全验证
 操作流程 := 从持久化记录选 ready 旧豆包会话 → 克隆 nativeState → 确认请求 client_meta.conversation_id 等于原保存值且 need_create_conversation=false → 实际上游仍返回 doubao_risk_control/403；不得把探测失败写回旧记录

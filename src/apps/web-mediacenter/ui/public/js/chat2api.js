@@ -135,6 +135,8 @@
 
     accountStatus(account) {
       if (account.enabled === false) return '已禁用';
+      if (account.providerId === 'doubaochat' && account.accountInfo?.nodeChatVerifiedAt) return 'Node 聊天已验证';
+      if (account.providerId === 'doubaochat' && account.accountInfo?.browserChatVerifiedAt) return '网页聊天已验证';
       if (account.providerId === 'doubaochat' && account.accountInfo?.credentialVerification === 'conversation-list') return '会话列表已验证';
       // API 凭证入库仅校验格式，调度启用状态不能充当远端鉴权成功证据。
       if (account.accountInfo?.credentialVerification === 'format-only' || ['qwen-api', 'doubaapi', 'doubao-api', 'doubaochat'].includes(account.providerId)) return '已配置，未远端验证';
@@ -142,6 +144,8 @@
     },
 
     savedAccountMessage(account, providerId = account?.providerId) {
+      if (providerId === 'doubaochat' && account?.accountInfo?.nodeChatVerifiedAt) return '账号已保存，Node 聊天已验证。';
+      if (providerId === 'doubaochat' && account?.accountInfo?.browserChatVerifiedAt) return '账号已保存，网页聊天已验证；Node 聊天将在首次真实请求成功后验证。';
       if (account?.accountInfo?.credentialVerification === 'conversation-list') return '账号已保存，会话列表访问已验证。';
       if (['qwen-api', 'doubaapi', 'doubao-api'].includes(providerId)) return 'API 账号已保存，凭证格式已校验；尚未进行远端验证。';
       if (account?.accountInfo?.credentialVerificationStatus === 'failed') return `账号已保存。${this.verificationMessage(account)}`;
@@ -150,6 +154,8 @@
     },
 
     verificationMessage(account) {
+      if (account?.accountInfo?.nodeChatVerifiedAt) return 'Node 聊天已验证。';
+      if (account?.accountInfo?.browserChatVerifiedAt) return '网页聊天已验证；Node 聊天仍待首次真实请求。';
       if (account?.accountInfo?.credentialVerification === 'conversation-list') return '会话列表访问已验证；聊天和语音能力需分别验收。';
       const reasons = { auth: '登录已失效', risk: '接口拒绝访问', timeout: '请求超时', network: '网络请求失败',
         response: '响应格式未确认', anonymous: '返回匿名状态', business: '上游业务拒绝', busy: '验证服务忙',

@@ -3,8 +3,8 @@
     {
       "instanceId": "75b07843",
       "taskName": "render-display",
-      "status": "running",
-      "timestamp": 1790325831705,
+      "status": "pending_forward",
+      "timestamp": 1790772590271,
       "target": "display",
       "env": "cpu",
       "mode": "service",

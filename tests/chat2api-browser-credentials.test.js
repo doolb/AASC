@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   parseArguments, cookieHeader, captureDoubao, captureQwen, chooseAccount,
-  createApiClient, saveCaptured,
+  createApiClient, saveCaptured, browserChatCompleted,
 } = require('../scripts/ops/save-chat2api-browser-credentials');
 
 const makePage = (byOrigin, storage = {}) => ({
@@ -77,6 +77,7 @@ test('已有豆包账号通过外部网页刷新接口保存，千问通过 OAut
     '/api/chat2api/accounts', '/api/chat2api/accounts/old-doubao/web-session',
     '/api/chat2api/accounts/web-session/consume', '/api/chat2api/accounts/web-session/refresh',
   ]);
+  assert.equal(doubaoCalls.at(-1).body.requestProfile, undefined);
 
   const qwenCalls = [];
   const qwenApi = async (method, pathname, body) => {
@@ -90,6 +91,15 @@ test('已有豆包账号通过外部网页刷新接口保存，千问通过 OAut
     captured: { credentials: { ticket: 'secret' } }, api: qwenApi });
   assert.deepEqual(qwen, { accountId: 'old-qwen', mode: 'updated' });
   assert.equal(qwenCalls.at(-1).body.credentials.ticket, 'secret');
+});
+
+test('网页聊天验证要求非空正文和最终完成事件，错误或仅 ACK 不算成功', () => {
+  const frame = (event, data = {}) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const answer = frame('CHUNK_DELTA', { text: '早上好' });
+  assert.equal(browserChatCompleted(frame('SSE_ACK') + answer + frame('SSE_REPLY_END')), true);
+  assert.equal(browserChatCompleted(frame('SSE_ACK') + frame('SSE_REPLY_END')), false);
+  assert.equal(browserChatCompleted(answer + frame('STREAM_ERROR', { error_code: 403 }) + frame('SSE_REPLY_END')), false);
+  assert.equal(browserChatCompleted(answer + frame('SSE_REPLY_END', { msg_finish_attr: {} })), false);
 });
 
 test('管理接口失败只抛公开状态和错误码，不泄露服务端正文', async () => {

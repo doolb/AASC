@@ -2,8 +2,13 @@
   "engine": "mnn-llm",
   "status": "ready",
   "revision": "d407447ed56c4121a11ccbd266dc184ca1ead0c2",
-  "root": "/mnt/AASC/build/third_party/MNN",
-  "generatedAt": "2026-09-21T10:29:20.250Z",
-  "source": "https://github.com/alibaba/MNN",
-  "buildScript": "/mnt/AASC/build/third_party/MNN/project/android/build_64.sh"
+  "root": "/mnt/AASC/3rd/android-mnnllm-prebuilt/d407447ed56c4121a11ccbd266dc184ca1ead0c2",
+  "generatedAt": "2026-10-22T06:27:42.878Z",
+  "source": "git-bundled-prebuilt",
+  "artifactManifest": "/mnt/AASC/3rd/android-mnnllm-prebuilt/d407447ed56c4121a11ccbd266dc184ca1ead0c2/manifest.json",
+  "library": {
+    "path": "/mnt/AASC/3rd/android-mnnllm-prebuilt/d407447ed56c4121a11ccbd266dc184ca1ead0c2/project/android/build_64/lib/libMNN.so",
+    "size": 7686792,
+    "sha256": "5b3ad20b47211f59bccba9cceaae3aa998d65f33316e3e884b6125bce0f85dcd"
+  }
 }

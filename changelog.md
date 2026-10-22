@@ -1,3 +1,9 @@
+### Git同步与合并校验
+
+- ✅ [2026-10-22] 合并本地HMR2原图服务与远端Node配置、Chat2API变更，保留双方changelog及自测记录，清除两处文档冲突状态；未跟踪文档保留本地。
+  - 同步docs/design/chat-system.md、docs/spec/self-test.md及docs/todo.md中的Windows测试限制；未新增业务代码或调整发布状态。
+  - 本机验证：test:hmr2为87通过/2跳过/0失败，test:node-display-config为4通过，浏览器凭据测试6通过；check:chat2api为353通过/5失败，4项涉及POSIX权限断言，1项为Windows symlink EPERM。对应Chat2API模块在两边提交中均无改动，待补跨平台自测适配，不记为全量通过。
+
 ### HMR2 Node独立原图服务与模型准备
 
 - ✅ [2026-10-22] Node代码入项目3rd，新增根 `download:hmr2-model` / `start:hmr2` 及 `test:hmr2`，完整原图health/infer和同源2D/Three页；原Python/8768/MMD默认保留。
@@ -6,6 +12,18 @@
   - 回归89项：87通过、0失败、2Windows file-symlink明确skip；junction拒绝实测。29同bytes/框当前原Python prepare_image CPU对照四输入SHA一致/maxAbs0；CMYK首次输入max2.10893/decoded134实差修正为保留工作色彩空间与OpenCV整数256换色，BMP扩展/gap/palette/stride强拒避免静默错误。
   - 真完整CPU ONNX＋自有port0四次HTTP（原3＋Gaussian）、actualHTML/Three/nonce、cold/ready/final/loadCount1通过并释放自身资源。CPU/VM/fake不冒充DML速度或浏览器视觉；新增DML原图与实屏需用户窗口，旧阶段A冻结Tensor结果不变。FP32 I/O/权重，内部precision/TF32/allocator/无profile actualAssignment未知，RSS非显存。
   - [使用与限制](<docs/usage/hmr2-node-onnx-service.md>)、设计/实现/任务/自测索引同步，只保留可选DML/真实视觉待办。servicePackage原已true，其余flags不扩大；未出包、发布APK/模型或控制用户正式进程。
+
+### Node配置示例与剩余变更整理
+
+- ✅ [2026-10-22] 恢复config.example.json，补齐实际支持的全部本机参数及逐项中文说明；使用_comments保持标准JSON和原加载器/回写兼容，补充默认值、范围、平台及远端权威关系。
+  - 同步Node README、usage、design/spec、self-test、task/todo；新增示例标记voiceDisplayNodePackage=true，其他产物状态保留，本轮无构建发布或生产重启。
+  - 汇总提交既有豆包浏览器请求模板捕获/网页终态验证、控制端验证状态文案及测试、历史设计文档、非秘密配置和打包描述。日志、模型/声纹向量、缓存、生成包与配套旧发布清单、含API密钥的历史任务结果保留本地，不写入此次提交。
+  - 验证：完整示例标准JSON/真实loadConfig及Linux/Windows参数读取通过；配置4/4、Chat2API358/358、浏览器凭据/独立包组合11/11，零失败零跳过；git diff --check通过。实体设备与上游长期可用性不作为本轮验证结论。
+
+### Node mpv鼠标点击方案
+
+- ✅ [2026-10-22] 核实mpv官方Lua鼠标键绑定、mouse-pos与client-message可通过现有IPC将点击传入Node，当前接收端尚未处理鼠标事件。
+  - 记录按钮/阶段/窗口及旋转逻辑坐标、Lua可选失败与会话清理方案，更新Node design/spec、task/todo；具体采集范围待确认，未修改生产代码、执行点击功能测试或变更发布状态。
 
 ### Node ASS网页主题样式对齐
 
@@ -26,6 +44,12 @@
   - 新增mpv-text-player.js、mpv-text-renderer.js；更新main/media-controller/mpv-player/audio-player；按owner取消文本音频，保留普通TTS及录音回调；远端朗读回执与textSentenceTtsCancel复用现有WebSocket路由，独立包附带共享分句器。
   - 补断线/延迟下载/旧TTS隔离、清空与新媒体竞态、OSD排空刷新修复；文本上限8MiB、每页2048字符、最多100000行/20000页，Markdown不承诺完整富文本。
   - 自测141项通过：mpv38、文本服务/路由53、语音/重连22、独立包22、Linux真实画面4、真实IPC1、网页布局1。Windows字体/DPI/声音现场另验；servicePackage/voiceDisplayNodePackage保持true，未构建发布包。同步design/spec/task/todo/usage/self-test。
+
+### 豆包与Qwen真实回复速度测量
+
+- ✅ [2026-10-22] 在当前192.168.1.39:8083使用Responses/stream=true，普通豆包Node与国内Qwen3.7独立新会话各测首轮及续聊两轮，6/6正文与completed成功。
+  - 相同自然消息交替发送；豆包平均首字2.08秒/正文结束3.23秒/完成5.25秒，Qwen1.28/2.19/2.35秒。收到32/11个真实正文分块，输出224/289字；样本量和长度不同，不能推出固定性能或吞吐。
+  - 仅独立API测试会话，不污染当前AASC聊天/游戏；没有重启服务、改账号、创建Key/任务或变更业务代码/发布状态。同步全局Responses design/spec、self-test、任务记录与剩余部署todo。
 
 ### Node子显示端ASS信息叠加
 
@@ -48,12 +72,6 @@
 
 - ✅ [2026-10-22] 核对裁剪框拖动、百分比crop消息、服务端持久化与Node几何链路，记录待确认方案。
   - 拟以mpv zoom/pan实现裁剪移动、合并连续输入并验证四方向实际画面；更新design/spec/task/todo。当前仅方案记录，未修改生产代码、执行功能测试或改变发布状态。
-
-### 豆包与Qwen真实回复速度测量
-
-- ✅ [2026-10-22] 在当前192.168.1.39:8083使用Responses/stream=true，普通豆包Node与国内Qwen3.7独立新会话各测首轮及续聊两轮，6/6正文与completed成功。
-  - 相同自然消息交替发送；豆包平均首字2.08秒/正文结束3.23秒/完成5.25秒，Qwen1.28/2.19/2.35秒。收到32/11个真实正文分块，输出224/289字；样本量和长度不同，不能推出固定性能或吞吐。
-  - 仅独立API测试会话，不污染当前AASC聊天/游戏；没有重启服务、改账号、创建Key/任务或变更业务代码/发布状态。同步全局Responses design/spec、self-test、任务记录与剩余部署todo。
 
 ### Node子显示端配置ERROR与原生panscan
 
@@ -104,6 +122,11 @@
   - 更新 `docs/design/node-display-mpv.md`、`docs/spec/node-display-mpv.md`、task/todo；核对网页选项、本机mpv属性与官方手册，补充旋转几何、文件方向元数据、动态调度回收和跨媒体状态继承验收。未修改生产代码、运行画面测试或改变发布状态。
 - ✅ [2026-10-21] 完成需求澄清与方案记录：现有控制端触发，Linux/Windows分别配置mpv命令，Linux指定DISPLAY/XAUTHORITY，常驻进程通过IPC切换视频、音频和图片。
   - 新增 `docs/design/node-display-mpv.md`、`docs/spec/node-display-mpv.md`、对应task及索引/todo；发现服务端启动会重写子显示端配置，拟保留mediaPlayer字段。具体改动方案待用户确认；尚未修改生产代码、启动播放器、执行功能测试或更改发布状态。
+
+### 豆包双平台共享JS方案
+
+- 📋 [2026-10-21] 记录用户要求：桌面与Android共用JS浏览器业务，平台调用分别适配CDP和WebView。
+  - 核实现有桌面JS与Kotlin内嵌请求/签名脚本重复，提出共享页面运行时及平台端口方案；保留直连/网页两种传输、签名缓存和一次失败补发。更新design/spec/task/todo，待具体方案确认，尚未修改生产代码/原生或发布状态，未将方案记录为修复完成。
 
 ### 专用Vivaldi官网发送对照
 
@@ -314,13 +337,6 @@
   - `game-chat-bridge.js` 引导目录→规则及依赖 GM 回执后续调用；完整缓冲有目标显示端的模型回复，校验中间行后再展示叙述。`game-chat-session.js` 通过正式 `addMessage` 保存同一“小爱”私聊会话的用户与最终助手消息；`llm-service.js` 避免角色设定已在 `System:` 时再次作为 `User:` 插入。旧尖括号和最多八条调用继续可解析。五子棋 design/spec/task/usage/todo 与定向测试同步，`npm run test:game-chat` 33/33 通过，服务包仍待构建。
   - 隔离的真实 Qwen `aasc-qwen-flash` 经正式 `chatStream` 完成 9 路开局及 User C3→AI E5；再分别模拟用户胜与 AI 胜两盘：C5–G5 横向连五为 `User胜`、版本 10，E5–E9 纵向连五为 `AI胜`、版本 11。临时棋局和聊天运行目录均已清理。AI 胜盘模型终局文字仍误称轮到用户，终局播报及旧空回复兜底待后续处理，真实显示端尚未验收。
 
-### Chat2API 豆包网页内置任务
-
-- ✅ [2026-10-20] 新增 `doubao.web` 常驻任务和网页内请求桥，参考 doubao2api 固定提交实现浏览器 profile、Android 隔离 WebView、聊天/Responses、媒体和文件兼容 API。
-  - `chat2api-doubao-browser-*`、`chat2api-doubao-android-bridge.js`、`chat2api-doubao-web-media.js`、`chat2api-doubao-web-file.js`、`builtin-tasks/doubao-web.js` 接通官网同源 `fetch()`、SSE、图片生成/编辑、视频、音乐、图片及文件上传、下载地址和文件问答；`chat2api-proxy-service.js` 提供受原 API Key 保护的独立入口。文件 AWS V4 固定向量、CRC32 和上传顺序已测试；聊天传输切换时从 AASC 已保存历史建立新上游会话。媒体/文件临时页完成后关闭，桌面账号 profile 保留。
-  - Android 新增 `DoubaoWebViewService.kt`，与外部登录页共享隔离进程 Cookie 目录，经固定本机端口与随机令牌向 Node 回传流；`NodeServerService.kt` 在启动子进程前绑定服务，`AndroidManifest.xml` 注册不导出服务。桌面浏览器默认在当前 Linux `DISPLAY=:1` 环境显示；人工处理登录及验证码，不自动删官网会话或切换账号。
-  - 同步 `.src`、design/spec/task/todo/usage/ref 与 Apache 2.0 许可记录；`npm run check:chat2api` 314/314、`doubao.web` 任务定向 1/1、Android `:app:compileDebugKotlin --offline` 通过。真实官网账号、专用浏览器 profile 和 Android 真机仍待验收；`servicePackage=true`、`minApk=true` 保持待构建，未发布制品。
-
 ### 聊天游戏独立调用入口
 
 - ✅ [2026-10-20] 新增可调用的聊天游戏 JS 会话入口和 JSON 行演练脚本，复用正式游戏桥接与权威棋局。
@@ -333,6 +349,18 @@
   - `game-chat-bridge.js`、`gomoku-game-service.js` 调整解析、流式过滤和回执；旧尖括号单条与多条调用仍按原规则执行，两端聊天兼容旧历史提示。同步 game-gomoku design/spec/task/usage/todo；五子棋及双端聊天定向测试 38/38 通过，`servicePackage=true` 待出包，真实模型和 Android 现场待验收。
 
 ### Chat2API 浏览器凭据保存
+
+- ✅ [2026-10-20] 豆包官网手动聊天样本接入调试端口和 Android 外部登录的账号保存，并为普通 Node 首轮建立受限 HTTP/2 请求模板。
+  - `save-chat2api-browser-credentials.js`、`Chat2ApiAuthWebView.kt`、`Chat2ApiLoginActivity.kt`、`Chat2ApiDoubaoRequestCapture.kt`、`chat2api-doubao-request-profile.js`、`chat2api-doubao-http2-client.js`及账号/适配器接线；保存前删除样本原话和旧会话标识，网页与 Node 完整聊天结果分别标记。`npm run check:chat2api` 296/296、浏览器导入测试 6/6、Android Kotlin 编译与 JVM 定向单测通过；真实账号发送仍待验收。服务包与 min APK 需求均为 `true`。
+
+- 📝 [2026-10-20] 分析豆包账号导入保存完整官网请求参数的需求。
+  - 当前导入只有 Cookie 快照与设备资料；新会话 ID 与权威 ACK 复用流程已存在。Android 现有 WebView 拦截器不能读取聊天 POST 正文，候选为同源文档起始脚本观察加原生桥接，真机核对实际签名和附加头；用户原则认可此方法。补充网页聊天与 Node 聊天分级验证：完整回复才升级，导入不自动发额外测试消息。新增 design/spec/task/todo 候选方案，完整实施范围仍待确认；未改生产代码或账号。
+
+- 📝 [2026-10-20] 用 Node HTTP/2 原样发送当前网页的完整豆包聊天请求。
+  - 当前 Vivaldi 网页发送“早”，网页与 Node 原样重发均为 HTTP 200，出现内容分块和 `SSE_REPLY_END`，无非零业务错误码。第二组网页“晚上好”成功后，Node 沿用当次 URL/头并替换正文为“你好”、更新消息 ID 和长度，也正常结束。证明当次网页参数下 Node 可发送新消息；独立生成逐次参数和长期复用尚未验证。仅更新豆包 design/spec/todo/changelog，未改生产代码或账号。
+
+- 📝 [2026-10-20] 按用户要求复测正式豆包账号的 Node 发送。
+  - `/v1/responses` 流式新会话发送“早”：HTTP 200，最终 `response.failed`/`doubao_upstream_failed`，无有效回复。只更新豆包 design/spec/todo 和本日志；未改代码、账号或传输方式。
 
 - 📝 [2026-10-20] 被动核对当前 Vivaldi 网页实发“早”的请求头名称与正式账号的 Node 首轮显式构造。
   - 共同七类显式头；网页额外包含 `x-flow-trace`、`last-event-id`、语言、`sec-ch-ua*`、`sec-fetch-*` 等，查询参数还多 `a_bogus`。纠正旧记录：当前普通首轮 Node 不显式发送独立 CSRF 头。网页请求 HTTP 200，未据此判断 SSE 终态或故障因果；只同步豆包 design/spec/todo，未改代码和账号凭据。
@@ -379,8 +407,10 @@
 
 - ✅ [2026-10-20] 支持 AI 回复开头连续多行 Game 标签，标签后可接自然语言，并在控制端逐条显示协议 tips。
   - `game-chat-bridge.js` 将简洁标签规则和目录提示放在现有 raw 文本的 `System:` 后、角色设定前；最多八条标签按序校验执行，失败即停且丢弃本批次预写叙述，保留已确认棋步并把 GM 回执交还模型。`llm-service.js` 与控制端 `chat.js` 将协议提示保存/渲染上限从 20 提至 128。更新五子棋 design/spec/task/todo；定向测试 25/25 通过，覆盖批量成功、第二条失败、格式拒绝、单标签兼容及控制端实时和历史 tips。当前豆包模型隔离请求输出目录标签及其后的自然语言；未改现有聊天和棋盘。服务代码包待构建。
+
 - ✅ [2026-10-20] 修复真实对话中 AI 对开局和语音坐标只说“轮到你落子”却不输出游戏标签。
   - `game-chat-bridge.js` 在原 `raw` 提示中补回标签格式、语音 User 落子和 GM 确认约束；活动棋局首答漏标签时缓冲并只让模型重新判断一次，不由代码代下棋。`game-gomoku.test.js` 增加漏标签恢复和普通聊天不改棋盘回归，17/17 通过。隔离的当前豆包 Responses 请求中，“我们来玩五子棋”输出 `<Game:目录,AI,列表>`，带权威快照的“B3。”输出 `<Game:五子棋,User,落子,B3>`；未写入现有对话或真实棋盘。同步五子棋 design/spec/task/todo，服务包仍待构建。
+
 - 📝 [2026-10-20] 用本地假模型和临时棋局复核改造后的五子棋调用链：开局按需查目录与规则，用户 H3 后 GM 增量驱动 AI H4，最终叙述合并且 GM 编号四位。
   - 同步五子棋 design/spec/todo；确认开局回复已有叙述时 GM 快照只进显示端和协议提示，本轮不再回送模型。未调用真实模型、未改运行代码或用户棋局。
 
@@ -493,6 +523,32 @@
 - 📝 [2026-10-19] 核对当前 JS 启动器的 LAN/WAN 来源顺序与故障回退：两个 LAN 源失败后尝试 WAN，下载文件按同一签名清单大小和 SHA-256 校验；有效但旧版 LAN 清单不会再与 WAN 比较版本。
   - 同步 `android-offline-js-launcher` design/spec 与可选设备验收 todo；仅源码核对，未断网实测或修改运行代码。
 
+### 豆包外部网页登录 Cookie 刷新设计
+
+- 📝 [2026-10-20] 对齐捕获豆包官网与 Node 的新会话首轮“早”：两者均 POST `/chat/completion`，官网 HTTP 200，Node `doubao_risk_control`（403）。
+  - 官网比 Node 多 `a_bogus`、`msToken`、`tz_name` 查询参数，约 29 条对 5 项 Cookie，并有 `x-flow-trace`/浏览器请求头及不同正文结构；目前只定位到协议差异，未确定单一风控原因。更新豆包 design/spec/todo，无运行代码或凭据改动。
+
+- 📝 [2026-10-20] 在 `DISPLAY=:1` Vivaldi 恢复 Chat2API 已存豆包凭证并发送“早”，官网正常回复。
+  - 两个官方来源的 10 项恢复映射均写入并验证，回复后仍与保存值一致；浏览器共有 33 条 Cookie。紧接着同账号 Node Responses 单次发送“早”仍为 `doubao_risk_control`（403），无正文。未回写账号或修改运行代码，具体差异待定位；同步豆包 design/spec/todo。
+
+- 📝 [2026-10-19] 记录用户对固定“请只回复测试”措辞可能触发豆包风控的判断。
+  - 现有测试指令请求 403、自然问候新建和续接成功，但时间与会话状态不同，暂列待验证线索；后续实测优先使用自然对话。更新豆包 design/spec/task/todo，无代码或账号操作。
+
+- 📝 [2026-10-19] 从豆包最近会话确认刚才“早”会话的上游 ID 后，Node 在同一会话续接发送“早”。
+  - ACK 会话 ID 一致，收到“早安～今天也要顺顺利利✨”、4 个流分块并正常结束。同步豆包 design/spec/task/todo；无代码、凭据或控制端历史改动。
+
+- 📝 [2026-10-19] 使用重新导入的豆包账号从 Node 发全新会话，消息仅为“早”，收到“早呀☀️”、4 个流分块并正常结束。
+  - 与前次测试指令短句的 `doubao_risk_control`（403）并存，具体风控触发条件尚不确定；同步豆包 design/spec/task/todo，无代码或凭据改动。
+
+- 📝 [2026-10-19] 按用户要求删除现有 Chat2API 豆包网页账号并从当前 Vivaldi 官方页面重新导入。
+  - 删除后豆包账号数为 0；导入后恢复为 1，原账号 ID 和 Node 资料保留，其他 Provider 账号未变，只读验证通过。随后 Node 全新聊天仍返回 `doubao_risk_control`（403）、正文 0 分块。只操作豆包账号记录，未删除控制端聊天历史；同步 design/spec/task/todo，无运行代码修改。
+
+- 📝 [2026-10-19] 按用户要求从当前 Vivaldi 官方页面读取受支持 Cookie，经现有 Chat2API `/oauth/start`、`/oauth/complete` 指定原账号执行保存，再用 Node 适配器发全新短句。
+  - 豆包账号仍为同一个、数量仍为 1；规范 Cookie 与保存前相同，登录只读验证显示通过。Node 聊天在正文前返回 `doubao_risk_control`（403），没有解决文字请求风控。更新豆包 design/spec/task/todo；未改运行代码，Android 外部网页完成按钮的自动回存仍待实施。
+
+- 📝 [2026-10-19] 用当前 Vivaldi 浏览器验证：人工拖动图片后，一次网页续接收到回复分块和正常结束；Node 用原保存、更新的六项及完整浏览器 Cookie 三种资料仍均返回 `doubao_risk_control`（403）。
+  - 网页实际请求有现有六项之外的 Cookie、动态 `a_bogus` 和更多字段，后续网页请求也曾返回 `STREAM_ERROR`；不能把完整 Cookie 视为 Node 风控的充分修复。核对当前外部网页“完成”只关闭、不保存更新资料；完成 cookie 刷新设计与伪代码，新增 task/todo，运行代码未改，待项目规则要求的方案确认。
+
 ### 豆包语音全角括号协议错误
 
 - ✅ [2026-10-19] Node 实网确认现场故障来自末尾半角括号句后，按用户确认扩展共享分句器和豆包直连清理，半角 `( )` 与全角 `（ ）` 均切段或移除字形、保留内部正文。
@@ -504,6 +560,15 @@
   - 更新 `sentence-splitter.js`、`chat2api-speech-service.js`、`chat2api-doubao-speech-adapter.js`、`chat-manual-tts.js`、`server-app.js` 及对应测试；补齐手动朗读测试桩。同步 chat-system design/spec/task/todo，分句 8/8、手动 TTS 24/24、Chat2API 286/286 通过；`servicePackage=true`，实际豆包账号待验收。旧日志没有逐句证据，仍需用新日志确认现场根因。
 
 ### Chat2API 错误显示端提示
+
+- 📝 [2026-10-19] 按要求在 `DISPLAY=:1` 的 Xvnc/LXQt 桌面打开有界面 Vivaldi，使用隔离运行时资料载入保存的豆包凭据并显示官网聊天页；页面 HTTP 200，本次未再次发消息。
+  - 本机 CDP 调试端口随浏览器启动临时分配，浏览器保持打开供现场操作；退出后运行时资料自动清理。同步 chat-system design/spec/todo；无运行代码或账号库改动。
+
+- 📝 [2026-10-19] 将保存的豆包 Cookie 和 User-Agent 载入隔离的 Vivaldi 远程调试实例，官网网页实发一条新会话短消息。
+  - 网页 POST 已发出，HTTP 200 的 SSE 含 `STREAM_ERROR` 与结束事件、没有回复文字块；与 Node 新旧会话均 403 的结果一致，当前保存资料在该隔离环境仍无法完成文字聊天。关闭实例并清理临时浏览器资料；同步 chat-system design/spec、对应 task 和 todo。未修改代码、账号资料或用户日常浏览器会话。
+
+- 📝 [2026-10-19] 用保存的豆包账号从 Node 再测文字 Chat：全新流式会话与最近一条 `ready` 旧会话原生续接均返回 `doubao_risk_control`（403），未收到完整回复。
+  - 经现有 Chat2API 核心适配器调用；旧会话使用内存副本，未改写本地记录。同步 chat-system design/spec/todo；当前语音端点成功不能证明文字端点已恢复，具体上游风控条件仍未知。无运行代码或账号配置变更。
 
 - 📝 [2026-10-18] 对照当前豆包适配器与官网网页调用方式：文字请求在 Node Axios 内发送，虽使用同一官网接口和网页式参数，但 Cookie/CSRF/nodeProfile 来自已保存快照，并非当前浏览器标签页的实时请求环境。
   - 新旧会话均被上游返回 403；无法从固定风控错误码判断具体校验项。同步聊天 design/spec/task/todo/usage；未修改运行代码或账号资料。
@@ -543,6 +608,8 @@
 
 - 📝 [2026-10-18] 复核 Android `80048028`：当前系统语音默认语速 0，原生代码走 `SpeakText`，并未提交自定义 SSML；SDK 的“check your SSML”不能作为实际根因。已同步 design/spec/task/todo；长输入的具体引擎失败边界待设备复测，无运行代码变更。
 
+- 📝 [2026-10-18] 根据服务端及 Android 现场日志定位天气播报 `80048028`：两次“今天天气怎么样”均由控制端回调把约 1036 字的完整逐时详情送入显示端离线 TTS；同设备短文本可成功合成。拟将控制端播报改用已有短摘要，待用户确认后修改代码；同步 design/spec/task/todo，本轮无代码变更。
+
 ### Responses 流错误透传
 
 - 📝 [2026-10-18] 核对豆包手动账号字段：应填完整网页 Cookie，文字聊天还需同账号 `nodeProfile`；安全验证码只填官网验证页，Chat2API 不存在供本次验证使用的豆包 Token 栏。同步 chat-system design/spec/task/usage/todo；无代码、配置或真实账号操作。
@@ -572,6 +639,8 @@
   - 更新 `chat2api-speech-upstream.js`、`chat2api-speech-service.js`、Qwen 网页签名与 WebSocket 适配器、Chat2API runtime 和 `server-app.js`；同步 design/spec/task/usage/todo 及定向测试。`npm run check:chat2api` 284/284、`npm run test:mmd-production:tts` 23/23 通过，`git diff --check` 通过。真实账号待现场验收；未构建或发布服务包，`servicePackage=true`。
 
 ### 豆包失效会话自动重建
+
+- 📝 [2026-10-17] 记录后续需求：自动重建成功后只删除被替换的旧豆包网页上游会话。更新角色会话 design/spec、todo 和任务文档；删除协议尚未验证，本轮未修改运行代码或执行远端删除。
 
 - ✅ [2026-10-17] 修复 Responses 续接豆包时 `doubao_session_uncertain` 直接报错：清除旧上游引用，尚未输出正文时用完整聊天上下文自动重试一次；已输出正文时只清除引用，下一轮重建，保留控制端会话与历史。
   - 更新 `src/external/llm/llm-service.js`、`src/external/llm/llm-service-doubao-recovery.test.js`、聊天 design/spec/task/todo。目标测试 12/12、`npm run check:chat2api` 279/279 通过，覆盖非流式、流式、部分输出和首轮失败边界；真实豆包账号待现场验收。`release/offline-release-status.json` 的 `servicePackage` 已为 `true`，未构建或发布代码包。
@@ -621,6 +690,7 @@
   - 临时模型、脚本和报告在忽略目录`tmp/mmd-pose/depth-eval/nlf-l/`；同步design/spec/task/usage，完成项从todo移除。权重495696900字节、ONNX471422850字节，SHA-256见使用说明；私有图片/模型不入Git。
   - CPU ONNX对官方FP32参考归一化最大差7.15e-6，JS重建XYZ最大差低于0.001mm；浏览器两后端六例通过，390px无横向溢出，本机WASM约1.7秒、WebGPU后两图128–140ms。官方完整半精度封装未完成，手机未测。
   - 真人抬腿仍归右，动漫手臂及示意图交叉腿偏离；不接入VAM，不替换MediaPipe。未修改生产代码/构建输入、未出APK或发布，Offline状态保持。
+
 ### 六轴IMU模拟器静稳归零、独立线性加速度与发送限流
 
 - ✅ [2026-10-17] 修复模拟设备拖动停止后速度残留，并为APK/网页增加独立去重力线性加速度读数和有界最新样本发送。
@@ -682,6 +752,11 @@
   - 默认模型契约先红后绿，27项Node、19项真实浏览器检查及npm run build:web:mmd-ar-test通过。公开图33点/11控制目标/270子步有限、相机11点误差1.9%，动漫3候选默认女孩/10目标；无人/取消/剪贴板/叠图/相机回环保持，390px无横向溢出。两模型SHA、源/构建副本和56173服务清单一致。
   - 更新design/spec/task/self-test/usage/ref和todo，移除完成回切任务，保留手机/遮挡质量验收；模型world仍估计，不宣称坐姿与深度已还原。servicePackage原true保持，其余产物需求原值保留；仅本地WEB，无APK/公网发布，模型/私图/输出不入Git。
 
+### Offline min 首装最初画面链路说明
+
+- ✅ [2026-10-16] 只读确认桌面先进入Android MainActivity原生准备布局及权限流程，再打开WebView承载的APK内置JS启动页，网页自动准备首包、健康后收起并进入显示页。
+  - 根据AndroidManifest、MainActivity、OfflineLauncherActivity与基线页面加载代码同步design/spec；todo补充设备过渡可见性与耗时验收。未改运行代码、产物状态，未新增/运行测试、构建发布或重新安装设备。
+
 ### Offline 发布后仅校验本次包与进度显示
 
 - ✅ [2026-10-16] 按用户最终要求，将服务发布后的HTTP归档校验限定为本次发布列表，保留签名清单及发布前已有资源核对。
@@ -705,6 +780,11 @@
 
 - ✅ [2026-10-16] 根据用户“黄色应该是左腿”的反馈，核对胶囊黄橙色当前使用right语义、抬高膝使用RTMPose编号26；承认此前仅解释前后多解不足以排除当前图片的左右语义错误。
   - 只读检查报告、配色与实际点，design/spec/task/todo记录对应修正对照方案，待确认后实现；未改代码、深度缓存、历史结果或生产入口，不声称已修复。
+
+- ✅ [2026-10-16] 保存 mini/flash/pro（轻量/普通/专业）的 Provider 独立映射与双端聊天切换设计，尚未实现。
+  - Qwen 目标为 Qwen3.6-Flash/Qwen3.7/Qwen3.7-Max；豆包更新为 Lite（seed-lite-7b，待验证）/快速（选择键0、思考0）/专家（选择键3、思考3）候选，替代此前三档均为 Lite 的设想。
+  - 明确用户网页抓包中的快速/专家内部编号均为38，不推测底层版本；现有适配器只设置思考参数，选择键对齐、Lite真实调用、Qwen默认映射冲突和续接隔离仍待实施核验。
+  - 同步 chat-system design/spec、task 与 todo；仅记录文档，未修改代码/运行配置、导入账号、重新远端验证或构建发布。
 
 ### Offline 自动升版与按种类出包入口
 
@@ -13914,15 +13994,25 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - `imu-engine.mjs`允许连续3秒高噪声窗口计算两个非负有限死区，`index.html`与`style.css`改无上限数值输入，`app.mjs`处理无效输入并以独立20ms定时器发布估计帧，`imu-room.mjs`显式传空轨迹增量。`MainActivity.kt`请求两路20ms采样，APK `sender.js`每20ms发送有界批次；`server.mjs`按每连接平均50消息/秒限流并暴露实际批次/帧率。
   - 同步IMU design/spec/task/usage/README和专项自测。`npm run test:imu:six-axis-test` 31/31通过；`npm run build:apk:imu-sender`成功，产物895612字节，SHA-256 `c50b53177669215c5a12513905b2bd453cd18c699f142115db0a3c05b2c7bc9d`。本地8769服务已更新，首页HTTP 200，状态与轨迹接口可读；切换前数据保存于`/tmp/aasc-imu-pre50-*.json`。当前无ADB设备，实际真机频率与动作效果列入待验收。
 
+### Offline code v117 发布恢复
+
+- ✅ [2026-10-17] WAN 首次回读 `code-v117.zip` 报 `fetch failed` 后，复用原发布报告恢复校验与精确清理，未重新出包或升版。
+  - LAN/WAN `manifest.json` 均指向 code v117；公网及 Node `fetch` 完整回读 4,950,718 字节，SHA-256 `b00fb241b9cb380c3d463d7d31f4eedbcbbc9390c958860e31b1dc054079e82c` 与签名清单一致。`npm run release:offline -- --resume=release/offline-update/output/releases/release-20261017T141458962Z-166827.json --publish` 成功，报告为 `published`、清理错误为空；两端 code 目录均仅保留 `code-v117.zip`。首次 `fetch failed` 的瞬时原因未确定，本轮未修改发布脚本。
 ### Android 颜色选择器
 
 - ✅ [2026-10-19] Android 控制端与显示端全部颜色入口采用参照 PC 的色域、色相条和 HEX 选色面板，PC 原生选色器保持现状。
   - 新增 `android-color-picker.js`、`android-color-picker.css` 与浏览器定向测试；`display.html`、`upload.html` 加载共享组件。保留原颜色控件 ID、实时 `input` 预览、确认 `change` 保存和取消回退。同步 design/spec/task/todo/usage；相关浏览器、背景光晕和主题定向测试 13/13 通过，JavaScript 语法与差异检查通过。服务网页代码修改标记 `servicePackage=true`，设备验收待更新服务代码包。
-
 ### Offline 服务更新跳过重复 launcher 解压
 
 - ✅ [2026-10-19] 修复启动器内容未变化时仍预解压目标 code 并显示“解压 launcher”。
   - `releases.js` 先比较当前实际启动器指纹与已验签清单，相同则直接进入服务更新；服务代码正常解压后再次校验签名启动器指纹。`offline-js-launcher.test.js` 覆盖只解压一次 code、伪造指纹拒绝、不同指纹切换和旧清单兼容；`npm run test:offline-launcher` 42/42、代码包定向测试 17/17 通过。同步 design/spec/task/todo；`servicePackage=true`、`minApk=true` 待出包。Note8 已观察到此前 code v138 服务健康而 launcher 仍为 v131；修复版首次升级及后续纯服务更新待现场验收。
+
+### Chat2API 豆包网页内置任务
+
+- ✅ [2026-10-20] 新增 `doubao.web` 常驻任务和网页内请求桥，参考 doubao2api 固定提交实现浏览器 profile、Android 隔离 WebView、聊天/Responses、媒体和文件兼容 API。
+  - `chat2api-doubao-browser-*`、`chat2api-doubao-android-bridge.js`、`chat2api-doubao-web-media.js`、`chat2api-doubao-web-file.js`、`builtin-tasks/doubao-web.js` 接通官网同源 `fetch()`、SSE、图片生成/编辑、视频、音乐、图片及文件上传、下载地址和文件问答；`chat2api-proxy-service.js` 提供受原 API Key 保护的独立入口。文件 AWS V4 固定向量、CRC32 和上传顺序已测试；聊天传输切换时从 AASC 已保存历史建立新上游会话。媒体/文件临时页完成后关闭，桌面账号 profile 保留。
+  - Android 新增 `DoubaoWebViewService.kt`，与外部登录页共享隔离进程 Cookie 目录，经固定本机端口与随机令牌向 Node 回传流；`NodeServerService.kt` 在启动子进程前绑定服务，`AndroidManifest.xml` 注册不导出服务。桌面浏览器默认在当前 Linux `DISPLAY=:1` 环境显示；人工处理登录及验证码，不自动删官网会话或切换账号。
+  - 同步 `.src`、design/spec/task/todo/usage/ref 与 Apache 2.0 许可记录；`npm run check:chat2api` 314/314、`doubao.web` 任务定向 1/1、Android `:app:compileDebugKotlin --offline` 通过。真实官网账号、专用浏览器 profile 和 Android 真机仍待验收；`servicePackage=true`、`minApk=true` 保持待构建，未发布制品。
 
 ### 豆包网页任务现场验收与双 Cookie 身份核对
 
@@ -13958,6 +14048,7 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - `npm run check:chat2api` 325/325、补充实际APK签名脚本与发送顺序定向2/2、Kotlin定向4/4通过。新增脚本VM测试覆盖立即消费、未授权不删除、单ID重试、SDK准备不联网及取消；同步design/spec/task/todo/usage/self-test。
   - min72构建并覆盖安装Note8，SHA-256 `ecbefb237eb4a79ced3c79b733d5aac6cf628cfbbb6bb9d13b882a4dba0d789c`，尚未发布。隔离最新Node源码的Responses直连首轮14字/续聊20字，兼容首轮5字/续聊135字，均HTTP200完整完成且保持各自权威会话ready。兼容测试实际创建并运行任务实例；测试实例停止、API Key剩余0，4个隔离测试官网会话逐个精确删除成功。当前AASC聊天及正式账号未写入测试数据。
   - `minApk=false`表示已构建最新原生代码；正常服务仍code148，`servicePackage=true`待服务包构建部署。新接口及NativeAPK须配套更新，正式账号应重新完成一次官网登录验证；成功视频/轮询另待验收。
+
 
 ### 控制端任务卡片下拉选择
 

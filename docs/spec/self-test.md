@@ -1,5 +1,15 @@
 # 自测功能实现文档
 
+## Git同步验证（2026-10-22，Windows）
+
+```text
+合并 := 保留本地HMR2与远端Node配置/Chat2API文档；未跟踪文件留在本地
+回归 := test:hmr2 → 87通过/2符号链接权限跳过；test:node-display-config → 4通过；浏览器凭据 → 6通过
+Chat2API := check:chat2api → 353通过/5失败；四项POSIX模式断言与一项symlink EPERM
+归因 := 两边相对共同基线均未修改Chat2API模块；Windows权限与符号链接测试条件需另行适配
+边界 := 不跳过或修改失败断言以宣称全通过；不改变业务代码或发布状态
+```
+
 ## HMR2 Node独立原图服务（2026-10-22）
 
 ```text
@@ -14,6 +24,17 @@
 剩余 := 用户显存窗口DML HTTP/原Python顺序与浏览器实屏；旧阶段A冻结Tensor不能变新增端到端速度/GT准度
 ```
 
+
+## Node完整配置示例与剩余改动提交核对（2026-10-22）
+
+```text
+示例 := 读取实际config.example.json → JSON.parse → main.loadConfig → 检查_comments保留、hostname身份与媒体关闭默认值
+平台 := 同一示例经platformOptions读取linux/win32 → 命令独立传参、空DISPLAY继承环境
+配置回归 := npm run test:node-display-config，4/4通过；含真实失败启动、退出码与TUI前校验
+账号回归 := npm run check:chat2api，358/358通过；浏览器凭据与独立包组合11/11通过
+提交边界 := 日志/模型与声纹向量/采集缓存/生成APK和ZIP排除；含非空API密钥的历史任务结果保留本地
+发布 := 只因新配置示例把voiceDisplayNodePackage置true；不构建、不发布、不重启服务，原Windows实机验收待办保留
+```
 
 ## Node ASS网页主题样式（2026-10-22）
 
