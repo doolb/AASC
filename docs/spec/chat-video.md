@@ -20,15 +20,15 @@ AI调用 := SubAI,生视频,"提示词"[,当前聊天参考图ID...]
 ```text
 豆包现有代码 := makePayload(video) → 2020/skill17 → async_task.id → 同账号第二阶段 → extractVideo(2021)
 豆包已接入 := ACK定位原会话后IM查询，兼容旧async_task；本轮实际模型为官网默认Seedance2.0 Mini
-Qwen官网公开源码 := ai_tool_scene=zaodian_generate_video；bizScene=genVideo
-Qwen请求 := req { rootModel, prompt, originPrompt, genMode, params { gen_mode,duration,audio,resolution,size,attachments } }
-Qwen待核实 := 账号下发模型配置、实际创建响应、ai_generate_video/loading卡片和最终任务查询/视频字段
+Qwen旧原生聊天兼容 := ai_tool_scene=zaodian_generate_video；bizScene=genVideo；仅已提交session/req任务沿旧snap查询
+Qwen新任务 := 下文千问创作接口；不再通过聊天工具提交SubAI视频
+Qwen已核实 := 官网截留创建字段、新入口认证、recordId独立查询/resultVideos；成功创建及参考图最终生成待账号额度
 GLM官网公开源码 := POST /chatglm/video-api/v1/chat
 GLM请求 := prompt + conversation_id + base_parameter_extra + 可选source_list/advanced_parameter_extra
 GLM查询 := GET /chatglm/video-api/v1/chat/status/{id} 与 GET /chatglm/video-api/v1/chat/{id}
 GLM结果 := output.file_list；参考图使用/video-api/v1/static/upload
 GLM实测 := source_list为ID数组，创建result.chat_id；查询status=finished、平铺video_url/cover_url；兼容output.file_list
-证据边界 := 首轮只核查；本次豆包/GLM独立任务已生成/下载/播放，Qwen积分不足；主AI协议用隔离Responses测试验证
+证据边界 := 首轮只核查；本次豆包/GLM独立任务已生成/下载/播放，Qwen新入口查询/下载/播放通过，新提交明确15004额度不足；主AI协议用隔离Responses测试验证
 ```
 
 
@@ -93,4 +93,34 @@ Qwen核查修正 := 用户确认HappyHorse可用，撤回本次Wan3.0普通/480p
 入口差异 := 旧chat2.qianwen.com聊天工具错误不能等同create.qianwen.com创作任务失败
 新页观测 := ai-studio-create.qianwen.com的video/function、assets/v1/list、assets/v1/batch/get与WS
 边界 := 只读页面，不二次生成；最终视频Node下载1483029字节，ffprobe确认H264/1280×720/5.162667秒；新入口Node创建/查询尚未接入
+```
+
+## Qwen千问创作入口修复（已确认实施，2026-10-23）
+
+```text
+已有声明 := video-service/jobs/catalog、Qwen账号ticket、workspace参考图上传、原生聊天snap定位
+新增定义 := QwenStudioTask { recordId, scene }；仅私有任务文件持久化定位，不保存认证参数
+认证 := 固定HTTPS千问创作页带当前账号Cookie读取__sm_req_token__的nonceId/signKey；不执行网页脚本
+签名 := 随机browserId与chid、当前毫秒timestamp；MD5(browserId_nonceId_signKey_timestamp_chid)
+请求 := 固定ai-studio-create主机；JSON正文合并业务参数、product=ai_studio、platform=pc和当次认证字段
+模型 := qwen-happyhorse沿用稳定ID，显示HappyHorse1.1，按截留的官网model/rootModel请求，场景由服务端选择；720P/5秒
+创建 := 参考图workspace上传 → 按文本/参考模式构造请求 → POST /api/web/ai/video/function一次 → 保存recordId和可选scene
+查询 := POST /api/web/ai/video/record/query固定原账号和recordId、可选scene；未finish不使用预览
+完成 := resultVideos全部显式作品(downloadUrl/cdnUrl/url)，coverCdnUrl仅作封面；归一化进入原有资产/双端历史
+兼容 := 已登记旧sessionId/reqId的原生任务仍查询旧snap；新SubAI创建不再调用旧聊天工具
+错误 := HTTP/认证/额度/审核/未知状态安全错误；无recordId不重发创建；取消沿用既有signal
+验收 := Node保存票据查询已有真实任务；截留官网创建请求核对参数不重复生成；独立协议/签名/失败/旧任务兼容测试
+```
+
+```text
+官网创建样本 := model=rootModel=happyhorse11；genMode=multi_ref；params(size,resolution=720P,duration=5,attachmentType=1,attachments)
+核查方式 := 独立页拦截创建请求并本地响应，不向上游发送生成；仅一次样本，关闭自建页
+```
+
+```text
+现场Node查询 := 保存ticket → 正式任务adopt(recordId) → 同账号query → finish.resultVideos → 627730字节下载版 → 两端播放器
+现场Node创建 := 仅提交一次，官网code15004；当前余额5/界面费用30，不购买额度或改模型
+错误实现 := HTTP401/403/429映射认证/频率错误；未知正文/HTML/Cookie/签名不传入公开错误
+兼容验收 := 缺scene的recordId查询成功；有scene也保留；重启旧record只查询；旧session/req走原snap
+范围边界 := 独立接口成功创建/参考图最终作品与Android部署后播放仍待验，不把查询成功记作新生成成功
 ```

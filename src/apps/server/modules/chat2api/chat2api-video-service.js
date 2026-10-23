@@ -5,12 +5,14 @@ const { VIDEO_MODELS, resolveVideoModel } = require('./chat2api-video-catalog');
 const { createVideoJobs, videoError } = require('./chat2api-video-jobs');
 const { createGlmAuthHeaders } = require('./chat2api-glm-auth');
 const { createQwenChatUpload } = require('./chat2api-qwen-chat-upload');
+const { createQwenVideoStudio } = require('./chat2api-qwen-video-studio');
 const { inspectNativeVideos } = require('./chat2api-native-videos');
 const { decodeChatImage } = require('./chat2api-chat-media');
 const { normalizeOutputVideos } = require('../../../../core/utils/chat-output-videos');
 
 function createChat2ApiVideoService({ dataStore, providerRegistry, browserBridge, http = axios, adapters = {}, ...limits }) {
     const qwenUpload = createQwenChatUpload({ http });
+    const qwenStudio = createQwenVideoStudio({ http });
     const { buildProviderHeaders, createQwenRequest } = require('./chat2api-provider-adapters');
     async function accountFor(job) {
         const account = await dataStore.getAccount(job.accountId);
@@ -99,17 +101,22 @@ function createChat2ApiVideoService({ dataStore, providerRegistry, browserBridge
         },
         qwen: {
             async start(job, input, account, signal) {
-                const provider = await providerRegistry.getProvider('qwen');
-                const model = resolveVideoModel(job.model); const prepared = createQwenRequest({ messages: [{ role: 'user', content: input.prompt }] }, 'Qwen', provider, buildProviderHeaders(provider, account, 'qwen'));
+                const model = resolveVideoModel(job.model);
                 const attachments = [];
                 for (const image of input.references) { const uploaded = await qwenUpload(image, { account, signal }); attachments.push({ type: 'image', materialId: uploaded.id }); }
-                Object.assign(prepared.data, { ai_tool_scene: 'zaodian_generate_video', sub_scene: '', chat_mode: 'quick',
-                    biz_data: JSON.stringify({ req: { rootModel: model.upstream, prompt: input.prompt, originPrompt: input.prompt, genMode: 'multi_ref',
-                        params: { gen_mode: 'multi_ref', duration: 5, resolution: '720P', size: input.ratio, ...(model.upstream !== 'happyhorse' ? { audio: true } : {}), ...(attachments.length ? { attachments } : {}) } }, bizScene: 'genVideo' }) });
-                const state = await collectQwen(await http.request({ method: 'POST', ...prepared, signal, timeout: 120000, responseType: 'stream' }));
-                return { videos: state.videos, done:!state.pending, upstream: { sessionId: prepared.data.session_id, reqId: prepared.data.req_id, parentReqId: prepared.data.parent_req_id } };
+                // 参照当前创作页的完整业务字段；模型/场景转换由官网完成，不沿旧聊天工具提交。
+                const result = await qwenStudio.request('/api/web/ai/video/function', {
+                    model: model.upstream, rootModel: model.upstream, prompt: input.prompt, originPrompt: input.prompt,
+                    genMode: 'multi_ref', fpFrom: null,
+                    params: { size: input.ratio, resolution: '720P', duration: 5, attachmentType: 1, attachments,
+                        ...(model.upstream !== 'happyhorse11' ? { audio: true } : {}) }
+                }, { account, signal });
+                if (typeof result.recordId !== 'string' || !result.recordId) throw videoError('qwen_video_protocol', '千问创作未返回视频任务标识', 502);
+                return { upstream: { recordId: result.recordId, ...(result.scene ? { scene: result.scene } : {}) } };
             },
             async poll(job, account, signal) {
+                if (job.upstream.recordId) return qwenStudio.query(job.upstream, { account, signal });
+                // 原生聊天已提交的旧任务只查原session/req，不改入口、不再创建。
                 const provider = await providerRegistry.getProvider('qwen');
                 const prepared = createQwenRequest({ messages: [] }, 'Qwen', provider, buildProviderHeaders(provider, account, 'qwen'),
                     { nativeState: { sessionId: job.upstream.sessionId, parentReqId: job.upstream.parentReqId } });

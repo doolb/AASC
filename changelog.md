@@ -1,3 +1,10 @@
+### Qwen千问创作视频接口修复
+
+- ✅ [2026-10-23] Qwen独立生视频改用当前千问创作接口，保留qwen-happyhorse选择ID并显示HappyHorse1.1，默认720P/5秒；不实施Wan3.0/480p变更。
+  - 新增chat2api-qwen-video-studio.js/.test.js，Node用保存票据读取官网nonce/key并按MD5公式签当次请求；创建只提交一次并保存recordId，完成态resultVideos全部进入现有本地资产/双端播放器。认证字段不持久化、不进入公开错误；HTTP/会员/额度/频率/审核错误固定脱敏。旧原生聊天session/req任务仍查原snap。
+  - 修改video-service/catalog、视频测试及npm脚本，官网创建样本截留后只在本地响应、未重复生成。正式Node任务服务查询/保存已有实际作品627,730字节，H.264/1280×720/5.162993秒，双端Chromium解码播放通过；新创建仅调用一次，当前余额5/界面费用30，返回明确15004；完整新生成和参考图最终结果待额度。
+  - 验证视频37/37、Chat2API419/419、最终HTTP/认证边界6/6、实际样片双端2/2；同步chat-video design/spec/task/usage/self-test/todo。servicePackage原已true，保持待构建；未构建/部署、未改APK/依赖，未提交凭据/抓包/样片，未写当前AASC对话。
+
 ### Qwen视频生成现场结论修正
 
 - ✅ [2026-10-23] 按用户更正保留HappyHorse，不实施Wan3.0普通/480p改动；只读当前Vivaldi确认千问创作HappyHorse1.1的橘猫任务生成完成，参数720P/16:9/5秒，Node下载1,483,029字节，ffprobe确认H.264/1280×720/5.162667秒。

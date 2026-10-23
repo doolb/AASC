@@ -3028,3 +3028,14 @@ LLM := 经游戏/SubAI桥收到onVideos，历史保存/重启恢复，后续prev
 浏览器 := 两端同回复多视频、分片/刷新不擦除、实际MP4解码播放、WS模型选择和草稿隔离
 边界 := 豆包/GLM实际样片；Qwen缺积分；主AI三家真实工具/Android部署后实机仍待验
 ```
+
+## Qwen千问创作视频入口回归（2026-10-23）
+
+```text
+认证 := 固定官网bootstrap + 保存票据；独立MD5校验；缺参数/无效Cookie/取消不提交；原始认证字段不入任务文件
+协议 := HappyHorse稳定ID→1.1；model/rootModel、multi_ref、attachmentType=1、720P/5秒与截留官网一致
+状态 := recordId可无scene；processing预览不完成，finish全组resultVideos；错误/无作品/错任务拒绝
+生命周期 := 只创建一次；断连无record中断不重发；新record重启只查，旧session/req仍走snap
+实测 := 正式Node取回已有627730字节H264/720P作品，两端解码；新提交一次明确15004，成功创建待额度
+回归 := 视频37/37、Chat2API419/419、最终认证边界6/6、真实样片浏览器2/2
+```

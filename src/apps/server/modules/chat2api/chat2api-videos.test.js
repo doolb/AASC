@@ -48,7 +48,10 @@ test('GLM已有视频回复断流不能假完成',async()=>{
 });
 
 test('千问额度不足立即失败，不进入空任务轮询，也不换账号/模型',async()=>{
- let calls=0;const service=createChat2ApiVideoService({dataStore:{listAccounts:async()=>[{accountId:'one',providerId:'qwen'}],getAccount:async()=>({accountId:'one',providerId:'qwen',credentials:{ticket:'ticket'}})},providerRegistry:{getProvider:async()=>({id:'qwen',apiEndpoint:'https://chat2.qianwen.com'})},http:{request:async()=>{calls++;return {status:200,data:Readable.from(['data: '+JSON.stringify({data:{messages:[{mime_type:'multi_load/iframe',status:'complete',meta_data:{multi_load:[]},content:'创作积分不足，请购买积分后再试'}]}})+'\n\n'])}}}});
+ let calls=0;const service=createChat2ApiVideoService({dataStore:{listAccounts:async()=>[{accountId:'one',providerId:'qwen'}],getAccount:async()=>({accountId:'one',providerId:'qwen',credentials:{ticket:'ticket'}})},providerRegistry:{getProvider:async()=>({id:'qwen',apiEndpoint:'https://chat2.qianwen.com'})},http:{request:async config=>{
+  if(config.method==='GET')return {status:200,data:'<script>window.__sm_req_token__ = {"nonceId":"nonce","signKey":"key"};</script>'};
+  calls++;return {status:200,data:{code:15004,msg:'当前积分不足'}};
+ }}});
  const job=await service.create({model:'qwen-happyhorse',prompt:'橘猫眨眼'});await assert.rejects(service.wait(job.id),/积分不足/);assert.equal(calls,1);await service.stop();
 });
 

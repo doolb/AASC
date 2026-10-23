@@ -4,7 +4,7 @@ const { videoError } = require('./chat2api-video-jobs');
 const VIDEO_MODELS = Object.freeze([
     { id: 'doubao-video', providerId: 'doubaochat', name: '豆包视频（官网默认）', referenceLimit: 8 },
     { id: 'glm-video', providerId: 'glm', name: '清影（官网默认）', referenceLimit: 2 },
-    { id: 'qwen-happyhorse', providerId: 'qwen', name: 'HappyHorse 1.0', upstream: 'happyhorse', referenceLimit: 9 },
+    { id: 'qwen-happyhorse', providerId: 'qwen', name: 'HappyHorse 1.1', upstream: 'happyhorse11', referenceLimit: 9 },
     { id: 'qwen-wan26', providerId: 'qwen', name: 'Wan 2.6', upstream: 'wan26', referenceLimit: 5 },
     { id: 'qwen-wan27', providerId: 'qwen', name: 'Wan 2.7', upstream: 'wan27', referenceLimit: 5 }
 ].map(Object.freeze));
