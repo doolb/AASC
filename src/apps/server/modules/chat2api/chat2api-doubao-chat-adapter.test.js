@@ -21,6 +21,38 @@ const blockEvent = (blocks) => event('STREAM_CHUNK', { patch_op: [{ patch_object
 const response = (parts) => ({ status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' }, data: Readable.from(parts) });
 const collect = async (stream) => { const chunks = []; for await (const chunk of stream) chunks.push(chunk); return chunks; };
 
+for (const stream of [false, true]) test(`豆包原生仅图${stream ? '流式' : '非流式'}可以完成且忽略头像`, async () => {
+  const block = { block_type: 10060, content: { creation_block: { creations: [
+    { image: { image_ori: { url: 'https://images.test/one.png' } } },
+    { image: { image_ori: { url: 'https://images.test/two.png' } } },
+  ] } } };
+  const adapter = createDoubaoChatAdapter({ httpClient: { request: async () => response([
+    event('SSE_ACK', { ack_client_meta: { conversation_info: { image: 'https://images.test/avatar.png' } } }),
+    blockEvent([block]), blockEvent([block]), event('SSE_REPLY_END')
+  ]) } });
+  const result = await adapter(input({ request: { ...input().request, stream } }));
+  let images;
+  if (stream) {
+    const chunks = await collect(result.stream);
+    assert.equal(chunks[0].choices[0].delta.image_generation.status, 'pending');
+    images = chunks.at(-1).choices[0].delta.images;
+  } else images = result.body.choices[0].message.images;
+  assert.deepEqual(images.map(image => image.url), ['https://images.test/one.png', 'https://images.test/two.png']);
+});
+
+test('豆包生图开始后中断不能刷新签名重复生成，也不提交未完成图片', async () => {
+  let sent = 0; let preparedCount = 0;
+  const adapter = createDoubaoChatAdapter({ prepareNodeRequest: async ({ prepared }) => {
+    preparedCount += 1; return prepared;
+  }, httpClient: { request: async () => {
+    sent += 1;
+    return response([blockEvent([{ block_type: 10060, content: { creation_block: { creations: [] } } }])]);
+  } } });
+  await assert.rejects(adapter(input()), error => error.code === 'doubao_incomplete_response');
+  assert.equal(sent, 1);
+  assert.equal(preparedCount, 1);
+});
+
 test('Cookie-only文字必须补齐Node资料，旧网页transport参数不能恢复兼容分支',async()=>{
  let calls=0;const adapter=createDoubaoChatAdapter({httpClient:{request:()=>{calls++;}},browserTransport:{request:()=>{throw Error('页面不得运行')}}});
  await assert.rejects(adapter(input({account:{credentials:{cookie:COOKIE}}})),e=>e.code==='doubao_node_profile_required'&&e.statusCode===422);assert.equal(calls,0);

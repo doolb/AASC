@@ -721,6 +721,7 @@ const Chat = {
 
     handleTemporaryConversation(data, { renderMessages = true } = {}) {
         if (!data || !data.conversation) return;
+        if (this.session.mode === 'temporary' && ['clear', 'reset'].includes(data.action)) this.abandonStreamingReply();
         const conversation = data.conversation;
         const nextHistoryGroups = Array.isArray(conversation.historyGroups)
             ? conversation.historyGroups
@@ -1300,6 +1301,10 @@ const Chat = {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
         this.requestContextUsage();
+        const scopeKey = JSON.stringify(this.getContextScope());
+        const liveMessages = this.isLoading
+            ? [...messagesContainer.querySelectorAll('#streamingGroup, #streamingAssistant')]
+                .filter(node => node.dataset.chatScope === scopeKey) : [];
         
         let indexedHistory = [];
         if (this.session.mode === 'temporary') {
@@ -1328,8 +1333,14 @@ const Chat = {
             }
         }
         
+        // 原生图片与本次流式文字是同一条回复，生成中保留流式节点，历史不再额外画一份。
+        if (liveMessages.some(node => node.id === 'streamingAssistant')) {
+            indexedHistory = indexedHistory.filter(({ item }) => !(item.imageGeneration?.source === 'main'
+                && item.imageGeneration.requestId === this.activeRequestId));
+        }
         if (indexedHistory.length === 0) {
             messagesContainer.innerHTML = '<div class="chat-empty">暂无聊天记录</div>';
+            if (liveMessages.length) messagesContainer.replaceChildren(...liveMessages);
             return;
         }
         
@@ -1382,6 +1393,11 @@ const Chat = {
         
         for (const button of messagesContainer.querySelectorAll('[data-cancel-image]')) {
             button.addEventListener('click', () => this.cancelImage(button.dataset.cancelImage));
+        }
+        for (const node of liveMessages) {
+            const lastUser = [...indexedHistory].reverse().find(({ item }) => item.role === 'user');
+            if (node.id === 'streamingGroup' && lastUser?.item.content === node.dataset.content) continue;
+            messagesContainer.appendChild(node);
         }
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
@@ -1540,6 +1556,8 @@ const Chat = {
     handleImageMessage(data) {
         const message = data.message;
         if (!message?.id) return;
+        if (message.imageGeneration?.source === 'main'
+            && this.contextIgnoredRequestIds.has(data.requestId || message.imageGeneration.requestId)) return;
         const upsert = list => {
             const index = list.findIndex(item => item.id === message.id);
             if (index >= 0) list[index] = message; else list.push(message);
@@ -1552,10 +1570,25 @@ const Chat = {
             this.roleHistories[role] ||= [];
             upsert(this.roleHistories[role]);
         } else upsert(this.history);
-        const live = [...document.querySelectorAll('#chatMessages .streaming')];
+        if (message.imageGeneration?.source === 'main' && data.requestId === this.activeRequestId && this.isLoading) {
+            const assistant = document.getElementById('streamingAssistant');
+            if (assistant) {
+                let panel = assistant.querySelector('.chat-native-images');
+                if (!panel) {
+                    panel = document.createElement('div'); panel.className = 'chat-message-content chat-image-job chat-native-images';
+                    assistant.insertBefore(panel, document.getElementById('streamingContent'));
+                }
+                panel.dataset.imageStatus = message.imageGeneration.status;
+                const pending = message.imageGeneration.status === 'pending';
+                panel.innerHTML = this.renderMessageImages(message.images)
+                    + (pending ? `正在生成图片…<button type="button" data-cancel-image="${this.escapeHtml(message.id)}">取消生成</button>`
+                        : ['failed', 'cancelled'].includes(message.imageGeneration.status)
+                            ? this.escapeHtml(message.imageGeneration.error || '图片生成已取消') : '');
+                panel.querySelector('[data-cancel-image]')?.addEventListener('click', () => this.cancelImage(message.id));
+                return;
+            }
+        }
         this.renderHistory();
-        const container = document.getElementById('chatMessages');
-        for (const node of live) container?.appendChild(node);
     },
 
     renderMessageImages(images) {
@@ -1890,6 +1923,8 @@ const Chat = {
         const group = document.createElement('div');
         group.className = 'chat-message user streaming';
         group.id = 'streamingGroup';
+        group.dataset.content = userMessage;
+        group.dataset.chatScope = JSON.stringify(this.getContextScope());
         group.innerHTML = `
             <div class="chat-message-header">用户</div>
             <div class="chat-message-content">${this.renderMessageImages(images)}${ChatMarkdown.render(userMessage)}</div>
@@ -1900,6 +1935,7 @@ const Chat = {
         const assistantMsg = document.createElement('div');
         assistantMsg.className = 'chat-message assistant';
         assistantMsg.id = 'streamingAssistant';
+        assistantMsg.dataset.chatScope = JSON.stringify(this.getContextScope());
         assistantMsg.innerHTML = `
             <div class="chat-message-header">${this.escapeHtml(assistantName)}</div>
             <div class="chat-message-content" id="streamingContent"><span class="chat-cursor">|</span></div>
@@ -2260,6 +2296,15 @@ const Chat = {
         }
     },
     
+    /** 清空后使流式节点失效，图片事件与文字分块都不能再补回已清空的回复。 */
+    abandonStreamingReply() {
+        if (this.activeRequestId) this.contextIgnoredRequestIds.add(this.activeRequestId);
+        if (this.contextIgnoredRequestIds.size > 256) this.contextIgnoredRequestIds.delete(this.contextIgnoredRequestIds.values().next().value);
+        this.activeRequestId = null;
+        this.isLoading = false;
+        this.updateSendButton();
+    },
+
     async clearHistory() {
         const mode = this.session.mode;
         // 清空与发消息使用同一显示端选择，旧棋局没有聊天归属时也能精确定位。
@@ -2320,8 +2365,7 @@ const Chat = {
                 throw new Error(data.message || data.error || `清空失败（HTTP ${response.status}）`);
             }
             this.history = Array.isArray(data.history) ? data.history : [];
-            if (this.activeRequestId) this.contextIgnoredRequestIds.add(this.activeRequestId);
-            if (this.contextIgnoredRequestIds.size > 256) this.contextIgnoredRequestIds.delete(this.contextIgnoredRequestIds.values().next().value);
+            this.abandonStreamingReply();
             this.contextUsage = null;
             this.contextRequestId = null;
             this.renderHistory();

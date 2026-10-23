@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const { isDoubaoSession, isReadyDoubaoSession, sessionError } = require('./chat2api-doubao-session');
+const { extractOutputImages, mergeOutputImages } = require('../../../../core/utils/chat-output-images');
 
 const createError = (statusCode, code, message) => {
   const error = new Error(message);
@@ -122,6 +123,10 @@ const getAssistantMessage = (body) => {
 };
 
 const getAssistantText = (message) => extractText(message && message.content);
+const createMessageContent = (message, text = getAssistantText(message)) => [
+  { type: 'output_text', text, annotations: [] },
+  ...extractOutputImages(message).map(image => ({ type: 'output_image', ...(image.dataUrl ? { dataUrl: image.dataUrl } : { image_url: image.url }) })),
+];
 
 const createOutput = (message) => {
   const toolCalls = Array.isArray(message && message.tool_calls) ? message.tool_calls : [];
@@ -137,14 +142,14 @@ const createOutput = (message) => {
         arguments: toolCall.function && toolCall.function.arguments || '',
       });
     }
-    return output;
+    if (!getAssistantText(message) && !extractOutputImages(message).length) return output;
   }
-  return [{
+  return [...output, {
     id: createMessageId(),
     type: 'message',
     status: 'completed',
     role: 'assistant',
-    content: [{ type: 'output_text', text: getAssistantText(message), annotations: [] }],
+    content: createMessageContent(message),
   }];
 };
 
@@ -162,7 +167,7 @@ const createResponseBody = ({ responseId, conversationId, previousResponseId, re
     model: request.model,
     output: textOverride === undefined ? createOutput(message) : [{
       id: messageId || createMessageId(), type: 'message', status: 'completed', role: 'assistant',
-      content: [{ type: 'output_text', text: outputText, annotations: [] }],
+      content: createMessageContent(message, outputText),
     }],
     output_text: outputText,
     ...(typeof reasoningText === 'string' && reasoningText ? { reasoning_text: reasoningText } : {}),
@@ -177,7 +182,9 @@ const createResponseBody = ({ responseId, conversationId, previousResponseId, re
 const createChatHistory = (session, inputMessages, assistantMessage) => [
   ...(Array.isArray(session.history) ? session.history : []),
   ...inputMessages,
-  { role: 'assistant', content: getAssistantText(assistantMessage), ...(assistantMessage.tool_calls ? { tool_calls: assistantMessage.tool_calls } : {}) },
+  { role: 'assistant', content: getAssistantText(assistantMessage),
+    ...(extractOutputImages(assistantMessage).length ? { images: extractOutputImages(assistantMessage) } : {}),
+    ...(assistantMessage.tool_calls ? { tool_calls: assistantMessage.tool_calls } : {}) },
 ];
 
 /**
@@ -412,6 +419,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
     yield { type: 'response.created', response: { ...created, status: 'in_progress', output: [], output_text: '' } };
     let text = '';
     let reasoningText = '';
+    let images = [];
     const toolCalls = new Map();
     let textItemCreated = false;
     const ensureTextItem = () => {
@@ -467,6 +475,15 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
     const upstreamIterable = { [Symbol.asyncIterator]: () => upstream };
     for await (const chunk of upstreamIterable) {
       const delta = chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+      const deltaImages = extractOutputImages(delta);
+      if (deltaImages.length || delta?.image_generation) {
+        images = mergeOutputImages(images, deltaImages);
+        const itemAdded = ensureTextItem();
+        if (itemAdded) yield itemAdded;
+        // 应用扩展：图片状态独立于正文，普通文本事件继续逐块传递。
+        yield { type: 'response.output_images', item_id: outputItemId, output_index: 0,
+          status: delta.image_generation?.status || 'completed', images: deltaImages };
+      }
       const deltaToolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : [];
       for (const deltaToolCall of deltaToolCalls) {
         const toolCall = ensureToolCall(deltaToolCall);
@@ -496,7 +513,8 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
         yield { type: 'response.output_text.delta', item_id: outputItemId, output_index: 0, content_index: 0, delta: content, logprobs: [] };
       }
     }
-    const assistantMessage = toolCalls.size > 0 ? createToolCallMessage() : { role: 'assistant', content: text };
+    const assistantMessage = { ...(toolCalls.size > 0 ? createToolCallMessage() : { role: 'assistant', content: text }),
+      ...(images.length ? { images } : {}) };
     const finalBody = createResponseBody({ responseId, conversationId, previousResponseId, request,
       chatBody: { choices: [{ message: assistantMessage }] }, reasoningTextOverride: reasoningText,
       ...(toolCalls.size > 0 ? {} : { textOverride: text, messageId: outputItemId }) });
@@ -523,7 +541,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
       }
     } else {
       if (textItemCreated) {
-        yield { type: 'response.output_item.done', output_index: 0, item: { id: outputItemId, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text, annotations: [] }] } };
+        yield { type: 'response.output_item.done', output_index: 0, item: { id: outputItemId, type: 'message', status: 'completed', role: 'assistant', content: createMessageContent(assistantMessage, text) } };
       }
       yield { type: 'response.output_text.done', item_id: outputItemId, output_index: 0, content_index: 0, text };
     }

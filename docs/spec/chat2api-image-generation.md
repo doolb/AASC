@@ -121,3 +121,43 @@ SubAI说明 := 用户最终原文，命令示例为SubAI,生图, "提示词"[, �
 无游戏通用说明 := 保持SubAI说明 → 参考图ID → 原角色提示的现有顺序
 约束 := 只调整提示及拼接；现有CSV解析、任务调度、取消和图片展示保持现有实现
 ```
+
+## 2026-10-23 主模型原生图片（已确认实施）
+
+```text
+原生输出 := 文字、思考、images[{url或dataUrl}]及image_generation状态并行；仅图也为有效回复
+Provider采集 := GLM读取image内容且finish确认，豆包读取creation_block/image_ori且总结束确认，Qwen按作品display_list去重
+生成中 := 仅收到明确生图卡片/creation_block时报告pending，不通过普通文字猜测
+Qwen续查 := 仅检测到pending生图卡片后，沿原prepared请求调用snap，完成或超时/取消结束，禁止重新提交生成
+Responses扩展 := response.output_images事件携带status及本次图片；完成消息content含output_image，URL或dataUrl保持至应用保存
+Responses持久 := 会话历史记录images；文本与工具内容仍保留；失败不能提交completed
+LLM接收 := 流式消费图片事件及completed/output_item图片，非流式提取output_image/image_generation_call，归一化去重
+游戏/SubAI桥 := onImages独立转发，游戏多轮共享本次图片生命周期；不把图片转换为文字或语音
+应用保存 := 第一次pending/图片通知创建同一原生回复记录，下载到chat-images，最终文字写回该记录，错误/取消保留状态
+图片消息 := 原有chatImageMessage携带requestId，双端将本次原生图片显示到对应流式回复；最终历史按同一ID恢复
+删除/清空 := 更新前必须确认记录存在，晚到内容不得复活；取消只终止原图片任务，不补发生成
+验收 := 图文/仅图/多图去重、三个Provider、流式/非流式Responses、双桥、保存恢复及取消/失败
+```
+
+```text
+迟到首图保护 := 每次创建占位/更新/最终保存前检查原用户消息仍在权威历史，临时会话ID仍相同；不依赖当前模型配置
+已清空 := 原消息不存在 → 中断本请求signal → 不创建首个图片占位，也不写最终助手消息
+重启中断 := pending主模型图片标interrupted时保留已有正文，另附中断说明
+```
+
+## 主模型原生图片已实现接口与验证
+
+```text
+公共图片工具 := chat-output-images归一化https/dataUrl、明确图片字段与原生base64结果；文字内容单独提取，按URL/dataUrl去重
+原生协议 := chat2api-native-images只读GLM的image、豆包creation_block/image_ori、Qwen作品卡片；不匹配正文链接/头像
+提供器 := 生成pending只发一次，原流完整完成后才交付图片；仅图非空可成功；Qwen未完成原任务snap，不重新生成
+Responses := delta.images/image_generation → response.output_images{status,images}；完成消息content追加output_image；私有会话保留images
+LLM := 流式图片事件、output_item.done、completed及非流式图片都归一化；无正文但有图仍成功
+重发防护 := 文字/图片/明确生图开始均记为已有输出，中断后不重放；signal穿过三档客户端和HTTP层
+应用生命周期 := native-chat-images持有控制器/下载队列 → 第一次明确事件存占位 → 完成正文更新同ID → 落盘完更新图片与状态
+持久内容 := 本地URL/图片ID + source=main/requestId/status；reasoning/speech/gameTrace随同一记录更新
+双端流式 := chatImageMessage.requestId定位流节点，图片面板独立于正文；匹配范围时保留节点，完成按历史同ID恢复
+清空 := 原用户记录与临时会话均仍有效才接收；首图迟到不重建；已清空请求ID在双端丢弃，控制端清空释放流式节点
+自测 := chat-images30、chat-streaming63、game-chat80、control-clear4；Chat2API385与后续边界43、签名原生针对性通过
+边界 := 官网真实生图与服务包部署另验；本轮不改最终提示词、Android原生或生产依赖
+```

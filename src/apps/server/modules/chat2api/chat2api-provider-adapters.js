@@ -7,6 +7,9 @@ const { createHash, createHmac, randomUUID } = require('crypto');
 const { createBrotliDecompress, createGunzip, createInflate } = require('zlib');
 
 const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
+const { inspectNativeImages } = require('./chat2api-native-images');
+const { extractQwenImages, completeQwenImages } = require('./chat2api-qwen-images');
+const { mergeOutputImages } = require('../../../../core/utils/chat-output-images');
 
 let deepSeekWasmPromise;
 
@@ -498,12 +501,35 @@ const decompressStream = (source, headers = {}) => {
   return source;
 };
 
-const parseSseStream = async function* (source, model, providerId, headers, responseSession) {
+const parseSseStream = async function* (source, model, providerId, headers, responseSession, imageOptions = {}) {
   let qwenContent = '';
   let providerContent = '';
+  let images = [];
+  let imageStarted = false;
+  let imageFinished = false;
+  let lastImageEvent;
   const events = providerId === 'kimi' ? parseGrpcEvents(source, headers) : parseSseEvents(decompressStream(source, headers));
   for await (const data of events) {
+    imageOptions.signal?.throwIfAborted();
     updateNativeState(data, providerId, responseSession);
+    const imageState = inspectNativeImages(providerId, data);
+    if (imageState.started) {
+      images = mergeOutputImages(images, imageState.images);
+      lastImageEvent = data;
+      if (!imageStarted) {
+        imageStarted = true;
+        yield { model, choices: [{ index: 0, delta: { image_generation: { status: 'pending' } }, finish_reason: null }] };
+      }
+    }
+    if (providerId === 'glm') {
+      if (imageStarted && (data.last_error?.code || data.error)) throw Object.assign(new Error('GLM 生图失败'), { code: 'glm_image_failed', statusCode: 502 });
+      if (data.status === 'finish') imageFinished = true;
+    }
+    if (providerId === 'qwen' && imageState.started) {
+      const current = extractQwenImages([data]);
+      images = mergeOutputImages(images, current.images);
+      imageFinished = !current.pending && images.length > 0;
+    }
     if (providerId === 'qwen') {
       const currentContent = extractQwenContent(data);
       if (currentContent === null || currentContent.length <= qwenContent.length) continue;
@@ -538,6 +564,14 @@ const parseSseStream = async function* (source, model, providerId, headers, resp
     const parsed = asOpenAiChunk(data, model);
     if (parsed) yield parsed;
   }
+  if (!imageStarted) return;
+  if (providerId === 'qwen' && !imageFinished) {
+    const complete = await completeQwenImages([lastImageEvent], imageOptions);
+    images = mergeOutputImages(images, complete);
+    imageFinished = true;
+  }
+  if (!imageFinished || !images.length) throw Object.assign(new Error('生成图片响应未完整结束'), { code: 'image_stream_interrupted', statusCode: 502 });
+  yield { model, choices: [{ index: 0, delta: { images, image_generation: { status: 'completed' } }, finish_reason: null }] };
 };
 
 const extractNativeProviderId = (data, providerId) => {
@@ -619,20 +653,32 @@ const normalizeBody = (data, model) => {
   };
 };
 
-const createQwenBody = (content, model, id) => ({
+const createQwenBody = (content, model, id, images = []) => ({
   id: id || `chatcmpl-${Date.now()}`,
   object: 'chat.completion',
   created: Math.floor(Date.now() / 1000),
   model,
-  choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+  choices: [{ index: 0, message: { role: 'assistant', content, ...(images.length ? { images } : {}) }, finish_reason: 'stop' }],
 });
 
-const normalizeQwenBody = async (data, model, headers = {}, responseSession) => {
+/** 流式与非流式共用原生图片消费，避免非流式再走一套会丢图片的文本聚合。 */
+const collectNativeImageBody = async (source, model, providerId, headers, responseSession, imageOptions) => {
+  let content = ''; let id; let images = [];
+  for await (const chunk of parseSseStream(source, model, providerId, headers, responseSession, imageOptions)) {
+    id = chunk.id || id;
+    content += chunk.choices?.[0]?.delta?.content || '';
+    images = mergeOutputImages(images, chunk.choices?.[0]?.delta?.images || []);
+  }
+  return createQwenBody(content.trim(), model, id, images);
+};
+
+const normalizeQwenBody = async (data, model, headers = {}, responseSession, imageOptions) => {
   if (!data || typeof data[Symbol.asyncIterator] !== 'function') {
     const upstreamError = createQwenUpstreamError(data);
     if (upstreamError) throw upstreamError;
     updateNativeState(data, 'qwen', responseSession);
-    return createQwenBody(extractQwenContent(data) || '', model, extractQwenResponseId(data));
+    const images = inspectNativeImages('qwen', data).started ? await completeQwenImages([data], imageOptions) : [];
+    return createQwenBody(extractQwenContent(data) || '', model, extractQwenResponseId(data), images);
   }
   const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
   if (contentType.includes('application/json')) {
@@ -647,7 +693,8 @@ const normalizeQwenBody = async (data, model, headers = {}, responseSession) => 
     const upstreamError = createQwenUpstreamError(parsed);
     if (upstreamError) throw upstreamError;
     updateNativeState(parsed, 'qwen', responseSession);
-    return createQwenBody(extractQwenContent(parsed) || '', model, extractQwenResponseId(parsed));
+    const images = inspectNativeImages('qwen', parsed || {}).started ? await completeQwenImages([parsed], imageOptions) : [];
+    return createQwenBody(extractQwenContent(parsed) || '', model, extractQwenResponseId(parsed), images);
   }
   let content = '';
   let id;
@@ -663,6 +710,11 @@ const normalizeQwenBody = async (data, model, headers = {}, responseSession) => 
 const normalizeNativeBody = async (data, model, providerId, headers, responseSession) => {
   if (!data || typeof data[Symbol.asyncIterator] !== 'function') {
     updateNativeState(data, providerId, responseSession);
+    const nativeImages = inspectNativeImages(providerId, data || {});
+    if (nativeImages.started) {
+      if (data.status !== 'finish' || !nativeImages.images.length) throw Object.assign(new Error('生成图片响应未完整结束'), { code: 'image_stream_interrupted', statusCode: 502 });
+      return createQwenBody(extractNativeProviderContent(data, providerId) || '', model, extractNativeProviderId(data, providerId), nativeImages.images);
+    }
     return normalizeBody(data, model);
   }
   let content = '';
@@ -906,6 +958,7 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
     responseType: providerId === 'minimax' ? 'json' : isQwen || nativeRequest || request.stream === true ? 'stream' : 'json',
     decompress: isQwen || nativeRequest ? false : undefined,
     timeout: 120_000,
+    signal: context.signal,
     validateStatus: () => true,
   });
   if (response.status < 200 || response.status >= 300) {
@@ -923,11 +976,16 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
       return { body: createQwenBody(answer.content, request.model, initial.chatId), nativeState: responseSession?.nativeState || {} };
     }
   }
+  const imageOptions = { http: tracedHttpClient, prepared: qwenRequest, headers: qwenRequest?.headers, signal: context.signal };
   if (request.stream === true) {
     const source = response.data && typeof response.data[Symbol.asyncIterator] === 'function' ? response.data : Readable.from([JSON.stringify(response.data)]);
-    return { stream: parseSseStream(source, request.model, providerId, response.headers, responseSession), nativeState: responseSession?.nativeState || {} };
+    return { stream: parseSseStream(source, request.model, providerId, response.headers, responseSession, imageOptions), nativeState: responseSession?.nativeState || {} };
   }
-  if (isQwen) return { body: await normalizeQwenBody(response.data, request.model, response.headers, responseSession), nativeState: responseSession?.nativeState || {} };
+  if (['qwen', 'glm'].includes(providerId) && response.data?.[Symbol.asyncIterator]
+      && !String(response.headers?.['content-type'] || '').includes('application/json')) {
+    return { body: await collectNativeImageBody(response.data, request.model, providerId, response.headers, responseSession, imageOptions), nativeState: responseSession?.nativeState || {} };
+  }
+  if (isQwen) return { body: await normalizeQwenBody(response.data, request.model, response.headers, responseSession, imageOptions), nativeState: responseSession?.nativeState || {} };
   if (nativeRequest) return { body: await normalizeNativeBody(response.data, request.model, providerId, response.headers, responseSession), nativeState: responseSession?.nativeState || {} };
   return { body: normalizeBody(response.data, request.model), nativeState: responseSession?.nativeState || {} };
 };

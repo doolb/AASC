@@ -51,6 +51,9 @@ function createGameChatStream({ callbacks, filterText, isUnsafe, currentGame, si
             ? /(?:^|\n)\s*(?:Game:|GameUser:|GameAI:)|<Game:/u
             : /(?:^|\n)\s*Game:|<Game:/u;
         return {
+            onImages(event) {
+                if (current()) callbacks.onImages?.(event);
+            },
             onChunk(chunk, fullMessage, fullReasoning) {
                 if (!current() || hold) return;
                 raw = typeof fullMessage === 'string' ? fullMessage : raw + String(chunk || '');

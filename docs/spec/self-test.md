@@ -2955,3 +2955,16 @@ npm run test:chat-images := 生图指令/图片任务/模型面板 + 请求取�
 ```
 
 执行结果：`npm run test:chat-images` 23/23，`npm run test:game-chat` 80/80，均通过。
+
+## 2026-10-23 主模型原生图片自测
+
+```text
+Provider := GLM/Qwen/豆包合成流，仅图/混合/多图/去重/缺完成拒绝；豆包启用prepareNodeRequest验证生图后不重签重发
+Qwen := processing只查询原prepared请求snap，req_id/session_id/messages一致；多卡片须全部完成，取消后不继续查询
+Responses := 流式图片状态与正文并行，非流式仅图成功；完成输出与会话历史一致，中断无completed/半轮历史
+LLM真实模块 := 隔离用户配置子进程，经过实际游戏/SubAI双桥仍发布图片，生图开始后ECONNRESET仅发送一次，重启保留已有说明
+应用持久 := 一条主模型回复记录、落盘本地URL、多图与重复事件去重；部分失败保留成功图片；清空前后迟到均不复活
+浏览器 := 实际Chat/DisplayChat模块保留独立图片面板，文字分片/历史刷新不擦图；最终同一气泡，多图历史恢复，清空/切范围不留旧流
+结果 := chat-images30/30、chat-streaming63/63、game-chat80/80、chat-clear-history4/4；Chat2API385/385及后续原生边界43/43，豆包签名针对性通过
+范围 := 合成Provider/独立临时目录和Chromium，无当前对话测试消息、无官网真实生图、无APK或服务包部署
+```

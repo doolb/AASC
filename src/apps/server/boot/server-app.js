@@ -24,6 +24,7 @@ const { createGomokuDisplayDemoService, isLoopbackAddress } =
 const { createSubAiChatBridge } = require('../modules/sub-ai/sub-ai-chat-bridge');
 const { createSubAiTaskService } = require('../modules/sub-ai/sub-ai-task-service');
 const { createChatImageAssets } = require('../modules/sub-ai/chat-image-assets');
+const { createNativeChatImages } = require('../modules/sub-ai/native-chat-images');
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createChatContextUsageService, resolveChatContextOptions, normalizeContextScope } = require('../modules/chat/chat-context-usage');
 const { createChatHistoryClearService } = require('../modules/chat/chat-history-clear-service');
@@ -11599,18 +11600,24 @@ async function handleChatMessage(options) {
     const gameTrace = [];
     const imageScope = { mode: messageMode, target: messageTarget, sessionId: effectiveSessionId,
         templateId: effectiveTemplateTarget || 'default', profileName: userMessageRecord.profileName, replyToMessageId: userMessageRecord.id };
-    const imageTasks = createSubAiTaskService({ chat, assets: chatImageAssets, scope: imageScope, controllers: chatImageControllers,
-        generate: (input, options) => chatModelTierService.generateImage(input, options),
-        publish: message => {
-            if (isTemporaryConversation && effectiveTemporaryConversationId === temporaryConversation.id) {
-                const index = temporaryConversation.messages.findIndex(item => item.id === message.id);
-                if (index < 0) appendTemporaryConversationMessage(message, effectiveTemporaryConversationId);
-                else { temporaryConversation.messages[index] = { ...message }; broadcastTemporaryConversation('update'); }
-            }
-            const payload = { type: 'chatImageMessage', message };
-            broadcastToControls(payload);
-            if (preferredDisplayId) sendToDisplay(preferredDisplayId, payload);
+    const publishChatImage = message => {
+        if (isTemporaryConversation && effectiveTemporaryConversationId === temporaryConversation.id) {
+            const index = temporaryConversation.messages.findIndex(item => item.id === message.id);
+            if (index < 0) appendTemporaryConversationMessage(message, effectiveTemporaryConversationId);
+            else { temporaryConversation.messages[index] = { ...message }; broadcastTemporaryConversation('update'); }
         }
+        const payload = { type: 'chatImageMessage', message,
+            ...(message.imageGeneration?.source === 'main' ? { requestId: effectiveRequestId } : {}) };
+        broadcastToControls(payload);
+        if (preferredDisplayId) sendToDisplay(preferredDisplayId, payload);
+    };
+    const nativeImages = createNativeChatImages({ chat, assets: chatImageAssets,
+        scope: { ...imageScope, name: effectiveTemplateTarget || '助手' }, requestId: effectiveRequestId,
+        publish: publishChatImage, controllers: chatImageControllers,
+        isCurrent: () => (!isTemporaryConversation || effectiveTemporaryConversationId === temporaryConversation.id)
+            && chat.getHistory().some(message => message.id === userMessageRecord.id) });
+    const imageTasks = createSubAiTaskService({ chat, assets: chatImageAssets, scope: imageScope, controllers: chatImageControllers,
+        generate: (input, options) => chatModelTierService.generateImage(input, options), publish: publishChatImage
     });
     const referenceImages = chat.getHistory().filter(item => item.mode === messageMode
         && (item.templateId || 'default') === (effectiveTemplateTarget || 'default')
@@ -11626,6 +11633,7 @@ async function handleChatMessage(options) {
         internalSignal: internalGameUpdate,
         options: {
         tierOverride,
+        signal: nativeImages.signal,
         onContextUsage: usage => {
             const payload = { type: 'chatContextUsage', requestId: effectiveRequestId, live: true,
                 scope: normalizeContextScope({ mode: messageMode, target: messageTarget, sessionId: effectiveSessionId }), usage };
@@ -11646,6 +11654,9 @@ async function handleChatMessage(options) {
             : null,
         images
     }, callbacks: {
+        onImages: event => {
+            nativeImages.receive(event);
+        },
         onGameProtocol: entry => {
             gameTrace.push(entry);
             const payload = { type: 'chatGameProtocol', requestId: effectiveRequestId,
@@ -11756,9 +11767,12 @@ async function handleChatMessage(options) {
             pendingTtsDeliveryPromises.push(deliveryPromise);
         },
         onComplete: (fullMessage, history, reasoning, speech) => {
-            if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
+            if (!nativeImages.isCurrent() || nativeImages.signal.aborted) {
+                nativeImages.fail('聊天已清空或取消');
+                return;
+            }
             if (!isTemporaryConversation || effectiveTemporaryConversationId === temporaryConversation.id) {
-                const assistantMessageRecord = chat.addMessage({
+                const finalRecord = {
                     role: 'assistant',
                     name: effectiveTemplateTarget || '助手',
                     content: fullMessage,
@@ -11771,8 +11785,10 @@ async function handleChatMessage(options) {
                     target: messageTarget,
                     sessionId: effectiveSessionId,
                     templateId: effectiveTemplateTarget || 'default'
-                });
-                if (isTemporaryConversation) {
+                };
+                const assistantMessageRecord = nativeImages.hasRecord()
+                    ? nativeImages.complete(finalRecord) : chat.addMessage(finalRecord);
+                if (isTemporaryConversation && assistantMessageRecord && !nativeImages.hasRecord()) {
                     appendTemporaryConversationMessage(assistantMessageRecord, effectiveTemporaryConversationId);
                 }
             }
@@ -11801,6 +11817,7 @@ async function handleChatMessage(options) {
             }
         },
         onError: (error) => {
+            nativeImages.fail(error);
             sendChatResponse({
                 type: 'chatResponse',
                 requestId: effectiveRequestId,
@@ -11815,6 +11832,7 @@ async function handleChatMessage(options) {
         await streamReply();
     } finally {
         try {
+            await nativeImages.wait();
             if (ttsScheduler) await ttsScheduler.waitForIdle();
             await Promise.allSettled(pendingTtsDeliveryPromises);
         } finally {

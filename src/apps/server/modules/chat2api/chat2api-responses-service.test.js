@@ -21,6 +21,45 @@ const createFakeSessionStore = () => {
   };
 };
 
+for (const stream of [false, true]) test(`Responses原生多图${stream ? '流式' : '非流式'}完成态与会话历史一致`, async () => {
+  const images = [{ url: 'https://images.test/a.png' }, { url: 'https://images.test/b.png' }];
+  const sessionStore = createFakeSessionStore();
+  const service = createChat2ApiResponsesService({ sessionStore, coreAdapter: { forwardChatCompletion: async () => ({
+    ...(stream ? { stream: (async function* () {
+      yield { choices: [{ delta: { image_generation: { status: 'pending' } } }] };
+      yield { choices: [{ delta: { content: '两张猫图。' } }] };
+      yield { choices: [{ delta: { images, image_generation: { status: 'completed' } } }] };
+      yield { choices: [{ delta: { images } }] };
+    })() } : { body: { choices: [{ message: { role: 'assistant', content: '', images } }] } }),
+    providerId: 'qwen', accountId: 'synthetic', actualModel: 'Qwen', nativeState: {},
+  }) } });
+  const result = await service.createResponse({ model: 'Qwen', input: '画猫', stream });
+  let body = result.body;
+  if (stream) {
+    const events = []; for await (const event of result.stream) events.push(event);
+    assert.equal(events.find(event => event.type === 'response.output_images').status, 'pending');
+    assert.equal(events.find(event => event.type === 'response.output_text.delta').delta, '两张猫图。');
+    body = events.at(-1).response;
+    assert.equal(events.find(event => event.type === 'response.output_item.done').item.content.filter(part => part.type === 'output_image').length, 2);
+  }
+  const { extractOutputImages } = require('../../../../core/utils/chat-output-images');
+  assert.deepEqual(extractOutputImages(body), images);
+  assert.deepEqual(sessionStore.sessions.get(body.conversation.id).history.at(-1).images, images);
+});
+
+test('原生图片流中断不发送response.completed或提交半轮历史', async () => {
+  const sessionStore = createFakeSessionStore();
+  const service = createChat2ApiResponsesService({ sessionStore, coreAdapter: { forwardChatCompletion: async () => ({
+    stream: (async function* () { yield { choices: [{ delta: { image_generation: { status: 'pending' } } }] }; throw new Error('图片流中断'); })(),
+    providerId: 'qwen', accountId: 'synthetic', actualModel: 'Qwen', nativeState: {},
+  }) } });
+  const result = await service.createResponse({ model: 'Qwen', input: '画猫', stream: true });
+  const events = [];
+  await assert.rejects(async () => { for await (const event of result.stream) events.push(event); }, /图片流中断/);
+  assert.equal(events.some(event => event.type === 'response.completed'), false);
+  assert.equal([...sessionStore.sessions.values()].some(session => session.history?.length), false);
+});
+
 test('Responses 非流式保留独立思考，回答与续接历史不混入思考', async () => {
   const sessionStore = createFakeSessionStore();
   const service = createChat2ApiResponsesService({

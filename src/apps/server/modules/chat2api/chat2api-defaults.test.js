@@ -22,7 +22,7 @@ const legacyQwen = { id: 'legacy-qwen', name: '虚构测试账号', providerId: 
 
 test('空映射使用含三档专用别名的内置规则，未知模型保持原值', async () => {
   const mapper = createChat2ApiModelMapper({ dataStore: { readCollection: async () => [] } });
-  assert.equal(DEFAULT_MODEL_MAPPINGS.length, 12);
+  assert.equal(DEFAULT_MODEL_MAPPINGS.length, 17);
   for (const rule of DEFAULT_MODEL_MAPPINGS) {
     const resolved = await mapper.resolveModel(rule.model.toUpperCase());
     assert.equal(resolved.actualModel, rule.actualModel);
@@ -33,6 +33,8 @@ test('空映射使用含三档专用别名的内置规则，未知模型保持�
   assert.equal((await mapper.resolveModel('Qwen3.6-Flash')).actualModel, 'Qwen3.6-Flash');
   assert.equal((await mapper.resolveModel('aasc-qwen-flash')).actualModel, 'Qwen3.7');
   assert.equal((await mapper.resolveModel('doubao-think')).actualModel, 'doubao');
+  assert.equal((await mapper.resolveModel('aasc-glm-mini')).actualModel, 'glm-5.3-flash');
+  assert.equal((await mapper.resolveModel('aasc-glm-pro')).actualModel, 'glm-5.3');
 });
 
 test('豆包普通别名经过内置Provider调度后仍发送思考0目标', async () => {
@@ -69,7 +71,7 @@ test('自定义精确与通配规则覆盖内置及Provider规则，保留账号
 
 test('有效默认列表只读，保存覆盖大小写去重，删除后恢复默认', async t => {
   const { store, options } = await fixture(t);
-  assert.equal((await store.listEffectiveModelMappings()).length, 12);
+  assert.equal((await store.listEffectiveModelMappings()).length, 17);
   assert.deepEqual(await store.listModelMappings(), []);
   await assert.rejects(fs.stat(path.join(options.rootDir, 'model-mappings.json')), { code: 'ENOENT' });
   await store.saveModelMapping({ model: 'aasc-qwen-mini', actualModel: 'first', providerId: 'qwen', builtinDefault: true });

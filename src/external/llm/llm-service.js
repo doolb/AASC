@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { isSentenceEnd, splitIntoSentences } = require('../../core/utils/sentence-splitter');
 const { createMarkdownSentenceStream } = require('../../core/utils/markdown-speech');
+const { extractOutputImages, extractOutputText, createOutputImageCollector } = require('../../core/utils/chat-output-images');
 
 const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
 const {
@@ -126,7 +127,9 @@ function loadHistory() {
             const msg = sourceMessage;
             if (msg.imageGeneration?.status === 'pending') {
                 msg.imageGeneration = { ...msg.imageGeneration, status: 'interrupted' };
-                msg.content = '图片生成被服务重启中断，请重新发起。';
+                const notice = '图片生成被服务重启中断，请重新发起。';
+                msg.content = msg.imageGeneration.source === 'main' && msg.content && msg.content !== '正在生成图片…'
+                    ? `${msg.content}\n${notice}` : notice;
                 pendingChangedHistoryFiles.add(historyStore.getHistoryFileName(msg));
             }
             // 旧消息没有 profile/template 时归入启动时的当前 profile/default 模板。
@@ -570,24 +573,27 @@ async function requestResponsesWithRecovery(context) {
     const client = context.client || getResponsesClient(context.profile);
     const request = buildResponsesPayload(context);
     try {
-        return await client.request(request);
+        return await client.request(request, { signal: context.signal, requestOptions: { signal: context.signal } });
     } catch (error) {
         // 只有确实携带旧上游引用的请求才需要重建；首轮失败不能重复发送。
         if (!(request.previous_response_id || request.conversation) || !canRebuildResponsesSession(error)) throw error;
         clearResponseReference(context.sessionKey);
-        return client.request(buildResponsesPayload({ ...context, state: null }));
+        context.signal?.throwIfAborted();
+        return client.request(buildResponsesPayload({ ...context, state: null }), { signal: context.signal, requestOptions: { signal: context.signal } });
     }
 }
 
 async function streamResponsesWithRecovery(context, onEvent) {
     const client = context.client || getResponsesClient(context.profile);
     const request = buildResponsesPayload(context);
-    let receivedText = false;
+    let receivedOutput = false;
     try {
         await client.stream(request, (event) => {
-            if (event?.type === 'response.output_text.delta') receivedText = true;
+            if (['response.output_text.delta', 'response.output_images', 'response.image_generation_call.in_progress'].includes(event?.type)
+                || event?.type === 'response.output_item.added' && event.item?.type === 'image_generation_call'
+                || extractOutputImages(event?.item || event?.response).length) receivedOutput = true;
             onEvent(event);
-        });
+        }, { signal: context.signal, requestOptions: { signal: context.signal } });
     } catch (error) {
         const hasReference = Boolean(request.previous_response_id || request.conversation);
         const invalidReference = hasReference && canRebuildResponsesSession(error);
@@ -595,10 +601,12 @@ async function streamResponsesWithRecovery(context, onEvent) {
         if (!invalidReference && !interrupted) throw error;
         // 断连时上游是否接收并完成本轮无法确定；清除旧引用，下轮使用完整本地历史。
         if (hasReference) clearResponseReference(context.sessionKey);
-        if (receivedText) throw error;
+        if (receivedOutput || context.signal?.aborted) throw error;
         // 尚无正文时最多重试一次；新会话使用已构造的完整历史，避免依赖可能失效的引用。
         if (interrupted) await new Promise(resolve => setTimeout(resolve, 300));
-        await client.stream(buildResponsesPayload({ ...context, state: null }), onEvent);
+        context.signal?.throwIfAborted();
+        await client.stream(buildResponsesPayload({ ...context, state: null }), onEvent,
+            { signal: context.signal, requestOptions: { signal: context.signal } });
     }
 }
 
@@ -1292,6 +1300,10 @@ function updateMessage(id, patch) {
     for (const key of ['content', 'images', 'imageGeneration']) {
         if (Object.hasOwn(patch, key)) message[key] = patch[key];
     }
+    for (const key of ['reasoning', 'speech']) {
+        if (typeof patch[key] === 'string') message[key] = patch[key].substring(0, MAX_MESSAGE_LENGTH);
+    }
+    if (Array.isArray(patch.gameTrace)) message.gameTrace = patch.gameTrace.slice(0, 128);
     saveHistory([historyStore.getHistoryFileName(message)]);
     flushHistorySave();
     return message;
@@ -1591,6 +1603,7 @@ async function chat(userMessage, options = {}) {
         let assistantMessage = '';
         let assistantReasoning = '';
         let assistantSpeech = '';
+        let assistantImages = [];
         if (transport.protocol === 'openai-responses') {
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
             const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
@@ -1605,12 +1618,14 @@ async function chat(userMessage, options = {}) {
                 model: profile.model || chatConfig.model,
                 maxTokens: profile.maxTokens || chatConfig.maxTokens,
                 temperature: profile.temperature ?? chatConfig.temperature,
-                stream: false
+                stream: false,
+                signal: options.signal
             });
             const parsedOutput = parseThinkOutput(extractResponsesText(response));
             assistantMessage = parsedOutput.answer;
             assistantReasoning = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.reasoning;
             assistantSpeech = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.speech;
+            assistantImages = extractOutputImages(response);
             saveResponseReference(responseSessionKey, response, fingerprint);
         } else {
             const requestBody = {
@@ -1629,10 +1644,11 @@ async function chat(userMessage, options = {}) {
             });
             const data = JSON.parse(response);
             if (!data.choices?.[0]?.message) throw new Error('Invalid response format from API');
-            const parsedOutput = parseThinkOutput(data.choices[0].message.content || '');
+            const parsedOutput = parseThinkOutput(extractOutputText(data.choices[0].message));
             assistantMessage = parsedOutput.answer;
             assistantReasoning = parsedOutput.reasoning;
             assistantSpeech = parsedOutput.speech;
+            assistantImages = extractOutputImages(data.choices[0].message);
         }
 
         const templateId = templateTarget || useTemplate || 'default';
@@ -1659,6 +1675,7 @@ async function chat(userMessage, options = {}) {
             message: assistantMessage,
             reasoning: assistantReasoning,
             speech: assistantSpeech,
+            ...(assistantImages.length ? { images: assistantImages } : {}),
             history: getHistory()
         };
     } catch (error) {
@@ -1795,6 +1812,7 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
 async function chatStream(userMessage, options = {}, callbacks = {}) {
     const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, historyMessages = null, images = [] } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
+    const outputImages = createOutputImageCollector(callbacks.onImages);
 
     const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
     if (activeProfileConfig?.mode === 'agent') {
@@ -1834,8 +1852,10 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 model: profile.model || chatConfig.model,
                 maxTokens: profile.maxTokens || chatConfig.maxTokens,
                 temperature: profile.temperature ?? chatConfig.temperature,
-                stream: true
+                stream: true,
+                signal: options.signal
             }, (event) => {
+                outputImages.pushEvent(event);
                 if (event?.type === 'response.reasoning_text.delta' && typeof event.delta === 'string') {
                     output.pushReasoning(event.delta);
                 }
@@ -1859,6 +1879,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 message: fullMessage,
                 reasoning: fullReasoning,
                 speech: fullSpeech,
+                ...(outputImages.getImages().length ? { images: outputImages.getImages() } : {}),
                 history: getHistory()
             };
         } catch (error) {
@@ -1897,7 +1918,8 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 
                 try {
                     const parsed = JSON.parse(data);
-                    const content = parsed.choices?.[0]?.delta?.content;
+                    outputImages.pushMessage(parsed.choices?.[0]?.delta);
+                    const content = extractOutputText(parsed.choices?.[0]?.delta);
                     
                     if (content) {
                         output.push(content);
@@ -1926,6 +1948,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
             message: fullMessage,
             reasoning: fullReasoning,
             speech: fullSpeech,
+            ...(outputImages.getImages().length ? { images: outputImages.getImages() } : {}),
             history: getHistory()
         };
     } catch (error) {

@@ -7,6 +7,8 @@ const { normalizeDoubaoRequestProfile } = require('./chat2api-doubao-request-pro
 const { createDoubaoHttp2Client } = require('./chat2api-doubao-http2-client');
 const { createDoubaoSessionFlow } = require('./chat2api-doubao-session');
 const { createDoubaoAndroidBridge } = require('./chat2api-doubao-android-bridge');
+const { inspectNativeImages } = require('./chat2api-native-images');
+const { mergeOutputImages } = require('../../../../core/utils/chat-output-images');
 
 // 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
 const DOUBAO_ORIGIN = 'https://www.doubao.com';
@@ -397,6 +399,8 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
   let reasoning = '';
   let observedConversationId = '';
   let observedSectionId = '';
+  let images = [];
+  let generatingImages = false;
   const appendText = (text, channel) => {
     if (typeof text !== 'string' || !text) return null;
     const delta = text;
@@ -457,6 +461,15 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
     for await (const { event, data } of parseDoubaoEvents(source, limits, control)) {
       const error = getUpstreamError(data, event);
       if (error) throw error;
+      // 用户回显不参与图片采集；生图卡片出现即视为已有上游副作用，后续失败不能自动重复发送。
+      if (event !== 'FULL_MSG_NOTIFY' && !['user', 'human'].includes(data.message?.role)) {
+        const imageState = inspectNativeImages('doubaochat', data);
+        images = mergeOutputImages(images, imageState.images);
+        if (imageState.started && !generatingImages) {
+          generatingImages = true;
+          yield createChunk(id, model, { image_generation: { status: 'pending' } });
+        }
+      }
       switch (event) {
         case 'SSE_ACK': {
           const ack = data.ack_client_meta;
@@ -517,7 +530,8 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
         case 'SSE_REPLY_END': {
           // 现场出现消息结束、答案结束、总结束三类通知；前两类不能提前提交原生状态。
           if (Object.hasOwn(data, 'msg_finish_attr') || Object.hasOwn(data, 'answer_finish_attr')) break;
-          if (!content.trim()) throw doubaoError('doubao_empty_response');
+          if (!content.trim() && !images.length) throw doubaoError('doubao_empty_response');
+          if (generatingImages && !images.length) throw doubaoError('doubao_incomplete_response');
           control.check();
           const completedSession = sessionFlow?.complete(observedConversationId);
           // 只有正文非空且收到显式结束事件才提交观测状态；失败/取消不会污染下一轮会话。
@@ -526,7 +540,7 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
           if (completedSession) Object.assign(nativeState, completedSession);
           try { await onComplete?.(); } catch { /* 验证状态写入失败不改变已经成功的聊天结果。 */ }
           control.check();
-          yield createChunk(id, model, {}, 'stop');
+          yield createChunk(id, model, images.length ? { images, image_generation: { status: 'completed' } } : {}, 'stop');
           return;
         }
         default:
@@ -732,7 +746,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
           try {
             const next = await events.next();
             const delta = next.value?.choices?.[0]?.delta;
-            if (delta?.content || delta?.reasoning_content) execution.receivedOutput = true;
+            if (delta?.content || delta?.reasoning_content || delta?.image_generation || delta?.images?.length) execution.receivedOutput = true;
             return next;
           }
           catch (error) { await signatureScope?.invalidate(error); throw error; }
@@ -745,16 +759,18 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
       if (request.stream === true) return { stream, nativeState, cancel: () => control.cancel() };
       let content = '';
       let reasoning = '';
+      let images = [];
       let id = '';
       for await (const chunk of stream) {
         id = chunk.id;
         content += chunk.choices[0].delta.content || '';
         reasoning += chunk.choices[0].delta.reasoning_content || '';
+        images = mergeOutputImages(images, chunk.choices[0].delta.images || []);
       }
       return {
         body: {
           id, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: request.originalModel || request.model,
-          choices: [{ index: 0, message: { role: 'assistant', content, ...(reasoning ? { reasoning_content: reasoning } : {}) }, finish_reason: 'stop' }],
+          choices: [{ index: 0, message: { role: 'assistant', content, ...(images.length ? { images } : {}), ...(reasoning ? { reasoning_content: reasoning } : {}) }, finish_reason: 'stop' }],
         },
         nativeState,
       };

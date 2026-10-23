@@ -551,6 +551,7 @@
         const history = filterHistoryForCurrentSession(state.history);
         for (const [index, item] of history.entries()) {
             if (!item || typeof item !== 'object') continue;
+            if (item.imageGeneration?.source === 'main' && state.streaming.has(item.imageGeneration.requestId)) continue;
             if (item.user !== undefined || item.assistant !== undefined) {
                 if (item.user) appendMessage('user', item.user);
                 if (item.assistant) {
@@ -870,8 +871,35 @@
         if (message.type === 'chatImageMessage') {
             const record = message.message;
             if (!record?.id || !filterHistoryForCurrentSession([record]).length) return true;
+            if (record.imageGeneration?.source === 'main'
+                && state.ignoredRequestIds.has(String(message.requestId || record.imageGeneration.requestId))) return true;
             const index = state.history.findIndex(item => item.id === record.id);
             if (index >= 0) state.history[index] = record; else state.history.push(record);
+            const live = record.imageGeneration?.source === 'main' && state.streaming.get(String(message.requestId || ''));
+            if (live) {
+                let panel = live.querySelector('.display-chat-native-images');
+                if (!panel) {
+                    panel = document.createElement('div'); panel.className = 'display-chat-message-body chat-image-job display-chat-native-images';
+                    live.appendChild(panel);
+                }
+                panel.dataset.imageStatus = record.imageGeneration.status;
+                panel.replaceChildren();
+                for (const image of record.images || []) {
+                    if (!/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(image.url || '')) continue;
+                    const img = document.createElement('img'); img.src = image.url; img.alt = '聊天图片';
+                    img.style.cssText = 'max-width:100%;max-height:420px;object-fit:contain'; panel.appendChild(img);
+                }
+                if (record.imageGeneration.status === 'pending') {
+                    panel.appendChild(document.createTextNode('正在生成图片…'));
+                    const cancel = document.createElement('button'); cancel.textContent = '取消生成';
+                    cancel.addEventListener('click', () => state.send?.({ type: 'cancelChatImage', messageId: record.id }));
+                    panel.appendChild(cancel);
+                }
+                if (['failed', 'cancelled'].includes(record.imageGeneration.status)) {
+                    panel.appendChild(document.createTextNode(record.imageGeneration.error || '图片生成已取消'));
+                }
+                return true;
+            }
             renderHistory();
             return true;
         }
