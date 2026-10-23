@@ -2981,3 +2981,15 @@ LLM双桥 := 临时用户配置子进程运行实际llm-service/游戏/SubAI桥�
 结果 := check:chat2api392/392、test:chat-streaming66/66、test:chat-images31/31，最后提示异常防护chat-progress2/2
 边界 := 合成凭据/本机HTTP/Chromium/临时目录，无官网操作或APK部署，服务包待构建
 ```
+
+## 聊天图片续聊与媒体开关（2026-10-23）
+
+```text
+控制端自测 := 只读检查两项上传能力控件、当前profile字段为布尔或旧配置缺省；不改配置/不发送聊天
+隔离LLM := raw三轮参考图增加仍携带previous_response_id；图片只上传一次；重启复用引用，失效恢复重新读取本地图
+配置 := 旧配置true、false持久化和权威快照/广播；禁图保留草稿及附件
+Native输入 := Doubao10052/Qwen image-url/GLM file_id；Responses流与非流均保留图片且第二轮只发增量
+签名 := workspace_api查询字段顺序、一次性token；Doubao重签补发不重复上传
+真实账号 := Responses独立新会话，图片识别→只发颜色追问，同一会话完成，不写AASC当前历史
+命令 := npm run test:chat-images / check:chat2api / test:chat-streaming / test:chat-context
+```

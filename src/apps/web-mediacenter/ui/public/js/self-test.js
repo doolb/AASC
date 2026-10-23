@@ -271,6 +271,21 @@ const SelfTest = {
             }
         },
         {
+            id: 'chat_media_capabilities',
+            name: '聊天媒体上传配置',
+            category: '聊天',
+            description: '只读检查图片/视频能力控件及profile字段，不发送测试消息',
+            run: async () => {
+                const controls = ['profileEditSupportsImageUpload', 'profileEditSupportsVideoUpload'];
+                const markupValid = controls.every(id => document.getElementById(id)?.type === 'checkbox');
+                const profilesValid = (window.Chat?.profiles || []).every(profile =>
+                    ['supportsImageUpload', 'supportsVideoUpload'].every(key => profile[key] === undefined || typeof profile[key] === 'boolean'));
+                return { success: markupValid && profilesValid,
+                    message: markupValid && profilesValid ? '媒体能力配置入口正常' : '媒体能力控件或配置类型异常',
+                    details: '缺省true；视频目前仅保存能力开关。图片上传和续聊由隔离自动测试及真实Responses验证。' };
+            }
+        },
+        {
             id: 'chat_streaming_markdown_speech',
             name: '流式分句与Markdown朗读',
             description: '只读检查首句即时产出、Markdown正文与字幕格式、长句不硬切和尾段去重，不发送语音',

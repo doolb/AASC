@@ -73,7 +73,7 @@ function normalizeToken(data, now, stage, fallbackDeviceId) {
         expiresAt, tokens: [...data['eo-clt-bacsft']] };
 }
 
-function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securityEndpoint = SECURITY_ENDPOINT } = {}) {
+function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securityEndpoint = SECURITY_ENDPOINT, businessScene = AUDIO_SCENE, buildSignature = buildSpeechSignature } = {}) {
     const sessions = new Map();
     const randomId = () => `${now()}${randomBytes(8).toString('hex').slice(0, 10)}`;
 
@@ -136,7 +136,7 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
     };
 
     const updateTokens = (session, data, stage) => {
-        const related = Array.isArray(data.unifyRelate) ? data.unifyRelate.find(item => item?.businessScene === AUDIO_SCENE) : null;
+        const related = Array.isArray(data.unifyRelate) ? data.unifyRelate.find(item => item?.businessScene === businessScene) : null;
         const base = normalizeToken(data, now() + session.clockOffset, stage);
         // 官方关联场景不重复返回设备ID，按SDK规则继承基础场景的设备标识。
         const scene = normalizeToken(related, now() + session.clockOffset, stage, base.deviceId);
@@ -152,7 +152,7 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
         const data = await request(session, `/security/external/access/register?chid=${chid}`, 'register', signal,
             { screenResolution: '800x600', cookieEnabled: true, localStorageEnabled: true,
                 timezoneOffset: 'Asia/Shanghai', fontList: [], pluginList: [], language: ['en-US'],
-                unifyRelateGenerate: [AUDIO_SCENE, 'voice_command'], fingerprint: session.fingerprint,
+                unifyRelateGenerate: [businessScene, 'voice_command'], fingerprint: session.fingerprint,
                 businessScene: BASE_SCENE, chid },
             { 'eo-clt-sftcnt': '100', 'clt-acs-caer': 'vrad', 'eo-clt-acs-bx-intss': '2', 'bx-umidtoken': '' });
         updateTokens(session, data, 'register');
@@ -160,14 +160,14 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
 
     const refresh = async (session, signal) => {
         await calibrate(session, signal);
-        const query = new URLSearchParams({ businessScene: BASE_SCENE, unifyRelateGenerate: `${AUDIO_SCENE},voice_command`, chid: randomId() });
+        const query = new URLSearchParams({ businessScene: BASE_SCENE, unifyRelateGenerate: `${businessScene},voice_command`, chid: randomId() });
         const data = await request(session, `/security/external/access/refresh?${query}`, 'refresh', signal, undefined,
             { 'eo-clt-dvidn': session.base.deviceId, 'eo-clt-actkn': session.base.accessToken,
                 'eo-clt-sftcnt': '100', 'clt-acs-caer': 'vrad', 'eo-clt-acs-bx-intss': '2', 'bx-umidtoken': '' });
         updateTokens(session, data, 'refresh');
     };
 
-    return async ({ credential, reqid, timeoutMs, signal }) => {
+    return async ({ credential, reqid, timeoutMs, signal, signData }) => {
         const cookies = parseCookies(credential);
         if (typeof reqid !== 'string' || !reqid || reqid.length > 128 || /[\x00-\x1f\x7f]/u.test(reqid)) throw authError('credentials');
         if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60000) throw authError('timeout');
@@ -205,7 +205,7 @@ function createQwenSigner({ fetchImpl = globalThis.fetch, now = Date.now, securi
                 else if (Math.min(session.base.expiresAt, session.scene.expiresAt) - (now() + session.clockOffset) < 1800000
                     || session.scene.tokens.length <= 20) await refresh(session, controller.signal);
                 checkDeadline();
-                return buildSpeechSignature({ reqid, nonce: randomBytes(8).toString('hex').slice(0, 11), timestamp: now(),
+                return buildSignature({ reqid, signData, nonce: randomBytes(8).toString('hex').slice(0, 11), timestamp: now(),
                     authTime: now() + session.clockOffset, base: session.base, scene: session.scene,
                     kp: session.cookies.get('tongyi_sso_ticket_hash') || '' });
             } catch (error) {

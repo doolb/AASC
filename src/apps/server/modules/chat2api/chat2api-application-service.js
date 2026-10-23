@@ -1,5 +1,5 @@
 'use strict';
-const {assertTextOnly,normalizeTtsInput}=require('./chat2api-content');
+const {assertChatContent,normalizeTtsInput}=require('./chat2api-content');
 const {applicationError,validateParameters,parseSystemControls}=require('./chat2api-system-controls');
 const {canonicalProviderId,getSpeechBinding}=require('./chat2api-model-capabilities');
 const {randomUUID}=require('node:crypto');
@@ -9,7 +9,7 @@ function createChat2ApiApplicationService({modelMapper,speechService}={}) {
     if(!request||typeof request!=='object'||Array.isArray(request))throw applicationError('invalid_request_error','请求必须是对象');
     const requestedModel=request.model??defaultModel;
     if(typeof requestedModel!=='string'||!requestedModel.trim())throw applicationError('invalid_request_error','缺少model');
-    assertTextOnly(request.input);
+    assertChatContent(request.input);
     const mapping=modelMapper?await modelMapper.resolveModel(requestedModel):{actualModel:requestedModel};
     const parsed=parseSystemControls(request.instructions);
     const owner=canonicalProviderId(mapping.preferredProviderId);

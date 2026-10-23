@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
 const { doubaoError } = require('./chat2api-doubao-chat-adapter');
-const {assertTextOnly}=require('./chat2api-content');
+const {assertChatContent,collectImages}=require('./chat2api-content');
 const {getSpeechBinding,canonicalProviderId}=require('./chat2api-model-capabilities');
 
 const createHttpError = (statusCode, code, message) => {
@@ -47,7 +47,7 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
 
   const forwardChatCompletion = async (request, options = {}) => {
     validateRequest(request);
-    for(const message of request.messages)assertTextOnly(message?.content);
+    for(const message of request.messages)assertChatContent(message?.content);
     const requestedMapping = await modelMapper.resolveModel(request.model);
     if(requestedMapping.application==='tts'||getSpeechBinding(requestedMapping.actualModel,requestedMapping.preferredProviderId,requestedMapping.application))throw createHttpError(400,'unsupported_application','语音模型请使用Responses或speech接口');
     let preferredProviderId = canonicalProviderId(options.preferredProviderId || requestedMapping.preferredProviderId);
@@ -74,6 +74,10 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
     );
     if (!selection) {
       throw createHttpError(503, 'no_available_account', `没有可用的模型账号: ${request.model}；请先在 Chat2API 登录对应账号，或恢复已有登录资料`);
+    }
+
+    if (collectImages(request.messages).length && !['doubaochat','qwen','glm'].includes(selection.provider.id)) {
+      throw createHttpError(400,'unsupported_modality','当前网页Provider尚未接入图片上传');
     }
 
     // 豆包文字只支持Node；旧Cookie-only账号在发送前要求补齐，已保存网页开关不再读取。

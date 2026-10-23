@@ -640,7 +640,7 @@ const createDoubaoNodeSignatureCache = (storage) => {
 
 /** 未走通用 rawTrafficLogger：原始网页错误可在任意字符串携带凭据，不能仅依靠键名脱敏。 */
 const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDoubaoHttp2Client(), browserBridge,
-  getTransport = () => 'node-http', getDoubaoWebViewSettings = () => ({}), signatureStore, onChatVerified, onBrowserChatVerified, prepareNodeRequest,
+  getTransport = () => 'node-http', getDoubaoWebViewSettings = () => ({}), signatureStore, onChatVerified, onBrowserChatVerified, prepareNodeRequest, uploadChatImages,
   limits: customLimits = {} } = {}) => {
   // 测试可收紧容量/超时，但调用方不能放宽生产安全上限。
   const limits = Object.fromEntries(Object.entries(DOUBAO_LIMITS).map(([key, maximum]) => [key,
@@ -659,7 +659,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     const sessionFlow = createDoubaoSessionFlow({ account, mode, state: nativeState,
       nodeMode: Boolean(accountCredentials?.nodeProfile), transport: transportMode });
     // 补发沿用同一条消息和唯一标识，不把一次恢复变成另一条新的用户消息。
-    const basePrepared = execution.prepared ||= buildDoubaoRequest({ request, account, provider, actualModel, limits,
+    const basePrepared = execution.prepared ||= buildDoubaoRequest({ request: { ...request, messages: request.messages.map(message => ({ ...message, content: Array.isArray(message.content) ? message.content.filter(p => ['text','input_text'].includes(p.type)).map(p => p.text).join('\n') : message.content })) }, account, provider, actualModel, limits,
       ...(sessionFlow.continuing ? { nativeSession: nativeState } : {}) });
     let prepared = { ...basePrepared, headers: { ...basePrepared.headers } };
     // Responses内部截止时间不可由请求JSON覆盖；排队已经消耗的时间不能重新赋给执行阶段。
@@ -675,6 +675,16 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     let signatureScope;
     try {
       control.check();
+      if (!execution.mediaPrepared) {
+        const { readChatImages, doubaoAttachmentMessage } = require('./chat2api-chat-media');
+        const images = readChatImages(request);
+        if (images.length) {
+          if (!uploadChatImages) throw Object.assign(new Error('豆包图片上传环境不可用'), { code:'unsupported_modality',statusCode:503 });
+          const files = await control.wait(uploadChatImages(images, { account, signal: control.signal }));
+          basePrepared.data.messages.unshift(doubaoAttachmentMessage(files));
+        }
+        execution.mediaPrepared = true;
+      }
       // 两个平台共用浏览器SDK准备及账号签名缓存，正文仍由本轮独立构建并交Node发送。
       if (transportMode === 'node-http' && (prepareNodeRequest || browserBridge?.prepare || process.env.AASC_ANDROID_NODE === '1')) {
         execution.nodeSigning = true;

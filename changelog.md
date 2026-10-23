@@ -1,3 +1,12 @@
+### 聊天图片回传、原会话续聊与媒体能力配置
+
+- ✅ [2026-10-23] 修复参考图清单变化和含图输入导致Responses重建会话，接通历史本地图/独立SubAI结果回传与失效恢复；主模型同会话已有图无需重复上传。
+  - 更新llm-service、llm-media-context、SubAI桥与server-app；保留raw System/User/AI文字，图片独立作为input_image/image_url，成功后保存已传图ID。
+  - 每个LLM配置新增supportsImageUpload/supportsVideoUpload，默认true、false保留；沿现有WS/config.set权威同步。控制端upload/chat增加复选框，禁图保留草稿；视频仅开关，Agent附件明确尚未接入。
+  - 新增chat2api-chat-media/qwen-chat-upload，更新content/application/Responses/core、豆包adapter、Provider上传和runtime；豆包10052、Qwen已签名workspace上传、GLM chat_upload按官网现场协议传附件，Native入口只接图片Data URL。
+  - Chat2API399/399、图片35/35、流式66/66、上下文8/8通过；最后规范化/签名影响范围55/55和两端配置浏览器等10/10通过。更新自测入口、design/spec/task/todo/usage；servicePackage=true待构建，无APK原生修改或本轮部署。
+  - 当前保存账号的独立Responses实测三家带图识别橘猫，第二轮只追问颜色且保持同一会话；Qwen约11/5秒、GLM13/7秒、豆包93/5秒（首轮含上传/浏览器准备），不写AASC当前聊天。GLM首次官网恢复旧会话误写一轮测试问答，未删整段旧会话，精确单轮清理仍待处理。
+
 ### 豆包签名刷新聊天状态提示
 
 - ✅ [2026-10-23] 豆包实际获取/重新获取签名时即时显示灰色状态，成功后提示发送/重试；缓存复用不提示，失败保留原始错误。

@@ -123,3 +123,24 @@ test('控制端清空与切换会话后不保留旧流式图片，也不接收�
     assert.equal(await page.$('#streamingAssistant'), null);
     assert.equal(await page.evaluate(() => Chat.activeRequestId), null);
 });
+
+test('LLM媒体开关沿现有配置提交，旧配置默认开启，禁图时保留输入草稿和附件',async t=>{
+ const fs=require('node:fs/promises');
+ const browser=await puppeteer.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});t.after(()=>browser.close());const page=await browser.newPage();
+ const html=await fs.readFile(path.join(root,'upload.html'),'utf8');
+ await page.setContent('<textarea id="chatInput">看这张图</textarea>');
+ await page.evaluate(html=>{const parsed=new DOMParser().parseFromString(html,'text/html');document.body.append(parsed.getElementById('profileEditor'))},html);
+ await page.addScriptTag({path:path.join(root,'js/chat.js')});
+ await page.addScriptTag({path:path.join(root,'js/self-test.js')});
+ assert.equal(await page.evaluate(async()=> (await SelfTest.tests.find(t=>t.id==='chat_media_capabilities').run()).success),true);
+ const result=await page.evaluate(async()=>{
+  window.showToast=()=>{};Chat.profiles=[{name:'old',apiUrl:'http://model.test',model:'test'}];Chat.activeProfile='old';Chat.editProfile('old');
+  const defaults=[document.getElementById('profileEditSupportsImageUpload').checked,document.getElementById('profileEditSupportsVideoUpload').checked];
+  document.getElementById('profileEditSupportsImageUpload').checked=false;document.getElementById('profileEditSupportsVideoUpload').checked=false;
+  let request;Chat.submitProfiles=async data=>{request=data;return {status:'success'}};Chat.renderProfileSelector=()=>{};
+  await Chat.saveProfile();Chat.profiles=request.profiles;Chat.isLoading=false;Chat.pendingImages=[{dataUrl:'data:image/png;base64,aA=='}];Chat.sendMessage();
+  return {defaults,type:request.type,profile:request.profiles[0],draft:document.getElementById('chatInput').value,images:Chat.pendingImages.length};
+ });
+ assert.deepEqual(result.defaults,[true,true]);assert.equal(result.type,'chatProfilesSave');assert.equal(result.profile.supportsImageUpload,false);assert.equal(result.profile.supportsVideoUpload,false);
+ assert.equal(result.draft,'看这张图');assert.equal(result.images,1);
+});

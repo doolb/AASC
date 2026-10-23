@@ -33,7 +33,10 @@ function createSubAiChatBridge(chat, { dispatch, references = [], signal }) {
                 for (const segment of segments) callbacks.onSentence?.(segment.text, published, '', published, 'answer', segment.subtitle);
             };
             const response = await chat.chatStream(content, { ...options,
-                systemPrompt: buildSubAiSystemPrompt(options.systemPrompt, references) }, {
+                systemPrompt: buildSubAiSystemPrompt(options.systemPrompt, references),
+                systemPromptIdentity: buildSubAiSystemPrompt(options.systemPromptIdentity || options.systemPrompt, []),
+                turnContext: [options.turnContext, references.length ? `可用参考图ID：${references.map(image => image.id).join(',')}` : '']
+                    .filter(Boolean).join('\n') }, {
                 ...callbacks,
                 onChunk(chunk, full, reasoning) {
                     const thought = clean(reasoning, false);

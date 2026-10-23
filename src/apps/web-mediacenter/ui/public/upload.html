@@ -1109,6 +1109,11 @@
                         <option value="openai-completions">OpenAI Chat Completions（/v1/chat/completions）</option>
                     </select>
                     <p class="chat-config-hint">协议属于当前 LLM 服务器。Responses 模式会复用下面 Chat Completions API URL 的服务基址，并使用同一个 API Key。</p>
+                    <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">
+                        <label><input type="checkbox" id="profileEditSupportsImageUpload" checked> 支持上传图片</label>
+                        <label><input type="checkbox" id="profileEditSupportsVideoUpload" checked> 支持上传视频</label>
+                    </div>
+                    <p class="chat-config-hint">按此服务器的模型能力设置。纯文本格式只改变文字组织方式，图片仍作为附件发送。</p>
                     <label style="margin-top:8px;display:block" for="profileEditApiUrl">Chat Completions API URL</label>
                     <input type="text" id="profileEditApiUrl" placeholder="http://192.168.1.12:8080/v1/chat/completions">
                     <p class="chat-config-hint">填写完整的 Chat Completions 地址；Responses 模式会去掉末尾的 /chat/completions 后调用同一服务的 /responses。</p>

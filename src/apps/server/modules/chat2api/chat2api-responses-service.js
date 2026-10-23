@@ -1,3 +1,4 @@
+const { normalizeChatContent } = require('./chat2api-content');
 const { randomUUID } = require('crypto');
 const { isDoubaoSession, isReadyDoubaoSession, sessionError } = require('./chat2api-doubao-session');
 const { extractOutputImages, mergeOutputImages } = require('../../../../core/utils/chat-output-images');
@@ -21,6 +22,7 @@ const extractText = (content) => {
 
 const normalizeInputItem = (item) => {
   if (!item || typeof item !== 'object') return null;
+  if (['input_text','text','output_text','input_image','image_url'].includes(item.type)) return {role:'user',content:normalizeChatContent([item])};
   if (item.type === 'function_call') {
     return {
       role: 'assistant',
@@ -41,7 +43,7 @@ const normalizeInputItem = (item) => {
   }
   const role = item.role || (item.type === 'message' ? 'user' : 'user');
   const normalizedRole = role === 'developer' ? 'system' : role;
-  return { role: normalizedRole, content: extractText(item.content !== undefined ? item.content : item.text) };
+  return { role: normalizedRole, content: normalizeChatContent(item.content !== undefined ? item.content : item.text) };
 };
 
 const normalizeInput = (request) => {
@@ -317,7 +319,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
         return applicationService.createAudioResponse(request,plan,{...options,timeoutMs:remaining});
       }
       request={...request,instructions:plan.instructions};
-    }else require('./chat2api-content').assertTextOnly(request.input);
+    }else require('./chat2api-content').assertChatContent(request.input);
     const inputMessages = normalizeInput(request);
     const piContext = getPiContext(request);
     const { conversationId, session: initialSession } = await resolveConversation(request, piContext);

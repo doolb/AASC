@@ -817,6 +817,7 @@ if (!ANDROID_NODE_POLICY.enabled && config.get('asr.serverEnabled', true) === tr
     asr.init(config.get('asr', {}));
 }
 chat.init(config.get('chat', {}), {
+    readChatImage: image => chatImageAssets.read(image),
     piRuntimeManager,
     codexRuntimeManager,
     offlineNodeMode: OFFLINE_NODE_MODE,
@@ -11498,6 +11499,7 @@ async function handleChatMessage(options) {
     let tierOverride = null;
     try {
         const active = chat.getProfiles().find(profile => profile.name === chat.getActiveProfile());
+        if (images.length && active?.supportsImageUpload === false) throw new Error('当前 LLM 配置不支持上传图片，请移除图片或切换配置');
         if (active?.mode !== 'agent') tierOverride = await chatModelTierService.resolveForChat();
     } catch (error) {
         sendToControl?.({ type: 'chatResponse', requestId: effectiveRequestId,
@@ -11623,7 +11625,9 @@ async function handleChatMessage(options) {
         && (item.templateId || 'default') === (effectiveTemplateTarget || 'default')
         && (item.target || null) === (messageTarget || null)
         && (item.sessionId || 'default') === (effectiveSessionId || 'default'))
-        .flatMap(item => item.images || []).filter(image => image.id).slice(-32);
+        .flatMap(item => (item.images || []).map(image => ({ ...image,
+            origin: item.imageGeneration?.source === 'main' ? 'main' : item.imageGeneration ? 'subai' : 'user',
+            originProfile: item.profileName }))).filter(image => image.id).slice(-32);
     const subAiChat = createSubAiChatBridge(chat, { references: referenceImages,
         dispatch: (call, context) => imageTasks.dispatch(call, context) });
     const streamReply = () => runGameAwareChat({ chat: subAiChat, gameService: gomokuGame,
@@ -11652,7 +11656,8 @@ async function handleChatMessage(options) {
         historyMessages: isTemporaryConversation
             ? getTemporaryConversationHistoryContext(effectiveTemporaryConversationId)
             : null,
-        images
+        images: images.map((image, index) => ({ ...savedInputImages[index], ...image })),
+        contextImages: referenceImages
     }, callbacks: {
         onStatus: status => {
             if (!nativeImages.isCurrent() || nativeImages.signal.aborted) return;

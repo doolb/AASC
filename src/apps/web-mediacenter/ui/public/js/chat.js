@@ -1484,6 +1484,10 @@ const Chat = {
     },
     
     selectImageFile() {
+        if (this.profiles.find(profile => profile.name === this.activeProfile)?.supportsImageUpload === false) {
+            window.showToast('当前 LLM 配置不支持上传图片，请切换配置后再添加', 'warning');
+            return;
+        }
         const input = document.getElementById('chatImageInput');
         if (input) input.click();
     },
@@ -1601,6 +1605,10 @@ const Chat = {
 
     sendMessage() {
         if (this.isLoading) return;
+        if (this.pendingImages.length && this.profiles.find(profile => profile.name === this.activeProfile)?.supportsImageUpload === false) {
+            window.showToast('当前 LLM 配置不支持上传图片，请移除图片或切换配置', 'warning');
+            return;
+        }
 
         if (this.session.mode === 'temporary' && this.temporaryHistoryViewSessionId) {
             window.showToast('历史临时会话只读查看，不能发送消息', 'warning');
@@ -2531,6 +2539,9 @@ const Chat = {
         document.getElementById('profileEditTemperature').value = '';
         document.getElementById('profileEditContextCount').value = '';
         document.getElementById('profileEditApiKey').value = '';
+        for (const id of ['profileEditSupportsImageUpload', 'profileEditSupportsVideoUpload']) {
+            const input = document.getElementById(id); if (input) input.checked = true;
+        }
         this.updateProfileBackendVisibility();
         document.getElementById('profileEditor').style.display = 'block';
     },
@@ -2550,6 +2561,9 @@ const Chat = {
         document.getElementById('profileEditContextCount').value = profile.contextCount || '';
         document.getElementById('profileEditApiKey').value = profile.apiKey || '';
         document.getElementById('profileEditPromptFormat').value = profile.promptFormat || 'openai';
+        for (const [id, key] of [['profileEditSupportsImageUpload', 'supportsImageUpload'], ['profileEditSupportsVideoUpload', 'supportsVideoUpload']]) {
+            const input = document.getElementById(id); if (input) input.checked = profile[key] !== false;
+        }
         this.updateProfileBackendVisibility();
         document.getElementById('profileEditor').style.display = 'block';
     },
@@ -2589,6 +2603,9 @@ const Chat = {
         const existingIdx = this.profiles.findIndex(p => p.name === name);
         const promptFormat = document.getElementById('profileEditPromptFormat').value;
         const profile = { name, protocol, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode };
+        const previous = this.profiles.find(item => item.name === this.editingProfileName);
+        profile.supportsImageUpload = document.getElementById('profileEditSupportsImageUpload')?.checked ?? previous?.supportsImageUpload ?? true;
+        profile.supportsVideoUpload = document.getElementById('profileEditSupportsVideoUpload')?.checked ?? previous?.supportsVideoUpload ?? true;
         if (mode === 'agent') profile.backend = backend;
 
         // 草稿不写入权威列表；下载被取消/失败时旧配置和表单都可直接恢复。

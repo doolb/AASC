@@ -537,3 +537,19 @@ AI/Agent 回复按对应聊天模板的 Provider 和音色覆盖系统 AI 默认
 4. 控制端临时页签增加当前角色选择器。选择角色通过 `startTemporaryConversation` 请求服务端创建/替换临时会话，服务端校验模板并广播权威会话快照；普通临时聊天消息只发送当前 `temporaryConversationId`，不发送角色提示词。
 5. 控制端刷新或多个控制端并行操作时，以服务端广播的 `temporaryConversation` 快照为准；没有当前角色和会话 ID 时禁止发送，避免消息落入未绑定角色的临时会话。
 6. 控制端临时页签用下拉菜单切换历史临时会话；选项显示开始时间、角色和消息数，并始终提供“当前对话”选项。查看历史时只读，选择当前对话后恢复实时消息和发送能力。
+
+## 聊天图片续聊与LLM媒体能力配置（2026-10-23，已实现）
+
+用户要求生成图片后续聊保留原会话与图片上下文，并在每个LLM配置增加图片/视频上传能力开关。已按确认范围修复图片与配置；视频入口另行接入。
+
+隔离复现参考图ID改变systemPrompt指纹，以及含图请求强制禁用续接两处问题后，分离稳定身份systemPromptIdentity和动态turnContext。合法引用继续发送文字/新增图片，成功后持久化已发送图片ID；引用失效则重新读取本地图恢复。主模型同会话已有图不重复上传，独立SubAI结果按ID补图；历史继续保存本地URL。
+
+supportsImageUpload/supportsVideoUpload缺省true、false保留、非法类型拒绝；沿用chatProfilesSave→normalize/config.set→chatProfilesConfig权威广播和初始化。禁图时阻止当前附件发送且保留草稿，历史图不上传但不删除。视频仅配置；Agent图片入口明确未接入。
+
+raw格式保留System/User/AI文字与独立图片附件，不新增system角色。Chat2API保存图片片段并执行实际上传：豆包10052附件与10000文本；Qwen workspace_api签名的oss_token/PUT/callback后image/url；GLM刷新token后chat_upload，再把file_id/image_url放同一user.content。Qwen复用现有校时/令牌机制的独立业务场景，无Android原生修改。Native输入要求Data URL，32图/单图20MiB/总计40MiB，豆包上传器10MiB。
+
+现场使用共享Vivaldi profile观察三家上传协议，再以保存的凭据进行独立Responses两轮“这张图里有什么？”→“它是什么颜色的？”，均识别橘猫且同一会话续接；未写AASC当前聊天。豆包首轮含浏览器准备约93秒、续轮5秒，Qwen11/5秒，GLM13/7秒，仅为本次现场耗时。
+
+GLM第一次官网尝试自动恢复旧网页会话，误写了一轮测试问答；未找到可靠单轮删除入口，保留原会话而未整段删除。此后显式新对话且拦截非空旧conversation_id，完成带图验证。该残留单轮需精确清理，不能当作已清除。
+
+验证见任务和self-test；servicePackage=true待构建，未部署本轮代码或APK。使用说明见usage/chat-media-input.md。

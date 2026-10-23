@@ -385,3 +385,15 @@ test('普通模式删除消息字段是JSON对象映射，不能以空数组替�
   assert.equal(Array.isArray(wire.option.related_deleted_message_ids), false);
   assert.deepEqual(wire.option.related_deleted_message_ids, {});
 });
+
+test('带图消息按10052附件和10000文本发送，签名补发复用已上传资源',async()=>{
+ let uploads=0,sends=0;const bodies=[];
+ const adapter=createDoubaoChatAdapter({prepareNodeRequest:async({prepared})=>prepared,
+ uploadChatImages:async(images,{signal})=>{uploads++;assert.equal(images[0].data.toString(),'hello');assert.equal(signal.aborted,false);return [{name:'cat.png',uri:'tos-cat',width:8,height:8,format:'png'}]},
+ httpClient:{request:async p=>{bodies.push(JSON.parse(JSON.stringify(p.data)));sends++;if(sends===1)return {status:403};return response([blockEvent([textBlock('橘猫')]),event('SSE_REPLY_END')])}}});
+ const result=await adapter(input({request:{...input().request,messages:[{role:'user',content:[{type:'text',text:'这张图里有什么？'},{type:'image_url',image_url:{url:'data:image/png;base64,aGVsbG8='}}]}]}}));
+ assert.equal(result.body.choices[0].message.content,'橘猫');assert.equal(uploads,1);assert.equal(sends,2);
+ assert.deepEqual(bodies[0].messages,bodies[1].messages);assert.equal(bodies[0].messages[0].content_block[0].block_type,10052);
+ assert.equal(bodies[0].messages[0].content_block[0].content.attachment_block.attachments[0].image.uri,'tos-cat');
+ assert.equal(bodies[0].messages[1].content_block[0].block_type,10000);
+});

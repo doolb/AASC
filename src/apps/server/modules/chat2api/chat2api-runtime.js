@@ -54,6 +54,16 @@ const createChat2ApiRuntime = (options = {}) => {
     loadBalancer,
     providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig,
       doubaoBrowserBridge: browserBridge,
+      uploadDoubaoImages: async (images,{account,signal}) => {
+        const port=options.doubaoBrowserBridge || browserPort;
+        if(!port)throw Object.assign(new Error('豆包图片上传环境不可用'),{code:'unsupported_modality',statusCode:503});
+        const uploader=require('./chat2api-doubao-web-media').createDoubaoWebMediaService({
+          bridge:{request:args=>port.request({...args,ephemeral:false})},
+          dataStore:{readCollection:async()=>[account]},accountId:account.accountId });
+        const files=[];
+        for(const image of images)files.push(await uploader.uploadImage({filename:image.filename,data:image.data},{signal}));
+        return files;
+      },
       getDoubaoTransport, getDoubaoWebViewSettings: options.getDoubaoWebViewSettings,
       doubaoSignatureStore: options.doubaoSignatureStore || (dataStore.rootDir
         ? createDoubaoSignatureStore({ rootDir: dataStore.rootDir }) : undefined),

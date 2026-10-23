@@ -6,6 +6,7 @@ const { isSentenceEnd, splitIntoSentences } = require('../../core/utils/sentence
 const { createMarkdownSentenceStream } = require('../../core/utils/markdown-speech');
 const { extractOutputImages, extractOutputText, createOutputImageCollector } = require('../../core/utils/chat-output-images');
 const { normalizeChatProgress } = require('../../core/utils/chat-progress');
+const { equivalentResponsesFingerprint, prepareMediaImages } = require('./llm-media-context');
 
 const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
 const {
@@ -69,6 +70,7 @@ let chatConfig = {
 };
 
 let llmProfiles = [];
+let readChatImage = null;
 let activeProfile = 'default';
 let piRuntimeManager = null;
 let codexRuntimeManager = null;
@@ -247,6 +249,7 @@ function pruneHistorySessions(options = {}) {
 }
 
 function init(config = {}, options = {}) {
+    if (options.readChatImage !== undefined) readChatImage = options.readChatImage;
     localLlmTransportOptions = normalizeLocalLlmTransportOptions(options);
     if (options.piRuntimeManager !== undefined) {
         piRuntimeManager = options.piRuntimeManager;
@@ -326,6 +329,10 @@ function applyProfile(name) {
 function normalizeLlmProfile(profile = {}, fallbackProtocol = 'openai-responses') {
     const normalized = normalizeAgentProfile(profile);
     normalized.protocol = normalizeProfileProtocol(normalized.protocol, fallbackProtocol);
+    for (const [key, label] of [['supportsImageUpload', '支持上传图片'], ['supportsVideoUpload', '支持上传视频']]) {
+        if (profile[key] !== undefined && typeof profile[key] !== 'boolean') throw new Error(`${label}必须为布尔值`);
+        normalized[key] = profile[key] ?? true;
+    }
     return normalized;
 }
 
@@ -490,7 +497,7 @@ function getResponsesFingerprint(options = {}, profile = getActiveProfileConfig(
     return JSON.stringify({
         profileName: profile.name || activeProfile,
         templateId: options.templateTarget || options.useTemplate || 'default',
-        systemPrompt: options.systemPrompt || chatConfig.systemPrompt || '',
+        systemPrompt: options.systemPromptIdentity ?? options.systemPrompt ?? chatConfig.systemPrompt ?? '',
         model: profile.model || chatConfig.model,
         promptFormat: profile.promptFormat || chatConfig.promptFormat || 'openai',
         protocol: normalizeChatTransport(profile).protocol,
@@ -498,16 +505,17 @@ function getResponsesFingerprint(options = {}, profile = getActiveProfileConfig(
     });
 }
 
-function buildResponsesPayload({ messages, userMessage, state, fingerprint, model, maxTokens, temperature, stream = false }) {
-    const hasImageContent = Array.isArray(messages)
-        && messages.some((message) => Array.isArray(message?.content)
-            && message.content.some((part) => part?.type === 'input_image' || part?.type === 'image_url'));
-    const reusable = !hasImageContent && state
-        && state.fingerprint === fingerprint
+function buildResponsesPayload({ messages, userMessage, state, fingerprint, model, maxTokens, temperature, stream = false, currentInput }) {
+    const reusable = state
+        && equivalentResponsesFingerprint(state.fingerprint, fingerprint)
         && (state.latestResponseId || state.conversationId);
+    const lastUser = Array.isArray(messages) ? [...messages].reverse().find(message => message.role === 'user') : null;
+    const media = Array.isArray(lastUser?.content) ? lastUser.content.filter(part => ['input_image', 'image_url'].includes(part?.type)) : [];
+    const incremental = currentInput || [{ role: 'user', content: media.length
+        ? [{ type: 'input_text', text: userMessage }, ...media] : userMessage }];
     const payload = {
         model,
-        input: reusable ? [{ role: 'user', content: userMessage }] : messages,
+        input: reusable ? incremental : messages,
         max_output_tokens: maxTokens,
         temperature,
         stream: Boolean(stream)
@@ -529,7 +537,7 @@ function extractResponsesText(response) {
         .join('');
 }
 
-function saveResponseReference(sessionKeyValue, response, fingerprint) {
+function saveResponseReference(sessionKeyValue, response, fingerprint, sentImageIds = []) {
     const conversationId = response?.conversation?.id || response?.conversation_id;
     const responseId = response?.id;
     if (!conversationId && !responseId) return;
@@ -538,6 +546,7 @@ function saveResponseReference(sessionKeyValue, response, fingerprint) {
         latestResponseId: responseId || responsesSessionStates[sessionKeyValue]?.latestResponseId || '',
         model: response?.model || chatConfig.model,
         fingerprint,
+        sentImageIds,
         updatedAt: Date.now()
     };
     saveResponsesSessionState();
@@ -580,6 +589,7 @@ async function requestResponsesWithRecovery(context) {
         if (!(request.previous_response_id || request.conversation) || !canRebuildResponsesSession(error)) throw error;
         clearResponseReference(context.sessionKey);
         context.signal?.throwIfAborted();
+        if (context.rebuildMessages) Object.assign(context, await context.rebuildMessages());
         return client.request(buildResponsesPayload({ ...context, state: null }), { signal: context.signal, requestOptions: { signal: context.signal } });
     }
 }
@@ -606,6 +616,7 @@ async function streamResponsesWithRecovery(context, onEvent) {
         // 尚无正文时最多重试一次；新会话使用已构造的完整历史，避免依赖可能失效的引用。
         if (interrupted) await new Promise(resolve => setTimeout(resolve, 300));
         context.signal?.throwIfAborted();
+        if (context.rebuildMessages) Object.assign(context, await context.rebuildMessages());
         await client.stream(buildResponsesPayload({ ...context, state: null }), onEvent,
             { signal: context.signal, requestOptions: { signal: context.signal } });
     }
@@ -1361,6 +1372,7 @@ function buildImageMessageContent(text, images, profile = getActiveProfileConfig
         text: String(text || '')
     }];
     for (const image of images) {
+        if (image.id) content.push({ type: responseProtocol ? 'input_text' : 'text', text: `图片ID：${image.id}` });
         if (responseProtocol) {
             content.push({ type: 'input_image', image_url: image.dataUrl });
         } else {
@@ -1368,6 +1380,31 @@ function buildImageMessageContent(text, images, profile = getActiveProfileConfig
         }
     }
     return content;
+}
+
+/** 会话复用只准备新增附件；确需重建时重新读取本地图，不能用增量附件列表冒充完整恢复。 */
+async function prepareChatRequest(userMessage, options, profile) {
+    const responseSessionKey = getResponsesSessionKey(options);
+    const fingerprint = getResponsesFingerprint(options, profile);
+    const state = responsesSessionStates[responseSessionKey];
+    const reusable = normalizeChatTransport(profile).protocol === 'openai-responses' && state
+        && equivalentResponsesFingerprint(state.fingerprint, fingerprint)
+        && Boolean(state.latestResponseId || state.conversationId);
+    const mediaOptions = { current: options.images || [], history: options.contextImages || [],
+        allowed: profile.supportsImageUpload !== false, sameUpstream: reusable,
+        knownIds: state?.sentImageIds || [], profileName: profile.name || activeProfile,
+        readImage: options.readChatImage || readChatImage, signal: options.signal };
+    const media = await prepareMediaImages(mediaOptions);
+    const make = () => ({
+        messages: buildMessages(userMessage, { ...options, profileName: profile.name || activeProfile, images: media.images }),
+        currentInput: [{ role: 'user', content: buildImageMessageContent(
+            [options.turnContext, userMessage].filter(Boolean).join('\n'), media.images, profile) }],
+    });
+    return { ...make(), responseSessionKey, sessionKey: responseSessionKey, fingerprint, state, media,
+        rebuildMessages: async () => {
+            Object.assign(media, await prepareMediaImages({ ...mediaOptions, sameUpstream: false, knownIds: [] }));
+            return make();
+        } };
 }
 
 function buildMessages(userMessage, options = {}) {
@@ -1600,15 +1637,16 @@ async function chat(userMessage, options = {}) {
         const profile = tierOverride ? { ...baseProfile, model: tierOverride.model,
             protocol: 'openai-responses', apiUrl: `http://aasc-chat2api/${tierOverride.providerId}` } : baseProfile;
         const transport = normalizeChatTransport(profile);
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name, onContextUsage: options.onContextUsage });
+        const requestContext = await prepareChatRequest(userMessage, options, profile);
+        const messages = requestContext.messages;
         let assistantMessage = '';
         let assistantReasoning = '';
         let assistantSpeech = '';
         let assistantImages = [];
         if (transport.protocol === 'openai-responses') {
-            const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
-            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
+            const { responseSessionKey, fingerprint } = requestContext;
             const response = await requestResponsesWithRecovery({
+                ...requestContext,
                 messages,
                 userMessage,
                 state: responsesSessionStates[responseSessionKey],
@@ -1627,7 +1665,7 @@ async function chat(userMessage, options = {}) {
             assistantReasoning = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.reasoning;
             assistantSpeech = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.speech;
             assistantImages = extractOutputImages(response);
-            saveResponseReference(responseSessionKey, response, fingerprint);
+            saveResponseReference(responseSessionKey, response, fingerprint, requestContext.media.sentImageIds);
         } else {
             const requestBody = {
                 model: profile.model || chatConfig.model,
@@ -1743,6 +1781,7 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
     let reportedError = false;
 
     try {
+        if (options.images?.length) throw new Error('当前 Agent 入口尚未接入图片附件，请切换直接 LLM 配置');
         const runtimeManager = profile.backend === 'codex' ? codexRuntimeManager : piRuntimeManager;
         if (!runtimeManager) throw new Error(`${profile.backend} Runtime 未初始化`);
         const messages = buildMessages(userMessage, {
@@ -1839,10 +1878,11 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     if (transport.protocol === 'openai-responses') {
         const output = createChatStreamOutput({ onChunk, onSentence });
         try {
-            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name, onContextUsage: options.onContextUsage });
-            const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
-            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
+            const requestContext = await prepareChatRequest(userMessage, options, profile);
+            const messages = requestContext.messages;
+            const { responseSessionKey, fingerprint } = requestContext;
             await streamResponsesWithRecovery({
+                ...requestContext,
                 messages,
                 userMessage,
                 state: responsesSessionStates[responseSessionKey],
@@ -1870,7 +1910,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                     output.push(event.delta);
                 }
                 if (event?.type === 'response.completed') {
-                    saveResponseReference(responseSessionKey, event.response, fingerprint);
+                    saveResponseReference(responseSessionKey, event.response, fingerprint, requestContext.media.sentImageIds);
                 }
             });
             output.finish();
@@ -1899,7 +1939,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     const output = createChatStreamOutput({ onChunk, onSentence });
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name, onContextUsage: options.onContextUsage });
+        const messages = (await prepareChatRequest(userMessage, options, profile)).messages;
         
         const requestBody = {
             model: profile.model || chatConfig.model,

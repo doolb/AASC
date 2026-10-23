@@ -7,6 +7,9 @@ const { createHash, createHmac, randomUUID } = require('crypto');
 const { createBrotliDecompress, createGunzip, createInflate } = require('zlib');
 
 const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
+const { readChatImages, qwenImageMessages } = require('./chat2api-chat-media');
+const { createQwenChatUpload } = require('./chat2api-qwen-chat-upload');
+const { uploadGlmImage } = require('./chat2api-image-upload');
 const { inspectNativeImages } = require('./chat2api-native-images');
 const { extractQwenImages, completeQwenImages } = require('./chat2api-qwen-images');
 const { mergeOutputImages } = require('../../../../core/utils/chat-output-images');
@@ -59,7 +62,7 @@ const getMessageText = (content) => {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content
-    .filter((item) => item && item.type === 'text')
+    .filter((item) => item && ['text','input_text','output_text'].includes(item.type))
     .map((item) => item.text || '')
     .join('\n');
 };
@@ -120,7 +123,7 @@ const createQwenRequest = (request, actualModel, provider, headers, responseSess
       session_id: sessionId,
       sub_scene: 'chat',
       temporary: false,
-      messages: [{ content, mime_type: 'text/plain', meta_data: { ori_query: content } }],
+      messages: [...qwenImageMessages(request.uploadedImages || []), { content, mime_type: 'text/plain', meta_data: { ori_query: content } }],
       from: 'default',
       parent_req_id: nativeState.parentReqId || '0',
       enable_search: false,
@@ -158,7 +161,7 @@ const createRequestId = () => randomUUID();
 const createGlmRequest = (request, actualModel, provider, headers, account, responseSession) => {
   const nativeState = getNativeState(responseSession);
   const origin = getProviderOrigin(provider, 'https://chatglm.cn');
-  const prepared = [{ role: 'user', content: [{ type: 'text', text: `${getMessagesText(request.messages)}\nAssistant: ` }] }];
+  const prepared = [{ role: 'user', content: [{ type: 'text', text: `${getMessagesText(request.messages)}\nAssistant: ` }, ...(request.uploadedImages?.length ? [{ type:'image',image:request.uploadedImages }] : [])] }];
   return {
     url: `${origin}/chatglm/backend-api/assistant/stream`,
     data: {
@@ -921,10 +924,16 @@ const prepareNativeRequest = async ({ httpClient, providerId, provider, account,
     if (responseSession && !nativeState.chatId) nativeState.chatId = chat.chatId;
     return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, chat.chatId, chat.messageId, responseSession);
   }
+  if (providerId === 'glm') {
+    const uploadedImages = [];
+    for (const image of readChatImages(request)) uploadedImages.push(await uploadGlmImage(image, {
+      http:httpClient, headers:{...headers, Authorization:`Bearer ${getProviderToken(preparedAccount)}`}, signal:request.mediaSignal }));
+    request = { ...request, uploadedImages };
+  }
   return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, responseSession);
 };
 
-const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig }) => async ({ request, account, provider, actualModel, context = {}, responseSession }) => {
+const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload }) => async ({ request, account, provider, actualModel, context = {}, responseSession }) => {
   let currentConfig = {};
   if (rawTrafficLogger && typeof getConfig === 'function') {
     try {
@@ -946,6 +955,10 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
     : httpClient;
   const isQwen = providerId === 'qwen';
   const headers = buildProviderHeaders(provider, account, providerId);
+  const images = readChatImages(request);
+  const uploadedImages = [];
+  if (isQwen) for (const image of images) uploadedImages.push(await qwenUpload(image, {account,signal:context.signal}));
+  request = { ...request, uploadedImages, mediaSignal:context.signal };
   const qwenRequest = isQwen ? createQwenRequest(request, actualModel, provider, headers, responseSession) : null;
   const nativeRequest = !isQwen && NATIVE_REQUEST_BUILDERS[providerId]
     ? await prepareNativeRequest({ httpClient: tracedHttpClient, providerId, provider, account, request, actualModel, headers, responseSession })
@@ -991,10 +1004,10 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
 };
 
 const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig, onDoubaoChatVerified,
-  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport, getDoubaoWebViewSettings, doubaoSignatureStore } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
+  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport, getDoubaoWebViewSettings, doubaoSignatureStore, uploadDoubaoImages, qwenUpload = createQwenChatUpload({http:httpClient}) } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
   providerId === 'doubaochat' ? createDoubaoChatAdapter({ httpClient, browserBridge: doubaoBrowserBridge,
-    getTransport: getDoubaoTransport, getDoubaoWebViewSettings, signatureStore: doubaoSignatureStore, onChatVerified: onDoubaoChatVerified,
-    onBrowserChatVerified: onDoubaoBrowserChatVerified }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig }),
+    getTransport: getDoubaoTransport, getDoubaoWebViewSettings, signatureStore: doubaoSignatureStore, uploadChatImages:uploadDoubaoImages, onChatVerified: onDoubaoChatVerified,
+    onBrowserChatVerified: onDoubaoBrowserChatVerified }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload }),
 ]));
 
 module.exports = { PROVIDER_IDS, createChat2ApiProviderAdapters, buildProviderHeaders, buildRequestBody, createQwenRequest, parseSseStream };

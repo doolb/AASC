@@ -2122,3 +2122,61 @@ handleChatMessage(options):
 加载历史、完成回复、清空、切换对象/会话/profile、重连 → 刷新统计；只应用当前请求及范围的快照；清空后的旧聊天推送不复活
 验证 := raw/OpenAI同一请求组装、裁剪和上限、清空与跨会话隔离、GM往返、两端显示与迟到回包
 ```
+
+## 已确认伪代码：媒体能力和图片续聊（2026-10-23）
+
+```text
+已观察 := 参考图IDs变化 → systemPrompt变化 → fingerprint变化 → 无previous_response_id；同ID第三轮正常复用
+独立禁用 := buildResponsesPayload发现input_image/image_url时忽略旧引用，当前也导致媒体新开会话
+配置 := supportsImageUpload/supportsVideoUpload缺省true，显式false保留；随现有LLM profile权威流程保存和初始化补发
+身份 := 稳定角色/模型/协议/服务地址仍控制会话；本轮参考图清单不充当会话身份
+续聊 := 合法旧引用 + 本轮新增文字/附件 → previous_response_id，不因媒体存在强制新会话
+媒体上下文 := 原生同会话保留上游已有图；独立SubAI结果/恢复所需图片从本地资产读取并按后端协议传入，排除本地路径泄漏和重复上传
+原始格式 := 保留raw System/User规范，不新增system角色消息；动态参考图信息随本轮上下文更新，不丢用户原话
+入站 := Responses/Chat2API保留图片类型，Provider能力检查后上传/引用；不再先转空文字；不支持时明确错误
+开关 := 默认允许，关闭媒体阻止相应发送并给出说明；既有聊天图片存储/显示不因关闭而删除
+视频 := 本轮只做默认true的能力开关和配置保存，实际上传入口后续接入
+验证计划 := 生成图→下一轮同会话，图IDs变化仍续接，恢复本地图片、能力默认/关闭/旧配置迁移、WS权威同步、失败与不静默丢媒体
+```
+
+```text
+能力规范化 := normalizeLlmProfile中缺省true，显式false保留，非布尔值拒绝；旧配置读取与保存均补齐
+raw附件 := 保留原System/User/AI文字，input_text后加input_image；Chat Completions使用text/image_url
+当前图片关闭 := 在保存用户记录/上传前给出明确错误，前端保留未发送草稿；历史图片显示不删除，SubAI独立生图不受此开关限制
+会话身份 := SubAI桥提供不含参考图清单的稳定systemPromptIdentity，本轮参考图清单由动态上下文传递
+图片续接 := 不再因input_image/image_url禁用previous_response_id，当前新增图片和文字一起构造增量input
+本地历史 := 从当前会话图片资产读取原图，不直接传本地相对URL；同一原生会话自己生成图优先沿用上游上下文
+```
+
+```text
+附件选择 := 当前会话contextImages + 本次images按稳定本地ID去重；关闭上传时拒绝当前显式附件、跳过历史图传送
+附件补齐 := 同上游复用时只传尚未知的外部图片；本配置主模型原生生成图片已在上游，沿原会话直接使用
+已知图片 := Responses私有引用额外保存sentImageIds，不存图片字节；成功完成后更新，失败不提前标记
+重建补图 := 引用失效/无输出断连重建时重新调用媒体准备，读取配置范围内本地图并重建完整请求，不使用仅增量附件冒充恢复
+动态信息 := SubAI桥提供systemPromptIdentity和turnContext；实际raw正文保留，动态参考图清单进入本轮增量input
+旧引用兼容 := 仅识别本应用SubAI固定说明中的参考图ID行变化，其他角色/模型/服务变更仍不复用
+官网已观察 := GLM /file/chat_upload后，user.content为text + image[]，含file_id/image_url/file_name/file_size/order/width/height
+```
+
+### 网页图片入站适配（官网现场验证后）
+
+```text
+Chat2API聊天输入:
+  校验text和image片段；拒绝尚未接入的audio/video
+  input_image保留为image_url片段，不压成空字符串
+  Native Provider仅豆包/Qwen/GLM接入图片；其他Native明确报不支持
+  Data URL解码并校验大小；Native图片入口要求Data URL，HTTPS链接明确报错而非静默丢图
+  附件限32张、单图20MiB、总计40MiB；豆包现有上传器单图另限10MiB
+豆包:
+  在请求总时限内上传图片，取得uri
+  在10000文本消息前放10052附件消息
+  签名补发复用同一已上传附件，不重复上传
+Qwen:
+  复用公开SDK校时/注册/刷新令牌流程；workspace_api使用独立场景
+  对完整请求查询字段（按插入顺序）加nonce/timestamp后签名
+  oss_token -> PUT字节 -> 已签名oss/callback取得ws_gid和CDN URL
+  image/url.resource_infos放在text/plain消息前
+GLM:
+  使用刷新后的账号token调用chat_upload
+  同一user.content保留text，追加image数组(file_id,image_url,file_size)
+```
