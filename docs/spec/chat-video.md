@@ -124,3 +124,11 @@ Qwen核查修正 := 用户确认HappyHorse可用，撤回本次Wan3.0普通/480p
 兼容验收 := 缺scene的recordId查询成功；有scene也保留；重启旧record只查询；旧session/req走原snap
 范围边界 := 独立接口成功创建/参考图最终作品与Android部署后播放仍待验，不把查询成功记作新生成成功
 ```
+
+```text
+媒体保留现状 := clearHistory/deleteConversationRound移除记录并通知onHistoryDeleted → 取消无记录的controller；不unlink既有资产
+历史回收 := trimHistory按条数切片，pruneHistorySessions过滤过旧会话 → 保存历史；不回收图片/视频/封面文件
+上下文裁剪 := trimHistoryToBudget复制recentHistory再裁剪 → 只影响本轮输入；不删除原历史或媒体
+资产接口 := 图片save/read、视频save；视频异常分支unlink仅本次temporary/target，不是历史引用回收
+尚未实现 := 按所有保留历史/下载中的任务引用回收无引用资产；本次不执行文件删除或变更策略
+```

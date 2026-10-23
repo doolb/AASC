@@ -47,3 +47,7 @@ AASC历史保存videos与videoGeneration。视频流式下载，单文件最多2
 video-service的新SubAI任务使用创作接口；旧主AI原生session/req恢复继续走snap。原qwen-happyhorse选择ID保留，名称更新1.1，参数720P/5秒。创建只提交一次，缺定位/断连不重发；认证/会员/额度/频率/审核错误返回固定脱敏信息，非finish预览不当完成，多视频均保留。
 
 当前保存账号的已有作品经正式任务服务、真实HTTP和视频资产服务取回，627,730字节的下载版本，H.264/1280×720/5.162993秒，两端Chromium解码播放通过。新创建实测一次返回15004；网页当前余额5而本次费用30，因此成功创建及参考图生成仍需额度后验收。没有购买额度、切换账号/模型或写入当前AASC对话。视频37/37、Chat2API419/419、真实样片双端2/2、最终认证边界6/6通过。本轮仅servicePackage待构建，未部署/重启生产或构建APK。
+
+## 媒体文件保留现状核查（2026-10-23）
+
+清空/删除轮次的onHistoryDeleted仅取消已无记录的媒体controller，不调用资产删除。trimHistory裁剪历史数组，pruneHistorySessions按保留会话过滤记录，也没有媒体文件回收。trimHistoryToBudget只操作本轮上下文副本，连历史记录也不删除。chat-image-assets仅有save/read、chat-video-assets仅有save；后者的unlink仅负责本次下载失败/取消清理，不能视为已完成资产回收。故已保存图片、视频及封面可在记录删除后保留为无引用文件。本轮只核查文档，不删除实际文件、不改变保留策略；自动媒体回收尚未实现。
