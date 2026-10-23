@@ -1335,8 +1335,8 @@ const Chat = {
         
         // 原生图片与本次流式文字是同一条回复，生成中保留流式节点，历史不再额外画一份。
         if (liveMessages.some(node => node.id === 'streamingAssistant')) {
-            indexedHistory = indexedHistory.filter(({ item }) => !(item.imageGeneration?.source === 'main'
-                && item.imageGeneration.requestId === this.activeRequestId));
+            indexedHistory = indexedHistory.filter(({ item }) => !(this.mediaGeneration(item)?.source === 'main'
+                && this.mediaGeneration(item).requestId === this.activeRequestId));
         }
         if (indexedHistory.length === 0) {
             messagesContainer.innerHTML = '<div class="chat-empty">暂无聊天记录</div>';
@@ -1383,7 +1383,7 @@ const Chat = {
             return `
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
-                    <div class="chat-message-content ${item.imageGeneration ? 'chat-image-job' : ''}" data-image-status="${this.escapeHtml(item.imageGeneration?.status || '')}">${this.renderMessageImages(item.images)}${item.imageGeneration?.status === 'pending' ? `<button type="button" data-cancel-image="${this.escapeHtml(item.id)}">取消生成</button>` : ''}${gameTrace}${ChatMarkdown.render(content)}</div>
+                    <div class="chat-message-content ${this.mediaGeneration(item) ? 'chat-image-job' : ''}" data-image-status="${this.escapeHtml(this.mediaGeneration(item)?.status || '')}">${this.renderMessageImages(item.images,item.videos)}${this.mediaGeneration(item)?.status === 'pending' ? `<button type="button" data-cancel-image="${this.escapeHtml(item.id)}">取消生成</button>` : ''}${gameTrace}${ChatMarkdown.render(content)}</div>
                     ${thinkButton}
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                     ${deleteButton}
@@ -1560,8 +1560,8 @@ const Chat = {
     handleImageMessage(data) {
         const message = data.message;
         if (!message?.id) return;
-        if (message.imageGeneration?.source === 'main'
-            && this.contextIgnoredRequestIds.has(data.requestId || message.imageGeneration.requestId)) return;
+        if (this.mediaGeneration(message)?.source === 'main'
+            && this.contextIgnoredRequestIds.has(data.requestId || this.mediaGeneration(message).requestId)) return;
         const upsert = list => {
             const index = list.findIndex(item => item.id === message.id);
             if (index >= 0) list[index] = message; else list.push(message);
@@ -1574,7 +1574,7 @@ const Chat = {
             this.roleHistories[role] ||= [];
             upsert(this.roleHistories[role]);
         } else upsert(this.history);
-        if (message.imageGeneration?.source === 'main' && data.requestId === this.activeRequestId && this.isLoading) {
+        if (this.mediaGeneration(message)?.source === 'main' && data.requestId === this.activeRequestId && this.isLoading) {
             const assistant = document.getElementById('streamingAssistant');
             if (assistant) {
                 let panel = assistant.querySelector('.chat-native-images');
@@ -1582,12 +1582,12 @@ const Chat = {
                     panel = document.createElement('div'); panel.className = 'chat-message-content chat-image-job chat-native-images';
                     assistant.insertBefore(panel, document.getElementById('streamingContent'));
                 }
-                panel.dataset.imageStatus = message.imageGeneration.status;
-                const pending = message.imageGeneration.status === 'pending';
-                panel.innerHTML = this.renderMessageImages(message.images)
-                    + (pending ? `正在生成图片…<button type="button" data-cancel-image="${this.escapeHtml(message.id)}">取消生成</button>`
-                        : ['failed', 'cancelled'].includes(message.imageGeneration.status)
-                            ? this.escapeHtml(message.imageGeneration.error || '图片生成已取消') : '');
+                panel.dataset.imageStatus = this.mediaGeneration(message).status;
+                const pending = this.mediaGeneration(message).status === 'pending';
+                panel.innerHTML = this.renderMessageImages(message.images,message.videos)
+                    + (pending ? `正在生成媒体…<button type="button" data-cancel-image="${this.escapeHtml(message.id)}">取消生成</button>`
+                        : ['failed', 'cancelled'].includes(this.mediaGeneration(message).status)
+                            ? this.escapeHtml(this.mediaGeneration(message).error || '媒体生成已取消') : '');
                 panel.querySelector('[data-cancel-image]')?.addEventListener('click', () => this.cancelImage(message.id));
                 return;
             }
@@ -1595,9 +1595,17 @@ const Chat = {
         this.renderHistory();
     },
 
-    renderMessageImages(images) {
-        if (!Array.isArray(images) || images.length === 0) return '';
-        return `<div class="chat-message-images">${images.map((image) => {
+    mediaGeneration(message) {
+        return [message.videoGeneration,message.imageGeneration].find(value=>value?.status==='pending')||message.videoGeneration||message.imageGeneration;
+    },
+    renderMessageImages(images, videos = []) {
+        images=Array.isArray(images)?images:[];
+        const videoMarkup=(Array.isArray(videos)?videos:[]).filter(video=>/^\/uploads\/chat-videos\/[a-f0-9-]+\.(mp4|webm)$/.test(video.url||'')).map(video=>{
+            const poster=/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(video.posterUrl||'')?` poster="${this.escapeHtml(video.posterUrl)}"`:'';
+            return `<video controls playsinline preload="metadata"${poster} src="${this.escapeHtml(video.url)}" style="max-width:100%;max-height:420px;border-radius:8px"></video>`;
+        }).join('');
+        if(!images.length&&!videoMarkup)return '';
+        return `<div class="chat-message-images">${videoMarkup}${images.map((image) => {
             const dataUrl = this.escapeHtml(image.dataUrl || image.url || '');
             return dataUrl ? `<img src="${dataUrl}" alt="聊天图片">` : '';
         }).join('')}</div>`;

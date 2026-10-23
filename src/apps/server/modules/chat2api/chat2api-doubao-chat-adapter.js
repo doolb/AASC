@@ -7,6 +7,8 @@ const { normalizeDoubaoRequestProfile } = require('./chat2api-doubao-request-pro
 const { createDoubaoHttp2Client } = require('./chat2api-doubao-http2-client');
 const { createDoubaoSessionFlow } = require('./chat2api-doubao-session');
 const { createDoubaoAndroidBridge } = require('./chat2api-doubao-android-bridge');
+const { inspectNativeVideos } = require('./chat2api-native-videos');
+const { mergeOutputVideos } = require('../../../../core/utils/chat-output-videos');
 const { inspectNativeImages } = require('./chat2api-native-images');
 const { mergeOutputImages } = require('../../../../core/utils/chat-output-images');
 const { normalizeChatProgress } = require('../../../../core/utils/chat-progress');
@@ -387,7 +389,7 @@ const createChunk = (id, model, delta, finishReason = null) => ({
  * 正文、思考和状态各走独立通道。10040 是参考协议的思考边界块；只按白名单文字块解析，
  * FULL_MSG_NOTIFY 可能是用户回显，永不当回答。累计快照只补未输出后缀，不重发 CHUNK_DELTA。
  */
-const consumeDoubaoStream = async function* ({ source, model, mode, nativeState, limits, control, sessionFlow, onComplete }) {
+const consumeDoubaoStream = async function* ({ source, model, mode, nativeState, limits, control, sessionFlow, onComplete, adoptVideoTask, account }) {
   const id = `chatcmpl-${randomUUID().replaceAll('-', '')}`;
   const blocks = new Map();
   let activeBlock = null;
@@ -402,6 +404,7 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
   let observedSectionId = '';
   let images = [];
   let generatingImages = false;
+  let videos = []; let videoStarted = false; let videoTask;
   const appendText = (text, channel) => {
     if (typeof text !== 'string' || !text) return null;
     const delta = text;
@@ -464,6 +467,11 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
       if (error) throw error;
       // 用户回显不参与图片采集；生图卡片出现即视为已有上游副作用，后续失败不能自动重复发送。
       if (event !== 'FULL_MSG_NOTIFY' && !['user', 'human'].includes(data.message?.role)) {
+        const videoState = inspectNativeVideos('doubaochat', data);
+        if(videoState.started) {
+          videos = mergeOutputVideos(videos, videoState.videos); videoTask ||= videoState.taskId;
+          if(!videoStarted) { videoStarted=true; yield createChunk(id,model,{video_generation:{status:'pending'}}); }
+        }
         const imageState = inspectNativeImages('doubaochat', data);
         images = mergeOutputImages(images, imageState.images);
         if (imageState.started && !generatingImages) {
@@ -531,7 +539,7 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
         case 'SSE_REPLY_END': {
           // 现场出现消息结束、答案结束、总结束三类通知；前两类不能提前提交原生状态。
           if (Object.hasOwn(data, 'msg_finish_attr') || Object.hasOwn(data, 'answer_finish_attr')) break;
-          if (!content.trim() && !images.length) throw doubaoError('doubao_empty_response');
+          if (!content.trim() && !images.length && !videoStarted) throw doubaoError('doubao_empty_response');
           if (generatingImages && !images.length) throw doubaoError('doubao_incomplete_response');
           control.check();
           const completedSession = sessionFlow?.complete(observedConversationId);
@@ -541,7 +549,14 @@ const consumeDoubaoStream = async function* ({ source, model, mode, nativeState,
           if (completedSession) Object.assign(nativeState, completedSession);
           try { await onComplete?.(); } catch { /* 验证状态写入失败不改变已经成功的聊天结果。 */ }
           control.check();
-          yield createChunk(id, model, images.length ? { images, image_generation: { status: 'completed' } } : {}, 'stop');
+          let videoGeneration;
+          if(videoStarted) {
+            videoGeneration={status:videos.length?'completed':'failed'};
+            if(!videos.length&&videoTask&&adoptVideoTask){const job=await adoptVideoTask({providerId:'doubaochat',account,upstream:{taskId:videoTask,...(observedConversationId?{conversationId:observedConversationId}:{})}});videoGeneration={status:'pending',taskId:job.id};}
+            if(videoGeneration.status==='failed')videoGeneration.error='豆包未返回可查询的视频任务';
+          }
+          yield createChunk(id, model, { ...(images.length ? { images, image_generation: { status: 'completed' } } : {}),
+            ...(videoGeneration?{videos,video_generation:videoGeneration}:{}) }, 'stop');
           return;
         }
         default:
@@ -640,7 +655,7 @@ const createDoubaoNodeSignatureCache = (storage) => {
 
 /** 未走通用 rawTrafficLogger：原始网页错误可在任意字符串携带凭据，不能仅依靠键名脱敏。 */
 const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDoubaoHttp2Client(), browserBridge,
-  getTransport = () => 'node-http', getDoubaoWebViewSettings = () => ({}), signatureStore, onChatVerified, onBrowserChatVerified, prepareNodeRequest, uploadChatImages,
+  getTransport = () => 'node-http', getDoubaoWebViewSettings = () => ({}), signatureStore, onChatVerified, onBrowserChatVerified, prepareNodeRequest, uploadChatImages, adoptVideoTask,
   limits: customLimits = {} } = {}) => {
   // 测试可收紧容量/超时，但调用方不能放宽生产安全上限。
   const limits = Object.fromEntries(Object.entries(DOUBAO_LIMITS).map(([key, maximum]) => [key,
@@ -757,7 +772,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
         }
         throw doubaoError('doubao_protocol_error');
       }
-      const events = consumeDoubaoStream({ source: response.data, model: request.originalModel || request.model,
+      const events = consumeDoubaoStream({ adoptVideoTask, account, source: response.data, model: request.originalModel || request.model,
         mode, nativeState, limits, control, sessionFlow,
         onComplete: async () => {
           await signatureScope?.complete(prepared, nativeState);
@@ -769,7 +784,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
           try {
             const next = await events.next();
             const delta = next.value?.choices?.[0]?.delta;
-            if (delta?.content || delta?.reasoning_content || delta?.image_generation || delta?.images?.length) execution.receivedOutput = true;
+            if (delta?.content || delta?.reasoning_content || delta?.image_generation || delta?.images?.length || delta?.video_generation || delta?.videos?.length) execution.receivedOutput = true;
             return next;
           }
           catch (error) { await signatureScope?.invalidate(error); throw error; }
@@ -782,18 +797,20 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
       if (request.stream === true) return { stream, nativeState, cancel: () => control.cancel() };
       let content = '';
       let reasoning = '';
-      let images = [];
+      let images = []; let videos = []; let videoGeneration;
       let id = '';
       for await (const chunk of stream) {
         id = chunk.id;
         content += chunk.choices[0].delta.content || '';
         reasoning += chunk.choices[0].delta.reasoning_content || '';
         images = mergeOutputImages(images, chunk.choices[0].delta.images || []);
+        videos = mergeOutputVideos(videos,chunk.choices[0].delta.videos||[]);
+        if(chunk.choices[0].delta.video_generation)videoGeneration=chunk.choices[0].delta.video_generation;
       }
       return {
         body: {
           id, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: request.originalModel || request.model,
-          choices: [{ index: 0, message: { role: 'assistant', content, ...(images.length ? { images } : {}), ...(reasoning ? { reasoning_content: reasoning } : {}) }, finish_reason: 'stop' }],
+          choices: [{ index: 0, message: { role: 'assistant', content, ...(images.length ? { images } : {}), ...(videos.length?{videos}:{}), ...(videoGeneration?{video_generation:videoGeneration}:{}), ...(reasoning ? { reasoning_content: reasoning } : {}) }, finish_reason: 'stop' }],
         },
         nativeState,
       };

@@ -54,6 +54,9 @@ function createGameChatStream({ callbacks, filterText, isUnsafe, currentGame, si
             onStatus(status) {
                 if (current()) callbacks.onStatus?.(status);
             },
+            onVideos(event) {
+                if(current())callbacks.onVideos?.(event);
+            },
             onImages(event) {
                 if (current()) callbacks.onImages?.(event);
             },

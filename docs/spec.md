@@ -324,4 +324,4 @@
 
 - [多Provider生图协议伪代码（待确认）](spec/chat2api-image-generation.md)
 
-- [聊天视频任务伪代码（待方案确认）](spec/chat-video.md)
+- [聊天视频任务实现伪代码](spec/chat-video.md)

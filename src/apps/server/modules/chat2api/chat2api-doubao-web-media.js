@@ -221,6 +221,20 @@ const createDoubaoWebMediaService = ({ bridge, dataStore, accountId = '' }) => {
     return { uri: info.uri || uri, cdn_url: cdnUrl, name: filename, format: extension,
       width: Number(info.width) || 0, height: Number(info.height) || 0 };
   };
+  const createVideoTask = async (input, { signal } = {}) => {
+    const account = await chooseAccount();
+    const events=await send(account,makePayload('video',input),signal);
+    const messages = eventMessages(events);
+    const ack=parseRecord(events.find(event=>Number(event.event_type)===2002)?.event_data);
+    const videos = extractVideo(messages);
+    const taskId = messages.find(({ detail }) => detail.fin_reason?.async_task?.id)?.detail.fin_reason.async_task.id;
+    if (!videos.length && !ack.conversation_id && (typeof taskId !== 'string' || !taskId || taskId.length > 256)) throw publicError('doubao_media_protocol', '豆包未返回视频任务');
+    return { videos, taskId, ...(ack.conversation_id?{conversationId:ack.conversation_id,messageId:ack.message_id,conversationType:ack.conversation_type}:{}) };
+  };
+  const pollVideoTask = async (taskId, { signal } = {}) => {
+    const account = await chooseAccount();
+    return { videos: extractVideo(eventMessages(await send(account, { task_id: taskId, event_id: 0 }, signal, 300_000))) };
+  };
   const generate = async (kind, input, { signal } = {}) => {
     const account = await chooseAccount();
     const prompt = checkPrompt(input?.prompt);
@@ -239,7 +253,7 @@ const createDoubaoWebMediaService = ({ bridge, dataStore, accountId = '' }) => {
     if (!videos.length) throw publicError('doubao_media_protocol', '豆包视频未返回任务结果');
     return { videos, prompt };
   };
-  return { generate, uploadImage };
+  return { generate, uploadImage, createVideoTask, pollVideoTask };
 };
 
 module.exports = { createDoubaoWebMediaService, makePayload, parseSamanthaEvents,

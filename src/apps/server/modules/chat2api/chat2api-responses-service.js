@@ -1,3 +1,4 @@
+const { extractOutputVideos, mergeOutputVideos } = require('../../../../core/utils/chat-output-videos');
 const { normalizeChatContent } = require('./chat2api-content');
 const { randomUUID } = require('crypto');
 const { isDoubaoSession, isReadyDoubaoSession, sessionError } = require('./chat2api-doubao-session');
@@ -128,6 +129,7 @@ const getAssistantMessage = (body) => {
 const getAssistantText = (message) => extractText(message && message.content);
 const createMessageContent = (message, text = getAssistantText(message)) => [
   { type: 'output_text', text, annotations: [] },
+  ...extractOutputVideos(message).map(video => ({type:'output_video',...video})),
   ...extractOutputImages(message).map(image => ({ type: 'output_image', ...(image.dataUrl ? { dataUrl: image.dataUrl } : { image_url: image.url }) })),
 ];
 
@@ -145,7 +147,7 @@ const createOutput = (message) => {
         arguments: toolCall.function && toolCall.function.arguments || '',
       });
     }
-    if (!getAssistantText(message) && !extractOutputImages(message).length) return output;
+    if (!getAssistantText(message) && !extractOutputImages(message).length && !extractOutputVideos(message).length && !message.video_generation) return output;
   }
   return [...output, {
     id: createMessageId(),
@@ -173,6 +175,7 @@ const createResponseBody = ({ responseId, conversationId, previousResponseId, re
       content: createMessageContent(message, outputText),
     }],
     output_text: outputText,
+    ...(message.video_generation?{video_generation:message.video_generation}:{}),
     ...(typeof reasoningText === 'string' && reasoningText ? { reasoning_text: reasoningText } : {}),
     previous_response_id: previousResponseId || null,
     conversation: { id: conversationId },
@@ -186,6 +189,8 @@ const createChatHistory = (session, inputMessages, assistantMessage) => [
   ...(Array.isArray(session.history) ? session.history : []),
   ...inputMessages,
   { role: 'assistant', content: getAssistantText(assistantMessage),
+    ...(extractOutputVideos(assistantMessage).length?{videos:extractOutputVideos(assistantMessage)}:{}),
+    ...(assistantMessage.video_generation?{video_generation:assistantMessage.video_generation}:{}),
     ...(extractOutputImages(assistantMessage).length ? { images: extractOutputImages(assistantMessage) } : {}),
     ...(assistantMessage.tool_calls ? { tool_calls: assistantMessage.tool_calls } : {}) },
 ];
@@ -426,7 +431,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
     yield { type: 'response.created', response: { ...created, status: 'in_progress', output: [], output_text: '' } };
     let text = '';
     let reasoningText = '';
-    let images = [];
+    let images = []; let videos = []; let videoGeneration;
     const toolCalls = new Map();
     let textItemCreated = false;
     const ensureTextItem = () => {
@@ -482,6 +487,14 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
     const upstreamIterable = { [Symbol.asyncIterator]: () => upstream };
     for await (const chunk of upstreamIterable) {
       const delta = chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+      const deltaVideos=extractOutputVideos(delta);
+      if(delta?.video_generation||deltaVideos.length) {
+        videos=mergeOutputVideos(videos,deltaVideos);
+        videoGeneration={...videoGeneration,...delta.video_generation};
+        const itemAdded=ensureTextItem();if(itemAdded)yield itemAdded;
+        yield {type:'response.output_videos',item_id:outputItemId,output_index:0,videos:deltaVideos,
+          generation:videoGeneration,status:videoGeneration.status||'completed'};
+      }
       const deltaImages = extractOutputImages(delta);
       if (deltaImages.length || delta?.image_generation) {
         images = mergeOutputImages(images, deltaImages);
@@ -521,7 +534,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
       }
     }
     const assistantMessage = { ...(toolCalls.size > 0 ? createToolCallMessage() : { role: 'assistant', content: text }),
-      ...(images.length ? { images } : {}) };
+      ...(images.length ? { images } : {}), ...(videos.length?{videos}:{}), ...(videoGeneration?{video_generation:videoGeneration}:{}) };
     const finalBody = createResponseBody({ responseId, conversationId, previousResponseId, request,
       chatBody: { choices: [{ message: assistantMessage }] }, reasoningTextOverride: reasoningText,
       ...(toolCalls.size > 0 ? {} : { textOverride: text, messageId: outputItemId }) });

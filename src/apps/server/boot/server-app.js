@@ -24,6 +24,7 @@ const { createGomokuDisplayDemoService, isLoopbackAddress } =
 const { createSubAiChatBridge } = require('../modules/sub-ai/sub-ai-chat-bridge');
 const { createSubAiTaskService } = require('../modules/sub-ai/sub-ai-task-service');
 const { createChatImageAssets } = require('../modules/sub-ai/chat-image-assets');
+const { createChatVideoAssets } = require('../modules/sub-ai/chat-video-assets');
 const { createNativeChatImages } = require('../modules/sub-ai/native-chat-images');
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createChatContextUsageService, resolveChatContextOptions, normalizeContextScope } = require('../modules/chat/chat-context-usage');
@@ -375,6 +376,7 @@ const modelManifestService = new ModelManifestService({
 const UPLOADS_DIR = path.join(RES_DIR, 'uploads');
 const chatImageControllers = new Map();
 const chatImageAssets = createChatImageAssets({ directory: path.join(UPLOADS_DIR, 'chat-images') });
+const chatVideoAssets = createChatVideoAssets({ directory:path.join(UPLOADS_DIR,'chat-videos'),imageAssets:chatImageAssets });
 const ASR_TEMP_DIR = path.join(RES_DIR, 'temp', 'asr');
 const HTTP_UPLOAD_TEMP_DIR = path.join(RES_DIR, 'temp', 'uploads');
 const VOICEPRINT_TEMP_DIR = path.join(RES_DIR, 'temp', 'voiceprint');
@@ -705,8 +707,22 @@ const chatModelTierService = createChatModelTierService({
         for (const [displayId] of displayClients) sendToDisplay(displayId, message);
     }
 });
+function resumeSavedChatVideos() {
+    if(![...runningChat2ApiRuntimes].some(runtime=>runtime.getStatus().running&&runtime.videoService))return;
+    for(const record of chat.getHistory()) {
+        if(record.videoGeneration?.status!=='pending'||!record.videoGeneration.taskId||chatImageControllers.has(record.id))continue;
+        const resumed=createNativeChatImages({chat,assets:chatImageAssets,videoAssets:chatVideoAssets,existingRecord:record,
+            requestId:record.videoGeneration.requestId,controllers:chatImageControllers,
+            isCurrent:()=>chat.getHistory().some(item=>item.id===record.id),
+            waitVideo:(id,options)=>chatModelTierService.waitVideo(id,options),
+            publish:message=>{broadcastToControls({type:'chatImageMessage',message});for(const [displayId]of displayClients)sendToDisplay(displayId,{type:'chatImageMessage',message});}});
+        resumed.receiveVideos({status:'pending',taskId:record.videoGeneration.taskId});
+        resumed.complete({content:record.content==='正在生成视频…'?'':record.content,reasoning:record.reasoning,speech:record.speech});
+    }
+}
 async function broadcastChatModelTierAvailability() {
     try {
+        resumeSavedChatVideos();
         const message = await chatModelTierService.snapshot();
         broadcastToControls(message);
         for (const [displayId] of displayClients) sendToDisplay(displayId, message);
@@ -818,6 +834,10 @@ if (!ANDROID_NODE_POLICY.enabled && config.get('asr.serverEnabled', true) === tr
 }
 chat.init(config.get('chat', {}), {
     readChatImage: image => chatImageAssets.read(image),
+    onHistoryDeleted:()=>{
+        const retained=new Set(chat.getHistory().map(message=>message.id));
+        for(const [id,controller]of chatImageControllers)if(!retained.has(id)){controller.abort();chatImageControllers.delete(id);}
+    },
     piRuntimeManager,
     codexRuntimeManager,
     offlineNodeMode: OFFLINE_NODE_MODE,
@@ -11609,16 +11629,18 @@ async function handleChatMessage(options) {
             else { temporaryConversation.messages[index] = { ...message }; broadcastTemporaryConversation('update'); }
         }
         const payload = { type: 'chatImageMessage', message,
-            ...(message.imageGeneration?.source === 'main' ? { requestId: effectiveRequestId } : {}) };
+            ...((message.imageGeneration||message.videoGeneration)?.source === 'main' ? { requestId: effectiveRequestId } : {}) };
         broadcastToControls(payload);
         if (preferredDisplayId) sendToDisplay(preferredDisplayId, payload);
     };
-    const nativeImages = createNativeChatImages({ chat, assets: chatImageAssets,
+    const nativeImages = createNativeChatImages({ chat, assets: chatImageAssets, videoAssets:chatVideoAssets,
+        waitVideo:(id,options)=>chatModelTierService.waitVideo(id,options),
         scope: { ...imageScope, name: effectiveTemplateTarget || '助手' }, requestId: effectiveRequestId,
         publish: publishChatImage, controllers: chatImageControllers,
         isCurrent: () => (!isTemporaryConversation || effectiveTemporaryConversationId === temporaryConversation.id)
             && chat.getHistory().some(message => message.id === userMessageRecord.id) });
-    const imageTasks = createSubAiTaskService({ chat, assets: chatImageAssets, scope: imageScope, controllers: chatImageControllers,
+    const imageTasks = createSubAiTaskService({ chat, assets: chatImageAssets, videoAssets:chatVideoAssets,
+        createVideo:(input,options)=>chatModelTierService.createVideo(input,options),waitVideo:(id,options)=>chatModelTierService.waitVideo(id,options), scope: imageScope, controllers: chatImageControllers,
         generate: (input, options) => chatModelTierService.generateImage(input, options), publish: publishChatImage
     });
     const referenceImages = chat.getHistory().filter(item => item.mode === messageMode
@@ -11665,6 +11687,7 @@ async function handleChatMessage(options) {
             sendToControl(payload);
             if (preferredDisplayId && preferredDisplayId !== options.sourceDisplayId) sendToDisplay(preferredDisplayId, payload);
         },
+        onVideos: event => { nativeImages.receiveVideos(event); },
         onImages: event => {
             nativeImages.receive(event);
         },

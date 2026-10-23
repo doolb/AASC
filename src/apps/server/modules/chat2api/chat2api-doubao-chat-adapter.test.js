@@ -397,3 +397,16 @@ test('带图消息按10052附件和10000文本发送，签名补发复用已上�
  assert.equal(bodies[0].messages[0].content_block[0].content.attachment_block.attachments[0].image.uri,'tos-cat');
  assert.equal(bodies[0].messages[1].content_block[0].block_type,10000);
 });
+
+for(const stream of [false,true])test(`豆包原生仅视频${stream?'流式':'非流式'}不误判图片且正常结束`,async()=>{
+ const video={block_type:10060,content:{creation_block:{creations:[{video:{video_url:'https://media.test/a.mp4'}}]}}};
+ const adapter=createDoubaoChatAdapter({httpClient:{request:async()=>response([blockEvent([video]),event('SSE_REPLY_END')])}});
+ const result=await adapter(input({request:{...input().request,stream}}));
+ const message=stream?(await collect(result.stream)).at(-1).choices[0].delta:result.body.choices[0].message;
+ assert.equal(message.videos.length,1);assert.equal(message.video_generation.status,'completed');assert.equal(message.image_generation,undefined);
+});
+
+test('豆包视频生成开始后断流不重签重发',async()=>{
+ let sent=0;const adapter=createDoubaoChatAdapter({prepareNodeRequest:async({prepared})=>prepared,httpClient:{request:async()=>{sent++;return response([blockEvent([{block_type:10060,content:{creation_block:{creations:[{video:{task_id:'task'}}]}}}])])}}});
+ await assert.rejects(adapter(input()),e=>e.code==='doubao_incomplete_response');assert.equal(sent,1);
+});

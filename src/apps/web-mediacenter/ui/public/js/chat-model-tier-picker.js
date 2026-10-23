@@ -28,12 +28,16 @@
             <button type="button" class="chat-model-tier-login" data-login disabled title="后续版本开放">外部登录（后续开放）</button>
             <hr><strong>生图模型</strong><label>Provider<select data-image-provider></select></label>
             <label>模型<select data-image-model></select></label><p data-image-note class="chat-model-tier-scope"></p>
+            <hr><strong>生视频模型</strong><label>Provider<select data-video-provider></select></label>
+            <label>模型<select data-video-model></select></label><p data-video-note class="chat-model-tier-scope"></p>
             <p class="chat-model-tier-status" data-status role="status"></p>`;
         host.append(button, panel);
 
         const providerSelect = panel.querySelector('[data-provider]');
         const imageProvider = panel.querySelector('[data-image-provider]');
         const imageModel = panel.querySelector('[data-image-model]');
+        const videoProvider=panel.querySelector('[data-video-provider]');
+        const videoModel=panel.querySelector('[data-video-model]');
         const levels = panel.querySelector('.chat-model-tier-levels');
         const currentModel = panel.querySelector('[data-current-model]');
         const status = panel.querySelector('[data-status]');
@@ -62,6 +66,11 @@
             panel.querySelector('[data-image-note]').textContent = selectedImage
                 ? selectedImage.referenceLimit ? `支持最多 ${selectedImage.referenceLimit} 张参考图` : '当前模型支持文字生图'
                 : '请选择生图 Provider 和模型';
+            const videoProviders=snapshot?.videoProviders||[], videoSelection=snapshot?.videoSelection||{};
+            fill(videoProvider,videoProviders,videoSelection.providerId);
+            fill(videoModel,videoProviders.find(p=>p.id===videoSelection.providerId)?.models||[],videoSelection.model);
+            panel.querySelector('[data-video-note]').textContent=videoSelection.model
+                ? '用于SubAI生视频；官网可能要求积分，以账号返回为准。主AI原生视频沿用主模型。' : '请选择生视频Provider和模型';
             const selection = snapshot?.selection || {};
             const providers = Array.isArray(snapshot?.providers) ? snapshot.providers : [];
             const providerId = selection.providerId || '';
@@ -140,6 +149,13 @@
         imageProvider.addEventListener('change', () => chooseImage(imageProvider.value,
             snapshot?.imageProviders?.find(p => p.id === imageProvider.value)?.models[0]?.id));
         imageModel.addEventListener('change', () => chooseImage(imageProvider.value, imageModel.value));
+        const chooseVideo=(providerId,model)=>{
+            if(!providerId||!model)return;
+            const sent=send({type:'setChatModelTierSelection',purpose:'video',providerId,model});
+            render();status.textContent=sent?'正在保存生视频设置…':'连接中断，选择未保存';
+        };
+        videoProvider.addEventListener('change',()=>chooseVideo(videoProvider.value,snapshot?.videoProviders?.find(p=>p.id===videoProvider.value)?.models[0]?.id));
+        videoModel.addEventListener('change',()=>chooseVideo(videoProvider.value,videoModel.value));
         render();
 
         return Object.freeze({

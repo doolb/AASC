@@ -1,3 +1,12 @@
+### 聊天视频生成与主AI原生视频展示
+
+- ✅ [2026-10-23] 接通SubAI生视频与主模型原生视频，控制端和显示端支持原消息多视频、生成中卡片、本地视频/封面与历史恢复；视频后台处理不阻塞文字和TTS，继续沿用主聊天会话。
+  - 新增chat-output-videos、chat2api-native-videos/native-media-stream、video-catalog/jobs/service、doubao-video-result、chat-video-assets和sub-ai-video-worker；扩展Provider/Responses/runtime/proxy、LLM/history、游戏/SubAI桥、server-app、双端chat及模型picker。生视频模型独立选择并复用WS/config.set权威配置；Chat2API提供鉴权POST/GET视频任务API，支持私有状态持久化及重启只查询旧任务。
+  - 只接收明确视频作品/任务，不把封面和文字链接当视频；生成开始后断流不重发，原生结果不重复分派SubAI；清空/删除取消，迟到结果不复活；支持空正文媒体历史，一段下载失败仍保留其余已保存视频。
+  - 按当前官网实测校准：豆包Samantha ACK后通过IM单会话cmd3100查询原消息关联作品并保留长任务ID；GLM source_list使用ID数组并解析finished平铺video_url；Qwen公开模型为HappyHorse1.0/Wan2.6/Wan2.7，账号积分不足立即失败。豆包432,239字节、GLM1,238,257字节实际样片完成下载，两段均通过两端播放器实际解码；GLM重启恢复未再次创建生成。
+  - 验证：test:chat-videos 31/31、check:chat2api 413/413、test:chat-images 35/35、test:chat-streaming 66/66、清空/生命周期27/27；另使用实际样片回放两次各2/2。主AI三家视频协议经隔离Responses/真实LLM模块验证；Qwen成功生成、三家真实主AI工具触发和Android更新后实际播放仍待验收。
+  - 更新chat-video design/spec/task/usage、索引及自测，移除已完成开发todo；仅servicePackage=true待构建，本轮未构建/部署、未改APK/依赖；私有凭据、抓包与样片未入Git。
+
 ### 主AI原生生视频聊天展示方案补充
 
 - ✅ [2026-10-23] 将主AI自身生成的视频明确纳入聊天视频接入范围：无需SubAI标签，Provider原生作品经Responses流式/非流式与LLM回调进入主回复，保存视频/封面并在双端原气泡播放。

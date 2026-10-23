@@ -58,10 +58,11 @@ function createSubAiChatBridge(chat, { dispatch, references = [], signal }) {
             const parsed = parseSubAiReply(response.message);
             for (const call of parsed.calls) {
                 if (requestSignal?.aborted || executed.has(call.raw)) continue;
+                if(call.task==='生视频'&&(response.videos?.length||response.videoGeneration?.status))continue;
                 executed.add(call.raw);
                 await dispatch(call, { references, signal: requestSignal });
             }
-            const message = parsed.text.trim() || (parsed.calls.length ? '图片任务已提交。' : response.message);
+            const message = parsed.text.trim() || (parsed.calls.length ? '任务已提交。' : response.message);
             const reasoning = clean(response.reasoning, true);
             const speech = clean(response.speech, true).trim() || message;
             if (reasoning.startsWith(publishedReasoning)) speakThought(thoughtVoice.push(reasoning.slice(publishedReasoning.length)));

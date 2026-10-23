@@ -206,3 +206,14 @@ test('导入拒绝无效格式和无内容消息', () => {
         fs.rmSync(historyDir, { recursive: true, force: true });
     }
 });
+
+test('仅视频和空正文pending媒体卡片保存/恢复，不把无媒体的空消息当有效历史',()=>{
+ const historyDir=createTempHistoryDir();
+ try{
+  const store=createChatHistoryStore({historyDir});
+  const video={id:'video-only',timestamp:Date.now(),role:'assistant',content:'',mode:'group',videos:[{url:'/uploads/chat-videos/aaaa.mp4'}]};
+  const pending={...video,id:'pending',videos:[],videoGeneration:{status:'pending',taskId:'task'}};
+  store.saveSnapshot([video,pending]);const loaded=store.load();assert.equal(loaded.length,2);assert.equal(loaded.find(m=>m.id==='pending').videoGeneration.taskId,'task');
+  assert.throws(()=>store.normalizeChatMessage({role:'assistant',content:''}),/消息内容无效/);
+ }finally{fs.rmSync(historyDir,{recursive:true,force:true})}
+});

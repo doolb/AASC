@@ -196,4 +196,4 @@
 
 - [多Provider生图与模型选择](design/chat2api-image-generation.md)
 
-- [聊天视频生成接入核查（尚未实现）](design/chat-video.md)
+- [聊天视频生成与主AI原生视频展示](design/chat-video.md)

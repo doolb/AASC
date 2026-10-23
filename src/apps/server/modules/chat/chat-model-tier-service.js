@@ -2,6 +2,7 @@
 
 // 从同一份开发映射读取档位；当前普通 LLM profile.model 是权威模型名。
 const { PROVIDER_TIERS, tierRequestModel } = require('../chat2api/chat2api-default-model-mappings');
+const { VIDEO_MODELS, resolveVideoModel } = require('../chat2api/chat2api-video-catalog');
 const { IMAGE_MODELS, resolveImageModel } = require('../chat2api/chat2api-image-catalog');
 const TIERS = Object.freeze(['mini', 'flash', 'pro']);
 const CONFIG_KEY = 'chat.modelTierSelection';
@@ -69,9 +70,29 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
             .map(id => ({ id, name: PROVIDER_TIERS[id]?.label || id,
                 models: IMAGE_MODELS.filter(model => model.providerId === id).map(({ id, name, referenceLimit = 0 }) => ({ id, name, referenceLimit })) }));
     }
+    const videoSelection = () => config.get('chat.videoSelection') || { providerId:null, model:null };
+    async function videoProviders() {
+        const runtime=getRuntime();
+        if(!runtime?.getStatus?.().running || !runtime.videoService)return [];
+        const [accounts, providers]=await Promise.all([runtime.dataStore.listAccounts(),runtime.providerRegistry.listProviders()]);
+        return [...new Set(VIDEO_MODELS.map(model=>model.providerId))].filter(id=>providers.some(p=>p.id===id&&p.enabled!==false)
+            &&accounts.some(account=>account.providerId===id&&account.enabled!==false&&account.secretConfigured!==false&&(!account.status||account.status==='active')))
+            .map(id=>({id,name:PROVIDER_TIERS[id]?.label||id,models:VIDEO_MODELS.filter(model=>model.providerId===id).map(({id,name,referenceLimit})=>({id,name,referenceLimit}))}));
+    }
+    async function createVideo(input,options) {
+        const runtime=getRuntime();
+        if(!runtime?.getStatus?.().running||!runtime.videoService)throw new Error('Chat2API生视频服务尚未运行');
+        return runtime.videoService.create({...input,model:videoSelection().model},options);
+    }
+    async function waitVideo(id,options) {
+        const runtime=getRuntime();
+        if(!runtime?.videoService)throw new Error('Chat2API生视频服务尚未运行');
+        return runtime.videoService.wait(id,options);
+    }
     async function snapshot(extra = {}) {
         return { type: 'chatModelTierConfig', selection: selection(), providers: await availableProviders(),
-            imageSelection: imageSelection(), imageProviders: await imageProviders(), ...extra };
+            imageSelection: imageSelection(), imageProviders: await imageProviders(),
+            videoSelection:videoSelection(),videoProviders:await videoProviders(), ...extra };
     }
     async function generateImage(input, options) {
         const runtime = getRuntime();
@@ -90,6 +111,12 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
 
     async function update(data) {
         const task = async () => {
+            if(data?.purpose==='video') {
+                const model=resolveVideoModel(data.model);
+                if(model.providerId!==data.providerId||!(await videoProviders()).some(provider=>provider.id===model.providerId))throw new Error('生视频Provider未登录或模型不匹配');
+                if(await config.set('chat.videoSelection',{providerId:model.providerId,model:model.id})===false)throw new Error('生视频设置保存失败');
+                const current=await snapshot({success:true});broadcast(current);return current;
+            }
             if (data?.purpose === 'image') {
                 const model = resolveImageModel(data.model);
                 if (model.providerId !== data.providerId || !(await imageProviders()).some(p => p.id === model.providerId)) {
@@ -176,7 +203,7 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
         };
     }
 
-    return { snapshot, sendSnapshot, update, resolveForChat, selection, availableProviders, imageSelection, generateImage };
+    return { snapshot, sendSnapshot, update, resolveForChat, selection, availableProviders, imageSelection, generateImage, videoSelection, createVideo, waitVideo };
 }
 
 module.exports = { PROVIDER_TIERS, TIERS, identifyModel, normalizeSelection, createChatModelTierService };

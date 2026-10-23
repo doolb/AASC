@@ -47,6 +47,8 @@ const createChat2ApiRuntime = (options = {}) => {
     request: args => doubaoWebTaskBridge.request(args),
     prepare: args => browserPort.prepare(args),
   };
+  const videoService = options.videoService || require('./chat2api-video-service').createChat2ApiVideoService({
+    dataStore, providerRegistry, browserBridge: options.doubaoBrowserBridge || browserPort, http: options.httpClient });
   const coreAdapter = options.coreAdapter || createChat2ApiCoreAdapter({
     dataStore,
     providerRegistry,
@@ -54,6 +56,7 @@ const createChat2ApiRuntime = (options = {}) => {
     loadBalancer,
     providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig,
       doubaoBrowserBridge: browserBridge,
+      adoptVideoTask: videoService.adopt,
       uploadDoubaoImages: async (images,{account,signal}) => {
         const port=options.doubaoBrowserBridge || browserPort;
         if(!port)throw Object.assign(new Error('豆包图片上传环境不可用'),{code:'unsupported_modality',statusCode:503});
@@ -107,23 +110,27 @@ const createChat2ApiRuntime = (options = {}) => {
     managementService,
     speechService,
     imageService,
+    videoService,
     doubaoMediaService: options.doubaoMediaService,
     doubaoFileService: options.doubaoFileService,
   });
 
-  const start = async () => proxy.start();
+  const start = async () => {
+    try { await videoService.resume?.(); } catch { console.warn('[Chat2API] 视频任务状态恢复失败，视频接口将返回状态错误'); }
+    return proxy.start();
+  };
   const stop = async () => {
     await oauth.stop();
     accountWebSession.clear();
     try { await proxy.stop(); }
-    finally { await imageService.stop?.(); await browserPort?.stop(); }
+    finally { await imageService.stop?.(); await videoService.stop?.(); await browserPort?.stop(); }
   };
   const getStatus = () => ({
     running: proxy.isRunning(),
     address: proxy.address(),
   });
 
-  return { imageService, dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, speechService, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, accountWebSession, accountVerificationService, managementService, proxy, start, stop, getStatus };
+  return { imageService, videoService, dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, speechService, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, accountWebSession, accountVerificationService, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };

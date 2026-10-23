@@ -271,6 +271,19 @@ const SelfTest = {
             }
         },
         {
+            id: 'chat_video_player',
+            name: '聊天视频播放器',
+            category: '聊天',
+            description: '离线检查播放器标记，不生成视频、不创建聊天消息',
+            run: async () => {
+                const html=window.Chat?.renderMessageImages?.([],[{url:'/uploads/chat-videos/aaaa.mp4'}]);
+                const video=new DOMParser().parseFromString(html||'','text/html').querySelector('video');
+                const valid=video?.hasAttribute('controls')&&video.hasAttribute('playsinline')&&video.preload==='metadata';
+                return {success:Boolean(valid),message:valid?'聊天视频播放器入口正常':'聊天视频播放器入口缺失',
+                    details:'真实生成、账号积分、服务任务恢复与Android播放需独立验收。'};
+            }
+        },
+        {
             id: 'chat_media_capabilities',
             name: '聊天媒体上传配置',
             category: '聊天',

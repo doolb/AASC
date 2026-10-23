@@ -1,43 +1,33 @@
-# 聊天视频生成接入核查（2026-10-23，尚未实现）
+# 聊天视频生成与主AI原生视频展示（2026-10-23）
 
-用户要求检查豆包、Qwen、GLM生成视频如何接入聊天。本轮仅查看现有源码、共享Vivaldi profile官网入口和当前官网加载的公开前端模块，没有发送视频生成请求，未验证额度、实际生成成功、视频下载、三家账号完整模型列表。以下为方案，不等于已可用。
+已实现主AI原生结果接收和SubAI独立生视频两条入口，共用本地视频资产、原消息更新、双端播放器与历史。视频上传开关仍默认false；视频作为模型输入的上传入口尚未接入，这不限制视频生成输出。本轮未构建或部署服务包，Android实际更新后的播放仍待验收。
 
-| Provider | 本地/官网证据 | 拟接入路径与待核实项 |
+## 用户交互
+
+用户自然语言→主AI输出 `SubAI,生视频,"提示词"[,参考图ID...]` →任务分流→立即持久化生成中卡片→后台创建/查询→视频及封面落盘→原卡片显示播放器。独立生视频Provider/模型在控制端与显示端共用模型面板选择，通过既有WS/config.set保存/广播，不改变主聊天或生图模型。
+
+主AI也可直接调用官网原生视频功能，不必输出SubAI标签。明确的原生视频状态/作品经Provider→Responses流或非流→LLM回调→游戏/SubAI桥→服务端媒体协调器，在主AI原回复展示。文字、图片、视频共用一条assistant记录；仅视频回复有效。同轮已有原生视频时，桥接层不再执行重复的SubAI生视频行。
+
+## Provider实现与现场证据
+
+| Provider | 创建与查询 | 验证边界 |
 | --- | --- | --- |
-| 豆包 | 项目chat2api-doubao-web-media已有content_type=2020/skill17创建、异步task_id与2021视频解析，网页任务有/v1/video/generations；当前官网公开bundle存在视频生成与Seedance2.0标识 | 复用同账号浏览器与媒体服务，先实测当前协议；不能把旧协议mock通过或前端标识当作当前账号可生成 |
-| Qwen | 当前官网“更多→AI生视频”；公开模块46818组装ai_tool_scene=zaodian_generate_video、bizScene=genVideo，req含rootModel/prompt/originPrompt/genMode/params；params含duration/audio/resolution/size/attachments | 接入现有Qwen网页聊天发送与作品卡片处理，补视频异步结果查询。前端含Wan2.5/2.6/2.7和HappyHorse1.0定义，实际可见模型与额度需读取账号配置，不能全部硬编码为可用 |
-| GLM | 当前https://chatglm.cn/video清影页；公开模块18882定义POST /chatglm/video-api/v1/chat、GET /chat/status/{id}和GET /chat/{id}，static/upload用于参考图；模块39655从output.file_list读取结果 | 复用GLM账号认证，独立创建/查询视频任务；prompt/conversation_id/base_parameter_extra/source_list等按官网配置组装。清影页面提示按参数消耗积分，但本轮未提交任务或确认具体消耗 |
+| 豆包 | Samantha视频输入，ACK立即记录原conversation_id/message_id。作品可能不在首段SSE中；用官网捕获的 `/im/chain/single` cmd3100查询原会话，读取9998消息ext中的明确视频工具和creation_material_info.result.video.download_url。按based_message_id_list/已知taskId过滤，长ID保留字符串；旧async_task路径仍兼容 | 当前账号实际生成Seedance2.0 Mini作品，未重发生成，按已有会话定位恢复查询并下载；Chrome双端播放器实际解码通过 |
+| Qwen | `zaodian_generate_video` / `genVideo`，官网前端模型定义happyhorse/wan26/wan27，默认5秒/720P，参考图走workspace上传；原session/req_id查询snap，明确ai_generate_video作品归一化 | 当前保存账号实际返回创作积分不足，已立即失败而非空轮询；成功生成仍待有积分账号。协议、模型选择、异步任务及错误路径测试通过 |
+| GLM | 清影 `/chatglm/video-api/v1/chat`，source_list使用上传得到的ID数组；刷新认证后查 `/chat/{id}`。当前结果是status=finished的平铺video_url/cover_url，兼容旧output.file_list | 当前账号实际生成一段视频，5.129秒、H.264、512×688，约1.24MB；模拟进程重启后只查询已有任务并下载，Chrome双端实际解码通过 |
 
-Qwen参考素材字段包含materialId和类型；GLM输入含画幅、fps、duration、generation_pattern等配置；不同Provider参数不能用同一个数值枚举猜测映射。豆包当前模型可用性与请求体仍需现场真实任务验证。
+豆包与GLM均使用独立官网会话/任务，没有写AASC当前对话。主AI原生三家协议的流式/非流式、真实LLM模块和原会话续聊使用隔离测试验证；不把SubAI实际生成等同于每家主模型都已在真实账号触发原生视频工具。原始抓取、凭据、样片只留私有临时目录，不入Git。
 
-## 拟定统一交互
+## 状态、存储与恢复
 
-玩家/用户自然语言→主AI在回复开头输出 `SubAI,生视频,"提示词"[,参考图ID1,...]` →任务注册分流→立即保存生成中卡片→按账号提交一次并保存上游任务标识→后台等待/查询→视频与封面下载为本地资产→同一聊天消息替换为video controls播放器。一次多条视频保留为数组；刷新/重启后历史仍可播放。主模型原生返回视频也应归一化后复用同一保存/展示流程，不能重复触发生成。
+Chat2API任务独立于聊天Responses连接：创建后立即返回任务ID，后台等待/查询，不占用主聊天或TTS收尾。`video-jobs.json`位于Chat2API用户目录，私有权限，最多128条、16个未完成任务；仅保存账号/Provider/定位字段、状态与结果，不保存原提示、Cookie、请求签名或参考图字节。重启只查询已有定位；无定位的中断提交不重发。Qwen同一session/req和豆包相同任务只登记一次。
 
-模型面板新增独立“生视频Provider/模型”，可再按Provider显示有效比例/时长/分辨率。沿现有chat-model-tier-service与共用picker、WS权威配置流程保存，不用主聊天模型推测视频模型。指令只承载提示词与参考图ID，生成参数从权威设置读取。
+AASC历史保存videos与videoGeneration。视频流式下载，单文件最多256MiB，校验MP4/WebM文件头并原子改名；可选封面保存在图片目录，历史使用本地URL，不依赖上游地址长期有效。空正文的媒体/pending记录可持久化，避免下载期间失去恢复任务ID。一段下载失败保留其他已保存视频及失败说明。
 
-接入拟涉及chat-model-tier-service/共用picker、sub-ai-protocol/task注册、独立video service与本地assets、chat2api-proxy/runtime/Provider视频适配、Responses输出媒体归一化、llm-service/history-store、chat.js/display-chat.js及定向测试。视频生成任务不能长期占用当前聊天Responses连接；复用已有视频接口并增加可查询的任务状态，避免再为同一设置新增HTTP配置接口。
+生成、查询、下载、完成/失败/取消分开；取消停止本地等待/下载，不承诺官网撤销或退还额度。清空与删除轮次取消已移除记录的controller；同一用户轮次绑定的多个媒体/回复一并删除，迟到结果不复活。已有任务的原生输出不会再次分派SubAI，生成开始后的断流也不自动重发消息。
 
-## 主AI原生生视频展示（用户明确要求，必须覆盖）
+## 代码与自测
 
-视频接入须同时覆盖SubAI指令任务和主AI原生生成。主AI可以不输出SubAI调用行，由豆包/Qwen/GLM官网自身生成视频；此时接收并展示官网已创建的作品，不再调用一次视频生成接口，不受独立生视频模型选择影响。
+共用chat-output-videos、Native视频/媒体流归一化、video-catalog/jobs/service、doubao-video-result；扩展Provider/Responses/runtime/proxy、LLM/history、SubAI协议/worker、媒体协调器、游戏回调、模型快选与双端渲染。通用Provider头提取为独立模块，原适配器保持1000行以内。
 
-原生数据流为：Provider明确的视频任务/作品卡片→Chat2API统一视频增量与完成结果→Responses→llm-service视频收集回调→server-app本地媒体保存→主AI原回复→控制端/显示端播放器及历史。文字与视频共用一个assistant记录，避免重复气泡；仅视频回复也算有效回复。正在生成、下载中与真正可播放分别显示，出现作品封面不代表生成完成。
-
-需要新增chat-output-videos.js和chat2api-native-videos.js等独立归一化模块，并扩展chat2api-doubao-chat-adapter.js、chat2api-provider-adapters.js、chat2api-responses-service.js、llm-service.js、game-chat-bridge.js回调、server-app.js和双端聊天渲染。视频本地保存复用新的视频资产模块与history-store既有字段保留机制；新增native-chat-videos.js管理主回复状态。具体字段以三家真实生成样本核实后实现，不从普通视频链接、搜索结果、头像或封面猜测作品。
-
-流式和非流式都须保留videos数组，支持文字+视频、仅视频、多个视频，增量与末尾重复结果去重，刷新/切会话/重启后仍在原记录播放。已知上游任务可以后台查询；开始生成后不能因断连自动重新提交，防止同一请求生成两次。媒体查询沿用原账号与任务，不改主聊天上游会话；下一轮自然语言继续使用原会话引用。
-
-本条是新增的明确验收要求，尚未实现；原生视频实际字段及任务结果仍需官网样本验证。
-
-## 状态与生命周期
-
-卡片区分queued/submitted/running/downloading/completed/failed/cancelled/interrupted。取消停止本地等待与下载；未证实官网取消能力前，不承诺撤销已提交任务或返还额度。停止后迟到结果不能复活已删除消息。
-
-服务重启只恢复已知task_id的查询，不能自动重新提交生成；明确失败与状态不确定分开。视频URL可能过期，使用流式落盘、文件大小/类型检查与原子提交，历史仅保存本地URL及必要元数据。封面不是生成图片本身，不混入生图结果列表。
-
-supportsVideoUpload默认false是视频作为模型输入的能力，与生视频输出独立；图片上传默认true，显式保存的布尔值保持。生视频功能不应因关闭视频上传而不可用。
-
-## 下一步验收
-
-方案确认后再实现。先完成每家独立自然提示任务的创建/状态/下载闭环，确认可用模型和额度提示；测试隔离账号任务与AASC会话，避免在用户旧聊天发送。随后验证双端占位→多视频播放器、历史恢复、清空/取消防迟到、重启只查询不重发，以及Android实际MP4编码与播放。仅网页/source检查不能记为真实生成成功。
+`npm run test:chat-videos`覆盖任务API鉴权、原生仅视频/多视频、流/非流、原会话续聊、重启查询、长ID和原消息隔离、模型WS配置、实际DOM/播放、取消与历史。配套图片、Chat2API、流式回归；确切结果见changelog与任务。控制端自测入口只检查播放器标记，不生成视频、不改当前聊天。

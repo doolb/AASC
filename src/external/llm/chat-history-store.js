@@ -62,7 +62,9 @@ const normalizeChatMessage = (message, defaults = {}) => {
         ? message.user
         : (typeof message.assistant === 'string' ? message.assistant : '');
     const content = typeof message.content === 'string' ? message.content : legacyContent;
-    if (!content) throw new Error('消息内容无效');
+    const hasMedia = [message.images,message.videos].some(items=>Array.isArray(items)&&items.length>0)
+        || [message.imageGeneration,message.videoGeneration].some(state=>state?.status==='pending');
+    if (!content && !hasMedia) throw new Error('消息内容无效');
 
     const mode = message.mode === 'private' ? 'private' : (message.mode || defaults.mode || 'group');
     const target = mode === 'private' ? (message.target || defaults.target || null) : null;

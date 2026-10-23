@@ -1,3 +1,4 @@
+const { extractOutputVideos, createOutputVideoCollector } = require('../../core/utils/chat-output-videos');
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -71,6 +72,7 @@ let chatConfig = {
 
 let llmProfiles = [];
 let readChatImage = null;
+let onHistoryDeleted = null;
 let activeProfile = 'default';
 let piRuntimeManager = null;
 let codexRuntimeManager = null;
@@ -133,6 +135,11 @@ function loadHistory() {
                 const notice = '图片生成被服务重启中断，请重新发起。';
                 msg.content = msg.imageGeneration.source === 'main' && msg.content && msg.content !== '正在生成图片…'
                     ? `${msg.content}\n${notice}` : notice;
+                pendingChangedHistoryFiles.add(historyStore.getHistoryFileName(msg));
+            }
+            if(msg.videoGeneration?.status==='pending'&&!msg.videoGeneration.taskId) {
+                msg.videoGeneration={...msg.videoGeneration,status:'interrupted'};
+                msg.content=[msg.content,'视频生成被服务重启中断；没有上游任务标识，未重复提交。'].filter(Boolean).join('\n');
                 pendingChangedHistoryFiles.add(historyStore.getHistoryFileName(msg));
             }
             // 旧消息没有 profile/template 时归入启动时的当前 profile/default 模板。
@@ -249,6 +256,7 @@ function pruneHistorySessions(options = {}) {
 }
 
 function init(config = {}, options = {}) {
+    if(options.onHistoryDeleted!==undefined)onHistoryDeleted=options.onHistoryDeleted;
     if (options.readChatImage !== undefined) readChatImage = options.readChatImage;
     localLlmTransportOptions = normalizeLocalLlmTransportOptions(options);
     if (options.piRuntimeManager !== undefined) {
@@ -600,9 +608,9 @@ async function streamResponsesWithRecovery(context, onEvent) {
     let receivedOutput = false;
     try {
         await client.stream(request, (event) => {
-            if (['response.output_text.delta', 'response.output_images', 'response.image_generation_call.in_progress'].includes(event?.type)
+            if (['response.output_text.delta', 'response.output_images', 'response.image_generation_call.in_progress', 'response.output_videos'].includes(event?.type)
                 || event?.type === 'response.output_item.added' && event.item?.type === 'image_generation_call'
-                || extractOutputImages(event?.item || event?.response).length) receivedOutput = true;
+                || extractOutputImages(event?.item || event?.response).length || extractOutputVideos(event?.item || event?.response).length) receivedOutput = true;
             onEvent(event);
         }, { signal: context.signal, requestOptions: { signal: context.signal } });
     } catch (error) {
@@ -1038,6 +1046,7 @@ function clearHistory(options = {}) {
     saveHistory([affectedFile]);
     clearResponseReferencesForScope(scope);
     resetPiSessionForScope(scope);
+    try { onHistoryDeleted?.(); } catch { /* 媒体取消异常不能撤销已经完成的历史删除。 */ }
     console.log(`[Chat] 清空历史 scope=${scope.mode} target=${scope.target || '-'} sessionId=${scope.sessionId || '-'}`);
     return getHistory();
 }
@@ -1062,10 +1071,13 @@ function deleteConversationRound(options = {}) {
         if (!removal.isUserMessage) return { success: false, history: getHistory(), message: '只能删除用户消息所在的对话轮次' };
 
         historyStore.ensurePreviousDayBackup();
-        messages.splice(removal.index, removal.removeCount);
-        if (messages.length === 0) delete chatHistories[key];
+        const removedIds=new Set(messages.slice(removal.index,removal.index+removal.removeCount).map(message=>message.id));
+        const retained=messages.filter(message=>!removedIds.has(message.id)&&message.replyToMessageId!==removal.message.id);
+        chatHistories[key]=retained;
+        if (retained.length === 0) delete chatHistories[key];
         saveHistory([historyStore.getHistoryFileName(removal.message)]);
         resetPiSessionForMessage(removal.message);
+        try { onHistoryDeleted?.(); } catch { /* 不因取消钩子异常恢复已删除的记录。 */ }
         return { success: true, history: getHistory() };
     }
 
@@ -1272,6 +1284,8 @@ function addMessage(message) {
         ...(gameTrace.length ? { gameTrace } : {}),
         ...(Array.isArray(message.images) ? { images: message.images.map(image => ({ ...image })) } : {}),
         ...(message.imageGeneration ? { imageGeneration: { ...message.imageGeneration } } : {}),
+        ...(Array.isArray(message.videos)?{videos:message.videos.map(video=>({...video}))}:{}),
+        ...(message.videoGeneration?{videoGeneration:{...message.videoGeneration}}:{}),
         // 保存本轮用户消息引用，历史语音播放不会误取其他并发回复的提问。
         ...(typeof message.replyToMessageId === 'string'
             ? { replyToMessageId: message.replyToMessageId.slice(0, 128) } : {}),
@@ -1293,7 +1307,7 @@ function addMessage(message) {
     chatHistories[key].push(msg);
     trimHistory();
     saveHistory([historyStore.getHistoryFileName(msg)]);
-    if (msg.imageGeneration || msg.images?.length) flushHistorySave();
+    if (msg.imageGeneration || msg.images?.length || msg.videoGeneration || msg.videos?.length) flushHistorySave();
     
     if (content && content.startsWith('系统记录')) {
         const importantContent = content.replace('系统记录', '').trim();
@@ -1309,7 +1323,7 @@ function addMessage(message) {
 function updateMessage(id, patch) {
     const message = getAllHistoryMessages().find(item => item.id === id);
     if (!message) return null;
-    for (const key of ['content', 'images', 'imageGeneration']) {
+    for (const key of ['content', 'images', 'imageGeneration', 'videos', 'videoGeneration']) {
         if (Object.hasOwn(patch, key)) message[key] = patch[key];
     }
     for (const key of ['reasoning', 'speech']) {
@@ -1642,7 +1656,7 @@ async function chat(userMessage, options = {}) {
         let assistantMessage = '';
         let assistantReasoning = '';
         let assistantSpeech = '';
-        let assistantImages = [];
+        let assistantImages = []; let assistantVideos = []; let videoGeneration;
         if (transport.protocol === 'openai-responses') {
             const { responseSessionKey, fingerprint } = requestContext;
             const response = await requestResponsesWithRecovery({
@@ -1665,6 +1679,7 @@ async function chat(userMessage, options = {}) {
             assistantReasoning = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.reasoning;
             assistantSpeech = (typeof response?.reasoning_text === 'string' ? response.reasoning_text : '') + parsedOutput.speech;
             assistantImages = extractOutputImages(response);
+            assistantVideos=extractOutputVideos(response);videoGeneration=response.video_generation;
             saveResponseReference(responseSessionKey, response, fingerprint, requestContext.media.sentImageIds);
         } else {
             const requestBody = {
@@ -1688,6 +1703,7 @@ async function chat(userMessage, options = {}) {
             assistantReasoning = parsedOutput.reasoning;
             assistantSpeech = parsedOutput.speech;
             assistantImages = extractOutputImages(data.choices[0].message);
+            assistantVideos=extractOutputVideos(data.choices[0].message);videoGeneration=data.choices[0].message.video_generation;
         }
 
         const templateId = templateTarget || useTemplate || 'default';
@@ -1715,6 +1731,7 @@ async function chat(userMessage, options = {}) {
             reasoning: assistantReasoning,
             speech: assistantSpeech,
             ...(assistantImages.length ? { images: assistantImages } : {}),
+            ...(assistantVideos.length?{videos:assistantVideos}:{}),...(videoGeneration?{videoGeneration}:{}),
             history: getHistory()
         };
     } catch (error) {
@@ -1853,6 +1870,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, historyMessages = null, images = [] } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
     const outputImages = createOutputImageCollector(callbacks.onImages);
+    const outputVideos = createOutputVideoCollector(callbacks.onVideos);
 
     const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
     if (activeProfileConfig?.mode === 'agent') {
@@ -1903,6 +1921,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                     }
                 }
                 outputImages.pushEvent(event);
+                outputVideos.pushEvent(event);
                 if (event?.type === 'response.reasoning_text.delta' && typeof event.delta === 'string') {
                     output.pushReasoning(event.delta);
                 }
@@ -1927,6 +1946,8 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 reasoning: fullReasoning,
                 speech: fullSpeech,
                 ...(outputImages.getImages().length ? { images: outputImages.getImages() } : {}),
+                ...(outputVideos.getVideos().length?{videos:outputVideos.getVideos()}:{}),
+                ...(outputVideos.getGeneration().status?{videoGeneration:outputVideos.getGeneration()}:{}),
                 history: getHistory()
             };
         } catch (error) {
@@ -1966,6 +1987,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 try {
                     const parsed = JSON.parse(data);
                     outputImages.pushMessage(parsed.choices?.[0]?.delta);
+                    outputVideos.pushMessage(parsed.choices?.[0]?.delta);
                     const content = extractOutputText(parsed.choices?.[0]?.delta);
                     
                     if (content) {
@@ -1996,6 +2018,8 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
             reasoning: fullReasoning,
             speech: fullSpeech,
             ...(outputImages.getImages().length ? { images: outputImages.getImages() } : {}),
+                ...(outputVideos.getVideos().length?{videos:outputVideos.getVideos()}:{}),
+                ...(outputVideos.getGeneration().status?{videoGeneration:outputVideos.getGeneration()}:{}),
             history: getHistory()
         };
     } catch (error) {

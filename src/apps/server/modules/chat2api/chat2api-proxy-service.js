@@ -221,6 +221,7 @@ const createChat2ApiProxyService = (options = {}) => {
     await authorize(request, url.pathname);
     if (request.method === 'GET' && url.pathname === '/') {
       sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models', '/v1/audio/speech', '/v1/audio/voices',
+        ...(options.videoService ? ['/v1/video/generations','/v1/video/generations/{id}'] : []),
         ...(doubaoMediaService ? ['/v1/images/generations', '/v1/images/edits', '/v1/images/upload',
           '/v1/audio/generations', '/v1/video/generations'] : []),
         ...(doubaoFileService ? ['/v1/files', '/v1/files/download', '/v1/chat/completions/with-file'] : [])] });
@@ -304,7 +305,8 @@ const createChat2ApiProxyService = (options = {}) => {
       const result=await coreAdapter.listModels();
       const speechModels=await speechService?.listModels?.()||[];
       const imageModels = await options.imageService?.listModels?.() || [];
-      sendJson(response,200,{...result,data:[...new Map([...result.data,...speechModels,...imageModels].map(model=>[model.id,model])).values()]});
+      const videoModels = await options.videoService?.listModels?.() || [];
+      sendJson(response,200,{...result,data:[...new Map([...result.data,...speechModels,...imageModels,...videoModels].map(model=>[model.id,model])).values()]});
       return;
     }
     if (request.method === 'GET' && url.pathname === '/v1/audio/voices') {
@@ -372,6 +374,15 @@ const createChat2ApiProxyService = (options = {}) => {
         const result = await options.imageService.generate(payload, { signal });
         if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result, { noStore: true });
       });
+      return;
+    }
+    if (options.videoService && request.method === 'POST' && url.pathname === '/v1/video/generations') {
+      const payload = await readJson(request);
+      sendJson(response, 202, await options.videoService.create(payload), { noStore:true });
+      return;
+    }
+    if (options.videoService && request.method === 'GET' && /^\/v1\/video\/generations\/video_[a-f0-9-]{36}$/.test(url.pathname)) {
+      sendJson(response, 200, await options.videoService.get(url.pathname.split('/').at(-1)), { noStore:true });
       return;
     }
     const mediaKind = {

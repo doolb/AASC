@@ -1,3 +1,5 @@
+- [聊天视频生成、主AI原生视频与历史播放](usage/chat-video.md)（服务包待构建部署）
+
 - [聊天图片输入、续聊与上传能力开关](usage/chat-media-input.md)（源码已实现，服务包待部署；视频入口尚未接入）
 
 - [MMD-AR可选HMR纯网页模式](usage/mmd-human-interface.md#hmr纯网页可选模式)：可选准备模型后重建，缺模型禁用，桌面WebGPU或普通CPU/WASM本地推理。

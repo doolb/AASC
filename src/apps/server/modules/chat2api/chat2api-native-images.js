@@ -19,6 +19,7 @@ function inspectNativeImages(providerId, data) {
         for (const block of blocks) {
             const creation = block?.content?.creation_block;
             if (!creation) continue;
+            if (list(creation.creations).some(item => item?.video) && !list(creation.creations).some(item => item?.image)) continue;
             started = true;
             for (const item of list(creation.creations)) if (item?.image?.image_ori?.url) images.push({ url: item.image.image_ori.url });
         }

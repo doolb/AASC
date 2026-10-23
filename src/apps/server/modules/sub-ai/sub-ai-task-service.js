@@ -1,7 +1,7 @@
 'use strict';
 
 /** 每个聊天请求持有自己的分流器；后续动作子AI可单独注册，不共享图像模型。 */
-function createSubAiTaskService({ chat, generate, assets, scope, publish, controllers = new Map(), workers = {} }) {
+function createSubAiTaskService({ chat, generate, assets, scope, publish, controllers = new Map(), workers = {}, videoAssets, createVideo, waitVideo }) {
     const registry = new Map(Object.entries(workers));
     const pending = new Set();
     registry.set('生图', async (call, context) => {
@@ -38,6 +38,8 @@ function createSubAiTaskService({ chat, generate, assets, scope, publish, contro
         })();
         pending.add(job); job.finally(() => { pending.delete(job); controllers.delete(record.id); });
     });
+    if(videoAssets&&createVideo&&waitVideo)registry.set('生视频',require('./sub-ai-video-worker').createSubAiVideoWorker({
+        chat,assets:videoAssets,imageAssets:assets,createVideo,waitVideo,scope,publish,controllers,pending }));
     return {
         async dispatch(call, context) {
             const worker = registry.get(call.task || '生图');

@@ -481,6 +481,17 @@
         item.querySelector('.display-chat-message-author')?.append(button);
     }
 
+    function mediaGeneration(message) {
+        return [message.videoGeneration,message.imageGeneration].find(value=>value?.status==='pending')||message.videoGeneration||message.imageGeneration;
+    }
+    function appendVideos(parent, videos) {
+        for(const asset of videos||[]) {
+            if(!/^\/uploads\/chat-videos\/[a-f0-9-]+\.(mp4|webm)$/.test(asset.url||''))continue;
+            const video=document.createElement('video');video.controls=true;video.preload='metadata';video.setAttribute('playsinline','');video.src=asset.url;
+            if(/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(asset.posterUrl||''))video.poster=asset.posterUrl;
+            video.style.cssText='max-width:100%;max-height:420px;border-radius:8px';parent.appendChild(video);
+        }
+    }
     function appendMessage(role, content, options = {}) {
         if (!state.refs.messages) return null;
         const item = document.createElement('article');
@@ -491,8 +502,8 @@
         author.className = 'display-chat-message-author';
         author.textContent = role === 'user' ? '我' : (options.author || '助手');
         const body = document.createElement('div');
-        body.className = 'display-chat-message-body' + (options.imageGeneration ? ' chat-image-job' : '');
-        body.dataset.imageStatus = options.imageGeneration?.status || '';
+        body.className = 'display-chat-message-body' + (mediaGeneration(options) ? ' chat-image-job' : '');
+        body.dataset.imageStatus = mediaGeneration(options)?.status || '';
         body.innerHTML = role === 'assistant'
             ? renderThinkAndAnswer(content, options.reasoning)
             : renderMarkdown(content);
@@ -500,6 +511,7 @@
         for (const entry of Array.isArray(options.gameTrace) ? options.gameTrace : []) {
             item.appendChild(createGameProtocolTip(entry));
         }
+        appendVideos(body,options.videos);
         for (const image of options.images || []) {
             if (!/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(image.url || '')) continue;
             const img = document.createElement('img');
@@ -507,7 +519,7 @@
             img.style.cssText = 'max-width:100%;max-height:420px;object-fit:contain;border-radius:8px';
             body.appendChild(img);
         }
-        if (options.imageGeneration?.status === 'pending') {
+        if (mediaGeneration(options)?.status === 'pending') {
             const cancel = document.createElement('button');
             cancel.type = 'button'; cancel.textContent = '取消生成';
             cancel.addEventListener('click', () => state.send?.({ type: 'cancelChatImage', messageId: options.id }));
@@ -551,7 +563,7 @@
         const history = filterHistoryForCurrentSession(state.history);
         for (const [index, item] of history.entries()) {
             if (!item || typeof item !== 'object') continue;
-            if (item.imageGeneration?.source === 'main' && state.streaming.has(item.imageGeneration.requestId)) continue;
+            if (mediaGeneration(item)?.source === 'main' && state.streaming.has(mediaGeneration(item).requestId)) continue;
             if (item.user !== undefined || item.assistant !== undefined) {
                 if (item.user) appendMessage('user', item.user);
                 if (item.assistant) {
@@ -564,7 +576,7 @@
                 appendMessage('user', item.content || item.text || '', { images: item.images });
             } else if (item.role === 'assistant') {
                 appendMessage('assistant', item.content || item.text || '', { reasoning: item.reasoning,
-                    gameTrace: item.gameTrace, images: item.images, imageGeneration: item.imageGeneration, id: item.id,
+                    gameTrace: item.gameTrace, images: item.images, videos:item.videos, videoGeneration:item.videoGeneration, imageGeneration: mediaGeneration(item), id: item.id,
                     playback: { ...item, content: item.content || item.text, chatReplyContext: getReplyPlaybackContext(item, history, index) } });
             }
         }
@@ -871,32 +883,33 @@
         if (message.type === 'chatImageMessage') {
             const record = message.message;
             if (!record?.id || !filterHistoryForCurrentSession([record]).length) return true;
-            if (record.imageGeneration?.source === 'main'
-                && state.ignoredRequestIds.has(String(message.requestId || record.imageGeneration.requestId))) return true;
+            if (mediaGeneration(record)?.source === 'main'
+                && state.ignoredRequestIds.has(String(message.requestId || mediaGeneration(record).requestId))) return true;
             const index = state.history.findIndex(item => item.id === record.id);
             if (index >= 0) state.history[index] = record; else state.history.push(record);
-            const live = record.imageGeneration?.source === 'main' && state.streaming.get(String(message.requestId || ''));
+            const live = mediaGeneration(record)?.source === 'main' && state.streaming.get(String(message.requestId || ''));
             if (live) {
                 let panel = live.querySelector('.display-chat-native-images');
                 if (!panel) {
                     panel = document.createElement('div'); panel.className = 'display-chat-message-body chat-image-job display-chat-native-images';
                     live.appendChild(panel);
                 }
-                panel.dataset.imageStatus = record.imageGeneration.status;
+                panel.dataset.imageStatus = mediaGeneration(record).status;
                 panel.replaceChildren();
+                appendVideos(panel,record.videos);
                 for (const image of record.images || []) {
                     if (!/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(image.url || '')) continue;
                     const img = document.createElement('img'); img.src = image.url; img.alt = '聊天图片';
                     img.style.cssText = 'max-width:100%;max-height:420px;object-fit:contain'; panel.appendChild(img);
                 }
-                if (record.imageGeneration.status === 'pending') {
-                    panel.appendChild(document.createTextNode('正在生成图片…'));
+                if (mediaGeneration(record).status === 'pending') {
+                    panel.appendChild(document.createTextNode(record.videoGeneration?'正在生成视频…':'正在生成图片…'));
                     const cancel = document.createElement('button'); cancel.textContent = '取消生成';
                     cancel.addEventListener('click', () => state.send?.({ type: 'cancelChatImage', messageId: record.id }));
                     panel.appendChild(cancel);
                 }
-                if (['failed', 'cancelled'].includes(record.imageGeneration.status)) {
-                    panel.appendChild(document.createTextNode(record.imageGeneration.error || '图片生成已取消'));
+                if (['failed', 'cancelled'].includes(mediaGeneration(record).status)) {
+                    panel.appendChild(document.createTextNode(mediaGeneration(record).error || '媒体生成已取消'));
                 }
                 return true;
             }

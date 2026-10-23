@@ -10,6 +10,7 @@ const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
 const { readChatImages, qwenImageMessages } = require('./chat2api-chat-media');
 const { createQwenChatUpload } = require('./chat2api-qwen-chat-upload');
 const { uploadGlmImage } = require('./chat2api-image-upload');
+const { createNativeVideoStream,collectNativeMediaBody } = require('./chat2api-native-media-stream');
 const { inspectNativeImages } = require('./chat2api-native-images');
 const { extractQwenImages, completeQwenImages } = require('./chat2api-qwen-images');
 const { mergeOutputImages } = require('../../../../core/utils/chat-output-images');
@@ -20,32 +21,7 @@ const PROVIDER_IDS = Object.freeze(['deepseek', 'glm', 'kimi', 'mimo', 'minimax'
 
 const getCredentials = (account) => account && (account.credentials || account) || {};
 
-const buildProviderHeaders = (provider, account, providerId) => {
-  const credentials = getCredentials(account);
-  const headers = { ...(provider.headers || {}) };
-  const token = credentials.token || credentials.accessToken || credentials.refreshToken || credentials.refresh_token || credentials.ticket;
-  if (token && !headers.Authorization && !headers.authorization) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  const cookieParts = [];
-  const cookie = credentials.cookie || credentials.cookies;
-  if (typeof cookie === 'string' && cookie.trim()) {
-    cookieParts.push(cookie.trim());
-  } else if (cookie && typeof cookie === 'object') {
-    for (const [key, value] of Object.entries(cookie)) cookieParts.push(`${key}=${value}`);
-  }
-  const cookieFields = {
-    tongyi_sso_ticket: providerId === 'qwen' ? credentials.ticket || credentials.tongyi_sso_ticket : undefined,
-    serviceToken: credentials.serviceToken || credentials.service_token,
-    userId: credentials.userId || credentials.user_id,
-    xiaomichatbot_ph: credentials.phToken || credentials.ph_token,
-    sessionToken: credentials.sessionToken,
-  };
-  for (const [key, value] of Object.entries(cookieFields)) if (value) cookieParts.push(`${key === 'sessionToken' ? '__Secure-next-auth.session-token' : key}=${value}`);
-  if (cookieParts.length > 0) headers.Cookie = cookieParts.join('; ');
-  if (providerId === 'mimo' && cookieParts.length > 0) headers.Origin = headers.Origin || provider.apiEndpoint;
-  return headers;
-};
+const {buildProviderHeaders}=require('./chat2api-provider-headers');
 
 const buildRequestBody = (request, actualModel) => ({
   model: actualModel,
@@ -511,10 +487,13 @@ const parseSseStream = async function* (source, model, providerId, headers, resp
   let imageStarted = false;
   let imageFinished = false;
   let lastImageEvent;
+  const nativeVideos=createNativeVideoStream(providerId,imageOptions);
   const events = providerId === 'kimi' ? parseGrpcEvents(source, headers) : parseSseEvents(decompressStream(source, headers));
   for await (const data of events) {
     imageOptions.signal?.throwIfAborted();
     updateNativeState(data, providerId, responseSession);
+    const videoDelta=nativeVideos.push(data);
+    if(videoDelta)yield {model,choices:[{index:0,delta:videoDelta,finish_reason:null}]};
     const imageState = inspectNativeImages(providerId, data);
     if (imageState.started) {
       images = mergeOutputImages(images, imageState.images);
@@ -567,6 +546,8 @@ const parseSseStream = async function* (source, model, providerId, headers, resp
     const parsed = asOpenAiChunk(data, model);
     if (parsed) yield parsed;
   }
+  const videoResult=await nativeVideos.finish();
+  if(videoResult)yield {model,choices:[{index:0,delta:videoResult,finish_reason:null}]};
   if (!imageStarted) return;
   if (providerId === 'qwen' && !imageFinished) {
     const complete = await completeQwenImages([lastImageEvent], imageOptions);
@@ -665,23 +646,14 @@ const createQwenBody = (content, model, id, images = []) => ({
 });
 
 /** 流式与非流式共用原生图片消费，避免非流式再走一套会丢图片的文本聚合。 */
-const collectNativeImageBody = async (source, model, providerId, headers, responseSession, imageOptions) => {
-  let content = ''; let id; let images = [];
-  for await (const chunk of parseSseStream(source, model, providerId, headers, responseSession, imageOptions)) {
-    id = chunk.id || id;
-    content += chunk.choices?.[0]?.delta?.content || '';
-    images = mergeOutputImages(images, chunk.choices?.[0]?.delta?.images || []);
-  }
-  return createQwenBody(content.trim(), model, id, images);
-};
+const collectNativeImageBody = (...args) => collectNativeMediaBody(parseSseStream,createQwenBody,...args);
 
 const normalizeQwenBody = async (data, model, headers = {}, responseSession, imageOptions) => {
   if (!data || typeof data[Symbol.asyncIterator] !== 'function') {
     const upstreamError = createQwenUpstreamError(data);
     if (upstreamError) throw upstreamError;
     updateNativeState(data, 'qwen', responseSession);
-    const images = inspectNativeImages('qwen', data).started ? await completeQwenImages([data], imageOptions) : [];
-    return createQwenBody(extractQwenContent(data) || '', model, extractQwenResponseId(data), images);
+    return collectNativeImageBody(Readable.from([`data: ${JSON.stringify(data)}\n\n`]),model,'qwen',{},responseSession,imageOptions);
   }
   const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
   if (contentType.includes('application/json')) {
@@ -696,8 +668,7 @@ const normalizeQwenBody = async (data, model, headers = {}, responseSession, ima
     const upstreamError = createQwenUpstreamError(parsed);
     if (upstreamError) throw upstreamError;
     updateNativeState(parsed, 'qwen', responseSession);
-    const images = inspectNativeImages('qwen', parsed || {}).started ? await completeQwenImages([parsed], imageOptions) : [];
-    return createQwenBody(extractQwenContent(parsed) || '', model, extractQwenResponseId(parsed), images);
+    return collectNativeImageBody(Readable.from([`data: ${JSON.stringify(parsed||{})}\n\n`]),model,'qwen',{},responseSession,imageOptions);
   }
   let content = '';
   let id;
@@ -710,8 +681,9 @@ const normalizeQwenBody = async (data, model, headers = {}, responseSession, ima
   return createQwenBody(content.trim(), model, id);
 };
 
-const normalizeNativeBody = async (data, model, providerId, headers, responseSession) => {
+const normalizeNativeBody = async (data, model, providerId, headers, responseSession, imageOptions) => {
   if (!data || typeof data[Symbol.asyncIterator] !== 'function') {
+    if(providerId==='glm')return collectNativeImageBody(Readable.from([`data: ${JSON.stringify(data)}\n\n`]),model,providerId,{},responseSession,imageOptions);
     updateNativeState(data, providerId, responseSession);
     const nativeImages = inspectNativeImages(providerId, data || {});
     if (nativeImages.started) {
@@ -933,7 +905,7 @@ const prepareNativeRequest = async ({ httpClient, providerId, provider, account,
   return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, responseSession);
 };
 
-const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload }) => async ({ request, account, provider, actualModel, context = {}, responseSession }) => {
+const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload, adoptVideoTask }) => async ({ request, account, provider, actualModel, context = {}, responseSession }) => {
   let currentConfig = {};
   if (rawTrafficLogger && typeof getConfig === 'function') {
     try {
@@ -989,7 +961,7 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
       return { body: createQwenBody(answer.content, request.model, initial.chatId), nativeState: responseSession?.nativeState || {} };
     }
   }
-  const imageOptions = { http: tracedHttpClient, prepared: qwenRequest, headers: qwenRequest?.headers, signal: context.signal };
+  const imageOptions = { http: tracedHttpClient, prepared: qwenRequest, headers: qwenRequest?.headers, signal: context.signal, adoptVideoTask, account, providerId };
   if (request.stream === true) {
     const source = response.data && typeof response.data[Symbol.asyncIterator] === 'function' ? response.data : Readable.from([JSON.stringify(response.data)]);
     return { stream: parseSseStream(source, request.model, providerId, response.headers, responseSession, imageOptions), nativeState: responseSession?.nativeState || {} };
@@ -999,15 +971,15 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
     return { body: await collectNativeImageBody(response.data, request.model, providerId, response.headers, responseSession, imageOptions), nativeState: responseSession?.nativeState || {} };
   }
   if (isQwen) return { body: await normalizeQwenBody(response.data, request.model, response.headers, responseSession, imageOptions), nativeState: responseSession?.nativeState || {} };
-  if (nativeRequest) return { body: await normalizeNativeBody(response.data, request.model, providerId, response.headers, responseSession), nativeState: responseSession?.nativeState || {} };
+  if (nativeRequest) return { body: await normalizeNativeBody(response.data, request.model, providerId, response.headers, responseSession, imageOptions), nativeState: responseSession?.nativeState || {} };
   return { body: normalizeBody(response.data, request.model), nativeState: responseSession?.nativeState || {} };
 };
 
 const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig, onDoubaoChatVerified,
-  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport, getDoubaoWebViewSettings, doubaoSignatureStore, uploadDoubaoImages, qwenUpload = createQwenChatUpload({http:httpClient}) } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
+  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport, getDoubaoWebViewSettings, doubaoSignatureStore, uploadDoubaoImages, adoptVideoTask, qwenUpload = createQwenChatUpload({http:httpClient}) } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
   providerId === 'doubaochat' ? createDoubaoChatAdapter({ httpClient, browserBridge: doubaoBrowserBridge,
-    getTransport: getDoubaoTransport, getDoubaoWebViewSettings, signatureStore: doubaoSignatureStore, uploadChatImages:uploadDoubaoImages, onChatVerified: onDoubaoChatVerified,
-    onBrowserChatVerified: onDoubaoBrowserChatVerified }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload }),
+    getTransport: getDoubaoTransport, getDoubaoWebViewSettings, signatureStore: doubaoSignatureStore, uploadChatImages:uploadDoubaoImages, adoptVideoTask, onChatVerified: onDoubaoChatVerified,
+    onBrowserChatVerified: onDoubaoBrowserChatVerified }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload, adoptVideoTask }),
 ]));
 
 module.exports = { PROVIDER_IDS, createChat2ApiProviderAdapters, buildProviderHeaders, buildRequestBody, createQwenRequest, parseSseStream };
