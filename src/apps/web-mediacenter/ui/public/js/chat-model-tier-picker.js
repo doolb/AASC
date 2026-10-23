@@ -30,6 +30,9 @@
             <label>模型<select data-image-model></select></label><p data-image-note class="chat-model-tier-scope"></p>
             <hr><strong>生视频模型</strong><label>Provider<select data-video-provider></select></label>
             <label>模型<select data-video-model></select></label><p data-video-note class="chat-model-tier-scope"></p>
+            <hr><strong>动作 SubAI</strong><label><input type="checkbox" data-motion-enabled>缺库时生成动作</label>
+            <label>Provider<select data-motion-provider></select></label><label>模型<select data-motion-model></select></label>
+            <p class="chat-model-tier-scope">完整播放成功后保存候选版本，在动作面板中采用。</p><p data-motion-status role="status"></p>
             <p class="chat-model-tier-status" data-status role="status"></p>`;
         host.append(button, panel);
 
@@ -38,6 +41,9 @@
         const imageModel = panel.querySelector('[data-image-model]');
         const videoProvider=panel.querySelector('[data-video-provider]');
         const videoModel=panel.querySelector('[data-video-model]');
+        const motionProvider = panel.querySelector('[data-motion-provider]');
+        const motionModel = panel.querySelector('[data-motion-model]');
+        const motionEnabled = panel.querySelector('[data-motion-enabled]');
         const levels = panel.querySelector('.chat-model-tier-levels');
         const currentModel = panel.querySelector('[data-current-model]');
         const status = panel.querySelector('[data-status]');
@@ -71,6 +77,16 @@
             fill(videoModel,videoProviders.find(p=>p.id===videoSelection.providerId)?.models||[],videoSelection.model);
             panel.querySelector('[data-video-note]').textContent=videoSelection.model
                 ? '用于SubAI生视频；官网可能要求积分，以账号返回为准。主AI原生视频沿用主模型。' : '请选择生视频Provider和模型';
+            const motion = snapshot?.motionSelection || {}, motionProviders = snapshot?.motionProviders || [];
+            const availableMotion = motionProviders.find(p => p.id === motion.providerId);
+            const motionChoices = [...motionProviders];
+            if (motion.providerId && !availableMotion) motionChoices.push({ id: motion.providerId, name: motion.providerId + '（不可用）' });
+            const modelChoices = [...(availableMotion?.models || [])];
+            if (motion.model && !modelChoices.some(m => m.id === motion.model)) modelChoices.push({ id: motion.model, name: motion.model + '（不可用）' });
+            fill(motionProvider, motionChoices, motion.providerId);
+            fill(motionModel, modelChoices, motion.model);
+            motionEnabled.checked = motion.enabled === true;
+            motionEnabled.disabled = !connected || !snapshot || !motion.model;
             const selection = snapshot?.selection || {};
             const providers = Array.isArray(snapshot?.providers) ? snapshot.providers : [];
             const providerId = selection.providerId || '';
@@ -156,11 +172,22 @@
         };
         videoProvider.addEventListener('change',()=>chooseVideo(videoProvider.value,snapshot?.videoProviders?.find(p=>p.id===videoProvider.value)?.models[0]?.id));
         videoModel.addEventListener('change',()=>chooseVideo(videoProvider.value,videoModel.value));
+        const chooseMotion = (providerId, model, enabled = snapshot?.motionSelection?.enabled === true) => {
+            if (!providerId || !model) return;
+            const sent = send({ type: 'setChatModelTierSelection', purpose: 'motion', providerId, model, enabled,
+                revision: snapshot?.motionRevision });
+            render(); status.textContent = sent ? '正在保存动作SubAI设置…' : '连接中断，选择未保存';
+        };
+        motionProvider.addEventListener('change', () => chooseMotion(motionProvider.value,
+            snapshot?.motionProviders?.find(p => p.id === motionProvider.value)?.models[0]?.id));
+        motionModel.addEventListener('change', () => chooseMotion(motionProvider.value, motionModel.value));
+        motionEnabled.addEventListener('change', () => chooseMotion(motionProvider.value, motionModel.value, motionEnabled.checked));
         render();
 
         return Object.freeze({
             close,
             handleMessage(message) {
+                if (message?.type === 'chatActionStatus') { panel.querySelector('[data-motion-status]').textContent = message.message || message.state; return; }
                 if (message?.type !== 'chatModelTierConfig') return;
                 snapshot = message;
                 render();

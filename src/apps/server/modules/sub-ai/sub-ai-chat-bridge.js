@@ -3,19 +3,19 @@ const { createMarkdownSentenceStream } = require('../../../../core/utils/markdow
 const { SUB_AI_PROMPT, parseSubAiReply } = require('./sub-ai-protocol');
 
 /** 游戏桥已构造通用说明和权威NowGame时，将SubAI说明放在两者之间，保留角色和游戏规则原文。 */
-function buildSubAiSystemPrompt(originalPrompt, references) {
+function buildSubAiSystemPrompt(originalPrompt, references, motionPrompt = '') {
     const prompt = String(originalPrompt || '');
     const referencePrompt = references.length ? `可用参考图ID：${references.map(image => image.id).join(',')}` : '';
     const stateIndex = prompt.indexOf('\n\nNowGame:');
     if (prompt.startsWith('本地游戏调用行：') && stateIndex >= 0) {
-        return [prompt.slice(0, stateIndex), SUB_AI_PROMPT, referencePrompt, prompt.slice(stateIndex + 2)]
+        return [prompt.slice(0, stateIndex), SUB_AI_PROMPT, motionPrompt, referencePrompt, prompt.slice(stateIndex + 2)]
             .filter(Boolean).join('\n\n');
     }
-    return [SUB_AI_PROMPT, referencePrompt, prompt].filter(Boolean).join('\n\n');
+    return [SUB_AI_PROMPT, motionPrompt, referencePrompt, prompt].filter(Boolean).join('\n\n');
 }
 
 /** 包装单次模型请求，游戏续轮仍沿用原桥；注册任务只处理本次真实模型响应。 */
-function createSubAiChatBridge(chat, { dispatch, references = [], signal }) {
+function createSubAiChatBridge(chat, { dispatch, references = [], signal, motionPrompt = '' }) {
     const executed = new Set();
     return {
         ...chat,
@@ -33,8 +33,8 @@ function createSubAiChatBridge(chat, { dispatch, references = [], signal }) {
                 for (const segment of segments) callbacks.onSentence?.(segment.text, published, '', published, 'answer', segment.subtitle);
             };
             const response = await chat.chatStream(content, { ...options,
-                systemPrompt: buildSubAiSystemPrompt(options.systemPrompt, references),
-                systemPromptIdentity: buildSubAiSystemPrompt(options.systemPromptIdentity || options.systemPrompt, []),
+                systemPrompt: buildSubAiSystemPrompt(options.systemPrompt, references, motionPrompt),
+                systemPromptIdentity: buildSubAiSystemPrompt(options.systemPromptIdentity || options.systemPrompt, [], motionPrompt),
                 turnContext: [options.turnContext, references.length ? `可用参考图ID：${references.map(image => image.id).join(',')}` : '']
                     .filter(Boolean).join('\n') }, {
                 ...callbacks,

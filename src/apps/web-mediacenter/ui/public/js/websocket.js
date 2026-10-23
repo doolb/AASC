@@ -82,9 +82,9 @@ const WebSocketManager = {
     },
 
     handleMessage(data) {
-        if (data.type === 'chatModelTierConfig') {
+        if (data.type === 'chatModelTierConfig' || data.type === 'chatActionStatus') {
             window.ControlChatModelTier?.handleMessage(data);
-            window.Chat?.requestContextUsage();
+            if (data.type === 'chatModelTierConfig') window.Chat?.requestContextUsage();
             return;
         }
         if (data.type === 'ttsProviderConfig') {

@@ -1,6 +1,16 @@
 function initHuman() {
     const panel = document.getElementById('mmdArHumanPanel');
     if (!panel) return;
+    const candidatePanel = document.createElement('details');
+    candidatePanel.innerHTML = '<summary>SubAI候选动作</summary><p>生成动作完整播放后自动保存；采用才切换默认版本。</p>'
+        + '<select data-human-field="candidate" aria-label="候选动作"></select>'
+        + '<button type="button" data-human="candidate-preview">预览候选</button>'
+        + '<button type="button" data-human="candidate-source">查看MPL</button>'
+        + '<button type="button" data-human="candidate-adopt">采用为默认版本</button>'
+        + '<button type="button" data-human="candidate-remove">删除候选</button>'
+        + '<button type="button" data-human="candidate-save">重试保存动作库</button>'
+        + '<button type="button" data-human="stop-subai">停止自动动作</button><p data-motion-status role="status"></p>';
+    panel.append(candidatePanel);
     const field = key => panel.querySelector('[data-human-field="' + key + '"]');
     const value = key => field(key).value.trim(), numeric = key => Number(value(key));
     const message = panel.querySelector('[role="status"]'), capabilities = panel.querySelector('[data-human-capabilities]');
@@ -78,11 +88,25 @@ function initHuman() {
             select.value = state.mappings[kind]?.[semantic] || ''; label.append(select); fragment.append(label);
         }
         mappings.replaceChildren(fragment);
+        options(field('candidate'), (state.candidates || []).map(item => [item.id, item.description + ' · ' + item.model]));
         options(field('action'), state.actions.map(action => [action.actionId, action.actionId])); versions(state);
         panel.querySelector('[data-human-rules]').textContent = state.rules.map(rule =>
             rule.id + ': ' + rule.event + ' → ' + (rule.action || rule.expression)).join('\n') || '无规则';
     }
+    const selectedCandidate = api => {
+        const result = api.candidates.list().find(item => item.id === value('candidate'));
+        if (!result) throw new Error('请先选择候选动作');
+        return result;
+    };
     const handlers = {
+        'candidate-preview': async api => api.startPrepared(await api.prepareMpl(selectedCandidate(api).source,
+            { owner: 'candidate:preview' }), { owner: 'candidate:preview', priority: 100 }),
+        'candidate-source': api => { field('source').value = selectedCandidate(api).source; },
+        'candidate-adopt': api => api.candidates.adopt(selectedCandidate(api).id,
+            value('actionId') || selectedCandidate(api).description.slice(0, 80)),
+        'candidate-remove': api => api.candidates.remove(selectedCandidate(api).id),
+        'candidate-save': api => api.candidates.retrySave(),
+        'stop-subai': api => { window.DisplayMmdChatActions?.stop(); api.stop('candidate:preview'); },
         physiology: api => api.physiology.set({ breathing: field('breathing').checked, blinking: field('blinking').checked,
             strength: numeric('physiologyStrength') }),
         gaze: api => api.gaze.set({ head: field('gazeHead').checked, eyes: field('gazeEyes').checked,

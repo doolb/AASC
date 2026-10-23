@@ -1,122 +1,91 @@
-# SubAI与AI对话动作伪代码草案
+# SubAI与AI对话动作实现伪代码
 
-状态：设计阶段，2026-10-23。以下全部为拟实现流程，不表示现有程序具备SubAI；动作完成后自动存候选已获用户确认。对应设计：docs/design/sub-ai-actions.md。
+状态：2026-10-23实现完成。复用当前生图/生视频SubAI CSV桥和模型面板；对应design/sub-ai-actions.md中的实施说明为当前边界。
 
-## 已有声明
+## 独立模型配置
 
 ```text
-聊天入口 := 普通LLM流式回复、Agent回复与统一TTS生成
-动作入口 := Human.capabilities/getState/learn.list/serverActions/prepare/startPrepared/stop/getRequest
-MPL入口 := Human.mpl.play立即播放；compileHumanMpl Worker编译；真实轨道过滤/模型代次保护
-现有对白动作 := generateChatTtsActions与createTtsActionPlayer；双方排除原始mpl事件
-当前库 := schema1，IndexedDB按模型签名存储；register/revise会切active
-模型面板 := ChatModelTierPicker共用主profile Provider/三档；服务端配置经WebSocket与config.set
-传输 := Chat2API runtime.responsesService及底层LLM客户端；不能借全局switchProfile临时调用
+已有 := ChatModelTierPicker、chat-model-tier-service、Chat2API账号/Provider/模型映射、config.set
+新增 := motion-model-service；chat.subAi.motion={enabled,providerId,model}；配置摘要revision
+模型面板动作SubAI → 选择Provider/具体文字模型/启用 → setChatModelTierSelection purpose=motion
+服务端提交队列 → 校验revision、账号启用、Provider/模型一致及非TTS → 再查revision
+  → config.set(chat.subAi.motion叶子键) → chatModelTierConfig广播motionSelection/motionRevision/motionProviders
+失败 → 原权威快照+错误；重连 → 原初始化快照补发；未配置默认enabled=false
+不可用旧选择 → 面板保留不可用占位，允许关闭；不静默借用主模型
+主模型设置/生图/生视频 → 原分支；动作保存不切activeProfile，不改主聊天历史或Responses会话
+生成调用 := coreAdapter.forwardChatCompletion，显式preferredProviderId、signal、独立messages、stream=false
 ```
 
-## 新增定义
+## 对话动作入口
 
 ```text
-SubAiConfig := schema、revision、workers；motion配置enabled/providerId/modelId/tier/生成参数/总预算/修复次数/提示词版本
-MotionIntent := description、可选actionRef、参数duration/strength/count、mode、可选sentenceId/语音字符锚点
-MotionJob := 服务端requestId、conversationId、turnId、targetDisplayId、modelToken/modelEpoch、catalogRevision、owner、截止时间、状态
-ModelCatalog := 模型signature/本次加载token/递增epoch、映射摘要、可用骨骼与Morph、动态骨骼、动作名及版本摘要、能力revision
-MotionArtifact := schema、status、解释摘要、MPL source、声明duration、所需能力、生成配置与策略版本
-PreparedTicket := 当前显示端requestId与本地WeakMap准备句柄映射；服务端只能引用ticketId，不能传入运行对象
-Candidate := candidateId、请求ID/内容摘要、描述/参数/source、Provider/模型、版本与模型摘要、创建时间；不含active指令
-LibraryV2 := 原actions/assets/presets/rules/mappings/physiology/gaze + schema2 + 独立candidates
+显示端Human就绪 → 上报catalog：actionKey、ready、当前本地动作/服务器动作/内置模板名、模型signature与骨骼/Morph/映射
+身份 := 服务端使用登记WebSocket及displayId；旧连接回执不处理
+主AI系统提示 := 仅目标具备Human能力才注入动作CSV说明与有界名称摘要
+调用 := SubAI,动作,"描述"[,时长秒,强度,次数]；参数仅尾部可省略，时长0.2～15/强度0～1/整数次数1～8
+原SubAI流式桥 → 完整调用行解析/去重 → 移除正文和TTS中的控制行 → 注册表动作worker
+新轮次 → 取消目标旧任务，固定effectiveRequestId/ttsConversationId → 每端独立任务，当前每轮最多两次请求
+动作worker → resolve给已绑定目标；无Human或未就绪返回错误，不调用生成
+resolve → 本地同名默认版本优先 → 服务器目录 → 内置别名模板 → Human.prepare，仅准备
+无法精确命中 → missing → 使用动作SubAI生成；普通引用/否定由主AI说明禁止提交，解析器保护引用/围栏
+原[动作]随TTS机制保持；明确动作CSV独立执行，可无音频；提示主AI不重复输出两种相同动作标记
 ```
 
-## 配置消息与隔离
+## 生成与校验
 
 ```text
-控制端或被授权显示端模型面板 → 主AI/SubAI动作角色选择 → 只修改选中角色的Provider和具体模型
-getSubAiConfig → 当前权威subAiConfig；断线/缺字段默认enabled=false
-setSubAiConfig + requestId + expectedRevision + worker草稿
-  → 校验消息角色/worker/Provider模型一致性/可用状态/参数范围
-  → 在提交队列内再检查revision，合并最新chat字段 → config.set(chat.subAi)
-  → 成功广播规范化subAiConfig；失败回当前权威值与error；重连初始化补发
-主AIprofile更新 + SubAI保存 → 共用提交协调/最新值合并，互不覆盖
-业务模型目录 → 复用Provider/映射只读查询；不新增HTTP配置读写
-SubAI调用 → 冻结worker配置/任务快照 → 独立无状态传输与AbortSignal
-  → 不切activeProfile、不追加主聊天历史、不复用previous_response_id、不调用TTS或递归SubAI
+任务状态 := resolving → generating → preparing → playing → completed/failed/cancelled
+生成条件 := 启用且所选Provider/模型仍有效；每端一个任务，全局最多两生成
+source缓存 := 描述+参数+模型signature/能力/映射+配置；最多16项/10分钟，通过端侧准备校验才缓存
+输入 := 最小描述/参数/模型能力与固定MPL语法示例；不带主会话历史、previous_response_id、工具权限
+输出 := 单个JSON {status,source}；原始文本最多32KiB、source最多16KiB；明确unsupported或非法结果报错
+显示端prepare → validateMotionSource → Worker编译 → createHumanSampler → validateMotionSampler
+静态约束 := 禁base/center/move/循环/外部资源；最多32pose/8animation
+实际约束 := 时长0.2～15秒、最多20000关键帧/96采样轨道、有限数值/单位旋转/表情0～1
+  → 拒绝未匹配/根骨骼/动态骨骼、位置变化；头颈相对初姿最多75度、其他150度，30Hz采样相邻旋转最多12.1度
+编译/轨道诊断 → 至多一次SubAI修复；错误信息最多1000字符，仍属原任务20秒截止
+截止/停止/模型变更 → AbortSignal；本地等待立即退出并释放并发槽，上游迟到结果丢弃
+缓存只复用source，各端独立编译；当前不合并同时在途生成请求
 ```
 
-## 意图、解析与消息契约
+## 端侧两阶段与生命周期
 
 ```text
-主AI上文 := 有界动作/能力摘要 + 受控动作协议；非执行性提及/否定/引用不生成请求
-完整工具调用 或 完整action围栏JSON → schema校验 → MotionIntent；半截协议不提交/不进入TTS
-旧[动作:名称] → 同一意图适配器；明确未知动作保留，普通代码/引用/思考保持保护
-服务端绑定目标/owner/轮次/ID → 按turn+sentence+序号去重 → 创建MotionJob
-显示端消息 := type=chatAction、op、requestId、jobRevision、载荷；op由表注册白名单
-server→display resolve := 绑定任务+意图+预期modelToken/catalogRevision
-  → 当前本地active精确命中 → 服务器目录命中 → 可完整表达的内置模板 → 准备KnownAction
-  → 无完整命中则返回missing与有界能力快照；语义不确定返回needClarification
-server→display prepare := 本任务MotionArtifact → 校验/Worker编译 → 本地PreparedTicket
-  → display→server ready := ticketId、实际duration、轨道摘要或有界编译诊断
-server→display start := requestId+ticketId+时钟绑定 → 当前有效才提交Human
-display→server result := started/completed/failed/cancelled；只有实际轨道completed=true才允许候选保存
-server→display cancel := 只取消绑定owner；角色/来源/目标需服务端验证，显示端不能伪造其他端状态
-过期/重复/未知op/错误来源/错误轮次或token → 丢弃或返回明确错误，不播放
+prepareMpl → 原operation代次/停止保护、编译与采样 → WeakMap准备句柄，不调用mixer.start
+ready → 回ticketId/实际duration；服务端只接受resolving/preparing当前任务的回执
+start → 校验requestId/actionKey/ticket/截止与未开始 → Human.startPrepared owner=subai:requestId priority40
+actionKey := 当前模型token+generation+库revision+基础动作/Helper引用变化epoch
+每次异步完成/轮询 → 核对Human实例/actionKey/连接/可见性；换模型/库/基础动作/后台/断线取消
+手动priority>=50出现 → 取消自动动作；自然结束须getRequest.completed=true
+已知动作原TTS时钟继续工作；生成动作首版独立direct，不进入原kind=mpl被过滤的TTS队列
+停止原对话 → 服务端cancelConversation及端侧tts.stop；新轮次/请求替换仅停止所属owner
+重连补配置/catalog，不重放旧start；重复start/ready不重复执行
 ```
 
-## 缺库生成与校验
+## 候选库与面板
 
 ```text
-missing + SubAI启用 + 目标有Human能力 → 截止/额度/并发检查 → 查询同组source短缓存
-  → 未命中则构造最小描述/参数/模型白名单/MPL语法和预算 → 请求motion.generate
-原模型输出 → 单个结构化结果校验 → ok/unsupported/needClarification
-ok → 服务端schema/长度/声明能力初检 → prepare消息 → 显示端再次核对当前模型及库
-显示端编译 := source进入现有compileHumanMpl，AbortSignal受外层总预算约束
-  → 校验实际帧/时长/finite/允许骨骼与Morph/部位及幅度变化策略
-  → 不允许生成root/center位移、强写动态骨骼/未知轨道/无限循环；不执行JS或shell
-可修复语法或轨道诊断 + 预算允许 + repairCount<1 → 同SubAI一次修复 → 再校验
-超时/断线/换模型/取消/unsupported/播放失败 → 不修复，不切其他Provider，不改主AI回复
-建议预算 := 源16KiB、时长0.2～15秒、总20秒、修复最多1、每端1个/全局2并发、每轮最多2生成
-硬上限 := 原Worker64KiB/30秒继续存在；总预算先到立即取消，不把等待/修复额外续期
+库schema1读取/导入 → 校验原actions/active → 返回内存schema2+candidates空数组；下一次保存原子写入
+旧磁盘记录在写入失败时保持；原程序不能读schema2，部署前可导出备份
+生成动作实际completed → 暂停本任务catalog刷新 → 候选保存前核对当前actionKey
+  → 等待原保存队列 → 从最新库复制 → 按requestId或source+description+parameters去重 → 只追加候选
+候选 := id/requestId/description/parameters/source/providerId/model/policyVersion/createdAt，不改变actions.active
+限制 := 最多32候选，计入总128版本及1MiB元数据；不保存重复VMD，不自动清理默认动作
+保存失败 → 已完成播放回执附候选保存失败，内存可导出/点重试保存；不重播
+取消/抢占/失败/过期/仅编译或start → 不保存候选
+Human面板 := 预览/查看MPL/采用默认版本/删除/重试保存/停止自动动作
+预览 → prepareMpl后手动priority100，默认版本不变
+采用 → 当前模型重编译、revision检查、规范化行为名称 → 新建或追加版本并显式切active → 移除候选
+导入/导出/配额校验 := 同时包含候选与旧动作，保存仍使用IndexedDB单记录事务
 ```
 
-## 两阶段播放与取消
+## 验证与边界
 
 ```text
-已知资源 → Human.prepare；生成source → 新增Human.prepareMpl（复用编译/采样，只准备、不调用mixer.start）
-准备句柄 → 复用startPrepared的WeakMap/模型generation/基础动作检查 → 自动priority40/本任务owner
-mode=direct → 有效ready即可start；无TTS也可完成，不依赖空音频
-mode=withSpeech → 绑定原ttsAction/entry及音频currentTime → 原锚点到达且ready才start
-  → 缺时跳过本句，不延长原TTS准备等待，不在下一句补播；只展示待预览source
-手动priority>=50、口型、物理骨骼规则 → 保持原优先及轨道控制
-同owner停止/新轮次替换/模型或库变更/后台/离页/断线 → abort任务/编译、释放ticket、停止本owner
-任一await之后 → 再查轮次/目标/modelToken/modelEpoch/catalogRevision/截止；失效立即丢弃
-相同mesh重新绑定Human/基础动作/映射 → 递增modelEpoch；签名或token相同也不能复活旧请求
-重连 → 配置与新能力摘要；不重放旧start/完成动作
-```
-
-## 完成后自动候选保存（用户已确认）
-
-```text
-旧schema1 → 校验原库 → 内存补空candidates并转schema2 → 完整校验 → 原子保存；失败不覆盖旧库
-读取schema2 → candidates单独校验；普通actions/active不变；旧程序不兼容需导出备份/明确回退限制
-完整实际播放completed + 本任务仍有效 + model/映射相符
-  → 保存队列内读取最新库 → 按requestId或内容摘要判重 → 只追加Candidate
-start/编译成功/取消/抢占/超时/失败/迟到 → 不保存候选
-候选最多32且计入总128版本/1MiB元数据预算 → 满额报错，不删默认动作；不持久重复VMD
-存储失败 → 单独candidateSaveFailed提示/重试保存，不重播已成功动作
-预览候选 → 当前模型重新编译/单独owner，不改active
-用户明确采用 → 已有动作新版本或新动作 → 事务内变更active；不直接使用会改active的register保存候选
-删除/导入/导出 → 同时支持候选；人工旧版本、默认版本和来源元数据保留
-```
-
-## 缓存、多端与验收
-
-```text
-source缓存键 := 规范化描述/参数 + 能力/映射/策略/MPL/提示词/worker配置/Provider模型摘要
-缓存 := 有界TTL与容量；完成有效结果才加入；candidate存储与source缓存分开
-模型准备ticket := 仅本端当前加载代次；不同端不共享ticket/VMD
-多端 := 先逐端查库 → 按模型/能力/库摘要分组复用生成source → 每端独立校验/编译/回执，不等待慢端
-Node mpv无Human/MPL := unsupported；已知媒体和原TTS照常工作
-自测 := 配置权威与并发保存、主/SubAI隔离、本地命中零调用、未知触发、受控协议去重、半截不执行
-  + direct无音频、withSpeech迟到跳过、一次修复/总预算、取消迟到/手动优先、两PMX/多端
-  + 候选completed后一次保存/active不变/停止无保存、schema1迁移/配额/存储失败/导入导出
-验证状态 := 仅文档与真实源码核查，未实现/运行本功能自动测试或实际模型生成；发布状态保持原值
+npm run test:sub-ai-motion := 16通过，含14定向与2浏览器
+真实浏览器 := 正式米娅PMX、真实MPL Worker/轨道播放；已有库动作零生成；固定测试生成结果播放后入候选/采用才换默认
+模型调用 := 假上游验证实际参数/Provider/signal/隔离；没有向真实账号请求模型
+回归 := test:chat-images 35通过；test:mmd-production 223通过/1既有跳过；test:chat-streaming 66通过（部分用例重叠）
+范围 := 生成动作direct；原已知动作随TTS保持；生成随语音锚点、同时在途去重、多设备/手机实屏仍列后续项
+发布 := servicePackage保持true，其他状态保留；无APK/服务包构建或发布
 ```

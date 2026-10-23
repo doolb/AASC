@@ -4,6 +4,7 @@
 const { PROVIDER_TIERS, tierRequestModel } = require('../chat2api/chat2api-default-model-mappings');
 const { VIDEO_MODELS, resolveVideoModel } = require('../chat2api/chat2api-video-catalog');
 const { IMAGE_MODELS, resolveImageModel } = require('../chat2api/chat2api-image-catalog');
+const { createMotionModelService } = require('../sub-ai/motion-model-service');
 const TIERS = Object.freeze(['mini', 'flash', 'pro']);
 const CONFIG_KEY = 'chat.modelTierSelection';
 function identifyModel(modelName) {
@@ -33,6 +34,7 @@ function normalizeSelection(raw) {
 }
 
 function createChatModelTierService({ config, getRuntime, getActiveProfile, saveActiveModel, broadcast }) {
+    const motion = createMotionModelService({ config, getRuntime });
     const selection = () => {
         const active = getActiveProfile() || {};
         const preference = normalizeSelection(config.get(CONFIG_KEY));
@@ -92,7 +94,8 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
     async function snapshot(extra = {}) {
         return { type: 'chatModelTierConfig', selection: selection(), providers: await availableProviders(),
             imageSelection: imageSelection(), imageProviders: await imageProviders(),
-            videoSelection:videoSelection(),videoProviders:await videoProviders(), ...extra };
+            videoSelection:videoSelection(),videoProviders:await videoProviders(),
+            motionSelection: motion.selection(), motionRevision: motion.revision(), motionProviders: await motion.providers(), ...extra };
     }
     async function generateImage(input, options) {
         const runtime = getRuntime();
@@ -111,6 +114,11 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
 
     async function update(data) {
         const task = async () => {
+            if (data?.purpose === 'motion') {
+                await motion.update(data);
+                const message = await snapshot({ success: true, requestId: data.requestId });
+                broadcast(message); return message;
+            }
             if(data?.purpose==='video') {
                 const model=resolveVideoModel(data.model);
                 if(model.providerId!==data.providerId||!(await videoProviders()).some(provider=>provider.id===model.providerId))throw new Error('生视频Provider未登录或模型不匹配');
@@ -203,7 +211,7 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
         };
     }
 
-    return { snapshot, sendSnapshot, update, resolveForChat, selection, availableProviders, imageSelection, generateImage, videoSelection, createVideo, waitVideo };
+    return { motion, snapshot, sendSnapshot, update, resolveForChat, selection, availableProviders, imageSelection, generateImage, videoSelection, createVideo, waitVideo };
 }
 
 module.exports = { PROVIDER_TIERS, TIERS, identifyModel, normalizeSelection, createChatModelTierService };

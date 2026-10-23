@@ -24,6 +24,7 @@ const { createGomokuGameService } = require('../modules/game/gomoku-game-service
 const { createGomokuDisplayDemoService, isLoopbackAddress } =
     require('../modules/game/gomoku-display-demo-service');
 const { createSubAiChatBridge } = require('../modules/sub-ai/sub-ai-chat-bridge');
+const { createMotionCoordinator } = require('../modules/sub-ai/motion-coordinator');
 const { createSubAiTaskService } = require('../modules/sub-ai/sub-ai-task-service');
 const { createChatImageAssets } = require('../modules/sub-ai/chat-image-assets');
 const { createChatVideoAssets } = require('../modules/sub-ai/chat-video-assets');
@@ -709,6 +710,9 @@ const chatModelTierService = createChatModelTierService({
         for (const [displayId] of displayClients) sendToDisplay(displayId, message);
     }
 });
+const motionCoordinator = createMotionCoordinator({ models: chatModelTierService.motion,
+    send: (id, message) => sendToDisplay(id, message),
+    publish: message => { broadcastToControls(message); sendToDisplay(message.displayId, message); } });
 function resumeSavedChatVideos() {
     if(![...runningChat2ApiRuntimes].some(runtime=>runtime.getStatus().running&&runtime.videoService))return;
     for(const record of chat.getHistory()) {
@@ -1398,7 +1402,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -7335,6 +7339,7 @@ function stopChatTtsPlayback({
     ws = null
 } = {}) {
     if (!conversationId) return;
+    motionCoordinator.cancelConversation(conversationId);
     cancelChatTtsGeneration(conversationId, phase);
     const message = createChatTtsStopMessage(conversationId, phase);
     if (playOnControl) {
@@ -8616,6 +8621,7 @@ wss.on('connection', (ws, req) => {
             const disconnectedIP = clientIP;
             const currentDisplay = displayClients.get(displayId);
             rejectPendingDisplayAsrForSocket(ws);
+            if (currentDisplay?.ws === ws) motionCoordinator.disconnect(displayId);
 
             // 旧连接的 close 事件可能晚于新连接到达，不能误删当前连接。
             if (!currentDisplay || currentDisplay.ws !== ws) {
@@ -9113,6 +9119,11 @@ async function handleChatModelTierMessage(ws, data) {
 }
 
 function handleDisplayMessageFallback(displayId, data, ws) {
+    if (data.type === 'chatAction') {
+        if (displayClients.get(displayId)?.ws !== ws) return;
+        void motionCoordinator.handle(displayId, data).catch(error => logError('动作', error.message));
+        return;
+    }
     if (['getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage'].includes(data.type)) {
         if (displayClients.get(displayId)?.ws !== ws) return;
         void handleChatModelTierMessage(ws, data);
@@ -11649,7 +11660,13 @@ async function handleChatMessage(options) {
         publish: publishChatImage, controllers: chatImageControllers,
         isCurrent: () => (!isTemporaryConversation || effectiveTemporaryConversationId === temporaryConversation.id)
             && chat.getHistory().some(message => message.id === userMessageRecord.id) });
-    const imageTasks = createSubAiTaskService({ chat, assets: chatImageAssets, videoAssets:chatVideoAssets,
+    const motionTargets = [...new Set((displayIds?.length ? displayIds : [preferredDisplayId]).filter(Boolean))];
+    for (const id of motionTargets) motionCoordinator.begin(id, effectiveRequestId, ttsConversationId);
+    const imageTasks = createSubAiTaskService({
+        workers: { '动作': (call, context) => {
+            if (context.signal?.aborted) return;
+            for (const id of motionTargets) motionCoordinator.request(id, effectiveRequestId, call);
+        } }, chat, assets: chatImageAssets, videoAssets:chatVideoAssets,
         createVideo:(input,options)=>chatModelTierService.createVideo(input,options),waitVideo:(id,options)=>chatModelTierService.waitVideo(id,options), scope: imageScope, controllers: chatImageControllers,
         generate: (input, options) => chatModelTierService.generateImage(input, options), publish: publishChatImage
     });
@@ -11661,6 +11678,7 @@ async function handleChatMessage(options) {
             origin: item.imageGeneration?.source === 'main' ? 'main' : item.imageGeneration ? 'subai' : 'user',
             originProfile: item.profileName }))).filter(image => image.id).slice(-32);
     const subAiChat = createSubAiChatBridge(chat, { references: referenceImages,
+        motionPrompt: motionTargets.map(id => motionCoordinator.prompt(id)).filter(Boolean).join("\n"),
         dispatch: (call, context) => imageTasks.dispatch(call, context) });
     const streamReply = () => runGameAwareChat({ chat: subAiChat, gameService: gomokuGame,
         getAvailableGames: id => getDisplayCapabilities(id)?.games || [],

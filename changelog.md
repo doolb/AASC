@@ -1,3 +1,10 @@
+### SubAI对话动作与自动候选库
+
+- ✅ [2026-10-23] 接入动作SubAI：模型面板独立选择Provider/具体模型，复用现有SubAI调用桥，优先当前角色动作库，缺库生成MPL并经实际轨道校验播放。
+  - 新增motion-model-service.js/motion-coordinator.js与mmd-chat-actions.mjs/mmd-motion-policy.mjs，接入既有服务、模型面板与Human；独立任务、一次修复、总超时、取消/迟到保护及原手动优先保持。
+  - Human增加prepareMpl与schema2候选区，完整播放成功后自动保存，采用才切默认；支持预览、源码、采用、删除、重试保存及旧库迁移/导出导入。
+  - 专项16通过，含真实PMX/Worker播放与两端面板；生图35通过、MMD223通过/1跳过、流式聊天66通过。真实模型响应使用测试夹具，账号生成质量/手机/多端另验；同步design/spec/task/usage/self-test/todo，servicePackage保持true，未构建发布包。
+
 ### Qwen千问创作视频接口修复
 
 - ✅ [2026-10-23] Qwen独立生视频改用当前千问创作接口，保留qwen-happyhorse选择ID并显示HappyHorse1.1，默认720P/5秒；不实施Wan3.0/480p变更。

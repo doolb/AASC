@@ -1,5 +1,7 @@
 - [媒体区间循环：一条滑条两个手柄](usage/control-media-loop.md)（服务包及Node独立包待构建部署）
 
+- [AI对话动作与动作SubAI](usage/sub-ai-actions.md)
+
 - [聊天视频生成、主AI原生视频与历史播放](usage/chat-video.md)（服务包待构建部署）
 
 - [聊天图片输入、续聊与上传能力开关](usage/chat-media-input.md)（源码已实现，服务包待部署；视频入口尚未接入）

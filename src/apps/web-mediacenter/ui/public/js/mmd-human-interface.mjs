@@ -1,3 +1,4 @@
+import { validateMotionSource, validateMotionSampler } from './mmd-motion-policy.mjs';
 import { GESTURES } from './mmd-reply-gestures.mjs';
 import { createHumanModel } from './mmd-human-model.mjs';
 import { createHumanMixer } from './mmd-human-mixer.mjs';
@@ -39,7 +40,7 @@ function patchOptions(value = {}) {
         ...(value.gazeStrength == null ? {} : { gazeStrength: number(value.gazeStrength, 1, 0, 1, '跟随混合强度') }) };
 }
 function validateDefinitions(record) {
-    validateHumanLibrary(record);
+    record = validateHumanLibrary(record);
     const actions = new Set();
     for (const asset of record.assets) inspectHumanVmd(asset.buffer);
     for (const action of record.actions) {
@@ -86,6 +87,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     const pending = new Map(), cache = new Map();
     let model = null, library = emptyHumanLibrary(), generation = 0, revision = 0, ready = false;
     let warning = '', disposed = false, helperBound = null, motionKey = '', suspended = false, rendererVisible = true, saveQueue = Promise.resolve();
+    let actionEpoch = 0, actionBasis = [];
     const wake = () => startRendering?.();
     const requireModel = () => {
         bind();
@@ -299,6 +301,62 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             wake(); return { ...request, buffer: result.buffer, warnings: result.sampler.warnings };
         });
     }
+    async function prepareMpl(source, options = {}) {
+        validateMotionSource(source);
+        const owner = name(options.owner || 'subai:prepare');
+        return operation(owner, async (bound, signal, check) => {
+            const result = await mplSampler(source, bound, signal, check); check();
+            validateMotionSampler(result.sampler, bound, result.buffer);
+            const patch = layer(result.sampler, { strength: 1 });
+            const prepared = Object.freeze({ duration: patch.duration, buffer: result.buffer, warnings: result.sampler.warnings });
+            preparedActions.set(prepared, { bound, generation, motion: getProfile()?.motionUrl, helper: getHelper(),
+                request: { owner, layers: [patch], duration: patch.duration, loop: false, priority: 40 } });
+            return prepared;
+        });
+    }
+    const candidates = {
+        list: () => structuredClone(library.candidates),
+        async save(value, expectedKey) {
+            await saveQueue.catch(() => {});
+            requireModel();
+            if (expectedKey !== actionKey()) throw new Error('角色或动作库已改变，候选保存已取消');
+            validateMotionSource(value.source);
+            const next = structuredClone(library);
+            const exists = next.candidates.find(item => item.requestId === value.requestId
+                || (item.source === value.source && item.description === value.description
+                    && JSON.stringify(item.parameters || {}) === JSON.stringify(value.parameters || {})));
+            if (!exists) next.candidates.push({ id: id(), requestId: value.requestId,
+                description: value.description, parameters: value.parameters || {}, source: value.source, providerId: value.providerId,
+                model: value.model, policyVersion: 1, createdAt: new Date().toISOString() });
+            await persist(next); return exists || next.candidates.at(-1);
+        },
+        async adopt(candidateId, actionId) {
+            const candidate = library.candidates.find(item => item.id === candidateId);
+            if (!candidate) throw new Error('候选动作不存在');
+            const initial = revision;
+            await prepareMpl(candidate.source, { owner: 'candidate:adopt' });
+            if (revision !== initial) throw new Error('准备期间动作库已变化');
+            const next = structuredClone(library), normalized = name(actionId);
+            let action = next.actions.find(item => item.actionId === normalized);
+            if (!action) { action = { actionId: normalized, active: '', versions: [] }; next.actions.push(action); }
+            const version = { id: id(), parent: action.active || null, source: candidate.source,
+                ...patchOptions({}), patches: [], loop: false, expression: '', createdAt: new Date().toISOString() };
+            action.versions.push(version); action.active = version.id;
+            next.candidates = next.candidates.filter(item => item.id !== candidateId);
+            await persist(next); return version;
+        },
+        remove(candidateId) {
+            requireModel(); const next = structuredClone(library);
+            next.candidates = next.candidates.filter(item => item.id !== candidateId); return persist(next);
+        },
+        retrySave() { requireModel(); return persist(structuredClone(library)); }
+    };
+    function actionKey() {
+        bind();
+        const basis = [getProfile()?.motionUrl, getHelper()];
+        if (basis.some((value, index) => value !== actionBasis[index])) { actionEpoch++; actionBasis = basis; }
+        return [model?.token || '', generation, revision, actionEpoch].join(':');
+    }
     function mixPose(mesh) {
         if (mesh !== model?.mesh || !ready || suspended || disposed) return;
         const state = manualExpressions.getState();
@@ -422,7 +480,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         capabilities() { bind(); return model?.snapshot() || { missing: ['尚未加载PMX'], bones: [], morphs: [], bindings: {} }; },
         getState() { bind(); return { ready, token: model?.token, signature: model?.signature, revision, warning,
             physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), layers: mixer.snapshot(), pending: pending.size,
-            actions: learn.list(), presets: structuredClone(library.presets), rules: structuredClone(library.rules),
+            actions: learn.list(), candidates: candidates.list(), presets: structuredClone(library.presets), rules: structuredClone(library.rules),
             mappings: structuredClone(library.mappings) }; },
         physiology: {
             get: physiology.get,
@@ -440,7 +498,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             point(x, y) { requireModel(); const changed = gaze.point(model, getCamera?.(), x, y); if (changed) wake(); return changed; },
             reset() { gaze.returnToCamera(); wake(); }
         },
-        reflex, learn, serverActions, perform, prepare: intent => perform(intent, true), startPrepared, mpl: { play: playMpl,
+        actionKey, candidates, prepareMpl, reflex, learn, serverActions, perform, prepare: intent => perform(intent, true), startPrepared, mpl: { play: playMpl,
             // 使用与实际播放相同的模型能力，编辑器不根据缺少英文别名的能力摘要再次猜表情。
             advancedSource: options => createHighLevelMpl(options, requireModel().morphs)
         }, stop, getRequest: mixer.state,

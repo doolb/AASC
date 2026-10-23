@@ -1,10 +1,22 @@
 const NAME = 'aasc-display-mmd-human-v1', LIMIT = 64 * 1024 * 1024;
-const fresh = () => ({ schema: 1, actions: [], assets: [], presets: {}, rules: [], mappings: {}, physiology: {}, gaze: {} });
+const fresh = () => ({ schema: 2, candidates: [], actions: [], assets: [], presets: {}, rules: [], mappings: {}, physiology: {}, gaze: {} });
 export function validateHumanLibrary(record) {
-    if (!record || record.schema !== 1 || !Array.isArray(record.actions) || record.actions.length > 64
+    if (!record || ![1, 2].includes(record.schema) || !Array.isArray(record.actions) || record.actions.length > 64
         || !Array.isArray(record.assets) || record.assets.length > 64 || !Array.isArray(record.rules) || record.rules.length > 32
         || !record.presets || !record.mappings || !record.physiology) throw new Error('动作库格式或数量无效');
-    let bytes = 0, versions = 0;
+    const candidates = record.schema === 1 ? [] : record.candidates;
+    if (!Array.isArray(candidates) || candidates.length > 32) throw new Error('候选动作最多32条');
+    const candidateIds = new Set();
+    for (const item of candidates) {
+        if (!item || typeof item.id !== 'string' || !item.id || item.id.length > 80 || candidateIds.has(item.id)
+            || typeof item.requestId !== 'string' || item.requestId.length > 80
+            || typeof item.description !== 'string' || !item.description.trim() || item.description.length > 500
+            || typeof item.source !== 'string' || !item.source.trim() || new TextEncoder().encode(item.source).length > 16384
+            || typeof item.providerId !== 'string' || item.providerId.length > 100
+            || typeof item.model !== 'string' || item.model.length > 160) throw new Error('候选动作数据无效');
+        candidateIds.add(item.id);
+    }
+    let bytes = 0, versions = candidates.length;
     const ids = new Set();
     for (const asset of record.assets) {
         if (typeof asset.id !== 'string' || ids.has(asset.id) || !(asset.buffer instanceof ArrayBuffer)
@@ -20,7 +32,7 @@ export function validateHumanLibrary(record) {
     if (versions > 128 || bytes > LIMIT) throw new Error('动作库最多128版本、64MiB VMD');
     const metadata = JSON.stringify({ ...record, assets: record.assets.map(a => ({ id: a.id })) });
     if (new TextEncoder().encode(metadata).length > 1024 * 1024) throw new Error('动作库定义最多1MiB');
-    return record;
+    return record.schema === 1 ? { ...record, schema: 2, candidates: [] } : record;
 }
 async function database() {
     return new Promise((resolve, reject) => {
@@ -42,7 +54,7 @@ export async function loadHumanLibrary(key) {
     } finally { db.close(); }
 }
 export async function saveHumanLibrary(key, record) {
-    validateHumanLibrary(record);
+    record = validateHumanLibrary(record);
     const db = await database();
     try {
         await new Promise((resolve, reject) => {
@@ -56,7 +68,7 @@ export async function saveHumanLibrary(key, record) {
 }
 export function emptyHumanLibrary() { return fresh(); }
 export function exportHumanLibrary(record) {
-    validateHumanLibrary(record);
+    record = validateHumanLibrary(record);
     const assets = record.assets.map(asset => {
         const bytes = new Uint8Array(asset.buffer), parts = [];
         for (let start = 0; start < bytes.length; start += 8192) parts.push(String.fromCharCode(...bytes.subarray(start, start + 8192)));
