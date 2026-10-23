@@ -134,7 +134,7 @@ test('生图HTTP接口沿用鉴权、保留全部图片与模型目录', async t
     const models=await (await fetch(base+'/v1/models',{headers})).json();assert.equal(models.data[0].capability,'image');
 });
 
-test('生图入口约束随角色和参考图一起传入，清空取消后不执行迟到标签', async () => {
+test('指定生图提示随角色和参考图一起传入，清空取消后不执行迟到标签', async () => {
     const request = new AbortController(); const calls=[]; const completed=[];
     let release; let delivered;
     const chat={async chatStream(content, options){
@@ -144,10 +144,34 @@ test('生图入口约束随角色和参考图一起传入，清空取消后不�
     const bridge=createSubAiChatBridge(chat,{references:[{id:'ref1'}],dispatch:async call=>calls.push(call)});
     const job=bridge.chatStream('修改图片',{systemPrompt:'角色设定',signal:request.signal},
         {onComplete:value=>completed.push(value)});
-    assert.match(delivered.systemPrompt,/唯一入口/);
-    assert.match(delivered.systemPrompt,/不得调用模型或官网自带的原生生图/);
+    assert.match(delivered.systemPrompt,/SubAI 指令调用行,和本地游戏调用行写法一致,/);
+    assert.match(delivered.systemPrompt,/用户说生图或者画图时/);
+    assert.doesNotMatch(delivered.systemPrompt,/唯一入口|不得调用模型或官网自带的原生生图|调用行不朗读/);
     assert.match(delivered.systemPrompt,/可用参考图ID：ref1/);
     assert.ok(delivered.systemPrompt.endsWith('角色设定'));
     request.abort();release();
     assert.equal((await job).cancelled,true);assert.deepEqual(calls,[]);assert.deepEqual(completed,[]);
+});
+
+test('实际模型请求按游戏、SubAI、权威状态、角色顺序注入用户指定提示，示例CSV可以调用', async () => {
+    const { buildGameSystemPrompt, GAME_PROMPT } = require('../src/apps/server/modules/game/game-chat-bridge');
+    const { SUB_AI_PROMPT } = require('../src/apps/server/modules/sub-ai/sub-ai-protocol');
+    let delivered;
+    const calls = [];
+    const chat = { async chatStream(_content, options) {
+        delivered = options;
+        return { success: true, message: 'SubAI,生图, "一只猫"\n我来画一只猫。', history: [] };
+    } };
+    const bridge = createSubAiChatBridge(chat, { dispatch: async call => calls.push(call) });
+    const result = await bridge.chatStream('画一只猫', {
+        systemPrompt: buildGameSystemPrompt(null, '你是小爱，一个简洁友好的智能助手。')
+    });
+    assert.equal(delivered.systemPrompt, [GAME_PROMPT, SUB_AI_PROMPT, 'NowGame:无',
+        '你是小爱，一个简洁友好的智能助手。'].join('\n\n'));
+    assert.match(delivered.systemPrompt, /自然语言中不要透露等待状态确认，GM 的信息/);
+    assert.match(delivered.systemPrompt, /Game: 目录, GameUser, 列表/);
+    assert.match(delivered.systemPrompt, /Game: 游戏名, GameAI, 规则/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].prompt, '一只猫');
+    assert.equal(result.message, '我来画一只猫。');
 });

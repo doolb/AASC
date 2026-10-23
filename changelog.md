@@ -1,3 +1,15 @@
+### 统一游戏与SubAI调用提示词
+
+- ✅ [2026-10-23] 按用户最终文本替换游戏及SubAI说明，保留英文逗号、示例空格、原子调用等待与每次自然语言要求，删除此前额外的原生生图禁止文案。
+  - 修改game-chat-bridge.js、sub-ai-protocol.js、sub-ai-chat-bridge.js；最终请求顺序为游戏说明、SubAI说明、权威NowGame/规则、角色，沿用raw System正文。
+  - test:chat-images 23/23、test:game-chat 80/80通过，覆盖实际包装器请求参数、CSV空格、取消、游戏与图片回归；同步design/spec/task/todo/self-test。servicePackage保持true待构建，未部署本次提示变更，主模型原生图片传递尚未实施。
+
+### Offline真机更新与豆包续聊复验
+
+- ✅ [2026-10-23] Note8 Offline APK覆盖更新min72→min74，服务code148→code158，保留已有账号和数据；发布清单签名、APK签名、文件大小及SHA-256校验通过，设备活动版本158且健康检查已提交。
+  - 使用现存豆包账号进行隔离Responses流式两轮测试：首轮14字/4片/10.917秒，续轮31字/6片/5.043秒，均完成；第二轮沿用previous_response_id，私有会话记录确认同一Node直连上游会话、4条历史及ready状态，未写入当前AASC聊天。
+  - 旧code148本轮首句即返回doubao_upstream_failed/502，未重现“首句成功后续聊断开”，因此不能据此断言历史故障根因；当前版本已验证两轮续聊，长时间及真实控制端完整链路另验。没有新建发布产物或修改运行代码。
+
 ### SubAI专用工作AI与对话动作设计
 
 - ✅ [2026-10-23] 完成SubAI与对话动作接入设计：主AI提交动作意图，当前显示端先查动作库，缺库后专用AI生成MPL，经编译后统一Human播放；模型面板独立选择Provider/具体模型。

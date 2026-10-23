@@ -476,3 +476,6 @@ server-app复用控制消息白名单、连接初始化和广播；config.set持
 外部登录通过browser-port租约复用现有launcher固定profile/debugPort，在同一默认Context中打开登记登录tab。运行页整理跳过登记登录tab；登录pin期间禁止切换宿主账号。launcher验证CDP实际profile后重连残留实例，私有active-browser.json用于恢复宿主选择；专用Vivaldi关闭退出/关窗确认，不创建空白保活页。完整协议及伪代码见chat2api-remote-login设计/spec。
 
 统一profile及默认Context、持久登录环境、动态帧率和适应/铺满详见[远程登录设计](chat2api-remote-login.md)。账号切换不切换profile，豆包登录期间与运行请求互斥。
+# 2026-10-23 安装态续聊验收补充
+
+Note8现已使用正式已发布min74与code158，覆盖安装保留账号资料，通过现有启动器更新并提交健康状态。以独立Responses会话验证首句和续句，两轮均流式完成，续句关联同一上游Node会话；不将隔离API通过扩大为所有AASC入口或长期签名有效性通过。旧code148本轮首句已失败，历史“只能发第一句”的具体根因仍未复现确认。

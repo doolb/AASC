@@ -294,13 +294,13 @@ test('语音用户落子由 AI 标签调用，GM 增量之后 AI 自己落子', 
     assert.equal(prompts.some(prompt => prompt.includes('根据权威结果继续')), false);
     assert.deepEqual(gameTrace.map(entry => entry.kind), ['GM', 'GameUser', 'GM', 'GameAI', 'GM']);
     assert.equal(gameTrace.some(entry => entry.text.includes('根据权威结果继续')), false);
-    assert.match(systemPrompts[0], /Game:目录,GameAI,列表/);
+    assert.match(systemPrompts[0], /Game: 目录, GameAI, 列表/);
     assert.match(systemPrompts[0], /回复开头最多 8 条调用行，每条独占一行/);
-    assert.match(systemPrompts[0], /如果该调用行需要等待确认或者数据,以及GameUser或者GameAI操作游戏需要等待状态确认时,是原子操作,等待调行回复,不能再发其他调用行/);
+    assert.match(systemPrompts[0], /如果该调用行需要等待确认或者数据，以及 GameUser 或者 GameAI 操作游戏需要等待状态确认时，是原子操作，等待调行回复，不能再发其他调用行/);
     assert.match(systemPrompts[0], /用户报坐标时先发 GameUser 落子行，等 GM 确认且轮到 GameAI，再决定并发 GameAI 落子行/);
-    assert.match(systemPrompts[0], /自然语言另起行,每次回复都带上自然语言/);
-    assert.match(systemPrompts[0], /每次回复都带上自然语言。\n自然语言中不要透露等待状态确认,GM的信息, 这些是内部流程。\nGameUser 代表用户/);
-    assert.match(systemPrompts[0], /首次需要本地游戏时先发下面的, 调用目录查询，\nGame:目录,GameAI,列表\n\n然后再发下面的按需读取规则；已有规则时按规则操作。\nGame:游戏名,GameAI,规则/);
+    assert.match(systemPrompts[0], /自然语言另起行，每次回复都带上自然语言/);
+    assert.match(systemPrompts[0], /每次回复都带上自然语言。\n自然语言中不要透露等待状态确认，GM 的信息，这些是内部流程。\nGameUser 代表用户/);
+    assert.match(systemPrompts[0], /首次需要本地游戏时先发下面的，调用目录查询，\nGame: 目录, GameAI, 列表\n\n然后再发下面的按需读取规则；已有规则时按规则操作。\nGame: 游戏名, GameAI, 规则/);
     assert.equal(systemPrompts[0].includes('默认 15×15'), false);
     assert.deepEqual(chunks, ['我下在 G8，轮到你了。']);
     assert.deepEqual(sentences, ['我下在 G8，轮到你了。']);
@@ -342,7 +342,7 @@ test('是否开局只由 AI 标签决定，不按用户关键词补发指令', a
     assert.equal(first.message, '我们可以聊聊规则。');
     assert.equal(game.snapshot('d'), null);
     assert.equal(prompts.length, 1);
-    assert.match(prompts[0].systemPrompt, /Game:目录,GameAI,列表/);
+    assert.match(prompts[0].systemPrompt, /Game: 目录, GameAI, 列表/);
     const second = await runGameAwareChat({ chat: fakeChat, gameService: game, displayId: 'd',
         content: '开始吧', options: {}, callbacks: {} });
     assert.equal(second.message, '棋盘已经打开。');
@@ -406,9 +406,9 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
         getAvailableGames: () => ['五子棋'] });
     assert.equal(result.message, '我先看看可用游戏。\n来玩吧，你先落黑子。');
     assert.equal(inputs.length, 3);
-    assert.match(inputs[0].systemPrompt, /帮玩家操作，\nGame:目录,GameUser,列表/);
-    assert.match(inputs[0].systemPrompt, /你的操作，\nGame:目录,GameAI,列表/);
-    assert.match(inputs[0].systemPrompt, /首次需要本地游戏时先发下面的, 调用目录查询，\nGame:目录,GameAI,列表/);
+    assert.match(inputs[0].systemPrompt, /帮玩家操作，\nGame: 目录, GameUser, 列表/);
+    assert.match(inputs[0].systemPrompt, /你的操作，\nGame: 目录, GameAI, 列表/);
+    assert.match(inputs[0].systemPrompt, /首次需要本地游戏时先发下面的，调用目录查询，\nGame: 目录, GameAI, 列表/);
     assert.match(inputs[1].input, /目录,GM,列表,五子棋/);
     assert.match(inputs[2].input, /五子棋,GM,规则/);
     assert.equal(inputs[0].systemPrompt.includes('横竖斜连续五子'), false);
@@ -417,8 +417,9 @@ test('AI 按需读取当前显示端目录和五子棋规则，成功标签后�
     assert.equal(inputs[2].systemPrompt.includes('五子棋规则:'), false);
     assert.match(inputs[2].input, /Game:五子棋,GM,规则,可用操作：\n开局\[,尺寸\]/);
     assert.equal(inputs[2].input.includes('位置参数标签只用英文逗号'), false);
-    assert.ok(inputs[0].systemPrompt.indexOf('目录,AI,列表')
-        < inputs[0].systemPrompt.indexOf('NowGame:无'));
+    const directoryHintIndex = inputs[0].systemPrompt.indexOf('Game: 目录, GameAI, 列表');
+    assert.ok(directoryHintIndex >= 0);
+    assert.ok(directoryHintIndex < inputs[0].systemPrompt.indexOf('NowGame:无'));
     assert.ok(inputs[0].systemPrompt.indexOf('NowGame:无')
         < inputs[0].systemPrompt.indexOf('原角色设定'));
     assert.equal(game.snapshot('d').revision, 1);
@@ -777,7 +778,9 @@ test('同一回复预写 User 与 AI 落子时，先等 User 的 GM 回执再让
         } });
     assert.equal(prompts.length, 3);
     assert.match(prompts[0].systemPrompt, /^本地游戏调用行：/);
-    assert.ok(prompts[0].systemPrompt.indexOf('目录,AI,列表') < prompts[0].systemPrompt.indexOf('原角色设定'));
+    const directoryHintIndex = prompts[0].systemPrompt.indexOf('Game: 目录, GameAI, 列表');
+    assert.ok(directoryHintIndex >= 0);
+    assert.ok(directoryHintIndex < prompts[0].systemPrompt.indexOf('原角色设定'));
     assert.match(prompts[1].input, /GM,落子,.*GameUser,H3,GameAI,进行中/);
     assert.equal(result.message, '我下 H4，轮到你啦。\n该你下了。');
     assert.equal(chunks.join(''), result.message);
