@@ -18,6 +18,18 @@ Qwen参考素材字段包含materialId和类型；GLM输入含画幅、fps、dur
 
 接入拟涉及chat-model-tier-service/共用picker、sub-ai-protocol/task注册、独立video service与本地assets、chat2api-proxy/runtime/Provider视频适配、Responses输出媒体归一化、llm-service/history-store、chat.js/display-chat.js及定向测试。视频生成任务不能长期占用当前聊天Responses连接；复用已有视频接口并增加可查询的任务状态，避免再为同一设置新增HTTP配置接口。
 
+## 主AI原生生视频展示（用户明确要求，必须覆盖）
+
+视频接入须同时覆盖SubAI指令任务和主AI原生生成。主AI可以不输出SubAI调用行，由豆包/Qwen/GLM官网自身生成视频；此时接收并展示官网已创建的作品，不再调用一次视频生成接口，不受独立生视频模型选择影响。
+
+原生数据流为：Provider明确的视频任务/作品卡片→Chat2API统一视频增量与完成结果→Responses→llm-service视频收集回调→server-app本地媒体保存→主AI原回复→控制端/显示端播放器及历史。文字与视频共用一个assistant记录，避免重复气泡；仅视频回复也算有效回复。正在生成、下载中与真正可播放分别显示，出现作品封面不代表生成完成。
+
+需要新增chat-output-videos.js和chat2api-native-videos.js等独立归一化模块，并扩展chat2api-doubao-chat-adapter.js、chat2api-provider-adapters.js、chat2api-responses-service.js、llm-service.js、game-chat-bridge.js回调、server-app.js和双端聊天渲染。视频本地保存复用新的视频资产模块与history-store既有字段保留机制；新增native-chat-videos.js管理主回复状态。具体字段以三家真实生成样本核实后实现，不从普通视频链接、搜索结果、头像或封面猜测作品。
+
+流式和非流式都须保留videos数组，支持文字+视频、仅视频、多个视频，增量与末尾重复结果去重，刷新/切会话/重启后仍在原记录播放。已知上游任务可以后台查询；开始生成后不能因断连自动重新提交，防止同一请求生成两次。媒体查询沿用原账号与任务，不改主聊天上游会话；下一轮自然语言继续使用原会话引用。
+
+本条是新增的明确验收要求，尚未实现；原生视频实际字段及任务结果仍需官网样本验证。
+
 ## 状态与生命周期
 
 卡片区分queued/submitted/running/downloading/completed/failed/cancelled/interrupted。取消停止本地等待与下载；未证实官网取消能力前，不承诺撤销已提交任务或返还额度。停止后迟到结果不能复活已删除消息。
