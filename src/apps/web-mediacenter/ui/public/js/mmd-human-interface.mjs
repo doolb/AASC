@@ -1,3 +1,4 @@
+import { createHumanIK } from './mmd-human-ik.mjs';
 import { validateMotionSource, validateMotionSampler } from './mmd-motion-policy.mjs';
 import { GESTURES } from './mmd-reply-gestures.mjs';
 import { createHumanModel } from './mmd-human-model.mjs';
@@ -78,7 +79,7 @@ function validateSource(source) {
 }
 
 // 一个实例属于一个显示runtime。名称映射、异步令牌和动作所有权都绑定当前PMX。
-export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, canvas, manualExpressions, startRendering }) {
+export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, getCamera, getScene, canvas, manualExpressions, startRendering }) {
     const mixer = createHumanMixer(), physiology = createHumanPhysiology(), external = new Map();
     const gaze = createHumanGaze();
     const armAvoidance = createHumanArmAvoidance();
@@ -87,7 +88,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     const pending = new Map(), cache = new Map();
     let model = null, library = emptyHumanLibrary(), generation = 0, revision = 0, ready = false;
     let warning = '', disposed = false, helperBound = null, motionKey = '', suspended = false, rendererVisible = true, saveQueue = Promise.resolve();
-    let actionEpoch = 0, actionBasis = [];
+    let actionEpoch = 0, actionBasis = [], ikPending = false, ikLoadEpoch = 0;
     const wake = () => startRendering?.();
     const requireModel = () => {
         bind();
@@ -99,6 +100,12 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         document.querySelector('#mmdEditor [data-mode="edit"][aria-pressed="true"]')
         || document.querySelector('#edBlenderSession:not([hidden])')
         || document.getElementById('mmdEditor')?.getAttribute('aria-busy') === 'true');
+    // 捕获阶段先处理IK控制点，命中后不再触发注视或镜头拖动。
+    const interactiveIK = createHumanIK({ getScene, getCamera, canvas, onChange: wake });
+    function clearInteractiveIK() {
+        ikLoadEpoch++; ikPending = false; actionEpoch++;
+        armAvoidance.restore(); interactiveIK.reset();
+    }
     const releasePointer = attachHumanGazePointer(canvas, (x, y) => {
         if (!model || !ready || suspended || blocked() || disposed) return;
         if (gaze.point(model, getCamera?.(), x, y)) wake();
@@ -115,7 +122,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (helperBound?.onHumanPose === mixPose) delete helperBound.onHumanPose;
         if (helperBound?.onHumanAfterIK === avoidArms) delete helperBound.onHumanAfterIK;
         if (helperBound?.onHumanAfterPhysics === observeArms) delete helperBound.onHumanAfterPhysics;
-        armAvoidance.reset();
+        clearInteractiveIK(); armAvoidance.reset();
         helperBound = null;
     }
     function bind() {
@@ -217,8 +224,11 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         const stored = preparedActions.get(prepared), bound = requireModel();
         if (!stored || stored.bound !== bound || stored.generation !== generation
             || stored.motion !== getProfile()?.motionUrl || stored.helper !== getHelper()) throw new Error('准备动作已失效，请重新准备');
+        const priority = number(options.priority, stored.request.priority, 0, 100, '优先级');
+        // 自动动作统一经过此门禁，包含语音锚点和SubAI准备句柄。
+        if (priority < 50 && (ikPending || interactiveIK.getState().enabled)) throw new Error('手动全身IK已接管，自动动作已跳过');
         const result = mixer.start({ ...stored.request, owner: name(options.owner || stored.request.owner),
-            priority: number(options.priority, stored.request.priority, 0, 100, '优先级'), clock: options.clock ?? null });
+            priority, clock: options.clock ?? null });
         wake(); return { ...result, buffer: prepared.buffer, warnings: prepared.warnings };
     }
     async function perform(intent = {}, prepareOnly = false) {
@@ -369,10 +379,13 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     }
     function avoidArms(mesh, delta, physics) {
         if (mesh !== model?.mesh || !ready || suspended || disposed) return;
+        interactiveIK.apply(model, delta);
+        // 身体代理已经处理人体碰撞，避免几何避让再次改写身体。
+        if (interactiveIK.isPhysicsEnabled()) return;
         armAvoidance.apply(model, physics, delta, armAvoidanceEnabled, { paused: helperBound?.enabled.physics === false });
     }
     function observeArms(mesh, physics) {
-        if (mesh === model?.mesh && ready && !suspended && armAvoidanceEnabled) armAvoidance.observe(physics, helperBound?.enabled.physics === false);
+        if (mesh === model?.mesh && ready && !suspended && armAvoidanceEnabled && !interactiveIK.isPhysicsEnabled()) armAvoidance.observe(physics, helperBound?.enabled.physics === false);
     }
     function before(delta, helper) {
         bind();
@@ -380,10 +393,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (motionKey && key !== motionKey) stop();
         motionKey = key;
         const paused = blocked();
-        if (paused && !suspended) { stop(); gaze.reset(); }
+        if (paused && !suspended) { stop(); gaze.reset(); clearInteractiveIK(); }
         suspended = paused;
         frameDelta = Math.max(0, Math.min(0.1, delta));
-        armAvoidance.restore(); mixer.restore();
+        armAvoidance.restore(); interactiveIK.restore(); mixer.restore();
         if (!paused) mixer.advance(delta);
         if (helper !== helperBound) {
             detach();
@@ -393,8 +406,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             }
         }
     }
-    function lifecycle() { if (document.hidden) { suspended = true; stop(); gaze.reset(); } else { suspended = !rendererVisible; wake(); } }
-    const pagehide = () => { stop(); gaze.reset(); };
+    function lifecycle() { if (document.hidden) { suspended = true; stop(); gaze.reset(); clearInteractiveIK(); } else { suspended = !rendererVisible; wake(); } }
+    const pagehide = () => { stop(); gaze.reset(); clearInteractiveIK(); };
     document.addEventListener('visibilitychange', lifecycle);
     window.addEventListener('pagehide', pagehide);
     const learn = {
@@ -479,7 +492,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     return Object.freeze({
         capabilities() { bind(); return model?.snapshot() || { missing: ['尚未加载PMX'], bones: [], morphs: [], bindings: {} }; },
         getState() { bind(); return { ready, token: model?.token, signature: model?.signature, revision, warning,
-            physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), layers: mixer.snapshot(), pending: pending.size,
+            physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), interactiveIK: interactiveIK.getState(), automaticMotionBlocked: ikPending || interactiveIK.getState().enabled, layers: mixer.snapshot(), pending: pending.size,
             actions: learn.list(), candidates: candidates.list(), presets: structuredClone(library.presets), rules: structuredClone(library.rules),
             mappings: structuredClone(library.mappings) }; },
         physiology: {
@@ -498,6 +511,28 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             point(x, y) { requireModel(); const changed = gaze.point(model, getCamera?.(), x, y); if (changed) wake(); return changed; },
             reset() { gaze.returnToCamera(); wake(); }
         },
+        getInteractiveIKState: () => interactiveIK.getState(),
+        setInteractiveIKEnabled(value) {
+            const bound = requireModel();
+            ikLoadEpoch++; ikPending = false; actionEpoch++;
+            if (value) { stop(); window.DisplayMmdChatActions?.stop?.(); }
+            armAvoidance.restore();
+            const result = interactiveIK.setEnabled(value, bound); wake(); return result;
+        },
+        resetInteractiveIK() { requireModel(); armAvoidance.restore(); interactiveIK.resetTargets(); wake(); return interactiveIK.getState(); },
+        setInteractiveMarkerDiameter(value) { const result = interactiveIK.setMarkerDiameter(value); wake(); return result; },
+        async setInteractiveIKMode(value) {
+            const bound = requireModel(), epoch = ++ikLoadEpoch;
+            ikPending = true; actionEpoch++; stop(); window.DisplayMmdChatActions?.stop?.(); armAvoidance.restore();
+            try {
+                const result = await interactiveIK.setMode(value, bound);
+                if (epoch !== ikLoadEpoch || model !== bound || disposed || blocked()) throw new Error('人体物理初始化已取消');
+                wake(); return result;
+            } finally { if (epoch === ikLoadEpoch) { ikPending = false; actionEpoch++; } }
+        },
+        setInteractiveBodySettings(value) { requireModel(); return interactiveIK.setBodySettings(value); },
+        setInteractiveTargetState(key, position, rotation) { requireModel(); return interactiveIK.setTargetState(key, position, rotation); },
+        setInteractiveTarget(key, position, rotation) { requireModel(); return interactiveIK.setTarget(key, position, rotation); },
         actionKey, candidates, prepareMpl, reflex, learn, serverActions, perform, prepare: intent => perform(intent, true), startPrepared, mpl: { play: playMpl,
             // 使用与实际播放相同的模型能力，编辑器不根据缺少英文别名的能力摘要再次猜表情。
             advancedSource: options => createHighLevelMpl(options, requireModel().morphs)
@@ -531,10 +566,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             wake(); return true;
         },
         before,
-        setVisible(value) { rendererVisible = value === true; suspended = !rendererVisible || document.hidden; if (suspended) { stop(); gaze.reset(); } },
+        setVisible(value) { rendererVisible = value === true; suspended = !rendererVisible || document.hidden; if (suspended) { stop(); gaze.reset(); clearInteractiveIK(); } },
         dispose() {
             disposed = true; generation++; stop(); mixer.clear(); detach(); cache.clear();
-            gaze.reset(); armAvoidance.dispose(); releasePointer();
+            gaze.reset(); armAvoidance.dispose(); interactiveIK.dispose(); releasePointer();
             document.removeEventListener('visibilitychange', lifecycle); window.removeEventListener('pagehide', pagehide);
         }
     });

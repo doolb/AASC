@@ -34,6 +34,7 @@
     const PANELS = Object.freeze([
         ['displayMmdLightingToggle', 'displayMmdLightingPanel'],
         ['displayMmdMotionToggle', 'displayMmdMotionPanel'],
+        ['displayMmdIKToggle', 'displayMmdIKPanel'],
         ['displayArTargetToggle', 'displayArTargetPanel']
     ]);
     const GROUP_SWITCHES = Object.freeze({

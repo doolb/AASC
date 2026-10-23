@@ -39,7 +39,7 @@ test('真实PMX/Worker：库命中零生成、缺库生成完整播放自动入�
     const errors = [], statuses = []; let generations = 0;
     try {
         await new Promise(r => server.listen(0, '127.0.0.1', r));
-        browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
+        browser = await puppeteer.launch({ executablePath: chrome, headless: true, ignoreDefaultArgs: ['--disable-dev-shm-usage'], args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
         const page = await browser.newPage(); await page.setViewport({ width: 640, height: 480 });
         page.on('pageerror', e => errors.push(e.message));
         coordinator = createMotionCoordinator({ models: { selection: () => ({ enabled: true }), generate: async () => {
@@ -91,7 +91,7 @@ test('真实PMX/Worker：库命中零生成、缺库生成完整播放自动入�
 });
 
 test('两端动作模型面板独立Provider/模型与启用值，主AI为Agent也可设置', { skip: !fs.existsSync(chrome) }, async () => {
-    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox'] });
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, ignoreDefaultArgs: ['--disable-dev-shm-usage'], args: ['--no-sandbox'] });
     try {
         const page = await browser.newPage(); await page.setContent('<div id="control"></div><div id="display"></div>');
         await page.addScriptTag({ path: path.join(root, 'js/chat-model-tier-picker.js') });

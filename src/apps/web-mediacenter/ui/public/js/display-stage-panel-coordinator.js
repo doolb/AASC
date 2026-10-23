@@ -6,6 +6,7 @@
         ['displayAppearanceToggle', 'displayAppearancePanel', () => root.DisplayAppearanceControls?.close?.()],
         ['displayTtsVoiceToggle', 'displayTtsVoicePanel', () => root.DisplayTtsVoices?.close?.()],
         ['displayMmdLightingToggle', 'displayMmdLightingPanel', () => root.DisplayMmdLighting?.close?.()],
+        ['displayMmdIKToggle', 'displayMmdIKPanel', () => root.DisplayMmdIKPanel?.close?.()],
         ['displayMmdMotionToggle', 'displayMmdMotionPanel', () => root.DisplayMmdPanelGroups?.closeMotion?.()],
         ['displayArTargetToggle', 'displayArTargetPanel', () => root.DisplayMmdAr?.closePanel?.()]
     ]);

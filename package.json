@@ -86,6 +86,7 @@
     "build:apk:noserver": "node scripts/ops/build-apk.js noserver",
     "upload:apk": "npm run build:apk && node scripts/ops/apk-deploy.js",
     "start:apk:display": "node scripts/ops/apk-start.js",
+    "test:mmd-production:ik": "node --test tests/display-mmd-ik.test.js tests/display-mmd-ik-browser.test.js",
     "test:mmd-production": "node --test tests/display-mmd-production-actions.test.js tests/display-mmd-production-panels.test.js tests/mmd-ar-lighting-presets.test.js tests/mmd-ar-human-actions.test.js tests/mmd-ar-human-head-recovery.test.js tests/mmd-ar-human-arm-avoidance.test.js tests/mmd-ar-emoji-gestures.test.js tests/mmd-ar-physics-lifecycle.test.js tests/mmd-pmx-helper.test.js tests/mmd-ar-production-wind.test.js tests/display-mmd-tts-actions.test.js tests/agent-chat-tts.test.js tests/display-mmd-performance.test.js tests/mmd-gpu-timer.test.js",
     "test:mmd-production:browser": "node --test tests/display-mmd-production-actions-browser.test.js",
     "test:mmd-production:independent": "node --test tests/mmd-ar-human-actions-browser.test.js",

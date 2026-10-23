@@ -1,5 +1,15 @@
 # 自测功能实现文档
 
+## 正式端全身IK验收（2026-10-23）
+
+```text
+状态 := 源码已完成；test:mmd-production:ik 8/8；test:mmd-production 223通过/1跳过；test:sub-ai-motion 17/17
+测试 := 正式PMX实际鼠标拖点/位置Hold拒绝移动/Comply设置/关闭恢复/隐藏/目录门禁；合成PBD/迟到加载/真实Ammo分配归零
+回归 := test:mmd-production + test:sub-ai-motion + 独立IK/身体物理专项
+候选 := 人工IK接管取消自动动作，不将被约束干扰的动作当成功候选
+实机 := 手机触控、多个PMX姿态和帧耗时另验
+```
+
 ## SubAI动作接入回归（2026-10-23）
 
 ```text

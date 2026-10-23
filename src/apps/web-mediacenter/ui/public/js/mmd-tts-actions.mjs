@@ -38,7 +38,7 @@ export function createTtsActionPlayer({ audio, api, source, manual = () => 0,
     async function compile(record) {
         if (!valid(record) || hidden()) return;
         const human = api();
-        if (!human?.getState().ready || !human.prepare || !human.startPrepared) return;
+        if (!human?.getState().ready || human.getState().automaticMotionBlocked || !human.prepare || !human.startPrepared) return;
         record.human = human; record.token = token(human); record.manual = manual();
         const entries = await human.serverActions.load();
         if (!valid(record) || token(human) !== record.token) return;
@@ -112,6 +112,7 @@ export function createTtsActionPlayer({ audio, api, source, manual = () => 0,
         const session = current;
         if (!session) return;
         const record = session.record, human = record.human;
+        if (human.getState().automaticMotionBlocked) { stopCurrent('手动全身IK已接管'); return; }
         if (!valid(record) || source() !== session.entry || api() !== human || token(human) !== record.token
             || hidden() || manual() !== record.manual) { stopCurrent('来源、模型或手动操作已变化'); return; }
         if (session.motion?.id && human.getRequest) {

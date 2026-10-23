@@ -167,6 +167,7 @@
                 </section>
                 <button id="displayMmdLightingToggle" class="display-stage-button" type="button"
                         aria-controls="displayMmdLightingPanel" aria-expanded="false">灯光</button>
+                <button data-mmd-production-only id="displayMmdIKToggle" class="display-stage-button" type="button" aria-controls="displayMmdIKPanel" aria-expanded="false">全身 IK</button>
                 <button id="displayMmdMotionToggle" class="display-stage-button" type="button"
                         aria-controls="displayMmdMotionPanel" aria-expanded="false">动作</button>
                 <button id="displayArTargetToggle" class="display-stage-button" type="button"
@@ -278,6 +279,15 @@
     <label class="mind-basic-field" data-mmd-production-only=""><span>重力死区 <output id="mmdArGravityDeadZoneValue">0.5°</output></span><input id="mmdArGravityDeadZone" type="range" min="0" max="3" step="0.1" value="0.5"></label>
     <label class="mind-basic-field" data-mmd-production-only=""><span>重力缓动 <output id="mmdArGravitySmoothingValue">20 ms</output></span><input id="mmdArGravitySmoothing" type="range" min="0" max="500" step="10" value="20"></label>
 </section>
+                <section data-mmd-production-only id="displayMmdIKPanel" class="display-mmd-lighting-panel" hidden aria-label="全身IK设置">
+        <div class="display-mmd-lighting-header"><strong>全身 IK</strong><button id="displayMmdIKClose" type="button" class="display-mmd-ar-action">收起</button></div>
+        <p class="mind-basic-note">拖动彩色控制点调整姿态。收起面板保留控制目标；关闭全身IK恢复动作。启用期间暂停自动对话动作。</p>
+        <div class="display-mmd-ar-actions"><button type="button" class="display-mmd-ar-action" data-ik-action="enable">启用全身 IK</button>
+        <button type="button" class="display-mmd-ar-action" data-ik-action="reset">重置控制点</button></div>
+        <label class="mind-basic-field">控制点大小 <output data-ik-size-output>32px</output><input data-ik-size type="range" min="20" max="48" step="2" value="32"></label>
+        <p class="mind-basic-note" data-human-ik-status>全身 IK 已关闭</p>
+        <p class="mind-basic-note" data-ik-message role="status" aria-live="polite"></p>
+        </section>
                 <section id="displayMmdMotionPanel" class="display-mmd-lighting-panel" hidden
                          aria-label="角色动作与物理设置">
                     <div class="display-mmd-lighting-header"><strong>动作与物理</strong></div>

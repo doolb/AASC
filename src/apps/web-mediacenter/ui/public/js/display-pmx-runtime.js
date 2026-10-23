@@ -400,7 +400,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         onChanged: () => { ambientOcclusion.invalidateTemporal(); startRendering(); }
     });
     const human = createHumanRuntime({ getMesh: () => currentMesh, getHelper: () => helper.current,
-        getProfile: () => currentProfile, getCamera: () => camera, canvas, manualExpressions, startRendering: () => startRendering() });
+        getProfile: () => currentProfile, getCamera: () => camera, getScene: () => scene, canvas, manualExpressions, startRendering: () => startRendering() });
     const physicsGate = { paused: false };
     const framePerformance = createCanvasPerformance(canvas, renderer);
     let physicsFrame = { running: false, frameMs: 0 };

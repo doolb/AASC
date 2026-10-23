@@ -9,7 +9,7 @@ export function createChatActionPlayer({ api, send, hidden = () => document.hidd
     function reply(job, op, extra = {}) { send({ type: 'chatAction', op, requestId: job.id, key: job.key, ...extra }); }
     function valid(job) {
         return !closed && active === job && connected && !hidden() && api() === job.human
-            && job.human.actionKey() === job.key && !cancelled.has(job.id);
+            && !job.human.getState().automaticMotionBlocked && job.human.actionKey() === job.key && !cancelled.has(job.id);
     }
     function cancel(message = '动作已取消') {
         const job = active; active = null;
@@ -23,7 +23,7 @@ export function createChatActionPlayer({ api, send, hidden = () => document.hidd
         const human = api();
         const state = human?.getState();
         const key = human?.actionKey?.() || 'unsupported';
-        const ready = Boolean(state?.ready && human?.prepareMpl && !hidden());
+        const ready = Boolean(state?.ready && !state.automaticMotionBlocked && human?.prepareMpl && !hidden());
         const stamp = key + ':' + ready;
         if (publishedKey === stamp) return;
         publishing = true;
@@ -43,7 +43,7 @@ export function createChatActionPlayer({ api, send, hidden = () => document.hidd
         if (cancelled.has(message.requestId)) return;
         cancel('新的动作请求');
         const human = api();
-        if (!human?.getState().ready || message.key !== human.actionKey() || hidden()) return;
+        if (!human?.getState().ready || human.getState().automaticMotionBlocked || message.key !== human.actionKey() || hidden()) return;
         const job = { id: message.requestId, key: message.key, description: message.description, parameters: message.parameters || {}, deadline: message.deadline, human };
         active = job;
         const entries = await human.serverActions.load();

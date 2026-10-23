@@ -1,5 +1,22 @@
 # 独立 MMD-AR HumanInterfaceElement 实现
 
+## 正式端全身IK迁移伪代码（2026-10-23，已实现）
+
+```text
+已有声明 := 独立web-human-ik/PBD/physics-rig/physics-drive/joint-limits/body-damping/markers/mode + 正式Human与SubAI
+新增定义 := InteractiveIKSession { enabled, mode, targets, settings, markerDiameter, modelToken, epoch }
+装配 := 正式场景/镜头/canvas/当前Human模型 → 会话IK实例；默认关闭；图片识姿依赖从交互核心解耦
+开启 := 捕获模型身份 → 取消自动对话动作并声明暂不可用 → 按需加载现有Ammo → 身份仍有效时启用physics
+目标 := 指针命中控制点 → 阻止镜头/角色拖动接管 → 有界世界目标与位置/旋转状态 → 既有物理求解
+逐帧 := 恢复上帧避让与IK增量 → 当前VMD/MPL基准与原生IK → 交互IK → 对应模式避让/物理衔接
+面板 := 显示当前Human权威会话状态；收起不关闭；重置释放目标；关闭恢复基准并重新上报自动动作可用性
+生命周期 := 换模型/helper重建/隐藏/销毁 → 取消指针及迟到加载 → 恢复骨骼 → 释放人体刚体与标记
+自动门禁 := IK加载代次与actionEpoch变化 → SubAI旧句柄失效；Human启动优先级小于50且IK加载/启用 → 拒绝启动；TTS动作停止自己的轨道，音频保持
+候选 := 人工IK接管取消自动任务；被接管或中断的生成动作不得保存为成功候选
+远端配置 := 首版沿用本地会话设置；将来可远端配置时复用AASC权威配置，不新增HTTP配置接口
+验证 := 合成约束/真实PMX拖点/关闭恢复/镜头互斥/迟到加载/正式MPL与SubAI回归
+```
+
 ## HMR纯网页可选模式（2026-10-22，已实现）
 
 ```text

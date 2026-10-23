@@ -175,3 +175,17 @@ test('自动动作手动抢占或存储失败不假报已保存，失败不重�
     await g.message('start', { ticketId: g.sent.at(-1).ticketId });
     assert.equal(g.started(), 0); assert.equal(g.saved.length, 0); g.player.dispose();
 });
+
+
+test('手动IK接管取消自动播放、不存候选，关闭后恢复目录可用', async () => {
+    const f = await playerFixture();
+    await f.message('resolve', { description: '未知动作' }); await f.message('prepare', { artifact });
+    await f.message('start', { ticketId: f.sent.at(-1).ticketId });
+    const original = f.human.getState; let blocked = true;
+    f.human.getState = () => ({ ...original(), automaticMotionBlocked: blocked });
+    f.finish(); await f.player.tick();
+    assert.equal(f.saved.length, 0); assert.ok(f.sent.some(m => m.op === 'result' && m.status === 'cancelled'));
+    assert.equal(f.sent.at(-1).catalog.ready, false);
+    blocked = false; await f.player.tick(); assert.equal(f.sent.at(-1).catalog.ready, true);
+    f.player.dispose();
+});

@@ -1,3 +1,5 @@
+- [正式显示端全身IK](usage/mmd-fullbody-ik.md)（源码完成，待服务包部署）
+
 - [媒体区间循环：一条滑条两个手柄](usage/control-media-loop.md)（服务包及Node独立包待构建部署）
 
 - [AI对话动作与动作SubAI](usage/sub-ai-actions.md)

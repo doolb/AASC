@@ -2,6 +2,7 @@ import { registerLightingAdapters } from './mmd-lighting-adapters.mjs';
 import { initLightingPresets } from './mmd-lighting-presets.mjs';
 import './mmd-mpl-ui.mjs';
 import './mmd-human-ui.mjs';
+import './mmd-human-ik-ui.mjs';
 import './mmd-reply-ui.mjs';
 import './mmd-expressions-ui.mjs';
 
