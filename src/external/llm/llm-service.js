@@ -329,9 +329,9 @@ function applyProfile(name) {
 function normalizeLlmProfile(profile = {}, fallbackProtocol = 'openai-responses') {
     const normalized = normalizeAgentProfile(profile);
     normalized.protocol = normalizeProfileProtocol(normalized.protocol, fallbackProtocol);
-    for (const [key, label] of [['supportsImageUpload', '支持上传图片'], ['supportsVideoUpload', '支持上传视频']]) {
+    for (const [key, label, defaultValue] of [['supportsImageUpload', '支持上传图片', true], ['supportsVideoUpload', '支持上传视频', false]]) {
         if (profile[key] !== undefined && typeof profile[key] !== 'boolean') throw new Error(`${label}必须为布尔值`);
-        normalized[key] = profile[key] ?? true;
+        normalized[key] = profile[key] ?? defaultValue;
     }
     return normalized;
 }

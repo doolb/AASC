@@ -51,7 +51,8 @@ test('真实LLM+SubAI三轮raw图片续聊、重启引用、失效恢复和能�
  const img={id:'cat',url:'/uploads/chat-images/abc.png',mimeType:'image/png',origin:'subai'};
  const run=async(text,refs=[])=>createSubAiChatBridge(chat,{references:refs,dispatch:async()=>{throw Error('无任务')}}).chatStream(text,{...options,contextImages:refs},{});
  (async()=>{
- assert.equal(chat.getProfiles()[0].supportsImageUpload,true);assert.equal(chat.getProfiles()[0].supportsVideoUpload,true);
+ assert.equal(chat.getProfiles()[0].supportsImageUpload,true);assert.equal(chat.getProfiles()[0].supportsVideoUpload,false);
+ assert.equal(chat.normalizeLlmProfile({...profile,supportsVideoUpload:true}).supportsVideoUpload,true);
  assert.throws(()=>chat.normalizeLlmProfile({...profile,supportsImageUpload:'false'}),/布尔/);
  assert.equal((await run('画猫')).success,true);
  assert.equal((await run('说说这张图',[img])).success,true);

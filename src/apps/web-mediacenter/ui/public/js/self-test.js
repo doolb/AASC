@@ -282,7 +282,7 @@ const SelfTest = {
                     ['supportsImageUpload', 'supportsVideoUpload'].every(key => profile[key] === undefined || typeof profile[key] === 'boolean'));
                 return { success: markupValid && profilesValid,
                     message: markupValid && profilesValid ? '媒体能力配置入口正常' : '媒体能力控件或配置类型异常',
-                    details: '缺省true；视频目前仅保存能力开关。图片上传和续聊由隔离自动测试及真实Responses验证。' };
+                    details: '图片缺省开启，视频缺省关闭；视频目前仅保存能力开关。图片上传和续聊由隔离自动测试及真实Responses验证。' };
             }
         },
         {

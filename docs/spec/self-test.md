@@ -2993,3 +2993,13 @@ Native输入 := Doubao10052/Qwen image-url/GLM file_id；Responses流与非流�
 真实账号 := Responses独立新会话，图片识别→只发颜色追问，同一会话完成，不写AASC当前历史
 命令 := npm run test:chat-images / check:chat2api / test:chat-streaming / test:chat-context
 ```
+
+## 视频上传默认关闭回归（2026-10-23）
+
+```text
+规范化 := 图片默认true、视频默认false；显式true/false保持；旧配置缺字段采用对应默认
+实际DOM := HTML不勾选视频；新增/编辑缺字段不勾选；显式开启编辑仍勾选
+提交 := 既有WS保存布尔false，权威快照保持；禁图仍保留草稿
+结果 := 图片35/35，补充新增默认/显式true之后定向7/7通过
+视频生成 := 只核查网页/source和方案，本轮不创建视频任务、不宣称视频生成成功
+```

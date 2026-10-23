@@ -1,3 +1,10 @@
+### 视频上传默认关闭与聊天视频生成接入核查
+
+- ✅ [2026-10-23] 视频上传能力默认改为false，图片继续默认true，明确保存的true/false保持；新增、编辑旧配置、HTML初始与保存回退一致。
+  - 修改llm-service.js、chat.js、upload.html、self-test.js与媒体配置/Chromium测试；npm run test:chat-images 35/35，补充新增缺省/显式true之后定向7/7通过。同步chat-system design/spec、usage与self-test，servicePackage=true待构建，未部署。
+- ✅ [2026-10-23] 用共享Vivaldi当前官网页面与公开前端源码核查豆包/Qwen/GLM视频生成接入，记录独立任务→占位卡片→后台查询→本地视频→同消息播放器方案。
+  - 豆包现有旧异步媒体服务需验证当前兼容性；Qwen有genVideo场景与视频作品卡片；GLM有清影video-api/v1/chat创建和状态/结果查询。新增chat-video design/spec及任务文档，视频接入待方案确认。本轮未创建视频任务、未验证真实生成或额度；仅关闭本次创建的4个检查页签，保留已有页签。
+
 ### 聊天图片回传、原会话续聊与媒体能力配置
 
 - ✅ [2026-10-23] 修复参考图清单变化和含图输入导致Responses重建会话，接通历史本地图/独立SubAI结果回传与失效恢复；主模型同会话已有图无需重复上传。

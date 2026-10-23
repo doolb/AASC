@@ -2539,8 +2539,8 @@ const Chat = {
         document.getElementById('profileEditTemperature').value = '';
         document.getElementById('profileEditContextCount').value = '';
         document.getElementById('profileEditApiKey').value = '';
-        for (const id of ['profileEditSupportsImageUpload', 'profileEditSupportsVideoUpload']) {
-            const input = document.getElementById(id); if (input) input.checked = true;
+        for (const [id, defaultValue] of [['profileEditSupportsImageUpload', true], ['profileEditSupportsVideoUpload', false]]) {
+            const input = document.getElementById(id); if (input) input.checked = defaultValue;
         }
         this.updateProfileBackendVisibility();
         document.getElementById('profileEditor').style.display = 'block';
@@ -2561,8 +2561,8 @@ const Chat = {
         document.getElementById('profileEditContextCount').value = profile.contextCount || '';
         document.getElementById('profileEditApiKey').value = profile.apiKey || '';
         document.getElementById('profileEditPromptFormat').value = profile.promptFormat || 'openai';
-        for (const [id, key] of [['profileEditSupportsImageUpload', 'supportsImageUpload'], ['profileEditSupportsVideoUpload', 'supportsVideoUpload']]) {
-            const input = document.getElementById(id); if (input) input.checked = profile[key] !== false;
+        for (const [id, key, defaultValue] of [['profileEditSupportsImageUpload', 'supportsImageUpload', true], ['profileEditSupportsVideoUpload', 'supportsVideoUpload', false]]) {
+            const input = document.getElementById(id); if (input) input.checked = profile[key] ?? defaultValue;
         }
         this.updateProfileBackendVisibility();
         document.getElementById('profileEditor').style.display = 'block';
@@ -2605,7 +2605,7 @@ const Chat = {
         const profile = { name, protocol, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode };
         const previous = this.profiles.find(item => item.name === this.editingProfileName);
         profile.supportsImageUpload = document.getElementById('profileEditSupportsImageUpload')?.checked ?? previous?.supportsImageUpload ?? true;
-        profile.supportsVideoUpload = document.getElementById('profileEditSupportsVideoUpload')?.checked ?? previous?.supportsVideoUpload ?? true;
+        profile.supportsVideoUpload = document.getElementById('profileEditSupportsVideoUpload')?.checked ?? previous?.supportsVideoUpload ?? false;
         if (mode === 'agent') profile.backend = backend;
 
         // 草稿不写入权威列表；下载被取消/失败时旧配置和表单都可直接恢复。

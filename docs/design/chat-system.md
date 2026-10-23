@@ -544,7 +544,7 @@ AI/Agent 回复按对应聊天模板的 Provider 和音色覆盖系统 AI 默认
 
 隔离复现参考图ID改变systemPrompt指纹，以及含图请求强制禁用续接两处问题后，分离稳定身份systemPromptIdentity和动态turnContext。合法引用继续发送文字/新增图片，成功后持久化已发送图片ID；引用失效则重新读取本地图恢复。主模型同会话已有图不重复上传，独立SubAI结果按ID补图；历史继续保存本地URL。
 
-supportsImageUpload/supportsVideoUpload缺省true、false保留、非法类型拒绝；沿用chatProfilesSave→normalize/config.set→chatProfilesConfig权威广播和初始化。禁图时阻止当前附件发送且保留草稿，历史图不上传但不删除。视频仅配置；Agent图片入口明确未接入。
+supportsImageUpload缺省true、supportsVideoUpload缺省false，显式布尔值保留、非法类型拒绝；沿用chatProfilesSave→normalize/config.set→chatProfilesConfig权威广播和初始化。禁图时阻止当前附件发送且保留草稿，历史图不上传但不删除。视频仅配置；Agent图片入口明确未接入。
 
 raw格式保留System/User/AI文字与独立图片附件，不新增system角色。Chat2API保存图片片段并执行实际上传：豆包10052附件与10000文本；Qwen workspace_api签名的oss_token/PUT/callback后image/url；GLM刷新token后chat_upload，再把file_id/image_url放同一user.content。Qwen复用现有校时/令牌机制的独立业务场景，无Android原生修改。Native输入要求Data URL，32图/单图20MiB/总计40MiB，豆包上传器10MiB。
 
@@ -553,3 +553,5 @@ raw格式保留System/User/AI文字与独立图片附件，不新增system角色
 GLM第一次官网尝试自动恢复旧网页会话，误写了一轮测试问答；未找到可靠单轮删除入口，保留原会话而未整段删除。此后显式新对话且拦截非空旧conversation_id，完成带图验证。该残留单轮需精确清理，不能当作已清除。
 
 验证见任务和self-test；servicePackage=true待构建，未部署本轮代码或APK。使用说明见usage/chat-media-input.md。
+
+视频上传默认值已按用户2026-10-23确认改为false，新增/旧配置缺省与表单一致，显式true仍保留。视频生成输出接入仅核查，见chat-video.md；上传开关不控制生成输出。

@@ -2128,19 +2128,19 @@ handleChatMessage(options):
 ```text
 已观察 := 参考图IDs变化 → systemPrompt变化 → fingerprint变化 → 无previous_response_id；同ID第三轮正常复用
 独立禁用 := buildResponsesPayload发现input_image/image_url时忽略旧引用，当前也导致媒体新开会话
-配置 := supportsImageUpload/supportsVideoUpload缺省true，显式false保留；随现有LLM profile权威流程保存和初始化补发
+配置 := supportsImageUpload缺省true、supportsVideoUpload缺省false，显式布尔值保留；随现有LLM profile权威流程保存和初始化补发
 身份 := 稳定角色/模型/协议/服务地址仍控制会话；本轮参考图清单不充当会话身份
 续聊 := 合法旧引用 + 本轮新增文字/附件 → previous_response_id，不因媒体存在强制新会话
 媒体上下文 := 原生同会话保留上游已有图；独立SubAI结果/恢复所需图片从本地资产读取并按后端协议传入，排除本地路径泄漏和重复上传
 原始格式 := 保留raw System/User规范，不新增system角色消息；动态参考图信息随本轮上下文更新，不丢用户原话
 入站 := Responses/Chat2API保留图片类型，Provider能力检查后上传/引用；不再先转空文字；不支持时明确错误
 开关 := 默认允许，关闭媒体阻止相应发送并给出说明；既有聊天图片存储/显示不因关闭而删除
-视频 := 本轮只做默认true的能力开关和配置保存，实际上传入口后续接入
+视频 := 本轮只做默认false的能力开关和配置保存，实际上传入口后续接入
 验证计划 := 生成图→下一轮同会话，图IDs变化仍续接，恢复本地图片、能力默认/关闭/旧配置迁移、WS权威同步、失败与不静默丢媒体
 ```
 
 ```text
-能力规范化 := normalizeLlmProfile中缺省true，显式false保留，非布尔值拒绝；旧配置读取与保存均补齐
+能力规范化 := normalizeLlmProfile中图片缺省true、视频缺省false，显式布尔值保留，非布尔值拒绝；旧配置读取与保存均补齐
 raw附件 := 保留原System/User/AI文字，input_text后加input_image；Chat Completions使用text/image_url
 当前图片关闭 := 在保存用户记录/上传前给出明确错误，前端保留未发送草稿；历史图片显示不删除，SubAI独立生图不受此开关限制
 会话身份 := SubAI桥提供不含参考图清单的稳定systemPromptIdentity，本轮参考图清单由动态上下文传递
@@ -2179,4 +2179,15 @@ Qwen:
 GLM:
   使用刷新后的账号token调用chat_upload
   同一user.content保留text，追加image数组(file_id,image_url,file_size)
+```
+
+
+### 视频上传默认关闭（2026-10-23，覆盖之前默认值）
+
+```text
+已有声明 := profile.supportsVideoUpload与现有配置保存/广播/表单
+默认值 := 视频false，图片true；仅在字段缺省时采用，不覆盖用户显式true/false
+规范化 := 校验字段为布尔值，缺省按各自默认值填充
+表单 := 初始HTML/新增/编辑旧配置/缺控件回退均使用视频false
+验证 := 新旧配置缺省false；显式true和false均保留；实际DOM与WS保存一致
 ```

@@ -195,3 +195,5 @@
 - [GLM认证兼容](design/chat2api-glm-auth.md)
 
 - [多Provider生图与模型选择](design/chat2api-image-generation.md)
+
+- [聊天视频生成接入核查（尚未实现）](design/chat-video.md)
