@@ -10,6 +10,7 @@ const { createDoubaoChatAdapter } = require('./chat2api-doubao-chat-adapter');
 const { readChatImages, qwenImageMessages } = require('./chat2api-chat-media');
 const { createQwenChatUpload } = require('./chat2api-qwen-chat-upload');
 const { uploadGlmImage } = require('./chat2api-image-upload');
+const { uploadInputVideos } = require('./chat2api-input-video-adapters');
 const { createNativeVideoStream,collectNativeMediaBody } = require('./chat2api-native-media-stream');
 const { inspectNativeImages } = require('./chat2api-native-images');
 const { extractQwenImages, completeQwenImages } = require('./chat2api-qwen-images');
@@ -137,7 +138,8 @@ const createRequestId = () => randomUUID();
 const createGlmRequest = (request, actualModel, provider, headers, account, responseSession) => {
   const nativeState = getNativeState(responseSession);
   const origin = getProviderOrigin(provider, 'https://chatglm.cn');
-  const prepared = [{ role: 'user', content: [{ type: 'text', text: `${getMessagesText(request.messages)}\nAssistant: ` }, ...(request.uploadedImages?.length ? [{ type:'image',image:request.uploadedImages }] : [])] }];
+  const prepared = [{ role: 'user', content: [{ type: 'text', text: `${getMessagesText(request.messages)}\nAssistant: ` }, ...(request.uploadedImages?.length ? [{ type:'image',image:request.uploadedImages }] : []),
+    ...(request.uploadedVideos?.length ? [{ type: 'video', video: request.uploadedVideos }] : [])] }];
   return {
     url: `${origin}/chatglm/backend-api/assistant/stream`,
     data: {
@@ -866,7 +868,7 @@ const createDeepSeekPowResponse = async (httpClient, provider, headers, account)
   return Buffer.from(JSON.stringify({ ...challenge, answer, target_path: '/api/v0/chat/completion' })).toString('base64');
 };
 
-const prepareNativeRequest = async ({ httpClient, providerId, provider, account, request, actualModel, headers, responseSession }) => {
+const prepareNativeRequest = async ({ httpClient, providerId, provider, account, request, actualModel, headers, responseSession, readVideoFile }) => {
   const nativeState = getNativeState(responseSession);
   let preparedAccount = account;
   if (providerId === 'glm') preparedAccount = await refreshGlmToken(httpClient, provider, headers, account);
@@ -897,15 +899,19 @@ const prepareNativeRequest = async ({ httpClient, providerId, provider, account,
     return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, chat.chatId, chat.messageId, responseSession);
   }
   if (providerId === 'glm') {
+    // 日志包装器只保证request，上传模块所需post在此显式适配。
+    const uploadHttp = { post: (url, data, config) => httpClient.request({ ...config, method: 'POST', url, data }) };
     const uploadedImages = [];
     for (const image of readChatImages(request)) uploadedImages.push(await uploadGlmImage(image, {
-      http:httpClient, headers:{...headers, Authorization:`Bearer ${getProviderToken(preparedAccount)}`}, signal:request.mediaSignal }));
-    request = { ...request, uploadedImages };
+      http:uploadHttp, headers:{...headers, Authorization:`Bearer ${getProviderToken(preparedAccount)}`}, signal:request.mediaSignal }));
+    const uploadedVideos = await uploadInputVideos({ providerId, request, account: preparedAccount, http: uploadHttp,
+      headers: { ...headers, Authorization: `Bearer ${getProviderToken(preparedAccount)}` }, signal: request.mediaSignal, readVideoFile });
+    request = { ...request, uploadedImages, uploadedVideos };
   }
   return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, responseSession);
 };
 
-const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload, adoptVideoTask }) => async ({ request, account, provider, actualModel, context = {}, responseSession }) => {
+const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload, adoptVideoTask, readVideoFile }) => async ({ request, account, provider, actualModel, context = {}, responseSession }) => {
   let currentConfig = {};
   if (rawTrafficLogger && typeof getConfig === 'function') {
     try {
@@ -930,10 +936,11 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
   const images = readChatImages(request);
   const uploadedImages = [];
   if (isQwen) for (const image of images) uploadedImages.push(await qwenUpload(image, {account,signal:context.signal}));
-  request = { ...request, uploadedImages, mediaSignal:context.signal };
+  const uploadedVideos = isQwen ? await uploadInputVideos({ providerId, request, account, http: httpClient, headers, signal: context.signal, readVideoFile, qwenUpload }) : [];
+  request = { ...request, uploadedImages, uploadedVideos, mediaSignal:context.signal };
   const qwenRequest = isQwen ? createQwenRequest(request, actualModel, provider, headers, responseSession) : null;
   const nativeRequest = !isQwen && NATIVE_REQUEST_BUILDERS[providerId]
-    ? await prepareNativeRequest({ httpClient: tracedHttpClient, providerId, provider, account, request, actualModel, headers, responseSession })
+    ? await prepareNativeRequest({ httpClient: tracedHttpClient, providerId, provider, account, request, actualModel, headers, responseSession, readVideoFile })
     : null;
   const response = await tracedHttpClient.request({
     method: 'POST',
@@ -976,10 +983,10 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
 };
 
 const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig, onDoubaoChatVerified,
-  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport, getDoubaoWebViewSettings, doubaoSignatureStore, uploadDoubaoImages, adoptVideoTask, qwenUpload = createQwenChatUpload({http:httpClient}) } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
+  onDoubaoBrowserChatVerified, doubaoBrowserBridge, getDoubaoTransport, getDoubaoWebViewSettings, doubaoSignatureStore, uploadDoubaoImages, adoptVideoTask, readVideoFile, qwenUpload = createQwenChatUpload({http:httpClient}) } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId,
   providerId === 'doubaochat' ? createDoubaoChatAdapter({ httpClient, browserBridge: doubaoBrowserBridge,
     getTransport: getDoubaoTransport, getDoubaoWebViewSettings, signatureStore: doubaoSignatureStore, uploadChatImages:uploadDoubaoImages, adoptVideoTask, onChatVerified: onDoubaoChatVerified,
-    onBrowserChatVerified: onDoubaoBrowserChatVerified }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload, adoptVideoTask }),
+    onBrowserChatVerified: onDoubaoBrowserChatVerified }) : createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig, qwenUpload, adoptVideoTask, readVideoFile }),
 ]));
 
 module.exports = { PROVIDER_IDS, createChat2ApiProviderAdapters, buildProviderHeaders, buildRequestBody, createQwenRequest, parseSseStream };

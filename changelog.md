@@ -1,3 +1,12 @@
+### 聊天附件、媒体回收与Node睡眠
+
+- ✅ [2026-10-23] 双端聊天新增文本/图片/视频附件，清空/历史淘汰后按全局引用回收媒体；Node子显示端接通现有睡眠设置、遮罩和唤醒恢复。
+  - 新增chat-attachment-service、chat-media-gc、共享chat-attachments JS/CSS、llm-attachment-context、Chat2API私有视频文件缓存及原生上传；WS只传附件ID，文本解码纳入预算，视频默认关闭，每条最多4文件，保留原会话/历史及迟到取消。保留每日单份快照、其他会话、显示/媒体库及草稿/生成租约引用；严格UUID普通文件，历史损坏停止删除。未删除正式服务器媒体。
+  - GLM原始视频经独立Responses两轮实测正确识别蓝色/无人，修复HTTP日志包装器缺少post导致上传失败；Qwen普通文件转chat_office异步工作流，当前未接通视频理解，正式路径明确unsupported_modality；豆包同样明确拒绝。未把上传HTTP成功或空回复当作视频支持，未写当前AASC对话或提交凭据/抓包/样片。
+  - 新增Node sleep-controller，扩展main/media-controller/mpv-player/mpv-text-player，普通睡眠遮黑媒体保UI，深睡全黑；正文暂停与通用TTS隔离，睡眠播放意图持久化，握手无媒体时不覆盖旧意图；恢复/新媒体/清空竞态、计时器清理及mpv同进程恢复均验。
+  - 验证：附件11/11、Node睡眠8/8、mpv51/51、独立虚拟屏幕真实mpv6/6、Chat2API419/419、流式66/66、图片35/35、视频37/37。旧网页睡眠现场测试依赖8081，初始化activationUntil非零失败仍待独立归因，不记通过；Windows及Android设备更新验收另列todo。
+  - 同步design/spec/task/usage与只读自测入口，移除已完成开发todo。servicePackage和voiceDisplayNodePackage=true待构建，其他产物不变；本轮未构建发布、未重启生产。
+
 ### 正式端全身IK
 
 - ✅ [2026-10-23] 将当前mmd-ar手动全身IK/身体物理迁入正式PMX显示端，增加独立面板、11个控制点、位置/旋转状态、牵引/阻尼/重力/骨盆设置及完整清理。

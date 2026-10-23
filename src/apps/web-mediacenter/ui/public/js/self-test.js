@@ -304,6 +304,16 @@ const SelfTest = {
             }
         },
         {
+            id: 'chat_attachment_controls', name: '聊天附件入口', category: '聊天',
+            description: '只读检查附件入口与文件链接，不选择文件或发送消息',
+            run: async () => {
+                const html = window.Chat?.renderMessageImages?.([], [], [{ kind: 'text', name: '说明.txt', url: '/uploads/chat-files/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.txt' }]);
+                const link = new DOMParser().parseFromString(html || '', 'text/html').querySelector('a[download]');
+                const valid = typeof window.Chat?.selectAttachment === 'function' && Boolean(link);
+                return { success: valid, message: valid ? '聊天附件选择与历史文件入口正常' : '聊天附件入口缺失', details: '上传、能力校验、引用回收和双端视频解码由隔离回归测试覆盖。' };
+            }
+        },
+        {
             id: 'chat_media_capabilities',
             name: '聊天媒体上传配置',
             category: '聊天',

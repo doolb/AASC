@@ -3066,3 +3066,18 @@ Node命令 := npm run test:node-display-mpv → 51通过，真实子进程/socke
 性能边界 := 拖动中不发送远端控制，松开后一次提交；循环由网页时间事件或原生mpv本地执行
 设备边界 := 未构建部署，Android触屏和设备原生mpv观感待验收，不将IPC模拟器记为设备实测
 ```
+
+## 聊天附件、媒体回收与Node睡眠自测（2026-10-23）
+
+```text
+入口 := chat_attachment_controls只读检查附件方法/历史下载链接，不上传或污染当前聊天
+附件命令 := npm run test:chat-attachments（11/11）
+附件覆盖 := 真实multipart/文件头/编码/中文名、能力及数量、草稿租约、当前/备份/共享引用、损坏与链接停止、在途生成保护
+浏览器 := 双端真实选择/上传/发送/历史与视频解码；换会话/清空后迟到上传不能复活
+LLM := 文件正文预算、视频文件鉴权、原会话续聊去重、重建恢复、进程内模型文件上传
+官网 := GLM独立Responses识别蓝色视频并续聊确认无人；Qwen普通文件转异步工作助理，正式路径明确拒绝，不把空回复算成功
+睡眠命令 := npm run test:node-display-sleep（8/8）；test:node-display-mpv（51/51）；test:node-display-mpv:render（6/6）
+睡眠覆盖 := 跨天/手动/临时激活、恢复不激活、原暂停意图、正文与TTS隔离、真实虚拟屏幕黑幕/深睡/唤醒且进程不重启
+外部依赖失败 := 旧display-sleep-mode.test.js连接8081后初始activationUntil非零，未归因，不能记通过；隔离Node脚本不含该现场用例
+发布 := servicePackage/voiceDisplayNodePackage待构建，Windows/Android实机另验；未部署或清理正式媒体
+```

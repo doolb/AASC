@@ -23,3 +23,7 @@ node src/apps/voice-display-node/main.js src/apps/voice-display-node/config.json
 Node 原生依赖与生成 ZIP 的出包平台一致；当前发布目录面向 Windows x64 子显示设备。
 
 Linux TTS默认自动选择可达的pulse/pipewire共享PCM，无可用入口时沿用default；可通过本机 `audioPlayer.linux.device` 显式指定ALSA设备。设备选择按实例缓存，修改后重启；mpv与TTS的音频会话要求见上方播放说明。
+
+## 睡眠模式
+
+使用控制端已有睡眠时段、立即睡眠/深睡和临时激活按钮。普通睡眠暂停并遮黑媒体与正文，保留时钟等UI；深睡全黑。临时激活60秒，新下发媒体会激活，重连恢复不激活。唤醒按原播放意图恢复，手动暂停保持暂停；正文句子暂挂，通用TTS、录音和连接继续。未收到服务器配置前默认关闭睡眠，断线后沿最后设置，退出清理计时器。需更新服务包与Node独立包；Linux真实mpv已验证，Windows实机待验。

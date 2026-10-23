@@ -53,6 +53,8 @@
     "demo:gomoku-ui": "node scripts/demo/gomoku-ui-demo.js",
     "demo:game-chat": "node scripts/demo/game-chat-session.js",
     "test:game-chat": "node --test tests/game-chat-clear.test.js tests/game-chat-stream.test.js tests/game-chat-session.test.js tests/game-gomoku.test.js tests/game-map-format.test.js tests/game-move-request.test.js tests/display-game-browser.test.js",
+    "test:chat-attachments": "node --test tests/chat-media-gc.test.js tests/chat-attachments.test.js tests/chat-attachments-browser.test.js",
+    "test:node-display-sleep": "node --test tests/node-display-sleep.test.js tests/display-sleep-priority.test.js tests/tts-display-sleep.test.js",
     "test:chat-videos": "node --test src/external/llm/chat-history-store.test.js tests/chat-videos.test.js tests/chat-videos-browser.test.js src/apps/server/modules/chat2api/chat2api-videos.test.js src/apps/server/modules/chat2api/chat2api-qwen-video-studio.test.js",
     "test:sub-ai-motion": "node --test tests/sub-ai-motion.test.js tests/sub-ai-motion-browser.test.js",
     "test:chat-images": "node --test tests/chat-media-context.test.js tests/sub-ai-images.test.js tests/chat-native-images.test.js tests/chat-images-browser.test.js tests/chat-model-tier-browser.test.js src/apps/server/modules/chat/chat-model-tier-service.test.js",

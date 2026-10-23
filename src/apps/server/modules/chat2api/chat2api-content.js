@@ -7,7 +7,7 @@ function assertTextOnly(input) {
   if(!Array.isArray(input))throw applicationError('invalid_input','input内容格式不合法');
   for(const item of input) {
     if(!item||typeof item!=='object')throw applicationError('invalid_input','内容片段必须是对象');
-    if(item.type&&['input_image','image_url','image','input_audio','audio','input_video','video'].includes(item.type))throw applicationError('unsupported_modality','该模型的媒体能力尚未接入');
+    if(item.type&&['input_image','image_url','image','input_audio','audio','input_video','video','video_url'].includes(item.type))throw applicationError('unsupported_modality','该模型的媒体能力尚未接入');
     if(item.type&&!TEXT_TYPES.has(item.type)&&!['message','function_call','function_call_output'].includes(item.type))throw applicationError('invalid_input','未知内容类型');
     if(TEXT_TYPES.has(item.type)&&typeof item.text!=='string')throw applicationError('invalid_input','文字片段缺少文本');
     if(item.content!==undefined)assertTextOnly(item.content);
@@ -29,6 +29,11 @@ function assertChatContent(input) {
   if(!Array.isArray(input))throw applicationError('invalid_input','input内容格式不合法');
   for(const item of input) {
     if(!item||typeof item!=='object')throw applicationError('invalid_input','内容片段必须是对象');
+    if (['input_video', 'video_url'].includes(item.type)) {
+      const id = item.file_id || item.video_url?.file_id;
+      if (!/^chat_file_[a-f0-9-]{36}$/.test(id || '')) throw applicationError('invalid_input','视频请先通过/v1/chat/files上传，再传file_id');
+      continue;
+    }
     if(['input_image','image_url'].includes(item.type)) {
       const url=imageUrl(item);
       if(typeof url!=='string'||url.length>28*1024*1024||!/^https:\/\/[^\s]+$|^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(url))throw applicationError('invalid_input','图片需使用HTTPS或有效图片Data URL');
@@ -44,10 +49,11 @@ function assertChatContent(input) {
 function normalizeChatContent(content) {
   if(!Array.isArray(content))return content;
   // 旧纯文字请求仍输出字符串，避免改变工具与原生文字适配器的契约。
-  if(!content.some(p=>['input_image','image_url'].includes(p?.type)))return content.map(p=>p.text||'').join('');
-  return content.map(p=>['input_image','image_url'].includes(p.type)
+  if(!content.some(p=>['input_image','image_url','input_video','video_url'].includes(p?.type)))return content.map(p=>p.text||'').join('');
+  return content.map(p=>['input_video','video_url'].includes(p.type) ? {type:'video_url',video_url:{file_id:p.file_id||p.video_url?.file_id}} : ['input_image','image_url'].includes(p.type)
     ? {type:'image_url',image_url:{url:imageUrl(p),...((p.detail||p.image_url?.detail)?{detail:p.detail||p.image_url.detail}:{})}}
     : {type:'text',text:p.text||''});
 }
 function collectImages(messages=[]) { return messages.flatMap(m=>Array.isArray(m.content)?m.content.filter(p=>['input_image','image_url'].includes(p?.type)).map(imageUrl):[]); }
-module.exports={assertTextOnly,assertChatContent,normalizeChatContent,collectImages,normalizeTtsInput};
+function collectVideos(messages=[]) { return [...new Set(messages.flatMap(m=>Array.isArray(m.content)?m.content.filter(p=>['input_video','video_url'].includes(p?.type)).map(p=>p.file_id||p.video_url?.file_id):[]))]; }
+module.exports={assertTextOnly,assertChatContent,normalizeChatContent,collectImages,collectVideos,normalizeTtsInput};

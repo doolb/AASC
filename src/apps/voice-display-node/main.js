@@ -460,6 +460,7 @@ class VoiceDisplay {
                         waiter.resolve(this.serverDisplayId);
                     }
                     this.updateTUIConnectionState();
+                    this.media.sleep?.report();
                 }
                 log('连接', `收到服务器确认显示端ID: ${this.serverDisplayId || data.id}, IP: ${data.ip}`);
                 break;

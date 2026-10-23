@@ -221,6 +221,7 @@ const createChat2ApiProxyService = (options = {}) => {
     await authorize(request, url.pathname);
     if (request.method === 'GET' && url.pathname === '/') {
       sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models', '/v1/audio/speech', '/v1/audio/voices',
+        ...(options.inputFiles ? ['/v1/chat/files'] : []),
         ...(options.videoService ? ['/v1/video/generations','/v1/video/generations/{id}'] : []),
         ...(doubaoMediaService ? ['/v1/images/generations', '/v1/images/edits', '/v1/images/upload',
           '/v1/audio/generations', '/v1/video/generations'] : []),
@@ -325,6 +326,11 @@ const createChat2ApiProxyService = (options = {}) => {
         const result = await doubaoFileService.downloadUrl(uri, expire, { signal });
         if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result, { noStore: true });
       });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/chat/files') {
+      if (!options.inputFiles) throw Object.assign(new Error('当前服务未启用聊天视频文件上传'), { statusCode: 503, code: 'unsupported_modality' });
+      sendJson(response, 200, await options.inputFiles.upload(request, response), { noStore: true });
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v1/files') {

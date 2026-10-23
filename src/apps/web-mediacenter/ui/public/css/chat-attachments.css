@@ -1,0 +1,3 @@
+.chat-attachments{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;max-width:100%}
+.chat-attachment{display:flex;align-items:center;gap:6px;min-width:0;max-width:100%;padding:6px 8px;border:1px solid var(--border-color,#8885);border-radius:8px;background:var(--bg-secondary,#8881);font-size:12px}
+.chat-attachment img{width:48px;height:40px;object-fit:contain}.chat-attachment span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chat-attachment button{flex:none;background:transparent;border:0;color:inherit;cursor:pointer;font-size:18px}.chat-file-link{display:block;overflow-wrap:anywhere;font-size:13px;padding:4px 0}

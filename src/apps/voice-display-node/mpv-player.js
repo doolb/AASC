@@ -288,7 +288,7 @@ class MpvPlayer extends EventEmitter {
                 this.mediaLoop = normalizeMediaLoop();
                 await this.command(['set_property', 'ab-loop-a', 'no']);
                 await this.command(['set_property', 'ab-loop-b', 'no']);
-                await this.command(['set_property', 'pause', this.paused]);
+                await this.command(['set_property', 'pause', this.paused || this.sleeping === true]);
                 await this.command(['set_property', 'volume', this.volume]);
                 try {
                     await this.loadSource(prepared.source);
@@ -351,6 +351,12 @@ class MpvPlayer extends EventEmitter {
 
     updateOverlay(data) { if (this.available && !this.closed) this.overlay.update(data); }
 
+    async setSleepState(state) {
+        this.sleepState = state; this.sleeping = ['sleep', 'deep'].includes(state);
+        if (this.session?.socket && !this.session.disposed) await this.command(['set_property', 'pause', this.sleeping || this.paused]);
+        await this.queueOverlay();
+    }
+
     async setTextPage(snapshot) {
         this.textPage = snapshot;
         if (snapshot && (this.closed || !this.session?.socket || this.session.disposed)) throw new Error('mpv正文会话已断开');
@@ -389,7 +395,7 @@ class MpvPlayer extends EventEmitter {
                 version = this.overlayVersion;
                 if (this.closed || this.session !== session || session.disposed) return;
                 const dimensions = this.properties['osd-dimensions'];
-                const command = this.overlay.active ? assDocument(this.overlay.state, {
+                const command = this.overlay.active && this.sleepState !== 'deep' ? assDocument(this.overlay.state, {
                     width: dimensions?.w > 0 ? dimensions.w : 1280,
                     height: dimensions?.h > 0 ? dimensions.h : 720
                 }, this.visual.rotation, this.overlay.now()) : { name: 'osd-overlay', id: 40, format: 'none', data: '' };
@@ -398,12 +404,19 @@ class MpvPlayer extends EventEmitter {
                     await this.command(command);
                     session.lastOverlay = key;
                 }
-                const body = textAss(this.overlay.active ? this.textPage : null, this.overlay.state.appearance);
+                const body = textAss(this.overlay.active && !this.sleeping ? this.textPage : null, this.overlay.state.appearance);
                 const bodyKey = JSON.stringify(body);
                 if (bodyKey !== session.lastTextOverlay) {
                     await this.command(body);
                     session.lastTextOverlay = bodyKey;
                 }
+                const width = dimensions?.w > 0 ? dimensions.w : 1280;
+                const height = dimensions?.h > 0 ? dimensions.h : 720;
+                const shade = { name: 'osd-overlay', id: 42, format: this.sleeping ? 'ass-events' : 'none',
+                    data: this.sleeping ? `{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H000000&\\1a&H00&\\p1}m 0 0 l ${width} 0 ${width} ${height} 0 ${height}{\\p0}` : '',
+                    res_x: width, res_y: height, z: 5 };
+                const shadeKey = JSON.stringify(shade);
+                if (shadeKey !== session.lastSleepOverlay) { await this.command(shade); session.lastSleepOverlay = shadeKey; }
             } while (version !== this.overlayVersion);
             // 同步标记排空；Promise的finally尚未运行时，新输入仍须创建新一轮刷新。
             update.draining = false;
@@ -440,7 +453,7 @@ class MpvPlayer extends EventEmitter {
         if (this.updateVisual(action, value)) return this.queueGeometry();
         if (action === 'clearMedia') return this.clear();
         const commands = {
-            play: () => { this.paused = value !== true; return ['set_property', 'pause', this.paused]; },
+            play: () => { this.paused = value !== true; return ['set_property', 'pause', this.paused || this.sleeping === true]; },
             volume: () => {
                 if (!Number.isFinite(Number(value))) throw new Error('音量必须是数字');
                 this.volume = Math.max(0, Math.min(100, Number(value)));

@@ -318,8 +318,15 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 - 真机自测：1h
 - 合计：**5h**
 
-## Node子显示端睡眠适配（2026-10-23，方案待确认）
+## Node子显示端睡眠适配（2026-10-23，已实现）
 
-用户要求Node支持现有睡眠模式。拟新增sleep-controller.js，main.js仅接线，media-controller/mpv-player/mpv-overlay适配：沿原sleepSettings、sleepActivate、sleepOverride、restoreState与sleepStateReport，按本地时区/现有时段/优先级判定，60秒临时激活。
+用户要求Node支持现有睡眠模式。已新增sleep-controller.js，main.js仅接线，media-controller/mpv-player/mpv-text-player适配：沿原sleepSettings、sleepActivate、sleepOverride、restoreState与sleepStateReport，按本地时区/现有时段/优先级判定，60秒临时激活。
 
 普通睡眠暂停并遮黑媒体和ASS正文，保留时钟等UI；深睡全黑并隐藏UI。唤醒恢复原先播放意图，手动暂停不能被误恢复。控制端新下发媒体临时激活，重连恢复/内部切换不激活。通用TTS继续正常，定时报时由服务端既有睡眠规则控制；录音和连接保持。复用WS权威配置，不增加独立HTTP配置或新时段设置。
+
+
+Node沿当前网页实际优先级：手动覆盖优先；新临时激活清除覆盖并持续60秒。未收到权威设置前本地默认关闭，收到restoreState后按服务端设置执行，断线沿最后设置计时，重连不创建重复计时器，退出清理。时段按本地时区每10秒检查，配置仍走既有WS流程。
+
+mpv常驻进程不重启：独立ASS层遮黑媒体，普通睡眠保留时钟/进度，深睡隐藏全部UI；正文朗读只取消当前文章句子，通用TTS不受影响。暂停意图与睡眠实际暂停分开保存，服务端持久化sleepPlaybackIntent，重连/唤醒不误播放原先手动暂停的媒体；旧恢复不覆盖新媒体/清空。
+
+验证：Node睡眠/优先级/TTS隔离套件8/8，mpv回归51/51，独立虚拟屏幕真实mpv渲染6/6（含睡眠黑媒体、深睡全黑、唤醒及同PID）。Windows目标设备验收仍待执行。网页旧display-sleep-mode.test.js依赖生产8081，现场初始化activationUntil非零（原因待独立归因），不能当隔离Node套件，单独保留排查记录。

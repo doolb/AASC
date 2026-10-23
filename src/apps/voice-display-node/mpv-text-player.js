@@ -25,6 +25,13 @@ class MpvTextPlayer {
 
     configureAudio(options) { this.audio = options; this.voice.configure(options); }
 
+    async setSleeping(sleeping) {
+        if (this.sleeping === sleeping) return;
+        this.sleeping = sleeping;
+        if (sleeping) this.cancelSentence();
+        if (this.active) { await this.draw(); this.report(); this.requestSentence(); }
+    }
+
     voiceCapabilityChanged(enabled) {
         if (enabled) return;
         this.voice.stop();
@@ -123,11 +130,11 @@ class MpvTextPlayer {
         this.send({ type: 'textProgress', playbackId: this.playbackId, pageIndex: this.pageIndex || 0,
             pageTotal: this.layout?.pages.length || 0, sentenceIndex: this.sentenceIndex || 0,
             sentenceTotal: this.sentences?.length || 0, state: this.state, format: this.format || 'plain' });
-        this.send({ type: 'playStateReport', isPlaying: this.state === 'playing' });
+        this.send({ type: 'playStateReport', isPlaying: this.state === 'playing' && !this.sleeping });
     }
 
     requestSentence() {
-        if (!this.active || !this.layout || this.state !== 'playing' || this.expected) return;
+        if (this.sleeping || !this.active || !this.layout || this.state !== 'playing' || this.expected) return;
         // 空白页不发TTS，使用异步推进避免长文空白页形成递归调用。
         if (!this.sentences[this.sentenceIndex]) {
             this.timer = setTimeout(() => { void this.advance().catch(error => this.fail(error)); }, 0);
@@ -147,7 +154,7 @@ class MpvTextPlayer {
     }
 
     async advance() {
-        if (!this.active || this.state !== 'playing') return;
+        if (this.sleeping || !this.active || this.state !== 'playing') return;
         clearTimeout(this.timer); this.expected = null;
         this.sentenceIndex++;
         if (this.sentenceIndex >= this.sentences.length) {

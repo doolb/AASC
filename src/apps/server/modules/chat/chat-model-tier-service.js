@@ -93,6 +93,8 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
     }
     async function snapshot(extra = {}) {
         return { type: 'chatModelTierConfig', selection: selection(), providers: await availableProviders(),
+            uploadCapabilities: { images: getActiveProfile()?.supportsImageUpload !== false, videos: getActiveProfile()?.supportsVideoUpload === true,
+                disabled: getActiveProfile()?.mode === 'agent' },
             imageSelection: imageSelection(), imageProviders: await imageProviders(),
             videoSelection:videoSelection(),videoProviders:await videoProviders(),
             motionSelection: motion.selection(), motionRevision: motion.revision(), motionProviders: await motion.providers(), ...extra };
@@ -183,6 +185,10 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
         return {
             providerId: current.providerId, tier, model,
             client: {
+                async uploadFile(file, options = {}) {
+                    if (!runtime.inputFiles?.put) throw new Error('当前Chat2API实例尚未接入视频文件上传');
+                    return runtime.inputFiles.put(file, options);
+                },
                 async request(payload, options = {}) {
                     const result = await runtime.responsesService.createResponse({ ...payload, model }, { signal: options.signal, onStatus: options.onStatus });
                     return result.body;

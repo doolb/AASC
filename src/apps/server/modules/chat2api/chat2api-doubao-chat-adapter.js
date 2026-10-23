@@ -825,6 +825,7 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
     'doubao_android_prepare', 'doubao_android_unavailable', 'doubao_android_webview',
     'doubao_browser_prepare', 'doubao_browser_page', 'doubao_browser_upstream']);
   return async input => {
+    if (require('./chat2api-content').collectVideos(input.request.messages).length) throw Object.assign(new Error('当前豆包网页尚未支持原始视频附件，请切换支持视频的模型'), { code: 'unsupported_modality', statusCode: 400 });
     const execution = { deadlineAt: Date.now() + limits.timeoutMs, retried: false, receivedOutput: false, stopped: false };
     const refreshForRetry = async error => {
       // 单个额度同时覆盖握手和流读取失败；已经输出任何正文/思考后禁止换流重放。

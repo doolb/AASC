@@ -10,18 +10,21 @@ test('Responses照片片段保持独立，视频和无效图片仍拒绝，TTS�
  const input=[{role:'user',content:[{type:'input_text',text:'猫'},{type:'input_image',image_url:url}]}];
  assertChatContent(input);assert.deepEqual(normalizeChatContent(input[0].content),[{type:'text',text:'猫'},{type:'image_url',image_url:{url}}]);
  assert.throws(()=>assertTextOnly(input),e=>e.code==='unsupported_modality');
- assert.throws(()=>assertChatContent([{type:'input_video',video_url:'https://example.com/a.mp4'}]),e=>e.code==='unsupported_modality');
+ assert.throws(()=>assertChatContent([{type:'input_video',video_url:'https://example.com/a.mp4'}]),e=>e.code==='invalid_input');
  assert.throws(()=>assertChatContent([{type:'input_image',image_url:'http://private/image'}]),e=>e.code==='invalid_input');
  assert.throws(()=>readChatImages({messages:[{role:'user',content:[{type:'image_url',image_url:{url:'data:image/png;base64,a'}}]}]}),/图片数据无效/);
 });
 
 for(const providerId of ['qwen','glm'])test(`${providerId}上传照片后按现场协议发送，与raw文本和原生会话共存`,async()=>{
  let sent,upload=0;const signal=new AbortController().signal;
- const http={post:async(u,data,options)=>{
-   if(u.includes('refresh'))return {data:{status:0,result:{access_token:'access'}}};
-   assert.match(u,/file\/chat_upload$/);assert.equal(options.signal,signal);assert.equal(data.get('assistant_id'),'65940acff94777010aa6b796');
-   upload++;return {data:{status:0,result:{file_id:'file',file_url:'https://images.test/a.png',file_name:'cat.png',file_size:5}}};
- },request:async config=>{if(config.url.includes('/user/refresh'))return {status:200,data:{result:{access_token:'access'}}};sent=config;return {status:200,headers:{'content-type':'application/json'},data:{choices:[{message:{content:'猫'}}]}}}};
+ const http={request:async config=>{
+   if(config.url.includes('/user/refresh'))return {status:200,data:{result:{access_token:'access'}}};
+   if(config.url.endsWith('/file/chat_upload')){
+     assert.equal(config.signal,signal);assert.equal(config.data.get('assistant_id'),'65940acff94777010aa6b796');
+     upload++;return {data:{status:0,result:{file_id:'file',file_url:'https://images.test/a.png',file_name:'cat.png',file_size:5}}};
+   }
+   sent=config;return {status:200,headers:{'content-type':'application/json'},data:{choices:[{message:{content:'猫'}}]}};
+ }};
  const adapters=createChat2ApiProviderAdapters({httpClient:http,qwenUpload:async(image,options)=>{upload++;assert.equal(image.data.toString(),'hello');assert.equal(options.signal,signal);return {id:'ws',url:'https://images.test/a.png',file_name:'cat.png',file_format:'PNG',file_size:5}}});
  const result=await adapters[providerId]({request:{model:'photo',messages},provider:{id:providerId,apiEndpoint:providerId==='glm'?'https://chatglm.cn':'https://chat2.qianwen.com'},account:{credentials:{refresh_token:'refresh',ticket:'ticket'}},actualModel:providerId==='glm'?'glm-5.3-flash':'Qwen3.5-Flash',context:{signal},responseSession:{nativeState:providerId==='glm'?{conversationId:'existing'}:{sessionId:'existing',parentReqId:'parent'}}});
  assert.ok(result.body);assert.equal(upload,1);

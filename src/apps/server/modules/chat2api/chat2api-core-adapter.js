@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
 const { doubaoError } = require('./chat2api-doubao-chat-adapter');
-const {assertChatContent,collectImages}=require('./chat2api-content');
+const {assertChatContent,collectImages,collectVideos}=require('./chat2api-content');
 const {getSpeechBinding,canonicalProviderId}=require('./chat2api-model-capabilities');
 
 const createHttpError = (statusCode, code, message) => {
@@ -78,6 +78,9 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
 
     if (collectImages(request.messages).length && !['doubaochat','qwen','glm'].includes(selection.provider.id)) {
       throw createHttpError(400,'unsupported_modality','当前网页Provider尚未接入图片上传');
+    }
+    if (collectVideos(request.messages).length && selection.provider.id !== 'glm') {
+      throw createHttpError(400, 'unsupported_modality', '当前网页Provider尚未支持原始视频附件，请切换支持视频的模型');
     }
 
     // 豆包文字只支持Node；旧Cookie-only账号在发送前要求补齐，已保存网页开关不再读取。

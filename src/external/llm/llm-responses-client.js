@@ -2,6 +2,9 @@
 
 const http = require('node:http');
 const https = require('node:https');
+const fs = require('node:fs');
+const { Readable } = require('node:stream');
+const { randomUUID } = require('node:crypto');
 
 const DEFAULT_TIMEOUT_MS = 120000;
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
@@ -66,6 +69,11 @@ const requestJson = ({ url, options, timeoutMs, requestOptions = {} }) => new Pr
   });
   request.once('error', reject);
   request.setTimeout(timeoutMs, () => request.destroy(new Error('Responses 请求超时')));
+  if (options.body?.pipe) {
+    options.body.once('error', error => request.destroy(error));
+    request.once('close', () => options.body.destroy());
+    options.body.pipe(request); return;
+  }
   if (options.body) request.write(options.body);
   request.end();
 });
@@ -228,7 +236,25 @@ const createResponsesClient = ({ baseUrl, apiKey = '', timeoutMs = DEFAULT_TIMEO
     });
   };
 
-  return { request, stream, baseUrl: normalizedBaseUrl };
+  const uploadFile = async (file, options = {}) => {
+    const size = file.path ? (await fs.promises.stat(file.path)).size : file.data?.length;
+    if (!size || size > 100 * 1024 * 1024) throw createResponsesError(400, 'video_limit', '视频附件为空或超过100MiB');
+    const boundary = `aasc-${randomUUID()}`;
+    const filename = String(file.filename || file.name || 'video.mp4').replace(/[\r\n"\\]/g, '_');
+    const mime = ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.mimeType) ? file.mimeType : 'application/octet-stream';
+    const start = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mime}\r\n\r\n`);
+    const end = Buffer.from(`\r\n--${boundary}--\r\n`);
+    const body = Readable.from((async function* () { yield start; if (file.path) { for await (const part of fs.createReadStream(file.path)) yield part; } else yield file.data; yield end; })());
+    const result = await requestJson({ url: `${normalizedBaseUrl}/chat/files`, timeoutMs: options.timeoutMs || timeoutMs,
+      requestOptions: { ...baseRequestOptions, ...(options.requestOptions || {}), ...(options.signal ? { signal: options.signal } : {}) },
+      options: { method: 'POST', body, headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': start.length + size + end.length,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) } } });
+    if ([404, 405].includes(result.statusCode)) throw createResponsesError(400, 'unsupported_modality', '当前LLM服务未提供视频文件上传接口，请切换支持视频的服务');
+    const payload = parseJsonBody(result.body, result.statusCode);
+    if (result.statusCode < 200 || result.statusCode >= 300 || !payload.id) throw getRemoteError(payload, result.statusCode);
+    return payload;
+  };
+  return { request, stream, uploadFile, baseUrl: normalizedBaseUrl };
 };
 
 module.exports = {

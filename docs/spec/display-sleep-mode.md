@@ -197,5 +197,29 @@ sendToDisplay(displayId, message, options={}):
 状态 := normal/active显示；sleep黑媒体保留UI；deep全黑；变化上报sleepStateReport和命令ack
 播放 := 隐藏时暂停媒体/正文推进；恢复时只按保存的播放意图续播，期间手动控制更新意图
 激活 := 控制端新媒体 → 60秒active；恢复持久化媒体/状态通知不触发active
-生命周期 := 重连补报并恢复权威设置；断开/退出清理定时器；TTS保持原服务端策略
+生命周期 := 重连补报并恢复权威设置；断线沿最后设置继续检查，重连不重复计时，退出清理定时器；TTS保持原服务端策略
+```
+
+```text
+当前网页优先级核实 := manualSleepMode先于临时激活；sleepOverride先清除activationUntil；activateTemporarily清除手动覆盖
+Node实现 := 以当前网页行为和现有priority测试为准；关闭自动时段不清手动覆盖，normal覆盖值恢复自动判定
+遮罩 := 新增独立ASS黑幕层置于正文与UI之间；sleep隐藏正文保留UI，deep同时隐藏UI；不停止mpv进程
+```
+
+```text
+睡眠不改用户意图 := player.paused/text.state保存用户期望；实际pause=用户暂停或sleeping；文本sleeping只停句子/推进，不覆写state
+重连意图 := sleepStateReport附playbackIntent布尔值；服务端规范化保存在显示端状态；处于睡眠时恢复媒体沿sleepPlaybackIntent
+ASS := 黑幕id42/z5，UI id40/z10；sleep隐藏正文，deep连UI隐藏；尺寸变化重算，唤醒移除黑幕
+```
+
+```text
+Node未收到配置默认 := enabled=false，时段23/8和1/6；保持旧Node启动行为，连接后由restoreState.sleep覆盖为服务端权威值
+```
+
+```text
+恢复异常 := sleep.restore的Promise立即接错误处理，能力尚未收到或其他恢复步骤先返回时也不产生未处理拒绝
+```
+
+```text
+初次上报 := 本机尚无当前媒体/正文时不发送playbackIntent，避免身份握手抢先用false覆盖服务端保留的恢复意图
 ```

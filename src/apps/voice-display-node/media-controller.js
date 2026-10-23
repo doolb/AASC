@@ -2,13 +2,14 @@
 
 const { MpvPlayer } = require('./mpv-player');
 const { MpvTextPlayer } = require('./mpv-text-player');
+const { NodeSleepController } = require('./sleep-controller');
 
-const MEDIA_CONTROLS = new Set(['play', 'seek', 'volume', 'clearMedia', 'rotate', 'fit', 'crop', 'dynamicFitConfig', 'textStyle', 'textPlayback', 'mediaLoop']);
+const MEDIA_CONTROLS = new Set(['play', 'seek', 'volume', 'clearMedia', 'rotate', 'fit', 'crop', 'dynamicFitConfig', 'textStyle', 'textPlayback', 'mediaLoop', 'sleepSettings', 'sleepActivate', 'sleepOverride']);
 const VISUAL_CONTROLS = new Set(['rotate', 'fit', 'crop', 'dynamicFitConfig']);
 
 /** 只适配已有AASC媒体协议，不在本机增加配置HTTP端口或外部命令执行接口。 */
 class NodeMediaController {
-    constructor(config, { send, onError, player } = {}) {
+    constructor(config, { send, onError, player, sleepClock = {} } = {}) {
         this.send = send || (() => {});
         this.onError = onError || (() => {});
         this.player = player || new MpvPlayer({ ...config.mediaPlayer, serverUrl: config.serverUrl }, { onError: this.onError });
@@ -24,6 +25,9 @@ class NodeMediaController {
         this.sequence = 0;
         this.restoring = null;
         this.capabilityEpoch = 0;
+        this.sleep = new NodeSleepController({ send: this.send, onError: this.onError, ...sleepClock,
+            extra: () => this.text.active || this.player.current ? ({ playbackIntent: this.text.active ? this.text.state === 'playing' || this.text.state === 'loading' && this.text.loadingState !== 'paused' : this.player.paused !== true }) : ({}),
+            apply: async state => { await this.text.setSleeping(['sleep', 'deep'].includes(state)); await this.player.setSleepState?.(state); } });
         this.player.on('progress', progress => {
             if (!this.capabilityKnown || this.text.active) return;
             // 播放状态只在变化时上报，进度走已有节流消息，避免每秒触发状态持久化。
@@ -104,6 +108,9 @@ class NodeMediaController {
     async handleMedia(media, options, restoreSequence) {
         if (restoreSequence === undefined) this.sequence += 1;
         else if (restoreSequence !== this.sequence) return false;
+        const startingSequence = this.sequence;
+        if (restoreSequence === undefined) await this.sleep.activate();
+        if (startingSequence !== this.sequence) return false;
         if (!this.capabilityKnown) {
             this.pendingMedia = media;
             return;
@@ -128,6 +135,7 @@ class NodeMediaController {
             } else loaded = await this.player.load(media, options);
             if (sequence !== this.sequence) return false;
             if (loaded) this.acknowledge('media', true, 'mpv已加载媒体', media.correlationId);
+            if (loaded) this.sleep.report();
             return loaded;
         } catch (error) {
             this.acknowledge('media', false, error.message, media.correlationId);
@@ -139,6 +147,9 @@ class NodeMediaController {
     async handleControl(data) {
         if (!MEDIA_CONTROLS.has(data.action)) return false;
         try {
+            if (this.sleep.handles(data.action)) {
+                await this.sleep.control(data); this.acknowledge('control', true, data.action, data.correlationId); return true;
+            }
             // 画面和音量参数可以先于媒体/能力消息到达，只记忆状态，不启动播放器。
             const rememberOnly = VISUAL_CONTROLS.has(data.action) || ['volume', 'textStyle'].includes(data.action);
             if (!rememberOnly && data.action !== 'clearMedia' && !this.enabled) throw new Error('媒体能力尚未开启');
@@ -169,6 +180,7 @@ class NodeMediaController {
             if (actions[data.action]) await actions[data.action]();
             else await this.player.control(data.action, data.value ?? data.rotation);
             if (data.action === 'rotate') await this.text.reflow();
+            if (['play', 'textPlayback'].includes(data.action)) this.sleep.report();
             this.acknowledge('control', true, data.action, data.correlationId);
         } catch (error) {
             this.acknowledge('control', false, `${data.action}: ${error.message}`, data.correlationId);
@@ -180,6 +192,7 @@ class NodeMediaController {
     async restore(state) {
         if (!state || typeof state !== 'object') return;
         state = { ...state };
+        const sleepRestore = state.sleep ? this.sleep.restore(state.sleep).catch(error => this.onError(error)) : null;
         if (!this.capabilityKnown) {
             this.pendingRestore = state;
             this.pendingMedia = null;
@@ -190,7 +203,7 @@ class NodeMediaController {
         try {
             if (state.textStyle) await this.text.reflow(state.textStyle);
             if (sequence !== this.sequence) return;
-            const operations = [];
+            const operations = sleepRestore ? [sleepRestore] : [];
             for (const [field, action] of [['rotation', 'rotate'], ['fit', 'fit'], ['dynamicFitConfig', 'dynamicFitConfig'], ['volume', 'volume']]) {
                 if (state[field] !== undefined) operations.push(this.player.control(action, state[field]));
             }
@@ -201,7 +214,7 @@ class NodeMediaController {
             if (state.currentMedia === null && !state.currentPlaylist) await Promise.all([this.text.clear(), this.player.clear()]);
             if (state.currentMedia) {
                 const loaded = await this.handleMedia(state.currentMedia, {
-                    paused: state.isPlaying === false,
+                    paused: this.sleep.paused && typeof state.sleepPlaybackIntent === 'boolean' ? !state.sleepPlaybackIntent : state.isPlaying === false,
                     ...(state.currentMedia.mediaType === 'text' ? { progress: state.currentTextProgress || state.currentMediaProgress } : {}),
                     resumeTime: Math.max(0, Number(state.currentMediaProgress?.currentTime) || 0)
                 }, sequence);
@@ -218,7 +231,7 @@ class NodeMediaController {
         }
     }
 
-    async close() { this.disconnected(); await this.text.close(); await this.player.close(); }
+    async close() { this.disconnected(); await this.sleep.close(); await this.text.close(); await this.player.close(); }
 }
 
 module.exports = { NodeMediaController, MEDIA_CONTROLS };

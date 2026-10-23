@@ -1001,11 +1001,13 @@ const Chat = {
                     <div class="chat-input-row">
                         <button id="voiceInputBtn" class="voice-input-btn" onclick="Chat.toggleVoice()" title="开始语音输入">🎤</button>
                         <button type="button" class="chat-image-btn" onclick="Chat.selectImageFile()" title="添加图片">🖼️</button>
+                        <button type="button" class="chat-image-btn" onclick="Chat.selectAttachment()" title="上传文本、图片或视频">📎</button>
                         <input type="file" id="chatImageInput" accept="image/*" style="display:none" onchange="Chat.handleImageFile(this.files[0]); this.value=''">
                         <input type="text" id="chatInput" placeholder="输入消息... (说“聊天xxx”触发语音对话)" onkeypress="Chat.handleKeyPress(event)">
                         <button class="chat-send-btn" onclick="Chat.sendMessage()" id="chatSendBtn">发送</button>
                     </div>
                     <div class="chat-image-preview-list" id="chatImagePreview"></div>
+                    <div id="chatAttachmentPreview"></div>
                     <div class="chat-options">
                         <label class="chat-option">
                             <input type="checkbox" id="playOnControlCheckbox" onchange="Chat.togglePlayOnControl()">
@@ -1383,7 +1385,7 @@ const Chat = {
             return `
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
-                    <div class="chat-message-content ${this.mediaGeneration(item) ? 'chat-image-job' : ''}" data-image-status="${this.escapeHtml(this.mediaGeneration(item)?.status || '')}">${this.renderMessageImages(item.images,item.videos)}${this.mediaGeneration(item)?.status === 'pending' ? `<button type="button" data-cancel-image="${this.escapeHtml(item.id)}">取消生成</button>` : ''}${gameTrace}${ChatMarkdown.render(content)}</div>
+                    <div class="chat-message-content ${this.mediaGeneration(item) ? 'chat-image-job' : ''}" data-image-status="${this.escapeHtml(this.mediaGeneration(item)?.status || '')}">${this.renderMessageImages(item.images,item.videos,item.attachments)}${this.mediaGeneration(item)?.status === 'pending' ? `<button type="button" data-cancel-image="${this.escapeHtml(item.id)}">取消生成</button>` : ''}${gameTrace}${ChatMarkdown.render(content)}</div>
                     ${thinkButton}
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                     ${deleteButton}
@@ -1492,6 +1494,22 @@ const Chat = {
         if (input) input.click();
     },
 
+    async selectAttachment() {
+        try {
+            if (!window.ChatAttachments) await import('/js/chat-attachments.js');
+            if (!this.attachmentWidget || this.attachmentHost !== document.getElementById('chatAttachmentPreview')) {
+                this.attachmentWidget?.reset(); this.attachmentHost = document.getElementById('chatAttachmentPreview');
+                this.attachmentWidget = window.ChatAttachments.create({ host: this.attachmentHost,
+                    getScope: () => `${JSON.stringify(this.getContextScope())}|${this.temporaryConversation.id || ''}|${this.activeProfile}`,
+                    getPolicy: () => { const profile = this.profiles.find(item => item.name === this.activeProfile) || {}; return {
+                        images: profile.supportsImageUpload !== false, videos: profile.supportsVideoUpload === true,
+                        disabled: profile.mode === 'agent' || this.session.mode === 'role' }; },
+                    onError: message => window.showToast(message, 'error') });
+            }
+            this.attachmentWidget.choose();
+        } catch (error) { window.showToast(error.message || '附件入口加载失败', 'error'); }
+    },
+
     async handleImageFile(file) {
         if (!file || !file.type.startsWith('image/')) return;
         try {
@@ -1598,14 +1616,16 @@ const Chat = {
     mediaGeneration(message) {
         return [message.videoGeneration,message.imageGeneration].find(value=>value?.status==='pending')||message.videoGeneration||message.imageGeneration;
     },
-    renderMessageImages(images, videos = []) {
+    renderMessageImages(images, videos = [], attachments = []) {
         images=Array.isArray(images)?images:[];
-        const videoMarkup=(Array.isArray(videos)?videos:[]).filter(video=>/^\/uploads\/chat-videos\/[a-f0-9-]+\.(mp4|webm)$/.test(video.url||'')).map(video=>{
+        const fileMarkup = (Array.isArray(attachments) ? attachments : []).filter(file => file.kind === 'text' && /^\/uploads\/chat-files\/[a-f0-9-]+\.(txt|md|log|csv|json)$/.test(file.url || '')).map(file =>
+            `<a class="chat-file-link" href="${this.escapeHtml(file.url)}" download="${this.escapeHtml(file.name || 'attachment.txt')}">📄 ${this.escapeHtml(file.name || '文本附件')}</a>`).join('');
+        const videoMarkup=(Array.isArray(videos)?videos:[]).filter(video=>/^\/uploads\/chat-videos\/[a-f0-9-]+\.(mp4|webm|mov)$/.test(video.url||'')).map(video=>{
             const poster=/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(video.posterUrl||'')?` poster="${this.escapeHtml(video.posterUrl)}"`:'';
             return `<video controls playsinline preload="metadata"${poster} src="${this.escapeHtml(video.url)}" style="max-width:100%;max-height:420px;border-radius:8px"></video>`;
         }).join('');
-        if(!images.length&&!videoMarkup)return '';
-        return `<div class="chat-message-images">${videoMarkup}${images.map((image) => {
+        if(!images.length&&!videoMarkup&&!fileMarkup)return '';
+        return `${fileMarkup}<div class="chat-message-images">${videoMarkup}${images.map((image) => {
             const dataUrl = this.escapeHtml(image.dataUrl || image.url || '');
             return dataUrl ? `<img src="${dataUrl}" alt="聊天图片">` : '';
         }).join('')}</div>`;
@@ -1613,6 +1633,9 @@ const Chat = {
 
     sendMessage() {
         if (this.isLoading) return;
+        if (this.attachmentWidget?.busy()) { window.showToast('请等待附件上传完成', 'warning'); return; }
+        const attachments = this.attachmentWidget?.ids() || [];
+        if (attachments.length + this.pendingImages.length > 4) { window.showToast('每条消息最多4个附件', 'warning'); return; }
         if (this.pendingImages.length && this.profiles.find(profile => profile.name === this.activeProfile)?.supportsImageUpload === false) {
             window.showToast('当前 LLM 配置不支持上传图片，请移除图片或切换配置', 'warning');
             return;
@@ -1634,7 +1657,7 @@ const Chat = {
         const input = document.getElementById('chatInput');
         let message = input.value.trim();
         
-        if (!message && this.pendingImages.length === 0) return;
+        if (!message && this.pendingImages.length === 0 && !attachments.length) return;
         
         if (this.session.mode === 'private') {
             const systemResult = this.handleSystemCommand(message);
@@ -1696,7 +1719,8 @@ const Chat = {
         } else if (templateTarget) {
             assistantName = templateTarget;
         }
-        this.showStreamingMessage(displayMessage, assistantName, images);
+        const draftAttachments = this.attachmentWidget?.items() || [];
+        this.showStreamingMessage(displayMessage, assistantName, [...images, ...draftAttachments.filter(item => item.kind === 'image')], draftAttachments);
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
@@ -1706,6 +1730,7 @@ const Chat = {
                 requestId,
                 content: sendMessage,
                 images: images,
+                attachments,
                 displayContent: displayMessage,
                 mode: mode,
                 assistantType: mode === 'role' ? 'agent' : 'llm',
@@ -1734,6 +1759,7 @@ const Chat = {
             }
             
             window.WebSocketManager.ws.send(JSON.stringify(chatMessage));
+            this.attachmentWidget?.sent();
         } else {
             this.addSystemMessage('WebSocket 连接未建立，正在重连...');
             if (window.WebSocketManager) {
@@ -1927,7 +1953,7 @@ const Chat = {
         this.addSystemMessage(content, type);
     },
     
-    showStreamingMessage(userMessage, assistantName = '助手', images = []) {
+    showStreamingMessage(userMessage, assistantName = '助手', images = [], attachments = []) {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
         
@@ -1943,7 +1969,7 @@ const Chat = {
         group.dataset.chatScope = JSON.stringify(this.getContextScope());
         group.innerHTML = `
             <div class="chat-message-header">用户</div>
-            <div class="chat-message-content">${this.renderMessageImages(images)}${ChatMarkdown.render(userMessage)}</div>
+            <div class="chat-message-content">${this.renderMessageImages(images, attachments.filter(item => item.kind === 'video'), attachments)}${ChatMarkdown.render(userMessage)}</div>
         `;
         
         messagesContainer.appendChild(group);
@@ -2329,6 +2355,7 @@ const Chat = {
     
     /** 清空后使流式节点失效，图片事件与文字分块都不能再补回已清空的回复。 */
     abandonStreamingReply() {
+        this.attachmentWidget?.reset();
         document.querySelector('#streamingAssistant .chat-request-status')?.remove();
         if (this.activeRequestId) this.contextIgnoredRequestIds.add(this.activeRequestId);
         if (this.contextIgnoredRequestIds.size > 256) this.contextIgnoredRequestIds.delete(this.contextIgnoredRequestIds.values().next().value);

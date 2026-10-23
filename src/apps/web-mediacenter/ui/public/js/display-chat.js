@@ -169,6 +169,7 @@
         }
         abandonStreamingMessages();
         state.history = filterHistoryForCurrentSession(message.history);
+        state.attachments?.reset();
         renderHistory();
         setStatus('已清空当前聊天记录');
         return true;
@@ -486,7 +487,7 @@
     }
     function appendVideos(parent, videos) {
         for(const asset of videos||[]) {
-            if(!/^\/uploads\/chat-videos\/[a-f0-9-]+\.(mp4|webm)$/.test(asset.url||''))continue;
+            if(!/^\/uploads\/chat-videos\/[a-f0-9-]+\.(mp4|webm|mov)$/.test(asset.url||''))continue;
             const video=document.createElement('video');video.controls=true;video.preload='metadata';video.setAttribute('playsinline','');video.src=asset.url;
             if(/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(asset.posterUrl||''))video.poster=asset.posterUrl;
             video.style.cssText='max-width:100%;max-height:420px;border-radius:8px';parent.appendChild(video);
@@ -512,6 +513,11 @@
             item.appendChild(createGameProtocolTip(entry));
         }
         appendVideos(body,options.videos);
+        for (const file of options.attachments || []) {
+            if (file.kind !== 'text' || !/^\/uploads\/chat-files\/[a-f0-9-]+\.(txt|md|log|csv|json)$/.test(file.url || '')) continue;
+            const link = document.createElement('a'); link.className = 'chat-file-link'; link.href = file.url; link.download = file.name;
+            link.textContent = `📄 ${file.name}`; body.append(link);
+        }
         for (const image of options.images || []) {
             if (!/^\/uploads\/chat-images\/[a-f0-9-]+\.(png|jpg|webp|gif)$/.test(image.url || '')) continue;
             const img = document.createElement('img');
@@ -573,7 +579,7 @@
                 continue;
             }
             if (item.role === 'user' || item.role === 'control') {
-                appendMessage('user', item.content || item.text || '', { images: item.images });
+                appendMessage('user', item.content || item.text || '', { images: item.images, videos: item.videos, attachments: item.attachments });
             } else if (item.role === 'assistant') {
                 appendMessage('assistant', item.content || item.text || '', { reasoning: item.reasoning,
                     gameTrace: item.gameTrace, images: item.images, videos:item.videos, videoGeneration:item.videoGeneration, imageGeneration: mediaGeneration(item), id: item.id,
@@ -632,7 +638,9 @@
         const input = state.refs.input;
         if (!input) return false;
         const content = typeof voiceText === 'string' ? voiceText.trim() : input.value.trim();
-        if (!content) return false;
+        if (state.attachments?.busy()) { setStatus('请等待附件上传完成', true); return false; }
+        const attachments = state.attachments?.items() || [];
+        if (!content && !attachments.length) return false;
         // 新消息先清理本地播放队列并通知服务端，使上一轮迟到的音频失效。
         stopConversationTts();
         const requestId = `display-chat-${Date.now()}-${++state.requestSequence}`;
@@ -641,6 +649,7 @@
             type: 'chatMessage',
             requestId,
             content,
+            attachments: attachments.map(item => item.id),
             displayContent: content,
             displayId: state.displayId,
             mode: state.session.mode,
@@ -657,7 +666,8 @@
             return false;
         }
         input.value = '';
-        appendMessage('user', content, { requestId });
+        state.attachments?.sent();
+        appendMessage('user', content, { requestId, attachments, images: attachments.filter(a => a.kind === 'image'), videos: attachments.filter(a => a.kind === 'video') });
         const streaming = appendMessage('assistant', '正在思考…', {
             requestId,
             author: state.session.roleTarget || state.session.privateTarget || state.assistantName
@@ -767,9 +777,11 @@
                     <div class="display-chat-status" data-role="status" aria-live="polite"></div>
                     <form class="display-chat-compose" data-role="compose">
                         <div class="display-chat-context-usage" data-role="context-usage" aria-live="polite">上下文 — · 对话 —</div>
+                        <div data-role="attachments"></div>
                         <textarea data-role="input" rows="2" maxlength="51200" placeholder="输入消息…" aria-label="聊天输入"></textarea>
                         <div class="display-chat-compose-actions">
                             <button type="submit" class="display-chat-send">发送</button>
+                            <button type="button" data-action="attach">📎 附件</button>
                             <button type="button" data-action="clear">清空</button>
                         </div>
                     </form>
@@ -801,6 +813,15 @@
         state.refs.compose.addEventListener('submit', (event) => {
             event.preventDefault();
             sendMessage();
+        });
+        state.root.querySelector('[data-action="attach"]').addEventListener('click', async () => {
+            try {
+                if (!root.ChatAttachments) await import('/js/chat-attachments.js');
+                state.attachments ||= root.ChatAttachments.create({ host: state.root.querySelector('[data-role="attachments"]'),
+                    getScope: () => `${getHistoryScopeKey()}|${state.temporaryConversationId || ''}`, getPolicy: () => ({ ...(state.uploadPolicy || { images: true, videos: false }), disabled: state.uploadPolicy?.disabled || state.session.mode === 'role' }),
+                    onError: message => setStatus(message, true) });
+                state.attachments.choose();
+            } catch (error) { setStatus(error.message || '附件入口加载失败', true); }
         });
         state.refs.input.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -847,8 +868,10 @@
         }
         if (message.type === 'displayId') {
             state.displayId = message.id || null;
+            state.send?.({ type: 'getChatModelTierConfig' });
             return true;
         }
+        if (message.type === 'chatModelTierConfig') { state.uploadPolicy = message.uploadCapabilities || { images: true, videos: false }; return false; }
         if (message.type === 'roleList') {
             state.roles = Array.isArray(message.roles) ? message.roles : [];
             buildTargets();
@@ -870,6 +893,7 @@
             if (state.session.mode !== 'private') state.privateSessions = [];
             const nextScopeKey = getHistoryScopeKey();
             if (previousScopeKey !== nextScopeKey) {
+                state.attachments?.reset();
                 abandonStreamingMessages();
                 state.history = [];
                 renderHistory();

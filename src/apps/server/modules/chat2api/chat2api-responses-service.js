@@ -23,7 +23,7 @@ const extractText = (content) => {
 
 const normalizeInputItem = (item) => {
   if (!item || typeof item !== 'object') return null;
-  if (['input_text','text','output_text','input_image','image_url'].includes(item.type)) return {role:'user',content:normalizeChatContent([item])};
+  if (['input_text','text','output_text','input_image','image_url','input_video','video_url'].includes(item.type)) return {role:'user',content:normalizeChatContent([item])};
   if (item.type === 'function_call') {
     return {
       role: 'assistant',

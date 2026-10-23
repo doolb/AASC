@@ -28,6 +28,8 @@ const { createMotionCoordinator } = require('../modules/sub-ai/motion-coordinato
 const { createSubAiTaskService } = require('../modules/sub-ai/sub-ai-task-service');
 const { createChatImageAssets } = require('../modules/sub-ai/chat-image-assets');
 const { createChatVideoAssets } = require('../modules/sub-ai/chat-video-assets');
+const { createChatMediaGc } = require('../modules/sub-ai/chat-media-gc');
+const { createChatAttachmentService } = require('../modules/sub-ai/chat-attachment-service');
 const { createNativeChatImages } = require('../modules/sub-ai/native-chat-images');
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createChatContextUsageService, resolveChatContextOptions, normalizeContextScope } = require('../modules/chat/chat-context-usage');
@@ -378,8 +380,13 @@ const modelManifestService = new ModelManifestService({
 });
 const UPLOADS_DIR = path.join(RES_DIR, 'uploads');
 const chatImageControllers = new Map();
-const chatImageAssets = createChatImageAssets({ directory: path.join(UPLOADS_DIR, 'chat-images') });
-const chatVideoAssets = createChatVideoAssets({ directory:path.join(UPLOADS_DIR,'chat-videos'),imageAssets:chatImageAssets });
+const chatMediaGc = createChatMediaGc({ uploadsDir: UPLOADS_DIR, historyDir: USER_CONFIG_DIR,
+    liveHistory: () => chat.getHistory(), onError: error => logError('Chat', `媒体回收暂停：${error.message}`) });
+const imageAssetsStore = createChatImageAssets({ directory: path.join(UPLOADS_DIR, 'chat-images') });
+const chatImageAssets = { ...imageAssetsStore, save: (...args) => chatMediaGc.write(async () => chatMediaGc.protect(await imageAssetsStore.save(...args))) };
+const videoAssetsStore = createChatVideoAssets({ directory:path.join(UPLOADS_DIR,'chat-videos'),imageAssets:chatImageAssets });
+const chatVideoAssets = { save: (...args) => chatMediaGc.write(async () => chatMediaGc.protect(await videoAssetsStore.save(...args))) };
+const chatAttachments = createChatAttachmentService({ uploadsDir: UPLOADS_DIR, gc: chatMediaGc });
 const ASR_TEMP_DIR = path.join(RES_DIR, 'temp', 'asr');
 const HTTP_UPLOAD_TEMP_DIR = path.join(RES_DIR, 'temp', 'uploads');
 const VOICEPRINT_TEMP_DIR = path.join(RES_DIR, 'temp', 'voiceprint');
@@ -840,6 +847,12 @@ if (!ANDROID_NODE_POLICY.enabled && config.get('asr.serverEnabled', true) === tr
 }
 chat.init(config.get('chat', {}), {
     readChatImage: image => chatImageAssets.read(image),
+    readChatAttachment: asset => chatAttachments.read(asset),
+    onHistorySaved:()=>{
+        const retained=new Set(chat.getHistory().map(message=>message.id));
+        for(const [id,controller]of chatImageControllers)if(!retained.has(id)){controller.abort();chatImageControllers.delete(id);}
+        chatMediaGc.historySaved();
+    },
     onHistoryDeleted:()=>{
         const retained=new Set(chat.getHistory().map(message=>message.id));
         for(const [id,controller]of chatImageControllers)if(!retained.has(id)){controller.abort();chatImageControllers.delete(id);}
@@ -3155,6 +3168,8 @@ function staticWithMhtmlMime(dir) {
 
 app.use('/uploads/tts', serveTtsAudio);
 app.use('/uploads', staticWithMhtmlMime(UPLOADS_DIR));
+chatAttachments.install(app);
+chatMediaGc.start();
 if (taskCodeCatalog) app.use('/res/tasks', taskCodeCatalog.middleware());
 app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
@@ -6666,6 +6681,7 @@ async function shutdownManagedRuntimes(exitCode) {
         await remoteLoginSessions.stop();
         await require('../modules/chat2api/chat2api-doubao-browser-port').stopDoubaoBrowserPorts();
         await chat.shutdown();
+        await chatMediaGc.stop();
     } catch (error) {
         logError('Chat', `Pi Runtime关闭失败: ${error.message}`);
     } finally {
@@ -9421,6 +9437,10 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     } else if (data.type === 'sleepStateReport' && displayData) {
         // 睡眠状态上报：存到 state（getState/device-settings 可返回）并转发控制端，供睡眠卡片按钮显示
         displayData.state.sleepState = data.sleepState;
+        if (typeof data.playbackIntent === 'boolean' && displayData.state.sleepPlaybackIntent !== data.playbackIntent) {
+            displayData.state.sleepPlaybackIntent = data.playbackIntent;
+            persistDisplayState(displayData, { sleepPlaybackIntent: data.playbackIntent });
+        }
         broadcastToControls({
             displayId: displayId,
             type: 'sleepStateReport',
@@ -9695,6 +9715,10 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
         const isAgentMessage = data.assistantType === 'agent' ||
             (!data.assistantType && data.mode === 'role');
         if (isAgentMessage) {
+            if (Array.isArray(data.attachments) && data.attachments.length) {
+                sendChatUpdate({ type: 'chatResponse', requestId: data.requestId, success: false, error: '当前Agent入口尚不支持附件，请切换普通LLM聊天' });
+                return;
+            }
             if (Array.isArray(data.images) && data.images.length > 0) {
                 sendChatUpdate({
                     type: 'chatResponse',
@@ -9759,6 +9783,7 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
             requestId: data.requestId,
             content: data.content,
             images: data.images,
+            attachments: data.attachments,
             displayContent: data.displayContent || data.content,
             displayId: targetDisplayId,
             sourceDisplayId: isDisplayChatSource ? displayId : null,
@@ -11514,6 +11539,7 @@ async function handleChatMessage(options) {
         requestId,
         content,
         images: rawImages = [],
+        attachments: attachmentIds = [],
         displayContent,
         displayId,
         voiceOriginDisplayId = null,
@@ -11538,8 +11564,12 @@ async function handleChatMessage(options) {
     
     const effectiveRequestId = requestId || generateCorrelationId('chat');
     let tierOverride = null;
+    let inputAttachments = [];
     try {
         const active = chat.getProfiles().find(profile => profile.name === chat.getActiveProfile());
+        inputAttachments = await chatAttachments.resolve(attachmentIds, active || {});
+        if (images.length + inputAttachments.length > 4) throw new Error('每条消息最多4个附件');
+        if (inputAttachments.length && active?.mode === 'agent') throw new Error('当前Agent入口尚不支持附件，请切换普通LLM聊天');
         if (images.length && active?.supportsImageUpload === false) throw new Error('当前 LLM 配置不支持上传图片，请移除图片或切换配置');
         if (active?.mode !== 'agent') tierOverride = await chatModelTierService.resolveForChat();
     } catch (error) {
@@ -11576,12 +11606,15 @@ async function handleChatMessage(options) {
         role: 'control',
         name: '控制端',
         content: internalGameUpdate ? (displayContent || '棋盘落子') : (displayContent || content),
-        images: savedInputImages,
+        images: [...savedInputImages, ...inputAttachments.filter(file => file.kind === 'image')],
+        videos: inputAttachments.filter(file => file.kind === 'video'),
+        attachments: inputAttachments,
         mode: messageMode,
         target: messageTarget,
         sessionId: effectiveSessionId,
         templateId: effectiveTemplateTarget || 'default'
     });
+    await chatAttachments.bind(inputAttachments);
     if (isTemporaryConversation) {
         appendTemporaryConversationMessage(userMessageRecord, effectiveTemporaryConversationId);
         pruneTemporaryConversationHistory(effectiveTemporaryConversationId);
@@ -11706,7 +11739,8 @@ async function handleChatMessage(options) {
         historyMessages: isTemporaryConversation
             ? getTemporaryConversationHistoryContext(effectiveTemporaryConversationId)
             : null,
-        images: images.map((image, index) => ({ ...savedInputImages[index], ...image })),
+        images: [...images.map((image, index) => ({ ...savedInputImages[index], ...image })), ...inputAttachments.filter(file => file.kind === 'image')],
+        attachments: inputAttachments,
         contextImages: referenceImages
     }, callbacks: {
         onStatus: status => {

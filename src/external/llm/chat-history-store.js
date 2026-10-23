@@ -62,7 +62,7 @@ const normalizeChatMessage = (message, defaults = {}) => {
         ? message.user
         : (typeof message.assistant === 'string' ? message.assistant : '');
     const content = typeof message.content === 'string' ? message.content : legacyContent;
-    const hasMedia = [message.images,message.videos].some(items=>Array.isArray(items)&&items.length>0)
+    const hasMedia = [message.images,message.videos,message.attachments].some(items=>Array.isArray(items)&&items.length>0)
         || [message.imageGeneration,message.videoGeneration].some(state=>state?.status==='pending');
     if (!content && !hasMedia) throw new Error('消息内容无效');
 

@@ -8,6 +8,7 @@ const { createMarkdownSentenceStream } = require('../../core/utils/markdown-spee
 const { extractOutputImages, extractOutputText, createOutputImageCollector } = require('../../core/utils/chat-output-images');
 const { normalizeChatProgress } = require('../../core/utils/chat-progress');
 const { equivalentResponsesFingerprint, prepareMediaImages } = require('./llm-media-context');
+const { prepareChatAttachments } = require('./llm-attachment-context');
 
 const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
 const {
@@ -72,7 +73,9 @@ let chatConfig = {
 
 let llmProfiles = [];
 let readChatImage = null;
+let readChatAttachment = null;
 let onHistoryDeleted = null;
+let onHistorySaved = null;
 let activeProfile = 'default';
 let piRuntimeManager = null;
 let codexRuntimeManager = null;
@@ -182,6 +185,7 @@ function flushHistorySave() {
             changedFiles: Array.from(pendingChangedHistoryFiles)
         });
         pendingChangedHistoryFiles.clear();
+        try { onHistorySaved?.(); } catch { /* 文件已成功保存，清理通知失败不改变保存结果。 */ }
         return true;
     } catch (err) {
         console.error('[Chat] 保存历史记录失败:', err.message);
@@ -257,7 +261,9 @@ function pruneHistorySessions(options = {}) {
 
 function init(config = {}, options = {}) {
     if(options.onHistoryDeleted!==undefined)onHistoryDeleted=options.onHistoryDeleted;
+    if(options.onHistorySaved!==undefined)onHistorySaved=options.onHistorySaved;
     if (options.readChatImage !== undefined) readChatImage = options.readChatImage;
+    if (options.readChatAttachment !== undefined) readChatAttachment = options.readChatAttachment;
     localLlmTransportOptions = normalizeLocalLlmTransportOptions(options);
     if (options.piRuntimeManager !== undefined) {
         piRuntimeManager = options.piRuntimeManager;
@@ -1283,6 +1289,7 @@ function addMessage(message) {
         ...(speech ? { speech } : {}),
         ...(gameTrace.length ? { gameTrace } : {}),
         ...(Array.isArray(message.images) ? { images: message.images.map(image => ({ ...image })) } : {}),
+        ...(Array.isArray(message.attachments) ? { attachments: message.attachments.map(item => ({ ...item })) } : {}),
         ...(message.imageGeneration ? { imageGeneration: { ...message.imageGeneration } } : {}),
         ...(Array.isArray(message.videos)?{videos:message.videos.map(video=>({...video}))}:{}),
         ...(message.videoGeneration?{videoGeneration:{...message.videoGeneration}}:{}),
@@ -1307,7 +1314,7 @@ function addMessage(message) {
     chatHistories[key].push(msg);
     trimHistory();
     saveHistory([historyStore.getHistoryFileName(msg)]);
-    if (msg.imageGeneration || msg.images?.length || msg.videoGeneration || msg.videos?.length) flushHistorySave();
+    if (msg.imageGeneration || msg.images?.length || msg.videoGeneration || msg.videos?.length || msg.attachments?.length) flushHistorySave();
     
     if (content && content.startsWith('系统记录')) {
         const importantContent = content.replace('系统记录', '').trim();
@@ -1378,8 +1385,8 @@ function getHistoryForOptions(options = {}) {
     return chatHistories[key] || [];
 }
 
-function buildImageMessageContent(text, images, profile = getActiveProfileConfig()) {
-    if (!Array.isArray(images) || images.length === 0) return text;
+function buildImageMessageContent(text, images, profile = getActiveProfileConfig(), videos = []) {
+    if ((!Array.isArray(images) || images.length === 0) && !videos.length) return text;
     const responseProtocol = normalizeChatTransport(profile).protocol === 'openai-responses';
     const content = [{
         type: responseProtocol ? 'input_text' : 'text',
@@ -1393,6 +1400,8 @@ function buildImageMessageContent(text, images, profile = getActiveProfileConfig
             content.push({ type: 'image_url', image_url: { url: image.dataUrl } });
         }
     }
+    for (const video of videos) content.push(responseProtocol ? { type: 'input_video', file_id: video.fileId }
+        : { type: 'video_url', video_url: { file_id: video.fileId } });
     return content;
 }
 
@@ -1409,14 +1418,27 @@ async function prepareChatRequest(userMessage, options, profile) {
         knownIds: state?.sentImageIds || [], profileName: profile.name || activeProfile,
         readImage: options.readChatImage || readChatImage, signal: options.signal };
     const media = await prepareMediaImages(mediaOptions);
+    const history = options.includeHistory && options.contextCount > 0
+        ? (Array.isArray(options.historyMessages) ? options.historyMessages : getHistoryForOptions({ ...options, profileName: profile.name || activeProfile,
+            templateId: options.templateTarget || options.useTemplate || 'default' })).slice(-options.contextCount) : [];
+    const fileOptions = { current: options.attachments || [], history, read: options.readChatAttachment || readChatAttachment,
+        upload: (file, args) => options.tierOverride?.client
+            ? options.tierOverride.client.uploadFile ? options.tierOverride.client.uploadFile(file, args) : Promise.reject(new Error('当前Chat2API实例尚未接入视频文件上传'))
+            : getResponsesClient(profile).uploadFile(file, args),
+        videoAllowed: profile.supportsVideoUpload === true, sameUpstream: reusable, knownIds: media.sentImageIds,
+        signal: options.signal, textBudget: chatConfig.maxTokens || 4096, userText: userMessage, systemText: options.systemPrompt || chatConfig.systemPrompt || '' };
+    let files = await prepareChatAttachments(fileOptions);
+    media.sentImageIds = files.sentIds;
     const make = () => ({
-        messages: buildMessages(userMessage, { ...options, profileName: profile.name || activeProfile, images: media.images }),
+        messages: buildMessages(files.currentText, { ...options, historyMessages: files.history, profileName: profile.name || activeProfile, images: media.images, videos: files.videos }),
         currentInput: [{ role: 'user', content: buildImageMessageContent(
-            [options.turnContext, userMessage].filter(Boolean).join('\n'), media.images, profile) }],
+            [options.turnContext, files.currentText].filter(Boolean).join('\n'), media.images, profile, files.videos) }],
     });
     return { ...make(), responseSessionKey, sessionKey: responseSessionKey, fingerprint, state, media,
         rebuildMessages: async () => {
             Object.assign(media, await prepareMediaImages({ ...mediaOptions, sameUpstream: false, knownIds: [] }));
+            files = await prepareChatAttachments({ ...fileOptions, sameUpstream: false, knownIds: media.sentImageIds });
+            media.sentImageIds = files.sentIds;
             return make();
         } };
 }
@@ -1434,7 +1456,7 @@ function buildMessages(userMessage, options = {}) {
         historyMessages = null,
         profileName = activeProfile,
         promptFormat = chatConfig.promptFormat,
-        images = []
+        images = [], videos = []
     } = options;
     const profile = llmProfiles.find((item) => item.name === profileName) || getActiveProfileConfig();
     const templateId = templateTarget || useTemplate || 'default';
@@ -1489,7 +1511,7 @@ function buildMessages(userMessage, options = {}) {
         if (template) raw += `User:${template.content}\n`;
         raw += `User:${userMessage}`;
         reportUsage(estimateTokens(raw));
-        return [{ role: 'user', content: buildImageMessageContent(raw, images, profile) }];
+        return [{ role: 'user', content: buildImageMessageContent(raw, images, profile, videos) }];
     }
 
     const messages = [{ role: 'system', content: sysPrompt }];
@@ -1514,7 +1536,7 @@ function buildMessages(userMessage, options = {}) {
         }
     }
     if (template) messages.push({ role: 'user', content: template.content });
-    messages.push({ role: 'user', content: buildImageMessageContent(userMessage, images, profile) });
+    messages.push({ role: 'user', content: buildImageMessageContent(userMessage, images, profile, videos) });
     reportUsage(fixedTokens + recentHistory.reduce((total, item) => total + tokenCount(item), 0));
     return messages;
 }

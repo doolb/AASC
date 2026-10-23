@@ -198,4 +198,4 @@
 
 - [聊天视频生成与主AI原生视频展示](design/chat-video.md)
 
-- [聊天附件上传（方案待确认）](design/chat-attachments.md)
+- [聊天附件上传](design/chat-attachments.md)

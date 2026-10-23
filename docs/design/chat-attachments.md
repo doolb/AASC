@@ -1,9 +1,13 @@
-# 聊天附件上传（2026-10-23，方案待确认）
+# 聊天附件上传（2026-10-23）
 
-在控制端与显示端聊天输入框增加统一附件入口，支持文本文件、图片和视频；可预览/移除，文件随发送归入本轮历史，刷新两端仍可查看。图片复用既有能力，视频使用真实原始附件传入模型。文本先覆盖TXT/MD/LOG/CSV/JSON，按文本数据读取附带文件名，不执行内容；超出当前上下文能力明确提示。
+已在控制端与显示端聊天输入框增加共享“📎”附件入口，支持TXT/MD/LOG/CSV/JSON文本、PNG/JPEG/GIF/WebP图片、MP4/WebM/MOV视频。可预览与移除，发送后归入本轮历史，刷新仍可查看。文本按UTF-8、BOM UTF-16或GB18030解码为用户数据，带文件名进入上下文，不执行内容；超过当前输入预算明确报错。
 
-拟新增共享chat-attachments.js及样式、服务端chat-attachment-service.js/受管资产和媒体输入模块；改chat.js、display-chat.js和upload.html挂载，server-app仅装配。复用现有WS chatMessage发送附件ID和权威历史，不通过WS传视频Base64；独立业务上传接口接收文件，校验格式/大小/数量并落盘，接入媒体引用回收。
+共享chat-attachments.js/CSS按需加载，两端复用；chat-attachment-service.js接收独立multipart业务上传。原WS chatMessage仅传附件ID，服务端校验后绑定历史；新附件不以Base64占用WS。每条最多4附件，文本1MiB、图片20MiB、视频100MiB；浏览器与服务端均校验。切会话、清空和迟到上传用作用域/版本隔离，不能复活旧草稿。既有相机和图片入口保留。
 
-图片遵循supportsImageUpload（默认true），视频遵循supportsVideoUpload（默认false）；两端和服务端均检查。拟默认文本单文件1MiB、图片20MiB、视频100MiB，每条最多4附件；在上传前后均校验。普通LLM沿已有协议发送其支持的附件；Chat2API新增视频附件规范化和三家网页原生上传，无法支持时明确报错，不静默丢弃或以文字链接伪装。
+图片遵循supportsImageUpload默认true，视频遵循supportsVideoUpload默认false；能力沿既有chatModelTierConfig权威WS同步，服务端再次校验。Agent入口明确不支持附件，普通LLM入口可用。文本文件保留本地下载链接，图片/视频使用已有聊天渲染；上传附件和生成作品均参与全局引用回收。
 
-受影响LLM/history和媒体上下文模块：保留原会话、发送记录与资产引用；上传附件与生成结果均参与全局引用回收。采用文件上传+附件ID避免长视频膨胀聊天JSON。待确认实施；新接口只负责业务数据，不承担配置读取/保存。
+视频原件经流式文件通道上传，Responses消息仅放不透明file_id；内置模型在进程内沿同一缓存服务保存，外置服务使用POST /v1/chat/files扩展。缓存私有、鉴权、24小时失效，最多64文件、单文件100MiB。这个扩展并非所有Responses服务都提供；缺接口明确报错。原会话续聊去重，失效会话重建后从本地原件恢复上传。
+
+当前GLM使用官网chat_upload与type=video数组，独立真实Responses测试正确识别蓝色视频且下一轮确认无人。GLM日志HTTP包装器只保证request，上传显式适配post。Qwen普通非图片files使用doc/url卡，会转chat_office异步任务；resource/video卡不属于普通聊天视频理解，实测不能得到有效回答。因此当前正式路径对Qwen/豆包原始视频明确unsupported_modality，不把成功上传或空回复视为视频理解成功。Qwen异步速读后续独立接入。
+
+验证：test:chat-attachments覆盖真实multipart上传、文本编码、能力/格式/大小/数量、当前及备份引用、草稿/生成租约、迟到取消、两端浏览器实际选择/发送/恢复和视频解码、鉴权文件通道、真实LLM上下文及原会话/重建、进程内模型上传。实际官网仅使用独立会话，不写当前AASC聊天；凭据/抓包/样片不入Git。服务包仍待构建部署。

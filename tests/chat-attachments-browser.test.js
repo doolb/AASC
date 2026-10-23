@@ -1,0 +1,70 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const express = require('express');
+const puppeteer = require('puppeteer-core');
+const { createChatAttachmentService } = require('../src/apps/server/modules/sub-ai/chat-attachment-service');
+const { createChatMediaGc } = require('../src/apps/server/modules/sub-ai/chat-media-gc');
+const publicRoot = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
+
+test('双端实际选择/上传三类附件、发送仅ID、历史恢复与视频解码；开关和清空/换会话防迟到', { timeout: 30000 }, async t => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-attachments-browser-')); t.after(() => fs.rm(directory, { recursive: true, force: true }));
+    const uploads = path.join(directory, 'uploads'); const history = path.join(directory, 'history'); await fs.mkdir(history);
+    const text = path.join(directory, '说明.txt'); await fs.writeFile(text, '窗边的猫');
+    const image = path.join(directory, 'cat.png'); await fs.writeFile(image, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/B9sAAAAASUVORK5CYII=', 'base64'));
+    const video = path.join(directory, 'clip.mp4'); await promisify(execFile)('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x64:r=10', '-t', '1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', video]);
+    const gc = createChatMediaGc({ uploadsDir: uploads, historyDir: history }); t.after(() => gc.stop());
+    const attachments = createChatAttachmentService({ uploadsDir: uploads, gc }); const app = express(); attachments.install(app);
+    app.use('/uploads', express.static(uploads)); app.use('/js', express.static(path.join(publicRoot, 'js'))); app.use('/css', express.static(path.join(publicRoot, 'css')));
+    app.get('/', (_req, res) => res.send('<div id="chatContainer"></div><div id="display"></div>'));
+    const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
+    t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+    const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] }); t.after(() => browser.close());
+    const page = await browser.newPage(); const errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    for (const file of ['chat-attachments.js', 'chat.js', 'display-chat.js']) await page.addScriptTag({ path: path.join(publicRoot, 'js', file) });
+    await page.evaluate(() => {
+        window.sent = []; window.toasts = []; window.ChatMarkdown = { render: value => value }; window.showToast = message => toasts.push(message); window.confirm = () => true;
+        window.WebSocketManager = { ws: { readyState: 1, send: raw => sent.push(JSON.parse(raw)) } };
+        Chat.requestContextUsage = () => {}; Chat.profiles = [{ name: 'test', supportsVideoUpload: true }]; Chat.activeProfile = 'test'; Chat.render();
+        DisplayChat.init({ root: document.getElementById('display'), send: value => { sent.push(value); return true; } }); DisplayChat.setVisible(true);
+        DisplayChat.handleServerMessage({ type: 'chatSession', session: { mode: 'group' } });
+    });
+    await page.click('button[title="上传文本、图片或视频"]'); await (await page.$('#chatAttachmentPreview input')).uploadFile(text, image, video);
+    await page.waitForFunction(() => document.querySelectorAll('#chatAttachmentPreview .chat-attachment').length === 3);
+    await page.evaluate(() => { window.controlAssets = Chat.attachmentWidget.items(); document.getElementById('chatInput').value = '看这些附件'; Chat.sendMessage(); });
+    const control = await page.evaluate(() => sent.filter(value => value.type === 'chatMessage').at(-1));
+    assert.equal(control.attachments.length, 3); assert.equal(JSON.stringify(control).includes('base64'), false);
+    assert.equal(await page.$$eval('#streamingGroup video', nodes => nodes.length), 1);
+    assert.equal(await page.$eval('#streamingGroup .chat-file-link', node => node.textContent.includes('说明.txt')), true);
+    await page.click('#display [data-action="attach"]'); await (await page.$('#display input[type="file"]')).uploadFile(video);
+    await page.waitForFunction(() => document.querySelector('#display [data-role="status"]').textContent.includes('开启'));
+    assert.equal(await page.$$eval('#display .chat-attachment', nodes => nodes.length), 0);
+    await page.evaluate(() => DisplayChat.handleServerMessage({ type: 'chatModelTierConfig', uploadCapabilities: { images: true, videos: true } }));
+    await (await page.$('#display input[type="file"]')).uploadFile(text, image, video);
+    await page.waitForFunction(() => document.querySelectorAll('#display .chat-attachment').length === 3);
+    await page.type('#display textarea', '看看附件'); await page.click('#display button[type="submit"]');
+    const display = await page.evaluate(() => sent.filter(value => value.type === 'chatMessage').at(-1));
+    assert.equal(display.attachments.length, 3); assert.equal(JSON.stringify(display).includes('base64'), false);
+    assert.equal(await page.$$eval('#display .display-chat-message.is-user video', nodes => nodes.length), 1);
+    await page.waitForFunction(() => [...document.querySelectorAll('video')].every(video => video.readyState >= 2));
+    assert.ok(await page.evaluate(async () => { const video = document.querySelector('#streamingGroup video'); video.muted = true; await video.play(); return video.videoWidth === 64; }));
+    const assets = await page.evaluate(() => controlAssets);
+    const record = { id: 'restored', role: 'control', content: '看这些附件', mode: 'group', sessionId: 'default', attachments: assets,
+        images: assets.filter(item => item.kind === 'image'), videos: assets.filter(item => item.kind === 'video') };
+    await page.evaluate(record => { Chat.isLoading = false; Chat.activeRequestId = null; Chat.history = [record]; document.getElementById('streamingGroup')?.remove(); document.getElementById('streamingAssistant')?.remove(); Chat.renderHistory(); }, record);
+    assert.equal(await page.$$eval('#chatMessages video', nodes => nodes.length), 1); assert.equal(await page.$$eval('#chatMessages .chat-file-link', nodes => nodes.length), 1);
+    const result = await page.evaluate(async () => {
+        let scope = 'old'; let finish; const host = document.createElement('div'); document.body.append(host);
+        const draft = ChatAttachments.create({ host, getScope: () => scope, fetchImpl: (url) => url.includes('/api/chat/attachments/') ? Promise.resolve({})
+            : new Promise(resolve => { finish = () => resolve({ ok: true, json: async () => ({ attachment: { id: 'late', kind: 'text', name: 'late.txt', url: '/uploads/chat-files/late.txt' } }) }); }) });
+        const promise = draft.add(new File(['abc'], 'late.txt', { type: 'text/plain' })); scope = 'new'; draft.reset(); finish(); await promise;
+        return draft.ids();
+    });
+    assert.deepEqual(result, []); assert.deepEqual(errors, []);
+});

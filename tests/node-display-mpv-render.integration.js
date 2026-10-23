@@ -76,6 +76,29 @@ function boxRect(layout, box) {
         top: Math.min(...corners.map(value => value[1])), bottom: Math.max(...corners.map(value => value[1])) };
 }
 
+test('真实mpv睡眠遮媒体保时钟，深睡整屏黑，恢复正文和手动暂停且不重启进程', { timeout: 18000 }, async t => {
+    const display = await virtualDisplay(t);
+    const errors = [];
+    const player = new MpvPlayer({ enabled: true, linux: { display, command: 'mpv', args: [
+        '--vo=x11', '--ao=null', '--geometry=800x600', '--cursor-autohide=always'
+    ] } }, { onError: error => errors.push(error.message), overlayClock: { now: () => new Date(2026, 9, 23, 12, 34, 56) } });
+    t.after(() => player.close()); assert.equal(await player.checkAvailable(), true);
+    await player.setOverlayEnabled(true); const pid = player.process.pid;
+    await player.setTextPage({ layout: paginate('睡眠前的正文。'.repeat(80), { width: 800, height: 600 }), pageIndex: 0 });
+    await player.control('play', false); await player.setSleepState('sleep'); await delay(150);
+    const sleep = await capture(display);
+    assert.ok(pixel(sleep, 400, 590).every(value => value < 5));
+    assert.ok(brightPixels(sleep, { left: 450, top: 0, right: 799, bottom: 90 }) > 20, '普通睡眠保留时钟');
+    await player.setSleepState('deep'); await delay(150);
+    const deep = await capture(display);
+    assert.equal(brightPixels(deep, { left: 0, top: 0, right: 800, bottom: 600 }), 0);
+    await player.setSleepState('normal'); await delay(150);
+    const restored = await capture(display);
+    assert.ok(pixel(restored, 400, 590)[0] > 230, '正文背景恢复');
+    assert.equal(await player.command(['get_property', 'pause']), true);
+    assert.equal(player.process.pid, pid); assert.deepEqual(errors, []);
+});
+
 test('真实ASS文本：黄底深灰正文/页码、四方向重排、信息层共存和清空，同一PID', { timeout: 25000 }, async t => {
     const display = await virtualDisplay(t);
     const errors = [];
