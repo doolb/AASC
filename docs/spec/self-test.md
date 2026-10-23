@@ -2905,3 +2905,15 @@ npm run test:chat-streaming := 原有聊天/游戏桥/TTS/Markdown兼容回归
 现场验证 := 独立Responses请求检查模型调用SubAI；GLM/豆包/Qwen文字与参考图接口收集真实图片
 禁止 := 将测试轮次写入用户当前AASC聊天；输出凭据或上游私有签名URL
 ```
+
+
+## 生图入口与清空棋局回归（2026-10-23）
+
+```text
+npm run test:game-chat := 原有棋局/桥接/显示测试 + game-chat-clear生命周期/持久失败/隔离/迟到/临时归属/服务端锁
+npm run test:chat-images := 生图指令/图片任务/模型面板 + 请求取消后不执行迟到SubAI
+清空入口回归 := chat-clear-history + display-chat-opening-browser + chat-context-usage及browser
+清空浏览器 := 实际执行Chat.clearHistory，核对single/adaptive目标与temporary的WS请求
+现场Responses := 隔离GLM/豆包自然语句 → 真实游戏桥+SubAI分流 → 各1条有效调用，正文无标签
+原生能力边界 := 未配置或测试Provider级禁用参数，不以两次指令成功宣称概率为零
+```

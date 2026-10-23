@@ -194,4 +194,4 @@
 
 - [GLM认证兼容](design/chat2api-glm-auth.md)
 
-- [多Provider生图与模型选择（待确认）](design/chat2api-image-generation.md)
+- [多Provider生图与模型选择](design/chat2api-image-generation.md)

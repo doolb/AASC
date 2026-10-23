@@ -521,6 +521,7 @@ test('清空分支回传显示端编号和范围历史，失败保留关联，�
             }
         }
     };
+    context.chatHistoryClear = { clear: data => context.chat.clearHistory(data) };
     const run = () => vm.runInNewContext(`(function () { ${branch} })()`, context);
     run();
     assert.deepEqual(responses[0], { type: 'chatHistory', history: [], requestId: 'clear-1', cleared: true });

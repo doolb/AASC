@@ -560,3 +560,35 @@ test('显示端五子棋首连快照、点击增量和版本缺口恢复', { ski
         await browser.close();
     }
 });
+
+test('清空关闭棋盘与恢复入口，迟到旧局快照不复活，新局不受旧清除事件影响', {skip:!CHROME}, async t => {
+    const $=cheerio.load(fs.readFileSync(path.join(PUBLIC,'display.html'),'utf8'));
+    $('script, link[rel="stylesheet"]').remove();
+    const browser=await puppeteer.launch({executablePath:CHROME,headless:true,args:['--no-sandbox']});
+    t.after(()=>browser.close());const page=await browser.newPage();const errors=[];
+    page.on('pageerror',error=>errors.push(error.message));await page.setContent($.html());
+    for(const name of ['display-stage','display-game'])await page.addScriptTag({path:path.join(PUBLIC,`js/${name}.js`)});
+    await page.evaluate(()=>{
+        window.sent=[];DisplayStage.setTransport(message=>{sent.push(message);return true});DisplayGame.init();
+        const recovery=sent.findLast(m=>m.type==='gameRecover');
+        DisplayStage.handleServerMessage({type:'gameRecoverResult',requestId:recovery.requestId,snapshot:null});
+        DisplayStage.handleServerMessage({type:'voiceConversationState',state:'activeGroup'});
+        window.snapshot={type:'gameSnapshot',game:'五子棋',gameId:'old',revision:1,size:9,
+            board:Array(9).fill('.........').join('/'),turn:'User',result:'进行中',visible:true};
+        DisplayStage.handleServerMessage(snapshot);
+    });
+    assert.equal(await page.$eval('#displayGameShell',n=>n.hidden),false);
+    await page.evaluate(()=>DisplayStage.handleServerMessage({type:'gameCleared',gameId:'old',revision:2}));
+    assert.equal(await page.$eval('#displayGameShell',n=>n.hidden),true);
+    assert.equal(await page.$eval('#displayGameToggle',n=>n.textContent),'游戏');
+    assert.equal(await page.$eval('.display-game-list-status',n=>n.textContent),'未开局');
+    await page.evaluate(()=>DisplayStage.handleServerMessage({...snapshot,revision:99}));
+    assert.equal(await page.$eval('#displayGameShell',n=>n.hidden),true);
+    await page.evaluate(()=>{
+        DisplayStage.handleServerMessage({...snapshot,gameId:'new'});
+        DisplayStage.handleServerMessage({type:'gameCleared',gameId:'old',revision:3});
+    });
+    assert.equal(await page.$eval('#displayGameShell',n=>n.hidden),false);
+    assert.equal(await page.$eval('#displayGameToggle',n=>n.textContent),'五子棋');
+    assert.deepEqual(errors,[]);
+});

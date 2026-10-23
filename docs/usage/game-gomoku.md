@@ -70,3 +70,6 @@ GameMap:
 JS 调用方可从 `src/apps/server/modules/game/game-chat-session.js` 引入 `createGameChatSession({ filePath, displayId, onModelRequest, onEvent })`；`onModelRequest({ input, systemPrompt, sequence })` 可异步返回 AI 回复字符串，`await session.sendUser(用户文本)` 返回最终 `result`、本轮 `events` 和权威 `snapshot`。这个回调模式接收完整 AI 回复并复用正式游戏桥接逻辑，不连接真实显示端或模型账号。
 
 调用真实聊天模型时，传入现有 `chat` 服务和 `roleName`，例如 `createGameChatSession({ filePath, displayId, chat, roleName: '小爱' })`。角色名必须能从当前聊天模板找到；入口按正式 private 会话保存两轮间的用户与助手历史，模型请求由 `chat.chatStream` 生成和发送，不需要调用方自己拼接 `System:`。这个模式会写入传入聊天服务配置的私聊历史；隔离测试需同时使用临时聊天运行目录和临时棋局文件。带目标显示端的聊天会等本次模型回复完成并校验游戏调用后展示叙述。
+
+
+清空聊天会同时删除该聊天在目标显示端上的棋局、关闭棋盘；下一次AI收到`NowGame:无`，重启也不会恢复已删除的棋局。仅隐藏棋盘或退出AI对话仍会保留棋局。控制端按当前显示端选择清理，临时聊天按服务端记录的所属显示端清理；其他聊天或未选显示端的棋局保留。旧版棋局没有聊天归属时，需在控制端选中对应显示端后清空。

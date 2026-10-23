@@ -8,6 +8,7 @@ function createSubAiChatBridge(chat, { dispatch, references = [], signal }) {
     return {
         ...chat,
         async chatStream(content, options, callbacks = {}) {
+            const requestSignal = options.signal || signal;
             const clean = (value, complete) => parseSubAiReply(value, complete).text;
             let published = '';
             const voice = createMarkdownSentenceStream();
@@ -39,11 +40,12 @@ function createSubAiChatBridge(chat, { dispatch, references = [], signal }) {
                 onComplete() {}
             });
             if (!response?.success) return response;
+            if (requestSignal?.aborted) return { success: false, cancelled: true, error: '聊天已取消' };
             const parsed = parseSubAiReply(response.message);
             for (const call of parsed.calls) {
-                if (signal?.aborted || executed.has(call.raw)) continue;
+                if (requestSignal?.aborted || executed.has(call.raw)) continue;
                 executed.add(call.raw);
-                await dispatch(call, { references, signal });
+                await dispatch(call, { references, signal: requestSignal });
             }
             const message = parsed.text.trim() || (parsed.calls.length ? '图片任务已提交。' : response.message);
             const reasoning = clean(response.reasoning, true);

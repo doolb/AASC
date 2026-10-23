@@ -2262,6 +2262,11 @@ const Chat = {
     
     async clearHistory() {
         const mode = this.session.mode;
+        // 清空与发消息使用同一显示端选择，旧棋局没有聊天归属时也能精确定位。
+        const selectionMode = window.DisplayList?.selectionMode;
+        const displayIds = ['all', 'adaptive'].includes(selectionMode)
+            ? window.DisplayList?.getSelectedDisplayIds?.() || []
+            : [window.currentDisplayId].filter(Boolean);
         if (mode === 'temporary') {
             if (this.temporaryHistoryViewSessionId) {
                 window.showToast('请先返回当前临时对话，再执行清空', 'warning');
@@ -2272,7 +2277,8 @@ const Chat = {
                 window.showToast('临时对话清空失败：控制端未连接', 'error');
                 return;
             }
-            window.WebSocketManager.ws.send(JSON.stringify({ type: 'clearTemporaryConversation' }));
+            window.WebSocketManager.ws.send(JSON.stringify({ type: 'clearTemporaryConversation',
+                ...(displayIds.length ? { displayIds } : {}) }));
             return;
         }
         const target = String(this.session.privateTarget || '').trim();
@@ -2295,7 +2301,8 @@ const Chat = {
 
         try {
             // 群聊/临时会话不属于具体私聊 session；只有私聊请求携带 sessionId。
-            const clearRequest = { mode, target: target || null };
+            const clearRequest = { mode, target: target || null,
+                ...(displayIds.length ? { displayIds } : {}) };
             if (mode === 'private') clearRequest.sessionId = sessionId;
             const response = await fetch('/api/chat/clear', {
                 method: 'POST',

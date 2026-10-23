@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const { normalizeGameChatScope, matchesGameChatScope } = require('./game-chat-scope');
 
 const GAME_NAME = '五子棋';
 const SIZES = new Set([9, 11, 13, 15]);
@@ -107,6 +108,7 @@ function isValidState(state) {
 
 function createGomokuGameService({ filePath, onUpdate = () => {} }) {
     const games = new Map();
+    const chats = new Set();
     try {
         const saved = JSON.parse(fs.readFileSync(filePath, 'utf8'));
         for (const [displayId, state] of Object.entries(saved)) {
@@ -170,7 +172,38 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
         return { ok: true, gm, message };
     }
 
-    function apply(displayId, call, { expectedVersion, userText = '', source = 'model' } = {}) {
+    /** 登记整轮模型交互，清空时连尚未开局的请求也失效。 */
+    function beginChat(displayId, scope) {
+        const controller = new AbortController();
+        const request = { displayId, scope: normalizeGameChatScope(scope), controller };
+        chats.add(request);
+        return { signal: controller.signal, release: () => chats.delete(request) };
+    }
+
+    function clearForChat(scope, { displayIds = [] } = {}) {
+        const targets = new Set(displayIds);
+        const targetMatches = id => !targets.size || targets.has(id);
+        const removed = [...games].filter(([id, state]) => targetMatches(id)
+            && (state.chatScope ? matchesGameChatScope(state.chatScope, scope) : targets.has(id)));
+        for (const [id] of removed) games.delete(id);
+        try {
+            if (removed.length) persist();
+        } catch (error) {
+            for (const [id, state] of removed) games.set(id, state);
+            throw error;
+        }
+        // 先保存成功，再让模型输出失效；持久失败时原局和在途操作继续有效。
+        for (const request of chats) {
+            if (targetMatches(request.displayId) && matchesGameChatScope(request.scope, scope)) {
+                request.controller.abort(new Error('聊天已清空'));
+            }
+        }
+        for (const [id, state] of removed) onUpdate(id, { type: 'gameCleared', game: GAME_NAME,
+            gameId: state.id, revision: state.revision + 1 });
+        return removed.map(([id]) => id);
+    }
+
+    function apply(displayId, call, { expectedVersion, userText = '', source = 'model', chatScope } = {}) {
         if (!displayId || typeof displayId !== 'string') return fail('缺少显示端');
         if (!call || call.game !== GAME_NAME) return fail('无效操作');
         const state = games.get(displayId);
@@ -186,7 +219,8 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                     return fail('棋局进行中，需要用户明确要求重新开局');
                 }
                 const next = { id: randomUUID(), revision: 1, size, board: Array(size * size).fill('.'),
-                    turn: 'User', result: '进行中', visible: true, pendingSize: null };
+                    turn: 'User', result: '进行中', visible: true, pendingSize: null,
+                    ...(chatScope ? { chatScope: normalizeGameChatScope(chatScope) } : {}) };
                 const message = { ...snapshotFromState(next), type: 'gameSnapshot' };
                 return commit(displayId, next, message,
                     gmSnapshotFromState(next));
@@ -231,7 +265,8 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
                 });
                 const result = won ? `${call.actor}胜` : board.includes('.') ? '进行中' : '平局';
                 const turn = result === '进行中' ? call.actor === 'User' ? 'AI' : 'User' : call.actor;
-                const next = { ...state, board, revision: state.revision + 1, turn, result, visible: true };
+                const next = { ...state, board, revision: state.revision + 1, turn, result, visible: true,
+                    ...(!state.chatScope && chatScope ? { chatScope: normalizeGameChatScope(chatScope) } : {}) };
                 // 隐藏期间没有可靠的本地棋盘，恢复时直接发完整快照；可见时仍只发增量。
                 const message = state.visible === false
                     ? { ...snapshotFromState(next), type: 'gameSnapshot' }
@@ -279,7 +314,8 @@ function createGomokuGameService({ filePath, onUpdate = () => {} }) {
         }
     }
 
-    return { apply, snapshot, gmSnapshot, gmStatus, has: displayId => games.has(displayId) };
+    return { apply, snapshot, gmSnapshot, gmStatus, beginChat, clearForChat,
+        has: displayId => games.has(displayId) };
 }
 
 function snapshotFromState(state) {

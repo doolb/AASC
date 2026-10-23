@@ -6,6 +6,7 @@
     // 棋步锁直到服务端完成本次 AI 处理才释放，棋盘广播不能提前释放它。
     let pending = null;
     let recoveryRequestId = null;
+    const clearedGames = new Set();
     let requestSequence = 0;
     let connected = false;
     let conversationState = 'waitingWake';
@@ -196,7 +197,26 @@
             return false;
         }
         if (!message || !['gameSnapshot', 'gameDelta', 'gameVisibility', 'gameProposal', 'gameError',
-            'gameDemoEnd', 'gameMoveResult', 'gameRecoverResult'].includes(message.type)) return false;
+            'gameCleared', 'gameDemoEnd', 'gameMoveResult', 'gameRecoverResult'].includes(message.type)) return false;
+        if (message.type === 'gameCleared') {
+            if (message.gameId) clearedGames.add(message.gameId);
+            if (clearedGames.size > 64) clearedGames.delete(clearedGames.values().next().value);
+            // 清除旧局的事件不能关闭随后已经开始的新棋局。
+            if (game && message.gameId && game.gameId !== message.gameId) return true;
+            game = null;
+            pending = null;
+            recoveryRequestId = null;
+            hideMoveHint();
+            refs.board.replaceChildren();
+            setStatus('');
+            setMenuOpen(false);
+            refs.layer.hidden = true;
+            refs.shell.hidden = true;
+            refs.layer.setAttribute('aria-hidden', 'true');
+            refreshView();
+            return true;
+        }
+        if (clearedGames.has(message.gameId)) return true;
         if (message.type === 'gameRecoverResult') {
             if (!recoveryRequestId || message.requestId !== recoveryRequestId) return true;
             if (message.snapshot) handleMessage(message.snapshot);

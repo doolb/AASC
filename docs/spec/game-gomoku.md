@@ -207,3 +207,34 @@ AI 代 GameUser 落子 → 模型依据用户自然语言填写坐标，用户�
 验收：语音用户落子必须由 AI 调用协议行；点击直接落子后 AI 收到 GM 增量；普通落子不传完整棋盘；断线与版本缺口恢复；尺寸确认、胜负、重复/越权落子。
 
 状态：服务端、显示端源码和定向测试完成；Offline 服务代码包与 Android 现场验收待进行。
+
+## 已确认修复伪代码：清空联动棋局（2026-10-23）
+
+```text
+已有声明 := chat.clearHistory、gomokuGame.snapshot、buildGameSystemPrompt、HTTP/WS/临时聊天清空入口
+新增定义 := 棋局所属聊天作用域、棋局持久清除和显示端清除事件
+清空 := 校验聊天范围 → 仅匹配当前聊天与目标显示端的棋局 → 失效在途棋步 → 持久移除棋局 → 通知关闭棋盘
+后续请求 := snapshot为空 → NowGame:无；无旧规则与旧GM恢复快照
+隔离 := 非匹配会话/显示端棋局保留；旧存量棋局按明确目标处理，不全局删除
+异常 := 持久失败回传错误；清空前的迟到回包不能恢复旧局
+状态 := 已实现并验证，实际步骤见清空生命周期
+```
+
+## 2026-10-23 已确认实现：清空生命周期
+
+```text
+棋局归属 := 规范化mode/target/sessionId，保存在game.chatScope；无归属的旧棋局只接受明确displayId清理
+聊天租约 := beginChat(displayId,scope)登记AbortController；结束release；清空匹配范围后abort
+清空入口 := 共用history-clear服务先校验聊天/目标参数，再game.clearForChat，最后原chat.clearHistory
+目标匹配 := 有displayIds只清这些显示端；无displayIds只清有明确所属范围的棋局；不全局删除旧棋局
+持久清除 := 批量移除匹配棋局 → 原子保存；失败回滚内存并报错，历史不先删除
+完成 := 失效匹配在途租约 → gameCleared(gameId)事件 → 显示端清理棋盘/棋步锁/恢复入口
+迟到响应 := 游戏桥使用租约signal过滤输出；模型返回后先检查signal，已清空不执行标签、不保存答复
+恢复 := 旧gameId已清除时不接收其迟到快照；重启从文件读不到已清棋局，NowGame为无
+临时清空 := 复用同一服务，优先服务端临时会话displayId；没有该信息才使用消息目标
+```
+
+```text
+服务端gameCleared回调 := 移除该显示端pendingGameMoves；迟到旧请求finally仅释放自己的锁
+测试 := test:game-chat覆盖持久清除/失败回滚/旧数据/会话及显示端隔离/迟到开局落子/临时权威归属/清空事件及棋步锁
+```

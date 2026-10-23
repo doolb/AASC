@@ -14160,3 +14160,16 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - `/v1/images/generations`统一路由，图片存为`res/uploads/chat-images/<UUID>.<ext>`；Qwen轮询最终作品，不重复统计缩略图。
   - GLM、豆包5.0 Flash、Qwen文字与桌面参考图实测成功；Android Qwen参考图暂不支持。test:chat-images 21项、流式回归63项、runtime/proxy/provider回归31项通过；servicePackage保持true，未出包。
   - 联调修复GLM增量流截断标签、豆包上传后关页竞态；独立Responses模型调用通过，正式images参考图接口HTTP200、图片落盘通过，不写入当前AASC聊天。
+
+### 聊天生图与游戏状态问题核查
+
+- ✅ [2026-10-23] 记录主AI绕过SubAI生图和清空历史遗留NowGame的问题及修复方案。
+  - 核实sub-ai-protocol缺少唯一入口约束；HTTP/WS/临时聊天清空未清理独立持久棋局。更新design/spec/task/todo，已发代码方案确认；尚未修改运行代码或执行修复测试。
+
+### SubAI生图入口与清空聊天棋局
+
+- ✅ [2026-10-23] 强化生图唯一入口，清空聊天同步清除关联棋局
+  - sub-ai-protocol明确生成/改图必须输出SubAI，禁止原生绘图/Markdown图片代替调用；桥接层检查本次取消信号。
+  - 新增game-chat-scope、chat-history-clear-service；gomoku-game-service持久保存聊天归属、清除失败回滚与模型租约失效；server-app统一HTTP/WS/临时清空并释放旧棋步锁。
+  - 控制端沿用当前显示端选择；临时聊天用服务端权威所属端；显示端处理gameCleared，关闭棋盘与恢复入口，拒绝旧局迟到快照，保留新局和其他会话/显示端。清空后NowGame为无，重启不恢复已清棋局。
+  - 生图22项、清空入口/上下文26项、控制端清空浏览器4项、流式聊天63项通过；游戏80项（含9项清空生命周期用例）通过。GLM/豆包隔离Responses各输出1条有效SubAI调用，不执行实际生图、不写当前聊天。servicePackage=true待构建，未构建APK。

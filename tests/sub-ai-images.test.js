@@ -133,3 +133,21 @@ test('生图HTTP接口沿用鉴权、保留全部图片与模型目录', async t
     assert.deepEqual(calls,[input]);
     const models=await (await fetch(base+'/v1/models',{headers})).json();assert.equal(models.data[0].capability,'image');
 });
+
+test('生图入口约束随角色和参考图一起传入，清空取消后不执行迟到标签', async () => {
+    const request = new AbortController(); const calls=[]; const completed=[];
+    let release; let delivered;
+    const chat={async chatStream(content, options){
+        delivered=options;
+        return await new Promise(resolve=>{release=()=>resolve({success:true,message:'SubAI,生图,"背景改为绿色",ref1',history:[]})});
+    }};
+    const bridge=createSubAiChatBridge(chat,{references:[{id:'ref1'}],dispatch:async call=>calls.push(call)});
+    const job=bridge.chatStream('修改图片',{systemPrompt:'角色设定',signal:request.signal},
+        {onComplete:value=>completed.push(value)});
+    assert.match(delivered.systemPrompt,/唯一入口/);
+    assert.match(delivered.systemPrompt,/不得调用模型或官网自带的原生生图/);
+    assert.match(delivered.systemPrompt,/可用参考图ID：ref1/);
+    assert.ok(delivered.systemPrompt.endsWith('角色设定'));
+    request.abort();release();
+    assert.equal((await job).cancelled,true);assert.deepEqual(calls,[]);assert.deepEqual(completed,[]);
+});

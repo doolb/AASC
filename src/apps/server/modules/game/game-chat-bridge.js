@@ -158,8 +158,22 @@ function buildGameSystemPrompt(initialState, originalPrompt) {
         .filter(Boolean).join('\n\n');
 }
 
+/** 清空聊天让本轮租约失效，防止已发送的模型请求晚到后重新创建棋局。 */
+async function runGameAwareChat(args) {
+    if (!args.displayId) return args.chat.chatStream(args.content, args.options, args.callbacks);
+    const lease = args.gameService.beginChat?.(args.displayId, args.options);
+    const sourceSignal = args.options?.signal;
+    const signal = lease && sourceSignal ? AbortSignal.any([lease.signal, sourceSignal])
+        : lease?.signal || sourceSignal;
+    try {
+        return await runGameChat({ ...args, options: { ...args.options, signal } });
+    } finally {
+        lease?.release();
+    }
+}
+
 /** 游戏回合缓冲模型输出，避免协议行的半截流进入聊天或 TTS。 */
-async function runGameAwareChat({ chat, gameService, displayId, content, userText = content,
+async function runGameChat({ chat, gameService, displayId, content, userText = content,
     options, callbacks, internalSignal = false, getAvailableGames = () => ['五子棋'] }) {
     if (!displayId) {
         return chat.chatStream(content, options, callbacks);
@@ -196,6 +210,11 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     const contextKey = [displayId, chat.getActiveProfile?.() || '', options.mode || '',
         options.target || '', options.sessionId || ''].join('|');
     const needsRecovery = initialState && recoveredContexts.get(contextKey) !== initialState.gameId;
+    const cancelled = () => {
+        const error = '聊天已清空或取消，本轮回复已停止';
+        callbacks.onError?.(error);
+        return { success: false, cancelled: true, error };
+    };
     if (needsRecovery) {
         // 服务器重启或上下文切换后补一次权威快照；常规落子回执也会附最新棋盘编码。
         const snapshot = gameService.gmSnapshot(displayId);
@@ -204,9 +223,11 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
     }
     if (internalSignal && /^Game:五子棋,GM,/.test(content)) recordProtocol('GM', content);
     for (let turn = 0; turn < maxTurns; turn += 1) {
+        if (options.signal?.aborted) return cancelled();
         // 普通正文逐块转发；调用行及依赖结果的叙述由请求级模块局部暂存，交原GM循环确认。
         const response = await chat.chatStream(input, { ...options, systemPrompt },
             streamOutput.beginTurn({ blocked: unconfirmedOperations.size > 0 }));
+        if (options.signal?.aborted) return cancelled();
         if (!response?.success) {
             callbacks.onError?.(response?.error || '游戏聊天失败');
             return response;
@@ -251,6 +272,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
         let terminalMove = false;
         let confirmedAiMove = false;
         for (const [index, { call, raw }] of tags.entries()) {
+            if (options.signal?.aborted) return cancelled();
             recordProtocol(call.actor === 'User' ? 'GameUser' : 'GameAI', raw);
             const games = getAvailableGames(displayId);
             const available = Array.isArray(games) && games.includes('五子棋');
@@ -261,7 +283,7 @@ async function runGameAwareChat({ chat, gameService, displayId, content, userTex
                         ? { ok: true, gm: `Game:${call.game},GM,规则,${GAME_RULES[call.game]}` }
                         : { ok: false, code: '当前显示端不支持五子棋',
                             gm: 'Game:五子棋,GM,错误,当前显示端不支持五子棋' }
-                    : gameService.apply(displayId, call, { expectedVersion: version, userText });
+                    : gameService.apply(displayId, call, { expectedVersion: version, userText, chatScope: options });
             recordProtocol('GM', result.gm);
             gmResults.push(result.gm);
             version = gameService.snapshot(displayId)?.revision;

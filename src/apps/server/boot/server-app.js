@@ -26,6 +26,7 @@ const { createSubAiTaskService } = require('../modules/sub-ai/sub-ai-task-servic
 const { createChatImageAssets } = require('../modules/sub-ai/chat-image-assets');
 const { runGameAwareChat } = require('../modules/game/game-chat-bridge');
 const { createChatContextUsageService, resolveChatContextOptions, normalizeContextScope } = require('../modules/chat/chat-context-usage');
+const { createChatHistoryClearService } = require('../modules/chat/chat-history-clear-service');
 const { createDataRepairRunner } = require('../modules/data-repair/data-repair-js-runner');
 const { createChat2ApiRuntime } = require('../modules/chat2api/chat2api-runtime');
 const { createDoubaoWebViewSettings } = require('../modules/chat2api/chat2api-doubao-webview-settings');
@@ -402,11 +403,13 @@ const pendingGameMoves = new Map();
 const gomokuGame = createGomokuGameService({
     filePath: path.join(USER_CONFIG_DIR, 'games', 'gomoku.json'),
     onUpdate: (displayId, message) => {
+        if (message?.type === 'gameCleared') pendingGameMoves.delete(displayId);
         // 真实棋局更新优先于临时演示；直接恢复最新快照，避免与演示版本混用。
         const interruptedDemo = gomokuDisplayDemo?.cancelForRealUpdate(displayId);
-        sendToDisplay(displayId, interruptedDemo ? gomokuGame.snapshot(displayId) : message);
+        sendToDisplay(displayId, interruptedDemo ? gomokuGame.snapshot(displayId) || message : message);
     }
 });
+const chatHistoryClear = createChatHistoryClearService({ chat, gameService: gomokuGame });
 const chatContextUsage = createChatContextUsageService({ chat,
     getGameSnapshot: displayId => gomokuGame.snapshot(displayId),
     getTemporaryConversation: () => ({ ...temporaryConversation,
@@ -2096,12 +2099,8 @@ function broadcastTemporaryConversation(action = 'snapshot') {
     });
 }
 
-function clearTemporaryChatHistory() {
-    try {
-        chat.clearHistory({ mode: 'temporary' });
-    } catch (error) {
-        logError('临时聊天', `清理旧临时历史失败: ${error.message}`);
-    }
+function clearTemporaryChatHistory(options = {}) {
+    return chatHistoryClear.clear({ ...options, mode: 'temporary' });
 }
 
 function pruneTemporaryConversationHistory(currentSessionId) {
@@ -2164,8 +2163,10 @@ function ensureTemporaryConversation(displayId) {
     return temporaryConversation.id || replaceTemporaryConversation(displayId);
 }
 
-function clearTemporaryConversation() {
-    clearTemporaryChatHistory();
+function clearTemporaryConversation(options = {}) {
+    clearTemporaryChatHistory({ ...options, sessionId: temporaryConversation.id,
+        // 临时会话的所属显示端由服务器确定，控制端当前选中项可能已切换。
+        ...(temporaryConversation.displayId ? { displayIds: [temporaryConversation.displayId] } : {}) });
     temporaryConversation.messages = [];
     broadcastTemporaryConversation('clear');
 }
@@ -5554,7 +5555,7 @@ app.get('/api/chat/history', (req, res) => {
 
 app.post('/api/chat/clear', (req, res) => {
     try {
-        const history = chat.clearHistory(req.body || {});
+        const history = chatHistoryClear.clear(req.body || {});
         log('Chat', `清空聊天历史 source=http mode=${req.body?.mode || '-'} target=${req.body?.target || '-'} sessionId=${req.body?.sessionId || '-'}`);
         res.json({
             status: 'success',
@@ -10357,7 +10358,11 @@ async function handleControlMessageFallback(data, ws) {
     }
 
     if (data.type === 'clearTemporaryConversation') {
-        clearTemporaryConversation();
+        try {
+            clearTemporaryConversation(data);
+        } catch (error) {
+            ws.send(JSON.stringify({ type: 'temporaryConversationError', message: error.message }));
+        }
         return;
     }
 
@@ -10786,7 +10791,7 @@ async function handleControlMessageFallback(data, ws) {
                             target: data.target,
                             sessionId: data.sessionId
                         };
-                        const remainingHistory = chat.clearHistory(scope);
+                        const remainingHistory = chatHistoryClear.clear({ ...data, ...scope });
                         // 显示端只接收被清空范围的快照，其他私聊历史不能阻止当前面板刷新。
                         const history = isDisplayChatSource
                             ? chat.getHistory({ ...scope, preserveThink: true }) : remainingHistory;

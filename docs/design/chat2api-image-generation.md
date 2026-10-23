@@ -41,3 +41,8 @@ Qwen请求为/api/v2/chat，model=Qwen，scene=chat，sub_scene为空，ai_tool_
 - 自测入口`npm run test:chat-images`，覆盖21项；流式聊天回归63项，runtime/proxy/provider回归31项。无新增依赖，无APK构建；servicePackage保持待构建。
 
 - 最终隔离Responses实测：GLM返回完整SubAI生图调用；修正GLM的if_increase_push增量处理。正式豆包images接口参考图返回HTTP200及1张图片，下载为image/png、2,045,361字节；上传/解析复用页面，避免关闭竞态。
+
+## 已修复：主AI生图入口约束（2026-10-23）
+
+用户反馈主AI有概率调用原生生图。SUB_AI_PROMPT已明确SubAI为生成/改图的唯一入口，禁止调用模型或官网原生绘图、用Markdown图片/附件替代调用；增加简短调用示例，普通聊天和仅编写提示词不调用。原角色设定、raw System格式和参考图ID沿用已有拼装。模型结果返回后先检查请求取消信号，清空失效时不再分流迟到调用。
+隔离Responses实测GLM、豆包各输出一条有效生图指令，未执行真实生图、未写当前聊天。提示词约束不是Provider级硬关闭；未添加未经验证的接口参数。
