@@ -132,3 +132,16 @@ Qwen核查修正 := 用户确认HappyHorse可用，撤回本次Wan3.0普通/480p
 资产接口 := 图片save/read、视频save；视频异常分支unlink仅本次temporary/target，不是历史引用回收
 尚未实现 := 按所有保留历史/下载中的任务引用回收无引用资产；本次不执行文件删除或变更策略
 ```
+
+## 受管媒体回收草案（待实施确认）
+
+```text
+已有声明 := chatHistories全profile/群私临时会话、历史持久化、每日一份快照、image/video资产、媒体controller
+新增定义 := MediaLease { assetId, state, expiresAt }；ChatMediaGC { managedRoots, currentRefs, backupRefs, liveLeases }
+备份策略 := 用户选保留备份引用；按现有每日/单份轮换，替换后失去引用才能回收
+删除事件 := 清空/轮次删除/条数淘汰/临时会话淘汰/导入替换 → 成功保存历史 → 取消失去记录的任务 → 排队回收
+引用扫描 := 全部当前历史 + 当前保留快照 + 上传/生成/下载租约 → 图片/视频/封面/附件ID引用集合
+执行 := 只枚举受管目录UUID普通文件，排除有引用/有租约者；删前再次校验；异常停止并报告，不跟随链接
+补偿 := 启动和周期补扫；未发送附件到期释放租约；备份轮换后重扫
+约束 := trimHistoryToBudget仅上下文选择，不删除历史/文件；回收失败不恢复已清空聊天
+```

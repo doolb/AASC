@@ -187,3 +187,15 @@ sendToDisplay(displayId, message, options={}):
     保持 playCurrentItem 的 isSleepPaused 守卫
     睡眠期间不推进 index、不排队
 ```
+
+## Node适配伪代码（待实施确认）
+
+```text
+已有声明 := NodeMediaController/MpvPlayer/ASS overlay、control/restoreState、服务端睡眠配置和TTS过滤
+新增定义 := NodeSleepController { settings, manualMode, activationUntil, state, timer, playbackIntent }
+输入 := sleepSettings/Activate/Override与restoreState.sleep → 既有优先级和本地时间判定
+状态 := normal/active显示；sleep黑媒体保留UI；deep全黑；变化上报sleepStateReport和命令ack
+播放 := 隐藏时暂停媒体/正文推进；恢复时只按保存的播放意图续播，期间手动控制更新意图
+激活 := 控制端新媒体 → 60秒active；恢复持久化媒体/状态通知不触发active
+生命周期 := 重连补报并恢复权威设置；断开/退出清理定时器；TTS保持原服务端策略
+```

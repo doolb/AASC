@@ -317,3 +317,9 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 - 文档更新：0.5h
 - 真机自测：1h
 - 合计：**5h**
+
+## Node子显示端睡眠适配（2026-10-23，方案待确认）
+
+用户要求Node支持现有睡眠模式。拟新增sleep-controller.js，main.js仅接线，media-controller/mpv-player/mpv-overlay适配：沿原sleepSettings、sleepActivate、sleepOverride、restoreState与sleepStateReport，按本地时区/现有时段/优先级判定，60秒临时激活。
+
+普通睡眠暂停并遮黑媒体和ASS正文，保留时钟等UI；深睡全黑并隐藏UI。唤醒恢复原先播放意图，手动暂停不能被误恢复。控制端新下发媒体临时激活，重连恢复/内部切换不激活。通用TTS继续正常，定时报时由服务端既有睡眠规则控制；录音和连接保持。复用WS权威配置，不增加独立HTTP配置或新时段设置。
