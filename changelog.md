@@ -14251,3 +14251,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 新版display-chat在同一真实WebView132隔离验证单占位更新4图、HTTPS200、真实解码、不越界、历史恢复通过；不写用户历史、不修改已装源码，测试frame和临时图片已清理。安装态功能待更新服务包。
   - APK Chat2API仅一个已启用豆包账号“豆包网页（doubao）”，没有个人昵称/手机号/邮箱信息；未输出凭据。
   - 补充双应用核查：同机普通APK com.aasc.display运行于外接屏、连接192.168.1.39，当前模块已支持图片；隔离四图、历史恢复及ADB HDMI实际截图通过，测试数据已清理。该服务器另有Qwen网页/Qwen API/豆包API/豆包网页/GLM五条账号记录，均无个人昵称字段。旧code-v148结论仅适用于Offline APK。
+
+### 控制端媒体单轨双手柄循环
+
+- ✅ [2026-10-23] 媒体播放卡片新增一条区间滑条、开始/结束两个手柄与循环开关；鼠标/触屏/键盘调整，选区高亮并显示时间，无手输，释放后提交。
+  - 新增公共 `media-loop.js`、控制交互 `control-media-loop.js` 和服务端 `media-loop-control.js`；接入upload/controls/websocket/device-list、server-app、display与Node media-controller/mpv-player。沿用WebSocket与config.set持久化链路，服务端规范化并广播权威值，媒体标识拒绝迟到拖动，切换清除、重连恢复、暂停保持、列表末尾优先循环。
+  - 独立Node打包收录公共模块，更新打包夹具；同步自测界面、design/spec/task/todo/usage。`test:media-loop` 18/18、`test:node-display-mpv` 51/51、`test:offline-voice-display-node` 22/22通过，含Chromium真实鼠标/触屏/键盘及音视频解码，Node为真实进程/socket IPC夹具。
+  - `servicePackage=true`与`voiceDisplayNodePackage=true`，其它状态保持；未构建部署，Android触屏与设备原生mpv仍待验收，未提交截图、媒体样本或本机配置。

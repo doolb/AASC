@@ -39,6 +39,24 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'media_loop_range',
+            name: '媒体循环双手柄',
+            description: '只读检查单轨双手柄和起止边界，不改变当前播放',
+            category: '播放控制',
+            run: async () => {
+                const track = document.getElementById('mediaLoopRange');
+                const inputs = track?.querySelectorAll('input[type="range"]');
+                const api = window.MediaLoop;
+                if (!api || !track || inputs?.length !== 2) return { success: false, message: '区间滑条未完整加载' };
+                const range = api.normalize({ enabled: true, startPercent: 100, endPercent: -1 });
+                const bounds = api.seconds(range, 120);
+                const valid = track.querySelectorAll('.media-loop-track').length === 1 && bounds && bounds.start < bounds.end
+                    && bounds.end <= 120 && api.seconds(range, Infinity) === null;
+                return { success: !!valid, message: valid ? '单轨双手柄及边界检查通过' : '区间边界或结构异常',
+                    details: '只读模块检查；实际鼠标/触屏拖动、音视频回跳和断线恢复由专项测试及设备验收覆盖' };
+            }
+        },
+        {
             id: 'offline_data_repair_baseline',
             name: 'Offline 数据修复基线',
             description: '只读检查数据版本与待执行修复结果，不运行修复',

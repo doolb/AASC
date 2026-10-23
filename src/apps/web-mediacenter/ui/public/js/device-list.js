@@ -2488,6 +2488,7 @@ const DeviceList = {
         }
         this.selectedNodeId = id;
         window.currentDisplayId = id;
+        window.ControlMediaLoop?.restore(id, {});
         try {
             localStorage.setItem('selectedDisplayId', id);
         } catch (e) {

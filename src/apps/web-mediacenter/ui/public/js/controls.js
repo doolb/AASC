@@ -435,6 +435,7 @@ const Controls = {
     },
     
     init() {
+        window.ControlMediaLoop?.init();
         const progressSlider = document.getElementById('progressSlider');
         const volumeSlider = document.getElementById('volumeSlider');
         

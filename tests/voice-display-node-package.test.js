@@ -57,6 +57,9 @@ function createProjectFixture() {
     fs.writeFileSync(path.join(frameworkRoot, 'console-redirect.js'), 'module.exports = { installConsoleRedirect() {} };\n');
     fs.mkdirSync(path.join(projectRoot, 'src/core/utils'), { recursive: true });
     fs.writeFileSync(path.join(path.join(projectRoot, 'src/core/utils'), 'sentence-splitter.js'), 'module.exports = { splitIntoSentences() { return []; } };\n');
+    const loopPath = path.join(projectRoot, 'src/apps/web-mediacenter/ui/public/js');
+    fs.mkdirSync(loopPath, { recursive: true });
+    fs.copyFileSync(path.join(__dirname, '../src/apps/web-mediacenter/ui/public/js/media-loop.js'), path.join(loopPath, 'media-loop.js'));
     return { projectRoot, appRoot };
 }
 
@@ -88,6 +91,7 @@ test('standalone ZIP keeps runtime paths, dependencies and signed content identi
     assert.ok(entries.includes('src/apps/voice-display-node/node_modules/ws/package.json'));
     assert.ok(entries.includes('src/apps/voice-display-node/config.example.json'));
     assert.ok(entries.includes('src/framework/observability/system-monitor.js'));
+    assert.ok(entries.includes('src/apps/web-mediacenter/ui/public/js/media-loop.js'));
     assert.ok(entries.includes('src/framework/observability/console-redirect.js'));
     assert.ok(entries.includes('src/core/utils/sentence-splitter.js'));
     assert.ok(!entries.includes('src/apps/voice-display-node/config.json'));

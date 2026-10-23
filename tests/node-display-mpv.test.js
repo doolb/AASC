@@ -16,6 +16,24 @@ const { calculateGeometry, normalizeCrop, normalizeRotation } = require('../src/
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const root = path.resolve(__dirname, '..');
+test('mpv区间通过真实IPC设置原生AB点，暂停恢复与新媒体清除', async t => {
+    const { player } = await createPlayer(t);
+    await player.load({ type: 'url', url: 'http://localhost/video.mp4', mediaType: 'video' }, { paused: true });
+    await player.control('mediaLoop', { enabled: true, startPercent: 25, endPercent: 75 });
+    assert.equal(await player.command(['get_property', 'ab-loop-a']), 30);
+    assert.equal(await player.command(['get_property', 'ab-loop-b']), 90);
+    assert.equal(await player.command(['get_property', 'pause']), true);
+    await player.command(['set_property', 'time-pos', 110]);
+    await player.control('play', true);
+    assert.equal(await player.command(['get_property', 'time-pos']), 30);
+    await player.control('mediaLoop', { enabled: false });
+    assert.equal(await player.command(['get_property', 'ab-loop-a']), 'no');
+    assert.equal(await player.command(['get_property', 'ab-loop-b']), 'no');
+    await player.control('mediaLoop', { enabled: true, startPercent: 20, endPercent: 60 });
+    await player.load({ type: 'url', url: 'http://localhost/audio.wav', mediaType: 'audio' });
+    assert.equal(await player.command(['get_property', 'ab-loop-a']), 'no');
+    assert.equal(player.mediaLoop.enabled, false);
+});
 const media = (url = 'http://localhost/image.png', mediaType = 'image') => ({ type: 'url', url, mediaType });
 
 // 与运行入口使用相同的导入声明，不能注入全局URL掩盖url模块与构造器的区别。

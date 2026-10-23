@@ -12,7 +12,8 @@ const OBSERVABILITY_FILES = Object.freeze([
     'src/framework/observability/system-monitor.js',
     'src/framework/observability/console-redirect.js'
 ]);
-const RUNTIME_SUPPORT_FILES = Object.freeze([...OBSERVABILITY_FILES, 'src/core/utils/sentence-splitter.js']);
+const RUNTIME_SUPPORT_FILES = Object.freeze([...OBSERVABILITY_FILES, 'src/core/utils/sentence-splitter.js',
+    'src/apps/web-mediacenter/ui/public/js/media-loop.js']);
 const SIGNATURE_ALGORITHM = 'SHA256withRSA';
 
 function assertVersion(version) {

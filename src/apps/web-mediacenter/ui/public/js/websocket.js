@@ -55,6 +55,7 @@ const WebSocketManager = {
         };
         
         this.ws.onclose = () => {
+            window.ControlMediaLoop?.disconnected();
             window.Chat?.onProfileConnectionClosed();
             window.TtsAudioCacheSettings?.handleDisconnected();
             window.TtsProviderSettings?.handleDisconnected();
@@ -267,6 +268,7 @@ const WebSocketManager = {
                 window.VoiceprintPanel.handleConversationWindowConfig(data);
             }
         } else if (data.type === 'playlistProgress') {
+            window.ControlMediaLoop?.progress(data);
             // 只处理当前选中显示端的播放列表进度
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
             if (window.MediaLibrary) {
@@ -329,6 +331,7 @@ const WebSocketManager = {
             }
             
             if (data.displayId === window.currentDisplayId) {
+                window.ControlMediaLoop?.restore(data.displayId, data.state);
                 // 睡眠状态（切换显示端/getState 响应）：有值显示真实状态，未上报过则按钮回落「设置」
                 if (window.Controls) {
                     window.Controls.updateSleepStatus(data.state.sleepState);
@@ -512,7 +515,11 @@ const WebSocketManager = {
             if (data.displayId !== window.currentDisplayId) return;
             if (window.Controls) window.Controls.updateTextPlaybackStatus(data);
             if (window.FloatingControl) window.FloatingControl.updateTextPlaybackStatus(data);
+        } else if (data.type === 'mediaLoopState') {
+            window.ControlMediaLoop?.receive(data);
+            if (data.displayId === window.currentDisplayId && data.error) window.showToast?.(data.error, 'warning');
         } else if (data.type === 'videoProgress') {
+            window.ControlMediaLoop?.progress(data);
             // 只显示当前选中显示端的进度
             window.currentHtmlPlaying = false;
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
@@ -524,6 +531,7 @@ const WebSocketManager = {
                 if (label) label.textContent = pct + '%';
             }
         } else if (data.type === 'audioProgress') {
+            window.ControlMediaLoop?.progress(data);
             // 音频与视频共用控制端进度条，但单独标记当前不是 html 滚动媒体。
             window.currentHtmlPlaying = false;
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
@@ -535,6 +543,7 @@ const WebSocketManager = {
                 if (label) label.textContent = pct + '%';
             }
         } else if (data.type === 'htmlProgress') {
+            window.ControlMediaLoop?.progress({ ...data, duration: 0 });
             // 只处理当前选中显示端的 html 播放进度
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
             // html 播放进度：进度条显示滚动比例，文本显示缩放倍数 + 滚动比例

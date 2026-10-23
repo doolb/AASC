@@ -712,6 +712,7 @@
     <script src="js/html-to-image.min.js"></script>
     <script src="js/control-mode-utils.js"></script>
     <script src="js/dynamic-fit-controller.js"></script>
+    <script src="js/media-loop.js"></script>
     <script src="js/sherpa-asr.js"></script>
     <script src="js/pcm-audio-capture.js"></script>
     <script src="js/task-onnx-runtime.js"></script>
@@ -3895,6 +3896,7 @@
                 );  // 恢复不激活；暂停状态保持暂停，并跳回上次播放位置
             }
 
+            setMediaLoop(state.mediaLoop);
             if (state.sleep !== undefined) {
                 // 容错：state.sleep 可能为 null/非对象（服务端持久化异常），按空值降级，避免 TypeError
                 const s = state.sleep || {};
@@ -4040,6 +4042,7 @@
                 voiceRouteByDisplayId: data.voiceRouteByDisplayId || null
             };
             playCurrentItem({ allowPausedLoad: true, resumeTime: resumeTime });
+            setMediaLoop(data.mediaLoop);
         }
 
         function getPlaylistTextRoute(ps) {
@@ -4068,6 +4071,7 @@
                 finishPlaylist();
                 return;
             }
+            mediaLoopPlayers.forEach(player => player.reset());
             // 清除上一项残留的定时器/ended 监听/加载失败回调，
             // 防止切换时重复触发 next 跳过媒体项
             if (ps.timer) {
@@ -5248,7 +5252,11 @@
             }
         }
 
+        const mediaLoopPlayers = [MediaLoop.attach(mediaVideo), MediaLoop.attach(mediaAudio)];
+        function setMediaLoop(value) { mediaLoopPlayers.forEach(player => player.set(value)); }
+
         function showMedia(data, noActivate, paused, resumeTime = 0) {
+            mediaLoopPlayers.forEach(player => player.reset());
             const loadSequence = ++mediaLoadSequence;
             htmlMediaAbortController?.abort();
             htmlMediaAbortController = null;
@@ -5498,6 +5506,7 @@
 
         // 清空停止全部媒体生命周期，但保留角色、聊天、监听和画面参数。
         function clearCurrentMedia() {
+            mediaLoopPlayers.forEach(player => player.reset());
             mediaLoadSequence += 1;
             htmlMediaAbortController?.abort();
             htmlMediaAbortController = null;
@@ -5534,6 +5543,9 @@
 
         function handleControl(data) {
             switch (data.action) {
+                case 'mediaLoop':
+                    setMediaLoop(data.value);
+                    break;
                 case 'clearMedia':
                     clearCurrentMedia();
                     break;

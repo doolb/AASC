@@ -1,5 +1,7 @@
 'use strict';
 
+const { normalize: normalizeMediaLoop, seconds: mediaLoopSeconds } = require('../web-mediacenter/ui/public/js/media-loop');
+
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -38,6 +40,7 @@ class MpvPlayer extends EventEmitter {
         this.properties = {};
         this.paused = false;
         this.volume = 100;
+        this.mediaLoop = normalizeMediaLoop();
         this.visual = { rotation: 0, fit: 'contain', crop: normalizeCrop(), dynamicFitConfig: normalizeDynamic() };
         this.dynamicTimer = null;
         this.geometryTimer = null;
@@ -282,6 +285,9 @@ class MpvPlayer extends EventEmitter {
             try {
                 this.current = null;
                 this.properties = { 'osd-dimensions': this.properties['osd-dimensions'] };
+                this.mediaLoop = normalizeMediaLoop();
+                await this.command(['set_property', 'ab-loop-a', 'no']);
+                await this.command(['set_property', 'ab-loop-b', 'no']);
                 await this.command(['set_property', 'pause', this.paused]);
                 await this.command(['set_property', 'volume', this.volume]);
                 try {
@@ -412,6 +418,25 @@ class MpvPlayer extends EventEmitter {
     }
 
     control(action, value) {
+        if (action === 'mediaLoop') {
+            const range = normalizeMediaLoop(value);
+            return this.enqueue(async () => {
+                if (!this.current || !this.session?.socket || this.session.disposed) return false;
+                const duration = await this.command(['get_property', 'duration']);
+                const bounds = ['audio', 'video'].includes(this.current.mediaType) ? mediaLoopSeconds(range, duration) : null;
+                // 先解除旧终点，防止更新两个边界的瞬间出现反向循环。
+                await this.command(['set_property', 'ab-loop-b', 'no']);
+                await this.command(['set_property', 'ab-loop-a', bounds ? bounds.start : 'no']);
+                await this.command(['set_property', 'ab-loop-b', bounds ? bounds.end : 'no']);
+                if (bounds) {
+                    await this.command(['set_property', 'ab-loop-count', 'inf']);
+                    const position = await this.command(['get_property', 'time-pos']);
+                    if (!this.paused && (position < bounds.start || position >= bounds.end)) await this.command(['seek', bounds.start, 'absolute+exact']);
+                }
+                this.mediaLoop = range;
+                return true;
+            });
+        }
         if (this.updateVisual(action, value)) return this.queueGeometry();
         if (action === 'clearMedia') return this.clear();
         const commands = {
@@ -423,13 +448,22 @@ class MpvPlayer extends EventEmitter {
             },
             seek: () => {
                 if (!Number.isFinite(Number(value))) throw new Error('进度必须是数字');
-                return ['seek', Math.max(0, Math.min(100, Number(value))), 'absolute-percent+exact'];
+                const minimum = this.mediaLoop.enabled ? this.mediaLoop.startPercent : 0;
+                const maximum = this.mediaLoop.enabled ? this.mediaLoop.endPercent - 0.001 : 100;
+                return ['seek', Math.max(minimum, Math.min(maximum, Number(value))), 'absolute-percent+exact'];
             }
         };
         if (!commands[action]) return Promise.resolve(false);
         const command = commands[action]();
         return this.enqueue(async () => {
-            if (this.session?.socket && !this.session.disposed) await this.command(command);
+            if (this.session?.socket && !this.session.disposed) {
+                if (action === 'play' && value === true && this.mediaLoop.enabled) {
+                    const bounds = mediaLoopSeconds(this.mediaLoop, await this.command(['get_property', 'duration']));
+                    const position = await this.command(['get_property', 'time-pos']);
+                    if (bounds && (position < bounds.start || position >= bounds.end)) await this.command(['seek', bounds.start, 'absolute+exact']);
+                }
+                await this.command(command);
+            }
             this.reportProgress(true);
             return true;
         });

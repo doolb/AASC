@@ -16,6 +16,8 @@ if (configImportResult) {
     output(`[ConfigBackup] 启动前恢复 status=${configImportResult.status}${configImportResult.message ? ` error=${configImportResult.message}` : ''}`);
 }
 const config = require('../modules/config/config-app-service');
+const { createMediaLoopService, createMediaLoopToken, normalizeMediaLoop } = require('../modules/media/media-loop-control');
+const mediaLoopService = createMediaLoopService({ persist: persistDisplayState, broadcast: broadcastToControls, send: sendToDisplay });
 const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
 const { createGomokuGameService } = require('../modules/game/gomoku-game-service');
@@ -2033,6 +2035,8 @@ function createDisplayState() {
         showStatusBar: true,
         mmdVisible: true,
         currentMediaProgress: null,
+        mediaLoop: normalizeMediaLoop(),
+        mediaLoopToken: createMediaLoopToken(),
         currentHtmlScroll: null,
         rotation: 0,
         fit: 'contain',
@@ -7746,6 +7750,7 @@ function sendToDisplay(displayId, data, options = {}) {
         return false;
     }
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
+        mediaLoopService.sent(displayData, data);
         prepareVoiceTtsPlayback(displayId, data);
         if (!data.correlationId) {
             data.correlationId = generateCorrelationId(data.type || 'msg');
@@ -8235,6 +8240,8 @@ wss.on('connection', (ws, req) => {
                 showStatusBar: normalizeDisplayStatusBarVisibility(savedState?.showStatusBar),
                 mmdVisible: normalizeMmdVisibility(savedState?.mmdVisible),
                 dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
+                mediaLoop: normalizeMediaLoop(savedState?.mediaLoop),
+                mediaLoopDuration: savedState?.currentPlaylist?.duration ?? savedState?.currentMediaProgress?.duration ?? 0,
                 vadThreshold: normalizeVadThreshold(savedState?.vadThreshold),
                 vadSilenceDurationMs: normalizeVadDuration(
                     savedState?.vadSilenceDurationMs,
@@ -8444,7 +8451,8 @@ wss.on('connection', (ws, req) => {
                 resumeIndex: savedState.currentPlaylist.index,
                 resumeTime: savedState.currentPlaylist.currentTime || 0,
                 resumeTextPage: savedState.currentPlaylist.currentTextPage || 0,
-                resumeState: savedState.currentPlaylist.state || 'playing'
+                resumeState: savedState.currentPlaylist.state || 'playing',
+                mediaLoop: savedState.mediaLoop
             }));
         }
         
@@ -9140,6 +9148,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         'tempMediaInfo', 'textProgress', 'playStateReport'];
     if (displayData?.state.currentMedia === null && !displayData.state.currentPlaylist
         && mediaReportTypes.includes(data.type)) return;
+    mediaLoopService.report(displayData, data);
 
     if (data.type === 'mmdVisibilityRequest') {
         const result = updateDisplayMmdVisibility(displayData, data.visible);
@@ -11237,6 +11246,7 @@ async function handleControlMessageFallback(data, ws) {
                     }
                     sendToDisplay(displayId, data.media);
                 } else if (data.type === 'control') {
+                    if (mediaLoopService.handle(displayData, data)) return;
                     if (data.action === 'mmdVisibility') {
                         const result = updateDisplayMmdVisibility(displayData, data.value);
                         if (!result.ok) sendMmdVisibilityError(ws, displayId, result.message);

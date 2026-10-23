@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [控制端媒体循环区间伪代码（单轨双手柄已实现）](spec/control-media-loop.md)
+
 - [SubAI与对话动作伪代码（草案，未实现）](spec/sub-ai-actions.md)
 
 - [Chat2API远程登录伪代码](spec/chat2api-remote-login.md)

@@ -3,7 +3,7 @@
 const { MpvPlayer } = require('./mpv-player');
 const { MpvTextPlayer } = require('./mpv-text-player');
 
-const MEDIA_CONTROLS = new Set(['play', 'seek', 'volume', 'clearMedia', 'rotate', 'fit', 'crop', 'dynamicFitConfig', 'textStyle', 'textPlayback']);
+const MEDIA_CONTROLS = new Set(['play', 'seek', 'volume', 'clearMedia', 'rotate', 'fit', 'crop', 'dynamicFitConfig', 'textStyle', 'textPlayback', 'mediaLoop']);
 const VISUAL_CONTROLS = new Set(['rotate', 'fit', 'crop', 'dynamicFitConfig']);
 
 /** 只适配已有AASC媒体协议，不在本机增加配置HTTP端口或外部命令执行接口。 */
@@ -155,8 +155,9 @@ class NodeMediaController {
                 if (this.restoring) this.restoring.isPlaying = data.value === true;
                 if (this.pendingRestore) this.pendingRestore.isPlaying = data.value === true;
             }
+            if (data.action === 'mediaLoop' && this.restoring) this.restoring.mediaLoop = data.value;
             if (this.pendingRestore) {
-                const field = { rotate: 'rotation', fit: 'fit', crop: 'crop', dynamicFitConfig: 'dynamicFitConfig', volume: 'volume', textStyle: 'textStyle' }[data.action];
+                const field = { rotate: 'rotation', fit: 'fit', crop: 'crop', dynamicFitConfig: 'dynamicFitConfig', volume: 'volume', textStyle: 'textStyle', mediaLoop: 'mediaLoop' }[data.action];
                 if (field) this.pendingRestore[field] = data.value ?? data.rotation;
                 if (data.action === 'crop') this.pendingRestore.fit = 'crop';
             }
@@ -205,6 +206,8 @@ class NodeMediaController {
                     resumeTime: Math.max(0, Number(state.currentMediaProgress?.currentTime) || 0)
                 }, sequence);
                 if (!loaded) return;
+                if (sequence !== this.sequence) return;
+                if (state.mediaLoop) await this.player.control('mediaLoop', state.mediaLoop);
             }
             this.acknowledge('restoreState', true, 'mpv状态已恢复');
         } catch (error) {
