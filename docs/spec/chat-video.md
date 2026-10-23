@@ -86,3 +86,11 @@ GLM实测 := source_list为ID数组，创建result.chat_id；查询status=finish
 保存窗口 := 主流结束到后台下载完成之间允许保存pending卡片，不能因空正文丢掉恢复任务ID
 空流帧 := choices为空的usage/保活帧不读取delta字段，不影响后续视频与完成态
 ```
+
+```text
+Qwen核查修正 := 用户确认HappyHorse可用，撤回本次Wan3.0普通/480p意向；运行目录和请求暂不变
+现场 := 当前Vivaldi的千问创作HappyHorse1.1/720P/16:9/5s已有任务，进度36%→完成
+入口差异 := 旧chat2.qianwen.com聊天工具错误不能等同create.qianwen.com创作任务失败
+新页观测 := ai-studio-create.qianwen.com的video/function、assets/v1/list、assets/v1/batch/get与WS
+边界 := 只读页面，不二次生成；最终视频Node下载1483029字节，ffprobe确认H264/1280×720/5.162667秒；新入口Node创建/查询尚未接入
+```

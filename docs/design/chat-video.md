@@ -13,7 +13,7 @@
 | Provider | 创建与查询 | 验证边界 |
 | --- | --- | --- |
 | 豆包 | Samantha视频输入，ACK立即记录原conversation_id/message_id。作品可能不在首段SSE中；用官网捕获的 `/im/chain/single` cmd3100查询原会话，读取9998消息ext中的明确视频工具和creation_material_info.result.video.download_url。按based_message_id_list/已知taskId过滤，长ID保留字符串；旧async_task路径仍兼容 | 当前账号实际生成Seedance2.0 Mini作品，未重发生成，按已有会话定位恢复查询并下载；Chrome双端播放器实际解码通过 |
-| Qwen | `zaodian_generate_video` / `genVideo`，官网前端模型定义happyhorse/wan26/wan27，默认5秒/720P，参考图走workspace上传；原session/req_id查询snap，明确ai_generate_video作品归一化 | 当前保存账号实际返回创作积分不足，已立即失败而非空轮询；成功生成仍待有积分账号。协议、模型选择、异步任务及错误路径测试通过 |
+| Qwen | `zaodian_generate_video` / `genVideo`，官网前端模型定义happyhorse/wan26/wan27，默认5秒/720P，参考图走workspace上传；原session/req_id查询snap，明确ai_generate_video作品归一化 | 旧Qwen聊天入口实测返回创作积分不足，错误路径测试通过；后续当前浏览器的千问创作页面已用HappyHorse 1.1提交同题任务，已完成，Node直接下载1,483,029字节，ffprobe确认H.264/1280×720/5.162667秒，不能据旧入口错误推断账号/HappyHorse不可用。新创作入口的Node创建/查询接入仍待核对，最终作品下载已通过 |
 | GLM | 清影 `/chatglm/video-api/v1/chat`，source_list使用上传得到的ID数组；刷新认证后查 `/chat/{id}`。当前结果是status=finished的平铺video_url/cover_url，兼容旧output.file_list | 当前账号实际生成一段视频，5.129秒、H.264、512×688，约1.24MB；模拟进程重启后只查询已有任务并下载，Chrome双端实际解码通过 |
 
 豆包与GLM均使用独立官网会话/任务，没有写AASC当前对话。主AI原生三家协议的流式/非流式、真实LLM模块和原会话续聊使用隔离测试验证；不把SubAI实际生成等同于每家主模型都已在真实账号触发原生视频工具。原始抓取、凭据、样片只留私有临时目录，不入Git。
@@ -31,3 +31,7 @@ AASC历史保存videos与videoGeneration。视频流式下载，单文件最多2
 共用chat-output-videos、Native视频/媒体流归一化、video-catalog/jobs/service、doubao-video-result；扩展Provider/Responses/runtime/proxy、LLM/history、SubAI协议/worker、媒体协调器、游戏回调、模型快选与双端渲染。通用Provider头提取为独立模块，原适配器保持1000行以内。
 
 `npm run test:chat-videos`覆盖任务API鉴权、原生仅视频/多视频、流/非流、原会话续聊、重启查询、长ID和原消息隔离、模型WS配置、实际DOM/播放、取消与历史。配套图片、Chat2API、流式回归；确切结果见changelog与任务。控制端自测入口只检查播放器标记，不生成视频、不改当前聊天。
+
+## Qwen现场结论修正（2026-10-23）
+
+用户撤回Wan 3.0普通/480p的变更，确认HappyHorse可生成。只读检查当前Vivaldi显示：千问创作（create.qianwen.com）使用HappyHorse 1.1、720P、16:9、5秒，已有橘猫任务从36%推进至完成；Node只下载已有作品，1,483,029字节，H.264/1280×720/5.162667秒。现有Node实现调用chat2.qianwen.com的zaodian_generate_video入口；当前页面资源则使用ai-studio-create.qianwen.com的video/function、assets/v1/list、assets/v1/batch/get与WS更新。两者不是同一入口，旧入口的积分拒绝不能直接套用到新创作页。未重复点击生成、未写AASC对话、未修改运行代码；最终作品已验证，新接口的Node创建/查询接入待验。
