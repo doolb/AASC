@@ -46,3 +46,14 @@ Qwen请求为/api/v2/chat，model=Qwen，scene=chat，sub_scene为空，ai_tool_
 
 用户反馈主AI有概率调用原生生图。SUB_AI_PROMPT已明确SubAI为生成/改图的唯一入口，禁止调用模型或官网原生绘图、用Markdown图片/附件替代调用；增加简短调用示例，普通聊天和仅编写提示词不调用。原角色设定、raw System格式和参考图ID沿用已有拼装。模型结果返回后先检查请求取消信号，清空失效时不再分流迟到调用。
 隔离Responses实测GLM、豆包各输出一条有效生图指令，未执行真实生图、未写当前聊天。提示词约束不是Provider级硬关闭；未添加未经验证的接口参数。
+
+2026-10-23 按用户要求从生图提示词删除“调用行不朗读，未收到应用生成结果不得声称已生成；”。
+
+## Note8 ADB图片实测（2026-10-23）
+
+当前设备192.168.1.6:5555，com.aasc.display.offline，APK0.2.72-offline-min；实际服务包code-v148。该版本display-chat没有chatImageMessage/imageGeneration处理，实际发送图片事件返回false，现装页面尚不支持新图片组。
+同一真实WebView132中加载新版display-chat到临时隔离frame，使用APK本地HTTPS上传目录的临时PNG（HTTP200）验证：pending一条→同一条completed含4张图片；4张均768×1024，显示宽315px不越界；历史JSON恢复后4张仍加载成功。测试frame和精确临时图片均清理，不调用生图、不写用户聊天、不覆盖APK源码。完整安装态验收待服务包更新。
+设备Chat2API只保存一个已启用active豆包账号，列表名“豆包网页（doubao）”；未保存个人昵称/手机号/邮箱，不能据此确认具体个人身份或推断当前官网在线状态。未输出Cookie/令牌。
+
+同机同时运行com.aasc.display普通显示端（外接Desktop/HDMI，visible）和Offline APK（内屏关闭、WebView后台）。普通端连接192.168.1.39:8081，其已加载DisplayChat确有图片事件处理。对普通端当前模块进行同页隔离frame测试：单占位更新4图、HTTP200、4张真实解码、315px宽不越界、历史恢复均通过；ADB screencap -d 1取得外接屏实际4图画面。临时frame与服务器精确临时图片已清理。
+该服务器Chat2API另有Qwen网页、Qwen API、豆包API、豆包网页、GLM共5条active记录；保存资料均无个人昵称/邮箱。当前仅Offline安装态需更新服务包，不将其旧版本结论套用到连接服务器的普通显示端。

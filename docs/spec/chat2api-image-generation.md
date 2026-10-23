@@ -88,8 +88,26 @@ GLM文字SSE := meta_data.if_increase_push=true时拼接增量；false时按累�
 
 ```text
 主AI职责 := 生成/修改图片只规划提示词并输出SubAI；SubAI为唯一生图入口
-禁止 := 原生生图/官网画图工具/附件或Markdown图片代替调用；未提交不能声称已生成
+禁止 := 原生生图/官网画图工具/附件或Markdown图片代替调用
 输出 := 独立CSV行 + 简短自然语言；示例展示无参考图调用
 信号 := 分流前检查本次options.signal，聊天被清空取消则不执行迟到SubAI调用
 界限 := 仅强化提示和已有分流契约，不宣称上游原生能力被硬关闭
+```
+
+```text
+生图提示用户精简 := 删除“调用行不朗读，未收到应用生成结果不得声称已生成；”两项提示文本
+```
+
+```text
+Android测试 := ADB当前Offline WebView → 查询实际display-chat能力；code-v148图片事件不识别
+隔离新版验证 := 临时frame装载新版聊天模块 → 临时本地HTTPS图片HTTP200 → 单占位更新4图 → naturalWidth>0且不越界 → 历史恢复4图
+清理 := 移除frame、精确删除本次临时图片；不保存测试消息，不替换已安装代码
+账号核查 := 只读取本机账号摘要；单个豆包已启用，无个人身份字段；凭据不输出
+```
+
+```text
+双APK核查 := com.aasc.display.offline→127.0.0.1旧code-v148；com.aasc.display→192.168.1.39新版
+前台验证 := 普通端已加载处理函数支持图片事件 → 当前源码在同WebView隔离frame → 四图及历史恢复通过
+物理截图 := 内屏OFF默认截图无效 → ADB screencap -d 1捕获HDMI实际四图；不用后台WebView截图判断前台结果
+账号范围 := Offline本机1条豆包；192.168.1.39共5条Provider记录；不把active摘要当作官网实时身份验证
 ```

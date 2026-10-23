@@ -14173,3 +14173,12 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 新增game-chat-scope、chat-history-clear-service；gomoku-game-service持久保存聊天归属、清除失败回滚与模型租约失效；server-app统一HTTP/WS/临时清空并释放旧棋步锁。
   - 控制端沿用当前显示端选择；临时聊天用服务端权威所属端；显示端处理gameCleared，关闭棋盘与恢复入口，拒绝旧局迟到快照，保留新局和其他会话/显示端。清空后NowGame为无，重启不恢复已清棋局。
   - 生图22项、清空入口/上下文26项、控制端清空浏览器4项、流式聊天63项通过；游戏80项（含9项清空生命周期用例）通过。GLM/豆包隔离Responses各输出1条有效SubAI调用，不执行实际生图、不写当前聊天。servicePackage=true待构建，未构建APK。
+
+### 生图提示精简与Android聊天图片核查
+
+- ✅ [2026-10-23] 按用户要求删除提示词中“调用行不朗读，未收到应用生成结果不得声称已生成；”，test:chat-images 22项通过。
+  - 更新sub-ai-protocol和对应design/spec/task/todo/self-test；servicePackage仍true待构建。
+- ✅ [2026-10-23] ADB核对Note8 Offline APK0.2.72，实际仍用code-v148，旧聊天页面图片事件不识别。
+  - 新版display-chat在同一真实WebView132隔离验证单占位更新4图、HTTPS200、真实解码、不越界、历史恢复通过；不写用户历史、不修改已装源码，测试frame和临时图片已清理。安装态功能待更新服务包。
+  - APK Chat2API仅一个已启用豆包账号“豆包网页（doubao）”，没有个人昵称/手机号/邮箱信息；未输出凭据。
+  - 补充双应用核查：同机普通APK com.aasc.display运行于外接屏、连接192.168.1.39，当前模块已支持图片；隔离四图、历史恢复及ADB HDMI实际截图通过，测试数据已清理。该服务器另有Qwen网页/Qwen API/豆包API/豆包网页/GLM五条账号记录，均无个人昵称字段。旧code-v148结论仅适用于Offline APK。

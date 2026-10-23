@@ -2917,3 +2917,20 @@ npm run test:chat-images := 生图指令/图片任务/模型面板 + 请求取�
 现场Responses := 隔离GLM/豆包自然语句 → 真实游戏桥+SubAI分流 → 各1条有效调用，正文无标签
 原生能力边界 := 未配置或测试Provider级禁用参数，不以两次指令成功宣称概率为零
 ```
+
+
+## Note8聊天图片ADB核查（2026-10-23）
+
+```text
+当前APK := com.aasc.display.offline v0.2.72，服务code-v148；实际chatImageMessage返回false
+新版模块 := 在同一个WebView132临时frame加载，send为本地空回调，不连接用户聊天WS
+图片 := ADB临时拷贝PNG到应用uploads/chat-images → HTTPS返回200 → pending一条 → completed四图
+校验 := 4张naturalWidth=768、naturalHeight=1024、显示315px不越界 → 重载历史仍4图可读
+恢复 := 删除临时frame及精确图片文件，原页面和对话未更改；不把隔离通过标为安装态通过
+```
+
+```text
+双应用现场 := 普通APK外接屏连接192.168.1.39，其加载的模块已支持图片；Offline APK内屏运行旧code-v148
+普通APK验证 := 当前模块隔离frame、服务器HTTPS临时图片、占位→4图、历史恢复通过；screencap -d 1实际画面确认
+核查原则 := 先按WebView URL/visibility确认目标，避免把内屏黑图或另一APK旧版本当成当前显示端结果
+```
