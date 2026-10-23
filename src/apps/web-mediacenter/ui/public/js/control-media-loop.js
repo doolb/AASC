@@ -60,10 +60,14 @@
             this.render();
         },
         formatTime(percent) {
-            if (!this.duration) return '--:--';
-            const time = Math.floor(this.duration * percent / 100);
-            const minutes = Math.floor(time / 60);
-            return `${String(minutes).padStart(2, '0')}:${String(time % 60).padStart(2, '0')}`;
+            if (!Number.isFinite(this.duration) || this.duration <= 0) return '--:--.--';
+            // 先统一舍入为百分之一秒，再拆分各位，避免59.999秒显示成00:59.100而不进位。
+            const time = Math.round(this.duration * percent / 100 * 100);
+            const hours = Math.floor(time / 360000);
+            const minutes = String(Math.floor(time / 6000) % 60).padStart(2, '0');
+            const seconds = String(Math.floor(time / 100) % 60).padStart(2, '0');
+            const fraction = String(time % 100).padStart(2, '0');
+            return `${hours ? hours + ':' : ''}${minutes}:${seconds}.${fraction}`;
         },
         render() {
             if (!this.start) return;

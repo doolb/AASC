@@ -41,7 +41,7 @@ const SelfTest = {
         {
             id: 'media_loop_range',
             name: '媒体循环双手柄',
-            description: '只读检查单轨双手柄和边界；临时视频由正式上传专项回归覆盖',
+            description: '只读检查双手柄透明叠层、小数时间与边界；不改变播放',
             category: '播放控制',
             run: async () => {
                 const track = document.getElementById('mediaLoopRange');
@@ -50,10 +50,12 @@ const SelfTest = {
                 if (!api || !track || inputs?.length !== 2) return { success: false, message: '区间滑条未完整加载' };
                 const range = api.normalize({ enabled: true, startPercent: 100, endPercent: -1 });
                 const bounds = api.seconds(range, 120);
-                const valid = track.querySelectorAll('.media-loop-track').length === 1 && bounds && bounds.start < bounds.end
+                const transparent = [...inputs].every(input => getComputedStyle(input).backgroundColor === 'rgba(0, 0, 0, 0)');
+                const timeFormat = ['mediaLoopStartTime', 'mediaLoopEndTime'].every(id => /^(?:\d+:)?\d{2}:\d{2}\.\d{2}$|^--:--\.--$/.test(document.getElementById(id)?.textContent || ''));
+                const valid = transparent && timeFormat && track.querySelectorAll('.media-loop-track').length === 1 && bounds && bounds.start < bounds.end
                     && bounds.end <= 120 && api.seconds(range, Infinity) === null;
                 return { success: !!valid, message: valid ? '单轨双手柄及边界检查通过' : '区间边界或结构异常',
-                    details: '只读模块检查；npm run test:media-loop含正式临时上传→时长上报→启用双手柄→实际视频回跳，设备验收另记' };
+                    details: '只读检查叠层透明和00:00.00/1:00:00.00；npm run test:media-loop覆盖真实主题、临时上传及视频回跳，设备验收另记' };
             }
         },
         {

@@ -14272,3 +14272,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - `display.html`统一URL/Base64音视频的timeupdate、loadedmetadata与durationchange监听，加载/暂停即上报有限时长，过滤隐藏旧媒体与无效时长，删除分支重复处理；更新self-test说明。
   - 新增真实临时上传浏览器回归：正式Upload.uploadFile→showMedia→服务端区间服务/WS→双手柄→实际视频回跳；暂停、URL音视频、Base64音频、隐藏/无限时长及单事件单次上报兼容通过。修复前18/19，修复后`npm run test:media-loop`19/19；同步design/spec/task/todo/usage和自测文档。
   - 仅网页热更新，`servicePackage=true`，其他发布状态保持；未重启现场服务、构建/部署或操作用户显示端。刷新显示页后重新发送；Offline设备需更新服务包。
+
+### 循环手柄可见性与小数时间显示
+
+- ✅ [2026-10-23] 修复浅色主题的不透明range背景盖住循环开始手柄和选区；区间输入保持透明，两个手柄保留实心填充并增加内外轮廓。
+  - 修改`css/theme.css`、`css/upload.css`；正式UiTheme全部15套主题的0/100与20/80区间实际截图验证两个手柄均可见，鼠标/触屏/键盘操作保持。
+- ✅ [2026-10-23] 循环起止时间按用户要求显示00:00.00，有小时显示1:00:00.00；统一按百分之一秒舍入并处理分钟/小时进位，屏幕与aria值一致，未知时长显示--:--.--。
+  - 修改control-media-loop.js/upload.html/self-test.js及浏览器回归；同步design/spec/task/todo/usage与自测文档。`npm run test:media-loop`20/20，包含15主题实际截图、小时/小数进位及既有临时上传和音视频回跳；截图与样片不入Git。
+  - 仅服务网页热更新，servicePackage保持true，其余发布状态不变；未构建发布或重启现场，控制页需刷新加载新样式/脚本，Offline设备需更新服务包。

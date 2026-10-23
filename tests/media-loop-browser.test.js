@@ -27,13 +27,16 @@ test('真实浏览器：单轨双手柄拖动、释放提交、键盘与显示�
     await page.addStyleTag({ content: read('css/upload.css') + read('css/theme.css') });
     await page.addScriptTag({ path: path.join(publicDir, 'js/media-loop.js') });
     await page.addScriptTag({ path: path.join(publicDir, 'js/control-media-loop.js') });
+    await page.addScriptTag({ path: path.join(publicDir, 'js/ui-theme.js') });
     await page.evaluate(() => {
         window.currentDisplayId = 'one';
         window.sent = [];
         window.WebSocketManager = { sendControl: (action, value) => sent.push({ action, value }) };
         ControlMediaLoop.init();
         ControlMediaLoop.restore('one', { currentMedia: { mediaType: 'video' }, currentMediaProgress: { duration: 120 }, mediaLoopToken: 'token' });
+        UiTheme.apply('light', false);
     });
+    assert.equal(await page.$eval('#mediaLoopEnd', input => getComputedStyle(input).backgroundColor), 'rgba(0, 0, 0, 0)', '上层手柄输入必须透明，不能遮住开始手柄');
     assert.equal(await page.$$eval('.media-loop-track', tracks => tracks.length), 1);
     const box = await page.$eval('#mediaLoopRange', element => {
         const rect = element.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
@@ -44,7 +47,7 @@ test('真实浏览器：单轨双手柄拖动、释放提交、键盘与显示�
     await page.mouse.down();
     await page.mouse.move(x(25), y, { steps: 10 });
     assert.equal(await page.evaluate(() => sent.length), 0, '拖动中仅预览');
-    assert.match(await page.$eval('#mediaLoopStartTime', element => element.textContent), /00:30/);
+    assert.equal(await page.$eval('#mediaLoopStartTime', element => element.textContent), '00:30.00');
     await page.mouse.up();
     assert.equal(await page.evaluate(() => sent.length), 1);
     await page.mouse.move(x(100), y);
@@ -87,6 +90,70 @@ test('真实浏览器：单轨双手柄拖动、释放提交、键盘与显示�
     await page.screenshot({ path: path.join(__dirname, '../tmp/media-loop-control.png') });
     await page.evaluate(() => ControlMediaLoop.disconnected());
     assert.equal(await page.$eval('#mediaLoopEnabled', input => input.disabled), true);
+});
+
+test('15套正式主题中两手柄实际可见，分秒小数/小时与进位同步显示', { timeout: 30000 }, async t => {
+    const page = await browserPage(t);
+    await page.setViewport({ width: 390, height: 600 });
+    const $ = cheerio.load(read('upload.html'));
+    await page.setContent(`<div class="control-item" style="width:320px;padding:20px">${$('#mediaLoopRange').closest('.control-item').html()}</div>`);
+    await page.addStyleTag({ content: read('css/upload.css') + read('css/theme.css') });
+    for (const name of ['media-loop', 'control-media-loop', 'ui-theme']) {
+        await page.addScriptTag({ path: path.join(publicDir, 'js', name + '.js') });
+    }
+    const themes = await page.evaluate(() => {
+        window.currentDisplayId = 'one';
+        ControlMediaLoop.init();
+        UiTheme.classify(document);
+        return UiTheme.themes;
+    });
+    for (const theme of themes) {
+        for (const [startPercent, endPercent] of [[0, 100], [20, 80]]) {
+            const points = await page.evaluate(async ({ theme, startPercent, endPercent }) => {
+                UiTheme.apply(theme, false);
+                ControlMediaLoop.receive({ displayId: 'one', mediaLoopToken: 'token', duration: 120,
+                    mediaLoop: { enabled: true, startPercent, endPercent } });
+                // 中文字体加载会改变标签高度；等待截图同样会等待的字体布局，再采样手柄坐标。
+                await new Promise(requestAnimationFrame);
+                await document.fonts.ready;
+                const rect = document.getElementById('mediaLoopRange').getBoundingClientRect();
+                return [startPercent, endPercent].map(percent => ({ x: rect.x + 10 + (rect.width - 20) * percent / 100,
+                    y: rect.y + rect.height / 2 - 6 }));
+            }, { theme, startPercent, endPercent });
+            const screenshot = await page.screenshot({ encoding: 'base64' });
+            // 从真实截图读取轨道上方的手柄内部像素，避免把轨道自身误认成可见手柄。
+            const pixels = await page.evaluate(async ({ screenshot, points }) => {
+                const image = new Image();
+                image.src = 'data:image/png;base64,' + screenshot;
+                await image.decode();
+                const canvas = document.createElement('canvas');
+                canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+                const context = canvas.getContext('2d');
+                context.drawImage(image, 0, 0);
+                return points.map(point => {
+                    const samples = context.getImageData(Math.round(point.x) - 2, Math.round(point.y) - 2, 5, 4).data;
+                    let blue = 0;
+                    for (let index = 0; index < samples.length; index += 4) {
+                        if (samples[index] === 58 && samples[index + 1] === 158 && samples[index + 2] === 219 && samples[index + 3] === 255) blue++;
+                    }
+                    return blue;
+                });
+            }, { screenshot, points });
+            for (const [index, count] of pixels.entries()) assert.ok(count >= 3, `${theme}的${index ? '结束' : '开始'}手柄必须实际可见（蓝色像素${count}）`);
+        }
+    }
+    await page.evaluate(() => UiTheme.apply('light', false));
+    await page.screenshot({ path: path.join(__dirname, '../tmp/media-loop-handles-after.png') });
+    for (const [duration, expected] of [[0.004, '00:00.00'], [0.015, '00:00.02'], [61.23, '01:01.23'],
+        [59.999, '01:00.00'], [3599.999, '1:00:00.00'], [3661.237, '1:01:01.24'], [36000.01, '10:00:00.01'], [0, '--:--.--']]) {
+        const displayed = await page.evaluate(duration => {
+            ControlMediaLoop.receive({ displayId: 'one', mediaLoopToken: 'token', duration,
+                mediaLoop: { enabled: true, startPercent: 0, endPercent: 100 } });
+            return { time: document.getElementById('mediaLoopEndTime').textContent,
+                aria: document.getElementById('mediaLoopEnd').getAttribute('aria-valuetext') };
+        }, duration);
+        assert.deepEqual(displayed, { time: expected, aria: expected });
+    }
 });
 
 for (const mediaType of ['video', 'audio']) {
