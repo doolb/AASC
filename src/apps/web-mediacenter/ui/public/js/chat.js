@@ -1948,6 +1948,20 @@ const Chat = {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
     
+    handleStatus(data) {
+        if (data.requestId !== this.activeRequestId || !this.isLoading
+            || this.contextIgnoredRequestIds.has(data.requestId) || typeof data.message !== 'string') return;
+        const reply = document.getElementById('streamingAssistant');
+        if (!reply || reply.dataset.chatScope !== JSON.stringify(this.getContextScope())) return;
+        let status = reply.querySelector('.chat-request-status');
+        if (!status) {
+            status = document.createElement('div'); status.className = 'chat-request-status';
+            status.style.cssText = 'font-size:12px;color:var(--text-secondary,#999);padding:4px 0';
+            status.setAttribute('role', 'status'); reply.insertBefore(status, document.getElementById('streamingContent'));
+        }
+        status.textContent = data.message;
+    },
+
     handleChunk(data) {
         if (data.requestId !== this.activeRequestId) return;
         this.currentStreamingMessage = data.message;
@@ -1980,6 +1994,7 @@ const Chat = {
     
     handleResponse(data) {
         if (data.requestId !== this.activeRequestId) return;
+        document.querySelector('#streamingAssistant .chat-request-status')?.remove();
         this.requestContextUsage();
         this.isLoading = false;
         this.updateSendButton();
@@ -2298,6 +2313,7 @@ const Chat = {
     
     /** 清空后使流式节点失效，图片事件与文字分块都不能再补回已清空的回复。 */
     abandonStreamingReply() {
+        document.querySelector('#streamingAssistant .chat-request-status')?.remove();
         if (this.activeRequestId) this.contextIgnoredRequestIds.add(this.activeRequestId);
         if (this.contextIgnoredRequestIds.size > 256) this.contextIgnoredRequestIds.delete(this.contextIgnoredRequestIds.values().next().value);
         this.activeRequestId = null;

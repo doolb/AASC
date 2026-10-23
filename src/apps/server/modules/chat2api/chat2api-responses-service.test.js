@@ -21,6 +21,23 @@ const createFakeSessionStore = () => {
   };
 };
 
+test('签名状态在上游结果前回送且只携带固定文案，不进会话历史或接受JSON回调', async () => {
+  const sessionStore = createFakeSessionStore(); const seen = []; let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const service = createChat2ApiResponsesService({ sessionStore, coreAdapter: { async forwardChatCompletion(_request, options) {
+    options.onStatus({ code: 'doubao_signature_refreshing', message: 'Cookie=secret', cookie: 'secret' });
+    options.onStatus({ code: 'unknown', message: '不允许的状态' }); await gate;
+    return { body: { choices: [{ message: { content: '早上好' } }] }, providerId: 'qwen', accountId: 'a', actualModel: 'Qwen', nativeState: {} };
+  } } });
+  const job = service.createResponse({ model: 'Qwen', input: '早', onStatus: () => { throw new Error('客户端JSON不能指定回调'); } },
+    { onStatus: status => seen.push(status) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(seen, [{ code: 'doubao_signature_refreshing', message: '正在重新获取豆包签名…' }]);
+  release(); const result = await job;
+  assert.doesNotMatch(JSON.stringify(result.body), /signature|secret/);
+  assert.doesNotMatch(JSON.stringify([...sessionStore.sessions.values()]), /signature|secret/);
+});
+
 for (const stream of [false, true]) test(`Responses原生多图${stream ? '流式' : '非流式'}完成态与会话历史一致`, async () => {
   const images = [{ url: 'https://images.test/a.png' }, { url: 'https://images.test/b.png' }];
   const sessionStore = createFakeSessionStore();

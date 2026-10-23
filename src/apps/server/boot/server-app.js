@@ -11654,6 +11654,12 @@ async function handleChatMessage(options) {
             : null,
         images
     }, callbacks: {
+        onStatus: status => {
+            if (!nativeImages.isCurrent() || nativeImages.signal.aborted) return;
+            const payload = { type: 'chatStatus', requestId: effectiveRequestId, ...status };
+            sendToControl(payload);
+            if (preferredDisplayId && preferredDisplayId !== options.sourceDisplayId) sendToDisplay(preferredDisplayId, payload);
+        },
         onImages: event => {
             nativeImages.receive(event);
         },

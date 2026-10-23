@@ -51,6 +51,9 @@ function createGameChatStream({ callbacks, filterText, isUnsafe, currentGame, si
             ? /(?:^|\n)\s*(?:Game:|GameUser:|GameAI:)|<Game:/u
             : /(?:^|\n)\s*Game:|<Game:/u;
         return {
+            onStatus(status) {
+                if (current()) callbacks.onStatus?.(status);
+            },
             onImages(event) {
                 if (current()) callbacks.onImages?.(event);
             },

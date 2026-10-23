@@ -9,6 +9,7 @@ const { createDoubaoSessionFlow } = require('./chat2api-doubao-session');
 const { createDoubaoAndroidBridge } = require('./chat2api-doubao-android-bridge');
 const { inspectNativeImages } = require('./chat2api-native-images');
 const { mergeOutputImages } = require('../../../../core/utils/chat-output-images');
+const { normalizeChatProgress } = require('../../../../core/utils/chat-progress');
 
 // 豆包网页凭据只能发送到这个固定来源；不使用 Provider 自定义头、路径、查询参数或代理。
 const DOUBAO_ORIGIN = 'https://www.doubao.com';
@@ -681,9 +682,21 @@ const createDoubaoChatAdapter = ({ httpClient = axios, http2Client = createDouba
         execution.signatureScope = signatureScope;
         const prepare = prepareNodeRequest || (browserBridge?.prepare
           ? options => browserBridge.prepare(options) : options => createDoubaoAndroidBridge().prepare(options));
-        prepared = signatureScope.apply(prepared)
-          || await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs },
-            closeAfterPrepare: getDoubaoWebViewSettings()?.closeAfterSign === true }));
+        const notify = code => {
+          if (control.signal.aborted) return;
+          try { context.onStatus?.(normalizeChatProgress(code)); } catch { /* 界面提示失败不改变签名和发送结果。 */ }
+        };
+        const cached = signatureScope.apply(prepared);
+        if (cached) prepared = cached;
+        else {
+          notify(execution.retried ? 'doubao_signature_refreshing' : 'doubao_signature_getting');
+          try {
+            prepared = await control.wait(prepare({ account, prepared, signal: control.signal, limits: { ...limits, timeoutMs },
+              closeAfterPrepare: getDoubaoWebViewSettings()?.closeAfterSign === true }));
+            control.check();
+            notify(execution.retried ? 'doubao_signature_retrying' : 'doubao_signature_ready');
+          } catch (error) { notify('doubao_signature_failed'); throw error; }
+        }
         control.check();
       }
       // 仅内部Responses生命周期读取这些标记；不属于nativeState，不会持久化到会话历史。

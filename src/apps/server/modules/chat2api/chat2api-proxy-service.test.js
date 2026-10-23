@@ -209,6 +209,37 @@ test('Responses 流开始后上游报错应发送失败事件并保留错误码�
   assert.deepEqual(events, ['response.created', 'response.failed']);
 });
 
+for (const fails of [false, true]) test(`签名准备时HTTP已收到进度，准备${fails ? '失败保留原错误' : '成功后继续正文流'}`, async t => {
+  let release; const gate = new Promise(resolve => { release = resolve; }); let released = false;
+  t.after(() => release());
+  const service = createChat2ApiProxyService({ host: '127.0.0.1', port: 0, config: { enableApiKey: false },
+    responsesService: { async createResponse(_payload, options) {
+      options.onStatus({ code: 'doubao_signature_refreshing', message: 'Cookie=secret', signature: 'secret' });
+      await gate;
+      if (fails) throw Object.assign(new Error('豆包网页要求安全验证'), { code: 'doubao_risk_control', statusCode: 403 });
+      return { stream: (async function* () {
+        yield { type: 'response.created', response: { id: 'resp_ready' } };
+        yield { type: 'response.output_text.delta', delta: '早上好。' };
+        yield { type: 'response.completed', response: { id: 'resp_ready', output_text: '早上好。' } };
+      })() };
+    } } });
+  await service.start(); t.after(() => service.stop());
+  const client = createResponsesClient({ baseUrl: `http://127.0.0.1:${service.address().port}/v1`, timeoutMs: 3000 });
+  const events = [];
+  const job = client.stream({ model: 'doubao', input: '早', stream: true }, event => {
+    events.push(event);
+    if (event.type === 'response.progress') {
+      assert.equal(released, false); assert.equal(event.message, '正在重新获取豆包签名…');
+      released = true; release();
+    }
+  });
+  if (fails) await assert.rejects(job, error => error.code === 'doubao_risk_control' && error.statusCode === 403);
+  else await job;
+  assert.equal(events[0].type, 'response.progress');
+  assert.equal(events.at(-1).type, fails ? 'response.failed' : 'response.completed');
+  assert.doesNotMatch(JSON.stringify(events), /Cookie|secret/);
+});
+
 test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
   const service = createChat2ApiProxyService({
     host: '127.0.0.1', port: 0, config: { enableApiKey: true },

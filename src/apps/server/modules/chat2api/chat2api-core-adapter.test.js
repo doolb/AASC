@@ -34,11 +34,13 @@ test('核心适配层解析模型并把完整凭据只传给 Provider adapter', 
     },
   });
 
-  const result = await adapter.forwardChatCompletion({ model: 'public-chat', messages: [{ role: 'user', content: '你好' }] });
+  const onStatus = () => {};
+  const result = await adapter.forwardChatCompletion({ model: 'public-chat', messages: [{ role: 'user', content: '你好' }] }, { onStatus });
   assert.equal(result.body.model, 'public-chat');
   assert.equal(received.account.accessToken, 'private-token');
   assert.equal(received.request.model, 'deepseek-v4-flash');
   assert.equal(received.request.messages[0].content, '你好');
+  assert.equal(received.context.onStatus, onStatus);
 });
 
 test('核心适配层没有可用账号时返回可识别的 503 错误', async () => {

@@ -8,6 +8,7 @@
     const CHAT_MESSAGE_TYPES = new Set([
         'assistantConfig',
         'chatChunk',
+        'chatStatus',
         'chatContextUsage',
         'chatGameProtocol',
         'chatHistory',

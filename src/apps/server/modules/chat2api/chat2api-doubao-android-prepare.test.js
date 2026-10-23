@@ -88,12 +88,54 @@ const signatureFixture = (hooks = {}) => {
     // 每次创建新的responseSession对象，模拟Responses只从存储复制nativeState的真实行为。
     const responseSession=session?{aascConversationId:session.id,nativeState:{...session.state}}:undefined;
     const result=await adapter({account:options.account||account,provider:{id:'doubaochat'},actualModel:options.model||'doubao',
+      context:{onStatus:options.onStatus,signal:options.signal},
       responseSession,request:{model:options.model||'doubao',messages:[{role:'user',content:options.text||'早'}],stream:!!options.stream}});
     if(session&&!options.stream)session.state={...result.nativeState};
     return result;
   };
   return {account,calls,prepares,run,setFailure:value=>{fail=value;}};
 };
+
+test('签名准备未完成已报告状态，成功后缓存复用没有额外提示', async () => {
+  let release; const gate = new Promise(resolve => { release = resolve; }); const statuses = [];
+  const f = signatureFixture({ beforePrepare: async () => gate });
+  const session = { id: 'status-session', state: {} };
+  const job = f.run(session, { onStatus: status => statuses.push(status) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(statuses.map(status => status.code), ['doubao_signature_getting']);
+  assert.equal(f.calls.length, 0); release(); await job;
+  assert.deepEqual(statuses.map(status => status.code), ['doubao_signature_getting', 'doubao_signature_ready']);
+  await f.run(session, { onStatus: status => statuses.push(status) });
+  assert.equal(statuses.length, 2); assert.equal(f.prepares.length, 1);
+  assert.doesNotMatch(JSON.stringify(statuses), /mock_session|mock_csrf|a_bogus|signature_1/);
+});
+
+test('缓存签名失效后只报告一次重新获取与重试，原始最终错误仍保留', async () => {
+  const statuses = []; const f = signatureFixture(); const session = { id: 'status-retry', state: {} };
+  await f.run(session); f.setFailure({ status: 403 });
+  await assert.rejects(f.run(session, { onStatus: status => statuses.push(status.code) }), error => error.code === 'doubao_risk_control');
+  assert.deepEqual(statuses, ['doubao_signature_refreshing', 'doubao_signature_retrying']);
+  assert.equal(f.calls.length, 3); assert.equal(f.prepares.length, 2);
+});
+
+test('准备失败报告固定安全状态，取消不发送迟到成功状态，提示异常不影响请求', async () => {
+  const failed = []; const f = signatureFixture({ beforePrepare: async () => {
+    throw Object.assign(new Error('private Cookie=a_bogus=secret'), { code: 'doubao_android_prepare' });
+  } });
+  await assert.rejects(f.run(null, { onStatus: status => failed.push(status) }));
+  assert.deepEqual(failed.map(status => status.code), ['doubao_signature_getting', 'doubao_signature_failed',
+    'doubao_signature_refreshing', 'doubao_signature_failed']);
+  assert.doesNotMatch(JSON.stringify(failed), /private|Cookie|secret/); assert.equal(f.calls.length, 0);
+  const controller = new AbortController(); let release; const gate = new Promise(resolve => { release = resolve; }); const cancelled = [];
+  const waiting = signatureFixture({ beforePrepare: async () => gate });
+  const job = waiting.run(null, { signal: controller.signal, onStatus: status => cancelled.push(status.code) });
+  await new Promise(resolve => setImmediate(resolve)); controller.abort();
+  await assert.rejects(job, error => error.code === 'doubao_cancelled'); release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(cancelled, ['doubao_signature_getting']); assert.equal(waiting.calls.length, 0);
+  const normal = signatureFixture(); await normal.run(null, { onStatus() { throw new Error('提示端已关闭'); } });
+  assert.equal(normal.calls.length, 1);
+});
 
 test('同账号签名跨新会话及上游复用，凭据与账号变化重新准备',async()=>{
   const f=signatureFixture(),session={id:'aasc-a',state:{}};

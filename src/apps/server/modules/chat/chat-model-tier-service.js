@@ -149,11 +149,12 @@ function createChatModelTierService({ config, getRuntime, getActiveProfile, save
             providerId: current.providerId, tier, model,
             client: {
                 async request(payload, options = {}) {
-                    const result = await runtime.responsesService.createResponse({ ...payload, model }, { signal: options.signal });
+                    const result = await runtime.responsesService.createResponse({ ...payload, model }, { signal: options.signal, onStatus: options.onStatus });
                     return result.body;
                 },
                 async stream(payload, onEvent, options = {}) {
-                    const result = await runtime.responsesService.createResponse({ ...payload, model, stream: true }, { signal: options.signal });
+                    const result = await runtime.responsesService.createResponse({ ...payload, model, stream: true }, {
+                        signal: options.signal, onStatus: status => onEvent({ type: 'response.progress', ...status }) });
                     let completed = false;
                     for await (const event of result.stream) {
                         onEvent(event);

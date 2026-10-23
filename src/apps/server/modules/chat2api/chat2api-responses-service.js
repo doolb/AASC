@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { isDoubaoSession, isReadyDoubaoSession, sessionError } = require('./chat2api-doubao-session');
 const { extractOutputImages, mergeOutputImages } = require('../../../../core/utils/chat-output-images');
+const { normalizeChatProgress } = require('../../../../core/utils/chat-progress');
 
 const createError = (statusCode, code, message) => {
   const error = new Error(message);
@@ -386,6 +387,10 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter, application
         ...(piContext ? { conversationId, piSessionId: piContext.sessionId } : {}),
         // 信号只取服务调用参数；客户端 JSON 中的 signal 不得控制其他会话或污染请求内容。
         ...(options.signal ? { signal: options.signal } : {}),
+        ...(typeof options.onStatus === 'function' ? { onStatus: status => {
+          const progress = normalizeChatProgress(status);
+          if (progress && !options.signal?.aborted) options.onStatus(progress);
+        } } : {}),
       });
       const responseId = createResponseId();
       if (!result.stream) {

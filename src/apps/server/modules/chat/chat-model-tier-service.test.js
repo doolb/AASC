@@ -47,6 +47,21 @@ function setup(initialModel = 'gpt-3.5-turbo') {
     };
 }
 
+test('三档客户端在Responses尚未返回时即时交付签名状态', async () => {
+    const f = setup('aasc-qwen-mini'); const events = []; let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    f.runtime.responsesService.createResponse = async (_payload, options) => {
+        options.onStatus({ code: 'doubao_signature_refreshing', message: '正在重新获取豆包签名…' });
+        await gate;
+        return { stream: (async function* () { yield { type: 'response.completed', response: { id: 'resp_done' } }; }()) };
+    };
+    const override = await f.service.resolveForChat();
+    const job = override.client.stream({}, event => events.push(event));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(events.map(event => event.type), ['response.progress']);
+    release(); await job; assert.equal(events.at(-1).type, 'response.completed');
+});
+
 test('每个 Provider 记住自己的档位，Qwen 默认普通、豆包默认轻量', async () => {
     const { service, broadcasts, profile, saves } = setup();
     assert.deepEqual(service.selection(), {

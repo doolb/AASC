@@ -1,6 +1,7 @@
 const http = require('http');
 const multer = require('multer');
 const { validateWav } = require('../../../../external/tts/tts-wav');
+const { normalizeChatProgress } = require('../../../../core/utils/chat-progress');
 
 const DEFAULT_CONFIG = Object.freeze({
   host: '127.0.0.1',
@@ -177,11 +178,24 @@ const createChat2ApiProxyService = (options = {}) => {
     }
   };
 
-  const writeResponsesStream = async (response, stream) => {
+  const beginResponsesStream = response => {
+    if (response.headersSent) return;
     response.statusCode = 200;
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-cache');
     response.setHeader('Connection', 'keep-alive');
+  };
+
+  const finishResponsesError = (response, error) => {
+    if (response.destroyed || response.writableEnded) return;
+    if (!response.headersSent) throw error;
+    const normalized = normalizePublicError(error);
+    console.warn(`[Chat2API] Responses 流失败: stage=after_headers code=${normalized.error.code} status=${normalized.statusCode}`);
+    response.end(`data: ${JSON.stringify({ type: 'response.failed', error: { ...normalized.error, statusCode: normalized.statusCode } })}\n\n`);
+  };
+
+  const writeResponsesStream = async (response, stream) => {
+    beginResponsesStream(response);
     try {
       for await (const event of stream) {
         if (response.destroyed || response.writableEnded) break;
@@ -190,11 +204,7 @@ const createChat2ApiProxyService = (options = {}) => {
       if (!response.destroyed && !response.writableEnded) response.end('data: [DONE]\n\n');
     } catch (error) {
       // 首个事件写出后 HTTP 状态已固定；用 SSE 失败事件交还真实错误，避免销毁连接只剩 socket hang up。
-      if (response.destroyed || response.writableEnded) return;
-      if (!response.headersSent) throw error;
-      const normalized = normalizePublicError(error);
-      console.warn(`[Chat2API] Responses 流失败: stage=after_headers code=${normalized.error.code} status=${normalized.statusCode}`);
-      response.end(`data: ${JSON.stringify({ type: 'response.failed', error: { ...normalized.error, statusCode: normalized.statusCode } })}\n\n`);
+      finishResponsesError(response, error);
     }
   };
 
@@ -440,12 +450,28 @@ const createChat2ApiProxyService = (options = {}) => {
       }
       const payload = await readJson(request);
       await withResponseCancellation(response, async (signal) => {
-        const result = await responsesService.createResponse(payload, { signal });
-        if (result.stream) {
-          await writeResponsesStream(response, result.stream);
-          return;
-        }
-        if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result.body);
+        try {
+          const result = await responsesService.createResponse(payload, { signal,
+            ...(payload.stream === true ? { onStatus: status => {
+              if (signal.aborted || response.destroyed || response.writableEnded) return;
+              const progress = normalizeChatProgress(status);
+              if (!progress) return;
+              // 准备签名时模型流尚未建立，先发送安全进度；后续正文流继续使用同一HTTP响应。
+              beginResponsesStream(response);
+              response.write(`data: ${JSON.stringify({ type: 'response.progress', ...progress })}\n\n`);
+            } } : {}) });
+          if (result.stream) {
+            await writeResponsesStream(response, result.stream);
+            return;
+          }
+          if (response.headersSent) {
+            await writeResponsesStream(response, (async function* () {
+              yield { type: 'response.completed', response: result.body };
+            }()));
+            return;
+          }
+          if (!response.destroyed && !response.writableEnded) sendJson(response, 200, result.body);
+        } catch (error) { finishResponsesError(response, error); }
       });
       return;
     }

@@ -5,6 +5,7 @@ const path = require('path');
 const { isSentenceEnd, splitIntoSentences } = require('../../core/utils/sentence-splitter');
 const { createMarkdownSentenceStream } = require('../../core/utils/markdown-speech');
 const { extractOutputImages, extractOutputText, createOutputImageCollector } = require('../../core/utils/chat-output-images');
+const { normalizeChatProgress } = require('../../core/utils/chat-progress');
 
 const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
 const {
@@ -1855,6 +1856,12 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 stream: true,
                 signal: options.signal
             }, (event) => {
+                if (event?.type === 'response.progress' && !options.signal?.aborted) {
+                    const status = normalizeChatProgress(event);
+                    if (status) {
+                        try { callbacks.onStatus?.(status); } catch { /* 临时提示的接收异常不能中断聊天或触发生图/消息补发。 */ }
+                    }
+                }
                 outputImages.pushEvent(event);
                 if (event?.type === 'response.reasoning_text.delta' && typeof event.delta === 'string') {
                     output.pushReasoning(event.delta);

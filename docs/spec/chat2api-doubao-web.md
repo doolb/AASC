@@ -1176,3 +1176,37 @@ min41/code76为历史发布；本次新增代码未出包。真实账号捕获�
 会话核对 := 两个响应ID同属一条记录，历史4条、transport为node-http、nativeState为ready且存在上游会话ID
 证据边界 := 不写入当前AASC聊天；旧版本本轮首句502，无法据此确定原续聊故障根因
 ```
+
+## 已确认伪代码：签名刷新即时状态（2026-10-23）
+
+```text
+请求标识 := 沿用当前AASC聊天requestId，仅关联本请求
+缓存命中 := 直接使用签名，不产生获取状态
+缓存缺失/失效 := 实际调用prepare前报告getting或refreshing；成功后报告ready；失败/取消按原错误和结束信号收尾
+内部传递 := 服务调用参数中的onStatus → core context → 豆包适配器；不信任客户端JSON注入回调
+Responses := 本地三档客户端即时回调；HTTP流式在准备阶段发送response.progress扩展，正文仍走原事件
+应用传递 := llm-service.onStatus → 游戏桥独立转发 → server-app发送带type/requestId的chatStatus → 两端临时状态
+终止 := 完成/错误/取消/清空关闭对应状态；旧requestId迟到不恢复；无历史持久化和TTS
+重发判定 := 状态不是模型输出，不改变现有重签/补发条件；仅已有正文/思考/图片等实际输出阻止重发
+验证计划 := 缓存无提示、prepare等待时已收到状态、重签一次、失败/取消收尾、双端及不同请求隔离、HTTP和本地Responses
+状态 := 用户已确认，先更新伪代码再实现；仅服务包受影响
+```
+
+```text
+安全契约 := chat-progress固定code/文案表，getting/refreshing/ready/retrying/failed；外部message/签名等字段丢弃
+获取位置 := signatureScope.apply未命中 → 获取状态 → prepare/control.check → 发送或重试状态；命中不发状态
+HTTP时序 := 只有stream=true且收到状态时才提前设置SSE头；后续流不重复设置；准备失败在已发头时response.failed，未发头保留HTTP错误
+本地时序 := createResponse(options.onStatus)立即回调 → 三档客户端转response.progress → llm回调，无需等待result.stream
+UI状态 := 请求下独立灰色小字，正文分块不覆盖；完成/错误/清空移除，旧编号忽略；会话范围匹配才显示
+```
+
+```text
+已实现 := chat-progress固定文案表；adapter实际prepare前getting/refreshing，完成ready/retrying，准备失败failed
+缓存 := signatureScope.apply有值直接使用，不产生签名状态
+传递 := context.onStatus仅服务参数创建 → Responses规范化 → 本地回调或HTTP response.progress → llm.onStatus → game流回调 → WS chatStatus
+HTTP失败 := 首个进度已发头时response.failed保留原码/状态；尚未发头仍走原HTTP错误；正文流不重复setHeader
+UI := requestId+当前范围定位流式气泡，独立role=status灰字；正文不覆盖；完成/错误/取消清空移除，旧编号不接受
+隔离 := 不保存状态，不进入模型正文、历史或TTS；提示回调异常不影响请求，进度不记为实际模型输出
+回归 := check:chat2api392、test:chat-streaming66、test:chat-images31；最后提示异常防护定向2项通过
+部署 := 服务包待构建，Android原生/生产依赖/任务代码无新增构建需求
+```

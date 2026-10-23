@@ -563,6 +563,8 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleChunk(data);
             }
+        } else if (data.type === 'chatStatus') {
+            window.Chat?.handleStatus(data);
         } else if (data.type === 'chatGameProtocol') {
             if (window.Chat) window.Chat.handleGameProtocol(data);
         } else if (data.type === 'chatContextUsage') {

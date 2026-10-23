@@ -976,6 +976,19 @@
             state.refs.messages.scrollTop = state.refs.messages.scrollHeight;
             return true;
         }
+        if (message.type === 'chatStatus') {
+            const requestId = String(message.requestId || '');
+            const reply = state.streaming.get(requestId);
+            if (!reply || state.ignoredRequestIds.has(requestId) || typeof message.message !== 'string') return true;
+            let status = reply.querySelector('.chat-request-status');
+            if (!status) {
+                status = document.createElement('div'); status.className = 'chat-request-status';
+                status.style.cssText = 'font-size:12px;color:var(--text-secondary,#999);padding:4px 0';
+                status.setAttribute('role', 'status'); reply.insertBefore(status, reply.querySelector('.display-chat-message-body'));
+            }
+            status.textContent = message.message;
+            return true;
+        }
         if (message.type === 'chatChunk') {
             const requestId = String(message.requestId || '');
             if (!requestId) return true;
@@ -996,6 +1009,7 @@
         }
         if (message.type === 'chatResponse') {
             const requestId = String(message.requestId || '');
+            state.streaming.get(requestId)?.querySelector('.chat-request-status')?.remove();
             state.bus?.publish('chat.activity', { requestId, active: false });
             if (state.ignoredRequestIds.has(requestId)) {
                 return true;

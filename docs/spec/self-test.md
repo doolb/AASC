@@ -2968,3 +2968,16 @@ LLM真实模块 := 隔离用户配置子进程，经过实际游戏/SubAI双桥�
 结果 := chat-images30/30、chat-streaming63/63、game-chat80/80、chat-clear-history4/4；Chat2API385/385及后续原生边界43/43，豆包签名针对性通过
 范围 := 合成Provider/独立临时目录和Chromium，无当前对话测试消息、无官网真实生图、无APK或服务包部署
 ```
+
+## 2026-10-23 豆包签名刷新临时提示
+
+```text
+SDK准备 := 首轮getting发生在prepare挂起时，完成ready；同凭据缓存复用无状态，失效只一次refreshing/retrying
+失败取消 := 准备失败固定安全状态，原错误仍返回；取消无迟到成功/发网；提示回调抛错不能改变实际请求
+传递 := 真实三档客户端、Responses及core内部回调，HTTP SSE在准备完成前可消费进度，失败保留response.failed原码
+LLM双桥 := 临时用户配置子进程运行实际llm-service/游戏/SubAI桥，规范化状态；正文/TTS/历史不含签名进度
+双端 := 实际WebSocket控制路由/Chat/DisplayChat模块，独立灰字，正文不覆盖；结束、失败、清空去除，旧请求隔离
+重试 := 进度不算模型输出，保留现有无正文断连恢复；不扩大签名补发额度
+结果 := check:chat2api392/392、test:chat-streaming66/66、test:chat-images31/31，最后提示异常防护chat-progress2/2
+边界 := 合成凭据/本机HTTP/Chromium/临时目录，无官网操作或APK部署，服务包待构建
+```
