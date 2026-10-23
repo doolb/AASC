@@ -41,7 +41,7 @@ const SelfTest = {
         {
             id: 'media_loop_range',
             name: '媒体循环双手柄',
-            description: '只读检查单轨双手柄和起止边界，不改变当前播放',
+            description: '只读检查单轨双手柄和边界；临时视频由正式上传专项回归覆盖',
             category: '播放控制',
             run: async () => {
                 const track = document.getElementById('mediaLoopRange');
@@ -53,7 +53,7 @@ const SelfTest = {
                 const valid = track.querySelectorAll('.media-loop-track').length === 1 && bounds && bounds.start < bounds.end
                     && bounds.end <= 120 && api.seconds(range, Infinity) === null;
                 return { success: !!valid, message: valid ? '单轨双手柄及边界检查通过' : '区间边界或结构异常',
-                    details: '只读模块检查；实际鼠标/触屏拖动、音视频回跳和断线恢复由专项测试及设备验收覆盖' };
+                    details: '只读模块检查；npm run test:media-loop含正式临时上传→时长上报→启用双手柄→实际视频回跳，设备验收另记' };
             }
         },
         {

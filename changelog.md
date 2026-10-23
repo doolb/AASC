@@ -14265,3 +14265,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - 新增公共 `media-loop.js`、控制交互 `control-media-loop.js` 和服务端 `media-loop-control.js`；接入upload/controls/websocket/device-list、server-app、display与Node media-controller/mpv-player。沿用WebSocket与config.set持久化链路，服务端规范化并广播权威值，媒体标识拒绝迟到拖动，切换清除、重连恢复、暂停保持、列表末尾优先循环。
   - 独立Node打包收录公共模块，更新打包夹具；同步自测界面、design/spec/task/todo/usage。`test:media-loop` 18/18、`test:node-display-mpv` 51/51、`test:offline-voice-display-node` 22/22通过，含Chromium真实鼠标/触屏/键盘及音视频解码，Node为真实进程/socket IPC夹具。
   - `servicePackage=true`与`voiceDisplayNodePackage=true`，其它状态保持；未构建部署，Android触屏与设备原生mpv仍待验收，未提交截图、媒体样本或本机配置。
+
+### 临时上传视频循环区间修复
+
+- ✅ [2026-10-23] 修复首次临时上传Base64视频缺少进度上报，导致控制端拿不到时长、循环双手柄一直禁用的问题。
+  - `display.html`统一URL/Base64音视频的timeupdate、loadedmetadata与durationchange监听，加载/暂停即上报有限时长，过滤隐藏旧媒体与无效时长，删除分支重复处理；更新self-test说明。
+  - 新增真实临时上传浏览器回归：正式Upload.uploadFile→showMedia→服务端区间服务/WS→双手柄→实际视频回跳；暂停、URL音视频、Base64音频、隐藏/无限时长及单事件单次上报兼容通过。修复前18/19，修复后`npm run test:media-loop`19/19；同步design/spec/task/todo/usage和自测文档。
+  - 仅网页热更新，`servicePackage=true`，其他发布状态保持；未重启现场服务、构建/部署或操作用户显示端。刷新显示页后重新发送；Offline设备需更新服务包。

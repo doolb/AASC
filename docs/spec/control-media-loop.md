@@ -36,6 +36,10 @@
 配置保存失败 → 保留原权威值，广播错误，不向播放器下发
 权威广播 := type为mediaLoopState，携带显示端、区间、媒体标识与时长
 网页播放器 := 公共模块绑定持久timeupdate/play/ended监听，不覆盖页面既有进度上报
+普通URL或临时Base64音视频 → 共用持久timeupdate、loadedmetadata与durationchange上报监听
+当前音视频且WebSocket已连接且时长有限且大于零 → 发送audioProgress或videoProgress
+刚加载或暂停的媒体 → 元数据加载即发送有限时长 → 控制端无需等待播放即可启用双手柄
+隐藏的旧媒体、尚未加载完或非有限时长 → 不发送可编辑的时长，保留禁用回退
 Node播放器 := 百分比乘有限时长 → 原生ab-loop-a/ab-loop-b与无限计数；关闭和新媒体加载解除旧AB点
 启用区间且播放到结束点 → 当前播放器跳回开始点 → 保留播放或暂停状态
 启用区间且位于播放列表 → 优先循环当前媒体，暂不自动推进列表
@@ -60,7 +64,11 @@ Node播放器 := 百分比乘有限时长 → 原生ab-loop-a/ab-loop-b与无限
 ## 自测结果
 
 ```text
-npm run test:media-loop → 18通过，包含Chromium实际鼠标/触屏/键盘、真实音视频解码及服务端状态流
+npm run test:media-loop → 19通过，包含Chromium实际鼠标/触屏/键盘、真实音视频解码及服务端状态流
+临时模式回归 → 实际Upload.uploadFile读取视频File → 正式showMedia的Base64分支 → videoProgress有限时长 → 双手柄启用
+区间提交 → 真实服务端区间服务与正式WS控制模块 → 本地播放器实际回跳
+暂停加载与切换来源 → URL视频、Base64音频、URL音频仍上报时长；每次timeupdate只发一次
+隐藏旧媒体事件或无限时长 → 不上报有效进度
 npm run test:node-display-mpv → 51通过，包含真实子进程与socket的AB属性、暂停恢复和切换清除
 npm run test:offline-voice-display-node → 22通过，包含独立包收录公共区间模块
 自测界面media_loop_range → 只读验证一条轨道两个手柄和区间规范化，不改变现场播放

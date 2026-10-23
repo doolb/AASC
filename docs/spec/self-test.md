@@ -3039,7 +3039,10 @@ LLM := 经游戏/SubAI桥收到onVideos，历史保存/重启恢复，后续prev
 
 ```text
 自测入口 := SelfTest.tests中的media_loop_range，只读检查轨道与两个原生手柄、有限时长及不交叉边界
-专项命令 := npm run test:media-loop → 18通过
+专项命令 := npm run test:media-loop → 19通过
+临时上传修复回归 := 19通过；修复前正式临时上传后的滑条禁用超时，修复后时长上报与实际回跳均通过
+新增用例 := tests/media-loop-temp-upload-browser.test.js运行正式Upload.uploadFile与showMedia，接真实区间服务及WS模块
+来源与暂停 := 暂停临时视频加载即启用，URL音视频与Base64音频兼容，隐藏旧元素/无限时长忽略，每事件单条进度
 实际浏览器 := Chromium加载正式控制模块与样式 → 鼠标/触屏拖动、释放只提交一次、键盘微调、媒体切换禁用与显示端隔离
 权威消息 := 正式websocket.js处理mediaLoopState → 单轨手柄回填 → 自测界面项运行成功
 实际音视频 := FFmpeg生成3秒媒体 → 浏览器真实解码播放 → 结束回跳、暂停不唤醒、文件末尾不推进列表、关闭还原普通循环

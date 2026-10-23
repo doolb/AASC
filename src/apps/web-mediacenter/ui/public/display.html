@@ -5255,6 +5255,24 @@
         const mediaLoopPlayers = [MediaLoop.attach(mediaVideo), MediaLoop.attach(mediaAudio)];
         function setMediaLoop(value) { mediaLoopPlayers.forEach(player => player.set(value)); }
 
+        // URL与临时Base64共用进度监听，避免首次临时视频遗漏时长，导致区间滑条一直禁用。
+        // 元数据加载和时长变化也立即上报，暂停恢复无需等待timeupdate即可编辑循环区间。
+        function reportCurrentMediaProgress(media) {
+            if (media !== getCurrentPlayableMedia() || !['audio', 'video'].includes(currentMediaType)) return;
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            if (!Number.isFinite(media.duration) || media.duration <= 0) return;
+            displayWs.send(JSON.stringify({
+                type: { audio: 'audioProgress', video: 'videoProgress' }[currentMediaType],
+                currentTime: Number.isFinite(media.currentTime) ? media.currentTime : 0,
+                duration: media.duration
+            }));
+        }
+        for (const media of [mediaVideo, mediaAudio]) {
+            for (const event of ['timeupdate', 'loadedmetadata', 'durationchange']) {
+                media.addEventListener(event, () => reportCurrentMediaProgress(media));
+            }
+        }
+
         function showMedia(data, noActivate, paused, resumeTime = 0) {
             mediaLoopPlayers.forEach(player => player.reset());
             const loadSequence = ++mediaLoadSequence;
@@ -5284,7 +5302,6 @@
                 mediaAudio.removeAttribute('src');
                 mediaAudio.load();
             }
-            mediaAudio.ontimeupdate = null;
             mediaVideo.onloadedmetadata = null;
             mediaAudio.onloadedmetadata = null;
             waitingMessage.style.display = 'none';
@@ -5384,15 +5401,6 @@
                     } else {
                         playAudioAuto(mediaAudio);
                     }
-                    mediaAudio.ontimeupdate = function() {
-                        if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
-                        if (!mediaAudio.duration) return;
-                        displayWs.send(JSON.stringify({
-                            type: 'audioProgress',
-                            currentTime: mediaAudio.currentTime,
-                            duration: mediaAudio.duration
-                        }));
-                    };
                 } else if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
@@ -5410,16 +5418,6 @@
                     } else {
                         playVideoAuto(mediaVideo);
                     }
-                    mediaVideo.ontimeupdate = function() {
-                        if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
-                        var d = mediaVideo.duration;
-                        if (!d) return;
-                        displayWs.send(JSON.stringify({
-                            type: 'videoProgress',
-                            currentTime: mediaVideo.currentTime,
-                            duration: d
-                        }));
-                    };
                 } else {
                     mediaVideo.style.display = 'none';
                     mediaImage.style.display = 'block';
@@ -5445,15 +5443,6 @@
                     } else {
                         playAudioAuto(mediaAudio);
                     }
-                    mediaAudio.ontimeupdate = function() {
-                        if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
-                        if (!mediaAudio.duration) return;
-                        displayWs.send(JSON.stringify({
-                            type: 'audioProgress',
-                            currentTime: mediaAudio.currentTime,
-                            duration: mediaAudio.duration
-                        }));
-                    };
                 } else if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
