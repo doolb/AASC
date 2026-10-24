@@ -26,6 +26,52 @@ const normalizeTrail = value => Array.isArray(value) && value.length <= TRAJECTO
     && value.every(point => array(point, 3, 1e5)) ? value.map(point => [...point]) : null;
 const moved = (previous, next) => !previous || next.reduce((sum, value, index) =>
     sum + (value - previous[index]) ** 2, 0) > 0.0001;
+const finiteRange = (value, min, max = Number.MAX_VALUE) => Number.isFinite(value) && value >= min && value <= max;
+// 新诊断均为可选字段以兼容旧页面；只转发白名单，拒绝伪造的非有限值或类型。
+function normalizeDiagnostics(frame) {
+    const result = {};
+    for (const [key, max] of [['gravityMagnitude', 200], ['gravityDirectionErrorDegrees', 180]]) {
+        if (!Object.hasOwn(frame, key)) continue;
+        if (frame[key] === null && key === 'gravityDirectionErrorDegrees') { result[key] = null; continue; }
+        if (!finiteRange(frame[key], 0, max)) return null;
+        result[key] = frame[key];
+    }
+    if (Object.hasOwn(frame, 'attitudeGyro')) {
+        if (!array(frame.attitudeGyro, 3, 1e4)) return null;
+        result.attitudeGyro = [...frame.attitudeGyro];
+    }
+    if (Object.hasOwn(frame, 'remoteRestActive')) {
+        if (typeof frame.remoteRestActive !== 'boolean') return null;
+        result.remoteRestActive = frame.remoteRestActive;
+    }
+    if (Object.hasOwn(frame, 'profile')) {
+        const profile = frame.profile;
+        if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return null;
+        result.profile = {};
+        for (const [key, max] of [['gyroDeadZone', Number.MAX_VALUE], ['accelDeadZone', Number.MAX_VALUE],
+            ['filterHz', 50], ['tiltGain', 2], ['maxGap', 60]]) {
+            if (!Object.hasOwn(profile, key)) continue;
+            if (!finiteRange(profile[key], 0, max)) return null;
+            result.profile[key] = profile[key];
+        }
+        for (const key of ['assumedRest', 'simulatorAutoRest', 'remoteAutoRest']) {
+            if (!Object.hasOwn(profile, key)) continue;
+            if (typeof profile[key] !== 'boolean') return null;
+            result.profile[key] = profile[key];
+        }
+    }
+    if (Object.hasOwn(frame, 'remoteRest')) {
+        const rest = frame.remoteRest;
+        if (!rest || !['window', 'moving', 'settling', 'rest'].includes(rest.state)) return null;
+        result.remoteRest = { state: rest.state };
+        for (const key of ['windowSeconds', 'gyroRms', 'forceVariation', 'gyroLimit', 'variationLimit']) {
+            if (rest[key] === null && ['gyroRms', 'forceVariation'].includes(key)) { result.remoteRest[key] = null; continue; }
+            if (!finiteRange(rest[key], 0, 1e4)) return null;
+            result.remoteRest[key] = rest[key];
+        }
+    }
+    return result;
+}
 const appendTrail = (trail, points) => {
     for (const point of points) {
         trail.push(point);
@@ -50,8 +96,10 @@ export function normalizeFrame(frame) {
         || !array(frame.quaternion, 4, 1.01) || !Number.isFinite(frame.time) || frame.time < 0) return null;
     const magnitude = Math.hypot(...frame.quaternion);
     if (magnitude < 0.9 || magnitude > 1.1) return null;
+    const diagnostics = normalizeDiagnostics(frame);
+    if (!diagnostics) return null;
     const result = { position: [...frame.position], velocity: [...frame.velocity],
-        quaternion: frame.quaternion.map(value => value / magnitude), time: frame.time };
+        quaternion: frame.quaternion.map(value => value / magnitude), time: frame.time, ...diagnostics };
     for (const key of ['gyro', 'linear', 'rawGyro', 'rawAccel', 'gyroBias', 'gyroNoise']) {
         if (!array(frame[key], 3, 1e4)) return null;
         result[key] = [...frame[key]];
@@ -281,6 +329,9 @@ export async function createLabServer(options = {}) {
                 for (const key of ['rawGyro', 'rawAccel', 'gyro', 'linear', 'gyroBias',
                     'gyroCalibrated', 'accelCalibrated', 'calibrationActive', 'faces', 'zeroCorrections', 'status', 'message']) {
                     point[key] = Array.isArray(frame[key]) ? [...frame[key]] : frame[key];
+                }
+                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest']) {
+                    if (Object.hasOwn(frame, key)) point[key] = structuredClone(frame[key]);
                 }
                 // 模拟参考位置只进入本机诊断轨迹，不能混入设备位姿或房间广播。
                 if (referencePosition) {

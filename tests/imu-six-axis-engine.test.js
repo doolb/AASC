@@ -378,3 +378,57 @@ test('线性加速度死区校准不借重力调整姿态', async () => {
     }
     assert.equal(engine.deadzoneRevision, 1); assert.ok(engine.q.equals(before));
 });
+
+for (const hz of [25, 50, 100]) test('倾斜手持噪声在' + hz + 'Hz重复重置后对齐当前重力，参数标定不丢失', async () => {
+    const [{ ImuEngine }, , { Vector3 }] = await modules;
+    const engine = new ImuEngine({ remoteAutoRest: true, gyroDeadZone: 0.39, accelDeadZone: 1.65 });
+    engine.gyroBias = [0.01, -0.02, 0.005]; engine.gyroNoise = [0.02, 0.01, 0.01]; engine.gyroCalibrated = true;
+    engine.accelBias = [0.1, 0.1, -0.1]; engine.accelScale = [1.01, 0.99, 1.02]; engine.accelCalibrated = true;
+    engine.faces = { 'z+': [0, 0, 9.8] }; engine.gravityMagnitude = 9.68;
+    const profile = { ...engine.profile }, bias = [...engine.gyroBias], scale = [...engine.accelScale];
+    let index = 0;
+    for (const force of [[-0.079, 3.554, 8.996], [-2.4, 5.1, 7.87]]) {
+        engine.p.set(2, -3, 100); engine.v.set(5, -1, 10); engine.beginCalibration();
+        const previousTime = engine.snapshot().time;
+        engine.resetExperiment();
+        assert.equal(engine.snapshot().time, previousTime, '等待下一测量不能把广播源时间退回0');
+        assert.equal(engine.initialized, false); assert.equal(engine.calibration, null);
+        assert.equal(engine.remoteRestActive, false); assert.equal(engine.remoteRestWindow.length, 0);
+        for (let i = 0; i < hz * 12; i++, index++) {
+            const sign = i % 2 ? -1 : 1;
+            engine.push({ time: index / hz, kind: 'gravity',
+                gyro: bias.map((value, axis) => value + sign * [0.03, 0.02, 0.01][axis]),
+                accel: force.map((value, axis) => (value + sign * 0.01) / scale[axis] + engine.accelBias[axis]) });
+        }
+        assert.ok(engine.p.length() < 1e-6, '固定倾斜和有界噪声不应被重置成平放导致漂移');
+        assert.ok(engine.v.length() < 1e-6); assert.ok(engine.snapshot().gravityDirectionErrorDegrees < 0.5);
+        const up = new Vector3(...force).applyQuaternion(engine.q).normalize();
+        assert.ok(up.y > 0.9999);
+    }
+    assert.deepEqual(engine.profile, profile); assert.deepEqual(engine.gyroBias, bias); assert.deepEqual(engine.accelScale, scale);
+    assert.equal(engine.gyroCalibrated, true); assert.equal(engine.accelCalibrated, true); assert.equal(engine.gravityMagnitude, 9.68);
+    assert.deepEqual(engine.faces, { 'z+': [0, 0, 9.8] });
+});
+
+test('大显示死区不冻结真实六轴的小角度姿态；倾斜纯旋转不制造平移', async () => {
+    const [{ ImuEngine, GRAVITY, REST_ORIENTATION, rotationStep }, , { Vector3 }] = await modules;
+    const engine = new ImuEngine({ remoteAutoRest: true, gyroDeadZone: 0.39 });
+    const truth = REST_ORIENTATION.clone(), rate = new Vector3(0.04, 0, 0), dt = 0.02;
+    engine.push({ time: 0, gyro: rate.toArray(), accel: [0, 0, GRAVITY], kind: 'gravity' });
+    for (let i = 1; i <= 500; i++) {
+        const midpoint = truth.clone().multiply(rotationStep(rate, dt / 2));
+        const force = new Vector3(0, GRAVITY, 0).applyQuaternion(midpoint.invert());
+        truth.multiply(rotationStep(rate, dt));
+        engine.push({ time: i * dt, gyro: rate.toArray(), accel: force.toArray(), kind: 'gravity' });
+    }
+    assert.deepEqual(engine.snapshot().gyro, [0, 0, 0]);
+    assert.deepEqual(engine.snapshot().attitudeGyro, rate.toArray());
+    assert.ok(engine.q.angleTo(truth) < 1e-6); assert.ok(engine.p.length() < 1e-6);
+    assert.equal(engine.zeroCorrections, 0, '不能靠清零速度掩盖姿态错误');
+    const diagnostic = engine.snapshot(); diagnostic.profile.gyroDeadZone = 100; diagnostic.remoteRest.state = 'rest';
+    assert.equal(engine.profile.gyroDeadZone, 0.39, '诊断快照不能修改估计器参数');
+    assert.notEqual(engine.remoteRestDiagnostics.state, 'rest');
+    engine.resetExperiment();
+    engine.push({ time: 0, gyro: [0, 0, 0], accel: [0, 0, 0], kind: 'linear' });
+    assert.equal(engine.snapshot().gravityDirectionErrorDegrees, null, '平台线性输入没有重力方向残差');
+});

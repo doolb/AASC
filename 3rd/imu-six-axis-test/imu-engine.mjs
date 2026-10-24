@@ -41,6 +41,9 @@ export class ImuEngine {
         this.rotationOnlySince = null;
         this.remoteRestWindow = []; this.remoteRestSince = null; this.remoteRestActive = false;
         this.gravityMagnitude = GRAVITY;
+        this.gravityDirectionErrorDegrees = null; this.attitudeGyro = [0, 0, 0];
+        this.remoteRestDiagnostics = { state: 'window', windowSeconds: 0, gyroRms: null, forceVariation: null,
+            gyroLimit: 0.015, variationLimit: 0.08 };
         this.message = '等待六轴数据'; this.status = 'waiting'; this.lastSample = null;
     }
 
@@ -73,6 +76,8 @@ export class ImuEngine {
 
     resetRemoteRest() {
         this.remoteRestWindow.length = 0; this.remoteRestSince = null; this.remoteRestActive = false;
+        this.remoteRestDiagnostics = { state: 'window', windowSeconds: 0, gyroRms: null, forceVariation: null,
+            gyroLimit: 0.015, variationLimit: 0.08 };
     }
 
     /** APK观察端用原始六轴识别静稳，学习本机有效重力模长；不依赖平台线性加速度。 */
@@ -86,6 +91,7 @@ export class ImuEngine {
         }
         const span = time - this.remoteRestWindow[0].time;
         if (this.remoteRestWindow.length < 12 || span < 0.5) {
+            this.remoteRestDiagnostics.windowSeconds = span;
             this.remoteRestSince = null; this.remoteRestActive = false; return false;
         }
         const totals = this.remoteRestWindow.reduce((sum, item) => {
@@ -102,6 +108,8 @@ export class ImuEngine {
             && meanMagnitude > 9 && meanMagnitude < 10.4;
         this.remoteRestSince = stable ? this.remoteRestSince ?? time : null;
         const stopped = this.remoteRestSince !== null && time - this.remoteRestSince >= 0.7;
+        this.remoteRestDiagnostics = { state: stopped ? 'rest' : stable ? 'settling' : 'moving',
+            windowSeconds: span, gyroRms, forceVariation, gyroLimit, variationLimit };
         if (!stopped) { this.remoteRestActive = false; return false; }
         if (!this.remoteRestActive) this.zeroCorrections += 1;
         // 单朝向不能求完整三轴零偏，但可由静稳力模长去除本机垂直残差，并用方向校正倾斜。
@@ -237,6 +245,20 @@ export class ImuEngine {
         this.calibration = null; this.resetSimulatorRest(); this.resetRemoteRest();
     }
 
+    // 实验重置保留处理参数及已学标定；手机姿态必须由下一条实际重力重新对齐。
+    // 只清原点的操作仍保留当前姿态，避免把两个按钮的语义混在一起。
+    resetExperiment() {
+        this.resetOrigin(); this.calibration = null; this.deadzoneMessage = '';
+        this.q.copy(REST_ORIENTATION); this.initialized = false; this.lastTime = null;
+        this.filteredAcceleration = null; this.filteredGyro = null; this.quietSince = null;
+        this.clearProcessed(); this.status = 'waiting';
+        this.message = '实验已重置，等待下一条六轴重新对齐重力';
+    }
+    // 断流或重置帧没有新的有效区间，不能沿用上一帧的处理输出和方向诊断。
+    clearProcessed() {
+        this.correctedGyro = [0, 0, 0]; this.attitudeGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
+        this.gravityDirectionErrorDegrees = null;
+    }
     resetOrigin() { this.cancelDeadzoneCalibration(); this.p.set(0, 0, 0); this.stopVelocity(); }
     stopVelocity() { this.v.set(0, 0, 0); this.resetSimulatorRest(); this.resetRemoteRest();
         this.zeroCorrections += 1; this.message = '已按用户确认停稳清零速度'; }
@@ -250,6 +272,7 @@ export class ImuEngine {
     }
     pause() { this.cancelDeadzoneCalibration(); this.lastTime = null; this.v.set(0, 0, 0); this.filteredGyro = null;
         this.filteredAcceleration = null; this.quietSince = null; this.resetSimulatorRest(); this.resetRemoteRest();
+        this.clearProcessed();
         this.status = 'paused'; this.message = '数据中断，冻结位置；恢复时速度从零开始'; }
 
     push(sample) {
@@ -274,12 +297,14 @@ export class ImuEngine {
             if (this.deadzoneCalibration) this.beginDeadzoneCalibration();
             this.gaps += 1; this.v.set(0, 0, 0); this.filteredGyro = null; this.filteredAcceleration = null;
             this.quietSince = null; this.resetSimulatorRest(); this.resetRemoteRest();
+            this.clearProcessed();
             this.status = 'gap'; this.message = '断流：未跨空白区积分，速度重新初始化'; return true;
         }
         this.status = 'tracking';
         if (this.deadzoneCalibration) {
             this.captureDeadzone(sample, force, dt);
-            this.correctedGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
+            this.correctedGyro = [0, 0, 0]; this.attitudeGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
+            this.gravityDirectionErrorDegrees = null;
             this.message = this.deadzoneMessage;
             return true;
         }
@@ -293,17 +318,24 @@ export class ImuEngine {
         // 降噪在扣除重力后的世界线性加速度上进行，避免混用不同延迟的六轴数据。
         const rate = gyro.clone();
         if (rate.length() < this.profile.gyroDeadZone) rate.set(0, 0, 0);
-        if (remoteStopped) rate.set(0, 0, 0);
+        // 大显示死区不能吞掉缓慢旋转，否则重力会被投影为水平加速度。
+        // 真实输入姿态通道只保留原默认的小噪声门槛；用户关闭死区时两通道都关闭门槛。
+        // 模拟器保留其可控噪声实验的原门槛，避免改变已有静稳/真值对照基线。
+        const attitudeRate = gyro.clone();
+        const attitudeDeadZone = this.profile.simulatorAutoRest ? this.profile.gyroDeadZone
+            : Math.min(this.profile.gyroDeadZone, DEFAULT_PROFILE.gyroDeadZone);
+        if (attitudeRate.length() < attitudeDeadZone) attitudeRate.set(0, 0, 0);
+        if (remoteStopped) { rate.set(0, 0, 0); attitudeRate.set(0, 0, 0); }
         // 用户确认静置后采集零偏时，不把尚未扣除的零偏积成不可观测航向误差。
-        if (this.calibration && this.calibration.face === null) rate.set(0, 0, 0);
-        const midpoint = this.q.clone().multiply(rotationStep(rate, dt / 2));
-        this.q.multiply(rotationStep(rate, dt)).normalize();
+        if (this.calibration && this.calibration.face === null) { rate.set(0, 0, 0); attitudeRate.set(0, 0, 0); }
+        const midpoint = this.q.clone().multiply(rotationStep(attitudeRate, dt / 2));
+        this.q.multiply(rotationStep(attitudeRate, dt)).normalize();
         const acceleration = force.clone().applyQuaternion(midpoint);
         if (this.profile.simulatorAutoRest && sample.kind === 'gravity' && dt > 0) {
             const gravityError = Math.abs(forceNorm - GRAVITY);
             const apparentLinear = acceleration.clone().addScaledVector(UP, -GRAVITY).length();
-            const recovery = this.simulatorRestActive && rate.length() < 0.02;
-            if (gravityError < 0.12 && (rate.length() > 0.03 && apparentLinear < 0.25 || recovery)) {
+            const recovery = this.simulatorRestActive && attitudeRate.length() < 0.02;
+            if (gravityError < 0.12 && (attitudeRate.length() > 0.03 && apparentLinear < 0.25 || recovery)) {
                 // 六轴只能约束俯仰/横滚；重力方向的最小旋转不会凭空提供航向信息。
                 // 位移加速度可能暂时伪装成倾斜，故仅在接近重力且线性残差很小时快速纠倾。
                 const correction = new Quaternion().setFromUnitVectors(acceleration.clone().normalize(), UP);
@@ -312,6 +344,9 @@ export class ImuEngine {
                 acceleration.applyQuaternion(partial);
             }
         }
+        // 此读数是测得的力方向与估计竖直方向的夹角，运动加速度也会影响它，不是真值姿态误差。
+        this.gravityDirectionErrorDegrees = sample.kind === 'gravity' && forceNorm > 1
+            ? Math.acos(Math.max(-1, Math.min(1, acceleration.y / forceNorm))) * 180 / Math.PI : null;
         if (sample.kind === 'gravity') acceleration.y -= this.gravityMagnitude;
         this.filteredAcceleration ??= acceleration.clone(); this.filteredAcceleration.lerp(acceleration, blend);
         const linear = this.filteredAcceleration.clone();
@@ -322,7 +357,7 @@ export class ImuEngine {
             if (work < -0.2) this.simulatorBraking = true;
             if (work > 0.2 || (this.v.length() < 0.1 && acceleration.length() > 1)) this.simulatorBraking = false;
         }
-        const quiet = rate.length() < 0.02 && acceleration.length() < 0.12;
+        const quiet = attitudeRate.length() < 0.02 && acceleration.length() < 0.12;
         this.quietSince = quiet ? this.quietSince ?? sample.time : null;
         const assumedStopped = this.profile.assumedRest && this.quietSince !== null && sample.time - this.quietSince > 0.7;
         if (this.profile.simulatorAutoRest && sample.kind === 'gravity') {
@@ -331,7 +366,7 @@ export class ImuEngine {
         // 已进入仅旋转零速时略放宽退出门限，避免单帧加速度噪声反复增加修正计数。
         const continuingRotation = this.simulatorRestActive && this.zuptReason === 'rotation';
         const rotationOnly = this.profile.simulatorAutoRest && sample.kind === 'gravity'
-            && rate.length() > 0.08 && acceleration.length() < (continuingRotation ? 0.25 : 0.18)
+            && attitudeRate.length() > 0.08 && acceleration.length() < (continuingRotation ? 0.25 : 0.18)
             && Math.abs(forceNorm - GRAVITY) < (continuingRotation ? 0.12 : 0.08);
         this.rotationOnlySince = rotationOnly ? this.rotationOnlySince ?? sample.time : null;
         const rotationStopped = this.rotationOnlySince !== null && sample.time - this.rotationOnlySince >= 0.7;
@@ -368,17 +403,19 @@ export class ImuEngine {
             this.filteredAcceleration?.set(0, 0, 0); linear.set(0, 0, 0);
             this.message = `APK六轴静稳：速度已清零，本机重力模长 ${this.gravityMagnitude.toFixed(3)} m/s²`;
         }
-        this.correctedGyro = rate.toArray(); this.linearAcceleration = linear.toArray();
+        this.correctedGyro = rate.toArray(); this.attitudeGyro = attitudeRate.toArray(); this.linearAcceleration = linear.toArray();
         return true;
     }
 
     snapshot() {
         return { position: this.p.toArray(), velocity: this.v.toArray(), quaternion: this.q.toArray(),
             gyro: this.correctedGyro || [0, 0, 0], linear: this.linearAcceleration || [0, 0, 0],
+            attitudeGyro: [...this.attitudeGyro], profile: { ...this.profile },
             rawGyro: this.lastSample?.gyro || [0, 0, 0], rawAccel: this.lastSample?.accel || [0, 0, 0],
             time: this.lastSample?.time ?? 0, samples: this.samples, gaps: this.gaps, rejected: this.rejected,
             zeroCorrections: this.zeroCorrections, restConfidence: this.restConfidence, restReason: this.zuptReason,
             gravityMagnitude: this.gravityMagnitude, remoteRestActive: this.remoteRestActive,
+            gravityDirectionErrorDegrees: this.gravityDirectionErrorDegrees, remoteRest: { ...this.remoteRestDiagnostics },
             status: this.status, message: this.message,
             gyroCalibrated: this.gyroCalibrated, accelCalibrated: this.accelCalibrated,
             calibrationActive: Boolean(this.calibration || this.deadzoneCalibration), faces: Object.keys(this.faces).length,

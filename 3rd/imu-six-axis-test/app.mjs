@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three';
-import { ImuEngine, REST_ORIENTATION } from './imu-engine.mjs';
+import { ImuEngine } from './imu-engine.mjs';
 import { ImuSimulator } from './imu-simulator.mjs';
 import { SimulatorView } from './imu-simulator-view.mjs';
 import { ImuScene } from './imu-scene.mjs';
@@ -22,6 +22,7 @@ let activeFrames = 0, sourceStart = null, animation = null;
 let remoteDeviceId = null, remoteLastReceive = 0;
 const pendingEstimatedTrail = []; const pendingReferenceTrail = [];
 const format = values => values.map(value => (Math.abs(value) < 0.00005 ? 0 : value).toFixed(3)).join(' / ');
+const diagnosticNumber = (value, digits = 3) => Number.isFinite(value) ? value.toFixed(digits) : '—';
 const setStatus = message => { element('phoneStatus').textContent = message; };
 const receive = sample => {
     const revision = engine.deadzoneRevision;
@@ -133,8 +134,8 @@ for (const mode of ['translate', 'rotate']) element(mode).addEventListener('clic
     right.setMode(mode); element('translate').classList.toggle('active', mode === 'translate'); element('rotate').classList.toggle('active', mode === 'rotate');
 });
 element('resetExperiment').addEventListener('click', () => {
-    simulator.reset(); truthOrigin.set(0, 0, 0); engine.resetOrigin(); engine.q.copy(REST_ORIENTATION);
-    engine.lastTime = null; engine.filteredAcceleration = null; engine.filteredGyro = null; clearDisplayedTrails(); autoFaces = null;
+    simulator.reset(); truthOrigin.set(0, 0, 0); engine.resetExperiment();
+    clearDisplayedTrails(); autoFaces = null;
     right.syncTarget();
 });
 element('holdTarget').addEventListener('click', () => { simulator.trajectory = null; simulator.setTarget(simulator.p, simulator.q); });
@@ -214,9 +215,21 @@ function diagnostics(now) {
     element('position').value = format(selected.position); element('velocity').value = format(selected.velocity);
     element('rawRate').value = format(selected.rawGyro.map(value => value * 180 / Math.PI));
     element('cleanRate').value = format(selected.gyro.map(value => value * 180 / Math.PI));
+    element('attitudeRate').value = selected.attitudeGyro ? format(selected.attitudeGyro.map(value => value * 180 / Math.PI)) : '—';
     element('rawForce').value = format(selected.rawAccel);
     element('cleanForce').value = format(selected.linear);
     element('calibratedBias').value = format(selected.gyroBias.map(value => value * 180 / Math.PI));
+    element('gravityMagnitude').value = Number.isFinite(selected.gravityMagnitude) ? selected.gravityMagnitude.toFixed(3) : '—';
+    element('gravityDirectionError').value = Number.isFinite(selected.gravityDirectionErrorDegrees)
+        ? selected.gravityDirectionErrorDegrees.toFixed(2) : '—';
+    const restNames = { window: '等待静稳窗口', moving: '窗口未满足门槛', settling: '静稳确认中', rest: '静稳已清零' };
+    const rest = selected.remoteRest;
+    element('restDiagnostics').textContent = selected.profile?.remoteAutoRest && rest
+        ? `${restNames[rest.state]} · 角速度RMS ${rest.gyroRms === null ? '—' : rest.gyroRms.toFixed(4)} / ${rest.gyroLimit.toFixed(4)} rad/s · 加速度波动 ${rest.forceVariation === null ? '—' : rest.forceVariation.toFixed(3)} / ${rest.variationLimit.toFixed(3)} m/s²`
+        : '当前来源未启用APK静稳窗口，或旧页面未提供诊断';
+    element('processingDiagnostics').textContent = selected.profile
+        ? `显示角速度死区 ${diagnosticNumber(selected.profile.gyroDeadZone * 180 / Math.PI, 2)} °/s · 加速度死区 ${diagnosticNumber(selected.profile.accelDeadZone, 2)} m/s² · 滤波 ${diagnosticNumber(selected.profile.filterHz, 0)} Hz`
+        : '旧页面未提供处理参数';
     element('accelKind').textContent = `${selected.kind === 'gravity' ? '原始含重力' : '原始平台线性'}加速度 / m/s²`;
     element('gyro').value = format((latestSample?.gyro || [0, 0, 0]).map(value => value * 180 / Math.PI));
     element('acceleration').value = format(latestSample?.accel || [0, 0, 0]);

@@ -176,5 +176,30 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     const rate = await (await fetch(`http://127.0.0.1:${service.port}/api/imu/trajectory`)).json();
     const observerRate = rate.devices.find(device => device.label === '电脑观察端').frameRateHz;
     assert.ok(observerRate >= 35 && observerRate <= 55, `电脑估计帧每秒应接近50，实测${observerRate}`);
+    // 手机模式隐藏了模拟器工具栏，直接触发同一个DOM按钮处理函数，复现旧版共用重置入口。
+    // 由真实WebSocket送倾斜原始样本，不直接赋值姿态；短窗口不依赖自动静稳纠正。
+    await page.$eval('#gyroZone', input => { input.value = '22.35'; input.dispatchEvent(new Event('input')); });
+    await page.$eval('#accelZone', input => { input.value = '1.65'; input.dispatchEvent(new Event('input')); });
+    await page.$eval('#resetExperiment', button => button.click());
+    const tilted = Array.from({ length: 8 }, (_, index) => ({ time: 0.16 + index * 0.02,
+        gyro: [0, 0, 0], accel: [0, 4.903325, 8.492808026022666], kind: 'gravity' }));
+    sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
+        generation: identity.generation, sequence: 2, samples: tilted }));
+    await page.waitForFunction(() => Math.abs(window.imuLab.snapshot().engine.time - 0.3) < 1e-6);
+    const resetState = await page.evaluate(() => window.imuLab.snapshot().engine);
+    assert.ok(Math.hypot(...resetState.velocity) < 1e-6);
+    assert.ok(resetState.gravityDirectionErrorDegrees < 1e-5);
+    assert.equal(resetState.profile.accelDeadZone, 1.65);
+    await page.waitForFunction(async () => {
+        const data = await (await fetch('/api/imu/trajectory')).json();
+        const frame = data.devices.find(device => device.label === '电脑观察端')?.current;
+        return frame && Math.abs(frame.time - 0.3) < 1e-6 && frame.profile?.accelDeadZone === 1.65;
+    }, { polling: 100 });
+    const diagnostic = await (await fetch(`http://127.0.0.1:${service.port}/api/imu/trajectory`)).json();
+    const current = diagnostic.devices.find(device => device.label === '电脑观察端').current;
+    assert.deepEqual(current.attitudeGyro, [0, 0, 0]);
+    assert.equal(current.remoteRest.state, 'window');
+    assert.ok(current.gravityDirectionErrorDegrees < 1e-5);
+    assert.ok(await page.$eval('#processingDiagnostics', node => node.textContent.includes('1.65')));
     assert.deepEqual(errors, []);
 });

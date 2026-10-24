@@ -1,5 +1,11 @@
 # Web MediaCenter - 项目参考文档
 
+## AndroidDSU与Cemuhook（2026-10-24源码审阅）
+
+- [AndroidDSU传感器回调（固定a2f32c4）](https://github.com/PlayXboxtion963/AndroidDSU/blob/a2f32c4c5a163cf01d5503baa32ee6c04de3563d/app/src/main/java/com/plawyue/AndroidDSU/MainActivity.java#L315)：读取加速度计/陀螺仪，轴映射与灵敏度缩放，无滤波/去重力/速度位置积分；不把DSU体感转发当成惯性定位实现。
+- [DSU封包时间戳](https://github.com/PlayXboxtion963/AndroidDSU/blob/a2f32c4c5a163cf01d5503baa32ee6c04de3563d/app/src/main/java/com/plawyue/AndroidDSU/DsuPacket.java#L277)：使用发送时刻System.currentTimeMillis()*1000；本项目原生积分仍按传感器硬件测量时间，未复制此计时。
+- [Cemuhook协议1001](https://github.com/v1993/cemuhook-protocol/blob/82bf8a837cc7d2254e9257729f462a233d9ad184/README.md#actual-controllers-data)：UDP控制器数据，加速度g、角速度deg/s、运动时间戳微秒并随加速度更新；没有速度/位置字段或抗漂移算法。接收端姿态融合需查看各模拟器实现，不能由协议推断融合算法。
+
 ## HMR2 Node原图服务（2026-10-22）
 
 - [Sharp0.35.5](https://www.npmjs.com/package/sharp/v/0.35.5)、[OpenCV.js4.12固定包](https://www.npmjs.com/package/@techstark/opencv-js/v/4.12.0-release.1)、[bmp-js0.1.0](https://www.npmjs.com/package/bmp-js/v/0.1.0)：独立lock锁定；Sharp仅decode/orient，OpenCV双dtype仿射，不以resize冒充原预处理。

@@ -29,9 +29,13 @@
       <p class="status" id="engineStatus">等待数据</p>
       <details><summary>六轴数据与零偏</summary><div class="readouts">
         <div><span>原始角速度 / °/s</span><output id="rawRate">—</output></div><div><span>处理后角速度 / °/s</span><output id="cleanRate">—</output></div>
+        <div><span>姿态积分角速度 / °/s</span><output id="attitudeRate">—</output></div>
         <div><span id="accelKind">原始加速度 / m/s²</span><output id="rawForce">—</output></div>
         <div><span>世界线性加速度 / m/s²</span><output id="cleanForce">—</output></div>
-        <div><span>陀螺仪零偏 / °/s</span><output id="calibratedBias">—</output></div></div></details>
+        <div><span>陀螺仪零偏 / °/s</span><output id="calibratedBias">—</output></div>
+        <div><span>有效重力 / m/s²</span><output id="gravityMagnitude">—</output></div>
+        <div><span>力方向偏离竖直 / °（含运动加速度）</span><output id="gravityDirectionError">—</output></div></div>
+        <p id="processingDiagnostics">等待处理参数</p><p id="restDiagnostics">等待静稳诊断</p></details>
       <div class="toolbar"><button id="stopVelocity">已停稳：清零速度</button>
         <button id="resetOrigin">重置位置原点</button><button id="resetHeading">重置航向</button></div>
       <details id="advancedCalibration"><summary>高级校准（可选）</summary>
@@ -44,7 +48,7 @@
         <div class="toolbar"><button id="calibrateDeadzone">静置校准死区（3秒）</button><button id="cancelDeadzone" hidden>取消校准</button></div>
         <p id="deadzoneStatus" role="status">保持一个朝向静置，自动设置两个死区并对齐重力方向；不修改零偏。高死区可能忽略真实慢动作。</p>
         <div class="parameter-grid">
-        <label>角速度死区 / °/s<input id="gyroZone" type="number" min="0" step="0.01" value="0.2"><output></output></label>
+        <label>显示角速度死区 / °/s<input id="gyroZone" type="number" min="0" step="0.01" value="0.2"><output></output></label>
         <label>去重力后加速度死区 / m/s²<input id="accelZone" type="number" min="0" step="0.01" value="0.08"><output></output></label>
         <label>世界加速度滤波 / Hz（0＝关闭）<input id="filterHz" type="range" min="0" max="50" step="1" value="12"><output></output></label>
         <label>停稳假设下倾斜纠偏强度<input id="tiltGain" type="range" min="0" max="2" step="0.05" value="0.25"><output></output></label>

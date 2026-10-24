@@ -118,3 +118,26 @@ test('原生六轴批次保留顺序和双传感器时间，非法批次不写�
     assert.equal(compatible.samples.length, 4);
     sensor.socket.close(); observer.socket.close();
 });
+
+test('处理参数与重力静稳诊断仅转发白名单，旧帧兼容且非法值被拒绝', async () => {
+    const { normalizeFrame } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const { ImuEngine } = await import('../3rd/imu-six-axis-test/imu-engine.mjs');
+    const engine = new ImuEngine({ remoteAutoRest: true, gyroDeadZone: 0.39 });
+    for (let i = 0; i <= 60; i++) engine.push({ time: i * 0.04, kind: 'gravity',
+        gyro: [0, 0, 0], accel: [-1.4, 1.1, 9.5] });
+    const frame = engine.snapshot(), normalized = normalizeFrame(frame);
+    for (const key of ['profile', 'attitudeGyro', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest']) {
+        assert.deepEqual(normalized[key], frame[key]);
+    }
+    const legacy = { ...frame };
+    for (const key of ['profile', 'attitudeGyro', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest']) delete legacy[key];
+    assert.ok(normalizeFrame(legacy)); assert.equal(Object.hasOwn(normalizeFrame(legacy), 'profile'), false);
+    for (const patch of [
+        { attitudeGyro: [0, NaN, 0] }, { gravityMagnitude: Infinity }, { gravityDirectionErrorDegrees: -1 },
+        { remoteRestActive: 'true' }, { profile: [] }, { profile: { gyroDeadZone: -1 } },
+        { profile: { remoteAutoRest: 1 } }, { remoteRest: { ...frame.remoteRest, state: 'unknown' } },
+        { remoteRest: { ...frame.remoteRest, gyroRms: NaN } }
+    ]) assert.equal(normalizeFrame({ ...frame, ...patch }), null);
+    assert.equal(normalizeFrame({ ...frame, gravityDirectionErrorDegrees: null }).gravityDirectionErrorDegrees, null);
+    assert.deepEqual(normalizeFrame({ ...frame, profile: { gyroDeadZone: 1000, ignored: 'never forward' } }).profile, { gyroDeadZone: 1000 });
+});
