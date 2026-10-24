@@ -14330,4 +14330,11 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-24] 修复浏览器/Android 与 Node 子显示端首次播放及重连恢复的媒体 URL 策略不一致。
   - 新增 `display-media-payload.js`，单媒体、播放列表、restoreState 和节点重播统一保留原 URL 直连；HTTPS 下同源代理只作为失败备用，且不修改持久状态。兼容还原旧版代理主 URL。
   - 新增 `tests/display-media-payload.test.js`，定向测试 8/8 通过；显示端状态恢复、播放进度和 Node mpv 关联回归共 46/46 通过。更新媒体库/显示端 design、media-library spec、自测和任务文档。
-  - `servicePackage=true` 待构建；未构建、部署或操作现场显示端。浏览器/Android 与 Node 子显示端的设备验收待部署后完成。
+  - `servicePackage=true` 待构建；Note8 Android WebView 的实际恢复在后续消息分发修复中验证通过，HTTP混合内容fallback与Node子显示端设备验收仍待服务包更新后完成。
+
+### 显示端未知消息不再清除恢复媒体
+
+- ✅ [2026-10-24] 修复重连恢复视频后，音色/模型配置消息被误判为媒体并卸载视频源的问题。
+  - 显示端仅对 `url`、`base64` 执行媒体兜底；未知类型忽略，不停止列表、不调用 `showMedia`、不发 media 确认。更新 display design、WebSocket spec、任务和自测文档。
+  - 定向与媒体恢复关联回归 19/19 通过。Note8 `display-umwo5k6l` 实际主动重连验证：`restoreState` 视频后连续收到 `ttsProviderConfig`、`chatModelTierConfig`，视频保持 `readyState=4` 且正在播放。
+  - `servicePackage=true` 待构建发布；设备验证通过当前服务源码刷新页面，未构建 APK 或服务包。

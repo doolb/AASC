@@ -53,6 +53,16 @@ wss.on('connection', (ws, req)):
                     打印警告日志
             否则:
                 调用 handleDisplayMessageFallback(displayId, data, ws)
+
+显示端 WebSocket 收包分发:
+    先按已知的控制、配置、聊天、恢复、播放列表等消息类型执行对应处理
+    如果 data.type == 'url' 或 data.type == 'base64':
+        停止当前播放列表
+        showMedia(data)
+        发送 media 成功确认
+    否则如果 data.type 未知:
+        记录或忽略未知类型
+        不调用 showMedia，不清理媒体/播放列表，不发送 media 确认
         
         监听关闭:
             current = displayClients.get(displayId)
@@ -295,7 +305,8 @@ handleDisplayDisconnect(displayId, ws):
 | serverStartTime | 服务器启动时间 | `{ type, time }` |
 | displayId | 显示端ID | `{ type, id, ip }` |
 | restoreState | 恢复状态 | `{ type, state }` |
-| media | 媒体数据 | `{ type, url, mediaType, ... }` |
+| url | URL 媒体 | `{ type, url, fallbackUrl?, mediaType, ... }`；先直连，失败后使用备用地址 |
+| base64 | 内嵌媒体 | `{ type, data, mimeType, mediaType, ... }` |
 | control | 控制指令 | `{ type, action, value }` |
 | control/mmdVisibility | MMD 可见性指令 | `{ type: 'control', action: 'mmdVisibility', value: boolean }` |
 | reminder | 提醒消息 | `{ type, action, title, time, content }` |

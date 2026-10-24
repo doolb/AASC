@@ -3117,6 +3117,17 @@ LLM := 文件正文预算、视频文件鉴权、原会话续聊去重、重建�
 播放列表 := playlistStart逐项处理，Base64/临时条目不变
 重连 := restoreState.currentMedia与currentPlaylist.startData.playlist均处理；源持久状态对象不被修改
 入口 := sendToDisplay、restoreState直发及playlistStart直发均用同一规范化器
-客户端 := 浏览器/WebView与Node mpv已有先直连失败再fallback；本次未做设备现场验证
+客户端 := 浏览器/WebView与Node mpv已有先直连失败再fallback；Note8恢复复验确认HTTPS源播放，HTTP混合内容fallback和Node子显示端实机另待验
 发布 := servicePackage=true待构建；未部署或重启服务
+```
+
+## 显示端未知 WebSocket 消息保护媒体恢复（2026-10-24）
+
+```text
+实现 := 只有url/base64进入媒体处理；配置/未知类型忽略，不停止播放列表、不清媒体、不发media ack
+回归 := node --test tests/display-message-dispatch.test.js tests/display-media-payload.test.js tests/display-identity-batch-restore.test.js tests/display-playback-resume.test.js → 19/19
+现场 := Note8/display-umwo5k6l主动断线重连；收到restoreState(video,isPlaying=true)后依次收到ttsProviderConfig/chatModelTierConfig
+播放 := 当前类型video、readyState=4、networkState=1、paused=false、error=null，配置消息未卸载媒体源
+范围 := 页面刷新使用当前服务源码；未构建或发布服务包
+发布 := servicePackage=true待构建
 ```
