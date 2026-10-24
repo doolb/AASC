@@ -17,6 +17,7 @@ if (configImportResult) {
 }
 const config = require('../modules/config/config-app-service');
 const { createMediaLoopService, createMediaLoopToken, normalizeMediaLoop } = require('../modules/media/media-loop-control');
+const { normalizeDisplayMediaMessage } = require('../modules/media/display-media-payload');
 const mediaLoopService = createMediaLoopService({ persist: persistDisplayState, broadcast: broadcastToControls, send: sendToDisplay });
 const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
@@ -7684,15 +7685,6 @@ async function sendVoiceCommandTts(text, targetDisplayId, playbackOptions = {}) 
 // 裁剪调试日志开关
 let _cropDebugLog = false;
 
-// 服务器 HTTPS 时，把 http:// 媒体 URL 重写为同源 /api/media-proxy（绕开浏览器/WebView 混合内容拦截）
-function rewriteMediaUrl(url) {
-    if (!useHttps || typeof url !== 'string') return url;
-    if (/^http:\/\//i.test(url)) {
-        return '/api/media-proxy?url=' + encodeURIComponent(url);
-    }
-    return url;
-}
-
 // URL 媒体必须至少有一个可用地址；直连地址缺失时提升同源代理地址，
 // 防止 null/undefined 被持久化、转发后由显示端或浏览器发起无效请求。
 function normalizeMediaBatchPayload(media) {
@@ -7753,8 +7745,8 @@ function normalizeRemotePlaylist(playlist, nodeId, nodeUrl, libraryId) {
 }
 
 function sendToDisplay(displayId, data, options = {}) {
-    // 统一出口重写 http 媒体 URL：手动 URL 输入、restore 恢复、单文件播放等所有下发路径一次覆盖
-    if (data.url) data.url = rewriteMediaUrl(data.url);
+    // 每次下发只规范化媒体副本；保留原始直连地址，HTTPS 页面仅在失败时使用代理备用地址。
+    data = normalizeDisplayMediaMessage(data, useHttps);
     if (isRepairModeTtsSuppressed()
         && data.type === 'tts'
         && data.action === 'playAudio'
@@ -8459,14 +8451,14 @@ wss.on('connection', (ws, req) => {
             const restoreState = savedState.currentPlaylist
                 ? { ...savedState, currentMedia: null, currentMediaProgress: null }
                 : savedState;
-            ws.send(JSON.stringify({
+            ws.send(JSON.stringify(normalizeDisplayMediaMessage({
                 type: 'restoreState',
                 state: restoreState
-            }));
+            }, useHttps)));
         }
 
         if (savedState?.currentPlaylist) {
-            ws.send(JSON.stringify({
+            ws.send(JSON.stringify(normalizeDisplayMediaMessage({
                 type: 'playlistStart',
                 ...savedState.currentPlaylist.startData,
                 resumeIndex: savedState.currentPlaylist.index,
@@ -8474,7 +8466,7 @@ wss.on('connection', (ws, req) => {
                 resumeTextPage: savedState.currentPlaylist.currentTextPage || 0,
                 resumeState: savedState.currentPlaylist.state || 'playing',
                 mediaLoop: savedState.mediaLoop
-            }));
+            }, useHttps)));
         }
         
         broadcastDisplayList();

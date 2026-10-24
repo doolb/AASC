@@ -3107,3 +3107,16 @@ LLM := 文件正文预算、视频文件鉴权、原会话续聊去重、重建�
 限制 := SIGKILL无法由Node捕获；fixture进程验证不等同目标设备实机验收
 发布 := voiceDisplayNodePackage=true待构建，未部署
 ```
+
+## 显示端媒体直连优先与重连恢复（2026-10-24）
+
+```text
+定向 := node --test tests/display-media-payload.test.js → 8/8；媒体恢复/Node mpv关联回归共46/46
+单媒体 := HTTPS保留HTTP直连 + 同源代理fallback；已有HTTPS/相对fallback保留；HTTP fallback转同源代理
+兼容 := 恢复旧版代理主地址时从查询参数还原原始直连，代理留作备用
+播放列表 := playlistStart逐项处理，Base64/临时条目不变
+重连 := restoreState.currentMedia与currentPlaylist.startData.playlist均处理；源持久状态对象不被修改
+入口 := sendToDisplay、restoreState直发及playlistStart直发均用同一规范化器
+客户端 := 浏览器/WebView与Node mpv已有先直连失败再fallback；本次未做设备现场验证
+发布 := servicePackage=true待构建；未部署或重启服务
+```

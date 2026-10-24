@@ -14324,3 +14324,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - VoiceDisplay 按资源逐项清理，单项报错时继续关闭媒体控制器；TUI 销毁和进程退出等待清理完成。`SIGKILL`无法捕获，作为操作系统限制记录。
   - `npm run test:node-display-mpv` 53/53通过，覆盖mpv fixture子进程/IPC临时目录回收、重复退出及清理失败路径。睡眠遮罩原已实现：普通睡眠遮黑媒体并保留信息层，深度睡眠全屏黑遮罩，已有独立真实画面回归。
   - 更新Node子显示端design/spec/task/todo/self-test；`voiceDisplayNodePackage=true`待重新构建，未构建或部署。
+
+### 显示端重连媒体直连优先
+
+- ✅ [2026-10-24] 修复浏览器/Android 与 Node 子显示端首次播放及重连恢复的媒体 URL 策略不一致。
+  - 新增 `display-media-payload.js`，单媒体、播放列表、restoreState 和节点重播统一保留原 URL 直连；HTTPS 下同源代理只作为失败备用，且不修改持久状态。兼容还原旧版代理主 URL。
+  - 新增 `tests/display-media-payload.test.js`，定向测试 8/8 通过；显示端状态恢复、播放进度和 Node mpv 关联回归共 46/46 通过。更新媒体库/显示端 design、media-library spec、自测和任务文档。
+  - `servicePackage=true` 待构建；未构建、部署或操作现场显示端。浏览器/Android 与 Node 子显示端的设备验收待部署后完成。

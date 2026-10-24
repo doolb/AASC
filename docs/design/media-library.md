@@ -113,7 +113,7 @@
 3. **密码加密**：SMB 密码加密存储
 4. **文件类型验证**：限制上传文件类型
 5. **访问代理**：HTTP/SMB 资源通过服务器代理，避免暴露凭证
-6. **混合内容规避**：服务器 HTTPS 时，http:// 媒体 URL 统一重写为同源 /api/media-proxy，绕开浏览器/WebView 混合内容拦截；代理做 SSRF 基础防护（禁本机/回环/云元数据，内网媒体放行）
+6. **混合内容规避**：服务器 HTTPS 时保留 http:// 媒体直连地址作为首选，并附加同源 /api/media-proxy 备用地址；浏览器/WebView 直连失败后才尝试代理。代理做 SSRF 基础防护（禁本机/回环/云元数据，内网媒体放行）
 
 ## 实现优先级
 
@@ -214,7 +214,7 @@
 **背景：** 服务器启用 HTTPS（res/certs）后，显示端页面为 https://...:8081/display，加载 http:// 媒体子资源被浏览器/WebView 混合内容策略拦截——手动输入 http:// 媒体地址无法播放，HttpProvider 媒体库（mnt/mnt2）同理。
 
 **方案：**
-1. **sendToDisplay 统一出口重写**：服务器 HTTPS 时，把下发媒体的 http:// URL 重写为同源 `/api/media-proxy?url=<编码>`，覆盖手动 URL 输入 / restore 恢复 / 单文件播放全部路径，显示端零改动
+1. **显示端媒体统一规范化**：初次下发与连接恢复都保留原 URL 为首选；HTTPS 页面只把原始 HTTP URL 加入 `fallbackUrl`，代理只在浏览器/WebView 加载失败后启用
 2. **通用代理端点 `GET /api/media-proxy?url=`**：流式转发上游 + Range 透传（relay 206/200 + Content-Range）+ 15s 超时 + SSRF 基础防护（禁本机/回环/云元数据，内网媒体放行，因媒体库本身即内网资源）
 3. **HttpProvider.getPublicUrl** 改同源 HTTPS 库代理 URL（`/api/media-libraries/{id}/proxy/{path}`，与 SmbProvider 一致），媒体库控制端预览/播放不再被拦
 4. **库代理端点支持 Range**：本地/SMB 有精确 size → 解析 Range 走 206；http 库 size 未知回落全量（不回归）
@@ -222,6 +222,13 @@
 6. **_parseHtml 垃圾过滤**：剔除 fancy-index 表头排序链接（Name/Last modified/Description/Parent Directory）误当媒体项
 
 **范围约定：** 各 Provider getFileStream(path, range) 统一返回 `{ stream, statusCode, headers }`（无 range 200 整流 / 有 range 206 切片），供 proxy 端点 setHeader。
+
+### 2026-10-24 显示端媒体直连优先与重连恢复
+
+- 初次单文件、播放列表、Node 子显示端节点重播和显示端连接恢复共用媒体 payload 规范化。
+- HTTPS 下原始 URL 保持为 `url`；HTTP URL 仅在没有备用地址时生成同源 `/api/media-proxy` `fallbackUrl`。已有 HTTPS/相对备用地址保留，HTTP 备用地址转换为同源代理。
+- 规范化只作用于下发副本，不改媒体库、显示状态或配置中的原始 URL；旧版已经持久化为代理主地址时，尽量从代理查询参数恢复直连地址。
+- 浏览器/WebView 和 Node mpv 仍沿用客户端现有的“主地址加载失败后再使用备用地址”流程。
 
 **改动文件：**
 - src/apps/web-mediacenter/modules/media/media-library-app-service.js

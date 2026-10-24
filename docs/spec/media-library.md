@@ -427,8 +427,8 @@ GET /api/media-libraries/:id/proxy/*
         req close / stream error 时清理
 
 GET /api/media-proxy?url=<编码后的http地址>
-    通用 HTTPS 媒体代理：服务器 HTTPS 时，控制端手动输入的 http:// 媒体 URL
-    由 sendToDisplay 统一重写为同源 /api/media-proxy，绕开浏览器混合内容拦截
+    通用 HTTPS 媒体代理：服务器 HTTPS 且直连 HTTP 资源在浏览器/WebView 中被混合内容策略拦截时，
+    作为同源备用地址 /api/media-proxy 使用；直连地址始终保留为首选
     请求头: 可选 Range: bytes=start-end
     校验:
         url 必须以 http:// 或 https:// 开头
@@ -438,6 +438,36 @@ GET /api/media-proxy?url=<编码后的http地址>
         relay 远端状态码 206/200 与响应头 Content-Type/Content-Range/Accept-Ranges/Content-Length
         stream.pipe(res)
         超时/错误时响应 502/504，客户端断开时中断上游请求
+
+显示端媒体消息 URL 规范化（初次下发、重连恢复、播放列表恢复共用）
+    normalizeDisplayMediaMessage(message, useHttps):
+        payload = 复制消息以及将被规范化的媒体对象/容器 // 不修改持久化状态或调用者对象
+        normalizeMedia(media):
+            如果 media 不是对象，或媒体不是 URL 资源: 原样返回
+            directUrl = media.url
+            fallbackUrl = media.fallbackUrl
+            如果服务器未启用 HTTPS: 原样返回 media
+            如果 directUrl 是 http:// 且 fallbackUrl 为空:
+                fallbackUrl = /api/media-proxy?url=encodeURIComponent(directUrl)
+            如果 fallbackUrl 是 http://:
+                fallbackUrl = /api/media-proxy?url=encodeURIComponent(fallbackUrl)
+            返回 { ...media, url: directUrl, fallbackUrl }
+        如果 message 是单媒体 url 消息: normalizeMedia(message)
+        如果 message.type == playlistStart:
+            对 message.playlist 每项调用 normalizeMedia
+        如果 message.type == restoreState:
+            对 message.state.currentMedia 调用 normalizeMedia
+            对 message.state.currentPlaylist.startData.playlist 每项调用 normalizeMedia
+        返回 payload
+
+    sendToDisplay(displayId, message):
+        outgoing = normalizeDisplayMediaMessage(message, useHttps)
+        只发送 outgoing；不把 fallbackUrl 写回持久化媒体
+
+    显示端连接恢复：
+        从持久化状态生成 restoreState 和 playlistStart
+        两条消息都通过 normalizeDisplayMediaMessage 后发送
+        播放端先请求原始直连 url；资源加载失败后才尝试 fallbackUrl
 ```
 
 ## 前端模块实现
