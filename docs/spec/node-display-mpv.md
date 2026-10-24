@@ -52,7 +52,7 @@ displayId := hostname自动生成，配置文件同名字段被忽略；configPa
 产物 := 示例进入Node独立包，voiceDisplayNodePackage置true；其余已有状态保留，不执行构建发布
 ```
 
-## 鼠标事件桥接（待确认，未实现）
+## 鼠标事件桥接（仅记录，暂缓实现）
 
 ```text
 已有声明 := 常驻mpv会话/JSON IPC、MpvPlayer.receiveEvent、ASS窗口尺寸与旋转、NodeMediaController能力开关
@@ -68,7 +68,7 @@ Lua鼠标键回调 → mouse-pos与OSD尺寸 → 命名空间script-message → 
 重建 → 重新握手/绑定一份；Lua不可用/握手超时 → 明确报错，不停止原媒体播放
 自测 := 键/阶段/坐标与非法事件、四方向逆映射、尺寸/旧会话隔离、重复初始化、关闭与可选Lua失败
 实屏 := 隔离Xvnc内真实鼠标注入与IPC回包验证；不操作当前用户桌面，Windows现场另验
-状态 := 等待用户确认采集范围；没有鼠标业务代码或功能测试结果
+状态 := 用户要求只记录、暂不添加；以下流程为归档草案，不作为当前实现，不启动开发或测试
 ```
 
 ## ASS主题与文字外观（已实现）
@@ -268,4 +268,16 @@ mpv崩溃/IPC失效 → 停止调度、拒绝待处理命令、回收自有进�
 Node退出 → 取消初始化/加载/恢复/动态 → 等待自有mpv有界退出与清理 → 再结束Node
 服务端生成子显示端配置 → 读取并保留本机设置含mediaPlayer → 补缺失默认值并更新地址 → 写回
 本轮改动 → voiceDisplayNodePackage/servicePackage设true → 按规则同步Git；不构建APK/独立包
+```
+
+## Linux常亮现状（仅核对，2026-10-22）
+
+```text
+已有启动 := 平台args + no-config/idle/keep-open/force-window等；没有显式stop-screensaver或Node常亮管理器
+本地Linux args为空 → 使用mpv默认stop-screensaver=yes → 非活跃播放不承诺保持屏保抑制
+暂停/ASS正文/空闲窗口 → 当前实现不保证持续常亮；不把常驻进程等同屏幕常亮
+参考Chromium启动器 := 每10秒xset -dpms；未接入Node
+可用配置入口 := 用户可在支持该选项的mpv版本中，通过已有linux.args设置stop-screensaver=always
+限制 := 有视频输出窗口且平台后端支持时有效；不是系统挂起抑制接口
+本轮 := 只读核对，未改运行代码/本机配置/电源状态；未实施屏幕常亮功能
 ```

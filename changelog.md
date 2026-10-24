@@ -8,7 +8,6 @@
   - 同口径真实骨架舞蹈回归：累计穿透267.566→40.257、穿透帧697→540；隔离衣物动力学，手机局部衣袖蒙皮仍可能交叠，不声称完全消除。
   - 正式回归227通过/1 GPU能力跳过、真实PMX浏览器1/1、SubAI17/17、IK8/8，模板新增姿态断言后10/10。同步design/spec/task/usage/self-test/todo；servicePackage=true待出包，其余状态保留。
 
-
 ### 聊天附件、媒体回收与Node睡眠
 
 - ✅ [2026-10-23] 双端聊天新增文本/图片/视频附件，清空/历史淘汰后按全局引用回收媒体；Node子显示端接通现有睡眠设置、遮罩和唤醒恢复。
@@ -129,6 +128,16 @@
 - ✅ [2026-10-22] 修复报时等TTS加入队列失败的URL is not a constructor：main.js显式使用node:url.URL别名，保留原url模块解析WebSocket连接。
   - tests/node-display-mpv.test.js执行真实导入，移除掩盖冲突的全局URL注入；新增相对/绝对HTTP(S)、非法地址/协议、options与一次错误回调、ws/wss连接参数回归。新回归在旧代码失败，修复后mpv43/43与语音/重连/Windows22/22，共65项通过。
   - 更新Node design/spec/task/usage/self-test/todo；voiceDisplayNodePackage原已true，继续待构建，其他发布状态保留。本轮未构建发布包或修改本机配置，实际设备更新重启后的播报待验。
+
+### Node Linux屏幕常亮现状核查
+
+- ✅ [2026-10-22] 确认Node没有移植Chromium启动器每10秒xset -dpms的逻辑，mpv未显式指定stop-screensaver，暂停/空闲/ASS文本无持续常亮保证。
+  - 核对官方默认yes与本机支持always，记录已有linux.args配置入口和桌面后端限制；同步Node design/spec及可选todo。未改代码、配置、电源策略或发布状态，未执行常亮实机验收。
+
+### Node mpv鼠标点击暂缓
+
+- ✅ [2026-10-22] 按用户“只记录暂不添加”要求归档鼠标点击采集方案，将Node design/spec/task标记为暂缓实现，todo改为可选记录。
+  - 仅更新文档，未添加鼠标采集代码、运行功能测试或变更发布状态；待用户后续明确要求再实施。
 
 ### Chat2API服务端远程登录
 
@@ -14324,7 +14333,6 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
   - VoiceDisplay 按资源逐项清理，单项报错时继续关闭媒体控制器；TUI 销毁和进程退出等待清理完成。`SIGKILL`无法捕获，作为操作系统限制记录。
   - `npm run test:node-display-mpv` 53/53通过，覆盖mpv fixture子进程/IPC临时目录回收、重复退出及清理失败路径。睡眠遮罩原已实现：普通睡眠遮黑媒体并保留信息层，深度睡眠全屏黑遮罩，已有独立真实画面回归。
   - 更新Node子显示端design/spec/task/todo/self-test；`voiceDisplayNodePackage=true`待重新构建，未构建或部署。
-
 ### 显示端重连媒体直连优先
 
 - ✅ [2026-10-24] 修复浏览器/Android 与 Node 子显示端首次播放及重连恢复的媒体 URL 策略不一致。

@@ -143,7 +143,7 @@ ASS文本实施补充：新增textSentenceTtsCancel仅取消可信源显示端�
 
 验证71项通过：mpv42、浏览器布局/主题对照1（15套计算样式与8组窗口旋转）、真实画面5（含两主题×四旋转）、真实IPC1、独立包22。灰底180上的60%黑背景实测峰值72、边缘170；白字、主题彩色像素、黑色软阴影及零透明度背景移除通过。只将voiceDisplayNodePackage标为true，其他产物状态保持本轮前值，未构建或发布包；Windows字体/DPI仍待现场验收。
 
-## mpv鼠标点击采集（2026-10-22，方案待确认）
+## mpv鼠标点击采集（2026-10-22，仅记录，暂缓实现）
 
 用户询问Node能否获取mpv窗口内鼠标点击。现有常驻播放器已具备JSON IPC事件接收，但receiveEvent只处理媒体/属性消息，未接入鼠标。官方Lua键绑定支持鼠标按键及complex按下/松开事件，mouse-pos提供与OSD尺寸一致的坐标和hover状态，client-message可经现有IPC传给Node。
 
@@ -151,9 +151,15 @@ ASS文本实施补充：新增textSentenceTtsCancel仅取消可信源显示端�
 
 拟新增mpv-pointer.lua在自己的mpv会话内绑定鼠标并发送带命名空间的script-message，新增mpv-pointer.js规范化/校验/坐标换算，修改mpv-player.js加载桥接脚本与接收client-message，修改media-controller.js暴露Node本地pointer事件。点击采集会接管对应mpv鼠标键，具体业务动作待下一步指定；不擅自绑定播放暂停或翻页。Linux和Windows共用mpv机制，不新增系统鼠标钩子或生产npm依赖。
 
-加载脚本需要支持Lua的mpv；握手失败或Lua不可用时明确报错并保留媒体播放。媒体能力关闭/退出注销绑定并停止分发，按会话代次丢弃旧事件；重建只安装一份桥接。鼠标移出窗口的失效坐标忽略，窗口尺寸和rotation以当前会话校验，防止旧尺寸事件误命中。双击与单击可能按原生鼠标语义相继产生，本轮仅采集，消费侧业务需要选择处理方式。
+加载脚本需要支持Lua的mpv；握手失败或Lua不可用时明确报错并保留媒体播放。媒体能力关闭/退出注销绑定并停止分发，按会话代次丢弃旧事件；重建只安装一份桥接。鼠标移出窗口的失效坐标忽略，窗口尺寸和rotation以当前会话校验，防止旧尺寸事件误命中。双击与单击可能按原生鼠标语义相继产生，方案仅覆盖采集，消费侧业务需要选择处理方式。
 
-需求技能步骤0：采集能力可实现，后续点击业务尚未指定；建议先确认上述采集范围。主L6输入桥接/事件契约，次L5会话绑定/点击状态，直接开发风险中；等待具体方案确认后再更新实施伪代码并开发。依据为mpv官方manual的Lua key bindings、mouse-pos和client-message章节。本轮仅核对源码/官方接口，未修改生产代码、运行点击功能测试或变更发布状态。
+需求技能步骤0：采集能力可实现，后续点击业务尚未指定；建议先确认上述采集范围。主L6输入桥接/事件契约，次L5会话绑定/点击状态，直接开发风险中；用户明确要求“只记录暂不添加”，本方案仅归档，不进入开发；后续仅在用户重新明确要求时实施。依据为mpv官方manual的Lua key bindings、mouse-pos和client-message章节。本轮仅核对源码/官方接口，未修改生产代码、运行点击功能测试或变更发布状态。
+
+## Linux屏幕常亮现状核对（2026-10-22）
+
+用户询问Node子显示端是否保持Linux屏幕唤醒。核对现有代码后：Node未提供独立的xset/DPMS/桌面idle-inhibit常亮生命周期；mpv启动参数没有显式stop-screensaver，Linux示例与本机args为空。参考scripts/open-chromium-display0.js已每10秒执行xset -dpms，但该逻辑没有移植到Node。
+
+目前仅依赖mpv自身默认stop-screensaver=yes：播放不活跃时可能重新启用屏保，因而暂停、空闲窗口和仅ASS文本不能保证持续常亮。当前开发机mpv选项支持always；可通过现有mediaPlayer.linux.args传入--stop-screensaver=always，让存在mpv视频输出窗口时持续请求抑制屏保，实际支持取决于视频输出/桌面环境，不等同于整机禁止挂起。依据官方https://mpv.io/manual/stable/#options-stop-screensaver及本机mpv --list-options。本轮只核对/记录状态，没有改代码、配置、显示电源策略或运行常亮实机测试。
 
 ## TTS URL is not a constructor（2026-10-22，已修复）
 

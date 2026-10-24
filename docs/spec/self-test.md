@@ -12,7 +12,6 @@
 实机 := Note8临时模块替换，正侧面录像与五手势录像；原文件校验恢复，候选保留，未发布服务包
 ```
 
-
 ## 正式端全身IK验收（2026-10-23）
 
 ```text
@@ -32,9 +31,10 @@
 协议 := 真实SubAI流式桥逐字输入，完整CSV只调用一次，调用行不进入正文/TTS；参数有界传递
 候选 := 自然completed才保存一次；手动抢占/取消零保存；存储失败回报且不重播；schema1迁移/导出导入保持active
 实机 := 正式米娅PMX+真实Worker编译+Human轨道完成，候选保存不改默认，采用才追加并切换
-回归 := test:chat-images 35通过；test:mmd-production 223通过/1跳过；test:chat-streaming 66通过；各套有重复用例不合计独立总数
+回归 := test:chat-images 35通过；test:mmd-production 223通过/1跳过；test:sub-ai-motion 17/17；test:chat-streaming 66通过；各套有重复用例不合计独立总数
 边界 := 模型响应是测试夹具，无真实Provider调用；生成动作质量/手机/多端实屏仍待部署验收
 ```
+
 
 ## Node Linux TTS共享输出回归（2026-10-22）
 
@@ -48,6 +48,7 @@
 实机 := 工作机全静音WAV经aplay的pulse共享输出成功播放完成；mpv与TTS同时输出未确认；不冒充目标设备验收
 范围 := 不改系统ALSA/音频服务、不停止其他应用、不构建发布包；目标设备更新后的混音另验
 ```
+
 
 ## Node TTS真实URL导入回归（2026-10-22）
 
@@ -3012,6 +3013,7 @@ Native输入 := Doubao10052/Qwen image-url/GLM file_id；Responses流与非流�
 命令 := npm run test:chat-images / check:chat2api / test:chat-streaming / test:chat-context
 ```
 
+
 ## 视频上传默认关闭回归（2026-10-23）
 
 ```text
@@ -3021,6 +3023,7 @@ Native输入 := Doubao10052/Qwen image-url/GLM file_id；Responses流与非流�
 结果 := 图片35/35，补充新增默认/显式true之后定向7/7通过
 视频生成 := 只核查网页/source和方案，本轮不创建视频任务、不宣称视频生成成功
 ```
+
 
 ## 主AI原生视频展示验收补充（2026-10-23，待实现）
 
@@ -3032,6 +3035,7 @@ Native输入 := Doubao10052/Qwen image-url/GLM file_id；Responses流与非流�
 续聊 := 视频任务和原账号绑定；主AI下一轮沿原聊天引用，不因输出视频换会话
 边界 := 尚未实现，仅更新验收计划，不将既有图片测试记作视频通过
 ```
+
 
 ## 聊天视频展示与任务实现自测（2026-10-23）
 
@@ -3107,7 +3111,6 @@ LLM := 文件正文预算、视频文件鉴权、原会话续聊去重、重建�
 限制 := SIGKILL无法由Node捕获；fixture进程验证不等同目标设备实机验收
 发布 := voiceDisplayNodePackage=true待构建，未部署
 ```
-
 ## 显示端媒体直连优先与重连恢复（2026-10-24）
 
 ```text
