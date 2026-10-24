@@ -326,6 +326,22 @@ const Controls = {
         };
     },
 
+    setAutoBlackBorders(enabled) {
+        const input = document.getElementById('autoBlackBorders');
+        if (input) input.checked = typeof enabled === 'boolean' ? enabled : true;
+    },
+
+    sendAutoBlackBorders(enabled) {
+        if (!window.currentDisplayId) { this.setAutoBlackBorders(true); return; }
+        window.WebSocketManager?.sendControl('autoBlackBorders', enabled === true);
+    },
+
+    handleAutoBlackBordersConfig(data) {
+        if (data.displayId !== window.currentDisplayId) return;
+        this.setAutoBlackBorders(data.enabled);
+        if (data.error) console.warn('[画面填充]', data.error);
+    },
+
     getDynamicFitConfig() {
         return this.normalizeDynamicFitConfig({
             transitionSeconds: document.getElementById('dynamicFitTransitionSeconds')?.value,

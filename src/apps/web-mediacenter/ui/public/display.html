@@ -722,6 +722,8 @@
     <script src="js/html-to-image.min.js"></script>
     <script src="js/control-mode-utils.js"></script>
     <script src="js/dynamic-fit-controller.js"></script>
+    <script src="js/video-black-borders.js"></script>
+    <script src="js/display-video-black-borders.js"></script>
     <script src="js/media-loop.js"></script>
     <script src="js/sherpa-asr.js"></script>
     <script src="js/pcm-audio-capture.js"></script>
@@ -818,6 +820,10 @@
         let dynamicGeometryMode = 'contain';
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let currentMediaType = 'image';
+        const videoBlackBorders = new VideoBlackBorderController(mediaVideo, {
+            onChange: () => applyCrop(), sleeping: () => isSleepPaused(),
+            onUnavailable: error => console.info('[视频黑边] 当前来源无法读取像素，保留正常播放:', error.name)
+        });
         // 每次换媒体或清空都会失效旧加载，避免迟到的 MHTML 内容和临时信息回填。
         let mediaLoadSequence = 0;
         let htmlMediaAbortController = null;
@@ -2496,7 +2502,7 @@
             const media = getVisibleMediaElement();
             const transitionMs = Number(phase.transitionMs) || 0;
             media.style.transition = transitionMs > 0
-                ? `transform 0.3s ease, object-fit 0.3s ease, width ${transitionMs}ms ease, height ${transitionMs}ms ease`
+                ? `transform 0.3s ease, object-fit 0.3s ease, width ${transitionMs}ms ease, height ${transitionMs}ms ease, left ${transitionMs}ms ease, top ${transitionMs}ms ease`
                 : '';
             if (transitionMs <= 0) {
                 applyCrop();
@@ -2613,6 +2619,7 @@
         }
 
         function applyCrop(options = {}) {
+            mediaVideo.style.clipPath = '';
             if (mediaHtml.style.display !== 'none') {
                 // html 裁剪只在 crop 适配模式下生效，其他适配方式还原默认铺满
                 if (currentFit === 'crop') {
@@ -2660,6 +2667,19 @@
             };
 
             const geometryMode = currentFit === 'dynamic' ? dynamicGeometryMode : currentFit;
+
+            if (media === mediaVideo && currentMediaType === 'video' && videoBlackBorders.enabled
+                && VideoBlackBorders.hasBorder(videoBlackBorders.tracker.rect)) {
+                const layout = VideoBlackBorders.layout({ width: naturalWidth, height: naturalHeight,
+                    windowWidth: containerWidth, windowHeight: containerHeight, rotation: currentRotation,
+                    fit: geometryMode, crop: currentCrop, rect: videoBlackBorders.tracker.rect });
+                if (layout) {
+                    media.classList.add('crop');
+                    Object.assign(media.style, { width: layout.width + 'px', height: layout.height + 'px',
+                        left: layout.left + 'px', top: layout.top + 'px', maxWidth: 'none', maxHeight: 'none', clipPath: layout.clip });
+                    return { ...baseInfo, 状态: '有效画面填充', 有效区域: videoBlackBorders.tracker.rect };
+                }
+            }
 
             // 铺满模式：媒体等比放大覆盖整个容器（超出部分居中裁切）
             if (geometryMode === 'cover') {
@@ -3851,6 +3871,7 @@
 
         function handleRestoreState(state) {
             if (!state) return;
+            videoBlackBorders.setEnabled(state.autoBlackBorders);
 
             if (typeof state.mmdVisible === 'boolean' && window.DisplayStage
                 && typeof window.DisplayStage.setMmdVisible === 'function') {
@@ -5218,21 +5239,60 @@
             };
             const safeDirectUrl = normalizeUrl(directUrl);
             const safeFallbackUrl = normalizeUrl(fallbackUrl);
+            element._mediaFallbackUrl = safeFallbackUrl;
             const source = safeDirectUrl || safeFallbackUrl;
+            // 跨域像素读取需要CORS；若源不支持，先原URL普通直连，避免为检测强制走代理。
+            const setSource = url => {
+                let needsCors = false;
+                if (element === mediaVideo && videoBlackBorders.enabled) {
+                    try {
+                        const sourceUrl = new URL(url, location.href);
+                        needsCors = /^https?:$/.test(sourceUrl.protocol) && sourceUrl.origin !== location.origin;
+                    } catch { /* 无法解析的来源交给原有媒体错误/备用流程，不阻断消息处理。 */ }
+                }
+                if (needsCors) element.crossOrigin = 'anonymous';
+                else element.removeAttribute('crossorigin');
+                element.src = url;
+            };
             element.onerror = () => {
                 if (loadSequence !== mediaLoadSequence) return;
+                if (element === mediaVideo && element.hasAttribute('crossorigin')) {
+                    const directSource = element.src;
+                    element.removeAttribute('crossorigin');
+                    element.src = directSource;
+                    if (reload) element.load();
+                    return;
+                }
                 if (!fallbackUsed && safeFallbackUrl && safeFallbackUrl !== safeDirectUrl) {
                     fallbackUsed = true;
-                    element.src = safeFallbackUrl;
+                    setSource(safeFallbackUrl);
                     if (reload && typeof element.load === 'function') {
                         element.load();
                     }
                 }
             };
-            if (source) element.src = source;
+            if (source) setSource(source);
             if (reload && typeof element.load === 'function') {
                 element.load();
             }
+        }
+
+        // 在当前跨域视频上重新开启时也尝试可读像素的直连，保留播放位置和暂停状态。
+        function retryCurrentVideoBlackBorders() {
+            if (currentMediaType !== 'video' || mediaVideo.srcObject || mediaVideo.hasAttribute('crossorigin')) return;
+            const source = mediaVideo.currentSrc || mediaVideo.src;
+            if (!source) return;
+            try {
+                const url = new URL(source, location.href);
+                if (!/^https?:$/.test(url.protocol) || url.origin === location.origin) return;
+            } catch { return; }
+            const position = mediaVideo.currentTime, paused = mediaVideo.paused, sequence = mediaLoadSequence;
+            mediaVideo.onloadedmetadata = () => {
+                if (sequence !== mediaLoadSequence || currentMediaType !== 'video') return;
+                applyResumeTime(mediaVideo, position); restartDynamicFitAfterMediaLoad();
+                if (paused) mediaVideo.pause(); else playVideoAuto(mediaVideo);
+            };
+            setMediaSourceWithFallback(mediaVideo, source, mediaVideo._mediaFallbackUrl, true);
         }
 
         // MHTML 的网络请求可取消；所有 await 后检查序号，失败回退也不得复活旧媒体。
@@ -5300,6 +5360,7 @@
             }
             const previousMediaType = currentMediaType;
             currentMediaType = data.mediaType || 'image';
+            videoBlackBorders.setActive(currentMediaType === 'video');
             // 图片间切换不碰隐藏的音视频元素；空来源调用 load 也可能让 WebView
             // 重新分配媒体焦点，打断同页正在播报的 TTS。
             if (previousMediaType === 'video' || mediaVideo.getAttribute('src')) {
@@ -5438,6 +5499,7 @@
                 mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || '来自URL';
                 fileNameDisplay.textContent = mediaName;
             } else if (data.type === 'base64') {
+                mediaVideo.removeAttribute('crossorigin');
                 const mimeType = data.mimeType || 'application/octet-stream';
                 const src = 'data:' + mimeType + ';base64,' + data.data;
 
@@ -5505,6 +5567,7 @@
 
         // 清空停止全部媒体生命周期，但保留角色、聊天、监听和画面参数。
         function clearCurrentMedia() {
+            videoBlackBorders.setActive(false);
             mediaLoopPlayers.forEach(player => player.reset());
             mediaLoadSequence += 1;
             htmlMediaAbortController?.abort();
@@ -5542,6 +5605,11 @@
 
         function handleControl(data) {
             switch (data.action) {
+                case 'autoBlackBorders':
+                    const wasBlackBordersEnabled = videoBlackBorders.enabled;
+                    videoBlackBorders.setEnabled(data.value);
+                    if (!wasBlackBordersEnabled && videoBlackBorders.enabled) retryCurrentVideoBlackBorders();
+                    break;
                 case 'mediaLoop':
                     setMediaLoop(data.value);
                     break;
@@ -6614,6 +6682,7 @@
         }
 
         window.addEventListener('pagehide', function() {
+            videoBlackBorders.close();
             displayPageActive = false;
             cancelVoiceInteraction();
             clearDisplayReconnectTimer();

@@ -35,7 +35,7 @@ test('服务端清空保存状态、取消文本路由并只下发所选显示�
     const events = [];
     const responses = [];
     let saveFails = false;
-    const ctx = vm.createContext({ displayVoiceListeningConfig: { handle: () => false },
+    const ctx = vm.createContext({ displayVoiceListeningConfig: { handle: () => false }, chatContextUsage: { handle: () => false },
         displayClients: new Map([['target', { displayId: 'target', state }], ['other', other]]),
         persistDisplayState(display, patch) {
             if (saveFails) throw new Error('save failed');
@@ -233,6 +233,9 @@ test('真实媒体元素清空五种媒体，停止列表并阻止旧MHTML回填
     const page = await browser.newPage();
     await page.setContent(strippedHtml('display.html'));
     await page.addScriptTag({ path: path.join(publicDir, 'js/text-media-player.js') });
+    await page.addScriptTag({ path: path.join(publicDir, 'js/media-loop.js') });
+    await page.addScriptTag({ path: path.join(publicDir, 'js/video-black-borders.js') });
+    await page.addScriptTag({ path: path.join(publicDir, 'js/display-video-black-borders.js') });
     const source = read('display.html');
     const functions = ['stopPlaylist', 'setMediaSourceWithFallback', 'loadMhtmlMedia', 'showMedia',
         'getCurrentPlayableMedia', 'reportPlayState', 'clearCurrentMedia', 'handleControl', 'handleRestoreState']
@@ -241,6 +244,9 @@ test('真实媒体元素清空五种媒体，停止列表并阻止旧MHTML回填
         const [mediaImage, mediaVideo, mediaAudio, mediaHtml, mediaText, fileNameDisplay, waitingMessage] =
             ['mediaImage', 'mediaVideo', 'mediaAudio', 'mediaHtml', 'mediaText', 'fileNameDisplay', 'waitingMessage'].map(id => document.getElementById(id));
         const TextMediaPlayer = window.TextMediaPlayer;
+        const videoBlackBorders = new VideoBlackBorderController(mediaVideo);
+        const mediaLoopPlayers = [MediaLoop.attach(mediaVideo), MediaLoop.attach(mediaAudio)];
+        function setMediaLoop(value) { mediaLoopPlayers.forEach(player => player.set(value)); }
         let currentMediaType = null, mediaLoadSequence = 0, htmlMediaAbortController = null;
         let playlistState = null, savedAutoTts = null, autoTtsEnabled = false;
         let pauseExpected = true, mediaIsPlaying = false, mediaRecoveryAttempts = 0, mediaRecoveryTimer = null;

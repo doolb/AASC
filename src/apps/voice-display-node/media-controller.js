@@ -4,8 +4,8 @@ const { MpvPlayer } = require('./mpv-player');
 const { MpvTextPlayer } = require('./mpv-text-player');
 const { NodeSleepController } = require('./sleep-controller');
 
-const MEDIA_CONTROLS = new Set(['play', 'seek', 'volume', 'clearMedia', 'rotate', 'fit', 'crop', 'dynamicFitConfig', 'textStyle', 'textPlayback', 'mediaLoop', 'sleepSettings', 'sleepActivate', 'sleepOverride']);
-const VISUAL_CONTROLS = new Set(['rotate', 'fit', 'crop', 'dynamicFitConfig']);
+const MEDIA_CONTROLS = new Set(['play', 'seek', 'volume', 'clearMedia', 'rotate', 'fit', 'crop', 'dynamicFitConfig', 'autoBlackBorders', 'textStyle', 'textPlayback', 'mediaLoop', 'sleepSettings', 'sleepActivate', 'sleepOverride']);
+const VISUAL_CONTROLS = new Set(['rotate', 'fit', 'crop', 'dynamicFitConfig', 'autoBlackBorders']);
 
 /** 只适配已有AASC媒体协议，不在本机增加配置HTTP端口或外部命令执行接口。 */
 class NodeMediaController {
@@ -168,7 +168,7 @@ class NodeMediaController {
             }
             if (data.action === 'mediaLoop' && this.restoring) this.restoring.mediaLoop = data.value;
             if (this.pendingRestore) {
-                const field = { rotate: 'rotation', fit: 'fit', crop: 'crop', dynamicFitConfig: 'dynamicFitConfig', volume: 'volume', textStyle: 'textStyle', mediaLoop: 'mediaLoop' }[data.action];
+                const field = { rotate: 'rotation', fit: 'fit', crop: 'crop', dynamicFitConfig: 'dynamicFitConfig', autoBlackBorders: 'autoBlackBorders', volume: 'volume', textStyle: 'textStyle', mediaLoop: 'mediaLoop' }[data.action];
                 if (field) this.pendingRestore[field] = data.value ?? data.rotation;
                 if (data.action === 'crop') this.pendingRestore.fit = 'crop';
             }
@@ -204,6 +204,7 @@ class NodeMediaController {
             if (state.textStyle) await this.text.reflow(state.textStyle);
             if (sequence !== this.sequence) return;
             const operations = sleepRestore ? [sleepRestore] : [];
+            operations.push(this.player.control('autoBlackBorders', typeof state.autoBlackBorders === 'boolean' ? state.autoBlackBorders : true));
             for (const [field, action] of [['rotation', 'rotate'], ['fit', 'fit'], ['dynamicFitConfig', 'dynamicFitConfig'], ['volume', 'volume']]) {
                 if (state[field] !== undefined) operations.push(this.player.control(action, state[field]));
             }

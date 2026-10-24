@@ -1,5 +1,19 @@
 # 自测功能实现文档
 
+## 视频黑边检测与填充（2026-10-24）
+
+```text
+新增入口 := npm run test:video-black-borders；npm run test:video-black-borders:real
+共享 := 四边/单边/无边、压缩近黑、字幕、全黑/暗场、连续不同位置四次确认、恢复与人工框
+浏览器 := 正式display页真实captureStream、四旋转/适应/铺满/动态、真实留白像素、关闭/清空
+跨域 := 无CORS媒体先匿名再原URL普通直连；重新开启保留暂停；控制端权威消息及目标隔离
+Node := 真实fixture IPC/过期token隔离/原生几何/动态插值/能力前记忆/关闭
+真实mpv := 隔离vo=null/ao=null，自建短视频；Lua截图→IPC→JS，旋转回转、暂停零新样本、清空
+关联 := Node55/55，独立包22/22，媒体循环20/20，清空7/7，动态3/3，未知消息1/1
+性能 := 192×108检测1000次平均0.398ms；不含源帧读回/Lua缩小，设备性能另验
+限制 := 未在Android/Windows实机部署；仅servicePackage及voiceDisplayNodePackage待构建
+```
+
 ## Offline子代理动作实机验证（2026-10-24）
 
 ```text

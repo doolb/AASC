@@ -1,3 +1,4 @@
+- 待构建部署与设备验收 [2026-10-24] 视频自动去黑边源码及浏览器/真实mpv回归完成；servicePackage和voiceDisplayNodePackage=true，待更新两包后验Android、Windows及高分辨率取样负载。见 `docs/task/20261024_视频黑边检测与填充.md`。
 - 待服务包构建与发布验收 [2026-10-24] 媒体恢复保留原URL直连、HTTPS代理作失败备用；Android WebView未知消息误清媒体已修复。定向与关联回归19/19通过，Note8 display-umwo5k6l 实际重连后 video readyState=4、paused=false，随后配置消息未清除媒体。`servicePackage=true` 待构建发布后确认；见 `docs/task/20261024_显示端重连直连媒体恢复.md`、`docs/task/20261024_显示端未知WebSocket消息保护媒体恢复.md`。
 - 待自测归因 [2026-10-22] Chat2API speech-upstream.test.js第21行启动间隔>=4ms断言在整套364项中重复失败（其余363通过），该文件单独6项通过；本轮未改语音调度，需核对计时稳定性。
 - 待人工验收 [2026-10-22] 多Provider远程登录：逐个官网验证登录、验证码及凭据保存；隔离本地浏览器和会话自测已通过；共享豆包固定profile/debugPort、关闭仅回收登录tab及断线重连的回归已通过，待部署验收。

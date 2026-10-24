@@ -1,3 +1,5 @@
+- [视频黑边检测与有效画面填充](usage/video-black-borders.md)（服务包和Node独立包待构建部署）
+
 - [正式MMD动作优化、表情与躯干避让](usage/mmd-production-actions.md)（Note8临时验证，待服务包发布）
 
 - [正式显示端全身IK](usage/mmd-fullbody-ik.md)（源码完成，待服务包部署）

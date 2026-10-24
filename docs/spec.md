@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [视频黑边检测、有效画面填充与配置伪代码](spec/video-black-borders.md)
+
 - [控制端媒体循环区间伪代码（单轨双手柄已实现）](spec/control-media-loop.md)
 
 - [SubAI与对话动作实现伪代码](spec/sub-ai-actions.md)

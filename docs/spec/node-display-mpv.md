@@ -1,5 +1,16 @@
 # Node 子显示端常驻 mpv 伪代码
 
+## 视频黑边与填充（2026-10-24）
+
+```text
+control/restoreState.autoBlackBorders → MpvBlackBorders.enabled → 当前视频Lua定时采样
+screenshot-raw video → 最长边192亮度图+代次+旋转 → IPC client-message → 共享检测器/稳定确认
+有效矩形 → 按视频旋转映射 → 当前fit缩放/平移；dynamic按有效矩形几何插值，不叠加原panscan
+clear/load/close/进程失效 → 样本代次失效、清矩形；Lua随进程退出回收
+独立包 → 显式包含共享video-black-borders.js，应用目录包含Lua和Node适配器
+完整伪代码 → docs/spec/video-black-borders.md
+```
+
 ## Linux TTS共享输出（已实现）
 
 ```text

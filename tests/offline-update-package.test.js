@@ -48,6 +48,7 @@ function createFixture() {
     const loopPath = path.join(sourceRoot, 'apps/web-mediacenter/ui/public/js');
     fs.mkdirSync(loopPath, { recursive: true });
     fs.copyFileSync(path.join(__dirname, '../src/apps/web-mediacenter/ui/public/js/media-loop.js'), path.join(loopPath, 'media-loop.js'));
+    fs.copyFileSync(path.join(__dirname, '../src/apps/web-mediacenter/ui/public/js/video-black-borders.js'), path.join(loopPath, 'video-black-borders.js'));
     fs.writeFileSync(path.join(sourceRoot, 'apps/server/boot/server-launcher.js'), 'process.exit(0);\n');
     const { PREFIX, SHARED } = require('../src/apps/server/boot/offline-launcher/launcher-identity');
     for (const relative of [
@@ -193,6 +194,7 @@ test('code-only builds service source without Node subdisplay and creates its si
     assert.ok(nodeEntries.includes('src/framework/observability/console-redirect.js'));
     assert.ok(nodeEntries.includes('src/core/utils/sentence-splitter.js'));
     assert.ok(nodeEntries.includes('src/apps/web-mediacenter/ui/public/js/media-loop.js'));
+    assert.ok(nodeEntries.includes('src/apps/web-mediacenter/ui/public/js/video-black-borders.js'));
     assert.ok(!nodeEntries.includes('src/apps/voice-display-node/config.json'));
     assert.ok(!nodeEntries.some(entry => entry.startsWith('src/apps/voice-display-node/run-task/')));
     assert.ok(!nodeEntries.some(entry => entry.includes('node_modules/.bin/')));

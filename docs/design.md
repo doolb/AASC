@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [视频黑边检测与有效画面填充](design/video-black-borders.md)
+
 - [SubAI专用工作AI与对话动作接入（首版实现，待设备验收）](design/sub-ai-actions.md)
 
 - [Chat2API远程交互登录](design/chat2api-remote-login.md)

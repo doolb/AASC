@@ -13,6 +13,8 @@ const { platformOptions, resolveXauthority, ipcAddress, executeFile } = require(
 const { FIT_MODES, normalizeRotation, normalizeCrop, normalizeDynamic, calculateGeometry } = require('./mpv-geometry');
 const { MpvOverlay, assDocument } = require('./mpv-overlay');
 const { textAss } = require('./mpv-text-renderer');
+const { MpvBlackBorders } = require('./mpv-black-borders');
+const { layout: layoutContent } = require('../web-mediacenter/ui/public/js/video-black-borders');
 
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const MEDIA_TYPES = new Set(['image', 'gif', 'video', 'audio']);
@@ -53,6 +55,8 @@ class MpvPlayer extends EventEmitter {
         this.overlayVersion = 0;
         this.overlayWrite = null;
         this.textPage = null;
+        this.blackBorders = new MpvBlackBorders({ command: command => this.command(command),
+            onChange: () => this.scheduleGeometry(), onUnavailable: error => this.onError(error) });
         this.overlay = new MpvOverlay(() => { void this.queueOverlay(); }, dependencies.overlayClock);
     }
 
@@ -104,7 +108,8 @@ class MpvPlayer extends EventEmitter {
                 `--force-window=${this.overlay.active ? 'immediate' : 'yes'}`, '--fullscreen', '--no-terminal', '--input-terminal=no',
                 '--audio-exclusive=no',
                 ...(this.overlay.active ? ['--osc=no', '--osd-level=0', '--osd-bar=no'] : []),
-                '--image-display-duration=inf', '--loop-file=inf', `--input-ipc-server=${session.address}`];
+                '--image-display-duration=inf', '--loop-file=inf',
+                `--script=${path.join(__dirname, 'mpv-black-borders.lua')}`, `--input-ipc-server=${session.address}`];
             const child = (this.dependencies.spawn || spawn)(this.options.command, args, {
                 env, shell: false, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe']
             });
@@ -197,6 +202,7 @@ class MpvPlayer extends EventEmitter {
     }
 
     receiveEvent(message) {
+        if (message.event === 'client-message') this.blackBorders.receive(message.args);
         if (message.event === 'file-loaded') this.loading?.resolve();
         if (message.event === 'end-file' && message.reason === 'error') {
             const error = new Error(`mpv加载媒体失败：${message.file_error || '无法读取或解码'}`);
@@ -273,6 +279,7 @@ class MpvPlayer extends EventEmitter {
 
     load(media, { paused = false, resumeTime = 0 } = {}) {
         const revision = ++this.revision;
+        this.blackBorders.invalidate();
         this.cancelLoad();
         this.stopDynamic();
         this.paused = paused;
@@ -314,6 +321,7 @@ class MpvPlayer extends EventEmitter {
                 }
                 await this.applyGeometry();
                 if (revision !== this.revision || this.closed) return false;
+                await this.blackBorders.start(media.mediaType === 'video');
                 this.startDynamic();
                 this.reportProgress(true);
                 return true;
@@ -431,6 +439,17 @@ class MpvPlayer extends EventEmitter {
     }
 
     control(action, value) {
+        if (action === 'autoBlackBorders') {
+            this.blackBorders.setEnabled(value);
+            this.stopDynamic();
+            this.geometryVersion += 1;
+            return this.enqueue(async () => {
+                if (!this.current || !this.session?.socket || this.session.disposed) return true;
+                await this.blackBorders.start(this.current.mediaType === 'video');
+                await this.applyGeometry(); this.startDynamic();
+                return true;
+            });
+        }
         if (action === 'mediaLoop') {
             const range = normalizeMediaLoop(value);
             return this.enqueue(async () => {
@@ -488,11 +507,12 @@ class MpvPlayer extends EventEmitter {
         if (!parameters || !dimensions) return null;
         // decoder参数保留文件自身方向，先得到浏览器naturalWidth/videoWidth同义尺寸，再叠加用户旋转。
         const intrinsicTurn = Number(parameters.rotate || 0) % 180 !== 0;
-        return calculateGeometry({
+        const calculate = this.current?.mediaType === 'video' && this.blackBorders.cropped ? layoutContent : calculateGeometry;
+        return calculate({
             width: intrinsicTurn ? parameters.dh : parameters.dw,
             height: intrinsicTurn ? parameters.dw : parameters.dh,
             windowWidth: dimensions.w, windowHeight: dimensions.h,
-            ...this.visual, fit: mode === 'dynamic' ? 'contain' : mode
+            ...this.visual, fit: mode === 'dynamic' ? 'contain' : mode, rect: this.blackBorders.rect
         });
     }
 
@@ -519,6 +539,7 @@ class MpvPlayer extends EventEmitter {
     }
 
     nativePanscan() {
+        if (this.current?.mediaType === 'video' && this.blackBorders.cropped) return 0;
         const values = { contain: 0, cover: 1, dynamic: 0, crop: 0 };
         if (Object.hasOwn(values, this.visual.fit)) return values[this.visual.fit];
         // height/width在任意比例下均等价于contain或cover，沿用网页旋转后的指定轴语义。
@@ -542,7 +563,8 @@ class MpvPlayer extends EventEmitter {
         }
         if (!valid()) return;
         await this.command(['set_property', 'panscan', this.nativePanscan()]);
-        const geometry = this.visual.fit === 'crop' ? this.geometry() : { scaleX: 1, panX: 0, panY: 0 };
+        const geometry = this.visual.fit === 'crop' || this.current.mediaType === 'video' && this.blackBorders.cropped
+            ? this.geometry() : { scaleX: 1, panX: 0, panY: 0 };
         await this.writeGeometry(geometry, valid);
     }
 
@@ -599,7 +621,13 @@ class MpvPlayer extends EventEmitter {
             if (epoch !== this.dynamicEpoch || this.closed || !this.current) return;
             const fraction = Math.max(0, Math.min(1, (Date.now() - transitionStart) / (transitionSeconds * 1000)));
             const panscan = from + (to - from) * fraction;
-            try { await this.command(['set_property', 'panscan', panscan]); }
+            try {
+                if (this.current.mediaType === 'video' && this.blackBorders.cropped) {
+                    const a = this.geometry('contain'), b = this.geometry('cover');
+                    if (a && b) await this.writeGeometry({ ...a, scaleX: a.scaleX + (b.scaleX - a.scaleX) * panscan },
+                        () => epoch === this.dynamicEpoch && !this.closed);
+                } else await this.command(['set_property', 'panscan', panscan]);
+            }
             catch (error) { if (epoch === this.dynamicEpoch) this.onError(error); return; }
             if (epoch !== this.dynamicEpoch) return;
             if (fraction === 1) {
@@ -613,6 +641,7 @@ class MpvPlayer extends EventEmitter {
 
     clear() {
         ++this.revision;
+        this.blackBorders.invalidate();
         this.cancelLoad();
         this.stopDynamic();
         clearTimeout(this.geometryTimer);
@@ -621,7 +650,10 @@ class MpvPlayer extends EventEmitter {
             const current = this.current;
             this.current = null;
             try {
-                if (this.session?.socket && !this.session.disposed) await this.command(['stop']);
+                if (this.session?.socket && !this.session.disposed) {
+                    await this.blackBorders.start(false);
+                    await this.command(['stop']);
+                }
             } finally {
                 if (current?.file) await this.removeTemporary(current.file);
                 this.emit('progress', { isPlaying: false, currentTime: 0, duration: 0 });
@@ -643,6 +675,7 @@ class MpvPlayer extends EventEmitter {
 
     sessionFailed(session, error) {
         if (session.disposed) return;
+        this.blackBorders.invalidate();
         this.stopDynamic();
         this.loading?.reject(error);
         for (const [id, pending] of this.pending) {
@@ -692,6 +725,7 @@ class MpvPlayer extends EventEmitter {
     async close() {
         if (this.closing) return this.closing;
         this.closed = true;
+        this.blackBorders.invalidate();
         this.overlay.close();
         ++this.revision;
         this.cancelLoad();

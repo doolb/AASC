@@ -19,6 +19,8 @@ const config = require('../modules/config/config-app-service');
 const { createMediaLoopService, createMediaLoopToken, normalizeMediaLoop } = require('../modules/media/media-loop-control');
 const { normalizeDisplayMediaMessage } = require('../modules/media/display-media-payload');
 const mediaLoopService = createMediaLoopService({ persist: persistDisplayState, broadcast: broadcastToControls, send: sendToDisplay });
+const { createVideoBlackBordersControl, normalizeEnabled: normalizeAutoBlackBorders } = require('../modules/media/video-black-borders-control');
+const videoBlackBordersControl = createVideoBlackBordersControl({ persist: persistDisplayState, broadcast: broadcastToControls, send: sendToDisplay });
 const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
 const { createGomokuGameService } = require('../modules/game/gomoku-game-service');
@@ -2059,6 +2061,7 @@ function createDisplayState() {
         rotation: 0,
         fit: 'contain',
         dynamicFitConfig: { ...DEFAULT_DYNAMIC_FIT_CONFIG },
+        autoBlackBorders: true,
         crop: { x: 0, y: 0, width: 100, height: 100 },
         volume: 100,
         isPlaying: false,
@@ -8253,6 +8256,7 @@ wss.on('connection', (ws, req) => {
                 showStatusBar: normalizeDisplayStatusBarVisibility(savedState?.showStatusBar),
                 mmdVisible: normalizeMmdVisibility(savedState?.mmdVisible),
                 dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
+                autoBlackBorders: normalizeAutoBlackBorders(savedState?.autoBlackBorders),
                 mediaLoop: normalizeMediaLoop(savedState?.mediaLoop),
                 mediaLoopDuration: savedState?.currentPlaylist?.duration ?? savedState?.currentMediaProgress?.duration ?? 0,
                 vadThreshold: normalizeVadThreshold(savedState?.vadThreshold),
@@ -11275,6 +11279,7 @@ async function handleControlMessageFallback(data, ws) {
                     sendToDisplay(displayId, data.media);
                 } else if (data.type === 'control') {
                     if (mediaLoopService.handle(displayData, data)) return;
+                    if (videoBlackBordersControl.handle(displayData, data)) return;
                     if (data.action === 'mmdVisibility') {
                         const result = updateDisplayMmdVisibility(displayData, data.value);
                         if (!result.ok) sendMmdVisibilityError(ws, displayId, result.message);

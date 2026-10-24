@@ -29,7 +29,7 @@ test('首次临时上传视频经正式showMedia上报时长、启用双手柄�
         <input id="tempMode" type="checkbox" checked><input id="tempMaxSize" value="300">
         <video id="mediaVideo" muted></video><audio id="mediaAudio"></audio><img id="mediaImage">
         <iframe id="mediaHtml"></iframe><div id="mediaText"></div><div id="waitingMessage"></div><div id="fileNameDisplay"></div>`);
-    for (const file of ['media-loop.js', 'control-media-loop.js', 'websocket.js', 'upload.js']) {
+    for (const file of ['media-loop.js', 'control-media-loop.js', 'websocket.js', 'upload.js', 'video-black-borders.js', 'display-video-black-borders.js']) {
         await page.addScriptTag({ path: path.join(publicDir, 'js', file) });
     }
     const display = { displayId: 'temp-display', state: {} };
@@ -77,6 +77,7 @@ test('首次临时上传视频经正式showMedia上报时长、启用双手柄�
         const mediaImage = document.getElementById('mediaImage'), mediaHtml = document.getElementById('mediaHtml');
         const mediaText = document.getElementById('mediaText'), waitingMessage = document.getElementById('waitingMessage');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const videoBlackBorders = new VideoBlackBorderController(mediaVideo);
         const stopHtmlScroll = () => {}, restartDynamicFitAfterMediaLoad = () => {}, activateTemporarily = () => {};
         const applyResumeTime = (media, time) => { if (time) media.currentTime = time; };
         const announceAndReport = () => {};

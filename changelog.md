@@ -1,3 +1,10 @@
+### 视频黑边检测与有效画面填充
+
+- ✅ [2026-10-24] 网页/Android显示页及Node/mpv新增自动去黑边，以有效画面参与适应、铺满、高度/宽度、动态和手动裁剪。
+  - 控制端“画面填充”下增加默认开启的按显示端开关；复用WebSocket配置、严格持久化、权威广播和重连恢复。新增共享检测/几何、网页canvas采样、Node Lua/IPC桥和独立包共享文件声明；不修改原视频。
+  - 每秒取样、四次稳定确认，暗场/全黑保护，换源/清空/退出隔离过期结果；跨域不支持像素读取时保留原URL普通直连。检测器192×108平均0.398ms，不含像素读回/Lua开销。
+  - 新增8/8、真实mpv1/1；Node55/55、独立包22/22、媒体循环20/20、清空7/7、动态3/3、未知消息1/1。同步design/spec/task/usage/self-test/todo；仅servicePackage、voiceDisplayNodePackage=true，未出包，Android/Windows及实际设备性能待部署验收。
+
 ### Offline动作SubAI与MMD动作优化
 
 - ✅ [2026-10-24] 本次动作子代理生成MPL，经ADB Note8 min74/code161真实准备/播放并保存为候选；没有替换默认版本、未调用真实Provider或主AI。
