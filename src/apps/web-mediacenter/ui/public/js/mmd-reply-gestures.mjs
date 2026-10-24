@@ -4,8 +4,8 @@ const head = (operation, value) => bone('head', operation, value);
 const both = (arm, elbow, wrist = 0) => ['l', 'r'].flatMap(side => [
     bone('arm_' + side, 'bend forward', arm), bone('elbow_' + side, 'bend forward', elbow),
     bone('wrist_' + side, 'bend forward', wrist)]);
-const paws = (arm, elbow, wrist = 0) => [...both(arm, elbow, wrist),
-    ...['l', 'r'].map(side => bone('arm_' + side, 'turn left', 60))];
+const paws = (arm, elbow, wrist = 0, turn = 60) => [...both(arm, elbow, wrist),
+    ...['l', 'r'].map(side => bone('arm_' + side, 'turn left', turn))];
 const right = (arm, elbow, wrist = 0) => [bone('arm_r', 'bend backward', arm),
     bone('elbow_r', 'bend forward', elbow), bone('wrist_r', 'sway right', wrist)];
 const entries = [
@@ -38,9 +38,49 @@ const entries = [
     ['摊手', '🤷', '耸肩,无奈,shrug', '', [head('sway right', 8), ...both(5, 70, -15)], [head('sway left', 8), ...both(0, 80, -20)]],
     ['拒绝', '🙅', '不要,不行,拒绝手势,no', '', [head('turn left', 12), ...both(15, 80)], [head('turn right', 12), ...both(20, 90)]],
 ];
+// 五个常用手势分别编排：时间为单轮比例，末段留给缓收；表情不随关节角度等幅放大。
+// 每个关键姿态完整定义当前控制部位，头、肘、腕分时到位，避免整条手臂同时机械摆动。
+const timelines = {
+    挥手: { expression: '开心', expressionStrength: 0.22, keyframes: [
+        [0.14, [...right(-12, 45), bone('arm_r', 'turn right', 25), head('sway right', 2)], 0.3],
+        [0.30, [...right(22, 115, -12), bone('arm_r', 'turn right', 80), head('sway right', 4)], 1],
+        [0.44, [...right(22, 115, 16), bone('arm_r', 'turn right', 80), head('sway right', 4)], 1],
+        [0.57, [...right(20, 112, -12), bone('arm_r', 'turn right', 80), head('sway right', 3)], 1],
+        [0.69, [...right(18, 108, 10), bone('arm_r', 'turn right', 80), head('sway right', 2)], 0.8],
+        [0.82, [...right(-12, 45), bone('arm_r', 'turn right', 25), head('sway right', 1)], 0.3]
+    ] },
+    鞠躬: { expression: '开心', expressionStrength: 0.12, keyframes: [
+        [0.12, [bone('upper_body', 'bend forward', 2), head('bend forward', 5)], 0.4],
+        [0.34, [bone('upper_body', 'bend forward', 24), head('bend forward', 9)], 1],
+        [0.52, [bone('upper_body', 'bend forward', 24), head('bend forward', 11)], 1],
+        [0.74, [bone('upper_body', 'bend forward', 10), head('bend forward', 8)], 0.6],
+        [0.88, [bone('upper_body', 'bend forward', 2), head('bend forward', 3)], 0.2]
+    ] },
+    比心: { expressionStrength: 0.24, keyframes: [
+        [0.12, [...paws(30, 65, -4), head('bend forward', 2)], 0.3],
+        [0.25, [...paws(45, 125, -15), head('bend forward', 3)], 0.8],
+        [0.43, [...paws(45, 125, -15), head('sway right', 4)], 1],
+        [0.62, [...paws(44, 124, -12), head('sway right', 4)], 1],
+        [0.79, [...paws(30, 70, -5), head('bend forward', 2)], 0.4]
+    ] },
+    猫咪撒娇: { expressionStrength: 0.22, keyframes: [
+        [0.16, [...paws(25, 70, 0, 30), head('sway right', 3)], 0.3],
+        [0.32, [...paws(32, 110, 12, 30), head('sway right', 9)], 0.8],
+        [0.46, [...paws(32, 114, -6, 30), head('sway right', 9)], 1],
+        [0.62, [...paws(30, 110, 10, 30), head('sway left', 7)], 1],
+        [0.78, [...paws(24, 70, 0, 30), head('sway left', 3)], 0.4]
+    ] },
+    拥抱: { expressionStrength: 0.22, keyframes: [
+        [0.16, [...paws(5, 30, 0, 8), head('bend forward', 2)], 0.3],
+        [0.34, [...paws(12, 85, -3, 20), head('bend forward', 3)], 0.8],
+        [0.52, [...paws(14, 130, -5, 30), head('sway right', 4)], 1],
+        [0.65, [...paws(14, 130, -5, 30), head('sway right', 3)], 1],
+        [0.82, [...paws(8, 55, -2, 15), head('bend forward', 1)], 0.4]
+    ] }
+};
 const emotionNames = new Set(['开心', '悲伤', '生气', '惊讶', '害羞', '眨眼', '平静']);
 export const ADVANCED_GESTURES = Object.freeze(entries.map(([name, icon, aliases, expression, first, second]) => Object.freeze({
-    name, icon, aliases: Object.freeze([name, ...aliases.split(',').filter(Boolean)]), expression,
+    ...timelines[name], name, icon, aliases: Object.freeze([name, ...aliases.split(',').filter(Boolean)]), expression: timelines[name]?.expression ?? expression,
     kind: emotionNames.has(name) ? 'emotion' : 'action',
     first: Object.freeze(first.map(Object.freeze)), second: Object.freeze(second.map(Object.freeze))
 })));

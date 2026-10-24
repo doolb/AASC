@@ -818,3 +818,5 @@
 - 待独立归因 [2026-10-23] 旧display-sleep-mode.test.js依赖运行中的8081，初始化activationUntil非零失败；本轮未改网页睡眠逻辑，不将此项记通过。Node隔离睡眠8/8和真实mpv渲染6/6已通过。
 
 - 待构建部署与设备验收 [2026-10-24] Node子显示端按键/信号统一回收修复已完成，`npm run test:node-display-mpv` 53/53通过；需重新构建Node独立包并在目标子显示端验收按键退出、mpv进程消失和睡眠/深度睡眠遮罩。`voiceDisplayNodePackage=true`，未构建或部署。见 `docs/task/20261024_Node子显示端退出回收mpv.md`。
+
+- 待服务包发布验收 [2026-10-24] 五手势/舞蹈轻表情和躯干避让源码已完成、Note8临时验证；正式发布后验更新路径。局部衣袖蒙皮交叠及跨机绝对deadline时差另作后续评估。见 `docs/task/20261024_Offline动作SubAI实测与动作优化.md`。

@@ -8,7 +8,8 @@ export function createHighLevelMpl({ name, duration = 2, strength = 0.7, count =
     if (!Number.isFinite(duration) || duration < 0.2 || duration > 15 || !Number.isFinite(strength) || strength < 0 || strength > 1
         || !Number.isInteger(count) || count < 1 || count > 8) throw new Error('高级动作参数超出范围');
     const angle = value => Number((value * strength).toFixed(3));
-    const bones = [...new Set([...gesture.first, ...gesture.second].map(([bone]) => bone))];
+    const sequence = gesture.keyframes;
+    const bones = [...new Set((sequence ? sequence.flatMap(frame => frame[1]) : [...gesture.first, ...gesture.second]).map(([bone]) => bone))];
     const resolved = gesture.expression === '平静'
         ? { names: [...new Set(['开心', '悲伤', '生气', '惊讶', '害羞', '眨眼', '闭眼'].flatMap(name => resolveReplyExpression(morphs, name).names))] }
         : resolveReplyExpression(morphs, gesture.expression);
@@ -17,6 +18,17 @@ export function createHighLevelMpl({ name, duration = 2, strength = 0.7, count =
     const commands = pose => pose.map(([bone, operation, value]) => ` ${bone} ${operation} ${angle(value)};`).join('\n');
     const weight = gesture.expression === '平静' ? 0 : strength;
     const rest = bones.map(bone => ` ${bone} reset;`).join('\n');
+    if (sequence) {
+        // 姿态显式归零后再赋值，缺失的轴不继承上个关键帧；收尾及重复边界都回到基线。
+        const poses = [`@pose rest {\n${rest}\n${face(0)}\n}`];
+        sequence.forEach(([, pose, amount], index) => poses.push(`@pose step${index} {\n${rest}\n${commands(pose)}\n${face(Number((weight * gesture.expressionStrength * amount).toFixed(4)))}\n}`));
+        const frames = [' 0: rest;'];
+        for (let cycle = 0; cycle < count; cycle++) {
+            for (const [index, [at]] of sequence.entries()) frames.push(` ${((cycle + at) * duration / count).toFixed(4)}: step${index};`);
+            frames.push(` ${((cycle + 1) * duration / count).toFixed(4)}: rest;`);
+        }
+        return `${poses.join('\n')}\n@animation gesture {\n${frames.join('\n')}\n}\nmain {\n gesture;\n}`;
+    }
     const poses = `@pose rest {\n${rest}\n${face(0)}\n}\n@pose first {\n${commands(gesture.first)}\n${face(weight)}\n}\n@pose second {\n${commands(gesture.second)}\n${face(weight)}\n}`;
     const frames = [' 0: rest;'];
     for (let index = 0; index < count; index++) {

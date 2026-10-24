@@ -1,3 +1,4 @@
+import { createDanceExpressionSampler } from './mmd-reply-expressions.mjs';
 import { createHumanIK } from './mmd-human-ik.mjs';
 import { validateMotionSource, validateMotionSampler } from './mmd-motion-policy.mjs';
 import { GESTURES } from './mmd-reply-gestures.mjs';
@@ -277,8 +278,9 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                     warnings.push('当前PMX缺少' + gesture.expression + '表情，仅播放骨骼动作');
                 }
                 const result = await mplSampler(source, bound, signal, check); check(); buffer = result.buffer;
-                layers.push(layer(result.sampler, { ...intent, strength: (intent.strength ?? 0.7) > 0 ? 1 : 0,
-                    gazeStrength: intent.strength ?? 0.7, duration: baseDuration }));
+                layers.push({ ...layer(result.sampler, { ...intent, strength: (intent.strength ?? 0.7) > 0 ? 1 : 0,
+                    gazeStrength: intent.strength ?? 0.7, duration: baseDuration }),
+                    gestureCycle: gesture?.keyframes ? baseDuration / (intent.count ?? 1) : 0 });
                 warnings.push(...result.sampler.warnings);
             }
             const cycleDuration = Math.max(baseDuration, ...layers.map(l => l.start + l.duration));
@@ -292,6 +294,11 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             const expression = intent.expression || version?.expression;
             if (expression) layers.push(layer(expressionSampler(expression, duration),
                 { strength: intent.strength ?? 1, mask: ['face'], duration }));
+            if (!expression && remote?.id === 'dance' && !version
+                && !layers.some(item => item.sampler.tracks.some(track => track.kind === 'morph'))) {
+                const face = createDanceExpressionSampler(bound.morphs, duration);
+                if (face.tracks.length) layers.push(layer(face, { duration, mask: ['face'], strength: intent.strength ?? remote.strength ?? 1 }));
+            }
             if (!layers.length) throw new Error('需要动作或表情');
             check();
             const prepared = Object.freeze({ duration, buffer, warnings });

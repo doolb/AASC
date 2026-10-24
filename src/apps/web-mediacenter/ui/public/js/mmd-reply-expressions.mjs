@@ -39,3 +39,20 @@ export function replyExpressionWeights(events, seconds) {
     for (const [index, weight] of current.weights) weights.set(index, Math.max(0, weight * amount));
     return [...weights];
 }
+
+// 内置无表情舞蹈的轻量眉/嘴角层。眼部继续使用原生理眨眼，元音口型不纳入此层。
+export function createDanceExpressionSampler(morphs, duration) {
+    const resolved = resolveReplyExpression(morphs, '开心');
+    const corners = new Set(['口角上げ', '微笑', 'smile']);
+    const weights = resolved.weights.filter(([index]) => {
+        const item = morphs.find(morph => morph.index === index);
+        return item?.panel === 1 || (item?.panel === 3 && corners.has(item.name.trim()));
+    });
+    const smooth = value => value * value * (3 - 2 * value);
+    return { duration, tracks: weights.map(([index]) => ({ kind: 'morph', index, evaluate(time) {
+        const phase = Math.max(0, Math.min(1, time / duration));
+        const envelope = smooth(Math.min(1, phase / 0.12, (1 - phase) / 0.18));
+        // 固定缓慢起伏避免僵硬笑脸；不新建随机循环或计时器。
+        return [0.18 * envelope * (0.9 + 0.1 * Math.cos(phase * Math.PI * 4))];
+    } })) };
+}

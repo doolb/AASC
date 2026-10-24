@@ -43,7 +43,7 @@
 - [MMD-AR统一灯光预设伪代码（已实现）](spec/mmd-ar-lighting-presets.md)
 
 
-- [独立MMD通用角色控制、MPL修正与PMX全身IK伪代码（已实现，本地构建）](spec/mmd-human-interface.md)
+- [MMD Human控制、正式手势/躯干避让与PMX全身IK伪代码](spec/mmd-human-interface.md)
 
 - [独立MMD-AR回复识别与动作调度](spec/mmd-ar-ai-reply.md)
 

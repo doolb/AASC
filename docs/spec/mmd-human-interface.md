@@ -1,5 +1,23 @@
 # 独立 MMD-AR HumanInterfaceElement 实现
 
+## 动作审美与舞蹈肘部避让伪代码（2026-10-24，已实现）
+
+```text
+已有声明 := GESTURES + createHighLevelMpl + Human混合器/生理层 + 固定dance VMD + armAvoidance
+已验数据流 := 会话子代理MPL → 正式协调器（手机时钟）→ APK原prepareMpl → 真实完成 → IndexedDB候选追加；默认版本保持
+新增定义 := GestureTimeline { keyframes: [归一时间, 骨骼命令, 表情系数], expressionStrength }
+编译 := 每个关键姿态先重置本动作涉及骨骼 → 写入该帧完整姿态 → 每轮起末rest → 按duration/count缩放时间；旧模板保留first/second路径
+舞蹈表情 := 内置remote.id=dance且无显式表情且源VMD无Morph → 眉/嘴角低强度包络；不占眼部；通过现有manual/transient合成优先级让位
+手势回归 := 五手势每轮前10%/后25%使用平滑混合包络，权重退回当前基础动作而非固定模型待机；gaze占用同步释放
+避让快照 := 检测器跳过双静态，故只在局部快照标记手臂snapshot.dynamic=true；不改PMX type或物理刚体
+静态躯干 := bindings(hips,waist,upperBody,chest)对应且非动态的骨骼索引；只允许这些type=0对手肘链接触
+模板 := 五类动作专属关键帧 → 时长/count按原契约缩放 → 头/肘/腕错相和有限微动作 → 编译采样 → 首尾恢复
+表情 := 当前模型支持的Morph → 独立低强度包络 → 既有Human混合 → 显式眼部占用/口型优先 → 完成释放
+舞蹈 := 固定VMD原样读取 → 运行时轻量表情层；不更换已校验原文件
+避让 := 当前PMX碰撞快照 → 动态衣物 + 语义躯干运动学代理白名单 → 排除同臂/相邻/无碰撞许可 → 肘/前臂接触目标 → 有限上臂/肘修正 → 平滑恢复
+验收 := 同设备/镜头/参数的正面与侧面录像 + 穿透深度/帧比例/修正跳变/耗时 → 优化前后对照；未实测不宣称更美或消除穿模
+```
+
 ## 正式端全身IK迁移伪代码（2026-10-23，已实现）
 
 ```text

@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const folder = path.resolve(__dirname, '../3rd/mmd-ar-test');
-const load = name => import(pathToFileURL(path.join(folder, name)).href);
+const load = name => import(pathToFileURL(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js', name.replace(/^web-/, 'mmd-'))).href);
 
 test('共享目录28类语义唯一，所有实际/候选符号都有对应入口且逐个可解析', async t => {
     const { ADVANCED_GESTURES, REPLY_SYMBOLS } = await load('web-reply-gestures.mjs');
@@ -109,7 +109,7 @@ test('全部28类模板经固定WASM真实编译，Morph时间线有效且真实
                 if (frame.frame === 0 || frame.frame === 90) assert.equal(frame.weight, 0, gesture.name);
             }
             if (prepared.frames.length && strength === 0.7) faces++;
-            if (gesture.name === '比心' && strength === 0.7) {
+            if (['比心', '挥手'].includes(gesture.name) && strength === 0.7) {
                 // 使用PMX真实父子骨骼检查双手确实靠近胸前，不能仅凭模板名称声称比心。
                 const THREE = await import('three'), root = new THREE.Group();
                 const bones = pmx.bones.map(b => { const bone = new THREE.Bone(); bone.name = b.name; bone.position.fromArray(b.position); return bone; });
@@ -117,12 +117,18 @@ test('全部28类模板经固定WASM真实编译，Morph时间线有效且真实
                     if (b.parentIndex >= 0) { bones[i].position.sub(new THREE.Vector3(...pmx.bones[b.parentIndex].position)); bones[b.parentIndex].add(bones[i]); }
                     else root.add(bones[i]);
                 });
-                for (const motion of vmd.motions.filter(m => m.frameNum === 11)) bones.find(b => b.name === motion.boneName)?.quaternion.fromArray(motion.rotation);
+                for (const motion of vmd.motions.filter(m => m.frameNum === (gesture.name === '比心' ? 11 : 13))) bones.find(b => b.name === motion.boneName)?.quaternion.fromArray(motion.rotation);
                 root.updateMatrixWorld(true);
                 const wrists = ['左手首', '右手首'].map(name => bones.find(b => b.name === name).getWorldPosition(new THREE.Vector3()));
-                assert.ok(wrists.every(p => Math.abs(p.x) < 1 && p.y > 12 && p.z > 1));
-                assert.ok(Math.abs(wrists[0].x + wrists[1].x) < 1e-5);
-                t.diagnostic('比心默认强度双腕=' + JSON.stringify(wrists.map(p => p.toArray())));
+                if (gesture.name === '比心') {
+                    assert.ok(wrists.every(p => Math.abs(p.x) < 1 && p.y > 12 && p.z > 1));
+                    assert.ok(Math.abs(wrists[0].x + wrists[1].x) < 1e-5);
+                } else {
+                    const elbow = bones.find(b => b.name === '右ひじ' || b.name === '右肘').getWorldPosition(new THREE.Vector3());
+                    assert.ok(wrists[1].y > elbow.y + 1, '挥手需竖起前臂而非水平前伸');
+                    assert.ok(wrists[1].x < -1, '右手不能跨身体中线');
+                }
+                t.diagnostic(gesture.name + '默认强度双腕=' + JSON.stringify(wrists.map(p => p.toArray())));
             }
         }
     } finally { compiler.free(); }
@@ -150,4 +156,59 @@ test('已缩放模板保留低强度头部跟随占用，普通层及零强度�
         if (!strength) assert.ok(head.quaternion.angleTo(new THREE.Quaternion()) < 1e-6);
         mixer.clear(); mixer.restore();
     }
+});
+
+test('五手势使用独立时序、重复边界回零、低强度表情；舞蹈不占眼和元音', async () => {
+    const { createHighLevelMpl } = await load('web-reply-actions.mjs');
+    const { createDanceExpressionSampler } = await load('web-reply-expressions.mjs');
+    const morphs = [
+        { name: 'にこり', panel: 1, supported: true, index: 0 },
+        { name: '笑い', panel: 2, supported: true, index: 1 },
+        { name: '口角上げ', panel: 3, supported: true, index: 2 },
+        { name: 'あ', panel: 3, supported: true, index: 3 }
+    ];
+    const sources = ['挥手', '鞠躬', '比心', '猫咪撒娇', '拥抱'].map(name => createHighLevelMpl({ name, duration: 4, count: 2 }, morphs));
+    for (const source of sources) {
+        assert.match(source, /2.0000: rest;/); assert.match(source, /4.0000: rest;/);
+        assert.ok([...source.matchAll(/morph "[^"]+" ([\d.]+);/g)].every(match => +match[1] <= 0.7 * 0.24 + 1e-8));
+    }
+    assert.equal(new Set(sources).size, 5);
+    const sampler = createDanceExpressionSampler(morphs, 15.2);
+    assert.deepEqual(sampler.tracks.map(track => track.index), [0, 2]);
+    for (const track of sampler.tracks) {
+        assert.equal(track.evaluate(0)[0], 0); assert.equal(track.evaluate(15.2)[0], 0);
+        for (let t = 0; t < 15.2; t += 0.1) assert.ok(track.evaluate(t)[0] >= 0 && track.evaluate(t)[0] <= 0.18);
+    }
+    assert.equal(createDanceExpressionSampler([], 2).tracks.length, 0);
+});
+
+test('精编手势每轮缓收回当前基础姿态，手动表情及瞬态口型仍覆盖舞蹈', async () => {
+    const THREE = await import('three');
+    const { createHumanMixer } = await load('web-human-mixer.mjs');
+    const { createDanceExpressionSampler } = await load('web-reply-expressions.mjs');
+    const { createManualExpressions } = await load('web-expressions.mjs');
+    const bone = new THREE.Bone(), mesh = new THREE.Group(); mesh.add(bone); mesh.morphTargetInfluences = [0];
+    const base = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.6);
+    const model = { mesh, bones: [{ bone }], morphs: [], allowed: () => true };
+    const mixer = createHumanMixer(); let clock = 0;
+    mixer.start({ owner: 'gesture', duration: 4, fade: 0, clock: () => clock, layers: [{ start: 0, duration: 4,
+        strength: 1, gestureCycle: 2, sampler: { duration: 4, tracks: [{ kind: 'bone', index: 0,
+            property: 'quaternion', evaluate: () => [0, 0, 0, 1] }] } }] });
+    for (const time of [0, 1.9, 2, 3.9, 4]) {
+        mixer.restore(); bone.quaternion.copy(base); clock = time; mixer.mix(model);
+        assert.ok(bone.quaternion.angleTo(base) < 0.07, '重复与结束须恢复当前基础姿态');
+    }
+    mixer.clear();
+    // 混合入口的实际优先级由表情控制器统一处理，不给舞蹈另开直接写Morph的通道。
+    mesh.geometry = { userData: { MMD: { morphs: [{ name: '口角上げ', panel: 3, supported: true }] } } };
+    const controller = createManualExpressions({ getMesh: () => mesh, getProfile: () => ({ modelUrl: 'test' }),
+        getHelper: () => null, onChanged() {} });
+    const face = createDanceExpressionSampler([{ index: 0, name: '口角上げ', panel: 3, supported: true }], 4);
+    controller.setHuman(mesh.uuid, [[0, face.tracks[0].evaluate(2)[0]]]);
+    assert.ok(mesh.morphTargetInfluences[0] > 0 && mesh.morphTargetInfluences[0] <= 0.18);
+    controller.set(0, 0.4); assert.equal(mesh.morphTargetInfluences[0], 0.4);
+    controller.setTransient(mesh.uuid, [[0, 0.8]]); assert.equal(mesh.morphTargetInfluences[0], 0.8);
+    controller.setTransient(mesh.uuid, []); assert.equal(mesh.morphTargetInfluences[0], 0.4);
+    controller.clear(); controller.setHuman(mesh.uuid, []); assert.equal(mesh.morphTargetInfluences[0], 0);
+    controller.dispose();
 });

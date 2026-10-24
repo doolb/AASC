@@ -43,7 +43,7 @@
 - [MMD-AR统一灯光预设（已实现，本地构建）](design/mmd-ar-lighting-presets.md)
 
 
-- [独立MMD通用HumanInterfaceElement与PMX全身IK（已实现，本地构建）](design/mmd-human-interface.md)
+- [MMD Human控制、正式手势优化与PMX全身IK（源码已实现，发布状态见模块文档）](design/mmd-human-interface.md)
 
 - [独立MMD-AR AI回复表情与分层动作](design/mmd-ar-ai-reply.md)
 

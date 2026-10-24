@@ -94,12 +94,18 @@ export function createHumanMixer() {
                 for (const [layerIndex, layer] of request.layers.entries()) {
                     if (time < layer.start || time > layer.start + layer.duration) continue;
                     const local = time - layer.start, windowFade = Math.min(fade, layer.duration / 3);
-                    const windowEnvelope = windowFade && (layer.start > 0 || layer.duration < request.duration)
+                    let windowEnvelope = windowFade && (layer.start > 0 || layer.duration < request.duration)
                         ? clamp(Math.min(local / windowFade, (layer.duration - local) / windowFade)) : 1;
+                    // 精编手势逐轮淡回当前基础动作，避免reset关键帧把角色拉向绑定姿态后突然收手。
+                    const phase = layer.gestureCycle ? (local % layer.gestureCycle) / layer.gestureCycle : 0;
+                    if (layer.gestureCycle) {
+                        const edge = clamp(Math.min(phase / 0.1, (1 - phase) / 0.25));
+                        windowEnvelope *= edge * edge * (3 - 2 * edge);
+                    }
                     const weight = clamp(layer.strength * envelope * windowEnvelope);
                     // 模板已缩放角度时，采样权重与跟随占用分开；普通VMD/MPL继续使用原权重。
                     const gazeWeight = layer.strength > 0 ? clamp((layer.gazeStrength ?? layer.strength) * envelope * windowEnvelope) : 0;
-                    const releasing = (!request.loop && fade > 0 && request.duration - time <= fade)
+                    const releasing = (layer.gestureCycle > 0 && phase >= 0.75) || (!request.loop && fade > 0 && request.duration - time <= fade)
                         || (windowFade > 0 && (layer.start > 0 || layer.duration < request.duration)
                             && layer.duration - local <= windowFade);
                     const sampleTime = Math.min(layer.sampler.duration, (time - layer.start) * (layer.speed || 1));

@@ -61,6 +61,11 @@ export function createHumanArmAvoidance() {
                 if (descends(model.mesh.skeleton.bones[index], elbow.bone)) sideByIndex.set(index, side);
             }
         }
+        // 只把可靠语义映射的躯干运动学代理作为障碍；不放开肩、同臂或包裹手臂的静态衣袖。
+        const torso = new Set(['hips', 'waist', 'upperBody', 'chest'].map(key => model.bindings['bones:' + key])
+            .filter(item => item && !item.dynamic).map(item => item.index));
+        // 窄阶段跳过双静态；这里只标记可由本求解器移动的快照，绝不改变实际刚体type。
+        for (const body of snapshot.bodies) if (body && animated.has(body.params.boneIndex)) body.dynamic = true;
         const n = snapshot.bodies.length, jointPairs = new Set();
         for (const joint of model.mesh.geometry.userData.MMD.constraints || []) {
             jointPairs.add(Math.min(joint.rigidBodyIndex1, joint.rigidBodyIndex2) * n + Math.max(joint.rigidBodyIndex1, joint.rigidBodyIndex2));
@@ -70,7 +75,8 @@ export function createHumanArmAvoidance() {
             const a = snapshot.bodies[Math.floor(key / n)], b = snapshot.bodies[key % n];
             if (!a?.available || !b?.available) return true;
             const left = sideByIndex.has(a.params.boneIndex), right = sideByIndex.has(b.params.boneIndex);
-            return left === right || (left ? b.params.type === 0 : a.params.type === 0);
+            const obstacle = left ? b.params : a.params;
+            return left === right || (obstacle.type === 0 && !torso.has(obstacle.boneIndex));
         } };
         state.available = snapshot.valid && arms.length > 0;
         state.reason = state.available ? '' : '缺少可靠手臂链或对应刚体';

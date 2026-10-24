@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 
 async function fixture(shape = 0) {
     const THREE = await import('three');
-    const { createHumanArmAvoidance } = await import('../3rd/mmd-ar-test/web-human-arm-avoidance.mjs');
+    const { createHumanArmAvoidance } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-arm-avoidance.mjs');
     const arm = new THREE.Bone(), elbow = new THREE.Bone(), wrist = new THREE.Bone();
     arm.position.set(0, 2, 0); elbow.position.set(1, 0, 0); wrist.position.set(1, 0, 0); arm.add(elbow); elbow.add(wrist);
     const mesh = new THREE.SkinnedMesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial()); mesh.add(arm);
@@ -47,7 +47,7 @@ test('关闭避让从当前修正600ms释放，开关默认/保存/存储失败�
     assert.ok(arm.quaternion.angleTo(before) < 0.01);
     for (let i = 0; i < 36; i++) frame(false);
     assert.ok(arm.quaternion.angleTo(new THREE.Quaternion()) < 1e-6);
-    const { readArmAvoidancePreference: read } = await import('../3rd/mmd-ar-test/web-human-arm-avoidance.mjs');
+    const { readArmAvoidancePreference: read } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-arm-avoidance.mjs');
     assert.equal(read({ getItem: () => null }), true); assert.equal(read({ getItem: () => 'false' }), false);
     assert.equal(read({ getItem() { throw new Error('不可用'); } }), true); avoidance.dispose();
 });
@@ -281,4 +281,85 @@ test('旋转暂停读取原求解空间，避免未同步COM产生虚假接触�
     assert.ok(snapshot.bodies[1].position.distanceTo(original) > 1);
     assert.ok(cloth.distanceTo(original) < 1e-6);
     physics.disposed = true; assert.equal(snapshot.sample(physics, model.groups.rightArm), false);
+});
+
+test('运动学躯干仅通过语义白名单接触，仍遵守关节和碰撞组排除并平滑恢复', async () => {
+    const f = await fixture(2);
+    const torso = new f.THREE.Bone(); torso.position.copy(f.cloth); f.mesh.add(torso);
+    f.mesh.skeleton.bones.push(torso);
+    const body = f.mesh.geometry.userData.MMD.rigidBodies[1]; body.type = 0; body.boneIndex = 3;
+    assert.equal(f.frame().contacts, 0, '未识别的静态物体不能阻塞手臂');
+    f.model.bindings['bones:chest'] = { bone: torso, index: 3, dynamic: false };
+    f.avoidance.reset(); assert.ok(f.frame().contacts > 0, '真正的静态躯干应被检测');
+    for (let i = 0; i < 90; i++) f.frame();
+    assert.equal(f.avoidance.getState().remaining, 0);
+    assert.ok(f.avoidance.getState().correctionDegrees <= 35);
+    torso.position.set(20, 20, 20);
+    for (let i = 0; i < 40; i++) f.frame();
+    for (const bone of [f.arm, f.elbow]) assert.ok(bone.quaternion.angleTo(new f.THREE.Quaternion()) < 1e-6);
+    torso.position.copy(f.cloth); f.avoidance.reset();
+    f.mesh.geometry.userData.MMD.constraints = [{ rigidBodyIndex1: 0, rigidBodyIndex2: 1 }];
+    assert.equal(f.frame().contacts, 0, '相邻关节不可互相推开');
+    f.mesh.geometry.userData.MMD.constraints = []; body.groupTarget = 0; f.avoidance.reset();
+    assert.equal(f.frame().contacts, 0); f.avoidance.dispose();
+});
+
+test('真实米娅完整舞蹈：相同躯干检测口径比较原始姿态与避让结果，骨长与角速度有界', async t => {
+    const fs = require('node:fs'), path = require('node:path');
+    const { makeModel } = require('./helpers/mmd-human-real-pmx');
+    const { model, T } = await makeModel(false);
+    const { STATIC_MMD_RELEASE } = require('../src/apps/server/modules/mmd/mmd-resource-service');
+    const root = path.resolve(__dirname, '../3rd/mmd-ar-test/model-cache', STATIC_MMD_RELEASE.version, 'mmd');
+    const read = file => { const b = fs.readFileSync(file); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
+    const { Parser } = await import('../src/apps/web-mediacenter/ui/public/js/vendor/three/libs/mmdparser.module.js');
+    const pmx = new Parser().parsePmx(read(path.join(root, 'miya/miya.pmx')), true);
+    // 与Loader相同，把PMX世界绑定位置换成骨骼局部刚体偏移；此测试隔离衣物动力学。
+    model.mesh.geometry.userData.MMD.rigidBodies = pmx.rigidBodies.map(body => ({ ...body,
+        position: body.position.map((value, axis) => value - (pmx.bones[body.boneIndex]?.position[axis] || 0)) }));
+    model.mesh.geometry.userData.MMD.constraints = pmx.constraints;
+    const { createHumanSampler } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-vmd.mjs');
+    const { createHumanArmAvoidance } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-arm-avoidance.mjs');
+    const { createHumanRigidSnapshot } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-rigid-snapshot.mjs');
+    const { createPrimitiveContacts } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-xpbd-collision.mjs');
+    const sampler = createHumanSampler(read(path.join(root, 'motions/miya-default.vmd')), model);
+    const snapshot = createHumanRigidSnapshot(model.mesh), detector = createPrimitiveContacts(), avoidance = createHumanArmAvoidance();
+    const torso = new Set(['hips', 'waist', 'upperBody', 'chest'].map(key => model.bindings['bones:' + key]?.index));
+    const hands = new Set();
+    for (const side of ['left', 'right']) model.bindings['bones:' + side + 'Elbow'].bone.traverse(bone => {
+        const index = model.mesh.skeleton.bones.indexOf(bone); if (index >= 0) hands.add(index);
+    });
+    for (const body of snapshot.bodies) if (hands.has(body.params.boneIndex)) body.dynamic = true;
+    const n = snapshot.bodies.length, delta = new T.Vector3();
+    const excluded = { has(key) {
+        const a = snapshot.bodies[Math.floor(key / n)].params, b = snapshot.bodies[key % n].params;
+        return !((hands.has(a.boneIndex) && torso.has(b.boneIndex)) || (hands.has(b.boneIndex) && torso.has(a.boneIndex)));
+    } };
+    const measure = () => {
+        snapshot.sample(null, hands);
+        return Math.max(0, ...detector.scan(snapshot.bodies, excluded).map(c => delta.copy(c.localA).applyQuaternion(c.a.quaternion).add(c.a.position)
+            .sub(c.localB.clone().applyQuaternion(c.b.quaternion).add(c.b.position)).dot(c.normal)));
+    };
+    const totals = { before: 0, after: 0, beforeFrames: 0, afterFrames: 0, maxBefore: 0, maxAfter: 0 };
+    const lengths = model.bones.map(b => b.restPosition.length());
+    for (let frame = 0; frame <= Math.round(sampler.duration * 60); frame++) {
+        avoidance.restore();
+        for (const track of sampler.tracks) if (track.kind === 'bone') {
+            const bone = model.bones[track.index].bone;
+            (track.property === 'position' ? bone.position : bone.quaternion).fromArray(track.evaluate(frame / 60));
+        }
+        model.mesh.updateMatrixWorld(true); const before = measure();
+        avoidance.apply(model, null, 1 / 60, true); const after = measure(), state = avoidance.getState();
+        totals.before += before; totals.after += after;
+        totals.beforeFrames += before > 0.001; totals.afterFrames += after > 0.001;
+        totals.maxBefore = Math.max(totals.maxBefore, before); totals.maxAfter = Math.max(totals.maxAfter, after);
+        assert.ok(state.correctionDegrees <= 35 + 1e-5); assert.ok(state.stepDegrees <= 35 / 0.6 / 60 + 1e-4);
+        for (const side of ['left', 'right']) for (const part of ['Elbow', 'Wrist']) {
+            const b = model.bindings['bones:' + side + part]; assert.ok(Math.abs(b.bone.position.length() - lengths[b.index]) < 1e-5);
+        }
+    }
+    avoidance.dispose(); detector.dispose();
+    t.diagnostic(JSON.stringify(totals));
+    assert.ok(totals.beforeFrames > 0, '夹具必须真实触发躯干接触');
+    assert.ok(totals.after < totals.before, '整段舞蹈累计穿透应下降');
+    assert.ok(totals.afterFrames <= totals.beforeFrames, '穿透帧数不得增加');
 });
