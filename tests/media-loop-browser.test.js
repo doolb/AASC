@@ -116,6 +116,8 @@ test('15套正式主题中两手柄实际可见，分秒小数/小时与进位�
                 // 中文字体加载会改变标签高度；等待截图同样会等待的字体布局，再采样手柄坐标。
                 await new Promise(requestAnimationFrame);
                 await document.fonts.ready;
+                // 原生range从disabled恢复后的手柄可能下一次合成才重绘；等待完整绘制周期后再取像素。
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
                 const rect = document.getElementById('mediaLoopRange').getBoundingClientRect();
                 return [startPercent, endPercent].map(percent => ({ x: rect.x + 10 + (rect.width - 20) * percent / 100,
                     y: rect.y + rect.height / 2 - 6 }));

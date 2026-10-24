@@ -498,6 +498,7 @@ test('几何与网页真实applyCrop一致：横竖媒体、窗口、四方向�
                     vm.runInNewContext(`${source.slice(start, end)}; applyCrop();`, {
                         mediaImage: element, mediaVideo: { style: { display: 'none' } }, mediaHtml: { style: { display: 'none' } },
                         currentRotation: rotation, currentFit: fit, dynamicGeometryMode: 'contain', currentCrop: crop,
+                        blackBorderBaseTransition: null,
                         document: { getElementById: () => ({ clientWidth: windowWidth, clientHeight: windowHeight }) }, _cropLog() {}
                     });
                     const turned = rotation % 180 !== 0;
@@ -809,7 +810,7 @@ test('重连恢复尚未完成时，新媒体/清空优先，旧恢复不得覆�
     await controller.setCapabilities({ mediaRendering: true });
     let release;
     player.control = action => action === 'clearMedia' ? player.clear()
-        : action === 'autoBlackBorders' ? Promise.resolve() : new Promise(resolve => { release = resolve; });
+        : ['autoBlackBorders', 'blackBorderTransition'].includes(action) ? Promise.resolve() : new Promise(resolve => { release = resolve; });
     const restoring = controller.restore({ rotation: 90, currentMedia: media('http://localhost/old') });
     await controller.handleMedia(media('http://localhost/new'));
     release();

@@ -50,7 +50,7 @@
     "test:mmd-hmr-web:wasm": "node --test tests/mmd-ar-hmr2-web-wasm.integration.js",
     "test": "node --test tests/*.test.js",
     "test:media-loop": "node --test tests/media-loop*.test.js tests/media-control-layout.test.js tests/display-video-loop.test.js tests/audio-media-ui.test.js",
-    "test:video-black-borders": "node --test tests/video-black-borders.test.js tests/video-black-borders-browser.test.js tests/node-display-mpv-black-borders.test.js",
+    "test:video-black-borders": "node --test tests/video-black-borders.test.js tests/video-black-borders-frames.test.js tests/video-black-borders-browser.test.js tests/node-display-mpv-black-borders.test.js",
     "test:video-black-borders:real": "node --test tests/video-black-borders.integration.js",
     "demo:gomoku-ui": "node scripts/demo/gomoku-ui-demo.js",
     "demo:game-chat": "node scripts/demo/game-chat-session.js",

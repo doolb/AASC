@@ -6,16 +6,19 @@ const { normalizeEnabled } = require('../../../web-mediacenter/ui/public/js/vide
 function createVideoBlackBordersControl({ persist, broadcast, send }) {
     return {
         handle(display, data) {
-            if (data.action !== 'autoBlackBorders') return false;
+            const fields = { autoBlackBorders: 'autoBlackBorders', blackBorderTransition: 'blackBorderTransition' };
+            const field = Object.hasOwn(fields, data.action) ? fields[data.action] : null;
+            if (!field) return false;
             const reply = error => broadcast({ type: 'autoBlackBordersConfig', displayId: display.displayId,
-                enabled: normalizeEnabled(display.state.autoBlackBorders), ...(error ? { error } : {}) });
-            if (typeof data.value !== 'boolean') { reply('自动去黑边必须为布尔值'); return true; }
+                enabled: normalizeEnabled(display.state.autoBlackBorders), transition: normalizeEnabled(display.state.blackBorderTransition),
+                ...(error ? { error } : {}) });
+            if (typeof data.value !== 'boolean') { reply('黑边设置必须为布尔值'); return true; }
             try {
-                persist(display, { autoBlackBorders: data.value }, { requireSave: true });
-                display.state.autoBlackBorders = data.value;
-                send(display.displayId, { type: 'control', action: 'autoBlackBorders', value: data.value });
+                persist(display, { [field]: data.value }, { requireSave: true });
+                display.state[field] = data.value;
+                send(display.displayId, { type: 'control', action: data.action, value: data.value });
                 reply();
-            } catch { reply('自动去黑边保存失败，请重试'); }
+            } catch { reply('黑边设置保存失败，请重试'); }
             return true;
         }
     };

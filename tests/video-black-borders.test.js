@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { detect, Tracker, FULL, hasBorder, layout, unrotateRect, normalizeEnabled } =
+const { detect, detectFrame, detectNative, Tracker, FULL, hasBorder, layout, unrotateRect, normalizeEnabled } =
     require('../src/apps/web-mediacenter/ui/public/js/video-black-borders');
 const { createVideoBlackBordersControl } = require('../src/apps/server/modules/media/video-black-borders-control');
 
@@ -12,6 +12,18 @@ function frame({ width = 192, height = 108, x = 0, y = 0, w = width, h = height,
     return { pixels, width, height };
 }
 const read = options => { const f = frame(options); return detect(f.pixels, f.width, f.height); };
+
+test('原生逐帧元数据保持暗场/面积保护与安全余量，固有旋转在共享计算器映射', () => {
+    const bounds = { frameWidth: 1280, frameHeight: 720, x: 180, y: 90, width: 900, height: 540, pblack: 47 };
+    const rect = detectNative(bounds);
+    assert.ok(rect.x < 180 / 1280 && rect.y < 90 / 720);
+    assert.ok(rect.width > 900 / 1280 && rect.height > 540 / 720);
+    assert.equal(detectNative({ ...bounds, pblack: 99 }), null);
+    assert.equal(detectNative({ ...bounds, width: -12 }), null);
+    assert.equal(detectNative({ ...bounds, x: 900 }), null);
+    assert.equal(detectNative({ ...bounds, width: 20, height: 20 }), null);
+    assert.deepEqual(detectFrame({ nativeBounds: bounds, rotation: 270 }), unrotateRect(rect, 270));
+});
 
 test('上下、左右、四边黑边仅留下一个采样像素安全余量', () => {
     for (const options of [{ y: 15, h: 78 }, { x: 24, w: 144 }, { x: 20, w: 152, y: 12, h: 84 }]) {
@@ -39,16 +51,16 @@ test('黑边中的可见字幕阻止继续裁切，压缩近黑与小亮点不�
     assert.equal(detect(dark, 192, 108), null);
 });
 
-test('连续四个不同位置稳定确认，暗场打断候选且不撤销已确认黑边', () => {
+test('连续两个不同位置稳定确认，暗场打断候选且不撤销已确认黑边', () => {
     const tracker = new Tracker(), rect = read({ y: 15, h: 78 });
-    for (let stamp = 0; stamp < 3; stamp += 1) assert.equal(tracker.push(rect, stamp), false);
-    assert.equal(tracker.push(rect, 2), false);
+    assert.equal(tracker.push(rect, 0), false);
+    assert.equal(tracker.push(rect, 0), false);
     assert.deepEqual(tracker.rect, FULL);
-    assert.equal(tracker.push(rect, 3), true);
-    assert.equal(tracker.push(null, 4), false);
+    assert.equal(tracker.push(rect, 1), true);
+    assert.equal(tracker.push(null, 2), false);
     assert.ok(hasBorder(tracker.rect));
-    for (let stamp = 5; stamp < 8; stamp += 1) assert.equal(tracker.push(FULL, stamp), false);
-    assert.equal(tracker.push(FULL, 8), true);
+    assert.equal(tracker.push(FULL, 3), false);
+    assert.equal(tracker.push(FULL, 4), true);
     assert.deepEqual(tracker.rect, FULL);
     tracker.reset(); assert.equal(tracker.stamp, null); assert.equal(tracker.count, 0);
 });
@@ -81,6 +93,7 @@ test('开关持久化后下发与广播，非法/保存失败返回旧权威值�
         broadcast: value => replies.push(value), send: (...args) => sent.push(args) });
     assert.equal(normalizeEnabled(undefined), true); assert.equal(normalizeEnabled(false), false);
     assert.equal(service.handle(display, { action: 'fit' }), false);
+    assert.equal(service.handle(display, { action: 'constructor', value: true }), false);
     service.handle(display, { action: 'autoBlackBorders', value: 'false' });
     assert.equal(saved.length, 0); assert.equal(replies.at(-1).enabled, true);
     service.handle(display, { action: 'autoBlackBorders', value: false });
@@ -90,4 +103,9 @@ test('开关持久化后下发与广播，非法/保存失败返回旧权威值�
     fail = true; service.handle(display, { action: 'autoBlackBorders', value: true });
     assert.equal(display.state.autoBlackBorders, false); assert.equal(replies.at(-1).enabled, false);
     assert.equal(sent.length, 1); assert.ok(replies.at(-1).error);
+    fail = false;
+    service.handle(display, { action: 'blackBorderTransition', value: false });
+    assert.equal(display.state.autoBlackBorders, false, '过渡开关不改变去黑边开关');
+    assert.equal(display.state.blackBorderTransition, false); assert.equal(replies.at(-1).transition, false);
+    assert.deepEqual(sent.at(-1), ['d1', { type: 'control', action: 'blackBorderTransition', value: false }]);
 });

@@ -61,6 +61,7 @@ function createProjectFixture() {
     fs.mkdirSync(loopPath, { recursive: true });
     fs.copyFileSync(path.join(__dirname, '../src/apps/web-mediacenter/ui/public/js/media-loop.js'), path.join(loopPath, 'media-loop.js'));
     fs.copyFileSync(path.join(__dirname, '../src/apps/web-mediacenter/ui/public/js/video-black-borders.js'), path.join(loopPath, 'video-black-borders.js'));
+    fs.copyFileSync(path.join(__dirname, '../src/apps/web-mediacenter/ui/public/js/video-black-borders-worker.js'), path.join(loopPath, 'video-black-borders-worker.js'));
     return { projectRoot, appRoot };
 }
 
@@ -94,6 +95,7 @@ test('standalone ZIP keeps runtime paths, dependencies and signed content identi
     assert.ok(entries.includes('src/framework/observability/system-monitor.js'));
     assert.ok(entries.includes('src/apps/web-mediacenter/ui/public/js/media-loop.js'));
     assert.ok(entries.includes('src/apps/web-mediacenter/ui/public/js/video-black-borders.js'));
+    assert.ok(entries.includes('src/apps/web-mediacenter/ui/public/js/video-black-borders-worker.js'));
     assert.ok(entries.includes('src/framework/observability/console-redirect.js'));
     assert.ok(entries.includes('src/core/utils/sentence-splitter.js'));
     assert.ok(!entries.includes('src/apps/voice-display-node/config.json'));

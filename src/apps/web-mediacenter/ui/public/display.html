@@ -820,8 +820,11 @@
         let dynamicGeometryMode = 'contain';
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let currentMediaType = 'image';
+        let blackBorderTransition = true;
+        let blackBorderTransitionTimer = null;
+        let blackBorderBaseTransition = null;
         const videoBlackBorders = new VideoBlackBorderController(mediaVideo, {
-            onChange: () => applyCrop(), sleeping: () => isSleepPaused(),
+            onChange: (_rect, animate) => applyVideoBlackBorderChange(animate), sleeping: () => isSleepPaused(),
             onUnavailable: error => console.info('[视频黑边] 当前来源无法读取像素，保留正常播放:', error.name)
         });
         // 每次换媒体或清空都会失效旧加载，避免迟到的 MHTML 内容和临时信息回填。
@@ -2498,6 +2501,7 @@
         }
 
         function applyDynamicPhase(phase) {
+            cancelBlackBorderTransition();
             dynamicGeometryMode = phase.mode;
             const media = getVisibleMediaElement();
             const transitionMs = Number(phase.transitionMs) || 0;
@@ -2543,6 +2547,7 @@
         }
 
         function applyFit(fit) {
+            cancelBlackBorderTransition();
             if (fit !== 'dynamic') {
                 stopDynamicFit();
             }
@@ -2570,6 +2575,34 @@
                 return;
             }
             applyCrop();
+        }
+
+        function cancelBlackBorderTransition() {
+            clearTimeout(blackBorderTransitionTimer); blackBorderTransitionTimer = null;
+            if (blackBorderBaseTransition !== null) mediaVideo.style.transition = blackBorderBaseTransition;
+            blackBorderBaseTransition = null;
+        }
+
+        // CSS过渡只用于已确认的边界变化，动态填充已有过渡时长优先，避免两套时序抢写。
+        function applyVideoBlackBorderChange(animate) {
+            if (!animate || !blackBorderTransition || currentMediaType !== 'video') {
+                cancelBlackBorderTransition(); applyCrop(); return;
+            }
+            if (currentFit === 'dynamic' && blackBorderBaseTransition === null && /width/.test(mediaVideo.style.transition)) {
+                applyCrop({ preserveMediaSize: true }); return;
+            }
+            const current = { width: mediaVideo.offsetWidth, height: mediaVideo.offsetHeight,
+                left: mediaVideo.offsetLeft, top: mediaVideo.offsetTop, clip: getComputedStyle(mediaVideo).clipPath };
+            cancelBlackBorderTransition();
+            blackBorderBaseTransition = mediaVideo.style.transition;
+            mediaVideo.style.transition = 'none'; mediaVideo.classList.add('crop');
+            Object.assign(mediaVideo.style, { width: current.width + 'px', height: current.height + 'px',
+                left: current.left + 'px', top: current.top + 'px', maxWidth: 'none', maxHeight: 'none',
+                clipPath: current.clip === 'none' ? 'inset(0% 0% 0% 0%)' : current.clip });
+            void mediaVideo.offsetWidth;
+            mediaVideo.style.transition = 'transform 0.3s ease, width 200ms ease, height 200ms ease, left 200ms ease, top 200ms ease, clip-path 200ms ease';
+            applyCrop({ preserveMediaSize: true });
+            blackBorderTransitionTimer = setTimeout(() => { cancelBlackBorderTransition(); applyCrop(); }, 220);
         }
 
         let _cropRafId = null;
@@ -2619,7 +2652,7 @@
         }
 
         function applyCrop(options = {}) {
-            mediaVideo.style.clipPath = '';
+            if (blackBorderBaseTransition === null) mediaVideo.style.clipPath = '';
             if (mediaHtml.style.display !== 'none') {
                 // html 裁剪只在 crop 适配模式下生效，其他适配方式还原默认铺满
                 if (currentFit === 'crop') {
@@ -2630,16 +2663,16 @@
                 return;
             }
             const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
-
-            media.classList.remove('crop');
+            const keepBlackBorderPosition = media === mediaVideo && blackBorderBaseTransition !== null;
+            if (!keepBlackBorderPosition) media.classList.remove('crop');
             if (!options.preserveMediaSize) {
                 media.style.width = '';
                 media.style.height = '';
             }
-            media.style.left = '';
-            media.style.top = '';
-            media.style.maxWidth = '';
-            media.style.maxHeight = '';
+            if (!keepBlackBorderPosition) {
+                media.style.left = ''; media.style.top = '';
+                media.style.maxWidth = ''; media.style.maxHeight = '';
+            }
 
             const container = document.getElementById('mediaContainer');
             const containerWidth = container.clientWidth;
@@ -2669,7 +2702,7 @@
             const geometryMode = currentFit === 'dynamic' ? dynamicGeometryMode : currentFit;
 
             if (media === mediaVideo && currentMediaType === 'video' && videoBlackBorders.enabled
-                && VideoBlackBorders.hasBorder(videoBlackBorders.tracker.rect)) {
+                && (VideoBlackBorders.hasBorder(videoBlackBorders.tracker.rect) || blackBorderBaseTransition !== null)) {
                 const layout = VideoBlackBorders.layout({ width: naturalWidth, height: naturalHeight,
                     windowWidth: containerWidth, windowHeight: containerHeight, rotation: currentRotation,
                     fit: geometryMode, crop: currentCrop, rect: videoBlackBorders.tracker.rect });
@@ -3871,6 +3904,7 @@
 
         function handleRestoreState(state) {
             if (!state) return;
+            blackBorderTransition = VideoBlackBorders.normalizeEnabled(state.blackBorderTransition);
             videoBlackBorders.setEnabled(state.autoBlackBorders);
 
             if (typeof state.mmdVisible === 'boolean' && window.DisplayStage
@@ -5605,6 +5639,10 @@
 
         function handleControl(data) {
             switch (data.action) {
+                case 'blackBorderTransition':
+                    blackBorderTransition = VideoBlackBorders.normalizeEnabled(data.value);
+                    if (!blackBorderTransition) { cancelBlackBorderTransition(); applyCrop(); }
+                    break;
                 case 'autoBlackBorders':
                     const wasBlackBordersEnabled = videoBlackBorders.enabled;
                     videoBlackBorders.setEnabled(data.value);

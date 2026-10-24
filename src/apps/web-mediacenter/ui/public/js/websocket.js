@@ -333,6 +333,7 @@ const WebSocketManager = {
             
             if (data.displayId === window.currentDisplayId) {
                 window.Controls?.setAutoBlackBorders?.(data.state.autoBlackBorders);
+                window.Controls?.setBlackBorderTransition?.(data.state.blackBorderTransition);
                 window.ControlMediaLoop?.restore(data.displayId, data.state);
                 // 睡眠状态（切换显示端/getState 响应）：有值显示真实状态，未上报过则按钮回落「设置」
                 if (window.Controls) {

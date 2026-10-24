@@ -336,9 +336,20 @@ const Controls = {
         window.WebSocketManager?.sendControl('autoBlackBorders', enabled === true);
     },
 
+    setBlackBorderTransition(enabled) {
+        const input = document.getElementById('blackBorderTransition');
+        if (input) input.checked = typeof enabled === 'boolean' ? enabled : true;
+    },
+
+    sendBlackBorderTransition(enabled) {
+        if (!window.currentDisplayId) { this.setBlackBorderTransition(true); return; }
+        window.WebSocketManager?.sendControl('blackBorderTransition', enabled === true);
+    },
+
     handleAutoBlackBordersConfig(data) {
         if (data.displayId !== window.currentDisplayId) return;
         this.setAutoBlackBorders(data.enabled);
+        this.setBlackBorderTransition(data.transition);
         if (data.error) console.warn('[画面填充]', data.error);
     },
 

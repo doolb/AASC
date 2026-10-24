@@ -247,7 +247,7 @@ test('真实媒体元素清空五种媒体，停止列表并阻止旧MHTML回填
         const videoBlackBorders = new VideoBlackBorderController(mediaVideo);
         const mediaLoopPlayers = [MediaLoop.attach(mediaVideo), MediaLoop.attach(mediaAudio)];
         function setMediaLoop(value) { mediaLoopPlayers.forEach(player => player.set(value)); }
-        let currentMediaType = null, mediaLoadSequence = 0, htmlMediaAbortController = null;
+        let currentMediaType = null, mediaLoadSequence = 0, htmlMediaAbortController = null, blackBorderTransition = true;
         let playlistState = null, savedAutoTts = null, autoTtsEnabled = false;
         let pauseExpected = true, mediaIsPlaying = false, mediaRecoveryAttempts = 0, mediaRecoveryTimer = null;
         let controlModeEnabled = true, currentHtmlScroll = {}, htmlProgressTimer = null;

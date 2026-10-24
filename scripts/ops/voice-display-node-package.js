@@ -14,7 +14,8 @@ const OBSERVABILITY_FILES = Object.freeze([
 ]);
 const RUNTIME_SUPPORT_FILES = Object.freeze([...OBSERVABILITY_FILES, 'src/core/utils/sentence-splitter.js',
     'src/apps/web-mediacenter/ui/public/js/media-loop.js',
-    'src/apps/web-mediacenter/ui/public/js/video-black-borders.js']);
+    'src/apps/web-mediacenter/ui/public/js/video-black-borders.js',
+    'src/apps/web-mediacenter/ui/public/js/video-black-borders-worker.js']);
 const SIGNATURE_ALGORITHM = 'SHA256withRSA';
 
 function assertVersion(version) {

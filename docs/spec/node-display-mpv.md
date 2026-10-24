@@ -3,11 +3,11 @@
 ## 视频黑边与填充（2026-10-24）
 
 ```text
-control/restoreState.autoBlackBorders → MpvBlackBorders.enabled → 当前视频Lua定时采样
-screenshot-raw video → 最长边192亮度图+代次+旋转 → IPC client-message → 共享检测器/稳定确认
-有效矩形 → 按视频旋转映射 → 当前fit缩放/平移；dynamic按有效矩形几何插值，不叠加原panscan
-clear/load/close/进程失效 → 样本代次失效、清矩形；Lua随进程退出回收
-独立包 → 显式包含共享video-black-borders.js，应用目录包含Lua和Node适配器
+control/restoreState.autoBlackBorders → MpvBlackBorders.enabled → 自有lavfi逐帧元数据优先、截图兼容回退
+视频PTS → 当前候选+代次+固有旋转 → IPC client-message → 消费上次完成结果 → Worker单任务计算 → ACK放行下一样本
+两帧确认有效矩形 → 当前fit缩放/平移；blackBorderTransition默认true → 约200ms插值，否则立即提交
+短过渡结束 → 恢复dynamic调度；clear/load/close/进程失效 → 取消过渡、隔离旧结果；关闭回收Worker
+停止Lua → 只移除自身分析滤镜，保留用户滤镜；独立包显式包含共享检测器和Worker，应用目录包含Lua与Node适配器
 完整伪代码 → docs/spec/video-black-borders.md
 ```
 

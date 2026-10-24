@@ -45,6 +45,25 @@
         return { x: left / width, y: top / height, width: (high - left) / width, height: (low - top) / height };
     }
 
+    /** 原生滤镜已逐帧扫描亮度；JS校验暗场/面积/边界，并补与小图检测相同的安全余量。 */
+    function detectNative(bounds) {
+        const { x, y, width, height, frameWidth: w, frameHeight: h, pblack } = bounds;
+        if (![x, y, width, height, w, h, pblack].every(Number.isFinite) || w < 16 || h < 16 || w > 32768 || h > 32768 ||
+            x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > w || y + height > h || pblack < 0 || pblack > 92) return null;
+        const margins = [x / w, y / h, (w - x - width) / w, (h - y - height) / h];
+        if (margins.some(value => value > 0.34) || width * height < w * h * 0.25) return null;
+        const pad = Math.max(w, h) / 192;
+        const left = x < pad * 2 ? 0 : x - pad, top = y < pad * 2 ? 0 : y - pad;
+        const high = w - x - width < pad * 2 ? w : x + width + pad;
+        const low = h - y - height < pad * 2 ? h : y + height + pad;
+        return { x: left / w, y: top / h, width: (high - left) / w, height: (low - top) / h };
+    }
+
+    function detectFrame(frame) {
+        const rect = frame.nativeBounds ? detectNative(frame.nativeBounds) : detect(frame.pixels, frame.width, frame.height);
+        return rect && unrotateRect(rect, frame.rotation || 0);
+    }
+
     class Tracker {
         constructor() { this.reset(); }
         reset() { this.rect = { ...FULL }; this.candidate = null; this.count = 0; this.stamp = null; }
@@ -54,9 +73,87 @@
             if (!rect) { this.candidate = null; this.count = 0; return false; }
             if (close(this.candidate, rect)) { this.candidate = union(this.candidate, rect); this.count += 1; }
             else { this.candidate = { ...rect }; this.count = 1; }
-            if (this.count < 4 || close(this.rect, this.candidate, 0.002)) return false;
+            if (this.count < 2 || close(this.rect, this.candidate, 0.002)) return false;
             this.rect = { ...this.candidate };
             return true;
+        }
+    }
+
+    /** 当前新帧只消费上次完成结果；计算单在途，慢计算期间不保存等待处理的帧。 */
+    class FramePipeline {
+        constructor({ compute, onResult, onError = () => {}, onReady = () => {}, createWorker } = {}) {
+            this.compute = compute || detectFrame;
+            this.onResult = onResult; this.onError = onError; this.onReady = onReady; this.createWorker = createWorker;
+            this.worker = null; this.closed = false; this.epoch = 0; this.sequence = 0; this.busy = null;
+            this.disposals = new Set(); this.reset();
+        }
+        reset() {
+            this.epoch += 1; this.completed = null; this.lastStamp = null;
+            this.stats = { frames: 0, submitted: 0, completed: 0, skipped: 0, applied: 0 };
+        }
+        prepare() {
+            if (this.closed || this.worker || !this.createWorker) return;
+            try {
+                const worker = this.createWorker(); this.worker = worker;
+                const message = data => {
+                    if (this.worker !== worker || data?.id !== this.busy?.id) return;
+                    this.finish(this.busy, data.rect, data.error ? new Error(data.error) : null);
+                };
+                const fail = () => {
+                    if (this.worker !== worker) return;
+                    this.terminateWorker(); this.createWorker = null;
+                    const job = this.busy; this.busy = null;
+                    // 传输后的像素已经转交Worker；失败帧不重算，放行下一新帧走兼容计算。
+                    if (job && job.epoch === this.epoch && !this.closed) this.onReady(job.stamp);
+                };
+                if (worker.addEventListener) {
+                    worker.addEventListener('message', event => message(event.data));
+                    worker.addEventListener('error', event => { event.preventDefault?.(); fail(); });
+                } else {
+                    worker.on('message', message); worker.on('error', fail);
+                    worker.on('exit', () => { if (this.worker === worker) fail(); });
+                    worker.unref?.();
+                }
+            } catch { this.createWorker = null; this.worker = null; }
+        }
+        frame(stamp, capture) {
+            if (this.closed || !Number.isFinite(stamp) || stamp < 0 || stamp === this.lastStamp) return false;
+            this.lastStamp = stamp; this.stats.frames += 1;
+            const ready = this.completed; this.completed = null;
+            if (ready) { this.stats.applied += 1; this.onResult?.(ready.rect, ready.stamp); }
+            if (this.closed) return false;
+            if (this.busy) { this.stats.skipped += 1; return false; }
+            const job = { id: ++this.sequence, epoch: this.epoch, stamp };
+            try {
+                const frame = capture();
+                if (!frame) return false;
+                this.busy = job; this.stats.submitted += 1; this.prepare();
+                if (this.worker) this.worker.postMessage({ ...frame, id: job.id }, frame.pixels ? [frame.pixels.buffer] : []);
+                else Promise.resolve().then(() => this.compute(frame)).then(
+                    rect => this.finish(job, rect), error => this.finish(job, null, error));
+                return true;
+            } catch (error) {
+                if (this.busy === job) this.busy = null;
+                this.onError(error); return false;
+            }
+        }
+        finish(job, rect, error) {
+            if (this.busy !== job) return;
+            this.busy = null;
+            if (this.closed || job.epoch !== this.epoch) return;
+            if (error) this.onError(error);
+            else { this.stats.completed += 1; this.completed = { rect, stamp: job.stamp }; }
+            this.onReady(job.stamp);
+        }
+        terminateWorker() {
+            const worker = this.worker; this.worker = null;
+            if (!worker) return;
+            const disposal = Promise.resolve(worker.terminate()).catch(() => {});
+            this.disposals.add(disposal); void disposal.finally(() => this.disposals.delete(disposal));
+        }
+        async close() {
+            this.closed = true; this.reset(); this.busy = null; this.terminateWorker();
+            await Promise.all(this.disposals);
         }
     }
 
@@ -109,5 +206,5 @@
         };
     }
 
-    return { FULL, normalizeEnabled, hasBorder, detect, Tracker, unrotateRect, layout };
+    return { FULL, normalizeEnabled, hasBorder, detect, detectNative, detectFrame, Tracker, FramePipeline, unrotateRect, layout };
 });
