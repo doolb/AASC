@@ -816,3 +816,5 @@
 - 待构建部署与设备验收 [2026-10-23] 聊天附件/媒体回收与Node睡眠已实现，servicePackage和voiceDisplayNodePackage=true；需更新两包，验Android双端附件及Windows睡眠。见 `docs/task/20261023_聊天附件上传媒体回收与Node睡眠.md`。
 - 待接入 [2026-10-23] Qwen网页普通视频文件会路由chat_office异步工作助理，当前Chat2API普通聊天无法读取最终视频理解结果；正式入口明确拒绝原始视频，GLM原始视频两轮实测通过。后续独立接异步速读，不能把成功上传/空回复记为支持。
 - 待独立归因 [2026-10-23] 旧display-sleep-mode.test.js依赖运行中的8081，初始化activationUntil非零失败；本轮未改网页睡眠逻辑，不将此项记通过。Node隔离睡眠8/8和真实mpv渲染6/6已通过。
+
+- 待构建部署与设备验收 [2026-10-24] Node子显示端按键/信号统一回收修复已完成，`npm run test:node-display-mpv` 53/53通过；需重新构建Node独立包并在目标子显示端验收按键退出、mpv进程消失和睡眠/深度睡眠遮罩。`voiceDisplayNodePackage=true`，未构建或部署。见 `docs/task/20261024_Node子显示端退出回收mpv.md`。

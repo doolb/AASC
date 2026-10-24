@@ -6,6 +6,8 @@
 
 - [Node子显示端常驻mpv跨平台播放（源码完成，待设备验收）](design/node-display-mpv.md)
 
+- [Node子显示端退出与mpv回收（待构建）](design/node-display-exit.md)
+
 - [HMR2 Node代码入3rd与模型获取/服务启动（代码与CPU自测完成，DML实屏待窗口）](<design/hmr2-node-onnx-project-service.md>)
 
 - [ASR 内容过滤](design/asr-content-filter.md)

@@ -36,6 +36,7 @@ const { NodeMediaController, MEDIA_CONTROLS } = require('./media-controller');
 const ServerASR = require('./asr-client');
 const { formatAsrDisplayText } = require('./asr-display');
 const SubDisplayTUI = require('./tui');
+const { createShutdownController } = require('./shutdown-controller');
 const {
     WINDOWS_HOTKEY_LABEL,
     WINDOWS_VOICEPRINT_HOTKEY_LABEL,
@@ -2242,42 +2243,39 @@ class VoiceDisplay {
      * 停止语音显示端
      */
     async stop() {
-        this.recordingEnabled = false;
-        this.voiceRecognitionRestartPending = false;
-        this.stopController.abort();
-        this.clearReconnectTimer();
-        this.stopHeartbeat();
-        this.clearTextInputIdleTimer();
-        this.rejectDisplayIdWaiter(new Error('语音显示端已停止'));
-
-        if (this.asrPollTimer) {
-            clearInterval(this.asrPollTimer);
-            this.asrPollTimer = null;
+        let failure = null;
+        const cleanups = [
+            ['停止标记与计时器', () => {
+                this.recordingEnabled = false;
+                this.voiceRecognitionRestartPending = false;
+                this.stopController.abort();
+                this.clearReconnectTimer();
+                this.stopHeartbeat();
+                this.clearTextInputIdleTimer();
+                this.rejectDisplayIdWaiter(new Error('语音显示端已停止'));
+                if (this.asrPollTimer) clearInterval(this.asrPollTimer);
+                this.asrPollTimer = null;
+            }],
+            ['录音器', () => this.recorder?.stop()],
+            ['TTS播放器', () => this.audio?.stop()],
+            ['AEC处理器', () => this.aecProcessor?.destroy()],
+            ['ASR客户端', () => this.asr?.close()],
+            ['WebSocket', () => this.ws?.close()],
+            ['文本输入热键', () => this.textInputHotkey.close()],
+            ['声纹热键', () => this.textInputVoiceprintHotkey.close()],
+            ['文本输入注入器', () => this.textInputInjector.close()],
+            ['mpv媒体播放器', () => this.media.close()]
+        ];
+        for (const [name, cleanup] of cleanups) {
+            try { await cleanup(); }
+            catch (error) {
+                failure ||= error;
+                logError('停止', `${name}清理失败: ${error.message}`);
+            }
         }
-
-        if (this.recorder) {
-            this.recorder.stop();
-        }
-        if (this.audio) {
-            this.audio.stop();
-        }
-        if (this.aecProcessor) {
-            this.aecProcessor.destroy();
-            this.aecProcessor = null;
-        }
-        if (this.asr) {
-            this.asr.close();
-        }
-        if (this.ws) {
-            this.ws.close();
-        }
-        this.textInputHotkey.close();
-        this.textInputVoiceprintHotkey.close();
-        this.textInputInjector.close();
-
-        await this.media.close();
-
+        this.aecProcessor = null;
         log('停止', '语音显示端已停止');
+        if (failure) throw failure;
     }
 
     startHeartbeat() {
@@ -2354,6 +2352,14 @@ async function main() {
     const voiceDisplay = new VoiceDisplay(config);
 
     let systemMonitor = null;
+    const shutdown = createShutdownController({
+        stopMonitor: () => systemMonitor?.stop(),
+        stopDisplay: () => voiceDisplay.stop(),
+        destroyTui: () => tui.destroy(),
+        exit: code => process.exit(code),
+        onError: (error, resource) => logError('停止', `${resource}清理失败: ${error.message}`)
+    });
+    tui.onExit = () => shutdown(0);
 
     if (useTUI) {
         tui.displayId = config.displayId || 'unknown';
@@ -2375,18 +2381,12 @@ async function main() {
         tui.updateSystemStats(systemMonitor.getStats());
     }
 
-    process.on('SIGINT', async () => {
-        log('系统', '\n收到退出信号，正在关闭...');
-        if (systemMonitor) systemMonitor.stop();
-        await voiceDisplay.stop();
-        process.exit(0);
-    });
-
-    process.on('SIGTERM', async () => {
-        if (systemMonitor) systemMonitor.stop();
-        await voiceDisplay.stop();
-        process.exit(0);
-    });
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+        process.on(signal, () => {
+            log('系统', `收到${signal}，正在关闭...`);
+            void shutdown(0);
+        });
+    }
 
     try {
         await voiceDisplay.start();
@@ -2403,9 +2403,7 @@ async function main() {
         }
     } catch (error) {
         logError('系统', `启动失败: ${error.message}`);
-        if (systemMonitor) systemMonitor.stop();
-        await voiceDisplay.stop();
-        process.exit(1);
+        await shutdown(1);
     }
 }
 

@@ -14306,3 +14306,10 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-10-23] 循环起止时间按用户要求显示00:00.00，有小时显示1:00:00.00；统一按百分之一秒舍入并处理分钟/小时进位，屏幕与aria值一致，未知时长显示--:--.--。
   - 修改control-media-loop.js/upload.html/self-test.js及浏览器回归；同步design/spec/task/todo/usage与自测文档。`npm run test:media-loop`20/20，包含15主题实际截图、小时/小数进位及既有临时上传和音视频回跳；截图与样片不入Git。
   - 仅服务网页热更新，servicePackage保持true，其余发布状态不变；未构建发布或重启现场，控制页需刷新加载新样式/脚本，Offline设备需更新服务包。
+
+### Node 子显示端退出回收 mpv
+
+- ✅ [2026-10-24] 修复 TUI 按 `q`/`Ctrl+C` 直接退出、跳过 mpv 回收的问题；按键、`SIGINT`、`SIGTERM`、`SIGHUP` 与启动失败统一经过幂等关闭协调器。
+  - VoiceDisplay 按资源逐项清理，单项报错时继续关闭媒体控制器；TUI 销毁和进程退出等待清理完成。`SIGKILL`无法捕获，作为操作系统限制记录。
+  - `npm run test:node-display-mpv` 53/53通过，覆盖mpv fixture子进程/IPC临时目录回收、重复退出及清理失败路径。睡眠遮罩原已实现：普通睡眠遮黑媒体并保留信息层，深度睡眠全屏黑遮罩，已有独立真实画面回归。
+  - 更新Node子显示端design/spec/task/todo/self-test；`voiceDisplayNodePackage=true`待重新构建，未构建或部署。

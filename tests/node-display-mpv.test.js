@@ -11,6 +11,8 @@ const { spawn } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 const { MpvPlayer } = require('../src/apps/voice-display-node/mpv-player');
 const { NodeMediaController } = require('../src/apps/voice-display-node/media-controller');
+const SubDisplayTUI = require('../src/apps/voice-display-node/tui');
+const { createShutdownController } = require('../src/apps/voice-display-node/shutdown-controller');
 const { platformOptions, resolveXauthority, ipcAddress } = require('../src/apps/voice-display-node/mpv-platform');
 const { calculateGeometry, normalizeCrop, normalizeRotation } = require('../src/apps/voice-display-node/mpv-geometry');
 
@@ -180,6 +182,61 @@ test('视频→音频→图片→清空→新媒体只启动一个进程，临�
     assert.equal(player.pending.size, 0);
     assert.equal(player.dynamicTimer, null);
     await assert.rejects(player.ensureStarted(), /已关闭/);
+});
+
+test('TUI按键退出经过幂等关闭协调器并等待真实mpv子进程回收', async t => {
+    const { player } = await createPlayer(t);
+    await player.load(media('http://localhost/exit.mp4', 'video'));
+    const child = player.process;
+    const directory = player.session.directory;
+    const mainSource = fs.readFileSync(path.join(root, 'src/apps/voice-display-node/main.js'), 'utf8');
+    const tuiSource = fs.readFileSync(path.join(root, 'src/apps/voice-display-node/tui.js'), 'utf8');
+    assert.match(tuiSource, /void this\.requestExit\(\)/);
+    assert.doesNotMatch(tuiSource, /process\.exit/);
+    assert.match(mainSource, /\['SIGINT', 'SIGTERM', 'SIGHUP'\]/);
+
+    const order = [];
+    const tui = Object.create(SubDisplayTUI.prototype);
+    tui.enabled = false;
+    tui.destroyed = false;
+    const voiceDisplay = { stop: async () => { order.push('display'); await player.close(); } };
+    const shutdown = createShutdownController({
+        stopMonitor: () => order.push('monitor'),
+        stopDisplay: () => voiceDisplay.stop(),
+        destroyTui: () => order.push('tui'),
+        exit: code => order.push(`exit:${code}`)
+    });
+    tui.onExit = () => shutdown(0);
+    await tui.requestExit();
+    await shutdown(1);
+
+    assert.deepEqual(order, ['monitor', 'display', 'tui', 'exit:0']);
+    assert.ok(child.exitCode !== null || child.signalCode, '退出回调完成前mpv子进程应结束');
+    assert.equal(fs.existsSync(directory), false, 'mpv IPC临时目录应删除');
+});
+
+test('退出协调器只运行一次并在资源清理失败后继续销毁界面', async () => {
+    const order = [];
+    const errors = [];
+    let releaseDisplay;
+    let markDisplayStarted;
+    const displayGate = new Promise(resolve => { releaseDisplay = resolve; });
+    const displayStarted = new Promise(resolve => { markDisplayStarted = resolve; });
+    const shutdown = createShutdownController({
+        stopMonitor: () => order.push('monitor'),
+        stopDisplay: async () => { order.push('display:start'); markDisplayStarted(); await displayGate; order.push('display:end'); throw new Error('display stop failed'); },
+        destroyTui: () => order.push('tui'),
+        exit: code => order.push(`exit:${code}`),
+        onError: (error, name) => errors.push(`${name}:${error.message}`)
+    });
+    const first = shutdown(0);
+    assert.strictEqual(shutdown(1), first, '重复信号必须复用同一个关闭Promise');
+    await displayStarted;
+    assert.deepEqual(order, ['monitor', 'display:start']);
+    releaseDisplay();
+    assert.equal(await first, 1);
+    assert.deepEqual(order, ['monitor', 'display:start', 'display:end', 'tui', 'exit:1']);
+    assert.deepEqual(errors, ['语音显示端:display stop failed']);
 });
 
 test('快速请求只加载最后有效媒体，清空取消在途加载且不出现旧画面回调', async t => {
@@ -668,8 +725,10 @@ test('VoiceDisplay真实消息分支连接媒体控制器，能力声明/旋转/
     assert.equal(player.calls.length, mediaCalls);
     await instance.media.handleControl({ action: 'clearMedia' });
     assert.equal(ttsStops, 1);
-    await instance.stop();
+    instance.recorder.stop = () => { throw new Error('录音设备停止失败'); };
+    await assert.rejects(instance.stop(), /录音设备停止失败/);
     assert.equal(closed, true);
+    assert.ok(mainErrors.some(args => String(args[1]).includes('mpv媒体播放器') === false && String(args[1]).includes('录音器清理失败')));
 });
 
 test('真实URL导入支持TTS相对/绝对地址及一次失败回调，保留WebSocket地址解析', async () => {

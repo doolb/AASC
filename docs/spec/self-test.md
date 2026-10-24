@@ -3081,3 +3081,16 @@ LLM := 文件正文预算、视频文件鉴权、原会话续聊去重、重建�
 外部依赖失败 := 旧display-sleep-mode.test.js连接8081后初始activationUntil非零，未归因，不能记通过；隔离Node脚本不含该现场用例
 发布 := servicePackage/voiceDisplayNodePackage待构建，Windows/Android实机另验；未部署或清理正式媒体
 ```
+
+## Node 子显示端退出与 mpv 回收（2026-10-24）
+
+```text
+关闭入口 := TUI q/Ctrl+C、SIGINT、SIGTERM、SIGHUP、启动失败共用幂等Promise
+资源顺序 := 停止监控 → VoiceDisplay逐项清理 → TUI销毁 → 设置最终退出码
+错误恢复 := 单项清理报错仍继续，确认mpv.close被调用且最终退出码非零
+进程回收 := 独立mpv fixture实际子进程退出、IPC临时目录删除；重复信号不重复关闭
+命令 := npm run test:node-display-mpv → 53/53
+睡眠画面现状 := 普通睡眠遮黑媒体并保留时钟/状态栏；深度睡眠全屏黑；真实Xvnc截帧断言在test:node-display-mpv:render中
+限制 := SIGKILL无法由Node捕获；fixture进程验证不等同目标设备实机验收
+发布 := voiceDisplayNodePackage=true待构建，未部署
+```

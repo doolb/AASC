@@ -58,6 +58,8 @@ function formatMemory(bytes) {
 class SubDisplayTUI {
     constructor(options = {}) {
         this.enabled = options.enabled !== false;
+        this.onExit = typeof options.onExit === 'function' ? options.onExit : null;
+        this.destroyed = false;
         if (!this.enabled) return;
 
         this.maxLogLines = options.maxLogLines || 300;
@@ -190,8 +192,7 @@ class SubDisplayTUI {
 
         this.screen.key(['q', 'C-c'], () => {
             if (this.keyboardMode !== 'input') {  // 输入模式下禁止退出，防止误触
-                this.destroy();
-                process.exit(0);
+                void this.requestExit();
             }
         });
 
@@ -422,7 +423,8 @@ class SubDisplayTUI {
     }
 
     destroy() {
-        if (!this.enabled) return;
+        if (!this.enabled || this.destroyed) return;
+        this.destroyed = true;
         if (this._trimTimer) {
             clearInterval(this._trimTimer);
             this._trimTimer = null;
@@ -441,6 +443,11 @@ class SubDisplayTUI {
         this.logBox = null;
         this.screen = null;
         this.enabled = false;
+    }
+
+    /** 按键只请求退出；播放器和录音等资源由主生命周期统一回收。 */
+    requestExit() {
+        return this.onExit?.();
     }
 }
 
