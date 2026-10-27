@@ -46,7 +46,7 @@
         <button id="autoFaces">模拟器自动依次静置六面</button></details></details>
       <details open><summary>估计器处理</summary>
         <div class="toolbar"><button id="calibrateDeadzone">静置校准死区（3秒）</button><button id="cancelDeadzone" hidden>取消校准</button></div>
-        <p id="deadzoneStatus" role="status">保持一个朝向静置，自动设置两个死区并对齐重力方向；不修改零偏。高死区可能忽略真实慢动作。</p>
+        <p id="deadzoneStatus" role="status">保持一个朝向静置3秒，设置死区、对齐重力并学习静稳噪声；不修改零偏。校准时真实移动可能被误学，高死区可能忽略真实慢动作。</p>
         <div class="parameter-grid">
         <label>显示角速度死区 / °/s<input id="gyroZone" type="number" min="0" step="0.01" value="0.2"><output></output></label>
         <label>去重力后加速度死区 / m/s²<input id="accelZone" type="number" min="0" step="0.01" value="0.08"><output></output></label>

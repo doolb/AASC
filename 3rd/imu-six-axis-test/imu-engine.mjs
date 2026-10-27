@@ -42,8 +42,7 @@ export class ImuEngine {
         this.remoteRestWindow = []; this.remoteRestSince = null; this.remoteRestActive = false;
         this.gravityMagnitude = GRAVITY;
         this.gravityDirectionErrorDegrees = null; this.attitudeGyro = [0, 0, 0];
-        this.remoteRestDiagnostics = { state: 'window', windowSeconds: 0, gyroRms: null, forceVariation: null,
-            gyroLimit: 0.015, variationLimit: 0.08 };
+        this.restNoise = null; this.resetRemoteRest();
         this.message = '等待六轴数据'; this.status = 'waiting'; this.lastSample = null;
     }
 
@@ -77,15 +76,20 @@ export class ImuEngine {
     resetRemoteRest() {
         this.remoteRestWindow.length = 0; this.remoteRestSince = null; this.remoteRestActive = false;
         this.remoteRestDiagnostics = { state: 'window', windowSeconds: 0, gyroRms: null, forceVariation: null,
-            gyroLimit: 0.015, variationLimit: 0.08 };
+            gyroLimit: 0.015, variationLimit: 0.08, noiseLearned: Boolean(this.restNoise),
+            gyroMeanError: null, gyroVariation: null, gyroVariationLimit: null };
     }
 
     /** APK观察端用原始六轴识别静稳，学习本机有效重力模长；不依赖平台线性加速度。 */
     updateRemoteRest(time, gyro, force) {
         const last = this.remoteRestWindow.at(-1);
+        const noise = this.restNoise, gyroNoise = noise ? Math.hypot(...noise.gyroDeviation) : 0;
+        const centered = noise ? gyro.clone().sub(vector(noise.gyroMean)).length() : gyro.length();
         // 快速运动使旧静稳窗口立即失效，避免复用上一段静置样本清掉新的移动速度。
-        if (last && (gyro.length() > 0.1 || force.distanceTo(last.force) > 0.35)) this.resetRemoteRest();
-        this.remoteRestWindow.push({ time, gyroSq: gyro.lengthSq(), force: force.clone(), forceSq: force.lengthSq() });
+        // 有静置学习依据时按实测噪声包络撤销，避免正常手持波动逐点清空窗口。
+        if (last && (centered > Math.max(0.1, gyroNoise * 6)
+            || force.distanceTo(last.force) > Math.max(0.35, (noise?.forceVariation || 0) * 6))) this.resetRemoteRest();
+        this.remoteRestWindow.push({ time, gyro: gyro.clone(), gyroSq: gyro.lengthSq(), force: force.clone(), forceSq: force.lengthSq() });
         while (this.remoteRestWindow.length > 80 || time - this.remoteRestWindow[0].time > 0.8) {
             this.remoteRestWindow.shift();
         }
@@ -95,21 +99,30 @@ export class ImuEngine {
             this.remoteRestSince = null; this.remoteRestActive = false; return false;
         }
         const totals = this.remoteRestWindow.reduce((sum, item) => {
-            sum.gyroSq += item.gyroSq; sum.forceSq += item.forceSq; sum.force.add(item.force); return sum;
-        }, { gyroSq: 0, forceSq: 0, force: new Vector3() });
+            sum.gyroSq += item.gyroSq; sum.gyro.add(item.gyro);
+            sum.forceSq += item.forceSq; sum.force.add(item.force); return sum;
+        }, { gyroSq: 0, forceSq: 0, force: new Vector3(), gyro: new Vector3() });
         const count = this.remoteRestWindow.length;
         const meanForce = totals.force.divideScalar(count);
         const meanMagnitude = meanForce.length();
         const gyroRms = Math.sqrt(totals.gyroSq / count);
         const forceVariation = Math.sqrt(Math.max(0, totals.forceSq / count - meanMagnitude * meanMagnitude));
-        const gyroLimit = this.remoteRestActive ? 0.025 : 0.015;
-        const variationLimit = this.remoteRestActive ? 0.12 : 0.08;
-        const stable = gyroRms < gyroLimit && forceVariation < variationLimit
+        const baseGyroLimit = this.remoteRestActive ? 0.025 : 0.015;
+        const gyroLimit = Math.max(baseGyroLimit, noise ? 3 * gyroNoise / Math.sqrt(count) : 0);
+        const variationLimit = Math.max(this.remoteRestActive ? 0.12 : 0.08, (noise?.forceVariation || 0) * 1.5);
+        const gyroMean = totals.gyro.divideScalar(count);
+        const gyroVariation = Math.sqrt(Math.max(0, totals.gyroSq / count - gyroMean.lengthSq()));
+        const gyroMeanError = noise ? gyroMean.clone().sub(vector(noise.gyroMean)).length() : null;
+        const gyroVariationLimit = noise ? Math.max(baseGyroLimit, gyroNoise * 1.5) : null;
+        // 均值和波动分别检查：大噪声不直接冒充持续旋转，持续旋转也不能因均方根门槛放大而被清零。
+        const gyroStable = noise ? gyroMeanError < gyroLimit && gyroVariation < gyroVariationLimit : gyroRms < gyroLimit;
+        const stable = gyroStable && forceVariation < variationLimit
             && meanMagnitude > 9 && meanMagnitude < 10.4;
         this.remoteRestSince = stable ? this.remoteRestSince ?? time : null;
         const stopped = this.remoteRestSince !== null && time - this.remoteRestSince >= 0.7;
         this.remoteRestDiagnostics = { state: stopped ? 'rest' : stable ? 'settling' : 'moving',
-            windowSeconds: span, gyroRms, forceVariation, gyroLimit, variationLimit };
+            windowSeconds: span, gyroRms, forceVariation, gyroLimit, variationLimit,
+            noiseLearned: Boolean(noise), gyroMeanError, gyroVariation, gyroVariationLimit };
         if (!stopped) { this.remoteRestActive = false; return false; }
         if (!this.remoteRestActive) this.zeroCorrections += 1;
         // 单朝向不能求完整三轴零偏，但可由静稳力模长去除本机垂直残差，并用方向校正倾斜。
@@ -197,10 +210,18 @@ export class ImuEngine {
             this.deadzoneMessage = '采样结果无效，未修改死区'; return;
         }
         this.profile.gyroDeadZone = gyroDegrees * Math.PI / 180; this.profile.accelDeadZone = accelZone;
+        // 用户明确点击静置校准后才学习；任意手调死区都不能作为设备静止的证明。
+        const gyroStats = statistics(capture.samples, 'gyro'), forceStats = statistics(capture.samples, 'force');
+        const forceVariation = Math.hypot(...forceStats.deviation);
+        const reliable = sample.kind === 'gravity' && Math.hypot(...forceStats.mean) > 9 && Math.hypot(...forceStats.mean) < 10.4
+            && Math.hypot(...gyroStats.mean) < 0.05 && Math.hypot(...gyroStats.deviation) < 0.3 && forceVariation < 0.8;
+        this.restNoise = reliable ? { gyroMean: gyroStats.mean, gyroDeviation: gyroStats.deviation,
+            forceVariation, sampleCount: capture.samples.length, sampleRateHz: (capture.samples.length - 1) / elapsed } : null;
         this.q.copy(candidate); this.filteredAcceleration = null; this.quietSince = null; this.resetSimulatorRest();
+        this.resetRemoteRest();
         this.deadzoneRevision += 1;
         const caution = gyroDegrees > 1 || accelZone > 0.5 ? '；高死区可能忽略真实慢动作' : '';
-        this.deadzoneMessage = `死区已校准：${gyroDegrees.toFixed(2)} °/s，${accelZone.toFixed(2)} m/s²；含重力输入已对齐倾斜${caution}`;
+        this.deadzoneMessage = `死区已校准：${gyroDegrees.toFixed(2)} °/s，${accelZone.toFixed(2)} m/s²；含重力输入已对齐倾斜${caution}；${reliable ? '已学习静稳噪声' : '未启用静稳噪声学习，请确认窗口静置且波动可靠'}`;
     }
 
     calibrate(sample) {
@@ -242,7 +263,7 @@ export class ImuEngine {
             this.message = '陀螺仪零偏校准完成；加速度六面校准独立进行';
         }
         this.v.set(0, 0, 0); this.filteredGyro = null; this.filteredAcceleration = null;
-        this.calibration = null; this.resetSimulatorRest(); this.resetRemoteRest();
+        this.calibration = null; this.restNoise = null; this.resetSimulatorRest(); this.resetRemoteRest();
     }
 
     // 实验重置保留处理参数及已学标定；手机姿态必须由下一条实际重力重新对齐。
@@ -416,6 +437,7 @@ export class ImuEngine {
             zeroCorrections: this.zeroCorrections, restConfidence: this.restConfidence, restReason: this.zuptReason,
             gravityMagnitude: this.gravityMagnitude, remoteRestActive: this.remoteRestActive,
             gravityDirectionErrorDegrees: this.gravityDirectionErrorDegrees, remoteRest: { ...this.remoteRestDiagnostics },
+            restNoise: this.restNoise ? { ...this.restNoise, gyroMean: [...this.restNoise.gyroMean], gyroDeviation: [...this.restNoise.gyroDeviation] } : null,
             status: this.status, message: this.message,
             gyroCalibrated: this.gyroCalibrated, accelCalibrated: this.accelCalibrated,
             calibrationActive: Boolean(this.calibration || this.deadzoneCalibration), faces: Object.keys(this.faces).length,

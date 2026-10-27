@@ -209,7 +209,7 @@ element('ideal').addEventListener('click', () => cleanExperiment(true));
 function diagnostics(now) {
     element('cancelDeadzone').hidden = !engine.deadzoneCalibration;
     element('calibrateDeadzone').disabled = Boolean(engine.deadzoneCalibration);
-    element('deadzoneStatus').textContent = engine.deadzoneMessage || '保持一个朝向静置，自动设置两个死区并对齐重力方向；不修改零偏。高死区可能忽略真实慢动作。';
+    element('deadzoneStatus').textContent = engine.deadzoneMessage || '保持一个朝向静置3秒，设置死区、对齐重力并学习静稳噪声；不修改零偏。校准时真实移动可能被误学，高死区可能忽略真实慢动作。';
     const own = engine.snapshot(); const selectedId = element('deviceSelect').value;
     const selected = selectedId === 'local' ? own : devices.get(selectedId)?.frame || own;
     element('position').value = format(selected.position); element('velocity').value = format(selected.velocity);
@@ -224,8 +224,10 @@ function diagnostics(now) {
         ? selected.gravityDirectionErrorDegrees.toFixed(2) : '—';
     const restNames = { window: '等待静稳窗口', moving: '窗口未满足门槛', settling: '静稳确认中', rest: '静稳已清零' };
     const rest = selected.remoteRest;
+    const noiseStatus = selected.restNoise ? `已学习静稳噪声（${selected.restNoise.sampleCount}点，源样本约${diagnosticNumber(selected.restNoise.sampleRateHz, 1)}Hz）`
+        : '未学习静稳噪声，可先点击静置校准死区（3秒）';
     element('restDiagnostics').textContent = selected.profile?.remoteAutoRest && rest
-        ? `${restNames[rest.state]} · 角速度RMS ${rest.gyroRms === null ? '—' : rest.gyroRms.toFixed(4)} / ${rest.gyroLimit.toFixed(4)} rad/s · 加速度波动 ${rest.forceVariation === null ? '—' : rest.forceVariation.toFixed(3)} / ${rest.variationLimit.toFixed(3)} m/s²`
+        ? `${noiseStatus} · ${restNames[rest.state]} · ${rest.noiseLearned ? '角速度均值差' : '角速度RMS'} ${diagnosticNumber(rest.noiseLearned ? rest.gyroMeanError : rest.gyroRms, 4)} / ${diagnosticNumber(rest.gyroLimit, 4)} rad/s · 加速度波动 ${diagnosticNumber(rest.forceVariation)} / ${diagnosticNumber(rest.variationLimit)} m/s²`
         : '当前来源未启用APK静稳窗口，或旧页面未提供诊断';
     element('processingDiagnostics').textContent = selected.profile
         ? `显示角速度死区 ${diagnosticNumber(selected.profile.gyroDeadZone * 180 / Math.PI, 2)} °/s · 加速度死区 ${diagnosticNumber(selected.profile.accelDeadZone, 2)} m/s² · 滤波 ${diagnosticNumber(selected.profile.filterHz, 0)} Hz`

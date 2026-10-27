@@ -432,3 +432,82 @@ test('大显示死区不冻结真实六轴的小角度姿态；倾斜纯旋转�
     engine.push({ time: 0, gyro: [0, 0, 0], accel: [0, 0, 0], kind: 'linear' });
     assert.equal(engine.snapshot().gravityDirectionErrorDegrees, null, '平台线性输入没有重力方向残差');
 });
+
+// 固定姿态叠加零均值的有界手持噪声：旧RMS/单点门槛持续拒绝这个窗口。
+const noisyHold = (index, hz = 50) => {
+    const phase = index * Math.PI / 5;
+    return { time: index / hz, kind: 'gravity',
+        gyro: [0.09 * Math.sin(phase), 0.08 * Math.cos(phase), 0.05 * Math.sin(phase + 0.7)],
+        accel: [-1.4 + 0.22 * Math.sin(phase), 1.1 + 0.2 * Math.cos(phase), 9.5 + 0.18 * Math.sin(phase + 1)] };
+};
+async function learnedHold(hz = 50) {
+    const [{ ImuEngine }] = await modules;
+    const engine = new ImuEngine({ remoteAutoRest: true });
+    engine.beginDeadzoneCalibration(); let index = 0;
+    while (engine.deadzoneCalibration && index < hz * 4) engine.push(noisyHold(index++, hz));
+    assert.ok(engine.restNoise); return { engine, index };
+}
+
+for (const hz of [25, 50, 100]) test(hz + 'Hz静置学习后高噪声手持可清残留速度，手调大死区不能冒充学习依据', async () => {
+    const [{ ImuEngine }] = await modules;
+    const { engine, index: start } = await learnedHold(hz);
+    assert.ok(Math.abs(engine.restNoise.sampleRateHz - hz) < 1e-6);
+    assert.deepEqual(engine.gyroBias, [0, 0, 0]); assert.deepEqual(engine.accelBias, [0, 0, 0]);
+    assert.equal(engine.gyroCalibrated, false);
+    engine.v.set(0.8, -0.4, 2);
+    const unlearned = new ImuEngine(engine.profile); unlearned.v.set(0.8, -0.4, 2);
+    for (let i = start; i < start + hz * 3; i++) {
+        engine.push(noisyHold(i, hz)); unlearned.push(noisyHold(i, hz));
+    }
+    assert.equal(engine.remoteRestActive, true); assert.deepEqual(engine.v.toArray(), [0, 0, 0]);
+    assert.equal(engine.snapshot().remoteRest.noiseLearned, true);
+    assert.equal(unlearned.zeroCorrections, 0); assert.ok(unlearned.v.length() > 1);
+    const stopped = engine.p.clone(), corrections = engine.zeroCorrections;
+    for (let i = start + hz * 3; i < start + hz * 13; i++) engine.push(noisyHold(i, hz));
+    assert.ok(engine.p.distanceTo(stopped) < 1e-9, '连续噪声静稳后不能按旧速度继续漂移');
+    assert.equal(engine.zeroCorrections, corrections);
+});
+
+test('学习噪声不掩盖持续旋转或大加速，明显运动清窗口并继续积分', async () => {
+    const { engine, index: start } = await learnedHold();
+    for (let i = start; i < start + 100; i++) engine.push(noisyHold(i));
+    assert.equal(engine.remoteRestActive, true);
+    const direction = engine.lastSample.accel.map(value => value / Math.hypot(...engine.lastSample.accel));
+    for (let i = start + 100; i < start + 150; i++) {
+        const sample = noisyHold(i);
+        sample.gyro = sample.gyro.map((value, axis) => value + direction[axis] * 0.12);
+        engine.push(sample);
+    }
+    assert.equal(engine.remoteRestActive, false, '持续角速度的均值不能被高噪声预算吞掉');
+    engine.v.z = 1;
+    for (let i = start + 150; i < start + 200; i++) {
+        const sample = noisyHold(i);
+        sample.gyro = sample.gyro.map((value, axis) => value + direction[axis] * 0.12);
+        engine.push(sample);
+    }
+    assert.ok(engine.v.length() > 0.2);
+    for (let i = start + 200; i < start + 350; i++) engine.push(noisyHold(i));
+    assert.equal(engine.remoteRestActive, true);
+    const sample = noisyHold(start + 350); sample.accel[0] += 6;
+    engine.push(sample);
+    assert.equal(engine.remoteRestActive, false); assert.equal(engine.remoteRestWindow.length, 1);
+    assert.ok(engine.v.length() > 0);
+});
+
+test('噪声学习保留与失效明确，超大噪声仍可设置死区但不作为自动静稳依据', async () => {
+    const { engine } = await learnedHold();
+    const learned = engine.snapshot().restNoise;
+    engine.pause(); engine.resetExperiment(); assert.deepEqual(engine.snapshot().restNoise, learned);
+    const copy = engine.snapshot().restNoise; copy.gyroMean[0] = 99;
+    assert.notEqual(engine.restNoise.gyroMean[0], 99);
+    engine.beginDeadzoneCalibration(); engine.cancelDeadzoneCalibration();
+    assert.deepEqual(engine.snapshot().restNoise, learned);
+    engine.beginDeadzoneCalibration();
+    for (let i = 0; i <= 160; i++) engine.push({ time: 10 + i * .02, kind: 'linear', gyro: [0, 0, 0], accel: [0, 0, 0] });
+    assert.equal(engine.restNoise, null);
+    engine.beginDeadzoneCalibration();
+    for (let i = 0; i <= 160; i++) engine.push({ time: 20 + i * .02, kind: 'gravity',
+        gyro: [i % 2 ? 2 : -2, 0, 0], accel: [i % 2 ? 3 : -3, 0, 9.8] });
+    assert.ok(engine.profile.gyroDeadZone > 1, '死区仍允许高噪声数值'); assert.equal(engine.restNoise, null);
+    assert.match(engine.deadzoneMessage, /未启用静稳噪声学习/);
+});

@@ -69,6 +69,27 @@ function normalizeDiagnostics(frame) {
             if (!finiteRange(rest[key], 0, 1e4)) return null;
             result.remoteRest[key] = rest[key];
         }
+        if (Object.hasOwn(rest, 'noiseLearned')) {
+            if (typeof rest.noiseLearned !== 'boolean') return null;
+            result.remoteRest.noiseLearned = rest.noiseLearned;
+        }
+        for (const key of ['gyroMeanError', 'gyroVariation', 'gyroVariationLimit']) {
+            if (!Object.hasOwn(rest, key)) continue;
+            if (rest[key] !== null && !finiteRange(rest[key], 0, 1e4)) return null;
+            result.remoteRest[key] = rest[key];
+        }
+    }
+    if (Object.hasOwn(frame, 'restNoise')) {
+        const noise = frame.restNoise;
+        result.restNoise = null;
+        if (noise !== null) {
+            if (!noise || !array(noise.gyroMean, 3, 1e4) || !array(noise.gyroDeviation, 3, 1e4)
+                || noise.gyroDeviation.some(value => value < 0) || !finiteRange(noise.forceVariation, 0, 1e4)
+                || !Number.isInteger(noise.sampleCount) || !finiteRange(noise.sampleCount, 60, 1200)
+                || !finiteRange(noise.sampleRateHz, 1, 1000)) return null;
+            result.restNoise = { gyroMean: [...noise.gyroMean], gyroDeviation: [...noise.gyroDeviation],
+                forceVariation: noise.forceVariation, sampleCount: noise.sampleCount, sampleRateHz: noise.sampleRateHz };
+        }
     }
     return result;
 }
@@ -330,7 +351,7 @@ export async function createLabServer(options = {}) {
                     'gyroCalibrated', 'accelCalibrated', 'calibrationActive', 'faces', 'zeroCorrections', 'status', 'message']) {
                     point[key] = Array.isArray(frame[key]) ? [...frame[key]] : frame[key];
                 }
-                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest']) {
+                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest', 'restNoise']) {
                     if (Object.hasOwn(frame, key)) point[key] = structuredClone(frame[key]);
                 }
                 // 模拟参考位置只进入本机诊断轨迹，不能混入设备位姿或房间广播。

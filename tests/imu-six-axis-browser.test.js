@@ -200,6 +200,29 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     assert.deepEqual(current.attitudeGyro, [0, 0, 0]);
     assert.equal(current.remoteRest.state, 'window');
     assert.ok(current.gravityDirectionErrorDegrees < 1e-5);
-    assert.ok(await page.$eval('#processingDiagnostics', node => node.textContent.includes('1.65')));
+    await page.waitForFunction(() => document.querySelector('#processingDiagnostics').textContent.includes('1.65'));
+    // 实际校准按钮与50Hz源时间的噪声批次，贯通学习、页面状态及轨迹诊断。
+    await page.click('#calibrateDeadzone');
+    const held = Array.from({ length: 240 }, (_, index) => {
+        const phase = index * Math.PI / 5;
+        return { time: .32 + index * .02, kind: 'gravity',
+            gyro: [.09 * Math.sin(phase), .08 * Math.cos(phase), .05 * Math.sin(phase + .7)],
+            accel: [.22 * Math.sin(phase), 4.903325 + .2 * Math.cos(phase), 8.492808026022666 + .18 * Math.sin(phase + 1)] };
+    });
+    for (let index = 0; index < held.length; index += 8) {
+        sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
+            generation: identity.generation, sequence: 3 + index / 8, samples: held.slice(index, index + 8) }));
+        await delay(25);
+    }
+    await page.waitForFunction(() => window.imuLab.snapshot().engine.remoteRestActive, { polling: 100 });
+    await page.waitForFunction(() => document.querySelector('#restDiagnostics').textContent.includes('已学习静稳噪声'));
+    const learned = await page.evaluate(() => window.imuLab.snapshot().engine);
+    assert.ok(Math.abs(learned.restNoise.sampleRateHz - 50) < 1e-6);
+    assert.deepEqual(learned.gyroBias, [0, 0, 0]); assert.equal(learned.gyroCalibrated, false);
+    await page.waitForFunction(async () => {
+        const data = await (await fetch('/api/imu/trajectory')).json();
+        const value = data.devices.find(device => device.label === '电脑观察端')?.current;
+        return value?.remoteRest?.noiseLearned && value?.restNoise?.sampleCount >= 150;
+    }, { polling: 100 });
     assert.deepEqual(errors, []);
 });

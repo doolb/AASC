@@ -141,3 +141,23 @@ test('处理参数与重力静稳诊断仅转发白名单，旧帧兼容且非�
     assert.equal(normalizeFrame({ ...frame, gravityDirectionErrorDegrees: null }).gravityDirectionErrorDegrees, null);
     assert.deepEqual(normalizeFrame({ ...frame, profile: { gyroDeadZone: 1000, ignored: 'never forward' } }).profile, { gyroDeadZone: 1000 });
 });
+
+test('静稳噪声诊断兼容旧帧，模型数组深拷贝且非法统计不会传播', async () => {
+    const { normalizeFrame } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const { ImuEngine } = await import('../3rd/imu-six-axis-test/imu-engine.mjs');
+    const frame = new ImuEngine({ remoteAutoRest: true }).snapshot();
+    const restNoise = { gyroMean: [0.001, 0, 0], gyroDeviation: [0.06, 0.05, 0.03],
+        forceVariation: 0.25, sampleCount: 151, sampleRateHz: 50 };
+    const normalized = normalizeFrame({ ...frame, restNoise,
+        remoteRest: { ...frame.remoteRest, noiseLearned: true, gyroMeanError: 0.01, gyroVariation: 0.08, gyroVariationLimit: 0.12 } });
+    assert.deepEqual(normalized.restNoise, restNoise); assert.equal(normalized.remoteRest.noiseLearned, true);
+    normalized.restNoise.gyroMean[0] = 99; assert.equal(restNoise.gyroMean[0], 0.001);
+    for (const patch of [{ gyroDeviation: [-1, 0, 0] }, { sampleCount: 3 }, { sampleRateHz: Infinity }, { forceVariation: NaN }]) {
+        assert.equal(normalizeFrame({ ...frame, restNoise: { ...restNoise, ...patch } }), null);
+    }
+    assert.equal(normalizeFrame({ ...frame, remoteRest: { ...frame.remoteRest, noiseLearned: 'yes' } }), null);
+    assert.equal(normalizeFrame({ ...frame, remoteRest: { ...frame.remoteRest, gyroMeanError: -1 } }), null);
+    const old = { ...frame }; delete old.restNoise;
+    for (const key of ['noiseLearned', 'gyroMeanError', 'gyroVariation', 'gyroVariationLimit']) delete old.remoteRest[key];
+    assert.ok(normalizeFrame(old)); assert.equal(Object.hasOwn(normalizeFrame(old), 'restNoise'), false);
+});
