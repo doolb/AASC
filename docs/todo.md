@@ -1,3 +1,4 @@
+- 待磁校准后实机验收 [2026-10-28] IMU重力倾斜补偿磁航向已实现并构建安装独立APK；Note8真机回传验证通过，精度0/3时正确回退六轴。待远离磁干扰并完成磁校准后，验精度>=2时的真实倾斜/旋转/干扰恢复、航向漂移与延迟；此前轨迹来源手机仍需单独更新APK。见 `docs/task/20261028_IMU磁力计辅助航向方案.md`。
 - 待构建部署与设备验收 [2026-10-24] 视频去黑边已升级逐帧/上一帧结果/两帧确认，并新增默认开启的独立200ms过渡；浏览器及真实mpv30/60fps通过。servicePackage和voiceDisplayNodePackage=true，待更新两包后验Android、Windows及高分辨率负载。见 `docs/task/20261024_视频黑边检测与填充.md`、`docs/task/20261024_视频逐帧黑边检测.md`。
 - 待服务包构建与发布验收 [2026-10-24] 媒体恢复保留原URL直连、HTTPS代理作失败备用；Android WebView未知消息误清媒体已修复。定向与关联回归19/19通过，Note8 display-umwo5k6l 实际重连后 video readyState=4、paused=false，随后配置消息未清除媒体。`servicePackage=true` 待构建发布后确认；见 `docs/task/20261024_显示端重连直连媒体恢复.md`、`docs/task/20261024_显示端未知WebSocket消息保护媒体恢复.md`。
 - 待自测归因 [2026-10-22] Chat2API speech-upstream.test.js第21行启动间隔>=4ms断言在整套364项中重复失败（其余363通过），该文件单独6项通过；本轮未改语音调度，需核对计时稳定性。

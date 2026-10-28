@@ -224,5 +224,24 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
         const value = data.devices.find(device => device.label === '电脑观察端')?.current;
         return value?.remoteRest?.noiseLearned && value?.restNoise?.sampleCount >= 150;
     }, { polling: 100 });
+    // 可选磁场贯穿真实WS、页面融合、诊断发布；来源仍为合成观测，不冒充手机实测。
+    const magneticSamples = Array.from({ length: 80 }, (_, index) => ({ time: 5.12 + index * .02,
+        kind: 'gravity', gyro: [0, 0, 0], accel: [0, 4.903325, 8.492808026022666],
+        magneticAvailable: true, magnetic: { field: [20, 15, -35], time: 5.12 + index * .02, accuracy: 3 } }));
+    for (let index = 0; index < magneticSamples.length; index += 8) {
+        sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
+            generation: identity.generation, sequence: 33 + index / 8, samples: magneticSamples.slice(index, index + 8) }));
+        await delay(30);
+    }
+    await page.waitForFunction(() => window.imuLab.snapshot().engine.magnetic.state === 'active');
+    await page.waitForFunction(() => document.querySelector('#magneticDiagnostics').textContent.includes('磁航向辅助中'));
+    await page.waitForFunction(async () => {
+        const data = await (await fetch('/api/imu/trajectory')).json();
+        return data.devices.find(device => device.label === '电脑观察端')?.current?.magnetic?.state === 'active';
+    });
+    const captured = await page.evaluate(async () => (await (await fetch('/api/imu/samples')).json()));
+    assert.ok(captured.samples.some(entry => entry.sample.magnetic?.accuracy === 3));
+    await page.click('#magneticAssist');
+    assert.equal(await page.evaluate(() => window.imuLab.snapshot().engine.magnetic.state), 'disabled');
     assert.deepEqual(errors, []);
 });

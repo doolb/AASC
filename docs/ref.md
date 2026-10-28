@@ -221,3 +221,9 @@ web-mediacenter/
 ## 人物分割本机模型身份与实际证据（2026-10-16）
 
 [OpenCV官方HF固定revision](https://huggingface.co/opencv/human_segmentation_pphumanseg/tree/e876e63603f6c65c1a22576bfd5fc7c07ecf9eb9)的原精度ONNX为6,163,938字节，SHA256 552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24，与[OpenCV Zoo LFS指针](https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/human_segmentation_pphumanseg/human_segmentation_pphumanseg_2023mar.onnx)核对，Apache-2.0。三图本机WASM已运行，不能将官方示例评测当本项目准确率；动漫误分猪剑、原图/裁剪/抠图差异和失败见[执行任务](task/20261016_MMDAR人物分割辅助姿态计算.md)。
+
+## IMU磁力计与重力倾斜补偿（2026-10-28）
+
+- [Android Position sensors](https://developer.android.com/develop/sensors-and-location/sensors/sensors_position)：校准磁场μT、磁场与加速度组合获取朝向、游戏旋转向量不依赖磁场。
+- [SensorManager.getRotationMatrix](https://developer.android.com/reference/android/hardware/SensorManager#getRotationMatrix(float[],%20float[],%20float[],%20float[]))：重力/地磁共同定义朝向，动态加速度可能污染结果。
+- [AOSP Sensor types](https://source.android.com/docs/core/interaction/sensors/sensor-types)：机体系坐标、基础与融合传感器。此处使用相对磁航向与受限重力修正，不宣称系统融合四元数或绝对定位。

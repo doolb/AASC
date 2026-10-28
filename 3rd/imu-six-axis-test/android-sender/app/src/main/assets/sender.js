@@ -7,6 +7,7 @@ const status = get('status');
 const countOutput = get('count');
 const gyroOutput = get('gyro');
 const accelOutput = get('accel');
+const magneticOutput = get('magnetic');
 const MIN_SEND_INTERVAL_MS = 20;
 const MAX_BUFFERED_BYTES = 64 * 1024;
 const MAX_PENDING_SAMPLES = 128;
@@ -142,6 +143,9 @@ window.onNativeImuSamples = samples => {
     const latest = samples.at(-1);
     gyroOutput.textContent = `角速度 / rad·s⁻¹：${latest.gyro.map(value => value.toFixed(3)).join(' / ')}`;
     accelOutput.textContent = `加速度 / m·s⁻²：${latest.accel.map(value => value.toFixed(3)).join(' / ')}`;
+    magneticOutput.textContent = latest.magnetic
+        ? `磁场 / μT：${latest.magnetic.field.map(value => value.toFixed(1)).join(' / ')} · 精度 ${latest.magnetic.accuracy}/3`
+        : latest.magneticAvailable === false ? '磁力计不可用，继续六轴采集' : '磁力计等待有效读数';
     updateCount(); scheduleBatchSend();
 };
 window.onNativeImuSample = sample => window.onNativeImuSamples([sample]);

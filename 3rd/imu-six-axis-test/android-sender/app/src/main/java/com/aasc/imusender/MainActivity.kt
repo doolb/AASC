@@ -19,7 +19,7 @@ import java.util.ArrayDeque
 
 /** 独立测试APK：只在前台采集原生六轴，并把样本交给本地页面的WebSocket客户端。 */
 class MainActivity : Activity(), SensorEventListener {
-    private data class TimedVector(val timestampNs: Long, val values: FloatArray)
+    private data class TimedVector(val timestampNs: Long, val values: FloatArray, val accuracy: Int = 0)
 
     private companion object {
         const val MAX_GYRO_EVENTS = 128
@@ -37,6 +37,8 @@ class MainActivity : Activity(), SensorEventListener {
     private var originTimestampNs = 0L
     private val gyroEvents = ArrayDeque<TimedVector>()
     private val accelEvents = ArrayDeque<TimedVector>()
+    private val magneticEvents = ArrayDeque<TimedVector>()
+    private var magneticAvailable = false
     private val dispatchLock = Any()
     private val pendingJavascriptSamples = ArrayDeque<JSONObject>()
     private var pairGapPending = false
@@ -76,6 +78,7 @@ class MainActivity : Activity(), SensorEventListener {
         originTimestampNs = 0L
         gyroEvents.clear()
         accelEvents.clear()
+        magneticEvents.clear()
         pairGapPending = false
         synchronized(dispatchLock) { pendingJavascriptSamples.clear() }
         val handler = mainHandler
@@ -87,8 +90,11 @@ class MainActivity : Activity(), SensorEventListener {
             notifyPage("传感器监听启动失败")
             return false
         }
+        // 磁力计为可选能力，缺失或注册失败时继续原六轴，不中断采集。
+        val magnetic = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        magneticAvailable = magnetic != null && sensorManager.registerListener(this, magnetic, SENSOR_PERIOD_US, handler)
         collecting = true
-        notifyPage("原生陀螺仪和含重力加速度计已启动")
+        notifyPage(if (magneticAvailable) "原生六轴与磁力计已启动" else "原生六轴已启动，磁力计不可用")
         return true
     }
 
@@ -101,8 +107,10 @@ class MainActivity : Activity(), SensorEventListener {
     private fun stopSensorsInternal() {
         if (collecting) sensorManager.unregisterListener(this)
         collecting = false
+        magneticAvailable = false
         gyroEvents.clear()
         accelEvents.clear()
+        magneticEvents.clear()
         pairGapPending = false
         synchronized(dispatchLock) { pendingJavascriptSamples.clear() }
     }
@@ -110,7 +118,7 @@ class MainActivity : Activity(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
         if (!collecting) return
         if (originTimestampNs == 0L) originTimestampNs = event.timestamp
-        val measured = TimedVector(event.timestamp, event.values.copyOf())
+        val measured = TimedVector(event.timestamp, event.values.copyOf(), event.accuracy)
         when (event.sensor.type) {
             Sensor.TYPE_GYROSCOPE -> {
                 gyroEvents.addLast(measured)
@@ -122,6 +130,11 @@ class MainActivity : Activity(), SensorEventListener {
             Sensor.TYPE_ACCELEROMETER -> {
                 accelEvents.addLast(measured)
                 if (accelEvents.size > MAX_ACCEL_EVENTS) accelEvents.removeFirst()
+            }
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                magneticEvents.addLast(measured)
+                if (magneticEvents.size > 16) magneticEvents.removeFirst()
+                return
             }
             else -> return
         }
@@ -165,6 +178,15 @@ class MainActivity : Activity(), SensorEventListener {
             .put("accelBeforeTime", relativeSeconds(before.timestampNs))
             .put("accelAfterTime", relativeSeconds(after.timestampNs))
             .put("kind", "gravity")
+            .put("magneticAvailable", magneticAvailable)
+        // 磁力计频率可能不同；只附带不晚于陀螺时刻的事件和真实时间，不能伪装成同步读数。
+        val magnetic = magneticEvents.lastOrNull { it.timestampNs <= gyro.timestampNs }
+        if (magneticAvailable && magnetic != null) {
+            sample.put("magnetic", JSONObject()
+                .put("field", JSONArray(magnetic.values.take(3).map { it.toDouble() }))
+                .put("time", relativeSeconds(magnetic.timestampNs))
+                .put("accuracy", magnetic.accuracy.coerceIn(0, 3)))
+        }
         val shouldDispatch = synchronized(dispatchLock) {
             if (pairGapPending) {
                 sample.put("gap", true)

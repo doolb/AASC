@@ -9,7 +9,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repository = path.resolve(root, '../..');
 const names = ['index.html', 'style.css', 'app.mjs', 'imu-engine.mjs', 'imu-simulator.mjs',
-    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs'];
+    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs', 'imu-magnetic.mjs'];
 export const FIXED_SENSOR_ROOM = 'AASCIMU1';
 const SAMPLE_RING_LIMIT = 500;
 const SAMPLE_BATCH_LIMIT = 8;
@@ -54,7 +54,7 @@ function normalizeDiagnostics(frame) {
             if (!finiteRange(profile[key], 0, max)) return null;
             result.profile[key] = profile[key];
         }
-        for (const key of ['assumedRest', 'simulatorAutoRest', 'remoteAutoRest']) {
+        for (const key of ['assumedRest', 'simulatorAutoRest', 'remoteAutoRest', 'magneticAssist']) {
             if (!Object.hasOwn(profile, key)) continue;
             if (typeof profile[key] !== 'boolean') return null;
             result.profile[key] = profile[key];
@@ -89,6 +89,25 @@ function normalizeDiagnostics(frame) {
                 || !finiteRange(noise.sampleRateHz, 1, 1000)) return null;
             result.restNoise = { gyroMean: [...noise.gyroMean], gyroDeviation: [...noise.gyroDeviation],
                 forceVariation: noise.forceVariation, sampleCount: noise.sampleCount, sampleRateHz: noise.sampleRateHz };
+        }
+    }
+    if (Object.hasOwn(frame, 'magnetic')) {
+        const magnetic = frame.magnetic;
+        const states = ['missing', 'waiting', 'disabled', 'unsupported', 'invalid', 'stale', 'interference', 'dynamic', 'settling', 'active'];
+        if (!magnetic || !states.includes(magnetic.state) || typeof magnetic.enabled !== 'boolean'
+            || magnetic.available !== null && typeof magnetic.available !== 'boolean'
+            || typeof magnetic.gravityTrusted !== 'boolean' || typeof magnetic.referenceReady !== 'boolean'
+            || typeof magnetic.reason !== 'string') return null;
+        result.magnetic = { state: magnetic.state, enabled: magnetic.enabled, available: magnetic.available,
+            gravityTrusted: magnetic.gravityTrusted, referenceReady: magnetic.referenceReady, reason: magnetic.reason.slice(0, 120) };
+        if (Object.hasOwn(magnetic, 'accuracy')) {
+            if (magnetic.accuracy !== null && (!Number.isInteger(magnetic.accuracy) || !finiteRange(magnetic.accuracy, 0, 3))) return null;
+            result.magnetic.accuracy = magnetic.accuracy;
+        }
+        for (const [key, min, max] of [['fieldMagnitude', 0, 2e4], ['observationAge', 0, 86400],
+            ['headingResidual', -180, 180], ['correctionDegrees', -180, 180]]) {
+            if (magnetic[key] !== null && !finiteRange(magnetic[key], min, max)) return null;
+            result.magnetic[key] = magnetic[key];
         }
     }
     return result;
@@ -142,6 +161,17 @@ export function normalizeSample(sample) {
     if (sample.gap !== undefined && typeof sample.gap !== 'boolean') return null;
     const result = { time: sample.time, gyro: [...sample.gyro], accel: [...sample.accel], kind: sample.kind };
     if (sample.gap === true) result.gap = true;
+    if (sample.magneticAvailable !== undefined) {
+        if (typeof sample.magneticAvailable !== 'boolean') return null;
+        result.magneticAvailable = sample.magneticAvailable;
+    }
+    if (sample.magnetic !== undefined) {
+        const observation = sample.magnetic;
+        if (!observation || !array(observation.field, 3, 2000)
+            || !finiteRange(observation.time, 0, sample.time + 1e-6)
+            || !Number.isInteger(observation.accuracy) || !finiteRange(observation.accuracy, 0, 3)) return null;
+        result.magnetic = { field: [...observation.field], time: observation.time, accuracy: observation.accuracy };
+    }
     const hasBefore = sample.accelBeforeTime !== undefined;
     const hasAfter = sample.accelAfterTime !== undefined;
     if (hasBefore !== hasAfter) return null;
@@ -351,7 +381,7 @@ export async function createLabServer(options = {}) {
                     'gyroCalibrated', 'accelCalibrated', 'calibrationActive', 'faces', 'zeroCorrections', 'status', 'message']) {
                     point[key] = Array.isArray(frame[key]) ? [...frame[key]] : frame[key];
                 }
-                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest', 'restNoise']) {
+                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest', 'restNoise', 'magnetic']) {
                     if (Object.hasOwn(frame, key)) point[key] = structuredClone(frame[key]);
                 }
                 // 模拟参考位置只进入本机诊断轨迹，不能混入设备位姿或房间广播。

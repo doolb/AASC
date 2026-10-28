@@ -1,4 +1,5 @@
 import { Quaternion, Vector3 } from 'three';
+import { MagneticAssist } from './imu-magnetic.mjs';
 
 export const GRAVITY = 9.80665;
 export const REST_ORIENTATION = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2);
@@ -21,12 +22,14 @@ function statistics(samples, key) {
 }
 
 export const DEFAULT_PROFILE = Object.freeze({ gyroDeadZone: 0.0035, accelDeadZone: 0.08,
-    filterHz: 12, tiltGain: 0.25, assumedRest: false, simulatorAutoRest: false, remoteAutoRest: false, maxGap: 0.15 });
+    filterHz: 12, tiltGain: 0.25, assumedRest: false, simulatorAutoRest: false, remoteAutoRest: false,
+    magneticAssist: true, maxGap: 0.15 });
 
 /** 不读取模拟真值的六轴估计器；所有输入端共用，观察端不重复积分。 */
 export class ImuEngine {
     constructor(profile = {}) {
         this.profile = { ...DEFAULT_PROFILE, ...profile };
+        this.magnetic = new MagneticAssist();
         this.q = REST_ORIENTATION.clone();
         this.p = new Vector3(); this.v = new Vector3();
         this.gyroBias = [0, 0, 0]; this.accelBias = [0, 0, 0]; this.accelScale = [1, 1, 1];
@@ -47,6 +50,7 @@ export class ImuEngine {
     }
 
     beginCalibration(face = null) {
+        this.magnetic.reset();
         this.cancelDeadzoneCalibration();
         if (face !== null && !/^[xyz][+-]$/.test(face)) throw new Error('校准面无效');
         this.quietSince = null; this.resetSimulatorRest(); this.resetRemoteRest();
@@ -55,6 +59,7 @@ export class ImuEngine {
     }
 
     beginDeadzoneCalibration() {
+        this.magnetic.reset();
         this.calibration = null;
         this.zeroCorrections += 1;
         this.v.set(0, 0, 0); this.filteredAcceleration = null; this.quietSince = null;
@@ -269,6 +274,7 @@ export class ImuEngine {
     // 实验重置保留处理参数及已学标定；手机姿态必须由下一条实际重力重新对齐。
     // 只清原点的操作仍保留当前姿态，避免把两个按钮的语义混在一起。
     resetExperiment() {
+        this.magnetic.reset();
         this.resetOrigin(); this.calibration = null; this.deadzoneMessage = '';
         this.q.copy(REST_ORIENTATION); this.initialized = false; this.lastTime = null;
         this.filteredAcceleration = null; this.filteredGyro = null; this.quietSince = null;
@@ -284,6 +290,7 @@ export class ImuEngine {
     stopVelocity() { this.v.set(0, 0, 0); this.resetSimulatorRest(); this.resetRemoteRest();
         this.zeroCorrections += 1; this.message = '已按用户确认停稳清零速度'; }
     resetHeading() {
+        this.magnetic.reset();
         const forward = new Vector3(0, 1, 0).applyQuaternion(this.q);
         const yaw = Math.atan2(-forward.x, -forward.z);
         // 绕世界竖直轴抵消当前航向，保留已有倾斜；同向叠加会把航向误差翻倍。
@@ -292,6 +299,7 @@ export class ImuEngine {
         this.message = '已重置相对航向，保持倾斜';
     }
     pause() { this.cancelDeadzoneCalibration(); this.lastTime = null; this.v.set(0, 0, 0); this.filteredGyro = null;
+        this.magnetic.suspend();
         this.filteredAcceleration = null; this.quietSince = null; this.resetSimulatorRest(); this.resetRemoteRest();
         this.clearProcessed();
         this.status = 'paused'; this.message = '数据中断，冻结位置；恢复时速度从零开始'; }
@@ -315,6 +323,7 @@ export class ImuEngine {
             this.initialized = true;
         }
         if (dt > this.profile.maxGap) {
+            this.magnetic.suspend('断流，等待稳定观测恢复');
             if (this.deadzoneCalibration) this.beginDeadzoneCalibration();
             this.gaps += 1; this.v.set(0, 0, 0); this.filteredGyro = null; this.filteredAcceleration = null;
             this.quietSince = null; this.resetSimulatorRest(); this.resetRemoteRest();
@@ -351,6 +360,10 @@ export class ImuEngine {
         if (this.calibration && this.calibration.face === null) { rate.set(0, 0, 0); attitudeRate.set(0, 0, 0); }
         const midpoint = this.q.clone().multiply(rotationStep(attitudeRate, dt / 2));
         this.q.multiply(rotationStep(attitudeRate, dt)).normalize();
+        if (!this.calibration) {
+            const correction = this.magnetic.update(sample, force, this.q, dt, this.profile.magneticAssist);
+            this.q.premultiply(correction).normalize(); midpoint.premultiply(correction).normalize();
+        }
         const acceleration = force.clone().applyQuaternion(midpoint);
         if (this.profile.simulatorAutoRest && sample.kind === 'gravity' && dt > 0) {
             const gravityError = Math.abs(forceNorm - GRAVITY);
@@ -432,6 +445,7 @@ export class ImuEngine {
         return { position: this.p.toArray(), velocity: this.v.toArray(), quaternion: this.q.toArray(),
             gyro: this.correctedGyro || [0, 0, 0], linear: this.linearAcceleration || [0, 0, 0],
             attitudeGyro: [...this.attitudeGyro], profile: { ...this.profile },
+            magnetic: this.magnetic.snapshot(),
             rawGyro: this.lastSample?.gyro || [0, 0, 0], rawAccel: this.lastSample?.accel || [0, 0, 0],
             time: this.lastSample?.time ?? 0, samples: this.samples, gaps: this.gaps, rejected: this.rejected,
             zeroCorrections: this.zeroCorrections, restConfidence: this.restConfidence, restReason: this.zuptReason,

@@ -126,6 +126,10 @@ element('resetOrigin').addEventListener('click', () => { engine.resetOrigin(); t
 element('resetHeading').addEventListener('click', () => engine.resetHeading());
 element('clearTrails').addEventListener('click', clearDisplayedTrails);
 element('assumedRest').addEventListener('change', event => { engine.profile.assumedRest = event.target.checked; });
+element('magneticAssist').addEventListener('change', event => {
+    engine.profile.magneticAssist = event.target.checked; engine.magnetic.reset();
+    if (!event.target.checked) engine.magnetic.update({ time: engine.lastTime || 0 }, new Vector3(), engine.q, 0, false);
+});
 element('followLeft').addEventListener('change', event => left.follow(event.target.checked ? element('deviceSelect').value : null));
 element('deviceSelect').addEventListener('change', event => { if (element('followLeft').checked) left.follow(event.target.value); });
 element('stream').addEventListener('change', event => { stream = event.target.checked;
@@ -232,6 +236,10 @@ function diagnostics(now) {
     element('processingDiagnostics').textContent = selected.profile
         ? `显示角速度死区 ${diagnosticNumber(selected.profile.gyroDeadZone * 180 / Math.PI, 2)} °/s · 加速度死区 ${diagnosticNumber(selected.profile.accelDeadZone, 2)} m/s² · 滤波 ${diagnosticNumber(selected.profile.filterHz, 0)} Hz`
         : '旧页面未提供处理参数';
+    const magnetic = selected.magnetic;
+    element('magneticDiagnostics').textContent = magnetic
+        ? `${magnetic.reason} · 磁场 ${diagnosticNumber(magnetic.fieldMagnitude, 1)} μT · 精度 ${diagnosticNumber(magnetic.accuracy, 0)}/3 · 观测年龄 ${diagnosticNumber(magnetic.observationAge)} s · 航向残差 ${diagnosticNumber(magnetic.headingResidual, 2)}° · 重力${magnetic.gravityTrusted ? '可信' : '未确认'} · 参考${magnetic.referenceReady ? '已建立' : '待建立'}`
+        : '旧页面未提供磁场辅助诊断';
     element('accelKind').textContent = `${selected.kind === 'gravity' ? '原始含重力' : '原始平台线性'}加速度 / m/s²`;
     element('gyro').value = format((latestSample?.gyro || [0, 0, 0]).map(value => value * 180 / Math.PI));
     element('acceleration').value = format(latestSample?.accel || [0, 0, 0]);

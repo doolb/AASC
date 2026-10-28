@@ -38,6 +38,8 @@ test('真实WebSocket多设备同房间广播、晚加入快照、所有权、�
     assert.deepEqual(recorded.points[1].rawAccel, next.rawAccel);
     assert.deepEqual(recorded.current.linear, next.linear);
     assert.equal(recorded.current.zeroCorrections, 7);
+    assert.deepEqual(recorded.current.magnetic, frame.magnetic);
+    assert.deepEqual(recorded.points[0].magnetic, frame.magnetic);
     assert.equal(Object.hasOwn(recorded.current, 'platformLinear'), false);
     second.send({ type: 'imu.frame', deviceId: joined.device.id, generation: phone.device.generation, sequence: 1, frame });
     assert.match((await second.take('error')).message, /会话/);
@@ -160,4 +162,32 @@ test('静稳噪声诊断兼容旧帧，模型数组深拷贝且非法统计不�
     const old = { ...frame }; delete old.restNoise;
     for (const key of ['noiseLearned', 'gyroMeanError', 'gyroVariation', 'gyroVariationLimit']) delete old.remoteRest[key];
     assert.ok(normalizeFrame(old)); assert.equal(Object.hasOwn(normalizeFrame(old), 'restNoise'), false);
+});
+
+test('磁场可选观测与诊断严格校验、旧样本兼容、深拷贝和静态融合模块可加载', async t => {
+    const { normalizeSample, normalizeFrame, createLabServer } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const { ImuEngine } = await import('../3rd/imu-six-axis-test/imu-engine.mjs');
+    const raw = { time: 1, gyro: [0, 0, 0], accel: [0, 0, 9.80665], kind: 'gravity',
+        magneticAvailable: true, magnetic: { field: [18, 35, -28], time: .98, accuracy: 3, unknown: 100 } };
+    const normalized = normalizeSample(raw);
+    assert.deepEqual(normalized.magnetic, { field: [18, 35, -28], time: .98, accuracy: 3 });
+    normalized.magnetic.field[0] = 0; assert.equal(raw.magnetic.field[0], 18);
+    for (const patch of [{ time: 1.1 }, { time: -1 }, { field: [1, 2] }, { field: [Infinity, 0, 0] },
+        { field: [3000, 0, 0] }, { accuracy: -1 }, { accuracy: 4 }, { accuracy: 1.5 }, { accuracy: '3' }]) {
+        assert.equal(normalizeSample({ ...raw, magnetic: { ...raw.magnetic, ...patch } }), null);
+    }
+    assert.equal(normalizeSample({ ...raw, magneticAvailable: 'yes' }), null);
+    const legacy = { ...raw }; delete legacy.magnetic; delete legacy.magneticAvailable;
+    assert.ok(normalizeSample(legacy)); assert.ok(normalizeSample({ ...legacy, magneticAvailable: false }));
+    const frame = new ImuEngine().snapshot();
+    assert.deepEqual(normalizeFrame(frame).magnetic, frame.magnetic);
+    const oldFrame = { ...frame }; delete oldFrame.magnetic;
+    assert.ok(normalizeFrame(oldFrame));
+    for (const patch of [{ enabled: 1 }, { available: 1 }, { state: 'bad' }, { fieldMagnitude: NaN },
+        { headingResidual: 181 }, { observationAge: -1 }, { reason: {} }, { gravityTrusted: 'yes' }, { accuracy: 4 }, { accuracy: '3' }]) {
+        assert.equal(normalizeFrame({ ...frame, magnetic: { ...frame.magnetic, ...patch } }), null);
+    }
+    assert.equal(normalizeFrame({ ...frame, profile: { magneticAssist: 1 } }), null);
+    const service = await createLabServer({ host: '127.0.0.1', port: 0 }); t.after(() => service.close());
+    assert.equal((await fetch(`http://127.0.0.1:${service.port}/imu-magnetic.mjs`)).status, 200);
 });

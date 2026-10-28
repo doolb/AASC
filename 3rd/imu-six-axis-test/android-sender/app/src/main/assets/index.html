@@ -27,7 +27,7 @@
 <body>
 <main>
   <h1>AASC 六轴传感器</h1>
-  <p>原生读取陀螺仪与加速度计，并发送到电脑的六轴运动实验室。样本按时间配对并分批发送；队列满时丢弃最旧样本。</p>
+  <p>原生读取陀螺仪、加速度计及可选磁力计，并发送到电脑的运动实验室。样本按时间配对并分批发送；队列满时丢弃最旧样本。</p>
   <section class="card">
     <label>电脑服务器地址<input id="host" value="192.168.1.39" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <label>端口<input id="port" value="8769" inputmode="numeric"></label>
@@ -40,6 +40,7 @@
     <output id="count">已发送 0 个样本</output>
     <output id="gyro">角速度 / rad·s⁻¹：—</output>
     <output id="accel">加速度 / m·s⁻²：—</output>
+    <output id="magnetic">磁场 / μT：等待采集</output>
   </section>
   <p class="hint">请确认手机与电脑连接同一局域网。采集仅在本应用前台运行；返回桌面或断开后会停止传感器。</p>
 </main>
