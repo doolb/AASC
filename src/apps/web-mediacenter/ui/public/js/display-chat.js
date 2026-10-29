@@ -780,9 +780,9 @@
                         <div data-role="attachments"></div>
                         <textarea data-role="input" rows="2" maxlength="51200" placeholder="输入消息…" aria-label="聊天输入"></textarea>
                         <div class="display-chat-compose-actions">
-                            <button type="submit" class="display-chat-send">发送</button>
-                            <button type="button" data-action="attach">📎 附件</button>
                             <button type="button" data-action="clear">清空</button>
+                            <button type="button" data-action="attach">📎 附件</button>
+                            <button type="submit" class="display-chat-send">发送</button>
                         </div>
                     </form>
                 </section>

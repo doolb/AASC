@@ -101,10 +101,11 @@ for (const endpoint of ['control', 'display']) {
                         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
                         const field = document.querySelector('[data-role="input"]').getBoundingClientRect();
                         const row = document.querySelector('.display-chat-compose-actions').getBoundingClientRect();
-                        const buttons = [...document.querySelectorAll('.display-chat-compose-actions button')]
-                            .map(node => node.getBoundingClientRect());
+                        const controls = [...document.querySelectorAll('.display-chat-compose-actions button')];
+                        const buttons = controls.map(node => node.getBoundingClientRect());
                         const form = document.querySelector('.display-chat-compose');
                         return {
+                            order: controls.map(node => node.textContent.trim()),
                             fullWidth: Math.abs(field.left - row.left) < 1 && Math.abs(field.width - row.width) < 1,
                             below: row.top >= field.bottom,
                             oneRow: buttons.length === 3 && buttons.every(rect => Math.abs(rect.top - row.top) < 1),
@@ -114,7 +115,7 @@ for (const endpoint of ['control', 'display']) {
                             previewFits: !withAttachment || host.scrollWidth <= host.clientWidth
                         };
                     }, withAttachment);
-                    assert.deepEqual(compose, { fullWidth: true, below: true, oneRow: true,
+                    assert.deepEqual(compose, { order: ['清空', '📎 附件', '发送'], fullWidth: true, below: true, oneRow: true,
                         equalWidths: true, fits: true, previewFits: true }, `${width}px,附件=${withAttachment}`);
                 }
             }
