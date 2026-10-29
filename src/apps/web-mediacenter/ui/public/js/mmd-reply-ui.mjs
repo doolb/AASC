@@ -89,12 +89,12 @@ function initReply() {
     }
     async function editSource(name, options, request) {
         const editor = window.DisplayMmdMplPlayback;
-        if (!editor?.editSource) { sourceStatus('MPL编辑器尚未就绪，请稍后重试'); return; }
+        if (!editor?.editSource) { sourceStatus('动作编辑器尚未就绪，请稍后重试'); return; }
         const human = api()?.getHumanInterface?.(), token = human?.getState?.().token, revision = editor.getSourceRevision();
         const current = () => !closed && !document.hidden && request === sourceRequest
             && human === api()?.getHumanInterface?.() && token === human?.getState?.().token
             && revision === editor.getSourceRevision();
-        sourceStatus('正在读取' + name + '的MPL源码…');
+        sourceStatus('正在读取' + name + '的动作代码…');
         try {
             const source = await getAdvancedMpl(options, human, serverActions);
             // 新选择、用户输入和模型token均高于迟到结果；替换完整代码，不拼接多个main块。

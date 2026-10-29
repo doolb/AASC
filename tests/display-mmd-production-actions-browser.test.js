@@ -12,7 +12,7 @@ const { STATIC_MMD_RELEASE } = require('../src/apps/server/modules/mmd/mmd-resou
 const MODELS = path.resolve(__dirname, '../3rd/mmd-ar-test/model-cache', STATIC_MMD_RELEASE.version, 'mmd');
 const CHROME = '/usr/bin/chromium';
 
-test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填入与真实TTS优先', {
+test('正式真实PMX：灯光保存/预设、待机/动态目录、IK源码静默填入与真实TTS优先', {
     timeout: 240000, skip: !fs.existsSync(CHROME) || !fs.existsSync(path.join(MODELS, 'miya/miya.pmx'))
 }, async () => {
     // 使用正式HTML、脚本和真实米娅，只隔离服务器连接及摄像头业务。
@@ -93,13 +93,14 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
             const panel = document.getElementById('mmdArLightingPresets'); panel.querySelector('[data-preset-name]').value = '正式自测';
             panel.querySelector('[data-preset-action="save"]').click();
             // 软件GPU验收动作时关闭重型光照，灯光参数已在上面通过实际入口验证。
-            window.DisplayMmdLighting.apply({ pmxAoEnabled: false, keyShadowEnabled: false });
-            window.DisplayMmdLightingPresetGroups.screenLighting.apply({ giEnabled: false });
-            window.DisplayMmdLightingPresetGroups.render.apply({ canvasScale: .5 });
+            window.DisplayMmdLighting.apply({ pmxAoEnabled: false, keyShadowEnabled: false, shadowSource: 'none' });
+            window.DisplayMmdLightingPresetGroups.screenLighting.apply({ giEnabled: false, contactEnabled: false });
+            window.DisplayMmdLightingPresetGroups.render.apply({ canvasScale: .25, taaEnabled: false });
             window.DisplayMmd.init({ canvas: document.getElementById('displayMmdCanvas'), onLoadProgress() {}, status: document.getElementById('displayMmdStatus') });
             window.DisplayMmd.setVisible(true);
         });
-        try { await page.waitForFunction(() => window.DisplayMmd?.getHumanInterface?.()?.getState().ready, { timeout: 90000 }); }
+        try { await page.waitForFunction(() => { const h = window.DisplayMmd?.getHumanInterface?.();
+            return h?.getState().ready && !h.getState().automaticMotionBlocked; }, { timeout: 90000 }); }
         catch (error) { console.log(await page.evaluate(() => ({ state: window.DisplayMmd.getState(), status: document.getElementById('displayMmdStatus')?.textContent }))); throw error; }
         // 初始化正式舞台而不连接服务器；验证真实渲染计时及角色控件生命周期。
         await page.addScriptTag({ path: path.join(ROOT, 'js/display-stage.js') });
@@ -126,14 +127,16 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
         assert.match(await page.evaluate(() => window.DisplayMmd.getModelProfile().motionUrl), /miya-idle\.vmd$/u);
         await page.waitForFunction(() => document.querySelectorAll('[data-server-actions] [data-advanced]').length === 3);
         assert.equal(await page.$$eval('[data-builtin-actions] button', nodes => nodes.length), 28);
-        await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getArmAvoidanceState().available);
+        await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().available);
         const sampled = await page.evaluate(() => ({ arm: window.DisplayMmd.getHumanInterface().getArmAvoidanceState(),
+            ik: window.DisplayMmd.getHumanInterface().getInteractiveIKState(),
             gaze: window.DisplayMmd.getHumanInterface().getState().gaze,
             parsed: window.DisplayMmdReplyPreview.parse('❤️🐾🐈‍⬛🫶🏽😊🤷🏾‍♀️') }));
+        assert.equal(sampled.ik.enabled, true); assert.equal(sampled.ik.mode, 'physics');
         assert.deepEqual(sampled.parsed.events.map(item => item.name), ['比心', '猫爪', '猫咪撒娇', '比心', '开心', '摊手']);
         assert.equal(sampled.gaze.head, true); assert.equal(sampled.gaze.eyes, true);
         console.log('正式避让状态：', JSON.stringify(sampled.arm));
-        // 直接点击实际动作按钮，真实Worker生成源码；折叠、焦点和滚动均保持。
+        // 直接点击实际动作按钮，读取实际IK计划；折叠、焦点和滚动均保持。
         const navigation = await page.evaluate(() => {
             document.getElementById('displayMmdMotionToggle').click();
             document.getElementById('mmdArAdvancedMotionPanel').closest('.display-mmd-panel-group').querySelector('button').click();
@@ -147,13 +150,23 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
             folded: document.getElementById('mmdArMplPanel').closest('.display-mmd-panel-group-body').hidden,
             active: document.activeElement.dataset.advanced, positions: window.__navigationNodes.map(node => [node.scrollLeft, node.scrollTop]) }));
         assert.equal(renderedSource.folded, true); assert.equal(renderedSource.active, '猫爪');
+        const download = await page.evaluate(() => {
+            const original = HTMLAnchorElement.prototype.click;
+            let filename = '';
+            HTMLAnchorElement.prototype.click = function () { filename = this.download; };
+            try { document.querySelector('[data-mpl="download-source"]').click(); }
+            finally { HTMLAnchorElement.prototype.click = original; }
+            return filename;
+        });
+        assert.equal(download, '猫爪.json');
         renderedSource.positions.forEach((value, index) => assert.ok(value.every((axis, i) => Math.abs(axis - navigation[index][i]) <= 1)));
         const compiled = await page.evaluate(async source => {
             await window.DisplayMmdReplyPreview.stop();
             const result = await window.DisplayMmdMplPlayback.play(source, 'formal:preview', true);
-            await window.DisplayMmdMplPlayback.stop(); return { bytes: result.buffer.byteLength, duration: result.duration };
+            await window.DisplayMmdMplPlayback.stop(); return { bytes: result.buffer?.byteLength || 0, duration: result.duration,
+                format: JSON.parse(source).format };
         }, renderedSource.source);
-        assert.ok(compiled.bytes > 0); assert.ok(compiled.duration > 0);
+        assert.equal(compiled.format, 'ik-targets'); assert.equal(compiled.bytes, 0); assert.ok(compiled.duration > 0);
         sourceDelay = 450;
         await page.evaluate(() => {
             document.querySelector('[data-advanced="待机"]').click();
@@ -248,5 +261,13 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、MPL静默填
         assert.equal(stoppedTiming.physics.frameMs, 0); assert.match(stoppedTiming.label, /物理已关闭|物理未运行/u);
         assert.deepEqual(errors, []); assert.deepEqual(missing.filter(name => name !== 'favicon.ico'), []);
         console.log('正式集成：灯光/保存/动态动作/MPL/真实音频通过');
-    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+    } catch (error) {
+        console.error('正式页面验收失败：', error.stack); throw error;
+    } finally {
+        // 真实资源流和软件GPU关闭可能滞留；显式收尾，避免掩盖原断言/超时为事件循环已结束。
+        server.closeAllConnections();
+        const cleanup = setTimeout(() => browser?.process()?.kill('SIGTERM'), 5000);
+        try { await browser?.close(); }
+        finally { clearTimeout(cleanup); await new Promise(resolve => server.close(resolve)); }
+    }
 });

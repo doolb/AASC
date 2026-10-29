@@ -1,7 +1,6 @@
 import { createDanceExpressionSampler } from './mmd-reply-expressions.mjs';
 import { createHumanIK } from './mmd-human-ik.mjs';
 import { validateMotionSource, validateMotionSampler } from './mmd-motion-policy.mjs';
-import { GESTURES } from './mmd-reply-gestures.mjs';
 import { createHumanModel } from './mmd-human-model.mjs';
 import { createHumanMixer } from './mmd-human-mixer.mjs';
 import { createHumanPhysiology } from './mmd-human-physiology.mjs';
@@ -11,7 +10,7 @@ import { compileHumanMpl } from './mmd-human-compiler.mjs';
 import { createHumanSampler, readHumanVmd, inspectHumanVmd } from './mmd-human-vmd.mjs';
 import { emptyHumanLibrary, loadHumanLibrary, saveHumanLibrary, validateHumanLibrary,
     exportHumanLibrary, importHumanLibrary } from './mmd-human-storage.mjs';
-import { createHighLevelMpl } from './mmd-reply-actions.mjs';
+import { createBuiltinIKPlan, createBuiltinIKSampler } from './mmd-reply-ik-gestures.mjs';
 import { serverActions } from './mmd-human-server-actions.mjs';
 import { createHumanArmAvoidance, readArmAvoidancePreference, ARM_AVOIDANCE_KEY } from './mmd-human-arm-avoidance.mjs';
 import { createIKSampler, isIKSource, parseIKSource, IK_TARGET_BONES } from './mmd-ik-plan.mjs';
@@ -326,16 +325,13 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                 layers.push(base); baseDuration = base.duration; warnings.push(...sampler.warnings);
             }
             if (intent.action && !version && !remote) {
-                const source = createHighLevelMpl({ name: intent.action, duration: Math.min(15, baseDuration), strength: intent.strength ?? 0.7, count: intent.count ?? 1 }, bound.morphs);
-                const gesture = GESTURES.get(intent.action);
-                if (gesture?.expression && gesture.expression !== '平静' && bound.expression(gesture.expression).missing) {
-                    warnings.push('当前PMX缺少' + gesture.expression + '表情，仅播放骨骼动作');
-                }
-                const result = await mplSampler(source, bound, signal, check); check(); buffer = result.buffer;
-                layers.push({ ...layer(result.sampler, { ...intent, strength: (intent.strength ?? 0.7) > 0 ? 1 : 0,
-                    gazeStrength: intent.strength ?? 0.7, duration: baseDuration }),
-                    gestureCycle: gesture?.keyframes ? baseDuration / (intent.count ?? 1) : 0 });
-                warnings.push(...result.sampler.warnings);
+                const sampler = createBuiltinIKSampler({ name: intent.action, duration: Math.min(15, baseDuration),
+                    strength: intent.strength ?? 0.7, count: intent.count ?? 1 }, bound);
+                check();
+                // 目标与Morph已按强度缩放；混合层不重复缩小，零强度仍完全释放身体接管。
+                layers.push(layer(sampler, { ...intent, strength: (intent.strength ?? 0.7) > 0 ? 1 : 0,
+                    gazeStrength: intent.strength ?? 0.7, duration: baseDuration }));
+                warnings.push(...sampler.warnings);
             }
             const cycleDuration = Math.max(baseDuration, ...layers.map(l => l.start + l.duration));
             const count = number(intent.count, remote?.count ?? 1, 1, 8, '重复次数');
@@ -627,8 +623,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         setInteractiveTargetState(key, position, rotation) { requireModel(); return interactiveIK.setTargetState(key, position, rotation); },
         setInteractiveTarget(key, position, rotation) { requireModel(); return interactiveIK.setTarget(key, position, rotation); },
         actionKey, candidates, prepareMpl, prepareMotion: prepareMpl, reflex, learn, serverActions, perform, prepare: intent => perform(intent, true), startPrepared, mpl: { play: playMpl,
-            // 使用与实际播放相同的模型能力，编辑器不根据缺少英文别名的能力摘要再次猜表情。
-            advancedSource: options => createHighLevelMpl(options, requireModel().morphs)
+            // 正式内置模板源码与播放共用同一IK计划，旧MPL手写和用户版本仍可直接预览。
+            advancedSource: options => JSON.stringify(createBuiltinIKPlan(options, requireModel()).plan)
         }, stop, getRequest: mixer.state,
         setArmAvoidanceEnabled(value) {
             armAvoidanceEnabled = value === true;

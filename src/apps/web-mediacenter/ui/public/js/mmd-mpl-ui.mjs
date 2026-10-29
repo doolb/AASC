@@ -1,4 +1,5 @@
 import { encodeMorphName } from './mmd-mpl-morphs.mjs';
+import { isIKSource } from './mmd-ik-plan.mjs';
 
 // 调试和回复只提交Human层；基础VMD和物理helper一直由原播放器持有。
 function initMpl() {
@@ -11,7 +12,7 @@ function initMpl() {
     let sourceRevision = 0, sourceName = '', sourceBlend = null;
     const downloadSource = document.createElement('button');
     downloadSource.type = 'button'; downloadSource.className = 'display-mmd-ar-action';
-    downloadSource.dataset.mpl = 'download-source'; downloadSource.textContent = '下载 MPL';
+    downloadSource.dataset.mpl = 'download-source'; downloadSource.textContent = '下载动作代码';
     buttons.save.after(downloadSource);
     const human = () => window.DisplayMmd?.getHumanInterface?.();
     const status = text => { message.textContent = text; };
@@ -87,10 +88,10 @@ function initMpl() {
         panel.setAttribute('aria-busy', String(!!phase));
     }
     function editSource(source, name, blend = null) {
-        if (closed || typeof source !== 'string' || !source.trim() || new TextEncoder().encode(source).length > 65536) throw new Error('MPL需要1–64KiB代码');
+        if (closed || typeof source !== 'string' || !source.trim() || new TextEncoder().encode(source).length > 65536) throw new Error('动作代码需要1–64KiB');
         automatic = false; input.value = source; sourceName = name; sourceRevision++; sourceBlend = blend;
         // 静默填入源码并更新编辑状态，保留分类折叠、滚动和焦点；由用户手动打开预览。
-        status('已载入「' + name + '」MPL。修改后可编译预览、下载；暂不保存高级动作。');
+        status('已载入「' + name + '」动作代码。修改后可预览、下载；暂不保存高级动作。');
         sync();
     }
     window.DisplayMmdMplPlayback = Object.freeze({ play, perform, stop: stopOwned, getState, editSource, getSourceRevision: () => sourceRevision });
@@ -111,9 +112,10 @@ function initMpl() {
     });
     downloadSource.addEventListener('click', () => {
         if (!input.value.trim()) return;
-        const url = URL.createObjectURL(new Blob([input.value], { type: 'text/plain;charset=utf-8' }));
+        const ik = isIKSource(input.value);
+        const url = URL.createObjectURL(new Blob([input.value], { type: ik ? 'application/json' : 'text/plain;charset=utf-8' }));
         const link = document.createElement('a'); link.href = url;
-        link.download = (sourceName || 'advanced-motion').replace(/[^\p{L}\p{N}_-]/gu, '_') + '.mpl'; link.click();
+        link.download = (sourceName || 'advanced-motion').replace(/[^\p{L}\p{N}_-]/gu, '_') + (ik ? '.json' : '.mpl'); link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     const timer = setInterval(() => { if (!document.hidden) sync(); }, 1000);

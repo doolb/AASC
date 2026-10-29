@@ -12,6 +12,48 @@ const example = () => ({ format: 'ik-targets', version: 1, duration: 2, frames: 
 ] });
 const contract = () => import('../src/apps/web-mediacenter/ui/public/js/mmd-ik-plan.mjs');
 
+test('全部28类内置动作走IK目标，极短/多轮时缩幅且不写骨骼轨道，源码与采样一致', async () => {
+    const { model } = await makeModel();
+    const { ADVANCED_GESTURES } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-reply-gestures.mjs');
+    const { createBuiltinIKSampler } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-reply-ik-gestures.mjs');
+    for (const gesture of ADVANCED_GESTURES) for (const parameters of [
+        { duration: 0.2, count: 8, strength: 1 }, { duration: 4, count: 1, strength: 0.7 },
+        { duration: 15, count: 8, strength: 1 }, { duration: 2, count: 2, strength: 0 }
+    ]) {
+        const result = createBuiltinIKSampler({ name: gesture.name, ...parameters }, model);
+        assert.equal(result.duration, parameters.duration);
+        assert.ok(result.plan.frames.length <= 48);
+        assert.ok(result.tracks.some(track => track.kind === 'ik'));
+        assert.ok(result.tracks.every(track => ['ik', 'morph'].includes(track.kind)));
+        assert.deepEqual(JSON.parse(result.source), result.plan);
+        for (const track of result.tracks) {
+            assert.ok(track.evaluate(result.duration * 0.4).every(Number.isFinite));
+            assert.ok(track.evaluate(0).every(value => value === 0));
+            assert.ok(track.evaluate(result.duration).every(value => value === 0));
+        }
+        if (parameters.strength === 0) for (const track of result.tracks) assert.ok(track.evaluate(result.duration * 0.4).every(value => value === 0));
+    }
+});
+
+test('内置IK表情按真实Morph/独立权重解析，缺部位告警且动态骨不接管，参数错误明确拒绝', async () => {
+    const { model } = await makeModel();
+    const { createBuiltinIKPlan } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-reply-ik-gestures.mjs');
+    model.morphs = [{ name: '照れ', index: 0, supported: true, panel: 1 }];
+    const result = createBuiltinIKPlan({ name: '比心', duration: 4, strength: 0.7 }, model);
+    assert.ok(Math.abs(result.plan.frames[2].morphs['照れ'] - 0.7 * 0.24 * 0.9) < 1e-8);
+    assert.ok(result.plan.frames[2].targets.leftHand.position.every((value, index) => Math.abs(value - [-0.12, 0.19, 0.13][index]) < 1e-8));
+    model.bindings['bones:leftWrist'].dynamic = true;
+    model.bindings['bones:rightWrist'] = null;
+    const degraded = createBuiltinIKPlan({ name: '比心' }, model);
+    assert.deepEqual(Object.keys(degraded.plan.frames[1].targets), ['head']);
+    assert.match(degraded.warnings.join(' '), /leftHand.*rightHand/);
+    model.bindings['bones:head'] = null;
+    assert.throws(() => createBuiltinIKPlan({ name: '比心' }, model), /缺少/);
+    for (const options of [{ name: '不存在' }, { duration: NaN }, { strength: -1 }, { count: 0 }, { count: 1.5 }]) {
+        assert.throws(() => createBuiltinIKPlan({ name: '点头', ...options }, model));
+    }
+});
+
 test('IK格式规范化保留原输入，约束时长/部位/通道/首尾/速度与真实Morph', async () => {
     const { normalizeIKPlan } = await contract();
     const original = example(), normalized = normalizeIKPlan(original, { ikTargets: ['head'], morphs: [] });
@@ -132,6 +174,21 @@ test('正式Human默认IK初始化、隐藏期间取消、恢复、手动接管�
         assert.equal(api.getInteractiveIKState().markersVisible, false);
         helper.onHumanPose(model.mesh); helper.onHumanAfterIK(model.mesh, 1 / 60);
         assert.ok(api.getInteractiveIKState().automaticTargets > 0);
+        const source = JSON.parse(api.mpl.advancedSource({ name: '比心', duration: 4, strength: 0.7 }));
+        assert.equal(source.format, 'ik-targets');
+        const baseline = api.getInteractiveIKState().controls.find(item => item.key === 'leftHand').achieved[1];
+        const request = await api.perform({ action: '比心', owner: 'test:builtin', duration: 4, strength: 0.7 });
+        assert.equal(request.buffer, undefined, '内置IK不依赖MPL Worker编译');
+        for (let frame = 0; frame < 120; frame++) {
+            api.before(1 / 60, helper); helper.onHumanPose(model.mesh); helper.onHumanAfterIK(model.mesh, 1 / 60);
+        }
+        assert.ok(api.getInteractiveIKState().controls.find(item => item.key === 'leftHand').achieved[1] > baseline + 1);
+        api.stop('test:builtin');
+        assert.equal(api.getRequest(request.id).reason, 'stopped');
+        const zero = await api.perform({ action: '比心', owner: 'test:zero', duration: 2, strength: 0 });
+        api.before(0.1, helper); helper.onHumanPose(model.mesh); helper.onHumanAfterIK(model.mesh, 0.1);
+        assert.equal(api.getInteractiveIKState().unreachable, 0);
+        api.stop('test:zero'); assert.equal(api.getRequest(zero.id).active, false);
         api.setInteractiveTargetState('leftHand', 'On', 'Off');
         assert.equal(api.getState().automaticMotionBlocked, true);
         api.resetInteractiveIK(); assert.equal(api.getState().automaticMotionBlocked, false);
