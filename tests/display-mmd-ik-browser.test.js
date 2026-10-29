@@ -54,7 +54,8 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
         console.error('[IK验收] 初始化角色');
         await page.evaluate(() => { window.DisplayMmd.init({ canvas: document.getElementById('displayMmdCanvas'), onLoadProgress: p => console.log('[IK进度]', JSON.stringify(p)) }); window.DisplayMmd.setVisible(true); });
         console.error('[IK验收] 等待模型');
-        await page.waitForFunction(() => window.DisplayMmd.getHumanInterface()?.getState().ready, { timeout: 90000 });
+        await page.waitForFunction(() => { const h = window.DisplayMmd.getHumanInterface(); return h?.getState().ready && !h.getState().automaticMotionBlocked; }, { timeout: 90000 });
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().markersVisible), false);
         await page.evaluate(async () => {
             window.DisplayMmd.setMotionPlaybackEnabled(false);
             const h = window.DisplayMmd.getHumanInterface(); h.physiology.set({ breathing: false, blinking: false }); h.gaze.set({ head: false, eyes: false });
@@ -67,14 +68,14 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
         await page.evaluate(() => window.DisplayStage.setMmdVisible(true));
         console.error('[IK验收] 打开IK面板');
         await page.click('#displayMmdIKToggle');
-        console.error('[IK验收] 启用IK');
-        await page.click('#displayMmdIKPanel [data-ik-action="enable"]');
+        console.error('[IK验收] 确认默认启用IK');
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled, { timeout: 30000 });
         console.error('[IK验收] 读取IK状态');
         const state = await page.evaluate(async () => { await window.player.tick(); return window.DisplayMmd.getHumanInterface().getInteractiveIKState(); });
+        assert.equal(state.markersVisible, true);
         assert.equal(state.mode, 'physics'); assert.equal(state.targets, 11); assert.ok(state.physics.bodyCount >= 15);
         assert.equal(state.settings.gravity, false); assert.equal(state.settings.strength, 0.85);
-        assert.equal(await page.evaluate(() => window.messages.at(-1).catalog.ready), false);
+        assert.equal(await page.evaluate(() => window.messages.at(-1).catalog.ready), true);
         console.error('[IK验收] 关闭面板');
         await page.click('#displayMmdIKClose');
         const point = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.find(c => c.key === 'leftHand').screen);
@@ -97,10 +98,11 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
         console.error('[IK验收] 重置恢复');
         const reset = await page.evaluate(async () => {
             const h = window.DisplayMmd.getHumanInterface(); h.resetInteractiveIK(); const active = h.getInteractiveIKState().activeTargets;
+            await window.player.tick(); const readyAfterReset = window.messages.at(-1).catalog.ready;
             h.setInteractiveIKEnabled(false); await window.player.tick();
-            return { active, state: h.getInteractiveIKState(), ready: window.messages.at(-1).catalog.ready, candidates: h.candidates.list().length };
+            return { active, readyAfterReset, state: h.getInteractiveIKState(), ready: window.messages.at(-1).catalog.ready, candidates: h.candidates.list().length };
         });
-        assert.equal(reset.active, 0); assert.equal(reset.state.targets, 0); assert.equal(reset.state.physics, null); assert.equal(reset.ready, true); assert.equal(reset.candidates, 0);
+        assert.equal(reset.active, 0); assert.equal(reset.state.targets, 0); assert.equal(reset.state.physics, null); assert.equal(reset.readyAfterReset, true); assert.equal(reset.ready, false); assert.equal(reset.candidates, 0);
         await page.evaluate(async () => { const h = window.DisplayMmd.getHumanInterface(); await h.setInteractiveIKMode('physics'); h.setInteractiveIKEnabled(true); window.DisplayStage.setMmdVisible(false); });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled), false);
         assert.deepEqual(errors, []);

@@ -34,7 +34,8 @@ export function createChatActionPlayer({ api, send, hidden = () => document.hidd
             const actions = ready ? [...new Set([...state.actions.map(a => a.actionId), ...entries.map(a => a.name), ...GESTURES.keys()])].slice(0, 160) : [];
             send({ type: 'chatAction', op: 'catalog', catalog: { key, ready, actions,
                 capabilities: ready ? { signature: state.signature, bindings: capabilities.bindings,
-                    bones: capabilities.bones.slice(0, 512), morphs: capabilities.morphs.slice(0, 256) } : {} } });
+                    bones: capabilities.bones.slice(0, 512), morphs: capabilities.morphs.slice(0, 256),
+                    ikTargets: capabilities.ikTargets || [] } : {} } });
             publishedKey = stamp;
         } catch (error) { report('动作目录读取失败：' + error.message); }
         finally { publishing = false; }
@@ -65,7 +66,8 @@ export function createChatActionPlayer({ api, send, hidden = () => document.hidd
             || !['missing', 'invalid'].includes(job.phase)) return;
         job.phase = 'preparing'; job.artifact = message.artifact;
         try {
-            job.prepared = await job.human.prepareMpl(message.artifact.source, { owner: owner(job) });
+            job.prepared = await (job.human.prepareMotion || job.human.prepareMpl)(message.artifact.source,
+                { owner: owner(job), ...job.parameters });
             if (valid(job)) ready(job);
         } catch (error) {
             if (valid(job)) { job.phase = 'invalid'; reply(job, 'invalid', { message: error.message }); }

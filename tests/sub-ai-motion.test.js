@@ -2,17 +2,22 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createMotionModelService } = require('../src/apps/server/modules/sub-ai/motion-model-service');
-const { createMotionCoordinator } = require('../src/apps/server/modules/sub-ai/motion-coordinator');
+const { createMotionCoordinator, playbackAckTimeout } = require('../src/apps/server/modules/sub-ai/motion-coordinator');
 const { createSubAiChatBridge } = require('../src/apps/server/modules/sub-ai/sub-ai-chat-bridge');
 const source = '@pose rest {\n head reset;\n}\n@pose nod {\n head bend forward 12;\n}\n@animation gesture {\n 0: rest;\n 0.5: nod;\n 1: rest;\n}\nmain {\n gesture;\n}';
 const artifact = { source, providerId: 'qwen', model: 'test-model' };
+const ikPlan = { format: 'ik-targets', version: 1, duration: 1, frames: [
+    { time: 0, targets: { head: { rotation: [0, 0, 0] } } },
+    { time: 0.5, targets: { head: { rotation: [12, 0, 0] } } },
+    { time: 1, targets: { head: { rotation: [0, 0, 0] } } }
+] };
 function modelFixture() {
     const values = new Map(), calls = [];
     const runtime = { getStatus: () => ({ running: true }), dataStore: {
         listAccounts: async () => [{ providerId: 'qwen', enabled: true }], readCollection: async () => [] },
     providerRegistry: { listProviders: async () => [{ id: 'qwen', supportedModels: ['test-model', 'audio-tts'] }] },
     modelMapper: { resolveModel: async () => ({}) }, coreAdapter: { async forwardChatCompletion(body, options) {
-        calls.push({ body, options }); return { body: { choices: [{ message: { content: JSON.stringify({ status: 'ok', source }) } }] } };
+        calls.push({ body, options }); return { body: { choices: [{ message: { content: JSON.stringify({ status: 'ok', plan: ikPlan }) } }] } };
     } } };
     const config = { get: key => values.get(key), set: (key, value) => { values.set(key, value); return true; } };
     return { service: createMotionModelService({ config, getRuntime: () => runtime }), values, runtime, calls, config };
@@ -25,7 +30,9 @@ test('动作Provider/具体模型与主AI隔离，revision冲突及错误绑定�
     await service.update({ revision, enabled: true, providerId: 'qwen', model: 'test-model' });
     await assert.rejects(service.update({ revision, enabled: false, providerId: 'qwen', model: 'test-model' }), /变化/);
     const signal = new AbortController().signal;
-    assert.equal((await service.generate({ description: '点头', capabilities: {} }, { signal })).source, source);
+    const generated = await service.generate({ description: '点头', capabilities: {} }, { signal });
+    assert.equal(generated.format, 'ik-targets'); assert.equal(JSON.parse(generated.source).frames[1].targets.head.rotation[0], 12);
+    assert.match(calls[0].body.messages[0].content, /IK动作目标规划器/);
     assert.equal(calls[0].options.preferredProviderId, 'qwen'); assert.equal(calls[0].options.signal, signal);
     assert.equal(calls[0].body.stream, false); assert.equal(calls[0].body.messages.length, 2);
     assert.equal(calls[0].body.previous_response_id, undefined);
@@ -52,6 +59,11 @@ function coordinatorFixture(options = {}) {
     const ack = (requestId, op, extra = {}, id = 'd') => service.handle(id, { type: 'chatAction', op, requestId, key: 'model:1', ...extra });
     return { service, sent, published, generated, catalog, call, ack };
 }
+test('低帧率播放回执预算覆盖慢速时间轴，保留明确的最大时限', () => {
+    assert.ok(playbackAckTimeout(1) >= 20000, '1fps时十个有效帧约需十秒，仍需留渲染/回执余量');
+    assert.ok(playbackAckTimeout(15) >= 150000, '长动作低帧率不能套用短动作的固定余量');
+    assert.ok(playbackAckTimeout(3600) <= 3600000, '回执超时不可无限放大');
+});
 test('本地动作命中零SubAI调用，回执必须绑定目标/阶段并且只开始一次', async t => {
     const f = coordinatorFixture(); t.after(() => f.service.dispose()); await f.catalog('d'); const id = f.call();
     await f.ack(id, 'ready', { ticketId: 'ticket', duration: 1 }, 'other'); assert.equal(f.sent.length, 1);

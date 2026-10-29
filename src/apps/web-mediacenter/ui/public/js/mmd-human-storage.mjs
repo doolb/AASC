@@ -1,3 +1,5 @@
+import { isIKSource, parseIKSource } from './mmd-ik-plan.mjs';
+
 const NAME = 'aasc-display-mmd-human-v1', LIMIT = 64 * 1024 * 1024;
 const fresh = () => ({ schema: 2, candidates: [], actions: [], assets: [], presets: {}, rules: [], mappings: {}, physiology: {}, gaze: {} });
 export function validateHumanLibrary(record) {
@@ -15,6 +17,7 @@ export function validateHumanLibrary(record) {
             || typeof item.providerId !== 'string' || item.providerId.length > 100
             || typeof item.model !== 'string' || item.model.length > 160) throw new Error('候选动作数据无效');
         candidateIds.add(item.id);
+        if (item.format === 'ik-targets' || isIKSource(item.source)) parseIKSource(item.source);
     }
     let bytes = 0, versions = candidates.length;
     const ids = new Set();
@@ -28,6 +31,9 @@ export function validateHumanLibrary(record) {
             || action.versions.length > 16 || !action.versions.some(v => v.id === action.active)) throw new Error('行为版本无效');
         versions += action.versions.length;
         if (action.versions.some(v => v.assetId && !ids.has(v.assetId))) throw new Error('行为引用的VMD缺失');
+        for (const version of action.versions) {
+            if (version.format === 'ik-targets' || isIKSource(version.source)) parseIKSource(version.source);
+        }
     }
     if (versions > 128 || bytes > LIMIT) throw new Error('动作库最多128版本、64MiB VMD');
     const metadata = JSON.stringify({ ...record, assets: record.assets.map(a => ({ id: a.id })) });

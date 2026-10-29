@@ -4,6 +4,7 @@ import * as THREE from 'three';
 export function createHumanMixer() {
     let serial = 0, clock = 0;
     const requests = new Map(), history = new Map(), saved = new Map();
+    let ikTargets = new Map();
     const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), weighted = new THREE.Quaternion();
     const clamp = value => Math.max(0, Math.min(1, value));
     // 外部时钟只影响所属轨道；TTS暂停或缓冲时不推进身体动作，其他轨道照常运行。
@@ -50,7 +51,9 @@ export function createHumanMixer() {
                 layer.strength > 0 && layer.sampler.tracks.some(track => track.kind === 'morph'
                     && model.morphs.find(m => m.index === track.index)?.panel === 2 && model.allowed(track, layer.mask))));
         },
-        mix(model, physiological = [], external = [], gaze = null) {
+        ikTargets: () => ikTargets,
+        mix(model, physiological = [], external = [], gaze = null, bodyEnabled = true) {
+            ikTargets = new Map();
             const morphs = new Map();
             const occupied = new Map();
             const rotations = new Map();
@@ -72,6 +75,7 @@ export function createHumanMixer() {
             for (const contribution of physiological) {
                 if (contribution.kind === 'morph') morphs.set(contribution.index, contribution.value);
                 else {
+                    if (!bodyEnabled) continue;
                     const target = model.bones[contribution.index];
                     if (target.dynamic) continue;
                     save(target.bone);
@@ -111,7 +115,18 @@ export function createHumanMixer() {
                     const sampleTime = Math.min(layer.sampler.duration, (time - layer.start) * (layer.speed || 1));
                     for (const track of layer.sampler.tracks) {
                         if (!model.allowed(track, layer.mask)) continue;
+                        if (!bodyEnabled && ['bone', 'ik'].includes(track.kind)) continue;
                         const values = track.evaluate(sampleTime);
+                        if (track.kind === 'ik') {
+                            if (weight <= 0) continue;
+                            const target = ikTargets.get(track.key) || { key: track.key };
+                            const previous = target[track.property] || [0, 0, 0];
+                            target[track.property] = values.map((value, axis) => layer.mode === 'additive'
+                                ? previous[axis] + value * weight : previous[axis] + (value - previous[axis]) * weight);
+                            ikTargets.set(track.key, target);
+                            occupied.set(track.index, 1);
+                            continue;
+                        }
                         if (track.kind === 'bone') {
                             if (track.property === 'quaternion') {
                                 occupied.set(track.index, Math.max(occupied.get(track.index) || 0, gazeWeight));
@@ -144,6 +159,6 @@ export function createHumanMixer() {
         },
         snapshot: () => [...requests.values()].map(r => ({ id: r.id, owner: r.owner, duration: r.duration,
             loop: r.loop, time: elapsed(r), priority: r.priority })),
-        clear() { stop(); restore(); history.clear(); clock = 0; },
+        clear() { stop(); restore(); history.clear(); ikTargets.clear(); clock = 0; },
     };
 }

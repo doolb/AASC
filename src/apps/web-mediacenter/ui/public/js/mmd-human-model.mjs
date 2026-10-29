@@ -78,11 +78,12 @@ export function createHumanModel(mesh, state, mappings = {}) {
         });
     }
     function allowed(track, mask) {
-        if (track.kind === 'bone' && bones[track.index].dynamic) return false;
-        if (!mask?.length) return track.kind !== 'bone' || !groups.root.has(track.index);
+        const body = track.kind === 'bone' || track.kind === 'ik';
+        if (body && (!bones[track.index] || bones[track.index].dynamic)) return false;
+        if (!mask?.length) return !body || !groups.root.has(track.index);
         return mask.some(part => {
             if (part === 'all') return true;
-            if (track.kind === 'bone') return part === 'body' ? !groups.root.has(track.index)
+            if (body) return part === 'body' ? !groups.root.has(track.index)
                 : groups[part]?.has(track.index) || part === 'bone:' + bones[track.index].name;
             const item = state.items[track.index];
             return part === 'face' || part === 'morph:' + item.name

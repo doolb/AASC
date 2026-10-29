@@ -1,4 +1,27 @@
-# 独立 MMD-AR HumanInterfaceElement 实现
+# MMD HumanInterfaceElement 实现（正式端与独立实验）
+
+## 默认启用IK与统一动作驱动（2026-10-29，已确认实现规格）
+
+```text
+IK格式 := {format:ik-targets,version:1,duration:0.2..15,frames:[{time,targets:{目标名:{position:[x,y,z],rotation:[度x,度y,度z]}},morphs:{真实名称:0..1}}]}
+约束 := 2..48帧，时间严格递增且首0末duration；同一目标通道各帧齐全，首尾位移/角度/表情为0；速度校验包含smoothstep的1.5倍峰值
+坐标 := 模型局部绑定姿态增量，位移按身高归一（每轴<=0.5），旋转每轴<=90度；有限值、速度/部位/体积验证
+存储 := source为规范化IK JSON字符串，format为ik-targets；仍写schema2，旧MPL source和schema1/2继续读取，候选/版本保留格式标记
+目标部位 := head、left/rightHand、left/rightElbow、left/rightKnee、left/rightFoot、pelvis、chest；不新增指趾独立控制点
+执行 := 旧身体轨道仅作为目标姿态输入 → 提取语义骨骼世界目标 → 与IK目标通道混合 → 原生物理IK求解 → 写最终身体骨骼
+门控 := 默认初始化完成前或显式关闭求解器时，暂停身体轨道并保持最后姿态；Morph仍可执行，禁止绕过求解器写最终身体
+已有声明 := interactiveIK、Human mixer、prepare/startPrepared、SubAI动作生成、候选动作库
+新增定义 := 求解器运行状态、手动接管状态、模型相对IK目标轨迹、候选格式标记
+模型就绪 → 默认初始化physics IK且默认隐藏编辑控制点 → 成功后开放动作能力；取消/换模型隔离旧初始化
+打开IK面板 → 显示控制点，不改变引擎启用状态；收起保留拖点行为
+求解器开启且无手动目标接管 → 自动动作可准备/播放；手动On/Hold/Comply → 手动优先；Off/重置 → 恢复
+旧MPL/VMD采样 → 动作目标适配 → IK身体目标；Morph/口型仍走原权重轨道
+新SubAI → 直接生成IK目标轨迹 → 校验时长/坐标系/可用部位/幅度 → 同一IK执行器
+逐帧 → 当前有效目标 → 原关节限位/物理求解 → 最终身体骨骼；禁止自动身体轨道绕过IK直接写最终姿态
+结束/取消/新轮次/断线/换模型 → 释放所属目标 → 平滑恢复基准；旧句柄不能启动
+候选 → 完整播放后按格式保存；旧库/旧版本继续读取，不批量迁移或覆盖
+验证 → 默认启动、能力门控、手动优先、释放恢复、旧动作转换、IK生成格式、取消、真实模型限位与碰撞
+```
 
 ## 动作审美与舞蹈肘部避让伪代码（2026-10-24，已实现）
 
@@ -23,7 +46,7 @@
 ```text
 已有声明 := 独立web-human-ik/PBD/physics-rig/physics-drive/joint-limits/body-damping/markers/mode + 正式Human与SubAI
 新增定义 := InteractiveIKSession { enabled, mode, targets, settings, markerDiameter, modelToken, epoch }
-装配 := 正式场景/镜头/canvas/当前Human模型 → 会话IK实例；默认关闭；图片识姿依赖从交互核心解耦
+装配 := 正式场景/镜头/canvas/当前Human模型 → 默认初始化physics IK；手动接管按活动目标判定；图片识姿依赖从交互核心解耦
 开启 := 捕获模型身份 → 取消自动对话动作并声明暂不可用 → 按需加载现有Ammo → 身份仍有效时启用physics
 目标 := 指针命中控制点 → 阻止镜头/角色拖动接管 → 有界世界目标与位置/旋转状态 → 既有物理求解
 逐帧 := 恢复上帧避让与IK增量 → 当前VMD/MPL基准与原生IK → 交互IK → 对应模式避让/物理衔接

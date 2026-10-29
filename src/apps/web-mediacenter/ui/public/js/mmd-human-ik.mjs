@@ -5,6 +5,7 @@ import { createHumanPhysicsRig } from './mmd-human-physics-rig.mjs';
 import { BODY_STATES, createHumanPhysicsDrive, normalizeBodySettings } from './mmd-human-physics-drive.mjs';
 
 import { normalizeMarkerDiameter, projectIKMarker, pickIKMarker } from './mmd-human-ik-markers.mjs';
+import { createAutomaticIKTargets } from './mmd-human-ik-targets.mjs';
 
 const TARGETS = [
     { key: 'head', label: '头部', bone: 'head', color: 0xffd166 },
@@ -64,6 +65,8 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     const notifyChange = () => onChange();
     let mode = 'pbd', ammoModule = null, bodyRig = null, bodyDrive = null, loadEpoch = 0, selected = '';
     let bodySettings = normalizeBodySettings(), markerDiameter = normalizeMarkerDiameter();
+    let automaticTargetCount = 0;
+    let markersVisible = true;
     let state = { enabled: false, available: false, targets: 0, activeTargets: 0, unreachable: 0, reason: '已关闭' };
 
     function stopDrag() {
@@ -98,6 +101,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         notifyChange();
     }
     function reset() {
+        automaticTargetCount = 0;
         loadEpoch++; restore(); bodyDrive?.dispose(); bodyDrive = null; bodyRig = null;
         enabled = false;
         disposeHelpers();
@@ -209,7 +213,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         if (!camera || !rect) return;
         for (const handle of handles) {
             const screen = projectIKMarker(handle.mesh.getWorldPosition(new Vector3()), camera, rect, geometry, markerDiameter);
-            handle.mesh.visible = screen?.visible === true;
+            handle.mesh.visible = markersVisible && screen?.visible === true;
             if (screen?.radius > 0) handle.mesh.scale.setScalar(screen.radius);
         }
     }
@@ -220,7 +224,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         return pickIKMarker(handles, { x: event.clientX, y: event.clientY }, camera, rect, markerGeometry(), markerDiameter);
     }
     function pointerDown(event) {
-        if (!enabled || !state.available || event.button !== 0 || event.isPrimary === false) return;
+        if (!enabled || !markersVisible || !state.available || event.button !== 0 || event.isPrimary === false) return;
         const hit = pick(event), handle = handles.find(item => item.mesh === hit?.object);
         if (!handle) return;
         event.stopImmediatePropagation(); event.preventDefault();
@@ -338,7 +342,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         }
         return active.reduce((count, handle) => count + Number(targetDistance(handle) > UNREACHABLE_DISTANCE), 0);
     }
-    function apply(model, delta = 1 / 60) {
+    function apply(model, delta = 1 / 60, automatic = null) {
         if (!enabled || !model) return;
         bind(model);
         if (!state.available) return;
@@ -346,8 +350,14 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         const active = handles.filter(handle => handle.active);
         if (mode === 'physics') {
             try {
-                bodyDrive.step(delta, bodyRig.animatedPoses(), active, bodySettings);
-                state.unreachable = active.filter(handle => handle.positionState !== 'Off' && targetDistance(handle) * bodyRig.metersPerUnit > 0.05).length;
+                const animated = bodyRig.animatedPoses();
+                const goals = !active.length && automatic
+                    ? createAutomaticIKTargets(bodyRig, animated, automatic.targets) : active;
+                automaticTargetCount = !active.length && automatic ? goals.length : 0;
+                bodyDrive.step(delta, animated, goals, bodySettings);
+                state.unreachable = goals.filter(goal => (!goal.automatic || goal.explicit) && goal.positionState !== 'Off'
+                    && bodyRig.targetToLocal(goal.node.bone.getWorldPosition(new Vector3()))
+                        .distanceTo(bodyRig.targetToLocal(goal.target)) > 0.05).length;
                 state.reason = state.unreachable ? '部分目标受关节限位、碰撞或牵引强度影响，尚未到达' : '';
             } catch (error) {
                 restore(); bodyDrive?.dispose(); bodyDrive = null;
@@ -376,6 +386,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
         resizeMarkers();
     }
     function setEnabled(value, model) {
+        automaticTargetCount = 0;
         loadEpoch++; restore(); stopDrag();
         enabled = value === true;
         if (!enabled) {
@@ -449,9 +460,14 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     function setMarkerDiameter(value) {
         markerDiameter = normalizeMarkerDiameter(value); resizeMarkers(); notifyChange(); return getState();
     }
+    function setMarkersVisible(value) {
+        markersVisible = value === true;
+        if (!markersVisible) stopDrag();
+        resizeMarkers(); notifyChange();
+    }
     function getState() {
         const camera = getCamera?.(), rect = canvas?.getBoundingClientRect?.();
-        return { ...state, mode, markerDiameter, settings: { ...bodySettings, dampingMultipliers: { ...bodySettings.dampingMultipliers } }, selected, enabled, targets: handles.length,
+        return { ...state, mode, markerDiameter, markersVisible, automaticTargets: automaticTargetCount, settings: { ...bodySettings, dampingMultipliers: { ...bodySettings.dampingMultipliers } }, selected, enabled, targets: handles.length,
             activeTargets: handles.filter(handle => handle.active).length, physics: bodyDrive?.getState() || null,
             controls: handles.map(handle => {
                 const achieved = handle.endpoint.bone.getWorldPosition(new Vector3());
@@ -459,7 +475,7 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
                 const screen = projectIKMarker(handle.mesh.getWorldPosition(new Vector3()), camera, rect, markerGeometry(), markerDiameter);
                 return { key: handle.key, label: handle.label, positionState: handle.positionState, rotationState: handle.rotationState,
                     target: handle.target.toArray(), rotation: handle.targetRotation.toArray(), achieved: achieved.toArray(),
-                    screen: screen ? { x: screen.x, y: screen.y, visible: screen.visible, diameter: markerDiameter } : null };
+                    screen: screen ? { x: screen.x, y: screen.y, visible: markersVisible && screen.visible, diameter: markerDiameter } : null };
             }) };
     }
 
@@ -472,8 +488,10 @@ export function createHumanIK({ getScene, getCamera, canvas, onChange = () => {}
     window.addEventListener('pointercancel', pointerUp, true);
 
     return {
-        apply, restore, reset, resetTargets, setEnabled, setMode, setBodySettings, setTargetState, setTarget, setMarkerDiameter, getState,
+        apply, restore, reset, resetTargets, setEnabled, setMode, setBodySettings, setTargetState, setTarget, setMarkerDiameter, setMarkersVisible, getState,
         isPhysicsEnabled: () => enabled && mode === 'physics' && bodyDrive !== null,
+        isAvailable: () => state.available,
+        hasManualTargets: () => handles.some(handle => handle.active) || !!drag,
         dispose() {
             reset();
             canvas?.removeEventListener('pointerdown', pointerDown, true);

@@ -23,6 +23,8 @@ function motionParameters(values = []) {
     }));
 }
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+// 端侧时间轴每帧最多推进0.1秒；低帧率渲染会慢于标称时长，不能用固定10秒余量误取消。
+const playbackAckTimeout = duration => Math.min(3600000, Math.max(30000, duration * 10000 + 10000));
 
 /** 任务只接受登记连接的回执；服务端决定目标和owner，端侧拥有真实模型及准备句柄。 */
 function createMotionCoordinator({ models, send, publish = () => {}, now = Date.now, timeoutMs = 20000 }) {
@@ -79,7 +81,7 @@ function createMotionCoordinator({ models, send, publish = () => {}, now = Date.
         if (!current(job)) return;
         if (generating >= 2) { finish(job, 'failed', '动作生成忙，请稍后重试'); return; }
         job.state = 'generating'; generating++;
-        status(job, 'generating', diagnostic ? '正在修正MPL' : '动作库未命中，正在生成MPL');
+        status(job, 'generating', diagnostic ? '正在修正IK目标轨迹' : '动作库未命中，正在生成IK目标轨迹');
         try {
             const key = hash([job.description, job.parameters, job.capabilities, job.settings]);
             const cached = !diagnostic && cache.get(key);
@@ -122,7 +124,7 @@ function createMotionCoordinator({ models, send, publish = () => {}, now = Date.
                 while (cache.size > 16) cache.delete(cache.keys().next().value);
             }
             job.state = 'playing'; clearTimeout(job.timer);
-            job.timer = setTimeout(() => finish(job, 'failed', '动作播放回执超时'), Math.min(3600000, message.duration * 1000) + 10000);
+            job.timer = setTimeout(() => finish(job, 'failed', '动作播放回执超时'), playbackAckTimeout(message.duration));
             job.timer.unref?.();
             send(displayId, { type: 'chatAction', op: 'start', requestId: job.id, key: job.key, ticketId: message.ticketId });
             status(job, 'playing', '正在播放动作'); return;
@@ -136,4 +138,4 @@ function createMotionCoordinator({ models, send, publish = () => {}, now = Date.
         for (const job of jobs.values()) if ((job.turnId === turnId || job.conversationId === turnId)) finish(job, 'cancelled', '对话已停止');
     }, dispose() { for (const id of [...jobs.keys()]) disconnect(id); catalogs.clear(); turns.clear(); cache.clear(); } };
 }
-module.exports = { createMotionCoordinator };
+module.exports = { createMotionCoordinator, playbackAckTimeout };

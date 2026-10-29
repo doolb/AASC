@@ -101,6 +101,7 @@ function initIKPanel() {
     function setOpen(open) {
         if (timer !== null) { clearInterval(timer); timer = null; }
         if (open) {
+            try { human().setInteractiveMarkersVisible(true); } catch { /* 模型未就绪时保持等待状态。 */ }
             window.DisplayMmdLighting?.close?.(); window.DisplayMmdAr?.closePanel?.();
             for (const [button, panelId] of [['displayMmdMotionToggle', 'displayMmdMotionPanel'], ['displayMmdCharacterToggle', 'displayMmdCharacterPanel']]) {
                 if (document.getElementById(panelId)?.hidden === false) document.getElementById(button)?.click();

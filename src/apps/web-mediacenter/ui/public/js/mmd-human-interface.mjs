@@ -14,6 +14,7 @@ import { emptyHumanLibrary, loadHumanLibrary, saveHumanLibrary, validateHumanLib
 import { createHighLevelMpl } from './mmd-reply-actions.mjs';
 import { serverActions } from './mmd-human-server-actions.mjs';
 import { createHumanArmAvoidance, readArmAvoidancePreference, ARM_AVOIDANCE_KEY } from './mmd-human-arm-avoidance.mjs';
+import { createIKSampler, isIKSource, parseIKSource, IK_TARGET_BONES } from './mmd-ik-plan.mjs';
 
 const number = (value, fallback, min, max, label) => {
     const result = value ?? fallback;
@@ -90,6 +91,17 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     let model = null, library = emptyHumanLibrary(), generation = 0, revision = 0, ready = false;
     let warning = '', disposed = false, helperBound = null, motionKey = '', suspended = false, rendererVisible = true, saveQueue = Promise.resolve();
     let actionEpoch = 0, actionBasis = [], ikPending = false, ikLoadEpoch = 0;
+    let ikWanted = true, ikFailure = '', ikInitialization = null;
+    let ikMarkersVisible = false;
+    const heldBody = new Map();
+    let bodyIndexModel = null, bodyIndices = [];
+    function controlledBodyIndices() {
+        if (bodyIndexModel !== model) {
+            bodyIndexModel = model;
+            bodyIndices = [...new Set(['root', 'head', 'torso', 'leftArm', 'rightArm', 'legs'].flatMap(key => [...model.groups[key]]))];
+        }
+        return bodyIndices;
+    }
     const wake = () => startRendering?.();
     const requireModel = () => {
         bind();
@@ -103,8 +115,35 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         || document.getElementById('mmdEditor')?.getAttribute('aria-busy') === 'true');
     // 捕获阶段先处理IK控制点，命中后不再触发注视或镜头拖动。
     const interactiveIK = createHumanIK({ getScene, getCamera, canvas, onChange: wake });
+    const bodyReady = () => interactiveIK.isPhysicsEnabled() && interactiveIK.isAvailable();
+    const bodyBlocked = () => ikPending || !bodyReady() || interactiveIK.hasManualTargets();
+    async function ensureDefaultIK() {
+        if (!ikWanted || !ready || !model || suspended || disposed || ikFailure) return false;
+        if (bodyReady()) return true;
+        if (ikInitialization) return ikInitialization;
+        const epoch = ++ikLoadEpoch, bound = model;
+        ikPending = true;
+        const work = (async () => {
+            try {
+                await interactiveIK.setMode('physics', bound);
+                if (epoch !== ikLoadEpoch || bound !== model || disposed || !ikWanted || suspended) return false;
+                const result = interactiveIK.setEnabled(true, bound);
+                interactiveIK.setMarkersVisible(ikMarkersVisible);
+                if (!result.available) throw new Error(result.reason || '身体IK不可用');
+                return true;
+            } catch (error) {
+                if (epoch === ikLoadEpoch) { ikFailure = error.message; warning = '身体IK初始化失败：' + error.message; }
+                return false;
+            } finally {
+                if (epoch === ikLoadEpoch) { ikPending = false; ikInitialization = null; wake(); }
+            }
+        })();
+        ikInitialization = work;
+        return work;
+    }
     function clearInteractiveIK() {
         ikLoadEpoch++; ikPending = false; actionEpoch++;
+        ikInitialization = null; ikFailure = '';
         armAvoidance.restore(); interactiveIK.reset();
     }
     const releasePointer = attachHumanGazePointer(canvas, (x, y) => {
@@ -124,6 +163,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (helperBound?.onHumanAfterIK === avoidArms) delete helperBound.onHumanAfterIK;
         if (helperBound?.onHumanAfterPhysics === observeArms) delete helperBound.onHumanAfterPhysics;
         clearInteractiveIK(); armAvoidance.reset();
+        heldBody.clear();
+        bodyIndexModel = null; bodyIndices = [];
         helperBound = null;
     }
     function bind() {
@@ -177,10 +218,17 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         try { const result = await work(bound, controller.signal, check); check(); return result; }
         finally { if (pending.get(owner) === controller) pending.delete(owner); }
     }
-    async function mplSampler(source, bound, signal, check) {
+    async function mplSampler(source, bound, signal, check, parameters = {}) {
         validateSource(source);
-        const key = 'mpl:' + source, cached = cache.get(key);
+        const ik = isIKSource(source);
+        const key = (ik ? 'ik:' + JSON.stringify([parameters.duration, parameters.count]) : 'mpl:') + source, cached = cache.get(key);
         if (cached) return cached;
+        if (ik) {
+            const result = { sampler: createIKSampler(source, bound, parameters), buffer: null };
+            cache.set(key, result);
+            if (cache.size > 8) cache.delete(cache.keys().next().value);
+            return result;
+        }
         const compiled = await compileHumanMpl(source, bound.morphs, signal);
         check();
         const result = { sampler: createHumanSampler(compiled.buffer, bound, compiled.source), buffer: compiled.buffer };
@@ -227,7 +275,9 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             || stored.motion !== getProfile()?.motionUrl || stored.helper !== getHelper()) throw new Error('准备动作已失效，请重新准备');
         const priority = number(options.priority, stored.request.priority, 0, 100, '优先级');
         // 自动动作统一经过此门禁，包含语音锚点和SubAI准备句柄。
-        if (priority < 50 && (ikPending || interactiveIK.getState().enabled)) throw new Error('手动全身IK已接管，自动动作已跳过');
+        const bodily = stored.request.layers.some(layer => layer.sampler.tracks.some(track => ['bone', 'ik'].includes(track.kind)));
+        if (bodily && !bodyReady()) throw new Error(ikFailure || '身体IK尚未就绪或已关闭');
+        if (bodily && interactiveIK.hasManualTargets()) throw new Error('手动全身IK目标已接管，请释放或重置控制点');
         const result = mixer.start({ ...stored.request, owner: name(options.owner || stored.request.owner),
             priority, clock: options.clock ?? null });
         wake(); return { ...result, buffer: prepared.buffer, warnings: prepared.warnings };
@@ -247,9 +297,13 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             if (version) {
                 let sampler;
                 if (version.assetId) sampler = vmdSampler(library.assets.find(a => a.id === version.assetId), bound);
-                else { const result = await mplSampler(version.source, bound, signal, check); sampler = result.sampler; buffer = result.buffer; }
+                else {
+                    const result = await mplSampler(version.source, bound, signal, check, {
+                        duration: intent.duration ?? version.parameters?.duration, count: intent.count ?? version.parameters?.count });
+                    sampler = result.sampler; buffer = result.buffer;
+                }
                 check();
-                const base = layer(sampler, { ...version, duration: intent.duration ?? version.duration,
+                const base = layer(sampler, { ...version, duration: sampler.format === 'ik-targets' ? sampler.duration : intent.duration ?? version.duration,
                     strength: intent.strength ?? version.strength, mask: intent.mask ?? version.mask });
                 layers.push(base); baseDuration = base.start + base.duration;
                 for (const patch of version.patches) {
@@ -313,18 +367,21 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         return operation(owner, async (bound, signal, check) => {
             const result = await mplSampler(source, bound, signal, check); check();
             const patch = layer(result.sampler, options);
-            const request = mixer.start({ owner, layers: [patch], duration: patch.start + patch.duration,
-                loop: !!options.loop, priority: number(options.priority, 100, 0, 100, '优先级') });
-            wake(); return { ...request, buffer: result.buffer, warnings: result.sampler.warnings };
+            const prepared = Object.freeze({ duration: patch.start + patch.duration, buffer: result.buffer, warnings: result.sampler.warnings });
+            preparedActions.set(prepared, { bound, generation, motion: getProfile()?.motionUrl, helper: getHelper(),
+                request: { owner, layers: [patch], duration: prepared.duration,
+                    loop: !!options.loop, priority: number(options.priority, 100, 0, 100, '优先级') } });
+            return startPrepared(prepared);
         });
     }
     async function prepareMpl(source, options = {}) {
-        validateMotionSource(source);
+        const ik = isIKSource(source);
+        if (ik) parseIKSource(source); else validateMotionSource(source);
         const owner = name(options.owner || 'subai:prepare');
         return operation(owner, async (bound, signal, check) => {
-            const result = await mplSampler(source, bound, signal, check); check();
-            validateMotionSampler(result.sampler, bound, result.buffer);
-            const patch = layer(result.sampler, { strength: 1 });
+            const result = await mplSampler(source, bound, signal, check, options); check();
+            if (!ik) validateMotionSampler(result.sampler, bound, result.buffer);
+            const patch = layer(result.sampler, { strength: options.strength ?? 1 });
             const prepared = Object.freeze({ duration: patch.duration, buffer: result.buffer, warnings: result.sampler.warnings });
             preparedActions.set(prepared, { bound, generation, motion: getProfile()?.motionUrl, helper: getHelper(),
                 request: { owner, layers: [patch], duration: patch.duration, loop: false, priority: 40 } });
@@ -337,14 +394,14 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             await saveQueue.catch(() => {});
             requireModel();
             if (expectedKey !== actionKey()) throw new Error('角色或动作库已改变，候选保存已取消');
-            validateMotionSource(value.source);
+            if (isIKSource(value.source)) parseIKSource(value.source); else validateMotionSource(value.source);
             const next = structuredClone(library);
             const exists = next.candidates.find(item => item.requestId === value.requestId
                 || (item.source === value.source && item.description === value.description
                     && JSON.stringify(item.parameters || {}) === JSON.stringify(value.parameters || {})));
             if (!exists) next.candidates.push({ id: id(), requestId: value.requestId,
                 description: value.description, parameters: value.parameters || {}, source: value.source, providerId: value.providerId,
-                model: value.model, policyVersion: 1, createdAt: new Date().toISOString() });
+                model: value.model, format: isIKSource(value.source) ? 'ik-targets' : 'mpl', policyVersion: value.policyVersion || 1, createdAt: new Date().toISOString() });
             await persist(next); return exists || next.candidates.at(-1);
         },
         async adopt(candidateId, actionId) {
@@ -357,7 +414,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             let action = next.actions.find(item => item.actionId === normalized);
             if (!action) { action = { actionId: normalized, active: '', versions: [] }; next.actions.push(action); }
             const version = { id: id(), parent: action.active || null, source: candidate.source,
-                ...patchOptions({}), patches: [], loop: false, expression: '', createdAt: new Date().toISOString() };
+                format: candidate.format || 'mpl', parameters: isIKSource(candidate.source) ? candidate.parameters : undefined,
+                ...patchOptions({ strength: isIKSource(candidate.source) ? candidate.parameters?.strength ?? 1 : 1 }), patches: [], loop: false, expression: '', createdAt: new Date().toISOString() };
             action.versions.push(version); action.active = version.id;
             next.candidates = next.candidates.filter(item => item.id !== candidateId);
             await persist(next); return version;
@@ -376,20 +434,41 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     }
     function mixPose(mesh) {
         if (mesh !== model?.mesh || !ready || suspended || disposed) return;
+        const animateBody = bodyReady() && !interactiveIK.hasManualTargets();
         const state = manualExpressions.getState();
         const eyes = mixer.occupiedEyes(model) || [...external.values()].some(weights =>
             [...weights.keys()].some(index => model.morphs.find(m => m.index === index)?.panel === 2));
         const weights = mixer.mix(model, physiology.sample(model, mixer.clock, eyes, state.items),
             [...external.values()].map(weights => ({ id: 0, priority: 50, weights })),
-            (save, occupied, rotations) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied, rotations));
+            animateBody ? (save, occupied, rotations) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied, rotations) : null,
+            animateBody);
         manualExpressions.setHuman(model.token, [...weights]);
     }
     function avoidArms(mesh, delta, physics) {
         if (mesh !== model?.mesh || !ready || suspended || disposed) return;
-        interactiveIK.apply(model, delta);
-        // 身体代理已经处理人体碰撞，避免几何避让再次改写身体。
-        if (interactiveIK.isPhysicsEnabled()) return;
-        armAvoidance.apply(model, physics, delta, armAvoidanceEnabled, { paused: helperBound?.enabled.physics === false });
+        const indices = controlledBodyIndices();
+        if (bodyReady()) {
+            interactiveIK.apply(model, delta, { targets: mixer.ikTargets() });
+            if (bodyReady()) for (const index of indices) {
+                const bone = model.bones[index];
+                if (bone.dynamic) continue;
+                const saved = heldBody.get(bone.bone);
+                if (saved) { saved.position.copy(bone.bone.position); saved.rotation.copy(bone.bone.quaternion); }
+                else heldBody.set(bone.bone, { position: bone.bone.position.clone(), rotation: bone.bone.quaternion.clone() });
+            }
+            if (bodyReady()) return;
+            ikFailure = interactiveIK.getState().reason || '身体IK运行失败';
+            warning = ikFailure;
+            stop();
+        }
+        // 初始化中、失败或显式关闭时保持身体，不让旧VMD/MPL绕过求解器写最终身体。
+        for (const index of indices) {
+            const item = model.bones[index]; if (item.dynamic) continue;
+            const pose = heldBody.get(item.bone);
+            if (!pose) heldBody.set(item.bone, { position: item.bone.position.clone(), rotation: item.bone.quaternion.clone() });
+            else { item.bone.position.copy(pose.position); item.bone.quaternion.copy(pose.rotation); }
+        }
+        mesh.updateMatrixWorld(true);
     }
     function observeArms(mesh, physics) {
         if (mesh === model?.mesh && ready && !suspended && armAvoidanceEnabled && !interactiveIK.isPhysicsEnabled()) armAvoidance.observe(physics, helperBound?.enabled.physics === false);
@@ -412,6 +491,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                 helper.onHumanAfterPhysics = observeArms; helperBound = helper;
             }
         }
+        if (!paused && ready && ikWanted && !ikPending && !ikFailure && !bodyReady()) void ensureDefaultIK();
     }
     function lifecycle() { if (document.hidden) { suspended = true; stop(); gaze.reset(); clearInteractiveIK(); } else { suspended = !rendererVisible; wake(); } }
     const pagehide = () => { stop(); gaze.reset(); clearInteractiveIK(); };
@@ -428,7 +508,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
                 if (old?.versions.length >= 16) throw new Error('每个行为最多16版本');
                 const version = { id: id(), parent: old?.active || null, ...patchOptions(value), patches: [],
                     loop: !!value.loop, expression: value.expression || '', createdAt: new Date().toISOString() };
-                if (value.source) version.source = validateSource(value.source);
+                if (value.source) { version.source = validateSource(value.source); version.format = isIKSource(value.source) ? 'ik-targets' : 'mpl'; }
                 else {
                     const buffer = await readHumanVmd(value.vmd || getProfile()?.motionUrl, signal); check();
                     const sampler = createHumanSampler(buffer, bound);
@@ -497,9 +577,11 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         }
     };
     return Object.freeze({
-        capabilities() { bind(); return model?.snapshot() || { missing: ['尚未加载PMX'], bones: [], morphs: [], bindings: {} }; },
+        capabilities() { bind(); return model ? { ...model.snapshot(), ikTargets: Object.keys(IK_TARGET_BONES).filter(key => {
+            const bone = model.bindings['bones:' + IK_TARGET_BONES[key]]; return bone && !bone.dynamic;
+        }) } : { missing: ['尚未加载PMX'], bones: [], morphs: [], bindings: {}, ikTargets: [] }; },
         getState() { bind(); return { ready, token: model?.token, signature: model?.signature, revision, warning,
-            physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), interactiveIK: interactiveIK.getState(), automaticMotionBlocked: ikPending || interactiveIK.getState().enabled, layers: mixer.snapshot(), pending: pending.size,
+            physiology: physiology.get(), gaze: gaze.get(), gazeStatus: gaze.status(model), interactiveIK: interactiveIK.getState(), automaticMotionBlocked: bodyBlocked(), layers: mixer.snapshot(), pending: pending.size,
             actions: learn.list(), candidates: candidates.list(), presets: structuredClone(library.presets), rules: structuredClone(library.rules),
             mappings: structuredClone(library.mappings) }; },
         physiology: {
@@ -521,6 +603,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         getInteractiveIKState: () => interactiveIK.getState(),
         setInteractiveIKEnabled(value) {
             const bound = requireModel();
+            if (value) { ikMarkersVisible = true; interactiveIK.setMarkersVisible(true); }
+            ikWanted = value === true; ikFailure = ''; ikInitialization = null;
             ikLoadEpoch++; ikPending = false; actionEpoch++;
             if (value) { stop(); window.DisplayMmdChatActions?.stop?.(); }
             armAvoidance.restore();
@@ -528,8 +612,10 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         },
         resetInteractiveIK() { requireModel(); armAvoidance.restore(); interactiveIK.resetTargets(); wake(); return interactiveIK.getState(); },
         setInteractiveMarkerDiameter(value) { const result = interactiveIK.setMarkerDiameter(value); wake(); return result; },
+        setInteractiveMarkersVisible(value) { ikMarkersVisible = value === true; interactiveIK.setMarkersVisible(ikMarkersVisible); wake(); },
         async setInteractiveIKMode(value) {
             const bound = requireModel(), epoch = ++ikLoadEpoch;
+            ikFailure = ''; ikInitialization = null;
             ikPending = true; actionEpoch++; stop(); window.DisplayMmdChatActions?.stop?.(); armAvoidance.restore();
             try {
                 const result = await interactiveIK.setMode(value, bound);
@@ -540,7 +626,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         setInteractiveBodySettings(value) { requireModel(); return interactiveIK.setBodySettings(value); },
         setInteractiveTargetState(key, position, rotation) { requireModel(); return interactiveIK.setTargetState(key, position, rotation); },
         setInteractiveTarget(key, position, rotation) { requireModel(); return interactiveIK.setTarget(key, position, rotation); },
-        actionKey, candidates, prepareMpl, reflex, learn, serverActions, perform, prepare: intent => perform(intent, true), startPrepared, mpl: { play: playMpl,
+        actionKey, candidates, prepareMpl, prepareMotion: prepareMpl, reflex, learn, serverActions, perform, prepare: intent => perform(intent, true), startPrepared, mpl: { play: playMpl,
             // 使用与实际播放相同的模型能力，编辑器不根据缺少英文别名的能力摘要再次猜表情。
             advancedSource: options => createHighLevelMpl(options, requireModel().morphs)
         }, stop, getRequest: mixer.state,

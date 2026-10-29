@@ -1,3 +1,5 @@
+import { isIKSource } from './mmd-ik-plan.mjs';
+
 function initHuman() {
     const panel = document.getElementById('mmdArHumanPanel');
     if (!panel) return;
@@ -5,7 +7,7 @@ function initHuman() {
     candidatePanel.innerHTML = '<summary>SubAI候选动作</summary><p>生成动作完整播放后自动保存；采用才切换默认版本。</p>'
         + '<select data-human-field="candidate" aria-label="候选动作"></select>'
         + '<button type="button" data-human="candidate-preview">预览候选</button>'
-        + '<button type="button" data-human="candidate-source">查看MPL</button>'
+        + '<button type="button" data-human="candidate-source">查看动作代码</button>'
         + '<button type="button" data-human="candidate-adopt">采用为默认版本</button>'
         + '<button type="button" data-human="candidate-remove">删除候选</button>'
         + '<button type="button" data-human="candidate-save">重试保存动作库</button>'
@@ -99,8 +101,8 @@ function initHuman() {
         return result;
     };
     const handlers = {
-        'candidate-preview': async api => api.startPrepared(await api.prepareMpl(selectedCandidate(api).source,
-            { owner: 'candidate:preview' }), { owner: 'candidate:preview', priority: 100 }),
+        'candidate-preview': async api => api.startPrepared(await api.prepareMotion(selectedCandidate(api).source,
+            { ...(isIKSource(selectedCandidate(api).source) ? selectedCandidate(api).parameters : {}), owner: 'candidate:preview' }), { owner: 'candidate:preview', priority: 100 }),
         'candidate-source': api => { field('source').value = selectedCandidate(api).source; },
         'candidate-adopt': api => api.candidates.adopt(selectedCandidate(api).id,
             value('actionId') || selectedCandidate(api).description.slice(0, 80)),

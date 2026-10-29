@@ -43,46 +43,90 @@ test('真实PMX/Worker：库命中零生成、缺库生成完整播放自动入�
         const page = await browser.newPage(); await page.setViewport({ width: 640, height: 480 });
         page.on('pageerror', e => errors.push(e.message));
         coordinator = createMotionCoordinator({ models: { selection: () => ({ enabled: true }), generate: async () => {
-            generations++; return { source, providerId: 'fixture', model: 'fixture-motion' };
+            generations++; return { source: JSON.stringify({ format: 'ik-targets', version: 1, duration: 1,
+                frames: [{ time: 0, targets: { leftHand: { position: [0, 0, 0] } } },
+                    { time: 0.5, targets: { leftHand: { position: [0, 0.1, 0] } } },
+                    { time: 1, targets: { leftHand: { position: [0, 0, 0] } } }] }),
+                format: 'ik-targets', providerId: 'fixture', model: 'fixture-motion' };
         } }, send: (_id, message) => { void page.evaluate(message => window.actionPlayer?.handle(message), message).catch(e => errors.push(e.message)); }, publish: m => statuses.push(m) });
         await page.exposeFunction('motionSend', message => coordinator.handle('display', message));
         await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => window.DisplayMmd);
+        await page.evaluate(() => {
+            const groups = window.DisplayMmdLightingPresetGroups;
+            groups?.lighting?.apply({ ...groups.lighting.read(), pmxAoEnabled: false, shadowSource: 'none', keyShadowEnabled: false });
+            groups?.screenLighting?.apply({ ...groups.screenLighting.read(), giEnabled: false, contactEnabled: false });
+            groups?.render?.apply({ ...groups.render.read(), aaMode: 'taa', taaEnabled: false, canvasScale: 0.25 });
+        });
         await page.evaluate(() => { window.DisplayMmd.init({ canvas: document.getElementById('displayMmdCanvas'), onLoadProgress() {} }); window.DisplayMmd.setVisible(true); });
-        await page.waitForFunction(() => window.DisplayMmd.getHumanInterface()?.getState().ready, { timeout: 90000 });
+        await page.waitForFunction(() => { const h = window.DisplayMmd.getHumanInterface(); return h?.getState().ready && !h.getState().automaticMotionBlocked; }, { timeout: 90000 });
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().markersVisible), false);
+        await page.addScriptTag({ path: path.join(root, 'js/display-stage.js') });
+        await page.evaluate(() => window.DisplayStage.setMmdVisible(true));
+        await page.waitForFunction(() => document.getElementById('displayMmdCanvas').getBoundingClientRect().width > 100);
         const initial = await page.evaluate(async source => {
             const human = window.DisplayMmd.getHumanInterface();
+            window.DisplayMmd.setMotionPlaybackEnabled(false);
+            await human.physiology.set({ breathing: false, blinking: false });
+            await human.gaze.set({ head: false, eyes: false });
             const old = await human.learn.register({ actionId: '原动作', source });
             const { createChatActionPlayer } = await import('/js/mmd-chat-actions.mjs');
             window.actionMessages = [];
             window.actionPlayer = createChatActionPlayer({ api: () => window.DisplayMmd.getHumanInterface(),
                 send: message => { window.actionMessages.push(message); void window.motionSend(message); }, report: text => { window.motionReport = text; } });
             window.actionPlayer.setConnected(true); await window.actionPlayer.tick();
-            window.actionTimer = setInterval(() => { void window.actionPlayer.tick(); }, 100);
+            window.handTrace = [];
+            window.actionTimer = setInterval(() => {
+                void window.actionPlayer.tick();
+                if (window.captureHand) window.handTrace.push(human.getInteractiveIKState().controls.find(c => c.key === 'leftHand')?.achieved[1]);
+            }, 100);
             return { active: old.id, key: human.actionKey() };
         }, source);
         for (let i = 0; i < 50 && !coordinator.prompt('display'); i++) await new Promise(r => setTimeout(r, 100));
         assert.match(coordinator.prompt('display'), /原动作/);
         coordinator.begin('display', 'known'); coordinator.request('display', 'known', { prompt: '原动作', references: [] });
-        await page.waitForFunction(() => window.actionMessages.some(m => m.op === 'result' && m.status === 'completed'), { timeout: 30000 });
+        try {
+            await page.waitForFunction(() => window.actionMessages.some(m => m.op === 'result'), { timeout: 30000 });
+            assert.equal(await page.evaluate(() => window.actionMessages.find(m => m.op === 'result').status), 'completed');
+        } catch (error) {
+            console.error('IK服务回执诊断', JSON.stringify({ statuses, errors }));
+            console.error('IK实际舞台诊断', JSON.stringify(await page.evaluate(() => {
+                const h = window.DisplayMmd.getHumanInterface(), state = h.getState();
+                return { messages: window.actionMessages.slice(-5).map(({ catalog, ...message }) => catalog
+                    ? { op: message.op, key: catalog.key, ready: catalog.ready } : message), report: window.motionReport,
+                    ready: state.ready, warning: state.warning, blocked: state.automaticMotionBlocked,
+                    layers: state.layers, performance: window.DisplayMmd.getPerformanceState(), ik: { enabled: state.interactiveIK.enabled, reason: state.interactiveIK.reason,
+                        targets: state.interactiveIK.activeTargets } };
+            })));
+            await page.screenshot({ path: '/tmp/aasc-unified-ik-debug.png' });
+            throw error;
+        }
         assert.equal(generations, 0);
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().candidates.list().length), 0);
-        coordinator.begin('display', 'unknown'); coordinator.request('display', 'unknown', { prompt: '缓缓低头再恢复', references: [] });
+        const baseline = await page.evaluate(() => {
+            window.captureHand = true;
+            return window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.find(c => c.key === 'leftHand').achieved[1];
+        });
+        coordinator.begin('display', 'unknown'); coordinator.request('display', 'unknown', { prompt: '缓缓举起左手再恢复', references: [] });
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().candidates.list().length === 1, { timeout: 30000 });
         await page.waitForFunction(() => window.actionMessages.filter(m => m.op === 'result' && m.status === 'completed').length === 2, { timeout: 10000 });
+        const peak = await page.evaluate(() => Math.max(...window.handTrace.filter(Number.isFinite)));
+        assert.ok(peak > baseline + 0.15, `实际左手未随IK目标抬起：${peak} / ${baseline}`);
+        await page.screenshot({ path: '/tmp/aasc-unified-ik-final.png' });
         const result = await page.evaluate(async oldActive => {
             clearInterval(window.actionTimer);
             const human = window.DisplayMmd.getHumanInterface(), candidate = human.candidates.list()[0];
             const before = human.learn.list()[0].active;
             const file = human.learn.export();
             const exported = JSON.parse(await file.text());
-            const prepared = await human.prepareMpl(candidate.source, { owner: 'candidate:preview' });
+            const prepared = await human.prepareMotion(candidate.source, { owner: 'candidate:preview' });
             const activeBeforeStart = human.getState().layers.length;
             const adopted = await human.candidates.adopt(candidate.id, '原动作');
             return { before, oldActive, exportedSchema: exported.schema, exportedCandidates: exported.candidates.length,
-                duration: prepared.duration, activeBeforeStart, active: human.learn.list()[0].active, adopted: adopted.id, remaining: human.candidates.list().length };
+                duration: prepared.duration, format: candidate.format, ik: human.getInteractiveIKState(), activeBeforeStart, active: human.learn.list()[0].active, adopted: adopted.id, remaining: human.candidates.list().length };
         }, initial.active);
         assert.equal(generations, 1); assert.equal(result.before, initial.active); assert.equal(result.exportedSchema, 2);
+        assert.equal(result.format, 'ik-targets'); assert.equal(result.ik.enabled, true); assert.ok(result.ik.automaticTargets > 0);
         assert.equal(result.exportedCandidates, 1); assert.equal(result.duration, 1); assert.equal(result.activeBeforeStart, 0);
         assert.equal(result.active, result.adopted); assert.notEqual(result.active, initial.active); assert.equal(result.remaining, 0);
         assert.equal(statuses.filter(s => s.state === 'completed').length, 2);
