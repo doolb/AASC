@@ -12,20 +12,31 @@ import android.webkit.JavascriptInterface
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.net.URI
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** 控制 WebView 的原生桥：只负责启动/关闭隔离登录 Activity，不读取或记录凭据。 */
+/** 控制 WebView 的原生桥：负责隔离登录与运行页面入口，不读取或记录凭据。 */
 class Chat2ApiNativeBridge(
     private val activity: Activity,
-    private val onFullConfigBackupSave: ((String) -> Boolean)? = null
+    private val onFullConfigBackupSave: ((String) -> Boolean)? = null,
+    private val runtimeServerUrl: (() -> String?)? = null
 ) {
 
     companion object {
         const val LOGIN_REQUEST_CODE = 1006
         const val ACCOUNT_WEB_REQUEST_CODE = 1007
         private const val MAX_DOWNLOAD_BYTES = 16 * 1024 * 1024
+
+        /** 运行页属于本机Offline服务，远端控制页面不能误打开手机上的另一套运行时。 */
+        @JvmStatic
+        fun isLocalRuntimeUrl(rawUrl: String?): Boolean = try {
+            val uri = URI(rawUrl ?: "")
+            uri.scheme in setOf("http", "https") && uri.rawUserInfo == null &&
+                (uri.port == -1 || uri.port in 1..65535) &&
+                uri.host in setOf("localhost", "127.0.0.1", "[::1]", "::1")
+        } catch (_: Exception) { false }
 
         /** 只允许单层文件名，避免 WebView 传入路径穿越或控制字符。 */
         @JvmStatic
@@ -50,20 +61,37 @@ class Chat2ApiNativeBridge(
         return openLoginActivity(sessionJson, ACCOUNT_WEB_REQUEST_CODE)
     }
 
+    @JavascriptInterface
+    fun openDoubaoRuntimePage(): Boolean {
+        if (runtimeServerUrl == null || activity.isFinishing || activity.isDestroyed) return false
+        return launchOnUiThread {
+            // 必须在主线程读取当前控制页URL，切换服务器后不能沿用首次连接时的旧来源。
+            check(isLocalRuntimeUrl(runtimeServerUrl.invoke()))
+            activity.startActivity(Intent(activity, DoubaoWebViewActivity::class.java))
+        }
+    }
+
     private fun openLoginActivity(sessionJson: String, requestCode: Int): Boolean {
         if (sessionJson.isBlank() || activity.isFinishing || activity.isDestroyed) return false
+        return launchOnUiThread {
+            activity.startActivityForResult(
+                Intent(activity, Chat2ApiLoginActivity::class.java)
+                    .putExtra(Chat2ApiLoginActivity.EXTRA_SESSION_JSON, sessionJson),
+                requestCode
+            )
+        }
+    }
+
+    private fun launchOnUiThread(launch: () -> Unit): Boolean {
         val opened = AtomicBoolean(false)
         val completed = CountDownLatch(1)
-        val open = {
+        val open = open@{
             try {
-                activity.startActivityForResult(
-                        Intent(activity, Chat2ApiLoginActivity::class.java)
-                        .putExtra(Chat2ApiLoginActivity.EXTRA_SESSION_JSON, sessionJson),
-                    requestCode
-                )
+                if (activity.isFinishing || activity.isDestroyed) return@open
+                launch()
                 opened.set(true)
             } catch (_: Exception) {
-                // JavaScript 侧会在返回 false 时回退手工登录；这里不输出 sessionJson，避免凭据配置误入日志。
+                // 切换失败只回传false；不记录登录参数或异常附带的凭据。
             } finally {
                 completed.countDown()
             }

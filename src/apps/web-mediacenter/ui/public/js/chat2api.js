@@ -107,6 +107,34 @@
       if (modal) modal.style.display = 'none';
     },
 
+    openDoubaoRuntimePage(platform) {
+      const notify = text => {
+        if (typeof window.showToast === 'function') window.showToast(text);
+        else this.message(text, true);
+      };
+      if (platform !== 'android') {
+        notify('此入口用于 Android 本机豆包运行页面；请确认任务已启动，桌面端请查看专用浏览器。');
+        return false;
+      }
+      if (typeof window.NativeControl?.openDoubaoRuntimePage !== 'function') {
+        notify('查看运行页面需要在新版 Offline APK 的本机控制端打开，请更新 APK。');
+        return false;
+      }
+      // 当前WebSocket若连向远端，不应把手机自身的运行页误认为远端任务的页面。
+      const wsUrl = window.WebSocketManager?.ws?.url;
+      try {
+        if (wsUrl && !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(wsUrl).hostname)) {
+          notify('请连接手机本地服务后查看运行页面。');
+          return false;
+        }
+        if (window.NativeControl.openDoubaoRuntimePage()) return true;
+        notify('当前页面未连接本机 Offline 服务，无法查看运行页面。');
+      } catch (error) {
+        notify(`打开运行页面失败：${error.message}`);
+      }
+      return false;
+    },
+
     ensureModal() {
       if (document.getElementById('chat2apiModal')) return;
       const modal = document.createElement('div');

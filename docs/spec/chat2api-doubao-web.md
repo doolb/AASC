@@ -1,5 +1,25 @@
 # 豆包网页账号Node文字与朗读 TTS 实现伪代码
 
+## Android运行页查看与首装种子（2026-10-29）
+
+```text
+授权范围 := 本地release首装任务种子 + 查看当前运行WebView；不做数据修复、服务自动创建配置或设备启动操作
+种子 := release/task/doubao.web/results/index.json → 一个builtin/server/service/running实例
+参数 := 9091、vivaldi、9224、空accountId；复用既有任务恢复，不注入凭据或修改其他种子
+首次初始化 := 既有release/task恢复 → restoreAutoStartServices → 启动doubao.web；已有手机由用户手动启动
+面板运行回包 := runtimePlatform为android或desktop；查看按钮 → 验证Android平台与原生桥能力
+原生入口 := 仅Offline本机控制端允许启动非导出的DoubaoWebViewActivity
+隔离进程 := 与Service共用chat2api_login进程、一次初始化相同WebView数据目录；不绑定/启动一个无令牌Service
+查看 := 订阅现有页面缓存 → 当前WebView从旧父容器移除 → 使用Activity上下文附着 → 显示同一个页面
+未加载 := 显示首次调用后加载提示；不创建第二个WebView、不自动签名或发消息
+关闭/后台/旋转 := 按查看者身份解除订阅并卸载视图 → 释放Activity上下文 → 原页面/JS/请求继续运行
+换账号/重建/签名后关闭/服务销毁 := 先通知查看者卸载旧页再destroy → 显示等待状态；后续新页自动展示
+迟到旧查看者退出 := 不移除新查看者或销毁任何运行页面；查看异常不影响后台请求
+网页业务 := 官网请求和签名仍由共享JS执行；原生仅处理视图生命周期，不改Cookie/账号/会话
+验证 := 页面缓存生命周期JVM测试、原生编译、正式widget/JS入口浏览器测试、种子恢复和现有Chat2API回归
+发布 := servicePackage及minApk待构建；不构建或发布APK/修复包，不修改数据版本基线
+```
+
 ## 兼容模式入口伪代码（2026-10-22）
 
 ```text

@@ -1,3 +1,11 @@
+### 豆包网页运行页面与首装配置
+
+- ✅ [2026-10-29] 本地release新增豆包网页首装运行实例，Android任务面板增加“查看运行页面”。
+  - 新增 `release/task/doubao.web/results/index.json`，复用现有任务恢复，默认9091/9224且不绑定账号；未增加服务自动创建配置或数据修复包，当前手机由用户手动开启。
+  - 修改 `doubao-web.js`、`chat2api.js`、原生桥/MainActivity/页面缓存/Service和Manifest，新增 `DoubaoWebViewActivity.kt`。同隔离进程展示后台同一个WebView，关闭只卸载视图；换页先卸载再销毁，旧查看者退出不影响新窗口，远端/桌面/旧APK明确提示。
+  - 新增 `npm run test:doubao-runtime-view`，真实widget浏览器和种子暂存/恢复15/15，Chat2API419/419，Android最终编译及定向6/6通过，当前来源切换边界已纳入实现。同步design/spec/task/usage/self-test/todo。
+  - `servicePackage=true`、`minApk=true`待构建；数据基线保持4，未构建发布APK/修复包、未操作手机或官网账号，真机UI与请求期间开关窗口待配套部署验收。
+
 ### 显示端聊天输入区
 
 - ✅ [2026-10-29] 按用户确认交换发送和清空，按钮最终顺序为清空、附件、发送。

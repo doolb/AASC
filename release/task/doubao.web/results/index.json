@@ -1,0 +1,30 @@
+{
+  "instances": [
+    {
+      "instanceId": "d0baba01",
+      "taskName": "doubao.web",
+      "status": "running",
+      "timestamp": 1793263830056,
+      "target": "server",
+      "env": "auto",
+      "mode": "service",
+      "displayId": null,
+      "params": {
+        "port": 9091,
+        "browserExecutable": "vivaldi",
+        "debugPort": 9224,
+        "accountId": ""
+      },
+      "taskType": "builtin",
+      "builtinId": "doubao.web",
+      "entryFile": null,
+      "stage": "running",
+      "progress": 100,
+      "routing": null,
+      "requiredCapabilities": [],
+      "routeTarget": "server",
+      "routeReason": "explicit-server",
+      "routeNodeId": "main-server"
+    }
+  ]
+}

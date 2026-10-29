@@ -57,6 +57,15 @@
             android:process=":chat2api_login"
             android:screenOrientation="portrait" />
 
+        <!-- 查看后台同一个WebView；关闭仅卸载视图，页面和请求继续由Service持有。 -->
+        <activity
+            android:name=".DoubaoWebViewActivity"
+            android:exported="false"
+            android:process=":chat2api_login"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- 与外部登录页共用隔离 WebView 数据目录；只接受同应用绑定。 -->
         <service
             android:name=".DoubaoWebViewService"

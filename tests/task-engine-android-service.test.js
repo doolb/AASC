@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const TaskManager = require('../src/apps/server/modules/task-engine/task-manager.js');
+const { stageNodeMinSeeds } = require('../scripts/ops/node-min-seeds');
 
 async function waitFor(predicate, timeoutMs = 2000) {
     const deadline = Date.now() + timeoutMs;
@@ -65,6 +66,38 @@ test('Android 节点允许 llm-server 在当前进程注册和注销服务路由
 
     await manager.stopInstance('llm-server', result.instanceId);
     assert.equal(manager._taskRouteRegistry.getRoutes().length, 0);
+});
+
+test('release豆包网页种子通过现有恢复流程启动唯一实例，不创建浏览器或消息', async t => {
+    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-doubao-seed-'));
+    t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
+    const release = path.join(root, 'release');
+    const directory = path.join(release, 'task/doubao.web/results');
+    await fs.promises.mkdir(directory, { recursive: true });
+    await fs.promises.mkdir(path.join(release, 'config'));
+    await fs.promises.mkdir(path.join(release, 'userconfig'));
+    await fs.promises.writeFile(path.join(release, 'config/config.json'), '{}');
+    await fs.promises.copyFile(path.resolve(__dirname, '../release/task/doubao.web/results/index.json'),
+        path.join(directory, 'index.json'));
+    const stage = await stageNodeMinSeeds(release, path.join(root, 'stage'));
+    const tasksDir = path.join(stage, 'task');
+    let starts = 0;
+    let stops = 0;
+    const manager = new TaskManager({ tasksDir, serverExecutionDisabled: true,
+        chat2apiRuntimeFactory: () => ({ start: async () => { starts++; }, stop: async () => { stops++; } }) });
+    t.after(() => manager.destroy());
+    await manager.init();
+    await manager.restoreAutoStartServices();
+    await waitFor(() => starts === 1);
+    const result = await manager.ensureBuiltinServiceInstance('doubao.web');
+    assert.equal(result.status, 'running');
+    assert.equal(result.instanceId, 'd0baba01');
+    assert.equal(starts, 1);
+    const entries = await manager.taskIO.getIndex('doubao.web');
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].params.accountId, '');
+    await manager.stopInstance('doubao.web', result.instanceId);
+    assert.equal(stops, 1);
 });
 
 test('Android 节点仍拒绝需要服务端子进程的普通任务', async (t) => {

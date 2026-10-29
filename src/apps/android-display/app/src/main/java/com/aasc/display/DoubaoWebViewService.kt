@@ -3,11 +3,13 @@ package com.aasc.display
 import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Intent
+import android.content.MutableContextWrapper
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -37,6 +39,13 @@ class DoubaoWebViewService : Service() {
     companion object {
         const val EXTRA_TOKEN = "doubao_webview_token"
         const val PORT = 19092
+
+        // 仅隔离进程内共享页面引用，不暴露Binder或IPC令牌；查看Activity不启动无授权的Service。
+        internal val runtimePages = DoubaoWebViewPageCache<WebView> { page ->
+            (page.parent as? ViewGroup)?.removeView(page)
+            (page.context as? MutableContextWrapper)?.baseContext = page.context.applicationContext
+            page.destroy()
+        }
     }
 
     private val binder = Binder()
@@ -45,12 +54,13 @@ class DoubaoWebViewService : Service() {
     private val pending = ConcurrentHashMap<String, LinkedBlockingQueue<JSONObject>>()
     private var listener: ServerSocket? = null
     private var token = ""
-    private val pages = DoubaoWebViewPageCache<WebView> { it.destroy() }
+    private val pages get() = runtimePages
     private val webView: WebView? get() = pages.current
     private var pageLoaded = CountDownLatch(1)
     private val accountLock = ReentrantLock()
     private var accountFingerprint = ""
     private var pageScriptFingerprint = ""
+    private var destroyed = false
 
     override fun onCreate() {
         Chat2ApiWebViewDataDirectory.initializer.initialize(Build.VERSION.SDK_INT) { suffix ->
@@ -76,6 +86,7 @@ class DoubaoWebViewService : Service() {
     }
 
     override fun onDestroy() {
+        destroyed = true
         listener?.close()
         listener = null
         workers.shutdownNow()
@@ -120,12 +131,14 @@ class DoubaoWebViewService : Service() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun ensurePage(profile: JSONObject, bootstrapScript: String): WebView {
+        check(!destroyed) { "豆包网页服务已关闭" }
         val fingerprint = MessageDigest.getInstance("SHA-256").digest(bootstrapScript.toByteArray())
             .joinToString("") { "%02x".format(it) }
         // 服务JS升级时重建页面，确保文档开始注入点与本次调用使用同一个运行时。
         if (fingerprint != pageScriptFingerprint) { pages.clear(); pageScriptFingerprint = fingerprint }
         return pages.getOrCreate {
-            val view = WebView(this)
+            // 展示时暂借Activity上下文以支持输入法，退回后台时解除引用，避免窗口泄漏。
+            val view = WebView(MutableContextWrapper(this))
             view.settings.javaScriptEnabled = true
             view.settings.domStorageEnabled = true
             view.settings.userAgentString = profile.getString("userAgent")

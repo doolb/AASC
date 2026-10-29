@@ -1,5 +1,15 @@
 # 自测功能实现文档
 
+## 豆包网页运行页面与首装种子（2026-10-29）
+
+```text
+npm run test:doubao-runtime-view → 正式widget真实点击；Android/桌面/旧APK/远端/失败提示；15项通过
+真实release种子 → stageNodeMinSeeds暂存 → TaskManager.restoreAutoStartServices → 一个doubao.web实例 → ensure复用 → stop注销
+npm run check:chat2api → 419/419通过，原登录/直连/兼容/流式/凭据流程保留
+Android编译与6/6定向 → 缓存查看者身份、同页复用、关闭继续、重建、异常与先卸载后销毁；本机来源/非法端口
+边界 → 不发送真实聊天、不使用正式凭据、不改当前手机；Android视觉/验证码/键盘/旋转需新版APK与服务部署后验收
+```
+
 ## 显示端聊天输入框独行与按钮横排（2026-10-29）
 
 ```text

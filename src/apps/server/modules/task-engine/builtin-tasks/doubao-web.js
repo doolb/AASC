@@ -26,6 +26,7 @@ module.exports = {
     html: '<div>状态：<strong style="color:{{_statusColor}}">{{statusText}}</strong></div>' +
       '<div style="font-size:12px">账号：{{accountText}}</div>' +
       '<div style="font-size:12px">API：{{addressText}}</div>' +
+      '<button class="task-card-btn" onclick="Chat2APIControl.openDoubaoRuntimePage(\'{{runtimePlatform}}\')">查看运行页面</button> ' +
       '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'{{instanceId}}\')">停止服务</button>',
   },
   async run(context) {
@@ -67,12 +68,14 @@ module.exports = {
       throw error;
     }
     context.postWidgetUpdate?.({ statusText: '运行中', _statusColor: '#4ade80',
+      runtimePlatform: process.env.AASC_ANDROID_NODE === '1' ? 'android' : 'desktop',
       accountText: config.accountId || '按当前请求选择', addressText: `127.0.0.1:${port}` });
     return { type: 'service', stop: async () => {
       deactivate();
       await runtime.stop();
       await bridge.stop();
       context.postWidgetUpdate?.({ statusText: '已停止', _statusColor: '#f87171',
+        runtimePlatform: process.env.AASC_ANDROID_NODE === '1' ? 'android' : 'desktop',
         accountText: '--', addressText: '--' });
     } };
   },

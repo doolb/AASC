@@ -1532,7 +1532,8 @@ class MainActivity : AppCompatActivity() {
             onFileChooserRequested = ::requestWebViewFileChooser
         )
         control.visibility = View.GONE
-        control.addJavascriptInterface(Chat2ApiNativeBridge(this, ::requestFullConfigBackupSave), "NativeControl")
+        control.addJavascriptInterface(Chat2ApiNativeBridge(this, ::requestFullConfigBackupSave,
+            runtimeServerUrl = { if (offlineMode) control.url else null }), "NativeControl")
         control.addJavascriptInterface(OfflineModelStatusBridge(this, offlineMode), "NativeOfflineModels")
         control.webViewClient = createWebViewClient(null, baseUrl, false)
         // 插入到 display WebView 之上、控制按钮和启动遮罩之下，避免控制页被显示页覆盖。
