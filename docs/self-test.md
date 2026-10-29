@@ -1,5 +1,19 @@
 # 自测功能文档
 
+## 内置IK下半身微动作（2026-10-29）
+
+```text
+定向 := node --test --test-concurrency=1 tests/display-mmd-ik.test.js tests/mmd-ik-motion.test.js → 19/19
+范围 := 28类边界/降级/真实Morph源码；脚锚定与显式优先；旧动作/手动生命周期；取消空目标及基础姿态、不改输入
+真实Ammo := 30/60fps×比心/庆祝/鞠躬；骨盆0.99～1.27厘米、轻沉/起伏膝变化14～16°、脚漂移2.95～4.65毫米；781项原生分配固定，dispose归零
+取消修复 := 原60fps脚滑13.06毫米→同一物理世界回位后<5毫米；未放宽1厘米断言
+MMD-AR := node --test tests/mmd-builtin-ik-browser.test.js 最终独立1/1，57.6秒；真实米娅+正式Human/模板/drive，实际骨盆/膝/脚、外部时钟、停止；截图和JSON在/tmp/aasc-mmd-ar-lowerbody-ik.*
+Offline := Note8 min74/code164临时JS覆盖；五动作10张ADB系统截图及实际坐标，错误0/不可达0/候选1；覆盖已撤销并刷新原磁盘页，不写聊天
+观感 := 系统截图角色完整、脚稳定，未见此前明显裙摆翻起；手机采样7.5～10.6fps，不当逐帧穿模或性能提升证明
+完整回归 := npm run test:mmd-production本轮65通过/1既有跳过/7取消；合并浏览器7通过/1取消（Promise resolution is still pending but the event loop has already resolved），均不记全量通过
+发布 := servicePackage已true；未构建部署或安装APK；其他PMX和正式包仍待验收
+```
+
 
 ## HMR普通CPU/WASM（2026-10-22）
 

@@ -45,12 +45,37 @@ test('内置IK表情按真实Morph/独立权重解析，缺部位告警且动态
     model.bindings['bones:leftWrist'].dynamic = true;
     model.bindings['bones:rightWrist'] = null;
     const degraded = createBuiltinIKPlan({ name: '比心' }, model);
-    assert.deepEqual(Object.keys(degraded.plan.frames[1].targets), ['head']);
+    assert.deepEqual(Object.keys(degraded.plan.frames[1].targets), ['head', 'pelvis']);
     assert.match(degraded.warnings.join(' '), /leftHand.*rightHand/);
+    model.bindings['bones:leftAnkle'] = null;
+    const noSupport = createBuiltinIKPlan({ name: '比心' }, model);
+    assert.deepEqual(Object.keys(noSupport.plan.frames[1].targets), ['head']);
+    assert.match(noSupport.warnings.join(' '), /省略下半身/);
     model.bindings['bones:head'] = null;
     assert.throws(() => createBuiltinIKPlan({ name: '比心' }, model), /缺少/);
     for (const options of [{ name: '不存在' }, { duration: NaN }, { strength: -1 }, { count: 0 }, { count: 1.5 }]) {
         assert.throws(() => createBuiltinIKPlan({ name: '点头', ...options }, model));
+    }
+});
+
+test('下半身按语义选配方、目标幅度受限且不增加帧数，多轮真实Morph源码保持16KiB以内', async () => {
+    const { model } = await makeModel();
+    const { createBuiltinIKPlan } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-reply-ik-gestures.mjs');
+    const { ADVANCED_GESTURES } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-reply-gestures.mjs');
+    model.morphs = ['にこり', '笑い', '口角上げ', '照れ'].map((name, index) => ({ name, index, supported: true, panel: 1 }));
+    const quiet = new Set(['点头', '摇头', '生气', '眨眼', '平静', '敬礼']);
+    for (const { name } of ADVANCED_GESTURES) {
+        const { plan } = createBuiltinIKPlan({ name, duration: 15, count: 8, strength: 1 }, model);
+        assert.ok(Buffer.byteLength(JSON.stringify(plan)) <= 16384, name);
+        assert.equal(plan.frames.length, 41);
+        assert.equal(Object.hasOwn(plan.frames[0].targets, 'pelvis'), !quiet.has(name), name);
+        for (const frame of plan.frames) {
+            const pelvis = frame.targets.pelvis;
+            if (pelvis) {
+                assert.ok(Math.hypot(...pelvis.position) <= 0.012501);
+                if (pelvis.rotation) assert.ok(Math.hypot(...pelvis.rotation) <= 2.000001);
+            }
+        }
     }
 });
 
@@ -143,6 +168,33 @@ test('真实PMX旧姿态转换为IK世界目标，明确手部目标释放上游
     rig.restore();
 });
 
+test('骨盆目标保留初始化脚锚点并释放旧腿姿态，显式脚/膝目标优先且无骨盆时不改变原行为', async () => {
+    const { T, model } = await makeModel();
+    const { createHumanPhysicsRig } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-physics-rig.mjs');
+    const { createAutomaticIKTargets } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-ik-targets.mjs');
+    const rig = createHumanPhysicsRig(model), animated = rig.animatedPoses();
+    const ankle = rig.nodes.find(node => node.semantic === 'leftAnkle');
+    animated.get(ankle).position.add(new T.Vector3(0.04, 0, 0));
+    const channels = new Map([['pelvis', { position: [0.008, -0.004, 0] }]]);
+    const targets = createAutomaticIKTargets(rig, animated, channels);
+    const foot = targets.find(target => target.node === ankle);
+    assert.equal(foot.stance, true);
+    assert.ok(rig.targetToLocal(foot.target).distanceTo(ankle.position) < 1e-8);
+    assert.equal(targets.find(target => target.node.semantic === 'leftKnee').positionState, 'Off');
+    assert.equal(targets.find(target => target.node.semantic === 'rightLeg').rotationState, 'Off');
+    channels.set('leftFoot', { position: [0.02, 0, 0] });
+    channels.set('leftKnee', { position: [0, 0, 0.01] });
+    const explicit = createAutomaticIKTargets(rig, animated, channels);
+    assert.equal(explicit.find(target => target.node === ankle).stance, undefined);
+    assert.ok(rig.targetToLocal(explicit.find(target => target.node === ankle).target)
+        .distanceTo(ankle.position.clone().add(new T.Vector3(0.032, 0, 0))) < 1e-8);
+    assert.equal(explicit.find(target => target.node.semantic === 'leftKnee').positionState, 'On');
+    const legacy = createAutomaticIKTargets(rig, animated);
+    assert.equal(legacy.find(target => target.node.semantic === 'leftKnee').positionState, 'On');
+    assert.ok(rig.targetToLocal(legacy.find(target => target.node === ankle).target).distanceTo(animated.get(ankle).position) < 1e-8);
+    rig.restore();
+});
+
 test('正式Human默认IK初始化、隐藏期间取消、恢复、手动接管和关闭均走真实资源生命周期', { timeout: 15000 }, async () => {
     const { T, model } = await makeModel();
     const globals = new Map(['window', 'document', 'Ammo'].map(key => [key, globalThis[key]]));
@@ -232,6 +284,53 @@ test('真实Ammo在30/60fps统一求解旧姿态和新IK目标，限位/有限�
             assert.ok(peakLift > 0.02, `目标没有实际抬高手腕：${peakLift}`);
             assert.ok(remaining < peakLift, `释放后没有回到基准附近：${remaining} / ${peakLift}`);
             t.diagnostic(`${fps}fps求解平均${(timings.reduce((a, b) => a + b, 0) / timings.length).toFixed(2)}ms，${allocations}项原生分配固定`);
+        } finally { drive.dispose(); rig.restore(); }
+        assert.equal(drive.getState().allocations, 0);
+    }
+});
+
+test('真实Ammo30/60fps下半身有实际位移/屈膝，脚保持站姿范围且取消后释放，不累积原生分配', { timeout: 30000 }, async t => {
+    const { createBuiltinIKSampler } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-reply-ik-gestures.mjs');
+    const { createHumanPhysicsRig } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-physics-rig.mjs');
+    const { createHumanPhysicsDrive } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-physics-drive.mjs');
+    const { createAutomaticIKTargets } = await import('../src/apps/web-mediacenter/ui/public/js/mmd-human-ik-targets.mjs');
+    const Ammo = await require('../src/apps/web-mediacenter/ui/public/js/vendor/three/libs/ammo.wasm.js')({
+        wasmBinary: fs.readFileSync(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/vendor/three/libs/ammo.wasm.wasm')) });
+    for (const fps of [30, 60]) for (const name of ['比心', '庆祝', '鞠躬']) {
+        const { T, model } = await makeModel(), rig = createHumanPhysicsRig(model), drive = createHumanPhysicsDrive(Ammo, rig);
+        const sampler = createBuiltinIKSampler({ name, duration: 4, strength: 0.7 }, model), allocations = drive.getState().allocations;
+        const node = semantic => rig.nodes.find(item => item.semantic === semantic);
+        const position = semantic => rig.targetToLocal(node(semantic).bone.getWorldPosition(new T.Vector3()));
+        const knee = side => {
+            const a = position(side + 'Leg'), b = position(side + 'Knee'), c = position(side + 'Ankle');
+            return Math.PI - a.sub(b).angleTo(c.sub(b));
+        };
+        const initial = knee('left');
+        let peakPelvis = 0, peakFoot = 0, peakKnee = 0, remaining = Infinity;
+        try {
+            for (let frame = 0; frame < fps * 3; frame++) {
+                rig.restore(); const animated = rig.animatedPoses(), channels = new Map();
+                // 中途取消而非只验证正常归零：1.8秒后完全撤去所属目标。
+                if (frame < fps * 1.8) for (const track of sampler.tracks.filter(track => track.kind === 'ik')) {
+                    const value = channels.get(track.key) || {}; value[track.property] = track.evaluate(frame / fps); channels.set(track.key, value);
+                }
+                // 同时覆盖整个自动层消失（空目标）和保留基础自动姿态两种取消入口。
+                const goals = frame >= fps * 1.8 && name === '庆祝' ? [] : createAutomaticIKTargets(rig, animated, channels);
+                const original = goals.map(goal => [goal.positionState, goal.rotationState, goal.target?.toArray()]);
+                const result = drive.step(1 / fps, animated, goals, {});
+                assert.deepEqual(goals.map(goal => [goal.positionState, goal.rotationState, goal.target?.toArray()]), original, '回位不得改写输入目标');
+                remaining = position('hips').distanceTo(rig.pelvis.position);
+                peakPelvis = Math.max(peakPelvis, remaining);
+                peakFoot = Math.max(peakFoot, ...['leftAnkle', 'rightAnkle'].map(key => position(key).distanceTo(node(key).position)));
+                peakKnee = Math.max(peakKnee, Math.abs(knee('left') - initial));
+                assert.ok([...result.values()].every(pose => [...pose.position.toArray(), ...pose.quaternion.toArray()].every(Number.isFinite)));
+                assert.equal(drive.getState().allocations, allocations);
+            }
+            assert.ok(peakPelvis > 0.004 && peakPelvis < 0.035, name + '骨盆应实际轻移：' + peakPelvis);
+            assert.ok(peakFoot < 0.01, name + '脚部漂移超过1厘米：' + peakFoot);
+            if (name !== '比心') assert.ok(peakKnee > 3 * Math.PI / 180 && peakKnee < 22 * Math.PI / 180, name + '缺少实际轻屈膝');
+            assert.ok(remaining < 0.001, name + '取消后骨盆未释放');
+            t.diagnostic(`${name}/${fps}fps：骨盆${(peakPelvis * 100).toFixed(2)}cm、脚漂移${(peakFoot * 1000).toFixed(2)}mm、膝变化${(peakKnee * 180 / Math.PI).toFixed(2)}度`);
         } finally { drive.dispose(); rig.restore(); }
         assert.equal(drive.getState().allocations, 0);
     }

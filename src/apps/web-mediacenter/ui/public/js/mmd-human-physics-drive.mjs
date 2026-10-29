@@ -14,7 +14,7 @@ export function normalizeBodySettings(value = {}) {
 // 所有本模式原生分配归本实例所有，晚到初始化、模型切换与关闭均可完整释放。
 export function createHumanPhysicsDrive(Ammo, rig) {
     const owned = [], bodies = new Map(), constraints = [], positionDrives = new Map();
-    let disposed = false, accumulator = 0, frameMs = 0, substeps = 0;
+    let disposed = false, accumulator = 0, frameMs = 0, substeps = 0, stanceRecovery = null;
     const own = object => { owned.push(object); return object; };
     let world;
     const vector = new Vector3(), delta = new Quaternion();
@@ -63,6 +63,7 @@ export function createHumanPhysicsDrive(Ammo, rig) {
     function dispose() {
         if (disposed) return;
         disposed = true;
+        stanceRecovery = null;
         if (world) {
             for (const constraint of constraints) world.removeConstraint(constraint);
             for (const record of bodies.values()) world.removeRigidBody(record.body);
@@ -182,6 +183,7 @@ export function createHumanPhysicsDrive(Ammo, rig) {
     function step(seconds, animated, targets, requestedSettings = {}) {
         if (disposed) throw new Error('人体物理世界已释放');
         const started = performance.now(), settings = normalizeBodySettings(requestedSettings);
+        targets = recoverAutomaticStance(seconds, animated, targets, settings);
         scratchVector.setValue(0, settings.gravity ? -9.81 : 0, 0); world.setGravity(scratchVector);
         for (const [node, record] of bodies) {
             record.damping = bodyDamping(settings, node.semantic);
@@ -312,6 +314,42 @@ export function createHumanPhysicsDrive(Ammo, rig) {
         frameMs = performance.now() - started;
         return poses;
     }
+    // 自动重心目标取消后先用同一物理世界回位，再固定骨盆；直接固定会把整条腿瞬移回去。
+    // 状态仅属于当前实例，手动接管和自由骨盆不继承自动动作留下的脚锚点。
+    function recoverAutomaticStance(seconds, animated, targets, settings) {
+        const pelvisTarget = targets.find(target => target.node === rig.pelvis);
+        if (settings.freePelvis || targets.some(target => !target.automatic)) {
+            stanceRecovery = null;
+            return targets;
+        }
+        if (pelvisTarget) {
+            const feet = targets.filter(target => target.stance);
+            stanceRecovery = feet.length === 2 ? { elapsed: 0, feet: feet.map(target => ({ ...target,
+                target: target.target.clone(), targetRotation: target.targetRotation.clone() })) } : null;
+            return targets;
+        }
+        if (!stanceRecovery) return targets;
+        const root = read(bodies.get(rig.pelvis)), base = animated.get(rig.pelvis);
+        const goal = base.position.clone().add(nodeOffset(rig.pelvis, base.quaternion));
+        stanceRecovery.elapsed += Math.max(0, Math.min(0.1, Number.isFinite(seconds) ? seconds : 0));
+        if (stanceRecovery.elapsed >= 0.8 || (root.position.distanceTo(goal) < 0.0001 && root.quaternion.angleTo(base.quaternion) < Math.PI / 1800)) {
+            stanceRecovery = null;
+            return targets;
+        }
+        const effective = targets.map(target => {
+            if (target.explicit) return target;
+            const foot = stanceRecovery.feet.find(item => item.node === target.node);
+            if (foot) return foot;
+            if (/(Leg|Knee)$/u.test(target.node.semantic)) return { ...target, positionState: 'Off', rotationState: 'Off' };
+            return target;
+        });
+        for (const foot of stanceRecovery.feet) {
+            if (!effective.some(target => target.node === foot.node)) effective.push(foot);
+        }
+        effective.push({ node: rig.pelvis, automatic: true, positionState: 'On', rotationState: 'On',
+            target: rig.targetToWorld(base.position), targetRotation: rig.targetRotationToWorld(base.quaternion) });
+        return effective;
+    }
     // 关节释放后仍耗散相对运动。等反角冲量保留自由身体的整体运动，不重置姿态或清零全部速度。
     function dissipateJointMotion(projections, targets) {
         const inverses = new Map([...bodies].map(([node, record]) => [node, inverseInertia(record)]));
@@ -360,7 +398,7 @@ export function createHumanPhysicsDrive(Ammo, rig) {
         }
     }
     function reset(animated = null) {
-        rig.restore(); animated ||= rig.animatedPoses(); accumulator = 0;
+        rig.restore(); animated ||= rig.animatedPoses(); accumulator = 0; stanceRecovery = null;
         for (const [node, record] of bodies) {
             const pose = animated.get(node); record.guideVelocity?.set(0, 0, 0);
             write(record, pose.position.clone().add(nodeOffset(node, pose.quaternion)), pose.quaternion, true);

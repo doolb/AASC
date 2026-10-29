@@ -59,9 +59,26 @@ const templates = new Map(Object.entries({
         { ...hands(-0.18, 0.24, 0.17), ...head([0, -9, 0]) })
 }));
 
+// 下半身与上身共用四段时序；脚保持原地，轻微降重心交给原关节链自然屈膝。
+// 默认位移约1厘米、摆角不到2度，不给敬礼/平静/眨眼等动作额外摇晃。
+const lowerRecipes = {
+    sway: [point([0.002, -0.001, 0], [0, 0.2, -0.1]), point([0.008, -0.003, 0], [0, 0.7, -0.4]),
+        point([-0.007, -0.002, 0], [0, -0.7, 0.4]), point([-0.001, -0.001, 0], [0, -0.15, 0.1])],
+    settle: [point([0, -0.001, 0]), point([0.001, -0.006, -0.001]),
+        point([0.001, -0.005, -0.001]), point([0, -0.001, 0])],
+    bounce: [point([0, -0.001, 0]), point([0.002, -0.007, 0]),
+        point([-0.001, -0.002, 0]), point([0, -0.001, 0])]
+};
+const lowerByName = new Map([
+    ['sway', ['挥手', '歪头', '开心', '害羞', '比心', '亲亲', '猫爪', '猫咪撒娇', '拥抱', '思考', '晚安', '闪亮', '摊手']],
+    ['settle', ['鞠躬', '悲伤', '合十', '嘘', '拒绝']],
+    ['bounce', ['庆祝', '赞同', '加油', '惊讶']]
+].flatMap(([key, names]) => names.map(name => [name, lowerRecipes[key]])));
+
 /** 生成与实际播放、源码预览共用的计划；参数只在这里写入一次。 */
 export function createBuiltinIKPlan({ name, duration = 2, strength = 0.7, count = 1 }, model) {
-    const gesture = GESTURES.get(name), sequence = templates.get(name);
+    const gesture = GESTURES.get(name);
+    let sequence = templates.get(name);
     if (!gesture || !sequence) throw new Error('没有内置IK动作模板：' + name);
     if (!Number.isFinite(duration) || duration < 0.2 || duration > 15 || !Number.isFinite(strength) || strength < 0 || strength > 1
         || !Number.isInteger(count) || count < 1 || count > 8) throw new Error('内置IK动作参数超出范围');
@@ -75,6 +92,16 @@ export function createBuiltinIKPlan({ name, duration = 2, strength = 0.7, count 
     if (!channels.size) throw new Error('当前模型缺少内置动作所需的IK部位：' + name);
     const unavailable = warnings.splice(0);
     if (unavailable.length) warnings.push('当前PMX缺少可控制IK部位：' + unavailable.join('、'));
+    const lower = lowerByName.get(name);
+    if (lower) {
+        const supported = ['hips', 'leftAnkle', 'rightAnkle'].every(key => {
+            const bone = model.bindings['bones:' + key]; return bone && !bone.dynamic;
+        });
+        if (supported) {
+            sequence = sequence.map((pose, index) => ({ ...pose, pelvis: lower[index] }));
+            channels.set('pelvis', new Set(Object.keys(lower[0])));
+        } else warnings.push('当前PMX缺少可控制骨盆或双脚，已省略下半身微动作');
+    }
     const expression = gesture.expression === '平静'
         ? { names: [...new Set(['开心', '悲伤', '生气', '惊讶', '害羞', '眨眼', '闭眼']
             .flatMap(value => resolveReplyExpression(model.morphs, value).names))] }
@@ -82,11 +109,24 @@ export function createBuiltinIKPlan({ name, duration = 2, strength = 0.7, count 
     const faceNames = expression.names || [];
     if (gesture.expression && gesture.expression !== '平静' && !faceNames.length) warnings.push('当前PMX缺少' + gesture.expression + '表情，仅播放身体目标');
     const expressionStrength = gesture.kind === 'emotion' ? 1 : gesture.expressionStrength ?? 0.22;
-    const frame = (time, pose, amount) => ({ time, targets: Object.fromEntries([...channels].map(([key, properties]) => [key,
-        Object.fromEntries([...properties].map(property => [property, (pose[key]?.[property] || [0, 0, 0])
-            .map(value => Math.max(property === 'position' ? -0.45 : -90,
-                Math.min(property === 'position' ? 0.45 : 90, value * strength / 0.7)))]))])),
-        morphs: Object.fromEntries(faceNames.map(key => [key, gesture.expression === '平静' ? 0 : Math.round(strength * expressionStrength * amount * 1e6) / 1e6])) });
+    const frame = (time, pose, amount) => {
+        const targets = {};
+        for (const [key, properties] of channels) {
+            targets[key] = {};
+            for (const property of properties) {
+                const limit = property === 'position' ? 0.45 : 90;
+                let vector = (pose[key]?.[property] || [0, 0, 0]).map(value => Math.max(-limit, Math.min(limit, value * strength / 0.7)));
+                if (key === 'pelvis') {
+                    // 骨盆微动作另限整体幅度：归一位移0.0125对应2厘米；角度向量不超过2度。
+                    const maximum = property === 'position' ? 0.0125 : 2, length = Math.hypot(...vector);
+                    if (length > maximum) vector = vector.map(value => value * maximum / length);
+                }
+                targets[key][property] = vector;
+            }
+        }
+        return { time, targets, morphs: Object.fromEntries(faceNames.map(key => [key,
+            gesture.expression === '平静' ? 0 : Math.round(strength * expressionStrength * amount * 1e6) / 1e6])) };
+    };
     const frames = [frame(0, {}, 0)], moments = [0.18, 0.38, 0.62, 0.82], faceAmounts = [0.25, 0.9, 1, 0.25];
     for (let cycle = 0; cycle < count; cycle++) {
         sequence.forEach((pose, index) => frames.push(frame((cycle + moments[index]) * duration / count, pose, faceAmounts[index])));

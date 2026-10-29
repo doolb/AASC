@@ -8,7 +8,7 @@ const puppeteer = require('puppeteer-core');
 const root = path.resolve(__dirname, '../3rd/mmd-ar-test/web-dist');
 const formal = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js');
 
-test('MMD-AR真实米娅加载正式Human与同一内置IK模板，实际抬手、时钟暂停及取消释放', {
+test('MMD-AR真实米娅同一内置IK模板，抬手/重心切换/屈膝及脚锚定、暂停与取消', {
     timeout: 120000, skip: !fs.existsSync('/usr/bin/chromium') || !fs.existsSync(path.join(root, 'index.html'))
 }, async () => {
     const errors = [];
@@ -44,22 +44,50 @@ test('MMD-AR真实米娅加载正式Human与同一内置IK模板，实际抬手�
             const h = window.DisplayMmd.getHumanInterface();
             window.DisplayMmd.setMotionPlaybackEnabled(false);
             const hand = h.getInteractiveIKState().controls.find(c => c.key === 'leftHand');
+            const controls = h.getInteractiveIKState().controls.map(c => ({ key: c.key, position: c.achieved }));
             window.builtinClock = 0;
             const prepared = await h.prepare({ action: '比心', duration: 4, strength: 0.7, owner: 'test:builtin' });
             const request = h.startPrepared(prepared, { owner: 'test:builtin', clock: () => window.builtinClock });
-            return { y: hand.achieved[1], id: request.id, source: JSON.parse(h.mpl.advancedSource({ name: '比心' })).format };
+            return { y: hand.achieved[1], id: request.id, controls,
+                source: JSON.parse(h.mpl.advancedSource({ name: '比心' })).format };
         });
         assert.equal(initial.source, 'ik-targets');
-        await page.evaluate(() => { window.builtinClock = 2; });
+        await page.evaluate(() => { window.builtinClock = 1.52; });
         await page.waitForFunction(y => window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls
             .find(c => c.key === 'leftHand').achieved[1] > y + 0.4, { timeout: 30000 }, initial.y);
         const held = await page.evaluate(id => window.DisplayMmd.getHumanInterface().getRequest(id).time, initial.id);
         await new Promise(resolve => setTimeout(resolve, 150));
         assert.equal(await page.evaluate(id => window.DisplayMmd.getHumanInterface().getRequest(id).time, initial.id), held);
+        const baseline = Object.fromEntries(initial.controls.map(c => [c.key, c.position]));
+        const height = baseline.head[1] - Math.min(baseline.leftFoot[1], baseline.rightFoot[1]);
+        const distance = (a, b) => Math.hypot(...a.map((value, index) => value - b[index])) * 1.6 / height;
+        await page.waitForFunction(({ baseline, height }) => {
+            const pelvis = window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.find(c => c.key === 'pelvis').achieved;
+            return Math.hypot(...pelvis.map((value, index) => value - baseline[index])) * 1.6 / height > 0.002;
+        }, { timeout: 30000 }, { baseline: baseline.pelvis, height });
+        const sway = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.map(c => ({ key: c.key, position: c.achieved })));
+        for (const c of sway.filter(c => /Foot$/u.test(c.key))) assert.ok(distance(c.position, baseline[c.key]) < 0.012, c.key + '重心切换时滑动过大');
         await page.screenshot({ path: '/tmp/aasc-mmd-ar-builtin-ik.png' });
         assert.equal(await page.evaluate(id => {
             const h = window.DisplayMmd.getHumanInterface(); h.stop('test:builtin'); return h.getRequest(id).active;
         }, initial.id), false);
+        const bounceId = await page.evaluate(async () => {
+            const h = window.DisplayMmd.getHumanInterface(); window.builtinClock = 0;
+            const prepared = await h.prepare({ action: '庆祝', duration: 4, strength: 0.7, owner: 'test:lower' });
+            return h.startPrepared(prepared, { owner: 'test:lower', clock: () => window.builtinClock }).id;
+        });
+        await page.evaluate(() => { window.builtinClock = 1.52; });
+        await page.waitForFunction(({ baseline, height }) => {
+            const knee = window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.find(c => c.key === 'leftKnee').achieved;
+            return Math.hypot(...knee.map((value, index) => value - baseline[index])) * 1.6 / height > 0.003;
+        }, { timeout: 30000 }, { baseline: baseline.leftKnee, height });
+        const bounce = await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().controls.map(c => ({ key: c.key, position: c.achieved })));
+        for (const c of bounce.filter(c => /Foot$/u.test(c.key))) assert.ok(distance(c.position, baseline[c.key]) < 0.012, c.key + '屈膝时滑动过大');
+        await page.screenshot({ path: '/tmp/aasc-mmd-ar-lowerbody-ik.png' });
+        fs.writeFileSync('/tmp/aasc-mmd-ar-lowerbody-ik.json', JSON.stringify({ baseline, sway, bounce, height }, null, 2));
+        assert.equal(await page.evaluate(id => {
+            const h = window.DisplayMmd.getHumanInterface(); h.stop('test:lower'); return h.getRequest(id).active;
+        }, bounceId), false);
         assert.deepEqual(errors, []);
     } finally {
         server.closeAllConnections();

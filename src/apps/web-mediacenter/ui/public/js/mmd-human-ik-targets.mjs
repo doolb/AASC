@@ -11,6 +11,20 @@ export function createAutomaticIKTargets(rig, animated, channels = new Map()) {
         targets.set(node, { node, target: rig.targetToWorld(pose.position),
             targetRotation: rig.targetRotationToWorld(pose.quaternion), positionState: 'On', rotationState: 'On', automatic: true });
     }
+    if (channels.has('pelvis')) {
+        // 骨盆带动重心时，双脚作为站姿支撑；释放旧腿/膝姿态，才能由关节链自然屈膝。
+        // 显式脚/膝命令仍优先，无骨盆目标时完全沿用原自动姿态。
+        for (const node of rig.nodes) {
+            if (explicit.has(node)) continue;
+            const target = targets.get(node);
+            if (/Ankle$/u.test(node.semantic)) {
+                target.target = rig.targetToWorld(node.position);
+                target.targetRotation = rig.targetRotationToWorld(node.quaternion);
+                target.stance = true;
+            }
+            if (/(Leg|Knee)$/u.test(node.semantic)) { target.positionState = 'Off'; target.rotationState = 'Off'; }
+        }
+    }
     for (const [key, value] of channels) {
         const node = rig.nodes.find(node => node.semantic === IK_TARGET_BONES[key]);
         if (!node) throw new Error('当前身体物理不支持IK目标：' + key);
