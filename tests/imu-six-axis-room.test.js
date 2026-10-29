@@ -191,3 +191,23 @@ test('磁场可选观测与诊断严格校验、旧样本兼容、深拷贝和�
     const service = await createLabServer({ host: '127.0.0.1', port: 0 }); t.after(() => service.close());
     assert.equal((await fetch(`http://127.0.0.1:${service.port}/imu-magnetic.mjs`)).status, 200);
 });
+
+test('多帧降噪诊断旧帧可选，延迟/状态/计数校验与逐帧历史兼容', async () => {
+    const { normalizeFrame } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const { ImuEngine } = await import('../3rd/imu-six-axis-test/imu-engine.mjs');
+    const e = new ImuEngine({ denoiseEnabled: true });
+    for (let i = 0; i <= 50; i++) e.push({ time: i / 50, kind: 'gravity', gyro: [0, 0, 0], accel: [0, 9.80665, 0] });
+    const frame = e.snapshot(), normalized = normalizeFrame(frame);
+    assert.deepEqual(normalized.denoise, frame.denoise);
+    assert.equal(normalized.profile.denoiseEnabled, true);
+    assert.equal(normalized.profile.denoiseLagMs, 300);
+    const old = { ...frame }; delete old.denoise;
+    assert.ok(normalizeFrame(old));
+    for (const patch of [{ enabled: 1 }, { state: 'random' }, { lagMs: 49 }, { lagMs: 1001 },
+        { actualLagMs: -1 }, { actualLagMs: Infinity }, { queuedSamples: 513 }, { windowSamples: 1.5 },
+        { latestInputTime: -1 }, { noiseEstimate: NaN }]) {
+        assert.equal(normalizeFrame({ ...frame, denoise: { ...frame.denoise, ...patch } }), null);
+    }
+    assert.equal(normalizeFrame({ ...frame, profile: { denoiseEnabled: 'true' } }), null);
+    assert.equal(normalizeFrame({ ...frame, profile: { denoiseLagMs: 0 } }), null);
+});

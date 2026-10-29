@@ -11,6 +11,7 @@ const params = new URLSearchParams(location.search);
 let source = params.get('source') === 'remote' || params.get('role') === 'remote' ? 'remote'
     : params.get('role') === 'phone' ? 'phone' : 'simulator';
 const DEFAULT_ROOM = 'AASCIMU1';
+const denoisePreferences = { simulator: false, phone: true, remote: true };
 let engine = new ImuEngine({ simulatorAutoRest: source === 'simulator', remoteAutoRest: source === 'remote' });
 const simulator = new ImuSimulator();
 const left = new ImuScene(element('leftViewport'));
@@ -21,14 +22,30 @@ let stream = true, disposed = false, autoFaces = null, latestSample = null, trut
 let activeFrames = 0, sourceStart = null, animation = null;
 let remoteDeviceId = null, remoteLastReceive = 0;
 const pendingEstimatedTrail = []; const pendingReferenceTrail = [];
+const truthHistory = [];
 const format = values => values.map(value => (Math.abs(value) < 0.00005 ? 0 : value).toFixed(3)).join(' / ');
 const diagnosticNumber = (value, digits = 3) => Number.isFinite(value) ? value.toFixed(digits) : '—';
 const setStatus = message => { element('phoneStatus').textContent = message; };
 const receive = sample => {
+    if (source === 'simulator') {
+        truthHistory.push({ time: sample.time, ...simulator.truth() });
+        if (truthHistory.length > 512) truthHistory.shift();
+    }
     const revision = engine.deadzoneRevision;
     if (engine.push(sample)) { latestSample = sample; activeFrames += 1; sourceStart ??= sample.time; }
     if (engine.deadzoneRevision !== revision) syncDeadzoneInputs();
 };
+/** 真值仅用于显示同一时刻的对照，绝不传入估计器或多帧降噪。 */
+function displayTruth(frame = engine.snapshot()) {
+    let reference = simulator.truth();
+    if (frame.denoise?.enabled && truthHistory.length) {
+        reference = truthHistory[0];
+        for (let index = truthHistory.length - 1; index >= 0; index -= 1) {
+            if (truthHistory[index].time <= frame.time + 1e-8) { reference = truthHistory[index]; break; }
+        }
+    }
+    return { ...reference, position: new Vector3().fromArray(reference.position).sub(truthOrigin).toArray() };
+}
 const phone = new PhoneInput(receive, message => {
     setStatus(message);
     if (!phone.running && source === 'phone') engine.pause();
@@ -82,6 +99,9 @@ function applySource() {
     element('phoneStart').disabled = source !== 'phone'; element('phoneStop').disabled = source !== 'phone';
     engine.profile.simulatorAutoRest = source === 'simulator';
     engine.profile.remoteAutoRest = source === 'remote';
+    engine.profile.denoiseEnabled = denoisePreferences[source];
+    element('denoiseEnabled').checked = engine.profile.denoiseEnabled;
+    engine.configureDenoise();
     element('roomCode').disabled = false;
     if (source === 'remote') {
         element('phoneStatus').textContent = `接收房间 ${currentRoom} 的Android原生六轴数据`;
@@ -102,6 +122,7 @@ element('copyLink').addEventListener('click', async () => {
     catch { element('phoneLink').select(); element('roomStatus').textContent = '请复制已选中的链接'; }
 });
 element('source').addEventListener('change', event => {
+    truthHistory.length = 0;
     phone.stop(); source = event.target.value; engine = new ImuEngine(engine.profile); sourceStart = null;
     activeFrames = 0; latestSample = null; autoFaces = null; remoteDeviceId = null;
     const url = new URL(location.href);
@@ -126,6 +147,14 @@ element('resetOrigin').addEventListener('click', () => { engine.resetOrigin(); t
 element('resetHeading').addEventListener('click', () => engine.resetHeading());
 element('clearTrails').addEventListener('click', clearDisplayedTrails);
 element('assumedRest').addEventListener('change', event => { engine.profile.assumedRest = event.target.checked; });
+element('denoiseEnabled').addEventListener('change', event => {
+    denoisePreferences[source] = event.target.checked;
+    engine.profile.denoiseEnabled = event.target.checked; engine.configureDenoise();
+});
+element('denoiseLagMs').addEventListener('input', event => {
+    engine.profile.denoiseLagMs = Number(event.target.value); engine.configureDenoise();
+    element('denoiseLagValue').value = engine.profile.denoiseLagMs;
+});
 element('magneticAssist').addEventListener('change', event => {
     engine.profile.magneticAssist = event.target.checked; engine.magnetic.reset();
     if (!event.target.checked) engine.magnetic.update({ time: engine.lastTime || 0 }, new Vector3(), engine.q, 0, false);
@@ -138,6 +167,7 @@ for (const mode of ['translate', 'rotate']) element(mode).addEventListener('clic
     right.setMode(mode); element('translate').classList.toggle('active', mode === 'translate'); element('rotate').classList.toggle('active', mode === 'rotate');
 });
 element('resetExperiment').addEventListener('click', () => {
+    truthHistory.length = 0;
     simulator.reset(); truthOrigin.set(0, 0, 0); engine.resetExperiment();
     clearDisplayedTrails(); autoFaces = null;
     right.syncTarget();
@@ -237,6 +267,10 @@ function diagnostics(now) {
         ? `显示角速度死区 ${diagnosticNumber(selected.profile.gyroDeadZone * 180 / Math.PI, 2)} °/s · 加速度死区 ${diagnosticNumber(selected.profile.accelDeadZone, 2)} m/s² · 滤波 ${diagnosticNumber(selected.profile.filterHz, 0)} Hz`
         : '旧页面未提供处理参数';
     const magnetic = selected.magnetic;
+    const denoise = selected.denoise;
+    element('denoiseDiagnostics').textContent = denoise
+        ? `${denoise.reason} · ${denoise.state} · 配置 ${diagnosticNumber(denoise.lagMs, 0)} ms · 实际源时间落后 ${diagnosticNumber(denoise.actualLagMs, 0)} ms · 拟合 ${denoise.windowSamples} 点 · 待处理缓存 ${denoise.queuedSamples} 点 · 波动估计 ${diagnosticNumber(denoise.noiseEstimate, 4)} m/s²`
+        : '旧页面未提供多帧降噪诊断';
     element('magneticDiagnostics').textContent = magnetic
         ? `${magnetic.reason} · 磁场 ${diagnosticNumber(magnetic.fieldMagnitude, 1)} μT · 精度 ${diagnosticNumber(magnetic.accuracy, 0)}/3 · 观测年龄 ${diagnosticNumber(magnetic.observationAge)} s · 航向残差 ${diagnosticNumber(magnetic.headingResidual, 2)}° · 重力${magnetic.gravityTrusted ? '可信' : '未确认'} · 参考${magnetic.referenceReady ? '已建立' : '待建立'}`
         : '旧页面未提供磁场辅助诊断';
@@ -248,15 +282,16 @@ function diagnostics(now) {
     element('engineStatus').textContent = `${selected.message} · 陀螺仪${selected.gyroCalibrated ? '已校准' : '使用死区，未校准'} · 加速度${selected.accelCalibrated ? '六面已校准' : '使用死区，六面校准可选'}`;
     element('faceCount').textContent = `${own.faces}/6`;
     if (source === 'simulator' && selectedId === 'local') {
-        const referencePosition = simulator.p.clone().sub(truthOrigin);
-        const rawError = engine.p.clone().sub(referencePosition).toArray();
+        const reference = displayTruth(own);
+        const rawError = new Vector3().fromArray(own.position).sub(new Vector3().fromArray(reference.position)).toArray();
         const error = rawError
             .map(value => Math.abs(value) < 0.00005 ? 0 : value);
         element('positionErrorX').value = error[0].toFixed(4);
         element('positionErrorY').value = error[1].toFixed(4);
         element('positionErrorZ').value = error[2].toFixed(4);
         element('positionErrorTotal').value = Math.hypot(...rawError).toFixed(4);
-        element('rotationError').value = (engine.q.angleTo(simulator.q) * 180 / Math.PI).toFixed(3);
+        element('rotationError').value = (new Quaternion().fromArray(own.quaternion)
+            .angleTo(new Quaternion().fromArray(reference.quaternion)) * 180 / Math.PI).toFixed(3);
     } else {
         for (const id of ['positionErrorX', 'positionErrorY', 'positionErrorZ', 'positionErrorTotal']) {
             element(id).value = '无外部真值';
@@ -288,10 +323,11 @@ function tick(now) {
             advanceFaces(); nextInterval = simulator.nextInterval();
         }
     }
-    queueTrailPoint(pendingEstimatedTrail, left.update('local', engine.snapshot(), '#0f766e'));
+    const frame = engine.snapshot();
+    queueTrailPoint(pendingEstimatedTrail, left.update('local', frame, '#0f766e'));
     const truthEntry = left.devices.get('truth');
     if (source === 'simulator') {
-        const truth = simulator.truth(); truth.position = simulator.p.clone().sub(truthOrigin).toArray();
+        const truth = displayTruth(frame);
         queueTrailPoint(pendingReferenceTrail, left.update('truth', truth, '#ea580c'));
         const showTruth = element('showTruth').checked;
         left.devices.get('truth').object.visible = showTruth;
@@ -305,14 +341,15 @@ animation = requestAnimationFrame(tick);
 /** 房间消息按20毫秒独立发送，避免60Hz屏幕刷新回调把实际发布频率压低。 */
 const publishTimer = window.setInterval(() => {
     if (disposed || source === 'remote' && !latestSample) return;
-    const referencePosition = source === 'simulator' ? simulator.p.clone().sub(truthOrigin).toArray() : null;
-    const sent = room.publish(engine.snapshot(), referencePosition,
+    const frame = engine.snapshot();
+    const referencePosition = source === 'simulator' ? displayTruth(frame).position : null;
+    const sent = room.publish(frame, referencePosition,
         { estimated: pendingEstimatedTrail, reference: pendingReferenceTrail });
     if (sent) { pendingEstimatedTrail.length = 0; pendingReferenceTrail.length = 0; }
 }, 20);
 document.addEventListener('visibilitychange', () => { if (document.hidden) {
     engine.pause();
-    const referencePosition = source === 'simulator' ? simulator.p.clone().sub(truthOrigin).toArray() : null;
+    const referencePosition = source === 'simulator' ? displayTruth().position : null;
     room.publish(engine.snapshot(), referencePosition);
     syncVisibleTrailSnapshot();
 }

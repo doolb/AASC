@@ -9,7 +9,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repository = path.resolve(root, '../..');
 const names = ['index.html', 'style.css', 'app.mjs', 'imu-engine.mjs', 'imu-simulator.mjs',
-    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs', 'imu-magnetic.mjs'];
+    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs', 'imu-magnetic.mjs', 'imu-denoiser.mjs'];
 export const FIXED_SENSOR_ROOM = 'AASCIMU1';
 const SAMPLE_RING_LIMIT = 500;
 const SAMPLE_BATCH_LIMIT = 8;
@@ -49,12 +49,13 @@ function normalizeDiagnostics(frame) {
         if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return null;
         result.profile = {};
         for (const [key, max] of [['gyroDeadZone', Number.MAX_VALUE], ['accelDeadZone', Number.MAX_VALUE],
-            ['filterHz', 50], ['tiltGain', 2], ['maxGap', 60]]) {
+            ['filterHz', 50], ['tiltGain', 2], ['maxGap', 60], ['denoiseLagMs', 1000]]) {
             if (!Object.hasOwn(profile, key)) continue;
             if (!finiteRange(profile[key], 0, max)) return null;
+            if (key === 'denoiseLagMs' && profile[key] < 50) return null;
             result.profile[key] = profile[key];
         }
-        for (const key of ['assumedRest', 'simulatorAutoRest', 'remoteAutoRest', 'magneticAssist']) {
+        for (const key of ['assumedRest', 'simulatorAutoRest', 'remoteAutoRest', 'magneticAssist', 'denoiseEnabled']) {
             if (!Object.hasOwn(profile, key)) continue;
             if (typeof profile[key] !== 'boolean') return null;
             result.profile[key] = profile[key];
@@ -109,6 +110,20 @@ function normalizeDiagnostics(frame) {
             if (magnetic[key] !== null && !finiteRange(magnetic[key], min, max)) return null;
             result.magnetic[key] = magnetic[key];
         }
+    }
+    if (Object.hasOwn(frame, 'denoise')) {
+        const denoise = frame.denoise;
+        const states = ['disabled', 'warming', 'tracking', 'edge', 'short', 'sparse', 'calibration', 'paused', 'gap'];
+        if (!denoise || !states.includes(denoise.state) || typeof denoise.enabled !== 'boolean'
+            || typeof denoise.reason !== 'string' || !finiteRange(denoise.lagMs, 50, 1000)
+            || !finiteRange(denoise.latestInputTime, 0, 1e8) || !finiteRange(denoise.noiseEstimate, 0, 1e4)
+            || denoise.actualLagMs !== null && !finiteRange(denoise.actualLagMs, 0, 1e11)) return null;
+        for (const key of ['queuedSamples', 'windowSamples']) {
+            if (!Number.isInteger(denoise[key]) || !finiteRange(denoise[key], 0, 512)) return null;
+        }
+        result.denoise = { enabled: denoise.enabled, state: denoise.state, reason: denoise.reason.slice(0, 120),
+            lagMs: denoise.lagMs, latestInputTime: denoise.latestInputTime, noiseEstimate: denoise.noiseEstimate,
+            actualLagMs: denoise.actualLagMs, queuedSamples: denoise.queuedSamples, windowSamples: denoise.windowSamples };
     }
     return result;
 }
@@ -381,7 +396,7 @@ export async function createLabServer(options = {}) {
                     'gyroCalibrated', 'accelCalibrated', 'calibrationActive', 'faces', 'zeroCorrections', 'status', 'message']) {
                     point[key] = Array.isArray(frame[key]) ? [...frame[key]] : frame[key];
                 }
-                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest', 'restNoise', 'magnetic']) {
+                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest', 'restNoise', 'magnetic', 'denoise']) {
                     if (Object.hasOwn(frame, key)) point[key] = structuredClone(frame[key]);
                 }
                 // 模拟参考位置只进入本机诊断轨迹，不能混入设备位姿或房间广播。

@@ -1,5 +1,6 @@
 import { Quaternion, Vector3 } from 'three';
 import { MagneticAssist } from './imu-magnetic.mjs';
+import { FixedLagDenoiser } from './imu-denoiser.mjs';
 
 export const GRAVITY = 9.80665;
 export const REST_ORIENTATION = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2);
@@ -23,13 +24,15 @@ function statistics(samples, key) {
 
 export const DEFAULT_PROFILE = Object.freeze({ gyroDeadZone: 0.0035, accelDeadZone: 0.08,
     filterHz: 12, tiltGain: 0.25, assumedRest: false, simulatorAutoRest: false, remoteAutoRest: false,
-    magneticAssist: true, maxGap: 0.15 });
+    magneticAssist: true, denoiseEnabled: false, denoiseLagMs: 300, maxGap: 0.15 });
 
 /** 不读取模拟真值的六轴估计器；所有输入端共用，观察端不重复积分。 */
 export class ImuEngine {
     constructor(profile = {}) {
         this.profile = { ...DEFAULT_PROFILE, ...profile };
         this.magnetic = new MagneticAssist();
+        this.denoiser = new FixedLagDenoiser(); this.denoiseKey = null;
+        this.inputWorldAcceleration = [0, 0, 0]; this.denoiseRate = [0, 0, 0]; this.outputHold = false;
         this.q = REST_ORIENTATION.clone();
         this.p = new Vector3(); this.v = new Vector3();
         this.gyroBias = [0, 0, 0]; this.accelBias = [0, 0, 0]; this.accelScale = [1, 1, 1];
@@ -56,6 +59,7 @@ export class ImuEngine {
         this.quietSince = null; this.resetSimulatorRest(); this.resetRemoteRest();
         this.calibration = { face, samples: [], since: null };
         this.message = face ? `六面校准 ${face}：该轴正/负方向朝上，保持静止 2 秒` : '请保持设备静止 2 秒';
+        this.resetDenoise('原始样本校准中', { state: 'calibration' });
     }
 
     beginDeadzoneCalibration() {
@@ -66,11 +70,14 @@ export class ImuEngine {
         this.resetSimulatorRest(); this.resetRemoteRest();
         this.deadzoneCalibration = { samples: [], since: null, kind: null };
         this.deadzoneMessage = '请保持设备静止 3 秒，正在采集死区前数据';
+        this.resetDenoise('原始样本校准中', { stop: true, state: 'calibration' });
     }
 
     cancelDeadzoneCalibration() {
-        if (this.deadzoneCalibration) this.deadzoneMessage = '死区校准已取消，保留原阈值';
+        const active = Boolean(this.deadzoneCalibration);
+        if (active) this.deadzoneMessage = '死区校准已取消，保留原阈值';
         this.deadzoneCalibration = null;
+        if (active) this.resetDenoise('校准结束，重新预热');
     }
 
     resetSimulatorRest() {
@@ -280,15 +287,19 @@ export class ImuEngine {
         this.filteredAcceleration = null; this.filteredGyro = null; this.quietSince = null;
         this.clearProcessed(); this.status = 'waiting';
         this.message = '实验已重置，等待下一条六轴重新对齐重力';
+        this.resetDenoise('实验重置，重新预热', { origin: true, stop: true });
     }
     // 断流或重置帧没有新的有效区间，不能沿用上一帧的处理输出和方向诊断。
     clearProcessed() {
         this.correctedGyro = [0, 0, 0]; this.attitudeGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
         this.gravityDirectionErrorDegrees = null;
+        this.inputWorldAcceleration = [0, 0, 0]; this.denoiseRate = [0, 0, 0]; this.outputHold = false;
     }
-    resetOrigin() { this.cancelDeadzoneCalibration(); this.p.set(0, 0, 0); this.stopVelocity(); }
+    resetOrigin() { this.cancelDeadzoneCalibration(); this.p.set(0, 0, 0); this.stopVelocity();
+        this.resetDenoise('原点重置，重新预热', { origin: true, stop: true }); }
     stopVelocity() { this.v.set(0, 0, 0); this.resetSimulatorRest(); this.resetRemoteRest();
-        this.zeroCorrections += 1; this.message = '已按用户确认停稳清零速度'; }
+        this.zeroCorrections += 1; this.message = '已按用户确认停稳清零速度';
+        this.resetDenoise('已确认停稳，重新预热', { stop: true }); }
     resetHeading() {
         this.magnetic.reset();
         const forward = new Vector3(0, 1, 0).applyQuaternion(this.q);
@@ -297,14 +308,64 @@ export class ImuEngine {
         this.q.premultiply(new Quaternion().setFromAxisAngle(UP, -yaw)).normalize();
         this.resetSimulatorRest(); this.resetRemoteRest();
         this.message = '已重置相对航向，保持倾斜';
+        this.resetDenoise('航向重置，重新预热');
     }
     pause() { this.cancelDeadzoneCalibration(); this.lastTime = null; this.v.set(0, 0, 0); this.filteredGyro = null;
         this.magnetic.suspend();
         this.filteredAcceleration = null; this.quietSince = null; this.resetSimulatorRest(); this.resetRemoteRest();
         this.clearProcessed();
-        this.status = 'paused'; this.message = '数据中断，冻结位置；恢复时速度从零开始'; }
+        this.status = 'paused'; this.message = '数据中断，冻结位置；恢复时速度从零开始';
+        this.resetDenoise('数据暂停，等待恢复', { stop: true, state: 'paused' }); }
+
+    /** 控制动作清理未来窗口，冻结已经显示的位置；不跨预热空白区补积分。 */
+    resetDenoise(reason, { origin = false, stop = false, state = 'warming' } = {}) {
+        const raw = this.rawSnapshot();
+        let seed = raw;
+        if (this.profile.denoiseEnabled && this.denoiser.frame && ['paused', 'gap'].includes(state)) {
+            seed = { ...structuredClone(this.denoiser.frame), profile: raw.profile, status: raw.status,
+                message: raw.message, gaps: raw.gaps, linear: [0, 0, 0], gyro: [0, 0, 0], attitudeGyro: [0, 0, 0] };
+        }
+        if (this.profile.denoiseEnabled && this.denoiser.frame) {
+            seed.position = [...this.denoiser.frame.position]; seed.velocity = [...this.denoiser.frame.velocity];
+        }
+        if (origin) seed.position = [0, 0, 0];
+        if (stop) seed.velocity = [0, 0, 0];
+        this.denoiser.reset(seed, reason); this.denoiser.state = state;
+        this.denoiser.latestInputTime = raw.time;
+    }
+
+    configureDenoise() {
+        this.profile.denoiseLagMs = Number.isFinite(this.profile.denoiseLagMs)
+            ? Math.min(1000, Math.max(50, this.profile.denoiseLagMs)) : 300;
+        const key = JSON.stringify(this.profile);
+        if (key === this.denoiseKey) return;
+        // 显式改变模式/参数时以当前可见位置建立新时间基准，避免切换回原链路出现位置跳变。
+        if (this.denoiseKey !== null && this.denoiser.frame && this.denoiseWasEnabled) {
+            this.p.fromArray(this.denoiser.frame.position); this.v.fromArray(this.denoiser.frame.velocity);
+        }
+        this.denoiseKey = key; this.denoiseWasEnabled = this.profile.denoiseEnabled;
+        this.denoiser.reset(this.rawSnapshot(), '参数变化，重新预热');
+    }
 
     push(sample) {
+        this.configureDenoise();
+        const calibrating = Boolean(this.calibration || this.deadzoneCalibration);
+        if (!this.pushRaw(sample)) return false;
+        if (!this.profile.denoiseEnabled) return true;
+        const raw = this.rawSnapshot();
+        if (calibrating || raw.calibrationActive) {
+            this.denoiser.reset(raw, raw.calibrationActive ? '使用原始样本校准' : '校准完成，重新预热');
+            this.denoiser.state = raw.calibrationActive ? 'calibration' : 'warming';
+            return true;
+        }
+        if (raw.status === 'gap') {
+            this.resetDenoise('断流，重新预热', { stop: true, state: 'gap' }); return true;
+        }
+        this.denoiser.push(raw, this.inputWorldAcceleration, this.denoiseRate, this.outputHold);
+        return true;
+    }
+
+    pushRaw(sample) {
         if (!sample || !Number.isFinite(sample.time) || !finite3(sample.gyro) || !finite3(sample.accel)
             || !['gravity', 'linear'].includes(sample.kind)) { this.rejected += 1; return false; }
         if (this.lastTime !== null && sample.time <= this.lastTime) { this.rejected += 1; return false; }
@@ -382,6 +443,7 @@ export class ImuEngine {
         this.gravityDirectionErrorDegrees = sample.kind === 'gravity' && forceNorm > 1
             ? Math.acos(Math.max(-1, Math.min(1, acceleration.y / forceNorm))) * 180 / Math.PI : null;
         if (sample.kind === 'gravity') acceleration.y -= this.gravityMagnitude;
+        this.inputWorldAcceleration = acceleration.toArray(); this.denoiseRate = gyro.toArray();
         this.filteredAcceleration ??= acceleration.clone(); this.filteredAcceleration.lerp(acceleration, blend);
         const linear = this.filteredAcceleration.clone();
         if (linear.length() < this.profile.accelDeadZone) linear.set(0, 0, 0);
@@ -437,11 +499,16 @@ export class ImuEngine {
             this.filteredAcceleration?.set(0, 0, 0); linear.set(0, 0, 0);
             this.message = `APK六轴静稳：速度已清零，本机重力模长 ${this.gravityMagnitude.toFixed(3)} m/s²`;
         }
+        this.outputHold = Boolean(assumedStopped || simulatorStopped || remoteStopped);
         this.correctedGyro = rate.toArray(); this.attitudeGyro = attitudeRate.toArray(); this.linearAcceleration = linear.toArray();
         return true;
     }
 
     snapshot() {
+        return this.denoiser.snapshot(this.rawSnapshot(), this.profile.denoiseEnabled);
+    }
+
+    rawSnapshot() {
         return { position: this.p.toArray(), velocity: this.v.toArray(), quaternion: this.q.toArray(),
             gyro: this.correctedGyro || [0, 0, 0], linear: this.linearAcceleration || [0, 0, 0],
             attitudeGyro: [...this.attitudeGyro], profile: { ...this.profile },

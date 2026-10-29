@@ -55,6 +55,12 @@
       </div><label><input id="assumedRest" type="checkbox">手持停稳假设：安静时清零速度（可能误判匀速移动）</label>
       <p><label><input id="magneticAssist" type="checkbox" checked>磁场辅助航向（重力倾斜补偿）</label></p>
       <p id="magneticDiagnostics" role="status">等待磁场数据；旧APK仍可使用六轴</p></details>
+      <details open><summary>多帧降噪</summary>
+        <p><label><input id="denoiseEnabled" type="checkbox">启用运动对齐多帧降噪</label></p>
+        <label>算法延迟 / ms <input id="denoiseLagMs" type="range" min="50" max="1000" step="50" value="300"><output id="denoiseLagValue">300</output></label>
+        <p id="denoiseDiagnostics" role="status">手机输入默认开启300ms；模拟器默认关闭</p>
+        <p>更多延迟可利用更多未来样本；姿态与轨迹统一延迟。切换或修改处理参数会重新预热；不能消除零偏或保证位置不漂移。</p>
+      </details>
       <p class="footnote">旋转由角速度估计，平移由加速度积分。纯六轴会累积位置与航向漂移；右侧真值只用于对照。</p>
     </section>
     <section class="panel simulator"><div class="panel-heading"><div><span class="eyebrow">02 / VIRTUAL SENSOR</span><h2>陀螺仪模拟器</h2></div><span class="badge amber">图形操作</span></div>

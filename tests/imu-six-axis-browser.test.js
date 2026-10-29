@@ -80,6 +80,8 @@ test('真实双视口拖拽、右相机跟随、旋转及关闭数据流不直�
     const second = await browser.newPage(); await second.setViewport({ width: 390, height: 844 });
     await second.goto(`http://127.0.0.1:${service.port}/?room=${moved.room}&role=phone`);
     await second.waitForFunction(() => window.imuLab?.snapshot().devices.length >= 2);
+    // 原手机接口回归使用原处理链；默认多帧模式由专用端到端用例验收。
+    await second.click('#denoiseEnabled');
     assert.equal(await second.$eval('.simulator', element => getComputedStyle(element).display), 'none');
     // 注入浏览器事件仍经过手机适配和同一个估计器，不直接操作位姿。
     await second.bringToFront(); await second.click('#phoneStart');
@@ -149,6 +151,7 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${service.port}/?source=remote&room=AASCIMU1`);
     await page.waitForFunction(() => window.imuLab?.snapshot().room === 'AASCIMU1');
+    await page.click('#denoiseEnabled');
     const sensor = new WebSocket(`ws://127.0.0.1:${service.port}/room`);
     t.after(() => sensor.close());
     await new Promise(resolve => sensor.once('open', resolve));
@@ -243,5 +246,53 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     assert.ok(captured.samples.some(entry => entry.sample.magnetic?.accuracy === 3));
     await page.click('#magneticAssist');
     assert.equal(await page.evaluate(() => window.imuLab.snapshot().engine.magnetic.state), 'disabled');
+    await page.click('#denoiseEnabled');
+    const buffered = Array.from({ length: 80 }, (_, index) => ({ time: 6.72 + index * .02,
+        kind: 'gravity', gyro: [0, 0, 0], accel: [0, 4.903325, 8.492808026022666] }));
+    for (let index = 0; index < buffered.length; index += 8) {
+        sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
+            generation: identity.generation, sequence: 43 + index / 8, samples: buffered.slice(index, index + 8) }));
+        await delay(30);
+    }
+    await page.waitForFunction(() => Math.abs(window.imuLab.snapshot().engine.denoise.latestInputTime - 8.3) < 1e-6);
+    const delayed = await page.evaluate(() => window.imuLab.snapshot().engine);
+    assert.equal(delayed.denoise.enabled, true);
+    assert.ok(Math.abs(delayed.time - 8) < 1e-6);
+    assert.ok(Math.abs(delayed.denoise.actualLagMs - 300) < 1e-6);
+    await page.waitForFunction(() => document.querySelector('#denoiseDiagnostics').textContent.includes('实际源时间落后 300 ms'));
+    await page.waitForFunction(async () => {
+        const data = await (await fetch('/api/imu/trajectory')).json();
+        const frame = data.devices.find(device => device.label === '电脑观察端')?.current;
+        return frame?.denoise?.enabled && Math.abs(frame.time - 8) < 1e-6;
+    });
+    const unmodified = await page.evaluate(async () => (await (await fetch('/api/imu/samples')).json()).samples.at(-1).sample.time);
+    assert.ok(Math.abs(unmodified - 8.3) < 1e-6, '原始历史不能被延迟帧覆盖');
     assert.deepEqual(errors, []);
+});
+
+test('模拟器显式启用降噪后，误差与API参考使用同一延迟源时刻', { timeout: 45000 }, async t => {
+    const { createLabServer } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const service = await createLabServer({ port: 0, host: '127.0.0.1' }); t.after(() => service.close());
+    const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true,
+        args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+    t.after(() => browser.close()); const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${service.port}/`);
+    await page.waitForFunction(() => window.imuLab?.snapshot().engine.samples > 20);
+    await page.click('#ideal');
+    await page.click('#denoiseEnabled');
+    await page.click('[data-trajectory="translate"]');
+    await page.waitForFunction(() => {
+        const e = window.imuLab.snapshot().engine;
+        return e.time > 2 && e.denoise.actualLagMs >= 299;
+    }, { polling: 100 });
+    const data = await page.evaluate(async () => {
+        const api = await (await fetch('/api/imu/trajectory')).json();
+        return { snapshot: window.imuLab.snapshot(), own: api.devices.find(d => d.label === '电脑模拟器')?.current };
+    });
+    assert.ok(data.own?.denoise?.enabled);
+    assert.ok(data.own.positionErrorTotal < .06, `延迟真值比较误差过大：${data.own.positionErrorTotal}`);
+    assert.ok(Math.abs(data.own.denoise.actualLagMs - 300) < .1);
+    assert.ok(data.snapshot.engine.denoise.latestInputTime - data.own.time > .25);
+    const label = await page.$eval('#positionErrorTotal', element => element.value);
+    assert.ok(Number(label) < .06, `页面误差未使用延迟真值：${label}`);
 });

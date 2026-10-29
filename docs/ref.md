@@ -227,3 +227,9 @@ web-mediacenter/
 - [Android Position sensors](https://developer.android.com/develop/sensors-and-location/sensors/sensors_position)：校准磁场μT、磁场与加速度组合获取朝向、游戏旋转向量不依赖磁场。
 - [SensorManager.getRotationMatrix](https://developer.android.com/reference/android/hardware/SensorManager#getRotationMatrix(float[],%20float[],%20float[],%20float[]))：重力/地磁共同定义朝向，动态加速度可能污染结果。
 - [AOSP Sensor types](https://source.android.com/docs/core/interaction/sensors/sensor-types)：机体系坐标、基础与融合传感器。此处使用相对磁航向与受限重力修正，不宣称系统融合四元数或绝对定位。
+
+## 夜景多帧对齐与IMU时间窗（2026-10-29）
+
+- [Handheld Mobile Photography in Very Low Light](https://research.google/pubs/handheld-mobile-photography-in-very-low-light/)：参考运动估计、对齐与稳健合并的原则；不是本项目IMU算法或其精度证据。
+- [Burst photography for high dynamic range and low-light imaging on mobile cameras](https://research.google/pubs/burst-photography-for-high-dynamic-range-and-low-light-imaging-on-mobile-cameras/)：多帧配准合并与降噪权衡。
+- [NXP Sensor Fusion用户指南](https://www.nxp.com/docs/en/user-guide/NSFK_Prod_UG.pdf)：多路传感器异频/异步时刻与融合假设。项目采用已有姿态世界对齐、源时间局部拟合和固定延迟输出，未复制影像算法，也未增加模型依赖。
