@@ -534,12 +534,12 @@ test('聊天层语音输入绕过普通确认并把聊天流回传来源显示�
     assert.match(server, /result\.type === 'chat'[\s\S]*sendToControl: sendVoiceChatUpdate/u);
 });
 
-test('聊天输入区将发送和清空按钮竖向放在输入框右侧且发送在上', () => {
+test('聊天输入框独占一行，发送、附件、清空在下一行等宽横排', () => {
     const chat = readPublic('js/display-chat.js');
     const css = readPublic('css/display-chat.css');
-    assert.match(chat, /<textarea data-role="input"[\s\S]*<div class="display-chat-compose-actions">[\s\S]*display-chat-send[\s\S]*data-action="clear"/u);
-    assert.match(css, /\.display-chat-compose\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto/u);
-    assert.match(css, /\.display-chat-compose-actions\s*\{[\s\S]*flex-direction:\s*column[\s\S]*min-width:\s*4\.5rem/u);
+    assert.match(chat, /<textarea data-role="input"[\s\S]*<div class="display-chat-compose-actions">[\s\S]*display-chat-send[\s\S]*data-action="attach"[\s\S]*data-action="clear"/u);
+    assert.match(css, /\.display-chat-compose\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/u);
+    assert.match(css, /\.display-chat-compose-actions\s*\{[^}]*flex-direction:\s*row[^}]*flex-wrap:\s*nowrap/u);
     assert.match(css, /\.display-chat-compose-actions button\s*\{[\s\S]*flex:\s*1 1 0/u);
 });
 

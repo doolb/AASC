@@ -82,6 +82,46 @@ for (const endpoint of ['control', 'display']) {
         }, { meter, input });
         assert.deepEqual(layout, { above: true, fits: true, inputVisible: true });
 
+        if (endpoint === 'display') {
+            await page.addStyleTag({ content: read('css/chat-attachments.css') });
+            // 检查实际边界，防止单列输入区被长文件名撑宽，或窄屏按钮挤成两行。
+            for (const width of [320, 390, 1280]) {
+                await page.setViewport({ width, height: 740 });
+                for (const withAttachment of [false, true]) {
+                    const compose = await page.evaluate(async withAttachment => {
+                        const host = document.querySelector('[data-role="attachments"]');
+                        host.replaceChildren();
+                        if (withAttachment) {
+                            const previews = document.createElement('div'); previews.className = 'chat-attachments';
+                            const item = document.createElement('div'); item.className = 'chat-attachment';
+                            const label = document.createElement('span'); label.textContent = '超长附件名'.repeat(60) + '.txt';
+                            const remove = document.createElement('button'); remove.textContent = '×';
+                            item.append(label, remove); previews.append(item); host.append(previews);
+                        }
+                        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                        const field = document.querySelector('[data-role="input"]').getBoundingClientRect();
+                        const row = document.querySelector('.display-chat-compose-actions').getBoundingClientRect();
+                        const buttons = [...document.querySelectorAll('.display-chat-compose-actions button')]
+                            .map(node => node.getBoundingClientRect());
+                        const form = document.querySelector('.display-chat-compose');
+                        return {
+                            fullWidth: Math.abs(field.left - row.left) < 1 && Math.abs(field.width - row.width) < 1,
+                            below: row.top >= field.bottom,
+                            oneRow: buttons.length === 3 && buttons.every(rect => Math.abs(rect.top - row.top) < 1),
+                            equalWidths: buttons.every(rect => Math.abs(rect.width - buttons[0].width) < 1),
+                            fits: field.left >= 0 && row.right <= innerWidth && row.bottom <= innerHeight
+                                && form.scrollWidth <= form.clientWidth,
+                            previewFits: !withAttachment || host.scrollWidth <= host.clientWidth
+                        };
+                    }, withAttachment);
+                    assert.deepEqual(compose, { fullWidth: true, below: true, oneRow: true,
+                        equalWidths: true, fits: true, previewFits: true }, `${width}px,附件=${withAttachment}`);
+                }
+            }
+            await page.evaluate(() => document.querySelector('[data-role="attachments"]').replaceChildren());
+            await page.setViewport({ width: 390, height: 740 });
+        }
+
         // 切换同一角色的另一会话，旧范围和旧请求编号都不能污染当前统计。
         await page.evaluate(endpoint => {
             if (endpoint === 'control') { Chat.session.privateSessionId = 'two'; Chat.renderHistory(); }

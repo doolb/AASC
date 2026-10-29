@@ -345,7 +345,8 @@
 .display-chat-compose {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    /* 输入框独占一行，按钮在下一行横排；零最小列宽避免长附件撑出窄屏。 */
+    grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
     gap: 8px;
     padding: 10px max(14px, var(--display-safe-inset-right))
@@ -353,6 +354,10 @@
         max(14px, var(--display-safe-inset-left));
     border-top: 1px solid var(--border-color);
     background: var(--bg-secondary);
+}
+
+.display-chat-compose [data-role="attachments"] {
+    min-width: 0;
 }
 
 .display-chat-compose textarea {
@@ -383,15 +388,16 @@
 
 .display-chat-compose-actions {
     display: flex;
-    flex-direction: column;
-    justify-content: stretch;
+    flex-direction: row;
+    flex-wrap: nowrap;
     gap: 8px;
-    min-width: 4.5rem;
+    min-width: 0;
 }
 
 .display-chat-compose-actions button {
     flex: 1 1 0;
-    min-width: 4.5rem;
+    min-width: 0;
+    white-space: nowrap;
     padding: 7px 12px;
     border: 1px solid var(--border-color);
     border-radius: 8px;

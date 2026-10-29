@@ -1,5 +1,17 @@
 # 自测功能实现文档
 
+## 显示端聊天输入框独行与按钮横排（2026-10-29）
+
+```text
+正式DOM/CSS + DisplayChat/DisplayStage → 320/390/1280像素视口
+空附件或长文件名预览 → 输入框与按钮行全宽对齐 → 发送/附件/清空等宽同排且位于输入框下方
+所有场景 → 表单和预览无横向溢出，按钮位于可见区域
+npm run test:chat-context → 8/8；npm run test:chat-attachments → 11/11
+node --test tests/display-chat-mmd.test.js → 39/52；本次布局项通过
+HEAD原测试 + 只读返回HEAD原CSS → 同样39/52、同样13项AR/MMD既有失败；无新增失败
+边界 → 不调用真实模型、不写当前聊天；Android软键盘和旋转仍待部署后真机验收
+```
+
 ## 重力倾斜补偿磁航向（2026-10-28，专项50/50）
 
 ```text
