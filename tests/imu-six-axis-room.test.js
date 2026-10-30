@@ -211,3 +211,76 @@ test('多帧降噪诊断旧帧可选，延迟/状态/计数校验与逐帧历史
     assert.equal(normalizeFrame({ ...frame, profile: { denoiseEnabled: 'true' } }), null);
     assert.equal(normalizeFrame({ ...frame, profile: { denoiseLagMs: 0 } }), null);
 });
+
+test('可见轨迹快照/增量保留各自时间速度，旧XYZ留空，非法批次不部分写入', async t => {
+    const { createLabServer } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const { ImuEngine } = await import('../3rd/imu-six-axis-test/imu-engine.mjs');
+    const service = await createLabServer({ host: '127.0.0.1', port: 0 }); t.after(() => service.close());
+    const first = client(service.port); await first.ready;
+    first.send({ type: 'room.join', room: 'AASCIMU1', role: 'source', label: '元数据来源' });
+    const { device } = await first.take('room.joined'); await first.take('device.update');
+    let sequence = 0;
+    const send = message => first.send({ deviceId: device.id, generation: device.generation, sequence: ++sequence, ...message });
+    const get = async id => (await (await fetch(`http://127.0.0.1:${service.port}/api/imu/trajectory?limit=600`)).json()).devices.find(d => d.id === id);
+    const waitFor = async (id, predicate) => {
+        for (let i = 0; i < 100; i += 1) { const d = await get(id); if (predicate(d)) return d; await new Promise(r => setTimeout(r, 20)); }
+        throw new Error('等待轨迹快照写入超时');
+    };
+    const point = (x, time, speed) => ({ position: [x, 0, 0], time, velocity: [speed, 0, 0], status: 'tracking' });
+    send({ type: 'imu.trajectory.snapshot', estimatedTrail: [[0, 0, 0], point(.03, 1, .1)], referenceTrail: [[0, 0, 0]] });
+    const initial = await waitFor(device.id, d => d.estimatedTrail.length === 2);
+    assert.deepEqual(initial.estimatedTrail[0], { position: [0, 0, 0], time: null, velocity: null, status: null });
+    const frame = { ...new ImuEngine().snapshot(), time: 2, position: [.09, 0, 0], velocity: [9, 0, 0], status: 'tracking' };
+    send({ type: 'imu.frame', frame, estimatedTrailDelta: [point(.06, 1.1, .2), point(.09, 1.2, .3)] });
+    await first.take('device.update');
+    const recorded = await get(device.id);
+    assert.deepEqual(recorded.estimatedTrail.slice(1), [point(.03, 1, .1), point(.06, 1.1, .2), point(.09, 1.2, .3)]);
+    assert.deepEqual(recorded.referenceTrail, [[0, 0, 0]]);
+    send({ type: 'imu.frame', frame: { ...frame, time: 3 }, estimatedTrailDelta: [point(.12, 2.1, .4), point(.15, -1, .5)] });
+    assert.match((await first.take('error')).message, /轨迹增量/);
+    const rejected = await get(device.id);
+    assert.equal(rejected.current.time, 2); assert.deepEqual(rejected.estimatedTrail, recorded.estimatedTrail);
+    send({ type: 'imu.trajectory.snapshot', estimatedTrail: [point(.5, 3, .4), { ...point(.6, 3.1, .5), velocity: [1, null, 2] }], referenceTrail: [] });
+    assert.match((await first.take('error')).message, /轨迹快照/);
+    assert.deepEqual((await get(device.id)).estimatedTrail, recorded.estimatedTrail);
+    // 新会话恢复相同快照，服务端不能退化为仅XYZ。
+    const second = client(service.port); await second.ready;
+    second.send({ type: 'room.join', room: 'AASCIMU1', role: 'source', label: '恢复来源' });
+    const restored = (await second.take('room.joined')).device;
+    second.send({ type: 'imu.trajectory.snapshot', deviceId: restored.id, generation: restored.generation,
+        sequence: 1, estimatedTrail: recorded.estimatedTrail, referenceTrail: recorded.referenceTrail });
+    const recovery = await waitFor(restored.id, d => d.estimatedTrail.length === 4);
+    assert.deepEqual(recovery.estimatedTrail, recorded.estimatedTrail);
+    send({ type: 'imu.trajectory.snapshot', estimatedTrail: [], referenceTrail: [], clearHistory: true });
+    assert.equal((await waitFor(device.id, d => d.estimatedTrail.length === 0)).points.length, 0);
+    first.socket.close(); second.socket.close();
+});
+
+test('无增量客户端从同一帧生成点，暂停重复不覆盖末次移动与停止端点', async t => {
+    const { createLabServer } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const { ImuEngine } = await import('../3rd/imu-six-axis-test/imu-engine.mjs');
+    const service = await createLabServer({ host: '127.0.0.1', port: 0 }); t.after(() => service.close());
+    const source = client(service.port); await source.ready;
+    source.send({ type: 'room.join', room: 'AASCIMU1' });
+    const { device } = await source.take('room.joined'); await source.take('device.update');
+    const frame = new ImuEngine().snapshot();
+    const updates = [
+        { position: [0, 0, 0], velocity: [1, 0, 0], status: 'tracking' },
+        { position: [.03, 0, 0], velocity: [1, 0, 0], status: 'tracking' },
+        { position: [.03, 0, 0], velocity: [0, 0, 0], status: 'tracking' },
+        { position: [.03, 0, 0], velocity: [0, 0, 0], status: 'paused' },
+        { position: [.03, 0, 0], velocity: [0, 0, 0], status: 'paused' }
+    ];
+    for (let i = 0; i < updates.length; i += 1) {
+        source.send({ type: 'imu.frame', deviceId: device.id, generation: device.generation, sequence: i + 1,
+            frame: { ...frame, ...updates[i], time: i * .02 } });
+        await source.take('device.update'); await new Promise(r => setTimeout(r, 25));
+    }
+    const history = await (await fetch(`http://127.0.0.1:${service.port}/api/imu/trajectory`)).json();
+    const d = history.devices.find(d => d.id === device.id);
+    assert.equal(d.estimatedTrail.length, 4);
+    assert.deepEqual(d.estimatedTrail.map(p => p.time), [0, .02, .04, .06]);
+    assert.deepEqual(d.estimatedTrail[2].velocity, [0, 0, 0]); assert.equal(d.estimatedTrail[3].status, 'paused');
+    assert.equal(d.points.length, 5, '逐帧历史职责保持原样');
+    source.socket.close();
+});

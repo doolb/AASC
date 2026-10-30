@@ -43,6 +43,9 @@ test('真实双视口拖拽、右相机跟随、旋转及关闭数据流不直�
     assert.ok(Math.hypot(...moved.engine.position.map((value, axis) => value - moved.truth.position[axis])) < 0.02);
     const trajectory = await page.evaluate(async () => (await fetch('/api/imu/trajectory?limit=120')).json());
     const input = trajectory.devices.find(device => device.role === 'source' && device.current?.referencePosition);
+    assert.ok(input.estimatedTrail.length > 1);
+    assert.ok(input.estimatedTrail.every(point => point.position.length === 3 && Number.isFinite(point.time)
+        && point.velocity.length === 3 && typeof point.status === 'string'));
     assert.ok(input?.points.length > 0, '轨迹接口应返回浏览器正在显示的模拟源实时帧');
     assert.ok(input.current.positionError.every(Number.isFinite));
     assert.ok(input.current.positionErrorTotal < 0.02);
@@ -118,6 +121,22 @@ test('真实双视口拖拽、右相机跟随、旋转及关闭数据流不直�
     assert.equal(await second.evaluate(() => window.imuLab.snapshot().engine.gyroCalibrated), false);
     await second.click('#phoneStop');
     assert.equal(await second.evaluate(() => window.imuLab.snapshot().engine.status), 'paused');
+    // 模拟器前面已暂停输入，实际点击重连，确认网页内存快照仍携带历史点元数据。
+    await page.bringToFront();
+    await page.waitForFunction(async () => {
+        const data = await (await fetch('/api/imu/trajectory?limit=600')).json();
+        return data.devices.find(d => d.label === '电脑模拟器' && d.online)?.estimatedTrail.at(-1)?.status === 'paused';
+    }, { polling: 100 });
+    const oldTrace = await page.evaluate(async () => (await (await fetch('/api/imu/trajectory?limit=600')).json())
+        .devices.find(d => d.label === '电脑模拟器' && d.online));
+    await page.click('#reconnect');
+    await page.waitForFunction(async previousId => {
+        const data = await (await fetch('/api/imu/trajectory?limit=600')).json();
+        return data.devices.some(d => d.label === '电脑模拟器' && d.online && d.id !== previousId && d.estimatedTrail.length > 0);
+    }, { polling: 100 }, oldTrace.id);
+    const recovered = await page.evaluate(async () => (await (await fetch('/api/imu/trajectory?limit=600')).json())
+        .devices.find(d => d.label === '电脑模拟器' && d.online));
+    assert.deepEqual(recovered.estimatedTrail, oldTrace.estimatedTrail);
     assert.deepEqual(errors, []);
 });
 
@@ -259,6 +278,12 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     assert.equal(delayed.denoise.enabled, true);
     assert.ok(Math.abs(delayed.time - 8) < 1e-6);
     assert.ok(Math.abs(delayed.denoise.actualLagMs - 300) < 1e-6);
+    const metadata = await page.evaluate(async () => {
+        const data = await (await fetch('/api/imu/trajectory?limit=600')).json();
+        return data.devices.find(d => d.label === '电脑观察端').estimatedTrail;
+    });
+    assert.ok(metadata.every(point => point.time <= delayed.time + 1e-6));
+    assert.ok(metadata.every(point => point.velocity.length === 3));
     await page.waitForFunction(() => document.querySelector('#denoiseDiagnostics').textContent.includes('实际源时间落后 300 ms'));
     await page.waitForFunction(async () => {
         const data = await (await fetch('/api/imu/trajectory')).json();
@@ -295,4 +320,42 @@ test('模拟器显式启用降噪后，误差与API参考使用同一延迟源�
     assert.ok(data.snapshot.engine.denoise.latestInputTime - data.own.time > .25);
     const label = await page.$eval('#positionErrorTotal', element => element.value);
     assert.ok(Number(label) < .06, `页面误差未使用延迟真值：${label}`);
+});
+
+test('真实Three轨迹元数据与Float32绘制点同步滚动、暂停去重、恢复及清空', { timeout: 45000 }, async t => {
+    const { createLabServer } = await import('../3rd/imu-six-axis-test/server.mjs');
+    const service = await createLabServer({ port: 0, host: '127.0.0.1' }); t.after(() => service.close());
+    const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true,
+        args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+    t.after(() => browser.close()); const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${service.port}/?source=remote`);
+    const result = await page.evaluate(async () => {
+        const { ImuScene } = await import('/imu-scene.mjs');
+        const container = document.createElement('div'); container.style.cssText = 'position:absolute;left:-10000px;width:240px;height:180px';
+        document.body.append(container); const scene = new ImuScene(container);
+        try {
+            const pose = (i, status = 'tracking', speed = i + 1) => ({ position: [i * .03, 0, 0],
+                quaternion: [0, 0, 0, 1], time: i * .02, velocity: [speed, 0, 0], status });
+            for (let i = 0; i < 650; i += 1) scene.update('test', pose(i), '#0f766e', true, true);
+            const records = scene.getTrailSnapshot('test', true), positions = scene.getTrailSnapshot('test');
+            const aligned = records.every((record, i) => JSON.stringify(record.position) === JSON.stringify(positions[i]));
+            records[0].velocity[0] = -100;
+            const originalSpeed = scene.getTrailSnapshot('test', true)[0].velocity[0];
+            for (let i = 0; i < 1000; i += 1) scene.update('test', { ...pose(649, 'paused', 0), time: 20 + i * .02 }, '#0f766e', true, true);
+            const paused = scene.getTrailSnapshot('test', true);
+            scene.update('test', { ...pose(649, 'tracking', 0), time: 41 }, '#0f766e', true, true);
+            const restored = scene.getTrailSnapshot('test', true);
+            const output = { count: positions.length, aligned, first: records[0].time, originalSpeed,
+                pausedFirst: paused[0].time, pausedLast: paused.at(-1), restoredLast: restored.at(-1) };
+            scene.clearTrails(); output.cleared = scene.getTrailSnapshot('test', true).length;
+            output.drawCount = scene.devices.get('test').trail.geometry.drawRange.count;
+            return output;
+        } finally { scene.dispose(); container.remove(); }
+    });
+    assert.equal(result.count, 600); assert.equal(result.aligned, true); assert.equal(result.first, 1);
+    assert.equal(result.originalSpeed, 51); assert.equal(result.pausedFirst, 1.02);
+    assert.equal(result.pausedLast.time, 20); assert.equal(result.pausedLast.status, 'paused');
+    assert.deepEqual(result.pausedLast.velocity, [0, 0, 0]);
+    assert.equal(result.restoredLast.time, 41); assert.equal(result.restoredLast.status, 'tracking');
+    assert.equal(result.cleared, 0); assert.equal(result.drawCount, 0);
 });

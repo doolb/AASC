@@ -88,7 +88,7 @@ SM-N9500/Samsung Internet实际约60Hz；一次3.5秒真实采集208样本，静
 npm run test:imu:six-axis-test
 ```
 
-当前60项，覆盖算法/轴向/时序/重置、大死区姿态、噪声学习静稳、真实WebSocket与Chromium双视口及APK观察页。浏览器自动测试使用项目puppeteer-core和/usr/bin/chromium，手机事件注入不作为真机精度验证。测试截图保存到/tmp，不提交仓库。
+当前66项，覆盖算法/轴向/时序/重置、大死区姿态、噪声学习静稳、真实WebSocket与Chromium双视口及APK观察页。浏览器自动测试使用项目puppeteer-core和/usr/bin/chromium，手机事件注入不作为真机精度验证。测试截图保存到/tmp，不提交仓库。
 
 设计：docs/design/imu-six-axis-test.md；伪代码：docs/spec/imu-six-axis-test.md；任务：docs/task/20261017_六轴IMU原生APK固定房间转发.md。本APK为独立debug构建，不进入Offline发布或外网服务包。
 
@@ -141,3 +141,17 @@ ADB Note8已安装并实际回传；本轮采集磁场41.59..48.04μT，但精�
 姿态与轨迹统一延迟，原始样本查询仍返回实时采集值。接收场景内的原始测量属于当前显示的历史输出帧；诊断latestInputTime表示最新已收到的源时刻。模式/处理参数变化重新预热，暂停/缺口冻结已显示位姿并沿用原速度重置。零偏/死区校准仍用原始数据，期间暂不做多帧拟合，完成后重预热。模拟器的误差/API参考按同一输出源时间取真值。
 
 比较效果时保持同一标定、死区与静稳设置，记录静置波动，同时做缓慢旋转、快速转向、启停与往返；需要观察真实短动作有没有被削弱。旧静置片段已验证随机波动下降、直流偏差仍在；新持机精度和总延迟待验。磁精度0/3不会因降噪变成可信，长期位置漂移仍需零偏/重力标定或外部约束。
+
+## 可见轨迹的时间、速度与状态（2026-10-30）
+
+更新独立8769服务并刷新网页后，`/api/imu/trajectory` 中 `estimatedTrail` 返回对象数组，每点为：
+
+```json
+{"position":[0.1,0.2,0.3],"time":12.34,"velocity":[0.01,0,0],"status":"tracking"}
+```
+
+position为米、velocity为同一帧世界坐标速度m/s、time为该点的估计输出源秒，不是服务器接收的Unix时间；300ms降噪开启时对应历史输出时刻。脚本绘图改为读取 `point.position`。status可能为waiting/tracking/warming/paused/gap，paused后的零速表示断流/暂停清零，不能直接解释为手机物理停止。
+
+位置变化超过约1cm才追加点；速度零/非零状态切换、暂停/恢复等状态变化也保留一次端点。重复暂停不挤掉移动历史，容量仍为600点，新真实移动足够多时会滚动；清空轨迹同时清元数据。页面点击“连接房间”会恢复本地保存的完整点信息。
+
+旧XYZ消息仍接受，但旧点只知道位置，time/velocity/status明确为null。已保存的471旧点没有可追溯时速，不能在更新后凭空补出；旧数据与规范化副本保存在 `.cache/imu-trail-upgrade-20261030/`。当前网页刷新会开始新的页面会话，需留存旧轨迹时先保存快照。referenceTrail继续XYZ，points/current继续逐帧诊断，不把三者混用。本轮无需重装采集APK。

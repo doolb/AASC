@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { normalizeEstimatedTrailPoint, shouldAppendEstimatedPoint } from './imu-trail.mjs';
 
 export function makeDevice(color = '#0f766e', wireframe = false) {
     const group = new THREE.Group();
@@ -33,7 +34,7 @@ export class ImuScene {
     }
     resize() { const { clientWidth: width, clientHeight: height } = this.container;
         if (!width || !height) return; this.renderer.setSize(width, height); this.camera.aspect = width / height; this.camera.updateProjectionMatrix(); }
-    update(id, pose, color, online = true) {
+    update(id, pose, color, online = true, recordMetadata = false) {
         if (!pose) return null;
         let entry = this.devices.get(id);
         if (!entry) {
@@ -42,16 +43,25 @@ export class ImuScene {
             const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(points, 3));
             geometry.setDrawRange(0, 0);
             const trail = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color })); trail.frustumCulled = false;
-            this.scene.add(trail); entry = { object, trail, points, count: 0, last: null }; this.devices.set(id, entry);
+            this.scene.add(trail); entry = { object, trail, points, records: [], count: 0, last: null }; this.devices.set(id, entry);
         }
         entry.object.position.fromArray(pose.position); entry.object.quaternion.fromArray(pose.quaternion);
         entry.object.traverse(node => { if (node.material?.color && node.type === 'Mesh') node.material.opacity = online ? 1 : 0.35;
             if (node.material) node.material.transparent = !online; });
         let addedPoint = null;
-        if (!entry.last || entry.last.distanceToSquared(entry.object.position) > 0.0001) {
-            if (entry.count >= 600) { entry.points.copyWithin(0, 3); entry.count = 599; }
+        // 元数据在绘制点产生时捕获，同一帧的时间/速度不得被后续网络批次覆盖。
+        const candidate = recordMetadata ? normalizeEstimatedTrailPoint({
+            position: Array.from(new Float32Array(pose.position)), time: pose.time,
+            velocity: pose.velocity, status: pose.status }) : null;
+        const append = recordMetadata ? candidate && shouldAppendEstimatedPoint(entry.records.at(-1), candidate)
+            : !entry.last || entry.last.distanceToSquared(entry.object.position) > 0.0001;
+        if (append) {
+            if (entry.count >= 600) { entry.points.copyWithin(0, 3); entry.records.shift(); entry.count = 599; }
             entry.points.set(entry.object.position.toArray(), entry.count * 3);
-            addedPoint = Array.from(entry.points.subarray(entry.count * 3, entry.count * 3 + 3)); entry.count += 1;
+            const position = Array.from(entry.points.subarray(entry.count * 3, entry.count * 3 + 3));
+            const record = candidate || normalizeEstimatedTrailPoint(position);
+            entry.records.push(record);
+            addedPoint = recordMetadata ? structuredClone(record) : position; entry.count += 1;
             entry.trail.geometry.attributes.position.needsUpdate = true; entry.trail.geometry.setDrawRange(0, entry.count);
             entry.last = entry.object.position.clone();
         }
@@ -62,9 +72,10 @@ export class ImuScene {
         return addedPoint;
     }
     /** 返回网页当前绘制的轨迹点，供服务端诊断缓存同步；不暴露Three几何对象。 */
-    getTrailSnapshot(id) {
+    getTrailSnapshot(id, includeMetadata = false) {
         const entry = this.devices.get(id);
         if (!entry) return [];
+        if (includeMetadata) return structuredClone(entry.records);
         return Array.from({ length: entry.count }, (_, index) =>
             Array.from(entry.points.subarray(index * 3, index * 3 + 3)));
     }
@@ -72,7 +83,8 @@ export class ImuScene {
         const entry = this.devices.get(id); if (!entry) return;
         const delta = entry.object.position.clone().sub(this.controls.target);
         this.camera.position.add(delta); this.controls.target.copy(entry.object.position); }
-    clearTrails() { for (const entry of this.devices.values()) { entry.count = 0; entry.last = null; entry.trail.geometry.setDrawRange(0, 0); } }
+    clearTrails() { for (const entry of this.devices.values()) { entry.count = 0; entry.last = null;
+        entry.records.length = 0; entry.trail.geometry.setDrawRange(0, 0); } }
     render() { this.controls.update(); this.renderer.render(this.scene, this.camera); }
     dispose() { this.resizeObserver.disconnect(); this.controls.dispose();
         this.scene.traverse(node => { node.geometry?.dispose(); if (Array.isArray(node.material)) node.material.forEach(material => material.dispose()); else node.material?.dispose(); });

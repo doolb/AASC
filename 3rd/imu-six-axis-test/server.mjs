@@ -5,11 +5,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
+import { normalizeEstimatedTrail, normalizeEstimatedTrailPoint, appendEstimatedTrail } from './imu-trail.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repository = path.resolve(root, '../..');
 const names = ['index.html', 'style.css', 'app.mjs', 'imu-engine.mjs', 'imu-simulator.mjs',
-    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs', 'imu-magnetic.mjs', 'imu-denoiser.mjs'];
+    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs', 'imu-magnetic.mjs', 'imu-denoiser.mjs', 'imu-trail.mjs'];
 export const FIXED_SENSOR_ROOM = 'AASCIMU1';
 const SAMPLE_RING_LIMIT = 500;
 const SAMPLE_BATCH_LIMIT = 8;
@@ -326,7 +327,7 @@ export async function createLabServer(options = {}) {
                 if (data.deviceId !== device.id || data.generation !== device.generation) throw new Error('设备会话不匹配');
                 if (!Number.isSafeInteger(data.sequence) || data.sequence <= device.sequence) throw new Error('样本顺序无效');
                 if (data.type === 'imu.trajectory.snapshot' && device.role === 'source') {
-                    const estimatedTrail = normalizeTrail(data.estimatedTrail);
+                    const estimatedTrail = normalizeEstimatedTrail(data.estimatedTrail);
                     const referenceTrail = normalizeTrail(data.referenceTrail);
                     if (!estimatedTrail || !referenceTrail || (data.clearHistory !== undefined && typeof data.clearHistory !== 'boolean')) {
                         throw new Error('轨迹快照无效');
@@ -376,11 +377,15 @@ export async function createLabServer(options = {}) {
                 if (device.frame && frame.time < device.frame.time) throw new Error('源时间回退');
                 const hasEstimatedTrailDelta = Object.hasOwn(data, 'estimatedTrailDelta');
                 const hasReferenceTrailDelta = Object.hasOwn(data, 'referenceTrailDelta');
-                const estimatedTrailDelta = hasEstimatedTrailDelta ? normalizeTrail(data.estimatedTrailDelta) : null;
+                const estimatedTrailDelta = hasEstimatedTrailDelta ? normalizeEstimatedTrail(data.estimatedTrailDelta) : null;
                 const referenceTrailDelta = hasReferenceTrailDelta ? normalizeTrail(data.referenceTrailDelta) : null;
                 if (hasEstimatedTrailDelta && !estimatedTrailDelta || hasReferenceTrailDelta && !referenceTrailDelta) {
                     throw new Error('轨迹增量无效');
                 }
+                const fallbackTrailPoint = hasEstimatedTrailDelta ? null : normalizeEstimatedTrailPoint({
+                    position: frame.position, time: frame.time, velocity: frame.velocity,
+                    status: ['waiting', 'tracking', 'warming', 'paused', 'gap'].includes(frame.status) ? frame.status : null });
+                if (!hasEstimatedTrailDelta && !fallbackTrailPoint) throw new Error('轨迹点无效');
                 let referencePosition = null;
                 if (data.referencePosition !== undefined && data.referencePosition !== null) {
                     if (!array(data.referencePosition, 3, 1e5)) throw new Error('模拟参考位置无效');
@@ -408,8 +413,8 @@ export async function createLabServer(options = {}) {
                 }
                 device.sequence = data.sequence; device.frame = frame; device.current = point; device.lastFrameAt = now;
                 device.lastActive = now; room.lastActive = now;
-                if (estimatedTrailDelta) appendTrail(device.estimatedTrail, estimatedTrailDelta);
-                else if (moved(device.estimatedTrail.at(-1), frame.position)) appendTrail(device.estimatedTrail, [frame.position]);
+                if (estimatedTrailDelta) appendEstimatedTrail(device.estimatedTrail, estimatedTrailDelta);
+                else appendEstimatedTrail(device.estimatedTrail, [fallbackTrailPoint]);
                 if (referenceTrailDelta) appendTrail(device.referenceTrail, referenceTrailDelta);
                 else if (referencePosition && moved(device.referenceTrail.at(-1), referencePosition)) {
                     appendTrail(device.referenceTrail, [referencePosition]);

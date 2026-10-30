@@ -79,7 +79,7 @@ const room = new RoomClient(incoming => {
 /** 服务端重启或重新连接后，用页面内存中的两条可见轨迹恢复诊断缓存。 */
 function syncVisibleTrailSnapshot(clearHistory = false) {
     const referenceTrail = source === 'simulator' ? left.getTrailSnapshot('truth') : [];
-    const sent = room.publishTrajectorySnapshot(left.getTrailSnapshot('local'), referenceTrail, clearHistory);
+    const sent = room.publishTrajectorySnapshot(left.getTrailSnapshot('local', true), referenceTrail, clearHistory);
     if (sent) { pendingEstimatedTrail.length = 0; pendingReferenceTrail.length = 0; }
     return sent;
 }
@@ -324,7 +324,7 @@ function tick(now) {
         }
     }
     const frame = engine.snapshot();
-    queueTrailPoint(pendingEstimatedTrail, left.update('local', frame, '#0f766e'));
+    queueTrailPoint(pendingEstimatedTrail, left.update('local', frame, '#0f766e', true, true));
     const truthEntry = left.devices.get('truth');
     if (source === 'simulator') {
         const truth = displayTruth(frame);
