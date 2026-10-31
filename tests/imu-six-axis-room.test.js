@@ -28,7 +28,7 @@ test('真实WebSocket多设备同房间广播、晚加入快照、所有权、�
     assert.equal(remote.device.id, joined.device.id); assert.deepEqual(remote.device.frame.position, frame.position);
     // 两个不同诊断帧应按时间保存，最新值不能覆盖上一帧。
     await new Promise(resolve => setTimeout(resolve, 20));
-    const next = { ...frame, time: 1, rawAccel: [1, 2, 3], linear: [-1, 0, 0], zeroCorrections: 7 };
+    const next = { ...frame, time: 1, integration: { ...frame.integration, time: 1 }, rawAccel: [1, 2, 3], linear: [-1, 0, 0], zeroCorrections: 7 };
     first.send({ type: 'imu.frame', deviceId: joined.device.id, generation: joined.device.generation, sequence: 2, frame: next });
     await first.take('device.update'); await second.take('device.update');
     const history = await (await fetch(`http://127.0.0.1:${service.port}/api/imu/trajectory?room=${joined.room}`)).json();
@@ -230,13 +230,14 @@ test('可见轨迹快照/增量保留各自时间速度，旧XYZ留空，非法�
     send({ type: 'imu.trajectory.snapshot', estimatedTrail: [[0, 0, 0], point(.03, 1, .1)], referenceTrail: [[0, 0, 0]] });
     const initial = await waitFor(device.id, d => d.estimatedTrail.length === 2);
     assert.deepEqual(initial.estimatedTrail[0], { position: [0, 0, 0], time: null, velocity: null, status: null });
-    const frame = { ...new ImuEngine().snapshot(), time: 2, position: [.09, 0, 0], velocity: [9, 0, 0], status: 'tracking' };
+    const frame = { ...new ImuEngine().snapshot(), time: 2, position: [.09, 0, 0], velocity: [9, 0, 0], status: 'tracking',
+        integration: { convention: 'interval', state: 'tracking', time: 2, dt: .02 } };
     send({ type: 'imu.frame', frame, estimatedTrailDelta: [point(.06, 1.1, .2), point(.09, 1.2, .3)] });
     await first.take('device.update');
     const recorded = await get(device.id);
     assert.deepEqual(recorded.estimatedTrail.slice(1), [point(.03, 1, .1), point(.06, 1.1, .2), point(.09, 1.2, .3)]);
     assert.deepEqual(recorded.referenceTrail, [[0, 0, 0]]);
-    send({ type: 'imu.frame', frame: { ...frame, time: 3 }, estimatedTrailDelta: [point(.12, 2.1, .4), point(.15, -1, .5)] });
+    send({ type: 'imu.frame', frame: { ...frame, time: 3, integration: { ...frame.integration, time: 3 } }, estimatedTrailDelta: [point(.12, 2.1, .4), point(.15, -1, .5)] });
     assert.match((await first.take('error')).message, /轨迹增量/);
     const rejected = await get(device.id);
     assert.equal(rejected.current.time, 2); assert.deepEqual(rejected.estimatedTrail, recorded.estimatedTrail);
@@ -273,7 +274,7 @@ test('无增量客户端从同一帧生成点，暂停重复不覆盖末次移�
     ];
     for (let i = 0; i < updates.length; i += 1) {
         source.send({ type: 'imu.frame', deviceId: device.id, generation: device.generation, sequence: i + 1,
-            frame: { ...frame, ...updates[i], time: i * .02 } });
+            frame: { ...frame, ...updates[i], time: i * .02, integration: { ...frame.integration, time: i * .02 } } });
         await source.take('device.update'); await new Promise(r => setTimeout(r, 25));
     }
     const history = await (await fetch(`http://127.0.0.1:${service.port}/api/imu/trajectory`)).json();

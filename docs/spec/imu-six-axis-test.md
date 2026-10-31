@@ -1,20 +1,28 @@
 # 六轴IMU共享3D测试网页实现规范（伪代码）
 
-## 快速运动时序诊断（2026-10-31，拟实现，尚未改代码）
+## 快速运动时序与预积分（2026-10-31，已实现）
 
 ```text
 问题范围 := 用户确认运动中偏移；末运动段已future快停清速，位置偏移在此前累积
 已有声明 := APK在sample.time陀螺时刻插值accel，带accelBeforeTime/accelAfterTime；模拟器gyro为区间均值且force由中点姿态生成
-当前缺口 := 引擎尚未区分上述契约，均用当前gyro推进整段并以半步姿态旋转force
-新增定义草案 := InstantPreintegration { previousTime, previousRate, previousWorldAcceleration, samplingConvention }
-来源草案 := 有既有有效配对时间字段用瞬时支路；无字段保留原区间约定，不把所有gravity输入视为APK
-瞬时姿态草案 := 前后校正gyro构造区间旋转，评估二样本交叉修正；当前force使用同源端点姿态
-平移草案 := 当前世界force减有效重力，前后世界加速度按真实源间隔求速度/位置；延迟支路遵守相同中心时刻契约
-生命周期草案 := 暂停/缺口/重置/校准/参数/来源变化清前值；预热或清速不跨段使用旧加速度
-诊断草案 := 积分采样约定及源时间可选字段，经既有WS/历史白名单保存；不增HTTP配置或APK字段
-验收草案 := 独立解析瞬时多轴旋转/纯平移/混合，三频率与抖动/缺口/快停重启，原73项兼容
+修复前缺口 := 引擎未区分上述契约，均用当前gyro推进整段并以半步姿态旋转force
 现场限制 := 550点保存；动态原始50Hz环已滚走，只有部分发布帧；数学探针不是完整实采回放/真实位置精度
-状态 := 先确认具体文件和方案，再补齐L4细则和产品代码
+新增声明 := InstantPreintegration持有convention/previousRate/rateTime/previousAcceleration/accelerationTime/state/dt，均为单个前值，reset清空
+采样识别 := accelBeforeTime/accelAfterTime都不存在为interval；同时有限且0<=before<=time<=after<=86400、跨度<=0.100001为instantaneous；只给一项或非法则拒绝，不静默降级
+瞬时角增量 := dt=(当前源time-前一rateTime)，0<dt<=maxGap时θ=(前rate+当前rate)*dt/2+(前rate叉乘当前rate)*dt²/12；指数映射θ右乘已有姿态
+首帧姿态 := 无前rate或超时不补猜区间，缓存当前校正/小死区角速度作为下一区间前值
+瞬时力对齐 := 同源端点q旋转当前插值force；磁场仍按自己的测量时刻门控并校正q；去有效重力后提供世界加速度
+瞬时平移 := 对死区前滤波/死区后的同源端点a0/a1，在dt内线性插值；位置增加v0*dt+(2*a0+a1)*dt²/6，速度增加(a0+a1)*dt/2；首个端点仅建立前值
+原区间平移 := 保持原v0*dt+a1*dt²/2及v0+a1*dt，不改变模拟器/无配对字段输入的既有基线
+双支路 := engine的原始位置与denoiser的延迟位置各有独立预积分实例，后者读取中心frame.integration.convention、按中心源time而非最新输入time积分
+保持 := 原静稳/快停/明确停稳时速度为0，缓存当前源time的零加速度端点，不让上段制动/加速拖尾跨保持段；校准期间瞬时平移保持
+生命周期 := resetDenoise/clearProcessed/参数变化/校准完成清原始实例；denoiser.reset清延迟实例；瞬时与区间切换清两支路窗口和滤波，首区间不积分
+输出诊断 := integration { convention=interval或instantaneous, state=priming或tracking或held, time=同frame.time的源秒, dt=0..60 } 可选；暂停/预热seed的state=priming/dt=0
+协议校验 := 严格枚举、有限time与dt、诊断time须与frame.time相等，未知字段剔除；旧帧无该字段接受，原sample及WS流程不新增配置
+界面 := 既有处理诊断显示瞬时端点/区间中点、积分状态、源time与dt；旧帧显示未提供
+兼容与验证 := 解析真值独立生成，三频率/抖动的恒速及多轴旋转、旋转平移/短脉冲/匀速，双支路同源时间，原73项及生命周期/磁场/快停重启
+限制 := 该二样本方法不重建采样间所有快速变化；真实片段缺完整raw，不把合成改善称为手机位置精度
+状态 := 已确认后先更新本节再实现；新增9项、最终82项专项通过；独立8769已更新，6个前端文件HTTP/大小/SHA-256一致，持机验收待做
 ```
 
 ## 新轨迹停止恢复诊断与修复（2026-10-31，已实现）

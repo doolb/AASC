@@ -1,5 +1,6 @@
 import { Quaternion, Vector3 } from 'three';
 import { StopRecovery } from './imu-stop-recovery.mjs';
+import { InstantPreintegration } from './imu-preintegration.mjs';
 
 const vector = values => new Vector3().fromArray(values);
 const median = values => {
@@ -78,7 +79,9 @@ export class FixedLagDenoiser {
 
     reset(seed = null, reason = '等待窗口预热') {
         this.stopRecovery = new StopRecovery();
+        this.preintegration = new InstantPreintegration();
         this.entries = []; this.frame = seed ? structuredClone(seed) : null;
+        if (this.frame?.integration) this.frame.integration = { ...this.frame.integration, state: 'priming', dt: 0 };
         this.lastOutputTime = null; this.latestInputTime = seed?.time ?? null;
         this.position = vector(seed?.position || [0, 0, 0]); this.velocity = vector(seed?.velocity || [0, 0, 0]);
         this.filteredAcceleration = null; this.reason = reason;
@@ -136,11 +139,12 @@ export class FixedLagDenoiser {
         const fastStopped = this.stopRecovery.update(center, fullNeighbors, this.filteredAcceleration.toArray(), this.velocity.toArray(), dt);
         if (center.hold || fastStopped) {
             this.velocity.set(0, 0, 0); this.filteredAcceleration.set(0, 0, 0); linear.set(0, 0, 0);
-        } else if (dt > 0) {
-            this.position.addScaledVector(this.velocity, dt).addScaledVector(linear, .5 * dt * dt);
-            this.velocity.addScaledVector(linear, dt);
         }
+        this.preintegration.select(center.frame.integration?.convention || 'interval');
+        this.preintegration.advance(this.position, this.velocity, linear, center.frame.time, center.frame.profile.maxGap, dt,
+            center.hold || fastStopped);
         this.frame = { ...structuredClone(center.frame), position: this.position.toArray(), velocity: this.velocity.toArray(),
+            integration: this.preintegration.snapshot(center.frame.time),
             quaternion: smoothPose(window, center, radius), linear: linear.toArray(), stopRecovery: this.stopRecovery.snapshot() };
         this.lastOutputTime = center.frame.time; this.reason = '运动对齐多帧降噪';
     }

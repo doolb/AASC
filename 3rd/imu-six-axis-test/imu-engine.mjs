@@ -1,6 +1,7 @@
 import { Quaternion, Vector3 } from 'three';
 import { MagneticAssist } from './imu-magnetic.mjs';
 import { FixedLagDenoiser } from './imu-denoiser.mjs';
+import { InstantPreintegration, samplingConvention } from './imu-preintegration.mjs';
 
 export const GRAVITY = 9.80665;
 export const REST_ORIENTATION = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2);
@@ -31,6 +32,7 @@ export class ImuEngine {
     constructor(profile = {}) {
         this.profile = { ...DEFAULT_PROFILE, ...profile };
         this.magnetic = new MagneticAssist();
+        this.preintegration = new InstantPreintegration();
         this.denoiser = new FixedLagDenoiser(); this.denoiseKey = null;
         this.inputWorldAcceleration = [0, 0, 0]; this.denoiseRate = [0, 0, 0]; this.outputHold = false;
         this.q = REST_ORIENTATION.clone();
@@ -276,6 +278,7 @@ export class ImuEngine {
         }
         this.v.set(0, 0, 0); this.filteredGyro = null; this.filteredAcceleration = null;
         this.calibration = null; this.restNoise = null; this.resetSimulatorRest(); this.resetRemoteRest();
+        this.preintegration.reset();
     }
 
     // 实验重置保留处理参数及已学标定；手机姿态必须由下一条实际重力重新对齐。
@@ -291,6 +294,7 @@ export class ImuEngine {
     }
     // 断流或重置帧没有新的有效区间，不能沿用上一帧的处理输出和方向诊断。
     clearProcessed() {
+        this.preintegration.reset();
         this.correctedGyro = [0, 0, 0]; this.attitudeGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
         this.gravityDirectionErrorDegrees = null;
         this.inputWorldAcceleration = [0, 0, 0]; this.denoiseRate = [0, 0, 0]; this.outputHold = false;
@@ -319,6 +323,7 @@ export class ImuEngine {
 
     /** 控制动作清理未来窗口，冻结已经显示的位置；不跨预热空白区补积分。 */
     resetDenoise(reason, { origin = false, stop = false, state = 'warming' } = {}) {
+        this.preintegration.reset();
         const raw = this.rawSnapshot();
         let seed = raw;
         if (this.profile.denoiseEnabled && this.denoiser.frame && ['paused', 'gap'].includes(state)) {
@@ -344,6 +349,7 @@ export class ImuEngine {
             this.p.fromArray(this.denoiser.frame.position); this.v.fromArray(this.denoiser.frame.velocity);
         }
         this.denoiseKey = key; this.denoiseWasEnabled = this.profile.denoiseEnabled;
+        this.preintegration.reset();
         this.denoiser.reset(this.rawSnapshot(), '参数变化，重新预热');
     }
 
@@ -367,14 +373,20 @@ export class ImuEngine {
 
     pushRaw(sample) {
         if (!sample || !Number.isFinite(sample.time) || !finite3(sample.gyro) || !finite3(sample.accel)
-            || !['gravity', 'linear'].includes(sample.kind)) { this.rejected += 1; return false; }
+            || !['gravity', 'linear'].includes(sample.kind) || !samplingConvention(sample)) { this.rejected += 1; return false; }
         if (this.lastTime !== null && sample.time <= this.lastTime) { this.rejected += 1; return false; }
+        const convention = samplingConvention(sample);
+        const switched = this.lastSample && samplingConvention(this.lastSample) !== convention;
+        if (switched) {
+            this.filteredAcceleration = null; this.resetSimulatorRest(); this.resetRemoteRest();
+            this.resetDenoise('采样约定变化，重新预热');
+        }
         // 原生传输队列丢弃旧样本时显式标记缺口；即使时间差尚未达到普通断流门限，也不能跨缺样积分。
         if (sample.gap === true && this.lastTime !== null) { this.gaps += 1; this.pause(); }
         this.calibrate(sample);
         this.lastSample = sample; this.samples += 1;
         const interrupted = this.status === 'paused' || this.status === 'gap';
-        const dt = this.lastTime === null ? 0 : sample.time - this.lastTime;
+        const dt = this.lastTime === null || switched ? 0 : sample.time - this.lastTime;
         this.lastTime = sample.time;
         const force = vector(sample.accel.map((value, axis) => (value - this.accelBias[axis]) * this.accelScale[axis]));
         // 保留机体系力的模长；后续旋转、去重力会修改世界系向量，不能再拿它计算重力模长评分。
@@ -392,6 +404,7 @@ export class ImuEngine {
             this.status = 'gap'; this.message = '断流：未跨空白区积分，速度重新初始化'; return true;
         }
         this.status = 'tracking';
+        this.preintegration.select(convention);
         if (this.deadzoneCalibration) {
             this.captureDeadzone(sample, force, dt);
             this.correctedGyro = [0, 0, 0]; this.attitudeGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
@@ -427,12 +440,14 @@ export class ImuEngine {
         // 用户确认静置后采集零偏时，不把尚未扣除的零偏积成不可观测航向误差。
         if (this.calibration && this.calibration.face === null) { rate.set(0, 0, 0); attitudeRate.set(0, 0, 0); }
         const midpoint = this.q.clone().multiply(rotationStep(attitudeRate, dt / 2));
-        this.q.multiply(rotationStep(attitudeRate, dt)).normalize();
+        const rotation = convention === 'instantaneous' ? this.preintegration.rotation(attitudeRate, sample.time, this.profile.maxGap)
+            : rotationStep(attitudeRate, dt);
+        this.q.multiply(rotation).normalize();
         if (!this.calibration) {
             const correction = this.magnetic.update(sample, force, this.q, dt, this.profile.magneticAssist);
             this.q.premultiply(correction).normalize(); midpoint.premultiply(correction).normalize();
         }
-        const acceleration = force.clone().applyQuaternion(midpoint);
+        const acceleration = force.clone().applyQuaternion(convention === 'instantaneous' ? this.q : midpoint);
         if (this.profile.simulatorAutoRest && sample.kind === 'gravity' && dt > 0) {
             const gravityError = Math.abs(forceNorm - GRAVITY);
             const apparentLinear = acceleration.clone().addScaledVector(UP, -GRAVITY).length();
@@ -477,10 +492,8 @@ export class ImuEngine {
         const simulatorStopped = this.profile.simulatorAutoRest && sample.kind === 'gravity'
             && (rotationStopped || this.restConfidence >= 0.8 && stationaryTime >= (this.simulatorBraking ? 0.7 : 1.5));
         const wasSimulatorRest = this.simulatorRestActive;
-        if (dt > 0 && !simulatorStopped && !remoteStopped) {
-            this.p.addScaledVector(this.v, dt).addScaledVector(linear, 0.5 * dt * dt);
-            this.v.addScaledVector(linear, dt);
-        }
+        const held = simulatorStopped || remoteStopped || convention === 'instantaneous' && Boolean(this.calibration);
+        this.preintegration.advance(this.p, this.v, linear, sample.time, this.profile.maxGap, dt, held);
         // 低加速度本身不能证明静止：手机需用户启用假设，模拟器按来源单独启用；一般运动不持续纠倾。
         if (assumedStopped && sample.kind === 'gravity' && this.profile.tiltGain > 0 && dt > 0) {
             const direction = vector(sample.accel.map((value, axis) => (value - this.accelBias[axis]) * this.accelScale[axis]))
@@ -490,6 +503,7 @@ export class ImuEngine {
         }
         if (assumedStopped) {
             this.v.set(0, 0, 0); this.zeroCorrections += 1;
+            this.preintegration.advance(this.p, this.v, new Vector3(), sample.time, this.profile.maxGap, 0, true);
             this.message = '手持停稳假设已清零速度；匀速运动也可能被误判';
         }
         if (simulatorStopped) {
@@ -517,6 +531,7 @@ export class ImuEngine {
 
     rawSnapshot() {
         return { position: this.p.toArray(), velocity: this.v.toArray(), quaternion: this.q.toArray(),
+            integration: this.preintegration.snapshot(this.lastSample?.time ?? 0, samplingConvention(this.lastSample) || 'interval'),
             gyro: this.correctedGyro || [0, 0, 0], linear: this.linearAcceleration || [0, 0, 0],
             attitudeGyro: [...this.attitudeGyro], profile: { ...this.profile },
             magnetic: this.magnetic.snapshot(),

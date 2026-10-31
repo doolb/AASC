@@ -161,6 +161,8 @@ test('默认噪声纯旋转的浏览器轨迹接口保持参考位置与估计�
 });
 
 test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { timeout: 45000 }, async t => {
+    const paired = samples => samples.map(sample => ({ ...sample,
+        accelBeforeTime: Math.max(0, sample.time - .01), accelAfterTime: sample.time + .01 }));
     const { createLabServer } = await import('../3rd/imu-six-axis-test/server.mjs');
     const service = await createLabServer({ port: 0, host: '127.0.0.1' }); t.after(() => service.close());
     const browser = await puppeteer.launch({ executablePath: '/usr/bin/chromium', headless: true,
@@ -183,7 +185,7 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     const samples = Array.from({ length: 8 }, (_, index) => ({ time: index * 0.02,
         gyro: [0, 0, 0], accel: [0, 0, 9.80665], kind: 'gravity' }));
     sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
-        generation: identity.generation, sequence: 1, samples }));
+        generation: identity.generation, sequence: 1, samples: paired(samples) }));
     await page.waitForFunction(() => window.imuLab.snapshot().engine.samples === 8);
     await page.waitForFunction(async () => {
         const trajectory = await (await fetch('/api/imu/trajectory')).json();
@@ -192,6 +194,10 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     const trajectory = await (await fetch(`http://127.0.0.1:${service.port}/api/imu/trajectory`)).json();
     const observer = trajectory.devices.find(device => device.label === '电脑观察端');
     assert.equal(observer.current.time, 0.14);
+    assert.equal(observer.current.integration.convention, 'instantaneous');
+    assert.equal(observer.current.integration.time, observer.current.time);
+    assert.ok(Math.abs(observer.current.integration.dt - .02) < 1e-6);
+    await page.waitForFunction(() => document.querySelector('#processingDiagnostics').textContent.includes('瞬时端点预积分'));
     assert.equal(observer.current.referencePosition, undefined);
     assert.ok(observer.points.length > 0);
     await delay(1100);
@@ -206,7 +212,7 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     const tilted = Array.from({ length: 8 }, (_, index) => ({ time: 0.16 + index * 0.02,
         gyro: [0, 0, 0], accel: [0, 4.903325, 8.492808026022666], kind: 'gravity' }));
     sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
-        generation: identity.generation, sequence: 2, samples: tilted }));
+        generation: identity.generation, sequence: 2, samples: paired(tilted) }));
     await page.waitForFunction(() => Math.abs(window.imuLab.snapshot().engine.time - 0.3) < 1e-6);
     const resetState = await page.evaluate(() => window.imuLab.snapshot().engine);
     assert.ok(Math.hypot(...resetState.velocity) < 1e-6);
@@ -233,7 +239,7 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     });
     for (let index = 0; index < held.length; index += 8) {
         sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
-            generation: identity.generation, sequence: 3 + index / 8, samples: held.slice(index, index + 8) }));
+            generation: identity.generation, sequence: 3 + index / 8, samples: paired(held.slice(index, index + 8)) }));
         await delay(25);
     }
     await page.waitForFunction(() => window.imuLab.snapshot().engine.remoteRestActive, { polling: 100 });
@@ -252,7 +258,7 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
         magneticAvailable: true, magnetic: { field: [20, 15, -35], time: 5.12 + index * .02, accuracy: 3 } }));
     for (let index = 0; index < magneticSamples.length; index += 8) {
         sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
-            generation: identity.generation, sequence: 33 + index / 8, samples: magneticSamples.slice(index, index + 8) }));
+            generation: identity.generation, sequence: 33 + index / 8, samples: paired(magneticSamples.slice(index, index + 8)) }));
         await delay(30);
     }
     await page.waitForFunction(() => window.imuLab.snapshot().engine.magnetic.state === 'active');
@@ -270,12 +276,14 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
         kind: 'gravity', gyro: [0, 0, 0], accel: [0, 4.903325, 8.492808026022666] }));
     for (let index = 0; index < buffered.length; index += 8) {
         sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
-            generation: identity.generation, sequence: 43 + index / 8, samples: buffered.slice(index, index + 8) }));
+            generation: identity.generation, sequence: 43 + index / 8, samples: paired(buffered.slice(index, index + 8)) }));
         await delay(30);
     }
     await page.waitForFunction(() => Math.abs(window.imuLab.snapshot().engine.denoise.latestInputTime - 8.3) < 1e-6);
     const delayed = await page.evaluate(() => window.imuLab.snapshot().engine);
     assert.equal(delayed.denoise.enabled, true);
+    assert.equal(delayed.integration.convention, 'instantaneous');
+    assert.equal(delayed.integration.time, delayed.time);
     assert.ok(Math.abs(delayed.time - 8) < 1e-6);
     assert.ok(Math.abs(delayed.denoise.actualLagMs - 300) < 1e-6);
     const metadata = await page.evaluate(async () => {

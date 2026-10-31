@@ -270,6 +270,10 @@ function diagnostics(now) {
     element('processingDiagnostics').textContent = selected.profile
         ? `显示角速度死区 ${diagnosticNumber(selected.profile.gyroDeadZone * 180 / Math.PI, 2)} °/s · 加速度死区 ${diagnosticNumber(selected.profile.accelDeadZone, 2)} m/s² · 滤波 ${diagnosticNumber(selected.profile.filterHz, 0)} Hz`
         : '旧页面未提供处理参数';
+    const integration = selected.integration;
+    element('processingDiagnostics').textContent += integration
+        ? ` · ${integration.convention === 'instantaneous' ? '瞬时端点预积分' : '区间中点积分'} · ${integration.state} · 源时刻 ${diagnosticNumber(integration.time)} s · 积分间隔 ${diagnosticNumber(integration.dt * 1000, 1)} ms`
+        : ' · 旧页面未提供积分采样约定';
     const magnetic = selected.magnetic;
     const denoise = selected.denoise;
     element('denoiseDiagnostics').textContent = denoise
