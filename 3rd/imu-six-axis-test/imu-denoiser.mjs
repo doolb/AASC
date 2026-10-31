@@ -1,6 +1,7 @@
 import { Quaternion, Vector3 } from 'three';
 import { StopRecovery } from './imu-stop-recovery.mjs';
 import { InstantPreintegration } from './imu-preintegration.mjs';
+import { SourceFilter, ConservativeDenoise, constantSignal } from './imu-conservative-denoise.mjs';
 
 const vector = values => new Vector3().fromArray(values);
 const median = values => {
@@ -80,8 +81,10 @@ export class FixedLagDenoiser {
     reset(seed = null, reason = '等待窗口预热') {
         this.stopRecovery = new StopRecovery();
         this.preintegration = new InstantPreintegration();
+        this.sourceFilter = new SourceFilter(); this.conservative = new ConservativeDenoise();
         this.entries = []; this.frame = seed ? structuredClone(seed) : null;
         if (this.frame?.integration) this.frame.integration = { ...this.frame.integration, state: 'priming', dt: 0 };
+        if (this.frame) this.frame.integrationAcceleration = [0, 0, 0];
         this.lastOutputTime = null; this.latestInputTime = seed?.time ?? null;
         this.position = vector(seed?.position || [0, 0, 0]); this.velocity = vector(seed?.velocity || [0, 0, 0]);
         this.filteredAcceleration = null; this.reason = reason;
@@ -94,7 +97,14 @@ export class FixedLagDenoiser {
         }
         const lag = frame.profile.denoiseLagMs / 1000;
         this.latestInputTime = frame.time;
-        this.entries.push({ frame: structuredClone(frame), acceleration: [...acceleration], rate: [...rate], hold });
+        let signal = this.sourceFilter.prepare(frame.time, acceleration, frame.profile.filterHz, frame.integration?.convention || 'interval');
+        let value = this.sourceFilter.commit(signal, hold).acceleration;
+        if (hold) { value = [0, 0, 0]; signal = constantSignal(signal.start, signal.end, value); }
+        if (frame.integration?.convention !== 'instantaneous') {
+            if (Math.hypot(...value) < frame.profile.accelDeadZone) value = [0, 0, 0];
+            signal = constantSignal(signal.start, signal.end, value);
+        }
+        this.entries.push({ frame: structuredClone(frame), acceleration: [...acceleration], rate: [...rate], hold, signal, value });
         if (this.entries.length > 512) { this.reset(this.frame, '窗口超限，重新预热'); this.latestInputTime = frame.time; return; }
         for (const center of this.entries) {
             if (center.frame.time <= (this.lastOutputTime ?? -Infinity) || center.frame.time > frame.time - lag + 1e-8) continue;
@@ -120,30 +130,21 @@ export class FixedLagDenoiser {
             else { last = index - 1; break; }
         }
         let window = neighbors.slice(first, last + 1);
-        let result = fit(window, window.map(entry => entry.acceleration), center.frame.time, radius);
         this.state = first || last < neighbors.length - 1 ? 'edge' : 'tracking';
-        // 局部模型解释不了、且超过噪声尺度的残差视为动作复杂度，缩窗保留动作，不强行截幅。
-        if (result && result.residual > Math.max(.03, this.noise * 2) && radius > .1) {
-            window = window.filter(entry => Math.abs(entry.frame.time - center.frame.time) <= .1 + 1e-8);
-            result = fit(window, window.map(entry => entry.acceleration), center.frame.time, .1);
-            radius = .1; this.state = 'short';
-        }
         this.windowSamples = window.length;
-        if (!result && this.state === 'tracking') this.state = 'sparse';
         const dt = this.lastOutputTime === null ? 0 : center.frame.time - this.lastOutputTime;
-        const acceleration = vector(result?.value || center.acceleration);
-        const blend = center.frame.profile.filterHz <= 0 ? 1 : 1 - Math.exp(-2 * Math.PI * center.frame.profile.filterHz * dt);
-        this.filteredAcceleration ??= acceleration.clone(); this.filteredAcceleration.lerp(acceleration, blend);
-        const linear = this.filteredAcceleration.clone();
+        this.filteredAcceleration = vector(center.value);
+        const fastStopped = this.stopRecovery.update(center, fullNeighbors, center.value, this.velocity.toArray(), dt);
+        const result = this.conservative.advance(this.position, this.velocity, center, fullNeighbors, radius, this.noise, center.hold || fastStopped);
+        const linear = vector(result.acceleration);
         if (linear.length() < center.frame.profile.accelDeadZone) linear.set(0, 0, 0);
-        const fastStopped = this.stopRecovery.update(center, fullNeighbors, this.filteredAcceleration.toArray(), this.velocity.toArray(), dt);
         if (center.hold || fastStopped) {
             this.velocity.set(0, 0, 0); this.filteredAcceleration.set(0, 0, 0); linear.set(0, 0, 0);
         }
         this.preintegration.select(center.frame.integration?.convention || 'interval');
-        this.preintegration.advance(this.position, this.velocity, linear, center.frame.time, center.frame.profile.maxGap, dt,
-            center.hold || fastStopped);
+        this.preintegration.state = result.state; this.preintegration.dt = result.dt;
         this.frame = { ...structuredClone(center.frame), position: this.position.toArray(), velocity: this.velocity.toArray(),
+            integrationAcceleration: [...result.acceleration],
             integration: this.preintegration.snapshot(center.frame.time),
             quaternion: smoothPose(window, center, radius), linear: linear.toArray(), stopRecovery: this.stopRecovery.snapshot() };
         this.lastOutputTime = center.frame.time; this.reason = '运动对齐多帧降噪';

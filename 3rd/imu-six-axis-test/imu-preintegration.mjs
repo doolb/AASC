@@ -1,4 +1,5 @@
 import { Quaternion, Vector3 } from 'three';
+import { SourceFilter } from './imu-conservative-denoise.mjs';
 
 /** APK已将加速度插值到陀螺时刻；旧输入/模拟器没有该字段，保留其区间约定。 */
 export function samplingConvention(sample) {
@@ -18,6 +19,7 @@ export class InstantPreintegration {
         this.convention = null; this.previousRate = null; this.rateTime = null;
         this.previousAcceleration = null; this.accelerationTime = null;
         this.state = 'priming'; this.dt = 0;
+        this.sourceFilter = new SourceFilter();
     }
 
     select(convention) {
@@ -42,6 +44,7 @@ export class InstantPreintegration {
         const interval = this.accelerationTime === null ? 0 : time - this.accelerationTime;
         this.dt = this.convention === 'instantaneous' ? interval : dt;
         if (hold) {
+            this.sourceFilter.hold(time);
             velocity.set(0, 0, 0); this.state = 'held';
             this.previousAcceleration = new Vector3(); this.accelerationTime = time;
             return;
@@ -60,6 +63,19 @@ export class InstantPreintegration {
         }
         if (this.state === 'priming') this.dt = 0;
         this.previousAcceleration = acceleration.clone(); this.accelerationTime = time;
+    }
+
+    /** 原生支路直接积低通连续响应的区间矩，显示硬死区不参与此处的运动积分。 */
+    advanceFiltered(position, velocity, signal, hold = false) {
+        const moments = this.sourceFilter.commit(signal, hold);
+        this.dt = signal.end - signal.start; this.state = this.dt > 0 ? 'tracking' : 'priming';
+        if (hold) { velocity.set(0, 0, 0); this.state = 'held'; moments.acceleration = [0, 0, 0]; }
+        if (!hold && this.dt > 0) {
+            position.addScaledVector(velocity, this.dt).add(new Vector3().fromArray(moments.position));
+            velocity.add(new Vector3().fromArray(moments.velocity));
+        }
+        this.previousAcceleration = new Vector3().fromArray(moments.acceleration); this.accelerationTime = signal.end;
+        return moments.acceleration;
     }
 
     snapshot(time, convention = this.convention || 'interval') {

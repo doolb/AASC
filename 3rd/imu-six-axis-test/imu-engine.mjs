@@ -2,6 +2,7 @@ import { Quaternion, Vector3 } from 'three';
 import { MagneticAssist } from './imu-magnetic.mjs';
 import { FixedLagDenoiser } from './imu-denoiser.mjs';
 import { InstantPreintegration, samplingConvention } from './imu-preintegration.mjs';
+import { integrateSignal } from './imu-conservative-denoise.mjs';
 
 export const GRAVITY = 9.80665;
 export const REST_ORIENTATION = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2);
@@ -234,7 +235,8 @@ export class ImuEngine {
         this.q.copy(candidate); this.filteredAcceleration = null; this.quietSince = null; this.resetSimulatorRest();
         this.resetRemoteRest();
         this.deadzoneRevision += 1;
-        const caution = gyroDegrees > 1 || accelZone > 0.5 ? '；高死区可能忽略真实慢动作' : '';
+        const caution = gyroDegrees > 1 || accelZone > 0.5
+            ? samplingConvention(sample) === 'instantaneous' ? '；高死区用于显示，APK运动积分不截断加速度' : '；高死区可能忽略真实慢动作' : '';
         this.deadzoneMessage = `死区已校准：${gyroDegrees.toFixed(2)} °/s，${accelZone.toFixed(2)} m/s²；含重力输入已对齐倾斜${caution}；${reliable ? '已学习静稳噪声' : '未启用静稳噪声学习，请确认窗口静置且波动可靠'}`;
     }
 
@@ -298,6 +300,7 @@ export class ImuEngine {
         this.correctedGyro = [0, 0, 0]; this.attitudeGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
         this.gravityDirectionErrorDegrees = null;
         this.inputWorldAcceleration = [0, 0, 0]; this.denoiseRate = [0, 0, 0]; this.outputHold = false;
+        this.integrationAcceleration = [0, 0, 0];
     }
     resetOrigin() { this.cancelDeadzoneCalibration(); this.p.set(0, 0, 0); this.stopVelocity();
         this.resetDenoise('原点重置，重新预热', { origin: true, stop: true }); }
@@ -324,6 +327,7 @@ export class ImuEngine {
     /** 控制动作清理未来窗口，冻结已经显示的位置；不跨预热空白区补积分。 */
     resetDenoise(reason, { origin = false, stop = false, state = 'warming' } = {}) {
         this.preintegration.reset();
+        this.integrationAcceleration = [0, 0, 0];
         const raw = this.rawSnapshot();
         let seed = raw;
         if (this.profile.denoiseEnabled && this.denoiser.frame && ['paused', 'gap'].includes(state)) {
@@ -350,6 +354,7 @@ export class ImuEngine {
         }
         this.denoiseKey = key; this.denoiseWasEnabled = this.profile.denoiseEnabled;
         this.preintegration.reset();
+        this.integrationAcceleration = [0, 0, 0];
         this.denoiser.reset(this.rawSnapshot(), '参数变化，重新预热');
     }
 
@@ -408,6 +413,7 @@ export class ImuEngine {
         if (this.deadzoneCalibration) {
             this.captureDeadzone(sample, force, dt);
             this.correctedGyro = [0, 0, 0]; this.attitudeGyro = [0, 0, 0]; this.linearAcceleration = [0, 0, 0];
+            this.integrationAcceleration = [0, 0, 0];
             this.gravityDirectionErrorDegrees = null;
             this.message = this.deadzoneMessage;
             return true;
@@ -466,7 +472,10 @@ export class ImuEngine {
             ? Math.acos(Math.max(-1, Math.min(1, acceleration.y / forceNorm))) * 180 / Math.PI : null;
         if (sample.kind === 'gravity') acceleration.y -= this.gravityMagnitude;
         this.inputWorldAcceleration = acceleration.toArray(); this.denoiseRate = gyro.toArray();
-        this.filteredAcceleration ??= acceleration.clone(); this.filteredAcceleration.lerp(acceleration, blend);
+        const sourceSignal = convention === 'instantaneous'
+            ? this.preintegration.sourceFilter.prepare(sample.time, acceleration.toArray(), this.profile.filterHz) : null;
+        if (sourceSignal) this.filteredAcceleration = vector(integrateSignal(sourceSignal).acceleration);
+        else { this.filteredAcceleration ??= acceleration.clone(); this.filteredAcceleration.lerp(acceleration, blend); }
         const linear = this.filteredAcceleration.clone();
         if (linear.length() < this.profile.accelDeadZone) linear.set(0, 0, 0);
         // 限速后的匀速段也可能几乎无加速度。只有最近显著减速过，模拟器才把后续静稳视为停下。
@@ -493,7 +502,11 @@ export class ImuEngine {
             && (rotationStopped || this.restConfidence >= 0.8 && stationaryTime >= (this.simulatorBraking ? 0.7 : 1.5));
         const wasSimulatorRest = this.simulatorRestActive;
         const held = simulatorStopped || remoteStopped || convention === 'instantaneous' && Boolean(this.calibration);
-        this.preintegration.advance(this.p, this.v, linear, sample.time, this.profile.maxGap, dt, held);
+        if (sourceSignal) this.integrationAcceleration = this.preintegration.advanceFiltered(this.p, this.v, sourceSignal, held);
+        else {
+            this.preintegration.advance(this.p, this.v, linear, sample.time, this.profile.maxGap, dt, held);
+            this.integrationAcceleration = linear.toArray();
+        }
         // 低加速度本身不能证明静止：手机需用户启用假设，模拟器按来源单独启用；一般运动不持续纠倾。
         if (assumedStopped && sample.kind === 'gravity' && this.profile.tiltGain > 0 && dt > 0) {
             const direction = vector(sample.accel.map((value, axis) => (value - this.accelBias[axis]) * this.accelScale[axis]))
@@ -504,6 +517,7 @@ export class ImuEngine {
         if (assumedStopped) {
             this.v.set(0, 0, 0); this.zeroCorrections += 1;
             this.preintegration.advance(this.p, this.v, new Vector3(), sample.time, this.profile.maxGap, 0, true);
+            this.integrationAcceleration = [0, 0, 0];
             this.message = '手持停稳假设已清零速度；匀速运动也可能被误判';
         }
         if (simulatorStopped) {
@@ -533,6 +547,7 @@ export class ImuEngine {
         return { position: this.p.toArray(), velocity: this.v.toArray(), quaternion: this.q.toArray(),
             integration: this.preintegration.snapshot(this.lastSample?.time ?? 0, samplingConvention(this.lastSample) || 'interval'),
             gyro: this.correctedGyro || [0, 0, 0], linear: this.linearAcceleration || [0, 0, 0],
+            integrationAcceleration: [...(this.integrationAcceleration || [0, 0, 0])],
             attitudeGyro: [...this.attitudeGyro], profile: { ...this.profile },
             magnetic: this.magnetic.snapshot(),
             rawGyro: this.lastSample?.gyro || [0, 0, 0], rawAccel: this.lastSample?.accel || [0, 0, 0],

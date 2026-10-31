@@ -10,7 +10,7 @@ import { normalizeEstimatedTrail, normalizeEstimatedTrailPoint, appendEstimatedT
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repository = path.resolve(root, '../..');
 const names = ['index.html', 'style.css', 'app.mjs', 'imu-engine.mjs', 'imu-simulator.mjs',
-    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs', 'imu-magnetic.mjs', 'imu-denoiser.mjs', 'imu-stop-recovery.mjs', 'imu-preintegration.mjs', 'imu-trail.mjs'];
+    'imu-simulator-view.mjs', 'imu-phone.mjs', 'imu-room.mjs', 'imu-scene.mjs', 'imu-magnetic.mjs', 'imu-denoiser.mjs', 'imu-stop-recovery.mjs', 'imu-preintegration.mjs', 'imu-conservative-denoise.mjs', 'imu-trail.mjs'];
 export const FIXED_SENSOR_ROOM = 'AASCIMU1';
 const SAMPLE_RING_LIMIT = 500;
 const SAMPLE_BATCH_LIMIT = 8;
@@ -31,6 +31,10 @@ const finiteRange = (value, min, max = Number.MAX_VALUE) => Number.isFinite(valu
 // 新诊断均为可选字段以兼容旧页面；只转发白名单，拒绝伪造的非有限值或类型。
 function normalizeDiagnostics(frame) {
     const result = {};
+    if (Object.hasOwn(frame, 'integrationAcceleration')) {
+        if (!array(frame.integrationAcceleration, 3, 1e4)) return null;
+        result.integrationAcceleration = [...frame.integrationAcceleration];
+    }
     if (Object.hasOwn(frame, 'integration')) {
         const integration = frame.integration;
         if (!integration || !['instantaneous', 'interval'].includes(integration.convention)
@@ -427,7 +431,7 @@ export async function createLabServer(options = {}) {
                     'gyroCalibrated', 'accelCalibrated', 'calibrationActive', 'faces', 'zeroCorrections', 'status', 'message']) {
                     point[key] = Array.isArray(frame[key]) ? [...frame[key]] : frame[key];
                 }
-                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest', 'restNoise', 'magnetic', 'denoise', 'stopRecovery', 'integration']) {
+                for (const key of ['attitudeGyro', 'profile', 'gravityMagnitude', 'gravityDirectionErrorDegrees', 'remoteRestActive', 'remoteRest', 'restNoise', 'magnetic', 'denoise', 'stopRecovery', 'integration', 'integrationAcceleration']) {
                     if (Object.hasOwn(frame, key)) point[key] = structuredClone(frame[key]);
                 }
                 // 模拟参考位置只进入本机诊断轨迹，不能混入设备位姿或房间广播。

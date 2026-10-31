@@ -247,7 +247,7 @@ element('ideal').addEventListener('click', () => cleanExperiment(true));
 function diagnostics(now) {
     element('cancelDeadzone').hidden = !engine.deadzoneCalibration;
     element('calibrateDeadzone').disabled = Boolean(engine.deadzoneCalibration);
-    element('deadzoneStatus').textContent = engine.deadzoneMessage || '保持一个朝向静置3秒，设置死区、对齐重力并学习静稳噪声；不修改零偏。校准时真实移动可能被误学，高死区可能忽略真实慢动作。';
+    element('deadzoneStatus').textContent = engine.deadzoneMessage || '保持一个朝向静置3秒，设置显示死区、对齐重力并学习静稳噪声；不修改零偏。APK运动积分不截断加速度；旧来源的高死区仍可能忽略慢动作。';
     const own = engine.snapshot(); const selectedId = element('deviceSelect').value;
     const selected = selectedId === 'local' ? own : devices.get(selectedId)?.frame || own;
     element('position').value = format(selected.position); element('velocity').value = format(selected.velocity);
@@ -256,6 +256,7 @@ function diagnostics(now) {
     element('attitudeRate').value = selected.attitudeGyro ? format(selected.attitudeGyro.map(value => value * 180 / Math.PI)) : '—';
     element('rawForce').value = format(selected.rawAccel);
     element('cleanForce').value = format(selected.linear);
+    element('integrationForce').value = selected.integrationAcceleration ? format(selected.integrationAcceleration) : '旧页面未提供';
     element('calibratedBias').value = format(selected.gyroBias.map(value => value * 180 / Math.PI));
     element('gravityMagnitude').value = Number.isFinite(selected.gravityMagnitude) ? selected.gravityMagnitude.toFixed(3) : '—';
     element('gravityDirectionError').value = Number.isFinite(selected.gravityDirectionErrorDegrees)

@@ -173,6 +173,7 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     await page.goto(`http://127.0.0.1:${service.port}/?source=remote&room=AASCIMU1`);
     await page.waitForFunction(() => window.imuLab?.snapshot().room === 'AASCIMU1');
     await page.click('#denoiseEnabled');
+    await page.$eval('#accelZone', input => { input.value = '1.33'; input.dispatchEvent(new Event('input')); });
     const sensor = new WebSocket(`ws://127.0.0.1:${service.port}/room`);
     t.after(() => sensor.close());
     await new Promise(resolve => sensor.once('open', resolve));
@@ -183,7 +184,7 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     sensor.send(JSON.stringify({ type: 'room.join', room: 'AASCIMU1', role: 'sensor', label: '测试APK' }));
     const identity = (await joined).device;
     const samples = Array.from({ length: 8 }, (_, index) => ({ time: index * 0.02,
-        gyro: [0, 0, 0], accel: [0, 0, 9.80665], kind: 'gravity' }));
+        gyro: [0, 0, 0], accel: [index ? .2 : 0, 0, 9.80665], kind: 'gravity' }));
     sensor.send(JSON.stringify({ type: 'imu.samples', deviceId: identity.id,
         generation: identity.generation, sequence: 1, samples: paired(samples) }));
     await page.waitForFunction(() => window.imuLab.snapshot().engine.samples === 8);
@@ -196,6 +197,11 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     assert.equal(observer.current.time, 0.14);
     assert.equal(observer.current.integration.convention, 'instantaneous');
     assert.equal(observer.current.integration.time, observer.current.time);
+    assert.deepEqual(observer.current.linear, [0, 0, 0]);
+    assert.ok(observer.current.integrationAcceleration[0] > .15);
+    assert.ok(observer.points.some(point => point.integrationAcceleration?.[0] > .15));
+    await page.waitForFunction(() => document.querySelector('#cleanForce').textContent.includes('0.000')
+        && document.querySelector('#integrationForce').textContent.startsWith('0.200'));
     assert.ok(Math.abs(observer.current.integration.dt - .02) < 1e-6);
     await page.waitForFunction(() => document.querySelector('#processingDiagnostics').textContent.includes('瞬时端点预积分'));
     assert.equal(observer.current.referencePosition, undefined);
