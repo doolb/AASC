@@ -292,6 +292,18 @@ test('APK观察页逐条积分批次并向现有轨迹接口发布估计帧', { 
     });
     const unmodified = await page.evaluate(async () => (await (await fetch('/api/imu/samples')).json()).samples.at(-1).sample.time);
     assert.ok(Math.abs(unmodified - 8.3) < 1e-6, '原始历史不能被延迟帧覆盖');
+    assert.equal(delayed.stopRecovery.enabled, true);
+    assert.equal(delayed.stopRecovery.source, 'legacy', '没有减速证据的静止输入沿用原静稳');
+    await page.waitForFunction(() => document.querySelector('#stopRecoveryDiagnostics').textContent.includes('来源 legacy'));
+    const stopHistory = await page.evaluate(async () => {
+        const data = await (await fetch('/api/imu/trajectory')).json();
+        return data.devices.find(device => device.label === '电脑观察端').points.at(-1).stopRecovery;
+    });
+    assert.deepEqual(stopHistory, delayed.stopRecovery);
+    await page.click('#stopRecoveryEnabled');
+    assert.equal(await page.evaluate(() => window.imuLab.snapshot().engine.profile.stopRecoveryEnabled), false);
+    assert.equal(await page.evaluate(() => window.imuLab.snapshot().engine.stopRecovery.active), false);
+    assert.equal(await page.evaluate(() => window.imuLab.snapshot().engine.denoise.state), 'warming');
     assert.deepEqual(errors, []);
 });
 

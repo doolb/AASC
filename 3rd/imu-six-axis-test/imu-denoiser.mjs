@@ -1,4 +1,5 @@
 import { Quaternion, Vector3 } from 'three';
+import { StopRecovery } from './imu-stop-recovery.mjs';
 
 const vector = values => new Vector3().fromArray(values);
 const median = values => {
@@ -76,6 +77,7 @@ export class FixedLagDenoiser {
     constructor() { this.reset(); }
 
     reset(seed = null, reason = '等待窗口预热') {
+        this.stopRecovery = new StopRecovery();
         this.entries = []; this.frame = seed ? structuredClone(seed) : null;
         this.lastOutputTime = null; this.latestInputTime = seed?.time ?? null;
         this.position = vector(seed?.position || [0, 0, 0]); this.velocity = vector(seed?.velocity || [0, 0, 0]);
@@ -101,6 +103,7 @@ export class FixedLagDenoiser {
     }
 
     emit(center, neighbors, radius) {
+        const fullNeighbors = neighbors;
         this.noise = noiseLevel(neighbors, 'acceleration');
         const accelLimit = Math.max(.35, this.noise * 6), rateLimit = Math.max(.08, noiseLevel(neighbors, 'rate') * 6);
         let first = 0, last = neighbors.length - 1;
@@ -130,14 +133,15 @@ export class FixedLagDenoiser {
         this.filteredAcceleration ??= acceleration.clone(); this.filteredAcceleration.lerp(acceleration, blend);
         const linear = this.filteredAcceleration.clone();
         if (linear.length() < center.frame.profile.accelDeadZone) linear.set(0, 0, 0);
-        if (center.hold) {
+        const fastStopped = this.stopRecovery.update(center, fullNeighbors, this.filteredAcceleration.toArray(), this.velocity.toArray(), dt);
+        if (center.hold || fastStopped) {
             this.velocity.set(0, 0, 0); this.filteredAcceleration.set(0, 0, 0); linear.set(0, 0, 0);
         } else if (dt > 0) {
             this.position.addScaledVector(this.velocity, dt).addScaledVector(linear, .5 * dt * dt);
             this.velocity.addScaledVector(linear, dt);
         }
         this.frame = { ...structuredClone(center.frame), position: this.position.toArray(), velocity: this.velocity.toArray(),
-            quaternion: smoothPose(window, center, radius), linear: linear.toArray() };
+            quaternion: smoothPose(window, center, radius), linear: linear.toArray(), stopRecovery: this.stopRecovery.snapshot() };
         this.lastOutputTime = center.frame.time; this.reason = '运动对齐多帧降噪';
     }
 
@@ -146,7 +150,8 @@ export class FixedLagDenoiser {
         if (enabled && this.state === 'warming') { frame.status = 'warming'; frame.message = '多帧窗口预热，等待未来样本'; }
         const lag = enabled && this.state === 'warming' ? null
             : enabled && this.latestInputTime !== null ? Math.max(0, (this.latestInputTime - frame.time) * 1000) : 0;
-        return { ...frame, profile: { ...raw.profile }, denoise: { enabled, state: enabled ? this.state : 'disabled',
+        return { ...frame, stopRecovery: enabled ? this.stopRecovery.snapshot() : new StopRecovery().snapshot(),
+            profile: { ...raw.profile }, denoise: { enabled, state: enabled ? this.state : 'disabled',
             reason: enabled ? this.reason : '多帧降噪已关闭', lagMs: raw.profile.denoiseLagMs,
             actualLagMs: lag, latestInputTime: enabled ? this.latestInputTime ?? raw.time : raw.time, queuedSamples: this.entries.length,
             windowSamples: this.windowSamples, noiseEstimate: this.noise } };

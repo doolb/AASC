@@ -59,6 +59,8 @@
         <p><label><input id="denoiseEnabled" type="checkbox">启用运动对齐多帧降噪</label></p>
         <label>算法延迟 / ms <input id="denoiseLagMs" type="range" min="50" max="1000" step="50" value="300"><output id="denoiseLagValue">300</output></label>
         <p id="denoiseDiagnostics" role="status">手机输入默认开启300ms；模拟器默认关闭</p>
+        <p><label><input id="stopRecoveryEnabled" type="checkbox" checked>减速后快停（APK远端输入）</label></p>
+        <p id="stopRecoveryDiagnostics" role="status">减速证据与未来强静稳同时成立才清速；原静稳保留兜底</p>
         <p>更多延迟可利用更多未来样本；姿态与轨迹统一延迟。切换或修改处理参数会重新预热；不能消除零偏或保证位置不漂移。</p>
       </details>
       <p class="footnote">旋转由角速度估计，平移由加速度积分。纯六轴会累积位置与航向漂移；右侧真值只用于对照。</p>

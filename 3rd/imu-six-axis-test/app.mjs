@@ -101,6 +101,7 @@ function applySource() {
     engine.profile.remoteAutoRest = source === 'remote';
     engine.profile.denoiseEnabled = denoisePreferences[source];
     element('denoiseEnabled').checked = engine.profile.denoiseEnabled;
+    element('stopRecoveryEnabled').checked = engine.profile.stopRecoveryEnabled;
     engine.configureDenoise();
     element('roomCode').disabled = false;
     if (source === 'remote') {
@@ -154,6 +155,9 @@ element('denoiseEnabled').addEventListener('change', event => {
 element('denoiseLagMs').addEventListener('input', event => {
     engine.profile.denoiseLagMs = Number(event.target.value); engine.configureDenoise();
     element('denoiseLagValue').value = engine.profile.denoiseLagMs;
+});
+element('stopRecoveryEnabled').addEventListener('change', event => {
+    engine.profile.stopRecoveryEnabled = event.target.checked; engine.configureDenoise();
 });
 element('magneticAssist').addEventListener('change', event => {
     engine.profile.magneticAssist = event.target.checked; engine.magnetic.reset();
@@ -271,6 +275,10 @@ function diagnostics(now) {
     element('denoiseDiagnostics').textContent = denoise
         ? `${denoise.reason} · ${denoise.state} · 配置 ${diagnosticNumber(denoise.lagMs, 0)} ms · 实际源时间落后 ${diagnosticNumber(denoise.actualLagMs, 0)} ms · 拟合 ${denoise.windowSamples} 点 · 待处理缓存 ${denoise.queuedSamples} 点 · 波动估计 ${diagnosticNumber(denoise.noiseEstimate, 4)} m/s²`
         : '旧页面未提供多帧降噪诊断';
+    const stop = selected.stopRecovery;
+    element('stopRecoveryDiagnostics').textContent = stop
+        ? `${stop.reason} · 来源 ${stop.source} · 快停 ${stop.corrections} 次 · 判定源时刻 ${diagnosticNumber(stop.decisionTime)} s · 证据截至 ${diagnosticNumber(stop.evidenceEndTime)} s`
+        : '旧页面未提供快停诊断';
     element('magneticDiagnostics').textContent = magnetic
         ? `${magnetic.reason} · 磁场 ${diagnosticNumber(magnetic.fieldMagnitude, 1)} μT · 精度 ${diagnosticNumber(magnetic.accuracy, 0)}/3 · 观测年龄 ${diagnosticNumber(magnetic.observationAge)} s · 航向残差 ${diagnosticNumber(magnetic.headingResidual, 2)}° · 重力${magnetic.gravityTrusted ? '可信' : '未确认'} · 参考${magnetic.referenceReady ? '已建立' : '待建立'}`
         : '旧页面未提供磁场辅助诊断';

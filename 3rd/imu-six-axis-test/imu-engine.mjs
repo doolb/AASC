@@ -24,7 +24,7 @@ function statistics(samples, key) {
 
 export const DEFAULT_PROFILE = Object.freeze({ gyroDeadZone: 0.0035, accelDeadZone: 0.08,
     filterHz: 12, tiltGain: 0.25, assumedRest: false, simulatorAutoRest: false, remoteAutoRest: false,
-    magneticAssist: true, denoiseEnabled: false, denoiseLagMs: 300, maxGap: 0.15 });
+    magneticAssist: true, denoiseEnabled: false, denoiseLagMs: 300, stopRecoveryEnabled: true, maxGap: 0.15 });
 
 /** 不读取模拟真值的六轴估计器；所有输入端共用，观察端不重复积分。 */
 export class ImuEngine {
@@ -402,6 +402,13 @@ export class ImuEngine {
         if (interrupted) this.message = '数据已恢复，速度从零重新估计';
         if (!this.calibration && !this.gyroCalibrated && !interrupted) this.message = '死区处理中；零偏校准可选';
         const gyro = vector(sample.gyro.map((value, axis) => value - this.gyroBias[axis]));
+        // 延迟支路已确认静稳后，当前原始观测的新运动须先撤销旧静稳窗口，避免旧hold吞掉重启动作。
+        // 此处只撤销原链路的窗口；快停本身仍在对应的延迟源中心到来时才退出。
+        if (this.profile.denoiseEnabled && this.profile.stopRecoveryEnabled && this.denoiser.stopRecovery.active) {
+            const predicted = this.q.clone().multiply(rotationStep(gyro, dt));
+            const worldLinear = force.clone().applyQuaternion(predicted).sub(new Vector3(0, this.gravityMagnitude, 0));
+            if (this.denoiser.stopRecovery.isMoving(worldLinear.toArray(), gyro.toArray())) this.resetRemoteRest();
+        }
         const remoteStopped = this.profile.remoteAutoRest && !this.calibration && sample.kind === 'gravity'
             ? this.updateRemoteRest(sample.time, gyro, force) : false;
         const blend = this.profile.filterHz <= 0 ? 1 : 1 - Math.exp(-2 * Math.PI * this.profile.filterHz * dt);
