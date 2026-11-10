@@ -2,7 +2,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const os = require('node:os');
+const { offlineBuildTempRoot } = require('./offline-build-temp');
 const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -75,7 +75,7 @@ async function prepareReleaseRepairs({ projectRoot, repairs, worker = execute, o
         if (existing && (existing.repairVersion !== repair.metadata.repairVersion || existing.scriptSha256 !== repair.metadata.scriptSha256
             || existing.targetDataVersion !== repair.metadata.targetDataVersion)) throw new Error('新的修复必须使用新的repairId');
     }
-    const workRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-repair-seeds-'));
+    const workRoot = await fs.mkdtemp(path.join(await offlineBuildTempRoot(projectRoot), 'aasc-repair-seeds-'));
     const stagedRelease = path.join(workRoot, 'release');
     const sourceFiles = [];
     let disposed = false;

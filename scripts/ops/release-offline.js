@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const os = require('node:os');
+const { offlineBuildTempRoot } = require('./offline-build-temp');
 const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { createReadStream, constants } = require('node:fs');
@@ -325,13 +325,16 @@ function plannedSteps(plan) {
 
 async function runNpm(projectRoot, script, args = [], environment = {}, runtime = {}) {
     runtime.signal?.throwIfAborted();
+    const tempRoot = await offlineBuildTempRoot(projectRoot, { ...process.env, ...environment });
+    const tempEnvironment = process.platform === 'win32'
+        ? { TMPDIR: tempRoot, TEMP: tempRoot, TMP: tempRoot } : { TMPDIR: tempRoot };
     const npmPath = process.env.npm_execpath;
     const program = npmPath ? process.execPath : process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const parameters = [...(npmPath ? [npmPath] : []), 'run', script, ...(args.length ? ['--', ...args] : [])];
     console.log(JSON.stringify({ stage: 'command', script, args }));
     await new Promise((resolve, reject) => {
         const detached = process.platform !== 'win32';
-        const child = spawn(program, parameters, { cwd: projectRoot, stdio: 'inherit', detached, env: { ...process.env, ...environment } });
+        const child = spawn(program, parameters, { cwd: projectRoot, stdio: 'inherit', detached, env: { ...process.env, ...environment, ...tempEnvironment } });
         let killTimer;
         const kill = signal => {
             try { if (child.pid) process.kill(detached ? -child.pid : child.pid, signal); }
@@ -439,7 +442,7 @@ async function verifyApk(apkPath, buildManifestPath, kind, expectedVersion, base
 }
 
 async function buildNode(plan, keyPair, runtime = {}) {
-    const workDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-release-node-'));
+    const workDirectory = await fs.mkdtemp(path.join(await offlineBuildTempRoot(plan.projectRoot), 'aasc-release-node-'));
     try {
         const staged = await stageVoiceDisplayNodePackage({ projectRoot: plan.projectRoot, workDirectory,
             outputDir: plan.artifactRoot, version: plan.versions.node, source: readGitSourceMetadata(plan.projectRoot),

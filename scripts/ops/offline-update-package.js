@@ -2,8 +2,8 @@
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+const { offlineBuildTempRoot } = require('./offline-build-temp');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
@@ -502,7 +502,7 @@ async function createDataRepairArtifacts(options = {}) {
         throw new Error('多前置版本的累计修复必须声明支持它的最低 APK 版本');
     }
     const repairSource = await fs.promises.readFile(repairFile);
-    const workDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-data-repair-'));
+    const workDirectory = await fs.promises.mkdtemp(path.join(await offlineBuildTempRoot(projectRoot), 'aasc-data-repair-'));
     const stagingDirectory = path.join(workDirectory, 'data-repair');
     const archivePath = path.join(workDirectory, `data-repair-v${repairVersion}.zip`);
     const finalArchivePath = path.join(outputDir, 'data', path.basename(archivePath));
@@ -612,7 +612,7 @@ async function createTaskCodeArtifacts(options) {
     if (!current) throw new Error('独立任务更新必须基于现有签名清单');
     validateManifestComponents(current);
     assertNewVersion(Number(options.taskCodeVersion), current.payload.components.taskCode?.version, 'taskCodeVersion');
-    const work = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-task-code-'));
+    const work = await fs.promises.mkdtemp(path.join(await offlineBuildTempRoot(projectRoot), 'aasc-task-code-'));
     try {
         const staged = await prepareTaskCode(options, projectRoot, work, outputDir, readGitSourceMetadata(projectRoot));
         const payload = { ...current.payload, generatedAt: options.generatedAt || new Date().toISOString(),
@@ -679,7 +679,7 @@ async function createOfflineUpdateArtifacts(options = {}) {
 
     const zipRunner = options.zipRunner || execFileAsync;
     const commandRunner = options.commandRunner || execFileAsync;
-    const workDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-offline-update-'));
+    const workDirectory = await fs.promises.mkdtemp(path.join(await offlineBuildTempRoot(projectRoot), 'aasc-offline-update-'));
     const stagedCodeArchive = path.join(workDirectory, `code-v${codeVersion}.zip`);
     const stagedNodeMinSeedsDirectory = path.join(workDirectory, 'node-min-seeds');
     const nodeMinSeedVersion = reuseNodeMinSeeds ? currentComponents.nodeMinSeeds.version
