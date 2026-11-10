@@ -91,17 +91,17 @@
 .display-voice-action[data-state="thinking"] { --voice-state-color: #8b5cf6; }
 .display-voice-action[data-state="speaking"] { --voice-state-color: #06b6d4; }
 .display-voice-action:focus-visible { outline: 3px solid var(--accent-color); outline-offset: 4px; }
-.display-voice-switch { cursor: pointer; }
+.display-voice-switch { cursor: pointer; transition: none; }
 /* 实时监听用按钮选中态表达模式，关闭态保持中性；覆盖浅色通用按钮样式。 */
 .display-voice-switch[aria-pressed="true"],
-:root[data-theme-mode="light"] .display-voice-switch[aria-pressed="true"] {
+:root[data-theme-mode="light"] #displayVoiceContinuous[aria-pressed="true"] {
     background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
     color: #fff !important;
     border-color: var(--accent-color) !important;
     box-shadow: 0 0 0 1px var(--accent-color);
 }
 .display-voice-switch[aria-pressed="false"],
-:root[data-theme-mode="light"] .display-voice-switch[aria-pressed="false"] {
+:root[data-theme-mode="light"] #displayVoiceContinuous[aria-pressed="false"] {
     background: var(--bg-secondary) !important;
     color: var(--text-secondary) !important;
     border-color: var(--border-color) !important;

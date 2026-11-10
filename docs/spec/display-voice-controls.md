@@ -172,3 +172,11 @@ saved voiceContinuousEnabled缺失 -> true；显式false保留
 ```
 
 2026-10-10 发布验证：本轮对应功能已纳入code56，最终21文件93项定向通过、无跳过；LAN/WAN签名清单及全部组件HTTP大小/哈希、精确旧版本清理通过。手机实际交互另验收。
+# 监听模式文字同步（2026-11-10）
+
+```text
+已有声明 := runtime.snapshot.continuous、服务端 displayVoiceListeningConfig、模式按钮
+权威配置或运行状态变化 → 同步按钮 aria-pressed、文字及下次操作提示
+continuous=true → 实时监听；false → 单次监听
+保存中/断线 → 禁用按钮并保留权威状态；失败不虚构状态
+```

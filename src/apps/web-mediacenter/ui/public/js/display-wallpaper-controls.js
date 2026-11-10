@@ -1,0 +1,110 @@
+/* 壁纸专用浮动控件；前台与普通浏览器不改变既有状态。 */
+(function initializeWallpaperControls(root) {
+    'use strict';
+    const document = root.document;
+    const get = id => document.getElementById(id);
+    const box = get('wallpaperControls');
+    if (!box) return;
+    const handle = get('wallpaperControlsHandle');
+    const panel = get('wallpaperControlsPanel');
+    const drag = get('wallpaperControlsDrag');
+    const volume = get('wallpaperVolume');
+    const volumeValue = get('wallpaperVolumeValue');
+    const fps = get('wallpaperShowFps');
+    const time = get('wallpaperShowTime');
+    const status = get('wallpaperStatus');
+    const clock = get('timeDisplay');
+    let active = false;
+    let frame = null;
+    let gesture = null;
+    const readPreference = key => { try { return root.localStorage.getItem(key) !== 'false'; } catch (_) { return true; } };
+    const savePreference = (key, value) => { try { root.localStorage.setItem(key, String(value)); } catch (_) {} };
+    fps.checked = readPreference('aasc.wallpaper.fps');
+    time.checked = readPreference('aasc.wallpaper.time');
+
+    function updateClockInset() {
+        frame = null;
+        if (!clock) return;
+        clock.style.translate = '';
+        if (!active || !time.checked) return;
+        let inset = 0;
+        try { inset = Math.max(0, Number(root.NativeDisplay?.getWallpaperTopInset?.()) || 0); } catch (_) { return; }
+        const overlap = Math.max(0, inset - clock.getBoundingClientRect().top);
+        if (overlap) clock.style.translate = `0px ${overlap}px`;
+    }
+    function scheduleClock() {
+        if (frame !== null) return;
+        frame = root.requestAnimationFrame(updateClockInset);
+    }
+    function updateOptions() {
+        document.body.classList.toggle('wallpaper-fps-hidden', active && !fps.checked);
+        document.body.classList.toggle('wallpaper-time-hidden', active && !time.checked);
+        scheduleClock();
+    }
+    function updateStatus() {
+        const text = ['connectionStatus', 'voiceStatus'].map(id => get(id)?.textContent?.trim()).filter(Boolean).join(' · ');
+        status.textContent = text || '暂无状态';
+    }
+    function setExpanded(expanded) {
+        panel.hidden = !expanded;
+        handle.hidden = expanded;
+        handle.setAttribute('aria-expanded', String(expanded));
+    }
+    function updateMode() {
+        try { active = root.NativeDisplay?.isWallpaperActive?.() === true; } catch (_) { active = false; }
+        document.body.classList.toggle('is-wallpaper', active);
+        box.hidden = !active;
+        if (active) {
+            try {
+                const value = Number(root.NativeDisplay?.getWallpaperMediaVolume?.());
+                if (Number.isFinite(value)) { volume.value = String(value); volumeValue.textContent = `${value}%`; }
+            } catch (_) { volume.disabled = true; }
+            updateStatus();
+        } else setExpanded(false);
+        updateOptions();
+    }
+    handle.addEventListener('click', () => setExpanded(true));
+    get('wallpaperControlsCollapse').addEventListener('click', () => setExpanded(false));
+    volume.addEventListener('input', () => {
+        const value = Number(volume.value);
+        try { root.NativeDisplay?.setWallpaperMediaVolume?.(value); volumeValue.textContent = `${value}%`; } catch (_) { volume.disabled = true; }
+    });
+    for (const [input, key] of [[fps, 'aasc.wallpaper.fps'], [time, 'aasc.wallpaper.time']]) {
+        input.addEventListener('change', () => { savePreference(key, input.checked); updateOptions(); });
+    }
+    drag.addEventListener('pointerdown', event => {
+        if (event.target.closest('button')) return;
+        const rect = box.getBoundingClientRect();
+        gesture = { id: event.pointerId, dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+        drag.setPointerCapture(event.pointerId);
+    });
+    drag.addEventListener('pointermove', event => {
+        if (!gesture || gesture.id !== event.pointerId) return;
+        box.style.right = 'auto';
+        box.style.left = `${Math.max(0, Math.min(root.innerWidth - box.offsetWidth, event.clientX - gesture.dx))}px`;
+        box.style.top = `${Math.max(0, Math.min(root.innerHeight - box.offsetHeight, event.clientY - gesture.dy))}px`;
+    });
+    const finish = event => {
+        if (!gesture || gesture.id !== event.pointerId) return;
+        gesture = null;
+        const rect = box.getBoundingClientRect();
+        const left = rect.left + rect.width / 2 < root.innerWidth / 2;
+        box.style.left = left ? '0px' : 'auto';
+        box.style.right = left ? 'auto' : '0px';
+    };
+    drag.addEventListener('pointerup', finish);
+    drag.addEventListener('pointercancel', finish);
+    root.addEventListener('aasc-wallpaper-mode', updateMode);
+    root.addEventListener('aasc-wallpaper-inset', scheduleClock);
+    root.addEventListener('resize', scheduleClock);
+    if (root.MutationObserver) {
+        const observer = new root.MutationObserver(() => { if (active) { updateStatus(); scheduleClock(); } });
+        for (const id of ['connectionStatus', 'voiceStatus']) {
+            const element = get(id);
+            if (element) observer.observe(element, { childList: true, subtree: true, characterData: true });
+        }
+        const stage = get('displayStageLayers');
+        if (stage) observer.observe(stage, { attributes: true, attributeFilter: ['data-rotation'] });
+    }
+    updateMode();
+})(window);

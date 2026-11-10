@@ -34,6 +34,22 @@ class NativeBridge(
     @JavascriptInterface
     fun getWallpaperTopInset(): Double = WallpaperDisplayCoordinator.wallpaperTopInset
 
+    @JavascriptInterface
+    fun isWallpaperActive(): Boolean = WallpaperDisplayCoordinator.wallpaperActive
+
+    @JavascriptInterface
+    fun getWallpaperMediaVolume(): Int {
+        val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        return audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / maximum
+    }
+
+    @JavascriptInterface
+    fun setWallpaperMediaVolume(value: Int) {
+        if (!WallpaperDisplayCoordinator.wallpaperActive) return
+        val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (value.coerceIn(0, 100) * maximum + 50) / 100, 0)
+    }
+
     private val audioManager = webView.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val bluetoothScoController = BluetoothScoController(
         webView.context.applicationContext,

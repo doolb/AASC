@@ -37,6 +37,8 @@
         }
         if (refs.toggle) {
             refs.toggle.setAttribute('aria-pressed', String(snapshot.continuous === true));
+            refs.toggle.textContent = snapshot.continuous === true ? '实时监听' : '单次监听';
+            refs.toggle.setAttribute('aria-label', snapshot.continuous === true ? '当前实时监听，点击切换为单次监听' : '当前单次监听，点击切换为实时监听');
             refs.toggle.disabled = Boolean(pendingId) || !snapshot.connected || !snapshot.configReady;
         }
     }
@@ -134,7 +136,7 @@
         const displayId = getStageState().displayId;
         if (message.displayId && displayId && message.displayId !== displayId) return false;
         if (!message.requestId || message.requestId === pendingId) clearPending();
-        runtime.configure(message.enabled !== false);
+        if (typeof message.enabled === 'boolean') runtime.configure(message.enabled);
         if (message.success === false) showError(new Error(message.message || '监听模式保存失败'));
         render();
         return true;

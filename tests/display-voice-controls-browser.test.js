@@ -121,6 +121,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 空闲');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.tagName), 'BUTTON');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.getAttribute('aria-pressed')), 'true', '默认实时监听开启');
+        assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.textContent), '实时监听');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.disabled), false);
         for (const theme of ['dark', 'light']) {
             await page.evaluate((name) => {
@@ -130,6 +131,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
             assert.match(await page.$eval('#displayVoiceContinuous', (element) => getComputedStyle(element).backgroundImage), /linear-gradient/u);
             await page.click('#displayVoiceContinuous');
             await page.waitForFunction(() => document.getElementById('displayVoiceContinuous').getAttribute('aria-pressed') === 'false');
+            assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.textContent), '单次监听');
             assert.equal(await page.$eval('#displayVoiceContinuous', (element) => getComputedStyle(element).backgroundImage), 'none');
             await page.click('#displayVoiceContinuous');
             await page.waitForFunction(() => document.getElementById('displayVoiceContinuous').getAttribute('aria-pressed') === 'true');

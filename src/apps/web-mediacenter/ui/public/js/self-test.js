@@ -571,6 +571,26 @@ const SelfTest = {
             }
         },
         {
+            id: 'wallpaper_controls_structure',
+            name: '壁纸浮动控件结构',
+            description: '只读检查壁纸面板及前台控件隔离',
+            category: '界面布局',
+            run: async () => {
+                try {
+                    const [page, style] = await Promise.all([
+                        fetch('/display.html', { cache: 'no-store' }),
+                        fetch('/css/display-wallpaper-controls.css', { cache: 'no-store' })
+                    ]);
+                    if (!page.ok || !style.ok) return { success: false, message: '壁纸控件资源不可读取' };
+                    const [html, css] = await Promise.all([page.text(), style.text()]);
+                    const valid = ['wallpaperControls', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime']
+                        .every(id => html.includes(`id="${id}"`)) && css.includes('body.is-wallpaper #displayInteractionLayer');
+                    return { success: valid, message: valid ? '壁纸控件结构正常' : '壁纸控件结构缺失',
+                        details: '仅检查资源结构；桌面触摸和任务关闭需真机验收' };
+                } catch (error) { return { success: false, message: `壁纸控件检查失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'display_status_bar_vad_location',
             name: '显示状态栏开关位置',
             description: '确认当前显示端的独立开关位于 VAD 卡片',

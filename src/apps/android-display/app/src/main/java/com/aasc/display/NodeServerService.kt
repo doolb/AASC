@@ -382,6 +382,12 @@ class NodeServerService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Offline 前台服务通常会收到最近任务移除；只暂停壁纸，不改变 Node 服务策略。
+        WallpaperDisplayCoordinator.suspendWallpaper()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         jsLauncherSession?.let { session -> Thread({ session.close() }, "aasc-js-stop").start() }
         unregisterReceiver(statusRequestReceiver)

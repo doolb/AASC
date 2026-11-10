@@ -16,6 +16,24 @@ object WallpaperDisplayCoordinator {
     @Volatile
     var wallpaperTopInset = 0.0
         private set
+    @Volatile
+    var wallpaperActive = false
+        private set
+    var wallpaperSuspended = false
+        private set
+
+    /** 桌面与前台共享页面，通过桥接状态通知页面切换专用布局。 */
+    fun setWallpaperActive(value: Boolean) {
+        if (wallpaperActive == value) return
+        wallpaperActive = value
+        view?.evaluateJavascript("window.dispatchEvent(new Event('aasc-wallpaper-mode'));", null)
+    }
+
+    fun suspendWallpaper() {
+        wallpaperSuspended = true
+        listeners.toList().forEach { it(true) }
+        releaseIfUnused()
+    }
 
     // 状态属于共享页面，不依赖页面是否已经加载完成。
     fun setWallpaperTopInset(value: Double) {
@@ -32,6 +50,7 @@ object WallpaperDisplayCoordinator {
     private var engines = 0
 
     fun setForeground(value: Boolean) {
+        if (value) wallpaperSuspended = false
         if (foreground == value) return
         foreground = value
         listeners.toList().forEach { it(value) }
@@ -92,7 +111,7 @@ object WallpaperDisplayCoordinator {
     }
 
     private fun releaseIfUnused() {
-        if (engines > 0 || activity.get() != null) return
+        if ((engines > 0 && !wallpaperSuspended) || activity.get() != null) return
         val old = view
         (old?.parent as? ViewGroup)?.removeView(old)
         bridge?.release()

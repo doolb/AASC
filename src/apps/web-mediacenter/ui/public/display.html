@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="css/chat-model-tier-picker.css">
     <link rel="stylesheet" href="css/android-color-picker.css">
     <link rel="stylesheet" href="css/display-voice-controls.css">
+    <link rel="stylesheet" href="css/display-wallpaper-controls.css">
     <script type="importmap">
         {
             "imports": {
@@ -27,6 +28,16 @@
 <body>
     <div id="connectionStatus" class="connecting">连接中...</div>
     <div id="timeDisplay"></div>
+    <aside id="wallpaperControls" class="wallpaper-controls" aria-label="壁纸控制" hidden>
+        <button id="wallpaperControlsHandle" type="button" aria-label="展开壁纸控制" aria-expanded="false">控</button>
+        <div id="wallpaperControlsPanel" class="wallpaper-controls-panel" hidden>
+            <div id="wallpaperControlsDrag" class="wallpaper-controls-drag">壁纸控制 <button id="wallpaperControlsCollapse" type="button" aria-label="收起壁纸控制">收起</button></div>
+            <label>音量 <output id="wallpaperVolumeValue">--</output><input id="wallpaperVolume" type="range" min="0" max="100" step="1" aria-label="系统媒体音量"></label>
+            <div id="wallpaperStatus" class="wallpaper-controls-status" aria-live="polite"></div>
+            <label><input id="wallpaperShowFps" type="checkbox" checked> 显示 FPS</label>
+            <label><input id="wallpaperShowTime" type="checkbox" checked> 显示时间</label>
+        </div>
+    </aside>
     <div id="fileNameDisplay"></div>
     <div class="voice-status-row" id="voiceStatusRow">
         <div class="voice-status-main-row" id="voiceStatusMainRow">
@@ -755,6 +766,7 @@
     <script src="js/chat-model-tier-picker.js" defer></script>
     <script src="js/display-chat-model-tier.js" defer></script>
     <script src="js/display-voice-controls.js" defer></script>
+    <script src="js/display-wallpaper-controls.js" defer></script>
     <script src="js/display-mmd-settings.js" defer></script>
     <script src="js/display-mmd-human-bridge.js" defer></script>
     <script src="js/display-mmd.js" defer></script>

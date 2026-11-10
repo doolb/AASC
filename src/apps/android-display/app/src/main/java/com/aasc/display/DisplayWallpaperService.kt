@@ -2,12 +2,14 @@ package com.aasc.display
 
 import android.app.Presentation
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.SurfaceHolder
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -17,6 +19,11 @@ import android.widget.FrameLayout
 /** 壁纸和前台共用显示页；系统短暂隐藏壁纸时保留页面状态。 */
 class DisplayWallpaperService : WallpaperService() {
     override fun onCreateEngine(): Engine = DisplayEngine()
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        WallpaperDisplayCoordinator.suspendWallpaper()
+        super.onTaskRemoved(rootIntent)
+    }
 
     private inner class DisplayEngine : Engine() {
         private var display: VirtualDisplay? = null
@@ -32,7 +39,16 @@ class DisplayWallpaperService : WallpaperService() {
 
         override fun onCreate(holder: SurfaceHolder) {
             super.onCreate(holder)
+            setTouchEventsEnabled(true)
             WallpaperDisplayCoordinator.addListener(foregroundListener)
+        }
+
+        override fun onTouchEvent(event: MotionEvent) {
+            super.onTouchEvent(event)
+            if (webView?.parent !== container) return
+            // 桌面允许转发触摸时交给同一 WebView；不拦截系统桌面的手势策略。
+            val copy = MotionEvent.obtain(event)
+            try { webView?.dispatchTouchEvent(copy) } finally { copy.recycle() }
         }
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -69,7 +85,7 @@ class DisplayWallpaperService : WallpaperService() {
         }
 
         private fun ensureRenderer(holder: SurfaceHolder) {
-            if (WallpaperDisplayCoordinator.foreground || surfaceWidth <= 0 || surfaceHeight <= 0 || !holder.surface.isValid) return
+            if (WallpaperDisplayCoordinator.foreground || WallpaperDisplayCoordinator.wallpaperSuspended || surfaceWidth <= 0 || surfaceHeight <= 0 || !holder.surface.isValid) return
             val prefs = getSharedPreferences("aasc_display", Context.MODE_PRIVATE)
             val offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
             val address = ServerConfig.chooseUrl(null, prefs.getString("server_url", ""), offlineMode)
@@ -106,6 +122,7 @@ class DisplayWallpaperService : WallpaperService() {
                     shared.setBackgroundColor(Color.BLACK)
                     shared.webViewClient = WebViewClient()
                     root.addView(shared, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    WallpaperDisplayCoordinator.setWallpaperActive(true)
                     if (created || shared.url.isNullOrBlank() || shared.url == "about:blank") {
                         shared.loadUrl(ServerConfig.pageUrl(address, if (offlineMode) ServerConfig.OFFLINE_DISPLAY_ID else null))
                     }
@@ -127,7 +144,9 @@ class DisplayWallpaperService : WallpaperService() {
 
         private fun releaseRenderer() {
             if (container != null && webView?.parent === container) {
+                WallpaperDisplayCoordinator.setWallpaperActive(false)
                 WallpaperDisplayCoordinator.setWallpaperTopInset(0.0)
+                webView?.onPause()
                 container?.removeView(webView)
             }
             webView = null
