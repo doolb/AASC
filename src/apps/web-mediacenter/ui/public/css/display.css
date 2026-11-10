@@ -982,11 +982,18 @@ body.display-chat-open .display-chat-suppressible {
 /* B站弹幕层位于媒体容器内、睡眠遮罩（z-index: 10）之下；只有临时开关可接收触控。 */
 #bilibiliDanmakuLayerHost {
     position: absolute;
-    inset: 0;
+    top: 50%; left: 50%;
+    width: 100vw; height: 100vh;
+    transform: translate(-50%, -50%) rotate(0deg);
     z-index: 5;
     overflow: hidden;
     pointer-events: none;
 }
+#bilibiliDanmakuLayerHost[data-rotation="90"],
+#bilibiliDanmakuLayerHost[data-rotation="270"] { width: 100vh; height: 100vw; }
+#bilibiliDanmakuLayerHost[data-rotation="90"] { transform: translate(-50%, -50%) rotate(90deg); }
+#bilibiliDanmakuLayerHost[data-rotation="180"] { transform: translate(-50%, -50%) rotate(180deg); }
+#bilibiliDanmakuLayerHost[data-rotation="270"] { transform: translate(-50%, -50%) rotate(270deg); }
 
 .bilibili-danmaku-layer {
     position: absolute;
@@ -1008,7 +1015,7 @@ body.display-chat-open .display-chat-suppressible {
 .bilibili-danmaku.bottom { bottom: 8%; left: 50%; transform: translateX(-50%); }
 /* 视频暂停时冻结滚动动画，继续播放后从原位置恢复。 */
 .bilibili-danmaku-layer.paused .bilibili-danmaku { animation-play-state: paused; }
-@keyframes danmaku-scroll { from { transform: translateX(0); } to { transform: translateX(-120vw); } }
+@keyframes danmaku-scroll { from { transform: translateX(0); } to { transform: translateX(calc(0px - var(--danmaku-width, 100vw) - 100%)); } }
 
 #danmakuToggle {
     position: absolute;

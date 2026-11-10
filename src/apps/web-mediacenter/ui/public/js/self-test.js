@@ -571,6 +571,23 @@ const SelfTest = {
             }
         },
         {
+            id: 'bilibili_rotation_related_structure',
+            name: 'B站弹幕和相关推荐结构',
+            description: '只读检查弹幕旋转宿主与当前播放首项',
+            category: '界面布局',
+            run: async () => {
+                try {
+                    const responses = await Promise.all(['/display.html', '/css/display.css', '/js/media-library.js'].map(url => fetch(url, { cache: 'no-store' })));
+                    if (responses.some(response => !response.ok)) return { success: false, message: 'B站显示资源不可读取' };
+                    const [html, css, library] = await Promise.all(responses.map(response => response.text()));
+                    const valid = html.includes('danmakuHost.dataset.rotation') && css.includes('--danmaku-width')
+                        && library.includes('bilibili-current-video') && library.includes('bilibiliRelatedSequence');
+                    return { success: valid, message: valid ? 'B站弹幕和相关推荐结构正常' : 'B站弹幕或推荐结构缺失',
+                        details: '仅检查资源结构；旋转和实际播放仍需设备验收' };
+                } catch (error) { return { success: false, message: `B站资源检查失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'wallpaper_controls_structure',
             name: '壁纸浮动控件结构',
             description: '只读检查壁纸面板及前台控件隔离',

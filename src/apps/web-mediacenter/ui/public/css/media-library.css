@@ -525,6 +525,8 @@
 .bilibili-video-cover { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: rgba(128,128,128,.3); }
 .bilibili-video-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 6px 0; }
 .bilibili-video-actions { display: flex; gap: 6px; }
+.bilibili-current-video { outline: 2px solid var(--accent-color, #4c9aff); }
+.bilibili-current-badge { display: inline-block; margin-bottom: 5px; color: var(--accent-color, #4c9aff); font-weight: 600; }
 
 .share-folder-navigation { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .share-folder-navigation button, .share-link-actions button { border: 0; border-radius: 7px; padding: 7px 10px; cursor: pointer; }

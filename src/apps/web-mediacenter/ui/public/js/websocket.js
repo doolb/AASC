@@ -293,6 +293,8 @@ const WebSocketManager = {
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
             if (window.MediaLibrary) {
                 window.MediaLibrary.renderPlaylistPanel(data);
+                if (data.state === 'stopped' || data.state === 'finished') window.MediaLibrary.setCurrentMedia?.(null);
+                else if (data.url) window.MediaLibrary.setCurrentMedia?.(data.url, data.fileName || '');
             }
             // 批量播放中的文本项也要同步文本分页按钮，但不改变列表级别的控制按钮。
             if (data.mediaType === 'text' || data.pageTotal !== undefined) {
@@ -444,8 +446,10 @@ const WebSocketManager = {
                     }
                 }
 
-                if (data.state.currentMediaUrl && window.MediaLibrary) {
-                    window.MediaLibrary.setCurrentMedia(data.state.currentMediaUrl);
+                if (window.MediaLibrary) {
+                    const playlist = data.state.currentPlaylist;
+                    const item = playlist?.startData?.playlist?.[playlist.index || 0];
+                    window.MediaLibrary.setCurrentMedia(playlist ? item?.url || null : data.state.currentMediaUrl || null, item?.fileName || data.state.currentMedia?.fileName || '');
                 }
 
                 // 控制端刷新后，服务端通过 displayState 返回当前播放列表及索引；

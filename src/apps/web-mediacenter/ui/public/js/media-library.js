@@ -24,6 +24,8 @@ const MediaLibrary = {
     // 首页是否已自动加载；弹幕开关状态由 localStorage 恢复。
     bilibiliHomeLoaded: false,
     bilibiliDanmakuEnabled: false,
+    bilibiliRelatedSequence: 0,
+    bilibiliCurrentKey: '',
     shareFolders: { quark: { folders: [], entries: {} }, bilibili: { folders: [], entries: {} } },
     selectedShareFolder: { quark: '', bilibili: '' },
     currentMediaUrl: null,
@@ -305,8 +307,12 @@ const MediaLibrary = {
         if (this.bilibiliDanmakuEnabled && bvid) {
             media = { ...media, bilibiliDanmaku: true, bilibiliDanmakuUrl: `/api/bilibili/danmaku/${bvid}/${page}` };
         }
-        if (bvid) void this.loadBilibiliRelated(bvid);
-        if (sequence === this.mediaPlaySequence) window.WebSocketManager?.sendMedia(media);
+        if (sequence !== this.mediaPlaySequence) return;
+        await window.WebSocketManager?.sendMedia(media);
+        // 请求显示端权威状态，避免未选设备或发送失败时将请求中的视频误标为正在播放。
+        if (sequence === this.mediaPlaySequence && window.currentDisplayId) {
+            window.WebSocketManager?.send?.({ type: 'getState', displayId: window.currentDisplayId });
+        }
     },
 
     playBilibiliInput() {
@@ -577,18 +583,56 @@ const MediaLibrary = {
         } catch (error) { showToast(`B站首页加载失败：${error.message}`, 'error'); }
     },
 
-    // 加载指定 BV 的相关推荐；非 B 站页签或没有结果时保持面板隐藏。
-    async loadBilibiliRelated(bvid) {
+    // 从实际播放地址提取 BV/分 P，不把其他网站的查询参数误认作 B 站视频。
+    parseBilibiliCurrent(url) {
+        if (!url || typeof url !== 'string') return null;
+        try {
+            const parsed = new URL(url, window.location.href);
+            // 批量播放可能返回同一服务的 LAN 地址，与控制页访问域名不同。
+            const local = /^https?:$/.test(parsed.protocol) && /^\/api\/bilibili\/(?:video|dash|local)\//.test(parsed.pathname);
+            const bilibili = /(^|\.)bilibili\.com$/i.test(parsed.hostname);
+            if (!local && !bilibili) return null;
+            const bvid = (local ? parsed.pathname.match(/\/(BV[0-9A-Za-z]{10})$/)?.[1]
+                : parsed.searchParams.get('bvid') || parsed.pathname.match(/\/video\/(BV[0-9A-Za-z]{10})/)?.[1]) || '';
+            if (!/^BV[0-9A-Za-z]{10}$/.test(bvid)) return null;
+            const rawPage = Number(parsed.searchParams.get('p') || 1);
+            const page = Number.isSafeInteger(rawPage) && rawPage > 0 && rawPage <= 10000 ? rawPage : 1;
+            return { bvid, page, url: `https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}` };
+        } catch { return null; }
+    },
+
+    // 优先复用已有卡片元数据；直接输入或刷新没有元数据时安全回退到 BV 编号。
+    currentBilibiliMetadata(item, title) {
+        const cards = document.querySelectorAll('[data-bilibili-video]');
+        const card = [...cards].find(entry => entry.dataset.bvid === item.bvid && Number(entry.dataset.page || 1) === item.page);
+        const saved = this.bilibiliVideos.find(video => video.bvid === item.bvid && Number(video.page || 1) === item.page);
+        return { ...item, title: title || card?.querySelector('.bilibili-video-title')?.textContent || saved?.title || item.bvid,
+            cover: card?.querySelector('img')?.getAttribute('src') || saved?.cover || '' };
+    },
+
+    async loadBilibiliRelated(item, title) {
         const root = document.getElementById('bilibiliRelated');
         const list = document.getElementById('bilibiliRelatedList');
-        if (!root || !list || !/^BV[0-9A-Za-z]{10}$/.test(bvid || '')) return;
-        try {
-            const response = await fetch(`/api/bilibili/related?bvid=${encodeURIComponent(bvid)}`);
-            const result = await this.parseResponse(response);
-            list.replaceChildren(...this.buildBilibiliCards(result.videos));
+        if (!root || !list) return;
+        const sequence = ++this.bilibiliRelatedSequence;
+        const current = this.currentBilibiliMetadata(item, title);
+        const render = videos => {
+            if (sequence !== this.bilibiliRelatedSequence) return;
+            const recommendations = (Array.isArray(videos) ? videos : []).filter(video => video.bvid !== item.bvid);
+            const cards = this.buildBilibiliCards([current, ...recommendations]);
+            cards[0].classList.add('bilibili-current-video');
+            const badge = document.createElement('span'); badge.className = 'bilibili-current-badge'; badge.textContent = '正在播放';
+            cards[0].prepend(badge);
+            list.replaceChildren(...cards);
+            root.hidden = this.activeTab !== 'bilibili';
             this.checkBilibiliDownloaded();
-            root.hidden = this.activeTab !== 'bilibili' || !result.videos.length;
-        } catch { root.hidden = true; }
+        };
+        render([]);
+        try {
+            const response = await fetch(`/api/bilibili/related?bvid=${encodeURIComponent(item.bvid)}`);
+            const result = await this.parseResponse(response);
+            render(result.videos);
+        } catch { /* 当前项保留，推荐失败不影响播放。 */ }
     },
 
     // 通用 B 站卡片渲染：封面加空值与加载失败守卫，带 bvid 的卡片标记已下载检查。
@@ -1806,8 +1850,22 @@ const MediaLibrary = {
         window.WebSocketManager.sendPlaylistControl(displayIds, action);
     },
 
-    setCurrentMedia(url) {
+    setCurrentMedia(url, title = '') {
         this.currentMediaUrl = url;
+        const current = this.parseBilibiliCurrent(url);
+        const key = current ? `${current.bvid}:${current.page}` : '';
+        if (key !== this.bilibiliCurrentKey) {
+            this.bilibiliCurrentKey = key;
+            if (current) void this.loadBilibiliRelated(current, title);
+            else {
+                this.bilibiliRelatedSequence++;
+                const related = document.getElementById('bilibiliRelated');
+                const list = document.getElementById('bilibiliRelatedList');
+                if (related) related.hidden = true;
+                if (list) list.replaceChildren();
+            }
+        }
+
         
         document.querySelectorAll('.media-library-item').forEach(el => {
             const itemUrl = el.dataset.url;

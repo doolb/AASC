@@ -72,8 +72,7 @@
             <div id="mediaTextStatus"></div>
         </section>
         <!-- 弹幕宿主与临时开关位于媒体容器内、睡眠遮罩之下，睡眠/唤醒只遮盖不销毁弹幕。 -->
-        <div id="bilibiliDanmakuLayerHost"></div>
-        <button id="danmakuToggle" type="button" hidden>弹幕</button>
+        <div id="bilibiliDanmakuLayerHost"><button id="danmakuToggle" type="button" hidden>弹幕</button></div>
         <div id="mediaSleepOverlay" class="sleep-overlay sleep-overlay-media"></div>
     </div>
 
@@ -2368,6 +2367,11 @@
             const voiceStatusOffset = `${rotationLayout.margin * 4}px`;
             const voiceTextOffset = `${rotationLayout.margin * 7}px`;
             window.currentRotation = currentRotation;
+            const danmakuHost = document.getElementById('bilibiliDanmakuLayerHost');
+            if (danmakuHost) {
+                danmakuHost.dataset.rotation = String(currentRotation);
+                danmakuHost.style.setProperty('--danmaku-width', `${rotationLayout.layoutWidth}px`);
+            }
             // MMD、聊天和交互按钮使用同一显示端旋转角；播报文字仍由下方既有逻辑独立排版。
             window.DisplayStage?.setRotation?.(currentRotation);
             const rotTransform = 'rotate(' + currentRotation + 'deg)';
