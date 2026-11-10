@@ -31,6 +31,9 @@ class NativeBridge(
     private val onControlPageAccessChanged: ((Boolean) -> Unit)? = null
 ) {
 
+    @JavascriptInterface
+    fun getWallpaperTopInset(): Double = WallpaperDisplayCoordinator.wallpaperTopInset
+
     private val audioManager = webView.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val bluetoothScoController = BluetoothScoController(
         webView.context.applicationContext,
@@ -703,7 +706,13 @@ class NativeBridge(
     @JavascriptInterface
     fun offlineShowModels(): Boolean {
         val store = offlineModelStore ?: return false
-        val activity = webView.context as? android.app.Activity ?: return false
+        var currentContext = webView.context
+        while (currentContext is android.content.ContextWrapper && currentContext !is android.app.Activity) {
+            val base = currentContext.baseContext
+            if (base === currentContext) break
+            currentContext = base
+        }
+        val activity = currentContext as? android.app.Activity ?: return false
         webView.post {
             if (OfflineLauncherSession.enabled(activity)) {
                 activity.startActivity(android.content.Intent(activity, OfflineLauncherActivity::class.java))

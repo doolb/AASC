@@ -6085,8 +6085,10 @@
         function getPersistentDisplayId() {
             const configuredDisplayId = getConfiguredDisplayId();
             if (configuredDisplayId) {
-                // Offline APK 通过 URL 注入固定 ID；覆盖旧版本曾保存的随机 ID，确保任务能恢复。
-                localStorage.setItem('displayId', configuredDisplayId);
+                // 壁纸与普通窗口共享 WebView 存储，但使用独立身份；不得覆盖普通显示端 ID。
+                if (new URL(window.location.href).searchParams.get('displayContext') !== 'wallpaper') {
+                    localStorage.setItem('displayId', configuredDisplayId);
+                }
                 return configuredDisplayId;
             }
             let id = localStorage.getItem('displayId');

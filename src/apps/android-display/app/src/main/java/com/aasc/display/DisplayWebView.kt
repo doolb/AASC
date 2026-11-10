@@ -15,6 +15,7 @@ class DisplayWebView(
     context: Context,
     offlineMode: Boolean,
     private val disableInputAutoZoom: Boolean = false,
+    private val isMediaCaptureAllowed: () -> Boolean = { true },
     private val onFileChooserRequested: (
         ValueCallback<Array<Uri>>,
         WebChromeClient.FileChooserParams
@@ -69,6 +70,10 @@ class DisplayWebView(
             }
 
             override fun onPermissionRequest(request: PermissionRequest) {
+                if (!isMediaCaptureAllowed()) {
+                    request.deny()
+                    return
+                }
                 val granted = request.resources.filter {
                     it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
                         || it == PermissionRequest.RESOURCE_VIDEO_CAPTURE

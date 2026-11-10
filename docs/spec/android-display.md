@@ -796,3 +796,32 @@ prewarmDisplaySpeechModels():
 
 - 收起态负边距只影响原生按钮位置；点击仍进入既有 `EXPAND`/`TOGGLE_PAGE` 状态转换。
 - 不改变 `controlPageAllowed`、WebView 可见性或页面 URL。
+
+## Android 显示端动态壁纸
+
+```text
+APK 提供设置壁纸入口 → 打开系统动态壁纸预览，由用户确认启用
+同一进程维护一个显示 WebView 和原生桥；普通页面与壁纸在主线程交接同一实例
+壁纸可见且 surface 有效时 → 把共享 WebView 移入连接 wallpaper surface 的私有 VirtualDisplay/Presentation
+壁纸临时不可见 → 暂停壁纸 WebView，不销毁页面或断开原有连接；再次可见 → 恢复原实例
+壁纸 surface 销毁 → 从虚拟显示解绑 surface，保留实例；新 surface 到来时重新绑定并调整尺寸
+Activity 恢复 → 释放壁纸输出容器，把同一 WebView 移回前台；不加载 about:blank 或重载显示页
+Activity 和全部壁纸 Engine 均销毁 → 释放 WebView、原生桥和音频焦点；进程被系统回收时按原有状态恢复
+```
+
+## 壁纸入口收起（2026-11-09）
+
+```text
+显示端启动 → 壁纸入口默认收起到右侧中部边缘，只露出窄把手，避开顶部时钟
+点击把手 → 展开“壁纸”按钮；点击按钮 → 保存现有地址并进入系统壁纸预览
+展开后无操作 5 秒、长按入口或返回显示页 → 收起到边缘
+Activity 销毁 → 移除自动收起回调；系统预览及现有地址复用保持不变
+```
+
+## 壁纸 FPS 顶部避让（2026-11-10）
+
+```text
+壁纸接管共享 WebView → 读取系统状态栏高度并换算为 CSS 像素 → 通知显示页
+FPS 可见、旋转或尺寸变化 → 测量物理屏幕位置，仅将重叠部分向下避让
+切回前台 → 清除避让；其他元素保持原状
+```

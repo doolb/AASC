@@ -1,6 +1,8 @@
 package com.aasc.display
 
 import android.Manifest
+import android.app.WallpaperManager
+import android.content.ComponentName
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -52,6 +54,7 @@ class MainActivity : AppCompatActivity() {
         private const val OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS = 10_000L
         private const val OFFLINE_UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1_000L
         private const val OFFLINE_UPDATE_PANEL_COLLAPSE_DELAY_MS = 10_000L
+        private const val WALLPAPER_BUTTON_COLLAPSE_DELAY_MS = 5_000L
         private const val OFFLINE_VOICE_PROMPT_KEY = "offline_voice_first_run_v1"
     }
 
@@ -59,6 +62,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverInput: EditText
     private lateinit var webContainer: FrameLayout
     private lateinit var controlToggleButton: Button
+    private lateinit var wallpaperButton: Button
+    private var wallpaperButtonExpanded = false
+    private val collapseWallpaperButtonRunnable = Runnable { setWallpaperButtonExpanded(false) }
     private lateinit var offlineStartupPanel: View
     private lateinit var offlineStartupProgress: ProgressBar
     private lateinit var offlineStartupMessage: TextView
@@ -142,16 +148,7 @@ class MainActivity : AppCompatActivity() {
     private var offlineDisplayLoadFailed = false
     private val offlineFailures = OfflineFailureState()
     // 整个 APK 只维护一个原生音频焦点；网页媒体不按 TTS/视频拆分申请焦点。
-    private val audioFocusController by lazy {
-        AudioFocusController(this) { change ->
-            runOnUiThread {
-                webView?.evaluateJavascript(
-                    "window.onNativeAudioFocusChanged && window.onNativeAudioFocusChanged($change);",
-                    null
-                )
-            }
-        }
-    }
+    private val audioFocusController get() = WallpaperDisplayCoordinator.audioFocus(applicationContext)
 
     private val REQ_AUDIO_PERMISSION = 1001
     private val REQ_NOTIFICATION_PERMISSION = 1002
@@ -377,6 +374,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WallpaperDisplayCoordinator.bindActivity(this)
         setContentView(R.layout.activity_main)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -390,6 +388,7 @@ class MainActivity : AppCompatActivity() {
         serverInput = findViewById(R.id.serverInput)
         webContainer = findViewById(R.id.webContainer)
         controlToggleButton = findViewById(R.id.controlToggleButton)
+        wallpaperButton = findViewById(R.id.wallpaperButton)
         offlineStartupPanel = findViewById(R.id.offlineStartupPanel)
         offlineStartupProgress = findViewById(R.id.offlineStartupProgress)
         offlineStartupMessage = findViewById(R.id.offlineStartupMessage)
@@ -405,6 +404,7 @@ class MainActivity : AppCompatActivity() {
         offlineUpdateCollapsedTab = findViewById(R.id.offlineUpdateCollapsedTab)
         offlineDisplayInfo = findViewById(R.id.offlineDisplayInfo)
         setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
+        setWallpaperButtonExpanded(false)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
         offlineFailures.restore(savedInstanceState?.getString("offlineStartupError"), savedInstanceState?.getString("offlineUpdateError"))
@@ -430,6 +430,30 @@ class MainActivity : AppCompatActivity() {
         connectBtn.setOnClickListener { connect(true) }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(true); true }
         controlToggleButton.setOnClickListener { handleControlButtonClick() }
+        wallpaperButton.setOnLongClickListener {
+            setWallpaperButtonExpanded(false)
+            true
+        }
+        wallpaperButton.setOnClickListener {
+            if (!wallpaperButtonExpanded) {
+                setWallpaperButtonExpanded(true)
+                return@setOnClickListener
+            }
+            setWallpaperButtonExpanded(false)
+            val address = ServerConfig.baseUrl(serverInput.text.toString())
+            if (address.isBlank()) {
+                Toast.makeText(this, "请先填写服务器地址", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", address).apply()
+            try {
+                val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+                    .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(this, DisplayWallpaperService::class.java))
+                startActivity(intent)
+            } catch (error: Exception) {
+                Toast.makeText(this, "无法打开系统壁纸预览", Toast.LENGTH_LONG).show()
+            }
+        }
         offlineStartupRetry.setOnClickListener {
             if (OfflineLauncherSession.enabled(this)) {
                 startActivity(Intent(this, OfflineLauncherActivity::class.java).putExtra(OfflineLauncherActivity.EXTRA_AUTOMATIC, true))
@@ -476,6 +500,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        WallpaperDisplayCoordinator.setForeground(true)
+        webView?.let { current ->
+            if (current.parent !== webContainer) {
+                val (shared, _) = WallpaperDisplayCoordinator.obtain(this, offlineMode)
+                webContainer.addView(shared, 0)
+                webView = shared
+            }
+            webView?.webViewClient = createWebViewClient(nativeDisplayBridge, ServerConfig.baseUrl(serverInput.text.toString()), true)
+        }
         SafDirectorySelection.setForegroundHost(this, true)
         activityResumed = true
         if (embeddedNode && offlineMode) {
@@ -493,6 +526,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        setWallpaperButtonExpanded(false)
+        WallpaperDisplayCoordinator.setForeground(false)
         SafDirectorySelection.setForegroundHost(this, false)
         activityResumed = false
         // 后台期间服务可能失败或重启，恢复前台后必须等待新的健康快照。
@@ -516,14 +551,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         bootstrapExecutor.shutdownNow()
+        mainHandler.removeCallbacks(collapseWallpaperButtonRunnable)
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         cancelOfflineUpdatePanelCollapse()
         completePendingWebFileChooser(null)
         backupExportConnection?.disconnect()
         backupExportExecutor.shutdownNow()
-        nativeDisplayBridge?.release()
-        audioFocusController.abandon()
+        WallpaperDisplayCoordinator.unbindActivity(this)
         super.onDestroy()
     }
 
@@ -1505,25 +1540,14 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String, baseUrl: String) {
-        val wv = DisplayWebView(
-            this,
-            offlineMode,
-            onFileChooserRequested = ::requestWebViewFileChooser
-        )
-        val bridge = NativeBridge(
-            wv,
-            audioFocusController,
-            offlineMode,
-            displayWebViewInitialScalePercent = wv.initialScalePercent
-        ) { allowed -> setControlPageAccess(allowed) }
+        val (wv, created) = WallpaperDisplayCoordinator.obtain(this, offlineMode)
+        val bridge = checkNotNull(WallpaperDisplayCoordinator.nativeBridge())
         nativeDisplayBridge = bridge
         bridge.updateServerOrigin(url)
-        wv.addJavascriptInterface(bridge, "NativeDisplay")
         wv.webViewClient = createWebViewClient(bridge, baseUrl, true)
-        // display WebView 先放到底层；XML 中的控制按钮和启动遮罩继续保持在它上方。
         webContainer.addView(wv, 0)
         webView = wv
-        wv.loadUrl(url)
+        if (created || !isDisplayPageUrl(wv.url.orEmpty(), baseUrl)) wv.loadUrl(url)
 
         val control = DisplayWebView(
             this,
@@ -1540,6 +1564,11 @@ class MainActivity : AppCompatActivity() {
         webContainer.addView(control, 1)
         controlWebView = control
     }
+
+    internal fun updateSharedControlAccess(allowed: Boolean) = setControlPageAccess(allowed)
+
+    internal fun requestSharedFileChooser(callback: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean =
+        requestWebViewFileChooser(callback, params)
 
     /** 将网页文件输入请求交给系统选择器，并把 URI 结果返回给发起请求的 WebView。 */
     private fun requestWebViewFileChooser(
@@ -1722,6 +1751,26 @@ class MainActivity : AppCompatActivity() {
         controlToggleButton.layoutParams = layoutParams
     }
 
+    /** 壁纸入口收起到右侧中部，避免遮挡顶部时钟；展开后短时自动收起。 */
+    private fun setWallpaperButtonExpanded(expanded: Boolean) {
+        wallpaperButtonExpanded = expanded
+        mainHandler.removeCallbacks(collapseWallpaperButtonRunnable)
+        if (!::wallpaperButton.isInitialized) return
+        val params = wallpaperButton.layoutParams as FrameLayout.LayoutParams
+        params.gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+        params.leftMargin = 0
+        params.rightMargin = if (expanded) dp(12) else -dp(21)
+        params.topMargin = 0
+        params.bottomMargin = 0
+        params.width = if (expanded) FrameLayout.LayoutParams.WRAP_CONTENT else dp(42)
+        params.height = if (expanded) FrameLayout.LayoutParams.WRAP_CONTENT else dp(72)
+        wallpaperButton.text = getString(if (expanded) R.string.wallpaper_button else R.string.wallpaper_handle)
+        wallpaperButton.contentDescription = getString(if (expanded) R.string.wallpaper_button else R.string.wallpaper_expand)
+        wallpaperButton.setPadding(dp(if (expanded) 8 else 2), dp(4), dp(if (expanded) 8 else 2), dp(4))
+        wallpaperButton.layoutParams = params
+        if (expanded) mainHandler.postDelayed(collapseWallpaperButtonRunnable, WALLPAPER_BUTTON_COLLAPSE_DELAY_MS)
+    }
+
     private fun dp(value: Int): Int {
         return (value * resources.displayMetrics.density).toInt()
     }
@@ -1863,6 +1912,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleBackNavigation() {
+        if (wallpaperButtonExpanded) {
+            setWallpaperButtonExpanded(false)
+            return
+        }
         if (controlWebView?.visibility == View.VISIBLE) {
             controlWebView?.visibility = View.GONE
             restoreControlPageButton()

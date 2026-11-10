@@ -8,6 +8,15 @@
 语法与 git diff --check → 通过；未重新发布
 ```
 
+## 壁纸 FPS 状态栏避让（2026-11-10）
+
+```text
+node --test tests/wallpaper-fps-inset.test.js tests/android-wallpaper-display.test.js → 3通过
+壁纸重叠 → 按物理方向仅补足重叠；未重叠 → 不移动
+旋转0/90/180/270 → 物理向下；返回前台 → 清除位移
+浏览器现有FPS显示测试通过；Android编译检查超时，真机验收待完成
+```
+
 ## estimatedTrail点时间与速度（2026-10-30，66/66）
 
 ```text

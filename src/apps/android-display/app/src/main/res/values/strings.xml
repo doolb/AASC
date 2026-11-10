@@ -3,6 +3,11 @@
     <string name="accessibility_desc">AASC 显示端跨域控制：将控制端的触摸/滚轮注入到网页内容</string>
     <string name="server_hint">服务器地址，如 192.168.1.39:8081</string>
     <string name="connect">连接</string>
+    <string name="wallpaper_title">AASC 显示端壁纸</string>
+    <string name="wallpaper_description">将 AASC 显示端显示在桌面背景</string>
+    <string name="wallpaper_button">壁纸</string>
+    <string name="wallpaper_handle">壁</string>
+    <string name="wallpaper_expand">展开壁纸入口</string>
     <string name="control_page">控制端</string>
     <string name="control_page_handle">控</string>
     <string name="control_page_expand">展开控制端入口</string>
