@@ -15,7 +15,9 @@ const { publishVoiceDisplayNodePackage } = require('./publish-voice-display-node
 const { readSignerSha256 } = require('./offline-min-apk-package');
 const { readGitSourceMetadata } = require('./git-source-metadata');
 const { collectFreshCleanup, cleanupFreshRelease, preparePendingRebuild } = require('./offline-release-cleanup');
+const { cleanupOutputArtifacts } = require('./offline-output-cleanup');
 const { printVerificationProgress } = require('./offline-publish-verification');
+const { taskRequirements, assertTaskDependencies } = require('./offline-task-preflight');
 const { publishOfflineUpdate, publishOfflineFullApk, assertRemoteTarget, buildRemoteShellArguments,
     DEFAULT_LOCAL_ROOT, DEFAULT_LOCAL_VERIFY_URL, DEFAULT_WAN_VERIFY_URL } = require('./publish-offline-update');
 
@@ -33,6 +35,7 @@ npm run release:offline -- [参数]
   --only=min,code,deps,task,node,full  手动指定种类，可单选或组合
   --only=all                     显式构建全部六种，包括完整 APK
   --publish                      出包后发布 LAN/WAN，校验并精确清理
+  --publish-only                 仅发布最新完整构建，不打包、不升版；可配合 --dry-run
   --dry-run                      仅输出计划，不升版、不写文件、不加载私钥
   --resume=报告路径               复用完成项，仅补建未完成项
   --resume                       自动识别最近可恢复报告，不需填写路径
@@ -50,13 +53,14 @@ npm run release:offline -- [参数]
   --help                         显示帮助
 
 deps 会联动 code；code 检测到锁文件变化也会联动 deps。
+依赖更新且旧任务包绑定精确依赖时会联动 task，并提前检查兼容声明。
 full 仅在 --only 显式指定时构建；不清除 min APK 待出包标记。
 服务发布后的 HTTP 校验仅回读本次发布包，逐秒显示 LAN/WAN 校验进度。
 退出码：0 成功/无需出包；1 失败（含发布或清理待重试）。报告位于输出目录 releases/。
 `;
 
 function parseArguments(argv) {
-    const flags = new Set(['publish', 'dry-run', 'help', 'fresh', 'new']);
+    const flags = new Set(['publish', 'publish-only', 'dry-run', 'help', 'fresh', 'new']);
     const values = new Set(['only', 'resume', 'manifest-file', 'output-dir', 'local-root', 'remote-dir',
         'local-verify-url', 'remote-verify-url', 'dependency-roots', 'node-abi']);
     const options = {};
@@ -92,6 +96,9 @@ function parseArguments(argv) {
         throw new Error('--resume 不能与 --only/--manifest-file/--fresh/--new 混用');
     }
     if (options.fresh && options.new) throw new Error('--fresh 原号重建与 --new 递增版本不能同时使用');
+    if (options.publishOnly && (options.publish || options.resume || options.only || options.manifestFile || options.fresh || options.new || options.dependencyRoots || options.nodeAbi)) {
+        throw new Error('--publish-only 只使用最新构建报告，不能混用构建、恢复或 --publish 参数');
+    }
     if (options.nodeAbi && !/^[1-9][0-9]{0,4}$/u.test(options.nodeAbi)) throw new Error('--node-abi 必须为有效的正整数 ABI');
     return options;
 }
@@ -231,6 +238,9 @@ async function createPlan(options = {}) {
         baseline.payload.components.dependencies.lockSha256 !== lockSha256)) {
         selected.add('deps'); reasons.push('依赖分组或 package-lock 指纹变化，code 联动 deps');
     }
+    if (selected.has('deps') && baselines.some(item => item.payload.components.taskCode?.requiredDependencyVersion !== undefined) && !selected.has('task')) {
+        selected.add('task'); reasons.push('现有任务包绑定精确依赖版本，deps 联动 task');
+    }
     const versions = { code: 0, deps: 0, task: 0, node: 0, apk: 0 };
     for (const item of baselines) {
         const components = item.payload.components;
@@ -289,6 +299,12 @@ async function createPlan(options = {}) {
         }
         if (selected.has('code') && selected.has('node') && next.code !== next.node) throw new Error('原任务code/node联合编号不一致，请使用 --new');
         reasons.push('fresh 原号重建：复用旧任务 versions，不递增；正式执行前还会核对两端实际文件');
+    }
+    if (selected.has('code') || selected.has('task')) {
+        const task = await taskRequirements(projectRoot, selected.has('task'), baseline.payload.components.taskCode);
+        const dependencyVersion = selected.has('deps') ? next.deps : baseline.payload.components.dependencies.version;
+        const targetLock = selected.has('deps') ? lockSha256 : baseline.payload.components.dependencies.lockSha256;
+        assertTaskDependencies(task, dependencyVersion, targetLock);
     }
     return { requested, selected: KINDS.filter(kind => selected.has(kind)), reasons, versions: next, baseline,
         artifactRoot, targets, projectRoot, statusPath, fullBaseline: full, lockSha256, baselinePath,
@@ -385,6 +401,7 @@ async function sourceFingerprint(projectRoot) {
     const result = await execFileAsync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
         { cwd: projectRoot, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
     const files = [...new Set(result.stdout.split('\0'))].filter(file => /^(src\/|scripts\/|release\/(config|userconfig|task)\/|res\/tasks\/|package(?:-lock)?\.json$)/u.test(file)
+        && !/^res\/tasks\/local-only\//u.test(file)
         && !/(^|\/)(results|node_modules|\.gradle|\.cxx|build)(\/|$)/u.test(file)).sort();
     const hash = crypto.createHash('sha256');
     for (const file of files) {
@@ -579,7 +596,7 @@ function shellQuote(value) { return `'${value.replace(/'/gu, `'"'"'`)}'`; }
 async function publishRelease(report, reportPath, keyPair, runtime = {}) {
     const plan = report.plan;
     runtime.signal?.throwIfAborted();
-    await verifyReportFiles(report, true);
+    await verifyReportFiles(report, !runtime.publishOnly, runtime.publishOnly);
     const manifest = validateBaseline(await readJson(report.manifestPath), keyPair.publicKeyPem);
     const names = Object.keys(manifest.payload.components).filter(name =>
         canonicalJson(manifest.payload.components[name]) !== canonicalJson(plan.baseline.payload.components[name] ?? null));
@@ -619,6 +636,14 @@ async function publishRelease(report, reportPath, keyPair, runtime = {}) {
         await saveReport(reportPath, report);
         if (result.errors.length) throw new Error(`Node 发布失败: ${JSON.stringify(result.errors)}`);
     }
+    if (!report.cleanupErrors.length) {
+        try {
+            report.outputCleanup = await cleanupOutputArtifacts(report, reportPath, manifest, keyPair.publicKeyPem, runtime);
+        } catch (error) {
+            runtime.signal?.throwIfAborted();
+            report.cleanupErrors.push({ target: 'output', relativePath: '.', message: error.message });
+        }
+    }
     runtime.signal?.throwIfAborted();
     report.phase = report.cleanupErrors.length ? 'cleanup-pending' : 'published';
     await saveReport(reportPath, report);
@@ -644,13 +669,13 @@ async function acquireLock(artifactRoot) {
     };
 }
 
-async function verifyReportFiles(report, markPending = false) {
+async function verifyReportFiles(report, markPending = false, skipSourceCheck = false) {
     try {
         for (const expected of report.files) {
             const actual = await describeFile(expected.path);
             if (actual.size !== expected.size || actual.sha256 !== expected.sha256) throw new Error(`报告产物已改变: ${expected.path}`);
         }
-        if (await sourceFingerprint(report.plan.projectRoot) !== report.sourceFingerprint) {
+        if (!skipSourceCheck && await sourceFingerprint(report.plan.projectRoot) !== report.sourceFingerprint) {
             throw new Error('当前源码已不同于报告快照；用 --fresh 原号重做未发布任务，或用 --new 创建递增版本');
         }
     } catch (error) {
@@ -682,7 +707,7 @@ async function latestMatchingTask(plan) {
 }
 
 /** 最近的新任务取代更早任务；不因旧报告仍未完成而在新任务结束后再次接管旧报告。 */
-async function findResumeReport(options) {
+async function findResumeReport(options, projectRoot = ROOT) {
     const artifactRoot = path.resolve(options.outputDir || path.join(ROOT, 'release/offline-update/output'));
     const directory = path.join(artifactRoot, 'releases');
     const stat = await fs.lstat(directory).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
@@ -694,12 +719,13 @@ async function findResumeReport(options) {
     for (const name of names) {
         const file = path.join(directory, name);
         const report = await readJson(file);
-        if (report.schemaVersion !== 1 || report.plan?.projectRoot !== ROOT || report.plan.artifactRoot !== artifactRoot ||
+        if (report.schemaVersion !== 1 || report.plan?.projectRoot !== projectRoot || report.plan.artifactRoot !== artifactRoot ||
             canonicalJson(report.plan.targets) !== canonicalJson(targets)) continue;
         if (options.only && canonicalJson([...options.only].sort()) !== canonicalJson([...report.plan.requested].sort())) continue;
         if (options.manifestFile && report.plan.baselinePath !== path.resolve(options.manifestFile)) continue;
         if (options.dependencyRoots && report.plan.dependencyRoots !== path.resolve(options.dependencyRoots)) continue;
         if (options.nodeAbi && report.plan.nodeAbi !== options.nodeAbi) continue;
+        if (options.publishOnly) return file;
         const recoverable = ['building', 'publishing', 'cleanup-pending'].includes(report.phase) ||
             (report.phase === 'built' && (options.publish || options.resume === 'auto'));
         return recoverable ? file : null;
@@ -707,10 +733,20 @@ async function findResumeReport(options) {
     return null;
 }
 
+function assertPublishOnlyReport(report) {
+    if (report.schemaVersion !== 1 || !report.plan || !Array.isArray(report.plan.selected) || !report.plan.selected.length ||
+        !report.plan.selected.every(kind => KINDS.includes(kind)) || !Array.isArray(report.completed) ||
+        report.plan.selected.some(kind => !report.completed.includes(kind)) || !Array.isArray(report.files) || !report.files.length ||
+        !['built', 'publishing', 'cleanup-pending', 'published'].includes(report.phase) || !report.manifestPath) {
+        throw new Error('最新构建报告不完整或尚未构建成功；仅发布不会重新打包或使用旧版本');
+    }
+}
+
 async function runCli(argv = process.argv.slice(2)) {
     let releaseLock;
     let report;
     let reportPath;
+    let saveErrors = true;
     const controller = new AbortController();
     const runtime = {
         signal: controller.signal,
@@ -732,6 +768,31 @@ async function runCli(argv = process.argv.slice(2)) {
     try {
         const options = parseArguments(argv);
         if (options.help) { console.log(HELP); return; }
+        if (options.publishOnly) {
+            saveErrors = false;
+            const latest = await findResumeReport(options);
+            if (!latest) throw new Error('没有匹配目标的构建报告，无法仅发布');
+            if (!options.dryRun) releaseLock = await acquireLock(path.resolve(options.outputDir || path.join(ROOT, 'release/offline-update/output')));
+            // 获取锁后重新选取报告，防止等待期间有新构建完成。
+            reportPath = options.dryRun ? latest : await findResumeReport(options);
+            if (!reportPath) throw new Error('没有匹配目标的构建报告，无法仅发布');
+            report = await readJson(reportPath);
+            assertPublishOnlyReport(report);
+            await verifyReportFiles(report, false, true);
+            const keyPair = await loadOfflineUpdatePublicKey();
+            validateBaseline(await readJson(report.manifestPath), keyPair.publicKeyPem);
+            const sourceChanged = await sourceFingerprint(report.plan.projectRoot) !== report.sourceFingerprint;
+            if (sourceChanged) console.warn('当前源码与构建快照不同；仅发布已有产物，待出包状态不变。');
+            console.log(JSON.stringify({ stage: 'publish-only', report: reportPath, phase: report.phase,
+                selected: report.plan.selected, versions: report.plan.versions, targets: report.plan.targets, sourceChanged, dryRun: !!options.dryRun }));
+            if (options.dryRun) return;
+            report.cleanupErrors = [];
+            delete report.error;
+            saveErrors = true;
+            await publishRelease(report, reportPath, keyPair, { ...runtime, publishOnly: true });
+            console.log(JSON.stringify({ phase: report.phase, report: reportPath }));
+            return;
+        }
         if (!options.fresh && !options.new && (!options.resume || options.resume === 'auto')) {
             const automatic = await findResumeReport(options);
             if (automatic) {
@@ -806,7 +867,7 @@ async function runCli(argv = process.argv.slice(2)) {
         console.log(JSON.stringify({ phase: report.phase, report: reportPath,
             resume: ['npm', 'run', 'release:offline', '--', `--resume=${reportPath}`, '--publish'] }));
     } catch (error) {
-        if (releaseLock && report && reportPath) {
+        if (saveErrors && releaseLock && report && reportPath) {
             report.error = error.message;
             await saveReport(reportPath, report).catch(saveError => console.error(`保存报告失败: ${saveError.message}`));
         }
@@ -822,4 +883,4 @@ async function runCli(argv = process.argv.slice(2)) {
 if (require.main === module) runCli().catch(error => { console.error(error.message); process.exitCode = 1; });
 
 module.exports = { KINDS, STATUS_FIELDS, parseArguments, createPlan, scanVersions, sourceFingerprint,
-    buildRelease, publishRelease, runCli };
+    buildRelease, publishRelease, runCli, findResumeReport, assertPublishOnlyReport, verifyReportFiles };

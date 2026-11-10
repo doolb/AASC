@@ -85,6 +85,10 @@
             
             <div class="section">
                 <h2>设备列表</h2>
+                <div id="quarkCacheStatus" class="quark-cache-status" role="status" aria-live="polite" style="display:none;">
+                    <span id="quarkCacheStatusText"></span>
+                    <progress id="quarkCacheProgress" max="100" value="0"></progress>
+                </div>
                 <div class="device-list" id="mediaDeviceList">
                     <div class="empty-list">暂无显示端连接</div>
                 </div>
@@ -122,7 +126,7 @@
             <div class="section">
                 <h2>URL上传</h2>
                 <div class="url-input-group">
-                    <input type="text" id="urlInput" placeholder="输入图片/视频/网页URL">
+                    <input type="text" id="urlInput" placeholder="输入图片/视频/网页 URL 或 B 站视频链接">
                     <button onclick="uploadByUrl()">发送</button>
                 </div>
             </div>
@@ -130,12 +134,49 @@
             <div class="section">
                 <h2>媒体库</h2>
                 <div class="media-library-container">
-                    <div class="media-library-header">
+                    <div class="media-library-tabs" role="tablist" aria-label="媒体库类型">
+                        <button class="media-library-tab active" type="button" data-tab="libraries" id="mediaTabLibraries" onclick="MediaLibrary.switchTab('libraries')">本地媒体</button>
+                        <button class="media-library-tab" type="button" data-tab="quark" id="mediaTabQuark" onclick="MediaLibrary.switchTab('quark')">夸克分享</button>
+                        <span class="media-region-label" data-region-label="domestic">国内媒体</span>
+                        <button class="media-library-tab" type="button" data-tab="bilibili" data-region="domestic" id="mediaTabBilibili" onclick="MediaLibrary.switchTab('bilibili')">B站视频</button>
+                        <span class="media-region-group" id="domesticMediaTabs"></span>
+                        <span class="media-region-label" data-region-label="overseas">国外媒体</span>
+                        <span class="media-region-group" id="overseasMediaTabs"></span>
+                    </div>
+                    <div id="quarkShareBar" class="quark-share-bar" style="display:none;">
+                        <input id="quarkShareInput" type="text" placeholder="粘贴夸克分享链接或分享文字" autocomplete="off">
+                        <input id="quarkSharePasscode" type="text" placeholder="提取码（可选）" autocomplete="off">
+                        <button type="button" onclick="MediaLibrary.addQuarkShare(false)">加入</button>
+                        <button type="button" onclick="MediaLibrary.addQuarkShare(true)">播放</button>
+                    </div>
+                    <div id="bilibiliVideoBar" class="quark-share-bar" style="display:none;">
+                        <input id="bilibiliVideoInput" type="text" placeholder="粘贴 B 站 BV 视频或收藏列表链接" autocomplete="off">
+                        <button type="button" onclick="MediaLibrary.addBilibiliVideo()">加入</button>
+                        <button type="button" onclick="MediaLibrary.playBilibiliInput()">播放</button>
+                        <button type="button" onclick="MediaLibrary.downloadBilibiliInput()">下载</button>
+                        <button type="button" onclick="MediaLibrary.showBilibiliBatchPlayDialog()">批量播放当前文件夹</button>
+                        <button class="control-btn" id="bilibiliHomeBtn" onclick="MediaLibrary.loadBilibiliHome()">首页</button>
+                        <label class="bilibili-danmaku-toggle"><input type="checkbox" id="bilibiliDanmakuToggle"> 弹幕</label>
+                        <label class="media-source-proxy"><input type="checkbox" id="bilibiliProxyToggle" onchange="MediaLibrary.toggleProviderProxy('bilibili', this.checked)"> 使用代理</label>
+                    </div>
+                    <div id="bilibiliSearchBar" class="quark-share-bar" style="display:none;">
+                        <input id="bilibiliSearchInput" type="search" placeholder="搜索 B 站视频" autocomplete="off" onkeydown="if(event.key === 'Enter') MediaLibrary.searchBilibili()">
+                        <button type="button" onclick="MediaLibrary.searchBilibili()">搜索</button>
+                    </div>
+                    <div id="bilibiliDownloadStatus" class="quark-directory-download-status" style="display:none" role="status"></div>
+                    <div id="shareFolderNavigation" class="share-folder-navigation" style="display:none;"></div>
+                    <div id="quarkShareList" class="media-library-content" style="display:none;"></div>
+                    <div id="bilibiliVideoList" class="bilibili-video-list" style="display:none;"></div>
+                    <div id="bilibiliRelated" class="bilibili-related" hidden>
+                        <div class="bilibili-related-title">相关推荐</div>
+                        <div id="bilibiliRelatedList" class="bilibili-video-list"></div>
+                    </div>
+                    <div class="media-library-header" id="mediaLibraryHeader">
                         <div class="library-selector" id="mediaLibraryList">
                             <div class="empty-list">暂无媒体库</div>
                         </div>
                     </div>
-                    <div class="media-library-toolbar">
+                    <div class="media-library-toolbar" id="mediaLibraryToolbar">
                         <div class="media-library-breadcrumb" id="mediaLibraryBreadcrumb">
                             <span class="breadcrumb-item">根目录</span>
                         </div>
@@ -150,10 +191,12 @@
                                 <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" onchange="MediaLibrary.uploadFolder(this.files)">
                             </label>
                             <button class="btn-batch" onclick="MediaLibrary.showBatchPlayDialog(MediaLibrary.currentPath)">批量播放当前文件夹</button>
+                            <button id="quarkDirectoryDownloadButton" type="button" style="display:none" onclick="MediaLibrary.showQuarkDirectoryDownloadDialog(MediaLibrary.currentPath)">下载当前文件夹到媒体库</button>
                             <button data-media-write-control onclick="MediaLibrary.showCreateFolderDialog()">新建文件夹</button>
                             <button onclick="MediaLibrary.loadContent(MediaLibrary.currentPath)">刷新</button>
                         </div>
                     </div>
+                    <div id="quarkDirectoryDownloadStatus" class="quark-directory-download-status" style="display:none" role="status"></div>
                     <div class="media-library-content" id="mediaLibraryContent">
                         <div class="empty-list">暂无文件</div>
                     </div>
@@ -436,7 +479,7 @@
                         <h2>当前服务器</h2>
                         <p class="server-list-status" id="serverListStatus">加载中...</p>
                     </div>
-                    <button class="control-btn" id="serverListRefreshBtn" type="button">刷新</button>
+                    <div><button class="control-btn" id="serverListRefreshBtn" type="button">刷新</button> <button class="control-btn" type="button" onclick="SelfTest.runAllTests()">🧪 自测</button></div>
                 </div>
                 <div class="server-switch-toolbar">
                     <input id="serverAddressInput" type="text" placeholder="输入服务器地址，例如 https://192.168.1.39:8081">
@@ -851,6 +894,17 @@
                     </div>
                 </div>
             </div>
+            <div class="section">
+                <h2>网络代理</h2>
+                <div class="control-item">
+                    <label for="globalWebProxyInput">全局网页代理</label>
+                    <input id="globalWebProxyInput" type="text" placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080">
+                    <div class="control-buttons">
+                        <button class="control-btn" id="globalWebProxySaveBtn">保存代理</button>
+                    </div>
+                    <div class="routing-hint">仅对开启“使用代理”的媒体源生效；留空表示不使用代理。</div>
+                </div>
+            </div>
         </section>
         <section class="panel" id="panel-task" style="display:none;">
         </section>
@@ -1252,6 +1306,7 @@
     <script src="js/toast.js"></script>
     <script src="js/temp-playlist-preview.js"></script>
     <script src="js/upload.js"></script>
+    <script src="js/quark-cache-progress.js"></script>
     <script src="js/media-library.js"></script>
     <script src="js/device-list.js"></script>
     <script src="js/server-list.js"></script>
@@ -1302,6 +1357,9 @@
         init() {
             this.updateUI();
             this.loadRouting();
+            document.getElementById('globalWebProxySaveBtn')?.addEventListener('click', () => this.saveGlobalWebProxy());
+            // 代理配置以服务端为权威；连接未打开时 send 会静默跳过，服务端建立连接后也会主动推送。
+            window.WebSocketManager?.send({ type: 'getWebProxyConfig' });
         },
 
         loadRouting() {
@@ -1424,6 +1482,21 @@
         handleServerPortConfigError(data) {
             this.handleServerPortConfig(data);
             showToast(data?.message || '服务器端口保存失败', 'error');
+        },
+
+        saveGlobalWebProxy() {
+            const value = document.getElementById('globalWebProxyInput')?.value.trim() || '';
+            window.WebSocketManager?.send({ type: 'setGlobalWebProxy', value });
+        },
+
+        applyWebProxyConfig(data) {
+            const config = data || {};
+            const input = document.getElementById('globalWebProxyInput');
+            if (input && document.activeElement !== input) input.value = config.globalWebProxy || '';
+            // 只同步设置面板中的代理开关；任务页签的复选框由 MediaLibrary 按源状态渲染，避免互相覆盖。
+            document.querySelectorAll('[data-provider-proxy]:not([data-task-media-proxy])').forEach(input => {
+                input.checked = Boolean(config.providerProxy?.[input.dataset.providerProxy]);
+            });
         },
 
         waitForServerPort(port) {
@@ -1575,9 +1648,6 @@
     });
     </script>
 
-    <div class="self-test-trigger">
-        <button class="self-test-trigger-btn" onclick="SelfTest.runAllTests()" title="运行自测">🧪</button>
-    </div>
     
     <div class="floating-control" id="floatingControl">
         <button type="button" class="floating-recording-pause" id="floatingRecordingPauseButton"

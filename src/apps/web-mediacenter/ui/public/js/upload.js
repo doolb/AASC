@@ -389,6 +389,21 @@ const Upload = {
         });
     },
 
+    // 仅接受 B 站视频页的合法 BV 号，避免将其他站点链接误转成播放器。
+    getBilibiliPlayerUrl(value) {
+        let url;
+        try { url = new URL(value); } catch { return null; }
+        if (!['http:', 'https:'].includes(url.protocol) || !['www.bilibili.com', 'm.bilibili.com', 'bilibili.com'].includes(url.hostname.toLowerCase())) return null;
+        const match = /^\/video\/(BV[0-9A-Za-z]{10})(?:\/|$)/.exec(url.pathname);
+        if (!match) return null;
+        const player = new URL('https://player.bilibili.com/player.html');
+        player.searchParams.set('bvid', match[1]);
+        const page = url.searchParams.get('p');
+        if (page && /^[1-9]\d*$/.test(page)) player.searchParams.set('p', page);
+        player.searchParams.set('autoplay', '1');
+        return player.toString();
+    },
+
     uploadByUrl() {
         const urlInput = document.getElementById('urlInput');
         const url = urlInput.value.trim();
@@ -398,15 +413,21 @@ const Upload = {
             return;
         }
 
+        const bilibiliUrl = this.getBilibiliPlayerUrl(url);
+        if (bilibiliUrl && window.MediaLibrary?.playBilibiliUrl) {
+            void window.MediaLibrary.playBilibiliUrl(url);
+            urlInput.value = '';
+            return;
+        }
         // URL 输入：detectMediaType 对无扩展名 URL 默认判 image，
         // 自定义网页地址（如 https://example.com）常不带 .html —— 无已知媒体扩展名时按网页处理
-        let mediaType = this.detectMediaType(url);
+        let mediaType = bilibiliUrl ? 'html' : this.detectMediaType(url);
         if (mediaType === 'image') mediaType = 'html';
 
         if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
             window.WebSocketManager.sendMedia({
                 type: 'url',
-                url: url,
+                url: bilibiliUrl || url,
                 mediaType: mediaType
             });
         }

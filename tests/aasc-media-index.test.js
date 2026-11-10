@@ -184,3 +184,29 @@ test('远程媒体没有条目 URL 时按节点地址和媒体库路径补全直
     assert.equal(item.directUrl, 'https://192.168.1.6:8081/api/media-libraries/remote/proxy/%E6%BC%94%E7%A4%BA%E5%9B%BE.png');
     assert.equal(item.url, item.directUrl);
 });
+
+test('夸克媒体索引携带分享 ID 供界面查重，不包含提取码', async () => {
+    const service = new AascMediaIndexService({
+        mediaLibraryManager: {
+            listLibraries: () => [{ id: 'q', name: '分享', type: 'quark', shareId: 'abc123', passcode: 'secret' }],
+            list: async () => []
+        },
+        getNode: () => ({ nodeId: 'main-server', url: 'https://main.test' }),
+        getRemoteNodes: () => [{ nodeId: 'sub', url: 'https://sub.test', status: 'online' }],
+        requestRemoteIndex: async () => ({ node: { nodeId: 'sub' }, libraries: [{ id: 'r', name: '远程分享', type: 'quark', shareId: 'xyz456', passcode: 'secret', items: [] }] })
+    });
+    const index = await service.buildNetworkIndex('/');
+    assert.equal(index.sources[0].libraries[0].shareId, 'abc123');
+    assert.equal(index.sources[1].libraries[0].shareId, 'xyz456');
+    assert.doesNotMatch(JSON.stringify(index), /secret/);
+});
+
+test('夸克视频缩略图能力通过本地索引保留', async () => {
+    const { AascMediaIndexService } = require('../src/framework/aasc/media-index-service');
+    const service = new AascMediaIndexService({
+        mediaLibraryManager: { listLibraries: () => [{ id: 'q', type: 'quark', name: 'q' }], list: async () => [{ name: 'v.mp4', path: '/v.mp4', type: 'file', mediaType: 'video', hasThumbnail: true, size: 5 }] },
+        getNode: () => ({ nodeId: 'main-server', url: 'https://server.test' })
+    });
+    const index = await service.buildLocalIndex('/');
+    assert.equal(index.libraries[0].items[0].hasThumbnail, true);
+});

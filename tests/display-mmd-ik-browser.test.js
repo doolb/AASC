@@ -54,7 +54,9 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
         console.error('[IK验收] 初始化角色');
         await page.evaluate(() => { window.DisplayMmd.init({ canvas: document.getElementById('displayMmdCanvas'), onLoadProgress: p => console.log('[IK进度]', JSON.stringify(p)) }); window.DisplayMmd.setVisible(true); });
         console.error('[IK验收] 等待模型');
-        await page.waitForFunction(() => { const h = window.DisplayMmd.getHumanInterface(); return h?.getState().ready && !h.getState().automaticMotionBlocked; }, { timeout: 90000 });
+        await page.waitForFunction(() => window.DisplayMmd.getHumanInterface()?.getState().ready, { timeout: 90000 });
+        assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled), false);
+        await page.evaluate(async () => { const h = window.DisplayMmd.getHumanInterface(); await h.setInteractiveIKMode('physics'); h.setInteractiveIKEnabled(true); h.setInteractiveMarkersVisible(false); });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().markersVisible), false);
         await page.evaluate(async () => {
             window.DisplayMmd.setMotionPlaybackEnabled(false);
@@ -68,7 +70,7 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
         await page.evaluate(() => window.DisplayStage.setMmdVisible(true));
         console.error('[IK验收] 打开IK面板');
         await page.click('#displayMmdIKToggle');
-        console.error('[IK验收] 确认默认启用IK');
+        console.error('[IK验收] 确认手动启用IK');
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled, { timeout: 30000 });
         console.error('[IK验收] 读取IK状态');
         const state = await page.evaluate(async () => { await window.player.tick(); return window.DisplayMmd.getHumanInterface().getInteractiveIKState(); });

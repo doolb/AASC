@@ -235,3 +235,34 @@ test('buildFromTemp 保留 tempPreviewKey 和预览元数据，供服务端回�
         height: 180
     });
 });
+
+test('逐目录播放延迟扫描多级目录，并在下一轮发现新增内容', async () => {
+    const calls = [];
+    const tree = {
+        '/': [{ type: 'folder', name: 'A', path: '/A' }, { type: 'folder', name: 'B', path: '/B' }],
+        '/A': [{ type: 'file', name: 'a.jpg', path: '/A/a.jpg', mediaType: 'image', url: '/a' }, { type: 'folder', name: 'A1', path: '/A/A1' }],
+        '/A/A1': [{ type: 'file', name: 'b.jpg', path: '/A/A1/b.jpg', mediaType: 'image', url: '/b' }],
+        '/B': []
+    };
+    const manager = new PlaylistManager({ async list(id, dir) { calls.push(dir); return tree[dir]; } });
+    let cursor = manager.createDirectoryCursor('q', '/', { recursive: true, loop: true });
+    let batch = await manager.nextDirectoryBatch(cursor);
+    assert.deepEqual(calls, ['/', '/A']);
+    assert.equal(batch.playlist[0].fileName, 'a.jpg');
+    cursor = batch.cursor;
+    tree['/A/A1'].push({ type: 'file', name: 'new.jpg', path: '/A/A1/new.jpg', mediaType: 'image', url: '/new' });
+    batch = await manager.nextDirectoryBatch(cursor);
+    assert.deepEqual(batch.playlist.map(x => x.fileName), ['b.jpg', 'new.jpg']);
+    tree['/A'].push({ type: 'file', name: 'later.jpg', path: '/A/later.jpg', mediaType: 'image', url: '/later' });
+    batch = await manager.nextDirectoryBatch(batch.cursor);
+    assert.deepEqual(calls, ['/', '/A', '/A/A1', '/B', '/', '/A']);
+    assert.deepEqual(batch.playlist.map(x => x.fileName), ['a.jpg', 'later.jpg']);
+});
+
+test('逐目录循环遇到全空目录时结束，读取失败不修改原游标', async () => {
+    const manager = new PlaylistManager({ async list() { return []; } });
+    const cursor = manager.createDirectoryCursor('q', '/', { recursive: true, loop: true });
+    assert.deepEqual((await manager.nextDirectoryBatch(cursor)).playlist, []);
+    await assert.rejects(manager.nextDirectoryBatch(cursor, async () => { throw new Error('网络错误'); }), /网络错误/);
+    assert.deepEqual(cursor.stack, ['/']);
+});

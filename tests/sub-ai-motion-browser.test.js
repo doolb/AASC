@@ -59,7 +59,8 @@ test('真实PMX/Worker：库命中零生成、缺库生成完整播放自动入�
             groups?.render?.apply({ ...groups.render.read(), aaMode: 'taa', taaEnabled: false, canvasScale: 0.25 });
         });
         await page.evaluate(() => { window.DisplayMmd.init({ canvas: document.getElementById('displayMmdCanvas'), onLoadProgress() {} }); window.DisplayMmd.setVisible(true); });
-        await page.waitForFunction(() => { const h = window.DisplayMmd.getHumanInterface(); return h?.getState().ready && !h.getState().automaticMotionBlocked; }, { timeout: 90000 });
+        await page.waitForFunction(() => window.DisplayMmd.getHumanInterface()?.getState().ready, { timeout: 90000 });
+        await page.evaluate(async () => { const h = window.DisplayMmd.getHumanInterface(); await h.setInteractiveIKMode('physics'); h.setInteractiveIKEnabled(true); h.setInteractiveMarkersVisible(false); });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().markersVisible), false);
         await page.addScriptTag({ path: path.join(root, 'js/display-stage.js') });
         await page.evaluate(() => window.DisplayStage.setMmdVisible(true));

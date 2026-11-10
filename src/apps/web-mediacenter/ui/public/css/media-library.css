@@ -250,7 +250,8 @@
     opacity: 1;
 }
 
-.item-actions button {
+.item-actions button,
+.item-actions .btn-download {
     flex: 1;
     padding: 6px 10px;
     border: none;
@@ -258,6 +259,13 @@
     cursor: pointer;
     font-size: 12px;
     transition: all 0.2s;
+}
+
+.item-actions .btn-download {
+    background: rgba(102, 126, 234, 0.2);
+    color: inherit;
+    text-align: center;
+    text-decoration: none;
 }
 
 .btn-play {
@@ -496,3 +504,68 @@
 .library-modal-footer .btn-delete {
     margin-right: auto;
 }
+
+.media-library-tabs, .quark-share-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.media-library-tabs button.active { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
+.media-region-label { align-self: center; margin: 0 4px 0 8px; font-size: 12px; color: #888; white-space: nowrap; }
+.media-region-group { display: inline-flex; align-items: center; gap: 6px; }
+.media-task-source-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.media-task-source-wrap .media-source-proxy { font-size: 11px; }
+.quark-share-bar input:first-child { flex: 1 1 240px; min-width: 0; }
+.quark-share-bar input:nth-child(2) { flex: 0 1 130px; min-width: 90px; }
+.quark-share-bar input { padding: 8px; border-radius: 6px; border: 1px solid rgba(128,128,128,.5); }
+
+.bilibili-video-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.bilibili-video-card { min-width: 0; padding: 8px; border-radius: 8px; background: rgba(128,128,128,.15); }
+.bilibili-video-cover { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: rgba(128,128,128,.3); }
+.bilibili-video-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 6px 0; }
+.bilibili-video-actions { display: flex; gap: 6px; }
+
+.share-folder-navigation { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.share-folder-navigation button, .share-link-actions button { border: 0; border-radius: 7px; padding: 7px 10px; cursor: pointer; }
+.share-folder-navigation button.active { background: #7655bb; color: white; }
+.share-link-actions { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
+
+.quark-cache-status { align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgba(128, 128, 128, .15); font-size: 13px; }
+.quark-cache-status progress { flex: 1 1 120px; min-width: 90px; max-width: 260px; }
+
+/* 夸克视频缓存状态覆盖在对应缩略图的底部。 */
+.quark-card-cache:not([hidden]) {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px 6px 0;
+    color: #fff;
+    background: linear-gradient(transparent, rgba(0, 0, 0, .8));
+    font-size: 11px;
+    pointer-events: none;
+}
+.quark-card-cache progress { width: 100%; height: 6px; accent-color: #f472a6; }
+.quark-card-cache.error progress { accent-color: #ef4444; }
+
+.quark-directory-download-status {
+    margin: 8px 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(102, 126, 234, .18);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+/* B 站首页分组标题与相关推荐面板。 */
+.bilibili-section-title,
+.bilibili-related-title { font-size: 14px; font-weight: 600; margin: 8px 0; color: #ddd; }
+/* 分组标题在网格列表中独占一行，避免占用单个卡片单元。 */
+.bilibili-video-list .bilibili-section-title { grid-column: 1 / -1; }
+.bilibili-related { margin-top: 12px; }
+.bilibili-danmaku-toggle,
+.media-source-proxy { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #bbb; }
+.bilibili-video-actions button:disabled { opacity: .55; cursor: default; }

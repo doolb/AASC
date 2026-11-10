@@ -381,4 +381,5 @@ async function preparePendingRebuild(report, reportPath, save, publicKeyPem, run
     }
 }
 
-module.exports = { managedArchive, collectFreshCleanup, cleanupFreshRelease, preparePendingRebuild };
+module.exports = { managedArchive, collectFreshCleanup, cleanupFreshRelease, preparePendingRebuild,
+    inspectPath, relativeBelow, artifacts, protection, DEPENDENCY_DIRECTORIES, REPORT_PATTERN };

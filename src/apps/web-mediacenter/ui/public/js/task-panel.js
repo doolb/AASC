@@ -322,6 +322,7 @@
       }
 
       var metaHtml = '';
+      if (task.localOnly) metaHtml += '<span>仅本机</span>';
       if (task.files && task.files.length > 0) {
         metaHtml += '<span>' + task.files.length + ' 个文件</span>';
       }
@@ -2345,8 +2346,8 @@
             '<div class="task-form-field">' +
               '<label>模式</label>' +
               '<div class="task-btn-group" id="editModeGroup">' +
-                '<button class="task-btn-option active" data-value="one-shot">一次性</button>' +
-                '<button class="task-btn-option" data-value="service">服务</button>' +
+                '<button class="task-btn-option' + (task.mode === 'service' ? '' : ' active') + '" data-value="one-shot">一次性</button>' +
+                '<button class="task-btn-option' + (task.mode === 'service' ? ' active' : '') + '" data-value="service">服务</button>' +
               '</div>' +
             '</div>' +
           '</div>' +

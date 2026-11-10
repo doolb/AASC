@@ -55,11 +55,14 @@
         <img id="mediaImage">
         <video id="mediaVideo" autoplay loop playsinline></video>
         <audio id="mediaAudio" preload="auto" style="display:none;"></audio>
-        <iframe id="mediaHtml" style="display:none;"></iframe>
+        <iframe id="mediaHtml" style="display:none;" allow="autoplay; fullscreen" allowfullscreen></iframe>
         <section id="mediaText" aria-live="polite" style="display:none;">
             <div id="mediaTextContent"></div>
             <div id="mediaTextStatus"></div>
         </section>
+        <!-- 弹幕宿主与临时开关位于媒体容器内、睡眠遮罩之下，睡眠/唤醒只遮盖不销毁弹幕。 -->
+        <div id="bilibiliDanmakuLayerHost"></div>
+        <button id="danmakuToggle" type="button" hidden>弹幕</button>
         <div id="mediaSleepOverlay" class="sleep-overlay sleep-overlay-media"></div>
     </div>
 
@@ -725,6 +728,7 @@
     <script src="js/video-black-borders.js"></script>
     <script src="js/display-video-black-borders.js"></script>
     <script src="js/media-loop.js"></script>
+    <script src="js/quark-cache-progress.js"></script>
     <script src="js/sherpa-asr.js"></script>
     <script src="js/pcm-audio-capture.js"></script>
     <script src="js/task-onnx-runtime.js"></script>
@@ -735,6 +739,8 @@
     <script src="js/display-lipsync-audio.js"></script>
     <script src="js/display-tts-subtitles.js"></script>
     <script src="js/text-media-player.js"></script>
+    <!-- 弹幕渲染器必须先于主内联脚本加载，确保 window.BilibiliDanmaku 已注册。 -->
+    <script src="/js/bilibili-danmaku.js"></script>
     <script src="js/ui-theme.js"></script>
     <script src="js/display-appearance-controls.js" defer></script>
     <script src="js/display-stage-panel-coordinator.js" defer></script>
@@ -829,6 +835,65 @@
         });
         // 每次换媒体或清空都会失效旧加载，避免迟到的 MHTML 内容和临时信息回填。
         let mediaLoadSequence = 0;
+        let bilibiliDashPlayer = null;
+        let bilibiliDashLoader = null;
+        function stopBilibiliDash() {
+            const player = bilibiliDashPlayer;
+            bilibiliDashPlayer = null;
+            if (player) { try { player.reset(); } catch (error) { console.warn('关闭 DASH 播放器失败', error); } }
+        }
+        function loadBilibiliDash() {
+            if (window.dashjs) return Promise.resolve(window.dashjs);
+            if (!bilibiliDashLoader) {
+                bilibiliDashLoader = new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = '/js/vendor/dashjs-4.7.4/dash.all.min.js';
+                    script.onload = () => window.dashjs ? resolve(window.dashjs) : reject(new Error('DASH 播放器不可用'));
+                    script.onerror = () => reject(new Error('加载 DASH 播放器失败'));
+                    document.head.appendChild(script);
+                }).catch(error => { bilibiliDashLoader = null; throw error; });
+            }
+            return bilibiliDashLoader;
+        }
+        let bilibiliDanmakuController = null;
+        // 切换/清空媒体时必须销毁旧弹幕层，避免上一个视频的弹幕残留在新画面上。
+        function stopBilibiliDanmaku() {
+            if (bilibiliDanmakuController) {
+                try { bilibiliDanmakuController.destroy(); } catch { /* 忽略清理失败。 */ }
+            }
+            bilibiliDanmakuController = null;
+            const toggle = document.getElementById('danmakuToggle');
+            if (toggle) {
+                toggle.hidden = true;
+                toggle.onclick = null;
+            }
+        }
+        function setupBilibiliDanmaku(data) {
+            stopBilibiliDanmaku();
+            if (!data?.bilibiliDanmaku || !data?.bilibiliDanmakuUrl) return;
+            const toggle = document.getElementById('danmakuToggle');
+            try {
+                bilibiliDanmakuController = window.BilibiliDanmaku.create({
+                    container: document.getElementById('bilibiliDanmakuLayerHost'),
+                    video: document.getElementById('mediaVideo'),
+                    url: data.bilibiliDanmakuUrl,
+                    toggle
+                });
+            } catch (error) {
+                console.warn('弹幕初始化失败', error);
+                bilibiliDanmakuController = null;
+                return;
+            }
+            if (!toggle) return;
+            // 每个新视频都恢复默认文案，避免上一轮临时关闭状态串到新视频。
+            toggle.hidden = false;
+            toggle.textContent = '弹幕';
+            toggle.onclick = () => {
+                const visible = !bilibiliDanmakuController?.visible;
+                bilibiliDanmakuController?.setVisible(visible);
+                toggle.textContent = visible ? '弹幕' : '弹幕已关';
+            };
+        }
         let htmlMediaAbortController = null;
         let displayWs = null;
         // ASR 来源必须与当前 WebSocket 使用同一个持久化显示端 ID；连接确认前也允许使用本地 ID 上传。
@@ -4001,8 +4066,17 @@
         let playlistState = null;
         let savedAutoTts = null;
 
+        function cancelPlaylistCache(ps) {
+            if (ps?.cachePendingIndex == null) return;
+            const item = ps.playlist[ps.cachePendingIndex];
+            if (item && displayWs?.readyState === WebSocket.OPEN) displayWs.send(JSON.stringify({ type: 'playlistCacheStatus', status: 'cancelled', cacheNodeId: item.cacheNodeId, cacheLibraryId: item.cacheLibraryId, cachePath: item.cachePath }));
+            ps.cachePendingIndex = null;
+            ps.cacheTicket = null;
+        }
+
         function stopPlaylist() {
             if (!playlistState) return;
+            cancelPlaylistCache(playlistState);
             playlistState.active = false;
             // 先解绑列表上下文再停止，过期 TTS 回包不会再推进已经停止的列表。
             TextMediaPlayer.attachPlaylist(null);
@@ -4059,6 +4133,7 @@
             displayWs.send(JSON.stringify({
                 type: 'playlistProgress',
                 listId: ps.listId,
+                dynamicBatch: ps.dynamicBatch,
                 index: ps.index,
                 total: ps.playlist.length,
                 state: state,
@@ -4093,6 +4168,9 @@
                 playlist: playlist,
                 interval: (data.interval || 0) * 1000,
                 loop: !!data.loop,
+                dynamic: !!data.dynamicCursor,
+                dynamicBatch: data.dynamicBatch,
+                waitingNext: false,
                 index: resumeIndex,
                 timer: null,
                 videoEndedHandler: null,
@@ -4136,6 +4214,45 @@
                 finishPlaylist();
                 return;
             }
+            if (item.cacheBeforePlay && item.mediaType === 'video' && !options.cacheReady) {
+                const index = ps.index;
+                if (ps.cacheReadyIndex === index && ps.cacheReadyUrl === item.url) {
+                    ps.cacheReadyIndex = null;
+                } else {
+                    if (ps.cachePendingIndex === index && ps.cachePendingUrl === item.url) return;
+                    if (ps.timer) { clearTimeout(ps.timer); ps.timer = null; }
+                    if (ps.videoEndedHandler) { mediaVideo.removeEventListener('ended', ps.videoEndedHandler); ps.videoEndedHandler = null; }
+                    if (ps.audioEndedHandler) { mediaAudio.removeEventListener('ended', ps.audioEndedHandler); ps.audioEndedHandler = null; }
+                    const ticket = {};
+                    const cacheIdentity = { cacheNodeId: item.cacheNodeId, cacheLibraryId: item.cacheLibraryId, cachePath: item.cachePath };
+                    ps.cacheTicket = ticket; ps.cachePendingIndex = index; ps.cachePendingUrl = item.url;
+                    if (displayWs?.readyState === WebSocket.OPEN) displayWs.send(JSON.stringify({ type: 'playlistCacheStatus', status: 'caching', fileName: item.fileName || '', ...cacheIdentity }));
+                    let url;
+                    try {
+                        const source = new URL(item.fallbackUrl || item.url, window.location.href);
+                        if (!/^\/api\/(?:aasc\/servers\/[^/]+\/)?media-libraries\/[^/]+\/proxy\//.test(source.pathname)) throw new Error('缓存地址无效');
+                        url = new URL(source.pathname + source.search, window.location.origin);
+                        url.searchParams.set('prepare', '1');
+                    } catch (error) { console.warn('夸克视频缓存失败', error.message); return; }
+                    window.QuarkCacheProgress.prepare(url.href, progress => {
+                        if (playlistState !== ps || !ps.active || ps.cacheTicket !== ticket || ps.index !== index) return;
+                        if (displayWs?.readyState === WebSocket.OPEN) displayWs.send(JSON.stringify({ type: 'playlistCacheStatus', status: progress.phase === 'ready' ? 'ready' : 'progress', phase: progress.phase, received: progress.received, total: progress.total, fileName: item.fileName || '', ...cacheIdentity }));
+                    }).then(() => {
+                        if (playlistState !== ps || !ps.active || ps.cacheTicket !== ticket) return;
+                        ps.cachePendingIndex = null;
+                        if (ps.index !== index) return;
+                        ps.cacheReadyIndex = index; ps.cacheReadyUrl = item.url;
+                        if (!ps.paused && !isSleepPaused()) playCurrentItem({ ...options, cacheReady: true });
+                    }).catch(error => {
+                        if (playlistState !== ps || !ps.active || ps.cacheTicket !== ticket) return;
+                        ps.cachePendingIndex = null;
+                        if (ps.index !== index) return;
+                        if (displayWs?.readyState === WebSocket.OPEN) displayWs.send(JSON.stringify({ type: 'playlistCacheStatus', status: 'error', message: String(error.message || '视频缓存失败').slice(0, 200), ...cacheIdentity }));
+                    });
+                    return;
+                }
+            }
+            ps.cacheReadyIndex = null;
             mediaLoopPlayers.forEach(player => player.reset());
             // 清除上一项残留的定时器/ended 监听/加载失败回调，
             // 防止切换时重复触发 next 跳过媒体项
@@ -4157,11 +4274,17 @@
             // 每次切项均取消旧文本句子的播放标识，避免旧回包覆盖新媒体。
             TextMediaPlayer.attachPlaylist(null);
             TextMediaPlayer.stop();
+            // 列表项携带的弹幕地址必须透传给 showMedia，批量播放才和单媒体一样渲染弹幕。
+            const danmakuFields = item.bilibiliDanmaku && item.bilibiliDanmakuUrl
+                ? { bilibiliDanmaku: true, bilibiliDanmakuUrl: item.bilibiliDanmakuUrl }
+                : {};
             const mediaData = item.url
-                ? { type: 'url', url: item.url, fallbackUrl: item.fallbackUrl, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}) }
+                ? { type: 'url', url: item.url, fallbackUrl: item.fallbackUrl, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}), ...(item.bilibiliDash ? { bilibiliDash: true, bilibiliMp4: item.bilibiliMp4 } : {}), ...danmakuFields }
                 : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}) };
             const resumeTime = Number.isFinite(options.resumeTime) ? options.resumeTime : ps.resumeTime;
             if (item.mediaType === 'text') {
+                // 文本列表项不经过 showMedia，必须在这里清理上一个视频的弹幕层。
+                stopBilibiliDanmaku();
                 currentMediaType = 'text';
                 mediaImage.style.display = 'none';
                 mediaVideo.style.display = 'none';
@@ -4176,6 +4299,28 @@
                 sendPlaylistProgress(ps.paused ? 'paused' : 'playing');
                 return;
             }
+            const itemIndex = ps.index;
+            const onVideoFailure = () => {
+                if (playlistState !== ps || !ps.active || ps.index !== itemIndex) return;
+                mediaVideo.onerror = null;
+                if (ps.paused) return;
+                if (ps.videoEndedHandler) {
+                    mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
+                    ps.videoEndedHandler = null;
+                }
+                if (ps.timer) clearTimeout(ps.timer);
+                ps.timer = setTimeout(playlistNext, ps.interval);
+            };
+            // DASH 回退到 MP4 后恢复列表的非循环播放及失败处理。
+            if (item.bilibiliDash) mediaData.onBilibiliFallback = () => {
+                if (playlistState !== ps || !ps.active || ps.index !== itemIndex) return;
+                mediaVideo.loop = false;
+                const retrySource = mediaVideo.onerror;
+                mediaVideo.onerror = () => {
+                    if (mediaVideo.hasAttribute('crossorigin')) { retrySource?.(); return; }
+                    onVideoFailure();
+                };
+            };
             showMedia(mediaData, true, ps.paused, resumeTime);  // 播放列表自动切播不激活（显示端内部行为）
             // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
             const reportSizeOnce = () => {
@@ -4206,16 +4351,8 @@
                     };
                     mediaVideo.addEventListener('ended', ps.videoEndedHandler);
                 }
-                mediaVideo.onerror = function() {
-                    // 视频加载失败：等间隔后播下一个，不卡死循环
-                    mediaVideo.onerror = null;
-                    if (ps.paused) return;
-                    if (ps.videoEndedHandler) {
-                        mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
-                        ps.videoEndedHandler = null;
-                    }
-                    ps.timer = setTimeout(playlistNext, ps.interval);
-                };
+                const fallbackOnError = mediaVideo.onerror;
+                mediaVideo.onerror = item.bilibiliDash ? fallbackOnError : onVideoFailure;
             } else if (item.mediaType === 'audio') {
                 // 音频按自然时长播放，结束后等待间隔再切换，和视频批量语义一致。
                 mediaAudio.loop = false;
@@ -4250,6 +4387,18 @@
             sendPlaylistProgress(ps.paused ? 'paused' : 'playing');
         }
 
+        // 当前目录播放结束后向服务端索取下一目录；断线或短暂错误时重试。
+        function requestNextPlaylistDirectory(ps) {
+            if (playlistState !== ps || !ps.active || ps.paused || isSleepPaused()) return;
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) {
+                ps.timer = setTimeout(() => { ps.timer = null; requestNextPlaylistDirectory(ps); }, 5000);
+                return;
+            }
+            ps.waitingNext = true;
+            displayWs.send(JSON.stringify({ type: 'playlistNeedNext', listId: ps.listId, dynamicBatch: ps.dynamicBatch, index: ps.index }));
+            ps.timer = setTimeout(() => { ps.timer = null; requestNextPlaylistDirectory(ps); }, 15000);
+        }
+
         function playlistNext() {
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
@@ -4261,7 +4410,12 @@
             // 自动 timer/ended 在睡眠期间只保留当前项，不推进索引、不排队下一项；
             // 控制端手动 next 会先临时激活，再进入此函数执行切换。
             if (isSleepPaused()) return;
+            cancelPlaylistCache(ps);
             if (ps.index + 1 >= ps.playlist.length) {
+                if (ps.dynamic) {
+                    if (!ps.waitingNext) requestNextPlaylistDirectory(ps);
+                    return;
+                }
                 if (ps.loop) {
                     ps.index = 0;
                     playCurrentItem();
@@ -4277,6 +4431,8 @@
         function playlistPrev() {
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
+            cancelPlaylistCache(ps);
+            ps.waitingNext = false;
             ps.resumeTime = null;
             ps.resumeTextPage = 0;
             ps.index = ps.index - 1 < 0 ? (ps.loop ? ps.playlist.length - 1 : 0) : ps.index - 1;
@@ -4287,6 +4443,8 @@
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
             if (index < 0 || index >= ps.playlist.length) return;
+            cancelPlaylistCache(ps);
+            ps.waitingNext = false;
             ps.resumeTime = null;
             ps.resumeTextPage = 0;
             ps.index = index;
@@ -4329,7 +4487,12 @@
             ps.paused = false;
             pauseExpected = false;
             const item = ps.playlist[ps.index];
-            if (item && item.mediaType === 'text') {
+            if (ps.dynamic && ps.waitingNext) {
+                ps.waitingNext = false;
+                requestNextPlaylistDirectory(ps);
+            } else if (item && item.cacheBeforePlay && (ps.cachePendingIndex === ps.index || ps.cacheReadyIndex === ps.index || !ps.videoEndedHandler)) {
+                playCurrentItem();
+            } else if (item && item.mediaType === 'text') {
                 TextMediaPlayer.handleControl('play');
             } else if (item && item.mediaType === 'video' && !ps.timer && !ps.videoEndedHandler) {
                 // 暂停时视频正在播放 → 继续播放视频
@@ -4365,6 +4528,7 @@
             pauseExpected = true;
             const info = {
                 listId: playlistState.listId,
+                dynamicBatch: playlistState.dynamicBatch,
                 index: playlistState.index,
                 total: playlistState.playlist.length,
                 state: 'finished'
@@ -5122,11 +5286,18 @@
             const pageInterval = opts.pageInterval || 5;
             const speedPx = { slow: 60, medium: 120, fast: 240 }[opts.speed || 'medium'];
 
-            const scrollHeight = Math.max(
-                (win.document.documentElement && win.document.documentElement.scrollHeight) || 0,
-                (win.document.body && win.document.body.scrollHeight) || 0
-            );
-            const clientHeight = win.innerHeight || iframe.clientHeight;
+            // 外站播放器受同源策略保护，无法读取其页面尺寸，也不需要自动滚动。
+            let scrollHeight;
+            let clientHeight;
+            try {
+                scrollHeight = Math.max(
+                    (win.document.documentElement && win.document.documentElement.scrollHeight) || 0,
+                    (win.document.body && win.document.body.scrollHeight) || 0
+                );
+                clientHeight = win.innerHeight || iframe.clientHeight;
+            } catch (error) {
+                return;
+            }
             // 内容不溢出时无需滚动
             if (scrollHeight <= clientHeight + 1) return;
 
@@ -5380,6 +5551,8 @@
         function showMedia(data, noActivate, paused, resumeTime = 0) {
             mediaLoopPlayers.forEach(player => player.reset());
             const loadSequence = ++mediaLoadSequence;
+            stopBilibiliDash();
+            stopBilibiliDanmaku();
             htmlMediaAbortController?.abort();
             htmlMediaAbortController = null;
             mediaImage.onload = null;
@@ -5509,20 +5682,58 @@
                 } else if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
-                    setMediaSourceWithFallback(mediaVideo, data.url, data.fallbackUrl, true);
-                    // 单媒体/重连恢复始终循环；批量播放切项时会再改为 false
+                    const playMp4OrOfficial = () => {
+                        if (loadSequence !== mediaLoadSequence) return;
+                        let mp4;
+                        try { mp4 = new URL(data.bilibiliMp4); } catch {}
+                        if (data.bilibiliDash && mp4 && /^https?:$/.test(mp4.protocol) && /^\/api\/bilibili\/video\/BV[0-9A-Za-z]{10}$/.test(mp4.pathname)) {
+                            showMedia({ ...data, url: mp4.href, bilibiliDash: false, bilibiliMp4: undefined }, true, paused || !mediaIsPlaying, resumeTime);
+                            data.onBilibiliFallback?.();
+                            return;
+                        }
+                        let fallback;
+                        try { fallback = new URL(data.bilibiliFallback); } catch {}
+                        if (fallback?.origin === 'https://player.bilibili.com' && fallback.pathname === '/player.html') {
+                            showMedia({ type: 'url', url: fallback.href, mediaType: 'html' }, true);
+                        }
+                    };
+                    // 单媒体/重连恢复始终循环；批量播放切项时会再改为 false。
                     mediaVideo.loop = true;
                     mediaVideo.onloadedmetadata = () => {
                         applyResumeTime(mediaVideo, resumeTime);
                         restartDynamicFitAfterMediaLoad();
                     };
-                    mediaVideo.load();
-                    // 重连恢复且为暂停状态时不自动播放（控制端暂停的视频重连后保持暂停）
-                    if (paused) {
-                        mediaVideo.pause();
+                    if (data.bilibiliDash) {
+                        mediaVideo.onerror = playMp4OrOfficial;
+                        void loadBilibiliDash().then(dashjs => {
+                            if (loadSequence !== mediaLoadSequence) return;
+                            if (!window.MediaSource) throw new Error('显示端不支持 MediaSource');
+                            const player = dashjs.MediaPlayer().create();
+                            bilibiliDashPlayer = player;
+                            player.on(dashjs.MediaPlayer.events.ERROR, event => {
+                                console.warn('B站 DASH 播放错误', event?.error || event);
+                                if (event?.error?.fatal !== false) playMp4OrOfficial();
+                            });
+                            player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+                                if (loadSequence === mediaLoadSequence && !paused && mediaIsPlaying && !isSleepPaused()) playVideoAuto(mediaVideo);
+                            });
+                            player.initialize(mediaVideo, data.url, false);
+                        }).catch(playMp4OrOfficial);
                     } else {
-                        playVideoAuto(mediaVideo);
+                        setMediaSourceWithFallback(mediaVideo, data.url, data.fallbackUrl, true);
+                        if (data.bilibiliFallback) {
+                            const originalError = mediaVideo.onerror;
+                            mediaVideo.onerror = () => {
+                                if (loadSequence !== mediaLoadSequence) return;
+                                if (mediaVideo.hasAttribute('crossorigin') || mediaVideo._mediaFallbackUrl) { originalError?.(); return; }
+                                playMp4OrOfficial();
+                            };
+                        }
+                        if (paused) mediaVideo.pause();
+                        else playVideoAuto(mediaVideo);
                     }
+                    // DASH/MP4 分支统一在视频元素就绪后挂载弹幕；HTML/音频/图片分支不创建。
+                    setupBilibiliDanmaku(data);
                 } else {
                     mediaVideo.style.display = 'none';
                     mediaImage.style.display = 'block';
@@ -5604,6 +5815,8 @@
             videoBlackBorders.setActive(false);
             mediaLoopPlayers.forEach(player => player.reset());
             mediaLoadSequence += 1;
+            stopBilibiliDash();
+            stopBilibiliDanmaku();
             htmlMediaAbortController?.abort();
             htmlMediaAbortController = null;
             mediaIsPlaying = false;
@@ -5873,7 +6086,14 @@
         // 睡眠期间 ended/timer 可能已经清掉当前项监听；唤醒时恢复当前项的批量生命周期。
         function resumePlaylistAfterSleep() {
             const ps = playlistState;
-            if (!ps || !ps.active || ps.paused || ps.timer) return;
+            if (!ps || !ps.active || ps.paused) return;
+            if (ps.dynamic && ps.waitingNext) {
+                if (ps.timer) clearTimeout(ps.timer);
+                ps.timer = null;
+                requestNextPlaylistDirectory(ps);
+                return;
+            }
+            if (ps.timer) return;
             const item = ps.playlist[ps.index];
             if (!item) return;
             if (item.mediaType === 'video' && !ps.videoEndedHandler) {
@@ -6665,6 +6885,15 @@
                     } else if (data.type === 'playlistStart') {
                         handlePlaylistStart(data);
                         sendCommandAck('playlistStart', true, data.listId);
+                    } else if (data.type === 'playlistDynamicEnd') {
+                        if (playlistState?.listId === data.listId) finishPlaylist();
+                    } else if (data.type === 'playlistDynamicError') {
+                        if (playlistState?.listId === data.listId) {
+                            const ps = playlistState;
+                            if (ps.timer) clearTimeout(ps.timer);
+                            ps.waitingNext = true;
+                            if (!ps.paused) ps.timer = setTimeout(() => { ps.timer = null; requestNextPlaylistDirectory(ps); }, 5000);
+                        }
                     } else if (data.type === 'playlistControl') {
                         handlePlaylistControl(data);
                         sendCommandAck('playlistControl', true, data.action);
@@ -7872,6 +8101,7 @@
 
                 // 媒体渲染能力关闭 → 停止媒体播放，清空画面
                 if (!data.capabilities.mediaRendering) {
+                    stopBilibiliDanmaku();
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'none';
                     mediaVideo.pause();

@@ -1142,6 +1142,58 @@ class SmbProvider extends MediaLibraryProvider {
     }
 }
 
+const QuarkShareProvider = require('./quark-share-provider')(MediaLibraryProvider);
+
+// 用户服务任务按生命周期注册提供者；配置可在任务未启动时安全恢复。
+class TaskMediaProvider extends MediaLibraryProvider {
+    constructor(config, options) {
+        super(config);
+        this.registry = options.registry;
+        this.getPort = options.getPort; this.getLocalIP = options.getLocalIP; this.isHttps = options.isHttps;
+        // 实时读取任务媒体源当前生效的代理地址，未启用时由调用方返回空串。
+        this.getProxyUrl = options.getProxyUrl || (() => '');
+        this.registration = null; this.implementation = null;
+    }
+    async connect() {
+        if (!/^[a-z][a-z0-9._-]{1,63}$/.test(String(this.config.providerId || ''))) throw new Error('任务媒体源 ID 无效');
+        this.connected = true;
+    }
+    async disconnect() { this.connected = false; this.implementation = null; this.registration = null; }
+    getImplementation() {
+        const registration = this.registry.get(this.config.providerId);
+        if (!registration) throw new Error('任务媒体源未运行，请先启动对应的用户服务任务');
+        if (registration !== this.registration) {
+            // 将 proxyUrl 定义为实时 getter，任务侧切换代理后无需重建即可读取最新值。
+            const config = { ...this.config };
+            Object.defineProperty(config, 'proxyUrl', {
+                enumerable: true,
+                get: () => this.getProxyUrl(registration.id, registration.proxyDefault) || ''
+            });
+            const implementation = registration.create(config);
+            if (!implementation || ['list', 'getFile', 'getFileStream'].some(name => typeof implementation[name] !== 'function')) {
+                throw new Error('任务媒体源缺少必要接口');
+            }
+            this.registration = registration;
+            this.implementation = implementation;
+        }
+        return this.implementation;
+    }
+    getPublicUrl(filePath) {
+        const encoded = String(filePath || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
+        return `${this.isHttps() ? 'https' : 'http'}://${this.getLocalIP()}:${this.getPort()}/api/media-libraries/${encodeURIComponent(this.config.id)}/proxy/${encoded}`;
+    }
+    async list(dirPath) {
+        const items = await this.getImplementation().list(dirPath || '/');
+        if (!Array.isArray(items)) throw new Error('任务媒体源返回的目录无效');
+        return items.map(item => {
+            if (!item || typeof item.path !== 'string' || !/^\/[\p{L}\p{N}_./ -]+$/u.test(item.path) || item.path.split('/').some(part => part === '.' || part === '..') || !['file', 'folder'].includes(item.type)) throw new Error('任务媒体源返回了无效的媒体路径');
+            return { ...item, ...(item.type === 'file' ? { url: this.getPublicUrl(item.path) } : {}) };
+        });
+    }
+    async getFile(filePath) { return this.getImplementation().getFile(filePath); }
+    async getFileStream(filePath, range) { return this.getImplementation().getFileStream(filePath, range); }
+}
+
 class MediaLibraryManager {
     constructor(options = {}) {
         this.libraries = new Map();
@@ -1150,7 +1202,15 @@ class MediaLibraryManager {
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
         this.isHttps = options.isHttps || (() => false);
+        // 按媒体源 ID 与默认开关实时返回生效代理地址，未启用时返回空串。
+        this.getProxyUrl = options.getProxyUrl || (() => '');
         this.androidSafConfig = options.androidSafConfig || null;
+        this.getQuarkCookie = options.getQuarkCookie || (() => '');
+        const { QuarkVideoCache } = require('./quark-video-cache');
+        this.quarkVideoCache = options.quarkVideoCache || new QuarkVideoCache(path.join(path.dirname(this.configPath), 'cache', 'quark-video'));
+        const { TaskMediaProviderRegistry } = require('./task-media-provider-registry');
+        this.taskMediaProviders = options.taskMediaProviders || new TaskMediaProviderRegistry();
+        this.virtualTaskLibraries = new Map();
     }
 
     async init() {
@@ -1212,6 +1272,14 @@ class MediaLibraryManager {
                     isHttps: this.isHttps
                 });
                 break;
+            case 'task':
+                config.readonly = true;
+                provider = new TaskMediaProvider(config, { registry: this.taskMediaProviders, getPort: this.getPort, getLocalIP: this.getLocalIP, isHttps: this.isHttps, getProxyUrl: this.getProxyUrl });
+                break;
+            case 'quark':
+                config.readonly = true;
+                provider = new QuarkShareProvider(config, { getPort: this.getPort, getLocalIP: this.getLocalIP, isHttps: this.isHttps, getCookie: this.getQuarkCookie, videoCache: this.quarkVideoCache });
+                break;
             case 'android-saf':
                 provider = new AndroidSafProvider(config);
                 break;
@@ -1247,7 +1315,48 @@ class MediaLibraryManager {
     }
 
     getLibrary(id) {
-        return this.libraries.get(id);
+        const saved = this.libraries.get(id);
+        if (saved) return saved;
+        const match = /^task-auto:([a-z][a-z0-9._-]{1,63})$/.exec(String(id || ''));
+        if (!match) return undefined;
+        const registration = this.taskMediaProviders.get(match[1]);
+        if (!registration) { this.virtualTaskLibraries.delete(id); return undefined; }
+        let item = this.virtualTaskLibraries.get(id);
+        if (!item || item.registration !== registration) {
+            const config = { ...registration.defaultConfig, id, name: registration.name, type: 'task', providerId: registration.id, readonly: true, managed: true };
+            item = { config, registration, provider: new TaskMediaProvider(config, { registry: this.taskMediaProviders, getPort: this.getPort, getLocalIP: this.getLocalIP, isHttps: this.isHttps, getProxyUrl: this.getProxyUrl }) };
+            this.virtualTaskLibraries.set(id, item);
+        }
+        return item;
+    }
+
+    // 获取任务媒体源提供者，复用虚拟 task-auto 媒体库缓存以保持实现与注册身份一致。
+    getTaskSourceProvider(providerId) {
+        const entry = this.getLibrary(`task-auto:${providerId}`);
+        if (!entry) throw new Error('任务媒体源未运行，请先启动对应的用户服务任务');
+        return entry.provider;
+    }
+
+    // 统一调用任务媒体源能力：先校验注册状态与能力声明，再转发到具体实现。
+    async callTaskSource(providerId, action, payload = {}) {
+        const registration = this.taskMediaProviders.get(providerId);
+        if (!registration) throw new Error('任务媒体源未运行，请先启动对应的用户服务任务');
+        if (!registration.features.includes(action)) throw new Error('任务媒体源不支持该操作');
+        const implementation = this.getTaskSourceProvider(providerId).getImplementation();
+        if (typeof implementation[action] !== 'function') throw new Error('任务媒体源缺少该操作接口');
+        return implementation[action](payload);
+    }
+
+    listTaskMediaSources() {
+        return this.taskMediaProviders.list().map(source => {
+            const existing = [...this.libraries.values()].find(item => item.config.type === 'task' && item.config.providerId === source.id);
+            return {
+                ...source,
+                libraryId: existing?.config.id || `task-auto:${source.id}`,
+                // 代理状态按当前配置实时计算，供前端展示“使用代理”开关。
+                proxyEnabled: Boolean(this.getProxyUrl(source.id, source.proxyDefault))
+            };
+        });
     }
 
     getDefaultLibrary() {
@@ -1277,6 +1386,8 @@ class MediaLibraryManager {
                 type: lib.config.type,
                 isDefault: id === this.defaultLibraryId,
                 readonly: lib.config.readonly || false,
+                ...(lib.config.type === 'quark' && lib.provider.shareId ? { shareId: lib.provider.shareId } : {}),
+                ...(lib.config.type === 'task' ? { providerId: lib.config.providerId, available: !!this.taskMediaProviders.get(lib.config.providerId) } : {}),
                 ...(lib.config.managed ? { managed: true } : {})
             });
         });
@@ -1285,7 +1396,7 @@ class MediaLibraryManager {
     }
 
     async list(libraryId, dirPath) {
-        const library = this.libraries.get(libraryId);
+        const library = this.getLibrary(libraryId);
         
         if (!library) {
             throw new Error('媒体库不存在');
@@ -1351,7 +1462,7 @@ class MediaLibraryManager {
     }
 
     async getFile(libraryId, filePath) {
-        const library = this.libraries.get(libraryId);
+        const library = this.getLibrary(libraryId);
 
         if (!library) {
             throw new Error('媒体库不存在');
@@ -1361,7 +1472,7 @@ class MediaLibraryManager {
     }
 
     async getFileStream(libraryId, filePath, range) {
-        const library = this.libraries.get(libraryId);
+        const library = this.getLibrary(libraryId);
 
         if (!library) {
             throw new Error('媒体库不存在');
@@ -1398,7 +1509,13 @@ class MediaLibraryManager {
                 readonly: lib.config.readonly || false
             };
             
-            if (lib.config.type === 'http') {
+            if (lib.config.type === 'task') {
+                libConfig.providerId = lib.config.providerId;
+                libConfig.url = lib.config.url;
+            } else if (lib.config.type === 'quark') {
+                libConfig.url = lib.config.url;
+                libConfig.passcode = lib.config.passcode;
+            } else if (lib.config.type === 'http') {
                 libConfig.url = lib.config.url;
                 libConfig.username = lib.config.username;
                 libConfig.password = lib.config.password;
@@ -1434,7 +1551,15 @@ class MediaLibraryManager {
             readonly: configData.readonly || false
         };
         
-        if (configData.type === 'http') {
+        if (configData.type === 'task') {
+            config.providerId = String(configData.providerId || '');
+            config.url = String(configData.url || '');
+            config.readonly = true;
+        } else if (configData.type === 'quark') {
+            config.url = configData.url;
+            config.passcode = configData.passcode;
+            config.readonly = true;
+        } else if (configData.type === 'http') {
             config.url = configData.url;
             config.username = configData.username;
             config.password = configData.password;
@@ -1461,6 +1586,7 @@ class MediaLibraryManager {
             throw new Error('媒体库不存在');
         }
         
+        if (['quark', 'task'].includes(library.config.type)) updates = { ...updates, readonly: true };
         Object.assign(library.config, updates);
         this.saveConfig();
         
@@ -1490,6 +1616,7 @@ module.exports = {
     migrateLegacyTildeDirectory,
     AndroidSafProvider,
     HttpProvider,
+    QuarkShareProvider,
     SmbProvider,
     MediaLibraryManager
 };

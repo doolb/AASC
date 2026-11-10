@@ -233,3 +233,5 @@ web-mediacenter/
 - [Handheld Mobile Photography in Very Low Light](https://research.google/pubs/handheld-mobile-photography-in-very-low-light/)：参考运动估计、对齐与稳健合并的原则；不是本项目IMU算法或其精度证据。
 - [Burst photography for high dynamic range and low-light imaging on mobile cameras](https://research.google/pubs/burst-photography-for-high-dynamic-range-and-low-light-imaging-on-mobile-cameras/)：多帧配准合并与降噪权衡。
 - [NXP Sensor Fusion用户指南](https://www.nxp.com/docs/en/user-guide/NSFK_Prod_UG.pdf)：多路传感器异频/异步时刻与融合假设。项目采用已有姿态世界对齐、源时间局部拟合和固定延迟输出，未复制影像算法，也未增加模型依赖。
+
+- [dash.js](https://github.com/Dash-Industry-Forum/dash.js) 4.7.4：MPEG-DASH 浏览器播放器，项目使用本地分发版本；许可证随 `src/apps/web-mediacenter/ui/public/js/vendor/dashjs-4.7.4/` 保留。

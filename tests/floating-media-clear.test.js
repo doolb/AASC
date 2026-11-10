@@ -237,8 +237,9 @@ test('真实媒体元素清空五种媒体，停止列表并阻止旧MHTML回填
     await page.addScriptTag({ path: path.join(publicDir, 'js/video-black-borders.js') });
     await page.addScriptTag({ path: path.join(publicDir, 'js/display-video-black-borders.js') });
     const source = read('display.html');
-    const functions = ['stopPlaylist', 'setMediaSourceWithFallback', 'loadMhtmlMedia', 'showMedia',
-        'getCurrentPlayableMedia', 'reportPlayState', 'clearCurrentMedia', 'handleControl', 'handleRestoreState']
+    const functions = ['cancelPlaylistCache', 'stopPlaylist', 'setMediaSourceWithFallback', 'loadMhtmlMedia', 'showMedia',
+        'getCurrentPlayableMedia', 'reportPlayState', 'clearCurrentMedia', 'handleControl', 'handleRestoreState',
+        'stopBilibiliDash', 'stopBilibiliDanmaku', 'setupBilibiliDanmaku']
         .map((name) => declaration(source, name, '        ')).join('\n');
     await page.addScriptTag({ content: `
         const [mediaImage, mediaVideo, mediaAudio, mediaHtml, mediaText, fileNameDisplay, waitingMessage] =
@@ -248,6 +249,8 @@ test('真实媒体元素清空五种媒体，停止列表并阻止旧MHTML回填
         const mediaLoopPlayers = [MediaLoop.attach(mediaVideo), MediaLoop.attach(mediaAudio)];
         function setMediaLoop(value) { mediaLoopPlayers.forEach(player => player.set(value)); }
         let currentMediaType = null, mediaLoadSequence = 0, htmlMediaAbortController = null, blackBorderTransition = true;
+        let bilibiliDashPlayer = null;
+        let bilibiliDanmakuController = null;
         let playlistState = null, savedAutoTts = null, autoTtsEnabled = false;
         let pauseExpected = true, mediaIsPlaying = false, mediaRecoveryAttempts = 0, mediaRecoveryTimer = null;
         let controlModeEnabled = true, currentHtmlScroll = {}, htmlProgressTimer = null;

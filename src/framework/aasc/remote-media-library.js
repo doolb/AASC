@@ -8,7 +8,8 @@ const REMOTE_MEDIA_LIBRARY_COMMANDS = new Set([
     'media.library.create-folder',
     'media.library.delete-folder',
     'media.library.set-default',
-    'media.library.playlist'
+    'media.library.playlist',
+    'media.library.list'
 ]);
 
 /**
@@ -66,6 +67,7 @@ function createRemoteMediaLibraryHandlers(options = {}) {
         mediaLibraryManager.setDefault(payload.id);
         return { id: payload.id, isDefault: true };
     });
+    handlers.set('media.library.list', async payload => ({ items: await mediaLibraryManager.list(payload.id, payload.path || '/') }));
     handlers.set('media.library.playlist', async payload => {
         if (typeof buildPlaylist !== 'function') {
             throw new Error('子服务器未配置媒体库播放列表能力');
@@ -118,7 +120,7 @@ function buildRemoteMediaProxyPath(nodeId, libraryId, filePath) {
 }
 
 function normalizeConfig(payload = {}) {
-    const fields = ['id', 'name', 'type', 'path', 'url', 'server', 'share', 'domain', 'username', 'password', 'readonly'];
+    const fields = ['id', 'name', 'type', 'path', 'url', 'server', 'share', 'domain', 'username', 'password', 'passcode', 'readonly'];
     return fields.reduce((config, field) => {
         if (payload[field] !== undefined) {
             config[field] = payload[field];

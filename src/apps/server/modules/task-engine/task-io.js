@@ -22,6 +22,9 @@ class TaskIO extends EventEmitter {
     this.tasksDir = options.tasksDir
       || (process.env.AASC_TASK_DIR ? path.resolve(process.env.AASC_TASK_DIR) : null)
       || runtimeContext.taskDir;
+    this.localTasksDir = options.localTasksDir || (options.tasksDir
+      ? path.join(this.tasksDir, 'local-only')
+      : path.join(projectRoot, 'res', 'tasks', 'local-only'));
     this._indexes = new Map();
     this.taskCodeCatalog = options.taskCodeCatalog === undefined ? require('./task-code-catalog').getTaskCodeCatalog() : options.taskCodeCatalog;
   }
@@ -35,7 +38,16 @@ class TaskIO extends EventEmitter {
     return resolved;
   }
 
-  _taskPath(taskName) { return path.join(this.tasksDir, taskName); }
+  _taskPath(taskName) {
+    if (typeof taskName !== 'string') throw new Error('任务名无效');
+    if (taskName.startsWith('local-only.')) {
+      const name = taskName.slice('local-only.'.length);
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) throw new Error('本地任务名无效');
+      return this._validateSafePath(this.localTasksDir, name);
+    }
+    if (taskName === 'local-only') throw new Error('本地任务目录不是任务');
+    return this._validateSafePath(this.tasksDir, taskName);
+  }
   resolveCodePath(taskName, entryFile) {
     if (this.taskCodeCatalog?.isManaged(taskName)) return this.taskCodeCatalog.resolve(taskName, entryFile);
     return this._validateSafePath(this._taskPath(taskName), entryFile);
@@ -83,7 +95,7 @@ class TaskIO extends EventEmitter {
       } else if (file.path) {
         const relative = file.path.replace(/^\/res\/tasks\//, '');
         const [sourceTask, ...sourceFile] = relative.split('/');
-        const srcPath = this.taskCodeCatalog?.isManaged(sourceTask)
+        const srcPath = this.taskCodeCatalog?.isManaged(sourceTask) || sourceTask.startsWith('local-only.')
           ? this.resolveCodePath(sourceTask, sourceFile.join('/')) : this._validateSafePath(this.tasksDir, relative);
         const srcExists = fs.existsSync(srcPath);
         if (srcExists) {
@@ -225,7 +237,7 @@ class TaskIO extends EventEmitter {
     try {
       const entries = await fs.promises.readdir(this.tasksDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
+        if (!entry.isDirectory() || entry.name === 'local-only' || entry.name.startsWith('local-only.')) continue;
         const taskName = entry.name;
         const taskDir = this._taskPath(taskName);
         const files = [];
@@ -242,6 +254,19 @@ class TaskIO extends EventEmitter {
         tasks.push({ taskName, files, instances: idx });
       }
     } catch (e) { console.warn('[TaskIO] 读取任务目录失败:', e.message); }
+    try {
+      const localEntries = await fs.promises.readdir(this.localTasksDir, { withFileTypes: true });
+      for (const entry of localEntries) {
+        if (!entry.isDirectory() || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(entry.name)) continue;
+        const taskName = `local-only.${entry.name}`;
+        const taskDir = this._taskPath(taskName);
+        const files = [];
+        for (const file of await fs.promises.readdir(taskDir, { withFileTypes: true })) {
+          if (file.isFile()) { const st = await fs.promises.stat(path.join(taskDir, file.name)); files.push({ name: file.name, size: st.size }); }
+        }
+        tasks.push({ taskName, files, instances: await this.getIndex(taskName).catch(() => []), localOnly: true });
+      }
+    } catch (error) { if (error.code !== 'ENOENT') console.warn('[TaskIO] 读取本地任务失败:', error.message); }
     if (this.taskCodeCatalog) {
       tasks = tasks.filter(task => !this.taskCodeCatalog.isManaged(task.taskName));
       for (const task of this.taskCodeCatalog.tasks.values()) {
@@ -256,7 +281,7 @@ class TaskIO extends EventEmitter {
   async deleteTask(taskName) {
     this.assertTaskWritable(taskName);
     this._indexes.delete(taskName);
-    const taskDir = this._validateSafePath(this.tasksDir, taskName);
+    const taskDir = this._taskPath(taskName);
     try {
       await fs.promises.rm(taskDir, { recursive: true, force: true });
       return { success: true };
@@ -302,7 +327,7 @@ class TaskIO extends EventEmitter {
 
   async deleteTaskFiles(taskName, fileNames) {
     this.assertTaskWritable(taskName, fileNames);
-    const taskDir = this._validateSafePath(this.tasksDir, taskName);
+    const taskDir = this._taskPath(taskName);
     const results = [];
     for (const fileName of fileNames) {
       try {

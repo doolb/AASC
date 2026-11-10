@@ -353,3 +353,36 @@ test('旧字面波浪号目录迁移到 Android 外部媒体目录且不覆盖�
         fs.rmSync(root, { recursive: true, force: true });
     }
 });
+
+test('任务媒体源统一调用并注入实时代理地址', () => {
+    const { TaskMediaProviderRegistry } = require('../src/apps/web-mediacenter/modules/media/task-media-provider-registry');
+    const { MediaLibraryManager } = require('../src/apps/web-mediacenter/modules/media/media-library-app-service');
+    const registry = new TaskMediaProviderRegistry();
+    let received = null;
+    registry.register('owner', {
+        id: 'demo', name: '演示源', region: 'overseas', features: ['home', 'search'], proxyDefault: true,
+        create: config => {
+            received = config;
+            return {
+                list: async () => [],
+                getFile: async () => ({}),
+                getFileStream: async () => ({}),
+                home: async () => ({ items: [{ id: '1', title: '视频', mediaType: 'video' }] })
+            };
+        }
+    });
+    let proxy = 'http://127.0.0.1:7890';
+    const manager = new MediaLibraryManager({
+        configPath: path.join(os.tmpdir(), `aasc-media-${process.pid}.json`),
+        taskMediaProviders: registry,
+        getProxyUrl: (id, fallback) => id === 'demo' && fallback ? proxy : ''
+    });
+    const provider = manager.getTaskSourceProvider('demo');
+    assert.equal(provider.getImplementation().list instanceof Function, true);
+    assert.equal(received.proxyUrl, 'http://127.0.0.1:7890');
+    proxy = '';
+    assert.equal(received.proxyUrl, '');
+    return manager.callTaskSource('demo', 'home', {}).then(result => {
+        assert.equal(result.items[0].title, '视频');
+    });
+});

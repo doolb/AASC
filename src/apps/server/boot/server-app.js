@@ -106,6 +106,7 @@ const {
     createDisplayAsrLongQueueSettings
 } = require('../modules/asr/display-asr-long-queue');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
+const { normalizeProxyUrl, resolveSourceProxyUrl } = require('../modules/media/web-proxy');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
 const { AascServerRegistry } = require('../../../framework/aasc/server-registry');
@@ -955,6 +956,9 @@ const androidSafUrl = process.env.AASC_ANDROID_SAF_URL?.trim() || '';
 const androidSafToken = process.env.AASC_ANDROID_SAF_TOKEN?.trim() || '';
 const mediaLibraryManager = new MediaLibraryManager({
     configPath: path.join(USER_CONFIG_DIR, 'media-libraries.json'),
+    getQuarkCookie: () => config.get('media.quarkCookie', ''),
+    // 任务媒体源按“全局代理 + 单源开关 + 源默认值”实时解析代理地址。
+    getProxyUrl: (sourceId, proxyDefault) => getSourceProxyUrl(sourceId, proxyDefault),
     getPort: () => PORT,
     getLocalIP: getLocalIP,
     isHttps: () => useHttps,
@@ -962,6 +966,32 @@ const mediaLibraryManager = new MediaLibraryManager({
         ? { url: androidSafUrl, token: androidSafToken }
         : null
 });
+
+// 统一解析任务媒体源最终使用的代理地址：全局代理 + 单源开关 + 源默认值。
+function getSourceProxyUrl(sourceId, proxyDefault = false) {
+    // 持久化配置可能被手工编辑或导入损坏，读取路径按“无代理”容错处理，
+    // 避免在控制端握手等场景抛异常；不记录代理地址本身（可能含凭据）。
+    try {
+        return resolveSourceProxyUrl({
+            globalProxy: config.get('network.globalWebProxy', ''),
+            switches: config.get('media.providerProxy', {}) || {},
+            sourceId,
+            proxyDefault
+        });
+    } catch {
+        return '';
+    }
+}
+
+// 组装控制端需要的代理配置快照，并附带各任务媒体源当前的有效代理状态。
+function getWebProxyConfig() {
+    return {
+        type: 'webProxyConfig',
+        globalWebProxy: config.get('network.globalWebProxy', ''),
+        providerProxy: config.get('media.providerProxy', {}) || {},
+        sources: mediaLibraryManager.listTaskMediaSources()
+    };
+}
 
 const androidSafControl = createAndroidSafControl({ url: androidSafUrl, token: androidSafToken, mediaLibraryManager });
 
@@ -1034,6 +1064,60 @@ const aascMediaIndexService = new AascMediaIndexService({
         return `${origin}${buildRemoteMediaProxyPath(node.nodeId, libraryId, filePath)}`;
     }
 });
+const { QuarkDirectoryDownloads, serveQuarkDirectoryDownload } = require('../modules/media/quark-directory-downloads');
+const quarkDirectoryDownloads = new QuarkDirectoryDownloads({
+    indexPath: path.join(USER_CONFIG_DIR, 'quark-directory-downloads.json'),
+    getTarget(id, writable = false) {
+        const target = mediaLibraryManager.getLibrary(id);
+        if (!target || target.config.type !== 'local' || (writable && target.config.readonly) || !target.provider.basePath) throw new Error('请选择主服务器上的可写本地媒体库');
+        return target.provider;
+    },
+    async list(source, dir) {
+        if (source.nodeId === AASC_MAIN_NODE_ID) {
+            const library = mediaLibraryManager.getLibrary(source.libraryId);
+            if (!library || library.config.type !== 'quark') throw new Error('夸克媒体库不存在');
+            return mediaLibraryManager.list(source.libraryId, dir);
+        }
+        const result = await requestRemoteMediaLibrary({ registry: aascServerRegistry, nodeId: source.nodeId, command: 'media.library.list', payload: { id: source.libraryId, path: dir } });
+        return result.items || [];
+    },
+    async open(source, filePath) {
+        if (source.nodeId === AASC_MAIN_NODE_ID) return (await mediaLibraryManager.getLibrary(source.libraryId).provider.getDownloadStream(filePath)).stream;
+        const node = getRemoteMediaNode(source.nodeId);
+        const target = new URL(`/api/media-libraries/${encodeURIComponent(source.libraryId)}/proxy/${encodeRemoteMediaPath(filePath)}?download=1`, `${node.url}/`);
+        const response = await requestRemoteHttp(node, target);
+        if (response.statusCode !== 200) { response.resume(); throw new Error(`子服务器下载失败 (${response.statusCode})`); }
+        return response;
+    },
+    notify: job => broadcastToControls({ type: 'quarkDirectoryDownload', ...job })
+});
+
+// 列表接口与媒体索引共用同一套条目状态规则，避免两处口径不一致。
+async function attachQuarkItemDownloaded(source, items) {
+    for (const item of Array.isArray(items) ? items : []) {
+        try {
+            if (item.type === 'folder') {
+                item.downloaded = Boolean(await quarkDirectoryDownloads.lookupDirectory(source, item.path));
+                const count = quarkDirectoryDownloads.countDirectory(source, item.path);
+                if (count > 0) item.downloadedCount = count;
+            } else {
+                item.downloaded = Boolean(await quarkDirectoryDownloads.lookup(source, item.path));
+            }
+        } catch { item.downloaded = false; }
+    }
+}
+
+// 为媒体索引中的夸克库附加“已下载”状态，供分享卡片和文件/文件夹卡片直接渲染。
+async function attachQuarkDownloadedState(index) {
+    const libraries = [...(index?.libraries || []), ...(index?.sources || []).flatMap(source => source?.libraries || [])];
+    for (const library of libraries) {
+        if (library?.type !== 'quark') continue;
+        const source = { nodeId: library.ownerNodeId || AASC_MAIN_NODE_ID, libraryId: library.id };
+        try { library.downloaded = Boolean(await quarkDirectoryDownloads.lookupDirectory(source, '/')); } catch { library.downloaded = false; }
+        await attachQuarkItemDownloaded(source, library.items);
+    }
+}
+
 const aascTaskRouter = new AascTaskRouter({
     getDisplays: () => Array.from(displayClients.entries()).map(([id, data]) => ({
         id,
@@ -1418,7 +1502,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1522,7 +1606,8 @@ async function startServer() {
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'setVoiceCaptureConfig', 'requestAudioInputDevices', 'setAudioOutputConfig', 'requestAudioOutputDevices', 'requestDisplayRecording', 'stopDisplayRecording',
                 'listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera',
                 'setGlobalRecordingPause',
-                'playlistRequest', 'playlistControl', 'gameDemoStart', 'gameDemoStop'
+                'playlistRequest', 'playlistControl', 'bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove', 'shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet', 'gameDemoStart', 'gameDemoStop',
+                'getWebProxyConfig', 'setGlobalWebProxy', 'setProviderProxy'
             ];
             for (const type of controlTypes) {
                 wsServer.registerHandler(type, async (data, ctx) => {
@@ -1657,6 +1742,11 @@ async function startServer() {
                     return runtime;
                 },
                 taskCodeCatalog,
+                registerMediaProvider: (owner, definition) => {
+                    const unregister = mediaLibraryManager.taskMediaProviders.register(owner, definition);
+                    broadcastToControls({ type: 'taskMediaSources', providers: mediaLibraryManager.listTaskMediaSources() });
+                    return () => { unregister(); mediaLibraryManager.virtualTaskLibraries.delete(`task-auto:${definition.id}`); broadcastToControls({ type: 'taskMediaSources', providers: mediaLibraryManager.listTaskMediaSources() }); };
+                },
                 maxInstances: 50,
                 ensureTaskDependencies: (ids, onProgress) => taskDependencyManager.ensure(ids, onProgress),
                 chatService: chat,
@@ -3562,13 +3652,14 @@ async function proxyRemoteMediaUpload(req, res) {
 }
 
 async function proxyRemoteMediaFile(req, res) {
-    const node = getRemoteMediaNode(req.params.nodeId);
     let filePath;
     try {
-        filePath = decodeURIComponent(req.params[0] || '');
+        filePath = req.params[0] || '';
     } catch (error) {
         throw new Error(`远程媒体路径编码无效: ${error.message}`);
     }
+    if (await serveQuarkDirectoryDownload(req, res, { nodeId: req.params.nodeId, libraryId: req.params.libraryId }, '/' + filePath.replace(/^\/+/, ''), quarkDirectoryDownloads)) return;
+    const node = getRemoteMediaNode(req.params.nodeId);
     const encodedPath = encodeRemoteMediaPath(filePath);
     if (!encodedPath) {
         throw new Error('远程媒体文件路径不能为空');
@@ -3577,6 +3668,7 @@ async function proxyRemoteMediaFile(req, res) {
         `/api/media-libraries/${encodeURIComponent(req.params.libraryId)}/proxy/${encodedPath}`,
         `${node.url}/`
     );
+    for (const key of ['prepare', 'progress', 'thumbnail', 'download']) if (req.query[key] === '1') target.searchParams.set(key, '1');
     const remoteResponse = await requestRemoteHttp(node, target, {
         method: 'GET',
         headers: req.headers
@@ -4715,6 +4807,7 @@ app.get('/api/aasc/media-index', async (req, res) => {
         const index = req.query.scope === 'local'
             ? await aascMediaIndexService.buildLocalIndex(requestedPath)
             : await aascMediaIndexService.buildNetworkIndex(requestedPath);
+        await attachQuarkDownloadedState(index);
         res.json({ status: 'success', index });
     } catch (error) {
         res.status(500).json({ status: 'error', message: `读取 AASC 媒体索引失败: ${error.message}` });
@@ -5532,10 +5625,12 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-    res.json({ 
-        status: 'success', 
-        config: config.getConfig()
-    });
+    // 夸克 Cookie 仅供服务端使用，公开配置接口不返回凭证。
+    const current = config.getConfig();
+    const media = { ...(current.media || {}) };
+    delete media.quarkCookie;
+    delete media.bilibiliCookie;
+    res.json({ status: 'success', config: { ...current, media } });
 });
 
 app.get('/api/chat/config', (req, res) => {
@@ -5890,17 +5985,177 @@ app.post('/api/reminders/:id/test', async (req, res) => {
     }
 });
 
-app.get('/api/media-libraries', (req, res) => {
-    res.json({
-        status: 'success',
-        libraries: mediaLibraryManager.listLibraries(),
-        defaultLibraryId: mediaLibraryManager.getDefaultLibraryId()
-    });
+const { createBilibiliStreamService } = require('../modules/media/bilibili-stream-service');
+const bilibiliStreamService = createBilibiliStreamService({ getCookie: () => config.get('media.bilibiliCookie', '') || process.env.BILIBILI_COOKIE || '' });
+const { createBilibiliSearchService } = require('../modules/media/bilibili-search-service');
+const { createBilibiliDiscoveryService } = require('../modules/media/bilibili-discovery-service');
+const { createBilibiliDanmakuService } = require('../modules/media/bilibili-danmaku-service');
+const { BilibiliDownloads } = require('../modules/media/bilibili-download-service');
+const { parseVideoUrl: parseBilibiliVideoUrl, defaultCollection: fetchBilibiliCollection } = require('../modules/media/bilibili-list-service');
+// B 站搜索按源代理开关解析代理地址，代理仅作用于服务端外部请求。
+const searchBilibili = createBilibiliSearchService({ getProxyUrl: () => getSourceProxyUrl('bilibili', false) });
+// B 站首页与相关推荐同搜索共用源代理开关。
+const discoveryBilibili = createBilibiliDiscoveryService({ getProxyUrl: () => getSourceProxyUrl('bilibili', false) });
+// B 站弹幕接口同样按源代理开关解析代理地址。
+const danmakuBilibili = createBilibiliDanmakuService({ getProxyUrl: () => getSourceProxyUrl('bilibili', false) });
+const bilibiliDownloads = new BilibiliDownloads({
+    indexPath: path.join(USER_CONFIG_DIR, 'bilibili-downloads.json'),
+    getTarget: (id, writable) => quarkDirectoryDownloads.getTarget(id, writable),
+    streamService: bilibiliStreamService, fetchCollection: fetchBilibiliCollection,
+    notify: job => broadcastToControls({ type: 'bilibiliDownload', ...job })
+});
+// 不同服务器上的显示端也可通过 MSE 读取公共媒体分段和 Range 响应头。
+app.use('/api/bilibili', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    next();
+});
+app.get('/api/bilibili/search', async (req, res) => {
+    try {
+        const result = await searchBilibili(req.query.keyword, req.query.page || 1);
+        // 为每个结果附加本地已下载状态，供前端显示“已下载”。
+        const videos = await Promise.all(result.videos.map(async video => ({
+            ...video,
+            downloaded: Boolean(await bilibiliDownloads.lookup(video))
+        })));
+        res.json({ status: 'success', ...result, videos });
+    } catch (error) { res.status(502).json({ status: 'error', message: error.message }); }
+});
+app.get('/api/bilibili/home', async (req, res) => {
+    try { res.json({ status: 'success', ...await discoveryBilibili.home(req.query.page || 1) }); }
+    catch (error) { res.status(502).json({ status: 'error', message: error.message }); }
+});
+app.get('/api/bilibili/related', async (req, res) => {
+    try { res.json({ status: 'success', ...await discoveryBilibili.related(req.query.bvid) }); }
+    catch (error) { res.status(502).json({ status: 'error', message: error.message }); }
+});
+app.get('/api/bilibili/downloaded', async (req, res) => {
+    try {
+        // 复用视频 URL 解析校验 bvid/page；非法 bvid 会在此抛错并返回 400。
+        const video = parseBilibiliVideoUrl(`https://www.bilibili.com/video/${req.query.bvid}?p=${req.query.page || 1}`);
+        res.json({ status: 'success', downloaded: Boolean(await bilibiliDownloads.lookup(video)) });
+    } catch (error) { res.status(400).json({ status: 'error', message: error.message }); }
+});
+app.get('/api/bilibili/danmaku/:bvid/:page', async (req, res) => {
+    try {
+        const result = await danmakuBilibili.get(req.params.bvid, req.params.page);
+        res.set('Cache-Control', 'private, max-age=600');
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: error.message });
+    }
+});
+app.post('/api/bilibili/download', (req, res) => {
+    try {
+        const { url, targetId, title } = req.body || {};
+        if (typeof url !== 'string' || typeof targetId !== 'string') throw new Error('请选择视频和目标媒体库');
+        res.json({ status: 'success', job: bilibiliDownloads.start(url, targetId, title) });
+    } catch (error) { res.status(400).json({ status: 'error', message: error.message }); }
+});
+app.get('/api/bilibili/download', (req, res) => res.json({ status: 'success', job: bilibiliDownloads.job }));
+app.get('/api/bilibili/local/:bvid', async (req, res) => {
+    try {
+        const video = parseBilibiliVideoUrl(`https://www.bilibili.com/video/${req.params.bvid}?p=${encodeURIComponent(String(req.query.p || '1'))}`);
+        if (!await serveQuarkDirectoryDownload(req, res, bilibiliDownloads.source, bilibiliDownloads.key(video), bilibiliDownloads.index)) res.status(404).json({ status: 'error', message: '本地视频不存在' });
+    } catch (error) { if (!res.headersSent) res.status(400).json({ status: 'error', message: error.message }); else res.destroy(); }
+});
+app.get('/api/bilibili/resolve', async (req, res) => {
+    try {
+        const parsed = parseBilibiliVideoUrl(req.query.url);
+        if (await bilibiliDownloads.lookup(parsed)) return res.json({ status: 'success', url: `/api/bilibili/local/${parsed.bvid}?p=${parsed.page}`, dash: false, local: true });
+        let video;
+        let dash = false;
+        try { video = await bilibiliStreamService.resolveDash(req.query.url); dash = true; }
+        catch { video = await bilibiliStreamService.resolve(req.query.url); }
+        const prefix = `${encodeURIComponent(video.bvid)}?p=${video.page}`;
+        res.json({ status: 'success', url: dash ? `/api/bilibili/dash/${prefix}` : `/api/bilibili/video/${prefix}`,
+            dash, fallbackUrl: dash ? `/api/bilibili/video/${prefix}` : undefined,
+            quality: dash ? video.video.quality : video.quality, width: dash ? video.video.width : video.width, height: dash ? video.video.height : video.height });
+    } catch (error) { res.status(502).json({ status: 'error', message: error.message }); }
+});
+app.get('/api/bilibili/dash/:bvid', async (req, res) => {
+    try {
+        const url = `https://www.bilibili.com/video/${req.params.bvid}?p=${encodeURIComponent(String(req.query.p || '1'))}`;
+        res.type('application/dash+xml').send(await bilibiliStreamService.manifest(url));
+    } catch (error) { res.status(502).json({ status: 'error', message: error.message }); }
+});
+app.all('/api/bilibili/dash/:bvid/:track', async (req, res) => {
+    if (!['GET', 'HEAD'].includes(req.method)) return res.status(405).end();
+    try {
+        const url = `https://www.bilibili.com/video/${req.params.bvid}?p=${encodeURIComponent(String(req.query.p || '1'))}`;
+        await bilibiliStreamService.stream(url, req, res, req.params.track);
+    } catch (error) {
+        if (!res.headersSent) res.status(502).json({ status: 'error', message: error.message });
+        else res.destroy();
+    }
+});
+app.all('/api/bilibili/video/:bvid', async (req, res) => {
+    if (!['GET', 'HEAD'].includes(req.method)) return res.status(405).end();
+    try {
+        const url = `https://www.bilibili.com/video/${req.params.bvid}?p=${encodeURIComponent(String(req.query.p || '1'))}`;
+        await bilibiliStreamService.stream(url, req, res);
+    } catch (error) {
+        if (!res.headersSent) res.status(502).json({ status: 'error', message: error.message });
+        else res.destroy();
+    }
+});
+
+// 目录与单文件下载共用来源校验：主服务器直接查本地库，子服务器查网络索引。
+async function assertQuarkDownloadSource(nodeId, libraryId) {
+    if (typeof nodeId !== 'string' || typeof libraryId !== 'string') throw new Error('来源或目标无效');
+    if (nodeId === AASC_MAIN_NODE_ID) {
+        const source = mediaLibraryManager.getLibrary(libraryId);
+        if (!source || source.config.type !== 'quark') throw new Error('夸克媒体库不存在');
+        return;
+    }
+    const index = await aascMediaIndexService.buildNetworkIndex('/');
+    const source = index.sources?.find(s => s.node?.nodeId === nodeId)?.libraries?.find(lib => lib.id === libraryId);
+    if (!source || source.type !== 'quark') throw new Error('夸克子服务器媒体库不存在或不可用');
+}
+
+app.post('/api/quark-directory-downloads', async (req, res) => {
+    try {
+        const { nodeId = AASC_MAIN_NODE_ID, libraryId, targetId, path: dirPath = '/' } = req.body || {};
+        await assertQuarkDownloadSource(nodeId, libraryId);
+        if (typeof targetId !== 'string') throw new Error('来源或目标无效');
+        const job = quarkDirectoryDownloads.start({ nodeId, libraryId }, dirPath, targetId);
+        res.json({ status: 'success', job });
+    } catch (error) { res.status(400).json({ status: 'error', message: error.message }); }
+});
+app.post('/api/quark-file-downloads', async (req, res) => {
+    try {
+        const { nodeId = AASC_MAIN_NODE_ID, libraryId, targetId, path: filePath, size, modifiedTime } = req.body || {};
+        if (typeof targetId !== 'string' || typeof filePath !== 'string') throw new Error('下载参数无效');
+        await assertQuarkDownloadSource(nodeId, libraryId);
+        const job = quarkDirectoryDownloads.startFile({ nodeId, libraryId }, filePath, targetId, { size, modifiedTime });
+        res.json({ status: 'success', job });
+    } catch (error) { res.status(400).json({ status: 'error', message: error.message }); }
+});
+app.get('/api/quark-directory-downloads', (req, res) => res.json({ status: 'success', job: quarkDirectoryDownloads.job }));
+
+app.get('/api/media-library-providers', (req, res) => res.json({ status: 'success', providers: mediaLibraryManager.listTaskMediaSources() }));
+
+app.get('/api/media-libraries', async (req, res) => {
+    try {
+        const libraries = await Promise.all(mediaLibraryManager.listLibraries().map(async library => library.type === 'quark'
+            ? { ...library, downloaded: Boolean(await quarkDirectoryDownloads.lookupDirectory({ nodeId: AASC_MAIN_NODE_ID, libraryId: library.id }, '/')) }
+            : library));
+        res.json({
+            status: 'success',
+            libraries,
+            defaultLibraryId: mediaLibraryManager.getDefaultLibraryId()
+        });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: error.message });
+    }
 });
 
 app.post('/api/media-libraries', async (req, res) => {
     try {
-        const { name, type, path: libPath, url, server, share, domain, username, password, readonly } = req.body;
+        const { name, type, path: libPath, url, providerId, server, share, domain, username, password, passcode, readonly } = req.body;
         
         if (!name) {
             return res.status(400).json({ status: 'error', message: '名称不能为空' });
@@ -5911,11 +6166,13 @@ app.post('/api/media-libraries', async (req, res) => {
             type: type || 'local',
             path: libPath,
             url,
+            providerId,
             server,
             share,
             domain,
             username,
             password,
+            passcode,
             readonly: readonly || false
         });
         
@@ -5933,7 +6190,7 @@ app.post('/api/media-libraries', async (req, res) => {
             }
         }
         
-        res.json({ status: 'success', library: config });
+        res.json({ status: 'success', library: config.type === 'quark' ? { ...config, passcode: undefined } : config });
     } catch (err) {
         res.status(500).json({ status: 'error', message: err.message });
     }
@@ -5954,7 +6211,7 @@ app.put('/api/media-libraries/:id', (req, res) => {
             mediaLibraryManager.setDefault(id);
         }
         
-        res.json({ status: 'success', library: config });
+        res.json({ status: 'success', library: config.type === 'quark' ? { ...config, passcode: undefined } : config });
     } catch (err) {
         res.status(500).json({ status: 'error', message: err.message });
     }
@@ -5974,6 +6231,8 @@ app.get('/api/media-libraries/:id/list', async (req, res) => {
     try {
         const { path: dirPath = '/' } = req.query;
         const items = await mediaLibraryManager.list(req.params.id, dirPath);
+        const library = mediaLibraryManager.getLibrary(req.params.id);
+        if (library?.config.type === 'quark') await attachQuarkItemDownloaded({ nodeId: AASC_MAIN_NODE_ID, libraryId: req.params.id }, items);
         res.json({ status: 'success', items });
     } catch (err) {
         res.status(500).json({ status: 'error', message: err.message });
@@ -6063,10 +6322,55 @@ app.post('/api/media-libraries/:id/set-default', (req, res) => {
 
 app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
     try {
-        const filePath = decodeURIComponent(req.params[0]);
+        const filePath = req.params[0];
 
         if (!filePath) {
             return res.status(400).json({ status: 'error', message: '文件路径不能为空' });
+        }
+        if (await serveQuarkDirectoryDownload(req, res, { nodeId: AASC_MAIN_NODE_ID, libraryId: req.params.id }, '/' + filePath.replace(/^\/+/, ''), quarkDirectoryDownloads)) return;
+        if (req.query.download === '1') {
+            const library = mediaLibraryManager.getLibrary(req.params.id);
+            if (!library || library.config.type !== 'quark' || typeof library.provider.getDownloadStream !== 'function') return res.status(400).json({ status: 'error', message: '不支持下载该媒体' });
+            const result = await library.provider.getDownloadStream(filePath, req.headers.range);
+            if (res.destroyed) { result.stream.destroy(); return; }
+            res.status(result.statusCode);
+            res.attachment(result.fileName);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Cache-Control', 'private, no-store');
+            for (const [name, value] of Object.entries(result.headers)) res.setHeader(name, value);
+            result.stream.on('error', () => res.destroy());
+            res.on('close', () => result.stream.destroy());
+            result.stream.pipe(res);
+            return;
+        }
+        if (req.query.prepare === '1') {
+            const library = mediaLibraryManager.getLibrary(req.params.id);
+            if (!library || library.config.type !== 'quark' || typeof library.provider.prepareVideo !== 'function') return res.status(400).json({ status: 'error', message: '不支持缓存该媒体' });
+            // 新客户端按行接收进度；旧客户端仍收到完整 JSON。远程代理原样转发。
+            const live = req.query.progress === '1';
+            res.setHeader('Content-Type', live ? 'application/x-ndjson; charset=utf-8' : 'application/json; charset=utf-8');
+            res.setHeader('Cache-Control', 'no-store');
+            res.write(live ? '\n' : ' ');
+            const heartbeat = setInterval(() => { if (!res.destroyed) res.write(live ? '\n' : ' '); }, 15000);
+            const progress = live ? event => { if (!res.destroyed) res.write(JSON.stringify({ type: 'progress', ...event }) + '\n'); } : null;
+            try {
+                await library.provider.prepareVideo(filePath, progress);
+                if (!res.destroyed) res.end(JSON.stringify({ status: 'success' }) + (live ? '\n' : ''));
+            } catch (error) {
+                if (!res.destroyed) res.end(JSON.stringify({ status: 'error', message: error.message }) + (live ? '\n' : ''));
+            } finally { clearInterval(heartbeat); }
+            return;
+        }
+        if (req.query.thumbnail === '1') {
+            const library = mediaLibraryManager.getLibrary(req.params.id);
+            if (!library || library.config.type !== 'quark' || typeof library.provider.getThumbnailStream !== 'function') return res.status(400).json({ status: 'error', message: '不支持视频缩略图' });
+            const result = await library.provider.getThumbnailStream(filePath);
+            res.status(result.statusCode);
+            for (const [name, value] of Object.entries(result.headers)) res.setHeader(name, value);
+            result.stream.on('error', () => res.destroy());
+            res.on('close', () => result.stream.destroy());
+            result.stream.pipe(res);
+            return;
         }
 
         const ext = filePath.toLowerCase().split('.').pop();
@@ -7037,7 +7341,7 @@ const displayListDebug = {
     sources: new Set()
 };
 
-const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'task:widget_update', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'htmlProgress']);
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'task:widget_update', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistCacheStatus', 'htmlProgress']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
@@ -7746,6 +8050,49 @@ function normalizeRemotePlaylist(playlist, nodeId, nodeUrl, libraryId) {
             ...(directUrl && fallbackUrl && directUrl !== fallbackUrl ? { fallbackUrl } : {})
         };
     }).filter(Boolean);
+}
+
+// 夸克分享逐目录读取；远端目录仍由主服务器转成可用的媒体代理地址。
+async function nextDynamicPlaylistBatch(cursor, remoteNodeId) {
+    const listDirectory = remoteNodeId ? async (libraryId, dir) => {
+        const result = await requestRemoteMediaLibrary({ registry: aascServerRegistry, nodeId: remoteNodeId,
+            command: 'media.library.list', payload: { id: libraryId, path: dir } });
+        return result.items || [];
+    } : undefined;
+    const batch = await playlistManager.nextDirectoryBatch(cursor, listDirectory);
+    if (remoteNodeId) {
+        const node = aascServerRegistry.get(remoteNodeId);
+        batch.playlist = normalizeRemotePlaylist(batch.playlist, remoteNodeId, node?.url, cursor.libraryId);
+    }
+    batch.playlist = batch.playlist.map(item => item.mediaType === 'video' ? { ...item, ...(remoteNodeId && item.fallbackUrl ? { url: new URL(item.fallbackUrl, `${useHttps ? 'https' : 'http'}://${getLocalIP()}:${PORT}`).href, directUrl: undefined } : {}), cacheBeforePlay: true, cacheNodeId: remoteNodeId || 'main-server', cacheLibraryId: cursor.libraryId, cachePath: item.path } : item);
+    return batch;
+}
+
+const dynamicPlaylistLoading = new WeakSet();
+async function advanceDynamicPlaylist(displayId, data, ws) {
+    const display = displayClients.get(displayId);
+    const state = display?.state.currentPlaylist;
+    if (!state || display.ws !== ws || state.startData?.listId !== data.listId || !state.startData.dynamicCursor || state.startData.dynamicBatch !== data.dynamicBatch || state.index !== data.index || dynamicPlaylistLoading.has(state)) return;
+    dynamicPlaylistLoading.add(state);
+    try {
+        const batch = await nextDynamicPlaylistBatch(state.startData.dynamicCursor, state.startData.dynamicRemoteNodeId);
+        if (displayClients.get(displayId)?.state.currentPlaylist !== state || displayClients.get(displayId)?.ws !== ws || state.index !== data.index || state.startData.dynamicBatch !== data.dynamicBatch) return;
+        if (!batch.playlist.length) {
+            sendToDisplay(displayId, { type: 'playlistDynamicEnd', listId: data.listId });
+            return;
+        }
+        state.startData = { ...state.startData, playlist: batch.playlist, dynamicCursor: batch.cursor, dynamicBatch: (state.startData.dynamicBatch || 0) + 1 };
+        state.index = 0;
+        state.currentTime = 0;
+        state.duration = 0;
+        persistDisplayState(display, { currentPlaylist: state });
+        sendToDisplay(displayId, { type: 'playlistStart', ...state.startData, resumeState: state.state });
+    } catch (error) {
+        if (displayClients.get(displayId)?.state.currentPlaylist === state) {
+            logError('批量播放', `读取下一个目录失败: ${error.message}`);
+            sendToDisplay(displayId, { type: 'playlistDynamicError', listId: data.listId });
+        }
+    } finally { dynamicPlaylistLoading.delete(state); }
 }
 
 function sendToDisplay(displayId, data, options = {}) {
@@ -8498,7 +8845,7 @@ wss.on('connection', (ws, req) => {
                     : data.type === 'llm.error'
                         ? { ...data, text: '', generatedChars: consumeLlmLogText(displayId, data.requestId).length }
                         : data;
-                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress' && data.type !== 'textProgress' && !shouldSkipLlmChunkLog) {
+                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'playlistCacheStatus' && data.type !== 'htmlProgress' && data.type !== 'textProgress' && !shouldSkipLlmChunkLog) {
                     const logMessage = logData.type === 'asrResult'
                         ? formatAsrResultLog(
                             logData,
@@ -8700,6 +9047,9 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify(remoteLoginSettings.snapshot()));
         ws.send(JSON.stringify(ttsProviderWs.snapshot()));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
+        ws.send(JSON.stringify({ type: 'taskMediaSources', providers: mediaLibraryManager.listTaskMediaSources() }));
+        // 控制端连接建立时下发权威代理配置，页面刷新或重连后无需再请求。
+        ws.send(JSON.stringify(getWebProxyConfig()));
         ws.send(JSON.stringify({
             type: 'displayBackgroundGlowConfig',
             config: getDisplayBackgroundGlowConfig()
@@ -9161,6 +9511,11 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         void ttsProviderWs.handle(ws, selectionData);
         return;
     }
+    if (data.type === 'playlistNeedNext') { void advanceDynamicPlaylist(displayId, data, ws); return; }
+    if (data.type === 'playlistCacheStatus') {
+        if (displayClients.get(displayId)?.ws === ws && ['caching', 'progress', 'ready', 'error', 'cancelled'].includes(data.status)) broadcastToControls({ type: 'playlistCacheStatus', status: data.status, message: String(data.message || '').slice(0, 200), fileName: String(data.fileName || '').slice(0, 200), received: Math.max(0, Number(data.received) || 0), total: Math.max(0, Number(data.total) || 0), phase: String(data.phase || '').slice(0, 20), cacheNodeId: String(data.cacheNodeId || '').slice(0, 200), cacheLibraryId: String(data.cacheLibraryId || '').slice(0, 200), cachePath: String(data.cachePath || '').slice(0, 2048) });
+        return;
+    }
     if (displayVoiceListeningConfig.handle(data, ws, displayId)) return;
     const displayData = displayClients.get(displayId);
     if (data.type === 'getChatContextUsage') {
@@ -9371,6 +9726,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             height: data.height
         });
     } else if (data.type === 'playlistProgress') {
+        const active = displayData?.state.currentPlaylist;
+        if (active?.startData?.dynamicCursor && (data.listId !== active.startData.listId || data.dynamicBatch !== active.startData.dynamicBatch)) return;
         let currentPlaylistItems = [];
         if (displayData && displayData.state.currentPlaylist) {
             const previousIndex = displayData.state.currentPlaylist.index;
@@ -9811,7 +10168,41 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
     }
 }
 
+const { createBilibiliListService } = require('../modules/media/bilibili-list-service');
+const bilibiliListService = createBilibiliListService({ config, broadcast: broadcastToControls });
+const { createShareFoldersService } = require('../modules/media/share-folders-service');
+const shareFoldersService = createShareFoldersService({ config, broadcast: broadcastToControls });
+
 async function handleControlMessageFallback(data, ws) {
+    if (['shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet'].includes(data.type)) { shareFoldersService.handle(ws, data); return; }
+    if (['bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove'].includes(data.type)) { await bilibiliListService.handle(ws, data); return; }
+    // 代理配置属于控制端全局设置，不依赖 displayId，提前处理并直接返回。
+    if (data.type === 'getWebProxyConfig') {
+        ws.send(JSON.stringify(getWebProxyConfig()));
+        return;
+    }
+    if (data.type === 'setGlobalWebProxy') {
+        try {
+            const value = normalizeProxyUrl(data.value);
+            if (!config.set('network.globalWebProxy', value)) throw new Error('代理配置保存失败');
+            broadcastToControls(getWebProxyConfig());
+        } catch (error) {
+            ws.send(JSON.stringify({ type: 'webProxyConfigError', message: error.message }));
+        }
+        return;
+    }
+    if (data.type === 'setProviderProxy') {
+        try {
+            const sourceId = String(data.sourceId || '');
+            if (!/^(bilibili|[a-z][a-z0-9._-]{1,63})$/.test(sourceId)) throw new Error('媒体源 ID 无效');
+            const switches = { ...(config.get('media.providerProxy', {}) || {}), [sourceId]: data.enabled === true };
+            if (!config.set('media.providerProxy', switches)) throw new Error('媒体源代理设置保存失败');
+            broadcastToControls(getWebProxyConfig());
+        } catch (error) {
+            ws.send(JSON.stringify({ type: 'webProxyConfigError', message: error.message }));
+        }
+        return;
+    }
     if (chatContextUsage.handle(ws, data)) return;
     if (data.type === 'gameDemoStart' || data.type === 'gameDemoStop') {
         const displayId = typeof data.displayId === 'string' ? data.displayId : '';
@@ -11074,7 +11465,31 @@ async function handleControlMessageFallback(data, ws) {
                                 return;
                             }
                             let playlist;
-                            if (data.temp) {
+                            let dynamicCursor = null;
+                            const dynamic = !data.temp && data.libraryType === 'quark';
+                            if (dynamic) {
+                                const cursor = playlistManager.createDirectoryCursor(data.libraryId, data.path, data);
+                                const batch = await nextDynamicPlaylistBatch(cursor, data.remoteNodeId);
+                                playlist = batch.playlist;
+                                dynamicCursor = batch.cursor;
+                            } else if (data.libraryType === 'bilibili' && !data.temp) {
+                                playlist = await bilibiliListService.buildPlaylist({
+                                    folderId: data.folderId, collectionUrl: data.collectionUrl, mode: data.mode, sortBy: data.sortBy, direction: data.direction,
+                                    // 控制端弹幕开关开启时才下发弹幕地址。
+                                    danmaku: data.danmaku === true,
+                                    origin: `${useHttps ? 'https' : 'http'}://${getLocalIP()}:${PORT}`
+                                });
+                                for (const item of playlist) {
+                                    const path = new URL(item.url);
+                                    const bvid = path.pathname.split('/').at(-1);
+                                    const parsed = parseBilibiliVideoUrl(`https://www.bilibili.com/video/${bvid}?p=${path.searchParams.get('p')}`);
+                                    if (await bilibiliDownloads.lookup(parsed)) {
+                                        item.url = `${useHttps ? 'https' : 'http'}://${getLocalIP()}:${PORT}/api/bilibili/local/${parsed.bvid}?p=${parsed.page}`;
+                                        delete item.bilibiliDash;
+                                        delete item.bilibiliMp4;
+                                    }
+                                }
+                            } else if (data.temp) {
                                 playlist = playlistManager.buildFromTemp(data.files || [], {
                                     mode: data.mode, sortBy: data.sortBy, direction: data.direction, mediaTypes: data.mediaTypes
                                 });
@@ -11114,7 +11529,8 @@ async function handleControlMessageFallback(data, ws) {
                             const startData = {
                                 listId, playlist,
                                 interval: data.interval || 0,
-                                loop: !!data.loop,
+                                loop: dynamic ? false : !!data.loop,
+                                ...(dynamic ? { dynamicCursor, dynamicBatch: 0, dynamicRemoteNodeId: data.remoteNodeId || null } : {}),
                                 announceName: !!data.announceName,
                                 selectedDisplayIds: voiceRouteByDisplayId.selectedDisplayIds,
                                 selectedVoiceDisplayIds: voiceRouteByDisplayId.selectedVoiceDisplayIds,

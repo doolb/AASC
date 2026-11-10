@@ -90,7 +90,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     let model = null, library = emptyHumanLibrary(), generation = 0, revision = 0, ready = false;
     let warning = '', disposed = false, helperBound = null, motionKey = '', suspended = false, rendererVisible = true, saveQueue = Promise.resolve();
     let actionEpoch = 0, actionBasis = [], ikPending = false, ikLoadEpoch = 0;
-    let ikWanted = true, ikFailure = '', ikInitialization = null;
+    let ikWanted = false, ikFailure = '', ikInitialization = null;
     let ikMarkersVisible = false;
     const heldBody = new Map();
     let bodyIndexModel = null, bodyIndices = [];

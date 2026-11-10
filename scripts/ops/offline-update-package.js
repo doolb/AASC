@@ -671,6 +671,9 @@ async function createOfflineUpdateArtifacts(options = {}) {
         dependencyVersion: options.dependencyVersion ?? (migratingGroups ? (currentComponents.dependencies?.version || 0) + 1 : undefined)
     });
     const { mode, dependencyVersion } = updatePlan;
+    const { taskRequirements, assertTaskDependencies } = require('./offline-task-preflight');
+    const task = await taskRequirements(projectRoot, options.taskCodeVersion !== undefined, currentComponents.taskCode, options.selection);
+    assertTaskDependencies(task, dependencyVersion, lockSha256);
     const autoDependencyUpgrade = updatePlan.autoDependencyUpgrade || (migratingGroups && requestedMode === 'code-only');
     const reuseNodeMinSeeds = options.reuseNodeMinSeeds === true;
     if (reuseNodeMinSeeds && (mode !== 'code-only' || !currentComponents.nodeMinSeeds)) {

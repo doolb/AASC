@@ -62,6 +62,7 @@ class AascMediaIndexService {
             id: library.id,
             name: library.name,
             type: library.type,
+            ...(library.type === 'quark' && /^[a-zA-Z0-9]+$/.test(library.shareId || '') ? { shareId: library.shareId } : {}),
             readonly: library.readonly === true,
             isDefault: library.isDefault === true,
             ownerNodeId: node.nodeId,
@@ -120,6 +121,7 @@ function normalizeRemoteLibrary(library = {}, node, getRemoteMediaProxyUrl = nul
         id: String(library.id || ''),
         name: String(library.name || library.id || '未命名媒体库'),
         type: String(library.type || 'unknown'),
+        ...(library.type === 'quark' && /^[a-zA-Z0-9]+$/.test(library.shareId || '') ? { shareId: library.shareId } : {}),
         readonly: library.readonly === true,
         isDefault: library.isDefault === true,
         ownerNodeId: node.nodeId,
@@ -147,6 +149,7 @@ function normalizeItems(items, node, libraryId, getRemoteMediaProxyUrl = null, i
         size: Number.isFinite(Number(item?.size)) ? Number(item.size) : null,
         modifiedTime: item?.modifiedTime || null,
         mediaType: item?.mediaType || null,
+        ...(item?.hasThumbnail === true ? { hasThumbnail: true } : {}),
         format: item?.format || null,
         // url 保持兼容并代表当前首选的节点直连地址，proxyUrl 只作为回退。
         url: directUrl,

@@ -27,6 +27,8 @@ class TaskManager extends EventEmitter {
     }
     this.instances = new Map();
     this._services = new Map();  // instanceId -> { stop, status }
+    this._registerMediaProvider = options.registerMediaProvider || null;
+    this._mediaProviderUnregisters = new Map();
     this._sendToDisplay = null;  // 由 setSendToDisplay() 注入
     this._generateTts = null;  // 由 server-app 注入统一的显示端优先 TTS 路由
     this._getTtsServiceUrl = options.getTtsServiceUrl || null;
@@ -647,6 +649,8 @@ class TaskManager extends EventEmitter {
   }
 
   _unregisterTaskRoutes(instanceId) {
+    for (const unregister of this._mediaProviderUnregisters.get(instanceId) || []) { try { unregister(); } catch (error) { console.warn('[TaskManager] 媒体源注销失败:', error.message); } }
+    this._mediaProviderUnregisters.delete(instanceId);
     return this._taskRouteRegistry.unregisterInstance(instanceId);
   }
 
@@ -893,6 +897,13 @@ class TaskManager extends EventEmitter {
           workDir: this.taskIO._taskPath(task.taskName),
           taskIO: this.taskIO,
           registerRoute: (route) => this._registerServerTaskRoute(task, route),
+          registerMediaProvider: (definition) => {
+            if (!this._registerMediaProvider) throw new Error('任务媒体源功能不可用');
+            const unregister = this._registerMediaProvider(instanceId, { ...definition, defaultConfig: { ...(task.params || {}), ...(definition.defaultConfig || {}) } });
+            const registrations = this._mediaProviderUnregisters.get(instanceId) || [];
+            registrations.push(unregister); this._mediaProviderUnregisters.set(instanceId, registrations);
+            return unregister;
+          },
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
           postStream: (data) => this.emit('stream', instanceId, data),
@@ -910,6 +921,12 @@ class TaskManager extends EventEmitter {
           }
         };
         const result = await run(serviceContext);
+        // 启动期间若已停止或删除，立即回收晚到的注册，不能复活已停止的媒体源。
+        if (instance.status === 'stopped' || this.instances.get(instanceId) !== instance) {
+          if (typeof result?.stop === 'function') await result.stop();
+          this._unregisterTaskRoutes(instanceId);
+          return;
+        }
         if (!result || typeof result.stop !== 'function') {
           throw new Error('用户服务未返回 stop 方法');
         }

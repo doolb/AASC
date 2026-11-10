@@ -30,7 +30,7 @@ async function stageTaskCode(projectRoot, stagingRoot, version, options = {}) {
     await fs.promises.mkdir(stagingRoot, { recursive: true });
     let total = 0; let count = 0;
     for (const selected of [...selection.tasks].sort((a, b) => String(a.taskName).localeCompare(String(b.taskName), 'en'))) {
-        if (!contract.validName(selected.taskName) || !Array.isArray(selected.files) || !selected.files.length) throw new Error('任务名或文件清单无效');
+        if (selected.taskName === 'local-only' || String(selected.taskName).startsWith('local-only.') || !contract.validName(selected.taskName) || !Array.isArray(selected.files) || !selected.files.length) throw new Error('任务名或文件清单无效');
         const task = { taskName: selected.taskName, codeRequirement: contract.normalizeCodeRequirement(selected.codeRequirement),
             dependencyRequirement: contract.normalizeDependencyRequirement(selected.dependencyRequirement), files: [] };
         for (const relative of [...selected.files].sort()) {

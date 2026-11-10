@@ -1,6 +1,15 @@
 // 临时 render 刷新诊断默认关闭，保留埋点便于后续现场需要时重新开启。
 const WEBSOCKET_RENDER_REFRESH_DIAGNOSTICS_ENABLED = false;
 const CONTROL_REMOTE_CONFIG_HANDLERS = Object.freeze({
+    taskMediaSources: data => window.MediaLibrary?.handleTaskMediaSources(data),
+    bilibiliDownload: data => window.MediaLibrary?.handleBilibiliDownload(data),
+    quarkDirectoryDownload: data => window.MediaLibrary?.handleQuarkDirectoryDownload(data),
+    playlistCacheStatus: data => { window.MediaLibrary?.handleQuarkCacheProgress(data); if (data.status === 'error') window.showToast?.('视频缓存失败：' + data.message, 'error'); },
+    shareFolders: data => window.MediaLibrary?.handleShareFolders(data),
+    shareFoldersError: data => window.showToast?.(data.message || '文件夹操作失败', 'error'),
+    bilibiliList: data => window.MediaLibrary?.handleBilibiliList(data),
+    bilibiliCollection: data => window.MediaLibrary?.handleBilibiliCollection(data),
+    bilibiliListError: data => window.showToast?.(data.message || 'B站视频操作失败', 'error'),
     autoBlackBordersConfig: data => window.Controls?.handleAutoBlackBordersConfig?.(data),
     chat2apiRemoteLoginConfig: data => window.Chat2APIRemoteLogin?.handleConfig(data),
     chatProfilesConfig: data => window.Chat?.handleProfilesConfig(data),
@@ -9,7 +18,13 @@ const CONTROL_REMOTE_CONFIG_HANDLERS = Object.freeze({
     displayTtsBackgroundOpacityConfigError: data => window.Settings?.handleTtsBackgroundOpacityConfigError(data),
     controlThemeChanged: data => window.UiTheme?.applyRemoteTheme(data.theme),
     serverPortConfig: data => window.Settings?.handleServerPortConfig(data),
-    serverPortConfigError: data => window.Settings?.handleServerPortConfigError(data)
+    serverPortConfigError: data => window.Settings?.handleServerPortConfigError(data),
+    // 代理配置同时驱动设置面板输入框和任务页签“使用代理”开关。
+    webProxyConfig: data => {
+        window.Settings?.applyWebProxyConfig?.(data);
+        window.MediaLibrary?.handleWebProxyConfig?.(data);
+    },
+    webProxyConfigError: data => window.showToast?.(data.message, 'error')
 });
 
 const WebSocketManager = {
@@ -44,6 +59,10 @@ const WebSocketManager = {
                 window.DeviceList.setServerInfo(host, port);
             }
             this.ws.send(JSON.stringify({ type: 'getConversationConfirmationConfig' }));
+            void window.MediaLibrary?.refreshQuarkDirectoryDownload?.();
+            void window.MediaLibrary?.refreshBilibiliDownload?.();
+            this.ws.send(JSON.stringify({ type: 'bilibiliListGet' }));
+            this.ws.send(JSON.stringify({ type: 'shareFoldersGet' }));
         };
         
         this.ws.onmessage = (event) => {

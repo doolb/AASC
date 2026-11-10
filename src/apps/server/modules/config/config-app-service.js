@@ -344,6 +344,8 @@ class Config extends DataSnapshot {
         server: {
             port: 8081
         },
+        // 全局网页代理：仅对开启“使用代理”的媒体源生效，空字符串表示不使用代理。
+        network: { globalWebProxy: '' },
         // AASC 节点角色和主服务器地址。默认保持当前进程为主服务器，
         // 子服务器通过修改 aasc.role 后主动连接 mainServerUrl。
         aasc: {

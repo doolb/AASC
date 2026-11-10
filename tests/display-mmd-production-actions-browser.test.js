@@ -99,8 +99,8 @@ test('正式真实PMX：灯光保存/预设、待机/动态目录、IK源码静�
             window.DisplayMmd.init({ canvas: document.getElementById('displayMmdCanvas'), onLoadProgress() {}, status: document.getElementById('displayMmdStatus') });
             window.DisplayMmd.setVisible(true);
         });
-        try { await page.waitForFunction(() => { const h = window.DisplayMmd?.getHumanInterface?.();
-            return h?.getState().ready && !h.getState().automaticMotionBlocked; }, { timeout: 90000 }); }
+        try { await page.waitForFunction(() => window.DisplayMmd?.getHumanInterface?.()?.getState().ready, { timeout: 90000 });
+            await page.evaluate(async () => { const h = window.DisplayMmd.getHumanInterface(); await h.setInteractiveIKMode('physics'); h.setInteractiveIKEnabled(true); }); }
         catch (error) { console.log(await page.evaluate(() => ({ state: window.DisplayMmd.getState(), status: document.getElementById('displayMmdStatus')?.textContent }))); throw error; }
         // 初始化正式舞台而不连接服务器；验证真实渲染计时及角色控件生命周期。
         await page.addScriptTag({ path: path.join(ROOT, 'js/display-stage.js') });

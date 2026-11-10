@@ -978,3 +978,49 @@ body.display-chat-open .display-chat-suppressible {
 .tts-subtitle-line :is(th,td) { padding-inline: .2em; border: 1px solid currentColor; }
 .tts-subtitle-line code { font-size: 1em; white-space: pre-wrap; }
 .tts-subtitle-line a { color: inherit; text-decoration: underline; }
+
+/* B站弹幕层位于媒体容器内、睡眠遮罩（z-index: 10）之下；只有临时开关可接收触控。 */
+#bilibiliDanmakuLayerHost {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.bilibili-danmaku-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.bilibili-danmaku {
+    position: absolute;
+    white-space: nowrap;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
+    will-change: transform;
+}
+
+.bilibili-danmaku.scroll { top: var(--lane, 10%); left: 100%; animation: danmaku-scroll 9s linear forwards; }
+.bilibili-danmaku.top { top: 8%; left: 50%; transform: translateX(-50%); }
+.bilibili-danmaku.bottom { bottom: 8%; left: 50%; transform: translateX(-50%); }
+/* 视频暂停时冻结滚动动画，继续播放后从原位置恢复。 */
+.bilibili-danmaku-layer.paused .bilibili-danmaku { animation-play-state: paused; }
+@keyframes danmaku-scroll { from { transform: translateX(0); } to { transform: translateX(-120vw); } }
+
+#danmakuToggle {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 6;
+    pointer-events: auto;
+    opacity: .5;
+    background: rgba(0, 0, 0, .4);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .35);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+}

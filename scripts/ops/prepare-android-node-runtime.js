@@ -188,7 +188,7 @@ function isAndroidAssetExcluded(relativePath, isDirectory = false) {
     return hasUnsupportedDirectory || isHiddenFile;
 }
 
-async function listFiles(sourceRoot, relativePath = '') {
+async function listFiles(sourceRoot, relativePath = '', excludedPrefixes = []) {
     const currentPath = path.join(sourceRoot, relativePath);
     const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
     const files = [];
@@ -196,6 +196,7 @@ async function listFiles(sourceRoot, relativePath = '') {
     for (const entry of entries) {
         const childRelativePath = path.join(relativePath, entry.name);
         assertSafeRelativePath(childRelativePath);
+        if (excludedPrefixes.some(prefix => childRelativePath === prefix || childRelativePath.startsWith(`${prefix}${path.sep}`))) continue;
         // aapt2/AssetManager 会过滤隐藏路径以及 npm/Pixi 的下划线生成目录；
         // 这些文件不会进入 APK，必须同步从 manifest 排除，避免安装时校验落空。
         if (isAndroidAssetExcluded(childRelativePath, entry.isDirectory())) continue;
@@ -210,7 +211,7 @@ async function listFiles(sourceRoot, relativePath = '') {
             throw new Error(`服务器运行包不允许符号链接: ${childRelativePath}`);
         }
         if (entry.isDirectory()) {
-            files.push(...await listFiles(sourceRoot, childRelativePath));
+            files.push(...await listFiles(sourceRoot, childRelativePath, excludedPrefixes));
             continue;
         }
         if (!entry.isFile()) {
@@ -354,7 +355,7 @@ async function listOfflineTaskFiles(sourceRoot, relativePath = '') {
         assertSafeRelativePath(childRelativePath);
         // Android AssetManager 不支持隐藏文件和以下划线开头的目录；任务链和 latest
         // 通过下方 marker 单独打包，普通 results 文件必须保留用于首次恢复服务实例。
-        if (entry.name === '.task-links.json') continue;
+        if (entry.name === '.task-links.json' || (!relativePath && entry.name === 'local-only')) continue;
         const pathSegments = childRelativePath.split(path.sep);
         // latest 可能来自不同平台的任务结果同步：软链接和文本实例 ID 都只作为
         // 输入 marker 处理，不能把原始文件写入 APK，否则会阻止安装器创建软链接。
@@ -387,7 +388,7 @@ function normalizeTaskInstanceId(value) {
 async function validateTaskResultIndexes(taskRoot) {
     const taskEntries = await fs.promises.readdir(taskRoot, { withFileTypes: true });
     for (const taskEntry of taskEntries) {
-        if (!taskEntry.isDirectory() || taskEntry.name.startsWith('.') || taskEntry.name.startsWith('_')) continue;
+        if (!taskEntry.isDirectory() || taskEntry.name === 'local-only' || taskEntry.name.startsWith('.') || taskEntry.name.startsWith('_')) continue;
         const resultsDir = path.join(taskRoot, taskEntry.name, 'results');
         if (!fs.existsSync(resultsDir)) continue;
         const indexPath = path.join(resultsDir, 'index.json');
@@ -433,7 +434,7 @@ async function copyTaskMarkers(taskRoot, outputRoot) {
 
     const taskEntries = await fs.promises.readdir(taskRoot, { withFileTypes: true });
     for (const taskEntry of taskEntries) {
-        if (!taskEntry.isDirectory() || taskEntry.name.startsWith('.') || taskEntry.name.startsWith('_')) continue;
+        if (!taskEntry.isDirectory() || taskEntry.name === 'local-only' || taskEntry.name.startsWith('.') || taskEntry.name.startsWith('_')) continue;
         const resultsDir = path.join(taskRoot, taskEntry.name, 'results');
         const latestPath = path.join(resultsDir, 'latest');
         let target;
@@ -510,9 +511,9 @@ async function copyOfflineUpdatePublicKey(outputRoot, options = {}) {
 }
 
 async function copyDirectoryWithManifest(sourceRoot, outputRoot, outputPrefix = '', options = {}) {
-    const sourceFiles = await listFiles(sourceRoot);
     const excludedPaths = new Set(options.excludedPaths || []);
     const excludedPrefixes = options.excludedPrefixes || [];
+    const sourceFiles = await listFiles(sourceRoot, '', excludedPrefixes);
     const files = [];
     for (const relativePath of sourceFiles) {
         if (excludedPaths.has(relativePath) || excludedPrefixes.some(prefix => (
@@ -859,7 +860,7 @@ async function prepareAndroidNodeRuntime(options = {}) {
         files.push(...runtimeFiles);
         const nodeFile = await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
         // PMX/VMD 与纹理始终经服务同源代理按需读取，不能随任何 Runtime profile 进入 APK assets。
-        const excludedPrefixes = [path.join('res', 'models', 'mmd')];
+        const excludedPrefixes = [path.join('res', 'models', 'mmd'), path.join('res', 'tasks', 'local-only')];
         // Offline首装与common一致：任务运行库在首次执行时准备，不夹带旧宿主安装的ORT。
         const serverPackageJson = JSON.parse(await fs.promises.readFile(path.join(packageDir, 'package.json'), 'utf8'));
         if (options.profileMetadata?.offline === true && serverPackageJson.optionalDependencies?.['onnxruntime-web']) {
@@ -1083,5 +1084,7 @@ module.exports = {
     createModelCompatibilityMetadata,
     readOfflineConfigSeed,
     readReleaseConfigSeed,
-    prepareAndroidNodeRuntime
+    prepareAndroidNodeRuntime,
+    listOfflineTaskFiles,
+    copyDirectoryWithManifest
 };

@@ -38,8 +38,8 @@ test('MMD-AR真实米娅同一内置IK模板，抬手/重心切换/屈膝及脚�
         await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => window.DisplayMmd?.setLighting);
         await page.evaluate(() => window.DisplayMmd.setLighting({ pmxAoEnabled: false, keyShadowEnabled: false, shadowSource: 'none' }));
-        await page.waitForFunction(() => { const h = window.DisplayMmd?.getHumanInterface();
-            return h?.getState().ready && !h.getState().automaticMotionBlocked; }, { timeout: 90000 });
+        await page.waitForFunction(() => window.DisplayMmd?.getHumanInterface()?.getState().ready, { timeout: 90000 });
+        await page.evaluate(async () => { const h = window.DisplayMmd.getHumanInterface(); await h.setInteractiveIKMode('physics'); h.setInteractiveIKEnabled(true); });
         const initial = await page.evaluate(async () => {
             const h = window.DisplayMmd.getHumanInterface();
             window.DisplayMmd.setMotionPlaybackEnabled(false);

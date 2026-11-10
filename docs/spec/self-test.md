@@ -1,5 +1,14 @@
 # 自测功能实现文档
 
+## Offline 仅发布已有产物（2026-11-10）
+
+```text
+仅发布参数/未完成报告/摘要与源码变化 → 定向测试通过
+签名清单和发布流程回归 → 连同定向测试共22项通过
+最新真实未完成报告 → 预览拒绝；完整签名报告副本 → 预览显示版本与源码变化
+未执行真实发布
+```
+
 ## Offline 构建临时目录（2026-11-10）
 
 ```text
@@ -3303,4 +3312,119 @@ LLM := 文件正文预算、视频文件鉴权、原会话续聊去重、重建�
 播放 := 当前类型video、readyState=4、networkState=1、paused=false、error=null，配置消息未卸载媒体源
 范围 := 页面刷新使用当前服务源码；未构建或发布服务包
 发布 := servicePackage=true待构建
+```
+
+### 夸克分享媒体库
+
+```text
+运行 node --test tests/quark-share-media-provider.test.js
+校验：嵌套目录、提取码传递、预览流及地址校验、只读配置
+人工联调：添加可访问的分享链接，逐级浏览并读取图片；确认内容类型及实际字节数
+```
+
+### 夸克逐目录播放
+
+```text
+运行 node --test tests/quark-dynamic-playback.test.js tests/playlist-app-service.test.js
+验证多级延迟扫描、目录内容变化、空循环结束、批次推进和停止时异步结果失效。
+```
+
+### 夸克分享标签
+
+```text
+运行 node --test tests/media-library-ui.test.js tests/quark-share-tabs-browser.test.js tests/aasc-media-index.test.js
+验证旧分享分组、链接/分享文字提取码识别、重复分享复用、加入和播放入口、索引不泄露提取码。
+```
+
+### B 站外链播放
+
+```text
+运行 node --test tests/bilibili-url-playback.test.js
+验证 BV 与分集转换、伪造域名隔离、普通 URL 和 iframe 权限。
+浏览器加载官方播放器并检查视频状态；Android 真机待独立验收。
+```
+
+### B 站视频标签
+
+```text
+运行 node --test tests/bilibili-list-service.test.js tests/bilibili-tabs-browser.test.js
+验证服务端规范化、分集去重、持久化广播、元数据失败及封面限制；浏览器验证缩略图、加入、播放和移除。
+```
+
+### B 站原生流播放
+
+```text
+运行 node --test tests/bilibili-stream-service.test.js tests/media-library-ui.test.js
+验证分集、流域名和重定向限制、Range 转发、解析失败回退。
+真实公开 BV 样本以 Chromium 验证加载、暂停和拖动，用 ffprobe 验证音视频轨道；Android 真机待验收。
+```
+
+### B 站匿名 480P DASH
+
+```text
+运行 node --test tests/bilibili-stream-service.test.js tests/media-library-ui.test.js tests/display-video-loop.test.js
+校验 480P 分轨选择、分段范围和域名校验、清单本地代理、控制端回退数据。
+真实 B 站样本在 Chromium 显示页面验证 852×480、AAC 音轨、暂停/拖动及 360P/官方播放器回退；Android 实机待验收。
+```
+
+### Android 动态壁纸
+
+运行 `node --test tests/android-wallpaper-display.test.js tests/display-identity-batch-restore.test.js`，检查壁纸与前台身份复用及服务配置。noserver debug APK 离线构建通过；Android 9 真机系统预览用隔离测试网页验证 WebGL、循环视频播放时间推进，以及前台→预览→前台均以同一 ID 依次连接，没有应用壁纸。实际 AASC 内容恢复、应用到桌面后的生命周期及其他 Android 版本仍需验收。
+
+### 显示端交互式 IK 默认关闭
+
+运行 `node --test tests/mmd-ik-motion.test.js tests/display-mmd-ik.test.js` 和 `node --test --test-concurrency=1 tests/display-mmd-ik-browser.test.js`。验证真实模型默认关闭、手动开启、隐藏恢复、关闭及浏览器拖动；依赖身体 IK 的自动动作需先开启 IK。
+
+### 壁纸入口收起
+
+noserver debug APK 编译与 `node --test tests/android-wallpaper-display.test.js` 通过；Android 9 独立测试包确认右侧中部把手点击展开、5 秒自动收起。长按、返回键与其他设备尺寸待验收。
+
+### 壁纸共享实例与通知栏
+
+Android 9 真机使用隔离 noserver debug 包和测试页面，在普通页面、系统壁纸预览、通知栏展开及收起、返回普通页面之间验证：同一页面随机标识与递增计数保持，服务器只记录一条 WebSocket 连接，预览收起通知栏后画面恢复。未应用或更改用户的桌面壁纸；其他系统版本及实际桌面长时间运行仍需验收。`node --test tests/android-wallpaper-display.test.js` 通过，noserver debug APK 构建通过。
+
+### 夸克视频与分类文件夹
+
+使用指定的夸克分享和服务端 Cookie，通过真实提供者读取原视频；浏览器实测视频开始播放并拖动至中间位置，Range 响应为 206。`node --test tests/share-folders-service.test.js tests/quark-share-media-provider.test.js tests/media-library-ui.test.js tests/bilibili-list-service.test.js tests/quark-share-tabs-browser.test.js tests/bilibili-tabs-browser.test.js` 覆盖 Cookie、受限地址、分类持久化、浏览器移动和旧链接兼容。真实在线上游接口与账号权限可能变化。
+
+### 夸克视频完整缓存及链接复制
+
+`node --test tests/quark-video-cache.test.js tests/display-quark-cache.test.js tests/media-library-ui.test.js tests/quark-share-tabs-browser.test.js tests/quark-share-media-provider.test.js` 覆盖单文件 300 MiB 上限、单任务串行、缓存替换、失败清理、缓存完成后切换、过期结果拦截及两种分享复制。隔离缓存目录实测夸克分享中的 7,939,257 字节视频完整写入、只有一个缓存文件，并通过缓存返回 206 Range。
+
+### 夸克缓存进度和缩略图
+
+`node --test tests/quark-cache-progress.test.js tests/quark-video-cache.test.js tests/quark-share-media-provider.test.js tests/display-quark-cache.test.js tests/media-library-ui.test.js tests/aasc-media-index.test.js` 覆盖逐行解析、多个订阅者、已下载字节数、错误状态、索引缩略图、播放项切换与失效结果。隔离目录实测分享视频缩略图为 PNG，约 32 KB 且未创建缓存文件；随后 7,939,257 字节视频缓存产生排队、下载、完成事件，最终字节数匹配且仅保留一个缓存。
+
+### 地区媒体中心、B 站增强与夸克下载统一（2026-11-10）
+
+```text
+媒体库-B站搜索稳定性：连续搜索 10 次均返回 JSON；命中退避后 30 秒内提示稍后重试。
+媒体库-B站弹幕：开启后显示滚动/顶部/底部弹幕；暂停、恢复、seek 同步；关闭后无弹幕层。
+媒体库-B站首页与相关推荐：首页热门可播放；播放后控制端列表下方出现相关推荐。
+媒体库-B站已下载：已下载视频按钮显示“已下载”并禁用。
+媒体库-夸克下载：分享卡片、文件、文件夹均可下载到本地媒体库；完成后显示“已下载”。
+媒体库-代理：非法代理地址提示；开启来源代理后请求走代理；关闭后不走代理。
+媒体库-地区分组：国内/国外任务源分组正确；任务停止后页签移除并回退“本地媒体”。
+
+定向回归：node --test tests/web-proxy.test.js tests/task-media-provider-registry.test.js tests/media-library-app-service.test.js tests/bilibili-search-service.test.js tests/bilibili-discovery-service.test.js tests/bilibili-danmaku-service.test.js tests/quark-directory-downloads.test.js
+浏览器回归：node --test tests/task-media-tab-browser.test.js tests/quark-share-tabs-browser.test.js tests/bilibili-tabs-browser.test.js tests/quark-card-cache-browser.test.js tests/floating-media-clear.test.js
+```
+
+```text
+自测入口放入服务器面板的当前服务器操作栏，调用原有自测流程；不再显示全局悬浮入口。
+```
+# Offline 任务依赖预检自测（2026-11-10）
+
+```text
+精确版本与锁指纹匹配 → 预检通过
+版本不匹配或锁指纹不匹配 → 构建前报错并显示声明与目标
+任务未绑定精确版本 → 不增加版本限制
+现有绑定旧依赖的发布基线 + 选择 deps → dry-run 自动加入 task
+```
+# Offline 出包目录清理自测（2026-11-10）
+
+```text
+旧代码/依赖/APK 与当前引用、各类最新版本及未完成报告共同存在 → 只删除未受保护旧包
+符号链接、修复包和报告 → 保留
+LAN/WAN 清单不可用或未完成报告无法解析 → 停止清理，原包保留
 ```

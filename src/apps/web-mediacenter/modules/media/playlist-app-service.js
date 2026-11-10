@@ -92,6 +92,49 @@ class PlaylistManager {
         }));
     }
 
+    // 深度优先遍历，每次只读取到下一个包含媒体的目录。
+    createDirectoryCursor(libraryId, root, options = {}) {
+        return { libraryId, root: root || '/', stack: [root || '/'], recursive: !!options.recursive,
+            loop: !!options.loop, mode: options.mode, sortBy: options.sortBy,
+            direction: options.direction, mediaTypes: options.mediaTypes, hadItems: false };
+    }
+
+    async nextDirectoryBatch(cursor, listDirectory = (id, dir) => this.manager.list(id, dir)) {
+        const next = { ...cursor, stack: [...cursor.stack] };
+        // 每次调用最多跨越一次轮次边界，避免空目录树在循环模式下无限扫描。
+        let restarted = false;
+        while (true) {
+            if (!next.stack.length) {
+                if (!next.loop || !next.hadItems || restarted) return { playlist: [], cursor: next };
+                next.stack = [next.root];
+                next.hadItems = false;
+                restarted = true;
+            }
+            const dir = next.stack.pop();
+            let items;
+            try { items = await listDirectory(next.libraryId, dir); }
+            catch (error) {
+                // 分享中已移除的目录可以跳过；认证或网络错误必须上报并保留重试位置。
+                if (/夸克分享目录不存在/.test(error.message)) continue;
+                throw error;
+            }
+            if (next.recursive) {
+                const folders = items.filter(item => item.type === 'folder').sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                if (next.direction === 'desc') folders.reverse();
+                for (const folder of folders.reverse()) next.stack.push(folder.path);
+            }
+            const allowed = this._normalizeMediaTypes(next.mediaTypes);
+            const files = items.filter(item => item.type !== 'folder' && MEDIA_TYPES.includes(item.mediaType) && allowed.has(item.mediaType));
+            if (!files.length) continue;
+            next.hadItems = true;
+            const playlist = this._sortPlaylist(files, next.mode, next.sortBy, next.direction).map(item => ({
+                url: item.url, path: item.path, fileName: item.name, mediaType: item.mediaType,
+                ...(item.mediaType === 'text' ? { format: item.format } : {})
+            }));
+            return { playlist, cursor: next };
+        }
+    }
+
     // 从控制端上传的 base64 文件构建播放列表
     buildFromTemp(files, options = {}) {
         const { mode = 'sequence', sortBy = 'name', direction = 'asc', mediaTypes } = options;

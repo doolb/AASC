@@ -17,6 +17,12 @@ npm run release:offline
 # 自动恢复最近未完成任务/发布最近已出包任务，否则按状态出包后发布 LAN/WAN
 npm run release:offline -- --publish
 
+# 仅预览最新构建的发布内容；不打包、不发布
+npm run release:offline -- --publish-only --dry-run
+
+# 只发布最新完整构建，不打包、不递增版本
+npm run release:offline -- --publish-only
+
 # 手动选择种类，可单选或逗号组合；覆盖默认状态选择
 npm run release:offline -- --only=min
 npm run release:offline -- --only=code,task --publish
@@ -42,11 +48,15 @@ npm run release:offline -- --only=all --publish
 
 `node` 不代表外网 `/node-min/` 下的 Node min 配套文件；本入口不重建/上传 noserver、withserver 或 allserver-min.js。
 
+`--publish-only` 使用与目标匹配的最新构建报告及其已完成的全部组件，不按单个文件分别挑选版本。最新报告尚未构建成功、文件缺失或摘要不符时直接报错，不自动构建，也不退回旧报告。当前源码与出包快照不同时会提示，但仍可发布原有产物，待出包标记保持不变；原有的服务器基线、签名和版本保护仍然生效。该参数不能与 `--publish`、`--resume`、`--only`、`--fresh` 或 `--new` 混用。
+
 ## 版本号与状态
 
 普通新任务（含 `--new`）的版本取已发布清单、本地版本化产物/候选清单和 APK profile/构建元数据中的最大值加一。输出目录独立 `.release-offline-versions.json` 保存历史编号高水位，不随报告删除而回收编号。min/full 使用共同的 Android 最大 versionCode，避免相互覆盖安装时降级；versionName 保留现有主/次版本与后缀，递增编号段。联合 code/node 沿用原构建器的同版本编号。
 
 显式 `--only` 会强制构建指定种类，即使对应状态是 false；默认不选择 full。构建成功且受管源码/种子指纹未改变，才清除对应标记；未选中或失败项保留待出包状态。false 表示已出包，不表示已发布。
+
+依赖更新时，如果当前任务包绑定了精确依赖版本，计划会自动加入 `task` 并在构建前校验选择清单。若报出依赖版本或锁指纹不匹配，应检查 `release/task-code-files.json` 中各任务的实际兼容要求，确认后更新声明，不能仅通过升版本绕过校验。修正源码后，旧失败报告的源码指纹可能不再匹配，使用 `--new` 创建新任务。
 
 构建会修改对应 `app.json` 和状态文件；命令不执行 Git 提交，自动调用方应按项目规则将这些跟踪文件提交并推送。APK/ZIP、报告、锁和中间文件不入 Git。
 
@@ -55,6 +65,8 @@ npm run release:offline -- --only=all --publish
 服务发布后，LAN/WAN分别通过HTTP核对签名清单，只完整下载本次发布列表中的包校验大小与SHA-256。`--only=min,code`通常只回读新的min APK和代码ZIP；依赖未更新时不会再通过HTTP下载旧依赖。发布前的本地包、目标已有文件与清单基线核对照常执行。`all`模式校验其全部选择资源；完整APK与独立Node包沿用各自的独立发布流程。
 
 `release:offline`及`publish:offline-update`等服务发布CLI自动显示LAN/WAN清单核对、本次包数量/总大小、文件序号与路径、文件/累计百分比和平均速度、等待数据时长及逐文件大小/SHA-256结果。交互终端每秒在同一行覆盖进度，并随窗口宽度压缩信息，避免长行折行；重定向文件或管道时每10秒追加一行进度，不含光标控制序列。开始、清单通过、文件开始/通过、失败及完成始终立即单独记录。显示“校验完成”后仍需等待清理与最终报告，不要提前视为整次任务成功。
+
+`release:offline --publish` 在所有选定目标发布及清理成功后，也会清理出包目录内未受保护的旧版本代码包、依赖包、任务包和 APK。当前 LAN/WAN 清单引用的版本、未完成报告关联的版本及每类数字版本最大的文件会保留，因此旧依赖分组或失败任务的包可能仍存在。种子、数据修复包、独立 Node 包和报告不在此清理范围；清单或报告无法安全读取时停止并记录待重试错误。此规则只在后续成功发布时执行，不会主动清理已有文件。
 
 修改仅对新启动的命令生效，已经运行的进程保持原校验流程；本次没有自动停止或重启现有任务。直接调用旧四参数`verifyHttpTarget`的API仍保留全清单检查；发布器会显式传入本次资源范围。
 

@@ -195,7 +195,7 @@ test('骨盆目标保留初始化脚锚点并释放旧腿姿态，显式脚/膝�
     rig.restore();
 });
 
-test('正式Human默认IK初始化、隐藏期间取消、恢复、手动接管和关闭均走真实资源生命周期', { timeout: 15000 }, async () => {
+test('正式Human默认关闭IK，手动开启后隐藏恢复、手动接管和关闭均走真实资源生命周期', { timeout: 15000 }, async () => {
     const { T, model } = await makeModel();
     const globals = new Map(['window', 'document', 'Ammo'].map(key => [key, globalThis[key]]));
     const events = { addEventListener() {}, removeEventListener() {} };
@@ -217,7 +217,15 @@ test('正式Human默认IK初始化、隐藏期间取消、恢复、手动接管�
     };
     try {
         await settle(() => api.getState().ready);
-        api.before(1 / 60, helper); api.setVisible(false);
+        api.before(1 / 60, helper);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        api.before(1 / 60, helper);
+        assert.equal(api.getInteractiveIKState().enabled, false, '模型就绪后默认关闭交互式IK');
+        assert.equal(api.getState().automaticMotionBlocked, true);
+        await api.setInteractiveIKMode('physics');
+        api.setInteractiveIKEnabled(true);
+        api.setInteractiveMarkersVisible(false);
+        api.setVisible(false);
         await new Promise(resolve => setTimeout(resolve, 20));
         assert.equal(api.getInteractiveIKState().enabled, false, '迟到初始化不得在隐藏时开启');
         api.setVisible(true);
