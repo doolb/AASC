@@ -123,6 +123,7 @@ test('运行中的媒体任务自动创建临时媒体库，复用已保存配�
     }) });
     const sources = manager.listTaskMediaSources();
     assert.equal(sources[0].libraryId, 'task-auto:source-a');
+    assert.equal(sources[0].ownerInstanceId, 'instance-a');
     assert.equal((await manager.list(sources[0].libraryId, '/'))[0].name, 'https://example.test/');
     assert.equal(manager.listLibraries().length, 0);
     manager.saveConfig();

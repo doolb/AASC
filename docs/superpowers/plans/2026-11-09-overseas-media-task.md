@@ -707,30 +707,18 @@ Expected: 3 tests PASS
 
 ---
 
-### Task 6: 发布清单、任务参数与文档
+### Task 6: 任务参数与文档
 
 **Files:**
-- Modify: `release/task-code-files.json`
 - Modify: `docs/spec/media-library.md`
 - Modify: `docs/spec/self-test.md`
 - Modify: `docs/usage.md`
 - Modify: `changelog.md`
 - Modify: `docs/todo.md`
 
-- [ ] **Step 1: 发布清单**
+- [ ] **Step 1: 保持国外用户任务不进入 release 发布**
 
-新增：
-
-```json
-{
-  "taskName": "overseas-media",
-  "files": ["task.js", "providers/proxy.js", "providers/http.js", "providers/ytdlp.js", "providers/youtube.js", "providers/pinterest.js", "providers/pixiv.js"],
-  "codeRequirement": { "minimumVersion": 169, "apiVersion": 1 },
-  "dependencyRequirement": null
-}
-```
-
-按现有 schema 字段名填写，不新增字段。
+`overseas-media` 作为用户任务在 `res/tasks/overseas-media/` 实现与使用，不加入 `release/task-code-files.json` 或 `release/task/` 发布种子，不作为 release 产物发布。
 
 - [ ] **Step 2: 文档**
 

@@ -240,6 +240,8 @@ class TaskIO extends EventEmitter {
         if (!entry.isDirectory() || entry.name === 'local-only' || entry.name.startsWith('local-only.')) continue;
         const taskName = entry.name;
         const taskDir = this._taskPath(taskName);
+        // 退役标记只影响任务发现和自动恢复，历史结果及其他用户数据仍留在原目录。
+        if (fs.existsSync(path.join(taskDir, '.retired'))) continue;
         const files = [];
         try {
           const dirEntries = await fs.promises.readdir(taskDir, { withFileTypes: true });

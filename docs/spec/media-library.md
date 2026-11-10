@@ -11,7 +11,6 @@
 文件夹名通过文本节点渲染；关闭时释放键盘监听并恢复原焦点
 ```
 
-
 ## 概述
 
 媒体库功能提供统一的媒体资源管理接口，支持多种存储后端（本地存储、HTTP目录、SMB共享）。
@@ -891,7 +890,10 @@ DASH 不支持或出错 → 360P MP4；MP4 出错 → 官方播放器
 
 ```text
 目录下载前，控制端选择主服务器上任一可写本地媒体库作为目标
-按来源创建独立子目录并保留原目录结构，已有文件不得覆盖
+新下载路径：目标库/夸克分享/<sanitizeCategoryName(category)>/<sha256(source).slice(0,16)>/<相对路径>
+category 经统一清洗：分隔符/控制字符 -> 下划线，折叠空白，空值或点目录 -> 未分类，截断 50 字符
+保留原目录结构，已有文件不得覆盖；lookup 仍按 source + filePath + targetId 命中旧记录
+旧目录与记录不迁移；仍按 source + filePath + targetId 查询
 记录来源和所选目标库内的本地路径；可跨重启读取映射
 ```
 
@@ -911,6 +913,10 @@ B 站标签搜索关键词：
   选择主服务器可写本地媒体库，后台按项串行下载
   优先取得匿名 480P DASH 音视频并通过 ffmpeg 无转码合成；不可用时回退单文件 MP4
   完整文件发布到目标媒体库，记录 BV、分集和本地地址，失败不登记半成品
+  新下载路径：目标库/B站视频/<sanitizeCategoryName(category)>/<标题> <bvid>[ Pn].mp4
+  category 缺省使用“未分类”；旧目录与记录不迁移、不失效
+  控制端 B站优先合集标题，其次当前文件夹；夸克使用当前分享文件夹
+  两来源及夸克单文件对话框预览“目标：库名 / 来源名 / 分类名”，切换库同步更新并提交 category
 播放 B 站视频：
   优先查询本地映射并通过代理支持 Range；未命中沿用现有 DASH/MP4 播放
 ```
@@ -959,7 +965,7 @@ B 站 DASH 每条轨道从主地址和备用地址中选择首个受信任的 HT
 registerMediaProvider(owner, definition):
   校验 id（^[a-z][a-z0-9._-]{1,63}$）、name、create 与可选能力 [home, search, resolveLink, related, download]
   region 只允许 domestic 或 overseas；缺失或非法回退 domestic
-  proxyDefault 只表示该来源默认是否使用全局代理，缺省 false
+  proxyDefault 保留兼容元数据；新代理模型不以它作为默认选择
   defaultConfig 只接受普通对象并浅拷贝
   registry 保存 definition 与 owner，注销时按 owner 删除；一个任务可注册多个来源
 
@@ -975,31 +981,75 @@ GET /api/media-library-providers -> 返回 id、name、libraryId、region、feat
   国内媒体：B 站视频（原生）、国内任务来源
   国外媒体：国外任务来源
   组标题固定展示；组内无来源时仅显示标题
-  任务来源按钮与“使用代理”复选框成对渲染；复选框显式配置优先，否则使用 proxyEnabled
+  任务来源按钮与代理选择框成对渲染；尚无显式选择时显示“不使用代理”
 任务来源的首页/搜索/链接/相关推荐 UI 由后续国内/国外任务计划实现；本计划只完成注册、代理注入与页签分组
 ```
 
-### 全局网络代理与来源代理开关
+### 命名网络代理与来源选择
 
 ```text
 实现文件：src/apps/server/modules/media/web-proxy.js
 normalizeProxyUrl(value): 去空白；空串表示未配置；允许 http/https/socks/socks5/socks5h
   拒绝查询参数、片段与缺失主机；末尾单个斜杠去除
-resolveSourceProxyUrl({globalProxy, switches, sourceId, proxyDefault}):
-  无全局代理或无 sourceId 返回空串
-  显式 switches[sourceId] 优先，否则取 proxyDefault
+resolveSourceProxyUrl({proxies, selections, sourceId}):
+  以 selections[sourceId] 查找代理；无选择、找不到或地址非法时返回空串
 getProxyAgents(proxyUrl): socks* 用 SocksProxyAgent，其余用 HttpsProxyAgent；按地址缓存
 axiosProxyOptions(proxyUrl): 有代理时返回 { proxy: false, httpAgent, httpsAgent }
+SOCKS 地址区分 socks5（客户端解析域名）与 socks5h（代理端解析域名）；需要代理端解析时由用户在权威代理列表中选择 socks5h
 
-配置键 network.globalWebProxy 与 media.providerProxy 持久化在服务端配置
+network.webProxies = [{ id, name, url }]，最多 20 项；新增 id 由服务端生成
+media.providerProxy = { sourceId: proxyId }；空串或缺失表示不使用代理
+迁移：webProxies 不是数组时，旧 globalWebProxy 合法则创建 proxy-legacy；
+  旧 providerProxy 值 true 映射至该 id（无有效代理时为空），其他值映射为空；写入新配置并清空 globalWebProxy
+  webProxies 已是数组则跳过迁移；任务 proxyDefault 不参与新模型解析
+  迁移和列表保存先写 network.pendingWebProxyUpdate，再写选择并提交代理表、清除待处理记录
+  启动先重放日志，再判断是否已有 webProxies；后续列表/来源保存也先恢复日志
+  日志保存失败则不修改业务配置；日志成功后的普通 set 失败或完整写入之间中断可重放恢复
+  迁移最后提交标志；启动恢复失败终止启动迁移；这不是多个 set 的瞬时原子事务
+  失败期间来源可能暂时降级为无代理，不错误绑定其他代理
+  底层 DataSnapshot 直接覆盖同一 config.json；写入中途终止导致截断不在恢复保证内
 控制端 WebSocket:
-  getWebProxyConfig -> { type:'webProxyConfig', globalWebProxy, providerProxy, sources }
-  setGlobalWebProxy -> normalizeProxyUrl 校验后保存并广播；失败回 webProxyConfigError
-  setProviderProxy -> 校验 sourceId（含 bilibili），保存 providerId->布尔并广播
-控制端设置页提供代理地址输入与保存；非法地址显示错误提示；当前没有代理连通性测试按钮
+  getWebProxyConfig -> { type:'webProxyConfig', webProxies, providerProxy, sources }
+  setWebProxyList -> 校验数组最多 20 项、名称非空且不超过 30 字符、地址经 normalizeProxyUrl 合法
+  删除代理时同一次可恢复提交清空所有引用；保存后广播权威配置，校验失败回 webProxyConfigError
+  控制端仅按权威快照刷新；保存拒绝或断线恢复旧选择，连接可用时请求 getWebProxyConfig
+  setProviderProxy -> 校验 sourceId 格式及非空 proxyId 的存在性，保存选择并广播；失败回 webProxyConfigError
+控制端设置页编辑代理列表；B 站工具栏不显示代理选择，保留已保存的来源代理；活动任务源在对应任务实例详情内选择代理或不使用代理
+任务源列表附带 ownerInstanceId，任务详情仅展示由当前实例注册的来源；一个实例可为多个来源分别选择
+选择继续发送 setProviderProxy，服务端广播权威配置；断线或失败时恢复权威值，重连接收当前配置
+媒体库页签按本地、国内和国外分组排列；夸克分享属于国内分组
+国内、国外来源保持分行，行首不显示地区文字，按钮从行首排列
+无活动国外任务来源时隐藏国外媒体整个分组，来源注册或停止时重新计算显隐
+来源 id 为 hongguo 的页签显示“红果短剧”，不修改注册名称或其他来源信息
+任务代理下拉框不再占用页签区域
+代理地址不进入日志或错误消息
 任务 provider 实例化时注入 getProxyUrl(sourceId, proxyDefault)，代理只作用于服务端外部请求
 B 站搜索/首页/相关推荐/弹幕服务通过 axiosProxyOptions 使用来源代理
 子进程 yt-dlp 的 --proxy/HTTPS_PROXY 由后续国外任务计划实现
+```
+
+### 显示端本机媒体库
+
+```text
+display.html 的 #displayGameChatActions 内、#displayGameToggle 之前加入“媒体库”入口
+仅页面 hostname 为 localhost、127.0.0.1、::1 或 [::1] 时显示入口
+GET /api/display-local/libraries -> { libraries }：local/smb/http/android-saf 库和 listTaskMediaSources 活动任务源
+GET /api/display-local/list?libraryId=&path= -> { path, parent, entries }
+服务端按 req.socket.remoteAddress 校验回环；非回环返回 403 { error: '仅限本机访问' }
+entries 保留目录和 image/video/audio/text 媒体；gif 归一化为 image
+本地文件使用同源静态地址；SMB、HTTP、SAF 和任务源使用同源媒体库代理地址
+媒体库代理调用 provider 前统一补齐路径前导斜杠，兼容任务媒体清单的路径格式
+已停止的任务媒体源返回 410 / TASK_SOURCE_STOPPED
+单文件播放 -> 发送带 requestId 的 displayPlaylistCancel {libraryId,path}，等待 displayMediaStart 权威确认后 showMedia
+  不信任客户端 URL；重新列举父目录按完整 path 匹配；失败保留原播放，确认只消费一次
+文件夹播放 -> 回环连接发送 displayPlaylistRequest
+  仅允许本地库与当前活动任务源，过滤非 image/video/audio/text 文件，GIF 转为 image
+  分配显示端操作令牌；playlistManager.buildFromLibrary(recursive:false, mode:sequence, sortBy:name, direction:asc)
+  扫描后检查令牌、连接和活动来源；被后续播放或停止操作取代时丢弃结果
+  注册仅面向请求显示端的可信文本语音路由，终止旧路由的朗读上下文
+  startData 设置 loop:false、interval:5、selectedDisplayIds:[请求显示端]
+  空目录或生成失败 -> displayPlaylistError；不发送空列表
+本地 provider 以相对路径边界校验目标属于库根，拒绝同前缀兄弟目录和向上穿越
 ```
 
 ### B 站首页、相关推荐与搜索稳定性
@@ -1019,6 +1069,7 @@ B 站搜索/首页/相关推荐/弹幕服务通过 axiosProxyOptions 使用来�
 ```text
 实现文件：src/apps/server/modules/media/bilibili-search-service.js、bilibili-discovery-service.js
 B 站首页 GET /api/bilibili/home?page=:
+  B 站工具栏首页按钮放在链接输入框之前，窄屏下也可见；点击读取热门首页
   api.bilibili.com/x/web-interface/popular（ps=20，pn 限制 1-50）
   规范化为 bvid、page=1、url、title、cover、author；过滤非法 BV
   封面只接受 hdslb.com 的 https，http 升级为 https，协议相对地址补 https；其余封面置空
@@ -1081,52 +1132,195 @@ GET /api/aasc/media-index、GET /api/media-libraries、GET /api/media-libraries/
 ### 国内媒体任务（红果短剧与番茄小说）
 
 ```text
-本计划未实现；由 docs/superpowers/plans/2026-11-09-domestic-media-task.md 后续实现，以下为设计目标。
+以下描述已实现的代码契约；真实站点及设备验证范围见下方限制与自测记录。
 任务 domestic-media 启动:
   注册 provider hongguo 与 tomato；每个 provider 独立 home/search/resolveLink/related/download 能力
+  任一注册失败时撤销本次注册并停止自有番茄进程；ID 冲突提示先停止占用来源的旧任务，不覆盖已有注册
+  停止时只注销一次，取消所有红果实例的网页请求与媒体流并等待正在保存的下载清理；并发停止共享同一次清理
+  各资源清理互不阻塞，失败时仍尝试其他资源，未成功清理的资源保留可重试状态
+  每次 HTTP 请求读取当前命名代理；未选择代理时显式禁用环境代理，不输出代理凭据与 Cookie
 红果:
   首页返回网站推荐剧集；搜索请求 /api/search/result/?query=，解析 searchList.name 与 video_data.series_id
+  搜索接口未确认分页参数，仅返回第 1 页；请求后续页面返回空结果且总页数为 1
+  首页、搜索和相关推荐的剧集合集标记 downloadable=false；打开合集后仅下载公开分集
   resolveLink 接受 /player/{id}、/detail?series_id={id} 和纯数字 ID，返回 /{id} 目录
-  目录列出网站公开的 360P 视频；Cookie 可选，随网页请求发送，不写入日志
+  读取剧集首页中指向同一剧集的 player 分集链接，按页面顺序去重，最多 200 集；忽略其他剧集和外站链接
+  以最多 4 个并发请求逐页检查 JSON-LD 中同站明确公开的 360P 地址；未公开地址或单页请求失败的分集仍显示，标记不可播放、不可下载
+  没有分集链接时保留原有单页公开视频解析；播放和下载须重新确认视频属于对应公开页面，不根据分集 ID 推测媒体地址
+  只读文件目录只列可播放分集；Cookie 可选，随网页请求发送，不写入日志；停止时取消分集请求
 番茄小说:
-  启动时探测下载器 server；未运行时以 --server --data-dir 启动，并等待就绪；任务停止时只结束自己启动的进程
-  首页使用网站匿名推荐榜；搜索调用下载器 /api/search；resolveLink 接受 book_id 或书籍链接
-  下载调用下载器 /api/jobs；书库读取下载器数据目录，按 status.json 和 downloaded_chapters.jsonl 生成书籍/章节
-  章节以 text/plain 文本流提供；显示端使用文本播放器阅读与 TTS
+  按需检测端口空闲，以独立进程组和 --server --data-dir 启动自有下载器，等待其监听日志与状态；密码仅通过 TOMATO_WEB_PASSWORD 环境变量传给子进程，密码模式调用登录接口获取 Cookie
+  启动失败、端口占用或下载器不可用时给出来源内中文错误；停止时只回收自己启动的进程，先 SIGINT，等待 5 秒后 SIGKILL
+  首页请求番茄公开 /rank/1 榜单，严格提取书籍 ID，最多对前十项请求同站详情并从结构化数据还原未混淆标题及作者；匿名榜不可用时回退下载器书库
+  榜单及详情请求使用当前来源代理，禁止重定向、限制响应大小和并发；同代理并发首页共享请求，不同代理首页串行
+  搜索调用下载器 /api/search；resolveLink 接受 book_id 或书籍链接，读取已有 JSONL 章节
+  下载先验证 item.id 和 item.url 所指书籍一致；按输出目录真实路径在 Node 进程内共享串行锁及未确定作业租约，跨 controller 生效
+  新作业前确认输出目录没有未知或未结束作业；响应丢失、轮询失败和超时不能解除租约；开始前计算候选 EPUB 内容哈希并约束总读取量
+  调用下载器 /api/jobs 并轮询状态；核对 job.book_id、完整章节进度以及较开始前发生内容变化的 EPUB
+  校验 EPUB 条目无重复，从 META-INF/container.xml 唯一 rootfile 精确定位元数据，dc:identifier 必须等于 book_id
+  限制文件与 EPUB 元数据大小和整个任务读取预算，仅唯一匹配时保存已验证的字节，不能仅凭书名绑定
+  其他格式、无法确认身份或匹配多个文件时安全拒绝并提示，既不写入目标也不登记下载成功
+  章节 HTML 转纯文本，按 text/plain 支持 Range；拒绝符号链接和过大的章节文件
+  章节下载复用纯文本流及安全 save 发布为 .txt 文件
+  媒体库 list 的文件路径 := /f_ + 文件相对路径 UTF-8 的无填充 base64url；getFile/getFileStream 严格解码并再次校验相对路径与当前书库成员
+  只读媒体库目录仅列可被纯文本播放器读取的 TXT，EPUB/PDF 仍可通过任务来源书库和下载功能访问，不冒充可播放纯文本
+  任务来源返回 EPUB/PDF 文件标记 playable=false；控制端显示不支持播放的提示并保留下载按钮，TXT 仍可播放
+  任务媒体源 HTTP 条目仍使用 file:<原相对路径>，不改变现有条目标识和下载索引
+  请求序列化并读取当前命名代理；直连时清除继承的代理环境，启动进程时注入所选代理
+  代理发生变化时先检查后台下载作业和打开的媒体流；存在未结束或状态不明的作业时拒绝切换并保留进程
+  确认空闲后只停止本任务持有的下载器进程，再按当前代理重新启动；作业成功、失败或取消后解除租约
+  下载任务创建结果不明时保留租约，不推测任务已经停止，后续成功创建作业不得清除此租约；错误不包含代理地址或凭据
+  自有下载器意外退出或重新启动时清除旧会话 Cookie，重新登录后验证状态
   下载器不可用或代理失败只在番茄来源内提示，不影响红果
 ```
 
 ### 国外媒体任务（YouTube/Pinterest/Pixiv）
 
 ```text
-本计划未实现；由 docs/superpowers/plans/2026-11-09-overseas-media-task.md 后续实现，以下为设计目标。
+以下描述已实现的代码契约；真实站点及设备验证范围见下方限制与自测记录。
+发布约束：overseas-media 在 res/tasks 用户任务目录维护；不加入 release/task-code-files.json 或 release/task 发布种子，不随 release 产物发布。
 任务 overseas-media 启动:
-  注册 provider youtube、pinterest、pixiv；三者按各自代理开关使用全局代理
+  注册 provider youtube、pinterest、pixiv；三者按各自选择使用命名代理
+  每次外部请求及 yt-dlp 调用读取当前来源的代理选择；选择为空时直连，proxyDefault 仅为旧元数据
 YouTube:
-  首页尽力取得趋势/推荐；搜索解析 youtube 搜索结果页的 ytInitialData；resolveLink 支持 watch、youtu.be、shorts
+  首页页面解析结果为空时明确提示用户搜索或检查登录状态，不将空白结果冒充可用首页；保留搜索、链接及其余来源能力
+  任务媒体路由仅放行该首页固定提示，其他未知异常仍返回通用脱敏错误
+  首页首次使用前检查或安装 yt-dlp；安装失败只影响 YouTube 并明确提示；取得趋势/推荐；搜索解析 youtube 搜索结果页的 ytInitialData；resolveLink 支持 watch、youtu.be、shorts
+  停止任务时取消该来源进行中的页面请求、媒体流和下载保存，并等待自身资源及临时文件清理；其他来源不受影响
   related 读取观看页相关推荐；播放/下载调用 yt-dlp：
-    首次使用按架构下载官方单文件到数据目录并校验可执行
-    下载先写入临时文件，完成后原子发布，Range 由媒体代理提供
-    直链失败或 yt-dlp 不可用时返回内嵌播放器地址作为兜底
+    首次使用仅在支持的 Linux glibc x64/arm64 下载固定版本官方单文件；校验内置 SHA-256 后以独立临时文件原子发布
+    解析播放地址时读取所选格式的实际扩展名与标题，不能将降级格式固定标为 mp4
+    自动安装文件每次使用前校验散列；不支持的平台提示手动配置可执行文件，自定义路径不可用时不自动覆盖
+    验证 YouTube HTTPS 地址白名单；子进程禁用配置并清除继承的环境代理，使用环境变量设置当前代理或以空代理参数直连，凭据不进入命令参数
+    可选 Cookie 校验后转换为权限受限的临时 Netscape 文件，子进程只接收文件路径；执行结束、失败或停止时清理文件
+    限制下载大小、请求与进程运行时间及输出大小；停止任务取消下载并终止本次启动的进程组及后代，异步安装检查后再次确认停止状态；错误和日志不暴露代理凭据
+    搜索和相关推荐只返回上游实际视频；链接解析须取得真实标题，失败明确报错
+    页面仅访问固定 YouTube HTTPS 地址；直链只允许 HTTPS googlevideo.com 域名，不跟随重定向，不向媒体主机发送 Cookie
+    流代理转发合法 Range 与状态；错误不暴露上游地址和代理凭据
+    下载在独立临时目录执行，检查实际输出是目录内普通文件并采用真实扩展名，通过 save 写入后清理临时目录
+    实现 list/getFile/getFileStream 以兼容任务媒体库；直链不可用时返回错误
 Pinterest:
-  首页优先资源 API；匿名受限时降级为默认主题搜索
-  搜索使用页面 Cookie/CSRF 资源接口；受限时提示配置 Cookie；resolveLink 支持 /pin/{id}
-  图片/视频从 CDN 下载；视频仅有 HLS 时由 ffmpeg 转封装
+  汇总所有受支持的页面 JSON 数据脚本后解析；页面包含多个脚本时不能因第一个脚本有条目而漏掉后续条目
+  页面 HTTP 401/403 返回访问受限及检查 Cookie 的安全提示，已配置 Cookie 时提示检查 Cookie 是否有效；其他网络错误保持脱敏
+  任务媒体路由只放行两种固定受限提示，不转发上游错误文本和凭据
+  页面只访问固定 Pinterest HTTPS 域名，解析页面 JSON 中真实 Pin；Pin 详情无 canonical 且出现匿名登录墙时提示配置 Cookie；否则先校验 Open Graph canonical 数字 ID 与请求一致，仅接受 JSON 中同 ID 的 Pin 数据，不能返回推荐条目；JSON 无条目时仅在图片地址通过 CDN 校验时解析真实图片；含视频标记时不以封面冒充视频；首页、搜索及相关推荐失败时明确提示，不伪造内容；首页和搜索仅支持第一页，其他页明确报错
+  登录墙提示配置 Cookie；Cookie 仅发给 Pinterest 页面，不发送到媒体 CDN；每次请求读取当前命名代理
+  媒体 ID 编码 CDN 地址，解码时只允许 HTTPS pinimg.com 子域且无凭据或端口；页面与媒体请求禁止重定向
+  支持图片、直接视频与 HLS 视频；HLS 播放流明确提示使用下载，下载时仅抓取通过 HTTPS pinimg 域名校验的列表和分段，不跟随重定向；限制递归深度、数量、字节和时长，拒绝密钥及不支持的格式；独立临时目录离线交给 ffmpeg 转封装，限制同时一个 HLS 下载并在输出流写入时限制字节，停止时终止进程组并清理；HLS 卡片明确提示先下载并禁用播放；无真实相关推荐时返回空列表
+  实现 list/getFile/getFileStream 与合法 Range，下载使用受控 save 并限制大小；停止时取消在途请求和销毁流，等待清理
+  页面、媒体、下载失败均返回脱敏错误；不向用户暴露 Cookie 或代理凭据
 Pixiv:
-  首页读取排行榜 JSON；搜索读取 ajax/search/artworks/{keyword}；resolveLink 支持 artworks/{id}
+  作品详情和分页只缓存成功响应 60 秒、最多 32 项；同代理同地址的并发请求共享，代理变化后独立请求；停止时清空缓存并取消请求
+  排行榜和搜索中验证后的封面按作品 ID 和代理短暂缓存；封面请求仅通过 ID 查找，过期时重新获取作品详情，不接受客户端 URL
+  首页读取排行榜 JSON（最多 100 页）；搜索读取 ajax/search/artworks/{keyword}（最多 1000 页），返回总页数不超过可请求上限；resolveLink 支持 artworks/{id}
   相关推荐读取作品相关接口或作者作品；图片请求必须带 https://www.pixiv.net/ Referer
-  多图按页列出，动图使用 ffmpeg 合成 mp4；受限内容需要可选 Cookie
+  多图按页列出；动图下载仅接受受限 ZIP 和帧元数据，经安全解压后由 ffmpeg 离线合成 mp4；受限内容需要可选 Cookie
+  页面及 API 仅访问固定 Pixiv HTTPS 域名，Cookie 不发送 CDN；CDN 仅允许 i.pximg.net HTTPS，禁止跳转并携带 Referer
+  缩略图返回同源相对路径，通过封面路由按作品 ID 重新解析并代理 CDN，携带 Referer、当前代理且不发送 Cookie；禁止接受任意 URL，限制类型与字节
+  动图帧在 ffmpeg 解码前读取文件头校验 JPEG/PNG 尺寸与总像素；拒绝超出限制、无效或不支持的帧
+  实现 list/getFile/getFileStream；根目录作品以 folder 类型和合法路径返回，作品目录仅返回可直接播放的文件；动图仅在来源页面提示先下载，不进入显示端目录及批量播放，兼容媒体管理器和显示端本地路由
+  支持合法 Range 与受控 save；限制下载大小、临时文件和转码时长，停止时取消请求、流及进程并等待清理；失败脱敏
 所有国外来源:
   外部请求带超时与响应大小限制；代理/站点失败隔离在该来源；不把上游地址或 Cookie 返回给其他客户端
+```
+
+### 任务来源选择与加入反馈
+
+```text
+媒体来源按钮按当前活动来源切换明确的选中与未选中样式，同步无障碍选中状态
+加入链接发送带唯一 requestId 的 WebSocket 请求 → 只在服务端成功持久化后返回对应确认 → 当前来源切换到目标文件夹并提示成功
+服务端拒绝、连接断开或确认超时 → 提示失败或状态待确认，不能冒充保存成功；其他控制端广播不触发本次成功提示
+打开来源链接和其他导航请求时显示加载状态；旧请求结束不能覆盖当前来源
 ```
 
 ### 地区媒体页签与首页/搜索/链接 UI
 
 ```text
+任务来源收藏按 sourceId 隔离，服务端持久化每个来源的文件夹和已加入链接，WebSocket 权威广播并在连接时补发
+支持 resolveLink 的任务来源页展示未分类与自建文件夹；加入链接或来源卡片到所选分类，可移动、移出和删除空文件夹
+保存操作规范化 sourceId、链接及标题，校验数量、目标文件夹和输入长度；不保存 URL 用户名、密码或控制字符
+保存的链接再次打开时通过该来源 resolveLink，不能把用户提交的地址直接作为服务端请求地址
 控制端加载 providers:
   按 region 分组追加到媒体库顶部：B 站与国内任务源进入 #domesticMediaTabs，国外任务源进入 #overseasMediaTabs
-  组标题“国内媒体”“国外媒体”固定展示；组内无来源时仅显示标题
-  任务来源按钮与独立“使用代理”开关成对渲染；显式开关优先，否则使用 proxyEnabled
-本计划已实现：地区元数据、代理注入、统一 callTaskSource 接口、地区页签分组
-后续实现：任务来源页签的首页、搜索、链接、刷新、相关推荐工具栏与卡片交互
+  国内媒体包含夸克分享和 B 站；国外组仅在存在活动国外任务来源时展示
+  任务来源按钮与独立代理选择框成对渲染；没有显式选择时不使用代理
+既有实现：地区元数据、代理注入、统一 callTaskSource 接口、地区页签分组
+已实现：任务来源页签按能力提供首页、搜索、链接、刷新、相关推荐工具栏与卡片交互；来源数据可用性取决于上游
+```
+
+### 地区媒体任务通用路由与下载
+
+```text
+已有声明：任务源注册表、MediaLibraryManager.callTaskSource、命名代理选择、可写本地媒体库、媒体播放和下载能力
+新增定义：媒体条目 { id, title, cover, mediaType, description?, duration?, meta?, playUrl?, downloadable?, downloaded }
+操作流程：
+  GET /api/task-media-sources/:id/home?page= → 校验运行中来源及 home 能力 → 返回首页条目和分页
+  GET /api/task-media-sources/:id/search?keyword=&page= → 校验 search 能力 → 返回搜索条目和分页
+  POST /api/task-media-sources/:id/resolve-link { url } → 校验 resolveLink 能力和链接 → 返回解析条目
+  GET /api/task-media-sources/:id/related?itemId=&url= → 校验 related 能力 → 返回相关推荐
+  结果按来源 ID 和条目 ID 查询下载索引并标记 downloaded；需要流式播放的条目使用服务端同源流地址
+  GET /api/task-media-sources/:id/stream/:itemId → 校验运行中来源及流能力 → 传递 Range → 返回流、状态与安全响应头
+  POST /api/task-media-sources/:id/download { item, targetId, dirPath } → 校验来源、条目和主服务器可写本地库
+  来源异常仅对番茄代理租约及书籍身份验证的固定安全文案按完整相等白名单返回，其余错误统一脱敏；控制端提示该固定文案
+    清洗目录和文件名并限制在目标库内；来源写入独占临时文件 → 完成后防覆盖发布 → 记录来源、条目、目标和相对路径
+    已下载索引需确认目标文件仍存在；失败清理临时文件且不记录成功；多个文件按来源结果分别保存
+  控制端进入活动来源 → 根据能力显示首页、搜索、链接解析、刷新、播放、下载和相关推荐
+    条目 downloadable=false 时隐藏下载按钮；未声明时按来源 download 能力显示，保留其他来源合集下载
+    首页和搜索返回有效分页且多页时显示上一页/下一页，保留当前搜索关键词；进入链接或切换来源隐藏分页，忽略过期响应
+    点击条目按媒体类型播放或进入目录；离开来源或来源停止时清理旧视图，忽略过期请求
+  每个来源通过当前选择的命名代理发起外部请求；无选择即直连，凭据和代理地址不写日志
+  国内发布清单保留 domestic-media 并将旧 hongguo 标记退役，不再发布旧任务代码
+  本地旧任务目录保留 results 等用户数据，使用退役标记阻止任务列表和自动恢复；不递归删除目录
+  已运行的旧实例需先停止才能释放 hongguo 来源，新的 domestic-media 方可注册；不能仅靠修改磁盘解除运行中冲突
+  overseas-media 不加入任何 release 任务清单或发布种子
+  当前 domestic-media 最低服务版本 169 尚不能证明包含本次服务代码；发布前确定包含本次服务的版本并更新兼容声明
+```
+
+真实环境限制：Pinterest 真实匿名 Pin 图片链接解析及 Range 已做只读验证；匿名搜索请求 403，首页未取得可用内容；真实首页、搜索、分页、相关推荐尚未实现，登录态与真实视频待验收。番茄仅在 EPUB 身份及完整性检查通过时保存，锁只覆盖同一 Node 进程，真实完整下载与代理待验收。Pixiv 真实 CDN、登录和动图待验收，ffmpeg 无系统级内存硬限制。
+
+### 显示端本地播放操作与权威确认
+
+```text
+点击单文件:
+  取消旧批量 requestId，创建单文件 requestId
+  发送 {type:'displayPlaylistCancel', libraryId, path, requestId}，确认前不调用 playMedia
+服务端处理带来源/路径的 displayPlaylistCancel:
+  仅回环且当前已登记连接可处理；立即使在途扫描 token 失效
+  从活动白名单来源重新列举父目录，按完整 path 匹配 image/video/audio/text 文件
+  忽略客户端 URL；服务端生成同源 URL，文本 format 规范为 markdown/plain
+  异步后再次校验 token、连接、来源；后续单文件、目录或控制端播放使旧结果失效
+  解析成功 -> 更新并持久化 currentMedia、currentPlaylist=null、currentMediaProgress=null
+  注册当前显示端可信文本路由，发送 displayMediaStart(requestId, media)
+  解析失败 -> displayPlaylistError(requestId)，保留原媒体与原列表
+兼容不带来源/路径的 displayPlaylistCancel:
+  仅取消扫描并清除/持久化 currentPlaylist；不执行单文件解析
+浏览器处理 displayMediaStart:
+  仅消费当前单文件 requestId 一次；清除 pending，再 stopPlaylist/showMedia
+  重复、过期或断线后的确认丢弃；断线清除 pending 并提示，重连使用已保存权威状态
+目录请求:
+  附带 requestId，playlistStart 原样返回；调用 handlePlaylistStart 前过滤已取消 requestId
+  getLibraries 默认拒绝全部，生产注入本地库与活动任务源白名单
+  扫描前后检查 token、连接和原媒体/列表引用；播放、停止、清空使扫描失效
+  仅投影播放必需字段，不转发 provider 凭据；GIF -> image，文本保留 format
+  buildTextVoiceRoute(displayId,[displayId]) 生成可信路由
+  textMediaTtsService.setDisplayRoute 终止旧朗读，startData 保存相同 route/voiceRouteByDisplayId
+  持久化初始进度后下发；announceName=false，单层名称升序，不循环
+目录浏览返回 410 / TASK_SOURCE_STOPPED:
+  回当前来源根路径，清空旧条目并提示任务媒体源已停止
+  浏览版本标识防止旧异步结果覆盖新来源/目录
+LocalProvider._resolvePath:
+  用 path.relative 校验完整路径段；拒绝向上穿越与同前缀兄弟目录
+  符号链接目录行为保持原有兼容，不声称新增 realpath 隔离
+```
+
+### Task 6 单文件失败时恢复已提交批量列表
+```text
+单文件解析失败时，错误携带 requestId 与服务端 authoritativePlaylist 当前快照
+浏览器仅对当前单文件请求处理此快照：
+    若快照 startData.requestId 曾被本地取消，撤销该标识取消并调用 restorePlaylist
+    使用服务端 index/currentTime/state 恢复，避免重播已在客户端播放的其他列表
+    其余失败保留当前画面，不重启正在播放的媒体
+单文件成功仍维持过期批量 requestId 取消，禁止旧列表覆盖
+当前连接断开后清空旧连接取消标识；旧连接消息不能进入新连接分发
+重连权威 playlistStart 可正常恢复服务端实际保存的列表
 ```

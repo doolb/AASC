@@ -806,7 +806,9 @@ class TaskManager extends EventEmitter {
       try {
         if (svc.status === 'running') await svc.stop();
       } catch (err) {
-        console.error('[TaskManager] 服务停止出错:', err.message);
+        // 保留控制器供后续重试，避免停止失败时遗留资源却报告成功。
+        this.emit('log', instanceId, 'system', 'error', '服务停止失败，请重试');
+        return { success: false, error: '服务停止失败，请重试' };
       }
       this._services.delete(instanceId);
       this._widgetActions.delete(instanceId);

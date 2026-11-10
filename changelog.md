@@ -14648,3 +14648,89 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 - ✅ [2026-11-10] 修复依赖升级时旧任务包兼容声明导致耗时构建后失败。
   - `release-offline.js` 自动联动任务包并提前校验，`offline-update-package.js` 直接构建时同样预检；`offline-task-preflight.js` 输出具体目标与声明，`release/task-code-files.json` 移除 win-monitor 过时的精确绑定。
   - 任务预检、更新包和任务同步等 30 项测试通过；实际基线 dry-run 确认自动加入 task。未执行真实构建或发布。
+
+### 媒体库多代理、显示端媒体库与下载子分类
+
+- ✅ [2026-11-10] 命名代理列表与 B站/任务来源独立选择，旧配置迁移，服务端广播权威值，错误或断线恢复选择。
+  - 修改 `web-proxy.js`、新增 `web-proxy-settings.js`，接入 `server-app.js`、`upload.html`、`media-library.js`、`websocket.js`、`media-library.css`。待处理日志支持普通保存失败及完整写入之间中断恢复，不保证底层文件截断恢复。
+- ✅ [2026-11-10] 显示端新增回环限定只读媒体库，浏览本地库与活动任务源，支持单文件权威确认后播放、单层顺序不循环列表。
+  - 新增 `display-local-media.js`、`display-media-library.js/css`，修改 `display.html` 与服务入口；同源媒体路径、停止任务 410、可信文本路由、操作令牌和请求确认防止旧播放覆盖；单文件确认失败时恢复已提交的权威列表；共享 `media-library-app-service.js` 修复同前缀兄弟目录穿越。
+- ✅ [2026-11-10] 夸克与 B站新下载按来源/分类落盘，三个下载对话框预览目标，旧目录及索引查询兼容。
+  - 新增 `download-path.js`，修改 `quark-directory-downloads.js`、`bilibili-download-service.js`、`server-app.js`、`media-library.js`；夸克使用 `夸克分享/<分类>/<来源hash>/`，B站使用 `B站视频/<分类>/`。
+- ✅ [2026-11-10] 计划服务/单元回归 73 项、Chromium 浏览器 6 项通过，无失败或跳过；计划 JS 及共享 LocalProvider 文件语法检查通过。
+  - 同步 media-library design/spec、self-test、todo 与任务文档；真实临时 HTTP/TLS/WS、磁盘/任务/Range 有验证，完整 npm test 未运行。Android、SMB/SAF、真实代理及真实 B站/夸克下载保留实机待办。
+  - 本轮服务/网页修改需要 servicePackage；未构建或发布 APK/更新包、未操作现场服务器。
+
+### 国外媒体用户任务发布范围
+
+- ✅ [2026-11-10] 明确国外媒体用户任务不纳入 release 发布，修正后续实现计划中加入发布清单的步骤。
+  - 更新国外媒体任务计划、媒体库 design/spec 和待办；现有 `release/task-code-files.json` 未包含 `overseas-media`，未修改代码或发布产物。
+
+
+### 国内国外媒体用户任务
+
+- ✅ [2026-11-10] 实现任务媒体通用路由、来源交互和下载索引，新增 `res/tasks/domestic-media/` 的红果与番茄来源及 `res/tasks/overseas-media/` 的 YouTube、Pinterest、Pixiv 来源。旧 `hongguo` 保留；来源 ID 冲突时须停止旧任务。国外任务不进入 release 清单或种子。
+  - 国内国外服务端及 provider 定向测试 59/59、浏览器任务源/页签/代理 3/3、`npm run test:task-code-sync` 69/69 通过，均无跳过；`git diff --check` 通过。验证以模拟上游和隔离进程为主，真实只读访问范围记于任务文档。
+  - Pinterest 真实首页、搜索、分页和相关推荐仍未实现，匿名页面为空、资源接口 403；登录态和真实视频待验收。番茄仅保存身份与完整性验证通过的唯一 EPUB，锁仅同一 Node 进程；完整下载及真实代理待验收。Pixiv 真实 CDN、登录与动图待验收，ffmpeg 无系统级内存硬上限；YouTube 完整下载与登录限制视频待验收。
+  - 国内发布清单当前最低服务版本 169 不足以证明包含本次服务；发布前须确认版本并更新兼容声明。`servicePackage` 和 `taskCodePackage` 待构建；未构建或发布。
+
+- ✅ [2026-11-10] 修正任务源显示端兼容与停止清理：Pixiv 作品按文件夹返回并过滤不可直接播放的动图；番茄只读媒体库使用可逆路径，仅 TXT 可播放，EPUB/PDF 不冒充纯文本；红果停止取消在途请求、销毁流并等待下载清理。
+  - Pinterest 真实匿名 Pin 图片解析和 Range 已有只读验证，匿名搜索仍返回 403；首页、搜索、分页与相关推荐尚待实现。最终联合回归：12 组任务源与显示端服务端测试 87/87、浏览器测试 3/3，均无失败或跳过；`git diff --check` 通过。国内发布兼容的最低服务版本仍待确定。
+
+### 媒体库布局与任务代理设置
+
+- ✅ [2026-11-10] 媒体库按本地、国内和国外分行排列；任务来源的代理选择移到所属实例详情，B 站保留工具栏设置。
+  - 修改 `upload.html`、`media-library.css`、`media-library.js`、`task-panel.js` 和 `media-library-app-service.js`，由来源注册归属匹配任务实例，沿用服务端权威代理协议。
+  - 服务端与 Chromium 定向测试 9/9、代理配置和媒体库关联回归 33/33 通过，覆盖窄屏、多实例隔离、广播及断线回退；真实设备待验收。
+
+- ✅ [2026-11-10] 夸克分享归入国内媒体；没有国外任务来源时隐藏国外分组；红果来源页签仅显示“红果短剧”。
+  - 修改 `upload.html`、`media-library.css`、`media-library.js` 和 `task-media-tab-browser.test.js`；浏览器定向测试 7/7、JavaScript 语法及 `git diff --check` 通过，真实设备待验收。
+
+### 旧红果任务退役
+
+- ✅ [2026-11-10] 退役旧 `hongguo` 任务并使用 `domestic-media` 的红果来源，保留旧任务结果及用户数据。
+  - 移除旧 `task.js` 和其专用旧测试，`res/tasks/hongguo/.retired` 阻止本地发现及自动恢复；`release/task-code-files.json` 将旧名称列入退役名单，保留国内任务清单及国外任务不发布规则。
+  - 修改 `task-io.js` 并增加退役与数据保留测试；`npm run test:task-code-sync` 71/71、国内媒体相关回归 14/14 通过。本机控制端未连接，现场旧实例是否停止尚未验证；未构建或发布更新包。
+
+### 任务媒体来源分类与加入
+
+- ✅ [2026-11-10] 支持链接解析的任务媒体来源各自维护文件夹和已加入内容，并使用 WebSocket 持久化和同步；原有 B 站与夸克分类保持兼容。
+  - 新增 `task-media-collections.js`、服务端消息和控制端来源分类界面，修改 `server-app.js`、`websocket.js`、`media-library.js`、`upload.html`、`media-library.css`；两控制端同步与来源隔离等相关回归 12/12 通过。
+  - 无 `resolveLink` 能力的自定义任务源暂不提供链接加入；红果多集显示问题另待修复。
+
+### 国外媒体代理连通性排查
+
+- ✅ [2026-11-10] 将三个国外来源共用的已保存 SOCKS5 代理通过远端配置改为 SOCKS5H，使域名由代理端解析；保留代理 ID 和来源选择，不记录地址或凭据。
+  - 原配置到三个站点均超时，使用代理端 DNS 后三个站点 HTTP 200；实际服务 Pixiv 首页 50 项、搜索 60 项，YouTube 搜索 19 项。YouTube 首页返回空列表；Pinterest 提示匿名访问受限，相关适配仍待处理。
+
+### 红果多集浏览
+
+- ✅ [2026-11-10] 按公开剧集页列出的链接逐页检查分集，缺少公开地址或页面读取失败的集保留并标记不可播放、不可下载；文件目录只列公开可播放项。
+  - 修改 `res/tasks/domestic-media/providers/hongguo.js`、`tests/hongguo-provider.test.js` 及媒体库设计、伪代码、使用和自测文档；国内任务和浏览器定向测试 10/10、`npm run test:task-code-sync` 71/71、`git diff --check` 通过。真实公开页面识别 3 集，首集声明公开视频，后两集未声明；真实播放待验收。
+  - ADB 只读观察到设备当前是 `com.phoenix.read` 短剧页面，未取得应用内部播放接口；任务代码包状态已为待构建，未构建或发布。
+
+### 国外媒体空页与访问提示
+
+- ✅ [2026-11-10] YouTube 无首页推荐时提示搜索；Pinterest 汇总多个页面数据脚本，并按 Cookie 配置区分登录墙和 HTTP 401/403 访问受限提示。
+  - 修改 `res/tasks/overseas-media/providers/youtube.js`、`pinterest.js`、`task-media-routes.js` 及对应测试和文档；国外来源、浏览器和媒体来源关联回归 28/28 通过。日本代理下 YouTube 搜索返回 20 项；Pinterest 匿名首页及搜索仍受限，登录态和真实播放待验收。
+  - 国外任务仍不进入 release；服务代码包状态原已标记待构建，未构建或发布。
+
+### Pixiv 加入反馈和媒体来源选中
+
+- ✅ [2026-11-10] 媒体来源当前选中项使用紫色高亮；加入链接等待服务端持久化确认并显示所在文件夹，断线或超时提示检查结果，来源页面加载时显示进度。
+  - 修改 `media-library.css`、`media-library.js`、`websocket.js`、`task-media-collections.js` 和浏览器及服务测试；Pixiv 与媒体来源回归 15/15，分类确认回归 4/4。
+- ✅ [2026-11-10] Pixiv 按代理短时缓存作品详情、分页及已验证的列表封面，合并同地址并发请求；代理切换独立读取，任务停止清理缓存。
+  - 修改 `res/tasks/overseas-media/providers/pixiv.js` 和 `tests/pixiv-provider.test.js`；日本代理只读实测首次解析约 2.5 秒，重复解析无需新增网络请求。真实部署、设备及登录受限内容待验收；国外任务不进入 release，服务包状态已为待构建。
+
+### 媒体来源地区文字
+
+- ✅ [2026-11-10] 移除媒体来源行首的“国内媒体”和“国外媒体”文字，保留来源分行及空国外分组隐藏。
+  - 修改 `upload.html`、`media-library.css` 和 `task-media-tab-browser.test.js`；Chromium 测试 1/1、`git diff --check` 通过，实际设备待验收；服务包状态已为待构建。
+
+### B 站工具栏代理
+
+- ✅ [2026-11-10] 隐藏 B 站工具栏代理选择，保留已保存的来源代理配置和服务端行为。
+  - 修改 `upload.html`、`media-library.css`、相关浏览器测试及文档；代理配置和界面测试 17/17、`git diff --check` 通过。服务包状态已为待构建，实际设备待验收。
+
+- ✅ [2026-11-10] 将 B 站首页按钮移到工具栏最前面，窄屏下更容易看到并点击。
+  - 修改 `upload.html` 和 `task-media-tab-browser.test.js`；Chromium 测试 1/1、`git diff --check` 通过，真实设备与热门接口待验收。

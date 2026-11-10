@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "requiredApkVersionCode": 58,
-  "retiredTaskNames": [],
+  "retiredTaskNames": ["hongguo"],
   "tasks": [
     {
       "taskName": "render-display",
@@ -50,9 +50,13 @@
       "dependencyRequirement": null
     },
     {
-      "taskName": "hongguo",
+      "taskName": "domestic-media",
       "files": [
-        "task.js"
+        "task.js",
+        "providers/proxy.js",
+        "providers/http.js",
+        "providers/hongguo.js",
+        "providers/tomato.js"
       ],
       "codeRequirement": {
         "minimumVersion": 169,

@@ -106,7 +106,9 @@ const {
     createDisplayAsrLongQueueSettings
 } = require('../modules/asr/display-asr-long-queue');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
-const { normalizeProxyUrl, resolveSourceProxyUrl } = require('../modules/media/web-proxy');
+const { createDisplayLocalRouter, listDisplayLibraries, createDisplayPlaylistRequestHandler, invalidateDisplayPlaylistRequest } = require('../modules/media/display-local-media');
+const { resolveSourceProxyUrl } = require('../modules/media/web-proxy');
+const { ensureWebProxyMigration, createWebProxySettings } = require('../modules/media/web-proxy-settings');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
 const { AascServerRegistry } = require('../../../framework/aasc/server-registry');
@@ -219,6 +221,10 @@ const NODE_MODULES_ROOT = path.resolve(process.env.AASC_NODE_MODULES_DIR || path
 const taskCodeCatalog = require('../modules/task-engine/task-code-catalog').getTaskCodeCatalog();
 
 config.loadConfig();
+ensureWebProxyMigration({
+    get: (key, fallback) => config.get(key, fallback),
+    set: (key, value) => config.set(key, value)
+});
 const ANDROID_NODE_POLICY = getAndroidNodePolicy();
 const OFFLINE_NODE_MODE = process.env.AASC_OFFLINE_MODE === '1';
 
@@ -957,7 +963,7 @@ const androidSafToken = process.env.AASC_ANDROID_SAF_TOKEN?.trim() || '';
 const mediaLibraryManager = new MediaLibraryManager({
     configPath: path.join(USER_CONFIG_DIR, 'media-libraries.json'),
     getQuarkCookie: () => config.get('media.quarkCookie', ''),
-    // 任务媒体源按“全局代理 + 单源开关 + 源默认值”实时解析代理地址。
+    // 任务媒体源按服务端保存的命名代理选择实时解析地址。
     getProxyUrl: (sourceId, proxyDefault) => getSourceProxyUrl(sourceId, proxyDefault),
     getPort: () => PORT,
     getLocalIP: getLocalIP,
@@ -967,30 +973,32 @@ const mediaLibraryManager = new MediaLibraryManager({
         : null
 });
 
-// 统一解析任务媒体源最终使用的代理地址：全局代理 + 单源开关 + 源默认值。
-function getSourceProxyUrl(sourceId, proxyDefault = false) {
-    // 持久化配置可能被手工编辑或导入损坏，读取路径按“无代理”容错处理，
-    // 避免在控制端握手等场景抛异常；不记录代理地址本身（可能含凭据）。
-    try {
-        return resolveSourceProxyUrl({
-            globalProxy: config.get('network.globalWebProxy', ''),
-            switches: config.get('media.providerProxy', {}) || {},
-            sourceId,
-            proxyDefault
-        });
-    } catch {
-        return '';
-    }
+// 显示端只读媒体库以真实连接地址检查回环，不能通过转发头绕过。
+app.use('/api/display-local', createDisplayLocalRouter({ mediaLibraryManager, isHttps: () => useHttps }));
+
+// 统一解析命名代理；读取损坏配置时降级为不使用代理。
+function getSourceProxyUrl(sourceId) {
+    return resolveSourceProxyUrl({
+        proxies: config.get('network.webProxies', []) || [],
+        selections: config.get('media.providerProxy', {}) || {},
+        sourceId
+    });
 }
 
-// 组装控制端需要的代理配置快照，并附带各任务媒体源当前的有效代理状态。
+// 代理设置服务集中校验、持久化并生成权威快照。
+const webProxySettings = createWebProxySettings({
+    get: (key, fallback) => config.get(key, fallback),
+    set: (key, value) => config.set(key, value),
+    listSources: () => [
+        { id: 'bilibili', name: 'B 站视频', region: 'domestic' },
+        ...mediaLibraryManager.listTaskMediaSources().map(source => ({
+            id: source.id, name: source.name, region: source.region
+        }))
+    ]
+});
+
 function getWebProxyConfig() {
-    return {
-        type: 'webProxyConfig',
-        globalWebProxy: config.get('network.globalWebProxy', ''),
-        providerProxy: config.get('media.providerProxy', {}) || {},
-        sources: mediaLibraryManager.listTaskMediaSources()
-    };
+    return webProxySettings.snapshot();
 }
 
 const androidSafControl = createAndroidSafControl({ url: androidSafUrl, token: androidSafToken, mediaLibraryManager });
@@ -1033,6 +1041,20 @@ const aascRemoteMediaLibraryHandlers = createRemoteMediaLibraryHandlers({
 
 const { PlaylistManager } = require('../../web-mediacenter/modules/media/playlist-app-service');
 const playlistManager = new PlaylistManager(mediaLibraryManager);
+// 显示端只读库批量播放共用本机访问边界与活动源白名单，固定单层顺序、不循环。
+const handleDisplayPlaylistRequest = createDisplayPlaylistRequestHandler({
+    getLibraries: () => listDisplayLibraries(mediaLibraryManager),
+    getVoiceRoute: displayId => buildTextVoiceRoute(displayId, [displayId]),
+    setDisplayRoute: (displayId, route) => textMediaTtsService.setDisplayRoute(displayId, route),
+    buildPlaylist: (libraryId, dirPath) => playlistManager.buildFromLibrary(libraryId, dirPath, {
+        recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc',
+        mediaTypes: ['image', 'video', 'audio', 'text']
+    }),
+    getDisplayData: displayId => displayClients.get(displayId),
+    persist: persistDisplayState,
+    sendToDisplay
+});
+
 
 const subServerManager = new SubServerManager();
 const AASC_MAIN_NODE_ID = 'main-server';
@@ -1502,7 +1524,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'displayPlaylistRequest', 'displayPlaylistCancel', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1607,7 +1629,8 @@ async function startServer() {
                 'listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera',
                 'setGlobalRecordingPause',
                 'playlistRequest', 'playlistControl', 'bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove', 'shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet', 'gameDemoStart', 'gameDemoStop',
-                'getWebProxyConfig', 'setGlobalWebProxy', 'setProviderProxy'
+                'getWebProxyConfig', 'setWebProxyList', 'setProviderProxy',
+                'taskMediaCollectionsGet', 'taskMediaFolderCreate', 'taskMediaFolderDelete', 'taskMediaAdd', 'taskMediaMove', 'taskMediaRemove'
             ];
             for (const type of controlTypes) {
                 wsServer.registerHandler(type, async (data, ctx) => {
@@ -6050,9 +6073,9 @@ app.get('/api/bilibili/danmaku/:bvid/:page', async (req, res) => {
 });
 app.post('/api/bilibili/download', (req, res) => {
     try {
-        const { url, targetId, title } = req.body || {};
+        const { url, targetId, title, category = '' } = req.body || {};
         if (typeof url !== 'string' || typeof targetId !== 'string') throw new Error('请选择视频和目标媒体库');
-        res.json({ status: 'success', job: bilibiliDownloads.start(url, targetId, title) });
+        res.json({ status: 'success', job: bilibiliDownloads.start(url, targetId, title, category) });
     } catch (error) { res.status(400).json({ status: 'error', message: error.message }); }
 });
 app.get('/api/bilibili/download', (req, res) => res.json({ status: 'success', job: bilibiliDownloads.job }));
@@ -6118,23 +6141,36 @@ async function assertQuarkDownloadSource(nodeId, libraryId) {
 
 app.post('/api/quark-directory-downloads', async (req, res) => {
     try {
-        const { nodeId = AASC_MAIN_NODE_ID, libraryId, targetId, path: dirPath = '/' } = req.body || {};
+        const { nodeId = AASC_MAIN_NODE_ID, libraryId, targetId, path: dirPath = '/', category = '' } = req.body || {};
         await assertQuarkDownloadSource(nodeId, libraryId);
         if (typeof targetId !== 'string') throw new Error('来源或目标无效');
-        const job = quarkDirectoryDownloads.start({ nodeId, libraryId }, dirPath, targetId);
+        const job = quarkDirectoryDownloads.start({ nodeId, libraryId }, dirPath, targetId, category);
         res.json({ status: 'success', job });
     } catch (error) { res.status(400).json({ status: 'error', message: error.message }); }
 });
 app.post('/api/quark-file-downloads', async (req, res) => {
     try {
-        const { nodeId = AASC_MAIN_NODE_ID, libraryId, targetId, path: filePath, size, modifiedTime } = req.body || {};
+        const { nodeId = AASC_MAIN_NODE_ID, libraryId, targetId, path: filePath, size, modifiedTime, category = '' } = req.body || {};
         if (typeof targetId !== 'string' || typeof filePath !== 'string') throw new Error('下载参数无效');
         await assertQuarkDownloadSource(nodeId, libraryId);
-        const job = quarkDirectoryDownloads.startFile({ nodeId, libraryId }, filePath, targetId, { size, modifiedTime });
+        const job = quarkDirectoryDownloads.startFile({ nodeId, libraryId }, filePath, targetId, { size, modifiedTime, category });
         res.json({ status: 'success', job });
     } catch (error) { res.status(400).json({ status: 'error', message: error.message }); }
 });
 app.get('/api/quark-directory-downloads', (req, res) => res.json({ status: 'success', job: quarkDirectoryDownloads.job }));
+
+const { TaskMediaDownloadIndex } = require('../modules/media/task-media-download-index');
+const { registerTaskMediaRoutes } = require('../modules/media/task-media-routes');
+const taskMediaDownloads = new TaskMediaDownloadIndex({
+    indexPath: path.join(USER_CONFIG_DIR, 'task-media-downloads.json'),
+    getTarget: (id, writable) => quarkDirectoryDownloads.getTarget(id, writable)
+});
+registerTaskMediaRoutes(app, {
+    manager: mediaLibraryManager,
+    index: taskMediaDownloads,
+    getTarget: (id, writable) => quarkDirectoryDownloads.getTarget(id, writable),
+    getBaseUrl: () => `${useHttps ? 'https' : 'http'}://${getLocalIP()}:${PORT}`
+});
 
 app.get('/api/media-library-providers', (req, res) => res.json({ status: 'success', providers: mediaLibraryManager.listTaskMediaSources() }));
 
@@ -6322,7 +6358,9 @@ app.post('/api/media-libraries/:id/set-default', (req, res) => {
 
 app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
     try {
-        const filePath = req.params[0];
+        // Express 通配参数不含起始斜杠；统一恢复目录清单使用的根路径格式，
+        // 保证任务提供器按清单路径查找媒体时与本地/HTTP/SMB 提供器一致。
+        const filePath = req.params[0] ? '/' + req.params[0].replace(/^\/+/, '') : '';
 
         if (!filePath) {
             return res.status(400).json({ status: 'error', message: '文件路径不能为空' });
@@ -8096,6 +8134,12 @@ async function advanceDynamicPlaylist(displayId, data, ws) {
 }
 
 function sendToDisplay(displayId, data, options = {}) {
+    // 新媒体与停止/清空操作使旧目录扫描失效，避免迟到列表覆盖用户后续操作。
+    if (['url', 'base64', 'media', 'playlistStart'].includes(data.type)
+        || (data.type === 'control' && ['stop', 'clearMedia'].includes(data.action))
+        || (data.type === 'playlistControl' && data.action === 'stop')) {
+        invalidateDisplayPlaylistRequest(displayClients.get(displayId));
+    }
     // 每次下发只规范化媒体副本；保留原始直连地址，HTTPS 页面仅在失败时使用代理备用地址。
     data = normalizeDisplayMediaMessage(data, useHttps);
     if (isRepairModeTtsSuppressed()
@@ -9483,6 +9527,10 @@ async function handleChatModelTierMessage(ws, data) {
 }
 
 function handleDisplayMessageFallback(displayId, data, ws) {
+    if (['displayPlaylistRequest', 'displayPlaylistCancel'].includes(data.type)) {
+        void handleDisplayPlaylistRequest(displayId, data, ws);
+        return;
+    }
     if (data.type === 'chatAction') {
         if (displayClients.get(displayId)?.ws !== ws) return;
         void motionCoordinator.handle(displayId, data).catch(error => logError('动作', error.message));
@@ -10172,8 +10220,11 @@ const { createBilibiliListService } = require('../modules/media/bilibili-list-se
 const bilibiliListService = createBilibiliListService({ config, broadcast: broadcastToControls });
 const { createShareFoldersService } = require('../modules/media/share-folders-service');
 const shareFoldersService = createShareFoldersService({ config, broadcast: broadcastToControls });
+const { createTaskMediaCollections } = require('../modules/media/task-media-collections');
+const taskMediaCollections = createTaskMediaCollections({ config, broadcast: broadcastToControls });
 
 async function handleControlMessageFallback(data, ws) {
+    if (['taskMediaCollectionsGet', 'taskMediaFolderCreate', 'taskMediaFolderDelete', 'taskMediaAdd', 'taskMediaMove', 'taskMediaRemove'].includes(data.type)) { taskMediaCollections.handle(ws, data); return; }
     if (['shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet'].includes(data.type)) { shareFoldersService.handle(ws, data); return; }
     if (['bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove'].includes(data.type)) { await bilibiliListService.handle(ws, data); return; }
     // 代理配置属于控制端全局设置，不依赖 displayId，提前处理并直接返回。
@@ -10181,10 +10232,9 @@ async function handleControlMessageFallback(data, ws) {
         ws.send(JSON.stringify(getWebProxyConfig()));
         return;
     }
-    if (data.type === 'setGlobalWebProxy') {
+    if (data.type === 'setWebProxyList') {
         try {
-            const value = normalizeProxyUrl(data.value);
-            if (!config.set('network.globalWebProxy', value)) throw new Error('代理配置保存失败');
+            webProxySettings.setList({ webProxies: data.webProxies });
             broadcastToControls(getWebProxyConfig());
         } catch (error) {
             ws.send(JSON.stringify({ type: 'webProxyConfigError', message: error.message }));
@@ -10193,10 +10243,7 @@ async function handleControlMessageFallback(data, ws) {
     }
     if (data.type === 'setProviderProxy') {
         try {
-            const sourceId = String(data.sourceId || '');
-            if (!/^(bilibili|[a-z][a-z0-9._-]{1,63})$/.test(sourceId)) throw new Error('媒体源 ID 无效');
-            const switches = { ...(config.get('media.providerProxy', {}) || {}), [sourceId]: data.enabled === true };
-            if (!config.set('media.providerProxy', switches)) throw new Error('媒体源代理设置保存失败');
+            webProxySettings.setProvider({ sourceId: data.sourceId, proxyId: data.proxyId });
             broadcastToControls(getWebProxyConfig());
         } catch (error) {
             ws.send(JSON.stringify({ type: 'webProxyConfigError', message: error.message }));

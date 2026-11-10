@@ -131,3 +131,59 @@ test('单文件下载遇到同名已有文件时使用新文件名，不覆盖',
     assert.equal(await fs.readFile(path.join(dir, 'a.mp4'), 'utf8'), 'old');
     assert.equal(saved.full, path.join(dir, 'a (1).mp4'));
 });
+
+test('下载子分类按来源与分类分目录，单文件同样生效', async t => {
+    const f = await fixture(t);
+    f.service.start(f.source, '/course', 'b', '课程 / 2026');
+    assert.equal((await finish(f.service)).status, 'done');
+    const saved = await f.service.lookup(f.source, '/course/a.mp4', 'b');
+    assert.ok(saved.full.startsWith(path.join(f.b, '夸克分享', '课程 _ 2026') + path.sep));
+    f.service.startFile(f.source, '/course/a.mp4', 'a', { size: 3, modifiedTime: null, category: '单文件分类' });
+    await finish(f.service);
+    const fileSaved = await f.service.lookup(f.source, '/course/a.mp4', 'a');
+    assert.ok(fileSaved.full.startsWith(path.join(f.a, '夸克分享', '单文件分类') + path.sep));
+});
+
+test('缺省分类落入未分类目录', async t => {
+    const f = await fixture(t);
+    f.service.start(f.source, '/course', 'a');
+    await finish(f.service);
+    const saved = await f.service.lookup(f.source, '/course/a.mp4', 'a');
+    assert.ok(saved.full.startsWith(path.join(f.a, '夸克分享', '未分类') + path.sep));
+});
+
+test('旧夸克下载目录的记录仍可查询', async t => {
+    const f = await fixture(t);
+    const oldDir = path.join(f.a, '夸克下载', 'legacyhash', 'course');
+    await fs.mkdir(oldDir, { recursive: true });
+    await fs.writeFile(path.join(oldDir, 'a.mp4'), 'old');
+    const stat = await fs.stat(path.join(oldDir, 'a.mp4'));
+    f.service.records.push({
+        key: f.service.key(f.source, '/course/a.mp4'),
+        source: f.source,
+        filePath: '/course/a.mp4',
+        targetId: 'a',
+        relative: path.relative(f.a, path.join(oldDir, 'a.mp4')),
+        size: stat.size,
+        updatedAt: Date.now()
+    });
+    const saved = await f.service.lookup(f.source, '/course/a.mp4', 'a');
+    assert.equal(await fs.readFile(saved.full, 'utf8'), 'old');
+});
+
+test('分类穿越文本作为单层目录，实际目录与单文件下载均受清洗', async t => {
+    const f = await fixture(t);
+    const job = f.service.start(f.source, '/course', 'a', '../../etc');
+    assert.equal(job.category, '.._.._etc');
+    assert.equal((await finish(f.service)).status, 'done');
+    const saved = await f.service.lookup(f.source, '/course/a.mp4', 'a');
+    assert.ok(saved.full.startsWith(path.join(f.a, '夸克分享', '.._.._etc') + path.sep));
+    const single = f.service.startFile(f.source, '/course/a.mp4', 'b', { size: 3, category: '/' });
+    assert.equal(single.category, '_');
+    assert.equal((await finish(f.service)).status, 'done');
+    const fileSaved = await f.service.lookup(f.source, '/course/a.mp4', 'b');
+    assert.ok(fileSaved.full.startsWith(path.join(f.b, '夸克分享', '_') + path.sep));
+    assert.equal(await fs.readFile(fileSaved.full, 'utf8'), 'abc');
+    const otherSource = { ...f.source, libraryId: 'another-share' };
+    assert.notDeepEqual(f.service.downloadPrefix(f.source, '课程'), f.service.downloadPrefix(otherSource, '课程'));
+});

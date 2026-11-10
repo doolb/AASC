@@ -505,22 +505,34 @@
     margin-right: auto;
 }
 
-.media-library-tabs, .quark-share-bar {
+.quark-share-bar {
     display: flex;
     gap: 8px;
     margin-bottom: 12px;
     flex-wrap: wrap;
 }
-.media-library-tabs button.active { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
-.media-region-label { align-self: center; margin: 0 4px 0 8px; font-size: 12px; color: #888; white-space: nowrap; }
-.media-region-group { display: inline-flex; align-items: center; gap: 6px; }
-.media-task-source-wrap { display: inline-flex; align-items: center; gap: 2px; }
-.media-task-source-wrap .media-source-proxy { font-size: 11px; }
+.media-library-tabs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.media-tab-section { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.media-tab-section[hidden] { display: none; }
+.media-tab-local { padding-bottom: 8px; border-bottom: 1px solid var(--border-color, rgba(128,128,128,.25)); }
+.media-library-tabs .media-library-tab { background: #fff5fa; color: #8c4765; border: 1px solid #dba6bd; border-radius: 6px; padding: 6px 10px; }
+.media-library-tabs .media-library-tab.active { background: #6743a5; color: #fff; border-color: #482579; box-shadow: 0 0 0 2px rgba(103, 67, 165, .2); }
+.media-library-tabs .media-library-tab:focus-visible { outline: 3px solid #3b2585; outline-offset: 2px; }
+.media-region-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.media-task-source-wrap { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; }
+.media-library-tabs .media-library-tab { max-width: 100%; overflow-wrap: anywhere; }
+.task-media-proxy-settings { display: grid; gap: 8px; margin-bottom: 12px; padding: 12px; border: 1px solid var(--border-color, rgba(128,128,128,.3)); border-radius: 8px; }
+.task-media-proxy-settings:empty { display: none; }
+.task-media-proxy-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.task-media-proxy-row select { max-width: 100%; }
 .quark-share-bar input:first-child { flex: 1 1 240px; min-width: 0; }
 .quark-share-bar input:nth-child(2) { flex: 0 1 130px; min-width: 90px; }
 .quark-share-bar input { padding: 8px; border-radius: 6px; border: 1px solid rgba(128,128,128,.5); }
 
 .bilibili-video-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+#taskMediaSourceBar[hidden], #taskMediaSourceList[hidden], #taskSourceRelated[hidden], #taskMediaFolderNavigation[hidden] { display: none; }
+.task-source-title { margin-left: auto; font-size: 13px; color: #aaa; }
+#taskMediaSourceList:not([hidden]) { margin-top: 12px; }
 .bilibili-video-card { min-width: 0; padding: 8px; border-radius: 8px; background: rgba(128,128,128,.15); }
 .share-move-dialog { width: min(420px, calc(100vw - 32px)); min-width: 0; max-height: calc(100vh - 32px); box-sizing: border-box; display: flex; flex-direction: column; }
 .share-move-list { overflow-y: auto; display: grid; gap: 8px; }
@@ -528,11 +540,11 @@
 .share-move-option input { flex: none; accent-color: var(--accent-color, #4a9eff); }
 .share-move-option span { min-width: 0; overflow-wrap: anywhere; }
 .share-move-option:focus-within { outline: 2px solid var(--accent-color, #4a9eff); outline-offset: 1px; }
+.bilibili-current-video { outline: 2px solid var(--accent-color, #4c9aff); }
+.bilibili-current-badge { display: inline-block; margin-bottom: 5px; color: var(--accent-color, #4c9aff); font-weight: 600; }
 .bilibili-video-cover { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: rgba(128,128,128,.3); }
 .bilibili-video-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 6px 0; }
 .bilibili-video-actions { display: flex; gap: 6px; }
-.bilibili-current-video { outline: 2px solid var(--accent-color, #4c9aff); }
-.bilibili-current-badge { display: inline-block; margin-bottom: 5px; color: var(--accent-color, #4c9aff); font-weight: 600; }
 
 .share-folder-navigation { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .share-folder-navigation button, .share-link-actions button { border: 0; border-radius: 7px; padding: 7px 10px; cursor: pointer; }
@@ -576,4 +588,15 @@
 .bilibili-related { margin-top: 12px; }
 .bilibili-danmaku-toggle,
 .media-source-proxy { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #bbb; }
+.media-source-proxy[hidden] { display: none; }
 .bilibili-video-actions button:disabled { opacity: .55; cursor: default; }
+
+/* 命名代理列表与来源代理选择，窄屏时输入框自动换行。 */
+.web-proxy-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.web-proxy-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.web-proxy-row input { flex: 1 1 160px; min-width: 0; padding: 8px; border-radius: 6px; border: 1px solid rgba(128, 128, 128, .5); background: rgba(255, 255, 255, .05); color: #fff; }
+.web-proxy-row button { flex: 0 0 auto; }
+.media-source-proxy select { max-width: 170px; padding: 4px 6px; border-radius: 6px; border: 1px solid rgba(128, 128, 128, .5); background: rgba(255, 255, 255, .08); color: #fff; }
+.media-task-proxy-select { max-width: 150px; font-size: 12px; padding: 2px 4px; border-radius: 6px; border: 1px solid rgba(128, 128, 128, .5); background: rgba(255, 255, 255, .08); color: #fff; }
+
+.task-source-pagination { display: flex; align-items: center; gap: 8px; width: 100%; margin: 12px 0; }

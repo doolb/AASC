@@ -378,7 +378,9 @@ class LocalProvider extends MediaLibraryProvider {
         const resolved = path.join(this.basePath, cleanPath);
         const normalized = path.normalize(resolved);
         
-        if (!normalized.startsWith(this.basePath)) {
+        // 必须按路径段校验：字符串前缀会误放行与库名同前缀的兄弟目录。
+        const relative = path.relative(this.basePath, normalized);
+        if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
             throw new Error('路径遍历攻击检测');
         }
         
@@ -1353,6 +1355,8 @@ class MediaLibraryManager {
             return {
                 ...source,
                 libraryId: existing?.config.id || `task-auto:${source.id}`,
+                // 仅公开注册该来源的任务实例标识，供控制端在对应实例中显示设置。
+                ownerInstanceId: this.taskMediaProviders.get(source.id)?.owner || '',
                 // 代理状态按当前配置实时计算，供前端展示“使用代理”开关。
                 proxyEnabled: Boolean(this.getProxyUrl(source.id, source.proxyDefault))
             };

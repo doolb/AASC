@@ -76,3 +76,61 @@ test('下载后的 B 站分集可通过本地代理读取和 Range 拖动', asyn
     const response = await fetch(`http://127.0.0.1:${server.address().port}/local`, { headers: { Range: 'bytes=0-4' } });
     assert.equal(response.status, 206); assert.equal(await response.text(), 'video');
 });
+
+test('B 站下载按分类目录存放并保留分集后缀', async t => {
+    const f = await create(t);
+    f.service.start('https://www.bilibili.com/list/ml1', 'a', '课程合集', '我的课程');
+    assert.equal((await wait(f.service)).completed, 2);
+    const saved = await f.service.lookup({ bvid: 'BV1B7411m7LV', page: 2 });
+    assert.ok(saved.full.startsWith(path.join(f.first, 'B站视频', '我的课程') + path.sep));
+    assert.match(saved.full, /P2\.mp4$/);
+});
+
+test('B 站单视频无分类时落入未分类目录，旧记录仍可查询', async t => {
+    const f = await create(t);
+    f.service.start('https://www.bilibili.com/video/BV1B7411m7LV', 'b');
+    await wait(f.service);
+    const saved = await f.service.lookup({ bvid: 'BV1B7411m7LV', page: 1 });
+    assert.ok(saved.full.startsWith(path.join(f.second, 'B站视频', '未分类') + path.sep));
+    assert.equal(await fs.readFile(saved.full, 'utf8'), 'videoaudio');
+});
+
+// 旧版本索引保留原 relative，升级后查询和去重不能依赖新目录布局。
+test('旧 B站下载记录重启后仍命中，分类变化不重复下载', async t => {
+    const f = await create(t);
+    const relative = path.join('B站下载', '旧课程 BV1B7411m7LV P2.mp4');
+    const full = path.join(f.first, relative);
+    await fs.mkdir(path.dirname(full), { recursive: true });
+    await fs.writeFile(full, 'legacy');
+    const source = f.service.source;
+    const filePath = '/BV1B7411m7LV/p2.mp4';
+    await fs.writeFile(f.options.indexPath, JSON.stringify({ records: [{ key: f.service.index.key(source, filePath), source, filePath, targetId: 'a', relative, size: 6, quality: '480P' }] }));
+    const restarted = new BilibiliDownloads(f.options);
+    assert.equal((await restarted.lookup({ bvid: 'BV1B7411m7LV', page: 2 })).full, full);
+    restarted.start('https://www.bilibili.com/video/BV1B7411m7LV?p=2', 'a', '课程', '新分类');
+    assert.equal((await wait(restarted)).skipped, 1);
+    assert.equal(await fs.readFile(full, 'utf8'), 'legacy');
+    await assert.rejects(fs.stat(path.join(f.first, 'B站视频')), { code: 'ENOENT' });
+});
+
+// 执行 server-app 中实际注册的处理器，避免另写替身路由掩盖字段遗漏。
+test('真实 B 站下载路由透传分类并保留缺省和参数校验', async () => {
+    const vm = require('node:vm');
+    const source = await fs.readFile(path.join(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
+    const start = source.indexOf("app.post('/api/bilibili/download',");
+    const end = source.indexOf("\napp.get('/api/bilibili/download',", start);
+    let handler;
+    let received;
+    vm.runInNewContext(source.slice(start, end), {
+        app: { post(route, callback) { assert.equal(route, '/api/bilibili/download'); handler = callback; } },
+        bilibiliDownloads: { start(...args) { received = args; return { category: args[3] }; } }
+    });
+    const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; } };
+    handler({ body: { url: 'video', targetId: 'a', title: '标题', category: '课程 / 2026' } }, res);
+    assert.deepEqual(received, ['video', 'a', '标题', '课程 / 2026']);
+    assert.equal(res.body.status, 'success');
+    handler({ body: { url: 'video', targetId: 'a' } }, res);
+    assert.equal(received[3], '');
+    handler({ body: { url: 'video' } }, res);
+    assert.equal(res.statusCode, 400);
+});

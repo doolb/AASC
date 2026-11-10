@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="css/display-chat.css">
     <link rel="stylesheet" href="css/display-game.css">
     <link rel="stylesheet" href="css/display-mmd.css">
+    <link rel="stylesheet" href="css/display-media-library.css">
     <link rel="stylesheet" href="css/tts-voice-picker.css">
     <link rel="stylesheet" href="css/chat-model-tier-picker.css">
     <link rel="stylesheet" href="css/android-color-picker.css">
@@ -676,6 +677,7 @@
 </section>
             </div>
             <div id="displayGameChatActions" class="display-game-chat-actions">
+                <button id="displayMediaLibraryToggle" class="display-stage-button" type="button" hidden>媒体库</button>
                 <button id="displayGameToggle" class="display-stage-button" type="button"
                         aria-controls="displayGameMenu" aria-expanded="false">游戏</button>
                 <section id="displayGameMenu" class="display-game-menu" aria-label="游戏列表" hidden>
@@ -729,6 +731,24 @@
         </div>
     </div>
 
+    <div id="displayMediaLibraryPanel" class="display-media-library-panel" hidden>
+        <div class="display-media-library-header">
+            <strong>媒体库</strong>
+            <button id="displayMediaLibraryClose" class="display-stage-button" type="button">关闭</button>
+        </div>
+        <div class="display-media-library-body">
+            <div id="displayMediaLibrarySources" class="display-media-library-sources"></div>
+            <div class="display-media-library-main">
+                <div class="display-media-library-toolbar">
+                    <button id="displayMediaLibraryUp" type="button">返回上级</button>
+                    <span id="displayMediaLibraryPath">/</span>
+                </div>
+                <div id="displayMediaLibraryEntries" class="display-media-library-entries"></div>
+                <p id="displayMediaLibraryStatus" class="display-media-library-status" role="status"></p>
+            </div>
+        </div>
+    </div>
+    <div id="displayMediaLibraryNotice" class="display-media-library-notice" hidden></div>
     <audio id="ttsAudio" style="display:none;"></audio>
     <script type="module" src="js/mmd-tts-actions.mjs"></script>
     <div id="uiSleepOverlay" class="sleep-overlay sleep-overlay-ui"></div>
@@ -751,6 +771,7 @@
     <script src="js/text-media-player.js"></script>
     <!-- 弹幕渲染器必须先于主内联脚本加载，确保 window.BilibiliDanmaku 已注册。 -->
     <script src="/js/bilibili-danmaku.js"></script>
+    <script src="js/display-media-library.js"></script>
     <script src="js/ui-theme.js"></script>
     <script src="js/display-appearance-controls.js" defer></script>
     <script src="js/display-stage-panel-coordinator.js" defer></script>
@@ -6899,8 +6920,11 @@
                             window._renderTaskUpdates[_rid](data.data);
                         }
                     } else if (data.type === 'playlistStart') {
+                        if (window.DisplayMediaLibrary?.handleServerMessage(data) === false) return;
                         handlePlaylistStart(data);
                         sendCommandAck('playlistStart', true, data.listId);
+                    } else if (data.type === 'displayMediaStart' || data.type === 'displayPlaylistError') {
+                        window.DisplayMediaLibrary?.handleServerMessage(data);
                     } else if (data.type === 'playlistDynamicEnd') {
                         if (playlistState?.listId === data.listId) finishPlaylist();
                     } else if (data.type === 'playlistDynamicError') {
@@ -6928,6 +6952,7 @@
 
             socket.onclose = function() {
                 if (!isCurrentDisplaySocket(socket)) return;
+                window.DisplayMediaLibrary?.handleServerMessage({ type: 'displayMediaDisconnected' });
                 window.DisplayAppearanceControls?.handleDisconnected();
                 if (displayRecordingSession) {
                     void finalizeDisplayRecording(false, '显示端连接已断开');
@@ -6996,6 +7021,23 @@
 
         applyRotation();
         connectWebSocket();
+        // 媒体库面板只在本机页面可用；播放回调复用显示端现有 showMedia/stopPlaylist。
+        window.DisplayMediaLibrary?.init({
+            send: message => {
+                if (displayWs && displayWs.readyState === WebSocket.OPEN) { displayWs.send(JSON.stringify(message)); return true; }
+                return false;
+            },
+            playMedia: data => {
+                stopPlaylist();
+                showMedia(data);
+            },
+            restorePlaylist: state => handlePlaylistStart({
+                type: 'playlistStart', ...state.startData,
+                resumeIndex: state.index, resumeTime: state.currentTime, resumeState: state.state,
+                resumeTextPage: state.currentTextPage || 0
+            })
+        });
+
         checkSleepMode();
         setInterval(checkSleepMode, 10000);
 

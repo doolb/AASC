@@ -125,6 +125,9 @@ runInstance(taskName, instanceId):
 
 stopInstance(taskName, instanceId):
   调用服务 stop
+  if 服务 stop 失败:
+    返回停止失败，保留控制器和实例状态供重试
+    不报告已停止，不记录底层敏感错误
   routeRegistry.unregisterInstance(instanceId)
   向显示端发送 task:stop
   持久化 stopped

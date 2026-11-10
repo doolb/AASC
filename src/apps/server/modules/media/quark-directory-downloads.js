@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { pipeline } = require('node:stream/promises');
 const { Transform } = require('node:stream');
+const { sanitizeCategoryName } = require('./download-path');
 
 // 持久目录下载独立于仅保留一个文件的播放缓存；索引只记录完整文件。
 class QuarkDirectoryDownloads {
@@ -70,17 +71,22 @@ class QuarkDirectoryDownloads {
         }
         return paths.size;
     }
-    start(source, dirPath, targetId) {
+    start(source, dirPath, targetId, category = '') {
         if (this.job?.status === 'running') throw new Error('已有目录正在下载，请稍后再试');
         if (!source?.nodeId || !source?.libraryId || !targetId) throw new Error('请选择来源和目标媒体库');
         const dir = this.validatePath(dirPath);
         this.getTarget(targetId, true);
-        this.job = { id: crypto.randomUUID(), status: 'running', source, dirPath: dir, targetId, completed: 0, skipped: 0, received: 0, total: 0, fileName: '' };
+        this.job = {
+            id: crypto.randomUUID(), status: 'running', source, dirPath: dir, targetId,
+            category: sanitizeCategoryName(category),
+            completed: 0, skipped: 0, received: 0, total: 0, fileName: ''
+        };
         const job = this.job;
         void this.run(job).catch(error => { job.status = 'error'; job.message = error.message || '目录下载失败'; this.notify(job); });
         this.notify(job);
         return { ...job };
     }
+
     startFile(source, filePath, targetId, meta = {}) {
         if (this.job?.status === 'running') throw new Error('已有下载任务正在进行，请稍后再试');
         if (!source?.nodeId || !source?.libraryId || !targetId) throw new Error('下载来源或目标无效');
@@ -90,6 +96,7 @@ class QuarkDirectoryDownloads {
         const size = meta.size == null ? null : Number(meta.size);
         const job = {
             id: crypto.randomUUID(), status: 'running', source, dirPath: targetPath, fileMode: true, targetId,
+            category: sanitizeCategoryName(meta.category),
             completed: 0, skipped: 0, received: 0,
             total: Number.isSafeInteger(size) && size >= 0 ? size : 0,
             fileName: path.posix.basename(targetPath)
@@ -99,6 +106,7 @@ class QuarkDirectoryDownloads {
         this.notify(job);
         return { ...job };
     }
+
     async runFile(job, filePath, meta = {}) {
         // 已登记且文件仍存在的同一来源文件直接跳过，避免重复保存。
         if (await this.lookup(job.source, filePath, job.targetId)) {
@@ -109,16 +117,16 @@ class QuarkDirectoryDownloads {
         // 指纹与目录下载保持一致，先单文件下载再整目录下载时不会重复保存。
         const fingerprint = knownSize === null ? null : JSON.stringify([knownSize, meta.modifiedTime || null]);
         const root = await fs.promises.realpath(this.getTarget(job.targetId, true).basePath);
-        await this.downloadOne(job, root, this.downloadPrefix(job.source), filePath, knownSize, fingerprint);
+        await this.downloadOne(job, root, this.downloadPrefix(job.source, job.category), filePath, knownSize, fingerprint);
         job.status = 'done'; job.fileName = ''; this.notify(job);
     }
-    downloadPrefix(source) {
-        return ['夸克下载', crypto.createHash('sha256').update(JSON.stringify(source)).digest('hex').slice(0, 16)];
+    downloadPrefix(source, category = '') {
+        return ['夸克分享', sanitizeCategoryName(category), crypto.createHash('sha256').update(JSON.stringify(source)).digest('hex').slice(0, 16)];
     }
     async run(job) {
         const { source, targetId } = job;
         const root = await fs.promises.realpath(this.getTarget(targetId, true).basePath);
-        const prefix = this.downloadPrefix(source);
+        const prefix = this.downloadPrefix(source, job.category);
         const queue = [job.dirPath];
         const visited = new Set();
         while (queue.length) {

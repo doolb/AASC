@@ -135,13 +135,17 @@
                 <h2>媒体库</h2>
                 <div class="media-library-container">
                     <div class="media-library-tabs" role="tablist" aria-label="媒体库类型">
+                        <div class="media-tab-section media-tab-local"><div class="media-region-group">
                         <button class="media-library-tab active" type="button" data-tab="libraries" id="mediaTabLibraries" onclick="MediaLibrary.switchTab('libraries')">本地媒体</button>
+                        </div></div>
+                        <div class="media-tab-section"><div class="media-region-group">
                         <button class="media-library-tab" type="button" data-tab="quark" id="mediaTabQuark" onclick="MediaLibrary.switchTab('quark')">夸克分享</button>
-                        <span class="media-region-label" data-region-label="domestic">国内媒体</span>
                         <button class="media-library-tab" type="button" data-tab="bilibili" data-region="domestic" id="mediaTabBilibili" onclick="MediaLibrary.switchTab('bilibili')">B站视频</button>
                         <span class="media-region-group" id="domesticMediaTabs"></span>
-                        <span class="media-region-label" data-region-label="overseas">国外媒体</span>
+                        </div></div>
+                        <div class="media-tab-section" id="overseasMediaSection" hidden>
                         <span class="media-region-group" id="overseasMediaTabs"></span>
+                        </div>
                     </div>
                     <div id="quarkShareBar" class="quark-share-bar" style="display:none;">
                         <input id="quarkShareInput" type="text" placeholder="粘贴夸克分享链接或分享文字" autocomplete="off">
@@ -150,18 +154,33 @@
                         <button type="button" onclick="MediaLibrary.addQuarkShare(true)">播放</button>
                     </div>
                     <div id="bilibiliVideoBar" class="quark-share-bar" style="display:none;">
+                        <button class="control-btn" id="bilibiliHomeBtn" onclick="MediaLibrary.loadBilibiliHome()">首页</button>
                         <input id="bilibiliVideoInput" type="text" placeholder="粘贴 B 站 BV 视频或收藏列表链接" autocomplete="off">
                         <button type="button" onclick="MediaLibrary.addBilibiliVideo()">加入</button>
                         <button type="button" onclick="MediaLibrary.playBilibiliInput()">播放</button>
                         <button type="button" onclick="MediaLibrary.downloadBilibiliInput()">下载</button>
                         <button type="button" onclick="MediaLibrary.showBilibiliBatchPlayDialog()">批量播放当前文件夹</button>
-                        <button class="control-btn" id="bilibiliHomeBtn" onclick="MediaLibrary.loadBilibiliHome()">首页</button>
                         <label class="bilibili-danmaku-toggle"><input type="checkbox" id="bilibiliDanmakuToggle"> 弹幕</label>
-                        <label class="media-source-proxy"><input type="checkbox" id="bilibiliProxyToggle" onchange="MediaLibrary.toggleProviderProxy('bilibili', this.checked)"> 使用代理</label>
+                        <label class="media-source-proxy" hidden>代理 <select id="bilibiliProxySelect" data-provider-proxy="bilibili"></select></label>
                     </div>
                     <div id="bilibiliSearchBar" class="quark-share-bar" style="display:none;">
                         <input id="bilibiliSearchInput" type="search" placeholder="搜索 B 站视频" autocomplete="off" onkeydown="if(event.key === 'Enter') MediaLibrary.searchBilibili()">
                         <button type="button" onclick="MediaLibrary.searchBilibili()">搜索</button>
+                    </div>
+                    <div id="taskMediaSourceBar" class="quark-share-bar" hidden>
+                        <button type="button" id="taskSourceHomeBtn">首页</button>
+                        <input id="taskSourceSearchInput" type="search" placeholder="搜索媒体源内容" autocomplete="off">
+                        <button type="button" id="taskSourceSearchBtn">搜索</button>
+                        <input id="taskSourceLinkInput" type="text" placeholder="粘贴链接或 ID" autocomplete="off">
+                        <button type="button" id="taskSourceLinkBtn">打开链接</button>
+                        <button type="button" id="taskSourceAddBtn">加入</button>
+                        <span id="taskSourceTitle" class="task-source-title"></span>
+                    </div>
+                    <div id="taskMediaFolderNavigation" class="share-folder-navigation" hidden></div>
+                    <div id="taskMediaSourceList" class="bilibili-video-list" hidden></div>
+                    <div id="taskSourceRelated" class="bilibili-related" hidden>
+                        <div class="bilibili-related-title">相关推荐</div>
+                        <div id="taskSourceRelatedList" class="bilibili-video-list"></div>
                     </div>
                     <div id="bilibiliDownloadStatus" class="quark-directory-download-status" style="display:none" role="status"></div>
                     <div id="shareFolderNavigation" class="share-folder-navigation" style="display:none;"></div>
@@ -897,12 +916,13 @@
             <div class="section">
                 <h2>网络代理</h2>
                 <div class="control-item">
-                    <label for="globalWebProxyInput">全局网页代理</label>
-                    <input id="globalWebProxyInput" type="text" placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080">
+                    <label>代理列表</label>
+                    <div id="webProxyList" class="web-proxy-list"></div>
                     <div class="control-buttons">
-                        <button class="control-btn" id="globalWebProxySaveBtn">保存代理</button>
+                        <button class="control-btn" id="webProxyAddBtn" type="button">添加代理</button>
+                        <button class="control-btn" id="webProxySaveBtn" type="button">保存代理列表</button>
                     </div>
-                    <div class="routing-hint">仅对开启“使用代理”的媒体源生效；留空表示不使用代理。</div>
+                    <div class="routing-hint">任务媒体源在对应任务实例中选择代理，B站在来源工具栏选择；删除代理后引用它的来源会回到“不使用代理”。代理仅由服务端使用。</div>
                 </div>
             </div>
         </section>
@@ -1357,9 +1377,6 @@
         init() {
             this.updateUI();
             this.loadRouting();
-            document.getElementById('globalWebProxySaveBtn')?.addEventListener('click', () => this.saveGlobalWebProxy());
-            // 代理配置以服务端为权威；连接未打开时 send 会静默跳过，服务端建立连接后也会主动推送。
-            window.WebSocketManager?.send({ type: 'getWebProxyConfig' });
         },
 
         loadRouting() {
@@ -1482,21 +1499,6 @@
         handleServerPortConfigError(data) {
             this.handleServerPortConfig(data);
             showToast(data?.message || '服务器端口保存失败', 'error');
-        },
-
-        saveGlobalWebProxy() {
-            const value = document.getElementById('globalWebProxyInput')?.value.trim() || '';
-            window.WebSocketManager?.send({ type: 'setGlobalWebProxy', value });
-        },
-
-        applyWebProxyConfig(data) {
-            const config = data || {};
-            const input = document.getElementById('globalWebProxyInput');
-            if (input && document.activeElement !== input) input.value = config.globalWebProxy || '';
-            // 只同步设置面板中的代理开关；任务页签的复选框由 MediaLibrary 按源状态渲染，避免互相覆盖。
-            document.querySelectorAll('[data-provider-proxy]:not([data-task-media-proxy])').forEach(input => {
-                input.checked = Boolean(config.providerProxy?.[input.dataset.providerProxy]);
-            });
         },
 
         waitForServerPort(port) {

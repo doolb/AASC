@@ -43,6 +43,36 @@ async function fixture(t) {
     return { root, source, selection, staging, manifest, context, catalog };
 }
 
+test('退役本地任务不显示或自动恢复，但保留实例记录和用户数据', async t => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-retired-task-'));
+    t.after(() => fs.rm(root, { recursive: true, force: true }));
+    const tasksDir = path.join(root, 'tasks');
+    const retired = path.join(tasksDir, 'hongguo');
+    await fs.mkdir(path.join(retired, 'results', 'old-instance'), { recursive: true });
+    await fs.writeFile(path.join(retired, '.retired'), 'retired');
+    await fs.writeFile(path.join(retired, 'results', 'index.json'), JSON.stringify({ instances: [
+        { taskName: 'hongguo', instanceId: 'old-instance', status: 'running', mode: 'service' }
+    ] }));
+    await fs.writeFile(path.join(retired, 'results', 'old-instance', 'output.txt'), '保留数据');
+    await fs.mkdir(path.join(tasksDir, 'other'), { recursive: true });
+    await fs.writeFile(path.join(tasksDir, 'other', 'task.js'), 'module.exports = {};');
+    const manager = new TaskManager({ tasksDir, taskCodeCatalog: null, serverExecutionDisabled: true });
+    assert.deepEqual((await manager.taskIO.listTasks()).map(task => task.taskName), ['other']);
+    const submitted = [];
+    manager.submit = async item => submitted.push(item);
+    await manager.restoreAutoStartServices();
+    assert.deepEqual(submitted, []);
+    assert.equal((await manager.taskIO.getIndex('hongguo'))[0].instanceId, 'old-instance');
+    assert.equal(await fs.readFile(path.join(retired, 'results', 'old-instance', 'output.txt'), 'utf8'), '保留数据');
+});
+
+test('发布清单退役旧红果且不发布国外任务', () => {
+    const selection = require('../release/task-code-files.json');
+    assert.ok(selection.retiredTaskNames.includes('hongguo'));
+    assert.ok(selection.tasks.some(task => task.taskName === 'domestic-media'));
+    assert.ok(!selection.tasks.some(task => ['hongguo', 'overseas-media'].includes(task.taskName)));
+});
+
 test('白名单只生成代码、revision和聚合依赖，种子/数据不入包', async t => {
     const f = await fixture(t);
     assert.deepEqual((await fs.readdir(path.join(f.staging, 'tasks/demo'))).sort(), ['helper.js', 'task.js']);

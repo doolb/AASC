@@ -7,7 +7,12 @@ const MediaLibrary = {
     taskMediaSources: [],
     activeTaskSourceId: '',
     taskMediaRevision: 0,
-    // 服务端下发的全局代理配置与每个任务媒体源的代理开关状态。
+    taskSourceSequence: 0,
+    taskRelatedSequence: 0,
+    taskMediaCollections: {},
+    selectedTaskMediaFolder: {},
+    taskMediaShowingSaved: false,
+    // 服务端下发的命名代理列表与每个媒体源选择的代理 id。
     webProxyConfig: {},
     quarkAdding: false,
     mediaPlaySequence: 0,
@@ -43,6 +48,19 @@ const MediaLibrary = {
                 this.bilibiliDanmakuEnabled = danmakuToggle.checked;
                 localStorage.setItem('aasc.bilibiliDanmaku', danmakuToggle.checked ? '1' : '0');
             };
+        }
+        // 代理设置面板由 MediaLibrary 统一渲染，保证列表与来源下拉框使用同一份权威快照。
+        document.getElementById('webProxyAddBtn')?.addEventListener('click', () => this.addWebProxyRow());
+        document.getElementById('webProxySaveBtn')?.addEventListener('click', () => this.saveWebProxyList());
+        document.getElementById('bilibiliProxySelect')?.addEventListener('change', event => {
+            this.setProviderProxy('bilibili', event.target.value);
+        });
+        document.getElementById('taskSourceHomeBtn')?.addEventListener('click', () => this.loadTaskSourceHome());
+        document.getElementById('taskSourceSearchBtn')?.addEventListener('click', () => this.searchTaskSource());
+        document.getElementById('taskSourceLinkBtn')?.addEventListener('click', () => this.openTaskSourceLink());
+        document.getElementById('taskSourceAddBtn')?.addEventListener('click', () => this.addTaskMediaLink());
+        for (const [id, action] of [['taskSourceSearchInput', 'searchTaskSource'], ['taskSourceLinkInput', 'openTaskSourceLink']]) {
+            document.getElementById(id)?.addEventListener('keydown', event => { if (event.key === 'Enter') this[action](); });
         }
         void this.refreshTaskMediaSources();
         this.setupDragDrop();
@@ -182,6 +200,8 @@ const MediaLibrary = {
     },
 
     async switchLibrary(id) {
+        this.taskSourceSequence++; this.taskRelatedSequence++;
+        this.activeTaskSourceId = '';
         this.currentLibrary = this.libraries.find(library => library.id === id) || null;
         if (this.currentLibrary) this.activeTab = ['quark', 'task'].includes(this.currentLibrary.type) ? this.currentLibrary.type : 'libraries';
         this.renderTabs();
@@ -201,10 +221,10 @@ const MediaLibrary = {
         const bilibiliList = document.getElementById('bilibiliVideoList');
         const bilibiliSearchBar = document.getElementById('bilibiliSearchBar');
         if (bilibiliSearchBar) bilibiliSearchBar.style.display = this.activeTab === 'bilibili' ? 'flex' : 'none';
-        if (ordinary) ordinary.classList.toggle('active', this.activeTab === 'libraries');
-        if (quark) quark.classList.toggle('active', this.activeTab === 'quark');
+        if (ordinary) { ordinary.classList.toggle('active', this.activeTab === 'libraries'); ordinary.setAttribute('aria-selected', String(this.activeTab === 'libraries')); }
+        if (quark) { quark.classList.toggle('active', this.activeTab === 'quark'); quark.setAttribute('aria-selected', String(this.activeTab === 'quark')); }
         if (bar) bar.style.display = this.activeTab === 'quark' ? 'flex' : 'none';
-        if (bilibili) bilibili.classList.toggle('active', this.activeTab === 'bilibili');
+        if (bilibili) { bilibili.classList.toggle('active', this.activeTab === 'bilibili'); bilibili.setAttribute('aria-selected', String(this.activeTab === 'bilibili')); }
         if (bilibiliBar) bilibiliBar.style.display = this.activeTab === 'bilibili' ? 'flex' : 'none';
         if (bilibiliList) bilibiliList.style.display = this.activeTab === 'bilibili' ? 'grid' : 'none';
         const browsingShares = this.activeTab === 'quark' && this.currentLibrary?.type !== 'quark';
@@ -214,9 +234,17 @@ const MediaLibrary = {
         if (folders) folders.style.display = ['quark', 'bilibili'].includes(this.activeTab) ? 'flex' : 'none';
         this.renderShareFolders();
         if (browsingShares) this.renderQuarkShares();
+        const taskSource = this.taskMediaSources.find(source => source.id === this.activeTaskSourceId);
+        const taskBrowse = this.activeTab === 'task' && taskSource?.features?.length > 0;
+        for (const id of ['taskMediaSourceBar', 'taskMediaSourceList', 'taskMediaFolderNavigation']) {
+            const el = document.getElementById(id); if (el) el.hidden = !taskBrowse;
+        }
+        if (taskBrowse) this.renderTaskMediaFolders();
+        const taskRelated = document.getElementById('taskSourceRelated');
+        if (taskRelated && !taskBrowse) taskRelated.hidden = true;
         for (const id of ['mediaLibraryHeader', 'mediaLibraryToolbar', 'mediaLibraryContent']) {
             const el = document.getElementById(id);
-            if (el) el.style.display = this.activeTab === 'bilibili' || browsingShares || (['quark', 'task'].includes(this.activeTab) && id === 'mediaLibraryHeader') ? 'none' : '';
+            if (el) el.style.display = this.activeTab === 'bilibili' || browsingShares || taskBrowse || (['quark', 'task'].includes(this.activeTab) && id === 'mediaLibraryHeader') ? 'none' : '';
         }
         // 相关推荐只在 B 站页签且存在卡片时展示，避免跨页签残留空面板。
         const related = document.getElementById('bilibiliRelated');
@@ -224,6 +252,7 @@ const MediaLibrary = {
     },
 
     async switchTab(tab) {
+        this.taskSourceSequence++; this.taskRelatedSequence++;
         this.activeTab = ['quark', 'bilibili'].includes(tab) ? tab : 'libraries';
         this.activeTaskSourceId = '';
         if (this.activeTab !== 'bilibili') this.bilibiliCollection = null;
@@ -408,6 +437,28 @@ const MediaLibrary = {
         if (!this.canonicalBilibiliCollectionUrl(url) && !window.Upload?.getBilibiliPlayerUrl(url)) { showToast('请输入 B 站视频或收藏列表链接', 'error'); return; }
         this.showBilibiliDownloadDialog(url);
     },
+    // 与服务端 sanitizeCategoryName 保持一致，用于对话框预览与请求字段。
+    cleanCategoryName(value) {
+        let text = String(value ?? '').trim();
+        text = text.replace(/[\/\\\u0000-\u001f\u007f]/g, '_');
+        text = text.replace(/\s+/g, ' ');
+        if (!text || text === '.' || text === '..') return '未分类';
+        return text.slice(0, 50);
+    },
+    currentQuarkCategory() {
+        const folderId = this.selectedShareFolder.quark;
+        const folder = this.shareFolders.quark.folders.find(item => item.id === folderId);
+        return folder?.name || '';
+    },
+    currentBilibiliCategory() {
+        if (this.bilibiliCollection?.title) return this.bilibiliCollection.title;
+        const folderId = this.selectedShareFolder.bilibili;
+        const folder = this.shareFolders.bilibili.folders.find(item => item.id === folderId);
+        return folder?.name || '';
+    },
+    categoryPreview(libraryName, sourceName, category) {
+        return `目标：${libraryName} / ${sourceName} / ${this.cleanCategoryName(category)}`;
+    },
     showBilibiliDownloadDialog(url, title = '') {
         const targets = this.libraries.filter(lib => lib.type === 'local' && !lib.readonly && !lib.remote && lib.isLocal !== false);
         if (!targets.length) { showToast('请先添加主服务器上的可写本地媒体库', 'error'); return; }
@@ -418,14 +469,24 @@ const MediaLibrary = {
         const label = document.createElement('p'); label.textContent = title || url;
         const select = document.createElement('select'); select.setAttribute('aria-label', '目标本地媒体库');
         for (const lib of targets) { const option = document.createElement('option'); option.value = lib.sourceLibraryId || lib.id; option.textContent = lib.name; select.appendChild(option); }
-        body.append(label, select);
+        // 分类在打开对话框时取当前浏览上下文，目标库切换时同步更新预览。
+        const category = this.currentBilibiliCategory();
+        const preview = document.createElement('p');
+        preview.className = 'download-target-preview';
+        const updatePreview = () => {
+            const selected = targets.find(lib => String(lib.sourceLibraryId || lib.id) === select.value) || targets[0];
+            preview.textContent = this.categoryPreview(selected.name, 'B站视频', category);
+        };
+        select.onchange = updatePreview;
+        updatePreview();
+        body.append(label, select, preview);
         const footer = document.createElement('div'); footer.className = 'dialog-footer';
         const cancel = document.createElement('button'); cancel.className = 'btn-cancel'; cancel.textContent = '取消'; cancel.onclick = () => mask.remove();
         const start = document.createElement('button'); start.className = 'btn-confirm'; start.textContent = '开始下载';
         start.onclick = async () => {
             start.disabled = true;
             try {
-                const response = await fetch('/api/bilibili/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, title, targetId: select.value }) });
+                const response = await fetch('/api/bilibili/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, title, targetId: select.value, category }) });
                 const result = await this.parseResponse(response); this.handleBilibiliDownload(result.job); mask.remove();
             } catch (error) { showToast(`B 站下载失败：${error.message}`, 'error'); start.disabled = false; }
         };
@@ -791,7 +852,8 @@ const MediaLibrary = {
     sendShareFolder(type, data = {}) {
         const socket = window.WebSocketManager?.ws;
         if (!socket || socket.readyState !== WebSocket.OPEN) { showToast('服务未连接，请稍后重试', 'error'); return false; }
-        socket.send(JSON.stringify({ type, ...data })); return true;
+        try { socket.send(JSON.stringify({ type, ...data })); return true; }
+        catch { showToast('服务未连接，请稍后重试', 'error'); return false; }
     },
     handleShareFolders(data) {
         this.quarkCookieConfigured = data.quarkCookieConfigured === true;
@@ -885,32 +947,134 @@ const MediaLibrary = {
     },
     handleTaskMediaSources(data) {
         this.taskMediaRevision++;
-        this.taskMediaSources = Array.isArray(data.providers) ? data.providers.filter(source => source && /^[a-z][a-z0-9._-]{1,63}$/.test(source.id || '') && typeof source.libraryId === 'string' && source.libraryId) : [];
+        const previous = this.taskMediaSources.find(source => source.id === this.activeTaskSourceId);
+        this.taskMediaSources = Array.isArray(data.providers) ? data.providers.filter(source => source && /^[a-z][a-z0-9._-]{1,63}$/.test(source.id || '') && typeof source.libraryId === 'string' && source.libraryId).map(source => ({ ...source, features: Array.isArray(source.features) ? source.features : [] })) : [];
+        window.TaskPanel?.refreshTaskMediaProxySettings?.();
         if (this.activeTab === 'task' && !this.taskMediaSources.some(source => source.id === this.activeTaskSourceId)) {
             this.currentLibrary = null;
             void this.switchTab('libraries');
             return;
         }
+        const current = this.taskMediaSources.find(source => source.id === this.activeTaskSourceId);
+        // 相同 ID 的重新注册也可能改变能力或库地址；重新进入以作废在途请求并同步所有控件。
+        const signature = source => JSON.stringify([source?.libraryId, source?.name, [...(source?.features || [])].sort()]);
+        if (this.activeTab === 'task' && current && signature(previous) !== signature(current)) {
+            void this.switchTaskMediaSource(current.id);
+            return;
+        }
         this.renderTaskMediaTabs();
     },
-    // 接收服务端代理配置；数据缺失时按空配置处理，保证任务页签仍能正常渲染。
+    // 接收服务端代理配置：重绘代理列表、B 站及任务详情中的下拉框。
     handleWebProxyConfig(data) {
-        this.webProxyConfig = data || {};
-        const enabled = Boolean(data?.providerProxy?.bilibili);
-        const toggle = document.getElementById('bilibiliProxyToggle');
-        if (toggle && document.activeElement !== toggle) toggle.checked = enabled;
-        this.renderTaskMediaTabs();
+        this.webProxyConfig = data && typeof data === 'object' ? data : {};
+        this.renderWebProxyList(this.webProxyConfig.webProxies || []);
+        const sources = Array.isArray(this.webProxyConfig.sources) ? this.webProxyConfig.sources : [];
+        const selects = document.querySelectorAll('[data-provider-proxy]:not([data-task-media-proxy])');
+        for (const select of selects) {
+            const source = sources.find(item => item.id === select.dataset.providerProxy);
+            this.fillProxySelect(select, this.webProxyConfig.webProxies || [], source?.proxyId || '');
+        }
+        window.TaskPanel?.refreshTaskMediaProxySettings?.();
     },
-    // 发送单个媒体源的代理开关，服务端保存成功后广播权威配置。
-    toggleProviderProxy(sourceId, enabled) {
-        window.WebSocketManager?.send({ type: 'setProviderProxy', sourceId, enabled });
+    // 单个来源的代理选择变更即提交服务端，广播回来后按权威结果重绘。
+    setProviderProxy(sourceId, proxyId) {
+        const manager = window.WebSocketManager;
+        if (manager?.ws?.readyState !== WebSocket.OPEN) {
+            this.handleWebProxyConfigError({ message: '连接已断开，代理选择未保存' });
+            return;
+        }
+        try {
+            manager.send({ type: 'setProviderProxy', sourceId, proxyId });
+        } catch {
+            this.handleWebProxyConfigError({ message: '代理选择发送失败，请重试' });
+        }
+    },
+    // 保存失败时恢复最后一份权威快照，避免界面停留在尚未生效的选择上。
+    // 连接仍可用时重新请求配置，覆盖其他控制端可能已经提交的变更。
+    handleWebProxyConfigError(data) {
+        this.handleWebProxyConfig(this.webProxyConfig);
+        window.showToast?.(data?.message || '代理配置保存失败', 'error');
+        const manager = window.WebSocketManager;
+        if (manager?.ws?.readyState !== WebSocket.OPEN) return;
+        try {
+            manager.send({ type: 'getWebProxyConfig' });
+        } catch { /* 连接在检查后关闭时保留已恢复的权威快照，重连由服务端补发。 */ }
+    },
+    // 下拉框第一项固定“不使用代理”；只保留服务端存在的代理 id。
+    fillProxySelect(select, proxies, proxyId) {
+        if (!select) return;
+        select.replaceChildren();
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = '不使用代理';
+        select.appendChild(none);
+        for (const proxy of proxies || []) {
+            const option = document.createElement('option');
+            option.value = proxy.id;
+            option.textContent = proxy.name;
+            select.appendChild(option);
+        }
+        const valid = (proxies || []).some(proxy => proxy.id === proxyId);
+        select.value = valid ? proxyId : '';
+    },
+    // 整表重绘会丢弃未保存编辑，这是服务端广播后的预期行为。
+    renderWebProxyList(proxies) {
+        const list = document.getElementById('webProxyList');
+        if (!list) return;
+        list.replaceChildren(...(proxies || []).map(proxy => this.createWebProxyRow(proxy)));
+    },
+    createWebProxyRow(proxy = {}) {
+        const row = document.createElement('div');
+        row.className = 'web-proxy-row';
+        row.dataset.proxyRow = '';
+        if (proxy.id) row.dataset.proxyId = proxy.id;
+        const name = document.createElement('input');
+        name.type = 'text';
+        name.maxLength = 30;
+        name.placeholder = '名称（如：公司代理）';
+        name.dataset.proxyName = '';
+        name.value = proxy.name || '';
+        const url = document.createElement('input');
+        url.type = 'text';
+        url.placeholder = 'http://127.0.0.1:7890 或 socks5://127.0.0.1:1080';
+        url.dataset.proxyUrl = '';
+        url.value = proxy.url || '';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '删除';
+        remove.dataset.proxyRemove = '';
+        remove.onclick = () => row.remove();
+        row.append(name, url, remove);
+        return row;
+    },
+    addWebProxyRow() {
+        const list = document.getElementById('webProxyList');
+        if (!list) return;
+        if (list.querySelectorAll('[data-proxy-row]').length >= 20) {
+            showToast('代理数量超出限制（最多 20 个）', 'error');
+            return;
+        }
+        list.appendChild(this.createWebProxyRow());
+    },
+    // 保存整表；新增行不带 id，由服务端生成，已有行按 data-proxy-id 匹配。
+    saveWebProxyList() {
+        const rows = [...document.querySelectorAll('#webProxyList [data-proxy-row]')];
+        const webProxies = rows.map(row => ({
+            ...(row.dataset.proxyId ? { id: row.dataset.proxyId } : {}),
+            name: row.querySelector('[data-proxy-name]')?.value || '',
+            url: row.querySelector('[data-proxy-url]')?.value || ''
+        }));
+        window.WebSocketManager?.send({ type: 'setWebProxyList', webProxies });
     },
     renderTaskMediaTabs() {
-        // 先清理旧节点，避免任务源变化后残留页签或“使用代理”复选框。
+        // 先清理旧节点，避免任务源变化后残留页签。
         document.querySelectorAll('.media-task-source-wrap').forEach(node => node.remove());
         document.querySelectorAll('[data-task-media-source]').forEach(node => node.remove());
         const groups = { domestic: document.getElementById('domesticMediaTabs'), overseas: document.getElementById('overseasMediaTabs') };
         if (!groups.domestic || !groups.overseas) return;
+        // 国外任务源不存在时隐藏整个分组；来源注册和停止都会重新执行此渲染。
+        const overseasSection = document.getElementById('overseasMediaSection');
+        if (overseasSection) overseasSection.hidden = !(this.taskMediaSources || []).some(source => source.region === 'overseas');
         groups.domestic.replaceChildren(); groups.overseas.replaceChildren();
         for (const source of this.taskMediaSources || []) {
             const host = groups[source.region === 'overseas' ? 'overseas' : 'domestic'];
@@ -918,39 +1082,232 @@ const MediaLibrary = {
             tab.type = 'button';
             tab.className = 'media-library-tab media-task-source';
             tab.dataset.taskMediaSource = source.id;
-            tab.textContent = source.name || source.id;
+            tab.textContent = source.id === 'hongguo' ? '红果短剧' : (source.name || source.id);
             tab.classList.toggle('active', this.activeTab === 'task' && this.activeTaskSourceId === source.id);
+            tab.setAttribute('aria-selected', String(this.activeTab === 'task' && this.activeTaskSourceId === source.id));
             tab.onclick = () => this.switchTaskMediaSource(source.id);
-
-            // 每个任务源附带“使用代理”开关：显式开关优先，否则沿用服务端计算的有效状态。
-            const label = document.createElement('label');
-            label.className = 'media-source-proxy';
-            label.dataset.taskMediaProxy = source.id;
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.dataset.providerProxy = source.id;
-            // 复选框同样标记为任务代理，供设置面板批量同步时排除，避免覆盖任务页签状态。
-            checkbox.dataset.taskMediaProxy = source.id;
-            const switches = this.webProxyConfig?.providerProxy || {};
-            checkbox.checked = Object.prototype.hasOwnProperty.call(switches, source.id)
-                ? switches[source.id] === true
-                : source.proxyEnabled === true;
-            checkbox.onchange = () => this.toggleProviderProxy(source.id, checkbox.checked);
-            label.append(checkbox, document.createTextNode(' 使用代理'));
 
             const wrap = document.createElement('span');
             wrap.className = 'media-task-source-wrap';
-            wrap.append(tab, label);
+            wrap.appendChild(tab);
             host.appendChild(wrap);
         }
     },
     async switchTaskMediaSource(id) {
         const source = this.taskMediaSources.find(item => item.id === id);
         if (!source) return;
+        this.taskSourceSequence++; this.taskRelatedSequence++;
         this.activeTab = 'task'; this.activeTaskSourceId = id;
+        this.taskMediaShowingSaved = false;
         this.currentLibrary = { id: source.libraryId, sourceLibraryId: source.libraryId, providerId: id, type: 'task', name: source.name, ownerNodeId: 'main-server', ownerNodeName: '主服务器', isLocal: true, remote: false, readonly: true };
         this.currentPath = '/'; this.renderTabs(); this.renderLibraryToolbarState();
-        await this.loadContent('/');
+        if (!source.features?.length) return this.loadContent('/');
+        const title = document.getElementById('taskSourceTitle'); if (title) title.textContent = source.name || source.id;
+        for (const [id, feature] of [['taskSourceHomeBtn', 'home'], ['taskSourceSearchInput', 'search'], ['taskSourceSearchBtn', 'search'], ['taskSourceLinkInput', 'resolveLink'], ['taskSourceLinkBtn', 'resolveLink'], ['taskSourceAddBtn', 'resolveLink']]) {
+            const element = document.getElementById(id); if (element) element.hidden = !source.features.includes(feature);
+        }
+        document.getElementById('taskMediaSourceList')?.replaceChildren();
+        const related = document.getElementById('taskSourceRelated'); if (related) related.hidden = true;
+        if (source.features.includes('home')) await this.loadTaskSourceHome();
+    },
+    async taskSourceRequest(id, path, options = {}) {
+        const response = await fetch(`/api/task-media-sources/${encodeURIComponent(id)}${path}`, options);
+        return this.parseResponse(response);
+    },
+    // 每次导航都独占序号；切换来源、离开或来源注销后旧响应不能覆盖当前视图。
+    async navigateTaskSource(path, title, options = {}) {
+        const id = this.activeTaskSourceId;
+        if (!id || this.activeTab !== 'task') return;
+        this.taskMediaShowingSaved = false;
+        this.renderTaskMediaFolders();
+        const sequence = ++this.taskSourceSequence;
+        this.taskRelatedSequence++;
+        const related = document.getElementById('taskSourceRelated'); if (related) related.hidden = true;
+        const loadingRoot = document.getElementById('taskMediaSourceList');
+        if (loadingRoot) { const loading = document.createElement('div'); loading.textContent = '正在加载…'; loadingRoot.replaceChildren(loading); }
+        try {
+            const result = await this.taskSourceRequest(id, path, options);
+            if (sequence !== this.taskSourceSequence || this.activeTab !== 'task' || this.activeTaskSourceId !== id) return;
+            this.renderTaskSourceItems(result.items, title);
+            this.renderTaskSourcePagination(result, path, title);
+        } catch (error) {
+            if (sequence === this.taskSourceSequence && this.activeTab === 'task' && this.activeTaskSourceId === id) {
+                document.getElementById('taskMediaSourceList')?.replaceChildren();
+                showToast(`${title}失败：${error.message}`, 'error');
+            }
+        }
+    },
+    loadTaskSourceHome() { return this.navigateTaskSource('/home?page=1', '首页'); },
+    searchTaskSource() {
+        const keyword = document.getElementById('taskSourceSearchInput')?.value.trim();
+        if (!keyword) return showToast('请输入搜索关键词', 'warning');
+        return this.navigateTaskSource(`/search?keyword=${encodeURIComponent(keyword)}&page=1`, `搜索：${keyword}`);
+    },
+    openTaskSourceLink(value) {
+        const url = typeof value === 'string' ? value : document.getElementById('taskSourceLinkInput')?.value.trim();
+        if (!url) return showToast('请输入链接或 ID', 'warning');
+        return this.navigateTaskSource('/resolve-link', '链接内容', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    },
+    // 只发送来源与链接标识，实际打开仍经来源的 resolveLink 校验。
+    addTaskMediaLink(item = null) {
+        const url = item?.url || item?.id || document.getElementById('taskSourceLinkInput')?.value.trim();
+        if (!url) return showToast('请输入链接或 ID', 'warning');
+        if (this.pendingTaskMediaAdd) return showToast('正在加入，请稍候', 'warning');
+        const sourceId = this.activeTaskSourceId, folderId = this.selectedTaskMediaFolder[sourceId] || '';
+        const requestId = `add-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const socket = window.WebSocketManager?.ws;
+        if (!this.sendShareFolder('taskMediaAdd', { requestId, sourceId, url, title: item?.title || '', folderId })) return;
+        const finish = () => this.handleTaskMediaAddResult({ requestId, status: 'unknown' });
+        const timer = setTimeout(finish, 15000);
+        socket.addEventListener('close', finish, { once: true });
+        this.pendingTaskMediaAdd = { requestId, sourceId, folderId, timer, socket, finish };
+        showToast('正在加入…', 'loading');
+    },
+    handleTaskMediaAddResult(data) {
+        const pending = this.pendingTaskMediaAdd;
+        if (!pending || pending.requestId !== data?.requestId) return;
+        clearTimeout(pending.timer); pending.socket.removeEventListener('close', pending.finish); this.pendingTaskMediaAdd = null;
+        if (data.status === 'unknown') return showToast('未收到加入结果，请检查连接并在文件夹中确认', 'warning');
+        if (data.status !== 'success') return showToast(data.message || '加入失败，请重试', 'error');
+        showToast('已加入文件夹', 'success');
+        if (this.activeTab !== 'task' || this.activeTaskSourceId !== pending.sourceId) return;
+        this.taskSourceSequence++; this.taskRelatedSequence++;
+        this.selectedTaskMediaFolder[pending.sourceId] = pending.folderId;
+        this.taskMediaShowingSaved = true; this.renderTaskMediaFolders(); this.renderSavedTaskMedia();
+    },
+    handleTaskMediaCollections(data) {
+        this.taskMediaCollections = data?.sources && typeof data.sources === 'object' ? data.sources : {};
+        for (const [id, folderId] of Object.entries(this.selectedTaskMediaFolder)) {
+            if (folderId && !(this.taskMediaCollections[id]?.folders || []).some(folder => folder.id === folderId)) this.selectedTaskMediaFolder[id] = '';
+        }
+        this.renderTaskMediaFolders();
+        if (this.activeTab === 'task' && this.taskMediaShowingSaved) this.renderSavedTaskMedia();
+    },
+    renderTaskMediaFolders() {
+        const root = document.getElementById('taskMediaFolderNavigation');
+        if (!root) return;
+        root.replaceChildren();
+        if (this.activeTab !== 'task' || !this.activeTaskSourceId) return;
+        const id = this.activeTaskSourceId;
+        const group = this.taskMediaCollections[id] || { folders: [], items: [] };
+        const selected = this.selectedTaskMediaFolder[id] || '';
+        const button = (text, action, active = false) => {
+            const node = document.createElement('button'); node.type = 'button'; node.textContent = text;
+            if (active) node.className = 'active'; node.onclick = action; return node;
+        };
+        const choose = folderId => { this.taskSourceSequence++; this.taskRelatedSequence++; this.selectedTaskMediaFolder[id] = folderId; this.taskMediaShowingSaved = true; this.renderTaskMediaFolders(); this.renderSavedTaskMedia(); };
+        root.appendChild(button('📁 未分类', () => choose(''), this.taskMediaShowingSaved && !selected));
+        for (const folder of group.folders || []) root.appendChild(button(`📁 ${folder.name}`, () => choose(folder.id), this.taskMediaShowingSaved && folder.id === selected));
+        root.appendChild(button('＋ 新建文件夹', () => { const name = window.prompt('文件夹名称'); if (name?.trim()) this.sendShareFolder('taskMediaFolderCreate', { sourceId: id, name }); }));
+        if (selected) root.appendChild(button('删除空文件夹', () => { if (window.confirm('删除当前空文件夹？')) this.sendShareFolder('taskMediaFolderDelete', { sourceId: id, folderId: selected }); }));
+    },
+    renderSavedTaskMedia() {
+        const root = document.getElementById('taskMediaSourceList');
+        if (!root) return;
+        const sourceId = this.activeTaskSourceId, group = this.taskMediaCollections[sourceId] || { folders: [], items: [] };
+        const folderId = this.selectedTaskMediaFolder[sourceId] || '';
+        const title = group.folders.find(folder => folder.id === folderId)?.name || '未分类';
+        root.replaceChildren();
+        const heading = document.createElement('div'); heading.className = 'bilibili-section-title'; heading.textContent = title; root.appendChild(heading);
+        const related = document.getElementById('taskSourceRelated'); if (related) related.hidden = true;
+        const items = group.items.filter(item => item.folderId === folderId);
+        if (!items.length) { const empty = document.createElement('div'); empty.textContent = '暂无内容'; root.appendChild(empty); }
+        for (const item of items) {
+            const card = document.createElement('div'); card.className = 'bilibili-video-card';
+            const label = document.createElement('div'); label.className = 'bilibili-video-title'; label.textContent = item.title || item.url; label.title = item.url;
+            const actions = document.createElement('div'); actions.className = 'bilibili-video-actions';
+            const open = document.createElement('button'); open.type = 'button'; open.textContent = '打开'; open.onclick = () => this.openTaskSourceLink(item.url);
+            const move = document.createElement('select'); move.setAttribute('aria-label', '移动到文件夹');
+            for (const folder of [{ id: '', name: '未分类' }, ...group.folders]) { const option = document.createElement('option'); option.value = folder.id; option.textContent = folder.name; option.selected = folder.id === folderId; move.appendChild(option); }
+            move.onchange = () => { this.sendShareFolder('taskMediaMove', { sourceId, url: item.url, folderId: move.value }); move.value = folderId; };
+            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '移除'; remove.onclick = () => this.sendShareFolder('taskMediaRemove', { sourceId, url: item.url });
+            actions.append(open, move, remove); card.append(label, actions); root.appendChild(card);
+        }
+    },
+    renderTaskSourceItems(items, titleText) {
+        const root = document.getElementById('taskMediaSourceList'); if (!root) return;
+        root.replaceChildren();
+        const title = document.createElement('div'); title.className = 'bilibili-section-title'; title.textContent = titleText; root.appendChild(title);
+        const entries = Array.isArray(items) ? items : [];
+        if (!entries.length) { const empty = document.createElement('div'); empty.textContent = '暂无内容'; root.appendChild(empty); }
+        for (const item of entries) root.appendChild(this.buildTaskSourceCard(item));
+    },
+    // 仅首页和搜索支持翻页；复用导航序号，旧页响应不能覆盖新来源。
+    renderTaskSourcePagination(result, requestPath, title) {
+        const root = document.getElementById('taskMediaSourceList');
+        if (!root) return;
+        const url = new URL(requestPath, window.location.origin);
+        if (!['/home', '/search'].includes(url.pathname)) return;
+        const page = Number(result?.page), total = Number(result?.totalPages);
+        if (!Number.isSafeInteger(page) || !Number.isSafeInteger(total) || page < 1 || total < 2 || page > total) return;
+        const controls = document.createElement('div'); controls.className = 'task-source-pagination';
+        const add = (label, next, disabled) => {
+            const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.disabled = disabled;
+            button.onclick = () => { const target = new URL(url.href); target.searchParams.set('page', String(next)); void this.navigateTaskSource(`${target.pathname}${target.search}`, title); };
+            controls.appendChild(button);
+        };
+        add('上一页', page - 1, page <= 1);
+        const text = document.createElement('span'); text.textContent = `第 ${page} / ${total} 页`; controls.appendChild(text);
+        add('下一页', page + 1, page >= total);
+        root.appendChild(controls);
+    },
+    buildTaskSourceCard(item) {
+        const sourceId = this.activeTaskSourceId;
+        const features = this.taskMediaSources.find(source => source.id === sourceId)?.features || [];
+        const card = document.createElement('div'); card.className = 'bilibili-video-card';
+        if (item.cover) {
+            const cover = document.createElement('img'); cover.className = 'bilibili-video-cover'; cover.src = item.cover; cover.loading = 'lazy'; cover.alt = ''; cover.referrerPolicy = 'no-referrer'; card.appendChild(cover);
+        }
+        const title = document.createElement('div'); title.className = 'bilibili-video-title'; title.textContent = item.title || item.id; title.title = item.title || '';
+        const actions = document.createElement('div'); actions.className = 'bilibili-video-actions';
+        if (features.includes('resolveLink') && (item.url || item.id)) {
+            const add = document.createElement('button'); add.type = 'button'; add.textContent = '加入'; add.onclick = () => this.addTaskMediaLink(item); actions.appendChild(add);
+        }
+        if (item.mediaType === 'collection' && features.includes('resolveLink')) {
+            const open = document.createElement('button'); open.type = 'button'; open.textContent = '打开'; open.onclick = () => this.openTaskSourceLink(item.url || item.id); actions.appendChild(open);
+        } else if (item.mediaType !== 'collection') {
+            const play = document.createElement('button'); play.type = 'button'; play.textContent = item.playable === false ? (item.playbackMessage || '暂不可播放') : '播放'; play.disabled = item.playable === false; play.onclick = () => this.playTaskSourceItem(item, sourceId); actions.appendChild(play);
+        }
+        if (features.includes('download') && item.downloadable !== false) {
+            const download = document.createElement('button'); download.type = 'button'; download.textContent = item.downloaded ? '已下载' : '下载'; download.disabled = Boolean(item.downloaded);
+            download.onclick = () => this.downloadTaskSourceItem(item, sourceId, download); actions.appendChild(download);
+        }
+        card.append(title, actions); return card;
+    },
+    playTaskSourceItem(item, id) {
+        if (this.activeTab !== 'task' || this.activeTaskSourceId !== id) return;
+        if (item.playable === false) return showToast(item.playbackMessage || '该媒体暂不可播放', 'warning');
+        if (!item.playUrl) return showToast('该媒体没有可播放地址', 'error');
+        void this.playMedia(item.playUrl, item.mediaType || 'video', item.title || item.id, item.format);
+        void this.loadTaskSourceRelated(item, id);
+    },
+    async loadTaskSourceRelated(item, id) {
+        const root = document.getElementById('taskSourceRelated'), list = document.getElementById('taskSourceRelatedList');
+        if (!root || !list) return;
+        root.hidden = true; list.replaceChildren();
+        const sequence = ++this.taskRelatedSequence;
+        if (!this.taskMediaSources.find(source => source.id === id)?.features?.includes('related')) return;
+        try {
+            const result = await this.taskSourceRequest(id, `/related?itemId=${encodeURIComponent(item.id)}&url=${encodeURIComponent(item.url || '')}`);
+            if (sequence !== this.taskRelatedSequence || this.activeTab !== 'task' || this.activeTaskSourceId !== id) return;
+            const items = Array.isArray(result.items) ? result.items : [];
+            list.replaceChildren(...items.map(entry => this.buildTaskSourceCard(entry))); root.hidden = !items.length;
+        } catch { if (sequence === this.taskRelatedSequence) root.hidden = true; }
+    },
+    async downloadTaskSourceItem(item, id, button) {
+        if (this.activeTab !== 'task' || this.activeTaskSourceId !== id) return;
+        const targets = this.libraries.filter(lib => lib.type === 'local' && !lib.readonly && !lib.remote && lib.isLocal !== false);
+        if (!targets.length) return showToast('请先添加主服务器上的可写本地媒体库', 'error');
+        button.disabled = true;
+        try {
+            const result = await this.taskSourceRequest(id, '/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item, targetId: targets[0].sourceLibraryId || targets[0].id }) });
+            if (!result.downloaded) throw new Error('服务端未确认下载完成');
+            item.downloaded = true; button.textContent = '已下载';
+            if (this.activeTab === 'task' && this.activeTaskSourceId === id) showToast('下载完成', 'success');
+        } catch (error) {
+            button.disabled = false;
+            if (this.activeTab === 'task' && this.activeTaskSourceId === id) showToast(`下载失败：${error.message}`, 'error');
+        }
     },
     renderQuarkShares() {
         const root = document.getElementById('quarkShareList');
@@ -1611,14 +1968,24 @@ const MediaLibrary = {
         const description = document.createElement('p'); description.textContent = `来源目录：${folderPath || '/'}（包含子文件夹）`;
         const select = document.createElement('select'); select.setAttribute('aria-label', '目标本地媒体库');
         for (const lib of targets) { const option = document.createElement('option'); option.value = lib.sourceLibraryId || lib.id; option.textContent = lib.name; select.appendChild(option); }
-        body.append(description, select);
+        // 分类在打开对话框时取当前浏览上下文，目标库切换时同步更新预览。
+        const category = this.currentQuarkCategory();
+        const preview = document.createElement('p');
+        preview.className = 'download-target-preview';
+        const updatePreview = () => {
+            const selected = targets.find(lib => String(lib.sourceLibraryId || lib.id) === select.value) || targets[0];
+            preview.textContent = this.categoryPreview(selected.name, '夸克分享', category);
+        };
+        select.onchange = updatePreview;
+        updatePreview();
+        body.append(description, select, preview);
         const footer = document.createElement('div'); footer.className = 'dialog-footer';
         const cancel = document.createElement('button'); cancel.className = 'btn-cancel'; cancel.textContent = '取消'; cancel.onclick = () => mask.remove();
         const start = document.createElement('button'); start.className = 'btn-confirm'; start.textContent = '开始下载';
         start.onclick = async () => {
             start.disabled = true;
             try {
-                const response = await fetch('/api/quark-directory-downloads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodeId: source.remote ? source.ownerNodeId : 'main-server', libraryId: source.sourceLibraryId || source.id, targetId: select.value, path: folderPath || '/' }) });
+                const response = await fetch('/api/quark-directory-downloads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodeId: source.remote ? source.ownerNodeId : 'main-server', libraryId: source.sourceLibraryId || source.id, targetId: select.value, path: folderPath || '/', category }) });
                 const result = await this.parseResponse(response);
                 this.handleQuarkDirectoryDownload(result.job); mask.remove();
             } catch (error) { showToast(`目录下载失败：${error.message}`, 'error'); start.disabled = false; }
@@ -1640,14 +2007,24 @@ const MediaLibrary = {
         const description = document.createElement('p'); description.textContent = `来源文件：${filePath}`;
         const select = document.createElement('select'); select.setAttribute('aria-label', '目标本地媒体库');
         for (const lib of targets) { const option = document.createElement('option'); option.value = lib.sourceLibraryId || lib.id; option.textContent = lib.name; select.appendChild(option); }
-        body.append(description, select);
+        // 分类在打开对话框时取当前浏览上下文，目标库切换时同步更新预览。
+        const category = this.currentQuarkCategory();
+        const preview = document.createElement('p');
+        preview.className = 'download-target-preview';
+        const updatePreview = () => {
+            const selected = targets.find(lib => String(lib.sourceLibraryId || lib.id) === select.value) || targets[0];
+            preview.textContent = this.categoryPreview(selected.name, '夸克分享', category);
+        };
+        select.onchange = updatePreview;
+        updatePreview();
+        body.append(description, select, preview);
         const footer = document.createElement('div'); footer.className = 'dialog-footer';
         const cancel = document.createElement('button'); cancel.className = 'btn-cancel'; cancel.textContent = '取消'; cancel.onclick = () => mask.remove();
         const start = document.createElement('button'); start.className = 'btn-confirm'; start.textContent = '开始下载';
         start.onclick = async () => {
             start.disabled = true;
             try {
-                const response = await fetch('/api/quark-file-downloads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodeId: source.remote ? source.ownerNodeId : 'main-server', libraryId: source.sourceLibraryId || source.id, targetId: select.value, path: filePath, size: meta.size, modifiedTime: meta.modifiedTime }) });
+                const response = await fetch('/api/quark-file-downloads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodeId: source.remote ? source.ownerNodeId : 'main-server', libraryId: source.sourceLibraryId || source.id, targetId: select.value, path: filePath, size: meta.size, modifiedTime: meta.modifiedTime, category }) });
                 const result = await this.parseResponse(response);
                 this.handleQuarkDirectoryDownload(result.job); mask.remove();
             } catch (error) { showToast(`文件下载失败：${error.message}`, 'error'); start.disabled = false; }
@@ -1901,7 +2278,6 @@ const MediaLibrary = {
                 if (list) list.replaceChildren();
             }
         }
-
         
         document.querySelectorAll('.media-library-item').forEach(el => {
             const itemUrl = el.dataset.url;

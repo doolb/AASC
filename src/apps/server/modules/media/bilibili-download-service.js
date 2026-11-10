@@ -6,6 +6,7 @@ const { spawn } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
 const { Transform } = require('node:stream');
 const { QuarkDirectoryDownloads } = require('./quark-directory-downloads');
+const { sanitizeCategoryName } = require('./download-path');
 const { parseVideoUrl, parseCollectionUrl } = require('./bilibili-list-service');
 
 class BilibiliDownloads {
@@ -17,12 +18,12 @@ class BilibiliDownloads {
     }
     key(video) { return `/${video.bvid}/p${video.page}.mp4`; }
     lookup(video, targetId) { return this.index.lookup(this.source, this.key(video), targetId); }
-    start(url, targetId, title) {
+    start(url, targetId, title, category = '') {
         if (this.job?.status === 'running') throw new Error('已有 B 站下载任务正在进行');
         this.getTarget(targetId, true);
         const collection = parseCollectionUrl(url);
         const video = collection ? null : parseVideoUrl(url);
-        const job = { id: crypto.randomUUID(), status: 'running', targetId, url: collection?.url || video.url, completed: 0, skipped: 0, total: 0, received: 0, fileName: '' };
+        const job = { id: crypto.randomUUID(), status: 'running', targetId, url: collection?.url || video.url, category: sanitizeCategoryName(category), completed: 0, skipped: 0, total: 0, received: 0, fileName: '' };
         this.job = job;
         void this.run(job, collection, video, title).catch(error => { job.status = 'error'; job.message = error.message || '下载失败'; this.notify(job); });
         this.notify(job);
@@ -35,7 +36,7 @@ class BilibiliDownloads {
             const parsed = parseVideoUrl(`https://www.bilibili.com/video/${item.bvid}?p=${item.page}`);
             if (await this.lookup(parsed, job.targetId)) { job.skipped++; this.notify(job); continue; }
             const root = await fs.promises.realpath(this.getTarget(job.targetId, true).basePath);
-            const dir = await this.index.safeDir(root, ['B站下载']);
+            const dir = await this.index.safeDir(root, ['B站视频', sanitizeCategoryName(job.category)]);
             const base = `${Array.from(String(item.title || parsed.bvid).replace(/[\\/:*?"<>|\x00-\x1f]/g, ' ').trim()).slice(0, 50).join('') || parsed.bvid} ${parsed.bvid}${parsed.page > 1 ? ` P${parsed.page}` : ''}`;
             const unique = crypto.randomUUID();
             const temporary = [path.join(dir, `.aasc-${unique}.video`), path.join(dir, `.aasc-${unique}.audio`), path.join(dir, `.aasc-${unique}.mp4`)];

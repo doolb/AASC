@@ -226,6 +226,10 @@ workDir / cwd / context.workDir := 原任务数据目录
 配置/参数/实例操作 → 原流程
 整个任务停止发布 → 明确 retiredTaskNames，后续保留退役记录
 同步本身写任务数据目录 := 空集合
+国内媒体任务发布选择 → 保留 hongguo，另选 domestic-media 入口和四个 provider 文件
+  两项最低服务代码版本 169，taskCodeApiVersion=1；不将 hongguo 加入 retiredTaskNames
+  来源 ID 冲突 → 新任务撤销本次注册并提示停止旧任务，不自动删除或迁移用户任务
+  overseas-media 不加入 release 任务选择或发布种子
 ```
 
 ## 恢复、首次迁移、清理和状态

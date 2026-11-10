@@ -7,7 +7,6 @@
 资源缺失或关键结构不匹配 → 失败；浏览器测试验证实际选择、取消及异常
 ```
 
-
 ## B 站弹幕与相关推荐（2026-11-10）
 
 ```text
@@ -3426,12 +3425,42 @@ Android 9 真机使用隔离 noserver debug 包和测试页面，在普通页面
 媒体库-B站首页与相关推荐：首页热门可播放；播放后控制端列表下方出现相关推荐。
 媒体库-B站已下载：已下载视频按钮显示“已下载”并禁用。
 媒体库-夸克下载：分享卡片、文件、文件夹均可下载到本地媒体库；完成后显示“已下载”。
-媒体库-代理：非法代理地址提示；开启来源代理后请求走代理；关闭后不走代理。
+媒体库-代理：非法代理地址提示；来源选择命名代理后请求走所选代理；选“不使用代理”后不走代理。
 媒体库-地区分组：国内/国外任务源分组正确；任务停止后页签移除并回退“本地媒体”。
 
 定向回归：node --test tests/web-proxy.test.js tests/task-media-provider-registry.test.js tests/media-library-app-service.test.js tests/bilibili-search-service.test.js tests/bilibili-discovery-service.test.js tests/bilibili-danmaku-service.test.js tests/quark-directory-downloads.test.js
 浏览器回归：node --test tests/task-media-tab-browser.test.js tests/quark-share-tabs-browser.test.js tests/bilibili-tabs-browser.test.js tests/quark-card-cache-browser.test.js tests/floating-media-clear.test.js
 ```
+
+### 多代理、显示端媒体库与下载子分类（2026-11-10）
+
+人工验收（待真实设备、账号及代理环境执行）：
+
+1. 设置中添加两个命名代理并保存；B 站在来源工具栏选择，运行中的任务在对应实例详情为每个来源分别选择代理。刷新后保持服务端选择；删除被引用代理后回到“不使用代理”，拒绝保存或断线后恢复权威快照。切换不同任务实例时不得显示其他实例的来源。
+2. 用旧 globalWebProxy + 布尔 providerProxy 配置启动，确认迁移为 webProxies/proxy-legacy 且再次启动不重复迁移；先备份测试配置。普通 set 故障可恢复，不能用此推断底层 config.json 写入截断可恢复。
+3. 127.0.0.1/localhost/IPv6 回环显示页的“媒体库”位于游戏按钮之前；LAN 地址无入口，直接访问 /api/display-local/libraries 返回 403，伪造转发头不得放行。
+4. 列出本地库与活动任务源，进入目录和返回上级；单文件确认成功后显示，失败保持旧画面。图片、音视频、Markdown 均检查，关闭/Escape 恢复面板前画面。
+5. 文件夹批量播放只播放一层、名称升序、不循环，空目录提示“该目录没有可播放的媒体”；扫描中选单文件或控制端换媒体，迟到结果不得覆盖新播放；确认重复不重复播放。
+6. 文本列表应朗读到本机显示端，终止旧远端目标朗读；断线重连恢复已保存的权威单文件/列表，不复活旧列表。
+7. 任务源停止后目录请求返回 410/TASK_SOURCE_STOPPED，面板回根、清空旧条目并提示；HTTPS 下通过返回的同源地址读取媒体，不依赖 LAN 自签地址。
+8. 夸克目录和单文件下载至 目标库/夸克分享/<分类>/<来源hash>/；B站合集下载至 目标库/B站视频/<合集标题>/。三个对话框预览“目标：库名 / 来源名 / 分类名”，切换目标同步；旧目录记录仍命中。
+9. 验证实际 SMB 共享、Android SAF 与 Android 触屏/音视频；验证真实 B站/夸克账号下载及真实 HTTP/SOCKS 代理走线。本轮未完成这些现场验证。
+10. 媒体库页签中夸克分享应位于国内分组；无国外任务来源时国外分组不显示，启动或停止国外来源后相应显示或隐藏；红果页签显示“红果短剧”，来源原名保持不变。
+11. 旧红果实例先正常停止，加载更新后旧任务不再列出或自动恢复；历史 results 保留，新国内媒体任务可注册红果来源。Offline 更新仅在匹配的服务和任务代码包均已发布并安装后生效。
+12. 红果、番茄及其他支持链接解析的任务来源各自新建文件夹，使用“加入”保存链接或列表项；验证两个控制端同步、刷新后保留、移动与移除，以及不同来源互不混用。B 站和夸克原有分类仍可使用。
+
+```text
+服务/单元定向回归:
+node --test tests/web-proxy.test.js tests/web-proxy-settings.test.js tests/display-local-media.test.js tests/display-playlist-request.test.js tests/download-path.test.js tests/quark-directory-downloads.test.js tests/bilibili-download-search.test.js
+浏览器定向回归:
+node --test tests/web-proxy-ui-browser.test.js tests/display-media-library-browser.test.js tests/download-category-browser.test.js tests/task-media-tab-browser.test.js
+关联回归:
+node --test tests/display-playlist-request.test.js tests/display-local-media.test.js tests/text-media-tts-service.test.js tests/media-library-app-service.test.js tests/playlist-app-service.test.js tests/text-media-server-integration.test.js
+```
+
+主代理本轮执行计划两批：服务/单元 73 pass，Chromium 浏览器 6 pass，均 0 fail / 0 skip；计划列出的 JS 与 `media-library-app-service.js` 语法检查通过。关联回归由 Task5 报告记录 94/94，不计为 Task9 重复执行。无专项 npm script，使用 Node 定向命令；未运行完整 `npm test`。
+
+边界：实际临时 HTTPS/HTTP/WS、磁盘库、生产 web-manifest 任务、非回环 TCP 拒绝及 Range 读取有测试证据；SMB URL 转换测试使用真实 URL 生成和 manager 桩，未连接实际共享。完整 display.html 图片/Markdown 用真实服务处理器与 WS 确认、DOM click 验证调用链，不等于 Android 真机触屏或完整生产服务进程重连验收。未构建、发布或操作现场服务器。
 
 ```text
 自测入口放入服务器面板的当前服务器操作栏，调用原有自测流程；不再显示全局悬浮入口。
@@ -3450,4 +3479,23 @@ Android 9 真机使用隔离 noserver debug 包和测试页面，在普通页面
 旧代码/依赖/APK 与当前引用、各类最新版本及未完成报告共同存在 → 只删除未受保护旧包
 符号链接、修复包和报告 → 保留
 LAN/WAN 清单不可用或未完成报告无法解析 → 停止清理，原包保留
+```
+
+
+### 国内国外媒体用户任务（2026-11-10）
+
+```text
+定向回归：国内国外服务端及 provider 测试 59/59，浏览器任务源、页签及代理测试 3/3，均无跳过；任务代码同步 npm run test:task-code-sync 69/69。git diff --check 通过。
+人工待验收：旧 hongguo 停止后启动 domestic-media，检查来源冲突提示；真实红果及设备播放。回归停止时取消在途请求、流与下载清理。
+红果多集：模拟上游核验分集顺序、同剧集与外站过滤、单页失败、不可播放项及播放校验；浏览器通用来源交互回归。真实公开页面识别 3 集，首集声明公开视频，其余两集没有公开地址；真实播放及设备验收待完成。
+番茄：回归可逆书库路径及 TXT 只读播放，EPUB/PDF 禁止直接播放；实际完整小说下载、EPUB 身份与真实代理出网；仅验证通过的唯一 EPUB 保存，锁仅同一 Node 进程。
+YouTube：真实完整下载及登录限制视频。
+国外空页提示：YouTube 空首页经路由提示搜索；Pinterest 汇总多个页面数据脚本，匿名及已配置 Cookie 的登录墙、401/403 经路由显示固定脱敏提示。日本代理实测 YouTube 搜索 20 项，Pinterest 匿名首页和搜索受限；登录态及真实播放仍待验收。
+Pinterest：真实 Pin 图片链接与 Range 曾只读验证；真实首页、搜索、分页、相关推荐尚未实现，匿名搜索 403；验收登录态和真实视频。
+Pixiv：回归显示端作品文件夹和动图过滤；真实 CDN、登录限制作品与动图；ffmpeg 尚无系统级内存硬限制。
+来源选中与 Pixiv 加入：浏览器覆盖选中颜色、aria 状态与窄屏布局；真实 WebSocket 覆盖加入后广播、服务端确认和保存失败；Pixiv 覆盖重复与并发请求复用、代理切换和封面读取。日本代理真实只读验证一次作品解析约 2.5 秒，缓存内再次解析无新增请求；真实设备仍待验收。
+媒体来源地区行：Chromium 验证行首无地区文字、夸克归组、国外组显隐、来源切换及 320px 布局，1/1 通过；实际设备待验收。
+B 站工具栏代理：Chromium 检查代理选择控件不可见，同时回归任务代理选择及服务端权威配置，相关测试 17/17 通过；实际设备待验收。
+B 站首页按钮：Chromium 在 320px 视口确认按钮位于工具栏首位、可见且可点击，来源页签测试 1/1 通过；真实热门接口及设备待验收。
+发布前：确认包含本次服务代码的版本并更新国内任务最低版本声明；当前 169 不能证明兼容；国外任务不发布。
 ```

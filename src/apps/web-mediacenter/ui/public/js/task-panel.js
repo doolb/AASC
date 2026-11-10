@@ -642,7 +642,33 @@
         }
       }
 
-      return this._resultDetailHTML(inst, taskName);
+      return '<div id="taskMediaProxySettings" class="task-media-proxy-settings">' +
+        this._taskMediaProxySettingsHTML(instanceId) + '</div>' + this._resultDetailHTML(inst, taskName);
+    },
+
+    // 媒体源由服务端标明所属实例；代理值仍由原有权威配置广播提供。
+    _taskMediaProxySettingsHTML: function(instanceId) {
+      const media = window.MediaLibrary;
+      const sources = (media?.taskMediaSources || []).filter(source => source.ownerInstanceId === instanceId);
+      if (!sources.length) return '';
+      const config = media.webProxyConfig || {};
+      const proxies = Array.isArray(config.webProxies) ? config.webProxies : [];
+      const rows = sources.map(source => {
+        const selected = config.providerProxy?.[source.id] || '';
+        const choices = [{ id: '', name: '不使用代理' }, ...proxies];
+        const options = choices.map(proxy => '<option value="' + this._escapeAttr(proxy.id) + '"' +
+          (proxy.id === selected ? ' selected' : '') + '>' + this._escapeHtml(proxy.name) + '</option>').join('');
+        return '<label class="task-media-proxy-row"><span>' + this._escapeHtml(source.name || source.id) + ' 代理</span>' +
+          '<select data-provider-proxy="' + this._escapeAttr(source.id) + '" data-task-media-proxy="' + this._escapeAttr(source.id) +
+          '" onchange="MediaLibrary.setProviderProxy(this.dataset.providerProxy,this.value)">' + options + '</select></label>';
+      });
+      return '<div>媒体来源代理</div>' + rows.join('');
+    },
+
+    // 只刷新代理区，避免配置广播覆盖任务详情中用户正在编辑的其他字段。
+    refreshTaskMediaProxySettings: function() {
+      const container = document.getElementById('taskMediaProxySettings');
+      if (container) container.innerHTML = this._taskMediaProxySettingsHTML(this._selectedInstanceId);
     },
 
     _filterTasks: function() {
