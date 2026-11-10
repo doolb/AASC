@@ -571,6 +571,21 @@ const SelfTest = {
             }
         },
         {
+            id: 'share_move_dialog_structure',
+            name: '分享移动文件夹弹窗',
+            description: '只读检查分享移动弹窗和文件夹选项',
+            category: '界面布局',
+            run: async () => {
+                try {
+                    const responses = await Promise.all(['/js/media-library.js', '/css/media-library.css'].map(url => fetch(url, { cache: 'no-store' })));
+                    if (responses.some(response => !response.ok)) return { success: false, message: '媒体库资源不可读取' };
+                    const [script, style] = await Promise.all(responses.map(response => response.text()));
+                    const valid = script.includes('share-move-dialog') && script.includes('shareFolderMove') && style.includes('.share-move-option');
+                    return { success: valid, message: valid ? '分享移动弹窗结构正常' : '分享移动弹窗结构缺失', details: '仅检查资源结构，实际交互由浏览器测试覆盖' };
+                } catch (error) { return { success: false, message: `移动弹窗检查失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'bilibili_rotation_related_structure',
             name: 'B站弹幕和相关推荐结构',
             description: '只读检查弹幕旋转宿主与当前播放首项',

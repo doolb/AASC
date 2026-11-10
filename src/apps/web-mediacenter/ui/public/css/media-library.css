@@ -522,6 +522,12 @@
 
 .bilibili-video-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
 .bilibili-video-card { min-width: 0; padding: 8px; border-radius: 8px; background: rgba(128,128,128,.15); }
+.share-move-dialog { width: min(420px, calc(100vw - 32px)); min-width: 0; max-height: calc(100vh - 32px); box-sizing: border-box; display: flex; flex-direction: column; }
+.share-move-list { overflow-y: auto; display: grid; gap: 8px; }
+.share-move-option { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-color, #555); border-radius: 8px; cursor: pointer; }
+.share-move-option input { flex: none; accent-color: var(--accent-color, #4a9eff); }
+.share-move-option span { min-width: 0; overflow-wrap: anywhere; }
+.share-move-option:focus-within { outline: 2px solid var(--accent-color, #4a9eff); outline-offset: 1px; }
 .bilibili-video-cover { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: rgba(128,128,128,.3); }
 .bilibili-video-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 6px 0; }
 .bilibili-video-actions { display: flex; gap: 6px; }

@@ -831,14 +831,50 @@ const MediaLibrary = {
         if (type === 'bilibili') this.renderBilibiliVideos();
     },
     moveShare(type, key) {
-        const folders = this.shareFolders[type].folders;
+        const group = this.shareFolders[type];
+        if (!group) return;
+        const folders = group.folders;
         if (!folders.length) { showToast('请先新建文件夹', 'info'); return; }
-        const choices = ['0. 未分类', ...folders.map((folder, index) => `${index + 1}. ${folder.name}`)];
-        const answer = window.prompt(`移动到哪个文件夹？\n${choices.join('\n')}`, '0');
-        if (answer === null) return;
-        const index = Number(answer.trim());
-        if (!/^\d+$/.test(answer.trim()) || index > folders.length) { showToast('文件夹编号无效', 'error'); return; }
-        this.sendShareFolder('shareFolderMove', { category: type, key, folderId: index ? folders[index - 1].id : '' });
+        this.closeShareMoveDialog?.();
+        const previousFocus = document.activeElement;
+        const mask = document.createElement('div'); mask.className = 'modal-mask share-move-mask';
+        const dialog = document.createElement('section'); dialog.className = 'playlist-settings-dialog share-move-dialog';
+        dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', 'shareMoveTitle');
+        const title = document.createElement('div'); title.className = 'dialog-title'; title.id = 'shareMoveTitle'; title.textContent = '移动到文件夹';
+        const body = document.createElement('div'); body.className = 'dialog-body share-move-list';
+        const selected = group.entries[key] || '';
+        for (const folder of [{ id: '', name: '未分类' }, ...folders]) {
+            const label = document.createElement('label'); label.className = 'share-move-option';
+            const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'shareMoveFolder'; radio.value = folder.id;
+            radio.checked = folder.id === selected;
+            const text = document.createElement('span'); text.textContent = folder.name;
+            label.append(radio, text); body.appendChild(label);
+        }
+        // 已删除分类回退到未分类，避免弹窗没有选中项。
+        if (!body.querySelector('input:checked')) body.querySelector('input').checked = true;
+        const footer = document.createElement('div'); footer.className = 'dialog-footer';
+        const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'btn-cancel'; cancel.textContent = '取消';
+        const confirm = document.createElement('button'); confirm.type = 'button'; confirm.className = 'btn-confirm'; confirm.textContent = '确认移动';
+        const close = () => {
+            document.removeEventListener('keydown', onKey);
+            mask.remove();
+            if (this.closeShareMoveDialog === close) this.closeShareMoveDialog = null;
+            previousFocus?.focus?.();
+        };
+        const onKey = event => { if (event.key === 'Escape') { event.preventDefault(); close(); } };
+        cancel.onclick = close;
+        mask.addEventListener('click', event => { if (event.target === mask) close(); });
+        confirm.onclick = () => {
+            const folderId = body.querySelector('input:checked')?.value ?? '';
+            if (folderId && !this.shareFolders[type].folders.some(folder => folder.id === folderId)) {
+                showToast('文件夹已不存在，请重新选择', 'error'); return;
+            }
+            if (this.sendShareFolder('shareFolderMove', { category: type, key, folderId })) close();
+        };
+        footer.append(cancel, confirm); dialog.append(title, body, footer); mask.appendChild(dialog); document.body.appendChild(mask);
+        this.closeShareMoveDialog = close;
+        document.addEventListener('keydown', onKey);
+        body.querySelector('input:checked')?.focus();
     },
     async refreshTaskMediaSources() {
         const revision = this.taskMediaRevision;
