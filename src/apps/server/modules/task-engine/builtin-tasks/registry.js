@@ -9,7 +9,8 @@ const tasks = {
   'llm-server': require('./llm-server'),
   'search.web': require('./search'),
   'chat2api.proxy': require('./chat2api-proxy'),
-  'doubao.web': require('./doubao-web')
+  'doubao.web': require('./doubao-web'),
+  'browser.media': require('./browser-media')
 };
 
 module.exports = {

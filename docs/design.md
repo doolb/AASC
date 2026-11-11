@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目设计文档
 
+- [桌面浏览器媒体服务](design/browser-media-service.md)
+
 - [视频黑边检测与有效画面填充](design/video-black-borders.md)
 
 - [SubAI专用工作AI与对话动作接入（首版实现，待设备验收）](design/sub-ai-actions.md)

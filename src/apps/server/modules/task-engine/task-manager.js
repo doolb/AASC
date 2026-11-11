@@ -28,6 +28,7 @@ class TaskManager extends EventEmitter {
     this.instances = new Map();
     this._services = new Map();  // instanceId -> { stop, status }
     this._registerMediaProvider = options.registerMediaProvider || null;
+    this._saveUserMedia = options.saveUserMedia || null;
     this._mediaProviderUnregisters = new Map();
     this._sendToDisplay = null;  // 由 setSendToDisplay() 注入
     this._generateTts = null;  // 由 server-app 注入统一的显示端优先 TTS 路由
@@ -863,6 +864,8 @@ class TaskManager extends EventEmitter {
           generateTTS: this._generateTts,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           postStream: (data) => this.emit('stream', instanceId, data),
+          browserMedia: require('../media/browser-media-registry').browserMedia,
+          saveUserMedia: this._saveUserMedia,
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
           registerRoute: (route) => this._registerServerTaskRoute(task, route),
           sendProgress: (progressData) => {
@@ -906,6 +909,7 @@ class TaskManager extends EventEmitter {
             registrations.push(unregister); this._mediaProviderUnregisters.set(instanceId, registrations);
             return unregister;
           },
+          browserMedia: require('../media/browser-media-registry').browserMedia,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
           postStream: (data) => this.emit('stream', instanceId, data),

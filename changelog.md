@@ -1,5 +1,8 @@
 ### 媒体库
 
+- ✅ [2026-11-11] 新增 Linux 桌面浏览器媒体服务任务和 AASC 自有油猴采集兼容。
+  - 新增 `browser-media-service.js`、`browser-media-registry.js` 和 `browser-media.js`，任务为后续媒体来源提供受限浏览器请求；桌面专项 6 项、豆包/Android 回归 15 项通过；真实 Vivaldi 验证普通页、二进制、视频采集与代理失败不直连，Cloudflare 挑战识别成功，挑战完成后的读取待验收。服务包待更新。
+
 - ✅ [2026-11-11] 新增 WebDAV 媒体库、抖音任务来源及油猴用户媒体采集。
   - 新增 `webdav-provider.js`、`douyin.js`、`user-media-service.js`、采集脚本及相关界面；支持 AList WebDAV、用户分站点播放列表、直链下载与受限 M3U8 转封装。47 项定向测试通过；真实 AList 与抖音 Cookie 待验收，匿名抖音测试提示需新鲜 Cookie。服务包和任务代码包待构建。
 

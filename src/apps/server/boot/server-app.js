@@ -1749,6 +1749,7 @@ async function startServer() {
 
             // 初始化远程任务引擎
             taskManager = new TaskManager({
+                saveUserMedia: data => userMediaService.save(data),
                 chat2apiRuntimeFactory: options => {
                     const upstream = speechUpstream.forRoot(options.dataStore?.rootDir || options.rootDir);
                     const runtime = createChat2ApiRuntime({ ...options,

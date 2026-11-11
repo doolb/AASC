@@ -1,5 +1,7 @@
 # Web MediaCenter - 项目实现文档
 
+- [桌面浏览器媒体服务伪代码](spec/browser-media-service.md)
+
 - [视频黑边检测、有效画面填充与配置伪代码](spec/video-black-borders.md)
 
 - [控制端媒体循环区间伪代码（单轨双手柄已实现）](spec/control-media-loop.md)
