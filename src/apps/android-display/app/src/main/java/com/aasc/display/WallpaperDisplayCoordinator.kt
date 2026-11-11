@@ -22,6 +22,9 @@ object WallpaperDisplayCoordinator {
     @Volatile
     var wallpaperActive = false
         private set
+    @Volatile
+    var wallpaperVisible = false
+        private set
     var wallpaperSuspended = false
         private set
 
@@ -31,6 +34,8 @@ object WallpaperDisplayCoordinator {
         wallpaperActive = value
         view?.evaluateJavascript("window.dispatchEvent(new Event('aasc-wallpaper-mode'));", null)
     }
+
+    fun setWallpaperVisible(value: Boolean) { wallpaperVisible = value }
 
     fun suspendWallpaper(context: Context) {
         wallpaperSuspended = true
@@ -105,7 +110,8 @@ object WallpaperDisplayCoordinator {
         }
         val wrapper = MutableContextWrapper(nextContext)
         context = wrapper
-        val created = DisplayWebView(wrapper, offlineMode, isMediaCaptureAllowed = { foreground }) { callback, params ->
+        val created = DisplayWebView(wrapper, offlineMode, isMediaCaptureAllowed = { foreground },
+            isWallpaperAudioCaptureAllowed = { wallpaperActive && wallpaperVisible && !wallpaperSuspended }) { callback, params ->
             requestFileChooser(callback, params)
         }
         view = created

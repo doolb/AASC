@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
+import android.util.TypedValue
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -18,6 +20,7 @@ import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import org.json.JSONObject
 import kotlin.math.abs
 
@@ -36,11 +39,14 @@ class WallpaperOverlay(private val context: Context) {
     private var edge: Int = 0
     private var collapsed = false
     private var interacting = false
+    private var configurationStamp = ""
     private val collapse = Runnable { if (edge != 0 && !interacting) setCollapsed(true) }
     private val refresh = object : Runnable {
         override fun run() {
             val currentPage = page ?: return
             if (root == null) return
+            val stamp = "${screenWidth()}:${screenHeight()}:${context.resources.configuration.fontScale}"
+            if (configurationStamp != stamp) { configurationStamp = stamp; onConfigurationChanged() }
             currentPage.evaluateJavascript("window.DisplayVoiceControls && typeof window.DisplayVoiceControls.overlaySnapshot === 'function' ? window.DisplayVoiceControls.overlaySnapshot() : null") { value ->
                 if (root == null || page !== currentPage || value == "null") return@evaluateJavascript
                 try { render(JSONObject(value)) } catch (error: Exception) { Log.w(TAG, "读取壁纸语音状态失败", error) }
@@ -65,25 +71,31 @@ class WallpaperOverlay(private val context: Context) {
         val outer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val expanded = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val label = TextView(context).apply {
-            text = "语音 · 连接中"; textSize = 14f; gravity = Gravity.CENTER
+            text = "语音 · 连接中"; setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(14)); gravity = Gravity.CENTER
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            maxWidth = (screenWidth() - dp(24)).coerceAtLeast(dp(80))
             setPadding(dp(10), dp(4), dp(10), dp(4))
             contentDescription = "拖动语音浮窗"
         }
         val row = FrameLayout(context)
-        val circle = VoiceCircle(context).apply { isEnabled = false; contentDescription = "语音操作"; setOnClickListener { invoke("voice") } }
+        val circle = VoiceCircle(context).apply { contentDescription = "语音操作"; setOnClickListener { invoke("voice") } }
         row.addView(circle, FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER))
-        val modeDot = TextView(context).apply { isEnabled = false; contentDescription = "监听模式" }
+        val modeDot = TextView(context).apply { contentDescription = "监听模式" }
         row.addView(modeDot, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.RIGHT or Gravity.BOTTOM).apply { bottomMargin = dp(5) })
         expanded.addView(label)
         expanded.addView(row, LinearLayout.LayoutParams(dp(108), dp(72)))
         val tab = TextView(context).apply {
-            text = "语"; textSize = 14f; gravity = Gravity.CENTER; contentDescription = "展开语音浮窗"
+            text = "语"; setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(12)); gravity = Gravity.CENTER; contentDescription = "展开语音浮窗"
+            includeFontPadding = false
             visibility = View.GONE
             setOnClickListener { setCollapsed(false) }
         }
         outer.addView(expanded)
-        outer.addView(tab, LinearLayout.LayoutParams(dp(28), dp(50)))
+        outer.addView(tab, LinearLayout.LayoutParams(dp(28), dp(30)))
         root = outer; content = expanded; handle = tab; status = label; voice = circle; mode = modeDot
+        outer.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) constrainPosition()
+        }
         attachDrag(label, outer, windowParams)
         attachDrag(circle, outer, windowParams)
         modeDot.setOnClickListener { restartCollapse(); invoke("mode") }
@@ -98,7 +110,12 @@ class WallpaperOverlay(private val context: Context) {
 
     private fun invoke(action: String) {
         restartCollapse()
-        page?.evaluateJavascript("window.DisplayVoiceControls && typeof window.DisplayVoiceControls.overlayAction === 'function' && window.DisplayVoiceControls.overlayAction(${JSONObject.quote(action)})", null)
+        val currentPage = page ?: return
+        currentPage.evaluateJavascript("window.DisplayVoiceControls && typeof window.DisplayVoiceControls.overlayAction === 'function' && window.DisplayVoiceControls.overlayAction(${JSONObject.quote(action)})") { result ->
+            if (root != null && page === currentPage && result != "true") {
+                Toast.makeText(context, "语音暂不可用，请检查显示端连接和录音权限", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun render(data: JSONObject) {
@@ -110,6 +127,7 @@ class WallpaperOverlay(private val context: Context) {
         val secondary = parseColor(theme.optString("secondary"), accent)
         status?.apply {
             text = data.optString("label", "语音 · 已停止")
+            contentDescription = text
             setTextColor(textColor)
             background = rounded(panelColor, dp(20).toFloat())
         }
@@ -125,9 +143,9 @@ class WallpaperOverlay(private val context: Context) {
             invalidate()
         }
         mode?.apply {
-            isEnabled = data.optBoolean("modeEnabled")
-            alpha = if (isEnabled) 1f else 0.5f
-            contentDescription = data.optString("modeLabel", "切换监听模式")
+            val available = data.optBoolean("modeEnabled")
+            alpha = if (available) 1f else 0.5f
+            contentDescription = data.optString("modeLabel", "切换监听模式") + if (available) "" else "，暂不可用"
             background = if (data.optBoolean("continuous")) GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(secondary, accent)).apply { shape = GradientDrawable.OVAL }
                 else rounded(panelColor, dp(20).toFloat())
         }
@@ -204,11 +222,34 @@ class WallpaperOverlay(private val context: Context) {
         try { manager.updateViewLayout(current, layout) } catch (error: Exception) { Log.w(TAG, "更新壁纸语音浮窗失败", error) }
     }
 
+    /** 设备缩放、旋转和状态文字宽度变化后，继续约束浮窗在可见屏幕内。 */
+    fun onConfigurationChanged() {
+        status?.apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(14))
+            maxWidth = (screenWidth() - dp(24)).coerceAtLeast(dp(80))
+        }
+        handle?.setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(12))
+        root?.post { constrainPosition() }
+    }
+
+    private fun constrainPosition() {
+        val current = params ?: return
+        val currentRoot = root ?: return
+        val maxX = (screenWidth() - currentRoot.width).coerceAtLeast(0)
+        val maxY = (screenHeight() - currentRoot.height).coerceAtLeast(0)
+        val nextX = if (edge > 0) maxX else current.x.coerceIn(0, maxX)
+        val nextY = current.y.coerceIn(0, maxY)
+        if (current.x != nextX || current.y != nextY) {
+            current.x = nextX; current.y = nextY
+            updateWindow()
+        }
+    }
+
     fun hide() {
         handler.removeCallbacks(refresh); handler.removeCallbacks(collapse)
         val current = root
         root = null; page = null; params = null; content = null; handle = null; status = null; voice = null; mode = null
-        edge = 0; collapsed = false; interacting = false
+        edge = 0; collapsed = false; interacting = false; configurationStamp = ""
         if (current != null) try { manager.removeView(current) } catch (error: Exception) { Log.w(TAG, "移除壁纸语音浮窗失败", error) }
     }
 
@@ -217,6 +258,7 @@ class WallpaperOverlay(private val context: Context) {
     private fun screenWidth(): Int = context.resources.displayMetrics.widthPixels
     private fun screenHeight(): Int = context.resources.displayMetrics.heightPixels
     private fun dp(value: Int): Int = (value * context.resources.displayMetrics.density).toInt()
+    private fun scaledText(value: Int): Float = dp(value) * context.resources.configuration.fontScale.coerceIn(1f, 1.3f)
     private companion object { const val TAG = "AASCWallpaperOverlay" }
 
     /** 与网页语音圆钮使用同一状态颜色，内圈显示语音活动及阈值。 */

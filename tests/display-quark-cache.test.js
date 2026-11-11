@@ -75,3 +75,20 @@ test('B 站批量视频回退 MP4 后仍自动切换，旧项目错误不会影�
     video.onerror?.();
     assert.equal(timers.length, 1);
 });
+
+test('B 站同源相对 MP4 地址在 DASH 失败时可以回退', () => {
+    const html = fs.readFileSync('src/apps/web-mediacenter/ui/public/display.html', 'utf8');
+    const start = html.indexOf('                    const playMp4OrOfficial = () => {');
+    const end = html.indexOf('                    // 单媒体/重连恢复', start);
+    assert.ok(start >= 0 && end > start);
+    let played;
+    const context = {
+        URL, window: { location: { href: 'http://localhost:3000/display.html' } },
+        data: { bilibiliDash: true, bilibiliMp4: '/api/bilibili/video/BV1B7411m7LV?p=2', mediaType: 'video' },
+        loadSequence: 1, mediaLoadSequence: 1, paused: false, mediaIsPlaying: true, resumeTime: 0,
+        showMedia: value => { played = value; }
+    };
+    vm.runInNewContext(`${html.slice(start, end)}\nplayMp4OrOfficial();`, context);
+    assert.equal(played.url, 'http://localhost:3000/api/bilibili/video/BV1B7411m7LV?p=2');
+    assert.equal(played.bilibiliDash, false);
+});

@@ -15,7 +15,7 @@ test('回环地址判定覆盖 IPv4、IPv6 与 IPv4 映射形式', () => {
     }
 });
 
-test('显示端媒体库列表只包含本地库与活动任务源', () => {
+test('显示端媒体库列表包含本地库、夸克与活动任务源', () => {
     const manager = {
         listLibraries: () => [
             { id: 'local1', name: '上传', type: 'local', readonly: false },
@@ -31,6 +31,7 @@ test('显示端媒体库列表只包含本地库与活动任务源', () => {
     assert.deepEqual(listDisplayLibraries(manager), [
         { id: 'local1', name: '上传', type: 'local', readonly: false },
         { id: 'smb1', name: 'NAS', type: 'smb', readonly: true },
+        { id: 'quark1', name: '夸克分享', type: 'quark', readonly: true },
         { id: 'task-auto:hongguo', name: '红果短剧', type: 'task', taskId: 'hongguo', region: 'domestic' },
         { id: 'task-auto:youtube', name: 'YouTube', type: 'task', taskId: 'youtube', region: 'overseas' }
     ]);

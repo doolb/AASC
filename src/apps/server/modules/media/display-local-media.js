@@ -1,7 +1,8 @@
 'use strict';
 const express = require('express');
 
-const LOCAL_LIBRARY_TYPES = new Set(['local', 'smb', 'http', 'webdav', 'android-saf']);
+const { DISPLAY_BILIBILI_ID } = require('./display-bilibili-source');
+const LOCAL_LIBRARY_TYPES = new Set(['local', 'smb', 'http', 'webdav', 'android-saf', 'quark']);
 const PLAYABLE_MEDIA_TYPES = new Set(['image', 'gif', 'video', 'audio', 'text']);
 // 弱引用令牌只关联在线显示端，后续播放操作可取消尚未完成的目录扫描。
 const DISPLAY_PLAYLIST_REQUESTS = new WeakMap();
@@ -16,8 +17,8 @@ function isLoopbackAddress(address) {
     return typeof address === 'string' && LOOPBACK_ADDRESSES.has(address);
 }
 
-// 显示端只读列表：本地库在前，活动任务源在后；夸克与已保存的 task 库不展示。
-function listDisplayLibraries(manager) {
+// 显示端只公开当前已配置的库、B 站及活动任务源，不公开凭据。
+function listDisplayLibraries(manager, { includeBilibili = false } = {}) {
     const local = manager.listLibraries()
         .filter(library => LOCAL_LIBRARY_TYPES.has(library.type))
         .map(library => ({
@@ -33,7 +34,8 @@ function listDisplayLibraries(manager) {
         taskId: source.id,
         region: source.region === 'overseas' ? 'overseas' : 'domestic'
     }));
-    return [...local, ...tasks];
+    const bilibili = includeBilibili ? [{ id: DISPLAY_BILIBILI_ID, name: 'B 站', type: 'bilibili', readonly: true }] : [];
+    return [...local, ...bilibili, ...tasks];
 }
 
 function parentPath(value) {
@@ -80,6 +82,7 @@ function normalizeDisplayEntries(items, { isHttps = false } = {}) {
 
 function createDisplayLocalRouter({
     mediaLibraryManager,
+    bilibiliSource = null,
     isHttps = () => false,
     getRemoteAddress = req => req.socket.remoteAddress
 }) {
@@ -97,7 +100,7 @@ function createDisplayLocalRouter({
     });
     router.get('/libraries', (req, res) => {
         try {
-            res.json({ libraries: listDisplayLibraries(mediaLibraryManager) });
+            res.json({ libraries: listDisplayLibraries(mediaLibraryManager, { includeBilibili: !!bilibiliSource }) });
         } catch (error) {
             res.status(500).json({ error: '媒体库加载失败，请稍后重试' });
         }
@@ -107,7 +110,7 @@ function createDisplayLocalRouter({
         try {
             libraryId = typeof req.query.libraryId === 'string' ? req.query.libraryId : '';
             const dirPath = typeof req.query.path === 'string' ? req.query.path : '/';
-            const library = listDisplayLibraries(mediaLibraryManager).find(library => library.id === libraryId);
+            const library = listDisplayLibraries(mediaLibraryManager, { includeBilibili: !!bilibiliSource }).find(library => library.id === libraryId);
             const allowed = Boolean(library);
             if (!allowed) {
                 if (isStoppedTask(libraryId)) {
@@ -117,7 +120,7 @@ function createDisplayLocalRouter({
                 res.status(400).json({ error: '媒体库不存在' });
                 return;
             }
-            const items = await mediaLibraryManager.list(libraryId, dirPath);
+            const items = library.type === 'bilibili' ? await bilibiliSource.list(dirPath) : await mediaLibraryManager.list(libraryId, dirPath);
             // 异步列目录期间若任务已停止，即使扫描刚返回也不能展示过期来源。
             if (library.type === 'task'
                 && !listDisplayLibraries(mediaLibraryManager).some(current => current.id === libraryId)) {
@@ -129,6 +132,7 @@ function createDisplayLocalRouter({
             // 也不经通用代理绕回 LAN（自签证书、主机名及回环拦截均可能使其失败）。
             const displayItems = items.map(item => {
                 if (!item || typeof item.path !== 'string' || ['folder', 'directory'].includes(item.type)) return item;
+                if (library.type === 'bilibili') return item;
                 if (library.type === 'local') {
                     if (typeof item.url !== 'string' || !/^https?:\/\//i.test(item.url)) return item;
                     const url = new URL(item.url);
@@ -157,6 +161,7 @@ function createDisplayLocalRouter({
 
 // 本地媒体仍使用原始同源路径；远端提供器统一通过已有媒体库代理取流。
 function displayPlaylistUrl(item, library) {
+    if (library.type === 'bilibili') return item.url;
     if (library.type !== 'local') {
         const encodedPath = String(item.path || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
         return `/api/media-libraries/${encodeURIComponent(library.id)}/proxy/${encodedPath}`;
@@ -215,6 +220,7 @@ function createDisplayPlaylistRequestHandler({ buildPlaylist, getDisplayData, pe
                 const media = {
                     type: 'url', url: displayPlaylistUrl(item, library), fileName: item.fileName,
                     mediaType: item.mediaType === 'gif' ? 'image' : item.mediaType,
+                    ...(library.type === 'bilibili' ? { bilibiliDash: true, bilibiliMp4: item.bilibiliMp4 } : {}),
                     ...(item.mediaType === 'text' ? { format: item.format === 'markdown' ? 'markdown' : 'plain' } : {}),
                     ...route
                 };
@@ -262,6 +268,7 @@ function createDisplayPlaylistRequestHandler({ buildPlaylist, getDisplayData, pe
                     // 不将提供器原始 URL 中可能携带的认证信息发送到显示端。
                     url: displayPlaylistUrl(item, library), path: item.path, fileName: item.fileName,
                     mediaType: item.mediaType === 'gif' ? 'image' : item.mediaType,
+                    ...(library.type === 'bilibili' ? { bilibiliDash: true, bilibiliMp4: item.bilibiliMp4 } : {}),
                     ...(item.mediaType === 'text' ? { format: item.format } : {})
                 }));
             if (!Array.isArray(playlist) || playlist.length === 0) {

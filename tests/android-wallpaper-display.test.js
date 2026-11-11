@@ -56,7 +56,8 @@ test('系统壁纸浮窗有权限保护，并随壁纸生命周期移除', () =>
     const activity = read('src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt');
     assert.match(manifest, /android.permission.SYSTEM_ALERT_WINDOW/);
     assert.match(activity, /Settings\.ACTION_MANAGE_OVERLAY_PERMISSION/);
-    assert.match(service, /if \(!isPreview\) webView\?\.let \{ overlay\.show\(it\) \}/);
+    assert.match(service, /if \(!isPreview && WallpaperDesktopTracker\.isDesktop != false\) webView\?\.let \{ overlay\.show\(it\) \}/);
+    assert.match(service, /if \(desktop == false\) overlay\.hide\(\)/);
     assert.match(service, /onVisibilityChanged[\s\S]*?overlay\.hide\(\)/);
     assert.match(service, /private fun releaseRenderer\(\) \{\s*overlay\.hide\(\)/);
     assert.match(overlay, /Settings\.canDrawOverlays\(context\)/);
@@ -66,4 +67,15 @@ test('系统壁纸浮窗有权限保护，并随壁纸生命周期移除', () =>
     assert.match(overlay, /postDelayed\(collapse, 5000\)/);
     assert.match(overlay, /overlaySnapshot/);
     assert.match(overlay, /overlayAction/);
+});
+
+test('壁纸录音仅在壁纸可见且系统已授权时允许，摄像头仍只在前台开放', () => {
+    const coordinator = read('src/apps/android-display/app/src/main/java/com/aasc/display/WallpaperDisplayCoordinator.kt');
+    const view = read('src/apps/android-display/app/src/main/java/com/aasc/display/DisplayWebView.kt');
+    const service = read('src/apps/android-display/app/src/main/java/com/aasc/display/DisplayWallpaperService.kt');
+    assert.match(coordinator, /isWallpaperAudioCaptureAllowed = \{ wallpaperActive && wallpaperVisible && !wallpaperSuspended \}/);
+    assert.match(view, /checkSelfPermission\(context, Manifest\.permission\.RECORD_AUDIO\)/);
+    assert.match(view, /RESOURCE_AUDIO_CAPTURE && \(foreground \|\| wallpaperAudio\)/);
+    assert.match(view, /RESOURCE_VIDEO_CAPTURE && foreground/);
+    assert.match(service, /setWallpaperVisible\(visible && !isPreview\)/);
 });

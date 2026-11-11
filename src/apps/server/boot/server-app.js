@@ -980,8 +980,14 @@ mediaLibraryManager.taskMediaProviders.register('aasc-user-media', {
     create: () => userMediaService.provider
 });
 
+// 显示端的 B 站目录只映射已保存项目；所有外部播放地址由服务端构造。
+const { DISPLAY_BILIBILI_ID, createDisplayBilibiliSource } = require('../modules/media/display-bilibili-source');
+const displayBilibiliSource = createDisplayBilibiliSource({
+    getService: () => bilibiliListService,
+    getFolders: () => config.get('media.shareFolders', {})?.bilibili || {}
+});
 // 显示端只读媒体库以真实连接地址检查回环，不能通过转发头绕过。
-app.use('/api/display-local', createDisplayLocalRouter({ mediaLibraryManager, isHttps: () => useHttps }));
+app.use('/api/display-local', createDisplayLocalRouter({ mediaLibraryManager, bilibiliSource: displayBilibiliSource, isHttps: () => useHttps }));
 
 // 统一解析命名代理；读取损坏配置时降级为不使用代理。
 function getSourceProxyUrl(sourceId) {
@@ -1051,10 +1057,10 @@ const { PlaylistManager } = require('../../web-mediacenter/modules/media/playlis
 const playlistManager = new PlaylistManager(mediaLibraryManager);
 // 显示端只读库批量播放共用本机访问边界与活动源白名单，固定单层顺序、不循环。
 const handleDisplayPlaylistRequest = createDisplayPlaylistRequestHandler({
-    getLibraries: () => listDisplayLibraries(mediaLibraryManager),
+    getLibraries: () => listDisplayLibraries(mediaLibraryManager, { includeBilibili: true }),
     getVoiceRoute: displayId => buildTextVoiceRoute(displayId, [displayId]),
     setDisplayRoute: (displayId, route) => textMediaTtsService.setDisplayRoute(displayId, route),
-    buildPlaylist: (libraryId, dirPath) => playlistManager.buildFromLibrary(libraryId, dirPath, {
+    buildPlaylist: (libraryId, dirPath) => libraryId === DISPLAY_BILIBILI_ID ? displayBilibiliSource.playlist(dirPath) : playlistManager.buildFromLibrary(libraryId, dirPath, {
         recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc',
         mediaTypes: ['image', 'video', 'audio', 'text']
     }),

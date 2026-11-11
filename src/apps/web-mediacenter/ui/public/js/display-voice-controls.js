@@ -10,6 +10,7 @@
     let asrResultHideTimer = null;
     let asrResultExpired = false;
     let initialized = false;
+    let overlayError = null;
     let refs = {};
 
     function deriveStatus(snapshot = {}, thinking = false) {
@@ -121,11 +122,13 @@
         return true;
     }
 
-    async function click() {
+    async function click(options) {
         if (!runtime) return;
+        if (options?.fromOverlay) overlayError = null;
         try {
             await runtime.activate();
         } catch (error) {
+            if (options?.fromOverlay) overlayError = { text: error.message || '语音操作失败', until: Date.now() + 5000 };
             showError(error);
         }
         render();
@@ -189,7 +192,7 @@
         const style = root.getComputedStyle(root.document.documentElement);
         const color = name => style.getPropertyValue(name).trim();
         return {
-            label: refs.status?.textContent || '已停止',
+            label: overlayError && overlayError.until > Date.now() ? overlayError.text : (refs.status?.textContent || '已停止'),
             state: deriveStatus(snapshot, chats.size > 0),
             actionLabel: refs.button.getAttribute('aria-label') || '语音操作',
             modeLabel: refs.toggle.getAttribute('aria-label') || '切换监听模式',
@@ -204,7 +207,7 @@
 
     function overlayAction(action) {
         if (!runtime || root.NativeDisplay?.isWallpaperActive?.() !== true) return false;
-        if (action === 'voice') { void click(); return true; }
+        if (action === 'voice') { void click({ fromOverlay: true }); return true; }
         if (action === 'mode' && refs.toggle && !refs.toggle.disabled) return requestContinuous(!runtime.snapshot().continuous);
         return false;
     }

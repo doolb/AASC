@@ -10,17 +10,19 @@ class DisplayAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        WallpaperDesktopTracker.reset()
         TouchInjector.service = this
     }
 
     override fun onDestroy() {
+        WallpaperDesktopTracker.reset()
         if (TouchInjector.service === this) TouchInjector.service = null
         super.onDestroy()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) { WallpaperDesktopTracker.onWindowEvent(this, event) }
 
-    override fun onInterrupt() {}
+    override fun onInterrupt() { WallpaperDesktopTracker.reset() }
 
     // action: click=点按 / down=按住 / up=轻点抬起 / contextmenu=长按
     fun performTouch(x: Int, y: Int, action: String): Boolean {

@@ -55,6 +55,12 @@ function createBilibiliListService({ config, broadcast, fetchMetadata = defaultM
     }
     function snapshot() { return { type: 'bilibiliList', videos: list() }; }
     return {
+        getVideos: list,
+        async getCollection(url) {
+            const collection = parseCollectionUrl(url);
+            if (!collection || !list().some(item => item.collection && item.url === collection.url)) throw new Error('B 站收藏列表不存在');
+            return fetchCollection(collection.id);
+        },
         async buildPlaylist({ folderId = '', collectionUrl, mode, sortBy, direction, origin, danmaku = false }) {
             const group = config.get('media.shareFolders', {})?.bilibili || {};
             const folders = Array.isArray(group.folders) ? group.folders : [];

@@ -805,6 +805,7 @@ APK 提供设置壁纸入口 → 打开系统动态壁纸预览，由用户确�
 壁纸可见且 surface 有效时 → 把共享 WebView 移入连接 wallpaper surface 的私有 VirtualDisplay/Presentation
 壁纸临时不可见 → 暂停壁纸 WebView，不销毁页面或断开原有连接；再次可见 → 恢复原实例
 壁纸 surface 销毁 → 从虚拟显示解绑 surface，保留实例；新 surface 到来时重新绑定并调整尺寸
+真实壁纸可见且系统麦克风权限已授予 → 壁纸网页可请求音频；预览或不可见 → 不授予壁纸音频；视频采集仅前台允许
 Activity 恢复 → 释放壁纸输出容器，把同一 WebView 移回前台；不加载 about:blank 或重载显示页
 Activity 和全部壁纸 Engine 均销毁 → 释放 WebView、原生桥和音频焦点；进程被系统回收时按原有状态恢复
 ```

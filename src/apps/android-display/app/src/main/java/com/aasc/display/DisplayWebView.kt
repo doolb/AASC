@@ -1,13 +1,16 @@
 package com.aasc.display
 
 import android.annotation.SuppressLint
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.core.content.ContextCompat
 
 // 显示端 WebView：启用 JS/DOM 存储/混合内容，保证 display.html 与跨域 iframe 内容可渲染
 @SuppressLint("SetJavaScriptEnabled")
@@ -16,6 +19,7 @@ class DisplayWebView(
     offlineMode: Boolean,
     private val disableInputAutoZoom: Boolean = false,
     private val isMediaCaptureAllowed: () -> Boolean = { true },
+    private val isWallpaperAudioCaptureAllowed: () -> Boolean = { false },
     private val onFileChooserRequested: (
         ValueCallback<Array<Uri>>,
         WebChromeClient.FileChooserParams
@@ -70,13 +74,12 @@ class DisplayWebView(
             }
 
             override fun onPermissionRequest(request: PermissionRequest) {
-                if (!isMediaCaptureAllowed()) {
-                    request.deny()
-                    return
-                }
+                val foreground = isMediaCaptureAllowed()
+                val wallpaperAudio = isWallpaperAudioCaptureAllowed() &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                 val granted = request.resources.filter {
-                    it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
-                        || it == PermissionRequest.RESOURCE_VIDEO_CAPTURE
+                    (it == PermissionRequest.RESOURCE_AUDIO_CAPTURE && (foreground || wallpaperAudio)) ||
+                        (it == PermissionRequest.RESOURCE_VIDEO_CAPTURE && foreground)
                 }
                 if (granted.isNotEmpty()) {
                     request.grant(granted.toTypedArray())

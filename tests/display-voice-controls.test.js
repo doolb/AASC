@@ -38,6 +38,28 @@ test('圆钮VAD使用真实百分比与相同阈值刻度，暂停/非法值清�
     assert.equal(properties.get('--voice-vad-threshold'), '1.00');
 });
 
+test('壁纸浮窗语音启动失败显示原因，不改变普通页面状态', async () => {
+    const refs = {};
+    for (const id of ['displayVoiceContinuous', 'displayVoiceAction', 'displayVoiceActionStatus', 'displayVoiceActionStatusText']) {
+        refs[id] = { dataset: {}, attributes: {}, addEventListener() {},
+            setAttribute(name, value) { this.attributes[name] = value; }, getAttribute(name) { return this.attributes[name]; } };
+    }
+    const window = {
+        document: { documentElement: {}, getElementById: id => refs[id] },
+        getComputedStyle: () => ({ getPropertyValue: () => '#123456' }),
+        NativeDisplay: { isWallpaperActive: () => true }, showToast() {}, setTimeout, clearTimeout
+    };
+    vm.runInNewContext(controls, { window });
+    window.DisplayVoiceControls.init({
+        runtime: { snapshot: () => ({ connected: true, configReady: true, continuous: false }), activate: async () => { throw new Error('麦克风未授权'); } },
+        send: () => true, getState: () => ({ displayId: 'one' }), bus: { subscribe() {} }
+    });
+    assert.equal(window.DisplayVoiceControls.overlayAction('voice'), true);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(window.DisplayVoiceControls.overlaySnapshot().label, '麦克风未授权');
+    assert.equal(refs.displayVoiceActionStatusText.textContent, '群聊 · 已停止');
+});
+
 test('ASR复用顶部文字自适应规则，旋转和键盘后高度仍有界', () => {
     const geometry = { logicalWidth: 360, logicalHeight: 800, keyboardInset: 0 };
     const context = vm.createContext({ window: { DisplayStage: { getState: () => ({ rotationGeometry: geometry }) } }, voiceTextDisplay: { textContent: '旧顶部文字' } });

@@ -46,8 +46,9 @@
         if (!root) return;
         root.replaceChildren();
         const groups = [
-            { title: '本地媒体', items: state.libraries.filter(item => item.type !== 'task') },
-            { title: '任务媒体', items: state.libraries.filter(item => item.type === 'task') }
+            { title: '本地媒体', items: state.libraries.filter(item => !['task', 'quark', 'bilibili'].includes(item.type)) },
+            { title: '国内媒体', items: state.libraries.filter(item => ['quark', 'bilibili'].includes(item.type) || (item.type === 'task' && item.region !== 'overseas')) },
+            { title: '国外媒体', items: state.libraries.filter(item => item.type === 'task' && item.region === 'overseas') }
         ];
         for (const group of groups) {
             if (!group.items.length) continue;

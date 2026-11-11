@@ -34,6 +34,12 @@ class DisplayWallpaperService : WallpaperService() {
         private var surfaceWidth = 0
         private var surfaceHeight = 0
         private val overlay = WallpaperOverlay(this@DisplayWallpaperService)
+        private val desktopListener: (Boolean?) -> Unit = { desktop ->
+            if (desktop == false) overlay.hide()
+            else if (visible && !isPreview && !WallpaperDisplayCoordinator.foreground && !WallpaperDisplayCoordinator.wallpaperSuspended) {
+                webView?.takeIf { it.parent === container }?.let { overlay.show(it) }
+            }
+        }
         private val foregroundListener: (Boolean) -> Unit = { foreground ->
             if (foreground) releaseRenderer() else if (visible) ensureRenderer(surfaceHolder)
         }
@@ -42,6 +48,7 @@ class DisplayWallpaperService : WallpaperService() {
             super.onCreate(holder)
             setTouchEventsEnabled(true)
             WallpaperDisplayCoordinator.addListener(foregroundListener)
+            WallpaperDesktopTracker.addListener(desktopListener)
         }
 
         override fun onTouchEvent(event: MotionEvent) {
@@ -56,6 +63,7 @@ class DisplayWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             surfaceWidth = width
             surfaceHeight = height
+            overlay.onConfigurationChanged()
             if (width > 0 && height > 0 && holder.surface.isValid) {
                 display?.resize(width, height, resources.displayMetrics.densityDpi)
                 display?.setSurface(holder.surface)
@@ -70,14 +78,20 @@ class DisplayWallpaperService : WallpaperService() {
             if (visible) ensureRenderer(surfaceHolder)
             else {
                 overlay.hide()
-                if (webView?.parent === container) webView?.onPause()
+                if (webView != null && webView?.parent === container) {
+                    WallpaperDisplayCoordinator.setWallpaperVisible(false)
+                    webView?.onPause()
+                }
             }
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             overlay.hide()
             display?.setSurface(null)
-            if (webView?.parent === container) webView?.onPause()
+            if (webView != null && webView?.parent === container) {
+                WallpaperDisplayCoordinator.setWallpaperVisible(false)
+                webView?.onPause()
+            }
             surfaceWidth = 0
             surfaceHeight = 0
             super.onSurfaceDestroyed(holder)
@@ -86,6 +100,7 @@ class DisplayWallpaperService : WallpaperService() {
         override fun onDestroy() {
             releaseRenderer()
             WallpaperDisplayCoordinator.removeListener(foregroundListener)
+            WallpaperDesktopTracker.removeListener(desktopListener)
             super.onDestroy()
         }
 
@@ -134,7 +149,8 @@ class DisplayWallpaperService : WallpaperService() {
                 } else {
                     webView?.onResume()
                 }
-                if (!isPreview) webView?.let { overlay.show(it) }
+                WallpaperDisplayCoordinator.setWallpaperVisible(visible && !isPreview)
+                if (!isPreview && WallpaperDesktopTracker.isDesktop != false) webView?.let { overlay.show(it) }
             } catch (error: Exception) {
                 Log.e(TAG, "动态壁纸显示端启动失败", error)
                 releaseRenderer()
@@ -151,6 +167,7 @@ class DisplayWallpaperService : WallpaperService() {
         private fun releaseRenderer() {
             overlay.hide()
             if (container != null && webView?.parent === container) {
+                WallpaperDisplayCoordinator.setWallpaperVisible(false)
                 WallpaperDisplayCoordinator.setWallpaperActive(false)
                 WallpaperDisplayCoordinator.setWallpaperTopInset(0.0)
                 webView?.onPause()

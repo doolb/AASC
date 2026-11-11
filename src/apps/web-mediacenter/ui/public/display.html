@@ -5726,7 +5726,7 @@
                     const playMp4OrOfficial = () => {
                         if (loadSequence !== mediaLoadSequence) return;
                         let mp4;
-                        try { mp4 = new URL(data.bilibiliMp4); } catch {}
+                        try { mp4 = new URL(data.bilibiliMp4, window.location.href); } catch {}
                         if (data.bilibiliDash && mp4 && /^https?:$/.test(mp4.protocol) && /^\/api\/bilibili\/video\/BV[0-9A-Za-z]{10}$/.test(mp4.pathname)) {
                             showMedia({ ...data, url: mp4.href, bilibiliDash: false, bilibiliMp4: undefined }, true, paused || !mediaIsPlaying, resumeTime);
                             data.onBilibiliFallback?.();
@@ -7526,6 +7526,9 @@
             if (voiceContinuousEnabled) {
                 resumeVoiceRecordingAfterTts();
                 if (!isListening) await startVoiceRecording();
+                if (window.NativeDisplay?.isWallpaperActive?.() === true && !isListening && !voiceCaptureStarting) {
+                    throw new Error('壁纸语音未启动，请检查麦克风授权与监听状态');
+                }
                 return;
             }
             if (manualVoiceRecording) {
@@ -7541,6 +7544,9 @@
             manualVoiceRecording = true;
             voiceCooldownUntil = 0;
             await startVoiceRecording();
+            if (window.NativeDisplay?.isWallpaperActive?.() === true && !isListening && !voiceCaptureStarting) {
+                throw new Error('壁纸语音未启动，请检查麦克风授权与监听状态');
+            }
             if (!manualVoiceRecording || !isListening) return;
             manualVoiceRecordingTimer = setTimeout(() => void finishManualVoiceRecording(), 60000);
             publishVoiceRuntime();

@@ -32,6 +32,8 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     app.get('/api/display-local/libraries', (req, res) => res.json({
         libraries: [
             { id: 'local1', name: '上传', type: 'local' },
+            { id: 'quark1', name: '夸克分享', type: 'quark' },
+            { id: 'display-bilibili', name: 'B 站', type: 'bilibili' },
             { id: 'task-auto:hongguo', name: '红果短剧', type: 'task', taskId: 'hongguo' }
         ]
     }));
@@ -78,12 +80,16 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     await page.waitForSelector('.display-media-library-source');
     assert.deepEqual(
         await page.$$eval('.display-media-library-source', nodes => nodes.map(node => node.textContent)),
-        ['上传', '红果短剧']
+        ['上传', '夸克分享', 'B 站', '红果短剧']
     );
     assert.deepEqual(
         await page.$$eval('.display-media-library-group-title', nodes => nodes.map(node => node.textContent)),
-        ['本地媒体', '任务媒体']
+        ['本地媒体', '国内媒体']
     );
+    for (const sourceId of ['quark1', 'display-bilibili', 'task-auto:hongguo', 'local1']) {
+        await page.click(`[data-library-id="${sourceId}"]`);
+        assert.equal(await page.$eval(`[data-library-id="${sourceId}"]`, node => node.classList.contains('active')), true);
+    }
     await page.waitForSelector('.display-media-library-entry');
     await page.evaluate(() => [...document.querySelectorAll('.display-media-library-entry-name')]
         .find(node => node.textContent === 'a.mp4').click());

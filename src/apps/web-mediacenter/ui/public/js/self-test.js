@@ -618,6 +618,21 @@ const SelfTest = {
             }
         },
         {
+            id: 'display_media_sources_structure',
+            name: '显示端媒体来源结构',
+            description: '只读检查夸克、B 站及国内任务来源入口',
+            category: '界面布局',
+            run: async () => {
+                try {
+                    const response = await fetch('/js/display-media-library.js', { cache: 'no-store' });
+                    if (!response.ok) return { success: false, message: '显示端媒体来源资源不可读取' };
+                    const script = await response.text();
+                    const valid = ['quark', 'bilibili', '国内媒体', 'display-local/libraries'].every(value => script.includes(value));
+                    return { success: valid, message: valid ? '显示端媒体来源结构正常' : '显示端媒体来源结构缺失', details: '仅检查入口结构；实际浏览和播放需设备及来源验收' };
+                } catch (error) { return { success: false, message: `显示端媒体来源检查失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'wallpaper_controls_structure',
             name: '壁纸浮动控件结构',
             description: '只读检查壁纸面板及前台控件隔离',

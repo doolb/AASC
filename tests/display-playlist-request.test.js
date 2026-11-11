@@ -134,6 +134,7 @@ function createRoutedHarness(manager, displays, persisted) {
     const fallbackEnd = source.indexOf("    if (data.type === 'chatAction')", fallbackStart);
     const context = vm.createContext({
         createDisplayPlaylistRequestHandler, listDisplayLibraries, mediaLibraryManager: manager,
+        DISPLAY_BILIBILI_ID: 'display-bilibili', displayBilibiliSource: { playlist: async () => [] },
         buildTextVoiceRoute: displayId => ({ selectedDisplayIds: [displayId], selectedVoiceDisplayIds: [displayId], voiceTargetDisplayId: displayId }),
         textMediaTtsService: { setDisplayRoute: () => {} },
         playlistManager, displayClients: displays,
@@ -157,7 +158,7 @@ function createRoutedHarness(manager, displays, persisted) {
 test('实际注册路由组合真实列表服务：白名单、媒体筛选、单层名称排序及目标隔离', async () => {
     const requested = [];
     const manager = {
-        listLibraries: () => [{ id: 'local1', type: 'local' }, { id: 'blocked', type: 'quark' }],
+        listLibraries: () => [{ id: 'local1', type: 'local' }, { id: 'blocked', type: 'task' }],
         listTaskMediaSources: () => [{ id: 'task1', libraryId: 'task-real' }],
         async list(id, path) {
             requested.push({ id, path });
