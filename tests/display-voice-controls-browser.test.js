@@ -137,6 +137,8 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
             }, theme);
             const overlay = await page.evaluate(() => ({ snapshot: window.DisplayVoiceControls.overlaySnapshot(), accent: getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim() }));
             assert.equal(overlay.snapshot.theme.accent, overlay.accent);
+            assert.match(overlay.snapshot.label, /^群聊 空闲(?: \d+\.\d+)?$/u);
+            assert.equal(await page.$eval('#displayVoiceActionStatusText', node => node.textContent), '群聊 · 空闲');
             assert.equal(overlay.snapshot.continuous, true);
             assert.equal(overlay.snapshot.modeEnabled, true);
             assert.match(await page.$eval('#displayVoiceContinuous', (element) => getComputedStyle(element).backgroundImage), /linear-gradient/u);

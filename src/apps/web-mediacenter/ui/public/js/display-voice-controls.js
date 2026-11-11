@@ -192,7 +192,7 @@
         const style = root.getComputedStyle(root.document.documentElement);
         const color = name => style.getPropertyValue(name).trim();
         return {
-            label: overlayError && overlayError.until > Date.now() ? overlayError.text : (refs.status?.textContent || '已停止'),
+            label: overlayError && overlayError.until > Date.now() ? overlayError.text : (refs.status?.textContent || '已停止').replace(' · ', ' '),
             state: deriveStatus(snapshot, chats.size > 0),
             actionLabel: refs.button.getAttribute('aria-label') || '语音操作',
             modeLabel: refs.toggle.getAttribute('aria-label') || '切换监听模式',

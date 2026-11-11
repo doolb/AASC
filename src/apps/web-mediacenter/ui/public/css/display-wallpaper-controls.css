@@ -1,5 +1,7 @@
 /* 壁纸共享前台页面，但不显示前台的四周交互入口。 */
 body.is-wallpaper #displayInteractionLayer { visibility: hidden !important; pointer-events: none !important; }
+/* 识别结果继续使用网页原有位置和时限，壁纸模式不恢复交互入口。 */
+body.is-wallpaper #displayVoiceAsrResult { visibility: visible !important; pointer-events: none !important; }
 body.is-wallpaper #connectionStatus, body.is-wallpaper #voiceStatusRow { visibility: hidden !important; }
 body.is-wallpaper.wallpaper-fps-hidden #displayMmdFps,
 body.is-wallpaper.wallpaper-time-hidden #timeDisplay { visibility: hidden !important; }

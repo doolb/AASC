@@ -71,7 +71,7 @@ class WallpaperOverlay(private val context: Context) {
         val outer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val expanded = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val label = TextView(context).apply {
-            text = "语音 · 连接中"; setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(14)); gravity = Gravity.CENTER
+            text = "语音 连接中"; setTextSize(TypedValue.COMPLEX_UNIT_PX, scaledText(14)); gravity = Gravity.CENTER
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
             maxWidth = (screenWidth() - dp(24)).coerceAtLeast(dp(80))
             setPadding(dp(10), dp(4), dp(10), dp(4))
@@ -126,7 +126,7 @@ class WallpaperOverlay(private val context: Context) {
         val accent = parseColor(theme.optString("accent"), 0xff00d2ff.toInt())
         val secondary = parseColor(theme.optString("secondary"), accent)
         status?.apply {
-            text = data.optString("label", "语音 · 已停止")
+            text = data.optString("label", "语音 已停止")
             contentDescription = text
             setTextColor(textColor)
             background = rounded(panelColor, dp(20).toFloat())

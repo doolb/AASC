@@ -17,7 +17,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     const html = fs.readFileSync(path.join(dir, 'display.html'), 'utf8');
     const panel = html.slice(html.indexOf('    <div id="wallpaperInteractionShield"'), html.indexOf('    </aside>') + '    </aside>'.length);
     const css = fs.readFileSync(path.join(dir, 'css/display-wallpaper-controls.css'), 'utf8');
-    await page.setContent(`<style>${css} #timeDisplay { position: fixed; top: 0; right: 0; } #cover { position: fixed; inset: 0; z-index: 999999; }</style><div id="cover"></div><div id="timeDisplay">12:00</div>${panel}<div id="connectionStatus">已连接</div><div id="voiceStatus">监听中</div><div id="displayStageLayers"><div id="displayInteractionLayer">按钮</div><div id="displayMmdFps">60 FPS</div></div>`);
+    await page.setContent(`<style>${css} #timeDisplay { position: fixed; top: 0; right: 0; } #cover { position: fixed; inset: 0; z-index: 999999; }</style><div id="cover"></div><div id="timeDisplay">12:00</div>${panel}<div id="connectionStatus">已连接</div><div id="voiceStatus">监听中</div><div id="displayStageLayers"><div id="displayInteractionLayer"><button id="normalControl">按钮</button><div id="displayVoiceAsrResult" hidden>识别文字</div></div><div id="displayMmdFps">60 FPS</div></div>`);
     await page.evaluate(() => {
         const preferences = {};
         Object.defineProperty(window, 'localStorage', { value: { getItem: key => preferences[key] ?? null, setItem: (key, value) => { preferences[key] = value; } } });
@@ -50,6 +50,12 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         await page.waitForFunction(() => document.getElementById('timeDisplay').getBoundingClientRect().top >= 29.5);
     }
     assert.equal(await page.$eval('#displayInteractionLayer', node => getComputedStyle(node).visibility), 'hidden');
+    await page.$eval('#displayVoiceAsrResult', node => { node.hidden = false; });
+    assert.equal(await page.$eval('#displayVoiceAsrResult', node => getComputedStyle(node).visibility), 'visible');
+    assert.equal(await page.$eval('#displayVoiceAsrResult', node => getComputedStyle(node).pointerEvents), 'none');
+    assert.equal(await page.$eval('#normalControl', node => getComputedStyle(node).visibility), 'hidden');
+    await page.$eval('#displayVoiceAsrResult', node => { node.hidden = true; });
+    assert.equal(await page.$eval('#displayVoiceAsrResult', node => getComputedStyle(node).display), 'none');
     assert.ok(await page.$eval('#wallpaperControls', node => Number(getComputedStyle(node).zIndex) > 999999));
     const events = () => page.evaluate(() => {
         const target = document.getElementById('displayMmdFps');

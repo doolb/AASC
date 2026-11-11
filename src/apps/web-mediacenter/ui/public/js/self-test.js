@@ -648,6 +648,7 @@ const SelfTest = {
                     const [html, css, voiceScript] = await Promise.all([page.text(), style.text(), voice.text()]);
                     const valid = ['wallpaperControls', 'wallpaperOpenPreview', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime', 'wallpaperInteractionShield', 'wallpaperContentInteraction']
                         .every(id => html.includes(`id="${id}"`)) && css.includes('body.is-wallpaper #displayInteractionLayer') && css.includes('.wallpaper-interaction-shield')
+                        && css.includes('body.is-wallpaper #displayVoiceAsrResult')
                         && voiceScript.includes('overlaySnapshot') && voiceScript.includes('overlayAction');
                     return { success: valid, message: valid ? '壁纸控件结构正常' : '壁纸控件结构缺失',
                         details: '仅检查资源结构；桌面触摸和任务关闭需真机验收' };
