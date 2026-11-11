@@ -1145,6 +1145,7 @@ class SmbProvider extends MediaLibraryProvider {
 }
 
 const QuarkShareProvider = require('./quark-share-provider')(MediaLibraryProvider);
+const WebDavProvider = require('./webdav-provider')(MediaLibraryProvider);
 
 // 用户服务任务按生命周期注册提供者；配置可在任务未启动时安全恢复。
 class TaskMediaProvider extends MediaLibraryProvider {
@@ -1266,6 +1267,9 @@ class MediaLibraryManager {
                     getLocalIP: this.getLocalIP,
                     isHttps: this.isHttps
                 });
+                break;
+            case 'webdav':
+                provider = new WebDavProvider(config, { getPort: this.getPort, getLocalIP: this.getLocalIP, isHttps: this.isHttps });
                 break;
             case 'smb':
                 provider = new SmbProvider(config, {
@@ -1519,7 +1523,7 @@ class MediaLibraryManager {
             } else if (lib.config.type === 'quark') {
                 libConfig.url = lib.config.url;
                 libConfig.passcode = lib.config.passcode;
-            } else if (lib.config.type === 'http') {
+            } else if (['http', 'webdav'].includes(lib.config.type)) {
                 libConfig.url = lib.config.url;
                 libConfig.username = lib.config.username;
                 libConfig.password = lib.config.password;
@@ -1563,7 +1567,7 @@ class MediaLibraryManager {
             config.url = configData.url;
             config.passcode = configData.passcode;
             config.readonly = true;
-        } else if (configData.type === 'http') {
+        } else if (['http', 'webdav'].includes(configData.type)) {
             config.url = configData.url;
             config.username = configData.username;
             config.password = configData.password;

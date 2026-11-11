@@ -973,6 +973,13 @@ const mediaLibraryManager = new MediaLibraryManager({
         : null
 });
 
+const { createUserMediaService } = require('../modules/media/user-media-service');
+const userMediaService = createUserMediaService({ root: path.join(USER_CONFIG_DIR, 'media-links') });
+mediaLibraryManager.taskMediaProviders.register('aasc-user-media', {
+    id: 'user-media', name: '用户文件', region: 'domestic', features: ['home', 'resolveLink', 'stream', 'download'],
+    create: () => userMediaService.provider
+});
+
 // 显示端只读媒体库以真实连接地址检查回环，不能通过转发头绕过。
 app.use('/api/display-local', createDisplayLocalRouter({ mediaLibraryManager, isHttps: () => useHttps }));
 
@@ -3301,6 +3308,8 @@ app.use('/js/lib', (req, res, next) => {
     } catch (error) { next(error); }
 });
 app.use(express.json({ limit: '50mb' }));
+
+require('../modules/media/user-media-routes').registerUserMediaRoutes(app, { service: userMediaService, getToken: () => config.get('media.userMediaCaptureToken', '') });
 
 // VRoid 页面地址只用于解析模型 ID；浏览器实际加载同源代理，避免 WebView 直接处理
 // VRoid Hub 的临时重定向、CORS 和临时 URL 过期问题。模型二进制不进入 APK 或 Git。
@@ -6230,7 +6239,7 @@ app.post('/api/media-libraries', async (req, res) => {
             }
         }
         
-        res.json({ status: 'success', library: config.type === 'quark' ? { ...config, passcode: undefined } : config });
+        res.json({ status: 'success', library: config.type === 'quark' ? { ...config, passcode: undefined } : config.type === 'webdav' ? { ...config, password: undefined } : config });
     } catch (err) {
         res.status(500).json({ status: 'error', message: err.message });
     }
@@ -6370,7 +6379,9 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
             return res.status(400).json({ status: 'error', message: '文件路径不能为空' });
         }
         if (await serveQuarkDirectoryDownload(req, res, { nodeId: AASC_MAIN_NODE_ID, libraryId: req.params.id }, '/' + filePath.replace(/^\/+/, ''), quarkDirectoryDownloads)) return;
-        if (req.query.download === '1') {
+        const webdavDownload = req.query.download === '1' && mediaLibraryManager.getLibrary(req.params.id)?.config.type === 'webdav';
+        if (webdavDownload) res.attachment(path.basename(filePath));
+        if (req.query.download === '1' && !webdavDownload) {
             const library = mediaLibraryManager.getLibrary(req.params.id);
             if (!library || library.config.type !== 'quark' || typeof library.provider.getDownloadStream !== 'function') return res.status(400).json({ status: 'error', message: '不支持下载该媒体' });
             const result = await library.provider.getDownloadStream(filePath, req.headers.range);
@@ -8545,6 +8556,9 @@ function handleAascNodeConnection(ws) {
 }
 
 wss.on('connection', (ws, req) => {
+    // 采集令牌仅提供给同源浏览器控制端，避免其他网页经 WebSocket 读取令牌。
+    try { ws.userMediaSameOrigin = new URL(req.headers.origin).host === req.headers.host; }
+    catch { ws.userMediaSameOrigin = false; }
     const url = req.url || '/';
 
     if (url === '/server' || url.startsWith('/server?')) {
@@ -10228,6 +10242,16 @@ const { createTaskMediaCollections } = require('../modules/media/task-media-coll
 const taskMediaCollections = createTaskMediaCollections({ config, broadcast: broadcastToControls });
 
 async function handleControlMessageFallback(data, ws) {
+    if (data.type === 'getUserMediaCaptureToken') {
+        if (!ws.userMediaSameOrigin) { ws.send(JSON.stringify({ type: 'userMediaCaptureToken', error: '仅同源控制端可读取采集凭据' })); return; }
+        let token = String(config.get('media.userMediaCaptureToken', '') || '');
+        if (!/^[a-f0-9]{64}$/.test(token)) {
+            token = require('node:crypto').randomBytes(32).toString('hex');
+            if (!config.set('media.userMediaCaptureToken', token)) { ws.send(JSON.stringify({ type: 'userMediaCaptureToken', error: '保存采集凭据失败' })); return; }
+        }
+        ws.send(JSON.stringify({ type: 'userMediaCaptureToken', token }));
+        return;
+    }
     if (['taskMediaCollectionsGet', 'taskMediaFolderCreate', 'taskMediaFolderDelete', 'taskMediaAdd', 'taskMediaMove', 'taskMediaRemove'].includes(data.type)) { taskMediaCollections.handle(ws, data); return; }
     if (['shareFoldersGet', 'shareFolderCreate', 'shareFolderMove', 'shareFolderDelete', 'quarkCookieSet', 'bilibiliCookieSet'].includes(data.type)) { shareFoldersService.handle(ws, data); return; }
     if (['bilibiliCollectionGet', 'bilibiliListGet', 'bilibiliListAdd', 'bilibiliListRemove'].includes(data.type)) { await bilibiliListService.handle(ws, data); return; }

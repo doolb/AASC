@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 
-const LOCAL_LIBRARY_TYPES = new Set(['local', 'smb', 'http', 'android-saf']);
+const LOCAL_LIBRARY_TYPES = new Set(['local', 'smb', 'http', 'webdav', 'android-saf']);
 const PLAYABLE_MEDIA_TYPES = new Set(['image', 'gif', 'video', 'audio', 'text']);
 // 弱引用令牌只关联在线显示端，后续播放操作可取消尚未完成的目录扫描。
 const DISPLAY_PLAYLIST_REQUESTS = new WeakMap();

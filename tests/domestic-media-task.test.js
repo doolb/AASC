@@ -22,14 +22,14 @@ function context(registry) {
   return { params: { hongguoCookie: 'private-cookie' }, log() {}, registerMediaProvider: definition => registry.register('new-task', definition) };
 }
 
-test('国内任务注册两个真实注册表条目并停止注销', async () => withProviders(async getStops => {
+test('国内任务注册三个真实注册表条目并停止注销', async () => withProviders(async getStops => {
   const registry = new TaskMediaProviderRegistry();
   const service = await run(context(registry));
-  assert.deepEqual(registry.list().map(item => item.id), ['hongguo', 'tomato']);
+  assert.deepEqual(registry.list().map(item => item.id), ['hongguo', 'tomato', 'douyin']);
   for (const entry of registry.list()) {
     assert.equal(entry.region, 'domestic');
     assert.equal(entry.proxyDefault, false);
-    assert.deepEqual(entry.features, ['home', 'search', 'resolveLink', 'related', 'stream', 'download']);
+    assert.deepEqual(entry.features, entry.id === 'douyin' ? ['resolveLink', 'stream', 'download'] : ['home', 'search', 'resolveLink', 'related', 'stream', 'download']);
   }
   assert.equal(registry.get('hongguo').create({}).options.cookie, 'private-cookie');
   await service.stop(); await service.stop();

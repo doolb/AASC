@@ -23,6 +23,7 @@ const CONTROL_REMOTE_CONFIG_HANDLERS = Object.freeze({
     serverPortConfig: data => window.Settings?.handleServerPortConfig(data),
     serverPortConfigError: data => window.Settings?.handleServerPortConfigError(data),
     // 代理配置驱动设置面板代理列表、B 站下拉框与任务页签下拉框。
+    userMediaCaptureToken: data => data.error ? window.showToast?.(data.error, 'error') : window.prompt('油猴采集凭据，请复制并在油猴脚本设置中粘贴', data.token),
     webProxyConfig: data => window.MediaLibrary?.handleWebProxyConfig?.(data),
     webProxyConfigError: data => window.MediaLibrary?.handleWebProxyConfigError?.(data)
 });

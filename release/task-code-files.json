@@ -56,7 +56,9 @@
         "providers/proxy.js",
         "providers/http.js",
         "providers/hongguo.js",
-        "providers/tomato.js"
+        "providers/tomato.js",
+        "providers/douyin.js",
+        "providers/ytdlp.js"
       ],
       "codeRequirement": {
         "minimumVersion": 169,

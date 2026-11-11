@@ -1,5 +1,8 @@
 ### 媒体库
 
+- ✅ [2026-11-11] 新增 WebDAV 媒体库、抖音任务来源及油猴用户媒体采集。
+  - 新增 `webdav-provider.js`、`douyin.js`、`user-media-service.js`、采集脚本及相关界面；支持 AList WebDAV、用户分站点播放列表、直链下载与受限 M3U8 转封装。47 项定向测试通过；真实 AList 与抖音 Cookie 待验收，匿名抖音测试提示需新鲜 Cookie。服务包和任务代码包待构建。
+
 - ✅ [2026-11-11] 私密媒体源统一使用逐源命名代理选择，不再按 jp/us 名称自动绑定；已有选择保留。
   - 更新 `private-media/task.js`、`private-media/gallery.js`、`server-app.js`、`web-proxy-settings.js`、代理专项测试及媒体库/自测文档；页面、图片、封面均按请求读取代理。36 项定向测试通过，真实站点与代理待现场验收。
 

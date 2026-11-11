@@ -59,6 +59,7 @@ const MediaLibrary = {
             this.setProviderProxy('quark', event.target.value);
         });
         document.getElementById('taskSourceHomeBtn')?.addEventListener('click', () => this.loadTaskSourceHome());
+        document.getElementById('userMediaCaptureToken')?.addEventListener('click', () => window.WebSocketManager?.send({ type: 'getUserMediaCaptureToken' }));
         document.getElementById('taskSourceSearchBtn')?.addEventListener('click', () => this.searchTaskSource());
         document.getElementById('taskSourceLinkBtn')?.addEventListener('click', () => this.openTaskSourceLink());
         document.getElementById('taskSourceAddBtn')?.addEventListener('click', () => this.addTaskMediaLink());
@@ -1081,7 +1082,8 @@ const MediaLibrary = {
         }
         Object.values(groups).forEach(group => group.replaceChildren());
         for (const source of this.taskMediaSources || []) {
-            const host = groups[source.region] || groups.domestic;
+            const host = source.id === 'user-media' ? document.getElementById('userMediaTab') : (groups[source.region] || groups.domestic);
+            if (!host) continue;
             const tab = document.createElement('button');
             tab.type = 'button';
             tab.className = 'media-library-tab media-task-source';
@@ -1105,10 +1107,11 @@ const MediaLibrary = {
         this.taskMediaShowingSaved = false;
         this.currentLibrary = { id: source.libraryId, sourceLibraryId: source.libraryId, providerId: id, type: 'task', name: source.name, ownerNodeId: 'main-server', ownerNodeName: '主服务器', isLocal: true, remote: false, readonly: true };
         this.currentPath = '/'; this.renderTabs(); this.renderLibraryToolbarState();
+        const captureToken = document.getElementById('userMediaCaptureToken'); if (captureToken) captureToken.hidden = id !== 'user-media';
         if (!source.features?.length) return this.loadContent('/');
         const title = document.getElementById('taskSourceTitle'); if (title) title.textContent = source.name || source.id;
         for (const [id, feature] of [['taskSourceHomeBtn', 'home'], ['taskSourceSearchInput', 'search'], ['taskSourceSearchBtn', 'search'], ['taskSourceLinkInput', 'resolveLink'], ['taskSourceLinkBtn', 'resolveLink'], ['taskSourceAddBtn', 'resolveLink']]) {
-            const element = document.getElementById(id); if (element) element.hidden = !source.features.includes(feature);
+            const element = document.getElementById(id); if (element) element.hidden = !source.features.includes(feature) || (source.id === 'user-media' && feature === 'resolveLink');
         }
         document.getElementById('taskMediaSourceList')?.replaceChildren();
         const related = document.getElementById('taskSourceRelated'); if (related) related.hidden = true;
@@ -1264,7 +1267,7 @@ const MediaLibrary = {
         }
         const title = document.createElement('div'); title.className = 'bilibili-video-title'; title.textContent = item.title || item.id; title.title = item.title || '';
         const actions = document.createElement('div'); actions.className = 'bilibili-video-actions';
-        if (features.includes('resolveLink') && (item.url || item.id)) {
+        if (sourceId !== 'user-media' && features.includes('resolveLink') && (item.url || item.id)) {
             const add = document.createElement('button'); add.type = 'button'; add.textContent = '加入'; add.onclick = () => this.addTaskMediaLink(item); actions.appendChild(add);
         }
         if (item.mediaType === 'collection' && features.includes('resolveLink')) {
@@ -1274,7 +1277,21 @@ const MediaLibrary = {
         }
         if (features.includes('download') && item.downloadable !== false) {
             const download = document.createElement('button'); download.type = 'button'; download.textContent = item.downloaded ? '已下载' : '下载'; download.disabled = Boolean(item.downloaded);
-            download.onclick = () => this.downloadTaskSourceItem(item, sourceId, download); actions.appendChild(download);
+            download.onclick = async () => {
+                if (sourceId !== 'user-media') return this.downloadTaskSourceItem(item, sourceId, download);
+                download.disabled = true;
+                try {
+                    const response = await fetch('/api/user-media/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id }) });
+                    await this.parseResponse(response);
+                    if (item.playable === false) {
+                        item.playable = true;
+                        const play = [...actions.querySelectorAll('button')].find(button => button.textContent === (item.playbackMessage || '暂不可播放'));
+                        if (play) { play.disabled = false; play.textContent = '播放'; }
+                    }
+                    showToast('已下载到用户文件目录', 'success');
+                } catch (error) { showToast(error.message, 'error'); }
+                finally { download.disabled = false; }
+            }; actions.appendChild(download);
         }
         card.append(title, actions); return card;
     },
@@ -2426,6 +2443,12 @@ const MediaLibrary = {
                 }
                 
                 const isQuarkVideo = item.mediaType === 'video' && this.currentLibrary?.type === 'quark';
+                let webdavDownloadUrl = '';
+                if (this.currentLibrary?.type === 'webdav') {
+                    const url = new URL(fallbackUrl || playbackUrl, window.location.href);
+                    url.searchParams.set('download', '1');
+                    webdavDownloadUrl = url.href;
+                }
                 const cacheKey = isQuarkVideo ? this.cacheCardKey({ cacheNodeId: this.currentLibrary.remote ? String(this.currentLibrary.ownerNodeId || '') : 'main-server', cacheLibraryId: String(this.currentLibrary.sourceLibraryId || this.currentLibrary.id || ''), cachePath: item.path }) : '';
                 return `
                     <div class="media-library-item ${isPlaying ? 'playing' : ''}" data-url="${this._escapeHtml(playbackUrl)}" ${cacheKey ? `data-cache-key="${this._escapeHtml(cacheKey)}" data-cache-path="${this._escapeHtml(item.path)}"` : ''}>
@@ -2440,7 +2463,7 @@ const MediaLibrary = {
                             <button class="btn-play" onclick="MediaLibrary.playMedia('${this._escapeHtml(playbackUrl)}', '${this._escapeHtml(item.mediaType)}', '${this._escapeHtml(item.name)}', '${this._escapeHtml(item.format || '')}', '${this._escapeHtml(directUrl ? fallbackUrl : '')}', this.closest('.media-library-item').dataset.cachePath || '')">播放</button>
                             ${this.currentLibrary?.type === 'quark'
                                 ? `<button class="btn-download" ${item.downloaded ? 'disabled' : ''} onclick="event.stopPropagation(); MediaLibrary.showQuarkFileDownloadDialog('${this._escapeHtml(item.path)}')">${item.downloaded ? '已下载' : '下载'}</button>`
-                                : ''}
+                                : (webdavDownloadUrl ? `<a class="btn-download" href="${this._escapeHtml(webdavDownloadUrl)}" download>下载</a>` : '')}
                             ${this.currentLibrary?.readonly ? '' : `<button class="btn-delete" onclick="MediaLibrary.deleteItem('${item.path}')">删除</button>`}
                         </div>
                     </div>
@@ -2457,7 +2480,7 @@ const MediaLibrary = {
     },
     
     getLibraryIcon(type) {
-        const icons = { local: '💾', http: '🌐', smb: '🖥️', quark: '☁️', task: '🧩' };
+        const icons = { local: '💾', http: '🌐', webdav: '☁️', smb: '🖥️', quark: '☁️', task: '🧩' };
         return icons[type] || '📁';
     },
     
@@ -2640,6 +2663,7 @@ const MediaLibrary = {
                         <select id="libType" onchange="MediaLibrary.onTypeChange(this.value)">
                             <option value="local">本地磁盘</option>
                             <option value="http">HTTP远程</option>
+                            <option value="webdav">WebDAV</option>
                             <option value="smb">SMB网络共享</option>
                             <option value="quark">夸克网盘分享</option>
                             <option value="task">用户任务媒体源</option>
@@ -2750,6 +2774,7 @@ const MediaLibrary = {
                         <select id="libType" disabled>
                             <option value="local" ${lib.type === 'local' ? 'selected' : ''}>本地磁盘</option>
                             <option value="http" ${lib.type === 'http' ? 'selected' : ''}>HTTP远程</option>
+                            <option value="webdav" ${lib.type === 'webdav' ? 'selected' : ''}>WebDAV</option>
                             <option value="smb" ${lib.type === 'smb' ? 'selected' : ''}>SMB网络共享</option>
                             <option value="quark" ${lib.type === 'quark' ? 'selected' : ''}>夸克网盘分享</option>
                             <option value="task" ${lib.type === 'task' ? 'selected' : ''}>用户任务媒体源</option>
@@ -2781,7 +2806,7 @@ const MediaLibrary = {
     
     onTypeChange(type) {
         document.querySelectorAll('.http-only').forEach(el => {
-            el.style.display = (type === 'http' || type === 'smb') ? 'block' : 'none';
+            el.style.display = (type === 'http' || type === 'webdav' || type === 'smb') ? 'block' : 'none';
         });
         document.querySelectorAll('.smb-only').forEach(el => {
             el.style.display = type === 'smb' ? 'block' : 'none';
@@ -2808,7 +2833,7 @@ const MediaLibrary = {
         
         if (type === 'local') {
             config.path = document.getElementById('libPath').value.trim() || './uploads';
-        } else if (type === 'http') {
+        } else if (type === 'http' || type === 'webdav') {
             config.url = document.getElementById('libUrl').value.trim();
             config.username = document.getElementById('libUsername').value.trim();
             config.password = document.getElementById('libPassword').value;

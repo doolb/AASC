@@ -137,6 +137,7 @@
                     <div class="media-library-tabs" role="tablist" aria-label="媒体库类型">
                         <div class="media-tab-section media-tab-local"><div class="media-region-group">
                         <button class="media-library-tab active" type="button" data-tab="libraries" id="mediaTabLibraries" onclick="MediaLibrary.switchTab('libraries')">本地媒体</button>
+                        <span id="userMediaTab"></span>
                         </div></div>
                         <div class="media-tab-section"><div class="media-region-group">
                         <button class="media-library-tab" type="button" data-tab="quark" id="mediaTabQuark" onclick="MediaLibrary.switchTab('quark')">夸克分享</button>
@@ -172,6 +173,7 @@
                         <button type="button" onclick="MediaLibrary.searchBilibili()">搜索</button>
                     </div>
                     <div id="taskMediaSourceBar" class="quark-share-bar" hidden>
+                        <button type="button" id="userMediaCaptureToken" hidden>油猴采集凭据</button>
                         <button type="button" id="taskSourceHomeBtn">首页</button>
                         <input id="taskSourceSearchInput" type="search" placeholder="搜索媒体源内容" autocomplete="off">
                         <button type="button" id="taskSourceSearchBtn">搜索</button>
