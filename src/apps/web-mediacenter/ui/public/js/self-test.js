@@ -39,6 +39,21 @@ const SelfTest = {
     
     tests: [
         {
+            id: 'browser_media_api_auth',
+            name: '浏览器媒体接口保护',
+            description: '不使用凭据检查浏览器接口保护，不启动浏览器',
+            category: '系统功能',
+            run: async () => {
+                try {
+                    const response = await fetch('/api/browser-media/status', { cache: 'no-store' });
+                    const data = await response.json();
+                    const valid = (response.status === 403 && data.code === 'BROWSER_MEDIA_UNAUTHORIZED')
+                        || (response.status === 503 && data.code === 'BROWSER_MEDIA_API_DISABLED');
+                    return { success: valid, message: valid ? '接口已保护或未启用' : '接口保护状态异常' };
+                } catch (error) { return { success: false, message: `检查浏览器接口失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'media_loop_range',
             name: '媒体循环双手柄',
             description: '只读检查双手柄透明叠层、小数时间与边界；不改变播放',

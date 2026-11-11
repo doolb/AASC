@@ -1210,6 +1210,8 @@ B 站视频输入框也支持公开收藏列表链接（`https://www.bilibili.co
 
 Linux 图形桌面可以启动内置“浏览器媒体”服务任务，`allowedOrigins` 填入允许的 HTTPS 网站来源（逗号分隔），`initialUrl` 可填写启动时打开的页面；有多个来源时应分别加入允许列表。启动后可在任务卡片“查看运行页面”处理验证，“扫描并保存”会将当前页全部候选写入用户文件媒体源。任务自动使用独立 Vivaldi profile，不需油猴扩展；仅兼容 AASC 自带采集脚本的必要接口。任务通过内部 `context.browserMedia` 提供同源页面获取给后续媒体来源，现有国内、国外来源默认不会自动切换。浏览器仅支持无凭据 HTTP/HTTPS/SOCKS5/SOCKS5H 代理，每次响应不超过 2 MiB；验证挑战、代理或上游访问失败需要处理后重试。Android WebView 尚未接入。
 
+服务端启动环境设置 `AASC_BROWSER_MEDIA_API_TOKEN` 为随机 64 位小写十六进制令牌（可用 `openssl rand -hex 32` 生成）后，可调用 `/api/browser-media/status`、`/api/browser-media/request` 和 `/api/browser-media/extract`；不设置时接口关闭。浏览器任务仍须启动，目标网站须列入任务允许列表。调用端设置相同环境变量，运行 `node scripts/browser-media-client.js extract https://example.com/ script http://127.0.0.1:8081`；`request` 可读取页面，`status` 查看任务状态。脚本也可通过 `require('./scripts/browser-media-client').browserMediaCall` 调用，传入 `operation`、`options` 和 `server`；`request` 的 options 支持 `sourceId`、`pageUrl`、`url`、`proxyUrl`、`responseType` 和 `range`，二进制结果的 body 为 base64。远程调用须使用 HTTPS 并妥善保管令牌；服务端 HTTP 路由本身不强制 HTTPS，应在可信网络或 TLS 代理后使用。出现 `BROWSER_MEDIA_CHALLENGE` 时在任务页面完成人工验证后重试。
+
 红果打开剧集后按网页列出的顺序显示分集；网页没有声明公开播放地址或该集页面暂时无法读取时，分集显示“暂无公开播放地址”，不能播放或下载。显示端文件目录仅显示网页声明了公开视频地址的分集。
 
 本机可启动 `overseas-media` 使用 YouTube、Pinterest 和 Pixiv 来源，国外任务不随 release 发布。各来源可在媒体库选择命名代理，未选择时直连。YouTube 需要 yt-dlp，自动安装仅支持指定 Linux glibc 平台，其他平台需配置可执行文件；直链不可用时报错。Pinterest 的真实首页、搜索、分页与相关推荐尚不可用，登录态与真实视频尚未验收；部分匿名 Pin 图片链接可解析。Pixiv 支持作品与多图浏览，真实 CDN、登录内容和动图尚待验收；动图转码需要 ffmpeg 且无系统级内存硬限制。站点访问及资源权限受上游限制。

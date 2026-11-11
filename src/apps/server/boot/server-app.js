@@ -3311,6 +3311,7 @@ app.use('/js/lib', (req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 
 require('../modules/media/user-media-routes').registerUserMediaRoutes(app, { service: userMediaService, getToken: () => config.get('media.userMediaCaptureToken', '') });
+require('../modules/media/browser-media-routes').registerBrowserMediaRoutes(app, { service: require('../modules/media/browser-media-registry').browserMedia, getToken: () => process.env.AASC_BROWSER_MEDIA_API_TOKEN });
 
 // VRoid 页面地址只用于解析模型 ID；浏览器实际加载同源代理，避免 WebView 直接处理
 // VRoid Hub 的临时重定向、CORS 和临时 URL 过期问题。模型二进制不进入 APK 或 Git。

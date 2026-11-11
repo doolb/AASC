@@ -14758,3 +14758,7 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 
 - ✅ [2026-11-10] 将 B 站首页按钮移到工具栏最前面，窄屏下更容易看到并点击。
   - 修改 `upload.html` 和 `task-media-tab-browser.test.js`；Chromium 测试 1/1、`git diff --check` 通过，真实设备与热门接口待验收。
+### 浏览器媒体
+
+- ✅ [2026-11-11] 增加浏览器媒体 HTTP 业务接口和普通 Node.js 脚本。
+  - `browser-media-routes.js`、`server-app.js`、`browser-media-client.js` 复用桌面任务，独立令牌保护状态、请求和提取；同步设计、伪代码、任务、使用说明及自测。定向测试 7 项通过，真实 Cloudflare 挑战通过后仍待现场验收。
