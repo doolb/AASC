@@ -1,5 +1,8 @@
 ### 媒体库
 
+- ✅ [2026-11-11] 显示端 B 站接入热门首页、当前视频相关推荐和播放/加入/下载/复制，媒体库顶端增加本机保存的背景透明度滑块。
+  - 更新 `display-media-library.js`、`display-bilibili-source.js`、显示页面与样式、服务端接线和自测；35 项定向测试通过，真实 B 站网络及 Android 设备待验收，服务包待更新。
+
 - ✅ [2026-11-11] 新增 Linux 桌面浏览器媒体服务任务和 AASC 自有油猴采集兼容。
   - 新增 `browser-media-service.js`、`browser-media-registry.js` 和 `browser-media.js`，任务为后续媒体来源提供受限浏览器请求；桌面专项 6 项、豆包/Android 回归 15 项通过；真实 Vivaldi 验证普通页、二进制、视频采集与代理失败不直连，Cloudflare 挑战识别成功，挑战完成后的读取待验收。服务包待更新。
 

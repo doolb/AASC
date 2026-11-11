@@ -624,10 +624,12 @@ const SelfTest = {
             category: '界面布局',
             run: async () => {
                 try {
-                    const response = await fetch('/js/display-media-library.js', { cache: 'no-store' });
-                    if (!response.ok) return { success: false, message: '显示端媒体来源资源不可读取' };
-                    const script = await response.text();
-                    const valid = ['quark', 'bilibili', '国内媒体', 'display-local/libraries'].every(value => script.includes(value));
+                    const responses = await Promise.all(['/js/display-media-library.js', '/display.html', '/css/display-media-library.css']
+                        .map(url => fetch(url, { cache: 'no-store' })));
+                    if (responses.some(response => !response.ok)) return { success: false, message: '显示端媒体来源资源不可读取' };
+                    const [script, html, css] = await Promise.all(responses.map(response => response.text()));
+                    const valid = ['quark', 'bilibili', '国内媒体', 'display-local/libraries', '/d:home', '/d:related:'].every(value => script.includes(value))
+                        && html.includes('displayMediaLibraryOpacity') && css.includes('--display-media-background-alpha');
                     return { success: valid, message: valid ? '显示端媒体来源结构正常' : '显示端媒体来源结构缺失', details: '仅检查入口结构；实际浏览和播放需设备及来源验收' };
                 } catch (error) { return { success: false, message: `显示端媒体来源检查失败: ${error.message}` }; }
             }

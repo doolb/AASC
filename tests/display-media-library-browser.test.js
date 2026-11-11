@@ -21,6 +21,33 @@ test('媒体库页面和提示显示在 MMD 舞台与设置面板上方', { skip
     assert.ok(await page.$eval('#notice', node => Number(getComputedStyle(node).zIndex) > Number(getComputedStyle(document.getElementById('stage')).zIndex)));
 });
 
+test('媒体库透明度仅影响背景并在页面重开后恢复', { skip: !fs.existsSync(chrome), timeout: 30000 }, async t => {
+    const app = express();
+    app.get('/', (_req, res) => res.type('html').send('<div id="displayMediaLibraryPanel" class="display-media-library-panel"><label>透明度<input id="displayMediaLibraryOpacity" type="range" min="0" max="100" value="6"><output id="displayMediaLibraryOpacityValue"></output></label><span id="text">文字</span></div><button id="displayMediaLibraryToggle"></button>'));
+    const server = await new Promise(resolve => { const instance = app.listen(0, '127.0.0.1', () => resolve(instance)); });
+    t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    const open = async () => {
+        await page.goto(`http://127.0.0.1:${server.address().port}/`);
+        await page.addStyleTag({ path: path.join(publicDir, 'css/display-media-library.css') });
+        await page.addScriptTag({ path: path.join(publicDir, 'js/display-media-library.js') });
+        await page.evaluate(() => window.DisplayMediaLibrary.init());
+    };
+    await open();
+    await page.$eval('#displayMediaLibraryOpacity', node => { node.value = '100'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    assert.equal(await page.$eval('#displayMediaLibraryPanel', node => getComputedStyle(node).backgroundColor), 'rgba(8, 10, 16, 0)');
+    assert.equal(await page.$eval('#text', node => getComputedStyle(node).opacity), '1');
+    await open();
+    assert.equal(await page.$eval('#displayMediaLibraryOpacity', node => node.value), '100');
+    await page.$eval('#displayMediaLibraryOpacity', node => { node.value = '0'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    assert.equal(await page.$eval('#displayMediaLibraryPanel', node => getComputedStyle(node).backgroundColor), 'rgb(8, 10, 16)');
+    await page.evaluate(() => localStorage.setItem('aasc.display.mediaLibraryTransparency', 'invalid'));
+    await open();
+    assert.equal(await page.$eval('#displayMediaLibraryOpacity', node => node.value), '6');
+});
+
 test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批量播放', {
     skip: !fs.existsSync(chrome), timeout: 45000
 }, async t => {
@@ -28,6 +55,10 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     $('script, link[rel="stylesheet"]').remove();
     const html = $.html();
     const app = express();
+    app.use(express.json());
+    const actions = [];
+    app.post('/api/display-local/bilibili/add', (req, res) => { actions.push({ type: 'add', ...req.body }); res.json({ status: 'success' }); });
+    app.post('/api/bilibili/download', (req, res) => { actions.push({ type: 'download', ...req.body }); res.json({ status: 'success' }); });
     app.get('/display.html', (req, res) => res.type('html').send(html));
     app.get('/api/display-local/libraries', (req, res) => res.json({
         libraries: [
@@ -40,6 +71,13 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
     app.get('/api/display-local/list', (req, res) => {
         if (req.query.libraryId === 'task-auto:hongguo') return res.status(410).json({ code: 'TASK_SOURCE_STOPPED' });
         const dir = String(req.query.path || '/');
+        if (req.query.libraryId === 'display-bilibili' && dir.startsWith('/d:')) {
+            const bvid = dir.startsWith('/d:home') ? 'BVabcdefghij' : dir.match(/BV[0-9A-Za-z]{10}/)?.[0];
+            const send = () => res.json({ path: dir, parent: '/', entries: [{ name: `B站测试${bvid}`, bvid, page: 1,
+                path: `${dir}/v:${bvid}:1`, type: 'file', mediaType: 'video' }] });
+            if (dir.includes('BVabcdefghij') && !dir.startsWith('/d:home')) return setTimeout(send, 150);
+            return send();
+        }
         const entries = dir === '/'
             ? [
                 { name: '合集A', path: '/合集A', type: 'directory' },
@@ -78,6 +116,41 @@ test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批�
 
     await page.click('#displayMediaLibraryToggle');
     await page.waitForSelector('.display-media-library-source');
+    await page.$eval('#displayMediaLibraryOpacity', node => { node.value = '75'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+    assert.equal(await page.$eval('#displayMediaLibraryPanel', node => node.style.getPropertyValue('--display-media-background-alpha')), '0.25');
+    assert.equal(await page.$eval('#displayMediaLibraryOpacityValue', node => node.textContent), '75%');
+    assert.equal(await page.evaluate(() => localStorage.getItem('aasc.display.mediaLibraryTransparency')), '75');
+    await page.click('[data-library-id="display-bilibili"]');
+    await page.waitForFunction(() => document.querySelector('#displayMediaLibraryPath').textContent === '/d:home');
+    assert.match(await page.$eval('#displayMediaLibraryEntries', node => node.textContent), /B站热门/);
+    assert.deepEqual(await page.$$eval('.display-media-bilibili-actions button', nodes => nodes.map(node => node.textContent)), ['播放', '加入', '下载', '复制链接']);
+    await page.evaluate(() => [...document.querySelectorAll('.display-media-bilibili-actions button')].find(node => node.textContent === '加入').click());
+    await page.waitForFunction(() => document.getElementById('displayMediaLibraryNotice').textContent === '已加入 B 站视频');
+    assert.deepEqual(actions[0], { type: 'add', bvid: 'BVabcdefghij', page: 1 });
+    await page.evaluate(() => [...document.querySelectorAll('.display-media-bilibili-actions button')].find(node => node.textContent === '下载').click());
+    await page.waitForSelector('dialog[open]');
+    await page.evaluate(() => [...document.querySelectorAll('dialog button')].find(node => node.textContent === '开始下载').click());
+    await page.waitForFunction(() => document.getElementById('displayMediaLibraryNotice').textContent === '已开始下载');
+    assert.equal(actions[1].url, 'https://www.bilibili.com/video/BVabcdefghij'); assert.equal(actions[1].targetId, 'local1');
+    await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async value => { window.copied = value; } } }); });
+    await page.evaluate(() => [...document.querySelectorAll('.display-media-bilibili-actions button')].find(node => node.textContent === '复制链接').click());
+    await page.waitForFunction(() => window.copied);
+    assert.equal(await page.evaluate(() => window.copied), 'https://www.bilibili.com/video/BVabcdefghij');
+    await page.evaluate(() => [...document.querySelectorAll('.display-media-bilibili-actions button')].find(node => node.textContent === '播放').click());
+    assert.equal(await page.evaluate(() => window.sent.at(-1).path), '/d:home/v:BVabcdefghij:1');
+    await page.click('#displayMediaLibraryToggle');
+    await page.waitForFunction(() => document.querySelector('#displayMediaLibraryPath').textContent === '/d:home');
+    await page.evaluate(() => window.DisplayMediaLibrary.setCurrentMedia({ url: '/api/bilibili/dash/BVabcdefghij?p=1', fileName: '当前视频' }));
+    await page.waitForFunction(() => document.querySelector('#displayMediaLibraryEntries').textContent.includes('正在播放：当前视频'));
+    await page.evaluate(() => {
+        window.DisplayMediaLibrary.setCurrentMedia({ url: '/api/bilibili/dash/BVabcdefghij?p=1', fileName: '旧视频' });
+        window.DisplayMediaLibrary.setCurrentMedia({ url: '/api/bilibili/dash/BVklmnopqrst?p=1', fileName: '新视频' });
+    });
+    await page.waitForFunction(() => document.querySelector('#displayMediaLibraryEntries').textContent.includes('正在播放：新视频'));
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.doesNotMatch(await page.$eval('#displayMediaLibraryEntries', node => node.textContent), /旧视频/);
+    await page.evaluate(() => window.DisplayMediaLibrary.setCurrentMedia(null));
+    assert.doesNotMatch(await page.$eval('#displayMediaLibraryEntries', node => node.textContent), /相关推荐/);
     assert.deepEqual(
         await page.$$eval('.display-media-library-source', nodes => nodes.map(node => node.textContent)),
         ['上传', '夸克分享', 'B 站', '红果短剧']

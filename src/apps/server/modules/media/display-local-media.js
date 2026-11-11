@@ -74,6 +74,7 @@ function normalizeDisplayEntries(items, { isHttps = false } = {}) {
             mediaType: item.mediaType === 'gif' ? 'image' : item.mediaType,
             directUrl: urls.directUrl,
             proxyUrl: urls.proxyUrl,
+            ...(item.bvid ? { bvid: item.bvid, page: item.page, cover: item.cover, author: item.author } : {}),
             ...(item.mediaType === 'text' ? { format: item.format === 'markdown' ? 'markdown' : 'plain' } : {})
         });
     }
@@ -104,6 +105,13 @@ function createDisplayLocalRouter({
         } catch (error) {
             res.status(500).json({ error: '媒体库加载失败，请稍后重试' });
         }
+    });
+    router.post('/bilibili/add', express.json({ limit: '1kb' }), async (req, res) => {
+        try {
+            if (!bilibiliSource) throw new Error('B 站来源不可用');
+            await bilibiliSource.add(req.body?.bvid, req.body?.page);
+            res.json({ status: 'success' });
+        } catch (error) { res.status(400).json({ error: error.message || '保存失败' }); }
     });
     router.get('/list', async (req, res) => {
         let libraryId = '';

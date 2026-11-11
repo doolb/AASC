@@ -737,6 +737,7 @@
     <div id="displayMediaLibraryPanel" class="display-media-library-panel" hidden>
         <div class="display-media-library-header">
             <strong>媒体库</strong>
+            <label class="display-media-library-opacity">背景透明度 <input id="displayMediaLibraryOpacity" type="range" min="0" max="100" step="1" value="6" aria-label="媒体库背景透明度"><output id="displayMediaLibraryOpacityValue">6%</output></label>
             <button id="displayMediaLibraryClose" class="display-stage-button" type="button">关闭</button>
         </div>
         <div class="display-media-library-body">
@@ -5589,6 +5590,7 @@
         }
 
         function showMedia(data, noActivate, paused, resumeTime = 0) {
+            window.DisplayMediaLibrary?.setCurrentMedia(data);
             mediaLoopPlayers.forEach(player => player.reset());
             const loadSequence = ++mediaLoadSequence;
             stopBilibiliDash();
@@ -5886,6 +5888,7 @@
             mediaText.style.display = 'none';
             fileNameDisplay.textContent = '';
             currentMediaType = null;
+            window.DisplayMediaLibrary?.setCurrentMedia(null);
             waitingMessage.style.display = 'block';
             reportPlayState(false);
         }

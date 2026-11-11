@@ -980,11 +980,12 @@ mediaLibraryManager.taskMediaProviders.register('aasc-user-media', {
     create: () => userMediaService.provider
 });
 
-// 显示端的 B 站目录只映射已保存项目；所有外部播放地址由服务端构造。
+// 显示端的 B 站目录映射已保存项目和发现快照；所有播放地址由服务端构造。
 const { DISPLAY_BILIBILI_ID, createDisplayBilibiliSource } = require('../modules/media/display-bilibili-source');
 const displayBilibiliSource = createDisplayBilibiliSource({
     getService: () => bilibiliListService,
-    getFolders: () => config.get('media.shareFolders', {})?.bilibili || {}
+    getFolders: () => config.get('media.shareFolders', {})?.bilibili || {},
+    getDiscovery: () => discoveryBilibili
 });
 // 显示端只读媒体库以真实连接地址检查回环，不能通过转发头绕过。
 app.use('/api/display-local', createDisplayLocalRouter({ mediaLibraryManager, bilibiliSource: displayBilibiliSource, isHttps: () => useHttps }));
