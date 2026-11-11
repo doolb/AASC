@@ -644,7 +644,7 @@ const SelfTest = {
                     const responses = await Promise.all(['/display.html', '/js/display-quick-control.js', '/css/display-quick-control.css'].map(url => fetch(url, { cache: 'no-store' })));
                     if (responses.some(response => !response.ok)) return { success: false, message: '快捷控制资源不可读取' };
                     const [html, script, css] = await Promise.all(responses.map(response => response.text()));
-                    const valid = html.includes('displayQuickControlToggle') && html.includes('displayQuickControlPanel') && script.includes('displayQuickControl') && css.includes('.display-quick-control');
+                    const valid = html.includes('displayQuickControlToggle') && html.includes('displayQuickControlPanel') && html.includes('quickProgress') && script.includes('displayQuickControl') && script.includes("send('seek'") && css.includes('.display-quick-control');
                     return { success: valid, message: valid ? '快捷控制资源正常' : '快捷控制资源缺失', details: '实际播放和触控需要设备验收' };
                 } catch (error) { return { success: false, message: `快捷控制检查失败: ${error.message}` }; }
             }

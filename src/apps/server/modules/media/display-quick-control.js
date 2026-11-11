@@ -16,6 +16,7 @@ function normalizeQuickControl(data, displayId) {
         clearMedia: value => value === undefined,
         play: value => typeof value === 'boolean',
         volume: value => Number.isInteger(value) && value >= 0 && value <= 100,
+        seek: value => Number.isInteger(value) && value >= 0 && value <= 100,
         fit: value => ['contain', 'cover', 'dynamic', 'crop'].includes(value),
         textPlayback: value => value && ['play', 'pause', 'prev', 'next', 'stop'].includes(value.action),
         textStyle: value => value && ['auto', 'small', 'medium', 'large'].includes(value.fontSize)

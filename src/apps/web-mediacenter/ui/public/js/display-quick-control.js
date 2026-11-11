@@ -2,6 +2,8 @@
     'use strict';
     let options;
     let timer;
+    let progressPreview = null;
+    let progressTimer = null;
     let state = { volume: 100, fit: 'contain', textStyle: {} };
     const get = id => document.getElementById(id);
     const send = (action, value) => {
@@ -12,9 +14,38 @@
         get('quickControlStatus').textContent = '';
         return true;
     };
+    function formatTime(seconds) {
+        const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor(total % 3600 / 60);
+        const remainder = String(total % 60).padStart(2, '0');
+        return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${remainder}` : `${minutes}:${remainder}`;
+    }
+    function clearProgressPreview() {
+        progressPreview = null;
+        clearTimeout(progressTimer);
+        progressTimer = null;
+    }
+    function renderProgress(progress) {
+        const slider = get('quickProgress');
+        const valid = progress && Number.isFinite(progress.duration) && progress.duration > 0;
+        if (!valid || (progressPreview && progressPreview.key !== progress.key)) clearProgressPreview();
+        slider.disabled = !valid;
+        if (!valid) {
+            slider.value = '0';
+            get('quickProgressTime').textContent = '--:-- / --:--';
+            return;
+        }
+        const current = Math.max(0, Math.min(progress.duration, Number.isFinite(progress.currentTime) ? progress.currentTime : 0));
+        const percent = progressPreview ? progressPreview.percent : Math.round(current / progress.duration * 100);
+        slider.value = String(percent);
+        const shownTime = progressPreview ? progress.duration * percent / 100 : current;
+        get('quickProgressTime').textContent = `${formatTime(shownTime)} / ${formatTime(progress.duration)}`;
+    }
     function render() {
         const snapshot = options.snapshot();
         get('quickPlayToggle').textContent = snapshot.playing ? '暂停' : '播放';
+        renderProgress(snapshot.progress);
         get('quickVolume').value = state.volume;
         get('quickVolumeValue').textContent = `${state.volume}%`;
         document.querySelectorAll('#displayQuickControlPanel [data-fit]').forEach(button => {
@@ -35,6 +66,7 @@
         get('displayQuickControlPanel').hidden = !open;
         get('displayQuickControlToggle').setAttribute('aria-expanded', String(open));
         clearInterval(timer);
+        if (!open) clearProgressPreview();
         if (open) { render(); timer = setInterval(render, 1000); }
     }
     function init(config) {
@@ -43,6 +75,26 @@
         get('quickControlClose').addEventListener('click', () => setOpen(false));
         get('quickPlayToggle').addEventListener('click', () => send('play', !options.snapshot().playing));
         get('quickClear').addEventListener('click', () => send('clearMedia'));
+        // 输入过程中只预览；松手后发送一次，避免播放状态刷新覆盖手势。
+        const progress = get('quickProgress');
+        progress.addEventListener('input', () => {
+            const current = options.snapshot().progress;
+            if (!current || !Number.isFinite(current.duration) || current.duration <= 0) { clearProgressPreview(); render(); return; }
+            clearTimeout(progressTimer);
+            progressPreview = { key: current.key, percent: Number(progress.value), pending: false };
+            renderProgress(current);
+        });
+        progress.addEventListener('change', () => {
+            const current = options.snapshot().progress;
+            if (!progressPreview || !current || current.key !== progressPreview.key || !Number.isFinite(current.duration) || current.duration <= 0) { clearProgressPreview(); render(); return; }
+            const percent = progressPreview.percent;
+            progressPreview.pending = true;
+            if (!send('seek', percent)) { clearProgressPreview(); render(); return; }
+            // 收到服务端回显后恢复真实时间；回显丢失时也不会永久停在预览位置。
+            clearTimeout(progressTimer);
+            progressTimer = setTimeout(() => { clearProgressPreview(); if (!get('displayQuickControlPanel').hidden) render(); }, 3000);
+        });
+        progress.addEventListener('pointercancel', () => { clearProgressPreview(); render(); });
         get('quickVolume').addEventListener('input', event => { const value = Number(event.target.value); if (send('volume', value)) { state.volume = value; render(); } });
         get('displayQuickControlPanel').addEventListener('click', event => {
             const button = event.target.closest('button');
@@ -62,6 +114,7 @@
         });
     }
     function update(message) {
+        if (message.type === 'control' && message.action === 'seek' && progressPreview?.pending) clearProgressPreview();
         const values = message.type === 'restoreState' ? message.state || {} : message.type === 'control' ? { [message.action]: message.value } : {};
         for (const key of ['volume', 'fit', 'textStyle']) if (values[key] !== undefined) state[key] = values[key];
         const style = state.textStyle || {};

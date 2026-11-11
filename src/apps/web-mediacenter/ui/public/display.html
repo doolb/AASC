@@ -743,6 +743,7 @@
         <header><strong>快捷控制</strong><button id="quickControlClose" type="button">关闭</button></header>
         <p id="quickControlStatus" role="status"></p>
         <section><label>播放控制</label><div class="quick-buttons"><button id="quickPlayToggle" type="button">播放</button><button id="quickClear" type="button">清空媒体</button></div></section>
+        <section><label for="quickProgress">播放进度 <output id="quickProgressTime">--:-- / --:--</output></label><input id="quickProgress" type="range" min="0" max="100" step="1" value="0" aria-label="播放进度" disabled></section>
         <section><label>文本分页 <span id="quickTextStatus">未播放文本</span></label><div class="quick-buttons"><button id="quickTextToggle" data-text="toggle">播放</button><button data-text="prev">上一页</button><button data-text="next">下一页</button><button data-text="stop">停止</button></div>
         <details><summary>文本模式</summary><div class="quick-buttons"><label>字体 <select id="quickFontSize"><option value="auto">自动</option><option value="small">小</option><option value="medium">中</option><option value="large">大</option></select></label><label>行距 <select id="quickLineHeight"><option value="compact">紧凑</option><option value="normal" selected>标准</option><option value="loose">宽松</option></select></label><label>页边距 <select id="quickPageMargin"><option value="small">小</option><option value="normal" selected>标准</option><option value="large">大</option></select></label><button id="quickTextStyleApply" type="button">应用</button></div></details></section>
         <section><label for="quickVolume">音量 <output id="quickVolumeValue">100%</output></label><input id="quickVolume" type="range" min="0" max="100" value="100"></section>
@@ -7055,6 +7056,11 @@
             },
             snapshot: () => ({
                 playing: mediaIsPlaying,
+                progress: (() => {
+                    const media = getCurrentPlayableMedia();
+                    if (!media || media.readyState < 1 || !Number.isFinite(media.duration) || media.duration <= 0) return null;
+                    return { key: mediaLoadSequence, currentTime: media.currentTime, duration: media.duration };
+                })(),
                 text: currentMediaType === 'text' ? TextMediaPlayer.getProgress() : null,
                 playlist: playlistState?.active ? { index: playlistState.index, total: playlistState.playlist.length, paused: playlistState.paused } : null
             })

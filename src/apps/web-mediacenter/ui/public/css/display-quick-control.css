@@ -18,3 +18,4 @@
 .display-quick-control form input { min-width: 0; flex: 1; }
 /* 壁纸模式沿用网页交互层的隐藏规则，避免切换模式后残留普通页面面板。 */
 body.is-wallpaper .display-quick-control { display: none !important; }
+.display-quick-control input[type=range]:disabled { opacity: .45; cursor: not-allowed; }
