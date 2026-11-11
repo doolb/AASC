@@ -5,6 +5,7 @@
     const get = id => document.getElementById(id);
     const box = get('wallpaperControls');
     if (!box) return;
+    const shield = get('wallpaperInteractionShield');
     const handle = get('wallpaperControlsHandle');
     const panel = get('wallpaperControlsPanel');
     const drag = get('wallpaperControlsDrag');
@@ -12,6 +13,7 @@
     const volumeValue = get('wallpaperVolumeValue');
     const fps = get('wallpaperShowFps');
     const time = get('wallpaperShowTime');
+    const contentInteraction = get('wallpaperContentInteraction');
     const status = get('wallpaperStatus');
     const clock = get('timeDisplay');
     let active = false;
@@ -21,6 +23,7 @@
     const savePreference = (key, value) => { try { root.localStorage.setItem(key, String(value)); } catch (_) {} };
     fps.checked = readPreference('aasc.wallpaper.fps');
     time.checked = readPreference('aasc.wallpaper.time');
+    contentInteraction.checked = readPreference('aasc.wallpaper.contentInteraction');
 
     function updateClockInset() {
         frame = null;
@@ -37,6 +40,7 @@
         frame = root.requestAnimationFrame(updateClockInset);
     }
     function updateOptions() {
+        if (shield) shield.hidden = !active || contentInteraction.checked;
         document.body.classList.toggle('wallpaper-fps-hidden', active && !fps.checked);
         document.body.classList.toggle('wallpaper-time-hidden', active && !time.checked);
         scheduleClock();
@@ -71,6 +75,18 @@
     });
     for (const [input, key] of [[fps, 'aasc.wallpaper.fps'], [time, 'aasc.wallpaper.time']]) {
         input.addEventListener('change', () => { savePreference(key, input.checked); updateOptions(); });
+    }
+    contentInteraction.addEventListener('change', () => {
+        savePreference('aasc.wallpaper.contentInteraction', contentInteraction.checked);
+        updateOptions();
+    });
+    // 关闭壁纸内容交互时在捕获阶段拦截输入；浮动面板始终保留交互能力。
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'touchcancel', 'mousedown', 'mousemove', 'mouseup', 'click', 'dblclick', 'contextmenu', 'wheel']) {
+        root.addEventListener(type, event => {
+            if (!active || contentInteraction.checked || event.composedPath().includes(box)) return;
+            event.stopImmediatePropagation();
+            if (event.cancelable) event.preventDefault();
+        }, { capture: true, passive: false });
     }
     drag.addEventListener('pointerdown', event => {
         if (event.target.closest('button')) return;

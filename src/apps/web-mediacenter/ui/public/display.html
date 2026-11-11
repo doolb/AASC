@@ -29,6 +29,7 @@
 <body>
     <div id="connectionStatus" class="connecting">连接中...</div>
     <div id="timeDisplay"></div>
+    <div id="wallpaperInteractionShield" class="wallpaper-interaction-shield" hidden></div>
     <aside id="wallpaperControls" class="wallpaper-controls" aria-label="壁纸控制" hidden>
         <button id="wallpaperControlsHandle" type="button" aria-label="展开壁纸控制" aria-expanded="false">控</button>
         <div id="wallpaperControlsPanel" class="wallpaper-controls-panel" hidden>
@@ -37,6 +38,7 @@
             <div id="wallpaperStatus" class="wallpaper-controls-status" aria-live="polite"></div>
             <label><input id="wallpaperShowFps" type="checkbox" checked> 显示 FPS</label>
             <label><input id="wallpaperShowTime" type="checkbox" checked> 显示时间</label>
+            <label><input id="wallpaperContentInteraction" type="checkbox" checked> 壁纸内容响应触摸</label>
         </div>
     </aside>
     <div id="fileNameDisplay"></div>

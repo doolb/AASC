@@ -4,7 +4,9 @@ body.is-wallpaper #connectionStatus, body.is-wallpaper #voiceStatusRow { visibil
 body.is-wallpaper.wallpaper-fps-hidden #displayMmdFps,
 body.is-wallpaper.wallpaper-time-hidden #timeDisplay { visibility: hidden !important; }
 .wallpaper-controls[hidden], .wallpaper-controls-panel[hidden] { display: none !important; }
-.wallpaper-controls { position: fixed; z-index: 10000; top: 35%; right: 0; color: white; pointer-events: auto; }
+.wallpaper-interaction-shield[hidden] { display: none !important; }
+.wallpaper-interaction-shield { position: fixed; inset: 0; z-index: 2147483646; touch-action: none; }
+.wallpaper-controls { position: fixed; z-index: 2147483647; top: 35%; right: 0; color: white; pointer-events: auto; }
 .wallpaper-controls button { cursor: pointer; color: white; background: #273548; border: 1px solid #789; border-radius: 6px; padding: 6px; }
 .wallpaper-controls-panel { width: min(240px, 75vw); padding: 10px; border-radius: 8px; background: rgba(20, 26, 35, .92); box-sizing: border-box; }
 .wallpaper-controls-panel label { display: block; margin-top: 8px; }

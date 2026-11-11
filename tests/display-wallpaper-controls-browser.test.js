@@ -15,10 +15,12 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     const page = await browser.newPage();
     await page.setViewport({ width: 480, height: 800 });
     const html = fs.readFileSync(path.join(dir, 'display.html'), 'utf8');
-    const panel = html.slice(html.indexOf('    <aside id="wallpaperControls"'), html.indexOf('    </aside>') + '    </aside>'.length);
+    const panel = html.slice(html.indexOf('    <div id="wallpaperInteractionShield"'), html.indexOf('    </aside>') + '    </aside>'.length);
     const css = fs.readFileSync(path.join(dir, 'css/display-wallpaper-controls.css'), 'utf8');
-    await page.setContent(`<style>${css} #timeDisplay { position: fixed; top: 0; right: 0; }</style><div id="timeDisplay">12:00</div>${panel}<div id="connectionStatus">已连接</div><div id="voiceStatus">监听中</div><div id="displayStageLayers"><div id="displayInteractionLayer">按钮</div><div id="displayMmdFps">60 FPS</div></div>`);
+    await page.setContent(`<style>${css} #timeDisplay { position: fixed; top: 0; right: 0; } #cover { position: fixed; inset: 0; z-index: 999999; }</style><div id="cover"></div><div id="timeDisplay">12:00</div>${panel}<div id="connectionStatus">已连接</div><div id="voiceStatus">监听中</div><div id="displayStageLayers"><div id="displayInteractionLayer">按钮</div><div id="displayMmdFps">60 FPS</div></div>`);
     await page.evaluate(() => {
+        const preferences = {};
+        Object.defineProperty(window, 'localStorage', { value: { getItem: key => preferences[key] ?? null, setItem: (key, value) => { preferences[key] = value; } } });
         window.wallpaper = false; window.actualVolume = 36;
         window.NativeDisplay = { isWallpaperActive: () => window.wallpaper, getWallpaperTopInset: () => 30,
             getWallpaperMediaVolume: () => window.actualVolume, setWallpaperMediaVolume: value => { window.actualVolume = value; } };
@@ -36,7 +38,24 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         await page.waitForFunction(() => document.getElementById('timeDisplay').getBoundingClientRect().top >= 29.5);
     }
     assert.equal(await page.$eval('#displayInteractionLayer', node => getComputedStyle(node).visibility), 'hidden');
+    assert.ok(await page.$eval('#wallpaperControls', node => Number(getComputedStyle(node).zIndex) > 999999));
     await page.click('#wallpaperControlsHandle');
+    const events = () => page.evaluate(() => {
+        const target = document.getElementById('displayMmdFps');
+        const received = [];
+        for (const type of ['pointerdown', 'pointermove', 'pointerup', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'mouseup', 'click']) {
+            target.addEventListener(type, () => received.push(type), { once: true });
+            target.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
+        }
+        return received;
+    });
+    const expectedEvents = ['pointerdown', 'pointermove', 'pointerup', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'mouseup', 'click'];
+    assert.deepEqual(await events(), expectedEvents);
+    await page.click('#wallpaperContentInteraction');
+    assert.equal(await page.$eval('#wallpaperInteractionShield', node => node.hidden), false);
+    assert.equal(await page.evaluate(() => document.elementFromPoint(10, 10).id), 'wallpaperInteractionShield');
+    assert.deepEqual(await events(), []);
+    assert.equal(await page.evaluate(() => localStorage.getItem('aasc.wallpaper.contentInteraction')), 'false');
     const drag = await page.$eval('#wallpaperControlsDrag', node => { const r = node.getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; });
     await page.mouse.move(drag.x, drag.y);
     await page.mouse.down();
@@ -53,7 +72,17 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     assert.equal(await page.$eval('#displayMmdFps', node => getComputedStyle(node).visibility), 'hidden');
     assert.equal(await page.$eval('#timeDisplay', node => getComputedStyle(node).visibility), 'hidden');
     await page.evaluate(() => { window.wallpaper = false; window.dispatchEvent(new Event('aasc-wallpaper-mode')); });
+    assert.equal(await page.$eval('#wallpaperInteractionShield', node => node.hidden), true);
+    assert.deepEqual(await events(), expectedEvents);
     assert.equal(await page.$eval('#wallpaperControls', node => node.hidden), true);
     assert.equal(await page.$eval('#displayInteractionLayer', node => getComputedStyle(node).visibility), 'visible');
     assert.equal(await page.$eval('#timeDisplay', node => getComputedStyle(node).visibility), 'visible');
+    const restored = await browser.newPage();
+    await restored.setContent(`<style>${css}</style>${panel}`);
+    await restored.evaluate(() => {
+        Object.defineProperty(window, 'localStorage', { value: { getItem: key => key === 'aasc.wallpaper.contentInteraction' ? 'false' : null, setItem: () => {} } });
+        window.NativeDisplay = { isWallpaperActive: () => true };
+    });
+    await restored.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
+    assert.equal(await restored.$eval('#wallpaperContentInteraction', node => node.checked), false);
 });
