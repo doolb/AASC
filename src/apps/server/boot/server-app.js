@@ -5655,7 +5655,7 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
 app.get('/api/config', (req, res) => {
     // 夸克 Cookie 仅供服务端使用，公开配置接口不返回凭证。
     const current = config.getConfig();
-    const media = { ...(current.media || {}) };
+    const media = { ...config.get('media', {}) };
     delete media.quarkCookie;
     delete media.bilibiliCookie;
     res.json({ status: 'success', config: { ...current, media } });

@@ -344,8 +344,6 @@ class Config extends DataSnapshot {
         server: {
             port: 8081
         },
-        // 全局网页代理：仅对开启“使用代理”的媒体源生效，空字符串表示不使用代理。
-        network: { globalWebProxy: '' },
         // AASC 节点角色和主服务器地址。默认保持当前进程为主服务器，
         // 子服务器通过修改 aasc.role 后主动连接 mainServerUrl。
         aasc: {
@@ -473,6 +471,10 @@ class Config extends DataSnapshot {
     };
 
     get(key, defaultValue) {
+        // 代理及媒体用户数据统一使用用户配置目录，调用方继续使用原有键名。
+        if (key === 'network' || key.startsWith('network.') || key === 'media' || key.startsWith('media.')) {
+            return userConfig.get(key, defaultValue);
+        }
         const keys = key.split('.');
         let value = this._data;
         for (const k of keys) {
@@ -486,6 +488,12 @@ class Config extends DataSnapshot {
     }
 
     set(key, value) {
+        if (key === 'network' || key.startsWith('network.') || key === 'media' || key.startsWith('media.')) {
+            const previous = userConfig._deepClone(userConfig._data);
+            if (userConfig.set(key, value)) return true;
+            userConfig._data = previous;
+            return false;
+        }
         const keys = key.split('.');
         let obj = this._data;
         for (let i = 0; i < keys.length - 1; i++) {
@@ -725,6 +733,55 @@ class UserConfig extends DataSnapshot {
 const config = new Config(CONFIG_FILE);
 const userConfig = new UserConfig(USER_CONFIG_FILE);
 
+// 迁移时使用同目录临时文件和原子替换，避免写入中断截断原始配置。
+function saveMigrationSnapshot(snapshot) {
+    const file = snapshot._filePath;
+    const temporary = `${file}.media-migration-${process.pid}-${require('crypto').randomBytes(8).toString('hex')}`;
+    let descriptor;
+    try {
+        const mode = fs.existsSync(file) ? fs.statSync(file).mode & 0o777 : 0o600;
+        descriptor = fs.openSync(temporary, 'wx', mode);
+        fs.writeFileSync(descriptor, JSON.stringify(snapshot._data, null, 2), 'utf8');
+        fs.fsyncSync(descriptor);
+        fs.closeSync(descriptor);
+        descriptor = undefined;
+        fs.renameSync(temporary, file);
+        return true;
+    } catch (error) {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+        try { fs.unlinkSync(temporary); } catch (cleanupError) { if (cleanupError.code !== 'ENOENT') console.error('迁移临时文件清理失败'); }
+        console.error('媒体用户配置迁移写入失败:', error.message);
+        return false;
+    }
+}
+
+// 先持久化用户分区再清理旧值；中断时保留两份，重启后以用户字段为准。
+function migrateMediaUserConfig() {
+    if (!config._loaded || !userConfig._loaded) throw new Error('配置加载失败，停止迁移媒体用户数据');
+    const previous = userConfig._deepClone(userConfig._data);
+    const sections = ['network', 'media'].filter(key => Object.hasOwn(config._data, key));
+    if (!sections.length) return;
+    for (const key of sections) {
+        const legacy = config._data[key];
+        const current = userConfig._data[key];
+        if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy) ||
+            (current !== undefined && (!current || typeof current !== 'object' || Array.isArray(current)))) {
+            throw new Error(`配置分区 ${key} 格式无效，停止迁移`);
+        }
+        userConfig._data[key] = { ...legacy, ...(current || {}) };
+    }
+    if (!saveMigrationSnapshot(userConfig)) {
+        userConfig._data = previous;
+        throw new Error('媒体用户配置保存失败，保留旧配置');
+    }
+    const oldSections = Object.fromEntries(sections.map(key => [key, config._data[key]]));
+    for (const key of sections) delete config._data[key];
+    if (!saveMigrationSnapshot(config)) {
+        Object.assign(config._data, oldSections);
+        throw new Error('旧媒体配置清理失败，请重试迁移');
+    }
+}
+
 // Provider凭证与独立语速留在用户配置中；业务选择和全局音量继续通过config.set进入项目权威配置。
 // 对应 .src/framework/tts-provider-configuration.md 的配置保存与脱敏流程。
 function getTtsProviderSettings() {
@@ -850,6 +907,7 @@ function migrateLegacyUserData() {
     }
 }
 
+migrateMediaUserConfig();
 migrateLegacyUserData();
 
 module.exports = config;
