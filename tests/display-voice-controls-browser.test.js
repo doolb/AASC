@@ -129,11 +129,16 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.getAttribute('aria-pressed')), 'true', '默认实时监听开启');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.textContent), '实时监听');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.disabled), false);
+        await page.evaluate(() => { window.NativeDisplay = { isWallpaperActive: () => true }; });
         for (const theme of ['dark', 'light']) {
             await page.evaluate((name) => {
                 document.documentElement.dataset.theme = name;
                 document.documentElement.dataset.themeMode = name;
             }, theme);
+            const overlay = await page.evaluate(() => ({ snapshot: window.DisplayVoiceControls.overlaySnapshot(), accent: getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim() }));
+            assert.equal(overlay.snapshot.theme.accent, overlay.accent);
+            assert.equal(overlay.snapshot.continuous, true);
+            assert.equal(overlay.snapshot.modeEnabled, true);
             assert.match(await page.$eval('#displayVoiceContinuous', (element) => getComputedStyle(element).backgroundImage), /linear-gradient/u);
             await page.click('#displayVoiceContinuous');
             await page.waitForFunction(() => document.getElementById('displayVoiceContinuous').getAttribute('aria-pressed') === 'false');
@@ -142,6 +147,11 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
             await page.click('#displayVoiceContinuous');
             await page.waitForFunction(() => document.getElementById('displayVoiceContinuous').getAttribute('aria-pressed') === 'true');
         }
+        assert.equal(await page.evaluate(() => window.DisplayVoiceControls.overlayAction('mode')), true);
+        await page.waitForFunction(() => window.DisplayVoiceControls.overlaySnapshot().continuous === false);
+        assert.equal(await page.evaluate(() => window.DisplayVoiceControls.overlayAction('mode')), true);
+        await page.waitForFunction(() => window.DisplayVoiceControls.overlaySnapshot().continuous === true);
+        assert.equal(await page.evaluate(() => { window.NativeDisplay.isWallpaperActive = () => false; return window.DisplayVoiceControls.overlayAction('mode'); }), false);
         await page.evaluate(() => {
             document.documentElement.dataset.theme = 'dark';
             document.documentElement.dataset.themeMode = 'dark';
@@ -205,7 +215,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         await page.evaluate(() => { hasSpeech = false; updateAsrResultDisplay(''); });
         await page.evaluate(() => { window.fixturePlay(); window.fixtureCalls = []; });
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 说话中');
-        await page.click('#displayVoiceAction');
+        assert.equal(await page.evaluate(() => { window.NativeDisplay.isWallpaperActive = () => true; return window.DisplayVoiceControls.overlayAction('voice'); }), true);
         await page.waitForFunction(() => document.getElementById('displayVoiceActionStatusText').textContent === '群聊 · 空闲');
         assert.deepEqual(await page.evaluate(() => window.fixtureCalls), ['stop', 'send-stop']);
         const measure = () => page.evaluate(() => {

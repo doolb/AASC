@@ -182,5 +182,32 @@
         render();
     }
 
-    root.DisplayVoiceControls = Object.freeze({ deriveStatus, init, render });
+    // Android 系统浮窗只复用当前显示页的运行状态与控制路径，不另建连接或状态源。
+    function overlaySnapshot() {
+        if (!runtime || !refs.toggle || !refs.button) return null;
+        const snapshot = runtime.snapshot();
+        const style = root.getComputedStyle(root.document.documentElement);
+        const color = name => style.getPropertyValue(name).trim();
+        return {
+            label: refs.status?.textContent || '已停止',
+            state: deriveStatus(snapshot, chats.size > 0),
+            actionLabel: refs.button.getAttribute('aria-label') || '语音操作',
+            modeLabel: refs.toggle.getAttribute('aria-label') || '切换监听模式',
+            continuous: snapshot.continuous === true,
+            modeEnabled: !refs.toggle.disabled,
+            vadActive: snapshot.vadActive === true,
+            vadRms: Math.max(0, Math.min(1, Number(snapshot.vadRms) || 0)),
+            vadThreshold: Math.max(0, Math.min(1, Number(snapshot.vadThreshold) || 0)),
+            theme: { background: color('--bg-primary'), panel: color('--bg-secondary'), text: color('--text-primary'), accent: color('--accent-color'), secondary: color('--accent-secondary') }
+        };
+    }
+
+    function overlayAction(action) {
+        if (!runtime || root.NativeDisplay?.isWallpaperActive?.() !== true) return false;
+        if (action === 'voice') { void click(); return true; }
+        if (action === 'mode' && refs.toggle && !refs.toggle.disabled) return requestContinuous(!runtime.snapshot().continuous);
+        return false;
+    }
+
+    root.DisplayVoiceControls = Object.freeze({ deriveStatus, init, render, overlaySnapshot, overlayAction });
 }(window));
