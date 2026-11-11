@@ -93,6 +93,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     let ikWanted = false, ikFailure = '', ikInitialization = null;
     let ikMarkersVisible = false;
     const heldBody = new Map();
+    let heldGazeHead = null;
     let bodyIndexModel = null, bodyIndices = [];
     function controlledBodyIndices() {
         if (bodyIndexModel !== model) {
@@ -163,6 +164,7 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
         if (helperBound?.onHumanAfterPhysics === observeArms) delete helperBound.onHumanAfterPhysics;
         clearInteractiveIK(); armAvoidance.reset();
         heldBody.clear();
+        heldGazeHead = null;
         bodyIndexModel = null; bodyIndices = [];
         helperBound = null;
     }
@@ -431,13 +433,26 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
     function mixPose(mesh) {
         if (mesh !== model?.mesh || !ready || suspended || disposed) return;
         const animateBody = bodyReady() && !interactiveIK.hasManualTargets();
+        const gazeEnabled = !interactiveIK.hasManualTargets();
+        const candidateHead = model.bindings['bones:head'] || model.bindings['bones:neck'];
+        const head = candidateHead && !candidateHead.dynamic ? candidateHead : null;
+        let heldHead = head && heldBody.get(head.bone);
+        // 先恢复身体保持基准，再计算注视，使共有眼的继承仍在 PMX 阶段生效。
+        if (!animateBody && head && !heldHead) {
+            heldHead = { position: head.bone.position.clone(), rotation: head.bone.quaternion.clone() };
+            heldBody.set(head.bone, heldHead);
+        }
+        if (!animateBody && heldHead) {
+            head.bone.position.copy(heldHead.position); head.bone.quaternion.copy(heldHead.rotation);
+        }
         const state = manualExpressions.getState();
         const eyes = mixer.occupiedEyes(model) || [...external.values()].some(weights =>
             [...weights.keys()].some(index => model.morphs.find(m => m.index === index)?.panel === 2));
         const weights = mixer.mix(model, physiology.sample(model, mixer.clock, eyes, state.items),
             [...external.values()].map(weights => ({ id: 0, priority: 50, weights })),
-            animateBody ? (save, occupied, rotations) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied, rotations) : null,
+            gazeEnabled ? (save, occupied, rotations) => gaze.apply(model, getCamera?.(), frameDelta, save, occupied, rotations) : null,
             animateBody);
+        heldGazeHead = !animateBody && gazeEnabled && head ? { bone: head.bone, rotation: head.bone.quaternion.clone() } : null;
         manualExpressions.setHuman(model.token, [...weights]);
     }
     function avoidArms(mesh, delta, physics) {
@@ -464,6 +479,8 @@ export function createHumanInterfaceElement({ getMesh, getHelper, getProfile, ge
             if (!pose) heldBody.set(item.bone, { position: item.bone.position.clone(), rotation: item.bone.quaternion.clone() });
             else { item.bone.position.copy(pose.position); item.bone.quaternion.copy(pose.rotation); }
         }
+        // 身体保持不能覆盖本帧已参与 PMX 继承计算的头部注视。
+        if (heldGazeHead) heldGazeHead.bone.quaternion.copy(heldGazeHead.rotation);
         mesh.updateMatrixWorld(true);
     }
     function observeArms(mesh, physics) {

@@ -52,10 +52,30 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
             groups?.render?.apply({ ...groups.render.read(), aaMode: 'taa', taaEnabled: false, canvasScale: 0.25 });
         });
         console.error('[IK验收] 初始化角色');
+        await page.evaluate(async () => {
+            // 捕获正式 Helper 接收的真实 PMX 网格，以实际骨骼旋转验证注视。
+            const { MMDAnimationHelper } = await import('/js/vendor/three/animation/MMDAnimationHelper.js');
+            const add = MMDAnimationHelper.prototype.add;
+            MMDAnimationHelper.prototype.add = function (object, ...args) {
+                if (object.isSkinnedMesh) window.__gazeTestMesh = object;
+                return add.call(this, object, ...args);
+            };
+        });
         await page.evaluate(() => { window.DisplayMmd.init({ canvas: document.getElementById('displayMmdCanvas'), onLoadProgress: p => console.log('[IK进度]', JSON.stringify(p)) }); window.DisplayMmd.setVisible(true); });
         console.error('[IK验收] 等待模型');
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface()?.getState().ready, { timeout: 90000 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled), false);
+        const stable = await page.evaluate(async () => {
+            const h = window.DisplayMmd.getHumanInterface();
+            await h.gaze.set({ head: true, eyes: false, headMs: 0 });
+            const name = h.getState().gazeStatus.head;
+            const head = window.__gazeTestMesh.skeleton.bones.find(bone => bone.name === name);
+            h.gaze.point(0.8, 0);
+            await new Promise(resolve => setTimeout(resolve, 700)); const first = head.quaternion.toArray();
+            await new Promise(resolve => setTimeout(resolve, 700)); const second = head.quaternion.toArray();
+            return { first, second };
+        });
+        assert.ok(stable.first.every((value, axis) => Math.abs(value - stable.second[axis]) < 0.001), '初始关闭 IK 时注视角度不能逐帧累积');
         await page.evaluate(async () => { const h = window.DisplayMmd.getHumanInterface(); await h.setInteractiveIKMode('physics'); h.setInteractiveIKEnabled(true); h.setInteractiveMarkersVisible(false); });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().markersVisible), false);
         await page.evaluate(async () => {
@@ -105,6 +125,29 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
             return { active, readyAfterReset, state: h.getInteractiveIKState(), ready: window.messages.at(-1).catalog.ready, candidates: h.candidates.list().length };
         });
         assert.equal(reset.active, 0); assert.equal(reset.state.targets, 0); assert.equal(reset.state.physics, null); assert.equal(reset.readyAfterReset, true); assert.equal(reset.ready, false); assert.equal(reset.candidates, 0);
+        // IK 关闭后，用两个目标比较真正显示的头眼骨骼，而不是只检查开关状态。
+        const gaze = await page.evaluate(async () => {
+            const h = window.DisplayMmd.getHumanInterface();
+            await h.gaze.set({ head: true, eyes: true, strength: 1, headMs: 0, eyeMs: 0 });
+            const status = h.getState().gazeStatus;
+            const names = [status.head, ...status.eyes, ...(status.shared ? ['左目', '右目'] : [])];
+            const bones = names.map(name => window.__gazeTestMesh.skeleton.bones.find(bone => bone.name === name));
+            const sample = () => bones.map(bone => bone.quaternion.toArray());
+            const wait = () => new Promise(resolve => setTimeout(resolve, 700));
+            h.gaze.point(-0.8, 0); await wait(); const left = sample();
+            h.gaze.point(0.8, 0); await wait(); const right = sample();
+            // 头部朝向目标后眼睛可能无需水平转动，关闭头部以单独验证眼球。
+            await h.gaze.set({ head: false });
+            h.gaze.point(-0.8, 0); await wait(); const eyesLeft = sample();
+            h.gaze.point(0.8, 0); await wait(); const eyesRight = sample();
+            return { status, left, right, eyesLeft, eyesRight, enabled: h.getInteractiveIKState().enabled };
+        });
+        assert.equal(gaze.enabled, false);
+        assert.ok(gaze.status.head && gaze.status.eyes.length, '模型需要可驱动的头部与眼球骨骼');
+        assert.ok(gaze.left[0].some((value, axis) => Math.abs(value - gaze.right[0][axis]) > 0.001), '切换目标后头部应转动');
+        for (let i = 1; i < gaze.eyesLeft.length; i++) {
+            assert.ok(gaze.eyesLeft[i].some((value, axis) => Math.abs(value - gaze.eyesRight[i][axis]) > 0.001), '切换目标后眼球应转动');
+        }
         await page.evaluate(async () => { const h = window.DisplayMmd.getHumanInterface(); await h.setInteractiveIKMode('physics'); h.setInteractiveIKEnabled(true); window.DisplayStage.setMmdVisible(false); });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled), false);
         assert.deepEqual(errors, []);
