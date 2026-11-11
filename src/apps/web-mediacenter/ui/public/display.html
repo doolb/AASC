@@ -34,6 +34,7 @@
         <button id="wallpaperControlsHandle" type="button" aria-label="展开壁纸控制" aria-expanded="false">控</button>
         <div id="wallpaperControlsPanel" class="wallpaper-controls-panel" hidden>
             <div id="wallpaperControlsDrag" class="wallpaper-controls-drag">壁纸控制 <button id="wallpaperControlsCollapse" type="button" aria-label="收起壁纸控制">收起</button></div>
+            <button id="wallpaperOpenPreview" type="button">设置壁纸</button>
             <label>音量 <output id="wallpaperVolumeValue">--</output><input id="wallpaperVolume" type="range" min="0" max="100" step="1" aria-label="系统媒体音量"></label>
             <div id="wallpaperStatus" class="wallpaper-controls-status" aria-live="polite"></div>
             <label><input id="wallpaperShowFps" type="checkbox" checked> 显示 FPS</label>
@@ -703,13 +704,14 @@
                             aria-label="收起本机模型入口" aria-controls="displayOfflineModelsActions" aria-expanded="true">‹</button>
                 </div>
             </div>
-            <button id="displayVoiceContinuous" class="display-stage-button display-voice-switch" type="button"
-                    aria-pressed="true" disabled>实时监听</button>
             <div class="display-voice-action-group">
                 <div id="displayVoiceAsrResult" class="display-voice-asr-result" role="status" aria-live="polite" hidden></div>
                 <span id="displayVoiceActionStatus" class="display-voice-action-status"><span id="displayVoiceActionStatusText" role="status" aria-live="polite">已停止</span><span id="displayVoiceVadValue" aria-live="off" hidden></span></span>
-                <button id="displayVoiceAction" class="display-voice-action" type="button" data-state="stopped"
-                        aria-label="已停止，开始一次语音输入"><span id="displayVoiceVadMeter" class="display-voice-vad-meter" aria-hidden="true"><span class="display-voice-vad-fill"></span><span class="display-voice-vad-threshold"></span></span></button>
+                <div class="display-voice-action-row">
+                    <button id="displayVoiceAction" class="display-voice-action" type="button" data-state="stopped"
+                            aria-label="已停止，开始一次语音输入"><span id="displayVoiceVadMeter" class="display-voice-vad-meter" aria-hidden="true"><span class="display-voice-vad-fill"></span><span class="display-voice-vad-threshold"></span></span></button>
+                    <button id="displayVoiceContinuous" class="display-voice-switch" type="button" aria-pressed="true" disabled>实时监听</button>
+                </div>
             </div>
         </div>
         <div id="displayArCalibration" class="display-mmd-ar-calibration" role="dialog"

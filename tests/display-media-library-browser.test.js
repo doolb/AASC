@@ -10,6 +10,17 @@ const puppeteer = require('puppeteer-core');
 const publicDir = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
 const chrome = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
 
+test('媒体库页面和提示显示在 MMD 舞台与设置面板上方', { skip: !fs.existsSync(chrome), timeout: 30000 }, async t => {
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.setContent('<div id="stage" style="position:fixed;inset:0;z-index:10001;background:red"></div><div class="display-media-library-panel"><button id="mediaButton">媒体库</button></div><div class="display-media-library-notice" id="notice">提示</div>');
+    await page.addStyleTag({ path: path.join(publicDir, 'css/display-media-library.css') });
+    assert.equal(await page.evaluate(() => document.elementFromPoint(5, 5).closest('.display-media-library-panel') !== null), true);
+    await page.click('#mediaButton');
+    assert.ok(await page.$eval('#notice', node => Number(getComputedStyle(node).zIndex) > Number(getComputedStyle(document.getElementById('stage')).zIndex)));
+});
+
 test('本机显示端媒体库按钮、浏览、单文件播放与文件夹批量播放', {
     skip: !fs.existsSync(chrome), timeout: 45000
 }, async t => {

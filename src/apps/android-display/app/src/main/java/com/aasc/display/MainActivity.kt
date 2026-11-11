@@ -54,7 +54,6 @@ class MainActivity : AppCompatActivity() {
         private const val OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS = 10_000L
         private const val OFFLINE_UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1_000L
         private const val OFFLINE_UPDATE_PANEL_COLLAPSE_DELAY_MS = 10_000L
-        private const val WALLPAPER_BUTTON_COLLAPSE_DELAY_MS = 5_000L
         private const val OFFLINE_VOICE_PROMPT_KEY = "offline_voice_first_run_v1"
     }
 
@@ -62,9 +61,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverInput: EditText
     private lateinit var webContainer: FrameLayout
     private lateinit var controlToggleButton: Button
-    private lateinit var wallpaperButton: Button
-    private var wallpaperButtonExpanded = false
-    private val collapseWallpaperButtonRunnable = Runnable { setWallpaperButtonExpanded(false) }
+    private var wallpaperPreviewAfterOverlayPermission = false
     private lateinit var offlineStartupPanel: View
     private lateinit var offlineStartupProgress: ProgressBar
     private lateinit var offlineStartupMessage: TextView
@@ -388,7 +385,6 @@ class MainActivity : AppCompatActivity() {
         serverInput = findViewById(R.id.serverInput)
         webContainer = findViewById(R.id.webContainer)
         controlToggleButton = findViewById(R.id.controlToggleButton)
-        wallpaperButton = findViewById(R.id.wallpaperButton)
         offlineStartupPanel = findViewById(R.id.offlineStartupPanel)
         offlineStartupProgress = findViewById(R.id.offlineStartupProgress)
         offlineStartupMessage = findViewById(R.id.offlineStartupMessage)
@@ -404,7 +400,6 @@ class MainActivity : AppCompatActivity() {
         offlineUpdateCollapsedTab = findViewById(R.id.offlineUpdateCollapsedTab)
         offlineDisplayInfo = findViewById(R.id.offlineDisplayInfo)
         setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
-        setWallpaperButtonExpanded(false)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
         offlineFailures.restore(savedInstanceState?.getString("offlineStartupError"), savedInstanceState?.getString("offlineUpdateError"))
@@ -430,30 +425,6 @@ class MainActivity : AppCompatActivity() {
         connectBtn.setOnClickListener { connect(true) }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(true); true }
         controlToggleButton.setOnClickListener { handleControlButtonClick() }
-        wallpaperButton.setOnLongClickListener {
-            setWallpaperButtonExpanded(false)
-            true
-        }
-        wallpaperButton.setOnClickListener {
-            if (!wallpaperButtonExpanded) {
-                setWallpaperButtonExpanded(true)
-                return@setOnClickListener
-            }
-            setWallpaperButtonExpanded(false)
-            val address = ServerConfig.baseUrl(serverInput.text.toString())
-            if (address.isBlank()) {
-                Toast.makeText(this, "请先填写服务器地址", Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
-            getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", address).apply()
-            try {
-                val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
-                    .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(this, DisplayWallpaperService::class.java))
-                startActivity(intent)
-            } catch (error: Exception) {
-                Toast.makeText(this, "无法打开系统壁纸预览", Toast.LENGTH_LONG).show()
-            }
-        }
         offlineStartupRetry.setOnClickListener {
             if (OfflineLauncherSession.enabled(this)) {
                 startActivity(Intent(this, OfflineLauncherActivity::class.java).putExtra(OfflineLauncherActivity.EXTRA_AUTOMATIC, true))
@@ -500,6 +471,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (wallpaperPreviewAfterOverlayPermission) {
+            wallpaperPreviewAfterOverlayPermission = false
+            showWallpaperPreview()
+        }
         WallpaperDisplayCoordinator.setForeground(true)
         webView?.let { current ->
             if (current.parent !== webContainer) {
@@ -526,7 +501,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        setWallpaperButtonExpanded(false)
         WallpaperDisplayCoordinator.setForeground(false)
         SafDirectorySelection.setForegroundHost(this, false)
         activityResumed = false
@@ -553,7 +527,6 @@ class MainActivity : AppCompatActivity() {
         // 最近任务移除等明确结束 Activity 的路径暂停壁纸；系统强杀不保证调用此处。
         if (isFinishing && !isChangingConfigurations) WallpaperDisplayCoordinator.suspendWallpaper(this)
         bootstrapExecutor.shutdownNow()
-        mainHandler.removeCallbacks(collapseWallpaperButtonRunnable)
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         cancelOfflineUpdatePanelCollapse()
@@ -1753,24 +1726,36 @@ class MainActivity : AppCompatActivity() {
         controlToggleButton.layoutParams = layoutParams
     }
 
-    /** 壁纸入口收起到右侧中部，避免遮挡顶部时钟；展开后短时自动收起。 */
-    private fun setWallpaperButtonExpanded(expanded: Boolean) {
-        wallpaperButtonExpanded = expanded
-        mainHandler.removeCallbacks(collapseWallpaperButtonRunnable)
-        if (!::wallpaperButton.isInitialized) return
-        val params = wallpaperButton.layoutParams as FrameLayout.LayoutParams
-        params.gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-        params.leftMargin = 0
-        params.rightMargin = if (expanded) dp(12) else -dp(21)
-        params.topMargin = 0
-        params.bottomMargin = 0
-        params.width = if (expanded) FrameLayout.LayoutParams.WRAP_CONTENT else dp(42)
-        params.height = if (expanded) FrameLayout.LayoutParams.WRAP_CONTENT else dp(72)
-        wallpaperButton.text = getString(if (expanded) R.string.wallpaper_button else R.string.wallpaper_handle)
-        wallpaperButton.contentDescription = getString(if (expanded) R.string.wallpaper_button else R.string.wallpaper_expand)
-        wallpaperButton.setPadding(dp(if (expanded) 8 else 2), dp(4), dp(if (expanded) 8 else 2), dp(4))
-        wallpaperButton.layoutParams = params
-        if (expanded) mainHandler.postDelayed(collapseWallpaperButtonRunnable, WALLPAPER_BUTTON_COLLAPSE_DELAY_MS)
+    /** 前台入口负责请求系统浮窗权限，返回后再打开系统壁纸预览。 */
+    fun openWallpaperPreview() {
+        val address = ServerConfig.baseUrl(serverInput.text.toString())
+        if (address.isBlank()) {
+            Toast.makeText(this, "请先填写服务器地址", Toast.LENGTH_LONG).show()
+            return
+        }
+        getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", address).apply()
+        if (!Settings.canDrawOverlays(this)) {
+            try {
+                wallpaperPreviewAfterOverlayPermission = true
+                Toast.makeText(this, "请允许显示在其他应用上层，以使用壁纸浮窗", Toast.LENGTH_LONG).show()
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                return
+            } catch (error: Exception) {
+                wallpaperPreviewAfterOverlayPermission = false
+                Toast.makeText(this, "无法打开悬浮窗权限设置", Toast.LENGTH_LONG).show()
+            }
+        }
+        showWallpaperPreview()
+    }
+
+    private fun showWallpaperPreview() {
+        try {
+            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+                .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(this, DisplayWallpaperService::class.java))
+            startActivity(intent)
+        } catch (error: Exception) {
+            Toast.makeText(this, "无法打开系统壁纸预览", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun dp(value: Int): Int {
@@ -1914,10 +1899,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleBackNavigation() {
-        if (wallpaperButtonExpanded) {
-            setWallpaperButtonExpanded(false)
-            return
-        }
         if (controlWebView?.visibility == View.VISIBLE) {
             controlWebView?.visibility = View.GONE
             restoreControlPageButton()

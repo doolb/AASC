@@ -24,7 +24,7 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
     fs.mkdirSync(cache, { recursive: true });
     const profile = fs.mkdtempSync(path.join(cache, 'browser-'));
     const html = read('display.html');
-    const start = html.indexOf('            <button id="displayVoiceContinuous"');
+    const start = html.indexOf('            <div class="display-voice-action-group">');
     assert.ok(start >= 0);
     const end = html.indexOf('        </div>\n        <div id="displayArCalibration"', start);
     const markup = html.slice(start, end);
@@ -120,6 +120,12 @@ test('浏览器验证真实语音按钮、助手名及重开后隐藏面板的�
         });
         assert.equal(await page.$eval('#displayVoiceActionStatusText', (element) => element.textContent), '群聊 · 空闲');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.tagName), 'BUTTON');
+        const positions = await page.evaluate(() => {
+            const main = document.getElementById('displayVoiceAction').getBoundingClientRect();
+            const toggle = document.getElementById('displayVoiceContinuous').getBoundingClientRect();
+            return { mainRight: main.right, toggleLeft: toggle.left, width: toggle.width, height: toggle.height };
+        });
+        assert.ok(positions.toggleLeft >= positions.mainRight && positions.width <= 24 && positions.height <= 24);
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.getAttribute('aria-pressed')), 'true', '默认实时监听开启');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.textContent), '实时监听');
         assert.equal(await page.$eval('#displayVoiceContinuous', (element) => element.disabled), false);

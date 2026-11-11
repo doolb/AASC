@@ -38,6 +38,11 @@ class NativeBridge(
     fun isWallpaperActive(): Boolean = WallpaperDisplayCoordinator.wallpaperActive
 
     @JavascriptInterface
+    fun openWallpaperPreview() {
+        mainHandler.post { WallpaperDisplayCoordinator.openWallpaperPreview() }
+    }
+
+    @JavascriptInterface
     fun getWallpaperMediaVolume(): Int {
         val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         return audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / maximum
@@ -45,7 +50,7 @@ class NativeBridge(
 
     @JavascriptInterface
     fun setWallpaperMediaVolume(value: Int) {
-        if (!WallpaperDisplayCoordinator.wallpaperActive) return
+        if (!WallpaperDisplayCoordinator.wallpaperActive && !WallpaperDisplayCoordinator.foreground) return
         val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (value.coerceIn(0, 100) * maximum + 50) / 100, 0)
     }

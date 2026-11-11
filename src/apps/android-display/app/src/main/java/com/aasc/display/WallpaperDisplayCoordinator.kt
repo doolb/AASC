@@ -77,6 +77,10 @@ object WallpaperDisplayCoordinator {
 
     fun bindActivity(value: MainActivity) { activity = WeakReference(value) }
 
+    fun openWallpaperPreview() {
+        if (foreground) activity.get()?.openWallpaperPreview()
+    }
+
     fun unbindActivity(value: MainActivity) {
         if (activity.get() !== value) return
         activity.clear()

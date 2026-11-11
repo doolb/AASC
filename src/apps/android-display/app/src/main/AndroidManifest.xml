@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 关闭任务时将本应用的桌面动态壁纸恢复为系统默认壁纸。 -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Android WebView 创建 getUserMedia 录音设备所需的普通安装权限。 -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />

@@ -1,4 +1,4 @@
-/* 壁纸专用浮动控件；前台与普通浏览器不改变既有状态。 */
+/* 普通显示页浮动控件；壁纸通过独立系统浮窗复用这些偏好。 */
 (function initializeWallpaperControls(root) {
     'use strict';
     const document = root.document;
@@ -57,8 +57,10 @@
     function updateMode() {
         try { active = root.NativeDisplay?.isWallpaperActive?.() === true; } catch (_) { active = false; }
         document.body.classList.toggle('is-wallpaper', active);
-        box.hidden = !active;
-        if (active) {
+        const hasSystemOverlay = typeof root.NativeDisplay?.openWallpaperPreview === 'function';
+        box.hidden = !root.NativeDisplay || (active && hasSystemOverlay);
+        get('wallpaperOpenPreview').hidden = !hasSystemOverlay;
+        if (!box.hidden) {
             try {
                 const value = Number(root.NativeDisplay?.getWallpaperMediaVolume?.());
                 if (Number.isFinite(value)) { volume.value = String(value); volumeValue.textContent = `${value}%`; }
@@ -68,6 +70,7 @@
         updateOptions();
     }
     handle.addEventListener('click', () => setExpanded(true));
+    get('wallpaperOpenPreview').addEventListener('click', () => root.NativeDisplay?.openWallpaperPreview?.());
     get('wallpaperControlsCollapse').addEventListener('click', () => setExpanded(false));
     volume.addEventListener('input', () => {
         const value = Number(volume.value);
@@ -80,6 +83,17 @@
         savePreference('aasc.wallpaper.contentInteraction', contentInteraction.checked);
         updateOptions();
     });
+    // 系统浮窗与前台共用网页本地偏好；只接受预定义的三个开关。
+    const options = { fps, time, contentInteraction };
+    root.WallpaperControls = {
+        snapshot: () => ({ fps: fps.checked, time: time.checked, contentInteraction: contentInteraction.checked, status: status.textContent || '暂无状态' }),
+        setOption: (name, value) => {
+            const input = options[name];
+            if (!input || typeof value !== 'boolean') return;
+            input.checked = value;
+            input.dispatchEvent(new Event('change'));
+        }
+    };
     // 关闭壁纸内容交互时在捕获阶段拦截输入；浮动面板始终保留交互能力。
     for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'touchcancel', 'mousedown', 'mousemove', 'mouseup', 'click', 'dblclick', 'contextmenu', 'wheel']) {
         root.addEventListener(type, event => {
@@ -114,7 +128,7 @@
     root.addEventListener('aasc-wallpaper-inset', scheduleClock);
     root.addEventListener('resize', scheduleClock);
     if (root.MutationObserver) {
-        const observer = new root.MutationObserver(() => { if (active) { updateStatus(); scheduleClock(); } });
+        const observer = new root.MutationObserver(() => { updateStatus(); if (active) scheduleClock(); });
         for (const id of ['connectionStatus', 'voiceStatus']) {
             const element = get(id);
             if (element) observer.observe(element, { childList: true, subtree: true, characterData: true });

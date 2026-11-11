@@ -48,3 +48,18 @@ test('关闭任务仅重置本应用桌面壁纸，并保留锁屏壁纸', () =>
         assert.match(source, /WallpaperDisplayCoordinator\.suspendWallpaper\(this\)/);
     }
 });
+
+test('系统壁纸浮窗有权限保护，并随壁纸生命周期移除', () => {
+    const manifest = read('src/apps/android-display/app/src/main/AndroidManifest.xml');
+    const service = read('src/apps/android-display/app/src/main/java/com/aasc/display/DisplayWallpaperService.kt');
+    const overlay = read('src/apps/android-display/app/src/main/java/com/aasc/display/WallpaperOverlay.kt');
+    const activity = read('src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt');
+    assert.match(manifest, /android.permission.SYSTEM_ALERT_WINDOW/);
+    assert.match(activity, /Settings\.ACTION_MANAGE_OVERLAY_PERMISSION/);
+    assert.match(service, /if \(!isPreview\) webView\?\.let \{ overlay\.show\(it\) \}/);
+    assert.match(service, /onVisibilityChanged[\s\S]*?overlay\.hide\(\)/);
+    assert.match(service, /private fun releaseRenderer\(\) \{\s*overlay\.hide\(\)/);
+    assert.match(overlay, /Settings\.canDrawOverlays\(context\)/);
+    assert.match(overlay, /TYPE_APPLICATION_OVERLAY/);
+    assert.match(overlay, /handler\.removeCallbacks\(refresh\)/);
+});

@@ -33,6 +33,7 @@ class DisplayWallpaperService : WallpaperService() {
         private var visible = false
         private var surfaceWidth = 0
         private var surfaceHeight = 0
+        private val overlay = WallpaperOverlay(this@DisplayWallpaperService)
         private val foregroundListener: (Boolean) -> Unit = { foreground ->
             if (foreground) releaseRenderer() else if (visible) ensureRenderer(surfaceHolder)
         }
@@ -67,10 +68,14 @@ class DisplayWallpaperService : WallpaperService() {
             super.onVisibilityChanged(visible)
             this.visible = visible
             if (visible) ensureRenderer(surfaceHolder)
-            else if (webView?.parent === container) webView?.onPause()
+            else {
+                overlay.hide()
+                if (webView?.parent === container) webView?.onPause()
+            }
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
+            overlay.hide()
             display?.setSurface(null)
             if (webView?.parent === container) webView?.onPause()
             surfaceWidth = 0
@@ -129,6 +134,7 @@ class DisplayWallpaperService : WallpaperService() {
                 } else {
                     webView?.onResume()
                 }
+                if (!isPreview) webView?.let { overlay.show(it) }
             } catch (error: Exception) {
                 Log.e(TAG, "动态壁纸显示端启动失败", error)
                 releaseRenderer()
@@ -143,6 +149,7 @@ class DisplayWallpaperService : WallpaperService() {
         }
 
         private fun releaseRenderer() {
+            overlay.hide()
             if (container != null && webView?.parent === container) {
                 WallpaperDisplayCoordinator.setWallpaperActive(false)
                 WallpaperDisplayCoordinator.setWallpaperTopInset(0.0)

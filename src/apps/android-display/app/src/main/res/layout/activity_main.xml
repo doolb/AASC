@@ -45,15 +45,6 @@
             android:text="@string/control_page"
             android:visibility="gone" />
 
-        <Button
-            android:id="@+id/wallpaperButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|end"
-            android:layout_margin="12dp"
-            android:elevation="12dp"
-            android:text="@string/wallpaper_button" />
-
         <!-- 首次解包或 Node 服务启动期间覆盖 WebView，避免用户看到短暂的连接拒绝错误。 -->
         <LinearLayout
             android:id="@+id/offlineStartupPanel"
