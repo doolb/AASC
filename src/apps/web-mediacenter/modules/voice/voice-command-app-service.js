@@ -1020,10 +1020,10 @@ async function handlePlayCommand(text, displayId, callbacks) {
         
         if (displayId && sendToDisplay) {
             sendToDisplay(displayId, {
-                type: 'media',
+                type: 'url',
                 url: file.url,
                 mediaType: file.mediaType,
-                name: file.name
+                fileName: file.name
             });
         }
         return;
@@ -1147,10 +1147,10 @@ async function handlePlaySelection(confirmationId, selection, displayId) {
     
     if (displayId && sendToDisplay) {
         sendToDisplay(displayId, {
-            type: 'media',
+            type: 'url',
             url: file.url,
             mediaType: file.mediaType,
-            name: file.name
+            fileName: file.name
         });
     }
     

@@ -1,3 +1,4 @@
+- [显示端快捷控制](design/display-quick-control.md)
 # Web MediaCenter - 项目设计文档
 
 - [桌面浏览器媒体服务](design/browser-media-service.md)

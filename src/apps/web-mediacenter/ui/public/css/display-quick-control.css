@@ -1,0 +1,20 @@
+.display-quick-control {
+    position: fixed; z-index: 10030; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom));
+    box-sizing: border-box; width: min(360px, calc(100vw - 24px)); max-height: min(80vh, 720px); overflow: auto;
+    padding: 14px; border: 1px solid var(--border-color, #657078); border-radius: 14px;
+    background: var(--panel-bg, #202b35); color: var(--text-color, #fff); box-shadow: 0 8px 28px #0008; pointer-events: auto;
+}
+.display-quick-control[hidden], .display-quick-control [hidden] { display: none !important; }
+.display-quick-control header { display: flex; align-items: center; justify-content: space-between; }
+.display-quick-control section { margin-top: 12px; }
+.display-quick-control label { display: block; margin-bottom: 5px; }
+.display-quick-control .quick-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.display-quick-control button, .display-quick-control select, .display-quick-control input { font: inherit; }
+.display-quick-control button, .display-quick-control select, .display-quick-control input[type=text] { padding: 6px; border: 1px solid #ffffff55; border-radius: 6px; background: #ffffff18; color: inherit; }
+.display-quick-control select option { color: #111; }
+.display-quick-control button.active { background: #299c86; }
+.display-quick-control input[type=range] { width: 100%; }
+.display-quick-control form { display: flex; gap: 6px; }
+.display-quick-control form input { min-width: 0; flex: 1; }
+/* 壁纸模式沿用网页交互层的隐藏规则，避免切换模式后残留普通页面面板。 */
+body.is-wallpaper .display-quick-control { display: none !important; }

@@ -635,6 +635,21 @@ const SelfTest = {
             }
         },
         {
+            id: 'display_quick_control_structure',
+            name: '显示端快捷控制结构',
+            description: '只读检查快捷控制入口与资源',
+            category: '界面布局',
+            run: async () => {
+                try {
+                    const responses = await Promise.all(['/display.html', '/js/display-quick-control.js', '/css/display-quick-control.css'].map(url => fetch(url, { cache: 'no-store' })));
+                    if (responses.some(response => !response.ok)) return { success: false, message: '快捷控制资源不可读取' };
+                    const [html, script, css] = await Promise.all(responses.map(response => response.text()));
+                    const valid = html.includes('displayQuickControlToggle') && html.includes('displayQuickControlPanel') && script.includes('displayQuickControl') && css.includes('.display-quick-control');
+                    return { success: valid, message: valid ? '快捷控制资源正常' : '快捷控制资源缺失', details: '实际播放和触控需要设备验收' };
+                } catch (error) { return { success: false, message: `快捷控制检查失败: ${error.message}` }; }
+            }
+        },
+        {
             id: 'wallpaper_controls_structure',
             name: '壁纸浮动控件结构',
             description: '只读检查壁纸面板及前台控件隔离',

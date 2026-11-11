@@ -525,6 +525,7 @@
         setRotation,
         handleBack() {
             if (root.DisplayMediaLibrary?.handleBack?.()) return true;
+            if (root.DisplayQuickControl?.handleBack?.()) return true;
             if (!state.chatVisible) return false;
             setChatVisible(false);
             return true;

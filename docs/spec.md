@@ -1,3 +1,4 @@
+- [显示端快捷控制](spec/display-quick-control.md)
 # Web MediaCenter - 项目实现文档
 
 - [桌面浏览器媒体服务伪代码](spec/browser-media-service.md)

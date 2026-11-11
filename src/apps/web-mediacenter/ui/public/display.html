@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="css/display.css">
     <link rel="stylesheet" href="css/display-chat.css">
     <link rel="stylesheet" href="css/display-game.css">
+    <link rel="stylesheet" href="css/display-quick-control.css">
     <link rel="stylesheet" href="css/display-mmd.css">
     <link rel="stylesheet" href="css/display-media-library.css">
     <link rel="stylesheet" href="css/tts-voice-picker.css">
@@ -683,6 +684,7 @@
 </section>
             </div>
             <div id="displayGameChatActions" class="display-game-chat-actions">
+                <button id="displayQuickControlToggle" class="display-stage-button" type="button" aria-controls="displayQuickControlPanel" aria-expanded="false">快捷控制</button>
                 <button id="displayMediaLibraryToggle" class="display-stage-button" type="button" hidden>媒体库</button>
                 <button id="displayGameToggle" class="display-stage-button" type="button"
                         aria-controls="displayGameMenu" aria-expanded="false">游戏</button>
@@ -737,6 +739,17 @@
         </div>
     </div>
 
+    <div id="displayQuickControlPanel" class="display-quick-control" role="dialog" aria-label="快捷控制" hidden>
+        <header><strong>快捷控制</strong><button id="quickControlClose" type="button">关闭</button></header>
+        <p id="quickControlStatus" role="status"></p>
+        <section><label>播放控制</label><div class="quick-buttons"><button id="quickPlayToggle" type="button">播放</button><button id="quickClear" type="button">清空媒体</button></div></section>
+        <section><label>文本分页 <span id="quickTextStatus">未播放文本</span></label><div class="quick-buttons"><button id="quickTextToggle" data-text="toggle">播放</button><button data-text="prev">上一页</button><button data-text="next">下一页</button><button data-text="stop">停止</button></div>
+        <details><summary>文本模式</summary><div class="quick-buttons"><label>字体 <select id="quickFontSize"><option value="auto">自动</option><option value="small">小</option><option value="medium">中</option><option value="large">大</option></select></label><label>行距 <select id="quickLineHeight"><option value="compact">紧凑</option><option value="normal" selected>标准</option><option value="loose">宽松</option></select></label><label>页边距 <select id="quickPageMargin"><option value="small">小</option><option value="normal" selected>标准</option><option value="large">大</option></select></label><button id="quickTextStyleApply" type="button">应用</button></div></details></section>
+        <section><label for="quickVolume">音量 <output id="quickVolumeValue">100%</output></label><input id="quickVolume" type="range" min="0" max="100" value="100"></section>
+        <section><label>画面填充</label><div class="quick-buttons"><button data-fit="contain">适应</button><button data-fit="cover">铺满</button><button data-fit="dynamic">动态</button><button data-fit="crop">裁剪</button></div></section>
+        <section><label for="quickPlayName">快速播放</label><form id="quickPlayForm"><input id="quickPlayName" type="text" placeholder="输入文件名"><button>播放</button></form></section>
+        <section id="quickPlaylist" hidden><label>批量播放 <span id="quickPlaylistStatus"></span></label><div class="quick-buttons"><button id="quickPlaylistToggle" data-playlist="toggle">暂停</button><button data-playlist="prev">上一个</button><button data-playlist="next">下一个</button><button data-playlist="stop">停止</button></div></section>
+    </div>
     <div id="displayMediaLibraryPanel" class="display-media-library-panel" hidden>
         <div class="display-media-library-header">
             <strong>媒体库</strong>
@@ -779,6 +792,7 @@
     <!-- 弹幕渲染器必须先于主内联脚本加载，确保 window.BilibiliDanmaku 已注册。 -->
     <script src="/js/bilibili-danmaku.js"></script>
     <script src="js/display-media-library.js"></script>
+    <script src="js/display-quick-control.js"></script>
     <script src="js/ui-theme.js"></script>
     <script src="js/display-appearance-controls.js" defer></script>
     <script src="js/display-stage-panel-coordinator.js" defer></script>
@@ -6855,6 +6869,7 @@
 
                     if (data.type === 'control') {
                         handleControl(data);
+                        window.DisplayQuickControl?.update(data);
                         if (data.action !== 'crop') {
                             // 睡眠设置/激活/手动覆盖回传当前 sleepState，供控制端状态显示
                             let ackExtra = null;
@@ -6883,6 +6898,7 @@
                         sendCommandAck('reminder', true, data.action);
                     } else if (data.type === 'restoreState') {
                         handleRestoreState(data.state);
+                        window.DisplayQuickControl?.update(data);
                         sendCommandAck('restoreState', true, 'state restored');
                     } else if (data.type === 'voiceCommand') {
                         handleVoiceCommand(data);
@@ -6932,6 +6948,8 @@
                         if (window.DisplayMediaLibrary?.handleServerMessage(data) === false) return;
                         handlePlaylistStart(data);
                         sendCommandAck('playlistStart', true, data.listId);
+                    } else if (data.type === 'displayQuickControlResult') {
+                        document.getElementById('quickControlStatus').textContent = data.message || '';
                     } else if (data.type === 'displayMediaStart' || data.type === 'displayPlaylistError') {
                         window.DisplayMediaLibrary?.handleServerMessage(data);
                     } else if (data.type === 'playlistDynamicEnd') {
@@ -7030,6 +7048,17 @@
 
         applyRotation();
         connectWebSocket();
+        window.DisplayQuickControl?.init({
+            send: message => {
+                if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return false;
+                try { displayWs.send(JSON.stringify(message)); return true; } catch (error) { console.warn('快捷控制发送失败', error); return false; }
+            },
+            snapshot: () => ({
+                playing: mediaIsPlaying,
+                text: currentMediaType === 'text' ? TextMediaPlayer.getProgress() : null,
+                playlist: playlistState?.active ? { index: playlistState.index, total: playlistState.playlist.length, paused: playlistState.paused } : null
+            })
+        });
         // 媒体库面板只在本机页面可用；播放回调复用显示端现有 showMedia/stopPlaylist。
         window.DisplayMediaLibrary?.init({
             send: message => {

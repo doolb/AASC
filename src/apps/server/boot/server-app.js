@@ -1539,7 +1539,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'displayPlaylistRequest', 'displayPlaylistCancel', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
+                displayTypes: ['chatAction', 'setChatTtsSelection', 'getChatTtsConfig', 'getTtsProviderVoices', 'previewTtsVoice', 'getChatModelTierConfig', 'setChatModelTierSelection', 'cancelChatImage', 'setDisplayVoiceListeningConfig', 'setControlThemeConfig', 'setDisplayBackgroundGlowConfig', 'setDisplayTtsBackgroundOpacityConfig', 'canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'audioOutputDevices', 'audioOutputStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'playlistNeedNext', 'playlistCacheStatus', 'displayPlaylistRequest', 'displayPlaylistCancel', 'displayQuickControl', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'getChatContextUsage', 'chatMessage', 'displayChatVisibility', 'gameMove', 'gameView', 'gameRecover', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -9554,6 +9554,22 @@ async function handleChatModelTierMessage(ws, data) {
 }
 
 function handleDisplayMessageFallback(displayId, data, ws) {
+    if (data.type === 'displayQuickControl') {
+        if (displayClients.get(displayId)?.ws !== ws) return;
+        const command = require('../modules/media/display-quick-control').normalizeQuickControl(data, displayId);
+        if (command?.type === 'voiceCommand') {
+            // 快速播放是明确的文件搜索，文件名包含“天气”等词时不能误触发语音指令。
+            void voiceCommand.handlePlayCommand(command.text, displayId, {
+                onResult: async message => {
+                    if (displayClients.get(displayId)?.ws === ws) ws.send(JSON.stringify({ type: 'displayQuickControlResult', message }));
+                }
+            }).catch(error => {
+                logError('快捷播放', error.message);
+                if (displayClients.get(displayId)?.ws === ws) ws.send(JSON.stringify({ type: 'displayQuickControlResult', message: '搜索失败，请稍后重试' }));
+            });
+        } else if (command) void handleControlMessageFallback(command, ws);
+        return;
+    }
     if (['displayPlaylistRequest', 'displayPlaylistCancel'].includes(data.type)) {
         void handleDisplayPlaylistRequest(displayId, data, ws);
         return;
