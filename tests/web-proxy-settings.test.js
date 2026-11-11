@@ -5,6 +5,8 @@ const {
     ensureWebProxyMigration, createWebProxySettings
 } = require('../src/apps/server/modules/media/web-proxy-settings');
 const { LEGACY_PROXY_ID } = require('../src/apps/server/modules/media/web-proxy');
+const { createGalleryProvider } = require('../res/tasks/local-only/private-media/gallery');
+const { Readable } = require('node:stream');
 
 // 内存配置模拟 config.get/set 的点路径行为，set 立即生效并返回 true。
 function memoryConfig(initial = {}) {
@@ -145,16 +147,64 @@ test('代理列表校验失败时不写入配置', () => {
     assert.equal(JSON.stringify(config.data), before);
 });
 
-test('initial per-source proxy only fills missing selections', () => {
+test('私密来源未选择代理时直连，显式选择保持不变', () => {
     const config = memoryConfig({
-        network: { webProxies: [{ id: 'jp-id', name: 'jp', url: 'socks5h://127.0.0.1:1080' }, { id: 'us-id', name: 'us', url: 'socks5://127.0.0.1:1081' }] },
-        media: { providerProxy: { existing: '', customized: 'us-id' } }
+        network: { webProxies: [{ id: 'jp-id', name: 'jp', url: 'socks5h://127.0.0.1:1080' }] },
+        media: { providerProxy: { ehentai: '' } }
     });
-    const settings = createWebProxySettings({ get: config.get, set: config.set });
-    assert.equal(settings.setInitialProviders(['new-source', 'existing', 'customized'], 'jp'), true);
-    assert.deepEqual(config.data.media.providerProxy, { existing: '', customized: 'us-id', 'new-source': 'jp-id' });
-    assert.equal(settings.setInitialProviders(['new-source'], 'us'), false);
-    assert.equal(settings.setInitialProviders(['missing-source'], 'absent'), false);
+    const settings = createWebProxySettings({
+        get: config.get, set: config.set,
+        listSources: () => [{ id: 'ehentai', name: 'E-Hentai', region: 'private' }, { id: 'iwara', region: 'private' }]
+    });
+    assert.deepEqual(settings.snapshot().sources.map(source => source.proxyId), ['', '']);
+    settings.setProvider({ sourceId: 'ehentai', proxyId: 'jp-id' });
+    assert.deepEqual(settings.snapshot().sources.map(source => source.proxyId), ['jp-id', '']);
+    assert.equal(config.data.media.providerProxy.ehentai, 'jp-id');
+});
+
+test('私密画廊页面、图片和封面请求逐次读取代理', async () => {
+    let selected = '';
+    const seen = [];
+    const galleryUrl = 'https://e-hentai.org/g/1/aaaaaaaaaa/';
+    const imagePage = 'https://e-hentai.org/s/bbbbbbbbbb/1-1';
+    const request = async (url, options) => {
+        seen.push({ url, ...options });
+        if (options.responseType === 'stream') return {
+            data: Readable.from([]), headers: { 'content-type': 'image/jpeg', 'content-length': '1' }
+        };
+        const html = url === galleryUrl
+            ? '<div id="gd1"><div style="background:url(https://ehgt.org/image.jpg)"></div></div><div id="gdd">1 pages</div><div id="gdt"><a href="/s/bbbbbbbbbb/1-1"></a></div>'
+            : url === imagePage ? '<img id="img" src="https://ehgt.org/image.jpg">' : '';
+        return { data: html };
+    };
+    const provider = createGalleryProvider({ get proxyUrl() { return selected; } }, { request });
+    await provider.home();
+    selected = 'socks5h://127.0.0.1:1080';
+    await provider.resolveLink({ url: galleryUrl });
+    await provider.getStream('/image/s/bbbbbbbbbb/1-1');
+    selected = 'http://127.0.0.1:8888';
+    await provider.getCover('/gallery/g/1/aaaaaaaaaa/');
+    assert.equal(seen.length, 6);
+    assert.equal(seen[0].proxy, false);
+    assert.equal(seen[0].httpAgent, undefined);
+    assert.equal(seen[1].httpAgent?.constructor.name, 'SocksProxyAgent');
+    assert.equal(seen[2].httpAgent?.constructor.name, 'SocksProxyAgent');
+    assert.equal(seen[3].httpAgent?.constructor.name, 'SocksProxyAgent');
+    assert.equal(seen[4].httpAgent?.constructor.name, 'HttpsProxyAgent');
+    assert.equal(seen[5].httpAgent?.constructor.name, 'HttpsProxyAgent');
+    assert.ok(seen.every(item => item.proxy === false && item.maxRedirects === 0));
+    await provider.stop();
+});
+
+test('私密画廊所选代理失败不自动直连', async () => {
+    const calls = [];
+    const provider = createGalleryProvider({ proxyUrl: 'http://127.0.0.1:8888' }, {
+        request: async (_url, options) => { calls.push(options); throw new Error('代理连接失败'); }
+    });
+    await assert.rejects(provider.home(), /代理连接失败/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].httpAgent?.constructor.name, 'HttpsProxyAgent');
+    await provider.stop();
 });
 
 test('保存单个来源代理校验来源与代理存在性', () => {

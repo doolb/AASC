@@ -1768,10 +1768,6 @@ async function startServer() {
                 taskCodeCatalog,
                 registerMediaProvider: (owner, definition) => {
                     const unregister = mediaLibraryManager.taskMediaProviders.register(owner, definition);
-                    if (definition.region === 'private' && definition.initialProxyName) {
-                        try { webProxySettings.setInitialProviders([definition.id], definition.initialProxyName); }
-                        catch (error) { console.warn('媒体源初始代理设置失败:', error.message); }
-                    }
                     broadcastToControls({ type: 'taskMediaSources', providers: mediaLibraryManager.listTaskMediaSources() });
                     if (definition.region === 'private') broadcastToControls(webProxySettings.snapshot());
                     return () => { unregister(); mediaLibraryManager.virtualTaskLibraries.delete(`task-auto:${definition.id}`); broadcastToControls({ type: 'taskMediaSources', providers: mediaLibraryManager.listTaskMediaSources() }); };

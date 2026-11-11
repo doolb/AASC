@@ -11,7 +11,7 @@ const SOURCES = [
   { id: 'kanav', name: 'kanav.ad', reason: '仅验证首页可达，播放地址尚未验证' },
   { id: 'acgxmh', name: 'acgxmh.com', reason: '仅验证漫画页可达，图片流尚未验证' },
   { id: 'cosplaytele', name: 'cosplaytele.com', reason: '仅验证首页可达，媒体接口尚未验证' },
-  { id: 'hanime1', name: 'hanime1.me', initialProxyName: 'us', reason: '通过所选代理访问超时，暂不可用' },
+  { id: 'hanime1', name: 'hanime1.me', reason: '通过所选代理访问超时，暂不可用' },
   { id: 'taiav', name: 'taiav.com', reason: '仅验证详情可达，视频流尚未验证' }
 ];
 
@@ -31,7 +31,6 @@ async function run(context) {
     for (const source of SOURCES) {
       unregisters.push(context.registerMediaProvider({
         id: source.id, name: source.name, region: 'private',
-        initialProxyName: source.initialProxyName || 'jp',
         features: source.features || ['home'],
         create: config => {
           const provider = source.create ? source.create(config) : unavailable(`${source.name}：${source.reason}`);

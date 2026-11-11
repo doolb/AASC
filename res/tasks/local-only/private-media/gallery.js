@@ -39,6 +39,15 @@ function galleryItems(html) {
     return { id: galleryPath(url), title, mediaType: 'collection', url, ...(cover ? { cover } : {}) };
   }).get().slice(0, 25);
 }
+function proxyOptions(proxyUrl) {
+  if (!proxyUrl) return { proxy: false };
+  const parsed = new URL(proxyUrl);
+  if (!['http:', 'https:', 'socks:', 'socks5:', 'socks5h:'].includes(parsed.protocol) || !parsed.hostname || parsed.search || parsed.hash) throw new Error('代理地址格式无效');
+  const Agent = parsed.protocol.startsWith('socks') ? SocksProxyAgent : HttpsProxyAgent;
+  const agent = new Agent(proxyUrl);
+  return { proxy: false, httpAgent: agent, httpsAgent: agent };
+}
+
 function createGalleryProvider(config, { request = axios.get } = {}) {
   const abort = new AbortController();
   const streams = new Set();
@@ -53,8 +62,7 @@ function createGalleryProvider(config, { request = axios.get } = {}) {
     check();
     const proxy = config.proxyUrl || '';
     if (proxy !== lastProxy) { imagePages.clear(); lastProxy = proxy; }
-    const agent = proxy ? new (new URL(proxy).protocol.startsWith('socks') ? SocksProxyAgent : HttpsProxyAgent)(proxy) : null;
-    const response = await request(url, { proxy: false, ...(agent ? { httpAgent: agent, httpsAgent: agent } : {}), timeout: 15000, maxRedirects: 0, maxContentLength: PAGE_LIMIT, headers: { 'User-Agent': 'Mozilla/5.0' }, signal: abort.signal, responseType: 'text' });
+    const response = await request(url, { ...proxyOptions(proxy), timeout: 15000, maxRedirects: 0, maxContentLength: PAGE_LIMIT, headers: { 'User-Agent': 'Mozilla/5.0' }, signal: abort.signal, responseType: 'text' });
     check();
     return String(response.data);
   }
@@ -87,9 +95,7 @@ function createGalleryProvider(config, { request = axios.get } = {}) {
     const $ = cheerio.load(await fetchPage(page));
     const url = imageUrl($('#img').attr('src'));
     if (!url) throw new Error('图片地址不可用');
-    const proxy = config.proxyUrl || '';
-    const agent = proxy ? new (new URL(proxy).protocol.startsWith('socks') ? SocksProxyAgent : HttpsProxyAgent)(proxy) : null;
-    const response = await request(url, { proxy: false, ...(agent ? { httpAgent: agent, httpsAgent: agent } : {}), timeout: 30000, maxRedirects: 0, responseType: 'stream', signal: abort.signal, headers: { Referer: ORIGIN + '/', 'User-Agent': 'Mozilla/5.0' }, validateStatus: status => status === 200 });
+    const response = await request(url, { ...proxyOptions(config.proxyUrl), timeout: 30000, maxRedirects: 0, responseType: 'stream', signal: abort.signal, headers: { Referer: ORIGIN + '/', 'User-Agent': 'Mozilla/5.0' }, validateStatus: status => status === 200 });
     const length = Number(response.headers['content-length']);
     if (abort.signal.aborted || !/^image\/(?:jpeg|png|gif|webp|avif)$/i.test(String(response.headers['content-type'] || '').split(';')[0]) || (Number.isFinite(length) && length > IMAGE_LIMIT)) {
       response.data.destroy();
@@ -130,9 +136,7 @@ function createGalleryProvider(config, { request = axios.get } = {}) {
       const match = /url\((https:\/\/[^)]+)\)/.exec($('#gd1 div').first().attr('style') || '');
       const url = imageUrl(match?.[1]);
       if (!url) throw new Error('封面不可用');
-      const proxy = config.proxyUrl || '';
-      const agent = proxy ? new (new URL(proxy).protocol.startsWith('socks') ? SocksProxyAgent : HttpsProxyAgent)(proxy) : null;
-      const response = await request(url, { proxy: false, ...(agent ? { httpAgent: agent, httpsAgent: agent } : {}), timeout: 20000, maxRedirects: 0, responseType: 'stream', signal: abort.signal, validateStatus: status => status === 200 });
+      const response = await request(url, { ...proxyOptions(config.proxyUrl), timeout: 20000, maxRedirects: 0, responseType: 'stream', signal: abort.signal, validateStatus: status => status === 200 });
       const length = Number(response.headers['content-length']);
       if (!/^image\/(?:jpeg|png|gif|webp|avif)$/i.test(String(response.headers['content-type'] || '').split(';')[0]) || (Number.isFinite(length) && length > 5 * 1024 * 1024)) { response.data.destroy(); throw new Error('封面响应无效'); }
       streams.add(response.data);
