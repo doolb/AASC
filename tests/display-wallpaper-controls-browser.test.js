@@ -22,11 +22,47 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         const preferences = {};
         Object.defineProperty(window, 'localStorage', { value: { getItem: key => preferences[key] ?? null, setItem: (key, value) => { preferences[key] = value; } } });
         window.wallpaper = false; window.actualVolume = 36; window.previewCount = 0;
+        window.hologram = {}; window.sensorEnabled = false;
+        window.DisplayMmd = { setHolographicTilt: value => { window.hologram = value; } };
         window.NativeDisplay = { isWallpaperActive: () => window.wallpaper, getWallpaperTopInset: () => 30,
-            openWallpaperPreview: () => { window.previewCount++; }, getWallpaperMediaVolume: () => window.actualVolume, setWallpaperMediaVolume: value => { window.actualVolume = value; } };
+            openWallpaperPreview: () => { window.previewCount++; }, getWallpaperMediaVolume: () => window.actualVolume, setWallpaperMediaVolume: value => { window.actualVolume = value; },
+            setHolographicSensorEnabled: value => { window.sensorEnabled = value; return true; } };
     });
     await page.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await page.$eval('#wallpaperControls', node => node.hidden), false);
+    assert.equal(await page.$eval('#wallpaperHologramModel', node => node.checked), false);
+    assert.equal(await page.$eval('#wallpaperHologramCamera', node => node.checked), false);
+    await page.$eval('#wallpaperHologramModel', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    assert.equal(await page.evaluate(() => window.sensorEnabled), true);
+    await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 10, gamma: 20 } }));
+    });
+    let tilt = await page.evaluate(() => window.hologram);
+    assert.ok(Math.abs(tilt.modelYaw) > 0 && tilt.cameraYaw === 0);
+    await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 80, gamma: 170 } }));
+    });
+    tilt = await page.evaluate(() => window.hologram);
+    assert.equal(Math.abs(tilt.modelYaw), 0.14); assert.equal(Math.abs(tilt.cameraYaw), 0.14);
+    await page.$eval('#wallpaperHologramModel', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
+    await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 10, gamma: 20 } }));
+    });
+    tilt = await page.evaluate(() => window.hologram);
+    assert.equal(tilt.modelYaw, 0); assert.ok(Math.abs(tilt.cameraYaw) > 0);
+    await page.evaluate(() => window.dispatchEvent(new Event('aasc-hologram-visibility')));
+    assert.deepEqual(await page.evaluate(() => window.hologram), {});
+    await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
+    assert.equal(await page.evaluate(() => window.sensorEnabled), false);
+    assert.deepEqual(await page.evaluate(() => window.hologram), {});
+    await page.evaluate(() => { window.NativeDisplay.setHolographicSensorEnabled = () => false; });
+    await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    assert.match(await page.$eval('#wallpaperHologramStatus', node => node.textContent), /没有可用的姿态传感器/);
+    await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     await page.click('#wallpaperControlsHandle');
     await page.click('#wallpaperOpenPreview');
     assert.equal(await page.evaluate(() => window.previewCount), 1);

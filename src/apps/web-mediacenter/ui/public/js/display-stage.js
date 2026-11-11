@@ -523,6 +523,12 @@
         mapViewportPointToStage,
         send,
         setRotation,
+        handleBack() {
+            if (root.DisplayMediaLibrary?.handleBack?.()) return true;
+            if (!state.chatVisible) return false;
+            setChatVisible(false);
+            return true;
+        },
         setChatVisible,
         setMmdOrder,
         setMmdVisible,

@@ -53,11 +53,13 @@ class NodeServerService : Service() {
         const val EXTRA_CANCEL_BOOTSTRAP = "cancel_bootstrap"
         const val ACTION_STATUS = "com.aasc.display.action.NODE_STATUS"
         const val ACTION_REQUEST_STATUS = "com.aasc.display.action.REQUEST_NODE_STATUS"
+        const val ACTION_ACK_UPDATE_STATUS = "com.aasc.display.action.ACK_NODE_UPDATE_STATUS"
         const val EXTRA_STATUS = "status"
         const val EXTRA_DETAIL = "detail"
         const val EXTRA_PHASE = "phase"
         const val EXTRA_COMPLETED_BYTES = "completed_bytes"
         const val EXTRA_TOTAL_BYTES = "total_bytes"
+        const val EXTRA_UPDATE_SEQUENCE = "update_sequence"
         const val STATUS_PREPARING = "preparing"
         const val STATUS_INSTALLING = "installing"
         const val STATUS_STARTING = "starting"
@@ -310,8 +312,13 @@ class NodeServerService : Service() {
     private val startupStatus = NodeStartupStatus()
     private val statusRequestReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == ACTION_REQUEST_STATUS && offlineMode) {
-                startupStatus.replay(::broadcastStatus)
+            if (!offlineMode) return
+            when (intent.action) {
+                ACTION_REQUEST_STATUS -> {
+                    startupStatus.replay(::broadcastStatus)
+                    startupStatus.replayUpdate(::broadcastStatus)
+                }
+                ACTION_ACK_UPDATE_STATUS -> startupStatus.acknowledgeUpdate(intent.getStringExtra(EXTRA_STATUS).orEmpty(), intent.getLongExtra(EXTRA_UPDATE_SEQUENCE, 0L))
             }
         }
     }
@@ -321,7 +328,10 @@ class NodeServerService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("正在准备 Node.js 服务"))
         // 仅现有服务回应前台状态请求；不导出接收器，也不因查询重新启动 Node。
-        ContextCompat.registerReceiver(this, statusRequestReceiver, IntentFilter(ACTION_REQUEST_STATUS),
+        ContextCompat.registerReceiver(this, statusRequestReceiver, IntentFilter().apply {
+            addAction(ACTION_REQUEST_STATUS)
+            addAction(ACTION_ACK_UPDATE_STATUS)
+        },
             ContextCompat.RECEIVER_NOT_EXPORTED)
         try {
             safMediaServer = SafMediaServer(this).also { gateway ->
@@ -467,6 +477,7 @@ class NodeServerService : Service() {
         val intent = Intent(ACTION_STATUS)
             .setPackage(packageName)
             .putExtra(EXTRA_STATUS, snapshot.status)
+            .putExtra(EXTRA_UPDATE_SEQUENCE, snapshot.updateSequence)
         if (!snapshot.detail.isNullOrBlank()) {
             intent.putExtra(EXTRA_DETAIL, snapshot.detail)
         }

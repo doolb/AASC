@@ -276,6 +276,15 @@
         if (panel) panel.hidden = true;
     }
 
+    function handleBack() {
+        const dialog = document.querySelector('.display-media-download-dialog[open]');
+        if (dialog) { dialog.close(); return true; }
+        const panel = byId('displayMediaLibraryPanel');
+        if (!panel || panel.hidden) return false;
+        close();
+        return true;
+    }
+
     function showNotice(message) {
         const notice = byId('displayMediaLibraryNotice');
         if (!notice) return;
@@ -371,6 +380,6 @@
     }
 
     window.DisplayMediaLibrary = {
-        init, open, close, handleServerMessage, isLocalHostname, setCurrentMedia
+        init, open, close, handleBack, handleServerMessage, isLocalHostname, setCurrentMedia
     };
 })();

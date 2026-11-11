@@ -65,6 +65,32 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
         console.error('[IK验收] 等待模型');
         await page.waitForFunction(() => window.DisplayMmd.getHumanInterface()?.getState().ready, { timeout: 90000 });
         assert.equal(await page.evaluate(() => window.DisplayMmd.getHumanInterface().getInteractiveIKState().enabled), false);
+        const hologram = await page.evaluate(async () => {
+            const pivot = window.__gazeTestMesh.parent;
+            const before = pivot.quaternion.toArray();
+            window.DisplayMmd.setHolographicTilt({ modelYaw: 0.12 });
+            await new Promise(resolve => setTimeout(resolve, 800));
+            const tilted = pivot.quaternion.toArray();
+            window.DisplayMmd.setHolographicTilt({});
+            await new Promise(resolve => setTimeout(resolve, 800));
+            return { before, tilted, restored: pivot.quaternion.toArray() };
+        });
+        assert.ok(hologram.before.some((value, axis) => Math.abs(value - hologram.tilted[axis]) > 0.01), '全息偏移应实际旋转角色');
+        assert.ok(hologram.before.every((value, axis) => Math.abs(value - hologram.restored[axis]) < 0.01), '关闭效果应恢复原角色方向');
+        const cameraTilt = await page.evaluate(async () => {
+            window.MmdArTestAframeMode = true;
+            const sample = () => window.DisplayMmd.getArCameraState().cameraPosition;
+            const before = sample();
+            window.DisplayMmd.setHolographicTilt({ cameraYaw: 0.12 });
+            await new Promise(resolve => setTimeout(resolve, 800));
+            const tilted = sample();
+            window.DisplayMmd.setHolographicTilt({});
+            await new Promise(resolve => setTimeout(resolve, 800));
+            const restored = sample(); delete window.MmdArTestAframeMode;
+            return { before, tilted, restored };
+        });
+        assert.ok(cameraTilt.before.some((value, axis) => Math.abs(value - cameraTilt.tilted[axis]) > 0.01), '镜头效果应实际改变视角');
+        assert.ok(cameraTilt.before.every((value, axis) => Math.abs(value - cameraTilt.restored[axis]) < 0.01), '关闭镜头效果应恢复原视角');
         const stable = await page.evaluate(async () => {
             const h = window.DisplayMmd.getHumanInterface();
             await h.gaze.set({ head: true, eyes: false, headMs: 0 });

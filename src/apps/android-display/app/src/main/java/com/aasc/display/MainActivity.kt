@@ -167,7 +167,8 @@ class MainActivity : AppCompatActivity() {
                 ?.takeIf { it >= 0L }
             val totalBytes = intent?.getLongExtra(NodeServerService.EXTRA_TOTAL_BYTES, -1L)
                 ?.takeIf { it >= 0L }
-            updateOfflineStartupStatus(status, detail, phase, completedBytes, totalBytes)
+            updateOfflineStartupStatus(status, detail, phase, completedBytes, totalBytes,
+                intent?.getLongExtra(NodeServerService.EXTRA_UPDATE_SEQUENCE, 0L) ?: 0L)
         }
     }
 
@@ -179,8 +180,17 @@ class MainActivity : AppCompatActivity() {
                 android.content.pm.PackageInstaller.STATUS_FAILURE
             )
             val detail = intent.getStringExtra(OfflineApkInstallReceiver.EXTRA_INSTALL_DETAIL).orEmpty()
-            updateMinApkInstallStatus(status, detail)
+            if (status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                updateMinApkInstallStatus(status, detail)
+            } else {
+                consumeMinInstallStatus()
+            }
         }
+    }
+
+    private fun consumeMinInstallStatus() {
+        if (!offlineMode) return
+        OfflineInstallStatusStore.consume(this)?.let { (status, detail) -> updateMinApkInstallStatus(status, detail) }
     }
 
     private fun requestAudioPermissionIfNeeded(): Boolean {
@@ -491,6 +501,7 @@ class MainActivity : AppCompatActivity() {
             offlineVoiceFirstRun.nodeReady = false
             sendBroadcast(Intent(NodeServerService.ACTION_REQUEST_STATUS).setPackage(packageName))
         }
+        consumeMinInstallStatus()
         maybePromptOfflineVoiceModels()
         runOfflineUpdateChecksIfReady()
         scheduleOfflineUpdateChecks()
@@ -815,7 +826,8 @@ class MainActivity : AppCompatActivity() {
         detail: String?,
         phase: String? = null,
         completedBytes: Long? = null,
-        totalBytes: Long? = null
+        totalBytes: Long? = null,
+        updateSequence: Long = 0L
     ) {
         if (!offlineMode) return
         when (status) {
@@ -851,13 +863,17 @@ class MainActivity : AppCompatActivity() {
             NodeServerService.STATUS_SERVICE_UPDATE_APPLYING,
             NodeServerService.STATUS_SERVICE_UPDATE_PROGRESS -> {
                 offlineVoiceFirstRun.nodeReady = false
+                serviceUpdateStarted = true
+                if (offlineUpdatePanel.visibility != View.VISIBLE && offlineUpdateCollapsedTab.visibility != View.VISIBLE) showOfflineUpdatePanel()
                 updateServiceUpdateProgress(phase, detail, completedBytes, totalBytes)
             }
             NodeServerService.STATUS_SERVICE_UPDATE_APPLIED -> {
                 handleServiceUpdateApplied(detail)
+                acknowledgeServiceUpdate(status, updateSequence)
             }
             NodeServerService.STATUS_SERVICE_UPDATE_FAILED -> {
                 handleServiceUpdateFailed(detail)
+                acknowledgeServiceUpdate(status, updateSequence)
             }
             NodeServerService.STATUS_FAILED -> {
                 offlineVoiceFirstRun.nodeReady = false
@@ -868,6 +884,12 @@ class MainActivity : AppCompatActivity() {
                 showOfflineStartupMessage(getString(R.string.offline_startup_failed, failure), true)
             }
         }
+    }
+
+    private fun acknowledgeServiceUpdate(status: String, updateSequence: Long) {
+        sendBroadcast(Intent(NodeServerService.ACTION_ACK_UPDATE_STATUS).setPackage(packageName)
+            .putExtra(NodeServerService.EXTRA_STATUS, status)
+            .putExtra(NodeServerService.EXTRA_UPDATE_SEQUENCE, updateSequence))
     }
 
     /** 首次语音提示晚于服务健康和页面成功，取消后保留手动入口，不在重连时反复打扰。 */
@@ -1341,6 +1363,9 @@ class MainActivity : AppCompatActivity() {
             }
             android.content.pm.PackageInstaller.STATUS_SUCCESS -> {
                 offlineFailures.retryUpdate()
+                minApkDownloadStarted = false
+                pendingMinApkUpdate = null
+                minApkUpdateCandidate = null
                 offlineUpdateProgress.progress = 100
                 updateCollapsedUpdateTab("success")
                 offlineUpdateMessage.text = getString(R.string.offline_update_success)
@@ -1414,17 +1439,22 @@ class MainActivity : AppCompatActivity() {
     /** 交给系统 PackageInstaller 后仍显示 Android 的标准更新确认页，不执行静默安装。 */
     private fun submitPreparedMinApkUpdate(update: MinApkUpdateResult) {
         try {
+            OfflineInstallStatusStore.clear(this)
             if (offlineUpdateManager.installPreparedMinApk(update)) {
                 Toast.makeText(this, "已请求系统安装 Offline 更新，请在系统提示中确认", Toast.LENGTH_LONG).show()
+            } else {
+                throw IllegalStateException("系统未接受 APK 安装请求，请重试")
             }
         } catch (error: Exception) {
             android.util.Log.e("MainActivity", "提交 Offline min APK 安装失败", error)
             offlineFailures.updateFailed(error.message ?: "APK应用更新失败")
+            minApkDownloadStarted = false
             showOfflineUpdatePanel()
             offlineUpdateMessage.text = offlineFailures.updateError
             offlineUpdateProgress.visibility = View.GONE
             offlineUpdateDownload.isEnabled = true
             offlineUpdateDownload.visibility = View.VISIBLE
+            offlineUpdateLater.visibility = View.VISIBLE
             Toast.makeText(this, "Offline 更新安装失败：${error.message}", Toast.LENGTH_LONG).show()
         }
     }
@@ -1458,6 +1488,10 @@ class MainActivity : AppCompatActivity() {
             metrics.densityDpi,
             scale
         )
+        // 即使错过 STARTING 广播，也必须为首次显示设置隐藏期限。
+        if (offlineDisplayInfoHideAtElapsedRealtime == 0L) {
+            scheduleOfflineDisplayInfoHide()
+        }
         offlineDisplayInfo.visibility = if (
             offlineDisplayInfoHideAtElapsedRealtime > 0L
                 && SystemClock.elapsedRealtime() >= offlineDisplayInfoHideAtElapsedRealtime
@@ -1904,6 +1938,19 @@ class MainActivity : AppCompatActivity() {
             restoreControlPageButton()
             return
         }
+        val current = webView
+        if (current != null && current.visibility == View.VISIBLE) {
+            // 先让网页处理最上层面板；未处理时才继续原生返回，且避免迟到回调影响已切换页面。
+            current.evaluateJavascript("Boolean(window.DisplayStage && window.DisplayStage.handleBack && window.DisplayStage.handleBack())") { handled ->
+                if (isFinishing || isDestroyed || webView !== current || current.visibility != View.VISIBLE || controlWebView?.visibility == View.VISIBLE) return@evaluateJavascript
+                if (handled != "true") handleBackWithoutPagePanel()
+            }
+            return
+        }
+        handleBackWithoutPagePanel()
+    }
+
+    private fun handleBackWithoutPagePanel() {
         if (offlineMode && webView?.visibility == View.VISIBLE && controlPageAllowed) {
             // 显示页返回时保留当前页面和 WebSocket，不让 WebView 历史覆盖控制端入口。
             restoreControlPageButton()

@@ -41,6 +41,26 @@ test('首次展开、会话恢复和迟到历史使用真实聊天与舞台模�
         ['chatHistory', 'roleHistory'].includes(message.type)));
     const text = () => page.$eval('[data-role="messages"]', (element) => element.textContent);
 
+    await context.test('返回键按媒体弹窗、媒体库、聊天顺序关闭且未处理时返回 false', async () => {
+        await reset();
+        await page.addScriptTag({ path: path.join(publicDir, 'js/display-media-library.js') });
+        await page.evaluate(() => {
+            window.DisplayStage.setChatVisible(true);
+            document.getElementById('displayMediaLibraryPanel').hidden = false;
+            const dialog = document.createElement('dialog'); dialog.className = 'display-media-download-dialog';
+            document.body.append(dialog); dialog.showModal();
+        });
+        assert.equal(await page.evaluate(() => window.DisplayStage.handleBack()), true);
+        assert.equal(await page.$eval('.display-media-download-dialog', node => node.open), false);
+        assert.equal(await page.$eval('#displayMediaLibraryPanel', node => node.hidden), false);
+        assert.equal(await page.evaluate(() => window.DisplayStage.handleBack()), true);
+        assert.equal(await page.$eval('#displayMediaLibraryPanel', node => node.hidden), true);
+        assert.equal(await page.evaluate(() => window.DisplayStage.getState().chatVisible), true);
+        assert.equal(await page.evaluate(() => window.DisplayStage.handleBack()), true);
+        assert.equal(await page.evaluate(() => window.DisplayStage.getState().chatVisible), false);
+        assert.equal(await page.evaluate(() => window.DisplayStage.handleBack()), false);
+    });
+
     await context.test('游戏期间可打开上层聊天并发送，关闭后原棋盘继续落子', async () => {
         const sessions = [
             { session: { mode: 'group' }, voice: 'activeGroup', order: 'under-chat' },

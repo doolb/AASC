@@ -42,6 +42,35 @@ class NodeStartupStatusTest {
     }
 
     @Test
+    fun 后台错过更新进度与终态可单独重放并确认() {
+        val status = NodeStartupStatus()
+        val ready = NodeStartupSnapshot(NodeServerService.STATUS_READY)
+        val progress = NodeStartupSnapshot(NodeServerService.STATUS_SERVICE_UPDATE_PROGRESS, "code.zip", "downloading", 30, 100)
+        val applied = NodeStartupSnapshot(NodeServerService.STATUS_SERVICE_UPDATE_APPLIED, "更新成功")
+        status.publish(ready) { }
+        status.publish(progress) { }
+        status.replay { assertEquals(ready, it) }
+        status.replayUpdate { assertEquals(progress.copy(updateSequence = 1L), it) }
+        status.publish(applied) { }
+        status.replayUpdate { assertEquals(applied.copy(updateSequence = 2L), it) }
+        status.acknowledgeUpdate(NodeServerService.STATUS_SERVICE_UPDATE_FAILED, 2L)
+        status.replayUpdate { assertEquals(applied.copy(updateSequence = 2L), it) }
+        status.acknowledgeUpdate(NodeServerService.STATUS_SERVICE_UPDATE_APPLIED, 2L)
+        status.replayUpdate { fail("已确认的终态不能重复展示") }
+        status.replay { assertEquals(ready, it) }
+    }
+
+    @Test
+    fun 新更新进度不能被旧终态确认清除() {
+        val status = NodeStartupStatus()
+        status.publish(NodeStartupSnapshot(NodeServerService.STATUS_SERVICE_UPDATE_APPLIED)) { }
+        val progress = NodeStartupSnapshot(NodeServerService.STATUS_SERVICE_UPDATE_PROGRESS, phase = "verifying")
+        status.publish(progress) { }
+        status.acknowledgeUpdate(NodeServerService.STATUS_SERVICE_UPDATE_APPLIED, 1L)
+        status.replayUpdate { assertEquals(progress.copy(updateSequence = 2L), it) }
+    }
+
+    @Test
     fun 新一轮准备及失败覆盖旧ready并保留完整详情() {
         val status = NodeStartupStatus()
         status.publish(NodeStartupSnapshot(NodeServerService.STATUS_READY)) { }

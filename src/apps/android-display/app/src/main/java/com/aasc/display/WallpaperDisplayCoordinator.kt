@@ -35,7 +35,10 @@ object WallpaperDisplayCoordinator {
         view?.evaluateJavascript("window.dispatchEvent(new Event('aasc-wallpaper-mode'));", null)
     }
 
-    fun setWallpaperVisible(value: Boolean) { wallpaperVisible = value }
+    fun setWallpaperVisible(value: Boolean) {
+        wallpaperVisible = value
+        bridge?.refreshHolographicSensorVisibility()
+    }
 
     fun suspendWallpaper(context: Context) {
         wallpaperSuspended = true
@@ -71,6 +74,7 @@ object WallpaperDisplayCoordinator {
         if (value) wallpaperSuspended = false
         if (foreground == value) return
         foreground = value
+        bridge?.refreshHolographicSensorVisibility()
         listeners.toList().forEach { it(value) }
     }
 

@@ -179,6 +179,7 @@
         loadSequence: 0,
         lighting: normalizeMmdLighting(DEFAULT_MMD_LIGHTING),
         cameraViewRotation: { yaw: 0, pitch: 0 },
+        holographicTilt: { modelYaw: 0, modelPitch: 0, cameraYaw: 0, cameraPitch: 0 },
         arCameraSettings: null
     };
     function setStatus(message, isError = false) {
@@ -590,6 +591,14 @@
     const mmdSettings = root.createDisplayMmdSettings({ state });
     const { setModelGravityRotation, setModelGravitySettings, setPhysicsStabilityReference, setWindSettings } = mmdSettings;
 
+    function setHolographicTilt(value = {}) {
+        for (const key of Object.keys(state.holographicTilt)) {
+            const amount = Number(value[key]);
+            state.holographicTilt[key] = Number.isFinite(amount) ? Math.max(-0.14, Math.min(0.14, amount)) : 0;
+        }
+        state.runtime?.setHolographicTilt?.(state.holographicTilt);
+    }
+
     function setCameraViewRotation(yaw, pitch) {
         state.cameraViewRotation = normalizeCameraViewRotation(yaw, pitch);
         state.runtime?.setCameraViewRotation?.(
@@ -752,6 +761,7 @@
                     state.cameraViewRotation.yaw,
                     state.cameraViewRotation.pitch
                 );
+                state.runtime.setHolographicTilt?.(state.holographicTilt);
                 resizeCanvas(state.width, state.height);
                 return state.runtime;
             })
@@ -990,6 +1000,7 @@
         setArCameraPose,
         setArCameraSettings,
         setCameraViewRotation,
+        setHolographicTilt,
         setModelGravityRotation,
         setModelGravitySettings,
         getModelGravityState: () => state.runtime?.getModelGravityState?.() ?? null,

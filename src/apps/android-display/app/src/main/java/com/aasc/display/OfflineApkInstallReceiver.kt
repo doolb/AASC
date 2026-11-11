@@ -15,6 +15,7 @@ class OfflineApkInstallReceiver : BroadcastReceiver() {
         if (intent.action != OfflineUpdateManager.MIN_APK_INSTALL_ACTION) return
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val detail = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty()
+        OfflineInstallStatusStore.save(context, status, detail)
         sendInstallStatus(context, status, detail)
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> launchSystemConfirmation(context, intent)

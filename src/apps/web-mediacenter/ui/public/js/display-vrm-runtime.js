@@ -123,6 +123,14 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         currentYaw: 0,
         currentPitch: 0
     };
+    const holographicTilt = { modelYaw: 0, modelPitch: 0, cameraYaw: 0, cameraPitch: 0 };
+    const setHolographicTilt = value => {
+        for (const key of Object.keys(holographicTilt)) {
+            const amount = Number(value?.[key]);
+            holographicTilt[key] = Number.isFinite(amount) ? Math.max(-0.14, Math.min(0.14, amount)) : 0;
+        }
+        startRendering();
+    };
 
     const applyCameraView = () => {
         const cosPitch = Math.cos(cameraViewState.currentPitch);
@@ -139,12 +147,14 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     };
 
     const updateCameraView = (delta) => {
-        const yawDistance = cameraViewState.targetYaw - cameraViewState.currentYaw;
-        const pitchDistance = cameraViewState.targetPitch - cameraViewState.currentPitch;
+        const targetYaw = cameraViewState.targetYaw + holographicTilt.cameraYaw;
+        const targetPitch = cameraViewState.targetPitch + holographicTilt.cameraPitch;
+        const yawDistance = targetYaw - cameraViewState.currentYaw;
+        const pitchDistance = targetPitch - cameraViewState.currentPitch;
         if (Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
             && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON) {
-            cameraViewState.currentYaw = cameraViewState.targetYaw;
-            cameraViewState.currentPitch = cameraViewState.targetPitch;
+            cameraViewState.currentYaw = targetYaw;
+            cameraViewState.currentPitch = targetPitch;
             applyCameraView();
             return false;
         }
@@ -369,13 +379,15 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
 
     function updateModelRotation(delta) {
         if (!currentRotationPivot) return false;
-        const yawDistance = rotationState.targetYaw - currentRotationPivot.rotation.y;
-        const pitchDistance = rotationState.targetPitch - currentRotationPivot.rotation.x;
+        const targetYaw = rotationState.targetYaw + holographicTilt.modelYaw;
+        const targetPitch = rotationState.targetPitch + holographicTilt.modelPitch;
+        const yawDistance = targetYaw - currentRotationPivot.rotation.y;
+        const pitchDistance = targetPitch - currentRotationPivot.rotation.x;
         const settled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
             && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON;
         if (settled) {
-            currentRotationPivot.rotation.y = rotationState.targetYaw;
-            currentRotationPivot.rotation.x = rotationState.targetPitch;
+            currentRotationPivot.rotation.y = targetYaw;
+            currentRotationPivot.rotation.x = targetPitch;
             if (rotationState.fitShadowWhenSettled) {
                 rotationState.fitShadowWhenSettled = false;
                 currentRotationPivot.updateWorldMatrix(true, true);
@@ -551,6 +563,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         setArPose: arFootAnchor.setPose,
         translateModelByPixels: arFootAnchor.translateByPixels,
         setCameraViewRotation,
+        setHolographicTilt,
         zoomCameraBy,
         setLighting,
         setVisible

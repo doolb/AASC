@@ -89,6 +89,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentYaw: 0,
         currentPitch: 0
     };
+    const holographicTilt = { modelYaw: 0, modelPitch: 0, cameraYaw: 0, cameraPitch: 0 };
+    const setHolographicTilt = value => {
+        for (const key of Object.keys(holographicTilt)) {
+            const amount = Number(value?.[key]);
+            holographicTilt[key] = Number.isFinite(amount) ? Math.max(-0.14, Math.min(0.14, amount)) : 0;
+        }
+        startRendering();
+    };
     const applyCameraView = () => {
         const cosPitch = Math.cos(cameraViewState.currentPitch);
         const distance = cameraDistance / cameraZoomFactor;
@@ -102,12 +110,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         syncCameraClip();
     };
     const updateCameraView = (delta) => {
-        const yawDistance = cameraViewState.targetYaw - cameraViewState.currentYaw;
-        const pitchDistance = cameraViewState.targetPitch - cameraViewState.currentPitch;
+        const targetYaw = cameraViewState.targetYaw + holographicTilt.cameraYaw;
+        const targetPitch = cameraViewState.targetPitch + holographicTilt.cameraPitch;
+        const yawDistance = targetYaw - cameraViewState.currentYaw;
+        const pitchDistance = targetPitch - cameraViewState.currentPitch;
         if (Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
             && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON) {
-            cameraViewState.currentYaw = cameraViewState.targetYaw;
-            cameraViewState.currentPitch = cameraViewState.targetPitch;
+            cameraViewState.currentYaw = targetYaw;
+            cameraViewState.currentPitch = targetPitch;
             applyCameraView();
             return false;
         }
@@ -556,8 +566,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     function updateModelRotation(delta) {
         if (!currentRotationPivot) return false;
         const previous = currentRotationPivot.quaternion.clone();
-        const yawDistance = rotationState.targetYaw - manualRotation.yaw;
-        const pitchDistance = rotationState.targetPitch - manualRotation.pitch;
+        const yawDistance = rotationState.targetYaw + (arCameraState.active ? 0 : holographicTilt.modelYaw) - manualRotation.yaw;
+        const pitchDistance = rotationState.targetPitch + (arCameraState.active ? 0 : holographicTilt.modelPitch) - manualRotation.pitch;
         const manualSettled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
             && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON;
         const easing = manualSettled ? 1 : 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
@@ -976,6 +986,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         rotateCameraViewBy,
         setModelGravityRotation,
         setModelGravitySettings,
+        setHolographicTilt,
         getModelGravityState: () => gravityFilter.getState(),
         finishModelRotation,
         setCameraViewRotation,

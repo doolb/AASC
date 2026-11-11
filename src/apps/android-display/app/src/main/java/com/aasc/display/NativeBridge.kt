@@ -30,6 +30,12 @@ class NativeBridge(
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
     private val onControlPageAccessChanged: ((Boolean) -> Unit)? = null
 ) {
+    private val holographicSensor = HolographicSensorController(webView)
+
+    @JavascriptInterface
+    fun setHolographicSensorEnabled(enabled: Boolean): Boolean = holographicSensor.setEnabled(enabled)
+
+    internal fun refreshHolographicSensorVisibility() { mainHandler.post { holographicSensor.refreshVisibility() } }
 
     @JavascriptInterface
     fun getWallpaperTopInset(): Double = WallpaperDisplayCoordinator.wallpaperTopInset
@@ -238,6 +244,7 @@ class NativeBridge(
 
     /** Activity 销毁时释放原生桥持有的 SCO 状态。 */
     fun release() {
+        holographicSensor.release()
         nativeAudioCaptureController.release()
         nativeAudioOutputController.release()
         bluetoothScoController.stop()

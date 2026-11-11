@@ -641,17 +641,19 @@ const SelfTest = {
             category: '界面布局',
             run: async () => {
                 try {
-                    const [page, style, voice] = await Promise.all([
+                    const [page, style, voice, controls] = await Promise.all([
                         fetch('/display.html', { cache: 'no-store' }),
                         fetch('/css/display-wallpaper-controls.css', { cache: 'no-store' }),
-                        fetch('/js/display-voice-controls.js', { cache: 'no-store' })
+                        fetch('/js/display-voice-controls.js', { cache: 'no-store' }),
+                        fetch('/js/display-wallpaper-controls.js', { cache: 'no-store' })
                     ]);
-                    if (!page.ok || !style.ok || !voice.ok) return { success: false, message: '壁纸控件资源不可读取' };
-                    const [html, css, voiceScript] = await Promise.all([page.text(), style.text(), voice.text()]);
-                    const valid = ['wallpaperControls', 'wallpaperOpenPreview', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime', 'wallpaperInteractionShield', 'wallpaperContentInteraction']
+                    if (!page.ok || !style.ok || !voice.ok || !controls.ok) return { success: false, message: '壁纸控件资源不可读取' };
+                    const [html, css, voiceScript, controlsScript] = await Promise.all([page.text(), style.text(), voice.text(), controls.text()]);
+                    const valid = ['wallpaperControls', 'wallpaperOpenPreview', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime', 'wallpaperInteractionShield', 'wallpaperContentInteraction', 'wallpaperHologramModel', 'wallpaperHologramCamera']
                         .every(id => html.includes(`id="${id}"`)) && css.includes('body.is-wallpaper #displayInteractionLayer') && css.includes('.wallpaper-interaction-shield')
                         && css.includes('body.is-wallpaper #displayVoiceAsrResult')
-                        && voiceScript.includes('overlaySnapshot') && voiceScript.includes('overlayAction');
+                        && voiceScript.includes('overlaySnapshot') && voiceScript.includes('overlayAction')
+                        && controlsScript.includes('setHolographicSensorEnabled');
                     return { success: valid, message: valid ? '壁纸控件结构正常' : '壁纸控件结构缺失',
                         details: '仅检查资源结构；桌面触摸和任务关闭需真机验收' };
                 } catch (error) { return { success: false, message: `壁纸控件检查失败: ${error.message}` }; }
