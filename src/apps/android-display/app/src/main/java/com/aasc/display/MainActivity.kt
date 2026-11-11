@@ -551,7 +551,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         // 最近任务移除等明确结束 Activity 的路径暂停壁纸；系统强杀不保证调用此处。
-        if (isFinishing && !isChangingConfigurations) WallpaperDisplayCoordinator.suspendWallpaper()
+        if (isFinishing && !isChangingConfigurations) WallpaperDisplayCoordinator.suspendWallpaper(this)
         bootstrapExecutor.shutdownNow()
         mainHandler.removeCallbacks(collapseWallpaperButtonRunnable)
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)

@@ -384,7 +384,7 @@ class NodeServerService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Offline 前台服务通常会收到最近任务移除；只暂停壁纸，不改变 Node 服务策略。
-        WallpaperDisplayCoordinator.suspendWallpaper()
+        WallpaperDisplayCoordinator.suspendWallpaper(this)
         super.onTaskRemoved(rootIntent)
     }
 

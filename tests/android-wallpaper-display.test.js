@@ -36,3 +36,15 @@ test('壁纸短暂隐藏时保留共享页面和渲染器', () => {
     assert.match(service, /WallpaperDisplayCoordinator\.foreground/);
     assert.match(service, /ServerConfig\.OFFLINE_DISPLAY_ID else null/);
 });
+
+test('关闭任务仅重置本应用桌面壁纸，并保留锁屏壁纸', () => {
+    const manifest = read('src/apps/android-display/app/src/main/AndroidManifest.xml');
+    const coordinator = read('src/apps/android-display/app/src/main/java/com/aasc/display/WallpaperDisplayCoordinator.kt');
+    assert.match(manifest, /android.permission.SET_WALLPAPER/);
+    assert.match(coordinator, /manager\.wallpaperInfo\?\.component == component\)[\s\S]*?manager\.clear\(WallpaperManager\.FLAG_SYSTEM\)/);
+    assert.doesNotMatch(coordinator, /manager\.clear\(WallpaperManager\.FLAG_LOCK/);
+    for (const name of ['MainActivity', 'DisplayWallpaperService', 'NodeServerService']) {
+        const source = read(`src/apps/android-display/app/src/main/java/com/aasc/display/${name}.kt`);
+        assert.match(source, /WallpaperDisplayCoordinator\.suspendWallpaper\(this\)/);
+    }
+});

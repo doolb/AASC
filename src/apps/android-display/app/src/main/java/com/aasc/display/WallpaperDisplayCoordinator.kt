@@ -1,8 +1,11 @@
 package com.aasc.display
 
 import android.content.Context
+import android.content.ComponentName
 import android.content.MutableContextWrapper
+import android.app.WallpaperManager
 import android.net.Uri
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -29,9 +32,19 @@ object WallpaperDisplayCoordinator {
         view?.evaluateJavascript("window.dispatchEvent(new Event('aasc-wallpaper-mode'));", null)
     }
 
-    fun suspendWallpaper() {
+    fun suspendWallpaper(context: Context) {
         wallpaperSuspended = true
         listeners.toList().forEach { it(true) }
+        // 只清除当前仍属于本应用的桌面壁纸，避免覆盖用户后来选择的壁纸。
+        try {
+            val manager = WallpaperManager.getInstance(context.applicationContext)
+            val component = ComponentName(context, DisplayWallpaperService::class.java)
+            if (manager.wallpaperInfo?.component == component) {
+                manager.clear(WallpaperManager.FLAG_SYSTEM)
+            }
+        } catch (error: Exception) {
+            Log.e("AASCWallpaper", "恢复系统默认桌面壁纸失败", error)
+        }
         releaseIfUnused()
     }
 

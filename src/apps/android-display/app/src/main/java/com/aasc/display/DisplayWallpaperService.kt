@@ -21,7 +21,7 @@ class DisplayWallpaperService : WallpaperService() {
     override fun onCreateEngine(): Engine = DisplayEngine()
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        WallpaperDisplayCoordinator.suspendWallpaper()
+        WallpaperDisplayCoordinator.suspendWallpaper(this)
         super.onTaskRemoved(rootIntent)
     }
 
