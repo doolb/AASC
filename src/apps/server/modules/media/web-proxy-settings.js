@@ -65,7 +65,7 @@ function createWebProxySettings({ get, set, listSources = () => [], generateId }
         const sources = listSources().map(source => ({
             id: source.id,
             name: source.name || source.id,
-            region: source.region === 'overseas' ? 'overseas' : 'domestic',
+            region: ['domestic', 'overseas', 'private'].includes(source.region) ? source.region : 'domestic',
             proxyId: typeof providerProxy[source.id] === 'string' ? providerProxy[source.id] : ''
         }));
         return { type: 'webProxyConfig', webProxies, providerProxy, sources };
@@ -120,7 +120,22 @@ function createWebProxySettings({ get, set, listSources = () => [], generateId }
         return snapshot();
     }
 
-    return { snapshot, setList, setProvider };
+    function setInitialProviders(sourceIds, preferredName) {
+        finishPendingUpdate({ get, set });
+        const proxy = readProxies().find(item => item.name.toLowerCase() === String(preferredName).toLowerCase());
+        if (!proxy) return false;
+        const current = readSelections();
+        const pending = sourceIds.filter(id => SOURCE_ID_PATTERN.test(id) && !Object.hasOwn(current, id));
+        if (!pending.length) return false;
+        const selections = { ...current };
+        for (const id of pending) selections[id] = proxy.id;
+        try {
+            if (!set('media.providerProxy', selections)) throw new Error();
+        } catch { throw new Error('媒体源代理设置保存失败'); }
+        return true;
+    }
+
+    return { snapshot, setList, setProvider, setInitialProviders };
 }
 
 module.exports = { ensureWebProxyMigration, createWebProxySettings };

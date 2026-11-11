@@ -964,7 +964,7 @@ B 站 DASH 每条轨道从主地址和备用地址中选择首个受信任的 HT
 实现文件：src/apps/web-mediacenter/modules/media/task-media-provider-registry.js
 registerMediaProvider(owner, definition):
   校验 id（^[a-z][a-z0-9._-]{1,63}$）、name、create 与可选能力 [home, search, resolveLink, related, download]
-  region 只允许 domestic 或 overseas；缺失或非法回退 domestic
+  region 只允许 domestic、overseas 或 private；缺失或非法回退 domestic
   proxyDefault 保留兼容元数据；新代理模型不以它作为默认选择
   defaultConfig 只接受普通对象并浅拷贝
   registry 保存 definition 与 owner，注销时按 owner 删除；一个任务可注册多个来源
@@ -980,6 +980,7 @@ GET /api/media-library-providers -> 返回 id、name、libraryId、region、feat
 控制端按 region 分组渲染顶部页签：
   国内媒体：B 站视频（原生）、国内任务来源
   国外媒体：国外任务来源
+  私密媒体：private 任务来源，无活动来源时隐藏整个分组
   组标题固定展示；组内无来源时仅显示标题
   任务来源按钮与代理选择框成对渲染；尚无显式选择时显示“不使用代理”
 任务来源的首页/搜索/链接/相关推荐 UI 由后续国内/国外任务计划实现；本计划只完成注册、代理注入与页签分组
@@ -1017,7 +1018,9 @@ media.providerProxy = { sourceId: proxyId }；空串或缺失表示不使用代�
 控制端设置页编辑代理列表；B 站工具栏不显示代理选择，保留已保存的来源代理；活动任务源在对应任务实例详情内选择代理或不使用代理
 任务源列表附带 ownerInstanceId，任务详情仅展示由当前实例注册的来源；一个实例可为多个来源分别选择
 选择继续发送 setProviderProxy，服务端广播权威配置；断线或失败时恢复权威值，重连接收当前配置
-媒体库页签按本地、国内和国外分组排列；夸克分享属于国内分组
+媒体库页签按本地、国内、国外和私密分组排列；夸克分享属于国内分组
+private 来源只使用现有 media.providerProxy 的逐源选择；注册时按来源声明的代理名称初始化已有代理 id，只对缺失的来源执行，显式空选择及旧选择均不覆盖；代理不存在时保持未选择并提示用户在任务详情配置
+私密来源任务保存在 local-only 中，注册清单与可用能力由任务自身维护；只公开经匿名请求验证的能力，受限时返回明确错误；下载复用 task-media-sources 通用保存路径
 国内、国外来源保持分行，行首不显示地区文字，按钮从行首排列
 无活动国外任务来源时隐藏国外媒体整个分组，来源注册或停止时重新计算显隐
 来源 id 为 hongguo 的页签显示“红果短剧”，不修改注册名称或其他来源信息

@@ -29,6 +29,7 @@ test('运行中的任务分别显示顶部页签，搜索结果可复制链接�
   });
   assert.equal(await page.$$eval('[data-task-media-source]', nodes => nodes.length), 2);
   assert.equal(await page.$eval('#overseasMediaSection', el => getComputedStyle(el).display), 'none');
+  assert.equal(await page.$eval('#privateMediaSection', el => getComputedStyle(el).display), 'none');
   assert.equal(await page.$eval('[data-task-media-source="hongguo"]', el => el.textContent), '红果短剧');
   assert.equal(await page.evaluate(() => MediaLibrary.taskMediaSources.find(source => source.id === 'hongguo').name), '红果短剧（网页公开视频）');
   assert.equal(await page.$eval('#mediaTabQuark', el => Boolean(el.closest('.media-tab-section').querySelector('#domesticMediaTabs'))), true);
@@ -36,8 +37,10 @@ test('运行中的任务分别显示顶部页签，搜索结果可复制链接�
   await page.evaluate(() => MediaLibrary.handleTaskMediaSources({ providers: [
     { id: 'hongguo', name: '红果短剧（网页公开视频）', libraryId: 'task-auto:hongguo' },
     { id: 'other', name: '其他来源', libraryId: 'existing' },
-    { id: 'youtube', name: 'YouTube', libraryId: 'task-auto:youtube', region: 'overseas' }
+    { id: 'youtube', name: 'YouTube', libraryId: 'task-auto:youtube', region: 'overseas' },
+    { id: 'private-demo', name: '私密来源', libraryId: 'task-auto:private-demo', region: 'private' }
   ] }));
+  assert.equal(await page.$eval('#privateMediaSection', el => getComputedStyle(el).display), 'flex');
   assert.equal(await page.$eval('#overseasMediaSection', el => getComputedStyle(el).display), 'flex');
   await page.setViewport({ width: 320, height: 800 });
   const layout = await page.evaluate(() => {
@@ -47,8 +50,8 @@ test('运行中的任务分别显示顶部页签，搜索结果可复制链接�
       rows: sections.map(section => Math.round(section.getBoundingClientRect().top)),
       overflow: tabs.scrollWidth > tabs.clientWidth };
   });
-  assert.equal(layout.rows.length, 3);
-  assert.ok(layout.rows[0] < layout.rows[1] && layout.rows[1] < layout.rows[2]);
+  assert.equal(layout.rows.length, 4);
+  assert.ok(layout.rows.every((row, index) => index === 0 || layout.rows[index - 1] < row));
   assert.equal(layout.overflow, false);
   assert.equal(await page.$('#taskMediaBar'), null);
   await page.click('[data-task-media-source="hongguo"]');

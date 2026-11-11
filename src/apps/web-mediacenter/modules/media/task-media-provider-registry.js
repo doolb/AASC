@@ -1,7 +1,7 @@
 'use strict';
 
-// 媒体源地区：仅允许国内与海外，未知值回退为 domestic。
-const REGIONS = new Set(['domestic', 'overseas']);
+// 未知地区回退为 domestic。
+const REGIONS = new Set(['domestic', 'overseas', 'private']);
 // 媒体源能力：注册时过滤未知能力并去重。
 const FEATURES = new Set(['home', 'search', 'resolveLink', 'related', 'stream', 'download']);
 

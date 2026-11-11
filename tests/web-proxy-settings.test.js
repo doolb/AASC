@@ -82,7 +82,8 @@ test('快照附带 B 站与任务源的 proxyId', () => {
         get: config.get, set: config.set,
         listSources: () => [
             { id: 'bilibili', name: 'B 站视频', region: 'domestic' },
-            { id: 'hongguo', name: '红果短剧', region: 'overseas' }
+            { id: 'hongguo', name: '红果短剧', region: 'overseas' },
+            { id: 'private-sample', name: '测试来源', region: 'private' }
         ]
     });
     const snapshot = settings.snapshot();
@@ -90,7 +91,8 @@ test('快照附带 B 站与任务源的 proxyId', () => {
     assert.deepEqual(snapshot.webProxies, config.data.network.webProxies);
     assert.deepEqual(snapshot.sources, [
         { id: 'bilibili', name: 'B 站视频', region: 'domestic', proxyId: 'p1' },
-        { id: 'hongguo', name: '红果短剧', region: 'overseas', proxyId: '' }
+        { id: 'hongguo', name: '红果短剧', region: 'overseas', proxyId: '' },
+        { id: 'private-sample', name: '测试来源', region: 'private', proxyId: '' }
     ]);
 });
 
@@ -141,6 +143,18 @@ test('代理列表校验失败时不写入配置', () => {
     assert.throws(() => settings.setList({ webProxies: [{ name: 'x'.repeat(31), url: 'http://127.0.0.1:7890' }] }), /代理名称不能为空且不能超过 30 个字符/);
     assert.throws(() => settings.setList({ webProxies: [{ name: '代理', url: 'ftp://127.0.0.1:21' }] }), /代理地址格式不正确，仅支持 http\/https\/socks\/socks5\/socks5h/);
     assert.equal(JSON.stringify(config.data), before);
+});
+
+test('initial per-source proxy only fills missing selections', () => {
+    const config = memoryConfig({
+        network: { webProxies: [{ id: 'jp-id', name: 'jp', url: 'socks5h://127.0.0.1:1080' }, { id: 'us-id', name: 'us', url: 'socks5://127.0.0.1:1081' }] },
+        media: { providerProxy: { existing: '', customized: 'us-id' } }
+    });
+    const settings = createWebProxySettings({ get: config.get, set: config.set });
+    assert.equal(settings.setInitialProviders(['new-source', 'existing', 'customized'], 'jp'), true);
+    assert.deepEqual(config.data.media.providerProxy, { existing: '', customized: 'us-id', 'new-source': 'jp-id' });
+    assert.equal(settings.setInitialProviders(['new-source'], 'us'), false);
+    assert.equal(settings.setInitialProviders(['missing-source'], 'absent'), false);
 });
 
 test('保存单个来源代理校验来源与代理存在性', () => {

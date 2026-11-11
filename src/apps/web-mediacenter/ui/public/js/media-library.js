@@ -1070,14 +1070,15 @@ const MediaLibrary = {
         // 先清理旧节点，避免任务源变化后残留页签。
         document.querySelectorAll('.media-task-source-wrap').forEach(node => node.remove());
         document.querySelectorAll('[data-task-media-source]').forEach(node => node.remove());
-        const groups = { domestic: document.getElementById('domesticMediaTabs'), overseas: document.getElementById('overseasMediaTabs') };
-        if (!groups.domestic || !groups.overseas) return;
-        // 国外任务源不存在时隐藏整个分组；来源注册和停止都会重新执行此渲染。
-        const overseasSection = document.getElementById('overseasMediaSection');
-        if (overseasSection) overseasSection.hidden = !(this.taskMediaSources || []).some(source => source.region === 'overseas');
-        groups.domestic.replaceChildren(); groups.overseas.replaceChildren();
+        const groups = { domestic: document.getElementById('domesticMediaTabs'), overseas: document.getElementById('overseasMediaTabs'), private: document.getElementById('privateMediaTabs') };
+        if (Object.values(groups).some(group => !group)) return;
+        for (const region of ['overseas', 'private']) {
+            const section = document.getElementById(`${region}MediaSection`);
+            if (section) section.hidden = !(this.taskMediaSources || []).some(source => source.region === region);
+        }
+        Object.values(groups).forEach(group => group.replaceChildren());
         for (const source of this.taskMediaSources || []) {
-            const host = groups[source.region === 'overseas' ? 'overseas' : 'domestic'];
+            const host = groups[source.region] || groups.domestic;
             const tab = document.createElement('button');
             tab.type = 'button';
             tab.className = 'media-library-tab media-task-source';
