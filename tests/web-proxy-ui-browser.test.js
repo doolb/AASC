@@ -13,7 +13,8 @@ test('代理列表、B 站与所属任务实例中的来源选择使用服务端
     const $ = cheerio.load(html);
     assert.equal($('#bilibiliProxyToggle').length, 0);
     assert.equal($('#bilibiliProxySelect').length, 1);
-    assert.equal($('#bilibiliProxySelect').closest('label').is('[hidden]'), true);
+    assert.equal($('#bilibiliProxySelect').closest('label').is('[hidden]'), false);
+    assert.equal($('#quarkProxySelect').length, 1);
     assert.equal($('#webProxyList').length, 1);
     assert.equal($('#webProxyAddBtn').length, 1);
     assert.equal($('#webProxySaveBtn').length, 1);

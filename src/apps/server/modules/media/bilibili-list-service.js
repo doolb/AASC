@@ -157,12 +157,12 @@ function createBilibiliListService({ config, broadcast, fetchMetadata = defaultM
     };
 }
 
-async function defaultCollection(id) {
+async function defaultCollection(id, client = axios) {
     const videos = [];
     let title = `收藏列表 ${id}`;
     let cover = '';
     for (let pn = 1; pn <= 25; pn++) {
-        const response = await axios.get('https://api.bilibili.com/x/v3/fav/resource/list', {
+        const response = await client.get('https://api.bilibili.com/x/v3/fav/resource/list', {
             params: { media_id: id, pn, ps: 20 },
             headers: { Referer: 'https://www.bilibili.com/', 'User-Agent': 'Mozilla/5.0' },
             timeout: 10000, maxRedirects: 0
@@ -188,12 +188,12 @@ async function defaultCollection(id) {
     throw new Error('B 站收藏列表超过 500 条内容');
 }
 
-async function defaultMetadata(bvid) {
-    const response = await axios.get('https://api.bilibili.com/x/web-interface/view', {
+async function defaultMetadata(bvid, client = axios) {
+    const response = await client.get('https://api.bilibili.com/x/web-interface/view', {
         params: { bvid }, headers: { Referer: 'https://www.bilibili.com/', 'User-Agent': 'Mozilla/5.0' }, timeout: 8000, maxRedirects: 0
     });
     if (response.data?.code !== 0) throw new Error('B 站元数据暂不可用');
     return { title: response.data.data?.title, cover: response.data.data?.pic };
 }
 
-module.exports = { createBilibiliListService, parseVideoUrl, parseCollectionUrl, defaultCollection, safeCover };
+module.exports = { createBilibiliListService, parseVideoUrl, parseCollectionUrl, defaultCollection, defaultMetadata, safeCover };

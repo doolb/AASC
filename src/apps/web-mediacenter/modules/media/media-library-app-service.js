@@ -1280,7 +1280,7 @@ class MediaLibraryManager {
                 break;
             case 'quark':
                 config.readonly = true;
-                provider = new QuarkShareProvider(config, { getPort: this.getPort, getLocalIP: this.getLocalIP, isHttps: this.isHttps, getCookie: this.getQuarkCookie, videoCache: this.quarkVideoCache });
+                provider = new QuarkShareProvider(config, { getPort: this.getPort, getLocalIP: this.getLocalIP, isHttps: this.isHttps, getCookie: this.getQuarkCookie, videoCache: this.quarkVideoCache, getProxyUrl: () => this.getProxyUrl('quark') });
                 break;
             case 'android-saf':
                 provider = new AndroidSafProvider(config);

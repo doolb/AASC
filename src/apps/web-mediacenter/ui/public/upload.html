@@ -155,6 +155,7 @@
                         <input id="quarkSharePasscode" type="text" placeholder="提取码（可选）" autocomplete="off">
                         <button type="button" onclick="MediaLibrary.addQuarkShare(false)">加入</button>
                         <button type="button" onclick="MediaLibrary.addQuarkShare(true)">播放</button>
+                        <label class="media-source-proxy">代理 <select id="quarkProxySelect" data-provider-proxy="quark"></select></label>
                     </div>
                     <div id="bilibiliVideoBar" class="quark-share-bar" style="display:none;">
                         <button class="control-btn" id="bilibiliHomeBtn" onclick="MediaLibrary.loadBilibiliHome()">首页</button>
@@ -164,7 +165,7 @@
                         <button type="button" onclick="MediaLibrary.downloadBilibiliInput()">下载</button>
                         <button type="button" onclick="MediaLibrary.showBilibiliBatchPlayDialog()">批量播放当前文件夹</button>
                         <label class="bilibili-danmaku-toggle"><input type="checkbox" id="bilibiliDanmakuToggle"> 弹幕</label>
-                        <label class="media-source-proxy" hidden>代理 <select id="bilibiliProxySelect" data-provider-proxy="bilibili"></select></label>
+                        <label class="media-source-proxy">代理 <select id="bilibiliProxySelect" data-provider-proxy="bilibili"></select></label>
                     </div>
                     <div id="bilibiliSearchBar" class="quark-share-bar" style="display:none;">
                         <input id="bilibiliSearchInput" type="search" placeholder="搜索 B 站视频" autocomplete="off" onkeydown="if(event.key === 'Enter') MediaLibrary.searchBilibili()">

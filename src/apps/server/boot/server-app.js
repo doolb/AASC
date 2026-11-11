@@ -107,7 +107,7 @@ const {
 } = require('../modules/asr/display-asr-long-queue');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { createDisplayLocalRouter, listDisplayLibraries, createDisplayPlaylistRequestHandler, invalidateDisplayPlaylistRequest } = require('../modules/media/display-local-media');
-const { resolveSourceProxyUrl } = require('../modules/media/web-proxy');
+const { resolveSourceProxyUrl, createSourceHttpClient } = require('../modules/media/web-proxy');
 const { ensureWebProxyMigration, createWebProxySettings } = require('../modules/media/web-proxy-settings');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
@@ -991,6 +991,7 @@ const webProxySettings = createWebProxySettings({
     set: (key, value) => config.set(key, value),
     listSources: () => [
         { id: 'bilibili', name: 'B 站视频', region: 'domestic' },
+        { id: 'quark', name: '夸克分享', region: 'domestic' },
         ...mediaLibraryManager.listTaskMediaSources().map(source => ({
             id: source.id, name: source.name, region: source.region
         }))
@@ -6014,12 +6015,14 @@ app.post('/api/reminders/:id/test', async (req, res) => {
 });
 
 const { createBilibiliStreamService } = require('../modules/media/bilibili-stream-service');
-const bilibiliStreamService = createBilibiliStreamService({ getCookie: () => config.get('media.bilibiliCookie', '') || process.env.BILIBILI_COOKIE || '' });
+const bilibiliHttp = createSourceHttpClient(require('axios'), () => getSourceProxyUrl('bilibili'));
+const bilibiliStreamService = createBilibiliStreamService({ client: bilibiliHttp, getCookie: () => config.get('media.bilibiliCookie', '') || process.env.BILIBILI_COOKIE || '' });
 const { createBilibiliSearchService } = require('../modules/media/bilibili-search-service');
 const { createBilibiliDiscoveryService } = require('../modules/media/bilibili-discovery-service');
 const { createBilibiliDanmakuService } = require('../modules/media/bilibili-danmaku-service');
 const { BilibiliDownloads } = require('../modules/media/bilibili-download-service');
-const { parseVideoUrl: parseBilibiliVideoUrl, defaultCollection: fetchBilibiliCollection } = require('../modules/media/bilibili-list-service');
+const { parseVideoUrl: parseBilibiliVideoUrl, defaultCollection, defaultMetadata } = require('../modules/media/bilibili-list-service');
+const fetchBilibiliCollection = id => defaultCollection(id, bilibiliHttp);
 // B 站搜索按源代理开关解析代理地址，代理仅作用于服务端外部请求。
 const searchBilibili = createBilibiliSearchService({ getProxyUrl: () => getSourceProxyUrl('bilibili', false) });
 // B 站首页与相关推荐同搜索共用源代理开关。
@@ -10222,7 +10225,7 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
 }
 
 const { createBilibiliListService } = require('../modules/media/bilibili-list-service');
-const bilibiliListService = createBilibiliListService({ config, broadcast: broadcastToControls });
+const bilibiliListService = createBilibiliListService({ config, broadcast: broadcastToControls, fetchCollection: fetchBilibiliCollection, fetchMetadata: id => defaultMetadata(id, bilibiliHttp) });
 const { createShareFoldersService } = require('../modules/media/share-folders-service');
 const shareFoldersService = createShareFoldersService({ config, broadcast: broadcastToControls });
 const { createTaskMediaCollections } = require('../modules/media/task-media-collections');

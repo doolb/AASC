@@ -14,6 +14,18 @@ function client() {
         return { data: { code: 0, data: { list }, metadata: { _total: list.length } } };
     } };
 }
+test('夸克分享及图片请求按当前来源选择代理', async () => {
+    const api = client();
+    let selected = 'http://127.0.0.1:7890';
+    const provider = new QuarkShareProvider({ id: 'q', url: 'https://pan.quark.cn/s/abc' }, { client: api, getProxyUrl: () => selected });
+    await provider.connect();
+    assert.ok(api.calls.find(call => call.options)?.options.httpsAgent);
+    selected = '';
+    await provider.getFileStream('/相册/a.png');
+    const preview = api.calls.find(call => call.url === 'https://img.drive.quark.cn/image');
+    assert.equal(preview.options.proxy, false);
+    assert.equal(preview.options.httpsAgent, undefined);
+});
 test('浏览嵌套分享目录并通过受限预览地址读取图片', async () => {
     const api = client();
     const provider = new QuarkShareProvider({ id: 'q', url: 'https://pan.quark.cn/s/abc', passcode: '1234' }, { client: api });

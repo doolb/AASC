@@ -94,11 +94,21 @@ function getProxyAgents(proxyUrl) {
 
 function axiosProxyOptions(proxyUrl) {
     const agents = getProxyAgents(proxyUrl);
-    return agents ? { proxy: false, ...agents } : {};
+    return agents ? { proxy: false, ...agents } : { proxy: false };
+}
+
+// 绑定来源而非固定代理：每次请求读取权威配置，避免影响其他来源或在途连接。
+function createSourceHttpClient(client, getProxyUrl = () => '') {
+    const options = value => ({ ...value, ...axiosProxyOptions(getProxyUrl()) });
+    return {
+        get: (url, config) => client.get(url, options(config)),
+        post: (url, body, config) => client.post(url, body, options(config)),
+        request: config => client.request(options(config))
+    };
 }
 
 module.exports = {
     normalizeProxyUrl, normalizeWebProxyList, migrateLegacyProxyConfig,
-    resolveSourceProxyUrl, getProxyAgents, axiosProxyOptions,
+    resolveSourceProxyUrl, getProxyAgents, axiosProxyOptions, createSourceHttpClient,
     MAX_PROXIES, LEGACY_PROXY_ID
 };

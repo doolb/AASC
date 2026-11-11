@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
     normalizeProxyUrl, normalizeWebProxyList, migrateLegacyProxyConfig,
-    resolveSourceProxyUrl, axiosProxyOptions, MAX_PROXIES, LEGACY_PROXY_ID
+    resolveSourceProxyUrl, axiosProxyOptions, createSourceHttpClient, MAX_PROXIES, LEGACY_PROXY_ID
 } = require('../src/apps/server/modules/media/web-proxy');
 
 test('normalizeProxyUrl 接受 HTTP/HTTPS/SOCKS5 并去掉末尾斜杠', () => {
@@ -114,5 +114,46 @@ test('axiosProxyOptions 为代理请求关闭 axios 默认代理并返回 agent'
     assert.equal(options.proxy, false);
     assert.ok(options.httpAgent);
     assert.ok(options.httpsAgent);
-    assert.deepEqual(axiosProxyOptions(''), {});
+    assert.deepEqual(axiosProxyOptions(''), { proxy: false });
+});
+
+test('来源客户端每次读取当前代理并保留请求与流参数', async () => {
+    let selected = 'http://127.0.0.1:7890';
+    const calls = [];
+    const client = createSourceHttpClient({
+        get: async (url, config) => { calls.push({ url, config }); return 'ok'; },
+        post: async (url, body, config) => { calls.push({ url, body, config }); },
+        request: async config => { calls.push({ config }); }
+    }, () => selected);
+    await client.get('https://example.test', { headers: { Range: 'bytes=1-2' }, responseType: 'stream' });
+    assert.ok(calls[0].config.httpsAgent);
+    assert.equal(calls[0].config.headers.Range, 'bytes=1-2');
+    selected = '';
+    await client.post('https://example.test', { key: 1 }, {});
+    assert.equal(calls[1].config.proxy, false);
+    assert.equal(calls[1].config.httpsAgent, undefined);
+    selected = 'socks5h://127.0.0.1:1080';
+    await client.request({ url: 'https://example.test' });
+    assert.ok(calls[2].config.httpsAgent);
+});
+
+test('所选代理失败时不会绕过代理直连目标', async t => {
+    const http = require('node:http');
+    const axios = require('axios');
+    let directRequests = 0;
+    let proxyRequests = 0;
+    const target = http.createServer((req, res) => { directRequests++; res.end('direct'); });
+    const proxy = http.createServer();
+    proxy.on('connect', (req, socket) => { proxyRequests++; socket.end('HTTP/1.1 502 Bad Gateway\r\n\r\n'); });
+    await Promise.all([new Promise(resolve => target.listen(0, '127.0.0.1', resolve)), new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve))]);
+    t.after(() => { target.close(); proxy.close(); });
+    let selection = `http://127.0.0.1:${proxy.address().port}`;
+    const client = createSourceHttpClient(axios, () => selection);
+    const url = `http://127.0.0.1:${target.address().port}/`;
+    await assert.rejects(client.get(url, { timeout: 2000 }));
+    assert.equal(proxyRequests, 1);
+    assert.equal(directRequests, 0);
+    selection = '';
+    assert.equal((await client.get(url, { timeout: 2000 })).data, 'direct');
+    assert.equal(directRequests, 1);
 });

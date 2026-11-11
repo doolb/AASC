@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { QuarkVideoCache } = require('./quark-video-cache');
+const { createSourceHttpClient } = require('../../../server/modules/media/web-proxy');
 const QUARK_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/2.5.20 Chrome/100.0.4896.160 Electron/18.3.5.12-a038f7b798 Safari/537.36 Channel/pckk_other_ch';
 const API = 'https://drive-pc.quark.cn/1/clouddrive';
 
@@ -19,7 +20,7 @@ module.exports = Base => class QuarkShareProvider extends Base {
         if (!match || url.username || url.password) throw new Error('请输入有效的夸克分享链接');
         this.shareId = match[1];
         this.passcode = String(config.passcode || '');
-        this.client = options.client || axios;
+        this.client = createSourceHttpClient(options.client || axios, options.getProxyUrl);
         this.videoCache = options.videoCache || new QuarkVideoCache(path.join(os.tmpdir(), 'aasc-quark-video-cache'));
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');

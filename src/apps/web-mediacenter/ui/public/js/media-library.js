@@ -55,6 +55,9 @@ const MediaLibrary = {
         document.getElementById('bilibiliProxySelect')?.addEventListener('change', event => {
             this.setProviderProxy('bilibili', event.target.value);
         });
+        document.getElementById('quarkProxySelect')?.addEventListener('change', event => {
+            this.setProviderProxy('quark', event.target.value);
+        });
         document.getElementById('taskSourceHomeBtn')?.addEventListener('click', () => this.loadTaskSourceHome());
         document.getElementById('taskSourceSearchBtn')?.addEventListener('click', () => this.searchTaskSource());
         document.getElementById('taskSourceLinkBtn')?.addEventListener('click', () => this.openTaskSourceLink());
