@@ -21,3 +21,5 @@
 Offline 使用独立进程 WebView 服务和前台查看页面，Node 通过本机令牌接口复用 open/request/extract/stop 契约。任务会话上限 1–4，默认 1；达到上限拒绝新会话，不挤掉已有页面。Android WebView 不支持逐会话代理时明确拒绝，避免静默直连。WebView 与豆包、显示页进程隔离；同一 Android 媒体服务内会话共享平台 Cookie 存储，不宣称跨会话隔离。手动验证和站点实际播放依赖设备与上游。
 
 抖音精选使用 Android WebView 当前 Chromium 版本构造桌面版浏览器标识，尽量与精选卡片布局一致；其他网站仍使用 WebView 默认标识。实际站点兼容性须真机确认。
+
+Offline 服务器启动不等待网页媒体独立进程；首次使用网页媒体时通过兼容旧 APK 的幂等清理请求有界等待服务就绪。

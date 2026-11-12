@@ -34,3 +34,33 @@ test('Android 适配器拒绝无效端点并报告操作失败', async () => {
   await assert.rejects(adapter.launch(), /失败/);
   assert.deepEqual(operations, ['reset', 'create', 'close']);
 });
+
+
+test('网页媒体延迟启动时仅重试就绪探测，鉴权错误立即返回', async () => {
+  const operations = [];
+  let attempts = 0;
+  const adapter = createAndroidBrowserAdapter({ port: 19093, token: 'x'.repeat(64), readyRetryMs: 1, fetchImpl: async (_url, options) => {
+    const operation = JSON.parse(options.body).operation; operations.push(operation);
+    if (operation === 'reset' && ++attempts < 3) throw new TypeError('connection refused');
+    return { ok: true, json: async () => ({ ok: true, value: true }) };
+  } });
+  await adapter.launch();
+  assert.deepEqual(operations, ['reset', 'reset', 'reset', 'create']);
+  let count = 0;
+  const forbidden = createAndroidBrowserAdapter({ port: 19093, token: 'x'.repeat(64), fetchImpl: async () => {
+    count++; return { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) };
+  } });
+  await assert.rejects(forbidden.launch(), /unauthorized/);
+  assert.equal(count, 1);
+});
+
+test('网页媒体就绪超时后允许再次尝试', async () => {
+  let ready = false;
+  const adapter = createAndroidBrowserAdapter({ port: 19093, token: 'x'.repeat(64), readyTimeoutMs: 15, readyRetryMs: 2, fetchImpl: async () => {
+    if (!ready) throw new TypeError('connection refused');
+    return { ok: true, json: async () => ({ ok: true, value: true }) };
+  } });
+  await assert.rejects(adapter.launch(), /未就绪/);
+  ready = true;
+  await adapter.launch();
+});

@@ -28,7 +28,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         window.NativeDisplay = { isWallpaperActive: () => window.wallpaper, getWallpaperTopInset: () => 30,
             openWallpaperPreview: () => { window.previewCount++; }, getWallpaperMediaVolume: () => window.actualVolume, setWallpaperMediaVolume: value => { window.actualVolume = value; },
             setHolographicSensorEnabled: value => { window.sensorEnabled = value; return true; } };
-        window.emitMotion = (x, y) => { const event = new Event('devicemotion'); Object.defineProperty(event, 'acceleration', { value: { x, y, z: 0 } }); window.dispatchEvent(event); };
+        window.emitMotion = (x, y) => { const event = new Event('devicemotion'); Object.defineProperty(event, 'accelerationIncludingGravity', { value: { x, y, z: 9.80665 } }); Object.defineProperty(event, 'rotationRate', { value: { alpha: 0, beta: 0, gamma: 0 } }); window.dispatchEvent(event); };
     });
     const mmd = fs.readFileSync(path.join(dir, 'js/display-mmd.js'), 'utf8');
     const start = mmd.indexOf('    function setHolographicTilt(value = {}) {');
@@ -40,6 +40,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         const publish = new Function('state', `${source}; return setHolographicTilt;`)(state);
         window.DisplayMmd.setHolographicTilt = value => { window.hologram = value; publish(value); };
     }, mmd.slice(start, end));
+    await page.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-motion.js') });
     await page.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await page.$eval('#wallpaperControls', node => node.hidden), false);
     assert.equal(await page.$eval('#wallpaperHologramModel', node => node.checked), false);
@@ -74,6 +75,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await page.evaluate(() => {
         Object.defineProperty(window.screen, 'orientation', { configurable: true, value: { angle: 90 } });
         window.dispatchEvent(new Event('aasc-hologram-visibility'));
+        window.emitMotion(0, 0);
         window.emitMotion(0, 4);
     });
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -84,18 +86,21 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await page.evaluate(() => { delete window.screen.orientation; });
     await page.evaluate(async () => {
         window.dispatchEvent(new Event('aasc-hologram-visibility'));
+        window.emitMotion(0, 0);
         for (let i = 0; i < 6; i++) { window.emitMotion(0.05, 0); await new Promise(resolve => setTimeout(resolve, 30)); }
     });
     assert.equal((await page.evaluate(() => window.runtimeHologram)).cameraX, 0);
     // 连续的中等线性加速度应产生可见量级的偏移，而不是只验证非零。
     await page.evaluate(async () => {
         window.dispatchEvent(new Event('aasc-hologram-visibility'));
+        window.emitMotion(0, 0);
         for (let i = 0; i < 10; i++) { window.emitMotion(1, 0); await new Promise(resolve => setTimeout(resolve, 30)); }
     });
     assert.ok((await page.evaluate(() => window.runtimeHologram.cameraX)) > 0.025);
     for (const [x, y, axis, direction] of [[4, 0, 'cameraX', 1], [-4, 0, 'cameraX', -1], [0, 4, 'cameraY', 1], [0, -4, 'cameraY', -1]]) {
         await page.evaluate(({ x, y }) => {
             window.dispatchEvent(new Event('aasc-hologram-visibility'));
+            window.emitMotion(0, 0);
             window.emitMotion(x, y);
         }, { x, y });
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -118,6 +123,11 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     });
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
     await page.waitForFunction(() => document.getElementById('wallpaperHologramStatus').textContent.includes('未收到手机移动数据'));
+    await page.$eval('#wallpaperHologramModel', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    await page.waitForFunction(() => document.getElementById('wallpaperHologramStatus').textContent.includes('未收到手机移动数据'));
+    await page.evaluate(() => { for (const beta of [0, 10]) window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta, gamma: 0 } })); });
+    assert.match(await page.$eval('#wallpaperHologramStatus', node => node.textContent), /未收到手机移动数据/);
+    await page.$eval('#wallpaperHologramModel', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     await page.click('#wallpaperControlsHandle');
     await page.click('#wallpaperOpenPreview');
@@ -180,6 +190,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         Object.defineProperty(window, 'localStorage', { value: { getItem: key => key === 'aasc.wallpaper.contentInteraction' ? 'false' : null, setItem: () => {} } });
         window.NativeDisplay = { isWallpaperActive: () => true };
     });
+    await restored.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-motion.js') });
     await restored.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await restored.$eval('#wallpaperContentInteraction', node => node.checked), false);
     assert.equal(await restored.$eval('#wallpaperControls', node => node.hidden), false, '旧 APK 没有系统浮窗时保留壁纸网页面板');

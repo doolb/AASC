@@ -318,19 +318,14 @@ class NodeServerService : Service() {
     private fun ensureBrowserMediaEndpoint(): Pair<Int, String>? {
         browserMediaEndpoint?.let { return it }
         val secret = ByteArray(32).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
-        val latch = CountDownLatch(1)
-        var connected = false
         val connection = object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, service: IBinder?) { connected = true; latch.countDown() }
-            override fun onServiceDisconnected(name: ComponentName?) { browserMediaEndpoint = null }
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) { }
+            // 系统可能以同一绑定和令牌重连；不因此重新绑定或改变 Node 的令牌。
+            override fun onServiceDisconnected(name: ComponentName?) { }
         }
         val intent = Intent(this, BrowserMediaWebViewService::class.java).putExtra(BrowserMediaWebViewService.EXTRA_TOKEN, secret)
         if (!bindService(intent, connection, Context.BIND_AUTO_CREATE)) return null
         browserMediaConnection = connection
-        if (!latch.await(10, TimeUnit.SECONDS) || !connected) {
-            runCatching { unbindService(connection) }; browserMediaConnection = null
-            return null
-        }
         return (BrowserMediaWebViewService.PORT to secret).also { browserMediaEndpoint = it }
     }
     private val serviceUpdateApplying = java.util.concurrent.atomic.AtomicBoolean(false)

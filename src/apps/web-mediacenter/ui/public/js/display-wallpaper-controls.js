@@ -37,11 +37,15 @@
     let motionFrame = null;
     let lastMotionFrame = null;
     let motionTimeout = null;
+    let modelStatus = '', motionStatus = '';
+    const renderHologramStatus = () => { if (hologramStatus) hologramStatus.textContent = motionStatus || modelStatus; };
+    const estimator = root.createWallpaperMotionEstimator();
     const hologram = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
     const motion = { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 };
     const publishHologram = () => root.DisplayMmd?.setHolographicTilt?.({ ...hologram });
     const resetHologram = () => {
         hologramCenter = null;
+        estimator.reset();
         Object.assign(hologram, { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 });
         Object.assign(motion, { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 });
         lastMotionFrame = null;
@@ -68,15 +72,15 @@
     }
     function onMotionSample(event) {
         if (!motionListening) return;
-        const sample = event.acceleration;
-        if (!sample || typeof sample.x !== 'number' || typeof sample.y !== 'number' || !Number.isFinite(sample.x) || !Number.isFinite(sample.y)) return;
+        const sample = estimator.sample(event, root.performance.now());
+        if (!sample) return;
         const angle = Number(root.screen?.orientation?.angle || root.orientation || 0) * Math.PI / 180;
         const deadzone = value => Math.abs(value) < 0.08 ? 0 : Math.max(-8, Math.min(8, value));
-        motion.ax = deadzone(sample.x * Math.cos(angle) - sample.y * Math.sin(angle));
-        motion.ay = deadzone(sample.y * Math.cos(angle) + sample.x * Math.sin(angle));
+        motion.ax = deadzone(sample[0] * Math.cos(angle) - sample[1] * Math.sin(angle));
+        motion.ay = deadzone(sample[1] * Math.cos(angle) + sample[0] * Math.sin(angle));
         motion.sampledAt = root.performance.now();
         if (motionTimeout !== null) { root.clearTimeout(motionTimeout); motionTimeout = null; }
-        if (hologramStatus) hologramStatus.textContent = '';
+        motionStatus = ''; renderHologramStatus();
     }
     const deltaDegrees = (value, center) => ((value - center + 540) % 360) - 180;
     function onHologramSample(event) {
@@ -95,7 +99,7 @@
         hologram.modelYaw = yaw;
         hologram.modelPitch = tilt;
         publishHologram();
-        if (hologramStatus) hologramStatus.textContent = '';
+        modelStatus = ''; renderHologramStatus();
     }
     function updateHologram() {
         resetHologram();
@@ -112,7 +116,7 @@
         motionListening = motionEnabled && motionSupported;
         if (motionListening) {
             root.addEventListener('devicemotion', onMotionSample, { passive: true });
-            motionTimeout = root.setTimeout(() => { motionTimeout = null; if (motionListening && hologramStatus) hologramStatus.textContent = '未收到手机移动数据，请检查传感器和网页权限'; }, 5000);
+            motionTimeout = root.setTimeout(() => { motionTimeout = null; if (motionListening) { motionStatus = '未收到手机移动数据，请检查加速度、角速度和网页权限'; renderHologramStatus(); } }, 5000);
         }
         if (typeof root.NativeDisplay?.setHolographicSensorEnabled === 'function') {
             try { modelSupported = root.NativeDisplay.setHolographicSensorEnabled(enabled) === true; } catch (_) {}
@@ -123,7 +127,9 @@
             if (orientationListening) root.addEventListener('deviceorientation', onHologramSample, { passive: true });
         }
         if (motionListening) motionFrame = root.requestAnimationFrame(motionTick);
-        if (hologramStatus) hologramStatus.textContent = !motionSupported ? '当前页面不支持手机移动传感器' : !modelSupported ? '当前设备没有可用的姿态传感器' : (enabled || motionEnabled) ? '等待设备传感器…' : '';
+        motionStatus = !motionSupported ? '当前页面不支持手机移动传感器' : motionEnabled ? '等待手机移动数据…' : '';
+        modelStatus = !modelSupported ? '当前设备没有可用的姿态传感器' : enabled ? '等待设备姿态…' : '';
+        renderHologramStatus();
     }
 
     function updateClockInset() {
