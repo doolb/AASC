@@ -35,6 +35,9 @@ class NativeBridge(
     @JavascriptInterface
     fun setHolographicSensorEnabled(enabled: Boolean): Boolean = holographicSensor.setEnabled(enabled)
 
+    @JavascriptInterface
+    fun setHolographicMotionEnabled(enabled: Boolean): Boolean = holographicSensor.setMotionEnabled(enabled)
+
     internal fun refreshHolographicSensorVisibility() { mainHandler.post { holographicSensor.refreshVisibility() } }
 
     @JavascriptInterface

@@ -33,13 +33,55 @@
 
     let hologramCenter = null;
     let orientationListening = false;
-    const resetHologram = () => { hologramCenter = null; root.DisplayMmd?.setHolographicTilt?.({}); };
+    let motionListening = false;
+    let motionFrame = null;
+    let lastMotionFrame = null;
+    const hologram = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
+    const motion = { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 };
+    const publishHologram = () => root.DisplayMmd?.setHolographicTilt?.({ ...hologram });
+    const resetHologram = () => {
+        hologramCenter = null;
+        Object.assign(hologram, { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 });
+        Object.assign(motion, { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 });
+        lastMotionFrame = null;
+        root.DisplayMmd?.setHolographicTilt?.({});
+    };
+    function motionTick(now) {
+        motionFrame = null;
+        if (!motionListening) return;
+        const dt = lastMotionFrame === null ? 0 : Math.min(0.05, Math.max(0, (now - lastMotionFrame) / 1000));
+        lastMotionFrame = now;
+        const fresh = now - motion.sampledAt < 150;
+        const damping = Math.exp(-5 * dt);
+        motion.vx = (motion.vx + (fresh ? motion.ax : 0) * dt) * damping;
+        motion.vy = (motion.vy + (fresh ? motion.ay : 0) * dt) * damping;
+        const decay = Math.exp(-2.5 * dt);
+        const previousX = hologram.cameraX, previousY = hologram.cameraY;
+        // 位移是短时的视觉反馈，并非无外部定位的绝对手机坐标。
+        hologram.cameraX = Math.max(-0.14, Math.min(0.14, hologram.cameraX * decay + motion.vx * dt * 0.7));
+        hologram.cameraY = Math.max(-0.14, Math.min(0.14, hologram.cameraY * decay + motion.vy * dt * 0.7));
+        if (Math.abs(hologram.cameraX) < 0.00001 && Math.abs(motion.vx) < 0.00001) hologram.cameraX = 0;
+        if (Math.abs(hologram.cameraY) < 0.00001 && Math.abs(motion.vy) < 0.00001) hologram.cameraY = 0;
+        if (hologram.cameraX !== previousX || hologram.cameraY !== previousY) publishHologram();
+        motionFrame = root.requestAnimationFrame(motionTick);
+    }
+    function onMotionSample(event) {
+        if (!motionListening) return;
+        const sample = event.detail || event.acceleration;
+        if (!sample || typeof sample.x !== 'number' || typeof sample.y !== 'number' || !Number.isFinite(sample.x) || !Number.isFinite(sample.y)) return;
+        const angle = Number(root.screen?.orientation?.angle || root.orientation || 0) * Math.PI / 180;
+        const deadzone = value => Math.abs(value) < 0.12 ? 0 : Math.max(-8, Math.min(8, value));
+        motion.ax = deadzone(sample.x * Math.cos(angle) - sample.y * Math.sin(angle));
+        motion.ay = deadzone(sample.y * Math.cos(angle) + sample.x * Math.sin(angle));
+        motion.sampledAt = root.performance.now();
+        if (hologramStatus) hologramStatus.textContent = '';
+    }
     const deltaDegrees = (value, center) => ((value - center + 540) % 360) - 180;
     function onHologramSample(event) {
         const sample = event.detail || event;
         if (typeof sample.beta !== 'number' || typeof sample.gamma !== 'number') return;
         const beta = Number(sample.beta), gamma = Number(sample.gamma);
-        if ((!hologramModel.checked && !hologramCamera.checked) || !Number.isFinite(beta) || !Number.isFinite(gamma)) return;
+        if (!hologramModel.checked || !Number.isFinite(beta) || !Number.isFinite(gamma)) return;
         if (document.hidden && !active) return;
         if (!hologramCenter) { hologramCenter = { beta, gamma }; return; }
         const angle = Number(root.screen?.orientation?.angle || root.orientation || 0) * Math.PI / 180;
@@ -48,24 +90,36 @@
         const y = pitch * Math.cos(angle) + roll * Math.sin(angle);
         const bounded = value => Math.max(-0.14, Math.min(0.14, value * Math.PI / 180 * 0.25));
         const yaw = bounded(x), tilt = bounded(y);
-        root.DisplayMmd?.setHolographicTilt?.({ modelYaw: hologramModel.checked ? yaw : 0,
-            modelPitch: hologramModel.checked ? tilt : 0, cameraX: hologramCamera.checked ? -yaw : 0,
-            cameraY: hologramCamera.checked ? -tilt : 0 });
+        hologram.modelYaw = yaw;
+        hologram.modelPitch = tilt;
+        publishHologram();
         if (hologramStatus) hologramStatus.textContent = '';
     }
     function updateHologram() {
         resetHologram();
-        const enabled = hologramModel.checked || hologramCamera.checked;
+        if (motionFrame !== null) root.cancelAnimationFrame(motionFrame);
+        motionFrame = null;
+        const visible = !document.hidden || active;
+        const enabled = hologramModel.checked && visible;
+        const motionEnabled = hologramCamera.checked && visible;
+        let modelSupported = !enabled;
+        let motionSupported = !motionEnabled;
         if (typeof root.NativeDisplay?.setHolographicSensorEnabled === 'function') {
-            let supported = false;
-            try { supported = root.NativeDisplay.setHolographicSensorEnabled(enabled && (!document.hidden || active)) === true; } catch (_) {}
-            if (hologramStatus) hologramStatus.textContent = enabled ? (supported ? '等待设备姿态…' : '当前设备没有可用的姿态传感器') : '';
-            return;
+            try { modelSupported = root.NativeDisplay.setHolographicSensorEnabled(enabled) === true; } catch (_) {}
+            try { motionSupported = !motionEnabled || (typeof root.NativeDisplay.setHolographicMotionEnabled === 'function' && root.NativeDisplay.setHolographicMotionEnabled(true) === true); if (!motionEnabled) root.NativeDisplay.setHolographicMotionEnabled?.(false); } catch (_) {}
+            motionListening = motionEnabled && motionSupported;
+        } else {
+            if (orientationListening) root.removeEventListener('deviceorientation', onHologramSample);
+            root.removeEventListener('devicemotion', onMotionSample);
+            orientationListening = enabled && typeof root.DeviceOrientationEvent !== 'undefined';
+            motionListening = motionEnabled && typeof root.DeviceMotionEvent !== 'undefined';
+            modelSupported = !enabled || orientationListening;
+            motionSupported = !motionEnabled || motionListening;
+            if (orientationListening) root.addEventListener('deviceorientation', onHologramSample, { passive: true });
+            if (motionListening) root.addEventListener('devicemotion', onMotionSample, { passive: true });
         }
-        if (orientationListening) root.removeEventListener('deviceorientation', onHologramSample);
-        orientationListening = enabled && !document.hidden && typeof root.DeviceOrientationEvent !== 'undefined';
-        if (orientationListening) root.addEventListener('deviceorientation', onHologramSample, { passive: true });
-        if (hologramStatus) hologramStatus.textContent = enabled && !orientationListening ? '当前页面没有可用的姿态传感器' : '';
+        if (motionListening) motionFrame = root.requestAnimationFrame(motionTick);
+        if (hologramStatus) hologramStatus.textContent = !motionSupported ? '当前设备没有可用的平移传感器或需要更新应用' : !modelSupported ? '当前设备没有可用的姿态传感器' : (enabled || motionEnabled) ? '等待设备传感器…' : '';
     }
 
     function updateClockInset() {
@@ -131,6 +185,7 @@
         input.addEventListener('change', () => { savePreference(key, input.checked); updateHologram(); });
     }
     root.addEventListener('aasc-native-orientation', onHologramSample);
+    root.addEventListener('aasc-native-motion', onMotionSample);
     root.addEventListener('aasc-hologram-visibility', resetHologram);
     root.addEventListener('orientationchange', resetHologram);
     document.addEventListener('visibilitychange', updateHologram);
