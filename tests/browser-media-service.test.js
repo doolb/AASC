@@ -17,8 +17,8 @@ function browserFactory(records) {
       async bringToFront() { record.focused = true; },
       async evaluate(fn, argument) {
         const document = { title: record.state === 'challenge' ? 'Just a moment...' : '示例',
-          querySelector: selector => selector.includes('og:title') ? { content: '示例视频' } : null,
-          querySelectorAll: selector => selector.startsWith('video,') ? [{ currentSrc: 'https://cdn.example.com/one.mp4', title: '第一集', closest: () => null }] : [] };
+          querySelector: selector => selector === '[data-aweme-id]' ? record.cards?.[0] : selector.includes('og:title') ? { content: '示例视频' } : null,
+          querySelectorAll: selector => selector === '[data-aweme-id]' ? (record.cards || []) : selector === 'video' ? (record.videos || []) : selector.startsWith('video,') ? [{ currentSrc: 'https://cdn.example.com/one.mp4', title: '第一集', closest: () => null }] : [] };
         const context = { document, URL, location: { href: record.url }, performance: { getEntriesByType: () => [] }, Map, Uint8Array, TextDecoder, AbortController, setTimeout, clearTimeout, btoa,
           fetch: async () => { record.requests++; let read = false; return { status: 200, headers: { get: () => 'text/plain' }, body: { getReader: () => ({ read: async () => read ? { done: true } : (read = true, { done: false, value: Buffer.from('ok') }) }) } }; } };
         return vm.runInNewContext(`(${fn.toString()})`, context)(argument);
@@ -55,6 +55,26 @@ test('浏览器服务按来源隔离、访问受限并运行现有采集脚本',
   await service.stop();
   assert.deepEqual(records.map(record => record.closed), [1, 1]);
   await assert.rejects(service.request(first), { code: 'BROWSER_MEDIA_DISABLED' });
+});
+
+test('抖音使用同一会话读取真实推荐 ID 并过滤静态测试视频', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-douyin-page-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const records = [], factory = browserFactory(records);
+  const service = createBrowserMediaService({ rootDir: root, resolveBrowser: async () => '/test/vivaldi', launch: async options => {
+    const browser = await factory(options);
+    const img = { getAttribute: () => '推荐标题', src: 'https://p3.douyinpic.com/a.jpg' };
+    records[0].cards = [{ getAttribute: () => '7696837153740819721', querySelector: () => img }];
+    records[0].videos = [{ currentSrc: 'https://lf.douyinstatic.com/test.mp4' }, { currentSrc: 'https://v11.douyinvod.com/real.mp4' }];
+    return browser;
+  } });
+  t.after(() => service.stop());
+  const cards = await service.douyinHome();
+  assert.equal(cards[0].id, '7696837153740819721');
+  assert.equal(cards[0].title, '推荐标题');
+  assert.equal(await service.douyinVideo({ id: cards[0].id }), 'https://v11.douyinvod.com/real.mp4');
+  assert.equal(records.length, 1);
+  await assert.rejects(service.douyinVideo({ id: '../bad' }), /视频 ID/);
 });
 
 test('挑战页保留供人工处理，验证后继续请求', async t => {

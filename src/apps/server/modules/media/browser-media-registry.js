@@ -15,6 +15,8 @@ function requireActive() {
 const browserMedia = {
   request: options => requireActive().request(options),
   extract: options => requireActive().extract(options),
+  douyinHome: options => requireActive().douyinHome(options),
+  douyinVideo: options => requireActive().douyinVideo(options),
   status: () => active ? active.status() : { running: false, sessions: [] }
 };
 module.exports = { activateBrowserMedia, browserMedia };

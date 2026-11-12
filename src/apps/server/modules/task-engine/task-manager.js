@@ -841,6 +841,13 @@ class TaskManager extends EventEmitter {
   async _runServiceTask(task, instanceId, instance, context) {
     try {
       let controller;
+      const browserMedia = require('../media/browser-media-registry').browserMedia;
+      // 媒体来源按需启动同一个内置服务，复用普通任务生命周期和并发保护。
+      const taskBrowserMedia = { ...browserMedia, ensure: async () => {
+        if (browserMedia.status().running) return;
+        const result = await this.ensureBuiltinServiceInstance('browser.media');
+        if (result.status !== 'running' || !browserMedia.status().running) throw new Error(result.error || '浏览器媒体任务启动失败');
+      } };
 
       if (task.taskType === 'builtin') {
         if (!builtinRegistry) throw new Error('内置任务模块不可用');
@@ -864,7 +871,7 @@ class TaskManager extends EventEmitter {
           generateTTS: this._generateTts,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           postStream: (data) => this.emit('stream', instanceId, data),
-          browserMedia: require('../media/browser-media-registry').browserMedia,
+          browserMedia: taskBrowserMedia,
           saveUserMedia: this._saveUserMedia,
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
           registerRoute: (route) => this._registerServerTaskRoute(task, route),
@@ -909,7 +916,7 @@ class TaskManager extends EventEmitter {
             registrations.push(unregister); this._mediaProviderUnregisters.set(instanceId, registrations);
             return unregister;
           },
-          browserMedia: require('../media/browser-media-registry').browserMedia,
+          browserMedia: taskBrowserMedia,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
           postStream: (data) => this.emit('stream', instanceId, data),

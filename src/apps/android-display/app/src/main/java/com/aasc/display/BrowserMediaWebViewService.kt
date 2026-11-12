@@ -42,7 +42,7 @@ class BrowserMediaWebViewService : Service() {
             }
         }
     }
-    private data class Page(val view: WebView, var origin: String = "", var loaded: CountDownLatch = CountDownLatch(1),
+    private data class Page(val view: WebView, val defaultUserAgent: String, var origin: String = "", var loaded: CountDownLatch = CountDownLatch(1),
         @Volatile var status: Int = 200, @Volatile var failed: Boolean = false)
     private val pages = ConcurrentHashMap<String, Page>()
     private val callbacks = ConcurrentHashMap<String, (JSONObject) -> Unit>()
@@ -91,7 +91,7 @@ class BrowserMediaWebViewService : Service() {
         check(pages.size < 4 && !pages.containsKey(id))
         onMain {
             val view = WebView(MutableContextWrapper(this))
-            val page = Page(view)
+            val page = Page(view, view.settings.userAgentString)
             view.settings.javaScriptEnabled = true
             view.settings.domStorageEnabled = true
             view.addJavascriptInterface(object {
@@ -141,6 +141,8 @@ class BrowserMediaWebViewService : Service() {
                 val expected = origin(url)
                 onMain {
                     check(page.origin.isEmpty() || page.origin == expected) { "禁止跨站导航" }
+                    // 精选卡片使用桌面布局；保留当前 WebView 的 Chromium 版本以避免伪造不兼容版本。
+                    page.view.settings.userAgentString = BrowserMediaUserAgent.forOrigin(expected, page.defaultUserAgent)
                     select(page); page.origin = expected; page.status = 200; page.failed = false
                     page.loaded = CountDownLatch(1); page.view.loadUrl(url)
                 }

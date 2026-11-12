@@ -1,5 +1,9 @@
 # 自测功能文档
 
+## 抖音自动调用网页媒体（2026-11-12）
+
+32 项定向测试覆盖按需启动与复用、推荐 ID、网页媒体取流和失败提示；桌面独立 Vivaldi 读取 19 条精选推荐并从第一条取得 HTTP 206、1024 字节分段。Android 浏览器标识单测和原生编译通过；真实 WebView 和播放待验收。
+
 ## Offline 网页媒体与会话（2026-11-12）
 
 运行 `node --test tests/browser-media-android.test.js tests/browser-media-service.test.js tests/browser-media-api.test.js src/apps/server/modules/task-engine/builtin-tasks/browser-media.test.js`。覆盖默认与自定义上限、超限保留、代理拒绝、本机令牌桥和原有请求；Android Kotlin 编译与 NodeServerService 启动环境单测通过。新版 APK 的实际网页加载、登录和抖音视频播放待真机验收。

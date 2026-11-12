@@ -11,6 +11,9 @@ const STREAM_HEADERS = new Set(['content-length', 'content-range', 'accept-range
 const SAFE_MIME = /^(?:video\/(?:mp4|webm|ogg|mpeg|quicktime|x-matroska)|audio\/(?:mpeg|mp4|ogg|webm|wav|x-wav|flac|aac)|image\/(?:jpeg|png|gif|webp|avif|bmp)|text\/plain|application\/octet-stream)$/i;
 const SAFE_TOMATO_ERRORS = new Set(['番茄下载或读取进行中，暂不能切换代理', '番茄下载任务状态不可用，暂不能切换代理', '番茄下载文件无法确认书籍身份']);
 function safeError(id, error, fallback) {
+    if (id === 'douyin' && ['网页媒体任务启动失败，请检查任务状态', '网页媒体服务不可用，请更新服务后重试',
+        '浏览器会话数量已达上限', '网站需要验证，请在专用浏览器中完成后重试', '网站不在允许列表中',
+        'Android 网页媒体暂不支持独立代理', '抖音网页尚未返回推荐，请查看运行页面并重试'].includes(error?.message)) return error.message;
     if (id === 'tomato' && SAFE_TOMATO_ERRORS.has(error?.message)) return error.message;
     if (id === 'youtube' && error?.message === 'YouTube 首页暂无推荐视频，请尝试搜索或检查登录状态') return error.message;
     if (id === 'pinterest' && ['Pinterest 匿名访问受限，请配置 Cookie', 'Pinterest 匿名访问受限，请配置 Cookie 或检查站点访问限制', 'Pinterest 访问受限，请检查 Cookie 是否有效或站点访问限制', 'Pinterest 下载失败：网络、代理或 HLS 格式不支持', 'Pinterest HLS 视频请先下载', 'Pinterest 暂不支持搜索分页', 'Pinterest 暂不支持首页分页', 'Pinterest 未返回与链接匹配的媒体'].includes(error?.message)) return error.message;

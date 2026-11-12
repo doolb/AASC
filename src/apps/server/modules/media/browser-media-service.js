@@ -218,6 +218,41 @@ function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', all
         }) };
     });
   }
+  async function douyinHome(options = {}) {
+    const pageUrl = 'https://www.douyin.com/jingxuan';
+    return withPage({ sourceId: 'douyin', pageUrl, proxyUrl: options.proxyUrl }, async page => {
+      const cards = await page.evaluate(async () => {
+        // 精选卡片为异步渲染；只读取带真实作品 ID 的卡片，不能把页面自带测试视频当推荐。
+        for (let i = 0; i < 30 && !document.querySelector('[data-aweme-id]'); i++) await new Promise(resolve => setTimeout(resolve, 500));
+        return [...document.querySelectorAll('[data-aweme-id]')].slice(0, 100).map(card => ({
+          id: card.getAttribute('data-aweme-id'), title: card.querySelector('img')?.getAttribute('alt') || '',
+          cover: card.querySelector('img')?.src || ''
+        }));
+      });
+      if (!Array.isArray(cards) || cards.length > 100) throw new Error('抖音推荐数据无效');
+      return cards.filter(item => /^\d{10,24}$/.test(String(item?.id || '')) && typeof item.title === 'string' && item.title.trim()).map(item => ({
+        id: String(item.id), title: item.title.slice(0, 200), cover: String(item.cover || '').slice(0, 8192)
+      }));
+    });
+  }
+  async function douyinVideo(options = {}) {
+    const id = String(options.id || '');
+    if (!/^\d{10,24}$/.test(id)) throw new Error('抖音视频 ID 无效');
+    const pageUrl = `https://www.douyin.com/jingxuan?modal_id=${id}`;
+    return withPage({ sourceId: 'douyin', pageUrl, proxyUrl: options.proxyUrl }, async page => page.evaluate(async expectedId => {
+      for (let i = 0; i < 30; i++) {
+        if (new URL(location.href).searchParams.get('modal_id') !== expectedId) throw new Error('抖音视频页面已变化，请重试');
+        for (const video of document.querySelectorAll('video')) {
+          for (const value of [video.currentSrc, video.src]) try {
+            const url = new URL(value || '');
+            if (url.protocol === 'https:' && (url.hostname === 'douyinvod.com' || url.hostname.endsWith('.douyinvod.com'))) return url.href;
+          } catch { /* 等待真实视频地址出现。 */ }
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      throw new Error('抖音网页未提供可播放地址，请在运行页面检查登录或播放状态');
+    }, id));
+  }
   async function showPage() {
     const entry = sessions.get(latest);
     if (!entry) throw new Error('尚无运行页面，请先由媒体源发起请求');
@@ -239,6 +274,6 @@ function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', all
     await Promise.allSettled([...closing.values()]);
     sessions.clear(); onStatus(getStatus());
   }
-  return { open: options => withPage(options, async () => ({ ready: true })), request, extract, extractCurrent, showPage, status: getStatus, stop };
+  return { open: options => withPage(options, async () => ({ ready: true })), request, extract, extractCurrent, douyinHome, douyinVideo, showPage, status: getStatus, stop };
 }
 module.exports = { createBrowserMediaService, normalizeOrigins, normalizeSessionLimit, proxyArgument, inspectPage, resolveExecutable };

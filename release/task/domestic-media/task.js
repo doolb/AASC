@@ -34,10 +34,10 @@ async function run(context) {
       proxyDefault: false, create: config => tomato.create(config)
     }));
     unregister.push(context.registerMediaProvider({
-      id: 'douyin', name: '抖音', region: 'domestic', features: ['resolveLink', 'stream', 'download'], proxyDefault: false,
+      id: 'douyin', name: '抖音', region: 'domestic', features: ['home', 'resolveLink', 'stream', 'download'], proxyDefault: false,
       create: config => {
         const ytdlp = createYtdlp({ binary: params.douyinYtdlpBinary || '', dataDir: context.workDir, proxyUrl: () => config.proxyUrl || '', cookie: params.douyinCookie || '', log: context.log });
-        const provider = createDouyinProvider(config, { ytdlp });
+        const provider = createDouyinProvider(config, { ytdlp, browserMedia: context.browserMedia });
         douyinInstances.add(provider);
         return provider;
       }
