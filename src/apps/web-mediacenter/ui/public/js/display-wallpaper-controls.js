@@ -60,9 +60,9 @@
         const damping = Math.exp(-5 * dt);
         motion.vx = (motion.vx + (fresh ? motion.ax : 0) * dt) * damping;
         motion.vy = (motion.vy + (fresh ? motion.ay : 0) * dt) * damping;
-        const decay = Math.exp(-2.5 * dt);
+        const decay = Math.exp(-5 * dt);
         const previousX = hologram.cameraX, previousY = hologram.cameraY;
-        // 位移是短时的视觉反馈，并非无外部定位的绝对手机坐标；提高增益，仍以原阻尼和限幅控制回中。
+        // 位移是短时的视觉反馈，并非无外部定位的绝对手机坐标；提高增益，以阻尼和限幅控制回中。
         hologram.cameraX = Math.max(-0.14, Math.min(0.14, hologram.cameraX * decay + motion.vx * dt * 2.8));
         hologram.cameraY = Math.max(-0.14, Math.min(0.14, hologram.cameraY * decay + motion.vy * dt * 2.8));
         if (Math.abs(hologram.cameraX) < 0.00001 && Math.abs(motion.vx) < 0.00001) hologram.cameraX = 0;
@@ -116,7 +116,7 @@
         motionListening = motionEnabled && motionSupported;
         if (motionListening) {
             root.addEventListener('devicemotion', onMotionSample, { passive: true });
-            motionTimeout = root.setTimeout(() => { motionTimeout = null; if (motionListening) { motionStatus = '未收到手机移动数据，请检查加速度、角速度和网页权限'; renderHologramStatus(); } }, 5000);
+            motionTimeout = root.setTimeout(() => { motionTimeout = null; if (motionListening) { motionStatus = '未收到手机移动数据，请检查加速度传感器和网页权限'; renderHologramStatus(); } }, 5000);
         }
         if (typeof root.NativeDisplay?.setHolographicSensorEnabled === 'function') {
             try { modelSupported = root.NativeDisplay.setHolographicSensorEnabled(enabled) === true; } catch (_) {}

@@ -673,7 +673,7 @@ const SelfTest = {
                         && controlsScript.includes('devicemotion')
                         && html.includes('js/display-wallpaper-motion.js')
                         && controlsScript.includes('createWallpaperMotionEstimator')
-                        && motionScript.includes('accelerationIncludingGravity') && motionScript.includes('rotationRate')
+                        && motionScript.includes('accelerationIncludingGravity') && motionScript.includes('gravityTimeConstant')
                         && controlsScript.includes('cameraX:') && controlsScript.includes('cameraY:');
                     return { success: valid, message: valid ? '壁纸控件结构正常' : '壁纸控件结构缺失',
                         details: '仅检查资源结构；桌面触摸和任务关闭需真机验收' };

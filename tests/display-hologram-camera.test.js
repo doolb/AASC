@@ -59,7 +59,7 @@ for (const type of ['pmx', 'vrm']) {
   });
 }
 
-test('壁纸内置自测检查真实六轴资源并识别缺失文件', async () => {
+test('壁纸内置自测检查真实加速度资源并识别缺失文件', async () => {
   const root = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
   const source = fs.readFileSync(path.join(root, 'js/self-test.js'), 'utf8');
   const id = source.indexOf("id: 'wallpaper_controls_structure'");
@@ -76,4 +76,23 @@ test('壁纸内置自测检查真实六轴资源并识别缺失文件', async ()
   assert.equal((await check.run()).success, true);
   missing = true;
   assert.equal((await check.run()).success, false);
+});
+
+test('镜头停止运动后按更快的回中系数衰减', () => {
+  const file = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/display-wallpaper-controls.js');
+  const source = fs.readFileSync(file, 'utf8');
+  const start = source.indexOf('    function motionTick(now) {');
+  const end = source.indexOf('    function onMotionSample(event)', start);
+  assert.ok(start >= 0 && end > start);
+  const state = { cameraX: 0.1, cameraY: -0.1 };
+  const motion = { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 };
+  const tick = new Function('root', 'hologram', 'motion', `
+    let motionFrame = null, motionListening = true, lastMotionFrame = 0;
+    const publishHologram = () => {};
+    ${source.slice(start, end)}
+    return motionTick;
+  `)({ requestAnimationFrame: () => 1 }, state, motion);
+  tick(50);
+  assert.ok(Math.abs(state.cameraX - 0.1 * Math.exp(-5 * 0.05)) < 1e-12);
+  assert.ok(Math.abs(state.cameraY + 0.1 * Math.exp(-5 * 0.05)) < 1e-12);
 });
