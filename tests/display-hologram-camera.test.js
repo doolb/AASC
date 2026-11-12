@@ -49,8 +49,8 @@ for (const type of ['pmx', 'vrm']) {
     scene.setHolographicTilt({ cameraX: 4, cameraY: -4 });
     for (let i = 0; i < 100; i++) scene.updateCameraView(0.016);
     const displacement = scene.camera.position.clone().sub(position);
-    assert.ok(Math.abs(displacement.dot(right) - 0.14 * 1.75 * 0.4) < 0.001);
-    assert.ok(Math.abs(displacement.dot(up) + 0.14 * 1.75 * 0.4) < 0.001);
+    assert.ok(Math.abs(displacement.dot(right) - 0.14 * 1.75 * 4) < 0.001);
+    assert.ok(Math.abs(displacement.dot(up) + 0.14 * 1.75 * 4) < 0.001);
     assert.ok(orientation.angleTo(scene.camera.quaternion) < 1e-6);
     scene.setHolographicTilt({});
     for (let i = 0; i < 100; i++) scene.updateCameraView(0.016);
@@ -58,3 +58,22 @@ for (const type of ['pmx', 'vrm']) {
     assert.ok(orientation.angleTo(scene.camera.quaternion) < 1e-6);
   });
 }
+
+test('壁纸内置自测检查真实六轴资源并识别缺失文件', async () => {
+  const root = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public');
+  const source = fs.readFileSync(path.join(root, 'js/self-test.js'), 'utf8');
+  const id = source.indexOf("id: 'wallpaper_controls_structure'");
+  const start = source.lastIndexOf('        {', id);
+  const end = source.indexOf('\n        },\n        {', id);
+  assert.ok(start >= 0 && end > start);
+  const definition = source.slice(start, end + '\n        }'.length);
+  let missing = false;
+  const fetch = async url => {
+    if (missing && url === '/js/display-wallpaper-motion.js') return { ok: false };
+    return { ok: true, text: async () => fs.readFileSync(path.join(root, url.slice(1)), 'utf8') };
+  };
+  const check = new Function('fetch', `return (${definition});`)(fetch);
+  assert.equal((await check.run()).success, true);
+  missing = true;
+  assert.equal((await check.run()).success, false);
+});

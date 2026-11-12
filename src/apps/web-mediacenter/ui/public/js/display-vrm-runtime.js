@@ -148,8 +148,8 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         );
         camera.lookAt(targetX, targetY, targetZ);
         // 相机朝向先由用户视角确定；沿自身右、上轴平移，不重新对准角色。
-        camera.translateX(cameraViewState.currentOffsetX * TARGET_MODEL_HEIGHT * 0.4);
-        camera.translateY(cameraViewState.currentOffsetY * TARGET_MODEL_HEIGHT * 0.4);
+        camera.translateX(cameraViewState.currentOffsetX * TARGET_MODEL_HEIGHT * 4);
+        camera.translateY(cameraViewState.currentOffsetY * TARGET_MODEL_HEIGHT * 4);
     };
 
     const updateCameraView = (delta) => {
