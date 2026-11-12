@@ -93,6 +93,6 @@ test('镜头停止运动后按更快的回中系数衰减', () => {
     return motionTick;
   `)({ requestAnimationFrame: () => 1 }, state, motion);
   tick(50);
-  assert.ok(Math.abs(state.cameraX - 0.1 * Math.exp(-5 * 0.05)) < 1e-12);
-  assert.ok(Math.abs(state.cameraY + 0.1 * Math.exp(-5 * 0.05)) < 1e-12);
+  assert.ok(Math.abs(state.cameraX - 0.1 * Math.exp(-15 * 0.05)) < 1e-12);
+  assert.ok(Math.abs(state.cameraY + 0.1 * Math.exp(-15 * 0.05)) < 1e-12);
 });

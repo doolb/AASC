@@ -60,11 +60,11 @@
         const damping = Math.exp(-5 * dt);
         motion.vx = (motion.vx + (fresh ? motion.ax : 0) * dt) * damping;
         motion.vy = (motion.vy + (fresh ? motion.ay : 0) * dt) * damping;
-        const decay = Math.exp(-5 * dt);
+        const decay = Math.exp(-15 * dt);
         const previousX = hologram.cameraX, previousY = hologram.cameraY;
         // 位移是短时的视觉反馈，并非无外部定位的绝对手机坐标；提高增益，以阻尼和限幅控制回中。
-        hologram.cameraX = Math.max(-0.14, Math.min(0.14, hologram.cameraX * decay + motion.vx * dt * 2.8));
-        hologram.cameraY = Math.max(-0.14, Math.min(0.14, hologram.cameraY * decay + motion.vy * dt * 2.8));
+        hologram.cameraX = Math.max(-0.14, Math.min(0.14, hologram.cameraX * decay + motion.vx * dt * 8.4));
+        hologram.cameraY = Math.max(-0.14, Math.min(0.14, hologram.cameraY * decay + motion.vy * dt * 8.4));
         if (Math.abs(hologram.cameraX) < 0.00001 && Math.abs(motion.vx) < 0.00001) hologram.cameraX = 0;
         if (Math.abs(hologram.cameraY) < 0.00001 && Math.abs(motion.vy) < 0.00001) hologram.cameraY = 0;
         if (hologram.cameraX !== previousX || hologram.cameraY !== previousY) publishHologram();
