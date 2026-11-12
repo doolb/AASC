@@ -1,5 +1,9 @@
 # 自测功能文档
 
+## Offline 网页媒体与会话（2026-11-12）
+
+运行 `node --test tests/browser-media-android.test.js tests/browser-media-service.test.js tests/browser-media-api.test.js src/apps/server/modules/task-engine/builtin-tasks/browser-media.test.js`。覆盖默认与自定义上限、超限保留、代理拒绝、本机令牌桥和原有请求；Android Kotlin 编译与 NodeServerService 启动环境单测通过。新版 APK 的实际网页加载、登录和抖音视频播放待真机验收。
+
 ## 壁纸手机平移（2026-11-12）
 
 角色跟随增益与限幅翻倍由 `npm run test:hologram-camera` 验证；同时检查 PMX/VRM 镜头限幅保持不变。外网设备升级后的观感待验收。

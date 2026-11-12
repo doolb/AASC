@@ -3248,6 +3248,12 @@
     },
 
     _onWidgetAction: function(instanceId, action) {
+      if (action === 'showBrowserMediaPage') {
+        if (window.NativeControl && typeof window.NativeControl.openBrowserMediaRuntimePage === 'function') {
+          if (window.NativeControl.openBrowserMediaRuntimePage()) return;
+        }
+        action = 'showPage';
+      }
       this._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: action } });
     },
 

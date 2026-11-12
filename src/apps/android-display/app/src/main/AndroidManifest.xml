@@ -83,6 +83,14 @@
             android:exported="false"
             android:process=":chat2api_login" />
 
+        <!-- 网页媒体使用独立进程，运行页仅由本应用查看。 -->
+        <activity android:name=".BrowserMediaWebViewActivity" android:exported="false"
+            android:process=":browser_media" android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
+        <service android:name=".BrowserMediaWebViewService" android:exported="false"
+            android:process=":browser_media" />
+
         <service
             android:name=".DisplayAccessibilityService"
             android:exported="false"

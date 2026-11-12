@@ -195,7 +195,8 @@ class NodeServerService : Service() {
             nodeModulesDirectory: File? = null,
             apkVersionCode: Int? = null,
             activeRelease: ActiveRelease? = null,
-            doubaoWebViewEndpoint: Pair<Int, String>? = null
+            doubaoWebViewEndpoint: Pair<Int, String>? = null,
+            browserMediaEndpoint: Pair<Int, String>? = null
         ): Map<String, String> {
             val runtimeLibraryPath = File(rootDir, "runtime/arm64-v8a/lib").absolutePath
             val inheritedLibraryPath = System.getenv("LD_LIBRARY_PATH")?.trim().orEmpty()
@@ -220,6 +221,11 @@ class NodeServerService : Service() {
                 require(port in 1024..65535 && secret.length >= 32) { "豆包网页服务端点无效" }
                 environment["AASC_DOUBAO_WEBVIEW_PORT"] = port.toString()
                 environment["AASC_DOUBAO_WEBVIEW_TOKEN"] = secret
+            }
+            browserMediaEndpoint?.let { (port, secret) ->
+                require(port in 1024..65535 && secret.length >= 32) { "网页媒体端点无效" }
+                environment["AASC_BROWSER_MEDIA_PORT"] = port.toString()
+                environment["AASC_BROWSER_MEDIA_TOKEN"] = secret
             }
             nodeModulesDirectory?.let {
                 environment["NODE_PATH"] = it.absolutePath
@@ -304,6 +310,28 @@ class NodeServerService : Service() {
         doubaoWebViewConnection = connection
         if (!latch.await(10, TimeUnit.SECONDS) || port <= 0) return null
         return (port to secret).also { doubaoWebViewEndpoint = it }
+    }
+    private var browserMediaConnection: ServiceConnection? = null
+    private var browserMediaEndpoint: Pair<Int, String>? = null
+
+    /** 为网页媒体进程生成独立令牌，不与豆包或远程接口共用。 */
+    private fun ensureBrowserMediaEndpoint(): Pair<Int, String>? {
+        browserMediaEndpoint?.let { return it }
+        val secret = ByteArray(32).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        val latch = CountDownLatch(1)
+        var connected = false
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) { connected = true; latch.countDown() }
+            override fun onServiceDisconnected(name: ComponentName?) { browserMediaEndpoint = null }
+        }
+        val intent = Intent(this, BrowserMediaWebViewService::class.java).putExtra(BrowserMediaWebViewService.EXTRA_TOKEN, secret)
+        if (!bindService(intent, connection, Context.BIND_AUTO_CREATE)) return null
+        browserMediaConnection = connection
+        if (!latch.await(10, TimeUnit.SECONDS) || !connected) {
+            runCatching { unbindService(connection) }; browserMediaConnection = null
+            return null
+        }
+        return (BrowserMediaWebViewService.PORT to secret).also { browserMediaEndpoint = it }
     }
     private val serviceUpdateApplying = java.util.concurrent.atomic.AtomicBoolean(false)
     private val bootstrapManager by lazy { OfflineBootstrapManager(this) }
@@ -407,6 +435,9 @@ class NodeServerService : Service() {
         doubaoWebViewConnection?.let { runCatching { unbindService(it) } }
         doubaoWebViewConnection = null
         doubaoWebViewEndpoint = null
+        browserMediaConnection?.let { runCatching { unbindService(it) } }
+        browserMediaConnection = null
+        browserMediaEndpoint = null
         startExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -455,7 +486,7 @@ class NodeServerService : Service() {
                     jsLauncherSession = session
                     // JS启动器也必须先取得同应用WebView服务的绑定结果，随后由宿主环境传到服务Node。
                     session.start(mainServerUrl, readAppVersion(), readAppVersionCode() ?: 1,
-                        connection?.baseUrl, connection?.token, ensureDoubaoWebViewEndpoint())
+                        connection?.baseUrl, connection?.token, ensureDoubaoWebViewEndpoint(), ensureBrowserMediaEndpoint())
                 }
                 when {
                     manifest != null -> OfflineLauncherClient.objectCall("bootstrap.install", JSONObject().put("signedManifest", manifest).put("baseUrl", source), 600)
@@ -565,7 +596,8 @@ class NodeServerService : Service() {
                     nodeModulesDirectory,
                     readAppVersionCode(),
                     activeRelease,
-                    doubaoWebViewEndpoint = ensureDoubaoWebViewEndpoint()
+                    doubaoWebViewEndpoint = ensureDoubaoWebViewEndpoint(),
+                    browserMediaEndpoint = ensureBrowserMediaEndpoint()
                 )
             )
             val process = processBuilder.start()

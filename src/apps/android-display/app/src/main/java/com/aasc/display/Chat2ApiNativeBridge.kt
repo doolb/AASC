@@ -71,6 +71,16 @@ class Chat2ApiNativeBridge(
         }
     }
 
+    /** 只允许本机 Offline 控制页面查看网页媒体的后台 WebView。 */
+    @JavascriptInterface
+    fun openBrowserMediaRuntimePage(): Boolean {
+        if (runtimeServerUrl == null || activity.isFinishing || activity.isDestroyed) return false
+        return launchOnUiThread {
+            check(isLocalRuntimeUrl(runtimeServerUrl.invoke()))
+            activity.startActivity(Intent(activity, BrowserMediaWebViewActivity::class.java))
+        }
+    }
+
     private fun openLoginActivity(sessionJson: String, requestCode: Int): Boolean {
         if (sessionJson.isBlank() || activity.isFinishing || activity.isDestroyed) return false
         return launchOnUiThread {

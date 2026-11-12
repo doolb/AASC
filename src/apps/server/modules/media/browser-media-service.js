@@ -6,6 +6,11 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const MAX_SESSIONS = 4;
+function normalizeSessionLimit(value) {
+  const number = Number(value ?? 1);
+  if (!Number.isInteger(number) || number < 1 || number > MAX_SESSIONS) throw new Error('浏览器会话上限须为 1 至 4');
+  return number;
+}
 const MAX_RESPONSE = 2 * 1024 * 1024;
 const SCRIPT_PATH = path.resolve(__dirname, '../../../web-mediacenter/ui/public/userscripts/aasc-media-capture.user.js');
 
@@ -54,8 +59,9 @@ async function inspectPage(page, expectedOrigin) {
   });
 }
 
-function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', allowedOrigins = [], display = '', launch, resolveBrowser = resolveExecutable, readScript, onStatus = () => {} } = {}) {
+function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', allowedOrigins = [], display = '', maxSessions = 1, launch, resolveBrowser = resolveExecutable, readScript, rejectProxy = false, onStatus = () => {} } = {}) {
   const origins = normalizeOrigins(allowedOrigins);
+  const sessionLimit = normalizeSessionLimit(maxSessions);
   const sessions = new Map();
   const closing = new Map();
   let running = true;
@@ -69,15 +75,16 @@ function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', all
     const origin = originOf(options?.pageUrl);
     // 留空表示允许所有 HTTPS 站点；显式配置列表时仍严格匹配站点来源。
     if (origins.length > 0 && !origins.includes(origin)) throw Object.assign(new Error('网站不在允许列表中'), { code: 'BROWSER_MEDIA_ORIGIN' });
-    return { sourceId, origin, pageUrl: new URL(options.pageUrl).href, proxy: proxyArgument(options.proxyUrl) };
+    const proxy = proxyArgument(options.proxyUrl);
+    if (rejectProxy && proxy) throw new Error('Android 网页媒体暂不支持独立代理');
+    return { sourceId, origin, pageUrl: new URL(options.pageUrl).href, proxy };
   }
   async function session(options) {
     const details = validate(options);
     const key = crypto.createHash('sha256').update(JSON.stringify([details.sourceId, details.origin, details.proxy])).digest('hex');
-    latest = key;
     let entry = sessions.get(key);
     if (!entry) {
-      if (sessions.size >= MAX_SESSIONS) throw new Error('浏览器会话数量已达上限');
+      if (sessions.size >= sessionLimit) throw new Error('浏览器会话数量已达上限');
       entry = { ...details, state: 'starting', browser: null, page: null, promise: null, chain: Promise.resolve() };
       sessions.set(key, entry);
       entry.promise = (async () => {
@@ -125,6 +132,7 @@ function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', all
       });
     }
     await entry.promise;
+    latest = key;
     return { entry, details };
   }
   async function withPage(options, operation) {
@@ -233,4 +241,4 @@ function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', all
   }
   return { open: options => withPage(options, async () => ({ ready: true })), request, extract, extractCurrent, showPage, status: getStatus, stop };
 }
-module.exports = { createBrowserMediaService, normalizeOrigins, proxyArgument, inspectPage, resolveExecutable };
+module.exports = { createBrowserMediaService, normalizeOrigins, normalizeSessionLimit, proxyArgument, inspectPage, resolveExecutable };

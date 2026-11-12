@@ -32,7 +32,7 @@ function browserFactory(records) {
 test('浏览器服务按来源隔离、访问受限并运行现有采集脚本', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-browser-media-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
   const records = [];
-  const service = createBrowserMediaService({ rootDir: root, allowedOrigins: 'https://example.com', launch: browserFactory(records), resolveBrowser: async () => '/test/vivaldi' });
+  const service = createBrowserMediaService({ rootDir: root, maxSessions: 2, allowedOrigins: 'https://example.com', launch: browserFactory(records), resolveBrowser: async () => '/test/vivaldi' });
   const first = { sourceId: 'source-a', pageUrl: 'https://example.com/watch' };
   const result = await service.extract(first);
   assert.equal(result.content, '示例视频'); assert.equal(result.items[0].title, '第一集');
@@ -94,7 +94,7 @@ test('空允许列表允许不同 HTTPS 网站，但会话仍限制同源请求�
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-browser-all-sites-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const records = [];
-  const service = createBrowserMediaService({ rootDir: root, allowedOrigins: '', launch: browserFactory(records), resolveBrowser: async () => '/test/vivaldi' });
+  const service = createBrowserMediaService({ rootDir: root, maxSessions: 2, allowedOrigins: '', launch: browserFactory(records), resolveBrowser: async () => '/test/vivaldi' });
   t.after(() => service.stop());
   const first = { sourceId: 'source-a', pageUrl: 'https://first.example/watch' };
   const second = { sourceId: 'source-b', pageUrl: 'https://second.example/' };
@@ -107,4 +107,29 @@ test('空允许列表允许不同 HTTPS 网站，但会话仍限制同源请求�
   let decision = '';
   records[0].handlers.request({ isNavigationRequest: () => true, frame: () => records[0].page, url: () => 'https://second.example/', abort: async () => { decision = 'blocked'; }, continue: async () => { decision = 'allowed'; } });
   assert.equal(decision, 'blocked');
+});
+
+test('默认只允许一个会话，超限保留已有会话，配置必须在 1 至 4 之间', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-browser-limit-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const records = [];
+  const service = createBrowserMediaService({ rootDir: root, launch: browserFactory(records), resolveBrowser: async () => '/test/vivaldi' });
+  t.after(() => service.stop());
+  const first = { sourceId: 'source-a', pageUrl: 'https://first.example/' };
+  await service.open(first);
+  await assert.rejects(service.open({ sourceId: 'source-b', pageUrl: 'https://second.example/' }), /上限/);
+  assert.equal(service.status().sessions.length, 1);
+  await service.showPage();
+  assert.equal(records[0].focused, true);
+  await service.open(first);
+  assert.equal(records.length, 1);
+  for (const maxSessions of [0, 5, 1.5, 'bad']) assert.throws(() => createBrowserMediaService({ maxSessions }), /1 至 4/);
+});
+
+test('Android 禁用代理时明确拒绝而不启动浏览器', async () => {
+  const records = [];
+  const service = createBrowserMediaService({ rootDir: '/unused', rejectProxy: true, launch: browserFactory(records), resolveBrowser: async () => '/test/vivaldi' });
+  await assert.rejects(service.open({ sourceId: 'sample', pageUrl: 'https://example.com/', proxyUrl: 'http://proxy.example:8080' }), /不支持独立代理/);
+  assert.equal(records.length, 0);
+  await service.stop();
 });

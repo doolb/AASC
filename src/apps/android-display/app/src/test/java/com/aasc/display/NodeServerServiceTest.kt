@@ -162,6 +162,23 @@ class NodeServerServiceTest {
     }
 
     @Test
+    fun 网页媒体端点使用独立令牌且未配置时不暴露() {
+        val root = File("/data/user/0/com.aasc.display.offline/files/aasc-server")
+        val secret = "b".repeat(64)
+        val environment = NodeServerService.buildNodeEnvironment(root, "https://127.0.0.1:8081", "apk-test",
+            browserMediaEndpoint = 19093 to secret)
+        assertEquals("19093", environment["AASC_BROWSER_MEDIA_PORT"])
+        assertEquals(secret, environment["AASC_BROWSER_MEDIA_TOKEN"])
+        assertEquals(false, environment.containsKey("AASC_DOUBAO_WEBVIEW_TOKEN"))
+        val withoutEndpoint = NodeServerService.buildNodeEnvironment(root, "https://127.0.0.1:8081", "apk-test")
+        assertEquals(false, withoutEndpoint.containsKey("AASC_BROWSER_MEDIA_PORT"))
+        assertEquals(false, withoutEndpoint.containsKey("AASC_BROWSER_MEDIA_TOKEN"))
+        assertEquals(true, runCatching {
+            NodeServerService.buildNodeEnvironment(root, "https://127.0.0.1:8081", "apk-test", browserMediaEndpoint = 19093 to "short")
+        }.isFailure)
+    }
+
+    @Test
     fun 豆包端点端口或令牌损坏时拒绝构造运行环境() {
         val root = File("/data/user/0/com.aasc.display.offline/files/aasc-server")
         val invalidEndpoints = listOf(0 to "a".repeat(64), 65536 to "a".repeat(64), 19092 to "short")

@@ -22,8 +22,20 @@ test('桌面任务注册浏览器接口、扫描保存并在停止后注销', as
   assert.ok(updates.some(value => value.scanText.includes('已保存 1')));
 });
 
-test('Android、非 Linux 和无图形环境不会启动浏览器', async () => {
-  for (const [platform, environment] of [['linux', {}], ['linux', { DISPLAY: ':1', AASC_ANDROID_NODE: '1' }], ['win32', { DISPLAY: ':1' }]]) {
+test('非 Linux 和无图形环境不会启动浏览器，旧版 Android 提示缺少服务', async () => {
+  for (const [platform, environment] of [['linux', {}], ['win32', { DISPLAY: ':1' }]]) {
     await assert.rejects(task.run({ browserMediaPlatform: platform, browserMediaEnvironment: environment, browserMediaHasX1: false }), /仅支持 Linux 图形桌面/);
   }
+  await assert.rejects(task.run({ browserMediaPlatform: 'linux', browserMediaEnvironment: { AASC_ANDROID_NODE: '1' } }), /更新 APK/);
+});
+
+test('Android 将默认上限及独立端点交给服务，并拒绝独立代理', async () => {
+  let config;
+  const service = { status: () => ({ running: true, sessions: [] }), stop: async () => {} };
+  const runner = await task.run({ params: {}, browserMediaEnvironment: { AASC_ANDROID_NODE: '1', AASC_BROWSER_MEDIA_PORT: '19093', AASC_BROWSER_MEDIA_TOKEN: 'a'.repeat(64) },
+    browserMediaFactory: options => { config = options; return service; } });
+  assert.equal(config.maxSessions, 1);
+  assert.equal(config.rejectProxy, true);
+  assert.equal(typeof config.launch, 'function');
+  await runner.stop();
 });

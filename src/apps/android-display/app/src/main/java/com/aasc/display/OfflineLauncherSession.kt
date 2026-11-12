@@ -62,7 +62,7 @@ internal class OfflineLauncherSession(private val context: Context,
     }
 
     fun start(serverUrl: String, versionName: String, versionCode: Int, safUrl: String?, safToken: String?,
-        doubaoWebViewEndpoint: Pair<Int, String>? = null) {
+        doubaoWebViewEndpoint: Pair<Int, String>? = null, browserMediaEndpoint: Pair<Int, String>? = null) {
         val bundle = installBaseline()
         val root = NodeRuntimeInstaller(context).ensureLauncherRuntime()
         val fullPending = OfflineFullApkActivation.isPending(root)
@@ -73,7 +73,7 @@ internal class OfflineLauncherSession(private val context: Context,
         }
         val environment = NodeServerService.buildNodeEnvironment(root, serverUrl, "apk-$versionName", true,
             safUrl, safToken, context.getExternalFilesDir(null)?.absolutePath, null, versionCode, null,
-            doubaoWebViewEndpoint = doubaoWebViewEndpoint)
+            doubaoWebViewEndpoint = doubaoWebViewEndpoint, browserMediaEndpoint = browserMediaEndpoint)
         val config = JSONObject().put("hostApi", 1).put("stateApi", 1).put("root", root.absolutePath)
             .put("bundleRoot", bundle.absolutePath).put("generation", generation).put("apkVersion", versionCode)
             .put("updateOnly", context.resources.getBoolean(R.bool.aasc_update_only_mode))
