@@ -2,7 +2,7 @@
 
 ## 壁纸手机平移（2026-11-12）
 
-`npm run test:hologram-camera` 覆盖镜头平移、倾斜分离、横屏、自动回中、禁用及无传感器；Android 桥由离线 Kotlin 编译检查。传感器响应和漂移仍需真机验收。
+`npm run test:hologram-camera` 覆盖网页运动事件、倾斜分离、横屏、自动回中、禁用及无传感器。SM-N9500 Android 9、Offline v95 主屏壁纸 WebView 实测 5 秒 38 个 devicemotion 均带有效线性加速度；实际移动观感和漂移仍需验收。
 
 ## 浏览器媒体接口（2026-11-11）
 

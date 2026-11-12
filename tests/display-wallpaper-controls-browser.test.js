@@ -22,12 +22,13 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         const preferences = {};
         Object.defineProperty(window, 'localStorage', { value: { getItem: key => preferences[key] ?? null, setItem: (key, value) => { preferences[key] = value; } } });
         window.wallpaper = false; window.actualVolume = 36; window.previewCount = 0;
-        window.hologram = {}; window.sensorEnabled = false; window.motionEnabled = false;
+        window.hologram = {}; window.sensorEnabled = false;
+        window.DeviceMotionEvent = window.DeviceMotionEvent || function DeviceMotionEvent() {};
         window.DisplayMmd = { setHolographicTilt: value => { window.hologram = value; } };
         window.NativeDisplay = { isWallpaperActive: () => window.wallpaper, getWallpaperTopInset: () => 30,
             openWallpaperPreview: () => { window.previewCount++; }, getWallpaperMediaVolume: () => window.actualVolume, setWallpaperMediaVolume: value => { window.actualVolume = value; },
-            setHolographicSensorEnabled: value => { window.sensorEnabled = value; return true; },
-            setHolographicMotionEnabled: value => { window.motionEnabled = value; return true; } };
+            setHolographicSensorEnabled: value => { window.sensorEnabled = value; return true; } };
+        window.emitMotion = (x, y) => { const event = new Event('devicemotion'); Object.defineProperty(event, 'acceleration', { value: { x, y, z: 0 } }); window.dispatchEvent(event); };
     });
     await page.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await page.$eval('#wallpaperControls', node => node.hidden), false);
@@ -61,7 +62,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await page.evaluate(() => {
         Object.defineProperty(window.screen, 'orientation', { configurable: true, value: { angle: 90 } });
         window.dispatchEvent(new Event('aasc-hologram-visibility'));
-        window.dispatchEvent(new CustomEvent('aasc-native-motion', { detail: { x: 0, y: 4 } }));
+        window.emitMotion(0, 4);
     });
     await new Promise(resolve => setTimeout(resolve, 100));
     tilt = await page.evaluate(() => window.hologram);
@@ -72,7 +73,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     for (const [x, y, axis, direction] of [[4, 0, 'cameraX', 1], [-4, 0, 'cameraX', -1], [0, 4, 'cameraY', 1], [0, -4, 'cameraY', -1]]) {
         await page.evaluate(({ x, y }) => {
             window.dispatchEvent(new Event('aasc-hologram-visibility'));
-            window.dispatchEvent(new CustomEvent('aasc-native-motion', { detail: { x, y } }));
+            window.emitMotion(x, y);
         }, { x, y });
         await new Promise(resolve => setTimeout(resolve, 100));
         const sample = await page.evaluate(() => window.hologram);
@@ -83,9 +84,17 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     assert.equal(await page.evaluate(() => window.sensorEnabled), false);
     assert.deepEqual(await page.evaluate(() => window.hologram), {});
-    await page.evaluate(() => { window.NativeDisplay.setHolographicMotionEnabled = () => false; });
+    await page.evaluate(() => { window.DeviceMotionEvent = undefined; });
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
-    assert.match(await page.$eval('#wallpaperHologramStatus', node => node.textContent), /没有可用的平移传感器/);
+    assert.match(await page.$eval('#wallpaperHologramStatus', node => node.textContent), /不支持手机移动传感器/);
+    await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
+    await page.evaluate(() => {
+        window.DeviceMotionEvent = function DeviceMotionEvent() {};
+        const originalTimeout = window.setTimeout.bind(window);
+        window.setTimeout = (callback, ms, ...args) => ms === 5000 ? originalTimeout(callback, 20, ...args) : originalTimeout(callback, ms, ...args);
+    });
+    await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    await page.waitForFunction(() => document.getElementById('wallpaperHologramStatus').textContent.includes('未收到手机移动数据'));
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     await page.click('#wallpaperControlsHandle');
     await page.click('#wallpaperOpenPreview');

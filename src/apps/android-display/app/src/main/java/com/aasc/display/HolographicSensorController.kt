@@ -14,14 +14,10 @@ internal class HolographicSensorController(private val view: WebView) : SensorEv
     private val manager = view.context.applicationContext.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val sensor = manager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
         ?: manager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-    private val motionSensor = manager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
     private var requested = false
-    private var motionRequested = false
     private var listening = false
-    private var motionListening = false
     @Volatile private var released = false
     private var lastMillis = 0L
-    private var lastMotionMillis = 0L
     private val matrix = FloatArray(9)
     private val angles = FloatArray(3)
 
@@ -31,38 +27,21 @@ internal class HolographicSensorController(private val view: WebView) : SensorEv
         return !value || sensor != null
     }
 
-    fun setMotionEnabled(value: Boolean): Boolean {
-        if (released) return false
-        view.post { if (!released) { motionRequested = value; refreshVisibility() } }
-        return !value || motionSensor != null
-    }
-
     fun refreshVisibility() {
         if (released) return
-        val visible = WallpaperDisplayCoordinator.foreground || WallpaperDisplayCoordinator.wallpaperVisible
-        val wanted = requested && visible && sensor != null
-        val motionWanted = motionRequested && visible && motionSensor != null
-        if (wanted == listening && motionWanted == motionListening) return
-        manager.unregisterListener(this)
-        listening = wanted && manager.registerListener(this, sensor, 33_333)
-        motionListening = motionWanted && manager.registerListener(this, motionSensor, 33_333)
+        val wanted = requested && (WallpaperDisplayCoordinator.foreground || WallpaperDisplayCoordinator.wallpaperVisible)
+        if (wanted == listening) return
+        if (wanted && sensor != null) {
+            listening = manager.registerListener(this, sensor, 33_333)
+        } else {
+            manager.unregisterListener(this)
+            listening = false
+        }
         lastMillis = 0L
-        lastMotionMillis = 0L
         view.evaluateJavascript("window.dispatchEvent(new Event('aasc-hologram-visibility'));", null)
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (motionListening && event.sensor == motionSensor) {
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastMotionMillis < 33L) return
-            lastMotionMillis = now
-            val x = event.values[0].toDouble()
-            val y = event.values[1].toDouble()
-            if (x.isFinite() && y.isFinite()) {
-                view.evaluateJavascript("window.dispatchEvent(new CustomEvent('aasc-native-motion',{detail:{x:$x,y:$y}}));", null)
-            }
-            return
-        }
         if (!listening || event.sensor != sensor) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastMillis < 33L) return
@@ -77,5 +56,5 @@ internal class HolographicSensorController(private val view: WebView) : SensorEv
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
-    fun release() { released = true; requested = false; motionRequested = false; manager.unregisterListener(this); listening = false; motionListening = false }
+    fun release() { released = true; requested = false; manager.unregisterListener(this); listening = false }
 }

@@ -36,6 +36,7 @@
     let motionListening = false;
     let motionFrame = null;
     let lastMotionFrame = null;
+    let motionTimeout = null;
     const hologram = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
     const motion = { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 };
     const publishHologram = () => root.DisplayMmd?.setHolographicTilt?.({ ...hologram });
@@ -67,13 +68,14 @@
     }
     function onMotionSample(event) {
         if (!motionListening) return;
-        const sample = event.detail || event.acceleration;
+        const sample = event.acceleration;
         if (!sample || typeof sample.x !== 'number' || typeof sample.y !== 'number' || !Number.isFinite(sample.x) || !Number.isFinite(sample.y)) return;
         const angle = Number(root.screen?.orientation?.angle || root.orientation || 0) * Math.PI / 180;
         const deadzone = value => Math.abs(value) < 0.12 ? 0 : Math.max(-8, Math.min(8, value));
         motion.ax = deadzone(sample.x * Math.cos(angle) - sample.y * Math.sin(angle));
         motion.ay = deadzone(sample.y * Math.cos(angle) + sample.x * Math.sin(angle));
         motion.sampledAt = root.performance.now();
+        if (motionTimeout !== null) { root.clearTimeout(motionTimeout); motionTimeout = null; }
         if (hologramStatus) hologramStatus.textContent = '';
     }
     const deltaDegrees = (value, center) => ((value - center + 540) % 360) - 180;
@@ -98,28 +100,30 @@
     function updateHologram() {
         resetHologram();
         if (motionFrame !== null) root.cancelAnimationFrame(motionFrame);
+        if (motionTimeout !== null) root.clearTimeout(motionTimeout);
         motionFrame = null;
+        motionTimeout = null;
         const visible = !document.hidden || active;
         const enabled = hologramModel.checked && visible;
         const motionEnabled = hologramCamera.checked && visible;
         let modelSupported = !enabled;
-        let motionSupported = !motionEnabled;
+        const motionSupported = !motionEnabled || typeof root.DeviceMotionEvent !== 'undefined';
+        root.removeEventListener('devicemotion', onMotionSample);
+        motionListening = motionEnabled && motionSupported;
+        if (motionListening) {
+            root.addEventListener('devicemotion', onMotionSample, { passive: true });
+            motionTimeout = root.setTimeout(() => { motionTimeout = null; if (motionListening && hologramStatus) hologramStatus.textContent = '未收到手机移动数据，请检查传感器和网页权限'; }, 5000);
+        }
         if (typeof root.NativeDisplay?.setHolographicSensorEnabled === 'function') {
             try { modelSupported = root.NativeDisplay.setHolographicSensorEnabled(enabled) === true; } catch (_) {}
-            try { motionSupported = !motionEnabled || (typeof root.NativeDisplay.setHolographicMotionEnabled === 'function' && root.NativeDisplay.setHolographicMotionEnabled(true) === true); if (!motionEnabled) root.NativeDisplay.setHolographicMotionEnabled?.(false); } catch (_) {}
-            motionListening = motionEnabled && motionSupported;
         } else {
             if (orientationListening) root.removeEventListener('deviceorientation', onHologramSample);
-            root.removeEventListener('devicemotion', onMotionSample);
             orientationListening = enabled && typeof root.DeviceOrientationEvent !== 'undefined';
-            motionListening = motionEnabled && typeof root.DeviceMotionEvent !== 'undefined';
             modelSupported = !enabled || orientationListening;
-            motionSupported = !motionEnabled || motionListening;
             if (orientationListening) root.addEventListener('deviceorientation', onHologramSample, { passive: true });
-            if (motionListening) root.addEventListener('devicemotion', onMotionSample, { passive: true });
         }
         if (motionListening) motionFrame = root.requestAnimationFrame(motionTick);
-        if (hologramStatus) hologramStatus.textContent = !motionSupported ? '当前设备没有可用的平移传感器或需要更新应用' : !modelSupported ? '当前设备没有可用的姿态传感器' : (enabled || motionEnabled) ? '等待设备传感器…' : '';
+        if (hologramStatus) hologramStatus.textContent = !motionSupported ? '当前页面不支持手机移动传感器' : !modelSupported ? '当前设备没有可用的姿态传感器' : (enabled || motionEnabled) ? '等待设备传感器…' : '';
     }
 
     function updateClockInset() {
@@ -185,7 +189,6 @@
         input.addEventListener('change', () => { savePreference(key, input.checked); updateHologram(); });
     }
     root.addEventListener('aasc-native-orientation', onHologramSample);
-    root.addEventListener('aasc-native-motion', onMotionSample);
     root.addEventListener('aasc-hologram-visibility', resetHologram);
     root.addEventListener('orientationchange', resetHologram);
     document.addEventListener('visibilitychange', updateHologram);
