@@ -665,7 +665,7 @@ const SelfTest = {
                     ]);
                     if (!page.ok || !style.ok || !voice.ok || !controls.ok || !motion.ok) return { success: false, message: '壁纸控件资源不可读取' };
                     const [html, css, voiceScript, controlsScript, motionScript] = await Promise.all([page.text(), style.text(), voice.text(), controls.text(), motion.text()]);
-                    const valid = ['wallpaperControls', 'wallpaperOpenPreview', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime', 'wallpaperInteractionShield', 'wallpaperContentInteraction', 'wallpaperHologramModel', 'wallpaperHologramCamera']
+                    const valid = ['wallpaperControls', 'wallpaperOpenPreview', 'wallpaperVolume', 'wallpaperShowFps', 'wallpaperShowTime', 'wallpaperInteractionShield', 'wallpaperContentInteraction', 'wallpaperHologramModel', 'wallpaperHologramMove', 'wallpaperHologramCamera']
                         .every(id => html.includes(`id="${id}"`)) && css.includes('body.is-wallpaper #displayInteractionLayer') && css.includes('.wallpaper-interaction-shield')
                         && css.includes('body.is-wallpaper #displayVoiceAsrResult')
                         && voiceScript.includes('overlaySnapshot') && voiceScript.includes('overlayAction')

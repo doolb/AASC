@@ -16,6 +16,7 @@
     const contentInteraction = get('wallpaperContentInteraction');
     const hologramModel = get('wallpaperHologramModel');
     const hologramCamera = get('wallpaperHologramCamera');
+    const hologramMove = get('wallpaperHologramMove');
     const hologramStatus = get('wallpaperHologramStatus');
     const status = get('wallpaperStatus');
     const clock = get('timeDisplay');
@@ -30,6 +31,8 @@
     const readHologram = key => { try { return root.localStorage.getItem(key) === 'true'; } catch (_) { return false; } };
     hologramModel.checked = readHologram('aasc.hologram.model');
     hologramCamera.checked = readHologram('aasc.hologram.camera');
+    hologramMove.checked = readHologram('aasc.hologram.move');
+    if (hologramCamera.checked && hologramMove.checked) { hologramMove.checked = false; savePreference('aasc.hologram.move', false); }
 
     let hologramCenter = null;
     let orientationListening = false;
@@ -41,13 +44,13 @@
     let modelStatus = '', motionStatus = '';
     const renderHologramStatus = () => { if (hologramStatus) hologramStatus.textContent = motionStatus || modelStatus; };
     const estimator = root.createWallpaperMotionEstimator();
-    const hologram = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
+    const hologram = { modelYaw: 0, modelPitch: 0, modelX: 0, modelY: 0, cameraX: 0, cameraY: 0 };
     const motion = { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 };
     const publishHologram = () => root.DisplayMmd?.setHolographicTilt?.({ ...hologram });
     const resetMotion = () => {
         estimator.reset();
         Object.assign(motion, { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 });
-        Object.assign(hologram, { cameraX: 0, cameraY: 0 });
+        Object.assign(hologram, { modelX: 0, modelY: 0, cameraX: 0, cameraY: 0 });
         lastMotionFrame = null;
     };
     const resetHologram = () => {
@@ -66,13 +69,15 @@
         motion.vx = (motion.vx + (fresh ? motion.ax : 0) * dt) * damping;
         motion.vy = (motion.vy + (fresh ? motion.ay : 0) * dt) * damping;
         const decay = Math.exp(-15 * dt);
-        const previousX = hologram.cameraX, previousY = hologram.cameraY;
-        // 位移是短时的视觉反馈，并非无外部定位的绝对手机坐标；提高增益，以阻尼和限幅控制回中。
-        hologram.cameraX = Math.max(-0.14, Math.min(0.14, hologram.cameraX * decay + motion.vx * dt * 8.4));
-        hologram.cameraY = Math.max(-0.14, Math.min(0.14, hologram.cameraY * decay + motion.vy * dt * 8.4));
-        if (Math.abs(hologram.cameraX) < 0.00001 && Math.abs(motion.vx) < 0.00001) hologram.cameraX = 0;
-        if (Math.abs(hologram.cameraY) < 0.00001 && Math.abs(motion.vy) < 0.00001) hologram.cameraY = 0;
-        if (hologram.cameraX !== previousX || hologram.cameraY !== previousY) publishHologram();
+        const xKey = hologramMove.checked ? 'modelX' : 'cameraX';
+        const yKey = hologramMove.checked ? 'modelY' : 'cameraY';
+        const previousX = hologram[xKey], previousY = hologram[yKey];
+        // 角色和镜头共用短时运动与回中，但始终只输出到当前选中的目标。
+        hologram[xKey] = Math.max(-0.14, Math.min(0.14, hologram[xKey] * decay + motion.vx * dt * 8.4));
+        hologram[yKey] = Math.max(-0.14, Math.min(0.14, hologram[yKey] * decay + motion.vy * dt * 8.4));
+        if (Math.abs(hologram[xKey]) < 0.00001 && Math.abs(motion.vx) < 0.00001) hologram[xKey] = 0;
+        if (Math.abs(hologram[yKey]) < 0.00001 && Math.abs(motion.vy) < 0.00001) hologram[yKey] = 0;
+        if (hologram[xKey] !== previousX || hologram[yKey] !== previousY) publishHologram();
         motionFrame = root.requestAnimationFrame(motionTick);
     }
     function onMotionSample(event) {
@@ -120,7 +125,7 @@
         motionTimeout = null;
         const visible = !document.hidden || active;
         const enabled = hologramModel.checked && visible;
-        const motionEnabled = hologramCamera.checked && visible;
+        const motionEnabled = (hologramCamera.checked || hologramMove.checked) && visible;
         let modelSupported = !enabled;
         const webMotionSupported = typeof root.DeviceMotionEvent !== 'undefined';
         const bridge = root.NativeDisplay?.setWallpaperMotionSensorEnabled;
@@ -208,8 +213,16 @@
         savePreference('aasc.wallpaper.contentInteraction', contentInteraction.checked);
         updateOptions();
     });
-    for (const [input, key] of [[hologramModel, 'aasc.hologram.model'], [hologramCamera, 'aasc.hologram.camera']]) {
-        input.addEventListener('change', () => { savePreference(key, input.checked); updateHologram(); });
+    hologramModel.addEventListener('change', () => { savePreference('aasc.hologram.model', hologramModel.checked); updateHologram(); });
+    for (const [input, key, other, otherKey] of [
+        [hologramMove, 'aasc.hologram.move', hologramCamera, 'aasc.hologram.camera'],
+        [hologramCamera, 'aasc.hologram.camera', hologramMove, 'aasc.hologram.move']
+    ]) {
+        input.addEventListener('change', () => {
+            if (input.checked) { other.checked = false; savePreference(otherKey, false); }
+            savePreference(key, input.checked);
+            updateHologram();
+        });
     }
     root.addEventListener('aasc-native-orientation', onHologramSample);
     root.addEventListener('aasc-native-motion', onNativeMotion);

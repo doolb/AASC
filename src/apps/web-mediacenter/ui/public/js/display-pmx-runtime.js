@@ -91,11 +91,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         currentOffsetX: 0,
         currentOffsetY: 0
     };
-    const holographicTilt = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
+    const holographicTilt = { modelYaw: 0, modelPitch: 0, modelX: 0, modelY: 0, cameraX: 0, cameraY: 0 };
     const setHolographicTilt = value => {
         for (const key of Object.keys(holographicTilt)) {
             const amount = Number(value?.[key]);
-            const limit = key.startsWith('model') ? 0.28 : 0.14;
+            const limit = (key === 'modelYaw' || key === 'modelPitch') ? 0.28 : 0.14;
             holographicTilt[key] = Number.isFinite(amount) ? Math.max(-limit, Math.min(limit, amount)) : 0;
         }
         startRendering();
@@ -674,6 +674,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             syncCameraClip();
         } else if (!arCameraState.active) {
             if (!advanceCameraMotion(delta)) updateCameraView(delta);
+        }
+        // 角色平移叠加在 AR 和手动定位上，并在推进物理前更新模型锚点。
+        if (arFootAnchor.setHolographicOffset(holographicTilt.modelX * TARGET_MODEL_HEIGHT * 4, holographicTilt.modelY * TARGET_MODEL_HEIGHT * 4)) {
+            keyLight.shadow.needsUpdate = true;
+            fillLight.shadow.needsUpdate = true;
         }
         const frameHelper = motionSwitchMesh === currentMesh ? null : helper.current;
         const framePhysics = frameHelper?.objects?.get(currentMesh)?.physics;

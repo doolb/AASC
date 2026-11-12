@@ -35,7 +35,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     const end = mmd.indexOf('    function setCameraViewRotation', start);
     assert.ok(start >= 0 && end > start);
     await page.evaluate(source => {
-        const state = { holographicTilt: { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 },
+        const state = { holographicTilt: { modelYaw: 0, modelPitch: 0, modelX: 0, modelY: 0, cameraX: 0, cameraY: 0 },
             runtime: { setHolographicTilt: value => { window.runtimeHologram = { ...value }; } } };
         const publish = new Function('state', `${source}; return setHolographicTilt;`)(state);
         window.DisplayMmd.setHolographicTilt = value => { window.hologram = value; publish(value); };
@@ -109,6 +109,25 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     }
     await page.evaluate(() => window.dispatchEvent(new Event('aasc-hologram-visibility')));
     assert.deepEqual(await page.evaluate(() => window.hologram), {});
+    await page.$eval('#wallpaperHologramMove', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    assert.equal(await page.$eval('#wallpaperHologramCamera', node => node.checked), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem('aasc.hologram.camera')), 'false');
+    for (const [x, y, axis, direction] of [[4, 0, 'modelX', 1], [-4, 0, 'modelX', -1], [0, 4, 'modelY', 1], [0, -4, 'modelY', -1]]) {
+        await page.evaluate(({ x, y }) => {
+            window.dispatchEvent(new Event('aasc-hologram-visibility'));
+            window.emitMotion(0, 0); window.emitMotion(x, y);
+        }, { x, y });
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const value = await page.evaluate(() => window.hologram);
+        assert.ok(value[axis] * direction > 0.001, `手机平移 ${x},${y} 应带动 ${axis}`);
+        assert.equal(value.cameraX, 0); assert.equal(value.cameraY, 0);
+    }
+    await page.$eval('#wallpaperHologramModel', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    assert.equal(await page.$eval('#wallpaperHologramMove', node => node.checked), true);
+    await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    assert.equal(await page.$eval('#wallpaperHologramMove', node => node.checked), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem('aasc.hologram.move')), 'false');
+    await page.$eval('#wallpaperHologramModel', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     assert.equal(await page.evaluate(() => window.sensorEnabled), false);
     assert.deepEqual(await page.evaluate(() => window.hologram), {});
@@ -162,7 +181,16 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     assert.equal(await page.evaluate(() => window.hologram.cameraX), 0);
     await page.evaluate(() => window.dispatchEvent(new Event('aasc-native-motion-error')));
     assert.match(await page.$eval('#wallpaperHologramStatus', node => node.textContent), /无法启动/);
-    await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
+    await page.$eval('#wallpaperHologramMove', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
+    assert.equal(await page.$eval('#wallpaperHologramCamera', node => node.checked), false);
+    assert.equal(await page.evaluate(() => window.nativeMotionEnabled), true);
+    await page.evaluate(() => {
+        for (const x of [0, 4]) window.dispatchEvent(new CustomEvent('aasc-native-motion', { detail: { x, y: 0, z: 9.80665 } }));
+    });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.ok((await page.evaluate(() => window.hologram.modelX)) > 0.001);
+    assert.equal(await page.evaluate(() => window.hologram.cameraX), 0);
+    await page.$eval('#wallpaperHologramMove', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     assert.equal(await page.evaluate(() => window.nativeMotionEnabled), false);
     await page.waitForFunction(() => document.getElementById('timeDisplay').getBoundingClientRect().top >= 30);
     for (const angle of [90, 180, 270, 0]) {
@@ -220,7 +248,7 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     const restored = await browser.newPage();
     await restored.setContent(`<style>${css}</style>${panel}`);
     await restored.evaluate(() => {
-        Object.defineProperty(window, 'localStorage', { value: { getItem: key => key === 'aasc.wallpaper.contentInteraction' ? 'false' : null, setItem: () => {} } });
+        Object.defineProperty(window, 'localStorage', { value: { getItem: key => key === 'aasc.wallpaper.contentInteraction' ? 'false' : ['aasc.hologram.camera', 'aasc.hologram.move'].includes(key) ? 'true' : null, setItem: (key, value) => { window.restoredPreference = { key, value }; } } });
         window.NativeDisplay = { isWallpaperActive: () => true };
         window.DeviceMotionEvent = window.DeviceMotionEvent || function DeviceMotionEvent() {};
         window.hologram = {};
@@ -229,6 +257,9 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await restored.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-motion.js') });
     await restored.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await restored.$eval('#wallpaperContentInteraction', node => node.checked), false);
+    assert.equal(await restored.$eval('#wallpaperHologramCamera', node => node.checked), true);
+    assert.equal(await restored.$eval('#wallpaperHologramMove', node => node.checked), false);
+    assert.deepEqual(await restored.evaluate(() => window.restoredPreference), { key: 'aasc.hologram.move', value: 'false' });
     assert.equal(await restored.$eval('#wallpaperControls', node => node.hidden), false, '旧 APK 没有系统浮窗时保留壁纸网页面板');
     await restored.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
     await restored.evaluate(() => {

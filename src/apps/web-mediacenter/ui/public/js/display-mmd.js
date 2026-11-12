@@ -179,7 +179,7 @@
         loadSequence: 0,
         lighting: normalizeMmdLighting(DEFAULT_MMD_LIGHTING),
         cameraViewRotation: { yaw: 0, pitch: 0 },
-        holographicTilt: { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 },
+        holographicTilt: { modelYaw: 0, modelPitch: 0, modelX: 0, modelY: 0, cameraX: 0, cameraY: 0 },
         arCameraSettings: null
     };
     function setStatus(message, isError = false) {
@@ -595,7 +595,7 @@
         for (const key of Object.keys(state.holographicTilt)) {
             const amount = Number(value[key]);
             // 角色与相机的量纲和限幅不同；入口必须与两个渲染运行时保持一致。
-            const limit = key.startsWith('model') ? 0.28 : 0.14;
+            const limit = (key === 'modelYaw' || key === 'modelPitch') ? 0.28 : 0.14;
             state.holographicTilt[key] = Number.isFinite(amount) ? Math.max(-limit, Math.min(limit, amount)) : 0;
         }
         state.runtime?.setHolographicTilt?.(state.holographicTilt);

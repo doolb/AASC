@@ -28,9 +28,11 @@ for (const type of ['pmx', 'vrm']) {
     const wrapperStart = wrapper.indexOf('    function setHolographicTilt(value = {}) {');
     const wrapperEnd = wrapper.indexOf('    function setCameraViewRotation', wrapperStart);
     assert.ok(wrapperStart >= 0 && wrapperEnd > wrapperStart);
-    const state = { holographicTilt: { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 }, runtime: scene };
+    const state = { holographicTilt: { modelYaw: 0, modelPitch: 0, modelX: 0, modelY: 0, cameraX: 0, cameraY: 0 }, runtime: scene };
     const publish = new Function('state', `${wrapper.slice(wrapperStart, wrapperEnd)}; return setHolographicTilt;`)(state);
-    publish({ modelYaw: 0.25, modelPitch: -0.4, cameraX: 0.4 });
+    publish({ modelYaw: 0.25, modelPitch: -0.4, modelX: 0.2, modelY: -0.1, cameraX: 0.4 });
+    assert.equal(scene.holographicTilt.modelX, 0.14);
+    assert.equal(scene.holographicTilt.modelY, -0.1);
     assert.equal(scene.holographicTilt.modelYaw, 0.25);
     assert.equal(scene.holographicTilt.modelPitch, -0.28);
     assert.equal(scene.holographicTilt.cameraX, 0.14);
@@ -88,6 +90,7 @@ test('镜头停止运动后按更快的回中系数衰减', () => {
   const motion = { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 };
   const tick = new Function('root', 'hologram', 'motion', `
     let motionFrame = null, motionListening = true, lastMotionFrame = 0;
+    const hologramMove = { checked: false };
     const publishHologram = () => {};
     ${source.slice(start, end)}
     return motionTick;
@@ -95,4 +98,34 @@ test('镜头停止运动后按更快的回中系数衰减', () => {
   tick(50);
   assert.ok(Math.abs(state.cameraX - 0.1 * Math.exp(-15 * 0.05)) < 1e-12);
   assert.ok(Math.abs(state.cameraY + 0.1 * Math.exp(-15 * 0.05)) < 1e-12);
+});
+
+
+test('角色平移按相机方向叠加，不覆盖手动及 AR 位置，回中不累积', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/display-mmd-ar-pose.js'), 'utf8');
+  const start = source.indexOf('export function createArFootAnchor');
+  assert.ok(start >= 0);
+  const create = new Function('THREE', `${source.slice(start).replace('export function', 'function')}; return createArFootAnchor;`)(THREE);
+  const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+  camera.position.set(2, 2, 5); camera.lookAt(0, 1, 0); camera.updateMatrixWorld(true);
+  const scene = new THREE.Scene();
+  const root = new THREE.Group(); root.position.set(1, 2, 0);
+  root.add(new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1))); scene.add(root);
+  const anchor = create({ camera, getModelRoot: () => root, getViewport: () => ({ width: 500, height: 800 }), startRendering: () => {} });
+  assert.equal(anchor.translateBy(new THREE.Vector3(0.2, 0.1, 0)), true);
+  const manual = root.position.clone();
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+  assert.equal(anchor.setHolographicOffset(0.5, -0.25), true);
+  assert.ok(root.position.clone().sub(manual).distanceTo(right.clone().multiplyScalar(0.5).addScaledVector(up, -0.25)) < 1e-9);
+  assert.equal(anchor.setHolographicOffset(0.5, -0.25), false);
+  assert.equal(anchor.translateBy(new THREE.Vector3(0.1, 0, 0)), true);
+  assert.equal(anchor.setHolographicOffset(0, 0), true);
+  assert.ok(root.position.distanceTo(manual.clone().add(new THREE.Vector3(0.1, 0, 0))) < 1e-9);
+  assert.equal(anchor.setPose({ x: 0.4, y: 0.7, scale: 1 }), true);
+  const positioned = root.position.clone();
+  anchor.setHolographicOffset(-0.4, 0.2); anchor.setHolographicOffset(0, 0);
+  assert.ok(root.position.distanceTo(positioned) < 1e-9);
+  anchor.reset();
+  assert.ok(root.position.distanceTo(new THREE.Vector3(1, 2, 0)) < 1e-9);
 });

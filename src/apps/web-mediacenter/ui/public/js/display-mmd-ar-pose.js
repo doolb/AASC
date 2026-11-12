@@ -7,6 +7,7 @@ export function createArFootAnchor({ camera, getModelRoot, getViewport, startRen
     let baseScale = null;
     let posePosition = null;
     let manualOffset = new THREE.Vector3();
+    let holographicOffset = new THREE.Vector3();
     function ensureRoot(root) {
         if (root === activeRoot) return;
         activeRoot = root;
@@ -14,6 +15,7 @@ export function createArFootAnchor({ camera, getModelRoot, getViewport, startRen
         baseScale = root.scale.clone();
         posePosition = basePosition.clone();
         manualOffset = new THREE.Vector3();
+        holographicOffset = new THREE.Vector3();
     }
 
     function setPose(pose, calibration = {}) {
@@ -42,7 +44,7 @@ export function createArFootAnchor({ camera, getModelRoot, getViewport, startRen
         const y = Math.max(0, Math.min(1, pose.y + (Number(offset.y) || 0)));
         const target = new THREE.Vector3(x * 2 - 1, 1 - y * 2, projected.z).unproject(camera);
         posePosition.add(target.sub(foot).multiplyScalar(0.35));
-        root.position.copy(posePosition).add(manualOffset);
+        root.position.copy(posePosition).add(manualOffset).add(holographicOffset);
         startRendering();
         return true;
     }
@@ -54,9 +56,25 @@ export function createArFootAnchor({ camera, getModelRoot, getViewport, startRen
         ensureRoot(root);
         if (worldDelta.lengthSq() < Number.EPSILON) return false;
         manualOffset.add(worldDelta);
-        root.position.copy(posePosition).add(manualOffset);
+        root.position.copy(posePosition).add(manualOffset).add(holographicOffset);
         root.updateWorldMatrix(true, true);
         startRendering();
+        return true;
+    }
+
+    function setHolographicOffset(x, y) {
+        const root = getModelRoot();
+        if (!root || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+        if (!activeRoot && x === 0 && y === 0) return false;
+        ensureRoot(root);
+        camera.updateMatrixWorld(true);
+        const quaternion = camera.getWorldQuaternion(new THREE.Quaternion());
+        const next = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion).multiplyScalar(x)
+            .addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion), y);
+        if (next.distanceToSquared(holographicOffset) < 1e-16) return false;
+        holographicOffset.copy(next);
+        root.position.copy(posePosition).add(manualOffset).add(holographicOffset);
+        root.updateWorldMatrix(true, true);
         return true;
     }
 
@@ -96,7 +114,8 @@ export function createArFootAnchor({ camera, getModelRoot, getViewport, startRen
         baseScale = null;
         posePosition = null;
         manualOffset.set(0, 0, 0);
+        holographicOffset.set(0, 0, 0);
     }
 
-    return Object.freeze({ reset, setPose, translateBy, translateByPixels });
+    return Object.freeze({ reset, setPose, translateBy, translateByPixels, setHolographicOffset });
 }

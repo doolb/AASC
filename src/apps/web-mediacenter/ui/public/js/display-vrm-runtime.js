@@ -125,11 +125,11 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         currentOffsetX: 0,
         currentOffsetY: 0
     };
-    const holographicTilt = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
+    const holographicTilt = { modelYaw: 0, modelPitch: 0, modelX: 0, modelY: 0, cameraX: 0, cameraY: 0 };
     const setHolographicTilt = value => {
         for (const key of Object.keys(holographicTilt)) {
             const amount = Number(value?.[key]);
-            const limit = key.startsWith('model') ? 0.28 : 0.14;
+            const limit = (key === 'modelYaw' || key === 'modelPitch') ? 0.28 : 0.14;
             holographicTilt[key] = Number.isFinite(amount) ? Math.max(-limit, Math.min(limit, amount)) : 0;
         }
         startRendering();
@@ -412,6 +412,10 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         if (currentVrm) currentVrm.update(delta);
         updateModelRotation(delta);
         updateCameraView(delta);
+        // 沿相机右上方向移动角色，同时保留 AR 和手动定位。
+        if (arFootAnchor.setHolographicOffset(holographicTilt.modelX * TARGET_MODEL_HEIGHT * 4, holographicTilt.modelY * TARGET_MODEL_HEIGHT * 4)) {
+            keyLight.shadow.needsUpdate = true;
+        }
         if (currentVrm) framePerformance.beginRender();
         const renderStarted = performance.now();
         let renderMs = 0;
