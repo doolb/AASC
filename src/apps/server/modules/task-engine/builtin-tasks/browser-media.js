@@ -8,7 +8,7 @@ module.exports = {
   id: 'browser.media', name: '浏览器媒体', description: 'Linux 桌面浏览器访问及受限媒体采集', target: 'server', mode: 'service',
   params: [
     { name: 'browserExecutable', type: 'text', required: false, default: 'vivaldi', label: 'Vivaldi 路径' },
-    { name: 'allowedOrigins', type: 'text', required: false, default: '', label: '允许的网站（HTTPS 地址，逗号分隔）' },
+    { name: 'allowedOrigins', type: 'text', required: false, default: '', label: '允许的网站（留空允许所有 HTTPS，多个地址用逗号分隔）' },
     { name: 'initialUrl', type: 'text', required: false, default: '', label: '启动时打开的网址（可选）' },
     { name: 'proxyUrl', type: 'text', required: false, default: '', label: '启动页面代理（可选）' }
   ],

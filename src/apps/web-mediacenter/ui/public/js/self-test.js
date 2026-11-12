@@ -41,7 +41,7 @@ const SelfTest = {
         {
             id: 'browser_media_api_auth',
             name: '浏览器媒体接口保护',
-            description: '不使用凭据检查浏览器接口保护，不启动浏览器',
+            description: '不使用凭据检查浏览器接口保护；不启动浏览器或验证站点允许列表',
             category: '系统功能',
             run: async () => {
                 try {

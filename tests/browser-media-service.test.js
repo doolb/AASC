@@ -89,3 +89,22 @@ test('专用页面被用户关闭后，下次请求创建新浏览器', async t 
   assert.equal(records[0].closed, 1);
   await service.stop();
 });
+
+test('空允许列表允许不同 HTTPS 网站，但会话仍限制同源请求与导航', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'aasc-browser-all-sites-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const records = [];
+  const service = createBrowserMediaService({ rootDir: root, allowedOrigins: '', launch: browserFactory(records), resolveBrowser: async () => '/test/vivaldi' });
+  t.after(() => service.stop());
+  const first = { sourceId: 'source-a', pageUrl: 'https://first.example/watch' };
+  const second = { sourceId: 'source-b', pageUrl: 'https://second.example/' };
+  assert.equal((await service.request(first)).body, 'ok');
+  assert.equal((await service.request(second)).body, 'ok');
+  assert.equal(records.length, 2);
+  await assert.rejects(service.request({ ...first, url: 'https://second.example/api' }), /同源/);
+  await assert.rejects(service.open({ ...first, pageUrl: 'http://first.example/' }), /HTTPS/);
+  await assert.rejects(service.open({ ...first, pageUrl: 'https://user:pass@first.example/' }), /HTTPS/);
+  let decision = '';
+  records[0].handlers.request({ isNavigationRequest: () => true, frame: () => records[0].page, url: () => 'https://second.example/', abort: async () => { decision = 'blocked'; }, continue: async () => { decision = 'allowed'; } });
+  assert.equal(decision, 'blocked');
+});

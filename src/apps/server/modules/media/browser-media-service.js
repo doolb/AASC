@@ -67,7 +67,8 @@ function createBrowserMediaService({ rootDir, browserExecutable = 'vivaldi', all
     const sourceId = String(options?.sourceId || '');
     if (!/^[a-z][a-z0-9._-]{1,63}$/.test(sourceId)) throw new Error('媒体来源标识无效');
     const origin = originOf(options?.pageUrl);
-    if (!origins.includes(origin)) throw Object.assign(new Error('网站不在允许列表中'), { code: 'BROWSER_MEDIA_ORIGIN' });
+    // 留空表示允许所有 HTTPS 站点；显式配置列表时仍严格匹配站点来源。
+    if (origins.length > 0 && !origins.includes(origin)) throw Object.assign(new Error('网站不在允许列表中'), { code: 'BROWSER_MEDIA_ORIGIN' });
     return { sourceId, origin, pageUrl: new URL(options.pageUrl).href, proxy: proxyArgument(options.proxyUrl) };
   }
   async function session(options) {
