@@ -670,6 +670,7 @@ const SelfTest = {
                         && css.includes('body.is-wallpaper #displayVoiceAsrResult')
                         && voiceScript.includes('overlaySnapshot') && voiceScript.includes('overlayAction')
                         && controlsScript.includes('setHolographicSensorEnabled')
+                        && controlsScript.includes('setWallpaperMotionSensorEnabled') && controlsScript.includes('aasc-native-motion')
                         && controlsScript.includes('devicemotion')
                         && html.includes('js/display-wallpaper-motion.js')
                         && controlsScript.includes('createWallpaperMotionEstimator')

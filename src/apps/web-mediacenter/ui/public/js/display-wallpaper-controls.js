@@ -34,6 +34,7 @@
     let hologramCenter = null;
     let orientationListening = false;
     let motionListening = false;
+    let nativeMotion = false;
     let motionFrame = null;
     let lastMotionFrame = null;
     let motionTimeout = null;
@@ -43,12 +44,16 @@
     const hologram = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
     const motion = { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 };
     const publishHologram = () => root.DisplayMmd?.setHolographicTilt?.({ ...hologram });
+    const resetMotion = () => {
+        estimator.reset();
+        Object.assign(motion, { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 });
+        Object.assign(hologram, { cameraX: 0, cameraY: 0 });
+        lastMotionFrame = null;
+    };
     const resetHologram = () => {
         hologramCenter = null;
-        estimator.reset();
-        Object.assign(hologram, { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 });
-        Object.assign(motion, { ax: 0, ay: 0, vx: 0, vy: 0, sampledAt: 0 });
-        lastMotionFrame = null;
+        resetMotion();
+        Object.assign(hologram, { modelYaw: 0, modelPitch: 0 });
         root.DisplayMmd?.setHolographicTilt?.({});
     };
     function motionTick(now) {
@@ -82,6 +87,12 @@
         if (motionTimeout !== null) { root.clearTimeout(motionTimeout); motionTimeout = null; }
         motionStatus = ''; renderHologramStatus();
     }
+    function onNativeMotion(event) {
+        if (nativeMotion && active) onMotionSample({ accelerationIncludingGravity: event.detail });
+    }
+    function onNativeMotionError() {
+        if (nativeMotion && active) { motionStatus = '壁纸加速度传感器无法启动'; renderHologramStatus(); }
+    }
     const deltaDegrees = (value, center) => ((value - center + 540) % 360) - 180;
     function onHologramSample(event) {
         const sample = event.detail || event;
@@ -111,11 +122,17 @@
         const enabled = hologramModel.checked && visible;
         const motionEnabled = hologramCamera.checked && visible;
         let modelSupported = !enabled;
-        const motionSupported = !motionEnabled || typeof root.DeviceMotionEvent !== 'undefined';
+        const webMotionSupported = typeof root.DeviceMotionEvent !== 'undefined';
+        const bridge = root.NativeDisplay?.setWallpaperMotionSensorEnabled;
+        nativeMotion = false;
+        if (typeof bridge === 'function') {
+            try { nativeMotion = root.NativeDisplay.setWallpaperMotionSensorEnabled(active && motionEnabled) === true && active && motionEnabled; } catch (_) {}
+        }
+        const motionSupported = !motionEnabled || nativeMotion || webMotionSupported;
         root.removeEventListener('devicemotion', onMotionSample);
         motionListening = motionEnabled && motionSupported;
         if (motionListening) {
-            root.addEventListener('devicemotion', onMotionSample, { passive: true });
+            if (!nativeMotion) root.addEventListener('devicemotion', onMotionSample, { passive: true });
             motionTimeout = root.setTimeout(() => { motionTimeout = null; if (motionListening) { motionStatus = '未收到手机移动数据，请检查加速度传感器和网页权限'; renderHologramStatus(); } }, 5000);
         }
         if (typeof root.NativeDisplay?.setHolographicSensorEnabled === 'function') {
@@ -195,6 +212,9 @@
         input.addEventListener('change', () => { savePreference(key, input.checked); updateHologram(); });
     }
     root.addEventListener('aasc-native-orientation', onHologramSample);
+    root.addEventListener('aasc-native-motion', onNativeMotion);
+    root.addEventListener('aasc-native-motion-error', onNativeMotionError);
+    root.addEventListener('aasc-native-motion-reset', () => { if (nativeMotion && active) { resetMotion(); publishHologram(); } });
     root.addEventListener('aasc-hologram-visibility', resetHologram);
     root.addEventListener('orientationchange', resetHologram);
     document.addEventListener('visibilitychange', updateHologram);
