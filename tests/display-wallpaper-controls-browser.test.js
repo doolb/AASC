@@ -42,13 +42,14 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     });
     let tilt = await page.evaluate(() => window.hologram);
     assert.ok(Math.abs(tilt.modelYaw) > 0 && tilt.cameraX === 0);
+    assert.ok(Math.abs(Math.abs(tilt.modelYaw) - 20 * Math.PI / 180 * 0.5) < 1e-10);
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
     await page.evaluate(() => {
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 80, gamma: 170 } }));
     });
     tilt = await page.evaluate(() => window.hologram);
-    assert.equal(Math.abs(tilt.modelYaw), 0.14); assert.equal(tilt.cameraX, 0);
+    assert.equal(Math.abs(tilt.modelYaw), 0.28); assert.equal(tilt.cameraX, 0);
     assert.equal(tilt.cameraY, 0);
     await page.$eval('#wallpaperHologramModel', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     await page.evaluate(() => {

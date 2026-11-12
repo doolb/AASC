@@ -20,9 +20,14 @@ for (const type of ['pmx', 'vrm']) {
       let cameraZoomFactor = 1, cameraDistance = 4.9, initialCameraDistance = 4.9;
       const syncCameraClip = () => {}, startRendering = () => {};
       ${source.slice(start, end)}
-      return { camera, cameraTarget, cameraViewState, setHolographicTilt, updateCameraView };
+      return { camera, cameraTarget, cameraViewState, holographicTilt, setHolographicTilt, updateCameraView };
     `);
     const scene = create(THREE);
+    scene.setHolographicTilt({ modelYaw: 0.2, modelPitch: -0.4, cameraX: 0.4 });
+    assert.equal(scene.holographicTilt.modelYaw, 0.2);
+    assert.equal(scene.holographicTilt.modelPitch, -0.28);
+    assert.equal(scene.holographicTilt.cameraX, 0.14);
+    scene.setHolographicTilt({});
     scene.cameraViewState.targetYaw = scene.cameraViewState.currentYaw = 0.6;
     scene.cameraViewState.targetPitch = scene.cameraViewState.currentPitch = 0.2;
     scene.updateCameraView(1);

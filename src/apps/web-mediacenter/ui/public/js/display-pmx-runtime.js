@@ -95,7 +95,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
     const setHolographicTilt = value => {
         for (const key of Object.keys(holographicTilt)) {
             const amount = Number(value?.[key]);
-            holographicTilt[key] = Number.isFinite(amount) ? Math.max(-0.14, Math.min(0.14, amount)) : 0;
+            const limit = key.startsWith('model') ? 0.28 : 0.14;
+            holographicTilt[key] = Number.isFinite(amount) ? Math.max(-limit, Math.min(limit, amount)) : 0;
         }
         startRendering();
     };

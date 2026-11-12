@@ -90,7 +90,7 @@
         const pitch = deltaDegrees(beta, hologramCenter.beta), roll = deltaDegrees(gamma, hologramCenter.gamma);
         const x = roll * Math.cos(angle) - pitch * Math.sin(angle);
         const y = pitch * Math.cos(angle) + roll * Math.sin(angle);
-        const bounded = value => Math.max(-0.14, Math.min(0.14, value * Math.PI / 180 * 0.25));
+        const bounded = value => Math.max(-0.28, Math.min(0.28, value * Math.PI / 180 * 0.5));
         const yaw = bounded(x), tilt = bounded(y);
         hologram.modelYaw = yaw;
         hologram.modelPitch = tilt;

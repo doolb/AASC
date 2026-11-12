@@ -14810,3 +14810,8 @@ TTS最终构建进度（2026-10-14）：code-v75.zip 17,721,484字节，SHA256 1
 
 - ✅ [2026-11-12] 镜头改用网页 devicemotion，移除新增的 Android 平移传感器桥。
   - Offline v74 保留数据更新到已发布 v95；SM-N9500 Android 9 主屏幕壁纸 HTTPS WebView 5 秒收到 38 个有效线性加速度事件。服务包待更新，实际镜头观感需验收。
+
+### 壁纸镜头与角色
+
+- ✅ [2026-11-12] 将手机倾斜驱动角色的增益和限幅提高到两倍，保持镜头独立限幅。
+  - `display-wallpaper-controls.js`、PMX/VRM 运行时及壁纸测试；`npm run test:hologram-camera` 3 项通过。v190 基于已发布 v189，仅更改三个壁纸脚本，LAN/WAN 已发布校验；ADB 手机服务仍为 v164，外网设备及实际视差等待更新后验证。
