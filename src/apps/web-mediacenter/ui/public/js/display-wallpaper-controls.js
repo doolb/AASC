@@ -58,9 +58,9 @@
         motion.vy = (motion.vy + (fresh ? motion.ay : 0) * dt) * damping;
         const decay = Math.exp(-2.5 * dt);
         const previousX = hologram.cameraX, previousY = hologram.cameraY;
-        // 位移是短时的视觉反馈，并非无外部定位的绝对手机坐标。
-        hologram.cameraX = Math.max(-0.14, Math.min(0.14, hologram.cameraX * decay + motion.vx * dt * 0.7));
-        hologram.cameraY = Math.max(-0.14, Math.min(0.14, hologram.cameraY * decay + motion.vy * dt * 0.7));
+        // 位移是短时的视觉反馈，并非无外部定位的绝对手机坐标；提高增益，仍以原阻尼和限幅控制回中。
+        hologram.cameraX = Math.max(-0.14, Math.min(0.14, hologram.cameraX * decay + motion.vx * dt * 2.8));
+        hologram.cameraY = Math.max(-0.14, Math.min(0.14, hologram.cameraY * decay + motion.vy * dt * 2.8));
         if (Math.abs(hologram.cameraX) < 0.00001 && Math.abs(motion.vx) < 0.00001) hologram.cameraX = 0;
         if (Math.abs(hologram.cameraY) < 0.00001 && Math.abs(motion.vy) < 0.00001) hologram.cameraY = 0;
         if (hologram.cameraX !== previousX || hologram.cameraY !== previousY) publishHologram();
@@ -71,7 +71,7 @@
         const sample = event.acceleration;
         if (!sample || typeof sample.x !== 'number' || typeof sample.y !== 'number' || !Number.isFinite(sample.x) || !Number.isFinite(sample.y)) return;
         const angle = Number(root.screen?.orientation?.angle || root.orientation || 0) * Math.PI / 180;
-        const deadzone = value => Math.abs(value) < 0.12 ? 0 : Math.max(-8, Math.min(8, value));
+        const deadzone = value => Math.abs(value) < 0.08 ? 0 : Math.max(-8, Math.min(8, value));
         motion.ax = deadzone(sample.x * Math.cos(angle) - sample.y * Math.sin(angle));
         motion.ay = deadzone(sample.y * Math.cos(angle) + sample.x * Math.sin(angle));
         motion.sampledAt = root.performance.now();
@@ -90,7 +90,7 @@
         const pitch = deltaDegrees(beta, hologramCenter.beta), roll = deltaDegrees(gamma, hologramCenter.gamma);
         const x = roll * Math.cos(angle) - pitch * Math.sin(angle);
         const y = pitch * Math.cos(angle) + roll * Math.sin(angle);
-        const bounded = value => Math.max(-0.28, Math.min(0.28, value * Math.PI / 180 * 0.5));
+        const bounded = value => Math.max(-0.28, Math.min(0.28, value * Math.PI / 180));
         const yaw = bounded(x), tilt = bounded(y);
         hologram.modelYaw = yaw;
         hologram.modelPitch = tilt;

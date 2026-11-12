@@ -23,6 +23,17 @@ for (const type of ['pmx', 'vrm']) {
       return { camera, cameraTarget, cameraViewState, holographicTilt, setHolographicTilt, updateCameraView };
     `);
     const scene = create(THREE);
+    // 实际公开入口也要纳入验证，避免控件和运行时之间再次截断角色角度。
+    const wrapper = fs.readFileSync(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/display-mmd.js'), 'utf8');
+    const wrapperStart = wrapper.indexOf('    function setHolographicTilt(value = {}) {');
+    const wrapperEnd = wrapper.indexOf('    function setCameraViewRotation', wrapperStart);
+    assert.ok(wrapperStart >= 0 && wrapperEnd > wrapperStart);
+    const state = { holographicTilt: { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 }, runtime: scene };
+    const publish = new Function('state', `${wrapper.slice(wrapperStart, wrapperEnd)}; return setHolographicTilt;`)(state);
+    publish({ modelYaw: 0.25, modelPitch: -0.4, cameraX: 0.4 });
+    assert.equal(scene.holographicTilt.modelYaw, 0.25);
+    assert.equal(scene.holographicTilt.modelPitch, -0.28);
+    assert.equal(scene.holographicTilt.cameraX, 0.14);
     scene.setHolographicTilt({ modelYaw: 0.2, modelPitch: -0.4, cameraX: 0.4 });
     assert.equal(scene.holographicTilt.modelYaw, 0.2);
     assert.equal(scene.holographicTilt.modelPitch, -0.28);

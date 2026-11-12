@@ -594,7 +594,9 @@
     function setHolographicTilt(value = {}) {
         for (const key of Object.keys(state.holographicTilt)) {
             const amount = Number(value[key]);
-            state.holographicTilt[key] = Number.isFinite(amount) ? Math.max(-0.14, Math.min(0.14, amount)) : 0;
+            // 角色与相机的量纲和限幅不同；入口必须与两个渲染运行时保持一致。
+            const limit = key.startsWith('model') ? 0.28 : 0.14;
+            state.holographicTilt[key] = Number.isFinite(amount) ? Math.max(-limit, Math.min(limit, amount)) : 0;
         }
         state.runtime?.setHolographicTilt?.(state.holographicTilt);
     }

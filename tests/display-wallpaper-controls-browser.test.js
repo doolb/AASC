@@ -30,6 +30,16 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
             setHolographicSensorEnabled: value => { window.sensorEnabled = value; return true; } };
         window.emitMotion = (x, y) => { const event = new Event('devicemotion'); Object.defineProperty(event, 'acceleration', { value: { x, y, z: 0 } }); window.dispatchEvent(event); };
     });
+    const mmd = fs.readFileSync(path.join(dir, 'js/display-mmd.js'), 'utf8');
+    const start = mmd.indexOf('    function setHolographicTilt(value = {}) {');
+    const end = mmd.indexOf('    function setCameraViewRotation', start);
+    assert.ok(start >= 0 && end > start);
+    await page.evaluate(source => {
+        const state = { holographicTilt: { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 },
+            runtime: { setHolographicTilt: value => { window.runtimeHologram = { ...value }; } } };
+        const publish = new Function('state', `${source}; return setHolographicTilt;`)(state);
+        window.DisplayMmd.setHolographicTilt = value => { window.hologram = value; publish(value); };
+    }, mmd.slice(start, end));
     await page.addScriptTag({ path: path.join(dir, 'js/display-wallpaper-controls.js') });
     assert.equal(await page.$eval('#wallpaperControls', node => node.hidden), false);
     assert.equal(await page.$eval('#wallpaperHologramModel', node => node.checked), false);
@@ -38,11 +48,12 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     assert.equal(await page.evaluate(() => window.sensorEnabled), true);
     await page.evaluate(() => {
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
-        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 10, gamma: 20 } }));
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 5, gamma: 10 } }));
     });
     let tilt = await page.evaluate(() => window.hologram);
     assert.ok(Math.abs(tilt.modelYaw) > 0 && tilt.cameraX === 0);
-    assert.ok(Math.abs(Math.abs(tilt.modelYaw) - 20 * Math.PI / 180 * 0.5) < 1e-10);
+    assert.ok(Math.abs(Math.abs(tilt.modelYaw) - 10 * Math.PI / 180) < 1e-10);
+    assert.ok(Math.abs((await page.evaluate(() => window.runtimeHologram)).modelYaw - tilt.modelYaw) < 1e-10);
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
     await page.evaluate(() => {
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
@@ -71,6 +82,17 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
     await new Promise(resolve => setTimeout(resolve, 1500));
     assert.ok(Math.abs((await page.evaluate(() => window.hologram)).cameraX) < Math.abs(tilt.cameraX));
     await page.evaluate(() => { delete window.screen.orientation; });
+    await page.evaluate(async () => {
+        window.dispatchEvent(new Event('aasc-hologram-visibility'));
+        for (let i = 0; i < 6; i++) { window.emitMotion(0.05, 0); await new Promise(resolve => setTimeout(resolve, 30)); }
+    });
+    assert.equal((await page.evaluate(() => window.runtimeHologram)).cameraX, 0);
+    // 连续的中等线性加速度应产生可见量级的偏移，而不是只验证非零。
+    await page.evaluate(async () => {
+        window.dispatchEvent(new Event('aasc-hologram-visibility'));
+        for (let i = 0; i < 10; i++) { window.emitMotion(1, 0); await new Promise(resolve => setTimeout(resolve, 30)); }
+    });
+    assert.ok((await page.evaluate(() => window.runtimeHologram.cameraX)) > 0.025);
     for (const [x, y, axis, direction] of [[4, 0, 'cameraX', 1], [-4, 0, 'cameraX', -1], [0, 4, 'cameraY', 1], [0, -4, 'cameraY', -1]]) {
         await page.evaluate(({ x, y }) => {
             window.dispatchEvent(new Event('aasc-hologram-visibility'));
