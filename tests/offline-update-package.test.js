@@ -163,6 +163,11 @@ test('launcher 独立版本仅在启动器内容变化时递增', async t => {
 test('code-only builds service source without Node subdisplay and creates its signed standalone archive', async (t) => {
     const fixture = createFixture();
     t.after(() => removeFixture(fixture));
+    const seedRoot = path.join(fixture.projectRoot, 'release/task/sample/results');
+    fs.mkdirSync(seedRoot, { recursive: true });
+    fs.writeFileSync(path.join(seedRoot, 'index.json'), JSON.stringify({ autoStartOnUpdate: true, instances: [{
+        taskName: 'sample', instanceId: 'sample1', taskType: 'user', entryFile: 'task.js', mode: 'service', target: 'server', status: 'running', params: {}
+    }] }));
     let commandCount = 0;
 
     const result = await createOfflineUpdateArtifacts({
@@ -175,6 +180,10 @@ test('code-only builds service source without Node subdisplay and creates its si
     const entries = archiveEntries(result.codeArchivePath);
     assert.equal(commandCount, 0);
     assert.ok(entries.includes('src/apps/server/boot/server-launcher.js'));
+    const snapshot = JSON.parse(execFileSync('unzip', ['-p', result.codeArchivePath, 'src/apps/server/boot/offline-task-seeds.json'], { encoding: 'utf8' }));
+    assert.equal(snapshot.length, 1);
+    assert.equal(snapshot[0].taskName, 'sample');
+    assert.equal(snapshot[0].entryFile, 'task.js');
     assert.ok(entries.includes('src/apps/web-mediacenter/ui/index.html'));
     assert.ok(entries.includes('package.json'));
     assert.ok(entries.includes('package-lock.json'));

@@ -1,0 +1,18 @@
+{
+  "autoStartOnUpdate": true,
+  "instances": [
+    {
+      "instanceId": "d0e571c1",
+      "taskName": "domestic-media",
+      "status": "running",
+      "timestamp": 0,
+      "target": "server",
+      "env": "auto",
+      "mode": "service",
+      "displayId": null,
+      "params": {},
+      "taskType": "user",
+      "entryFile": "task.js"
+    }
+  ]
+}

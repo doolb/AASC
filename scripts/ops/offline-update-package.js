@@ -383,6 +383,10 @@ async function copyCodeSnapshot(projectRoot, stagingDirectory) {
         }
     };
     await copySelectedTree();
+    // 仅将显式标记的任务实例定义打入代码包，更新设备不再依赖首装种子被重新覆盖。
+    const { collectOfflineTaskSeeds } = require('../../src/apps/server/modules/task-engine/offline-task-seeds');
+    const taskSeeds = await collectOfflineTaskSeeds(path.join(projectRoot, 'release', 'task'));
+    await fs.promises.writeFile(path.join(targetRoot, 'apps/server/boot/offline-task-seeds.json'), JSON.stringify(taskSeeds));
     for (const fileName of ['package.json', 'package-lock.json']) {
         const sourcePath = path.join(projectRoot, fileName);
         const stat = await fs.promises.lstat(sourcePath);

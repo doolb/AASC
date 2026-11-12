@@ -1831,6 +1831,16 @@ async function startServer() {
             await taskManager.restoreAutoStartServices();
             if (OFFLINE_NODE_MODE) {
                 try {
+                    const seedPath = path.join(CODE_ROOT, 'src/apps/server/boot/offline-task-seeds.json');
+                    if (fs.existsSync(seedPath)) {
+                        const seeds = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+                        await require('../modules/task-engine/offline-task-seeds').applyOfflineTaskSeeds(
+                            taskManager, seeds, require('../modules/task-engine/builtin-tasks/registry'));
+                    }
+                } catch (error) {
+                    logError('任务引擎', `offline 任务种子恢复失败: ${error.message}`);
+                }
+                try {
                     const ensuredLlmServer = await taskManager.ensureBuiltinServiceInstance('llm-server', {
                         target: 'server',
                         mode: 'service'
