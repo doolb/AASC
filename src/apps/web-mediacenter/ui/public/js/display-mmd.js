@@ -179,7 +179,7 @@
         loadSequence: 0,
         lighting: normalizeMmdLighting(DEFAULT_MMD_LIGHTING),
         cameraViewRotation: { yaw: 0, pitch: 0 },
-        holographicTilt: { modelYaw: 0, modelPitch: 0, cameraYaw: 0, cameraPitch: 0 },
+        holographicTilt: { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 },
         arCameraSettings: null
     };
     function setStatus(message, isError = false) {

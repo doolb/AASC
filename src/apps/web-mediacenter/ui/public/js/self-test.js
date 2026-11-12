@@ -668,7 +668,8 @@ const SelfTest = {
                         .every(id => html.includes(`id="${id}"`)) && css.includes('body.is-wallpaper #displayInteractionLayer') && css.includes('.wallpaper-interaction-shield')
                         && css.includes('body.is-wallpaper #displayVoiceAsrResult')
                         && voiceScript.includes('overlaySnapshot') && voiceScript.includes('overlayAction')
-                        && controlsScript.includes('setHolographicSensorEnabled');
+                        && controlsScript.includes('setHolographicSensorEnabled')
+                        && controlsScript.includes('cameraX:') && controlsScript.includes('cameraY:');
                     return { success: valid, message: valid ? '壁纸控件结构正常' : '壁纸控件结构缺失',
                         details: '仅检查资源结构；桌面触摸和任务关闭需真机验收' };
                 } catch (error) { return { success: false, message: `壁纸控件检查失败: ${error.message}` }; }

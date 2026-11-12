@@ -79,18 +79,19 @@ test('正式PMX：IK面板、真实指针拖动、物理状态、自动动作门
         assert.ok(hologram.before.every((value, axis) => Math.abs(value - hologram.restored[axis]) < 0.01), '关闭效果应恢复原角色方向');
         const cameraTilt = await page.evaluate(async () => {
             window.MmdArTestAframeMode = true;
-            const sample = () => window.DisplayMmd.getArCameraState().cameraPosition;
+            const sample = () => { const state = window.DisplayMmd.getArCameraState(); return { position: state.cameraPosition, quaternion: state.cameraQuaternion }; };
             const before = sample();
-            window.DisplayMmd.setHolographicTilt({ cameraYaw: 0.12 });
+            window.DisplayMmd.setHolographicTilt({ cameraX: 0.12, cameraY: -0.1 });
             await new Promise(resolve => setTimeout(resolve, 800));
-            const tilted = sample();
+            const moved = sample();
             window.DisplayMmd.setHolographicTilt({});
             await new Promise(resolve => setTimeout(resolve, 800));
             const restored = sample(); delete window.MmdArTestAframeMode;
-            return { before, tilted, restored };
+            return { before, moved, restored };
         });
-        assert.ok(cameraTilt.before.some((value, axis) => Math.abs(value - cameraTilt.tilted[axis]) > 0.01), '镜头效果应实际改变视角');
-        assert.ok(cameraTilt.before.every((value, axis) => Math.abs(value - cameraTilt.restored[axis]) < 0.01), '关闭镜头效果应恢复原视角');
+        assert.ok(cameraTilt.before.position.some((value, axis) => Math.abs(value - cameraTilt.moved.position[axis]) > 0.01), '镜头效果应平移相机');
+        assert.ok(cameraTilt.before.quaternion.every((value, axis) => Math.abs(value - cameraTilt.moved.quaternion[axis]) < 0.001), '平移时镜头朝向不变');
+        assert.ok(cameraTilt.before.position.every((value, axis) => Math.abs(value - cameraTilt.restored.position[axis]) < 0.01), '关闭镜头效果应恢复原位置');
         const stable = await page.evaluate(async () => {
             const h = window.DisplayMmd.getHumanInterface();
             await h.gaze.set({ head: true, eyes: false, headMs: 0 });

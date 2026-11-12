@@ -39,21 +39,32 @@ test('壁纸和前台切换、独立开关、音量与时间安全区', { skip: 
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 10, gamma: 20 } }));
     });
     let tilt = await page.evaluate(() => window.hologram);
-    assert.ok(Math.abs(tilt.modelYaw) > 0 && tilt.cameraYaw === 0);
+    assert.ok(Math.abs(tilt.modelYaw) > 0 && tilt.cameraX === 0);
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = true; node.dispatchEvent(new Event('change')); });
     await page.evaluate(() => {
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 80, gamma: 170 } }));
     });
     tilt = await page.evaluate(() => window.hologram);
-    assert.equal(Math.abs(tilt.modelYaw), 0.14); assert.equal(Math.abs(tilt.cameraYaw), 0.14);
+    assert.equal(Math.abs(tilt.modelYaw), 0.14); assert.equal(Math.abs(tilt.cameraX), 0.14);
+    assert.equal(Math.abs(tilt.cameraY), 0.14);
     await page.$eval('#wallpaperHologramModel', node => { node.checked = false; node.dispatchEvent(new Event('change')); });
     await page.evaluate(() => {
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
         window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 10, gamma: 20 } }));
     });
     tilt = await page.evaluate(() => window.hologram);
-    assert.equal(tilt.modelYaw, 0); assert.ok(Math.abs(tilt.cameraYaw) > 0);
+    assert.equal(tilt.modelYaw, 0); assert.ok(Math.abs(tilt.cameraX) > 0);
+    // 横屏时设备倾斜要换算到屏幕横纵轴，再发给镜头平移。
+    await page.evaluate(() => {
+        Object.defineProperty(window.screen, 'orientation', { configurable: true, value: { angle: 90 } });
+        window.dispatchEvent(new Event('aasc-hologram-visibility'));
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 0, gamma: 0 } }));
+        window.dispatchEvent(new CustomEvent('aasc-native-orientation', { detail: { beta: 10, gamma: 0 } }));
+    });
+    tilt = await page.evaluate(() => window.hologram);
+    assert.ok(Math.abs(tilt.cameraX) > 0.01); assert.ok(Math.abs(tilt.cameraY) < 1e-8);
+    await page.evaluate(() => { delete window.screen.orientation; });
     await page.evaluate(() => window.dispatchEvent(new Event('aasc-hologram-visibility')));
     assert.deepEqual(await page.evaluate(() => window.hologram), {});
     await page.$eval('#wallpaperHologramCamera', node => { node.checked = false; node.dispatchEvent(new Event('change')); });

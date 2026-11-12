@@ -49,8 +49,8 @@
         const bounded = value => Math.max(-0.14, Math.min(0.14, value * Math.PI / 180 * 0.25));
         const yaw = bounded(x), tilt = bounded(y);
         root.DisplayMmd?.setHolographicTilt?.({ modelYaw: hologramModel.checked ? yaw : 0,
-            modelPitch: hologramModel.checked ? tilt : 0, cameraYaw: hologramCamera.checked ? -yaw : 0,
-            cameraPitch: hologramCamera.checked ? -tilt : 0 });
+            modelPitch: hologramModel.checked ? tilt : 0, cameraX: hologramCamera.checked ? -yaw : 0,
+            cameraY: hologramCamera.checked ? -tilt : 0 });
         if (hologramStatus) hologramStatus.textContent = '';
     }
     function updateHologram() {

@@ -87,9 +87,11 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
         targetYaw: 0,
         targetPitch: 0,
         currentYaw: 0,
-        currentPitch: 0
+        currentPitch: 0,
+        currentOffsetX: 0,
+        currentOffsetY: 0
     };
-    const holographicTilt = { modelYaw: 0, modelPitch: 0, cameraYaw: 0, cameraPitch: 0 };
+    const holographicTilt = { modelYaw: 0, modelPitch: 0, cameraX: 0, cameraY: 0 };
     const setHolographicTilt = value => {
         for (const key of Object.keys(holographicTilt)) {
             const amount = Number(value?.[key]);
@@ -107,25 +109,25 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {}, onProgres
             target.z + Math.cos(cameraViewState.currentYaw) * cosPitch * distance
         );
         camera.lookAt(target);
+        // 相机朝向先由用户视角确定；沿自身右、上轴平移，不重新对准角色。
+        camera.translateX(cameraViewState.currentOffsetX * TARGET_MODEL_HEIGHT * 0.4);
+        camera.translateY(cameraViewState.currentOffsetY * TARGET_MODEL_HEIGHT * 0.4);
         syncCameraClip();
     };
     const updateCameraView = (delta) => {
-        const targetYaw = cameraViewState.targetYaw + holographicTilt.cameraYaw;
-        const targetPitch = cameraViewState.targetPitch + holographicTilt.cameraPitch;
-        const yawDistance = targetYaw - cameraViewState.currentYaw;
-        const pitchDistance = targetPitch - cameraViewState.currentPitch;
-        if (Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
-            && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON) {
-            cameraViewState.currentYaw = targetYaw;
-            cameraViewState.currentPitch = targetPitch;
-            applyCameraView();
-            return false;
-        }
-        const easing = 1 - Math.exp(-ROTATION_EASING_PER_SECOND * Math.max(0, delta));
+        const yawDistance = cameraViewState.targetYaw - cameraViewState.currentYaw;
+        const pitchDistance = cameraViewState.targetPitch - cameraViewState.currentPitch;
+        const xDistance = holographicTilt.cameraX - cameraViewState.currentOffsetX;
+        const yDistance = holographicTilt.cameraY - cameraViewState.currentOffsetY;
+        const settled = [yawDistance, pitchDistance, xDistance, yDistance]
+            .every(distance => Math.abs(distance) < ROTATION_SETTLE_EPSILON);
+        const easing = settled ? 1 : 1 - Math.exp(-ROTATION_EASING_PER_SECOND * Math.max(0, delta));
         cameraViewState.currentYaw += yawDistance * easing;
         cameraViewState.currentPitch += pitchDistance * easing;
+        cameraViewState.currentOffsetX += xDistance * easing;
+        cameraViewState.currentOffsetY += yDistance * easing;
         applyCameraView();
-        return true;
+        return !settled;
     };
     const setCameraViewRotation = (yawRadians, pitchRadians = 0) => {
         const yaw = Number(yawRadians);
